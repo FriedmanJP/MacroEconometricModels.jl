@@ -8,7 +8,8 @@
 plot_result method for BayesianDSGE (relocated out of models.jl in the PLT
 plotting overhaul so the Wave-2 MCMC lane owns this file). PLT-05: the posterior
 mean is now drawn as a real vertical reference line (axis:"x"), matching the
-docstring. The inline KDE is left intact (a later issue extracts `_kde_line`).
+docstring. PLT-19: the posterior KDE is computed by the shared `_kde_line` helper
+(helpers.jl), no longer inline.
 """
 
 # =============================================================================
@@ -34,31 +35,13 @@ function plot_result(result::BayesianDSGE{T};
         d = result.priors.distributions[i]
         post_mean = mean(draws)
 
-        # Compute KDE of posterior draws
-        lo_draw = minimum(draws)
-        hi_draw = maximum(draws)
-        bw = 1.06 * std(draws) * length(draws)^(-0.2)  # Silverman bandwidth
-        bw = max(bw, T(1e-10))
-        margin_range = 3 * bw
-        grid_lo = lo_draw - margin_range
-        grid_hi = hi_draw + margin_range
-        n_grid = 200
-        xs = range(grid_lo, grid_hi; length=n_grid)
-
-        # KDE density
-        kde_vals = zeros(T, n_grid)
-        n_draws_total = length(draws)
-        for (gi, xg) in enumerate(xs)
-            s = zero(T)
-            for dv in draws
-                z = (xg - dv) / bw
-                s += exp(-z * z / 2)
-            end
-            kde_vals[gi] = s / (n_draws_total * bw * sqrt(2 * T(pi)))
-        end
+        # KDE of the posterior draws via the shared Silverman-bandwidth helper
+        # (PLT-19 — A5, no inline statistics). Prior is evaluated on the SAME grid.
+        xs, kde_vals = _kde_line(draws)
+        n_grid = length(xs)
 
         # Prior density at same grid points
-        prior_vals = zeros(T, n_grid)
+        prior_vals = zeros(Float64, n_grid)
         for (gi, xg) in enumerate(xs)
             try
                 pv = pdf(d, xg)

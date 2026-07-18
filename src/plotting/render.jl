@@ -184,25 +184,35 @@ Generate D3.js code for a line chart with optional CI bands and reference lines.
   drawn only at real data x-values (PLT-08 date axes)
 - `regions_json`: JSON array of {x0, x1, color, alpha} shaded x-ranges
   (e.g. recession bands), drawn behind the series
+- `integer_x`: force integer x-axis ticks (horizon/lag/event-time axes) when no
+  `x_ticks_json` date map is supplied — no fractional tick at h = 2.5 (PLT-17)
 - `xlabel`, `ylabel`: axis labels
 """
 function _render_line_js(id::String, data_json::String, series_json::String;
                          bands_json::String="[]", ref_lines_json::String="[]",
                          x_ticks_json::String="null", regions_json::String="[]",
+                         integer_x::Bool=false,
                          xlabel::String="", ylabel::String="")
-    # Emit the x-axis call. When x_ticks_json == "null" this is byte-identical to
-    # the historical integer-tick axis; otherwise ticks/labels come only from the
-    # supplied data x-values (no fractional/date-less ticks). (PLT-08)
-    xaxis_js = if x_ticks_json == "null"
-        "g.append('g').attr('class','axis').attr('transform','translate(0,'+h+')')\n" *
-        "        .call(d3.axisBottom(x).ticks(Math.min(xVals.length,8)));"
-    else
+    # Emit the x-axis call. A supplied `x_ticks_json` date map wins; else `integer_x`
+    # forces integer ticks; else this is byte-identical to the historical auto-tick
+    # axis (PLT-08 date axes / PLT-17 integer axes).
+    xaxis_js = if x_ticks_json != "null"
         "const _xt = $(x_ticks_json);\n" *
         "    const _xtm = new Map(_xt.map(t => [t.v, t.label]));\n" *
         "    const _xtv = _xt.map(t => t.v);\n" *
         "    const _xtk = Math.max(1, Math.ceil(_xtv.length / 8));\n" *
         "    g.append('g').attr('class','axis').attr('transform','translate(0,'+h+')')\n" *
         "        .call(d3.axisBottom(x).tickValues(_xtv.filter((_,i) => i % _xtk === 0)).tickFormat(v => { const l = _xtm.get(v); return l === undefined ? '' : l; }));"
+    elseif integer_x
+        "const _xd = x.domain();\n" *
+        "    const _ixv = [];\n" *
+        "    for (let _v = Math.ceil(_xd[0]); _v <= Math.floor(_xd[1]); _v++) _ixv.push(_v);\n" *
+        "    const _ixs = Math.max(1, Math.ceil(_ixv.length / 10));\n" *
+        "    g.append('g').attr('class','axis').attr('transform','translate(0,'+h+')')\n" *
+        "        .call(d3.axisBottom(x).tickValues(_ixv.filter((_,i) => i % _ixs === 0)).tickFormat(d3.format('d')));"
+    else
+        "g.append('g').attr('class','axis').attr('transform','translate(0,'+h+')')\n" *
+        "        .call(d3.axisBottom(x).ticks(Math.min(xVals.length,8)));"
     end
     """
 (function() {
@@ -700,6 +710,608 @@ function _render_heatmap_js(id::String, data_json::String,
         .call(d3.axisLeft(y).tickFormat(d => d.length > 20 ? d.slice(0,18)+'..' : d));
 
 $(_axis_labels_js(xlabel, ylabel; yl_y="-maxLabelW+10"))
+})();
+"""
+end
+
+# =============================================================================
+# Scatter Chart Renderer (relocated from did.jl — plotrule A1; PLT-19)
+# =============================================================================
+
+"""
+Generate D3.js code for a scatter plot with color-coded groups, reference lines,
+sloped data-coordinate line overlays, and reference shapes.
+
+- `id`: SVG container element ID
+- `data_json`: JSON array of {x, y, group} data points
+- `groups_json`: JSON array of {name, color} group configs
+- `ref_lines_json`: JSON array of {value, color, dash, axis} reference lines
+  (`axis`: "x" (vertical at x(value)) or "y" (default, horizontal at y(value)))
+- `line_overlays_json`: JSON array of sloped segments {x1, y1, x2, y2, color, dash}
+  in **data coordinates**, mapped through this renderer's own x/y scales — used for
+  OLS / Q-Q 45° fit lines with no second IIFE / scale re-derivation (plotrule A4).
+- `ref_shapes_json`: JSON array of {type:"circle", cx, cy, r, color, dash} in data
+  coordinates, drawn as an ellipse through the independent x/y scales (e.g. the unit
+  circle for inverse-root / stability plots).
+- `integer_x`: force integer x-axis ticks (PLT-17).
+- `xlabel`, `ylabel`: axis labels
+
+Big-N: `data` exceeding ~2000 points is subsampled to ≤2000 marks with a visible
+on-figure note (plotrule C7 / Robustness "Huge N").
+"""
+function _render_scatter_js(id::String, data_json::String, groups_json::String;
+                            ref_lines_json::String="[]",
+                            line_overlays_json::String="[]",
+                            ref_shapes_json::String="[]",
+                            integer_x::Bool=false,
+                            xlabel::String="", ylabel::String="")
+    xaxis_js = integer_x ?
+        ("const _xd = x.domain();\n" *
+         "    const _ixv = [];\n" *
+         "    for (let _v = Math.ceil(_xd[0]); _v <= Math.floor(_xd[1]); _v++) _ixv.push(_v);\n" *
+         "    const _ixs = Math.max(1, Math.ceil(_ixv.length / 10));\n" *
+         "    g.append('g').attr('class','axis').attr('transform','translate(0,'+h+')')\n" *
+         "        .call(d3.axisBottom(x).tickValues(_ixv.filter((_,i) => i % _ixs === 0)).tickFormat(d3.format('d')));") :
+        ("g.append('g').attr('class','axis').attr('transform','translate(0,'+h+')')\n" *
+         "        .call(d3.axisBottom(x).ticks(8));")
+    """
+(function() {
+    const data = $(data_json);
+    const groups = $(groups_json);
+    const refLines = $(ref_lines_json);
+    const lineOverlays = $(line_overlays_json);
+    const refShapes = $(ref_shapes_json);
+
+    // Big-N cap: subsample the drawn MARKS to <= 2000 (plotrule C7 / Robustness
+    // "Huge N"); domains still span the full `data` so nothing is clipped.
+    const CAP = 2000;
+    let drawn = data, subN = 0;
+    if(data.length > CAP) {
+        const step = Math.ceil(data.length / CAP);
+        drawn = data.filter((_, i) => i % step === 0);
+        subN = data.length;
+    }
+
+    const container = d3.select('#$(id)');
+    const W = Math.max(container.node().clientWidth - 24, 280);
+    const margin = {top:10, right:15, bottom:35, left:55};
+    const w = W - margin.left - margin.right;
+    const h = Math.min(w * 0.6, 250);
+
+    const svg = container.append('svg').attr('width', W).attr('height', h + margin.top + margin.bottom);
+    const g = svg.append('g').attr('transform', 'translate('+margin.left+','+margin.top+')');
+
+    // Domains — include ref-lines, overlay endpoints and shape bounds so nothing clips
+    const xVals = data.map(d => d.x).filter(v => v !== null);
+    const yVals = data.map(d => d.y).filter(v => v !== null);
+    refLines.forEach(r => { if(r.axis === 'x') xVals.push(r.value); else yVals.push(r.value); });
+    lineOverlays.forEach(o => { xVals.push(o.x1, o.x2); yVals.push(o.y1, o.y2); });
+    refShapes.forEach(s => { if(s.type === 'circle') { xVals.push(s.cx - s.r, s.cx + s.r); yVals.push(s.cy - s.r, s.cy + s.r); } });
+
+    const xExt = d3.extent(xVals);
+    const xPad = (xExt[1] - xExt[0]) * 0.08 || 1;
+    const x = d3.scaleLinear().domain([xExt[0] - xPad, xExt[1] + xPad]).range([0, w]);
+
+    const yExt = d3.extent(yVals);
+    const yPad = (yExt[1] - yExt[0]) * 0.08 || 0.01;
+    const y = d3.scaleLinear().domain([yExt[0] - yPad, yExt[1] + yPad]).range([h, 0]);
+
+    // Grid
+    g.append('g').attr('class','grid').call(d3.axisLeft(y).tickSize(-w).tickFormat(''));
+
+    // Reference lines (axis:"x" → vertical; axis:"y" (default) → horizontal)
+    refLines.forEach(r => {
+        if(r.axis === 'x') {
+            g.append('line').attr('x1', x(r.value)).attr('x2', x(r.value))
+                .attr('y1', 0).attr('y2', h)
+                .attr('stroke', r.color || '#999').attr('stroke-width', 1)
+                .attr('stroke-dasharray', r.dash || '4,3');
+        } else {
+            g.append('line').attr('x1', 0).attr('x2', w)
+                .attr('y1', y(r.value)).attr('y2', y(r.value))
+                .attr('stroke', r.color || '#999').attr('stroke-width', 1)
+                .attr('stroke-dasharray', r.dash || '4,3');
+        }
+    });
+
+    // Reference shapes (data-coord circle → ellipse through independent x/y scales)
+    refShapes.forEach(s => {
+        if(s.type === 'circle') {
+            g.append('ellipse')
+                .attr('cx', x(s.cx)).attr('cy', y(s.cy))
+                .attr('rx', Math.abs(x(s.cx + s.r) - x(s.cx)))
+                .attr('ry', Math.abs(y(s.cy + s.r) - y(s.cy)))
+                .attr('fill', 'none').attr('stroke', s.color || '#999')
+                .attr('stroke-width', 1).attr('stroke-dasharray', s.dash || '4,3');
+        }
+    });
+
+    // Sloped line overlays (data coords → this renderer's own scales; A4, no scale-clone)
+    lineOverlays.forEach(o => {
+        g.append('line')
+            .attr('x1', x(o.x1)).attr('y1', y(o.y1))
+            .attr('x2', x(o.x2)).attr('y2', y(o.y2))
+            .attr('stroke', o.color || '#d62728').attr('stroke-width', 1.5)
+            .attr('stroke-dasharray', o.dash || '');
+    });
+
+    // Build color map from groups
+    const colorMap = {};
+    groups.forEach(gr => { colorMap[gr.name] = gr.color; });
+
+    // Scatter points (subsampled marks; C7)
+    g.selectAll('circle').data(drawn).join('circle')
+        .attr('cx', d => x(d.x))
+        .attr('cy', d => y(d.y))
+        .attr('r', 5)
+        .attr('fill', d => colorMap[d.group] || '#999')
+        .attr('opacity', 0.8)
+        .attr('stroke', '#fff')
+        .attr('stroke-width', 0.5)
+        .on('mouseover', function(evt, d) {
+            d3.select(this).attr('r', 7).attr('opacity', 1);
+            showTip(evt, '<b>'+d.group+'</b><br>x: '+fmt(d.x)+'<br>y: '+fmt(d.y));
+        })
+        .on('mouseout', function() {
+            d3.select(this).attr('r', 5).attr('opacity', 0.8);
+            hideTip();
+        });
+
+    // Axes
+    $(xaxis_js)
+    g.append('g').attr('class','axis').call(d3.axisLeft(y).ticks(6));
+
+$(_axis_labels_js(xlabel, ylabel))
+
+    // Legend
+    if(groups.length > 1) {
+        const leg = g.append('g').attr('class','legend').attr('transform','translate(5,-5)');
+        groups.forEach((gr, i) => {
+            const gi = leg.append('g').attr('transform','translate('+(i*130)+',0)');
+            gi.append('circle').attr('cx',6).attr('cy',0).attr('r',5)
+                .attr('fill',gr.color).attr('opacity',0.8);
+            gi.append('text').attr('x',16).attr('y',4).attr('font-size','10px')
+                .attr('fill','#555').text(gr.name);
+        });
+    }
+
+    // Big-N subsample note (C7)
+    if(subN > 0) {
+        g.append('text').attr('x', w).attr('y', -2).attr('text-anchor','end')
+            .attr('font-size','9px').attr('fill','#888')
+            .text('showing '+drawn.length+' of '+subN+' points');
+    }
+})();
+"""
+end
+
+# =============================================================================
+# Vertical Bar Renderer (bars from baseline=0; relocated from spectral.jl — A1; PLT-19)
+# =============================================================================
+
+"""
+Generate D3.js code for a vertical bar chart with bars drawn from baseline=0, plus
+optional horizontal reference lines (e.g. ACF ±CI bounds).
+
+- `id`: SVG container element ID
+- `data_json`: JSON array of {x, y} data points
+- `bar_color`: bar fill color
+- `ref_lines_json`: JSON array of {value, color, dash} horizontal reference lines
+- `xlabel`, `ylabel`: axis labels
+"""
+function _render_vbar_js(id::String, data_json::String;
+                         bar_color::String=_PLOT_COLORS[1],
+                         ref_lines_json::String="[]",
+                         xlabel::String="", ylabel::String="")
+    """
+(function() {
+    const data = $(data_json);
+    const refLines = $(ref_lines_json);
+
+    const container = d3.select('#$(id)');
+    const W = Math.max(container.node().clientWidth - 24, 280);
+    const margin = {top:10, right:15, bottom:35, left:55};
+    const w = W - margin.left - margin.right;
+    const h = Math.min(w * 0.6, 250);
+
+    const svg = container.append('svg').attr('width', W).attr('height', h + margin.top + margin.bottom);
+    const g = svg.append('g').attr('transform', 'translate('+margin.left+','+margin.top+')');
+
+    const xVals = data.map(d => d.x);
+    const yVals = data.map(d => d.y);
+    refLines.forEach(r => yVals.push(r.value));
+    yVals.push(0);
+
+    const xExt = d3.extent(xVals);
+    const xPad = xVals.length > 1 ? (xVals[1] - xVals[0]) * 0.5 : 0.5;
+    const x = d3.scaleLinear().domain([xExt[0] - xPad, xExt[1] + xPad]).range([0, w]);
+
+    const yExt = d3.extent(yVals);
+    const yPad = (yExt[1] - yExt[0]) * 0.08 || 0.1;
+    const y = d3.scaleLinear().domain([yExt[0] - yPad, yExt[1] + yPad]).range([h, 0]);
+
+    // Grid
+    g.append('g').attr('class','grid').call(d3.axisLeft(y).tickSize(-w).tickFormat(''));
+
+    // Zero line
+    g.append('line').attr('x1',0).attr('x2',w)
+        .attr('y1',y(0)).attr('y2',y(0))
+        .attr('stroke','#333').attr('stroke-width',0.8);
+
+    // Reference lines (CI bounds)
+    refLines.forEach(r => {
+        g.append('line').attr('x1',0).attr('x2',w)
+            .attr('y1',y(r.value)).attr('y2',y(r.value))
+            .attr('stroke',r.color||'#d62728').attr('stroke-width',1)
+            .attr('stroke-dasharray',r.dash||'5,4');
+    });
+
+    // Bars
+    const barW = Math.max(1, Math.min(6, w / data.length * 0.6));
+    data.forEach(d => {
+        const yTop = d.y >= 0 ? y(d.y) : y(0);
+        const yBot = d.y >= 0 ? y(0) : y(d.y);
+        g.append('rect')
+            .attr('x', x(d.x) - barW/2)
+            .attr('y', yTop)
+            .attr('width', barW)
+            .attr('height', Math.max(0.5, yBot - yTop))
+            .attr('fill', '$(bar_color)')
+            .attr('opacity', 0.85);
+    });
+
+    // Axes
+    g.append('g').attr('class','axis').attr('transform','translate(0,'+h+')')
+        .call(d3.axisBottom(x).ticks(Math.min(xVals.length, 10)));
+    g.append('g').attr('class','axis').call(d3.axisLeft(y).ticks(6));
+
+$(_axis_labels_js(xlabel, ylabel))
+
+    // Tooltip
+    svg.append('rect').attr('width',W).attr('height',h+margin.top+margin.bottom)
+        .attr('fill','none').attr('pointer-events','all')
+        .on('mousemove', function(evt) {
+            const [mx] = d3.pointer(evt, g.node());
+            const x0 = x.invert(mx);
+            const idx = d3.minIndex(data, d => Math.abs(d.x - x0));
+            const d = data[idx];
+            showTip(evt, '<b>Lag '+d.x+'</b><br>Value: '+fmt(d.y));
+        })
+        .on('mouseout', hideTip);
+})();
+"""
+end
+
+# =============================================================================
+# Histogram Renderer (contiguous linear-x bins + optional density overlay; PLT-19)
+# =============================================================================
+
+"""
+Generate D3.js code for a histogram: contiguous linear-x bins with an optional
+density-curve overlay (KDE / fitted normal) and reference lines.
+
+- `id`: SVG container element ID
+- `bins_json`: JSON array of {x0, x1, y} contiguous bins (y = count or density)
+- `series_json`: `[{name, color}, …]`; `series[0]` labels/colors the bars,
+  `series[1]` (optional) labels/colors the density curve. Legend shown when >1.
+- `density_json`: optional `[{x, d}, …]` overlay line
+- `ref_lines_json`: `[{value, color, dash, axis}]` — `axis:"x"` (vertical, e.g. a
+  mean / observed value) or `"y"` (horizontal). PLT-26/27 use `axis:"x"`.
+- `xlabel`, `ylabel`: axis labels (`ylabel` default "Frequency")
+"""
+function _render_histogram_js(id::String, bins_json::String, series_json::String;
+                              density_json::String="[]", ref_lines_json::String="[]",
+                              xlabel::String="", ylabel::String="Frequency")
+    """
+(function() {
+    const bins = $(bins_json);
+    const series = $(series_json);
+    const density = $(density_json);
+    const refLines = $(ref_lines_json);
+
+    const container = d3.select('#$(id)');
+    const W = Math.max(container.node().clientWidth - 24, 280);
+    const margin = {top:10, right:15, bottom:35, left:55};
+    const w = W - margin.left - margin.right;
+    const h = Math.min(w * 0.6, 250);
+
+    const svg = container.append('svg').attr('width', W).attr('height', h + margin.top + margin.bottom);
+    const g = svg.append('g').attr('transform', 'translate('+margin.left+','+margin.top+')');
+
+    const xLo = d3.min(bins, d => d.x0);
+    const xHi = d3.max(bins, d => d.x1);
+    const x = d3.scaleLinear().domain([xLo !== undefined ? xLo : 0, xHi !== undefined ? xHi : 1]).range([0, w]);
+
+    const yVals = [0];
+    bins.forEach(d => { if(d.y !== null) yVals.push(d.y); });
+    density.forEach(d => { if(d.d !== null) yVals.push(d.d); });
+    refLines.forEach(r => { if((r.axis||'y') !== 'x' && r.value !== null) yVals.push(r.value); });
+    const yMax = d3.max(yVals) || 1;
+    const y = d3.scaleLinear().domain([0, yMax * 1.08]).range([h, 0]);
+
+    // Grid
+    g.append('g').attr('class','grid').call(d3.axisLeft(y).tickSize(-w).tickFormat(''));
+
+    // Bars (contiguous, no band gaps)
+    const barColor = (series[0] && series[0].color) || '#1f77b4';
+    g.selectAll('rect.bar').data(bins).join('rect').attr('class','bar')
+        .attr('x', d => x(d.x0))
+        .attr('y', d => y(d.y !== null ? d.y : 0))
+        .attr('width', d => Math.max(0, x(d.x1) - x(d.x0)))
+        .attr('height', d => Math.max(0, y(0) - y(d.y !== null ? d.y : 0)))
+        .attr('fill', barColor).attr('opacity', 0.75)
+        .on('mouseover', function(evt, d) {
+            showTip(evt, '<b>['+fmt(d.x0)+', '+fmt(d.x1)+')</b><br>'+fmt(d.y));
+        })
+        .on('mouseout', hideTip);
+
+    // Density overlay
+    if(density.length > 0) {
+        const dcolor = (series[1] && series[1].color) || '#d62728';
+        const dline = d3.line().x(d => x(d.x)).y(d => y(d.d)).defined(d => d.d !== null);
+        g.append('path').datum(density).attr('d', dline)
+            .attr('fill','none').attr('stroke', dcolor).attr('stroke-width', 1.8);
+    }
+
+    // Reference lines (axis:"x" → vertical; axis:"y" (default) → horizontal)
+    refLines.forEach(r => {
+        if((r.axis||'y') === 'x') {
+            g.append('line').attr('x1',x(r.value)).attr('x2',x(r.value)).attr('y1',0).attr('y2',h)
+                .attr('stroke',r.color||'#999').attr('stroke-width',1).attr('stroke-dasharray',r.dash||'4,3');
+        } else {
+            g.append('line').attr('x1',0).attr('x2',w).attr('y1',y(r.value)).attr('y2',y(r.value))
+                .attr('stroke',r.color||'#999').attr('stroke-width',1).attr('stroke-dasharray',r.dash||'4,3');
+        }
+    });
+
+    // Axes
+    g.append('g').attr('class','axis').attr('transform','translate(0,'+h+')').call(d3.axisBottom(x).ticks(8));
+    g.append('g').attr('class','axis').call(d3.axisLeft(y).ticks(6));
+
+$(_axis_labels_js(xlabel, ylabel))
+
+    // Legend (bars vs curve) when a density overlay + second series are present
+    if(series.length > 1) {
+        const leg = g.append('g').attr('class','legend').attr('transform','translate(5,-5)');
+        series.forEach((s,i) => {
+            const gi = leg.append('g').attr('transform','translate('+(i*90)+',0)');
+            if(i === 0) {
+                gi.append('rect').attr('width',12).attr('height',12).attr('y',-6).attr('fill',s.color).attr('opacity',0.75);
+            } else {
+                gi.append('line').attr('x1',0).attr('x2',16).attr('y1',0).attr('y2',0).attr('stroke',s.color).attr('stroke-width',2);
+            }
+            gi.append('text').attr('x',18).attr('y',4).attr('font-size','10px').attr('fill','#555').text(s.name);
+        });
+    }
+})();
+"""
+end
+
+# =============================================================================
+# Box / Whisker Renderer (group distributions; PLT-19)
+# =============================================================================
+
+"""
+Generate D3.js code for a box-and-whisker chart comparing group distributions.
+
+- `id`: SVG container element ID
+- `boxes_json`: JSON array of `{group, whislo, q1, med, q3, whishi, mean, outliers:[…]}`
+- `orientation`: `:v` (groups on the x-band) or `:h` (groups on the y-band, so named
+  entities read horizontally)
+- `xlabel`, `ylabel`: axis labels
+- `tip_label`: tooltip prefix (A2) — prepended to the group name in the tooltip
+"""
+function _render_box_js(id::String, boxes_json::String;
+                        orientation::Symbol=:v, xlabel::String="",
+                        ylabel::String="", tip_label::String="")
+    horiz = orientation == :h ? "true" : "false"
+    """
+(function() {
+    const boxes = $(boxes_json);
+    const horiz = $(horiz);
+    const tipLabel = $(_json(tip_label));
+
+    const container = d3.select('#$(id)');
+    const W = Math.max(container.node().clientWidth - 24, 280);
+
+    // Value extent across every box (incl. mean + outliers)
+    const vals = [];
+    boxes.forEach(b => {
+        [b.whislo,b.q1,b.med,b.q3,b.whishi,b.mean].forEach(v => { if(v!==null&&v!==undefined) vals.push(v); });
+        (b.outliers||[]).forEach(v => { if(v!==null) vals.push(v); });
+    });
+    let vExt = d3.extent(vals);
+    if(vExt[0] === undefined) vExt = [0,1];
+    const vPad = (vExt[1]-vExt[0])*0.08 || 1;
+
+    function boxTip(evt, b) {
+        showTip(evt, '<b>'+(tipLabel ? tipLabel+' ' : '')+b.group+'</b>'
+            +'<br>median: '+fmt(b.med)+'<br>IQR: ['+fmt(b.q1)+', '+fmt(b.q3)+']');
+    }
+
+    if(horiz) {
+        const margin = {top:10, right:20, bottom:35, left:120};
+        const w = W - margin.left - margin.right;
+        const h = Math.max(boxes.length*34, 60);
+        const svg = container.append('svg').attr('width', W).attr('height', h + margin.top + margin.bottom);
+        const g = svg.append('g').attr('transform', 'translate('+margin.left+','+margin.top+')');
+
+        const band = d3.scaleBand().domain(boxes.map(b=>b.group)).range([0,h]).padding(0.3);
+        const val = d3.scaleLinear().domain([vExt[0]-vPad, vExt[1]+vPad]).range([0,w]);
+        const bw = band.bandwidth();
+
+        g.append('g').attr('class','grid').attr('transform','translate(0,'+h+')')
+            .call(d3.axisBottom(val).tickSize(-h).tickFormat(''));
+
+        boxes.forEach(b => {
+            const yc = band(b.group), mid = yc + bw/2;
+            g.append('line').attr('x1',val(b.whislo)).attr('x2',val(b.whishi)).attr('y1',mid).attr('y2',mid).attr('stroke','#555');
+            [b.whislo,b.whishi].forEach(v => g.append('line').attr('x1',val(v)).attr('x2',val(v)).attr('y1',mid-bw*0.2).attr('y2',mid+bw*0.2).attr('stroke','#555'));
+            g.append('rect').attr('x',val(b.q1)).attr('y',yc).attr('width',Math.max(0,val(b.q3)-val(b.q1))).attr('height',bw)
+                .attr('fill','#1f77b4').attr('opacity',0.55).attr('stroke','#1f77b4')
+                .on('mouseover', function(evt){ boxTip(evt, b); }).on('mouseout', hideTip);
+            g.append('line').attr('x1',val(b.med)).attr('x2',val(b.med)).attr('y1',yc).attr('y2',yc+bw).attr('stroke','#08306b').attr('stroke-width',2);
+            if(b.mean!==null&&b.mean!==undefined) g.append('circle').attr('cx',val(b.mean)).attr('cy',mid).attr('r',2.5).attr('fill','#d62728');
+            (b.outliers||[]).forEach(v => g.append('circle').attr('cx',val(v)).attr('cy',mid).attr('r',2).attr('fill','none').attr('stroke','#d62728'));
+        });
+
+        g.append('g').attr('class','axis').attr('transform','translate(0,'+h+')').call(d3.axisBottom(val).ticks(6));
+        g.append('g').attr('class','axis').call(d3.axisLeft(band).tickFormat(d => d.length>16 ? d.slice(0,14)+'..' : d));
+$(_axis_labels_js(xlabel, ylabel; yl_y="-(margin.left-12)"))
+    } else {
+        const margin = {top:10, right:15, bottom:35, left:55};
+        const w = W - margin.left - margin.right;
+        const h = Math.min(w*0.6, 250);
+        const svg = container.append('svg').attr('width', W).attr('height', h + margin.top + margin.bottom);
+        const g = svg.append('g').attr('transform', 'translate('+margin.left+','+margin.top+')');
+
+        const band = d3.scaleBand().domain(boxes.map(b=>b.group)).range([0,w]).padding(0.3);
+        const val = d3.scaleLinear().domain([vExt[0]-vPad, vExt[1]+vPad]).range([h,0]);
+        const bw = band.bandwidth();
+
+        g.append('g').attr('class','grid').call(d3.axisLeft(val).tickSize(-w).tickFormat(''));
+
+        boxes.forEach(b => {
+            const xc = band(b.group), mid = xc + bw/2;
+            g.append('line').attr('x1',mid).attr('x2',mid).attr('y1',val(b.whislo)).attr('y2',val(b.whishi)).attr('stroke','#555');
+            [b.whislo,b.whishi].forEach(v => g.append('line').attr('x1',mid-bw*0.2).attr('x2',mid+bw*0.2).attr('y1',val(v)).attr('y2',val(v)).attr('stroke','#555'));
+            g.append('rect').attr('x',xc).attr('y',val(b.q3)).attr('width',bw).attr('height',Math.max(0,val(b.q1)-val(b.q3)))
+                .attr('fill','#1f77b4').attr('opacity',0.55).attr('stroke','#1f77b4')
+                .on('mouseover', function(evt){ boxTip(evt, b); }).on('mouseout', hideTip);
+            g.append('line').attr('x1',xc).attr('x2',xc+bw).attr('y1',val(b.med)).attr('y2',val(b.med)).attr('stroke','#08306b').attr('stroke-width',2);
+            if(b.mean!==null&&b.mean!==undefined) g.append('circle').attr('cx',mid).attr('cy',val(b.mean)).attr('r',2.5).attr('fill','#d62728');
+            (b.outliers||[]).forEach(v => g.append('circle').attr('cx',mid).attr('cy',val(v)).attr('r',2).attr('fill','none').attr('stroke','#d62728'));
+        });
+
+        g.append('g').attr('class','axis').attr('transform','translate(0,'+h+')').call(d3.axisBottom(band).tickFormat(d => d.length>12 ? d.slice(0,10)+'..' : d));
+        g.append('g').attr('class','axis').call(d3.axisLeft(val).ticks(6));
+$(_axis_labels_js(xlabel, ylabel))
+    }
+})();
+"""
+end
+
+# =============================================================================
+# Quantile-Fan Renderer (k nested bands + central line; PLT-19)
+# =============================================================================
+
+"""
+Generate D3.js code for a quantile fan: k nested credible/quantile bands in one hue
+at ramped alpha (outer→inner), a solid central line, and one legend entry per band.
+
+- `id`: SVG container element ID
+- `data_json`: JSON array of `{x, q1, q2, …, qk, med}` rows
+- `fan_json`: ordered nested band specs `[{lo_key, hi_key, label, alpha, color}, …]`
+  (outer→inner, increasing alpha). Each band gets a legend entry labelled by `label`.
+- `median_key`: the central-line key in `data_json` (default "med")
+- `central_label`: legend/tooltip label for the central line (default "Median"; pass
+  "Mean" when the central line is the posterior mean — keeps the label honest, C6)
+- `ref_lines_json`: `[{value, color, dash, axis}]` — `axis:"x"`/`"y"`
+- `xlabel`, `ylabel`: axis labels
+"""
+function _render_fan_js(id::String, data_json::String, fan_json::String;
+                        median_key::String="med", central_label::String="Median",
+                        ref_lines_json::String="[]",
+                        xlabel::String="", ylabel::String="")
+    """
+(function() {
+    const data = $(data_json);
+    const fan = $(fan_json);
+    const refLines = $(ref_lines_json);
+    const medKey = $(_json(median_key));
+    const centralLabel = $(_json(central_label));
+
+    const container = d3.select('#$(id)');
+    const W = Math.max(container.node().clientWidth - 24, 280);
+    const margin = {top:10, right:15, bottom:35, left:55};
+    const w = W - margin.left - margin.right;
+    const h = Math.min(w * 0.6, 250);
+
+    const svg = container.append('svg').attr('width', W).attr('height', h + margin.top + margin.bottom);
+    const g = svg.append('g').attr('transform', 'translate('+margin.left+','+margin.top+')');
+
+    const xVals = data.map(d => d.x);
+    const allY = [];
+    fan.forEach(b => data.forEach(d => {
+        if(d[b.lo_key]!==null && d[b.lo_key]!==undefined) allY.push(d[b.lo_key]);
+        if(d[b.hi_key]!==null && d[b.hi_key]!==undefined) allY.push(d[b.hi_key]);
+    }));
+    data.forEach(d => { if(d[medKey]!==null && d[medKey]!==undefined) allY.push(d[medKey]); });
+    refLines.forEach(r => { if((r.axis||'y') !== 'x') allY.push(r.value); });
+
+    const x = d3.scaleLinear().domain(d3.extent(xVals)).range([0,w]);
+    const yExt = d3.extent(allY);
+    const yPad = (yExt[1]-yExt[0])*0.08 || 1;
+    const y = d3.scaleLinear().domain([yExt[0]-yPad, yExt[1]+yPad]).range([h,0]);
+
+    // Grid
+    g.append('g').attr('class','grid').call(d3.axisLeft(y).tickSize(-w).tickFormat(''));
+
+    // Reference lines
+    refLines.forEach(r => {
+        if((r.axis||'y') === 'x') {
+            g.append('line').attr('x1',x(r.value)).attr('x2',x(r.value)).attr('y1',0).attr('y2',h)
+                .attr('stroke',r.color||'#999').attr('stroke-width',1).attr('stroke-dasharray',r.dash||'4,3');
+        } else {
+            g.append('line').attr('x1',0).attr('x2',w).attr('y1',y(r.value)).attr('y2',y(r.value))
+                .attr('stroke',r.color||'#999').attr('stroke-width',1).attr('stroke-dasharray',r.dash||'4,3');
+        }
+    });
+
+    // Nested bands (outer→inner, ramped alpha)
+    fan.forEach(b => {
+        const area = d3.area().x(d => x(d.x))
+            .y0(d => y(d[b.lo_key]!==null ? d[b.lo_key] : 0))
+            .y1(d => y(d[b.hi_key]!==null ? d[b.hi_key] : 0))
+            .defined(d => d[b.lo_key]!==null && d[b.lo_key]!==undefined && d[b.hi_key]!==null && d[b.hi_key]!==undefined);
+        g.append('path').datum(data).attr('d', area)
+            .attr('fill', b.color || '#1f77b4').attr('opacity', b.alpha || 0.15);
+    });
+
+    // Central (median/mean) line
+    const medColor = fan.length > 0 ? (fan[fan.length-1].color || '#1f77b4') : '#1f77b4';
+    const mline = d3.line().x(d => x(d.x)).y(d => y(d[medKey]))
+        .defined(d => d[medKey]!==null && d[medKey]!==undefined);
+    g.append('path').datum(data).attr('d', mline)
+        .attr('fill','none').attr('stroke', medColor).attr('stroke-width', 2);
+
+    // Axes
+    g.append('g').attr('class','axis').attr('transform','translate(0,'+h+')').call(d3.axisBottom(x).ticks(Math.min(xVals.length,8)));
+    g.append('g').attr('class','axis').call(d3.axisLeft(y).ticks(6));
+
+$(_axis_labels_js(xlabel, ylabel))
+
+    // Legend — one entry per band (labelled by quantile pair) + the central line
+    const leg = g.append('g').attr('class','legend').attr('transform','translate(5,-5)');
+    let li = 0;
+    fan.forEach(b => {
+        const gi = leg.append('g').attr('transform','translate('+(li*90)+',0)');
+        gi.append('rect').attr('width',12).attr('height',12).attr('y',-6)
+            .attr('fill', b.color || '#1f77b4').attr('opacity', b.alpha || 0.15);
+        gi.append('text').attr('x',16).attr('y',4).attr('font-size','10px').attr('fill','#555').text(b.label);
+        li++;
+    });
+    const gm = leg.append('g').attr('transform','translate('+(li*90)+',0)');
+    gm.append('line').attr('x1',0).attr('x2',16).attr('y1',0).attr('y2',0).attr('stroke',medColor).attr('stroke-width',2);
+    gm.append('text').attr('x',20).attr('y',4).attr('font-size','10px').attr('fill','#555').text(centralLabel);
+
+    // Tooltip (crosshair nearest)
+    svg.append('rect').attr('width',W).attr('height',h+margin.top+margin.bottom)
+        .attr('fill','none').attr('pointer-events','all')
+        .on('mousemove', function(evt) {
+            const [mx] = d3.pointer(evt, g.node());
+            const x0 = x.invert(mx);
+            const idx = d3.minIndex(data, d => Math.abs(d.x - x0));
+            const d = data[idx];
+            let html = '<b>x='+fmt(d.x)+'</b>';
+            if(d[medKey]!==null && d[medKey]!==undefined) html += '<br>'+centralLabel+': '+fmt(d[medKey]);
+            fan.forEach(b => {
+                if(d[b.lo_key]!==null && d[b.hi_key]!==null && d[b.lo_key]!==undefined && d[b.hi_key]!==undefined)
+                    html += '<br>'+b.label+': ['+fmt(d[b.lo_key])+', '+fmt(d[b.hi_key])+']';
+            });
+            showTip(evt, html);
+        })
+        .on('mouseout', hideTip);
 })();
 """
 end
