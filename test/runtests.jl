@@ -141,11 +141,29 @@ const TEST_GROUPS = [
         "mgarch/test_mgarch.jl",            # EV-16 (#424): multivariate GARCH — CCC/DCC/BEKK
         "nongaussian/test_nongaussian_svar.jl",
         "nongaussian/test_nongaussian_internals.jl",
-        "plotting/test_plot_result.jl",
         "filters/test_filters.jl",
         "filters/test_x13.jl",
         "filters/test_x13_coverage.jl",
         "spectral/test_spectral.jl",
+    ]),
+    # Plotting — consolidated plot_result harness (PLT-39). Split from the old
+    # monolith (test_plot_result.jl) into per-domain lanes + the Wave-2 dispatch
+    # lanes + renderer-option tests; every file shares the structural-assertion
+    # helper test/plotting/plot_test_helpers.jl (parses EXTRACTED JSON literals —
+    # check_plot / assert_all_json_valid / assert_escapes / series_count …).
+    ("Plotting" => [
+        "plotting/test_plot_render.jl",
+        "plotting/test_plot_irf_fevd_hd.jl",
+        "plotting/test_plot_forecast_filters.jl",
+        "plotting/test_plot_models.jl",
+        "plotting/test_plot_reg_micro.jl",
+        "plotting/test_plot_nowcast.jl",
+        "plotting/test_plot_wave2_laneA.jl",
+        "plotting/test_plot_wave2_laneB.jl",
+        "plotting/test_plot_wave2_laneC.jl",
+        "plotting/test_plot_wave2_laneD.jl",
+        "plotting/test_plot_wave2_laneE.jl",
+        "plotting/test_plot_wave2_laneF.jl",
     ]),
     # Nonlinear time series (EV-05 threshold/SETAR; EV-06 STAR & EV-07 Markov
     # switching join this group).
@@ -234,6 +252,7 @@ function _expected_rank(name::AbstractString)
     name == "Extensions (JuMP/Ipopt/PATH)"    && return 60   # cold-load: schedule early
     startswith(name, "Coverage-A")            && return 60
     name == "ARIMA & Tests & Data & Reg"      && return 55
+    name == "Plotting"            && return 52   # render + 11 lanes; schedule early to avoid a straggler
     name == "IRF & VECM"          && return 50
     name == "Bayesian & SVAR"     && return 45
     name == "Display"             && return 42   # est-heavy compile; schedule with the medium wave
@@ -490,7 +509,23 @@ else
         @testset "Multivariate GARCH (CCC/DCC/BEKK)" begin include("mgarch/test_mgarch.jl") end
         @testset "Non-Gaussian SVAR Identification" begin include("nongaussian/test_nongaussian_svar.jl") end
         @testset "Non-Gaussian Internals" begin include("nongaussian/test_nongaussian_internals.jl") end
-        @testset "Plotting" begin include("plotting/test_plot_result.jl") end
+        # Plotting — consolidated plot_result harness (PLT-39). Per-domain lanes +
+        # Wave-2 dispatch lanes + renderer-option tests, all sharing the structural-
+        # assertion helper plot_test_helpers.jl (each file self-bootstraps it).
+        @testset "Plotting" begin
+            include("plotting/test_plot_render.jl")
+            include("plotting/test_plot_irf_fevd_hd.jl")
+            include("plotting/test_plot_forecast_filters.jl")
+            include("plotting/test_plot_models.jl")
+            include("plotting/test_plot_reg_micro.jl")
+            include("plotting/test_plot_nowcast.jl")
+            include("plotting/test_plot_wave2_laneA.jl")
+            include("plotting/test_plot_wave2_laneB.jl")
+            include("plotting/test_plot_wave2_laneC.jl")
+            include("plotting/test_plot_wave2_laneD.jl")
+            include("plotting/test_plot_wave2_laneE.jl")
+            include("plotting/test_plot_wave2_laneF.jl")
+        end
         @testset "Time Series Filters" begin include("filters/test_filters.jl") end
         @testset "X-13ARIMA-SEATS" begin include("filters/test_x13.jl") end
         @testset "X-13 Coverage" begin include("filters/test_x13_coverage.jl") end
