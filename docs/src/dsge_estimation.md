@@ -411,7 +411,7 @@ The optimizer works in a **prior-transformed unconstrained space** (log for posi
 where ``H`` is the Hessian of the negative log posterior at the mode and ``d`` the number of estimated parameters (Tierney & Kadane 1986). If ``H`` is not positive definite, `laplace_log_ml` is `NaN` (with a warning) and the inverse Hessian falls back to a diagonal matrix, so downstream proposal seeding never receives a garbage covariance.
 
 ```@example dsge_estimation
-pm = posterior_mode(spec, Y_data, [0.9];
+pm = posterior_mode(spec, y_obs, [0.9];
     priors=Dict(:rho => Beta(5, 2)), observables=[:y])
 pm
 ```
@@ -447,7 +447,7 @@ pm
 To seed RWMH from the mode, pass `proposal=:mode`: the chain starts at ``\theta^*`` with proposal covariance ``c^2 H^{-1}``, ``c = 2.38/\sqrt{d}`` (Roberts & Rosenthal 2001), which typically lands the acceptance rate in the 0.2--0.4 range without hand-tuning:
 
 ```@example dsge_estimation
-result_mode_mh = estimate_dsge_bayes(spec, Y_data, [0.9];
+result_mode_mh = estimate_dsge_bayes(spec, y_obs, [0.9];
     priors=Dict(:rho => Beta(5, 2)),
     method=:mh, proposal=:mode, observables=[:y],
     n_draws=50, burnin=25)

@@ -348,3 +348,43 @@ forecast(::FAVARModel{T}, ::Int) where {T}
 estimate_structural_dfm
 sdfm_panel_irf
 ```
+
+---
+
+## Multivariate GARCH
+
+```@docs
+AbstractMGARCHModel
+```
+
+```@autodocs
+Modules = [MacroEconometricModels]
+Pages   = ["mgarch/types.jl", "mgarch/ccc.jl", "mgarch/dcc.jl", "mgarch/bekk.jl"]
+```
+
+---
+
+## Cointegrating Regression
+
+```@autodocs
+Modules = [MacroEconometricModels]
+Pages   = ["cointreg/types.jl", "cointreg/fmols.jl", "cointreg/ccr.jl", "cointreg/dols.jl", "cointreg/panel.jl"]
+```
+
+---
+
+## Systems of Equations (SUR / 3SLS)
+
+```@autodocs
+Modules = [MacroEconometricModels]
+Pages   = ["system/types.jl", "system/sur.jl", "system/threesls.jl"]
+```
+
+---
+
+## Autoregressive Distributed Lag (ARDL)
+
+```@autodocs
+Modules = [MacroEconometricModels]
+Pages   = ["ardl/types.jl", "ardl/estimation.jl", "ardl/bounds.jl", "ardl/nardl.jl", "ardl/pmg.jl"]
+```

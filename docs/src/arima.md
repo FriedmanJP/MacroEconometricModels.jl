@@ -634,12 +634,12 @@ Two log-periodogram estimators estimate ``d`` *without* specifying the short-mem
 
 ```@example arima
 g = gph_test(flow)
-report(g)
+g
 ```
 
 ```@example arima
 lw = local_whittle(flow)
-report(lw)
+lw
 ```
 
 Both flag positive long memory in the Nile series, with ``\hat d \approx 0.4`` --- the classic result for this benchmark long-memory series.

@@ -221,3 +221,82 @@ function pvar_stability(model::PVARModel{T}) where {T}
     is_stable = all(m -> m < one(T), moduli)
     PVARStability{T}(eigenvals, moduli, is_stable)
 end
+
+# =============================================================================
+# Name-carrying wrappers (PLT-29): reuse the canonical VAR result types so PVAR
+# structural analysis flows into the existing IRF / FEVD plot dispatches. The
+# bare-array `pvar_oirf` / `pvar_girf` / `pvar_fevd` stay (non-breaking).
+# =============================================================================
+
+"""
+    _pvar_fevd_decomp(model::PVARModel{T}, H::Int) -> Array{T,3}
+
+Raw (unnormalized) FEVD numerator — the cumulative squared orthogonalized-IRF
+contributions `Σ_{j=0}^{h} Ψ_j[l,k]²`, shape `(H+1, variable, shock)`. Paired with
+the normalized `pvar_fevd` proportions to populate a canonical `FEVD` result.
+"""
+function _pvar_fevd_decomp(model::PVARModel{T}, H::Int) where {T}
+    H < 0 && throw(ArgumentError("Horizon H must be non-negative"))
+    m_dim = model.m
+    oirf = pvar_oirf(model, H)
+    decomp = zeros(T, H + 1, m_dim, m_dim)
+    for l in 1:m_dim, k in 1:m_dim
+        contrib = zero(T)
+        for h in 0:H
+            contrib += oirf[h+1, l, k]^2
+            decomp[h+1, l, k] = contrib
+        end
+    end
+    decomp
+end
+
+"""
+    pvar_irf(model::PVARModel{T}, H::Int; irf_type=:oirf, ci=nothing) -> ImpulseResponse{T}
+
+Panel-VAR impulse responses as a canonical name-carrying [`ImpulseResponse`](@ref),
+so PVAR IRFs flow into the standard IRF plot / analysis dispatches.
+
+- `irf_type` — `:oirf` (orthogonalized, Cholesky) or `:girf` (generalized,
+  Pesaran–Shin).
+- `ci` — the `NamedTuple` returned by [`pvar_bootstrap_irf`](@ref) (fields
+  `lower`/`upper`, shape `(H+1, m, m)`) to attach bootstrap bands; `nothing` ⇒ no
+  bands (`ci_type = :none`).
+
+# Examples
+```julia
+r  = pvar_irf(model, 20)                                # OIRF, no bands
+bs = pvar_bootstrap_irf(model, 20; irf_type=:oirf)
+rb = pvar_irf(model, 20; ci=bs)                         # with bootstrap bands
+```
+"""
+function pvar_irf(model::PVARModel{T}, H::Int; irf_type::Symbol=:oirf,
+                  ci::Union{Nothing,NamedTuple}=nothing) where {T}
+    irf_type in (:oirf, :girf) ||
+        throw(ArgumentError("irf_type must be :oirf or :girf, got :$irf_type"))
+    raw = irf_type === :oirf ? pvar_oirf(model, H) : pvar_girf(model, H)
+    if ci === nothing
+        lo = zero(raw); hi = zero(raw); ci_type = :none
+    else
+        lo = convert(Array{T,3}, ci.lower)
+        hi = convert(Array{T,3}, ci.upper)
+        ci_type = :bootstrap
+    end
+    ImpulseResponse{T}(raw, lo, hi, H + 1, model.varnames, model.varnames, ci_type)
+end
+
+"""
+    pvar_fevd_result(model::PVARModel{T}, H::Int) -> FEVD{T}
+
+Panel-VAR forecast-error variance decomposition as a canonical name-carrying
+[`FEVD`](@ref) (fields laid out `variable × shock × horizon`), so it flows into the
+standard stacked-area FEVD plot dispatch. Proportions come from [`pvar_fevd`](@ref)
+(rows already sum to 1); the `decomposition` field carries the raw cumulative
+squared-OIRF numerators.
+"""
+function pvar_fevd_result(model::PVARModel{T}, H::Int) where {T}
+    props_raw  = pvar_fevd(model, H)          # (H+1, variable, shock)
+    decomp_raw = _pvar_fevd_decomp(model, H)  # (H+1, variable, shock)
+    proportions   = permutedims(props_raw,  (2, 3, 1))   # (variable, shock, H+1)
+    decomposition = permutedims(decomp_raw, (2, 3, 1))
+    FEVD{T}(decomposition, proportions, model.varnames, model.varnames)
+end

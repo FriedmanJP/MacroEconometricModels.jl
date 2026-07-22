@@ -6,6 +6,19 @@ output, not just documentation.
 
 ---
 
+## v0.7.1
+
+Documentation-only patch. No public API or numerical changes.
+
+- **API reference completed**: added `@docs`/`@autodocs` coverage for the v0.7.0
+  EViews-parity and new-module exports — extended GARCH (IGARCH/CGARCH/APARCH/FIGARCH/
+  FIEGARCH, GARCH-MIDAS diagnostics), multivariate GARCH, single-equation & panel
+  cointegrating regression, SUR/3SLS, ARDL/NARDL/PMG, penalized/robust/Tobit/Heckman
+  regression, MIDAS, ARFIMA, nonlinear & state-space forecast methods, and the
+  higher-moment/bubble/distribution test battery — so every export is registered on a
+  reference page (`checkdocs=:exports`).
+- Fixed the v0.7.0 documentation examples that were blocking the docs build.
+
 ## v0.7.0
 
 Major feature release. Breaking (0.6 → 0.7): a large new exported API surface, and `JuMP` + `Ipopt`

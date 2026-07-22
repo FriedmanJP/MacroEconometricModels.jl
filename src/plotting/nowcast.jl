@@ -28,8 +28,9 @@ Plot nowcast result with multiple view options.
 - `title::String=""` — figure title (auto-generated if empty)
 - `save_path::Union{String,Nothing}=nothing` — save HTML to file
 - `groups::Union{Vector{Int},Nothing}=nothing` — group assignment per factor (heatmap/contributions)
-- `group_names::Union{Vector{String},Nothing}=nothing` — labels for groups
+- `group_names::Union{Vector{String},Nothing}=nothing` — labels for groups (heatmap row prefixes; contributions legend)
 - `variable_names::Union{Vector{String},Nothing}=nothing` — labels for variables (heatmap)
+- `dates::Union{Vector{String},Nothing}=nothing` — calendar/vintage labels for the heatmap columns (length ≥ T_obs)
 - `n_periods::Int=18` — number of recent periods to show (heatmap)
 """
 function plot_result(nr::NowcastResult{T};
@@ -39,6 +40,7 @@ function plot_result(nr::NowcastResult{T};
                      groups::Union{Vector{Int},Nothing}=nothing,
                      group_names::Union{Vector{String},Nothing}=nothing,
                      variable_names::Union{Vector{String},Nothing}=nothing,
+                     dates::Union{Vector{String},Nothing}=nothing,
                      n_periods::Int=18) where {T}
     if view == :default
         p = _plot_nowcast_default(nr; ncols=ncols, title=title)
@@ -46,6 +48,7 @@ function plot_result(nr::NowcastResult{T};
         p = _plot_nowcast_heatmap(nr; title=title, groups=groups,
                                   group_names=group_names,
                                   variable_names=variable_names,
+                                  dates=dates,
                                   n_periods=n_periods)
     elseif view == :contributions
         p = _plot_nowcast_contributions(nr; title=title, ncols=ncols,
@@ -156,6 +159,7 @@ function _plot_nowcast_heatmap(nr::NowcastResult{T};
                                groups::Union{Vector{Int},Nothing}=nothing,
                                group_names::Union{Vector{String},Nothing}=nothing,
                                variable_names::Union{Vector{String},Nothing}=nothing,
+                               dates::Union{Vector{String},Nothing}=nothing,
                                n_periods::Int=18) where {T}
     data = nr.model.data
     T_obs, n_vars = size(data)
@@ -165,6 +169,18 @@ function _plot_nowcast_heatmap(nr::NowcastResult{T};
         variable_names
     else
         ["Var $i" for i in 1:n_vars]
+    end
+
+    # Row label for a variable: group-prefixed when a group assignment is supplied
+    # (wires the previously-dead `group_names` kwarg into the heatmap, plotrule C4).
+    _row_label = function(vi)
+        if groups !== nothing
+            g = groups[vi]
+            gname = (group_names !== nothing && g <= length(group_names)) ? group_names[g] : "Group $g"
+            return "$(gname): $(vnames[vi])"
+        else
+            return vnames[vi]
+        end
     end
 
     # Compute z-scores per column (using non-NaN values)
@@ -183,7 +199,10 @@ function _plot_nowcast_heatmap(nr::NowcastResult{T};
     # Select last n_periods
     t_start = max(1, T_obs - n_periods + 1)
     t_end = T_obs
-    col_labels = [string(t) for t in t_start:t_end]
+    # Column labels: calendar dates when supplied (length ≥ T_obs), else integer period.
+    use_dates = dates !== nothing && length(dates) >= T_obs
+    _col_label = t -> use_dates ? dates[t] : string(t)
+    col_labels = [_col_label(t) for t in t_start:t_end]
 
     # Row ordering: by groups if provided, otherwise 1:n_vars
     if groups !== nothing
@@ -191,7 +210,7 @@ function _plot_nowcast_heatmap(nr::NowcastResult{T};
     else
         row_order = collect(1:n_vars)
     end
-    row_labels = vnames[row_order]
+    row_labels = String[_row_label(vi) for vi in row_order]
 
     # Build heatmap data: {x: col_label, y: row_label, v: z_score or null}
     hm_rows = Vector{Pair{String,String}}[]
@@ -199,8 +218,8 @@ function _plot_nowcast_heatmap(nr::NowcastResult{T};
         for t in t_start:t_end
             val = z_data[t, vi]
             push!(hm_rows, [
-                "x" => _json(string(t)),
-                "y" => _json(vnames[vi]),
+                "x" => _json(_col_label(t)),
+                "y" => _json(_row_label(vi)),
                 "v" => isnan(val) ? "null" : _json(val)
             ])
         end
@@ -214,10 +233,13 @@ function _plot_nowcast_heatmap(nr::NowcastResult{T};
         title = "Nowcast Data Availability & Z-Scores ($(nr.method))"
     end
 
+    # Signed z-scores → diverging scale, explicit symmetric ±3 domain (standard
+    # z-score cut; plotrule Heatmaps rule 3, PLT-15). tip_label kills the "Period" noun.
     js = _render_heatmap_js(id, data_json, row_labels_json, col_labels_json;
-                            xlabel="Period", ylabel="")
+                            xlabel=use_dates ? "Date" : "Period", ylabel="",
+                            scale=:diverging, color_domain=[-3.0, 3.0])
 
-    _make_plot([_PanelSpec(id, "Z-Score Heatmap", js)]; title=title)
+    _make_plot([_PanelSpec(id, "Z-Score Heatmap (values are z-scores, clipped ±3)", js)]; title=title)
 end
 
 # =============================================================================
@@ -379,8 +401,8 @@ function _plot_news_releases(nn::NowcastNews{T}; title::String="") where {T}
     data_json = _json_array_of_objects(rows)
     s_json = _series_json(["News Impact"], [_PLOT_COLORS[1]]; keys=["impact"])
 
-    js = _render_bar_js(id, data_json, s_json; mode="grouped",
-                        xlabel="", ylabel="Impact")
+    js = _render_bar_js(id, data_json, s_json; mode="grouped", orientation="h",
+                        xlabel="Impact", ylabel="")
 
     _make_plot([_PanelSpec(id, "Per-Release Impact", js)];
                title=_news_title(nn, title))
@@ -448,8 +470,10 @@ function _plot_news_individual(nn::NowcastNews{T}; title::String="") where {T}
     data_json = _json_array_of_objects(rows)
     s_json = _series_json(["News Impact"], [_PLOT_COLORS[1]]; keys=["impact"])
 
-    js = _render_bar_js(id, data_json, s_json; mode="grouped",
-                        xlabel="", ylabel="Impact")
+    # sorted_idx is largest-|impact| first; the y-band runs top→bottom, so the
+    # largest impact sits at the top of the horizontal chart.
+    js = _render_bar_js(id, data_json, s_json; mode="grouped", orientation="h",
+                        xlabel="Impact", ylabel="")
 
     _make_plot([_PanelSpec(id, "Individual Impacts (sorted)", js)];
                title=_news_title(nn, title))
