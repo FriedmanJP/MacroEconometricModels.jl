@@ -2375,12 +2375,17 @@ end
         priors=priors, method=:smc, observables=[:y],
         n_smc=100, rng=Random.MersenneTwister(1))
 
+    # Default view is :trace (MCMC diagnostics) after the PLT plotting overhaul.
     p = plot_result(result)
     @test p isa PlotOutput
     @test occursin("d3", p.html)
-    @test occursin("Prior", p.html)
-    @test occursin("Posterior", p.html)
     @test occursin("Bayesian DSGE", p.html)
+
+    # The prior-vs-posterior overlay lives in the :density view.
+    pden = plot_result(result; view=:density)
+    @test pden isa PlotOutput
+    @test occursin("Prior", pden.html)
+    @test occursin("Posterior", pden.html)
     end
 end
 
