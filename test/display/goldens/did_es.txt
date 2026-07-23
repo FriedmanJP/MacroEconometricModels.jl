@@ -1,33 +1,33 @@
 Difference-in-Differences — Two-Way Fixed Effects
 
- Method Two-Way Fixed Effects
- Outcome outcome
- Treatment treat_time
- Clustering Unit-clustered
- Control group never_treated
- Groups N
- Treated units N
- Control units N
- Observations N
+Method Two-Way Fixed Effects
+Outcome outcome
+Treatment treat_time
+Clustering Unit-clustered
+Control group never_treated
+Groups N
+Treated units N
+Control units N
+Observations N
 
- Event-Study Coefficients
+Event-Study Coefficients
 
- Coef. Std.Err. z P>|z| CI lower CI upper
+Coef. Std.Err. z P>|z| CI lower CI upper
 
- e=-N N N N N N N
- e=-N N N N N N N
- e=-N (ref) — — — — — —
- e=N N N N N N N
- e=N N N N N N N
- e=N N N N N N N
- e=N N N N N N N
- e=N N N N N N N
- e=N N N N N N N
+e=-N N N N N N N
+e=-N N N N N N N
+e=-N (ref) — — — — — —
+e=N N N N N N N
+e=N N N N N N N
+e=N N N N N N N
+e=N N N N N N N
+e=N N N N N N N
+e=N N N N N N N
 
 
 Aggregate Treatment Effect
 
- Overall ATT N
- SE N
- z N
- P>|z| N
+Overall ATT N
+SE N
+z N
+P>|z| N

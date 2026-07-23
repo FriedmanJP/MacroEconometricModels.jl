@@ -1,31 +1,31 @@
- DSGE Estimation — GMM
+DSGE Estimation — GMM
 
- Parameters N
- Method irf_matching
- J-statistic N
- J p-value N
- Converged Yes
- Determined Yes
+Parameters N
+Method irf_matching
+J-statistic N
+J p-value N
+Converged Yes
+Determined Yes
 
- Estimated Parameters
+Estimated Parameters
 
- Coef. Std.Err. z P>|z| CI lower CI upper
+Coef. Std.Err. z P>|z| CI lower CI upper
 
- ρ N N N N N N
+ρ N N N N N N
 
 Significance: pN, pN, pN
 
- DSGE Solution
+DSGE Solution
 
- Variables N
- Shocks N
- Method gensys
- Existence Yes
- Uniqueness Yes
- Stable eigenvalues N
- Unstable eigenvalues N
- Max |eigenvalue(GN)| N
+Variables N
+Shocks N
+Method gensys
+Existence Yes
+Uniqueness Yes
+Stable eigenvalues N
+Unstable eigenvalues N
+Max |eigenvalue(GN)| N
 
- Steady State
+Steady State
 
- y N
+y N
