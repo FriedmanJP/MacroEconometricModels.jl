@@ -227,10 +227,17 @@ end
         _assert_roundtrip(estimate_gjr_garch(yv, 1, 1))
         _assert_roundtrip(estimate_aparch(yv, 1, 1; fix_delta=2.0, fix_gamma=0.0))
         _assert_roundtrip(estimate_cgarch(yv))
-        rl = randn(MersenneTwister(38), 400)
-        _assert_roundtrip(estimate_figarch(rl; truncation=100))
-        _assert_roundtrip(estimate_fiegarch(rl; truncation=100))
-        _assert_roundtrip(estimate_garch_midas(rl, randn(MersenneTwister(39), 400); K=12, m_freq=22))
+        # n=300/truncation=50 fits a valid FI(E)GARCH in ~0.1s; n=400/truncation=100 sent the
+        # long-memory MLE into a ~36s optimizer thrash (450× slower) — the single dominant cost
+        # in this file. Serialization coverage only needs a converged model, not a specific d, so
+        # use the fast config (FIGARCH correctness/truncation is exercised in test_volatility.jl).
+        rl = randn(MersenneTwister(38), 300)
+        _assert_roundtrip(estimate_figarch(rl; truncation=50))
+        _assert_roundtrip(estimate_fiegarch(rl; truncation=50))
+        # GARCH-MIDAS needs > K+1 low-freq blocks (⌈n/m_freq⌉ > 13 ⇒ n ≥ 308); its own 400-obs
+        # series (already fast) stays, decoupled from the shrunk FI(E)GARCH series above.
+        _assert_roundtrip(estimate_garch_midas(randn(MersenneTwister(38), 400),
+                                               randn(MersenneTwister(39), 400); K=12, m_freq=22))
         _assert_roundtrip(estimate_dcc(randn(MersenneTwister(40), 250, 2)))
         _assert_roundtrip(estimate_sv(yv[1:150]; n_samples=20, burnin=10))
     end
