@@ -1,11 +1,11 @@
- Multivariate Normality Test Suite (n=N, k=N)
+Multivariate Normality Test Suite (n=N, k=N)
 
- Test Statistic P-value H₀ (N%)
+Test Statistic P-value H₀ (N%)
 
- Jarque–Bera (multivariate) N N Reject
- Jarque–Bera (component-wise) N N Reject
- Mardia skewness N N Reject
- Mardia kurtosis N N Reject
- Mardia Both N N Reject
- Doornik–Hansen N N Reject
- Henze–Zirkler N N Reject
+Jarque–Bera (multivariate) N N Reject
+Jarque–Bera (component-wise) N N Reject
+Mardia skewness N N Reject
+Mardia kurtosis N N Reject
+Mardia Both N N Reject
+Doornik–Hansen N N Reject
+Henze–Zirkler N N Reject

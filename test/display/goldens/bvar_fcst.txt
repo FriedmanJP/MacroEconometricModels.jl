@@ -1,25 +1,25 @@
- Bayesian VAR Forecast
+Bayesian VAR Forecast
 
- Specification
+Specification
 
- Horizon N
- Variables N
- Credibility N%
+Horizon N
+Variables N
+Credibility N%
 
- yN
+yN
 
- h Post. Mean N% N%
+h Post. Mean N% N%
 
- N N N N
- N N N N
- N N N N
- N N N N
+N N N N
+N N N N
+N N N N
+N N N N
 
- yN
+yN
 
- h Post. Mean N% N%
+h Post. Mean N% N%
 
- N N N N
- N N N N
- N N N N
- N N N N
+N N N N
+N N N N
+N N N N
+N N N N

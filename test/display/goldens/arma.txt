@@ -1,26 +1,26 @@
- ARMA(N,N) Model
+ARMA(N,N) Model
 
- Coef. Std.Err. z P>|z| CI lower CI upper
+Coef. Std.Err. z P>|z| CI lower CI upper
 
- (Intercept) N N — — — —
- φ[N] N N — — — —
- θ[N] N N N N N N
-
-
- Estimate
-
- σ² N
+(Intercept) N N — — — —
+φ[N] N N — — — —
+θ[N] N N N N N N
 
 
- Fit Value
+Estimate
 
- Observations N
- Log-likelihood N
- AIC N
- BIC N
- R² N
- S.E. of regression N
- Method CSS-MLE
- Converged Yes
+σ² N
+
+
+Fit Value
+
+Observations N
+Log-likelihood N
+AIC N
+BIC N
+R² N
+S.E. of regression N
+Method CSS-MLE
+Converged Yes
 
 Significance: pN, pN, pN

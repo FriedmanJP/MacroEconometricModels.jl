@@ -623,11 +623,11 @@ reproduce(post)          # ReproReport: PASS (matched bit-for-bit)
 
 Because a seed is not recoverable from an `AbstractRNG` after the fact, the estimator must own it: pass `seed=N` and it seeds a fresh generator, records `N`, and reproduces exactly (thread-count-invariantly). Without a `seed` the manifest still captures the environment but reports the result as not seed-reproducible. A bootstrap IRF carries a manifest too; reproduce it with `reproduce(ir, model)` (the source model is not retained on the IRF result).
 
-[`save_model`](@ref) / [`load_model`](@ref) persist a fitted model to a versioned, self-describing container backed by the optional `JLD2` package. The file records the format version, the package and Julia versions, and — for a randomized result — its reproducibility manifest, so it survives a package upgrade; a file whose `format_version` a build does not recognize is rejected with a `SerializationError` naming the expected version rather than silently mis-read.
+[`save_model`](@ref) / [`load_model`](@ref) persist a fitted model — or a data container — to a versioned, self-describing container backed by the optional `JLD2` package. Coverage spans every VAR, regression, panel, volatility, factor, ARIMA, local-projection, and GMM model plus the data containers (`TimeSeriesData`, `PanelData`, `CrossSectionData`, `IOData`). The file records the format version, the package and Julia versions, and — for a randomized result — its reproducibility manifest, so it survives a package upgrade; a file whose `format_version` a build does not recognize is rejected with a `SerializationError` naming the expected version rather than silently mis-read. Only public fields are stored: cached factorizations recompute on load, and a state-space `builder` closure reloads as `nothing`.
 
 ```julia
 using JLD2                                       # loads the disk backend
-save_model(post, "bvar_posterior.jld2")          # VAR/BVAR/Reg/Logit/Probit/LP supported
+save_model(post, "bvar_posterior.jld2")          # any fitted model or data container
 post_reloaded = load_model("bvar_posterior.jld2")
 reproduce(post_reloaded)                          # still reproduces from the persisted seed
 ```
