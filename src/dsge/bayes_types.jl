@@ -556,6 +556,11 @@ Fields:
 - `measurement_error::Union{Nothing,Vector{T}}` — measurement error SDs
 - `solver::Symbol` — DSGE solver used during estimation
 - `solver_kwargs::NamedTuple` — solver keyword arguments used during estimation
+- `prefilter::Union{Nothing,PrefilterSpec{T}}` — observable transform applied before
+  estimation (`nothing` when `prefilter=:none`); invert with [`invert_prefilter`](@ref)
+  to map filtered forecasts back to the observed scale
+- `trends::Union{Nothing,ObservationTrends{T}}` — deterministic trends carried in the
+  measurement equation (`nothing` when none were specified)
 """
 struct BayesianDSGE{T<:AbstractFloat} <: AbstractDSGEModel
     theta_draws::Matrix{T}
@@ -578,6 +583,8 @@ struct BayesianDSGE{T<:AbstractFloat} <: AbstractDSGEModel
     measurement_error::Union{Nothing,Vector{T}}
     solver::Symbol
     solver_kwargs::NamedTuple
+    prefilter::Union{Nothing,PrefilterSpec{T}}
+    trends::Union{Nothing,ObservationTrends{T}}
 
     function BayesianDSGE{T}(theta_draws, log_posterior, param_names, priors,
                               log_marginal_likelihood, method, acceptance_rate,
@@ -586,7 +593,8 @@ struct BayesianDSGE{T<:AbstractFloat} <: AbstractDSGEModel
                               solved_at,
                               data=zeros(T, 0, 0), observables=Symbol[],
                               measurement_error=nothing, solver=:gensys,
-                              solver_kwargs=NamedTuple()) where {T<:AbstractFloat}
+                              solver_kwargs=NamedTuple(),
+                              prefilter=nothing, trends=nothing) where {T<:AbstractFloat}
         n_draws, n_params = size(theta_draws)
         @assert length(log_posterior) == n_draws "log_posterior length must match n_draws"
         @assert length(param_names) == n_params "param_names length must match n_params"
@@ -598,7 +606,7 @@ struct BayesianDSGE{T<:AbstractFloat} <: AbstractDSGEModel
                ess_history, phi_schedule, spec, solution, state_space,
                n_failed_draws, n_lik_evals, solved_at,
                Matrix{T}(data), Vector{Symbol}(observables), me,
-               solver, solver_kwargs)
+               solver, solver_kwargs, prefilter, trends)
     end
 end
 

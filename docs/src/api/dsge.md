@@ -130,6 +130,17 @@ dynare_prior
 InverseGamma1
 ```
 
+### Observation Handling for Trending Data
+
+```@docs
+apply_prefilter
+invert_prefilter
+PrefilterSpec
+observation_trends
+ObservationTrends
+detect_trend
+```
+
 ---
 
 ## Occasionally Binding Constraints
