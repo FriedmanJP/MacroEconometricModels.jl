@@ -477,6 +477,7 @@ include("lp/smooth.jl")
 include("lp/state.jl")
 include("lp/propensity.jl")
 include("lp/forecast.jl")
+include("lp/weak_iv.jl")   # T245 (#344): MOP effective F + horizon-wise AR bands for LP-IV
 
 # Difference-in-Differences / Event Study LP
 include("did/types.jl")
@@ -974,6 +975,7 @@ export estimate_xtcointreg, PanelCointRegModel   # EV-22 (#430): panel FMOLS/DOL
 
 # LP-IV (Stock & Watson 2018)
 export estimate_lp_iv, lp_iv_irf
+export montiel_olea_pflueger_f, lp_iv_ar_band, MontielOleaPfluegerF, LPIVARBand
 export weak_instrument_test, sargan_test
 
 # Smooth LP (Barnichon & Brownlees 2019)

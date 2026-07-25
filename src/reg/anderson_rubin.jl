@@ -202,13 +202,15 @@ test of that restriction, divided by `q`:
 - `:ols` — the classical homoskedastic AR, `(γ'γ/q) / (r'r/(n−m))`, referred to `F(q, n−m)`
 - `:hc0`–`:hc3` — heteroskedasticity-robust meat `Σᵢ Zbᵢ rᵢ² Zbᵢ'`, referred to `χ²_q/q`
 - `:cluster` — cluster meat `Σ_g (Zb_g'r_g)(Zb_g'r_g)'`, referred to `χ²_q/q`
+- `:hac` — Newey-West meat at `bandwidth`, for serially correlated residuals, `χ²_q/q`
 
 Its size is correct at any instrument strength because `γ = 0` under `H₀` whatever the
 first stage looks like.
 """
 function _ar_stat(y::Vector{T}, Xen::Matrix{T}, W::Matrix{T}, Zb::Matrix{T},
                   beta0::Vector{T}, cov_type::Symbol, m::Int;
-                  clusters::Union{Nothing,AbstractVector}=nothing) where {T<:AbstractFloat}
+                  clusters::Union{Nothing,AbstractVector}=nothing,
+                  bandwidth::Int=0) where {T<:AbstractFloat}
     n, q = size(Zb)
     ytil = y .- Xen * beta0
     ytil_perp = isempty(W) ? ytil : _partial_out(ytil, W)
@@ -221,6 +223,16 @@ function _ar_stat(y::Vector{T}, Xen::Matrix{T}, W::Matrix{T}, Zb::Matrix{T},
         s2 = dot(resid, resid) / T(df2)
         stat = dot(gamma, gamma) / (T(q) * s2)
         return stat, df2, :F
+    end
+
+    if cov_type === :hac
+        # Heteroskedasticity- and autocorrelation-robust meat, for serially correlated
+        # residuals (LP-IV at horizon h has MA(h) overlap). newey_west returns the full
+        # sandwich; with an orthonormal Zb the bread is the identity, so the sandwich IS
+        # the meat and no rescaling is needed.
+        Vs = newey_west(Zb, resid; bandwidth=bandwidth)
+        wald_hac = dot(gamma, robust_inv(Symmetric(Matrix{T}(Vs))) * gamma)
+        return wald_hac / T(q), df2, :chisq
     end
 
     V = zeros(T, q, q)

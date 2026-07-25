@@ -67,6 +67,7 @@ const TEST_GROUPS = [
         "lp/test_lp_structural.jl",
         "lp/test_lp_forecast.jl",
         "lp/test_lp_fevd.jl",
+        "lp/test_lp_weak_iv.jl",   # T245 (#344): MOP effective F + LP-IV AR bands
         "factor/test_factormodel.jl",
         "factor/test_dynamicfactormodel.jl",
         "factor/test_gdfm.jl",

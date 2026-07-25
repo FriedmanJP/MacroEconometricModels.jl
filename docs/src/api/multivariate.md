@@ -259,6 +259,15 @@ Pages   = ["lp/iv.jl"]
 Order   = [:function]
 ```
 
+### LP-IV Weak-Instrument-Robust Inference
+
+```@docs
+montiel_olea_pflueger_f
+lp_iv_ar_band
+MontielOleaPfluegerF
+LPIVARBand
+```
+
 ### Smooth LP (Barnichon & Brownlees 2019)
 
 ```@autodocs
