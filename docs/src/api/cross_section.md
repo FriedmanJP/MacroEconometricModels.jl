@@ -13,6 +13,7 @@ ProbitModel
 MarginalEffects
 MultinomialMarginalEffects
 OddsRatio
+WildClusterBootstrap
 ```
 
 ---
@@ -34,6 +35,12 @@ estimate_reg
 estimate_iv
 estimate_logit
 estimate_probit
+```
+
+### Few-Cluster Inference
+
+```@docs
+wild_cluster_bootstrap
 ```
 
 ### Marginal Effects and Odds Ratios

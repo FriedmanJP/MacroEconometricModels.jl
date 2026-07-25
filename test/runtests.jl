@@ -116,6 +116,7 @@ const TEST_GROUPS = [
         "reg/test_heckman.jl",     # EV-18 (#426): Heckman sample-selection (two-step + MLE)
         "reg/test_robust.jl",      # EV-40 (#448): robust regression — Huber/bisquare M + Yohai MM
         "system/test_system.jl",   # EV-35 (#443): SUR / 3SLS systems estimation
+        "reg/test_wildboot.jl",          # T243 (#342): wild cluster bootstrap (boottest-style)
         "reg/test_reg_diagnostics.jl",   # EV-31 (#439): White/BP/Glejser/Harvey/BG/RESET
         "reg/test_stability.jl",         # EV-32 (#440): recursive residuals / CUSUM(SQ) / Chow / influence
         "reg/test_ordered.jl",

@@ -359,6 +359,73 @@ report(m)
 
 The cluster-robust standard errors for the intercept are substantially larger than the HC1 standard errors because the cluster-level shock induces within-group correlation that inflates the effective variance. The slope coefficient is less affected because the regressor `x1` varies independently across observations within each cluster.
 
+### Few Clusters: The Wild Cluster Bootstrap
+
+The consistency of the cluster-robust sandwich is asymptotic in ``G``. With few clusters --- the routine situation in difference-in-differences and policy evaluation, where treatment varies at the state or region level --- the cluster-robust ``t`` over-rejects severely: at ``G = 6`` a nominal 5% test rejects a true null roughly 15% of the time. `wild_cluster_bootstrap` implements the remedy of Cameron, Gelbach & Miller (2008), matching Stata `boottest`.
+
+The **restricted** (WCR) variant is the default and the recommended one. Estimate the model imposing ``H_0: \beta_j = r``, giving the restricted fit ``\tilde\beta`` and residuals ``\tilde u``, then generate bootstrap outcomes by flipping each **cluster's** residuals as a block:
+
+```math
+y_i^* = x_i'\tilde\beta + v_{g(i)}\,\tilde u_i, \qquad v_g \sim \text{Rademacher}
+```
+
+where:
+- ``v_g`` is one weight per cluster ``g``, ``\pm 1`` with equal probability
+- ``g(i)`` is the cluster of observation ``i``
+- the whole cluster's residuals share the weight, which is what preserves the within-cluster correlation
+
+Re-estimating on each ``y^*`` and recomputing the cluster-robust ``t`` gives the bootstrap distribution; the p-value is the share of ``|t^*|`` at least as large as ``|t_{obs}|``, and the confidence interval comes from inverting the test over the null value.
+
+```@example reg
+# Six clusters — far too few for the cluster-robust normal approximation
+G_few, n_per = 6, 30
+n_few = G_few * n_per
+cl_few = repeat(1:G_few, inner=n_per)
+X_few = hcat(ones(n_few), randn(n_few))
+u_few = repeat(randn(G_few), inner=n_per) + 0.5 * randn(n_few)
+y_few = X_few * [1.0, 0.0] + u_few          # true slope is zero
+
+m_few = estimate_reg(y_few, X_few; cov_type=:cluster, clusters=cl_few,
+                     varnames=["(Intercept)", "x1"])
+wcb = wild_cluster_bootstrap(m_few, "x1", 0.0; clusters=cl_few)
+report(wcb)
+```
+
+The report puts the bootstrap p-value next to the cluster-robust normal p-value, which is the comparison that matters: the latter is the one that over-rejects. With ``G = 6`` there are only ``2^6 = 64`` distinct Rademacher sign vectors, so the procedure **enumerates all of them** rather than sampling — the test then carries no bootstrap simulation error at all, and the p-value takes values on multiples of ``1/65``.
+
+Weights are `:rademacher` by default; `:webb` gives the six-point distribution ``\{\pm\sqrt{1/2}, \pm 1, \pm\sqrt{3/2}\}``, which has more support points and is preferred when ``G`` is very small (MacKinnon & Webb 2018). The function also dispatches on a fixed-effects [`PanelRegModel`](@ref), defaulting the clusters to the panel entity ids:
+
+```julia
+pm = estimate_xtreg(pd, :y, [:x])
+wild_cluster_bootstrap(pm, "x", 0.0)
+```
+
+| Keyword | Type | Default | Description |
+|---------|------|---------|-------------|
+| `clusters` | `AbstractVector` | required (`RegModel`) | Cluster assignment per observation |
+| `n_boot` | `Int` | `999` | Bootstrap replications (ignored when the sign space is enumerated) |
+| `weights` | `Symbol` | `:rademacher` | `:rademacher` or `:webb` |
+| `imposenull` | `Bool` | `true` | Impose the null (WCR); `false` gives the unrestricted WCU |
+| `ci` | `Bool` | `true` | Compute the inverted-test confidence interval |
+| `level` | `Real` | `0.95` | CI coverage |
+| `ci_gridpoints` | `Int` | `25` | Grid used to bracket the CI crossings |
+| `enumerate` | `Bool` | `nothing` | Force or forbid exact enumeration of the ``2^G`` sign vectors |
+| `rng` | `AbstractRNG` | `default_rng()` | Random number generator |
+
+`WildClusterBootstrap{T}` return value:
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `estimate` | `T` | Unrestricted point estimate ``\hat\beta_j`` |
+| `t_stat` | `T` | Observed cluster-robust ``t`` for the restriction |
+| `p_value` | `T` | Symmetric bootstrap p-value |
+| `p_value_equaltail` | `T` | Equal-tail bootstrap p-value |
+| `p_value_asymptotic` | `T` | Cluster-robust normal p-value, for comparison |
+| `ci_lower` / `ci_upper` | `T` | Inverted-test confidence interval (`NaN` when `ci=false`) |
+| `t_boot` | `Vector{T}` | Bootstrap ``t`` distribution at the null |
+| `n_clusters` | `Int` | Number of clusters |
+| `enumerated` | `Bool` | Whether all ``2^G`` sign vectors were enumerated exactly |
+
 ---
 
 ## Long-Run Variance (HAC) Estimation
@@ -1286,6 +1353,15 @@ The OLS estimate of the return to education is biased upward because ability is 
 ---
 
 ## References
+
+- Cameron, A. C., Gelbach, J. B., & Miller, D. L. (2008). Bootstrap-Based Improvements for Inference with Clustered Errors.
+  *Review of Economics and Statistics*, 90(3), 414-427. [DOI](https://doi.org/10.1162/rest.90.3.414)
+
+- MacKinnon, J. G., & Webb, M. D. (2018). The Wild Bootstrap for Few (Treated) Clusters.
+  *The Econometrics Journal*, 21(2), 114-135. [DOI](https://doi.org/10.1111/ectj.12107)
+
+- Roodman, D., MacKinnon, J. G., Nielsen, M. Ø., & Webb, M. D. (2019). Fast and Wild: Bootstrap Inference in Stata Using boottest.
+  *The Stata Journal*, 19(1), 4-60. [DOI](https://doi.org/10.1177/1536867X19830877)
 
 - Aitken, A. C. (1936). On Least Squares and Linear Combination of Observations.
   *Proceedings of the Royal Society of Edinburgh*, 55, 42-48. [DOI](https://doi.org/10.1017/S0370164600014346)
