@@ -75,6 +75,16 @@ const _REFERENCES = Dict{Symbol, _RefEntry}(
         title="Inference Based on Structural Vector Autoregressions Identified with Sign and Zero Restrictions: Theory and Applications",
         journal="Econometrica", volume="86", issue="2", pages="685--720",
         doi="10.3982/ECTA14468", isbn="", publisher="", entry_type=:article),
+    :waggoner_zha1999 => (key=:waggoner_zha1999,
+        authors="Waggoner, Daniel F. and Zha, Tao", year=1999,
+        title="Conditional Forecasts in Dynamic Multivariate Models",
+        journal="Review of Economics and Statistics", volume="81", issue="4", pages="639--651",
+        doi="10.1162/003465399558508", isbn="", publisher="", entry_type=:article),
+    :antolin_diaz_petrella_rubio_ramirez2021 => (key=:antolin_diaz_petrella_rubio_ramirez2021,
+        authors="Antol{\\'\\i}n-D{\\'\\i}az, Juan and Petrella, Ivan and Rubio-Ram{\\'\\i}rez, Juan F.", year=2021,
+        title="Structural Scenario Analysis with SVARs",
+        journal="Journal of Monetary Economics", volume="117", issue="", pages="798--815",
+        doi="10.1016/j.jmoneco.2020.06.001", isbn="", publisher="", entry_type=:article),
     :mountford_uhlig2009 => (key=:mountford_uhlig2009,
         authors="Mountford, Andrew and Uhlig, Harald", year=2009,
         title="What Are the Effects of Fiscal Policy Shocks?",
@@ -1655,6 +1665,7 @@ const _TYPE_REFS = Dict{Symbol, Vector{Symbol}}(
     :AriasSVARResult => [:arias_rubio_ramirez_waggoner2018],
     :UhligSVARResult => [:mountford_uhlig2009, :uhlig2005],
     :SVARRestrictions => [:arias_rubio_ramirez_waggoner2018],
+    :ConditionalForecast => [:waggoner_zha1999, :antolin_diaz_petrella_rubio_ramirez2021],
     :SignIdentifiedSet => [:rubio_ramirez2010, :baumeister_hamilton2015],
     # Bayesian VAR
     :MinnesotaHyperparameters => [:litterman1986, :kadiyala_karlsson1997],
@@ -2270,6 +2281,7 @@ refs(io::IO, ::AriasSVARResult; kw...) = refs(io, _TYPE_REFS[:AriasSVARResult]; 
 refs(io::IO, ::UhligSVARResult; kw...) = refs(io, _TYPE_REFS[:UhligSVARResult]; kw...)
 refs(io::IO, ::SVARRestrictions; kw...) = refs(io, _TYPE_REFS[:SVARRestrictions]; kw...)
 refs(io::IO, ::SignIdentifiedSet; kw...) = refs(io, _TYPE_REFS[:SignIdentifiedSet]; kw...)
+refs(io::IO, ::ConditionalForecast; kw...) = refs(io, _TYPE_REFS[:ConditionalForecast]; kw...)
 refs(io::IO, ::MinnesotaHyperparameters; kw...) = refs(io, _TYPE_REFS[:MinnesotaHyperparameters]; kw...)
 refs(io::IO, ::BVARPosterior; kw...) = refs(io, _TYPE_REFS[:BVARPosterior]; kw...)
 

@@ -534,6 +534,35 @@ The posterior credible intervals widen with the forecast horizon, reflecting bot
 | `point_estimate` | `Symbol` | Central tendency used (`:mean` or `:median`) |
 | `varnames` | `Vector{String}` | Variable names |
 
+### Conditional Forecasts
+
+`conditional_forecast` runs a Waggoner & Zha (1999) scenario through the posterior. Every draw supplies its own coefficients, structural impact matrix, unconditional path and restriction system, and contributes one conditional shock draw — so the bands carry both parameter and shock uncertainty, unlike the `VARModel` dispatch, which conditions on the point estimate. Non-stationary draws are skipped exactly as in `forecast`.
+
+The mechanics of the restriction system, hard versus soft conditions, and the identification-invariance result are covered on the [VAR](@ref var_page) page.
+
+```@example bvar
+# Hold the policy rate at 2% for the first four quarters
+scenario = Dict(("FFR", h) => 2.0 for h in 1:4)
+cfc = conditional_forecast(post, scenario, 12)
+report(cfc)
+```
+
+The conditioned rows are pinned to 2.0 with a degenerate band — a hard condition holds in every posterior draw — while the other variables show the scenario's spillovers with credible intervals that reflect the full posterior.
+
+```julia
+plot_result(cfc)
+```
+
+| Keyword | Type | Default | Description |
+|---------|------|---------|-------------|
+| `Q` | `AbstractMatrix` | `nothing` | Rotation matrix; `nothing` is Cholesky. Affects only the reported `shocks` |
+| `reps` | `Int` | `nothing` | Posterior draws to use (default: all) |
+| `conf_level` | `Real` | `0.95` | Credible-band coverage |
+| `point_estimate` | `Symbol` | `:mean` | Central tendency across draws (`:mean` or `:median`) |
+| `rng` | `AbstractRNG` | `default_rng()` | Random number generator |
+
+The return value is a `ConditionalForecast{T}`; its fields are documented on the [VAR](@ref var_page) page.
+
 ---
 
 ## Large BVAR
@@ -641,3 +670,6 @@ This workflow demonstrates the complete Bayesian pipeline: hyperparameter optimi
 
 - Litterman, R. B. (1986). Forecasting with Bayesian Vector Autoregressions --- Five Years of Experience.
   *Journal of Business & Economic Statistics*, 4(1), 25-38. [DOI](https://doi.org/10.1080/07350015.1986.10509491)
+
+- Waggoner, D. F., & Zha, T. (1999). Conditional Forecasts in Dynamic Multivariate Models.
+  *Review of Economics and Statistics*, 81(4), 639-651. [DOI](https://doi.org/10.1162/003465399558508)

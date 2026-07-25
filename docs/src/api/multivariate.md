@@ -108,6 +108,15 @@ BVARPosterior
 AbstractForecastResult
 VARForecast
 BVARForecast
+ConditionalForecast
+ForecastCondition
+```
+
+### Conditional Forecasting
+
+```@docs
+conditional_forecast
+forecast_condition
 ```
 
 ---

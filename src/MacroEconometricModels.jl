@@ -226,6 +226,9 @@ include("nongaussian/tests.jl")
 # Bayesian utilities (after bayesian + identification)
 include("bvar/utils.jl")
 
+# Conditional forecasting / scenario analysis (needs VAR + BVAR + identification)
+include("var/conditional_forecast.jl")
+
 # Factor models
 include("factor/kalman.jl")
 include("factor/static.jl")
@@ -628,6 +631,7 @@ export point_forecast, lower_bound, upper_bound, forecast_horizon
 
 # VAR types
 export VARModel, VARForecast
+export ConditionalForecast, ForecastCondition, forecast_condition, conditional_forecast
 
 # IRF types
 export ImpulseResponse, BayesianImpulseResponse

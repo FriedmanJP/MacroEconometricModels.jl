@@ -613,6 +613,74 @@ The forecast object displays per-variable tables with point forecasts and confid
 | `reps` | `Int` | `500` | Number of bootstrap replications |
 | `conf_level` | `Real` | `0.95` | Confidence level for intervals |
 
+### Conditional Forecasts and Scenario Analysis
+
+`conditional_forecast` answers the scenario question — *what happens to everything else if inflation is held at 2% for the next four quarters?* — using Waggoner & Zha (1999). Write the forecast as the unconditional path plus the moving average of the future structural shocks,
+
+```math
+y_{T+s} = \hat{y}_{T+s} + \sum_{j=1}^{s} \Psi_{s-j} \, \varepsilon_{T+j},
+\qquad \Psi_s = \Phi_s P
+```
+
+where:
+- ``\hat{y}_{T+s}`` is the unconditional forecast
+- ``\Phi_s`` is the reduced-form moving-average coefficient at lag ``s`` (``\Phi_0 = I``)
+- ``P`` is the structural impact matrix and ``\varepsilon_{T+j} \sim N(0, I)`` the future shocks
+
+Each restriction is linear in ``\varepsilon``, so stacking them over the conditioning window gives ``R\varepsilon = r``, where ``r`` is the gap between the desired path and the unconditional forecast. The shocks are then drawn from the implied conditional distribution
+
+```math
+\varepsilon \sim N\big(R'(RR')^{-1}r, \; I - R'(RR')^{-1}R\big)
+```
+
+— the minimum-norm mean plus randomness in the null space of the restrictions. The point forecast uses the conditional mean; the bands come from `reps` draws, so unconstrained variables and horizons keep genuine uncertainty while constrained cells collapse onto their targets.
+
+```@example var
+model = estimate_var(Y, 4; varnames=["INDPRO", "CPI", "FFR"])
+# Hold the policy rate at 2% for four quarters
+scenario = Dict(("FFR", h) => 2.0 for h in 1:4)
+cfc = conditional_forecast(model, scenario, 12; reps=200)
+report(cfc)
+```
+
+Each variable's table places the conditional path next to the unconditional one, so the scenario's effect is read off directly. Conditions are built either as a `Dict` keyed by `(variable, horizon)` or with [`forecast_condition`](@ref), which also builds **soft** conditions — a target with a tolerance:
+
+```@example var
+soft = [forecast_condition("FFR", h, 2.0; sd=0.25) for h in 1:4]
+cfc_soft = conditional_forecast(model, soft, 12; reps=200)
+round.(cfc_soft.forecast[1:4, 3], digits=3)   # shrunk toward 2.0, not pinned to it
+```
+
+A soft condition treats the target as a noisy observation with standard deviation `sd`, so the path is shrunk toward it rather than hit exactly, and `sd → 0` recovers the hard condition.
+
+```julia
+plot_result(cfc)
+```
+
+!!! note "Identification and conditional forecasts"
+    For conditions on observable paths the conditional forecast is **invariant** to the rotation ``Q``: writing ``P = LQ``, the rotation cancels between ``R`` and the impact matrix, so identification does not change the forecast. It changes only the interpretation of the implied shocks in `result.shocks`, which rotate as ``\varepsilon_L = Q\varepsilon_{LQ}``. Pass `Q` when those structural shocks are themselves of interest.
+
+| Keyword | Type | Default | Description |
+|---------|------|---------|-------------|
+| `Q` | `AbstractMatrix` | `nothing` | Rotation matrix; `nothing` is Cholesky. Affects only the reported `shocks` |
+| `reps` | `Int` | `1000` | Draws used for the bands |
+| `conf_level` | `Real` | `0.95` | Band coverage |
+| `rng` | `AbstractRNG` | `default_rng()` | Random number generator |
+
+`ConditionalForecast{T}` return value:
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `forecast` | `Matrix{T}` | ``h \times n`` conditional mean path |
+| `ci_lower` / `ci_upper` | `Matrix{T}` | ``h \times n`` band bounds |
+| `unconditional` | `Matrix{T}` | ``h \times n`` unconditional forecast, for comparison |
+| `shocks` | `Matrix{T}` | ``h \times n`` mean structural shocks implied by the conditions |
+| `conditions` | `Vector{ForecastCondition{T}}` | The restrictions imposed, with variable indices resolved |
+| `identification` | `Symbol` | `:cholesky` or `:custom` |
+| `n_draws` | `Int` | Draws used for the bands |
+
+The same function dispatches on `BVARPosterior` to integrate the scenario over the posterior — see [Bayesian VAR](bayesian.md).
+
 ---
 
 ## Innovation Accounting and Bayesian VAR
@@ -693,6 +761,9 @@ The BIC selects a parsimonious lag order for the 3-variable system. The Cholesky
 - Arias, J. E., Rubio-Ramírez, J. F., & Waggoner, D. F. (2018). Inference Based on Structural Vector Autoregressions Identified with Sign and Zero Restrictions: Theory and Applications.
   *Econometrica*, 86(2), 685-720. [DOI](https://doi.org/10.3982/ECTA14468)
 
+- Antolín-Díaz, J., Petrella, I., & Rubio-Ramírez, J. F. (2021). Structural Scenario Analysis with SVARs.
+  *Journal of Monetary Economics*, 117, 798-815. [DOI](https://doi.org/10.1016/j.jmoneco.2020.06.001)
+
 - Baumeister, C., & Hamilton, J. D. (2015). Sign Restrictions, Structural Vector Autoregressions, and Useful Prior Information.
   *Econometrica*, 83(5), 1963-1999. [DOI](https://doi.org/10.3982/ECTA12356)
 
@@ -728,6 +799,9 @@ The BIC selects a parsimonious lag order for the 3-variable system. The Cholesky
 
 - Uhlig, H. (2005). What Are the Effects of Monetary Policy on Output? Results from an Agnostic Identification Procedure.
   *Journal of Monetary Economics*, 52(2), 381-419. [DOI](https://doi.org/10.1016/j.jmoneco.2004.05.007)
+
+- Waggoner, D. F., & Zha, T. (1999). Conditional Forecasts in Dynamic Multivariate Models.
+  *Review of Economics and Statistics*, 81(4), 639-651. [DOI](https://doi.org/10.1162/003465399558508)
 
 - White, H. (1980). A Heteroskedasticity-Consistent Covariance Matrix Estimator and a Direct Test for Heteroskedasticity.
   *Econometrica*, 48(4), 817-838. [DOI](https://doi.org/10.2307/1912934)

@@ -48,6 +48,7 @@ const TEST_GROUPS = [
         "bvar/test_bgr.jl",
         "var/test_arias2018.jl",
         "var/test_uhlig.jl",
+        "var/test_conditional_forecast.jl",   # T241 (#340): Waggoner-Zha conditional forecasts
         "preg/test_panel_nonlinear.jl",   # moved from the ceiling ARIMA group to rebalance (#127)
     ]),
     # Group 3: IRF/FEVD/HD & VECM
