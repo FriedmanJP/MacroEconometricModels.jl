@@ -6,6 +6,7 @@
 - **MA(q)**: Moving average models estimated via CSS, exact MLE, or CSS-MLE
 - **ARMA(p,q)**: Combined autoregressive-moving average with three estimation methods
 - **ARIMA(p,d,q)**: Integrated ARMA for non-stationary series via ``d``-fold differencing
+- **SARIMA(p,d,q)(P,D,Q)ₛ**: Multiplicative seasonal ARIMA with seasonal differencing and automatic order search
 - **Forecasting**: Multi-step point forecasts with ``\psi``-weight confidence intervals
 - **Order Selection**: Grid search over information criteria and automatic `auto_arima`
 - **StatsAPI Interface**: Full `coef`, `nobs`, `predict`, `fit`, `residuals`, `aic`, `bic` compatibility
@@ -16,6 +17,19 @@ fred = load_example(:fred_md)
 cpi_raw = fred[:, "CPIAUCSL"]
 y = filter(isfinite, diff(log.(cpi_raw)))
 y = y[end-99:end]
+
+# FRED-MD ships seasonally adjusted series, so the seasonal examples use a simulated
+# airline process (0,1,1)(0,1,1)₁₂ with known θ = -0.4, Θ = -0.6.
+using Random
+let rng = Random.MersenneTwister(7), n = 240, s = 12, th = -0.4, TH = -0.6
+    resid = randn(rng, n + 50)
+    global y_seasonal = zeros(n + 50)
+    for t in (s+2):(n+50)
+        w = resid[t] + th*resid[t-1] + TH*resid[t-s] + th*TH*resid[t-s-1]
+        y_seasonal[t] = w + y_seasonal[t-1] + y_seasonal[t-s] - y_seasonal[t-s-1]
+    end
+    global y_seasonal = y_seasonal[51:end]
+end
 ```
 
 ## Quick Start
@@ -323,6 +337,107 @@ The ARIMA(1,1,0) on the synthetic log-level series (`y_level = cumsum(y)`, an I(
 | `method` | `Symbol` | Estimation method |
 | `converged` | `Bool` | Convergence indicator |
 | `iterations` | `Int` | Number of iterations |
+
+---
+
+## The SARIMA(p,d,q)(P,D,Q)ₛ Model
+
+Monthly and quarterly macro series carry seasonal dependence that a non-seasonal ARIMA cannot represent parsimoniously: a December effect in monthly data would need ``\phi_{12}`` and every lag below it. The **multiplicative seasonal ARIMA** adds a second pair of polynomials in ``L^s``:
+
+```math
+\Phi_P(L^s)\,\phi_p(L)\,(1-L)^d (1-L^s)^D y_t = \Theta_Q(L^s)\,\theta_q(L)\,\varepsilon_t
+```
+
+where:
+- ``\phi_p(L) = 1 - \phi_1 L - \cdots - \phi_p L^p`` is the non-seasonal AR polynomial
+- ``\Phi_P(L^s) = 1 - \Phi_1 L^s - \cdots - \Phi_P L^{Ps}`` is the seasonal AR polynomial
+- ``\theta_q(L)``, ``\Theta_Q(L^s)`` are the corresponding MA polynomials
+- ``s`` is the seasonal period (12 monthly, 4 quarterly)
+- ``d``, ``D`` are the regular and seasonal differencing orders
+
+!!! note "Technical Note"
+    The multiplicative structure is handled by **expanding** the two polynomial pairs into a single long ARMA — ``\phi_p(L)\Phi_P(L^s)`` has degree ``p + Ps`` — which the existing Kalman likelihood then evaluates unchanged. The expansion is what makes the model parsimonious: SARIMA(0,1,1)(0,1,1)₁₂ has two parameters but an MA of degree 13, with the lag-13 coefficient pinned to the product ``\theta_1\Theta_1`` rather than estimated freely.
+
+### Estimation
+
+`estimate_sarima` takes both order triples and the seasonal period, and offers the same three methods as `estimate_arima`: `:css`, `:mle`, and `:css_mle` (the default). The canonical case is Box and Jenkins' **airline model**, SARIMA(0,1,1)(0,1,1)₁₂:
+
+```@example arima
+airline = estimate_sarima(y_seasonal, 0, 1, 1, 0, 1, 1, 12; include_intercept=false)
+report(airline)
+```
+
+The two estimated coefficients sit within one standard error of the data-generating values ``\theta_1 = -0.4`` and ``\Theta_1 = -0.6``. The expanded MA polynomial shows the multiplicative restriction directly — a coefficient at lag 1, one at lag 12, and their product at lag 13, with zeros in between:
+
+```@example arima
+round.(airline.theta_expanded[[1, 12, 13]], digits=4)
+```
+
+With `P = D = Q = 0` the model reduces exactly to `estimate_arima(y, p, d, q)` — identical coefficients, likelihood, and forecasts.
+
+| Keyword | Type | Default | Description |
+|---------|------|---------|-------------|
+| `method` | `Symbol` | `:css_mle` | `:css`, `:mle`, or `:css_mle` |
+| `include_intercept` | `Bool` | `true` | Constant on the differenced series |
+| `max_iter` | `Int` | `500` | Optimizer iteration cap |
+
+### SARIMAModel Return Values
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `y` | `Vector{T}` | Original (undifferenced) series |
+| `y_diff` | `Vector{T}` | Series after ``(1-L)^d(1-L^s)^D`` |
+| `p`, `d`, `q` | `Int` | Non-seasonal orders |
+| `P`, `D`, `Q` | `Int` | Seasonal orders |
+| `s` | `Int` | Seasonal period |
+| `c` | `T` | Intercept (on the differenced series) |
+| `phi`, `theta` | `Vector{T}` | Non-seasonal AR and MA coefficients |
+| `Phi`, `Theta` | `Vector{T}` | Seasonal AR and MA coefficients |
+| `phi_expanded` | `Vector{T}` | AR coefficients of ``\phi_p(L)\Phi_P(L^s)``, length ``p + Ps`` |
+| `theta_expanded` | `Vector{T}` | MA coefficients of ``\theta_q(L)\Theta_Q(L^s)``, length ``q + Qs`` |
+| `sigma2` | `T` | Innovation variance |
+| `residuals`, `fitted` | `Vector{T}` | Residuals and fitted values (differenced scale) |
+| `loglik`, `aic`, `bic` | `T` | Log-likelihood and information criteria |
+| `method` | `Symbol` | Estimation method |
+| `converged` | `Bool` | Convergence indicator |
+| `iterations` | `Int` | Number of iterations |
+
+### Seasonal Forecasting
+
+`forecast` projects the expanded ARMA on the differenced scale, then un-differences through the full operator ``(1-L)^d(1-L^s)^D``. Prediction intervals come from the ``\psi``-weights of the **non-differenced** operator ``\phi(L)\Phi(L^s)(1-L)^d(1-L^s)^D``, so the bands widen at the rate the doubly integrated process implies rather than at the stationary ARMA rate:
+
+```@example arima
+fc = forecast(airline, 24)
+report(fc)
+```
+
+The point forecasts reproduce the seasonal profile of the last observed year, and the standard errors grow monotonically with the horizon.
+
+```julia
+plot_result(fc; history=y_seasonal)
+```
+
+### Automatic Seasonal Order Selection
+
+`auto_sarima` searches the ARMA orders at a given seasonal period. Differencing orders are chosen first and held fixed — information criteria are not comparable across differencing orders — with ``D`` selected by the [HEGY seasonal unit-root test](@ref tests_unitroot_advanced_page) and ``d`` by the KPSS test on the seasonally differenced series. The order search itself runs with `:css` for speed and the winner is refit with `method`, following Hyndman & Khandakar (2008).
+
+```@example arima
+best = auto_sarima(y_seasonal, 12; max_p=1, max_q=1, max_P=1, max_Q=1)
+(p=best.p, d=best.d, q=best.q, P=best.P, D=best.D, Q=best.Q)
+```
+
+The search recovers the airline orders (0,1,1)(0,1,1)₁₂.
+
+| Keyword | Type | Default | Description |
+|---------|------|---------|-------------|
+| `d`, `D` | `Int` | `nothing` | Fix the differencing orders instead of testing for them |
+| `max_p`, `max_q` | `Int` | `2` | Non-seasonal search bounds |
+| `max_P`, `max_Q` | `Int` | `1` | Seasonal search bounds |
+| `criterion` | `Symbol` | `:aic` | `:aic` or `:bic` |
+| `method` | `Symbol` | `:css_mle` | Estimation method for the final refit |
+
+!!! note "Seasonal period support in `D` selection"
+    The HEGY test is tabulated for quarterly and monthly data only, so automatic ``D`` selection applies when `s ∈ {4, 12}` and the sample has at least ``3s + 5`` observations. At any other period `D` defaults to `0` and should be supplied explicitly.
 
 ---
 
@@ -691,6 +806,9 @@ The shared filter helpers `MacroEconometricModels._frac_diff_weights(d, K)` and 
 
 - Geweke, J., & Porter-Hudak, S. (1983). The Estimation and Application of Long Memory Time Series Models.
   *Journal of Time Series Analysis*, 4(4), 221-238. [DOI](https://doi.org/10.1111/j.1467-9892.1983.tb00371.x)
+
+- Hyndman, R. J., & Khandakar, Y. (2008). Automatic Time Series Forecasting: The forecast Package for R.
+  *Journal of Statistical Software*, 27(3), 1-22. [DOI](https://doi.org/10.18637/jss.v027.i03)
 
 - Hosking, J. R. M. (1981). Fractional Differencing.
   *Biometrika*, 68(1), 165-176. [DOI](https://doi.org/10.1093/biomet/68.1.165)

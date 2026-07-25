@@ -197,6 +197,72 @@ struct ARIMAModel{T<:AbstractFloat} <: AbstractARIMAModel{T}
 end
 
 # =============================================================================
+# SARIMA Model
+# =============================================================================
+
+"""
+    SARIMAModel{T} <: AbstractARIMAModel
+
+Multiplicative seasonal ARIMA — SARIMA(p,d,q)(P,D,Q)ₛ:
+
+```math
+\\Phi_P(L^s)\\,\\phi_p(L)\\,(1-L)^d (1-L^s)^D y_t = \\Theta_Q(L^s)\\,\\theta_q(L)\\,\\varepsilon_t
+```
+
+The model is fit to the differenced series by expanding the seasonal and non-seasonal
+polynomials into a single long ARMA; both the seasonal parameters and the expanded
+coefficients are stored, the former for reporting and the latter for filtering and
+forecasting.
+
+# Fields
+- `y::Vector{T}`: Original (undifferenced) data
+- `y_diff::Vector{T}`: Series after `(1-L)^d (1-Lˢ)^D`
+- `p`, `d`, `q`::Int: Non-seasonal AR order, differencing order, MA order
+- `P`, `D`, `Q`::Int: Seasonal AR order, seasonal differencing order, seasonal MA order
+- `s::Int`: Seasonal period
+- `c::T`: Intercept (on the differenced series)
+- `phi::Vector{T}`: Non-seasonal AR coefficients ``\\phi_1 \\dots \\phi_p``
+- `theta::Vector{T}`: Non-seasonal MA coefficients ``\\theta_1 \\dots \\theta_q``
+- `Phi::Vector{T}`: Seasonal AR coefficients ``\\Phi_1 \\dots \\Phi_P``
+- `Theta::Vector{T}`: Seasonal MA coefficients ``\\Theta_1 \\dots \\Theta_Q``
+- `phi_expanded::Vector{T}`: AR coefficients of ``\\phi_p(L)\\Phi_P(L^s)``, length ``p + Ps``
+- `theta_expanded::Vector{T}`: MA coefficients of ``\\theta_q(L)\\Theta_Q(L^s)``, length ``q + Qs``
+- `sigma2::T`: Innovation variance
+- `residuals::Vector{T}`: Estimated residuals
+- `fitted::Vector{T}`: Fitted values (on the differenced series)
+- `loglik::T`, `aic::T`, `bic::T`: Log-likelihood and information criteria
+- `method::Symbol`: Estimation method (`:css`, `:mle`, `:css_mle`)
+- `converged::Bool`, `iterations::Int`: Optimizer diagnostics
+"""
+struct SARIMAModel{T<:AbstractFloat} <: AbstractARIMAModel{T}
+    y::Vector{T}
+    y_diff::Vector{T}
+    p::Int
+    d::Int
+    q::Int
+    P::Int
+    D::Int
+    Q::Int
+    s::Int
+    c::T
+    phi::Vector{T}
+    theta::Vector{T}
+    Phi::Vector{T}
+    Theta::Vector{T}
+    phi_expanded::Vector{T}
+    theta_expanded::Vector{T}
+    sigma2::T
+    residuals::Vector{T}
+    fitted::Vector{T}
+    loglik::T
+    aic::T
+    bic::T
+    method::Symbol
+    converged::Bool
+    iterations::Int
+end
+
+# =============================================================================
 # Forecast Result
 # =============================================================================
 
@@ -261,18 +327,21 @@ ar_order(m::ARModel) = m.p
 ar_order(m::MAModel) = 0
 ar_order(m::ARMAModel) = m.p
 ar_order(m::ARIMAModel) = m.p
+ar_order(m::SARIMAModel) = m.p
 
 """Return MA order q."""
 ma_order(m::ARModel) = 0
 ma_order(m::MAModel) = m.q
 ma_order(m::ARMAModel) = m.q
 ma_order(m::ARIMAModel) = m.q
+ma_order(m::SARIMAModel) = m.q
 
 """Return integration order d."""
 diff_order(m::ARModel) = 0
 diff_order(m::MAModel) = 0
 diff_order(m::ARMAModel) = 0
 diff_order(m::ARIMAModel) = m.d
+diff_order(m::SARIMAModel) = m.d
 
 # =============================================================================
 # StatsAPI Interface
@@ -286,6 +355,7 @@ StatsAPI.coef(m::ARModel) = vcat(m.c, m.phi)
 StatsAPI.coef(m::MAModel) = vcat(m.c, m.theta)
 StatsAPI.coef(m::ARMAModel) = vcat(m.c, m.phi, m.theta)
 StatsAPI.coef(m::ARIMAModel) = vcat(m.c, m.phi, m.theta)
+StatsAPI.coef(m::SARIMAModel) = vcat(m.c, m.phi, m.theta, m.Phi, m.Theta)
 
 # Residuals
 StatsAPI.residuals(m::AbstractARIMAModel) = m.residuals
@@ -301,6 +371,7 @@ StatsAPI.bic(m::AbstractARIMAModel) = m.bic
 
 # Degrees of freedom
 StatsAPI.dof(m::AbstractARIMAModel) = ar_order(m) + ma_order(m) + 2
+StatsAPI.dof(m::SARIMAModel) = m.p + m.q + m.P + m.Q + 2
 
 # Residual degrees of freedom
 StatsAPI.dof_residual(m::AbstractARIMAModel) = length(m.residuals) - dof(m) + 1
@@ -336,7 +407,8 @@ StatsAPI.islinear(::AbstractARIMAModel) = true
 # =============================================================================
 
 function _show_arima_model(io::IO, header::String, m::AbstractARIMAModel;
-                           phi::Vector=Float64[], theta::Vector=Float64[])
+                           phi::Vector=Float64[], theta::Vector=Float64[],
+                           Phi::Vector=Float64[], Theta::Vector=Float64[])
     # Build parameter names and values
     param_names = String[_INTERCEPT_LABEL]
     param_vals = eltype(m.y)[m.c]
@@ -347,6 +419,14 @@ function _show_arima_model(io::IO, header::String, m::AbstractARIMAModel;
     for (i, t) in enumerate(theta)
         push!(param_names, "θ[$i]")
         push!(param_vals, t)
+    end
+    for (i, v) in enumerate(Phi)
+        push!(param_names, "Φ[$i]")
+        push!(param_vals, v)
+    end
+    for (i, v) in enumerate(Theta)
+        push!(param_names, "Θ[$i]")
+        push!(param_vals, v)
     end
 
     # Compute standard errors
@@ -396,6 +476,9 @@ Base.show(io::IO, m::ARModel) = _show_arima_model(io, "AR($(m.p)) Model", m; phi
 Base.show(io::IO, m::MAModel) = _show_arima_model(io, "MA($(m.q)) Model", m; theta=m.theta)
 Base.show(io::IO, m::ARMAModel) = _show_arima_model(io, "ARMA($(m.p),$(m.q)) Model", m; phi=m.phi, theta=m.theta)
 Base.show(io::IO, m::ARIMAModel) = _show_arima_model(io, "ARIMA($(m.p),$(m.d),$(m.q)) Model", m; phi=m.phi, theta=m.theta)
+Base.show(io::IO, m::SARIMAModel) = _show_arima_model(
+    io, "SARIMA($(m.p),$(m.d),$(m.q))($(m.P),$(m.D),$(m.Q))[$(m.s)] Model", m;
+    phi=m.phi, theta=m.theta, Phi=m.Phi, Theta=m.Theta)
 
 function Base.show(io::IO, f::ARIMAForecast)
     h = f.horizon

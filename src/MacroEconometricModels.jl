@@ -326,6 +326,7 @@ include("arima/estimation.jl")
 include("arima/forecast.jl")
 include("arima/selection.jl")
 include("arima/arfima.jl")   # EV-13 (#421): ARFIMA + GPH + local Whittle
+include("arima/sarima.jl")   # T242 (#341): multiplicative seasonal ARIMA
 
 # Public linear-Gaussian state-space module — thin wrapper over the core Kalman kernel
 include("statespace/types.jl")      # EV-37 (#445): StateSpaceModel + AbstractStateSpaceModel
@@ -1056,7 +1057,7 @@ export bacon_decomposition, pretrend_test, negative_weight_check
 export AbstractARIMAModel
 
 # Model types
-export ARModel, MAModel, ARMAModel, ARIMAModel
+export ARModel, MAModel, ARMAModel, ARIMAModel, SARIMAModel
 export ARIMAForecast, ARIMAOrderSelection
 
 # Type accessors
@@ -1064,6 +1065,7 @@ export ar_order, ma_order, diff_order
 
 # Estimation functions
 export estimate_ar, estimate_ma, estimate_arma, estimate_arima
+export estimate_sarima, auto_sarima
 
 # Order selection
 export select_arima_order, auto_arima, ic_table

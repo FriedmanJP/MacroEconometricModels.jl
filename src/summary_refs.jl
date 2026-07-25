@@ -1725,6 +1725,7 @@ const _TYPE_REFS = Dict{Symbol, Vector{Symbol}}(
     :MAModel => [:box_jenkins1970],
     :ARMAModel => [:box_jenkins1970],
     :ARIMAModel => [:box_jenkins1970],
+    :SARIMAModel => [:box_jenkins1970, :hyndman_khandakar2008],
     :ARIMAForecast => [:box_jenkins1970],
     :ARIMAOrderSelection => [:hyndman_khandakar2008],
     :auto_arima => [:hyndman_khandakar2008],
@@ -2340,6 +2341,7 @@ refs(io::IO, ::ARModel; kw...) = refs(io, _TYPE_REFS[:ARModel]; kw...)
 refs(io::IO, ::MAModel; kw...) = refs(io, _TYPE_REFS[:MAModel]; kw...)
 refs(io::IO, ::ARMAModel; kw...) = refs(io, _TYPE_REFS[:ARMAModel]; kw...)
 refs(io::IO, ::ARIMAModel; kw...) = refs(io, _TYPE_REFS[:ARIMAModel]; kw...)
+refs(io::IO, ::SARIMAModel; kw...) = refs(io, _TYPE_REFS[:SARIMAModel]; kw...)
 refs(io::IO, ::ARIMAForecast; kw...) = refs(io, _TYPE_REFS[:ARIMAForecast]; kw...)
 refs(io::IO, ::ARIMAOrderSelection; kw...) = refs(io, _TYPE_REFS[:ARIMAOrderSelection]; kw...)
 
