@@ -438,6 +438,7 @@ include("preg/display.jl")
 # Wild cluster bootstrap (T243, #342) — after reg/ AND preg/ (dispatches on both
 # RegModel and PanelRegModel, and reuses the preg within-transform helpers).
 include("reg/wildboot.jl")
+include("reg/anderson_rubin.jl")   # T244 (#343): weak-IV-robust AR test + confidence set
 
 # Panel ARDL — PMG / MG / DFE (EV-23, #431). After preg/ (reuses _panel_cluster_vcov,
 # _hausman_quadratic_form) and after ardl/estimation.jl (reuses estimate_ardl for MG).
@@ -1268,6 +1269,7 @@ export MultinomialLogitModel, estimate_mlogit
 # Estimation
 export estimate_reg, estimate_iv, estimate_logit, estimate_probit
 export wild_cluster_bootstrap, WildClusterBootstrap
+export anderson_rubin_test, anderson_rubin_ci, AndersonRubinTest, AndersonRubinCI
 
 # Penalized regression — EV-03 (#411)
 export PenalizedRegModel, estimate_ridge, estimate_lasso, estimate_elastic_net

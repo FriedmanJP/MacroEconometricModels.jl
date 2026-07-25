@@ -610,9 +610,76 @@ The `report()` footer adds the LIML least-variance ratio ``\hat{\kappa}`` and th
 Anderson (1949) likelihood-ratio overidentification statistic ``n\ln\hat{\kappa} \sim \chi^2(m - k)``.
 For a user-specified value pass `method=:kclass` with the `k` keyword.
 
-Weak-instrument *inference* (Anderson–Rubin, Kleibergen–Paap, Stock–Yogo critical values) is a
-separate layer tracked in issue #343; this entry point delivers the *estimators* those tests
-condition on.
+### Weak-Instrument-Robust Inference: Anderson-Rubin
+
+The first-stage F, Cragg-Donald and Kleibergen-Paap statistics *detect* weak instruments; they do not repair the inference. Under weak identification the 2SLS Wald interval under-covers no matter how large the sample, because the estimator is not approximately normal around the truth. The **Anderson-Rubin (1949)** test has correct size at *any* instrument strength, and inverting it gives a confidence set with correct coverage.
+
+Subtract the hypothesized effect to form ``\tilde y = y - X_{\text{endog}}\beta_0``. Under ``H_0`` this depends on the excluded instruments only through the error, so their coefficients in the auxiliary regression are zero:
+
+```math
+\tilde y = W\gamma_W + Z_{\text{excl}}\gamma + u, \qquad H_0:\ \gamma = 0
+```
+
+where:
+- ``W`` holds the included exogenous regressors and ``Z_{\text{excl}}`` the excluded instruments
+- ``q`` is the number of excluded instruments
+- the AR statistic is the Wald test of ``\gamma = 0`` divided by ``q``, referred to ``F(q, n-m)`` under homoskedasticity and to ``\chi^2_q/q`` with robust or clustered weighting
+
+The restriction ``\gamma = 0`` holds under ``H_0`` whatever the first stage looks like — which is exactly why the test's size does not depend on instrument strength.
+
+```@example reg
+# Deliberately weak instrument: the first stage explains almost nothing
+n_w = 200
+z_w = randn(n_w)
+v_w = randn(n_w)
+u_w = 0.8 * v_w + 0.6 * randn(n_w)
+x_w = 0.03 * z_w + v_w                       # first-stage coefficient ≈ 0
+y_w = 1.0 * x_w + u_w                        # true effect is 1.0
+
+m_weak = estimate_iv(y_w, hcat(ones(n_w), x_w), hcat(ones(n_w), z_w);
+                     endogenous=[2], cov_type=:ols,
+                     varnames=["(Intercept)", "x"])
+ar_ci = anderson_rubin_ci(m_weak; cov_type=:ols)
+report(ar_ci)
+```
+
+The Wald interval is short and confidently wrong; the AR set is the **whole real line**, which is the honest answer when the instrument carries almost no information about ``x`` — the data simply do not identify the effect. `anderson_rubin_ci` never forces an interval: with weak instruments the set can be unbounded on one or both sides, with over-identification it can be a union of disjoint components or **empty** (signalling that no ``\beta`` reconciles the over-identifying restrictions), and on a narrow search range it can be the whole line. Each case is reported as such.
+
+When the first stage is strong the two nearly coincide, so nothing is lost by reporting AR routinely:
+
+```@example reg
+ar_strong = anderson_rubin_ci(m_iv; cov_type=:ols)
+report(ar_strong)
+```
+
+A single hypothesized value can be tested directly with `anderson_rubin_test`, which also accepts several endogenous regressors at once:
+
+```@example reg
+report(anderson_rubin_test(m_iv, 0.8; cov_type=:ols))
+```
+
+When the reported first-stage F falls below the Stock-Yogo 10% critical value, `report(model)` prints a note pointing at `anderson_rubin_ci` rather than leaving the Wald intervals to be read at face value.
+
+| Keyword | Type | Default | Description |
+|---------|------|---------|-------------|
+| `level` | `Real` | `0.95` | Nominal coverage of the confidence set |
+| `n_grid` | `Int` | `1001` | Grid points over the search range |
+| `span` | `Real` | `20` | Half-width of the default range, in 2SLS standard errors |
+| `grid` | `AbstractVector` | `nothing` | Explicit grid, overriding `span`/`n_grid` |
+| `cov_type` | `Symbol` | model's | `:ols`, `:hc0`–`:hc3`, or `:cluster` |
+| `clusters` | `AbstractVector` | `nothing` | Required when `cov_type=:cluster` |
+
+`AndersonRubinCI{T}` return value:
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `intervals` | `Vector{Tuple{T,T}}` | Connected components; unbounded sides carry `±Inf` |
+| `is_empty` / `is_whole_line` | `Bool` | Degenerate shapes |
+| `bounded` | `Bool` | Whether the set lies strictly inside the searched range |
+| `critical_value` | `T` | AR critical value at `level` |
+| `wald_lower` / `wald_upper` | `T` | 2SLS Wald interval, for comparison |
+| `estimate` | `T` | 2SLS point estimate |
+| `df1` | `Int` | Number of excluded instruments ``q`` |
 
 ### Keyword Arguments
 

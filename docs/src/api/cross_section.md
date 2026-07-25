@@ -14,6 +14,8 @@ MarginalEffects
 MultinomialMarginalEffects
 OddsRatio
 WildClusterBootstrap
+AndersonRubinTest
+AndersonRubinCI
 ```
 
 ---
@@ -41,6 +43,13 @@ estimate_probit
 
 ```@docs
 wild_cluster_bootstrap
+```
+
+### Weak-Instrument-Robust Inference
+
+```@docs
+anderson_rubin_test
+anderson_rubin_ci
 ```
 
 ### Marginal Effects and Odds Ratios
