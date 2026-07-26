@@ -186,6 +186,7 @@ const TEST_GROUPS = [
     ("DSGE Core" => [
         "dsge/test_dsge.jl",
         "dsge/test_blanchard_olg.jl",
+        "dsge/test_lifecycle_olg.jl",
         "dsge/test_continuous_aiyagari.jl",
     ]),
     ("DSGE Bayesian & HD" => [
@@ -553,6 +554,7 @@ else
         @testset "DSGE Core" begin
             include("dsge/test_dsge.jl")
             include("dsge/test_blanchard_olg.jl")
+            include("dsge/test_lifecycle_olg.jl")
             include("dsge/test_continuous_aiyagari.jl")
         end
         @testset "DSGE Bayesian & HD" begin

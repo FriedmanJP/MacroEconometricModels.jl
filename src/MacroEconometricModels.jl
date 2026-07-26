@@ -553,6 +553,7 @@ include("dsge/heterogeneous/estimation.jl")
 
 # Overlapping generations (Blanchard 1985 perpetual youth)
 include("olg/blanchard.jl")
+include("olg/lifecycle.jl")
 
 # Continuous-time heterogeneous agents (Achdou et al. 2022)
 include("ct/continuous_aiyagari.jl")
@@ -742,6 +743,10 @@ export dcegm_simulate, dcegm_retirement_model
 # Overlapping generations (Blanchard 1985 perpetual youth)
 export BlanchardOLG, BlanchardOLGSteadyState, BlanchardOLGSolution
 export blanchard_steady_state, blanchard_solve, blanchard_transition
+# True life-cycle OLG (Auerbach-Kotlikoff / Imrohoroglu et al.)
+export LifeCycleOLG, LifeCycleSteadyState
+export lifecycle_steady_state, lifecycle_policies, lifecycle_distribution
+export lifecycle_income, lifecycle_survival
 
 # Continuous-time heterogeneous agents (Achdou et al. 2022)
 export CTAiyagari, CTPoissonIncome, CTSteadyState, CTTransition

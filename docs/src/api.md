@@ -449,6 +449,9 @@ Heterogeneous-agent (Reiter/SSJ/Krusell-Smith), continuous-time (HJB/KFE), and O
 | `dcegm_retirement_model(; ...)` | Canonical work/retire problem |
 | `dcegm_threshold(sol, t, d_prev, j; ...)` | Cash-on-hand at which the discrete choice switches |
 | `dcegm_simulate(sol, grid)` | Young histogram respecting the discrete choice |
+| `LifeCycleOLG(; J, J_retire, ...)` | True life-cycle OLG (age-dependent EGM) |
+| `lifecycle_steady_state(m)` | Stationary equilibrium: backward age sweep + age-extended histogram |
+| `lifecycle_income(ρ, σ, n)` / `lifecycle_survival(J)` | Unit-mean level income process / Gompertz-Makeham mortality |
 
 ### Occasionally Binding Constraints (OccBin)
 

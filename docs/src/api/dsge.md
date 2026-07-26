@@ -225,6 +225,21 @@ report(::DCEGMDistribution{T}) where {T}
 
 ---
 
+### Life-Cycle Overlapping Generations
+
+```@docs
+LifeCycleOLG
+LifeCycleSteadyState
+lifecycle_steady_state
+lifecycle_policies
+lifecycle_distribution
+lifecycle_income
+lifecycle_survival
+report(::LifeCycleSteadyState{T}) where {T}
+```
+
+---
+
 ## Continuous-Time DSGE
 
 ```@docs
