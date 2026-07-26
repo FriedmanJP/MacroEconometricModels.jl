@@ -565,6 +565,98 @@ The return value is a `ConditionalForecast{T}`; its fields are documented on the
 
 ---
 
+## Time-Varying Parameters and Stochastic Volatility
+
+A constant-coefficient, homoskedastic VAR cannot represent the Great Moderation, drifting inflation persistence, or a monetary transmission mechanism that changes across regimes. `estimate_tvpvar` implements Primiceri (2005), in which the coefficients, the contemporaneous structural matrix, and the shock volatilities all drift:
+
+```math
+y_t = X_t' B_t + A_t^{-1}\Sigma_t\varepsilon_t,\qquad
+B_t = B_{t-1} + \nu_t,\quad
+a_t = a_{t-1} + \zeta_t,\quad
+\log\sigma^2_{i,t} = \log\sigma^2_{i,t-1} + \eta_{i,t}
+```
+
+where:
+- ``X_t' = I_n \otimes [1, y_{t-1}', \ldots, y_{t-p}']``, so ``B_t`` stacks every equation's coefficients
+- ``A_t`` is lower triangular with a unit diagonal; its free elements are the contemporaneous structural coefficients, which impose a recursive identification that itself drifts
+- ``\Sigma_t = \mathrm{diag}(\sigma_{1,t},\ldots,\sigma_{n,t})``
+- ``\nu_t\sim N(0,Q)``, ``\zeta_t\sim N(0,S)`` block diagonal by equation, ``\eta_t\sim N(0,W)`` diagonal
+
+!!! note "Technical Note"
+    Each Gibbs sweep draws, in the Del Negro & Primiceri (2015) **corrected** order: ``B_{1:T}`` by Carter-Kohn with per-period observation covariance ``A_t^{-1}\Sigma_t^2A_t^{-1\prime}``; ``a_{1:T}`` equation by equation on the VAR residuals; the Kim-Shephard-Chib mixture indicators ``s_t`` given the **current** volatilities, then ``\log\sigma^2_{1:T}`` given ``s``; and finally ``Q``, ``S``, ``W`` from conjugate inverse-Wishart / inverse-gamma updates. The corrigendum's point is that ``s`` must be drawn *before* the volatility update, and that the coefficient blocks are drawn without conditioning on ``s``.
+
+Priors are calibrated on a training sample in Primiceri's fashion: ``B_0\sim N(\hat B_{OLS}, 4V(\hat B_{OLS}))``, ``Q\sim IW(k_Q^2\tau V(\hat B_{OLS}), \tau)``, and analogously for ``A_0``, ``S`` and ``W``. The constants ``k_Q = 0.01``, ``k_S = 0.1``, ``k_W = 0.01`` control how much drift the prior permits.
+
+```@example bvar
+# Drifting coefficients and drifting volatilities
+tvp = estimate_tvpvar(Y, 1; n_draws=100, n_burn=100,
+                      varnames=["INDPRO", "CPI", "FFR"])
+report(tvp)
+```
+
+The report shows the posterior mean volatility path at several dates — the object that carries most of the economic content in this class of models. `volatility_path` returns the full path with credible bands (note that the stored state is the log **variance**, so the standard deviation is `exp(h/2)`; `volatility_path` applies that transform):
+
+```@example bvar
+vol, vol_bands = volatility_path(tvp)
+size(vol), size(vol_bands)
+```
+
+### Time-Varying Impulse Responses
+
+`irf(tvp, H; t)` computes the impulse response **at a chosen date**, integrating over posterior draws. Both the propagation (from ``B_t``) and the impact matrix (``A_t^{-1}\Sigma_t``) are taken at that date, so comparing two dates is how time variation in transmission is read off:
+
+```@example bvar
+early = irf(tvp, 12; t=5, n_draws=50)
+late  = irf(tvp, 12; t=tvp.T_eff, n_draws=50)
+round.([early.point_estimate[1, :, 3]  late.point_estimate[1, :, 3]], digits=4)
+```
+
+```julia
+plot_result(late)
+```
+
+### The Constant-Coefficient Special Case
+
+`tvp=false` fixes ``B_t`` and ``a_t`` and leaves only the volatilities drifting — the Cogley & Sargent (2005) SV-BVAR. On homoskedastic data its coefficient posterior mean reproduces the conjugate BVAR's on the same estimation window:
+
+```@example bvar
+sv_only = estimate_tvpvar(Y, 1; tvp=false, n_draws=100, n_burn=100,
+                          varnames=["INDPRO", "CPI", "FFR"])
+sv_only.tvp, sv_only.sv
+```
+
+Symmetrically, `sv=false` freezes the volatilities at their training-sample values and lets only the coefficients drift.
+
+### `estimate_tvpvar` Keyword Arguments
+
+| Keyword | Type | Default | Description |
+|---------|------|---------|-------------|
+| `tvp` | `Bool` | `true` | Let ``B_t`` and ``a_t`` drift; `false` gives the Cogley-Sargent SV-BVAR |
+| `sv` | `Bool` | `true` | Let the volatilities drift |
+| `n_draws` | `Int` | `2000` | Retained posterior draws |
+| `n_burn` | `Int` | `1000` | Burn-in sweeps discarded |
+| `thin` | `Int` | `1` | Keep every `thin`-th post-burn-in sweep |
+| `n_train` | `Int` | `0` | Training-sample length; `0` uses `max(4p+n+2, T÷4)` |
+| `k_Q`, `k_S`, `k_W` | `Real` | `0.01`, `0.1`, `0.01` | Primiceri's prior-drift constants |
+| `varnames` | `Vector{String}` | `y1, y2, …` | Variable names |
+| `rng` | `AbstractRNG` | `default_rng()` | Random number generator |
+
+### `TVPVARPosterior{T}` Fields
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `B_draws` | `Array{T,3}` | ``n_{draws}\times T_{eff}\times k`` drifting VAR coefficients, ``k = n(1+np)`` |
+| `A_draws` | `Array{T,3}` | ``n_{draws}\times T_{eff}\times n_a`` free elements of ``A_t``, ``n_a = n(n-1)/2`` |
+| `H_draws` | `Array{T,3}` | ``n_{draws}\times T_{eff}\times n`` log-**variances** ``\log\sigma^2_{i,t}`` |
+| `Q_draws` | `Array{T,3}` | Coefficient random-walk covariance draws |
+| `S_draws` | `Array{T,3}` | Block-diagonal ``A_t`` random-walk covariance draws |
+| `W_draws` | `Matrix{T}` | Log-volatility random-walk variances |
+| `T_eff` | `Int` | Effective sample after the training block |
+| `n_train` | `Int` | Training-sample length used for the priors |
+| `tvp` / `sv` | `Bool` | Which blocks were allowed to drift |
+
+---
+
 ## Large BVAR
 
 For high-dimensional systems (20+ variables), the number of VAR parameters ``n^2 p + n`` grows quadratically with the number of variables, quickly exceeding the sample size. The Minnesota prior prevents overfitting by shrinking coefficient estimates, making large-scale Bayesian VAR estimation feasible.
@@ -673,3 +765,15 @@ This workflow demonstrates the complete Bayesian pipeline: hyperparameter optimi
 
 - Waggoner, D. F., & Zha, T. (1999). Conditional Forecasts in Dynamic Multivariate Models.
   *Review of Economics and Statistics*, 81(4), 639-651. [DOI](https://doi.org/10.1162/003465399558508)
+
+- Primiceri, G. E. (2005). Time Varying Structural Vector Autoregressions and Monetary Policy.
+  *Review of Economic Studies*, 72(3), 821-852. [DOI](https://doi.org/10.1111/j.1467-937X.2005.00353.x)
+
+- Del Negro, M., & Primiceri, G. E. (2015). Time Varying Structural Vector Autoregressions and Monetary Policy: A Corrigendum.
+  *Review of Economic Studies*, 82(4), 1342-1345. [DOI](https://doi.org/10.1093/restud/rdv024)
+
+- Cogley, T., & Sargent, T. J. (2005). Drifts and Volatilities: Monetary Policies and Outcomes in the Post WWII US.
+  *Review of Economic Dynamics*, 8(2), 262-302. [DOI](https://doi.org/10.1016/j.red.2004.10.009)
+
+- Kim, S., Shephard, N., & Chib, S. (1998). Stochastic Volatility: Likelihood Inference and Comparison with ARCH Models.
+  *Review of Economic Studies*, 65(3), 361-393. [DOI](https://doi.org/10.1111/1467-937X.00050)

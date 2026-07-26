@@ -225,6 +225,7 @@ include("nongaussian/tests.jl")
 
 # Bayesian utilities (after bayesian + identification)
 include("bvar/utils.jl")
+include("bvar/tvpvar.jl")   # T250 (#349): Primiceri TVP-VAR-SV / Cogley-Sargent SV-BVAR
 
 # Conditional forecasting / scenario analysis (needs VAR + BVAR + identification)
 include("var/conditional_forecast.jl")
@@ -841,6 +842,7 @@ export test_known_beta, test_joint_restriction
 # =============================================================================
 
 export BVARPosterior, BVARForecast
+export TVPVARPosterior, estimate_tvpvar, volatility_path
 export estimate_bvar
 export posterior_mean_model
 export posterior_median_model

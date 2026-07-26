@@ -46,6 +46,7 @@ const TEST_GROUPS = [
         "bvar/test_bayesian_utils.jl",
         "bvar/test_minnesota.jl",
         "bvar/test_bgr.jl",
+        "bvar/test_tvpvar.jl",   # T250 (#349): Primiceri TVP-VAR-SV / Cogley-Sargent SV-BVAR
         "var/test_arias2018.jl",
         "var/test_uhlig.jl",
         "var/test_conditional_forecast.jl",   # T241 (#340): Waggoner-Zha conditional forecasts

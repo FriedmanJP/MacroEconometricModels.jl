@@ -98,6 +98,14 @@ AbstractPrior
 
 ```@docs
 BVARPosterior
+TVPVARPosterior
+```
+
+### Time-Varying Parameter VAR
+
+```@docs
+estimate_tvpvar
+volatility_path
 ```
 
 ---
