@@ -657,6 +657,87 @@ Symmetrically, `sv=false` freezes the volatilities at their training-sample valu
 
 ---
 
+## Mixed-Frequency VAR
+
+Macro data arrive at different frequencies: GDP quarterly, employment and prices monthly. `estimate_mfvar` implements Schorfheide & Song (2015), which puts the VAR entirely at the **high** frequency and treats each low-frequency series as a latent high-frequency process observed only at reference dates through a temporal-aggregation identity:
+
+```math
+y^{lo}_{i,t} = \sum_{j} w_j\, z_{i,t-j+1}
+```
+
+where:
+- ``z_{i,t}`` is the latent high-frequency value of series ``i``
+- ``w`` is the aggregation filter: ``[1]`` for a `:stock` (end-of-period level), ``\mathbf{1}_m`` for a `:flow` sum, ``\mathbf{1}_m/m`` for an `:average`, and the Mariano-Murasawa triangular filter ``[1,2,\ldots,m,\ldots,2,1]/m`` for a `:growth` rate
+- ``m`` is the frequency ratio (3 for monthly/quarterly)
+
+Input is a high-frequency panel with `NaN` wherever a series is not observed — a quarterly series in a monthly panel carries a value every third row.
+
+!!! note "Technical Note"
+    A two-block Gibbs sampler alternates between the conjugate NIW draw of ``(B, \Sigma)`` given the completed path — the same draw the conjugate BVAR uses, Minnesota dummies included — and a draw of the latent path given ``(B, \Sigma)``. The path draw uses the **Durbin-Koopman (2002) simulation smoother** rather than a backward sampler: the companion state noise is singular, so a Kim-Nelson backward step conditions only on ``z_{t+1}``, but an aggregation row links ``z_t, z_{t-1}, \ldots`` across several lag blocks and lags redrawn at successive backward steps are then mutually inconsistent with that constraint. Durbin-Koopman simulates an unconditional path ``s^+``, smooths ``y - y^+``, and sets ``\tilde s = \hat s(y - y^+) + s^+``; because the aggregation is noiseless, applying the observation map returns ``y`` **exactly** at every reference date.
+
+```@example bvar
+# Build a monthly panel in which the third series is observed only quarterly, as a
+# within-quarter sum of its latent monthly values.
+Y_m = copy(Y)
+mf_data = copy(Y_m)
+mf_data[:, 3] .= NaN
+for t in 3:size(Y_m, 1)
+    t % 3 == 0 || continue
+    mf_data[t, 3] = sum(Y_m[t-j+1, 3] for j in 1:3)
+end
+
+mf = estimate_mfvar(mf_data, 1; low_freq=[3], aggregation=:flow, freq_ratio=3,
+                    n_draws=100, n_burn=100,
+                    varnames=["INDPRO", "CPI", "FFR"])
+report(mf)
+```
+
+The report shows the interpolated high-frequency path of each low-frequency series with credible bands — the object the model exists to produce. `latent_path` returns it in full:
+
+```@example bvar
+mu, bands = latent_path(mf)
+# The aggregation identity holds at every reference date, by construction
+maximum(abs(sum(mu[t-j+1, 3] for j in 1:3) - mf_data[t, 3])
+        for t in 3:size(mf_data, 1) if !isnan(mf_data[t, 3]))
+```
+
+Because the parameter draws are ordinary VAR draws, the existing analysis dispatches apply at the high frequency:
+
+```@example bvar
+fc_mf = forecast(mf, 6)
+report(fc_mf)
+```
+
+With `low_freq` empty nothing is latent and the sampler reduces to the conjugate BVAR. See also the [Nowcasting](nowcast.md) pages, which solve the same ragged-edge problem with a dynamic factor model instead.
+
+### `estimate_mfvar` Keyword Arguments
+
+| Keyword | Type | Default | Description |
+|---------|------|---------|-------------|
+| `low_freq` | `Vector{Int}` | `Int[]` | Column indices observed at the low frequency |
+| `freq_ratio` | `Int` | `3` | High-frequency periods per low-frequency period |
+| `aggregation` | `Symbol` or `Vector{Symbol}` | `:growth` | `:growth`, `:flow`, `:average`, `:stock`; one rule for all low-frequency series or one per series |
+| `n_draws` | `Int` | `1000` | Retained posterior draws |
+| `n_burn` | `Int` | `500` | Burn-in sweeps |
+| `prior` | `Symbol` | `:minnesota` | `:minnesota` (dummy observations) or `:diffuse` |
+| `hyper` | `MinnesotaHyperparameters` | `nothing` | Fixed hyperparameters; `nothing` optimizes once on the initial path |
+| `varnames` | `Vector{String}` | `y1, y2, …` | Variable names |
+| `rng` | `AbstractRNG` | `default_rng()` | Random number generator |
+
+### `MFVARPosterior{T}` Fields
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `B_draws` | `Array{T,3}` | ``n_{draws}\times k\times n`` VAR coefficients, ``k = 1+np`` |
+| `Sigma_draws` | `Array{T,3}` | ``n_{draws}\times n\times n`` innovation covariances |
+| `Z_draws` | `Array{T,3}` | ``n_{draws}\times T_{hf}\times n`` latent high-frequency paths |
+| `data` | `Matrix{T}` | The input panel, `NaN` where unobserved |
+| `low_freq` | `Vector{Int}` | Low-frequency column indices |
+| `freq_ratio` | `Int` | High-frequency periods per low-frequency period |
+| `aggregation` | `Vector{Symbol}` | Aggregation rule per low-frequency series |
+
+---
+
 ## Large BVAR
 
 For high-dimensional systems (20+ variables), the number of VAR parameters ``n^2 p + n`` grows quadratically with the number of variables, quickly exceeding the sample size. The Minnesota prior prevents overfitting by shrinking coefficient estimates, making large-scale Bayesian VAR estimation feasible.
@@ -777,3 +858,12 @@ This workflow demonstrates the complete Bayesian pipeline: hyperparameter optimi
 
 - Kim, S., Shephard, N., & Chib, S. (1998). Stochastic Volatility: Likelihood Inference and Comparison with ARCH Models.
   *Review of Economic Studies*, 65(3), 361-393. [DOI](https://doi.org/10.1111/1467-937X.00050)
+
+- Schorfheide, F., & Song, D. (2015). Real-Time Forecasting with a Mixed-Frequency VAR.
+  *Journal of Business & Economic Statistics*, 33(3), 366-380. [DOI](https://doi.org/10.1080/07350015.2014.954707)
+
+- Mariano, R. S., & Murasawa, Y. (2003). A New Coincident Index of Business Cycles Based on Monthly and Quarterly Series.
+  *Journal of Applied Econometrics*, 18(4), 427-443. [DOI](https://doi.org/10.1002/jae.695)
+
+- Durbin, J., & Koopman, S. J. (2002). A Simple and Efficient Simulation Smoother for State Space Time Series Analysis.
+  *Biometrika*, 89(3), 603-616. [DOI](https://doi.org/10.1093/biomet/89.3.603)

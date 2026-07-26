@@ -99,6 +99,7 @@ AbstractPrior
 ```@docs
 BVARPosterior
 TVPVARPosterior
+MFVARPosterior
 ```
 
 ### Time-Varying Parameter VAR
@@ -106,6 +107,13 @@ TVPVARPosterior
 ```@docs
 estimate_tvpvar
 volatility_path
+```
+
+### Mixed-Frequency VAR
+
+```@docs
+estimate_mfvar
+latent_path
 ```
 
 ---

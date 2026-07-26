@@ -47,6 +47,7 @@ const TEST_GROUPS = [
         "bvar/test_minnesota.jl",
         "bvar/test_bgr.jl",
         "bvar/test_tvpvar.jl",   # T250 (#349): Primiceri TVP-VAR-SV / Cogley-Sargent SV-BVAR
+        "bvar/test_mfvar.jl",    # T251 (#350): Schorfheide-Song mixed-frequency VAR
         "var/test_arias2018.jl",
         "var/test_uhlig.jl",
         "var/test_conditional_forecast.jl",   # T241 (#340): Waggoner-Zha conditional forecasts
