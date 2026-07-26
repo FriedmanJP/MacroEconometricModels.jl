@@ -272,6 +272,65 @@ Joint optimization is particularly important for large systems (``n \geq 10``), 
 | `lambda_grid` | `Vector` | `[1.0, 5.0, 10.0]` | Grid values for ``\lambda`` |
 | `mu_grid` | `Vector` | `[1.0, 2.0, 5.0]` | Grid values for ``\mu`` |
 
+### Hierarchical Optimization (GLP 2015) --- the default
+
+Giannone, Lenza & Primiceri (2015) treat the hyperparameters as **random**, with hyperpriors, and select them by maximizing the posterior rather than the marginal likelihood alone:
+
+```math
+\hat{\gamma} = \arg\max_{\gamma}\ \log p(Y \mid \gamma) + \log p(\gamma),
+\qquad \gamma = (\tau, \lambda, \mu)
+```
+
+where:
+- ``p(Y \mid \gamma)`` is the closed-form conjugate marginal likelihood above
+- ``p(\gamma)`` are Gamma hyperpriors in GLP's mode/standard-deviation parameterization: ``\tau`` with mode 0.2 and sd 0.4, ``\lambda`` and ``\mu`` with mode 1 and sd 1
+
+This is what `estimate_bvar` uses by default when `prior=:minnesota` and no `hyper` is supplied. It matters because a one-dimensional grid over ``\tau`` cannot trade overall tightness against the sum-of-coefficients and initial-observation priors: holding the latter at their defaults, the grid can be driven to an endpoint of its own range and report that endpoint as though it had been selected.
+
+```@example bvar
+glp = optimize_hyperparameters_glp(Y, 2)
+report(glp)
+```
+
+The result carries the diagnostics needed to decide whether to trust it. `converged` is `true` only when the optimizer converged **and** no hyperparameter sits on a bound; a pinned value sets `at_bound` and clears `converged`, and the reported log marginal likelihood can be compared against `log_ml_default` (the package defaults) to see how much the selection bought.
+
+!!! note "Technical Note"
+    Optimization runs in log space, so every hyperparameter stays positive without a constrained solver, and uses a derivative-free Nelder-Mead restarted from several dispersed starting points --- the marginal-likelihood surface is not concave in the hyperparameters, and a single start can settle in a local optimum. The lag decay and covariance scaling are held fixed (GLP fix the lag decay rather than estimate it) and can be shifted with the `decay` and `omega` keywords.
+
+| Keyword | Type | Default | Description |
+|---------|------|---------|-------------|
+| `decay` | `Real` | `0.5` | Lag-decay exponent, held fixed |
+| `omega` | `Real` | `2.0` | Covariance scaling, held fixed |
+| `starts` | `Int` | `4` | Dispersed restarts of the optimizer |
+| `max_iter` | `Int` | `500` | Iterations per restart |
+| `f_reltol` | `Real` | `1e-8` | Relative objective tolerance |
+| `verbose` | `Bool` | `true` | Warn on non-convergence |
+
+`GLPHyperparameters{T}` return value:
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `hyper` | `MinnesotaHyperparameters{T}` | The optimized hyperparameters |
+| `log_ml` | `T` | Log marginal likelihood at the optimum |
+| `log_posterior` | `T` | `log_ml` plus the log hyperprior --- the maximized objective |
+| `converged` | `Bool` | Converged **and** no hyperparameter on a bound |
+| `at_bound` | `Bool` | Some hyperparameter is pinned to the search box |
+| `iterations` | `Int` | Optimizer iterations |
+| `log_ml_default` | `T` | Log marginal likelihood at the package defaults |
+
+Selection is controlled from `estimate_bvar` through `hyperopt`:
+
+```@example bvar
+post_glp  = estimate_bvar(Y, 2; n_draws=100, prior=:minnesota,
+                          varnames=["INDPRO", "CPI", "FFR"])            # :glp (default)
+post_grid = estimate_bvar(Y, 2; n_draws=100, prior=:minnesota, hyperopt=:grid,
+                          varnames=["INDPRO", "CPI", "FFR"])            # tau-only grid
+using Statistics
+round.([mean(post_glp.B_draws[:, 2, 1]) mean(post_grid.B_draws[:, 2, 1])], digits=4)
+```
+
+An explicit `hyper=` bypasses selection entirely under either setting.
+
 ---
 
 ## Posterior Sampling

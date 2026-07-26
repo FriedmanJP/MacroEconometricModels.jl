@@ -100,6 +100,7 @@ AbstractPrior
 BVARPosterior
 TVPVARPosterior
 MFVARPosterior
+GLPHyperparameters
 ```
 
 ### Time-Varying Parameter VAR
@@ -114,6 +115,12 @@ volatility_path
 ```@docs
 estimate_mfvar
 latent_path
+```
+
+### Hyperparameter Selection
+
+```@docs
+optimize_hyperparameters_glp
 ```
 
 ---

@@ -226,6 +226,7 @@ include("nongaussian/tests.jl")
 # Bayesian utilities (after bayesian + identification)
 include("bvar/utils.jl")
 include("bvar/tvpvar.jl")   # T250 (#349): Primiceri TVP-VAR-SV / Cogley-Sargent SV-BVAR
+include("bvar/glp.jl")      # T252 (#351): GLP (2015) hierarchical hyperparameter optimization
 include("bvar/mfvar.jl")    # T251 (#350): Schorfheide-Song mixed-frequency VAR
 
 # Conditional forecasting / scenario analysis (needs VAR + BVAR + identification)
@@ -845,6 +846,7 @@ export test_known_beta, test_joint_restriction
 export BVARPosterior, BVARForecast
 export TVPVARPosterior, estimate_tvpvar, volatility_path
 export MFVARPosterior, estimate_mfvar, latent_path
+export optimize_hyperparameters_glp, GLPHyperparameters
 export estimate_bvar
 export posterior_mean_model
 export posterior_median_model
