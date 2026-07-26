@@ -445,6 +445,10 @@ Heterogeneous-agent (Reiter/SSJ/Krusell-Smith), continuous-time (HJB/KFE), and O
 | `combine_blocks(blocks...)` | Assemble blocks into a DAG (topological sort) |
 | `ssj_jacobian(model; unknowns, targets, shocks)` | General-equilibrium sequence-space Jacobian `H_U`, `H_Z` |
 | `ssj_irf(gej, dZ; order=2)` | First- and second-order sequence-space impulse responses |
+| `dcegm_solve(prob)` | DCEGM discrete-continuous choice with upper envelope (Iskhakov et al. 2017) |
+| `dcegm_retirement_model(; ...)` | Canonical work/retire problem |
+| `dcegm_threshold(sol, t, d_prev, j; ...)` | Cash-on-hand at which the discrete choice switches |
+| `dcegm_simulate(sol, grid)` | Young histogram respecting the discrete choice |
 
 ### Occasionally Binding Constraints (OccBin)
 

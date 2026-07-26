@@ -122,6 +122,85 @@ When EGM is not applicable (non-separable utility, complex constraints), **Value
 
 ---
 
+## [Discrete-Continuous Choice: DCEGM](@id dcegm)
+
+Many household problems pair the continuous consumption choice with a **discrete** one — retire or work, own or rent, adjust a durable or not. The discrete choice makes the value function non-concave, so the Euler equation is no longer sufficient: it admits spurious local optima, and the endogenous grid it produces is non-monotone. Iskhakov, Jørgensen, Rust & Schjerning (2017) solve this with an **upper-envelope** step.
+
+```math
+V_t(M, j, d_-) = \max_{d \in D(d_-)} v_t(M, j, d), \qquad
+v_t(M, j, d) = \max_{c} u(c, d) + \beta\, E_j V_{t+1}\!\left(R(M - c) + y(d, j'),\, j',\, d\right)
+```
+
+where:
+- ``M`` is cash-on-hand and ``j`` the idiosyncratic income state
+- ``d_-`` is last period's discrete option and ``D(d_-)`` those still feasible (an **absorbing** option leaves only itself)
+- ``u(c, d)`` is flow utility, ``R`` the gross return, and ``y(d, j')`` income received next period
+
+One EGM sweep per option gives candidate ``(M, c, v)`` triples; where the continuation value is non-concave the ``M`` sequence loops back on itself, and the same cash-on-hand appears on two branches. `_upper_envelope` keeps the branch with the higher value and inserts the **exact** crossing, at which the value function is continuous while consumption jumps.
+
+!!! note "Technical Note"
+    Between two adjacent candidate grid points both branches are linear — the grid contains every knot — so the crossing ``M^* = M_{lo} + (M_{hi} - M_{lo}) f(M_{lo}) / (f(M_{lo}) - f(M_{hi}))`` with ``f = v_p - v_q`` is exact, not bisected. It is inserted twice, once with each branch's consumption, because consumption is genuinely discontinuous at a discrete-choice threshold.
+
+[`dcegm_retirement_model`](@ref) builds the canonical retirement problem: work or retire (absorbing), flow utility ``\log c - \delta \mathbb{1}[\text{work}]``, and no income once retired.
+
+```@example dsge_ha
+retire = dcegm_retirement_model(; n_periods=6, beta=0.98, R=1.0, wage=20.0,
+                                disutility=1.0, a_max=60.0, n_a=200)
+dc = dcegm_solve(retire)
+report(dc)
+```
+
+The envelope finds switching thresholds only on the **working** branch. Retirement is absorbing, so a retiree faces no further discrete choice and their problem stays concave — which is why the retired branch has zero kinks and reduces to deterministic cake-eating with the closed form ``c_t = M / \sum_{k \le T-t} \beta^k``.
+
+```@example dsge_ha
+annuity = sum(0.98^k for k in 0:2)                # three periods left at t = 4
+(dcegm  = round(dcegm_policy(dc, 4, 1, 1, 45.0)[1], digits=8),
+ closed = round(45.0 / annuity, digits=8),
+ threshold = round(dcegm_threshold(dc, 4, 2, 1; M_lo=0.5, M_hi=60.0), digits=4))
+```
+
+The retired consumption function reproduces the closed form to machine precision, and the threshold says a worker with more than about 49 units of cash-on-hand retires at ``t = 4`` — wealthy enough that the disutility of work outweighs another wage.
+
+| Keyword | Type | Default | Description |
+|---------|------|---------|-------------|
+| `max_iter` | `Int` | `500` | Infinite-horizon iteration cap |
+| `tol` | `Real` | ``10^{-8}`` | Sup-norm policy tolerance (infinite horizon) |
+| `verbose` | `Bool` | `false` | Print iteration diagnostics |
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `M`, `c`, `v` | `Array{Vector{T},3}` | Endogenous grid, consumption, and conditional value per `(t, option, income state)` |
+| `n_kinks` | `Array{Int,3}` | Switching thresholds the envelope found |
+| `converged` | `Bool` | Infinite horizon: whether the policy fixed point met `tol` |
+
+### Taste Shocks
+
+Adding extreme-value taste shocks of scale ``\lambda`` replaces the hard maximum with a log-sum-exp and the switching rule with multinomial-logit probabilities, which makes the value function differentiable — the numerically robust variant. Setting ``\lambda = 0`` recovers the deterministic upper envelope.
+
+```@example dsge_ha
+smooth = dcegm_solve(dcegm_retirement_model(; n_periods=6, a_max=60.0, n_a=200,
+                                            taste_shock_scale=0.5))
+p_low  = dcegm_choice_probabilities(smooth, 4, 2, 1, 20.0)
+p_high = dcegm_choice_probabilities(smooth, 4, 2, 1, 55.0)
+(retire_at_20 = round(p_low[1], digits=4), retire_at_55 = round(p_high[1], digits=4))
+```
+
+Retirement probability rises with wealth, smoothly rather than as a step. As ``\lambda \to 0`` the probabilities collapse onto the deterministic rule and the consumption policy onto the upper-envelope solution.
+
+### Simulating the Distribution
+
+[`dcegm_simulate`](@ref) propagates a Young (2010) histogram whose transition respects the discrete choice: mass is split across options by the choice probabilities and each part is pushed forward by that option's savings policy.
+
+```@example dsge_ha
+dist = dcegm_simulate(dc, collect(range(0.01, 60.0; length=100)))
+(mass = round(sum(dist.dist[3, :, :, :]), digits=12),
+ retired_share = round.(dist.shares[:, 1], digits=4))
+```
+
+Mass is conserved exactly — off-grid landing points are split between the two bracketing nodes in proportion to distance. The retired share is monotone in age because retirement is absorbing, and jumps to one in the terminal period, when working carries its disutility with no future wage to compensate.
+
+---
+
 ## Income Discretization
 
 Idiosyncratic productivity follows an AR(1) process ``\log e' = \rho \log e + \sigma \varepsilon`` discretized onto a finite Markov chain.
@@ -660,6 +739,10 @@ plot_result(ss_ks; view=:policy)      # policy functions by income
 
 8. **Second-order step size.** `ssj_irf(...; order=2)` differences at the actual shock size (`fd_step=1.0`). Reduce `fd_step` when the shock is large enough to push the household problem far from its steady state; raise it when the shock is so small that the ``O(\sigma^2)`` term is lost in roundoff.
 
+9. **DCEGM asset grids must be dense near the credit limit.** A household that saves exactly the credit limit and has no income next period consumes zero forever, so the value there is ``-\infty`` and the endogenous grid cannot reach below ``\bar{a} + c(\bar{a})``. On a uniform grid that unresolved wedge is a full asset step wide; `dcegm_retirement_model` therefore defaults to `curvature=2.0`, which shrinks it by a factor of `n_a`. Give the option a positive income floor (`pension`) if you need the constrained branch itself.
+
+10. **Comparing DCEGM against a grid solver near a kink.** DCEGM locates the switching threshold exactly, so consumption jumps at an arbitrary real number. A value-function-iteration benchmark on a finite grid cannot represent that jump and will disagree sharply at the one or two nodes straddling it, while agreeing to grid accuracy everywhere else. Compare medians and choice indicators, not maxima.
+
 ---
 
 ## References
@@ -671,6 +754,8 @@ plot_result(ss_ks; view=:policy)      # policy functions by income
 - Carroll, Christopher D. 2006. "The Method of Endogenous Gridpoints for Solving Dynamic Stochastic Optimization Problems." *Economics Letters* 91 (3): 312--320. [DOI](https://doi.org/10.1016/j.econlet.2005.09.013)
 
 - den Haan, Wouter J. 2010. "Assessing the Accuracy of the Aggregate Law of Motion in Models with Heterogeneous Agents." *Journal of Economic Dynamics and Control* 34 (1): 79--99. [DOI](https://doi.org/10.1016/j.jedc.2009.07.006)
+
+- Iskhakov, Fedor, Thomas H. Jørgensen, John Rust, and Bertel Schjerning. 2017. "The Endogenous Grid Method for Discrete-Continuous Dynamic Choice Models with (or without) Taste Shocks." *Quantitative Economics* 8 (2): 317--365. [DOI](https://doi.org/10.3982/QE643)
 
 - Huggett, Mark. 1993. "The Risk-Free Rate in Heterogeneous-Agent Incomplete-Insurance Economies." *Journal of Economic Dynamics and Control* 17 (5--6): 953--969. [DOI](https://doi.org/10.1016/0165-1889(93)90024-M)
 

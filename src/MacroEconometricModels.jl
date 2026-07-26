@@ -543,6 +543,7 @@ include("dsge/heterogeneous/steady_state.jl")
 include("dsge/heterogeneous/krusell_smith.jl")
 include("dsge/heterogeneous/ssj.jl")
 include("dsge/heterogeneous/blocks.jl")
+include("dsge/heterogeneous/dcegm.jl")
 include("dsge/heterogeneous/reiter.jl")
 include("dsge/heterogeneous/examples.jl")
 include("dsge/heterogeneous/parser.jl")
@@ -733,6 +734,10 @@ export distribution_irf, inequality_irf, simulate_panel, den_haan_test
 export AbstractSSJBlock, SimpleBlock, HetBlock, SSJModel
 export SSJGEJacobian, SSJImpulseResponse
 export combine_blocks, block_jacobian, ssj_jacobian, ssj_irf, ssj_arg_order
+# DCEGM — discrete-continuous choice (Iskhakov et al. 2017)
+export DCEGMProblem, DCEGMSolution, DCEGMDistribution
+export dcegm_solve, dcegm_policy, dcegm_choice_probabilities, dcegm_threshold
+export dcegm_simulate, dcegm_retirement_model
 
 # Overlapping generations (Blanchard 1985 perpetual youth)
 export BlanchardOLG, BlanchardOLGSteadyState, BlanchardOLGSolution

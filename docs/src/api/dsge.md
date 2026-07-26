@@ -207,6 +207,22 @@ report(::SSJGEJacobian{T}) where {T}
 report(::SSJImpulseResponse{T}) where {T}
 ```
 
+### Discrete-Continuous Choice (DCEGM)
+
+```@docs
+DCEGMProblem
+DCEGMSolution
+DCEGMDistribution
+dcegm_solve
+dcegm_policy
+dcegm_choice_probabilities
+dcegm_threshold
+dcegm_simulate
+dcegm_retirement_model
+report(::DCEGMSolution{T}) where {T}
+report(::DCEGMDistribution{T}) where {T}
+```
+
 ---
 
 ## Continuous-Time DSGE

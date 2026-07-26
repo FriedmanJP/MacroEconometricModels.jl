@@ -1983,4 +1983,304 @@ end
     @test_throws ArgumentError HetBlock(spec, ss; inputs=[:r], outputs=Symbol[])
 end
 
+# ─────────────────────────────────────────────────────────────────────────────
+# Section 27 (#353/T254): DCEGM — discrete-continuous choice
+# ─────────────────────────────────────────────────────────────────────────────
+
+@testset "DCEGM upper envelope" begin
+    UE = MacroEconometricModels._upper_envelope
+    SEG = MacroEconometricModels._monotone_segments
+
+    @test SEG([1.0, 2.0, 3.0]) == [1:3]
+    @test SEG([1.0, 2.0, 3.0, 2.5, 3.5]) == [1:3, 4:5]
+    @test SEG([1.0, 2.0, 1.5]) == [1:2]                  # trailing single point dropped
+    @test isempty(SEG(Float64[]))
+
+    # A monotone correspondence passes through untouched.
+    M1 = [1.0, 2.0, 3.0]; c1 = [0.5, 1.0, 1.5]; v1 = [0.0, 1.0, 2.0]
+    Me, ce, ve, nk = UE(M1, c1, v1)
+    @test Me == M1 && ce == c1 && ve == v1 && nk == 0
+
+    # Two branches that genuinely CROSS inside their overlap.
+    #   A: v = M           on [1, 5]
+    #   B: v = 2M − 3.5    on [2, 5]   ⇒  v_A = v_B ⟺ M = 3.5, strictly between knots
+    Ma = [1.0, 2.0, 3.0, 4.0, 5.0]; ca = [0.5, 1.0, 1.5, 2.0, 2.5]; va = [1.0, 2.0, 3.0, 4.0, 5.0]
+    Mb = [2.0, 3.0, 4.0, 5.0];      cb = [9.0, 9.5, 10.0, 10.5];    vb = [0.5, 2.5, 4.5, 6.5]
+    Me, ce, ve, nk = UE(vcat(Ma, Mb), vcat(ca, cb), vcat(va, vb))
+    @test nk == 1
+    @test all(diff(Me) .> 0)                              # strictly increasing output
+    k = findfirst(i -> Me[i+1] == nextfloat(Me[i]), 1:(length(Me)-1))
+    @test k !== nothing
+    @test Me[k] ≈ 3.5                                     # exact crossing, not a grid point
+    @test ve[k] ≈ ve[k+1] ≈ 3.5                           # value is continuous at a kink
+    @test ce[k] ≈ 1.75 && ce[k+1] ≈ 9.75                  # consumption jumps
+    # Defining property: the envelope dominates every branch everywhere it is defined.
+    for (m, v) in zip(Me, ve)
+        for (Ms, vs) in ((Ma, va), (Mb, vb))
+            Ms[1] <= m <= Ms[end] || continue
+            @test v >= MacroEconometricModels._seg_interp(Ms, vs, m) - 1e-12
+        end
+    end
+
+    # A crossing that lands exactly ON a knot is still a kink: the branches tie at
+    # M = 3 and consumption jumps immediately above it. Rounding it away would lose
+    # the switching threshold entirely.
+    vb_knot = [1.0, 3.0, 5.0, 7.0]                        # B: v = 2M − 3 ⇒ tie at M = 3
+    Me, ce, ve, nk = UE(vcat(Ma, Mb), vcat(ca, cb), vcat(va, vb_knot))
+    @test nk == 1
+    @test all(diff(Me) .> 0)
+    k = findfirst(i -> Me[i+1] == nextfloat(Me[i]), 1:(length(Me)-1))
+    @test k !== nothing && Me[k] == 3.0
+    @test ve[k] ≈ ve[k+1] ≈ 3.0
+    @test ce[k] ≈ 1.5 && ce[k+1] ≈ 9.5
+
+    # A switch at a SUPPORT BOUNDARY is not a crossing: branch B starts already
+    # dominating, so there is no interior kink to insert.
+    Mc_ = [1.0, 2.0, 3.0, 2.5, 3.5, 4.5]
+    cc_ = [0.5, 1.0, 1.5, 0.2, 0.3, 0.4]
+    vc_ = [0.0, 1.0, 2.0, 3.0, 3.4, 3.8]
+    Me, ce, ve, nk = UE(Mc_, cc_, vc_)
+    @test nk == 0
+    @test all(diff(Me) .> 0)
+    @test ve[findfirst(≈(2.5), Me)] ≈ 3.0                 # the dominating branch is kept
+
+    @test_throws ArgumentError UE([1.0, 2.0], [1.0], [1.0, 2.0])
+end
+
+@testset "DCEGM retirement model" begin
+    prob = dcegm_retirement_model(; n_periods=6, beta=0.98, R=1.0, wage=20.0,
+                                  disutility=1.0, a_max=60.0, n_a=250)
+    @test prob isa DCEGMProblem{Float64}
+    @test prob.options == [:retire, :work] && prob.absorbing == [true, false]
+    sol = dcegm_solve(prob)
+    @test sol isa DCEGMSolution{Float64}
+    @test sol.converged && sol.n_periods == 6
+
+    # ANALYTIC ORACLE: once retired (absorbing, no pension, R = 1, log utility) the
+    # problem is deterministic cake-eating with the closed form c_t = M / Σ_{k≤T−t} β^k.
+    for t in (6, 5, 3, 1), Mt in (5.0, 20.0, 45.0)
+        annuity = sum(0.98^k for k in 0:(6 - t))
+        @test dcegm_policy(sol, t, 1, 1, Mt)[1] ≈ Mt / annuity rtol=1e-12
+    end
+
+    # The discrete choice makes the WORKING branch non-concave: the envelope deletes
+    # secondary segments and inserts switching thresholds. Retirement is absorbing,
+    # so its own branch is concave and needs none.
+    @test sum(sol.n_kinks[:, 2, :]) > 0
+    @test sum(sol.n_kinks[:, 1, :]) == 0
+
+    # At every inserted kink the two value branches coincide while consumption jumps —
+    # the defining property of an upper-envelope crossing.
+    for t in 1:6, d in 1:2
+        Mv = sol.M[t, d, 1]; cv = sol.c[t, d, 1]; vv = sol.v[t, d, 1]
+        @test all(diff(Mv) .> 0)
+        for i in 1:(length(Mv) - 1)
+            Mv[i+1] == nextfloat(Mv[i]) || continue
+            @test vv[i] ≈ vv[i+1] rtol=1e-8
+            @test abs(cv[i] - cv[i+1]) > 1e-6
+        end
+    end
+
+    # ── INDEPENDENT ORACLE: dense-grid backward-induction VFI on the same model ──
+    # No EGM, no envelope, no Euler equation — just brute-force maximization.
+    function _vfi_retirement(; T_end, beta, R, wage, delta, Mmax, nM, nC)
+        Mg = collect(range(1e-4, Mmax; length=nM))
+        V = fill(-Inf, T_end, nM, 2); C = zeros(T_end, nM, 2); D = zeros(Int, T_end, nM, 2)
+        u(c, d) = c > 0 ? log(c) - (d == 2 ? delta : 0.0) : -Inf
+        for i in 1:nM, dp in 1:2
+            V[T_end, i, dp] = u(Mg[i], 1); C[T_end, i, dp] = Mg[i]; D[T_end, i, dp] = 1
+        end
+        for t in (T_end-1):-1:1, i in 1:nM, dp in 1:2
+            best = -Inf; bc = 0.0; bd = 0
+            for d in (dp == 1 ? (1:1) : (1:2))
+                inc = d == 2 ? wage : 0.0
+                for k in 0:(nC-1)
+                    c = Mg[i] * (k + 1) / nC
+                    Mn = R * (Mg[i] - c) + inc
+                    Vn = if Mn <= Mg[1]; V[t+1, 1, d]
+                         elseif Mn >= Mg[end]; V[t+1, end, d]
+                         else
+                             q = searchsortedfirst(Mg, Mn) - 1
+                             w = (Mn - Mg[q]) / (Mg[q+1] - Mg[q])
+                             (1 - w) * V[t+1, q, d] + w * V[t+1, q+1, d]
+                         end
+                    val = u(c, d) + beta * Vn
+                    val > best && (best = val; bc = c; bd = d)
+                end
+            end
+            V[t, i, dp] = best; C[t, i, dp] = bc; D[t, i, dp] = bd
+        end
+        return Mg, C, D
+    end
+    Mg, C_vfi, D_vfi = _vfi_retirement(; T_end=6, beta=0.98, R=1.0, wage=20.0,
+                                      delta=1.0, Mmax=60.0, nM=200, nC=600)
+    step = Mg[2] - Mg[1]
+
+    for t in 2:4
+        errs = Float64[]; mism = 0
+        for (i, m) in enumerate(Mg)
+            m < 0.5 && continue
+            d = argmax(dcegm_choice_probabilities(sol, t, 2, 1, m))
+            d != D_vfi[t, i, 2] && (mism += 1)
+            push!(errs, abs(dcegm_policy(sol, t, d, 1, m)[1] - C_vfi[t, i, 2]) /
+                        max(C_vfi[t, i, 2], 1e-8))
+        end
+        @test mism == 0                                        # discrete choice agrees
+        @test sort(errs)[cld(length(errs), 2)] < 2e-3          # median within VFI resolution
+        # Large disagreements occur only where the policy is genuinely discontinuous:
+        # a grid-based VFI cannot resolve a jump, DCEGM locates it exactly.
+        @test count(>(1e-2), errs) <= sum(sol.n_kinks[t, :, :]) + 1
+    end
+
+    # Retirement threshold vs the VFI switch point, within one oracle grid step.
+    for t in (4, 5)
+        thr = dcegm_threshold(sol, t, 2, 1; M_lo=0.5, M_hi=60.0)
+        idx = findlast(i -> D_vfi[t, i, 2] == 2, 1:length(Mg))
+        @test idx !== nothing
+        @test isfinite(thr)
+        @test abs(thr - Mg[idx]) <= 2 * step
+    end
+    # Early in life the worker never retires on this bracket — honestly reported as NaN.
+    @test isnan(dcegm_threshold(sol, 2, 2, 1; M_lo=0.5, M_hi=60.0))
+    @test all(D_vfi[2, i, 2] == 2 for i in 1:length(Mg))   # …and the oracle agrees
+    # Retirement is absorbing, so there is no two-option choice left to threshold.
+    @test_throws ArgumentError dcegm_threshold(sol, 3, 1, 1; M_lo=1.0, M_hi=10.0)
+    @test_throws ArgumentError dcegm_threshold(sol, 3, 2, 1; M_lo=10.0, M_hi=1.0)
+
+    report(sol)                                                # display smoke tests
+    @test occursin("DCEGMSolution", sprint(show, sol))
+    @test occursin("DCEGMProblem", sprint(show, prob))
+end
+
+@testset "DCEGM taste shocks" begin
+    base = dcegm_solve(dcegm_retirement_model(; n_periods=5, beta=0.98, R=1.0,
+                                              wage=20.0, disutility=1.0,
+                                              a_max=60.0, n_a=200))
+    Ms = collect(2.0:2.0:55.0)
+    devs = Float64[]; spreads = Float64[]
+    for lam in (1.0, 0.05, 0.01, 0.002)
+        s = dcegm_solve(dcegm_retirement_model(; n_periods=5, beta=0.98, R=1.0,
+                                               wage=20.0, disutility=1.0,
+                                               a_max=60.0, n_a=200,
+                                               taste_shock_scale=lam))
+        push!(devs, maximum(abs(dcegm_policy(s, 2, 2, 1, m)[1] -
+                                dcegm_policy(base, 2, 2, 1, m)[1]) for m in Ms))
+        # Mean distance of the choice probabilities from the deterministic 0/1 rule.
+        # The MAXIMUM is the wrong statistic: at the indifference point the
+        # probabilities are 1/2 for every λ, so only the *measure* of the interior
+        # region shrinks, not its peak.
+        push!(spreads, sum(minimum(dcegm_choice_probabilities(s, 3, 2, 1, m))
+                           for m in Ms) / length(Ms))
+    end
+    # The smoothed solution collapses onto the deterministic upper envelope as λ → 0.
+    @test issorted(devs; rev=true)
+    @test devs[1] > 1.0                                   # λ = 1 genuinely differs
+    @test devs[end] < 0.01
+    @test issorted(spreads; rev=true)
+    @test spreads[end] < 1e-3
+
+    s = dcegm_solve(dcegm_retirement_model(; n_periods=5, a_max=60.0, n_a=150,
+                                           taste_shock_scale=0.5))
+    p = dcegm_choice_probabilities(s, 3, 2, 1, 30.0)
+    @test length(p) == 2 && sum(p) ≈ 1.0 && all(p .>= 0)
+    # After retiring, work is infeasible: probability exactly zero, not merely small.
+    pr = dcegm_choice_probabilities(s, 3, 1, 1, 30.0)
+    @test pr == [1.0, 0.0]
+end
+
+@testset "DCEGM distribution and simulation" begin
+    prob = dcegm_retirement_model(; n_periods=7, beta=0.98, R=1.02, wage=20.0,
+                                  disutility=0.8, sigma=0.15, n_shocks=3,
+                                  a_max=80.0, n_a=150)
+    @test length(prob.income_process.states) == 3
+    @test sum(prob.income_process.stationary_dist) ≈ 1.0
+    @test dot(prob.income_process.stationary_dist, prob.income_process.states) ≈ 1.0 rtol=1e-6
+    sol = dcegm_solve(prob)
+
+    grid = collect(range(0.01, 80.0; length=120))
+    dist = dcegm_simulate(sol, grid)
+    @test dist isa DCEGMDistribution{Float64}
+    @test dist.n_periods == 7
+    # The Young lottery splits off-grid landings between neighbours, so mass is exact.
+    for t in 1:7
+        @test sum(@view dist.dist[t, :, :, :]) ≈ 1.0 atol=1e-12
+        @test sum(@view dist.shares[t, :]) ≈ 1.0 atol=1e-12
+    end
+    @test all(dist.dist .>= 0)
+    # Retirement is absorbing, so its share can only rise with age.
+    @test issorted(dist.shares[:, 1])
+    @test dist.shares[1, 2] ≈ 1.0                       # everyone starts working
+    @test all(isfinite, dist.consumption) && all(dist.consumption .> 0)
+    @test all(dist.assets .>= -1e-12)
+    report(dist)                                        # display smoke test
+    @test occursin("DCEGMDistribution", sprint(show, dist))
+
+    # Custom initial condition: all mass at one node, everyone already retired.
+    init = zeros(length(grid), 3)
+    init[60, :] .= prob.income_process.stationary_dist
+    d2 = dcegm_simulate(sol, grid; init=init, init_option=:retire, n_periods=4)
+    @test d2.n_periods == 4
+    @test all(d2.shares[:, 1] .≈ 1.0)                   # absorbing: nobody returns to work
+    @test sum(@view d2.dist[1, :, :, :]) ≈ 1.0
+
+    @test_throws ArgumentError dcegm_simulate(sol, [3.0, 1.0, 2.0])
+    @test_throws ArgumentError dcegm_simulate(sol, [1.0])
+    @test_throws ArgumentError dcegm_simulate(sol, grid; n_periods=0)
+    @test_throws ArgumentError dcegm_simulate(sol, grid; n_periods=99)
+    @test_throws ArgumentError dcegm_simulate(sol, grid; init_option=:nope)
+    @test_throws ArgumentError dcegm_simulate(sol, grid; init=zeros(3, 3))
+end
+
+@testset "DCEGM infinite horizon and validation" begin
+    # Stationary policy: a pension keeps the retired branch finite at the constraint.
+    p = dcegm_retirement_model(; n_periods=0, beta=0.95, R=1.01, wage=5.0,
+                               disutility=0.5, a_max=40.0, n_a=150, pension=1.0)
+    s = dcegm_solve(p; max_iter=300, tol=1e-7)
+    @test s.converged
+    @test s.iterations > 1 && s.sup_diff < 1e-7
+    @test s.n_periods == 1
+    # A stationary solution can be simulated for any number of periods.
+    d = dcegm_simulate(s, collect(range(0.01, 40.0; length=80)); n_periods=12)
+    @test d.n_periods == 12
+    @test all(sum(@view d.dist[t, :, :, :]) ≈ 1.0 for t in 1:12)
+
+    # Non-convergence is reported, not silently accepted.
+    s1 = dcegm_solve(p; max_iter=1, tol=1e-12)
+    @test !s1.converged && s1.iterations == 1
+
+    # ── Constructor validation ──────────────────────────────────────────────
+    inc = rouwenhorst(0.5, 0.1, 2)
+    base = (utility=(c, d) -> log(c), utility_prime=(c, d) -> 1 / c,
+            utility_prime_inv=(m, d) -> 1 / m, income=(d, j) -> 1.0,
+            income_process=inc)
+    @test_throws ArgumentError DCEGMProblem(; beta=0.95, R=1.0, base...,
+        options=Symbol[], absorbing=Bool[], asset_grid=[0.0, 1.0])
+    @test_throws ArgumentError DCEGMProblem(; beta=0.95, R=1.0, base...,
+        options=[:a, :b], absorbing=[true], asset_grid=[0.0, 1.0])
+    @test_throws ArgumentError DCEGMProblem(; beta=0.95, R=1.0, base...,
+        options=[:a, :a], absorbing=[true, false], asset_grid=[0.0, 1.0])
+    @test_throws ArgumentError DCEGMProblem(; beta=0.95, R=1.0, base...,
+        options=[:a], absorbing=[false], asset_grid=[0.0])            # too few points
+    @test_throws ArgumentError DCEGMProblem(; beta=0.95, R=1.0, base...,
+        options=[:a], absorbing=[false], asset_grid=[1.0, 0.0])       # unsorted
+    @test_throws ArgumentError DCEGMProblem(; beta=0.95, R=1.0, base...,
+        options=[:a], absorbing=[false], asset_grid=[0.5, 1.0])       # ≠ credit limit
+    @test_throws ArgumentError DCEGMProblem(; beta=1.5, R=1.0, base...,
+        options=[:a], absorbing=[false], asset_grid=[0.0, 1.0])       # β outside (0,1)
+    @test_throws ArgumentError DCEGMProblem(; beta=0.95, R=1.0, base...,
+        options=[:a], absorbing=[false], asset_grid=[0.0, 1.0], n_periods=-1)
+    @test_throws ArgumentError DCEGMProblem(; beta=0.95, R=1.0, base...,
+        options=[:a], absorbing=[false], asset_grid=[0.0, 1.0], taste_shock_scale=-1)
+    @test_throws ArgumentError dcegm_retirement_model(; n_shocks=0)
+    @test_throws ArgumentError dcegm_retirement_model(; curvature=0.5)
+
+    # A degenerate problem leaves too few usable grid points and says so.
+    bad = DCEGMProblem(; beta=0.95, R=1.0,
+        utility=(c, d) -> c > 0 ? log(c) : -Inf, utility_prime=(c, d) -> c > 0 ? 1 / c : Inf,
+        utility_prime_inv=(m, d) -> m > 0 ? 1 / m : Inf, income=(d, j) -> 0.0,
+        options=[:only], absorbing=[true], asset_grid=[0.0, 1.0],
+        income_process=inc, n_periods=3)
+    @test_throws ErrorException dcegm_solve(bad)
+end
+
 end # @testset "HA-DSGE Types"
