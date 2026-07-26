@@ -256,6 +256,8 @@ sol_ssj = solve(spec; method=:ssj, ss=ss, T_horizon=50, n_reduced=15)
 report(sol_ssj)
 ```
 
+Composing several blocks into a model, and going to second order in the sequence space, are covered in [Block Composition and Second-Order SSJ](@ref ssj_blocks).
+
 The SSJ method reduces the full sequence-space representation (dimension ``T``) to a compact state-space form with `n_reduced` states. The explained variance measures the fraction of aggregate dynamics captured by the truncated Ho-Kalman basis --- values above 99.9% confirm the reduction is adequate. The underlying steady state is reported alongside the reduction diagnostics.
 
 | Keyword | Type | Default | Description |
@@ -454,6 +456,98 @@ The Sequence-Space Jacobian forms the market-clearing system ``H_U \, dr + H_Z \
 
 ---
 
+## [Block Composition and Second-Order SSJ](@id ssj_blocks)
+
+A single household Jacobian prices one block. A *model* is a directed acyclic graph (DAG) of blocks, and its general-equilibrium Jacobian follows from the implicit function theorem applied along a topological ordering of that graph. `combine_blocks` assembles [`HetBlock`](@ref) household problems and [`SimpleBlock`](@ref) equation blocks into an [`SSJModel`](@ref); `ssj_jacobian` accumulates their Jacobians forward into the general-equilibrium system
+
+```math
+H_U \, dU + H_Z \, dZ = 0, \qquad dU = -H_U^{-1} H_Z \, dZ
+```
+
+where:
+- ``dU`` stacks the ``T``-length deviation paths of the **unknowns** --- the aggregates the equilibrium determines
+- ``dZ`` stacks the paths of the exogenous **shocks**
+- ``H_U``, ``H_Z`` are the total derivatives of the **targets** (equilibrium residuals, zero in steady state) with respect to the unknowns and shocks
+
+A `SimpleBlock` maps its inputs at declared leads and lags to its outputs, so its sequence-space Jacobian is the constant partial derivative ``\partial f_o / \partial I_{i,l}`` placed on the ``l``-th diagonal --- a banded Toeplitz matrix obtained by automatic differentiation, with no simulation. A `HetBlock` returns the dense fake-news Jacobian of the previous section, anticipation entries included.
+
+!!! note "Technical Note"
+    Unknowns and shocks must be **exogenous to the DAG** --- produced by no block. Feedback loops are closed by the GE solve, not by the graph, so a cycle among blocks is an error naming the blocks involved. Targets are equilibrium residuals: a target whose steady-state level does not vanish means the model is being linearized around a point that does not clear, which `ssj_jacobian` reports as a warning.
+
+The Huggett economy is a two-block DAG: households map ``(r, w)`` to aggregate bond holdings ``A``, and the bond market requires ``A = 0`` in zero net supply.
+
+```@example dsge_ha
+household = HetBlock(hug, ss_hug; inputs=[:r, :w], outputs=[:A], name=:household)
+bond_market = SimpleBlock(x -> [x[1]];                 # bond_mkt = A, clears at zero
+                          inputs=[:A], outputs=[:bond_mkt],
+                          ss_inputs=Dict(:A => household.ss_outputs[:A]),
+                          name=:bond_market)
+model = combine_blocks(household, bond_market; name=:huggett)
+report(model)
+```
+
+The DAG report lists the blocks in topological order --- households first, then the market they feed --- together with the variables the model treats as exogenous. Here ``r`` is the unknown the bond market pins down and ``w`` is the aggregate endowment shock; both are exogenous to the graph precisely because the equilibrium, not a block, determines them.
+
+```@example dsge_ha
+gej = ssj_jacobian(model; unknowns=[:r], targets=[:bond_mkt], shocks=[:w],
+                   T_horizon=40, target_tol=1e-3)   # SS was solved to tol=5e-4
+report(gej)
+```
+
+``H_U`` is the ``40 \times 40`` derivative of aggregate bond demand with respect to the whole rate path and ``H_Z`` its derivative with respect to the endowment path. Bond demand is about six times more sensitive to the rate path than to the endowment path (``\|H_U\|_1 \approx 50`` against ``\|H_Z\|_1 \approx 7.9``), so clearing a 2% endowment shock takes a rate move of only a few tenths of a percentage point. `target_tol` is relaxed to ``10^{-3}`` because the steady state was itself computed to `tol=5e-4`: demanding tighter clearing than the linearization point delivers would fire a warning that reflects the steady-state tolerance, not the DAG.
+
+| Keyword | Type | Default | Description |
+|---------|------|---------|-------------|
+| `unknowns` | `Vector{Symbol}` | --- | Aggregates the equilibrium determines; exogenous to the DAG |
+| `targets` | `Vector{Symbol}` | --- | Equilibrium residuals, one per unknown; produced by some block |
+| `shocks` | `Vector{Symbol}` | --- | Exogenous drivers; exogenous to the DAG |
+| `T_horizon` | `Int` | `300` | Truncation horizon ``T`` |
+| `target_tol` | `Real` | ``10^{-6}`` | Warn when a target does not vanish in steady state |
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `H_U` | `Matrix{T}` | ``(n_{targets} T) \times (n_{unknowns} T)`` clearing Jacobian |
+| `H_Z` | `Matrix{T}` | ``(n_{targets} T) \times (n_{shocks} T)`` shock Jacobian |
+| `curlyJ` | `Dict{Symbol,Dict{Symbol,Matrix{T}}}` | Total derivative of every variable w.r.t. every unknown and shock |
+| `H_U_fact` | `Factorization{T}` | Cached LU factorization reused by `ssj_irf` |
+
+### Second-Order Impulse Responses
+
+Expanding ``H(U, Z) = 0`` to second order in the shock size gives the first-order system above plus
+
+```math
+H_U \, dU^{(2)} + \tfrac{1}{2} D^2 H[v, v] = 0, \qquad v = (dU^{(1)}, dZ)
+```
+
+where ``D^2 H[v, v]`` is the second-order sequence-space Jacobian tensor **contracted with the first-order solution path**. `ssj_irf(...; order=2)` evaluates that contraction from a central difference of two nonlinear DAG passes, so the ``T^3`` tensors --- ``2.7 \times 10^7`` entries per input pair at ``T = 300`` --- are never materialized. Because ``dU^{(2)}`` scales with the square of the shock size, the second-order solution collapses onto the first-order one as the shock shrinks.
+
+```@example dsge_ha
+dw = Dict(:w => [0.02 * 0.9^(t - 1) for t in 1:40])   # 2% AR(1) endowment shock
+irf1 = ssj_irf(gej, dw)
+irf2 = ssj_irf(gej, dw; order=2)
+(impact_1st = round(irf1.paths[:r][1], digits=6),
+ impact_2nd = round(irf2.paths[:r][1], digits=6),
+ residual_1st = round(irf1.target_residual[:bond_mkt], sigdigits=3),
+ residual_2nd = round(irf2.target_residual[:bond_mkt], sigdigits=3))
+```
+
+A positive endowment shock lowers the clearing rate: households want to save the windfall, but the bond is in zero net supply, so the rate must fall. The second-order correction moves the impact rate from ``-0.00314`` to ``-0.00309``, about 1.7% of the first-order response --- the precautionary-saving nonlinearity the linear solution misses. `target_residual` is the honest accuracy measure: it evaluates the DAG **nonlinearly** along the returned path and reports the largest market-clearing violation, which falls from ``3.2 \times 10^{-4}`` to ``5.0 \times 10^{-6}``, a factor of 63.
+
+| Keyword | Type | Default | Description |
+|---------|------|---------|-------------|
+| `order` | `Int` | `1` | Approximation order (`1` or `2`) |
+| `fd_step` | `Real` | `1.0` | Scaling of the central difference used for the second-order contraction |
+| `residual` | `Bool` | `true` | Report the nonlinear market-clearing residual along the returned path |
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `paths` | `Dict{Symbol,Vector{T}}` | Total deviation path of every variable in the DAG |
+| `first_order` | `Dict{Symbol,Vector{T}}` | First-order component alone |
+| `correction` | `Dict{Symbol,Vector{T}}` | Second-order component (empty when `order = 1`) |
+| `target_residual` | `Dict{Symbol,T}` | Largest nonlinear target deviation along the returned path |
+
+---
+
 ## Built-in Examples
 
 Four canonical models are available via `load_ha_example`:
@@ -562,11 +656,17 @@ plot_result(ss_ks; view=:policy)      # policy functions by income
 
 6. **Two-asset deposit grid resolution.** The nested EGM searches over a discrete deposit grid. With too few points (`n_deposit < 20`), the optimal deposit choice may be inaccurate near the adjustment cost kink.
 
+7. **Targets that do not vanish in steady state.** `ssj_jacobian` warns when a target's steady-state level exceeds `target_tol`, which means the DAG is being linearized around a point that does not clear. The usual cause is an asset grid whose upper bound truncates the savings policy, so mass piles up at `a_max` and ``\int a' d\mu`` exceeds ``\int a \, d\mu``. Widen the grid rather than raising the tolerance.
+
+8. **Second-order step size.** `ssj_irf(...; order=2)` differences at the actual shock size (`fd_step=1.0`). Reduce `fd_step` when the shock is large enough to push the household problem far from its steady state; raise it when the shock is so small that the ``O(\sigma^2)`` term is lost in roundoff.
+
 ---
 
 ## References
 
 - Auclert, Adrien, Bence Bardóczy, Matthew Rognlie, and Ludwig Straub. 2021. "Using the Sequence-Space Jacobian to Solve and Estimate Heterogeneous-Agent Models." *Econometrica* 89 (5): 2375--2408. [DOI](https://doi.org/10.3982/ECTA17434)
+
+- Bhandari, Anmol, Thomas Bourany, David Evans, and Mikhail Golosov. 2023. "A Perturbational Approach for Approximating Heterogeneous-Agent Models." NBER Working Paper 31744. [DOI](https://doi.org/10.3386/w31744)
 
 - Carroll, Christopher D. 2006. "The Method of Endogenous Gridpoints for Solving Dynamic Stochastic Optimization Problems." *Economics Letters* 91 (3): 312--320. [DOI](https://doi.org/10.1016/j.econlet.2005.09.013)
 

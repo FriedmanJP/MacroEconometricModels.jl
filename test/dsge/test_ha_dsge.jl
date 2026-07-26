@@ -1637,4 +1637,350 @@ end
     @test_throws ErrorException den_haan_test(ks_h)
 end
 
+# ─────────────────────────────────────────────────────────────────────────────
+# Section 26 (#352/T253): sequence-space block composition (DAG) + 2nd-order SSJ
+# ─────────────────────────────────────────────────────────────────────────────
+
+# A pure-SimpleBlock DAG is exactly solvable by hand, so it pins down every piece
+# of the composition machinery (shift matrices, topological sort, forward
+# accumulation, the GE solve, and the second-order contraction) against closed
+# forms rather than against snapshots.
+@testset "SSJ blocks — SimpleBlock algebra" begin
+    Th = 12
+
+    # y_t = 2·u_t + 3·z_t ;  q_t = y_t − 0.5·u_{t-1} + 0.25·y_{t+1}
+    blk1 = SimpleBlock(x -> [2 * x[1] + 3 * x[2]];
+                       inputs=[:u, :z], outputs=[:y],
+                       ss_inputs=Dict(:u => 0.0, :z => 0.0), name=:one)
+    blk2 = SimpleBlock(x -> [x[3] - 0.5 * x[1] + 0.25 * x[2]];
+                       inputs=[:u, :y], outputs=[:q],
+                       lags=Dict(:u => [1], :y => [-1, 0]),
+                       ss_inputs=Dict(:u => 0.0, :y => 0.0), name=:two)
+
+    # Argument order: inputs in declaration order, lags ascending within an input.
+    @test ssj_arg_order(blk1) == [(:u, 0), (:z, 0)]
+    @test ssj_arg_order(blk2) == [(:u, 1), (:y, -1), (:y, 0)]
+    @test blk1.ss_outputs[:y] == 0.0
+
+    J1 = block_jacobian(blk1, Th)
+    @test J1[(:y, :u)] ≈ 2 * Matrix(I, Th, Th)
+    @test J1[(:y, :z)] ≈ 3 * Matrix(I, Th, Th)
+
+    # Shift matrices: lag l ⇒ ones on M[t, t-l]; out-of-window entries dropped.
+    S_lag = zeros(Th, Th); for t in 2:Th; S_lag[t, t-1] = 1.0; end
+    S_lead = zeros(Th, Th); for t in 1:(Th-1); S_lead[t, t+1] = 1.0; end
+    J2 = block_jacobian(blk2, Th)
+    @test J2[(:q, :u)] ≈ -0.5 .* S_lag
+    @test J2[(:q, :y)] ≈ Matrix(I, Th, Th) .+ 0.25 .* S_lead
+
+    model = combine_blocks(blk1, blk2; name=:toy)
+    @test [b.name for b in model.blocks] == [:one, :two]      # topological order
+    @test model.exogenous == [:u, :z]
+    @test model.endogenous == [:y, :q]
+    @test model.ss_values[:q] == 0.0
+
+    # Supplying the blocks out of order must not change the sorted DAG.
+    @test [b.name for b in combine_blocks(blk2, blk1).blocks] == [:one, :two]
+
+    gej = ssj_jacobian(model; unknowns=[:u], targets=[:q], shocks=[:z], T_horizon=Th)
+    # Chain rule by hand: dq/du = ∂q/∂u + (∂q/∂y)(∂y/∂u); dq/dz = (∂q/∂y)(∂y/∂z).
+    H_U_hand = J2[(:q, :u)] .+ J2[(:q, :y)] * J1[(:y, :u)]
+    H_Z_hand = J2[(:q, :y)] * J1[(:y, :z)]
+    @test gej.H_U ≈ H_U_hand
+    @test gej.H_Z ≈ H_Z_hand
+    @test size(gej.H_U) == (Th, Th) && size(gej.H_Z) == (Th, Th)
+
+    dz = [0.5^(t - 1) for t in 1:Th]
+    r1 = ssj_irf(gej, Dict(:z => dz))
+    du_hand = -(H_U_hand \ (H_Z_hand * dz))
+    @test r1.paths[:u] ≈ du_hand
+    @test r1.paths[:y] ≈ J1[(:y, :u)] * du_hand .+ J1[(:y, :z)] * dz
+    @test r1.paths[:z] ≈ dz
+    @test r1.order == 1 && isempty(r1.correction)
+    # A linear DAG clears exactly at first order.
+    @test r1.target_residual[:q] < 1e-12
+    @test maximum(abs, r1.paths[:q]) < 1e-12
+
+    # Second order on a LINEAR DAG must vanish identically.
+    r2 = ssj_irf(gej, Dict(:z => dz); order=2)
+    @test r2.order == 2
+    @test maximum(abs, r2.correction[:u]) < 1e-9
+    @test r2.paths[:u] ≈ du_hand atol=1e-9
+
+    # Convenience single-shock method.
+    @test ssj_irf(gej, :z, dz).paths[:u] ≈ du_hand
+end
+
+@testset "SSJ blocks — second-order closed form" begin
+    Th = 8
+    # y_t = u_t + u_t² ;  q_t = y_t − z_t.  Equilibrium: u + u² = z.
+    b1 = SimpleBlock(x -> [x[1] + x[1]^2];
+                     inputs=[:u], outputs=[:y],
+                     ss_inputs=Dict(:u => 0.0), name=:quad)
+    b2 = SimpleBlock(x -> [x[1] - x[2]];
+                     inputs=[:y, :z], outputs=[:q],
+                     ss_inputs=Dict(:y => 0.0, :z => 0.0), name=:clear)
+    gej = ssj_jacobian(combine_blocks(b1, b2; name=:quadtoy);
+                       unknowns=[:u], targets=[:q], shocks=[:z], T_horizon=Th)
+    @test gej.H_U ≈ Matrix(I, Th, Th)           # ∂(u+u²)/∂u = 1 at u=0
+
+    dz = fill(0.05, Th)
+    r1 = ssj_irf(gej, Dict(:z => dz))
+    @test r1.paths[:u] ≈ dz                     # first order: du = dz
+
+    r2 = ssj_irf(gej, Dict(:z => dz); order=2)
+    # Second order: u + u² = z with u = z + u₂ ⇒ u₂ = −z².
+    @test r2.correction[:u] ≈ -dz .^ 2 rtol=1e-8
+    @test r2.paths[:u] ≈ dz .- dz .^ 2 rtol=1e-8
+    # D²y[v,v] = 2·(du¹)² ⇒ the second-order y path is J·u₂ + ½·2z² = −z² + z² = 0.
+    @test maximum(abs, r2.correction[:y]) < 1e-8
+    # Exact root of u + u² = z:  u* = (√(1+4z) − 1)/2.  Second order beats first.
+    u_exact = (sqrt.(1 .+ 4 .* dz) .- 1) ./ 2
+    @test maximum(abs, r2.paths[:u] .- u_exact) < maximum(abs, r1.paths[:u] .- u_exact)
+    @test r2.target_residual[:q] < r1.target_residual[:q]
+end
+
+@testset "SSJ blocks — HetBlock and DAG composition" begin
+    spec = load_ha_example(:krusell_smith)
+    ss = compute_steady_state(spec; r_bounds=(-0.01, 0.04), max_iter=80, tol=1e-4)
+    Th = 20
+
+    hh = HetBlock(spec, ss; inputs=[:r, :w], outputs=[:A, :C], name=:household)
+    @test hh isa HetBlock{Float64}
+    @test hh.ss_inputs[:r] == ss.prices[:r]
+    @test hh.ss_outputs[:A] ≈ dot(vec(ss.policies[:savings]),
+                                  MacroEconometricModels._normalized_distribution(ss))
+
+    # The block Jacobian IS the fake-news Jacobian — no reimplementation drift.
+    Jb = block_jacobian(hh, Th)
+    @test Set(keys(Jb)) == Set([(:A, :r), (:A, :w), (:C, :r), (:C, :w)])
+    @test Jb[(:A, :r)] == MacroEconometricModels._ssj_jacobian(
+        ss, spec.individual, spec.grid, spec.income, :r, :A; T_horizon=Th, dx=hh.dx)
+
+    # Nonlinear path evaluation reproduces the steady state on a flat input path.
+    flat = Dict(:r => fill(ss.prices[:r], Th), :w => fill(ss.prices[:w], Th))
+    base = MacroEconometricModels._block_evaluate(hh, flat, Th)
+    @test maximum(abs, base[:A] .- hh.ss_outputs[:A]) < 1e-6
+    @test maximum(abs, base[:C] .- hh.ss_outputs[:C]) < 1e-6
+
+    # INDEPENDENT ORACLE: the fake-news Jacobian must equal a central finite
+    # difference of the *nonlinear* transition path (backward EGM + forward Young
+    # histogram) — two implementations sharing no code beyond the EGM step. The
+    # anticipation columns (t < s) are the ones the pre-#226 brute force got wrong.
+    hh_fine = HetBlock(spec, ss; inputs=[:r, :w], outputs=[:A], dx=1e-5)
+    J_fine = block_jacobian(hh_fine, Th)[(:A, :r)]
+    fd_step = 1e-6
+    for s in (1, 4, 9)
+        pp = deepcopy(flat); pp[:r][s] += fd_step
+        pm = deepcopy(flat); pm[:r][s] -= fd_step
+        col = (MacroEconometricModels._block_evaluate(hh_fine, pp, Th)[:A] .-
+               MacroEconometricModels._block_evaluate(hh_fine, pm, Th)[:A]) ./ (2fd_step)
+        @test maximum(abs, col .- J_fine[:, s]) < 1e-5 * maximum(abs, J_fine[:, s])
+    end
+    @test any(abs(J_fine[t, s]) > 1e-8 for t in 1:Th for s in (t+1):Th)   # anticipation
+
+    # ── Three-block DAG: firm (lagged capital) → household → asset market ────
+    alpha = spec.aggregate_spec.param_values[:alpha]
+    delta = spec.aggregate_spec.param_values[:delta]
+    K_ss = ss.aggregates[:K]
+    firm = SimpleBlock(
+        x -> [alpha * x[2] * x[1]^(alpha - 1) - delta,
+              (1 - alpha) * x[2] * x[1]^alpha,
+              x[2] * x[1]^alpha];
+        inputs=[:K, :Z], outputs=[:r, :w, :Y],
+        lags=Dict(:K => [1]),
+        ss_inputs=Dict(:K => K_ss, :Z => 1.0), name=:firm)
+    @test firm.ss_outputs[:r] ≈ ss.prices[:r] atol=1e-6
+    @test firm.ss_outputs[:w] ≈ ss.prices[:w] atol=1e-6
+
+    hh1 = HetBlock(spec, ss; inputs=[:r, :w], outputs=[:A], name=:household)
+    mkt = SimpleBlock(x -> [x[1] - x[2]];
+                      inputs=[:A, :K], outputs=[:asset_mkt],
+                      ss_inputs=Dict(:A => hh1.ss_outputs[:A], :K => K_ss),
+                      name=:asset_market)
+    dag = combine_blocks(firm, hh1, mkt; name=:ks_dag)
+    @test [b.name for b in dag.blocks] == [:firm, :household, :asset_market]
+    @test dag.exogenous == [:K, :Z]
+    @test dag.endogenous == [:r, :w, :Y, :A, :asset_mkt]
+
+    # The shipped Krusell-Smith example truncates the asset grid (~5.6% of mass is
+    # pinned at a_max = 200), so ∫a'dμ exceeds ∫a dμ by ~1.7% and the asset market
+    # does NOT clear at the linearization point. The GE assembler must say so
+    # rather than silently linearize around a non-clearing steady state.
+    @test dag.ss_values[:asset_mkt] > 1e-3
+    @test_logs (:warn, r"does not vanish in steady state") match_mode=:any begin
+        ssj_jacobian(dag; unknowns=[:K], targets=[:asset_mkt], shocks=[:Z],
+                     T_horizon=4)
+    end
+
+    gej = ssj_jacobian(dag; unknowns=[:K], targets=[:asset_mkt], shocks=[:Z],
+                       T_horizon=Th, target_tol=Inf)
+    # Forward accumulation vs the chain rule computed by hand from block Jacobians.
+    Jf = block_jacobian(firm, Th)
+    Jh = block_jacobian(hh1, Th)
+    dA_dK = Jh[(:A, :r)] * Jf[(:r, :K)] .+ Jh[(:A, :w)] * Jf[(:w, :K)]
+    @test gej.curlyJ[:A][:K] ≈ dA_dK
+    @test gej.H_U ≈ dA_dK .- Matrix(I, Th, Th)
+    @test gej.curlyJ[:Y][:Z] ≈ Jf[(:Y, :Z)]
+
+    dZ = Dict(:Z => [0.01 * 0.9^(t - 1) for t in 1:Th])
+    r1 = ssj_irf(gej, dZ; residual=false)
+    # The linearized clearing condition holds exactly whatever the steady-state wedge.
+    @test maximum(abs, gej.H_U * r1.paths[:K] .+ gej.H_Z * dZ[:Z]) < 1e-8
+    @test r1.paths[:K][1] > 0                    # positive TFP shock raises capital
+    @test r1.paths[:r][1] ≈ alpha * 0.01 * K_ss^(alpha - 1) atol=1e-10  # K lagged ⇒ r_1 ← Z_1
+    report(dag)                                   # display smoke tests
+    report(gej)
+    @test occursin("SSJModel", sprint(show, dag))
+    @test occursin("SSJGEJacobian", sprint(show, gej))
+    @test occursin("HetBlock", sprint(show, hh1))
+    @test occursin("SimpleBlock", sprint(show, firm))
+end
+
+@testset "SSJ blocks — Huggett GE and second order" begin
+    spec = _HUG_SPEC_M2; ss = _HUG_SS_M2       # reuse the shared cl=−2 SS
+    Th = 40
+
+    hh = HetBlock(spec, ss; inputs=[:r, :w], outputs=[:A], name=:household)
+    bond = SimpleBlock(x -> [x[1]];
+                       inputs=[:A], outputs=[:bond_mkt],
+                       ss_inputs=Dict(:A => hh.ss_outputs[:A]), name=:bond_market)
+    dag = combine_blocks(hh, bond; name=:huggett_dag)
+    # Zero net supply: the Huggett steady state genuinely clears, so no warning.
+    @test abs(dag.ss_values[:bond_mkt]) < 1e-3
+    gej = ssj_jacobian(dag; unknowns=[:r], targets=[:bond_mkt], shocks=[:w],
+                       T_horizon=Th, target_tol=1e-2)
+
+    # The two-block DAG reproduces the hard-wired GE close of `_ssj_solve` exactly.
+    J_ref_U = MacroEconometricModels._ssj_jacobian(ss, spec.individual, spec.grid,
+                                                   spec.income, :r, :A; T_horizon=Th)
+    J_ref_Z = MacroEconometricModels._ssj_jacobian(ss, spec.individual, spec.grid,
+                                                   spec.income, :w, :A; T_horizon=Th)
+    @test gej.H_U == J_ref_U
+    @test gej.H_Z == J_ref_Z
+    dw = [0.9^(t - 1) for t in 1:Th]
+    @test ssj_irf(gej, Dict(:w => dw); residual=false).paths[:r] ≈ -(J_ref_U \ (J_ref_Z * dw))
+
+    # Routing `solve(:ssj)` through the DAG must not start emitting the target guard:
+    # for the zero-net-supply close the target level IS ss.excess_demand, already
+    # reported by report(ss), so warning again on every solve is pure noise.
+    logs, _ = Test.collect_test_logs() do
+        solve(spec; method=:ssj, ss=ss, T_horizon=30, n_reduced=12)
+    end
+    @test !any(occursin("does not vanish in steady state", string(r.message)) for r in logs)
+
+    # ── Second order ────────────────────────────────────────────────────────
+    sigma = 0.02
+    dZ = Dict(:w => [sigma * 0.9^(t - 1) for t in 1:Th])
+    o1 = ssj_irf(gej, dZ)
+    o2 = ssj_irf(gej, dZ; order=2)
+    @test o2.order == 2
+    @test haskey(o2.correction, :r) && haskey(o2.correction, :A)
+    # Precautionary saving makes the block genuinely nonlinear: nonzero correction.
+    @test maximum(abs, o2.correction[:r]) > 1e-10
+    # By construction the target is zero to second order: 𝒥·dU² + ½D²H = 0. Scale
+    # against one of the two cancelling terms — NOT against the first-order :A path,
+    # which the GE solve itself drives to ~1e-17 (bond_mkt IS A here).
+    cancel_scale = maximum(abs, gej.H_U * o2.correction[:r])
+    @test cancel_scale > 1e-12
+    @test maximum(abs, o2.correction[:bond_mkt]) < 1e-8 * cancel_scale
+    # The honest accuracy measure: the nonlinear clearing residual must improve.
+    @test o2.target_residual[:bond_mkt] < o1.target_residual[:bond_mkt]
+
+    # dU² is O(σ²) while dU¹ is O(σ), so halving the shock halves the relative
+    # correction — this is what "collapses onto the first order" means.
+    ratios = Float64[]
+    for s in (0.02, 0.01, 0.005)
+        rr = ssj_irf(gej, Dict(:w => [s * 0.9^(t - 1) for t in 1:Th]);
+                     order=2, residual=false)
+        push!(ratios, maximum(abs, rr.correction[:r]) / maximum(abs, rr.first_order[:r]))
+    end
+    @test issorted(ratios; rev=true)
+    @test 1.6 < ratios[1] / ratios[2] < 2.4
+    @test 1.6 < ratios[2] / ratios[3] < 2.4
+
+    report(o2)                                    # display smoke test
+    @test occursin("SSJImpulseResponse", sprint(show, o2))
+end
+
+@testset "SSJ blocks — validation and errors" begin
+    ok = SimpleBlock(x -> [x[1]]; inputs=[:a], outputs=[:b],
+                     ss_inputs=Dict(:a => 1.0), name=:ok)
+
+    # Construction-time validation
+    @test_throws ArgumentError SimpleBlock(x -> [x[1]]; inputs=Symbol[], outputs=[:b],
+                                           ss_inputs=Dict{Symbol,Float64}())
+    @test_throws ArgumentError SimpleBlock(x -> [x[1]]; inputs=[:a], outputs=Symbol[],
+                                           ss_inputs=Dict(:a => 1.0))
+    @test_throws ArgumentError SimpleBlock(x -> [x[1]]; inputs=[:a, :a], outputs=[:b],
+                                           ss_inputs=Dict(:a => 1.0))
+    @test_throws ArgumentError SimpleBlock(x -> [x[1]]; inputs=[:a], outputs=[:b],
+                                           ss_inputs=Dict{Symbol,Float64}())    # missing SS
+    @test_throws ArgumentError SimpleBlock(x -> [x[1]]; inputs=[:a], outputs=[:b],
+                                           ss_inputs=Dict(:a => 1.0),
+                                           lags=Dict(:q => [1]))                # unknown lag key
+    @test_throws ArgumentError SimpleBlock(x -> [x[1]]; inputs=[:a], outputs=[:b, :c],
+                                           ss_inputs=Dict(:a => 1.0))           # arity mismatch
+
+    # DAG assembly
+    @test_throws ArgumentError combine_blocks()
+    dup = SimpleBlock(x -> [2 * x[1]]; inputs=[:a], outputs=[:b],
+                      ss_inputs=Dict(:a => 1.0), name=:dup)
+    @test_throws ArgumentError combine_blocks(ok, dup)                # duplicate output
+    self = SimpleBlock(x -> [x[1]]; inputs=[:b], outputs=[:b],
+                       ss_inputs=Dict(:b => 1.0), name=:self)
+    @test_throws ArgumentError combine_blocks(self)                   # self loop
+    back = SimpleBlock(x -> [x[1]]; inputs=[:b], outputs=[:a],
+                       ss_inputs=Dict(:b => 1.0), name=:back)
+    @test_throws ArgumentError combine_blocks(ok, back)               # cycle
+
+    # Inconsistent steady state between producer and consumer is warned about.
+    consumer = SimpleBlock(x -> [x[1]]; inputs=[:b], outputs=[:c],
+                           ss_inputs=Dict(:b => 5.0), name=:consumer)
+    @test_logs (:warn, r"inconsistent steady state") match_mode=:any begin
+        combine_blocks(ok, consumer)
+    end
+
+    model = combine_blocks(ok; name=:tiny)
+    @test_throws ArgumentError ssj_jacobian(model; unknowns=[:a], targets=[:b],
+                                            shocks=[:a], T_horizon=4, target_tol=Inf)
+    @test_throws ArgumentError ssj_jacobian(model; unknowns=[:b], targets=[:b],
+                                            shocks=Symbol[], T_horizon=4, target_tol=Inf)
+    @test_throws ArgumentError ssj_jacobian(model; unknowns=[:a], targets=[:a],
+                                            shocks=Symbol[], T_horizon=4, target_tol=Inf)
+    @test_throws ArgumentError ssj_jacobian(model; unknowns=Symbol[], targets=Symbol[],
+                                            shocks=Symbol[], T_horizon=4, target_tol=Inf)
+    @test_throws ArgumentError ssj_jacobian(model; unknowns=[:a], targets=[:b],
+                                            shocks=Symbol[], T_horizon=1, target_tol=Inf)
+    # A non-vanishing target level is warned about (ok's steady-state :b is 1.0).
+    @test_logs (:warn, r"does not vanish in steady state") match_mode=:any begin
+        ssj_jacobian(model; unknowns=[:a], targets=[:b], shocks=Symbol[], T_horizon=4)
+    end
+
+    # A model with no shocks must still assemble and solve (typed empty H_Z path).
+    gej = ssj_jacobian(model; unknowns=[:a], targets=[:b], shocks=Symbol[],
+                       T_horizon=4, target_tol=Inf)
+    @test size(gej.H_Z) == (4, 0)
+    @test all(iszero, ssj_irf(gej, Dict{Symbol,Vector{Float64}}()).paths[:a])
+    @test_throws ArgumentError ssj_irf(gej, Dict(:zz => zeros(4)))          # undeclared shock
+    @test_throws ArgumentError ssj_irf(gej, Dict{Symbol,Vector{Float64}}(); order=3)
+    @test_throws ArgumentError ssj_irf(gej, Dict{Symbol,Vector{Float64}}();
+                                       order=2, fd_step=0.0)
+
+    # A singular clearing Jacobian is reported, not silently inverted.
+    dead = SimpleBlock(x -> [0.0 * x[1]]; inputs=[:a], outputs=[:b],
+                       ss_inputs=Dict(:a => 1.0), name=:dead)
+    @test_throws ErrorException ssj_jacobian(combine_blocks(dead);
+                                             unknowns=[:a], targets=[:b],
+                                             shocks=Symbol[], T_horizon=4,
+                                             target_tol=Inf)
+
+    # HetBlock validation
+    spec = _HUG_SPEC_M2; ss = _HUG_SS_M2
+    @test_throws ArgumentError HetBlock(spec, ss; inputs=[:not_a_price], outputs=[:A])
+    @test_throws ArgumentError HetBlock(spec, ss; inputs=[:r], outputs=[:nonsense])
+    @test_throws ArgumentError HetBlock(spec, ss; inputs=Symbol[], outputs=[:A])
+    @test_throws ArgumentError HetBlock(spec, ss; inputs=[:r], outputs=Symbol[])
+end
+
 end # @testset "HA-DSGE Types"

@@ -467,19 +467,32 @@ function _ssj_solve(spec::HADSGESpec{T}, ss::HASteadyState{T};
     # The bond clears in zero net supply (A_t = 0 ∀t). With an aggregate endowment
     # shock w_t (AR(1)), solve for the market-clearing rate path:
     #   H_U · dr + H_Z · dw = 0  ⟹  dr = -H_U \ (H_Z · dw).
-    # H_U = ∂A/∂r-path, H_Z = ∂A/∂w-path (both via the existing finite-difference
-    # Jacobian, which aggregates household assets). Ho-Kalman realizes the rate IRF.
+    # This is assembled as a two-block DAG (#352/T253) — a `HetBlock` household
+    # (r, w → A) feeding a `SimpleBlock` bond market (A → bond_mkt) — so the
+    # hard-wired close below is now a special case of `combine_blocks` +
+    # `ssj_jacobian` + `ssj_irf`. H_U = ∂A/∂r-path, H_Z = ∂A/∂w-path.
+    # Ho-Kalman realizes the rate IRF.
     if spec.model === :huggett
-        H_U = _ssj_jacobian(ss, spec.individual, spec.grid, spec.income,
-                            :r, :A; T_horizon=T_horizon)
-        H_Z = _ssj_jacobian(ss, spec.individual, spec.grid, spec.income,
-                            :w, :A; T_horizon=T_horizon)
+        household = HetBlock(spec, ss; inputs=[:r, :w], outputs=[:A],
+                             name=:household)
+        bond_market = SimpleBlock(x -> [x[1]];
+                                  inputs=[:A], outputs=[:bond_mkt],
+                                  ss_inputs=Dict(:A => household.ss_outputs[:A]),
+                                  name=:bond_market)
+        dag = combine_blocks(household, bond_market; name=:huggett)
+        # `target_tol=Inf`: for the zero-net-supply close the target level IS
+        # `ss.excess_demand`, which `report(ss)` already reports, so the DAG guard
+        # would only duplicate it on every solve. Hand-built DAGs keep the default.
+        gej = ssj_jacobian(dag; unknowns=[:r], targets=[:bond_mkt], shocks=[:w],
+                           T_horizon=T_horizon, target_tol=Inf)
+        H_U = gej.curlyJ[:bond_mkt][:r]
+        H_Z = gej.curlyJ[:bond_mkt][:w]
         jacobians[:H_U] = H_U
         jacobians[:H_Z] = H_Z
 
         rho = T(get(spec.het_params, :rho_e, 0.9))
         dw = T[rho^(t - 1) for t in 1:T_horizon]          # endowment-shock impulse path
-        dr = -(H_U \ (H_Z * dw))                          # clearing rate path (IRF of r)
+        dr = ssj_irf(gej, Dict(:w => dw); residual=false).paths[:r]  # clearing rate path
 
         irf_seq = [reshape([dr[t]], 1, 1) for t in 1:T_horizon]
         k = max(min(n_reduced, div(T_horizon, 2) - 1), 1)

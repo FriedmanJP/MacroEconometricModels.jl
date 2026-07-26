@@ -188,6 +188,25 @@ fevd(::HADSGESolution{T}, ::Int) where {T<:AbstractFloat}
 report(::DenHaanAccuracy{T}) where {T}
 ```
 
+### Sequence-Space Block Composition
+
+```@docs
+AbstractSSJBlock
+SimpleBlock
+HetBlock
+SSJModel
+SSJGEJacobian
+SSJImpulseResponse
+combine_blocks
+block_jacobian
+ssj_jacobian
+ssj_irf
+ssj_arg_order
+report(::SSJModel{T}) where {T}
+report(::SSJGEJacobian{T}) where {T}
+report(::SSJImpulseResponse{T}) where {T}
+```
+
 ---
 
 ## Continuous-Time DSGE

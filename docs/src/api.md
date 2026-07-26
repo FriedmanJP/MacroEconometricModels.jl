@@ -441,6 +441,10 @@ Heterogeneous-agent (Reiter/SSJ/Krusell-Smith), continuous-time (HJB/KFE), and O
 | `distribution_irf(sol, H)` / `inequality_irf(sol, H)` | Distribution dynamics / Gini response |
 | `simulate_panel(ss; N_agents, T_periods)` | Simulate individual-level panel from HA steady state |
 | `den_haan_test(ks_sol)` | Den Haan (2010) forecast accuracy |
+| `HetBlock(spec, ss)` / `SimpleBlock(f; ...)` | Sequence-space blocks (household / equation) |
+| `combine_blocks(blocks...)` | Assemble blocks into a DAG (topological sort) |
+| `ssj_jacobian(model; unknowns, targets, shocks)` | General-equilibrium sequence-space Jacobian `H_U`, `H_Z` |
+| `ssj_irf(gej, dZ; order=2)` | First- and second-order sequence-space impulse responses |
 
 ### Occasionally Binding Constraints (OccBin)
 

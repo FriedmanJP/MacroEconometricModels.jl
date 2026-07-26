@@ -542,6 +542,7 @@ include("dsge/heterogeneous/distribution.jl")
 include("dsge/heterogeneous/steady_state.jl")
 include("dsge/heterogeneous/krusell_smith.jl")
 include("dsge/heterogeneous/ssj.jl")
+include("dsge/heterogeneous/blocks.jl")
 include("dsge/heterogeneous/reiter.jl")
 include("dsge/heterogeneous/examples.jl")
 include("dsge/heterogeneous/parser.jl")
@@ -728,6 +729,10 @@ export HASteadyState, HADSGESolution, KrusellSmithSolution, DenHaanAccuracy
 export rouwenhorst, tauchen
 export load_ha_example
 export distribution_irf, inequality_irf, simulate_panel, den_haan_test
+# Sequence-space block composition (DAG) + second-order SSJ
+export AbstractSSJBlock, SimpleBlock, HetBlock, SSJModel
+export SSJGEJacobian, SSJImpulseResponse
+export combine_blocks, block_jacobian, ssj_jacobian, ssj_irf, ssj_arg_order
 
 # Overlapping generations (Blanchard 1985 perpetual youth)
 export BlanchardOLG, BlanchardOLGSteadyState, BlanchardOLGSolution
