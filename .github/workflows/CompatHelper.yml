@@ -3,6 +3,13 @@ on:
   schedule:
     - cron: '0 0 * * *'
   workflow_dispatch:
+# The repository default for GITHUB_TOKEN is read-only. CompatHelper always makes
+# its first push over the HTTPS `origin` remote with GITHUB_TOKEN (the SSH key in
+# COMPATHELPER_PRIV is only used afterwards, to trigger CI on the new branch), so
+# without these the push fails with "Permission to ... denied to github-actions[bot]".
+permissions:
+  contents: write
+  pull-requests: write
 jobs:
   CompatHelper:
     runs-on: ubuntu-latest
