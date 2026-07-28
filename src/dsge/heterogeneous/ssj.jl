@@ -78,7 +78,6 @@ function _egm_backward_step(ip::IndividualProblem{T}, grid::HAGrid{T},
     Pi = income.transition
     e_vals = income.states
     r = prices[:r]
-    w = prices[:w]
 
     c_now = zeros(T, n_a, n_e)
     a_now = zeros(T, n_a, n_e)
@@ -98,8 +97,18 @@ function _egm_backward_step(ip::IndividualProblem{T}, grid::HAGrid{T},
         for i in 1:n_a
             c_endo[i] = u_prime_inv(beta * (one(T) + r) * emu[i])
         end
+        # Endogenous beginning-of-period assets. Route the non-asset income
+        # through budget_fn exactly as `_egm_solve` does (#235/H-09): the
+        # hardcoded `w*e` here silently dropped any budget offset such as `div`
+        # in `_hank1_budget`, so a single step applied to the converged
+        # `_egm_solve` policy moved it — contradicting this kernel's own
+        # docstring and differencing every SSJ Jacobian around a point that was
+        # not the steady state. budget_fn is affine in own assets, so the net
+        # income is budget_fn(0, e) and the gross return its own-asset slope.
+        net_income = ip.budget_fn(zero(T), e_vals[j], prices)
+        gross_R = ip.budget_fn(one(T), e_vals[j], prices) - net_income
         for i in 1:n_a
-            a_endo[i] = (c_endo[i] + a_grid[i] - w * e_vals[j]) / (one(T) + r)
+            a_endo[i] = (c_endo[i] + a_grid[i] - net_income) / gross_R
         end
         for i in 1:n_a
             a_val = a_grid[i]
