@@ -136,10 +136,21 @@ function _ha_steady_state(ip::IndividualProblem{T}, grid::HAGrid{T},
                            r_bounds::Tuple{T,T}=(T(-0.01), T(0.04)),
                            max_iter::Int=200,
                            tol::Real=T(1e-8),
+                           rtol::Real=T(1e-8),
+                           r_atol::Real=T(1e-13),
+                           grid_check::Symbol=:none,
+                           ceiling_mass_tol::Real=T(1e-6),
+                           residual_tol::Real=T(1e-6),
                            verbose::Bool=false,
                            clearing_fn::Union{Nothing,Function}=nothing) where {T<:AbstractFloat}
-    @assert grid.n_dims == 1 "Steady state bisection requires a one-asset grid"
-    @assert ip.n_asset_dims == 1 "Steady state bisection requires a one-asset individual problem"
+    grid.n_dims == 1 || throw(ArgumentError(
+        "compute_steady_state: the bisection steady-state solver supports one-asset " *
+        "models only (got n_dims = $(grid.n_dims)). Two-asset models such as " *
+        "load_ha_example(:two_asset_hank) require a two-dimensional market-clearing " *
+        "solve, which is not implemented — see docs/src/dsge_ha.md."))
+    ip.n_asset_dims == 1 || throw(ArgumentError(
+        "compute_steady_state: the bisection steady-state solver supports one-asset " *
+        "individual problems only (got n_asset_dims = $(ip.n_asset_dims))."))
 
     tol_T = T(tol)
     r_lo, r_hi = r_bounds
@@ -227,6 +238,20 @@ function _ha_steady_state(ip::IndividualProblem{T}, grid::HAGrid{T},
         # Bisection midpoint
         r_mid = (r_lo + r_hi) / T(2)
 
+        # Aiyagari (1994) existence: with β(1+r) ≥ 1 an infinite-horizon household's
+        # wealth diverges, so no stationary distribution exists and such a rate can
+        # never clear. Solving there anyway yields a K_s that is a pure artifact of
+        # the grid ceiling (every household saves to a_max), and — worse — that
+        # divergent policy then propagates as the EGM warm start (#238), corrupting
+        # the excess-demand evaluations at the *next*, admissible rates and letting
+        # the bracket collapse on a spurious sign change. Shrink the bracket without
+        # solving and leave `warm_c` untouched.
+        if ip.beta * (one(T) + r_mid) >= one(T)
+            r_hi = r_mid
+            r_hi - r_lo <= T(r_atol) && break
+            continue
+        end
+
         res = eval_excess(r_mid, warm_c)
         if res.c_pol === nothing
             # Demand diverges (e.g. r below the marginal-product floor) → raise r.
@@ -256,8 +281,12 @@ function _ha_steady_state(ip::IndividualProblem{T}, grid::HAGrid{T},
             best_K_d = res.K_d
         end
 
-        # Check convergence
-        if abs(excess) < tol_T
+        # Check convergence. The threshold is scale-free: an absolute tolerance on
+        # K_s − K_d is unmeetable for an economy whose capital stock is O(10-100),
+        # because the residual floor is set by the discreteness of the asset grid
+        # (~1e-8 absolute), not by the bisection. Scaling by |K_d| makes the same
+        # tolerance mean the same thing at any calibration.
+        if abs(excess) <= max(tol_T, T(rtol) * max(one(T), abs(res.K_d)))
             converged = true
             break
         end
@@ -268,6 +297,10 @@ function _ha_steady_state(ip::IndividualProblem{T}, grid::HAGrid{T},
         else
             r_lo = r_mid
         end
+
+        # The bracket has collapsed to floating-point width — further bisection
+        # cannot move r, so iterating to max_iter only burns solves.
+        r_hi - r_lo <= T(r_atol) && break
     end
 
     # Compute Euler equation error
@@ -291,12 +324,37 @@ function _ha_steady_state(ip::IndividualProblem{T}, grid::HAGrid{T},
         :savings => best_a_pol,
         :consumption => best_c_pol
     )
+    # Grid adequacy. Computed once, after the loop — never inside `eval_excess`,
+    # which runs 30-200 times. `:K` keeps its established meaning (∫a dμ, the
+    # aggregate the bisection clears on); `:A_policy` is what the policy actually
+    # implies (∫a′ dμ, the aggregate the sequence-space household block reports),
+    # and the two coincide exactly iff the grid does not truncate.
+    gdiag = _ha_grid_diagnostics(best_a_pol, best_dist, grid;
+                                 ceiling_mass_tol=ceiling_mass_tol,
+                                 residual_tol=residual_tol)
+
     aggregates = Dict{Symbol,T}(
         :K => best_K_s,
         :K_demand => best_K_d,
         :Y => Y_val,
-        :excess_demand => best_excess
+        :excess_demand => best_excess,
+        :A_policy => gdiag.assets_desired,
+        :A_residual => gdiag.clearing_residual
     )
+
+    # Aiyagari (1994) existence condition. With β(1+r) ≥ 1 an infinite-horizon
+    # household's wealth diverges, no stationary distribution exists, and NO
+    # finite a_max can fix it — a distinct failure from a merely-too-small grid.
+    bR = ip.beta * (one(T) + best_prices[:r])
+    if bR >= one(T) - T(1e-10)
+        @warn "beta*(1+r) = $bR ≥ 1 at the computed steady state: household wealth " *
+              "diverges, so no stationary distribution exists and no finite a_max " *
+              "will produce one. Check beta, the clearing rule, or r_bounds." maxlog = 1
+    end
+
+    grid_check === :none ||
+        _check_grid_adequacy(gdiag, grid_check; context="compute_steady_state")
+
     value_fn = zeros(T, n_a, n_e)  # EGM does not produce a value function
 
     return HASteadyState{T}(
@@ -373,9 +431,12 @@ end
     _huggett_clearing() → (r_mid, params) -> (0, Dict(:r, :w))
 
 Huggett (1993) zero-net-supply clearing rule for a pure-exchange risk-free-bond
-economy: asset demand is identically zero, so the bisection clears `∫a' dμ = 0`.
-The aggregate endowment level `w` is fixed at 1 in steady state (income enters the
-budget as `w·e`).
+economy: asset demand is identically zero, so the bisection clears `∫a dμ = 0`
+(the bisection always measures supply as `_aggregate(dist, grid)`, i.e. holdings
+at grid nodes, not the raw policy `∫a′ dμ`). The two coincide here because the
+Huggett grid never truncates the policy — see [`ha_grid_diagnostics`](@ref) for
+what happens when it does. The aggregate endowment level `w` is fixed at 1 in
+steady state (income enters the budget as `w·e`).
 """
 function _huggett_clearing()
     return function (r_mid::T, params::Dict{Symbol,T}) where {T<:AbstractFloat}
@@ -400,15 +461,35 @@ does not provide one, and delegates to `_ha_steady_state`.
 - `K_init::T` — initial capital guess (default 10.0)
 - `r_bounds::Tuple{T,T}` — bisection bounds for r (default (-0.01, 0.04))
 - `max_iter::Int` — maximum iterations (default 200)
-- `tol` — convergence tolerance (default 1e-8)
+- `tol` — absolute convergence tolerance on `|K_s − K_d|` (default 1e-8)
+- `rtol` — relative convergence tolerance (default 1e-8); the effective threshold
+  is `max(tol, rtol * max(1, |K_d|))`, so it means the same thing at any scale
+- `r_atol` — stop once the bisection bracket is narrower than this (default 1e-13)
+- `grid_check::Symbol` — `:warn` (default), `:none` or `:error`. Checks whether the
+  stationary distribution has run into the top of the asset grid; see
+  [`ha_grid_diagnostics`](@ref)
+- `ceiling_mass_tol` / `residual_tol` — thresholds for that check (default 1e-6)
 - `verbose::Bool` — print progress (default false)
 - `price_fn::Function` — custom price function; if not supplied, uses Cobb-Douglas
+
+# Aggregates
+
+`aggregates[:K]` is `∫ a dμ`, the aggregate the bisection clears on.
+`aggregates[:A_policy]` is `∫ a′ dμ`, the aggregate the savings policy implies —
+which is what the sequence-space household block reports. They are equal iff the
+asset grid never truncates the policy; `aggregates[:A_residual]` is the
+difference. See [`ha_grid_diagnostics`](@ref).
 """
 function compute_steady_state(spec::HADSGESpec{T};
                           K_init::T=T(10),
                           r_bounds::Union{Nothing,Tuple{T,T}}=nothing,
                           max_iter::Int=200,
                           tol::Real=T(1e-8),
+                          rtol::Real=T(1e-8),
+                          r_atol::Real=T(1e-13),
+                          grid_check::Symbol=:warn,
+                          ceiling_mass_tol::Real=T(1e-6),
+                          residual_tol::Real=T(1e-6),
                           verbose::Bool=false,
                           price_fn::Union{Nothing,Function}=nothing,
                           clearing::Union{Nothing,Function}=nothing) where {T<:AbstractFloat}
@@ -446,6 +527,8 @@ function compute_steady_state(spec::HADSGESpec{T};
     return _ha_steady_state(
         spec.individual, spec.grid, spec.income, pfn, params;
         K_init=K_init, r_bounds=rb, max_iter=max_iter,
-        tol=tol, verbose=verbose, clearing_fn=clr
+        tol=tol, rtol=rtol, r_atol=r_atol, grid_check=grid_check,
+        ceiling_mass_tol=ceiling_mass_tol, residual_tol=residual_tol,
+        verbose=verbose, clearing_fn=clr
     )
 end

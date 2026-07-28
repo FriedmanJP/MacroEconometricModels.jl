@@ -227,6 +227,31 @@ function report(ss::HASteadyState{T}) where {T}
             alignment=[:l, :r])
     end
 
+    # --- Grid adequacy ---
+    # An HA steady state can be exactly stationary and still fail to clear its
+    # asset market: the Young (2010) transition clamps the savings policy at
+    # a_max, which conserves mass but destroys assets. `excess_demand` is blind
+    # to this because it is measured on the already-clamped aggregate.
+    if ss.grid.n_dims == 1
+        gd = ha_grid_diagnostics(ss)
+        grid_data = Any[
+            "a_max"                    _fmt(gd.a_max; digits=4);
+            "Mass at ceiling (%)"      _fmt(100 * gd.ceiling_mass; digits=6);
+            "Mass at floor (%)"        _fmt(100 * gd.floor_mass; digits=4);
+            "Cells with a' > a_max"    gd.n_cells_above;
+            "Max a'"                   _fmt(gd.max_savings; digits=4);
+            "∫a dμ  (holdings)"        _fmt(gd.assets_held; digits=6);
+            "∫a' dμ (policy)"          _fmt(gd.assets_desired; digits=6);
+            "Residual"                 _fmt(gd.clearing_residual; digits=6);
+            "Relative residual"        _fmt(gd.relative_residual; digits=6);
+            "Verdict"                  (gd.adequate ? "adequate" : "TRUNCATED — see ?ha_grid_diagnostics")
+        ]
+        _pretty_table(io, grid_data;
+            title="Grid Adequacy",
+            column_labels=["Statistic", "Value"],
+            alignment=[:l, :r])
+    end
+
     # --- Distribution statistics ---
     d_vec = vec(ss.distribution)
     gini = _gini_coefficient(d_vec, ss.grid)

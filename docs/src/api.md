@@ -437,10 +437,11 @@ Heterogeneous-agent (Reiter/SSJ/Krusell-Smith), continuous-time (HJB/KFE), and O
 | `load_ha_example(:krusell_smith)` | Built-in HA-DSGE model specs (see [Heterogeneous Agents](dsge_ha.md)) |
 | `compute_steady_state(spec::HADSGESpec)` | HA stationary equilibrium (EGM + distribution + market clearing) |
 | `solve(spec::HADSGESpec; method=:ssj)` | HA-DSGE solution (SSJ/Reiter/Krusell-Smith) |
-| `rouwenhorst(ρ, σ, n)` / `tauchen(ρ, σ, n)` | Income process discretization |
+| `rouwenhorst(ρ, σ, n)` / `tauchen(ρ, σ, n)` | Income process discretization (`σ` = **innovation** sd; pass `sigma_is=:unconditional` for sd(y)) |
 | `distribution_irf(sol, H)` / `inequality_irf(sol, H)` | Distribution dynamics / Gini response |
 | `simulate_panel(ss; N_agents, T_periods)` | Simulate individual-level panel from HA steady state |
 | `den_haan_test(ks_sol)` | Den Haan (2010) forecast accuracy |
+| `ha_grid_diagnostics(ss)` | Asset-grid adequacy: ceiling mass, `∫a′dμ − ∫a dμ` clearing residual |
 | `HetBlock(spec, ss)` / `SimpleBlock(f; ...)` | Sequence-space blocks (household / equation) |
 | `combine_blocks(blocks...)` | Assemble blocks into a DAG (topological sort) |
 | `ssj_jacobian(model; unknowns, targets, shocks)` | General-equilibrium sequence-space Jacobian `H_U`, `H_Z` |

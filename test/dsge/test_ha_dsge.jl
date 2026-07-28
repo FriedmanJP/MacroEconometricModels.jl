@@ -630,6 +630,26 @@ end
 # Section 13: SSJ Jacobian
 # ─────────────────────────────────────────────────────────────────────────────
 
+@testset "_egm_backward_step is the _egm_solve fixed point" begin
+    # ORACLE: the kernel's own docstring — "iterating it to a fixed point
+    # reproduces `_egm_solve`". So ONE step applied to the CONVERGED `_egm_solve`
+    # policy must not move it. It used to, whenever the budget carried an offset:
+    # the kernel hardcoded `w*e` for non-asset income while `_egm_solve` routes it
+    # through `budget_fn` (#235/H-09), so `:div` was silently dropped and every SSJ
+    # Jacobian for such a model was differenced around a non-steady-state point.
+    spec = load_ha_example(:one_asset_hank)
+    for prices in (Dict(:r => 0.01, :w => 1.0, :div => 0.30),   # was |Δc| ≈ 2.6e-1
+                   Dict(:r => 0.01, :w => 1.0))                 # plain-budget control
+        c, a, _ = MacroEconometricModels._egm_solve(spec.individual, spec.grid,
+                                                    spec.income, prices;
+                                                    max_iter=2000, tol=1e-12)
+        c1, a1 = MacroEconometricModels._egm_backward_step(spec.individual, spec.grid,
+                                                           spec.income, prices, c)
+        @test maximum(abs, c1 .- c) < 1e-9
+        @test maximum(abs, a1 .- a) < 1e-9
+    end
+end
+
 @testset "SSJ Jacobian" begin
     grid = HAGrid(assets=(0.0, 200.0, 80), income_states=3)
     inc = rouwenhorst(0.966, 0.5, 3)
@@ -1038,7 +1058,7 @@ end
         @test length(spec.income.states) == 7
         @test spec.individual.borrowing_constraint[1] ≈ 0.0
         @test spec.grid.n_points == [200]
-        @test spec.grid.bounds[1] == (0.0, 200.0)
+        @test spec.grid.bounds[1] == (0.0, 1000.0)
         @test spec.het_params[:alpha] ≈ 0.36
         @test spec.het_params[:delta] ≈ 0.025
         @test spec.n_assets == 1
@@ -1056,7 +1076,7 @@ end
         @test spec.individual.borrowing_constraint[1] ≈ -2.0
         @test spec.individual.beta ≈ 0.986
         @test spec.grid.bounds[1][1] ≈ -2.0
-        @test spec.grid.bounds[1][2] ≈ 50.0
+        @test spec.grid.bounds[1][2] ≈ 1000.0
         @test spec.grid.n_points == [200]
         @test spec.grid.n_income == 7
         @test spec.het_params[:sigma_c] ≈ 1.0
@@ -1108,6 +1128,270 @@ end
         # rouwenhorst/tauchen direct calls must still return the symmetric log grid.
         inc = rouwenhorst(0.966, 0.5, 7)
         @test inc.states[1] ≈ -inc.states[end] atol=1e-12
+    end
+
+    @testset "Income dispersion units" begin
+        # ORACLE (analytic): Rouwenhorst's stationary law is Binomial(n-1, 1/2) on an
+        # equispaced grid of half-width ψ = √(n-1)·σ_y, so the state sd is EXACTLY σ_y
+        # and the first autocorrelation is EXACTLY ρ. The exp/E[exp] normalization is a
+        # pure location shift in logs, so sd(log e) survives it unchanged.
+        #
+        # This is the detector for the units bug the examples shipped with: `sigma` is
+        # the AR(1) INNOVATION sd, but the literal 0.5 in the calibration is the
+        # UNCONDITIONAL sd (the Python sequence-jacobian convention). Read the wrong
+        # way it gives sd(log e) = 0.5/√(1-0.966²) = 1.9339 — 3.87× too dispersed in
+        # logs, 15× in variance — which pinned 5.6% of KS mass on the grid ceiling.
+        for name in (:krusell_smith, :one_asset_hank, :two_asset_hank)
+            spec = load_ha_example(name)
+            p = spec.income.stationary_dist
+            z = log.(spec.income.states)
+            mu = dot(p, z)
+            var_z = dot(p, (z .- mu) .^ 2)
+            @test sqrt(var_z) ≈ 0.5 atol=1e-8
+            # first autocorrelation of the discretized chain == ρ exactly
+            @test (dot(p .* z, spec.income.transition * z) - mu^2) / var_z ≈ 0.966 atol=1e-10
+            # top/bottom ratio = exp(2ψ) with ψ = √6 · 0.5
+            @test maximum(spec.income.states) / minimum(spec.income.states) ≈
+                  exp(2 * sqrt(6) * 0.5) rtol=1e-10
+        end
+    end
+
+    @testset "sigma_is convention (rouwenhorst / tauchen)" begin
+        # Default must be bitwise unchanged from the pre-`sigma_is` implementation.
+        for f in (rouwenhorst, tauchen)
+            a = f(0.966, 0.5, 7)
+            b = f(0.966, 0.5, 7; sigma_is=:innovation)
+            @test a.states == b.states
+            @test a.transition == b.transition
+            @test_throws ArgumentError f(0.9, 0.2, 5; sigma_is=:bogus)
+        end
+
+        # :innovation ⇒ half-width √(n-1)·σ/√(1-ρ²);  :unconditional ⇒ √(n-1)·σ.
+        @test rouwenhorst(0.966, 0.5, 7).states[end] ≈
+              sqrt(6) * 0.5 / sqrt(1 - 0.966^2) atol=1e-12
+        @test rouwenhorst(0.9, 0.2, 7; sigma_is=:unconditional).states[end] ≈
+              sqrt(6) * 0.2 atol=1e-12
+        @test tauchen(0.9, 0.2, 7; sigma_is=:unconditional).states[end] ≈
+              3 * 0.2 atol=1e-12
+
+        # The two conventions must agree after the σ_y ↔ σ_ε change of variables.
+        # For `tauchen` this also pins the transition matrix, whose CDF is scaled by
+        # the INNOVATION sd — passing sd(y) there would silently mis-scale it.
+        for (rho, sig) in ((0.9, 0.2), (0.966, 0.13), (0.5, 0.4))
+            inn = tauchen(rho, sig, 7)
+            unc = tauchen(rho, sig / sqrt(1 - rho^2), 7; sigma_is=:unconditional)
+            @test maximum(abs, unc.states .- inn.states) < 1e-12
+            @test maximum(abs, unc.transition .- inn.transition) < 1e-12
+        end
+    end
+
+    @testset ":geometric asset grid" begin
+        # ORACLE (analytic): a pivot-geometric grid is equidistant in log(a + piv),
+        # so every consecutive ratio equals q = ((a_max+piv)/(a_min+piv))^(1/(n-1)).
+        for (lo, hi, n) in ((0.0, 1000.0, 200), (-2.0, 1000.0, 200), (0.0, 200.0, 50))
+            g = MacroEconometricModels._make_asset_grid(lo, hi, n, :geometric)
+            piv = abs(lo) + 0.25
+            q = ((hi + piv) / (lo + piv))^(1 / (n - 1))
+            @test all(i -> isapprox((g[i+1] + piv) / (g[i] + piv), q; rtol=1e-12), 1:n-1)
+            @test g[1] == lo && g[end] == hi
+            @test all(diff(g) .> 0)
+        end
+        @test_throws ArgumentError MacroEconometricModels._make_asset_grid(
+            0.0, 10.0, 5, :nonexistent)
+
+        # The property the shape buys, and the reason the examples use it: raising
+        # a_max 5× costs `:double_exp` exactly 5× the bottom spacing (it is a fixed
+        # curve rescaled by (a_max - a_min)), but costs `:geometric` only ~1.25×.
+        de200 = MacroEconometricModels._make_asset_grid(0.0, 200.0, 200, :double_exp)
+        de1000 = MacroEconometricModels._make_asset_grid(0.0, 1000.0, 200, :double_exp)
+        gm200 = MacroEconometricModels._make_asset_grid(0.0, 200.0, 200, :geometric)
+        gm1000 = MacroEconometricModels._make_asset_grid(0.0, 1000.0, 200, :geometric)
+        @test (de1000[2] - de1000[1]) ≈ 5 * (de200[2] - de200[1]) rtol=1e-12
+        @test (gm1000[2] - gm1000[1]) < 1.5 * (gm200[2] - gm200[1])
+    end
+end
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Section 18b: Asset-grid adequacy / asset-market clearing
+# ─────────────────────────────────────────────────────────────────────────────
+
+@testset "Grid adequacy" begin
+    @testset "shipped examples clear the asset market" begin
+        # An HA steady state can be EXACTLY stationary and still fail to clear:
+        # `_build_transition_matrix` clamps the savings policy at a_max, which
+        # conserves mass but destroys assets, and `excess_demand` cannot see it
+        # because it is measured on the already-clamped aggregate ∫a dμ.
+        #
+        # ORACLE: for a stationary Young histogram whose policy never leaves the
+        # grid, ∫a'dμ == ∫a dμ is FORCED — stationarity says next period's
+        # holdings integrate to ∫a dμ, and with no clamping those holdings ARE a'.
+        for name in (:krusell_smith, :one_asset_hank, :huggett)
+            ss = compute_steady_state(load_ha_example(name))
+            d = ha_grid_diagnostics(ss)
+            scale = max(1.0, abs(ss.aggregates[:K]))
+            @test d.adequate
+            @test d.ceiling_mass < 1e-10
+            @test d.n_cells_below == 0
+            @test abs(d.clearing_residual) < 1e-8 * scale
+            @test abs(ss.aggregates[:A_policy] - ss.aggregates[:K]) < 1e-8 * scale
+            @test abs(ss.excess_demand) < 1e-6 * scale
+            # NB not `maximum(a_pol) < a_grid[end]`: at a_max = 1000 exactly one
+            # cell still overshoots, but it carries zero mass. The measure-zero
+            # form is what the theorem requires; the strict-max form is spurious.
+        end
+    end
+
+    @testset "steady state is invariant to the bisection bracket" begin
+        # ORACLE: the market-clearing rate is a property of the model, not of the
+        # interval it is searched over. Any bracket containing the root must give
+        # the same answer.
+        #
+        # It did not. A trial rate with β(1+r) ≥ 1 has no stationary distribution:
+        # wealth diverges and every household saves to a_max, so the computed K_s
+        # is a pure grid artifact — and that divergent policy was then reused as
+        # the EGM warm start (#238), corrupting the excess-demand values at the
+        # NEXT, admissible rates and collapsing the bracket on a spurious sign
+        # change. On one-asset HANK, r_bounds=(-0.02, 0.04) returned r = 0.010469
+        # with excess = -13.2 (converged=false) while (-0.01, 0.04) returned the
+        # true r = 0.011523. Raising a_max amplified it: the artifact K_s is a_max.
+        spec = load_ha_example(:one_asset_hank)
+        beta = spec.individual.beta
+        sss = [compute_steady_state(spec; r_bounds=rb)
+               for rb in ((-0.01, 0.04), (-0.02, 0.04), (-0.005, 0.05))]
+        rs = [ss.prices[:r] for ss in sss]
+        Ks = [ss.aggregates[:K] for ss in sss]
+        @test maximum(rs) - minimum(rs) < 1e-6
+        @test (maximum(Ks) - minimum(Ks)) / minimum(Ks) < 1e-4
+        for ss in sss
+            @test ss.converged
+            @test abs(ss.excess_demand) < 1e-6 * max(1.0, ss.aggregates[:K])
+            # ...and the equilibrium must satisfy Aiyagari's existence condition,
+            # which is what rules out the divergent branch in the first place.
+            @test beta * (1 + ss.prices[:r]) < 1
+        end
+    end
+
+    @testset "truncation identity (exact)" begin
+        # ORACLE: ∫a'dμ − ∫a dμ == ∫max(a'−a_max,0)dμ − ∫max(a_min−a',0)dμ for ANY
+        # stationary histogram. Tested on synthetic policies, so no solver is
+        # involved and the identity is checked in isolation.
+        base = load_ha_example(:krusell_smith)
+        ev = base.income.states
+        for (amax, n, gt) in ((5.0, 60, :geometric), (20.0, 80, :geometric),
+                              (200.0, 200, :double_exp), (50.0, 100, :linear))
+            g = HAGrid(; assets=(0.0, amax, n), income_states=7, grid_type=gt)
+            ag = g.grids[1]
+            # affine policy with fixed point a*_j = 1.5·a_max·e_j ⇒ states truncate
+            # differentially (e spans ≈0.3–3.0)
+            apol = [max(0.0, 0.15 * amax * ev[j] + 0.9 * ag[i]) for i in 1:n, j in 1:7]
+            L = MacroEconometricModels._build_transition_matrix(apol, g, base.income)
+            dist, _ = MacroEconometricModels._stationary_dist_young(L; max_iter=100_000,
+                                                                    tol=1e-14)
+            d = MacroEconometricModels._ha_grid_diagnostics(apol, dist, g)
+            @test maximum(abs.(L * dist .- dist)) < 1e-12        # stationary
+            @test d.clearing_residual ≈ d.truncation_flux_up - d.truncation_flux_down atol =
+                  1e-9 * max(1.0, abs(d.assets_held))
+            @test d.n_cells_above > 0
+            @test !d.adequate
+        end
+    end
+
+    @testset "detects the historical Krusell-Smith defect" begin
+        # Rebuild EXACTLY the pre-fix KS spec: sigma = 0.5 read as the INNOVATION
+        # sd, on the old [0, 200] :double_exp grid. The diagnostics must catch what
+        # `excess_demand` could not.
+        base = load_ha_example(:krusell_smith)
+        raw = rouwenhorst(0.966, 0.5, 7)                       # old (buggy) convention
+        e = exp.(raw.states); e ./= dot(raw.stationary_dist, e)
+        old_inc = IncomeProcess{Float64}(raw.transition, e, raw.stationary_dist, :income)
+        old = HADSGESpec{Float64}(base.aggregate_spec, base.individual, old_inc,
+                                  HAGrid(; assets=(0.0, 200.0, 200), income_states=7),
+                                  base.aggregation, base.het_params; model=base.model)
+        ss_old = compute_steady_state(old; grid_check=:none)
+        d = ha_grid_diagnostics(ss_old)
+        @test !d.adequate
+        @test d.ceiling_mass > 0.05              # measured 5.574343%
+        @test d.relative_residual > 0.015        # measured 1.6843%
+        @test abs(ss_old.excess_demand) < 1e-6   # ...and excess_demand is blind to it
+        @test d.clearing_residual ≈ d.truncation_flux_up - d.truncation_flux_down atol=1e-9
+
+        logs, _ = Test.collect_test_logs() do
+            compute_steady_state(old; grid_check=:warn)
+        end
+        @test any(l -> occursin("truncates the stationary distribution",
+                                string(l.message)), logs)
+        @test_throws ArgumentError compute_steady_state(old; grid_check=:error)
+    end
+
+    @testset "emitter (synthetic fixture)" begin
+        # Hand-computed: a = [0,1,2,3], n_e = 2, a' = [0,1,2,5] in both income
+        # states, uniform mass 1/8 ⇒ ∫a dμ = 1.5, ∫a'dμ = 2.0, flux_up = 0.5,
+        # ceiling mass = 0.25, 2 cells above. Synthetic on purpose, so this test
+        # never needs rewriting when a calibration moves.
+        g = HAGrid(; assets=(0.0, 3.0, 4), income_states=2, grid_type=:linear)
+        apol = [0.0 0.0; 1.0 1.0; 2.0 2.0; 5.0 5.0]
+        d = MacroEconometricModels._ha_grid_diagnostics(apol, fill(1 / 8, 8), g)
+        @test d.assets_held ≈ 1.5
+        @test d.assets_desired ≈ 2.0
+        @test d.truncation_flux_up ≈ 0.5
+        @test d.truncation_flux_down ≈ 0.0
+        @test d.ceiling_mass ≈ 0.25
+        @test d.n_cells_above == 2
+        @test d.n_cells_below == 0
+        @test !d.adequate
+
+        @test MacroEconometricModels._check_grid_adequacy(d, :none) === d
+        @test_throws ArgumentError MacroEconometricModels._check_grid_adequacy(d, :error)
+        @test_throws ArgumentError MacroEconometricModels._check_grid_adequacy(d, :bogus)
+        logs, _ = Test.collect_test_logs() do
+            MacroEconometricModels._check_grid_adequacy(d, :warn)
+        end
+        @test length(logs) == 1
+        msg = string(logs[1].message)
+        @test occursin("a_max", msg)                   # message must be actionable
+        @test occursin("grid_type=:geometric", msg)
+        @test occursin("grid_check=:none", msg)
+
+        # Mirror case: a policy below the grid floor CREATES assets.
+        g2 = HAGrid(; assets=(-2.0, 3.0, 4), income_states=2, grid_type=:linear)
+        apol2 = [-5.0 -5.0; 0.0 0.0; 1.0 1.0; 2.0 2.0]
+        d2 = MacroEconometricModels._ha_grid_diagnostics(apol2, fill(1 / 8, 8), g2)
+        @test d2.n_cells_below == 2
+        @test d2.truncation_flux_down ≈ 0.75
+        @test !d2.adequate
+
+        # Two-asset grids are refused outright.
+        g3 = HAGrid(; liquid=(0.0, 5.0, 4), illiquid=(0.0, 5.0, 4), income_states=2)
+        @test_throws ArgumentError MacroEconometricModels._ha_grid_diagnostics(
+            apol, fill(1 / 8, 8), g3)
+    end
+
+    @testset "spec validation: borrowing constraint vs grid floor" begin
+        base = load_ha_example(:krusell_smith)
+        ip = base.individual
+        mk(bc) = IndividualProblem{Float64}(ip.utility, ip.utility_prime,
+            ip.utility_prime_inv, ip.beta, ip.budget_fn, [bc], nothing, 1)
+        g = HAGrid(; assets=(0.0, 200.0, 50), income_states=7)
+        # Below the floor: the Young clamp would create assets out of nothing.
+        @test_throws ArgumentError HADSGESpec{Float64}(base.aggregate_spec, mk(-1.0),
+            base.income, g, base.aggregation, base.het_params)
+        # Above the floor: merely wasteful, so warn.
+        logs, _ = Test.collect_test_logs() do
+            HADSGESpec{Float64}(base.aggregate_spec, mk(5.0), base.income, g,
+                                base.aggregation, base.het_params)
+        end
+        @test any(l -> occursin("unreachable", string(l.message)), logs)
+        # All shipped examples satisfy the check.
+        for name in (:krusell_smith, :one_asset_hank, :two_asset_hank, :huggett)
+            @test load_ha_example(name) isa HADSGESpec{Float64}
+        end
+    end
+
+    @testset "two-asset steady state raises an honest error" begin
+        # docs/src/dsge_ha.md used to claim `compute_steady_state` auto-selects a
+        # VFI solver for two-asset models. It does not — it used to fail with a
+        # bare AssertionError on a SHIPPED example.
+        @test_throws ArgumentError compute_steady_state(load_ha_example(:two_asset_hank))
     end
 end
 
@@ -1312,11 +1596,16 @@ end
 
 @testset "HA Bayesian estimation" begin
     spec = load_ha_example(:krusell_smith)
-    # [T206] NOTE: the plan's asset-grid shrink (n_a 200→60/80) was dropped — coarsening the
+    # [T206] NOTE: the plan's asset-grid shrink (n_a 200→60/80) was dropped — perturbing the
     # KS-SSJ grid non-monotonically stabilizes the reduced realization and flips the #234
     # @test_broken truncation assertions to unexpected passes (n_a=60 flips T049's L1475;
     # n_a=80 also flips _build_ha_likelihood_fn's ll_val). Per the plan's flip-guard fallback
     # we keep the full-size spec and cut only draws + T_data (+ the shared-solve hoist).
+    # The Ho-Kalman spectral radius is CHAOTIC, not monotone, in the calibration: the
+    # a_max/grid_type change that fixed the asset-grid truncation was checked against all
+    # three @test_broken items (all still -Inf at :geometric a_max=1000, whereas
+    # :double_exp a_max=1000 flips all three). Re-measure them after ANY change to
+    # a_max, n_a or grid_type — an unexpected pass is reported as a suite FAILURE.
 
     # Compute steady state for generating fake data
     ss = compute_steady_state(spec; K_init=10.0, r_bounds=(-0.02, 0.04), max_iter=50, tol=1e-3)
@@ -1742,7 +2031,12 @@ end
 
 @testset "SSJ blocks — HetBlock and DAG composition" begin
     spec = load_ha_example(:krusell_smith)
-    ss = compute_steady_state(spec; r_bounds=(-0.01, 0.04), max_iter=80, tol=1e-4)
+    # Converged (default) tolerance, not the loose tol=1e-4 used elsewhere: the
+    # firm SimpleBlock below is built at K_ss = ∫a dμ while `ss.prices` are
+    # evaluated at the firm's K_demand, so the two price sets differ by exactly
+    # |dp/dK|·|excess_demand|. Testing the block's Cobb-Douglas algebra against
+    # the price function therefore needs a steady state where those coincide.
+    ss = compute_steady_state(spec; r_bounds=(-0.01, 0.04), max_iter=80)
     Th = 20
 
     hh = HetBlock(spec, ss; inputs=[:r, :w], outputs=[:A, :C], name=:household)
@@ -1803,15 +2097,14 @@ end
     @test dag.exogenous == [:K, :Z]
     @test dag.endogenous == [:r, :w, :Y, :A, :asset_mkt]
 
-    # The shipped Krusell-Smith example truncates the asset grid (~5.6% of mass is
-    # pinned at a_max = 200), so ∫a'dμ exceeds ∫a dμ by ~1.7% and the asset market
-    # does NOT clear at the linearization point. The GE assembler must say so
-    # rather than silently linearize around a non-clearing steady state.
-    @test dag.ss_values[:asset_mkt] > 1e-3
-    @test_logs (:warn, r"does not vanish in steady state") match_mode=:any begin
-        ssj_jacobian(dag; unknowns=[:K], targets=[:asset_mkt], shocks=[:Z],
-                     T_horizon=4)
-    end
+    # HISTORICAL NOTE: the Krusell-Smith example used to truncate its asset grid
+    # (~5.6% of mass pinned at a_max = 200, so ∫a'dμ exceeded ∫a dμ by ~1.7%) and
+    # the asset market did NOT clear at the linearization point — this assertion
+    # read `dag.ss_values[:asset_mkt] > 1e-3` and the GE assembler's target_tol
+    # guard fired. The example now clears; the household block's ∫a'dμ and the
+    # steady state's ∫a dμ agree to floating-point. The guard itself is still
+    # covered independently on the toy DAG below.
+    @test abs(dag.ss_values[:asset_mkt]) < 1e-9
 
     gej = ssj_jacobian(dag; unknowns=[:K], targets=[:asset_mkt], shocks=[:Z],
                        T_horizon=Th, target_tol=Inf)

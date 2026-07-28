@@ -16,20 +16,40 @@ using LinearAlgebra
 # =============================================================================
 
 """
-    _make_asset_grid(a_min, a_max, n, grid_type) → Vector{T}
+    _make_asset_grid(a_min, a_max, n, grid_type; pivot=0.25) → Vector{T}
 
 Construct a one-dimensional asset grid on `[a_min, a_max]` with `n` points.
 
 Supported `grid_type`:
 - `:double_exp` — double exponential (denser near `a_min`, default)
+- `:geometric` — pivot-geometric: equidistant in `log(a - a_min + pivot)`, so the
+  spacing at the bottom grows only *logarithmically* in `a_max`. This matches
+  `agrid` in the Python `sequence-jacobian` toolkit. Prefer it when `a_max` must
+  be large enough to keep the stationary distribution off the ceiling: the
+  `:double_exp` shape is a fixed curve rescaled by `(a_max - a_min)`, so its
+  bottom spacing is *linear* in `a_max` and resolution at the borrowing
+  constraint degrades as the ceiling is raised.
 - `:log` — logarithmic spacing (shifted)
 - `:linear` — uniform spacing
+
+`pivot` (default `0.25`) shifts the geometric grid away from the origin; the
+effective pivot is `abs(a_min) + pivot`, so a grid starting at a negative
+borrowing limit is still dense at the constraint.
 """
-function _make_asset_grid(a_min::T, a_max::T, n::Int, grid_type::Symbol) where {T<:AbstractFloat}
+function _make_asset_grid(a_min::T, a_max::T, n::Int, grid_type::Symbol;
+                          pivot::Real=T(0.25)) where {T<:AbstractFloat}
     @assert n >= 3 "Need at least 3 grid points"
     @assert a_max > a_min "Upper bound must exceed lower bound"
 
-    if grid_type == :linear
+    if grid_type == :geometric
+        piv = abs(a_min) + T(pivot)
+        @assert piv > zero(T) "pivot must be positive"
+        # Geometric in (a + piv): lo = a_min + piv > 0 for any a_min.
+        g = exp.(range(log(a_min + piv), log(a_max + piv); length=n)) .- piv
+        g[1] = a_min      # exact endpoints (guard against roundoff)
+        g[end] = a_max
+        return g
+    elseif grid_type == :linear
         return collect(range(a_min, a_max; length=n))
     elseif grid_type == :log
         # Shifted log spacing: map [0,1] through log(1+x) then scale
@@ -42,7 +62,29 @@ function _make_asset_grid(a_min::T, a_max::T, n::Int, grid_type::Symbol) where {
         raw = @. (exp(exp(x) - one(T)) - one(T)) / (exp(exp(one(T)) - one(T)) - one(T))
         return @. a_min + raw * (a_max - a_min)
     else
-        throw(ArgumentError("Unknown grid_type: $grid_type. Use :double_exp, :log, or :linear."))
+        throw(ArgumentError("Unknown grid_type: $grid_type. Use :double_exp, :geometric, :log, or :linear."))
+    end
+end
+
+"""
+    _ar1_unconditional_sd(sigma, rho, sigma_is, caller) → T
+
+Resolve the `sigma_is` convention for an AR(1) discretizer: return the
+unconditional standard deviation `sd(y_t)` of `y_t = ρ y_{t-1} + σ ε_t`.
+
+`sigma_is === :innovation` treats `sigma` as `sd(ε_t)` (so `sd(y) = σ/√(1-ρ²)`);
+`sigma_is === :unconditional` treats it as `sd(y_t)` itself.
+"""
+function _ar1_unconditional_sd(sigma::T, rho::T, sigma_is::Symbol, caller::Symbol) where {T<:AbstractFloat}
+    if sigma_is === :innovation
+        return sigma / sqrt(one(T) - rho^2)
+    elseif sigma_is === :unconditional
+        return sigma
+    else
+        throw(ArgumentError("$caller: sigma_is must be :innovation (sigma is the " *
+            "standard deviation of the AR(1) innovation eps_t — the default) or " *
+            ":unconditional (sigma is sd(y_t) itself, the Python sequence-jacobian " *
+            "convention); got :$sigma_is"))
     end
 end
 
@@ -125,7 +167,10 @@ For two-asset models (e.g., HANK), pass `liquid=...` and `illiquid=...`.
 - `liquid::Union{Nothing,Tuple{Real,Real,Int}}` — liquid asset grid spec
 - `illiquid::Union{Nothing,Tuple{Real,Real,Int}}` — illiquid asset grid spec
 - `income_states::Int` — number of income states (default 7)
-- `grid_type::Symbol` — `:double_exp` (default), `:log`, or `:linear`
+- `grid_type::Symbol` — `:double_exp` (default), `:geometric`, `:log`, or `:linear`.
+  Use `:geometric` when `a_max` has to be large: unlike `:double_exp`, its spacing
+  near `a_min` grows only logarithmically in `a_max`, so raising the ceiling does
+  not cost resolution at the borrowing constraint.
 """
 function HAGrid(; assets::Union{Nothing,Tuple{Real,Real,Int}}=nothing,
                   liquid::Union{Nothing,Tuple{Real,Real,Int}}=nothing,
@@ -190,7 +235,7 @@ end
 # =============================================================================
 
 """
-    rouwenhorst(rho, sigma, n) → IncomeProcess{Float64}
+    rouwenhorst(rho, sigma, n; sigma_is=:innovation) → IncomeProcess{Float64}
 
 Discretize an AR(1) process `y_t = ρ y_{t-1} + σ ε_t` using the Rouwenhorst (1995) method.
 
@@ -198,8 +243,21 @@ More accurate than Tauchen for highly persistent processes (ρ close to 1).
 
 # Arguments
 - `rho::Real` — persistence parameter (|ρ| < 1)
-- `sigma::Real` — shock standard deviation (σ > 0)
+- `sigma::Real` — standard deviation (σ > 0); see **Convention** below
 - `n::Int` — number of discrete states (n ≥ 2)
+- `sigma_is::Symbol` — `:innovation` (default) or `:unconditional`
+
+# Convention
+
+By default `sigma` is the standard deviation of the **innovation** `ε_t`, so the
+process itself has `sd(y_t) = σ / √(1 - ρ²)` and the state space spans
+`±√(n-1) · sd(y_t)`. Pass `sigma_is=:unconditional` to supply `sd(y_t)` directly.
+
+The two differ sharply at high persistence: at `ρ = 0.966` the unconditional
+standard deviation is **3.87×** the innovation standard deviation. `markov_rouwenhorst`
+in the Python `sequence-jacobian` toolkit parameterizes by the *unconditional*
+standard deviation, so a `sigma` copied from there must be passed with
+`sigma_is=:unconditional` (or divided by `√(1 - ρ²)` first).
 
 # References
 - Rouwenhorst, K. G. (1995). Asset pricing implications of equilibrium business cycle models.
@@ -207,7 +265,7 @@ More accurate than Tauchen for highly persistent processes (ρ close to 1).
 - Kopecky, K. A., & Suen, R. M. H. (2010). Finite state Markov-chain approximations to
   highly persistent processes. *Review of Economic Dynamics*, 13(3), 701–714.
 """
-function rouwenhorst(rho::Real, sigma::Real, n::Int)
+function rouwenhorst(rho::Real, sigma::Real, n::Int; sigma_is::Symbol=:innovation)
     T = Float64
     rho_T = T(rho)
     sigma_T = T(sigma)
@@ -217,7 +275,7 @@ function rouwenhorst(rho::Real, sigma::Real, n::Int)
     @assert n >= 2 "Need at least 2 states"
 
     # Unconditional std dev of the AR(1) process
-    sigma_y = sigma_T / sqrt(one(T) - rho_T^2)
+    sigma_y = _ar1_unconditional_sd(sigma_T, rho_T, sigma_is, :rouwenhorst)
 
     # State space: equally spaced on [-ψ, ψ] where ψ = √(n-1) × σ_y
     psi = sqrt(T(n - 1)) * sigma_y
@@ -269,21 +327,29 @@ end
 # =============================================================================
 
 """
-    tauchen(rho, sigma, n; m=3) → IncomeProcess{Float64}
+    tauchen(rho, sigma, n; m=3, sigma_is=:innovation) → IncomeProcess{Float64}
 
 Discretize an AR(1) process `y_t = ρ y_{t-1} + σ ε_t` using the Tauchen (1986) method.
 
 # Arguments
 - `rho::Real` — persistence parameter (|ρ| < 1)
-- `sigma::Real` — shock standard deviation (σ > 0)
+- `sigma::Real` — standard deviation (σ > 0); see **Convention** below
 - `n::Int` — number of discrete states (n ≥ 2)
 - `m::Real` — state space covers ±m unconditional standard deviations (default 3)
+- `sigma_is::Symbol` — `:innovation` (default) or `:unconditional`
+
+# Convention
+
+Identical to [`rouwenhorst`](@ref): `sigma` is the standard deviation of the
+**innovation** `ε_t` by default, giving `sd(y_t) = σ / √(1 - ρ²)`. Pass
+`sigma_is=:unconditional` to supply `sd(y_t)` directly (the Python
+`sequence-jacobian` convention). At `ρ = 0.966` the two differ by **3.87×**.
 
 # References
 - Tauchen, G. (1986). Finite state Markov-chain approximations to univariate and
   vector autoregressions. *Economics Letters*, 20(2), 177–181.
 """
-function tauchen(rho::Real, sigma::Real, n::Int; m::Real=3)
+function tauchen(rho::Real, sigma::Real, n::Int; m::Real=3, sigma_is::Symbol=:innovation)
     T = Float64
     rho_T = T(rho)
     sigma_T = T(sigma)
@@ -295,7 +361,12 @@ function tauchen(rho::Real, sigma::Real, n::Int; m::Real=3)
     @assert m_T > zero(T) "Coverage parameter m must be positive"
 
     # Unconditional std dev
-    sigma_y = sigma_T / sqrt(one(T) - rho_T^2)
+    sigma_y = _ar1_unconditional_sd(sigma_T, rho_T, sigma_is, :tauchen)
+
+    # Conditional (innovation) std dev — this is what scales the transition CDF.
+    # Branch rather than round-tripping through sigma_y so the :innovation path
+    # stays bitwise identical to the pre-`sigma_is` implementation.
+    sigma_eps = sigma_is === :innovation ? sigma_T : sigma_y * sqrt(one(T) - rho_T^2)
 
     # State space
     y_max = m_T * sigma_y
@@ -311,15 +382,15 @@ function tauchen(rho::Real, sigma::Real, n::Int; m::Real=3)
         for j in 1:n
             if j == 1
                 P[i, j] = Distributions.cdf(normal_dist,
-                    (states[1] + d / T(2) - rho_T * states[i]) / sigma_T)
+                    (states[1] + d / T(2) - rho_T * states[i]) / sigma_eps)
             elseif j == n
                 P[i, j] = one(T) - Distributions.cdf(normal_dist,
-                    (states[n] - d / T(2) - rho_T * states[i]) / sigma_T)
+                    (states[n] - d / T(2) - rho_T * states[i]) / sigma_eps)
             else
                 P[i, j] = Distributions.cdf(normal_dist,
-                    (states[j] + d / T(2) - rho_T * states[i]) / sigma_T) -
+                    (states[j] + d / T(2) - rho_T * states[i]) / sigma_eps) -
                            Distributions.cdf(normal_dist,
-                    (states[j] - d / T(2) - rho_T * states[i]) / sigma_T)
+                    (states[j] - d / T(2) - rho_T * states[i]) / sigma_eps)
             end
         end
     end
@@ -422,6 +493,30 @@ struct HADSGESpec{T<:AbstractFloat}
         n_income = grid.n_income
         @assert individual.n_asset_dims == n_assets "Individual problem asset dims must match grid"
         @assert length(income.states) == n_income "Income states must match grid n_income"
+
+        # The borrowing constraint must coincide with the grid floor. The Young
+        # (2010) transition clamps the savings policy into the grid, so a
+        # constraint BELOW the floor silently creates assets out of nothing every
+        # period — the model would violate its own budget constraint. A
+        # constraint above the floor is merely wasteful (unreachable nodes).
+        for d in 1:grid.n_dims
+            lo = grid.bounds[d][1]
+            bc = individual.borrowing_constraint[d]
+            scale = max(one(T), abs(lo))
+            if bc < lo - sqrt(eps(T)) * scale
+                throw(ArgumentError(
+                    "HADSGESpec: borrowing_constraint[$d] = $bc lies below the grid " *
+                    "lower bound $lo on dimension :$(grid.labels[d]). The Young (2010) " *
+                    "transition clamps the savings policy up to the grid floor, so such " *
+                    "a model silently creates assets out of nothing every period. Set " *
+                    "the grid lower bound equal to the borrowing constraint."))
+            elseif bc > lo + sqrt(eps(T)) * scale
+                @warn "HADSGESpec: borrowing_constraint[$d] = $bc lies above the grid " *
+                      "lower bound $lo on dimension :$(grid.labels[d]); grid nodes below " *
+                      "the constraint are unreachable (wasted resolution)." maxlog = 1
+            end
+        end
+
         new{T}(aggregate_spec, individual, income, grid,
                aggregation, het_params, n_assets, n_income, model)
     end

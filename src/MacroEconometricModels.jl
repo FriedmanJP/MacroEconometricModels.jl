@@ -539,6 +539,7 @@ include("dsge/heterogeneous/types.jl")
 include("dsge/heterogeneous/egm.jl")
 include("dsge/heterogeneous/individual_vfi.jl")
 include("dsge/heterogeneous/distribution.jl")
+include("dsge/heterogeneous/grid_check.jl")
 include("dsge/heterogeneous/steady_state.jl")
 include("dsge/heterogeneous/krusell_smith.jl")
 include("dsge/heterogeneous/ssj.jl")
@@ -728,6 +729,7 @@ export dsge_smoother, dsge_particle_smoother
 # Heterogeneous Agent DSGE types
 export HADSGESpec, HAGrid, IncomeProcess, IndividualProblem
 export HASteadyState, HADSGESolution, KrusellSmithSolution, DenHaanAccuracy
+export HAGridDiagnostics, ha_grid_diagnostics
 export rouwenhorst, tauchen
 export load_ha_example
 export distribution_irf, inequality_irf, simulate_panel, den_haan_test

@@ -82,6 +82,14 @@ function run_checks()
             abs(ss_ks.excess_demand) < 1e-3 ? "PASS" : "FAIL",
             "  |excess|=", round(abs(ss_ks.excess_demand), sigdigits=3))
     all_pass &= abs(ss_ks.excess_demand) < 1e-3
+    # `excess_demand` alone is NOT sufficient: it is measured on the clamped
+    # aggregate ∫a dμ, so it reads ~1e-7 even when the grid truncates and the
+    # market misses by percent. Assert grid adequacy too.
+    gd_ks = ha_grid_diagnostics(ss_ks)
+    println(rpad("KS asset-grid adequacy", 40), gd_ks.adequate ? "PASS" : "FAIL",
+            "  ceiling=", round(100 * gd_ks.ceiling_mass, sigdigits=3), "%",
+            "  resid=", round(gd_ks.clearing_residual, sigdigits=3))
+    all_pass &= gd_ks.adequate
 
     Th = 200
     J_r_K = MEM._ssj_jacobian(ss_ks, ks.individual, ks.grid, ks.income, :r, :K; T_horizon=Th)

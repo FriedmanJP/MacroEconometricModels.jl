@@ -116,9 +116,31 @@ report(ss_egm)
 
 The steady state report displays convergence diagnostics, equilibrium prices, aggregate quantities, and wealth distribution statistics. A negative Euler error (in ``\log_{10}`` units) indicates the accuracy of the consumption policy --- values below ``-3`` are standard in the literature.
 
+### Choosing an Asset Grid
+
+Two decisions matter, and they trade off against each other on one grid shape but not the other.
+
+**The ceiling must not bind.** The Young (2010) transition clamps the savings policy into ``[a_{\min}, a_{\max}]``, so any mass that wants to save past ``a_{\max}`` is silently pushed back onto the top node --- see Common Pitfalls. Choose ``a_{\max}`` from the *right tail* of the wealth distribution, not from the mean: the built-in examples run to ``a_{\max} = 1000`` against an equilibrium ``K \approx 42``, a ratio of about ``24``.
+
+**Raising the ceiling must not cost resolution at the constraint.** The `:double_exp` grid is a fixed curve rescaled by ``(a_{\max} - a_{\min})``, so its bottom spacing is *linear* in ``a_{\max}`` --- widening the grid five-fold coarsens the borrowing constraint five-fold. The `:geometric` grid is equidistant in ``\log(a - a_{\min} + \text{pivot})``, so its bottom spacing grows only logarithmically. Measured on the Krusell--Smith calibration at ``n_a = 200``:
+
+| Grid | ``a_{\max}`` | First step ``\Delta a_1`` | Mass at floor | Mass at ceiling | Euler error |
+|------|--------------|---------------------------|---------------|-----------------|-------------|
+| `:double_exp` | 200 | 0.2208 | 6.41% | ``7.1 \times 10^{-3}`` | ``-4.54`` |
+| `:double_exp` | 1000 | 1.1039 | 8.15% | ``0`` | ``-4.21`` |
+| `:geometric` | 200 | 0.0085 | 6.12% | ``8.7 \times 10^{-3}`` | ``-6.09`` |
+| `:geometric` | 1000 | 0.0106 | 6.31% | ``4.4 \times 10^{-13}`` | ``-6.04`` |
+
+Widening `:double_exp` fixes the ceiling but degrades the Euler error from ``-4.54`` to ``-4.21``; `:geometric` clears the ceiling *and* holds accuracy near ``-6``. This is why the built-in one-asset examples use `grid_type=:geometric`. The default remains `:double_exp` for backward compatibility.
+
+Grid *resolution* is a separate matter, and refining ``n_a`` does **not** fix a binding ceiling. On the truncating configuration, sweeping ``n_a`` from 100 to 1600 at fixed ``a_{\max} = 200`` moves the relative clearing residual only from ``1.6844\%`` to ``1.6848\%`` --- unchanged to four significant figures across a 16-fold refinement, while the solve time rises from 2.4 s to 47.6 s. Only ``a_{\max}`` fixes truncation.
+
 ### VFI with Howard Improvement
 
-When EGM is not applicable (non-separable utility, complex constraints), **Value Function Iteration** with **Howard improvement steps** provides a robust alternative. Each VFI iteration consists of one policy maximization step followed by ``K`` policy-evaluation steps (default ``K = 20``), which are cheap linear operations that dramatically accelerate convergence. The VFI solver is used automatically when `compute_steady_state` detects a two-asset model.
+When EGM is not applicable (non-separable utility, complex constraints), **Value Function Iteration** with **Howard improvement steps** provides a robust alternative. Each VFI iteration consists of one policy maximization step followed by ``K`` policy-evaluation steps (default ``K = 20``), which are cheap linear operations that dramatically accelerate convergence.
+
+!!! note "Two-asset steady states"
+    `compute_steady_state` bisects on a single interest rate and therefore supports **one-asset models only**. Clearing a two-asset model requires a two-dimensional market-clearing solve, which is not implemented; calling `compute_steady_state(load_ha_example(:two_asset_hank))` raises an `ArgumentError` saying so. The two-asset individual problem itself (nested EGM, adjustment costs) is fully available --- it is the general-equilibrium close that is missing.
 
 ---
 
@@ -217,6 +239,20 @@ inc7 = rouwenhorst(0.966, 0.5, 7)
 
 The 7-state discretization spans the ergodic support of the log-productivity process. The stationary distribution concentrates mass near the mean, with thin tails reflecting the high persistence.
 
+!!! warning "`sigma` is the innovation standard deviation"
+    `rouwenhorst(rho, sigma, n)` and `tauchen(rho, sigma, n)` interpret `sigma` as the standard deviation of the AR(1) **innovation** ``\varepsilon_t``, so the process itself has ``\mathrm{sd}(y_t) = \sigma / \sqrt{1 - \rho^2}``. The call above therefore produces a chain with an unconditional standard deviation of ``0.5 / \sqrt{1 - 0.966^2} = 1.934``, not ``0.5``.
+
+    Calibration targets are usually quoted the other way round --- as the cross-sectional standard deviation of log earnings --- and `markov_rouwenhorst` in the Python `sequence-jacobian` toolkit uses that convention too. Pass `sigma_is=:unconditional` when your ``\sigma`` is ``\mathrm{sd}(y_t)``:
+
+    ```@example dsge_ha
+    a = rouwenhorst(0.966, 0.5, 7)                             # sd(y) = 1.934
+    b = rouwenhorst(0.966, 0.5, 7; sigma_is=:unconditional)    # sd(y) = 0.500
+    (innovation = round(a.states[end], digits=4),
+     unconditional = round(b.states[end], digits=4))
+    ```
+
+    At ``\rho = 0.966`` the two readings differ by ``3.87\times`` in logs and ``15\times`` in variance --- more than enough to move the stationary wealth distribution off any reasonable asset grid. The built-in examples target ``\mathrm{sd}(\log e) = 0.5`` and pass `sigma_is=:unconditional` accordingly.
+
 | Keyword | Type | Default | Description |
 |---------|------|---------|-------------|
 | `rho` | `Real` | — | Persistence parameter |
@@ -295,7 +331,7 @@ ss_hank = compute_steady_state(spec_hank; K_init=10.0, r_bounds=(-0.02, 0.04),
 report(ss_hank)
 ```
 
-The one-asset HANK steady state features a lower equilibrium interest rate than the standard Aiyagari economy due to the New Keynesian markup and dividend income. The Gini coefficient and wealth percentiles characterize the cross-sectional distribution, with the 90th percentile typically several times the median --- consistent with empirical wealth data.
+The one-asset HANK steady state clears at a **higher** interest rate and a **lower** capital stock than the standard Aiyagari economy (``r = 0.0115`` vs ``0.0077`` per quarter; ``K = 35.70`` vs ``42.44``). The reason is impatience, not the New Keynesian block: this calibration sets ``\beta = 0.986`` against ``0.99`` for Krusell--Smith, and that difference in time preference dominates the extra dividend income. The Gini coefficient and wealth percentiles characterize the cross-sectional distribution, with the 90th percentile several times the median --- consistent with empirical wealth data.
 
 | Keyword | Type | Default | Description |
 |---------|------|---------|-------------|
@@ -633,10 +669,10 @@ Four canonical models are available via `load_ha_example`:
 
 | Model | Assets | Grid | Income | Key Feature |
 |-------|--------|------|--------|-------------|
-| `:krusell_smith` | 1 (``a \in [0, 200]``) | 200 pts | 7 states | Standard Aiyagari economy |
-| `:one_asset_hank` | 1 (``b \in [-2, 50]``) | 200 pts | 7 states | NK with dividends, borrowing |
+| `:krusell_smith` | 1 (``a \in [0, 1000]``, geometric) | 200 pts | 7 states | Standard Aiyagari economy |
+| `:one_asset_hank` | 1 (``b \in [-2, 1000]``, geometric) | 200 pts | 7 states | NK with dividends, borrowing |
 | `:two_asset_hank` | 2 (liquid + illiquid) | 50 × 50 | 7 states | Portfolio choice with adjustment cost |
-| `:huggett` | 1 (``a \in [-2, 8]``) | 300 pts | 2 states | Pure exchange, bond in zero net supply |
+| `:huggett` | 1 (``a \in [-2, 4]``) | 300 pts | 2 states | Pure exchange, bond in zero net supply |
 
 ```@example dsge_ha
 [let s = load_ha_example(name)
@@ -737,11 +773,21 @@ plot_result(ss_ks; view=:policy)      # policy functions by income
 
 7. **Targets that do not vanish in steady state.** `ssj_jacobian` warns when a target's steady-state level exceeds `target_tol`, which means the DAG is being linearized around a point that does not clear. The usual cause is an asset grid whose upper bound truncates the savings policy, so mass piles up at `a_max` and ``\int a' d\mu`` exceeds ``\int a \, d\mu``. Widen the grid rather than raising the tolerance.
 
-8. **Second-order step size.** `ssj_irf(...; order=2)` differences at the actual shock size (`fd_step=1.0`). Reduce `fd_step` when the shock is large enough to push the household problem far from its steady state; raise it when the shock is so small that the ``O(\sigma^2)`` term is lost in roundoff.
+8. **`excess_demand` cannot see grid truncation.** This is the failure mode that motivated `ha_grid_diagnostics`, and it is silent by construction. The Young (2010) transition clamps the savings policy into ``[a_{\min}, a_{\max}]``. Clamping conserves *mass* exactly, so the distribution is still a valid probability measure and still exactly stationary --- but it destroys *assets*. Because `excess_demand` is measured on the already-clamped aggregate ``\int a \, d\mu``, it can read ``10^{-7}`` while the model fails to clear by percent. For a stationary histogram the wedge is an exact identity:
 
-9. **DCEGM asset grids must be dense near the credit limit.** A household that saves exactly the credit limit and has no income next period consumes zero forever, so the value there is ``-\infty`` and the endogenous grid cannot reach below ``\bar{a} + c(\bar{a})``. On a uniform grid that unresolved wedge is a full asset step wide; `dcegm_retirement_model` therefore defaults to `curvature=2.0`, which shrinks it by a factor of `n_a`. Give the option a positive income floor (`pension`) if you need the constrained branch itself.
+    ```math
+    \int a' d\mu - \int a \, d\mu = \int \max(a' - a_{\max}, 0) \, d\mu - \int \max(a_{\min} - a', 0) \, d\mu
+    ```
 
-10. **Comparing DCEGM against a grid solver near a kink.** DCEGM locates the switching threshold exactly, so consumption jumps at an arbitrary real number. A value-function-iteration benchmark on a finite grid cannot represent that jump and will disagree sharply at the one or two nodes straddling it, while agreeing to grid accuracy everywhere else. Compare medians and choice indicators, not maxima.
+    so a non-zero residual *is* truncation. Read `ha_grid_diagnostics(ss)` (or the **Grid Adequacy** panel that `report(ss)` prints) after every solve, and compare `aggregates[:K]` = ``\int a \, d\mu`` against `aggregates[:A_policy]` = ``\int a' d\mu``, which is what the sequence-space household block integrates. `compute_steady_state` warns by default; use `grid_check=:error` to make it fatal or `:none` to silence it.
+
+9. **A rate with ``\beta(1+r) \geq 1`` is not an equilibrium candidate.** Aiyagari's (1994) existence condition requires ``\beta(1+r) < 1``; above it, household wealth diverges and *no* stationary distribution exists, so no finite `a_max` will help. If `compute_steady_state` warns about this, the problem is the calibration or the clearing rule, not the grid. The bisection skips such rates outright rather than solving a household problem whose answer would be an artifact of the grid ceiling.
+
+10. **Second-order step size.** `ssj_irf(...; order=2)` differences at the actual shock size (`fd_step=1.0`). Reduce `fd_step` when the shock is large enough to push the household problem far from its steady state; raise it when the shock is so small that the ``O(\sigma^2)`` term is lost in roundoff.
+
+11. **DCEGM asset grids must be dense near the credit limit.** A household that saves exactly the credit limit and has no income next period consumes zero forever, so the value there is ``-\infty`` and the endogenous grid cannot reach below ``\bar{a} + c(\bar{a})``. On a uniform grid that unresolved wedge is a full asset step wide; `dcegm_retirement_model` therefore defaults to `curvature=2.0`, which shrinks it by a factor of `n_a`. Give the option a positive income floor (`pension`) if you need the constrained branch itself.
+
+12. **Comparing DCEGM against a grid solver near a kink.** DCEGM locates the switching threshold exactly, so consumption jumps at an arbitrary real number. A value-function-iteration benchmark on a finite grid cannot represent that jump and will disagree sharply at the one or two nodes straddling it, while agreeing to grid accuracy everywhere else. Compare medians and choice indicators, not maxima.
 
 ---
 

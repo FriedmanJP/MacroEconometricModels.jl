@@ -87,6 +87,35 @@ function _crra_utility(sigma_c::Float64)
 end
 
 # =============================================================================
+# _unit_mean_lognormal_income — shared income discretization for the examples
+# =============================================================================
+
+"""
+    _unit_mean_lognormal_income(rho, sd_log, n; method=:rouwenhorst) -> IncomeProcess{Float64}
+
+Discretized log-AR(1) idiosyncratic income normalized to a unit-mean multiplier
+`e = exp(z) / E[exp(z)]`, so `E[e] = 1` and every state gives strictly positive
+labor income `w*e` (the raw grid is symmetric about 0 in logs, which would make
+half the states negative if used directly).
+
+`sd_log` is the **unconditional (cross-sectional) standard deviation of
+`log e`**, not the innovation standard deviation — the `exp`/`E[exp]`
+normalization is a pure location shift in logs, so `sd(log e) == sd_log`
+exactly. This is the convention the calibration targets are quoted in and the
+one the Python `sequence-jacobian` toolkit uses; the underlying
+[`rouwenhorst`](@ref)/[`tauchen`](@ref) primitives default to the *innovation*
+convention, so the call below passes `sigma_is=:unconditional` explicitly.
+"""
+function _unit_mean_lognormal_income(rho::Real, sd_log::Real, n::Int;
+                                     method::Symbol=:rouwenhorst)
+    raw = method === :tauchen ? tauchen(rho, sd_log, n; sigma_is=:unconditional) :
+                                rouwenhorst(rho, sd_log, n; sigma_is=:unconditional)
+    e = exp.(raw.states)
+    e ./= dot(raw.stationary_dist, e)
+    return IncomeProcess{Float64}(raw.transition, e, raw.stationary_dist, :income)
+end
+
+# =============================================================================
 # Shared helper functions (named, to avoid closure-over-local issues in 1.12)
 # =============================================================================
 
@@ -129,18 +158,23 @@ function _ks_example()
     # CRRA with sigma = 1 (log utility)
     u, up, upi = _crra_utility(1.0)
 
-    # Income process: Rouwenhorst(0.966, 0.5, 7), normalized to a unit-mean
-    # multiplier e = exp(z) / E[exp(z)] so that E[e] = 1 and every state gives
-    # strictly positive labor income w*e (the raw grid is a symmetric log grid
-    # about 0, which would make half the states have negative labor income).
-    inc_raw = rouwenhorst(0.966, 0.5, 7)
-    e_norm = exp.(inc_raw.states)
-    e_norm ./= dot(inc_raw.stationary_dist, e_norm)
-    income = IncomeProcess{Float64}(inc_raw.transition, e_norm,
-                                    inc_raw.stationary_dist, :income)
+    # Income: log e is AR(1) with rho = 0.966 and UNCONDITIONAL sd(log e) = 0.5
+    # — the Krusell-Smith / sequence-jacobian calibration target — normalized to
+    # unit mean so every state gives strictly positive labor income w*e (#231).
+    # NB 0.5 is the cross-sectional sd, NOT the innovation sd: passing it
+    # positionally to `rouwenhorst` would give sd(log e) = 0.5/sqrt(1-0.966^2)
+    # = 1.93, a 15x-too-dispersed income process.
+    income = _unit_mean_lognormal_income(0.966, 0.5, 7)
 
-    # Asset grid: [0, 200] with 200 points
-    grid = HAGrid(; assets=(0.0, 200.0, 200), income_states=7)
+    # Asset grid: [0, 1000] with 200 pivot-geometric points. a_max/K ~ 24 at the
+    # equilibrium K, so the savings policy is interior on a set of full measure
+    # and the ceiling never binds — required for the asset market to clear, since
+    # the Young (2010) transition clamps a' at a_max. `:geometric` rather than
+    # `:double_exp` because the latter's bottom spacing scales linearly with
+    # a_max and would trade the ceiling problem for a resolution problem at the
+    # borrowing constraint.
+    grid = HAGrid(; assets=(0.0, 1000.0, 200), income_states=7,
+                    grid_type=:geometric)
 
     # Individual problem
     individual = IndividualProblem{Float64}(u, up, upi, beta, _ks_budget,
@@ -180,18 +214,16 @@ function _one_asset_hank_example()
     # CRRA utility
     u, up, upi = _crra_utility(sigma_c)
 
-    # Income process: Rouwenhorst(0.966, 0.5, 7), normalized to a unit-mean
-    # multiplier e = exp(z) / E[exp(z)] so that E[e] = 1 and every state gives
-    # strictly positive labor income w*e (the raw grid is a symmetric log grid
-    # about 0, which would make half the states have negative labor income).
-    inc_raw = rouwenhorst(0.966, 0.5, 7)
-    e_norm = exp.(inc_raw.states)
-    e_norm ./= dot(inc_raw.stationary_dist, e_norm)
-    income = IncomeProcess{Float64}(inc_raw.transition, e_norm,
-                                    inc_raw.stationary_dist, :income)
+    # Income: unconditional sd(log e) = 0.5, as in the KS example (see
+    # `_unit_mean_lognormal_income` for the sd convention).
+    income = _unit_mean_lognormal_income(0.966, 0.5, 7)
 
-    # Asset grid: [-2, 50] with 200 points (allows borrowing)
-    grid = HAGrid(; assets=(-2.0, 50.0, 200), income_states=7)
+    # Asset grid: [-2, 1000] with 200 pivot-geometric points (allows borrowing).
+    # beta = 0.986 here gives beta(1+r) closer to 1 than in the KS example, i.e.
+    # a fatter right tail — so the ceiling has to be checked again if beta is
+    # ever recalibrated. The shipped [-2, 50] left ~29% of mass on the ceiling.
+    grid = HAGrid(; assets=(-2.0, 1000.0, 200), income_states=7,
+                    grid_type=:geometric)
 
     # Individual problem — borrowing constraint b >= -2
     individual = IndividualProblem{Float64}(u, up, upi, beta, _hank1_budget,
@@ -231,17 +263,14 @@ function _two_asset_hank_example()
     # CRRA utility
     u, up, upi = _crra_utility(sigma_c)
 
-    # Income process: Rouwenhorst(0.966, 0.5, 7), normalized to a unit-mean
-    # multiplier e = exp(z) / E[exp(z)] so that E[e] = 1 and every state gives
-    # strictly positive labor income w*e (the raw grid is a symmetric log grid
-    # about 0, which would make half the states have negative labor income).
-    inc_raw = rouwenhorst(0.966, 0.5, 7)
-    e_norm = exp.(inc_raw.states)
-    e_norm ./= dot(inc_raw.stationary_dist, e_norm)
-    income = IncomeProcess{Float64}(inc_raw.transition, e_norm,
-                                    inc_raw.stationary_dist, :income)
+    # Income: unconditional sd(log e) = 0.5, as in the KS example (see
+    # `_unit_mean_lognormal_income` for the sd convention).
+    income = _unit_mean_lognormal_income(0.966, 0.5, 7)
 
-    # Two-asset grid: liquid [-2, 50] (50 pts), illiquid [0, 100] (50 pts)
+    # Two-asset grid: liquid [-2, 50] (50 pts), illiquid [0, 100] (50 pts).
+    # Left as-is: `compute_steady_state` does not support two-asset market
+    # clearing, so no shipped number is computed from these bounds and re-sizing
+    # them would be an unverifiable guess.
     grid = HAGrid(; liquid=(-2.0, 50.0, 50), illiquid=(0.0, 100.0, 50),
                     income_states=7)
 
