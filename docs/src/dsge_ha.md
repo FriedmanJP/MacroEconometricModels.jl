@@ -4,10 +4,11 @@ Standard DSGE models assume a **representative agent** whose decisions aggregate
 
 - Individual problem solvers: EGM (one-asset and nested two-asset) and VFI with Howard improvement
 - Income discretization: Rouwenhorst (1995) and Tauchen (1986)
+- Endogenous labor supply: GHH (no wealth effect) and additively separable
 - Distribution: Young (2010) non-stochastic histogram with sparse transition matrices
 - Steady state: bisection on the interest rate with EGM + distribution + market clearing
 - Three aggregate solution methods: SSJ, Reiter, Krusell-Smith
-- Built-in models: Krusell-Smith (1998), one-asset HANK, two-asset HANK
+- Built-in models: Krusell-Smith (1998), one-asset HANK, two-asset HANK, Huggett (1993), GHH endogenous labor
 - Bayesian estimation via RWMH + Kalman filter on reduced system
 - Visualization: wealth distribution, Lorenz curve, policy functions
 
@@ -141,6 +142,69 @@ When EGM is not applicable (non-separable utility, complex constraints), **Value
 
 !!! note "Two-asset steady states"
     `compute_steady_state` bisects on a single interest rate and therefore supports **one-asset models only**. Clearing a two-asset model requires a two-dimensional market-clearing solve, which is not implemented; calling `compute_steady_state(load_ha_example(:two_asset_hank))` raises an `ArgumentError` saying so. The two-asset individual problem itself (nested EGM, adjustment costs) is fully available --- it is the general-equilibrium close that is missing.
+
+---
+
+## [Endogenous Labor Supply](@id ha_labor)
+
+By default households choose only consumption and savings. Attaching a [`LaborSupply`](@ref) to the [`IndividualProblem`](@ref) makes hours a choice too, which is what transmits shocks through the labor market and is essential for the fiscal and monetary experiments HANK models are built for.
+
+Disutility of hours is isoelastic, ``v(n) = \psi n^{1 + 1/\varphi} / (1 + 1/\varphi)``, so ``v'(n) = \psi n^{1/\varphi}`` and ``\varphi`` is the Frisch elasticity. Two preference specifications are available, and they differ in exactly one respect: whether hours carry a **wealth effect**.
+
+### GHH: no wealth effect
+
+Greenwood, Hercowitz & Huffman (1988) preferences put the disutility inside the felicity function, ``U\bigl(c - \psi n^{1+1/\varphi}/(1+1/\varphi)\bigr)``. The intratemporal condition is then
+
+```math
+\psi n^{1/\varphi} = w e \qquad \Longrightarrow \qquad n(e) = \left(\frac{w e}{\psi}\right)^{\varphi}
+```
+
+Hours depend on the effective wage alone — not on consumption, not on assets. That makes GHH the tractable default: substituting hours out leaves an ordinary one-dimensional consumption-savings problem in the composite good ``x = c - v(n)``, with net labor income ``\tilde{y}(e) = w e n(e) - v(n(e))``. The EGM solves that problem unchanged and recovers ``c = x + v(n)`` at the end.
+
+### Separable: with a wealth effect
+
+Additively separable preferences ``u(c) - v(n)`` give
+
+```math
+\psi n^{1/\varphi} = w e \, u'(c)
+```
+
+which couples hours to consumption: a richer household consumes more, values a marginal dollar less, and works less. On the unconstrained EGM branch this costs nothing — the Euler inversion delivers ``c`` first, so hours follow in closed form. At the borrowing constraint the two conditions must hold jointly, and `_egm_solve` runs a bracketed scalar root-find (``g(c) = c + \underline{a} - Ra - w e n(c)`` is strictly increasing, so the root is unique).
+
+### Solving
+
+```@example dsge_ha
+spec_lab = load_ha_example(:endogenous_labor)
+ss_lab = compute_steady_state(spec_lab)
+(r = round(ss_lab.prices[:r], digits=6),
+ K = round(ss_lab.aggregates[:K], digits=4),
+ L = round(ss_lab.aggregates[:L], digits=4),
+ N = round(ss_lab.aggregates[:N], digits=4))
+```
+
+Two labor aggregates are reported and they are different objects: `aggregates[:L]` is efficiency units ``\int e\,n\,d\mu`` — what enters the production function — while `aggregates[:N]` is mean hours ``\int n\,d\mu``. They coincide only if every income state equals 1. The hours policy itself is `ss.policies[:labor]`.
+
+The built-in example sets ``\psi = 3`` so that ``L \approx 1``, matching the ``L = 1`` normalization the exogenous-labor examples impose — which makes the two economies directly comparable. Swap in separable preferences by rebuilding the individual problem:
+
+```@example dsge_ha
+ls_sep = LaborSupply(; kind=:separable, psi=1.0, frisch=0.5)
+(kind = ls_sep.kind, psi = ls_sep.psi, frisch = ls_sep.frisch)
+```
+
+!!! note "Aggregate labor is an outcome, not a parameter"
+    With exogenous labor, `params[:L]` is a fixed input to the firm's problem. With endogenous labor it is an *outcome* of the household problem, so `compute_steady_state` iterates solve → aggregate hours → re-price to a fixed point inside each bisection step. Under Cobb-Douglas this converges on the second pass, because the firm FOC pins ``K/L`` from ``r`` alone and the wage is therefore invariant to ``L``.
+
+### Labor in the sequence space
+
+Hours are available as a [`HetBlock`](@ref) output — `:N` (or `:n`, `:hours`) for mean hours, `:L` for efficiency units:
+
+```@example dsge_ha
+hh_lab = HetBlock(spec_lab, ss_lab; inputs=[:r, :w], outputs=[:A, :N, :L])
+J_lab = block_jacobian(hh_lab, 10)
+round(J_lab[(:N, :w)][1, 1], digits=6)
+```
+
+Under GHH that number has a closed form: hours are static, so ``dN/dw = \varphi N / w``, which at this calibration is ``0.5 \times 0.8869 / 2.5099 = 0.1767``. For the same reason the Jacobian ``\partial N_t / \partial w_s`` is **diagonal** — GHH hours never depend on the continuation value, so there is no anticipation effect (the measured off-diagonal maximum is ``8 \times 10^{-13}``). Separable preferences break both properties: hours inherit the wealth effect and therefore respond to announced future prices.
 
 ---
 
@@ -673,6 +737,7 @@ Four canonical models are available via `load_ha_example`:
 | `:one_asset_hank` | 1 (``b \in [-2, 1000]``, geometric) | 200 pts | 7 states | NK with dividends, borrowing |
 | `:two_asset_hank` | 2 (liquid + illiquid) | 50 × 50 | 7 states | Portfolio choice with adjustment cost |
 | `:huggett` | 1 (``a \in [-2, 4]``) | 300 pts | 2 states | Pure exchange, bond in zero net supply |
+| `:endogenous_labor` | 1 (``a \in [0, 2000]``, geometric) | 200 pts | 7 states | Aiyagari with GHH endogenous hours |
 
 ```@example dsge_ha
 [let s = load_ha_example(name)
@@ -799,6 +864,7 @@ plot_result(ss_ks; view=:policy)      # policy functions by income
 
 - Carroll, Christopher D. 2006. "The Method of Endogenous Gridpoints for Solving Dynamic Stochastic Optimization Problems." *Economics Letters* 91 (3): 312--320. [DOI](https://doi.org/10.1016/j.econlet.2005.09.013)
 
+- Greenwood, Jeremy, Zvi Hercowitz, and Gregory W. Huffman. 1988. "Investment, Capacity Utilization, and the Real Business Cycle." *American Economic Review* 78 (3): 402--417.
 - den Haan, Wouter J. 2010. "Assessing the Accuracy of the Aggregate Law of Motion in Models with Heterogeneous Agents." *Journal of Economic Dynamics and Control* 34 (1): 79--99. [DOI](https://doi.org/10.1016/j.jedc.2009.07.006)
 
 - Iskhakov, Fedor, Thomas H. Jørgensen, John Rust, and Bertel Schjerning. 2017. "The Endogenous Grid Method for Discrete-Continuous Dynamic Choice Models with (or without) Taste Shocks." *Quantitative Economics* 8 (2): 317--365. [DOI](https://doi.org/10.3982/QE643)

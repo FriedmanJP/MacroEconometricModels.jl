@@ -58,6 +58,19 @@ function _compute_euler_error(c_pol::Matrix{T}, a_pol::Matrix{T},
     n_checked = 0
     constraint_tol = a_min + T(1e-6)
 
+    # Under GHH preferences marginal utility is U'(x) with x = c − v(n), not
+    # U'(c): the Euler equation holds in the composite good. `shift[j]` is v(n_j),
+    # which under GHH depends on the income state alone. Zero in every other case,
+    # so the residual reduces to the standard one.
+    shift = zeros(T, n_e)
+    ls = ip.labor
+    if ls !== nothing && ls.kind === :ghh
+        w = prices[:w]
+        for j in 1:n_e
+            shift[j] = _labor_disutility(ls, labor_supply(ls, w * income.states[j]))
+        end
+    end
+
     @inbounds for j in 1:n_e
         for i in 1:n_a
             # Skip constrained points
@@ -69,12 +82,12 @@ function _compute_euler_error(c_pol::Matrix{T}, a_pol::Matrix{T},
             emu = zero(T)
             for jp in 1:n_e
                 c_tomorrow = _linear_interp(a_grid, view(c_pol, :, jp), a_pol[i, j])
-                c_tomorrow = max(c_tomorrow, T(1e-15))
+                c_tomorrow = max(c_tomorrow - shift[jp], T(1e-15))
                 emu += Pi[j, jp] * u_prime(c_tomorrow)
             end
 
             # Euler residual
-            up_today = u_prime(c_pol[i, j])
+            up_today = u_prime(max(c_pol[i, j] - shift[j], T(1e-15)))
             if up_today > zero(T) && isfinite(emu)
                 euler_resid = abs(one(T) - beta * (one(T) + r) * emu / up_today)
                 if euler_resid > max_err
@@ -154,6 +167,7 @@ function _ha_steady_state(ip::IndividualProblem{T}, grid::HAGrid{T},
 
     tol_T = T(tol)
     r_lo, r_hi = r_bounds
+    has_labor = ip.labor !== nothing
 
     # Market-clearing closure: given a trial rate, return (asset demand, prices).
     # Defaults to the Aiyagari firm-FOC rule built from `price_fn`, preserving the
@@ -176,6 +190,8 @@ function _ha_steady_state(ip::IndividualProblem{T}, grid::HAGrid{T},
     best_a_pol = zeros(T, n_a, n_e)
     best_dist = zeros(T, n_a * n_e)
     best_prices = Dict{Symbol,T}()
+    best_n_pol = has_labor ? zeros(T, n_a, n_e) : nothing
+    best_L = get(params, :L, one(T))
     best_K_s = zero(T)
     best_K_d = zero(T)
     best_excess = T(Inf)
@@ -187,16 +203,43 @@ function _ha_steady_state(ip::IndividualProblem{T}, grid::HAGrid{T},
     # demand diverges at a too-low rate) is mapped to excess = −∞ (raise r),
     # guarding the escalation path so a valid setup does not throw (#240/H-18).
     function eval_excess(r::T, warm)
-        K_d, prices = clr(r, params)
+        p_loc = copy(params)
+        K_d, prices = clr(r, p_loc)
         isfinite(K_d) || return (excess=T(-Inf), K_d=K_d, prices=prices,
-                                 c_pol=nothing, a_pol=nothing, dist=nothing, K_s=T(NaN))
-        c_pol, a_pol, _ = _egm_solve(ip, grid, income, prices;
-                                     max_iter=1000, tol=T(1e-10), init_policy=warm)
-        Lambda = _build_transition_matrix(a_pol, grid, income)
-        dist, _ = _stationary_dist_young(Lambda; max_iter=10_000, tol=T(1e-12))
-        K_s = _aggregate(dist, grid; var_index=1)
+                                 c_pol=nothing, a_pol=nothing, dist=nothing,
+                                 K_s=T(NaN), n_pol=nothing, L=T(NaN))
+        local c_pol, a_pol, dist, K_s
+        n_pol = nothing
+        L_agg = get(p_loc, :L, one(T))
+        # With endogenous labor, aggregate efficiency units are an outcome of the
+        # household problem, so factor demand cannot be evaluated before it. Iterate
+        # (solve → aggregate hours → re-price) to a fixed point. Under Cobb-Douglas
+        # the wage depends on r alone — the firm FOC pins K/L, and both marginal
+        # products are homogeneous of degree zero in it — so this converges on the
+        # second pass; the loop is written generally in case a custom clearing rule
+        # does make prices depend on L. With exogenous labor it runs exactly once
+        # and the whole block reduces to the original code path.
+        for _ in 1:(has_labor ? 30 : 1)
+            c_pol, a_pol, _ = _egm_solve(ip, grid, income, prices;
+                                         max_iter=1000, tol=T(1e-10), init_policy=warm)
+            Lambda = _build_transition_matrix(a_pol, grid, income)
+            dist, _ = _stationary_dist_young(Lambda; max_iter=10_000, tol=T(1e-12))
+            K_s = _aggregate(dist, grid; var_index=1)
+            has_labor || break
+
+            n_pol = labor_policy(ip, grid, income, prices, c_pol)
+            L_new = _aggregate_labor(dist, n_pol, income, grid)
+            p_loc[:L] = L_new
+            K_d, prices = clr(r, p_loc)
+            isfinite(K_d) || break
+            converged_L = abs(L_new - L_agg) <= T(1e-12) * max(one(T), abs(L_new))
+            L_agg = L_new
+            warm = c_pol
+            converged_L && break
+        end
         return (excess=K_s - K_d, K_d=K_d, prices=prices,
-                c_pol=c_pol, a_pol=a_pol, dist=dist, K_s=K_s)
+                c_pol=c_pol, a_pol=a_pol, dist=dist, K_s=K_s,
+                n_pol=n_pol, L=L_agg)
     end
 
     # Bracket check + bounded widening (#240/H-18). excess(r) = K_s − K_d is
@@ -209,6 +252,20 @@ function _ha_steady_state(ip::IndividualProblem{T}, grid::HAGrid{T},
     # equilibrium of a valid model whose rate lies outside the default bounds
     # rather than throwing or returning a spurious midpoint.
     r_cap = one(T) / ip.beta - one(T) - T(1e-6)
+    # Never evaluate the household problem above the Aiyagari (1994) existence
+    # bound: at β(1+r) ≥ 1 wealth diverges, the computed K_s is an artifact of the
+    # grid ceiling, and (with endogenous labor) a household driven to zero
+    # consumption supplies unbounded hours, so excess demand there is meaningless
+    # — it can even come out NEGATIVE and destroy the bracket. Only ever lowers
+    # r_hi, so a bracket that was already admissible is untouched.
+    if r_hi > r_cap
+        width = r_hi - r_lo
+        r_hi = r_cap
+        # A caller may legitimately supply an interval lying entirely above the
+        # bound; drop r_lo with it so the bracket keeps its width and the
+        # widening logic below can still find the true clearing rate.
+        r_lo >= r_hi && (r_lo = r_hi - max(width, T(1e-3)))
+    end
     res_lo = eval_excess(r_lo, nothing)
     res_hi = eval_excess(r_hi, res_lo.c_pol)
     widen = 0
@@ -279,6 +336,8 @@ function _ha_steady_state(ip::IndividualProblem{T}, grid::HAGrid{T},
             best_prices = copy(res.prices)
             best_K_s = res.K_s
             best_K_d = res.K_d
+            best_L = res.L
+            best_n_pol === nothing || copyto!(best_n_pol, res.n_pol)
         end
 
         # Check convergence. The threshold is scale-free: an absolute tolerance on
@@ -308,8 +367,9 @@ function _ha_steady_state(ip::IndividualProblem{T}, grid::HAGrid{T},
 
     # Compute output: Cobb-Douglas for production economies, aggregate endowment otherwise
     if best_K_d > zero(T)
+        # Labor is the REALIZED aggregate when it is endogenous, not params[:L].
         Y_val = get(params, :Z, one(T)) * best_K_d^(get(params, :alpha, T(0.36))) *
-                get(params, :L, one(T))^(one(T) - get(params, :alpha, T(0.36)))
+                best_L^(one(T) - get(params, :alpha, T(0.36)))
     else
         # Pure-exchange (e.g. Huggett): Y = aggregate endowment Σ_j p_j e_j
         inc_marg = vec(sum(reshape(best_dist, n_a, n_e), dims=1))
@@ -324,6 +384,7 @@ function _ha_steady_state(ip::IndividualProblem{T}, grid::HAGrid{T},
         :savings => best_a_pol,
         :consumption => best_c_pol
     )
+    best_n_pol === nothing || (policies[:labor] = best_n_pol)
     # Grid adequacy. Computed once, after the loop — never inside `eval_excess`,
     # which runs 30-200 times. `:K` keeps its established meaning (∫a dμ, the
     # aggregate the bisection clears on); `:A_policy` is what the policy actually
@@ -341,6 +402,13 @@ function _ha_steady_state(ip::IndividualProblem{T}, grid::HAGrid{T},
         :A_policy => gdiag.assets_desired,
         :A_residual => gdiag.clearing_residual
     )
+
+    # Endogenous labor: `:L` is efficiency units ∫e·n dμ (what enters production)
+    # and `:N` is mean hours ∫n dμ. They differ whenever income states are not 1.
+    if best_n_pol !== nothing
+        aggregates[:L] = best_L
+        aggregates[:N] = _aggregate_hours(best_dist, best_n_pol, grid)
+    end
 
     # Aiyagari (1994) existence condition. With β(1+r) ≥ 1 an infinite-horizon
     # household's wealth diverges, no stationary distribution exists, and NO

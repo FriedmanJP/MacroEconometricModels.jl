@@ -77,7 +77,7 @@ function _update_ha_params(spec::HADSGESpec{T}, param_names::Vector{Symbol},
     new_ip = IndividualProblem{T}(
         ip.utility, ip.utility_prime, ip.utility_prime_inv,
         new_beta, ip.budget_fn, ip.borrowing_constraint,
-        ip.adjustment_cost, ip.n_asset_dims
+        ip.adjustment_cost, ip.n_asset_dims; labor=ip.labor
     )
 
     return HADSGESpec{T}(new_agg, new_ip, spec.income, spec.grid,

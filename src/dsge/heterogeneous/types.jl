@@ -406,6 +406,119 @@ function tauchen(rho::Real, sigma::Real, n::Int; m::Real=3, sigma_is::Symbol=:in
 end
 
 # =============================================================================
+# LaborSupply — endogenous labor-supply specification
+# =============================================================================
+
+"""
+    LaborSupply{T}
+
+Endogenous labor supply for a heterogeneous-agent household problem. Attach one
+to an [`IndividualProblem`](@ref) via its `labor` keyword; the default (`nothing`)
+leaves labor exogenous and every solver path bitwise unchanged.
+
+Disutility of hours is isoelastic, `v(n) = ψ n^{1 + 1/φ} / (1 + 1/φ)`, so
+`v'(n) = ψ n^{1/φ}`.
+
+Fields:
+- `kind::Symbol` — `:ghh` or `:separable`
+- `psi::T` — disutility scale `ψ > 0`
+- `frisch::T` — Frisch elasticity `φ > 0`
+- `n_max::T` — upper bound on hours (numerical guard, default `Inf`)
+
+# Preference specifications
+
+**GHH** (Greenwood–Hercowitz–Huffman 1988), `U(c - ψ n^{1+1/φ}/(1+1/φ))`. The
+intratemporal condition is
+
+```math
+ψ n^{1/φ} = w e \\quad\\Longrightarrow\\quad n(e) = (w e / ψ)^φ
+```
+
+independent of consumption and assets — there is **no wealth effect on hours**.
+Substituting it out leaves a standard one-dimensional consumption-savings problem
+in the composite good `x = c - ψ n^{1+1/φ}/(1+1/φ)`, with net labor income
+`ỹ(e) = w e n(e) - ψ n(e)^{1+1/φ}/(1+1/φ)`. This is the tractable default.
+
+**Separable**, `u(c) - v(n)`. The intratemporal condition
+
+```math
+ψ n^{1/φ} = w e \\, u'(c)
+```
+
+couples hours to consumption, so hours carry a wealth effect. On the
+unconstrained EGM branch consumption is known before hours, so `n` is still
+explicit; on the constrained branch `c` and `n` must be solved jointly, which
+[`_egm_solve`](@ref) does with a bracketed scalar root-find.
+
+See also [`IndividualProblem`](@ref), [`labor_supply`](@ref).
+"""
+struct LaborSupply{T<:AbstractFloat}
+    kind::Symbol
+    psi::T
+    frisch::T
+    n_max::T
+
+    function LaborSupply{T}(kind::Symbol, psi, frisch, n_max) where {T<:AbstractFloat}
+        kind in (:ghh, :separable) || throw(ArgumentError(
+            "LaborSupply: kind must be :ghh or :separable, got :$kind"))
+        psi > 0 || throw(ArgumentError("LaborSupply: psi must be positive, got $psi"))
+        frisch > 0 || throw(ArgumentError("LaborSupply: frisch must be positive, got $frisch"))
+        n_max > 0 || throw(ArgumentError("LaborSupply: n_max must be positive, got $n_max"))
+        new{T}(kind, T(psi), T(frisch), T(n_max))
+    end
+end
+
+"""
+    LaborSupply(; kind=:ghh, psi=1.0, frisch=0.5, n_max=Inf) → LaborSupply{Float64}
+
+Keyword constructor for [`LaborSupply`](@ref). `frisch = 0.5` is a common
+macro calibration; `psi` is usually chosen so that mean hours ≈ 1 at the
+steady-state wage.
+"""
+LaborSupply(; kind::Symbol=:ghh, psi::Real=1.0, frisch::Real=0.5, n_max::Real=Inf) =
+    LaborSupply{Float64}(kind, psi, frisch, n_max)
+
+"""
+    labor_supply(ls::LaborSupply, w_e) → n
+    labor_supply(ls::LaborSupply, w_e, u_prime_c) → n
+
+Hours implied by the intratemporal first-order condition at effective wage
+`w_e = w·e`. The two-argument form is the GHH condition `ψ n^{1/φ} = w e`; the
+three-argument form is the separable condition `ψ n^{1/φ} = w e u'(c)`, and
+reduces to the first when `u_prime_c = 1`.
+
+Hours are clamped to `[0, ls.n_max]`.
+"""
+function labor_supply(ls::LaborSupply{T}, w_e::Real, u_prime_c::Real=one(T)) where {T<:AbstractFloat}
+    mrs = T(w_e) * T(u_prime_c)
+    mrs <= zero(T) && return zero(T)
+    return min((mrs / ls.psi)^ls.frisch, ls.n_max)
+end
+
+"""
+    _labor_disutility(ls, n) → ψ n^{1+1/φ} / (1 + 1/φ)
+
+Flow disutility of hours. Under GHH this is subtracted from consumption inside
+the utility function; under separable preferences it is subtracted from utility.
+"""
+_labor_disutility(ls::LaborSupply{T}, n::T) where {T<:AbstractFloat} =
+    n <= zero(T) ? zero(T) : ls.psi * n^(one(T) + one(T) / ls.frisch) / (one(T) + one(T) / ls.frisch)
+
+"""
+    _ghh_net_income(ls, w_e) → (ỹ, n, disutility)
+
+GHH labor income net of the disutility term, `ỹ = w e n - ψ n^{1+1/φ}/(1+1/φ)`,
+together with the hours and the disutility that produced it. Because GHH hours
+do not depend on consumption or assets, this is a function of the effective wage
+alone and can be substituted into the budget before the EGM step.
+"""
+function _ghh_net_income(ls::LaborSupply{T}, w_e::T) where {T<:AbstractFloat}
+    n = labor_supply(ls, w_e)
+    d = _labor_disutility(ls, n)
+    return (w_e * n - d, n, d)
+end
+
+# =============================================================================
 # IndividualProblem — Household optimization specification
 # =============================================================================
 
@@ -429,6 +542,17 @@ Fields:
 - `borrowing_constraint::Vector{T}` — lower bound per asset dimension
 - `adjustment_cost::Union{Nothing,Function}` — optional `χ(d)` portfolio adjustment cost (two-asset)
 - `n_asset_dims::Int` — number of asset dimensions (1 or 2)
+- `labor::Union{Nothing,LaborSupply{T}}` — optional endogenous labor supply
+  (default `nothing`, i.e. exogenous labor). Pass via the `labor` keyword.
+
+# Endogenous labor
+
+With `labor = nothing` the household chooses only consumption and savings, and
+`budget_fn(a, e, prices)` is the whole budget. With a [`LaborSupply`](@ref)
+attached, `budget_fn` is interpreted as the budget **evaluated at `n = 1`**: the
+solver reads the gross return and any non-labor offset (e.g. `div`) from it, then
+replaces the `w·e` term with the labor income the intratemporal condition
+implies. So the same `budget_fn` serves both cases.
 """
 struct IndividualProblem{T<:AbstractFloat, FU, FUP, FUPI, FB, FA}
     utility::FU
@@ -439,17 +563,24 @@ struct IndividualProblem{T<:AbstractFloat, FU, FUP, FUPI, FB, FA}
     borrowing_constraint::Vector{T}
     adjustment_cost::FA   # Nothing (one-asset) or a concrete χ(d) function type (two-asset)
     n_asset_dims::Int
+    labor::Union{Nothing,LaborSupply{T}}
 
+    # `labor` is a KEYWORD with a `nothing` default, so all pre-existing
+    # eight-positional-argument call sites keep working unchanged.
     function IndividualProblem{T}(utility, utility_prime, utility_prime_inv, beta,
                                   budget_fn, borrowing_constraint, adjustment_cost,
-                                  n_asset_dims) where {T<:AbstractFloat}
+                                  n_asset_dims;
+                                  labor::Union{Nothing,LaborSupply{T}}=nothing) where {T<:AbstractFloat}
         @assert zero(T) < beta < one(T) "Discount factor must be in (0, 1)"
         @assert n_asset_dims in (1, 2) "Only 1 or 2 asset dimensions supported"
         @assert length(borrowing_constraint) == n_asset_dims "Borrowing constraint length must match n_asset_dims"
+        labor === nothing || n_asset_dims == 1 || throw(ArgumentError(
+            "IndividualProblem: endogenous labor supply is implemented for one-asset " *
+            "problems only (got n_asset_dims = $n_asset_dims)."))
         new{T, typeof(utility), typeof(utility_prime), typeof(utility_prime_inv),
             typeof(budget_fn), typeof(adjustment_cost)}(
             utility, utility_prime, utility_prime_inv, beta,
-            budget_fn, borrowing_constraint, adjustment_cost, n_asset_dims)
+            budget_fn, borrowing_constraint, adjustment_cost, n_asset_dims, labor)
     end
 end
 

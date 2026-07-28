@@ -172,6 +172,7 @@ HADSGESolution
 KrusellSmithSolution
 DenHaanAccuracy
 HAGridDiagnostics
+LaborSupply
 ```
 
 ### Heterogeneous-Agent Solvers and Analysis
@@ -185,6 +186,8 @@ inequality_irf
 simulate_panel
 den_haan_test
 ha_grid_diagnostics
+labor_supply
+labor_policy
 irf(::HADSGESolution{T}, ::Int) where {T<:AbstractFloat}
 fevd(::HADSGESolution{T}, ::Int) where {T<:AbstractFloat}
 report(::DenHaanAccuracy{T}) where {T}

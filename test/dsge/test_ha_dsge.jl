@@ -1396,6 +1396,175 @@ end
 end
 
 # ─────────────────────────────────────────────────────────────────────────────
+# Section 18c: Endogenous labor supply (GHH / separable) — [T256] #355
+# ─────────────────────────────────────────────────────────────────────────────
+
+@testset "Endogenous labor supply" begin
+    _ha_ip(base, ls) = IndividualProblem{Float64}(
+        base.individual.utility, base.individual.utility_prime,
+        base.individual.utility_prime_inv, base.individual.beta,
+        base.individual.budget_fn, base.individual.borrowing_constraint,
+        nothing, 1; labor=ls)
+
+    @testset "LaborSupply construction" begin
+        ls = LaborSupply(; kind=:ghh, psi=2.0, frisch=0.5)
+        @test ls isa LaborSupply{Float64}
+        @test ls.kind === :ghh && ls.psi ≈ 2.0 && ls.frisch ≈ 0.5 && ls.n_max == Inf
+        @test_throws ArgumentError LaborSupply(; kind=:bogus)
+        @test_throws ArgumentError LaborSupply(; psi=0.0)
+        @test_throws ArgumentError LaborSupply(; frisch=-1.0)
+        @test_throws ArgumentError LaborSupply(; n_max=0.0)
+
+        # ORACLE (closed form): ψ n^{1/φ} = w·e ⟹ n = (w e/ψ)^φ
+        for (psi, phi, we) in ((2.0, 0.5, 3.0), (1.0, 1.0, 0.4), (3.5, 0.25, 7.0))
+            l = LaborSupply(; kind=:ghh, psi=psi, frisch=phi)
+            @test labor_supply(l, we) ≈ (we / psi)^phi
+            # the separable form multiplies the effective wage by u'(c)
+            @test labor_supply(l, we, 2.0) ≈ (2we / psi)^phi
+        end
+        @test labor_supply(LaborSupply(; psi=1.0, frisch=1.0, n_max=0.75), 10.0) ≈ 0.75
+        @test labor_supply(LaborSupply(), -1.0) == 0.0        # non-positive wage ⟹ no work
+
+        # Endogenous labor is one-asset only.
+        base = load_ha_example(:krusell_smith)
+        @test_throws ArgumentError IndividualProblem{Float64}(
+            base.individual.utility, base.individual.utility_prime,
+            base.individual.utility_prime_inv, base.individual.beta,
+            base.individual.budget_fn, [0.0, 0.0], nothing, 2; labor=LaborSupply())
+    end
+
+    @testset "exogenous-labor paths are untouched" begin
+        base = load_ha_example(:krusell_smith)
+        @test base.individual.labor === nothing
+        # `labor_policy` returns ones, so ∫e·n dμ reduces to ∫e dμ.
+        ss = compute_steady_state(base)
+        n = labor_policy(base.individual, base.grid, base.income, ss.prices,
+                         ss.policies[:consumption])
+        @test all(==(1.0), n)
+        @test !haskey(ss.policies, :labor)
+        @test !haskey(ss.aggregates, :L)
+        # The three-argument `_ssj_outcome_vector` form still dispatches as before.
+        cpol = Float64[1 4; 2 5; 3 6]; apol = Float64[11 14; 12 15; 13 16]
+        @test MacroEconometricModels._ssj_outcome_vector(:C, cpol, apol) == vec(cpol)
+        @test MacroEconometricModels._ssj_outcome_vector(:K, cpol, apol) == vec(apol)
+        # Labor outputs require an hours policy and say so.
+        @test_throws ArgumentError MacroEconometricModels._ssj_outcome_vector(:N, cpol, apol)
+        @test_throws ArgumentError MacroEconometricModels._ssj_outcome_vector(
+            :L, cpol, apol, cpol)      # hours given, income missing
+    end
+
+    @testset "intratemporal FOC holds at every grid point" begin
+        # ORACLE (analytic, exact): the household's static first-order condition
+        # for hours. GHH: ψ n^{1/φ} = w·e — no wealth effect, so hours depend on
+        # the income state alone. Separable: ψ n^{1/φ} = w·e·u'(c), which couples
+        # hours to consumption. Both must hold at EVERY (a, e), including the
+        # constrained cells where `_egm_solve` runs a joint root-find.
+        base = load_ha_example(:krusell_smith)
+        prices = Dict(:r => 0.0077, :w => 2.467)
+        for kind in (:ghh, :separable)
+            ls = LaborSupply(; kind=kind, psi=1.5, frisch=0.5)
+            ip = _ha_ip(base, ls)
+            c, a, conv = MacroEconometricModels._egm_solve(ip, base.grid, base.income,
+                                                            prices; max_iter=3000, tol=1e-12)
+            @test conv
+            n = labor_policy(ip, base.grid, base.income, prices, c)
+            ag = base.grid.grids[1]
+            foc_err = 0.0; budget_err = 0.0
+            for j in eachindex(base.income.states), i in eachindex(ag)
+                we = prices[:w] * base.income.states[j]
+                rhs = kind === :ghh ? we : we * ip.utility_prime(c[i, j])
+                foc_err = max(foc_err, abs(ls.psi * n[i, j]^(1 / ls.frisch) - rhs))
+                # budget identity: c + a' = (1+r)a + w·e·n
+                budget_err = max(budget_err, abs((c[i, j] + a[i, j]) -
+                                    ((1 + prices[:r]) * ag[i] + we * n[i, j])))
+            end
+            @test foc_err < 1e-10
+            @test budget_err < 1e-9
+            @test all(n .> 0)
+            # GHH hours are a function of the income state alone (no wealth effect);
+            # separable hours must actually vary with assets, or the wealth effect
+            # this preference class exists to deliver would be missing.
+            spread = maximum(j -> maximum(n[:, j]) - minimum(n[:, j]),
+                             eachindex(base.income.states))
+            kind === :ghh ? (@test spread < 1e-12) : (@test spread > 1e-3)
+        end
+    end
+
+    @testset "steady state clears with endogenous labor" begin
+        # ORACLE: with Cobb-Douglas production the firm FOC pins K/L given r —
+        # k = (α Z /(r+δ))^{1/(1-α)} — independent of the household side. So the
+        # REALIZED K/L from the distribution must reproduce it exactly, and it is
+        # aggregate LABOR (∫e·n dμ), not the params[:L] placeholder, that has to
+        # enter. Getting this wrong leaves a K/L that misses by the labor gap.
+        for (kind, psi) in ((:ghh, 3.0), (:separable, 1.0))
+            spec = MacroEconometricModels._endogenous_labor_example(; kind=kind, psi=psi)
+            ss = compute_steady_state(spec)
+            al = spec.het_params[:alpha]; de = spec.het_params[:delta]
+            k_foc = (al / (ss.prices[:r] + de))^(1 / (1 - al))
+            # rtol is set by the bisection's own clearing tolerance, not by the
+            # identity: K_d = k·L holds exactly, but the solver stops once
+            # |K_s − K_d| ≤ rtol·K (≈4.5e-7 here), so K_s/L inherits that slack.
+            # 1e-6 still catches a labor gap of any economic size.
+            @test ss.aggregates[:K] / ss.aggregates[:L] ≈ k_foc rtol=1e-6
+            @test abs(ss.excess_demand) < 1e-6 * max(1.0, ss.aggregates[:K])
+            @test ss.converged
+            @test ha_grid_diagnostics(ss).adequate
+            # Both labor aggregates are reported and are distinct concepts.
+            @test haskey(ss.policies, :labor)
+            @test ss.aggregates[:L] ≈ dot(vec(ss.policies[:labor] .*
+                    reshape(spec.income.states, 1, :)), vec(ss.distribution)) rtol=1e-12
+            @test ss.aggregates[:N] ≈ dot(vec(ss.policies[:labor]),
+                                          vec(ss.distribution)) rtol=1e-12
+            @test ss.aggregates[:L] != ss.aggregates[:N]
+            # Y must be built from realized labor, not the params[:L] = 1 default.
+            @test ss.aggregates[:Y] ≈ ss.aggregates[:K]^al *
+                                      ss.aggregates[:L]^(1 - al) rtol=1e-6
+            # Aiyagari existence still holds at the equilibrium.
+            @test spec.individual.beta * (1 + ss.prices[:r]) < 1
+        end
+    end
+
+    @testset "wage shock moves hours the right way (SSJ)" begin
+        # ORACLE (analytic): under GHH, n = (w e/ψ)^φ is PURELY STATIC, so
+        #   (i) dN/dw = φ·N/w exactly, and
+        #   (ii) the sequence-space Jacobian of hours w.r.t. the wage is DIAGONAL —
+        #        there is no anticipation, because hours never depend on the
+        #        continuation value.
+        spec = load_ha_example(:endogenous_labor)
+        ss = compute_steady_state(spec)
+        hh = HetBlock(spec, ss; inputs=[:r, :w], outputs=[:A, :C, :N, :L])
+        @test hh.ss_outputs[:A] ≈ ss.aggregates[:K] rtol=1e-10
+        @test hh.ss_outputs[:N] ≈ ss.aggregates[:N] rtol=1e-10
+        @test hh.ss_outputs[:L] ≈ ss.aggregates[:L] rtol=1e-10
+
+        Th = 10
+        J = block_jacobian(hh, Th)
+        ls = spec.individual.labor
+        dN_dw = ls.frisch * ss.aggregates[:N] / ss.prices[:w]
+        @test J[(:N, :w)][1, 1] ≈ dN_dw rtol=1e-4          # correct sign AND magnitude
+        @test J[(:N, :w)][1, 1] > 0                        # hours rise with the wage
+        @test maximum(abs, [J[(:N, :w)][t, s] for t in 1:Th for s in 1:Th if t != s]) < 1e-9
+        # A labor output must be rejected on an exogenous-labor block.
+        @test_throws ArgumentError HetBlock(load_ha_example(:krusell_smith),
+            compute_steady_state(load_ha_example(:krusell_smith)); outputs=[:bogus_output])
+    end
+
+    @testset "built-in :endogenous_labor example" begin
+        spec = load_ha_example(:endogenous_labor)
+        @test spec isa HADSGESpec{Float64}
+        @test spec.individual.labor isa LaborSupply{Float64}
+        @test spec.individual.labor.kind === :ghh
+        @test spec.grid.bounds[1] == (0.0, 2000.0)
+        @test spec.n_assets == 1
+        @test_throws ErrorException load_ha_example(:not_a_model)
+        # ψ = 3 is calibrated so efficiency units land on the L = 1 normalization
+        # the exogenous-labor examples impose, making the two comparable.
+        ss = compute_steady_state(spec)
+        @test ss.aggregates[:L] ≈ 1.0 atol=0.05
+    end
+end
+
+# ─────────────────────────────────────────────────────────────────────────────
 # Section 19: Plotting
 # ─────────────────────────────────────────────────────────────────────────────
 

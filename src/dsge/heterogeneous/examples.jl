@@ -11,6 +11,7 @@ Provides pre-calibrated `HADSGESpec` specifications for canonical models:
 - `:krusell_smith` — Krusell & Smith (1998) incomplete markets
 - `:one_asset_hank` — one-asset HANK (Kaplan-Moll-Violante style)
 - `:two_asset_hank` — two-asset HANK with portfolio adjustment costs
+- `:endogenous_labor` — Aiyagari with GHH endogenous labor supply
 
 # References
 - Krusell, P., & Smith, A. A. (1998). Income and wealth heterogeneity in the
@@ -380,6 +381,7 @@ Return a pre-calibrated `HADSGESpec` for a canonical heterogeneous agent model.
 | `:one_asset_hank` | One-asset HANK | Kaplan, Moll & Violante (2018) |
 | `:two_asset_hank` | Two-asset HANK with adjustment costs | Kaplan, Moll & Violante (2018) |
 | `:huggett` | Pure-exchange risk-free bond, zero net supply | Huggett (1993) |
+| `:endogenous_labor` | Aiyagari with GHH endogenous labor supply | Greenwood, Hercowitz & Huffman (1988) |
 
 # Examples
 
@@ -394,6 +396,8 @@ report(ss)
   macroeconomy. *Journal of Political Economy*, 106(5), 867-896.
 - Kaplan, G., Moll, B., & Violante, G. L. (2018). Monetary policy according to
   HANK. *American Economic Review*, 108(3), 697-743.
+- Greenwood, J., Hercowitz, Z., & Huffman, G. W. (1988). Investment, capacity
+  utilization, and the real business cycle. *American Economic Review*, 78(3), 402-417.
 """
 function load_ha_example(name::Symbol)
     if name === :krusell_smith
@@ -404,8 +408,59 @@ function load_ha_example(name::Symbol)
         return _two_asset_hank_example()
     elseif name === :huggett
         return _huggett_example()
+    elseif name === :endogenous_labor
+        return _endogenous_labor_example()
     else
-        error("Unknown HA-DSGE example: :$name. " *
-              "Available: :krusell_smith, :one_asset_hank, :two_asset_hank, :huggett")
+        error("Unknown HA-DSGE example: :$name. Available: :krusell_smith, " *
+              ":one_asset_hank, :two_asset_hank, :huggett, :endogenous_labor")
     end
+end
+
+# =============================================================================
+# _endogenous_labor_example — Aiyagari with GHH endogenous labor supply
+# =============================================================================
+
+"""
+    _endogenous_labor_example(; kind=:ghh, psi=3.0, frisch=0.5, a_max=2000.0, n_a=200)
+
+Aiyagari economy with **endogenous labor supply**. Identical to
+[`_ks_example`](@ref) except that households also choose hours.
+
+`psi = 3.0` is chosen so aggregate labor in efficiency units is `L ≈ 1` at the
+steady state, matching the `L = 1` normalization the exogenous-labor examples
+impose — which makes the two directly comparable.
+
+`a_max = 2000` rather than 1000: hours raise labor income, so the stationary
+wealth distribution has a fatter right tail and the ceiling has to move with it
+(see `ha_grid_diagnostics`).
+"""
+function _endogenous_labor_example(; kind::Symbol=:ghh, psi::Real=3.0,
+                                     frisch::Real=0.5, a_max::Real=2000.0,
+                                     n_a::Int=200)
+    alpha = 0.36
+    beta  = 0.99
+    delta = 0.025
+
+    u, up, upi = _crra_utility(1.0)
+
+    # Same income process as the Krusell-Smith example: unconditional
+    # sd(log e) = 0.5 (see `_unit_mean_lognormal_income` for the sd convention).
+    income = _unit_mean_lognormal_income(0.966, 0.5, 7)
+
+    grid = HAGrid(; assets=(0.0, Float64(a_max), n_a), income_states=7,
+                    grid_type=:geometric)
+
+    labor = LaborSupply(; kind=kind, psi=psi, frisch=frisch)
+    individual = IndividualProblem{Float64}(u, up, upi, beta, _ks_budget,
+                                            [0.0], nothing, 1; labor=labor)
+
+    agg_spec = _minimal_agg_spec(; alpha=alpha, delta=delta)
+    aggregation = Pair{Symbol,Function}[:K => _agg_var1]
+    het_params = Dict{Symbol,Float64}(
+        :alpha => alpha, :delta => delta, :Z => 1.0, :L => 1.0,
+        :psi => Float64(psi), :frisch => Float64(frisch)
+    )
+
+    return HADSGESpec{Float64}(agg_spec, individual, income, grid,
+                                aggregation, het_params)
 end

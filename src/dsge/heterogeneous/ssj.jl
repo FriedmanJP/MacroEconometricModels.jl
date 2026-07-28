@@ -29,7 +29,16 @@ using LinearAlgebra
 # =============================================================================
 
 """
-    _ssj_outcome_vector(output_var, c_pol, a_pol) → Vector{T}
+    _ssj_needs_labor(output_var) → Bool
+
+Whether an SSJ output variable is a labor aggregate and therefore needs an hours
+policy alongside consumption and savings.
+"""
+_ssj_needs_labor(output_var::Symbol) =
+    output_var in (:N, :n, :hours, :labor, :L, :efficiency_labor)
+
+"""
+    _ssj_outcome_vector(output_var, c_pol, a_pol, n_pol=nothing, income=nothing) → Vector{T}
 
 Individual-level outcome that is aggregated to `output_var`, flattened to an
 `N = n_a·n_e` vector (column-major, income slowest — matching the transition
@@ -37,14 +46,40 @@ matrix index convention). Asset/capital/bond aggregates (`:K`, `:A`, `:B`,
 `:assets`, `:a`, `:savings`) use the savings policy `a'(a,e)`; consumption
 aggregates (`:C`, `:c`, `:consumption`) use the consumption policy `c(a,e)`.
 
+With an endogenous-labor model, pass the hours policy `n_pol` to enable the
+labor aggregates: `:N`, `:n`, `:hours` give mean hours `∫n dμ`, and `:L`
+(which also needs `income`) gives efficiency units `∫e·n dμ` — the quantity that
+enters the production function. The two coincide only when every income state
+is 1.
+
 This threads `output_var` through the aggregation (closing #240/H-16 for the SSJ
 path), replacing the old hardcoded `_aggregate(...; var_index=1)` asset-only
 aggregation.
 """
 function _ssj_outcome_vector(output_var::Symbol, c_pol::AbstractMatrix{T},
-                             a_pol::AbstractMatrix{T}) where {T<:AbstractFloat}
+                             a_pol::AbstractMatrix{T},
+                             n_pol::Union{Nothing,AbstractMatrix{T}}=nothing,
+                             income::Union{Nothing,IncomeProcess{T}}=nothing) where {T<:AbstractFloat}
     if output_var in (:C, :c, :consumption)
         return vec(c_pol)
+    elseif output_var in (:N, :n, :hours, :labor)
+        n_pol === nothing && throw(ArgumentError(
+            "_ssj_outcome_vector: output :$output_var needs an hours policy, which " *
+            "only an endogenous-labor model has (IndividualProblem(...; labor=...))."))
+        return vec(n_pol)
+    elseif output_var in (:L, :efficiency_labor)
+        (n_pol === nothing || income === nothing) && throw(ArgumentError(
+            "_ssj_outcome_vector: output :$output_var needs both an hours policy and " *
+            "the income process (efficiency units are ∫e·n dμ)."))
+        n_a, n_e = size(n_pol)
+        out = Vector{T}(undef, n_a * n_e)
+        @inbounds for j in 1:n_e
+            ej = income.states[j]
+            for i in 1:n_a
+                out[(j - 1) * n_a + i] = ej * n_pol[i, j]
+            end
+        end
+        return out
     else
         # :K, :A, :B, :assets, :a, :savings → asset/savings aggregate
         return vec(a_pol)
@@ -206,7 +241,11 @@ function _ssj_jacobian(ss::HASteadyState{T}, ip::IndividualProblem{T},
     Lambda_ss = _build_transition_matrix(a_pol_ss, grid, income)
 
     # Outcome vector aggregated to output_var (savings for asset aggregates).
-    y_out_ss = _ssj_outcome_vector(output_var, c_pol_ss, a_pol_ss)
+    # Labor aggregates additionally need the hours policy, which responds to the
+    # wage — so it is recomputed at the perturbed prices inside the loop below.
+    want_labor = _ssj_needs_labor(output_var)
+    n_pol_ss = want_labor ? labor_policy(ip, grid, income, prices_ss, c_pol_ss) : nothing
+    y_out_ss = _ssj_outcome_vector(output_var, c_pol_ss, a_pol_ss, n_pol_ss, income)
 
     # ── Expectation vectors: curlyE[u] = (Λ*')^{u-1} y_out_ss ────────────────
     curlyE = Vector{Vector{T}}(undef, Th)
@@ -228,7 +267,8 @@ function _ssj_jacobian(ss::HASteadyState{T}, ip::IndividualProblem{T},
             prices_step[input_var] = prices_ss[input_var] + dx_T   # contemporaneous shock
         end
         c_now, a_now = _egm_backward_step(ip, grid, income, prices_step, c_cont)
-        y_now = _ssj_outcome_vector(output_var, c_now, a_now)
+        n_now = want_labor ? labor_policy(ip, grid, income, prices_step, c_now) : nothing
+        y_now = _ssj_outcome_vector(output_var, c_now, a_now, n_now, income)
         dY[s] = dot(y_now .- y_out_ss, D_ss) / dx_T
         Lambda_now = _build_transition_matrix(a_now, grid, income)
         dD[s] = (Lambda_now * D_ss .- Lambda_ss * D_ss) ./ dx_T

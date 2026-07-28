@@ -730,6 +730,7 @@ export dsge_smoother, dsge_particle_smoother
 export HADSGESpec, HAGrid, IncomeProcess, IndividualProblem
 export HASteadyState, HADSGESolution, KrusellSmithSolution, DenHaanAccuracy
 export HAGridDiagnostics, ha_grid_diagnostics
+export LaborSupply, labor_supply, labor_policy
 export rouwenhorst, tauchen
 export load_ha_example
 export distribution_irf, inequality_irf, simulate_panel, den_haan_test

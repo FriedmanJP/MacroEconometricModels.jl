@@ -178,6 +178,8 @@ const _HETBLOCK_OUTPUT_KIND = Dict{Symbol,Symbol}(
     :C => :consumption, :c => :consumption, :consumption => :consumption,
     :K => :savings, :A => :savings, :B => :savings,
     :assets => :savings, :a => :savings, :savings => :savings,
+    :N => :labor, :n => :labor, :hours => :labor,
+    :labor => :labor, :L => :labor, :efficiency_labor => :labor,
 )
 
 """
@@ -251,14 +253,18 @@ function HetBlock(ss::HASteadyState{T}, individual::IndividualProblem{T},
     for o in outputs
         haskey(_HETBLOCK_OUTPUT_KIND, o) || throw(ArgumentError(
             "HetBlock :$name output :$o is not a recognized household aggregate. " *
-            "Use an asset aggregate (:A, :K, :B, :assets, :a, :savings) or a " *
-            "consumption aggregate (:C, :c, :consumption)."))
+            "Use an asset aggregate (:A, :K, :B, :assets, :a, :savings), a " *
+            "consumption aggregate (:C, :c, :consumption), or — for an " *
+            "endogenous-labor model — a labor aggregate (:N, :n, :hours for mean " *
+            "hours, :L for efficiency units)."))
     end
 
     c_ss = ss.policies[:consumption]
     a_ss = ss.policies[:savings]
     D_ss = _normalized_distribution(ss)
-    ss_out = Dict{Symbol,T}(o => dot(_ssj_outcome_vector(o, c_ss, a_ss), D_ss)
+    n_ss = any(_ssj_needs_labor, outputs) ?
+           labor_policy(individual, grid, income, ss.prices, c_ss) : nothing
+    ss_out = Dict{Symbol,T}(o => dot(_ssj_outcome_vector(o, c_ss, a_ss, n_ss, income), D_ss)
                             for o in outputs)
     ss_in = Dict{Symbol,T}(i => ss.prices[i] for i in inputs)
 
@@ -545,8 +551,18 @@ function _block_evaluate(b::HetBlock{T}, input_paths::Dict{Symbol,Vector{T}},
     # ── Forward pass: distribution from the initial stationary distribution ──
     out = Dict{Symbol,Vector{T}}(o => zeros(T, Th) for o in b.outputs)
     for t in 1:Th
+        n_t = nothing
+        if any(_ssj_needs_labor, b.outputs)
+            # Hours respond to the wage, so they must be evaluated at date t's
+            # prices, not the steady-state ones.
+            p_t = copy(ss.prices)
+            for i in b.inputs
+                p_t[i] = input_paths[i][t]
+            end
+            n_t = labor_policy(b.individual, b.grid, b.income, p_t, c_store[t])
+        end
         for o in b.outputs
-            out[o][t] = dot(_ssj_outcome_vector(o, c_store[t], a_store[t]), D)
+            out[o][t] = dot(_ssj_outcome_vector(o, c_store[t], a_store[t], n_t, b.income), D)
         end
         if t < Th
             D = _build_transition_matrix(a_store[t], b.grid, b.income) * D

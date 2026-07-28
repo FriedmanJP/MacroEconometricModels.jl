@@ -442,6 +442,8 @@ Heterogeneous-agent (Reiter/SSJ/Krusell-Smith), continuous-time (HJB/KFE), and O
 | `simulate_panel(ss; N_agents, T_periods)` | Simulate individual-level panel from HA steady state |
 | `den_haan_test(ks_sol)` | Den Haan (2010) forecast accuracy |
 | `ha_grid_diagnostics(ss)` | Asset-grid adequacy: ceiling mass, `∫a′dμ − ∫a dμ` clearing residual |
+| `LaborSupply(; kind=:ghh, psi, frisch)` | Endogenous labor supply (GHH / separable) for an `IndividualProblem` |
+| `labor_supply(ls, w*e[, u′(c)])` / `labor_policy(ip, …)` | Intratemporal hours FOC / hours policy `n(a,e)` |
 | `HetBlock(spec, ss)` / `SimpleBlock(f; ...)` | Sequence-space blocks (household / equation) |
 | `combine_blocks(blocks...)` | Assemble blocks into a DAG (topological sort) |
 | `ssj_jacobian(model; unknowns, targets, shocks)` | General-equilibrium sequence-space Jacobian `H_U`, `H_Z` |
