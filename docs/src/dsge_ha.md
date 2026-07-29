@@ -137,6 +137,52 @@ Widening `:double_exp` fixes the ceiling but degrades the Euler error from ``-4.
 
 Grid *resolution* is a separate matter, and refining ``n_a`` does **not** fix a binding ceiling. On the truncating configuration, sweeping ``n_a`` from 100 to 1600 at fixed ``a_{\max} = 200`` moves the relative clearing residual only from ``1.6844\%`` to ``1.6848\%`` --- unchanged to four significant figures across a 16-fold refinement, while the solve time rises from 2.4 s to 47.6 s. Only ``a_{\max}`` fixes truncation.
 
+### Adapting the Grid to the Density
+
+`:geometric` and `:double_exp` are fixed curves chosen before the density is known. `adapt_ha_grid` instead solves once, reads the stationary distribution, and re-places the nodes where that density actually bends. Both the Young (2010) histogram and the EGM policy are piecewise linear on the asset grid, so their error on a cell of width ``h`` scales like ``h^2 |p''|``; equidistributing ``q = |p''|^{1/2}`` equalizes the *error* per cell rather than the *width* per cell (de Boor 1973). The monitor is
+
+```math
+M(a) = (1 - \lambda) \frac{1}{a_{\max} - a_{\min}} + \lambda \frac{q(a)}{\int q}, \qquad q = |p''|^{1/2},
+```
+
+where:
+- ``p`` is the marginal asset density (histogram mass divided by the cell width)
+- ``\lambda`` is `curvature`, the share of nodes allocated by curvature
+
+and the new nodes sit at equal increments of ``\int M``. Both components integrate to 1 over the domain, so ``\lambda`` has an exact reading and ``\lambda = 0`` returns a uniform grid.
+
+```@example dsge_ha
+spec_adapted = adapt_ha_grid(spec, ss)
+
+a_old = spec.grid.grids[1]
+a_new = spec_adapted.grid.grids[1]
+cutoff = a_old[findfirst(>=(0.99), cumsum(vec(sum(ss.distribution; dims=2))))]
+
+(mass_99_below = round(cutoff; digits=1),
+ nodes_before  = count(<=(cutoff), a_old),
+ nodes_after   = count(<=(cutoff), a_new))
+```
+
+99% of the mass sits below ``a = 213.7`` --- about a fifth of the ``[0, 1000]`` domain --- and adaptation moves 175 of the 200 nodes there, against 163 on the shipped `:geometric` grid. Feed `spec_adapted` back to `compute_steady_state` to re-solve on the new grid.
+
+Measured against an ``n_a = 1600`` `:geometric` reference (``r = 0.00772022``, ``K = 42.39574``) at ``n_a = 200`` with default settings:
+
+| Grid | ``|\Delta r|`` | ``|\Delta K| / K`` |
+|------|----------------|--------------------|
+| `:linear` | ``2.21 \times 10^{-4}`` | ``1.07 \times 10^{-2}`` |
+| `:double_exp` | ``5.11 \times 10^{-5}`` | ``2.44 \times 10^{-3}`` |
+| `:geometric` (shipped) | ``2.01 \times 10^{-5}`` | ``9.62 \times 10^{-4}`` |
+| `adapt_ha_grid` (defaults) | ``1.68 \times 10^{-5}`` | ``8.05 \times 10^{-4}`` |
+| `adapt_ha_grid`, `monitor_cap=Inf` | ``2.92 \times 10^{-4}`` | ``1.41 \times 10^{-2}`` |
+
+The gain over `:geometric` is modest because that curve is already tuned for this density shape; adaptation earns its keep when the shape is not known in advance. Adapt **once** --- a second round re-derives the monitor from an already-adapted grid and degrades ``|\Delta r|`` to ``4.31 \times 10^{-5}``.
+
+!!! warning "Never disable `monitor_cap` on a model with a borrowing constraint"
+    The stationary distribution has an **atom** at the constraint, and a histogram atom in a cell of width ``w`` reports ``|p''| \sim 1/w^2`` --- a discretization artifact, not curvature. Uncapped, that single node attracts 153 of 200 grid points into the bottom 0.5% of the domain and the grid becomes the *worst* of the five above. The default `monitor_cap=3.0` caps the monitor at three times its positive median.
+
+!!! note "The node Euler error does not rank grids"
+    `ss.euler_error` evaluates the Euler equation at the grid **nodes**, where EGM is exact by construction (issue #508). The adapted grid reports ``-4.67`` against ``-6.04`` for `:geometric` while being *closer* to the high-resolution reference on both ``r`` and ``K``. Rank grids against a refined reference solution, not against the node metric.
+
 ### VFI with Howard Improvement
 
 When EGM is not applicable (non-separable utility, complex constraints), **Value Function Iteration** with **Howard improvement steps** provides a robust alternative. Each VFI iteration consists of one policy maximization step followed by ``K`` policy-evaluation steps (default ``K = 20``), which are cheap linear operations that dramatically accelerate convergence.
@@ -955,6 +1001,8 @@ plot_result(ss_ks; view=:policy)      # policy functions by income
 - Auclert, Adrien, Bence Bardóczy, Matthew Rognlie, and Ludwig Straub. 2021. "Using the Sequence-Space Jacobian to Solve and Estimate Heterogeneous-Agent Models." *Econometrica* 89 (5): 2375--2408. [DOI](https://doi.org/10.3982/ECTA17434)
 
 - Bhandari, Anmol, Thomas Bourany, David Evans, and Mikhail Golosov. 2023. "A Perturbational Approach for Approximating Heterogeneous-Agent Models." NBER Working Paper 31744. [DOI](https://doi.org/10.3386/w31744)
+
+- de Boor, Carl. 1973. "Good Approximation by Splines with Variable Knots II." In *Conference on the Numerical Solution of Differential Equations*, edited by G. A. Watson, 12--20. Lecture Notes in Mathematics 363. Berlin: Springer. [DOI](https://doi.org/10.1007/BFb0069121)
 
 - Carroll, Christopher D. 2006. "The Method of Endogenous Gridpoints for Solving Dynamic Stochastic Optimization Problems." *Economics Letters* 91 (3): 312--320. [DOI](https://doi.org/10.1016/j.econlet.2005.09.013)
 

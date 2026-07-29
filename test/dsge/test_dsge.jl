@@ -848,6 +848,301 @@ end
     @test [0, 2] ∈ rows
 end
 
+@testset "Anisotropic + adaptive Smolyak (#357/T258)" begin
+    M = MacroEconometricModels
+
+    @testset "isotropic regression: node/basis counts unchanged" begin
+        # Pinned against the pre-#357 builder (verified bit-identical on nodes AND
+        # multi-indices for nx=1..4, mu=0..4).
+        expected = Dict((1, 0) => 1, (1, 1) => 3, (1, 2) => 5, (1, 3) => 9, (1, 4) => 17,
+                        (2, 0) => 1, (2, 1) => 5, (2, 2) => 13, (2, 3) => 29, (2, 4) => 65,
+                        (3, 0) => 1, (3, 1) => 7, (3, 2) => 25, (3, 3) => 69, (3, 4) => 177,
+                        (4, 0) => 1, (4, 1) => 9, (4, 2) => 41, (4, 3) => 137)
+        for ((nx, mu), n_exp) in expected
+            nodes, mi = M._smolyak_grid(nx, mu)
+            @test size(nodes, 1) == n_exp
+            @test size(mi, 1) == n_exp        # square by construction (#218)
+            @test size(nodes, 2) == nx
+        end
+        # a scalar mu and the equivalent constant vector are the same grid
+        for (nx, mu) in ((2, 3), (3, 2))
+            ns, ms = M._smolyak_grid(nx, mu)
+            nv, mv = M._smolyak_grid(nx, fill(mu, nx))
+            @test ns == nv
+            @test ms == mv
+        end
+    end
+
+    @testset "admissible level set == the |α|₁/anisotropic rule (brute force)" begin
+        # isotropic: |l|₁ ≤ μ
+        for nx in 1:3, mu in 0:3
+            lv = M._smolyak_admissible_levels(fill(mu, nx))
+            brute = sort([collect(t) for t in vec(collect(Iterators.product(ntuple(_ -> 0:mu, nx)...)))
+                          if sum(t) <= mu])
+            @test lv == brute
+        end
+        # anisotropic: Σ l_k/μ_k ≤ 1, tested in exact rational arithmetic
+        for muv in ([1, 3], [3, 1], [2, 4], [1, 2, 4], [0, 3])
+            nx = length(muv)
+            lv = M._smolyak_admissible_levels(muv)
+            brute = Vector{Vector{Int}}()
+            for t in Iterators.product(ntuple(k -> 0:muv[k], nx)...)
+                l = collect(t)
+                any(k -> muv[k] == 0 && l[k] > 0, 1:nx) && continue
+                s = sum(muv[k] == 0 ? 0 // 1 : l[k] // muv[k] for k in 1:nx)
+                s <= 1 && push!(brute, l)
+            end
+            @test lv == sort(brute)
+        end
+        # the set is downward closed — the property the combination technique needs
+        for muv in ([1, 3], [2, 4], [1, 2, 4])
+            lv = M._smolyak_admissible_levels(muv)
+            S = Set(lv)
+            for l in lv, k in eachindex(l)
+                l[k] == 0 && continue
+                b = copy(l); b[k] -= 1
+                @test b in S
+            end
+        end
+        @test_throws ArgumentError M._smolyak_level_vector(2, -1)
+        @test_throws ArgumentError M._smolyak_level_vector(3, [1, 2])
+        @test_throws ArgumentError M._smolyak_level_vector(2, [1, -2])
+    end
+
+    @testset "combination coefficients (Gerstner-Griebel == closed form)" begin
+        for nx in 1:4, mu in 0:4
+            lv = M._smolyak_admissible_levels(fill(mu, nx))
+            c = M._smolyak_combination_coefficients(lv)
+            @test sum(c) == 1
+            for (i, l) in enumerate(lv)
+                k = mu - sum(l)
+                @test c[i] == (-1)^k * binomial(nx - 1, k)
+            end
+        end
+        # the general rule still sums to 1 on anisotropic (and hence adaptive) sets
+        for muv in ([1, 3], [3, 1], [2, 4], [1, 2, 4])
+            lv = M._smolyak_admissible_levels(muv)
+            @test sum(M._smolyak_combination_coefficients(lv)) == 1
+        end
+    end
+
+    @testset "anisotropic grids stay unisolvent" begin
+        for muv in ([1, 3], [3, 1], [2, 4], [1, 2, 3])
+            nodes, mi = M._smolyak_grid(length(muv), muv)
+            B = M._chebyshev_basis_multi(nodes, mi)
+            @test size(B, 1) == size(B, 2)
+            @test cond(B) < 1e3
+        end
+    end
+
+    @testset "resolution lands in the requested dimension" begin
+        _, mi31 = M._smolyak_grid(2, [3, 1])
+        _, mi13 = M._smolyak_grid(2, [1, 3])
+        @test vec(maximum(mi31; dims=1)) == [8, 2]
+        @test vec(maximum(mi13; dims=1)) == [2, 8]
+        nodes31, _ = M._smolyak_grid(2, [3, 1])
+        @test length(unique(round.(nodes31[:, 1]; digits=12))) == 9
+        @test length(unique(round.(nodes31[:, 2]; digits=12))) == 3
+    end
+
+    @testset "anisotropic beats isotropic per node on anisotropic curvature" begin
+        # f is sharp in x and near-linear in y
+        f(x, y) = exp(-(2.5x)^2) * (1 + 0.05y)
+        tp = vec([[x y] for x in range(-1, 1; length=41), y in range(-1, 1; length=41)])
+        Xt = reduce(vcat, tp)
+        ft = [f(Xt[i, 1], Xt[i, 2]) for i in 1:size(Xt, 1)]
+        function interp_err(muv)
+            nodes, mi = M._smolyak_grid(2, muv)
+            B = M._chebyshev_basis_multi(nodes, mi)
+            c = B \ [f(nodes[i, 1], nodes[i, 2]) for i in 1:size(nodes, 1)]
+            return maximum(abs.(M._chebyshev_basis_multi(Xt, mi) * c .- ft)), size(nodes, 1)
+        end
+        e_iso, n_iso = interp_err([3, 3])
+        e_ani, n_ani = interp_err([4, 2])
+        @test n_ani == n_iso == 29          # matched node budget
+        @test e_ani < e_iso                 # 1.14e-2 vs 2.97e-2
+        # and a *cheaper* anisotropic grid still beats a coarser isotropic one
+        e_small, n_small = interp_err([3, 1])
+        e_iso2, n_iso2 = interp_err([2, 2])
+        @test n_small < n_iso2              # 11 < 13
+        @test e_small < e_iso2              # 6.4e-2 vs 2.5e-1
+    end
+
+    @testset "forward neighbours keep the set downward closed" begin
+        lv = M._smolyak_admissible_levels([1, 1])
+        cands = M._smolyak_forward_neighbours(lv)
+        @test !isempty(cands)
+        @test all(c -> !(c in Set(lv)), cands)
+        for c in cands
+            grown = sort(vcat(lv, [c]))
+            S = Set(grown)
+            for l in grown, k in eachindex(l)
+                l[k] == 0 && continue
+                b = copy(l); b[k] -= 1
+                @test b in S
+            end
+        end
+        # every candidate adds at least one genuinely new node
+        existing = Set(round.(Vector{Float64}(M._smolyak_grid(2, [1, 1])[1][j, :]); digits=14)
+                       for j in 1:size(M._smolyak_grid(2, [1, 1])[1], 1))
+        for c in cands
+            @test any(p -> !(p in existing), M._smolyak_block_nodes(c))
+        end
+    end
+
+    @testset "_pad_coefficients is an exact carry-over" begin
+        _, mi_small = M._smolyak_grid(2, [1, 1])
+        _, mi_big = M._smolyak_grid(2, [2, 2])
+        rows_small = Set(mi_small[i, :] for i in 1:size(mi_small, 1))
+        @test all(r in Set(mi_big[i, :] for i in 1:size(mi_big, 1)) for r in rows_small)
+        old = randn(Random.MersenneTwister(258), 3, size(mi_small, 1))
+        new = M._pad_coefficients(old, mi_small, mi_big)
+        @test size(new) == (3, size(mi_big, 1))
+        lookup = Dict(mi_big[i, :] => i for i in 1:size(mi_big, 1))
+        for k in 1:size(mi_small, 1)
+            @test new[:, lookup[mi_small[k, :]]] == old[:, k]
+        end
+        @test sum(abs, new) ≈ sum(abs, old)   # zeros everywhere else
+    end
+
+    @testset "solver: anisotropic keyword and reported level set" begin
+        spec = @dsge begin
+            parameters: β = 0.99, α = 0.36, δ = 0.025, ρ = 0.95, σ = 0.007
+            endogenous: c, k, a
+            exogenous: ε
+            1 / c[t] = β * (1 / c[t+1]) * (α * exp(a[t+1]) * k[t]^(α - 1) + 1 - δ)
+            c[t] + k[t] = exp(a[t]) * k[t-1]^α + (1 - δ) * k[t-1]
+            a[t] = ρ * a[t-1] + σ * ε[t]
+        end
+        spec = compute_steady_state(spec)
+
+        sol_iso = collocation_solver(spec; grid=:smolyak, smolyak_mu=2, max_iter=60)
+        @test sol_iso.converged
+        @test size(sol_iso.smolyak_levels, 2) == 2
+        @test vec(maximum(sol_iso.smolyak_levels; dims=1)) == [2, 2]
+        @test sol_iso.refinements == 0
+        @test isnan(sol_iso.euler_error)          # not measured unless adaptive
+
+        sol_ani = collocation_solver(spec; grid=:smolyak, smolyak_mu=[3, 1], max_iter=60)
+        @test sol_ani.converged
+        @test vec(maximum(sol_ani.smolyak_levels; dims=1)) == [3, 1]
+        @test size(sol_ani.collocation_nodes, 1) == sol_ani.n_basis
+
+        # tensor grids report no level set
+        sol_ten = collocation_solver(spec; grid=:tensor, degree=3, max_iter=60)
+        @test size(sol_ten.smolyak_levels) == (0, 0)
+        @test isnan(sol_ten.euler_error)
+    end
+
+    @testset "adaptive refinement reduces the reported Euler error" begin
+        spec = @dsge begin
+            parameters: β = 0.99, α = 0.36, δ = 0.025, ρ = 0.95, σ = 0.007
+            endogenous: c, k, a
+            exogenous: ε
+            1 / c[t] = β * (1 / c[t+1]) * (α * exp(a[t+1]) * k[t]^(α - 1) + 1 - δ)
+            c[t] + k[t] = exp(a[t]) * k[t-1]^α + (1 - δ) * k[t-1]
+            a[t] = ρ * a[t-1] + σ * ε[t]
+        end
+        spec = compute_steady_state(spec)
+
+        base = collocation_solver(spec; grid=:smolyak, smolyak_mu=1, max_iter=60)
+        e_base = max_euler_error(base; n_test=200, rng=Random.MersenneTwister(7))
+
+        sol = @test_logs (:warn, r"Adaptive refinement finished") match_mode = :any (
+            collocation_solver(spec; grid=:smolyak, smolyak_mu=1, adaptive=true,
+                               euler_tol=1e-8, max_nodes=200, max_refinements=6,
+                               n_euler_test=100, max_iter=60,
+                               rng=Random.MersenneTwister(7)))
+        @test sol.converged
+        @test sol.refinements > 0
+        @test size(sol.collocation_nodes, 1) > size(base.collocation_nodes, 1)
+        @test isfinite(sol.euler_error)
+        @test sol.euler_error < e_base                       # 1.3e-4 vs 1.2e-2
+
+        # the reported accuracy is the same statistic `max_euler_error` computes
+        e_ind = max_euler_error(sol; n_test=200, rng=Random.MersenneTwister(7))
+        @test isapprox(e_ind, sol.euler_error; rtol=0.5)
+
+        # beats the isotropic grid it would otherwise have to pay for
+        iso3 = collocation_solver(spec; grid=:smolyak, smolyak_mu=3, max_iter=60)
+        e_iso3 = max_euler_error(iso3; n_test=200, rng=Random.MersenneTwister(7))
+        @test size(sol.collocation_nodes, 1) <= size(iso3.collocation_nodes, 1)
+        @test sol.euler_error < e_iso3                       # 1.3e-4 vs 2.1e-4
+
+        # honest stop: the node budget is respected
+        capped = collocation_solver(spec; grid=:smolyak, smolyak_mu=1, adaptive=true,
+                                    euler_tol=1e-14, max_nodes=15, max_refinements=10,
+                                    n_euler_test=40, max_iter=40,
+                                    rng=Random.MersenneTwister(7))
+        @test size(capped.collocation_nodes, 1) <= 15
+    end
+
+    @testset "refinement adds nodes only where the residual is large" begin
+        # `z` appears in no equation but its own law of motion, so the equilibrium residuals
+        # are exactly flat in z and no refinement should ever buy resolution there.
+        spec = @dsge begin
+            parameters: β = 0.99, α = 0.36, δ = 0.025, ρ = 0.95, σ = 0.007, ρz = 0.8, σz = 0.01
+            endogenous: c, k, a, z
+            exogenous: ε, εz
+            1 / c[t] = β * (1 / c[t+1]) * (α * exp(a[t+1]) * k[t]^(α - 1) + 1 - δ)
+            c[t] + k[t] = exp(a[t]) * k[t-1]^α + (1 - δ) * k[t-1]
+            a[t] = ρ * a[t-1] + σ * ε[t]
+            z[t] = ρz * z[t-1] + σz * εz[t]
+        end
+        spec = compute_steady_state(spec)
+
+        sol = collocation_solver(spec; grid=:smolyak, smolyak_mu=1, adaptive=true,
+                                 euler_tol=1e-10, max_nodes=120, max_refinements=6,
+                                 n_euler_test=60, max_iter=60,
+                                 rng=Random.MersenneTwister(11))
+        names = spec.varnames[sol.state_indices]
+        zi = findfirst(==("z"), names)
+        @test zi !== nothing
+        lv = vec(maximum(sol.smolyak_levels; dims=1))
+        others = lv[setdiff(1:length(lv), zi)]
+        @test sol.refinements > 0
+        @test lv[zi] == 1                    # unchanged from the isotropic μ=1 start
+        @test maximum(others) > lv[zi]       # every refinement went into (k, a)
+        @test length(unique(round.(sol.collocation_nodes[:, zi]; digits=12))) == 3
+    end
+
+    @testset "adaptive requires a Smolyak grid" begin
+        spec = @dsge begin
+            parameters: ρ = 0.9, σ = 0.01
+            endogenous: y
+            exogenous: ε
+            y[t] = ρ * y[t-1] + σ * ε[t]
+            steady_state: [0.0]
+        end
+        spec = compute_steady_state(spec)
+        @test_throws ArgumentError collocation_solver(spec; grid=:tensor, adaptive=true)
+        # grid=:auto upgrades to Smolyak when adaptivity is requested
+        sol = collocation_solver(spec; adaptive=true, euler_tol=1e-6, max_refinements=1,
+                                 n_euler_test=20, max_iter=30, rng=Random.MersenneTwister(1))
+        @test sol.grid_type == :smolyak
+    end
+
+    @testset "vfi/pfi accept the anisotropic level vector" begin
+        spec = @dsge begin
+            parameters: β = 0.99, α = 0.36, δ = 0.025, ρ = 0.95, σ = 0.007
+            endogenous: c, k, a
+            exogenous: ε
+            1 / c[t] = β * (1 / c[t+1]) * (α * exp(a[t+1]) * k[t]^(α - 1) + 1 - δ)
+            c[t] + k[t] = exp(a[t]) * k[t-1]^α + (1 - δ) * k[t-1]
+            a[t] = ρ * a[t-1] + σ * ε[t]
+        end
+        spec = compute_steady_state(spec)
+        for f in (pfi_solver, vfi_solver)
+            s = f(spec; grid=:smolyak, smolyak_mu=[2, 1], max_iter=40)
+            @test vec(maximum(s.smolyak_levels; dims=1)) == [2, 1]
+            @test s.degree == 2
+            s_iso = f(spec; grid=:smolyak, smolyak_mu=2, max_iter=40)
+            @test s_iso.degree == 2
+            @test size(s_iso.smolyak_levels, 2) == 2
+        end
+    end
+end
+
 @testset "Lyapunov doubling (#220)" begin
     M = MacroEconometricModels
     # scalar AR(1): Σ = s²/(1-a²)

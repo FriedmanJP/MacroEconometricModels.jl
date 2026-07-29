@@ -322,22 +322,89 @@ report(proj)
 
 | Keyword | Type | Default | Description |
 |---------|------|---------|-------------|
-| `degree` | `Int` | `5` | Chebyshev polynomial degree |
+| `degree` | `Int` | `5` | Chebyshev polynomial degree (tensor grid) |
 | `grid` | `Symbol` | `:auto` | `:tensor`, `:smolyak`, or `:auto` (tensor if ``n_x \leq 4``) |
-| `smolyak_mu` | `Int` | `3` | Smolyak approximation level |
+| `smolyak_mu` | `Int` or `Vector{Int}` | `3` | Smolyak approximation level: a scalar is isotropic, an ``n_x``-vector is anisotropic |
 | `quadrature` | `Symbol` | `:auto` | `:gauss_hermite` or `:monomial` (auto based on ``n_\varepsilon``) |
 | `n_quad` | `Int` | `5` | Quadrature nodes per dimension |
 | `scale` | `Real` | `3.0` | State bounds as multiples of unconditional std |
 | `tol` | `Real` | ``10^{-8}`` | Newton convergence tolerance |
 | `max_iter` | `Int` | `100` | Maximum Newton iterations |
 | `initial_coeffs` | `Union{Nothing, Matrix}` | `nothing` | Warm-start coefficients from previous solve |
+| `adaptive` | `Bool` | `false` | Enable dimension-adaptive Smolyak refinement |
+| `euler_tol` | `Real` | ``10^{-6}`` | Target max Euler error for adaptive refinement |
+| `max_nodes` | `Int` | `1000` | Node budget; refinement stops before exceeding it |
+| `max_refinements` | `Int` | `10` | Maximum refinement rounds |
+| `n_euler_test` | `Int` | `200` | Random test points used for the Euler-error target |
+| `rng` | `AbstractRNG` | `default_rng()` | RNG for the Euler-error test points |
 
 ### Smolyak Sparse Grids
 
-For models with ``n_x > 4`` states, tensor grids become computationally infeasible. A tensor grid with degree 5 and 5 states requires ``6^5 = 7{,}776`` nodes; with 8 states, ``6^8 \approx 1.7 \times 10^6``. **Smolyak sparse grids** (Smolyak 1963; Judd, Maliar, Maliar & Valero 2014) select a subset of grid points that preserve polynomial exactness at a fraction of the cost. The `grid=:smolyak` option uses nested Clenshaw-Curtis points with the Smolyak selection rule ``|\alpha|_1 \leq \mu + n_x`` for multi-index ``\alpha``.
+For models with ``n_x > 4`` states, tensor grids become computationally infeasible. A tensor grid with degree 5 and 5 states requires ``6^5 = 7{,}776`` nodes; with 8 states, ``6^8 \approx 1.7 \times 10^6``. **Smolyak sparse grids** (Smolyak 1963; Judd, Maliar, Maliar & Valero 2014) select a subset of grid points that preserve polynomial exactness at a fraction of the cost. The `grid=:smolyak` option uses nested Clenshaw-Curtis points, where a level-``\ell`` dimension contributes ``2^\ell + 1`` points and polynomial degrees ``0, \dots, 2^\ell``. The isotropic selection rule admits the level multi-indices
+
+```math
+\mathcal{A}_\mu = \{ \ell \in \mathbb{N}_0^{n_x} : |\ell|_1 \leq \mu \},
+```
+
+equivalently ``|\alpha|_1 \leq \mu + n_x`` for ``\alpha = \ell + 1``. The nodes and the polynomial basis come out of this one rule, so the collocation matrix is square and unisolvent by construction.
 
 !!! note "Technical Note"
-    The `grid=:auto` option selects tensor grids for ``n_x \leq 4`` and Smolyak grids for ``n_x > 4``. Similarly, `quadrature=:auto` selects Gauss-Hermite for ``n_\varepsilon \leq 2`` and monomial rules for ``n_\varepsilon > 2``. Monomial rules scale linearly with ``n_\varepsilon`` while Gauss-Hermite scales exponentially.
+    The `grid=:auto` option selects tensor grids for ``n_x \leq 4`` and Smolyak grids for ``n_x > 4``, except that requesting `adaptive=true` always selects `:smolyak`. Similarly, `quadrature=:auto` selects Gauss-Hermite for ``n_\varepsilon \leq 2`` and monomial rules for ``n_\varepsilon > 2``. Monomial rules scale linearly with ``n_\varepsilon`` while Gauss-Hermite scales exponentially.
+
+### Anisotropic Smolyak Grids
+
+States rarely need equal resolution. Passing an ``n_x``-vector to `smolyak_mu` applies the dimension-adaptive weighting of Gerstner & Griebel (2003), which admits
+
+```math
+\mathcal{A}_{\boldsymbol{\mu}} = \left\{ \ell \in \mathbb{N}_0^{n_x} : \sum_{k=1}^{n_x} \frac{\ell_k}{\mu_k} \leq 1 \right\},
+```
+
+where:
+- ``\ell_k`` is the Clenshaw-Curtis level in state ``k``
+- ``\mu_k`` is the requested approximation level for state ``k``; ``\mu_k = 0`` pins that state at level 0
+
+Setting ``\mu_k = \mu`` for every ``k`` recovers the isotropic rule exactly, so anisotropy is a strict generalization. The package derives the grid, the polynomial index set, and the Smolyak combination coefficients from this same rule.
+
+In the stochastic growth model the capital domain is ``[34.19, 41.79]`` while productivity spans only ``[0.90, 1.10]``, and the policy is far more curved in ``K``. Spending the level budget accordingly costs nothing and buys three orders of magnitude:
+
+```@example dsge_nonlinear
+iso = collocation_solver(spec; grid=:smolyak, smolyak_mu=3, max_iter=200)
+ani = collocation_solver(spec; grid=:smolyak, smolyak_mu=[4, 2], max_iter=200)
+
+(nodes_iso  = size(iso.collocation_nodes, 1),
+ nodes_ani  = size(ani.collocation_nodes, 1),
+ euler_iso  = max_euler_error(iso; n_test=500, rng=MersenneTwister(42)),
+ euler_ani  = max_euler_error(ani; n_test=500, rng=MersenneTwister(42)))
+```
+
+Both grids carry 29 nodes, but the anisotropic one reaches a max Euler error of ``2.1 \times 10^{-4}`` against ``6.4 \times 10^{-1}`` for the isotropic grid. The isotropic set spends half its levels resolving a productivity direction that is nearly linear, and it has too few cross-terms left to represent the curvature in ``K``. The state ordering is `sol.state_indices`, so `spec.varnames[iso.state_indices]` names the entries of the level vector.
+
+### Adaptive Refinement
+
+Choosing ``\boldsymbol{\mu}`` by hand requires knowing where the curvature is. Setting `adaptive=true` discovers it instead. Starting from the requested level set, each round:
+
+1. Solves the collocation system on the current grid
+2. Measures the max Euler error on a **fixed** set of `n_euler_test` random points (fixed across rounds, so round-to-round comparisons reflect the grid and not resampling noise)
+3. Scores every admissible forward neighbour ``\ell + e_k`` by the largest absolute Euler residual at the **new** nodes that block would introduce
+4. Adds the highest-scoring block and warm-starts from the previous coefficients
+
+Because the refined index set is a superset of the old one, the warm start is exact: the padded coefficients represent the identical policy function. Refinement stops at `euler_tol`, at the `max_nodes` budget, or after `max_refinements` rounds — and the solver warns when it stops without reaching the target.
+
+```@example dsge_nonlinear
+ada = collocation_solver(spec; grid=:smolyak, smolyak_mu=1, adaptive=true,
+                         euler_tol=1e-4, max_nodes=300, max_refinements=12,
+                         rng=MersenneTwister(42))
+
+(nodes       = size(ada.collocation_nodes, 1),
+ refinements = ada.refinements,
+ euler_error = ada.euler_error,
+ levels      = vec(maximum(ada.smolyak_levels; dims=1)))
+```
+
+Refinement grows the 5-node ``\mu = 1`` grid into a 57-node grid whose per-state levels are ``(4, 3)`` — it spends more on capital than on productivity without being told to — and reaches a max Euler error of ``7.4 \times 10^{-5}``, below the ``10^{-4}`` target. The hand-tuned ``\boldsymbol{\mu} = (4, 2)`` grid above is the more economical of the two at 29 nodes; adaptivity trades nodes for not having to know where the curvature is.
+
+!!! warning "`residual_norm` is not accuracy"
+    `residual_norm` measures the fit **at the collocation nodes only**, where the solver forces it to zero. The isotropic ``\mu = 3`` solve above converges to ``\|R\| \approx 7 \times 10^{-11}`` and still has a max Euler error of ``0.64`` --- the polynomial oscillates between nodes. Always report `max_euler_error`, which samples the domain uniformly. This is why `adaptive=true` targets `euler_tol` rather than `tol`.
 
 ### Evaluating the Policy Function
 
@@ -402,17 +469,20 @@ report(pfi)
 | `coefficients` | `Matrix{T}` | ``n_{\text{vars}} \times n_b`` Chebyshev coefficients |
 | `state_bounds` | `Matrix{T}` | ``n_x \times 2`` state domain bounds |
 | `grid_type` | `Symbol` | `:tensor` or `:smolyak` |
-| `degree` | `Int` | Polynomial degree (tensor) or Smolyak level ``\mu`` |
+| `degree` | `Int` | Polynomial degree (tensor) or highest Smolyak level reached |
 | `collocation_nodes` | `Matrix{T}` | ``n_{\text{nodes}} \times n_x`` grid points in ``[-1, 1]`` |
-| `residual_norm` | `T` | Final ``\|R\|`` residual (collocation) or sup-norm (PFI/VFI) |
+| `residual_norm` | `T` | Final ``\|R\|`` residual (collocation) or sup-norm (PFI/VFI); fit **at the nodes only** |
 | `n_basis` | `Int` | Number of basis functions |
 | `multi_indices` | `Matrix{Int}` | ``n_b \times n_x`` multi-index matrix |
 | `quadrature` | `Symbol` | `:gauss_hermite` or `:monomial` |
-| `converged` | `Bool` | Convergence flag |
+| `converged` | `Bool` | Newton convergence flag |
 | `iterations` | `Int` | Iterations until convergence |
 | `state_indices` | `Vector{Int}` | State variable indices |
 | `control_indices` | `Vector{Int}` | Control variable indices |
 | `method` | `Symbol` | `:projection`, `:pfi`, or `:vfi` |
+| `euler_error` | `T` | Max Euler error achieved by adaptive refinement; `NaN` when not measured |
+| `smolyak_levels` | `Matrix{Int}` | ``n_{\text{blocks}} \times n_x`` admissible level set; ``0 \times 0`` for tensor grids |
+| `refinements` | `Int` | Adaptive refinement rounds performed (`0` when `adaptive=false`) |
 
 ---
 
@@ -642,13 +712,17 @@ The stochastic steady state shifts from second-order perturbation reflect precau
 
 2. **Tensor grids in high dimensions**: A tensor grid with degree 5 and ``n_x = 6`` states requires ``6^6 = 46{,}656`` nodes. Use `grid=:smolyak` for ``n_x > 4``.
 
-3. **Poor Euler errors**: If `max_euler_error` returns values above ``10^{-2}``, increase the polynomial `degree`, widen the state bounds via the `scale` parameter, or switch from collocation to PFI.
+3. **Poor Euler errors**: If `max_euler_error` returns values above ``10^{-2}``, increase the polynomial `degree`, widen the state bounds via the `scale` parameter, or switch from collocation to PFI. On a Smolyak grid, raise the level only in the states that need it (`smolyak_mu=[4, 2]`) or let `adaptive=true` find them.
 
 4. **Non-convergence of collocation**: The Gauss-Newton solver uses backtracking line search but can stall at local minima. Warm-start with `initial_coeffs` from a lower-degree solution or from PFI.
 
 5. **Lyapunov equation instability**: `solve_lyapunov` throws an error if the first-order solution has eigenvalues on or outside the unit circle. Check determinacy with `is_determined(sol)` before computing moments.
 
 6. **VFI convergence speed**: Pure VFI is slow --- use `howard_steps=5` or `howard_steps=10` to reduce iteration count by 3--5x. Combine with `anderson_m=3` for further acceleration.
+
+7. **Trusting `residual_norm`**: A converged collocation solve drives ``\|R\|`` to zero *at the nodes* and says nothing about the points in between. The isotropic ``\mu = 3`` grid in [Anisotropic Smolyak Grids](@ref) reaches ``\|R\| \approx 7 \times 10^{-11}`` with a max Euler error of ``0.64``. Report `max_euler_error`, or set `adaptive=true` and read `sol.euler_error`.
+
+8. **`adaptive=true` on a tensor grid**: Refinement grows a Smolyak level set, so it throws an `ArgumentError` when `grid=:tensor` is requested explicitly. Leave `grid=:auto`, which upgrades to `:smolyak` automatically.
 
 ---
 
@@ -657,6 +731,10 @@ The stochastic steady state shifts from second-order perturbation reflect precau
 - Andreasen, M. M., Fernandez-Villaverde, J., & Rubio-Ramirez, J. F. (2018). The Pruned State-Space System for Non-Linear DSGE Models: Theory and Empirical Applications. *Review of Economic Studies*, 85(1), 1--49. [DOI](https://doi.org/10.1093/restud/rdx037)
 
 - Coleman, W. J. (1990). Solving the Stochastic Growth Model by Policy-Function Iteration. *Journal of Business & Economic Statistics*, 8(1), 27--29. [DOI](https://doi.org/10.1080/07350015.1990.10509769)
+
+- Brumm, J., & Scheidegger, S. (2017). Using Adaptive Sparse Grids to Solve High-Dimensional Dynamic Models. *Econometrica*, 85(5), 1575--1612. [DOI](https://doi.org/10.3982/ECTA12216)
+
+- Gerstner, T., & Griebel, M. (2003). Dimension-Adaptive Tensor-Product Quadrature. *Computing*, 71(1), 65--87. [DOI](https://doi.org/10.1007/s00607-003-0015-5)
 
 - Judd, K. L. (1992). Projection Methods for Solving Aggregate Growth Models. *Journal of Economic Theory*, 58(2), 410--452. [DOI](https://doi.org/10.1016/0022-0531(92)90061-L)
 

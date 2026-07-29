@@ -186,6 +186,8 @@ inequality_irf
 simulate_panel
 den_haan_test
 ha_grid_diagnostics
+adaptive_asset_grid
+adapt_ha_grid
 labor_supply
 labor_policy
 irf(::HADSGESolution{T}, ::Int) where {T<:AbstractFloat}

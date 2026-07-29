@@ -403,7 +403,7 @@ Specify, solve, simulate, and estimate Dynamic Stochastic General Equilibrium mo
 | `blanchard_kahn(ld, spec)` | Blanchard-Kahn (1980) eigenvalue counting |
 | `klein(ld, spec)` | Klein (2000) generalized Schur solver |
 | `perturbation_solver(spec; order=2)` | Higher-order perturbation solver |
-| `collocation_solver(spec; ...)` | Chebyshev collocation projection |
+| `collocation_solver(spec; ...)` | Chebyshev collocation projection (isotropic/anisotropic Smolyak, `adaptive=true` refinement) |
 | `pfi_solver(spec; ...)` | Policy function iteration |
 | `vfi_solver(spec; ...)` | Value function iteration |
 | `is_determined(sol)` | Check existence and uniqueness |
@@ -442,6 +442,7 @@ Heterogeneous-agent (Reiter/SSJ/Krusell-Smith), continuous-time (HJB/KFE), and O
 | `simulate_panel(ss; N_agents, T_periods)` | Simulate individual-level panel from HA steady state |
 | `den_haan_test(ks_sol)` | Den Haan (2010) forecast accuracy |
 | `ha_grid_diagnostics(ss)` | Asset-grid adequacy: ceiling mass, `∫a′dμ − ∫a dμ` clearing residual |
+| `adapt_ha_grid(spec, ss)` / `adaptive_asset_grid(nodes, mass)` | Re-place asset nodes by stationary-density curvature (de Boor equidistribution) |
 | `LaborSupply(; kind=:ghh, psi, frisch)` | Endogenous labor supply (GHH / separable) for an `IndividualProblem` |
 | `labor_supply(ls, w*e[, u′(c)])` / `labor_policy(ip, …)` | Intratemporal hours FOC / hours policy `n(a,e)` |
 | `HetBlock(spec, ss)` / `SimpleBlock(f; ...)` | Sequence-space blocks (household / equation) |

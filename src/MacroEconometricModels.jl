@@ -536,6 +536,7 @@ include("dsge/hd.jl")
 
 # Heterogeneous Agent DSGE (after dsge/types.jl and dsge/hd.jl)
 include("dsge/heterogeneous/types.jl")
+include("dsge/heterogeneous/adaptive_grid.jl")
 include("dsge/heterogeneous/egm.jl")
 include("dsge/heterogeneous/individual_vfi.jl")
 include("dsge/heterogeneous/distribution.jl")
@@ -731,6 +732,7 @@ export dsge_smoother, dsge_particle_smoother
 export HADSGESpec, HAGrid, IncomeProcess, IndividualProblem
 export HASteadyState, HADSGESolution, KrusellSmithSolution, DenHaanAccuracy
 export HAGridDiagnostics, ha_grid_diagnostics
+export adaptive_asset_grid, adapt_ha_grid
 export LaborSupply, labor_supply, labor_policy
 export rouwenhorst, tauchen
 export load_ha_example

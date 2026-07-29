@@ -1395,6 +1395,198 @@ end
     end
 end
 
+@testset "Adaptive distribution grid (#357/T258)" begin
+    M = MacroEconometricModels
+
+    # A Gaussian density on [0, 40] with an analytically known second derivative, sampled
+    # finely enough that the discretization is not the binding error.
+    a_lo, a_hi, μ0, s0 = 0.0, 40.0, 12.0, 2.0
+    xf = collect(range(a_lo, a_hi; length=2001))
+    pf = @. exp(-0.5 * ((xf - μ0) / s0)^2) / (s0 * sqrt(2π))
+    d2f = @. pf * (((xf - μ0)^2 - s0^2) / s0^4)
+
+    @testset "curvature=0 returns an exactly uniform grid" begin
+        x0 = M._make_asset_grid(0.0, 100.0, 60, :double_exp)
+        mass = exp.(-((x0 .- 20.0) ./ 3.0) .^ 2); mass ./= sum(mass)
+        g0 = adaptive_asset_grid(x0, mass; curvature=0.0)
+        @test length(g0) == 60
+        @test g0 ≈ collect(range(0.0, 100.0; length=60)) atol = 1e-10
+        # ... on any density at all, since the monitor no longer sees it
+        g1 = adaptive_asset_grid(xf, pf; curvature=0.0, is_density=true, n=25)
+        @test g1 ≈ collect(range(a_lo, a_hi; length=25)) atol = 1e-10
+    end
+
+    @testset "equidistribution identity: equal ∫M per cell" begin
+        # With curvature=1, no cap and no smoothing the monitor is exactly q/∫q,
+        # q = |p''|^{1/2}, so every returned cell must carry the same ∫q.
+        q = sqrt.(abs.(d2f))
+        h = xf[2] - xf[1]
+        C = cumsum(vcat(0.0, (q[1:(end - 1)] .+ q[2:end]) ./ 2 .* h))
+        g = adaptive_asset_grid(xf, pf; n=41, curvature=1.0, monitor_cap=Inf,
+                                smoothing=0, is_density=true)
+        Cg = [(j = searchsortedlast(xf, a); C[j] + (a - xf[j]) * q[j]) for a in g]
+        Cg[end] = C[end]
+        inc = diff(Cg)
+        @test (maximum(inc) - minimum(inc)) / mean(inc) < 1e-2
+    end
+
+    @testset "concentration is monotone in `curvature`" begin
+        counts = Int[]
+        spacings = Float64[]
+        for κ in (0.0, 0.5, 0.9, 1.0)
+            g = adaptive_asset_grid(xf, pf; n=41, curvature=κ, monitor_cap=Inf,
+                                    smoothing=0, is_density=true)
+            push!(counts, count(a -> abs(a - μ0) <= 2 * s0, g))
+            push!(spacings, minimum(diff(g)))
+            @test all(diff(g) .> 0)
+            @test g[1] == a_lo && g[end] == a_hi
+        end
+        @test issorted(counts)                    # more nodes at the peak as κ rises
+        @test issorted(spacings; rev=true)        # and finer cells there
+        @test counts[end] > 3 * counts[1]         # 27 vs 8
+    end
+
+    @testset "beats a uniform grid on piecewise-linear interpolation error" begin
+        function pw_lin_err(nodes)
+            p_at = [exp(-0.5 * ((a - μ0) / s0)^2) / (s0 * sqrt(2π)) for a in nodes]
+            err = 0.0
+            for (i, x) in enumerate(xf)
+                j = clamp(searchsortedlast(nodes, x), 1, length(nodes) - 1)
+                w = (x - nodes[j]) / (nodes[j + 1] - nodes[j])
+                err = max(err, abs((1 - w) * p_at[j] + w * p_at[j + 1] - pf[i]))
+            end
+            return err
+        end
+        for n in (21, 41, 81)
+            e_uni = pw_lin_err(collect(range(a_lo, a_hi; length=n)))
+            e_ad = pw_lin_err(adaptive_asset_grid(xf, pf; n=n, curvature=0.9,
+                                                  monitor_cap=Inf, smoothing=0, is_density=true))
+            @test e_ad < e_uni / 5                # measured 12.5x / 19.1x / 21.0x
+        end
+    end
+
+    @testset "monitor_cap defuses the borrowing-constraint atom" begin
+        # A histogram atom in a cell of width w reports |p''| ~ 1/w², which is a
+        # discretization artifact, not curvature. Uncapped it swallows the whole grid.
+        x = M._make_asset_grid(0.0, 200.0, 200, :geometric)
+        w = M._node_widths(x)
+        mass = exp.(-((x .- 30.0) ./ 10.0) .^ 2) .* w
+        mass[1] += 0.05 * sum(mass)                       # the atom at the constraint
+        mass ./= sum(mass)
+        g_cap = adaptive_asset_grid(x, mass; monitor_cap=3.0)
+        g_unc = adaptive_asset_grid(x, mass; monitor_cap=Inf)
+        @test minimum(diff(g_cap)) > 100 * minimum(diff(g_unc))
+        # the capped grid resolves the actual peak; the uncapped one collapses onto the atom
+        @test count(a -> 20 <= a <= 40, g_cap) > 4 * count(a -> 20 <= a <= 40, g_unc)  # 65 vs 14
+        @test count(<=(1.0), g_unc) > 100      # 153 of 200 nodes inside the bottom 0.5%
+        @test count(<=(1.0), g_cap) <= 5       # 1
+        @test all(diff(g_cap) .> 0) && all(diff(g_unc) .> 0)
+    end
+
+    @testset "structural invariants and input validation" begin
+        x = M._make_asset_grid(0.0, 50.0, 40, :geometric)
+        mass = fill(1 / 40, 40)
+        for n in (3, 17, 40, 97)
+            g = adaptive_asset_grid(x, mass; n=n)
+            @test length(g) == n
+            @test g[1] == 0.0 && g[end] == 50.0
+            @test all(diff(g) .> 0)
+        end
+        @test_throws ArgumentError adaptive_asset_grid(x[1:2], mass[1:2])
+        @test_throws ArgumentError adaptive_asset_grid(x, mass[1:39])
+        @test_throws ArgumentError adaptive_asset_grid(x, mass; n=2)
+        @test_throws ArgumentError adaptive_asset_grid(x, mass; curvature=1.5)
+        @test_throws ArgumentError adaptive_asset_grid(x, mass; curvature=-0.1)
+        @test_throws ArgumentError adaptive_asset_grid(x, mass; monitor_cap=0.0)
+        @test_throws ArgumentError adaptive_asset_grid(x, mass; smoothing=-1)
+        @test_throws ArgumentError adaptive_asset_grid(reverse(x), mass)
+        # a degenerate (all-zero) density falls back to uniform rather than dividing by zero
+        g0 = adaptive_asset_grid(x, zeros(40))
+        @test all(isfinite, g0) && all(diff(g0) .> 0)
+    end
+
+    @testset "adapt_ha_grid preserves the grid contract" begin
+        spec = _HUG_SPEC_M2
+        ss = _HUG_SS_M2
+        g_new = adapt_ha_grid(spec.grid, ss.distribution)
+        @test g_new isa MacroEconometricModels.HAGrid{Float64}
+        @test g_new.n_dims == spec.grid.n_dims
+        @test g_new.n_income == spec.grid.n_income
+        @test g_new.n_points == spec.grid.n_points
+        @test g_new.bounds == spec.grid.bounds
+        @test g_new.labels == spec.grid.labels
+        @test g_new.grids[1][1] == spec.grid.grids[1][1]        # borrowing constraint intact
+        @test g_new.grids[1][end] == spec.grid.grids[1][end]
+        @test all(diff(g_new.grids[1]) .> 0)
+        @test g_new.grids[1] != spec.grid.grids[1]              # nodes actually moved
+
+        # curvature=0 reproduces a uniform grid through the wrapper too
+        g_uni = adapt_ha_grid(spec.grid, ss.distribution; curvature=0.0)
+        lo, hi = spec.grid.bounds[1]
+        @test g_uni.grids[1] ≈ collect(range(lo, hi; length=spec.grid.n_points[1])) atol = 1e-10
+
+        # a coarser grid is allowed
+        g_small = adapt_ha_grid(spec.grid, ss.distribution; n_points=[50])
+        @test g_small.n_points == [50]
+        @test length(g_small.grids[1]) == 50
+        @test g_small.total_individual_states == 50 * spec.grid.n_income
+
+        @test_throws ArgumentError adapt_ha_grid(spec.grid, ss.distribution; n_points=[50, 50])
+        @test_throws ArgumentError adapt_ha_grid(spec.grid, ss.distribution[1:10])
+        @test_throws ArgumentError adapt_ha_grid(spec.grid, zeros(size(ss.distribution)))
+
+        # spec method returns a solvable specification
+        spec2 = adapt_ha_grid(spec, ss)
+        @test spec2 isa MacroEconometricModels.HADSGESpec{Float64}
+        @test spec2.model == spec.model
+        @test spec2.distribution == spec.distribution
+        @test spec2.grid.grids[1] == g_new.grids[1]
+        ss2 = compute_steady_state(spec2; max_iter=200, tol=5e-4)
+        @test isfinite(ss2.prices[:r])
+        @test isapprox(ss2.prices[:r], ss.prices[:r]; atol=2e-3)
+    end
+
+    @testset "two asset dimensions are adapted independently" begin
+        grid = MacroEconometricModels.HAGrid(; liquid=(0.0, 20.0, 25), illiquid=(0.0, 60.0, 30),
+                                              income_states=3)
+        b = grid.grids[1]; a = grid.grids[2]
+        dist = [exp(-((bi - 4.0) / 2.0)^2 - ((ai - 25.0) / 6.0)^2) for bi in b, ai in a, _ in 1:3]
+        dist ./= sum(dist)
+        g2 = adapt_ha_grid(grid, dist)
+        @test g2.n_points == [25, 30]
+        @test g2.bounds == grid.bounds
+        for d in 1:2
+            @test all(diff(g2.grids[d]) .> 0)
+            @test g2.grids[d][1] == grid.grids[d][1]
+            @test g2.grids[d][end] == grid.grids[d][end]
+        end
+        # nodes cluster on each dimension's own peak
+        @test count(x -> abs(x - 4.0) <= 4.0, g2.grids[1]) >
+              count(x -> abs(x - 4.0) <= 4.0, collect(range(0.0, 20.0; length=25)))
+        @test count(x -> abs(x - 25.0) <= 12.0, g2.grids[2]) >
+              count(x -> abs(x - 25.0) <= 12.0, collect(range(0.0, 60.0; length=30)))
+    end
+
+    @testset "internal monitor helpers" begin
+        # nonuniform second derivative reproduces the uniform formula and is exact on x²
+        x = collect(range(0.0, 2.0; length=9))
+        @test M._second_derivative_nonuniform(x, x .^ 2)[2:(end - 1)] ≈ fill(2.0, 7) atol = 1e-10
+        xn = [0.0, 0.1, 0.3, 0.7, 1.5, 2.0]
+        @test M._second_derivative_nonuniform(xn, xn .^ 2)[2:(end - 1)] ≈ fill(2.0, 4) atol = 1e-10
+        @test M._second_derivative_nonuniform(x, 3 .* x .+ 1) ≈ zeros(9) atol = 1e-10
+        # widths partition the domain
+        w = M._node_widths(x)
+        @test sum(w) ≈ x[end] - x[1]
+        wn = M._node_widths(xn)
+        @test sum(wn) ≈ xn[end] - xn[1]
+        # the smoother preserves a constant and is a contraction on the range
+        v = randn(Random.MersenneTwister(258), 20)
+        @test M._smooth3(ones(20)) ≈ ones(20)
+        sv = M._smooth3(v)
+        @test minimum(sv) >= minimum(v) && maximum(sv) <= maximum(v)
+    end
+end
+
 # ─────────────────────────────────────────────────────────────────────────────
 # Section 18c: Endogenous labor supply (GHH / separable) — [T256] #355
 # ─────────────────────────────────────────────────────────────────────────────
