@@ -605,6 +605,9 @@ Fields:
 - `n_income::Int` — number of income states
 - `model::Symbol` — model family for clearing/dynamics dispatch (`:aiyagari` default,
   `:huggett` for zero-net-supply pure exchange)
+- `distribution::Symbol` — distribution representation: `:young` (default, the
+  Young 2010 histogram) or `:winberry` (Winberry 2018 parametric moment family;
+  see [`WinberryFamily`](@ref))
 """
 struct HADSGESpec{T<:AbstractFloat}
     aggregate_spec::DSGESpec{T}
@@ -616,10 +619,14 @@ struct HADSGESpec{T<:AbstractFloat}
     n_assets::Int
     n_income::Int
     model::Symbol
+    distribution::Symbol
 
     function HADSGESpec{T}(aggregate_spec, individual, income, grid,
                             aggregation, het_params;
-                            model::Symbol=:aiyagari) where {T<:AbstractFloat}
+                            model::Symbol=:aiyagari,
+                            distribution::Symbol=:young) where {T<:AbstractFloat}
+        distribution in (:young, :winberry) || throw(ArgumentError(
+            "HADSGESpec: distribution must be :young or :winberry, got :$distribution."))
         n_assets = grid.n_dims
         n_income = grid.n_income
         @assert individual.n_asset_dims == n_assets "Individual problem asset dims must match grid"
@@ -649,8 +656,77 @@ struct HADSGESpec{T<:AbstractFloat}
         end
 
         new{T}(aggregate_spec, individual, income, grid,
-               aggregation, het_params, n_assets, n_income, model)
+               aggregation, het_params, n_assets, n_income, model, distribution)
     end
+end
+
+# =============================================================================
+# ParametricDensity / WinberryFamily — Winberry (2018) moment representation
+# =============================================================================
+
+"""
+    ParametricDensity{T}
+
+Exponential-family approximation of the asset density within a single income
+state (Winberry 2018).  On the standardized variable
+`z = (a − center) / scale`,
+
+    g(a) = exp( Σ_i λ_i (z^i − μ_i) − log_norm ),   μ_i = moments[i] / scale^i,
+
+which integrates to one over the reference interval and reproduces `moments`
+exactly at a converged fit.
+
+Fields:
+- `lambda::Vector{T}` — exponential-family coefficients (length `n_moments`)
+- `moments::Vector{T}` — target centered moments `(mean, variance, m_3, …)`
+- `center::T` / `scale::T` — standardization, `moments[1]` and `sqrt(moments[2])`
+- `log_norm::T` — log normalizer in asset units
+- `converged::Bool` — whether the Newton solve for `λ` met its tolerance
+- `iterations::Int` — Newton iterations used
+- `residual::T` — largest standardized moment residual `max_i |E_g[z^i] − μ_i|`
+
+See [`fit_parametric_density`](@ref), [`parametric_density`](@ref),
+[`parametric_moments`](@ref).
+"""
+struct ParametricDensity{T<:AbstractFloat}
+    lambda::Vector{T}
+    moments::Vector{T}
+    center::T
+    scale::T
+    log_norm::T
+    converged::Bool
+    iterations::Int
+    residual::T
+end
+
+"""
+    WinberryFamily{T}
+
+Winberry (2018) parametric representation of a full cross-sectional
+distribution: one [`ParametricDensity`](@ref) per income state, plus the
+income-state masses.
+
+The distribution state is the `n_income × n_moments` moment matrix rather than
+the `n_a × n_income` histogram, which is what shrinks the linearized system.
+
+Fields:
+- `densities::Vector{ParametricDensity{T}}` — one density per income state
+- `mass::Vector{T}` — income-state masses (sum to one)
+- `n_moments::Int` — moments carried per income state
+- `nodes::Vector{T}` / `weights::Vector{T}` — reference-grid quadrature (asset units)
+- `bounds::Tuple{T,T}` — reference interval
+- `converged::Bool` — `true` iff every income state's `λ` solve converged
+
+See [`fit_winberry`](@ref), [`winberry_moments`](@ref), [`winberry_histogram`](@ref).
+"""
+struct WinberryFamily{T<:AbstractFloat}
+    densities::Vector{ParametricDensity{T}}
+    mass::Vector{T}
+    n_moments::Int
+    nodes::Vector{T}
+    weights::Vector{T}
+    bounds::Tuple{T,T}
+    converged::Bool
 end
 
 # =============================================================================
@@ -674,6 +750,13 @@ Fields:
 - `iterations::Int` — number of iterations used
 - `euler_error::T` — maximum Euler equation error (log10 units)
 - `excess_demand::T` — market clearing residual
+- `parametric::Union{Nothing,WinberryFamily{T}}` — fitted Winberry (2018) family
+  when the equilibrium was computed with `distribution=:winberry`, `nothing`
+  under the default Young histogram
+
+The `parametric` field is a trailing **keyword** on the constructor
+(`HASteadyState{T}(…11 positional…; parametric=nothing)`), so existing
+positional call sites are unaffected.
 """
 struct HASteadyState{T<:AbstractFloat}
     policies::Dict{Symbol,Array{T}}
@@ -687,6 +770,16 @@ struct HASteadyState{T<:AbstractFloat}
     iterations::Int
     euler_error::T
     excess_demand::T
+    parametric::Union{Nothing,WinberryFamily{T}}
+
+    function HASteadyState{T}(policies, distribution, value_fn, prices, aggregates,
+                              grid, income, converged, iterations, euler_error,
+                              excess_demand;
+                              parametric::Union{Nothing,WinberryFamily{T}}=nothing
+                              ) where {T<:AbstractFloat}
+        new{T}(policies, distribution, value_fn, prices, aggregates, grid, income,
+               converged, iterations, euler_error, excess_demand, parametric)
+    end
 end
 
 # =============================================================================

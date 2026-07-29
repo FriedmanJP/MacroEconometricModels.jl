@@ -2745,4 +2745,364 @@ end
     @test_throws ErrorException dcegm_solve(bad)
 end
 
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Winberry (2018) parametric distribution dynamics (#356/T257)
+# ─────────────────────────────────────────────────────────────────────────────
+
+# Small Aiyagari spec: the Winberry end-to-end tests solve TWO steady states and
+# TWO linearizations, so the shipped 200x7 examples would dominate this file.
+function _win_small_spec(; distribution::Symbol=:young, n_a::Int=80, n_e::Int=3)
+    u, up, upi = MacroEconometricModels._crra_utility(1.0)
+    income = MacroEconometricModels._unit_mean_lognormal_income(0.90, 0.30, n_e)
+    grid = HAGrid(; assets=(0.0, 300.0, n_a), income_states=n_e, grid_type=:geometric)
+    ip = IndividualProblem{Float64}(u, up, upi, 0.99,
+                                    MacroEconometricModels._ks_budget,
+                                    [0.0], nothing, 1)
+    agg = MacroEconometricModels._minimal_agg_spec(; alpha=0.36, delta=0.025)
+    aggregation = Pair{Symbol,Function}[:K => MacroEconometricModels._agg_var1]
+    het = Dict{Symbol,Float64}(:alpha => 0.36, :delta => 0.025, :Z => 1.0, :L => 1.0)
+    return HADSGESpec{Float64}(agg, ip, income, grid, aggregation, het;
+                                distribution=distribution)
+end
+
+@testset "Winberry parametric density (#356/T257)" begin
+
+    @testset "Gauss-Legendre and composite quadrature are exact" begin
+        # A k-point Gauss-Legendre rule integrates polynomials of degree 2k-1 exactly.
+        for k in 2:6
+            x, w = MacroEconometricModels._gauss_legendre(Float64, k)
+            @test length(x) == k && length(w) == k
+            @test sum(w) ≈ 2.0 atol=1e-14
+            for d in 0:(2k - 1)
+                exact = iseven(d) ? 2 / (d + 1) : 0.0
+                @test sum(w .* x .^ d) ≈ exact atol=1e-12
+            end
+        end
+        # Composite rule on arbitrary (unequal) segments: same exactness, and the
+        # weights integrate the domain width.
+        edges = [0.0, 0.3, 1.7, 5.0]
+        nodes, wts = MacroEconometricModels._composite_quadrature(edges, 4)
+        @test length(nodes) == 3 * 4
+        @test sum(wts) ≈ 5.0 atol=1e-12
+        for d in 0:7
+            @test sum(wts .* nodes .^ d) ≈ 5.0^(d + 1) / (d + 1) atol=1e-9
+        end
+        # Grid-derived rule inherits the asset grid as its segment edges.
+        g = HAGrid(; assets=(0.0, 50.0, 40), income_states=2)
+        nq, wq = winberry_quadrature(g; n_quad=3)
+        @test length(nq) == 39 * 3
+        @test sum(wq) ≈ 50.0 atol=1e-10
+        @test all(g.grids[1][1] .<= nq .<= g.grids[1][end])
+        g2 = HAGrid(; liquid=(0.0, 5.0, 10), illiquid=(0.0, 5.0, 10), income_states=2)
+        @test_throws ArgumentError winberry_quadrature(g2)
+    end
+
+    @testset "analytic oracles: the max-entropy fit IS the known density" begin
+        # (a) Matching mean 0 and variance 1 on a wide symmetric interval must return
+        #     the Gaussian exactly: g ∝ exp(−z²/2), i.e. λ = (0, −1/2).
+        pd = fit_parametric_density([0.0, 1.0]; bounds=(-8.0, 8.0),
+                                    n_segments=200, n_quad=6)
+        @test pd.converged
+        @test pd.lambda[1] ≈ 0.0 atol=1e-10
+        @test pd.lambda[2] ≈ -0.5 atol=1e-7
+        @test pd.residual < 1e-10
+        for a in (-2.0, -0.5, 0.0, 1.0, 2.5)
+            @test parametric_density(pd, a) ≈ exp(-a^2 / 2) / sqrt(2π) rtol=1e-6
+        end
+
+        # (b) The exponential distribution with rate 1 has centered moments
+        #     (1, 1, 2, 9); the four-moment max-entropy fit must recover exp(−a)
+        #     POINTWISE, not merely match the moments. In standardized coordinates
+        #     z = a − 1, so the answer is λ = (−1, 0, 0, 0).
+        pd4 = fit_parametric_density([1.0, 1.0, 2.0, 9.0]; bounds=(0.0, 40.0),
+                                     n_segments=400, n_quad=6, tol=1e-12)
+        @test pd4.converged
+        @test pd4.lambda[1] ≈ -1.0 atol=1e-8
+        @test all(abs.(pd4.lambda[2:end]) .< 1e-8)
+        for a in (0.0, 0.25, 1.0, 2.0, 5.0)
+            @test parametric_density(pd4, a) ≈ exp(-a) rtol=1e-6
+        end
+    end
+
+    @testset "moment round trip (fit ∘ moments = identity)" begin
+        nodes, wts = MacroEconometricModels._composite_quadrature(
+            collect(range(-6.0, 12.0; length=301)), 5)
+        for targets in ([2.0, 4.0], [2.0, 4.0, 3.0], [1.0, 2.0, 1.5, 14.0])
+            pd = MacroEconometricModels._fit_parametric_density(
+                copy(targets), nodes, wts; tol=1e-12)
+            @test pd.converged
+            @test parametric_moments(pd, nodes, wts) ≈ targets rtol=1e-7
+            # The density integrates to one over the reference interval.
+            @test sum(wts .* [parametric_density(pd, a) for a in nodes]) ≈ 1.0 atol=1e-10
+        end
+    end
+
+    @testset "analytic gradient/Hessian match ForwardDiff" begin
+        # The fit uses closed-form derivatives of the log-normalizer rather than AD.
+        # Cross-check both against ForwardDiff on the same objective (the docstring
+        # promises this).
+        FD = MacroEconometricModels.ForwardDiff
+        nodes, wts = MacroEconometricModels._composite_quadrature(
+            collect(range(-5.0, 9.0; length=201)), 5)
+        moments = [1.5, 2.25, 1.2, 16.0]
+        center, scale, mu = MacroEconometricModels._standardized_targets(moments)
+        B = MacroEconometricModels._winberry_basis(nodes, center, scale, mu)
+        F(lam) = begin
+            u = B * lam
+            umax = maximum(u)
+            umax + log(sum(wts .* exp.(u .- umax)))
+        end
+        for lam in ([0.0, -0.5, 0.0, 0.0], [-0.4, -0.3, 0.05, -0.02])
+            _, p = MacroEconometricModels._log_normalizer(B * lam, wts)
+            grad_analytic = B' * p
+            hess_analytic = B' * (B .* p) - grad_analytic * grad_analytic'
+            @test grad_analytic ≈ FD.gradient(F, lam) rtol=1e-8
+            @test hess_analytic ≈ FD.hessian(F, lam) rtol=1e-6
+            # The Hessian is a covariance matrix, hence symmetric PSD.
+            @test hess_analytic ≈ hess_analytic' atol=1e-12
+            @test minimum(eigvals(Symmetric(hess_analytic))) > -1e-12
+        end
+        # ∇ = 0 is exactly the moment-matching condition: at the converged λ the
+        # analytic gradient vanishes and the fitted density's central moments are
+        # the targets.
+        pd = MacroEconometricModels._fit_parametric_density(copy(moments), nodes, wts;
+                                                            tol=1e-12)
+        @test pd.converged
+        _, p_star = MacroEconometricModels._log_normalizer(B * pd.lambda, wts)
+        @test maximum(abs, B' * p_star) < 1e-11
+        @test parametric_moments(pd, nodes, wts) ≈ moments rtol=1e-7
+    end
+
+    @testset "input validation" begin
+        @test_throws ArgumentError fit_parametric_density([1.0]; bounds=(0.0, 1.0))
+        @test_throws ArgumentError fit_parametric_density([1.0, -1.0]; bounds=(0.0, 1.0))
+        @test_throws ArgumentError fit_parametric_density([1.0, 1.0])   # no quadrature
+        @test_throws ArgumentError fit_parametric_density([1.0, 1.0]; nodes=[0.0, 1.0],
+                                                          weights=[0.5])
+        nodes, wts = MacroEconometricModels._composite_quadrature([0.0, 4.0], 5)
+        @test_throws ArgumentError MacroEconometricModels._fit_parametric_density(
+            [1.0, 1.0], nodes, wts; lambda_init=[0.0, 0.0, 0.0])
+        @test_throws ArgumentError HADSGESpec{Float64}(
+            _win_small_spec().aggregate_spec, _win_small_spec().individual,
+            _win_small_spec().income, _win_small_spec().grid,
+            _win_small_spec().aggregation, _win_small_spec().het_params;
+            distribution=:histogram)
+    end
+
+    @testset "histogram ↔ moments" begin
+        g = HAGrid(; assets=(0.0, 20.0, 60), income_states=2)
+        a = g.grids[1]
+        d = zeros(60, 2)
+        d[:, 1] .= exp.(-a ./ 3); d[:, 2] .= exp.(-a ./ 8)
+        d ./= sum(d)
+        M, mass = winberry_moments(d, g; n_moments=4)
+        @test size(M) == (2, 4)
+        @test sum(mass) ≈ 1.0 atol=1e-12
+        # Rows must equal the discrete conditional moments, computed independently.
+        for j in 1:2
+            p = d[:, j] ./ mass[j]
+            m1 = sum(p .* a)
+            @test M[j, 1] ≈ m1 rtol=1e-12
+            for i in 2:4
+                @test M[j, i] ≈ sum(p .* (a .- m1) .^ i) rtol=1e-10
+            end
+        end
+        # Flattened input is accepted and gives the same answer.
+        @test first(winberry_moments(vec(d), g; n_moments=4)) ≈ M
+        @test_throws ArgumentError winberry_moments(d, g; n_moments=1)
+
+        fam = fit_winberry(d, g; n_moments=3)
+        @test fam isa WinberryFamily{Float64}
+        @test fam.converged
+        @test length(fam.densities) == 2
+        @test fam.n_moments == 3
+        h = winberry_histogram(fam, g)
+        @test length(h) == 120
+        @test all(h .>= 0)
+        @test sum(h) ≈ 1.0 atol=1e-12
+        # Per-income-state mass is preserved by the rendering.
+        for j in 1:2
+            @test sum(h[((j - 1) * 60 + 1):(j * 60)]) ≈ mass[j] rtol=1e-10
+        end
+        # The rendered histogram carries roughly the family's own mean.
+        @test sum(h .* repeat(a, 2)) ≈ sum(mass .* M[:, 1]) rtol=1e-3
+    end
+
+    @testset "moment fixed point is genuinely stationary and tracks Young" begin
+        spec = _win_small_spec()
+        ss = compute_steady_state(spec; grid_check=:none)
+        a_pol = ss.policies[:savings]
+        nodes, wts = winberry_quadrature(ss.grid; n_quad=4)
+        M_young, mass_y = winberry_moments(ss.distribution, ss.grid; n_moments=3)
+        K_young = sum(mass_y .* M_young[:, 1])
+        @test K_young ≈ ss.aggregates[:K] rtol=1e-10
+
+        errs = Float64[]
+        for nm in (2, 3, 4)
+            st = MacroEconometricModels._winberry_stationary(
+                a_pol, ss.grid, ss.income; n_moments=nm)
+            @test st.converged
+            @test size(st.moments) == (3, nm)
+            # Income-state masses are the ergodic distribution of the income chain.
+            @test st.mass ≈ vec(sum(ss.distribution; dims=1)) rtol=1e-8
+            # It really is a FIXED POINT: one more application of the law of motion
+            # leaves it where it is (this is the property the linearization needs).
+            M_next, _, _ = MacroEconometricModels._winberry_forward(
+                st.moments, st.mass, a_pol, ss.grid, ss.income, nodes, wts;
+                lambda_warm=st.lambdas)
+            dev = MacroEconometricModels._winberry_to_state(
+                M_next .- st.moments, MacroEconometricModels._winberry_scales(st.moments))
+            @test maximum(abs, dev) < 1e-8
+            K_w = sum(st.mass .* st.moments[:, 1])
+            push!(errs, abs(K_w - K_young) / K_young)
+            # A parametric solve started with no guess must find the same point.
+            st_cold = MacroEconometricModels._winberry_stationary(
+                a_pol, ss.grid, ss.income; n_moments=nm, M_init=nothing)
+            @test st_cold.moments ≈ st.moments rtol=1e-6
+        end
+        # The reduction is accurate, and more moments do not make it worse.
+        @test all(errs .< 0.10)
+        @test errs[3] <= errs[1] + 1e-12
+    end
+
+    @testset "steady state with distribution=:winberry" begin
+        spec_y = _win_small_spec()
+        spec_w = _win_small_spec(; distribution=:winberry)
+        @test spec_y.distribution === :young
+        @test spec_w.distribution === :winberry
+        ss_y = compute_steady_state(spec_y; grid_check=:none)
+        ss_w = compute_steady_state(spec_w; grid_check=:none)
+
+        # The equilibrium is cleared on the histogram either way, so prices and
+        # aggregates are identical — only the extra parametric object differs.
+        @test ss_y.parametric === nothing
+        @test ss_w.parametric isa WinberryFamily{Float64}
+        @test ss_w.prices[:r] == ss_y.prices[:r]
+        @test ss_w.aggregates[:K] == ss_y.aggregates[:K]
+        @test ss_w.parametric.converged
+        @test ss_w.parametric.n_moments == 3
+        @test length(ss_w.parametric.densities) == 3
+        @test sum(ss_w.parametric.mass) ≈ 1.0 atol=1e-12
+        @test all(pd -> pd.residual < 1e-9, ss_w.parametric.densities)
+
+        # aggregates[:K_winberry] is the family's OWN stationary aggregate, so the
+        # gap against :K is the reduction error — small but not zero.
+        @test haskey(ss_w.aggregates, :K_winberry)
+        @test !haskey(ss_y.aggregates, :K_winberry)
+        rel = abs(ss_w.aggregates[:K_winberry] - ss_w.aggregates[:K]) / ss_w.aggregates[:K]
+        @test 0 < rel < 0.10
+
+        # n_moments is honoured, and more moments do not degrade the aggregate.
+        ss_w5 = compute_steady_state(spec_w; grid_check=:none, n_moments=5)
+        @test ss_w5.parametric.n_moments == 5
+        rel5 = abs(ss_w5.aggregates[:K_winberry] - ss_w5.aggregates[:K]) / ss_w5.aggregates[:K]
+        @test rel5 <= rel + 1e-10
+
+        # `distribution=` on the call overrides the spec in both directions.
+        @test compute_steady_state(spec_y; grid_check=:none,
+                                   distribution=:winberry).parametric !== nothing
+        @test compute_steady_state(spec_w; grid_check=:none,
+                                   distribution=:young).parametric === nothing
+        @test_throws ArgumentError compute_steady_state(spec_y; grid_check=:none,
+                                                        distribution=:bogus)
+    end
+
+    @testset "Reiter linearization on the moment state" begin
+        spec_y = _win_small_spec()
+        spec_w = _win_small_spec(; distribution=:winberry)
+        ss_y = compute_steady_state(spec_y; grid_check=:none)
+        ss_w = compute_steady_state(spec_w; grid_check=:none)
+        sol_y = solve(spec_y; method=:reiter, ss=ss_y)
+        sol_w = solve(spec_w; method=:reiter, ss=ss_w)
+
+        n_e = spec_w.grid.n_income
+        # The distribution state is n_income × n_moments — far fewer than the
+        # histogram's n_a × n_income, and fewer than the SVD reduction as well.
+        @test sol_w.n_reduced == n_e * 3
+        @test sol_w.n_reduced < sol_y.n_reduced
+        @test sol_w.n_reduced < spec_w.grid.total_individual_states
+        @test sol_w.method === :reiter
+        @test is_determined(sol_w)
+        @test maximum(abs, eigvals(sol_w.linear_solution.G1)) < 1.0
+        @test 0.5 < sol_w.explained_variance <= 1.0
+
+        # The reduction basis maps moment deviations back to the full histogram, so
+        # distribution IRFs work unchanged — and every column is mass-preserving.
+        @test size(sol_w.reduction_basis) == (spec_w.grid.total_individual_states,
+                                              sol_w.n_reduced)
+        @test maximum(abs, vec(sum(sol_w.reduction_basis; dims=1))) < 1e-8
+        di = distribution_irf(sol_w, 6)
+        @test size(di) == (spec_w.grid.n_points[1], n_e, 6)
+        @test maximum(abs, di) > 0
+        @test abs(sum(di[:, :, 1])) < 1e-8
+
+        # Aggregate capital IRFs agree with the Young-based Reiter system. K is the
+        # state just after the distribution block in both.
+        function _agg_path(sol, H)
+            G1 = sol.linear_solution.G1
+            x = sol.linear_solution.impact[:, 1]
+            out = zeros(H)
+            for h in 1:H
+                out[h] = x[sol.n_reduced + 1]
+                x = G1 * x
+            end
+            return out
+        end
+        H = 20
+        iy = _agg_path(sol_y, H)
+        iw = _agg_path(sol_w, H)
+        scale = maximum(abs, iy)
+        @test scale > 0
+        @test maximum(abs, iw .- iy) / scale < 0.05
+        @test cor(iy, iw) > 0.999
+
+        # More moments must not move the aggregate IRF much further away.
+        sol_w5 = solve(spec_w; method=:reiter,
+                       ss=compute_steady_state(spec_w; grid_check=:none, n_moments=5),
+                       n_moments=5)
+        @test sol_w5.n_reduced == n_e * 5
+        @test maximum(abs, _agg_path(sol_w5, H) .- iy) / scale < 0.05
+    end
+
+    @testset "Huggett closure and the built-in examples" begin
+        spec = load_ha_example(:huggett; distribution=:winberry)
+        @test spec.distribution === :winberry
+        @test load_ha_example(:huggett).distribution === :young
+        @test load_ha_example(:krusell_smith; distribution=:winberry).distribution === :winberry
+        ss = compute_steady_state(spec; grid_check=:none)
+        @test ss.parametric isa WinberryFamily{Float64}
+        # Huggett is zero net supply: the parametric family's own aggregate must
+        # also be (nearly) zero, without ever having been told so.
+        @test abs(ss.aggregates[:K_winberry]) < 1e-2
+        sol = solve(spec; method=:reiter, ss=ss)
+        @test sol.n_reduced == spec.grid.n_income * 3
+        @test is_determined(sol)
+        @test maximum(abs, eigvals(sol.linear_solution.G1)) < 1.0
+    end
+
+    @testset "display" begin
+        spec = _win_small_spec(; distribution=:winberry)
+        ss = compute_steady_state(spec; grid_check=:none)
+        fam = ss.parametric
+        str_f = sprint(show, fam)
+        @test occursin("WinberryFamily", str_f)
+        @test occursin("3 moments", str_f)
+        @test occursin("converged=true", str_f)
+        str_d = sprint(show, fam.densities[1])
+        @test occursin("ParametricDensity", str_d)
+        @test occursin("converged=true", str_d)
+        # `report` writes to stdout; on Julia 1.12 redirect_stdout no longer accepts
+        # an IOBuffer, so capture through a temporary file.
+        out = mktemp() do path, f
+            redirect_stdout(() -> report(ss), f)
+            flush(f)
+            read(path, String)
+        end
+        @test occursin("Winberry Parametric Family", out)
+        @test occursin("K_winberry", out)
+    end
+
+end
+
 end # @testset "HA-DSGE Types"

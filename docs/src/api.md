@@ -452,6 +452,11 @@ Heterogeneous-agent (Reiter/SSJ/Krusell-Smith), continuous-time (HJB/KFE), and O
 | `dcegm_retirement_model(; ...)` | Canonical work/retire problem |
 | `dcegm_threshold(sol, t, d_prev, j; ...)` | Cash-on-hand at which the discrete choice switches |
 | `dcegm_simulate(sol, grid)` | Young histogram respecting the discrete choice |
+| `fit_parametric_density(moments; bounds)` | Winberry (2018) exponential family matching centered moments |
+| `parametric_density(pd, a)` / `parametric_moments(pd, nodes, weights)` | Evaluate a fitted density / invert `λ` back to moments |
+| `fit_winberry(ss; n_moments=3)` | Fit the parametric family to a Young histogram (one density per income state) |
+| `winberry_moments(dist, grid)` / `winberry_histogram(fam, grid)` | Histogram → conditional moments / family → grid rendering |
+| `winberry_quadrature(grid; n_quad=4)` | Composite Gauss-Legendre rule on the asset-grid intervals |
 | `LifeCycleOLG(; J, J_retire, ...)` | True life-cycle OLG (age-dependent EGM) |
 | `lifecycle_steady_state(m)` | Stationary equilibrium: backward age sweep + age-extended histogram |
 | `lifecycle_income(ρ, σ, n)` / `lifecycle_survival(J)` | Unit-mean level income process / Gompertz-Makeham mortality |

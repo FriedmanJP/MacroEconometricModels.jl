@@ -8,6 +8,7 @@ Standard DSGE models assume a **representative agent** whose decisions aggregate
 - Distribution: Young (2010) non-stochastic histogram with sparse transition matrices
 - Steady state: bisection on the interest rate with EGM + distribution + market clearing
 - Three aggregate solution methods: SSJ, Reiter, Krusell-Smith
+- Distribution representation: Young (2010) histogram or Winberry (2018) parametric moments
 - Built-in models: Krusell-Smith (1998), one-asset HANK, two-asset HANK, Huggett (1993), GHH endogenous labor
 - Bayesian estimation via RWMH + Kalman filter on reduced system
 - Visualization: wealth distribution, Lorenz curve, policy functions
@@ -727,6 +728,95 @@ A positive endowment shock lowers the clearing rate: households want to save the
 
 ---
 
+## [Winberry (2018) Parametric Distributions](@id ha_winberry)
+
+The Young histogram is exact but expensive: it carries one state per grid node, so a linearized model with ``N_a = 200`` and ``N_e = 7`` has 1400 distribution states. **Winberry (2018)** instead approximates the asset density *within each income state* by a low-order exponential family, so the distribution state is a handful of moments per income state. Pass `distribution=:winberry` to a spec to select it.
+
+Within income state ``j`` the density is
+
+```math
+g_j(a) = \exp\!\Big( \sum_{i=1}^{n} \lambda_{j,i} \, (z^i - \mu_{j,i}) - \log Z_j \Big),
+\qquad z = \frac{a - m_{j,1}}{\sqrt{m_{j,2}}}
+```
+
+where:
+- ``m_{j,1}, m_{j,2}, \ldots, m_{j,n}`` are the mean, the variance, and the higher **central** moments of assets conditional on income state ``j``
+- ``\mu_{j,i} = m_{j,i} / m_{j,2}^{i/2}`` are those moments standardized, so ``\mu_{j,1} = 0`` and ``\mu_{j,2} = 1``
+- ``\lambda_{j}`` are the exponential-family coefficients that make the density reproduce ``m_j``
+- ``\log Z_j`` is the log normalizer over the reference interval ``[a_{\min}, a_{\max}]``
+
+The moment vector ``m`` *is* the distribution state, so the linearized system carries ``N_e \times n`` distribution states instead of ``N_a \times N_e``.
+
+!!! note "Technical Note"
+    Given target moments, ``\lambda`` minimizes the log normalizer ``F(\lambda) = \log \int \exp(\sum_i \lambda_i (z^i - \mu_i)) \, da``, which is strictly convex. Its gradient ``\nabla_i F = E_g[z^i] - \mu_i`` is the moment residual itself and its Hessian is ``\mathrm{Cov}_g(z^i, z^j)``, both in closed form — the Newton step uses these exact derivatives rather than automatic differentiation, and the test suite cross-checks them against `ForwardDiff`. Two numerical details matter. The normalizer is evaluated in log space with the exponent maximum subtracted, so a density peaked at the borrowing constraint never overflows. And the monomial basis is whitened under the current density at each Newton round: on the calibrated Krusell-Smith grid the top asset node sits 33 standard deviations above the mean, so ``z^4`` spans ``10^6`` and the raw Hessian has condition number ``10^8``. Whitening through a QR factorization of ``\sqrt{p} \odot B`` restores an identity Hessian without ever squaring that condition number.
+
+### Fitting a density to moments
+
+[`fit_parametric_density`](@ref) solves the moment problem on its own, independently of any model. The exponential distribution with rate 1 has centered moments ``(1, 1, 2, 9)``, and the maximum-entropy density matching them is the exponential itself:
+
+```@example dsge_ha
+pd = fit_parametric_density([1.0, 1.0, 2.0, 9.0]; bounds=(0.0, 40.0),
+                            n_segments=400, n_quad=6)
+(converged = pd.converged,
+ lambda = round.(pd.lambda, digits=8),
+ fitted_at_a1 = round(parametric_density(pd, 1.0), digits=8),
+ exact_at_a1 = round(exp(-1.0), digits=8))
+```
+
+The fit recovers ``\lambda = (-1, 0, 0, 0)`` — in standardized coordinates ``z = a - 1``, so ``\exp(-z) \propto \exp(-a)`` — and reproduces the density pointwise to eight digits, not merely its first four moments. [`parametric_moments`](@ref) inverts the map, returning the moments implied by a fitted ``\lambda``.
+
+| Keyword | Type | Default | Description |
+|---------|------|---------|-------------|
+| `bounds` | `Tuple` | — | Reference interval; required unless `nodes`/`weights` are given |
+| `nodes`, `weights` | `Vector` | `nothing` | Explicit quadrature in asset units, e.g. from [`winberry_quadrature`](@ref) |
+| `n_segments` | `Int` | `64` | Subintervals of the default rule built from `bounds` |
+| `n_quad` | `Int` | `5` | Gauss-Legendre nodes per subinterval |
+| `tol` | `Real` | ``10^{-10}`` | Tolerance on the largest standardized moment residual |
+| `lambda_init` | `Vector` | `nothing` | Warm start; defaults to the Gaussian ``(0, -1/2, 0, \ldots)`` |
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `lambda` | `Vector{T}` | Exponential-family coefficients |
+| `moments` | `Vector{T}` | Target centered moments |
+| `center`, `scale` | `T` | Standardization, ``m_1`` and ``\sqrt{m_2}`` |
+| `log_norm` | `T` | Log normalizer in asset units |
+| `converged` | `Bool` | Whether the Newton solve met `tol` |
+| `residual` | `T` | Largest standardized moment residual attained |
+
+### Steady state and solution
+
+With `distribution=:winberry` the equilibrium is still cleared on the histogram — the accurate reference — and the parametric family is fitted afterwards at the equilibrium policy as the fixed point of the *moment* law of motion. That fixed point is a different object from the moments of the histogram, and the gap between the two aggregates is the reduction's approximation error:
+
+```@example dsge_ha
+spec_w = load_ha_example(:krusell_smith; distribution=:winberry)
+ss_w = compute_steady_state(spec_w; K_init=10.0, r_bounds=(-0.02, 0.04),
+                             max_iter=80, tol=1e-4, n_moments=3)
+(K_histogram = round(ss_w.aggregates[:K], digits=4),
+ K_parametric = round(ss_w.aggregates[:K_winberry], digits=4),
+ distribution_states = length(ss_w.parametric.densities) * ss_w.parametric.n_moments,
+ histogram_states = spec_w.grid.total_individual_states)
+```
+
+Three moments per income state reproduce aggregate capital to about 1.8% while carrying 21 distribution states instead of 1400. Feeding that steady state to `solve(spec; method=:reiter)` builds the linearized system on the moment state, with the same general-equilibrium closure the histogram-based Reiter method uses:
+
+```@example dsge_ha
+sol_w = solve(spec_w; method=:reiter, ss=ss_w, n_moments=3)
+report(sol_w)
+```
+
+Aggregate capital is *exactly* linear in the moment state, ``K = \sum_j \text{mass}_j \, m_{j,1}``, so unlike the SVD reduction the aggregator carries no approximation error at all — the whole error sits in the shape of the density. Against the Young-based Reiter system, the aggregate capital impulse response agrees to 1.8% at two moments, 0.34% at three, and 0.30% at four. [`distribution_irf`](@ref) works unchanged: the solution stores an ``N \times (N_e \cdot n)`` basis mapping moment deviations back to a histogram deviation, so full distributional dynamics remain available from the reduced system.
+
+| Keyword | Type | Default | Description |
+|---------|------|---------|-------------|
+| `distribution` | `Symbol` | `:young` | `:young` or `:winberry`; settable on the spec or per call |
+| `n_moments` | `Int` | `3` | Moments carried per income state (minimum 2) |
+| `n_quad` | `Int` | `4` | Gauss-Legendre nodes per asset-grid interval |
+| `winberry_tol` | `Real` | ``10^{-9}`` | Tolerance for the moment fixed point, in standardized units |
+
+[`fit_winberry`](@ref) fits the family to any histogram directly, [`winberry_moments`](@ref) extracts the conditional moments of one, and [`winberry_histogram`](@ref) renders a fitted family back onto the asset grid for plotting or node-by-node comparison.
+
+---
+
 ## Built-in Examples
 
 Four canonical models are available via `load_ha_example`:
@@ -854,6 +944,10 @@ plot_result(ss_ks; view=:policy)      # policy functions by income
 
 12. **Comparing DCEGM against a grid solver near a kink.** DCEGM locates the switching threshold exactly, so consumption jumps at an arbitrary real number. A value-function-iteration benchmark on a finite grid cannot represent that jump and will disagree sharply at the one or two nodes straddling it, while agreeing to grid accuracy everywhere else. Compare medians and choice indicators, not maxima.
 
+13. **Winberry accuracy is limited by the mass at the borrowing constraint, not by the moment order.** An exponential family is a density and cannot represent an atom. On the calibrated Krusell-Smith example 6.3% of households sit exactly at ``a = 0``, and aggregate capital from the parametric fixed point is off by 7.2% at two moments, 1.8% at three, and 1.1% at five --- the returns to extra moments flatten out quickly. Use `:winberry` when the size of the linearized system is the binding constraint, and check `aggregates[:K_winberry]` against `aggregates[:K]` before trusting it.
+
+14. **High moment orders on coarse grids do not reach the fixed-point tolerance.** The residual floor of the moment map rises with the moment order and falls with grid resolution. On a 200-node grid the fixed point converges to ``10^{-9}`` through at least five moments; on an 80-node grid it stops converging above four. `compute_steady_state` warns and leaves `converged=false` on the family rather than reporting success --- lower `n_moments` or refine the grid.
+
 ---
 
 ## References
@@ -878,6 +972,8 @@ plot_result(ss_ks; view=:policy)      # policy functions by income
 - Reiter, Michael. 2009. "Solving Heterogeneous-Agent Models by Projection and Perturbation." *Journal of Economic Dynamics and Control* 33 (3): 649--665. [DOI](https://doi.org/10.1016/j.jedc.2008.08.010)
 
 - Rouwenhorst, K. Geert. 1995. "Asset Pricing Implications of Equilibrium Business Cycle Models." In *Frontiers of Business Cycle Research*, edited by Thomas F. Cooley, 294--330. Princeton: Princeton University Press.
+
+- Winberry, Thomas. 2018. "A Method for Solving and Estimating Heterogeneous Agent Macro Models." *Quantitative Economics* 9 (3): 1123--1151. [DOI](https://doi.org/10.3982/QE740)
 
 - Tauchen, George. 1986. "Finite State Markov-Chain Approximations to Univariate and Vector Autoregressions." *Economics Letters* 20 (2): 177--181. [DOI](https://doi.org/10.1016/0165-1765(86)90168-0)
 

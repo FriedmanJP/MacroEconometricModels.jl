@@ -369,9 +369,13 @@ end
 # =============================================================================
 
 """
-    load_ha_example(name::Symbol) -> HADSGESpec{Float64}
+    load_ha_example(name::Symbol; distribution=:young) -> HADSGESpec{Float64}
 
 Return a pre-calibrated `HADSGESpec` for a canonical heterogeneous agent model.
+
+Pass `distribution=:winberry` to represent the cross-sectional distribution by
+the Winberry (2018) parametric moment family instead of the Young (2010)
+histogram; everything else about the calibration is unchanged.
 
 # Available models
 
@@ -399,21 +403,25 @@ report(ss)
 - Greenwood, J., Hercowitz, Z., & Huffman, G. W. (1988). Investment, capacity
   utilization, and the real business cycle. *American Economic Review*, 78(3), 402-417.
 """
-function load_ha_example(name::Symbol)
-    if name === :krusell_smith
-        return _ks_example()
+function load_ha_example(name::Symbol; distribution::Symbol=:young)
+    spec = if name === :krusell_smith
+        _ks_example()
     elseif name === :one_asset_hank
-        return _one_asset_hank_example()
+        _one_asset_hank_example()
     elseif name === :two_asset_hank
-        return _two_asset_hank_example()
+        _two_asset_hank_example()
     elseif name === :huggett
-        return _huggett_example()
+        _huggett_example()
     elseif name === :endogenous_labor
-        return _endogenous_labor_example()
+        _endogenous_labor_example()
     else
         error("Unknown HA-DSGE example: :$name. Available: :krusell_smith, " *
               ":one_asset_hank, :two_asset_hank, :huggett, :endogenous_labor")
     end
+    distribution === :young && return spec
+    return HADSGESpec{Float64}(spec.aggregate_spec, spec.individual, spec.income,
+                                spec.grid, spec.aggregation, spec.het_params;
+                                model=spec.model, distribution=distribution)
 end
 
 # =============================================================================

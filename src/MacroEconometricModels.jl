@@ -546,6 +546,7 @@ include("dsge/heterogeneous/ssj.jl")
 include("dsge/heterogeneous/blocks.jl")
 include("dsge/heterogeneous/dcegm.jl")
 include("dsge/heterogeneous/reiter.jl")
+include("dsge/heterogeneous/winberry.jl")
 include("dsge/heterogeneous/examples.jl")
 include("dsge/heterogeneous/parser.jl")
 include("dsge/heterogeneous/display.jl")
@@ -742,6 +743,10 @@ export combine_blocks, block_jacobian, ssj_jacobian, ssj_irf, ssj_arg_order
 export DCEGMProblem, DCEGMSolution, DCEGMDistribution
 export dcegm_solve, dcegm_policy, dcegm_choice_probabilities, dcegm_threshold
 export dcegm_simulate, dcegm_retirement_model
+# Winberry (2018) parametric distribution dynamics
+export ParametricDensity, WinberryFamily
+export fit_parametric_density, parametric_density, parametric_moments
+export fit_winberry, winberry_moments, winberry_histogram, winberry_quadrature
 
 # Overlapping generations (Blanchard 1985 perpetual youth)
 export BlanchardOLG, BlanchardOLGSteadyState, BlanchardOLGSolution

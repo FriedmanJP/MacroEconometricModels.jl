@@ -81,7 +81,8 @@ function _update_ha_params(spec::HADSGESpec{T}, param_names::Vector{Symbol},
     )
 
     return HADSGESpec{T}(new_agg, new_ip, spec.income, spec.grid,
-                          spec.aggregation, new_het_pv; model=spec.model)
+                          spec.aggregation, new_het_pv; model=spec.model,
+                          distribution=spec.distribution)
 end
 
 # =============================================================================

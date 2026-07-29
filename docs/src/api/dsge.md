@@ -230,6 +230,22 @@ report(::DCEGMDistribution{T}) where {T}
 
 ---
 
+### Winberry (2018) Parametric Distributions
+
+```@docs
+ParametricDensity
+WinberryFamily
+fit_parametric_density
+parametric_density
+parametric_moments
+fit_winberry
+winberry_moments
+winberry_histogram
+winberry_quadrature
+```
+
+---
+
 ### Life-Cycle Overlapping Generations
 
 ```@docs

@@ -145,6 +145,20 @@ function Base.show(io::IO, ss::HASteadyState{T}) where {T}
               "r=$(_fmt(r_val)), K=$(_fmt(K_val)), Gini=$(_fmt(gini; digits=2))")
 end
 
+function Base.show(io::IO, pd::ParametricDensity{T}) where {T}
+    print(io, "ParametricDensity{$T}: n_moments=$(length(pd.lambda)), " *
+              "mean=$(_fmt(pd.center)), sd=$(_fmt(pd.scale)), " *
+              "converged=$(pd.converged), residual=$(_fmt(pd.residual; digits=2))")
+end
+
+function Base.show(io::IO, fam::WinberryFamily{T}) where {T}
+    n_e = length(fam.densities)
+    worst = isempty(fam.densities) ? zero(T) : maximum(pd.residual for pd in fam.densities)
+    print(io, "WinberryFamily{$T}: $(n_e) income states × $(fam.n_moments) moments " *
+              "($(n_e * fam.n_moments) distribution states), " *
+              "converged=$(fam.converged), max residual=$(_fmt(worst; digits=2))")
+end
+
 function Base.show(io::IO, sol::HADSGESolution{T}) where {T}
     print(io, "HADSGESolution{$T}: method=:$(sol.method), " *
               "n_reduced=$(sol.n_reduced), " *
@@ -225,6 +239,26 @@ function report(ss::HASteadyState{T}) where {T}
             title="Aggregates",
             column_labels=["Variable", "Value"],
             alignment=[:l, :r])
+    end
+
+    # --- Winberry parametric family (only when distribution=:winberry) ---
+    fam = ss.parametric
+    if fam !== nothing
+        n_e = length(fam.densities)
+        win_data = Matrix{Any}(undef, n_e, 5)
+        for j in 1:n_e
+            pd = fam.densities[j]
+            win_data[j, 1] = string(j)
+            win_data[j, 2] = _fmt(fam.mass[j]; digits=4)
+            win_data[j, 3] = _fmt(pd.center; digits=4)
+            win_data[j, 4] = _fmt(pd.scale; digits=4)
+            win_data[j, 5] = _fmt(pd.residual; digits=2)
+        end
+        _pretty_table(io, win_data;
+            title="Winberry Parametric Family " *
+                  "($(n_e) × $(fam.n_moments) = $(n_e * fam.n_moments) distribution states)",
+            column_labels=["Income state", "Mass", "Mean", "Std. dev.", "Moment residual"],
+            alignment=[:l, :r, :r, :r, :r])
     end
 
     # --- Grid adequacy ---

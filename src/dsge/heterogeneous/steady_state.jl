@@ -155,7 +155,13 @@ function _ha_steady_state(ip::IndividualProblem{T}, grid::HAGrid{T},
                            ceiling_mass_tol::Real=T(1e-6),
                            residual_tol::Real=T(1e-6),
                            verbose::Bool=false,
-                           clearing_fn::Union{Nothing,Function}=nothing) where {T<:AbstractFloat}
+                           clearing_fn::Union{Nothing,Function}=nothing,
+                           distribution::Symbol=:young,
+                           n_moments::Int=3,
+                           n_quad::Int=4,
+                           winberry_tol::Real=1e-9) where {T<:AbstractFloat}
+    distribution in (:young, :winberry) || throw(ArgumentError(
+        "_ha_steady_state: distribution must be :young or :winberry, got :$distribution."))
     grid.n_dims == 1 || throw(ArgumentError(
         "compute_steady_state: the bisection steady-state solver supports one-asset " *
         "models only (got n_dims = $(grid.n_dims)). Two-asset models such as " *
@@ -410,6 +416,30 @@ function _ha_steady_state(ip::IndividualProblem{T}, grid::HAGrid{T},
         aggregates[:N] = _aggregate_hours(best_dist, best_n_pol, grid)
     end
 
+    # Winberry (2018) parametric family (#356/T257). The equilibrium itself is
+    # cleared on the Young histogram — the accurate reference — and the family is
+    # fitted afterwards at the equilibrium policy, which is what the issue asks and
+    # what keeps the two representations comparable. `M` is the fixed point of the
+    # MOMENT law of motion, not the moments of `best_dist`: those are different
+    # objects, and `aggregates[:K_winberry]` versus `aggregates[:K]` is exactly the
+    # reduction's approximation error. The Young moments serve only as the starting
+    # guess (the parametric map has spurious fixed points far from the ergodic set);
+    # the returned point is verified stationary to `winberry_tol`.
+    best_family = nothing
+    if distribution === :winberry
+        M0, _ = winberry_moments(best_dist, grid; n_moments=n_moments)
+        stat = _winberry_stationary(best_a_pol, grid, income; n_moments=n_moments,
+                                    n_quad=n_quad, M_init=M0, tol=winberry_tol)
+        nodes_w, wts_w = winberry_quadrature(grid; n_quad=n_quad)
+        best_family = _build_family(stat.moments, stat.mass, nodes_w, wts_w, grid;
+                                    lambda_warm=stat.lambdas)
+        aggregates[:K_winberry] = sum(stat.mass .* view(stat.moments, :, 1))
+        stat.converged || @warn "compute_steady_state(distribution=:winberry): the " *
+            "moment fixed point did not reach its tolerance; treat " *
+            "aggregates[:K_winberry] and any :reiter solution built on it as " *
+            "provisional." maxlog = 1
+    end
+
     # Aiyagari (1994) existence condition. With β(1+r) ≥ 1 an infinite-horizon
     # household's wealth diverges, no stationary distribution exists, and NO
     # finite a_max can fix it — a distinct failure from a merely-too-small grid.
@@ -436,7 +466,8 @@ function _ha_steady_state(ip::IndividualProblem{T}, grid::HAGrid{T},
         converged,
         final_iter,
         euler_err,
-        best_excess
+        best_excess;
+        parametric=best_family
     )
 end
 
@@ -539,6 +570,17 @@ does not provide one, and delegates to `_ha_steady_state`.
 - `ceiling_mass_tol` / `residual_tol` — thresholds for that check (default 1e-6)
 - `verbose::Bool` — print progress (default false)
 - `price_fn::Function` — custom price function; if not supplied, uses Cobb-Douglas
+- `distribution::Symbol` — override `spec.distribution`: `:young` (default, the
+  Young 2010 histogram) or `:winberry` (Winberry 2018 parametric moment family).
+  Under `:winberry` the equilibrium is still cleared on the histogram, and the
+  parametric family is fitted afterwards at the equilibrium policy as the fixed
+  point of the *moment* law of motion. It is returned in `ss.parametric`, and its
+  own aggregate appears as `aggregates[:K_winberry]` — the gap against
+  `aggregates[:K]` is the reduction's approximation error
+- `n_moments::Int` — moments per income state under `:winberry` (default 3)
+- `n_quad::Int` — Gauss–Legendre nodes per asset-grid interval (default 4)
+- `winberry_tol::Real` — tolerance for the moment fixed point (default 1e-9, in
+  standardized moment units)
 
 # Aggregates
 
@@ -560,7 +602,11 @@ function compute_steady_state(spec::HADSGESpec{T};
                           residual_tol::Real=T(1e-6),
                           verbose::Bool=false,
                           price_fn::Union{Nothing,Function}=nothing,
-                          clearing::Union{Nothing,Function}=nothing) where {T<:AbstractFloat}
+                          clearing::Union{Nothing,Function}=nothing,
+                          distribution::Union{Nothing,Symbol}=nothing,
+                          n_moments::Int=3,
+                          n_quad::Int=4,
+                          winberry_tol::Real=1e-9) where {T<:AbstractFloat}
     pfn = isnothing(price_fn) ? _default_cobb_douglas_price_fn : price_fn
 
     # Extract parameters: merge het_params with aggregate steady-state params
@@ -597,6 +643,8 @@ function compute_steady_state(spec::HADSGESpec{T};
         K_init=K_init, r_bounds=rb, max_iter=max_iter,
         tol=tol, rtol=rtol, r_atol=r_atol, grid_check=grid_check,
         ceiling_mass_tol=ceiling_mass_tol, residual_tol=residual_tol,
-        verbose=verbose, clearing_fn=clr
+        verbose=verbose, clearing_fn=clr,
+        distribution=isnothing(distribution) ? spec.distribution : distribution,
+        n_moments=n_moments, n_quad=n_quad, winberry_tol=winberry_tol
     )
 end
