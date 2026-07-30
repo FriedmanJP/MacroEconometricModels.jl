@@ -261,8 +261,14 @@ function solve(spec::DSGESpec{T}; method::Symbol=:gensys, kwargs...) where {T<:A
         return klein(ld, spec; div=get(kwargs, :div, 1.0 + 1e-8),
                      cluster_tol=get(kwargs, :cluster_tol, 1e-6))
     elseif method == :perturbation
-        order = get(kwargs, :order, 2)
-        return perturbation_solver(spec; order=order)
+        # Forward the Sylvester-solver knobs too; before [T266] every kwarg but `order` was
+        # silently dropped here, so `solve(spec; method=:perturbation, gmres_tol=…)` was a no-op.
+        return perturbation_solver(spec;
+            order=get(kwargs, :order, 2),
+            gmres_tol=T(get(kwargs, :gmres_tol, 1e-8)),
+            gmres_max_outer=get(kwargs, :gmres_max_outer, 20),
+            sylvester_method=get(kwargs, :sylvester_method, :auto),
+            sylvester_tol=T(get(kwargs, :sylvester_tol, 1e-8)))
     elseif method == :projection
         return collocation_solver(spec; kwargs...)
     elseif method == :pfi

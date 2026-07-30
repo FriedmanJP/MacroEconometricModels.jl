@@ -570,7 +570,7 @@ function _fevd_unconditional(sol::PerturbationSolution{T}) where {T}
     end
 
     # Total unconditional variance (all shocks)
-    Var_xf_total = nx > 0 ? _dlyap_doubling(hx_state, eta_x * eta_x') : zeros(T, 0, 0)
+    Var_xf_total = nx > 0 ? _dlyap(hx_state, eta_x * eta_x') : zeros(T, 0, 0)
     I_ne = Matrix{T}(I, n_eps, n_eps)
     c_total = zeros(T, nz)
     if sol.hσσ !== nothing
@@ -579,7 +579,7 @@ function _fevd_unconditional(sol::PerturbationSolution{T}) where {T}
     c_total[2*nx+1:nz] = kron(eta_x, eta_x) * vec(I_ne)
 
     Var_inov_total = _innovation_variance_2nd(hx_state, eta_x, Var_xf_total, nx, n_eps)
-    Var_z_total = _dlyap_doubling(A, Var_inov_total)
+    Var_z_total = _dlyap(A, Var_inov_total)
     Var_y_total = C_full * Var_z_total * C_full' + noise_full * noise_full'
     Var_y_total = (Var_y_total + Var_y_total') / 2
 
@@ -604,10 +604,10 @@ function _fevd_unconditional(sol::PerturbationSolution{T}) where {T}
             noise_full_j[ci, :] = ny > 0 ? gx_state[k:k, :] * eta_x_j + eta_y_j[k:k, :] : zeros(T, 1, n_eps)
         end
 
-        Var_xf_j = nx > 0 ? _dlyap_doubling(hx_state, eta_x_j * eta_x_j') : zeros(T, 0, 0)
+        Var_xf_j = nx > 0 ? _dlyap(hx_state, eta_x_j * eta_x_j') : zeros(T, 0, 0)
 
         Var_inov_j = _innovation_variance_2nd(hx_state, eta_x_j, Var_xf_j, nx, n_eps)
-        Var_z_j = _dlyap_doubling(A, Var_inov_j)
+        Var_z_j = _dlyap(A, Var_inov_j)
         Var_y_j = C_full * Var_z_j * C_full' + noise_full_j * noise_full_j'
         Var_y_j = (Var_y_j + Var_y_j') / 2
 
@@ -1039,13 +1039,13 @@ function _augmented_moments_2nd(sol::PerturbationSolution{T};
     E_z = (Matrix{T}(I, nz, nz) - A) \ c
 
     # First-order state variance (for innovation variance computation)
-    Var_xf = nx > 0 ? _dlyap_doubling(hx_state, eta_x * eta_x') : zeros(T, 0, 0)
+    Var_xf = nx > 0 ? _dlyap(hx_state, eta_x * eta_x') : zeros(T, 0, 0)
 
     # Innovation variance
     Var_inov = _innovation_variance_2nd(hx_state, eta_x, Var_xf, nx, n_eps)
 
     # Solve augmented Lyapunov: Var_z = A·Var_z·A' + Var_inov
-    Var_z = _dlyap_doubling(A, Var_inov)
+    Var_z = _dlyap(A, Var_inov)
 
     # ---------------------------------------------------------------
     # Observation mapping for ALL n = nx + ny variables
@@ -1244,13 +1244,13 @@ function _augmented_moments_3rd(sol::PerturbationSolution{T};
     E_z = (Matrix{T}(I, nz, nz) - A) \ c
 
     # ---- Innovation variance via MC simulation ----
-    Var_xf = _dlyap_doubling(hx_state, eta_x * eta_x')
+    Var_xf = _dlyap(hx_state, eta_x * eta_x')
     Var_inov = _innovation_variance_3rd_sim(A, c, hx_state, hxx_xx, eta_x,
                                               sol.hσσ, Var_xf,
                                               nx, n_eps, nz, r1, r2, r3, r4, r5, r6)
 
     # ---- Solve augmented Lyapunov ----
-    Var_z = _dlyap_doubling(A, Var_inov)
+    Var_z = _dlyap(A, Var_inov)
 
     # ---- Observation mapping ----
     # Use transition-based convention (consistent with _augmented_moments_2nd):
@@ -1398,7 +1398,7 @@ function analytical_moments(sol::PerturbationSolution{T};
 
     # State covariance via Lyapunov: Σ_x = hx_state · Σ_x · hx_state' + η_x · η_x'
     if nx > 0
-        Sigma_x = _dlyap_doubling(hx_state, eta_x * eta_x')
+        Sigma_x = _dlyap(hx_state, eta_x * eta_x')
     else
         Sigma_x = zeros(T, 0, 0)
     end
@@ -1498,7 +1498,7 @@ function _analytical_moments_gmm(sol::PerturbationSolution{T}; lags::Int=1) wher
         gx_state = ny > 0 ? sol.gx[:, 1:nx] : zeros(T, 0, nx)
         eta_y    = ny > 0 ? sol.gx[:, nx+1:nv] : zeros(T, 0, n_eps)
 
-        Var_xf = nx > 0 ? _dlyap_doubling(hx_state, eta_x * eta_x') : zeros(T, 0, 0)
+        Var_xf = nx > 0 ? _dlyap(hx_state, eta_x * eta_x') : zeros(T, 0, 0)
 
         E_y = zeros(T, n)
         Var_y = zeros(T, n, n)

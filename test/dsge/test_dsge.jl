@@ -778,12 +778,20 @@ end
     # Default solve satisfies the Sylvester equation f_c·X + f_f·X·Mkd = -RHS
     X = M._solve_kronecker_sylvester(f_c, f_f, Mkd, RHS, n, nvd)
     @test norm(f_c * X + f_f * (X * Mkd) + RHS) / norm(RHS) < 1e-6
-    # An unreachable tolerance warns instead of silently returning the last iterate
+    # The GMRES path is a FALLBACK since [T266] — :auto now solves this directly and never
+    # reaches GMRES, so the guard is exercised by forcing the path. An unreachable tolerance
+    # must still warn rather than silently return the last iterate.
     @test_logs (:warn,) match_mode = :any M._solve_kronecker_sylvester(
-        f_c, f_f, Mkd, RHS, n, nvd; gmres_max_outer=1, gmres_tol=1e-18)
-    # rhs = 0 → zeros, not 0/0 = NaN
+        f_c, f_f, Mkd, RHS, n, nvd; sylvester_method=:gmres,
+        gmres_max_outer=1, gmres_tol=1e-18)
+    Xg = M._solve_kronecker_sylvester(f_c, f_f, Mkd, RHS, n, nvd; sylvester_method=:gmres)
+    @test norm(f_c * Xg + f_f * (Xg * Mkd) + RHS) / norm(RHS) < 1e-6
+    # rhs = 0 → zeros, not 0/0 = NaN (on both the default and the GMRES path)
     Z = M._solve_kronecker_sylvester(f_c, f_f, Mkd, zeros(n, nvd), n, nvd)
     @test all(iszero, Z)
+    Zg = M._solve_kronecker_sylvester(f_c, f_f, Mkd, zeros(n, nvd), n, nvd;
+                                      sylvester_method=:gmres)
+    @test all(iszero, Zg)
 end
 
 @testset "Matrix-free Kronecker power (#225 part 1)" begin
@@ -831,6 +839,221 @@ end
     X_ordL = M._solve_kronecker_sylvester(f_cL, f_fL, MmL, RHSL, n2, nvL2, 2)
     resid = f_cL * X_ordL + f_fL * (X_ordL * kron(MmL, MmL)) + RHSL
     @test norm(resid) / norm(RHSL) < 1e-6
+end
+
+@testset "Generalized-Schur Sylvester solver (#365, T266)" begin
+    M = MacroEconometricModels
+    rng = Random.MersenneTwister(266)
+
+    # Dense-Kronecker reference: [(I ⊗ A) + (C^{⊗d}' ⊗ B)] vec(X) = vec(D).
+    function sylv_dense(A, B, C, D, d)
+        nvd = size(C, 1)^d
+        LHS = kron(Matrix{Float64}(I, nvd, nvd), A) + kron(M._kron_power(C, d)', B)
+        reshape(LHS \ vec(D), size(A, 1), nvd)
+    end
+
+    @testset "matches the dense Kronecker solve, orders 1-3" begin
+        for (n, nv, d) in ((4, 3, 1), (4, 3, 2), (5, 3, 3), (6, 4, 2), (3, 5, 2), (7, 2, 3))
+            A = Matrix{Float64}(3.0I, n, n) .+ 0.2 .* randn(rng, n, n)
+            B = 0.3 .* randn(rng, n, n)
+            C = 0.25 .* randn(rng, nv, nv)
+            D = randn(rng, n, nv^d)
+            X, info = M._kamenik_sylvester(A, B, C, D, d)
+            @test info.ok
+            @test info.residual < 1e-12
+            @test X ≈ sylv_dense(A, B, C, D, d) rtol = 1e-9
+        end
+    end
+
+    @testset "complex spectra in both factors" begin
+        # Rotation blocks give purely complex eigenvalues — the 2×2 blocks that the REAL Schur
+        # form of Kamenik (2005) has to special-case. The complex Schur form used here has no
+        # 2×2 blocks at all, so this must be as accurate as the real-spectrum case above.
+        rot(th, r) = r .* [cos(th) -sin(th); sin(th) cos(th)]
+        C = [rot(0.7, 0.5) zeros(2, 2); zeros(2, 2) rot(1.3, 0.4)]
+        B = [rot(0.9, 0.6) zeros(2, 2); zeros(2, 2) rot(2.1, 0.3)]
+        A = Matrix{Float64}(I, 4, 4)
+        @test all(!isreal, eigvals(C))       # the premise: no real eigenvalue anywhere
+        @test all(!isreal, eigvals(B))
+        for d in 1:3
+            D = randn(rng, 4, 4^d)
+            X, info = M._kamenik_sylvester(A, B, C, D, d)
+            @test info.ok
+            @test X ≈ sylv_dense(A, B, C, D, d) rtol = 1e-9
+        end
+    end
+
+    @testset "singular A — the QZ pencil solves what A\\B cannot" begin
+        # Kamenik's published algorithm forms A⁻¹B, so a singular A kills it outright. Working
+        # on the (A, B) pencil instead keeps the solve exact even at rank(A) = 0, and f_c IS
+        # singular for any model with a purely static or purely forward-looking equation.
+        Bs = Matrix{Float64}(I, 3, 3)
+        Cs = 0.3 .* Matrix{Float64}(I, 2, 2)
+        for As in (Float64[1 0 0; 0 0 0; 0 0 0], zeros(3, 3), Float64[1 2 0; 2 4 0; 0 0 1])
+            @test det(As) == 0                        # the premise
+            for d in (1, 2)
+                D = randn(rng, 3, 2^d)
+                X, info = M._kamenik_sylvester(As, Bs, Cs, D, d)
+                @test info.ok
+                @test X ≈ sylv_dense(As, Bs, Cs, D, d) rtol = 1e-9
+            end
+        end
+    end
+
+    @testset "singular equation is reported, not returned" begin
+        # A = I, B = μI, C = λI  ⇒  (1 + μλᵈ)·X = D, singular exactly at μ = -λ^{-d}.
+        lam, d = 0.5, 2
+        A = Matrix{Float64}(I, 3, 3)
+        C = lam .* Matrix{Float64}(I, 2, 2)
+        D = randn(rng, 3, 4)
+        Xs, infos = M._kamenik_sylvester(A, (-1 / lam^d) .* Matrix{Float64}(I, 3, 3), C, D, d)
+        @test Xs === nothing
+        @test !infos.ok
+        @test infos.reason == :near_singular
+        # Just off the singularity it solves, and matches the closed form.
+        mu = -0.5 / lam^d
+        X2, info2 = M._kamenik_sylvester(A, mu .* Matrix{Float64}(I, 3, 3), C, D, d)
+        @test info2.ok
+        @test X2 ≈ D ./ (1 + mu * lam^d) rtol = 1e-12
+        # A wholly singular pencil is reported rather than throwing.
+        Xn, infon = M._kamenik_sylvester(zeros(2, 2), zeros(2, 2), C, randn(rng, 2, 4), 2)
+        @test Xn === nothing && !infon.ok
+    end
+
+    @testset "all four _solve_kronecker_sylvester paths agree" begin
+        n, nv, order = 4, 3, 2
+        nvd = nv^order
+        f_c = Matrix{Float64}(3.0I, n, n) .+ 0.05 .* randn(rng, n, n)
+        f_f = 0.05 .* randn(rng, n, n)
+        Mm = 0.2 .* randn(rng, nv, nv)
+        RHS = randn(rng, n, nvd)
+        ref = M._solve_kronecker_sylvester(f_c, f_f, Mm, RHS, n, nvd, order;
+                                           sylvester_method=:dense)
+        for meth in (:auto, :kamenik, :gmres)
+            X = M._solve_kronecker_sylvester(f_c, f_f, Mm, RHS, n, nvd, order;
+                                             sylvester_method=meth)
+            @test X ≈ ref rtol = 1e-8
+            @test norm(f_c * X + f_f * (X * kron(Mm, Mm)) + RHS) / norm(RHS) < 1e-8
+        end
+        @test_throws ArgumentError M._solve_kronecker_sylvester(
+            f_c, f_f, Mm, RHS, n, nvd, order; sylvester_method=:bogus)
+
+        # An unreachable acceptance tolerance forces the certify-or-fall-back branch on a
+        # perfectly well-conditioned system: :auto must warn and hand off, :kamenik must warn
+        # and keep its own answer, and BOTH must still return the right solution.
+        Xa = @test_logs (:warn,) match_mode = :any M._solve_kronecker_sylvester(
+            f_c, f_f, Mm, RHS, n, nvd, order; sylvester_method=:auto, sylvester_tol=1e-30)
+        @test Xa ≈ ref rtol = 1e-8
+        Xk = @test_logs (:warn,) match_mode = :any M._solve_kronecker_sylvester(
+            f_c, f_f, Mm, RHS, n, nvd, order; sylvester_method=:kamenik, sylvester_tol=1e-30)
+        @test Xk ≈ ref rtol = 1e-8
+    end
+
+    @testset "n > 50 where the dense form is infeasible" begin
+        # n·nv³ = 60·1000 = 60000 ⇒ the vectorized operator is 60000² Float64 = 28.8 GB.
+        # The direct solve runs in milliseconds and certifies its own residual.
+        n, nv, order = 60, 10, 3
+        nvd = nv^order
+        f_c = Matrix{Float64}(3.0I, n, n) .+ 0.02 .* randn(rng, n, n)
+        f_f = 0.02 .* randn(rng, n, n)
+        Mm = 0.1 .* randn(rng, nv, nv)
+        RHS = randn(rng, n, nvd)
+        X, info = M._kamenik_sylvester(f_c, f_f, Mm, -RHS, order)
+        @test info.ok
+        @test info.residual < 1e-10
+        @test size(X) == (n, nvd)
+        # Verified matrix-free — kron(Mm,Mm,Mm) is 1000×1000 here, but X·(·) never forms it.
+        @test norm(f_c * X + f_f * M._apply_kron_power(X, Mm, order) + RHS) / norm(RHS) < 1e-10
+    end
+
+    @testset "Bartels-Stewart Lyapunov" begin
+        for n in (1, 2, 5, 12, 30)
+            Araw = randn(rng, n, n)
+            A = 0.7 .* Araw ./ maximum(abs.(eigvals(Araw)))     # spectral radius exactly 0.7
+            Bm = randn(rng, n, 3)
+            Qm = Bm * Bm'
+            P, info = M._bartels_stewart_dlyap(A, Qm)
+            @test info.ok
+            @test info.residual < 1e-12
+            @test P == P'                                        # exactly symmetric
+            @test minimum(eigvals(Symmetric(P))) > -1e-10        # PSD
+            # matches BOTH the doubling solver and the dense Kronecker solve
+            @test P ≈ M._dlyap_doubling(A, Qm) rtol = 1e-8
+            Pk = reshape((Matrix{Float64}(I, n * n, n * n) - kron(A, A)) \ vec(Qm), n, n)
+            @test P ≈ Pk rtol = 1e-8
+        end
+    end
+
+    @testset "Lyapunov: closed forms" begin
+        # scalar AR(1): σ² / (1 - ρ²)
+        P, info = M._bartels_stewart_dlyap(reshape([0.9], 1, 1), reshape([1.0], 1, 1))
+        @test info.ok
+        @test P[1, 1] ≈ 1 / (1 - 0.81) rtol = 1e-12
+        # complex-conjugate pair: a rotation of radius r has P = Q/(1-r²) when Q = I
+        r, th = 0.8, 0.6
+        A = r .* [cos(th) -sin(th); sin(th) cos(th)]
+        P2, info2 = M._bartels_stewart_dlyap(A, Matrix{Float64}(I, 2, 2))
+        @test info2.ok
+        @test P2 ≈ Matrix{Float64}(I, 2, 2) ./ (1 - r^2) rtol = 1e-12
+        # zero driving term ⇒ zero covariance
+        P3, _ = M._bartels_stewart_dlyap(A, zeros(2, 2))
+        @test all(iszero, P3)
+        @test size(M._bartels_stewart_dlyap(zeros(0, 0), zeros(0, 0))[1]) == (0, 0)
+    end
+
+    @testset "_dlyap agrees with doubling and survives a near unit root" begin
+        for rho in (0.5, 0.99, 0.9999)
+            n = 6
+            Araw = randn(rng, n, n)
+            A = rho .* Araw ./ maximum(abs.(eigvals(Araw)))
+            Bm = randn(rng, n, 2)
+            Qm = Bm * Bm'
+            P = M._dlyap(A, Qm)
+            @test norm(A * P * A' + Qm - P) / norm(Qm) < 1e-8
+            @test P ≈ M._dlyap_doubling(A, Qm) rtol = 1e-6
+        end
+    end
+
+    @testset "solve_lyapunov unchanged through the new path" begin
+        @test M.solve_lyapunov(reshape([0.9], 1, 1), reshape([1.0], 1, 1))[1, 1] ≈
+              1 / (1 - 0.81) rtol = 1e-10
+        rng2 = Random.MersenneTwister(2661)
+        G1 = [0.5 0.1; -0.2 0.6]
+        imp = randn(rng2, 2, 2)
+        Sig = M.solve_lyapunov(G1, imp)
+        @test Sig ≈ G1 * Sig * G1' + imp * imp' rtol = 1e-10
+        @test Sig == Sig'
+        @test_throws ArgumentError M.solve_lyapunov(reshape([1.0], 1, 1), reshape([1.0], 1, 1))
+    end
+
+    @testset "order-2/3 perturbation coefficients are solver-independent" begin
+        # The regression that matters: a real model solved through :kamenik and through the
+        # historical :dense path must give the same policy tensors, hence the same IRFs.
+        spec = @dsge begin
+            parameters: β = 0.99, α = 0.36, δ = 0.025, ρ = 0.95, σ = 0.01
+            endogenous: k, c, z
+            exogenous: ε
+            z[t] = ρ * z[t-1] + σ * ε[t]
+            k[t] = exp(z[t]) * k[t-1]^α + (1 - δ) * k[t-1] - c[t]
+            1 / c[t] = β * (1 / c[t+1]) * (α * exp(z[t+1]) * k[t]^(α - 1) + 1 - δ)
+        end
+        spec = compute_steady_state(spec)
+        for order in (2, 3)
+            sk = perturbation_solver(spec; order=order, sylvester_method=:kamenik)
+            sd = perturbation_solver(spec; order=order, sylvester_method=:dense)
+            @test sk.hxx ≈ sd.hxx rtol = 1e-7
+            @test sk.gxx ≈ sd.gxx rtol = 1e-7
+            @test sk.hσσ ≈ sd.hσσ rtol = 1e-7
+            if order == 3
+                @test sk.hxxx ≈ sd.hxxx rtol = 1e-7
+                @test sk.gxxx ≈ sd.gxxx rtol = 1e-7
+            end
+            @test irf(sk, 12).values ≈ irf(sd, 12).values rtol = 1e-7
+        end
+        # and reachable through solve(), which used to drop every kwarg but `order`
+        ss = solve(spec; method=:perturbation, order=2, sylvester_method=:kamenik)
+        @test ss.hxx ≈ perturbation_solver(spec; order=2).hxx rtol = 1e-7
+    end
 end
 
 @testset "Smolyak grid unisolvency (#218)" begin

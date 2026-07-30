@@ -41,9 +41,15 @@ Compute a perturbation approximation to the policy functions of a DSGE model.
 # Keywords
 - `order::Int=2` — perturbation order (1, 2, or 3)
 - `method::Symbol=:gensys` — first-order solver (`:gensys` or `:blanchard_kahn`)
-- `gmres_tol::T=1e-8` — relative tolerance for the matrix-free GMRES Sylvester solve used for
-  the order-2/3 coefficients on large systems (`n·nvᵈ > 5000`); a warning is emitted if it is
-  not reached within `gmres_max_outer` restarts
+- `sylvester_method::Symbol=:auto` — solver for the order-2/3 Kronecker-Sylvester systems.
+  `:auto` uses the generalized-Schur (Kamenik 2005) solver and falls back to `:dense`/`:gmres`
+  if it does not certify; `:kamenik`, `:dense`, `:gmres` force one path. See
+  [`_solve_kronecker_sylvester`](@ref).
+- `sylvester_tol::T=1e-8` — relative residual the generalized-Schur solve must reach before it
+  is accepted; above this, `:auto` falls back and `:kamenik` warns
+- `gmres_tol::T=1e-8` — relative tolerance for the matrix-free GMRES Sylvester solve, used only
+  on the `:gmres` path (a fallback since [T266]); a warning is emitted if it is not reached
+  within `gmres_max_outer` restarts
 - `gmres_max_outer::Int=20` — maximum GMRES outer (restart) iterations
 
 # Returns
@@ -67,7 +73,9 @@ function perturbation_solver(spec::DSGESpec{T};
                               order::Int=2,
                               method::Symbol=:gensys,
                               gmres_tol::T=T(1e-8),
-                              gmres_max_outer::Int=20) where {T<:AbstractFloat}
+                              gmres_max_outer::Int=20,
+                              sylvester_method::Symbol=:auto,
+                              sylvester_tol::T=T(1e-8)) where {T<:AbstractFloat}
     order in (1, 2, 3) || throw(ArgumentError("order must be 1, 2, or 3; got $order"))
     isempty(spec.steady_state) &&
         throw(ArgumentError("Must compute steady state first (call compute_steady_state)"))
@@ -281,7 +289,9 @@ function perturbation_solver(spec::DSGESpec{T};
     if nv > 0
         # Matrix-free Kronecker power: never forms kron(M,M) (nv²×nv²) on the GMRES path (#225).
         fvv = _solve_kronecker_sylvester(f_c, f_f, M, RHS, n, nv2, 2;
-                                         gmres_tol=gmres_tol, gmres_max_outer=gmres_max_outer)
+                                         gmres_tol=gmres_tol, gmres_max_outer=gmres_max_outer,
+                                         sylvester_method=sylvester_method,
+                                         sylvester_tol=sylvester_tol)
     else
         fvv = zeros(T, n, 0)
     end
@@ -430,7 +440,9 @@ function perturbation_solver(spec::DSGESpec{T};
         # Matrix-free: the nv³×nv³ operator kron(M,M,M) is never materialized (#225) — this is
         # what makes order-3 tractable for large models (forming it can need >100 GB).
         fvvv = _solve_kronecker_sylvester(f_c, f_f, M, RHS_3, n, nv3, 3;
-                                          gmres_tol=gmres_tol, gmres_max_outer=gmres_max_outer)
+                                          gmres_tol=gmres_tol, gmres_max_outer=gmres_max_outer,
+                                          sylvester_method=sylvester_method,
+                                          sylvester_tol=sylvester_tol)
     else
         fvvv = zeros(T, n, 0)
     end
@@ -891,8 +903,11 @@ of `d-1` factors, `p = nv^{d-1}`) recursively: right-multiply each contiguous `n
 block by `M`, then recurse on the block index. Work is `O(d · n · nv^{d+1})` and peak
 allocation `O(n · nv^d)` instead of `O(nv^{2d})`. Matches dense `X * kron(M,…,M)` to
 floating-point tolerance (the order-3 `nv³ × nv³` operator is never materialized).
+
+`T` is `<:Number` rather than `<:AbstractFloat` because the generalized-Schur Sylvester solver
+([`_kamenik_sylvester`](@ref)) applies the same Kronecker powers in the complex Schur basis.
 """
-function _apply_kron_power(X::AbstractMatrix{T}, M::AbstractMatrix{T}, d::Int) where {T<:AbstractFloat}
+function _apply_kron_power(X::AbstractMatrix{T}, M::AbstractMatrix{T}, d::Int) where {T<:Number}
     d <= 0 && return Matrix{T}(X)
     d == 1 && return Matrix{T}(X * M)
     n  = size(X, 1)
@@ -1000,73 +1015,91 @@ function _gmres_solve!(matvec!, rhs::AbstractVector{T}, total::Int;
 end
 
 """
-    _solve_kronecker_sylvester(f_c, f_f, Mkd, RHS, n, nvd) → Matrix{T}
+    _solve_kronecker_sylvester(f_c, f_f, Mkd, RHS, n, nvd; …) → Matrix{T}
 
 Solve the Kronecker-Sylvester system for a **general** operator `Mkd` (nvd × nvd):
     f_c * X + f_f * X * Mkd = -RHS
 where X is n × nvd.
 
-Vectorized form: [(I_{nvd} ⊗ f_c) + (Mkd' ⊗ f_f)] * vec(X) = -vec(RHS)
-
-For small systems (n*nvd ≤ 5000), uses a direct dense solve.
-For larger systems, uses matrix-free GMRES to avoid forming the (n*nvd)² system matrix.
-Memory: O(n·nvd) instead of O(n²·nvd²).
+This is exactly the order-aware method below with `order = 1` and `M = Mkd`; it forwards there
+so both signatures share one implementation and one solver-selection policy.
 """
-function _solve_kronecker_sylvester(f_c::Matrix{T}, f_f::Matrix{T},
-        Mkd::Matrix{T}, RHS::Matrix{T}, n::Int, nvd::Int;
-        gmres_tol::T=T(1e-8), gmres_max_outer::Int=20) where {T<:AbstractFloat}
-    total = n * nvd
-
-    if total <= 5000
-        LHS = kron(Matrix{T}(I, nvd, nvd), f_c) + kron(Mkd', f_f)
-        return reshape(LHS \ (-vec(RHS)), n, nvd)
-    end
-
-    # Matrix-free GMRES: apply A*x = [(I⊗f_c) + (Mkd'⊗f_f)] * x without forming A.
-    rhs = -vec(RHS)
-    matvec! = function (y::AbstractVector, x::AbstractVector)
-        X = reshape(x, n, nvd)
-        Y = f_c * X + f_f * (X * Mkd)
-        copyto!(y, vec(Y))
-        return y
-    end
-    x = _gmres_solve!(matvec!, rhs, total; gmres_tol=gmres_tol, gmres_max_outer=gmres_max_outer)
-    return reshape(x, n, nvd)
-end
+_solve_kronecker_sylvester(f_c::Matrix{T}, f_f::Matrix{T}, Mkd::Matrix{T}, RHS::Matrix{T},
+        n::Int, nvd::Int; kwargs...) where {T<:AbstractFloat} =
+    _solve_kronecker_sylvester(f_c, f_f, Mkd, RHS, n, nvd, 1; kwargs...)
 
 """
-    _solve_kronecker_sylvester(f_c, f_f, M, RHS, n, nvd, order) → Matrix{T}
+    _solve_kronecker_sylvester(f_c, f_f, M, RHS, n, nvd, order; sylvester_method=:auto, …) → Matrix{T}
 
-Order-aware variant of the Kronecker-Sylvester solve where the operator is a Kronecker
-power `Mkd = kron(M, M, …, M)` (`order` factors, `nvd = nv^order`):
+Solve the order-aware Kronecker-Sylvester system whose operator is a Kronecker power
+`Mkd = kron(M, M, …, M)` (`order` factors, `nvd = nv^order`):
+
     f_c * X + f_f * X * kron(M,…,M) = -RHS
 
-Identical result to the general method with `Mkd = kron(M,…,M)`, but the matrix-free
-GMRES path applies the operator via `_apply_kron_power` — the `nv^order × nv^order`
-Kronecker matrix is **never formed** (this is what makes order-3 tractable for large
-models: forming `kron(M,M,M)` for n≈35, nv≈14 would need ~120 GB). The small-system
-dense path reconstructs `kron(M,…,M)` via `_kron_power`, so its result is bit-identical
-to the general method.
+## Solver selection (`sylvester_method`)
+
+- `:auto` (default) — the generalized-Schur solver [`_kamenik_sylvester`](@ref) first, falling
+  back to `:dense` (small systems) or `:gmres` (large) if it fails to certify. This is a direct
+  `O(n³ + n²·nvᵈ)` method: it is both faster and more accurate than the alternatives, and it
+  reports a near-singular pencil instead of quietly returning a wrong tensor.
+- `:kamenik` — generalized Schur only; warns if the residual exceeds `sylvester_tol`.
+- `:dense` — vectorize to the `(n·nvᵈ)²` system and factor it. The historical path; exact, but
+  `O((n·nvᵈ)³)` in time and `O((n·nvᵈ)²)` in memory, so it is only viable for small models.
+- `:gmres` — matrix-free restarted GMRES. Retained as the iterative fallback.
+
+Every path applies the operator through [`_apply_kron_power`](@ref) or [`_kron_power`](@ref) as
+appropriate; on the `:kamenik` and `:gmres` paths the `nv^order × nv^order` Kronecker matrix is
+**never formed**, which is what makes order 3 tractable for large models (materializing
+`kron(M,M,M)` at n≈35, nv≈14 would need ~120 GB).
+
+All paths solve the same equation, so they agree to floating-point tolerance; `:dense` and the
+general-operator method above build the identical `LHS`, so those two are bit-identical.
 """
 function _solve_kronecker_sylvester(f_c::Matrix{T}, f_f::Matrix{T},
         M::Matrix{T}, RHS::Matrix{T}, n::Int, nvd::Int, order::Int;
-        gmres_tol::T=T(1e-8), gmres_max_outer::Int=20) where {T<:AbstractFloat}
+        gmres_tol::T=T(1e-8), gmres_max_outer::Int=20,
+        sylvester_method::Symbol=:auto, sylvester_tol::T=T(1e-8)) where {T<:AbstractFloat}
+    sylvester_method in (:auto, :kamenik, :dense, :gmres) || throw(ArgumentError(
+        "sylvester_method must be :auto, :kamenik, :dense, or :gmres; got :$sylvester_method"))
     total = n * nvd
 
-    if total <= 5000
-        Mkd = _kron_power(M, order)   # nvd × nvd — affordable when small
+    dense_solve() = begin
+        Mkd = _kron_power(M, order)   # nvd × nvd — affordable only when small
         LHS = kron(Matrix{T}(I, nvd, nvd), f_c) + kron(Mkd', f_f)
-        return reshape(LHS \ (-vec(RHS)), n, nvd)
+        reshape(LHS \ (-vec(RHS)), n, nvd)
     end
 
-    # Matrix-free GMRES; the matvec applies X·kron(M,…,M) without materializing the operator.
-    rhs = -vec(RHS)
-    matvec! = function (y::AbstractVector, x::AbstractVector)
-        X = reshape(x, n, nvd)
-        Y = f_c * X + f_f * _apply_kron_power(X, M, order)
-        copyto!(y, vec(Y))
-        return y
+    gmres_solve() = begin
+        # Matrix-free: the matvec applies X·kron(M,…,M) without materializing the operator.
+        matvec! = function (y::AbstractVector, x::AbstractVector)
+            X = reshape(x, n, nvd)
+            Y = f_c * X + f_f * _apply_kron_power(X, M, order)
+            copyto!(y, vec(Y))
+            return y
+        end
+        reshape(_gmres_solve!(matvec!, -vec(RHS), total;
+                              gmres_tol=gmres_tol, gmres_max_outer=gmres_max_outer), n, nvd)
     end
-    x = _gmres_solve!(matvec!, rhs, total; gmres_tol=gmres_tol, gmres_max_outer=gmres_max_outer)
-    return reshape(x, n, nvd)
+
+    sylvester_method === :dense && return dense_solve()
+    sylvester_method === :gmres && return gmres_solve()
+
+    X, info = _kamenik_sylvester(f_c, f_f, M, -RHS, order)
+    if X !== nothing && info.ok && info.residual <= sylvester_tol
+        return X
+    end
+
+    detail = X === nothing ? "failed ($(info.reason))" :
+             "relative residual $(info.residual) > sylvester_tol $sylvester_tol"
+    if sylvester_method === :kamenik
+        @warn "Generalized-Schur Sylvester solve $detail (min pivot $(info.min_pivot)); " *
+              "order-$order perturbation coefficients may be inaccurate. The Sylvester equation " *
+              "is singular when a generalized eigenvalue of (f_c, f_f) equals an order-$order " *
+              "product of eigenvalues of the transition matrix." maxlog = 1
+        return X === nothing ? (total <= 5000 ? dense_solve() : gmres_solve()) : X
+    end
+
+    @warn "Generalized-Schur Sylvester solve $detail; falling back to the " *
+          "$(total <= 5000 ? ":dense" : ":gmres") path for the order-$order coefficients." maxlog = 1
+    return total <= 5000 ? dense_solve() : gmres_solve()
 end

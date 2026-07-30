@@ -180,6 +180,56 @@ The third-order computation extends the second-order procedure with six addition
 
 ---
 
+## Solving the Kronecker-Sylvester System
+
+Both higher orders reduce to the same **generalized Sylvester equation** for the coefficient tensor ``X`` (``f_{vv}`` at order 2, ``f_{vvv}`` at order 3):
+
+```math
+f_c \, X + f_f \, X \, \underbrace{(M \otimes M \otimes \cdots \otimes M)}_{d \text{ factors}} = -\text{RHS}
+```
+
+where ``d`` is the perturbation order, ``M`` is the ``n_v \times n_v`` transition of the augmented innovation vector, and ``X`` is ``n \times n_v^d``.
+
+Vectorizing this gives an ``(n \cdot n_v^d)``-dimensional linear system. That is the direct reading of the equation, and it is unusable at scale: for a 35-variable model at order 3 the operator alone is 68 GB. The default solver instead uses the **generalized-Schur** method (Kamenik 2005), which decomposes once and back-substitutes through the resulting triangular structure:
+
+1. QZ-decompose the pencil ``(f_c, f_f)`` and Schur-decompose ``M``, making all three operators triangular
+2. Transform the equation into that basis, where it separates by column
+3. Back-substitute recursively over the ``d`` Kronecker factors
+4. Transform back
+
+The ``n_v^d \times n_v^d`` Kronecker operator is **never formed** at any point. Cost falls from ``O((n \cdot n_v^d)^3)`` time and ``O((n \cdot n_v^d)^2)`` memory to ``O(n^3 + n^2 n_v^d + d^2 n \, n_v^{d+1})``.
+
+```julia
+# Default: generalized Schur, with automatic fallback
+psol = perturbation_solver(spec; order=3)
+
+# Force a specific solver
+psol_k = perturbation_solver(spec; order=3, sylvester_method=:kamenik)
+psol_d = perturbation_solver(spec; order=3, sylvester_method=:dense)
+```
+
+| `sylvester_method` | Description |
+|---|---|
+| `:auto` (default) | Generalized Schur; falls back to `:dense` (small) or `:gmres` (large) if the residual check fails |
+| `:kamenik` | Generalized Schur only; warns if the residual exceeds `sylvester_tol` |
+| `:dense` | Vectorize and factor the full ``(n \cdot n_v^d)^2`` system. Exact, but only viable for small models |
+| `:gmres` | Matrix-free restarted GMRES. Iterative fallback |
+
+All paths solve the same equation and agree to floating-point tolerance. Representative timings (`n` = model size, `n_v` = states + shocks):
+
+| Case | System size | `:kamenik` | `:dense` |
+|---|---|---|---|
+| ``n=35, n_v=14``, order 2 | 6,860 | 4.7 ms | 4,651 ms |
+| ``n=20, n_v=8``, order 3 | 10,240 | 4.7 ms | 20,370 ms |
+| ``n=35, n_v=14``, order 3 | 96,040 | 67 ms | infeasible (68 GB) |
+
+!!! note "Solvability"
+    The Sylvester equation is singular exactly when a generalized eigenvalue of the pencil ``(f_c, f_f)`` coincides with a ``d``-fold product of eigenvalues of ``M``. Every solve carries a residual check, so a near-singular system produces a warning and a fallback rather than a silently wrong coefficient tensor.
+
+    Working on the **pencil** rather than on ``f_c^{-1} f_f`` matters in practice: ``f_c`` is singular for any model with a purely static or purely forward-looking equation, and the pencil formulation solves those cases exactly.
+
+---
+
 ## Pruning
 
 Naive simulation of higher-order decision rules produces **explosive sample paths** because the Kronecker products ``(v_t \otimes v_t)`` compound deviations multiplicatively --- a moderate deviation at time ``t`` is squared, generating a larger deviation at ``t+1``, which is squared again. **Pruning** (Kim, Kim, Schaumburg & Sims 2008) prevents this by tracking state components separately and using only first-order states in the Kronecker products.
@@ -610,7 +660,7 @@ where:
 - ``G_1`` is the state transition matrix from the first-order solution
 - ``\text{impact}`` is the ``n \times n_\varepsilon`` shock impact matrix
 
-The `solve_lyapunov` function solves this equation via Kronecker vectorization: ``\text{vec}(\Sigma) = (I_{n^2} - G_1 \otimes G_1)^{-1} \, \text{vec}(\text{impact} \cdot \text{impact}')``. Autocovariances at lag ``h`` follow from ``\Gamma_h = G_1^h \, \Sigma``.
+The Kronecker reading of this equation, ``\text{vec}(\Sigma) = (I_{n^2} - G_1 \otimes G_1)^{-1} \, \text{vec}(\text{impact} \cdot \text{impact}')``, forms an ``n^2 \times n^2`` matrix and costs ``O(n^6)`` — 11.9 GB at ``n = 200``. `solve_lyapunov` instead uses the doubling (squaring) iteration, which converges quadratically in ``O(n^3)`` products, and verifies its relative residual; if doubling misses tolerance, a direct Bartels-Stewart solve (complex Schur plus a triangular column sweep) takes over. Autocovariances at lag ``h`` follow from ``\Gamma_h = G_1^h \, \Sigma``.
 
 ```@example dsge_nonlinear
 sol = solve(spec)
@@ -730,6 +780,10 @@ The stochastic steady state shifts from second-order perturbation reflect precau
 
 - Andreasen, M. M., Fernandez-Villaverde, J., & Rubio-Ramirez, J. F. (2018). The Pruned State-Space System for Non-Linear DSGE Models: Theory and Empirical Applications. *Review of Economic Studies*, 85(1), 1--49. [DOI](https://doi.org/10.1093/restud/rdx037)
 
+- Barraud, A. Y. (1977). A Numerical Algorithm to Solve ``A^T X A - X = Q``. *IEEE Transactions on Automatic Control*, 22(5), 883--885. [DOI](https://doi.org/10.1109/TAC.1977.1101604)
+
+- Bartels, R. H., & Stewart, G. W. (1972). Solution of the Matrix Equation ``AX + XB = C``. *Communications of the ACM*, 15(9), 820--826. [DOI](https://doi.org/10.1145/361573.361582)
+
 - Coleman, W. J. (1990). Solving the Stochastic Growth Model by Policy-Function Iteration. *Journal of Business & Economic Statistics*, 8(1), 27--29. [DOI](https://doi.org/10.1080/07350015.1990.10509769)
 
 - Brumm, J., & Scheidegger, S. (2017). Using Adaptive Sparse Grids to Solve High-Dimensional Dynamic Models. *Econometrica*, 85(5), 1575--1612. [DOI](https://doi.org/10.3982/ECTA12216)
@@ -737,6 +791,8 @@ The stochastic steady state shifts from second-order perturbation reflect precau
 - Gerstner, T., & Griebel, M. (2003). Dimension-Adaptive Tensor-Product Quadrature. *Computing*, 71(1), 65--87. [DOI](https://doi.org/10.1007/s00607-003-0015-5)
 
 - Judd, K. L. (1992). Projection Methods for Solving Aggregate Growth Models. *Journal of Economic Theory*, 58(2), 410--452. [DOI](https://doi.org/10.1016/0022-0531(92)90061-L)
+
+- Kamenik, O. (2005). Solving SDGE Models: A New Algorithm for the Sylvester Equation. *Computational Economics*, 25(1--2), 167--187. [DOI](https://doi.org/10.1007/s10614-005-6280-y)
 
 - Judd, K. L. (1998). *Numerical Methods in Economics*. MIT Press. ISBN: 978-0-262-10071-7.
 
