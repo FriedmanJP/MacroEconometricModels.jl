@@ -884,6 +884,118 @@ end
         @test maximum(abs, BCov) > 0
     end
 
+    @testset "pruning prevents the explosion it exists to prevent" begin
+        # The three pre-T269 pruning testsets all used `y[t] = ρ·y[t-1] + σ·ε[t]` — a linear
+        # AR(1) with no control, where hxx = gxx = hxxx = 0 exactly and pruning is a no-op.
+        # They would pass with the pruning recursion deleted. This is the missing test: run the
+        # SAME policy functions with the Kronecker terms fed the TOTAL state (what pruning
+        # removes) and show the unpruned path diverges where the pruned one stays bounded.
+        function simulate_unpruned(sol, e)
+            p = pruned_state_space(sol)
+            dev = zeros(size(e, 1), p.n)
+            x = zeros(p.nx)
+            for t in 1:size(e, 1)
+                v = vcat(x, e[t, :])
+                kv = kron(v, v)
+                xn = p.hx_state * x + p.eta_x * e[t, :] + 0.5 * (p.hxx * kv) + 0.5 * p.hss
+                yv = p.gx_state * x + p.eta_y * e[t, :] + 0.5 * (p.gxx * kv) + 0.5 * p.gss
+                if p.order >= 3
+                    k3 = kron(v, kv)
+                    xn += (1 / 6) * (p.hxxx * k3) + 0.5 * (p.hssx * v) + (1 / 6) * p.hsss
+                    yv += (1 / 6) * (p.gxxx * k3) + 0.5 * (p.gssx * v) + (1 / 6) * p.gsss
+                end
+                for (k, si) in enumerate(p.state_indices); dev[t, si] = xn[k]; end
+                for (k, ci) in enumerate(p.control_indices); dev[t, ci] = yv[k]; end
+                x = xn
+            end
+            dev
+        end
+        function cubic_spec(a2, a3, sig)
+            sp = @dsge begin
+                parameters: ρ = 0.7, a2 = 0.15, a3 = 0.05, κ = 0.5, σ = 0.3
+                endogenous: x, y
+                exogenous: ε
+                x[t] = ρ * x[t-1] + a2 * x[t-1]^2 + a3 * x[t-1]^3 + σ * ε[t]
+                y[t] = κ * x[t-1] + 0.2 * x[t-1]^2
+            end
+            sp.param_values[:a2] = a2
+            sp.param_values[:a3] = a3
+            sp.param_values[:σ] = sig
+            compute_steady_state(sp)
+        end
+
+        # Mild nonlinearity. Starting from the steady state the second-order component is zero
+        # at t=1 and only feeds back from t=3, so the two recursions coincide exactly through
+        # t=2 and separate after — pruning is a genuinely different recursion, not a filter
+        # that only engages near blow-up. Over the full path both stay bounded here, so the
+        # divergence below is about stability, not about the paths differing at all.
+        mild = cubic_spec(0.15, 0.05, 0.3)
+        for order in (2, 3)
+            sol = perturbation_solver(mild; order=order)
+            e = randn(Random.MersenneTwister(4), 2000, 1)
+            sp = simulate(sol, 2000; shock_draws=e) .- sol.steady_state'
+            su = simulate_unpruned(sol, e)
+            @test sp[1:2, :] ≈ su[1:2, :] rtol = 1e-10
+            @test !isapprox(sp, su; rtol=1e-8)
+            @test all(isfinite, sp) && all(isfinite, su)
+            @test maximum(abs, sp) < 5 && maximum(abs, su) < 5
+        end
+
+        # Strong nonlinearity: the unpruned Kronecker terms compound and blow up, at BOTH
+        # orders and every seed, while the pruned path stays bounded.
+        strong = cubic_spec(0.4, 0.2, 0.6)
+        for order in (2, 3), seed in (1, 2, 3, 4)
+            sol = perturbation_solver(strong; order=order)
+            e = randn(Random.MersenneTwister(seed), 2000, 1)
+            sp = simulate(sol, 2000; shock_draws=e) .- sol.steady_state'
+            @test all(isfinite, sp)
+            @test maximum(abs, sp) < 50
+            @test !all(isfinite, simulate_unpruned(sol, e))     # the premise of pruning
+        end
+    end
+
+    @testset "order-3 σ² state correction is live in both paths" begin
+        # `hσσx`/`gσσx` are exactly zero on the cubic fixture above, so nothing there exercises
+        # the σ²·state term. A CRRA model with a risky return makes them large (‖hσσx‖ ≈ 0.55
+        # versus 0.028 for the plain RBC), and both the closed form and the pruned simulation
+        # must respond to them.
+        risky = @dsge begin
+            parameters: β = 0.99, α = 0.36, δ = 0.025, ρ = 0.9, σ = 0.05, γ = 5.0
+            endogenous: k, c, z, r
+            exogenous: ε
+            z[t] = ρ * z[t-1] + σ * ε[t]
+            k[t] = exp(z[t]) * k[t-1]^α + (1 - δ) * k[t-1] - c[t]
+            c[t]^(-γ) = β * c[t+1]^(-γ) * (α * exp(z[t+1]) * k[t]^(α - 1) + 1 - δ)
+            r[t] = α * exp(z[t]) * k[t-1]^(α - 1) - δ
+        end
+        risky = compute_steady_state(risky)
+        sol = perturbation_solver(risky; order=3)
+        pss = pruned_state_space(sol)
+        @test maximum(abs, pss.hssx) > 0.4        # the premise: a genuinely live correction
+        @test maximum(abs, pss.gssx) > 0.4
+
+        # A solution with the σ² state corrections switched off, to measure their effect.
+        sol0 = perturbation_solver(risky; order=3)
+        sol0.hσσx .= 0.0
+        sol0.gσσx .= 0.0
+
+        m1 = M._augmented_moments_3rd(sol; lags=[1])
+        m0 = M._augmented_moments_3rd(sol0; lags=[1])
+        # The closed-form VARIANCE moves substantially...
+        @test abs(m1[:Var_y][1, 1] - m0[:Var_y][1, 1]) / m1[:Var_y][1, 1] > 0.2
+        @test abs(m1[:Var_y][2, 2] - m0[:Var_y][2, 2]) / m1[:Var_y][2, 2] > 0.2
+        # ... while the MEAN does not, and that is correct rather than a dropped term:
+        # hσσx multiplies xf, and E[xf] = 0 exactly, so the σ²·state term is mean-zero.
+        @test m1[:E_y] ≈ m0[:E_y] atol = 1e-12
+
+        # The pruned simulation responds the same way — the correction is not merely in the
+        # moment formula. Same seed, so the difference is the coefficient, not the draws.
+        v1 = var(simulate(sol, 200_000; rng=Random.MersenneTwister(9))[:, 1])
+        v0 = var(simulate(sol0, 200_000; rng=Random.MersenneTwister(9))[:, 1])
+        @test abs(v1 - v0) / v1 > 0.2
+        @test sign(m1[:Var_y][1, 1] - m0[:Var_y][1, 1]) == sign(v1 - v0)
+    end
+
     @testset "order-3 closed form matches simulation when hxx has no shock blocks" begin
         # Nonlinear in the STATE but linear in the shock, so hxx/hxxx carry only x⊗x blocks —
         # exactly what the augmented state can represent. The closed form must then land
