@@ -2094,3 +2094,157 @@ end
         @test all(isfinite, coef(mi))
     end
 end
+
+@testset "Regression discontinuity, CCT (#362/T263)" begin
+    M = MacroEconometricModels
+
+    @testset "kernels" begin
+        @test M._rd_kernel(0.0, :triangular) == 1.0
+        @test M._rd_kernel(0.5, :triangular) ≈ 0.5
+        @test M._rd_kernel(1.0, :triangular) == 0.0
+        @test M._rd_kernel(1.5, :triangular) == 0.0
+        @test M._rd_kernel(-0.5, :triangular) ≈ 0.5          # symmetric
+        @test M._rd_kernel(0.0, :epanechnikov) ≈ 0.75
+        @test M._rd_kernel(0.5, :uniform) == 1.0
+        @test M._rd_kernel(1.5, :uniform) == 0.0
+    end
+
+    @testset "conventional estimate equals a hand-rolled two-sided WLS" begin
+        # With a uniform kernel, p = 1 and a fixed h the estimator is just the difference of
+        # two OLS intercepts, which can be computed independently.
+        rng = Random.MersenneTwister(5); n = 800
+        x = 2 .* rand(rng, n) .- 1
+        y = (@. 1.0 + 0.8 * x + 0.7 * (x >= 0)) .+ 0.2 .* randn(rng, n)
+        h = 0.5
+        rd = estimate_rdd(y, x; cutoff=0.0, kernel=:uniform, p=1, h=h, b=h)
+        function side_intercept(mask)
+            d = x[mask]; X = hcat(ones(count(mask)), d)
+            ((X'X) \ (X' * y[mask]))[1]
+        end
+        ml = (x .< 0) .& (abs.(x) .<= h)
+        mr = (x .>= 0) .& (abs.(x) .<= h)
+        @test rd.tau_conventional ≈ side_intercept(mr) - side_intercept(ml) atol = 1e-10
+        @test rd.n_left == count(ml)
+        @test rd.n_right == count(mr)
+        @test rd.h == h
+        @test rd.design === :sharp
+        @test rd.first_stage === nothing
+    end
+
+    @testset "recovers a known sharp jump" begin
+        for tau0 in (0.0, 0.5, 1.0)
+            rng = Random.MersenneTwister(99); n = 3000
+            x = 2 .* rand(rng, n) .- 1
+            y = (@. 0.5 + 1.2 * x + 0.4 * x^2 + tau0 * (x >= 0)) .+ 0.3 .* randn(rng, n)
+            rd = estimate_rdd(y, x; cutoff=0.0)
+            @test rd.ci_robust[1] <= tau0 <= rd.ci_robust[2]
+            @test isapprox(rd.tau_bias_corrected, tau0; atol=0.12)
+            @test 0 < rd.h < 2                       # finite and inside the support
+            @test rd.b >= rd.h                       # the pilot is at least as wide
+            @test rd.n_left > 10 && rd.n_right > 10
+            @test rd.se_robust > 0 && rd.se_conventional > 0
+            @test isfinite(rd.pvalue_robust) && 0 <= rd.pvalue_robust <= 1
+        end
+    end
+
+    @testset "bias correction works where the bandwidth makes bias bite" begin
+        # At the MSE-optimal bandwidth the conventional estimator is already nearly unbiased,
+        # so there is nothing to correct. The CCT contribution shows up when h is large
+        # enough for the bias to dominate — which is exactly when a practitioner would be
+        # misled by the conventional interval.
+        tau0 = 0.6; reps = 60
+        for hfix in (0.6, 0.9)
+            bias_c = Float64[]; bias_b = Float64[]; cov_c = 0; cov_r = 0
+            for r in 1:reps
+                rr = Random.MersenneTwister(3000 + r); n = 2000
+                x = 2 .* rand(rr, n) .- 1
+                # curvature only on the LEFT, so the two intercept biases cannot cancel
+                y = (@. 0.5 + 1.0 * x + 4.0 * x^2 * (x < 0) + tau0 * (x >= 0)) .+
+                    0.2 .* randn(rr, n)
+                rd = estimate_rdd(y, x; cutoff=0.0, h=hfix, b=hfix * 1.5)
+                push!(bias_c, rd.tau_conventional - tau0)
+                push!(bias_b, rd.tau_bias_corrected - tau0)
+                rd.ci_conventional[1] <= tau0 <= rd.ci_conventional[2] && (cov_c += 1)
+                rd.ci_robust[1] <= tau0 <= rd.ci_robust[2] && (cov_r += 1)
+            end
+            # the correction removes essentially all of the bias (measured: +0.144 → -0.001
+            # at h = 0.6, and +0.325 → -0.000 at h = 0.9)
+            @test abs(Statistics.mean(bias_b)) < abs(Statistics.mean(bias_c)) / 5
+            @test abs(Statistics.mean(bias_b)) < 0.02
+            # the conventional interval collapses; the robust one holds its nominal level
+            @test cov_r > cov_c
+            @test cov_r / reps > 0.85
+        end
+    end
+
+    @testset "the robust standard error exceeds the conventional one" begin
+        rng = Random.MersenneTwister(7); n = 2000
+        x = 2 .* rand(rng, n) .- 1
+        y = (@. 0.5 + 1.0 * x + 1.5 * x^2 + 0.6 * (x >= 0)) .+ 0.3 .* randn(rng, n)
+        rd = estimate_rdd(y, x; cutoff=0.0)
+        # estimating the bias costs variance — that is why the robust CI is wider
+        @test rd.se_robust > rd.se_conventional
+        @test (rd.ci_robust[2] - rd.ci_robust[1]) > (rd.ci_conventional[2] - rd.ci_conventional[1])
+    end
+
+    @testset "fuzzy design recovers the local Wald ratio" begin
+        rng = Random.MersenneTwister(31); n = 6000
+        x = 2 .* rand(rng, n) .- 1
+        pr = @. 0.25 + 0.5 * (x >= 0)               # treatment probability jumps by 0.5
+        d = rand(rng, n) .< pr
+        y = (@. 0.5 + 0.8 * x + 1.0 * d) .+ 0.3 .* randn(rng, n)
+        rd = estimate_rdd(y, x; cutoff=0.0, fuzzy=Float64.(d))
+        @test rd.design === :fuzzy
+        @test rd.first_stage !== nothing
+        @test isapprox(rd.first_stage, 0.5; atol=0.12)
+        @test isapprox(rd.tau_bias_corrected, 1.0; atol=0.2)
+        @test rd.ci_robust[1] <= 1.0 <= rd.ci_robust[2]
+        # a first stage of zero is not identified
+        @test_throws ArgumentError estimate_rdd(y, x; cutoff=0.0, fuzzy=ones(n))
+    end
+
+    @testset "kernels and polynomial orders all run and agree roughly" begin
+        rng = Random.MersenneTwister(77); n = 2500
+        x = 2 .* rand(rng, n) .- 1
+        y = (@. 0.5 + 1.0 * x + 0.8 * (x >= 0)) .+ 0.25 .* randn(rng, n)
+        ests = Float64[]
+        for kern in (:triangular, :epanechnikov, :uniform), pp in (1, 2)
+            rd = estimate_rdd(y, x; cutoff=0.0, kernel=kern, p=pp)
+            @test isfinite(rd.tau_bias_corrected)
+            @test rd.kernel === kern && rd.p == pp
+            push!(ests, rd.tau_bias_corrected)
+        end
+        @test all(isapprox.(ests, 0.8; atol=0.2))
+    end
+
+    @testset "non-zero cutoff is handled by shifting, not by luck" begin
+        rng = Random.MersenneTwister(19); n = 2500
+        x = 2 .* rand(rng, n) .- 1
+        y = (@. 1.0 + 0.5 * x + 0.7 * (x >= 0.3)) .+ 0.2 .* randn(rng, n)
+        rd = estimate_rdd(y, x; cutoff=0.3)
+        @test rd.cutoff == 0.3
+        @test isapprox(rd.tau_bias_corrected, 0.7; atol=0.2)
+        # shifting the running variable and the cutoff together is the same problem
+        rd2 = estimate_rdd(y, x .- 0.3; cutoff=0.0, h=rd.h, b=rd.b)
+        rd1 = estimate_rdd(y, x; cutoff=0.3, h=rd.h, b=rd.b)
+        @test rd1.tau_conventional ≈ rd2.tau_conventional rtol = 1e-10
+        @test rd1.tau_bias_corrected ≈ rd2.tau_bias_corrected rtol = 1e-10
+    end
+
+    @testset "display and validation" begin
+        rng = Random.MersenneTwister(3); n = 600
+        x = 2 .* rand(rng, n) .- 1
+        y = (@. 0.5 * x + 0.5 * (x >= 0)) .+ 0.2 .* randn(rng, n)
+        rd = estimate_rdd(y, x; cutoff=0.0)
+        io = IOBuffer(); show(io, rd); @test occursin("RDDResult", String(take!(io)))
+        report(rd)
+        @test_throws ArgumentError estimate_rdd(y, x; cutoff=0.0, kernel=:bogus)
+        @test_throws ArgumentError estimate_rdd(y, x; cutoff=0.0, p=0)
+        @test_throws ArgumentError estimate_rdd(y, x; cutoff=0.0, level=0.0)
+        @test_throws ArgumentError estimate_rdd(y, x; cutoff=0.0, level=1.0)
+        @test_throws ArgumentError estimate_rdd(y, x[1:10]; cutoff=0.0)
+        @test_throws ArgumentError estimate_rdd(y, x; cutoff=0.0, fuzzy=ones(5))
+        @test_throws ArgumentError estimate_rdd(y, x; cutoff=99.0)     # nothing above
+        @test_throws ArgumentError estimate_rdd(y, x; cutoff=-99.0)    # nothing below
+    end
+end

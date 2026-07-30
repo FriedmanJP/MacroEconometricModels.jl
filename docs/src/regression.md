@@ -552,6 +552,89 @@ The sparsity ``s(\tau)`` is estimated by the Siddiqui–Hendricks–Koenker diff
 
 ---
 
+## Regression Discontinuity
+
+When treatment is assigned by whether a **running variable** crosses a cutoff, units just above and just below are comparable, and the jump in the conditional mean of the outcome at the cutoff identifies a local treatment effect. `estimate_rdd` implements the modern standard: local polynomial regression with Calonico, Cattaneo & Titiunik (2014) robust bias-corrected inference.
+
+```math
+\tau = \lim_{x \downarrow c}\mathbb{E}[y \mid x] - \lim_{x \uparrow c}\mathbb{E}[y \mid x]
+```
+
+Each limit is a weighted polynomial fit on its own side of the cutoff, using observations within a bandwidth `h` and a kernel (triangular by default) that down-weights points further away. The estimate is the difference of the two fitted intercepts.
+
+```@example reg
+xr = 2 .* rand(n) .- 1                              # running variable
+yr = (@. 0.5 + 1.2 * xr + 0.4 * xr^2 + 0.8 * (xr >= 0)) .+ 0.3 .* randn(n)
+
+rd = estimate_rdd(yr, xr; cutoff=0.0)
+report(rd)
+```
+
+The true jump is 0.8. The MSE-optimal bandwidth is chosen automatically by the CCT plug-in rule, which balances the variance term of order ``1/(nh)`` against the squared bias of order ``h^{2(p+1)}``.
+
+### Why the robust interval
+
+Three quantities are reported, and the gap between them is the whole reason to prefer CCT over naive local linear regression:
+
+| | Estimate | Standard error |
+|---|---|---|
+| conventional | local polynomial of order ``p`` at ``h`` | its own variance |
+| bias-corrected | conventional minus the estimated leading bias | conventional SE |
+| **robust** | bias-corrected | variance that *also* accounts for having estimated the bias |
+
+The MSE-optimal bandwidth is deliberately large enough that bias is not negligible — that is what makes it optimal for the point estimate. But it means the conventional interval, which ignores that bias, is centred in the wrong place and too narrow. Simulated on a design with curvature on one side of the cutoff only (so the two intercept biases cannot cancel), with the bandwidth held fixed to make the bias bite:
+
+| Bandwidth | Conventional bias | Bias-corrected | Conventional coverage | Robust coverage |
+|---|---|---|---|---|
+| ``h = 0.3`` | ``+0.035`` | ``-0.001`` | 83.2% | **94.5%** |
+| ``h = 0.6`` | ``+0.144`` | ``-0.001`` | 0.0% | **94.8%** |
+| ``h = 0.9`` | ``+0.325`` | ``-0.000`` | 0.0% | **97.0%** |
+
+The correction removes essentially all of the bias, and the robust interval holds its nominal level where the conventional one collapses entirely. **Report `ci_robust`.**
+
+!!! note "At the MSE-optimal bandwidth the correction may look inert"
+    On a smooth design the plug-in bandwidth is often small enough that the conventional estimator is already nearly unbiased, in which case the bias correction changes little and only widens the interval. That is not a failure — it is the correction reporting that there was nothing to fix. The table above uses a fixed, deliberately wide bandwidth to exhibit the regime where it matters.
+
+!!! warning "Symmetric curvature cancels"
+    If the conditional mean has the *same* curvature on both sides of the cutoff, the two intercept biases are nearly equal and cancel in the difference. Bias in an RD estimate comes from curvature that **differs** across the cutoff, which is also why a specification check should look at each side separately.
+
+### Fuzzy designs
+
+When crossing the cutoff shifts the *probability* of treatment rather than switching it deterministically, pass the treatment indicator as `fuzzy`. The estimate becomes the local Wald ratio — the outcome jump divided by the treatment jump — with the ratio's variance obtained by the delta method:
+
+```@example reg
+prob = @. 0.25 + 0.5 * (xr >= 0)
+dr = Float64.(rand(n) .< prob)
+yf = (@. 0.5 + 0.8 * xr + 1.0 * dr) .+ 0.3 .* randn(n)
+
+rdf = estimate_rdd(yf, xr; cutoff=0.0, fuzzy=dr)
+(first_stage = round(rdf.first_stage; digits=3),
+ wald_ratio = round(rdf.tau_bias_corrected; digits=3))
+```
+
+The first stage recovers the 0.5 jump in treatment probability and the ratio recovers the effect on the treated.
+
+| Keyword | Type | Default | Description |
+|---------|------|---------|-------------|
+| `cutoff` | `Real` | `0.0` | Threshold in the running variable |
+| `fuzzy` | `AbstractVector` | `nothing` | Treatment indicator for a fuzzy design |
+| `kernel` | `Symbol` | `:triangular` | `:triangular`, `:epanechnikov`, or `:uniform` |
+| `p` | `Int` | `1` | Polynomial order (1 = local linear) |
+| `h`, `b` | `Real` | `nothing` | Main and pilot bandwidths; omit for the MSE-optimal plug-in |
+| `level` | `Real` | `0.95` | Confidence level |
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `tau_conventional`, `tau_bias_corrected` | `T` | Point estimates of the jump |
+| `se_conventional`, `se_robust` | `T` | Standard errors |
+| `ci_conventional`, `ci_robust` | `Tuple{T,T}` | Confidence intervals |
+| `pvalue_robust`, `z_robust` | `T` | Robust test of no effect |
+| `h`, `b` | `T` | Main and pilot bandwidths used |
+| `n_left`, `n_right` | `Int` | Effective observations inside the window per side |
+| `first_stage` | `Union{Nothing,T}` | Treatment jump (fuzzy designs only) |
+
+---
+
 ## Long-Run Variance (HAC) Estimation
 
 When the data are serially correlated --- as in time-series regressions, GMM moment conditions, and cointegration analysis --- inference requires the **long-run variance** (LRV), the zero-frequency spectral density that sums all autocovariances rather than a single-lag White correction. For a mean-zero (after demeaning) series ``U_t`` (``T \times k``) with sample autocovariances ``\Gamma_j = T^{-1} \sum_t U_t U_{t-j}'`` and kernel ``k(\cdot)``:

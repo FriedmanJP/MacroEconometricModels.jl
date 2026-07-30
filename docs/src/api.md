@@ -493,6 +493,7 @@ OLS, WLS, IV/2SLS, logit, probit, ordered, and multinomial estimation for cross-
 | `estimate_reg(y, X; ...)` | OLS/WLS regression (HC0–HC3, cluster-robust, Conley spatial SEs) |
 | `conley_se(m; coords, cutoff)` | Conley (1999) spatial HAC SEs (also `cov_type=:conley`) |
 | `estimate_qreg(y, X, tau)` | Quantile regression (Koenker-Bassett; `:iid`/`:robust`/`:boot` SEs) |
+| `estimate_rdd(y, running; cutoff)` | Sharp/fuzzy RDD with CCT robust bias-corrected inference |
 | `estimate_iv(y, X, Z; ...)` | IV/2SLS estimation |
 | `estimate_logit(y, X)` | Logit MLE via IRLS |
 | `estimate_probit(y, X)` | Probit MLE via IRLS |

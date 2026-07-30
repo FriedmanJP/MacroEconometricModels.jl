@@ -9,6 +9,7 @@ OLS, WLS, IV/2SLS, logit, probit, ordered, and multinomial estimation for cross-
 ```@docs
 RegModel
 QuantileRegModel
+RDDResult
 LogitModel
 ProbitModel
 MarginalEffects
@@ -37,6 +38,7 @@ MultinomialLogitModel
 estimate_reg
 conley_se
 estimate_qreg
+estimate_rdd
 estimate_iv
 estimate_logit
 estimate_probit
