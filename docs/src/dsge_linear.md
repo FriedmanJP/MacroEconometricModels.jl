@@ -183,6 +183,68 @@ The three outcomes are:
 - **``n_{\text{unstable}} < n_{\text{forward}}``**: More forward-looking variables than unstable roots. The system is **indeterminate** --- multiple stable paths exist. Typical fixes: strengthen the Taylor rule (increase ``\phi_\pi``), add fiscal rules, or tighten expectations anchoring.
 - **``n_{\text{unstable}} > n_{\text{forward}}``**: More unstable roots than forward-looking variables. No stable solution exists --- all paths are **explosive**. Typical fixes: check parameter calibration (discount factor near unity, reasonable adjustment costs), verify equation timing, or reduce the number of predetermined variables.
 
+### Determinacy Regions
+
+A single verdict answers "is *this* calibration determinate?". The more useful applied question is *where* the boundary lies. `determinacy_region` sweeps one or two parameters, re-solving the model at each grid point, and returns a `DeterminacyMap`:
+
+```@example dsge_linear
+nk = @dsge begin
+    parameters: β = 0.99, σ_c = 1.0, κ = 0.3, φ_π = 1.5, φ_y = 0.5,
+                ρ_d = 0.8, σ_d = 0.01
+    endogenous: y, π, R, d
+    exogenous: ε_d
+
+    y[t] = y[t+1] - (1 / σ_c) * (R[t] - π[t+1]) + d[t]
+    R[t] = φ_π * π[t] + φ_y * y[t]
+    π[t] = β * π[t+1] + κ * y[t]
+    d[t] = ρ_d * d[t-1] + σ_d * ε_d[t]
+end
+nk = compute_steady_state(nk)
+
+dm = determinacy_region(nk; params=:φ_π, grids=range(0.0, 3.0; length=31))
+report(dm)
+```
+
+The boundary this locates is the **generalized Taylor principle**, ``\kappa(\phi_\pi - 1) + (1 - \beta)\phi_y > 0``: a strong enough output response substitutes for the inflation response, so the frontier sits slightly below ``\phi_\pi = 1``.
+
+```@example dsge_linear
+determinacy_boundary(dm)     # located to within half a grid step
+```
+
+Sweeping both policy coefficients traces the frontier as a curve:
+
+```@example dsge_linear
+dm2 = determinacy_region(nk; params=(:φ_π, :φ_y),
+                         grids=(range(0.0, 2.0; length=11), range(0.0, 4.0; length=9)))
+count(==(1), dm2.verdict), length(dm2.verdict)
+```
+
+```julia
+plot_result(dm2)             # determinacy map (heatmap)
+```
+
+| Keyword | Default | Description |
+|---------|---------|-------------|
+| `params` | --- | a `Symbol`, or 1--2 `Symbol`s to sweep |
+| `grids` | --- | matching grid values (a vector, or one vector per parameter) |
+| `div` | `1.0 + 1e-8` | stable/unstable eigenvalue boundary |
+| `rank_rtol` | `1e-8` | relative tolerance of the Sims rank tests |
+| `method` | `:gensys` | linear solver used at each grid point |
+| `threaded` | `false` | evaluate grid points in parallel (results are identical) |
+| `quiet` | `true` | suppress per-point solver warnings |
+
+Verdicts are stored as ordered integer codes in `dm.verdict`:
+
+| Code | Meaning |
+|------|---------|
+| `1` | determinate |
+| `0` | indeterminate |
+| `-1` | no stable solution |
+| `-2` | the model could not be solved at that grid point |
+
+!!! note "Failed grid points are not a region"
+    A parameter value where the steady state fails to converge is recorded as `-2`, with the error message in `dm.failures`, and the sweep continues rather than aborting. Such cells are drawn in neutral grey on the map and skipped by `determinacy_boundary` --- a solve failure is missing information, not a fourth determinacy region, so the step from "failed" to "determinate" is not a boundary crossing.
+
 ---
 
 ## Gensys (Sims 2002)
@@ -479,6 +541,9 @@ All three solvers produce identical state-space representations for a well-speci
 
 - Klein, P. (2000). Using the Generalized Schur Form to Solve a Multivariate Linear Rational Expectations Model.
   *Journal of Economic Dynamics and Control*, 24(10), 1405--1423. [DOI](https://doi.org/10.1016/S0165-1889(99)00045-7)
+
+- Lubik, T. A., & Schorfheide, F. (2004). Testing for Indeterminacy: An Application to U.S. Monetary Policy.
+  *American Economic Review*, 94(1), 190--217. [DOI](https://doi.org/10.1257/000282804322970760)
 
 - Sims, C. A. (2002). Solving Linear Rational Expectations Models.
   *Computational Economics*, 20(1--2), 1--20. [DOI](https://doi.org/10.1023/A:1020517101123)

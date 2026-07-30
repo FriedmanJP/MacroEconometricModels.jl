@@ -407,8 +407,10 @@ Specify, solve, simulate, and estimate Dynamic Stochastic General Equilibrium mo
 | `collocation_solver(spec; ...)` | Chebyshev collocation projection (isotropic/anisotropic Smolyak, `adaptive=true` refinement) |
 | `pfi_solver(spec; ...)` | Policy function iteration |
 | `vfi_solver(spec; ...)` | Value function iteration |
-| `is_determined(sol)` | Check existence and uniqueness |
+| `is_determined(sol)` | Check existence and uniqueness (Sims 2002 rank test) |
 | `is_stable(sol)` | Check stability of solution |
+| `determinacy_region(spec; params, grids)` | Determinacy verdict over a 1- or 2-parameter grid |
+| `determinacy_boundary(m)` | Grid location of the boundary in a 1-parameter sweep |
 
 ### DSGE Simulation and Analysis
 

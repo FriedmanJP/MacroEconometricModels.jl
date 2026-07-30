@@ -306,6 +306,7 @@ include("dsge/steady_state.jl")
 include("dsge/linearize.jl")
 include("dsge/qz_solve.jl")
 include("dsge/gensys.jl")
+include("dsge/determinacy.jl")   # T268 (#367): determinacy-region mapping
 include("dsge/blanchard_kahn.jl")
 include("dsge/klein.jl")
 include("dsge/derivatives.jl")
@@ -690,6 +691,7 @@ export AbstractDSGEModel
 
 # Types
 export DSGESpec, LinearDSGE, DSGESolution, PerturbationSolution, ProjectionSolution, PerfectForesightPath, DSGEEstimation
+export DeterminacyMap
 
 # Bayesian DSGE
 export BayesianDSGE, BayesianDSGESimulation
@@ -715,6 +717,7 @@ export compute_steady_state, linearize, solve, gensys, blanchard_kahn, klein, pe
 export collocation_solver, pfi_solver, perfect_foresight
 export simulate, estimate_dsge
 export solve_lyapunov, analytical_moments
+export determinacy_region, determinacy_boundary, determinacy_label, DETERMINACY_CODES
 export evaluate_policy, max_euler_error, vfi_solver
 
 # Accessors

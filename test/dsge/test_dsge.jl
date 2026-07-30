@@ -742,6 +742,163 @@ end
     @test is_determined(sol)
 end
 
+@testset "Determinacy-region mapping (#367, T268)" begin
+    M = MacroEconometricModels
+
+    # Textbook 3-equation NK model. Its determinacy frontier is analytic:
+    #   determinate  ⇔  κ·(φ_π − 1) + (1 − β)·φ_y > 0
+    # (Woodford's "generalized Taylor principle"), which is what every check below is
+    # measured against rather than against the code's own output.
+    nk = @dsge begin
+        parameters: β = 0.99, σ_c = 1.0, κ = 0.3, φ_π = 1.5, φ_y = 0.5,
+                    ρ_d = 0.8, σ_d = 0.01
+        endogenous: y, π, R, d
+        exogenous: ε_d
+        y[t] = y[t+1] - (1 / σ_c) * (R[t] - π[t+1]) + d[t]
+        R[t] = φ_π * π[t] + φ_y * y[t]
+        π[t] = β * π[t+1] + κ * y[t]
+        d[t] = ρ_d * d[t-1] + σ_d * ε_d[t]
+    end
+    nk = compute_steady_state(nk)
+    frontier(pp, py; beta=0.99, kappa=0.3) = kappa * (pp - 1) + (1 - beta) * py
+
+    @testset "1-D sweep reproduces the Taylor-principle boundary" begin
+        grid = range(0.0, 3.0; length=61)
+        m = determinacy_region(nk; params=:φ_π, grids=grid)
+        @test m isa DeterminacyMap
+        @test m.params == [:φ_π]
+        @test size(m.verdict) == (61, 1)
+        @test isempty(m.failures)
+        # Every cell matches the closed-form frontier (φ_y = 0.5 held at its base value).
+        for (i, pp) in enumerate(grid)
+            abs(frontier(pp, 0.5)) < 1e-8 && continue      # skip the frontier itself
+            @test m.verdict[i, 1] == (frontier(pp, 0.5) > 0 ? 1 : 0)
+        end
+        # ... and the located boundary sits within half a grid step of the analytic one.
+        b = determinacy_boundary(m)
+        @test length(b) == 1
+        analytic = 1 - (1 - 0.99) * 0.5 / 0.3
+        @test abs(b[1] - analytic) <= step(grid)
+        # eu is the raw Sims pair, consistent with the verdict code
+        @test m.eu[end, 1, :] == [1, 1]                     # φ_π = 3 ⇒ determinate
+        @test m.eu[1, 1, :] == [1, 0]                       # φ_π = 0 ⇒ indeterminate
+    end
+
+    @testset "2-D sweep matches the analytic frontier cell by cell" begin
+        g1 = range(0.0, 2.0; length=11)
+        g2 = range(0.0, 4.0; length=9)
+        m = determinacy_region(nk; params=(:φ_π, :φ_y), grids=(g1, g2))
+        @test size(m.verdict) == (11, 9)
+        @test sort(unique(m.verdict)) == [0, 1]
+        bad = 0
+        for (i, pp) in enumerate(g1), (j, py) in enumerate(g2)
+            abs(frontier(pp, py)) < 1e-8 && continue
+            m.verdict[i, j] == (frontier(pp, py) > 0 ? 1 : 0) || (bad += 1)
+        end
+        @test bad == 0
+        # The frontier slopes: a larger output response lowers the inflation response needed.
+        @test m.verdict[6, 1] == 0 && m.verdict[6, end] == 1
+        @test_throws ArgumentError determinacy_boundary(m)   # a curve, not points
+    end
+
+    @testset "no stable solution is a distinct region" begin
+        # div below the largest stable root leaves too few stable roots.
+        m = determinacy_region(nk; params=:φ_π, grids=[1.5], div=0.5)
+        @test m.verdict[1, 1] == DETERMINACY_CODES.no_solution
+        @test m.eu[1, 1, 1] == 0
+    end
+
+    @testset "solve failures are marked, not fatal" begin
+        # Nonlinear RBC: the steady state is solved numerically, so invalid capital shares
+        # genuinely fail instead of merely changing the verdict.
+        rbc = @dsge begin
+            parameters: β = 0.99, α = 0.36, δ = 0.025, ρ = 0.95, σ = 0.01
+            endogenous: k, c, z
+            exogenous: ε
+            z[t] = ρ * z[t-1] + σ * ε[t]
+            k[t] = exp(z[t]) * k[t-1]^α + (1 - δ) * k[t-1] - c[t]
+            1 / c[t] = β * (1 / c[t+1]) * (α * exp(z[t+1]) * k[t]^(α - 1) + 1 - δ)
+        end
+        rbc = compute_steady_state(rbc)
+        m = determinacy_region(rbc; params=:α, grids=[-0.5, 0.0, 0.36, 0.9, 1.0, 1.5])
+        @test m.verdict[3, 1] == DETERMINACY_CODES.determinate    # the valid calibration
+        @test count(==(DETERMINACY_CODES.failed), m.verdict) >= 3
+        @test length(m.failures) == count(==(DETERMINACY_CODES.failed), m.verdict)
+        @test all(k -> m.verdict[k...] == DETERMINACY_CODES.failed, keys(m.failures))
+        @test all(!isempty, values(m.failures))
+        @test m.eu[1, 1, :] == [-1, -1]                            # sentinel at failed cells
+        # A failed cell is missing information, not a region: the step from "failed" to
+        # "determinate" must not be reported as a determinacy boundary.
+        @test isempty(determinacy_boundary(m))
+        @test !isempty(sprint(report, m))
+    end
+
+    @testset "threaded equals serial" begin
+        g1 = range(0.5, 2.0; length=7)
+        g2 = range(0.0, 3.0; length=5)
+        ms = determinacy_region(nk; params=(:φ_π, :φ_y), grids=(g1, g2))
+        mt = determinacy_region(nk; params=(:φ_π, :φ_y), grids=(g1, g2), threaded=true)
+        @test mt.verdict == ms.verdict
+        @test mt.eu == ms.eu
+    end
+
+    @testset "argument validation and accessors" begin
+        @test_throws ArgumentError determinacy_region(nk; params=:nope, grids=[1.0])
+        @test_throws ArgumentError determinacy_region(nk; params=(:φ_π, :φ_π),
+                                                      grids=([1.0], [1.0]))
+        @test_throws ArgumentError determinacy_region(nk; params=(:φ_π, :φ_y, :κ),
+                                                      grids=([1.0], [1.0], [1.0]))
+        @test_throws ArgumentError determinacy_region(nk; params=:φ_π, grids=Float64[])
+        @test_throws ArgumentError determinacy_region(nk; params=(:φ_π, :φ_y), grids=([1.0],))
+        @test_throws ArgumentError determinacy_region(nk; params=:φ_π, grids=[1.0],
+                                                      method=:bogus)
+        @test determinacy_label(1) == "determinate"
+        @test determinacy_label(0) == "indeterminate"
+        @test determinacy_label(-1) == "no stable solution"
+        @test determinacy_label(-2) == "solve failed"
+        @test_throws ArgumentError determinacy_label(7)
+        @test DETERMINACY_CODES.determinate == 1
+    end
+
+    @testset "base parameter vector is respected" begin
+        # Holding φ_y at 0 moves the frontier to exactly φ_π = 1.
+        base = copy(nk.param_values)
+        base[:φ_y] = 0.0
+        m = determinacy_region(nk, base; params=:φ_π, grids=[0.9, 0.99, 1.01, 1.1])
+        @test vec(m.verdict) == [0, 0, 1, 1]
+        @test m.base_values[:φ_y] == 0.0
+        # and the default base reproduces the model's own values
+        m2 = determinacy_region(nk; params=:φ_π, grids=[1.5])
+        @test m2.base_values[:φ_y] == nk.param_values[:φ_y]
+    end
+
+    @testset "report and show" begin
+        m = determinacy_region(nk; params=:φ_π, grids=range(0.0, 3.0; length=21))
+        s = sprint(show, m)
+        @test occursin("DeterminacyMap", s) && occursin("determinate", s)
+        r = sprint(report, m)
+        @test occursin("Determinacy Region", r)
+        @test occursin("Boundary at", r)
+        @test occursin("D", r) && occursin("I", r)        # the ASCII map
+        m2 = determinacy_region(nk; params=(:φ_π, :φ_y),
+                                grids=(range(0.0, 2.0; length=5), range(0.0, 2.0; length=4)))
+        r2 = sprint(report, m2)
+        @test occursin("rows:", r2) && occursin("cols:", r2)
+    end
+
+    @testset "plot_result renders both shapes" begin
+        m1 = determinacy_region(nk; params=:φ_π, grids=range(0.0, 3.0; length=21))
+        p1 = plot_result(m1)
+        @test p1 isa MacroEconometricModels.PlotOutput
+        @test occursin("dsge_determinacy", p1.html)
+        m2 = determinacy_region(nk; params=(:φ_π, :φ_y),
+                                grids=(range(0.0, 2.0; length=6), range(0.0, 3.0; length=5)))
+        p2 = plot_result(m2; title="NK determinacy")
+        @test occursin("NK determinacy", p2.html)
+        @test occursin("φ_y", p2.html)                     # second parameter labels the x axis
+    end
+end
+
 @testset "Sims (2002) existence/uniqueness rank test (#366, T267)" begin
     M = MacroEconometricModels
 

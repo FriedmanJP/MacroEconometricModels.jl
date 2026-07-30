@@ -25,6 +25,7 @@ OccBinConstraint
 OccBinRegime
 OccBinSolution
 OccBinIRF
+DeterminacyMap
 ```
 
 ---
@@ -89,6 +90,15 @@ fevd(::BayesianDSGE{T}, ::Int) where {T<:AbstractFloat}
 simulate
 solve_lyapunov
 analytical_moments
+```
+
+### Determinacy Regions
+
+```@docs
+determinacy_region
+determinacy_boundary
+determinacy_label
+DETERMINACY_CODES
 ```
 
 ---
