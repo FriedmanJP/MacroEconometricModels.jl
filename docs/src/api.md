@@ -450,6 +450,11 @@ Heterogeneous-agent (Reiter/SSJ/Krusell-Smith), continuous-time (HJB/KFE), and O
 | `ssj_jacobian(model; unknowns, targets, shocks)` | General-equilibrium sequence-space Jacobian `H_U`, `H_Z` |
 | `ssj_irf(gej, dZ; order=2)` | First- and second-order sequence-space impulse responses |
 | `dcegm_solve(prob)` | DCEGM discrete-continuous choice with upper envelope (Iskhakov et al. 2017) |
+| `ct_two_asset_solve(m)` | Continuous-time two-asset household block (KMV upwind; `cost=:quadratic`/`:kinked`) |
+| `ct_two_asset_ge(m)` | Two-asset stationary general equilibrium (capital + bond market clearing) |
+| `ct_two_asset_mit(m, ge, Z_path)` | Two-asset MIT-shock transition (backward HJB / forward KFE shooting) |
+| `hand_to_mouth(sol)` / `ceiling_mass(sol)` | Poor vs wealthy hand-to-mouth shares; mass on the grid ceilings |
+| `ct_two_asset_stationarity(m)` | Whether the calibration can bound illiquid wealth (see #509) |
 | `dcegm_retirement_model(; ...)` | Canonical work/retire problem |
 | `dcegm_threshold(sol, t, d_prev, j; ...)` | Cash-on-hand at which the discrete choice switches |
 | `dcegm_simulate(sol, grid)` | Young histogram respecting the discrete choice |

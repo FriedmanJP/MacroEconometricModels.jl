@@ -272,6 +272,8 @@ CTSteadyState
 CTTransition
 CTTwoAsset
 CTTwoAssetSolution
+CTTwoAssetGE
+CTTwoAssetTransition
 ```
 
 ### Continuous-Time Solvers
@@ -282,8 +284,14 @@ ct_kfe
 ct_steady_state
 ct_mit_shock
 ct_two_asset_solve
+ct_two_asset_ge
+ct_two_asset_mit
+hand_to_mouth
+ceiling_mass
+ct_two_asset_stationarity
 report(::IO, ::CTSteadyState{T}) where {T}
 report(::IO, ::CTTwoAssetSolution{T}) where {T}
+report(::IO, ::CTTwoAssetGE{T}) where {T}
 ```
 
 ---
