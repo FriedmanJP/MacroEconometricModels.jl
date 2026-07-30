@@ -429,3 +429,181 @@ function _pss_augmented_2nd(pss::PrunedStateSpace{T};
 
     return (A, c, Var_z, E_z, M)
 end
+
+
+# =============================================================================
+# Order-3 augmented system: exact, simulation-free innovation moments
+# =============================================================================
+#
+# Andreasen, Fernández-Villaverde & Rubio-Ramírez (2018) give the third-order pruned system as
+# a LINEAR recursion in the augmented state
+#
+#     z_t = [xf; xs; xf⊗xf; xrd; xf⊗xs; xf⊗xf⊗xf]        (3nx + 2nx² + nx³)
+#     z_{t+1} = c + A·z_t + ξ_{t+1}
+#
+# and their companion code (`UnconditionalMoments_3rd_Lyap.m`) obtains `Var(ξ)` and
+# `Cov(ξ_{t+1}, z_t)` from ~2000 lines of hand-derived Gaussian moment algebra, carrying shock
+# moments up to order six.
+#
+# There is a much shorter exact route. Expanding each block of ξ shows that every term is a
+# monomial in `ε_{t+1}` times a SINGLE component of `z_t` (or a constant) — the whole point of
+# the augmentation is that the nonlinearity is absorbed into the state coordinates. So for a
+# FIXED shock, ξ is **linear** in `z̃ = [1; z]`:
+#
+#     ξ_{t+1} = Ξ(ε_{t+1}) · z̃_t
+#
+# With `ε ⊥ z` that gives, exactly,
+#
+#     Var(ξ)             = E_ε[ Ξ(ε)·E[z̃z̃']·Ξ(ε)' ]
+#     Cov(ξ_{t+1}, z_t)  = E_ε[Ξ(ε)] · Cov(z̃_t, z_t)
+#
+# and both expectations are integrals of a polynomial of degree ≤ 6 in ε, which a 4-node
+# Gauss-Hermite tensor rule evaluates EXACTLY (exact through degree 2m−1 = 7). No simulation,
+# no sixth-moment algebra, and the shock moments enter through the quadrature rather than
+# through hand-coded `vectorMom4`/`vectorMom6` tables.
+#
+# `E_ε[Ξ(ε)]` is not zero: the `ε²·xf` terms inside the `xf⊗xf⊗xf` block make ξ correlated
+# with `z_t`. That correlation is exactly Andreasen's `BCov_xiLeadS_z`, and dropping it — as
+# this package did before — biases the third-order variance.
+#
+# Since `Var(ξ)` depends on `E[z̃z̃']`, which depends on `Var(z)`, the pair is a fixed point;
+# `_pss_moments_3rd` iterates it to convergence (a contraction for a stable `A`).
+
+"""
+    _pss_xi_matrix(pss, u, hxx_xx) → Ξ
+
+The matrix `Ξ(ε)` with `ξ_{t+1} = Ξ(ε)·[1; z_t]`, for the shock contribution `u = η_x·ε`.
+
+Blocks, writing `a = hx·xf` and expanding `z_{t+1}` minus its `c + A·z_t` part:
+
+| block | contribution |
+|---|---|
+| `xf` | `u` |
+| `xs` | 0 — the whole update is in `A` and `c` |
+| `xf⊗xf` | `[hx⊗u + u⊗hx]·xf + (u⊗u − E[u⊗u])` |
+| `xrd` | 0 |
+| `xf⊗xs` | `(u⊗hx)·xs + (u⊗½hxx)·(xf⊗xf) + u⊗½hσσ` |
+| `xf⊗xf⊗xf` | `[hx⊗hx⊗u + hx⊗u⊗hx + u⊗hx⊗hx]·(xf⊗xf)` `+ [hx⊗u⊗u + u⊗hx⊗u + u⊗u⊗hx]·xf` `+ (u⊗u⊗u − E[u⊗u⊗u])` |
+
+The Kronecker identities used are `(A⊗b)·x = (A·x)⊗b` for a column `b`, and
+`(A⊗B⊗C)·(x⊗y⊗z) = (Ax)⊗(By)⊗(Cz)` with a scalar slot when the middle factor is a column.
+"""
+function _pss_xi_matrix(pss::PrunedStateSpace{T}, u::AbstractVector{T},
+                        hxx_xx::AbstractMatrix{T}) where {T}
+    nx = pss.nx
+    nz = 3 * nx + 2 * nx^2 + nx^3
+    hx = pss.hx_state
+    U = reshape(u, nx, 1)
+    hss2 = reshape(T(0.5) .* pss.hss, nx, 1)
+
+    r1 = 1:nx
+    r2 = nx+1:2*nx
+    r3 = 2*nx+1:2*nx+nx^2
+    r5 = 3*nx+nx^2+1:3*nx+2*nx^2
+    r6 = 3*nx+2*nx^2+1:nz
+    # columns of z̃: 1 is the constant, then 1 + (z index)
+    c1 = 1
+    cz(rng) = (first(rng) + 1):(last(rng) + 1)
+
+    X = zeros(T, nz, nz + 1)
+
+    # xf
+    X[r1, c1] = u
+
+    # xf⊗xf
+    X[r3, cz(r1)] = kron(hx, U) + kron(U, hx)
+    X[r3, c1] = kron(u, u) - kron(pss.eta_x, pss.eta_x) * vec(Matrix{T}(I, pss.n_eps, pss.n_eps))
+
+    # xf⊗xs
+    X[r5, cz(r2)] = kron(U, hx)
+    X[r5, cz(r3)] = kron(U, T(0.5) * hxx_xx)
+    X[r5, c1] = kron(u, vec(hss2))
+
+    # xf⊗xf⊗xf
+    X[r6, cz(r3)] = kron(kron(hx, hx), U) + kron(hx, kron(U, hx)) + kron(U, kron(hx, hx))
+    X[r6, cz(r1)] = kron(hx, kron(U, U)) + kron(U, kron(hx, U)) + kron(U, kron(U, hx))
+    X[r6, c1] = kron(u, kron(u, u))       # E[u⊗u⊗u] = 0 for symmetric shocks
+
+    return X
+end
+
+"""
+    _pss_inov_moments_3rd(pss, E_z, Var_z, hxx_xx; n_gh=4) → (Var_inov, BCov, Xbar, S1)
+
+Exact `Var(ξ)`, `Cov(ξ_{t+1}, z_t)`, `Xbar = E_ε[Ξ(ε)]` and `S1 = Cov(z_t, ε_t)` for the
+third-order augmented system, given the current augmented mean and variance. `Xbar` and `S1`
+drive the autocovariance recursion.
+
+The `ε` integral is a Gauss-Hermite tensor rule with `n_gh` nodes per shock. `ξξ'` is a
+polynomial of degree ≤ 6 in `ε`, and an `m`-node rule is exact through degree `2m − 1`, so
+`n_gh = 4` integrates it exactly — this is not an approximation that tightens with more nodes.
+Cost is `n_gh^{n_ε}` evaluations, trivial for the shock counts DSGE models carry.
+"""
+function _pss_inov_moments_3rd(pss::PrunedStateSpace{T}, E_z::AbstractVector{T},
+                               Var_z::AbstractMatrix{T}, hxx_xx::AbstractMatrix{T};
+                               n_gh::Int=4) where {T}
+    nz = length(E_z)
+    nodes, weights = _gauss_hermite_scaled(n_gh, Matrix{T}(I, pss.n_eps, pss.n_eps))
+
+    # E[z̃z̃'] and Cov(z̃, z) with z̃ = [1; z]
+    Mzz = zeros(T, nz + 1, nz + 1)
+    Mzz[1, 1] = one(T)
+    Mzz[1, 2:end] = E_z
+    Mzz[2:end, 1] = E_z
+    Mzz[2:end, 2:end] = Var_z + E_z * E_z'
+    Czz = vcat(zeros(T, 1, nz), Var_z)          # Cov([1; z], z)
+
+    E_ztilde = vcat(one(T), E_z)
+    Var_inov = zeros(T, nz, nz)
+    Xbar = zeros(T, nz, nz + 1)
+    S1 = zeros(T, nz, pss.n_eps)              # Cov(z_t, ε_t)
+    for (q, w) in enumerate(weights)
+        e = Vector{T}(nodes[q, :])
+        X = _pss_xi_matrix(pss, pss.eta_x * e, hxx_xx)
+        Var_inov .+= w .* (X * Mzz * X')
+        Xbar .+= w .* X
+        S1 .+= w .* ((X * E_ztilde) * e')
+    end
+    Var_inov = (Var_inov + Var_inov') / 2
+    # ξ is centred by construction, so E[ξξ'] IS Var(ξ); Cov(ξ,z) = E_ε[Ξ]·Cov(z̃,z).
+    return (Var_inov, Xbar * Czz, Xbar, S1)
+end
+
+"""
+    _pss_augmented_3rd(pss, A, c, E_z, hxx_xx; tol=1e-12, maxiter=200) → (Var_z, BCov, Xbar, S1)
+
+Unconditional variance of the third-order augmented state, simulation-free.
+
+`Var(ξ)` depends on `E[z̃z̃']`, which depends on `Var(z)`, so the two are solved as a fixed
+point: start from `Var(z) = 0`, compute the innovation moments, solve
+
+```
+Var(z) = A·Var(z)·A' + Var(ξ) + Cov(ξ,z)·A' + A·Cov(ξ,z)'
+```
+
+and repeat until `Var(z)` stops moving. The `Cov(ξ,z)` terms are what the previous
+implementation omitted; they are nonzero because the `ε²·xf` terms in the `xf⊗xf⊗xf` block
+correlate the innovation with the state it is added to.
+"""
+function _pss_augmented_3rd(pss::PrunedStateSpace{T}, A::AbstractMatrix{T},
+                            c::AbstractVector{T}, E_z::AbstractVector{T},
+                            hxx_xx::AbstractMatrix{T};
+                            tol::Real=1e-12, maxiter::Int=200, n_gh::Int=4) where {T}
+    nz = length(E_z)
+    Var_z = zeros(T, nz, nz)
+    BCov = zeros(T, nz, nz)
+    Xbar = zeros(T, nz, nz + 1)
+    S1 = zeros(T, nz, pss.n_eps)
+    for iter in 1:maxiter
+        Var_inov, BCov, Xbar, S1 = _pss_inov_moments_3rd(pss, E_z, Var_z, hxx_xx; n_gh=n_gh)
+        const_term = Var_inov + BCov * A' + A * BCov'
+        const_term = (const_term + const_term') / 2
+        Var_new = _dlyap(Matrix{T}(A), Matrix{T}(const_term); warn_label="order-3 pruned moments")
+        delta = maximum(abs, Var_new - Var_z) / max(one(T), maximum(abs, Var_new))
+        Var_z = (Var_new + Var_new') / 2
+        delta < tol && return (Var_z, BCov, Xbar, S1)
+    end
+    @warn "Third-order pruned variance fixed point did not converge in $maxiter iterations; " *
+          "the unconditional moments may be inaccurate." maxlog = 1
+    return (Var_z, BCov, Xbar, S1)
+end

@@ -832,18 +832,78 @@ end
         @test all(iszero, d[:E_y])                                 # linear ⇒ no σ² shift
     end
 
-    @testset "order-3 observation map is the state map with h → g" begin
-        # The order-3 augmented moments used the same current-state control map. On the linear
-        # model the corrected map lands on the analytic moments up to the Monte-Carlo error of
-        # `_innovation_variance_3rd_sim` (which is still simulation-based); the OLD map was
-        # structurally wrong — it put cov(x,y) at 0.5·var(x) = 1.389 instead of 1.111.
+    @testset "order-3 moments are exact and simulation-free" begin
+        # Andreasen et al.'s own reference code gives the observation map as
+        #   D = [gx + 3/6·gssx, gx, ½·gxx, gx, 2·½·gxx, ⅙·gxxx],  d = ½·gss + ⅙·gsss
+        # i.e. the state map with h → g — NOT `gx·C_state`, which is what this package used.
+        # On the exactly-linear model the corrected order-3 machinery must reproduce the
+        # analytic moments to machine precision, including both autocovariance lags.
         vx = 1 / (1 - 0.8^2)
-        d3 = M._augmented_moments_3rd(perturbation_solver(lin; order=3); lags=[1])
-        @test d3[:Var_y][1, 1] ≈ vx rtol = 0.01
-        @test d3[:Var_y][1, 2] ≈ 0.5 * 0.8 * vx rtol = 0.01
-        @test d3[:Var_y][2, 2] ≈ 0.25 * vx rtol = 0.01
-        @test abs(d3[:Var_y][1, 2] - 0.5 * vx) > 0.2      # not the old, wrong value
+        sol3 = perturbation_solver(lin; order=3)
+        d3 = M._augmented_moments_3rd(sol3; lags=[1, 2])
+        @test d3[:Var_y] ≈ [vx 0.5*0.8*vx; 0.5*0.8*vx 0.25*vx] atol = 1e-9
+        @test d3[:Cov_y][:, :, 1] ≈ [0.8*vx 0.5*0.64*vx; 0.5*vx 0.25*0.8*vx] atol = 1e-9
+        @test d3[:Cov_y][:, :, 2] ≈ [0.64*vx 0.5*0.8^3*vx; 0.5*0.8*vx 0.25*0.64*vx] atol = 1e-9
         @test all(iszero, d3[:E_y])
+        @test abs(d3[:Var_y][1, 2] - 0.5 * vx) > 0.2      # not the old, wrong value
+        # `analytical_moments` at order 3 now routes here rather than simulating
+        @test analytical_moments(sol3; lags=1) ≈
+              [vx, 0.5 * 0.8 * vx, 0.25 * vx, 0.8 * vx, 0.25 * 0.8 * vx] atol = 1e-9
+    end
+
+    @testset "order-3 moments carry no Monte Carlo" begin
+        rbc = @dsge begin
+            parameters: β = 0.99, α = 0.36, δ = 0.025, ρ = 0.9, σ = 0.03
+            endogenous: k, c, z
+            exogenous: ε
+            z[t] = ρ * z[t-1] + σ * ε[t]
+            k[t] = exp(z[t]) * k[t-1]^α + (1 - δ) * k[t-1] - c[t]
+            1 / c[t] = β * (1 / c[t+1]) * (α * exp(z[t+1]) * k[t]^(α - 1) + 1 - δ)
+        end
+        rbc = compute_steady_state(rbc)
+        sol = perturbation_solver(rbc; order=3)
+        # Repeated calls are BIT-identical — there is no RNG left in this path.
+        @test M._augmented_moments_3rd(sol; lags=[1])[:Var_y] ==
+              M._augmented_moments_3rd(sol; lags=[1])[:Var_y]
+
+        # The shock integral is exact at 4 Gauss-Hermite nodes: the integrand is degree 6 in ε
+        # and an m-node rule is exact through degree 2m−1 = 7. More nodes must change nothing.
+        pss = pruned_state_space(sol)
+        hxx_xx = M._extract_xx_block(pss.hxx, pss.nx, pss.nv)
+        nz = 3 * pss.nx + 2 * pss.nx^2 + pss.nx^3
+        Ez = zeros(nz)
+        Vz = Matrix{Float64}(0.01I, nz, nz)
+        ref = M._pss_inov_moments_3rd(pss, Ez, Vz, hxx_xx; n_gh=4)[1]
+        for m in (6, 8)
+            @test M._pss_inov_moments_3rd(pss, Ez, Vz, hxx_xx; n_gh=m)[1] ≈ ref atol = 1e-12
+        end
+        # The Cov(ξ,z) cross term is genuinely nonzero at third order — omitting it (as this
+        # package did) biases the variance.
+        _, BCov, Xbar, _ = M._pss_inov_moments_3rd(pss, Ez, Vz, hxx_xx)
+        @test maximum(abs, Xbar) > 0
+        @test maximum(abs, BCov) > 0
+    end
+
+    @testset "order-3 closed form matches simulation when hxx has no shock blocks" begin
+        # Nonlinear in the STATE but linear in the shock, so hxx/hxxx carry only x⊗x blocks —
+        # exactly what the augmented state can represent. The closed form must then land
+        # inside Monte-Carlo scatter, which pins that the machinery itself is exact.
+        nl = @dsge begin
+            parameters: ρ = 0.7, a2 = 0.15, a3 = 0.05, κ = 0.5, σ = 0.3
+            endogenous: x, y
+            exogenous: ε
+            x[t] = ρ * x[t-1] + a2 * x[t-1]^2 + a3 * x[t-1]^3 + σ * ε[t]
+            y[t] = κ * x[t-1] + 0.2 * x[t-1]^2
+        end
+        nl = compute_steady_state(nl)
+        sol = perturbation_solver(nl; order=3)
+        pss = pruned_state_space(sol)
+        hxx_xx = M._extract_xx_block(pss.hxx, pss.nx, pss.nv)
+        @test maximum(abs, pss.hxx) ≈ maximum(abs, hxx_xx)    # the premise: no shock blocks
+        d = M._augmented_moments_3rd(sol; lags=[1])
+        dev = simulate(sol, 1_000_000; rng=Random.MersenneTwister(11)) .- sol.steady_state'
+        @test d[:Var_y] ≈ cov(dev) rtol = 0.02
+        @test d[:E_y] ≈ vec(mean(dev; dims=1)) rtol = 0.05
     end
 
     @testset "closed-form moments match a pruned simulation (nonlinear)" begin

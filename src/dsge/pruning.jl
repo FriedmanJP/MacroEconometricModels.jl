@@ -605,108 +605,6 @@ end
 
 
 # =============================================================================
-# _innovation_variance_3rd_sim — MC estimate of Var(innovations) for 3rd-order
-# =============================================================================
-
-"""
-    _innovation_variance_3rd_sim(A, c, hx_state, hxx_xx, eta_x, hσσ, Var_xf,
-                                   nx, n_eps, nz, r1, r2, r3, r4, r5, r6;
-                                   n_sim=500_000) → Matrix{T}
-
-Compute the innovation covariance for the 3rd-order augmented state system
-via Monte Carlo simulation.  This avoids the complex analytical Gaussian moment
-formulas (which involve up to 6th moments) while providing accurate results.
-
-The innovation `u(t) = z(t+1) - A·z(t) - c` is computed from simulated paths
-of the first-order state xf and shocks ε, then `Var_inov = E[u·u']`.
-"""
-function _innovation_variance_3rd_sim(A::Matrix{T}, c::Vector{T},
-                                        hx_state::Matrix{T}, hxx_xx::Matrix{T},
-                                        eta_x::Matrix{T}, hσσ::Union{Nothing,Vector{T}},
-                                        Var_xf::Matrix{T},
-                                        nx::Int, n_eps::Int, nz::Int,
-                                        r1, r2, r3, r4, r5, r6;
-                                        n_sim::Int=500_000) where {T}
-    rng = Random.MersenneTwister(54321)
-
-    # Cholesky of Var_xf for stationary draws
-    if nx > 0 && all(isfinite.(Var_xf))
-        L_xf = try
-            cholesky(Symmetric(Var_xf + T(1e-12) * I)).L
-        catch
-            zeros(T, nx, nx)
-        end
-    else
-        L_xf = zeros(T, nx, nx)
-    end
-
-    h_ss = hσσ !== nothing ? hσσ : zeros(T, nx)
-
-    # Accumulator
-    Var_inov = zeros(T, nz, nz)
-
-    # Pre-allocate work vectors
-    xf = zeros(T, nx)
-    xs = zeros(T, nx)
-
-    n_burn = 1000
-    z     = zeros(T, nz)
-    z_next = zeros(T, nz)
-    u     = zeros(T, nz)
-    Az_c  = zeros(T, nz)
-
-    for t in 1:(n_sim + n_burn)
-        eps_t = randn(rng, T, n_eps)
-
-        # First-order transition
-        xf_new = hx_state * xf + eta_x * eps_t
-
-        # Second-order transition
-        kron_xf = kron(xf, xf)
-        xs_new = hx_state * xs + T(0.5) * hxx_xx * kron_xf + T(0.5) * h_ss
-
-        # Build z(t) from current state
-        z[r1] .= xf
-        z[r2] .= xs
-        z[r3] .= kron_xf
-        for k in eachindex(r4); z[r4[k]] = zero(T); end  # xrd ≈ 0 (not tracked here)
-        z[r5] .= kron(xf, xs)
-        z[r6] .= kron(xf, kron_xf)
-
-        # Build z(t+1) from actual transitions
-        kron_xf_new = kron(xf_new, xf_new)
-        z_next[r1] .= xf_new
-        z_next[r2] .= xs_new
-        z_next[r3] .= kron_xf_new
-        for k in eachindex(r4); z_next[r4[k]] = zero(T); end
-        z_next[r5] .= kron(xf_new, xs_new)
-        z_next[r6] .= kron(xf_new, kron_xf_new)
-
-        # Innovation: u = z_next - A*z - c
-        mul!(Az_c, A, z)
-        Az_c .+= c
-        u .= z_next .- Az_c
-
-        if t > n_burn
-            @inbounds for i in 1:nz
-                for j in 1:nz
-                    Var_inov[i, j] += u[i] * u[j]
-                end
-            end
-        end
-
-        xf = copy(xf_new)
-        xs = copy(xs_new)
-    end
-
-    Var_inov ./= n_sim
-    Var_inov = (Var_inov + Var_inov') / 2
-
-    return Var_inov
-end
-
-
-# =============================================================================
 # _augmented_moments_2nd — closed-form 2nd-order moments
 # =============================================================================
 
@@ -874,14 +772,15 @@ function _augmented_moments_3rd(sol::PerturbationSolution{T};
     # ---- Unconditional mean ----
     E_z = (Matrix{T}(I, nz, nz) - A) \ c
 
-    # ---- Innovation variance via MC simulation ----
-    Var_xf = _dlyap(hx_state, eta_x * eta_x')
-    Var_inov = _innovation_variance_3rd_sim(A, c, hx_state, hxx_xx, eta_x,
-                                              sol.hσσ, Var_xf,
-                                              nx, n_eps, nz, r1, r2, r3, r4, r5, r6)
-
-    # ---- Solve augmented Lyapunov ----
-    Var_z = _dlyap(A, Var_inov)
+    # ---- Augmented variance: exact, simulation-free ([T269]) ----
+    # `Var(xi)` and the `Cov(xi_{t+1}, z_t)` cross term are computed by exact Gauss-Hermite
+    # integration over the shocks and solved as a fixed point with the Lyapunov equation. This
+    # replaces a Monte-Carlo estimate of `Var(xi)`, and it supplies the cross term, which was
+    # missing entirely — it is nonzero at third order (Andreasen et al.'s `BCov_xiLeadS_z`)
+    # because the eps^2*xf terms in the xf(x)xf(x)xf block correlate the innovation with the
+    # state it is added to.
+    pss = pruned_state_space(sol)
+    Var_z, BCov, Xbar, S1 = _pss_augmented_3rd(pss, A, c, E_z, hxx_xx)
 
     # ---- Observation mapping ----
     # Use transition-based convention (consistent with _augmented_moments_2nd):
@@ -942,19 +841,22 @@ function _augmented_moments_3rd(sol::PerturbationSolution{T};
     Var_y = C_full * Var_z * C_full' + noise_full * noise_full'
     Var_y = (Var_y + Var_y') / 2  # enforce symmetry
 
-    # Autocovariances
-    M_cross = zeros(T, nz, n_eps)
-    M_cross[r1, :] = eta_x
-
+    # Autocovariances. With y_t = C·z_{t-1} + noise·ε_t + d,
+    #     Cov(y_t, y_{t-k}) = C·G_k·C' + C·S_k·noise',
+    #     G_k = Cov(z_t, z_{t-k}) = A·G_{k-1} + Xbar·[0; G_{k-1}],   G_0 = Var_z
+    #     S_k = Cov(z_{t-1}, ε_{t-k}) = A·S_{k-1} + Xbar·[0; S_{k-1}]
+    # The `Xbar·[0; ·]` terms are Andreasen et al.'s `Get_BCov_xiLeadS_z` at lead k; they come
+    # out of the same Ξ(ε) representation as the variance rather than a separate derivation,
+    # and they vanish identically at order 2 (where Xbar = 0), recovering `A^k·Var_z`.
+    lift(X) = vcat(zeros(T, 1, size(X, 2)), X)
     max_lag = maximum(lags)
     Cov_y = zeros(T, n, n, max_lag)
-    A_power = copy(A)
-    A_power_prev = Matrix{T}(I, nz, nz)
+    G = Matrix{T}(Var_z)
+    S = Matrix{T}(S1)
     for lag in 1:max_lag
-        Cov_y[:, :, lag] = C_full * A_power * Var_z * C_full' +
-                            C_full * A_power_prev * M_cross * noise_full'
-        A_power_prev = A_power
-        A_power = A_power * A
+        G = A * G + Xbar * lift(G)
+        Cov_y[:, :, lag] = C_full * G * C_full' + C_full * S * noise_full'
+        S = A * S + Xbar * lift(S)
     end
 
     # Handle augmented models
@@ -1008,18 +910,15 @@ function analytical_moments(sol::PerturbationSolution{T};
         return _analytical_moments_gmm(sol; lags=lags)
     end
 
-    # Default :covariance format — backward compatible.
-    # Order 2 uses the closed-form augmented-state Lyapunov recursion ([T269]); it is exact
-    # (verified against the analytic moments of an exactly linear model) and needs no draws.
-    # Order 3 still falls back to the pruned simulation: the third-order augmented system's
-    # innovation variance is not yet available in closed form (`_innovation_variance_3rd_sim`
-    # estimates it by Monte Carlo), so a "closed form" built on it would be simulation-based
-    # anyway, without the honesty of saying so.
+    # Default :covariance format — backward compatible. Orders 2 AND 3 use the closed-form
+    # augmented-state Lyapunov recursion ([T269]); both are simulation-free and reproduce the
+    # analytic moments of an exactly linear model to machine precision.
     if sol.order == 2
         res = _augmented_moments_2nd(sol; lags=collect(1:max(lags, 1)))
         return _moment_vector_from_dict(res, lags)
     elseif sol.order >= 3
-        return _simulation_moments(sol; lags=lags)
+        res = _augmented_moments_3rd(sol; lags=collect(1:max(lags, 1)))
+        return _moment_vector_from_dict(res, lags)
     end
 
     # Order 1: closed-form Lyapunov approach

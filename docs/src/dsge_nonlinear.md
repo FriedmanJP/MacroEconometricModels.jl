@@ -718,12 +718,35 @@ m2 = analytical_moments(psol2; lags=1, format=:gmm)
 | `lags` | `Int` | `1` | Number of autocovariance lags |
 | `format` | `Symbol` | `:covariance` | `:covariance` for backward-compatible format, `:gmm` for closed-form augmented Lyapunov |
 
-At **order 2** the default `:covariance` format is computed from this closed form and draws no shocks. At **order 3** it still falls back to a pruned simulation, because the third-order augmented system's innovation variance is itself estimated by Monte Carlo.
+Both **order 2 and order 3** compute the default `:covariance` format from this closed form; neither draws a shock.
 
 ```@example dsge_nonlinear
-# Order-2 moments: closed form, no simulation
+# Simulation-free at both orders
 analytical_moments(psol2; lags=1)
 ```
+
+### Order-3 Moments Without Simulation
+
+At third order the augmented state is ``z_t = [x^f; x^s; x^f \otimes x^f; x^{rd}; x^f \otimes x^s; x^f \otimes x^f \otimes x^f]`` and the system is again linear, ``z_t = c + A z_{t-1} + \xi_t``. Andreasen et al.'s companion code obtains ``\text{Var}(\xi)`` and ``\text{Cov}(\xi_t, z_{t-1})`` from an extended hand derivation carrying shock moments to sixth order.
+
+This package takes a shorter route to the same quantities. Expanding each block of ``\xi`` shows that every term is a monomial in ``\varepsilon_t`` times a **single component** of ``z_{t-1}`` — absorbing the nonlinearity into the state coordinates is precisely what the augmentation does. So for a fixed shock, ``\xi`` is *linear* in ``\tilde{z} = [1; z]``:
+
+```math
+\xi_t = \Xi(\varepsilon_t) \, \tilde{z}_{t-1}
+```
+
+and because ``\varepsilon \perp z``,
+
+```math
+\text{Var}(\xi) = E_\varepsilon\!\left[\Xi(\varepsilon) \, E[\tilde{z}\tilde{z}'] \, \Xi(\varepsilon)'\right],
+\qquad
+\text{Cov}(\xi_t, z_{t-1}) = E_\varepsilon[\Xi(\varepsilon)] \, \text{Cov}(\tilde{z}, z)
+```
+
+Both expectations integrate a polynomial of degree ``\le 6`` in ``\varepsilon``, which a **4-node Gauss-Hermite tensor rule evaluates exactly** (an ``m``-node rule is exact through degree ``2m-1 = 7``). Since ``\text{Var}(\xi)`` depends on ``\text{Var}(z)``, the two are solved as a fixed point alongside the Lyapunov equation.
+
+!!! note "The ``\text{Cov}(\xi_t, z_{t-1})`` term is not optional"
+    ``E_\varepsilon[\Xi(\varepsilon)]`` is **not** zero: the ``\varepsilon^2 x^f`` terms inside the ``x^f \otimes x^f \otimes x^f`` block correlate the innovation with the state it is added to. The Lyapunov constant is therefore ``\text{Var}(\xi) + \text{Cov}(\xi,z)A' + A\,\text{Cov}(\xi,z)'``, and the same term propagates through the autocovariance recursion. It vanishes identically at order 2, which is why it can be ignored there --- and it was omitted here before, biasing the third-order variance.
 
 !!! note "Technical Note"
     The innovation variance ``\text{Var}(u)`` includes quartic shock moments (``E[\varepsilon^4] = 3`` for Gaussian shocks) via a ``(2n_x + n_x^2) \times (2n_x + n_x^2)`` block matrix assembled from ``E[(\varepsilon \otimes \varepsilon)(\varepsilon \otimes \varepsilon)']``. Third moments vanish for symmetric shocks (``E[\varepsilon^3] = 0``).
