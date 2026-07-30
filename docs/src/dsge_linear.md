@@ -251,6 +251,41 @@ Verdicts are stored as ordered integer codes in `dm.verdict`:
 
 The **Gensys** solver is the default method. It uses the QZ (generalized Schur) decomposition of the matrix pencil ``(\Gamma_0, \Gamma_1)`` and handles singular ``\Gamma_0`` matrices, making it suitable for models with static identities (e.g., ``Y_t = C_t + I_t``).
 
+### Large Sparse Models
+
+The default route decomposes the `2n × 2n` companion pencil with a complex QZ. For a medium-large model — multi-country, multi-sector, or a reduced HA system — that is the dominant cost, even though each equation touches only a handful of variables. `sparse=` selects an alternative that never forms a QZ: Newton's method on the quadratic `f_{lead} G^2 + f_0 G + f_1 = 0`, whose step
+
+```math
+(f_{lead} G_k + f_0)\,\Delta G + f_{lead}\,\Delta G\,G_k = -R_k
+```
+
+is a generalized Sylvester equation solved matrix-free by GMRES. Newton converges quadratically — 7 iterations on the benchmark below, independent of `n`.
+
+```julia
+sol = solve(spec; method=:gensys, sparse=true)    # force the sparse route
+sol = solve(spec; method=:gensys, sparse=false)   # force the dense core
+sol = solve(spec; method=:gensys)                 # :auto (default)
+```
+
+`:auto` takes the sparse route only when the model is both large (`n ≥ 400`) and sparse (density `≤ 5%`). Measured end-to-end on a multi-sector benchmark:
+
+| `n` | density | speedup vs dense |
+|---|---|---|
+| 100 | 0.017 | 0.21× (slower — routed to dense) |
+| 400 | 0.004 | 1.15× |
+| 800 | 0.002 | 1.7--1.8× |
+| 1600 | 0.001 | 2.7× |
+
+!!! note "What the sparse route does and does not buy"
+    The solvent `G` is dense even when the model is sparse, so the GMRES operator is dominated by dense `O(n^3)` products. The gain is that these are a few BLAS-3 **real** matrix multiplies rather than a **complex** QZ on a `2n × 2n` pencil; sparsity helps second-order by cheapening the `f_0 X` and `f_{lead}(\cdot)` products. On a fully dense model of the same size the advantage is ~1.8× at `n = 400` and gone by `n = 800`, which is why the heuristic requires sparsity as well as size. Because the cost is set by GMRES convergence, the speedup is model-dependent.
+
+    It does **not** speed up the determinacy verdict: `eu` always comes from the Sims rank test, which decomposes the `(n+k)` canonical pencil (~22% of the dense cost). The table above is end-to-end and already includes it.
+
+!!! warning "The sparse route is never allowed to be wrong"
+    Newton converges to *a* solvent, not necessarily the stable one. Its result is accepted only if the residual is small **and** `G` is stable (`max|eig(G)| < div`); otherwise the dense core runs and its answer is used. The determinacy verdict is never taken from the sparse path. A model the sparse route cannot handle is therefore slower, never wrong.
+
+### Keywords
+
 The `div` keyword sets the dividing line between stable and unstable eigenvalues. The default value of ``1.0 + 10^{-8}`` places the cutoff slightly above the unit circle, ensuring that borderline eigenvalues (exactly at unity) are treated as stable. Since the stable/unstable split defines the ``Q_1``/``Q_2`` partition, `div` also controls the rank conditions that produce `eu`. The `rank_rtol` keyword (default ``10^{-8}``) sets the relative tolerance of those rank and span tests.
 
 ```@example dsge_linear

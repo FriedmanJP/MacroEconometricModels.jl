@@ -199,7 +199,8 @@ function solve(spec::DSGESpec{T}; method::Symbol=:gensys, kwargs...) where {T<:A
 
         # Companion-QZ for correct determinacy + a robust solution fallback
         qz_core = _solve_qz_quadratic(f_0, f_1, f_lead, f_ε; div=div, cluster_tol=cluster_tol,
-                                      rank_rtol=get(kwargs, :rank_rtol, 1e-8))
+                                      rank_rtol=get(kwargs, :rank_rtol, 1e-8),
+                                      sparse=get(kwargs, :sparse, :auto))
 
         # Primary solution via undetermined coefficients (robust to many static vars). Accept
         # it only if the residual/convergence AND stability hold: a converged-but-explosive
@@ -235,13 +236,15 @@ function solve(spec::DSGESpec{T}; method::Symbol=:gensys, kwargs...) where {T<:A
     elseif method == :blanchard_kahn
         ld = linearize(spec)
         return blanchard_kahn(ld, spec; div=get(kwargs, :div, 1.0 + 1e-8),
-                              cluster_tol=get(kwargs, :cluster_tol, 1e-6))
+                              cluster_tol=get(kwargs, :cluster_tol, 1e-6),
+                              sparse=get(kwargs, :sparse, :auto))
     elseif method == :perfect_foresight
         return perfect_foresight(spec; kwargs...)
     elseif method == :klein
         ld = linearize(spec)
         return klein(ld, spec; div=get(kwargs, :div, 1.0 + 1e-8),
-                     cluster_tol=get(kwargs, :cluster_tol, 1e-6))
+                     cluster_tol=get(kwargs, :cluster_tol, 1e-6),
+                     sparse=get(kwargs, :sparse, :auto))
     elseif method == :perturbation
         # Forward the Sylvester-solver knobs too; before [T266] every kwarg but `order` was
         # silently dropped here, so `solve(spec; method=:perturbation, gmres_tol=…)` was a no-op.

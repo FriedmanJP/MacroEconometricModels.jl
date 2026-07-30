@@ -403,6 +403,7 @@ Specify, solve, simulate, and estimate Dynamic Stochastic General Equilibrium mo
 | `gensys(Γ₀, Γ₁, C, Ψ, Π)` | Sims (2002) QZ decomposition solver |
 | `blanchard_kahn(ld, spec)` | Blanchard-Kahn (1980) eigenvalue counting |
 | `klein(ld, spec)` | Klein (2000) generalized Schur solver |
+| `solve(spec; sparse=true)` | Matrix-free Newton route for large sparse models (`:auto` by default) |
 | `perturbation_solver(spec; order=2)` | Higher-order perturbation solver |
 | `collocation_solver(spec; ...)` | Chebyshev collocation projection (isotropic/anisotropic Smolyak, `adaptive=true` refinement) |
 | `pfi_solver(spec; ...)` | Policy function iteration |

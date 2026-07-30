@@ -1279,6 +1279,112 @@ end
     end
 end
 
+@testset "Sparse/structured linear solution (#369, T270)" begin
+    M = MacroEconometricModels
+
+    # Multi-sector linear RE system: each sector carries a predetermined capital-like state and
+    # a forward-looking price, coupled to a couple of neighbours. Sparse by construction.
+    function multisector(ns; couple=2)
+        n = 2ns
+        f0 = zeros(n, n); f1 = zeros(n, n); fl = zeros(n, n); fe = zeros(n, 1)
+        for i in 1:ns
+            ki, pk = i, ns + i
+            f0[ki, ki] = 1.0; f1[ki, ki] = -0.9; f0[ki, pk] = 0.1
+            f0[pk, pk] = 1.0; fl[pk, pk] = -0.95; f1[pk, ki] = -0.3
+            for j in 1:couple
+                nb = mod1(i + j, ns)
+                f1[ki, nb] = -0.02
+                fl[pk, ns+nb] = -0.01
+            end
+        end
+        fe[1, 1] = -1.0
+        (f0, f1, fl, fe)
+    end
+
+    @testset "sparse route reproduces the dense route" begin
+        # The whole point: this is a performance path, not a semantics change. G, impact and
+        # the determinacy verdict must all match the dense companion-QZ core.
+        for ns in (5, 25, 60)
+            f0, f1, fl, fe = multisector(ns)
+            d = M._solve_qz_quadratic(f0, f1, fl, fe; sparse=false)
+            s = M._solve_qz_quadratic(f0, f1, fl, fe; sparse=true)
+            @test s.G ≈ d.G atol = 1e-9
+            @test s.impact ≈ d.impact atol = 1e-9
+            @test s.eu == d.eu
+            @test s.n_stable == d.n_stable
+            @test s.residual < 1e-9
+            @test s.sparse.reason == :converged
+            @test s.sparse.iterations <= 15          # Newton converges quadratically
+            @test s.sparse.spectral_radius < 1.0
+        end
+    end
+
+    @testset "sparse route agrees on the package's own small models" begin
+        # Forced onto the sparse path, the standard fixtures must come out identical — the
+        # routing heuristic would send them to the dense core, so this checks the path itself
+        # rather than the heuristic.
+        for (f0, f1, fl, fe) in (
+            (reshape([1.0], 1, 1), reshape([-0.9], 1, 1), reshape([0.0], 1, 1),
+             reshape([-1.0], 1, 1)),                                     # backward AR(1)
+            (reshape([1.0], 1, 1), reshape([0.0], 1, 1), reshape([-0.5], 1, 1),
+             reshape([1.0], 1, 1)),                                      # pure forward
+            ([0.5 1.0; 1.0 1.0], [-0.5 0.0; -1.5 0.0], [0.0 -1.0; 0.0 0.0],
+             reshape([-0.01, -0.01], 2, 1)))                             # double unit root
+            d = M._solve_qz_quadratic(f0, f1, fl, fe; sparse=false, cluster_tol=1e-12)
+            s = M._solve_qz_quadratic(f0, f1, fl, fe; sparse=true, cluster_tol=1e-12)
+            @test s.eu == d.eu
+            @test s.G ≈ d.G atol = 1e-9
+        end
+    end
+
+    @testset "routing sends small or dense models to the dense core" begin
+        # Small and sparse → dense (the QZ is faster there; measured 0.21× at n = 100).
+        for ns in (5, 25, 50)
+            f0, f1, fl, fe = multisector(ns)
+            @test !M._should_use_sparse_klein(f0, f1, fl)
+            @test M._solve_qz_quadratic(f0, f1, fl, fe).sparse === nothing
+        end
+        # Large and sparse → sparse.
+        f0, f1, fl, fe = multisector(250)
+        @test M._should_use_sparse_klein(f0, f1, fl)
+        @test M._solve_qz_quadratic(f0, f1, fl, fe).sparse !== nothing
+        # Large but DENSE → dense, because the advantage vanishes without sparsity.
+        rng = Random.MersenneTwister(270)
+        nd = 420
+        f0d = Matrix{Float64}(4.0I, nd, nd) .+ 0.02 .* randn(rng, nd, nd)
+        @test M._sparse_density(f0d, f0d, f0d) > 0.9
+        @test !M._should_use_sparse_klein(f0d, 0.02 .* randn(rng, nd, nd),
+                                          0.02 .* randn(rng, nd, nd))
+    end
+
+    @testset "an unstable solvent is rejected, not returned" begin
+        # Newton finds A solvent, not necessarily the stable one. An explosive purely backward
+        # model has no stable solvent, so the sparse route must decline and hand over.
+        f0 = reshape([1.0], 1, 1); f1 = reshape([-1.5], 1, 1)
+        fl = reshape([0.0], 1, 1); fe = reshape([-1.0], 1, 1)
+        G, info = M._newton_solvent(f0, f1, fl; div=1.0 + 1e-8)
+        @test G === nothing
+        @test !info.ok
+        @test info.reason == :unstable_solvent
+        @test info.spectral_radius >= 1.0
+        # Forcing sparse=true still yields the dense answer, with a warning.
+        s = @test_logs (:warn,) match_mode = :any M._solve_qz_quadratic(
+            f0, f1, fl, fe; sparse=true)
+        @test s.eu == M._solve_qz_quadratic(f0, f1, fl, fe; sparse=false).eu
+        @test s.sparse === nothing               # fell through to the dense core
+    end
+
+    @testset "argument validation and density helper" begin
+        f0, f1, fl, fe = multisector(5)
+        @test_throws ArgumentError M._solve_qz_quadratic(f0, f1, fl, fe; sparse=:bogus)
+        @test M._sparse_density(zeros(4, 4)) == 0.0
+        @test M._sparse_density(ones(4, 4)) == 1.0
+        @test M._sparse_density(Matrix{Float64}(I, 4, 4)) == 0.25
+        @test M._sparse_density() == 1.0                       # degenerate input is not "sparse"
+        @test M._newton_solvent(zeros(0, 0), zeros(0, 0), zeros(0, 0))[2].reason == :empty
+    end
+end
+
 @testset "Sims (2002) existence/uniqueness rank test (#366, T267)" begin
     M = MacroEconometricModels
 

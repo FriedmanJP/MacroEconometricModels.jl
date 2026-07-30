@@ -305,6 +305,7 @@ include("dsge/parser.jl")
 include("dsge/steady_state.jl")
 include("dsge/linearize.jl")
 include("dsge/qz_solve.jl")
+include("dsge/sparse_klein.jl")   # T270 (#369): sparse/structured linear path
 include("dsge/gensys.jl")
 include("dsge/determinacy.jl")   # T268 (#367): determinacy-region mapping
 include("dsge/blanchard_kahn.jl")

@@ -262,9 +262,28 @@ only); do NOT reorder them — wrappers report `eigvals(G1)` separately.
 function _solve_qz_quadratic(f_0::AbstractMatrix{T}, f_1::AbstractMatrix{T},
         f_lead::AbstractMatrix{T}, f_ε::AbstractMatrix{T};
         div::Real=1.0 + 1e-8, cluster_tol::Real=1e-6,
-        rank_rtol::Real=1e-8) where {T<:AbstractFloat}
+        rank_rtol::Real=1e-8, sparse::Union{Bool,Symbol}=:auto) where {T<:AbstractFloat}
     f0 = Matrix{T}(f_0); f1 = Matrix{T}(f_1); flead = Matrix{T}(f_lead); fε = Matrix{T}(f_ε)
     n = size(f0, 1)
+
+    # Sparse/structured route ([T270]): Newton on the quadratic with matrix-free GMRES, which
+    # skips the dense companion QZ entirely. It is only taken when it certifies (small residual
+    # AND a stable solvent), so a model it cannot handle falls through to the dense core below
+    # and is never answered wrongly. `eu` is NOT taken from here — it always comes from the
+    # Sims rank test, so the verdict is identical on either route.
+    sparse in (true, false, :auto) || throw(ArgumentError(
+        "sparse must be true, false, or :auto; got $sparse"))
+    use_sparse = sparse === true ? true :
+                 sparse === false ? false : _should_use_sparse_klein(f0, f1, flead)
+    if use_sparse
+        G_sp, sp_info = _newton_solvent(f0, f1, flead; div=div)
+        if G_sp !== nothing
+            return _qz_quadratic_finish(f0, f1, flead, fε, G_sp, div, cluster_tol,
+                                        rank_rtol, sp_info)
+        end
+        sparse === true && @warn "Sparse Klein did not certify ($(sp_info.reason), relative " *
+            "residual $(sp_info.residual)); falling back to the dense companion-QZ core." maxlog = 1
+    end
     N = 2n
     Z0 = zeros(T, n, n)
     In = Matrix{T}(I, n, n)
@@ -320,7 +339,41 @@ function _solve_qz_quadratic(f_0::AbstractMatrix{T}, f_1::AbstractMatrix{T},
 
     (G=G, impact=impact, eigenvalues=Vector{ComplexF64}(λ),
      n_stable=n_stable, eu=eu, residual=residual,
-     eu_count=eu_count, sims=sims)
+     eu_count=eu_count, sims=sims, sparse=nothing)
+end
+
+"""
+    _qz_quadratic_finish(f0, f1, flead, fε, G, div, cluster_tol, rank_rtol, sparse_info) → NamedTuple
+
+Assemble the `_solve_qz_quadratic` return value from an already-computed solvent `G`, used by
+the sparse route ([T270]).
+
+The determinacy verdict and the diagnostic eigenvalues still come from the same places as on
+the dense route — `eu` from the Sims (2002) rank test, the eigenvalues from `G` itself — so the
+two routes agree on everything but how `G` was found. `n_stable` is reported as the number of
+stable eigenvalues of `G` (which is `n` by construction, since an unstable solvent is rejected),
+and `eu_count` is the Blanchard-Kahn reading of that.
+"""
+function _qz_quadratic_finish(f0::Matrix{T}, f1::Matrix{T}, flead::Matrix{T}, fε::Matrix{T},
+                              G::Matrix{T}, div::Real, cluster_tol::Real, rank_rtol::Real,
+                              sparse_info) where {T<:AbstractFloat}
+    n = size(f0, 1)
+    divhat = _place_divhat(abs.(eigvals(G)), div, cluster_tol)
+    sims = _sims_existence_uniqueness(f0, f1, flead, fε; divhat=divhat, rank_rtol=rank_rtol)
+
+    A = f0 + flead * G
+    impact = try
+        Matrix{T}(-(A \ fε))
+    catch
+        fill(T(NaN), n, size(fε, 2))
+    end
+    residual = maximum(abs.(flead * G * G + f0 * G + f1); init = zero(T))
+    eigs = Vector{ComplexF64}(eigvals(G))
+    n_stable = count(<(divhat), abs.(eigs))
+
+    return (G=G, impact=impact, eigenvalues=eigs, n_stable=n_stable,
+            eu=copy(sims.eu), residual=residual,
+            eu_count=(n_stable == n ? [1, 1] : [1, 0]), sims=sims, sparse=sparse_info)
 end
 
 """
