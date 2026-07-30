@@ -588,8 +588,19 @@ report(acc)
 
 A maximum error well below 1% confirms that the perceived law of motion reproduces the aggregate dynamics implied by the full cross-section --- the benchmark for an accurate Krusell-Smith solution. The ``\sigma`` ratio near unity shows the PLM reproduces the volatility of aggregate capital, the diagnostic Den Haan (2010) emphasizes.
 
-!!! note "Aiyagari only"
-    `den_haan_test` targets the Aiyagari capital model of Den Haan (2010). For a Huggett solution the cleared aggregate is the risk-free rate, which is driven by the wealth distribution rather than the shock alone, so the test raises an informative error.
+!!! note "Capital models only"
+    `den_haan_test` targets the Aiyagari capital models (`model = :aiyagari`), which covers both `:krusell_smith` and `:one_asset_hank`. For a Huggett solution the cleared aggregate is the risk-free rate, which is driven by the wealth distribution rather than the shock alone, so the test raises an informative error.
+
+### Linearized solutions
+
+`den_haan_test` also accepts an [`HADSGESolution`](@ref) from `:ssj` or `:reiter`. A linearized solution has no fitted aggregate law, so one is recovered from the solution itself: the reduced system is simulated for `T_fit` periods under AR(1) TFP innovations and ``\log K_{t+1}`` is regressed on ``(1, \log K_t, z_t)``. That two-state rule then goes through the identical comparison. The `source` field records which law was used --- `:plm` or `:linear`.
+
+One subtlety is load-bearing. The Krusell-Smith machinery prices the aggregate shock as **effective capital**, ``r = \alpha Z (K e^{z})^{\alpha-1} L^{1-\alpha} - \delta``, whereas the linearizations put ``z`` in **TFP**, ``Z \leftarrow Z e^{z}``. These are not the same shock and are not related by rescaling ``z``: under Cobb-Douglas the first gives ``\partial \log r/\partial z = \alpha - 1 = -0.64`` and ``\partial \log w/\partial z = \alpha = 0.36``, the second gives ``1`` and ``1``. A law fitted under one convention must therefore be simulated under that same convention, or the statistic measures the mismatch instead of the accuracy. `den_haan_test` selects the convention from the solution type.
+
+!!! warning "Read this before quoting the linearized number"
+    For a linearized solution the statistic is **much larger than the Krusell-Smith one and is method-dependent**. On `:krusell_smith` at ``\sigma_z = 0.007``: ``\varepsilon_{\max}`` is 0.07% for the fitted PLM but 12.2% for `:ssj` and 5.5% for `:reiter` --- two solutions of the *same* model differing by more than a factor of two.
+
+    Three errors are superimposed and this statistic does not separate them: the two-state aggregate law, the linearization itself, and the law being *recovered by regression* rather than solved as a fixed point. The ``\sigma`` comparison is the more interpretable output --- both methods show the reference cross-section more volatile than their own law predicts (ratios 2.3 and 1.3), exactly the Den Haan (2010) point that a high ``R^2`` hides a volatility miss. Treat it as a **relative** diagnostic, not an absolute certificate. Why the two linearizations disagree this much is unresolved.
 
 | Keyword | Type | Default | Description |
 |---------|------|---------|-------------|
@@ -597,9 +608,11 @@ A maximum error well below 1% confirms that the perceived law of motion reproduc
 | `T_burn` | `Int` | `1000` | Burn-in periods to discard |
 | `rho_z` | `Real` | `0.95` | Aggregate shock persistence |
 | `sigma_z` | `Real` | `0.007` | Aggregate shock standard deviation |
+| `T_fit` | `Int` | `4000` | Periods used to recover the implied law (`HADSGESolution` only) |
 
 | Field | Type | Description |
 |-------|------|-------------|
+| `source` | `Symbol` | `:plm` (fitted Krusell-Smith law) or `:linear` (recovered from `:ssj`/`:reiter`) |
 | `dh_max` | `T` | Maximum percentage error between reference and PLM-only paths |
 | `dh_mean` | `T` | Mean absolute percentage error |
 | `sigma_ref` | `T` | Standard deviation of the reference aggregate (``\log K``) |

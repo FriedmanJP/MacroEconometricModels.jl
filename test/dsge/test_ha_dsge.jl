@@ -1395,6 +1395,57 @@ end
     end
 end
 
+@testset "Den Haan (2010) accuracy beyond Huggett (#359/T260)" begin
+    M = MacroEconometricModels
+
+    @testset "price conventions are provably distinct" begin
+        par = Dict(:alpha => 0.36, :delta => 0.025, :Z => 1.0, :L => 1.0)
+        p0 = M._ks_prices(M._default_cobb_douglas_price_fn, 40.0, 0.0, par, :effective_capital)
+        # z = 0 must agree across conventions
+        @test p0 == M._ks_prices(M._default_cobb_douglas_price_fn, 40.0, 0.0, par, :tfp)
+        z = 0.02
+        pe = M._ks_prices(M._default_cobb_douglas_price_fn, 40.0, z, par, :effective_capital)
+        pt = M._ks_prices(M._default_cobb_douglas_price_fn, 40.0, z, par, :tfp)
+        # Effective capital: dlog(r+delta)/dz = alpha-1, dlog w/dz = alpha.
+        @test log((pe[:r] + 0.025) / (p0[:r] + 0.025)) / z ≈ 0.36 - 1 rtol = 1e-10
+        @test log(pe[:w] / p0[:w]) / z ≈ 0.36 rtol = 1e-10
+        # TFP: both elasticities are exactly 1.
+        @test log((pt[:r] + 0.025) / (p0[:r] + 0.025)) / z ≈ 1.0 rtol = 1e-10
+        @test log(pt[:w] / p0[:w]) / z ≈ 1.0 rtol = 1e-10
+        # ⇒ NOT related by rescaling z: r rises under TFP and falls under effective capital
+        @test pt[:r] > p0[:r]
+        @test pe[:r] < p0[:r]
+        # the default must be the Krusell-Smith convention (unchanged behaviour)
+        @test M._ks_prices(M._default_cobb_douglas_price_fn, 40.0, z, par, :effective_capital) ==
+              M._default_cobb_douglas_price_fn(40.0 * exp(z), par)
+    end
+
+    @testset "DenHaanAccuracy carries its source" begin
+        dh = M.DenHaanAccuracy{Float64}(:K, 0.5, 0.2, 0.01, 0.011,
+                                        [1.0, 2.0], [1.0, 2.1], 100, 10)
+        @test dh.source === :plm                      # 9-positional contract preserved
+        dh2 = M.DenHaanAccuracy{Float64}(:K, 0.5, 0.2, 0.01, 0.011,
+                                         [1.0, 2.0], [1.0, 2.1], 100, 10; source=:linear)
+        @test dh2.source === :linear
+    end
+
+    @testset "Huggett is refused with an informative message" begin
+        # Build the solution struct directly: the guard fires on `spec.model`, so running
+        # the (expensive) Krusell-Smith PLM fixed point just to reach it wastes ~4 minutes.
+        ks_h = M.KrusellSmithSolution{Float64}(
+            _HUG_SS_M2, Dict(:K => [0.0, 0.95, 0.0]), Dict(:K => 0.99),
+            _HUG_SPEC_M2, true, 1)
+        err = try
+            den_haan_test(ks_h); nothing
+        catch e
+            sprint(showerror, e)
+        end
+        @test err !== nothing
+        @test occursin("aiyagari", err)
+        @test occursin("distribution-augmented", err)
+    end
+end
+
 @testset "Adaptive distribution grid (#357/T258)" begin
     M = MacroEconometricModels
 

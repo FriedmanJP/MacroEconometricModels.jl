@@ -440,7 +440,7 @@ Heterogeneous-agent (Reiter/SSJ/Krusell-Smith), continuous-time (HJB/KFE), and O
 | `rouwenhorst(ρ, σ, n)` / `tauchen(ρ, σ, n)` | Income process discretization (`σ` = **innovation** sd; pass `sigma_is=:unconditional` for sd(y)) |
 | `distribution_irf(sol, H)` / `inequality_irf(sol, H)` | Distribution dynamics / Gini response |
 | `simulate_panel(ss; N_agents, T_periods)` | Simulate individual-level panel from HA steady state |
-| `den_haan_test(ks_sol)` | Den Haan (2010) forecast accuracy |
+| `den_haan_test(ks_sol)` / `den_haan_test(ha_sol)` | Den Haan (2010) accuracy for a Krusell-Smith PLM or an `:ssj`/`:reiter` linearization |
 | `ha_grid_diagnostics(ss)` | Asset-grid adequacy: ceiling mass, `∫a′dμ − ∫a dμ` clearing residual |
 | `adapt_ha_grid(spec, ss)` / `adaptive_asset_grid(nodes, mass)` | Re-place asset nodes by stationary-density curvature (de Boor equidistribution) |
 | `LaborSupply(; kind=:ghh, psi, frisch)` | Endogenous labor supply (GHH / separable) for an `IndividualProblem` |
