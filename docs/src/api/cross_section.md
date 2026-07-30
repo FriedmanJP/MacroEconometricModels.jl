@@ -34,6 +34,7 @@ MultinomialLogitModel
 
 ```@docs
 estimate_reg
+conley_se
 estimate_iv
 estimate_logit
 estimate_probit

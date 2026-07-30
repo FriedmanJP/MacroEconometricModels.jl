@@ -225,3 +225,165 @@ const CLEAN17_OLS = [-37.6524589008, 0.7976855601, 0.5773404574, -0.0670601769]
         @test_throws ArgumentError estimate_robust(y, X; varnames=["a", "b"])
     end
 end
+
+@testset "Conley (1999) spatial HAC standard errors (#360/T261)" begin
+    M = MacroEconometricModels
+    rng = Random.MersenneTwister(2610)
+    n = 150
+    lat = 40 .+ 4 .* rand(rng, n)
+    lon = -100 .+ 4 .* rand(rng, n)
+    coords = hcat(lat, lon)
+    X = hcat(ones(n), randn(rng, n, 2))
+    y = X * [1.0, 0.5, -0.3] .+ randn(rng, n)
+    m = estimate_reg(y, X; cov_type=:hc0)
+
+    @testset "haversine distance against known values" begin
+        # one degree of longitude at the equator, and pole to pole
+        @test M._great_circle(0.0, 0.0, 0.0, 1.0) ≈ 2π * 6371 / 360 rtol = 1e-10
+        @test M._great_circle(-90.0, 0.0, 90.0, 0.0) ≈ π * 6371 rtol = 1e-10
+        @test M._great_circle(40.0, -100.0, 40.0, -100.0) == 0.0
+        @test M._great_circle(40.0, -100.0, 41.0, -99.0) ==
+              M._great_circle(41.0, -99.0, 40.0, -100.0)          # symmetric
+        # a degree of longitude shrinks with latitude by cos(lat)
+        @test M._great_circle(60.0, 0.0, 60.0, 1.0) ≈
+              M._great_circle(0.0, 0.0, 0.0, 1.0) * cosd(60.0) rtol = 1e-3
+        # euclidean metric
+        c2 = [0.0 0.0; 3.0 4.0]
+        @test M._conley_distance(c2, 1, 2, :euclidean) ≈ 5.0
+        @test M._conley_distance(c2, 1, 1, :euclidean) == 0.0
+    end
+
+    @testset "kernel shape" begin
+        @test M._conley_kernel(0.0, 10.0, :bartlett) == 1.0
+        @test M._conley_kernel(5.0, 10.0, :bartlett) ≈ 0.5
+        @test M._conley_kernel(10.0, 10.0, :bartlett) == 0.0
+        @test M._conley_kernel(11.0, 10.0, :bartlett) == 0.0
+        @test M._conley_kernel(5.0, 10.0, :uniform) == 1.0
+        @test M._conley_kernel(11.0, 10.0, :uniform) == 0.0
+        # a non-positive cutoff keeps only the own-observation term
+        @test M._conley_kernel(0.0, 0.0, :bartlett) == 1.0
+        @test M._conley_kernel(1e-12, 0.0, :bartlett) == 0.0
+    end
+
+    @testset "cutoff = 0 reduces EXACTLY to HC0" begin
+        for kern in (:bartlett, :uniform), met in (:euclidean, :haversine)
+            c = conley_se(m; coords=coords, cutoff=0.0, kernel=kern, metric=met)
+            @test c.vcov ≈ m.vcov_mat atol = 1e-12
+            @test c.se ≈ sqrt.(diag(m.vcov_mat)) atol = 1e-12
+            @test !c.adjusted
+        end
+        # ... and through the estimate_reg keyword path
+        mc = estimate_reg(y, X; cov_type=:conley, coords=coords, cutoff=0.0)
+        @test mc.vcov_mat ≈ m.vcov_mat atol = 1e-12
+        @test mc.cov_type === :conley
+    end
+
+    @testset "uniform kernel equals the brute-force double sum" begin
+        c = conley_se(m; coords=coords, cutoff=150.0, kernel=:uniform,
+                      metric=:haversine, psd=false)
+        Xu = X .* m.residuals
+        S = zeros(3, 3)
+        for i in 1:n, j in 1:n
+            M._great_circle(lat[i], lon[i], lat[j], lon[j]) <= 150.0 &&
+                (S .+= Xu[i, :] * Xu[j, :]')
+        end
+        XtXinv = inv(X'X)
+        @test c.vcov ≈ XtXinv * S * XtXinv atol = 1e-10
+        # the meat carries no 1/n (package HAC convention)
+        @test !isapprox(c.vcov, XtXinv * (S ./ n) * XtXinv; rtol=1e-3)
+    end
+
+    @testset "Bartlett weights strictly between uniform and none" begin
+        c_none = conley_se(m; coords=coords, cutoff=0.0, psd=false)
+        c_bart = conley_se(m; coords=coords, cutoff=150.0, kernel=:bartlett,
+                           metric=:haversine, psd=false)
+        c_unif = conley_se(m; coords=coords, cutoff=150.0, kernel=:uniform,
+                           metric=:haversine, psd=false)
+        @test c_bart.vcov != c_unif.vcov
+        @test c_bart.vcov != c_none.vcov
+        # a wider cutoff includes weakly more pairs, so it cannot equal the narrow one
+        c_wide = conley_se(m; coords=coords, cutoff=400.0, kernel=:uniform,
+                           metric=:haversine, psd=false)
+        @test c_wide.vcov != c_unif.vcov
+    end
+
+    @testset "PSD projection clips and flags" begin
+        c_raw = conley_se(m; coords=coords, cutoff=150.0, kernel=:uniform,
+                          metric=:haversine, psd=false)
+        c_psd = conley_se(m; coords=coords, cutoff=150.0, kernel=:uniform,
+                          metric=:haversine, psd=true)
+        # Conley's meat need not be PSD in finite samples; when it is not, clipping the
+        # negative eigenvalues changes the answer and the result says so.
+        if c_psd.adjusted
+            @test c_psd.vcov != c_raw.vcov
+            @test all(diag(c_psd.vcov) .>= -1e-12)
+        end
+        @test all(isfinite, c_psd.se)
+    end
+
+    @testset "spatial correlation in BOTH error and regressor inflates the SE" begin
+        # With an iid regressor the correction is asymptotically moot, since
+        # E[x_i u_i x_j u_j] = E[x_i x_j] E[u_i u_j] = 0. The common spatial component has
+        # to be in the regressor too — that is when HC under-states the uncertainty.
+        reps = 60
+        ratio = Float64[]
+        n_cov_hc = 0; n_cov_con = 0
+        for r in 1:reps
+            rr = Random.MersenneTwister(1000 + r)
+            la = 40 .+ 4 .* rand(rr, 150); lo = -100 .+ 4 .* rand(rr, 150)
+            blk = @. Int(floor(la - 40)) * 10 + Int(floor(lo + 100))
+            ush = Dict(b => randn(rr) for b in unique(blk))
+            xsh = Dict(b => randn(rr) for b in unique(blk))
+            xb = [xsh[blk[i]] for i in 1:150] .+ 0.3 .* randn(rr, 150)
+            u = [ush[blk[i]] for i in 1:150] .+ 0.3 .* randn(rr, 150)
+            Xr = hcat(ones(150), xb)
+            mh = estimate_reg(Xr * [1.0, 0.5] .+ u, Xr; cov_type=:hc0)
+            ch = conley_se(mh; coords=hcat(la, lo), cutoff=120.0, kernel=:uniform,
+                           metric=:haversine, psd=false)
+            se_h = sqrt(mh.vcov_mat[2, 2]); se_c = ch.se[2]
+            push!(ratio, se_c / se_h)
+            abs(mh.beta[2] - 0.5) <= 1.96 * se_h && (n_cov_hc += 1)
+            abs(mh.beta[2] - 0.5) <= 1.96 * se_c && (n_cov_con += 1)
+        end
+        @test all(ratio .> 1)                       # measured: every rep, mean ratio 2.8
+        @test Statistics.mean(ratio) > 2
+        # and the coverage repair is large (measured 44.7% -> 83.3% at 300 reps)
+        @test n_cov_con > n_cov_hc + reps ÷ 5
+    end
+
+    @testset "spatial panel: the time kernel multiplies the spatial one" begin
+        nT = 4; nS = 30; N = nS * nT
+        la = repeat(40 .+ rand(Random.MersenneTwister(5), nS); inner=nT)
+        lo = repeat(-100 .+ rand(Random.MersenneTwister(6), nS); inner=nT)
+        tt = repeat(1:nT, outer=nS)
+        X2 = hcat(ones(N), randn(Random.MersenneTwister(7), N))
+        m2 = estimate_reg(X2 * [1.0, 0.5] .+ randn(Random.MersenneTwister(8), N), X2;
+                          cov_type=:hc0)
+        c0 = conley_se(m2; coords=hcat(la, lo), cutoff=50.0, kernel=:uniform,
+                       metric=:haversine, time=tt, time_cutoff=0, psd=false)
+        # time_cutoff = 0 ⇒ only contemporaneous pairs contribute
+        Xu = X2 .* m2.residuals
+        S0 = zeros(2, 2)
+        for i in 1:N, j in 1:N
+            (M._great_circle(la[i], lo[i], la[j], lo[j]) <= 50.0 && tt[i] == tt[j]) &&
+                (S0 .+= Xu[i, :] * Xu[j, :]')
+        end
+        Xti = inv(X2'X2)
+        @test c0.vcov ≈ Xti * S0 * Xti atol = 1e-10
+        # a positive time cutoff brings in cross-period pairs, so the answer moves
+        c2 = conley_se(m2; coords=hcat(la, lo), cutoff=50.0, kernel=:uniform,
+                       metric=:haversine, time=tt, time_cutoff=2, psd=false)
+        @test c2.vcov != c0.vcov
+    end
+
+    @testset "input validation" begin
+        @test_throws ArgumentError conley_se(m; coords=coords[1:10, :], cutoff=100.0)
+        @test_throws ArgumentError conley_se(m; coords=coords, cutoff=100.0, kernel=:bogus)
+        @test_throws ArgumentError conley_se(m; coords=coords, cutoff=100.0, metric=:bogus)
+        @test_throws ArgumentError conley_se(m; coords=lat[:, :], cutoff=100.0, metric=:haversine)
+        @test_throws ArgumentError conley_se(m; coords=coords, cutoff=100.0, time_cutoff=-1)
+        @test_throws ArgumentError conley_se(m; coords=coords, cutoff=100.0, time=[1, 2])
+        @test_throws ArgumentError estimate_reg(y, X; cov_type=:conley)          # coords missing
+        @test_throws ArgumentError estimate_reg(y, X; cov_type=:bogus)
+    end
+end

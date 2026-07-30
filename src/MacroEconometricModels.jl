@@ -1303,6 +1303,7 @@ export MultinomialLogitModel, estimate_mlogit
 
 # Estimation
 export estimate_reg, estimate_iv, estimate_logit, estimate_probit
+export conley_se
 export wild_cluster_bootstrap, WildClusterBootstrap
 export anderson_rubin_test, anderson_rubin_ci, AndersonRubinTest, AndersonRubinCI
 
