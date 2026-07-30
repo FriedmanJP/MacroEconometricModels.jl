@@ -742,6 +742,236 @@ end
     @test is_determined(sol)
 end
 
+@testset "Sims (2002) existence/uniqueness rank test (#366, T267)" begin
+    M = MacroEconometricModels
+
+    # The Blanchard-Kahn root count, reproduced verbatim from the pre-T267 implementation, so
+    # the knife-edge tests below DEMONSTRATE the disagreement rather than merely asserting it.
+    function bk_count_eu(Gamma0, Gamma1, Psi, Pi; div=1.0 + 1e-8)
+        n = size(Gamma0, 1)
+        F = schur(complex(Gamma0), complex(Gamma1))
+        gev = [abs(F.S[i, i]) > eps(Float64) ? abs(F.T[i, i] / F.S[i, i]) : Inf for i in 1:n]
+        sel = BitVector(gev .< div)
+        Fo = ordschur(F, sel)
+        nstab = count(sel); nunstab = n - nstab; Qp = Fo.Q'
+        ev = [abs(Fo.S[i, i]) > eps(Float64) ? Fo.T[i, i] / Fo.S[i, i] : complex(Inf) for i in 1:n]
+        eu = [0, 0]; n_fwd = size(Pi, 2)
+        if n_fwd > 0 && nunstab > 0
+            Q2Pi = Qp[nstab+1:n, :] * complex(Pi)
+            Q2Psi = Qp[nstab+1:n, :] * complex(Psi)
+            sv = svd(Q2Pi)
+            rank_Q2Pi = count(s -> s > eps(Float64) * 1e6 * maximum(sv.S), sv.S)
+            consistent = maximum(abs.(Q2Psi - Q2Pi * pinv(Q2Pi) * Q2Psi)) < 1e-8
+            (consistent || rank_Q2Pi >= nunstab) && (eu[1] = 1)
+            nfu = count(i -> !isinf(abs(ev[i])) && abs(ev[i]) >= div, 1:n)
+            (nfu == n_fwd || (consistent && nfu <= n_fwd)) && (eu[2] = 1)
+        elseif nunstab == 0
+            eu = [1, 1]
+        end
+        eu
+    end
+    sims_eu(G0, G1, Psi, Pi) = M.gensys(G0, G1, zeros(size(G0, 1)), Psi, Pi).eu
+
+    # Textbook 3-equation New Keynesian model, written directly in Jacobian form.
+    function nk_jacobians(phi_pi; beta=0.99, kappa=0.3)
+        f0 = zeros(3, 3); fl = zeros(3, 3); f1 = zeros(3, 3); fe = zeros(3, 1)
+        f0[1, 1] = 1.0; f0[1, 3] = 1.0; fl[1, 1] = -1.0; fl[1, 2] = -1.0   # IS
+        f0[2, 2] = -1.0; f0[2, 1] = kappa; fl[2, 2] = beta                  # Phillips
+        f0[3, 3] = -1.0; f0[3, 2] = phi_pi; fe[3, 1] = 1.0                  # Taylor rule
+        (f0, f1, fl, fe)
+    end
+
+    @testset "Taylor principle: determinate iff phi_pi > 1" begin
+        for phi in (0.0, 0.5, 0.9, 1.01, 1.5, 3.0)
+            r = M._solve_qz_quadratic(nk_jacobians(phi)...)
+            @test r.eu == (phi > 1 ? [1, 1] : [1, 0])
+            @test r.sims.n_expect == 2          # only pi and x carry leads; i does not
+        end
+        # The mechanism, not just the verdict: below the Taylor principle one expectational
+        # error is left unconstrained by the unstable block.
+        @test M._solve_qz_quadratic(nk_jacobians(0.5)...).sims.n_loose == 1
+        @test M._solve_qz_quadratic(nk_jacobians(1.5)...).sims.n_loose == 0
+    end
+
+    @testset "pure forward model: determinate iff |a| < 1" begin
+        # y_t = a·E_t[y_{t+1}] + e_t. Roots of -a·mu^2 + mu = 0 are 0 and 1/a, so the forward
+        # root is stable exactly when |a| > 1 — and a stable forward root IS indeterminacy.
+        for a in (0.5, 0.9, 1.5, 3.0)
+            r = M._solve_qz_quadratic(reshape([1.0], 1, 1), reshape([0.0], 1, 1),
+                                      reshape([-a], 1, 1), reshape([1.0], 1, 1))
+            @test r.eu == (abs(a) < 1 ? [1, 1] : [1, 0])
+        end
+    end
+
+    @testset "backward-looking model and existence failure" begin
+        for rho in (0.5, 0.95)
+            r = M._solve_qz_quadratic(reshape([1.0], 1, 1), reshape([-rho], 1, 1),
+                                      reshape([0.0], 1, 1), reshape([-1.0], 1, 1))
+            @test r.eu == [1, 1]
+            @test r.sims.n_expect == 0          # no leads ⇒ no expectational errors at all
+            @test r.G[1, 1] ≈ rho rtol = 1e-10
+        end
+        # Explosive and purely backward: the shock drives the unstable block and there is no
+        # expectational error to absorb it, so no bounded solution exists.
+        r = M._solve_qz_quadratic(reshape([1.0], 1, 1), reshape([-1.5], 1, 1),
+                                  reshape([0.0], 1, 1), reshape([-1.0], 1, 1))
+        @test r.eu[1] == 0
+        @test r.sims.existence_residual ≈ 1.0 rtol = 1e-10   # Q2·Psi entirely outside the span
+    end
+
+    @testset "knife edge: root count claims uniqueness that does not hold" begin
+        # s1_t = 0.5·s1_{t-1} + Psi1·e + eta2   (stable block)
+        # s2_t = 2.0·s2_{t-1} + Psi2·e + eta1   (unstable block)
+        # Killing the unstable block pins eta1. eta2 is untouched by it yet moves s1 — a
+        # sunspot. The root count sees one unstable root and two error columns and calls it
+        # determinate; Sims's row-span condition catches the free direction.
+        G0 = Matrix{Float64}(I, 2, 2); G1 = [0.5 0.0; 0.0 2.0]
+        Pi = [0.0 1.0; 1.0 0.0]; Psi = reshape([1.0, 1.0], 2, 1)
+        @test bk_count_eu(G0, G1, Psi, Pi) == [1, 1]      # the OLD verdict — wrong
+        @test sims_eu(G0, G1, Psi, Pi) == [1, 0]          # the NEW verdict — correct
+        s = M._sims_rank_eu(ordschur(schur(complex(G0), complex(G1)),
+                                     BitVector([true, false])).Q', 1, complex(Psi), complex(Pi))
+        @test s.n_loose == 1 && s.rank_Q2Pi == 1 && s.rank_Q1Pi == 1
+
+        # Pi loads only on the stable row, Psi only on the unstable row: nothing can absorb the
+        # shock. The old rule returned the incoherent [0,1] — "unique" but non-existent.
+        Pi2 = reshape([1.0, 0.0], 2, 1); Psi2 = reshape([0.0, 1.0], 2, 1)
+        @test bk_count_eu(G0, G1, Psi2, Pi2) == [0, 1]
+        @test sims_eu(G0, G1, Psi2, Pi2) == [0, 0]
+    end
+
+    @testset "span condition is weaker than Sims's own full-row-rank test" begin
+        # gensys.m tests rank(Q2·Pi) >= nunstab, which is sufficient but NOT necessary: with a
+        # rank-deficient Q2·Pi a solution still exists whenever Q2·Psi lands inside the span.
+        G0 = Matrix{Float64}(I, 3, 3); G1 = [0.5 0 0; 0 2.0 0; 0 0 3.0]
+        Qp = ordschur(schur(complex(G0), complex(G1)), BitVector([true, false, false])).Q'
+        Pi = reshape([0.0, 1.0, 1.0], 3, 1)
+        inside = M._sims_rank_eu(Qp, 1, complex(reshape([0.0, 2.0, 2.0], 3, 1)), complex(Pi))
+        @test inside.rank_Q2Pi == 1 && !inside.full_row_rank    # gensys.m would say "no"
+        @test inside.eu[1] == 1                                  # the span condition says "yes"
+        @test inside.existence_residual < 1e-12
+        outside = M._sims_rank_eu(Qp, 1, complex(reshape([0.0, 1.0, -1.0], 3, 1)), complex(Pi))
+        @test outside.eu[1] == 0
+        @test outside.existence_residual > 0.1
+    end
+
+    @testset "agrees with the root count on generic models" begin
+        # The count is a theorem under a rank condition; where the rank condition holds — i.e.
+        # essentially always for randomly drawn systems — the two verdicts must coincide.
+        rng = Random.MersenneTwister(267)
+        agree = 0; total = 0
+        for _ in 1:300
+            n = rand(rng, 1:4)
+            f0 = Matrix{Float64}(I, n, n) .+ 0.3 .* randn(rng, n, n)
+            r = try
+                M._solve_qz_quadratic(f0, 0.3 .* randn(rng, n, n),
+                                      0.3 .* randn(rng, n, n), randn(rng, n, 1))
+            catch
+                continue
+            end
+            total += 1
+            agree += (r.eu == r.eu_count)
+        end
+        @test total > 250
+        @test agree == total
+    end
+
+    @testset "scale-relative tolerances" begin
+        # Rescaling equations by a diagonal matrix leaves the model unchanged, so the verdict
+        # must not move. An absolute rank cutoff would fail this.
+        for s in (1e-6, 1.0, 1e6)
+            f0, f1, fl, fe = nk_jacobians(1.5)
+            D = Diagonal([s, 1.0, 1 / s])
+            @test M._solve_qz_quadratic(D * f0, D * f1, D * fl, D * fe).eu == [1, 1]
+            f0i, f1i, fli, fei = nk_jacobians(0.5)
+            @test M._solve_qz_quadratic(D * f0i, D * f1i, D * fli, D * fei).eu == [1, 0]
+        end
+        # _orth_basis cuts relative to the largest singular value, not an absolute floor.
+        A = Diagonal([1.0, 1e-14]) * ones(2, 2)
+        @test M._orth_basis(A, -1)[3] == 1
+        @test M._orth_basis(1e-12 .* A, -1)[3] == 1          # same rank after uniform scaling
+        @test M._orth_basis(Matrix(Diagonal([1.0, 0.5])), -1)[3] == 2
+        @test M._orth_basis(zeros(0, 3), -1)[3] == 0
+        # the returned bases really are orthonormal spans of the column/row spaces
+        U, V, r = M._orth_basis([1.0 2.0; 2.0 4.0; 0.0 0.0], -1)
+        @test r == 1                                          # rank-1 by construction
+        @test U' * U ≈ Matrix{Float64}(I, 1, 1) atol = 1e-12
+        @test V' * V ≈ Matrix{Float64}(I, 1, 1) atol = 1e-12
+    end
+
+    @testset "augmented Sims form matches the quadratic" begin
+        f0, f1, fl, fe = nk_jacobians(1.5)
+        G0, G1, Psi, Pi, fwd = M._sims_augmented_system(f0, f1, fl, fe)
+        @test fwd == [1, 2]                       # only x and pi appear with a lead
+        @test size(Pi, 2) == 2 && size(G0, 1) == 5
+        # det(Gamma1 - mu*Gamma0) has the same finite roots as det(f_lead*mu^2 + f0*mu + f1)
+        quad_roots = sort(filter(isfinite, abs.(
+            M._solve_qz_quadratic(f0, f1, fl, fe).eigenvalues)))
+        aug = eigvals(complex(G1), complex(G0))
+        aug_roots = sort(filter(isfinite, abs.(aug)))
+        @test length(aug_roots) >= 3
+        for r in aug_roots
+            @test minimum(abs.(quad_roots .- r)) < 1e-8
+        end
+        # a variable with no lead contributes no expectational error
+        fl_none = zeros(3, 3)
+        @test size(M._sims_augmented_system(f0, f1, fl_none, fe)[4], 2) == 0
+    end
+
+    @testset "defective double unit root resolves consistently" begin
+        # det(f_lead·mu^2 + f0·mu + f1) = mu·(mu-1)^2 — a double root sitting exactly ON the
+        # unit circle. The companion QZ splits such a root by about sqrt(eps) ~ 1e-8, which
+        # straddles the default div = 1 + 1e-8 and makes the ROOT COUNT report a spurious
+        # `n_stable == n`. The verdict must not depend on that accident.
+        f0 = [0.5 1.0; 1.0 1.0]; f1 = [-0.5 0.0; -1.5 0.0]
+        fl = [0.0 -1.0; 0.0 0.0]; fe = reshape([-0.01, -0.01], 2, 1)
+        @test det(fl .* 1.0^2 .+ f0 .* 1.0 .+ f1) ≈ 0 atol = 1e-14   # mu = 1 is a root
+        @test det(fl .* 0.0 .+ f1) ≈ 0 atol = 1e-14                   # mu = 0 is a root
+        @test det(fl .* 4.0 .+ f0 .* 2.0 .+ f1) ≈ 2.0 rtol = 1e-12    # ... and only those
+
+        # Not determinate on EITHER side of the knife edge.
+        @test M._solve_qz_quadratic(f0, f1, fl, fe; div=0.99, cluster_tol=1e-12).eu == [0, 0]
+        @test M._solve_qz_quadratic(f0, f1, fl, fe; div=1.01, cluster_tol=1e-12).eu == [1, 0]
+        # ... and so also at the default div, where the root count is fooled into [1,1].
+        r = M._solve_qz_quadratic(f0, f1, fl, fe; cluster_tol=1e-12)
+        @test r.eu == [1, 0]
+        @test r.eu_count == [1, 1]              # the artifact this test pins down
+        @test r.sims.n_loose == 1               # eta is unconstrained: a sunspot
+    end
+
+    @testset "div is honored by the rank test" begin
+        # y_t = 0.9·y_{t-1}: determinate at the default div, no stable solution once div < 0.9.
+        args = (reshape([1.0], 1, 1), reshape([-0.9], 1, 1),
+                reshape([0.0], 1, 1), reshape([-1.0], 1, 1))
+        @test M._solve_qz_quadratic(args...).eu == [1, 1]
+        @test M._solve_qz_quadratic(args...; div=0.5).eu == [0, 0]
+    end
+
+    @testset "solve() forwards div and rank_rtol to the rank test" begin
+        spec = @dsge begin
+            parameters: ρ = 0.9, σ = 1.0
+            endogenous: y
+            exogenous: ε
+            y[t] = ρ * y[t-1] + σ * ε[t]
+        end
+        spec = compute_steady_state(spec)
+        @test solve(spec; method=:gensys).eu == [1, 1]
+        @test solve(spec; method=:gensys, div=0.5).eu == [0, 0]
+        @test solve(spec; method=:gensys, rank_rtol=1e-6).eu == [1, 1]
+
+        # rank_rtol reaches the rank test: an absurd tolerance accepts a span that the default
+        # rejects. Asserted on the rank test itself, because `_solve_qz_quadratic` additionally
+        # forces eu = [0,0] whenever n_stable < n — no stable solvent can be built at all then,
+        # whatever the canonical form's rank conditions say — and that guard would mask this.
+        explosive = (reshape([1.0], 1, 1), reshape([-1.5], 1, 1),
+                     reshape([0.0], 1, 1), reshape([-1.0], 1, 1))
+        @test M._sims_existence_uniqueness(explosive...; divhat=1.0 + 1e-8).eu[1] == 0
+        @test M._sims_existence_uniqueness(explosive...; divhat=1.0 + 1e-8,
+                                           rank_rtol=2.0).eu[1] == 1
+        @test M._solve_qz_quadratic(explosive...; rank_rtol=2.0).eu == [0, 0]   # guard wins
+    end
+end
+
 @testset "Exact AD derivative tensors (#212)" begin
     M = MacroEconometricModels
     # residual f = y_t - y_lag² - a·e  ⇒ ∂²f/∂y_lag² = -2 exactly; all other 2nd/3rd derivs 0
@@ -4303,7 +4533,18 @@ end
         sol2 = solve(spec; method=:perturbation, order=2)
         @test sol2 isa MacroEconometricModels.PerturbationSolution
         @test sol2.order == 2
-        @test is_determined(sol2)
+        # NOT determinate, and it never was. The characteristic polynomial of this model is
+        # det(f_lead·μ² + f₀·μ + f₁) = μ(μ−1)², i.e. μ = 0 plus a DEFECTIVE DOUBLE ROOT at
+        # exactly 1. Breaking the knife edge either way rejects determinacy: with div < 1 both
+        # unit roots are unstable and too few stable roots remain ([0,0]); with div > 1 both are
+        # stable, leaving no unstable block to pin down the expectational error ([1,0], a
+        # sunspot). This assertion used to read `is_determined(sol2)` and passed only because
+        # the companion QZ resolves the double root as 1 ± 1.05e-8, which straddles the default
+        # div = 1 + 1e-8 and yields a spurious stable-root count of exactly n. The [T267] rank
+        # test resolves the same root to 1 ± 2e-16 and is not fooled. `_place_divhat` already
+        # warns on this model.
+        @test !is_determined(sol2)
+        @test sol2.eu == [1, 0]
         @test nvars(sol2) == 2
         @test nshocks(sol2) == 1
         @test MacroEconometricModels.nstates(sol2) + MacroEconometricModels.ncontrols(sol2) == 2

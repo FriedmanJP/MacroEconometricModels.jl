@@ -134,7 +134,7 @@ where:
 - ``C_{\text{sol}}`` is the ``n \times 1`` solution constant vector
 - ``\text{impact}`` is the ``n \times n_\varepsilon`` shock impact matrix
 
-The **generalized eigenvalues** of the matrix pencil ``(\Gamma_0, \Gamma_1)`` determine the system's stability properties. The Blanchard-Kahn (1980) condition requires that the number of eigenvalues with modulus greater than one (unstable roots) equals the number of forward-looking (jump) variables ``n_\eta``. The `eu` vector in the solution reports the outcome:
+The **generalized eigenvalues** of the matrix pencil ``(\Gamma_0, \Gamma_1)`` govern stability, and the Blanchard-Kahn (1980) condition — the number of unstable roots equals the number of forward-looking variables ``n_\eta`` — is the familiar summary of it. The `eu` vector reports the outcome:
 
 | `eu` value | Interpretation |
 |------------|----------------|
@@ -149,12 +149,22 @@ is_determined(sol)              # true
 maximum(abs.(sol.eigenvalues))  # largest eigenvalue modulus
 ```
 
+!!! note "`eu` is a rank test, not a root count"
+    The Blanchard-Kahn count is a *theorem* that holds under a rank condition which counting eigenvalues never checks. `eu` is therefore computed from the **Sims (2002) existence and uniqueness conditions** directly, as rank conditions on the QZ-decomposed system. Writing ``Q_1`` and ``Q_2`` for the stable and unstable row blocks of ``Q^{H}`` from the QZ of ``(\Gamma_0, \Gamma_1)``:
+
+    - **Existence**: ``\operatorname{colspan}(Q_2 \Psi) \subseteq \operatorname{colspan}(Q_2 \Pi)`` — every shock that reaches the unstable block can be offset by some expectational error.
+    - **Uniqueness**: ``\operatorname{rowspan}(Q_1 \Pi) \subseteq \operatorname{rowspan}(Q_2 \Pi)`` — no expectational error moves the stable block while being left free by the unstable block.
+
+    The two agree on ordinary models. They part company exactly where the rank condition fails: an expectational error that is redundant, or unconstrained, or a shock loading on the unstable block in a direction no error can absorb. In those cases the count can report a unique solution where a continuum exists. All rank tests use scale-relative tolerances, so rescaling the equations cannot change the verdict.
+
+    One case is decided before the rank tests: when there are fewer stable roots than state variables, no stable solution can be constructed at all, and `eu` is `[0, 0]` regardless.
+
 !!! warning "Common cause of indeterminacy"
     In New Keynesian models, the Taylor principle requires the inflation response coefficient ``\phi_\pi > 1``. With ``\phi_\pi < 1``, the model is indeterminate. If `eu = [1, 0]`, check the policy rule coefficients first.
 
 ### Diagnosing Indeterminacy
 
-When `is_determined(sol)` returns `false`, inspect the eigenvalue decomposition to understand why. Count the number of stable and unstable eigenvalues and compare with the number of forward-looking variables:
+When `is_determined(sol)` returns `false`, the eigenvalue decomposition tells you *why*. Counting stable and unstable eigenvalues against the number of forward-looking variables is a diagnostic — the verdict itself comes from the rank conditions above — but it is the diagnostic that usually identifies the offending equation:
 
 ```@example dsge_linear
 sol = solve(spec; method=:blanchard_kahn)
@@ -179,7 +189,7 @@ The three outcomes are:
 
 The **Gensys** solver is the default method. It uses the QZ (generalized Schur) decomposition of the matrix pencil ``(\Gamma_0, \Gamma_1)`` and handles singular ``\Gamma_0`` matrices, making it suitable for models with static identities (e.g., ``Y_t = C_t + I_t``).
 
-The `div` keyword sets the dividing line between stable and unstable eigenvalues. The default value of ``1.0 + 10^{-8}`` places the cutoff slightly above the unit circle, ensuring that borderline eigenvalues (exactly at unity) are treated as stable.
+The `div` keyword sets the dividing line between stable and unstable eigenvalues. The default value of ``1.0 + 10^{-8}`` places the cutoff slightly above the unit circle, ensuring that borderline eigenvalues (exactly at unity) are treated as stable. Since the stable/unstable split defines the ``Q_1``/``Q_2`` partition, `div` also controls the rank conditions that produce `eu`. The `rank_rtol` keyword (default ``10^{-8}``) sets the relative tolerance of those rank and span tests.
 
 ```@example dsge_linear
 sol = solve(spec; method=:gensys)
@@ -236,7 +246,7 @@ All three linear solvers return a `DSGESolution{T}` with the following fields:
 | `G1` | `Matrix{T}` | ``n \times n`` state transition matrix |
 | `impact` | `Matrix{T}` | ``n \times n_\varepsilon`` shock impact matrix |
 | `C_sol` | `Vector{T}` | ``n \times 1`` constant vector |
-| `eu` | `Vector{Int}` | ``[\text{existence}, \text{uniqueness}]``: 1 = yes, 0 = no |
+| `eu` | `Vector{Int}` | ``[\text{existence}, \text{uniqueness}]``: 1 = yes, 0 = no. Sims (2002) rank conditions, not a root count |
 | `method` | `Symbol` | Solver used (`:gensys`, `:blanchard_kahn`, `:klein`) |
 | `eigenvalues` | `Vector{ComplexF64}` | Generalized eigenvalues from QZ decomposition |
 | `spec` | `DSGESpec{T}` | Back-reference to model specification |

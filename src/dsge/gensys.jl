@@ -21,15 +21,17 @@ supplying determinacy (`eu`) and a fallback G1/impact when UC does not converge.
 Solve the linear RE system via QZ decomposition (Sims 2002).
 
 Returns `(G1, impact, C_sol, eu, eigenvalues)` where:
-- `eu = [exist, unique]`: 1=yes, 0=no
+- `eu = [exist, unique]`: 1=yes, 0=no, from the **Sims (2002) rank conditions**
+  ([`_sims_rank_eu`](@ref)) — existence is `col span(Q₂Ψ) ⊆ col span(Q₂Π)`, uniqueness is
+  `row span(Q₁Π) ⊆ row span(Q₂Π)`. Neither is a root count.
 - `div` is the dividing line between stable (|lambda| < div) and unstable eigenvalues.
+- `rank_rtol` is the relative tolerance for those rank/span tests.
 """
 function gensys(Gamma0::AbstractMatrix{T}, Gamma1::AbstractMatrix{T},
                 C::AbstractVector{T}, Psi::AbstractMatrix{T}, Pi::AbstractMatrix{T};
-                div::Real=1.0 + 1e-8, cluster_tol::Real=1e-6,
+                div::Real=1.0 + 1e-8, cluster_tol::Real=1e-6, rank_rtol::Real=1e-8,
                 f_lead::Union{Nothing,AbstractMatrix{T}}=nothing) where {T<:AbstractFloat}
     n = size(Gamma0, 1)
-    eu = [0, 0]
 
     # QZ (generalized Schur) decomposition for eigenvalue analysis
     F = schur(complex(Gamma0), complex(Gamma1))
@@ -55,34 +57,13 @@ function gensys(Gamma0::AbstractMatrix{T}, Gamma1::AbstractMatrix{T},
 
     Qp = Q'
 
-    # Existence/uniqueness via QZ rank conditions
+    # Existence/uniqueness via the Sims (2002) rank conditions ([T267]). This replaces the
+    # former mixture of a span check for eu[1] with a Blanchard-Kahn root count
+    # (`n_finite_unstable == n_fwd`) for eu[2] — the count is not Sims's uniqueness condition
+    # and disagrees with it whenever an expectational error is redundant or unconstrained.
+    sims = _sims_rank_eu(Qp, nstab, complex(Psi), complex(Pi); rank_rtol=rank_rtol)
+    eu = copy(sims.eu)
     n_fwd = size(Pi, 2)
-    if n_fwd > 0 && nunstab > 0
-        Q2Pi = Qp[nstab+1:n, :] * complex(Pi)
-        Q2Psi = Qp[nstab+1:n, :] * complex(Psi)
-        sv = svd(Q2Pi)
-        rank_Q2Pi = count(s -> s > eps(T) * 1e6 * maximum(sv.S), sv.S)
-
-        # Check consistency: range(Q2*Psi) ⊆ range(Q2*Pi)
-        # Project Q2Psi onto null space of (Q2Pi)'
-        proj_null = Q2Psi - Q2Pi * pinv(Q2Pi) * Q2Psi
-        consistent = maximum(abs.(proj_null)) < T(1e-8)
-
-        if consistent || rank_Q2Pi >= nunstab
-            eu[1] = 1
-        end
-
-        # Count finite unstable eigenvalues for BK condition (same adaptive boundary)
-        n_finite_unstable = count(i -> !isinf(abs(eigenvalues[i])) && abs(eigenvalues[i]) >= divhat,
-                                   1:n)
-        if n_finite_unstable == n_fwd || (consistent && n_finite_unstable <= n_fwd)
-            eu[2] = 1
-        end
-    else
-        if nunstab == 0
-            eu = [1, 1]
-        end
-    end
 
     # Build solution via QZ stable block
     if nstab > 0
@@ -217,7 +198,8 @@ function solve(spec::DSGESpec{T}; method::Symbol=:gensys, kwargs...) where {T<:A
         cluster_tol = T(get(kwargs, :cluster_tol, 1e-6))
 
         # Companion-QZ for correct determinacy + a robust solution fallback
-        qz_core = _solve_qz_quadratic(f_0, f_1, f_lead, f_ε; div=div, cluster_tol=cluster_tol)
+        qz_core = _solve_qz_quadratic(f_0, f_1, f_lead, f_ε; div=div, cluster_tol=cluster_tol,
+                                      rank_rtol=get(kwargs, :rank_rtol, 1e-8))
 
         # Primary solution via undetermined coefficients (robust to many static vars). Accept
         # it only if the residual/convergence AND stability hold: a converged-but-explosive
