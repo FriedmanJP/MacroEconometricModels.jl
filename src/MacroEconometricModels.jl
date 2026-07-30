@@ -126,6 +126,7 @@ include("io/show.jl")
 include("reg/types.jl")
 include("reg/covariance.jl")
 include("reg/estimation.jl")
+include("reg/quantile.jl")
 include("reg/penalized.jl")   # EV-03 (#411): ridge / LASSO / elastic net — after estimation.jl
 include("reg/selection.jl")   # EV-04 (#412): stepwise / best-subset / GETS variable selection
 include("reg/iv.jl")
@@ -1304,6 +1305,7 @@ export MultinomialLogitModel, estimate_mlogit
 # Estimation
 export estimate_reg, estimate_iv, estimate_logit, estimate_probit
 export conley_se
+export estimate_qreg, QuantileRegModel
 export wild_cluster_bootstrap, WildClusterBootstrap
 export anderson_rubin_test, anderson_rubin_ci, AndersonRubinTest, AndersonRubinCI
 

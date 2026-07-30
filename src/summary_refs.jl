@@ -401,6 +401,11 @@ const _REFERENCES = Dict{Symbol, _RefEntry}(
         title="A Simple Test for Heteroscedasticity and Random Coefficient Variation",
         journal="Econometrica", volume="47", issue="5", pages="1287--1294",
         doi="10.2307/1911963", isbn="", publisher="", entry_type=:article),
+    :koenker_bassett1978 => (key=:koenker_bassett1978,
+        authors="Koenker, Roger and Bassett, Gilbert", year=1978,
+        title="Regression Quantiles",
+        journal="Econometrica", volume="46", issue="1", pages="33--50",
+        doi="10.2307/1913643", isbn="", publisher="", entry_type=:article),
     :koenker1981 => (key=:koenker1981, authors="Koenker, Roger", year=1981,
         title="A Note on Studentizing a Test for Heteroscedasticity",
         journal="Journal of Econometrics", volume="17", issue="1", pages="107--112",
@@ -1910,6 +1915,7 @@ const _TYPE_REFS = Dict{Symbol, Vector{Symbol}}(
     # DSGE solution types
     :PerturbationSolution => [:schmitt_grohe_uribe2004, :kim_kim_schaumburg_sims2008],
     :ProjectionSolution => [:judd1998, :judd_maliar_maliar_valero2014],
+    :QuantileRegModel => [:koenker_bassett1978],
     :LinearDSGE => [:sims2002],
     # Bayesian DSGE
     :BayesianDSGE => [:herbst_schorfheide2015, :herbst_schorfheide2014, :an_schorfheide2007],
@@ -2477,6 +2483,7 @@ refs(io::IO, ::PerfectForesightPath; kw...) = refs(io, _TYPE_REFS[:PerfectForesi
 refs(io::IO, ::DSGESpec; kw...) = refs(io, _TYPE_REFS[:DSGESpec]; kw...)
 refs(io::IO, ::PerturbationSolution; kw...) = refs(io, _TYPE_REFS[:PerturbationSolution]; kw...)
 refs(io::IO, ::ProjectionSolution; kw...) = refs(io, _TYPE_REFS[:ProjectionSolution]; kw...)
+refs(io::IO, ::QuantileRegModel; kw...) = refs(io, _TYPE_REFS[:QuantileRegModel]; kw...)
 refs(io::IO, ::LinearDSGE; kw...) = refs(io, _TYPE_REFS[:LinearDSGE]; kw...)
 
 # Bayesian DSGE

@@ -491,6 +491,67 @@ wild_cluster_bootstrap(pm, "x", 0.0)
 
 ---
 
+## Quantile Regression
+
+OLS answers "how does `x` shift the **average** of `y`?" Quantile regression (Koenker & Bassett 1978) answers it for any point of the conditional distribution, which is what you want when a covariate compresses or fans out the outcome rather than merely relocating it. It minimizes the asymmetric **check-function** loss
+
+```math
+\min_\beta \sum_i \rho_\tau\!\left(y_i - x_i'\beta\right), \qquad \rho_\tau(u) = u\left(\tau - \mathbf{1}\{u < 0\}\right)
+```
+
+where:
+- ``\tau \in (0,1)`` is the quantile — ``\tau = 0.5`` is median (least-absolute-deviations) regression
+- ``\rho_\tau`` penalizes over-prediction by ``1-\tau`` and under-prediction by ``\tau``, so the minimizer is the conditional ``\tau``-quantile
+
+```@example reg
+xq = 2 .* rand(n)
+yq = 1.0 .+ 0.5 .* xq .+ (1.0 .+ 0.5 .* xq) .* randn(n)   # spread grows with x
+Xq = hcat(ones(n), xq)
+
+mq = estimate_qreg(yq, Xq, [0.1, 0.5, 0.9]; varnames=["(Intercept)", "x"])
+report(mq)
+```
+
+The slope rises with ``\tau``. That is the point of the exercise: the error scale here grows with ``x``, so the upper conditional quantiles of ``y`` separate from the lower ones as ``x`` increases — a spreading that a single OLS slope cannot express. In this location-scale design the true quantile line is available in closed form: with ``y = a + bx + (1 + cx)z`` and ``z \sim N(0,1)``, the ``\tau``-quantile is ``a + z_\tau + (b + c\,z_\tau)x``, so the slope is exactly ``b + c\,z_\tau``.
+
+### Solver and standard errors
+
+The check loss is piecewise linear, so the optimum is a **basic solution**: it interpolates ``k`` observations exactly. The solver minimizes by iteratively reweighted least squares with the weight floor annealed toward zero, which drives the iterate onto that vertex — verified against exhaustive enumeration of all ``k``-subsets on small problems, agreeing to ``10^{-12}``–``10^{-9}``.
+
+| `se` | Estimator |
+|------|-----------|
+| `:iid` | Koenker sparsity form ``\tau(1-\tau)\,s(\tau)^2 (X'X)^{-1}``, the Stata `qreg` default |
+| `:robust` | Powell kernel sandwich, allowing the conditional density at the quantile to vary with ``x`` |
+| `:boot` | xy-pair bootstrap, assuming nothing about that density |
+
+The sparsity ``s(\tau)`` is estimated by the Siddiqui–Hendricks–Koenker difference quotient with the Hall–Sheather bandwidth. On a median regression with standard normal errors all three agree with the analytic ``\sqrt{\pi/2}/\sqrt{n}``.
+
+| Keyword | Type | Default | Description |
+|---------|------|---------|-------------|
+| `tau` | `Real` or `AbstractVector` | `0.5` | Quantile(s) in ``(0,1)``; one fit per quantile |
+| `se` | `Symbol` | `:iid` | `:iid`, `:robust`, or `:boot` |
+| `n_boot` | `Int` | `500` | Bootstrap replications when `se = :boot` |
+| `alpha` | `Real` | `0.05` | Level for the Hall–Sheather bandwidth |
+| `varnames` | `Vector{String}` | `nothing` | Coefficient names |
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `taus` | `Vector{T}` | Quantiles fitted |
+| `beta` | `Matrix{T}` | ``k \times n_\tau`` coefficients, one column per quantile |
+| `stderr` | `Matrix{T}` | ``k \times n_\tau`` standard errors |
+| `vcov_mats` | `Vector{Matrix{T}}` | Covariance per quantile |
+| `objective` | `Vector{T}` | Check-function loss at the optimum |
+| `pseudo_r2` | `Vector{T}` | Koenker–Machado ``R^1(\tau)`` — loss relative to the intercept-only fit |
+| `converged` | `Vector{Bool}` | Solver convergence per quantile |
+
+!!! note "`pseudo_r2` is not an OLS `R²`"
+    ``R^1(\tau) = 1 - \hat V(\tau)/\tilde V(\tau)`` compares check-function losses, not variances, and it is quantile-specific. It is not comparable across ``\tau`` or against an OLS ``R^2``, and it is typically much smaller.
+
+!!! warning "The median fit is not unique for an intercept-only model with even `n`"
+    Any point between the two middle order statistics minimizes the loss identically, so with even ``n`` the returned intercept can differ from `Statistics.quantile(y, 0.5)` by up to half the gap between them. This is a property of the estimator, not of the solver.
+
+---
+
 ## Long-Run Variance (HAC) Estimation
 
 When the data are serially correlated --- as in time-series regressions, GMM moment conditions, and cointegration analysis --- inference requires the **long-run variance** (LRV), the zero-frequency spectral density that sums all autocovariances rather than a single-lag White correction. For a mean-zero (after demeaning) series ``U_t`` (``T \times k``) with sample autocovariances ``\Gamma_j = T^{-1} \sum_t U_t U_{t-j}'`` and kernel ``k(\cdot)``:
