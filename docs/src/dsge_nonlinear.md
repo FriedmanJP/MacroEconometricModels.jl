@@ -234,6 +234,28 @@ All paths solve the same equation and agree to floating-point tolerance. Represe
 
 Naive simulation of higher-order decision rules produces **explosive sample paths** because the Kronecker products ``(v_t \otimes v_t)`` compound deviations multiplicatively --- a moderate deviation at time ``t`` is squared, generating a larger deviation at ``t+1``, which is squared again. **Pruning** (Kim, Kim, Schaumburg & Sims 2008) prevents this by tracking state components separately and using only first-order states in the Kronecker products.
 
+### The Pruned State-Space Object
+
+`pruned_state_space` returns the pruned system as a first-class object. `simulate`, the unconditional FEVD, and the closed-form moments all read the recursion and the observation map from it, so they cannot disagree:
+
+```@example dsge_nonlinear
+pss = pruned_state_space(psol)      # psol is the order-2 solution from Quick Start
+report(pss)
+```
+
+| Field | Description |
+|-------|-------------|
+| `order` | Perturbation order (1, 2, or 3) |
+| `nx`, `ny`, `n_eps`, `nv`, `n` | States, controls, shocks, ``n_v = n_x + n_\varepsilon``, ``n = n_x + n_y`` |
+| `state_indices`, `control_indices` | Positions of states/controls in the model's variable order |
+| `hx_state`, `eta_x` | First-order state transition and shock loading |
+| `gx_state`, `eta_y` | Control loadings on the **lagged** state and the current shock |
+| `hxx`, `gxx`, `hss`, `gss` | Second-order blocks over ``v \otimes v`` and the ``\sigma^2`` corrections |
+| `hxxx`, `gxxx`, `hssx`, `gssx`, `hsss`, `gsss` | Third-order blocks (zeros below order 3) |
+
+!!! warning "The control is evaluated on the lagged state"
+    Policy functions here are written over ``v_t = [x_{t-1}; \varepsilon_t]``, so ``g_x`` loads the **lagged** state and ``\eta_y`` the current shock. Evaluating the control on the freshly-updated state instead applies a lagged-state loading to a current-dated state --- the state channel propagates twice, and every control series comes out shifted forward by one period. On an exactly linear model, where orders 2 and 3 must reproduce the first-order solution to machine precision, that shift is unmistakable. Both the simulation and the moment routine now evaluate the control on the same ``v`` blocks that drive the state.
+
 ### Second-Order Pruning (Kim et al. 2008)
 
 The pruned simulation decomposes the state into two components:
@@ -696,8 +718,18 @@ m2 = analytical_moments(psol2; lags=1, format=:gmm)
 | `lags` | `Int` | `1` | Number of autocovariance lags |
 | `format` | `Symbol` | `:covariance` | `:covariance` for backward-compatible format, `:gmm` for closed-form augmented Lyapunov |
 
+At **order 2** the default `:covariance` format is computed from this closed form and draws no shocks. At **order 3** it still falls back to a pruned simulation, because the third-order augmented system's innovation variance is itself estimated by Monte Carlo.
+
+```@example dsge_nonlinear
+# Order-2 moments: closed form, no simulation
+analytical_moments(psol2; lags=1)
+```
+
 !!! note "Technical Note"
     The innovation variance ``\text{Var}(u)`` includes quartic shock moments (``E[\varepsilon^4] = 3`` for Gaussian shocks) via a ``(2n_x + n_x^2) \times (2n_x + n_x^2)`` block matrix assembled from ``E[(\varepsilon \otimes \varepsilon)(\varepsilon \otimes \varepsilon)']``. Third moments vanish for symmetric shocks (``E[\varepsilon^3] = 0``).
+
+!!! warning "What the augmented state can and cannot carry"
+    This package writes the second-order term over ``v \otimes v`` with ``v = [x; \varepsilon]``, so ``h_{xx}`` carries four blocks. The augmented recursion above is stated for the ``x \otimes x`` block. The ``\varepsilon \otimes \varepsilon`` block has mean ``\text{vec}(I)`` and is folded into the constant exactly. The ``x \otimes \varepsilon`` blocks are bilinear in the lagged state and the current shock: they are mean-zero and uncorrelated with the rest, so means and autocovariance cross-terms are unaffected, but they contribute to the **variance** and are not included. The understatement is ``O(\sigma^2)`` relative to the state variance --- on the RBC benchmark the closed form sits within Monte-Carlo error of a ``2 \times 10^6``-draw pruned simulation.
 
 ---
 

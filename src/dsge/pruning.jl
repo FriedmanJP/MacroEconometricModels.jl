@@ -50,11 +50,7 @@ function simulate(sol::PerturbationSolution{T}, T_periods::Int;
                   shock_draws::Union{Nothing,AbstractMatrix}=nothing,
                   rng=Random.default_rng(),
                   antithetic::Bool=false) where {T<:AbstractFloat}
-    nx = nstates(sol)
-    ny = ncontrols(sol)
-    n  = nvars(sol)
     n_eps = nshocks(sol)
-    nv = nx + n_eps
 
     # Draw or use provided shocks
     if shock_draws !== nothing
@@ -75,205 +71,11 @@ function simulate(sol::PerturbationSolution{T}, T_periods::Int;
         end
     end
 
-    # Extract first-order blocks — ensure compatible dimensions even when nx=0 or ny=0
-    hx_state = nx > 0 ? sol.hx[:, 1:nx] : zeros(T, 0, 0)            # nx x nx
-    eta_x = nx > 0 ? sol.hx[:, nx+1:nv] : zeros(T, 0, n_eps)        # nx x n_eps
-    gx_state = ny > 0 ? sol.gx[:, 1:nx] : zeros(T, 0, nx)           # ny x nx
-    eta_y = ny > 0 ? sol.gx[:, nx+1:nv] : zeros(T, 0, n_eps)        # ny x n_eps
-
-    # Output: deviations from steady state
-    dev = zeros(T, T_periods, n)
-
-    if sol.order == 1
-        # Standard first-order simulation
-        xf = zeros(T, nx)
-        for t in 1:T_periods
-            eps_t = e[t, :]
-            # State transition
-            xf_new = hx_state * xf + eta_x * eps_t
-            # Control uses the LAGGED first-order state xf (= x_{t-1}). gx_state = G1[control,
-            # state] is the loading on the lagged state; applying it to xf_new (= x_t) would
-            # propagate the state channel twice (audit S-01 / #119).
-            y_t = gx_state * xf + eta_y * eps_t
-            # Store
-            for (k, si) in enumerate(sol.state_indices)
-                dev[t, si] = xf_new[k]
-            end
-            for (k, ci) in enumerate(sol.control_indices)
-                dev[t, ci] = y_t[k]
-            end
-            xf = xf_new
-        end
-    elseif sol.order == 2
-        # Pruned second-order simulation (Kim et al. 2008)
-        Hxx = sol.hxx   # nx x nv^2
-        Gxx = sol.gxx   # ny x nv^2
-        h_ss = sol.hσσ  # nx
-        g_ss = sol.gσσ  # ny
-
-        xf = zeros(T, nx)   # first-order state
-        xs = zeros(T, nx)   # second-order correction state
-
-        for t in 1:T_periods
-            eps_t = e[t, :]
-
-            # First-order state update
-            xf_new = hx_state * xf + eta_x * eps_t
-
-            # Innovations vector for Kronecker product
-            vf = zeros(T, nv)
-            if nx > 0
-                vf[1:nx] = xf
-            end
-            vf[nx+1:nv] = eps_t
-            kron_vf = kron(vf, vf)   # nv^2
-
-            # Second-order state correction
-            xs_new = hx_state * xs
-            if Hxx !== nothing && !isempty(kron_vf)
-                xs_new += T(0.5) * Hxx * kron_vf
-            end
-            if h_ss !== nothing
-                xs_new += T(0.5) * h_ss
-            end
-
-            # Total state
-            x_total = xf_new + xs_new
-
-            # Control output
-            y_t = gx_state * x_total + eta_y * eps_t
-            if Gxx !== nothing && !isempty(kron_vf)
-                y_t += T(0.5) * Gxx * kron_vf
-            end
-            if g_ss !== nothing
-                y_t += T(0.5) * g_ss
-            end
-
-            # Store
-            for (k, si) in enumerate(sol.state_indices)
-                dev[t, si] = x_total[k]
-            end
-            for (k, ci) in enumerate(sol.control_indices)
-                dev[t, ci] = y_t[k]
-            end
-
-            xf = xf_new
-            xs = xs_new
-        end
-
-    elseif sol.order >= 3
-        # Pruned third-order simulation (Andreasen et al. 2018)
-        Hxx = sol.hxx   # nx x nv²
-        Gxx = sol.gxx   # ny x nv²
-        h_ss = sol.hσσ  # nx
-        g_ss = sol.gσσ  # ny
-        Hxxx = sol.hxxx  # nx x nv³
-        Gxxx = sol.gxxx  # ny x nv³
-        h_ssx = sol.hσσx  # nx x nv
-        g_ssx = sol.gσσx  # ny x nv
-        h_sss = sol.hσσσ  # nx
-        g_sss = sol.gσσσ  # ny
-
-        xf = zeros(T, nx)
-        xs = zeros(T, nx)
-        xrd = zeros(T, nx)  # 3rd-order correction
-
-        for t in 1:T_periods
-            eps_t = e[t, :]
-
-            # First-order state update
-            xf_new = hx_state * xf + eta_x * eps_t
-
-            # Build v = [xf; eps] for Kronecker products
-            vf = zeros(T, nv)
-            if nx > 0
-                vf[1:nx] = xf
-            end
-            vf[nx+1:nv] = eps_t
-            kron_vf = kron(vf, vf)     # nv²
-            kron3_vf = kron(vf, kron_vf)  # nv³
-
-            # Second-order state correction
-            xs_new = hx_state * xs
-            if Hxx !== nothing && !isempty(kron_vf)
-                xs_new += T(0.5) * Hxx * kron_vf
-            end
-            if h_ss !== nothing
-                xs_new += T(0.5) * h_ss
-            end
-
-            # Third-order state correction
-            vs = zeros(T, nv)
-            if nx > 0
-                vs[1:nx] = xs
-            end
-            kron_vf_vs = kron(vf, vs)  # nv²
-
-            xrd_new = hx_state * xrd
-            if Hxx !== nothing && !isempty(kron_vf_vs)
-                xrd_new += Hxx * kron_vf_vs  # no 0.5 factor
-            end
-            if Hxxx !== nothing && !isempty(kron3_vf)
-                xrd_new += (one(T) / T(6)) * Hxxx * kron3_vf
-            end
-            if h_ssx !== nothing
-                xrd_new += T(0.5) * h_ssx * vf
-            end
-            if h_sss !== nothing
-                xrd_new += (one(T) / T(6)) * h_sss
-            end
-
-            # Total state
-            x_total = xf_new + xs_new + xrd_new
-
-            # Control output using updated states
-            y_t = gx_state * x_total + eta_y * eps_t
-
-            # Build vf/vs from new states for control Kronecker products
-            vf_new = zeros(T, nv)
-            if nx > 0
-                vf_new[1:nx] = xf_new
-            end
-            vf_new[nx+1:nv] = eps_t
-
-            vs_new = zeros(T, nv)
-            if nx > 0
-                vs_new[1:nx] = xs_new
-            end
-
-            kron_vf_new = kron(vf_new, vf_new)
-            kron_vfvs_new = kron(vf_new, vs_new)
-            kron3_vf_new = kron(vf_new, kron_vf_new)
-
-            if Gxx !== nothing && !isempty(kron_vf_new)
-                y_t += T(0.5) * Gxx * (kron_vf_new + T(2) * kron_vfvs_new)
-            end
-            if g_ss !== nothing
-                y_t += T(0.5) * g_ss
-            end
-            if Gxxx !== nothing && !isempty(kron3_vf_new)
-                y_t += (one(T) / T(6)) * Gxxx * kron3_vf_new
-            end
-            if g_ssx !== nothing
-                y_t += T(0.5) * g_ssx * vf_new
-            end
-            if g_sss !== nothing
-                y_t += (one(T) / T(6)) * g_sss
-            end
-
-            # Store
-            for (k, si) in enumerate(sol.state_indices)
-                dev[t, si] = x_total[k]
-            end
-            for (k, ci) in enumerate(sol.control_indices)
-                dev[t, ci] = y_t[k]
-            end
-
-            xf = xf_new
-            xs = xs_new
-            xrd = xrd_new
-        end
-    end
+    # One canonical pruned recursion, shared with the moments and the unconditional FEVD
+    # ([T269]); in particular the control map reads the LAGGED components (S-01 / #119),
+    # which orders 2 and 3 used to get wrong.
+    pss = pruned_state_space(sol)
+    dev = _pss_simulate_dev(pss, e)
 
     # Convert to levels
     levels = dev .+ sol.steady_state'
@@ -517,98 +319,26 @@ For each shock j, zeros out all other shocks and re-solves the augmented system
 to get the variance contribution. Properly handles second-order cross-terms.
 """
 function _fevd_unconditional(sol::PerturbationSolution{T}) where {T}
-    nx = nstates(sol)
-    ny = ncontrols(sol)
-    n  = nvars(sol)
-    n_eps = nshocks(sol)
-    nv = nx + n_eps
+    pss = pruned_state_space(sol)
+    n, n_eps = pss.n, pss.n_eps
 
-    hx_state = nx > 0 ? sol.hx[:, 1:nx] : zeros(T, 0, 0)
-    eta_x    = nx > 0 ? sol.hx[:, nx+1:nv] : zeros(T, 0, n_eps)
-    gx_state = ny > 0 ? sol.gx[:, 1:nx] : zeros(T, 0, nx)
-    eta_y    = ny > 0 ? sol.gx[:, nx+1:nv] : zeros(T, 0, n_eps)
+    # Shared augmented system + observation map ([T269]). This routine previously built its
+    # own and loaded the control's shock channel with gx·η_x + η_y — the state channel counted
+    # twice, the opposite of the error the moment routine made (S-01 / #119).
+    C_full, noise_full, _ = _pss_obs_map_2nd(pss)
 
-    hxx_xx = sol.hxx !== nothing ? _extract_xx_block(sol.hxx, nx, nv) : zeros(T, nx, nx^2)
-    gxx_xx = sol.gxx !== nothing ? _extract_xx_block(sol.gxx, nx, nv) : zeros(T, ny, nx^2)
-
-    nz = 2 * nx + nx^2
-
-    # Build transition matrix A (same for all shocks — doesn't depend on η)
-    A = zeros(T, nz, nz)
-    A[1:nx, 1:nx] = hx_state
-    A[nx+1:2*nx, nx+1:2*nx] = hx_state
-    A[nx+1:2*nx, 2*nx+1:nz] = T(0.5) * hxx_xx
-    A[2*nx+1:nz, 2*nx+1:nz] = kron(hx_state, hx_state)
-
-    # Observation matrices (same for all shocks)
-    C_state = zeros(T, nx, nz)
-    C_state[:, 1:nx] = hx_state
-    C_state[:, nx+1:2*nx] = hx_state
-    if nx > 0
-        C_state[:, 2*nx+1:nz] = T(0.5) * hxx_xx
-    end
-    noise_state = eta_x
-
-    C_ctrl = zeros(T, ny, nz)
-    if ny > 0 && nx > 0
-        C_ctrl = gx_state * C_state
-        C_ctrl[:, 2*nx+1:nz] += T(0.5) * gxx_xx
-    end
-    # Contemporaneous shock loading on the control is eta_y alone; the state's shock channel
-    # is already carried by gx_state·C_state·z (adding gx_state·eta_x double-counts, S-01/#119).
-    noise_ctrl = ny > 0 ? eta_y : zeros(T, 0, n_eps)
-
-    C_full = zeros(T, n, nz)
-    noise_full = zeros(T, n, n_eps)
-    for (k, si) in enumerate(sol.state_indices)
-        C_full[si, :] = C_state[k, :]
-        noise_full[si, :] = noise_state[k, :]
-    end
-    for (k, ci) in enumerate(sol.control_indices)
-        C_full[ci, :] = C_ctrl[k, :]
-        noise_full[ci, :] = noise_ctrl[k, :]
-    end
-
-    # Total unconditional variance (all shocks)
-    Var_xf_total = nx > 0 ? _dlyap(hx_state, eta_x * eta_x') : zeros(T, 0, 0)
-    I_ne = Matrix{T}(I, n_eps, n_eps)
-    c_total = zeros(T, nz)
-    if sol.hσσ !== nothing
-        c_total[nx+1:2*nx] = T(0.5) * sol.hσσ
-    end
-    c_total[2*nx+1:nz] = kron(eta_x, eta_x) * vec(I_ne)
-
-    Var_inov_total = _innovation_variance_2nd(hx_state, eta_x, Var_xf_total, nx, n_eps)
-    Var_z_total = _dlyap(A, Var_inov_total)
-    Var_y_total = C_full * Var_z_total * C_full' + noise_full * noise_full'
-    Var_y_total = (Var_y_total + Var_y_total') / 2
-
-    # Per-shock variance contribution
     decomp = zeros(T, n, n_eps, 1)
     props  = zeros(T, n, n_eps, 1)
 
     for j in 1:n_eps
-        eta_x_j = zeros(T, nx, n_eps)
-        eta_x_j[:, j] = eta_x[:, j]
+        # Keep only shock j: zero every other column of the shock loadings.
+        eta_x_j = zeros(T, pss.nx, n_eps)
+        pss.nx > 0 && (eta_x_j[:, j] = pss.eta_x[:, j])
+        noise_j = zeros(T, n, n_eps)
+        noise_j[:, j] = noise_full[:, j]
 
-        eta_y_j = zeros(T, ny, n_eps)
-        if ny > 0
-            eta_y_j[:, j] = eta_y[:, j]
-        end
-
-        noise_full_j = zeros(T, n, n_eps)
-        for (k, si) in enumerate(sol.state_indices)
-            noise_full_j[si, :] = eta_x_j[k, :]
-        end
-        for (k, ci) in enumerate(sol.control_indices)
-            noise_full_j[ci, :] = ny > 0 ? gx_state[k:k, :] * eta_x_j + eta_y_j[k:k, :] : zeros(T, 1, n_eps)
-        end
-
-        Var_xf_j = nx > 0 ? _dlyap(hx_state, eta_x_j * eta_x_j') : zeros(T, 0, 0)
-
-        Var_inov_j = _innovation_variance_2nd(hx_state, eta_x_j, Var_xf_j, nx, n_eps)
-        Var_z_j = _dlyap(A, Var_inov_j)
-        Var_y_j = C_full * Var_z_j * C_full' + noise_full_j * noise_full_j'
+        _, _, Var_z_j, _, _ = _pss_augmented_2nd(pss; eta_x_override=eta_x_j)
+        Var_y_j = C_full * Var_z_j * C_full' + noise_j * noise_j'
         Var_y_j = (Var_y_j + Var_y_j') / 2
 
         for i in 1:n
@@ -1002,122 +732,23 @@ Returns a Dict with keys:
 """
 function _augmented_moments_2nd(sol::PerturbationSolution{T};
                                  lags::Vector{Int}=[1]) where {T}
-    nx = nstates(sol)
-    ny = ncontrols(sol)
-    n  = nvars(sol)
-    n_eps = nshocks(sol)
-    nv = nx + n_eps
+    pss = pruned_state_space(sol)
+    n = pss.n
 
-    # Extract first-order blocks
-    hx_state = nx > 0 ? sol.hx[:, 1:nx] : zeros(T, 0, 0)
-    eta_x    = nx > 0 ? sol.hx[:, nx+1:nv] : zeros(T, 0, n_eps)
-    gx_state = ny > 0 ? sol.gx[:, 1:nx] : zeros(T, 0, nx)
-    eta_y    = ny > 0 ? sol.gx[:, nx+1:nv] : zeros(T, 0, n_eps)
+    # One shared definition of the augmented system and of the observation map ([T269]) —
+    # this routine and `_fevd_unconditional` used to build (and disagree about) their own.
+    A, c, Var_z, E_z, M = _pss_augmented_2nd(pss)
+    C_full, noise_full, d_full = _pss_obs_map_2nd(pss)
 
-    # Extract state×state blocks from hxx, gxx (nv² → nx²)
-    hxx_xx = sol.hxx !== nothing ? _extract_xx_block(sol.hxx, nx, nv) : zeros(T, nx, nx^2)
-    gxx_xx = sol.gxx !== nothing ? _extract_xx_block(sol.gxx, nx, nv) : zeros(T, ny, nx^2)
-
-    nz = 2 * nx + nx^2
-
-    # Build transition matrix A (nz × nz)
-    A = zeros(T, nz, nz)
-    A[1:nx, 1:nx] = hx_state                                        # xf → xf
-    A[nx+1:2*nx, nx+1:2*nx] = hx_state                              # xs → xs
-    A[nx+1:2*nx, 2*nx+1:nz] = T(0.5) * hxx_xx                      # kron(xf,xf) → xs
-    A[2*nx+1:nz, 2*nx+1:nz] = kron(hx_state, hx_state)             # kron → kron
-
-    # Build constant vector c (nz)
-    I_ne = Matrix{T}(I, n_eps, n_eps)
-    c = zeros(T, nz)
-    if sol.hσσ !== nothing
-        c[nx+1:2*nx] = T(0.5) * sol.hσσ
-    end
-    c[2*nx+1:nz] = kron(eta_x, eta_x) * vec(I_ne)
-
-    # Unconditional mean: E[z] = (I - A) \ c
-    E_z = (Matrix{T}(I, nz, nz) - A) \ c
-
-    # First-order state variance (for innovation variance computation)
-    Var_xf = nx > 0 ? _dlyap(hx_state, eta_x * eta_x') : zeros(T, 0, 0)
-
-    # Innovation variance
-    Var_inov = _innovation_variance_2nd(hx_state, eta_x, Var_xf, nx, n_eps)
-
-    # Solve augmented Lyapunov: Var_z = A·Var_z·A' + Var_inov
-    Var_z = _dlyap(A, Var_inov)
-
-    # ---------------------------------------------------------------
-    # Observation mapping for ALL n = nx + ny variables
-    #
-    # We express stored observations in terms of z(t) and ε(t), where
-    # z(t) is pre-shock and ε(t) is independent of z(t):
-    #   state_stored(t) = [hx, hx, 0.5·hxx_xx]·z(t) + 0.5·hσσ + eta_x·ε(t)
-    #   ctrl_stored(t)  = gx·(hx·z_xf(t) + eta_x·ε(t) + hx·z_xs(t) + ...)
-    #                     + eta_y·ε(t) + 0.5·gxx_xx·kron(xf,xf) + 0.5·gσσ
-    # Var(obs) = C·Var_z·C' + noise·noise'  since z(t) ⊥ ε(t)
-    # ---------------------------------------------------------------
-
-    # State observation: C_state = [hx, hx, 0.5·hxx_xx]
-    C_state = zeros(T, nx, nz)
-    C_state[:, 1:nx] = hx_state
-    C_state[:, nx+1:2*nx] = hx_state
-    if nx > 0
-        C_state[:, 2*nx+1:nz] = T(0.5) * hxx_xx
-    end
-    noise_state = eta_x
-    d_state = sol.hσσ !== nothing ? T(0.5) * sol.hσσ : zeros(T, nx)
-
-    # Control observation: ctrl = gx·x_total + eta_y·ε + 0.5·gxx·kron + 0.5·gσσ
-    # where x_total = C_state·z + d_state + eta_x·ε
-    C_ctrl = zeros(T, ny, nz)
-    if ny > 0 && nx > 0
-        C_ctrl = gx_state * C_state
-        C_ctrl[:, 2*nx+1:nz] += T(0.5) * gxx_xx
-    end
-    # Contemporaneous shock loading on the control is eta_y alone; the state's shock channel
-    # is already carried by gx_state·C_state·z (adding gx_state·eta_x double-counts, S-01/#119).
-    noise_ctrl = ny > 0 ? eta_y : zeros(T, 0, n_eps)
-    d_ctrl = zeros(T, ny)
-    if ny > 0 && nx > 0
-        d_ctrl = gx_state * d_state
-    end
-    if sol.gσσ !== nothing && ny > 0
-        d_ctrl += T(0.5) * sol.gσσ
-    end
-
-    # Assemble into full n-vector in original variable ordering
-    C_full = zeros(T, n, nz)
-    noise_full = zeros(T, n, n_eps)
-    d_full = zeros(T, n)
-    for (k, si) in enumerate(sol.state_indices)
-        C_full[si, :] = C_state[k, :]
-        noise_full[si, :] = noise_state[k, :]
-        d_full[si] = d_state[k]
-    end
-    for (k, ci) in enumerate(sol.control_indices)
-        C_full[ci, :] = C_ctrl[k, :]
-        noise_full[ci, :] = noise_ctrl[k, :]
-        d_full[ci] = d_ctrl[k]
-    end
-
-    # Output moments
     E_y = C_full * E_z + d_full
     Var_y = C_full * Var_z * C_full' + noise_full * noise_full'
     Var_y = (Var_y + Var_y') / 2  # enforce symmetry
 
-    # Autocovariances: Cov(y_t, y_{t-k})
-    # Since y(t) = C·z(t) + noise·ε(t) + d, and z(t) depends on ε(t-1)
-    # through the transition, we need the cross-term:
-    #   Cov(y_t, y_{t-k}) = C·A^k·Var_z·C' + C·A^{k-1}·M·noise'
-    # where M = E[u(t)·ε(t)'] is the cross-covariance of the augmented
-    # state innovation with the shock. For Gaussian shocks (3rd moment=0),
-    # only the xf block contributes: M = [eta_x; 0; 0].
-    M = zeros(T, nz, n_eps)
-    M[1:nx, :] = eta_x
-
+    # Autocovariances: y_t = C·z_{t-1} + noise·ε_t + d, and z_{t-1} carries ε_{t-1} through
+    # the innovation, so the lag-k covariance needs the cross term C·A^{k-1}·M·noise'.
     max_lag = maximum(lags)
     Cov_y = zeros(T, n, n, max_lag)
+    nz = size(A, 1)
     A_power = copy(A)
     A_power_prev = Matrix{T}(I, nz, nz)
     for lag in 1:max_lag
@@ -1268,22 +899,22 @@ function _augmented_moments_3rd(sol::PerturbationSolution{T};
         d_state = d_state + (one(T) / T(6)) * sol.hσσσ
     end
 
-    # Control observation: ctrl = gx · state_obs + direct Kron terms
+    # Control observation. The control map has the SAME SHAPE as the state map with h → g,
+    # because both are the policy function evaluated on the LAGGED components and the current
+    # shock ([T269]). It was previously `gx_state·C_state`, i.e. gx applied to the *current*
+    # state, which propagates the state channel twice and also drags the state's ½·hσσ
+    # intercept into the control (S-01 / #119).
     C_ctrl = zeros(T, ny, nz)
     if ny > 0 && nx > 0
-        C_ctrl = gx_state * C_state
-        C_ctrl[:, r3] += T(0.5) * gxx_xx
-        C_ctrl[:, r5] += gxx_xx
-        C_ctrl[:, r6] += (one(T) / T(6)) * gxxx_xxx
-        C_ctrl[:, r1] += T(0.5) * gssx_xx
+        C_ctrl[:, r1] = gx_state + T(0.5) * gssx_xx
+        C_ctrl[:, r2] = gx_state
+        C_ctrl[:, r3] = T(0.5) * gxx_xx
+        C_ctrl[:, r4] = gx_state
+        C_ctrl[:, r5] = gxx_xx
+        C_ctrl[:, r6] = (one(T) / T(6)) * gxxx_xxx
     end
-    # Contemporaneous shock loading on the control is eta_y alone; the state's shock channel
-    # is already carried by gx_state·C_state·z (adding gx_state·eta_x double-counts, S-01/#119).
     noise_ctrl = ny > 0 ? eta_y : zeros(T, 0, n_eps)
     d_ctrl = zeros(T, ny)
-    if ny > 0 && nx > 0
-        d_ctrl = gx_state * d_state
-    end
     if sol.gσσ !== nothing && ny > 0
         d_ctrl += T(0.5) * sol.gσσ
     end
@@ -1377,9 +1008,17 @@ function analytical_moments(sol::PerturbationSolution{T};
         return _analytical_moments_gmm(sol; lags=lags)
     end
 
-    # Default :covariance format — backward compatible
-    # For order >= 2: simulation-based moments via pruned simulation
-    if sol.order >= 2
+    # Default :covariance format — backward compatible.
+    # Order 2 uses the closed-form augmented-state Lyapunov recursion ([T269]); it is exact
+    # (verified against the analytic moments of an exactly linear model) and needs no draws.
+    # Order 3 still falls back to the pruned simulation: the third-order augmented system's
+    # innovation variance is not yet available in closed form (`_innovation_variance_3rd_sim`
+    # estimates it by Monte Carlo), so a "closed form" built on it would be simulation-based
+    # anyway, without the honesty of saying so.
+    if sol.order == 2
+        res = _augmented_moments_2nd(sol; lags=collect(1:max(lags, 1)))
+        return _moment_vector_from_dict(res, lags)
+    elseif sol.order >= 3
         return _simulation_moments(sol; lags=lags)
     end
 
@@ -1562,6 +1201,31 @@ function _analytical_moments_gmm(sol::PerturbationSolution{T}; lags::Int=1) wher
     end
 
     return moments
+end
+
+
+"""
+    _moment_vector_from_dict(res, lags) → Vector{T}
+
+Flatten a closed-form moment `Dict` (`:Var_y`, `:Cov_y`) into the `:covariance` moment-vector
+layout shared with `analytical_moments(::DSGESolution)`: the upper triangle of the
+variance-covariance matrix, then the diagonal autocovariance at each lag.
+"""
+function _moment_vector_from_dict(res::Dict{Symbol,Any}, lags::Int)
+    Var_y = res[:Var_y]
+    Cov_y = res[:Cov_y]
+    k = size(Var_y, 1)
+    T = eltype(Var_y)
+    out = T[]
+    for i in 1:k, j in i:k
+        push!(out, Var_y[i, j])
+    end
+    for lag in 1:lags
+        for i in 1:k
+            push!(out, Cov_y[i, i, lag])
+        end
+    end
+    return out
 end
 
 

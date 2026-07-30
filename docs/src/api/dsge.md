@@ -26,6 +26,7 @@ OccBinRegime
 OccBinSolution
 OccBinIRF
 DeterminacyMap
+PrunedStateSpace
 ```
 
 ---
@@ -90,6 +91,7 @@ fevd(::BayesianDSGE{T}, ::Int) where {T<:AbstractFloat}
 simulate
 solve_lyapunov
 analytical_moments
+pruned_state_space
 ```
 
 ### Determinacy Regions

@@ -312,6 +312,7 @@ include("dsge/klein.jl")
 include("dsge/derivatives.jl")
 include("dsge/sylvester.jl")
 include("dsge/perturbation.jl")
+include("dsge/pruned_state_space.jl")   # T269 (#368): pruned state-space object
 include("dsge/quadrature.jl")
 include("dsge/projection.jl")
 include("dsge/pfi.jl")
@@ -691,7 +692,7 @@ export AbstractDSGEModel
 
 # Types
 export DSGESpec, LinearDSGE, DSGESolution, PerturbationSolution, ProjectionSolution, PerfectForesightPath, DSGEEstimation
-export DeterminacyMap
+export DeterminacyMap, PrunedStateSpace
 
 # Bayesian DSGE
 export BayesianDSGE, BayesianDSGESimulation
@@ -718,6 +719,7 @@ export collocation_solver, pfi_solver, perfect_foresight
 export simulate, estimate_dsge
 export solve_lyapunov, analytical_moments
 export determinacy_region, determinacy_boundary, determinacy_label, DETERMINACY_CODES
+export pruned_state_space
 export evaluate_policy, max_euler_error, vfi_solver
 
 # Accessors

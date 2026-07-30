@@ -742,6 +742,214 @@ end
     @test is_determined(sol)
 end
 
+@testset "Pruned state-space object (#368, T269)" begin
+    M = MacroEconometricModels
+
+    # An EXACTLY linear model with a genuine control. Every derivative above first order is
+    # zero, so perturbation at orders 2 and 3 must reproduce the first-order / gensys solution
+    # to machine precision. That makes this an oracle, not an approximation check — and it is
+    # what exposed the control map being time-shifted at orders ≥ 2 (S-01 / #119).
+    lin = @dsge begin
+        parameters: ρ = 0.8, κ = 0.5, σ = 1.0
+        endogenous: x, y
+        exogenous: ε
+        x[t] = ρ * x[t-1] + σ * ε[t]
+        y[t] = κ * x[t-1]
+    end
+    lin = compute_steady_state(lin)
+    sg = solve(lin; method=:gensys)
+
+    @testset "orders 2 and 3 reproduce the linear solution exactly" begin
+        @test maximum(abs, perturbation_solver(lin; order=2).hxx) < 1e-8   # the premise
+        Tn = 12
+        rng = Random.MersenneTwister(269)
+        e = randn(rng, Tn, 1)
+        # Ground truth: iterate y_t = G1·y_{t-1} + impact·ε_t directly.
+        truth = zeros(Tn, 2)
+        yv = zeros(2)
+        for t in 1:Tn
+            yv = sg.G1 * yv + sg.impact * e[t, :]
+            truth[t, :] = yv
+        end
+        for order in 1:3
+            sim = simulate(perturbation_solver(lin; order=order), Tn; shock_draws=e)
+            @test sim ≈ truth atol = 1e-8
+        end
+    end
+
+    @testset "the control map reads the LAGGED state" begin
+        # One step from a known lagged state with no shock: y must be gx_state·x_lag, NOT
+        # gx_state·x_new. With rho=0.8, kappa=0.5 those differ by a factor of 0.8.
+        for order in 1:3
+            pss = pruned_state_space(perturbation_solver(lin; order=order))
+            xf = [1.0]; z = zeros(1)
+            xf_new, xs_new, xrd_new, x_obs, y_obs =
+                M._pss_step(pss, xf, z, z, [0.0])
+            @test x_obs[1] ≈ 0.8 rtol = 1e-8              # x_t = ρ·x_{t-1}
+            @test y_obs[1] ≈ 0.5 rtol = 1e-8              # y_t = κ·x_{t-1}, NOT κ·x_t = 0.4
+        end
+    end
+
+    @testset "irf reduces to the first-order solution at every order" begin
+        ig = irf(sg, 15)
+        for order in 1:3
+            @test irf(perturbation_solver(lin; order=order), 15).values ≈ ig.values atol = 1e-10
+        end
+    end
+
+    @testset "object structure, show and report" begin
+        pss = pruned_state_space(perturbation_solver(lin; order=3))
+        @test pss isa PrunedStateSpace
+        @test pss.order == 3
+        @test pss.nx == 1 && pss.ny == 1 && pss.n_eps == 1 && pss.n == 2
+        @test pss.nv == pss.nx + pss.n_eps
+        @test size(pss.hxx) == (pss.nx, pss.nv^2)
+        @test size(pss.hxxx) == (pss.nx, pss.nv^3)
+        @test length(pss.hss) == pss.nx && length(pss.gss) == pss.ny
+        @test sort(vcat(pss.state_indices, pss.control_indices)) == 1:2
+        s = sprint(show, pss)
+        @test occursin("PrunedStateSpace", s) && occursin("order 3", s)
+        r = sprint(report, pss)
+        @test occursin("Pruned State-Space System", r) && occursin("hxxx", r)
+        # order 1 keeps the higher blocks as empty zeros, not `nothing`
+        p1 = pruned_state_space(perturbation_solver(lin; order=1))
+        @test all(iszero, p1.hxx) && all(iszero, p1.hsss)
+        @test !occursin("hxxx", sprint(report, p1))
+    end
+
+    @testset "closed-form order-2 moments are exact on the linear model" begin
+        # var(x) = σ²/(1−ρ²) = 2.7777…, cov(x,y) = κ·ρ·var(x), var(y) = κ²·var(x),
+        # acov₁(x) = ρ·var(x), acov₁(y) = κ²·ρ·var(x).
+        vx = 1 / (1 - 0.8^2)
+        expected = [vx, 0.5 * 0.8 * vx, 0.25 * vx, 0.8 * vx, 0.25 * 0.8 * vx]
+        s2 = perturbation_solver(lin; order=2)
+        @test analytical_moments(s2; lags=1) ≈ expected rtol = 1e-10
+        # the full moment Dict agrees, including the cross-autocovariances
+        d = M._augmented_moments_2nd(s2; lags=[1])
+        @test d[:Var_y] ≈ [vx 0.5*0.8*vx; 0.5*0.8*vx 0.25*vx] rtol = 1e-10
+        @test d[:Cov_y][2, 1, 1] ≈ 0.5 * vx rtol = 1e-10          # cov(y_t, x_{t-1})
+        @test d[:Cov_y][1, 2, 1] ≈ 0.5 * 0.8^2 * vx rtol = 1e-10  # cov(x_t, y_{t-1})
+        @test all(iszero, d[:E_y])                                 # linear ⇒ no σ² shift
+    end
+
+    @testset "order-3 observation map is the state map with h → g" begin
+        # The order-3 augmented moments used the same current-state control map. On the linear
+        # model the corrected map lands on the analytic moments up to the Monte-Carlo error of
+        # `_innovation_variance_3rd_sim` (which is still simulation-based); the OLD map was
+        # structurally wrong — it put cov(x,y) at 0.5·var(x) = 1.389 instead of 1.111.
+        vx = 1 / (1 - 0.8^2)
+        d3 = M._augmented_moments_3rd(perturbation_solver(lin; order=3); lags=[1])
+        @test d3[:Var_y][1, 1] ≈ vx rtol = 0.01
+        @test d3[:Var_y][1, 2] ≈ 0.5 * 0.8 * vx rtol = 0.01
+        @test d3[:Var_y][2, 2] ≈ 0.25 * vx rtol = 0.01
+        @test abs(d3[:Var_y][1, 2] - 0.5 * vx) > 0.2      # not the old, wrong value
+        @test all(iszero, d3[:E_y])
+    end
+
+    @testset "closed-form moments match a pruned simulation (nonlinear)" begin
+        rbc = @dsge begin
+            parameters: β = 0.99, α = 0.36, δ = 0.025, ρ = 0.95, σ = 0.02
+            endogenous: k, c, z
+            exogenous: ε
+            z[t] = ρ * z[t-1] + σ * ε[t]
+            k[t] = exp(z[t]) * k[t-1]^α + (1 - δ) * k[t-1] - c[t]
+            1 / c[t] = β * (1 / c[t+1]) * (α * exp(z[t+1]) * k[t]^(α - 1) + 1 - δ)
+        end
+        rbc = compute_steady_state(rbc)
+        sol = perturbation_solver(rbc; order=2)
+        d = M._augmented_moments_2nd(sol; lags=[1])
+        dev = simulate(sol, 400_000; rng=Random.MersenneTwister(11)) .- sol.steady_state'
+        V = cov(dev)
+        @test d[:Var_y] ≈ V rtol = 0.05
+        @test vec(d[:E_y]) ≈ vec(mean(dev; dims=1)) atol = 0.05 * maximum(abs, d[:E_y])
+        # The σ² correction is real: consumption's mean is shifted off the deterministic SS.
+        @test abs(d[:E_y][2]) > 1e-3
+    end
+
+    @testset "simulate, moments and FEVD share one observation map" begin
+        rbc = @dsge begin
+            parameters: β = 0.99, α = 0.36, δ = 0.025, ρ = 0.9, σ = 0.02
+            endogenous: k, c, z
+            exogenous: ε
+            z[t] = ρ * z[t-1] + σ * ε[t]
+            k[t] = exp(z[t]) * k[t-1]^α + (1 - δ) * k[t-1] - c[t]
+            1 / c[t] = β * (1 / c[t+1]) * (α * exp(z[t+1]) * k[t]^(α - 1) + 1 - δ)
+        end
+        rbc = compute_steady_state(rbc)
+        sol = perturbation_solver(rbc; order=2)
+        pss = pruned_state_space(sol)
+        C, noise, d = M._pss_obs_map_2nd(pss)
+        A, c, Var_z, E_z, Mx = M._pss_augmented_2nd(pss)
+
+        # The linear-in-z map reproduces the pruned step exactly up to the bilinear x⊗ε term
+        # that no C·z + noise·ε form can represent. Assert BOTH halves of that claim: the gap
+        # is exactly the omitted second-order shock blocks, not an unexplained residual.
+        rng = Random.MersenneTwister(3)
+        e = randn(rng, 40, 1)
+        dev = M._pss_simulate_dev(pss, e)
+        nv, nx = pss.nv, pss.nx
+        xf = zeros(nx); xs = zeros(nx); zr = zeros(nx)
+        gaps = Float64[]
+        for t in 1:40
+            zvec = vcat(xf, xs, vec(kron(xf, xf)))
+            pred = C * zvec + noise * e[t, :] + d
+            # the terms the augmented state cannot carry: ½·Hxx·(v⊗v) minus its x⊗x and the
+            # (already-folded-in) mean of its ε⊗ε block
+            vf = vcat(xf, e[t, :])
+            kvf = kron(vf, vf)
+            full = zeros(pss.n)
+            for (k, si) in enumerate(pss.state_indices)
+                full[si] = 0.5 * (pss.hxx[k, :]' * kvf)
+            end
+            for (k, ci) in enumerate(pss.control_indices)
+                full[ci] = 0.5 * (pss.gxx[k, :]' * kvf)
+            end
+            xxonly = zeros(pss.n)
+            hxx_xx = M._extract_xx_block(pss.hxx, nx, nv)
+            gxx_xx = M._extract_xx_block(pss.gxx, nx, nv)
+            kxx = vec(kron(xf, xf))
+            for (k, si) in enumerate(pss.state_indices)
+                xxonly[si] = 0.5 * (hxx_xx[k, :]' * kxx) +
+                             0.5 * M._pss_ee_mean(pss.hxx, nx, nv, pss.n_eps)[k]
+            end
+            for (k, ci) in enumerate(pss.control_indices)
+                xxonly[ci] = 0.5 * (gxx_xx[k, :]' * kxx) +
+                             0.5 * M._pss_ee_mean(pss.gxx, nx, nv, pss.n_eps)[k]
+            end
+            @test pred + (full - xxonly) ≈ dev[t, :] atol = 1e-10
+            push!(gaps, maximum(abs, dev[t, :] - pred))
+            xf, xs, zr, _, _ = M._pss_step(pss, xf, xs, zr, e[t, :])
+        end
+        @test maximum(gaps) > 0            # this model DOES have shock blocks in hxx
+
+        # A model whose shocks enter linearly has no such blocks, and the map is then exact.
+        lin2 = @dsge begin
+            parameters: ρ = 0.7, κ = 0.4, σ = 1.0
+            endogenous: x, y
+            exogenous: ε
+            x[t] = ρ * x[t-1] + σ * ε[t]
+            y[t] = κ * x[t-1]
+        end
+        lin2 = compute_steady_state(lin2)
+        pl = pruned_state_space(perturbation_solver(lin2; order=2))
+        Cl, nl, dl = M._pss_obs_map_2nd(pl)
+        devl = M._pss_simulate_dev(pl, e)
+        xf = zeros(pl.nx); xs = zeros(pl.nx); zr = zeros(pl.nx)
+        for t in 1:40
+            @test Cl * vcat(xf, xs, vec(kron(xf, xf))) + nl * e[t, :] + dl ≈
+                  devl[t, :] atol = 1e-10
+            xf, xs, zr, _, _ = M._pss_step(pl, xf, xs, zr, e[t, :])
+        end
+
+        # With one shock, the unconditional FEVD attributes everything to it, and its variance
+        # equals the total closed-form variance — i.e. FEVD and moments agree.
+        fv = fevd(sol, 1; unconditional=true)
+        @test all(≈(1.0; atol=1e-10), fv.proportions[:, 1, 1])
+        mom = M._augmented_moments_2nd(sol; lags=[1])
+        @test fv.decomposition[:, 1, 1] ≈ diag(mom[:Var_y]) rtol = 1e-8
+    end
+end
+
 @testset "Determinacy-region mapping (#367, T268)" begin
     M = MacroEconometricModels
 

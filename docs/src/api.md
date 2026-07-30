@@ -422,6 +422,7 @@ Specify, solve, simulate, and estimate Dynamic Stochastic General Equilibrium mo
 | `historical_decomposition(sol, data, obs)` | DSGE historical decomposition |
 | `solve_lyapunov(G1, impact)` | Unconditional covariance (Lyapunov equation) |
 | `analytical_moments(sol; lags)` | Analytical variance and autocovariances |
+| `pruned_state_space(sol)` | Pruned state-space object (shared recursion + control map) |
 | `perfect_foresight(spec; T_periods, shock_path)` | Deterministic transition path |
 
 ### DSGE Estimation
