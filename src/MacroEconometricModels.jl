@@ -919,6 +919,7 @@ export UhligSVARResult, identify_uhlig
 
 export irf
 export fevd
+export generalized_fevd
 export lp_fevd
 
 # =============================================================================

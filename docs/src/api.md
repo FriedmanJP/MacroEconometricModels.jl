@@ -146,6 +146,7 @@ Impulse response functions, forecast error variance decomposition, historical de
 |----------|-------------|
 | `irf(model, H; ...)` | Compute impulse response functions |
 | `fevd(model, H; ...)` | Forecast error variance decomposition |
+| `generalized_fevd(model, H)` | Pesaran-Shin (1998) generalized FEVD — order-invariant, no orthogonalization |
 | `identify_cholesky(model)` | Cholesky identification |
 | `identify_sign(model; ...)` | Sign restriction identification |
 | `identify_long_run(model)` | Blanchard-Quah identification |

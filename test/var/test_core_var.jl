@@ -575,3 +575,130 @@ end
 
     @test fc == ref              # bit-identical to the vcat recursion
 end
+
+@testset "Generalized FEVD, Pesaran-Shin (#364/T265)" begin
+    M = MacroEconometricModels
+
+    # A stationary 3-variable VAR with CORRELATED reduced-form errors — correlation is what
+    # makes the ordering matter for Cholesky and is therefore the interesting case.
+    rng = Random.MersenneTwister(11); nobs = 600
+    A = [0.4 0.15 0.05; 0.10 0.35 0.10; 0.05 0.10 0.30]
+    L = [1.0 0.0 0.0; 0.5 1.0 0.0; 0.3 0.4 1.0]
+    Y = zeros(nobs, 3)
+    for t in 2:nobs
+        Y[t, :] = A * Y[t-1, :] + L * randn(rng, 3)
+    end
+    m = estimate_var(Y, 2)
+    H = 12
+
+    @testset "reduced-form MA recursion" begin
+        Phi = M._reduced_form_ma(m.B, 3, 2, 5)
+        @test length(Phi) == 5
+        @test Phi[1] ≈ I(3)                       # Phi_0 = I
+        Acoef = M.extract_ar_coefficients(m.B, 3, 2)
+        @test Phi[2] ≈ Acoef[1]                   # Phi_1 = A_1
+        @test Phi[3] ≈ Acoef[1] * Phi[2] + Acoef[2] * Phi[1]
+        # the structural IRF is Phi_h * P, so with P = chol(Sigma) it must match compute_irf
+        P = M.safe_cholesky(m.Sigma)
+        irf_chol = M.compute_irf(m, Matrix{Float64}(I, 3, 3), 5)
+        for h in 1:5
+            @test irf_chol[h, :, :] ≈ Phi[h] * P atol = 1e-10
+        end
+    end
+
+    @testset "ORDER INVARIANCE — the reason to use it" begin
+        g = generalized_fevd(m, H)
+        c = fevd(m, H)
+        perm = [3, 1, 2]; ip = invperm(perm)
+        mp = estimate_var(Y[:, perm], 2)
+        gp = generalized_fevd(mp, H)
+        cp = fevd(mp, H)
+        # gFEVD is invariant to the variable ordering, to machine precision
+        @test maximum(abs.(g.proportions .- gp.proportions[ip, ip, :])) < 1e-10
+        # Cholesky FEVD is NOT — that is the whole contrast (measured 0.303)
+        @test maximum(abs.(c.proportions .- cp.proportions[ip, ip, :])) > 0.01
+    end
+
+    @testset "impact horizon has a closed form: gFEVD_ij(1) = corr(u_i,u_j)^2" begin
+        # At h = 1, Phi_0 = I, so
+        #   gFEVD_ij(1) = sigma_jj^-1 (e_i' Sigma e_j)^2 / (e_i' Sigma e_i)
+        #               = sigma_ij^2 / (sigma_ii sigma_jj) = corr(u_i, u_j)^2
+        # and in particular the own-shock share is EXACTLY one.
+        g = generalized_fevd(m, H)
+        D = sqrt.(diag(m.Sigma))
+        R = m.Sigma ./ (D * D')
+        @test g.proportions[:, :, 1] ≈ R .^ 2 atol = 1e-12
+        for i in 1:3
+            @test g.proportions[i, i, 1] ≈ 1.0 atol = 1e-12
+        end
+    end
+
+    @testset "raw shares do not sum to one; normalized ones do" begin
+        g = generalized_fevd(m, H)
+        gn = generalized_fevd(m, H; normalize=true)
+        @test all(g.proportions .>= -1e-14)              # non-negative
+        rows = vec(sum(g.proportions[:, :, H]; dims=2))
+        @test all(rows .> 1.0)                            # correlated shocks over-attribute
+        @test !all(isapprox.(rows, 1.0; atol=1e-6))       # NOT forced to one
+        nrows = vec(sum(gn.proportions[:, :, H]; dims=2))
+        @test all(isapprox.(nrows, 1.0; atol=1e-10))
+        # normalization is a pure rescaling of each row: the ratios are preserved
+        for i in 1:3, h in 1:H
+            s = sum(g.proportions[i, :, h])
+            s > 0 && @test gn.proportions[i, :, h] ≈ g.proportions[i, :, h] ./ s atol = 1e-12
+        end
+        @test size(g.proportions) == (3, 3, H)
+        @test g.variables == m.varnames
+        @test g.shocks == m.varnames                      # a "shock" here is to a VARIABLE
+    end
+
+    @testset "diagonal Sigma ⇒ gFEVD coincides with Cholesky" begin
+        # With uncorrelated reduced-form errors there is nothing to orthogonalize, so the
+        # generalized and recursive decompositions agree (up to the sample correlation).
+        rng2 = Random.MersenneTwister(3); n2 = 4000
+        Y2 = zeros(n2, 2); A2 = [0.5 0.0; 0.0 0.4]
+        for t in 2:n2
+            Y2[t, :] = A2 * Y2[t-1, :] + randn(rng2, 2)
+        end
+        m2 = estimate_var(Y2, 1)
+        @test abs(m2.Sigma[1, 2] / sqrt(m2.Sigma[1, 1] * m2.Sigma[2, 2])) < 0.05
+        g2 = generalized_fevd(m2, 10)
+        c2 = fevd(m2, 10)
+        @test maximum(abs.(g2.proportions .- c2.proportions)) < 5e-3
+        # and with a diagonal Sigma the rows already nearly sum to one on their own
+        @test all(isapprox.(vec(sum(g2.proportions[:, :, 10]; dims=2)), 1.0; atol=5e-3))
+    end
+
+    @testset "Bayesian generalized FEVD" begin
+        rng3 = Random.MersenneTwister(5); n3 = 300
+        A3 = [0.4 0.1; 0.1 0.35]; Y3 = zeros(n3, 2)
+        for t in 2:n3
+            Y3[t, :] = A3 * Y3[t-1, :] + [1.0 0.0; 0.5 1.0] * randn(rng3, 2)
+        end
+        post = estimate_bvar(Y3, 2; n_draws=150)
+        g = generalized_fevd(post, 8)
+        gn = generalized_fevd(post, 8; normalize=true)
+        @test size(g.quantiles) == (8, 2, 2, 3)          # (horizon, var, shock, quantile)
+        @test size(g.point_estimate) == (8, 2, 2)
+        @test all(isfinite, g.quantiles)
+        @test all(g.quantiles .>= -1e-12)
+        # bands are ordered across the QUANTILE axis (which is last)
+        @test all(g.quantiles[:, :, :, 1] .<= g.quantiles[:, :, :, 2] .+ 1e-12)
+        @test all(g.quantiles[:, :, :, 2] .<= g.quantiles[:, :, :, 3] .+ 1e-12)
+        @test all(isapprox.(vec(sum(gn.point_estimate[8, :, :]; dims=2)), 1.0; atol=1e-8))
+        @test g.n_effective == 150 && g.n_failed == 0
+        # the posterior mean sits close to the OLS point estimate
+        gv = generalized_fevd(estimate_var(Y3, 2), 8)
+        @test maximum(abs.(g.point_estimate[8, :, :] .- gv.proportions[:, :, 8])) < 0.1
+    end
+
+    @testset "validation and display" begin
+        @test_throws ArgumentError generalized_fevd(m, 0)
+        @test_throws ArgumentError generalized_fevd(m, -1)
+        g = generalized_fevd(m, 4; shock_names=["a", "b", "c"])
+        @test g.shocks == ["a", "b", "c"]
+        io = IOBuffer(); show(io, g)
+        @test occursin("Forecast Error Variance Decomposition", String(take!(io)))
+        report(g)
+    end
+end
