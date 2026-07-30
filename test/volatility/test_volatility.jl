@@ -815,3 +815,142 @@ end
     end
 
 end
+
+@testset "Student-t and GED GARCH likelihoods (#363/T264)" begin
+    M = MacroEconometricModels
+    nrm(z) = -(log(2π) + z^2) / 2
+
+    @testset "densities are standardized to unit variance" begin
+        # Simpson quadrature of exp(logpdf) over a wide domain.
+        function moments(f; bound=400.0, N=400001)
+            a, b = -bound, bound
+            h = (b - a) / (N - 1)
+            xs = [a + i * h for i in 0:(N - 1)]
+            fx = [exp(f(x)) for x in xs]
+            w = [i == 0 || i == N - 1 ? 1.0 : (i % 2 == 1 ? 4.0 : 2.0) for i in 0:(N - 1)]
+            (sum(w .* fx) * h / 3, sum(w .* xs .^ 2 .* fx) * h / 3)
+        end
+        for nu in (5.0, 10.0, 50.0)
+            m0, m2 = moments(z -> M._std_t_logpdf(z, nu))
+            @test m0 ≈ 1.0 atol = 1e-6
+            @test m2 ≈ 1.0 atol = 1e-3          # the (nu-2)/nu scaling is what does this
+        end
+        for nu in (1.0, 1.5, 2.0, 4.0)
+            m0, m2 = moments(z -> M._std_ged_logpdf(z, nu))
+            @test m0 ≈ 1.0 atol = 1e-5
+            @test m2 ≈ 1.0 atol = 1e-6          # the lambda constant does this
+        end
+    end
+
+    @testset "known limiting cases" begin
+        # GED with nu = 2 IS the standard normal; nu = 1 is the unit-variance Laplace
+        for z in -5.0:0.25:5.0
+            @test M._std_ged_logpdf(z, 2.0) ≈ nrm(z) atol = 1e-12
+            @test M._std_ged_logpdf(z, 1.0) ≈ log(1 / sqrt(2)) - sqrt(2) * abs(z) atol = 1e-12
+            # Student-t converges to the normal as nu grows
+            @test M._std_t_logpdf(z, 1e7) ≈ nrm(z) atol = 1e-4
+            @test M._vol_innov_logpdf(z, :normal, 0.0) ≈ nrm(z) atol = 1e-14
+        end
+        # fatter tails than Gaussian: more mass far out for small nu
+        @test M._std_t_logpdf(5.0, 4.0) > nrm(5.0)
+        @test M._std_ged_logpdf(5.0, 1.0) > nrm(5.0)
+        # A standardized fat-tailed density is MORE peaked at zero as well as fatter in the
+        # tails — the mass it gives up is in the shoulders, not the centre.
+        @test M._std_t_logpdf(0.0, 4.0) > M._std_t_logpdf(0.0, 1e7)
+        @test M._std_ged_logpdf(0.0, 1.0) > M._std_ged_logpdf(0.0, 2.0)
+    end
+
+    @testset "shape transforms respect their constraints" begin
+        for nu in (2.5, 5.0, 30.0)   # inside the clamp, so the round trip is exact
+            @test M._vol_shape_transform(M._vol_shape_inverse(nu, :student), :student) ≈ nu atol = 1e-10
+        end
+        for nu in (0.5, 1.0, 2.0, 5.0)
+            @test M._vol_shape_transform(M._vol_shape_inverse(nu, :ged), :ged) ≈ nu atol = 1e-10
+        end
+        # Student-t needs nu > 2 for a finite variance; the transform enforces it
+        # Clamped strictly away from the singular boundaries at every coordinate, including
+        # the extremes where `2 + exp(x)` would round to exactly 2.0 in Float64.
+        for x in (-500.0, -50.0, -5.0, 0.0, 5.0, 500.0)
+            @test M._vol_shape_transform(x, :student) > 2
+            @test isfinite(M._vol_shape_transform(x, :student))
+            @test M._vol_shape_transform(x, :ged) > 0
+            @test isfinite(M._vol_shape_transform(x, :ged))
+        end
+        @test M._vol_dist_nparams(:normal) == 0
+        @test M._vol_dist_nparams(:student) == 1
+        @test M._vol_dist_nparams(:ged) == 1
+        @test_throws ArgumentError M._vol_dist_check(:bogus)
+    end
+
+    @testset "the dist-aware likelihood reduces to the Gaussian one" begin
+        rng = Random.MersenneTwister(9); n = 500
+        h = 0.5 .+ rand(rng, n)
+        rsq = (h .* randn(rng, n) .^ 2)
+        @test M._vol_negloglik_dist(h, rsq, n, :normal, 0.0) ≈
+              M._volatility_negloglik(h, rsq, n) rtol = 1e-12
+        @test M._vol_loglik_contribs_dist(h, rsq, :normal, 0.0) ≈
+              M._volatility_loglik_contribs(h, rsq) rtol = 1e-12
+    end
+
+    @testset "recovers a known shape on simulated fat-tailed returns" begin
+        function sim_t(n, om, al, be, nu; burn=2000, seed=4)
+            rng = Random.MersenneTwister(seed)
+            N = n + burn; h = zeros(N); r = zeros(N)
+            h[1] = om / (1 - al - be); sc = sqrt((nu - 2) / nu)
+            for t in 2:N
+                h[t] = om + al * r[t-1]^2 + be * h[t-1]
+                r[t] = sqrt(h[t]) * (rand(rng, M.Distributions.TDist(nu)) * sc)
+            end
+            r[(burn + 1):end]
+        end
+        y = sim_t(2500, 0.05, 0.10, 0.85, 5.0)
+        mn = estimate_garch(y, 1, 1)
+        mt = estimate_garch(y, 1, 1; dist=:student)
+        mg = estimate_garch(y, 1, 1; dist=:ged)
+
+        @test mt.dist === :student && mg.dist === :ged && mn.dist === :normal
+        @test isnan(mn.shape)                              # no shape under the Gaussian
+        @test mt.shape > 2 && isfinite(mt.shape)
+        @test mg.shape > 0 && isfinite(mg.shape)
+        @test isapprox(mt.shape, 5.0; atol=1.5)            # measured 4.79
+        @test mg.shape < 2                                 # fatter than Gaussian
+        # the fat-tailed likelihood fits better, and AIC/BIC charge for the extra parameter
+        @test mt.loglik > mn.loglik
+        @test mg.loglik > mn.loglik
+        @test mt.aic < mn.aic
+        @test mg.aic < mn.aic
+        @test mt.aic ≈ -2 * mt.loglik + 2 * (2 + 1 + 1 + 1) rtol = 1e-10
+        @test mn.aic ≈ -2 * mn.loglik + 2 * (2 + 1 + 1) rtol = 1e-10
+        # the GARCH parameters themselves stay sensible
+        for m in (mn, mt, mg)
+            @test m.omega > 0 && m.alpha[1] > 0 && m.beta[1] > 0
+            @test m.alpha[1] + m.beta[1] < 1
+            @test all(m.conditional_variance .> 0)
+        end
+    end
+
+    @testset "EGARCH and GJR accept the same distributions" begin
+        rng = Random.MersenneTwister(21); n = 1200
+        y = randn(rng, n) .* 0.5
+        for f in (estimate_egarch, estimate_gjr_garch)
+            mn = f(y, 1, 1)
+            mt = f(y, 1, 1; dist=:student)
+            @test mn.dist === :normal && isnan(mn.shape)
+            @test mt.dist === :student
+            @test mt.shape > 2 && isfinite(mt.shape)
+            @test isfinite(mt.loglik)
+            @test_throws ArgumentError f(y, 1, 1; dist=:bogus)
+        end
+    end
+
+    @testset "dist=:normal is unchanged" begin
+        rng = Random.MersenneTwister(77); n = 1500
+        y = randn(rng, n)
+        m = estimate_garch(y, 1, 1)
+        # the Gaussian path keeps the original parameter count and no shape
+        @test m.dist === :normal
+        @test isnan(m.shape)
+        @test m.aic ≈ -2 * m.loglik + 2 * 4 rtol = 1e-10      # k = 2 + q + p
+        @test_throws ArgumentError estimate_garch(y, 1, 1; dist=:bogus)
+    end
+end

@@ -57,6 +57,20 @@ struct GARCHModel{T<:AbstractFloat} <: AbstractVolatilityModel
     converged::Bool
     iterations::Int
     param_vcov::Matrix{T}
+    dist::Symbol
+    shape::T
+
+    # `dist`/`shape` are trailing keywords with defaults, so every existing positional
+    # construction site keeps working. `shape` is `NaN` under the Gaussian likelihood,
+    # where there is no shape parameter to report.
+    function GARCHModel{T}(y, p, q, mu, omega, alpha, beta, conditional_variance,
+                           standardized_residuals, residuals, fitted, loglik, aic, bic,
+                           method, converged, iterations, param_vcov;
+                           dist::Symbol=:normal, shape::Real=T(NaN)) where {T<:AbstractFloat}
+        new{T}(y, p, q, mu, omega, alpha, beta, conditional_variance,
+               standardized_residuals, residuals, fitted, loglik, aic, bic,
+               method, converged, iterations, param_vcov, dist, T(shape))
+    end
 end
 
 # Backward-compatible constructor (no cached covariance): stderror recomputes on demand
@@ -105,6 +119,14 @@ struct EGARCHModel{T<:AbstractFloat} <: AbstractVolatilityModel
     converged::Bool
     iterations::Int
     param_vcov::Matrix{T}
+    dist::Symbol
+    shape::T
+
+    # Trailing keywords with defaults, so existing positional call sites are unchanged.
+    function EGARCHModel{T}(y, p, q, mu, omega, alpha, gamma, beta, conditional_variance, standardized_residuals, residuals, fitted, loglik, aic, bic, method, converged, iterations, param_vcov;
+                           dist::Symbol=:normal, shape::Real=T(NaN)) where {T<:AbstractFloat}
+        new{T}(y, p, q, mu, omega, alpha, gamma, beta, conditional_variance, standardized_residuals, residuals, fitted, loglik, aic, bic, method, converged, iterations, param_vcov, dist, T(shape))
+    end
 end
 
 # Backward-compatible constructor (no cached covariance): stderror recomputes on demand
@@ -152,6 +174,14 @@ struct GJRGARCHModel{T<:AbstractFloat} <: AbstractVolatilityModel
     converged::Bool
     iterations::Int
     param_vcov::Matrix{T}
+    dist::Symbol
+    shape::T
+
+    # Trailing keywords with defaults, so existing positional call sites are unchanged.
+    function GJRGARCHModel{T}(y, p, q, mu, omega, alpha, gamma, beta, conditional_variance, standardized_residuals, residuals, fitted, loglik, aic, bic, method, converged, iterations, param_vcov;
+                           dist::Symbol=:normal, shape::Real=T(NaN)) where {T<:AbstractFloat}
+        new{T}(y, p, q, mu, omega, alpha, gamma, beta, conditional_variance, standardized_residuals, residuals, fitted, loglik, aic, bic, method, converged, iterations, param_vcov, dist, T(shape))
+    end
 end
 
 # Backward-compatible constructor (no cached covariance): stderror recomputes on demand

@@ -375,6 +375,7 @@ include("teststat/arch_diagnostics.jl")
 
 # GARCH models
 include("garch/types.jl")
+include("garch/distributions.jl")
 include("garch/estimation.jl")
 include("garch/forecast.jl")
 include("garch/diagnostics.jl")

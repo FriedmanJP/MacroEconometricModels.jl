@@ -267,7 +267,49 @@ plot_result(garch)
 
 The top panel shows the raw return series to identify volatility clusters visually. The middle panel plots the estimated conditional standard deviation ``\hat{\sigma}_t``, which spikes during turbulent periods. The bottom panel displays standardized residuals ``\hat{z}_t = \hat{\varepsilon}_t / \hat{\sigma}_t``; these should be approximately i.i.d. standard normal if the model is well-specified.
 
+### Fat-Tailed Innovations: Student-t and GED
+
+The GARCH likelihood is Gaussian by default, but financial returns are leptokurtic — the Gaussian conditional density is misspecified, and the misspecification shows up as an understated probability of large moves. Pass `dist` to estimate a fat-tailed conditional distribution instead, with its shape parameter estimated **jointly** with the GARCH parameters:
+
+- `:student` — Bollerslev's (1987) Student-t with ``\nu > 2`` degrees of freedom
+- `:ged` — Nelson's (1991) generalized error distribution with shape ``\nu > 0``; ``\nu = 2`` is Gaussian, ``\nu = 1`` Laplace, ``\nu < 2`` fatter-tailed
+
+Both are **standardized to unit variance**, which is what keeps the model identified: the GARCH recursion already owns the scale through ``h_t``, so an innovation distribution carrying its own free scale would be conflated with it. For the t that means dividing by ``\sqrt{\nu/(\nu-2)}``; for the GED it is the constant ``\lambda = \sqrt{\Gamma(1/\nu)/\Gamma(3/\nu)}``.
+
+```math
+\log f_t(z) = \log\Gamma\!\left(\tfrac{\nu+1}{2}\right) - \log\Gamma\!\left(\tfrac{\nu}{2}\right)
+- \tfrac{1}{2}\log\!\left(\pi(\nu-2)\right) - \tfrac{\nu+1}{2}\log\!\left(1 + \tfrac{z^2}{\nu-2}\right)
+```
+
+Note ``\pi(\nu-2)`` rather than ``\pi\nu`` — the Jacobian of the standardization is already folded in.
+
+```@example volatility
+mg_n = estimate_garch(ip, 1, 1)
+mg_t = estimate_garch(ip, 1, 1; dist=:student)
+
+(loglik_normal = round(mg_n.loglik; digits=2),
+ loglik_student = round(mg_t.loglik; digits=2),
+ nu = round(mg_t.shape; digits=3),
+ aic_prefers_t = mg_t.aic < mg_n.aic)
+```
+
+On simulated GARCH(1,1) returns with true ``\nu = 5`` the estimator recovers ``\hat\nu = 4.79``, and AIC prefers the t by a wide margin (10737 against 11129) — the shape parameter is charged to AIC/BIC, so the improvement is not free.
+
+`dist` is available on `estimate_garch`, `estimate_egarch` and `estimate_gjr_garch`. The default `:normal` is unchanged in every respect.
+
+| Keyword | Type | Default | Description |
+|---------|------|---------|-------------|
+| `dist` | `Symbol` | `:normal` | Conditional innovation distribution: `:normal`, `:student`, or `:ged` |
+
+!!! note "The shape parameter is clamped"
+    Estimation is done in an unconstrained coordinate, ``\nu = 2 + e^{x}`` for the t and ``\nu = e^{x}`` for the GED, and the result is clamped to ``\nu \in [2.01, 500]`` and ``[0.1, 50]`` respectively. The lower clamp is not cosmetic: the t standardization divides by ``\nu - 2``, and ``2 + e^{x}`` rounds to *exactly* 2.0 in Float64 once ``x < -37``, which would make the density infinite and abort the line search.
+
+!!! warning "QMLE versus MLE"
+    Under `:normal` the Gaussian likelihood is a *quasi*-likelihood and the Bollerslev-Wooldridge sandwich standard errors remain the right choice. Under a correctly specified `:student` or `:ged` likelihood the inverse Hessian is efficient — but only if the distributional assumption holds. `stderror` continues to default to the robust sandwich, which is valid either way.
+
 ### GARCH-Family Return Values
+
+
 
 **GARCHModel Fields**
 
@@ -288,6 +330,8 @@ The top panel shows the raw return series to identify volatility clusters visual
 | `aic` | `T` | AIC |
 | `bic` | `T` | BIC |
 | `method` | `Symbol` | Estimation method |
+| `dist` | `Symbol` | Conditional innovation distribution (`:normal`, `:student`, `:ged`) |
+| `shape` | `T` | Estimated shape parameter; `NaN` under `:normal` |
 | `converged` | `Bool` | Convergence status |
 | `iterations` | `Int` | Optimizer iterations |
 
