@@ -222,4 +222,65 @@ using Test, MacroEconometricModels, Random, LinearAlgebra, Statistics, Distribut
         # Builder missing a required field.
         @test_throws ArgumentError StateSpaceModel(θ -> (Z=Z, H=H, T=Tt), [0.0])
     end
+
+    @testset "#512: a1/P1 must be supplied together" begin
+        Z = reshape([1.0], 1, 1); H = reshape([1.0], 1, 1)
+        Tt = reshape([1.0], 1, 1); Q = reshape([0.5], 1, 1)
+
+        # Half-specified initialization used to be SILENTLY discarded, returning a
+        # different model from the one written -- and the quieter one, so nothing
+        # signalled the loss. It is now an error on both halves.
+        @test_throws ArgumentError StateSpaceModel(Z, H, Tt, Q; a1=[999.0])
+        @test_throws ArgumentError StateSpaceModel(Z, H, Tt, Q; P1=reshape([1.0], 1, 1))
+        err = try
+            StateSpaceModel(Z, H, Tt, Q; a1=[999.0]); nothing
+        catch e
+            sprint(showerror, e)
+        end
+        @test occursin("must be supplied together", err)
+        @test occursin("a1 without P1", err)
+
+        # Both, or neither, still work.
+        m_both = StateSpaceModel(Z, H, Tt, Q; a1=[999.0], P1=reshape([1.0], 1, 1))
+        @test m_both.a1 == [999.0]
+        @test m_both.init_mode === :explicit
+        m_none = StateSpaceModel(Z, H, Tt, Q)
+        @test m_none.a1 == [0.0]
+        @test m_none.init_mode === :kappa
+
+        # ... and the two really are different models. The issue measured three
+        # orders of magnitude between them, which is why silently dropping a1
+        # mattered: the user who omitted P1 got the more plausible-looking number.
+        y = reshape(cumsum(randn(MersenneTwister(512), 150)), :, 1)
+        ll_none = estimate_statespace(m_none, y).loglik
+        ll_both = estimate_statespace(m_both, y).loglik
+        @test ll_none > ll_both + 1000
+
+        # Dimension guards on the explicit path.
+        @test_throws ArgumentError StateSpaceModel(Z, H, Tt, Q; a1=[1.0, 2.0],
+                                                   P1=reshape([1.0], 1, 1))
+        @test_throws ArgumentError StateSpaceModel(Z, H, Tt, Q; a1=[1.0], P1=ones(2, 2))
+
+        # The NamedTuple entry point routes through the same constructor.
+        @test_throws ArgumentError StateSpaceModel(θ -> (Z=Z, H=H, T=Tt, Q=Q,
+                                                         a1=[1.0]), [0.0])
+    end
+
+    @testset "#512: init_mode docstrings match the signatures" begin
+        # Six public signatures documented `init_mode=:diffuse` while defaulting to
+        # `:kappa`. Lock the actual default so the docstrings cannot drift back.
+        Z = reshape([1.0], 1, 1); H = reshape([1.0], 1, 1)
+        Tt = reshape([1.0], 1, 1); Q = reshape([0.5], 1, 1)
+        y = cumsum(randn(MersenneTwister(5122), 80))
+        @test StateSpaceModel(Z, H, Tt, Q).init_mode === :kappa
+        @test local_level(y).init_mode === :kappa
+        @test local_linear_trend(y).init_mode === :kappa
+        @test estimate_tvp_reg(y, randn(MersenneTwister(3), 80, 1)).init_mode === :kappa
+        # :diffuse remains reachable and is a genuinely different initialization on a
+        # model with a stationary direction (it warns about the nonstationary one).
+        @test StateSpaceModel(Z, H, Tt, Q; init_mode=:diffuse).init_mode === :diffuse
+        Ts = reshape([0.5], 1, 1)
+        @test StateSpaceModel(Z, H, Ts, Q; init_mode=:diffuse).P1 !=
+              StateSpaceModel(Z, H, Ts, Q; init_mode=:kappa).P1
+    end
 end
