@@ -1896,7 +1896,16 @@ end
         # A correctly-centred fixed-design bootstrap should land in the same neighbourhood as
         # the HAC bands on well-behaved homoskedastic data — a sanity check, not an identity.
         b = lp_irf(m; ci_type=:bootstrap, bootstrap=:wild, reps=500, seed=2)
-        @test all(b.ci_lower .<= b.values .<= b.ci_upper)
+        # The h=0 own-shock cell is a point mass: the response is mechanically 1, so
+        # every bootstrap replicate returns it and the band collapses to a width of
+        # 6.7e-16 around 1.0. Whether the ordering holds there is decided at 1 ulp
+        # (it did on arm64 and did not on x86-64), so compare with a tolerance —
+        # the property being checked is that the band brackets the estimate, not
+        # that rounding falls a particular way at a degenerate cell.
+        btol = 1e-9
+        @test all(b.ci_lower .<= b.values .+ btol)
+        @test all(b.values .<= b.ci_upper .+ btol)
+        @test minimum(b.ci_upper .- b.ci_lower) < 1e-12   # that cell really is degenerate
         @test mean(b.ci_upper .- b.ci_lower) ≈ mean(a.ci_upper .- a.ci_lower) rtol = 0.35
     end
 
