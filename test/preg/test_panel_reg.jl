@@ -798,11 +798,14 @@ end
         @test m_a2.hdfe.n_absorbed == Ng + Tp - 1
         @test dof_residual(m_a2) == n - 2 - (Ng + Tp - 1)
 
-        # SEs deliberately differ: the :twoway path charges nothing to the
-        # cluster dof, HDFE charges the T-1 non-nested time parameters. HDFE is
-        # the reghdfe-correct (larger, more conservative) number.
+        # `twoway=true` now routes through this very path, so the two are the
+        # SAME estimator and agree bit-for-bit — including the cluster dof, which
+        # charges the T-1 non-nested time parameters.
         @test m_a2.hdfe.n_absorbed_cluster == Tp - 1
-        @test all(stderror(m_a2) .> stderror(m_tw))
+        @test stderror(m_a2) ≈ stderror(m_tw) atol = 1e-14
+        @test m_tw.hdfe !== nothing
+        @test m_tw.hdfe.absorb == [:entity, :time]
+        @test m_tw.twoway                       # the flag survives for display/API
     end
 
     @testset "multi-way absorption == explicit-dummy OLS" begin
@@ -879,9 +882,11 @@ end
         @test a2.n_absorbed == 10 + 6 - 1
     end
 
-    @testset "unbalanced two-way: HDFE matches dummy OLS, additive demeaning does not" begin
-        # y - ȳᵢ - ȳₜ + ȳ is the two-way within transformation only on a
-        # BALANCED panel. Alternating projections are correct either way.
+    @testset "unbalanced two-way matches dummy OLS (twoway= and absorb= alike)" begin
+        # y - ȳᵢ - ȳₜ + ȳ is the two-way within transformation only on a BALANCED
+        # panel; on an unbalanced one it is a different, biased estimator (it put
+        # the x2 coefficient 2.1e-3 away from the dummy-OLS truth here). Both
+        # entry points now use alternating projections, which are exact either way.
         rng8 = Random.MersenneTwister(21)
         dfu = df[rand(rng8, n) .> 0.25, :]
         pdu = xtset(dfu, :id, :t)
@@ -894,8 +899,13 @@ end
         mu_tw = estimate_xtreg(pdu, :y, [:x1, :x2]; twoway=true)
 
         @test coef(mu_ab) ≈ b_dummy atol = 1e-10
-        @test !isapprox(coef(mu_tw), b_dummy; atol=1e-6)
+        @test coef(mu_tw) ≈ b_dummy atol = 1e-10          # was off by 2.1e-3
+        @test coef(mu_tw) ≈ coef(mu_ab) atol = 1e-12
         @test mu_ab.hdfe.n_absorbed == rank(Du)
+        @test mu_tw.hdfe.n_absorbed == rank(Du)
+        # The residual dof now uses the true dummy rank (N + T - components), not
+        # the balanced-panel shortcut n - N - T + 1.
+        @test dof_residual(mu_tw) == size(Xu, 1) - 2 - rank(Du)
     end
 
     @testset "acceleration: same fixed point, far fewer sweeps" begin

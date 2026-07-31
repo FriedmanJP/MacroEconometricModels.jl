@@ -234,7 +234,11 @@ Estimate a linear panel regression model.
 
 # Keyword Arguments
 - `model::Symbol` — `:fe`, `:re`, `:fd`, `:between`, or `:cre` (default: `:fe`)
-- `twoway::Bool` — include time fixed effects (FE only, default: `false`)
+- `twoway::Bool` — entity **and** time fixed effects (FE only, default: `false`).
+  Equivalent to `absorb=[:entity, :time]`, and computed the same way: by alternating
+  projections, which are exact on unbalanced panels too. The additive identity
+  `y - ȳᵢ - ȳₜ + ȳ` is the two-way within transformation only when the panel is
+  balanced.
 - `absorb::Vector{Symbol}` — high-dimensional fixed effects to absorb by alternating
   projections (`model=:fe` only, default: none). Names resolve to panel variables, or
   to the reserved indices `:entity` (`:id`/`:unit`/`:group`), `:time` (`:period`), and
@@ -344,12 +348,19 @@ function estimate_xtreg(pd::PanelData{T}, depvar::Symbol, indepvars::Vector{Symb
         y, X, ar1_rho = _prais_winsten_transform(y, X, groups, time_ids, resid0; ar1=ar1)
     end
 
-    # Dispatch to specific estimator
-    if model == :fe && !isempty(absorb)
+    # Dispatch to specific estimator.
+    # `twoway=true` routes through the SAME alternating-projections path as
+    # `absorb=[:entity, :time]`. The additive identity y - ȳᵢ - ȳₜ + ȳ that the
+    # dedicated two-way branch applies is the two-way within transformation only
+    # on a BALANCED panel; on an unbalanced one it is simply a different (biased)
+    # estimator. Sharing the path means one estimator with one set of numbers.
+    if model == :fe && (!isempty(absorb) || twoway)
+        dims = isempty(absorb) ? [:entity, :time] : absorb
         return _estimate_fe_hdfe(pd, y, X, groups, time_ids, unique_groups,
-                                 N, n, k, indepvars, absorb, cov_type, bandwidth,
+                                 N, n, k, indepvars, dims, cov_type, bandwidth,
                                  hdfe_tol, hdfe_maxiter, hdfe_accel;
-                                 pcse_unbalanced=pcse_unbalanced, ar1_rho=ar1_rho)
+                                 pcse_unbalanced=pcse_unbalanced, ar1_rho=ar1_rho,
+                                 twoway=twoway)
     elseif model == :fe
         return _estimate_fe(pd, y, X, groups, time_ids, unique_groups, unique_times,
                             N, n_times, n, k, indepvars, twoway, cov_type, bandwidth;
@@ -380,6 +391,11 @@ end
 # Fixed Effects (Within) Estimation
 # =============================================================================
 
+# NOTE: `estimate_xtreg` no longer routes `twoway=true` here — it goes through
+# `_estimate_fe_hdfe`, whose alternating projections are exact on unbalanced panels
+# as well. The `twoway` branch below is retained because it is correct on balanced
+# panels and is exercised directly by the `_twoway_demean!` unit tests, but it is
+# not reachable from the public API.
 function _estimate_fe(pd::PanelData{T}, y::Vector{T}, X::Matrix{T},
                       groups::Vector{Int}, time_ids::Vector{Int},
                       unique_groups::Vector{Int}, unique_times::Vector{Int},
@@ -548,7 +564,8 @@ function _estimate_fe_hdfe(pd::PanelData{T}, y::Vector{T}, X::Matrix{T},
                            indepvars::Vector{Symbol}, absorb::Vector{Symbol},
                            cov_type::Symbol, bandwidth,
                            hdfe_tol::Real, hdfe_maxiter::Int, hdfe_accel::Bool;
-                           pcse_unbalanced::Symbol=:casewise, ar1_rho=nothing) where {T}
+                           pcse_unbalanced::Symbol=:casewise, ar1_rho=nothing,
+                           twoway::Bool=false) where {T}
 
     # `AbstractVector[...]`, not `Any[...]`: dimensions come back as `Vector{T}`
     # (data column) or `Vector{Int}` (panel index), and only an element type that
@@ -667,7 +684,7 @@ function _estimate_fe_hdfe(pd::PanelData{T}, y::Vector{T}, X::Matrix{T},
         nothing,
         f_stat, f_pval,
         loglik, aic_val, bic_val,
-        [String(v) for v in indepvars], :fe, false, cov_type,
+        [String(v) for v in indepvars], :fe, twoway, cov_type,
         n, N, T(n) / T(N),
         group_effects, pd, nothing, ar1_rho, hdfe_info
     )

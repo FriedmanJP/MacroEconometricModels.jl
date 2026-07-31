@@ -133,7 +133,7 @@ m_twoway = estimate_xtreg(pd_pwt, :lngdppc, [:hc, :lnk]; twoway=true)
 report(m_twoway)
 ```
 
-`twoway=true` applies the additive transformation ``y_{it} - \bar{y}_i - \bar{y}_t + \bar{y}``, which equals the two-way within transformation **only on a balanced panel**. For unbalanced panels — and for more than two dimensions — use `absorb` instead.
+`twoway=true` is exactly `absorb=[:entity, :time]` (see below): it removes entity and time effects by alternating projections rather than by the additive identity ``y_{it} - \bar{y}_i - \bar{y}_t + \bar{y}``, which is the two-way within transformation only on a balanced panel. For more than two dimensions, use `absorb`.
 
 ### High-Dimensional Fixed Effects
 
@@ -162,7 +162,7 @@ m_hdfe = estimate_xtreg(pd_pwt, :lngdppc, [:hc, :lnk]; absorb=[:entity, :time])
 report(m_hdfe)
 ```
 
-The PWT panel is unbalanced, so this is **not** the same estimator as `twoway=true` above: the additive demeaning identity fails and its capital-deepening coefficient (0.297) is far from the true two-way within estimate (0.514) that `absorb` recovers. Absorbing entity and time reports 107 fixed-effect parameters — 38 countries plus 70 years minus the one collinearity implied by a single **mobility group** (see below).
+This is the same estimator as `twoway=true` above — that keyword routes here. Absorbing entity and time reports 107 fixed-effect parameters: 38 countries plus 70 years minus the one collinearity implied by a single **mobility group** (see below). The distinction matters because the PWT panel is unbalanced, where the additive identity is not the two-way within transformation; it put the capital-deepening coefficient at 0.297 against the dummy-OLS truth of 0.514 that alternating projections recover to 1e-14.
 
 Any number of dimensions is allowed, and they need not be nested. A common applied specification adds **group × time** effects, which control for shocks common to countries at a similar development level:
 
@@ -184,7 +184,7 @@ report(m_gy)
 !!! note "Three or more dimensions"
     No closed form for the rank exists beyond two dimensions. Each dimension past the second is charged one collinearity, `G_d - 1`, which is an **upper bound** on its contribution. Absorbed parameters are therefore never understated, so the residual degrees of freedom are never overstated and the small-sample correction errs conservative. Estimated coefficients are unaffected — they depend only on the range of the dummy design, not on the bookkeeping, and are invariant to the order the dimensions are listed in.
 
-**Cluster-robust standard errors** charge only the fixed-effect dimensions *not* nested within the clustering variable. Entity fixed effects clustered on entity — the default panel setup — contribute nothing, because the ``G/(G-1)`` cluster factor already accounts for them. This is why `absorb=[:entity]` reproduces the plain one-way `estimate_xtreg` standard errors exactly, while `absorb=[:entity, :time]` charges the ``T-1`` non-nested time parameters and reports slightly wider intervals than `twoway=true`.
+**Cluster-robust standard errors** charge only the fixed-effect dimensions *not* nested within the clustering variable. Entity fixed effects clustered on entity — the default panel setup — contribute nothing, because the ``G/(G-1)`` cluster factor already accounts for them. This is why `absorb=[:entity]` reproduces the plain one-way `estimate_xtreg` standard errors exactly, while `absorb=[:entity, :time]` — and equivalently `twoway=true` — additionally charges the ``T-1`` non-nested time parameters.
 
 **Convergence.** Plain alternating projections converge linearly at a rate set by the angle between the dummy subspaces, which is punishing when the dimensions are weakly connected (sparse worker–firm mobility). `hdfe_accel=true` (the default) applies Irons–Tuck vector extrapolation, which is exact for a single geometric mode. The `MAP converged` line in `report` and the `hdfe.converged` field are authoritative — a `NO` there means the coefficients are still moving, and `hdfe_maxiter` should be raised:
 
@@ -367,7 +367,7 @@ report(m_ar1)
 | Keyword | Type | Default | Description |
 |---------|------|---------|-------------|
 | `model` | `Symbol` | `:fe` | Estimator: `:fe`, `:re`, `:fd`, `:between`, `:cre`, `:ab`, `:bb` |
-| `twoway` | `Bool` | `false` | Include time fixed effects (FE only; balanced panels only) |
+| `twoway` | `Bool` | `false` | Entity + time fixed effects (FE only); equivalent to `absorb=[:entity, :time]` |
 | `absorb` | `Vector{Symbol}` | `Symbol[]` | High-dimensional FE to absorb by alternating projections (`:fe` only) |
 | `hdfe_tol` | `Real` | `1e-8` | Absorption convergence tolerance |
 | `hdfe_maxiter` | `Int` | `1000` | Maximum alternating-projection iterations |
@@ -708,7 +708,7 @@ The CRE group-mean coefficients test the RE exogeneity assumption. Significant g
 
 6. **Unbalanced panels with AB/BB.** Arellano-Bond and Blundell-Bond GMM require sufficient time periods per entity for the instrument matrix. Very short panels may produce singular moment conditions.
 
-7. **`twoway=true` on an unbalanced panel.** The additive transformation ``y_{it} - \bar{y}_i - \bar{y}_t + \bar{y}`` equals the two-way within transformation only when the panel is balanced. On the unbalanced PWT panel it moves the capital-deepening coefficient from 0.514 to 0.297. Check `pd.balanced`, and use `absorb=[:entity, :time]` whenever it is `false`.
+7. **Assuming additive demeaning is the two-way within transformation.** ``y_{it} - \bar{y}_i - \bar{y}_t + \bar{y}`` equals it only on a balanced panel — on the unbalanced PWT panel that identity puts the capital-deepening coefficient at 0.297 against a truth of 0.514. `twoway=true` and `absorb=[:entity, :time]` both use alternating projections and are exact either way, so this is a trap only if you hand-demean your own data.
 
 8. **Ignoring the `hdfe.converged` flag.** Alternating projections converge slowly when fixed-effect dimensions are weakly connected. A `MAP converged: NO` line means the coefficients have not settled — raise `hdfe_maxiter` rather than reporting them.
 

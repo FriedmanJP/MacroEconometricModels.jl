@@ -456,6 +456,8 @@ function Base.show(io::IO, m::PanelRegModel{T}) where {T}
     if m.hdfe !== nothing
         h = m.hdfe
         lvl_str = join(("$(d)=$(g)" for (d, g) in zip(h.absorb, h.n_levels)), ", ")
+        # "Mobility groups" is the count that makes the FE parameter total correct on
+        # an unbalanced panel; showing it for twoway=true too is the point.
         spec = vcat(spec, Any[
             "Absorbed FE"       lvl_str;
             "FE parameters"     h.n_absorbed;
