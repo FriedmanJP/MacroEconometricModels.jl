@@ -209,15 +209,27 @@ function sargan_test(model::LPIVModel{T}, h::Int) where {T<:AbstractFloat}
     build_control_columns!(W, model.Y, t_start, t_end, model.lags, 2)
     Ztil = Z .- W * (robust_inv(W' * W) * (W' * Z))
 
+    sigma2 = [sum(abs2, @view U_h[:, eq]) / T_h for eq in 1:n_resp]
+
+    # Drop equations whose residual carries no variance. At h = 0 the shock
+    # variable's own response is a regression of a series on ITSELF, so it fits
+    # exactly and σ̂² is numerically zero (3.5e-31 in a T=300 sample). Since
+    # J = (Z̃'u)'(Z̃'Z̃)⁻¹(Z̃'u)/σ̂², that equation contributes an astronomical term
+    # to the average and the over-identification test rejects valid instruments —
+    # measured at 55 of 60 seeds before this guard, against a nominal 0.6, while
+    # horizons ≥ 1 were correctly sized. The threshold is relative to the largest
+    # residual variance at this horizon, so it is scale-free.
+    scale = maximum(sigma2)
+    keep = findall(s -> s > sqrt(eps(T)) * scale, sigma2)
+    isempty(keep) && return (J_stat=T(NaN), p_value=T(NaN), df=0, valid=false)
+
+    ZtZ_inv = robust_inv(Ztil' * Ztil)
     J_stats = [begin
-        u = @view U_h[:, eq]
-        sigma2 = sum(u.^2) / T_h
-        Zu = Ztil' * u
-        ZtZ_inv = robust_inv(Ztil' * Ztil)
+        Zu = Ztil' * @view U_h[:, eq]
         # Sargan J = (Z̃'u)'(Z̃'Z̃)⁻¹(Z̃'u)/σ̂², σ̂² = u'u/T_h. σ̂² already carries the sample
         # size in its denominator; do NOT multiply by T_h again (audit R-02 / #112).
-        (Zu' * ZtZ_inv * Zu) / sigma2
-    end for eq in 1:n_resp]
+        (Zu' * ZtZ_inv * Zu) / sigma2[eq]
+    end for eq in keep]
 
     J_avg = mean(J_stats)
     df = n_inst - 1

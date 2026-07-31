@@ -249,4 +249,40 @@ end
     @test sj.p_value > 0.01
 end
 
+@testset "Sargan-J is correctly SIZED at h=0 (degenerate own-shock equation)" begin
+    # A single seed cannot catch a mis-sized test: the original one-draw assertion
+    # above passed on ~1 seed in 12 while the h=0 statistic rejected valid
+    # instruments almost always. The cause is that at h=0 the shock variable's
+    # response to ITSELF is a regression of a series on itself — it fits exactly,
+    # σ̂² is ~1e-31, and J = (...)/σ̂² exploded into the cross-equation average.
+    # Assert the SIZE of the test over many draws, which is the property that
+    # actually matters and does not depend on any one RNG stream.
+    for h in 0:2
+        n_rej = 0
+        nrep = 30
+        for seed in 1:nrep
+            Y, Z1 = _lpiv_sim(300; pi1=1.2, seed=seed)
+            rng = Random.MersenneTwister(1000 + seed)
+            Z2 = 0.9 .* Z1 .+ 0.3 .* randn(rng, size(Z1, 1), 1)
+            m = estimate_lp_iv(Y, 1, hcat(Z1, Z2), 3; lags=2)
+            sj = sargan_test(m, h)
+            @test sj.valid && isfinite(sj.J_stat) && sj.J_stat >= 0
+            n_rej += sj.p_value < 0.01
+        end
+        # Nominal size is 1%; before the fix h=0 rejected ~92% of draws.
+        @test n_rej <= 3
+    end
+
+    # The degenerate equation is dropped, not silently zeroed: the h=0 residual
+    # variance of the shock's own response is numerically zero by construction.
+    Y, Z1 = _lpiv_sim(300; pi1=1.2, seed=5)
+    rng = Random.MersenneTwister(11)
+    Z2 = 0.9 .* Z1 .+ 0.3 .* randn(rng, size(Z1, 1), 1)
+    m = estimate_lp_iv(Y, 1, hcat(Z1, Z2), 2; lags=2)
+    U0 = m.residuals[1]
+    s2 = [sum(abs2, @view U0[:, e]) / m.T_eff[1] for e in 1:size(U0, 2)]
+    @test s2[m.shock_var] < 1e-20            # the shock on itself
+    @test all(s2[e] > 1e-3 for e in 1:length(s2) if e != m.shock_var)
+end
+
 end  # @testset "LP-IV weak-instrument-robust inference"

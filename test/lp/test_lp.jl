@@ -649,6 +649,11 @@ using Random
         # J = (Z̃'u)'(Z̃'Z̃)⁻¹(Z̃'u)/σ̂² with Z̃ = M_W Z (the included exogenous controls
         # W = [intercept, lagged Y] partialled out of the instruments, #209 R-26),
         # σ̂² = u'u/T_h. It must NOT be the pre-R-02 T_h-inflated value.
+        #
+        # The average runs over the NON-DEGENERATE equations. At h = 0 the shock
+        # variable's response to itself fits exactly (σ̂² ~ 1e-31), and including
+        # that term made the test reject valid instruments in 55 of 60 draws while
+        # h ≥ 1 was correctly sized — see the size testset in test_lp_weak_iv.jl.
         let h0 = 0
             U_h = model_sar.residuals[h0 + 1]
             T_h = model_sar.T_eff[h0 + 1]
@@ -660,10 +665,14 @@ using Random
             Ztil = Zc .- W * (MacroEconometricModels.robust_inv(W' * W) * (W' * Zc))
             ZtZ_inv = MacroEconometricModels.robust_inv(Ztil' * Ztil)
             nresp = size(U_h, 2)
+            s2 = [sum(U_h[:, eq] .^ 2) / T_h for eq in 1:nresp]
+            keep = findall(s -> s > sqrt(eps(Float64)) * maximum(s2), s2)
+            @test length(keep) == nresp - 1          # the shock's own h=0 equation drops out
+            @test !(model_sar.shock_var in keep)
             J_textbook = sum(begin
                 u = U_h[:, eq]; Zu = Ztil' * u
-                (Zu' * ZtZ_inv * Zu) / (sum(u .^ 2) / T_h)
-            end for eq in 1:nresp) / nresp
+                (Zu' * ZtZ_inv * Zu) / s2[eq]
+            end for eq in keep) / length(keep)
             @test sargan_result.J_stat ≈ J_textbook rtol=1e-8
             @test !isapprox(sargan_result.J_stat, T_h * J_textbook; rtol=1e-6)  # not the pre-fix T_h-inflated value
         end
