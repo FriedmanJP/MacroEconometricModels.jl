@@ -109,8 +109,9 @@ jobs:
         run: |
           # Docstring-aware: skips content inside """...""" blocks and # comment lines, so
           # docstring `# Examples` (randn(n), randn(200,3), rand(1:k), …) are not flagged.
-          # Whitelist on real-code lines: rng-threaded draws (rand(rng,…)/randn(local_rng,…)/
-          # any *_rng local), MersenneTwister/Random.default_rng seeds, and an explicit
+          # Whitelist on real-code lines: rng-threaded draws whose first argument is named
+          # `rng`, `<prefix>_rng`, or `rng_<suffix>` (rand(rng,…)/randn(local_rng,…)/
+          # randn(rng_fit,…)); MersenneTwister/Random.default_rng seeds; and an explicit
           # `# rng-lint: ignore` opt-out. Everything else drawing bare on the global RNG fails.
           viol=$(awk '
             FNR==1 { indoc=0 }
@@ -121,7 +122,7 @@ jobs:
               if ($0 ~ /^[[:space:]]*#/) next
               if ($0 !~ /(^|[^A-Za-z_.])(rand|randn|randn!)\(/) next
               line=$0
-              if (line ~ /\((rng|local_rng|thread_rng|rep_rng|rng_actual|rng_draw|boot_rng|thread_local_rng)[,)]/) next
+              if (line ~ /\(([A-Za-z_][A-Za-z_0-9]*_)?rng(_[A-Za-z_0-9]+)?[,)]/) next
               if (line ~ /(MersenneTwister|Random\.default_rng|rand\(UInt)/) next
               if (line ~ /# *rng-lint: *ignore/) next
               printf("%s:%d:%s\n", FILENAME, FNR, $0)
