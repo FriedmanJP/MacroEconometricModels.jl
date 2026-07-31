@@ -443,6 +443,26 @@ function StatsAPI.confint(m::MultinomialLogitModel{T}; level::Real=0.95) where {
     hcat(theta .- crit .* se_all, theta .+ crit .* se_all)
 end
 
+"""
+    residuals(m::MultinomialLogitModel; kind=:response) -> Matrix{T}
+
+Residual matrix (`n x J`, one column per alternative) for a multinomial logit model.
+
+Unlike [`LogitModel`](@ref)/[`ProbitModel`](@ref), which return a length-`n` vector of
+deviance residuals, a `J`-alternative response has `J` residuals per observation, so this
+returns a matrix. There is no meaningful length-`n` scalar residual for an unordered
+response — the score is `X'(D - P)` per alternative, so the `:response` residuals below
+*are* the generalized residuals, one column per alternative.
+
+`kind` selects `:response` (default, `dᵢⱼ - P̂ᵢⱼ`, rows summing to zero), `:pearson`
+(`rᵢⱼ / sqrt(P̂ᵢⱼ(1-P̂ᵢⱼ))`), or `:deviance` (sum of squares equals `-2·loglik`).
+
+# References
+- Agresti, A. (2002). *Categorical Data Analysis*. 2nd ed. Wiley, ch. 7.
+"""
+StatsAPI.residuals(m::MultinomialLogitModel{T}; kind::Symbol=:response) where {T} =
+    _category_residuals(m.y, m.fitted, kind)
+
 # =============================================================================
 # Predict (out-of-sample)
 # =============================================================================

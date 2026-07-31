@@ -507,3 +507,38 @@ using LinearAlgebra, Statistics, Random, Distributions
     end
 
 end
+
+@testset "#507: residuals for multinomial logit" begin
+    rng = Random.MersenneTwister(5072)
+    n = 600
+    X = hcat(ones(n), randn(rng, n), randn(rng, n))
+    beta_true = [0.0 0.5; 1.0 -0.8; -0.5 0.6]        # K x (J-1), base category 1
+    eta = hcat(zeros(n), X * beta_true)
+    P_true = exp.(eta) ./ sum(exp.(eta), dims=2)
+    y = [findfirst(cumsum(P_true[i, :]) .>= rand(rng)) for i in 1:n]
+    m = estimate_mlogit(Float64.(y), X)
+    J = length(m.categories)
+
+    r = residuals(m)
+    @test size(r) == (n, J)
+    @test maximum(abs, sum(r, dims=2)) < 1e-12
+    @test r ≈ [(m.y[i] == j) - m.fitted[i, j] for i in 1:n, j in 1:J] atol = 1e-14
+
+    rp = residuals(m; kind=:pearson)
+    @test rp ≈ r ./ sqrt.(m.fitted .* (1 .- m.fitted)) rtol = 1e-10
+
+    rd = residuals(m; kind=:deviance)
+    @test sum(abs2, rd) ≈ -2 * loglikelihood(m) rtol = 1e-10
+
+    # For an unordered response the response residuals ARE the generalized
+    # residuals: the score for alternative j is X'(d_j - P_j), so each
+    # non-base column must be orthogonal to X at the MLE.
+    for j in 2:J
+        @test maximum(abs, X' * r[:, j]) < 1e-5
+    end
+
+    @test_throws ArgumentError residuals(m; kind=:nonsense)
+    # generalized_residuals is deliberately NOT defined for the unordered model:
+    # there is no length-n scalar score residual for a multinomial response.
+    @test !hasmethod(generalized_residuals, Tuple{typeof(m)})
+end

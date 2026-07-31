@@ -1314,6 +1314,7 @@ export load_example
 # Types
 export RegModel, LogitModel, ProbitModel, MarginalEffects
 export OrderedLogitModel, OrderedProbitModel, estimate_ologit, estimate_oprobit
+export generalized_residuals   # #507: ordered-model score residual
 export MultinomialLogitModel, estimate_mlogit
 
 # Estimation

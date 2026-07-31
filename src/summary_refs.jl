@@ -1219,6 +1219,17 @@ const _REFERENCES = Dict{Symbol, _RefEntry}(
     :greene2018 => (key=:greene2018, authors="Greene, William H.", year=2018,
         title="Econometric Analysis", journal="", volume="", issue="", pages="",
         doi="", isbn="978-0134461366", publisher="Pearson (8th ed.)", entry_type=:book),
+    # --- Generalized residuals for ordered models (#507) ---
+    :chesher_irish1987 => (key=:chesher_irish1987,
+        authors="Chesher, Andrew and Irish, Margaret", year=1987,
+        title="Residual Analysis in the Grouped and Censored Normal Linear Model",
+        journal="Journal of Econometrics", volume="34", issue="1-2", pages="33--61",
+        doi="10.1016/0304-4076(87)90067-2", isbn="", publisher="", entry_type=:article),
+    :gourieroux_etal1987 => (key=:gourieroux_etal1987,
+        authors="Gourieroux, Christian and Monfort, Alain and Renault, Eric and Trognon, Alain", year=1987,
+        title="Generalised Residuals",
+        journal="Journal of Econometrics", volume="34", issue="1-2", pages="5--32",
+        doi="10.1016/0304-4076(87)90065-9", isbn="", publisher="", entry_type=:article),
     # --- Count-data regression: Poisson / NegBin2 (EV-19, #427) ---
     :gourieroux_monfort_trognon1984 => (key=:gourieroux_monfort_trognon1984,
         authors="Gourieroux, Christian and Monfort, Alain and Trognon, Alain", year=1984,
@@ -2109,8 +2120,8 @@ const _TYPE_REFS = Dict{Symbol, Vector{Symbol}}(
     :ParkAddedResult => [:park1990_added, :park1992],
     :park_added_test => [:park1990_added, :park1992],
     # Ordered & Multinomial models
-    :OrderedLogitModel => [:mccullagh1980, :brant1990, :wooldridge2010],
-    :OrderedProbitModel => [:mccullagh1980, :wooldridge2010],
+    :OrderedLogitModel => [:mccullagh1980, :brant1990, :wooldridge2010, :chesher_irish1987, :gourieroux_etal1987],
+    :OrderedProbitModel => [:mccullagh1980, :wooldridge2010, :chesher_irish1987, :gourieroux_etal1987],
     :MultinomialLogitModel => [:mcfadden1974, :hausman_mcfadden1984, :wooldridge2010],
     :estimate_ologit => [:mccullagh1980, :brant1990, :wooldridge2010],
     :estimate_oprobit => [:mccullagh1980, :wooldridge2010],

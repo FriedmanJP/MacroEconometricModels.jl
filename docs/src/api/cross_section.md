@@ -93,6 +93,7 @@ estimate_oprobit
 estimate_mlogit
 brant_test
 hausman_iia
+generalized_residuals
 ```
 
 ---

@@ -522,6 +522,8 @@ OLS, WLS, IV/2SLS, logit, probit, ordered, and multinomial estimation for cross-
 | `harvey_test(m)` | Harvey multiplicative heteroskedasticity test |
 | `breusch_godfrey_test(m; lags)` | Breusch-Godfrey serial-correlation LM test |
 | `reset_test(m; powers)` | Ramsey RESET functional-form test |
+| `residuals(m; kind)` | Ordered/multinomial residual matrix (`:response`/`:pearson`/`:deviance`) |
+| `generalized_residuals(m)` | Ordered-model score residual (Chesher-Irish), length `n` |
 | `brant_test(m)` | Brant test for parallel regression |
 | `hausman_iia(m)` | Hausman test for IIA assumption |
 
