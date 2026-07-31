@@ -204,7 +204,25 @@ smooth = CTTwoAsset(; cost=:quadratic, chi=2.0, Ib=6, Ia=6)
 The kinked deposit is *exactly* zero inside the band while the quadratic one is not.
 
 !!! warning "The level-quadratic cost cannot bound illiquid wealth"
-    With `cost=:quadratic`, ``d = (V_a/V_b - 1)/\chi`` and ``V_a/V_b \ge 0``, so the largest possible **withdrawal** is the constant ``1/\chi``. Illiquid wealth accrues ``r_a a``, which grows without bound in ``a``, so a constant withdrawal cap cannot offset it and the distribution diverges above ``a^\star = 1/(\chi r_a)``. Check the calibration with [`ct_two_asset_stationarity`](@ref); see issue #509. The KMV rate-based cost has no such problem because its withdrawal **scales with** ``a``.
+    With `cost=:quadratic`, ``d = (V_a/V_b - 1)/\chi`` and ``V_a/V_b \ge 0``, so the largest possible **withdrawal** is the constant ``1/\chi``. Illiquid wealth accrues ``r_a a``, which grows without bound in ``a``, so a constant withdrawal cap cannot offset it and the distribution diverges above ``a^\star = 1/(\chi r_a)``. `ct_two_asset_solve` now **warns** on such a calibration rather than returning a grid artifact with `hjb_converged = true`; pass `check_stationarity=false` to silence it. See issue #509.
+
+    The dichotomy is sharper than "pick ``a_{\max} < a^\star``". Measured at ``\chi = 8``, ``r_a = 0.05`` (so ``a^\star = 2.5``), ``r_b = 0.02``, ``\rho = 0.08``:
+
+    | ``a_{\max}`` | ``A`` | ``A/a_{\max}`` | mass on ceiling |
+    |---|---|---|---|
+    | 1.0 | ``\approx 0`` | ``\approx 0`` | ``6.7 \times 10^{-26}`` |
+    | 2.0 | ``\approx 0`` | ``\approx 0`` | ``1.2 \times 10^{-22}`` |
+    | 3.0 | 0.701 | 0.234 | 0.234 |
+    | 6.0 | 3.853 | 0.642 | 0.642 |
+
+    Above ``a^\star`` the ratio ``A/a_{\max}`` climbs toward 1 and equals the ceiling mass exactly — raising the ceiling does not reveal a tail, it only moves where the mass piles up. Below ``a^\star`` the ceiling is clean and ``A`` is insensitive to ``a_{\max}``, but only because ``A`` is essentially **zero**: the level-quadratic cost is stationary precisely where it supports no illiquid holdings at all.
+
+    So `:quadratic` remains the default — it is smooth, cheap, and adequate for exercising the solver — but it cannot produce a calibration with a realistic illiquid-wealth tail. Use `cost=:kinked` for that. The KMV rate-based cost has no such problem because its withdrawal **scales with** ``a``.
+
+!!! warning "The kinked stationarity condition runs the other way"
+    In the KMV parameterization ``\chi_1`` **multiplies** the withdrawal, ``|d| = \chi_1(|V_a/V_b - 1| - \chi_0)^{1/\chi_2}\,\bar a``, so the maximum withdrawal *rate* is ``\chi_1(1-\chi_0)^{1/\chi_2}`` and illiquid wealth is bounded iff that exceeds ``r_a``. A **larger** ``\chi_1`` is therefore more stationary, not less. `ct_two_asset_stationarity` reports this rate as `bound`. Once the absolute cap `dmax` binds, the withdrawal is a constant again and ``a^\star = \texttt{dmax}/r_a`` re-applies.
+
+    A passing check does not guarantee a small ceiling mass: a near-frictionless calibration (very large ``\chi_1``) makes the illiquid asset strictly dominate and drives a corner portfolio, which piles mass on the ceiling for an economic reason rather than a numerical one. Read [`ceiling_mass`](@ref) alongside the check.
 
 !!! note "Calibrating the kinked cost"
     ``\chi_0`` and ``\chi_2`` are dimensionless shape parameters and transfer across calibrations. ``\chi_1`` sets the scale of the deposit *rate* and does **not** — the shipped defaults are KMV's own estimates, which are quarterly. Their exponent implies ``1/\chi_2 \approx 2.5``, so a ratio ``V_a/V_b \approx 2.6`` already produces a very large deposit; `dmax` caps it, as in KMV. The kinked specification currently requires calibration to converge and is not recommended for production use.

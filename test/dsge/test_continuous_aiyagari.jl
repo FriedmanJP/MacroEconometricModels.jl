@@ -8,6 +8,7 @@ using Test
 using MacroEconometricModels
 using LinearAlgebra
 using SparseArrays
+using Logging
 
 const _CT = MacroEconometricModels
 
@@ -96,8 +97,15 @@ const _CT = MacroEconometricModels
     end
 
     @testset "Two-asset KMV-style solver" begin
+        # NOTE (#509): this calibration is deliberately the DIVERGENT one --
+        # a_max = 20 sits above a* = 1/(chi*r_a) = 10, so the level-quadratic cost
+        # cannot stop illiquid wealth from growing. It is kept because it exercises
+        # the solver mechanics (generator, mass, positivity) on a dense interior,
+        # but its aggregates are grid artifacts and are asserted as such below.
+        # `check_stationarity=false` silences the warning the solver now emits.
         m2 = CTTwoAsset(; Ib=30, Ia=30, r_a=0.05, r_b=0.02, chi=2.0, rho=0.08)
-        s = ct_two_asset_solve(m2; tol=1e-6)
+        @test !ct_two_asset_stationarity(m2).ok
+        s = ct_two_asset_solve(m2; tol=1e-6, check_stationarity=false)
         @test s isa CTTwoAssetSolution{Float64}
         @test s.hjb_converged
         # Valid infinitesimal generator (rows sum to ~0).
@@ -116,11 +124,19 @@ const _CT = MacroEconometricModels
         @test minimum(s.g) >= -1e-10
         @test all(s.c .> 0)
         @test s.A > 0 && s.B >= 0
-        @test s.A / (s.A + s.B) > 0.3                        # illiquidity premium ⟹ illiquid wealth
-        # A larger illiquidity premium raises the illiquid share.
-        s2 = ct_two_asset_solve(CTTwoAsset(; Ib=30, Ia=30, r_a=0.07, r_b=0.02, chi=2.0, rho=0.08); tol=1e-6)
+        # The old assertion here was `s.A / (s.A + s.B) > 0.3`, which passes at 0.94
+        # while 65% of the mass sits ON the illiquid ceiling -- it could not tell an
+        # illiquidity premium from a divergence. State what this calibration actually
+        # is instead (#509).
+        @test s.A / (s.A + s.B) > 0.9
+        @test ceiling_mass(s).illiquid > 0.5                 # measured 0.654: a grid artifact
+        # A larger illiquidity premium raises the illiquid share -- and, on a divergent
+        # calibration, also the share pinned to the ceiling. Both are recorded.
+        s2 = ct_two_asset_solve(CTTwoAsset(; Ib=30, Ia=30, r_a=0.07, r_b=0.02, chi=2.0,
+                                           rho=0.08); tol=1e-6, check_stationarity=false)
         @test s2.hjb_converged
         @test s2.A / (s2.A + s2.B) > s.A / (s.A + s.B)
+        @test ceiling_mass(s2).illiquid > ceiling_mass(s).illiquid   # 0.981 vs 0.654
         io = IOBuffer(); show(io, s)
         @test occursin("CTTwoAssetSolution", String(take!(io)))
         report(s)
@@ -229,12 +245,37 @@ const _CT = MacroEconometricModels
         @test !st.ok                                    # a_max = 20 > a* = 10
         @test occursin("509", st.message)
         @test ct_two_asset_stationarity(CTTwoAsset(; chi=2.0, r_a=0.05, a_max=5.0)).ok
-        # kinked: the withdrawal SCALES with a, so the condition is on chi1 instead
-        stk = ct_two_asset_stationarity(CTTwoAsset(; cost=:kinked, chi0=0.05, chi1=30.0, r_a=0.05))
-        @test stk.bound ≈ (1 - 0.05) / 0.05          # = 19
-        @test !stk.ok                                 # chi1 = 30 > 19 ⇒ diverges
-        @test ct_two_asset_stationarity(
-            CTTwoAsset(; cost=:kinked, chi0=0.05, chi1=5.0, r_a=0.05)).ok
+        @test st.a_star ≈ st.bound
+
+        # kinked: the withdrawal SCALES with a, so the condition is on the withdrawal
+        # RATE. In the KMV parameterization the implemented FOC is
+        #   |d| = chi1 * (|V_a/V_b - 1| - chi0)^(1/chi2) * (a + a_kink),
+        # so chi1 MULTIPLIES the withdrawal — a larger chi1 is MORE stationary, not less.
+        # The bound is the maximum rate chi1*(1-chi0)^(1/chi2), which must exceed r_a.
+        rate(c1, c0, c2) = c1 * (1 - c0)^(1 / c2)
+        stk = ct_two_asset_stationarity(CTTwoAsset(; cost=:kinked, chi0=0.05, chi1=30.0,
+                                                   r_a=0.05))
+        @test stk.bound ≈ rate(30.0, 0.05, 0.40176)
+        @test stk.bound > 26                          # ≈ 26.40
+        @test stk.ok                                  # ... comfortably above r_a = 0.05
+        @test isinf(stk.a_star)
+
+        # A SMALL chi1 is the divergent case: the rate falls below r_a.
+        stk_bad = ct_two_asset_stationarity(CTTwoAsset(; cost=:kinked, chi0=0.05, chi1=0.01,
+                                                       r_a=0.05))
+        @test stk_bad.bound ≈ rate(0.01, 0.05, 0.40176)
+        @test stk_bad.bound < 0.05
+        @test !stk_bad.ok
+        @test stk_bad.a_star == 0.0
+        @test occursin("RAISE chi1", stk_bad.message)
+
+        # The absolute dmax cap re-imposes a constant withdrawal above a* = dmax/r_a even
+        # when the rate condition holds.
+        stk_dmax = ct_two_asset_stationarity(CTTwoAsset(; cost=:kinked, chi0=0.05, chi1=5.0,
+                                                        r_a=0.05, dmax=0.1, a_max=20.0))
+        @test !stk_dmax.ok
+        @test stk_dmax.a_star ≈ 0.1 / 0.05
+        @test occursin("dmax", stk_dmax.message)
     end
 
     @testset "solution diagnostics on a converged solve" begin
@@ -363,7 +404,10 @@ const _CT = MacroEconometricModels
             m = CTTwoAsset(; Ib=20, Ia=20, r_a=0.05, r_b=0.01, rho=0.07, a_max=10.0,
                            b_max=5.0, z=[0.5, 1.5], lambda=[0.3, 0.3],
                            cost=cost, chi0=chi0, chi2=2.0, kw...)
-            s = ct_two_asset_solve(m; tol=1e-6, max_iter=60)
+            # This testset is about the FOC's inaction band, not about stationarity;
+            # a_max = 10 sits exactly at a* for the quadratic leg, so silence #509's
+            # warning rather than let it fire on every call.
+            s = ct_two_asset_solve(m; tol=1e-6, max_iter=60, check_stationarity=false)
             return count(iszero, s.d) / length(s.d)
         end
         # the smooth level-quadratic cost adjusts almost everywhere
@@ -375,4 +419,60 @@ const _CT = MacroEconometricModels
         @test f2 > frac_q
     end
 end
+end
+
+@testset "#509: level-quadratic illiquid divergence is detected, not shipped silently" begin
+    # The level-quadratic cost chi(d) = (chi/2)d^2 has FOC d = (V_a/V_b - 1)/chi, and
+    # V_a/V_b >= 0, so the largest WITHDRAWAL is the constant 1/chi. The no-deposit
+    # illiquid drift is r_a*a, which grows without bound in a. A constant cap cannot
+    # offset a return that scales with a, so illiquid wealth necessarily diverges above
+    #     a* = 1/(chi*r_a).
+    mk(amax) = CTTwoAsset(; Ib=20, Ia=20, r_a=0.05, r_b=0.02, chi=8.0, rho=0.08,
+                          a_max=amax, b_max=5.0)
+    a_star = 1 / (8.0 * 0.05)                                  # = 2.5
+    @test ct_two_asset_stationarity(mk(2.0)).bound ≈ a_star
+
+    @testset "the solver warns instead of returning a converged artifact" begin
+        @test_logs (:warn, r"diverges") match_mode = :any begin
+            ct_two_asset_solve(mk(6.0); tol=1e-6, max_iter=50)
+        end
+        # ... and the warning is suppressible for tests that want the artifact.
+        @test_logs min_level = Logging.Warn begin
+            ct_two_asset_solve(mk(2.0); tol=1e-6, max_iter=50, check_stationarity=false)
+        end
+    end
+
+    @testset "divergence signature: raising a_max moves the pile, it does not reveal a tail" begin
+        # If the distribution were bounded and merely truncated, raising a_max would
+        # expose the tail and A/a_max would FALL. Under divergence it RISES toward 1
+        # and the excess mass sits exactly on the ceiling.
+        s3 = ct_two_asset_solve(mk(3.0); tol=1e-6, max_iter=300, check_stationarity=false)
+        s6 = ct_two_asset_solve(mk(6.0); tol=1e-6, max_iter=300, check_stationarity=false)
+        @test s3.hjb_converged && s6.hjb_converged
+        @test !ct_two_asset_stationarity(mk(3.0)).ok
+        @test !ct_two_asset_stationarity(mk(6.0)).ok
+
+        @test s6.A / 6.0 > s3.A / 3.0                 # measured 0.642 vs 0.234
+        @test s6.A > 2 * s3.A                         # 3.853 vs 0.701
+        # The ceiling mass IS the excess: A/a_max and the ceiling mass coincide.
+        @test ceiling_mass(s3).illiquid ≈ s3.A / 3.0 rtol = 0.05
+        @test ceiling_mass(s6).illiquid ≈ s6.A / 6.0 rtol = 0.05
+        @test ceiling_mass(s6).illiquid > 0.6
+    end
+
+    @testset "below a* the ceiling is clean and A is insensitive to a_max" begin
+        # The other half of the dichotomy, and the answer to "is :quadratic usable":
+        # inside a* the ceiling mass is machine-zero and A does not move with a_max --
+        # because A is essentially ZERO. The level-quadratic cost is stationary only
+        # where it supports no illiquid holdings at all, which is why a calibration
+        # with a realistic illiquid tail needs cost=:kinked.
+        s1 = ct_two_asset_solve(mk(1.0); tol=1e-6, max_iter=300, check_stationarity=false)
+        s2 = ct_two_asset_solve(mk(2.0); tol=1e-6, max_iter=300, check_stationarity=false)
+        @test ct_two_asset_stationarity(mk(1.0)).ok
+        @test ct_two_asset_stationarity(mk(2.0)).ok
+        @test ceiling_mass(s1).illiquid < 1e-15       # measured 6.7e-26
+        @test ceiling_mass(s2).illiquid < 1e-15       # measured 1.2e-22
+        @test abs(s2.A - s1.A) < 1e-6                 # both ~0: insensitive to a_max
+        @test s2.A < 1e-6
+    end
 end

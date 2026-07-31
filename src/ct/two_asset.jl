@@ -493,7 +493,16 @@ household block at each candidate price.
 """
 function ct_two_asset_solve(m::CTTwoAsset{T}; max_iter::Int=200, tol::Real=1e-6,
                              Delta::Real=1000.0,
+                             check_stationarity::Bool=true,
                              V_init::Union{Nothing,AbstractArray}=nothing) where {T<:AbstractFloat}
+    # #509: a calibration on the wrong side of the stationarity condition returns a grid
+    # artifact with converged = true. Say so before spending the solve, rather than letting
+    # the caller read a number that is really "where the grid ends".
+    if check_stationarity
+        st = ct_two_asset_stationarity(m)
+        st.ok || @warn "ct_two_asset_solve: illiquid wealth diverges on this calibration; " *
+                       "the stationary distribution will be an artifact of a_max. " * st.message
+    end
     Ib = m.Ib; Ia = m.Ia; z = m.income.z; σ = m.sigma; ρ = m.rho
     n = 2 * Ib * Ia
     b = _ct2_power_grid(T, zero(T), m.b_max, Ib, m.b_power)
@@ -673,34 +682,65 @@ function ceiling_mass(s::CTTwoAssetSolution{T}) where {T<:AbstractFloat}
 end
 
 """
-    ct_two_asset_stationarity(m::CTTwoAsset) → (ok, bound, message)
+    ct_two_asset_stationarity(m::CTTwoAsset) → (ok, bound, a_star, message)
 
 Check whether the calibration can support a **bounded** illiquid-wealth distribution.
 
 In the no-deposit region illiquid wealth drifts at `s_a = r_a·a`, so halting it requires a
 withdrawal that grows with `a`. Whether the adjustment cost can deliver one depends on its
-specification:
+specification. With `V_a/V_b ≥ 0` the largest withdrawal is the one at `V_a/V_b = 0`:
 
-- `cost = :quadratic` — `d = (V_a/V_b − 1)/χ` with `V_a/V_b ≥ 0`, so the largest withdrawal
-  is the **constant** `1/χ`. Illiquid wealth diverges above `a* = 1/(χ·r_a)`; the model is
-  usable only on a grid with `a_max < a*`.
-- `cost = :kinked` — `d = ā(V_a/V_b − 1 + χ₀)/χ₁`, whose magnitude **scales with `a`**.
-  Stationary for any `a_max` iff `χ₁ < (1 − χ₀)/r_a`.
+- `cost = :quadratic` — `d = (V_a/V_b − 1)/χ`, so the largest withdrawal is the **constant**
+  `1/χ`, independent of how much illiquid wealth the household holds. A constant cannot
+  offset a return that scales with `a`, so illiquid wealth diverges above
+  `a* = 1/(χ·r_a)`; the model is usable only on a grid with `a_max < a*`.
+- `cost = :kinked` — `|d| = χ₁(|V_a/V_b − 1| − χ₀)^{1/χ₂}·(a + a_kink)`, capped at `dmax`.
+  The withdrawal **rate** is therefore bounded by `χ₁(1 − χ₀)^{1/χ₂}`, and illiquid wealth
+  is stationary iff that rate exceeds `r_a`. Note `χ₁` *multiplies* the withdrawal in this
+  (KMV) parameterization, so a **larger** `χ₁` is more stationary, not less. Once
+  `dmax` binds the cap is a constant again, which re-imposes `a* = dmax/r_a`.
 
-Returns the check, the relevant bound, and a message. See issue #509.
+Returns
+
+- `ok` — the illiquid distribution is bounded on this grid;
+- `bound` — the quantity compared against: `a*` for `:quadratic`, the maximum withdrawal
+  rate for `:kinked`;
+- `a_star` — the illiquid level above which the drift is divergent (`Inf` when none);
+- `message` — a diagnosis naming the failing margin.
+
+# Caveat
+A failing check implies a grid artifact, but a *passing* check does not guarantee a small
+ceiling mass: a near-frictionless `:kinked` calibration (very large `χ₁`) makes the illiquid
+asset strictly dominate and drives a corner portfolio, which piles mass on the ceiling for an
+economic reason rather than a numerical one. Read [`ceiling_mass`](@ref) as well.
+
+See issue #509.
 """
 function ct_two_asset_stationarity(m::CTTwoAsset{T}) where {T<:AbstractFloat}
     if m.cost === :kinked
-        bound = (one(T) - m.chi0) / m.r_a
-        ok = m.chi1 < bound
-        msg = ok ?
-            "kinked cost: chi1 = $(m.chi1) < (1 - chi0)/r_a = $(round(bound; sigdigits=4)); " *
-            "illiquid wealth is bounded." :
-            "kinked cost: chi1 = $(m.chi1) >= (1 - chi0)/r_a = $(round(bound; sigdigits=4)). " *
-            "The largest withdrawal a household can make is smaller than the return r_a*a " *
-            "it accrues, so illiquid wealth diverges and the stationary distribution is a " *
-            "grid artifact. Lower chi1 or lower r_a."
-        return (ok=ok, bound=bound, message=msg)
+        # Maximum withdrawal RATE, from the implemented FOC at V_a/V_b = 0.
+        rate = m.chi1 * (one(T) - m.chi0)^(one(T) / m.chi2)
+        a_star_dmax = m.dmax / m.r_a          # where the absolute dmax cap re-binds
+        ok_rate = rate > m.r_a
+        ok = ok_rate && m.a_max < a_star_dmax
+        a_star = ok_rate ? (m.a_max < a_star_dmax ? T(Inf) : a_star_dmax) : zero(T)
+        msg = if !ok_rate
+            "kinked cost: the maximum withdrawal rate chi1*(1-chi0)^(1/chi2) = " *
+            "$(round(rate; sigdigits=4)) does not exceed r_a = $(m.r_a), so illiquid " *
+            "wealth grows faster than any household can unwind it and the stationary " *
+            "distribution is a grid artifact. RAISE chi1 (it multiplies the withdrawal " *
+            "in this parameterization) or lower r_a. See #509."
+        elseif m.a_max >= a_star_dmax
+            "kinked cost: the withdrawal rate is adequate " *
+            "($(round(rate; sigdigits=4)) > r_a = $(m.r_a)), but the absolute cap " *
+            "dmax = $(m.dmax) binds above a* = dmax/r_a = " *
+            "$(round(a_star_dmax; sigdigits=4)) <= a_max = $(m.a_max), which re-imposes " *
+            "a constant withdrawal and hence divergence. Raise dmax or lower a_max. See #509."
+        else
+            "kinked cost: maximum withdrawal rate chi1*(1-chi0)^(1/chi2) = " *
+            "$(round(rate; sigdigits=4)) > r_a = $(m.r_a); illiquid wealth is bounded."
+        end
+        return (ok=ok, bound=rate, a_star=a_star, message=msg)
     else
         bound = one(T) / (m.chi * m.r_a)
         ok = m.a_max < bound
@@ -711,7 +751,7 @@ function ct_two_asset_stationarity(m::CTTwoAsset{T}) where {T<:AbstractFloat}
             "The level-quadratic cost caps withdrawals at the constant 1/chi, which cannot " *
             "offset the return r_a*a, so illiquid wealth diverges above a* and the mass " *
             "piles onto the ceiling. Use cost=:kinked, or shrink a_max below a*. See #509."
-        return (ok=ok, bound=bound, message=msg)
+        return (ok=ok, bound=bound, a_star=bound, message=msg)
     end
 end
 
