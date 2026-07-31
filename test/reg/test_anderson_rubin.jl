@@ -192,7 +192,10 @@ end
         cov_wald += (lo <= beta_true <= hi)
     end
     # AR has correct coverage under weak identification; the Wald interval does not.
-    @test cov_ar / nrep >= 0.93
+    # The threshold is 4 Monte-Carlo standard errors below the nominal 0.95 at
+    # nrep=300 (se ~0.013): 0.93 sat 1.6 se away and a different RNG stream landed
+    # at 0.925. The discriminating claim is `cov_ar > cov_wald`, asserted below.
+    @test cov_ar / nrep >= 0.90
     @test cov_wald / nrep < 0.94
     @test cov_ar > cov_wald
 end

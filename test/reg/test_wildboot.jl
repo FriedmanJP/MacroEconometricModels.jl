@@ -251,7 +251,11 @@ end
     @test wcr.imposenull
     @test !wcu.imposenull
     @test wcr.t_stat ≈ wcu.t_stat atol = 1e-10       # same observed statistic
-    @test wcr.p_value != wcu.p_value                 # different bootstrap DGP
+    # The bootstrap DGPs differ, so the bootstrap t DISTRIBUTIONS must differ. The
+    # p-values need not: with G=6 the 2^G sign vectors are enumerated and the
+    # p-value lives on a 64-point grid, so the two procedures can land on the same
+    # grid point by coincidence — they did on Julia 1.10's stream.
+    @test wcr.t_boot != wcu.t_boot
 
     # Under WCU the bootstrap DGP is the unrestricted fit, so the bootstrap t
     # distribution is centered on zero by construction of the recentering.

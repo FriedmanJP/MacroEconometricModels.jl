@@ -2133,12 +2133,29 @@ end
 
     @testset "recovers a known sharp jump" begin
         for tau0 in (0.0, 0.5, 1.0)
-            rng = Random.MersenneTwister(99); n = 3000
-            x = 2 .* rand(rng, n) .- 1
-            y = (@. 0.5 + 1.2 * x + 0.4 * x^2 + tau0 * (x >= 0)) .+ 0.3 .* randn(rng, n)
-            rd = estimate_rdd(y, x; cutoff=0.0)
-            @test rd.ci_robust[1] <= tau0 <= rd.ci_robust[2]
-            @test isapprox(rd.tau_bias_corrected, tau0; atol=0.12)
+            # A 95% CI misses the truth 5% of the time BY DESIGN, and a single
+            # bias-corrected estimate has sd ~0.05 with deviations up to 0.14 at
+            # this sample size — larger than any single-draw tolerance worth
+            # writing. Which draw you get depends on the RNG stream, which is not
+            # stable across Julia versions. So assert the two properties that are
+            # actually claimed: the interval covers at close to its nominal rate,
+            # and the estimator is centred on the true jump.
+            nrep = 15
+            n_cov = 0
+            taus = Float64[]
+            local rd
+            for s in 1:nrep
+                rng = Random.MersenneTwister(1000 * s + 7); n = 3000
+                x = 2 .* rand(rng, n) .- 1
+                y = (@. 0.5 + 1.2 * x + 0.4 * x^2 + tau0 * (x >= 0)) .+ 0.3 .* randn(rng, n)
+                rd = estimate_rdd(y, x; cutoff=0.0)
+                n_cov += rd.ci_robust[1] <= tau0 <= rd.ci_robust[2]
+                push!(taus, rd.tau_bias_corrected)
+            end
+            @test n_cov >= nrep - 3                  # nominal 95% => ~14.25/15
+            @test isapprox(Statistics.mean(taus), tau0; atol=0.06)  # measured |dev| <= 0.033
+
+            # The structural properties below hold draw by draw.
             @test 0 < rd.h < 2                       # finite and inside the support
             @test rd.b >= rd.h                       # the pilot is at least as wide
             @test rd.n_left > 10 && rd.n_right > 10

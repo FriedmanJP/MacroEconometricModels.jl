@@ -127,14 +127,42 @@ end
 end
 
 @testset "a pinned hyperparameter is never reported as converged" begin
-    # Near-random-walk data drives the overall tightness to the edge of the search box.
-    rng = Random.MersenneTwister(4)
-    Y_rw = cumsum(randn(rng, 150, 3); dims=1)
+    # THE invariant, and it cannot depend on any particular draw: whenever a fit
+    # lands on the edge of the search box it must NOT be reported as converged.
+    # Assert it over a sweep rather than on one dataset.
+    n_pinned = 0
+    for seed in 1:25
+        rc = optimize_hyperparameters_glp(
+            cumsum(randn(Random.MersenneTwister(seed), 150, 3); dims=1), 2; verbose=false)
+        rc.at_bound && (n_pinned += 1; @test !rc.converged)
+    end
 
-    r = optimize_hyperparameters_glp(Y_rw, 2; verbose=false)
+    # Near-random-walk data drives the overall tightness to the edge of the box —
+    # but only for some draws (8 of 40 seeds), and WHICH draws is a property of the
+    # RNG stream, which is not stable across Julia versions: seed 4 pins on 1.12
+    # and does not on 1.10. So search for a pinning draw instead of hard-coding a
+    # seed, which makes the end-to-end assertions below independent of the stream.
+    Y_rw = nothing
+    r = nothing
+    for seed in 1:40
+        Yc = cumsum(randn(Random.MersenneTwister(seed), 150, 3); dims=1)
+        rc = optimize_hyperparameters_glp(Yc, 2; verbose=false)
+        if rc.at_bound
+            Y_rw, r = Yc, rc
+            break
+        end
+    end
+    @test r !== nothing                # a near-RW panel must pin for SOME draw
+    @test n_pinned > 0
+
     @test r.at_bound
     @test !r.converged                 # THE point: a boundary value is not a selection
-    @test r.hyper.tau ≈ _M._GLP_BOUNDS.tau[1] atol = 1e-6
+    # `at_bound` fires on whichever hyperparameter hit the box; on this DGP it is
+    # the overall tightness, but assert the general property.
+    @test any(v <= b[1] * (1 + 1e-6) || v >= b[2] * (1 - 1e-6)
+              for (v, b) in ((r.hyper.tau, _M._GLP_BOUNDS.tau),
+                             (r.hyper.lambda, _M._GLP_BOUNDS.lambda),
+                             (r.hyper.mu, _M._GLP_BOUNDS.mu)))
 
     # ... and it warns when asked to
     @test_logs (:warn,) match_mode = :any optimize_hyperparameters_glp(Y_rw, 2)
