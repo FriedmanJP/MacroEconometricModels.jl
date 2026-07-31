@@ -748,7 +748,14 @@ Fields:
 - `income::IncomeProcess{T}` — income process used
 - `converged::Bool` — whether the equilibrium computation converged
 - `iterations::Int` — number of iterations used
-- `euler_error::T` — maximum Euler equation error (log10 units)
+- `euler_error::T` — maximum Euler equation error (log10 units), measured **off-node** at
+  the cell midpoints by default (#508). Evaluating at the grid nodes, where EGM solves the
+  Euler equation exactly, understates the approximation error by 2.5-3.8 log₁₀ units; pass
+  `euler_points=:nodes` to `compute_steady_state` for the old convention.
+- `euler::Union{Nothing,NamedTuple}` — both statistics as
+  `(midpoints=…, nodes=…)`, each a NamedTuple
+  `(points, max, mean, n_evaluated, n_constrained, n_offgrid)`. `nothing` for steady states
+  built by paths that do not measure accuracy.
 - `excess_demand::T` — market clearing residual
 - `parametric::Union{Nothing,WinberryFamily{T}}` — fitted Winberry (2018) family
   when the equilibrium was computed with `distribution=:winberry`, `nothing`
@@ -771,14 +778,16 @@ struct HASteadyState{T<:AbstractFloat}
     euler_error::T
     excess_demand::T
     parametric::Union{Nothing,WinberryFamily{T}}
+    euler::Union{Nothing,NamedTuple}
 
     function HASteadyState{T}(policies, distribution, value_fn, prices, aggregates,
                               grid, income, converged, iterations, euler_error,
                               excess_demand;
-                              parametric::Union{Nothing,WinberryFamily{T}}=nothing
+                              parametric::Union{Nothing,WinberryFamily{T}}=nothing,
+                              euler::Union{Nothing,NamedTuple}=nothing
                               ) where {T<:AbstractFloat}
         new{T}(policies, distribution, value_fn, prices, aggregates, grid, income,
-               converged, iterations, euler_error, excess_demand, parametric)
+               converged, iterations, euler_error, excess_demand, parametric, euler)
     end
 end
 

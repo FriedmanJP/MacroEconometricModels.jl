@@ -3364,3 +3364,115 @@ end
 end
 
 end # @testset "HA-DSGE Types"
+
+@testset "#508: Euler-error metric measures approximation, not round-trip" begin
+    MEM = MacroEconometricModels
+
+    @testset "analytic fixture (hand-computed residuals)" begin
+        # Everything below is exactly computable with pen and paper.
+        #   a_grid = [0,1,2,3,4], one income state, u = log c so u'(c) = 1/c,
+        #   beta = 0.96, r = 0.02, c(a) = 1 + a (linear, so the interpolant is
+        #   EXACT at midpoints), a'(a) = 1.5 for every a.
+        # Then c(a') = 2.5 always, E[u'(c')] = 0.4, and
+        #   resid(a) = |1 - beta(1+r)*0.4*(1+a)| = |1 - 0.39168*(1+a)|.
+        a_grid = [0.0, 1.0, 2.0, 3.0, 4.0]
+        c_pol = reshape([1.0, 2.0, 3.0, 4.0, 5.0], 5, 1)
+        a_pol = reshape(fill(1.5, 5), 5, 1)
+        ip = MEM.IndividualProblem{Float64}(
+            log, c -> 1 / c, u -> 1 / u, 0.96,
+            (a, e, p) -> (1 + p[:r]) * a + e, [0.0], nothing, 1)
+        grid = MEM.HAGrid{Float64}([a_grid], [5], 1, 1, [(0.0, 4.0)], [:assets])
+        income = MEM.IncomeProcess{Float64}(reshape([1.0], 1, 1), [1.0], [1.0], :income)
+        prices = Dict(:r => 0.02, :w => 1.0)
+
+        sn = MEM._euler_error_stats(c_pol, a_pol, ip, grid, income, prices; points=:nodes)
+        sm = MEM._euler_error_stats(c_pol, a_pol, ip, grid, income, prices; points=:midpoints)
+
+        @test sn.n_evaluated == 5 && sn.n_constrained == 0 && sn.n_offgrid == 0
+        @test sm.n_evaluated == 4 && sm.n_constrained == 0 && sm.n_offgrid == 0
+        @test sn.max ≈ log10(0.9584) atol = 1e-12
+        @test sn.mean ≈ log10(0.505024) atol = 1e-12
+        @test sm.max ≈ log10(0.76256) atol = 1e-12
+        @test sm.mean ≈ log10(0.39168) atol = 1e-12
+        @test sm.points === :midpoints && sn.points === :nodes
+        # the scalar wrapper is exactly the `max` field
+        @test MEM._compute_euler_error(c_pol, a_pol, ip, grid, income, prices) == sm.max
+        @test_throws ArgumentError MEM._euler_error_stats(c_pol, a_pol, ip, grid,
+                                                          income, prices; points=:bogus)
+
+        # Off-grid cells are excluded and counted, not scored: with a' = 10 > a_max
+        # the last node leaves the grid, and so does the last midpoint, whose
+        # interpolated a' is (1.5 + 10)/2 = 5.75.
+        a_off = reshape([1.5, 1.5, 1.5, 1.5, 10.0], 5, 1)
+        on = MEM._euler_error_stats(c_pol, a_off, ip, grid, income, prices; points=:nodes)
+        om = MEM._euler_error_stats(c_pol, a_off, ip, grid, income, prices; points=:midpoints)
+        @test on.n_offgrid == 1 && on.n_evaluated == 4
+        @test om.n_offgrid == 1 && om.n_evaluated == 3
+        # The remaining cells are untouched, so the max is the surviving maximum.
+        @test on.max ≈ log10(0.60832) atol = 1e-12
+        @test om.max ≈ log10(0.41248) atol = 1e-12
+
+        # Constrained cells are excluded too (the Euler equation is an inequality there).
+        a_con = reshape([0.0, 1.5, 1.5, 1.5, 1.5], 5, 1)
+        cn = MEM._euler_error_stats(c_pol, a_con, ip, grid, income, prices; points=:nodes)
+        @test cn.n_constrained == 1 && cn.n_evaluated == 4
+    end
+
+    @testset "shipped examples: the node metric flatters by 2.5-3.8 log10 units" begin
+        for (ex, mid, nodes) in ((:krusell_smith, -2.2531, -6.0397),
+                                 (:one_asset_hank, -2.2781, -6.0555),
+                                 (:huggett, -1.9363, -4.4699))
+            ss = compute_steady_state(load_ha_example(ex))
+            @test ss.euler !== nothing
+            # The headline number is now the off-node one.
+            @test ss.euler_error ≈ mid atol = 1e-3
+            @test ss.euler.midpoints.max ≈ mid atol = 1e-3
+            @test ss.euler.nodes.max ≈ nodes atol = 1e-3
+            # The node metric is optimistic by construction, never pessimistic.
+            @test ss.euler.nodes.max < ss.euler.midpoints.max
+            # mean < max, and both are finite and reported.
+            @test ss.euler.midpoints.mean < ss.euler.midpoints.max
+            @test isfinite(ss.euler.midpoints.mean)
+            @test ss.euler.midpoints.n_evaluated > 0
+
+            # The old convention is still reachable for continuity.
+            ss_n = compute_steady_state(load_ha_example(ex); euler_points=:nodes)
+            @test ss_n.euler_error ≈ nodes atol = 1e-3
+        end
+        @test_throws ArgumentError compute_steady_state(load_ha_example(:huggett);
+                                                        euler_points=:bogus)
+    end
+
+    @testset "a truncating model no longer reports the better accuracy" begin
+        # Same pre-fix Krusell-Smith clone the grid diagnostics use. Under the node
+        # metric its 22 truncated cells were excused to ~1e-11 while the interior sat
+        # at 2.5e-3, so truncation bought accuracy. Off-node it is scored worse than
+        # the shipped calibration, which is the point of the change.
+        base = load_ha_example(:krusell_smith)
+        raw = rouwenhorst(0.966, 0.5, 7)
+        e = exp.(raw.states); e ./= dot(raw.stationary_dist, e)
+        old_inc = IncomeProcess{Float64}(raw.transition, e, raw.stationary_dist, :income)
+        old = HADSGESpec{Float64}(base.aggregate_spec, base.individual, old_inc,
+                                  HAGrid(; assets=(0.0, 200.0, 200), income_states=7),
+                                  base.aggregation, base.het_params; model=base.model)
+        ss_bad = compute_steady_state(old; grid_check=:none)
+        ss_good = compute_steady_state(base)
+
+        @test ss_bad.euler_error > ss_good.euler_error      # measured -1.66 vs -2.25
+        @test ss_bad.euler.midpoints.n_offgrid > 0          # and its cells do leave the grid
+        @test ss_good.euler.midpoints.n_offgrid == 0
+        # Under the OLD metric the gap was 3.4 log10 units the other way, which is
+        # what made a truncating fit look respectable.
+        @test ss_bad.euler.nodes.max ≈ -2.5952 atol = 1e-3
+        @test ss_bad.euler.nodes.max < ss_bad.euler.midpoints.max
+    end
+
+    @testset "report(ss) names the convention" begin
+        ss = compute_steady_state(load_ha_example(:huggett))
+        io = IOBuffer(); report(io, ss); s = String(take!(io))
+        @test occursin("Euler error", s)
+        @test occursin("midpoints", s)          # the convention is stated, not implied
+        @test occursin("mean (log10)", s)
+        @test occursin("at grid nodes", s)
+    end
+end
