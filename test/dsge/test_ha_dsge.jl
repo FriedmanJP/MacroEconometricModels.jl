@@ -3071,9 +3071,14 @@ end
     @testset "moment round trip (fit ∘ moments = identity)" begin
         nodes, wts = MacroEconometricModels._composite_quadrature(
             collect(range(-6.0, 12.0; length=301)), 5)
+        # tol=1e-10, not 1e-12: at 1e-12 the four-moment fit lands at 6.9e-13 —
+        # 69% of the threshold — so which side of it a platform falls on is decided
+        # by BLAS rounding, and the assertion was passing on luck. 1e-10 leaves two
+        # orders of margin; fit QUALITY is asserted by the moment check below, which
+        # is unaffected (the achieved moment residual is 3.5e-10 against rtol=1e-7).
         for targets in ([2.0, 4.0], [2.0, 4.0, 3.0], [1.0, 2.0, 1.5, 14.0])
             pd = MacroEconometricModels._fit_parametric_density(
-                copy(targets), nodes, wts; tol=1e-12)
+                copy(targets), nodes, wts; tol=1e-10)
             @test pd.converged
             @test parametric_moments(pd, nodes, wts) ≈ targets rtol=1e-7
             # The density integrates to one over the reference interval.
@@ -3155,7 +3160,11 @@ end
         @test first(winberry_moments(vec(d), g; n_moments=4)) ≈ M
         @test_throws ArgumentError winberry_moments(d, g; n_moments=1)
 
-        fam = fit_winberry(d, g; n_moments=3)
+        # Explicit tol for the same reason as above: under the 1e-10 default this fit
+        # lands at 7.5e-11 (75% of the threshold), so `converged` is decided by
+        # rounding rather than by the fit. The lambda vector and the reconstructed
+        # histogram are identical to 4e-10 / 1e-11 across tol in [1e-10, 1e-6].
+        fam = fit_winberry(d, g; n_moments=3, tol=1e-8)
         @test fam isa WinberryFamily{Float64}
         @test fam.converged
         @test length(fam.densities) == 2

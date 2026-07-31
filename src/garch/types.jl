@@ -86,6 +86,21 @@ function GARCHModel(y::Vector{T}, p::Int, q::Int, mu::T, omega::T,
                   method, converged, iterations, fill(T(NaN), k, k))
 end
 
+# Full-arity positional constructor. `dist`/`shape` are keywords on the inner
+# constructor, which is what keeps older positional call sites working — but it
+# leaves NO method taking every field positionally, and the generic serializer
+# rebuilds a struct by splatting `fieldnames(T)` in order. Without this,
+# load_model on a GARCH family model throws MethodError. (#505 + T264/#363)
+GARCHModel(y::Vector{T}, p::Int, q::Int, mu::T, omega::T,
+           alpha::Vector{T}, beta::Vector{T},
+           conditional_variance::Vector{T}, standardized_residuals::Vector{T},
+           residuals::Vector{T}, fitted::Vector{T}, loglik::T, aic::T, bic::T,
+           method::Symbol, converged::Bool, iterations::Int,
+           param_vcov::Matrix{T}, dist::Symbol, shape::T) where {T<:AbstractFloat} =
+    GARCHModel{T}(y, p, q, mu, omega, alpha, beta, conditional_variance,
+                  standardized_residuals, residuals, fitted, loglik, aic, bic,
+                  method, converged, iterations, param_vcov; dist=dist, shape=shape)
+
 # =============================================================================
 # EGARCH Model Type
 # =============================================================================
@@ -142,6 +157,18 @@ function EGARCHModel(y::Vector{T}, p::Int, q::Int, mu::T, omega::T,
                    method, converged, iterations, fill(T(NaN), k, k))
 end
 
+# Full-arity positional constructor — required by the generic serializer, which
+# splats every field in `fieldnames(T)` order. See the GARCHModel note above.
+EGARCHModel(y::Vector{T}, p::Int, q::Int, mu::T, omega::T,
+            alpha::Vector{T}, gamma::Vector{T}, beta::Vector{T},
+            conditional_variance::Vector{T}, standardized_residuals::Vector{T},
+            residuals::Vector{T}, fitted::Vector{T}, loglik::T, aic::T, bic::T,
+            method::Symbol, converged::Bool, iterations::Int,
+            param_vcov::Matrix{T}, dist::Symbol, shape::T) where {T<:AbstractFloat} =
+    EGARCHModel{T}(y, p, q, mu, omega, alpha, gamma, beta, conditional_variance,
+                   standardized_residuals, residuals, fitted, loglik, aic, bic,
+                   method, converged, iterations, param_vcov; dist=dist, shape=shape)
+
 # =============================================================================
 # GJR-GARCH Model Type
 # =============================================================================
@@ -196,6 +223,18 @@ function GJRGARCHModel(y::Vector{T}, p::Int, q::Int, mu::T, omega::T,
                      standardized_residuals, residuals, fitted, loglik, aic, bic,
                      method, converged, iterations, fill(T(NaN), k, k))
 end
+
+# Full-arity positional constructor — required by the generic serializer, which
+# splats every field in `fieldnames(T)` order. See the GARCHModel note above.
+GJRGARCHModel(y::Vector{T}, p::Int, q::Int, mu::T, omega::T,
+              alpha::Vector{T}, gamma::Vector{T}, beta::Vector{T},
+              conditional_variance::Vector{T}, standardized_residuals::Vector{T},
+              residuals::Vector{T}, fitted::Vector{T}, loglik::T, aic::T, bic::T,
+              method::Symbol, converged::Bool, iterations::Int,
+              param_vcov::Matrix{T}, dist::Symbol, shape::T) where {T<:AbstractFloat} =
+    GJRGARCHModel{T}(y, p, q, mu, omega, alpha, gamma, beta, conditional_variance,
+                     standardized_residuals, residuals, fitted, loglik, aic, bic,
+                     method, converged, iterations, param_vcov; dist=dist, shape=shape)
 
 # =============================================================================
 # GARCH-MIDAS Model Type (EV-02, #410)
