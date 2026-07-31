@@ -135,6 +135,7 @@ include("reg/logit.jl")
 include("reg/probit.jl")
 include("reg/tobit.jl")        # EV-17 (#425): Tobit (censored) + truncated regression
 include("reg/heckman.jl")      # EV-18 (#426): Heckman sample-selection (two-step + MLE)
+include("reg/count.jl")        # EV-19 (#427): Poisson / NegBin2 count-data regression
 include("reg/robust.jl")       # EV-40 (#448): robust regression — Huber/bisquare M + Yohai MM
 include("reg/margins.jl")
 include("reg/diagnostics.jl")
@@ -1334,6 +1335,10 @@ export TobitModel, TruncRegModel, estimate_tobit, estimate_truncreg
 
 # Heckman sample-selection model — EV-18 (#426)
 export HeckmanModel, estimate_heckman
+
+# Count-data regression — EV-19 (#427)
+export PoissonModel, NegBinModel, DispersionTest,
+       estimate_poisson, estimate_nbreg, dispersion_test, incidence_rate_ratio
 
 # Robust regression (M / MM estimation) — EV-40 (#448)
 export RobustRegModel, estimate_robust

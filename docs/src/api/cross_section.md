@@ -104,9 +104,12 @@ PenalizedRegModel
 RobustRegModel
 HeckmanModel
 SelectionResult
+PoissonModel
+NegBinModel
+DispersionTest
 ```
 
 ```@autodocs
 Modules = [MacroEconometricModels]
-Pages   = ["reg/penalized.jl", "reg/robust.jl", "reg/tobit.jl", "reg/heckman.jl", "reg/selection.jl", "reg/stability.jl", "reg/diagnostics.jl"]
+Pages   = ["reg/penalized.jl", "reg/robust.jl", "reg/tobit.jl", "reg/heckman.jl", "reg/count.jl", "reg/selection.jl", "reg/stability.jl", "reg/diagnostics.jl"]
 ```
