@@ -630,6 +630,26 @@ end
 # Section 13: SSJ Jacobian
 # ─────────────────────────────────────────────────────────────────────────────
 
+@testset "_egm_backward_step is the _egm_solve fixed point" begin
+    # ORACLE: the kernel's own docstring — "iterating it to a fixed point
+    # reproduces `_egm_solve`". So ONE step applied to the CONVERGED `_egm_solve`
+    # policy must not move it. It used to, whenever the budget carried an offset:
+    # the kernel hardcoded `w*e` for non-asset income while `_egm_solve` routes it
+    # through `budget_fn` (#235/H-09), so `:div` was silently dropped and every SSJ
+    # Jacobian for such a model was differenced around a non-steady-state point.
+    spec = load_ha_example(:one_asset_hank)
+    for prices in (Dict(:r => 0.01, :w => 1.0, :div => 0.30),   # was |Δc| ≈ 2.6e-1
+                   Dict(:r => 0.01, :w => 1.0))                 # plain-budget control
+        c, a, _ = MacroEconometricModels._egm_solve(spec.individual, spec.grid,
+                                                    spec.income, prices;
+                                                    max_iter=2000, tol=1e-12)
+        c1, a1 = MacroEconometricModels._egm_backward_step(spec.individual, spec.grid,
+                                                           spec.income, prices, c)
+        @test maximum(abs, c1 .- c) < 1e-9
+        @test maximum(abs, a1 .- a) < 1e-9
+    end
+end
+
 @testset "SSJ Jacobian" begin
     grid = HAGrid(assets=(0.0, 200.0, 80), income_states=3)
     inc = rouwenhorst(0.966, 0.5, 3)
@@ -1038,7 +1058,7 @@ end
         @test length(spec.income.states) == 7
         @test spec.individual.borrowing_constraint[1] ≈ 0.0
         @test spec.grid.n_points == [200]
-        @test spec.grid.bounds[1] == (0.0, 200.0)
+        @test spec.grid.bounds[1] == (0.0, 1000.0)
         @test spec.het_params[:alpha] ≈ 0.36
         @test spec.het_params[:delta] ≈ 0.025
         @test spec.n_assets == 1
@@ -1056,7 +1076,7 @@ end
         @test spec.individual.borrowing_constraint[1] ≈ -2.0
         @test spec.individual.beta ≈ 0.986
         @test spec.grid.bounds[1][1] ≈ -2.0
-        @test spec.grid.bounds[1][2] ≈ 50.0
+        @test spec.grid.bounds[1][2] ≈ 1000.0
         @test spec.grid.n_points == [200]
         @test spec.grid.n_income == 7
         @test spec.het_params[:sigma_c] ≈ 1.0
@@ -1108,6 +1128,682 @@ end
         # rouwenhorst/tauchen direct calls must still return the symmetric log grid.
         inc = rouwenhorst(0.966, 0.5, 7)
         @test inc.states[1] ≈ -inc.states[end] atol=1e-12
+    end
+
+    @testset "Income dispersion units" begin
+        # ORACLE (analytic): Rouwenhorst's stationary law is Binomial(n-1, 1/2) on an
+        # equispaced grid of half-width ψ = √(n-1)·σ_y, so the state sd is EXACTLY σ_y
+        # and the first autocorrelation is EXACTLY ρ. The exp/E[exp] normalization is a
+        # pure location shift in logs, so sd(log e) survives it unchanged.
+        #
+        # This is the detector for the units bug the examples shipped with: `sigma` is
+        # the AR(1) INNOVATION sd, but the literal 0.5 in the calibration is the
+        # UNCONDITIONAL sd (the Python sequence-jacobian convention). Read the wrong
+        # way it gives sd(log e) = 0.5/√(1-0.966²) = 1.9339 — 3.87× too dispersed in
+        # logs, 15× in variance — which pinned 5.6% of KS mass on the grid ceiling.
+        for name in (:krusell_smith, :one_asset_hank, :two_asset_hank)
+            spec = load_ha_example(name)
+            p = spec.income.stationary_dist
+            z = log.(spec.income.states)
+            mu = dot(p, z)
+            var_z = dot(p, (z .- mu) .^ 2)
+            @test sqrt(var_z) ≈ 0.5 atol=1e-8
+            # first autocorrelation of the discretized chain == ρ exactly
+            @test (dot(p .* z, spec.income.transition * z) - mu^2) / var_z ≈ 0.966 atol=1e-10
+            # top/bottom ratio = exp(2ψ) with ψ = √6 · 0.5
+            @test maximum(spec.income.states) / minimum(spec.income.states) ≈
+                  exp(2 * sqrt(6) * 0.5) rtol=1e-10
+        end
+    end
+
+    @testset "sigma_is convention (rouwenhorst / tauchen)" begin
+        # Default must be bitwise unchanged from the pre-`sigma_is` implementation.
+        for f in (rouwenhorst, tauchen)
+            a = f(0.966, 0.5, 7)
+            b = f(0.966, 0.5, 7; sigma_is=:innovation)
+            @test a.states == b.states
+            @test a.transition == b.transition
+            @test_throws ArgumentError f(0.9, 0.2, 5; sigma_is=:bogus)
+        end
+
+        # :innovation ⇒ half-width √(n-1)·σ/√(1-ρ²);  :unconditional ⇒ √(n-1)·σ.
+        @test rouwenhorst(0.966, 0.5, 7).states[end] ≈
+              sqrt(6) * 0.5 / sqrt(1 - 0.966^2) atol=1e-12
+        @test rouwenhorst(0.9, 0.2, 7; sigma_is=:unconditional).states[end] ≈
+              sqrt(6) * 0.2 atol=1e-12
+        @test tauchen(0.9, 0.2, 7; sigma_is=:unconditional).states[end] ≈
+              3 * 0.2 atol=1e-12
+
+        # The two conventions must agree after the σ_y ↔ σ_ε change of variables.
+        # For `tauchen` this also pins the transition matrix, whose CDF is scaled by
+        # the INNOVATION sd — passing sd(y) there would silently mis-scale it.
+        for (rho, sig) in ((0.9, 0.2), (0.966, 0.13), (0.5, 0.4))
+            inn = tauchen(rho, sig, 7)
+            unc = tauchen(rho, sig / sqrt(1 - rho^2), 7; sigma_is=:unconditional)
+            @test maximum(abs, unc.states .- inn.states) < 1e-12
+            @test maximum(abs, unc.transition .- inn.transition) < 1e-12
+        end
+    end
+
+    @testset ":geometric asset grid" begin
+        # ORACLE (analytic): a pivot-geometric grid is equidistant in log(a + piv),
+        # so every consecutive ratio equals q = ((a_max+piv)/(a_min+piv))^(1/(n-1)).
+        for (lo, hi, n) in ((0.0, 1000.0, 200), (-2.0, 1000.0, 200), (0.0, 200.0, 50))
+            g = MacroEconometricModels._make_asset_grid(lo, hi, n, :geometric)
+            piv = abs(lo) + 0.25
+            q = ((hi + piv) / (lo + piv))^(1 / (n - 1))
+            @test all(i -> isapprox((g[i+1] + piv) / (g[i] + piv), q; rtol=1e-12), 1:n-1)
+            @test g[1] == lo && g[end] == hi
+            @test all(diff(g) .> 0)
+        end
+        @test_throws ArgumentError MacroEconometricModels._make_asset_grid(
+            0.0, 10.0, 5, :nonexistent)
+
+        # The property the shape buys, and the reason the examples use it: raising
+        # a_max 5× costs `:double_exp` exactly 5× the bottom spacing (it is a fixed
+        # curve rescaled by (a_max - a_min)), but costs `:geometric` only ~1.25×.
+        de200 = MacroEconometricModels._make_asset_grid(0.0, 200.0, 200, :double_exp)
+        de1000 = MacroEconometricModels._make_asset_grid(0.0, 1000.0, 200, :double_exp)
+        gm200 = MacroEconometricModels._make_asset_grid(0.0, 200.0, 200, :geometric)
+        gm1000 = MacroEconometricModels._make_asset_grid(0.0, 1000.0, 200, :geometric)
+        @test (de1000[2] - de1000[1]) ≈ 5 * (de200[2] - de200[1]) rtol=1e-12
+        @test (gm1000[2] - gm1000[1]) < 1.5 * (gm200[2] - gm200[1])
+    end
+end
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Section 18b: Asset-grid adequacy / asset-market clearing
+# ─────────────────────────────────────────────────────────────────────────────
+
+@testset "Grid adequacy" begin
+    @testset "shipped examples clear the asset market" begin
+        # An HA steady state can be EXACTLY stationary and still fail to clear:
+        # `_build_transition_matrix` clamps the savings policy at a_max, which
+        # conserves mass but destroys assets, and `excess_demand` cannot see it
+        # because it is measured on the already-clamped aggregate ∫a dμ.
+        #
+        # ORACLE: for a stationary Young histogram whose policy never leaves the
+        # grid, ∫a'dμ == ∫a dμ is FORCED — stationarity says next period's
+        # holdings integrate to ∫a dμ, and with no clamping those holdings ARE a'.
+        for name in (:krusell_smith, :one_asset_hank, :huggett)
+            ss = compute_steady_state(load_ha_example(name))
+            d = ha_grid_diagnostics(ss)
+            scale = max(1.0, abs(ss.aggregates[:K]))
+            @test d.adequate
+            @test d.ceiling_mass < 1e-10
+            @test d.n_cells_below == 0
+            @test abs(d.clearing_residual) < 1e-8 * scale
+            @test abs(ss.aggregates[:A_policy] - ss.aggregates[:K]) < 1e-8 * scale
+            @test abs(ss.excess_demand) < 1e-6 * scale
+            # NB not `maximum(a_pol) < a_grid[end]`: at a_max = 1000 exactly one
+            # cell still overshoots, but it carries zero mass. The measure-zero
+            # form is what the theorem requires; the strict-max form is spurious.
+        end
+    end
+
+    @testset "steady state is invariant to the bisection bracket" begin
+        # ORACLE: the market-clearing rate is a property of the model, not of the
+        # interval it is searched over. Any bracket containing the root must give
+        # the same answer.
+        #
+        # It did not. A trial rate with β(1+r) ≥ 1 has no stationary distribution:
+        # wealth diverges and every household saves to a_max, so the computed K_s
+        # is a pure grid artifact — and that divergent policy was then reused as
+        # the EGM warm start (#238), corrupting the excess-demand values at the
+        # NEXT, admissible rates and collapsing the bracket on a spurious sign
+        # change. On one-asset HANK, r_bounds=(-0.02, 0.04) returned r = 0.010469
+        # with excess = -13.2 (converged=false) while (-0.01, 0.04) returned the
+        # true r = 0.011523. Raising a_max amplified it: the artifact K_s is a_max.
+        spec = load_ha_example(:one_asset_hank)
+        beta = spec.individual.beta
+        sss = [compute_steady_state(spec; r_bounds=rb)
+               for rb in ((-0.01, 0.04), (-0.02, 0.04), (-0.005, 0.05))]
+        rs = [ss.prices[:r] for ss in sss]
+        Ks = [ss.aggregates[:K] for ss in sss]
+        @test maximum(rs) - minimum(rs) < 1e-6
+        @test (maximum(Ks) - minimum(Ks)) / minimum(Ks) < 1e-4
+        for ss in sss
+            @test ss.converged
+            @test abs(ss.excess_demand) < 1e-6 * max(1.0, ss.aggregates[:K])
+            # ...and the equilibrium must satisfy Aiyagari's existence condition,
+            # which is what rules out the divergent branch in the first place.
+            @test beta * (1 + ss.prices[:r]) < 1
+        end
+    end
+
+    @testset "truncation identity (exact)" begin
+        # ORACLE: ∫a'dμ − ∫a dμ == ∫max(a'−a_max,0)dμ − ∫max(a_min−a',0)dμ for ANY
+        # stationary histogram. Tested on synthetic policies, so no solver is
+        # involved and the identity is checked in isolation.
+        base = load_ha_example(:krusell_smith)
+        ev = base.income.states
+        for (amax, n, gt) in ((5.0, 60, :geometric), (20.0, 80, :geometric),
+                              (200.0, 200, :double_exp), (50.0, 100, :linear))
+            g = HAGrid(; assets=(0.0, amax, n), income_states=7, grid_type=gt)
+            ag = g.grids[1]
+            # affine policy with fixed point a*_j = 1.5·a_max·e_j ⇒ states truncate
+            # differentially (e spans ≈0.3–3.0)
+            apol = [max(0.0, 0.15 * amax * ev[j] + 0.9 * ag[i]) for i in 1:n, j in 1:7]
+            L = MacroEconometricModels._build_transition_matrix(apol, g, base.income)
+            dist, _ = MacroEconometricModels._stationary_dist_young(L; max_iter=100_000,
+                                                                    tol=1e-14)
+            d = MacroEconometricModels._ha_grid_diagnostics(apol, dist, g)
+            @test maximum(abs.(L * dist .- dist)) < 1e-12        # stationary
+            @test d.clearing_residual ≈ d.truncation_flux_up - d.truncation_flux_down atol =
+                  1e-9 * max(1.0, abs(d.assets_held))
+            @test d.n_cells_above > 0
+            @test !d.adequate
+        end
+    end
+
+    @testset "detects the historical Krusell-Smith defect" begin
+        # Rebuild EXACTLY the pre-fix KS spec: sigma = 0.5 read as the INNOVATION
+        # sd, on the old [0, 200] :double_exp grid. The diagnostics must catch what
+        # `excess_demand` could not.
+        base = load_ha_example(:krusell_smith)
+        raw = rouwenhorst(0.966, 0.5, 7)                       # old (buggy) convention
+        e = exp.(raw.states); e ./= dot(raw.stationary_dist, e)
+        old_inc = IncomeProcess{Float64}(raw.transition, e, raw.stationary_dist, :income)
+        old = HADSGESpec{Float64}(base.aggregate_spec, base.individual, old_inc,
+                                  HAGrid(; assets=(0.0, 200.0, 200), income_states=7),
+                                  base.aggregation, base.het_params; model=base.model)
+        ss_old = compute_steady_state(old; grid_check=:none)
+        d = ha_grid_diagnostics(ss_old)
+        @test !d.adequate
+        @test d.ceiling_mass > 0.05              # measured 5.574343%
+        @test d.relative_residual > 0.015        # measured 1.6843%
+        @test abs(ss_old.excess_demand) < 1e-6   # ...and excess_demand is blind to it
+        @test d.clearing_residual ≈ d.truncation_flux_up - d.truncation_flux_down atol=1e-9
+
+        logs, _ = Test.collect_test_logs() do
+            compute_steady_state(old; grid_check=:warn)
+        end
+        @test any(l -> occursin("truncates the stationary distribution",
+                                string(l.message)), logs)
+        @test_throws ArgumentError compute_steady_state(old; grid_check=:error)
+    end
+
+    @testset "emitter (synthetic fixture)" begin
+        # Hand-computed: a = [0,1,2,3], n_e = 2, a' = [0,1,2,5] in both income
+        # states, uniform mass 1/8 ⇒ ∫a dμ = 1.5, ∫a'dμ = 2.0, flux_up = 0.5,
+        # ceiling mass = 0.25, 2 cells above. Synthetic on purpose, so this test
+        # never needs rewriting when a calibration moves.
+        g = HAGrid(; assets=(0.0, 3.0, 4), income_states=2, grid_type=:linear)
+        apol = [0.0 0.0; 1.0 1.0; 2.0 2.0; 5.0 5.0]
+        d = MacroEconometricModels._ha_grid_diagnostics(apol, fill(1 / 8, 8), g)
+        @test d.assets_held ≈ 1.5
+        @test d.assets_desired ≈ 2.0
+        @test d.truncation_flux_up ≈ 0.5
+        @test d.truncation_flux_down ≈ 0.0
+        @test d.ceiling_mass ≈ 0.25
+        @test d.n_cells_above == 2
+        @test d.n_cells_below == 0
+        @test !d.adequate
+
+        @test MacroEconometricModels._check_grid_adequacy(d, :none) === d
+        @test_throws ArgumentError MacroEconometricModels._check_grid_adequacy(d, :error)
+        @test_throws ArgumentError MacroEconometricModels._check_grid_adequacy(d, :bogus)
+        logs, _ = Test.collect_test_logs() do
+            MacroEconometricModels._check_grid_adequacy(d, :warn)
+        end
+        @test length(logs) == 1
+        msg = string(logs[1].message)
+        @test occursin("a_max", msg)                   # message must be actionable
+        @test occursin("grid_type=:geometric", msg)
+        @test occursin("grid_check=:none", msg)
+
+        # Mirror case: a policy below the grid floor CREATES assets.
+        g2 = HAGrid(; assets=(-2.0, 3.0, 4), income_states=2, grid_type=:linear)
+        apol2 = [-5.0 -5.0; 0.0 0.0; 1.0 1.0; 2.0 2.0]
+        d2 = MacroEconometricModels._ha_grid_diagnostics(apol2, fill(1 / 8, 8), g2)
+        @test d2.n_cells_below == 2
+        @test d2.truncation_flux_down ≈ 0.75
+        @test !d2.adequate
+
+        # Two-asset grids are refused outright.
+        g3 = HAGrid(; liquid=(0.0, 5.0, 4), illiquid=(0.0, 5.0, 4), income_states=2)
+        @test_throws ArgumentError MacroEconometricModels._ha_grid_diagnostics(
+            apol, fill(1 / 8, 8), g3)
+    end
+
+    @testset "spec validation: borrowing constraint vs grid floor" begin
+        base = load_ha_example(:krusell_smith)
+        ip = base.individual
+        mk(bc) = IndividualProblem{Float64}(ip.utility, ip.utility_prime,
+            ip.utility_prime_inv, ip.beta, ip.budget_fn, [bc], nothing, 1)
+        g = HAGrid(; assets=(0.0, 200.0, 50), income_states=7)
+        # Below the floor: the Young clamp would create assets out of nothing.
+        @test_throws ArgumentError HADSGESpec{Float64}(base.aggregate_spec, mk(-1.0),
+            base.income, g, base.aggregation, base.het_params)
+        # Above the floor: merely wasteful, so warn.
+        logs, _ = Test.collect_test_logs() do
+            HADSGESpec{Float64}(base.aggregate_spec, mk(5.0), base.income, g,
+                                base.aggregation, base.het_params)
+        end
+        @test any(l -> occursin("unreachable", string(l.message)), logs)
+        # All shipped examples satisfy the check.
+        for name in (:krusell_smith, :one_asset_hank, :two_asset_hank, :huggett)
+            @test load_ha_example(name) isa HADSGESpec{Float64}
+        end
+    end
+
+    @testset "two-asset steady state raises an honest error" begin
+        # docs/src/dsge_ha.md used to claim `compute_steady_state` auto-selects a
+        # VFI solver for two-asset models. It does not — it used to fail with a
+        # bare AssertionError on a SHIPPED example.
+        @test_throws ArgumentError compute_steady_state(load_ha_example(:two_asset_hank))
+    end
+end
+
+@testset "Den Haan (2010) accuracy beyond Huggett (#359/T260)" begin
+    M = MacroEconometricModels
+
+    @testset "price conventions are provably distinct" begin
+        par = Dict(:alpha => 0.36, :delta => 0.025, :Z => 1.0, :L => 1.0)
+        p0 = M._ks_prices(M._default_cobb_douglas_price_fn, 40.0, 0.0, par, :effective_capital)
+        # z = 0 must agree across conventions
+        @test p0 == M._ks_prices(M._default_cobb_douglas_price_fn, 40.0, 0.0, par, :tfp)
+        z = 0.02
+        pe = M._ks_prices(M._default_cobb_douglas_price_fn, 40.0, z, par, :effective_capital)
+        pt = M._ks_prices(M._default_cobb_douglas_price_fn, 40.0, z, par, :tfp)
+        # Effective capital: dlog(r+delta)/dz = alpha-1, dlog w/dz = alpha.
+        @test log((pe[:r] + 0.025) / (p0[:r] + 0.025)) / z ≈ 0.36 - 1 rtol = 1e-10
+        @test log(pe[:w] / p0[:w]) / z ≈ 0.36 rtol = 1e-10
+        # TFP: both elasticities are exactly 1.
+        @test log((pt[:r] + 0.025) / (p0[:r] + 0.025)) / z ≈ 1.0 rtol = 1e-10
+        @test log(pt[:w] / p0[:w]) / z ≈ 1.0 rtol = 1e-10
+        # ⇒ NOT related by rescaling z: r rises under TFP and falls under effective capital
+        @test pt[:r] > p0[:r]
+        @test pe[:r] < p0[:r]
+        # the default must be the Krusell-Smith convention (unchanged behaviour)
+        @test M._ks_prices(M._default_cobb_douglas_price_fn, 40.0, z, par, :effective_capital) ==
+              M._default_cobb_douglas_price_fn(40.0 * exp(z), par)
+    end
+
+    @testset "DenHaanAccuracy carries its source" begin
+        dh = M.DenHaanAccuracy{Float64}(:K, 0.5, 0.2, 0.01, 0.011,
+                                        [1.0, 2.0], [1.0, 2.1], 100, 10)
+        @test dh.source === :plm                      # 9-positional contract preserved
+        dh2 = M.DenHaanAccuracy{Float64}(:K, 0.5, 0.2, 0.01, 0.011,
+                                         [1.0, 2.0], [1.0, 2.1], 100, 10; source=:linear)
+        @test dh2.source === :linear
+    end
+
+    @testset "Huggett is refused with an informative message" begin
+        # Build the solution struct directly: the guard fires on `spec.model`, so running
+        # the (expensive) Krusell-Smith PLM fixed point just to reach it wastes ~4 minutes.
+        ks_h = M.KrusellSmithSolution{Float64}(
+            _HUG_SS_M2, Dict(:K => [0.0, 0.95, 0.0]), Dict(:K => 0.99),
+            _HUG_SPEC_M2, true, 1)
+        err = try
+            den_haan_test(ks_h); nothing
+        catch e
+            sprint(showerror, e)
+        end
+        @test err !== nothing
+        @test occursin("aiyagari", err)
+        @test occursin("distribution-augmented", err)
+    end
+end
+
+@testset "Adaptive distribution grid (#357/T258)" begin
+    M = MacroEconometricModels
+
+    # A Gaussian density on [0, 40] with an analytically known second derivative, sampled
+    # finely enough that the discretization is not the binding error.
+    a_lo, a_hi, μ0, s0 = 0.0, 40.0, 12.0, 2.0
+    xf = collect(range(a_lo, a_hi; length=2001))
+    pf = @. exp(-0.5 * ((xf - μ0) / s0)^2) / (s0 * sqrt(2π))
+    d2f = @. pf * (((xf - μ0)^2 - s0^2) / s0^4)
+
+    @testset "curvature=0 returns an exactly uniform grid" begin
+        x0 = M._make_asset_grid(0.0, 100.0, 60, :double_exp)
+        mass = exp.(-((x0 .- 20.0) ./ 3.0) .^ 2); mass ./= sum(mass)
+        g0 = adaptive_asset_grid(x0, mass; curvature=0.0)
+        @test length(g0) == 60
+        @test g0 ≈ collect(range(0.0, 100.0; length=60)) atol = 1e-10
+        # ... on any density at all, since the monitor no longer sees it
+        g1 = adaptive_asset_grid(xf, pf; curvature=0.0, is_density=true, n=25)
+        @test g1 ≈ collect(range(a_lo, a_hi; length=25)) atol = 1e-10
+    end
+
+    @testset "equidistribution identity: equal ∫M per cell" begin
+        # With curvature=1, no cap and no smoothing the monitor is exactly q/∫q,
+        # q = |p''|^{1/2}, so every returned cell must carry the same ∫q.
+        q = sqrt.(abs.(d2f))
+        h = xf[2] - xf[1]
+        C = cumsum(vcat(0.0, (q[1:(end - 1)] .+ q[2:end]) ./ 2 .* h))
+        g = adaptive_asset_grid(xf, pf; n=41, curvature=1.0, monitor_cap=Inf,
+                                smoothing=0, is_density=true)
+        Cg = [(j = searchsortedlast(xf, a); C[j] + (a - xf[j]) * q[j]) for a in g]
+        Cg[end] = C[end]
+        inc = diff(Cg)
+        @test (maximum(inc) - minimum(inc)) / mean(inc) < 1e-2
+    end
+
+    @testset "concentration is monotone in `curvature`" begin
+        counts = Int[]
+        spacings = Float64[]
+        for κ in (0.0, 0.5, 0.9, 1.0)
+            g = adaptive_asset_grid(xf, pf; n=41, curvature=κ, monitor_cap=Inf,
+                                    smoothing=0, is_density=true)
+            push!(counts, count(a -> abs(a - μ0) <= 2 * s0, g))
+            push!(spacings, minimum(diff(g)))
+            @test all(diff(g) .> 0)
+            @test g[1] == a_lo && g[end] == a_hi
+        end
+        @test issorted(counts)                    # more nodes at the peak as κ rises
+        @test issorted(spacings; rev=true)        # and finer cells there
+        @test counts[end] > 3 * counts[1]         # 27 vs 8
+    end
+
+    @testset "beats a uniform grid on piecewise-linear interpolation error" begin
+        function pw_lin_err(nodes)
+            p_at = [exp(-0.5 * ((a - μ0) / s0)^2) / (s0 * sqrt(2π)) for a in nodes]
+            err = 0.0
+            for (i, x) in enumerate(xf)
+                j = clamp(searchsortedlast(nodes, x), 1, length(nodes) - 1)
+                w = (x - nodes[j]) / (nodes[j + 1] - nodes[j])
+                err = max(err, abs((1 - w) * p_at[j] + w * p_at[j + 1] - pf[i]))
+            end
+            return err
+        end
+        for n in (21, 41, 81)
+            e_uni = pw_lin_err(collect(range(a_lo, a_hi; length=n)))
+            e_ad = pw_lin_err(adaptive_asset_grid(xf, pf; n=n, curvature=0.9,
+                                                  monitor_cap=Inf, smoothing=0, is_density=true))
+            @test e_ad < e_uni / 5                # measured 12.5x / 19.1x / 21.0x
+        end
+    end
+
+    @testset "monitor_cap defuses the borrowing-constraint atom" begin
+        # A histogram atom in a cell of width w reports |p''| ~ 1/w², which is a
+        # discretization artifact, not curvature. Uncapped it swallows the whole grid.
+        x = M._make_asset_grid(0.0, 200.0, 200, :geometric)
+        w = M._node_widths(x)
+        mass = exp.(-((x .- 30.0) ./ 10.0) .^ 2) .* w
+        mass[1] += 0.05 * sum(mass)                       # the atom at the constraint
+        mass ./= sum(mass)
+        g_cap = adaptive_asset_grid(x, mass; monitor_cap=3.0)
+        g_unc = adaptive_asset_grid(x, mass; monitor_cap=Inf)
+        @test minimum(diff(g_cap)) > 100 * minimum(diff(g_unc))
+        # the capped grid resolves the actual peak; the uncapped one collapses onto the atom
+        @test count(a -> 20 <= a <= 40, g_cap) > 4 * count(a -> 20 <= a <= 40, g_unc)  # 65 vs 14
+        @test count(<=(1.0), g_unc) > 100      # 153 of 200 nodes inside the bottom 0.5%
+        @test count(<=(1.0), g_cap) <= 5       # 1
+        @test all(diff(g_cap) .> 0) && all(diff(g_unc) .> 0)
+    end
+
+    @testset "structural invariants and input validation" begin
+        x = M._make_asset_grid(0.0, 50.0, 40, :geometric)
+        mass = fill(1 / 40, 40)
+        for n in (3, 17, 40, 97)
+            g = adaptive_asset_grid(x, mass; n=n)
+            @test length(g) == n
+            @test g[1] == 0.0 && g[end] == 50.0
+            @test all(diff(g) .> 0)
+        end
+        @test_throws ArgumentError adaptive_asset_grid(x[1:2], mass[1:2])
+        @test_throws ArgumentError adaptive_asset_grid(x, mass[1:39])
+        @test_throws ArgumentError adaptive_asset_grid(x, mass; n=2)
+        @test_throws ArgumentError adaptive_asset_grid(x, mass; curvature=1.5)
+        @test_throws ArgumentError adaptive_asset_grid(x, mass; curvature=-0.1)
+        @test_throws ArgumentError adaptive_asset_grid(x, mass; monitor_cap=0.0)
+        @test_throws ArgumentError adaptive_asset_grid(x, mass; smoothing=-1)
+        @test_throws ArgumentError adaptive_asset_grid(reverse(x), mass)
+        # a degenerate (all-zero) density falls back to uniform rather than dividing by zero
+        g0 = adaptive_asset_grid(x, zeros(40))
+        @test all(isfinite, g0) && all(diff(g0) .> 0)
+    end
+
+    @testset "adapt_ha_grid preserves the grid contract" begin
+        spec = _HUG_SPEC_M2
+        ss = _HUG_SS_M2
+        g_new = adapt_ha_grid(spec.grid, ss.distribution)
+        @test g_new isa MacroEconometricModels.HAGrid{Float64}
+        @test g_new.n_dims == spec.grid.n_dims
+        @test g_new.n_income == spec.grid.n_income
+        @test g_new.n_points == spec.grid.n_points
+        @test g_new.bounds == spec.grid.bounds
+        @test g_new.labels == spec.grid.labels
+        @test g_new.grids[1][1] == spec.grid.grids[1][1]        # borrowing constraint intact
+        @test g_new.grids[1][end] == spec.grid.grids[1][end]
+        @test all(diff(g_new.grids[1]) .> 0)
+        @test g_new.grids[1] != spec.grid.grids[1]              # nodes actually moved
+
+        # curvature=0 reproduces a uniform grid through the wrapper too
+        g_uni = adapt_ha_grid(spec.grid, ss.distribution; curvature=0.0)
+        lo, hi = spec.grid.bounds[1]
+        @test g_uni.grids[1] ≈ collect(range(lo, hi; length=spec.grid.n_points[1])) atol = 1e-10
+
+        # a coarser grid is allowed
+        g_small = adapt_ha_grid(spec.grid, ss.distribution; n_points=[50])
+        @test g_small.n_points == [50]
+        @test length(g_small.grids[1]) == 50
+        @test g_small.total_individual_states == 50 * spec.grid.n_income
+
+        @test_throws ArgumentError adapt_ha_grid(spec.grid, ss.distribution; n_points=[50, 50])
+        @test_throws ArgumentError adapt_ha_grid(spec.grid, ss.distribution[1:10])
+        @test_throws ArgumentError adapt_ha_grid(spec.grid, zeros(size(ss.distribution)))
+
+        # spec method returns a solvable specification
+        spec2 = adapt_ha_grid(spec, ss)
+        @test spec2 isa MacroEconometricModels.HADSGESpec{Float64}
+        @test spec2.model == spec.model
+        @test spec2.distribution == spec.distribution
+        @test spec2.grid.grids[1] == g_new.grids[1]
+        ss2 = compute_steady_state(spec2; max_iter=200, tol=5e-4)
+        @test isfinite(ss2.prices[:r])
+        @test isapprox(ss2.prices[:r], ss.prices[:r]; atol=2e-3)
+    end
+
+    @testset "two asset dimensions are adapted independently" begin
+        grid = MacroEconometricModels.HAGrid(; liquid=(0.0, 20.0, 25), illiquid=(0.0, 60.0, 30),
+                                              income_states=3)
+        b = grid.grids[1]; a = grid.grids[2]
+        dist = [exp(-((bi - 4.0) / 2.0)^2 - ((ai - 25.0) / 6.0)^2) for bi in b, ai in a, _ in 1:3]
+        dist ./= sum(dist)
+        g2 = adapt_ha_grid(grid, dist)
+        @test g2.n_points == [25, 30]
+        @test g2.bounds == grid.bounds
+        for d in 1:2
+            @test all(diff(g2.grids[d]) .> 0)
+            @test g2.grids[d][1] == grid.grids[d][1]
+            @test g2.grids[d][end] == grid.grids[d][end]
+        end
+        # nodes cluster on each dimension's own peak
+        @test count(x -> abs(x - 4.0) <= 4.0, g2.grids[1]) >
+              count(x -> abs(x - 4.0) <= 4.0, collect(range(0.0, 20.0; length=25)))
+        @test count(x -> abs(x - 25.0) <= 12.0, g2.grids[2]) >
+              count(x -> abs(x - 25.0) <= 12.0, collect(range(0.0, 60.0; length=30)))
+    end
+
+    @testset "internal monitor helpers" begin
+        # nonuniform second derivative reproduces the uniform formula and is exact on x²
+        x = collect(range(0.0, 2.0; length=9))
+        @test M._second_derivative_nonuniform(x, x .^ 2)[2:(end - 1)] ≈ fill(2.0, 7) atol = 1e-10
+        xn = [0.0, 0.1, 0.3, 0.7, 1.5, 2.0]
+        @test M._second_derivative_nonuniform(xn, xn .^ 2)[2:(end - 1)] ≈ fill(2.0, 4) atol = 1e-10
+        @test M._second_derivative_nonuniform(x, 3 .* x .+ 1) ≈ zeros(9) atol = 1e-10
+        # widths partition the domain
+        w = M._node_widths(x)
+        @test sum(w) ≈ x[end] - x[1]
+        wn = M._node_widths(xn)
+        @test sum(wn) ≈ xn[end] - xn[1]
+        # the smoother preserves a constant and is a contraction on the range
+        v = randn(Random.MersenneTwister(258), 20)
+        @test M._smooth3(ones(20)) ≈ ones(20)
+        sv = M._smooth3(v)
+        @test minimum(sv) >= minimum(v) && maximum(sv) <= maximum(v)
+    end
+end
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Section 18c: Endogenous labor supply (GHH / separable) — [T256] #355
+# ─────────────────────────────────────────────────────────────────────────────
+
+@testset "Endogenous labor supply" begin
+    _ha_ip(base, ls) = IndividualProblem{Float64}(
+        base.individual.utility, base.individual.utility_prime,
+        base.individual.utility_prime_inv, base.individual.beta,
+        base.individual.budget_fn, base.individual.borrowing_constraint,
+        nothing, 1; labor=ls)
+
+    @testset "LaborSupply construction" begin
+        ls = LaborSupply(; kind=:ghh, psi=2.0, frisch=0.5)
+        @test ls isa LaborSupply{Float64}
+        @test ls.kind === :ghh && ls.psi ≈ 2.0 && ls.frisch ≈ 0.5 && ls.n_max == Inf
+        @test_throws ArgumentError LaborSupply(; kind=:bogus)
+        @test_throws ArgumentError LaborSupply(; psi=0.0)
+        @test_throws ArgumentError LaborSupply(; frisch=-1.0)
+        @test_throws ArgumentError LaborSupply(; n_max=0.0)
+
+        # ORACLE (closed form): ψ n^{1/φ} = w·e ⟹ n = (w e/ψ)^φ
+        for (psi, phi, we) in ((2.0, 0.5, 3.0), (1.0, 1.0, 0.4), (3.5, 0.25, 7.0))
+            l = LaborSupply(; kind=:ghh, psi=psi, frisch=phi)
+            @test labor_supply(l, we) ≈ (we / psi)^phi
+            # the separable form multiplies the effective wage by u'(c)
+            @test labor_supply(l, we, 2.0) ≈ (2we / psi)^phi
+        end
+        @test labor_supply(LaborSupply(; psi=1.0, frisch=1.0, n_max=0.75), 10.0) ≈ 0.75
+        @test labor_supply(LaborSupply(), -1.0) == 0.0        # non-positive wage ⟹ no work
+
+        # Endogenous labor is one-asset only.
+        base = load_ha_example(:krusell_smith)
+        @test_throws ArgumentError IndividualProblem{Float64}(
+            base.individual.utility, base.individual.utility_prime,
+            base.individual.utility_prime_inv, base.individual.beta,
+            base.individual.budget_fn, [0.0, 0.0], nothing, 2; labor=LaborSupply())
+    end
+
+    @testset "exogenous-labor paths are untouched" begin
+        base = load_ha_example(:krusell_smith)
+        @test base.individual.labor === nothing
+        # `labor_policy` returns ones, so ∫e·n dμ reduces to ∫e dμ.
+        ss = compute_steady_state(base)
+        n = labor_policy(base.individual, base.grid, base.income, ss.prices,
+                         ss.policies[:consumption])
+        @test all(==(1.0), n)
+        @test !haskey(ss.policies, :labor)
+        @test !haskey(ss.aggregates, :L)
+        # The three-argument `_ssj_outcome_vector` form still dispatches as before.
+        cpol = Float64[1 4; 2 5; 3 6]; apol = Float64[11 14; 12 15; 13 16]
+        @test MacroEconometricModels._ssj_outcome_vector(:C, cpol, apol) == vec(cpol)
+        @test MacroEconometricModels._ssj_outcome_vector(:K, cpol, apol) == vec(apol)
+        # Labor outputs require an hours policy and say so.
+        @test_throws ArgumentError MacroEconometricModels._ssj_outcome_vector(:N, cpol, apol)
+        @test_throws ArgumentError MacroEconometricModels._ssj_outcome_vector(
+            :L, cpol, apol, cpol)      # hours given, income missing
+    end
+
+    @testset "intratemporal FOC holds at every grid point" begin
+        # ORACLE (analytic, exact): the household's static first-order condition
+        # for hours. GHH: ψ n^{1/φ} = w·e — no wealth effect, so hours depend on
+        # the income state alone. Separable: ψ n^{1/φ} = w·e·u'(c), which couples
+        # hours to consumption. Both must hold at EVERY (a, e), including the
+        # constrained cells where `_egm_solve` runs a joint root-find.
+        base = load_ha_example(:krusell_smith)
+        prices = Dict(:r => 0.0077, :w => 2.467)
+        for kind in (:ghh, :separable)
+            ls = LaborSupply(; kind=kind, psi=1.5, frisch=0.5)
+            ip = _ha_ip(base, ls)
+            c, a, conv = MacroEconometricModels._egm_solve(ip, base.grid, base.income,
+                                                            prices; max_iter=3000, tol=1e-12)
+            @test conv
+            n = labor_policy(ip, base.grid, base.income, prices, c)
+            ag = base.grid.grids[1]
+            foc_err = 0.0; budget_err = 0.0
+            for j in eachindex(base.income.states), i in eachindex(ag)
+                we = prices[:w] * base.income.states[j]
+                rhs = kind === :ghh ? we : we * ip.utility_prime(c[i, j])
+                foc_err = max(foc_err, abs(ls.psi * n[i, j]^(1 / ls.frisch) - rhs))
+                # budget identity: c + a' = (1+r)a + w·e·n
+                budget_err = max(budget_err, abs((c[i, j] + a[i, j]) -
+                                    ((1 + prices[:r]) * ag[i] + we * n[i, j])))
+            end
+            @test foc_err < 1e-10
+            @test budget_err < 1e-9
+            @test all(n .> 0)
+            # GHH hours are a function of the income state alone (no wealth effect);
+            # separable hours must actually vary with assets, or the wealth effect
+            # this preference class exists to deliver would be missing.
+            spread = maximum(j -> maximum(n[:, j]) - minimum(n[:, j]),
+                             eachindex(base.income.states))
+            kind === :ghh ? (@test spread < 1e-12) : (@test spread > 1e-3)
+        end
+    end
+
+    @testset "steady state clears with endogenous labor" begin
+        # ORACLE: with Cobb-Douglas production the firm FOC pins K/L given r —
+        # k = (α Z /(r+δ))^{1/(1-α)} — independent of the household side. So the
+        # REALIZED K/L from the distribution must reproduce it exactly, and it is
+        # aggregate LABOR (∫e·n dμ), not the params[:L] placeholder, that has to
+        # enter. Getting this wrong leaves a K/L that misses by the labor gap.
+        for (kind, psi) in ((:ghh, 3.0), (:separable, 1.0))
+            spec = MacroEconometricModels._endogenous_labor_example(; kind=kind, psi=psi)
+            ss = compute_steady_state(spec)
+            al = spec.het_params[:alpha]; de = spec.het_params[:delta]
+            k_foc = (al / (ss.prices[:r] + de))^(1 / (1 - al))
+            # rtol is set by the bisection's own clearing tolerance, not by the
+            # identity: K_d = k·L holds exactly, but the solver stops once
+            # |K_s − K_d| ≤ rtol·K (≈4.5e-7 here), so K_s/L inherits that slack.
+            # 1e-6 still catches a labor gap of any economic size.
+            @test ss.aggregates[:K] / ss.aggregates[:L] ≈ k_foc rtol=1e-6
+            @test abs(ss.excess_demand) < 1e-6 * max(1.0, ss.aggregates[:K])
+            @test ss.converged
+            @test ha_grid_diagnostics(ss).adequate
+            # Both labor aggregates are reported and are distinct concepts.
+            @test haskey(ss.policies, :labor)
+            @test ss.aggregates[:L] ≈ dot(vec(ss.policies[:labor] .*
+                    reshape(spec.income.states, 1, :)), vec(ss.distribution)) rtol=1e-12
+            @test ss.aggregates[:N] ≈ dot(vec(ss.policies[:labor]),
+                                          vec(ss.distribution)) rtol=1e-12
+            @test ss.aggregates[:L] != ss.aggregates[:N]
+            # Y must be built from realized labor, not the params[:L] = 1 default.
+            @test ss.aggregates[:Y] ≈ ss.aggregates[:K]^al *
+                                      ss.aggregates[:L]^(1 - al) rtol=1e-6
+            # Aiyagari existence still holds at the equilibrium.
+            @test spec.individual.beta * (1 + ss.prices[:r]) < 1
+        end
+    end
+
+    @testset "wage shock moves hours the right way (SSJ)" begin
+        # ORACLE (analytic): under GHH, n = (w e/ψ)^φ is PURELY STATIC, so
+        #   (i) dN/dw = φ·N/w exactly, and
+        #   (ii) the sequence-space Jacobian of hours w.r.t. the wage is DIAGONAL —
+        #        there is no anticipation, because hours never depend on the
+        #        continuation value.
+        spec = load_ha_example(:endogenous_labor)
+        ss = compute_steady_state(spec)
+        hh = HetBlock(spec, ss; inputs=[:r, :w], outputs=[:A, :C, :N, :L])
+        @test hh.ss_outputs[:A] ≈ ss.aggregates[:K] rtol=1e-10
+        @test hh.ss_outputs[:N] ≈ ss.aggregates[:N] rtol=1e-10
+        @test hh.ss_outputs[:L] ≈ ss.aggregates[:L] rtol=1e-10
+
+        Th = 10
+        J = block_jacobian(hh, Th)
+        ls = spec.individual.labor
+        dN_dw = ls.frisch * ss.aggregates[:N] / ss.prices[:w]
+        @test J[(:N, :w)][1, 1] ≈ dN_dw rtol=1e-4          # correct sign AND magnitude
+        @test J[(:N, :w)][1, 1] > 0                        # hours rise with the wage
+        @test maximum(abs, [J[(:N, :w)][t, s] for t in 1:Th for s in 1:Th if t != s]) < 1e-9
+        # A labor output must be rejected on an exogenous-labor block.
+        @test_throws ArgumentError HetBlock(load_ha_example(:krusell_smith),
+            compute_steady_state(load_ha_example(:krusell_smith)); outputs=[:bogus_output])
+    end
+
+    @testset "built-in :endogenous_labor example" begin
+        spec = load_ha_example(:endogenous_labor)
+        @test spec isa HADSGESpec{Float64}
+        @test spec.individual.labor isa LaborSupply{Float64}
+        @test spec.individual.labor.kind === :ghh
+        @test spec.grid.bounds[1] == (0.0, 2000.0)
+        @test spec.n_assets == 1
+        @test_throws ErrorException load_ha_example(:not_a_model)
+        # ψ = 3 is calibrated so efficiency units land on the L = 1 normalization
+        # the exogenous-labor examples impose, making the two comparable.
+        ss = compute_steady_state(spec)
+        @test ss.aggregates[:L] ≈ 1.0 atol=0.05
     end
 end
 
@@ -1312,11 +2008,16 @@ end
 
 @testset "HA Bayesian estimation" begin
     spec = load_ha_example(:krusell_smith)
-    # [T206] NOTE: the plan's asset-grid shrink (n_a 200→60/80) was dropped — coarsening the
+    # [T206] NOTE: the plan's asset-grid shrink (n_a 200→60/80) was dropped — perturbing the
     # KS-SSJ grid non-monotonically stabilizes the reduced realization and flips the #234
     # @test_broken truncation assertions to unexpected passes (n_a=60 flips T049's L1475;
     # n_a=80 also flips _build_ha_likelihood_fn's ll_val). Per the plan's flip-guard fallback
     # we keep the full-size spec and cut only draws + T_data (+ the shared-solve hoist).
+    # The Ho-Kalman spectral radius is CHAOTIC, not monotone, in the calibration: the
+    # a_max/grid_type change that fixed the asset-grid truncation was checked against all
+    # three @test_broken items (all still -Inf at :geometric a_max=1000, whereas
+    # :double_exp a_max=1000 flips all three). Re-measure them after ANY change to
+    # a_max, n_a or grid_type — an unexpected pass is reported as a suite FAILURE.
 
     # Compute steady state for generating fake data
     ss = compute_steady_state(spec; K_init=10.0, r_bounds=(-0.02, 0.04), max_iter=50, tol=1e-3)
@@ -1635,6 +2336,1031 @@ end
     ks_h = KrusellSmithSolution{Float64}(ss_h,
         Dict(:r => [ss_h.prices[:r], 0.0]), Dict(:r => 1.0), hug_spec, false, 0)
     @test_throws ErrorException den_haan_test(ks_h)
+end
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Section 26 (#352/T253): sequence-space block composition (DAG) + 2nd-order SSJ
+# ─────────────────────────────────────────────────────────────────────────────
+
+# A pure-SimpleBlock DAG is exactly solvable by hand, so it pins down every piece
+# of the composition machinery (shift matrices, topological sort, forward
+# accumulation, the GE solve, and the second-order contraction) against closed
+# forms rather than against snapshots.
+@testset "SSJ blocks — SimpleBlock algebra" begin
+    Th = 12
+
+    # y_t = 2·u_t + 3·z_t ;  q_t = y_t − 0.5·u_{t-1} + 0.25·y_{t+1}
+    blk1 = SimpleBlock(x -> [2 * x[1] + 3 * x[2]];
+                       inputs=[:u, :z], outputs=[:y],
+                       ss_inputs=Dict(:u => 0.0, :z => 0.0), name=:one)
+    blk2 = SimpleBlock(x -> [x[3] - 0.5 * x[1] + 0.25 * x[2]];
+                       inputs=[:u, :y], outputs=[:q],
+                       lags=Dict(:u => [1], :y => [-1, 0]),
+                       ss_inputs=Dict(:u => 0.0, :y => 0.0), name=:two)
+
+    # Argument order: inputs in declaration order, lags ascending within an input.
+    @test ssj_arg_order(blk1) == [(:u, 0), (:z, 0)]
+    @test ssj_arg_order(blk2) == [(:u, 1), (:y, -1), (:y, 0)]
+    @test blk1.ss_outputs[:y] == 0.0
+
+    J1 = block_jacobian(blk1, Th)
+    @test J1[(:y, :u)] ≈ 2 * Matrix(I, Th, Th)
+    @test J1[(:y, :z)] ≈ 3 * Matrix(I, Th, Th)
+
+    # Shift matrices: lag l ⇒ ones on M[t, t-l]; out-of-window entries dropped.
+    S_lag = zeros(Th, Th); for t in 2:Th; S_lag[t, t-1] = 1.0; end
+    S_lead = zeros(Th, Th); for t in 1:(Th-1); S_lead[t, t+1] = 1.0; end
+    J2 = block_jacobian(blk2, Th)
+    @test J2[(:q, :u)] ≈ -0.5 .* S_lag
+    @test J2[(:q, :y)] ≈ Matrix(I, Th, Th) .+ 0.25 .* S_lead
+
+    model = combine_blocks(blk1, blk2; name=:toy)
+    @test [b.name for b in model.blocks] == [:one, :two]      # topological order
+    @test model.exogenous == [:u, :z]
+    @test model.endogenous == [:y, :q]
+    @test model.ss_values[:q] == 0.0
+
+    # Supplying the blocks out of order must not change the sorted DAG.
+    @test [b.name for b in combine_blocks(blk2, blk1).blocks] == [:one, :two]
+
+    gej = ssj_jacobian(model; unknowns=[:u], targets=[:q], shocks=[:z], T_horizon=Th)
+    # Chain rule by hand: dq/du = ∂q/∂u + (∂q/∂y)(∂y/∂u); dq/dz = (∂q/∂y)(∂y/∂z).
+    H_U_hand = J2[(:q, :u)] .+ J2[(:q, :y)] * J1[(:y, :u)]
+    H_Z_hand = J2[(:q, :y)] * J1[(:y, :z)]
+    @test gej.H_U ≈ H_U_hand
+    @test gej.H_Z ≈ H_Z_hand
+    @test size(gej.H_U) == (Th, Th) && size(gej.H_Z) == (Th, Th)
+
+    dz = [0.5^(t - 1) for t in 1:Th]
+    r1 = ssj_irf(gej, Dict(:z => dz))
+    du_hand = -(H_U_hand \ (H_Z_hand * dz))
+    @test r1.paths[:u] ≈ du_hand
+    @test r1.paths[:y] ≈ J1[(:y, :u)] * du_hand .+ J1[(:y, :z)] * dz
+    @test r1.paths[:z] ≈ dz
+    @test r1.order == 1 && isempty(r1.correction)
+    # A linear DAG clears exactly at first order.
+    @test r1.target_residual[:q] < 1e-12
+    @test maximum(abs, r1.paths[:q]) < 1e-12
+
+    # Second order on a LINEAR DAG must vanish identically.
+    r2 = ssj_irf(gej, Dict(:z => dz); order=2)
+    @test r2.order == 2
+    @test maximum(abs, r2.correction[:u]) < 1e-9
+    @test r2.paths[:u] ≈ du_hand atol=1e-9
+
+    # Convenience single-shock method.
+    @test ssj_irf(gej, :z, dz).paths[:u] ≈ du_hand
+end
+
+@testset "SSJ blocks — second-order closed form" begin
+    Th = 8
+    # y_t = u_t + u_t² ;  q_t = y_t − z_t.  Equilibrium: u + u² = z.
+    b1 = SimpleBlock(x -> [x[1] + x[1]^2];
+                     inputs=[:u], outputs=[:y],
+                     ss_inputs=Dict(:u => 0.0), name=:quad)
+    b2 = SimpleBlock(x -> [x[1] - x[2]];
+                     inputs=[:y, :z], outputs=[:q],
+                     ss_inputs=Dict(:y => 0.0, :z => 0.0), name=:clear)
+    gej = ssj_jacobian(combine_blocks(b1, b2; name=:quadtoy);
+                       unknowns=[:u], targets=[:q], shocks=[:z], T_horizon=Th)
+    @test gej.H_U ≈ Matrix(I, Th, Th)           # ∂(u+u²)/∂u = 1 at u=0
+
+    dz = fill(0.05, Th)
+    r1 = ssj_irf(gej, Dict(:z => dz))
+    @test r1.paths[:u] ≈ dz                     # first order: du = dz
+
+    r2 = ssj_irf(gej, Dict(:z => dz); order=2)
+    # Second order: u + u² = z with u = z + u₂ ⇒ u₂ = −z².
+    @test r2.correction[:u] ≈ -dz .^ 2 rtol=1e-8
+    @test r2.paths[:u] ≈ dz .- dz .^ 2 rtol=1e-8
+    # D²y[v,v] = 2·(du¹)² ⇒ the second-order y path is J·u₂ + ½·2z² = −z² + z² = 0.
+    @test maximum(abs, r2.correction[:y]) < 1e-8
+    # Exact root of u + u² = z:  u* = (√(1+4z) − 1)/2.  Second order beats first.
+    u_exact = (sqrt.(1 .+ 4 .* dz) .- 1) ./ 2
+    @test maximum(abs, r2.paths[:u] .- u_exact) < maximum(abs, r1.paths[:u] .- u_exact)
+    @test r2.target_residual[:q] < r1.target_residual[:q]
+end
+
+@testset "SSJ blocks — HetBlock and DAG composition" begin
+    spec = load_ha_example(:krusell_smith)
+    # Converged (default) tolerance, not the loose tol=1e-4 used elsewhere: the
+    # firm SimpleBlock below is built at K_ss = ∫a dμ while `ss.prices` are
+    # evaluated at the firm's K_demand, so the two price sets differ by exactly
+    # |dp/dK|·|excess_demand|. Testing the block's Cobb-Douglas algebra against
+    # the price function therefore needs a steady state where those coincide.
+    ss = compute_steady_state(spec; r_bounds=(-0.01, 0.04), max_iter=80)
+    Th = 20
+
+    hh = HetBlock(spec, ss; inputs=[:r, :w], outputs=[:A, :C], name=:household)
+    @test hh isa HetBlock{Float64}
+    @test hh.ss_inputs[:r] == ss.prices[:r]
+    @test hh.ss_outputs[:A] ≈ dot(vec(ss.policies[:savings]),
+                                  MacroEconometricModels._normalized_distribution(ss))
+
+    # The block Jacobian IS the fake-news Jacobian — no reimplementation drift.
+    Jb = block_jacobian(hh, Th)
+    @test Set(keys(Jb)) == Set([(:A, :r), (:A, :w), (:C, :r), (:C, :w)])
+    @test Jb[(:A, :r)] == MacroEconometricModels._ssj_jacobian(
+        ss, spec.individual, spec.grid, spec.income, :r, :A; T_horizon=Th, dx=hh.dx)
+
+    # Nonlinear path evaluation reproduces the steady state on a flat input path.
+    flat = Dict(:r => fill(ss.prices[:r], Th), :w => fill(ss.prices[:w], Th))
+    base = MacroEconometricModels._block_evaluate(hh, flat, Th)
+    @test maximum(abs, base[:A] .- hh.ss_outputs[:A]) < 1e-6
+    @test maximum(abs, base[:C] .- hh.ss_outputs[:C]) < 1e-6
+
+    # INDEPENDENT ORACLE: the fake-news Jacobian must equal a central finite
+    # difference of the *nonlinear* transition path (backward EGM + forward Young
+    # histogram) — two implementations sharing no code beyond the EGM step. The
+    # anticipation columns (t < s) are the ones the pre-#226 brute force got wrong.
+    hh_fine = HetBlock(spec, ss; inputs=[:r, :w], outputs=[:A], dx=1e-5)
+    J_fine = block_jacobian(hh_fine, Th)[(:A, :r)]
+    fd_step = 1e-6
+    for s in (1, 4, 9)
+        pp = deepcopy(flat); pp[:r][s] += fd_step
+        pm = deepcopy(flat); pm[:r][s] -= fd_step
+        col = (MacroEconometricModels._block_evaluate(hh_fine, pp, Th)[:A] .-
+               MacroEconometricModels._block_evaluate(hh_fine, pm, Th)[:A]) ./ (2fd_step)
+        @test maximum(abs, col .- J_fine[:, s]) < 1e-5 * maximum(abs, J_fine[:, s])
+    end
+    @test any(abs(J_fine[t, s]) > 1e-8 for t in 1:Th for s in (t+1):Th)   # anticipation
+
+    # ── Three-block DAG: firm (lagged capital) → household → asset market ────
+    alpha = spec.aggregate_spec.param_values[:alpha]
+    delta = spec.aggregate_spec.param_values[:delta]
+    K_ss = ss.aggregates[:K]
+    firm = SimpleBlock(
+        x -> [alpha * x[2] * x[1]^(alpha - 1) - delta,
+              (1 - alpha) * x[2] * x[1]^alpha,
+              x[2] * x[1]^alpha];
+        inputs=[:K, :Z], outputs=[:r, :w, :Y],
+        lags=Dict(:K => [1]),
+        ss_inputs=Dict(:K => K_ss, :Z => 1.0), name=:firm)
+    @test firm.ss_outputs[:r] ≈ ss.prices[:r] atol=1e-6
+    @test firm.ss_outputs[:w] ≈ ss.prices[:w] atol=1e-6
+
+    hh1 = HetBlock(spec, ss; inputs=[:r, :w], outputs=[:A], name=:household)
+    mkt = SimpleBlock(x -> [x[1] - x[2]];
+                      inputs=[:A, :K], outputs=[:asset_mkt],
+                      ss_inputs=Dict(:A => hh1.ss_outputs[:A], :K => K_ss),
+                      name=:asset_market)
+    dag = combine_blocks(firm, hh1, mkt; name=:ks_dag)
+    @test [b.name for b in dag.blocks] == [:firm, :household, :asset_market]
+    @test dag.exogenous == [:K, :Z]
+    @test dag.endogenous == [:r, :w, :Y, :A, :asset_mkt]
+
+    # HISTORICAL NOTE: the Krusell-Smith example used to truncate its asset grid
+    # (~5.6% of mass pinned at a_max = 200, so ∫a'dμ exceeded ∫a dμ by ~1.7%) and
+    # the asset market did NOT clear at the linearization point — this assertion
+    # read `dag.ss_values[:asset_mkt] > 1e-3` and the GE assembler's target_tol
+    # guard fired. The example now clears; the household block's ∫a'dμ and the
+    # steady state's ∫a dμ agree to floating-point. The guard itself is still
+    # covered independently on the toy DAG below.
+    @test abs(dag.ss_values[:asset_mkt]) < 1e-9
+
+    gej = ssj_jacobian(dag; unknowns=[:K], targets=[:asset_mkt], shocks=[:Z],
+                       T_horizon=Th, target_tol=Inf)
+    # Forward accumulation vs the chain rule computed by hand from block Jacobians.
+    Jf = block_jacobian(firm, Th)
+    Jh = block_jacobian(hh1, Th)
+    dA_dK = Jh[(:A, :r)] * Jf[(:r, :K)] .+ Jh[(:A, :w)] * Jf[(:w, :K)]
+    @test gej.curlyJ[:A][:K] ≈ dA_dK
+    @test gej.H_U ≈ dA_dK .- Matrix(I, Th, Th)
+    @test gej.curlyJ[:Y][:Z] ≈ Jf[(:Y, :Z)]
+
+    dZ = Dict(:Z => [0.01 * 0.9^(t - 1) for t in 1:Th])
+    r1 = ssj_irf(gej, dZ; residual=false)
+    # The linearized clearing condition holds exactly whatever the steady-state wedge.
+    @test maximum(abs, gej.H_U * r1.paths[:K] .+ gej.H_Z * dZ[:Z]) < 1e-8
+    @test r1.paths[:K][1] > 0                    # positive TFP shock raises capital
+    @test r1.paths[:r][1] ≈ alpha * 0.01 * K_ss^(alpha - 1) atol=1e-10  # K lagged ⇒ r_1 ← Z_1
+    report(dag)                                   # display smoke tests
+    report(gej)
+    @test occursin("SSJModel", sprint(show, dag))
+    @test occursin("SSJGEJacobian", sprint(show, gej))
+    @test occursin("HetBlock", sprint(show, hh1))
+    @test occursin("SimpleBlock", sprint(show, firm))
+end
+
+@testset "SSJ blocks — Huggett GE and second order" begin
+    spec = _HUG_SPEC_M2; ss = _HUG_SS_M2       # reuse the shared cl=−2 SS
+    Th = 40
+
+    hh = HetBlock(spec, ss; inputs=[:r, :w], outputs=[:A], name=:household)
+    bond = SimpleBlock(x -> [x[1]];
+                       inputs=[:A], outputs=[:bond_mkt],
+                       ss_inputs=Dict(:A => hh.ss_outputs[:A]), name=:bond_market)
+    dag = combine_blocks(hh, bond; name=:huggett_dag)
+    # Zero net supply: the Huggett steady state genuinely clears, so no warning.
+    @test abs(dag.ss_values[:bond_mkt]) < 1e-3
+    gej = ssj_jacobian(dag; unknowns=[:r], targets=[:bond_mkt], shocks=[:w],
+                       T_horizon=Th, target_tol=1e-2)
+
+    # The two-block DAG reproduces the hard-wired GE close of `_ssj_solve` exactly.
+    J_ref_U = MacroEconometricModels._ssj_jacobian(ss, spec.individual, spec.grid,
+                                                   spec.income, :r, :A; T_horizon=Th)
+    J_ref_Z = MacroEconometricModels._ssj_jacobian(ss, spec.individual, spec.grid,
+                                                   spec.income, :w, :A; T_horizon=Th)
+    @test gej.H_U == J_ref_U
+    @test gej.H_Z == J_ref_Z
+    dw = [0.9^(t - 1) for t in 1:Th]
+    @test ssj_irf(gej, Dict(:w => dw); residual=false).paths[:r] ≈ -(J_ref_U \ (J_ref_Z * dw))
+
+    # Routing `solve(:ssj)` through the DAG must not start emitting the target guard:
+    # for the zero-net-supply close the target level IS ss.excess_demand, already
+    # reported by report(ss), so warning again on every solve is pure noise.
+    logs, _ = Test.collect_test_logs() do
+        solve(spec; method=:ssj, ss=ss, T_horizon=30, n_reduced=12)
+    end
+    @test !any(occursin("does not vanish in steady state", string(r.message)) for r in logs)
+
+    # ── Second order ────────────────────────────────────────────────────────
+    sigma = 0.02
+    dZ = Dict(:w => [sigma * 0.9^(t - 1) for t in 1:Th])
+    o1 = ssj_irf(gej, dZ)
+    o2 = ssj_irf(gej, dZ; order=2)
+    @test o2.order == 2
+    @test haskey(o2.correction, :r) && haskey(o2.correction, :A)
+    # Precautionary saving makes the block genuinely nonlinear: nonzero correction.
+    @test maximum(abs, o2.correction[:r]) > 1e-10
+    # By construction the target is zero to second order: 𝒥·dU² + ½D²H = 0. Scale
+    # against one of the two cancelling terms — NOT against the first-order :A path,
+    # which the GE solve itself drives to ~1e-17 (bond_mkt IS A here).
+    cancel_scale = maximum(abs, gej.H_U * o2.correction[:r])
+    @test cancel_scale > 1e-12
+    @test maximum(abs, o2.correction[:bond_mkt]) < 1e-8 * cancel_scale
+    # The honest accuracy measure: the nonlinear clearing residual must improve.
+    @test o2.target_residual[:bond_mkt] < o1.target_residual[:bond_mkt]
+
+    # dU² is O(σ²) while dU¹ is O(σ), so halving the shock halves the relative
+    # correction — this is what "collapses onto the first order" means.
+    ratios = Float64[]
+    for s in (0.02, 0.01, 0.005)
+        rr = ssj_irf(gej, Dict(:w => [s * 0.9^(t - 1) for t in 1:Th]);
+                     order=2, residual=false)
+        push!(ratios, maximum(abs, rr.correction[:r]) / maximum(abs, rr.first_order[:r]))
+    end
+    @test issorted(ratios; rev=true)
+    @test 1.6 < ratios[1] / ratios[2] < 2.4
+    @test 1.6 < ratios[2] / ratios[3] < 2.4
+
+    report(o2)                                    # display smoke test
+    @test occursin("SSJImpulseResponse", sprint(show, o2))
+end
+
+@testset "SSJ blocks — validation and errors" begin
+    ok = SimpleBlock(x -> [x[1]]; inputs=[:a], outputs=[:b],
+                     ss_inputs=Dict(:a => 1.0), name=:ok)
+
+    # Construction-time validation
+    @test_throws ArgumentError SimpleBlock(x -> [x[1]]; inputs=Symbol[], outputs=[:b],
+                                           ss_inputs=Dict{Symbol,Float64}())
+    @test_throws ArgumentError SimpleBlock(x -> [x[1]]; inputs=[:a], outputs=Symbol[],
+                                           ss_inputs=Dict(:a => 1.0))
+    @test_throws ArgumentError SimpleBlock(x -> [x[1]]; inputs=[:a, :a], outputs=[:b],
+                                           ss_inputs=Dict(:a => 1.0))
+    @test_throws ArgumentError SimpleBlock(x -> [x[1]]; inputs=[:a], outputs=[:b],
+                                           ss_inputs=Dict{Symbol,Float64}())    # missing SS
+    @test_throws ArgumentError SimpleBlock(x -> [x[1]]; inputs=[:a], outputs=[:b],
+                                           ss_inputs=Dict(:a => 1.0),
+                                           lags=Dict(:q => [1]))                # unknown lag key
+    @test_throws ArgumentError SimpleBlock(x -> [x[1]]; inputs=[:a], outputs=[:b, :c],
+                                           ss_inputs=Dict(:a => 1.0))           # arity mismatch
+
+    # DAG assembly
+    @test_throws ArgumentError combine_blocks()
+    dup = SimpleBlock(x -> [2 * x[1]]; inputs=[:a], outputs=[:b],
+                      ss_inputs=Dict(:a => 1.0), name=:dup)
+    @test_throws ArgumentError combine_blocks(ok, dup)                # duplicate output
+    self = SimpleBlock(x -> [x[1]]; inputs=[:b], outputs=[:b],
+                       ss_inputs=Dict(:b => 1.0), name=:self)
+    @test_throws ArgumentError combine_blocks(self)                   # self loop
+    back = SimpleBlock(x -> [x[1]]; inputs=[:b], outputs=[:a],
+                       ss_inputs=Dict(:b => 1.0), name=:back)
+    @test_throws ArgumentError combine_blocks(ok, back)               # cycle
+
+    # Inconsistent steady state between producer and consumer is warned about.
+    consumer = SimpleBlock(x -> [x[1]]; inputs=[:b], outputs=[:c],
+                           ss_inputs=Dict(:b => 5.0), name=:consumer)
+    @test_logs (:warn, r"inconsistent steady state") match_mode=:any begin
+        combine_blocks(ok, consumer)
+    end
+
+    model = combine_blocks(ok; name=:tiny)
+    @test_throws ArgumentError ssj_jacobian(model; unknowns=[:a], targets=[:b],
+                                            shocks=[:a], T_horizon=4, target_tol=Inf)
+    @test_throws ArgumentError ssj_jacobian(model; unknowns=[:b], targets=[:b],
+                                            shocks=Symbol[], T_horizon=4, target_tol=Inf)
+    @test_throws ArgumentError ssj_jacobian(model; unknowns=[:a], targets=[:a],
+                                            shocks=Symbol[], T_horizon=4, target_tol=Inf)
+    @test_throws ArgumentError ssj_jacobian(model; unknowns=Symbol[], targets=Symbol[],
+                                            shocks=Symbol[], T_horizon=4, target_tol=Inf)
+    @test_throws ArgumentError ssj_jacobian(model; unknowns=[:a], targets=[:b],
+                                            shocks=Symbol[], T_horizon=1, target_tol=Inf)
+    # A non-vanishing target level is warned about (ok's steady-state :b is 1.0).
+    @test_logs (:warn, r"does not vanish in steady state") match_mode=:any begin
+        ssj_jacobian(model; unknowns=[:a], targets=[:b], shocks=Symbol[], T_horizon=4)
+    end
+
+    # A model with no shocks must still assemble and solve (typed empty H_Z path).
+    gej = ssj_jacobian(model; unknowns=[:a], targets=[:b], shocks=Symbol[],
+                       T_horizon=4, target_tol=Inf)
+    @test size(gej.H_Z) == (4, 0)
+    @test all(iszero, ssj_irf(gej, Dict{Symbol,Vector{Float64}}()).paths[:a])
+    @test_throws ArgumentError ssj_irf(gej, Dict(:zz => zeros(4)))          # undeclared shock
+    @test_throws ArgumentError ssj_irf(gej, Dict{Symbol,Vector{Float64}}(); order=3)
+    @test_throws ArgumentError ssj_irf(gej, Dict{Symbol,Vector{Float64}}();
+                                       order=2, fd_step=0.0)
+
+    # A singular clearing Jacobian is reported, not silently inverted.
+    dead = SimpleBlock(x -> [0.0 * x[1]]; inputs=[:a], outputs=[:b],
+                       ss_inputs=Dict(:a => 1.0), name=:dead)
+    @test_throws ErrorException ssj_jacobian(combine_blocks(dead);
+                                             unknowns=[:a], targets=[:b],
+                                             shocks=Symbol[], T_horizon=4,
+                                             target_tol=Inf)
+
+    # HetBlock validation
+    spec = _HUG_SPEC_M2; ss = _HUG_SS_M2
+    @test_throws ArgumentError HetBlock(spec, ss; inputs=[:not_a_price], outputs=[:A])
+    @test_throws ArgumentError HetBlock(spec, ss; inputs=[:r], outputs=[:nonsense])
+    @test_throws ArgumentError HetBlock(spec, ss; inputs=Symbol[], outputs=[:A])
+    @test_throws ArgumentError HetBlock(spec, ss; inputs=[:r], outputs=Symbol[])
+end
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Section 27 (#353/T254): DCEGM — discrete-continuous choice
+# ─────────────────────────────────────────────────────────────────────────────
+
+@testset "DCEGM upper envelope" begin
+    UE = MacroEconometricModels._upper_envelope
+    SEG = MacroEconometricModels._monotone_segments
+
+    @test SEG([1.0, 2.0, 3.0]) == [1:3]
+    @test SEG([1.0, 2.0, 3.0, 2.5, 3.5]) == [1:3, 4:5]
+    @test SEG([1.0, 2.0, 1.5]) == [1:2]                  # trailing single point dropped
+    @test isempty(SEG(Float64[]))
+
+    # A monotone correspondence passes through untouched.
+    M1 = [1.0, 2.0, 3.0]; c1 = [0.5, 1.0, 1.5]; v1 = [0.0, 1.0, 2.0]
+    Me, ce, ve, nk = UE(M1, c1, v1)
+    @test Me == M1 && ce == c1 && ve == v1 && nk == 0
+
+    # Two branches that genuinely CROSS inside their overlap.
+    #   A: v = M           on [1, 5]
+    #   B: v = 2M − 3.5    on [2, 5]   ⇒  v_A = v_B ⟺ M = 3.5, strictly between knots
+    Ma = [1.0, 2.0, 3.0, 4.0, 5.0]; ca = [0.5, 1.0, 1.5, 2.0, 2.5]; va = [1.0, 2.0, 3.0, 4.0, 5.0]
+    Mb = [2.0, 3.0, 4.0, 5.0];      cb = [9.0, 9.5, 10.0, 10.5];    vb = [0.5, 2.5, 4.5, 6.5]
+    Me, ce, ve, nk = UE(vcat(Ma, Mb), vcat(ca, cb), vcat(va, vb))
+    @test nk == 1
+    @test all(diff(Me) .> 0)                              # strictly increasing output
+    k = findfirst(i -> Me[i+1] == nextfloat(Me[i]), 1:(length(Me)-1))
+    @test k !== nothing
+    @test Me[k] ≈ 3.5                                     # exact crossing, not a grid point
+    @test ve[k] ≈ ve[k+1] ≈ 3.5                           # value is continuous at a kink
+    @test ce[k] ≈ 1.75 && ce[k+1] ≈ 9.75                  # consumption jumps
+    # Defining property: the envelope dominates every branch everywhere it is defined.
+    for (m, v) in zip(Me, ve)
+        for (Ms, vs) in ((Ma, va), (Mb, vb))
+            Ms[1] <= m <= Ms[end] || continue
+            @test v >= MacroEconometricModels._seg_interp(Ms, vs, m) - 1e-12
+        end
+    end
+
+    # A crossing that lands exactly ON a knot is still a kink: the branches tie at
+    # M = 3 and consumption jumps immediately above it. Rounding it away would lose
+    # the switching threshold entirely.
+    vb_knot = [1.0, 3.0, 5.0, 7.0]                        # B: v = 2M − 3 ⇒ tie at M = 3
+    Me, ce, ve, nk = UE(vcat(Ma, Mb), vcat(ca, cb), vcat(va, vb_knot))
+    @test nk == 1
+    @test all(diff(Me) .> 0)
+    k = findfirst(i -> Me[i+1] == nextfloat(Me[i]), 1:(length(Me)-1))
+    @test k !== nothing && Me[k] == 3.0
+    @test ve[k] ≈ ve[k+1] ≈ 3.0
+    @test ce[k] ≈ 1.5 && ce[k+1] ≈ 9.5
+
+    # A switch at a SUPPORT BOUNDARY is not a crossing: branch B starts already
+    # dominating, so there is no interior kink to insert.
+    Mc_ = [1.0, 2.0, 3.0, 2.5, 3.5, 4.5]
+    cc_ = [0.5, 1.0, 1.5, 0.2, 0.3, 0.4]
+    vc_ = [0.0, 1.0, 2.0, 3.0, 3.4, 3.8]
+    Me, ce, ve, nk = UE(Mc_, cc_, vc_)
+    @test nk == 0
+    @test all(diff(Me) .> 0)
+    @test ve[findfirst(≈(2.5), Me)] ≈ 3.0                 # the dominating branch is kept
+
+    @test_throws ArgumentError UE([1.0, 2.0], [1.0], [1.0, 2.0])
+end
+
+@testset "DCEGM retirement model" begin
+    prob = dcegm_retirement_model(; n_periods=6, beta=0.98, R=1.0, wage=20.0,
+                                  disutility=1.0, a_max=60.0, n_a=250)
+    @test prob isa DCEGMProblem{Float64}
+    @test prob.options == [:retire, :work] && prob.absorbing == [true, false]
+    sol = dcegm_solve(prob)
+    @test sol isa DCEGMSolution{Float64}
+    @test sol.converged && sol.n_periods == 6
+
+    # ANALYTIC ORACLE: once retired (absorbing, no pension, R = 1, log utility) the
+    # problem is deterministic cake-eating with the closed form c_t = M / Σ_{k≤T−t} β^k.
+    for t in (6, 5, 3, 1), Mt in (5.0, 20.0, 45.0)
+        annuity = sum(0.98^k for k in 0:(6 - t))
+        @test dcegm_policy(sol, t, 1, 1, Mt)[1] ≈ Mt / annuity rtol=1e-12
+    end
+
+    # The discrete choice makes the WORKING branch non-concave: the envelope deletes
+    # secondary segments and inserts switching thresholds. Retirement is absorbing,
+    # so its own branch is concave and needs none.
+    @test sum(sol.n_kinks[:, 2, :]) > 0
+    @test sum(sol.n_kinks[:, 1, :]) == 0
+
+    # At every inserted kink the two value branches coincide while consumption jumps —
+    # the defining property of an upper-envelope crossing.
+    for t in 1:6, d in 1:2
+        Mv = sol.M[t, d, 1]; cv = sol.c[t, d, 1]; vv = sol.v[t, d, 1]
+        @test all(diff(Mv) .> 0)
+        for i in 1:(length(Mv) - 1)
+            Mv[i+1] == nextfloat(Mv[i]) || continue
+            @test vv[i] ≈ vv[i+1] rtol=1e-8
+            @test abs(cv[i] - cv[i+1]) > 1e-6
+        end
+    end
+
+    # ── INDEPENDENT ORACLE: dense-grid backward-induction VFI on the same model ──
+    # No EGM, no envelope, no Euler equation — just brute-force maximization.
+    function _vfi_retirement(; T_end, beta, R, wage, delta, Mmax, nM, nC)
+        Mg = collect(range(1e-4, Mmax; length=nM))
+        V = fill(-Inf, T_end, nM, 2); C = zeros(T_end, nM, 2); D = zeros(Int, T_end, nM, 2)
+        u(c, d) = c > 0 ? log(c) - (d == 2 ? delta : 0.0) : -Inf
+        for i in 1:nM, dp in 1:2
+            V[T_end, i, dp] = u(Mg[i], 1); C[T_end, i, dp] = Mg[i]; D[T_end, i, dp] = 1
+        end
+        for t in (T_end-1):-1:1, i in 1:nM, dp in 1:2
+            best = -Inf; bc = 0.0; bd = 0
+            for d in (dp == 1 ? (1:1) : (1:2))
+                inc = d == 2 ? wage : 0.0
+                for k in 0:(nC-1)
+                    c = Mg[i] * (k + 1) / nC
+                    Mn = R * (Mg[i] - c) + inc
+                    Vn = if Mn <= Mg[1]; V[t+1, 1, d]
+                         elseif Mn >= Mg[end]; V[t+1, end, d]
+                         else
+                             q = searchsortedfirst(Mg, Mn) - 1
+                             w = (Mn - Mg[q]) / (Mg[q+1] - Mg[q])
+                             (1 - w) * V[t+1, q, d] + w * V[t+1, q+1, d]
+                         end
+                    val = u(c, d) + beta * Vn
+                    val > best && (best = val; bc = c; bd = d)
+                end
+            end
+            V[t, i, dp] = best; C[t, i, dp] = bc; D[t, i, dp] = bd
+        end
+        return Mg, C, D
+    end
+    Mg, C_vfi, D_vfi = _vfi_retirement(; T_end=6, beta=0.98, R=1.0, wage=20.0,
+                                      delta=1.0, Mmax=60.0, nM=200, nC=600)
+    step = Mg[2] - Mg[1]
+
+    for t in 2:4
+        errs = Float64[]; mism = 0
+        for (i, m) in enumerate(Mg)
+            m < 0.5 && continue
+            d = argmax(dcegm_choice_probabilities(sol, t, 2, 1, m))
+            d != D_vfi[t, i, 2] && (mism += 1)
+            push!(errs, abs(dcegm_policy(sol, t, d, 1, m)[1] - C_vfi[t, i, 2]) /
+                        max(C_vfi[t, i, 2], 1e-8))
+        end
+        @test mism == 0                                        # discrete choice agrees
+        @test sort(errs)[cld(length(errs), 2)] < 2e-3          # median within VFI resolution
+        # Large disagreements occur only where the policy is genuinely discontinuous:
+        # a grid-based VFI cannot resolve a jump, DCEGM locates it exactly.
+        @test count(>(1e-2), errs) <= sum(sol.n_kinks[t, :, :]) + 1
+    end
+
+    # Retirement threshold vs the VFI switch point, within one oracle grid step.
+    for t in (4, 5)
+        thr = dcegm_threshold(sol, t, 2, 1; M_lo=0.5, M_hi=60.0)
+        idx = findlast(i -> D_vfi[t, i, 2] == 2, 1:length(Mg))
+        @test idx !== nothing
+        @test isfinite(thr)
+        @test abs(thr - Mg[idx]) <= 2 * step
+    end
+    # Early in life the worker never retires on this bracket — honestly reported as NaN.
+    @test isnan(dcegm_threshold(sol, 2, 2, 1; M_lo=0.5, M_hi=60.0))
+    @test all(D_vfi[2, i, 2] == 2 for i in 1:length(Mg))   # …and the oracle agrees
+    # Retirement is absorbing, so there is no two-option choice left to threshold.
+    @test_throws ArgumentError dcegm_threshold(sol, 3, 1, 1; M_lo=1.0, M_hi=10.0)
+    @test_throws ArgumentError dcegm_threshold(sol, 3, 2, 1; M_lo=10.0, M_hi=1.0)
+
+    report(sol)                                                # display smoke tests
+    @test occursin("DCEGMSolution", sprint(show, sol))
+    @test occursin("DCEGMProblem", sprint(show, prob))
+end
+
+@testset "DCEGM taste shocks" begin
+    base = dcegm_solve(dcegm_retirement_model(; n_periods=5, beta=0.98, R=1.0,
+                                              wage=20.0, disutility=1.0,
+                                              a_max=60.0, n_a=200))
+    Ms = collect(2.0:2.0:55.0)
+    devs = Float64[]; spreads = Float64[]
+    for lam in (1.0, 0.05, 0.01, 0.002)
+        s = dcegm_solve(dcegm_retirement_model(; n_periods=5, beta=0.98, R=1.0,
+                                               wage=20.0, disutility=1.0,
+                                               a_max=60.0, n_a=200,
+                                               taste_shock_scale=lam))
+        push!(devs, maximum(abs(dcegm_policy(s, 2, 2, 1, m)[1] -
+                                dcegm_policy(base, 2, 2, 1, m)[1]) for m in Ms))
+        # Mean distance of the choice probabilities from the deterministic 0/1 rule.
+        # The MAXIMUM is the wrong statistic: at the indifference point the
+        # probabilities are 1/2 for every λ, so only the *measure* of the interior
+        # region shrinks, not its peak.
+        push!(spreads, sum(minimum(dcegm_choice_probabilities(s, 3, 2, 1, m))
+                           for m in Ms) / length(Ms))
+    end
+    # The smoothed solution collapses onto the deterministic upper envelope as λ → 0.
+    @test issorted(devs; rev=true)
+    @test devs[1] > 1.0                                   # λ = 1 genuinely differs
+    @test devs[end] < 0.01
+    @test issorted(spreads; rev=true)
+    @test spreads[end] < 1e-3
+
+    s = dcegm_solve(dcegm_retirement_model(; n_periods=5, a_max=60.0, n_a=150,
+                                           taste_shock_scale=0.5))
+    p = dcegm_choice_probabilities(s, 3, 2, 1, 30.0)
+    @test length(p) == 2 && sum(p) ≈ 1.0 && all(p .>= 0)
+    # After retiring, work is infeasible: probability exactly zero, not merely small.
+    pr = dcegm_choice_probabilities(s, 3, 1, 1, 30.0)
+    @test pr == [1.0, 0.0]
+end
+
+@testset "DCEGM distribution and simulation" begin
+    prob = dcegm_retirement_model(; n_periods=7, beta=0.98, R=1.02, wage=20.0,
+                                  disutility=0.8, sigma=0.15, n_shocks=3,
+                                  a_max=80.0, n_a=150)
+    @test length(prob.income_process.states) == 3
+    @test sum(prob.income_process.stationary_dist) ≈ 1.0
+    @test dot(prob.income_process.stationary_dist, prob.income_process.states) ≈ 1.0 rtol=1e-6
+    sol = dcegm_solve(prob)
+
+    grid = collect(range(0.01, 80.0; length=120))
+    dist = dcegm_simulate(sol, grid)
+    @test dist isa DCEGMDistribution{Float64}
+    @test dist.n_periods == 7
+    # The Young lottery splits off-grid landings between neighbours, so mass is exact.
+    for t in 1:7
+        @test sum(@view dist.dist[t, :, :, :]) ≈ 1.0 atol=1e-12
+        @test sum(@view dist.shares[t, :]) ≈ 1.0 atol=1e-12
+    end
+    @test all(dist.dist .>= 0)
+    # Retirement is absorbing, so its share can only rise with age.
+    @test issorted(dist.shares[:, 1])
+    @test dist.shares[1, 2] ≈ 1.0                       # everyone starts working
+    @test all(isfinite, dist.consumption) && all(dist.consumption .> 0)
+    @test all(dist.assets .>= -1e-12)
+    report(dist)                                        # display smoke test
+    @test occursin("DCEGMDistribution", sprint(show, dist))
+
+    # Custom initial condition: all mass at one node, everyone already retired.
+    init = zeros(length(grid), 3)
+    init[60, :] .= prob.income_process.stationary_dist
+    d2 = dcegm_simulate(sol, grid; init=init, init_option=:retire, n_periods=4)
+    @test d2.n_periods == 4
+    @test all(d2.shares[:, 1] .≈ 1.0)                   # absorbing: nobody returns to work
+    @test sum(@view d2.dist[1, :, :, :]) ≈ 1.0
+
+    @test_throws ArgumentError dcegm_simulate(sol, [3.0, 1.0, 2.0])
+    @test_throws ArgumentError dcegm_simulate(sol, [1.0])
+    @test_throws ArgumentError dcegm_simulate(sol, grid; n_periods=0)
+    @test_throws ArgumentError dcegm_simulate(sol, grid; n_periods=99)
+    @test_throws ArgumentError dcegm_simulate(sol, grid; init_option=:nope)
+    @test_throws ArgumentError dcegm_simulate(sol, grid; init=zeros(3, 3))
+end
+
+@testset "DCEGM infinite horizon and validation" begin
+    # Stationary policy: a pension keeps the retired branch finite at the constraint.
+    p = dcegm_retirement_model(; n_periods=0, beta=0.95, R=1.01, wage=5.0,
+                               disutility=0.5, a_max=40.0, n_a=150, pension=1.0)
+    s = dcegm_solve(p; max_iter=300, tol=1e-7)
+    @test s.converged
+    @test s.iterations > 1 && s.sup_diff < 1e-7
+    @test s.n_periods == 1
+    # A stationary solution can be simulated for any number of periods.
+    d = dcegm_simulate(s, collect(range(0.01, 40.0; length=80)); n_periods=12)
+    @test d.n_periods == 12
+    @test all(sum(@view d.dist[t, :, :, :]) ≈ 1.0 for t in 1:12)
+
+    # Non-convergence is reported, not silently accepted.
+    s1 = dcegm_solve(p; max_iter=1, tol=1e-12)
+    @test !s1.converged && s1.iterations == 1
+
+    # ── Constructor validation ──────────────────────────────────────────────
+    inc = rouwenhorst(0.5, 0.1, 2)
+    base = (utility=(c, d) -> log(c), utility_prime=(c, d) -> 1 / c,
+            utility_prime_inv=(m, d) -> 1 / m, income=(d, j) -> 1.0,
+            income_process=inc)
+    @test_throws ArgumentError DCEGMProblem(; beta=0.95, R=1.0, base...,
+        options=Symbol[], absorbing=Bool[], asset_grid=[0.0, 1.0])
+    @test_throws ArgumentError DCEGMProblem(; beta=0.95, R=1.0, base...,
+        options=[:a, :b], absorbing=[true], asset_grid=[0.0, 1.0])
+    @test_throws ArgumentError DCEGMProblem(; beta=0.95, R=1.0, base...,
+        options=[:a, :a], absorbing=[true, false], asset_grid=[0.0, 1.0])
+    @test_throws ArgumentError DCEGMProblem(; beta=0.95, R=1.0, base...,
+        options=[:a], absorbing=[false], asset_grid=[0.0])            # too few points
+    @test_throws ArgumentError DCEGMProblem(; beta=0.95, R=1.0, base...,
+        options=[:a], absorbing=[false], asset_grid=[1.0, 0.0])       # unsorted
+    @test_throws ArgumentError DCEGMProblem(; beta=0.95, R=1.0, base...,
+        options=[:a], absorbing=[false], asset_grid=[0.5, 1.0])       # ≠ credit limit
+    @test_throws ArgumentError DCEGMProblem(; beta=1.5, R=1.0, base...,
+        options=[:a], absorbing=[false], asset_grid=[0.0, 1.0])       # β outside (0,1)
+    @test_throws ArgumentError DCEGMProblem(; beta=0.95, R=1.0, base...,
+        options=[:a], absorbing=[false], asset_grid=[0.0, 1.0], n_periods=-1)
+    @test_throws ArgumentError DCEGMProblem(; beta=0.95, R=1.0, base...,
+        options=[:a], absorbing=[false], asset_grid=[0.0, 1.0], taste_shock_scale=-1)
+    @test_throws ArgumentError dcegm_retirement_model(; n_shocks=0)
+    @test_throws ArgumentError dcegm_retirement_model(; curvature=0.5)
+
+    # A degenerate problem leaves too few usable grid points and says so.
+    bad = DCEGMProblem(; beta=0.95, R=1.0,
+        utility=(c, d) -> c > 0 ? log(c) : -Inf, utility_prime=(c, d) -> c > 0 ? 1 / c : Inf,
+        utility_prime_inv=(m, d) -> m > 0 ? 1 / m : Inf, income=(d, j) -> 0.0,
+        options=[:only], absorbing=[true], asset_grid=[0.0, 1.0],
+        income_process=inc, n_periods=3)
+    @test_throws ErrorException dcegm_solve(bad)
+end
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Winberry (2018) parametric distribution dynamics (#356/T257)
+# ─────────────────────────────────────────────────────────────────────────────
+
+# Small Aiyagari spec: the Winberry end-to-end tests solve TWO steady states and
+# TWO linearizations, so the shipped 200x7 examples would dominate this file.
+function _win_small_spec(; distribution::Symbol=:young, n_a::Int=80, n_e::Int=3)
+    u, up, upi = MacroEconometricModels._crra_utility(1.0)
+    income = MacroEconometricModels._unit_mean_lognormal_income(0.90, 0.30, n_e)
+    grid = HAGrid(; assets=(0.0, 300.0, n_a), income_states=n_e, grid_type=:geometric)
+    ip = IndividualProblem{Float64}(u, up, upi, 0.99,
+                                    MacroEconometricModels._ks_budget,
+                                    [0.0], nothing, 1)
+    agg = MacroEconometricModels._minimal_agg_spec(; alpha=0.36, delta=0.025)
+    aggregation = Pair{Symbol,Function}[:K => MacroEconometricModels._agg_var1]
+    het = Dict{Symbol,Float64}(:alpha => 0.36, :delta => 0.025, :Z => 1.0, :L => 1.0)
+    return HADSGESpec{Float64}(agg, ip, income, grid, aggregation, het;
+                                distribution=distribution)
+end
+
+@testset "Winberry parametric density (#356/T257)" begin
+
+    @testset "Gauss-Legendre and composite quadrature are exact" begin
+        # A k-point Gauss-Legendre rule integrates polynomials of degree 2k-1 exactly.
+        for k in 2:6
+            x, w = MacroEconometricModels._gauss_legendre(Float64, k)
+            @test length(x) == k && length(w) == k
+            @test sum(w) ≈ 2.0 atol=1e-14
+            for d in 0:(2k - 1)
+                exact = iseven(d) ? 2 / (d + 1) : 0.0
+                @test sum(w .* x .^ d) ≈ exact atol=1e-12
+            end
+        end
+        # Composite rule on arbitrary (unequal) segments: same exactness, and the
+        # weights integrate the domain width.
+        edges = [0.0, 0.3, 1.7, 5.0]
+        nodes, wts = MacroEconometricModels._composite_quadrature(edges, 4)
+        @test length(nodes) == 3 * 4
+        @test sum(wts) ≈ 5.0 atol=1e-12
+        for d in 0:7
+            @test sum(wts .* nodes .^ d) ≈ 5.0^(d + 1) / (d + 1) atol=1e-9
+        end
+        # Grid-derived rule inherits the asset grid as its segment edges.
+        g = HAGrid(; assets=(0.0, 50.0, 40), income_states=2)
+        nq, wq = winberry_quadrature(g; n_quad=3)
+        @test length(nq) == 39 * 3
+        @test sum(wq) ≈ 50.0 atol=1e-10
+        @test all(g.grids[1][1] .<= nq .<= g.grids[1][end])
+        g2 = HAGrid(; liquid=(0.0, 5.0, 10), illiquid=(0.0, 5.0, 10), income_states=2)
+        @test_throws ArgumentError winberry_quadrature(g2)
+    end
+
+    @testset "analytic oracles: the max-entropy fit IS the known density" begin
+        # (a) Matching mean 0 and variance 1 on a wide symmetric interval must return
+        #     the Gaussian exactly: g ∝ exp(−z²/2), i.e. λ = (0, −1/2).
+        pd = fit_parametric_density([0.0, 1.0]; bounds=(-8.0, 8.0),
+                                    n_segments=200, n_quad=6)
+        @test pd.converged
+        @test pd.lambda[1] ≈ 0.0 atol=1e-10
+        @test pd.lambda[2] ≈ -0.5 atol=1e-7
+        @test pd.residual < 1e-10
+        for a in (-2.0, -0.5, 0.0, 1.0, 2.5)
+            @test parametric_density(pd, a) ≈ exp(-a^2 / 2) / sqrt(2π) rtol=1e-6
+        end
+
+        # (b) The exponential distribution with rate 1 has centered moments
+        #     (1, 1, 2, 9); the four-moment max-entropy fit must recover exp(−a)
+        #     POINTWISE, not merely match the moments. In standardized coordinates
+        #     z = a − 1, so the answer is λ = (−1, 0, 0, 0).
+        pd4 = fit_parametric_density([1.0, 1.0, 2.0, 9.0]; bounds=(0.0, 40.0),
+                                     n_segments=400, n_quad=6, tol=1e-12)
+        @test pd4.converged
+        @test pd4.lambda[1] ≈ -1.0 atol=1e-8
+        @test all(abs.(pd4.lambda[2:end]) .< 1e-8)
+        for a in (0.0, 0.25, 1.0, 2.0, 5.0)
+            @test parametric_density(pd4, a) ≈ exp(-a) rtol=1e-6
+        end
+    end
+
+    @testset "moment round trip (fit ∘ moments = identity)" begin
+        nodes, wts = MacroEconometricModels._composite_quadrature(
+            collect(range(-6.0, 12.0; length=301)), 5)
+        # `converged` compares an internal residual against `tol`, and for the
+        # FOUR-moment basis — the ill-conditioned one, whose Hessian reaches cond
+        # 1e8 — that residual spans five orders of magnitude across platforms:
+        # 3.6e-16 on 1.10/arm64, 8.9e-11 on 1.12/arm64 (89% of a 1e-10 tolerance),
+        # and above 1e-10 on Windows. No absolute tolerance makes the flag portable
+        # there, so assert it only for the well-conditioned bases.
+        #
+        # What the round trip actually claims is ACCURACY, and that IS stable: the
+        # recovered moments agree to <= 3e-11 everywhere measured, against the
+        # rtol=1e-7 asserted below for every case including four moments.
+        for targets in ([2.0, 4.0], [2.0, 4.0, 3.0], [1.0, 2.0, 1.5, 14.0])
+            pd = MacroEconometricModels._fit_parametric_density(
+                copy(targets), nodes, wts; tol=1e-10)
+            length(targets) <= 3 && @test pd.converged
+            @test pd.residual < 1e-6            # a hard bound for every basis
+            @test parametric_moments(pd, nodes, wts) ≈ targets rtol=1e-7
+            # The density integrates to one over the reference interval.
+            @test sum(wts .* [parametric_density(pd, a) for a in nodes]) ≈ 1.0 atol=1e-10
+        end
+    end
+
+    @testset "analytic gradient/Hessian match ForwardDiff" begin
+        # The fit uses closed-form derivatives of the log-normalizer rather than AD.
+        # Cross-check both against ForwardDiff on the same objective (the docstring
+        # promises this).
+        FD = MacroEconometricModels.ForwardDiff
+        nodes, wts = MacroEconometricModels._composite_quadrature(
+            collect(range(-5.0, 9.0; length=201)), 5)
+        moments = [1.5, 2.25, 1.2, 16.0]
+        center, scale, mu = MacroEconometricModels._standardized_targets(moments)
+        B = MacroEconometricModels._winberry_basis(nodes, center, scale, mu)
+        F(lam) = begin
+            u = B * lam
+            umax = maximum(u)
+            umax + log(sum(wts .* exp.(u .- umax)))
+        end
+        for lam in ([0.0, -0.5, 0.0, 0.0], [-0.4, -0.3, 0.05, -0.02])
+            _, p = MacroEconometricModels._log_normalizer(B * lam, wts)
+            grad_analytic = B' * p
+            hess_analytic = B' * (B .* p) - grad_analytic * grad_analytic'
+            @test grad_analytic ≈ FD.gradient(F, lam) rtol=1e-8
+            @test hess_analytic ≈ FD.hessian(F, lam) rtol=1e-6
+            # The Hessian is a covariance matrix, hence symmetric PSD.
+            @test hess_analytic ≈ hess_analytic' atol=1e-12
+            @test minimum(eigvals(Symmetric(hess_analytic))) > -1e-12
+        end
+        # ∇ = 0 is exactly the moment-matching condition: at the converged λ the
+        # analytic gradient vanishes and the fitted density's central moments are
+        # the targets.
+        pd = MacroEconometricModels._fit_parametric_density(copy(moments), nodes, wts;
+                                                            tol=1e-12)
+        @test pd.converged
+        _, p_star = MacroEconometricModels._log_normalizer(B * pd.lambda, wts)
+        @test maximum(abs, B' * p_star) < 1e-11
+        @test parametric_moments(pd, nodes, wts) ≈ moments rtol=1e-7
+    end
+
+    @testset "input validation" begin
+        @test_throws ArgumentError fit_parametric_density([1.0]; bounds=(0.0, 1.0))
+        @test_throws ArgumentError fit_parametric_density([1.0, -1.0]; bounds=(0.0, 1.0))
+        @test_throws ArgumentError fit_parametric_density([1.0, 1.0])   # no quadrature
+        @test_throws ArgumentError fit_parametric_density([1.0, 1.0]; nodes=[0.0, 1.0],
+                                                          weights=[0.5])
+        nodes, wts = MacroEconometricModels._composite_quadrature([0.0, 4.0], 5)
+        @test_throws ArgumentError MacroEconometricModels._fit_parametric_density(
+            [1.0, 1.0], nodes, wts; lambda_init=[0.0, 0.0, 0.0])
+        @test_throws ArgumentError HADSGESpec{Float64}(
+            _win_small_spec().aggregate_spec, _win_small_spec().individual,
+            _win_small_spec().income, _win_small_spec().grid,
+            _win_small_spec().aggregation, _win_small_spec().het_params;
+            distribution=:histogram)
+    end
+
+    @testset "histogram ↔ moments" begin
+        g = HAGrid(; assets=(0.0, 20.0, 60), income_states=2)
+        a = g.grids[1]
+        d = zeros(60, 2)
+        d[:, 1] .= exp.(-a ./ 3); d[:, 2] .= exp.(-a ./ 8)
+        d ./= sum(d)
+        M, mass = winberry_moments(d, g; n_moments=4)
+        @test size(M) == (2, 4)
+        @test sum(mass) ≈ 1.0 atol=1e-12
+        # Rows must equal the discrete conditional moments, computed independently.
+        for j in 1:2
+            p = d[:, j] ./ mass[j]
+            m1 = sum(p .* a)
+            @test M[j, 1] ≈ m1 rtol=1e-12
+            for i in 2:4
+                @test M[j, i] ≈ sum(p .* (a .- m1) .^ i) rtol=1e-10
+            end
+        end
+        # Flattened input is accepted and gives the same answer.
+        @test first(winberry_moments(vec(d), g; n_moments=4)) ≈ M
+        @test_throws ArgumentError winberry_moments(d, g; n_moments=1)
+
+        # Explicit tol for the same reason as above: under the 1e-10 default this fit
+        # lands at 7.5e-11 (75% of the threshold), so `converged` is decided by
+        # rounding rather than by the fit. The lambda vector and the reconstructed
+        # histogram are identical to 4e-10 / 1e-11 across tol in [1e-10, 1e-6].
+        fam = fit_winberry(d, g; n_moments=3, tol=1e-8)
+        @test fam isa WinberryFamily{Float64}
+        @test fam.converged
+        @test length(fam.densities) == 2
+        @test fam.n_moments == 3
+        h = winberry_histogram(fam, g)
+        @test length(h) == 120
+        @test all(h .>= 0)
+        @test sum(h) ≈ 1.0 atol=1e-12
+        # Per-income-state mass is preserved by the rendering.
+        for j in 1:2
+            @test sum(h[((j - 1) * 60 + 1):(j * 60)]) ≈ mass[j] rtol=1e-10
+        end
+        # The rendered histogram carries roughly the family's own mean.
+        @test sum(h .* repeat(a, 2)) ≈ sum(mass .* M[:, 1]) rtol=1e-3
+    end
+
+    @testset "moment fixed point is genuinely stationary and tracks Young" begin
+        spec = _win_small_spec()
+        ss = compute_steady_state(spec; grid_check=:none)
+        a_pol = ss.policies[:savings]
+        nodes, wts = winberry_quadrature(ss.grid; n_quad=4)
+        M_young, mass_y = winberry_moments(ss.distribution, ss.grid; n_moments=3)
+        K_young = sum(mass_y .* M_young[:, 1])
+        @test K_young ≈ ss.aggregates[:K] rtol=1e-10
+
+        errs = Float64[]
+        for nm in (2, 3, 4)
+            st = MacroEconometricModels._winberry_stationary(
+                a_pol, ss.grid, ss.income; n_moments=nm)
+            @test st.converged
+            @test size(st.moments) == (3, nm)
+            # Income-state masses are the ergodic distribution of the income chain.
+            @test st.mass ≈ vec(sum(ss.distribution; dims=1)) rtol=1e-8
+            # It really is a FIXED POINT: one more application of the law of motion
+            # leaves it where it is (this is the property the linearization needs).
+            M_next, _, _ = MacroEconometricModels._winberry_forward(
+                st.moments, st.mass, a_pol, ss.grid, ss.income, nodes, wts;
+                lambda_warm=st.lambdas)
+            dev = MacroEconometricModels._winberry_to_state(
+                M_next .- st.moments, MacroEconometricModels._winberry_scales(st.moments))
+            @test maximum(abs, dev) < 1e-8
+            K_w = sum(st.mass .* st.moments[:, 1])
+            push!(errs, abs(K_w - K_young) / K_young)
+            # A parametric solve started with no guess must find the same point.
+            st_cold = MacroEconometricModels._winberry_stationary(
+                a_pol, ss.grid, ss.income; n_moments=nm, M_init=nothing)
+            @test st_cold.moments ≈ st.moments rtol=1e-6
+        end
+        # The reduction is accurate, and more moments do not make it worse.
+        @test all(errs .< 0.10)
+        @test errs[3] <= errs[1] + 1e-12
+    end
+
+    @testset "steady state with distribution=:winberry" begin
+        spec_y = _win_small_spec()
+        spec_w = _win_small_spec(; distribution=:winberry)
+        @test spec_y.distribution === :young
+        @test spec_w.distribution === :winberry
+        ss_y = compute_steady_state(spec_y; grid_check=:none)
+        ss_w = compute_steady_state(spec_w; grid_check=:none)
+
+        # The equilibrium is cleared on the histogram either way, so prices and
+        # aggregates are identical — only the extra parametric object differs.
+        @test ss_y.parametric === nothing
+        @test ss_w.parametric isa WinberryFamily{Float64}
+        @test ss_w.prices[:r] == ss_y.prices[:r]
+        @test ss_w.aggregates[:K] == ss_y.aggregates[:K]
+        @test ss_w.parametric.converged
+        @test ss_w.parametric.n_moments == 3
+        @test length(ss_w.parametric.densities) == 3
+        @test sum(ss_w.parametric.mass) ≈ 1.0 atol=1e-12
+        @test all(pd -> pd.residual < 1e-9, ss_w.parametric.densities)
+
+        # aggregates[:K_winberry] is the family's OWN stationary aggregate, so the
+        # gap against :K is the reduction error — small but not zero.
+        @test haskey(ss_w.aggregates, :K_winberry)
+        @test !haskey(ss_y.aggregates, :K_winberry)
+        rel = abs(ss_w.aggregates[:K_winberry] - ss_w.aggregates[:K]) / ss_w.aggregates[:K]
+        @test 0 < rel < 0.10
+
+        # n_moments is honoured, and more moments do not degrade the aggregate.
+        ss_w5 = compute_steady_state(spec_w; grid_check=:none, n_moments=5)
+        @test ss_w5.parametric.n_moments == 5
+        rel5 = abs(ss_w5.aggregates[:K_winberry] - ss_w5.aggregates[:K]) / ss_w5.aggregates[:K]
+        @test rel5 <= rel + 1e-10
+
+        # `distribution=` on the call overrides the spec in both directions.
+        @test compute_steady_state(spec_y; grid_check=:none,
+                                   distribution=:winberry).parametric !== nothing
+        @test compute_steady_state(spec_w; grid_check=:none,
+                                   distribution=:young).parametric === nothing
+        @test_throws ArgumentError compute_steady_state(spec_y; grid_check=:none,
+                                                        distribution=:bogus)
+    end
+
+    @testset "Reiter linearization on the moment state" begin
+        spec_y = _win_small_spec()
+        spec_w = _win_small_spec(; distribution=:winberry)
+        ss_y = compute_steady_state(spec_y; grid_check=:none)
+        ss_w = compute_steady_state(spec_w; grid_check=:none)
+        sol_y = solve(spec_y; method=:reiter, ss=ss_y)
+        sol_w = solve(spec_w; method=:reiter, ss=ss_w)
+
+        n_e = spec_w.grid.n_income
+        # The distribution state is n_income × n_moments — far fewer than the
+        # histogram's n_a × n_income, and fewer than the SVD reduction as well.
+        @test sol_w.n_reduced == n_e * 3
+        @test sol_w.n_reduced < sol_y.n_reduced
+        @test sol_w.n_reduced < spec_w.grid.total_individual_states
+        @test sol_w.method === :reiter
+        @test is_determined(sol_w)
+        @test maximum(abs, eigvals(sol_w.linear_solution.G1)) < 1.0
+        @test 0.5 < sol_w.explained_variance <= 1.0
+
+        # The reduction basis maps moment deviations back to the full histogram, so
+        # distribution IRFs work unchanged — and every column is mass-preserving.
+        @test size(sol_w.reduction_basis) == (spec_w.grid.total_individual_states,
+                                              sol_w.n_reduced)
+        @test maximum(abs, vec(sum(sol_w.reduction_basis; dims=1))) < 1e-8
+        di = distribution_irf(sol_w, 6)
+        @test size(di) == (spec_w.grid.n_points[1], n_e, 6)
+        @test maximum(abs, di) > 0
+        @test abs(sum(di[:, :, 1])) < 1e-8
+
+        # Aggregate capital IRFs agree with the Young-based Reiter system. K is the
+        # state just after the distribution block in both.
+        function _agg_path(sol, H)
+            G1 = sol.linear_solution.G1
+            x = sol.linear_solution.impact[:, 1]
+            out = zeros(H)
+            for h in 1:H
+                out[h] = x[sol.n_reduced + 1]
+                x = G1 * x
+            end
+            return out
+        end
+        H = 20
+        iy = _agg_path(sol_y, H)
+        iw = _agg_path(sol_w, H)
+        scale = maximum(abs, iy)
+        @test scale > 0
+        @test maximum(abs, iw .- iy) / scale < 0.05
+        @test cor(iy, iw) > 0.999
+
+        # More moments must not move the aggregate IRF much further away.
+        sol_w5 = solve(spec_w; method=:reiter,
+                       ss=compute_steady_state(spec_w; grid_check=:none, n_moments=5),
+                       n_moments=5)
+        @test sol_w5.n_reduced == n_e * 5
+        @test maximum(abs, _agg_path(sol_w5, H) .- iy) / scale < 0.05
+    end
+
+    @testset "Huggett closure and the built-in examples" begin
+        spec = load_ha_example(:huggett; distribution=:winberry)
+        @test spec.distribution === :winberry
+        @test load_ha_example(:huggett).distribution === :young
+        @test load_ha_example(:krusell_smith; distribution=:winberry).distribution === :winberry
+        ss = compute_steady_state(spec; grid_check=:none)
+        @test ss.parametric isa WinberryFamily{Float64}
+        # Huggett is zero net supply: the parametric family's own aggregate must
+        # also be (nearly) zero, without ever having been told so.
+        @test abs(ss.aggregates[:K_winberry]) < 1e-2
+        sol = solve(spec; method=:reiter, ss=ss)
+        @test sol.n_reduced == spec.grid.n_income * 3
+        @test is_determined(sol)
+        @test maximum(abs, eigvals(sol.linear_solution.G1)) < 1.0
+    end
+
+    @testset "display" begin
+        spec = _win_small_spec(; distribution=:winberry)
+        ss = compute_steady_state(spec; grid_check=:none)
+        fam = ss.parametric
+        str_f = sprint(show, fam)
+        @test occursin("WinberryFamily", str_f)
+        @test occursin("3 moments", str_f)
+        @test occursin("converged=true", str_f)
+        str_d = sprint(show, fam.densities[1])
+        @test occursin("ParametricDensity", str_d)
+        @test occursin("converged=true", str_d)
+        # `report` writes to stdout; on Julia 1.12 redirect_stdout no longer accepts
+        # an IOBuffer, so capture through a temporary file.
+        out = mktemp() do path, f
+            redirect_stdout(() -> report(ss), f)
+            flush(f)
+            read(path, String)
+        end
+        @test occursin("Winberry Parametric Family", out)
+        @test occursin("K_winberry", out)
+    end
+
 end
 
 end # @testset "HA-DSGE Types"

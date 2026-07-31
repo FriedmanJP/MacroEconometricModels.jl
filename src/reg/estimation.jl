@@ -94,7 +94,12 @@ function estimate_reg(y::AbstractVector{T}, X::AbstractMatrix{T};
                       cov_type::Symbol=:hc1,
                       weights::Union{Nothing,AbstractVector}=nothing,
                       varnames::Union{Nothing,Vector{String}}=nothing,
-                      clusters::Union{Nothing,AbstractVector}=nothing) where {T<:AbstractFloat}
+                      clusters::Union{Nothing,AbstractVector}=nothing,
+                      coords::Union{Nothing,AbstractMatrix}=nothing,
+                      cutoff::Real=0.0, conley_kernel::Symbol=:bartlett,
+                      conley_metric::Symbol=:euclidean,
+                      time::Union{Nothing,AbstractVector}=nothing,
+                      time_cutoff::Int=0, conley_psd::Bool=true) where {T<:AbstractFloat}
     # ---- Input validation ----
     _validate_data(y, "y")
     _validate_data(X, "X")
@@ -104,8 +109,14 @@ function estimate_reg(y::AbstractVector{T}, X::AbstractMatrix{T};
     size(X, 1) == n || throw(ArgumentError("X must have $n rows (got $(size(X, 1)))"))
     n > k || throw(ArgumentError("Need n > k (n=$n, k=$k)"))
 
-    cov_type in (:ols, :hc0, :hc1, :hc2, :hc3, :cluster) ||
-        throw(ArgumentError("cov_type must be :ols, :hc0, :hc1, :hc2, :hc3, or :cluster; got :$cov_type"))
+    cov_type in (:ols, :hc0, :hc1, :hc2, :hc3, :cluster, :conley) ||
+        throw(ArgumentError("cov_type must be :ols, :hc0, :hc1, :hc2, :hc3, :cluster, or " *
+                            ":conley; got :$cov_type"))
+
+    if cov_type == :conley
+        coords === nothing && throw(ArgumentError("coords required for :conley cov_type"))
+        size(coords, 1) == n || throw(ArgumentError("coords must have $n rows"))
+    end
 
     if cov_type == :cluster
         clusters === nothing && throw(ArgumentError("clusters required for :cluster cov_type"))
@@ -166,9 +177,13 @@ function estimate_reg(y::AbstractVector{T}, X::AbstractMatrix{T};
     # cluster scores Σ √wᵢ xᵢ · √wᵢ eᵢ. The stored `resid` stays raw (√W·e is vcov-only).
     if method == :wls
         resid_t = sqrtW * resid
-        vcov_mat = _reg_vcov(Xw, resid_t, cov_type, XtXinv; clusters=clusters)
+        vcov_mat = _reg_vcov(Xw, resid_t, cov_type, XtXinv; clusters=clusters, coords=coords, cutoff=cutoff,
+                             conley_kernel=conley_kernel, conley_metric=conley_metric,
+                             time=time, time_cutoff=time_cutoff, conley_psd=conley_psd)
     else
-        vcov_mat = _reg_vcov(Matrix{T}(X), resid, cov_type, XtXinv; clusters=clusters)
+        vcov_mat = _reg_vcov(Matrix{T}(X), resid, cov_type, XtXinv; clusters=clusters, coords=coords, cutoff=cutoff,
+                             conley_kernel=conley_kernel, conley_metric=conley_metric,
+                             time=time, time_cutoff=time_cutoff, conley_psd=conley_psd)
     end
 
     # ---- Weights ----

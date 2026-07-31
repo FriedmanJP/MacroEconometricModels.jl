@@ -155,61 +155,131 @@ function _tensor_grid(nx::Int, degree::Int)
 end
 
 """
-    _smolyak_grid(nx::Int, mu::Int) -> (nodes, multi_indices)
+    _cc_points(level::Int) -> Vector{Float64}
 
-Smolyak sparse grid with exactness level mu.
-
-Uses nested Chebyshev extrema (Clenshaw-Curtis) points.
-Smolyak selection rule: |alpha|_1 <= mu + nx for multi-indices alpha.
-
-Returns:
-- `nodes`: n_nodes x nx grid points in [-1,1]
-- `multi_indices`: n_basis x nx polynomial multi-indices
+Nested Clenshaw-Curtis (Chebyshev extrema) points for a one-dimensional Smolyak level.
+Level 0 is the single midpoint; level `l >= 1` has `m_l = 2^l + 1` points, and the
+level-`l` set nests the level-`(l-1)` set.
 """
-function _smolyak_grid(nx::Int, mu::Int)
-    # Level-to-number-of-points mapping (nested Clenshaw-Curtis)
-    function _cc_points(level::Int)
-        if level == 0
-            return [0.0]
-        else
-            m = 2^level + 1
-            return [cos(π * j / (m - 1)) for j in 0:(m - 1)]
-        end
+function _cc_points(level::Int)
+    if level == 0
+        return [0.0]
+    else
+        m = 2^level + 1
+        return [cos(π * j / (m - 1)) for j in 0:(m - 1)]
     end
+end
 
-    # Build the Smolyak nodes AND the matching polynomial multi-index set from the SAME
-    # combination technique, so the collocation basis is unisolvent on the sparse grid. The old
-    # code took the full total-degree set |α|₁ ≤ μ+nx and clipped it by row-sum, which is NOT
-    # unisolvent (e.g. d=2,μ=1 kept (1,1), whose x·y basis is zero at every one of the 5 nodes →
-    # singular collocation, while dropping (2,0)/(0,2)). #218
+"""
+    _smolyak_level_vector(nx::Int, mu) -> Vector{Int}
+
+Normalize a Smolyak approximation level into a per-dimension level vector of length `nx`.
+A scalar `mu` gives the isotropic vector `fill(mu, nx)`; an `nx`-vector is validated and
+returned as-is (the anisotropic case).
+"""
+function _smolyak_level_vector(nx::Int, mu)
+    if mu isa Integer
+        mu >= 0 || throw(ArgumentError("smolyak_mu must be >= 0, got $mu"))
+        return fill(Int(mu), nx)
+    end
+    v = collect(Int, mu)
+    length(v) == nx || throw(ArgumentError(
+        "smolyak_mu must be a scalar or a vector of length nx=$nx, got length $(length(v))"))
+    all(>=(0), v) || throw(ArgumentError("all smolyak_mu entries must be >= 0, got $v"))
+    return v
+end
+
+"""
+    _smolyak_admissible_levels(mu_vec::Vector{Int}) -> Vector{Vector{Int}}
+
+Admissible (downward-closed) Smolyak level set for per-dimension levels `mu_vec`.
+
+The dimension-adaptive weighting of Gerstner & Griebel (2003) admits the levels
+`{l ∈ ℕ₀^d : Σ_k l_k / μ_k ≤ 1}`. To keep the test exact in integer arithmetic the
+rule is scaled by `P = lcm(μ_k)`, giving weights `w_k = P ÷ μ_k` and the test
+`Σ_k w_k l_k ≤ P`. A dimension with `μ_k = 0` is pinned at level 0.
+
+With `μ_k = μ` for all `k` this reduces to `P = μ`, `w_k = 1`, i.e. the isotropic
+rule `|l|_1 ≤ μ` (equivalently `|α|_1 ≤ μ + d` for `α = l + 1`).
+"""
+function _smolyak_admissible_levels(mu_vec::Vector{Int})
+    d = length(mu_vec)
+    d >= 1 || throw(ArgumentError("Smolyak level vector must be non-empty"))
+    positives = filter(>(0), mu_vec)
+    isempty(positives) && return [zeros(Int, d)]
+
+    P = foldl(lcm, positives)
+    # μ_k = 0 ⇒ weight P+1 > P ⇒ only l_k = 0 is admissible in that dimension.
+    w = [m == 0 ? P + 1 : P ÷ m for m in mu_vec]
+
+    levels = Vector{Vector{Int}}()
+    l = zeros(Int, d)
+    function _rec(k::Int, budget::Int)
+        if k > d
+            push!(levels, copy(l))
+            return nothing
+        end
+        lk = 0
+        while lk * w[k] <= budget
+            l[k] = lk
+            _rec(k + 1, budget - lk * w[k])
+            lk += 1
+        end
+        l[k] = 0
+        return nothing
+    end
+    _rec(1, P)
+    sort!(levels)
+    return levels
+end
+
+"""
+    _smolyak_block_nodes(l::AbstractVector{Int}) -> Vector{Vector{Float64}}
+
+Tensor-product Clenshaw-Curtis nodes contributed by the single Smolyak level block `l`.
+Coordinates are rounded to 14 digits so nested points compare equal across blocks.
+"""
+function _smolyak_block_nodes(l::AbstractVector{Int})
+    nx = length(l)
+    pts_per_dim = [_cc_points(lk) for lk in l]
+    sizes = [length(p) for p in pts_per_dim]
+    n_combo = prod(sizes)
+    out = Vector{Vector{Float64}}(undef, n_combo)
+    for idx in 0:(n_combo - 1)
+        pt = zeros(nx)
+        rem = idx
+        for d in nx:-1:1
+            j = rem % sizes[d]
+            rem = div(rem, sizes[d])
+            pt[d] = pts_per_dim[d][j + 1]
+        end
+        out[idx + 1] = round.(pt; digits=14)
+    end
+    return out
+end
+
+"""
+    _smolyak_grid_from_levels(levels::Vector{Vector{Int}}) -> (nodes, multi_indices)
+
+Build the sparse grid and the matching polynomial multi-index set from an admissible
+Smolyak level set.
+
+Both come out of the SAME combination loop, so the collocation basis is unisolvent on the
+sparse grid: a nested Clenshaw-Curtis level `l` contributes both its `m_l` points and the
+degrees `0:(m_l - 1)`. (The pre-#218 code took the full total-degree set `|α|₁ ≤ μ + nx` and
+clipped it by row sum, which is NOT unisolvent — for `d=2, μ=1` it kept `(1,1)`, whose `x·y`
+basis vanishes at every one of the 5 nodes, while dropping `(2,0)`/`(0,2)`.)
+"""
+function _smolyak_grid_from_levels(levels::Vector{Vector{Int}})
+    isempty(levels) && throw(ArgumentError("Smolyak level set must be non-empty"))
+    nx = length(first(levels))
+
     all_points = Set{Vector{Float64}}()
     index_set = Set{Vector{Int}}()
 
-    function _gen_level_combos(ndim, target_sum_max, min_level)
-        if ndim == 1
-            result = Matrix{Int}(undef, 0, 1)
-            for s in min_level:target_sum_max
-                result = vcat(result, reshape([s], 1, 1))
-            end
-            return result
-        end
-        result = Matrix{Int}(undef, 0, ndim)
-        for s in min_level:target_sum_max
-            sub = _gen_level_combos(ndim - 1, target_sum_max - s, min_level)
-            if !isempty(sub)
-                col_s = fill(s, size(sub, 1))
-                result = vcat(result, hcat(col_s, sub))
-            end
-        end
-        return result
-    end
-
-    level_combos = _gen_level_combos(nx, mu + nx, 1)
-
-    for row in eachrow(level_combos)
-        level_shifted = [max(r - 1, 0) for r in row]
-        pts_per_dim = [_cc_points(l) for l in level_shifted]
-
+    for l in levels
+        length(l) == nx || throw(ArgumentError("All Smolyak levels must have length $nx"))
+        pts_per_dim = [_cc_points(lk) for lk in l]
         sizes = [length(p) for p in pts_per_dim]
         n_combo = prod(sizes)
         for idx in 0:(n_combo - 1)
@@ -235,8 +305,6 @@ function _smolyak_grid(nx::Int, mu::Int)
         nodes[i, :] = pt
     end
 
-    # Multi-index set from the same combination loop — square with the node set by construction
-    # (a nested Clenshaw-Curtis level l contributes both m_l points and degrees 0:(m_l-1)).
     mi_list = sort(collect(index_set))
     n_basis = length(mi_list)
     mi_final = zeros(Int, n_basis, nx)
@@ -245,6 +313,92 @@ function _smolyak_grid(nx::Int, mu::Int)
     end
 
     return nodes, mi_final
+end
+
+"""
+    _smolyak_combination_coefficients(levels::Vector{Vector{Int}}) -> Vector{Int}
+
+Smolyak combination coefficients for an admissible level set, using the general
+Gerstner-Griebel rule that holds for ANY downward-closed set (isotropic, anisotropic, or
+adaptively grown):
+
+```math
+c_l = \\sum_{z \\in \\{0,1\\}^d,\\; l + z \\in A} (-1)^{|z|_1}
+```
+
+For the isotropic set `|l|_1 ≤ μ` this reduces to the textbook closed form
+`c_l = (-1)^{μ - |l|_1} \\binom{d-1}{μ - |l|_1}`. The coefficients always sum to 1.
+"""
+function _smolyak_combination_coefficients(levels::Vector{Vector{Int}})
+    isempty(levels) && return Int[]
+    d = length(first(levels))
+    S = Set(levels)
+    coeffs = zeros(Int, length(levels))
+    z = zeros(Int, d)
+    for (i, l) in enumerate(levels)
+        c = 0
+        for m in 0:(2^d - 1)
+            s = 0
+            for k in 1:d
+                z[k] = (m >> (k - 1)) & 1
+                s += z[k]
+            end
+            (l .+ z) in S && (c += iseven(s) ? 1 : -1)
+        end
+        coeffs[i] = c
+    end
+    return coeffs
+end
+
+"""
+    _smolyak_forward_neighbours(levels::Vector{Vector{Int}}) -> Vector{Vector{Int}}
+
+Admissible forward neighbours of a downward-closed level set: the candidates `l + e_k` that
+are not yet in the set but whose every backward neighbour is. Adding any one of them keeps
+the set downward-closed, which is what makes the adaptive refinement a valid Smolyak
+construction (Gerstner & Griebel 2003).
+"""
+function _smolyak_forward_neighbours(levels::Vector{Vector{Int}})
+    isempty(levels) && return Vector{Vector{Int}}()
+    d = length(first(levels))
+    S = Set(levels)
+    cands = Vector{Vector{Int}}()
+    for l in levels, k in 1:d
+        c = copy(l)
+        c[k] += 1
+        c in S && continue
+        c in cands && continue
+        admissible = true
+        for j in 1:d
+            c[j] == 0 && continue
+            b = copy(c)
+            b[j] -= 1
+            if !(b in S)
+                admissible = false
+                break
+            end
+        end
+        admissible && push!(cands, c)
+    end
+    return cands
+end
+
+"""
+    _smolyak_grid(nx::Int, mu) -> (nodes, multi_indices)
+
+Smolyak sparse grid at approximation level `mu`, which may be a scalar (isotropic) or an
+`nx`-vector of per-dimension levels (anisotropic).
+
+Uses nested Chebyshev extrema (Clenshaw-Curtis) points. The isotropic selection rule is
+`|alpha|_1 <= mu + nx` for multi-indices `alpha`; see [`_smolyak_admissible_levels`](@ref)
+for the anisotropic generalization.
+
+Returns:
+- `nodes`: n_nodes x nx grid points in [-1,1]
+- `multi_indices`: n_basis x nx polynomial multi-indices
+"""
+function _smolyak_grid(nx::Int, mu)
+    return _smolyak_grid_from_levels(_smolyak_admissible_levels(_smolyak_level_vector(nx, mu)))
 end
 
 # =============================================================================
@@ -409,125 +563,21 @@ end
 # Collocation Solver
 # =============================================================================
 
-"""
-    collocation_solver(spec::DSGESpec{T}; kwargs...) -> ProjectionSolution{T}
-
-Solve DSGE model via Chebyshev collocation (projection method).
-
-# Keyword Arguments
-- `degree::Int=5`: Chebyshev polynomial degree
-- `grid::Symbol=:auto`: `:tensor`, `:smolyak`, or `:auto`
-- `smolyak_mu::Int=3`: Smolyak exactness level
-- `quadrature::Symbol=:auto`: `:gauss_hermite`, `:monomial`, or `:auto`
-- `n_quad::Int=5`: quadrature nodes per shock dimension
-- `scale::Real=3.0`: state bounds = SS +/- scale * sigma
-- `tol::Real=1e-8`: Newton convergence tolerance
-- `max_iter::Int=100`: maximum Newton iterations
-- `threaded::Bool=false`: enable multi-threaded Jacobian evaluation
-- `verbose::Bool=false`: print iteration info
-- `initial_coeffs::Union{Nothing,AbstractMatrix{<:Real}}=nothing`: warm-start coefficients (n_vars x n_basis)
-"""
-function collocation_solver(spec::DSGESpec{T};
-                            degree::Int=5,
-                            grid::Symbol=:auto,
-                            smolyak_mu::Int=3,
-                            quadrature::Symbol=:auto,
-                            n_quad::Int=5,
-                            scale::Real=3.0,
-                            tol::Real=1e-8,
-                            max_iter::Int=100,
-                            threaded::Bool=false,
-                            verbose::Bool=false,
-                            initial_coeffs::Union{Nothing,AbstractMatrix{<:Real}}=nothing) where {T<:AbstractFloat}
-
-    n_eq = spec.n_endog
-    n_eps = spec.n_exog
-    ss = spec.steady_state
-
-    # Step 1: Linearize to get state/control partition
-    ld = linearize(spec)
-    state_idx, control_idx = _state_control_indices(ld)
-    nx = length(state_idx)
-
-    nx > 0 || throw(ArgumentError("Model has no state variables — projection requires at least one"))
-
-    # Auto-select grid type
-    if grid == :auto
-        grid = nx <= 4 ? :tensor : :smolyak
-    end
-
-    # Auto-select quadrature
-    if quadrature == :auto
-        quadrature = n_eps <= 2 ? :gauss_hermite : :monomial
-    end
-
-    if grid == :tensor && nx > 4
-        @warn "Tensor grid with nx=$nx states is expensive. Consider grid=:smolyak." maxlog=1
-    end
-
-    # Step 2: Compute state bounds
-    state_bounds = _compute_state_bounds(spec, ld, state_idx, scale)
-
-    # Step 3: Build collocation grid
-    if grid == :tensor
-        nodes_unit, multi_indices = _tensor_grid(nx, degree)
-    elseif grid == :smolyak
-        nodes_unit, multi_indices = _smolyak_grid(nx, smolyak_mu)
-    else
-        throw(ArgumentError("grid must be :tensor, :smolyak, or :auto"))
-    end
-
-    n_nodes = size(nodes_unit, 1)
-    n_basis = size(multi_indices, 1)
-    n_vars = n_eq
-
-    # Map nodes to physical coordinates
-    nodes_phys = _scale_from_unit(nodes_unit, state_bounds)
-
-    # Build basis matrix at collocation nodes
-    basis_matrix = Matrix{T}(_chebyshev_basis_multi(nodes_unit, multi_indices))
-
-    # Step 4: Set up quadrature
-    Sigma_e = Matrix{T}(I, n_eps, n_eps)
-    if quadrature == :gauss_hermite
-        quad_nodes, quad_weights = _gauss_hermite_scaled(n_quad, Sigma_e)
-    elseif quadrature == :monomial
-        quad_nodes, quad_weights = _monomial_nodes_weights(n_eps)
-    else
-        throw(ArgumentError("quadrature must be :gauss_hermite, :monomial, or :auto"))
-    end
-    quad_nodes = Matrix{T}(quad_nodes)
-    quad_weights = Vector{T}(quad_weights)
-
-    # Step 5: Initial guess — warm-start or first-order perturbation
-    if initial_coeffs !== nothing && size(initial_coeffs) == (n_vars, n_basis)
-        coeffs = Matrix{T}(initial_coeffs)
-    else
-        result_1st = _gensys_qz(spec, ld)
-        G1 = result_1st.G
-
-        coeffs = zeros(T, n_vars, n_basis)
-        for v in 1:n_vars
-            y_nodes = zeros(T, n_nodes)
-            for j in 1:n_nodes
-                x_dev = nodes_phys[j, :] .- ss[state_idx]
-                y_nodes[j] = dot(G1[v, state_idx], x_dev)
-            end
-            coeffs[v, :] = basis_matrix \ y_nodes
-        end
-    end
-
-    # First-order shock-impact matrix for genuine quadrature over next-period shocks (S-02 / #120)
-    impact_mat = _gensys_qz(spec, ld).impact
-
-    # Step 6: Newton iteration
-    coeffs_vec = vec(coeffs)
+# Gauss-Newton solve of the collocation system on a FIXED grid/basis. Returns
+# `(coeffs_vec, converged, iterations, residual_norm)`. Factored out of `collocation_solver`
+# so the adaptive-refinement loop can re-solve on each grown grid.
+function _collocation_newton(coeffs_vec::Vector{T}, n_vars::Int, n_basis::Int,
+                             basis_matrix::Matrix{T}, nodes_phys::Matrix{T},
+                             state_idx::Vector{Int}, control_idx::Vector{Int},
+                             spec::DSGESpec{T}, quad_nodes::Matrix{T},
+                             quad_weights::Vector{T}, state_bounds::Matrix{T},
+                             multi_indices::Matrix{Int}, ss::Vector{T},
+                             impact_mat::Matrix{T};
+                             tol::Real, max_iter::Int, threaded::Bool,
+                             verbose::Bool) where {T}
     converged = false
     iter = 0
     residual_norm = T(Inf)
-
-    nodes_phys_T = Matrix{T}(nodes_phys)
-    state_bounds_T = Matrix{T}(state_bounds)
 
     # The per-iteration finite-difference Jacobian costs one residual evaluation per unknown
     # and dominates the solve. Reuse it as a chord (modified-Newton) step, recomputing only on
@@ -541,10 +591,10 @@ function collocation_solver(spec::DSGESpec{T};
         iter = k
 
         R = _collocation_residual(coeffs_vec, n_vars, n_basis,
-                                   basis_matrix, nodes_phys_T,
+                                   basis_matrix, nodes_phys,
                                    state_idx, control_idx, spec,
                                    quad_nodes, quad_weights,
-                                   state_bounds_T, multi_indices, ss, impact_mat)
+                                   state_bounds, multi_indices, ss, impact_mat)
 
         residual_norm = norm(R)
 
@@ -571,10 +621,10 @@ function collocation_solver(spec::DSGESpec{T};
                     c_plus = copy(coeffs_vec)
                     c_plus[i] += h_fd
                     R_plus = _collocation_residual(c_plus, n_vars, n_basis,
-                                                    basis_matrix, nodes_phys_T,
+                                                    basis_matrix, nodes_phys,
                                                     state_idx, control_idx, spec,
                                                     quad_nodes, quad_weights,
-                                                    state_bounds_T, multi_indices, ss, impact_mat)
+                                                    state_bounds, multi_indices, ss, impact_mat)
                     J[:, i] = (R_plus .- R) ./ h_fd
                 end
             else
@@ -582,10 +632,10 @@ function collocation_solver(spec::DSGESpec{T};
                     c_plus = copy(coeffs_vec)
                     c_plus[i] += h_fd
                     R_plus = _collocation_residual(c_plus, n_vars, n_basis,
-                                                    basis_matrix, nodes_phys_T,
+                                                    basis_matrix, nodes_phys,
                                                     state_idx, control_idx, spec,
                                                     quad_nodes, quad_weights,
-                                                    state_bounds_T, multi_indices, ss, impact_mat)
+                                                    state_bounds, multi_indices, ss, impact_mat)
                     J[:, i] = (R_plus .- R) ./ h_fd
                 end
             end
@@ -603,10 +653,10 @@ function collocation_solver(spec::DSGESpec{T};
         for _ in 1:8
             c_trial = coeffs_vec .+ alpha .* delta
             R_trial = _collocation_residual(c_trial, n_vars, n_basis,
-                                             basis_matrix, nodes_phys_T,
+                                             basis_matrix, nodes_phys,
                                              state_idx, control_idx, spec,
                                              quad_nodes, quad_weights,
-                                             state_bounds_T, multi_indices, ss, impact_mat)
+                                             state_bounds, multi_indices, ss, impact_mat)
             trial_norm = norm(R_trial)
             if trial_norm < best_norm
                 best_norm = trial_norm
@@ -627,21 +677,279 @@ function collocation_solver(spec::DSGESpec{T};
         end
     end
 
+    return coeffs_vec, converged, iter, residual_norm
+end
+
+# Carry coefficients from a coarser Smolyak basis onto a refined one. The refined multi-index
+# set is a SUPERSET of the old one (adding a block to a downward-closed level set only adds
+# degrees), so padding with zeros represents exactly the same policy function — an exact warm
+# start, not an approximation.
+function _pad_coefficients(old_coeffs::Matrix{T}, old_mi::Matrix{Int},
+                           new_mi::Matrix{Int}) where {T}
+    n_vars = size(old_coeffs, 1)
+    new_coeffs = zeros(T, n_vars, size(new_mi, 1))
+    lookup = Dict{Vector{Int},Int}(new_mi[i, :] => i for i in 1:size(new_mi, 1))
+    for k in 1:size(old_mi, 1)
+        j = get(lookup, old_mi[k, :], 0)
+        j > 0 && (new_coeffs[:, j] = @view old_coeffs[:, k])
+    end
+    return new_coeffs
+end
+
+"""
+    collocation_solver(spec::DSGESpec{T}; kwargs...) -> ProjectionSolution{T}
+
+Solve DSGE model via Chebyshev collocation (projection method).
+
+# Keyword Arguments
+- `degree::Int=5`: Chebyshev polynomial degree (tensor grid)
+- `grid::Symbol=:auto`: `:tensor`, `:smolyak`, or `:auto`
+- `smolyak_mu=3`: Smolyak exactness level. A scalar gives the isotropic rule `|l|₁ ≤ μ`;
+  an `nx`-vector `(μ_1,…,μ_nx)` gives the **anisotropic** rule `Σ_k l_k/μ_k ≤ 1`
+  (Gerstner & Griebel 2003), which spends resolution only on the states that need it.
+- `quadrature::Symbol=:auto`: `:gauss_hermite`, `:monomial`, or `:auto`
+- `n_quad::Int=5`: quadrature nodes per shock dimension
+- `scale::Real=3.0`: state bounds = SS +/- scale * sigma
+- `tol::Real=1e-8`: Newton convergence tolerance
+- `max_iter::Int=100`: maximum Newton iterations
+- `threaded::Bool=false`: enable multi-threaded Jacobian evaluation
+- `verbose::Bool=false`: print iteration info
+- `initial_coeffs::Union{Nothing,AbstractMatrix{<:Real}}=nothing`: warm-start coefficients (n_vars x n_basis)
+- `adaptive::Bool=false`: enable dimension-adaptive Smolyak refinement (requires a Smolyak
+  grid; `grid=:auto` selects one automatically when `adaptive=true`)
+- `euler_tol::Real=1e-6`: target max Euler error for adaptive refinement
+- `max_nodes::Int=1000`: node budget — refinement stops before exceeding it
+- `max_refinements::Int=10`: maximum refinement rounds
+- `n_euler_test::Int=200`: random test points used for the Euler-error target
+- `rng=Random.default_rng()`: rng for the Euler-error test points
+
+# Adaptive refinement
+With `adaptive=true` the solver grows the Smolyak level set one block at a time. Each
+admissible forward neighbour of the current set is scored by the maximum absolute Euler
+residual at the **new** nodes it would introduce, and the highest-scoring block is added — so
+basis functions are added only where the residual is large. Refinement stops when the max
+Euler error falls below `euler_tol`, when the node budget would be exceeded, or after
+`max_refinements` rounds. The achieved accuracy is reported in `sol.euler_error` and the
+final level set in `sol.smolyak_levels`.
+"""
+function collocation_solver(spec::DSGESpec{T};
+                            degree::Int=5,
+                            grid::Symbol=:auto,
+                            smolyak_mu::Union{Integer,AbstractVector{<:Integer}}=3,
+                            quadrature::Symbol=:auto,
+                            n_quad::Int=5,
+                            scale::Real=3.0,
+                            tol::Real=1e-8,
+                            max_iter::Int=100,
+                            threaded::Bool=false,
+                            verbose::Bool=false,
+                            initial_coeffs::Union{Nothing,AbstractMatrix{<:Real}}=nothing,
+                            adaptive::Bool=false,
+                            euler_tol::Real=1e-6,
+                            max_nodes::Int=1000,
+                            max_refinements::Int=10,
+                            n_euler_test::Int=200,
+                            rng=Random.default_rng()) where {T<:AbstractFloat}
+
+    n_eq = spec.n_endog
+    n_eps = spec.n_exog
+    ss = spec.steady_state
+
+    # Step 1: Linearize to get state/control partition
+    ld = linearize(spec)
+    state_idx, control_idx = _state_control_indices(ld)
+    nx = length(state_idx)
+
+    nx > 0 || throw(ArgumentError("Model has no state variables — projection requires at least one"))
+
+    # Auto-select grid type. Adaptive refinement grows a Smolyak level set, so :auto picks
+    # :smolyak whenever adaptivity is requested regardless of nx.
+    if grid == :auto
+        grid = (adaptive || nx > 4) ? :smolyak : :tensor
+    end
+
+    grid in (:tensor, :smolyak) ||
+        throw(ArgumentError("grid must be :tensor, :smolyak, or :auto"))
+    adaptive && grid != :smolyak && throw(ArgumentError(
+        "adaptive=true requires a Smolyak grid (refinement grows the Smolyak level set); " *
+        "got grid=:$grid"))
+
+    # Auto-select quadrature
+    if quadrature == :auto
+        quadrature = n_eps <= 2 ? :gauss_hermite : :monomial
+    end
+
+    if grid == :tensor && nx > 4
+        @warn "Tensor grid with nx=$nx states is expensive. Consider grid=:smolyak." maxlog=1
+    end
+
+    # Step 2: Compute state bounds
+    state_bounds = _compute_state_bounds(spec, ld, state_idx, scale)
+    state_bounds_T = Matrix{T}(state_bounds)
+
+    # Step 3: Smolyak level set (anisotropic when `smolyak_mu` is a vector)
+    mu_vec = grid == :smolyak ? _smolyak_level_vector(nx, smolyak_mu) : Int[]
+    levels = grid == :smolyak ? _smolyak_admissible_levels(mu_vec) : Vector{Vector{Int}}()
+
+    # Step 4: Set up quadrature
+    Sigma_e = Matrix{T}(I, n_eps, n_eps)
+    if quadrature == :gauss_hermite
+        quad_nodes, quad_weights = _gauss_hermite_scaled(n_quad, Sigma_e)
+    elseif quadrature == :monomial
+        quad_nodes, quad_weights = _monomial_nodes_weights(n_eps)
+    else
+        throw(ArgumentError("quadrature must be :gauss_hermite, :monomial, or :auto"))
+    end
+    quad_nodes = Matrix{T}(quad_nodes)
+    quad_weights = Vector{T}(quad_weights)
+
+    # First-order shock-impact matrix for genuine quadrature over next-period shocks (S-02 / #120)
+    result_1st = _gensys_qz(spec, ld)
+    G1 = result_1st.G
+    impact_mat = result_1st.impact
+
+    n_vars = n_eq
+
+    # Euler-error test points are drawn ONCE and reused across refinement rounds, so the
+    # round-to-round accuracy comparison reflects the grid and not resampling noise.
+    euler_qn, euler_qw = _euler_quadrature(T, quadrature, n_eps)
+    test_points = adaptive ? _random_state_points(state_bounds_T, n_euler_test, rng) :
+                             zeros(T, 0, nx)
+
+    warm_coeffs = initial_coeffs === nothing ? nothing : Matrix{T}(initial_coeffs)
+    warm_mi = nothing
+
+    local nodes_unit, multi_indices, coeffs_final
+    converged = false
+    iter = 0
+    residual_norm = T(Inf)
+    euler_err = T(NaN)
+    n_refine = 0
+    hit_target = false
+
+    for refine_round in 0:(adaptive ? max_refinements : 0)
+        # Step 5: Build collocation grid for this round
+        if grid == :tensor
+            nodes_unit, multi_indices = _tensor_grid(nx, degree)
+        else
+            nodes_unit, multi_indices = _smolyak_grid_from_levels(levels)
+        end
+
+        n_nodes = size(nodes_unit, 1)
+        n_basis = size(multi_indices, 1)
+        nodes_phys_T = Matrix{T}(_scale_from_unit(nodes_unit, state_bounds))
+        basis_matrix = Matrix{T}(_chebyshev_basis_multi(nodes_unit, multi_indices))
+
+        # Step 6: Initial guess — refined-grid warm start, user warm start, or first order
+        coeffs = if warm_mi !== nothing
+            # The refined basis is a superset of the previous one: pad exactly.
+            _pad_coefficients(warm_coeffs, warm_mi, multi_indices)
+        elseif warm_coeffs !== nothing && size(warm_coeffs) == (n_vars, n_basis)
+            copy(warm_coeffs)
+        else
+            c0 = zeros(T, n_vars, n_basis)
+            for v in 1:n_vars
+                y_nodes = zeros(T, n_nodes)
+                for j in 1:n_nodes
+                    x_dev = nodes_phys_T[j, :] .- ss[state_idx]
+                    y_nodes[j] = dot(G1[v, state_idx], x_dev)
+                end
+                c0[v, :] = basis_matrix \ y_nodes
+            end
+            c0
+        end
+
+        # Step 7: Newton iteration on this grid
+        coeffs_vec, converged, iter, residual_norm = _collocation_newton(
+            vec(coeffs), n_vars, n_basis, basis_matrix, nodes_phys_T,
+            state_idx, control_idx, spec, quad_nodes, quad_weights,
+            state_bounds_T, multi_indices, ss, impact_mat;
+            tol=tol, max_iter=max_iter, threaded=threaded, verbose=verbose)
+
+        coeffs_final = reshape(coeffs_vec, n_vars, n_basis)
+
+        if !adaptive
+            break
+        end
+
+        # Step 8: Achieved accuracy on the fixed test set
+        euler_err = _max_euler_error_at(spec, coeffs_final, multi_indices, state_bounds_T,
+                                        state_idx, ss, euler_qn, euler_qw, impact_mat,
+                                        test_points)
+        if verbose
+            @info "Refinement round $refine_round: $(size(nodes_unit, 1)) nodes, " *
+                  "max Euler error = $euler_err"
+        end
+        if euler_err <= T(euler_tol)
+            hit_target = true
+            break
+        end
+        refine_round == max_refinements && break
+
+        # Step 9: Score each admissible forward neighbour by the residual at its NEW nodes
+        existing = Set(round.(Vector{Float64}(nodes_unit[j, :]); digits=14)
+                       for j in 1:size(nodes_unit, 1))
+        best_block = nothing
+        best_score = T(-Inf)
+        for cand in _smolyak_forward_neighbours(levels)
+            new_pts = [p for p in _smolyak_block_nodes(cand) if !(p in existing)]
+            isempty(new_pts) && continue
+            score = zero(T)
+            for p in new_pts
+                x_phys = Vector{T}(_scale_from_unit(Vector{T}(p), state_bounds))
+                r = _euler_residuals_at(spec, coeffs_final, multi_indices, state_bounds_T,
+                                        state_idx, ss, euler_qn, euler_qw, impact_mat, x_phys)
+                score = max(score, maximum(r))
+            end
+            if score > best_score
+                best_score = score
+                best_block = cand
+            end
+        end
+        best_block === nothing && break
+
+        trial_levels = sort(vcat(levels, [best_block]))
+        n_trial = size(_smolyak_grid_from_levels(trial_levels)[1], 1)
+        if n_trial > max_nodes
+            verbose && @info "Refinement stopped: adding block $best_block would need " *
+                             "$n_trial nodes (max_nodes = $max_nodes)"
+            break
+        end
+
+        warm_coeffs = coeffs_final
+        warm_mi = multi_indices
+        levels = trial_levels
+        n_refine += 1
+    end
+
     if !converged && verbose
         @warn "Collocation solver did not converge after $max_iter iterations (||R|| = $residual_norm)"
     end
+    if adaptive && !hit_target
+        @warn "Adaptive refinement finished at $(size(nodes_unit, 1)) nodes " *
+              "($n_refine refinements) with max Euler error $euler_err > euler_tol = " *
+              "$euler_tol; raise `max_nodes`/`max_refinements` or relax `euler_tol`." maxlog=1
+    end
 
-    # Step 7: Package result
-    coeffs_final = reshape(coeffs_vec, n_vars, n_basis)
+    # Step 10: Package result
+    level_matrix = if grid == :smolyak
+        L = zeros(Int, length(levels), nx)
+        for (i, l) in enumerate(levels)
+            L[i, :] = l
+        end
+        L
+    else
+        zeros(Int, 0, 0)
+    end
 
     return ProjectionSolution{T}(
         coeffs_final,
         state_bounds_T,
         grid,
-        grid == :smolyak ? smolyak_mu : degree,
+        grid == :smolyak ? maximum(maximum.(levels)) : degree,
         Matrix{T}(nodes_unit),
         residual_norm,
-        n_basis,
+        size(multi_indices, 1),
         multi_indices,
         quadrature,
         spec,
@@ -652,13 +960,29 @@ function collocation_solver(spec::DSGESpec{T};
         control_idx,
         converged,
         iter,
-        :projection
+        :projection;
+        euler_error=euler_err,
+        smolyak_levels=level_matrix,
+        refinements=n_refine
     )
 end
 
 # =============================================================================
 # Policy Evaluation
 # =============================================================================
+
+# Evaluate the Chebyshev policy approximation at a physical state vector, given the raw
+# coefficient/basis pieces. Shared by `evaluate_policy` and by the residual diagnostics that
+# run before a `ProjectionSolution` exists (the adaptive-refinement loop).
+function _proj_eval(coeffs::Matrix{T}, multi_indices::Matrix{Int},
+                    state_bounds::Matrix{T}, steady_state::Vector{T},
+                    x_level::AbstractVector) where {T}
+    nx = size(state_bounds, 1)
+    z = _scale_to_unit(Vector{T}(x_level), state_bounds)
+    z = clamp.(z, T(-1), T(1))
+    B = _chebyshev_basis_multi(reshape(z, 1, nx), multi_indices)
+    return coeffs * Vector{T}(@view B[1, :]) .+ steady_state
+end
 
 """
     evaluate_policy(sol::ProjectionSolution{T}, x_state::AbstractVector) -> Vector{T}
@@ -675,13 +999,10 @@ function evaluate_policy(sol::ProjectionSolution{T}, x_state::AbstractVector) wh
 
     if any(abs.(z) .> 1)
         @warn "State outside approximation domain — extrapolating" maxlog=1
-        z = clamp.(z, T(-1), T(1))
     end
 
-    B = _chebyshev_basis_multi(reshape(z, 1, nx), sol.multi_indices)
-    y_dev = sol.coefficients * B[1, :]
-
-    return y_dev .+ sol.steady_state
+    return _proj_eval(sol.coefficients, sol.multi_indices, sol.state_bounds,
+                      sol.steady_state, x_state)
 end
 
 """
@@ -704,6 +1025,98 @@ end
 # Euler Error Diagnostic
 # =============================================================================
 
+# Absolute equilibrium-equation residuals of a Chebyshev policy approximation at one physical
+# state point. The expectation is a genuine quadrature over the next-period shock (S-02 /
+# #120): the first-order impact matrix moves the next-period state at every quadrature node.
+# Shared by `max_euler_error` (random test points) and by the adaptive-refinement error
+# indicator (candidate nodes), so refinement is driven by exactly the metric that is reported.
+function _euler_residuals_at(spec::DSGESpec{T}, coeffs::Matrix{T},
+                             multi_indices::Matrix{Int}, state_bounds::Matrix{T},
+                             state_idx::Vector{Int}, steady_state::Vector{T},
+                             quad_nodes::Matrix{T}, quad_weights::Vector{T},
+                             impact::Matrix{T}, x_level::AbstractVector{T}) where {T}
+    n_eq = spec.n_endog
+    n_eps = spec.n_exog
+    nx = length(state_idx)
+    θ = spec.param_values
+
+    y_t = _proj_eval(coeffs, multi_indices, state_bounds, steady_state, x_level)
+
+    y_lag = copy(steady_state)
+    for (ii, si) in enumerate(state_idx)
+        y_lag[si] = x_level[ii]
+    end
+
+    y_lead_exp = zeros(T, n_eq)
+    for q in 1:size(quad_nodes, 1)
+        iszero(quad_weights[q]) && continue   # center node contributes 0 (S-19 / #224)
+        x_next_level = Vector{T}(y_t[state_idx])
+        for (ii, si) in enumerate(state_idx)
+            for k in 1:n_eps
+                x_next_level[ii] += impact[si, k] * quad_nodes[q, k]
+            end
+        end
+        for d in 1:nx
+            x_next_level[d] = clamp(x_next_level[d], state_bounds[d, 1], state_bounds[d, 2])
+        end
+        y_lead_exp .+= quad_weights[q] .*
+            _proj_eval(coeffs, multi_indices, state_bounds, steady_state, x_next_level)
+    end
+
+    ε_zero = zeros(T, n_eps)
+    out = zeros(T, n_eq)
+    for i in 1:n_eq
+        val = try
+            abs(spec.residual_fns[i](y_t, y_lag, y_lead_exp, ε_zero, θ))
+        catch e
+            if e isa DomainError || e isa InexactError
+                T(1e10)
+            else
+                rethrow(e)
+            end
+        end
+        out[i] = isfinite(val) ? val : T(1e10)
+    end
+    return out
+end
+
+# Maximum absolute Euler residual over a supplied set of physical test points
+# (`points` is n_points × nx).
+function _max_euler_error_at(spec::DSGESpec{T}, coeffs::Matrix{T},
+                             multi_indices::Matrix{Int}, state_bounds::Matrix{T},
+                             state_idx::Vector{Int}, steady_state::Vector{T},
+                             quad_nodes::Matrix{T}, quad_weights::Vector{T},
+                             impact::Matrix{T}, points::AbstractMatrix{T}) where {T}
+    max_err = zero(T)
+    for j in 1:size(points, 1)
+        r = _euler_residuals_at(spec, coeffs, multi_indices, state_bounds, state_idx,
+                                steady_state, quad_nodes, quad_weights, impact,
+                                Vector{T}(@view points[j, :]))
+        max_err = max(max_err, maximum(r))
+    end
+    return max_err
+end
+
+# Uniform random test points inside the state domain (n_test × nx).
+function _random_state_points(state_bounds::Matrix{T}, n_test::Int, rng) where {T}
+    nx = size(state_bounds, 1)
+    pts = zeros(T, n_test, nx)
+    for j in 1:n_test, d in 1:nx
+        lo = state_bounds[d, 1]
+        hi = state_bounds[d, 2]
+        pts[j, d] = lo + rand(rng, T) * (hi - lo)
+    end
+    return pts
+end
+
+# Quadrature rule matching a solution's `quadrature` symbol, as used by the Euler diagnostic.
+function _euler_quadrature(::Type{T}, quadrature::Symbol, n_eps::Int) where {T}
+    Sigma_e = Matrix{T}(I, n_eps, n_eps)
+    qn, qw = quadrature == :gauss_hermite ? _gauss_hermite_scaled(5, Sigma_e) :
+                                            _monomial_nodes_weights(n_eps)
+    return Matrix{T}(qn), Vector{T}(qw)
+end
+
 """
     max_euler_error(sol::ProjectionSolution{T}; n_test::Int=1000, rng=Random.default_rng()) -> T
 
@@ -711,80 +1124,14 @@ Compute maximum Euler equation error on random test points within the state doma
 """
 function max_euler_error(sol::ProjectionSolution{T}; n_test::Int=1000,
                           rng=Random.default_rng()) where {T}
-    nx = nstates(sol)
-    n_eps = nshocks(sol)
-    n_eq = nvars(sol)
-    spec = sol.spec
-    θ = spec.param_values
-    ss = sol.steady_state
-
-    Sigma_e = Matrix{T}(I, n_eps, n_eps)
-    if sol.quadrature == :gauss_hermite
-        quad_nodes, quad_weights = _gauss_hermite_scaled(5, Sigma_e)
-    else
-        quad_nodes, quad_weights = _monomial_nodes_weights(n_eps)
-    end
-    quad_nodes = Matrix{T}(quad_nodes)
-    quad_weights = Vector{T}(quad_weights)
+    quad_nodes, quad_weights = _euler_quadrature(T, sol.quadrature, nshocks(sol))
 
     # First-order shock impact so the Euler-error diagnostic integrates over next-period
     # shocks too (else it cannot detect the certainty-equivalent failure — S-02 / #120).
-    ld_lin = linearize(spec)
-    impact_mat = _gensys_qz(spec, ld_lin).impact
+    impact_mat = sol.impact
 
-    max_err = zero(T)
-
-    for _ in 1:n_test
-        x_level = zeros(T, nx)
-        for d in 1:nx
-            lo = sol.state_bounds[d, 1]
-            hi = sol.state_bounds[d, 2]
-            x_level[d] = lo + rand(rng, T) * (hi - lo)
-        end
-
-        y_t = evaluate_policy(sol, x_level)
-
-        y_lag = copy(ss)
-        for (ii, si) in enumerate(sol.state_indices)
-            y_lag[si] = x_level[ii]
-        end
-
-        y_lead_exp = zeros(T, n_eq)
-        for q in 1:size(quad_nodes, 1)
-            iszero(quad_weights[q]) && continue   # center node contributes 0 (S-19 / #224)
-            x_next_dev = y_t[sol.state_indices] .- ss[sol.state_indices]
-            x_next_level = x_next_dev .+ ss[sol.state_indices]
-            # Integrate over the next-period shock at this quadrature node (S-02 / #120)
-            for (ii, si) in enumerate(sol.state_indices)
-                for k in 1:n_eps
-                    x_next_level[ii] += impact_mat[si, k] * quad_nodes[q, k]
-                end
-            end
-            for d in 1:nx
-                x_next_level[d] = clamp(x_next_level[d], sol.state_bounds[d, 1], sol.state_bounds[d, 2])
-            end
-            y_next = evaluate_policy(sol, x_next_level)
-            y_lead_exp .+= quad_weights[q] .* y_next
-        end
-
-        ε_zero = zeros(T, n_eps)
-        for i in 1:n_eq
-            try
-                err = abs(spec.residual_fns[i](y_t, y_lag, y_lead_exp, ε_zero, θ))
-                if isfinite(err)
-                    max_err = max(max_err, err)
-                else
-                    max_err = max(max_err, T(1e10))
-                end
-            catch e
-                if e isa DomainError || e isa InexactError
-                    max_err = max(max_err, T(1e10))
-                else
-                    rethrow(e)
-                end
-            end
-        end
-    end
-
-    return max_err
+    points = _random_state_points(sol.state_bounds, n_test, rng)
+    return _max_euler_error_at(sol.spec, sol.coefficients, sol.multi_indices,
+                               sol.state_bounds, sol.state_indices, sol.steady_state,
+                               quad_nodes, quad_weights, impact_mat, points)
 end

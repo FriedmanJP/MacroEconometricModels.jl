@@ -21,6 +21,7 @@ using Test
 using LinearAlgebra
 using Statistics
 using Random
+using Logging
 using MacroEconometricModels
 
 if !@isdefined(FAST)
@@ -1445,6 +1446,157 @@ end
     @test r1.Q_draws == r2.Q_draws          # same seed -> bitwise-identical rotations
     r3 = identify_arias(model, restr, 8; n_draws=10, n_rotations=30, rng=Random.MersenneTwister(99))
     @test r1.Q_draws != r3.Q_draws          # different seed -> different draws
+end
+
+
+# ==============================================================================
+# T273 (#372): ESS reporting for Arias importance-sampling weights
+# ==============================================================================
+
+@testset "T273: importance-weight effective sample size" begin
+    MEM = MacroEconometricModels
+    kish(v) = sum(v)^2 / sum(abs2, v)
+
+    @testset "_effective_sample_size == Kish's formula" begin
+        # Uniform weights spend the whole sample; one dominant draw spends one.
+        @test MEM._effective_sample_size(fill(1.0, 10)) ≈ 10.0
+        @test MEM._effective_sample_size(fill(0.1, 10)) ≈ 10.0      # normalized: same
+        @test MEM._effective_sample_size(vcat(1.0, fill(1e-12, 99))) ≈ 1.0 atol = 1e-8
+        @test MEM._effective_sample_size([1.0, 1.0]) ≈ 2.0
+        @test MEM._effective_sample_size(vcat(fill(1.0, 50), zeros(50))) ≈ 50.0
+
+        # Scale invariance: the ratio is unchanged by normalization, which is why
+        # `ess` can be computed before the weights are scaled to sum to 1.
+        w = abs.(randn(Random.MersenneTwister(1), 200))
+        @test MEM._effective_sample_size(w) ≈ MEM._effective_sample_size(1e6 .* w)
+        @test MEM._effective_sample_size(w) ≈ MEM._effective_sample_size(w ./ sum(w))
+        @test MEM._effective_sample_size(w) ≈ kish(w)
+
+        # 1 <= ESS <= n for any non-negative weight vector.
+        for seed in 1:50
+            v = abs.(randn(Random.MersenneTwister(seed), 2 + seed % 40))
+            e = MEM._effective_sample_size(v)
+            @test 1 - 1e-9 <= e <= length(v) + 1e-9
+        end
+
+        # Degenerate inputs return 0 rather than NaN; negatives are an upstream bug.
+        @test MEM._effective_sample_size(Float64[]) == 0.0
+        @test MEM._effective_sample_size(zeros(5)) == 0.0
+        @test_throws ArgumentError MEM._effective_sample_size([1.0, -1.0])
+    end
+
+    Random.seed!(7)
+    n_v, p_v, T_v = 3, 2, 150
+    Yb = randn(T_v, n_v)
+    for t in 3:T_v
+        Yb[t, :] .= 0.5 .* Yb[t-1, :] .- 0.15 .* Yb[t-2, :] .+ 0.6 .* randn(n_v)
+    end
+    model_b = estimate_var(Yb, p_v)
+    restr_zs = SVARRestrictions(n_v;
+        zeros=[ZeroRestriction(1, 1, 0), ZeroRestriction(2, 1, 0)],
+        signs=[SignRestriction(3, 1, 0, 1)])
+
+    @testset "identify_arias populates ess / ess_fraction" begin
+        nd = FAST ? 40 : 120
+        r = identify_arias(model_b, restr_zs, 6; n_draws=nd, n_rotations=300,
+                           rng=Random.MersenneTwister(42))
+        @test length(r.weights) == nd
+        @test r.ess ≈ kish(r.weights) rtol = 1e-10
+        @test r.ess_fraction ≈ r.ess / nd
+        @test 1 <= r.ess <= nd
+        # Zero restrictions make the weights genuinely uneven, so the effective
+        # sample is strictly smaller than the nominal draw count.
+        @test !all(≈(r.weights[1]), r.weights)
+        @test r.ess < nd
+        @test sum(r.weights) ≈ 1.0                       # stored weights normalized
+
+        # ESS is computed pre-normalization and is unchanged by it.
+        r_raw = identify_arias(model_b, restr_zs, 6; n_draws=nd, n_rotations=300,
+                               normalize_weights=false, rng=Random.MersenneTwister(42))
+        @test r_raw.ess ≈ r.ess
+        @test r_raw.ess_fraction ≈ r.ess_fraction
+        @test !isapprox(sum(r_raw.weights), 1.0)         # raw volume-element scale
+        @test r_raw.weights ./ sum(r_raw.weights) ≈ r.weights rtol = 1e-12
+    end
+
+    @testset "pure sign restrictions give a full effective sample" begin
+        nd = FAST ? 20 : 60
+        rs = identify_arias(model_b, SVARRestrictions(n_v; signs=[SignRestriction(3, 1, 0, 1)]),
+                            6; n_draws=nd, rng=Random.MersenneTwister(1))
+        # Uniform weights: no importance sampling, so nothing is lost.
+        @test rs.ess ≈ nd
+        @test rs.ess_fraction ≈ 1.0
+    end
+
+    @testset "degeneracy warning" begin
+        degen = vcat(1.0, fill(1e-8, 199))
+        @test MEM._effective_sample_size(degen) ≈ 1.0 atol = 1e-4
+
+        buf = IOBuffer()
+        Logging.with_logger(Logging.SimpleLogger(buf)) do
+            MEM._warn_low_ess(MEM._effective_sample_size(degen),
+                              MEM._effective_sample_size(degen) / 200, 200, "unit")
+        end
+        msg = String(take!(buf))
+        @test occursin("degenerate", msg)
+        @test occursin("unit", msg)
+
+        # Silent when the weights are uniform — the sign-only case must not warn.
+        buf2 = IOBuffer()
+        Logging.with_logger(Logging.SimpleLogger(buf2)) do
+            MEM._warn_low_ess(200.0, 1.0, 200, "unit")
+        end
+        @test isempty(String(take!(buf2)))
+
+        # ...and not on an empty sample either.
+        buf3 = IOBuffer()
+        Logging.with_logger(Logging.SimpleLogger(buf3)) do
+            MEM._warn_low_ess(0.0, 0.0, 0, "unit")
+        end
+        @test isempty(String(take!(buf3)))
+    end
+
+    @testset "back-compatible constructor derives the diagnostics" begin
+        restr = SVARRestrictions(2)
+        nd = 200
+        degen = vcat(1.0, fill(1e-8, nd - 1))
+        ad = AriasSVARResult{Float64}([randn(2, 2) for _ in 1:nd], randn(nd, 4, 2, 2),
+                                      degen ./ sum(degen), 0.5, restr)
+        @test ad.ess ≈ 1.0 atol = 1e-4
+        @test ad.ess_fraction ≈ ad.ess / nd
+
+        unif = AriasSVARResult{Float64}([randn(2, 2) for _ in 1:10], randn(10, 4, 2, 2),
+                                        fill(0.1, 10), 0.5, restr)
+        @test unif.ess ≈ 10.0
+        @test unif.ess_fraction ≈ 1.0
+    end
+
+    @testset "report surfaces the effective sample" begin
+        restr = SVARRestrictions(2)
+        ad = AriasSVARResult{Float64}([randn(2, 2) for _ in 1:20], randn(20, 4, 2, 2),
+                                      fill(0.05, 20), 0.5, restr)
+        buf = IOBuffer()
+        show(buf, ad)
+        out = String(take!(buf))
+        @test occursin("Effective sample", out)
+        @test occursin("100.0%", out)
+    end
+
+    @testset "Bayesian pooling keeps the importance weights alive" begin
+        # Each per-posterior-draw call accepts a SINGLE rotation. Normalizing there
+        # would set every weight to 1 and silently reduce the weighted summaries to
+        # unweighted ones; pooling must happen once, on the raw scale.
+        post = estimate_bvar(Yb, p_v; n_draws=(FAST ? 15 : 30))
+        rb = identify_arias_bayesian(post, restr_zs, 4; n_rotations=300,
+                                     rng=Random.MersenneTwister(9))
+        @test rb.total_accepted > 1
+        @test length(unique(round.(rb.weights; digits=12))) > 1     # not all identical
+        @test sum(rb.weights) ≈ 1.0
+        @test rb.ess ≈ kish(rb.weights) rtol = 1e-10
+        @test rb.ess_fraction ≈ rb.ess / rb.total_accepted
+        @test 1 <= rb.ess <= rb.total_accepted
+        @test rb.ess < rb.total_accepted                            # weighting is live
+    end
 end
 
 _tprint("Arias et al. (2018) tests completed.")

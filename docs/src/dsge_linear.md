@@ -134,7 +134,7 @@ where:
 - ``C_{\text{sol}}`` is the ``n \times 1`` solution constant vector
 - ``\text{impact}`` is the ``n \times n_\varepsilon`` shock impact matrix
 
-The **generalized eigenvalues** of the matrix pencil ``(\Gamma_0, \Gamma_1)`` determine the system's stability properties. The Blanchard-Kahn (1980) condition requires that the number of eigenvalues with modulus greater than one (unstable roots) equals the number of forward-looking (jump) variables ``n_\eta``. The `eu` vector in the solution reports the outcome:
+The **generalized eigenvalues** of the matrix pencil ``(\Gamma_0, \Gamma_1)`` govern stability, and the Blanchard-Kahn (1980) condition — the number of unstable roots equals the number of forward-looking variables ``n_\eta`` — is the familiar summary of it. The `eu` vector reports the outcome:
 
 | `eu` value | Interpretation |
 |------------|----------------|
@@ -149,12 +149,22 @@ is_determined(sol)              # true
 maximum(abs.(sol.eigenvalues))  # largest eigenvalue modulus
 ```
 
+!!! note "`eu` is a rank test, not a root count"
+    The Blanchard-Kahn count is a *theorem* that holds under a rank condition which counting eigenvalues never checks. `eu` is therefore computed from the **Sims (2002) existence and uniqueness conditions** directly, as rank conditions on the QZ-decomposed system. Writing ``Q_1`` and ``Q_2`` for the stable and unstable row blocks of ``Q^{H}`` from the QZ of ``(\Gamma_0, \Gamma_1)``:
+
+    - **Existence**: ``\operatorname{colspan}(Q_2 \Psi) \subseteq \operatorname{colspan}(Q_2 \Pi)`` — every shock that reaches the unstable block can be offset by some expectational error.
+    - **Uniqueness**: ``\operatorname{rowspan}(Q_1 \Pi) \subseteq \operatorname{rowspan}(Q_2 \Pi)`` — no expectational error moves the stable block while being left free by the unstable block.
+
+    The two agree on ordinary models. They part company exactly where the rank condition fails: an expectational error that is redundant, or unconstrained, or a shock loading on the unstable block in a direction no error can absorb. In those cases the count can report a unique solution where a continuum exists. All rank tests use scale-relative tolerances, so rescaling the equations cannot change the verdict.
+
+    One case is decided before the rank tests: when there are fewer stable roots than state variables, no stable solution can be constructed at all, and `eu` is `[0, 0]` regardless.
+
 !!! warning "Common cause of indeterminacy"
     In New Keynesian models, the Taylor principle requires the inflation response coefficient ``\phi_\pi > 1``. With ``\phi_\pi < 1``, the model is indeterminate. If `eu = [1, 0]`, check the policy rule coefficients first.
 
 ### Diagnosing Indeterminacy
 
-When `is_determined(sol)` returns `false`, inspect the eigenvalue decomposition to understand why. Count the number of stable and unstable eigenvalues and compare with the number of forward-looking variables:
+When `is_determined(sol)` returns `false`, the eigenvalue decomposition tells you *why*. Counting stable and unstable eigenvalues against the number of forward-looking variables is a diagnostic — the verdict itself comes from the rank conditions above — but it is the diagnostic that usually identifies the offending equation:
 
 ```@example dsge_linear
 sol = solve(spec; method=:blanchard_kahn)
@@ -173,13 +183,110 @@ The three outcomes are:
 - **``n_{\text{unstable}} < n_{\text{forward}}``**: More forward-looking variables than unstable roots. The system is **indeterminate** --- multiple stable paths exist. Typical fixes: strengthen the Taylor rule (increase ``\phi_\pi``), add fiscal rules, or tighten expectations anchoring.
 - **``n_{\text{unstable}} > n_{\text{forward}}``**: More unstable roots than forward-looking variables. No stable solution exists --- all paths are **explosive**. Typical fixes: check parameter calibration (discount factor near unity, reasonable adjustment costs), verify equation timing, or reduce the number of predetermined variables.
 
+### Determinacy Regions
+
+A single verdict answers "is *this* calibration determinate?". The more useful applied question is *where* the boundary lies. `determinacy_region` sweeps one or two parameters, re-solving the model at each grid point, and returns a `DeterminacyMap`:
+
+```@example dsge_linear
+nk = @dsge begin
+    parameters: β = 0.99, σ_c = 1.0, κ = 0.3, φ_π = 1.5, φ_y = 0.5,
+                ρ_d = 0.8, σ_d = 0.01
+    endogenous: y, π, R, d
+    exogenous: ε_d
+
+    y[t] = y[t+1] - (1 / σ_c) * (R[t] - π[t+1]) + d[t]
+    R[t] = φ_π * π[t] + φ_y * y[t]
+    π[t] = β * π[t+1] + κ * y[t]
+    d[t] = ρ_d * d[t-1] + σ_d * ε_d[t]
+end
+nk = compute_steady_state(nk)
+
+dm = determinacy_region(nk; params=:φ_π, grids=range(0.0, 3.0; length=31))
+report(dm)
+```
+
+The boundary this locates is the **generalized Taylor principle**, ``\kappa(\phi_\pi - 1) + (1 - \beta)\phi_y > 0``: a strong enough output response substitutes for the inflation response, so the frontier sits slightly below ``\phi_\pi = 1``.
+
+```@example dsge_linear
+determinacy_boundary(dm)     # located to within half a grid step
+```
+
+Sweeping both policy coefficients traces the frontier as a curve:
+
+```@example dsge_linear
+dm2 = determinacy_region(nk; params=(:φ_π, :φ_y),
+                         grids=(range(0.0, 2.0; length=11), range(0.0, 4.0; length=9)))
+count(==(1), dm2.verdict), length(dm2.verdict)
+```
+
+```julia
+plot_result(dm2)             # determinacy map (heatmap)
+```
+
+| Keyword | Default | Description |
+|---------|---------|-------------|
+| `params` | --- | a `Symbol`, or 1--2 `Symbol`s to sweep |
+| `grids` | --- | matching grid values (a vector, or one vector per parameter) |
+| `div` | `1.0 + 1e-8` | stable/unstable eigenvalue boundary |
+| `rank_rtol` | `1e-8` | relative tolerance of the Sims rank tests |
+| `method` | `:gensys` | linear solver used at each grid point |
+| `threaded` | `false` | evaluate grid points in parallel (results are identical) |
+| `quiet` | `true` | suppress per-point solver warnings |
+
+Verdicts are stored as ordered integer codes in `dm.verdict`:
+
+| Code | Meaning |
+|------|---------|
+| `1` | determinate |
+| `0` | indeterminate |
+| `-1` | no stable solution |
+| `-2` | the model could not be solved at that grid point |
+
+!!! note "Failed grid points are not a region"
+    A parameter value where the steady state fails to converge is recorded as `-2`, with the error message in `dm.failures`, and the sweep continues rather than aborting. Such cells are drawn in neutral grey on the map and skipped by `determinacy_boundary` --- a solve failure is missing information, not a fourth determinacy region, so the step from "failed" to "determinate" is not a boundary crossing.
+
 ---
 
 ## Gensys (Sims 2002)
 
 The **Gensys** solver is the default method. It uses the QZ (generalized Schur) decomposition of the matrix pencil ``(\Gamma_0, \Gamma_1)`` and handles singular ``\Gamma_0`` matrices, making it suitable for models with static identities (e.g., ``Y_t = C_t + I_t``).
 
-The `div` keyword sets the dividing line between stable and unstable eigenvalues. The default value of ``1.0 + 10^{-8}`` places the cutoff slightly above the unit circle, ensuring that borderline eigenvalues (exactly at unity) are treated as stable.
+### Large Sparse Models
+
+The default route decomposes the `2n × 2n` companion pencil with a complex QZ. For a medium-large model — multi-country, multi-sector, or a reduced HA system — that is the dominant cost, even though each equation touches only a handful of variables. `sparse=` selects an alternative that never forms a QZ: Newton's method on the quadratic `f_{lead} G^2 + f_0 G + f_1 = 0`, whose step
+
+```math
+(f_{lead} G_k + f_0)\,\Delta G + f_{lead}\,\Delta G\,G_k = -R_k
+```
+
+is a generalized Sylvester equation solved matrix-free by GMRES. Newton converges quadratically — 7 iterations on the benchmark below, independent of `n`.
+
+```julia
+sol = solve(spec; method=:gensys, sparse=true)    # force the sparse route
+sol = solve(spec; method=:gensys, sparse=false)   # force the dense core
+sol = solve(spec; method=:gensys)                 # :auto (default)
+```
+
+`:auto` takes the sparse route only when the model is both large (`n ≥ 400`) and sparse (density `≤ 5%`). Measured end-to-end on a multi-sector benchmark:
+
+| `n` | density | speedup vs dense |
+|---|---|---|
+| 100 | 0.017 | 0.21× (slower — routed to dense) |
+| 400 | 0.004 | 1.15× |
+| 800 | 0.002 | 1.7--1.8× |
+| 1600 | 0.001 | 2.7× |
+
+!!! note "What the sparse route does and does not buy"
+    The solvent `G` is dense even when the model is sparse, so the GMRES operator is dominated by dense `O(n^3)` products. The gain is that these are a few BLAS-3 **real** matrix multiplies rather than a **complex** QZ on a `2n × 2n` pencil; sparsity helps second-order by cheapening the `f_0 X` and `f_{lead}(\cdot)` products. On a fully dense model of the same size the advantage is ~1.8× at `n = 400` and gone by `n = 800`, which is why the heuristic requires sparsity as well as size. Because the cost is set by GMRES convergence, the speedup is model-dependent.
+
+    It does **not** speed up the determinacy verdict: `eu` always comes from the Sims rank test, which decomposes the `(n+k)` canonical pencil (~22% of the dense cost). The table above is end-to-end and already includes it.
+
+!!! warning "The sparse route is never allowed to be wrong"
+    Newton converges to *a* solvent, not necessarily the stable one. Its result is accepted only if the residual is small **and** `G` is stable (`max|eig(G)| < div`); otherwise the dense core runs and its answer is used. The determinacy verdict is never taken from the sparse path. A model the sparse route cannot handle is therefore slower, never wrong.
+
+### Keywords
+
+The `div` keyword sets the dividing line between stable and unstable eigenvalues. The default value of ``1.0 + 10^{-8}`` places the cutoff slightly above the unit circle, ensuring that borderline eigenvalues (exactly at unity) are treated as stable. Since the stable/unstable split defines the ``Q_1``/``Q_2`` partition, `div` also controls the rank conditions that produce `eu`. The `rank_rtol` keyword (default ``10^{-8}``) sets the relative tolerance of those rank and span tests.
 
 ```@example dsge_linear
 sol = solve(spec; method=:gensys)
@@ -236,7 +343,7 @@ All three linear solvers return a `DSGESolution{T}` with the following fields:
 | `G1` | `Matrix{T}` | ``n \times n`` state transition matrix |
 | `impact` | `Matrix{T}` | ``n \times n_\varepsilon`` shock impact matrix |
 | `C_sol` | `Vector{T}` | ``n \times 1`` constant vector |
-| `eu` | `Vector{Int}` | ``[\text{existence}, \text{uniqueness}]``: 1 = yes, 0 = no |
+| `eu` | `Vector{Int}` | ``[\text{existence}, \text{uniqueness}]``: 1 = yes, 0 = no. Sims (2002) rank conditions, not a root count |
 | `method` | `Symbol` | Solver used (`:gensys`, `:blanchard_kahn`, `:klein`) |
 | `eigenvalues` | `Vector{ComplexF64}` | Generalized eigenvalues from QZ decomposition |
 | `spec` | `DSGESpec{T}` | Back-reference to model specification |
@@ -469,6 +576,9 @@ All three solvers produce identical state-space representations for a well-speci
 
 - Klein, P. (2000). Using the Generalized Schur Form to Solve a Multivariate Linear Rational Expectations Model.
   *Journal of Economic Dynamics and Control*, 24(10), 1405--1423. [DOI](https://doi.org/10.1016/S0165-1889(99)00045-7)
+
+- Lubik, T. A., & Schorfheide, F. (2004). Testing for Indeterminacy: An Application to U.S. Monetary Policy.
+  *American Economic Review*, 94(1), 190--217. [DOI](https://doi.org/10.1257/000282804322970760)
 
 - Sims, C. A. (2002). Solving Linear Rational Expectations Models.
   *Computational Economics*, 20(1--2), 1--20. [DOI](https://doi.org/10.1023/A:1020517101123)

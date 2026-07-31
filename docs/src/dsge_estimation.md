@@ -456,6 +456,84 @@ round(result_mode_mh.acceptance_rate; digits=2)
 
 The Laplace log-ML is on the same additive-constant convention as the SMC tempering-path estimate, so the two are directly comparable via `bayes_factor` (on a small linear model they agree to within about one nat).
 
+### Estimation on Trending Data
+
+DSGE observables are stationary deviations from steady state, but GDP, consumption and investment trend. `estimate_dsge_bayes` reconciles the two at the estimation entry point in either of the two standard ways, matching Dynare's `prefilter` and `observation_trends`.
+
+**Prefilter transforms** remove the trend from the data before filtering. `prefilter=:demean` subtracts each observable's sample mean, `:first_difference` takes ``\Delta y_t`` (dropping the first observation), `:linear_detrend` removes the OLS fit on ``[1, t]``, and `:hp` keeps the Hodrick-Prescott cycle at smoothing parameter `hp_lambda`.
+
+**Observation trends** instead carry the trend inside the measurement equation:
+
+```math
+y_t^{obs} = d + Z s_t + \underbrace{(c_0 + c_1 t + c_2 t^2)}_{\text{trend}_t} + v_t
+```
+
+where:
+- ``y_t^{obs}`` is the ``n_{obs} \times 1`` vector of observed series
+- ``d`` is the steady-state observation offset and ``Z`` the selection matrix
+- ``s_t`` is the model state vector and ``v_t \sim N(0, H)`` measurement error
+- ``c_0, c_1, c_2`` are per-observable constant, linear and quadratic coefficients
+
+Each coefficient is either a fixed number or a `Symbol` naming a **declared model parameter** — in which case it is estimated like any other parameter simply by giving it a prior. The model variable can therefore stay a stationary gap while the observed series is a trending level.
+
+```@example dsge_estimation
+# A trending level series: stationary model variable plus 1.0 + 0.02t
+T_obs = size(y_obs, 1)
+y_level = y_obs .+ 1.0 .+ 0.02 .* collect(1.0:T_obs)
+
+res_trend = estimate_dsge_bayes(spec, y_level, [0.9];
+    priors=Dict(:rho => Beta(5, 2)),
+    method=:smc, observables=[:y], n_smc=50,
+    observation_trends=Dict(:y => (constant=1.0, linear=0.02)))
+report(res_trend)
+```
+
+The trend is removed inside the likelihood, so the persistence estimate is unaffected by the level drift. The same data through `prefilter=:linear_detrend` reaches the same place without committing to trend values:
+
+```@example dsge_estimation
+res_pf = estimate_dsge_bayes(spec, y_level, [0.9];
+    priors=Dict(:rho => Beta(5, 2)),
+    method=:smc, observables=[:y], n_smc=50,
+    prefilter=:linear_detrend)
+round(res_pf.prefilter.slopes[1], digits=4)   # recovered drift ≈ 0.02
+```
+
+The applied transform is stored on the result as `res_pf.prefilter`, and [`invert_prefilter`](@ref) maps filtered paths back to the observed scale — pass `time_offset` equal to the estimation sample length to invert a forecast.
+
+To **estimate** the drift, declare a model parameter for it and name that parameter in the trend. It need not appear in any equation:
+
+```@example dsge_estimation
+spec_g = @dsge begin
+    parameters: rho = 0.9, phi = 1.5, g = 0.0
+    endogenous: y, i
+    exogenous: e
+    y[t] = rho * y[t-1] + e[t]
+    i[t] = phi * y[t]
+end
+spec_g = compute_steady_state(spec_g)
+
+res_est = estimate_dsge_bayes(spec_g, y_level, Dict(:rho => 0.9, :g => 0.0);
+    priors=Dict(:rho => Beta(5, 2), :g => Normal(0.0, 0.1)),
+    method=:mh, n_draws=2500, burnin=800, observables=[:y],
+    observation_trends=Dict(:y => (constant=1.0, linear=:g)))
+report(res_est)
+```
+
+The 95% credible interval for `g` covers the data-generating drift of 0.02. The short chain used here is flagged for low effective sample size --- see [Convergence Diagnostics](@ref). Symbolic trend coefficients require a Kalman method (`:smc` or `:mh`); the `:smc2` particle filter cannot re-evaluate the trend per draw and raises an error naming the offending symbols.
+
+When neither remedy is used and an observable shows a strong trend, estimation emits a guidance warning. [`detect_trend`](@ref) implements the check standalone and uses a Newey-West HAC standard error for the slope, so persistent-but-stationary observables are not flagged spuriously:
+
+```@example dsge_estimation
+detect_trend(vec(y_level))
+```
+
+| Keyword | Type | Default | Description |
+|---------|------|---------|-------------|
+| `prefilter` | `Symbol` | `:none` | `:none`, `:demean`, `:first_difference`, `:linear_detrend`, `:hp` |
+| `hp_lambda` | `Real` | `1600` | HP smoothing parameter (`:hp` only) |
+| `observation_trends` | `Dict{Symbol}` | `nothing` | Per-observable `Real`/`Symbol` (linear term), `NamedTuple` of `constant`/`linear`/`quadratic`, or a tuple in that order |
+| `warn_trends` | `Bool` | `true` | Emit the trending-data guidance warning |
+
 ### Bayesian Keywords
 
 | Keyword | Type | Default | Description |
@@ -477,6 +555,10 @@ The Laplace log-ML is on the same additive-constant convention as the SMC temper
 | `keep_burnin` | `Bool` | `false` | Retain the full RWMH chain including burnin (e.g. for trace plots) |
 | `proposal` | `Symbol` | `:adaptive` | RWMH proposal init: `:adaptive` or `:mode` (seed from `posterior_mode`) |
 | `transform` | `Bool` | `true` | RWMH walks in the prior-transformed unconstrained space with Jacobian correction |
+| `prefilter` | `Symbol` | `:none` | Observable transform: `:demean`, `:first_difference`, `:linear_detrend`, `:hp` |
+| `hp_lambda` | `Real` | `1600` | HP smoothing parameter when `prefilter=:hp` |
+| `observation_trends` | `Dict{Symbol}` | `nothing` | Deterministic constant/linear/quadratic trends in the measurement equation |
+| `warn_trends` | `Bool` | `true` | Emit the trending-data guidance warning when neither remedy is used |
 
 !!! note "Sampling in the unconstrained space"
     With `transform=true` (the default for `method=:mh`), the random walk runs on ``y = T(\theta)`` — ``\log`` for positive supports, logit for bounded intervals, inferred from each prior's support — and the acceptance ratio uses ``\log p(\theta(y)|Y) + \log|J(y)|``, the correct pushforward density (Stan reference manual). A walk on a persistence near 1 or a shock standard deviation near 0 then never wastes proposals outside the support; draws are back-transformed to ``\theta`` before storage, so results are directly comparable to `transform=false`.
@@ -752,6 +834,8 @@ The result is a `BayesianDSGESimulation{T}` containing the pointwise median, qua
 | `spec` | `DSGESpec{T}` | Back-reference to model specification |
 | `solution` | Union type | Model solution at posterior mean |
 | `state_space` | Union type | State-space representation at posterior mean |
+| `prefilter` | `PrefilterSpec{T}` or `nothing` | Observable transform applied before estimation |
+| `trends` | `ObservationTrends{T}` or `nothing` | Deterministic trends carried in the measurement equation |
 
 When called with `method=:mh`, the stored `method` field reports `:rwmh` --- the random-walk Metropolis-Hastings sampler that `:mh` selects.
 
@@ -836,7 +920,9 @@ The GMM point estimates and Bayesian posterior means should cluster near the tru
 
 4. **Observable mismatch**: The `observables` keyword specifies which endogenous variables in the model correspond to columns in the data matrix, in order. Mismatched dimensions or incorrect ordering produce nonsensical likelihood values. The number of observables must equal the number of data columns.
 
-5. **Solver choice for Bayesian estimation**: Use `:smc` with `:gensys` (or `:blanchard_kahn`, `:klein`) for linear models --- the Kalman filter provides the exact likelihood. Use `:smc2` with `:projection` or `:pfi` for nonlinear models where the particle filter is necessary. Using `:smc` with a nonlinear solver silently falls back to a first-order Kalman approximation that ignores higher-order dynamics.
+5. **Trending observables against a stationary model**: Feeding levels of GDP or consumption to a model whose variables are steady-state deviations biases persistence toward one and distorts every other parameter. Use `prefilter=` or `observation_trends=` (see [Estimation on Trending Data](@ref)); the entry-point warning names the offending series. Note that `prefilter=:first_difference` changes what the model variable means — the observable is now a growth rate, so the measured DSGE variable must be one too.
+
+6. **Solver choice for Bayesian estimation**: Use `:smc` with `:gensys` (or `:blanchard_kahn`, `:klein`) for linear models --- the Kalman filter provides the exact likelihood. Use `:smc2` with `:projection` or `:pfi` for nonlinear models where the particle filter is necessary. Using `:smc` with a nonlinear solver silently falls back to a first-order Kalman approximation that ignores higher-order dynamics.
 
 ---
 

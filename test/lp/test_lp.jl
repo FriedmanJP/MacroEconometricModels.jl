@@ -649,6 +649,11 @@ using Random
         # J = (Z̃'u)'(Z̃'Z̃)⁻¹(Z̃'u)/σ̂² with Z̃ = M_W Z (the included exogenous controls
         # W = [intercept, lagged Y] partialled out of the instruments, #209 R-26),
         # σ̂² = u'u/T_h. It must NOT be the pre-R-02 T_h-inflated value.
+        #
+        # The average runs over the NON-DEGENERATE equations. At h = 0 the shock
+        # variable's response to itself fits exactly (σ̂² ~ 1e-31), and including
+        # that term made the test reject valid instruments in 55 of 60 draws while
+        # h ≥ 1 was correctly sized — see the size testset in test_lp_weak_iv.jl.
         let h0 = 0
             U_h = model_sar.residuals[h0 + 1]
             T_h = model_sar.T_eff[h0 + 1]
@@ -660,10 +665,14 @@ using Random
             Ztil = Zc .- W * (MacroEconometricModels.robust_inv(W' * W) * (W' * Zc))
             ZtZ_inv = MacroEconometricModels.robust_inv(Ztil' * Ztil)
             nresp = size(U_h, 2)
+            s2 = [sum(U_h[:, eq] .^ 2) / T_h for eq in 1:nresp]
+            keep = findall(s -> s > sqrt(eps(Float64)) * maximum(s2), s2)
+            @test length(keep) == nresp - 1          # the shock's own h=0 equation drops out
+            @test !(model_sar.shock_var in keep)
             J_textbook = sum(begin
                 u = U_h[:, eq]; Zu = Ztil' * u
-                (Zu' * ZtZ_inv * Zu) / (sum(u .^ 2) / T_h)
-            end for eq in 1:nresp) / nresp
+                (Zu' * ZtZ_inv * Zu) / s2[eq]
+            end for eq in keep) / length(keep)
             @test sargan_result.J_stat ≈ J_textbook rtol=1e-8
             @test !isapprox(sargan_result.J_stat, T_h * J_textbook; rtol=1e-6)  # not the pre-fix T_h-inflated value
         end
@@ -1857,4 +1866,57 @@ end
     end
     @test maxrel_B < 1e-10
     @test maxrel_V < 1e-10
+end
+
+@testset "LP bootstrap IRF bands (#370, T271)" begin
+    M = MacroEconometricModels
+    rng = Random.MersenneTwister(371)
+    Y = randn(rng, 300, 2)
+    for t in 2:300
+        Y[t, :] = [0.6 0.1; 0.2 0.5] * Y[t-1, :] + randn(rng, 2)
+    end
+    m = estimate_lp(Y, 1, 8; lags=2)
+    a = lp_irf(m)
+
+    @testset "bands change, point estimates do not" begin
+        for sch in (:wild, :block, :iid)
+            b = lp_irf(m; ci_type=:bootstrap, bootstrap=sch, reps=200, seed=1)
+            # Only the bands are bootstrapped — the reported IRF and SEs stay analytical, so
+            # switching ci_type can never move the estimate itself.
+            @test b.values == a.values
+            @test b.se == a.se
+            @test all(isfinite, b.ci_lower) && all(isfinite, b.ci_upper)
+            @test all(b.ci_lower .<= b.ci_upper)
+            @test b.ci_lower != a.ci_lower
+            @test size(b.ci_lower) == size(a.ci_lower)
+        end
+    end
+
+    @testset "bands bracket the point estimate and roughly match the analytical ones" begin
+        # A correctly-centred fixed-design bootstrap should land in the same neighbourhood as
+        # the HAC bands on well-behaved homoskedastic data — a sanity check, not an identity.
+        b = lp_irf(m; ci_type=:bootstrap, bootstrap=:wild, reps=500, seed=2)
+        # The h=0 own-shock cell is a point mass: the response is mechanically 1, so
+        # every bootstrap replicate returns it and the band collapses to a width of
+        # 6.7e-16 around 1.0. Whether the ordering holds there is decided at 1 ulp
+        # (it did on arm64 and did not on x86-64), so compare with a tolerance —
+        # the property being checked is that the band brackets the estimate, not
+        # that rounding falls a particular way at a degenerate cell.
+        btol = 1e-9
+        @test all(b.ci_lower .<= b.values .+ btol)
+        @test all(b.values .<= b.ci_upper .+ btol)
+        @test minimum(b.ci_upper .- b.ci_lower) < 1e-12   # that cell really is degenerate
+        @test mean(b.ci_upper .- b.ci_lower) ≈ mean(a.ci_upper .- a.ci_lower) rtol = 0.35
+    end
+
+    @testset "reproducibility and validation" begin
+        @test lp_irf(m; ci_type=:bootstrap, reps=100, seed=7).ci_lower ==
+              lp_irf(m; ci_type=:bootstrap, reps=100, seed=7).ci_lower
+        @test_throws ArgumentError lp_irf(m; ci_type=:bogus)
+        @test_throws ArgumentError lp_irf(m; ci_type=:bootstrap, bootstrap=:bogus, reps=10)
+        # the convenience one-shot form forwards the options
+        c = lp_irf(Y, 1, 6; lags=2, ci_type=:bootstrap, bootstrap=:block, reps=100, seed=4)
+        @test all(isfinite, c.ci_lower) && all(c.ci_lower .<= c.ci_upper)
+        @test size(c.ci_lower, 1) == 7
+    end
 end

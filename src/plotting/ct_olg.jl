@@ -371,3 +371,142 @@ function plot_result(sol::BlanchardOLGSolution{T}; k_span::Real=0.4,
     save_path !== nothing && save_plot(p, save_path)
     p
 end
+
+# =============================================================================
+# LifeCycleSteadyState — age profiles, wealth by age, policies ([T255]/#354)
+# =============================================================================
+
+"""
+    plot_result(ss::LifeCycleSteadyState; view=:profiles, title="", save_path=nothing)
+
+Visualize a life-cycle OLG stationary equilibrium.
+
+| `view` | Panels |
+|---|---|
+| `:profiles` (default) | Mean assets, consumption, and income by age, plus the cohort mass |
+| `:distribution` | Mean and interquartile wealth by age — the spread the mean profile hides |
+| `:policy` | Consumption policy by asset level at three representative ages |
+
+The retirement age is marked with a dashed reference line on the age-indexed
+panels, since every profile turns there.
+"""
+function plot_result(ss::LifeCycleSteadyState{T}; view::Symbol=:profiles,
+                     title::String="", save_path::Union{String,Nothing}=nothing) where {T}
+    view in (:profiles, :distribution, :policy) || throw(ArgumentError(
+        "plot_result(::LifeCycleSteadyState): view must be :profiles, :distribution " *
+        "or :policy (got :$view)"))
+    p = if view === :profiles
+        _plot_lc_profiles(ss; title=title)
+    elseif view === :distribution
+        _plot_lc_distribution(ss; title=title)
+    else
+        _plot_lc_policy(ss; title=title)
+    end
+    save_path !== nothing && save_plot(p, save_path)
+    p
+end
+
+"Reference line at the retirement age, shared by the age-indexed panels."
+_lc_retire_ref(ss::LifeCycleSteadyState) =
+    ss.spec.J_retire <= ss.spec.J ?
+    "[{\"axis\":\"x\",\"value\":$(_json(float(ss.spec.J_retire)))," *
+    "\"color\":\"#999999\",\"dash\":\"5,4\",\"label\":\"retirement\"}]" : "[]"
+
+function _plot_lc_profiles(ss::LifeCycleSteadyState{T}; title::String) where {T}
+    J = ss.spec.J
+    ages = collect(1:J)
+    panels = _PanelSpec[]
+    refs = _lc_retire_ref(ss)
+
+    id = _next_plot_id("lc_prof")
+    rows = [Pair{String,String}["x" => _json(float(j)),
+                                "assets" => _json(float(ss.asset_profile[j])),
+                                "cons" => _json(float(ss.consumption_profile[j])),
+                                "inc" => _json(float(ss.income_profile[j]))] for j in ages]
+    s_json = _series_json(["Assets", "Consumption", "Income"],
+                          [_PLOT_SERIES[1], _PLOT_SERIES[2], _PLOT_SERIES[3]];
+                          keys=["assets", "cons", "inc"])
+    push!(panels, _PanelSpec(id, "Age Profiles",
+        _render_line_js(id, _json_array_of_objects(rows), s_json;
+                        ref_lines_json=refs, integer_x=true,
+                        xlabel="Age", ylabel="Level")))
+
+    id2 = _next_plot_id("lc_mass")
+    rows2 = [Pair{String,String}["x" => _json(float(j)),
+                                 "mass" => _json(float(ss.cohort_mass[j]))] for j in ages]
+    push!(panels, _PanelSpec(id2, "Population by Age",
+        _render_line_js(id2, _json_array_of_objects(rows2),
+                        _series_json(["Cohort mass"], [_PLOT_SERIES[4]]; keys=["mass"]);
+                        ref_lines_json=refs, integer_x=true,
+                        xlabel="Age", ylabel="Population share")))
+
+    isempty(title) && (title = "Life-Cycle OLG — Age Profiles (r = $(_fmt(float(ss.r); digits=4)))")
+    _make_plot(panels; title=title, ncols=2)
+end
+
+function _plot_lc_distribution(ss::LifeCycleSteadyState{T}; title::String) where {T}
+    J = ss.spec.J
+    a_grid = ss.spec.grid.grids[1]
+    lo = zeros(Float64, J); hi = zeros(Float64, J); med = zeros(Float64, J)
+    for j in 1:J
+        marg = vec(sum(@view(ss.dist[:, :, j]); dims=2))
+        m = sum(marg)
+        if m <= 0
+            lo[j] = hi[j] = med[j] = 0.0
+            continue
+        end
+        cum = cumsum(marg) ./ m
+        q(p) = a_grid[clamp(searchsortedfirst(cum, p), 1, length(a_grid))]
+        lo[j] = q(0.25); med[j] = q(0.50); hi[j] = q(0.75)
+    end
+
+    id = _next_plot_id("lc_dist")
+    rows = [Pair{String,String}["x" => _json(float(j)),
+                                "mean" => _json(float(ss.asset_profile[j])),
+                                "med" => _json(med[j])] for j in 1:J]
+    bands = "[{\"key\":\"mean\",\"lower\":[" *
+            join((_json(lo[j]) for j in 1:J), ",") * "],\"upper\":[" *
+            join((_json(hi[j]) for j in 1:J), ",") * "]}]"
+    s_json = _series_json(["Mean wealth", "Median wealth"],
+                          [_PLOT_SERIES[1], _PLOT_SERIES[2]]; keys=["mean", "med"],
+                          dash=["", "5,3"])
+    js = _render_line_js(id, _json_array_of_objects(rows), s_json;
+                         bands_json=bands, ref_lines_json=_lc_retire_ref(ss),
+                         integer_x=true, xlabel="Age", ylabel="Assets")
+    p1 = _PanelSpec(id, "Wealth by Age (band = interquartile range)", js)
+
+    isempty(title) && (title = "Life-Cycle OLG — Wealth Distribution by Age")
+    _make_plot([p1]; title=title, ncols=1)
+end
+
+function _plot_lc_policy(ss::LifeCycleSteadyState{T}; title::String) where {T}
+    J = ss.spec.J
+    a_grid = ss.spec.grid.grids[1]
+    n_a = length(a_grid)
+    step = max(1, div(n_a, 150))
+    idxs = collect(1:step:n_a)
+    last(idxs) != n_a && push!(idxs, n_a)
+
+    # Young, just-before-retirement, and old — where the policy differs most.
+    sel = unique(clamp.([max(1, div(J, 6)), max(1, ss.spec.J_retire - 1),
+                         max(1, J - 1)], 1, J))
+    e_mid = cld(length(ss.spec.income.states), 2)
+    labels = ["Age $(j)" for j in sel]
+    rows = Vector{Pair{String,String}}[]
+    for i in idxs
+        row = Pair{String,String}["x" => _json(float(a_grid[i]))]
+        for (k, j) in enumerate(sel)
+            push!(row, "a$k" => _json(float(ss.c_policy[i, e_mid, j])))
+        end
+        push!(rows, row)
+    end
+    id = _next_plot_id("lc_pol")
+    s_json = _series_json(labels, [_PLOT_SERIES[k] for k in 1:length(sel)];
+                          keys=["a$k" for k in 1:length(sel)])
+    js = _render_line_js(id, _json_array_of_objects(rows), s_json;
+                         xlabel="Assets", ylabel="Consumption")
+    p1 = _PanelSpec(id, "Consumption Policy by Age (median productivity)", js)
+
+    isempty(title) && (title = "Life-Cycle OLG — Consumption Policy")
+    _make_plot([p1]; title=title, ncols=1)
+end

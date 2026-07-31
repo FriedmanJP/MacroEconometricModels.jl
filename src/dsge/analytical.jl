@@ -20,8 +20,10 @@ using LinearAlgebra
 
 Solve the discrete Lyapunov equation: `Sigma = G1 * Sigma * G1' + impact * impact'`.
 
-Uses the smart-doubling (squaring) iteration [`_dlyap_doubling`](@ref) — O(n³ log(1/ε)) — instead
-of the dense `(I - G1 ⊗ G1)⁻¹` solve, which is O(n⁶) and forms an n²×n² system.
+Uses [`_dlyap`](@ref): the smart-doubling (squaring) iteration [`_dlyap_doubling`](@ref), with
+its relative residual checked and the direct Bartels-Stewart / Barraud solver
+[`_bartels_stewart_dlyap`](@ref) taking over if doubling misses tolerance. Both are `O(n³)`-class
+and replace the dense `(I - G1 ⊗ G1)⁻¹` solve, which is `O(n⁶)` on an `n²×n²` system.
 
 Returns the unconditional covariance matrix `Sigma` (n x n, symmetric positive semi-definite).
 
@@ -37,7 +39,7 @@ function solve_lyapunov(G1::AbstractMatrix{T}, impact::AbstractMatrix{T}) where 
     max_eig >= one(T) && throw(ArgumentError(
         "G1 is not stable (max |eigenvalue| = $(max_eig)). Lyapunov equation has no solution."))
 
-    Sigma = _dlyap_doubling(G1, impact * impact')
+    Sigma = _dlyap(Matrix{T}(G1), impact * impact'; warn_label="solve_lyapunov")
     return (Sigma + Sigma') / 2   # enforce exact symmetry
 end
 
@@ -52,12 +54,14 @@ Internal: solve the discrete Lyapunov equation `A P A' - P + C = 0` for a **stab
 `A` (all `|eig(A)| < 1`) given the covariance-form driving term `C` (as opposed to
 `solve_lyapunov`, which takes an impact matrix and forms `C = impact*impact'`). Used
 for the stationary subspace inside `_diffuse_initial_covariance`.
+
+Routed through [`_dlyap`](@ref) since [T266]; it previously formed the `n²×n²` matrix
+`I - kron(A, A)` and factored it, which is `O(n⁶)`.
 """
 function _lyapunov_from_cov(A::AbstractMatrix{T}, C::AbstractMatrix{T}) where {T<:AbstractFloat}
     n = size(A, 1)
     n == 0 && return zeros(T, 0, 0)
-    M = Matrix{T}(I, n*n, n*n) - kron(A, A)
-    P = reshape(M \ vec(C), n, n)
+    P = _dlyap(Matrix{T}(A), Matrix{T}(C); warn_label="diffuse Kalman init")
     return (P + P') / 2
 end
 

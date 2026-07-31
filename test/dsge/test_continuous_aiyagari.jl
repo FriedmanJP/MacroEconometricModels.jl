@@ -102,8 +102,17 @@ const _CT = MacroEconometricModels
         @test s.hjb_converged
         # Valid infinitesimal generator (rows sum to ~0).
         @test maximum(abs.(vec(sum(s.gen; dims=2)))) < 1e-8
-        db = s.b[2] - s.b[1]; da = s.a[2] - s.a[1]
-        @test isapprox(sum(s.g) * db * da, 1.0; atol=1e-6)   # joint density integrates to 1
+        # The joint density integrates to 1 under the TRAPEZOIDAL weights `bdelta`/`adelta`
+        # (KMV's `adelta(1) = 0.5*dagrid(1)`), which are half-width at the grid edges and
+        # are what the solver normalizes against. A flat `db*da` is not the right measure —
+        # it over-counts the boundary rows, and on this calibration, where most mass sits at
+        # b = 0, it reads 2.43 rather than 1.
+        mass = sum(s.g[i, j, k] * s.bdelta[i] * s.adelta[j]
+                   for i in eachindex(s.b), j in eachindex(s.a), k in 1:2)
+        @test isapprox(mass, 1.0; atol=1e-6)
+        @test length(s.bdelta) == length(s.b) && length(s.adelta) == length(s.a)
+        @test isapprox(sum(s.bdelta), s.b[end] - s.b[1]; rtol=1e-12)
+        @test isapprox(sum(s.adelta), s.a[end] - s.a[1]; rtol=1e-12)
         @test minimum(s.g) >= -1e-10
         @test all(s.c .> 0)
         @test s.A > 0 && s.B >= 0
@@ -117,4 +126,253 @@ const _CT = MacroEconometricModels
         report(s)
     end
 
+
+@testset "CT two-asset: KMV kinked cost, GE and MIT (#358/T259)" begin
+    M = MacroEconometricModels
+
+    @testset "power-spaced grids and trapezoidal weights" begin
+        # KMV `PowerSpacedGrid`: k = 1 is uniform, k → 0 is L-shaped.
+        g1 = M._ct2_power_grid(Float64, 0.0, 10.0, 11, 1.0)
+        @test g1 ≈ collect(range(0.0, 10.0; length=11))
+        for k in (0.15, 0.35, 0.5)
+            g = M._ct2_power_grid(Float64, 0.0, 10.0, 21, k)
+            @test length(g) == 21
+            @test g[1] == 0.0 && g[end] == 10.0
+            @test all(diff(g) .> 0)
+            # L-shaped ⇒ denser at the bottom than a uniform grid
+            @test count(<=(2.0), g) > count(<=(2.0), g1)
+            @test diff(g)[1] < diff(g)[end]
+        end
+        # smaller k ⇒ more concentrated
+        @test count(<=(1.0), M._ct2_power_grid(Float64, 0.0, 10.0, 41, 0.15)) >
+              count(<=(1.0), M._ct2_power_grid(Float64, 0.0, 10.0, 41, 0.5))
+        @test_throws ArgumentError M._ct2_power_grid(Float64, 0.0, 1.0, 1, 0.5)
+        @test M._ct2_power_grid(Float64, 0.0, 1.0, 2, 0.5) == [0.0, 1.0]
+
+        # `_ct2_deltas`: the weights partition the domain exactly, KMV's half-width at the ends
+        for k in (1.0, 0.35)
+            g = M._ct2_power_grid(Float64, 0.0, 8.0, 17, k)
+            dg, delta = M._ct2_deltas(g)
+            @test length(dg) == 16 && length(delta) == 17
+            @test sum(delta) ≈ g[end] - g[1] rtol = 1e-14
+            @test delta[1] ≈ dg[1] / 2
+            @test delta[end] ≈ dg[end] / 2
+            @test all(delta .> 0)
+            # integrating a linear function is exact under these weights
+            @test sum(g .* delta) ≈ (g[end]^2 - g[1]^2) / 2 rtol = 1e-12
+        end
+    end
+
+    @testset "KMV adjustment cost and its inverse" begin
+        m = CTTwoAsset(; Ib=6, Ia=6, cost=:kinked, chi0=0.05, chi1=0.5, chi2=2.0, a_kink=1.0)
+        a_eff = 3.0
+        # the FOC inverse returns EXACTLY zero inside the inaction band |R-1| <= chi0
+        # Strictly inside the band the deposit is EXACTLY zero. (Right at the edge,
+        # `R - 1` is not exactly ±chi0 in binary — `1.0 + (-0.05)` rounds — so the FOC
+        # returns ~1e-8 rather than 0. Test the interior and the crossing separately.)
+        for x in (-0.049, -0.03, 0.0, 0.03, 0.049)
+            @test M._ct2_deposit(m, 1.0 + x, a_eff) == 0.0
+        end
+        @test abs(M._ct2_deposit(m, 1.0 + 0.05, a_eff)) < 1e-7      # at the edge: ~0
+        @test M._ct2_deposit(m, 1.0 + 0.06, a_eff) > 0              # outside: adjusts
+        @test M._ct2_deposit(m, 1.0 - 0.06, a_eff) < 0
+        # the band has positive width, and widening chi0 widens it
+        mw = CTTwoAsset(; Ib=6, Ia=6, cost=:kinked, chi0=0.20, chi1=0.5, chi2=2.0, a_kink=1.0)
+        @test M._ct2_deposit(mw, 1.0 + 0.10, a_eff) == 0.0          # inside the wider band
+        @test M._ct2_deposit(m, 1.0 + 0.10, a_eff) > 0              # outside the narrow one
+        # cost is zero at d=0, positive and convex otherwise, and symmetric here
+        @test M._ct2_adj_cost(m, 0.0, a_eff) == 0.0
+        @test M._ct2_adj_cost(m, 0.4, a_eff) > 0
+        @test M._ct2_adj_cost(m, 0.4, a_eff) ≈ M._ct2_adj_cost(m, -0.4, a_eff)
+        @test M._ct2_adj_cost(m, 0.8, a_eff) > 2 * M._ct2_adj_cost(m, 0.4, a_eff)  # convex
+        # deposit and marginal cost invert each other: chi'(d(y)) == y outside the band
+        for y in (0.2, 0.5, 1.0)
+            d = M._ct2_deposit(m, 1.0 + y, a_eff)
+            marg = m.chi0 + ((d / a_eff) / m.chi1)^m.chi2      # KMV `adjcostfn1`
+            @test marg ≈ y rtol = 1e-10
+        end
+        # `a_kink` is a FLOOR on the scale (KMV `max(kappa3, la)`), not an offset
+        @test M._ct2_adj_scale(m, 0.0) == m.a_kink
+        @test M._ct2_adj_scale(m, 5.0) == 5.0
+        # the deposit scales with the illiquid stock — the property that lets a withdrawal
+        # offset the accruing return r_a*a at any level of a
+        d1 = M._ct2_deposit(m, 1.5, 2.0); d2 = M._ct2_deposit(m, 1.5, 8.0)
+        @test d2 ≈ 4 * d1 rtol = 1e-12
+        # the level-quadratic cost has NO inaction region and NO scaling with a
+        mq = CTTwoAsset(; Ib=6, Ia=6, cost=:quadratic, chi=2.0)
+        @test M._ct2_deposit(mq, 1.0 + 1e-9, 3.0) > 0        # adjusts for any R != 1
+        @test M._ct2_deposit(mq, 1.0, 3.0) == 0.0
+        @test M._ct2_deposit(mq, 1.5, 2.0) == M._ct2_deposit(mq, 1.5, 8.0)
+        @test M._ct2_adj_cost(mq, 0.5, 2.0) ≈ (2.0 / 2) * 0.25
+        # dmax cap (KMV `Parameters.f90`)
+        mc = CTTwoAsset(; Ib=6, Ia=6, cost=:kinked, chi2=0.40176, dmax=0.75)
+        @test abs(M._ct2_deposit(mc, 50.0, 10.0)) <= 0.75
+    end
+
+    @testset "constructor validation" begin
+        @test_throws ArgumentError CTTwoAsset(; cost=:bogus)
+        @test_throws ArgumentError CTTwoAsset(; cost=:kinked, chi1=0.0)
+        @test_throws ArgumentError CTTwoAsset(; cost=:kinked, chi2=0.0)
+        @test_throws ArgumentError CTTwoAsset(; cost=:kinked, chi0=-0.1)
+        @test_throws ArgumentError CTTwoAsset(; cost=:kinked, a_kink=0.0)
+        @test_throws ArgumentError CTTwoAsset(; a_power=0.0)
+        @test_throws ArgumentError CTTwoAsset(; a_power=1.5)
+        @test_throws ArgumentError CTTwoAsset(; b_power=-0.2)
+        @test_throws AssertionError CTTwoAsset(; r_a=0.01, r_b=0.02)   # premium must be > 0
+    end
+
+    @testset "stationarity diagnostic" begin
+        # quadratic: withdrawals cap at the CONSTANT 1/chi, so illiquid wealth diverges
+        # above a* = 1/(chi*r_a) — see #509
+        st = ct_two_asset_stationarity(CTTwoAsset(; chi=2.0, r_a=0.05, a_max=20.0))
+        @test st.bound ≈ 1 / (2.0 * 0.05)
+        @test !st.ok                                    # a_max = 20 > a* = 10
+        @test occursin("509", st.message)
+        @test ct_two_asset_stationarity(CTTwoAsset(; chi=2.0, r_a=0.05, a_max=5.0)).ok
+        # kinked: the withdrawal SCALES with a, so the condition is on chi1 instead
+        stk = ct_two_asset_stationarity(CTTwoAsset(; cost=:kinked, chi0=0.05, chi1=30.0, r_a=0.05))
+        @test stk.bound ≈ (1 - 0.05) / 0.05          # = 19
+        @test !stk.ok                                 # chi1 = 30 > 19 ⇒ diverges
+        @test ct_two_asset_stationarity(
+            CTTwoAsset(; cost=:kinked, chi0=0.05, chi1=5.0, r_a=0.05)).ok
+    end
+
+    @testset "solution diagnostics on a converged solve" begin
+        m = CTTwoAsset(; Ib=25, Ia=25, r_a=0.05, r_b=0.02, chi=2.0, rho=0.10,
+                       a_max=6.0, b_max=6.0, z=[0.6, 1.4], lambda=[0.4, 0.4])
+        s = ct_two_asset_solve(m; tol=1e-6, max_iter=300)
+        @test s.hjb_converged
+        @test s.hjb_iterations > 0
+        @test isfinite(s.kfe_residual) && s.kfe_residual < 1e-6
+        # mass integrates to 1 under the trapezoidal weights, and the generator is valid
+        mass = sum(s.g[i, j, k] * s.bdelta[i] * s.adelta[j]
+                   for i in eachindex(s.b), j in eachindex(s.a), k in 1:2)
+        @test mass ≈ 1.0 atol = 1e-8
+        @test maximum(abs, vec(sum(s.gen; dims=2))) < 1e-8
+        @test all(s.c .> 0)
+        # aggregates equal the weighted integrals of the policy
+        Achk = sum(s.a[j] * s.g[i, j, k] * s.bdelta[i] * s.adelta[j]
+                   for i in eachindex(s.b), j in eachindex(s.a), k in 1:2)
+        Bchk = sum(s.b[i] * s.g[i, j, k] * s.bdelta[i] * s.adelta[j]
+                   for i in eachindex(s.b), j in eachindex(s.a), k in 1:2)
+        @test s.A ≈ Achk rtol = 1e-12
+        @test s.B ≈ Bchk rtol = 1e-12
+        # hand-to-mouth shares partition the low-liquid mass
+        htm = hand_to_mouth(s)
+        @test htm.total ≈ htm.poor + htm.wealthy
+        @test 0 <= htm.total <= 1
+        @test htm.b_threshold > 0 && htm.a_threshold > 0
+        htm2 = hand_to_mouth(s; b_threshold=1e-8, a_threshold=1e-8)
+        @test htm2.total <= htm.total          # a tighter threshold cannot include more
+        cm = ceiling_mass(s)
+        @test 0 <= cm.liquid <= 1 && 0 <= cm.illiquid <= 1
+        # warm start reproduces the same fixed point
+        # Warm-starting lands on the same fixed point, but the tolerance has to be tied to
+        # the SOLVER's, not to the identity: `tol` bounds ‖ΔV‖∞, and the pushforward to the
+        # stationary distribution and then to an aggregate amplifies it (measured 1.8e-5
+        # relative at tol = 1e-6).
+        s_warm = ct_two_asset_solve(m; tol=1e-6, max_iter=300, V_init=s.V)
+        @test s_warm.hjb_converged
+        @test s_warm.A ≈ s.A rtol = 1e-3
+        @test s_warm.B ≈ s.B rtol = 1e-3
+        @test s_warm.hjb_iterations <= s.hjb_iterations
+        @test_throws ArgumentError ct_two_asset_solve(m; V_init=zeros(3, 3, 2))
+    end
+
+    @testset "general equilibrium clears both markets" begin
+        m = CTTwoAsset(; Ib=25, Ia=25, a_max=6.0, b_max=5.0, rho=0.06, sigma=2.0,
+                       z=[0.6, 1.4], lambda=[0.4, 0.4], alpha=0.36, delta=0.05, Z=1.0,
+                       B_supply=0.69, chi=2.0, a_power=0.5, b_power=0.5)
+        ge = ct_two_asset_ge(m; max_iter=120, tol=1e-3, relax_K=0.3, relax_rb=0.05)
+        @test ge isa MacroEconometricModels.CTTwoAssetGE{Float64}
+        @test ge.markets_cleared
+        @test abs(ge.resid_illiquid) < 1e-3          # measured 8.2e-04
+        @test abs(ge.resid_liquid) < 1e-3            # measured -2.3e-04
+
+        # the firm's first-order conditions hold EXACTLY at the reported K
+        @test ge.r_a ≈ m.alpha * m.Z * (ge.K / ge.L)^(m.alpha - 1) - m.delta rtol = 1e-14
+        @test ge.w ≈ (1 - m.alpha) * m.Z * (ge.K / ge.L)^m.alpha rtol = 1e-14
+        @test ge.Y ≈ m.Z * ge.K^m.alpha * ge.L^(1 - m.alpha) rtol = 1e-14
+        # the government budget balances and labor is the stationary mean of the income process
+        @test ge.tau ≈ ge.r_b * m.B_supply rtol = 1e-14
+        la = m.income.lambda; zz = m.income.z
+        @test ge.L ≈ zz[1] * la[2] / (la[1] + la[2]) + zz[2] * la[1] / (la[1] + la[2]) rtol = 1e-14
+        # the illiquidity premium is positive and the liquid return respects the bounds
+        @test ge.r_b < ge.r_a
+        @test ge.r_b <= m.rho
+        @test ge.B ≈ ge.solution.B rtol = 1e-14
+        io = IOBuffer(); show(io, ge)
+        @test occursin("CTTwoAssetGE", String(take!(io)))
+        report(ge)
+    end
+
+    @testset "MIT transition returns to the terminal steady state" begin
+        m = CTTwoAsset(; Ib=25, Ia=25, a_max=6.0, b_max=5.0, rho=0.06, sigma=2.0,
+                       z=[0.6, 1.4], lambda=[0.4, 0.4], alpha=0.36, delta=0.05, Z=1.0,
+                       B_supply=0.69, chi=2.0, a_power=0.5, b_power=0.5)
+        ge = ct_two_asset_ge(m; max_iter=120, tol=1e-3, relax_K=0.3, relax_rb=0.05)
+
+        N = 40
+        rho_z = 0.6
+        Z = [1.0 + 0.02 * rho_z^(n - 1) for n in 1:(N + 1)]; Z[1] = 1.0
+        tr = ct_two_asset_mit(m, ge, Z; dt=0.5, max_iter=80, tol=1e-5,
+                              relax_K=0.3, relax_rb=0.02)
+        @test tr isa MacroEconometricModels.CTTwoAssetTransition{Float64}
+        @test length(tr.t) == N + 1
+        @test tr.t[1] == 0.0 && tr.t[2] ≈ 0.5
+        @test tr.Z == Z
+
+        # K_0 is PINNED by the predetermined distribution and cannot jump on impact
+        @test tr.K[1] ≈ ge.K rtol = 1e-12
+        # the path returns to the terminal steady state (measured 3.7e-08)
+        @test abs(tr.K[end] - ge.K) < 1e-5
+        # capital accumulates above the steady state, then comes back down
+        ip = argmax(tr.K)
+        @test tr.K[ip] > ge.K
+        @test 1 < ip < N + 1
+        @test tr.K[end] < tr.K[ip]
+        # correct impact signs: higher TFP raises the marginal product of capital and the wage
+        @test tr.r_a[2] > ge.r_a
+        @test tr.w[2] > ge.w
+        # prices are consistent with the firm FOCs along the whole path
+        for n in 1:(N + 1)
+            @test tr.r_a[n] ≈ m.alpha * Z[n] * (tr.K[n] / ge.L)^(m.alpha - 1) - m.delta rtol = 1e-12
+            @test tr.w[n] ≈ (1 - m.alpha) * Z[n] * (tr.K[n] / ge.L)^m.alpha rtol = 1e-12
+        end
+        @test all(isfinite, tr.C) && all(tr.C .> 0)
+        @test all(isfinite, tr.B)
+        @test all(tr.r_b .< tr.r_a)
+        io = IOBuffer(); show(io, tr)
+        @test occursin("CTTwoAssetTransition", String(take!(io)))
+
+        # a ZERO shock leaves the economy at rest: the flat path is as flat as the initial
+        # steady state is accurate (its own clearing residual is ~1e-3).
+        tr0 = ct_two_asset_mit(m, ge, fill(m.Z, 17); dt=0.5, max_iter=60, tol=1e-6,
+                               relax_K=0.3, relax_rb=0.02)
+        @test tr0.K[1] ≈ ge.K rtol = 1e-12
+        @test maximum(abs.(tr0.K .- ge.K)) < 1e-2
+        @test maximum(abs.(tr0.r_a .- ge.r_a)) < 1e-3
+
+        @test_throws ArgumentError ct_two_asset_mit(m, ge, [1.0])
+    end
+
+    @testset "kinked cost produces an inaction region the quadratic cannot" begin
+        # This is a property of the FOC, so it holds independently of whether the aggregate
+        # solve converges: count the grid cells the deposit policy leaves exactly at zero.
+        function inaction_cells(; cost, chi0=0.05, kw...)
+            m = CTTwoAsset(; Ib=20, Ia=20, r_a=0.05, r_b=0.01, rho=0.07, a_max=10.0,
+                           b_max=5.0, z=[0.5, 1.5], lambda=[0.3, 0.3],
+                           cost=cost, chi0=chi0, chi2=2.0, kw...)
+            s = ct_two_asset_solve(m; tol=1e-6, max_iter=60)
+            return count(iszero, s.d) / length(s.d)
+        end
+        # the smooth level-quadratic cost adjusts almost everywhere
+        frac_q = inaction_cells(; cost=:quadratic)
+        # the kink opens a band, and widening chi0 widens it
+        f1 = inaction_cells(; cost=:kinked, chi0=0.02, chi1=1.0)
+        f2 = inaction_cells(; cost=:kinked, chi0=0.20, chi1=1.0)
+        @test f2 > f1
+        @test f2 > frac_q
+    end
+end
 end

@@ -90,6 +90,84 @@ end
 # =============================================================================
 
 """
+    _solve_constrained_c(ls, u_prime, a, j, gross_R, net_inc, w, e, a_min) → c
+
+Consumption of a borrowing-constrained household under **separable** preferences
+with endogenous labor. The household saves `a_min`, so consumption solves the
+budget identity
+
+    c + a_min = R·a + offset + w·e·n(c),    n(c) = (w·e·u'(c)/ψ)^φ
+
+Hours fall as consumption rises (`u'` is decreasing), so
+`g(c) = c + a_min − R·a − offset − w·e·n(c)` is strictly increasing: the root is
+unique and bisection cannot miss it. This is the one place the intratemporal and
+intertemporal conditions genuinely couple — on the unconstrained branch the Euler
+inversion delivers `c` first, and hours follow in closed form.
+"""
+function _solve_constrained_c(ls::LaborSupply{T}, u_prime::F, a::T, j::Int,
+                              gross_R::Vector{T}, net_inc::Vector{T}, w::T,
+                              e::T, a_min::T) where {T<:AbstractFloat, F}
+    we = w * e
+    base = gross_R[j] * a + net_inc[j] - a_min
+    g(c) = c - base - we * labor_supply(ls, we, u_prime(c))
+
+    lo = T(1e-12)
+    g(lo) >= zero(T) && return lo          # already non-negative at the floor
+    hi = max(base, one(T))
+    for _ in 1:60
+        g(hi) >= zero(T) && break
+        hi *= T(2)
+    end
+    g(hi) < zero(T) && return max(hi, T(1e-10))   # unbracketed: return the cap
+
+    for _ in 1:100
+        mid = (lo + hi) / T(2)
+        (hi - lo) <= eps(T) * max(one(T), hi) && break
+        g(mid) < zero(T) ? (lo = mid) : (hi = mid)
+    end
+    return max((lo + hi) / T(2), T(1e-10))
+end
+
+"""
+    labor_policy(ip, grid, income, prices, c_pol) → Matrix{T}
+
+Hours worked `n(a, e)` implied by a converged consumption policy, `n_a × n_e`.
+Returns a matrix of ones when the individual problem has exogenous labor
+(`ip.labor === nothing`), so aggregate labor in efficiency units is `∫ e dμ`
+either way.
+
+Hours follow the intratemporal first-order condition in closed form given
+consumption: `n = (w e / ψ)^φ` under GHH (independent of `c`) and
+`n = (w e u'(c) / ψ)^φ` under separable preferences.
+"""
+function labor_policy(ip::IndividualProblem{T}, grid::HAGrid{T},
+                      income::IncomeProcess{T}, prices::Dict{Symbol,T},
+                      c_pol::AbstractMatrix{T}) where {T<:AbstractFloat}
+    n_a = grid.n_points[1]
+    n_e = length(income.states)
+    ls = ip.labor
+    ls === nothing && return ones(T, n_a, n_e)
+
+    w = prices[:w]
+    u_prime = ip.utility_prime
+    n_pol = zeros(T, n_a, n_e)
+    for j in 1:n_e
+        we = w * income.states[j]
+        if ls.kind === :ghh
+            nj = labor_supply(ls, we)
+            for i in 1:n_a
+                n_pol[i, j] = nj
+            end
+        else
+            for i in 1:n_a
+                n_pol[i, j] = labor_supply(ls, we, u_prime(c_pol[i, j]))
+            end
+        end
+    end
+    return n_pol
+end
+
+"""
     _egm_solve(ip, grid, income, prices; max_iter=1000, tol=1e-10, init_policy=nothing)
         → (c_policy::Matrix{T}, a_policy::Matrix{T}, converged::Bool)
 
@@ -132,6 +210,51 @@ function _egm_solve(ip::IndividualProblem{T}, grid::HAGrid{T},
     Pi = income.transition  # n_e × n_e, row-stochastic
     e_vals = income.states
 
+    r = prices[:r]
+    w = prices[:w]
+
+    # --- Endogenous labor supply (optional) -------------------------------
+    # `budget_fn` is affine in own assets, so its own-asset slope is the gross
+    # return and `budget_fn(0, e)` is non-asset income. With endogenous labor
+    # `budget_fn` is read at n = 1, so subtracting `w*e` isolates any non-labor
+    # offset (e.g. `div` in _hank1_budget); labor income then replaces the `w*e`
+    # term. With `labor === nothing` `net_inc[j]` is exactly `budget_fn(0, e_j)`
+    # and every formula below reduces to the exogenous-labor one.
+    ls = ip.labor
+    has_labor = ls !== nothing
+    ghh = has_labor && ls.kind === :ghh
+    gross_R = zeros(T, n_e)
+    net_inc = zeros(T, n_e)       # non-asset income entering the EGM's own good
+    ghh_hours = zeros(T, n_e)
+    ghh_disutil = zeros(T, n_e)
+    for j in 1:n_e
+        b0 = ip.budget_fn(zero(T), e_vals[j], prices)
+        gross_R[j] = ip.budget_fn(one(T), e_vals[j], prices) - b0
+        if !has_labor
+            net_inc[j] = b0
+        elseif ghh
+            # GHH hours depend on the effective wage alone, so the whole net
+            # labor income term is precomputable and the EGM runs on the
+            # composite good x = c - v(n) with a standard one-dimensional
+            # Euler equation. `c_pol` holds x until the final conversion below.
+            ytil, nj, dj = _ghh_net_income(ls, w * e_vals[j])
+            net_inc[j] = (b0 - w * e_vals[j]) + ytil
+            ghh_hours[j] = nj
+            ghh_disutil[j] = dj
+        else
+            # Separable: hours depend on consumption, so only the offset is
+            # precomputable; the labor income term is added per grid point.
+            net_inc[j] = b0 - w * e_vals[j]
+        end
+    end
+
+    # Cash-on-hand of the EGM's own good at assets `a` in income state `j`.
+    # For separable preferences it also depends on consumption through hours.
+    coh_at(a, j) = has_labor ? gross_R[j] * a + net_inc[j] :
+                               ip.budget_fn(a, e_vals[j], prices)
+    coh_sep(a, j, c) = gross_R[j] * a + net_inc[j] +
+                       w * e_vals[j] * labor_supply(ls, w * e_vals[j], u_prime(c))
+
     # Initialize consumption policy. When a previous solution is supplied
     # (`init_policy`, #238), warm-start from it — successive EGM solves at nearby
     # prices then reach the fixed point in far fewer iterations. Otherwise fall
@@ -145,7 +268,7 @@ function _egm_solve(ip::IndividualProblem{T}, grid::HAGrid{T},
     else
         for j in 1:n_e
             for i in 1:n_a
-                coh = ip.budget_fn(a_grid[i], e_vals[j], prices)
+                coh = coh_at(a_grid[i], j)
                 c_pol[i, j] = max(coh * T(0.05), T(1e-10))
             end
         end
@@ -157,9 +280,6 @@ function _egm_solve(ip::IndividualProblem{T}, grid::HAGrid{T},
     emu = zeros(T, n_a)
     c_endo = zeros(T, n_a)
     a_endo = zeros(T, n_a)
-
-    r = prices[:r]
-    w = prices[:w]
 
     converged = false
     for iter in 1:max_iter
@@ -187,23 +307,41 @@ function _egm_solve(ip::IndividualProblem{T}, grid::HAGrid{T},
             # assets, so net_income = budget_fn(0, e, prices) and the gross return
             # factor is its own-asset slope budget_fn(1,e)-budget_fn(0,e); both are
             # read from the same hook rather than re-inlining `w*e`/`(1+r)`.
-            net_income = ip.budget_fn(zero(T), e_vals[j], prices)
-            gross_R = ip.budget_fn(one(T), e_vals[j], prices) - net_income
-            for i in 1:n_a
-                a_endo[i] = (c_endo[i] + a_grid[i] - net_income) / gross_R
+            # Under separable preferences hours respond to consumption, so the
+            # labor income term varies along the endogenous grid; under GHH (and
+            # with exogenous labor) it is already inside `net_inc[j]`.
+            if has_labor && !ghh
+                we = w * e_vals[j]
+                for i in 1:n_a
+                    lab_inc = we * labor_supply(ls, we, u_prime(c_endo[i]))
+                    a_endo[i] = (c_endo[i] + a_grid[i] - net_inc[j] - lab_inc) / gross_R[j]
+                end
+            else
+                for i in 1:n_a
+                    a_endo[i] = (c_endo[i] + a_grid[i] - net_inc[j]) / gross_R[j]
+                end
             end
 
             # Step 4: Interpolate back to exogenous grid + borrowing constraint
             for i in 1:n_a
                 a_val = a_grid[i]
                 if a_val < a_endo[1]
-                    # Constrained: consume all cash-on-hand minus borrowing limit savings
-                    coh = ip.budget_fn(a_val, e_vals[j], prices)
-                    c_new[i, j] = max(coh - a_min, T(1e-10))
+                    # Constrained: consume all cash-on-hand minus borrowing limit
+                    # savings. With separable preferences cash-on-hand itself
+                    # depends on consumption through hours, so this is a scalar
+                    # root-find rather than a subtraction.
+                    if has_labor && !ghh
+                        c_new[i, j] = _solve_constrained_c(ls, u_prime, a_val, j,
+                                                           gross_R, net_inc, w,
+                                                           e_vals[j], a_min)
+                    else
+                        c_new[i, j] = max(coh_at(a_val, j) - a_min, T(1e-10))
+                    end
                     a_new[i, j] = a_min
                 else
                     c_new[i, j] = _linear_interp(a_endo, c_endo, a_val)
-                    coh = ip.budget_fn(a_val, e_vals[j], prices)
+                    coh = has_labor && !ghh ? coh_sep(a_val, j, c_new[i, j]) :
+                                              coh_at(a_val, j)
                     a_new[i, j] = max(coh - c_new[i, j], a_min)
                 end
             end
@@ -233,8 +371,21 @@ function _egm_solve(ip::IndividualProblem{T}, grid::HAGrid{T},
     a_pol = zeros(T, n_a, n_e)
     for j in 1:n_e
         for i in 1:n_a
-            coh = ip.budget_fn(a_grid[i], e_vals[j], prices)
+            coh = has_labor && !ghh ? coh_sep(a_grid[i], j, c_pol[i, j]) :
+                                      coh_at(a_grid[i], j)
             a_pol[i, j] = max(coh - c_pol[i, j], a_min)
+        end
+    end
+
+    # Under GHH the loop above solved for the composite good x = c - v(n); the
+    # savings policy is already correct (the budget is written in x), so convert
+    # to actual consumption only now: c = x + v(n).
+    if ghh
+        for j in 1:n_e
+            d = ghh_disutil[j]
+            for i in 1:n_a
+                c_pol[i, j] += d
+            end
         end
     end
 

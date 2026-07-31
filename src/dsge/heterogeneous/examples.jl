@@ -11,6 +11,7 @@ Provides pre-calibrated `HADSGESpec` specifications for canonical models:
 - `:krusell_smith` — Krusell & Smith (1998) incomplete markets
 - `:one_asset_hank` — one-asset HANK (Kaplan-Moll-Violante style)
 - `:two_asset_hank` — two-asset HANK with portfolio adjustment costs
+- `:endogenous_labor` — Aiyagari with GHH endogenous labor supply
 
 # References
 - Krusell, P., & Smith, A. A. (1998). Income and wealth heterogeneity in the
@@ -87,6 +88,35 @@ function _crra_utility(sigma_c::Float64)
 end
 
 # =============================================================================
+# _unit_mean_lognormal_income — shared income discretization for the examples
+# =============================================================================
+
+"""
+    _unit_mean_lognormal_income(rho, sd_log, n; method=:rouwenhorst) -> IncomeProcess{Float64}
+
+Discretized log-AR(1) idiosyncratic income normalized to a unit-mean multiplier
+`e = exp(z) / E[exp(z)]`, so `E[e] = 1` and every state gives strictly positive
+labor income `w*e` (the raw grid is symmetric about 0 in logs, which would make
+half the states negative if used directly).
+
+`sd_log` is the **unconditional (cross-sectional) standard deviation of
+`log e`**, not the innovation standard deviation — the `exp`/`E[exp]`
+normalization is a pure location shift in logs, so `sd(log e) == sd_log`
+exactly. This is the convention the calibration targets are quoted in and the
+one the Python `sequence-jacobian` toolkit uses; the underlying
+[`rouwenhorst`](@ref)/[`tauchen`](@ref) primitives default to the *innovation*
+convention, so the call below passes `sigma_is=:unconditional` explicitly.
+"""
+function _unit_mean_lognormal_income(rho::Real, sd_log::Real, n::Int;
+                                     method::Symbol=:rouwenhorst)
+    raw = method === :tauchen ? tauchen(rho, sd_log, n; sigma_is=:unconditional) :
+                                rouwenhorst(rho, sd_log, n; sigma_is=:unconditional)
+    e = exp.(raw.states)
+    e ./= dot(raw.stationary_dist, e)
+    return IncomeProcess{Float64}(raw.transition, e, raw.stationary_dist, :income)
+end
+
+# =============================================================================
 # Shared helper functions (named, to avoid closure-over-local issues in 1.12)
 # =============================================================================
 
@@ -129,18 +159,23 @@ function _ks_example()
     # CRRA with sigma = 1 (log utility)
     u, up, upi = _crra_utility(1.0)
 
-    # Income process: Rouwenhorst(0.966, 0.5, 7), normalized to a unit-mean
-    # multiplier e = exp(z) / E[exp(z)] so that E[e] = 1 and every state gives
-    # strictly positive labor income w*e (the raw grid is a symmetric log grid
-    # about 0, which would make half the states have negative labor income).
-    inc_raw = rouwenhorst(0.966, 0.5, 7)
-    e_norm = exp.(inc_raw.states)
-    e_norm ./= dot(inc_raw.stationary_dist, e_norm)
-    income = IncomeProcess{Float64}(inc_raw.transition, e_norm,
-                                    inc_raw.stationary_dist, :income)
+    # Income: log e is AR(1) with rho = 0.966 and UNCONDITIONAL sd(log e) = 0.5
+    # — the Krusell-Smith / sequence-jacobian calibration target — normalized to
+    # unit mean so every state gives strictly positive labor income w*e (#231).
+    # NB 0.5 is the cross-sectional sd, NOT the innovation sd: passing it
+    # positionally to `rouwenhorst` would give sd(log e) = 0.5/sqrt(1-0.966^2)
+    # = 1.93, a 15x-too-dispersed income process.
+    income = _unit_mean_lognormal_income(0.966, 0.5, 7)
 
-    # Asset grid: [0, 200] with 200 points
-    grid = HAGrid(; assets=(0.0, 200.0, 200), income_states=7)
+    # Asset grid: [0, 1000] with 200 pivot-geometric points. a_max/K ~ 24 at the
+    # equilibrium K, so the savings policy is interior on a set of full measure
+    # and the ceiling never binds — required for the asset market to clear, since
+    # the Young (2010) transition clamps a' at a_max. `:geometric` rather than
+    # `:double_exp` because the latter's bottom spacing scales linearly with
+    # a_max and would trade the ceiling problem for a resolution problem at the
+    # borrowing constraint.
+    grid = HAGrid(; assets=(0.0, 1000.0, 200), income_states=7,
+                    grid_type=:geometric)
 
     # Individual problem
     individual = IndividualProblem{Float64}(u, up, upi, beta, _ks_budget,
@@ -180,18 +215,16 @@ function _one_asset_hank_example()
     # CRRA utility
     u, up, upi = _crra_utility(sigma_c)
 
-    # Income process: Rouwenhorst(0.966, 0.5, 7), normalized to a unit-mean
-    # multiplier e = exp(z) / E[exp(z)] so that E[e] = 1 and every state gives
-    # strictly positive labor income w*e (the raw grid is a symmetric log grid
-    # about 0, which would make half the states have negative labor income).
-    inc_raw = rouwenhorst(0.966, 0.5, 7)
-    e_norm = exp.(inc_raw.states)
-    e_norm ./= dot(inc_raw.stationary_dist, e_norm)
-    income = IncomeProcess{Float64}(inc_raw.transition, e_norm,
-                                    inc_raw.stationary_dist, :income)
+    # Income: unconditional sd(log e) = 0.5, as in the KS example (see
+    # `_unit_mean_lognormal_income` for the sd convention).
+    income = _unit_mean_lognormal_income(0.966, 0.5, 7)
 
-    # Asset grid: [-2, 50] with 200 points (allows borrowing)
-    grid = HAGrid(; assets=(-2.0, 50.0, 200), income_states=7)
+    # Asset grid: [-2, 1000] with 200 pivot-geometric points (allows borrowing).
+    # beta = 0.986 here gives beta(1+r) closer to 1 than in the KS example, i.e.
+    # a fatter right tail — so the ceiling has to be checked again if beta is
+    # ever recalibrated. The shipped [-2, 50] left ~29% of mass on the ceiling.
+    grid = HAGrid(; assets=(-2.0, 1000.0, 200), income_states=7,
+                    grid_type=:geometric)
 
     # Individual problem — borrowing constraint b >= -2
     individual = IndividualProblem{Float64}(u, up, upi, beta, _hank1_budget,
@@ -231,17 +264,14 @@ function _two_asset_hank_example()
     # CRRA utility
     u, up, upi = _crra_utility(sigma_c)
 
-    # Income process: Rouwenhorst(0.966, 0.5, 7), normalized to a unit-mean
-    # multiplier e = exp(z) / E[exp(z)] so that E[e] = 1 and every state gives
-    # strictly positive labor income w*e (the raw grid is a symmetric log grid
-    # about 0, which would make half the states have negative labor income).
-    inc_raw = rouwenhorst(0.966, 0.5, 7)
-    e_norm = exp.(inc_raw.states)
-    e_norm ./= dot(inc_raw.stationary_dist, e_norm)
-    income = IncomeProcess{Float64}(inc_raw.transition, e_norm,
-                                    inc_raw.stationary_dist, :income)
+    # Income: unconditional sd(log e) = 0.5, as in the KS example (see
+    # `_unit_mean_lognormal_income` for the sd convention).
+    income = _unit_mean_lognormal_income(0.966, 0.5, 7)
 
-    # Two-asset grid: liquid [-2, 50] (50 pts), illiquid [0, 100] (50 pts)
+    # Two-asset grid: liquid [-2, 50] (50 pts), illiquid [0, 100] (50 pts).
+    # Left as-is: `compute_steady_state` does not support two-asset market
+    # clearing, so no shipped number is computed from these bounds and re-sizing
+    # them would be an unverifiable guess.
     grid = HAGrid(; liquid=(-2.0, 50.0, 50), illiquid=(0.0, 100.0, 50),
                     income_states=7)
 
@@ -339,9 +369,13 @@ end
 # =============================================================================
 
 """
-    load_ha_example(name::Symbol) -> HADSGESpec{Float64}
+    load_ha_example(name::Symbol; distribution=:young) -> HADSGESpec{Float64}
 
 Return a pre-calibrated `HADSGESpec` for a canonical heterogeneous agent model.
+
+Pass `distribution=:winberry` to represent the cross-sectional distribution by
+the Winberry (2018) parametric moment family instead of the Young (2010)
+histogram; everything else about the calibration is unchanged.
 
 # Available models
 
@@ -351,6 +385,7 @@ Return a pre-calibrated `HADSGESpec` for a canonical heterogeneous agent model.
 | `:one_asset_hank` | One-asset HANK | Kaplan, Moll & Violante (2018) |
 | `:two_asset_hank` | Two-asset HANK with adjustment costs | Kaplan, Moll & Violante (2018) |
 | `:huggett` | Pure-exchange risk-free bond, zero net supply | Huggett (1993) |
+| `:endogenous_labor` | Aiyagari with GHH endogenous labor supply | Greenwood, Hercowitz & Huffman (1988) |
 
 # Examples
 
@@ -365,18 +400,75 @@ report(ss)
   macroeconomy. *Journal of Political Economy*, 106(5), 867-896.
 - Kaplan, G., Moll, B., & Violante, G. L. (2018). Monetary policy according to
   HANK. *American Economic Review*, 108(3), 697-743.
+- Greenwood, J., Hercowitz, Z., & Huffman, G. W. (1988). Investment, capacity
+  utilization, and the real business cycle. *American Economic Review*, 78(3), 402-417.
 """
-function load_ha_example(name::Symbol)
-    if name === :krusell_smith
-        return _ks_example()
+function load_ha_example(name::Symbol; distribution::Symbol=:young)
+    spec = if name === :krusell_smith
+        _ks_example()
     elseif name === :one_asset_hank
-        return _one_asset_hank_example()
+        _one_asset_hank_example()
     elseif name === :two_asset_hank
-        return _two_asset_hank_example()
+        _two_asset_hank_example()
     elseif name === :huggett
-        return _huggett_example()
+        _huggett_example()
+    elseif name === :endogenous_labor
+        _endogenous_labor_example()
     else
-        error("Unknown HA-DSGE example: :$name. " *
-              "Available: :krusell_smith, :one_asset_hank, :two_asset_hank, :huggett")
+        error("Unknown HA-DSGE example: :$name. Available: :krusell_smith, " *
+              ":one_asset_hank, :two_asset_hank, :huggett, :endogenous_labor")
     end
+    distribution === :young && return spec
+    return HADSGESpec{Float64}(spec.aggregate_spec, spec.individual, spec.income,
+                                spec.grid, spec.aggregation, spec.het_params;
+                                model=spec.model, distribution=distribution)
+end
+
+# =============================================================================
+# _endogenous_labor_example — Aiyagari with GHH endogenous labor supply
+# =============================================================================
+
+"""
+    _endogenous_labor_example(; kind=:ghh, psi=3.0, frisch=0.5, a_max=2000.0, n_a=200)
+
+Aiyagari economy with **endogenous labor supply**. Identical to
+[`_ks_example`](@ref) except that households also choose hours.
+
+`psi = 3.0` is chosen so aggregate labor in efficiency units is `L ≈ 1` at the
+steady state, matching the `L = 1` normalization the exogenous-labor examples
+impose — which makes the two directly comparable.
+
+`a_max = 2000` rather than 1000: hours raise labor income, so the stationary
+wealth distribution has a fatter right tail and the ceiling has to move with it
+(see `ha_grid_diagnostics`).
+"""
+function _endogenous_labor_example(; kind::Symbol=:ghh, psi::Real=3.0,
+                                     frisch::Real=0.5, a_max::Real=2000.0,
+                                     n_a::Int=200)
+    alpha = 0.36
+    beta  = 0.99
+    delta = 0.025
+
+    u, up, upi = _crra_utility(1.0)
+
+    # Same income process as the Krusell-Smith example: unconditional
+    # sd(log e) = 0.5 (see `_unit_mean_lognormal_income` for the sd convention).
+    income = _unit_mean_lognormal_income(0.966, 0.5, 7)
+
+    grid = HAGrid(; assets=(0.0, Float64(a_max), n_a), income_states=7,
+                    grid_type=:geometric)
+
+    labor = LaborSupply(; kind=kind, psi=psi, frisch=frisch)
+    individual = IndividualProblem{Float64}(u, up, upi, beta, _ks_budget,
+                                            [0.0], nothing, 1; labor=labor)
+
+    agg_spec = _minimal_agg_spec(; alpha=alpha, delta=delta)
+    aggregation = Pair{Symbol,Function}[:K => _agg_var1]
+    het_params = Dict{Symbol,Float64}(
+        :alpha => alpha, :delta => delta, :Z => 1.0, :L => 1.0,
+        :psi => Float64(psi), :frisch => Float64(frisch)
+    )
+
+    return HADSGESpec{Float64}(agg_spec, individual, income, grid,
+                                aggregation, het_params)
 end

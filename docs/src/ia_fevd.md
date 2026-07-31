@@ -164,6 +164,52 @@ The Bayesian FEVD computes variance shares for each accepted posterior draw, dis
 
 ---
 
+## Generalized FEVD (Pesaran-Shin)
+
+The structural FEVD above accumulates squared **orthogonalized** IRFs. That is a proper variance decomposition only when the impact matrix satisfies ``PP' = \Sigma``, and under a Cholesky identification the answer depends on the variable ordering — an ordering that is often arbitrary. The generalized decomposition of Pesaran & Shin (1998) avoids both problems by using the reduced-form ``\Sigma`` directly, with no orthogonalization at all:
+
+```math
+gFEVD_{ij}(H) = \frac{\sigma_{jj}^{-1}\sum_{h=0}^{H-1}\left(e_i' \Phi_h \Sigma e_j\right)^2}
+                      {\sum_{h=0}^{H-1} e_i' \Phi_h \Sigma \Phi_h' e_i}
+```
+
+where:
+- ``\Phi_h`` are the **reduced-form** moving-average coefficients (``\Phi_0 = I``)
+- ``\Sigma`` is the reduced-form error covariance and ``\sigma_{jj}`` its ``j``-th diagonal
+- ``e_i`` are selection vectors, so the numerator is the part of variable ``i``'s forecast error variance attributable to a shock to **variable** ``j``
+
+```@example ia_fevd
+g = generalized_fevd(model, 20)
+gn = generalized_fevd(model, 20; normalize=true)
+
+(raw_row_sums = round.(vec(sum(g.proportions[:, :, 20]; dims=2)); digits=3),
+ normalized_row_sums = round.(vec(sum(gn.proportions[:, :, 20]; dims=2)); digits=6))
+```
+
+### Order invariance, and the price paid for it
+
+The generalized decomposition is **invariant to the variable ordering** — permuting the variables permutes the result and changes nothing else, to machine precision (measured ``3 \times 10^{-16}``), where the Cholesky FEVD on the same data moves by 0.30. That invariance is the reason to reach for it.
+
+The price is that the generalized shocks are **correlated**, so the shares of a given variable do **not** sum to one. The raw row sums above exceed one because correlated shocks each take credit for the common component.
+
+!!! warning "`normalize=true` is a convention, not an identity"
+    Rescaling each row to sum to one is standard applied practice — it is what the Diebold-Yilmaz connectedness literature does — but it does not turn the generalized shares into an exclusive decomposition of the variance. They genuinely overlap. Report the raw shares when the overlap is itself informative, and say which version you used.
+
+!!! note "Two exact properties worth checking on your own data"
+    At the impact horizon ``\Phi_0 = I``, so ``gFEVD_{ij}(1) = \sigma_{ij}^2/(\sigma_{ii}\sigma_{jj}) = \mathrm{corr}(u_i, u_j)^2`` and the own-variable share is **exactly one**. And when ``\Sigma`` is diagonal there is nothing to orthogonalize, so the generalized and Cholesky decompositions coincide.
+
+| Keyword | Type | Default | Description |
+|---------|------|---------|-------------|
+| `normalize` | `Bool` | `false` | Rescale each row to sum to one (a convention — see above) |
+| `shock_names` | `Vector{String}` | variable names | Labels for the shock dimension |
+| `quantiles` | `Vector{<:Real}` | `[0.16, 0.5, 0.84]` | Posterior quantile levels (BVAR method) |
+| `point_estimate` | `Symbol` | `:mean` | Central tendency (BVAR method) |
+| `max_draws` | `Int` | `1000` | Cap on posterior draws used (BVAR method) |
+
+`generalized_fevd` accepts a `VARModel` (returning an [`FEVD`](@ref)) or a `BVARPosterior` (returning a [`BayesianFEVD`](@ref) with posterior bands). Since nothing is orthogonalized, the BVAR method has no `method`/`check_func` machinery — every draw contributes and there is no rotation to accept or reject.
+
+---
+
 ## LP-Based FEVD
 
 The LP-based FEVD of Gorodnichenko & Lee (2019) estimates variance shares directly via R² regressions rather than inverting the VAR lag polynomial. This approach is robust to dynamic misspecification: even if the VAR lag order is wrong, the LP-FEVD consistently estimates the true variance shares.

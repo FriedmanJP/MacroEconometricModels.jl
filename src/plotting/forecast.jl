@@ -41,16 +41,28 @@ function _forecast_panel_js(id::String, fc::AbstractVector, lo::AbstractVector,
                             hi::AbstractVector; has_ci::Bool, fc_name::String,
                             history::Union{AbstractVector,Nothing}, n_history::Int,
                             base_color::String=_PLOT_SERIES[1],
-                            xlabel::String, ylabel::String)
-    data_json = _forecast_data_json(fc, lo, hi; history=history, n_history=n_history)
+                            xlabel::String, ylabel::String,
+                            extra_line::Union{AbstractVector,Nothing}=nothing,
+                            extra_name::String="Reference")
+    data_json = _forecast_data_json(fc, lo, hi; history=history, n_history=n_history,
+                                    extra=extra_line)
+    has_extra = extra_line !== nothing
     if history === nothing
-        s_json = _series_json([fc_name], [base_color]; keys=["fc"])
+        names = has_extra ? [fc_name, extra_name] : [fc_name]
+        colors = has_extra ? [base_color, _PLOT_SERIES[3]] : [base_color]
+        keys = has_extra ? ["fc", "extra"] : ["fc"]
+        dash = has_extra ? ["", "4,4"] : [""]
+        s_json = _series_json(names, colors; keys=keys, dash=dash)
         bands = has_ci ?
             "[{\"lo_key\":\"ci_lo\",\"hi_key\":\"ci_hi\",\"color\":\"$(base_color)\",\"alpha\":$(_PLOT_CI_ALPHA)}]" : "[]"
         refs = "[]"
     else
-        s_json = _series_json(["History", fc_name], [_PLOT_SERIES[1], _PLOT_SERIES[2]];
-                              keys=["hist", "fc"], dash=["", "6,3"])
+        names = has_extra ? ["History", fc_name, extra_name] : ["History", fc_name]
+        colors = has_extra ? [_PLOT_SERIES[1], _PLOT_SERIES[2], _PLOT_SERIES[3]] :
+                             [_PLOT_SERIES[1], _PLOT_SERIES[2]]
+        keys = has_extra ? ["hist", "fc", "extra"] : ["hist", "fc"]
+        dash = has_extra ? ["", "6,3", "4,4"] : ["", "6,3"]
+        s_json = _series_json(names, colors; keys=keys, dash=dash)
         bands = has_ci ?
             "[{\"lo_key\":\"ci_lo\",\"hi_key\":\"ci_hi\",\"color\":\"$(_PLOT_SERIES[2])\",\"alpha\":$(_PLOT_CI_ALPHA)}]" : "[]"
         # Vertical reference line at the forecast origin (x = 0 in the joined domain).
@@ -229,6 +241,51 @@ function plot_result(fc::BVARForecast{T};
     if isempty(title)
         ci_pct = round(Int, 100 * fc.conf_level)
         title = "Bayesian VAR Forecast ($(ci_pct)% credible interval)"
+    end
+
+    p = _make_plot(panels; title=title, ncols=ncols)
+    save_path !== nothing && save_plot(p, save_path)
+    p
+end
+
+# =============================================================================
+# ConditionalForecast
+# =============================================================================
+
+"""
+    plot_result(fc::ConditionalForecast; var=nothing, history=nothing, n_history=50, ncols=0, title="", save_path=nothing)
+
+Plot a Waggoner-Zha conditional forecast with its bands. The unconditional forecast is
+drawn alongside as a reference line, so the effect of the conditioning path is visible
+panel by panel.
+"""
+function plot_result(fc::ConditionalForecast{T};
+                     var::Union{Int,String,Nothing}=nothing,
+                     history::Union{AbstractVector,AbstractMatrix,Nothing}=nothing,
+                     n_history::Int=50,
+                     ncols::Int=0, title::String="",
+                     save_path::Union{String,Nothing}=nothing) where {T}
+    h, n_vars = size(fc.forecast)
+    vars_to_plot = var === nothing ? (1:n_vars) : [_resolve_var(var, fc.varnames)]
+    _fc_validate_history(history, length(vars_to_plot), n_vars)
+    constrained = Set(c.variable::Int for c in fc.conditions)
+
+    panels = _PanelSpec[]
+    for vi in vars_to_plot
+        id = _next_plot_id("cond_fc")
+        ptitle = vi in constrained ? "$(fc.varnames[vi]) (conditioned)" : fc.varnames[vi]
+        js = _forecast_panel_js(id, fc.forecast[:, vi], fc.ci_lower[:, vi], fc.ci_upper[:, vi];
+                                has_ci=true, fc_name="Conditional",
+                                history=_fc_history_col(history, vi), n_history=n_history,
+                                xlabel="Horizon", ylabel="Forecast",
+                                extra_line=fc.unconditional[:, vi],
+                                extra_name="Unconditional")
+        push!(panels, _PanelSpec(id, ptitle, js))
+    end
+
+    if isempty(title)
+        ci_pct = round(Int, 100 * fc.conf_level)
+        title = "Conditional Forecast ($(ci_pct)% band, $(fc.identification))"
     end
 
     p = _make_plot(panels; title=title, ncols=ncols)

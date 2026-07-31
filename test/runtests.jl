@@ -46,8 +46,12 @@ const TEST_GROUPS = [
         "bvar/test_bayesian_utils.jl",
         "bvar/test_minnesota.jl",
         "bvar/test_bgr.jl",
+        "bvar/test_tvpvar.jl",   # T250 (#349): Primiceri TVP-VAR-SV / Cogley-Sargent SV-BVAR
+        "bvar/test_mfvar.jl",    # T251 (#350): Schorfheide-Song mixed-frequency VAR
+        "bvar/test_glp.jl",      # T252 (#351): GLP hierarchical hyperparameter optimization
         "var/test_arias2018.jl",
         "var/test_uhlig.jl",
+        "var/test_conditional_forecast.jl",   # T241 (#340): Waggoner-Zha conditional forecasts
         "preg/test_panel_nonlinear.jl",   # moved from the ceiling ARIMA group to rebalance (#127)
     ]),
     # Group 3: IRF/FEVD/HD & VECM
@@ -66,6 +70,7 @@ const TEST_GROUPS = [
         "lp/test_lp_structural.jl",
         "lp/test_lp_forecast.jl",
         "lp/test_lp_fevd.jl",
+        "lp/test_lp_weak_iv.jl",   # T245 (#344): MOP effective F + LP-IV AR bands
         "factor/test_factormodel.jl",
         "factor/test_dynamicfactormodel.jl",
         "factor/test_gdfm.jl",
@@ -92,6 +97,7 @@ const TEST_GROUPS = [
         "arima/test_arima.jl",
         "arima/test_arima_coverage.jl",
         "arima/test_arfima.jl",   # EV-13 (#421): ARFIMA + GPH + local Whittle
+        "arima/test_sarima.jl",   # T242 (#341): multiplicative seasonal ARIMA
         "statespace/test_statespace.jl",   # EV-37 (#445): public state-space Kalman MLE + TVP regression
         "teststat/test_granger.jl",
         "teststat/test_dumitrescu_hurlin.jl",   # EV-24 (#432): DH panel Granger non-causality
@@ -114,6 +120,8 @@ const TEST_GROUPS = [
         "reg/test_heckman.jl",     # EV-18 (#426): Heckman sample-selection (two-step + MLE)
         "reg/test_robust.jl",      # EV-40 (#448): robust regression — Huber/bisquare M + Yohai MM
         "system/test_system.jl",   # EV-35 (#443): SUR / 3SLS systems estimation
+        "reg/test_wildboot.jl",          # T243 (#342): wild cluster bootstrap (boottest-style)
+        "reg/test_anderson_rubin.jl",    # T244 (#343): AR weak-IV-robust test + confidence set
         "reg/test_reg_diagnostics.jl",   # EV-31 (#439): White/BP/Glejser/Harvey/BG/RESET
         "reg/test_stability.jl",         # EV-32 (#440): recursive residuals / CUSUM(SQ) / Chow / influence
         "reg/test_ordered.jl",
@@ -178,6 +186,7 @@ const TEST_GROUPS = [
     ("DSGE Core" => [
         "dsge/test_dsge.jl",
         "dsge/test_blanchard_olg.jl",
+        "dsge/test_lifecycle_olg.jl",
         "dsge/test_continuous_aiyagari.jl",
     ]),
     ("DSGE Bayesian & HD" => [
@@ -469,6 +478,7 @@ else
         @testset "ARIMA Models" begin include("arima/test_arima.jl") end
         @testset "ARIMA Coverage" begin include("arima/test_arima_coverage.jl") end
         @testset "ARFIMA (long memory)" begin include("arima/test_arfima.jl") end
+        @testset "SARIMA (seasonal)" begin include("arima/test_sarima.jl") end
         @testset "State-Space Module" begin include("statespace/test_statespace.jl") end   # EV-37 (#445)
         @testset "Granger Causality Tests" begin include("teststat/test_granger.jl") end
         @testset "Equality & Rank Correlation Tests" begin include("teststat/test_equality.jl") end   # EV-34 (#442)
@@ -544,6 +554,7 @@ else
         @testset "DSGE Core" begin
             include("dsge/test_dsge.jl")
             include("dsge/test_blanchard_olg.jl")
+            include("dsge/test_lifecycle_olg.jl")
             include("dsge/test_continuous_aiyagari.jl")
         end
         @testset "DSGE Bayesian & HD" begin

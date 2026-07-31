@@ -339,6 +339,18 @@ end
         pdP = xtset(dfP, :g, :t)
         _assert_roundtrip(estimate_pvar(pdP, 1))
         _assert_roundtrip(estimate_xtreg(pdP, :y, [:x1, :x2]; model=:fe))
+        # HDFE fit (T272, #371): carries a NamedTuple `hdfe` field
+        m_hdfe = estimate_xtreg(pdP, :y, [:x1, :x2]; absorb=[:entity, :time])
+        _assert_roundtrip(m_hdfe)
+        let pth = joinpath(mktempdir(), "hdfe.jld2")
+            save_model(m_hdfe, pth)
+            back = load_model(pth)
+            @test back.hdfe.absorb == [:entity, :time]
+            @test back.hdfe.n_absorbed == m_hdfe.hdfe.n_absorbed
+            @test back.hdfe.n_levels == m_hdfe.hdfe.n_levels
+            @test back.hdfe.converged
+            @test dof_residual(back) == dof_residual(m_hdfe)
+        end
         _assert_roundtrip(estimate_xtiv(pdP, :y, [:x1], [:xen]; instruments=[:z1, :z2], model=:fe))
         _assert_roundtrip(estimate_xtlogit(pdP, :yb, [:x1, :x2]))
         _assert_roundtrip(estimate_xtprobit(pdP, :yb, [:x1, :x2]))

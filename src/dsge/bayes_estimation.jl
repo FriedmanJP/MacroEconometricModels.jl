@@ -216,6 +216,19 @@ SMC², or Random-Walk Metropolis-Hastings (RWMH).
 - `measurement_error::Union{Nothing,Symbol,Vector{<:Real}}=nothing` — measurement error SDs;
   `nothing` means zero ME (requires `n_obs ≤ n_shocks`, else a `StochasticSingularityError`
   is thrown); `:auto` adds per-observable ME at 10% of each series' variance with a warning
+- `prefilter::Symbol=:none` — built-in observable transform applied before estimation
+  (`:none`, `:demean`, `:first_difference`, `:linear_detrend`, `:hp`); the applied transform
+  is recorded on `result.prefilter` so forecasts can be mapped back with
+  [`invert_prefilter`](@ref). See [`apply_prefilter`](@ref).
+- `hp_lambda::Real=1600` — HP smoothing parameter used when `prefilter=:hp`
+- `observation_trends=nothing` — deterministic trends in the measurement equation,
+  `yₜ = d + Z sₜ + trendₜ + vₜ`. A `Dict{Symbol}` keyed by observable whose values are a
+  `Real`/`Symbol` (linear term), a `NamedTuple` of `constant`/`linear`/`quadratic`, or a
+  tuple read in that order. `Symbol` coefficients name **declared model parameters** and are
+  therefore estimated whenever they are given a prior (Dynare's `observation_trends`).
+  Estimated (symbolic) trends require a Kalman method (`:smc`/`:mh`).
+- `warn_trends::Bool=true` — emit the [`detect_trend`](@ref) guidance warning when strongly
+  trending observables are estimated with no prefilter and no observation trends
 - `likelihood::Symbol=:auto` — likelihood evaluation method (currently auto = Kalman)
 - `solver::Symbol=:gensys` — DSGE solver method
 - `solver_kwargs::NamedTuple=NamedTuple()` — additional solver keyword arguments
@@ -266,6 +279,10 @@ function estimate_dsge_bayes(spec::DSGESpec{T}, data::AbstractMatrix,
                               keep_burnin::Bool=false,
                               ess_target::Float64=0.5,
                               measurement_error::Union{Nothing,Symbol,Vector{<:Real}}=nothing,
+                              prefilter::Symbol=:none,
+                              hp_lambda::Real=1600,
+                              observation_trends=nothing,
+                              warn_trends::Bool=true,
                               likelihood::Symbol=:auto,
                               solver::Symbol=:gensys,
                               solver_kwargs::NamedTuple=NamedTuple(),
@@ -296,6 +313,25 @@ function estimate_dsge_bayes(spec::DSGESpec{T}, data::AbstractMatrix,
     # Public convention is T×n; Kalman/PF expect n_obs × T_obs internally.
     data_mat = _orient_data(data, n_obs, T)
 
+    # ── 4a. Observation handling for trending data (T240 / #339) ─────────
+    # Prefilter first (it changes the sample), then build the measurement-equation
+    # trends, then warn only if the user did neither.
+    prefilter_spec = nothing
+    if prefilter !== :none
+        data_mat, prefilter_spec = apply_prefilter(data_mat, prefilter;
+                                                   observables=observables,
+                                                   lambda=hp_lambda)
+    end
+
+    trends = observation_trends === nothing ? nothing :
+             _build_observation_trends(observation_trends, observables, T)
+    _validate_trend_params(trends, spec)
+    trends_record = trends   # what the user asked for, even if pre-subtracted below
+
+    if warn_trends && prefilter === :none && trends === nothing
+        _warn_untransformed_trends(data_mat, observables)
+    end
+
     # Resolve :auto measurement error against data variance (per-observable). (#141/T042)
     measurement_error = _resolve_measurement_error(measurement_error, data_mat, observables)
 
@@ -319,6 +355,20 @@ function estimate_dsge_bayes(spec::DSGESpec{T}, data::AbstractMatrix,
         throw(ArgumentError("proposal must be :adaptive or :mode, got :$proposal"))
     end
 
+    # ── 5a. Observation trends vs. the particle-filter path ──────────────
+    # The :smc2 particle filter has no per-θ data hook; fixed (all-numeric) trends are
+    # therefore removed from the data up front, while θ-dependent trends are rejected
+    # with guidance rather than silently ignored.
+    if trends !== nothing && method == :smc2
+        _has_estimated_terms(trends) && throw(ArgumentError(
+            "observation_trends with parameter symbols $(_trend_param_symbols(trends)) " *
+            "requires a Kalman method (method=:smc or :mh); the :smc2 particle filter " *
+            "cannot re-evaluate the trend per draw. Fix the coefficients numerically or " *
+            "switch method."))
+        data_mat = data_mat .- _trend_matrix(trends, spec.param_values, size(data_mat, 2), T)
+        trends = nothing
+    end
+
     # ── 6. Dispatch to sampler ───────────────────────────────────────────
     if method == :smc
         state = _smc_sample(spec, data_mat, param_names, prior, theta0_sorted;
@@ -326,10 +376,12 @@ function estimate_dsge_bayes(spec::DSGESpec{T}, data::AbstractMatrix,
                              ess_target=ess_target, observables=observables,
                              measurement_error=measurement_error,
                              solver=solver, solver_kwargs=solver_kwargs,
+                             trends=trends,
                              max_stages=max_stages, min_dphi=min_dphi, rng=rng)
         return _smc_state_to_bayesian_dsge(state, prior, param_names, spec, :smc,
                                             observables, measurement_error,
-                                            solver, solver_kwargs, data_mat)
+                                            solver, solver_kwargs, data_mat,
+                                            prefilter_spec, trends_record)
 
     elseif method == :smc2
         state = _smc2_sample(spec, data_mat, param_names, prior, theta0_sorted;
@@ -343,7 +395,8 @@ function estimate_dsge_bayes(spec::DSGESpec{T}, data::AbstractMatrix,
                               max_stages=max_stages, min_dphi=min_dphi, rng=rng)
         return _smc_state_to_bayesian_dsge(state, prior, param_names, spec, :smc2,
                                             observables, measurement_error,
-                                            solver, solver_kwargs, data_mat)
+                                            solver, solver_kwargs, data_mat,
+                                            prefilter_spec, trends_record)
 
     else  # :mh
         theta_init = theta0_sorted
@@ -352,7 +405,8 @@ function estimate_dsge_bayes(spec::DSGESpec{T}, data::AbstractMatrix,
             pm = posterior_mode(spec, data_mat, theta0_sorted;
                                 priors=priors, observables=observables,
                                 measurement_error=measurement_error,
-                                solver=solver, solver_kwargs=solver_kwargs)
+                                solver=solver, solver_kwargs=solver_kwargs,
+                                trends=trends)
             c2 = T(2.38)^2 / T(length(param_names))
             init_proposal_cov = c2 .* pm.inv_hessian
             theta_init = pm.mode
@@ -372,7 +426,7 @@ function estimate_dsge_bayes(spec::DSGESpec{T}, data::AbstractMatrix,
             n_draws=n_draws, burnin=burnin,
             observables=observables,
             measurement_error=measurement_error,
-            solver=solver, solver_kwargs=solver_kwargs,
+            solver=solver, solver_kwargs=solver_kwargs, trends=trends,
             init_proposal_cov=init_proposal_cov, transform=transform, rng=rng)
         # Discard burn-in so posterior summaries exclude the transient. The burnin kwarg was
         # previously a no-op for :mh (all draws stored). keep_burnin=true retains the full
@@ -386,7 +440,8 @@ function estimate_dsge_bayes(spec::DSGESpec{T}, data::AbstractMatrix,
                                      prior, param_names, spec,
                                      observables, measurement_error,
                                      solver, solver_kwargs,
-                                     _mh_diag.n_failed, _mh_diag.n_evals, data_mat)
+                                     _mh_diag.n_failed, _mh_diag.n_evals, data_mat,
+                                     prefilter_spec, trends_record)
     end
 end
 
@@ -435,6 +490,8 @@ and `inv_hessian` falls back to a diagonal matrix.
 - `measurement_error=nothing` — measurement error SDs
 - `solver::Symbol=:gensys` — DSGE solver method
 - `solver_kwargs::NamedTuple=NamedTuple()` — additional solver kwargs
+- `trends::Union{Nothing,ObservationTrends}=nothing` — deterministic observation trends,
+  so the mode is found under the same measurement equation the sampler uses
 - `transform::Bool=true` — optimize in the unconstrained (prior-transformed) space
 - `optimizer=Optim.LBFGS()` — any `Optim.jl` first-order optimizer
 - `f_reltol::Real=1e-8` — relative objective tolerance (`Optim.Options` `f_reltol`)
@@ -457,6 +514,7 @@ function posterior_mode(spec::DSGESpec{T}, data::AbstractMatrix,
                         measurement_error=nothing,
                         solver::Symbol=:gensys,
                         solver_kwargs::NamedTuple=NamedTuple(),
+                        trends::Union{Nothing,ObservationTrends{T}}=nothing,
                         transform::Bool=true,
                         optimizer=Optim.LBFGS(),
                         f_reltol::Real=1e-8,
@@ -476,7 +534,8 @@ function posterior_mode(spec::DSGESpec{T}, data::AbstractMatrix,
 
     # Same likelihood closure the samplers use, so mode and chain see identical evaluations
     ll_fn = _build_likelihood_fn(spec, param_names, data_mat, observables,
-                                 measurement_error, solver, solver_kwargs)
+                                 measurement_error, solver, solver_kwargs;
+                                 trends=trends)
 
     penalty = T(1e10)
     function logpost(theta::Vector{T})
@@ -595,7 +654,9 @@ function _smc_state_to_bayesian_dsge(state::SMCState{T}, prior::DSGEPrior{T},
                                        measurement_error,
                                        solver::Symbol,
                                        solver_kwargs::NamedTuple,
-                                       data::Matrix{T}=zeros(T, 0, 0)) where {T<:AbstractFloat}
+                                       data::Matrix{T}=zeros(T, 0, 0),
+                                       prefilter=nothing,
+                                       trends=nothing) where {T<:AbstractFloat}
     # theta_draws: transpose from n_params × N_smc to N_smc × n_params
     theta_draws = Matrix{T}(state.theta_particles')
 
@@ -629,7 +690,8 @@ function _smc_state_to_bayesian_dsge(state::SMCState{T}, prior::DSGEPrior{T},
         state.ess_history, state.phi_schedule,
         spec, sol, ss,
         state.n_lik_failures, state.n_lik_evals, solved_at,
-        data, observables, measurement_error, solver, solver_kwargs
+        data, observables, measurement_error, solver, solver_kwargs,
+        prefilter, trends
     )
 end
 
@@ -736,7 +798,9 @@ function _mh_to_bayesian_dsge(draws::Matrix{T}, log_posterior::Vector{T},
                                 solver_kwargs::NamedTuple,
                                 n_failed::Int=0,
                                 n_evals::Int=0,
-                                data::Matrix{T}=zeros(T, 0, 0)) where {T<:AbstractFloat}
+                                data::Matrix{T}=zeros(T, 0, 0),
+                                prefilter=nothing,
+                                trends=nothing) where {T<:AbstractFloat}
     # Posterior mean from draws
     theta_mean = vec(mean(draws; dims=1))
 
@@ -758,7 +822,8 @@ function _mh_to_bayesian_dsge(draws::Matrix{T}, log_posterior::Vector{T},
         T[], T[],  # no ESS history or phi schedule for MH
         spec, sol, ss,
         n_failed, n_evals, solved_at,
-        data, observables, measurement_error, solver, solver_kwargs
+        data, observables, measurement_error, solver, solver_kwargs,
+        prefilter, trends
     )
 end
 

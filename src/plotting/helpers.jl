@@ -161,11 +161,20 @@ end
 # Forecast Data
 # =============================================================================
 
-"""Convert forecast + optional history to JSON data array."""
+"""
+Convert forecast + optional history to JSON data array.
+
+`extra` adds a second forecast-window line under the key `"extra"` (used by the
+conditional forecast to draw the unconditional path alongside); it is emitted only when
+supplied, so existing callers produce byte-identical JSON.
+"""
 function _forecast_data_json(fc::AbstractVector, ci_lo::AbstractVector,
                              ci_up::AbstractVector;
                              history::Union{AbstractVector,Nothing}=nothing,
-                             n_history::Int=50)
+                             n_history::Int=50,
+                             extra::Union{AbstractVector,Nothing}=nothing)
+    extra === nothing || length(extra) == length(fc) || throw(ArgumentError(
+        "extra series has length $(length(extra)); expected $(length(fc)) to match the forecast"))
     rows = Vector{Pair{String,String}}[]
     start_idx = 0
 
@@ -174,24 +183,28 @@ function _forecast_data_json(fc::AbstractVector, ci_lo::AbstractVector,
         start_idx = -nh
         for i in 1:nh
             t = i - nh  # negative time index for history
-            push!(rows, [
+            row = [
                 "x" => _json(t),
                 "hist" => _json(history[end - nh + i]),
                 "fc" => "null",
                 "ci_lo" => "null",
                 "ci_hi" => "null"
-            ])
+            ]
+            extra === nothing || push!(row, "extra" => "null")
+            push!(rows, row)
         end
     end
 
     for i in 1:length(fc)
-        push!(rows, [
+        row = [
             "x" => _json(i),
             "hist" => "null",
             "fc" => _json(fc[i]),
             "ci_lo" => _json(ci_lo[i]),
             "ci_hi" => _json(ci_up[i])
-        ])
+        ]
+        extra === nothing || push!(row, "extra" => _json(extra[i]))
+        push!(rows, row)
     end
 
     # Bridge point: connect history to forecast. The last history row already carries

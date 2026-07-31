@@ -41,9 +41,14 @@ Estimate Bayesian VAR via conjugate Normal-Inverse-Wishart posterior.
 - `thin::Int=1`: Thinning interval (only for `:gibbs`)
 - `prior::Symbol=:normal`: Prior type (`:normal` or `:minnesota`)
 - `hyper::Union{Nothing,MinnesotaHyperparameters}=nothing`: Minnesota hyperparameters.
-  When `prior=:minnesota` and `hyper=nothing`, tau is automatically optimized via
-  marginal likelihood maximization (Giannone, Lenza & Primiceri 2015). Pass an explicit
-  `MinnesotaHyperparameters(...)` to use fixed values instead.
+  When `prior=:minnesota` and `hyper=nothing`, they are selected automatically (see
+  `hyperopt`). Pass an explicit `MinnesotaHyperparameters(...)` to use fixed values instead.
+- `hyperopt::Symbol=:glp`: how hyperparameters are selected when `hyper=nothing`.
+  `:glp` runs the full Giannone, Lenza & Primiceri (2015) joint optimization of the
+  marginal likelihood plus Gamma hyperpriors over the overall, sum-of-coefficients and
+  dummy-initial-observation tightness ([`optimize_hyperparameters_glp`](@ref)); `:grid`
+  restores the historical `tau`-only grid ([`optimize_hyperparameters`](@ref)), which
+  leaves the other hyperparameters at their defaults.
 
 # Returns
 `BVARPosterior{T}` containing coefficient and covariance draws.
@@ -60,10 +65,14 @@ function estimate_bvar(Y::AbstractMatrix{T}, p::Int;
     burnin::Int=0, thin::Int=1,
     prior::Symbol=:normal,
     hyper::Union{Nothing,MinnesotaHyperparameters}=nothing,
+    hyperopt::Symbol=:glp,
     varnames::Union{Vector{String},Nothing}=nothing,
     seed::Union{Integer,Nothing}=nothing,
     rng::AbstractRNG=Random.default_rng()
 ) where {T<:AbstractFloat}
+    hyperopt in (:glp, :grid) || throw(ArgumentError(
+        "hyperopt must be :glp (joint GLP optimization, the default) or :grid " *
+        "(tau-only grid); got :$hyperopt"))
 
     _validate_data(Y, "Y")
     T_obs, n = size(Y)
@@ -83,7 +92,17 @@ function estimate_bvar(Y::AbstractMatrix{T}, p::Int;
     # would double-lag the marginal-likelihood sample and scale the prior off a shifted sample
     # (audit F-04).
     Y_data, X_data = if prior == :minnesota
-        h = isnothing(hyper) ? optimize_hyperparameters(Y, p) : hyper
+        # Default: the full Giannone-Lenza-Primiceri (2015) joint optimization over the
+        # overall, sum-of-coefficients and initial-observation tightness with their Gamma
+        # hyperpriors (T252). `hyperopt=:grid` restores the historical tau-only grid, and an
+        # explicit `hyper=` bypasses selection entirely.
+        h = if !isnothing(hyper)
+            hyper
+        elseif hyperopt === :glp
+            optimize_hyperparameters_glp(Y, p).hyper
+        else
+            optimize_hyperparameters(Y, p)
+        end
         Y_d, X_d = gen_dummy_obs(Y, p, h)
         (vcat(Y_eff, Y_d), vcat(X, X_d))
     else

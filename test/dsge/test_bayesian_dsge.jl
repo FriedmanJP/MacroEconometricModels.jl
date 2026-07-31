@@ -4403,6 +4403,399 @@ end
     end
 end
 
+# ─────────────────────────────────────────────────────────────────────────────
+# T240 (#339): estimation on observables with trends — prefilter transforms +
+# deterministic trends in the observation equation
+# ─────────────────────────────────────────────────────────────────────────────
+
+@testset "T240 apply_prefilter transforms" begin
+    # Two constructed series with known structure, in the internal n_obs × T_obs layout
+    Tn = 40
+    tt = collect(1.0:Tn)
+    row1 = 2.0 .+ 3.0 .* tt                    # exact linear trend
+    row2 = 5.0 .+ [(-1.0)^t for t in 1:Tn]     # mean 5, zero-mean alternation
+    data = permutedims(hcat(row1, row2))
+    @test size(data) == (2, Tn)
+
+    @testset ":none is the identity" begin
+        f, pf = apply_prefilter(data, :none; observables=[:a, :b])
+        @test f == data
+        @test pf.transform === :none
+        @test pf.n_dropped == 0
+        @test all(iszero, pf.removed)
+        @test pf.observables == [:a, :b]
+    end
+
+    @testset ":demean removes the sample mean" begin
+        f, pf = apply_prefilter(data, :demean; observables=[:a, :b])
+        @test size(f) == size(data)
+        @test isapprox(mean(f[1, :]), 0.0; atol=1e-12)
+        @test isapprox(mean(f[2, :]), 0.0; atol=1e-12)
+        @test pf.intercepts ≈ [mean(row1), mean(row2)]
+        @test pf.n_dropped == 0
+    end
+
+    @testset ":first_difference drops one observation" begin
+        f, pf = apply_prefilter(data, :first_difference; observables=[:a, :b])
+        @test size(f) == (2, Tn - 1)
+        @test all(isapprox.(f[1, :], 3.0; atol=1e-12))   # constant growth
+        @test f[2, :] ≈ diff(row2)
+        @test pf.n_dropped == 1
+        @test pf.initial_levels ≈ [row1[1], row2[1]]
+        @test pf.final_levels ≈ [row1[end], row2[end]]
+    end
+
+    @testset ":linear_detrend recovers the exact trend" begin
+        f, pf = apply_prefilter(data, :linear_detrend; observables=[:a, :b])
+        @test maximum(abs, f[1, :]) < 1e-8      # exact linear series → zero residual
+        @test pf.intercepts[1] ≈ 2.0 atol = 1e-8
+        @test pf.slopes[1] ≈ 3.0 atol = 1e-10
+        # A mean-reverting series carries no trend (the alternating component is very
+        # nearly orthogonal to t; the exact OLS slope here is 20/5330 ≈ 0.0038)
+        @test abs(pf.slopes[2]) < 0.01
+        @test pf.removed[1, :] ≈ row1 atol = 1e-8
+    end
+
+    @testset ":hp splits into trend + cycle" begin
+        f, pf = apply_prefilter(data, :hp; observables=[:a, :b], lambda=1600)
+        @test size(f) == size(data)
+        @test f .+ pf.removed ≈ data          # cycle + trend == data, exactly
+        @test pf.lambda == 1600.0
+        # An exact linear series is an HP fixed point (zero second difference)
+        @test maximum(abs, f[1, :]) < 1e-6
+    end
+
+    @testset "argument validation" begin
+        @test_throws ArgumentError apply_prefilter(data, :bogus)
+        @test_throws ArgumentError apply_prefilter(data, :demean; observables=[:only_one])
+        @test_throws ArgumentError apply_prefilter(data[:, 1:1], :first_difference)
+        @test_throws ArgumentError apply_prefilter(data[:, 1:2], :linear_detrend)
+        @test_throws ArgumentError apply_prefilter(data[:, 1:2], :hp)
+    end
+end
+
+@testset "T240 invert_prefilter round-trips" begin
+    Tn = 30
+    tt = collect(1.0:Tn)
+    row = 1.5 .+ 0.25 .* tt .+ sin.(tt)
+    data = reshape(row, 1, Tn)
+
+    for tf in (:none, :demean, :linear_detrend, :hp)
+        f, pf = apply_prefilter(data, tf; observables=[:y])
+        @test invert_prefilter(pf, f) ≈ data
+    end
+
+    # :first_difference cumulates from a level anchor: y_1 anchors y_2..y_T
+    f, pf = apply_prefilter(data, :first_difference; observables=[:y])
+    @test invert_prefilter(pf, f; level0=pf.initial_levels) ≈ data[:, 2:end]
+    # Default anchor is the final level, which is what a forecast needs
+    fcst = reshape([0.25, 0.25], 1, 2)
+    @test invert_prefilter(pf, fcst) ≈ reshape([row[end] + 0.25, row[end] + 0.5], 1, 2)
+
+    # Out-of-sample extrapolation of a linear trend is analytic
+    _, pfl = apply_prefilter(data, :linear_detrend; observables=[:y])
+    out = invert_prefilter(pfl, zeros(1, 3); time_offset=Tn)
+    for h in 1:3
+        @test out[1, h] ≈ pfl.intercepts[1] + pfl.slopes[1] * (Tn + h)
+    end
+
+    # HP extrapolates its trend linearly from the last two points
+    _, pfh = apply_prefilter(data, :hp; observables=[:y])
+    slope = pfh.removed[1, end] - pfh.removed[1, end-1]
+    outh = invert_prefilter(pfh, zeros(1, 2); time_offset=Tn)
+    @test outh[1, 1] ≈ pfh.removed[1, end] + slope
+    @test outh[1, 2] ≈ pfh.removed[1, end] + 2slope
+
+    @test_throws ArgumentError invert_prefilter(pfl, zeros(2, 3))
+    @test_throws ArgumentError invert_prefilter(pfl, zeros(1, 3); time_offset=-1)
+    @test occursin("PrefilterSpec(:linear_detrend", sprint(show, pfl))
+end
+
+@testset "T240 ObservationTrends construction" begin
+    obs = [:y, :c]
+
+    # A bare Real/Symbol is the linear (growth) term, matching Dynare
+    tr = observation_trends(Dict(:y => 0.01, :c => :g), obs, Float64)
+    @test tr.constants == [0.0, 0.0]
+    @test tr.linears == [0.01, :g]
+    @test tr.quadratics == [0.0, 0.0]
+
+    # NamedTuple and tuple forms
+    tr2 = observation_trends(Dict(:y => (constant=1.0, linear=:g, quadratic=0.5)), obs, Float64)
+    @test tr2.constants[1] == 1.0
+    @test tr2.linears[1] === :g
+    @test tr2.quadratics[1] == 0.5
+    @test tr2.linears[2] == 0.0                      # absent observable → zero trend
+
+    tr3 = observation_trends(Dict(:c => (2.0, 0.3)), obs, Float64)
+    @test tr3.constants[2] == 2.0
+    @test tr3.linears[2] == 0.3
+    @test tr3.quadratics[2] == 0.0
+
+    # Re-validating an existing ObservationTrends
+    @test observation_trends(tr, obs, Float64).linears == tr.linears
+    @test_throws ArgumentError observation_trends(tr, [:y], Float64)
+
+    # Symbol bookkeeping
+    @test MacroEconometricModels._trend_param_symbols(tr) == [:g]
+    @test MacroEconometricModels._has_estimated_terms(tr)
+    @test !MacroEconometricModels._has_estimated_terms(
+        observation_trends(Dict(:y => 0.01), obs, Float64))
+    @test !MacroEconometricModels._has_estimated_terms(nothing)
+
+    # Error paths
+    @test_throws ArgumentError observation_trends(Dict(:zzz => 1.0), obs, Float64)
+    @test_throws ArgumentError observation_trends(Dict(:y => (cubic=1.0,)), obs, Float64)
+    @test_throws ArgumentError observation_trends(Dict(:y => (1.0, 2.0, 3.0, 4.0)), obs, Float64)
+    @test_throws ArgumentError observation_trends(Dict(:y => "linear"), obs, Float64)
+    @test_throws ArgumentError observation_trends([1.0, 2.0], obs, Float64)
+
+    @test occursin("ObservationTrends", sprint(show, tr))
+end
+
+@testset "T240 _trend_matrix evaluates c0 + c1 t + c2 t^2" begin
+    tr = observation_trends(Dict(:y => (constant=1.0, linear=:g, quadratic=0.5),
+                                 :c => 2.0), [:y, :c], Float64)
+    M = MacroEconometricModels._trend_matrix(tr, Dict(:g => 0.1), 3, Float64)
+    @test size(M) == (2, 3)
+    for t in 1:3
+        @test M[1, t] ≈ 1.0 + 0.1 * t + 0.5 * t^2
+        @test M[2, t] ≈ 2.0 * t
+    end
+end
+
+@testset "T240 trend parameters must be declared model parameters" begin
+    spec = @dsge begin
+        parameters: ρ = 0.5, σ = 0.5, g = 0.01
+        endogenous: y
+        exogenous: ε
+        y[t] = ρ * y[t-1] + σ * ε[t]
+        steady_state = [0.0]
+    end
+    ok = observation_trends(Dict(:y => :g), [:y], Float64)
+    @test MacroEconometricModels._validate_trend_params(ok, spec) === nothing
+    bad = observation_trends(Dict(:y => :not_a_param), [:y], Float64)
+    err = try
+        MacroEconometricModels._validate_trend_params(bad, spec)
+        nothing
+    catch e
+        e
+    end
+    @test err isa ArgumentError
+    @test occursin("not_a_param", sprint(showerror, err))
+    @test MacroEconometricModels._validate_trend_params(nothing, spec) === nothing
+end
+
+@testset "T240 detect_trend guidance" begin
+    rng = Random.MersenneTwister(2401)
+    trending = collect(1.0:100.0) .+ 0.1 .* randn(rng, 100)
+    noise = randn(rng, 100)
+
+    r1 = detect_trend(trending)
+    @test r1.trending
+    @test r1.slope ≈ 1.0 atol = 0.05
+    @test abs(r1.tstat) > 4
+
+    r2 = detect_trend(noise)
+    @test !r2.trending
+
+    # Too short to judge → not flagged
+    @test !detect_trend([1.0, 2.0, 3.0]).trending
+
+    # Matrix form works column-wise on the T×n public convention
+    flags = detect_trend(hcat(trending, noise); names=[:trend, :noise])
+    @test flags == [true, false]
+
+    # warn=true names the trending series
+    @test_logs (:warn,) match_mode = :any detect_trend(hcat(trending, noise);
+                                                       names=[:trend, :noise], warn=true)
+    # Nothing to warn about
+    @test_logs detect_trend(hcat(noise, noise); names=[:a, :b], warn=true)
+end
+
+@testset "T240 observation trends give the same likelihood as detrended data" begin
+    # AC2 oracle: filtering a trending level series through y_t = d + Z s_t + trend_t
+    # must reproduce, exactly, the likelihood of the underlying stationary series.
+    rng = Random.MersenneTwister(2402)
+    true_spec = @dsge begin
+        parameters: ρ = 0.8, σ = 0.5, g = 0.02
+        endogenous: y
+        exogenous: ε
+        y[t] = ρ * y[t-1] + σ * ε[t]
+        steady_state = [0.0]
+    end
+    true_spec = compute_steady_state(true_spec)
+    sol = solve(true_spec; method=:gensys)
+    Tn = 120
+    y_stat = vec(simulate(sol, Tn; rng=rng))
+    a, b = 1.0, 0.02
+    y_level = y_stat .+ a .+ b .* collect(1.0:Tn)
+
+    spec = @dsge begin
+        parameters: ρ = 0.5, σ = 0.5, g = 0.0
+        endogenous: y
+        exogenous: ε
+        y[t] = ρ * y[t-1] + σ * ε[t]
+        steady_state = [0.0]
+    end
+    spec = compute_steady_state(spec)
+
+    stat_mat = reshape(y_stat, 1, Tn)
+    level_mat = reshape(y_level, 1, Tn)
+
+    ll_plain = MacroEconometricModels._build_likelihood_fn(
+        spec, [:ρ], stat_mat, [:y], nothing, :gensys, NamedTuple())
+
+    # Fixed trend coefficients
+    tr_fixed = observation_trends(Dict(:y => (constant=a, linear=b)), [:y], Float64)
+    ll_trend = MacroEconometricModels._build_likelihood_fn(
+        spec, [:ρ], level_mat, [:y], nothing, :gensys, NamedTuple(); trends=tr_fixed)
+
+    for rho in (0.3, 0.6, 0.8)
+        @test ll_trend([rho]) ≈ ll_plain([rho]) atol = 1e-10
+    end
+
+    # Ignoring the trend materially changes the likelihood (the test above is not vacuous)
+    ll_ignored = MacroEconometricModels._build_likelihood_fn(
+        spec, [:ρ], level_mat, [:y], nothing, :gensys, NamedTuple())
+    @test ll_ignored([0.8]) < ll_plain([0.8]) - 1.0
+
+    # Symbolic coefficient: the trend is rebuilt from θ at every evaluation
+    tr_est = observation_trends(Dict(:y => (constant=a, linear=:g)), [:y], Float64)
+    ll_est = MacroEconometricModels._build_likelihood_fn(
+        spec, [:g, :ρ], level_mat, [:y], nothing, :gensys, NamedTuple(); trends=tr_est)
+    @test ll_est([b, 0.8]) ≈ ll_plain([0.8]) atol = 1e-10
+    @test ll_est([b + 0.05, 0.8]) < ll_est([b, 0.8])       # the truth maximizes over g
+    @test ll_est([b - 0.05, 0.8]) < ll_est([b, 0.8])
+
+    # :linear_detrend prefilter is the model-free alternative and lands in the same place
+    filtered, pf = apply_prefilter(level_mat, :linear_detrend; observables=[:y])
+    ll_pf = MacroEconometricModels._build_likelihood_fn(
+        spec, [:ρ], filtered, [:y], nothing, :gensys, NamedTuple())
+    @test ll_pf([0.8]) ≈ ll_plain([0.8]) rtol = 0.05
+    @test pf.slopes[1] ≈ b atol = 0.02
+end
+
+@testset "T240 estimate_dsge_bayes wiring: prefilter, trends, warning" begin
+    rng = Random.MersenneTwister(2403)
+    true_spec = @dsge begin
+        parameters: ρ = 0.8, σ = 0.5, g = 0.02
+        endogenous: y
+        exogenous: ε
+        y[t] = ρ * y[t-1] + σ * ε[t]
+        steady_state = [0.0]
+    end
+    true_spec = compute_steady_state(true_spec)
+    sol = solve(true_spec; method=:gensys)
+    Tn = 150
+    y_stat = vec(simulate(sol, Tn; rng=rng))
+    a, b = 1.0, 0.02
+    y_level = reshape(y_stat .+ a .+ b .* collect(1.0:Tn), Tn, 1)   # T×n convention
+
+    spec = @dsge begin
+        parameters: ρ = 0.5, σ = 0.5, g = 0.0
+        endogenous: y
+        exogenous: ε
+        y[t] = ρ * y[t-1] + σ * ε[t]
+        steady_state = [0.0]
+    end
+    spec = compute_steady_state(spec)
+    priors = Dict(:ρ => Beta(2, 2))
+
+    # Fixed observation trend on the level series recovers ρ and is recorded on the result
+    res_tr = _suppress_warnings() do
+        estimate_dsge_bayes(spec, y_level, Dict(:ρ => 0.5); priors=priors,
+                            method=:mh, n_draws=400, burnin=150, observables=[:y],
+                            observation_trends=Dict(:y => (constant=a, linear=b)),
+                            rng=Random.MersenneTwister(11))
+    end
+    @test res_tr.trends isa ObservationTrends{Float64}
+    @test res_tr.prefilter === nothing
+    @test abs(mean(res_tr.theta_draws[:, 1]) - 0.8) < 0.2
+
+    # The same data through the :linear_detrend prefilter lands in the same place
+    res_pf = _suppress_warnings() do
+        estimate_dsge_bayes(spec, y_level, Dict(:ρ => 0.5); priors=priors,
+                            method=:mh, n_draws=400, burnin=150, observables=[:y],
+                            prefilter=:linear_detrend,
+                            rng=Random.MersenneTwister(11))
+    end
+    @test res_pf.prefilter isa PrefilterSpec{Float64}
+    @test res_pf.prefilter.transform === :linear_detrend
+    @test res_pf.prefilter.slopes[1] ≈ b atol = 0.02
+    @test abs(mean(res_pf.theta_draws[:, 1]) - mean(res_tr.theta_draws[:, 1])) < 0.15
+    # The stored prefilter inverts a filtered path back to the observed scale
+    back = invert_prefilter(res_pf.prefilter, zeros(1, 2); time_offset=Tn)
+    @test back[1, 1] ≈ res_pf.prefilter.intercepts[1] + res_pf.prefilter.slopes[1] * (Tn + 1)
+
+    # :first_difference shortens the sample by one observation
+    res_fd = _suppress_warnings() do
+        estimate_dsge_bayes(spec, y_level, Dict(:ρ => 0.5); priors=priors,
+                            method=:mh, n_draws=120, burnin=40, observables=[:y],
+                            prefilter=:first_difference,
+                            rng=Random.MersenneTwister(11))
+    end
+    @test res_fd.prefilter.n_dropped == 1
+    @test size(res_fd.data, 2) == Tn - 1
+
+    # AC3: strongly trending data with neither transform triggers the guidance warning.
+    # Match on the message so unrelated numerical warnings (robust_inv pseudo-inverse)
+    # neither satisfy nor break the assertion.
+    function emits_trend_warning(f)
+        logs, _ = Test.collect_test_logs(f)
+        return any(r -> occursin("deterministic trend", string(r.message)), logs)
+    end
+
+    @test emits_trend_warning() do
+        estimate_dsge_bayes(spec, y_level, Dict(:ρ => 0.5); priors=priors,
+                            method=:mh, n_draws=30, burnin=10, observables=[:y],
+                            rng=Random.MersenneTwister(11))
+    end
+
+    # ... and is silenced by either remedy, or by warn_trends=false
+    @test !emits_trend_warning() do
+        estimate_dsge_bayes(spec, y_level, Dict(:ρ => 0.5); priors=priors,
+                            method=:mh, n_draws=30, burnin=10, observables=[:y],
+                            warn_trends=false, rng=Random.MersenneTwister(11))
+    end
+    @test !emits_trend_warning() do
+        estimate_dsge_bayes(spec, y_level, Dict(:ρ => 0.5); priors=priors,
+                            method=:mh, n_draws=30, burnin=10, observables=[:y],
+                            prefilter=:linear_detrend, rng=Random.MersenneTwister(11))
+    end
+    @test !emits_trend_warning() do
+        estimate_dsge_bayes(spec, y_level, Dict(:ρ => 0.5); priors=priors,
+                            method=:mh, n_draws=30, burnin=10, observables=[:y],
+                            observation_trends=Dict(:y => (constant=a, linear=b)),
+                            rng=Random.MersenneTwister(11))
+    end
+
+    # Estimated trend slope: give :g a prior and let the sampler find it
+    res_est = _suppress_warnings() do
+        estimate_dsge_bayes(spec, y_level, Dict(:ρ => 0.5, :g => 0.0);
+                            priors=Dict(:ρ => Beta(2, 2), :g => Normal(0.0, 0.1)),
+                            method=:mh, n_draws=1200, burnin=400, observables=[:y],
+                            observation_trends=Dict(:y => (constant=a, linear=:g)),
+                            rng=Random.MersenneTwister(12))
+    end
+    g_idx = findfirst(==(:g), res_est.param_names)
+    @test abs(mean(res_est.theta_draws[:, g_idx]) - b) < 0.02
+
+    # The particle-filter path cannot re-evaluate a θ-dependent trend → loud error
+    err = try
+        estimate_dsge_bayes(spec, y_level, Dict(:ρ => 0.5, :g => 0.0);
+                            priors=Dict(:ρ => Beta(2, 2), :g => Normal(0.0, 0.1)),
+                            method=:smc2, n_smc=4, n_particles=4, observables=[:y],
+                            observation_trends=Dict(:y => (constant=a, linear=:g)),
+                            rng=Random.MersenneTwister(13))
+        nothing
+    catch e
+        e
+    end
+    @test err isa ArgumentError
+    @test occursin("smc2", sprint(showerror, err))
+end
+
 end  # @testset "Bayesian DSGE"
 
 # =============================================================================

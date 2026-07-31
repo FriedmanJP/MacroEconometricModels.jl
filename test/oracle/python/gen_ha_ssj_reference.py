@@ -22,14 +22,33 @@ E[e] = 1 and every state has strictly positive labour income:
   Krusell–Smith  (_ks_example):
       alpha=0.36, beta=0.99, delta=0.025, sigma (CRRA)=1 (log),
       income = Rouwenhorst(rho=0.966, sigma=0.5, n=7), normalized to unit mean,
-      asset grid a in [0, 200] with 200 points, borrowing constraint a >= 0,
+      asset grid a in [0, 1000] with 200 points, borrowing constraint a >= 0,
       budget  c + a' = (1+r) a + w e.
 
   One-asset HANK  (_one_asset_hank_example):
       alpha=0.36, beta=0.986, delta=0.025, sigma=1,
       income = Rouwenhorst(0.966, 0.5, 7) normalized,
-      asset grid a in [-2, 50] with 200 points, borrowing a >= -2,
+      asset grid a in [-2, 1000] with 200 points, borrowing a >= -2,
       budget  c + a' = (1+r) a + w e + div   (div = 0 at the reference point).
+
+TWO CONVENTIONS THIS SCRIPT AND THE JULIA SIDE HAD TO BE RECONCILED ON — both
+were silently violated until the a_max/units fix, and neither was ever caught
+because test/oracle/ha_ssj_ref/ has only ever contained README.md (the fixtures
+were never generated, so checks_ha_ssj.jl always took its skip branch):
+
+  1. `sigma`. `markov_rouwenhorst(rho, sigma, N)` below parameterizes by the
+     UNCONDITIONAL (cross-sectional) standard deviation of log income. Julia's
+     `rouwenhorst(rho, sigma, n)` parameterizes by the AR(1) INNOVATION standard
+     deviation. At rho = 0.966 the two differ by 1/sqrt(1-rho^2) = 3.87x in logs
+     (15x in variance). The Julia examples now call
+     `_unit_mean_lognormal_income(0.966, 0.5, 7)`, which forwards
+     `sigma_is=:unconditional`, so `sigma_e=0.5` here and 0.5 there describe the
+     SAME process. Do not "fix" either side to match the other numerically.
+
+  2. Grid shape. `agrid(amax, n, amin)` is pivot-geometric — geometric in
+     (a + |amin| + 0.25). The Julia examples now pass `grid_type=:geometric`,
+     which implements exactly that. Previously they used `:double_exp`, a
+     different curve, so even a matching a_max would not have matched node-wise.
 
 Fixtures written (each a T x T CSV, comma-separated, no header):
     ks_J_r_A.csv     dA/dr   (household asset Jacobian wrt the interest rate)
@@ -103,12 +122,14 @@ def build_and_dump(name, *, alpha, beta, delta, a_min, a_max, n_a, rho, sigma_e,
 
 def main():
     # Krusell–Smith calibration
+    # sigma_e is the UNCONDITIONAL sd of log e here (see the module docstring);
+    # the Julia side passes the same 0.5 with sigma_is=:unconditional.
     build_and_dump("ks", alpha=0.36, beta=0.99, delta=0.025,
-                   a_min=0.0, a_max=200.0, n_a=200,
+                   a_min=0.0, a_max=1000.0, n_a=200,
                    rho=0.966, sigma_e=0.5, n_e=7)
     # One-asset HANK calibration
     build_and_dump("hank", alpha=0.36, beta=0.986, delta=0.025,
-                   a_min=-2.0, a_max=50.0, n_a=200,
+                   a_min=-2.0, a_max=1000.0, n_a=200,
                    rho=0.966, sigma_e=0.5, n_e=7)
     print(f"\nFixtures written to {os.path.abspath(OUT_DIR)}. Commit them, then run:")
     print("  MACRO_ORACLE_TESTS=1 julia --project=. test/oracle/checks_ha_ssj.jl")

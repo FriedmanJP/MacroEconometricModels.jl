@@ -75,6 +75,16 @@ const _REFERENCES = Dict{Symbol, _RefEntry}(
         title="Inference Based on Structural Vector Autoregressions Identified with Sign and Zero Restrictions: Theory and Applications",
         journal="Econometrica", volume="86", issue="2", pages="685--720",
         doi="10.3982/ECTA14468", isbn="", publisher="", entry_type=:article),
+    :waggoner_zha1999 => (key=:waggoner_zha1999,
+        authors="Waggoner, Daniel F. and Zha, Tao", year=1999,
+        title="Conditional Forecasts in Dynamic Multivariate Models",
+        journal="Review of Economics and Statistics", volume="81", issue="4", pages="639--651",
+        doi="10.1162/003465399558508", isbn="", publisher="", entry_type=:article),
+    :antolin_diaz_petrella_rubio_ramirez2021 => (key=:antolin_diaz_petrella_rubio_ramirez2021,
+        authors="Antol{\\'\\i}n-D{\\'\\i}az, Juan and Petrella, Ivan and Rubio-Ram{\\'\\i}rez, Juan F.", year=2021,
+        title="Structural Scenario Analysis with SVARs",
+        journal="Journal of Monetary Economics", volume="117", issue="", pages="798--815",
+        doi="10.1016/j.jmoneco.2020.06.001", isbn="", publisher="", entry_type=:article),
     :mountford_uhlig2009 => (key=:mountford_uhlig2009,
         authors="Mountford, Andrew and Uhlig, Harald", year=2009,
         title="What Are the Effects of Fiscal Policy Shocks?",
@@ -391,6 +401,11 @@ const _REFERENCES = Dict{Symbol, _RefEntry}(
         title="A Simple Test for Heteroscedasticity and Random Coefficient Variation",
         journal="Econometrica", volume="47", issue="5", pages="1287--1294",
         doi="10.2307/1911963", isbn="", publisher="", entry_type=:article),
+    :koenker_bassett1978 => (key=:koenker_bassett1978,
+        authors="Koenker, Roger and Bassett, Gilbert", year=1978,
+        title="Regression Quantiles",
+        journal="Econometrica", volume="46", issue="1", pages="33--50",
+        doi="10.2307/1913643", isbn="", publisher="", entry_type=:article),
     :koenker1981 => (key=:koenker1981, authors="Koenker, Roger", year=1981,
         title="A Note on Studentizing a Test for Heteroscedasticity",
         journal="Journal of Econometrics", volume="17", issue="1", pages="107--112",
@@ -804,6 +819,16 @@ const _REFERENCES = Dict{Symbol, _RefEntry}(
         title="Calculating and Using Second-Order Accurate Solutions of Discrete Time Dynamic Equilibrium Models",
         journal="Journal of Economic Dynamics and Control", volume="32", issue="11", pages="3397--3414",
         doi="10.1016/j.jedc.2008.02.003", isbn="", publisher="", entry_type=:article),
+    :kamenik2005 => (key=:kamenik2005,
+        authors="Kameník, Ondřej", year=2005,
+        title="Solving SDGE Models: A New Algorithm for the Sylvester Equation",
+        journal="Computational Economics", volume="25", issue="1--2", pages="167--187",
+        doi="10.1007/s10614-005-6280-y", isbn="", publisher="", entry_type=:article),
+    :bartels_stewart1972 => (key=:bartels_stewart1972,
+        authors="Bartels, Richard H. and Stewart, G. W.", year=1972,
+        title="Solution of the Matrix Equation AX + XB = C",
+        journal="Communications of the ACM", volume="15", issue="9", pages="820--826",
+        doi="10.1145/361573.361582", isbn="", publisher="", entry_type=:article),
     :andreasen_etal2018 => (key=:andreasen_etal2018,
         authors="Andreasen, Martin M. and Fern\u00e1ndez-Villaverde, Jes\u00fas and Rubio-Ram\u00edrez, Juan F.",
         year=2018,
@@ -1655,6 +1680,7 @@ const _TYPE_REFS = Dict{Symbol, Vector{Symbol}}(
     :AriasSVARResult => [:arias_rubio_ramirez_waggoner2018],
     :UhligSVARResult => [:mountford_uhlig2009, :uhlig2005],
     :SVARRestrictions => [:arias_rubio_ramirez_waggoner2018],
+    :ConditionalForecast => [:waggoner_zha1999, :antolin_diaz_petrella_rubio_ramirez2021],
     :SignIdentifiedSet => [:rubio_ramirez2010, :baumeister_hamilton2015],
     # Bayesian VAR
     :MinnesotaHyperparameters => [:litterman1986, :kadiyala_karlsson1997],
@@ -1714,6 +1740,7 @@ const _TYPE_REFS = Dict{Symbol, Vector{Symbol}}(
     :MAModel => [:box_jenkins1970],
     :ARMAModel => [:box_jenkins1970],
     :ARIMAModel => [:box_jenkins1970],
+    :SARIMAModel => [:box_jenkins1970, :hyndman_khandakar2008],
     :ARIMAForecast => [:box_jenkins1970],
     :ARIMAOrderSelection => [:hyndman_khandakar2008],
     :auto_arima => [:hyndman_khandakar2008],
@@ -1890,7 +1917,7 @@ const _TYPE_REFS = Dict{Symbol, Vector{Symbol}}(
     :occbin_irf => [:guerrieri_iacoviello2015],
     # DSGE solver methods
     :klein => [:klein2000],
-    :perturbation_solver => [:schmitt_grohe_uribe2004, :kim_kim_schaumburg_sims2008],
+    :perturbation_solver => [:schmitt_grohe_uribe2004, :kim_kim_schaumburg_sims2008, :kamenik2005],
     :collocation_solver => [:judd1998, :judd_maliar_maliar_valero2014],
     :pfi_solver => [:coleman1990, :judd1998],
     :vfi_solver => [:stokey_lucas_prescott1989, :howard1960, :judd1998, :santos_rust2003],
@@ -1898,13 +1925,14 @@ const _TYPE_REFS = Dict{Symbol, Vector{Symbol}}(
     # DSGE solution types
     :PerturbationSolution => [:schmitt_grohe_uribe2004, :kim_kim_schaumburg_sims2008],
     :ProjectionSolution => [:judd1998, :judd_maliar_maliar_valero2014],
+    :QuantileRegModel => [:koenker_bassett1978],
     :LinearDSGE => [:sims2002],
     # Bayesian DSGE
     :BayesianDSGE => [:herbst_schorfheide2015, :herbst_schorfheide2014, :an_schorfheide2007],
     :estimate_dsge_bayes => [:herbst_schorfheide2015, :herbst_schorfheide2014, :an_schorfheide2007],
     # Analytical moments
     :analytical_moments => [:hamilton1994, :fernandez_villaverde_rubio_schorfheide2016],
-    :solve_lyapunov => [:hamilton1994, :fernandez_villaverde_rubio_schorfheide2016],
+    :solve_lyapunov => [:hamilton1994, :fernandez_villaverde_rubio_schorfheide2016, :bartels_stewart1972],
     # DiD / Event Study
     :DIDResult => [:callaway_santanna2021, :goodman_bacon2021],
     :EventStudyLP => [:jorda2005, :dube_girardi_jorda_taylor2023],
@@ -2270,6 +2298,7 @@ refs(io::IO, ::AriasSVARResult; kw...) = refs(io, _TYPE_REFS[:AriasSVARResult]; 
 refs(io::IO, ::UhligSVARResult; kw...) = refs(io, _TYPE_REFS[:UhligSVARResult]; kw...)
 refs(io::IO, ::SVARRestrictions; kw...) = refs(io, _TYPE_REFS[:SVARRestrictions]; kw...)
 refs(io::IO, ::SignIdentifiedSet; kw...) = refs(io, _TYPE_REFS[:SignIdentifiedSet]; kw...)
+refs(io::IO, ::ConditionalForecast; kw...) = refs(io, _TYPE_REFS[:ConditionalForecast]; kw...)
 refs(io::IO, ::MinnesotaHyperparameters; kw...) = refs(io, _TYPE_REFS[:MinnesotaHyperparameters]; kw...)
 refs(io::IO, ::BVARPosterior; kw...) = refs(io, _TYPE_REFS[:BVARPosterior]; kw...)
 
@@ -2328,6 +2357,7 @@ refs(io::IO, ::ARModel; kw...) = refs(io, _TYPE_REFS[:ARModel]; kw...)
 refs(io::IO, ::MAModel; kw...) = refs(io, _TYPE_REFS[:MAModel]; kw...)
 refs(io::IO, ::ARMAModel; kw...) = refs(io, _TYPE_REFS[:ARMAModel]; kw...)
 refs(io::IO, ::ARIMAModel; kw...) = refs(io, _TYPE_REFS[:ARIMAModel]; kw...)
+refs(io::IO, ::SARIMAModel; kw...) = refs(io, _TYPE_REFS[:SARIMAModel]; kw...)
 refs(io::IO, ::ARIMAForecast; kw...) = refs(io, _TYPE_REFS[:ARIMAForecast]; kw...)
 refs(io::IO, ::ARIMAOrderSelection; kw...) = refs(io, _TYPE_REFS[:ARIMAOrderSelection]; kw...)
 
@@ -2463,6 +2493,7 @@ refs(io::IO, ::PerfectForesightPath; kw...) = refs(io, _TYPE_REFS[:PerfectForesi
 refs(io::IO, ::DSGESpec; kw...) = refs(io, _TYPE_REFS[:DSGESpec]; kw...)
 refs(io::IO, ::PerturbationSolution; kw...) = refs(io, _TYPE_REFS[:PerturbationSolution]; kw...)
 refs(io::IO, ::ProjectionSolution; kw...) = refs(io, _TYPE_REFS[:ProjectionSolution]; kw...)
+refs(io::IO, ::QuantileRegModel; kw...) = refs(io, _TYPE_REFS[:QuantileRegModel]; kw...)
 refs(io::IO, ::LinearDSGE; kw...) = refs(io, _TYPE_REFS[:LinearDSGE]; kw...)
 
 # Bayesian DSGE

@@ -265,6 +265,68 @@ end
         end
         # NOTE: BayesianDSGESimulation is plotted by the bayesfan.jl dispatch (PLT-28);
         # its authoritative test lives in the Lane E file (test_plot_wave2_laneE.jl).
+
+        @testset "DeterminacyMap heatmap (T268)" begin
+            nk = @dsge begin
+                parameters: β = 0.99, σ_c = 1.0, κ = 0.3, φ_π = 1.5, φ_y = 0.5,
+                            ρ_d = 0.8, σ_d = 0.01
+                endogenous: y, π, R, d
+                exogenous: ε_d
+                y[t] = y[t+1] - (1 / σ_c) * (R[t] - π[t+1]) + d[t]
+                R[t] = φ_π * π[t] + φ_y * y[t]
+                π[t] = β * π[t+1] + κ * y[t]
+                d[t] = ρ_d * d[t-1] + σ_d * ε_d[t]
+            end
+            nk = compute_steady_state(nk)
+
+            # 2-D map: both axes labelled, both regions present, fixed colour domain.
+            m2 = determinacy_region(nk; params=(:φ_π, :φ_y),
+                                    grids=(range(0.0, 2.0; length=6),
+                                           range(0.0, 3.0; length=5)))
+            p = plot_result(m2)
+            check_plot(p); assert_all_json_valid(p)
+            @test length(panel_titles(p.html)) == 1
+            @test occursin("Determinacy Region", p.html)
+            @test occursin("φ_π", p.html) && occursin("φ_y", p.html)
+            # Domain is PINNED to [-1, 1] so colours mean the same across maps, rather than
+            # rescaling to whatever regions this particular sweep happens to contain.
+            @test occursin("[-1.0, 1.0]", p.html)
+            @test occursin("determinate", p.html)
+
+            # 1-D map renders as a single row; title override honoured.
+            m1 = determinacy_region(nk; params=:φ_π, grids=range(0.0, 3.0; length=9))
+            p1 = plot_result(m1; title="Taylor principle")
+            check_plot(p1); assert_all_json_valid(p1)
+            @test occursin("Taylor principle", p1.html)
+
+            # Failed grid points serialize as JSON null (grey "Missing" cell), never as a
+            # fourth region code and never as NaN.
+            rbc = @dsge begin
+                parameters: β = 0.99, α = 0.36, δ = 0.025, ρ = 0.95, σ = 0.01
+                endogenous: k, c, z
+                exogenous: ε
+                z[t] = ρ * z[t-1] + σ * ε[t]
+                k[t] = exp(z[t]) * k[t-1]^α + (1 - δ) * k[t-1] - c[t]
+                1 / c[t] = β * (1 / c[t+1]) * (α * exp(z[t+1]) * k[t]^(α - 1) + 1 - δ)
+            end
+            rbc = compute_steady_state(rbc)
+            mf = determinacy_region(rbc; params=:α, grids=[-0.5, 0.36, 1.5])
+            @test any(==(-2), mf.verdict)                        # the premise
+            pf = plot_result(mf)
+            check_plot(pf); assert_all_json_valid(pf)
+            assert_nan_becomes_null(pf)          # failed cell -> JSON null, never a bare NaN
+            # and never leaks the internal -2 sentinel into the data literal
+            for (_, lit) in extract_json_blocks(pf.html)
+                @test !occursin(r"\"v\"\s*:\s*-2", lit)
+            end
+
+            # save_path writes a standalone document
+            mktempdir() do dir
+                f = joinpath(dir, "dm.html")
+                plot_result(m2; save_path=f)
+                @test startswith(read(f, String), "<!DOCTYPE html>")
+            end
+        end
     end
 
     # =========================================================================

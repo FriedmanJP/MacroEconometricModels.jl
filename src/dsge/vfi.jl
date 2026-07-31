@@ -27,7 +27,8 @@ separate reward/Bellman formulation the `DSGESpec` does not expose.
 # Keyword Arguments
 - `degree::Int=5`: Chebyshev polynomial degree
 - `grid::Symbol=:auto`: `:tensor`, `:smolyak`, or `:auto`
-- `smolyak_mu::Int=3`: Smolyak exactness level
+- `smolyak_mu=3`: Smolyak exactness level. A scalar gives the isotropic rule `|l|₁ ≤ μ`;
+  an `nx`-vector `(μ_1,…,μ_nx)` gives the anisotropic rule `Σ_k l_k/μ_k ≤ 1`.
 - `quadrature::Symbol=:auto`: `:gauss_hermite`, `:monomial`, or `:auto`
 - `n_quad::Int=5`: quadrature nodes per shock dimension
 - `scale::Real=3.0`: state bounds = SS ± scale × σ
@@ -43,7 +44,7 @@ separate reward/Bellman formulation the `DSGESpec` does not expose.
 function vfi_solver(spec::DSGESpec{T};
                     degree::Int=5,
                     grid::Symbol=:auto,
-                    smolyak_mu::Int=3,
+                    smolyak_mu::Union{Integer,AbstractVector{<:Integer}}=3,
                     quadrature::Symbol=:auto,
                     n_quad::Int=5,
                     scale::Real=3.0,
@@ -77,13 +78,24 @@ function vfi_solver(spec::DSGESpec{T};
     # State bounds
     state_bounds = _compute_state_bounds(spec, ld, state_idx, scale)
 
-    # Grid
+    # Grid. `smolyak_mu` may be a scalar (isotropic) or an nx-vector (anisotropic).
+    smolyak_level_set = Vector{Vector{Int}}()
     if grid == :tensor
         nodes_unit, multi_indices = _tensor_grid(nx, degree)
     elseif grid == :smolyak
-        nodes_unit, multi_indices = _smolyak_grid(nx, smolyak_mu)
+        smolyak_level_set = _smolyak_admissible_levels(_smolyak_level_vector(nx, smolyak_mu))
+        nodes_unit, multi_indices = _smolyak_grid_from_levels(smolyak_level_set)
     else
         throw(ArgumentError("grid must be :tensor, :smolyak, or :auto"))
+    end
+    smolyak_level_matrix = if grid == :smolyak
+        L = zeros(Int, length(smolyak_level_set), nx)
+        for (i, l) in enumerate(smolyak_level_set)
+            L[i, :] = l
+        end
+        L
+    else
+        zeros(Int, 0, 0)
     end
 
     n_nodes = size(nodes_unit, 1)
@@ -276,7 +288,7 @@ function vfi_solver(spec::DSGESpec{T};
         coeffs,
         state_bounds_T,
         grid,
-        grid == :smolyak ? smolyak_mu : degree,
+        grid == :smolyak ? maximum(maximum.(smolyak_level_set)) : degree,
         Matrix{T}(nodes_unit),
         sup_norm,
         n_basis,
@@ -290,6 +302,7 @@ function vfi_solver(spec::DSGESpec{T};
         control_idx,
         converged,
         iter,
-        :vfi
+        :vfi;
+        smolyak_levels=smolyak_level_matrix
     )
 end

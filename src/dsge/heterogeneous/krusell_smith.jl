@@ -51,6 +51,35 @@ function _ks_build_z_grid(rho_z::T, sigma_z::T, n_z::Int) where {T<:AbstractFloa
 end
 
 """
+    _ks_prices(price_fn, K, z, params, z_channel) → Dict{Symbol,T}
+
+Prices at an aggregate node `(K, z)`, under one of two conventions for how the aggregate
+shock enters the firm's first-order conditions:
+
+- `:effective_capital` (the Krusell-Smith default here) — `price_fn(K·exp(z), params)`, so
+  `z` shifts *effective capital*. Under Cobb-Douglas that gives
+  `∂log r/∂z = α − 1 < 0` and `∂log w/∂z = α`.
+- `:tfp` — `z` scales total factor productivity, `Z ← Z·exp(z)`, giving
+  `∂log r/∂z = 1` and `∂log w/∂z = 1`.
+
+The two are **not** related by rescaling `z`: they move `r` and `w` in different proportions.
+That matters when an aggregate law of motion fitted under one convention is used to drive a
+reference simulation priced under the other — the reference is then inconsistent with the law
+being tested, and the resulting Den Haan statistic measures the mismatch rather than accuracy.
+`:tfp` is the convention of the Reiter/SSJ linearizations.
+"""
+@inline function _ks_prices(price_fn::Function, K::T, z::T, params::Dict{Symbol,T},
+                            z_channel::Symbol) where {T<:AbstractFloat}
+    if z_channel === :tfp
+        p2 = copy(params)
+        p2[:Z] = params[:Z] * exp(z)
+        return price_fn(K, p2)
+    else
+        return price_fn(K * exp(z), params)
+    end
+end
+
+"""
     _ks_egm_solve(ip, grid, income, b, z_grid, z_trans, K_grid, price_fn, params;
                   max_iter=100, tol=1e-6, init_policy=nothing) → (c_pol, converged)
 
@@ -69,7 +98,8 @@ function _ks_egm_solve(ip::IndividualProblem{T}, grid::HAGrid{T},
                        K_grid::AbstractVector{T}, price_fn::Function,
                        params::Dict{Symbol,T};
                        max_iter::Int=100, tol::T=T(1e-6),
-                       init_policy=nothing) where {T<:AbstractFloat}
+                       init_policy=nothing,
+                       z_channel::Symbol=:effective_capital) where {T<:AbstractFloat}
     a_grid = grid.grids[1]
     n_a = length(a_grid)
     n_e = length(income.states)
@@ -86,7 +116,7 @@ function _ks_egm_solve(ip::IndividualProblem{T}, grid::HAGrid{T},
     r_node = zeros(T, n_K, n_z)
     w_node = zeros(T, n_K, n_z)
     for lz in 1:n_z, kK in 1:n_K
-        p = price_fn(K_grid[kK] * exp(z_grid[lz]), params)
+        p = _ks_prices(price_fn, K_grid[kK], z_grid[lz], params, z_channel)
         r_node[kK, lz] = p[:r]
         w_node[kK, lz] = p[:w]
     end
@@ -97,7 +127,7 @@ function _ks_egm_solve(ip::IndividualProblem{T}, grid::HAGrid{T},
         Kp = exp(b[1] + b[2] * log(K_grid[kK]) + b[3] * z_grid[lz])
         Kp_node[kK, lz] = Kp
         for lp in 1:n_z
-            rp_node[kK, lz, lp] = price_fn(Kp * exp(z_grid[lp]), params)[:r]
+            rp_node[kK, lz, lp] = _ks_prices(price_fn, Kp, z_grid[lp], params, z_channel)[:r]
         end
     end
 
@@ -203,7 +233,8 @@ the PLM baked into `c_pol`.
 function _ks_simulate(c_pol::Array{T,4}, ss::HASteadyState{T}, grid::HAGrid{T},
                       income::IncomeProcess{T}, z_idx_path::AbstractVector{Int},
                       z_grid::AbstractVector{T}, K_grid::AbstractVector{T},
-                      price_fn::Function, params::Dict{Symbol,T}) where {T<:AbstractFloat}
+                      price_fn::Function, params::Dict{Symbol,T};
+                      z_channel::Symbol=:effective_capital) where {T<:AbstractFloat}
     T_sim = length(z_idx_path)
     a_grid = grid.grids[1]
     e_vals = income.states
@@ -216,7 +247,7 @@ function _ks_simulate(c_pol::Array{T,4}, ss::HASteadyState{T}, grid::HAGrid{T},
     for t in 1:(T_sim - 1)
         K_t = K_series[t]
         lz = z_idx_path[t]
-        p = price_fn(K_t * exp(z_grid[lz]), params)
+        p = _ks_prices(price_fn, K_t, z_grid[lz], params, z_channel)
         a_pol = _ks_savings_at(c_pol, K_t, lz, a_grid, e_vals, K_grid,
                                p[:r], p[:w], a_min)
         Lambda = _build_transition_matrix(a_pol, grid, income)
@@ -533,6 +564,10 @@ Result of the Den Haan (2010) dynamic accuracy test for a Krusell-Smith solution
 - `ref_path::Vector{T}` — reference (explicit cross-sectional simulation) path
 - `plm_path::Vector{T}` — PLM-only path (law of motion iterated on its own forecasts)
 - `T_sim::Int` / `T_burn::Int` — simulation length / burn-in
+- `source::Symbol` — where the aggregate law of motion came from: `:plm` (the Krusell-Smith
+  fitted PLM) or `:linear` (recovered from an `:ssj`/`:reiter` linear solution). For
+  `:linear` the statistic also carries linearization error — see
+  [`den_haan_test(::HADSGESolution)`](@ref).
 """
 struct DenHaanAccuracy{T<:AbstractFloat}
     aggregate::Symbol
@@ -544,6 +579,91 @@ struct DenHaanAccuracy{T<:AbstractFloat}
     plm_path::Vector{T}
     T_sim::Int
     T_burn::Int
+    source::Symbol
+
+    # `source` is a trailing keyword so the established 9-positional contract is unchanged.
+    function DenHaanAccuracy{T}(aggregate, dh_max, dh_mean, sigma_ref, sigma_plm,
+                                ref_path, plm_path, T_sim, T_burn;
+                                source::Symbol=:plm) where {T<:AbstractFloat}
+        new{T}(aggregate, dh_max, dh_mean, sigma_ref, sigma_plm, ref_path, plm_path,
+               T_sim, T_burn, source)
+    end
+end
+
+"""
+    _den_haan_core(spec, ss, b, T_sim, T_burn, rho_z, sigma_z, rng) → DenHaanAccuracy
+
+Shared Den Haan (2010) machinery: given an aggregate law of motion
+`log K' = b₁ + b₂ log K + b₃ z` and a price convention `z_channel` (see [`_ks_prices`](@ref)),
+simulate the aggregate two ways under the SAME shock path and compare. The law and the
+reference simulation MUST share the convention, or the statistic measures their mismatch
+rather than the solution's accuracy.
+
+1. **Reference** — re-solve the household problem on the `(a, e, K, z)` grid under that law
+   (so agents' expectations are consistent with it), then simulate the explicit
+   cross-section: the Young histogram is pushed forward period by period at the realized
+   aggregate state, and `K_t = ∫ a dμ_t`.
+2. **Law-of-motion only** — iterate the law on its own forecasts, never re-anchoring to the
+   simulated cross-section.
+
+The gap between the two is the Den Haan statistic. Den Haan (2010) shows an `R²` of 0.9999
+can coexist with a double-digit error in the implied `σ(K)`, which is why the multi-step
+comparison — rather than the regression fit — is the informative test.
+"""
+function _den_haan_core(spec::HADSGESpec{T}, ss::HASteadyState{T}, b::Vector{T},
+                        T_sim::Int, T_burn::Int, rho_z::T, sigma_z::T,
+                        rng, source::Symbol, z_channel::Symbol) where {T<:AbstractFloat}
+    ip = spec.individual
+    grid = spec.grid
+    income = spec.income
+
+    params = copy(spec.het_params)
+    for (k, v) in (:alpha => T(0.36), :delta => T(0.025), :Z => one(T), :L => one(T))
+        haskey(params, k) || (params[k] = T(v))
+    end
+
+    # Aggregate-state grids (the same discretization the KS solver uses) and a discrete
+    # aggregate-shock index path.
+    n_z = 3; n_K = 5
+    z_grid, z_trans = _ks_build_z_grid(rho_z, sigma_z, n_z)
+    K_ss = ss.aggregates[:K]
+    K_grid = K_ss .* exp.(T.(collect(range(-T(0.4), T(0.4); length=n_K))))
+    z_idx = zeros(Int, T_sim); z_idx[1] = div(n_z + 1, 2)
+    z_cdf = cumsum(z_trans; dims=2)
+    for t in 2:T_sim
+        u = rand(rng, T); j = z_idx[t-1]
+        z_idx[t] = clamp(searchsortedfirst(view(z_cdf, j, :), u), 1, n_z)
+    end
+    z_real = T[z_grid[z_idx[t]] for t in 1:T_sim]
+
+    # Reference path: policy re-solved at the supplied law of motion (NOT a myopic re-solve
+    # at realized prices), warm-started from the steady-state policy.
+    c_ss = ss.policies[:consumption]
+    c0 = Array{T,4}(undef, size(c_ss, 1), size(c_ss, 2), n_K, n_z)
+    for lz in 1:n_z, kK in 1:n_K
+        @views c0[:, :, kK, lz] .= c_ss
+    end
+    c_pol, _ = _ks_egm_solve(ip, grid, income, b, z_grid, z_trans, K_grid,
+                             _default_cobb_douglas_price_fn, params;
+                             max_iter=1000, tol=T(1e-6), init_policy=c0,
+                             z_channel=z_channel)
+    K_ref = _ks_simulate(c_pol, ss, grid, income, z_idx, z_grid, K_grid,
+                         _default_cobb_douglas_price_fn, params;
+                         z_channel=z_channel)
+
+    # Law-of-motion-only path: iterate on its own forecasts, no cross-section.
+    logK_plm = zeros(T, T_sim); logK_plm[1] = log(K_ss)
+    for t in 1:(T_sim - 1)
+        logK_plm[t+1] = b[1] + b[2] * logK_plm[t] + b[3] * z_real[t]
+    end
+    K_plm = exp.(logK_plm)
+
+    idx = (T_burn + 1):T_sim
+    err = T(100) .* abs.(log.(K_ref[idx]) .- logK_plm[idx])                  # percent
+    return DenHaanAccuracy{T}(:K, maximum(err), Statistics.mean(err),
+                              Statistics.std(log.(K_ref[idx])),
+                              Statistics.std(logK_plm[idx]),
+                              K_ref, K_plm, T_sim, T_burn; source=source)
 end
 
 """
@@ -563,11 +683,14 @@ The aggregate is capital `K` and errors are in percent. The PLM must include the
 aggregate shock (`log K' = b₁ + b₂ log K + b₃ z`); otherwise the PLM-only path is
 degenerate.
 
-Implemented for the Aiyagari capital model (`spec.model == :aiyagari`), the setting of
-Den Haan (2010). For a Huggett solution the cleared aggregate is the risk-free rate (the
-bond is in zero net supply), which is driven by the wealth distribution rather than the
-shock alone; a robust rate-accuracy test there requires a distribution-augmented PLM and
-is out of scope, so `den_haan_test` raises an informative error for `:huggett`.
+Covers the capital models (`spec.model == :aiyagari`) — both `:krusell_smith` and
+`:one_asset_hank`, the setting of Den Haan (2010). For a Huggett solution the cleared
+aggregate is the risk-free rate (the bond is in zero net supply), which is driven by the
+wealth distribution rather than the shock alone; a robust rate-accuracy test there requires
+a distribution-augmented PLM and is out of scope, so `den_haan_test` raises an informative
+error for `:huggett`.
+
+See also [`den_haan_test(::HADSGESolution)`](@ref) for SSJ/Reiter solutions.
 
 # References
 - den Haan, W. J. (2010). Assessing the accuracy of the aggregate law of motion in models
@@ -578,65 +701,117 @@ function den_haan_test(ks::KrusellSmithSolution{T};
                        rho_z::Real=0.95, sigma_z::Real=0.007,
                        seed::Int=98765) where {T<:AbstractFloat}
     @assert T_sim > T_burn + 10 "T_sim must exceed T_burn by at least 10"
-    if ks.spec.model === :huggett
-        error("den_haan_test is implemented for Aiyagari (:aiyagari) Krusell-Smith " *
-              "solutions. The Huggett clearing rate is driven by the wealth distribution, " *
-              "not the aggregate shock alone, so a meaningful accuracy test there needs a " *
-              "distribution-augmented PLM (out of scope).")
-    end
-
-    ss = ks.steady_state
-    ip = ks.spec.individual
-    grid = ks.spec.grid
-    income = ks.spec.income
-    rng = Random.MersenneTwister(seed)
-
-    params = copy(ks.spec.het_params)
-    for (k, v) in (:alpha => T(0.36), :delta => T(0.025), :Z => one(T), :L => one(T))
-        haskey(params, k) || (params[k] = T(v))
-    end
+    _den_haan_check_model(ks.spec)
     b = ks.plm_coefficients[:K]
     @assert length(b) == 3 "den_haan_test expects a z-augmented PLM (log K' = b1 + b2 log K + b3 z)"
+    return _den_haan_core(ks.spec, ks.steady_state, Vector{T}(b), T_sim, T_burn,
+                          T(rho_z), T(sigma_z), Random.MersenneTwister(seed), :plm,
+                          :effective_capital)
+end
 
-    # Aggregate-state grids (same discretization the solver used) and a discrete
-    # aggregate-shock index path (Markov chain on z_grid).
-    n_z = 3; n_K = 5
-    z_grid, z_trans = _ks_build_z_grid(T(rho_z), T(sigma_z), n_z)
+# Shared model guard for both methods.
+function _den_haan_check_model(spec::HADSGESpec)
+    if spec.model === :huggett
+        error("den_haan_test is implemented for the capital models (:aiyagari — " *
+              ":krusell_smith and :one_asset_hank). The Huggett clearing rate is driven by " *
+              "the wealth distribution, not the aggregate shock alone, so a meaningful " *
+              "accuracy test there needs a distribution-augmented PLM (out of scope).")
+    end
+    return nothing
+end
+
+"""
+    den_haan_test(sol::HADSGESolution; T_sim=2000, T_burn=200, T_fit=4000,
+                  rho_z=0.95, sigma_z=0.007, seed=98765) → DenHaanAccuracy
+
+Den Haan (2010) accuracy test for a **linearized** HA solution (`:ssj` or `:reiter`).
+
+A linearized solution has no explicitly fitted aggregate law of motion, so one is recovered
+from the solution itself: the reduced linear system is simulated for `T_fit` periods under
+AR(1) TFP innovations and `log K_{t+1}` is regressed on `(1, log K_t, z_t)`. That two-state
+law is the solution's own implied aggregate forecast rule. It is then put through exactly
+the same comparison as the Krusell-Smith case — reference cross-sectional simulation versus
+the law iterated on its own forecasts.
+
+`K` is read from the solution's observation map: for `:ssj` the single `C_obs` output is
+aggregate capital, and for `:reiter` capital and TFP are explicit states at reduced indices
+`n_reduced + 1` and `n_reduced + 2`.
+
+!!! warning "Read this before quoting the number"
+    For a linearized solution the statistic is **much larger than the Krusell-Smith one and
+    is method-dependent**. Measured on `:krusell_smith` at `sigma_z = 0.007`, `T_sim = 1000`,
+    `seed = 11`: `eps_max` is 0.07% for the fitted Krusell-Smith PLM but 12.2% for `:ssj` and
+    5.5% for `:reiter` — two solutions of the *same* model, differing by more than a factor
+    of two.
+
+    Three errors are superimposed and this statistic does not separate them: the aggregate
+    law being only two-state (as in Krusell-Smith), the solution being a linearization around
+    the steady state, and the law being *recovered by regression* rather than fitted as a
+    fixed point. The `sigma_ref`/`sigma_plm` comparison is the more interpretable output —
+    both methods show the reference cross-section more volatile than their own law predicts
+    (ratios 2.3 and 1.3), which is exactly the Den Haan (2010) point that a high `R²` hides a
+    volatility miss.
+
+    Treat this as a **relative** diagnostic — same model, same `sigma_z`, same `T_sim`, same
+    seed, comparing a solution against itself under different settings — not as an absolute
+    accuracy certificate. Why the two linearizations disagree so much is unresolved.
+
+# References
+- den Haan, W. J. (2010). Assessing the accuracy of the aggregate law of motion in models
+  with heterogeneous agents. *Journal of Economic Dynamics and Control*, 34(1), 79–99.
+"""
+function den_haan_test(sol::HADSGESolution{T};
+                       T_sim::Int=2000, T_burn::Int=200, T_fit::Int=4000,
+                       rho_z::Real=0.95, sigma_z::Real=0.007,
+                       seed::Int=98765) where {T<:AbstractFloat}
+    @assert T_sim > T_burn + 10 "T_sim must exceed T_burn by at least 10"
+    @assert T_fit > 100 "T_fit must be > 100 to fit the implied law of motion"
+    _den_haan_check_model(sol.spec)
+    sol.method in (:ssj, :reiter) || error(
+        "den_haan_test(::HADSGESolution) supports the linearized methods :ssj and :reiter; " *
+        "got :$(sol.method). For a Krusell-Smith solution pass the KrusellSmithSolution.")
+
+    ss = sol.steady_state
     K_ss = ss.aggregates[:K]
-    K_grid = K_ss .* exp.(T.(collect(range(-T(0.4), T(0.4); length=n_K))))
-    z_idx = zeros(Int, T_sim); z_idx[1] = div(n_z + 1, 2)
-    z_cdf = cumsum(z_trans; dims=2)
-    for t in 2:T_sim
-        u = rand(rng, T); j = z_idx[t-1]
-        z_idx[t] = clamp(searchsortedfirst(view(z_cdf, j, :), u), 1, n_z)
-    end
-    z_real = T[z_grid[z_idx[t]] for t in 1:T_sim]
+    ρ = T(rho_z); σ = T(sigma_z)
 
-    # Reference path: the PLM-DEPENDENT cross-sectional simulation under the household
-    # policy re-solved at the fitted PLM b (not a myopic re-solve at realized prices),
-    # warm-started from the SS policy for fast EGM convergence.
-    c_ss = ss.policies[:consumption]
-    c0 = Array{T,4}(undef, size(c_ss, 1), size(c_ss, 2), n_K, n_z)
-    for lz in 1:n_z, kK in 1:n_K
-        @views c0[:, :, kK, lz] .= c_ss
-    end
-    c_pol, _ = _ks_egm_solve(ip, grid, income, b, z_grid, z_trans, K_grid,
-                             _default_cobb_douglas_price_fn, params;
-                             max_iter=1000, tol=T(1e-6), init_policy=c0)
-    K_ref = _ks_simulate(c_pol, ss, grid, income, z_idx, z_grid, K_grid,
-                         _default_cobb_douglas_price_fn, params)
+    # ── Recover the implied aggregate law of motion from the linear solution ──
+    rng_fit = Random.MersenneTwister(seed)
+    innov = σ .* randn(rng_fit, T, T_fit, 1)
+    Y = simulate(sol, T_fit; shock_draws=innov)
 
-    # PLM-only path: iterate the fitted law on its own forecasts (no cross-section).
-    logK_plm = zeros(T, T_sim); logK_plm[1] = log(K_ss)
-    for t in 1:(T_sim - 1)
-        logK_plm[t+1] = b[1] + b[2] * logK_plm[t] + b[3] * z_real[t]
+    dK = if sol.method === :ssj
+        size(Y, 2) == 1 || error("den_haan_test: expected a single SSJ aggregate output, " *
+                                 "got $(size(Y, 2)); the observation map is not aggregate K.")
+        Vector{T}(@view Y[:, 1])
+    else
+        iK = sol.n_reduced + 1
+        size(Y, 2) >= sol.n_reduced + 2 || error(
+            "den_haan_test: Reiter reduced system has $(size(Y, 2)) outputs but capital and " *
+            "TFP are expected at indices $(iK) and $(iK + 1).")
+        Vector{T}(@view Y[:, iK])
     end
-    K_plm = exp.(logK_plm)
+    # TFP state: read off the Reiter state, else rebuild the AR(1) from its own innovations.
+    z_path = if sol.method === :reiter
+        Vector{T}(@view Y[:, sol.n_reduced + 2])
+    else
+        zp = zeros(T, T_fit)
+        for t in 2:T_fit
+            zp[t] = ρ * zp[t-1] + innov[t-1, 1]
+        end
+        zp
+    end
 
-    idx = (T_burn + 1):T_sim
-    err = T(100) .* abs.(log.(K_ref[idx]) .- logK_plm[idx])                  # percent
-    return DenHaanAccuracy{T}(:K, maximum(err), Statistics.mean(err),
-                              Statistics.std(log.(K_ref[idx])),
-                              Statistics.std(logK_plm[idx]),
-                              K_ref, K_plm, T_sim, T_burn)
+    logK = log.(K_ss .+ dK)
+    all(isfinite, logK) || error("den_haan_test: the linear solution drove K non-positive " *
+                                 "at sigma_z = $sigma_z; reduce sigma_z.")
+    # OLS of log K_{t+1} on (1, log K_t, z_t) — the solution's own two-state forecast rule.
+    n_fit = T_fit - 1
+    X = hcat(ones(T, n_fit), logK[1:n_fit], z_path[1:n_fit])
+    b = Vector{T}(X \ logK[2:(n_fit + 1)])
+
+    # The linearizations put the aggregate shock in TFP, not in effective capital, so the
+    # reference simulation must be priced that way to match the law fitted from them.
+    return _den_haan_core(sol.spec, ss, b, T_sim, T_burn, ρ, σ,
+                          Random.MersenneTwister(seed), :linear, :tfp)
 end

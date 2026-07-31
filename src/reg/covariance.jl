@@ -126,8 +126,21 @@ Compute the variance-covariance matrix of OLS/WLS coefficients.
 function _reg_vcov(X::Matrix{T}, resid::Vector{T}, cov_type::Symbol,
                    XtXinv::Matrix{T};
                    clusters::Union{Nothing,AbstractVector}=nothing,
-                   weights::Union{Nothing,Vector{T}}=nothing) where {T<:AbstractFloat}
+                   weights::Union{Nothing,Vector{T}}=nothing,
+                   coords::Union{Nothing,AbstractMatrix}=nothing,
+                   cutoff::Real=0.0, conley_kernel::Symbol=:bartlett,
+                   conley_metric::Symbol=:euclidean,
+                   time::Union{Nothing,AbstractVector}=nothing,
+                   time_cutoff::Int=0, conley_psd::Bool=true) where {T<:AbstractFloat}
     n, k = size(X)
+
+    if cov_type == :conley
+        coords === nothing && throw(ArgumentError("coords required for :conley cov_type"))
+        V, _ = _conley_vcov(X, resid, XtXinv, Matrix{T}(coords);
+                            cutoff=cutoff, kernel=conley_kernel, metric=conley_metric,
+                            time=time, time_cutoff=time_cutoff, psd=conley_psd)
+        return V
+    end
 
     if cov_type == :ols
         sigma2 = dot(resid, resid) / T(n - k)
@@ -142,7 +155,8 @@ function _reg_vcov(X::Matrix{T}, resid::Vector{T}, cov_type::Symbol,
     # Heteroskedasticity-consistent estimators: V = (X'X)^{-1} S (X'X)^{-1}
     # where S = X' diag(omega_i) X
     cov_type in (:hc0, :hc1, :hc2, :hc3) ||
-        throw(ArgumentError("cov_type must be :ols, :hc0, :hc1, :hc2, :hc3, or :cluster; got :$cov_type"))
+        throw(ArgumentError("cov_type must be :ols, :hc0, :hc1, :hc2, :hc3, :cluster, or " *
+                            ":conley; got :$cov_type"))
 
     # Compute leverage if needed
     h = (cov_type == :hc2 || cov_type == :hc3) ? _hat_diag(X, XtXinv; weights=weights) : nothing
@@ -172,4 +186,214 @@ function _reg_vcov(X::Matrix{T}, resid::Vector{T}, cov_type::Symbol,
     end
 
     XtXinv * S * XtXinv
+end
+
+# =============================================================================
+# Conley (1999) spatial HAC covariance
+# =============================================================================
+
+"""
+    _great_circle(lat1, lon1, lat2, lon2) → T
+
+Great-circle (haversine) distance in kilometres between two lat/lon points in degrees.
+Uses the mean Earth radius 6371 km.
+"""
+@inline function _great_circle(lat1::T, lon1::T, lat2::T, lon2::T) where {T<:AbstractFloat}
+    R = T(6371)
+    φ1 = deg2rad(lat1); φ2 = deg2rad(lat2)
+    dφ = φ2 - φ1
+    dλ = deg2rad(lon2 - lon1)
+    a = sin(dφ / 2)^2 + cos(φ1) * cos(φ2) * sin(dλ / 2)^2
+    return 2 * R * asin(min(one(T), sqrt(max(a, zero(T)))))
+end
+
+"""
+    _conley_distance(coords, i, j, metric) → T
+
+Distance between observations `i` and `j`. `metric = :haversine` treats the first two
+columns of `coords` as latitude and longitude in degrees; `:euclidean` uses the ordinary
+Euclidean norm over all columns.
+"""
+@inline function _conley_distance(coords::Matrix{T}, i::Int, j::Int, metric::Symbol) where {T<:AbstractFloat}
+    if metric === :haversine
+        return _great_circle(coords[i, 1], coords[i, 2], coords[j, 1], coords[j, 2])
+    else
+        acc = zero(T)
+        @inbounds for d in axes(coords, 2)
+            acc += (coords[i, d] - coords[j, d])^2
+        end
+        return sqrt(acc)
+    end
+end
+
+"""
+    _conley_kernel(d, cutoff, kernel) → T
+
+Kernel weight as a function of distance. Both kernels are zero beyond `cutoff`, which is
+what makes the double sum truncatable.
+
+- `:uniform` — 1 inside the cutoff, 0 outside
+- `:bartlett` — `1 - d/cutoff`, decaying linearly to 0 at the cutoff
+
+A `cutoff <= 0` means "no spatial correlation": only the own-observation term survives, so
+the meat collapses to the White/HC0 outer-product sum.
+"""
+@inline function _conley_kernel(d::T, cutoff::T, kernel::Symbol) where {T<:AbstractFloat}
+    cutoff <= zero(T) && return d == zero(T) ? one(T) : zero(T)
+    d > cutoff && return zero(T)
+    return kernel === :uniform ? one(T) : one(T) - d / cutoff
+end
+
+"""
+    _conley_vcov(X, resid, XtXinv, coords; cutoff, kernel, metric, time, time_cutoff,
+                 time_kernel, psd) → (V, adjusted)
+
+Conley (1999) spatial-HAC sandwich `V = (X'X)⁻¹ S (X'X)⁻¹` with meat
+
+```math
+S = \\sum_i \\sum_j K_s(d_{ij}) \\, K_t(|t_i - t_j|) \\, x_i u_i (x_j u_j)'
+```
+
+`K_s` decays to zero beyond the spatial `cutoff`; `K_t` is a Bartlett weight in the time
+dimension with bandwidth `time_cutoff` (a spatial panel — Conley crossed with Newey-West).
+With no `time` supplied, `K_t ≡ 1` and the estimator is purely spatial.
+
+Following the package HAC convention the meat carries no `1/n`.
+
+Conley's `S` need not be positive semi-definite in finite samples. With `psd = true` the
+eigenvalues of the symmetrized `S` are clipped at zero and a warning is emitted, as `acreg`
+does; the second return value reports whether any clipping occurred.
+"""
+function _conley_vcov(X::Matrix{T}, resid::Vector{T}, XtXinv::Matrix{T},
+                      coords::Matrix{T};
+                      cutoff::Real, kernel::Symbol=:bartlett, metric::Symbol=:euclidean,
+                      time::Union{Nothing,AbstractVector}=nothing,
+                      time_cutoff::Int=0, time_kernel::Symbol=:bartlett,
+                      psd::Bool=true) where {T<:AbstractFloat}
+    n, k = size(X)
+    size(coords, 1) == n || throw(ArgumentError(
+        "coords must have $n rows (got $(size(coords, 1)))"))
+    kernel in (:bartlett, :uniform) || throw(ArgumentError(
+        "kernel must be :bartlett or :uniform; got :$kernel"))
+    metric in (:euclidean, :haversine) || throw(ArgumentError(
+        "metric must be :euclidean or :haversine; got :$metric"))
+    metric === :haversine && size(coords, 2) < 2 && throw(ArgumentError(
+        "metric = :haversine needs coords with 2 columns (latitude, longitude)"))
+    time_cutoff >= 0 || throw(ArgumentError("time_cutoff must be >= 0, got $time_cutoff"))
+    if time !== nothing
+        length(time) == n || throw(ArgumentError("time must have length $n"))
+    end
+    cut = T(cutoff)
+
+    # x_i · u_i, the score contributions the meat is built from.
+    Xu = similar(X)
+    @inbounds for i in 1:n, c in 1:k
+        Xu[i, c] = X[i, c] * resid[i]
+    end
+    tvec = time === nothing ? nothing : collect(time)
+
+    S = zeros(T, k, k)
+    @inbounds for i in 1:n
+        xi = @view Xu[i, :]
+        for j in 1:n
+            w = _conley_kernel(_conley_distance(coords, i, j, metric), cut, kernel)
+            w == zero(T) && continue
+            if tvec !== nothing
+                lag = abs(tvec[i] - tvec[j])
+                # Non-integer or out-of-range time gaps get zero weight, matching the
+                # compact support of the Bartlett kernel.
+                lag_i = try
+                    Int(lag)
+                catch
+                    time_cutoff + 1
+                end
+                wt = lag_i == 0 ? one(T) :
+                     kernel_weight(lag_i, time_cutoff, time_kernel, T)
+                wt == zero(T) && continue
+                w *= wt
+            end
+            xj = @view Xu[j, :]
+            for c2 in 1:k, c1 in 1:k
+                S[c1, c2] += w * xi[c1] * xj[c2]
+            end
+        end
+    end
+
+    S = (S .+ S') ./ 2                       # symmetrize against roundoff
+    adjusted = false
+    if psd
+        F = eigen(Symmetric(S))
+        if any(<(zero(T)), F.values)
+            adjusted = true
+            @warn "Conley covariance: the spatial-HAC meat was not positive semi-definite " *
+                  "(min eigenvalue $(minimum(F.values))); clipping negative eigenvalues to " *
+                  "zero. This is a known finite-sample property of the Conley (1999) " *
+                  "estimator — see `acreg`. Pass `psd=false` to keep the raw matrix." maxlog = 1
+            S = Matrix{T}(F.vectors * Diagonal(max.(F.values, zero(T))) * F.vectors')
+            S = (S .+ S') ./ 2
+        end
+    end
+
+    return XtXinv * S * XtXinv, adjusted
+end
+
+"""
+    conley_se(m::RegModel; coords, cutoff, kernel=:bartlett, metric=:euclidean,
+              time=nothing, time_cutoff=0, time_kernel=:bartlett, psd=true)
+        → (vcov, se, adjusted)
+
+Conley (1999) spatial-HAC covariance and standard errors for a fitted regression.
+
+Errors of geographically close observations are correlated, and neither HC nor clustering
+addresses that: HC assumes independence and clustering assumes correlation *within* groups
+and none across them. Conley's estimator instead weights every pair by a kernel in their
+distance, so correlation decays smoothly and vanishes beyond `cutoff`.
+
+# Keyword Arguments
+- `coords::AbstractMatrix` — `n × d` observation positions; with `metric = :haversine` the
+  first two columns are latitude and longitude **in degrees**
+- `cutoff::Real` — distance beyond which errors are treated as uncorrelated (kilometres for
+  `:haversine`, the coordinates' own units otherwise). `cutoff <= 0` reduces the estimator
+  to HC0.
+- `kernel::Symbol = :bartlett` — `:bartlett` (linear decay) or `:uniform`
+- `metric::Symbol = :euclidean` — `:haversine` for lat/lon
+- `time`, `time_cutoff`, `time_kernel` — optional spatial-panel extension: a Newey-West
+  weight in `|t_i - t_j|` multiplies the spatial weight
+- `psd::Bool = true` — clip negative eigenvalues of the meat (with a warning)
+
+# Returns
+A named tuple `(vcov, se, adjusted)`; `adjusted` records whether the PSD clipping fired.
+
+!!! note "Cost"
+    The estimator is `O(n²)` in the number of observations because every pair must be
+    weighted. The kernel is zero beyond `cutoff`, so distant pairs are skipped as soon as
+    the distance is known, but the distance itself is still computed for each pair.
+
+# Examples
+```julia
+m = estimate_reg(y, X)
+c = conley_se(m; coords=[lat lon], cutoff=100.0, metric=:haversine)
+c.se
+```
+
+See also [`estimate_reg`](@ref).
+
+# References
+- Conley, T. G. (1999). GMM estimation with cross sectional dependence.
+  *Journal of Econometrics*, 92(1), 1–45.
+- Colella, F., Lalive, R., Sakalli, S. O., & Thoenig, M. (2019). Inference with arbitrary
+  clustering. IZA Discussion Paper 12584 (the `acreg` conventions).
+"""
+function conley_se(m::RegModel{T}; coords::AbstractMatrix, cutoff::Real,
+                   kernel::Symbol=:bartlett, metric::Symbol=:euclidean,
+                   time::Union{Nothing,AbstractVector}=nothing,
+                   time_cutoff::Int=0, time_kernel::Symbol=:bartlett,
+                   psd::Bool=true) where {T<:AbstractFloat}
+    X = m.X
+    XtXinv = robust_inv(Symmetric(X' * X))
+    V, adjusted = _conley_vcov(X, m.residuals, Matrix{T}(XtXinv), Matrix{T}(coords);
+                               cutoff=cutoff, kernel=kernel, metric=metric,
+                               time=time, time_cutoff=time_cutoff,
+                               time_kernel=time_kernel, psd=psd)
+    return (vcov=V, se=sqrt.(max.(diag(V), zero(T))), adjusted=adjusted)
 end

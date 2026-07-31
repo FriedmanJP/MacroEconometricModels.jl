@@ -232,3 +232,61 @@ function plot_result(est::DSGEEstimation{T};
     save_path !== nothing && save_plot(p, save_path)
     p
 end
+
+
+# =============================================================================
+# DeterminacyMap ([T268])
+# =============================================================================
+
+"""
+    plot_result(m::DeterminacyMap; title="", save_path=nothing) -> PlotOutput
+
+Determinacy map: a heatmap of the verdict over the swept parameter grid.
+
+Cells carry the ordered verdict codes ([`DETERMINACY_CODES`](@ref)) — `1` determinate, `0`
+indeterminate, `-1` no stable solution — on a single-hue sequential ramp with a fixed domain
+`[-1, 1]`, so the colours mean the same thing across two maps of the same model. The domain is
+pinned rather than data-driven for exactly that reason: a sweep that happens to contain only
+determinate cells must not repaint them as if they were the worst outcome present.
+
+Grid points where the model could not be solved serialize as `null`, which the heatmap renderer
+draws in neutral grey and labels "Missing" (plotrule Heatmaps) — a failed solve is genuinely
+absent information, not a fourth region.
+
+A one-parameter sweep is drawn as a single row.
+"""
+function plot_result(m::DeterminacyMap{T};
+                     title::String="", save_path::Union{String,Nothing}=nothing) where {T}
+    n1, n2 = size(m.verdict)
+    id = _next_plot_id("dsge_determinacy")
+
+    # Rows = first parameter (descending down the axis, so low values sit at the bottom as on a
+    # conventional plot); columns = second parameter, or a single unlabeled row when 1-D.
+    row_vals = m.axes[1]
+    row_labels_asc = String[_fmt(v; digits=3) for v in row_vals]
+    col_labels = _dm_is_1d(m) ? [""] : String[_fmt(v; digits=3) for v in m.axes[2]]
+
+    rows = Vector{Pair{String,String}}[]
+    for i in 1:n1, j in 1:n2
+        v = m.verdict[i, j]
+        vj = v == DETERMINACY_CODES.failed ? "null" : _json(float(v))
+        push!(rows, Pair{String,String}["x" => _json(col_labels[j]),
+                                        "y" => _json(row_labels_asc[i]),
+                                        "v" => vj])
+    end
+    data_json = _json_array_of_objects(rows)
+
+    xlab = _dm_is_1d(m) ? "" : string(m.params[2])
+    js = _render_heatmap_js(id, data_json, _json(reverse(row_labels_asc)), _json(col_labels);
+                            xlabel=xlab, ylabel=string(m.params[1]),
+                            tip_label=isempty(xlab) ? string(m.params[1]) : xlab,
+                            scale=:sequential, color_domain=[-1.0, 1.0])
+    ptitle = "1 = determinate, 0 = indeterminate, -1 = no stable solution"
+    panel = _PanelSpec(id, ptitle, js)
+
+    ftitle = isempty(title) ? "Determinacy Region (" * join(string.(m.params), " × ") * ")" :
+             title
+    p = _make_plot([panel]; title=ftitle, ncols=1)
+    save_path !== nothing && save_plot(p, save_path)
+    p
+end

@@ -208,6 +208,52 @@ end
 # =============================================================================
 
 """
+    _aggregate_labor(d, n_policy, income, grid) → L
+
+Aggregate labor supply under the distribution `d`:
+
+    L = Σ_j Σ_i  e_j · n(a_i, e_j) · d[(j-1)*n_a + i]     (efficiency units)
+    N = Σ_j Σ_i        n(a_i, e_j) · d[(j-1)*n_a + i]     (raw hours)
+
+`L` is what enters the production function; use [`_aggregate_hours`](@ref) for
+the unweighted mean `N`. The two coincide only when every income state is 1.
+"""
+function _aggregate_labor(d::AbstractVector{T}, n_policy::AbstractMatrix{T},
+                          income::IncomeProcess{T}, grid::HAGrid{T}) where {T<:AbstractFloat}
+    n_a = grid.n_points[1]
+    n_e = length(income.states)
+    e_vals = income.states
+    L = zero(T)
+    @inbounds for j in 1:n_e
+        offset = (j - 1) * n_a
+        ej = e_vals[j]
+        for i in 1:n_a
+            L += ej * n_policy[i, j] * d[offset + i]
+        end
+    end
+    return L
+end
+
+"""
+    _aggregate_hours(d, n_policy, grid) → N
+
+Mean hours `∫ n dμ` under the distribution `d` (no efficiency weighting).
+"""
+function _aggregate_hours(d::AbstractVector{T}, n_policy::AbstractMatrix{T},
+                          grid::HAGrid{T}) where {T<:AbstractFloat}
+    n_a = grid.n_points[1]
+    n_e = div(length(d), n_a)
+    N = zero(T)
+    @inbounds for j in 1:n_e
+        offset = (j - 1) * n_a
+        for i in 1:n_a
+            N += n_policy[i, j] * d[offset + i]
+        end
+    end
+    return N
+end
+
+"""
     _aggregate(d, grid; var_index=1) → scalar
 
 Compute the aggregate (mean) of asset dimension `var_index` under the

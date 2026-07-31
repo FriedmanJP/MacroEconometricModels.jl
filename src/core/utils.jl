@@ -286,3 +286,35 @@ end
 _default_names(n::Int, prefix::String) = ["$prefix $i" for i in 1:n]
 default_var_names(n::Int; prefix::String="Var") = _default_names(n, prefix)
 default_shock_names(n::Int; prefix::String="Shock") = _default_names(n, prefix)
+
+# =============================================================================
+# Importance-Sampling Diagnostics
+# =============================================================================
+
+"""
+    _effective_sample_size(weights) -> T
+
+Kish's (1965) **effective sample size** of a set of importance weights:
+
+```math
+\\mathrm{ESS} = \\frac{\\left(\\sum_s w_s\\right)^2}{\\sum_s w_s^2}
+```
+
+The ratio is scale-invariant, so `weights` may be normalized or not — for
+normalized weights it reduces to `1 / Σ w̄²`. `ESS` equals `n` when the weights
+are uniform and approaches 1 when a single draw carries all the mass, so
+`ESS / n` measures how much of the nominal sample the weighting actually buys.
+
+Returns `zero(T)` when the weights are empty or sum to zero (no usable sample).
+Negative weights are rejected: the formula is meaningless for them and their
+presence signals an upstream error rather than a degenerate sample.
+"""
+function _effective_sample_size(weights::AbstractVector{T}) where {T<:Real}
+    isempty(weights) && return zero(float(T))
+    any(w -> w < 0, weights) && throw(ArgumentError(
+        "importance weights must be non-negative; got minimum $(minimum(weights))"))
+    s1 = sum(weights)
+    s2 = sum(abs2, weights)
+    (s1 <= 0 || s2 <= 0) && return zero(float(T))
+    float(s1)^2 / float(s2)
+end

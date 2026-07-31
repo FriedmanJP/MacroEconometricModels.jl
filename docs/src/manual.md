@@ -296,6 +296,36 @@ model = estimate_var(Y, 4)
 result = irf(model, 20; method=:cholesky, ci_type=:bootstrap, reps=50, conf_level=0.90)
 ```
 
+#### Bootstrap Schemes and Bias Correction
+
+The residual bootstrap resamples rows i.i.d. by default, which is valid only under conditionally homoskedastic, serially independent errors. Two alternatives relax that, and Kilian's (1998) bias correction addresses the small-sample bias of the OLS coefficients:
+
+```@example var
+wild  = irf(model, 20; ci_type=:bootstrap, reps=50, bootstrap=:wild)
+block = irf(model, 20; ci_type=:bootstrap, reps=50, bootstrap=:block, block_length=8)
+bc    = irf(model, 20; ci_type=:bootstrap, reps=50, bias_correct=true, seed=1)
+nothing # hide
+```
+
+| Keyword | Type | Default | Description |
+|---------|------|---------|-------------|
+| `bootstrap` | `Symbol` | `:iid` | Resampling scheme: `:iid`, `:wild`, `:block` |
+| `block_length` | `Int` | `0` | Moving-block length; `0` selects ``\lceil T^{1/3} \rceil`` |
+| `wild_dist` | `Symbol` | `:rademacher` | Wild multiplier: `:rademacher` or `:mammen` |
+| `bias_correct` | `Bool` | `false` | Kilian (1998) bootstrap-after-bootstrap |
+| `bias_reps` | `Int` | `0` | Inner-bootstrap replications; `0` reuses `reps` |
+
+- **Wild** multiplies each residual *row* by a single scalar draw. Because the whole row shares the multiplier, the contemporaneous cross-equation covariance is preserved exactly while the conditional variance is randomised --- the property that makes it robust to conditional heteroskedasticity of unknown form (Gonçalves & Kilian 2004). `:mammen` additionally matches the third moment; `:rademacher` cannot, since its odd moments vanish by symmetry.
+- **Block** concatenates contiguous residual blocks, retaining the serial dependence that i.i.d. resampling destroys (Brüggemann, Jentsch & Trenkler 2016).
+- **`bias_correct`** runs Kilian's bootstrap-after-bootstrap: an inner bootstrap estimates ``\Psi = E[B^*] - \hat{B}``, the DGP is re-centred at ``\hat{B} - \delta\Psi``, and each outer draw is corrected by the same ``\Psi``.
+
+!!! note "The stationarity shrinkage is not optional"
+    Subtracting the raw bias can push the companion matrix outside the unit circle, making the bias-corrected DGP explosive. Kilian's rule is applied: if the uncorrected estimate is already non-stationary no correction is made at all; otherwise ``\delta`` starts at 1 and shrinks by 0.01 until the corrected companion is stable.
+
+    On a persistent AR(1) (``\rho = 0.95``, ``T = 60``) where OLS is badly downward-biased, the correction cuts the mean bias by roughly three quarters and lowers RMSE.
+
+`bootstrap=:iid` with `bias_correct=false` reproduces the previous bands bit-for-bit, so existing results are unchanged. All bands are reproducible at a fixed `seed`.
+
 ```julia
 plot_result(result)
 ```
@@ -417,6 +447,7 @@ The acceptance rate reports the fraction of draws satisfying all restrictions. L
 | `n_draws` | `Int` | `1000` | Target number of accepted draws |
 | `n_rotations` | `Int` | `1000` | Maximum attempts per target draw |
 | `compute_weights` | `Bool` | `true` | Compute importance weights (set `false` for faster exploratory analysis) |
+| `normalize_weights` | `Bool` | `true` | Scale stored weights to sum to 1 (`false` keeps the raw volume-element scale) |
 
 **AriasSVARResult fields:**
 
@@ -427,6 +458,10 @@ The acceptance rate reports the fraction of draws satisfying all restrictions. L
 | `weights` | `Vector{T}` | Importance weights (normalized to sum to 1) |
 | `acceptance_rate` | `T` | Fraction of draws satisfying all restrictions |
 | `restrictions` | `SVARRestrictions` | The imposed restrictions |
+| `ess` | `T` | Kish effective sample size of the importance weights |
+| `ess_fraction` | `T` | ``\mathrm{ESS} / n_{\text{draws}}`` |
+
+`ess_fraction` is exactly 1 under pure sign restrictions (uniform weights) and falls below 1 once zero restrictions make the weights uneven. A value near zero means a handful of draws carry the posterior, so the credible bands rest on far fewer effective draws than `n_draws` implies; see [Structural Identification](@ref structural_identification_page).
 
 ### Mountford-Uhlig (2009) Penalty Function
 
@@ -613,6 +648,74 @@ The forecast object displays per-variable tables with point forecasts and confid
 | `reps` | `Int` | `500` | Number of bootstrap replications |
 | `conf_level` | `Real` | `0.95` | Confidence level for intervals |
 
+### Conditional Forecasts and Scenario Analysis
+
+`conditional_forecast` answers the scenario question — *what happens to everything else if inflation is held at 2% for the next four quarters?* — using Waggoner & Zha (1999). Write the forecast as the unconditional path plus the moving average of the future structural shocks,
+
+```math
+y_{T+s} = \hat{y}_{T+s} + \sum_{j=1}^{s} \Psi_{s-j} \, \varepsilon_{T+j},
+\qquad \Psi_s = \Phi_s P
+```
+
+where:
+- ``\hat{y}_{T+s}`` is the unconditional forecast
+- ``\Phi_s`` is the reduced-form moving-average coefficient at lag ``s`` (``\Phi_0 = I``)
+- ``P`` is the structural impact matrix and ``\varepsilon_{T+j} \sim N(0, I)`` the future shocks
+
+Each restriction is linear in ``\varepsilon``, so stacking them over the conditioning window gives ``R\varepsilon = r``, where ``r`` is the gap between the desired path and the unconditional forecast. The shocks are then drawn from the implied conditional distribution
+
+```math
+\varepsilon \sim N\big(R'(RR')^{-1}r, \; I - R'(RR')^{-1}R\big)
+```
+
+— the minimum-norm mean plus randomness in the null space of the restrictions. The point forecast uses the conditional mean; the bands come from `reps` draws, so unconstrained variables and horizons keep genuine uncertainty while constrained cells collapse onto their targets.
+
+```@example var
+model = estimate_var(Y, 4; varnames=["INDPRO", "CPI", "FFR"])
+# Hold the policy rate at 2% for four quarters
+scenario = Dict(("FFR", h) => 2.0 for h in 1:4)
+cfc = conditional_forecast(model, scenario, 12; reps=200)
+report(cfc)
+```
+
+Each variable's table places the conditional path next to the unconditional one, so the scenario's effect is read off directly. Conditions are built either as a `Dict` keyed by `(variable, horizon)` or with [`forecast_condition`](@ref), which also builds **soft** conditions — a target with a tolerance:
+
+```@example var
+soft = [forecast_condition("FFR", h, 2.0; sd=0.25) for h in 1:4]
+cfc_soft = conditional_forecast(model, soft, 12; reps=200)
+round.(cfc_soft.forecast[1:4, 3], digits=3)   # shrunk toward 2.0, not pinned to it
+```
+
+A soft condition treats the target as a noisy observation with standard deviation `sd`, so the path is shrunk toward it rather than hit exactly, and `sd → 0` recovers the hard condition.
+
+```julia
+plot_result(cfc)
+```
+
+!!! note "Identification and conditional forecasts"
+    For conditions on observable paths the conditional forecast is **invariant** to the rotation ``Q``: writing ``P = LQ``, the rotation cancels between ``R`` and the impact matrix, so identification does not change the forecast. It changes only the interpretation of the implied shocks in `result.shocks`, which rotate as ``\varepsilon_L = Q\varepsilon_{LQ}``. Pass `Q` when those structural shocks are themselves of interest.
+
+| Keyword | Type | Default | Description |
+|---------|------|---------|-------------|
+| `Q` | `AbstractMatrix` | `nothing` | Rotation matrix; `nothing` is Cholesky. Affects only the reported `shocks` |
+| `reps` | `Int` | `1000` | Draws used for the bands |
+| `conf_level` | `Real` | `0.95` | Band coverage |
+| `rng` | `AbstractRNG` | `default_rng()` | Random number generator |
+
+`ConditionalForecast{T}` return value:
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `forecast` | `Matrix{T}` | ``h \times n`` conditional mean path |
+| `ci_lower` / `ci_upper` | `Matrix{T}` | ``h \times n`` band bounds |
+| `unconditional` | `Matrix{T}` | ``h \times n`` unconditional forecast, for comparison |
+| `shocks` | `Matrix{T}` | ``h \times n`` mean structural shocks implied by the conditions |
+| `conditions` | `Vector{ForecastCondition{T}}` | The restrictions imposed, with variable indices resolved |
+| `identification` | `Symbol` | `:cholesky` or `:custom` |
+| `n_draws` | `Int` | Draws used for the bands |
+
+The same function dispatches on `BVARPosterior` to integrate the scenario over the posterior — see [Bayesian VAR](bayesian.md).
+
 ---
 
 ## Innovation Accounting and Bayesian VAR
@@ -693,6 +796,9 @@ The BIC selects a parsimonious lag order for the 3-variable system. The Cholesky
 - Arias, J. E., Rubio-Ramírez, J. F., & Waggoner, D. F. (2018). Inference Based on Structural Vector Autoregressions Identified with Sign and Zero Restrictions: Theory and Applications.
   *Econometrica*, 86(2), 685-720. [DOI](https://doi.org/10.3982/ECTA14468)
 
+- Antolín-Díaz, J., Petrella, I., & Rubio-Ramírez, J. F. (2021). Structural Scenario Analysis with SVARs.
+  *Journal of Monetary Economics*, 117, 798-815. [DOI](https://doi.org/10.1016/j.jmoneco.2020.06.001)
+
 - Baumeister, C., & Hamilton, J. D. (2015). Sign Restrictions, Structural Vector Autoregressions, and Useful Prior Information.
   *Econometrica*, 83(5), 1963-1999. [DOI](https://doi.org/10.3982/ECTA12356)
 
@@ -728,6 +834,9 @@ The BIC selects a parsimonious lag order for the 3-variable system. The Cholesky
 
 - Uhlig, H. (2005). What Are the Effects of Monetary Policy on Output? Results from an Agnostic Identification Procedure.
   *Journal of Monetary Economics*, 52(2), 381-419. [DOI](https://doi.org/10.1016/j.jmoneco.2004.05.007)
+
+- Waggoner, D. F., & Zha, T. (1999). Conditional Forecasts in Dynamic Multivariate Models.
+  *Review of Economics and Statistics*, 81(4), 639-651. [DOI](https://doi.org/10.1162/003465399558508)
 
 - White, H. (1980). A Heteroskedasticity-Consistent Covariance Matrix Estimator and a Direct Test for Heteroskedasticity.
   *Econometrica*, 48(4), 817-838. [DOI](https://doi.org/10.2307/1912934)

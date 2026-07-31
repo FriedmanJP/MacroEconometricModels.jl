@@ -126,6 +126,8 @@ include("io/show.jl")
 include("reg/types.jl")
 include("reg/covariance.jl")
 include("reg/estimation.jl")
+include("reg/quantile.jl")
+include("reg/rdd.jl")
 include("reg/penalized.jl")   # EV-03 (#411): ridge / LASSO / elastic net — after estimation.jl
 include("reg/selection.jl")   # EV-04 (#412): stepwise / best-subset / GETS variable selection
 include("reg/iv.jl")
@@ -225,6 +227,12 @@ include("nongaussian/tests.jl")
 
 # Bayesian utilities (after bayesian + identification)
 include("bvar/utils.jl")
+include("bvar/tvpvar.jl")   # T250 (#349): Primiceri TVP-VAR-SV / Cogley-Sargent SV-BVAR
+include("bvar/glp.jl")      # T252 (#351): GLP (2015) hierarchical hyperparameter optimization
+include("bvar/mfvar.jl")    # T251 (#350): Schorfheide-Song mixed-frequency VAR
+
+# Conditional forecasting / scenario analysis (needs VAR + BVAR + identification)
+include("var/conditional_forecast.jl")
 
 # Factor models
 include("factor/kalman.jl")
@@ -297,11 +305,15 @@ include("dsge/parser.jl")
 include("dsge/steady_state.jl")
 include("dsge/linearize.jl")
 include("dsge/qz_solve.jl")
+include("dsge/sparse_klein.jl")   # T270 (#369): sparse/structured linear path
 include("dsge/gensys.jl")
+include("dsge/determinacy.jl")   # T268 (#367): determinacy-region mapping
 include("dsge/blanchard_kahn.jl")
 include("dsge/klein.jl")
 include("dsge/derivatives.jl")
+include("dsge/sylvester.jl")
 include("dsge/perturbation.jl")
+include("dsge/pruned_state_space.jl")   # T269 (#368): pruned state-space object
 include("dsge/quadrature.jl")
 include("dsge/projection.jl")
 include("dsge/pfi.jl")
@@ -323,6 +335,7 @@ include("arima/estimation.jl")
 include("arima/forecast.jl")
 include("arima/selection.jl")
 include("arima/arfima.jl")   # EV-13 (#421): ARFIMA + GPH + local Whittle
+include("arima/sarima.jl")   # T242 (#341): multiplicative seasonal ARIMA
 
 # Public linear-Gaussian state-space module — thin wrapper over the core Kalman kernel
 include("statespace/types.jl")      # EV-37 (#445): StateSpaceModel + AbstractStateSpaceModel
@@ -366,6 +379,7 @@ include("teststat/arch_diagnostics.jl")
 
 # GARCH models
 include("garch/types.jl")
+include("garch/distributions.jl")
 include("garch/estimation.jl")
 include("garch/forecast.jl")
 include("garch/diagnostics.jl")
@@ -422,6 +436,7 @@ include("preg/types.jl")
 include("teststat/pvar_ar_test.jl")   # after preg/types (needs PanelRegModel), before preg/estimation (calls _pvar_ar_stats)
 include("preg/covariance.jl")
 include("preg/prais.jl")           # EV-25 (#433): Prais-Winsten AR(1) FGLS transform (used by estimation.jl)
+include("preg/hdfe.jl")            # T272 (#371): HDFE absorption by alternating projections (used by estimation.jl)
 include("preg/estimation.jl")
 include("preg/tests.jl")
 include("preg/iv.jl")
@@ -430,6 +445,11 @@ include("preg/logit.jl")
 include("preg/probit.jl")
 include("preg/margins.jl")
 include("preg/display.jl")
+
+# Wild cluster bootstrap (T243, #342) — after reg/ AND preg/ (dispatches on both
+# RegModel and PanelRegModel, and reuses the preg within-transform helpers).
+include("reg/wildboot.jl")
+include("reg/anderson_rubin.jl")   # T244 (#343): weak-IV-robust AR test + confidence set
 
 # Panel ARDL — PMG / MG / DFE (EV-23, #431). After preg/ (reuses _panel_cluster_vcov,
 # _hausman_quadratic_form) and after ardl/estimation.jl (reuses estimate_ardl for MG).
@@ -468,6 +488,7 @@ include("lp/smooth.jl")
 include("lp/state.jl")
 include("lp/propensity.jl")
 include("lp/forecast.jl")
+include("lp/weak_iv.jl")   # T245 (#344): MOP effective F + horizon-wise AR bands for LP-IV
 
 # Difference-in-Differences / Event Study LP
 include("did/types.jl")
@@ -484,6 +505,7 @@ include("did/honest_did.jl")
 include("did/estimation.jl")
 
 # Innovation accounting (after LP types for lp_irf support)
+include("core/bootstrap_schemes.jl")   # T271 (#370): wild/block resampling + Kilian bias correction
 include("core/irf.jl")
 include("core/fevd.jl")
 include("core/hd.jl")
@@ -509,6 +531,7 @@ include("dsge/pruning.jl")
 include("dsge/estimation.jl")
 
 # DSGE Bayesian estimation (after estimation.jl, needs DSGESpec, solve, ParameterTransform)
+include("dsge/prefilter.jl")
 include("dsge/bayes_types.jl")
 include("dsge/priors.jl")
 include("dsge/kalman_dsge.jl")
@@ -522,13 +545,18 @@ include("dsge/hd.jl")
 
 # Heterogeneous Agent DSGE (after dsge/types.jl and dsge/hd.jl)
 include("dsge/heterogeneous/types.jl")
+include("dsge/heterogeneous/adaptive_grid.jl")
 include("dsge/heterogeneous/egm.jl")
 include("dsge/heterogeneous/individual_vfi.jl")
 include("dsge/heterogeneous/distribution.jl")
+include("dsge/heterogeneous/grid_check.jl")
 include("dsge/heterogeneous/steady_state.jl")
 include("dsge/heterogeneous/krusell_smith.jl")
 include("dsge/heterogeneous/ssj.jl")
+include("dsge/heterogeneous/blocks.jl")
+include("dsge/heterogeneous/dcegm.jl")
 include("dsge/heterogeneous/reiter.jl")
+include("dsge/heterogeneous/winberry.jl")
 include("dsge/heterogeneous/examples.jl")
 include("dsge/heterogeneous/parser.jl")
 include("dsge/heterogeneous/display.jl")
@@ -537,6 +565,7 @@ include("dsge/heterogeneous/estimation.jl")
 
 # Overlapping generations (Blanchard 1985 perpetual youth)
 include("olg/blanchard.jl")
+include("olg/lifecycle.jl")
 
 # Continuous-time heterogeneous agents (Achdou et al. 2022)
 include("ct/continuous_aiyagari.jl")
@@ -627,6 +656,7 @@ export point_forecast, lower_bound, upper_bound, forecast_horizon
 
 # VAR types
 export VARModel, VARForecast
+export ConditionalForecast, ForecastCondition, forecast_condition, conditional_forecast
 
 # IRF types
 export ImpulseResponse, BayesianImpulseResponse
@@ -665,6 +695,7 @@ export AbstractDSGEModel
 
 # Types
 export DSGESpec, LinearDSGE, DSGESolution, PerturbationSolution, ProjectionSolution, PerfectForesightPath, DSGEEstimation
+export DeterminacyMap, PrunedStateSpace
 
 # Bayesian DSGE
 export BayesianDSGE, BayesianDSGESimulation
@@ -679,6 +710,8 @@ export prior_posterior_overlap, PriorPosteriorOverlap
 export prior_predictive, PriorPredictiveResult
 export posterior_predictive_check, PosteriorPredictiveCheck
 export dynare_prior, InverseGamma1
+export PrefilterSpec, apply_prefilter, invert_prefilter
+export ObservationTrends, observation_trends, detect_trend
 
 # Macro
 export @dsge
@@ -688,6 +721,8 @@ export compute_steady_state, linearize, solve, gensys, blanchard_kahn, klein, pe
 export collocation_solver, pfi_solver, perfect_foresight
 export simulate, estimate_dsge
 export solve_lyapunov, analytical_moments
+export determinacy_region, determinacy_boundary, determinacy_label, DETERMINACY_CODES
+export pruned_state_space
 export evaluate_policy, max_euler_error, vfi_solver
 
 # Accessors
@@ -708,18 +743,39 @@ export dsge_smoother, dsge_particle_smoother
 # Heterogeneous Agent DSGE types
 export HADSGESpec, HAGrid, IncomeProcess, IndividualProblem
 export HASteadyState, HADSGESolution, KrusellSmithSolution, DenHaanAccuracy
+export HAGridDiagnostics, ha_grid_diagnostics
+export adaptive_asset_grid, adapt_ha_grid
+export LaborSupply, labor_supply, labor_policy
 export rouwenhorst, tauchen
 export load_ha_example
 export distribution_irf, inequality_irf, simulate_panel, den_haan_test
+# Sequence-space block composition (DAG) + second-order SSJ
+export AbstractSSJBlock, SimpleBlock, HetBlock, SSJModel
+export SSJGEJacobian, SSJImpulseResponse
+export combine_blocks, block_jacobian, ssj_jacobian, ssj_irf, ssj_arg_order
+# DCEGM — discrete-continuous choice (Iskhakov et al. 2017)
+export DCEGMProblem, DCEGMSolution, DCEGMDistribution
+export dcegm_solve, dcegm_policy, dcegm_choice_probabilities, dcegm_threshold
+export dcegm_simulate, dcegm_retirement_model
+# Winberry (2018) parametric distribution dynamics
+export ParametricDensity, WinberryFamily
+export fit_parametric_density, parametric_density, parametric_moments
+export fit_winberry, winberry_moments, winberry_histogram, winberry_quadrature
 
 # Overlapping generations (Blanchard 1985 perpetual youth)
 export BlanchardOLG, BlanchardOLGSteadyState, BlanchardOLGSolution
 export blanchard_steady_state, blanchard_solve, blanchard_transition
+# True life-cycle OLG (Auerbach-Kotlikoff / Imrohoroglu et al.)
+export LifeCycleOLG, LifeCycleSteadyState
+export lifecycle_steady_state, lifecycle_policies, lifecycle_distribution
+export lifecycle_income, lifecycle_survival
 
 # Continuous-time heterogeneous agents (Achdou et al. 2022)
 export CTAiyagari, CTPoissonIncome, CTSteadyState, CTTransition
 export ct_hjb, ct_kfe, ct_steady_state, ct_mit_shock
 export CTTwoAsset, CTTwoAssetSolution, ct_two_asset_solve
+export CTTwoAssetGE, CTTwoAssetTransition, ct_two_asset_ge, ct_two_asset_mit
+export hand_to_mouth, ceiling_mass, ct_two_asset_stationarity
 
 # Local Projection types
 export AbstractLPModel, AbstractLPImpulseResponse, AbstractCovarianceEstimator
@@ -827,6 +883,9 @@ export test_known_beta, test_joint_restriction
 # =============================================================================
 
 export BVARPosterior, BVARForecast
+export TVPVARPosterior, estimate_tvpvar, volatility_path
+export MFVARPosterior, estimate_mfvar, latent_path
+export optimize_hyperparameters_glp, GLPHyperparameters
 export estimate_bvar
 export posterior_mean_model
 export posterior_median_model
@@ -869,6 +928,7 @@ export UhligSVARResult, identify_uhlig
 
 export irf
 export fevd
+export generalized_fevd
 export lp_fevd
 
 # =============================================================================
@@ -961,6 +1021,7 @@ export estimate_xtcointreg, PanelCointRegModel   # EV-22 (#430): panel FMOLS/DOL
 
 # LP-IV (Stock & Watson 2018)
 export estimate_lp_iv, lp_iv_irf
+export montiel_olea_pflueger_f, lp_iv_ar_band, MontielOleaPfluegerF, LPIVARBand
 export weak_instrument_test, sargan_test
 
 # Smooth LP (Barnichon & Brownlees 2019)
@@ -1019,6 +1080,7 @@ export PanelRegModel, PanelIVModel, PanelLogitModel, PanelProbitModel, PanelTest
 
 # Estimation
 export estimate_xtreg, estimate_xtiv, estimate_xtlogit, estimate_xtprobit
+export absorb_fe
 
 # Specification tests
 export hausman_test, breusch_pagan_test, f_test_fe
@@ -1049,7 +1111,7 @@ export bacon_decomposition, pretrend_test, negative_weight_check
 export AbstractARIMAModel
 
 # Model types
-export ARModel, MAModel, ARMAModel, ARIMAModel
+export ARModel, MAModel, ARMAModel, ARIMAModel, SARIMAModel
 export ARIMAForecast, ARIMAOrderSelection
 
 # Type accessors
@@ -1057,6 +1119,7 @@ export ar_order, ma_order, diff_order
 
 # Estimation functions
 export estimate_ar, estimate_ma, estimate_arma, estimate_arima
+export estimate_sarima, auto_sarima
 
 # Order selection
 export select_arima_order, auto_arima, ic_table
@@ -1254,6 +1317,11 @@ export MultinomialLogitModel, estimate_mlogit
 
 # Estimation
 export estimate_reg, estimate_iv, estimate_logit, estimate_probit
+export conley_se
+export estimate_qreg, QuantileRegModel
+export estimate_rdd, RDDResult
+export wild_cluster_bootstrap, WildClusterBootstrap
+export anderson_rubin_test, anderson_rubin_ci, AndersonRubinTest, AndersonRubinCI
 
 # Penalized regression — EV-03 (#411)
 export PenalizedRegModel, estimate_ridge, estimate_lasso, estimate_elastic_net

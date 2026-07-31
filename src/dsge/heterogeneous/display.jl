@@ -145,6 +145,20 @@ function Base.show(io::IO, ss::HASteadyState{T}) where {T}
               "r=$(_fmt(r_val)), K=$(_fmt(K_val)), Gini=$(_fmt(gini; digits=2))")
 end
 
+function Base.show(io::IO, pd::ParametricDensity{T}) where {T}
+    print(io, "ParametricDensity{$T}: n_moments=$(length(pd.lambda)), " *
+              "mean=$(_fmt(pd.center)), sd=$(_fmt(pd.scale)), " *
+              "converged=$(pd.converged), residual=$(_fmt(pd.residual; digits=2))")
+end
+
+function Base.show(io::IO, fam::WinberryFamily{T}) where {T}
+    n_e = length(fam.densities)
+    worst = isempty(fam.densities) ? zero(T) : maximum(pd.residual for pd in fam.densities)
+    print(io, "WinberryFamily{$T}: $(n_e) income states × $(fam.n_moments) moments " *
+              "($(n_e * fam.n_moments) distribution states), " *
+              "converged=$(fam.converged), max residual=$(_fmt(worst; digits=2))")
+end
+
 function Base.show(io::IO, sol::HADSGESolution{T}) where {T}
     print(io, "HADSGESolution{$T}: method=:$(sol.method), " *
               "n_reduced=$(sol.n_reduced), " *
@@ -224,6 +238,51 @@ function report(ss::HASteadyState{T}) where {T}
         _pretty_table(io, agg_data;
             title="Aggregates",
             column_labels=["Variable", "Value"],
+            alignment=[:l, :r])
+    end
+
+    # --- Winberry parametric family (only when distribution=:winberry) ---
+    fam = ss.parametric
+    if fam !== nothing
+        n_e = length(fam.densities)
+        win_data = Matrix{Any}(undef, n_e, 5)
+        for j in 1:n_e
+            pd = fam.densities[j]
+            win_data[j, 1] = string(j)
+            win_data[j, 2] = _fmt(fam.mass[j]; digits=4)
+            win_data[j, 3] = _fmt(pd.center; digits=4)
+            win_data[j, 4] = _fmt(pd.scale; digits=4)
+            win_data[j, 5] = _fmt(pd.residual; digits=2)
+        end
+        _pretty_table(io, win_data;
+            title="Winberry Parametric Family " *
+                  "($(n_e) × $(fam.n_moments) = $(n_e * fam.n_moments) distribution states)",
+            column_labels=["Income state", "Mass", "Mean", "Std. dev.", "Moment residual"],
+            alignment=[:l, :r, :r, :r, :r])
+    end
+
+    # --- Grid adequacy ---
+    # An HA steady state can be exactly stationary and still fail to clear its
+    # asset market: the Young (2010) transition clamps the savings policy at
+    # a_max, which conserves mass but destroys assets. `excess_demand` is blind
+    # to this because it is measured on the already-clamped aggregate.
+    if ss.grid.n_dims == 1
+        gd = ha_grid_diagnostics(ss)
+        grid_data = Any[
+            "a_max"                    _fmt(gd.a_max; digits=4);
+            "Mass at ceiling (%)"      _fmt(100 * gd.ceiling_mass; digits=6);
+            "Mass at floor (%)"        _fmt(100 * gd.floor_mass; digits=4);
+            "Cells with a' > a_max"    gd.n_cells_above;
+            "Max a'"                   _fmt(gd.max_savings; digits=4);
+            "∫a dμ  (holdings)"        _fmt(gd.assets_held; digits=6);
+            "∫a' dμ (policy)"          _fmt(gd.assets_desired; digits=6);
+            "Residual"                 _fmt(gd.clearing_residual; digits=6);
+            "Relative residual"        _fmt(gd.relative_residual; digits=6);
+            "Verdict"                  (gd.adequate ? "adequate" : "TRUNCATED — see ?ha_grid_diagnostics")
+        ]
+        _pretty_table(io, grid_data;
+            title="Grid Adequacy",
+            column_labels=["Statistic", "Value"],
             alignment=[:l, :r])
     end
 
