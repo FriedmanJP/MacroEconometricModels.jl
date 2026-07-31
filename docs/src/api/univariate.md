@@ -308,6 +308,7 @@ HansenLinearityTest
 STARModel
 STARForecast
 MSRegModel
+MSForecast
 ```
 
 ---

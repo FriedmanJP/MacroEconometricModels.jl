@@ -1213,7 +1213,7 @@ export estimate_threshold, estimate_setar, hansen_linearity_test
 export STARModel, STARForecast
 export estimate_star, star_linearity_test
 # EV-07: Markov-switching regression / mean-switching AR (Hamilton 1989; Kim 1994)
-export MSRegModel
+export MSRegModel, MSForecast
 export estimate_ms, estimate_ms_ar
 
 # =============================================================================
