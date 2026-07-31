@@ -702,3 +702,127 @@ end
         report(g)
     end
 end
+
+@testset "Wild/block bootstrap + Kilian bias correction (#370, T271)" begin
+    M = MacroEconometricModels
+
+    @testset "resampling schemes preserve what they claim to" begin
+        rng = Random.MersenneTwister(3)
+        U = randn(rng, 200, 3)
+        for sch in (:iid, :wild, :block)
+            A = M._resample_residuals(U, sch, Random.MersenneTwister(5))
+            @test size(A) == size(U)                                   # every scheme returns T_eff rows
+            @test A == M._resample_residuals(U, sch, Random.MersenneTwister(5))   # reproducible
+            @test all(isfinite, A)
+        end
+        @test_throws ArgumentError M._resample_residuals(U, :bogus, rng)
+
+        # WILD scales whole rows, so the contemporaneous cross-equation correlation survives
+        # exactly — that is the property that makes it robust to conditional heteroskedasticity.
+        Uc = randn(Random.MersenneTwister(9), 4000, 2) * [1.0 0.8; 0.0 0.6]
+        w = M._resample_residuals(Uc, :wild, Random.MersenneTwister(11))
+        @test cor(w[:, 1], w[:, 2]) ≈ cor(Uc[:, 1], Uc[:, 2]) atol = 0.03
+        # ... and it is a pure row rescaling: |u*| equals |u| row by row under Rademacher
+        @test abs.(w) ≈ abs.(Uc) atol = 1e-12
+
+        # BLOCK keeps serial dependence that i.i.d. resampling destroys.
+        ar = zeros(600)
+        rng2 = Random.MersenneTwister(21)
+        for t in 2:600
+            ar[t] = 0.9 * ar[t-1] + randn(rng2)
+        end
+        Ua = reshape(ar, :, 1)
+        ac(x) = cor(x[2:end], x[1:end-1])
+        @test ac(vec(M._resample_residuals(Ua, :block, Random.MersenneTwister(2);
+                                           block_length=30))) > 0.6
+        @test abs(ac(vec(M._resample_residuals(Ua, :iid, Random.MersenneTwister(2))))) < 0.15
+        @test M._default_block_length(1000) == 10
+        @test M._default_block_length(1) == 1
+    end
+
+    @testset "wild weights match their moments" begin
+        r = M._wild_weights(Random.MersenneTwister(4), 200_000, :rademacher, Float64)
+        @test all(x -> x == 1.0 || x == -1.0, r)
+        @test mean(r) ≈ 0 atol = 0.01
+        @test mean(r .^ 2) ≈ 1 atol = 1e-12                # exactly 1 for ±1
+        # Mammen matches the THIRD moment as well, which Rademacher cannot (its odd moments
+        # are zero by symmetry). That is the whole reason to offer it.
+        mm = M._wild_weights(Random.MersenneTwister(4), 400_000, :mammen, Float64)
+        @test mean(mm) ≈ 0 atol = 0.01
+        @test mean(mm .^ 2) ≈ 1 atol = 0.02
+        @test mean(mm .^ 3) ≈ 1 atol = 0.05
+        @test abs(mean(r .^ 3)) < 0.01                     # Rademacher: zero, not one
+        @test_throws ArgumentError M._wild_weights(Random.MersenneTwister(1), 5, :nope, Float64)
+    end
+
+    @testset "Kilian bias correction reduces the OLS bias" begin
+        # OLS is badly downward-biased for a persistent AR in a short sample. This is the
+        # acceptance criterion: the correction must move the estimate toward the truth.
+        rho_true, Tn, nsim = 0.95, 60, 250
+        bias_ols = Float64[]
+        bias_bc = Float64[]
+        for s in 1:nsim
+            rng = Random.MersenneTwister(1000 + s)
+            y = zeros(Tn, 1)
+            for t in 2:Tn
+                y[t, 1] = rho_true * y[t-1, 1] + randn(rng)
+            end
+            m = estimate_var(y, 1; check_stability=false)
+            push!(bias_ols, M.extract_ar_coefficients(m.B, 1, 1)[1][1, 1] - rho_true)
+            Psi = M._estimate_var_bias(m, 60, :iid, Random.MersenneTwister(7000 + s))
+            Bc, _ = M._kilian_bias_correction(m.B, Psi, 1, 1)
+            push!(bias_bc, M.extract_ar_coefficients(Bc, 1, 1)[1][1, 1] - rho_true)
+        end
+        @test mean(bias_ols) < -0.03                        # the premise: OLS IS biased down
+        @test abs(mean(bias_bc)) < abs(mean(bias_ols)) / 2  # at least halved
+        @test sqrt(mean(bias_bc .^ 2)) < sqrt(mean(bias_ols .^ 2))   # and RMSE improves
+    end
+
+    @testset "the stationarity shrinkage keeps the corrected companion stable" begin
+        # A correction large enough to push the companion outside the unit circle must be
+        # scaled back, not applied — otherwise the bias-corrected DGP is explosive.
+        B = reshape([0.0, 0.9], 2, 1)                       # intercept 0, rho 0.9
+        Psi_big = reshape([0.0, -0.5], 2, 1)                # would give rho = 1.4
+        Bc, delta = M._kilian_bias_correction(B, Psi_big, 1, 1)
+        @test delta < 1.0
+        @test maximum(abs.(eigvals(M.companion_matrix(Bc, 1, 1)))) < 1.0
+        # A small correction is applied in full.
+        Bc2, d2 = M._kilian_bias_correction(B, reshape([0.0, 0.01], 2, 1), 1, 1)
+        @test d2 == 1.0
+        @test M.extract_ar_coefficients(Bc2, 1, 1)[1][1, 1] ≈ 0.89 rtol = 1e-12
+        # An already-explosive estimate gets NO correction (rule 1).
+        Bexp = reshape([0.0, 1.2], 2, 1)
+        Bc3, d3 = M._kilian_bias_correction(Bexp, Psi_big, 1, 1)
+        @test d3 == 0.0 && Bc3 == Bexp
+    end
+
+    @testset "IRF bands: default unchanged, all schemes valid and reproducible" begin
+        rng = Random.MersenneTwister(42)
+        Y = randn(rng, 200, 2)
+        for t in 2:200
+            Y[t, :] = [0.5 0.1; 0.2 0.4] * Y[t-1, :] + 0.5 * randn(rng, 2)
+        end
+        mv = estimate_var(Y, 2)
+        base = irf(mv, 12; ci_type=:bootstrap, reps=80, seed=1)
+        # Backward compatibility: :iid must be BIT-identical to the historical default.
+        iid = irf(mv, 12; ci_type=:bootstrap, reps=80, seed=1, bootstrap=:iid)
+        @test iid.ci_lower == base.ci_lower && iid.ci_upper == base.ci_upper
+        for sch in (:wild, :block)
+            r = irf(mv, 12; ci_type=:bootstrap, reps=80, seed=1, bootstrap=sch)
+            @test all(isfinite, r.ci_lower) && all(isfinite, r.ci_upper)
+            @test all(r.ci_lower .<= r.ci_upper)
+            @test r.values == base.values                   # point IRF never moves
+            @test r.ci_lower != base.ci_lower               # ... but the bands do
+        end
+        bc = irf(mv, 12; ci_type=:bootstrap, reps=80, seed=1, bias_correct=true, bias_reps=40)
+        @test all(isfinite, bc.ci_lower) && all(bc.ci_lower .<= bc.ci_upper)
+        @test bc.values == base.values
+        # reproducible at a fixed seed
+        @test irf(mv, 12; ci_type=:bootstrap, reps=40, seed=99, bootstrap=:wild).ci_lower ==
+              irf(mv, 12; ci_type=:bootstrap, reps=40, seed=99, bootstrap=:wild).ci_lower
+        @test_throws ArgumentError irf(mv, 6; ci_type=:bootstrap, reps=10, bootstrap=:bogus)
+        # the scheme is recorded in the reproducibility manifest
+        @test irf(mv, 6; ci_type=:bootstrap, reps=10, seed=3,
+                  bootstrap=:wild).manifest.settings["bootstrap"] == "wild"
+    end
+end

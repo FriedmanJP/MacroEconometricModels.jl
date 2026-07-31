@@ -296,6 +296,36 @@ model = estimate_var(Y, 4)
 result = irf(model, 20; method=:cholesky, ci_type=:bootstrap, reps=50, conf_level=0.90)
 ```
 
+#### Bootstrap Schemes and Bias Correction
+
+The residual bootstrap resamples rows i.i.d. by default, which is valid only under conditionally homoskedastic, serially independent errors. Two alternatives relax that, and Kilian's (1998) bias correction addresses the small-sample bias of the OLS coefficients:
+
+```@example var
+wild  = irf(model, 20; ci_type=:bootstrap, reps=50, bootstrap=:wild)
+block = irf(model, 20; ci_type=:bootstrap, reps=50, bootstrap=:block, block_length=8)
+bc    = irf(model, 20; ci_type=:bootstrap, reps=50, bias_correct=true, seed=1)
+nothing # hide
+```
+
+| Keyword | Type | Default | Description |
+|---------|------|---------|-------------|
+| `bootstrap` | `Symbol` | `:iid` | Resampling scheme: `:iid`, `:wild`, `:block` |
+| `block_length` | `Int` | `0` | Moving-block length; `0` selects ``\lceil T^{1/3} \rceil`` |
+| `wild_dist` | `Symbol` | `:rademacher` | Wild multiplier: `:rademacher` or `:mammen` |
+| `bias_correct` | `Bool` | `false` | Kilian (1998) bootstrap-after-bootstrap |
+| `bias_reps` | `Int` | `0` | Inner-bootstrap replications; `0` reuses `reps` |
+
+- **Wild** multiplies each residual *row* by a single scalar draw. Because the whole row shares the multiplier, the contemporaneous cross-equation covariance is preserved exactly while the conditional variance is randomised --- the property that makes it robust to conditional heteroskedasticity of unknown form (Gonçalves & Kilian 2004). `:mammen` additionally matches the third moment; `:rademacher` cannot, since its odd moments vanish by symmetry.
+- **Block** concatenates contiguous residual blocks, retaining the serial dependence that i.i.d. resampling destroys (Brüggemann, Jentsch & Trenkler 2016).
+- **`bias_correct`** runs Kilian's bootstrap-after-bootstrap: an inner bootstrap estimates ``\Psi = E[B^*] - \hat{B}``, the DGP is re-centred at ``\hat{B} - \delta\Psi``, and each outer draw is corrected by the same ``\Psi``.
+
+!!! note "The stationarity shrinkage is not optional"
+    Subtracting the raw bias can push the companion matrix outside the unit circle, making the bias-corrected DGP explosive. Kilian's rule is applied: if the uncorrected estimate is already non-stationary no correction is made at all; otherwise ``\delta`` starts at 1 and shrinks by 0.01 until the corrected companion is stable.
+
+    On a persistent AR(1) (``\rho = 0.95``, ``T = 60``) where OLS is badly downward-biased, the correction cuts the mean bias by roughly three quarters and lowers RMSE.
+
+`bootstrap=:iid` with `bias_correct=false` reproduces the previous bands bit-for-bit, so existing results are unchanged. All bands are reproducible at a fixed `seed`.
+
 ```julia
 plot_result(result)
 ```

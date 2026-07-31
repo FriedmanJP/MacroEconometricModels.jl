@@ -150,6 +150,10 @@ lp_model = estimate_lp(Y, 3, 20;       # shock_var=3 (FEDFUNDS)
 
 # Extract IRF with confidence intervals
 irf_result = lp_irf(lp_model; conf_level=0.95)
+
+# Bootstrap bands instead of HAC ones ([T271]): the design is held fixed and only the
+# errors are resampled, which is what makes it valid for LP's MA(h)-correlated residuals.
+boot_result = lp_irf(lp_model; ci_type=:bootstrap, bootstrap=:wild, reps=500, seed=1)
 report(irf_result)
 ```
 
@@ -169,6 +173,21 @@ The `irf_result.values` matrix has dimension ``(H+1) \times n_{\text{resp}}``, w
 |---------|------|---------|-------------|
 | `lags` | `Int` | `4` | Number of control lags ``p`` |
 | `cov_type` | `Symbol` | `:newey_west` | Covariance estimator (`:newey_west`, `:white`, `:ols`) |
+
+### `lp_irf` Confidence Intervals
+
+| Keyword | Type | Default | Description |
+|---------|------|---------|-------------|
+| `ci_type` | `Symbol` | `:analytical` | `:analytical` (HAC) or `:bootstrap` (percentile bands) |
+| `bootstrap` | `Symbol` | `:wild` | Resampling scheme: `:wild`, `:block`, `:iid` |
+| `block_length` | `Int` | `0` | Moving-block length; `0` selects ``\lceil T^{1/3} \rceil`` |
+| `wild_dist` | `Symbol` | `:rademacher` | `:rademacher` or `:mammen` |
+| `reps` | `Int` | `500` | Bootstrap replications |
+| `seed` | `Int` | `nothing` | Fixes the bands for reproducibility |
+
+The bootstrap is **fixed-design**: at each horizon the regressor matrix is held fixed and only the errors are resampled (``y^* = X_h\hat{\beta}_h + u^*``, refit by OLS). That is the right form for LP, whose regressors are predetermined but whose errors are MA(``h``)-correlated by construction. `:wild` is the default here --- unlike the VAR, where `:iid` is --- because LP residuals are serially correlated *and* frequently heteroskedastic.
+
+Only the bands change: the reported responses and standard errors remain the analytical ones, so switching `ci_type` never moves the estimate.
 | `bandwidth` | `Int` | `0` | HAC bandwidth (0 = automatic) |
 | `response_vars` | `Vector{Int}` | all | Indices of response variables |
 | `conf_level` | `Real` | `0.95` | Confidence level for CIs |

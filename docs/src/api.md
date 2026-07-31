@@ -145,6 +145,8 @@ Impulse response functions, forecast error variance decomposition, historical de
 | Function | Description |
 |----------|-------------|
 | `irf(model, H; ...)` | Compute impulse response functions |
+| `irf(model, H; bootstrap=:wild)` | Wild / moving-block residual bootstrap bands |
+| `irf(model, H; bias_correct=true)` | Kilian (1998) bias-corrected bootstrap bands |
 | `fevd(model, H; ...)` | Forecast error variance decomposition |
 | `generalized_fevd(model, H)` | Pesaran-Shin (1998) generalized FEVD — order-invariant, no orthogonalization |
 | `identify_cholesky(model)` | Cholesky identification |
@@ -226,6 +228,7 @@ Convenience functions for extracting impulse responses from fitted LP models. Se
 | Function | Description |
 |----------|-------------|
 | `lp_irf(model; ...)` | Extract IRF from LPModel |
+| `lp_irf(model; ci_type=:bootstrap)` | Fixed-design wild/block bootstrap bands for LP |
 | `lp_iv_irf(model; ...)` | Extract IRF from LPIVModel |
 | `smooth_lp_irf(model; ...)` | Extract smoothed IRF |
 | `state_irf(model; ...)` | Extract state-dependent IRFs |

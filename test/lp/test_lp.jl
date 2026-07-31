@@ -1858,3 +1858,47 @@ end
     @test maxrel_B < 1e-10
     @test maxrel_V < 1e-10
 end
+
+@testset "LP bootstrap IRF bands (#370, T271)" begin
+    M = MacroEconometricModels
+    rng = Random.MersenneTwister(371)
+    Y = randn(rng, 300, 2)
+    for t in 2:300
+        Y[t, :] = [0.6 0.1; 0.2 0.5] * Y[t-1, :] + randn(rng, 2)
+    end
+    m = estimate_lp(Y, 1, 8; lags=2)
+    a = lp_irf(m)
+
+    @testset "bands change, point estimates do not" begin
+        for sch in (:wild, :block, :iid)
+            b = lp_irf(m; ci_type=:bootstrap, bootstrap=sch, reps=200, seed=1)
+            # Only the bands are bootstrapped — the reported IRF and SEs stay analytical, so
+            # switching ci_type can never move the estimate itself.
+            @test b.values == a.values
+            @test b.se == a.se
+            @test all(isfinite, b.ci_lower) && all(isfinite, b.ci_upper)
+            @test all(b.ci_lower .<= b.ci_upper)
+            @test b.ci_lower != a.ci_lower
+            @test size(b.ci_lower) == size(a.ci_lower)
+        end
+    end
+
+    @testset "bands bracket the point estimate and roughly match the analytical ones" begin
+        # A correctly-centred fixed-design bootstrap should land in the same neighbourhood as
+        # the HAC bands on well-behaved homoskedastic data — a sanity check, not an identity.
+        b = lp_irf(m; ci_type=:bootstrap, bootstrap=:wild, reps=500, seed=2)
+        @test all(b.ci_lower .<= b.values .<= b.ci_upper)
+        @test mean(b.ci_upper .- b.ci_lower) ≈ mean(a.ci_upper .- a.ci_lower) rtol = 0.35
+    end
+
+    @testset "reproducibility and validation" begin
+        @test lp_irf(m; ci_type=:bootstrap, reps=100, seed=7).ci_lower ==
+              lp_irf(m; ci_type=:bootstrap, reps=100, seed=7).ci_lower
+        @test_throws ArgumentError lp_irf(m; ci_type=:bogus)
+        @test_throws ArgumentError lp_irf(m; ci_type=:bootstrap, bootstrap=:bogus, reps=10)
+        # the convenience one-shot form forwards the options
+        c = lp_irf(Y, 1, 6; lags=2, ci_type=:bootstrap, bootstrap=:block, reps=100, seed=4)
+        @test all(isfinite, c.ci_lower) && all(c.ci_lower .<= c.ci_upper)
+        @test size(c.ci_lower, 1) == 7
+    end
+end

@@ -30,18 +30,33 @@ Note: `:smooth_transition` requires `transition_var` kwarg.
 
 # CI types
 - `:none`
-- `:bootstrap` --- nonparametric residual (recursive-design) bootstrap: resamples the
-  estimated residuals, regenerates data from the estimated `B`, and re-estimates the VAR
-  per replication. With `stationary_only=true`, draws whose companion matrix has
-  `|λmax| ≥ 1` are rejected and redrawn. This is **not** the Kilian (1998) bias-corrected
-  bootstrap — `B̂` is not bias-adjusted; the bias-corrected and wild bootstraps are tracked
-  as roadmap task T271.
+- `:bootstrap` --- residual (recursive-design) bootstrap: resamples the estimated residuals,
+  regenerates data from `B`, and re-estimates the VAR per replication. With
+  `stationary_only=true`, draws whose companion matrix has `|λmax| ≥ 1` are rejected and
+  redrawn.
 - `:theoretical` --- asymptotic (delta-method) confidence intervals.
+
+# Bootstrap options ([T271])
+- `bootstrap::Symbol=:iid` --- residual resampling scheme. `:iid` resamples rows with
+  replacement (the historical default); `:wild` multiplies each residual ROW by one scalar
+  draw, preserving the contemporaneous cross-equation covariance while randomising the
+  conditional variance (Gonçalves & Kilian 2004); `:block` concatenates contiguous blocks,
+  retaining serial dependence (Brüggemann et al. 2016).
+- `block_length::Int=0` --- moving-block length; `0` selects `⌈T^{1/3}⌉`.
+- `wild_dist::Symbol=:rademacher` --- `:rademacher` (±1) or `:mammen` (matches the third
+  moment as well).
+- `bias_correct::Bool=false` --- Kilian (1998) bootstrap-after-bootstrap. An inner bootstrap
+  estimates the small-sample bias `Ψ = E[B*] − B̂`; the DGP is re-centred at `B̂ − δΨ` with
+  Kilian's stationarity shrinkage, and each outer draw is corrected by the same `Ψ` before its
+  IRF is computed. Off by default, so existing bands are unchanged.
+- `bias_reps::Int=reps` --- replications for the inner bias bootstrap.
 """
 function irf(model::VARModel{T}, horizon::Int;
     method::Symbol=:cholesky, check_func=nothing, narrative_check=nothing,
     ci_type::Symbol=:none, reps::Int=200, conf_level::Real=0.95,
     stationary_only::Bool=false,
+    bootstrap::Symbol=:iid, block_length::Int=0, wild_dist::Symbol=:rademacher,
+    bias_correct::Bool=false, bias_reps::Int=0,
     shock_names::Union{Nothing,Vector{String}}=nothing,
     transition_var::Union{Nothing,AbstractVector}=nothing,
     regime_indicator::Union{Nothing,AbstractVector{Int}}=nothing,
@@ -65,7 +80,9 @@ function irf(model::VARModel{T}, horizon::Int;
         sim_irfs = _simulate_irfs(model, method, horizon, check_func, narrative_check, ci_type, reps;
                                   stationary_only=stationary_only,
                                   transition_var=transition_var, regime_indicator=regime_indicator,
-                                  rng=rng)
+                                  rng=rng, bootstrap=bootstrap, block_length=block_length,
+                                  wild_dist=wild_dist, bias_correct=bias_correct,
+                                  bias_reps=bias_reps)
         alpha = (1 - T(conf_level)) / 2
         @inbounds for h in 1:horizon, v in 1:n, s in 1:n
             d = @view sim_irfs[:, h, v, s]
@@ -79,7 +96,10 @@ function irf(model::VARModel{T}, horizon::Int;
     manifest = ci_type == :none ? nothing :
         capture_manifest(; seed=seed, settings=Dict{String,Any}(
             "method" => String(method), "ci_type" => String(ci_type),
-            "reps" => reps, "stationary_only" => stationary_only))
+            "reps" => reps, "stationary_only" => stationary_only,
+            "bootstrap" => String(bootstrap), "block_length" => block_length,
+            "wild_dist" => String(wild_dist), "bias_correct" => bias_correct,
+            "bias_reps" => bias_reps))
     ImpulseResponse{T}(point_irf, ci_lower, ci_upper, horizon,
                        model.varnames, snames, ci_type, sim_irfs, cl; manifest=manifest)
 end
@@ -90,13 +110,28 @@ function _simulate_irfs(model::VARModel{T}, method::Symbol, horizon::Int,
     stationary_only::Bool=false,
     transition_var::Union{Nothing,AbstractVector}=nothing,
     regime_indicator::Union{Nothing,AbstractVector{Int}}=nothing,
-    rng::AbstractRNG=Random.default_rng()
+    rng::AbstractRNG=Random.default_rng(),
+    bootstrap::Symbol=:iid, block_length::Int=0, wild_dist::Symbol=:rademacher,
+    bias_correct::Bool=false, bias_reps::Int=0
 ) where {T<:AbstractFloat}
     n, p = nvars(model), model.p
+    bootstrap in (:iid, :wild, :block) || throw(ArgumentError(
+        "bootstrap must be :iid, :wild, or :block; got :$bootstrap"))
 
     if ci_type == :bootstrap
         U, T_eff = model.U, size(model.U, 1)
         Y_init = model.Y[1:p, :]
+
+        # Kilian (1998) bootstrap-after-bootstrap: estimate the bias once, re-centre the DGP
+        # at the corrected coefficients, and correct every outer draw by the same Ψ.
+        B_dgp = model.B
+        Psi = zeros(T, size(model.B))
+        if bias_correct
+            nb = bias_reps > 0 ? bias_reps : reps
+            Psi = _estimate_var_bias(model, nb, bootstrap, rng;
+                                     block_length=block_length, wild_dist=wild_dist)
+            B_dgp, _ = _kilian_bias_correction(model.B, Psi, n, p)
+        end
 
         if stationary_only
             # Rejection sampling with DETERMINISTIC slot assignment (C-02): seed each of the
@@ -110,9 +145,11 @@ function _simulate_irfs(model::VARModel{T}, method::Symbol, horizon::Int,
             Threads.@threads for it in 1:max_iter
                 local_rng = Random.MersenneTwister(seeds[it])
                 _suppress_warnings() do
-                    U_boot = U[rand(local_rng, 1:T_eff, T_eff), :]
-                    Y_boot = _simulate_var(Y_init, model.B, U_boot, T_eff + p)
+                    U_boot = _resample_residuals(U, bootstrap, local_rng;
+                                                 block_length=block_length, wild_dist=wild_dist)
+                    Y_boot = _simulate_var(Y_init, B_dgp, U_boot, T_eff + p)
                     m = estimate_var(Y_boot, p; check_stability=false)
+                    m = _apply_boot_bias_correction(m, Psi, n, p, bias_correct)
                     F = companion_matrix(m.B, n, p)
                     maximum(abs.(eigvals(F))) >= one(T) && return  # reject non-stationary draw
                     Q = compute_Q(m, method, horizon, check_func, narrative_check;
@@ -135,9 +172,11 @@ function _simulate_irfs(model::VARModel{T}, method::Symbol, horizon::Int,
             Threads.@threads for r in 1:reps
                 local_rng = Random.MersenneTwister(seeds[r])
                 _suppress_warnings() do
-                    U_boot = U[rand(local_rng, 1:T_eff, T_eff), :]
-                    Y_boot = _simulate_var(Y_init, model.B, U_boot, T_eff + p)
+                    U_boot = _resample_residuals(U, bootstrap, local_rng;
+                                                 block_length=block_length, wild_dist=wild_dist)
+                    Y_boot = _simulate_var(Y_init, B_dgp, U_boot, T_eff + p)
                     m = estimate_var(Y_boot, p; check_stability=false)
+                    m = _apply_boot_bias_correction(m, Psi, n, p, bias_correct)
                     Q = compute_Q(m, method, horizon, check_func, narrative_check;
                                   transition_var=transition_var, regime_indicator=regime_indicator, rng=local_rng)
                     sim_irfs[r, :, :, :] = compute_irf(m, Q, horizon)
@@ -296,21 +335,107 @@ irf(slp::StructuralLP) = slp.irf
 # =============================================================================
 
 """
-    lp_irf(model::LPModel{T}; conf_level::Real=0.95) -> LPImpulseResponse{T}
+    lp_irf(model::LPModel{T}; conf_level=0.95, ci_type=:analytical, bootstrap=:wild, …)
+        -> LPImpulseResponse{T}
 
-Extract impulse response function with confidence intervals from LP model.
+Extract impulse response functions with confidence intervals from an LP model.
+
+# Confidence intervals
+- `ci_type=:analytical` (default) — HAC (Newey-West or White) standard errors from the
+  estimated `vcov`, unchanged from before.
+- `ci_type=:bootstrap` — percentile bands from a **fixed-design residual bootstrap** ([T271]).
+  At each horizon the regressor matrix is held fixed and only the errors are resampled:
+  `y* = X_h·β̂_h + u*`, refit by OLS. Holding the design fixed is what makes this valid for
+  LP, where the regressors are predetermined but the errors are MA(h)-correlated by
+  construction.
+
+# Bootstrap options
+- `bootstrap::Symbol=:wild` — `:wild` (default here, unlike the VAR, because LP residuals are
+  serially correlated *and* often heteroskedastic), `:block`, or `:iid`.
+- `block_length::Int=0` — moving-block length; `0` selects `⌈T^{1/3}⌉`.
+- `wild_dist::Symbol=:rademacher` — or `:mammen`.
+- `reps::Int=500`, `rng`/`seed` for reproducibility.
+
+The point estimates and standard errors are the analytical ones in both cases; only the
+bands change, so switching `ci_type` never moves the reported IRF.
 """
-function lp_irf(model::LPModel{T}; conf_level::Real=0.95) where {T<:AbstractFloat}
+function lp_irf(model::LPModel{T}; conf_level::Real=0.95,
+                ci_type::Symbol=:analytical, bootstrap::Symbol=:wild,
+                block_length::Int=0, wild_dist::Symbol=:rademacher,
+                reps::Int=500, seed::Union{Integer,Nothing}=nothing,
+                rng::AbstractRNG=Random.default_rng()) where {T<:AbstractFloat}
+    ci_type in (:analytical, :bootstrap) || throw(ArgumentError(
+        "ci_type must be :analytical or :bootstrap; got :$ci_type"))
+    # Validate BEFORE the threaded bootstrap loop: an ArgumentError raised inside
+    # `Threads.@threads` surfaces as a TaskFailedException, which is a worse diagnostic.
+    bootstrap in (:iid, :wild, :block) || throw(ArgumentError(
+        "bootstrap must be :iid, :wild, or :block; got :$bootstrap"))
+    wild_dist in (:rademacher, :mammen) || throw(ArgumentError(
+        "wild_dist must be :rademacher or :mammen; got :$wild_dist"))
     irf_data = extract_shock_irf(model.B, model.vcov, model.response_vars, 2;
                                   conf_level=conf_level)
+
+    ci_lower, ci_upper = irf_data.ci_lower, irf_data.ci_upper
+    if ci_type == :bootstrap
+        rng = _resolve_repro_rng(rng, seed)
+        ci_lower, ci_upper = _lp_irf_bootstrap_bands(model, T(conf_level), reps, bootstrap,
+                                                     block_length, wild_dist, rng)
+    end
 
     response_names = model.varnames[model.response_vars]
     shock_name = model.varnames[model.shock_var]
     cov_type_sym = model.cov_estimator isa NeweyWestEstimator ? :newey_west : :white
 
-    LPImpulseResponse{T}(irf_data.values, irf_data.ci_lower, irf_data.ci_upper,
+    LPImpulseResponse{T}(irf_data.values, ci_lower, ci_upper,
                          irf_data.se, model.horizon, response_names, shock_name,
                          cov_type_sym, T(conf_level))
+end
+
+"""
+    _lp_irf_bootstrap_bands(model, conf_level, reps, scheme, block_length, wild_dist, rng)
+        → (ci_lower, ci_upper)
+
+Percentile bands for the LP shock coefficient by a fixed-design residual bootstrap, run
+horizon by horizon.
+
+The design `X_h` is rebuilt from the model's own data and reused across replications, so the
+only randomness is in the resampled errors. Replication seeds are drawn up front and each
+result written to its own slot, making the bands invariant to thread scheduling ([T144]).
+"""
+function _lp_irf_bootstrap_bands(model::LPModel{T}, conf_level::T, reps::Int,
+                                 scheme::Symbol, block_length::Int, wild_dist::Symbol,
+                                 rng::AbstractRNG) where {T<:AbstractFloat}
+    H = model.horizon
+    nr = length(model.response_vars)
+    ci_lower = Matrix{T}(undef, H + 1, nr)
+    ci_upper = Matrix{T}(undef, H + 1, nr)
+    alpha = (1 - conf_level) / 2
+
+    for h in 0:H
+        _, X_h, _ = construct_lp_matrices(model.Y, model.shock_var, h, model.lags;
+                                          response_vars=model.response_vars)
+        B_h = model.B[h+1]
+        U_h = model.residuals[h+1]
+        fitted = X_h * B_h
+        XtX_inv = robust_inv(X_h' * X_h)
+        draws = zeros(T, reps, nr)
+        seeds = rand(rng, UInt64, reps)
+        Threads.@threads for r in 1:reps
+            local_rng = Random.MersenneTwister(seeds[r])
+            U_star = _resample_residuals(U_h, scheme, local_rng;
+                                         block_length=block_length, wild_dist=wild_dist)
+            B_star = XtX_inv * (X_h' * (fitted + U_star))
+            @inbounds for j in 1:nr
+                draws[r, j] = B_star[2, j]     # row 2 is the shock coefficient
+            end
+        end
+        @inbounds for j in 1:nr
+            d = @view draws[:, j]
+            ci_lower[h+1, j] = quantile(d, alpha)
+            ci_upper[h+1, j] = quantile(d, 1 - alpha)
+        end
+    end
+    return (ci_lower, ci_upper)
 end
 
 """
@@ -318,9 +443,13 @@ end
 
 Convenience function: estimate LP and extract IRF in one call.
 """
-function lp_irf(Y::AbstractMatrix, shock_var::Int, horizon::Int; conf_level::Real=0.95, kwargs...)
+function lp_irf(Y::AbstractMatrix, shock_var::Int, horizon::Int; conf_level::Real=0.95,
+                ci_type::Symbol=:analytical, bootstrap::Symbol=:wild, block_length::Int=0,
+                wild_dist::Symbol=:rademacher, reps::Int=500,
+                seed::Union{Integer,Nothing}=nothing, kwargs...)
     model = estimate_lp(Y, shock_var, horizon; kwargs...)
-    lp_irf(model; conf_level=conf_level)
+    lp_irf(model; conf_level=conf_level, ci_type=ci_type, bootstrap=bootstrap,
+           block_length=block_length, wild_dist=wild_dist, reps=reps, seed=seed)
 end
 
 # =============================================================================

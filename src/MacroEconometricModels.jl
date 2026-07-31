@@ -504,6 +504,7 @@ include("did/honest_did.jl")
 include("did/estimation.jl")
 
 # Innovation accounting (after LP types for lp_irf support)
+include("core/bootstrap_schemes.jl")   # T271 (#370): wild/block resampling + Kilian bias correction
 include("core/irf.jl")
 include("core/fevd.jl")
 include("core/hd.jl")
