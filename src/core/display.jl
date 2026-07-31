@@ -180,6 +180,10 @@ end
 const _LABELS = Dict{Symbol,String}(
     :hc0 => "HC0 (robust)", :hc1 => "HC1 (robust)", :hc2 => "HC2 (robust)", :hc3 => "HC3 (robust)",
     :ols => "OLS", :cluster => "Cluster-robust", :newey_west => "Newey–West (HAC)", :robust => "Robust (QMLE)",
+    # Panel-only covariance types (#407). ":twoway" is two-way *clustering*, which the bare
+    # "Two-way" would confuse with the two-way fixed effects already shown on the Method row.
+    :twoway => "Two-way cluster-robust", :driscoll_kraay => "Driscoll–Kraay (HAC)",
+    :pcse => "Panel-corrected (Beck–Katz)",
     :css => "CSS", :mle => "MLE", :css_mle => "CSS-MLE",
     :normal => "Normal", :direct => "Direct (NIW)", :gibbs => "Gibbs", :minnesota => "Minnesota",
     :ar1 => "AR(1)", :iid => "i.i.d.", :none => "None",

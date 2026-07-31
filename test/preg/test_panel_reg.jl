@@ -1072,3 +1072,49 @@ end
         @test wb_na.t_stat ≈ wb_hd.t_stat atol = 1e-6
     end
 end
+
+@testset "#407: panel report() renders cov_type through _label" begin
+    # The panel show bodies used to print `string(m.cov_type)`, so the internal
+    # symbol leaked into the table ("Cov. type  cluster"). Every panel covariance
+    # type must now render the same human-readable label the cross-sectional
+    # estimators use.
+    rng = Random.MersenneTwister(407)
+    # T >= N so the PCSE contemporaneous covariance is full rank (Beck & Katz 1995).
+    N_g = 8; T_p = 14; n = N_g * T_p
+    df = DataFrame(id=repeat(1:N_g, inner=T_p), t=repeat(1:T_p, N_g),
+                   x=randn(rng, n), w=randn(rng, n), z=randn(rng, n))
+    df.x .+= 0.8 .* df.z
+    df.y = 0.7 .* df.x .- 0.3 .* df.w .+ randn(rng, n)
+    pd = xtset(df, :id, :t)
+
+    covline(m) = begin
+        io = IOBuffer(); show(io, m); s = String(take!(io))
+        strip(only(filter(l -> occursin("Cov. type", l), split(s, '\n'))))
+    end
+
+    expected = Dict(:ols => "OLS",
+                    :cluster => "Cluster-robust",
+                    :twoway => "Two-way cluster-robust",
+                    :driscoll_kraay => "Driscoll–Kraay (HAC)",
+                    :pcse => "Panel-corrected (Beck–Katz)")
+
+    for (ct, label) in expected
+        m = estimate_xtreg(pd, :y, [:x, :w]; model=:fe, cov_type=ct)
+        line = covline(m)
+        @test occursin(label, line)
+        # the raw symbol must not survive anywhere on the row
+        @test !occursin(Regex("\\b" * String(ct) * "\\b"), line)
+    end
+
+    # PanelIVModel is the second site the defect lived at.
+    for ct in (:cluster, :twoway, :driscoll_kraay)
+        m = estimate_xtiv(pd, :y, [:x], [:w]; instruments=[:z], model=:fe, cov_type=ct)
+        line = covline(m)
+        @test occursin(expected[ct], line)
+        @test !occursin(Regex("\\b" * String(ct) * "\\b"), line)
+    end
+
+    # `_label` still falls back to title-case for symbols it does not know, so an
+    # unregistered type degrades to "Some New Type" rather than dumping the symbol.
+    @test MacroEconometricModels._label(:some_new_type) == "Some New Type"
+end
