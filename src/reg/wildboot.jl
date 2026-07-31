@@ -366,7 +366,9 @@ With Rademacher weights and `2^G ≤ n_boot`, all `2^G` sign vectors are enumera
 so the test carries no bootstrap simulation error at all.
 
 # Arguments
-- `model` — a fitted [`RegModel`](@ref) or [`PanelRegModel`](@ref) (`model=:fe`)
+- `model` — a fitted [`RegModel`](@ref) or [`PanelRegModel`](@ref) (`model=:fe`,
+  including HDFE fits from `absorb=`, which are re-absorbed with the fit's own
+  dimensions and tolerance)
 - `coefficient` — the coefficient to test: a column index, name `String`, or `Symbol`
 - `null_value::Real=0.0` — the hypothesized value `r` in `H₀: βⱼ = r`
 
@@ -413,13 +415,26 @@ function wild_cluster_bootstrap(model::PanelRegModel{T}, coefficient, null_value
         "the bootstrap on the corresponding cross-sectional RegModel."))
     groups = model.data.group_id
     unique_groups = sort(unique(groups))
-    y_dm, _ = _within_demean(Vector{T}(model.y), groups, unique_groups)
-    X_dm, _ = _within_demean_matrix(Matrix{T}(model.X), groups, unique_groups)
-    if model.twoway
-        times = model.data.time_id
-        unique_times = sort(unique(times))
-        _twoway_demean!(y_dm, X_dm, Vector{T}(model.y), Matrix{T}(model.X),
-                        groups, times, unique_groups, unique_times)
+    if model.hdfe !== nothing
+        # HDFE (T272, #371): re-absorb with the same dimensions and tolerance the
+        # fit used, so the bootstrap design matches the estimated one exactly.
+        h = model.hdfe
+        fe_ids = AbstractVector[_hdfe_dimension(model.data, d) for d in h.absorb]
+        # Reusing the fit's own iteration count matters when it did NOT converge:
+        # the bootstrap must then reproduce the same truncated design, not a
+        # better-converged one.
+        ab = absorb_fe(Vector{T}(model.y), Matrix{T}(model.X), fe_ids;
+                       tol=h.tol, maxiter=max(h.iterations, 1), accel=h.accel)
+        y_dm, X_dm = ab.y, ab.X
+    else
+        y_dm, _ = _within_demean(Vector{T}(model.y), groups, unique_groups)
+        X_dm, _ = _within_demean_matrix(Matrix{T}(model.X), groups, unique_groups)
+        if model.twoway
+            times = model.data.time_id
+            unique_times = sort(unique(times))
+            _twoway_demean!(y_dm, X_dm, Vector{T}(model.y), Matrix{T}(model.X),
+                            groups, times, unique_groups, unique_times)
+        end
     end
     cl = clusters === nothing ? groups : clusters
     return _wild_cluster_bootstrap(y_dm, X_dm, model.varnames, cl, coefficient,

@@ -235,6 +235,15 @@ Estimate a linear panel regression model.
 # Keyword Arguments
 - `model::Symbol` — `:fe`, `:re`, `:fd`, `:between`, or `:cre` (default: `:fe`)
 - `twoway::Bool` — include time fixed effects (FE only, default: `false`)
+- `absorb::Vector{Symbol}` — high-dimensional fixed effects to absorb by alternating
+  projections (`model=:fe` only, default: none). Names resolve to panel variables, or
+  to the reserved indices `:entity` (`:id`/`:unit`/`:group`), `:time` (`:period`), and
+  `:cohort`. `absorb=[:entity]` reproduces one-way FE and `absorb=[:entity, :time]`
+  reproduces `twoway=true`, but any number of non-nested dimensions is allowed.
+  Mutually exclusive with `twoway`. See [`absorb_fe`](@ref).
+- `hdfe_tol::Real` — absorption convergence tolerance (default: `1e-8`)
+- `hdfe_maxiter::Int` — maximum alternating-projection iterations (default: `1000`)
+- `hdfe_accel::Bool` — Irons-Tuck acceleration of the projection loop (default: `true`)
 - `cov_type::Symbol` — covariance type: `:ols`, `:cluster` (default), `:twoway`,
   `:driscoll_kraay`, or `:pcse` (Beck-Katz 1995 panel-corrected SE)
 - `bandwidth::Union{Nothing,Int}` — Driscoll-Kraay bandwidth (default: auto)
@@ -253,12 +262,16 @@ using DataFrames
 df = DataFrame(id=repeat(1:50, inner=20), t=repeat(1:20, 50),
                x1=randn(1000), x2=randn(1000))
 df.y = repeat(randn(50), inner=20) .+ 1.5 .* df.x1 .- 0.8 .* df.x2 .+ 0.5 .* randn(1000)
+df.region = Float64.(rand(1:6, 1000))
 pd = xtset(df, :id, :t)
 m_fe = estimate_xtreg(pd, :y, [:x1, :x2])
 m_re = estimate_xtreg(pd, :y, [:x1, :x2]; model=:re)
 m_fd = estimate_xtreg(pd, :y, [:x1, :x2]; model=:fd)
 m_be = estimate_xtreg(pd, :y, [:x1, :x2]; model=:between)
 m_cre = estimate_xtreg(pd, :y, [:x1, :x2]; model=:cre)
+
+# High-dimensional fixed effects (entity × time × region), no dummies formed
+m_hdfe = estimate_xtreg(pd, :y, [:x1, :x2]; absorb=[:entity, :time, :region])
 ```
 
 # References
@@ -266,15 +279,29 @@ m_cre = estimate_xtreg(pd, :y, [:x1, :x2]; model=:cre)
 - Wooldridge, J. M. (2010). *Econometric Analysis of Cross Section and Panel Data*. 2nd ed. MIT Press.
 - Swamy, P. A. V. B. & Arora, S. S. (1972). *Econometrica* 40(2), 311-323.
 - Mundlak, Y. (1978). *Econometrica* 46(1), 69-85.
+- Guimarães, P. & Portugal, P. (2010). *The Stata Journal* 10(4), 628-649.
+- Correia, S. (2016). *A Feasible Estimator for Linear Models with Multi-Way Fixed Effects*.
 """
 function estimate_xtreg(pd::PanelData{T}, depvar::Symbol, indepvars::Vector{Symbol};
                         model::Symbol=:fe, twoway::Bool=false,
+                        absorb::Vector{Symbol}=Symbol[],
+                        hdfe_tol::Real=1e-8, hdfe_maxiter::Int=1000,
+                        hdfe_accel::Bool=true,
                         cov_type::Symbol=:cluster,
                         bandwidth::Union{Nothing,Int}=nothing,
                         pcse_unbalanced::Symbol=:casewise,
                         ar1::Symbol=:none) where {T<:AbstractFloat}
     model in (:fe, :re, :fd, :between, :cre, :ab, :bb) ||
         throw(ArgumentError("model must be :fe, :re, :fd, :between, :cre, :ab, or :bb; got :$model"))
+    if !isempty(absorb)
+        model === :fe || throw(ArgumentError(
+            "absorb= is supported only for model=:fe (the within estimator); got :$model"))
+        twoway && throw(ArgumentError(
+            "absorb= and twoway=true are mutually exclusive — pass absorb=[:entity, :time] " *
+            "to absorb entity and time fixed effects"))
+        length(unique(absorb)) == length(absorb) || throw(ArgumentError(
+            "absorb contains duplicate dimensions: $absorb"))
+    end
     cov_type in (:ols, :cluster, :twoway, :driscoll_kraay, :pcse) ||
         throw(ArgumentError("cov_type must be :ols, :cluster, :twoway, :driscoll_kraay, or :pcse; got :$cov_type"))
     pcse_unbalanced in (:casewise, :pairwise) ||
@@ -318,7 +345,12 @@ function estimate_xtreg(pd::PanelData{T}, depvar::Symbol, indepvars::Vector{Symb
     end
 
     # Dispatch to specific estimator
-    if model == :fe
+    if model == :fe && !isempty(absorb)
+        return _estimate_fe_hdfe(pd, y, X, groups, time_ids, unique_groups,
+                                 N, n, k, indepvars, absorb, cov_type, bandwidth,
+                                 hdfe_tol, hdfe_maxiter, hdfe_accel;
+                                 pcse_unbalanced=pcse_unbalanced, ar1_rho=ar1_rho)
+    elseif model == :fe
         return _estimate_fe(pd, y, X, groups, time_ids, unique_groups, unique_times,
                             N, n_times, n, k, indepvars, twoway, cov_type, bandwidth;
                             pcse_unbalanced=pcse_unbalanced, ar1_rho=ar1_rho)
@@ -491,6 +523,153 @@ function _estimate_fe(pd::PanelData{T}, y::Vector{T}, X::Matrix{T},
         vn, :fe, twoway, cov_type,
         n, N, n_periods_avg,
         group_effects, pd, nothing, ar1_rho
+    )
+end
+
+# =============================================================================
+# High-Dimensional Fixed Effects (T272, #371)
+# =============================================================================
+
+"""
+    _estimate_fe_hdfe(pd, y, X, ..., absorb, cov_type, bandwidth, tol, maxiter, accel)
+
+Within estimator with `absorb` fixed-effect dimensions removed by alternating
+projections ([`absorb_fe`](@ref)) instead of an explicit within transformation.
+
+OLS on the absorbed data is the within-all-FE estimator; the only additional work
+is the degrees-of-freedom accounting, which uses the exact rank of the dummy
+design (connected components for two dimensions) and charges the cluster-robust
+correction only for dimensions **not** nested within the clustering variable.
+"""
+function _estimate_fe_hdfe(pd::PanelData{T}, y::Vector{T}, X::Matrix{T},
+                           groups::Vector{Int}, time_ids::Vector{Int},
+                           unique_groups::Vector{Int},
+                           N::Int, n::Int, k::Int,
+                           indepvars::Vector{Symbol}, absorb::Vector{Symbol},
+                           cov_type::Symbol, bandwidth,
+                           hdfe_tol::Real, hdfe_maxiter::Int, hdfe_accel::Bool;
+                           pcse_unbalanced::Symbol=:casewise, ar1_rho=nothing) where {T}
+
+    # `AbstractVector[...]`, not `Any[...]`: dimensions come back as `Vector{T}`
+    # (data column) or `Vector{Int}` (panel index), and only an element type that
+    # is itself `<:AbstractVector` matches `absorb_fe`'s signature.
+    fe_ids = AbstractVector[_hdfe_dimension(pd, d) for d in absorb]
+
+    ab = absorb_fe(y, X, fe_ids; tol=hdfe_tol, maxiter=hdfe_maxiter, accel=hdfe_accel)
+    ab.converged || @warn(
+        "HDFE absorption did not converge in $(ab.iterations) iterations " *
+        "(relative movement $(ab.change) > tol $(hdfe_tol)). Coefficients may be " *
+        "biased toward the un-absorbed fit; raise hdfe_maxiter or loosen hdfe_tol.")
+
+    n > k + ab.n_absorbed || throw(ArgumentError(
+        "Need more observations than parameters (n=$n, k=$k, absorbed FE=$(ab.n_absorbed))"))
+
+    y_dm, X_dm = ab.y, ab.X
+
+    # ---- OLS on absorbed data (no intercept — absorbed by the first dimension) ----
+    XtX = X_dm' * X_dm
+    XtXinv = robust_inv(XtX)
+    beta = XtXinv * (X_dm' * y_dm)
+    resid_dm = y_dm .- X_dm * beta
+
+    # ---- Entity effects: the entity component of the combined fixed effect ----
+    xb = X * beta
+    group_effects = zeros(T, N)
+    gmap = _group_index_map(groups)
+    for (j, g) in enumerate(unique_groups)
+        idx = gmap[g]
+        group_effects[j] = mean(@view y[idx]) - mean(@view xb[idx])
+    end
+
+    fitted_full = similar(y)
+    resid_full = similar(y)
+    for i in 1:n
+        g_idx = searchsortedfirst(unique_groups, groups[i])
+        fitted_full[i] = xb[i] + group_effects[g_idx]
+        resid_full[i] = y[i] - fitted_full[i]
+    end
+
+    # ---- R-squared variants ----
+    ssr_within = dot(resid_dm, resid_dm)
+    tss_within = max(dot(y_dm, y_dm), T(1e-300))
+    r2_within = one(T) - ssr_within / tss_within
+
+    y_bar_g = zeros(T, N)
+    xb_bar_g = zeros(T, N)
+    for (j, g) in enumerate(unique_groups)
+        idx = gmap[g]
+        y_bar_g[j] = mean(@view y[idx])
+        xb_bar_g[j] = mean(@view xb[idx])
+    end
+    r2_between = if std(y_bar_g) > T(1e-10) && std(xb_bar_g) > T(1e-10)
+        cor(y_bar_g, xb_bar_g)^2
+    else
+        zero(T)
+    end
+    r2_overall = if std(y) > T(1e-10) && std(xb) > T(1e-10)
+        cor(y, xb)^2
+    else
+        zero(T)
+    end
+
+    # ---- Variance components ----
+    dof_fe = max(n - ab.n_absorbed - k, 1)
+    sigma_e2 = ssr_within / T(dof_fe)
+    sigma_e = sqrt(sigma_e2)
+    sigma_u2 = var(group_effects; corrected=true)
+    sigma_u = sqrt(max(sigma_u2, zero(T)))
+    total_var = sigma_u2 + sigma_e2
+    rho = total_var > zero(T) ? sigma_u2 / total_var : zero(T)
+
+    # ---- Covariance ----
+    # Only non-nested absorbed dimensions enter the cluster dof correction
+    # (reghdfe convention): entity FE clustered on entity contributes nothing,
+    # so absorb=[:entity] reproduces the plain one-way FE standard errors.
+    n_abs_cluster = _hdfe_cluster_absorbed(fe_ids, ab.marginal, groups)
+    vcov_mat = _panel_vcov(X_dm, resid_dm, XtXinv, groups, time_ids, cov_type;
+                           bandwidth=bandwidth, n_absorbed=n_abs_cluster,
+                           pcse_unbalanced=pcse_unbalanced)
+
+    f_stat = try
+        T(dot(beta, robust_inv(vcov_mat) * beta) / k)
+    catch
+        zero(T)
+    end
+    f_pval = if f_stat > zero(T) && isfinite(f_stat)
+        df2 = N - 1
+        df2 > 0 ? T(1 - cdf(FDist(k, df2), f_stat)) : one(T)
+    else
+        one(T)
+    end
+
+    sigma2_ml = ssr_within / T(n)
+    loglik = -T(n) / 2 * log(T(2) * T(pi)) - T(n) / 2 * log(max(sigma2_ml, T(1e-300))) - T(n) / 2
+    aic_val = -2 * loglik + 2 * T(k)
+    bic_val = -2 * loglik + log(T(n)) * T(k)
+
+    hdfe_info = (absorb = copy(absorb),
+                 n_absorbed = ab.n_absorbed,
+                 n_levels = ab.n_levels,
+                 n_components = ab.n_components,
+                 marginal = ab.marginal,
+                 n_absorbed_cluster = n_abs_cluster,
+                 converged = ab.converged,
+                 iterations = ab.iterations,
+                 sweeps = ab.sweeps,
+                 change = ab.change,
+                 tol = T(hdfe_tol),
+                 accel = hdfe_accel)
+
+    PanelRegModel{T}(
+        beta, vcov_mat, resid_full, fitted_full, y, X,
+        r2_within, r2_between, r2_overall,
+        sigma_u, sigma_e, rho,
+        nothing,
+        f_stat, f_pval,
+        loglik, aic_val, bic_val,
+        [String(v) for v in indepvars], :fe, false, cov_type,
+        n, N, T(n) / T(N),
+        group_effects, pd, nothing, ar1_rho, hdfe_info
     )
 end
 

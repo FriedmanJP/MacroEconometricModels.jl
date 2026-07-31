@@ -14,7 +14,7 @@ For dynamic panels with multivariate feedback, see [Panel VAR](@ref pvar_page).
 - **Serial correlation**: Prais-Winsten AR(1) FGLS (`ar1=:common`/`:panel_specific`)
 
 ```@setup preg
-using MacroEconometricModels, Random, DataFrames
+using MacroEconometricModels, Random, DataFrames, Statistics
 Random.seed!(42)
 
 # ---- PWT: growth regression panel ----
@@ -131,6 +131,74 @@ The within R-squared measures how well human capital and capital deepening expla
 ```@example preg
 m_twoway = estimate_xtreg(pd_pwt, :lngdppc, [:hc, :lnk]; twoway=true)
 report(m_twoway)
+```
+
+`twoway=true` applies the additive transformation ``y_{it} - \bar{y}_i - \bar{y}_t + \bar{y}``, which equals the two-way within transformation **only on a balanced panel**. For unbalanced panels — and for more than two dimensions — use `absorb` instead.
+
+### High-Dimensional Fixed Effects
+
+The `absorb` keyword removes any number of categorical fixed-effect dimensions by the **method of alternating projections** (Guimarães & Portugal 2010; Correia 2016), the algorithm behind Stata's `reghdfe`. Writing ``D`` for the stacked dummy design of all absorbed dimensions, the within transformation is the orthogonal projection
+
+```math
+M = I - D(D'D)^{-}D'
+```
+
+Forming ``D`` is impossible once the level counts are large — worker × firm, or firm × year × product. Alternating projections compute ``M v`` by cycling the single-dimension demeaning operators ``M_d = I - P_d``, each one O(n):
+
+```math
+v \leftarrow M_D \cdots M_2 M_1 v \qquad \text{(repeat until } v \text{ stops moving)}
+```
+
+where:
+- ``P_d`` projects onto dimension ``d``'s dummy span, so ``M_d v`` subtracts each level's mean
+- ``M_d`` is an orthogonal projection, so by von Neumann–Halperin the cycle converges to the projection onto ``\bigcap_d \operatorname{range}(M_d) = \operatorname{range}(M)``
+
+OLS on the absorbed data is therefore the within-all-fixed-effects estimator, with no dummy ever materialized.
+
+Dimension names resolve to panel variables, or to the reserved indices `:entity` (`:id`/`:unit`/`:group`), `:time` (`:period`), and `:cohort`:
+
+```@example preg
+m_hdfe = estimate_xtreg(pd_pwt, :lngdppc, [:hc, :lnk]; absorb=[:entity, :time])
+report(m_hdfe)
+```
+
+The PWT panel is unbalanced, so this is **not** the same estimator as `twoway=true` above: the additive demeaning identity fails and its capital-deepening coefficient (0.297) is far from the true two-way within estimate (0.514) that `absorb` recovers. Absorbing entity and time reports 107 fixed-effect parameters — 38 countries plus 70 years minus the one collinearity implied by a single **mobility group** (see below).
+
+Any number of dimensions is allowed, and they need not be nested. A common applied specification adds **group × time** effects, which control for shocks common to countries at a similar development level:
+
+```@example preg
+# Income tercile from each country's first observed GDP per capita
+y0 = Dict(g.country[1] => g.lngdppc[1] for g in groupby(df_pwt, :country))
+cuts = quantile(collect(values(y0)), [1/3, 2/3])
+df_pwt.income_group = [y0[c] <= cuts[1] ? 1.0 : y0[c] <= cuts[2] ? 2.0 : 3.0
+                       for c in df_pwt.country]
+df_pwt.group_year = 10_000 .* df_pwt.income_group .+ df_pwt.year   # interacted dimension
+
+pd_gy = xtset(df_pwt, :country, :year)
+m_gy = estimate_xtreg(pd_gy, :lngdppc, [:hc, :lnk]; absorb=[:entity, :group_year])
+report(m_gy)
+```
+
+**Degrees of freedom.** The absorbed-parameter count is the rank of the dummy design, and getting it right is where naive implementations fail. For two dimensions the rank is ``G_1 + G_2 - C``, where ``C`` is the number of **connected components** (Abowd, Creecy & Kramarz 2002 "mobility groups") of the bipartite graph linking the two dimensions' levels — not ``G_1 + G_2 - 1``. The example above reports ``C = 3``: countries never change income tercile, so the country ↔ group-year graph splits into exactly one component per tercile, and the design absorbs ``38 + 210 - 3 = 245`` parameters rather than 247.
+
+!!! note "Three or more dimensions"
+    No closed form for the rank exists beyond two dimensions. Each dimension past the second is charged one collinearity, `G_d - 1`, which is an **upper bound** on its contribution. Absorbed parameters are therefore never understated, so the residual degrees of freedom are never overstated and the small-sample correction errs conservative. Estimated coefficients are unaffected — they depend only on the range of the dummy design, not on the bookkeeping, and are invariant to the order the dimensions are listed in.
+
+**Cluster-robust standard errors** charge only the fixed-effect dimensions *not* nested within the clustering variable. Entity fixed effects clustered on entity — the default panel setup — contribute nothing, because the ``G/(G-1)`` cluster factor already accounts for them. This is why `absorb=[:entity]` reproduces the plain one-way `estimate_xtreg` standard errors exactly, while `absorb=[:entity, :time]` charges the ``T-1`` non-nested time parameters and reports slightly wider intervals than `twoway=true`.
+
+**Convergence.** Plain alternating projections converge linearly at a rate set by the angle between the dummy subspaces, which is punishing when the dimensions are weakly connected (sparse worker–firm mobility). `hdfe_accel=true` (the default) applies Irons–Tuck vector extrapolation, which is exact for a single geometric mode. The `MAP converged` line in `report` and the `hdfe.converged` field are authoritative — a `NO` there means the coefficients are still moving, and `hdfe_maxiter` should be raised:
+
+```@example preg
+m_hdfe.hdfe.converged, m_hdfe.hdfe.iterations, m_hdfe.hdfe.n_absorbed
+```
+
+Use [`absorb_fe`](@ref) directly when you want the residualized data rather than a fitted model:
+
+```@example preg
+y_raw = pd_pwt.data[:, findfirst(==("lngdppc"), pd_pwt.varnames)]
+X_raw = pd_pwt.data[:, [findfirst(==(v), pd_pwt.varnames) for v in ("hc", "lnk")]]
+a = absorb_fe(y_raw, X_raw, [pd_pwt.group_id, pd_pwt.time_id])
+a.X \ a.y      # identical to coef(m_hdfe)
 ```
 
 ### Random Effects (GLS)
@@ -299,7 +367,11 @@ report(m_ar1)
 | Keyword | Type | Default | Description |
 |---------|------|---------|-------------|
 | `model` | `Symbol` | `:fe` | Estimator: `:fe`, `:re`, `:fd`, `:between`, `:cre`, `:ab`, `:bb` |
-| `twoway` | `Bool` | `false` | Include time fixed effects (FE only) |
+| `twoway` | `Bool` | `false` | Include time fixed effects (FE only; balanced panels only) |
+| `absorb` | `Vector{Symbol}` | `Symbol[]` | High-dimensional FE to absorb by alternating projections (`:fe` only) |
+| `hdfe_tol` | `Real` | `1e-8` | Absorption convergence tolerance |
+| `hdfe_maxiter` | `Int` | `1000` | Maximum alternating-projection iterations |
+| `hdfe_accel` | `Bool` | `true` | Irons-Tuck acceleration of the projection loop |
 | `cov_type` | `Symbol` | `:cluster` | Covariance: `:ols`, `:cluster`, `:twoway`, `:driscoll_kraay`, `:pcse` |
 | `bandwidth` | `Int` | auto | Driscoll-Kraay bandwidth (auto = Newey-West optimal) |
 | `pcse_unbalanced` | `Symbol` | `:casewise` | `:pcse` unbalanced handling: `:casewise` or `:pairwise` |
@@ -320,6 +392,24 @@ report(m_ar1)
 | `theta` | `T` | Quasi-demeaning parameter (RE only) |
 | `group_effects` | `Vector{T}` | Estimated entity effects (FE only) |
 | `method` | `Symbol` | Estimation method used |
+| `hdfe` | `NamedTuple` | Absorption diagnostics (`absorb` only; `nothing` otherwise) |
+
+When `absorb` is used, `hdfe` carries:
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `absorb` | `Vector{Symbol}` | Absorbed dimension names |
+| `n_absorbed` | `Int` | Absorbed FE parameters (rank of the dummy design) |
+| `n_levels` | `Vector{Int}` | Levels per dimension |
+| `n_components` | `Int` | Mobility groups of the first two dimensions |
+| `marginal` | `Vector{Int}` | Per-dimension contribution to `n_absorbed` |
+| `n_absorbed_cluster` | `Int` | Non-nested parameters charged to the cluster dof |
+| `converged` | `Bool` | Alternating projections reached `hdfe_tol` |
+| `iterations` | `Int` | Iterations run |
+| `sweeps` | `Int` | Total demeaning sweeps |
+| `change` | `T` | Final relative movement |
+| `tol` | `T` | Tolerance the fit used |
+| `accel` | `Bool` | Whether Irons-Tuck acceleration was on |
 
 ---
 
@@ -618,10 +708,15 @@ The CRE group-mean coefficients test the RE exogeneity assumption. Significant g
 
 6. **Unbalanced panels with AB/BB.** Arellano-Bond and Blundell-Bond GMM require sufficient time periods per entity for the instrument matrix. Very short panels may produce singular moment conditions.
 
+7. **`twoway=true` on an unbalanced panel.** The additive transformation ``y_{it} - \bar{y}_i - \bar{y}_t + \bar{y}`` equals the two-way within transformation only when the panel is balanced. On the unbalanced PWT panel it moves the capital-deepening coefficient from 0.514 to 0.297. Check `pd.balanced`, and use `absorb=[:entity, :time]` whenever it is `false`.
+
+8. **Ignoring the `hdfe.converged` flag.** Alternating projections converge slowly when fixed-effect dimensions are weakly connected. A `MAP converged: NO` line means the coefficients have not settled — raise `hdfe_maxiter` rather than reporting them.
+
 ---
 
 ## References
 
+- Abowd, J. M., Creecy, R. H. & Kramarz, F. (2002). Computing Person and Firm Effects Using Linked Longitudinal Employer-Employee Data. *US Census Bureau Technical Paper* TP-2002-06.
 - Arellano, M. (1987). Computing Robust Standard Errors for Within-Groups Estimators. *Oxford Bulletin of Economics and Statistics* 49(4), 431-434. [DOI](https://doi.org/10.1111/j.1468-0084.1987.mp49004006.x)
 - Arellano, M. & Bond, S. (1991). Some Tests of Specification for Panel Data: Monte Carlo Evidence and an Application to Employment Equations. *Review of Economic Studies* 58(2), 277-297. [DOI](https://doi.org/10.2307/2297968)
 - Baltagi, B. H. (1981). Simultaneous Equations with Error Components. *Journal of Econometrics* 17(2), 189-200. [DOI](https://doi.org/10.1016/0304-4076(81)90026-9)
@@ -630,10 +725,13 @@ The CRE group-mean coefficients test the RE exogeneity assumption. Significant g
 - Breusch, T. S. & Pagan, A. R. (1980). The Lagrange Multiplier Test and Its Applications to Model Specification in Econometrics. *Review of Economic Studies* 47(1), 239-253. [DOI](https://doi.org/10.2307/2297111)
 - Cameron, A. C., Gelbach, J. B. & Miller, D. L. (2011). Robust Inference with Multiway Clustering. *Journal of Business & Economic Statistics* 29(2), 238-249. [DOI](https://doi.org/10.1198/jbes.2010.07136)
 - Cameron, A. C. & Miller, D. L. (2015). A Practitioner's Guide to Cluster-Robust Inference. *Journal of Human Resources* 50(2), 317-372. [DOI](https://doi.org/10.3368/jhr.50.2.317)
+- Correia, S. (2016). *A Feasible Estimator for Linear Models with Multi-Way Fixed Effects*. Working paper (`reghdfe`). [PDF](http://scorreia.com/research/hdfe.pdf)
 - Chamberlain, G. (1980). Analysis of Covariance with Qualitative Data. *Review of Economic Studies* 47(1), 225-238. [DOI](https://doi.org/10.2307/2297110)
 - Driscoll, J. C. & Kraay, A. C. (1998). Consistent Covariance Matrix Estimation with Spatially Dependent Panel Data. *Review of Economics and Statistics* 80(4), 549-560. [DOI](https://doi.org/10.1162/003465398557825)
 - Feenstra, R. C., Inklaar, R. & Timmer, M. P. (2015). The Next Generation of the Penn World Table. *American Economic Review* 105(10), 3150-3182. [DOI](https://doi.org/10.1257/aer.20130954)
+- Gaure, S. (2013). OLS with Multiple High Dimensional Category Variables. *Computational Statistics & Data Analysis* 66, 8-18. [DOI](https://doi.org/10.1016/j.csda.2013.03.024)
 - Greene, W. H. (2012). *Econometric Analysis*. 7th ed. Prentice Hall. ISBN 978-0-131-39538-1.
+- Guimaraes, P. & Portugal, P. (2010). A Simple Feasible Procedure to Fit Models with High-Dimensional Fixed Effects. *The Stata Journal* 10(4), 628-649. [DOI](https://doi.org/10.1177/1536867X1101000406)
 - Hausman, J. A. (1978). Specification Tests in Econometrics. *Econometrica* 46(6), 1251-1271. [DOI](https://doi.org/10.2307/1913827)
 - Hausman, J. A. & Taylor, W. E. (1981). Panel Data and Unobservable Individual Effects. *Econometrica* 49(6), 1377-1398. [DOI](https://doi.org/10.2307/1911406)
 - Lipset, S. M. (1959). Some Social Requisites of Democracy: Economic Development and Political Legitimacy. *American Political Science Review* 53(1), 69-105. [DOI](https://doi.org/10.2307/1951731)

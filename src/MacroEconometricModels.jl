@@ -436,6 +436,7 @@ include("preg/types.jl")
 include("teststat/pvar_ar_test.jl")   # after preg/types (needs PanelRegModel), before preg/estimation (calls _pvar_ar_stats)
 include("preg/covariance.jl")
 include("preg/prais.jl")           # EV-25 (#433): Prais-Winsten AR(1) FGLS transform (used by estimation.jl)
+include("preg/hdfe.jl")            # T272 (#371): HDFE absorption by alternating projections (used by estimation.jl)
 include("preg/estimation.jl")
 include("preg/tests.jl")
 include("preg/iv.jl")
@@ -1079,6 +1080,7 @@ export PanelRegModel, PanelIVModel, PanelLogitModel, PanelProbitModel, PanelTest
 
 # Estimation
 export estimate_xtreg, estimate_xtiv, estimate_xtlogit, estimate_xtprobit
+export absorb_fe
 
 # Specification tests
 export hausman_test, breusch_pagan_test, f_test_fe

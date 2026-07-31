@@ -528,6 +528,8 @@ FE, RE, FD, Between, CRE, Arellano-Bond, and Blundell-Bond panel estimators. See
 | Function | Description |
 |----------|-------------|
 | `estimate_xtreg(pd, :y, :x1, :x2; ...)` | Panel FE/RE/FD/Between/CRE/AB/BB |
+| `estimate_xtreg(pd, :y, :x; absorb=[...])` | High-dimensional FE (reghdfe-style alternating projections) |
+| `absorb_fe(y, X, fe_groups; ...)` | Absorb HDFE dimensions from raw arrays |
 | `estimate_xtiv(pd, :y, :x; ...)` | Panel IV (FE-IV/RE-IV/FD-IV/Hausman-Taylor) |
 | `estimate_xtlogit(pd, :y, :x; ...)` | Panel logit (pooled/FE/RE/CRE) |
 | `estimate_xtprobit(pd, :y, :x; ...)` | Panel probit (pooled/FE/RE/CRE) |

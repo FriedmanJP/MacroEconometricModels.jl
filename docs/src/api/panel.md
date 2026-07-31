@@ -106,6 +106,7 @@ arellano_bond_ar_test
 
 ```@docs
 estimate_xtreg
+absorb_fe
 ```
 
 ### Panel Instrumental Variables
