@@ -447,6 +447,7 @@ The acceptance rate reports the fraction of draws satisfying all restrictions. L
 | `n_draws` | `Int` | `1000` | Target number of accepted draws |
 | `n_rotations` | `Int` | `1000` | Maximum attempts per target draw |
 | `compute_weights` | `Bool` | `true` | Compute importance weights (set `false` for faster exploratory analysis) |
+| `normalize_weights` | `Bool` | `true` | Scale stored weights to sum to 1 (`false` keeps the raw volume-element scale) |
 
 **AriasSVARResult fields:**
 
@@ -457,6 +458,10 @@ The acceptance rate reports the fraction of draws satisfying all restrictions. L
 | `weights` | `Vector{T}` | Importance weights (normalized to sum to 1) |
 | `acceptance_rate` | `T` | Fraction of draws satisfying all restrictions |
 | `restrictions` | `SVARRestrictions` | The imposed restrictions |
+| `ess` | `T` | Kish effective sample size of the importance weights |
+| `ess_fraction` | `T` | ``\mathrm{ESS} / n_{\text{draws}}`` |
+
+`ess_fraction` is exactly 1 under pure sign restrictions (uniform weights) and falls below 1 once zero restrictions make the weights uneven. A value near zero means a handful of draws carry the posterior, so the credible bands rest on far fewer effective draws than `n_draws` implies; see [Structural Identification](@ref structural_identification_page).
 
 ### Mountford-Uhlig (2009) Penalty Function
 

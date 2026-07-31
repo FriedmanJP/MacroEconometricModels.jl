@@ -850,6 +850,8 @@ function Base.show(io::IO, r::AriasSVARResult)
     n_signs = length(r.restrictions.signs)
     _show_spec_table(io, "Arias et al. (2018) SVAR Result",
         ["Accepted draws" => n_draws, "Acceptance rate" => string(acc_pct, "%"),
+         "Effective sample" => string(_fmt(r.ess; digits=1), " (",
+                                      round(r.ess_fraction * 100, digits=1), "%)"),
          "Zero restrictions" => n_zeros, "Sign restrictions" => n_signs,
          "Variables" => r.restrictions.n_vars, "Shocks" => r.restrictions.n_shocks])
     # Posterior-mean IRF summary — was restrictions/penalties only. (S4/T168)
