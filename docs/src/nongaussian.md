@@ -27,7 +27,7 @@ report(ica)
 
 ## Choosing a Method
 
-All 13 methods return a rotation matrix ``Q`` and structural impact matrix ``B_0 = L Q`` where ``L = \text{chol}(\Sigma)``. The shape of the data --- fat tails, bimodality, skewness, regime shifts, volatility clustering --- selects the estimator:
+All 14 methods return a rotation matrix ``Q`` and structural impact matrix ``B_0 = L Q`` where ``L = \text{chol}(\Sigma)``. The shape of the data --- fat tails, bimodality, skewness, regime shifts, volatility clustering --- selects the estimator:
 
 | Feature needed | Recommended | Why |
 |----------------|-------------|-----|
@@ -77,7 +77,7 @@ The covariance ``\Sigma = B_0 B_0'`` provides ``n(n+1)/2`` equations for ``n^2``
 
 ## IRF Pipeline Integration
 
-All 13 methods plug into `irf()`, `fevd()`, and `historical_decomposition()` through the same internal rotation interface. Pass the method name as a symbol:
+All 14 methods plug into `irf()`, `fevd()`, and `historical_decomposition()` through the same internal rotation interface. Pass the method name as a symbol:
 
 ```@example id_overview
 irfs = irf(model, 20; method=:fastica)
