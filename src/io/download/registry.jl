@@ -65,7 +65,7 @@ const IO_CHECKSUMS = Dict{String,String}()
     io_file_digest(path) -> String
 
 Return the SHA-256 digest (lowercase hex) of the file at `path`. Maintainer helper
-for populating [`IO_CHECKSUMS`](@ref) after fetching an archive once.
+for populating `IO_CHECKSUMS` after fetching an archive once.
 """
 io_file_digest(path::AbstractString) = bytes2hex(SHA.sha256(read(path)))
 
@@ -78,7 +78,7 @@ Check the downloaded file at `path` against the expected SHA-256 for `url`:
 - registered digest **mismatches** → throw an error naming `url` with expected
   vs. actual (the archive is corrupt or has been substituted);
 - **no** registered digest → emit a warning and return `path` (download allowed
-  but unverified — the honest default while [`IO_CHECKSUMS`](@ref) is unpopulated).
+  but unverified — the honest default while `IO_CHECKSUMS` is unpopulated).
 """
 function _verify_download(url::AbstractString, path::AbstractString; registry=IO_CHECKSUMS)
     expected = get(registry, String(url), nothing)

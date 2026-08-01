@@ -73,6 +73,10 @@ Pages   = ["arima/forecast.jl"]
 Order   = [:function]
 ```
 
+```@docs
+forecast(::SARIMAModel{T}, ::Int) where {T<:AbstractFloat}
+```
+
 ### Order Selection
 
 ```@docs
@@ -309,6 +313,7 @@ STARModel
 STARForecast
 MSRegModel
 MSForecast
+fitted(::MSRegModel)
 ```
 
 ---

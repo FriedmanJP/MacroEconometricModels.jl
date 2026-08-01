@@ -108,6 +108,7 @@ GLPHyperparameters
 ```@docs
 estimate_tvpvar
 volatility_path
+irf(::TVPVARPosterior{T}, ::Int) where {T<:AbstractFloat}
 ```
 
 ### Mixed-Frequency VAR
@@ -115,6 +116,8 @@ volatility_path
 ```@docs
 estimate_mfvar
 latent_path
+irf(::MFVARPosterior, ::Int)
+forecast(::MFVARPosterior, ::Int)
 ```
 
 ### Hyperparameter Selection

@@ -18,6 +18,8 @@ OddsRatio
 WildClusterBootstrap
 AndersonRubinTest
 AndersonRubinCI
+report(::IO, ::QuantileRegModel{T}) where {T}
+report(::IO, ::RDDResult{T}) where {T}
 ```
 
 ---
@@ -105,9 +107,6 @@ PenalizedRegModel
 RobustRegModel
 HeckmanModel
 SelectionResult
-PoissonModel
-NegBinModel
-DispersionTest
 ```
 
 ```@autodocs

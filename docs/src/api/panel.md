@@ -81,6 +81,8 @@ pvar_oirf
 pvar_girf
 pvar_fevd
 pvar_stability
+pvar_irf(::PVARModel{T}, ::Int) where {T}
+pvar_fevd_result(::PVARModel{T}, ::Int) where {T}
 ```
 
 ### Bootstrap

@@ -27,6 +27,8 @@ OccBinSolution
 OccBinIRF
 DeterminacyMap
 PrunedStateSpace
+report(::IO, ::DeterminacyMap{T}) where {T}
+report(::IO, ::PrunedStateSpace{T}) where {T}
 ```
 
 ---
@@ -198,6 +200,7 @@ inequality_irf
 simulate_panel
 den_haan_test
 ha_grid_diagnostics
+report(::HASteadyState)
 adaptive_asset_grid
 adapt_ha_grid
 labor_supply
