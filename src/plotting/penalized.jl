@@ -10,39 +10,6 @@ plot_result methods for penalized regression (`PenalizedRegModel`): coefficient 
 """
 
 # =============================================================================
-# Vertical-marker overlay (draws x-position guide lines matching _render_line_js scales)
-# =============================================================================
-
-"""Append a D3 snippet drawing dashed **vertical** guide lines at given `log λ` x-positions,
-reconstructing the exact x-scale of `_render_line_js` (no x-padding, same margins)."""
-function _penalized_vlines_js(id::String, data_json::String,
-                              marks::Vector{Tuple{Float64,String,String}})
-    mark_js = join(["{v:$(m[1]),color:'$(m[2])',dash:'$(m[3])'}" for m in marks], ",")
-    """
-(function() {
-    const container = d3.select('#$(id)');
-    const svgEl = container.select('svg');
-    const gEl = svgEl.select('g');
-    const W = +svgEl.attr('width');
-    const margin = {top:10, right:15, bottom:35, left:55};
-    const w = W - margin.left - margin.right;
-    const h = Math.min(w * 0.6, 250);
-    const data = $(data_json);
-    const xVals = data.map(d => d.x);
-    const x = d3.scaleLinear().domain(d3.extent(xVals)).range([0, w]);
-    const marks = [$(mark_js)];
-    marks.forEach(m => {
-        gEl.append('line')
-            .attr('x1', x(m.v)).attr('x2', x(m.v))
-            .attr('y1', 0).attr('y2', h)
-            .attr('stroke', m.color).attr('stroke-width', 1.2)
-            .attr('stroke-dasharray', m.dash);
-    });
-})();
-"""
-end
-
-# =============================================================================
 # PenalizedRegModel
 # =============================================================================
 
@@ -89,12 +56,15 @@ function _plot_penalized_path(m::PenalizedRegModel{T}; title::String="") where {
     colors = [_PLOT_COLORS[mod1(j, length(_PLOT_COLORS))] for j in 1:p]
     series = _series_json(m.varnames, colors; keys=["s$j" for j in 1:p])
 
-    refs = "[{\"value\":0,\"color\":\"#999\",\"dash\":\"4,3\"}]"   # zero coefficient line
+    # Zero coefficient line + dashed vertical marker at the selected log(λ), both via
+    # the line renderer's ref-line options (axis:"x" for the vertical — plotrule A4,
+    # no scale-clone).
+    logλ_sel = log(max(m.lambda, floatmin(T)))
+    refs = "[{\"value\":0,\"color\":\"#999\",\"dash\":\"4,3\"}," *
+           "{\"value\":$(_json(logλ_sel)),\"color\":\"#666\",\"dash\":\"5,4\",\"axis\":\"x\"}]"
     js = _render_line_js(id, data, series;
                          ref_lines_json=refs,
                          xlabel="log(λ)", ylabel="Coefficient")
-    js *= "\n" * _penalized_vlines_js(id, data,
-        [(Float64(log(max(m.lambda, floatmin(T)))), "#666", "5,4")])
     panel = _PanelSpec(id, "Coefficient Path", js)
 
     isempty(title) && (title = "Penalized Regression Coefficient Path")
@@ -121,13 +91,15 @@ function _plot_penalized_cv(m::PenalizedRegModel{T}; title::String="") where {T}
     series = _series_json(["CV MSE"], [_PLOT_COLORS[1]]; keys=["mse"])
     bands = "[{\"lo_key\":\"lo\",\"hi_key\":\"hi\",\"color\":\"$(_PLOT_COLORS[1])\"}]"
 
+    # Dashed vertical markers at log(λ_min) and the 1-SE-rule log(λ), via the line
+    # renderer's axis:"x" ref-line option (plotrule A4, no scale-clone).
+    logλ_min = log(max(m.lambda_min, floatmin(T)))
+    logλ_1se = log(max(m.lambda_1se, floatmin(T)))
+    refs = "[{\"value\":$(_json(logλ_min)),\"color\":\"#2ca02c\",\"dash\":\"5,4\",\"axis\":\"x\"}," *
+           "{\"value\":$(_json(logλ_1se)),\"color\":\"#999\",\"dash\":\"3,3\",\"axis\":\"x\"}]"
     js = _render_line_js(id, data, series;
-                         bands_json=bands,
+                         bands_json=bands, ref_lines_json=refs,
                          xlabel="log(λ)", ylabel="Mean CV MSE")
-    js *= "\n" * _penalized_vlines_js(id, data, [
-        (Float64(log(max(m.lambda_min, floatmin(T)))), "#2ca02c", "5,4"),
-        (Float64(log(max(m.lambda_1se, floatmin(T)))), "#999", "3,3"),
-    ])
     panel = _PanelSpec(id, "Cross-Validation Curve", js)
 
     isempty(title) && (title = "Penalized Regression CV Curve")

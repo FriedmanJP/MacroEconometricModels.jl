@@ -272,6 +272,65 @@ Joint optimization is particularly important for large systems (``n \geq 10``), 
 | `lambda_grid` | `Vector` | `[1.0, 5.0, 10.0]` | Grid values for ``\lambda`` |
 | `mu_grid` | `Vector` | `[1.0, 2.0, 5.0]` | Grid values for ``\mu`` |
 
+### Hierarchical Optimization (GLP 2015) --- the default
+
+Giannone, Lenza & Primiceri (2015) treat the hyperparameters as **random**, with hyperpriors, and select them by maximizing the posterior rather than the marginal likelihood alone:
+
+```math
+\hat{\gamma} = \arg\max_{\gamma}\ \log p(Y \mid \gamma) + \log p(\gamma),
+\qquad \gamma = (\tau, \lambda, \mu)
+```
+
+where:
+- ``p(Y \mid \gamma)`` is the closed-form conjugate marginal likelihood above
+- ``p(\gamma)`` are Gamma hyperpriors in GLP's mode/standard-deviation parameterization: ``\tau`` with mode 0.2 and sd 0.4, ``\lambda`` and ``\mu`` with mode 1 and sd 1
+
+This is what `estimate_bvar` uses by default when `prior=:minnesota` and no `hyper` is supplied. It matters because a one-dimensional grid over ``\tau`` cannot trade overall tightness against the sum-of-coefficients and initial-observation priors: holding the latter at their defaults, the grid can be driven to an endpoint of its own range and report that endpoint as though it had been selected.
+
+```@example bvar
+glp = optimize_hyperparameters_glp(Y, 2)
+report(glp)
+```
+
+The result carries the diagnostics needed to decide whether to trust it. `converged` is `true` only when the optimizer converged **and** no hyperparameter sits on a bound; a pinned value sets `at_bound` and clears `converged`, and the reported log marginal likelihood can be compared against `log_ml_default` (the package defaults) to see how much the selection bought.
+
+!!! note "Technical Note"
+    Optimization runs in log space, so every hyperparameter stays positive without a constrained solver, and uses a derivative-free Nelder-Mead restarted from several dispersed starting points --- the marginal-likelihood surface is not concave in the hyperparameters, and a single start can settle in a local optimum. The lag decay and covariance scaling are held fixed (GLP fix the lag decay rather than estimate it) and can be shifted with the `decay` and `omega` keywords.
+
+| Keyword | Type | Default | Description |
+|---------|------|---------|-------------|
+| `decay` | `Real` | `0.5` | Lag-decay exponent, held fixed |
+| `omega` | `Real` | `2.0` | Covariance scaling, held fixed |
+| `starts` | `Int` | `4` | Dispersed restarts of the optimizer |
+| `max_iter` | `Int` | `500` | Iterations per restart |
+| `f_reltol` | `Real` | `1e-8` | Relative objective tolerance |
+| `verbose` | `Bool` | `true` | Warn on non-convergence |
+
+`GLPHyperparameters{T}` return value:
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `hyper` | `MinnesotaHyperparameters{T}` | The optimized hyperparameters |
+| `log_ml` | `T` | Log marginal likelihood at the optimum |
+| `log_posterior` | `T` | `log_ml` plus the log hyperprior --- the maximized objective |
+| `converged` | `Bool` | Converged **and** no hyperparameter on a bound |
+| `at_bound` | `Bool` | Some hyperparameter is pinned to the search box |
+| `iterations` | `Int` | Optimizer iterations |
+| `log_ml_default` | `T` | Log marginal likelihood at the package defaults |
+
+Selection is controlled from `estimate_bvar` through `hyperopt`:
+
+```@example bvar
+post_glp  = estimate_bvar(Y, 2; n_draws=100, prior=:minnesota,
+                          varnames=["INDPRO", "CPI", "FFR"])            # :glp (default)
+post_grid = estimate_bvar(Y, 2; n_draws=100, prior=:minnesota, hyperopt=:grid,
+                          varnames=["INDPRO", "CPI", "FFR"])            # tau-only grid
+using Statistics
+round.([mean(post_glp.B_draws[:, 2, 1]) mean(post_grid.B_draws[:, 2, 1])], digits=4)
+```
+
+An explicit `hyper=` bypasses selection entirely under either setting.
+
 ---
 
 ## Posterior Sampling
@@ -534,6 +593,208 @@ The posterior credible intervals widen with the forecast horizon, reflecting bot
 | `point_estimate` | `Symbol` | Central tendency used (`:mean` or `:median`) |
 | `varnames` | `Vector{String}` | Variable names |
 
+### Conditional Forecasts
+
+`conditional_forecast` runs a Waggoner & Zha (1999) scenario through the posterior. Every draw supplies its own coefficients, structural impact matrix, unconditional path and restriction system, and contributes one conditional shock draw — so the bands carry both parameter and shock uncertainty, unlike the `VARModel` dispatch, which conditions on the point estimate. Non-stationary draws are skipped exactly as in `forecast`.
+
+The mechanics of the restriction system, hard versus soft conditions, and the identification-invariance result are covered on the [VAR](@ref var_page) page.
+
+```@example bvar
+# Hold the policy rate at 2% for the first four quarters
+scenario = Dict(("FFR", h) => 2.0 for h in 1:4)
+cfc = conditional_forecast(post, scenario, 12)
+report(cfc)
+```
+
+The conditioned rows are pinned to 2.0 with a degenerate band — a hard condition holds in every posterior draw — while the other variables show the scenario's spillovers with credible intervals that reflect the full posterior.
+
+```julia
+plot_result(cfc)
+```
+
+| Keyword | Type | Default | Description |
+|---------|------|---------|-------------|
+| `Q` | `AbstractMatrix` | `nothing` | Rotation matrix; `nothing` is Cholesky. Affects only the reported `shocks` |
+| `reps` | `Int` | `nothing` | Posterior draws to use (default: all) |
+| `conf_level` | `Real` | `0.95` | Credible-band coverage |
+| `point_estimate` | `Symbol` | `:mean` | Central tendency across draws (`:mean` or `:median`) |
+| `rng` | `AbstractRNG` | `default_rng()` | Random number generator |
+
+The return value is a `ConditionalForecast{T}`; its fields are documented on the [VAR](@ref var_page) page.
+
+---
+
+## Time-Varying Parameters and Stochastic Volatility
+
+A constant-coefficient, homoskedastic VAR cannot represent the Great Moderation, drifting inflation persistence, or a monetary transmission mechanism that changes across regimes. `estimate_tvpvar` implements Primiceri (2005), in which the coefficients, the contemporaneous structural matrix, and the shock volatilities all drift:
+
+```math
+y_t = X_t' B_t + A_t^{-1}\Sigma_t\varepsilon_t,\qquad
+B_t = B_{t-1} + \nu_t,\quad
+a_t = a_{t-1} + \zeta_t,\quad
+\log\sigma^2_{i,t} = \log\sigma^2_{i,t-1} + \eta_{i,t}
+```
+
+where:
+- ``X_t' = I_n \otimes [1, y_{t-1}', \ldots, y_{t-p}']``, so ``B_t`` stacks every equation's coefficients
+- ``A_t`` is lower triangular with a unit diagonal; its free elements are the contemporaneous structural coefficients, which impose a recursive identification that itself drifts
+- ``\Sigma_t = \mathrm{diag}(\sigma_{1,t},\ldots,\sigma_{n,t})``
+- ``\nu_t\sim N(0,Q)``, ``\zeta_t\sim N(0,S)`` block diagonal by equation, ``\eta_t\sim N(0,W)`` diagonal
+
+!!! note "Technical Note"
+    Each Gibbs sweep draws, in the Del Negro & Primiceri (2015) **corrected** order: ``B_{1:T}`` by Carter-Kohn with per-period observation covariance ``A_t^{-1}\Sigma_t^2A_t^{-1\prime}``; ``a_{1:T}`` equation by equation on the VAR residuals; the Kim-Shephard-Chib mixture indicators ``s_t`` given the **current** volatilities, then ``\log\sigma^2_{1:T}`` given ``s``; and finally ``Q``, ``S``, ``W`` from conjugate inverse-Wishart / inverse-gamma updates. The corrigendum's point is that ``s`` must be drawn *before* the volatility update, and that the coefficient blocks are drawn without conditioning on ``s``.
+
+Priors are calibrated on a training sample in Primiceri's fashion: ``B_0\sim N(\hat B_{OLS}, 4V(\hat B_{OLS}))``, ``Q\sim IW(k_Q^2\tau V(\hat B_{OLS}), \tau)``, and analogously for ``A_0``, ``S`` and ``W``. The constants ``k_Q = 0.01``, ``k_S = 0.1``, ``k_W = 0.01`` control how much drift the prior permits.
+
+```@example bvar
+# Drifting coefficients and drifting volatilities
+tvp = estimate_tvpvar(Y, 1; n_draws=100, n_burn=100,
+                      varnames=["INDPRO", "CPI", "FFR"])
+report(tvp)
+```
+
+The report shows the posterior mean volatility path at several dates — the object that carries most of the economic content in this class of models. `volatility_path` returns the full path with credible bands (note that the stored state is the log **variance**, so the standard deviation is `exp(h/2)`; `volatility_path` applies that transform):
+
+```@example bvar
+vol, vol_bands = volatility_path(tvp)
+size(vol), size(vol_bands)
+```
+
+### Time-Varying Impulse Responses
+
+`irf(tvp, H; t)` computes the impulse response **at a chosen date**, integrating over posterior draws. Both the propagation (from ``B_t``) and the impact matrix (``A_t^{-1}\Sigma_t``) are taken at that date, so comparing two dates is how time variation in transmission is read off:
+
+```@example bvar
+early = irf(tvp, 12; t=5, n_draws=50)
+late  = irf(tvp, 12; t=tvp.T_eff, n_draws=50)
+round.([early.point_estimate[1, :, 3]  late.point_estimate[1, :, 3]], digits=4)
+```
+
+```julia
+plot_result(late)
+```
+
+### The Constant-Coefficient Special Case
+
+`tvp=false` fixes ``B_t`` and ``a_t`` and leaves only the volatilities drifting — the Cogley & Sargent (2005) SV-BVAR. On homoskedastic data its coefficient posterior mean reproduces the conjugate BVAR's on the same estimation window:
+
+```@example bvar
+sv_only = estimate_tvpvar(Y, 1; tvp=false, n_draws=100, n_burn=100,
+                          varnames=["INDPRO", "CPI", "FFR"])
+sv_only.tvp, sv_only.sv
+```
+
+Symmetrically, `sv=false` freezes the volatilities at their training-sample values and lets only the coefficients drift.
+
+### `estimate_tvpvar` Keyword Arguments
+
+| Keyword | Type | Default | Description |
+|---------|------|---------|-------------|
+| `tvp` | `Bool` | `true` | Let ``B_t`` and ``a_t`` drift; `false` gives the Cogley-Sargent SV-BVAR |
+| `sv` | `Bool` | `true` | Let the volatilities drift |
+| `n_draws` | `Int` | `2000` | Retained posterior draws |
+| `n_burn` | `Int` | `1000` | Burn-in sweeps discarded |
+| `thin` | `Int` | `1` | Keep every `thin`-th post-burn-in sweep |
+| `n_train` | `Int` | `0` | Training-sample length; `0` uses `max(4p+n+2, T÷4)` |
+| `k_Q`, `k_S`, `k_W` | `Real` | `0.01`, `0.1`, `0.01` | Primiceri's prior-drift constants |
+| `varnames` | `Vector{String}` | `y1, y2, …` | Variable names |
+| `rng` | `AbstractRNG` | `default_rng()` | Random number generator |
+
+### `TVPVARPosterior{T}` Fields
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `B_draws` | `Array{T,3}` | ``n_{draws}\times T_{eff}\times k`` drifting VAR coefficients, ``k = n(1+np)`` |
+| `A_draws` | `Array{T,3}` | ``n_{draws}\times T_{eff}\times n_a`` free elements of ``A_t``, ``n_a = n(n-1)/2`` |
+| `H_draws` | `Array{T,3}` | ``n_{draws}\times T_{eff}\times n`` log-**variances** ``\log\sigma^2_{i,t}`` |
+| `Q_draws` | `Array{T,3}` | Coefficient random-walk covariance draws |
+| `S_draws` | `Array{T,3}` | Block-diagonal ``A_t`` random-walk covariance draws |
+| `W_draws` | `Matrix{T}` | Log-volatility random-walk variances |
+| `T_eff` | `Int` | Effective sample after the training block |
+| `n_train` | `Int` | Training-sample length used for the priors |
+| `tvp` / `sv` | `Bool` | Which blocks were allowed to drift |
+
+---
+
+## Mixed-Frequency VAR
+
+Macro data arrive at different frequencies: GDP quarterly, employment and prices monthly. `estimate_mfvar` implements Schorfheide & Song (2015), which puts the VAR entirely at the **high** frequency and treats each low-frequency series as a latent high-frequency process observed only at reference dates through a temporal-aggregation identity:
+
+```math
+y^{lo}_{i,t} = \sum_{j} w_j\, z_{i,t-j+1}
+```
+
+where:
+- ``z_{i,t}`` is the latent high-frequency value of series ``i``
+- ``w`` is the aggregation filter: ``[1]`` for a `:stock` (end-of-period level), ``\mathbf{1}_m`` for a `:flow` sum, ``\mathbf{1}_m/m`` for an `:average`, and the Mariano-Murasawa triangular filter ``[1,2,\ldots,m,\ldots,2,1]/m`` for a `:growth` rate
+- ``m`` is the frequency ratio (3 for monthly/quarterly)
+
+Input is a high-frequency panel with `NaN` wherever a series is not observed — a quarterly series in a monthly panel carries a value every third row.
+
+!!! note "Technical Note"
+    A two-block Gibbs sampler alternates between the conjugate NIW draw of ``(B, \Sigma)`` given the completed path — the same draw the conjugate BVAR uses, Minnesota dummies included — and a draw of the latent path given ``(B, \Sigma)``. The path draw uses the **Durbin-Koopman (2002) simulation smoother** rather than a backward sampler: the companion state noise is singular, so a Kim-Nelson backward step conditions only on ``z_{t+1}``, but an aggregation row links ``z_t, z_{t-1}, \ldots`` across several lag blocks and lags redrawn at successive backward steps are then mutually inconsistent with that constraint. Durbin-Koopman simulates an unconditional path ``s^+``, smooths ``y - y^+``, and sets ``\tilde s = \hat s(y - y^+) + s^+``; because the aggregation is noiseless, applying the observation map returns ``y`` **exactly** at every reference date.
+
+```@example bvar
+# Build a monthly panel in which the third series is observed only quarterly, as a
+# within-quarter sum of its latent monthly values.
+Y_m = copy(Y)
+mf_data = copy(Y_m)
+mf_data[:, 3] .= NaN
+for t in 3:size(Y_m, 1)
+    t % 3 == 0 || continue
+    mf_data[t, 3] = sum(Y_m[t-j+1, 3] for j in 1:3)
+end
+
+mf = estimate_mfvar(mf_data, 1; low_freq=[3], aggregation=:flow, freq_ratio=3,
+                    n_draws=100, n_burn=100,
+                    varnames=["INDPRO", "CPI", "FFR"])
+report(mf)
+```
+
+The report shows the interpolated high-frequency path of each low-frequency series with credible bands — the object the model exists to produce. `latent_path` returns it in full:
+
+```@example bvar
+mu, bands = latent_path(mf)
+# The aggregation identity holds at every reference date, by construction
+maximum(abs(sum(mu[t-j+1, 3] for j in 1:3) - mf_data[t, 3])
+        for t in 3:size(mf_data, 1) if !isnan(mf_data[t, 3]))
+```
+
+Because the parameter draws are ordinary VAR draws, the existing analysis dispatches apply at the high frequency:
+
+```@example bvar
+fc_mf = forecast(mf, 6)
+report(fc_mf)
+```
+
+With `low_freq` empty nothing is latent and the sampler reduces to the conjugate BVAR. See also the [Nowcasting](nowcast.md) pages, which solve the same ragged-edge problem with a dynamic factor model instead.
+
+### `estimate_mfvar` Keyword Arguments
+
+| Keyword | Type | Default | Description |
+|---------|------|---------|-------------|
+| `low_freq` | `Vector{Int}` | `Int[]` | Column indices observed at the low frequency |
+| `freq_ratio` | `Int` | `3` | High-frequency periods per low-frequency period |
+| `aggregation` | `Symbol` or `Vector{Symbol}` | `:growth` | `:growth`, `:flow`, `:average`, `:stock`; one rule for all low-frequency series or one per series |
+| `n_draws` | `Int` | `1000` | Retained posterior draws |
+| `n_burn` | `Int` | `500` | Burn-in sweeps |
+| `prior` | `Symbol` | `:minnesota` | `:minnesota` (dummy observations) or `:diffuse` |
+| `hyper` | `MinnesotaHyperparameters` | `nothing` | Fixed hyperparameters; `nothing` optimizes once on the initial path |
+| `varnames` | `Vector{String}` | `y1, y2, …` | Variable names |
+| `rng` | `AbstractRNG` | `default_rng()` | Random number generator |
+
+### `MFVARPosterior{T}` Fields
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `B_draws` | `Array{T,3}` | ``n_{draws}\times k\times n`` VAR coefficients, ``k = 1+np`` |
+| `Sigma_draws` | `Array{T,3}` | ``n_{draws}\times n\times n`` innovation covariances |
+| `Z_draws` | `Array{T,3}` | ``n_{draws}\times T_{hf}\times n`` latent high-frequency paths |
+| `data` | `Matrix{T}` | The input panel, `NaN` where unobserved |
+| `low_freq` | `Vector{Int}` | Low-frequency column indices |
+| `freq_ratio` | `Int` | High-frequency periods per low-frequency period |
+| `aggregation` | `Vector{Symbol}` | Aggregation rule per low-frequency series |
+
 ---
 
 ## Large BVAR
@@ -641,3 +902,27 @@ This workflow demonstrates the complete Bayesian pipeline: hyperparameter optimi
 
 - Litterman, R. B. (1986). Forecasting with Bayesian Vector Autoregressions --- Five Years of Experience.
   *Journal of Business & Economic Statistics*, 4(1), 25-38. [DOI](https://doi.org/10.1080/07350015.1986.10509491)
+
+- Waggoner, D. F., & Zha, T. (1999). Conditional Forecasts in Dynamic Multivariate Models.
+  *Review of Economics and Statistics*, 81(4), 639-651. [DOI](https://doi.org/10.1162/003465399558508)
+
+- Primiceri, G. E. (2005). Time Varying Structural Vector Autoregressions and Monetary Policy.
+  *Review of Economic Studies*, 72(3), 821-852. [DOI](https://doi.org/10.1111/j.1467-937X.2005.00353.x)
+
+- Del Negro, M., & Primiceri, G. E. (2015). Time Varying Structural Vector Autoregressions and Monetary Policy: A Corrigendum.
+  *Review of Economic Studies*, 82(4), 1342-1345. [DOI](https://doi.org/10.1093/restud/rdv024)
+
+- Cogley, T., & Sargent, T. J. (2005). Drifts and Volatilities: Monetary Policies and Outcomes in the Post WWII US.
+  *Review of Economic Dynamics*, 8(2), 262-302. [DOI](https://doi.org/10.1016/j.red.2004.10.009)
+
+- Kim, S., Shephard, N., & Chib, S. (1998). Stochastic Volatility: Likelihood Inference and Comparison with ARCH Models.
+  *Review of Economic Studies*, 65(3), 361-393. [DOI](https://doi.org/10.1111/1467-937X.00050)
+
+- Schorfheide, F., & Song, D. (2015). Real-Time Forecasting with a Mixed-Frequency VAR.
+  *Journal of Business & Economic Statistics*, 33(3), 366-380. [DOI](https://doi.org/10.1080/07350015.2014.954707)
+
+- Mariano, R. S., & Murasawa, Y. (2003). A New Coincident Index of Business Cycles Based on Monthly and Quarterly Series.
+  *Journal of Applied Econometrics*, 18(4), 427-443. [DOI](https://doi.org/10.1002/jae.695)
+
+- Durbin, J., & Koopman, S. J. (2002). A Simple and Efficient Simulation Smoother for State Space Time Series Analysis.
+  *Biometrika*, 89(3), 603-616. [DOI](https://doi.org/10.1093/biomet/89.3.603)

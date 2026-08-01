@@ -20,16 +20,23 @@ Visualize a MIDAS regression.
 
 - `view=:weights` — the realized weight curve `wₖ` versus high-frequency lag `k`.
 - `view=:fit` — actual versus fitted low-frequency target.
+- `view=:diagnostics` — the shared four-panel residual diagnostics (PLT-24).
 """
 function plot_result(m::MidasModel{T};
-                     view::Symbol=:weights, title::String="",
+                     view::Symbol=:weights, acf_lags::Int=0, title::String="",
                      save_path::Union{String,Nothing}=nothing) where {T}
     if view === :weights
         p = _midas_weight_plot(m, title)
     elseif view === :fit
         p = _midas_fit_plot(m, title)
+    elseif view === :diagnostics
+        resid = Float64[Float64(v) for v in m.residuals]
+        fitted = Float64[Float64(v) for v in m.fitted]
+        panels = _residual_diagnostics_panels(resid, fitted; acf_lags=acf_lags)
+        isempty(title) && (title = "MIDAS Residual Diagnostics")
+        p = _make_plot(panels; title=title, ncols=2)
     else
-        throw(ArgumentError("unknown view $view — use :weights or :fit"))
+        throw(ArgumentError("unknown view $view — use :weights, :fit, or :diagnostics"))
     end
     save_path !== nothing && save_plot(p, save_path)
     p

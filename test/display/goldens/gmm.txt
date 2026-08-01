@@ -1,15 +1,15 @@
- GMM Estimation Result
+GMM Estimation Result
 
- Parameters N
- Moments N
- Observations N
- Weighting two_step
- Converged Yes
- Iterations N
+Parameters N
+Moments N
+Observations N
+Weighting two_step
+Converged Yes
+Iterations N
 
- Coefficients
+Coefficients
 
- Coef. Std.Err. z P>|z| CI lower CI upper
+Coef. Std.Err. z P>|z| CI lower CI upper
 
- θ[N] N N N N N N
- θ[N] N N N N N N
+θ[N] N N N N N N
+θ[N] N N N N N N

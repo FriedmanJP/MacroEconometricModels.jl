@@ -393,6 +393,56 @@ Each row sums to 1. For multinomial logit, the same interface applies via `predi
 
 ---
 
+## Residuals
+
+A ``K``-category response has no single scalar residual, so the models here expose two distinct quantities. Choosing between them is a matter of what the diagnostic needs, not of convenience.
+
+**Per-category residuals.** [`residuals`](@ref) returns an ``n \times K`` matrix — one column per outcome category — for ordered logit, ordered probit, and multinomial logit alike. With the indicator ``d_{ij} = 1\{y_i = j\}``:
+
+```math
+r_{ij} = d_{ij} - \hat P_{ij},
+```
+
+where
+
+- ``d_{ij}`` is 1 when observation ``i`` falls in category ``j`` and 0 otherwise,
+- ``\hat P_{ij}`` is the fitted probability of category ``j`` for observation ``i``.
+
+Rows sum to exactly zero. The `kind` keyword selects `:response` (the default, above), `:pearson` (``r_{ij}/\sqrt{\hat P_{ij}(1-\hat P_{ij})}``), or `:deviance`, whose total sum of squares equals the model deviance ``-2\hat\ell``.
+
+```@example ordmult
+r = residuals(m)                       # n x K response residuals
+rd = residuals(m; kind=:deviance)
+round.([sum(abs2, rd), -2 * loglikelihood(m)], digits=6)
+```
+
+!!! warning "The shape differs from the binary models"
+    `residuals(::LogitModel)` and `residuals(::ProbitModel)` return a length-``n`` **vector** of deviance residuals. The ordered and multinomial versions return an ``n \times K`` **matrix**, because a ``K``-category response genuinely has ``K`` residuals per observation. Code written generically over binary models must account for this rather than assume a vector.
+
+**Generalized residuals.** For ordered models, [`generalized_residuals`](@ref) returns the length-``n`` vector
+
+```math
+e_i = \frac{f(c_{j-1} - x_i'\beta) - f(c_j - x_i'\beta)}{P(y_i = j \mid x_i)}, \qquad j = y_i,
+```
+
+where
+
+- ``c_0 = -\infty`` and ``c_K = +\infty``, so the boundary categories drop one term,
+- ``f`` is the logistic or standard-normal density.
+
+Equivalently ``e_i = \partial \ell_i / \partial (x_i'\beta)``, the score of observation ``i``'s log-likelihood with respect to its index — and for the probit case exactly ``E[\varepsilon_i \mid y_i, x_i]``. This is the vector that outer-product-of-gradients LM specification tests are built on (Chesher & Irish 1987), and the ordered score with respect to ``\beta`` is ``X'e``, so it is orthogonal to the regressors at the MLE:
+
+```@example ordmult
+e = generalized_residuals(m)
+round.(vec(maximum(abs, m.X' * e, dims=1)), digits=10)   # ~0 at the optimum
+```
+
+On a two-category fit ``e_i`` collapses to ``y_i - \hat p_i``, the familiar binary score residual — which is the sense in which it, not the residual matrix, is the true analogue of the binary case.
+
+`generalized_residuals` is deliberately **not** defined for multinomial logit: an unordered response has no single latent index, so there is no length-``n`` scalar score. Its score is ``X'(d_j - P_j)`` per alternative, which is precisely the `:response` residual matrix above.
+
+---
+
 ## Complete Example
 
 A full workflow estimating ordered and multinomial models on the same simulated survey data:
@@ -463,6 +513,8 @@ The ordered logit recovers the data-generating signs: `income` carries a positiv
 - Agresti, A. (2010). *Analysis of Ordinal Categorical Data*. 2nd ed. Wiley. ISBN 978-0-470-08289-8.
 - Brant, R. (1990). Assessing Proportionality in the Proportional Odds Model for Ordinal Logistic Regression. *Biometrics* 46(4), 1171-1178. [DOI](https://doi.org/10.2307/2532457)
 - Cameron, A. C. & Trivedi, P. K. (2005). *Microeconometrics: Methods and Applications*. Cambridge University Press. ISBN 978-0-521-84805-3.
+- Chesher, A. & Irish, M. (1987). Residual Analysis in the Grouped and Censored Normal Linear Model. *Journal of Econometrics* 34(1-2), 33-61. [DOI](https://doi.org/10.1016/0304-4076(87)90067-2)
+- Gourieroux, C., Monfort, A., Renault, E. & Trognon, A. (1987). Generalised Residuals. *Journal of Econometrics* 34(1-2), 5-32. [DOI](https://doi.org/10.1016/0304-4076(87)90065-9)
 - Greene, W. H. (2012). *Econometric Analysis*. 7th ed. Prentice Hall. ISBN 978-0-131-39538-1.
 - Hausman, J. A. & McFadden, D. (1984). Specification Tests for the Multinomial Logit Model. *Econometrica* 52(5), 1219-1240. [DOI](https://doi.org/10.2307/1910997)
 - McCullagh, P. (1980). Regression Models for Ordinal Data. *Journal of the Royal Statistical Society: Series B* 42(2), 109-142. [DOI](https://doi.org/10.1111/j.2517-6161.1980.tb01109.x)

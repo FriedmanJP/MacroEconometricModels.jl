@@ -8,11 +8,16 @@ OLS, WLS, IV/2SLS, logit, probit, ordered, and multinomial estimation for cross-
 
 ```@docs
 RegModel
+QuantileRegModel
+RDDResult
 LogitModel
 ProbitModel
 MarginalEffects
 MultinomialMarginalEffects
 OddsRatio
+WildClusterBootstrap
+AndersonRubinTest
+AndersonRubinCI
 ```
 
 ---
@@ -31,9 +36,25 @@ MultinomialLogitModel
 
 ```@docs
 estimate_reg
+conley_se
+estimate_qreg
+estimate_rdd
 estimate_iv
 estimate_logit
 estimate_probit
+```
+
+### Few-Cluster Inference
+
+```@docs
+wild_cluster_bootstrap
+```
+
+### Weak-Instrument-Robust Inference
+
+```@docs
+anderson_rubin_test
+anderson_rubin_ci
 ```
 
 ### Marginal Effects and Odds Ratios
@@ -72,6 +93,7 @@ estimate_oprobit
 estimate_mlogit
 brant_test
 hausman_iia
+generalized_residuals
 ```
 
 ---
@@ -83,9 +105,12 @@ PenalizedRegModel
 RobustRegModel
 HeckmanModel
 SelectionResult
+PoissonModel
+NegBinModel
+DispersionTest
 ```
 
 ```@autodocs
 Modules = [MacroEconometricModels]
-Pages   = ["reg/penalized.jl", "reg/robust.jl", "reg/tobit.jl", "reg/heckman.jl", "reg/selection.jl", "reg/stability.jl", "reg/diagnostics.jl"]
+Pages   = ["reg/penalized.jl", "reg/robust.jl", "reg/tobit.jl", "reg/heckman.jl", "reg/count.jl", "reg/selection.jl", "reg/stability.jl", "reg/diagnostics.jl"]
 ```

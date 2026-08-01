@@ -13,7 +13,7 @@
 - **StatsAPI interface**: `coef`, `vcov`, `predict`, `confint`, `stderror`, `nobs`, `r2`
 
 ```@setup reg
-using MacroEconometricModels, Random
+using MacroEconometricModels, Random, Distributions
 Random.seed!(42)
 ```
 
@@ -359,6 +359,280 @@ report(m)
 
 The cluster-robust standard errors for the intercept are substantially larger than the HC1 standard errors because the cluster-level shock induces within-group correlation that inflates the effective variance. The slope coefficient is less affected because the regressor `x1` varies independently across observations within each cluster.
 
+### Spatial Correlation: Conley Standard Errors
+
+When observations are geographic units, errors are correlated with *nearby* units and neither HC nor clustering is right: HC assumes independence outright, and clustering assumes correlation inside groups and none across them — a partition that rarely matches geography. Conley (1999) instead weights **every pair** by a kernel in their distance, so correlation decays smoothly and vanishes beyond a cutoff:
+
+```math
+S = \sum_i \sum_j K\!\left(d_{ij}\right) x_i u_i (x_j u_j)', \qquad V = (X'X)^{-1} S (X'X)^{-1}
+```
+
+where:
+- ``d_{ij}`` is the distance between observations ``i`` and ``j`` — great-circle kilometres for latitude/longitude, Euclidean otherwise
+- ``K`` is the Bartlett weight ``1 - d/\text{cutoff}`` (or uniform), zero beyond the cutoff
+- ``x_i u_i`` is the score contribution, as in every other sandwich on this page
+
+```@example reg
+lat = 40 .+ 4 .* rand(n)
+lon = -100 .+ 4 .* rand(n)
+region = @. Int(floor(lat - 40)) * 10 + Int(floor(lon + 100))
+
+# The common spatial component must be in the REGRESSOR as well as the error.
+shock_x = Dict(g => randn() for g in unique(region))
+shock_u = Dict(g => randn() for g in unique(region))
+x_spatial = [shock_x[region[i]] for i in 1:n] .+ 0.3 .* randn(n)
+u_spatial = [shock_u[region[i]] for i in 1:n] .+ 0.3 .* randn(n)
+
+Xs = hcat(ones(n), x_spatial)
+ms = estimate_reg(Xs * [1.0, 0.5] .+ u_spatial, Xs; cov_type=:hc0)
+cs = conley_se(ms; coords=hcat(lat, lon), cutoff=120.0,
+               kernel=:uniform, metric=:haversine, psd=false)
+
+(hc0_se = round(sqrt(ms.vcov_mat[2, 2]); digits=4),
+ conley_se = round(cs.se[2]; digits=4))
+```
+
+The Conley standard error is several times the HC0 one. In a 300-replication simulation of this design it was larger in **every** replication (mean ratio 2.8), and 95% confidence-interval coverage for the slope went from 44.7% under HC0 to 83.3% under Conley — HC0 badly overstates precision when the regressor and the error share a spatial component.
+
+!!! warning "The regressor has to be spatially correlated too"
+    Spatially correlated *errors* alone do not make HC wrong. The meat is built from ``x_i u_i``, so with an independent regressor ``E[x_i u_i \, x_j u_j] = E[x_i x_j]\,E[u_i u_j] = 0`` and the correction is asymptotically moot. It matters when the common spatial component is in both — which is the usual case for regional policy variables.
+
+!!! note "Cost and positive-semidefiniteness"
+    The estimator is ``O(n^2)``: every pair must be weighted. The kernel is zero beyond the cutoff, so distant pairs are skipped as soon as their distance is known.
+
+    Conley's ``S`` need not be positive semi-definite in finite samples. `psd=true` (the default) clips negative eigenvalues to zero and warns, as Stata's `acreg` does; the returned `adjusted` flag records whether it fired. Pass `psd=false` for the raw estimator.
+
+Setting `cutoff = 0` leaves only the own-observation term, so the estimator collapses to HC0 exactly — a useful sanity check on a new coordinate set.
+
+| Keyword | Type | Default | Description |
+|---------|------|---------|-------------|
+| `coords` | `AbstractMatrix` | — | ``n \times d`` positions; first two columns are latitude/longitude for `:haversine` |
+| `cutoff` | `Real` | — | Distance beyond which errors are uncorrelated (km for `:haversine`) |
+| `kernel` | `Symbol` | `:bartlett` | `:bartlett` (linear decay) or `:uniform` |
+| `metric` | `Symbol` | `:euclidean` | `:haversine` for latitude/longitude |
+| `time` | `AbstractVector` | `nothing` | Time index for the spatial-panel variant |
+| `time_cutoff` | `Int` | `0` | Newey-West lag cutoff multiplying the spatial weight |
+| `psd` | `Bool` | `true` | Clip negative eigenvalues of the meat |
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `vcov` | `Matrix{T}` | Conley spatial-HAC covariance matrix |
+| `se` | `Vector{T}` | Standard errors (square roots of the diagonal) |
+| `adjusted` | `Bool` | Whether the PSD clipping was applied |
+
+For a spatial **panel**, pass `time` and `time_cutoff`: the spatial kernel is multiplied by a Bartlett weight in ``|t_i - t_j|``, the standard Conley–Newey-West combination.
+
+### Few Clusters: The Wild Cluster Bootstrap
+
+The consistency of the cluster-robust sandwich is asymptotic in ``G``. With few clusters --- the routine situation in difference-in-differences and policy evaluation, where treatment varies at the state or region level --- the cluster-robust ``t`` over-rejects severely: at ``G = 6`` a nominal 5% test rejects a true null roughly 15% of the time. `wild_cluster_bootstrap` implements the remedy of Cameron, Gelbach & Miller (2008), matching Stata `boottest`.
+
+The **restricted** (WCR) variant is the default and the recommended one. Estimate the model imposing ``H_0: \beta_j = r``, giving the restricted fit ``\tilde\beta`` and residuals ``\tilde u``, then generate bootstrap outcomes by flipping each **cluster's** residuals as a block:
+
+```math
+y_i^* = x_i'\tilde\beta + v_{g(i)}\,\tilde u_i, \qquad v_g \sim \text{Rademacher}
+```
+
+where:
+- ``v_g`` is one weight per cluster ``g``, ``\pm 1`` with equal probability
+- ``g(i)`` is the cluster of observation ``i``
+- the whole cluster's residuals share the weight, which is what preserves the within-cluster correlation
+
+Re-estimating on each ``y^*`` and recomputing the cluster-robust ``t`` gives the bootstrap distribution; the p-value is the share of ``|t^*|`` at least as large as ``|t_{obs}|``, and the confidence interval comes from inverting the test over the null value.
+
+```@example reg
+# Six clusters — far too few for the cluster-robust normal approximation
+G_few, n_per = 6, 30
+n_few = G_few * n_per
+cl_few = repeat(1:G_few, inner=n_per)
+X_few = hcat(ones(n_few), randn(n_few))
+u_few = repeat(randn(G_few), inner=n_per) + 0.5 * randn(n_few)
+y_few = X_few * [1.0, 0.0] + u_few          # true slope is zero
+
+m_few = estimate_reg(y_few, X_few; cov_type=:cluster, clusters=cl_few,
+                     varnames=["(Intercept)", "x1"])
+wcb = wild_cluster_bootstrap(m_few, "x1", 0.0; clusters=cl_few)
+report(wcb)
+```
+
+The report puts the bootstrap p-value next to the cluster-robust normal p-value, which is the comparison that matters: the latter is the one that over-rejects. With ``G = 6`` there are only ``2^6 = 64`` distinct Rademacher sign vectors, so the procedure **enumerates all of them** rather than sampling — the test then carries no bootstrap simulation error at all, and the p-value takes values on multiples of ``1/65``.
+
+Weights are `:rademacher` by default; `:webb` gives the six-point distribution ``\{\pm\sqrt{1/2}, \pm 1, \pm\sqrt{3/2}\}``, which has more support points and is preferred when ``G`` is very small (MacKinnon & Webb 2018). The function also dispatches on a fixed-effects [`PanelRegModel`](@ref), defaulting the clusters to the panel entity ids:
+
+```julia
+pm = estimate_xtreg(pd, :y, [:x])
+wild_cluster_bootstrap(pm, "x", 0.0)
+```
+
+| Keyword | Type | Default | Description |
+|---------|------|---------|-------------|
+| `clusters` | `AbstractVector` | required (`RegModel`) | Cluster assignment per observation |
+| `n_boot` | `Int` | `999` | Bootstrap replications (ignored when the sign space is enumerated) |
+| `weights` | `Symbol` | `:rademacher` | `:rademacher` or `:webb` |
+| `imposenull` | `Bool` | `true` | Impose the null (WCR); `false` gives the unrestricted WCU |
+| `ci` | `Bool` | `true` | Compute the inverted-test confidence interval |
+| `level` | `Real` | `0.95` | CI coverage |
+| `ci_gridpoints` | `Int` | `25` | Grid used to bracket the CI crossings |
+| `enumerate` | `Bool` | `nothing` | Force or forbid exact enumeration of the ``2^G`` sign vectors |
+| `rng` | `AbstractRNG` | `default_rng()` | Random number generator |
+
+`WildClusterBootstrap{T}` return value:
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `estimate` | `T` | Unrestricted point estimate ``\hat\beta_j`` |
+| `t_stat` | `T` | Observed cluster-robust ``t`` for the restriction |
+| `p_value` | `T` | Symmetric bootstrap p-value |
+| `p_value_equaltail` | `T` | Equal-tail bootstrap p-value |
+| `p_value_asymptotic` | `T` | Cluster-robust normal p-value, for comparison |
+| `ci_lower` / `ci_upper` | `T` | Inverted-test confidence interval (`NaN` when `ci=false`) |
+| `t_boot` | `Vector{T}` | Bootstrap ``t`` distribution at the null |
+| `n_clusters` | `Int` | Number of clusters |
+| `enumerated` | `Bool` | Whether all ``2^G`` sign vectors were enumerated exactly |
+
+---
+
+## Quantile Regression
+
+OLS answers "how does `x` shift the **average** of `y`?" Quantile regression (Koenker & Bassett 1978) answers it for any point of the conditional distribution, which is what you want when a covariate compresses or fans out the outcome rather than merely relocating it. It minimizes the asymmetric **check-function** loss
+
+```math
+\min_\beta \sum_i \rho_\tau\!\left(y_i - x_i'\beta\right), \qquad \rho_\tau(u) = u\left(\tau - \mathbf{1}\{u < 0\}\right)
+```
+
+where:
+- ``\tau \in (0,1)`` is the quantile — ``\tau = 0.5`` is median (least-absolute-deviations) regression
+- ``\rho_\tau`` penalizes over-prediction by ``1-\tau`` and under-prediction by ``\tau``, so the minimizer is the conditional ``\tau``-quantile
+
+```@example reg
+xq = 2 .* rand(n)
+yq = 1.0 .+ 0.5 .* xq .+ (1.0 .+ 0.5 .* xq) .* randn(n)   # spread grows with x
+Xq = hcat(ones(n), xq)
+
+mq = estimate_qreg(yq, Xq, [0.1, 0.5, 0.9]; varnames=["(Intercept)", "x"])
+report(mq)
+```
+
+The slope rises with ``\tau``. That is the point of the exercise: the error scale here grows with ``x``, so the upper conditional quantiles of ``y`` separate from the lower ones as ``x`` increases — a spreading that a single OLS slope cannot express. In this location-scale design the true quantile line is available in closed form: with ``y = a + bx + (1 + cx)z`` and ``z \sim N(0,1)``, the ``\tau``-quantile is ``a + z_\tau + (b + c\,z_\tau)x``, so the slope is exactly ``b + c\,z_\tau``.
+
+### Solver and standard errors
+
+The check loss is piecewise linear, so the optimum is a **basic solution**: it interpolates ``k`` observations exactly. The solver minimizes by iteratively reweighted least squares with the weight floor annealed toward zero, which drives the iterate onto that vertex — verified against exhaustive enumeration of all ``k``-subsets on small problems, agreeing to ``10^{-12}``–``10^{-9}``.
+
+| `se` | Estimator |
+|------|-----------|
+| `:iid` | Koenker sparsity form ``\tau(1-\tau)\,s(\tau)^2 (X'X)^{-1}``, the Stata `qreg` default |
+| `:robust` | Powell kernel sandwich, allowing the conditional density at the quantile to vary with ``x`` |
+| `:boot` | xy-pair bootstrap, assuming nothing about that density |
+
+The sparsity ``s(\tau)`` is estimated by the Siddiqui–Hendricks–Koenker difference quotient with the Hall–Sheather bandwidth. On a median regression with standard normal errors all three agree with the analytic ``\sqrt{\pi/2}/\sqrt{n}``.
+
+| Keyword | Type | Default | Description |
+|---------|------|---------|-------------|
+| `tau` | `Real` or `AbstractVector` | `0.5` | Quantile(s) in ``(0,1)``; one fit per quantile |
+| `se` | `Symbol` | `:iid` | `:iid`, `:robust`, or `:boot` |
+| `n_boot` | `Int` | `500` | Bootstrap replications when `se = :boot` |
+| `alpha` | `Real` | `0.05` | Level for the Hall–Sheather bandwidth |
+| `varnames` | `Vector{String}` | `nothing` | Coefficient names |
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `taus` | `Vector{T}` | Quantiles fitted |
+| `beta` | `Matrix{T}` | ``k \times n_\tau`` coefficients, one column per quantile |
+| `stderr` | `Matrix{T}` | ``k \times n_\tau`` standard errors |
+| `vcov_mats` | `Vector{Matrix{T}}` | Covariance per quantile |
+| `objective` | `Vector{T}` | Check-function loss at the optimum |
+| `pseudo_r2` | `Vector{T}` | Koenker–Machado ``R^1(\tau)`` — loss relative to the intercept-only fit |
+| `converged` | `Vector{Bool}` | Solver convergence per quantile |
+
+!!! note "`pseudo_r2` is not an OLS `R²`"
+    ``R^1(\tau) = 1 - \hat V(\tau)/\tilde V(\tau)`` compares check-function losses, not variances, and it is quantile-specific. It is not comparable across ``\tau`` or against an OLS ``R^2``, and it is typically much smaller.
+
+!!! warning "The median fit is not unique for an intercept-only model with even `n`"
+    Any point between the two middle order statistics minimizes the loss identically, so with even ``n`` the returned intercept can differ from `Statistics.quantile(y, 0.5)` by up to half the gap between them. This is a property of the estimator, not of the solver.
+
+---
+
+## Regression Discontinuity
+
+When treatment is assigned by whether a **running variable** crosses a cutoff, units just above and just below are comparable, and the jump in the conditional mean of the outcome at the cutoff identifies a local treatment effect. `estimate_rdd` implements the modern standard: local polynomial regression with Calonico, Cattaneo & Titiunik (2014) robust bias-corrected inference.
+
+```math
+\tau = \lim_{x \downarrow c}\mathbb{E}[y \mid x] - \lim_{x \uparrow c}\mathbb{E}[y \mid x]
+```
+
+Each limit is a weighted polynomial fit on its own side of the cutoff, using observations within a bandwidth `h` and a kernel (triangular by default) that down-weights points further away. The estimate is the difference of the two fitted intercepts.
+
+```@example reg
+xr = 2 .* rand(n) .- 1                              # running variable
+yr = (@. 0.5 + 1.2 * xr + 0.4 * xr^2 + 0.8 * (xr >= 0)) .+ 0.3 .* randn(n)
+
+rd = estimate_rdd(yr, xr; cutoff=0.0)
+report(rd)
+```
+
+The true jump is 0.8. The MSE-optimal bandwidth is chosen automatically by the CCT plug-in rule, which balances the variance term of order ``1/(nh)`` against the squared bias of order ``h^{2(p+1)}``.
+
+### Why the robust interval
+
+Three quantities are reported, and the gap between them is the whole reason to prefer CCT over naive local linear regression:
+
+| | Estimate | Standard error |
+|---|---|---|
+| conventional | local polynomial of order ``p`` at ``h`` | its own variance |
+| bias-corrected | conventional minus the estimated leading bias | conventional SE |
+| **robust** | bias-corrected | variance that *also* accounts for having estimated the bias |
+
+The MSE-optimal bandwidth is deliberately large enough that bias is not negligible — that is what makes it optimal for the point estimate. But it means the conventional interval, which ignores that bias, is centred in the wrong place and too narrow. Simulated on a design with curvature on one side of the cutoff only (so the two intercept biases cannot cancel), with the bandwidth held fixed to make the bias bite:
+
+| Bandwidth | Conventional bias | Bias-corrected | Conventional coverage | Robust coverage |
+|---|---|---|---|---|
+| ``h = 0.3`` | ``+0.035`` | ``-0.001`` | 83.2% | **94.5%** |
+| ``h = 0.6`` | ``+0.144`` | ``-0.001`` | 0.0% | **94.8%** |
+| ``h = 0.9`` | ``+0.325`` | ``-0.000`` | 0.0% | **97.0%** |
+
+The correction removes essentially all of the bias, and the robust interval holds its nominal level where the conventional one collapses entirely. **Report `ci_robust`.**
+
+!!! note "At the MSE-optimal bandwidth the correction may look inert"
+    On a smooth design the plug-in bandwidth is often small enough that the conventional estimator is already nearly unbiased, in which case the bias correction changes little and only widens the interval. That is not a failure — it is the correction reporting that there was nothing to fix. The table above uses a fixed, deliberately wide bandwidth to exhibit the regime where it matters.
+
+!!! warning "Symmetric curvature cancels"
+    If the conditional mean has the *same* curvature on both sides of the cutoff, the two intercept biases are nearly equal and cancel in the difference. Bias in an RD estimate comes from curvature that **differs** across the cutoff, which is also why a specification check should look at each side separately.
+
+### Fuzzy designs
+
+When crossing the cutoff shifts the *probability* of treatment rather than switching it deterministically, pass the treatment indicator as `fuzzy`. The estimate becomes the local Wald ratio — the outcome jump divided by the treatment jump — with the ratio's variance obtained by the delta method:
+
+```@example reg
+prob = @. 0.25 + 0.5 * (xr >= 0)
+dr = Float64.(rand(n) .< prob)
+yf = (@. 0.5 + 0.8 * xr + 1.0 * dr) .+ 0.3 .* randn(n)
+
+rdf = estimate_rdd(yf, xr; cutoff=0.0, fuzzy=dr)
+(first_stage = round(rdf.first_stage; digits=3),
+ wald_ratio = round(rdf.tau_bias_corrected; digits=3))
+```
+
+The first stage recovers the 0.5 jump in treatment probability and the ratio recovers the effect on the treated.
+
+| Keyword | Type | Default | Description |
+|---------|------|---------|-------------|
+| `cutoff` | `Real` | `0.0` | Threshold in the running variable |
+| `fuzzy` | `AbstractVector` | `nothing` | Treatment indicator for a fuzzy design |
+| `kernel` | `Symbol` | `:triangular` | `:triangular`, `:epanechnikov`, or `:uniform` |
+| `p` | `Int` | `1` | Polynomial order (1 = local linear) |
+| `h`, `b` | `Real` | `nothing` | Main and pilot bandwidths; omit for the MSE-optimal plug-in |
+| `level` | `Real` | `0.95` | Confidence level |
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `tau_conventional`, `tau_bias_corrected` | `T` | Point estimates of the jump |
+| `se_conventional`, `se_robust` | `T` | Standard errors |
+| `ci_conventional`, `ci_robust` | `Tuple{T,T}` | Confidence intervals |
+| `pvalue_robust`, `z_robust` | `T` | Robust test of no effect |
+| `h`, `b` | `T` | Main and pilot bandwidths used |
+| `n_left`, `n_right` | `Int` | Effective observations inside the window per side |
+| `first_stage` | `Union{Nothing,T}` | Treatment jump (fuzzy designs only) |
+
 ---
 
 ## Long-Run Variance (HAC) Estimation
@@ -543,9 +817,76 @@ The `report()` footer adds the LIML least-variance ratio ``\hat{\kappa}`` and th
 Anderson (1949) likelihood-ratio overidentification statistic ``n\ln\hat{\kappa} \sim \chi^2(m - k)``.
 For a user-specified value pass `method=:kclass` with the `k` keyword.
 
-Weak-instrument *inference* (Anderson–Rubin, Kleibergen–Paap, Stock–Yogo critical values) is a
-separate layer tracked in issue #343; this entry point delivers the *estimators* those tests
-condition on.
+### Weak-Instrument-Robust Inference: Anderson-Rubin
+
+The first-stage F, Cragg-Donald and Kleibergen-Paap statistics *detect* weak instruments; they do not repair the inference. Under weak identification the 2SLS Wald interval under-covers no matter how large the sample, because the estimator is not approximately normal around the truth. The **Anderson-Rubin (1949)** test has correct size at *any* instrument strength, and inverting it gives a confidence set with correct coverage.
+
+Subtract the hypothesized effect to form ``\tilde y = y - X_{\text{endog}}\beta_0``. Under ``H_0`` this depends on the excluded instruments only through the error, so their coefficients in the auxiliary regression are zero:
+
+```math
+\tilde y = W\gamma_W + Z_{\text{excl}}\gamma + u, \qquad H_0:\ \gamma = 0
+```
+
+where:
+- ``W`` holds the included exogenous regressors and ``Z_{\text{excl}}`` the excluded instruments
+- ``q`` is the number of excluded instruments
+- the AR statistic is the Wald test of ``\gamma = 0`` divided by ``q``, referred to ``F(q, n-m)`` under homoskedasticity and to ``\chi^2_q/q`` with robust or clustered weighting
+
+The restriction ``\gamma = 0`` holds under ``H_0`` whatever the first stage looks like — which is exactly why the test's size does not depend on instrument strength.
+
+```@example reg
+# Deliberately weak instrument: the first stage explains almost nothing
+n_w = 200
+z_w = randn(n_w)
+v_w = randn(n_w)
+u_w = 0.8 * v_w + 0.6 * randn(n_w)
+x_w = 0.03 * z_w + v_w                       # first-stage coefficient ≈ 0
+y_w = 1.0 * x_w + u_w                        # true effect is 1.0
+
+m_weak = estimate_iv(y_w, hcat(ones(n_w), x_w), hcat(ones(n_w), z_w);
+                     endogenous=[2], cov_type=:ols,
+                     varnames=["(Intercept)", "x"])
+ar_ci = anderson_rubin_ci(m_weak; cov_type=:ols)
+report(ar_ci)
+```
+
+The Wald interval is short and confidently wrong; the AR set is the **whole real line**, which is the honest answer when the instrument carries almost no information about ``x`` — the data simply do not identify the effect. `anderson_rubin_ci` never forces an interval: with weak instruments the set can be unbounded on one or both sides, with over-identification it can be a union of disjoint components or **empty** (signalling that no ``\beta`` reconciles the over-identifying restrictions), and on a narrow search range it can be the whole line. Each case is reported as such.
+
+When the first stage is strong the two nearly coincide, so nothing is lost by reporting AR routinely:
+
+```@example reg
+ar_strong = anderson_rubin_ci(m_iv; cov_type=:ols)
+report(ar_strong)
+```
+
+A single hypothesized value can be tested directly with `anderson_rubin_test`, which also accepts several endogenous regressors at once:
+
+```@example reg
+report(anderson_rubin_test(m_iv, 0.8; cov_type=:ols))
+```
+
+When the reported first-stage F falls below the Stock-Yogo 10% critical value, `report(model)` prints a note pointing at `anderson_rubin_ci` rather than leaving the Wald intervals to be read at face value.
+
+| Keyword | Type | Default | Description |
+|---------|------|---------|-------------|
+| `level` | `Real` | `0.95` | Nominal coverage of the confidence set |
+| `n_grid` | `Int` | `1001` | Grid points over the search range |
+| `span` | `Real` | `20` | Half-width of the default range, in 2SLS standard errors |
+| `grid` | `AbstractVector` | `nothing` | Explicit grid, overriding `span`/`n_grid` |
+| `cov_type` | `Symbol` | model's | `:ols`, `:hc0`–`:hc3`, or `:cluster` |
+| `clusters` | `AbstractVector` | `nothing` | Required when `cov_type=:cluster` |
+
+`AndersonRubinCI{T}` return value:
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `intervals` | `Vector{Tuple{T,T}}` | Connected components; unbounded sides carry `±Inf` |
+| `is_empty` / `is_whole_line` | `Bool` | Degenerate shapes |
+| `bounded` | `Bool` | Whether the set lies strictly inside the searched range |
+| `critical_value` | `T` | AR critical value at `level` |
+| `wald_lower` / `wald_upper` | `T` | 2SLS Wald interval, for comparison |
+| `estimate` | `T` | 2SLS point estimate |
+| `df1` | `Int` | Number of excluded instruments ``q`` |
 
 ### Keyword Arguments
 
@@ -1088,6 +1429,88 @@ report(heck_ml)
 
 ---
 
+## Count Data: Poisson and Negative Binomial
+
+Event counts — bank failures, patent filings, sovereign-default episodes, central-bank communication events — are nonnegative integers, often with a mass at zero. OLS on a count ignores that support and can predict negative means; the log link keeps the fit on the right scale.
+
+[`estimate_poisson`](@ref) fits
+
+```math
+E[y_i \mid x_i] = \mu_i = \exp(x_i'\beta + \text{offset}_i),
+\qquad \mathrm{Var}[y_i \mid x_i] = \mu_i,
+```
+
+where
+
+- ``y_i`` is a nonnegative integer count,
+- ``\mu_i`` is the conditional mean,
+- ``\text{offset}_i`` enters the index with coefficient fixed at 1 — pass `exposure` to set it to ``\log(\text{exposure}_i)`` and model a *rate* rather than a count.
+
+The equality of mean and variance is the Poisson model's strongest and least credible assumption. It matters far less than it appears to: the Poisson quasi-MLE is consistent for ``\beta`` whenever the *mean* is correctly specified, whatever the variance does (Gourieroux, Monfort & Trognon 1984). What breaks under overdispersion is not the point estimate but the standard error.
+
+!!! note "Why `cov_type` defaults to `:robust`"
+    `estimate_poisson` reports the Gourieroux–Monfort–Trognon sandwich ``A^{-1}BA^{-1}`` with ``A = X'\mathrm{diag}(\mu)X`` and ``B = X'\mathrm{diag}((y-\mu)^2)X`` by default. The information-matrix errors (`cov_type=:mle`) are valid *only* under equidispersion; on overdispersed data they understate uncertainty severely. In the example below the naive errors are about 40 % too small.
+
+**Poisson with robust errors.** `report()` shows the log-likelihood, the deviance against the intercept-only null, and the coefficient table:
+
+```@example reg
+n = 400
+Xc = hcat(ones(n), randn(n), Float64.(rand(n) .< 0.4))
+mu_true = exp.(0.5 .+ 0.6 .* Xc[:, 2] .- 0.4 .* Xc[:, 3])
+y_cnt = Float64.(rand.(Poisson.(mu_true)))
+pois = estimate_poisson(y_cnt, Xc; varnames=["const", "x1", "x2"])
+report(pois)
+```
+
+Coefficients are semi-elasticities: ``\beta_j`` is the proportional change in the expected count per unit of ``x_j``. [`incidence_rate_ratio`](@ref) exponentiates them into the multiplicative form most readers prefer, with delta-method standard errors and confidence intervals formed on the log scale:
+
+```@example reg
+report(incidence_rate_ratio(pois))
+```
+
+**Testing for overdispersion.** [`dispersion_test`](@ref) runs the Cameron & Trivedi (1990) auxiliary regression of ``z_i = [(y_i-\hat\mu_i)^2 - y_i]/\hat\mu_i`` on ``\hat\mu_i`` (the NB2 alternative ``\mathrm{Var} = \mu + \alpha\mu^2``) and on a constant (the NB1 alternative ``\mathrm{Var} = (1+\alpha)\mu``). A significantly positive ``\hat\alpha`` rejects equidispersion:
+
+```@example reg
+overdisp = 0.5
+y_od = Float64.(rand.(NegativeBinomial.(1 / overdisp, 1 ./ (1 .+ overdisp .* mu_true))))
+report(dispersion_test(estimate_poisson(y_od, Xc)))
+```
+
+**Negative Binomial 2.** When the test fires, [`estimate_nbreg`](@ref) keeps the same mean but lets the variance grow quadratically:
+
+```math
+E[y_i \mid x_i] = \mu_i, \qquad \mathrm{Var}[y_i \mid x_i] = \mu_i + \alpha\mu_i^2 .
+```
+
+``\alpha`` is estimated jointly with ``\beta`` in the ``(\beta, \log\alpha)`` parameterization, so it is positive by construction, and is reported with its own delta-method standard error. ``\alpha \to 0`` is the Poisson limit.
+
+```@example reg
+nb = estimate_nbreg(y_od, Xc; varnames=["const", "x1", "x2"])
+report(nb)
+```
+
+The coefficients move little relative to Poisson — both are consistent for the mean — but the standard errors widen to reflect the true variance.
+
+!!! warning "R reports `theta`, not `alpha`"
+    `MASS::glm.nb` parameterizes the same model by ``\theta = 1/\alpha``. Invert before comparing. The coefficient standard errors also follow a different convention: `glm.nb` computes them with ``\theta`` held fixed, whereas `estimate_nbreg` uses the ``(\beta,\beta)`` block of the inverse joint ``(\beta, \log\alpha)`` Hessian, which charges for ``\alpha`` having been estimated. The expected information is block diagonal (Lawless 1987), so the two agree asymptotically.
+
+**Marginal effects.** A count-model coefficient is a semi-elasticity, not a marginal effect. [`marginal_effects`](@ref) returns ``\partial E[y]/\partial x_j = \beta_j \mu_i`` averaged over the sample for continuous regressors, and the discrete change ``E[y \mid x_j{=}1] - E[y \mid x_j{=}0]`` for binary ones:
+
+```@example reg
+report(marginal_effects(pois))
+```
+
+| Keyword | Type | Default | Description |
+|---|---|---|---|
+| `offset` | `AbstractVector` | `nothing` | Added to the index with coefficient 1 |
+| `exposure` | `AbstractVector` | `nothing` | Strictly positive exposure; enters as `log(exposure)` |
+| `cov_type` | `Symbol` | `:robust` | `:robust` (QMLE sandwich), `:mle`, `:hc1`, `:hc2`, `:hc3`, `:cluster` |
+| `clusters` | `AbstractVector` | `nothing` | Cluster assignments, required for `:cluster` |
+
+Zero-inflated and hurdle models are not implemented.
+
+---
+
 ## Robust Regression: M- and MM-Estimation
 
 Ordinary least squares breaks down under outliers: a single gross error, given full weight by the squared-error loss, can dominate the fit. Robust regression bounds each observation's influence. [`estimate_robust`](@ref) implements two classical strategies.
@@ -1287,6 +1710,15 @@ The OLS estimate of the return to education is biased upward because ability is 
 
 ## References
 
+- Cameron, A. C., Gelbach, J. B., & Miller, D. L. (2008). Bootstrap-Based Improvements for Inference with Clustered Errors.
+  *Review of Economics and Statistics*, 90(3), 414-427. [DOI](https://doi.org/10.1162/rest.90.3.414)
+
+- MacKinnon, J. G., & Webb, M. D. (2018). The Wild Bootstrap for Few (Treated) Clusters.
+  *The Econometrics Journal*, 21(2), 114-135. [DOI](https://doi.org/10.1111/ectj.12107)
+
+- Roodman, D., MacKinnon, J. G., Nielsen, M. Ø., & Webb, M. D. (2019). Fast and Wild: Bootstrap Inference in Stata Using boottest.
+  *The Stata Journal*, 19(1), 4-60. [DOI](https://doi.org/10.1177/1536867X19830877)
+
 - Aitken, A. C. (1936). On Least Squares and Linear Combination of Observations.
   *Proceedings of the Royal Society of Edinburgh*, 55, 42-48. [DOI](https://doi.org/10.1017/S0370164600014346)
 
@@ -1325,7 +1757,21 @@ The OLS estimate of the return to education is biased upward because ability is 
 - Friedman, J., Hastie, T., & Tibshirani, R. (2010). Regularization Paths for Generalized Linear Models via Coordinate Descent.
   *Journal of Statistical Software*, 33(1), 1-22. [DOI](https://doi.org/10.18637/jss.v033.i01)
 
+- Cameron, A. C., & Trivedi, P. K. (1986). Econometric Models Based on Count Data: Comparisons and Applications of Some Estimators and Tests.
+  *Journal of Applied Econometrics*, 1(1), 29-53. [DOI](https://doi.org/10.1002/jae.3950010104)
+
+- Cameron, A. C., & Trivedi, P. K. (1990). Regression-Based Tests for Overdispersion in the Poisson Model.
+  *Journal of Econometrics*, 46(3), 347-364. [DOI](https://doi.org/10.1016/0304-4076(90)90014-K)
+
+- Cameron, A. C., & Trivedi, P. K. (2013). *Regression Analysis of Count Data*. 2nd ed. Cambridge: Cambridge University Press. [DOI](https://doi.org/10.1017/CBO9781139013567)
+
+- Gourieroux, C., Monfort, A., & Trognon, A. (1984). Pseudo Maximum Likelihood Methods: Applications to Poisson Models.
+  *Econometrica*, 52(3), 701-720. [DOI](https://doi.org/10.2307/1913472)
+
 - Greene, W. H. (2018). *Econometric Analysis*. 8th ed. New York: Pearson. ISBN 978-0-13-446136-6.
+
+- Lawless, J. F. (1987). Negative Binomial and Mixed Poisson Regression.
+  *The Canadian Journal of Statistics*, 15(3), 209-225. [DOI](https://doi.org/10.2307/3314912)
 
 - Hoerl, A. E., & Kennard, R. W. (1970). Ridge Regression: Biased Estimation for Nonorthogonal Problems.
   *Technometrics*, 12(1), 55-67. [DOI](https://doi.org/10.1080/00401706.1970.10488634)

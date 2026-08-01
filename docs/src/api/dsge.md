@@ -25,6 +25,8 @@ OccBinConstraint
 OccBinRegime
 OccBinSolution
 OccBinIRF
+DeterminacyMap
+PrunedStateSpace
 ```
 
 ---
@@ -89,6 +91,16 @@ fevd(::BayesianDSGE{T}, ::Int) where {T<:AbstractFloat}
 simulate
 solve_lyapunov
 analytical_moments
+pruned_state_space
+```
+
+### Determinacy Regions
+
+```@docs
+determinacy_region
+determinacy_boundary
+determinacy_label
+DETERMINACY_CODES
 ```
 
 ---
@@ -130,6 +142,17 @@ dynare_prior
 InverseGamma1
 ```
 
+### Observation Handling for Trending Data
+
+```@docs
+apply_prefilter
+invert_prefilter
+PrefilterSpec
+observation_trends
+ObservationTrends
+detect_trend
+```
+
 ---
 
 ## Occasionally Binding Constraints
@@ -160,6 +183,8 @@ HASteadyState
 HADSGESolution
 KrusellSmithSolution
 DenHaanAccuracy
+HAGridDiagnostics
+LaborSupply
 ```
 
 ### Heterogeneous-Agent Solvers and Analysis
@@ -172,9 +197,80 @@ distribution_irf
 inequality_irf
 simulate_panel
 den_haan_test
+ha_grid_diagnostics
+adaptive_asset_grid
+adapt_ha_grid
+labor_supply
+labor_policy
 irf(::HADSGESolution{T}, ::Int) where {T<:AbstractFloat}
 fevd(::HADSGESolution{T}, ::Int) where {T<:AbstractFloat}
 report(::DenHaanAccuracy{T}) where {T}
+```
+
+### Sequence-Space Block Composition
+
+```@docs
+AbstractSSJBlock
+SimpleBlock
+HetBlock
+SSJModel
+SSJGEJacobian
+SSJImpulseResponse
+combine_blocks
+block_jacobian
+ssj_jacobian
+ssj_irf
+ssj_arg_order
+report(::SSJModel{T}) where {T}
+report(::SSJGEJacobian{T}) where {T}
+report(::SSJImpulseResponse{T}) where {T}
+```
+
+### Discrete-Continuous Choice (DCEGM)
+
+```@docs
+DCEGMProblem
+DCEGMSolution
+DCEGMDistribution
+dcegm_solve
+dcegm_policy
+dcegm_choice_probabilities
+dcegm_threshold
+dcegm_simulate
+dcegm_retirement_model
+report(::DCEGMSolution{T}) where {T}
+report(::DCEGMDistribution{T}) where {T}
+```
+
+---
+
+### Winberry (2018) Parametric Distributions
+
+```@docs
+ParametricDensity
+WinberryFamily
+fit_parametric_density
+parametric_density
+parametric_moments
+fit_winberry
+winberry_moments
+winberry_histogram
+winberry_quadrature
+```
+
+---
+
+### Life-Cycle Overlapping Generations
+
+```@docs
+LifeCycleOLG
+LifeCycleSteadyState
+lifecycle_steady_state
+lifecycle_policies
+lifecycle_distribution
+lifecycle_income
+lifecycle_survival
+report(::LifeCycleSteadyState{T}) where {T}
 ```
 
 ---
@@ -188,6 +284,8 @@ CTSteadyState
 CTTransition
 CTTwoAsset
 CTTwoAssetSolution
+CTTwoAssetGE
+CTTwoAssetTransition
 ```
 
 ### Continuous-Time Solvers
@@ -198,8 +296,14 @@ ct_kfe
 ct_steady_state
 ct_mit_shock
 ct_two_asset_solve
+ct_two_asset_ge
+ct_two_asset_mit
+hand_to_mouth
+ceiling_mass
+ct_two_asset_stationarity
 report(::IO, ::CTSteadyState{T}) where {T}
 report(::IO, ::CTTwoAssetSolution{T}) where {T}
+report(::IO, ::CTTwoAssetGE{T}) where {T}
 ```
 
 ---

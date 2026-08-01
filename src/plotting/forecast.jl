@@ -10,6 +10,69 @@ VECMForecast, FactorForecast, LPForecast.
 """
 
 # =============================================================================
+# Shared history/fan panel builder (PLT-18) — every multi-panel forecast type can
+# now draw a pre-sample "History" line joined to the dashed forecast fan, exactly
+# like ARIMA/Volatility, plus a vertical forecast-origin reference line.
+# =============================================================================
+
+# Validate a `history=` argument against the forecast width and the panels drawn.
+# A matrix must have one column per forecast series; a bare vector is only allowed
+# when a single variable is selected (plotrule Robustness: misaligned aux series).
+function _fc_validate_history(history, n_panels::Int, width::Int)
+    history === nothing && return nothing
+    if history isa AbstractMatrix
+        size(history, 2) == width || throw(ArgumentError(
+            "history has $(size(history, 2)) columns; expected $width to match the forecast width"))
+    elseif history isa AbstractVector
+        n_panels == 1 || throw(ArgumentError(
+            "a vector history is only valid when a single variable is selected; " *
+            "$(n_panels) panels are drawn — pass a T×$(width) matrix or select one var"))
+    end
+    nothing
+end
+
+# The history column for panel `vi` (bare vector passes through; matrix → column vi).
+_fc_history_col(history, vi::Int) = history === nothing ? nothing :
+    (history isa AbstractVector ? history : @view history[:, vi])
+
+# Build one forecast panel's JS: solid History line (when supplied) + dashed forecast
+# fan + CI band + a vertical forecast-origin reference line when history is present.
+function _forecast_panel_js(id::String, fc::AbstractVector, lo::AbstractVector,
+                            hi::AbstractVector; has_ci::Bool, fc_name::String,
+                            history::Union{AbstractVector,Nothing}, n_history::Int,
+                            base_color::String=_PLOT_SERIES[1],
+                            xlabel::String, ylabel::String,
+                            extra_line::Union{AbstractVector,Nothing}=nothing,
+                            extra_name::String="Reference")
+    data_json = _forecast_data_json(fc, lo, hi; history=history, n_history=n_history,
+                                    extra=extra_line)
+    has_extra = extra_line !== nothing
+    if history === nothing
+        names = has_extra ? [fc_name, extra_name] : [fc_name]
+        colors = has_extra ? [base_color, _PLOT_SERIES[3]] : [base_color]
+        keys = has_extra ? ["fc", "extra"] : ["fc"]
+        dash = has_extra ? ["", "4,4"] : [""]
+        s_json = _series_json(names, colors; keys=keys, dash=dash)
+        bands = has_ci ?
+            "[{\"lo_key\":\"ci_lo\",\"hi_key\":\"ci_hi\",\"color\":\"$(base_color)\",\"alpha\":$(_PLOT_CI_ALPHA)}]" : "[]"
+        refs = "[]"
+    else
+        names = has_extra ? ["History", fc_name, extra_name] : ["History", fc_name]
+        colors = has_extra ? [_PLOT_SERIES[1], _PLOT_SERIES[2], _PLOT_SERIES[3]] :
+                             [_PLOT_SERIES[1], _PLOT_SERIES[2]]
+        keys = has_extra ? ["hist", "fc", "extra"] : ["hist", "fc"]
+        dash = has_extra ? ["", "6,3", "4,4"] : ["", "6,3"]
+        s_json = _series_json(names, colors; keys=keys, dash=dash)
+        bands = has_ci ?
+            "[{\"lo_key\":\"ci_lo\",\"hi_key\":\"ci_hi\",\"color\":\"$(_PLOT_SERIES[2])\",\"alpha\":$(_PLOT_CI_ALPHA)}]" : "[]"
+        # Vertical reference line at the forecast origin (x = 0 in the joined domain).
+        refs = "[{\"value\":0,\"color\":\"$(_PLOT_ALERT)\",\"dash\":\"5,3\",\"axis\":\"x\"}]"
+    end
+    _render_line_js(id, data_json, s_json; bands_json=bands, ref_lines_json=refs,
+                    xlabel=xlabel, ylabel=ylabel)
+end
+
+# =============================================================================
 # ARIMAForecast
 # =============================================================================
 
@@ -104,32 +167,31 @@ end
 # =============================================================================
 
 """
-    plot_result(fc::VARForecast; var=nothing, ncols=0, title="", save_path=nothing)
+    plot_result(fc::VARForecast; var=nothing, history=nothing, n_history=50, ncols=0, title="", save_path=nothing)
 
-Plot VAR forecast with bootstrap CI bands.
+Plot VAR forecast with bootstrap CI bands. Pass `history` (a `T×n_vars` matrix, or a
+vector when a single `var` is selected) to draw a pre-sample History line joined to
+the forecast fan, with a vertical forecast-origin reference line.
 """
 function plot_result(fc::VARForecast{T};
-                     var::Union{Int,Nothing}=nothing,
+                     var::Union{Int,String,Nothing}=nothing,
+                     history::Union{AbstractVector,AbstractMatrix,Nothing}=nothing,
+                     n_history::Int=50,
                      ncols::Int=0, title::String="",
                      save_path::Union{String,Nothing}=nothing) where {T}
     h, n_vars = size(fc.forecast)
-    vars_to_plot = var === nothing ? (1:n_vars) : [var]
+    vars_to_plot = var === nothing ? (1:n_vars) : [_resolve_var(var, fc.varnames)]
+    _fc_validate_history(history, length(vars_to_plot), n_vars)
+    has_ci = fc.ci_method != :none
 
     panels = _PanelSpec[]
     for vi in vars_to_plot
         id = _next_plot_id("var_fc")
         ptitle = fc.varnames[vi]
-
-        data_json = _forecast_data_json(fc.forecast[:, vi], fc.ci_lower[:, vi],
-                                         fc.ci_upper[:, vi])
-
-        s_json = _series_json(["Forecast"], [_PLOT_COLORS[1]]; keys=["fc"])
-        has_ci = fc.ci_method != :none
-        bands = has_ci ?
-            "[{\"lo_key\":\"ci_lo\",\"hi_key\":\"ci_hi\",\"color\":\"$(_PLOT_COLORS[1])\",\"alpha\":$(_PLOT_CI_ALPHA)}]" : "[]"
-
-        js = _render_line_js(id, data_json, s_json;
-                             bands_json=bands, xlabel="Horizon", ylabel="Forecast")
+        js = _forecast_panel_js(id, fc.forecast[:, vi], fc.ci_lower[:, vi], fc.ci_upper[:, vi];
+                                has_ci=has_ci, fc_name="Forecast",
+                                history=_fc_history_col(history, vi), n_history=n_history,
+                                xlabel="Horizon", ylabel="Forecast")
         push!(panels, _PanelSpec(id, ptitle, js))
     end
 
@@ -148,31 +210,31 @@ end
 # =============================================================================
 
 """
-    plot_result(fc::BVARForecast; var=nothing, ncols=0, title="", save_path=nothing)
+    plot_result(fc::BVARForecast; var=nothing, history=nothing, n_history=50, ncols=0, title="", save_path=nothing)
 
-Plot Bayesian VAR forecast with posterior credible bands.
+Plot Bayesian VAR forecast with posterior credible bands. Pass `history` (a
+`T×n_vars` matrix, or a vector when a single `var` is selected) to draw a pre-sample
+History line joined to the forecast fan, with a vertical forecast-origin line.
 """
 function plot_result(fc::BVARForecast{T};
-                     var::Union{Int,Nothing}=nothing,
+                     var::Union{Int,String,Nothing}=nothing,
+                     history::Union{AbstractVector,AbstractMatrix,Nothing}=nothing,
+                     n_history::Int=50,
                      ncols::Int=0, title::String="",
                      save_path::Union{String,Nothing}=nothing) where {T}
     h, n_vars = size(fc.forecast)
-    vars_to_plot = var === nothing ? (1:n_vars) : [var]
+    vars_to_plot = var === nothing ? (1:n_vars) : [_resolve_var(var, fc.varnames)]
+    _fc_validate_history(history, length(vars_to_plot), n_vars)
+    pe_label = fc.point_estimate == :median ? "Posterior median" : "Posterior mean"
 
     panels = _PanelSpec[]
     for vi in vars_to_plot
         id = _next_plot_id("bvar_fc")
         ptitle = fc.varnames[vi]
-
-        data_json = _forecast_data_json(fc.forecast[:, vi], fc.ci_lower[:, vi],
-                                         fc.ci_upper[:, vi])
-
-        pe_label = fc.point_estimate == :median ? "Posterior median" : "Posterior mean"
-        s_json = _series_json([pe_label], [_PLOT_COLORS[1]]; keys=["fc"])
-        bands = "[{\"lo_key\":\"ci_lo\",\"hi_key\":\"ci_hi\",\"color\":\"$(_PLOT_COLORS[1])\",\"alpha\":$(_PLOT_CI_ALPHA)}]"
-
-        js = _render_line_js(id, data_json, s_json;
-                             bands_json=bands, xlabel="Horizon", ylabel="Forecast")
+        js = _forecast_panel_js(id, fc.forecast[:, vi], fc.ci_lower[:, vi], fc.ci_upper[:, vi];
+                                has_ci=true, fc_name=pe_label,
+                                history=_fc_history_col(history, vi), n_history=n_history,
+                                xlabel="Horizon", ylabel="Forecast")
         push!(panels, _PanelSpec(id, ptitle, js))
     end
 
@@ -187,36 +249,80 @@ function plot_result(fc::BVARForecast{T};
 end
 
 # =============================================================================
+# ConditionalForecast
+# =============================================================================
+
+"""
+    plot_result(fc::ConditionalForecast; var=nothing, history=nothing, n_history=50, ncols=0, title="", save_path=nothing)
+
+Plot a Waggoner-Zha conditional forecast with its bands. The unconditional forecast is
+drawn alongside as a reference line, so the effect of the conditioning path is visible
+panel by panel.
+"""
+function plot_result(fc::ConditionalForecast{T};
+                     var::Union{Int,String,Nothing}=nothing,
+                     history::Union{AbstractVector,AbstractMatrix,Nothing}=nothing,
+                     n_history::Int=50,
+                     ncols::Int=0, title::String="",
+                     save_path::Union{String,Nothing}=nothing) where {T}
+    h, n_vars = size(fc.forecast)
+    vars_to_plot = var === nothing ? (1:n_vars) : [_resolve_var(var, fc.varnames)]
+    _fc_validate_history(history, length(vars_to_plot), n_vars)
+    constrained = Set(c.variable::Int for c in fc.conditions)
+
+    panels = _PanelSpec[]
+    for vi in vars_to_plot
+        id = _next_plot_id("cond_fc")
+        ptitle = vi in constrained ? "$(fc.varnames[vi]) (conditioned)" : fc.varnames[vi]
+        js = _forecast_panel_js(id, fc.forecast[:, vi], fc.ci_lower[:, vi], fc.ci_upper[:, vi];
+                                has_ci=true, fc_name="Conditional",
+                                history=_fc_history_col(history, vi), n_history=n_history,
+                                xlabel="Horizon", ylabel="Forecast",
+                                extra_line=fc.unconditional[:, vi],
+                                extra_name="Unconditional")
+        push!(panels, _PanelSpec(id, ptitle, js))
+    end
+
+    if isempty(title)
+        ci_pct = round(Int, 100 * fc.conf_level)
+        title = "Conditional Forecast ($(ci_pct)% band, $(fc.identification))"
+    end
+
+    p = _make_plot(panels; title=title, ncols=ncols)
+    save_path !== nothing && save_plot(p, save_path)
+    p
+end
+
+# =============================================================================
 # VECMForecast
 # =============================================================================
 
 """
-    plot_result(fc::VECMForecast; var=nothing, ncols=0, title="", save_path=nothing)
+    plot_result(fc::VECMForecast; var=nothing, history=nothing, n_history=50, ncols=0, title="", save_path=nothing)
 
-Plot VECM forecast in levels with CI bands.
+Plot VECM forecast in levels with CI bands. Pass `history` (a `T×n_vars` matrix, or a
+vector when a single `var` is selected) to draw a pre-sample History line joined to
+the forecast fan, with a vertical forecast-origin line.
 """
 function plot_result(fc::VECMForecast{T};
-                     var::Union{Int,Nothing}=nothing,
+                     var::Union{Int,String,Nothing}=nothing,
+                     history::Union{AbstractVector,AbstractMatrix,Nothing}=nothing,
+                     n_history::Int=50,
                      ncols::Int=0, title::String="",
                      save_path::Union{String,Nothing}=nothing) where {T}
     h, n_vars = size(fc.levels)
-    vars_to_plot = var === nothing ? (1:n_vars) : [var]
+    vars_to_plot = var === nothing ? (1:n_vars) : [_resolve_var(var, fc.varnames)]
+    _fc_validate_history(history, length(vars_to_plot), n_vars)
+    has_ci = fc.ci_method != :none
 
     panels = _PanelSpec[]
     for vi in vars_to_plot
         id = _next_plot_id("vecm_fc")
         ptitle = fc.varnames[vi]
-
-        data_json = _forecast_data_json(fc.levels[:, vi], fc.ci_lower[:, vi],
-                                         fc.ci_upper[:, vi])
-
-        s_json = _series_json(["Forecast"], [_PLOT_COLORS[1]]; keys=["fc"])
-        has_ci = fc.ci_method != :none
-        bands = has_ci ?
-            "[{\"lo_key\":\"ci_lo\",\"hi_key\":\"ci_hi\",\"color\":\"$(_PLOT_COLORS[1])\",\"alpha\":$(_PLOT_CI_ALPHA)}]" : "[]"
-
-        js = _render_line_js(id, data_json, s_json;
-                             bands_json=bands, xlabel="Horizon", ylabel="Level")
+        js = _forecast_panel_js(id, fc.levels[:, vi], fc.ci_lower[:, vi], fc.ci_upper[:, vi];
+                                has_ci=has_ci, fc_name="Forecast",
+                                history=_fc_history_col(history, vi), n_history=n_history,
+                                xlabel="Horizon", ylabel="Level")
         push!(panels, _PanelSpec(id, ptitle, js))
     end
 
@@ -244,54 +350,65 @@ Plot factor model forecast.
 - `type=:factor`: plot factor forecasts only
 - `type=:observable`: plot observable forecasts only
 - `n_obs`: max number of observables to show when `type=:both` (default 6)
+- `history`/`n_history`: pre-sample context for the **observable** panels (a
+  `T×n_observables` matrix, or a vector when a single observable is selected); the
+  latent-factor panels have no observed history so they ignore it.
+- `var`: select a single panel by 1-based index (`Int`) or synthetic name
+  (`"Factor k"` / `"Observable k"`, `String`); resolved through `_resolve_var`
+  (out-of-range/unknown → `ArgumentError`). An `Int` selects the same index in
+  **both** the factor and observable loops under `type=:both`; select a single
+  `type` when addressing a panel by name.
 """
 function plot_result(fc::FactorForecast{T};
-                     type::Symbol=:both, var::Union{Int,Nothing}=nothing,
+                     type::Symbol=:both, var::Union{Int,String,Nothing}=nothing,
+                     history::Union{AbstractVector,AbstractMatrix,Nothing}=nothing,
+                     n_history::Int=50,
                      ncols::Int=0, title::String="",
                      n_obs::Int=6,
                      save_path::Union{String,Nothing}=nothing) where {T}
+    type in (:factor, :observable, :both) ||
+        throw(ArgumentError("Unknown type: $type. Expected :factor, :observable, or :both"))
     has_ci = fc.ci_method != :none
-    bands_str(color) = has_ci ?
-        "[{\"lo_key\":\"ci_lo\",\"hi_key\":\"ci_hi\",\"color\":\"$(color)\",\"alpha\":$(_PLOT_CI_ALPHA)}]" : "[]"
 
     panels = _PanelSpec[]
 
-    # Factor panels
+    # Factor panels (latent — no observed history)
     if type == :factor || type == :both
         h_f, n_factors = size(fc.factors)
-        fvars = var !== nothing && type == :factor ? [var] : (1:n_factors)
+        if var !== nothing
+            fvars = [_resolve_var(var, String["Factor $i" for i in 1:n_factors])]
+        else
+            fvars = 1:n_factors
+        end
         for vi in fvars
             id = _next_plot_id("fac_fc")
             ptitle = "Factor $vi"
-            data_json = _forecast_data_json(fc.factors[:, vi], fc.factors_lower[:, vi],
-                                             fc.factors_upper[:, vi])
-            s_json = _series_json(["Forecast"], [_PLOT_COLORS[1]]; keys=["fc"])
-            js = _render_line_js(id, data_json, s_json;
-                                 bands_json=bands_str(_PLOT_COLORS[1]),
-                                 xlabel="Horizon", ylabel="Factor")
+            js = _forecast_panel_js(id, fc.factors[:, vi], fc.factors_lower[:, vi],
+                                    fc.factors_upper[:, vi]; has_ci=has_ci, fc_name="Forecast",
+                                    history=nothing, n_history=n_history,
+                                    base_color=_PLOT_SERIES[1], xlabel="Horizon", ylabel="Factor")
             push!(panels, _PanelSpec(id, ptitle, js))
         end
     end
 
-    # Observable panels
+    # Observable panels (carry optional history)
     if type == :observable || type == :both
         h_o, n_obs_total = size(fc.observables)
-        if var !== nothing && type == :observable
-            ovars = [var]
+        if var !== nothing
+            ovars = [_resolve_var(var, String["Observable $i" for i in 1:n_obs_total])]
         elseif type == :both
             ovars = 1:min(n_obs_total, n_obs)
         else
             ovars = 1:min(n_obs_total, 6)
         end
+        _fc_validate_history(history, length(ovars), n_obs_total)
         for vi in ovars
             id = _next_plot_id("obs_fc")
             ptitle = "Observable $vi"
-            data_json = _forecast_data_json(fc.observables[:, vi], fc.observables_lower[:, vi],
-                                             fc.observables_upper[:, vi])
-            s_json = _series_json(["Forecast"], [_PLOT_COLORS[2]]; keys=["fc"])
-            js = _render_line_js(id, data_json, s_json;
-                                 bands_json=bands_str(_PLOT_COLORS[2]),
-                                 xlabel="Horizon", ylabel="Observable")
+            js = _forecast_panel_js(id, fc.observables[:, vi], fc.observables_lower[:, vi],
+                                    fc.observables_upper[:, vi]; has_ci=has_ci, fc_name="Forecast",
+                                    history=_fc_history_col(history, vi), n_history=n_history,
+                                    base_color=_PLOT_SERIES[2], xlabel="Horizon", ylabel="Observable")
             push!(panels, _PanelSpec(id, ptitle, js))
         end
     end
@@ -311,31 +428,33 @@ end
 # =============================================================================
 
 """
-    plot_result(fc::LPForecast; var=nothing, ncols=0, title="", save_path=nothing)
+    plot_result(fc::LPForecast; var=nothing, history=nothing, n_history=50, ncols=0, title="", save_path=nothing)
 
-Plot LP direct multi-step forecast.
+Plot LP direct multi-step forecast. Pass `history` (a `T×n_response` matrix, or a
+vector when a single `var` is selected) to draw a pre-sample History line joined to
+the forecast fan, with a vertical forecast-origin line.
 """
 function plot_result(fc::LPForecast{T};
-                     var::Union{Int,Nothing}=nothing,
+                     var::Union{Int,String,Nothing}=nothing,
+                     history::Union{AbstractVector,AbstractMatrix,Nothing}=nothing,
+                     n_history::Int=50,
                      ncols::Int=0, title::String="",
                      save_path::Union{String,Nothing}=nothing) where {T}
     h, n_resp = size(fc.forecast)
-    vars_to_plot = var === nothing ? (1:n_resp) : [var]
+    # Names for selection are the response-variable names (one per forecast column).
+    resp_names = String[fc.varnames[fc.response_vars[vi]] for vi in 1:n_resp]
+    vars_to_plot = var === nothing ? (1:n_resp) : [_resolve_var(var, resp_names)]
+    _fc_validate_history(history, length(vars_to_plot), n_resp)
+    has_ci = fc.ci_method != :none
 
     panels = _PanelSpec[]
     for vi in vars_to_plot
         id = _next_plot_id("lp_fc")
         ptitle = fc.varnames[fc.response_vars[vi]]
-
-        data_json = _forecast_data_json(fc.forecast[:, vi], fc.ci_lower[:, vi],
-                                         fc.ci_upper[:, vi])
-
-        s_json = _series_json(["LP Forecast"], [_PLOT_COLORS[1]]; keys=["fc"])
-        bands = fc.ci_method != :none ?
-            "[{\"lo_key\":\"ci_lo\",\"hi_key\":\"ci_hi\",\"color\":\"$(_PLOT_COLORS[1])\",\"alpha\":$(_PLOT_CI_ALPHA)}]" : "[]"
-
-        js = _render_line_js(id, data_json, s_json;
-                             bands_json=bands, xlabel="Horizon", ylabel="Forecast")
+        js = _forecast_panel_js(id, fc.forecast[:, vi], fc.ci_lower[:, vi], fc.ci_upper[:, vi];
+                                has_ci=has_ci, fc_name="LP Forecast",
+                                history=_fc_history_col(history, vi), n_history=n_history,
+                                xlabel="Horizon", ylabel="Forecast")
         push!(panels, _PanelSpec(id, ptitle, js))
     end
 
@@ -350,33 +469,8 @@ function plot_result(fc::LPForecast{T};
 end
 
 # =============================================================================
-# ForecastEvaluation (EV-39, #447) — ranked accuracy bar chart
+# ForecastEvaluation — the `plot_result` dispatch moved to plotting/fceval.jl (PLT-38),
+# where it gained the `view=:metrics/:theil` API alongside the other forecast-evaluation
+# and Local-Projection plots. Keeping a single method there avoids a same-type dispatch
+# collision that would silently override on include.
 # =============================================================================
-
-"""
-    plot_result(ev::ForecastEvaluation; metric="RMSE", title="", save_path=nothing)
-
-Bar chart of a chosen accuracy metric across the evaluated models, ranked best
-(smallest) to worst. `metric` must be one of the columns in `ev.metrics`
-(default `"RMSE"`).
-"""
-function plot_result(ev::ForecastEvaluation{T};
-                     metric::String="RMSE", title::String="",
-                     save_path::Union{String,Nothing}=nothing) where {T}
-    k = findfirst(==(metric), ev.metrics)
-    k === nothing && throw(ArgumentError("metric must be one of $(ev.metrics); got \"$metric\""))
-    M = length(ev.models)
-    ord = sortperm(ev.values[:, k])
-    id = _next_plot_id("fceval_bar")
-    rows = Vector{Pair{String,String}}[]
-    for j in ord
-        push!(rows, ["x" => _json(ev.models[j]), "s1" => _json(ev.values[j, k])])
-    end
-    data = _json_array_of_objects(rows)
-    s = _series_json([metric], [_PLOT_COLORS[2]]; keys = ["s1"])
-    js = _render_bar_js(id, data, s; mode = "stacked", xlabel = "Model", ylabel = metric)
-    isempty(title) && (title = "Forecast Accuracy — $metric (n=$(ev.n))")
-    p = _make_plot([_PanelSpec(id, title, js)]; title = title)
-    save_path !== nothing && save_plot(p, save_path)
-    p
-end

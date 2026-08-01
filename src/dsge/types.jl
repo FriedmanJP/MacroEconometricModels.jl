@@ -456,6 +456,12 @@ Fields:
 - `converged` — Newton convergence flag
 - `iterations` — Newton iterations used
 - `method` — `:projection`
+- `euler_error` — max Euler error achieved on the adaptive test set; `NaN` when the solver did
+  not measure it (i.e. `adaptive=false`). Call `max_euler_error(sol)` to measure it on demand.
+- `smolyak_levels` — `n_blocks × nx` admissible Smolyak level multi-index set; `0×0` for tensor
+  grids. `vec(maximum(smolyak_levels; dims=1))` gives the resolution reached in each state,
+  which is where an anisotropic or adaptively refined grid differs from an isotropic one.
+- `refinements` — adaptive refinement rounds performed (`0` when `adaptive=false`)
 """
 struct ProjectionSolution{T<:AbstractFloat}
     coefficients::Matrix{T}         # n_vars × n_basis
@@ -476,6 +482,25 @@ struct ProjectionSolution{T<:AbstractFloat}
     converged::Bool
     iterations::Int
     method::Symbol                  # :projection
+    euler_error::T                  # achieved max Euler error (NaN when not measured)
+    smolyak_levels::Matrix{Int}     # n_blocks × nx level set (0×0 for tensor grids)
+    refinements::Int                # adaptive refinement rounds performed
+
+    # The accuracy fields are trailing keywords with defaults so every existing 18-positional
+    # construction site (collocation/PFI/VFI) keeps working unchanged.
+    function ProjectionSolution{T}(coefficients, state_bounds, grid_type, degree,
+                                   collocation_nodes, residual_norm, n_basis, multi_indices,
+                                   quadrature, spec, linear, impact, steady_state,
+                                   state_indices, control_indices, converged, iterations,
+                                   method;
+                                   euler_error::Real=T(NaN),
+                                   smolyak_levels::Matrix{Int}=zeros(Int, 0, 0),
+                                   refinements::Int=0) where {T<:AbstractFloat}
+        new{T}(coefficients, state_bounds, grid_type, degree, collocation_nodes,
+               residual_norm, n_basis, multi_indices, quadrature, spec, linear, impact,
+               steady_state, state_indices, control_indices, converged, iterations, method,
+               T(euler_error), smolyak_levels, refinements)
+    end
 end
 
 nvars(sol::ProjectionSolution) = sol.spec.n_endog
@@ -504,6 +529,16 @@ function Base.show(io::IO, sol::ProjectionSolution{T}) where {T}
         "Converged"       conv_str;
         "Iterations"      sol.iterations;
     ]
+    if !isempty(sol.smolyak_levels) && size(sol.smolyak_levels, 1) > 0
+        lv = vec(maximum(sol.smolyak_levels; dims=1))
+        spec_data = vcat(spec_data, Any["Levels per state" string(lv)])
+    end
+    if isfinite(sol.euler_error)
+        spec_data = vcat(spec_data, Any["Max Euler error" string(round(sol.euler_error; sigdigits=3))])
+    end
+    if sol.refinements > 0
+        spec_data = vcat(spec_data, Any["Refinements" sol.refinements])
+    end
     _pretty_table(io, spec_data;
         title = "DSGE Projection Solution (Chebyshev Collocation)",
         column_labels = ["", ""],

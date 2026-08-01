@@ -36,8 +36,11 @@ report(result)
 **Recipe 2: LP-IV with external instruments**
 
 ```@example lp
-# Instrument FFR with its own lagged changes
-Z = reshape([zeros(1); diff(Y[:, 3])], :, 1)
+# A proxy external instrument: the FFR change observed with measurement error. An
+# instrument that is a deterministic function of the controls has an infinite first
+# stage and identifies nothing.
+Z = reshape([0.0; diff(Y[:, 3])] .+ 1.5 * std(diff(Y[:, 3])) *
+            randn(Random.MersenneTwister(7), size(Y, 1)), :, 1)
 lpiv = estimate_lp_iv(Y, 3, Z, 20; lags=4, cov_type=:newey_west)
 report(lpiv)
 ```
@@ -147,6 +150,10 @@ lp_model = estimate_lp(Y, 3, 20;       # shock_var=3 (FEDFUNDS)
 
 # Extract IRF with confidence intervals
 irf_result = lp_irf(lp_model; conf_level=0.95)
+
+# Bootstrap bands instead of HAC ones ([T271]): the design is held fixed and only the
+# errors are resampled, which is what makes it valid for LP's MA(h)-correlated residuals.
+boot_result = lp_irf(lp_model; ci_type=:bootstrap, bootstrap=:wild, reps=500, seed=1)
 report(irf_result)
 ```
 
@@ -166,6 +173,21 @@ The `irf_result.values` matrix has dimension ``(H+1) \times n_{\text{resp}}``, w
 |---------|------|---------|-------------|
 | `lags` | `Int` | `4` | Number of control lags ``p`` |
 | `cov_type` | `Symbol` | `:newey_west` | Covariance estimator (`:newey_west`, `:white`, `:ols`) |
+
+### `lp_irf` Confidence Intervals
+
+| Keyword | Type | Default | Description |
+|---------|------|---------|-------------|
+| `ci_type` | `Symbol` | `:analytical` | `:analytical` (HAC) or `:bootstrap` (percentile bands) |
+| `bootstrap` | `Symbol` | `:wild` | Resampling scheme: `:wild`, `:block`, `:iid` |
+| `block_length` | `Int` | `0` | Moving-block length; `0` selects ``\lceil T^{1/3} \rceil`` |
+| `wild_dist` | `Symbol` | `:rademacher` | `:rademacher` or `:mammen` |
+| `reps` | `Int` | `500` | Bootstrap replications |
+| `seed` | `Int` | `nothing` | Fixes the bands for reproducibility |
+
+The bootstrap is **fixed-design**: at each horizon the regressor matrix is held fixed and only the errors are resampled (``y^* = X_h\hat{\beta}_h + u^*``, refit by OLS). That is the right form for LP, whose regressors are predetermined but whose errors are MA(``h``)-correlated by construction. `:wild` is the default here --- unlike the VAR, where `:iid` is --- because LP residuals are serially correlated *and* frequently heteroskedastic.
+
+Only the bands change: the reported responses and standard errors remain the analytical ones, so switching `ci_type` never moves the estimate.
 | `bandwidth` | `Int` | `0` | HAC bandwidth (0 = automatic) |
 | `response_vars` | `Vector{Int}` | all | Indices of response variables |
 | `conf_level` | `Real` | `0.95` | Confidence level for CIs |
@@ -242,11 +264,10 @@ A rule of thumb requires ``F > 10`` for strong instruments (Stock & Yogo 2005).
 !!! note "HAC-Robust F-Statistic"
     The first-stage F-statistic uses Newey-West HAC standard errors, consistent with the second-stage inference. This accounts for the MA(``h-1``) serial correlation in LP residuals. The HAC bandwidth follows the same automatic selection as the second stage.
 
-```@example lp
-# Construct instrument: lagged changes in the federal funds rate
-Z = reshape([zeros(1); diff(Y[:, 3])], :, 1)
+An external instrument is a **noisy measure** of the structural shock — a narrative series or a high-frequency surprise — not a deterministic function of the model's own controls. FRED-MD ships no such series, so the example builds a proxy: the federal-funds-rate change plus measurement noise.
 
-# LP-IV: instrument FFR with its own lagged changes
+```@example lp
+# LP-IV with the proxy instrument built in the Quick Start
 lpiv_model = estimate_lp_iv(Y, 3, Z, 20;    # shock_var=3 (FEDFUNDS)
     lags = 4,
     cov_type = :newey_west
@@ -257,7 +278,63 @@ weak_test = weak_instrument_test(lpiv_model; threshold=10.0)
 report(lpiv_model)
 ```
 
-The `weak_test.min_F` reports the minimum first-stage F-statistic across all horizons. If it exceeds the Stock & Yogo (2005) threshold of 10, the instruments are strong at every horizon. First-stage strength typically declines at longer horizons because the instrument's predictive power weakens. If `weak_test.passes_threshold` is `false`, consider Anderson-Rubin confidence sets for robust inference at affected horizons.
+The `weak_test.min_F` reports the minimum first-stage F-statistic across all horizons. If it exceeds the Stock & Yogo (2005) threshold of 10, the instruments are strong at every horizon. First-stage strength typically declines at longer horizons because the instrument's predictive power weakens.
+
+### Weak-Instrument-Robust Inference
+
+External macro instruments — narrative series, high-frequency surprises — are routinely weak, and the horizon-wise 2SLS bands above are then unreliable at every horizon. Two tools address this.
+
+**The Montiel Olea & Pflueger (2013) effective F** is the correct relevance diagnostic when errors are heteroskedastic or serially correlated, which macro data always are. It replaces the homoskedastic scale in the classical first-stage F with a HAR one:
+
+```math
+F_{\text{eff}} = \frac{\tilde{x}' P_{\tilde{Z}} \tilde{x}}
+                        {\operatorname{tr}\!\big(\hat{V}_{\hat{\pi}}\,\tilde{Z}'\tilde{Z}\big)}
+```
+
+where:
+- ``\tilde{Z} = M_W Z`` and ``\tilde{x} = M_W x`` are the instruments and the shock with the LP controls partialled out
+- ``\hat{V}_{\hat{\pi}}`` is the Newey-West covariance of the first-stage coefficients
+- ``q`` is the number of excluded instruments
+
+Substituting the homoskedastic covariance ``\hat\sigma_v^2(\tilde{Z}'\tilde{Z})^{-1}`` makes the denominator exactly ``q\hat\sigma_v^2``, so ``F_{\text{eff}}`` collapses to the classical first-stage F — the reduction Montiel Olea and Pflueger establish.
+
+```@example lp
+mop = montiel_olea_pflueger_f(lpiv_model)
+report(mop)
+```
+
+The critical values are Montiel Olea and Pflueger's **simplified**, nuisance-parameter-free bounds by worst-case relative bias of 2SLS (`tau` = 0.05, 0.10, 0.20, 0.30 → 37.42, 23.11, 15.06, 12.04), as tabulated in Andrews, Stock & Sun (2019). They are conservative: the exact MOP critical values depend on the estimated covariance structure and are weakly smaller. Note how much higher the bar is than the familiar `F > 10`.
+
+**Anderson-Rubin bands** give correct coverage at any instrument strength. At each horizon `h`, the AR test of ``H_0: \theta_h = \theta_0`` regresses ``y_{t+h} - \theta_0 x_t`` on the controls and instruments and tests the instruments' joint irrelevance — a restriction that holds under ``H_0`` regardless of how weak the first stage is. Inverting the test over ``\theta_0`` gives the band:
+
+```@example lp
+ar_band = lp_iv_ar_band(lpiv_model; responses=[1], n_grid=101)
+report(ar_band)
+```
+
+The covariance uses **Newey-West with a lag length that scales with the horizon** — `max(data-driven, h+1)`, the rule `estimate_lp_iv` applies to its own standard errors, because the horizon-`h` LP residual is MA(`h`) by construction. The bandwidth actually used at each horizon and response is returned in `bandwidths`.
+
+An AR set is not forced to be an interval: where the instrument is too weak to bound the response the set is **unbounded** and reported as `±∞`, and the corresponding Wald band there is over-confident. Where the instrument is strong the two bands nearly coincide.
+
+| Keyword | Type | Default | Description |
+|---------|------|---------|-------------|
+| `level` | `Real` | `0.95` | Nominal coverage |
+| `n_grid` | `Int` | `401` | Grid points per horizon/response cell |
+| `span` | `Real` | `20` | Half-width of the search range, in 2SLS standard errors |
+| `bandwidth` | `Int` | `0` | Fixed HAC lag length; `0` uses `max(auto, h+1)` |
+| `responses` | `Vector{Int}` | all | Subset of response positions to compute |
+
+`LPIVARBand{T}` return value:
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `lower` / `upper` | `Matrix{T}` | ``(H+1) \times n_{resp}`` envelope; `±Inf` where unbounded, `NaN` where empty |
+| `sets` | `Matrix{Vector{Tuple{T,T}}}` | Connected components of each set |
+| `bounded` / `is_empty` | `Matrix{Bool}` | Set-shape flags |
+| `wald_lower` / `wald_upper` | `Matrix{T}` | 2SLS Wald band, for comparison |
+| `point` | `Matrix{T}` | LP-IV point estimates |
+| `bandwidths` | `Matrix{Int}` | HAC lag length used at each horizon/response |
+| `critical_value` | `T` | AR critical value at `level` |
 
 ### Keyword Arguments
 
@@ -951,6 +1028,12 @@ The `estimate_lp` call fits 21 horizon-specific OLS regressions (``h = 0, \ldots
 ---
 
 ## References
+
+- Montiel Olea, J. L., & Pflueger, C. (2013). A Robust Test for Weak Instruments.
+  *Journal of Business & Economic Statistics*, 31(3), 358-369. [DOI](https://doi.org/10.1080/00401706.2013.806694)
+
+- Andrews, I., Stock, J. H., & Sun, L. (2019). Weak Instruments in Instrumental Variables Regression: Theory and Practice.
+  *Annual Review of Economics*, 11, 727-753. [DOI](https://doi.org/10.1146/annurev-economics-080218-025643)
 
 - Angrist, J. D., Jordà, Ò., & Kuersteiner, G. M. (2018). Semiparametric Estimates of Monetary Policy Effects: String Theory Revisited.
   *Journal of Business & Economic Statistics*, 36(3), 371-387. [DOI](https://doi.org/10.1080/07350015.2016.1204919)

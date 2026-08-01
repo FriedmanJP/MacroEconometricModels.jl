@@ -33,49 +33,13 @@ function _np_fit_json(x::AbstractVector, fit::AbstractVector,
     "[" * join(rows, ",\n") * "]"
 end
 
-# Overlay a fitted line (+ optional shaded band) onto an existing scatter panel,
-# recomputing the shared domain from BOTH the scatter points and the fit so the
-# curve and its band always lie inside the drawn axes.
-function _render_np_overlay_js(id::String, scatter_json::String, fit_json::String;
-                               color::String=_PLOT_COLORS[2], has_band::Bool=false)
-    """
-(function() {
-    const container = d3.select('#$(id)');
-    const svgEl = container.select('svg');
-    const gEl = svgEl.select('g');
-    const W = +svgEl.attr('width');
-    const margin = {top:10, right:15, bottom:35, left:55};
-    const w = W - margin.left - margin.right;
-    const h = Math.min(w * 0.6, 250);
-
-    const pts = $(scatter_json);
-    const fit = $(fit_json);
-    const hasBand = $(has_band ? "true" : "false");
-
-    const xVals = pts.map(d => d.x).concat(fit.map(d => d.x));
-    let yVals = pts.map(d => d.y).concat(fit.map(d => d.y));
-    if (hasBand) {
-        fit.forEach(d => { if(d.lo!==null) yVals.push(d.lo); if(d.hi!==null) yVals.push(d.hi); });
-    }
-    const xExt = d3.extent(xVals);
-    const xPad = (xExt[1]-xExt[0])*0.08 || 1;
-    const x = d3.scaleLinear().domain([xExt[0]-xPad, xExt[1]+xPad]).range([0,w]);
-    const yExt = d3.extent(yVals);
-    const yPad = (yExt[1]-yExt[0])*0.08 || 0.01;
-    const y = d3.scaleLinear().domain([yExt[0]-yPad, yExt[1]+yPad]).range([h,0]);
-
-    if (hasBand) {
-        const area = d3.area().x(d=>x(d.x))
-            .y0(d=>y(d.lo!==null ? d.lo : d.y)).y1(d=>y(d.hi!==null ? d.hi : d.y))
-            .defined(d=>d.lo!==null && d.hi!==null);
-        gEl.append('path').datum(fit).attr('d',area)
-            .attr('fill','$(color)').attr('opacity',0.15);
-    }
-    const line = d3.line().x(d=>x(d.x)).y(d=>y(d.y));
-    gEl.append('path').datum(fit).attr('d',line)
-        .attr('fill','none').attr('stroke','$(color)').attr('stroke-width',2.2);
-})();
-"""
+# Build the scatter renderer's `curve_overlays_json` payload for a fitted curve
+# (+ optional [lo,hi] band) from the `_np_fit_json` points. The relocated scatter
+# renderer draws the polyline and band through its OWN scales (plotrule A1/A4) —
+# no post-hoc scale-clone.
+function _np_curve_overlay_json(fit_json::String; color::String=_PLOT_COLORS[2],
+                                band::Bool=false)
+    "[{\"points\":$(fit_json),\"color\":$(_json(color)),\"band\":$(band ? "true" : "false"),\"alpha\":0.15}]"
 end
 
 """
@@ -114,14 +78,14 @@ function plot_result(r::KernelRegression{T}; bands::Bool=true, title::String="",
     id = _next_plot_id("kreg")
     scatter_json = _np_scatter_json(r.xdata, r.ydata, "Data")
     groups = _series_json(["Data"], [_PLOT_COLORS[1]])
-    js_scatter = _render_scatter_js(id, scatter_json, groups; xlabel="x", ylabel="y")
     lo = bands ? (r.fitted .- 1.96 .* r.se) : nothing
     hi = bands ? (r.fitted .+ 1.96 .* r.se) : nothing
     fit_json = _np_fit_json(r.x, r.fitted, lo, hi)
-    js_line = _render_np_overlay_js(id, scatter_json, fit_json;
-                                    color=_PLOT_COLORS[2], has_band=bands)
+    curve = _np_curve_overlay_json(fit_json; color=_PLOT_COLORS[2], band=bands)
+    js = _render_scatter_js(id, scatter_json, groups;
+                            curve_overlays_json=curve, xlabel="x", ylabel="y")
     mlab = get(_NP_METHOD_LABEL, r.method, string(r.method))
-    panels = [_PanelSpec(id, "$mlab fit (h=$(_fmt(r.bandwidth)))", js_scatter * "\n" * js_line)]
+    panels = [_PanelSpec(id, "$mlab fit (h=$(_fmt(r.bandwidth)))", js)]
     if isempty(title)
         title = "Nonparametric Regression (n=$(r.nobs))"
     end
@@ -140,12 +104,11 @@ function plot_result(r::LowessFit{T}; title::String="",
     id = _next_plot_id("lowess")
     scatter_json = _np_scatter_json(r.x, r.ydata, "Data")
     groups = _series_json(["Data"], [_PLOT_COLORS[1]])
-    js_scatter = _render_scatter_js(id, scatter_json, groups; xlabel="x", ylabel="y")
     fit_json = _np_fit_json(r.x, r.fitted, nothing, nothing)
-    js_line = _render_np_overlay_js(id, scatter_json, fit_json;
-                                    color=_PLOT_COLORS[2], has_band=false)
-    panels = [_PanelSpec(id, "LOWESS (f=$(_fmt(r.span)), iter=$(r.iter))",
-                         js_scatter * "\n" * js_line)]
+    curve = _np_curve_overlay_json(fit_json; color=_PLOT_COLORS[2], band=false)
+    js = _render_scatter_js(id, scatter_json, groups;
+                            curve_overlays_json=curve, xlabel="x", ylabel="y")
+    panels = [_PanelSpec(id, "LOWESS (f=$(_fmt(r.span)), iter=$(r.iter))", js)]
     if isempty(title)
         title = "LOWESS Smoother (n=$(r.nobs))"
     end

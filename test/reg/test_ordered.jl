@@ -600,3 +600,88 @@ using LinearAlgebra, Statistics, Random, Distributions
     end
 
 end
+
+@testset "#507: residuals and generalized residuals for ordered models" begin
+    # `residuals` was undefined for the ordered models, so a diagnostic path
+    # written against LogitModel died with a MethodError. Two quantities are now
+    # exposed, with deliberately different shapes:
+    #   residuals(m)              -> n x K response/pearson/deviance matrix
+    #   generalized_residuals(m)  -> length-n score residual d(loglik_i)/d(x_i'beta)
+    rng = Random.MersenneTwister(507)
+    n = 500
+    X = hcat(randn(rng, n), randn(rng, n))
+    ystar = X * [0.8, -0.5] + randn(rng, n)
+    y3 = Float64[v < -0.4 ? 1 : (v < 0.7 ? 2 : 3) for v in ystar]
+
+    ol = estimate_ologit(y3, X)
+    op = estimate_oprobit(y3, X)
+
+    @testset "$nm" for (nm, m) in (("ologit", ol), ("oprobit", op))
+        r = residuals(m)
+        @test size(r) == (n, 3)
+        @test eltype(r) == Float64
+        # Response residuals d_ij - P_ij: rows sum to exactly zero.
+        @test maximum(abs, sum(r, dims=2)) < 1e-12
+        @test r ≈ [(m.y[i] == j) - m.fitted[i, j] for i in 1:n, j in 1:3] atol = 1e-14
+
+        # Pearson: response scaled by sqrt(p(1-p)).
+        rp = residuals(m; kind=:pearson)
+        @test all(isfinite, rp)
+        @test rp ≈ r ./ sqrt.(m.fitted .* (1 .- m.fitted)) rtol = 1e-10
+
+        # Deviance: nonzero only in the observed cell, and the total sum of
+        # squares is the model deviance -2*loglik.
+        rd = residuals(m; kind=:deviance)
+        @test sum(abs2, rd) ≈ -2 * loglikelihood(m) rtol = 1e-10
+        observed = [m.y[i] == j for i in 1:n, j in 1:3]
+        @test all(rd[.!observed] .== 0.0)         # 0*log0 = 0 off the observed cell
+        @test all(rd[observed] .> 0.0)
+
+        @test_throws ArgumentError residuals(m; kind=:nonsense)
+    end
+
+    @testset "generalized residuals — $nm" for (nm, m, cdf) in
+            (("ologit", ol, MacroEconometricModels._logistic_cdf),
+             ("oprobit", op, MacroEconometricModels._normal_cdf))
+        e = generalized_residuals(m)
+        @test length(e) == n
+        @test all(isfinite, e)
+
+        # (1) Exact analytic identity: the ordered-model score with respect to
+        #     beta is X'e, so it vanishes at the MLE.
+        @test maximum(abs, m.X' * e) < 1e-6
+
+        # (2) e_i is by definition d/d(delta) log P(y_i | x_i'beta + delta).
+        #     Checked against a central finite difference, which is an
+        #     independent route to the same quantity.
+        xb = m.X * m.beta
+        J = length(m.cutpoints) + 1
+        h = 1e-6
+        fd = [(log(MacroEconometricModels._ordered_probs(m.cutpoints, xb[i] + h, J, cdf)[Int(m.y[i])]) -
+               log(MacroEconometricModels._ordered_probs(m.cutpoints, xb[i] - h, J, cdf)[Int(m.y[i])])) / (2h)
+              for i in 1:n]
+        @test maximum(abs, e .- fd) < 1e-7
+    end
+
+    @testset "two-category reduction equals the binary score residual" begin
+        # With K=2 the generalized residual must collapse to y - p, the familiar
+        # binary score residual. `estimate_ologit` requires K>=3, so the model is
+        # assembled directly from an equivalent logit fit: the ordered slopes are
+        # the logit slopes and the single cutpoint is minus the logit intercept.
+        yb = Float64.(y3 .>= 2)
+        lg = estimate_logit(yb, hcat(ones(n), X))
+        b = lg.beta[2:3]
+        c1 = -lg.beta[1]
+        xb = X * b
+        P = reduce(vcat, (MacroEconometricModels._ordered_probs(
+                              [c1], xb[i], 2, MacroEconometricModels._logistic_cdf)'
+                          for i in 1:n))
+        ol2 = MacroEconometricModels.OrderedLogitModel{Float64}(
+            Int.(yb) .+ 1, X, b, [c1], zeros(3, 3), P,
+            0.0, 0.0, 0.0, 0.0, 0.0, ["x1", "x2"], [1, 2], true, 1, :ols)
+
+        # The hand-built model reproduces the logit probabilities exactly.
+        @test P[:, 2] ≈ lg.fitted atol = 1e-12
+        @test generalized_residuals(ol2) ≈ yb .- lg.fitted atol = 1e-12
+    end
+end

@@ -742,6 +742,879 @@ end
     @test is_determined(sol)
 end
 
+@testset "Pruned state-space object (#368, T269)" begin
+    M = MacroEconometricModels
+
+    # An EXACTLY linear model with a genuine control. Every derivative above first order is
+    # zero, so perturbation at orders 2 and 3 must reproduce the first-order / gensys solution
+    # to machine precision. That makes this an oracle, not an approximation check — and it is
+    # what exposed the control map being time-shifted at orders ≥ 2 (S-01 / #119).
+    lin = @dsge begin
+        parameters: ρ = 0.8, κ = 0.5, σ = 1.0
+        endogenous: x, y
+        exogenous: ε
+        x[t] = ρ * x[t-1] + σ * ε[t]
+        y[t] = κ * x[t-1]
+    end
+    lin = compute_steady_state(lin)
+    sg = solve(lin; method=:gensys)
+
+    @testset "orders 2 and 3 reproduce the linear solution exactly" begin
+        @test maximum(abs, perturbation_solver(lin; order=2).hxx) < 1e-8   # the premise
+        Tn = 12
+        rng = Random.MersenneTwister(269)
+        e = randn(rng, Tn, 1)
+        # Ground truth: iterate y_t = G1·y_{t-1} + impact·ε_t directly.
+        truth = zeros(Tn, 2)
+        yv = zeros(2)
+        for t in 1:Tn
+            yv = sg.G1 * yv + sg.impact * e[t, :]
+            truth[t, :] = yv
+        end
+        for order in 1:3
+            sim = simulate(perturbation_solver(lin; order=order), Tn; shock_draws=e)
+            @test sim ≈ truth atol = 1e-8
+        end
+    end
+
+    @testset "the control map reads the LAGGED state" begin
+        # One step from a known lagged state with no shock: y must be gx_state·x_lag, NOT
+        # gx_state·x_new. With rho=0.8, kappa=0.5 those differ by a factor of 0.8.
+        for order in 1:3
+            pss = pruned_state_space(perturbation_solver(lin; order=order))
+            xf = [1.0]; z = zeros(1)
+            xf_new, xs_new, xrd_new, x_obs, y_obs =
+                M._pss_step(pss, xf, z, z, [0.0])
+            @test x_obs[1] ≈ 0.8 rtol = 1e-8              # x_t = ρ·x_{t-1}
+            @test y_obs[1] ≈ 0.5 rtol = 1e-8              # y_t = κ·x_{t-1}, NOT κ·x_t = 0.4
+        end
+    end
+
+    @testset "irf reduces to the first-order solution at every order" begin
+        ig = irf(sg, 15)
+        for order in 1:3
+            @test irf(perturbation_solver(lin; order=order), 15).values ≈ ig.values atol = 1e-10
+        end
+    end
+
+    @testset "object structure, show and report" begin
+        pss = pruned_state_space(perturbation_solver(lin; order=3))
+        @test pss isa PrunedStateSpace
+        @test pss.order == 3
+        @test pss.nx == 1 && pss.ny == 1 && pss.n_eps == 1 && pss.n == 2
+        @test pss.nv == pss.nx + pss.n_eps
+        @test size(pss.hxx) == (pss.nx, pss.nv^2)
+        @test size(pss.hxxx) == (pss.nx, pss.nv^3)
+        @test length(pss.hss) == pss.nx && length(pss.gss) == pss.ny
+        @test sort(vcat(pss.state_indices, pss.control_indices)) == 1:2
+        s = sprint(show, pss)
+        @test occursin("PrunedStateSpace", s) && occursin("order 3", s)
+        r = sprint(report, pss)
+        @test occursin("Pruned State-Space System", r) && occursin("hxxx", r)
+        # order 1 keeps the higher blocks as empty zeros, not `nothing`
+        p1 = pruned_state_space(perturbation_solver(lin; order=1))
+        @test all(iszero, p1.hxx) && all(iszero, p1.hsss)
+        @test !occursin("hxxx", sprint(report, p1))
+    end
+
+    @testset "closed-form order-2 moments are exact on the linear model" begin
+        # var(x) = σ²/(1−ρ²) = 2.7777…, cov(x,y) = κ·ρ·var(x), var(y) = κ²·var(x),
+        # acov₁(x) = ρ·var(x), acov₁(y) = κ²·ρ·var(x).
+        vx = 1 / (1 - 0.8^2)
+        expected = [vx, 0.5 * 0.8 * vx, 0.25 * vx, 0.8 * vx, 0.25 * 0.8 * vx]
+        s2 = perturbation_solver(lin; order=2)
+        @test analytical_moments(s2; lags=1) ≈ expected rtol = 1e-10
+        # the full moment Dict agrees, including the cross-autocovariances
+        d = M._augmented_moments_2nd(s2; lags=[1])
+        @test d[:Var_y] ≈ [vx 0.5*0.8*vx; 0.5*0.8*vx 0.25*vx] rtol = 1e-10
+        @test d[:Cov_y][2, 1, 1] ≈ 0.5 * vx rtol = 1e-10          # cov(y_t, x_{t-1})
+        @test d[:Cov_y][1, 2, 1] ≈ 0.5 * 0.8^2 * vx rtol = 1e-10  # cov(x_t, y_{t-1})
+        @test all(iszero, d[:E_y])                                 # linear ⇒ no σ² shift
+    end
+
+    @testset "order-3 moments are exact and simulation-free" begin
+        # Andreasen et al.'s own reference code gives the observation map as
+        #   D = [gx + 3/6·gssx, gx, ½·gxx, gx, 2·½·gxx, ⅙·gxxx],  d = ½·gss + ⅙·gsss
+        # i.e. the state map with h → g — NOT `gx·C_state`, which is what this package used.
+        # On the exactly-linear model the corrected order-3 machinery must reproduce the
+        # analytic moments to machine precision, including both autocovariance lags.
+        vx = 1 / (1 - 0.8^2)
+        sol3 = perturbation_solver(lin; order=3)
+        d3 = M._augmented_moments_3rd(sol3; lags=[1, 2])
+        @test d3[:Var_y] ≈ [vx 0.5*0.8*vx; 0.5*0.8*vx 0.25*vx] atol = 1e-9
+        @test d3[:Cov_y][:, :, 1] ≈ [0.8*vx 0.5*0.64*vx; 0.5*vx 0.25*0.8*vx] atol = 1e-9
+        @test d3[:Cov_y][:, :, 2] ≈ [0.64*vx 0.5*0.8^3*vx; 0.5*0.8*vx 0.25*0.64*vx] atol = 1e-9
+        @test all(iszero, d3[:E_y])
+        @test abs(d3[:Var_y][1, 2] - 0.5 * vx) > 0.2      # not the old, wrong value
+        # `analytical_moments` at order 3 now routes here rather than simulating
+        @test analytical_moments(sol3; lags=1) ≈
+              [vx, 0.5 * 0.8 * vx, 0.25 * vx, 0.8 * vx, 0.25 * 0.8 * vx] atol = 1e-9
+    end
+
+    @testset "order-3 moments carry no Monte Carlo" begin
+        rbc = @dsge begin
+            parameters: β = 0.99, α = 0.36, δ = 0.025, ρ = 0.9, σ = 0.03
+            endogenous: k, c, z
+            exogenous: ε
+            z[t] = ρ * z[t-1] + σ * ε[t]
+            k[t] = exp(z[t]) * k[t-1]^α + (1 - δ) * k[t-1] - c[t]
+            1 / c[t] = β * (1 / c[t+1]) * (α * exp(z[t+1]) * k[t]^(α - 1) + 1 - δ)
+        end
+        rbc = compute_steady_state(rbc)
+        sol = perturbation_solver(rbc; order=3)
+        # Repeated calls are BIT-identical — there is no RNG left in this path.
+        @test M._augmented_moments_3rd(sol; lags=[1])[:Var_y] ==
+              M._augmented_moments_3rd(sol; lags=[1])[:Var_y]
+
+        # The shock integral is exact at 4 Gauss-Hermite nodes: the integrand is degree 6 in ε
+        # and an m-node rule is exact through degree 2m−1 = 7. More nodes must change nothing.
+        pss = pruned_state_space(sol)
+        hxx_xx = M._extract_xx_block(pss.hxx, pss.nx, pss.nv)
+        nz = 3 * pss.nx + 2 * pss.nx^2 + pss.nx^3
+        Ez = zeros(nz)
+        Vz = Matrix{Float64}(0.01I, nz, nz)
+        ref = M._pss_inov_moments_3rd(pss, Ez, Vz, hxx_xx; n_gh=4)[1]
+        for m in (6, 8)
+            @test M._pss_inov_moments_3rd(pss, Ez, Vz, hxx_xx; n_gh=m)[1] ≈ ref atol = 1e-12
+        end
+        # The Cov(ξ,z) cross term is genuinely nonzero at third order — omitting it (as this
+        # package did) biases the variance.
+        _, BCov, Xbar, _ = M._pss_inov_moments_3rd(pss, Ez, Vz, hxx_xx)
+        @test maximum(abs, Xbar) > 0
+        @test maximum(abs, BCov) > 0
+    end
+
+    @testset "pruning prevents the explosion it exists to prevent" begin
+        # The three pre-T269 pruning testsets all used `y[t] = ρ·y[t-1] + σ·ε[t]` — a linear
+        # AR(1) with no control, where hxx = gxx = hxxx = 0 exactly and pruning is a no-op.
+        # They would pass with the pruning recursion deleted. This is the missing test: run the
+        # SAME policy functions with the Kronecker terms fed the TOTAL state (what pruning
+        # removes) and show the unpruned path diverges where the pruned one stays bounded.
+        function simulate_unpruned(sol, e)
+            p = pruned_state_space(sol)
+            dev = zeros(size(e, 1), p.n)
+            x = zeros(p.nx)
+            for t in 1:size(e, 1)
+                v = vcat(x, e[t, :])
+                kv = kron(v, v)
+                xn = p.hx_state * x + p.eta_x * e[t, :] + 0.5 * (p.hxx * kv) + 0.5 * p.hss
+                yv = p.gx_state * x + p.eta_y * e[t, :] + 0.5 * (p.gxx * kv) + 0.5 * p.gss
+                if p.order >= 3
+                    k3 = kron(v, kv)
+                    xn += (1 / 6) * (p.hxxx * k3) + 0.5 * (p.hssx * v) + (1 / 6) * p.hsss
+                    yv += (1 / 6) * (p.gxxx * k3) + 0.5 * (p.gssx * v) + (1 / 6) * p.gsss
+                end
+                for (k, si) in enumerate(p.state_indices); dev[t, si] = xn[k]; end
+                for (k, ci) in enumerate(p.control_indices); dev[t, ci] = yv[k]; end
+                x = xn
+            end
+            dev
+        end
+        function cubic_spec(a2, a3, sig)
+            sp = @dsge begin
+                parameters: ρ = 0.7, a2 = 0.15, a3 = 0.05, κ = 0.5, σ = 0.3
+                endogenous: x, y
+                exogenous: ε
+                x[t] = ρ * x[t-1] + a2 * x[t-1]^2 + a3 * x[t-1]^3 + σ * ε[t]
+                y[t] = κ * x[t-1] + 0.2 * x[t-1]^2
+            end
+            sp.param_values[:a2] = a2
+            sp.param_values[:a3] = a3
+            sp.param_values[:σ] = sig
+            compute_steady_state(sp)
+        end
+
+        # Mild nonlinearity. Starting from the steady state the second-order component is zero
+        # at t=1 and only feeds back from t=3, so the two recursions coincide exactly through
+        # t=2 and separate after — pruning is a genuinely different recursion, not a filter
+        # that only engages near blow-up. Over the full path both stay bounded here, so the
+        # divergence below is about stability, not about the paths differing at all.
+        mild = cubic_spec(0.15, 0.05, 0.3)
+        for order in (2, 3)
+            sol = perturbation_solver(mild; order=order)
+            e = randn(Random.MersenneTwister(4), 2000, 1)
+            sp = simulate(sol, 2000; shock_draws=e) .- sol.steady_state'
+            su = simulate_unpruned(sol, e)
+            @test sp[1:2, :] ≈ su[1:2, :] rtol = 1e-10
+            @test !isapprox(sp, su; rtol=1e-8)
+            @test all(isfinite, sp) && all(isfinite, su)
+            @test maximum(abs, sp) < 5 && maximum(abs, su) < 5
+        end
+
+        # Strong nonlinearity: the unpruned Kronecker terms compound and blow up, at BOTH
+        # orders and every seed, while the pruned path stays bounded.
+        strong = cubic_spec(0.4, 0.2, 0.6)
+        for order in (2, 3), seed in (1, 2, 3, 4)
+            sol = perturbation_solver(strong; order=order)
+            e = randn(Random.MersenneTwister(seed), 2000, 1)
+            sp = simulate(sol, 2000; shock_draws=e) .- sol.steady_state'
+            @test all(isfinite, sp)
+            @test maximum(abs, sp) < 50
+            @test !all(isfinite, simulate_unpruned(sol, e))     # the premise of pruning
+        end
+    end
+
+    @testset "order-3 σ² state correction is live in both paths" begin
+        # `hσσx`/`gσσx` are exactly zero on the cubic fixture above, so nothing there exercises
+        # the σ²·state term. A CRRA model with a risky return makes them large (‖hσσx‖ ≈ 0.55
+        # versus 0.028 for the plain RBC), and both the closed form and the pruned simulation
+        # must respond to them.
+        risky = @dsge begin
+            parameters: β = 0.99, α = 0.36, δ = 0.025, ρ = 0.9, σ = 0.05, γ = 5.0
+            endogenous: k, c, z, r
+            exogenous: ε
+            z[t] = ρ * z[t-1] + σ * ε[t]
+            k[t] = exp(z[t]) * k[t-1]^α + (1 - δ) * k[t-1] - c[t]
+            c[t]^(-γ) = β * c[t+1]^(-γ) * (α * exp(z[t+1]) * k[t]^(α - 1) + 1 - δ)
+            r[t] = α * exp(z[t]) * k[t-1]^(α - 1) - δ
+        end
+        risky = compute_steady_state(risky)
+        sol = perturbation_solver(risky; order=3)
+        pss = pruned_state_space(sol)
+        @test maximum(abs, pss.hssx) > 0.4        # the premise: a genuinely live correction
+        @test maximum(abs, pss.gssx) > 0.4
+
+        # A solution with the σ² state corrections switched off, to measure their effect.
+        sol0 = perturbation_solver(risky; order=3)
+        sol0.hσσx .= 0.0
+        sol0.gσσx .= 0.0
+
+        m1 = M._augmented_moments_3rd(sol; lags=[1])
+        m0 = M._augmented_moments_3rd(sol0; lags=[1])
+        # The closed-form VARIANCE moves substantially...
+        @test abs(m1[:Var_y][1, 1] - m0[:Var_y][1, 1]) / m1[:Var_y][1, 1] > 0.2
+        @test abs(m1[:Var_y][2, 2] - m0[:Var_y][2, 2]) / m1[:Var_y][2, 2] > 0.2
+        # ... while the MEAN does not, and that is correct rather than a dropped term:
+        # hσσx multiplies xf, and E[xf] = 0 exactly, so the σ²·state term is mean-zero.
+        @test m1[:E_y] ≈ m0[:E_y] atol = 1e-12
+
+        # The pruned simulation responds the same way — the correction is not merely in the
+        # moment formula. Same seed, so the difference is the coefficient, not the draws.
+        v1 = var(simulate(sol, 200_000; rng=Random.MersenneTwister(9))[:, 1])
+        v0 = var(simulate(sol0, 200_000; rng=Random.MersenneTwister(9))[:, 1])
+        @test abs(v1 - v0) / v1 > 0.2
+        @test sign(m1[:Var_y][1, 1] - m0[:Var_y][1, 1]) == sign(v1 - v0)
+    end
+
+    @testset "order-3 closed form matches simulation when hxx has no shock blocks" begin
+        # Nonlinear in the STATE but linear in the shock, so hxx/hxxx carry only x⊗x blocks —
+        # exactly what the augmented state can represent. The closed form must then land
+        # inside Monte-Carlo scatter, which pins that the machinery itself is exact.
+        nl = @dsge begin
+            parameters: ρ = 0.7, a2 = 0.15, a3 = 0.05, κ = 0.5, σ = 0.3
+            endogenous: x, y
+            exogenous: ε
+            x[t] = ρ * x[t-1] + a2 * x[t-1]^2 + a3 * x[t-1]^3 + σ * ε[t]
+            y[t] = κ * x[t-1] + 0.2 * x[t-1]^2
+        end
+        nl = compute_steady_state(nl)
+        sol = perturbation_solver(nl; order=3)
+        pss = pruned_state_space(sol)
+        hxx_xx = M._extract_xx_block(pss.hxx, pss.nx, pss.nv)
+        @test maximum(abs, pss.hxx) ≈ maximum(abs, hxx_xx)    # the premise: no shock blocks
+        d = M._augmented_moments_3rd(sol; lags=[1])
+        dev = simulate(sol, 1_000_000; rng=Random.MersenneTwister(11)) .- sol.steady_state'
+        @test d[:Var_y] ≈ cov(dev) rtol = 0.02
+        @test d[:E_y] ≈ vec(mean(dev; dims=1)) rtol = 0.05
+    end
+
+    @testset "closed-form moments match a pruned simulation (nonlinear)" begin
+        rbc = @dsge begin
+            parameters: β = 0.99, α = 0.36, δ = 0.025, ρ = 0.95, σ = 0.02
+            endogenous: k, c, z
+            exogenous: ε
+            z[t] = ρ * z[t-1] + σ * ε[t]
+            k[t] = exp(z[t]) * k[t-1]^α + (1 - δ) * k[t-1] - c[t]
+            1 / c[t] = β * (1 / c[t+1]) * (α * exp(z[t+1]) * k[t]^(α - 1) + 1 - δ)
+        end
+        rbc = compute_steady_state(rbc)
+        sol = perturbation_solver(rbc; order=2)
+        d = M._augmented_moments_2nd(sol; lags=[1])
+        dev = simulate(sol, 400_000; rng=Random.MersenneTwister(11)) .- sol.steady_state'
+        V = cov(dev)
+        @test d[:Var_y] ≈ V rtol = 0.05
+        @test vec(d[:E_y]) ≈ vec(mean(dev; dims=1)) atol = 0.05 * maximum(abs, d[:E_y])
+        # The σ² correction is real: consumption's mean is shifted off the deterministic SS.
+        @test abs(d[:E_y][2]) > 1e-3
+    end
+
+    @testset "simulate, moments and FEVD share one observation map" begin
+        rbc = @dsge begin
+            parameters: β = 0.99, α = 0.36, δ = 0.025, ρ = 0.9, σ = 0.02
+            endogenous: k, c, z
+            exogenous: ε
+            z[t] = ρ * z[t-1] + σ * ε[t]
+            k[t] = exp(z[t]) * k[t-1]^α + (1 - δ) * k[t-1] - c[t]
+            1 / c[t] = β * (1 / c[t+1]) * (α * exp(z[t+1]) * k[t]^(α - 1) + 1 - δ)
+        end
+        rbc = compute_steady_state(rbc)
+        sol = perturbation_solver(rbc; order=2)
+        pss = pruned_state_space(sol)
+        C, noise, d = M._pss_obs_map_2nd(pss)
+        A, c, Var_z, E_z, Mx = M._pss_augmented_2nd(pss)
+
+        # The linear-in-z map reproduces the pruned step exactly up to the bilinear x⊗ε term
+        # that no C·z + noise·ε form can represent. Assert BOTH halves of that claim: the gap
+        # is exactly the omitted second-order shock blocks, not an unexplained residual.
+        rng = Random.MersenneTwister(3)
+        e = randn(rng, 40, 1)
+        dev = M._pss_simulate_dev(pss, e)
+        nv, nx = pss.nv, pss.nx
+        xf = zeros(nx); xs = zeros(nx); zr = zeros(nx)
+        gaps = Float64[]
+        for t in 1:40
+            zvec = vcat(xf, xs, vec(kron(xf, xf)))
+            pred = C * zvec + noise * e[t, :] + d
+            # the terms the augmented state cannot carry: ½·Hxx·(v⊗v) minus its x⊗x and the
+            # (already-folded-in) mean of its ε⊗ε block
+            vf = vcat(xf, e[t, :])
+            kvf = kron(vf, vf)
+            full = zeros(pss.n)
+            for (k, si) in enumerate(pss.state_indices)
+                full[si] = 0.5 * (pss.hxx[k, :]' * kvf)
+            end
+            for (k, ci) in enumerate(pss.control_indices)
+                full[ci] = 0.5 * (pss.gxx[k, :]' * kvf)
+            end
+            xxonly = zeros(pss.n)
+            hxx_xx = M._extract_xx_block(pss.hxx, nx, nv)
+            gxx_xx = M._extract_xx_block(pss.gxx, nx, nv)
+            kxx = vec(kron(xf, xf))
+            for (k, si) in enumerate(pss.state_indices)
+                xxonly[si] = 0.5 * (hxx_xx[k, :]' * kxx) +
+                             0.5 * M._pss_ee_mean(pss.hxx, nx, nv, pss.n_eps)[k]
+            end
+            for (k, ci) in enumerate(pss.control_indices)
+                xxonly[ci] = 0.5 * (gxx_xx[k, :]' * kxx) +
+                             0.5 * M._pss_ee_mean(pss.gxx, nx, nv, pss.n_eps)[k]
+            end
+            @test pred + (full - xxonly) ≈ dev[t, :] atol = 1e-10
+            push!(gaps, maximum(abs, dev[t, :] - pred))
+            xf, xs, zr, _, _ = M._pss_step(pss, xf, xs, zr, e[t, :])
+        end
+        @test maximum(gaps) > 0            # this model DOES have shock blocks in hxx
+
+        # A model whose shocks enter linearly has no such blocks, and the map is then exact.
+        lin2 = @dsge begin
+            parameters: ρ = 0.7, κ = 0.4, σ = 1.0
+            endogenous: x, y
+            exogenous: ε
+            x[t] = ρ * x[t-1] + σ * ε[t]
+            y[t] = κ * x[t-1]
+        end
+        lin2 = compute_steady_state(lin2)
+        pl = pruned_state_space(perturbation_solver(lin2; order=2))
+        Cl, nl, dl = M._pss_obs_map_2nd(pl)
+        devl = M._pss_simulate_dev(pl, e)
+        xf = zeros(pl.nx); xs = zeros(pl.nx); zr = zeros(pl.nx)
+        for t in 1:40
+            @test Cl * vcat(xf, xs, vec(kron(xf, xf))) + nl * e[t, :] + dl ≈
+                  devl[t, :] atol = 1e-10
+            xf, xs, zr, _, _ = M._pss_step(pl, xf, xs, zr, e[t, :])
+        end
+
+        # With one shock, the unconditional FEVD attributes everything to it, and its variance
+        # equals the total closed-form variance — i.e. FEVD and moments agree.
+        fv = fevd(sol, 1; unconditional=true)
+        @test all(≈(1.0; atol=1e-10), fv.proportions[:, 1, 1])
+        mom = M._augmented_moments_2nd(sol; lags=[1])
+        @test fv.decomposition[:, 1, 1] ≈ diag(mom[:Var_y]) rtol = 1e-8
+    end
+end
+
+@testset "Determinacy-region mapping (#367, T268)" begin
+    M = MacroEconometricModels
+
+    # Textbook 3-equation NK model. Its determinacy frontier is analytic:
+    #   determinate  ⇔  κ·(φ_π − 1) + (1 − β)·φ_y > 0
+    # (Woodford's "generalized Taylor principle"), which is what every check below is
+    # measured against rather than against the code's own output.
+    nk = @dsge begin
+        parameters: β = 0.99, σ_c = 1.0, κ = 0.3, φ_π = 1.5, φ_y = 0.5,
+                    ρ_d = 0.8, σ_d = 0.01
+        endogenous: y, π, R, d
+        exogenous: ε_d
+        y[t] = y[t+1] - (1 / σ_c) * (R[t] - π[t+1]) + d[t]
+        R[t] = φ_π * π[t] + φ_y * y[t]
+        π[t] = β * π[t+1] + κ * y[t]
+        d[t] = ρ_d * d[t-1] + σ_d * ε_d[t]
+    end
+    nk = compute_steady_state(nk)
+    frontier(pp, py; beta=0.99, kappa=0.3) = kappa * (pp - 1) + (1 - beta) * py
+
+    @testset "1-D sweep reproduces the Taylor-principle boundary" begin
+        grid = range(0.0, 3.0; length=61)
+        m = determinacy_region(nk; params=:φ_π, grids=grid)
+        @test m isa DeterminacyMap
+        @test m.params == [:φ_π]
+        @test size(m.verdict) == (61, 1)
+        @test isempty(m.failures)
+        # Every cell matches the closed-form frontier (φ_y = 0.5 held at its base value).
+        for (i, pp) in enumerate(grid)
+            abs(frontier(pp, 0.5)) < 1e-8 && continue      # skip the frontier itself
+            @test m.verdict[i, 1] == (frontier(pp, 0.5) > 0 ? 1 : 0)
+        end
+        # ... and the located boundary sits within half a grid step of the analytic one.
+        b = determinacy_boundary(m)
+        @test length(b) == 1
+        analytic = 1 - (1 - 0.99) * 0.5 / 0.3
+        @test abs(b[1] - analytic) <= step(grid)
+        # eu is the raw Sims pair, consistent with the verdict code
+        @test m.eu[end, 1, :] == [1, 1]                     # φ_π = 3 ⇒ determinate
+        @test m.eu[1, 1, :] == [1, 0]                       # φ_π = 0 ⇒ indeterminate
+    end
+
+    @testset "2-D sweep matches the analytic frontier cell by cell" begin
+        g1 = range(0.0, 2.0; length=11)
+        g2 = range(0.0, 4.0; length=9)
+        m = determinacy_region(nk; params=(:φ_π, :φ_y), grids=(g1, g2))
+        @test size(m.verdict) == (11, 9)
+        @test sort(unique(m.verdict)) == [0, 1]
+        bad = 0
+        for (i, pp) in enumerate(g1), (j, py) in enumerate(g2)
+            abs(frontier(pp, py)) < 1e-8 && continue
+            m.verdict[i, j] == (frontier(pp, py) > 0 ? 1 : 0) || (bad += 1)
+        end
+        @test bad == 0
+        # The frontier slopes: a larger output response lowers the inflation response needed.
+        @test m.verdict[6, 1] == 0 && m.verdict[6, end] == 1
+        @test_throws ArgumentError determinacy_boundary(m)   # a curve, not points
+    end
+
+    @testset "no stable solution is a distinct region" begin
+        # div below the largest stable root leaves too few stable roots.
+        m = determinacy_region(nk; params=:φ_π, grids=[1.5], div=0.5)
+        @test m.verdict[1, 1] == DETERMINACY_CODES.no_solution
+        @test m.eu[1, 1, 1] == 0
+    end
+
+    @testset "solve failures are marked, not fatal" begin
+        # Nonlinear RBC: the steady state is solved numerically, so invalid capital shares
+        # genuinely fail instead of merely changing the verdict.
+        rbc = @dsge begin
+            parameters: β = 0.99, α = 0.36, δ = 0.025, ρ = 0.95, σ = 0.01
+            endogenous: k, c, z
+            exogenous: ε
+            z[t] = ρ * z[t-1] + σ * ε[t]
+            k[t] = exp(z[t]) * k[t-1]^α + (1 - δ) * k[t-1] - c[t]
+            1 / c[t] = β * (1 / c[t+1]) * (α * exp(z[t+1]) * k[t]^(α - 1) + 1 - δ)
+        end
+        rbc = compute_steady_state(rbc)
+        m = determinacy_region(rbc; params=:α, grids=[-0.5, 0.0, 0.36, 0.9, 1.0, 1.5])
+        @test m.verdict[3, 1] == DETERMINACY_CODES.determinate    # the valid calibration
+        @test count(==(DETERMINACY_CODES.failed), m.verdict) >= 3
+        @test length(m.failures) == count(==(DETERMINACY_CODES.failed), m.verdict)
+        @test all(k -> m.verdict[k...] == DETERMINACY_CODES.failed, keys(m.failures))
+        @test all(!isempty, values(m.failures))
+        @test m.eu[1, 1, :] == [-1, -1]                            # sentinel at failed cells
+        # A failed cell is missing information, not a region: the step from "failed" to
+        # "determinate" must not be reported as a determinacy boundary.
+        @test isempty(determinacy_boundary(m))
+        @test !isempty(sprint(report, m))
+    end
+
+    @testset "threaded equals serial" begin
+        g1 = range(0.5, 2.0; length=7)
+        g2 = range(0.0, 3.0; length=5)
+        ms = determinacy_region(nk; params=(:φ_π, :φ_y), grids=(g1, g2))
+        mt = determinacy_region(nk; params=(:φ_π, :φ_y), grids=(g1, g2), threaded=true)
+        @test mt.verdict == ms.verdict
+        @test mt.eu == ms.eu
+    end
+
+    @testset "argument validation and accessors" begin
+        @test_throws ArgumentError determinacy_region(nk; params=:nope, grids=[1.0])
+        @test_throws ArgumentError determinacy_region(nk; params=(:φ_π, :φ_π),
+                                                      grids=([1.0], [1.0]))
+        @test_throws ArgumentError determinacy_region(nk; params=(:φ_π, :φ_y, :κ),
+                                                      grids=([1.0], [1.0], [1.0]))
+        @test_throws ArgumentError determinacy_region(nk; params=:φ_π, grids=Float64[])
+        @test_throws ArgumentError determinacy_region(nk; params=(:φ_π, :φ_y), grids=([1.0],))
+        @test_throws ArgumentError determinacy_region(nk; params=:φ_π, grids=[1.0],
+                                                      method=:bogus)
+        @test determinacy_label(1) == "determinate"
+        @test determinacy_label(0) == "indeterminate"
+        @test determinacy_label(-1) == "no stable solution"
+        @test determinacy_label(-2) == "solve failed"
+        @test_throws ArgumentError determinacy_label(7)
+        @test DETERMINACY_CODES.determinate == 1
+    end
+
+    @testset "base parameter vector is respected" begin
+        # Holding φ_y at 0 moves the frontier to exactly φ_π = 1.
+        base = copy(nk.param_values)
+        base[:φ_y] = 0.0
+        m = determinacy_region(nk, base; params=:φ_π, grids=[0.9, 0.99, 1.01, 1.1])
+        @test vec(m.verdict) == [0, 0, 1, 1]
+        @test m.base_values[:φ_y] == 0.0
+        # and the default base reproduces the model's own values
+        m2 = determinacy_region(nk; params=:φ_π, grids=[1.5])
+        @test m2.base_values[:φ_y] == nk.param_values[:φ_y]
+    end
+
+    @testset "report and show" begin
+        m = determinacy_region(nk; params=:φ_π, grids=range(0.0, 3.0; length=21))
+        s = sprint(show, m)
+        @test occursin("DeterminacyMap", s) && occursin("determinate", s)
+        r = sprint(report, m)
+        @test occursin("Determinacy Region", r)
+        @test occursin("Boundary at", r)
+        @test occursin("D", r) && occursin("I", r)        # the ASCII map
+        m2 = determinacy_region(nk; params=(:φ_π, :φ_y),
+                                grids=(range(0.0, 2.0; length=5), range(0.0, 2.0; length=4)))
+        r2 = sprint(report, m2)
+        @test occursin("rows:", r2) && occursin("cols:", r2)
+    end
+
+    @testset "plot_result renders both shapes" begin
+        m1 = determinacy_region(nk; params=:φ_π, grids=range(0.0, 3.0; length=21))
+        p1 = plot_result(m1)
+        @test p1 isa MacroEconometricModels.PlotOutput
+        @test occursin("dsge_determinacy", p1.html)
+        m2 = determinacy_region(nk; params=(:φ_π, :φ_y),
+                                grids=(range(0.0, 2.0; length=6), range(0.0, 3.0; length=5)))
+        p2 = plot_result(m2; title="NK determinacy")
+        @test occursin("NK determinacy", p2.html)
+        @test occursin("φ_y", p2.html)                     # second parameter labels the x axis
+    end
+end
+
+@testset "Sparse/structured linear solution (#369, T270)" begin
+    M = MacroEconometricModels
+
+    # Multi-sector linear RE system: each sector carries a predetermined capital-like state and
+    # a forward-looking price, coupled to a couple of neighbours. Sparse by construction.
+    function multisector(ns; couple=2)
+        n = 2ns
+        f0 = zeros(n, n); f1 = zeros(n, n); fl = zeros(n, n); fe = zeros(n, 1)
+        for i in 1:ns
+            ki, pk = i, ns + i
+            f0[ki, ki] = 1.0; f1[ki, ki] = -0.9; f0[ki, pk] = 0.1
+            f0[pk, pk] = 1.0; fl[pk, pk] = -0.95; f1[pk, ki] = -0.3
+            for j in 1:couple
+                nb = mod1(i + j, ns)
+                f1[ki, nb] = -0.02
+                fl[pk, ns+nb] = -0.01
+            end
+        end
+        fe[1, 1] = -1.0
+        (f0, f1, fl, fe)
+    end
+
+    @testset "sparse route reproduces the dense route" begin
+        # The whole point: this is a performance path, not a semantics change. G, impact and
+        # the determinacy verdict must all match the dense companion-QZ core.
+        for ns in (5, 25, 60)
+            f0, f1, fl, fe = multisector(ns)
+            d = M._solve_qz_quadratic(f0, f1, fl, fe; sparse=false)
+            s = M._solve_qz_quadratic(f0, f1, fl, fe; sparse=true)
+            @test s.G ≈ d.G atol = 1e-9
+            @test s.impact ≈ d.impact atol = 1e-9
+            @test s.eu == d.eu
+            @test s.n_stable == d.n_stable
+            @test s.residual < 1e-9
+            @test s.sparse.reason == :converged
+            @test s.sparse.iterations <= 15          # Newton converges quadratically
+            @test s.sparse.spectral_radius < 1.0
+        end
+    end
+
+    @testset "sparse route agrees on the package's own small models" begin
+        # Forced onto the sparse path, the standard fixtures must come out identical — the
+        # routing heuristic would send them to the dense core, so this checks the path itself
+        # rather than the heuristic.
+        for (f0, f1, fl, fe) in (
+            (reshape([1.0], 1, 1), reshape([-0.9], 1, 1), reshape([0.0], 1, 1),
+             reshape([-1.0], 1, 1)),                                     # backward AR(1)
+            (reshape([1.0], 1, 1), reshape([0.0], 1, 1), reshape([-0.5], 1, 1),
+             reshape([1.0], 1, 1)),                                      # pure forward
+            ([0.5 1.0; 1.0 1.0], [-0.5 0.0; -1.5 0.0], [0.0 -1.0; 0.0 0.0],
+             reshape([-0.01, -0.01], 2, 1)))                             # double unit root
+            d = M._solve_qz_quadratic(f0, f1, fl, fe; sparse=false, cluster_tol=1e-12)
+            s = M._solve_qz_quadratic(f0, f1, fl, fe; sparse=true, cluster_tol=1e-12)
+            @test s.eu == d.eu
+            @test s.G ≈ d.G atol = 1e-9
+        end
+    end
+
+    @testset "routing sends small or dense models to the dense core" begin
+        # Small and sparse → dense (the QZ is faster there; measured 0.21× at n = 100).
+        for ns in (5, 25, 50)
+            f0, f1, fl, fe = multisector(ns)
+            @test !M._should_use_sparse_klein(f0, f1, fl)
+            @test M._solve_qz_quadratic(f0, f1, fl, fe).sparse === nothing
+        end
+        # Large and sparse → sparse.
+        f0, f1, fl, fe = multisector(250)
+        @test M._should_use_sparse_klein(f0, f1, fl)
+        @test M._solve_qz_quadratic(f0, f1, fl, fe).sparse !== nothing
+        # Large but DENSE → dense, because the advantage vanishes without sparsity.
+        rng = Random.MersenneTwister(270)
+        nd = 420
+        f0d = Matrix{Float64}(4.0I, nd, nd) .+ 0.02 .* randn(rng, nd, nd)
+        @test M._sparse_density(f0d, f0d, f0d) > 0.9
+        @test !M._should_use_sparse_klein(f0d, 0.02 .* randn(rng, nd, nd),
+                                          0.02 .* randn(rng, nd, nd))
+    end
+
+    @testset "an unstable solvent is rejected, not returned" begin
+        # Newton finds A solvent, not necessarily the stable one. An explosive purely backward
+        # model has no stable solvent, so the sparse route must decline and hand over.
+        f0 = reshape([1.0], 1, 1); f1 = reshape([-1.5], 1, 1)
+        fl = reshape([0.0], 1, 1); fe = reshape([-1.0], 1, 1)
+        G, info = M._newton_solvent(f0, f1, fl; div=1.0 + 1e-8)
+        @test G === nothing
+        @test !info.ok
+        @test info.reason == :unstable_solvent
+        @test info.spectral_radius >= 1.0
+        # Forcing sparse=true still yields the dense answer, with a warning.
+        s = @test_logs (:warn,) match_mode = :any M._solve_qz_quadratic(
+            f0, f1, fl, fe; sparse=true)
+        @test s.eu == M._solve_qz_quadratic(f0, f1, fl, fe; sparse=false).eu
+        @test s.sparse === nothing               # fell through to the dense core
+    end
+
+    @testset "argument validation and density helper" begin
+        f0, f1, fl, fe = multisector(5)
+        @test_throws ArgumentError M._solve_qz_quadratic(f0, f1, fl, fe; sparse=:bogus)
+        @test M._sparse_density(zeros(4, 4)) == 0.0
+        @test M._sparse_density(ones(4, 4)) == 1.0
+        @test M._sparse_density(Matrix{Float64}(I, 4, 4)) == 0.25
+        @test M._sparse_density() == 1.0                       # degenerate input is not "sparse"
+        @test M._newton_solvent(zeros(0, 0), zeros(0, 0), zeros(0, 0))[2].reason == :empty
+    end
+end
+
+@testset "Sims (2002) existence/uniqueness rank test (#366, T267)" begin
+    M = MacroEconometricModels
+
+    # The Blanchard-Kahn root count, reproduced verbatim from the pre-T267 implementation, so
+    # the knife-edge tests below DEMONSTRATE the disagreement rather than merely asserting it.
+    function bk_count_eu(Gamma0, Gamma1, Psi, Pi; div=1.0 + 1e-8)
+        n = size(Gamma0, 1)
+        F = schur(complex(Gamma0), complex(Gamma1))
+        gev = [abs(F.S[i, i]) > eps(Float64) ? abs(F.T[i, i] / F.S[i, i]) : Inf for i in 1:n]
+        sel = BitVector(gev .< div)
+        Fo = ordschur(F, sel)
+        nstab = count(sel); nunstab = n - nstab; Qp = Fo.Q'
+        ev = [abs(Fo.S[i, i]) > eps(Float64) ? Fo.T[i, i] / Fo.S[i, i] : complex(Inf) for i in 1:n]
+        eu = [0, 0]; n_fwd = size(Pi, 2)
+        if n_fwd > 0 && nunstab > 0
+            Q2Pi = Qp[nstab+1:n, :] * complex(Pi)
+            Q2Psi = Qp[nstab+1:n, :] * complex(Psi)
+            sv = svd(Q2Pi)
+            rank_Q2Pi = count(s -> s > eps(Float64) * 1e6 * maximum(sv.S), sv.S)
+            consistent = maximum(abs.(Q2Psi - Q2Pi * pinv(Q2Pi) * Q2Psi)) < 1e-8
+            (consistent || rank_Q2Pi >= nunstab) && (eu[1] = 1)
+            nfu = count(i -> !isinf(abs(ev[i])) && abs(ev[i]) >= div, 1:n)
+            (nfu == n_fwd || (consistent && nfu <= n_fwd)) && (eu[2] = 1)
+        elseif nunstab == 0
+            eu = [1, 1]
+        end
+        eu
+    end
+    sims_eu(G0, G1, Psi, Pi) = M.gensys(G0, G1, zeros(size(G0, 1)), Psi, Pi).eu
+
+    # Textbook 3-equation New Keynesian model, written directly in Jacobian form.
+    function nk_jacobians(phi_pi; beta=0.99, kappa=0.3)
+        f0 = zeros(3, 3); fl = zeros(3, 3); f1 = zeros(3, 3); fe = zeros(3, 1)
+        f0[1, 1] = 1.0; f0[1, 3] = 1.0; fl[1, 1] = -1.0; fl[1, 2] = -1.0   # IS
+        f0[2, 2] = -1.0; f0[2, 1] = kappa; fl[2, 2] = beta                  # Phillips
+        f0[3, 3] = -1.0; f0[3, 2] = phi_pi; fe[3, 1] = 1.0                  # Taylor rule
+        (f0, f1, fl, fe)
+    end
+
+    @testset "Taylor principle: determinate iff phi_pi > 1" begin
+        for phi in (0.0, 0.5, 0.9, 1.01, 1.5, 3.0)
+            r = M._solve_qz_quadratic(nk_jacobians(phi)...)
+            @test r.eu == (phi > 1 ? [1, 1] : [1, 0])
+            @test r.sims.n_expect == 2          # only pi and x carry leads; i does not
+        end
+        # The mechanism, not just the verdict: below the Taylor principle one expectational
+        # error is left unconstrained by the unstable block.
+        @test M._solve_qz_quadratic(nk_jacobians(0.5)...).sims.n_loose == 1
+        @test M._solve_qz_quadratic(nk_jacobians(1.5)...).sims.n_loose == 0
+    end
+
+    @testset "pure forward model: determinate iff |a| < 1" begin
+        # y_t = a·E_t[y_{t+1}] + e_t. Roots of -a·mu^2 + mu = 0 are 0 and 1/a, so the forward
+        # root is stable exactly when |a| > 1 — and a stable forward root IS indeterminacy.
+        for a in (0.5, 0.9, 1.5, 3.0)
+            r = M._solve_qz_quadratic(reshape([1.0], 1, 1), reshape([0.0], 1, 1),
+                                      reshape([-a], 1, 1), reshape([1.0], 1, 1))
+            @test r.eu == (abs(a) < 1 ? [1, 1] : [1, 0])
+        end
+    end
+
+    @testset "backward-looking model and existence failure" begin
+        for rho in (0.5, 0.95)
+            r = M._solve_qz_quadratic(reshape([1.0], 1, 1), reshape([-rho], 1, 1),
+                                      reshape([0.0], 1, 1), reshape([-1.0], 1, 1))
+            @test r.eu == [1, 1]
+            @test r.sims.n_expect == 0          # no leads ⇒ no expectational errors at all
+            @test r.G[1, 1] ≈ rho rtol = 1e-10
+        end
+        # Explosive and purely backward: the shock drives the unstable block and there is no
+        # expectational error to absorb it, so no bounded solution exists.
+        r = M._solve_qz_quadratic(reshape([1.0], 1, 1), reshape([-1.5], 1, 1),
+                                  reshape([0.0], 1, 1), reshape([-1.0], 1, 1))
+        @test r.eu[1] == 0
+        @test r.sims.existence_residual ≈ 1.0 rtol = 1e-10   # Q2·Psi entirely outside the span
+    end
+
+    @testset "knife edge: root count claims uniqueness that does not hold" begin
+        # s1_t = 0.5·s1_{t-1} + Psi1·e + eta2   (stable block)
+        # s2_t = 2.0·s2_{t-1} + Psi2·e + eta1   (unstable block)
+        # Killing the unstable block pins eta1. eta2 is untouched by it yet moves s1 — a
+        # sunspot. The root count sees one unstable root and two error columns and calls it
+        # determinate; Sims's row-span condition catches the free direction.
+        G0 = Matrix{Float64}(I, 2, 2); G1 = [0.5 0.0; 0.0 2.0]
+        Pi = [0.0 1.0; 1.0 0.0]; Psi = reshape([1.0, 1.0], 2, 1)
+        @test bk_count_eu(G0, G1, Psi, Pi) == [1, 1]      # the OLD verdict — wrong
+        @test sims_eu(G0, G1, Psi, Pi) == [1, 0]          # the NEW verdict — correct
+        s = M._sims_rank_eu(ordschur(schur(complex(G0), complex(G1)),
+                                     BitVector([true, false])).Q', 1, complex(Psi), complex(Pi))
+        @test s.n_loose == 1 && s.rank_Q2Pi == 1 && s.rank_Q1Pi == 1
+
+        # Pi loads only on the stable row, Psi only on the unstable row: nothing can absorb the
+        # shock. The old rule returned the incoherent [0,1] — "unique" but non-existent.
+        Pi2 = reshape([1.0, 0.0], 2, 1); Psi2 = reshape([0.0, 1.0], 2, 1)
+        @test bk_count_eu(G0, G1, Psi2, Pi2) == [0, 1]
+        @test sims_eu(G0, G1, Psi2, Pi2) == [0, 0]
+    end
+
+    @testset "span condition is weaker than Sims's own full-row-rank test" begin
+        # gensys.m tests rank(Q2·Pi) >= nunstab, which is sufficient but NOT necessary: with a
+        # rank-deficient Q2·Pi a solution still exists whenever Q2·Psi lands inside the span.
+        G0 = Matrix{Float64}(I, 3, 3); G1 = [0.5 0 0; 0 2.0 0; 0 0 3.0]
+        Qp = ordschur(schur(complex(G0), complex(G1)), BitVector([true, false, false])).Q'
+        Pi = reshape([0.0, 1.0, 1.0], 3, 1)
+        inside = M._sims_rank_eu(Qp, 1, complex(reshape([0.0, 2.0, 2.0], 3, 1)), complex(Pi))
+        @test inside.rank_Q2Pi == 1 && !inside.full_row_rank    # gensys.m would say "no"
+        @test inside.eu[1] == 1                                  # the span condition says "yes"
+        @test inside.existence_residual < 1e-12
+        outside = M._sims_rank_eu(Qp, 1, complex(reshape([0.0, 1.0, -1.0], 3, 1)), complex(Pi))
+        @test outside.eu[1] == 0
+        @test outside.existence_residual > 0.1
+    end
+
+    @testset "agrees with the root count on generic models" begin
+        # The count is a theorem under a rank condition; where the rank condition holds — i.e.
+        # essentially always for randomly drawn systems — the two verdicts must coincide.
+        rng = Random.MersenneTwister(267)
+        agree = 0; total = 0
+        for _ in 1:300
+            n = rand(rng, 1:4)
+            f0 = Matrix{Float64}(I, n, n) .+ 0.3 .* randn(rng, n, n)
+            r = try
+                M._solve_qz_quadratic(f0, 0.3 .* randn(rng, n, n),
+                                      0.3 .* randn(rng, n, n), randn(rng, n, 1))
+            catch
+                continue
+            end
+            total += 1
+            agree += (r.eu == r.eu_count)
+        end
+        @test total > 250
+        @test agree == total
+    end
+
+    @testset "scale-relative tolerances" begin
+        # Rescaling equations by a diagonal matrix leaves the model unchanged, so the verdict
+        # must not move. An absolute rank cutoff would fail this.
+        for s in (1e-6, 1.0, 1e6)
+            f0, f1, fl, fe = nk_jacobians(1.5)
+            D = Diagonal([s, 1.0, 1 / s])
+            @test M._solve_qz_quadratic(D * f0, D * f1, D * fl, D * fe).eu == [1, 1]
+            f0i, f1i, fli, fei = nk_jacobians(0.5)
+            @test M._solve_qz_quadratic(D * f0i, D * f1i, D * fli, D * fei).eu == [1, 0]
+        end
+        # _orth_basis cuts relative to the largest singular value, not an absolute floor.
+        A = Diagonal([1.0, 1e-14]) * ones(2, 2)
+        @test M._orth_basis(A, -1)[3] == 1
+        @test M._orth_basis(1e-12 .* A, -1)[3] == 1          # same rank after uniform scaling
+        @test M._orth_basis(Matrix(Diagonal([1.0, 0.5])), -1)[3] == 2
+        @test M._orth_basis(zeros(0, 3), -1)[3] == 0
+        # the returned bases really are orthonormal spans of the column/row spaces
+        U, V, r = M._orth_basis([1.0 2.0; 2.0 4.0; 0.0 0.0], -1)
+        @test r == 1                                          # rank-1 by construction
+        @test U' * U ≈ Matrix{Float64}(I, 1, 1) atol = 1e-12
+        @test V' * V ≈ Matrix{Float64}(I, 1, 1) atol = 1e-12
+    end
+
+    @testset "augmented Sims form matches the quadratic" begin
+        f0, f1, fl, fe = nk_jacobians(1.5)
+        G0, G1, Psi, Pi, fwd = M._sims_augmented_system(f0, f1, fl, fe)
+        @test fwd == [1, 2]                       # only x and pi appear with a lead
+        @test size(Pi, 2) == 2 && size(G0, 1) == 5
+        # det(Gamma1 - mu*Gamma0) has the same finite roots as det(f_lead*mu^2 + f0*mu + f1)
+        quad_roots = sort(filter(isfinite, abs.(
+            M._solve_qz_quadratic(f0, f1, fl, fe).eigenvalues)))
+        aug = eigvals(complex(G1), complex(G0))
+        aug_roots = sort(filter(isfinite, abs.(aug)))
+        @test length(aug_roots) >= 3
+        for r in aug_roots
+            @test minimum(abs.(quad_roots .- r)) < 1e-8
+        end
+        # a variable with no lead contributes no expectational error
+        fl_none = zeros(3, 3)
+        @test size(M._sims_augmented_system(f0, f1, fl_none, fe)[4], 2) == 0
+    end
+
+    @testset "defective double unit root resolves consistently" begin
+        # det(f_lead·mu^2 + f0·mu + f1) = mu·(mu-1)^2 — a double root sitting exactly ON the
+        # unit circle. The companion QZ splits such a root by about sqrt(eps) ~ 1e-8, which
+        # straddles the default div = 1 + 1e-8 and makes the ROOT COUNT report a spurious
+        # `n_stable == n`. The verdict must not depend on that accident.
+        f0 = [0.5 1.0; 1.0 1.0]; f1 = [-0.5 0.0; -1.5 0.0]
+        fl = [0.0 -1.0; 0.0 0.0]; fe = reshape([-0.01, -0.01], 2, 1)
+        @test det(fl .* 1.0^2 .+ f0 .* 1.0 .+ f1) ≈ 0 atol = 1e-14   # mu = 1 is a root
+        @test det(fl .* 0.0 .+ f1) ≈ 0 atol = 1e-14                   # mu = 0 is a root
+        @test det(fl .* 4.0 .+ f0 .* 2.0 .+ f1) ≈ 2.0 rtol = 1e-12    # ... and only those
+
+        # Not determinate on EITHER side of the knife edge.
+        @test M._solve_qz_quadratic(f0, f1, fl, fe; div=0.99, cluster_tol=1e-12).eu == [0, 0]
+        @test M._solve_qz_quadratic(f0, f1, fl, fe; div=1.01, cluster_tol=1e-12).eu == [1, 0]
+        # ... and so also at the default div, where the root count is fooled into [1,1].
+        r = M._solve_qz_quadratic(f0, f1, fl, fe; cluster_tol=1e-12)
+        @test r.eu == [1, 0]
+        @test r.eu_count == [1, 1]              # the artifact this test pins down
+        @test r.sims.n_loose == 1               # eta is unconstrained: a sunspot
+    end
+
+    @testset "div is honored by the rank test" begin
+        # y_t = 0.9·y_{t-1}: determinate at the default div, no stable solution once div < 0.9.
+        args = (reshape([1.0], 1, 1), reshape([-0.9], 1, 1),
+                reshape([0.0], 1, 1), reshape([-1.0], 1, 1))
+        @test M._solve_qz_quadratic(args...).eu == [1, 1]
+        @test M._solve_qz_quadratic(args...; div=0.5).eu == [0, 0]
+    end
+
+    @testset "solve() forwards div and rank_rtol to the rank test" begin
+        spec = @dsge begin
+            parameters: ρ = 0.9, σ = 1.0
+            endogenous: y
+            exogenous: ε
+            y[t] = ρ * y[t-1] + σ * ε[t]
+        end
+        spec = compute_steady_state(spec)
+        @test solve(spec; method=:gensys).eu == [1, 1]
+        @test solve(spec; method=:gensys, div=0.5).eu == [0, 0]
+        @test solve(spec; method=:gensys, rank_rtol=1e-6).eu == [1, 1]
+
+        # rank_rtol reaches the rank test: an absurd tolerance accepts a span that the default
+        # rejects. Asserted on the rank test itself, because `_solve_qz_quadratic` additionally
+        # forces eu = [0,0] whenever n_stable < n — no stable solvent can be built at all then,
+        # whatever the canonical form's rank conditions say — and that guard would mask this.
+        explosive = (reshape([1.0], 1, 1), reshape([-1.5], 1, 1),
+                     reshape([0.0], 1, 1), reshape([-1.0], 1, 1))
+        @test M._sims_existence_uniqueness(explosive...; divhat=1.0 + 1e-8).eu[1] == 0
+        @test M._sims_existence_uniqueness(explosive...; divhat=1.0 + 1e-8,
+                                           rank_rtol=2.0).eu[1] == 1
+        @test M._solve_qz_quadratic(explosive...; rank_rtol=2.0).eu == [0, 0]   # guard wins
+    end
+end
+
 @testset "Exact AD derivative tensors (#212)" begin
     M = MacroEconometricModels
     # residual f = y_t - y_lag² - a·e  ⇒ ∂²f/∂y_lag² = -2 exactly; all other 2nd/3rd derivs 0
@@ -778,12 +1651,20 @@ end
     # Default solve satisfies the Sylvester equation f_c·X + f_f·X·Mkd = -RHS
     X = M._solve_kronecker_sylvester(f_c, f_f, Mkd, RHS, n, nvd)
     @test norm(f_c * X + f_f * (X * Mkd) + RHS) / norm(RHS) < 1e-6
-    # An unreachable tolerance warns instead of silently returning the last iterate
+    # The GMRES path is a FALLBACK since [T266] — :auto now solves this directly and never
+    # reaches GMRES, so the guard is exercised by forcing the path. An unreachable tolerance
+    # must still warn rather than silently return the last iterate.
     @test_logs (:warn,) match_mode = :any M._solve_kronecker_sylvester(
-        f_c, f_f, Mkd, RHS, n, nvd; gmres_max_outer=1, gmres_tol=1e-18)
-    # rhs = 0 → zeros, not 0/0 = NaN
+        f_c, f_f, Mkd, RHS, n, nvd; sylvester_method=:gmres,
+        gmres_max_outer=1, gmres_tol=1e-18)
+    Xg = M._solve_kronecker_sylvester(f_c, f_f, Mkd, RHS, n, nvd; sylvester_method=:gmres)
+    @test norm(f_c * Xg + f_f * (Xg * Mkd) + RHS) / norm(RHS) < 1e-6
+    # rhs = 0 → zeros, not 0/0 = NaN (on both the default and the GMRES path)
     Z = M._solve_kronecker_sylvester(f_c, f_f, Mkd, zeros(n, nvd), n, nvd)
     @test all(iszero, Z)
+    Zg = M._solve_kronecker_sylvester(f_c, f_f, Mkd, zeros(n, nvd), n, nvd;
+                                      sylvester_method=:gmres)
+    @test all(iszero, Zg)
 end
 
 @testset "Matrix-free Kronecker power (#225 part 1)" begin
@@ -833,6 +1714,221 @@ end
     @test norm(resid) / norm(RHSL) < 1e-6
 end
 
+@testset "Generalized-Schur Sylvester solver (#365, T266)" begin
+    M = MacroEconometricModels
+    rng = Random.MersenneTwister(266)
+
+    # Dense-Kronecker reference: [(I ⊗ A) + (C^{⊗d}' ⊗ B)] vec(X) = vec(D).
+    function sylv_dense(A, B, C, D, d)
+        nvd = size(C, 1)^d
+        LHS = kron(Matrix{Float64}(I, nvd, nvd), A) + kron(M._kron_power(C, d)', B)
+        reshape(LHS \ vec(D), size(A, 1), nvd)
+    end
+
+    @testset "matches the dense Kronecker solve, orders 1-3" begin
+        for (n, nv, d) in ((4, 3, 1), (4, 3, 2), (5, 3, 3), (6, 4, 2), (3, 5, 2), (7, 2, 3))
+            A = Matrix{Float64}(3.0I, n, n) .+ 0.2 .* randn(rng, n, n)
+            B = 0.3 .* randn(rng, n, n)
+            C = 0.25 .* randn(rng, nv, nv)
+            D = randn(rng, n, nv^d)
+            X, info = M._kamenik_sylvester(A, B, C, D, d)
+            @test info.ok
+            @test info.residual < 1e-12
+            @test X ≈ sylv_dense(A, B, C, D, d) rtol = 1e-9
+        end
+    end
+
+    @testset "complex spectra in both factors" begin
+        # Rotation blocks give purely complex eigenvalues — the 2×2 blocks that the REAL Schur
+        # form of Kamenik (2005) has to special-case. The complex Schur form used here has no
+        # 2×2 blocks at all, so this must be as accurate as the real-spectrum case above.
+        rot(th, r) = r .* [cos(th) -sin(th); sin(th) cos(th)]
+        C = [rot(0.7, 0.5) zeros(2, 2); zeros(2, 2) rot(1.3, 0.4)]
+        B = [rot(0.9, 0.6) zeros(2, 2); zeros(2, 2) rot(2.1, 0.3)]
+        A = Matrix{Float64}(I, 4, 4)
+        @test all(!isreal, eigvals(C))       # the premise: no real eigenvalue anywhere
+        @test all(!isreal, eigvals(B))
+        for d in 1:3
+            D = randn(rng, 4, 4^d)
+            X, info = M._kamenik_sylvester(A, B, C, D, d)
+            @test info.ok
+            @test X ≈ sylv_dense(A, B, C, D, d) rtol = 1e-9
+        end
+    end
+
+    @testset "singular A — the QZ pencil solves what A\\B cannot" begin
+        # Kamenik's published algorithm forms A⁻¹B, so a singular A kills it outright. Working
+        # on the (A, B) pencil instead keeps the solve exact even at rank(A) = 0, and f_c IS
+        # singular for any model with a purely static or purely forward-looking equation.
+        Bs = Matrix{Float64}(I, 3, 3)
+        Cs = 0.3 .* Matrix{Float64}(I, 2, 2)
+        for As in (Float64[1 0 0; 0 0 0; 0 0 0], zeros(3, 3), Float64[1 2 0; 2 4 0; 0 0 1])
+            @test det(As) == 0                        # the premise
+            for d in (1, 2)
+                D = randn(rng, 3, 2^d)
+                X, info = M._kamenik_sylvester(As, Bs, Cs, D, d)
+                @test info.ok
+                @test X ≈ sylv_dense(As, Bs, Cs, D, d) rtol = 1e-9
+            end
+        end
+    end
+
+    @testset "singular equation is reported, not returned" begin
+        # A = I, B = μI, C = λI  ⇒  (1 + μλᵈ)·X = D, singular exactly at μ = -λ^{-d}.
+        lam, d = 0.5, 2
+        A = Matrix{Float64}(I, 3, 3)
+        C = lam .* Matrix{Float64}(I, 2, 2)
+        D = randn(rng, 3, 4)
+        Xs, infos = M._kamenik_sylvester(A, (-1 / lam^d) .* Matrix{Float64}(I, 3, 3), C, D, d)
+        @test Xs === nothing
+        @test !infos.ok
+        @test infos.reason == :near_singular
+        # Just off the singularity it solves, and matches the closed form.
+        mu = -0.5 / lam^d
+        X2, info2 = M._kamenik_sylvester(A, mu .* Matrix{Float64}(I, 3, 3), C, D, d)
+        @test info2.ok
+        @test X2 ≈ D ./ (1 + mu * lam^d) rtol = 1e-12
+        # A wholly singular pencil is reported rather than throwing.
+        Xn, infon = M._kamenik_sylvester(zeros(2, 2), zeros(2, 2), C, randn(rng, 2, 4), 2)
+        @test Xn === nothing && !infon.ok
+    end
+
+    @testset "all four _solve_kronecker_sylvester paths agree" begin
+        n, nv, order = 4, 3, 2
+        nvd = nv^order
+        f_c = Matrix{Float64}(3.0I, n, n) .+ 0.05 .* randn(rng, n, n)
+        f_f = 0.05 .* randn(rng, n, n)
+        Mm = 0.2 .* randn(rng, nv, nv)
+        RHS = randn(rng, n, nvd)
+        ref = M._solve_kronecker_sylvester(f_c, f_f, Mm, RHS, n, nvd, order;
+                                           sylvester_method=:dense)
+        for meth in (:auto, :kamenik, :gmres)
+            X = M._solve_kronecker_sylvester(f_c, f_f, Mm, RHS, n, nvd, order;
+                                             sylvester_method=meth)
+            @test X ≈ ref rtol = 1e-8
+            @test norm(f_c * X + f_f * (X * kron(Mm, Mm)) + RHS) / norm(RHS) < 1e-8
+        end
+        @test_throws ArgumentError M._solve_kronecker_sylvester(
+            f_c, f_f, Mm, RHS, n, nvd, order; sylvester_method=:bogus)
+
+        # An unreachable acceptance tolerance forces the certify-or-fall-back branch on a
+        # perfectly well-conditioned system: :auto must warn and hand off, :kamenik must warn
+        # and keep its own answer, and BOTH must still return the right solution.
+        Xa = @test_logs (:warn,) match_mode = :any M._solve_kronecker_sylvester(
+            f_c, f_f, Mm, RHS, n, nvd, order; sylvester_method=:auto, sylvester_tol=1e-30)
+        @test Xa ≈ ref rtol = 1e-8
+        Xk = @test_logs (:warn,) match_mode = :any M._solve_kronecker_sylvester(
+            f_c, f_f, Mm, RHS, n, nvd, order; sylvester_method=:kamenik, sylvester_tol=1e-30)
+        @test Xk ≈ ref rtol = 1e-8
+    end
+
+    @testset "n > 50 where the dense form is infeasible" begin
+        # n·nv³ = 60·1000 = 60000 ⇒ the vectorized operator is 60000² Float64 = 28.8 GB.
+        # The direct solve runs in milliseconds and certifies its own residual.
+        n, nv, order = 60, 10, 3
+        nvd = nv^order
+        f_c = Matrix{Float64}(3.0I, n, n) .+ 0.02 .* randn(rng, n, n)
+        f_f = 0.02 .* randn(rng, n, n)
+        Mm = 0.1 .* randn(rng, nv, nv)
+        RHS = randn(rng, n, nvd)
+        X, info = M._kamenik_sylvester(f_c, f_f, Mm, -RHS, order)
+        @test info.ok
+        @test info.residual < 1e-10
+        @test size(X) == (n, nvd)
+        # Verified matrix-free — kron(Mm,Mm,Mm) is 1000×1000 here, but X·(·) never forms it.
+        @test norm(f_c * X + f_f * M._apply_kron_power(X, Mm, order) + RHS) / norm(RHS) < 1e-10
+    end
+
+    @testset "Bartels-Stewart Lyapunov" begin
+        for n in (1, 2, 5, 12, 30)
+            Araw = randn(rng, n, n)
+            A = 0.7 .* Araw ./ maximum(abs.(eigvals(Araw)))     # spectral radius exactly 0.7
+            Bm = randn(rng, n, 3)
+            Qm = Bm * Bm'
+            P, info = M._bartels_stewart_dlyap(A, Qm)
+            @test info.ok
+            @test info.residual < 1e-12
+            @test P == P'                                        # exactly symmetric
+            @test minimum(eigvals(Symmetric(P))) > -1e-10        # PSD
+            # matches BOTH the doubling solver and the dense Kronecker solve
+            @test P ≈ M._dlyap_doubling(A, Qm) rtol = 1e-8
+            Pk = reshape((Matrix{Float64}(I, n * n, n * n) - kron(A, A)) \ vec(Qm), n, n)
+            @test P ≈ Pk rtol = 1e-8
+        end
+    end
+
+    @testset "Lyapunov: closed forms" begin
+        # scalar AR(1): σ² / (1 - ρ²)
+        P, info = M._bartels_stewart_dlyap(reshape([0.9], 1, 1), reshape([1.0], 1, 1))
+        @test info.ok
+        @test P[1, 1] ≈ 1 / (1 - 0.81) rtol = 1e-12
+        # complex-conjugate pair: a rotation of radius r has P = Q/(1-r²) when Q = I
+        r, th = 0.8, 0.6
+        A = r .* [cos(th) -sin(th); sin(th) cos(th)]
+        P2, info2 = M._bartels_stewart_dlyap(A, Matrix{Float64}(I, 2, 2))
+        @test info2.ok
+        @test P2 ≈ Matrix{Float64}(I, 2, 2) ./ (1 - r^2) rtol = 1e-12
+        # zero driving term ⇒ zero covariance
+        P3, _ = M._bartels_stewart_dlyap(A, zeros(2, 2))
+        @test all(iszero, P3)
+        @test size(M._bartels_stewart_dlyap(zeros(0, 0), zeros(0, 0))[1]) == (0, 0)
+    end
+
+    @testset "_dlyap agrees with doubling and survives a near unit root" begin
+        for rho in (0.5, 0.99, 0.9999)
+            n = 6
+            Araw = randn(rng, n, n)
+            A = rho .* Araw ./ maximum(abs.(eigvals(Araw)))
+            Bm = randn(rng, n, 2)
+            Qm = Bm * Bm'
+            P = M._dlyap(A, Qm)
+            @test norm(A * P * A' + Qm - P) / norm(Qm) < 1e-8
+            @test P ≈ M._dlyap_doubling(A, Qm) rtol = 1e-6
+        end
+    end
+
+    @testset "solve_lyapunov unchanged through the new path" begin
+        @test M.solve_lyapunov(reshape([0.9], 1, 1), reshape([1.0], 1, 1))[1, 1] ≈
+              1 / (1 - 0.81) rtol = 1e-10
+        rng2 = Random.MersenneTwister(2661)
+        G1 = [0.5 0.1; -0.2 0.6]
+        imp = randn(rng2, 2, 2)
+        Sig = M.solve_lyapunov(G1, imp)
+        @test Sig ≈ G1 * Sig * G1' + imp * imp' rtol = 1e-10
+        @test Sig == Sig'
+        @test_throws ArgumentError M.solve_lyapunov(reshape([1.0], 1, 1), reshape([1.0], 1, 1))
+    end
+
+    @testset "order-2/3 perturbation coefficients are solver-independent" begin
+        # The regression that matters: a real model solved through :kamenik and through the
+        # historical :dense path must give the same policy tensors, hence the same IRFs.
+        spec = @dsge begin
+            parameters: β = 0.99, α = 0.36, δ = 0.025, ρ = 0.95, σ = 0.01
+            endogenous: k, c, z
+            exogenous: ε
+            z[t] = ρ * z[t-1] + σ * ε[t]
+            k[t] = exp(z[t]) * k[t-1]^α + (1 - δ) * k[t-1] - c[t]
+            1 / c[t] = β * (1 / c[t+1]) * (α * exp(z[t+1]) * k[t]^(α - 1) + 1 - δ)
+        end
+        spec = compute_steady_state(spec)
+        for order in (2, 3)
+            sk = perturbation_solver(spec; order=order, sylvester_method=:kamenik)
+            sd = perturbation_solver(spec; order=order, sylvester_method=:dense)
+            @test sk.hxx ≈ sd.hxx rtol = 1e-7
+            @test sk.gxx ≈ sd.gxx rtol = 1e-7
+            @test sk.hσσ ≈ sd.hσσ rtol = 1e-7
+            if order == 3
+                @test sk.hxxx ≈ sd.hxxx rtol = 1e-7
+                @test sk.gxxx ≈ sd.gxxx rtol = 1e-7
+            end
+            @test irf(sk, 12).values ≈ irf(sd, 12).values rtol = 1e-7
+        end
+        # and reachable through solve(), which used to drop every kwarg but `order`
+        ss = solve(spec; method=:perturbation, order=2, sylvester_method=:kamenik)
+        @test ss.hxx ≈ perturbation_solver(spec; order=2).hxx rtol = 1e-7
+    end
+end
+
 @testset "Smolyak grid unisolvency (#218)" begin
     M = MacroEconometricModels
     # nodes and polynomial multi-index set come from the SAME combination loop ⇒ square
@@ -846,6 +1942,301 @@ end
     @test [1, 1] ∉ rows
     @test [2, 0] ∈ rows
     @test [0, 2] ∈ rows
+end
+
+@testset "Anisotropic + adaptive Smolyak (#357/T258)" begin
+    M = MacroEconometricModels
+
+    @testset "isotropic regression: node/basis counts unchanged" begin
+        # Pinned against the pre-#357 builder (verified bit-identical on nodes AND
+        # multi-indices for nx=1..4, mu=0..4).
+        expected = Dict((1, 0) => 1, (1, 1) => 3, (1, 2) => 5, (1, 3) => 9, (1, 4) => 17,
+                        (2, 0) => 1, (2, 1) => 5, (2, 2) => 13, (2, 3) => 29, (2, 4) => 65,
+                        (3, 0) => 1, (3, 1) => 7, (3, 2) => 25, (3, 3) => 69, (3, 4) => 177,
+                        (4, 0) => 1, (4, 1) => 9, (4, 2) => 41, (4, 3) => 137)
+        for ((nx, mu), n_exp) in expected
+            nodes, mi = M._smolyak_grid(nx, mu)
+            @test size(nodes, 1) == n_exp
+            @test size(mi, 1) == n_exp        # square by construction (#218)
+            @test size(nodes, 2) == nx
+        end
+        # a scalar mu and the equivalent constant vector are the same grid
+        for (nx, mu) in ((2, 3), (3, 2))
+            ns, ms = M._smolyak_grid(nx, mu)
+            nv, mv = M._smolyak_grid(nx, fill(mu, nx))
+            @test ns == nv
+            @test ms == mv
+        end
+    end
+
+    @testset "admissible level set == the |α|₁/anisotropic rule (brute force)" begin
+        # isotropic: |l|₁ ≤ μ
+        for nx in 1:3, mu in 0:3
+            lv = M._smolyak_admissible_levels(fill(mu, nx))
+            brute = sort([collect(t) for t in vec(collect(Iterators.product(ntuple(_ -> 0:mu, nx)...)))
+                          if sum(t) <= mu])
+            @test lv == brute
+        end
+        # anisotropic: Σ l_k/μ_k ≤ 1, tested in exact rational arithmetic
+        for muv in ([1, 3], [3, 1], [2, 4], [1, 2, 4], [0, 3])
+            nx = length(muv)
+            lv = M._smolyak_admissible_levels(muv)
+            brute = Vector{Vector{Int}}()
+            for t in Iterators.product(ntuple(k -> 0:muv[k], nx)...)
+                l = collect(t)
+                any(k -> muv[k] == 0 && l[k] > 0, 1:nx) && continue
+                s = sum(muv[k] == 0 ? 0 // 1 : l[k] // muv[k] for k in 1:nx)
+                s <= 1 && push!(brute, l)
+            end
+            @test lv == sort(brute)
+        end
+        # the set is downward closed — the property the combination technique needs
+        for muv in ([1, 3], [2, 4], [1, 2, 4])
+            lv = M._smolyak_admissible_levels(muv)
+            S = Set(lv)
+            for l in lv, k in eachindex(l)
+                l[k] == 0 && continue
+                b = copy(l); b[k] -= 1
+                @test b in S
+            end
+        end
+        @test_throws ArgumentError M._smolyak_level_vector(2, -1)
+        @test_throws ArgumentError M._smolyak_level_vector(3, [1, 2])
+        @test_throws ArgumentError M._smolyak_level_vector(2, [1, -2])
+    end
+
+    @testset "combination coefficients (Gerstner-Griebel == closed form)" begin
+        for nx in 1:4, mu in 0:4
+            lv = M._smolyak_admissible_levels(fill(mu, nx))
+            c = M._smolyak_combination_coefficients(lv)
+            @test sum(c) == 1
+            for (i, l) in enumerate(lv)
+                k = mu - sum(l)
+                @test c[i] == (-1)^k * binomial(nx - 1, k)
+            end
+        end
+        # the general rule still sums to 1 on anisotropic (and hence adaptive) sets
+        for muv in ([1, 3], [3, 1], [2, 4], [1, 2, 4])
+            lv = M._smolyak_admissible_levels(muv)
+            @test sum(M._smolyak_combination_coefficients(lv)) == 1
+        end
+    end
+
+    @testset "anisotropic grids stay unisolvent" begin
+        for muv in ([1, 3], [3, 1], [2, 4], [1, 2, 3])
+            nodes, mi = M._smolyak_grid(length(muv), muv)
+            B = M._chebyshev_basis_multi(nodes, mi)
+            @test size(B, 1) == size(B, 2)
+            @test cond(B) < 1e3
+        end
+    end
+
+    @testset "resolution lands in the requested dimension" begin
+        _, mi31 = M._smolyak_grid(2, [3, 1])
+        _, mi13 = M._smolyak_grid(2, [1, 3])
+        @test vec(maximum(mi31; dims=1)) == [8, 2]
+        @test vec(maximum(mi13; dims=1)) == [2, 8]
+        nodes31, _ = M._smolyak_grid(2, [3, 1])
+        @test length(unique(round.(nodes31[:, 1]; digits=12))) == 9
+        @test length(unique(round.(nodes31[:, 2]; digits=12))) == 3
+    end
+
+    @testset "anisotropic beats isotropic per node on anisotropic curvature" begin
+        # f is sharp in x and near-linear in y
+        f(x, y) = exp(-(2.5x)^2) * (1 + 0.05y)
+        tp = vec([[x y] for x in range(-1, 1; length=41), y in range(-1, 1; length=41)])
+        Xt = reduce(vcat, tp)
+        ft = [f(Xt[i, 1], Xt[i, 2]) for i in 1:size(Xt, 1)]
+        function interp_err(muv)
+            nodes, mi = M._smolyak_grid(2, muv)
+            B = M._chebyshev_basis_multi(nodes, mi)
+            c = B \ [f(nodes[i, 1], nodes[i, 2]) for i in 1:size(nodes, 1)]
+            return maximum(abs.(M._chebyshev_basis_multi(Xt, mi) * c .- ft)), size(nodes, 1)
+        end
+        e_iso, n_iso = interp_err([3, 3])
+        e_ani, n_ani = interp_err([4, 2])
+        @test n_ani == n_iso == 29          # matched node budget
+        @test e_ani < e_iso                 # 1.14e-2 vs 2.97e-2
+        # and a *cheaper* anisotropic grid still beats a coarser isotropic one
+        e_small, n_small = interp_err([3, 1])
+        e_iso2, n_iso2 = interp_err([2, 2])
+        @test n_small < n_iso2              # 11 < 13
+        @test e_small < e_iso2              # 6.4e-2 vs 2.5e-1
+    end
+
+    @testset "forward neighbours keep the set downward closed" begin
+        lv = M._smolyak_admissible_levels([1, 1])
+        cands = M._smolyak_forward_neighbours(lv)
+        @test !isempty(cands)
+        @test all(c -> !(c in Set(lv)), cands)
+        for c in cands
+            grown = sort(vcat(lv, [c]))
+            S = Set(grown)
+            for l in grown, k in eachindex(l)
+                l[k] == 0 && continue
+                b = copy(l); b[k] -= 1
+                @test b in S
+            end
+        end
+        # every candidate adds at least one genuinely new node
+        existing = Set(round.(Vector{Float64}(M._smolyak_grid(2, [1, 1])[1][j, :]); digits=14)
+                       for j in 1:size(M._smolyak_grid(2, [1, 1])[1], 1))
+        for c in cands
+            @test any(p -> !(p in existing), M._smolyak_block_nodes(c))
+        end
+    end
+
+    @testset "_pad_coefficients is an exact carry-over" begin
+        _, mi_small = M._smolyak_grid(2, [1, 1])
+        _, mi_big = M._smolyak_grid(2, [2, 2])
+        rows_small = Set(mi_small[i, :] for i in 1:size(mi_small, 1))
+        @test all(r in Set(mi_big[i, :] for i in 1:size(mi_big, 1)) for r in rows_small)
+        old = randn(Random.MersenneTwister(258), 3, size(mi_small, 1))
+        new = M._pad_coefficients(old, mi_small, mi_big)
+        @test size(new) == (3, size(mi_big, 1))
+        lookup = Dict(mi_big[i, :] => i for i in 1:size(mi_big, 1))
+        for k in 1:size(mi_small, 1)
+            @test new[:, lookup[mi_small[k, :]]] == old[:, k]
+        end
+        @test sum(abs, new) ≈ sum(abs, old)   # zeros everywhere else
+    end
+
+    @testset "solver: anisotropic keyword and reported level set" begin
+        spec = @dsge begin
+            parameters: β = 0.99, α = 0.36, δ = 0.025, ρ = 0.95, σ = 0.007
+            endogenous: c, k, a
+            exogenous: ε
+            1 / c[t] = β * (1 / c[t+1]) * (α * exp(a[t+1]) * k[t]^(α - 1) + 1 - δ)
+            c[t] + k[t] = exp(a[t]) * k[t-1]^α + (1 - δ) * k[t-1]
+            a[t] = ρ * a[t-1] + σ * ε[t]
+        end
+        spec = compute_steady_state(spec)
+
+        sol_iso = collocation_solver(spec; grid=:smolyak, smolyak_mu=2, max_iter=60)
+        @test sol_iso.converged
+        @test size(sol_iso.smolyak_levels, 2) == 2
+        @test vec(maximum(sol_iso.smolyak_levels; dims=1)) == [2, 2]
+        @test sol_iso.refinements == 0
+        @test isnan(sol_iso.euler_error)          # not measured unless adaptive
+
+        sol_ani = collocation_solver(spec; grid=:smolyak, smolyak_mu=[3, 1], max_iter=60)
+        @test sol_ani.converged
+        @test vec(maximum(sol_ani.smolyak_levels; dims=1)) == [3, 1]
+        @test size(sol_ani.collocation_nodes, 1) == sol_ani.n_basis
+
+        # tensor grids report no level set
+        sol_ten = collocation_solver(spec; grid=:tensor, degree=3, max_iter=60)
+        @test size(sol_ten.smolyak_levels) == (0, 0)
+        @test isnan(sol_ten.euler_error)
+    end
+
+    @testset "adaptive refinement reduces the reported Euler error" begin
+        spec = @dsge begin
+            parameters: β = 0.99, α = 0.36, δ = 0.025, ρ = 0.95, σ = 0.007
+            endogenous: c, k, a
+            exogenous: ε
+            1 / c[t] = β * (1 / c[t+1]) * (α * exp(a[t+1]) * k[t]^(α - 1) + 1 - δ)
+            c[t] + k[t] = exp(a[t]) * k[t-1]^α + (1 - δ) * k[t-1]
+            a[t] = ρ * a[t-1] + σ * ε[t]
+        end
+        spec = compute_steady_state(spec)
+
+        base = collocation_solver(spec; grid=:smolyak, smolyak_mu=1, max_iter=60)
+        e_base = max_euler_error(base; n_test=200, rng=Random.MersenneTwister(7))
+
+        sol = @test_logs (:warn, r"Adaptive refinement finished") match_mode = :any (
+            collocation_solver(spec; grid=:smolyak, smolyak_mu=1, adaptive=true,
+                               euler_tol=1e-8, max_nodes=200, max_refinements=6,
+                               n_euler_test=100, max_iter=60,
+                               rng=Random.MersenneTwister(7)))
+        @test sol.converged
+        @test sol.refinements > 0
+        @test size(sol.collocation_nodes, 1) > size(base.collocation_nodes, 1)
+        @test isfinite(sol.euler_error)
+        @test sol.euler_error < e_base                       # 1.3e-4 vs 1.2e-2
+
+        # the reported accuracy is the same statistic `max_euler_error` computes
+        e_ind = max_euler_error(sol; n_test=200, rng=Random.MersenneTwister(7))
+        @test isapprox(e_ind, sol.euler_error; rtol=0.5)
+
+        # beats the isotropic grid it would otherwise have to pay for
+        iso3 = collocation_solver(spec; grid=:smolyak, smolyak_mu=3, max_iter=60)
+        e_iso3 = max_euler_error(iso3; n_test=200, rng=Random.MersenneTwister(7))
+        @test size(sol.collocation_nodes, 1) <= size(iso3.collocation_nodes, 1)
+        @test sol.euler_error < e_iso3                       # 1.3e-4 vs 2.1e-4
+
+        # honest stop: the node budget is respected
+        capped = collocation_solver(spec; grid=:smolyak, smolyak_mu=1, adaptive=true,
+                                    euler_tol=1e-14, max_nodes=15, max_refinements=10,
+                                    n_euler_test=40, max_iter=40,
+                                    rng=Random.MersenneTwister(7))
+        @test size(capped.collocation_nodes, 1) <= 15
+    end
+
+    @testset "refinement adds nodes only where the residual is large" begin
+        # `z` appears in no equation but its own law of motion, so the equilibrium residuals
+        # are exactly flat in z and no refinement should ever buy resolution there.
+        spec = @dsge begin
+            parameters: β = 0.99, α = 0.36, δ = 0.025, ρ = 0.95, σ = 0.007, ρz = 0.8, σz = 0.01
+            endogenous: c, k, a, z
+            exogenous: ε, εz
+            1 / c[t] = β * (1 / c[t+1]) * (α * exp(a[t+1]) * k[t]^(α - 1) + 1 - δ)
+            c[t] + k[t] = exp(a[t]) * k[t-1]^α + (1 - δ) * k[t-1]
+            a[t] = ρ * a[t-1] + σ * ε[t]
+            z[t] = ρz * z[t-1] + σz * εz[t]
+        end
+        spec = compute_steady_state(spec)
+
+        sol = collocation_solver(spec; grid=:smolyak, smolyak_mu=1, adaptive=true,
+                                 euler_tol=1e-10, max_nodes=120, max_refinements=6,
+                                 n_euler_test=60, max_iter=60,
+                                 rng=Random.MersenneTwister(11))
+        names = spec.varnames[sol.state_indices]
+        zi = findfirst(==("z"), names)
+        @test zi !== nothing
+        lv = vec(maximum(sol.smolyak_levels; dims=1))
+        others = lv[setdiff(1:length(lv), zi)]
+        @test sol.refinements > 0
+        @test lv[zi] == 1                    # unchanged from the isotropic μ=1 start
+        @test maximum(others) > lv[zi]       # every refinement went into (k, a)
+        @test length(unique(round.(sol.collocation_nodes[:, zi]; digits=12))) == 3
+    end
+
+    @testset "adaptive requires a Smolyak grid" begin
+        spec = @dsge begin
+            parameters: ρ = 0.9, σ = 0.01
+            endogenous: y
+            exogenous: ε
+            y[t] = ρ * y[t-1] + σ * ε[t]
+            steady_state: [0.0]
+        end
+        spec = compute_steady_state(spec)
+        @test_throws ArgumentError collocation_solver(spec; grid=:tensor, adaptive=true)
+        # grid=:auto upgrades to Smolyak when adaptivity is requested
+        sol = collocation_solver(spec; adaptive=true, euler_tol=1e-6, max_refinements=1,
+                                 n_euler_test=20, max_iter=30, rng=Random.MersenneTwister(1))
+        @test sol.grid_type == :smolyak
+    end
+
+    @testset "vfi/pfi accept the anisotropic level vector" begin
+        spec = @dsge begin
+            parameters: β = 0.99, α = 0.36, δ = 0.025, ρ = 0.95, σ = 0.007
+            endogenous: c, k, a
+            exogenous: ε
+            1 / c[t] = β * (1 / c[t+1]) * (α * exp(a[t+1]) * k[t]^(α - 1) + 1 - δ)
+            c[t] + k[t] = exp(a[t]) * k[t-1]^α + (1 - δ) * k[t-1]
+            a[t] = ρ * a[t-1] + σ * ε[t]
+        end
+        spec = compute_steady_state(spec)
+        for f in (pfi_solver, vfi_solver)
+            s = f(spec; grid=:smolyak, smolyak_mu=[2, 1], max_iter=40)
+            @test vec(maximum(s.smolyak_levels; dims=1)) == [2, 1]
+            @test s.degree == 2
+            s_iso = f(spec; grid=:smolyak, smolyak_mu=2, max_iter=40)
+            @test s_iso.degree == 2
+            @test size(s_iso.smolyak_levels, 2) == 2
+        end
+    end
 end
 
 @testset "Lyapunov doubling (#220)" begin
@@ -3785,7 +5176,18 @@ end
         sol2 = solve(spec; method=:perturbation, order=2)
         @test sol2 isa MacroEconometricModels.PerturbationSolution
         @test sol2.order == 2
-        @test is_determined(sol2)
+        # NOT determinate, and it never was. The characteristic polynomial of this model is
+        # det(f_lead·μ² + f₀·μ + f₁) = μ(μ−1)², i.e. μ = 0 plus a DEFECTIVE DOUBLE ROOT at
+        # exactly 1. Breaking the knife edge either way rejects determinacy: with div < 1 both
+        # unit roots are unstable and too few stable roots remain ([0,0]); with div > 1 both are
+        # stable, leaving no unstable block to pin down the expectational error ([1,0], a
+        # sunspot). This assertion used to read `is_determined(sol2)` and passed only because
+        # the companion QZ resolves the double root as 1 ± 1.05e-8, which straddles the default
+        # div = 1 + 1e-8 and yields a spurious stable-root count of exactly n. The [T267] rank
+        # test resolves the same root to 1 ± 2e-16 and is not fooled. `_place_divhat` already
+        # warns on this model.
+        @test !is_determined(sol2)
+        @test sol2.eu == [1, 0]
         @test nvars(sol2) == 2
         @test nshocks(sol2) == 1
         @test MacroEconometricModels.nstates(sol2) + MacroEconometricModels.ncontrols(sol2) == 2

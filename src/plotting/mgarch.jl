@@ -55,8 +55,9 @@ function _mgarch_corr_plot(m::MGARCHModel{T}, title::String) where {T}
         push!(rows, row)
     end
     data_json = _json_array_of_objects(rows)
-    colors = [_PLOT_COLORS[mod1(k, length(_PLOT_COLORS))] for k in 1:length(pairs)]
-    s_json = _series_json(names, colors; keys=keys)
+    # Entity-stable colors: pair ρ(i,j) keeps its hue across a filtered replot
+    # (plotrule Color; PLT-13). Red stays reserved for the zero reference line.
+    s_json = _series_json(names, _colors_for(names); keys=keys)
     refs = "[{\"value\":0,\"color\":\"#999\",\"dash\":\"4,3\"}]"
     js = _render_line_js(id, data_json, s_json;
                          ref_lines_json=refs, xlabel="Time", ylabel="Conditional correlation")
@@ -86,8 +87,10 @@ function _mgarch_cov_heatmap(m::MGARCHModel{T}, at::Union{Int,Nothing}, title::S
     row_labels_json = _json(labels)
     col_labels_json = _json(labels)
     id = _next_plot_id("mgarch_cov")
+    # Conditional covariance Hₜ has signed off-diagonals → diverging scale, symmetric
+    # ±|max| domain so 0 maps to the neutral center (plotrule Heatmaps; PLT-15).
     js = _render_heatmap_js(id, data_json, row_labels_json, col_labels_json;
-                            xlabel="", ylabel="",
+                            xlabel="series", ylabel="series", scale=:diverging,
                             color_domain=[-Float64(vmax), Float64(vmax)])
     isempty(title) && (title = "Conditional Covariance Hₜ at t=$t ($(m.kind))")
     _make_plot([_PanelSpec(id, "Covariance Hₜ (t=$t)", js)]; title=title)

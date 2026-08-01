@@ -89,7 +89,12 @@ golden must survive Julia 1.10 (LTS) vs 1.12 CI without churn. In order:
     0.01/0.05/0.10 boundary flips its stars across environments. The invariants
     suite checks star PRESENCE on the raw string; the golden locks structure only;
   * runs of ≥2 spaces → one space (column padding tracks the masked-away widths);
-  * trailing whitespace and leading/trailing blank lines trimmed.
+  * leading AND trailing whitespace on every line stripped — PrettyTables centers a
+    table's title over its body width, so the title's leading-space count tracks the
+    widest (masked-away) numeric cell. A sub-threshold steady-state value that `_fmt`
+    renders as `1e-13` (5 chars) vs `-1.53e-12` (9 chars) shifts a narrow table's title
+    by a space or two; that indentation is a width artifact, not structure, so it is
+    masked alongside the column padding. Leading/trailing blank lines trimmed too.
 
 What survives — and what the golden therefore LOCKS — is the environment-invariant
 text skeleton: titles, column headers, row labels, notes, legends, `%` symbols,
@@ -101,12 +106,17 @@ by `test_display_invariants.jl` and the per-issue unit tests in
 function _canonicalize(s::AbstractString)
     out = String[]
     for raw in split(String(s), '\n')
-        ln = replace(String(raw), r"-?\d+\.\d+(?:[eE][-+]?\d+)?" => "N")  # decimals/scientific
+        # Decimals (optional exponent) OR integer-mantissa scientific. The second alternative
+        # is essential: `_fmt` prints a sub-5e-5 value with a whole-number mantissa WITHOUT a
+        # decimal point (`1e-13`, `5e-12`), which the decimal-only pattern would leave for the
+        # integer step to shred into `Ne-N` — so a steady state that rounds to `1e-13` on one
+        # platform and `-1.53e-12` on another would mask to different skeletons. Both → `N`.
+        ln = replace(String(raw), r"-?\d+\.\d+(?:[eE][-+]?\d+)?|-?\d+[eE][-+]?\d+" => "N")  # decimals/scientific
         ln = replace(ln, r"[<>]N" => "N")                                 # <0.001 / >0.999 threshold prefix
         ln = replace(ln, r"\d+" => "N")                                   # remaining (algorithm-path) integers
         ln = replace(ln, "*" => "")                                       # significance stars (p-value-derived)
         ln = replace(ln, r"[ \t]{2,}" => " ")                             # column padding
-        push!(out, rstrip(ln))
+        push!(out, strip(ln))
     end
     while !isempty(out) && isempty(out[1]);   popfirst!(out); end
     while !isempty(out) && isempty(out[end]); pop!(out);      end
@@ -285,9 +295,21 @@ function _dsge_est_fixture()
         exogenous: ε
         y[t] = ρ * y[t-1] + ε[t]
     end
-    MacroEconometricModels._suppress_warnings() do
-        estimate_dsge(spec, reshape(y, :, 1), [:ρ]; method = :irf_matching, irf_horizon = 10)
+    # `:irf_matching` bootstraps the target-IRF sampling covariance from the GLOBAL RNG
+    # (not the seeded `rng` above), so the estimate — and thus the J-statistic, the
+    # steady-state roundoff, and the convergence flag — drifts run-to-run. Seed the default
+    # RNG for the estimation so the fixture honors the "every RNG is explicit" invariant this
+    # file promises, then restore the caller's stream so no sibling fixture is perturbed.
+    prev_rng = copy(Random.default_rng())
+    Random.seed!(810)
+    est = try
+        MacroEconometricModels._suppress_warnings() do
+            estimate_dsge(spec, reshape(y, :, 1), [:ρ]; method = :irf_matching, irf_horizon = 10)
+        end
+    finally
+        copy!(Random.default_rng(), prev_rng)
     end
+    return est
 end
 
 """

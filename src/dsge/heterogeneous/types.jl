@@ -16,20 +16,40 @@ using LinearAlgebra
 # =============================================================================
 
 """
-    _make_asset_grid(a_min, a_max, n, grid_type) → Vector{T}
+    _make_asset_grid(a_min, a_max, n, grid_type; pivot=0.25) → Vector{T}
 
 Construct a one-dimensional asset grid on `[a_min, a_max]` with `n` points.
 
 Supported `grid_type`:
 - `:double_exp` — double exponential (denser near `a_min`, default)
+- `:geometric` — pivot-geometric: equidistant in `log(a - a_min + pivot)`, so the
+  spacing at the bottom grows only *logarithmically* in `a_max`. This matches
+  `agrid` in the Python `sequence-jacobian` toolkit. Prefer it when `a_max` must
+  be large enough to keep the stationary distribution off the ceiling: the
+  `:double_exp` shape is a fixed curve rescaled by `(a_max - a_min)`, so its
+  bottom spacing is *linear* in `a_max` and resolution at the borrowing
+  constraint degrades as the ceiling is raised.
 - `:log` — logarithmic spacing (shifted)
 - `:linear` — uniform spacing
+
+`pivot` (default `0.25`) shifts the geometric grid away from the origin; the
+effective pivot is `abs(a_min) + pivot`, so a grid starting at a negative
+borrowing limit is still dense at the constraint.
 """
-function _make_asset_grid(a_min::T, a_max::T, n::Int, grid_type::Symbol) where {T<:AbstractFloat}
+function _make_asset_grid(a_min::T, a_max::T, n::Int, grid_type::Symbol;
+                          pivot::Real=T(0.25)) where {T<:AbstractFloat}
     @assert n >= 3 "Need at least 3 grid points"
     @assert a_max > a_min "Upper bound must exceed lower bound"
 
-    if grid_type == :linear
+    if grid_type == :geometric
+        piv = abs(a_min) + T(pivot)
+        @assert piv > zero(T) "pivot must be positive"
+        # Geometric in (a + piv): lo = a_min + piv > 0 for any a_min.
+        g = exp.(range(log(a_min + piv), log(a_max + piv); length=n)) .- piv
+        g[1] = a_min      # exact endpoints (guard against roundoff)
+        g[end] = a_max
+        return g
+    elseif grid_type == :linear
         return collect(range(a_min, a_max; length=n))
     elseif grid_type == :log
         # Shifted log spacing: map [0,1] through log(1+x) then scale
@@ -42,7 +62,29 @@ function _make_asset_grid(a_min::T, a_max::T, n::Int, grid_type::Symbol) where {
         raw = @. (exp(exp(x) - one(T)) - one(T)) / (exp(exp(one(T)) - one(T)) - one(T))
         return @. a_min + raw * (a_max - a_min)
     else
-        throw(ArgumentError("Unknown grid_type: $grid_type. Use :double_exp, :log, or :linear."))
+        throw(ArgumentError("Unknown grid_type: $grid_type. Use :double_exp, :geometric, :log, or :linear."))
+    end
+end
+
+"""
+    _ar1_unconditional_sd(sigma, rho, sigma_is, caller) → T
+
+Resolve the `sigma_is` convention for an AR(1) discretizer: return the
+unconditional standard deviation `sd(y_t)` of `y_t = ρ y_{t-1} + σ ε_t`.
+
+`sigma_is === :innovation` treats `sigma` as `sd(ε_t)` (so `sd(y) = σ/√(1-ρ²)`);
+`sigma_is === :unconditional` treats it as `sd(y_t)` itself.
+"""
+function _ar1_unconditional_sd(sigma::T, rho::T, sigma_is::Symbol, caller::Symbol) where {T<:AbstractFloat}
+    if sigma_is === :innovation
+        return sigma / sqrt(one(T) - rho^2)
+    elseif sigma_is === :unconditional
+        return sigma
+    else
+        throw(ArgumentError("$caller: sigma_is must be :innovation (sigma is the " *
+            "standard deviation of the AR(1) innovation eps_t — the default) or " *
+            ":unconditional (sigma is sd(y_t) itself, the Python sequence-jacobian " *
+            "convention); got :$sigma_is"))
     end
 end
 
@@ -125,7 +167,10 @@ For two-asset models (e.g., HANK), pass `liquid=...` and `illiquid=...`.
 - `liquid::Union{Nothing,Tuple{Real,Real,Int}}` — liquid asset grid spec
 - `illiquid::Union{Nothing,Tuple{Real,Real,Int}}` — illiquid asset grid spec
 - `income_states::Int` — number of income states (default 7)
-- `grid_type::Symbol` — `:double_exp` (default), `:log`, or `:linear`
+- `grid_type::Symbol` — `:double_exp` (default), `:geometric`, `:log`, or `:linear`.
+  Use `:geometric` when `a_max` has to be large: unlike `:double_exp`, its spacing
+  near `a_min` grows only logarithmically in `a_max`, so raising the ceiling does
+  not cost resolution at the borrowing constraint.
 """
 function HAGrid(; assets::Union{Nothing,Tuple{Real,Real,Int}}=nothing,
                   liquid::Union{Nothing,Tuple{Real,Real,Int}}=nothing,
@@ -190,7 +235,7 @@ end
 # =============================================================================
 
 """
-    rouwenhorst(rho, sigma, n) → IncomeProcess{Float64}
+    rouwenhorst(rho, sigma, n; sigma_is=:innovation) → IncomeProcess{Float64}
 
 Discretize an AR(1) process `y_t = ρ y_{t-1} + σ ε_t` using the Rouwenhorst (1995) method.
 
@@ -198,8 +243,21 @@ More accurate than Tauchen for highly persistent processes (ρ close to 1).
 
 # Arguments
 - `rho::Real` — persistence parameter (|ρ| < 1)
-- `sigma::Real` — shock standard deviation (σ > 0)
+- `sigma::Real` — standard deviation (σ > 0); see **Convention** below
 - `n::Int` — number of discrete states (n ≥ 2)
+- `sigma_is::Symbol` — `:innovation` (default) or `:unconditional`
+
+# Convention
+
+By default `sigma` is the standard deviation of the **innovation** `ε_t`, so the
+process itself has `sd(y_t) = σ / √(1 - ρ²)` and the state space spans
+`±√(n-1) · sd(y_t)`. Pass `sigma_is=:unconditional` to supply `sd(y_t)` directly.
+
+The two differ sharply at high persistence: at `ρ = 0.966` the unconditional
+standard deviation is **3.87×** the innovation standard deviation. `markov_rouwenhorst`
+in the Python `sequence-jacobian` toolkit parameterizes by the *unconditional*
+standard deviation, so a `sigma` copied from there must be passed with
+`sigma_is=:unconditional` (or divided by `√(1 - ρ²)` first).
 
 # References
 - Rouwenhorst, K. G. (1995). Asset pricing implications of equilibrium business cycle models.
@@ -207,7 +265,7 @@ More accurate than Tauchen for highly persistent processes (ρ close to 1).
 - Kopecky, K. A., & Suen, R. M. H. (2010). Finite state Markov-chain approximations to
   highly persistent processes. *Review of Economic Dynamics*, 13(3), 701–714.
 """
-function rouwenhorst(rho::Real, sigma::Real, n::Int)
+function rouwenhorst(rho::Real, sigma::Real, n::Int; sigma_is::Symbol=:innovation)
     T = Float64
     rho_T = T(rho)
     sigma_T = T(sigma)
@@ -217,7 +275,7 @@ function rouwenhorst(rho::Real, sigma::Real, n::Int)
     @assert n >= 2 "Need at least 2 states"
 
     # Unconditional std dev of the AR(1) process
-    sigma_y = sigma_T / sqrt(one(T) - rho_T^2)
+    sigma_y = _ar1_unconditional_sd(sigma_T, rho_T, sigma_is, :rouwenhorst)
 
     # State space: equally spaced on [-ψ, ψ] where ψ = √(n-1) × σ_y
     psi = sqrt(T(n - 1)) * sigma_y
@@ -269,21 +327,29 @@ end
 # =============================================================================
 
 """
-    tauchen(rho, sigma, n; m=3) → IncomeProcess{Float64}
+    tauchen(rho, sigma, n; m=3, sigma_is=:innovation) → IncomeProcess{Float64}
 
 Discretize an AR(1) process `y_t = ρ y_{t-1} + σ ε_t` using the Tauchen (1986) method.
 
 # Arguments
 - `rho::Real` — persistence parameter (|ρ| < 1)
-- `sigma::Real` — shock standard deviation (σ > 0)
+- `sigma::Real` — standard deviation (σ > 0); see **Convention** below
 - `n::Int` — number of discrete states (n ≥ 2)
 - `m::Real` — state space covers ±m unconditional standard deviations (default 3)
+- `sigma_is::Symbol` — `:innovation` (default) or `:unconditional`
+
+# Convention
+
+Identical to [`rouwenhorst`](@ref): `sigma` is the standard deviation of the
+**innovation** `ε_t` by default, giving `sd(y_t) = σ / √(1 - ρ²)`. Pass
+`sigma_is=:unconditional` to supply `sd(y_t)` directly (the Python
+`sequence-jacobian` convention). At `ρ = 0.966` the two differ by **3.87×**.
 
 # References
 - Tauchen, G. (1986). Finite state Markov-chain approximations to univariate and
   vector autoregressions. *Economics Letters*, 20(2), 177–181.
 """
-function tauchen(rho::Real, sigma::Real, n::Int; m::Real=3)
+function tauchen(rho::Real, sigma::Real, n::Int; m::Real=3, sigma_is::Symbol=:innovation)
     T = Float64
     rho_T = T(rho)
     sigma_T = T(sigma)
@@ -295,7 +361,12 @@ function tauchen(rho::Real, sigma::Real, n::Int; m::Real=3)
     @assert m_T > zero(T) "Coverage parameter m must be positive"
 
     # Unconditional std dev
-    sigma_y = sigma_T / sqrt(one(T) - rho_T^2)
+    sigma_y = _ar1_unconditional_sd(sigma_T, rho_T, sigma_is, :tauchen)
+
+    # Conditional (innovation) std dev — this is what scales the transition CDF.
+    # Branch rather than round-tripping through sigma_y so the :innovation path
+    # stays bitwise identical to the pre-`sigma_is` implementation.
+    sigma_eps = sigma_is === :innovation ? sigma_T : sigma_y * sqrt(one(T) - rho_T^2)
 
     # State space
     y_max = m_T * sigma_y
@@ -311,15 +382,15 @@ function tauchen(rho::Real, sigma::Real, n::Int; m::Real=3)
         for j in 1:n
             if j == 1
                 P[i, j] = Distributions.cdf(normal_dist,
-                    (states[1] + d / T(2) - rho_T * states[i]) / sigma_T)
+                    (states[1] + d / T(2) - rho_T * states[i]) / sigma_eps)
             elseif j == n
                 P[i, j] = one(T) - Distributions.cdf(normal_dist,
-                    (states[n] - d / T(2) - rho_T * states[i]) / sigma_T)
+                    (states[n] - d / T(2) - rho_T * states[i]) / sigma_eps)
             else
                 P[i, j] = Distributions.cdf(normal_dist,
-                    (states[j] + d / T(2) - rho_T * states[i]) / sigma_T) -
+                    (states[j] + d / T(2) - rho_T * states[i]) / sigma_eps) -
                            Distributions.cdf(normal_dist,
-                    (states[j] - d / T(2) - rho_T * states[i]) / sigma_T)
+                    (states[j] - d / T(2) - rho_T * states[i]) / sigma_eps)
             end
         end
     end
@@ -332,6 +403,119 @@ function tauchen(rho::Real, sigma::Real, n::Int; m::Real=3)
     pi_stat = _stationary_distribution(P)
 
     return IncomeProcess{T}(P, states, pi_stat, :income)
+end
+
+# =============================================================================
+# LaborSupply — endogenous labor-supply specification
+# =============================================================================
+
+"""
+    LaborSupply{T}
+
+Endogenous labor supply for a heterogeneous-agent household problem. Attach one
+to an [`IndividualProblem`](@ref) via its `labor` keyword; the default (`nothing`)
+leaves labor exogenous and every solver path bitwise unchanged.
+
+Disutility of hours is isoelastic, `v(n) = ψ n^{1 + 1/φ} / (1 + 1/φ)`, so
+`v'(n) = ψ n^{1/φ}`.
+
+Fields:
+- `kind::Symbol` — `:ghh` or `:separable`
+- `psi::T` — disutility scale `ψ > 0`
+- `frisch::T` — Frisch elasticity `φ > 0`
+- `n_max::T` — upper bound on hours (numerical guard, default `Inf`)
+
+# Preference specifications
+
+**GHH** (Greenwood–Hercowitz–Huffman 1988), `U(c - ψ n^{1+1/φ}/(1+1/φ))`. The
+intratemporal condition is
+
+```math
+ψ n^{1/φ} = w e \\quad\\Longrightarrow\\quad n(e) = (w e / ψ)^φ
+```
+
+independent of consumption and assets — there is **no wealth effect on hours**.
+Substituting it out leaves a standard one-dimensional consumption-savings problem
+in the composite good `x = c - ψ n^{1+1/φ}/(1+1/φ)`, with net labor income
+`ỹ(e) = w e n(e) - ψ n(e)^{1+1/φ}/(1+1/φ)`. This is the tractable default.
+
+**Separable**, `u(c) - v(n)`. The intratemporal condition
+
+```math
+ψ n^{1/φ} = w e \\, u'(c)
+```
+
+couples hours to consumption, so hours carry a wealth effect. On the
+unconstrained EGM branch consumption is known before hours, so `n` is still
+explicit; on the constrained branch `c` and `n` must be solved jointly, which
+[`_egm_solve`](@ref) does with a bracketed scalar root-find.
+
+See also [`IndividualProblem`](@ref), [`labor_supply`](@ref).
+"""
+struct LaborSupply{T<:AbstractFloat}
+    kind::Symbol
+    psi::T
+    frisch::T
+    n_max::T
+
+    function LaborSupply{T}(kind::Symbol, psi, frisch, n_max) where {T<:AbstractFloat}
+        kind in (:ghh, :separable) || throw(ArgumentError(
+            "LaborSupply: kind must be :ghh or :separable, got :$kind"))
+        psi > 0 || throw(ArgumentError("LaborSupply: psi must be positive, got $psi"))
+        frisch > 0 || throw(ArgumentError("LaborSupply: frisch must be positive, got $frisch"))
+        n_max > 0 || throw(ArgumentError("LaborSupply: n_max must be positive, got $n_max"))
+        new{T}(kind, T(psi), T(frisch), T(n_max))
+    end
+end
+
+"""
+    LaborSupply(; kind=:ghh, psi=1.0, frisch=0.5, n_max=Inf) → LaborSupply{Float64}
+
+Keyword constructor for [`LaborSupply`](@ref). `frisch = 0.5` is a common
+macro calibration; `psi` is usually chosen so that mean hours ≈ 1 at the
+steady-state wage.
+"""
+LaborSupply(; kind::Symbol=:ghh, psi::Real=1.0, frisch::Real=0.5, n_max::Real=Inf) =
+    LaborSupply{Float64}(kind, psi, frisch, n_max)
+
+"""
+    labor_supply(ls::LaborSupply, w_e) → n
+    labor_supply(ls::LaborSupply, w_e, u_prime_c) → n
+
+Hours implied by the intratemporal first-order condition at effective wage
+`w_e = w·e`. The two-argument form is the GHH condition `ψ n^{1/φ} = w e`; the
+three-argument form is the separable condition `ψ n^{1/φ} = w e u'(c)`, and
+reduces to the first when `u_prime_c = 1`.
+
+Hours are clamped to `[0, ls.n_max]`.
+"""
+function labor_supply(ls::LaborSupply{T}, w_e::Real, u_prime_c::Real=one(T)) where {T<:AbstractFloat}
+    mrs = T(w_e) * T(u_prime_c)
+    mrs <= zero(T) && return zero(T)
+    return min((mrs / ls.psi)^ls.frisch, ls.n_max)
+end
+
+"""
+    _labor_disutility(ls, n) → ψ n^{1+1/φ} / (1 + 1/φ)
+
+Flow disutility of hours. Under GHH this is subtracted from consumption inside
+the utility function; under separable preferences it is subtracted from utility.
+"""
+_labor_disutility(ls::LaborSupply{T}, n::T) where {T<:AbstractFloat} =
+    n <= zero(T) ? zero(T) : ls.psi * n^(one(T) + one(T) / ls.frisch) / (one(T) + one(T) / ls.frisch)
+
+"""
+    _ghh_net_income(ls, w_e) → (ỹ, n, disutility)
+
+GHH labor income net of the disutility term, `ỹ = w e n - ψ n^{1+1/φ}/(1+1/φ)`,
+together with the hours and the disutility that produced it. Because GHH hours
+do not depend on consumption or assets, this is a function of the effective wage
+alone and can be substituted into the budget before the EGM step.
+"""
+function _ghh_net_income(ls::LaborSupply{T}, w_e::T) where {T<:AbstractFloat}
+    n = labor_supply(ls, w_e)
+    d = _labor_disutility(ls, n)
+    return (w_e * n - d, n, d)
 end
 
 # =============================================================================
@@ -358,6 +542,17 @@ Fields:
 - `borrowing_constraint::Vector{T}` — lower bound per asset dimension
 - `adjustment_cost::Union{Nothing,Function}` — optional `χ(d)` portfolio adjustment cost (two-asset)
 - `n_asset_dims::Int` — number of asset dimensions (1 or 2)
+- `labor::Union{Nothing,LaborSupply{T}}` — optional endogenous labor supply
+  (default `nothing`, i.e. exogenous labor). Pass via the `labor` keyword.
+
+# Endogenous labor
+
+With `labor = nothing` the household chooses only consumption and savings, and
+`budget_fn(a, e, prices)` is the whole budget. With a [`LaborSupply`](@ref)
+attached, `budget_fn` is interpreted as the budget **evaluated at `n = 1`**: the
+solver reads the gross return and any non-labor offset (e.g. `div`) from it, then
+replaces the `w·e` term with the labor income the intratemporal condition
+implies. So the same `budget_fn` serves both cases.
 """
 struct IndividualProblem{T<:AbstractFloat, FU, FUP, FUPI, FB, FA}
     utility::FU
@@ -368,17 +563,24 @@ struct IndividualProblem{T<:AbstractFloat, FU, FUP, FUPI, FB, FA}
     borrowing_constraint::Vector{T}
     adjustment_cost::FA   # Nothing (one-asset) or a concrete χ(d) function type (two-asset)
     n_asset_dims::Int
+    labor::Union{Nothing,LaborSupply{T}}
 
+    # `labor` is a KEYWORD with a `nothing` default, so all pre-existing
+    # eight-positional-argument call sites keep working unchanged.
     function IndividualProblem{T}(utility, utility_prime, utility_prime_inv, beta,
                                   budget_fn, borrowing_constraint, adjustment_cost,
-                                  n_asset_dims) where {T<:AbstractFloat}
+                                  n_asset_dims;
+                                  labor::Union{Nothing,LaborSupply{T}}=nothing) where {T<:AbstractFloat}
         @assert zero(T) < beta < one(T) "Discount factor must be in (0, 1)"
         @assert n_asset_dims in (1, 2) "Only 1 or 2 asset dimensions supported"
         @assert length(borrowing_constraint) == n_asset_dims "Borrowing constraint length must match n_asset_dims"
+        labor === nothing || n_asset_dims == 1 || throw(ArgumentError(
+            "IndividualProblem: endogenous labor supply is implemented for one-asset " *
+            "problems only (got n_asset_dims = $n_asset_dims)."))
         new{T, typeof(utility), typeof(utility_prime), typeof(utility_prime_inv),
             typeof(budget_fn), typeof(adjustment_cost)}(
             utility, utility_prime, utility_prime_inv, beta,
-            budget_fn, borrowing_constraint, adjustment_cost, n_asset_dims)
+            budget_fn, borrowing_constraint, adjustment_cost, n_asset_dims, labor)
     end
 end
 
@@ -403,6 +605,9 @@ Fields:
 - `n_income::Int` — number of income states
 - `model::Symbol` — model family for clearing/dynamics dispatch (`:aiyagari` default,
   `:huggett` for zero-net-supply pure exchange)
+- `distribution::Symbol` — distribution representation: `:young` (default, the
+  Young 2010 histogram) or `:winberry` (Winberry 2018 parametric moment family;
+  see [`WinberryFamily`](@ref))
 """
 struct HADSGESpec{T<:AbstractFloat}
     aggregate_spec::DSGESpec{T}
@@ -414,17 +619,114 @@ struct HADSGESpec{T<:AbstractFloat}
     n_assets::Int
     n_income::Int
     model::Symbol
+    distribution::Symbol
 
     function HADSGESpec{T}(aggregate_spec, individual, income, grid,
                             aggregation, het_params;
-                            model::Symbol=:aiyagari) where {T<:AbstractFloat}
+                            model::Symbol=:aiyagari,
+                            distribution::Symbol=:young) where {T<:AbstractFloat}
+        distribution in (:young, :winberry) || throw(ArgumentError(
+            "HADSGESpec: distribution must be :young or :winberry, got :$distribution."))
         n_assets = grid.n_dims
         n_income = grid.n_income
         @assert individual.n_asset_dims == n_assets "Individual problem asset dims must match grid"
         @assert length(income.states) == n_income "Income states must match grid n_income"
+
+        # The borrowing constraint must coincide with the grid floor. The Young
+        # (2010) transition clamps the savings policy into the grid, so a
+        # constraint BELOW the floor silently creates assets out of nothing every
+        # period — the model would violate its own budget constraint. A
+        # constraint above the floor is merely wasteful (unreachable nodes).
+        for d in 1:grid.n_dims
+            lo = grid.bounds[d][1]
+            bc = individual.borrowing_constraint[d]
+            scale = max(one(T), abs(lo))
+            if bc < lo - sqrt(eps(T)) * scale
+                throw(ArgumentError(
+                    "HADSGESpec: borrowing_constraint[$d] = $bc lies below the grid " *
+                    "lower bound $lo on dimension :$(grid.labels[d]). The Young (2010) " *
+                    "transition clamps the savings policy up to the grid floor, so such " *
+                    "a model silently creates assets out of nothing every period. Set " *
+                    "the grid lower bound equal to the borrowing constraint."))
+            elseif bc > lo + sqrt(eps(T)) * scale
+                @warn "HADSGESpec: borrowing_constraint[$d] = $bc lies above the grid " *
+                      "lower bound $lo on dimension :$(grid.labels[d]); grid nodes below " *
+                      "the constraint are unreachable (wasted resolution)." maxlog = 1
+            end
+        end
+
         new{T}(aggregate_spec, individual, income, grid,
-               aggregation, het_params, n_assets, n_income, model)
+               aggregation, het_params, n_assets, n_income, model, distribution)
     end
+end
+
+# =============================================================================
+# ParametricDensity / WinberryFamily — Winberry (2018) moment representation
+# =============================================================================
+
+"""
+    ParametricDensity{T}
+
+Exponential-family approximation of the asset density within a single income
+state (Winberry 2018).  On the standardized variable
+`z = (a − center) / scale`,
+
+    g(a) = exp( Σ_i λ_i (z^i − μ_i) − log_norm ),   μ_i = moments[i] / scale^i,
+
+which integrates to one over the reference interval and reproduces `moments`
+exactly at a converged fit.
+
+Fields:
+- `lambda::Vector{T}` — exponential-family coefficients (length `n_moments`)
+- `moments::Vector{T}` — target centered moments `(mean, variance, m_3, …)`
+- `center::T` / `scale::T` — standardization, `moments[1]` and `sqrt(moments[2])`
+- `log_norm::T` — log normalizer in asset units
+- `converged::Bool` — whether the Newton solve for `λ` met its tolerance
+- `iterations::Int` — Newton iterations used
+- `residual::T` — largest standardized moment residual `max_i |E_g[z^i] − μ_i|`
+
+See [`fit_parametric_density`](@ref), [`parametric_density`](@ref),
+[`parametric_moments`](@ref).
+"""
+struct ParametricDensity{T<:AbstractFloat}
+    lambda::Vector{T}
+    moments::Vector{T}
+    center::T
+    scale::T
+    log_norm::T
+    converged::Bool
+    iterations::Int
+    residual::T
+end
+
+"""
+    WinberryFamily{T}
+
+Winberry (2018) parametric representation of a full cross-sectional
+distribution: one [`ParametricDensity`](@ref) per income state, plus the
+income-state masses.
+
+The distribution state is the `n_income × n_moments` moment matrix rather than
+the `n_a × n_income` histogram, which is what shrinks the linearized system.
+
+Fields:
+- `densities::Vector{ParametricDensity{T}}` — one density per income state
+- `mass::Vector{T}` — income-state masses (sum to one)
+- `n_moments::Int` — moments carried per income state
+- `nodes::Vector{T}` / `weights::Vector{T}` — reference-grid quadrature (asset units)
+- `bounds::Tuple{T,T}` — reference interval
+- `converged::Bool` — `true` iff every income state's `λ` solve converged
+
+See [`fit_winberry`](@ref), [`winberry_moments`](@ref), [`winberry_histogram`](@ref).
+"""
+struct WinberryFamily{T<:AbstractFloat}
+    densities::Vector{ParametricDensity{T}}
+    mass::Vector{T}
+    n_moments::Int
+    nodes::Vector{T}
+    weights::Vector{T}
+    bounds::Tuple{T,T}
+    converged::Bool
 end
 
 # =============================================================================
@@ -446,8 +748,22 @@ Fields:
 - `income::IncomeProcess{T}` — income process used
 - `converged::Bool` — whether the equilibrium computation converged
 - `iterations::Int` — number of iterations used
-- `euler_error::T` — maximum Euler equation error (log10 units)
+- `euler_error::T` — maximum Euler equation error (log10 units), measured **off-node** at
+  the cell midpoints by default (#508). Evaluating at the grid nodes, where EGM solves the
+  Euler equation exactly, understates the approximation error by 2.5-3.8 log₁₀ units; pass
+  `euler_points=:nodes` to `compute_steady_state` for the old convention.
+- `euler::Union{Nothing,NamedTuple}` — both statistics as
+  `(midpoints=…, nodes=…)`, each a NamedTuple
+  `(points, max, mean, n_evaluated, n_constrained, n_offgrid)`. `nothing` for steady states
+  built by paths that do not measure accuracy.
 - `excess_demand::T` — market clearing residual
+- `parametric::Union{Nothing,WinberryFamily{T}}` — fitted Winberry (2018) family
+  when the equilibrium was computed with `distribution=:winberry`, `nothing`
+  under the default Young histogram
+
+The `parametric` field is a trailing **keyword** on the constructor
+(`HASteadyState{T}(…11 positional…; parametric=nothing)`), so existing
+positional call sites are unaffected.
 """
 struct HASteadyState{T<:AbstractFloat}
     policies::Dict{Symbol,Array{T}}
@@ -461,6 +777,18 @@ struct HASteadyState{T<:AbstractFloat}
     iterations::Int
     euler_error::T
     excess_demand::T
+    parametric::Union{Nothing,WinberryFamily{T}}
+    euler::Union{Nothing,NamedTuple}
+
+    function HASteadyState{T}(policies, distribution, value_fn, prices, aggregates,
+                              grid, income, converged, iterations, euler_error,
+                              excess_demand;
+                              parametric::Union{Nothing,WinberryFamily{T}}=nothing,
+                              euler::Union{Nothing,NamedTuple}=nothing
+                              ) where {T<:AbstractFloat}
+        new{T}(policies, distribution, value_fn, prices, aggregates, grid, income,
+               converged, iterations, euler_error, excess_demand, parametric, euler)
+    end
 end
 
 # =============================================================================

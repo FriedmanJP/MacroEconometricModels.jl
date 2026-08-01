@@ -102,6 +102,7 @@ The equilibrium interest rate lies strictly below the discount rate ``\rho``: in
 | `hjb_max_iter` | `Int` | `100` | Maximum HJB value-function iterations per rate |
 | `hjb_tol` | `Real` | ``10^{-6}`` | HJB convergence tolerance |
 | `Delta` | `Real` | `1000.0` | Implicit HJB time step (speed only, not the solution) |
+| `V_init` | `Array{T,3}` | `nothing` | Warm-start value function (used by the GE loop) |
 
 | Field | Type | Description |
 |-------|------|-------------|
@@ -168,29 +169,128 @@ report(sol)
 
 The vast majority of wealth is held in the illiquid asset: the higher return more than compensates for the adjustment friction, while a small liquid balance buffers income risk. A larger illiquidity premium ``r_a - r_b`` raises the illiquid share further.
 
-!!! note "Simplifications relative to full KMV"
-    This solver uses a smooth quadratic adjustment cost (rather than the kinked
-    linear-plus-quadratic cost of KMV, which produces an explicit inaction region), a
-    single liquid return (no borrowing wedge), and solves the household block at given
-    returns. It is numerically stable for moderate adjustment costs ``\chi``; very small
-    ``\chi`` makes the optimal deposit large and the HJB iteration unstable.
+### Kinked adjustment costs and the inaction region
+
+The smooth quadratic cost is differentiable at ``d = 0``, so **every** household with ``V_a \neq V_b`` adjusts and there is no inaction region. Kaplan, Moll & Violante specify a linear-plus-convex cost on the deposit **rate** ``x = d/\bar a`` with ``\bar a = \max(\chi_3, a)``:
+
+```math
+\chi(d,a) = \left[\chi_0 |x| + \frac{|x|^{1+\chi_2}}{\chi_1^{\chi_2}(1+\chi_2)}\right]\bar a
+```
+
+where:
+- ``\chi_0`` is the linear term that creates the **kink** at ``d = 0``
+- ``\chi_1, \chi_2`` scale and curve the convex term
+- ``\chi_3`` (`a_kink`) floors ``\bar a`` so the rate stays finite at ``a = 0``
+
+Because the marginal cost jumps from ``-\chi_0`` to ``+\chi_0`` across ``d = 0``, the first-order condition has **no solution** while ``|V_a/V_b - 1| \le \chi_0``, and the deposit is exactly zero — a genuine **inaction region**, resolved rather than smoothed:
+
+```math
+d = \begin{cases}
+\bar a\,\chi_1 (V_a/V_b - 1 - \chi_0)^{1/\chi_2} & V_a/V_b - 1 > \chi_0\\
+0 & |V_a/V_b - 1| \le \chi_0\\
+-\bar a\,\chi_1 (1 - V_a/V_b - \chi_0)^{1/\chi_2} & V_a/V_b - 1 < -\chi_0
+\end{cases}
+```
+
+```@example ct
+kink = CTTwoAsset(; cost=:kinked, chi0=0.05, chi1=0.5, chi2=2.0, a_kink=1.0, Ib=6, Ia=6)
+smooth = CTTwoAsset(; cost=:quadratic, chi=2.0, Ib=6, Ia=6)
+
+(inside_band = MacroEconometricModels._ct2_deposit(kink, 1.03, 3.0),
+ outside_band = round(MacroEconometricModels._ct2_deposit(kink, 1.20, 3.0); digits=4),
+ quadratic_never_inactive = MacroEconometricModels._ct2_deposit(smooth, 1.03, 3.0) > 0)
+```
+
+The kinked deposit is *exactly* zero inside the band while the quadratic one is not.
+
+!!! warning "The level-quadratic cost cannot bound illiquid wealth"
+    With `cost=:quadratic`, ``d = (V_a/V_b - 1)/\chi`` and ``V_a/V_b \ge 0``, so the largest possible **withdrawal** is the constant ``1/\chi``. Illiquid wealth accrues ``r_a a``, which grows without bound in ``a``, so a constant withdrawal cap cannot offset it and the distribution diverges above ``a^\star = 1/(\chi r_a)``. `ct_two_asset_solve` now **warns** on such a calibration rather than returning a grid artifact with `hjb_converged = true`; pass `check_stationarity=false` to silence it. See issue #509.
+
+    The dichotomy is sharper than "pick ``a_{\max} < a^\star``". Measured at ``\chi = 8``, ``r_a = 0.05`` (so ``a^\star = 2.5``), ``r_b = 0.02``, ``\rho = 0.08``:
+
+    | ``a_{\max}`` | ``A`` | ``A/a_{\max}`` | mass on ceiling |
+    |---|---|---|---|
+    | 1.0 | ``\approx 0`` | ``\approx 0`` | ``6.7 \times 10^{-26}`` |
+    | 2.0 | ``\approx 0`` | ``\approx 0`` | ``1.2 \times 10^{-22}`` |
+    | 3.0 | 0.701 | 0.234 | 0.234 |
+    | 6.0 | 3.853 | 0.642 | 0.642 |
+
+    Above ``a^\star`` the ratio ``A/a_{\max}`` climbs toward 1 and equals the ceiling mass exactly — raising the ceiling does not reveal a tail, it only moves where the mass piles up. Below ``a^\star`` the ceiling is clean and ``A`` is insensitive to ``a_{\max}``, but only because ``A`` is essentially **zero**: the level-quadratic cost is stationary precisely where it supports no illiquid holdings at all.
+
+    So `:quadratic` remains the default — it is smooth, cheap, and adequate for exercising the solver — but it cannot produce a calibration with a realistic illiquid-wealth tail. Use `cost=:kinked` for that. The KMV rate-based cost has no such problem because its withdrawal **scales with** ``a``.
+
+!!! warning "The kinked stationarity condition runs the other way"
+    In the KMV parameterization ``\chi_1`` **multiplies** the withdrawal, ``|d| = \chi_1(|V_a/V_b - 1| - \chi_0)^{1/\chi_2}\,\bar a``, so the maximum withdrawal *rate* is ``\chi_1(1-\chi_0)^{1/\chi_2}`` and illiquid wealth is bounded iff that exceeds ``r_a``. A **larger** ``\chi_1`` is therefore more stationary, not less. `ct_two_asset_stationarity` reports this rate as `bound`. Once the absolute cap `dmax` binds, the withdrawal is a constant again and ``a^\star = \texttt{dmax}/r_a`` re-applies.
+
+    A passing check does not guarantee a small ceiling mass: a near-frictionless calibration (very large ``\chi_1``) makes the illiquid asset strictly dominate and drives a corner portfolio, which piles mass on the ceiling for an economic reason rather than a numerical one. Read [`ceiling_mass`](@ref) alongside the check.
+
+!!! note "Calibrating the kinked cost"
+    ``\chi_0`` and ``\chi_2`` are dimensionless shape parameters and transfer across calibrations. ``\chi_1`` sets the scale of the deposit *rate* and does **not** — the shipped defaults are KMV's own estimates, which are quarterly. Their exponent implies ``1/\chi_2 \approx 2.5``, so a ratio ``V_a/V_b \approx 2.6`` already produces a very large deposit; `dmax` caps it, as in KMV. The kinked specification currently requires calibration to converge and is not recommended for production use.
+
+### Grids
+
+KMV place both grids by `PowerSpacedGrid`: ``y = \text{lo} + (\text{hi}-\text{lo})\,x^{1/k}`` on ``x \in [0,1]``, where ``k = 1`` is uniform and ``k \to 0`` is L-shaped. This matters because the deposit FOC divides by ``V_b``: a uniform grid over a wide ``[0, b_{\max}]`` leaves ``V`` nearly flat in ``b`` at the top, so ``V_b \to 0`` and the FOC deposit explodes. Set `a_power` and `b_power` below 1 to concentrate nodes near the constraint.
+
+Integration uses the matching **trapezoidal** weights `bdelta`/`adelta` (half-width at the grid edges), which is what the density is normalized against — a flat ``\Delta b\,\Delta a`` over-counts the boundary rows.
+
+---
+
+## Two-Asset General Equilibrium
+
+`ct_two_asset_ge` closes the model. A Cobb-Douglas firm rents the illiquid asset as capital and liquid government bonds are in fixed net supply ``\bar B``, financed by a lump-sum tax ``\tau = r_b \bar B``:
+
+```math
+r_a = \alpha Z (K/L)^{\alpha-1} - \delta, \qquad w = (1-\alpha) Z (K/L)^{\alpha}
+```
+
+Equilibrium requires household illiquid wealth ``A = K`` and liquid wealth ``B = \bar B``; labor ``L`` is the stationary mean of the income process. The solver iterates both conditions with damped updates, warm-starting the household block from the previous value function.
+
+```@example ct
+ge = ct_two_asset_ge(CTTwoAsset(; Ib=25, Ia=25, a_max=6.0, b_max=5.0, rho=0.06,
+                                z=[0.6, 1.4], lambda=[0.4, 0.4], B_supply=0.69,
+                                chi=2.0, a_power=0.5, b_power=0.5);
+                     max_iter=120, tol=1e-3)
+
+(markets_cleared = ge.markets_cleared,
+ illiquid_residual = round(ge.resid_illiquid; sigdigits=2),
+ liquid_residual = round(ge.resid_liquid; sigdigits=2),
+ r_a = round(ge.r_a; digits=6), K = round(ge.K; digits=4))
+```
+
+Both markets clear to better than ``10^{-3}``. `markets_cleared` and `converged` are reported **separately**: market clearing can succeed while the inner HJB does not, and collapsing them would hide which failed.
+
+!!! warning "Bond supply is not a free parameter"
+    With a real adjustment cost, liquid demand has a **floor** — households hold a buffer however negative ``r_b`` goes. A ``\bar B`` below that floor leaves ``r_b`` pinned at its lower bound with the bond market uncleared.
+
+---
+
+## Two-Asset MIT Transitions
+
+`ct_two_asset_mit` computes the deterministic path after an unanticipated aggregate TFP shock, shooting on both the capital and liquid-return paths: backward HJB from the terminal value, forward KFE from the initial distribution.
+
+```@example ct
+N = 40
+Zpath = [1.0 + 0.02 * 0.6^(n - 1) for n in 1:(N + 1)]; Zpath[1] = 1.0
+tr = ct_two_asset_mit(CTTwoAsset(; Ib=25, Ia=25, a_max=6.0, b_max=5.0, rho=0.06,
+                                 z=[0.6, 1.4], lambda=[0.4, 0.4], B_supply=0.69,
+                                 chi=2.0, a_power=0.5, b_power=0.5),
+                      ge, Zpath; dt=0.5, max_iter=80, tol=1e-5)
+
+(K0_pinned = isapprox(tr.K[1], ge.K; rtol=1e-12),
+ peak_above_ss = maximum(tr.K) > ge.K,
+ returns_to_ss = round(abs(tr.K[end] - ge.K); sigdigits=2),
+ r_a_up_on_impact = tr.r_a[2] > ge.r_a)
+```
+
+``K_0`` is pinned by the predetermined wealth distribution and cannot jump on impact; higher productivity raises the marginal product of capital and the wage; capital accumulates to a hump and returns to the terminal steady state.
 
 | Keyword | Type | Default | Description |
 |---------|------|---------|-------------|
-| `max_iter` | `Int` | `200` | Maximum HJB value-function iterations |
-| `tol` | `Real` | ``10^{-6}`` | Convergence tolerance on the value function |
-| `Delta` | `Real` | `1000.0` | Implicit HJB time step (speed only, not the solution) |
-
-| Field | Type | Description |
-|-------|------|-------------|
-| `b`, `a` | `Vector{T}` | Liquid and illiquid asset grids |
-| `V` | `Array{T,3}` | Value function over ``(b, a, z)`` (``I_b \times I_a \times 2``) |
-| `c`, `d` | `Array{T,3}` | Consumption and deposit policies |
-| `sb`, `sa` | `Array{T,3}` | Liquid and illiquid saving drifts |
-| `g` | `Array{T,3}` | Stationary joint density over ``(b, a, z)`` (``I_b \times I_a \times 2``) |
-| `B`, `A` | `T` | Aggregate liquid and illiquid holdings (``\int b\,g``, ``\int a\,g``) |
-| `gen` | `SparseMatrixCSC{T}` | Infinitesimal generator (``2 I_b I_a`` square) |
-| `hjb_converged` | `Bool` | Whether the HJB iteration converged |
+| `dt` | `Real` | `0.25` | Time step of the transition grid |
+| `max_iter` | `Int` | `200` | Maximum shooting iterations |
+| `tol` | `Real` | ``10^{-5}`` | Path convergence tolerance |
+| `relax_K` | `Real` | `0.3` | Damping on the capital-path update |
+| `relax_rb` | `Real` | `0.02` | Damping on the liquid-return-path update |
 
 ---
 

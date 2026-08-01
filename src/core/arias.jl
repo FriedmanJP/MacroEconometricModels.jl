@@ -44,13 +44,56 @@ end
 SVARRestrictions(n_vars::Int; zeros=ZeroRestriction[], signs=SignRestriction[]) =
     SVARRestrictions(zeros, signs, n_vars, n_vars)
 
-"""Result from Arias et al. (2018) identification."""
+"""
+Result from Arias et al. (2018) identification.
+
+`ess` is Kish's effective sample size of the importance weights and
+`ess_fraction` is `ess / length(weights)`. Under pure sign restrictions the
+weights are uniform and `ess_fraction == 1`; with zero restrictions a fraction
+far below 1 means a handful of draws carry most of the posterior mass and the
+weighted summaries rest on far fewer effective draws than `n_draws` suggests.
+"""
 struct AriasSVARResult{T<:AbstractFloat}
     Q_draws::Vector{Matrix{T}}
     irf_draws::Array{T,4}
     weights::Vector{T}
     acceptance_rate::T
     restrictions::SVARRestrictions
+    ess::T
+    ess_fraction::T
+end
+
+# Back-compatible arity: pre-ESS construction sites omit the trailing diagnostics,
+# which are then derived from the weights they pass.
+function AriasSVARResult{T}(Q_draws, irf_draws, weights, acceptance_rate,
+                            restrictions) where {T<:AbstractFloat}
+    ess = T(_effective_sample_size(weights))
+    n = length(weights)
+    AriasSVARResult{T}(Q_draws, irf_draws, weights, acceptance_rate, restrictions,
+                       ess, n > 0 ? ess / T(n) : zero(T))
+end
+
+"""
+Fraction of the nominal draw count below which importance weights are reported
+as degenerate. Matches the conventional SMC resampling trigger.
+"""
+const _ARIAS_ESS_WARN_FRACTION = 0.1
+
+"""
+    _warn_low_ess(ess, ess_fraction, n, label)
+
+Emit the degeneracy warning when the effective sample size has collapsed. Silent
+when the weights are uniform (`ess_fraction == 1`), which is the sign-only case.
+"""
+function _warn_low_ess(ess::Real, ess_fraction::Real, n::Integer, label::AbstractString)
+    (n > 0 && ess_fraction < _ARIAS_ESS_WARN_FRACTION) || return nothing
+    @warn "$label: importance weights are degenerate — effective sample size " *
+          "$(round(ess; digits=1)) of $n draws " *
+          "($(round(100 * ess_fraction; digits=1))% < " *
+          "$(round(Int, 100 * _ARIAS_ESS_WARN_FRACTION))%). A few draws carry almost all " *
+          "the posterior mass, so weighted IRF summaries are far less precise than the " *
+          "draw count suggests. Consider loosening the zero/sign restrictions or raising n_draws."
+    nothing
 end
 
 # --- MA Coefficients ---
@@ -517,14 +560,25 @@ Identify SVAR using Arias et al. (2018) with zero and sign restrictions.
 Uses importance sampling with draw-dependent weights (Proposition 4) for zero+sign restriction
 combinations. For pure sign restrictions, draws uniformly from O(n) with unit weights.
 
+The result reports Kish's **effective sample size** of those weights (`ess`,
+`ess_fraction`). Uneven weights mean the weighted IRF summaries rest on fewer
+effective draws than `n_draws`; below 10% of the nominal count the sampler is
+reported as degenerate and a warning is emitted.
+
 # Keywords
 - `n_draws::Int=1000`: Target number of accepted draws
 - `n_rotations::Int=1000`: Maximum attempts per target draw
 - `compute_weights::Bool=true`: Compute importance weights (set false for faster exploratory analysis)
+- `normalize_weights::Bool=true`: Scale the stored weights to sum to 1. Pass `false`
+  to keep them on the raw volume-element scale, which is required when pooling
+  across draws of `(B, Σ)` — see [`identify_arias_bayesian`](@ref). `ess` is
+  scale-invariant and unaffected either way.
+- `rng::AbstractRNG`: Random number generator (thread through for reproducible `ess`)
 """
 function identify_arias(model::VARModel{T}, restrictions::SVARRestrictions, horizon::Int;
                         n_draws::Int=1000, n_rotations::Int=1000,
                         compute_weights::Bool=true,
+                        normalize_weights::Bool=true,
                         rng::AbstractRNG=Random.default_rng()) where {T<:AbstractFloat}
     n = nvars(model)
     @assert restrictions.n_vars == n "Restriction dimension must match model"
@@ -579,7 +633,14 @@ function identify_arias(model::VARModel{T}, restrictions::SVARRestrictions, hori
         irf_array[i, :, :, :] = irf
     end
 
-    AriasSVARResult{T}(Q_draws, irf_array, weights ./ sum(weights), T(n_acc / n_attempts), restrictions)
+    # ESS is scale-invariant, so it is identical before and after normalization.
+    ess = T(_effective_sample_size(weights))
+    ess_frac = ess / T(n_acc)
+    _warn_low_ess(ess, ess_frac, n_acc, "identify_arias")
+
+    w_out = normalize_weights ? weights ./ sum(weights) : weights
+    AriasSVARResult{T}(Q_draws, irf_array, w_out, T(n_acc / n_attempts), restrictions,
+                       ess, ess_frac)
 end
 
 # --- Bayesian Integration ---
@@ -590,6 +651,16 @@ end
 Apply Arias identification to each posterior draw. Returns IRF quantiles, mean, acceptance rates.
 
 Creates the `_AriasSVARSetup` once (W matrices fixed across all posterior draws) for consistency.
+
+Importance weights are pooled across posterior draws on the **raw volume-element
+scale** and normalized once at the end. Each per-draw call accepts a single
+rotation, so normalizing there would force every weight to 1 and reduce the
+weighted summaries to unweighted ones.
+
+# Returns
+A `NamedTuple` with `irf_quantiles`, `irf_mean`, `acceptance_rates`,
+`total_accepted`, `weights` (normalized), and the importance-sampling
+diagnostics `ess` / `ess_fraction` (Kish's effective sample size).
 """
 function identify_arias_bayesian(post::BVARPosterior, restrictions::SVARRestrictions, horizon::Int;
     data::Union{Nothing,AbstractMatrix}=nothing, n_rotations::Int=100,
@@ -606,8 +677,13 @@ function identify_arias_bayesian(post::BVARPosterior, restrictions::SVARRestrict
     for s in 1:n_samples
         m = parameters_to_model(b_vecs[s,:], sigmas[s,:], p, n, use_data)
         try
+            # normalize_weights=false is essential: each inner call accepts a
+            # SINGLE draw, so normalizing there would set every weight to 1 and
+            # silently discard the importance correction. Pooling happens once,
+            # below, across all posterior draws on the common volume-element scale.
             result = identify_arias(m, restrictions, horizon;
-                n_draws=1, n_rotations=n_rotations, compute_weights=compute_weights, rng=rng)
+                n_draws=1, n_rotations=n_rotations, compute_weights=compute_weights,
+                normalize_weights=false, rng=rng)
             for (i, w) in enumerate(result.weights)
                 push!(all_irfs, result.irf_draws[i, :, :, :])
                 push!(all_weights, w)
@@ -626,6 +702,9 @@ function identify_arias_bayesian(post::BVARPosterior, restrictions::SVARRestrict
     for (i, irf) in enumerate(all_irfs)
         irf_array[i, :, :, :] = irf
     end
+    ess = _effective_sample_size(all_weights)
+    ess_frac = ess / n_acc
+    _warn_low_ess(ess, ess_frac, n_acc, "identify_arias_bayesian")
     w_norm = all_weights ./ sum(all_weights)
 
     irf_q = zeros(horizon, n, n, length(quantiles))
@@ -638,7 +717,8 @@ function identify_arias_bayesian(post::BVARPosterior, restrictions::SVARRestrict
         end
     end
 
-    (irf_quantiles=irf_q, irf_mean=irf_m, acceptance_rates=acc_rates, total_accepted=n_acc, weights=w_norm)
+    (irf_quantiles=irf_q, irf_mean=irf_m, acceptance_rates=acc_rates, total_accepted=n_acc,
+     weights=w_norm, ess=ess, ess_fraction=ess_frac)
 end
 
 # Deprecated wrapper for old (chain, p, n, ...) signature

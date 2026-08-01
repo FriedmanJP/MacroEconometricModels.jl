@@ -57,18 +57,73 @@ function _plot_volatility_diagnostics(y::AbstractVector, cond_var::AbstractVecto
 end
 
 # =============================================================================
+# Volatility-model view helpers (lane-local, A5) — the standardized-residual
+# diagnostics figure (PLT-24) and the news-impact curve (PLT-37). Both compose the
+# frozen render/converter primitives; no renderer is defined here (A1).
+# =============================================================================
+
+# Standardized-residual four-panel diagnostics for a GARCH-family model (PLT-24). Every
+# GARCH-family struct carries `standardized_residuals`; `fitted` is the mean equation
+# (a constant μ for GARCH-MIDAS, which has no `fitted` field). Routed through the shared
+# `_residual_diagnostics_panels` converter (A6).
+function _vol_diag_plot(m, model_name::String; title::String="",
+                        save_path::Union{String,Nothing}=nothing)
+    sr = Float64[Float64(v) for v in m.standardized_residuals]
+    ft = hasproperty(m, :fitted) ? Float64[Float64(v) for v in m.fitted] :
+                                   fill(Float64(m.mu), length(sr))
+    n = min(length(sr), length(ft))
+    panels = _residual_diagnostics_panels(sr[end-n+1:end], ft[end-n+1:end]; standardized=true)
+    isempty(title) && (title = "$model_name — Residual Diagnostics")
+    p = _make_plot(panels; title=title, ncols=2)
+    save_path !== nothing && save_plot(p, save_path)
+    p
+end
+
+# News-impact curve figure (PLT-37): the conditional variance σ²ₜ as a function of the
+# previous shock εₜ₋₁, with a vertical reference line at ε=0. Asymmetric families
+# (GJR/EGARCH/APARCH) show a steeper negative-shock branch (C6 — the docstring's
+# "asymmetric parabola" becomes visible). `news_impact_curve` returns `(shocks, variance)`.
+function _news_impact_plot(m, model_name::String; title::String="",
+                           save_path::Union{String,Nothing}=nothing)
+    nic = news_impact_curve(m)
+    id = _next_plot_id("nic")
+    rows = Vector{Pair{String,String}}[]
+    for i in eachindex(nic.shocks)
+        push!(rows, ["x" => _json(nic.shocks[i]), "niv" => _json(nic.variance[i])])
+    end
+    data = _json_array_of_objects(rows)
+    s = _series_json(["News impact σ²"], [_PLOT_COLORS[1]]; keys=["niv"])
+    refs = "[{\"value\":0,\"color\":\"$(_PLOT_ALERT)\",\"dash\":\"5,3\",\"axis\":\"x\"}]"
+    js = _render_line_js(id, data, s; ref_lines_json=refs,
+                         xlabel="Shock εₜ₋₁", ylabel="Conditional variance σ²ₜ")
+    isempty(title) && (title = "$model_name — News Impact Curve")
+    p = _make_plot([_PanelSpec(id, title, js)]; title=title)
+    save_path !== nothing && save_plot(p, save_path)
+    p
+end
+
+# =============================================================================
 # ARCHModel
 # =============================================================================
 
 """
-    plot_result(m::ARCHModel; title="", save_path=nothing)
+    plot_result(m::ARCHModel; view=:default, title="", save_path=nothing)
 
-Plot ARCH model diagnostics: returns, conditional volatility, standardized residuals.
+Plot ARCH model diagnostics.
+
+- `view=:default` — returns, conditional volatility, standardized residuals (3 panels).
+- `view=:diagnostics` — the shared four-panel residual diagnostics on the standardized
+  residuals (PLT-24).
 """
-function plot_result(m::ARCHModel{T};
+function plot_result(m::ARCHModel{T}; view::Symbol=:default,
                      title::String="", save_path::Union{String,Nothing}=nothing) where {T}
-    _plot_volatility_diagnostics(m.y, m.conditional_variance, "ARCH($(m.q))";
-                                  title=title, save_path=save_path)
+    if view === :default
+        return _plot_volatility_diagnostics(m.y, m.conditional_variance, "ARCH($(m.q))";
+                                            title=title, save_path=save_path)
+    elseif view === :diagnostics
+        return _vol_diag_plot(m, "ARCH($(m.q))"; title=title, save_path=save_path)
+    end
+    throw(ArgumentError("unknown view :$view for ARCHModel — use :default or :diagnostics"))
 end
 
 # =============================================================================
@@ -76,14 +131,25 @@ end
 # =============================================================================
 
 """
-    plot_result(m::GARCHModel; title="", save_path=nothing)
+    plot_result(m::GARCHModel; view=:default, title="", save_path=nothing)
 
 Plot GARCH model diagnostics.
+
+- `view=:default` — returns, conditional volatility, standardized residuals.
+- `view=:diagnostics` — four-panel standardized-residual diagnostics (PLT-24).
+- `view=:news_impact` — the news-impact curve σ²ₜ(εₜ₋₁) with a vline at ε=0 (PLT-37).
 """
-function plot_result(m::GARCHModel{T};
+function plot_result(m::GARCHModel{T}; view::Symbol=:default,
                      title::String="", save_path::Union{String,Nothing}=nothing) where {T}
-    _plot_volatility_diagnostics(m.y, m.conditional_variance, "GARCH($(m.p),$(m.q))";
-                                  title=title, save_path=save_path)
+    if view === :default
+        return _plot_volatility_diagnostics(m.y, m.conditional_variance, "GARCH($(m.p),$(m.q))";
+                                            title=title, save_path=save_path)
+    elseif view === :diagnostics
+        return _vol_diag_plot(m, "GARCH($(m.p),$(m.q))"; title=title, save_path=save_path)
+    elseif view === :news_impact
+        return _news_impact_plot(m, "GARCH($(m.p),$(m.q))"; title=title, save_path=save_path)
+    end
+    throw(ArgumentError("unknown view :$view for GARCHModel — use :default, :diagnostics, or :news_impact"))
 end
 
 # =============================================================================
@@ -91,14 +157,23 @@ end
 # =============================================================================
 
 """
-    plot_result(m::EGARCHModel; title="", save_path=nothing)
+    plot_result(m::EGARCHModel; view=:default, title="", save_path=nothing)
 
-Plot EGARCH model diagnostics.
+Plot EGARCH model diagnostics. `view` ∈ (`:default`, `:diagnostics`, `:news_impact`) —
+the asymmetric news-impact curve (steeper negative-shock branch) is drawn by
+`view=:news_impact` (PLT-24/PLT-37).
 """
-function plot_result(m::EGARCHModel{T};
+function plot_result(m::EGARCHModel{T}; view::Symbol=:default,
                      title::String="", save_path::Union{String,Nothing}=nothing) where {T}
-    _plot_volatility_diagnostics(m.y, m.conditional_variance, "EGARCH($(m.p),$(m.q))";
-                                  title=title, save_path=save_path)
+    if view === :default
+        return _plot_volatility_diagnostics(m.y, m.conditional_variance, "EGARCH($(m.p),$(m.q))";
+                                            title=title, save_path=save_path)
+    elseif view === :diagnostics
+        return _vol_diag_plot(m, "EGARCH($(m.p),$(m.q))"; title=title, save_path=save_path)
+    elseif view === :news_impact
+        return _news_impact_plot(m, "EGARCH($(m.p),$(m.q))"; title=title, save_path=save_path)
+    end
+    throw(ArgumentError("unknown view :$view for EGARCHModel — use :default, :diagnostics, or :news_impact"))
 end
 
 # =============================================================================
@@ -106,14 +181,22 @@ end
 # =============================================================================
 
 """
-    plot_result(m::GJRGARCHModel; title="", save_path=nothing)
+    plot_result(m::GJRGARCHModel; view=:default, title="", save_path=nothing)
 
-Plot GJR-GARCH model diagnostics.
+Plot GJR-GARCH model diagnostics. `view` ∈ (`:default`, `:diagnostics`, `:news_impact`)
+— the leverage asymmetry is visible in `view=:news_impact` (PLT-24/PLT-37).
 """
-function plot_result(m::GJRGARCHModel{T};
+function plot_result(m::GJRGARCHModel{T}; view::Symbol=:default,
                      title::String="", save_path::Union{String,Nothing}=nothing) where {T}
-    _plot_volatility_diagnostics(m.y, m.conditional_variance, "GJR-GARCH($(m.p),$(m.q))";
-                                  title=title, save_path=save_path)
+    if view === :default
+        return _plot_volatility_diagnostics(m.y, m.conditional_variance, "GJR-GARCH($(m.p),$(m.q))";
+                                            title=title, save_path=save_path)
+    elseif view === :diagnostics
+        return _vol_diag_plot(m, "GJR-GARCH($(m.p),$(m.q))"; title=title, save_path=save_path)
+    elseif view === :news_impact
+        return _news_impact_plot(m, "GJR-GARCH($(m.p),$(m.q))"; title=title, save_path=save_path)
+    end
+    throw(ArgumentError("unknown view :$view for GJRGARCHModel — use :default, :diagnostics, or :news_impact"))
 end
 
 # =============================================================================
@@ -121,25 +204,35 @@ end
 # =============================================================================
 
 """
-    plot_result(m::FIGARCHModel; title="", save_path=nothing)
+    plot_result(m::FIGARCHModel; view=:default, title="", save_path=nothing)
 
-Plot FIGARCH conditional-volatility diagnostics (returns + fitted σ²).
+Plot FIGARCH conditional-volatility diagnostics. `view` ∈ (`:default`, `:diagnostics`).
 """
-function plot_result(m::FIGARCHModel{T};
+function plot_result(m::FIGARCHModel{T}; view::Symbol=:default,
                      title::String="", save_path::Union{String,Nothing}=nothing) where {T}
-    _plot_volatility_diagnostics(m.y, m.conditional_variance, "FIGARCH($(m.p),d,$(m.q))";
-                                  title=title, save_path=save_path)
+    if view === :default
+        return _plot_volatility_diagnostics(m.y, m.conditional_variance, "FIGARCH($(m.p),d,$(m.q))";
+                                            title=title, save_path=save_path)
+    elseif view === :diagnostics
+        return _vol_diag_plot(m, "FIGARCH($(m.p),d,$(m.q))"; title=title, save_path=save_path)
+    end
+    throw(ArgumentError("unknown view :$view for FIGARCHModel — use :default or :diagnostics"))
 end
 
 """
-    plot_result(m::FIEGARCHModel; title="", save_path=nothing)
+    plot_result(m::FIEGARCHModel; view=:default, title="", save_path=nothing)
 
-Plot FIEGARCH conditional-volatility diagnostics (returns + fitted σ²).
+Plot FIEGARCH conditional-volatility diagnostics. `view` ∈ (`:default`, `:diagnostics`).
 """
-function plot_result(m::FIEGARCHModel{T};
+function plot_result(m::FIEGARCHModel{T}; view::Symbol=:default,
                      title::String="", save_path::Union{String,Nothing}=nothing) where {T}
-    _plot_volatility_diagnostics(m.y, m.conditional_variance, "FIEGARCH($(m.p),d,$(m.q))";
-                                  title=title, save_path=save_path)
+    if view === :default
+        return _plot_volatility_diagnostics(m.y, m.conditional_variance, "FIEGARCH($(m.p),d,$(m.q))";
+                                            title=title, save_path=save_path)
+    elseif view === :diagnostics
+        return _vol_diag_plot(m, "FIEGARCH($(m.p),d,$(m.q))"; title=title, save_path=save_path)
+    end
+    throw(ArgumentError("unknown view :$view for FIEGARCHModel — use :default or :diagnostics"))
 end
 
 # =============================================================================
@@ -147,25 +240,42 @@ end
 # =============================================================================
 
 """
-    plot_result(m::IGARCHModel; title="", save_path=nothing)
+    plot_result(m::IGARCHModel; view=:default, title="", save_path=nothing)
 
-Plot IGARCH conditional-volatility diagnostics (returns + fitted σ²).
+Plot IGARCH conditional-volatility diagnostics. `view` ∈ (`:default`, `:diagnostics`,
+`:news_impact`) (PLT-24/PLT-37).
 """
-function plot_result(m::IGARCHModel{T};
+function plot_result(m::IGARCHModel{T}; view::Symbol=:default,
                      title::String="", save_path::Union{String,Nothing}=nothing) where {T}
-    _plot_volatility_diagnostics(m.y, m.conditional_variance, "IGARCH($(m.p),$(m.q))";
-                                  title=title, save_path=save_path)
+    if view === :default
+        return _plot_volatility_diagnostics(m.y, m.conditional_variance, "IGARCH($(m.p),$(m.q))";
+                                            title=title, save_path=save_path)
+    elseif view === :diagnostics
+        return _vol_diag_plot(m, "IGARCH($(m.p),$(m.q))"; title=title, save_path=save_path)
+    elseif view === :news_impact
+        return _news_impact_plot(m, "IGARCH($(m.p),$(m.q))"; title=title, save_path=save_path)
+    end
+    throw(ArgumentError("unknown view :$view for IGARCHModel — use :default, :diagnostics, or :news_impact"))
 end
 
 """
-    plot_result(m::APARCHModel; title="", save_path=nothing)
+    plot_result(m::APARCHModel; view=:default, title="", save_path=nothing)
 
-Plot APARCH conditional-volatility diagnostics (returns + fitted σ²).
+Plot APARCH conditional-volatility diagnostics. `view` ∈ (`:default`, `:diagnostics`,
+`:news_impact`) — the power/asymmetry shape is visible in `view=:news_impact`
+(PLT-24/PLT-37).
 """
-function plot_result(m::APARCHModel{T};
+function plot_result(m::APARCHModel{T}; view::Symbol=:default,
                      title::String="", save_path::Union{String,Nothing}=nothing) where {T}
-    _plot_volatility_diagnostics(m.y, m.conditional_variance, "APARCH($(m.p),$(m.q))";
-                                  title=title, save_path=save_path)
+    if view === :default
+        return _plot_volatility_diagnostics(m.y, m.conditional_variance, "APARCH($(m.p),$(m.q))";
+                                            title=title, save_path=save_path)
+    elseif view === :diagnostics
+        return _vol_diag_plot(m, "APARCH($(m.p),$(m.q))"; title=title, save_path=save_path)
+    elseif view === :news_impact
+        return _news_impact_plot(m, "APARCH($(m.p),$(m.q))"; title=title, save_path=save_path)
+    end
+    throw(ArgumentError("unknown view :$view for APARCHModel — use :default, :diagnostics, or :news_impact"))
 end
 
 """
@@ -176,6 +286,8 @@ Plot a Component-GARCH(1,1) fit.
 - `view=:components` — stacked-area decomposition of the permanent (`√q`) and
   transitory (`√max(σ²−q,0)`) volatility contributions over the sample.
 - `view=:default` — the standard 3-panel volatility diagnostic figure.
+- `view=:diagnostics` — four-panel standardized-residual diagnostics (PLT-24).
+- `view=:news_impact` — the news-impact curve σ²ₜ(εₜ₋₁) (PLT-37).
 """
 function plot_result(m::CGARCHModel{T}; view::Symbol=:components,
                      title::String="", save_path::Union{String,Nothing}=nothing) where {T}
@@ -184,8 +296,12 @@ function plot_result(m::CGARCHModel{T}; view::Symbol=:components,
     elseif view === :default
         return _plot_volatility_diagnostics(m.y, m.conditional_variance, "Component-GARCH(1,1)";
                                              title=title, save_path=save_path)
+    elseif view === :diagnostics
+        return _vol_diag_plot(m, "Component-GARCH(1,1)"; title=title, save_path=save_path)
+    elseif view === :news_impact
+        return _news_impact_plot(m, "Component-GARCH(1,1)"; title=title, save_path=save_path)
     else
-        throw(ArgumentError("unknown view $view — use :components or :default"))
+        throw(ArgumentError("unknown view $view — use :components, :default, :diagnostics, or :news_impact"))
     end
     save_path !== nothing && save_plot(p, save_path)
     p
@@ -221,6 +337,7 @@ Plot a GARCH-MIDAS fit.
 - `view=:components` — overlay total conditional volatility `√σ²` and the
   long-run component `√τ` over the retained sample.
 - `view=:weights` — the fitted Beta MIDAS weight curve `φ_k` versus lag `k`.
+- `view=:diagnostics` — four-panel standardized-residual diagnostics (PLT-24).
 """
 function plot_result(m::GarchMidasModel{T}; view::Symbol=:components,
                      title::String="", save_path::Union{String,Nothing}=nothing) where {T}
@@ -228,8 +345,10 @@ function plot_result(m::GarchMidasModel{T}; view::Symbol=:components,
         p = _garch_midas_components_plot(m, title)
     elseif view === :weights
         p = _garch_midas_weight_plot(m, title)
+    elseif view === :diagnostics
+        return _vol_diag_plot(m, "GARCH-MIDAS"; title=title, save_path=save_path)
     else
-        throw(ArgumentError("unknown view $view — use :components or :weights"))
+        throw(ArgumentError("unknown view $view — use :components, :weights, or :diagnostics"))
     end
     save_path !== nothing && save_plot(p, save_path)
     p
@@ -276,12 +395,29 @@ end
 # =============================================================================
 
 """
-    plot_result(m::SVModel; title="", save_path=nothing)
+    plot_result(m::SVModel; view=:default, title="", save_path=nothing)
 
-Plot SV model diagnostics with posterior quantile bands on volatility.
+Plot SV model diagnostics.
+
+- `view=:default` — returns, posterior volatility with credible band, standardized
+  residuals (3 panels).
+- `view=:diagnostics` — four-panel residual diagnostics on the already-standardized
+  residuals `zₜ = yₜ/√σ̄²ₜ` (PLT-24).
 """
-function plot_result(m::SVModel{T};
+function plot_result(m::SVModel{T}; view::Symbol=:default,
                      title::String="", save_path::Union{String,Nothing}=nothing) where {T}
+    if view === :diagnostics
+        sr = Float64[Float64(m.y[i]) / sqrt(max(Float64(m.volatility_mean[i]), 1e-12))
+                     for i in eachindex(m.y)]
+        ft = zeros(Float64, length(sr))   # SV assumes a zero conditional mean
+        panels = _residual_diagnostics_panels(sr, ft; standardized=true)
+        isempty(title) && (title = "Stochastic Volatility — Residual Diagnostics")
+        p = _make_plot(panels; title=title, ncols=2)
+        save_path !== nothing && save_plot(p, save_path)
+        return p
+    elseif view !== :default
+        throw(ArgumentError("unknown view :$view for SVModel — use :default or :diagnostics"))
+    end
     data_json = _sv_data_json(m.y, m.volatility_mean, m.volatility_quantiles,
                                m.quantile_levels)
     nq = length(m.quantile_levels)
@@ -328,12 +464,17 @@ end
     plot_result(fm::FactorModel; title="", save_path=nothing)
 
 Plot factor model: scree plot (eigenvalues) + extracted factor series.
+
+Caps (raise to show more; the drawn count appears in the panel title, plotrule C7):
+`max_factors=5` factor series, `max_eig=10` scree eigenvalues.
 """
 function plot_result(fm::FactorModel{T};
+                     max_factors::Int=5, max_eig::Int=10,
                      title::String="", save_path::Union{String,Nothing}=nothing) where {T}
     # Panel 1: Scree plot (eigenvalues as bar chart)
     id1 = _next_plot_id("fm_scree")
-    n_eig = min(length(fm.eigenvalues), 10)
+    n_e_total = length(fm.eigenvalues)
+    n_eig = min(n_e_total, max_eig)
     rows1 = Vector{Pair{String,String}}[]
     for i in 1:n_eig
         push!(rows1, ["x" => _json("PC $i"), "eig" => _json(fm.eigenvalues[i])])
@@ -341,18 +482,18 @@ function plot_result(fm::FactorModel{T};
     data1 = _json_array_of_objects(rows1)
     s1 = _series_json(["Eigenvalue"], [_PLOT_COLORS[1]]; keys=["eig"])
     js1 = _render_bar_js(id1, data1, s1; mode="grouped", ylabel="Eigenvalue")
-    p1 = _PanelSpec(id1, "Scree Plot", js1)
+    p1 = _PanelSpec(id1, _cap_title("Scree Plot", n_eig, n_e_total), js1)
 
     # Panel 2: Factor series
     id2 = _next_plot_id("fm_fac")
     T_obs, r = size(fm.factors)
-    n_plot = min(r, 5)
+    n_plot = min(r, max_factors)
     fac_names = ["Factor $i" for i in 1:n_plot]
-    fac_colors = _PLOT_COLORS[1:n_plot]
+    fac_colors = _palette_take(n_plot)
     data2 = _timeseries_data_json(fm.factors[:, 1:n_plot], fac_names)
     s2 = _series_json(fac_names, fac_colors; keys=["v$i" for i in 1:n_plot])
     js2 = _render_line_js(id2, data2, s2; xlabel="Period", ylabel="Factor Value")
-    p2 = _PanelSpec(id2, "Extracted Factors", js2)
+    p2 = _PanelSpec(id2, _cap_title("Extracted Factors", n_plot, r), js2)
 
     if isempty(title)
         title = "Static Factor Model (r=$(fm.r))"
@@ -371,12 +512,17 @@ end
     plot_result(fm::DynamicFactorModel; title="", save_path=nothing)
 
 Plot dynamic factor model: scree + factor series.
+
+Caps (raise to show more; the drawn count appears in the panel title, plotrule C7):
+`max_factors=5` factor series, `max_eig=10` scree eigenvalues.
 """
 function plot_result(fm::DynamicFactorModel{T};
+                     max_factors::Int=5, max_eig::Int=10,
                      title::String="", save_path::Union{String,Nothing}=nothing) where {T}
     # Panel 1: Scree
     id1 = _next_plot_id("dfm_scree")
-    n_eig = min(length(fm.eigenvalues), 10)
+    n_e_total = length(fm.eigenvalues)
+    n_eig = min(n_e_total, max_eig)
     rows1 = Vector{Pair{String,String}}[]
     for i in 1:n_eig
         push!(rows1, ["x" => _json("PC $i"), "eig" => _json(fm.eigenvalues[i])])
@@ -384,17 +530,17 @@ function plot_result(fm::DynamicFactorModel{T};
     data1 = _json_array_of_objects(rows1)
     s1 = _series_json(["Eigenvalue"], [_PLOT_COLORS[1]]; keys=["eig"])
     js1 = _render_bar_js(id1, data1, s1; mode="grouped", ylabel="Eigenvalue")
-    p1 = _PanelSpec(id1, "Scree Plot", js1)
+    p1 = _PanelSpec(id1, _cap_title("Scree Plot", n_eig, n_e_total), js1)
 
     # Panel 2: Factor series
     id2 = _next_plot_id("dfm_fac")
     T_obs, r = size(fm.factors)
-    n_plot = min(r, 5)
+    n_plot = min(r, max_factors)
     fac_names = ["Factor $i" for i in 1:n_plot]
     data2 = _timeseries_data_json(fm.factors[:, 1:n_plot], fac_names)
-    s2 = _series_json(fac_names, _PLOT_COLORS[1:n_plot]; keys=["v$i" for i in 1:n_plot])
+    s2 = _series_json(fac_names, _palette_take(n_plot); keys=["v$i" for i in 1:n_plot])
     js2 = _render_line_js(id2, data2, s2; xlabel="Period", ylabel="Factor Value")
-    p2 = _PanelSpec(id2, "Extracted Factors (VAR($( fm.p)))", js2)
+    p2 = _PanelSpec(id2, _cap_title("Extracted Factors (VAR($(fm.p)))", n_plot, r), js2)
 
     if isempty(title)
         title = "Dynamic Factor Model (r=$(fm.r), p=$(fm.p))"
@@ -405,118 +551,9 @@ function plot_result(fm::DynamicFactorModel{T};
     p
 end
 
-# =============================================================================
-# TimeSeriesData
-# =============================================================================
-
-"""
-    plot_result(d::TimeSeriesData; vars=nothing, ncols=0, title="", save_path=nothing)
-
-Plot time series data: one panel per variable (capped at 12).
-
-- `vars`: Variable indices or names to plot. `nothing` = all (up to 12).
-"""
-function plot_result(d::TimeSeriesData{T};
-                     vars::Union{Vector,Nothing}=nothing,
-                     ncols::Int=0, title::String="",
-                     save_path::Union{String,Nothing}=nothing) where {T}
-    if vars === nothing
-        idxs = collect(1:min(d.n_vars, 12))
-    else
-        idxs = [v isa String ? _resolve_var(v, d.varnames) : v for v in vars]
-    end
-
-    panels = _PanelSpec[]
-    for vi in idxs
-        id = _next_plot_id("ts")
-        ptitle = d.varnames[vi]
-
-        rows = Vector{Pair{String,String}}[]
-        for t in 1:d.T_obs
-            push!(rows, [
-                "x" => _json(d.time_index[t]),
-                "v1" => _json(d.data[t, vi])
-            ])
-        end
-        data_json = _json_array_of_objects(rows)
-        s_json = _series_json([d.varnames[vi]], [_PLOT_COLORS[mod1(vi, length(_PLOT_COLORS))]];
-                              keys=["v1"])
-
-        js = _render_line_js(id, data_json, s_json; xlabel="Time", ylabel="")
-        push!(panels, _PanelSpec(id, ptitle, js))
-    end
-
-    if isempty(title)
-        title = isempty(desc(d)) ? "Time Series Data" : desc(d)
-    end
-
-    p = _make_plot(panels; title=title, ncols=ncols)
-    save_path !== nothing && save_plot(p, save_path)
-    p
-end
-
-# =============================================================================
-# PanelData
-# =============================================================================
-
-"""
-    plot_result(d::PanelData; vars=nothing, ncols=0, title="", save_path=nothing)
-
-Plot panel data: one panel per variable, with lines for each group.
-"""
-function plot_result(d::PanelData{T};
-                     vars::Union{Vector,Nothing}=nothing,
-                     ncols::Int=0, title::String="",
-                     save_path::Union{String,Nothing}=nothing) where {T}
-    if vars === nothing
-        var_idxs = collect(1:min(d.n_vars, 6))
-    else
-        var_idxs = [v isa String ? _resolve_var(v, d.varnames) : v for v in vars]
-    end
-
-    # Group data by group_id
-    unique_groups = sort(unique(d.group_id))
-    n_groups_plot = min(length(unique_groups), 10)
-    groups_to_plot = unique_groups[1:n_groups_plot]
-
-    panels = _PanelSpec[]
-    for vi in var_idxs
-        id = _next_plot_id("pd")
-        ptitle = d.varnames[vi]
-
-        # Build data with one column per group
-        # Get unique time points
-        unique_times = sort(unique(d.time_id))
-        rows = Vector{Pair{String,String}}[]
-        for t in unique_times
-            row = Pair{String,String}["x" => _json(t)]
-            for (gi, gid) in enumerate(groups_to_plot)
-                mask = (d.group_id .== gid) .& (d.time_id .== t)
-                idx = findfirst(mask)
-                val = idx !== nothing ? d.data[idx, vi] : NaN
-                push!(row, "g$gi" => _json(val))
-            end
-            push!(rows, row)
-        end
-        data_json = _json_array_of_objects(rows)
-
-        group_names = [gi <= length(d.group_names) ? d.group_names[gi] : "Group $gid"
-                       for (gi, gid) in enumerate(groups_to_plot)]
-        s_json = _series_json(group_names, _PLOT_COLORS[1:n_groups_plot];
-                              keys=["g$i" for i in 1:n_groups_plot])
-
-        js = _render_line_js(id, data_json, s_json; xlabel="Time", ylabel="")
-        push!(panels, _PanelSpec(id, ptitle, js))
-    end
-
-    if isempty(title)
-        title = isempty(desc(d)) ? "Panel Data" : desc(d)
-    end
-
-    p = _make_plot(panels; title=title, ncols=ncols)
-    save_path !== nothing && save_plot(p, save_path)
-    p
-end
+# NOTE: plot_result(::TimeSeriesData) relocated to plotting/timeseries.jl and
+# plot_result(::PanelData) relocated to plotting/panel.jl (PLT plotting overhaul,
+# Wave-2 data-view lanes). See those files.
 
 # =============================================================================
 # OccBinIRF
@@ -550,7 +587,7 @@ function plot_result(oirf::OccBinIRF{T};
         end
         data_json = _json_array_of_objects(rows)
 
-        js = _render_occbin_panel_js(id, data_json, "Horizon", oirf.varnames[j])
+        js = _render_occbin_panel_js(id, data_json; xlabel="Horizon", ylabel=oirf.varnames[j])
         push!(panels, _PanelSpec(id, ptitle, js))
     end
 
@@ -595,7 +632,7 @@ function plot_result(sol::OccBinSolution{T};
         end
         data_json = _json_array_of_objects(rows)
 
-        js = _render_occbin_panel_js(id, data_json, "Period", sol.varnames[j])
+        js = _render_occbin_panel_js(id, data_json; xlabel="Period", ylabel=sol.varnames[j])
         push!(panels, _PanelSpec(id, ptitle, js))
     end
 
@@ -608,245 +645,8 @@ function plot_result(sol::OccBinSolution{T};
     p
 end
 
-# =============================================================================
-# Shared OccBin Panel Renderer
-# =============================================================================
-
-"""
-Render a single OccBin panel with linear (dashed) vs piecewise (solid) lines,
-shaded binding-period rectangles, and zero reference line.
-
-Data format: [{h, lin, pw, bind}, ...] where bind is 0 or 1.
-"""
-function _render_occbin_panel_js(id::String, data_json::String,
-                                  xlabel::String, ylabel::String)
-    lin_color = _PLOT_COLORS[3]   # green for linear
-    pw_color = _PLOT_COLORS[1]    # blue for piecewise
-    bind_color = "#d62728"        # red for binding region
-    """
-(function() {
-    const data_$(id) = $(data_json);
-    const container_$(id) = d3.select('#$(id)');
-    const W_$(id) = Math.max(container_$(id).node().clientWidth - 24, 280);
-    const margin_$(id) = {top:10, right:15, bottom:35, left:55};
-    const w_$(id) = W_$(id) - margin_$(id).left - margin_$(id).right;
-    const h_$(id) = Math.min(w_$(id) * 0.6, 250);
-
-    const svg_$(id) = container_$(id).append('svg')
-        .attr('width', W_$(id))
-        .attr('height', h_$(id) + margin_$(id).top + margin_$(id).bottom);
-    const g_$(id) = svg_$(id).append('g')
-        .attr('transform', 'translate('+margin_$(id).left+','+margin_$(id).top+')');
-
-    // Compute domains
-    const xVals_$(id) = data_$(id).map(d => d.h);
-    const allY_$(id) = [];
-    data_$(id).forEach(d => {
-        if(d.lin!==null) allY_$(id).push(d.lin);
-        if(d.pw!==null) allY_$(id).push(d.pw);
-    });
-    allY_$(id).push(0);
-
-    const x_$(id) = d3.scaleLinear().domain(d3.extent(xVals_$(id))).range([0, w_$(id)]);
-    const yExt_$(id) = d3.extent(allY_$(id));
-    const yPad_$(id) = (yExt_$(id)[1] - yExt_$(id)[0]) * 0.08 || 0.1;
-    const y_$(id) = d3.scaleLinear()
-        .domain([yExt_$(id)[0] - yPad_$(id), yExt_$(id)[1] + yPad_$(id)])
-        .range([h_$(id), 0]);
-
-    // Grid
-    g_$(id).append('g').attr('class','grid')
-        .call(d3.axisLeft(y_$(id)).tickSize(-w_$(id)).tickFormat(''));
-
-    // Binding-period shaded rectangles
-    const xStep_$(id) = w_$(id) / Math.max(xVals_$(id).length - 1, 1);
-    data_$(id).forEach((d, i) => {
-        if(d.bind === 1) {
-            const x0_$(id) = x_$(id)(d.h) - xStep_$(id) * 0.5;
-            const x1_$(id) = x_$(id)(d.h) + xStep_$(id) * 0.5;
-            g_$(id).append('rect')
-                .attr('x', Math.max(0, x0_$(id)))
-                .attr('y', 0)
-                .attr('width', Math.min(x1_$(id), w_$(id)) - Math.max(0, x0_$(id)))
-                .attr('height', h_$(id))
-                .attr('fill', '$(bind_color)')
-                .attr('opacity', 0.08);
-        }
-    });
-
-    // Zero reference line
-    g_$(id).append('line')
-        .attr('x1', 0).attr('x2', w_$(id))
-        .attr('y1', y_$(id)(0)).attr('y2', y_$(id)(0))
-        .attr('stroke', '#999').attr('stroke-width', 1)
-        .attr('stroke-dasharray', '4,3');
-
-    // Linear line (dashed)
-    const linLine_$(id) = d3.line().x(d => x_$(id)(d.h)).y(d => y_$(id)(d.lin))
-        .defined(d => d.lin !== null);
-    g_$(id).append('path').datum(data_$(id)).attr('d', linLine_$(id))
-        .attr('fill', 'none').attr('stroke', '$(lin_color)')
-        .attr('stroke-width', 1.8).attr('stroke-dasharray', '6,3');
-
-    // Piecewise line (solid)
-    const pwLine_$(id) = d3.line().x(d => x_$(id)(d.h)).y(d => y_$(id)(d.pw))
-        .defined(d => d.pw !== null);
-    g_$(id).append('path').datum(data_$(id)).attr('d', pwLine_$(id))
-        .attr('fill', 'none').attr('stroke', '$(pw_color)')
-        .attr('stroke-width', 1.8);
-
-    // Axes
-    g_$(id).append('g').attr('class','axis')
-        .attr('transform', 'translate(0,'+h_$(id)+')')
-        .call(d3.axisBottom(x_$(id)).ticks(Math.min(xVals_$(id).length, 8)));
-    g_$(id).append('g').attr('class','axis')
-        .call(d3.axisLeft(y_$(id)).ticks(6));
-
-    if('$(xlabel)') g_$(id).append('text')
-        .attr('x', w_$(id)/2).attr('y', h_$(id)+30)
-        .attr('text-anchor','middle').attr('font-size','11px')
-        .attr('fill','#666').text('$(xlabel)');
-    if('$(ylabel)') g_$(id).append('text')
-        .attr('transform','rotate(-90)')
-        .attr('x', -h_$(id)/2).attr('y', -42)
-        .attr('text-anchor','middle').attr('font-size','11px')
-        .attr('fill','#666').text('$(ylabel)');
-
-    // Legend
-    const leg_$(id) = g_$(id).append('g').attr('class','legend')
-        .attr('transform','translate(5,-5)');
-    // Linear (dashed)
-    const g1_$(id) = leg_$(id).append('g').attr('transform','translate(0,0)');
-    g1_$(id).append('line').attr('x1',0).attr('x2',16).attr('y1',0).attr('y2',0)
-        .attr('stroke','$(lin_color)').attr('stroke-width',2)
-        .attr('stroke-dasharray','6,3');
-    g1_$(id).append('text').attr('x',20).attr('y',4)
-        .attr('font-size','10px').attr('fill','#555').text('Linear');
-    // Piecewise (solid)
-    const g2_$(id) = leg_$(id).append('g').attr('transform','translate(80,0)');
-    g2_$(id).append('line').attr('x1',0).attr('x2',16).attr('y1',0).attr('y2',0)
-        .attr('stroke','$(pw_color)').attr('stroke-width',2);
-    g2_$(id).append('text').attr('x',20).attr('y',4)
-        .attr('font-size','10px').attr('fill','#555').text('Piecewise');
-    // Binding
-    const g3_$(id) = leg_$(id).append('g').attr('transform','translate(175,0)');
-    g3_$(id).append('rect').attr('width',12).attr('height',10).attr('y',-5)
-        .attr('fill','$(bind_color)').attr('opacity',0.15);
-    g3_$(id).append('text').attr('x',16).attr('y',4)
-        .attr('font-size','10px').attr('fill','#555').text('Binding');
-
-    // Tooltip
-    svg_$(id).append('rect')
-        .attr('width', W_$(id))
-        .attr('height', h_$(id) + margin_$(id).top + margin_$(id).bottom)
-        .attr('fill','none').attr('pointer-events','all')
-        .on('mousemove', function(evt) {
-            const [mx] = d3.pointer(evt, g_$(id).node());
-            const x0 = x_$(id).invert(mx);
-            const idx = d3.minIndex(data_$(id), d => Math.abs(d.h - x0));
-            const d = data_$(id)[idx];
-            let html = '<b>h='+d.h+'</b>';
-            if(d.lin!==null) html += '<br>Linear: '+fmt(d.lin);
-            if(d.pw!==null) html += '<br>Piecewise: '+fmt(d.pw);
-            if(d.bind===1) html += '<br><span style="color:$(bind_color)">Binding</span>';
-            showTip(evt, html);
-        })
-        .on('mouseout', hideTip);
-})();
-"""
-end
-
-# =============================================================================
-# BayesianDSGE — Prior vs Posterior Density Plots
-# =============================================================================
-
-"""
-    plot_result(result::BayesianDSGE; title="", save_path=nothing, ncols=0)
-
-Plot prior vs posterior density for each estimated parameter. Each panel shows
-the prior density curve (dashed) and a kernel density estimate of the posterior
-draws (solid), with a vertical line at the posterior mean.
-"""
-function plot_result(result::BayesianDSGE{T};
-                     title::String="", ncols::Int=0,
-                     save_path::Union{String,Nothing}=nothing) where {T}
-    n_params = length(result.param_names)
-    panels = _PanelSpec[]
-
-    for i in 1:n_params
-        pn = string(result.param_names[i])
-        draws = result.theta_draws[:, i]
-        d = result.priors.distributions[i]
-        post_mean = mean(draws)
-
-        # Compute KDE of posterior draws
-        lo_draw = minimum(draws)
-        hi_draw = maximum(draws)
-        bw = 1.06 * std(draws) * length(draws)^(-0.2)  # Silverman bandwidth
-        bw = max(bw, T(1e-10))
-        margin_range = 3 * bw
-        grid_lo = lo_draw - margin_range
-        grid_hi = hi_draw + margin_range
-        n_grid = 200
-        xs = range(grid_lo, grid_hi; length=n_grid)
-
-        # KDE density
-        kde_vals = zeros(T, n_grid)
-        n_draws_total = length(draws)
-        for (gi, xg) in enumerate(xs)
-            s = zero(T)
-            for dv in draws
-                z = (xg - dv) / bw
-                s += exp(-z * z / 2)
-            end
-            kde_vals[gi] = s / (n_draws_total * bw * sqrt(2 * T(pi)))
-        end
-
-        # Prior density at same grid points
-        prior_vals = zeros(T, n_grid)
-        for (gi, xg) in enumerate(xs)
-            try
-                pv = pdf(d, xg)
-                prior_vals[gi] = isfinite(pv) ? pv : zero(T)
-            catch
-                prior_vals[gi] = zero(T)
-            end
-        end
-
-        # Build data JSON
-        rows = Vector{Pair{String,String}}[]
-        for gi in 1:n_grid
-            push!(rows, [
-                "x" => _json(xs[gi]),
-                "post" => _json(kde_vals[gi]),
-                "prior" => _json(prior_vals[gi])
-            ])
-        end
-        data_json = _json_array_of_objects(rows)
-
-        id = _next_plot_id("bayes")
-
-        # Use line chart with prior (dashed) and posterior (solid)
-        s_json = "[{\"name\":\"Posterior\",\"color\":\"$(_PLOT_COLORS[1])\",\"key\":\"post\",\"dash\":\"\"}," *
-                 "{\"name\":\"Prior\",\"color\":\"$(_PLOT_COLORS[2])\",\"key\":\"prior\",\"dash\":\"6,3\"}]"
-
-        # Reference line at posterior mean
-        refs_json = "[{\"value\":0,\"color\":\"#999\",\"dash\":\"4,3\"}]"
-
-        js = _render_line_js(id, data_json, s_json;
-                             ref_lines_json="[]", xlabel=pn, ylabel="Density")
-
-        push!(panels, _PanelSpec(id, pn, js))
-    end
-
-    if isempty(title)
-        title = "Bayesian DSGE — Prior vs Posterior"
-    end
-
-    p = _make_plot(panels; title=title, ncols=ncols)
-    save_path !== nothing && save_plot(p, save_path)
-    p
-end
+# NOTE: plot_result(::BayesianDSGE) relocated to plotting/mcmc.jl (PLT plotting
+# overhaul, Wave-2 MCMC lane; PLT-05 posterior-mean vline applied there).
 
 # =============================================================================
 # FAVARModel
@@ -856,19 +656,23 @@ end
     plot_result(m::FAVARModel; title="", save_path=nothing)
 
 Plot FAVAR model: extracted factor series.
+
+Caps `max_factors=5` factor series; the drawn count appears in the panel title when
+truncated (plotrule C7).
 """
 function plot_result(m::FAVARModel{T};
+                     max_factors::Int=5,
                      title::String="", save_path::Union{String,Nothing}=nothing) where {T}
     r = m.n_factors
-    n_plot = min(r, 5)
+    n_plot = min(r, max_factors)
     fac_names = ["Factor $i" for i in 1:n_plot]
-    fac_colors = _PLOT_COLORS[1:n_plot]
+    fac_colors = _palette_take(n_plot)
     data2 = _timeseries_data_json(m.factors[:, 1:n_plot], fac_names)
     s2 = _series_json(fac_names, fac_colors; keys=["v$i" for i in 1:n_plot])
 
     id = _next_plot_id("favar_fac")
     js = _render_line_js(id, data2, s2; xlabel="Period", ylabel="Factor Value")
-    p1 = _PanelSpec(id, "Extracted Factors", js)
+    p1 = _PanelSpec(id, _cap_title("Extracted Factors", n_plot, r), js)
 
     if isempty(title)
         title = "FAVAR Model (r=$(m.n_factors), p=$(m.p))"
@@ -887,11 +691,14 @@ end
     plot_result(m::BayesianFAVAR; title="", save_path=nothing)
 
 Plot Bayesian FAVAR: posterior mean factor series with 68% credible intervals.
+
+Caps `max_factors=5` factor panels; a figure note reports any truncation (C7).
 """
 function plot_result(m::BayesianFAVAR{T};
+                     max_factors::Int=5,
                      title::String="", save_path::Union{String,Nothing}=nothing) where {T}
     r = m.n_factors
-    n_plot = min(r, 5)
+    n_plot = min(r, max_factors)
     F_mean = dropdims(mean(m.factor_draws, dims=1), dims=1)  # T_obs x r
     F_lo = dropdims(mapslices(x -> quantile(x, 0.16), m.factor_draws; dims=1), dims=1)
     F_hi = dropdims(mapslices(x -> quantile(x, 0.84), m.factor_draws; dims=1), dims=1)
@@ -925,7 +732,8 @@ function plot_result(m::BayesianFAVAR{T};
         title = "Bayesian FAVAR (r=$(m.n_factors), p=$(m.p))"
     end
 
-    p = _make_plot(panels; title=title, ncols=min(n_plot, 2))
+    p = _make_plot(panels; title=title, ncols=min(n_plot, 2),
+                   note=_cap_note("factors", n_plot, r, "max_factors"))
     save_path !== nothing && save_plot(p, save_path)
     p
 end
@@ -970,14 +778,15 @@ p = plot_result(ss; view=:policy)          # policy functions
 """
 function plot_result(ss::HASteadyState{T};
                      view::Symbol=:default,
+                     max_bars::Int=60, max_states::Int=length(_PLOT_COLORS),
                      title::String="",
                      save_path::Union{String,Nothing}=nothing) where {T}
     if view == :default || view == :distribution
-        p = _plot_ha_distribution(ss; title=title)
+        p = _plot_ha_distribution(ss; title=title, max_bars=max_bars)
     elseif view == :lorenz
         p = _plot_ha_lorenz(ss; title=title)
     elseif view == :policy
-        p = _plot_ha_policy(ss; title=title)
+        p = _plot_ha_policy(ss; title=title, max_states=max_states)
     else
         throw(ArgumentError("Unknown view: $view. Use :distribution, :lorenz, or :policy"))
     end
@@ -989,7 +798,8 @@ end
 Wealth distribution histogram: marginal asset distribution (summed over income states)
 plotted as a bar chart with asset grid on x-axis and density on y-axis.
 """
-function _plot_ha_distribution(ss::HASteadyState{T}; title::String="") where {T}
+function _plot_ha_distribution(ss::HASteadyState{T}; title::String="",
+                               max_bars::Int=60) where {T}
     a_grid = ss.grid.grids[1]
     n_a = ss.grid.n_points[1]
     n_e = ss.grid.n_income
@@ -1004,31 +814,39 @@ function _plot_ha_distribution(ss::HASteadyState{T}; title::String="") where {T}
         d_asset ./= total_mass
     end
 
-    # Subsample grid for bar chart readability (cap at 60 bars)
-    max_bars = min(n_a, 60)
-    step = max(1, div(n_a, max_bars))
-    idxs = 1:step:n_a
-    if last(idxs) != n_a
-        idxs = vcat(collect(idxs), n_a)
-    end
+    # Aggregate the marginal mass into (at most 60) contiguous bins so NO grid
+    # node's mass is dropped — bar heights are probability mass per bin and sum to
+    # the total distribution mass (≈1). Point-sampling one node per bin would
+    # discard the mass on skipped nodes (plotrule Anti-Pattern #7 / mass must be
+    # conserved). When n_a ≤ 60 each bin holds one node, so heights equal the
+    # per-node masses (values unchanged from the old path, now provably conserving).
+    nbins = min(n_a, max_bars)
+    bin_edges = round.(Int, range(0, n_a; length=nbins + 1))
 
-    # For subsampled bars, aggregate density within each bin
     rows = Vector{Pair{String,String}}[]
-    for (bi, idx) in enumerate(idxs)
-        # Use the grid value as label
-        label = _fmt_grid_label(a_grid[idx])
+    for b in 1:nbins
+        lo = bin_edges[b] + 1
+        hi = bin_edges[b + 1]
+        hi < lo && continue
+        bin_mass = sum(@view d_asset[lo:hi])
+        # Label the bin by its right-edge asset value.
+        label = _fmt_grid_label(a_grid[hi])
         push!(rows, [
             "x" => _json(label),
-            "dens" => _json(d_asset[idx])
+            "mass" => _json(bin_mass)
         ])
     end
     data_json = _json_array_of_objects(rows)
 
     id = _next_plot_id("ha_dist")
-    s_json = _series_json(["Density"], [_PLOT_COLORS[1]]; keys=["dens"])
+    s_json = _series_json(["Probability mass"], [_PLOT_COLORS[1]]; keys=["mass"])
     js = _render_bar_js(id, data_json, s_json;
-                        mode="grouped", xlabel="Assets", ylabel="Density")
-    p1 = _PanelSpec(id, "Marginal Wealth Distribution", js)
+                        mode="grouped", xlabel="Assets", ylabel="Probability mass")
+    binned = nbins < n_a
+    ptitle = binned ?
+        "Marginal Wealth Distribution ($(n_a) grid nodes in $(nbins) bins)" :
+        "Marginal Wealth Distribution"
+    p1 = _PanelSpec(id, ptitle, js)
 
     if isempty(title)
         gini = _gini_coefficient(vec(ss.distribution), ss.grid)
@@ -1131,7 +949,8 @@ end
 Policy function plot: consumption and savings as functions of assets,
 one line per income state. Two panels side by side.
 """
-function _plot_ha_policy(ss::HASteadyState{T}; title::String="") where {T}
+function _plot_ha_policy(ss::HASteadyState{T}; title::String="",
+                         max_states::Int=length(_PLOT_COLORS)) where {T}
     a_grid = ss.grid.grids[1]
     n_a = ss.grid.n_points[1]
     n_e = ss.grid.n_income
@@ -1146,7 +965,7 @@ function _plot_ha_policy(ss::HASteadyState{T}; title::String="") where {T}
     end
 
     income_names = ["e$j" for j in 1:n_e]
-    n_plot_e = min(n_e, length(_PLOT_COLORS))
+    n_plot_e = min(n_e, max_states)
 
     for (pol_key, pol_label, pol_ylabel) in [
         (:consumption, "Consumption Policy", "c(a, e)"),
@@ -1167,11 +986,11 @@ function _plot_ha_policy(ss::HASteadyState{T}; title::String="") where {T}
         data_json = _json_array_of_objects(rows)
 
         s_json = _series_json(income_names[1:n_plot_e],
-                              _PLOT_COLORS[1:n_plot_e];
+                              _palette_take(n_plot_e);
                               keys=["e$j" for j in 1:n_plot_e])
         js = _render_line_js(id, data_json, s_json;
                              xlabel="Assets", ylabel=pol_ylabel)
-        push!(panels, _PanelSpec(id, pol_label, js))
+        push!(panels, _PanelSpec(id, _cap_title(pol_label, n_plot_e, n_e), js))
     end
 
     if isempty(panels)
@@ -1183,7 +1002,8 @@ function _plot_ha_policy(ss::HASteadyState{T}; title::String="") where {T}
         title = "Policy Functions (r = $(_fmt(r_val; digits=4)))"
     end
 
-    _make_plot(panels; title=title, ncols=min(length(panels), 2))
+    _make_plot(panels; title=title, ncols=min(length(panels), 2),
+               note=_cap_note("income states", n_plot_e, n_e, "max_states"))
 end
 
 # =============================================================================

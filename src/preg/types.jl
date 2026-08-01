@@ -49,6 +49,10 @@ First-Difference (FD), Between, or Correlated Random Effects (CRE).
 - `data::PanelData{T}` — original panel data
 - `ar1_rho::Union{Nothing,T,Vector{T}}` — Prais-Winsten AR(1) ρ̂ (`nothing` when
   `ar1=:none`; scalar for `ar1=:common`; per-unit `Vector{T}` for `ar1=:panel_specific`)
+- `hdfe::Union{Nothing,NamedTuple}` — high-dimensional FE absorption diagnostics
+  (`nothing` unless `absorb` was used): `absorb` (dimension names), `n_absorbed`,
+  `n_levels`, `n_components`, `marginal`, `n_absorbed_cluster`, `converged`,
+  `iterations`, `sweeps`, `change`, `tol`, `accel`
 
 # References
 - Baltagi, B. H. (2021). *Econometric Analysis of Panel Data*. 6th ed. Springer.
@@ -88,7 +92,22 @@ struct PanelRegModel{T<:AbstractFloat} <: StatsAPI.RegressionModel
     # Prais-Winsten AR(1) ρ̂ (EV-25, #433): `nothing` when ar1=:none, scalar for
     # ar1=:common, per-unit Vector{T} for ar1=:panel_specific.
     ar1_rho::Union{Nothing,T,Vector{T}}
+    # HDFE absorption diagnostics (T272, #371); `nothing` unless `absorb` was used.
+    hdfe::Union{Nothing,NamedTuple}
 end
+
+# Back-compatible arity: every pre-HDFE construction site omits the trailing
+# `hdfe` field, which defaults to `nothing`.
+PanelRegModel{T}(beta, vcov_mat, residuals, fitted, y, X,
+                 r2_within, r2_between, r2_overall, sigma_u, sigma_e, rho, theta,
+                 f_stat, f_pval, loglik, aic, bic, varnames, method, twoway,
+                 cov_type, n_obs, n_groups, n_periods_avg, group_effects, data,
+                 dynamic_diagnostics, ar1_rho) where {T<:AbstractFloat} =
+    PanelRegModel{T}(beta, vcov_mat, residuals, fitted, y, X,
+                     r2_within, r2_between, r2_overall, sigma_u, sigma_e, rho, theta,
+                     f_stat, f_pval, loglik, aic, bic, varnames, method, twoway,
+                     cov_type, n_obs, n_groups, n_periods_avg, group_effects, data,
+                     dynamic_diagnostics, ar1_rho, nothing)
 
 # =============================================================================
 # PanelIVModel — Panel IV
@@ -297,6 +316,9 @@ StatsAPI.islinear(::PanelRegModel) = true
 StatsAPI.r2(m::PanelRegModel) = m.r2_within
 
 function StatsAPI.dof_residual(m::PanelRegModel)
+    # HDFE absorption reports the exact rank of the dummy design (one-way: G;
+    # two-way: G₁+G₂−components), which subsumes the `n_groups` shortcut.
+    m.hdfe !== nothing && return m.n_obs - length(m.beta) - m.hdfe.n_absorbed
     m.n_obs - length(m.beta) - (m.method == :fe ? m.n_groups : 0)
 end
 
@@ -404,8 +426,8 @@ function Base.show(io::IO, m::PanelRegModel{T}) where {T}
                  m.method == :between ? "Between" :
                  m.method == :ab ? "Arellano-Bond" :
                  m.method == :bb ? "Blundell-Bond" : "Correlated RE"
-    twoway_str = m.twoway ? " (Two-way)" : ""
-    cov_str = m.cov_type == :pcse ? "Panel-corrected (Beck-Katz)" : string(m.cov_type)
+    twoway_str = m.twoway ? " (Two-way)" :
+                 m.hdfe !== nothing ? " (HDFE)" : ""
 
     spec = Any[
         "Method"         method_str * twoway_str;
@@ -420,7 +442,7 @@ function Base.show(io::IO, m::PanelRegModel{T}) where {T}
         "rho"            _fmt(m.rho);
         "F-statistic"    _fmt(m.f_stat; digits=2);
         "F p-value"      _format_pvalue(m.f_pval);
-        "Cov. type"      cov_str
+        "Cov. type"      _label(m.cov_type)
     ]
     if m.theta !== nothing
         spec = vcat(spec, Any["theta" _fmt(m.theta)])
@@ -429,6 +451,19 @@ function Base.show(io::IO, m::PanelRegModel{T}) where {T}
         rho_str = m.ar1_rho isa AbstractVector ?
             "panel-specific (mean " * _fmt(mean(m.ar1_rho)) * ")" : _fmt(m.ar1_rho)
         spec = vcat(spec, Any["AR(1) rho (PW)" rho_str])
+    end
+    if m.hdfe !== nothing
+        h = m.hdfe
+        lvl_str = join(("$(d)=$(g)" for (d, g) in zip(h.absorb, h.n_levels)), ", ")
+        # "Mobility groups" is the count that makes the FE parameter total correct on
+        # an unbalanced panel; showing it for twoway=true too is the point.
+        spec = vcat(spec, Any[
+            "Absorbed FE"       lvl_str;
+            "FE parameters"     h.n_absorbed;
+            "Mobility groups"   (length(h.absorb) >= 2 ? string(h.n_components) : "n/a");
+            "MAP iterations"    h.iterations;
+            "MAP converged"     (h.converged ? "yes" : "NO");
+        ])
     end
     if m.dynamic_diagnostics !== nothing
         d = m.dynamic_diagnostics
@@ -478,7 +513,7 @@ function Base.show(io::IO, m::PanelIVModel{T}) where {T}
         "1st-stage F"      _fmt(m.first_stage_f; digits=2);
         "Endogenous"       join(m.endog_names, ", ");
         "Instruments"      join(m.instrument_names, ", ");
-        "Cov. type"        string(m.cov_type)
+        "Cov. type"        _label(m.cov_type)
     ]
     if m.sargan_stat !== nothing
         # Robust cov_type ⇒ the overid statistic is the clustered Hansen J, not Sargan.

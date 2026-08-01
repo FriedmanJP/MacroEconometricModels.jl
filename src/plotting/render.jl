@@ -13,14 +13,64 @@ composition, save/display/show.
 # CSS
 # =============================================================================
 
+# Dark-surface custom-property values, reused by the `prefers-color-scheme: dark`
+# media query AND the explicit `:root[data-theme="dark"]` block (the latter wins so
+# the docs Solarized toggle overrides the OS setting; plotrule Theming; PLT-14).
+const _MEM_DARK_VARS = """
+        --mem-bg: #0f1419;
+        --mem-panel-bg: #171d24;
+        --mem-panel-border: #2c333d;
+        --mem-ink: #d6d9de;
+        --mem-ink-strong: #e8eaed;
+        --mem-ink-title: #c3c7cc;
+        --mem-ink-muted: #9aa0a8;
+        --mem-ink-faint: #7f858d;
+        --mem-axis: #454d57;
+        --mem-grid: #262c34;
+        --mem-zero: #8a919b;
+        --mem-tooltip-bg: rgba(232,234,237,0.94);
+        --mem-tooltip-ink: #0f1419;"""
+
+const _MEM_LIGHT_VARS = """
+        --mem-bg: #fff;
+        --mem-panel-bg: #fff;
+        --mem-panel-border: #e0e0e0;
+        --mem-ink: #333;
+        --mem-ink-strong: #222;
+        --mem-ink-title: #444;
+        --mem-ink-muted: #666;
+        --mem-ink-faint: #888;
+        --mem-axis: #ccc;
+        --mem-grid: #f0f0f0;
+        --mem-zero: #333;
+        --mem-tooltip-bg: rgba(0,0,0,0.82);
+        --mem-tooltip-ink: #fff;"""
+
 function _render_css(ncols::Int)
     col_width = ncols <= 1 ? "100%" : "$(round(Int, 100 / ncols))%"
     """
+    /* Theme surface + ink are CSS custom properties (plotrule Theming; PLT-14): one
+       light default, a prefers-color-scheme dark override, and an explicit
+       data-theme override the docs toggle stamps on the root element. */
+    :root {
+$(_MEM_LIGHT_VARS)
+    }
+    @media (prefers-color-scheme: dark) {
+        :root {
+$(_MEM_DARK_VARS)
+        }
+    }
+    :root[data-theme="dark"] {
+$(_MEM_DARK_VARS)
+    }
+    :root[data-theme="light"] {
+$(_MEM_LIGHT_VARS)
+    }
     * { margin: 0; padding: 0; box-sizing: border-box; }
     body {
         font-family: $(_PLOT_FONT);
-        background: #fff;
-        color: #333;
+        background: var(--mem-bg);
+        color: var(--mem-ink);
         padding: 20px;
     }
     .figure-title {
@@ -28,11 +78,11 @@ function _render_css(ncols::Int)
         font-weight: 600;
         text-align: center;
         margin-bottom: 16px;
-        color: #222;
+        color: var(--mem-ink-strong);
     }
     .figure-source {
         font-size: 11px;
-        color: #888;
+        color: var(--mem-ink-faint);
         text-align: center;
         margin-top: 8px;
     }
@@ -45,8 +95,8 @@ function _render_css(ncols::Int)
     .panel {
         width: calc($col_width - 16px);
         min-width: 300px;
-        background: #fff;
-        border: 1px solid #e0e0e0;
+        background: var(--mem-panel-bg);
+        border: 1px solid var(--mem-panel-border);
         border-radius: 4px;
         padding: 12px;
     }
@@ -55,16 +105,21 @@ function _render_css(ncols::Int)
         font-weight: 600;
         text-align: center;
         margin-bottom: 8px;
-        color: #444;
+        color: var(--mem-ink-title);
     }
-    .axis text { font-size: 11px; fill: #666; }
-    .axis line, .axis path { stroke: #ccc; }
-    .grid line { stroke: #f0f0f0; stroke-dasharray: 2,2; }
+    .axis text { font-size: 11px; fill: var(--mem-ink-muted); }
+    .axis line, .axis path { stroke: var(--mem-axis); }
+    .grid line { stroke: var(--mem-grid); stroke-dasharray: 2,2; }
     .grid .domain { stroke: none; }
+    /* Inline SVG inks migrated to themed classes (plotrule Theming rule 2): CSS
+       properties override the low-specificity presentation attributes. */
+    .axis-label, .legend-label { fill: var(--mem-ink-muted); }
+    .plot-note { fill: var(--mem-ink-faint); }
+    .zero-line { stroke: var(--mem-zero); }
     .tooltip {
         position: absolute;
-        background: rgba(0,0,0,0.8);
-        color: #fff;
+        background: var(--mem-tooltip-bg);
+        color: var(--mem-tooltip-ink);
         padding: 6px 10px;
         border-radius: 4px;
         font-size: 11px;
@@ -89,19 +144,56 @@ function _render_html(; title::String, css::String, body::String, scripts::Strin
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>$(title)</title>
+<title>$(_esc_html(title))</title>
 <style>$(css)</style>
 </head>
 <body>
 $(body)
-<div class="tooltip" id="tooltip"></div>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/d3/7.8.5/d3.min.js"></script>
+<script>$(_d3_source())</script>
 <script>
 $(_render_js_core())
 $(scripts)
 </script>
+$(_render_theme_sync_js())
 </body>
 </html>"""
+end
+
+# When this document is iframed into the Documenter site, mirror the site's Solarized
+# light/dark toggle: read the parent <html>'s `theme--documenter-dark` class (set by
+# docs/src/assets/theme-toggle.js) and stamp `data-theme` on our own root, re-syncing
+# via a MutationObserver. Standalone plots (no accessible parent) fall back to the
+# `prefers-color-scheme` media query. Cross-origin access throws → silently ignored.
+function _render_theme_sync_js()
+    """<script>
+(function() {
+    try {
+        if (window.parent && window.parent !== window && window.parent.document) {
+            var pd = window.parent.document.documentElement;
+            var sync = function() {
+                var dark = (pd.className || '').indexOf('theme--documenter-dark') !== -1;
+                document.documentElement.setAttribute('data-theme', dark ? 'dark' : 'light');
+            };
+            sync();
+            new MutationObserver(sync).observe(pd, {attributes: true, attributeFilter: ['class']});
+        }
+    } catch (e) { /* cross-origin frame: keep prefers-color-scheme */ }
+})();
+</script>"""
+end
+
+# Embeddable HTML fragment — no <!DOCTYPE>/<html>/<head>/<body>, so two plots can be
+# dropped into one notebook/Documenter page without nesting whole documents (A11).
+# D3 is inlined per fragment (the UMD build reassigns window.d3 idempotently); the
+# shared JS core is guarded so re-inclusion on the same page is a runtime no-op.
+function _render_fragment(; css::String, body::String, scripts::String)
+    """<style>$(css)</style>
+$(body)
+<script>$(_d3_source())</script>
+<script>
+$(_render_js_core())
+$(scripts)
+</script>"""
 end
 
 # =============================================================================
@@ -110,18 +202,90 @@ end
 
 function _render_js_core()
     """
-// Shared utilities
-const tooltip = d3.select('#tooltip');
-function fmt(v) {
-    if (v === null || v === undefined) return '';
-    return Math.abs(v) >= 1000 ? v.toFixed(1) : (Math.abs(v) >= 1 ? v.toFixed(3) : v.toFixed(4));
+// Shared, embed-safe core. Guarded so two PlotOutputs on one page don't collide
+// (A11); the tooltip is a single lazily-created node on document.body, NOT a fixed
+// global id, so concatenated fragments share it instead of fighting over it.
+if (typeof window.__mem_core === 'undefined') {
+    window.__mem_core = {
+        tip: d3.select('body').append('div').attr('class','tooltip'),
+        fmt: function fmt(v) {
+            if (v === null || v === undefined) return '';
+            return Math.abs(v) >= 1000 ? v.toFixed(1) : (Math.abs(v) >= 1 ? v.toFixed(3) : v.toFixed(4));
+        },
+        showTip: function showTip(evt, html) {
+            window.__mem_core.tip.html(html).style('opacity',1)
+                .style('left',(evt.pageX+12)+'px').style('top',(evt.pageY-28)+'px');
+        },
+        hideTip: function hideTip() { window.__mem_core.tip.style('opacity',0); },
+        // Width-aware wrapping legend (plotrule Legend policy; PLT-16). `entries` are
+        // {label, color, type:'line'|'circle'|'rect', dash?, alpha?}. Each label is
+        // truncated with an ellipsis (full name kept in a <title> tooltip); rows wrap
+        // when the next entry would overflow `w`. `cap>0` folds the tail into a grey
+        // "Other (k more)" entry (line/scatter forms); `cap=0` wraps every entry
+        // (stacked FEVD/HD layers). Returns the pixel height the legend consumed.
+        legend: function legend(g, entries, w, cap) {
+            cap = cap || 0;
+            var items = entries;
+            if(cap > 0 && entries.length > cap) {
+                items = entries.slice(0, cap);
+                items.push({label:'Other ('+(entries.length - cap)+' more)', color:'#bbb', type:'rect'});
+            }
+            var leg = g.append('g').attr('class','legend').attr('transform','translate(5,-5)');
+            var rowH = 14, gap = 4, interGap = 14, cx = 0, cy = 0;
+            items.forEach(function(e) {
+                var full = (e.label == null) ? '' : String(e.label);
+                var shown = full.length > 22 ? full.slice(0,20)+'…' : full;
+                var gi = leg.append('g'), sw = 12;
+                if(e.type === 'line') {
+                    gi.append('line').attr('x1',0).attr('x2',16).attr('y1',0).attr('y2',0)
+                        .attr('stroke', e.color).attr('stroke-width',2).attr('stroke-dasharray', e.dash||'');
+                    sw = 16;
+                } else if(e.type === 'circle') {
+                    gi.append('circle').attr('cx',6).attr('cy',0).attr('r',5)
+                        .attr('fill', e.color).attr('opacity',0.8);
+                } else {
+                    gi.append('rect').attr('width',12).attr('height',12).attr('y',-6)
+                        .attr('fill', e.color).attr('opacity', e.alpha==null?1:e.alpha);
+                }
+                var txt = gi.append('text').attr('class','legend-label').attr('x', sw+gap).attr('y',4)
+                    .attr('font-size','10px').text(shown);
+                if(shown !== full) txt.append('title').text(full);
+                var tw = full.length * 6;
+                try { var mm = txt.node().getComputedTextLength(); if(mm > 0) tw = mm; } catch(err) {}
+                var ew = sw + gap + tw + interGap;
+                if(cx > 0 && cx + ew > w) { cx = 0; cy += rowH; }
+                gi.attr('transform','translate('+cx+','+cy+')');
+                cx += ew;
+            });
+            return cy + rowH;
+        }
+    };
 }
-function showTip(evt, html) {
-    tooltip.html(html).style('opacity',1)
-        .style('left',(evt.pageX+12)+'px').style('top',(evt.pageY-28)+'px');
-}
-function hideTip() { tooltip.style('opacity',0); }
+// var aliases are redeclaration-safe across concatenated fragments (unlike const),
+// so renderer call sites keep using fmt()/showTip()/hideTip() unchanged.
+var fmt = window.__mem_core.fmt;
+var showTip = window.__mem_core.showTip;
+var hideTip = window.__mem_core.hideTip;
 """
+end
+
+# Build the axis-label <text> appends. Labels are emitted as JSON string literals
+# (A8 JS-string sink) and omitted entirely, Julia-side, when empty — so no raw user
+# text is ever interpolated into quoted JS. `g`/`w`/`h` are the D3 group/width/height
+# var names in the caller's scope; `yl_y` is the y-axis-label y offset.
+function _axis_labels_js(xlabel::AbstractString, ylabel::AbstractString;
+                         g::String="g", w::String="w", h::String="h",
+                         yl_y::String="-42")
+    s = ""
+    if !isempty(xlabel)
+        s *= "    $(g).append('text').attr('class','axis-label').attr('x',$(w)/2).attr('y',$(h)+30).attr('text-anchor','middle')" *
+             ".attr('font-size','11px').text($(_json(xlabel)));\n"
+    end
+    if !isempty(ylabel)
+        s *= "    $(g).append('text').attr('class','axis-label').attr('transform','rotate(-90)').attr('x',-$(h)/2).attr('y',$(yl_y))" *
+             ".attr('text-anchor','middle').attr('font-size','11px').text($(_json(ylabel)));\n"
+    end
+    s
 end
 
 # =============================================================================
@@ -135,18 +299,49 @@ Generate D3.js code for a line chart with optional CI bands and reference lines.
 - `data_json`: JSON array of data points
 - `series_json`: JSON array of {name, color, dash, key} series configs
 - `bands_json`: JSON array of {lo_key, hi_key, color, alpha} band configs
-- `ref_lines_json`: JSON array of {value, color, dash} horizontal reference lines
+- `ref_lines_json`: JSON array of {value, color, dash, axis} reference lines
+  (`axis`: "y" (default) = horizontal at y(value); "x" = vertical at x(value))
+- `x_ticks_json`: `"null"` (integer/auto ticks) or a JSON array of {v, label}
+  drawn only at real data x-values (PLT-08 date axes)
+- `regions_json`: JSON array of {x0, x1, color, alpha} shaded x-ranges
+  (e.g. recession bands), drawn behind the series
+- `integer_x`: force integer x-axis ticks (horizon/lag/event-time axes) when no
+  `x_ticks_json` date map is supplied — no fractional tick at h = 2.5 (PLT-17)
 - `xlabel`, `ylabel`: axis labels
 """
 function _render_line_js(id::String, data_json::String, series_json::String;
                          bands_json::String="[]", ref_lines_json::String="[]",
+                         x_ticks_json::String="null", regions_json::String="[]",
+                         integer_x::Bool=false,
                          xlabel::String="", ylabel::String="")
+    # Emit the x-axis call. A supplied `x_ticks_json` date map wins; else `integer_x`
+    # forces integer ticks; else this is byte-identical to the historical auto-tick
+    # axis (PLT-08 date axes / PLT-17 integer axes).
+    xaxis_js = if x_ticks_json != "null"
+        "const _xt = $(x_ticks_json);\n" *
+        "    const _xtm = new Map(_xt.map(t => [t.v, t.label]));\n" *
+        "    const _xtv = _xt.map(t => t.v);\n" *
+        "    const _xtk = Math.max(1, Math.ceil(_xtv.length / 8));\n" *
+        "    g.append('g').attr('class','axis').attr('transform','translate(0,'+h+')')\n" *
+        "        .call(d3.axisBottom(x).tickValues(_xtv.filter((_,i) => i % _xtk === 0)).tickFormat(v => { const l = _xtm.get(v); return l === undefined ? '' : l; }));"
+    elseif integer_x
+        "const _xd = x.domain();\n" *
+        "    const _ixv = [];\n" *
+        "    for (let _v = Math.ceil(_xd[0]); _v <= Math.floor(_xd[1]); _v++) _ixv.push(_v);\n" *
+        "    const _ixs = Math.max(1, Math.ceil(_ixv.length / 10));\n" *
+        "    g.append('g').attr('class','axis').attr('transform','translate(0,'+h+')')\n" *
+        "        .call(d3.axisBottom(x).tickValues(_ixv.filter((_,i) => i % _ixs === 0)).tickFormat(d3.format('d')));"
+    else
+        "g.append('g').attr('class','axis').attr('transform','translate(0,'+h+')')\n" *
+        "        .call(d3.axisBottom(x).ticks(Math.min(xVals.length,8)));"
+    end
     """
 (function() {
     const data = $(data_json);
     const series = $(series_json);
     const bands = $(bands_json);
     const refLines = $(ref_lines_json);
+    const regions = $(regions_json);
 
     const container = d3.select('#$(id)');
     const W = Math.max(container.node().clientWidth - 24, 280);
@@ -165,7 +360,7 @@ function _render_line_js(id::String, data_json::String, series_json::String;
         if(d[b.lo_key]!==null) allYVals.push(d[b.lo_key]);
         if(d[b.hi_key]!==null) allYVals.push(d[b.hi_key]);
     }));
-    refLines.forEach(r => allYVals.push(r.value));
+    refLines.forEach(r => { if((r.axis||'y') !== 'x') allYVals.push(r.value); });
 
     const x = d3.scaleLinear().domain(d3.extent(xVals)).range([0,w]);
     const yExt = d3.extent(allYVals);
@@ -174,6 +369,13 @@ function _render_line_js(id::String, data_json::String, series_json::String;
 
     // Grid
     g.append('g').attr('class','grid').call(d3.axisLeft(y).tickSize(-w).tickFormat(''));
+
+    // Shaded x-regions (e.g. recession bands) — drawn behind series
+    regions.forEach(rg => {
+        g.append('rect').attr('x', x(rg.x0)).attr('y', 0)
+            .attr('width', Math.max(0, x(rg.x1) - x(rg.x0))).attr('height', h)
+            .attr('fill', rg.color || '#888').attr('opacity', rg.alpha || 0.12);
+    });
 
     // Bands
     bands.forEach(b => {
@@ -186,12 +388,19 @@ function _render_line_js(id::String, data_json::String, series_json::String;
             .attr('fill',b.color).attr('opacity',b.alpha||0.15);
     });
 
-    // Reference lines
+    // Reference lines (axis:"y" → horizontal at y(value); axis:"x" → vertical at x(value))
     refLines.forEach(r => {
-        g.append('line').attr('x1',0).attr('x2',w)
-            .attr('y1',y(r.value)).attr('y2',y(r.value))
-            .attr('stroke',r.color||'#999').attr('stroke-width',1)
-            .attr('stroke-dasharray',r.dash||'4,3');
+        if((r.axis||'y') === 'x') {
+            g.append('line').attr('x1',x(r.value)).attr('x2',x(r.value))
+                .attr('y1',0).attr('y2',h)
+                .attr('stroke',r.color||'#999').attr('stroke-width',1)
+                .attr('stroke-dasharray',r.dash||'4,3');
+        } else {
+            g.append('line').attr('x1',0).attr('x2',w)
+                .attr('y1',y(r.value)).attr('y2',y(r.value))
+                .attr('stroke',r.color||'#999').attr('stroke-width',1)
+                .attr('stroke-dasharray',r.dash||'4,3');
+        }
     });
 
     // Lines
@@ -204,28 +413,16 @@ function _render_line_js(id::String, data_json::String, series_json::String;
     });
 
     // Axes
-    g.append('g').attr('class','axis').attr('transform','translate(0,'+h+')')
-        .call(d3.axisBottom(x).ticks(Math.min(xVals.length,8)));
+    $(xaxis_js)
     g.append('g').attr('class','axis').call(d3.axisLeft(y).ticks(6));
 
-    if('$(xlabel)') g.append('text').attr('x',w/2).attr('y',h+30).attr('text-anchor','middle')
-        .attr('font-size','11px').attr('fill','#666').text('$(xlabel)');
-    if('$(ylabel)') g.append('text').attr('transform','rotate(-90)')
-        .attr('x',-h/2).attr('y',-42).attr('text-anchor','middle')
-        .attr('font-size','11px').attr('fill','#666').text('$(ylabel)');
+$(_axis_labels_js(xlabel, ylabel))
 
-    // Legend
-    if(series.length > 1) {
-        const leg = g.append('g').attr('class','legend').attr('transform','translate(5,-5)');
-        series.forEach((s,i) => {
-            const gi = leg.append('g').attr('transform','translate('+(i*100)+',0)');
-            gi.append('line').attr('x1',0).attr('x2',16).attr('y1',0).attr('y2',0)
-                .attr('stroke',s.color).attr('stroke-width',2)
-                .attr('stroke-dasharray',s.dash||'');
-            gi.append('text').attr('x',20).attr('y',4).attr('font-size','10px')
-                .attr('fill','#555').text(s.name);
-        });
-    }
+    // Legend — series lines + any NAMED bands (overlapping CI bands must each be
+    // legended; plotrule Color/Legend policy, PLT-16). Width-aware shared engine.
+    const legEntries = series.map(s => ({label:s.name, color:s.color, type:'line', dash:s.dash||''}));
+    bands.forEach(b => { if(b.name) legEntries.push({label:b.name, color:b.color, type:'rect', alpha:b.alpha==null?0.15:b.alpha}); });
+    if(legEntries.length > 1) window.__mem_core.legend(g, legEntries, w, 8);
 
     // Tooltip overlay
     svg.append('rect').attr('width',W).attr('height',h+margin.top+margin.bottom)
@@ -250,13 +447,32 @@ end
 
 """
 Generate D3.js code for a stacked area chart (proportions 0–1).
+
+- `x_ticks_json`: `"null"` (integer/auto ticks) or a JSON array of {v, label}
+  drawn only at real data x-values (PLT-08 date axes).
+- `tip_label`: tooltip x-prefix (domain-agnostic, plotrule A2); defaults to `xlabel`
+  when empty, empty ⇒ no prefix.
 """
 function _render_area_js(id::String, data_json::String, series_json::String;
+                         x_ticks_json::String="null", tip_label::String="",
                          xlabel::String="", ylabel::String="Proportion")
+    tip = isempty(tip_label) ? xlabel : tip_label
+    xaxis_js = if x_ticks_json == "null"
+        "g.append('g').attr('class','axis').attr('transform','translate(0,'+h+')')\n" *
+        "        .call(d3.axisBottom(x).ticks(Math.min(data.length,8)));"
+    else
+        "const _xt = $(x_ticks_json);\n" *
+        "    const _xtm = new Map(_xt.map(t => [t.v, t.label]));\n" *
+        "    const _xtv = _xt.map(t => t.v);\n" *
+        "    const _xtk = Math.max(1, Math.ceil(_xtv.length / 8));\n" *
+        "    g.append('g').attr('class','axis').attr('transform','translate(0,'+h+')')\n" *
+        "        .call(d3.axisBottom(x).tickValues(_xtv.filter((_,i) => i % _xtk === 0)).tickFormat(v => { const l = _xtm.get(v); return l === undefined ? '' : l; }));"
+    end
     """
 (function() {
     const data = $(data_json);
     const series = $(series_json);
+    const tipLabel = $(_json(tip));
 
     const container = d3.select('#$(id)');
     const W = Math.max(container.node().clientWidth - 24, 280);
@@ -286,23 +502,13 @@ function _render_area_js(id::String, data_json::String, series_json::String;
         .attr('opacity', 0.85);
 
     g.append('g').attr('class','grid').call(d3.axisLeft(y).tickSize(-w).tickFormat(''));
-    g.append('g').attr('class','axis').attr('transform','translate(0,'+h+')')
-        .call(d3.axisBottom(x).ticks(Math.min(data.length,8)));
+    $(xaxis_js)
     g.append('g').attr('class','axis').call(d3.axisLeft(y).ticks(5).tickFormat(d3.format('.0%')));
 
-    if('$(xlabel)') g.append('text').attr('x',w/2).attr('y',h+30).attr('text-anchor','middle')
-        .attr('font-size','11px').attr('fill','#666').text('$(xlabel)');
-    if('$(ylabel)') g.append('text').attr('transform','rotate(-90)')
-        .attr('x',-h/2).attr('y',-42).attr('text-anchor','middle')
-        .attr('font-size','11px').attr('fill','#666').text('$(ylabel)');
+$(_axis_labels_js(xlabel, ylabel))
 
-    // Legend
-    const leg = g.append('g').attr('class','legend').attr('transform','translate(5,-5)');
-    series.forEach((s,i) => {
-        const gi = leg.append('g').attr('transform','translate('+(i*90)+',0)');
-        gi.append('rect').attr('width',12).attr('height',12).attr('y',-6).attr('fill',s.color).attr('opacity',0.85);
-        gi.append('text').attr('x',16).attr('y',4).attr('font-size','10px').attr('fill','#555').text(s.name);
-    });
+    // Legend — stacked layers wrap across rows (no fold; shared engine, PLT-16)
+    window.__mem_core.legend(g, series.map(s => ({label:s.name, color:s.color, type:'rect', alpha:0.85})), w, 0);
 
     // Tooltip
     svg.append('rect').attr('width',W).attr('height',h+margin.top+margin.bottom)
@@ -312,7 +518,7 @@ function _render_area_js(id::String, data_json::String, series_json::String;
             const x0 = x.invert(mx);
             const idx = d3.minIndex(data, d => Math.abs(d.x - x0));
             const d = data[idx];
-            let html = '<b>h='+d.x+'</b>';
+            let html = '<b>'+(tipLabel ? tipLabel+' ' : '')+d.x+'</b>';
             series.forEach(s => { html += '<br>'+s.name+': '+(d[s.key]*100).toFixed(1)+'%'; });
             showTip(evt, html);
         })
@@ -328,17 +534,121 @@ end
 """
 Generate D3.js code for a stacked or grouped bar chart.
 - `mode`: "stacked" or "grouped"
+- `orientation`: "v" (vertical, categories on x-band) or "h" (horizontal, named
+  categories on the y-band with values on a horizontal linear/log x-axis). Use "h"
+  for named entities (news impacts, coefficients) so labels read horizontally.
+- `logscale`: log-scale the value axis (log-y when vertical, log-x when horizontal);
+  intended for all-positive magnitudes (e.g. singular values). No zero line when set.
 """
 function _render_bar_js(id::String, data_json::String, series_json::String;
-                        mode::String="stacked", xlabel::String="", ylabel::String="")
+                        mode::String="stacked", orientation::String="v",
+                        logscale::Bool=false, xlabel::String="", ylabel::String="")
     """
 (function() {
     const data = $(data_json);
     const series = $(series_json);
     const mode = '$(mode)';
+    const orientation = '$(orientation)';
+    const logscale = $(logscale ? "true" : "false");
 
     const container = d3.select('#$(id)');
     const W = Math.max(container.node().clientWidth - 24, 280);
+    const keys = series.map(s => s.key);
+
+    if(orientation === 'h') {
+        // ---- Horizontal: named categories on the y-band, values on x -------
+        const margin = {top:10, right:20, bottom:35, left:120};
+        const w = W - margin.left - margin.right;
+        const rowStep = 26;
+        const h = Math.max(data.length * rowStep, 60);
+
+        const svg = container.append('svg').attr('width', W).attr('height', h + margin.top + margin.bottom);
+        const g = svg.append('g').attr('transform', 'translate('+margin.left+','+margin.top+')');
+
+        const y = d3.scaleBand().domain(data.map(d=>d.x)).range([0,h]).padding(0.15);
+
+        let vMin = 0, vMax = 0;
+        let stacked = null;
+        if(mode === 'stacked') {
+            const stack = d3.stack().keys(keys).order(d3.stackOrderNone).offset(d3.stackOffsetDiverging);
+            stacked = stack(data);
+            stacked.forEach(layer => layer.forEach(d => { vMin = Math.min(vMin,d[0],d[1]); vMax = Math.max(vMax,d[0],d[1]); }));
+        } else {
+            data.forEach(d => keys.forEach(k => { vMin = Math.min(vMin,d[k]||0); vMax = Math.max(vMax,d[k]||0); }));
+        }
+
+        let x;
+        if(logscale) {
+            const lo = vMax > 0 ? (vMin > 0 ? vMin : vMax/1e6) : 1e-6;
+            x = d3.scaleLog().domain([lo, vMax > 0 ? vMax : 1]).range([0,w]).clamp(true);
+        } else {
+            const vPad = (vMax - vMin) * 0.08 || 1;
+            x = d3.scaleLinear().domain([vMin - (vMin<0?vPad:0), vMax + vPad]).range([0,w]);
+        }
+        const barBase = logscale ? x.range()[0] : x(0);
+        const barX = v => logscale ? Math.min(barBase, x(v)) : Math.min(x(0), x(v));
+        const barW = v => logscale ? Math.abs(x(v) - barBase) : Math.abs(x(v) - x(0));
+
+        g.append('g').attr('class','grid').attr('transform','translate(0,'+h+')')
+            .call(d3.axisBottom(x).tickSize(-h).tickFormat(''));
+
+        if(mode === 'stacked') {
+            g.selectAll('.layer').data(stacked).join('g').attr('class','layer')
+                .attr('fill', (d,i) => series[i].color)
+                .selectAll('rect').data(d => d).join('rect')
+                .attr('y', d => y(d.data.x))
+                .attr('x', d => x(Math.min(d[0], d[1])))
+                .attr('width', d => Math.abs(x(d[0]) - x(d[1])))
+                .attr('height', y.bandwidth());
+        } else {
+            const y1 = d3.scaleBand().domain(keys).range([0, y.bandwidth()]).padding(0.05);
+            g.selectAll('.group').data(data).join('g').attr('class','group')
+                .attr('transform', d => 'translate(0,'+y(d.x)+')')
+                .selectAll('rect').data(d => keys.map(k => ({key:k, val:d[k]||0})))
+                .join('rect')
+                .attr('y', d => y1(d.key))
+                .attr('x', d => barX(d.val))
+                .attr('width', d => barW(d.val))
+                .attr('height', y1.bandwidth())
+                .attr('fill', d => series.find(s=>s.key===d.key).color);
+        }
+
+        // Zero line (vertical) — omitted on a log scale (no zero)
+        if(!logscale) {
+            g.append('line').attr('x1',x(0)).attr('x2',x(0)).attr('y1',0).attr('y2',h)
+                .attr('class','zero-line').attr('stroke-width',0.8);
+        }
+
+        g.append('g').attr('class','axis').attr('transform','translate(0,'+h+')')
+            .call(d3.axisBottom(x).ticks(6));
+        g.append('g').attr('class','axis')
+            .call(d3.axisLeft(y).tickFormat(d => d.length > 16 ? d.slice(0,14)+'..' : d));
+
+$(_axis_labels_js(xlabel, ylabel; yl_y="-(margin.left-12)"))
+
+        // Legend (shared width-aware engine, PLT-16)
+        if(series.length > 1) {
+            window.__mem_core.legend(g, series.map(s => ({label:s.name, color:s.color, type:'rect'})), w, 0);
+        }
+
+        // Tooltip (per y-band)
+        svg.append('rect').attr('width',W).attr('height',h+margin.top+margin.bottom)
+            .attr('fill','none').attr('pointer-events','all')
+            .on('mousemove', function(evt) {
+                const [,my] = d3.pointer(evt, g.node());
+                const cats = y.domain();
+                const idx = Math.min(Math.max(0,Math.floor(my / (h / cats.length))), cats.length-1);
+                const d = data[idx];
+                if(!d) return;
+                let html = '<b>'+d.x+'</b>';
+                series.forEach(s => { if(d[s.key]!==undefined) html += '<br>'+s.name+': '+fmt(d[s.key]); });
+                showTip(evt, html);
+            })
+            .on('mouseout', hideTip);
+        return;
+    }
+
+    // ---- Vertical (default): categories on the x-band, values on y ---------
     const margin = {top:10, right:15, bottom:35, left:55};
     const w = W - margin.left - margin.right;
     const h = Math.min(w * 0.6, 250);
@@ -346,7 +656,6 @@ function _render_bar_js(id::String, data_json::String, series_json::String;
     const svg = container.append('svg').attr('width', W).attr('height', h + margin.top + margin.bottom);
     const g = svg.append('g').attr('transform', 'translate('+margin.left+','+margin.top+')');
 
-    const keys = series.map(s => s.key);
     const x = d3.scaleBand().domain(data.map(d=>d.x)).range([0,w]).padding(0.15);
 
     let yMin = 0, yMax = 0;
@@ -358,7 +667,9 @@ function _render_bar_js(id::String, data_json::String, series_json::String;
             yMax = Math.max(yMax, d[0], d[1]);
         }));
         const yPad = (yMax - yMin) * 0.08 || 1;
-        const y = d3.scaleLinear().domain([yMin - yPad, yMax + yPad]).range([h, 0]);
+        const y = logscale ?
+            d3.scaleLog().domain([yMax>0?(yMin>0?yMin:yMax/1e6):1e-6, yMax>0?yMax:1]).range([h,0]).clamp(true) :
+            d3.scaleLinear().domain([yMin - yPad, yMax + yPad]).range([h, 0]);
 
         g.append('g').attr('class','grid').call(d3.axisLeft(y).tickSize(-w).tickFormat(''));
         g.selectAll('.layer').data(stacked).join('g').attr('class','layer')
@@ -370,9 +681,11 @@ function _render_bar_js(id::String, data_json::String, series_json::String;
             .attr('width', x.bandwidth());
 
         // Zero line
-        g.append('line').attr('x1',0).attr('x2',w)
-            .attr('y1',y(0)).attr('y2',y(0))
-            .attr('stroke','#333').attr('stroke-width',0.8);
+        if(!logscale) {
+            g.append('line').attr('x1',0).attr('x2',w)
+                .attr('y1',y(0)).attr('y2',y(0))
+                .attr('class','zero-line').attr('stroke-width',0.8);
+        }
 
         g.append('g').attr('class','axis').attr('transform','translate(0,'+h+')')
             .call(d3.axisBottom(x).tickValues(x.domain().filter((d,i) =>
@@ -385,7 +698,10 @@ function _render_bar_js(id::String, data_json::String, series_json::String;
             yMax = Math.max(yMax, d[k]||0);
         }));
         const yPad = (yMax - yMin) * 0.08 || 1;
-        const y = d3.scaleLinear().domain([yMin - yPad, yMax + yPad]).range([h, 0]);
+        const y = logscale ?
+            d3.scaleLog().domain([yMax>0?(yMin>0?yMin:yMax/1e6):1e-6, yMax>0?yMax:1]).range([h,0]).clamp(true) :
+            d3.scaleLinear().domain([yMin - yPad, yMax + yPad]).range([h, 0]);
+        const yBase = logscale ? y.range()[0] : y(0);
         const x1 = d3.scaleBand().domain(keys).range([0, x.bandwidth()]).padding(0.05);
 
         g.append('g').attr('class','grid').call(d3.axisLeft(y).tickSize(-w).tickFormat(''));
@@ -394,14 +710,16 @@ function _render_bar_js(id::String, data_json::String, series_json::String;
             .selectAll('rect').data(d => keys.map(k => ({key:k, val:d[k]||0})))
             .join('rect')
             .attr('x', d => x1(d.key))
-            .attr('y', d => y(Math.max(0, d.val)))
-            .attr('height', d => Math.abs(y(0) - y(d.val)))
+            .attr('y', d => logscale ? (d.val>0?y(d.val):h) : y(Math.max(0, d.val)))
+            .attr('height', d => logscale ? Math.max(0,yBase-y(Math.max(d.val,y.domain()[0]))) : Math.abs(y(0) - y(d.val)))
             .attr('width', x1.bandwidth())
             .attr('fill', d => series.find(s=>s.key===d.key).color);
 
-        g.append('line').attr('x1',0).attr('x2',w)
-            .attr('y1',y(0)).attr('y2',y(0))
-            .attr('stroke','#333').attr('stroke-width',0.8);
+        if(!logscale) {
+            g.append('line').attr('x1',0).attr('x2',w)
+                .attr('y1',y(0)).attr('y2',y(0))
+                .attr('class','zero-line').attr('stroke-width',0.8);
+        }
 
         g.append('g').attr('class','axis').attr('transform','translate(0,'+h+')')
             .call(d3.axisBottom(x).tickValues(x.domain().filter((d,i) =>
@@ -409,20 +727,11 @@ function _render_bar_js(id::String, data_json::String, series_json::String;
         g.append('g').attr('class','axis').call(d3.axisLeft(y).ticks(6));
     }
 
-    if('$(xlabel)') g.append('text').attr('x',w/2).attr('y',h+30).attr('text-anchor','middle')
-        .attr('font-size','11px').attr('fill','#666').text('$(xlabel)');
-    if('$(ylabel)') g.append('text').attr('transform','rotate(-90)')
-        .attr('x',-h/2).attr('y',-42).attr('text-anchor','middle')
-        .attr('font-size','11px').attr('fill','#666').text('$(ylabel)');
+$(_axis_labels_js(xlabel, ylabel))
 
-    // Legend
+    // Legend (shared width-aware engine, PLT-16)
     if(series.length > 1) {
-        const leg = g.append('g').attr('class','legend').attr('transform','translate(5,-5)');
-        series.forEach((s,i) => {
-            const gi = leg.append('g').attr('transform','translate('+(i*90)+',0)');
-            gi.append('rect').attr('width',12).attr('height',12).attr('y',-6).attr('fill',s.color);
-            gi.append('text').attr('x',16).attr('y',4).attr('font-size','10px').attr('fill','#555').text(s.name);
-        });
+        window.__mem_core.legend(g, series.map(s => ({label:s.name, color:s.color, type:'rect'})), w, 0);
     }
 
     // Tooltip
@@ -448,27 +757,51 @@ end
 # =============================================================================
 
 """
-Generate D3.js code for a color-coded heatmap matrix.
+Generate D3.js code for a color-coded heatmap matrix with a **mandatory color-scale
+legend** (plotrule Heatmaps).
+
 - `data_json`: JSON array of {x, y, v} objects (v can be null for missing)
 - `row_labels_json`: JSON array of row label strings
 - `col_labels_json`: JSON array of column label strings
-- `color_domain`: [min, max] for the diverging color scale
+- `color_domain`: `nothing` (data-driven — see `scale`) or an explicit `[min, max]`.
+- `scale`: `:sequential` (single-hue `_PLOT_SEQUENTIAL` ramp, for **nonnegative**
+  matrices — Leontief, multipliers) or `:diverging` (`_PLOT_DIVERGING`, symmetric
+  around `midpoint` for **signed** data — z-scores, signed covariances). When
+  `color_domain === nothing` and `scale=:diverging`, the domain is forced symmetric
+  `[midpoint-m, midpoint+m]` with `m = max|v|`; sequential uses the data `[min,max]`.
+- `midpoint`: the neutral center for a diverging scale (default 0).
+- `best_cell_json`: `"null"` or `{"x":<col label>,"y":<row label>}` — outlines that
+  cell and stars it (the ARIMA IC-grid optimum; plotrule PLT-25 consumer).
+- `tip_label`: tooltip x-prefix (domain-agnostic, plotrule A2); defaults to `xlabel`
+  when empty, empty ⇒ no prefix (kills the leaked "Period" noun).
 """
 function _render_heatmap_js(id::String, data_json::String,
                             row_labels_json::String, col_labels_json::String;
-                            xlabel::String="", ylabel::String="",
-                            color_domain::Vector{<:Real}=[-3, 3])
-    cmin, cmax = color_domain[1], color_domain[2]
+                            xlabel::String="", ylabel::String="", tip_label::String="",
+                            color_domain::Union{Nothing,Vector{<:Real}}=nothing,
+                            scale::Symbol=:diverging, midpoint::Real=0,
+                            best_cell_json::String="null")
+    scale in (:sequential, :diverging) ||
+        throw(ArgumentError("scale must be :sequential or :diverging, got :$scale"))
+    tip = isempty(tip_label) ? xlabel : tip_label
+    provided = color_domain === nothing ? "null" :
+        "[$(_json(float(color_domain[1]))), $(_json(float(color_domain[2])))]"
     """
 (function() {
     const data = $(data_json);
     const rowLabels = $(row_labels_json);
     const colLabels = $(col_labels_json);
+    const tipLabel = $(_json(tip));
+    const scaleType = $(_json(String(scale)));
+    const midpoint = $(_json(float(midpoint)));
+    const providedDomain = $(provided);
+    const bestCell = $(best_cell_json);
 
     const container = d3.select('#$(id)');
     const W = Math.max(container.node().clientWidth - 24, 280);
     const maxLabelW = 120;
-    const margin = {top:10, right:15, bottom:35, left: maxLabelW};
+    const legendPad = 74;                       // reserve room for the gradient legend
+    const margin = {top:10, right:legendPad, bottom:35, left: maxLabelW};
     const w = W - margin.left - margin.right;
     const cellH = Math.max(Math.min(18, 250 / rowLabels.length), 8);
     const h = cellH * rowLabels.length;
@@ -479,8 +812,23 @@ function _render_heatmap_js(id::String, data_json::String,
     const x = d3.scaleBand().domain(colLabels).range([0, w]).padding(0.02);
     const y = d3.scaleBand().domain(rowLabels).range([0, h]).padding(0.02);
 
-    const color = d3.scaleSequential(t => d3.interpolateRdBu(1 - t))
-        .domain([$(cmin), $(cmax)]);
+    // Data-driven domain (unless the caller supplied one). Diverging ⇒ symmetric
+    // around `midpoint`; sequential ⇒ the data [min,max] (plotrule Heatmaps rule 3).
+    const finite = data.map(d => d.v).filter(v => v !== null && v !== undefined);
+    let cmin, cmax;
+    if(providedDomain !== null) {
+        cmin = providedDomain[0]; cmax = providedDomain[1];
+    } else if(scaleType === 'diverging') {
+        const m = (d3.max(finite.map(Math.abs)) || 1);
+        cmin = midpoint - m; cmax = midpoint + m;
+    } else {
+        cmin = (finite.length ? d3.min(finite) : 0);
+        cmax = (finite.length ? d3.max(finite) : 1);
+        if(cmin === cmax) { cmin -= 0.5; cmax += 0.5; }
+    }
+    const interp = scaleType === 'sequential' ?
+        d3.interpolate$(_PLOT_SEQUENTIAL) : (t => d3.interpolate$(_PLOT_DIVERGING)(1 - t));
+    const color = d3.scaleSequential(interp).domain([cmin, cmax]);
     const grey = '#d9d9d9';
 
     g.selectAll('rect.cell').data(data).join('rect').attr('class','cell')
@@ -488,13 +836,23 @@ function _render_heatmap_js(id::String, data_json::String,
         .attr('y', d => y(d.y))
         .attr('width', x.bandwidth())
         .attr('height', y.bandwidth())
-        .attr('fill', d => d.v === null ? grey : color(Math.max($(cmin), Math.min($(cmax), d.v))))
+        .attr('fill', d => d.v === null ? grey : color(Math.max(cmin, Math.min(cmax, d.v))))
         .attr('rx', 1)
         .on('mouseover', function(evt, d) {
             const val = d.v === null ? 'Missing' : fmt(d.v);
-            showTip(evt, '<b>'+d.y+'</b><br>Period '+d.x+': '+val);
+            showTip(evt, '<b>'+d.y+'</b><br>'+(tipLabel ? tipLabel+' ' : '')+d.x+': '+val);
         })
         .on('mouseout', hideTip);
+
+    // Best-cell marker (border + star) — highlights the optimum (e.g. min-BIC).
+    if(bestCell !== null) {
+        g.append('rect').attr('x', x(bestCell.x)).attr('y', y(bestCell.y))
+            .attr('width', x.bandwidth()).attr('height', y.bandwidth())
+            .attr('fill','none').attr('stroke','$(_PLOT_ALERT)').attr('stroke-width',2.5).attr('rx',1);
+        g.append('text').attr('x', x(bestCell.x)+x.bandwidth()/2)
+            .attr('y', y(bestCell.y)+y.bandwidth()/2+4).attr('text-anchor','middle')
+            .attr('font-size','12px').attr('fill','$(_PLOT_ALERT)').attr('pointer-events','none').text('★');
+    }
 
     // Axes
     g.append('g').attr('class','axis').attr('transform','translate(0,'+h+')')
@@ -503,11 +861,1031 @@ function _render_heatmap_js(id::String, data_json::String,
     g.append('g').attr('class','axis')
         .call(d3.axisLeft(y).tickFormat(d => d.length > 20 ? d.slice(0,18)+'..' : d));
 
-    if('$(xlabel)') g.append('text').attr('x',w/2).attr('y',h+30).attr('text-anchor','middle')
-        .attr('font-size','11px').attr('fill','#666').text('$(xlabel)');
-    if('$(ylabel)') g.append('text').attr('transform','rotate(-90)')
-        .attr('x',-h/2).attr('y',-maxLabelW+10).attr('text-anchor','middle')
-        .attr('font-size','11px').attr('fill','#666').text('$(ylabel)');
+$(_axis_labels_js(xlabel, ylabel; yl_y="-maxLabelW+10"))
+
+    // Color-scale legend: vertical gradient bar (min/mid/max ticks) + missing swatch
+    const legW = 12, legH = Math.max(Math.min(h, 150), 40);
+    const legX = w + 20;
+    const defs = svg.append('defs');
+    const gradId = 'grad_$(id)';
+    const grad = defs.append('linearGradient').attr('id', gradId)
+        .attr('x1','0%').attr('y1','100%').attr('x2','0%').attr('y2','0%');   // bottom=cmin, top=cmax
+    const nstop = 12;
+    for(let s = 0; s <= nstop; s++) {
+        const tt = s / nstop;
+        grad.append('stop').attr('offset', (tt*100)+'%')
+            .attr('stop-color', color(cmin + tt*(cmax - cmin)));
+    }
+    g.append('rect').attr('class','legend-gradient')
+        .attr('x', legX).attr('y', 0).attr('width', legW).attr('height', legH)
+        .attr('fill', 'url(#'+gradId+')').attr('stroke','#ccc').attr('stroke-width',0.5);
+    const legScale = d3.scaleLinear().domain([cmin, cmax]).range([legH, 0]);
+    [cmin, (cmin+cmax)/2, cmax].forEach(tv => {
+        g.append('text').attr('x', legX + legW + 4).attr('y', legScale(tv)+3)
+            .attr('class','plot-note').attr('font-size','9px').text(fmt(tv));
+    });
+    // Missing swatch + legend entry (plotrule Heatmaps rule 2)
+    g.append('rect').attr('x', legX).attr('y', legH + 14).attr('width', 10).attr('height', 10)
+        .attr('fill', grey).attr('stroke','#ccc').attr('stroke-width',0.5);
+    g.append('text').attr('x', legX + 14).attr('y', legH + 23)
+        .attr('class','plot-note').attr('font-size','9px').text('missing');
+})();
+"""
+end
+
+# =============================================================================
+# Scatter Chart Renderer (relocated from did.jl — plotrule A1; PLT-19)
+# =============================================================================
+
+"""
+Generate D3.js code for a scatter plot with color-coded groups, reference lines,
+sloped data-coordinate line overlays, and reference shapes.
+
+- `id`: SVG container element ID
+- `data_json`: JSON array of {x, y, group} data points
+- `groups_json`: JSON array of {name, color} group configs
+- `ref_lines_json`: JSON array of {value, color, dash, axis} reference lines
+  (`axis`: "x" (vertical at x(value)) or "y" (default, horizontal at y(value)))
+- `line_overlays_json`: JSON array of sloped segments {x1, y1, x2, y2, color, dash}
+  in **data coordinates**, mapped through this renderer's own x/y scales — used for
+  OLS / Q-Q 45° fit lines with no second IIFE / scale re-derivation (plotrule A4).
+- `curve_overlays_json`: JSON array of fitted-curve overlays
+  `{points:[{x,y,lo,hi}], color, dash, band, alpha}` in **data coordinates** — a
+  polyline through `(x,y)` plus (when `band` is true) a shaded `[lo,hi]` ribbon,
+  both mapped through this renderer's own scales. Replaces the old np-overlay
+  scale-clone (plotrule A1/A4); used by the nonparametric-fit / kernel-regression views.
+- `ref_shapes_json`: JSON array of {type:"circle", cx, cy, r, color, dash} in data
+  coordinates, drawn as an ellipse through the independent x/y scales (e.g. the unit
+  circle for inverse-root / stability plots).
+- `integer_x`: force integer x-axis ticks (PLT-17).
+- `xlabel`, `ylabel`: axis labels
+
+Big-N: `data` exceeding ~2000 points is subsampled to ≤2000 marks with a visible
+on-figure note (plotrule C7 / Robustness "Huge N").
+"""
+function _render_scatter_js(id::String, data_json::String, groups_json::String;
+                            ref_lines_json::String="[]",
+                            line_overlays_json::String="[]",
+                            curve_overlays_json::String="[]",
+                            ref_shapes_json::String="[]",
+                            integer_x::Bool=false,
+                            xlabel::String="", ylabel::String="")
+    xaxis_js = integer_x ?
+        ("const _xd = x.domain();\n" *
+         "    const _ixv = [];\n" *
+         "    for (let _v = Math.ceil(_xd[0]); _v <= Math.floor(_xd[1]); _v++) _ixv.push(_v);\n" *
+         "    const _ixs = Math.max(1, Math.ceil(_ixv.length / 10));\n" *
+         "    g.append('g').attr('class','axis').attr('transform','translate(0,'+h+')')\n" *
+         "        .call(d3.axisBottom(x).tickValues(_ixv.filter((_,i) => i % _ixs === 0)).tickFormat(d3.format('d')));") :
+        ("g.append('g').attr('class','axis').attr('transform','translate(0,'+h+')')\n" *
+         "        .call(d3.axisBottom(x).ticks(8));")
+    """
+(function() {
+    const data = $(data_json);
+    const groups = $(groups_json);
+    const refLines = $(ref_lines_json);
+    const lineOverlays = $(line_overlays_json);
+    const curveOverlays = $(curve_overlays_json);
+    const refShapes = $(ref_shapes_json);
+
+    // Big-N cap: subsample the drawn MARKS to <= 2000 (plotrule C7 / Robustness
+    // "Huge N"); domains still span the full `data` so nothing is clipped.
+    const CAP = 2000;
+    let drawn = data, subN = 0;
+    if(data.length > CAP) {
+        const step = Math.ceil(data.length / CAP);
+        drawn = data.filter((_, i) => i % step === 0);
+        subN = data.length;
+    }
+
+    const container = d3.select('#$(id)');
+    const W = Math.max(container.node().clientWidth - 24, 280);
+    const margin = {top:10, right:15, bottom:35, left:55};
+    const w = W - margin.left - margin.right;
+    const h = Math.min(w * 0.6, 250);
+
+    const svg = container.append('svg').attr('width', W).attr('height', h + margin.top + margin.bottom);
+    const g = svg.append('g').attr('transform', 'translate('+margin.left+','+margin.top+')');
+
+    // Domains — include ref-lines, overlay endpoints and shape bounds so nothing clips
+    const xVals = data.map(d => d.x).filter(v => v !== null);
+    const yVals = data.map(d => d.y).filter(v => v !== null);
+    refLines.forEach(r => { if(r.axis === 'x') xVals.push(r.value); else yVals.push(r.value); });
+    lineOverlays.forEach(o => { xVals.push(o.x1, o.x2); yVals.push(o.y1, o.y2); });
+    curveOverlays.forEach(c => (c.points||[]).forEach(pt => {
+        if(pt.x !== null) xVals.push(pt.x);
+        if(pt.y !== null) yVals.push(pt.y);
+        if(c.band) { if(pt.lo !== null && pt.lo !== undefined) yVals.push(pt.lo);
+                     if(pt.hi !== null && pt.hi !== undefined) yVals.push(pt.hi); }
+    }));
+    refShapes.forEach(s => { if(s.type === 'circle') { xVals.push(s.cx - s.r, s.cx + s.r); yVals.push(s.cy - s.r, s.cy + s.r); } });
+
+    const xExt = d3.extent(xVals);
+    const xPad = (xExt[1] - xExt[0]) * 0.08 || 1;
+    const x = d3.scaleLinear().domain([xExt[0] - xPad, xExt[1] + xPad]).range([0, w]);
+
+    const yExt = d3.extent(yVals);
+    const yPad = (yExt[1] - yExt[0]) * 0.08 || 0.01;
+    const y = d3.scaleLinear().domain([yExt[0] - yPad, yExt[1] + yPad]).range([h, 0]);
+
+    // Grid
+    g.append('g').attr('class','grid').call(d3.axisLeft(y).tickSize(-w).tickFormat(''));
+
+    // Reference lines (axis:"x" → vertical; axis:"y" (default) → horizontal)
+    refLines.forEach(r => {
+        if(r.axis === 'x') {
+            g.append('line').attr('x1', x(r.value)).attr('x2', x(r.value))
+                .attr('y1', 0).attr('y2', h)
+                .attr('stroke', r.color || '#999').attr('stroke-width', 1)
+                .attr('stroke-dasharray', r.dash || '4,3');
+        } else {
+            g.append('line').attr('x1', 0).attr('x2', w)
+                .attr('y1', y(r.value)).attr('y2', y(r.value))
+                .attr('stroke', r.color || '#999').attr('stroke-width', 1)
+                .attr('stroke-dasharray', r.dash || '4,3');
+        }
+    });
+
+    // Reference shapes (data-coord circle → ellipse through independent x/y scales)
+    refShapes.forEach(s => {
+        if(s.type === 'circle') {
+            g.append('ellipse')
+                .attr('cx', x(s.cx)).attr('cy', y(s.cy))
+                .attr('rx', Math.abs(x(s.cx + s.r) - x(s.cx)))
+                .attr('ry', Math.abs(y(s.cy + s.r) - y(s.cy)))
+                .attr('fill', 'none').attr('stroke', s.color || '#999')
+                .attr('stroke-width', 1).attr('stroke-dasharray', s.dash || '4,3');
+        }
+    });
+
+    // Sloped line overlays (data coords → this renderer's own scales; A4, no scale-clone)
+    lineOverlays.forEach(o => {
+        g.append('line')
+            .attr('x1', x(o.x1)).attr('y1', y(o.y1))
+            .attr('x2', x(o.x2)).attr('y2', y(o.y2))
+            .attr('stroke', o.color || '#d62728').attr('stroke-width', 1.5)
+            .attr('stroke-dasharray', o.dash || '');
+    });
+
+    // Build color map from groups
+    const colorMap = {};
+    groups.forEach(gr => { colorMap[gr.name] = gr.color; });
+
+    // Scatter points (subsampled marks; C7)
+    g.selectAll('circle').data(drawn).join('circle')
+        .attr('cx', d => x(d.x))
+        .attr('cy', d => y(d.y))
+        .attr('r', 5)
+        .attr('fill', d => colorMap[d.group] || '#999')
+        .attr('opacity', 0.8)
+        .attr('stroke', '#fff')
+        .attr('stroke-width', 0.5)
+        .on('mouseover', function(evt, d) {
+            d3.select(this).attr('r', 7).attr('opacity', 1);
+            showTip(evt, '<b>'+d.group+'</b><br>x: '+fmt(d.x)+'<br>y: '+fmt(d.y));
+        })
+        .on('mouseout', function() {
+            d3.select(this).attr('r', 5).attr('opacity', 0.8);
+            hideTip();
+        });
+
+    // Fitted-curve overlays (data coords → own scales; A4). Optional [lo,hi] band
+    // drawn first, the fit polyline on top.
+    curveOverlays.forEach(c => {
+        const pts = c.points || [];
+        if(c.band) {
+            const area = d3.area().x(d => x(d.x))
+                .y0(d => y(d.lo !== null && d.lo !== undefined ? d.lo : d.y))
+                .y1(d => y(d.hi !== null && d.hi !== undefined ? d.hi : d.y))
+                .defined(d => d.lo !== null && d.lo !== undefined && d.hi !== null && d.hi !== undefined);
+            g.append('path').datum(pts).attr('d', area)
+                .attr('fill', c.color || '#ff7f0e').attr('opacity', c.alpha || 0.15);
+        }
+        const line = d3.line().x(d => x(d.x)).y(d => y(d.y)).defined(d => d.y !== null);
+        g.append('path').datum(pts).attr('d', line)
+            .attr('fill', 'none').attr('stroke', c.color || '#ff7f0e')
+            .attr('stroke-width', 2.2).attr('stroke-dasharray', c.dash || '');
+    });
+
+    // Axes
+    $(xaxis_js)
+    g.append('g').attr('class','axis').call(d3.axisLeft(y).ticks(6));
+
+$(_axis_labels_js(xlabel, ylabel))
+
+    // Legend — group swatches, width-aware shared engine (PLT-16)
+    if(groups.length > 1) {
+        window.__mem_core.legend(g, groups.map(gr => ({label:gr.name, color:gr.color, type:'circle'})), w, 8);
+    }
+
+    // Big-N subsample note (C7)
+    if(subN > 0) {
+        g.append('text').attr('x', w).attr('y', -2).attr('text-anchor','end')
+            .attr('class','plot-note').attr('font-size','9px')
+            .text('showing '+drawn.length+' of '+subN+' points');
+    }
+})();
+"""
+end
+
+# =============================================================================
+# Vertical Bar Renderer (bars from baseline=0; relocated from spectral.jl — A1; PLT-19)
+# =============================================================================
+
+"""
+Generate D3.js code for a vertical bar chart with bars drawn from baseline=0, plus
+optional horizontal reference lines (e.g. ACF ±CI bounds).
+
+- `id`: SVG container element ID
+- `data_json`: JSON array of {x, y} data points
+- `bar_color`: bar fill color
+- `ref_lines_json`: JSON array of {value, color, dash} horizontal reference lines
+- `tip_label`: tooltip x-prefix (domain-agnostic, plotrule A2); defaults to `xlabel`
+  when empty, empty ⇒ no prefix (kills the leaked "Lag" noun).
+- `integer_x`: force integer x-axis ticks (lag/horizon axes — no tick at lag 2.5; PLT-17)
+- `xlabel`, `ylabel`: axis labels
+"""
+function _render_vbar_js(id::String, data_json::String;
+                         bar_color::String=_PLOT_COLORS[1],
+                         ref_lines_json::String="[]", tip_label::String="",
+                         integer_x::Bool=false,
+                         xlabel::String="", ylabel::String="")
+    tip = isempty(tip_label) ? xlabel : tip_label
+    xaxis_js = integer_x ?
+        ("const _xd = x.domain();\n" *
+         "    const _ixv = [];\n" *
+         "    for (let _v = Math.ceil(_xd[0]); _v <= Math.floor(_xd[1]); _v++) _ixv.push(_v);\n" *
+         "    const _ixs = Math.max(1, Math.ceil(_ixv.length / 10));\n" *
+         "    g.append('g').attr('class','axis').attr('transform','translate(0,'+h+')')\n" *
+         "        .call(d3.axisBottom(x).tickValues(_ixv.filter((_,i) => i % _ixs === 0)).tickFormat(d3.format('d')));") :
+        ("g.append('g').attr('class','axis').attr('transform','translate(0,'+h+')')\n" *
+         "        .call(d3.axisBottom(x).ticks(Math.min(xVals.length, 10)));")
+    """
+(function() {
+    const data = $(data_json);
+    const refLines = $(ref_lines_json);
+    const tipLabel = $(_json(tip));
+
+    const container = d3.select('#$(id)');
+    const W = Math.max(container.node().clientWidth - 24, 280);
+    const margin = {top:10, right:15, bottom:35, left:55};
+    const w = W - margin.left - margin.right;
+    const h = Math.min(w * 0.6, 250);
+
+    const svg = container.append('svg').attr('width', W).attr('height', h + margin.top + margin.bottom);
+    const g = svg.append('g').attr('transform', 'translate('+margin.left+','+margin.top+')');
+
+    const xVals = data.map(d => d.x);
+    const yVals = data.map(d => d.y);
+    refLines.forEach(r => yVals.push(r.value));
+    yVals.push(0);
+
+    const xExt = d3.extent(xVals);
+    const xPad = xVals.length > 1 ? (xVals[1] - xVals[0]) * 0.5 : 0.5;
+    const x = d3.scaleLinear().domain([xExt[0] - xPad, xExt[1] + xPad]).range([0, w]);
+
+    const yExt = d3.extent(yVals);
+    const yPad = (yExt[1] - yExt[0]) * 0.08 || 0.1;
+    const y = d3.scaleLinear().domain([yExt[0] - yPad, yExt[1] + yPad]).range([h, 0]);
+
+    // Grid
+    g.append('g').attr('class','grid').call(d3.axisLeft(y).tickSize(-w).tickFormat(''));
+
+    // Zero line
+    g.append('line').attr('x1',0).attr('x2',w)
+        .attr('y1',y(0)).attr('y2',y(0))
+        .attr('class','zero-line').attr('stroke-width',0.8);
+
+    // Reference lines (CI bounds)
+    refLines.forEach(r => {
+        g.append('line').attr('x1',0).attr('x2',w)
+            .attr('y1',y(r.value)).attr('y2',y(r.value))
+            .attr('stroke',r.color||'#d62728').attr('stroke-width',1)
+            .attr('stroke-dasharray',r.dash||'5,4');
+    });
+
+    // Bars
+    const barW = Math.max(1, Math.min(6, w / data.length * 0.6));
+    data.forEach(d => {
+        const yTop = d.y >= 0 ? y(d.y) : y(0);
+        const yBot = d.y >= 0 ? y(0) : y(d.y);
+        g.append('rect')
+            .attr('x', x(d.x) - barW/2)
+            .attr('y', yTop)
+            .attr('width', barW)
+            .attr('height', Math.max(0.5, yBot - yTop))
+            .attr('fill', '$(bar_color)')
+            .attr('opacity', 0.85);
+    });
+
+    // Axes
+    $(xaxis_js)
+    g.append('g').attr('class','axis').call(d3.axisLeft(y).ticks(6));
+
+$(_axis_labels_js(xlabel, ylabel))
+
+    // Tooltip
+    svg.append('rect').attr('width',W).attr('height',h+margin.top+margin.bottom)
+        .attr('fill','none').attr('pointer-events','all')
+        .on('mousemove', function(evt) {
+            const [mx] = d3.pointer(evt, g.node());
+            const x0 = x.invert(mx);
+            const idx = d3.minIndex(data, d => Math.abs(d.x - x0));
+            const d = data[idx];
+            showTip(evt, '<b>'+(tipLabel ? tipLabel+' ' : '')+d.x+'</b><br>Value: '+fmt(d.y));
+        })
+        .on('mouseout', hideTip);
+})();
+"""
+end
+
+# =============================================================================
+# Histogram Renderer (contiguous linear-x bins + optional density overlay; PLT-19)
+# =============================================================================
+
+"""
+Generate D3.js code for a histogram: contiguous linear-x bins with an optional
+density-curve overlay (KDE / fitted normal) and reference lines.
+
+- `id`: SVG container element ID
+- `bins_json`: JSON array of {x0, x1, y} contiguous bins (y = count or density)
+- `series_json`: `[{name, color}, …]`; `series[0]` labels/colors the bars,
+  `series[1]` (optional) labels/colors the density curve. Legend shown when >1.
+- `density_json`: optional `[{x, d}, …]` overlay line
+- `ref_lines_json`: `[{value, color, dash, axis}]` — `axis:"x"` (vertical, e.g. a
+  mean / observed value) or `"y"` (horizontal). PLT-26/27 use `axis:"x"`.
+- `xlabel`, `ylabel`: axis labels (`ylabel` default "Frequency")
+"""
+function _render_histogram_js(id::String, bins_json::String, series_json::String;
+                              density_json::String="[]", ref_lines_json::String="[]",
+                              xlabel::String="", ylabel::String="Frequency")
+    """
+(function() {
+    const bins = $(bins_json);
+    const series = $(series_json);
+    const density = $(density_json);
+    const refLines = $(ref_lines_json);
+
+    const container = d3.select('#$(id)');
+    const W = Math.max(container.node().clientWidth - 24, 280);
+    const margin = {top:10, right:15, bottom:35, left:55};
+    const w = W - margin.left - margin.right;
+    const h = Math.min(w * 0.6, 250);
+
+    const svg = container.append('svg').attr('width', W).attr('height', h + margin.top + margin.bottom);
+    const g = svg.append('g').attr('transform', 'translate('+margin.left+','+margin.top+')');
+
+    const xLo = d3.min(bins, d => d.x0);
+    const xHi = d3.max(bins, d => d.x1);
+    const x = d3.scaleLinear().domain([xLo !== undefined ? xLo : 0, xHi !== undefined ? xHi : 1]).range([0, w]);
+
+    const yVals = [0];
+    bins.forEach(d => { if(d.y !== null) yVals.push(d.y); });
+    density.forEach(d => { if(d.d !== null) yVals.push(d.d); });
+    refLines.forEach(r => { if((r.axis||'y') !== 'x' && r.value !== null) yVals.push(r.value); });
+    const yMax = d3.max(yVals) || 1;
+    const y = d3.scaleLinear().domain([0, yMax * 1.08]).range([h, 0]);
+
+    // Grid
+    g.append('g').attr('class','grid').call(d3.axisLeft(y).tickSize(-w).tickFormat(''));
+
+    // Bars (contiguous, no band gaps)
+    const barColor = (series[0] && series[0].color) || '#1f77b4';
+    g.selectAll('rect.bar').data(bins).join('rect').attr('class','bar')
+        .attr('x', d => x(d.x0))
+        .attr('y', d => y(d.y !== null ? d.y : 0))
+        .attr('width', d => Math.max(0, x(d.x1) - x(d.x0)))
+        .attr('height', d => Math.max(0, y(0) - y(d.y !== null ? d.y : 0)))
+        .attr('fill', barColor).attr('opacity', 0.75)
+        .on('mouseover', function(evt, d) {
+            showTip(evt, '<b>['+fmt(d.x0)+', '+fmt(d.x1)+')</b><br>'+fmt(d.y));
+        })
+        .on('mouseout', hideTip);
+
+    // Density overlay
+    if(density.length > 0) {
+        const dcolor = (series[1] && series[1].color) || '#d62728';
+        const dline = d3.line().x(d => x(d.x)).y(d => y(d.d)).defined(d => d.d !== null);
+        g.append('path').datum(density).attr('d', dline)
+            .attr('fill','none').attr('stroke', dcolor).attr('stroke-width', 1.8);
+    }
+
+    // Reference lines (axis:"x" → vertical; axis:"y" (default) → horizontal)
+    refLines.forEach(r => {
+        if((r.axis||'y') === 'x') {
+            g.append('line').attr('x1',x(r.value)).attr('x2',x(r.value)).attr('y1',0).attr('y2',h)
+                .attr('stroke',r.color||'#999').attr('stroke-width',1).attr('stroke-dasharray',r.dash||'4,3');
+        } else {
+            g.append('line').attr('x1',0).attr('x2',w).attr('y1',y(r.value)).attr('y2',y(r.value))
+                .attr('stroke',r.color||'#999').attr('stroke-width',1).attr('stroke-dasharray',r.dash||'4,3');
+        }
+    });
+
+    // Axes
+    g.append('g').attr('class','axis').attr('transform','translate(0,'+h+')').call(d3.axisBottom(x).ticks(8));
+    g.append('g').attr('class','axis').call(d3.axisLeft(y).ticks(6));
+
+$(_axis_labels_js(xlabel, ylabel))
+
+    // Legend (bars vs curve) — shared width-aware engine (PLT-16)
+    if(series.length > 1) {
+        const he = series.map((s,i) => ({label:s.name, color:s.color,
+            type: i === 0 ? 'rect' : 'line', alpha: i === 0 ? 0.75 : 1}));
+        window.__mem_core.legend(g, he, w, 0);
+    }
+})();
+"""
+end
+
+# =============================================================================
+# Box / Whisker Renderer (group distributions; PLT-19)
+# =============================================================================
+
+"""
+Generate D3.js code for a box-and-whisker chart comparing group distributions.
+
+- `id`: SVG container element ID
+- `boxes_json`: JSON array of `{group, whislo, q1, med, q3, whishi, mean, outliers:[…]}`
+- `orientation`: `:v` (groups on the x-band) or `:h` (groups on the y-band, so named
+  entities read horizontally)
+- `xlabel`, `ylabel`: axis labels
+- `tip_label`: tooltip prefix (A2) — prepended to the group name in the tooltip
+"""
+function _render_box_js(id::String, boxes_json::String;
+                        orientation::Symbol=:v, xlabel::String="",
+                        ylabel::String="", tip_label::String="")
+    horiz = orientation == :h ? "true" : "false"
+    """
+(function() {
+    const boxes = $(boxes_json);
+    const horiz = $(horiz);
+    const tipLabel = $(_json(tip_label));
+
+    const container = d3.select('#$(id)');
+    const W = Math.max(container.node().clientWidth - 24, 280);
+
+    // Value extent across every box (incl. mean + outliers)
+    const vals = [];
+    boxes.forEach(b => {
+        [b.whislo,b.q1,b.med,b.q3,b.whishi,b.mean].forEach(v => { if(v!==null&&v!==undefined) vals.push(v); });
+        (b.outliers||[]).forEach(v => { if(v!==null) vals.push(v); });
+    });
+    let vExt = d3.extent(vals);
+    if(vExt[0] === undefined) vExt = [0,1];
+    const vPad = (vExt[1]-vExt[0])*0.08 || 1;
+
+    function boxTip(evt, b) {
+        showTip(evt, '<b>'+(tipLabel ? tipLabel+' ' : '')+b.group+'</b>'
+            +'<br>median: '+fmt(b.med)+'<br>IQR: ['+fmt(b.q1)+', '+fmt(b.q3)+']');
+    }
+
+    if(horiz) {
+        const margin = {top:10, right:20, bottom:35, left:120};
+        const w = W - margin.left - margin.right;
+        const h = Math.max(boxes.length*34, 60);
+        const svg = container.append('svg').attr('width', W).attr('height', h + margin.top + margin.bottom);
+        const g = svg.append('g').attr('transform', 'translate('+margin.left+','+margin.top+')');
+
+        const band = d3.scaleBand().domain(boxes.map(b=>b.group)).range([0,h]).padding(0.3);
+        const val = d3.scaleLinear().domain([vExt[0]-vPad, vExt[1]+vPad]).range([0,w]);
+        const bw = band.bandwidth();
+
+        g.append('g').attr('class','grid').attr('transform','translate(0,'+h+')')
+            .call(d3.axisBottom(val).tickSize(-h).tickFormat(''));
+
+        boxes.forEach(b => {
+            const yc = band(b.group), mid = yc + bw/2;
+            g.append('line').attr('x1',val(b.whislo)).attr('x2',val(b.whishi)).attr('y1',mid).attr('y2',mid).attr('stroke','#555');
+            [b.whislo,b.whishi].forEach(v => g.append('line').attr('x1',val(v)).attr('x2',val(v)).attr('y1',mid-bw*0.2).attr('y2',mid+bw*0.2).attr('stroke','#555'));
+            g.append('rect').attr('x',val(b.q1)).attr('y',yc).attr('width',Math.max(0,val(b.q3)-val(b.q1))).attr('height',bw)
+                .attr('fill','#1f77b4').attr('opacity',0.55).attr('stroke','#1f77b4')
+                .on('mouseover', function(evt){ boxTip(evt, b); }).on('mouseout', hideTip);
+            g.append('line').attr('x1',val(b.med)).attr('x2',val(b.med)).attr('y1',yc).attr('y2',yc+bw).attr('stroke','#08306b').attr('stroke-width',2);
+            if(b.mean!==null&&b.mean!==undefined) g.append('circle').attr('cx',val(b.mean)).attr('cy',mid).attr('r',2.5).attr('fill','#d62728');
+            (b.outliers||[]).forEach(v => g.append('circle').attr('cx',val(v)).attr('cy',mid).attr('r',2).attr('fill','none').attr('stroke','#d62728'));
+        });
+
+        g.append('g').attr('class','axis').attr('transform','translate(0,'+h+')').call(d3.axisBottom(val).ticks(6));
+        g.append('g').attr('class','axis').call(d3.axisLeft(band).tickFormat(d => d.length>16 ? d.slice(0,14)+'..' : d));
+$(_axis_labels_js(xlabel, ylabel; yl_y="-(margin.left-12)"))
+    } else {
+        const margin = {top:10, right:15, bottom:35, left:55};
+        const w = W - margin.left - margin.right;
+        const h = Math.min(w*0.6, 250);
+        const svg = container.append('svg').attr('width', W).attr('height', h + margin.top + margin.bottom);
+        const g = svg.append('g').attr('transform', 'translate('+margin.left+','+margin.top+')');
+
+        const band = d3.scaleBand().domain(boxes.map(b=>b.group)).range([0,w]).padding(0.3);
+        const val = d3.scaleLinear().domain([vExt[0]-vPad, vExt[1]+vPad]).range([h,0]);
+        const bw = band.bandwidth();
+
+        g.append('g').attr('class','grid').call(d3.axisLeft(val).tickSize(-w).tickFormat(''));
+
+        boxes.forEach(b => {
+            const xc = band(b.group), mid = xc + bw/2;
+            g.append('line').attr('x1',mid).attr('x2',mid).attr('y1',val(b.whislo)).attr('y2',val(b.whishi)).attr('stroke','#555');
+            [b.whislo,b.whishi].forEach(v => g.append('line').attr('x1',mid-bw*0.2).attr('x2',mid+bw*0.2).attr('y1',val(v)).attr('y2',val(v)).attr('stroke','#555'));
+            g.append('rect').attr('x',xc).attr('y',val(b.q3)).attr('width',bw).attr('height',Math.max(0,val(b.q1)-val(b.q3)))
+                .attr('fill','#1f77b4').attr('opacity',0.55).attr('stroke','#1f77b4')
+                .on('mouseover', function(evt){ boxTip(evt, b); }).on('mouseout', hideTip);
+            g.append('line').attr('x1',xc).attr('x2',xc+bw).attr('y1',val(b.med)).attr('y2',val(b.med)).attr('stroke','#08306b').attr('stroke-width',2);
+            if(b.mean!==null&&b.mean!==undefined) g.append('circle').attr('cx',mid).attr('cy',val(b.mean)).attr('r',2.5).attr('fill','#d62728');
+            (b.outliers||[]).forEach(v => g.append('circle').attr('cx',mid).attr('cy',val(v)).attr('r',2).attr('fill','none').attr('stroke','#d62728'));
+        });
+
+        g.append('g').attr('class','axis').attr('transform','translate(0,'+h+')').call(d3.axisBottom(band).tickFormat(d => d.length>12 ? d.slice(0,10)+'..' : d));
+        g.append('g').attr('class','axis').call(d3.axisLeft(val).ticks(6));
+$(_axis_labels_js(xlabel, ylabel))
+    }
+})();
+"""
+end
+
+# =============================================================================
+# Quantile-Fan Renderer (k nested bands + central line; PLT-19)
+# =============================================================================
+
+"""
+Generate D3.js code for a quantile fan: k nested credible/quantile bands in one hue
+at ramped alpha (outer→inner), a solid central line, and one legend entry per band.
+
+- `id`: SVG container element ID
+- `data_json`: JSON array of `{x, q1, q2, …, qk, med}` rows
+- `fan_json`: ordered nested band specs `[{lo_key, hi_key, label, alpha, color}, …]`
+  (outer→inner, increasing alpha). Each band gets a legend entry labelled by `label`.
+- `median_key`: the central-line key in `data_json` (default "med")
+- `central_label`: legend/tooltip label for the central line (default "Median"; pass
+  "Mean" when the central line is the posterior mean — keeps the label honest, C6)
+- `ref_lines_json`: `[{value, color, dash, axis}]` — `axis:"x"`/`"y"`
+- `xlabel`, `ylabel`: axis labels
+"""
+function _render_fan_js(id::String, data_json::String, fan_json::String;
+                        median_key::String="med", central_label::String="Median",
+                        ref_lines_json::String="[]",
+                        xlabel::String="", ylabel::String="")
+    """
+(function() {
+    const data = $(data_json);
+    const fan = $(fan_json);
+    const refLines = $(ref_lines_json);
+    const medKey = $(_json(median_key));
+    const centralLabel = $(_json(central_label));
+
+    const container = d3.select('#$(id)');
+    const W = Math.max(container.node().clientWidth - 24, 280);
+    const margin = {top:10, right:15, bottom:35, left:55};
+    const w = W - margin.left - margin.right;
+    const h = Math.min(w * 0.6, 250);
+
+    const svg = container.append('svg').attr('width', W).attr('height', h + margin.top + margin.bottom);
+    const g = svg.append('g').attr('transform', 'translate('+margin.left+','+margin.top+')');
+
+    const xVals = data.map(d => d.x);
+    const allY = [];
+    fan.forEach(b => data.forEach(d => {
+        if(d[b.lo_key]!==null && d[b.lo_key]!==undefined) allY.push(d[b.lo_key]);
+        if(d[b.hi_key]!==null && d[b.hi_key]!==undefined) allY.push(d[b.hi_key]);
+    }));
+    data.forEach(d => { if(d[medKey]!==null && d[medKey]!==undefined) allY.push(d[medKey]); });
+    refLines.forEach(r => { if((r.axis||'y') !== 'x') allY.push(r.value); });
+
+    const x = d3.scaleLinear().domain(d3.extent(xVals)).range([0,w]);
+    const yExt = d3.extent(allY);
+    const yPad = (yExt[1]-yExt[0])*0.08 || 1;
+    const y = d3.scaleLinear().domain([yExt[0]-yPad, yExt[1]+yPad]).range([h,0]);
+
+    // Grid
+    g.append('g').attr('class','grid').call(d3.axisLeft(y).tickSize(-w).tickFormat(''));
+
+    // Reference lines
+    refLines.forEach(r => {
+        if((r.axis||'y') === 'x') {
+            g.append('line').attr('x1',x(r.value)).attr('x2',x(r.value)).attr('y1',0).attr('y2',h)
+                .attr('stroke',r.color||'#999').attr('stroke-width',1).attr('stroke-dasharray',r.dash||'4,3');
+        } else {
+            g.append('line').attr('x1',0).attr('x2',w).attr('y1',y(r.value)).attr('y2',y(r.value))
+                .attr('stroke',r.color||'#999').attr('stroke-width',1).attr('stroke-dasharray',r.dash||'4,3');
+        }
+    });
+
+    // Nested bands (outer→inner, ramped alpha)
+    fan.forEach(b => {
+        const area = d3.area().x(d => x(d.x))
+            .y0(d => y(d[b.lo_key]!==null ? d[b.lo_key] : 0))
+            .y1(d => y(d[b.hi_key]!==null ? d[b.hi_key] : 0))
+            .defined(d => d[b.lo_key]!==null && d[b.lo_key]!==undefined && d[b.hi_key]!==null && d[b.hi_key]!==undefined);
+        g.append('path').datum(data).attr('d', area)
+            .attr('fill', b.color || '#1f77b4').attr('opacity', b.alpha || 0.15);
+    });
+
+    // Central (median/mean) line
+    const medColor = fan.length > 0 ? (fan[fan.length-1].color || '#1f77b4') : '#1f77b4';
+    const mline = d3.line().x(d => x(d.x)).y(d => y(d[medKey]))
+        .defined(d => d[medKey]!==null && d[medKey]!==undefined);
+    g.append('path').datum(data).attr('d', mline)
+        .attr('fill','none').attr('stroke', medColor).attr('stroke-width', 2);
+
+    // Axes
+    g.append('g').attr('class','axis').attr('transform','translate(0,'+h+')').call(d3.axisBottom(x).ticks(Math.min(xVals.length,8)));
+    g.append('g').attr('class','axis').call(d3.axisLeft(y).ticks(6));
+
+$(_axis_labels_js(xlabel, ylabel))
+
+    // Legend — one entry per band (quantile pair) + the central line, width-aware (PLT-16)
+    const fanEntries = fan.map(b => ({label:b.label, color:b.color || '#1f77b4',
+        type:'rect', alpha: b.alpha || 0.15}));
+    fanEntries.push({label:centralLabel, color:medColor, type:'line'});
+    window.__mem_core.legend(g, fanEntries, w, 0);
+
+    // Tooltip (crosshair nearest)
+    svg.append('rect').attr('width',W).attr('height',h+margin.top+margin.bottom)
+        .attr('fill','none').attr('pointer-events','all')
+        .on('mousemove', function(evt) {
+            const [mx] = d3.pointer(evt, g.node());
+            const x0 = x.invert(mx);
+            const idx = d3.minIndex(data, d => Math.abs(d.x - x0));
+            const d = data[idx];
+            let html = '<b>x='+fmt(d.x)+'</b>';
+            if(d[medKey]!==null && d[medKey]!==undefined) html += '<br>'+centralLabel+': '+fmt(d[medKey]);
+            fan.forEach(b => {
+                if(d[b.lo_key]!==null && d[b.hi_key]!==null && d[b.lo_key]!==undefined && d[b.hi_key]!==undefined)
+                    html += '<br>'+b.label+': ['+fmt(d[b.lo_key])+', '+fmt(d[b.hi_key])+']';
+            });
+            showTip(evt, html);
+        })
+        .on('mouseout', hideTip);
+})();
+"""
+end
+
+# =============================================================================
+# Event-Study Dot-and-Whisker Renderer (per-event coefplot; PLT-17)
+# =============================================================================
+
+"""
+Generate D3.js for a per-event **dot-and-whisker** coefficient plot: a filled point
+at each `(x, y)` with a vertical CI whisker `[lo, hi]`, a HOLLOW marker at the
+reference / omitted period (`ref:1`, drawn without a whisker), plus a horizontal zero
+line and a vertical treatment line supplied via `ref_lines_json` (plotrule Form:
+event study — a continuous ribbon over-smooths discrete coefficients; PLT-17).
+
+- `data_json`: `[{x, y, lo, hi, ref}]` — `lo`/`hi` may be null; `ref ∈ {0,1}`.
+- `color`: point / whisker color.
+- `point_label`: series label for the tooltip.
+- `ref_lines_json`: `[{value, color, dash, axis}]` — `axis:"x"` vertical, `"y"` horizontal.
+- `integer_x`: force integer event-time ticks (default `true`; no tick at h = 2.5).
+- `xlabel`, `ylabel`: axis labels.
+"""
+function _render_whisker_js(id::String, data_json::String;
+                            color::String=_PLOT_SERIES[1], point_label::String="Estimate",
+                            ref_lines_json::String="[]", integer_x::Bool=true,
+                            xlabel::String="", ylabel::String="")
+    xaxis_js = integer_x ?
+        ("const _xd = x.domain();\n" *
+         "    const _ixv = [];\n" *
+         "    for (let _v = Math.ceil(_xd[0]); _v <= Math.floor(_xd[1]); _v++) _ixv.push(_v);\n" *
+         "    const _ixs = Math.max(1, Math.ceil(_ixv.length / 12));\n" *
+         "    g.append('g').attr('class','axis').attr('transform','translate(0,'+h+')')\n" *
+         "        .call(d3.axisBottom(x).tickValues(_ixv.filter((_,i) => i % _ixs === 0)).tickFormat(d3.format('d')));") :
+        ("g.append('g').attr('class','axis').attr('transform','translate(0,'+h+')')\n" *
+         "        .call(d3.axisBottom(x).ticks(Math.min(data.length,10)));")
+    """
+(function() {
+    const data = $(data_json);
+    const refLines = $(ref_lines_json);
+    const pointLabel = $(_json(point_label));
+
+    const container = d3.select('#$(id)');
+    const W = Math.max(container.node().clientWidth - 24, 280);
+    const margin = {top:10, right:15, bottom:35, left:55};
+    const w = W - margin.left - margin.right;
+    const h = Math.min(w * 0.6, 250);
+
+    const svg = container.append('svg').attr('width', W).attr('height', h + margin.top + margin.bottom);
+    const g = svg.append('g').attr('transform', 'translate('+margin.left+','+margin.top+')');
+
+    const xVals = data.map(d => d.x);
+    const allY = [];
+    data.forEach(d => { if(d.y!==null) allY.push(d.y); if(d.lo!==null) allY.push(d.lo); if(d.hi!==null) allY.push(d.hi); });
+    refLines.forEach(r => { if((r.axis||'y') !== 'x') allY.push(r.value); });
+
+    const xExt = d3.extent(xVals);
+    const xPad = (xExt[1]-xExt[0])*0.06 || 0.5;
+    const x = d3.scaleLinear().domain([xExt[0]-xPad, xExt[1]+xPad]).range([0,w]);
+    const yExt = d3.extent(allY);
+    const yPad = (yExt[1]-yExt[0])*0.08 || 1;
+    const y = d3.scaleLinear().domain([yExt[0]-yPad, yExt[1]+yPad]).range([h,0]);
+
+    // Grid
+    g.append('g').attr('class','grid').call(d3.axisLeft(y).tickSize(-w).tickFormat(''));
+
+    // Reference lines (axis:"x" vertical treatment line; axis:"y" horizontal zero)
+    refLines.forEach(r => {
+        if((r.axis||'y') === 'x') {
+            g.append('line').attr('x1',x(r.value)).attr('x2',x(r.value)).attr('y1',0).attr('y2',h)
+                .attr('stroke',r.color||'#999').attr('stroke-width',1).attr('stroke-dasharray',r.dash||'4,3');
+        } else {
+            g.append('line').attr('x1',0).attr('x2',w).attr('y1',y(r.value)).attr('y2',y(r.value))
+                .attr('stroke',r.color||'#999').attr('stroke-width',1).attr('stroke-dasharray',r.dash||'4,3');
+        }
+    });
+
+    // Whiskers (+ caps) — skipped at the reference period (no CI there)
+    const capW = Math.max(3, Math.min(9, w / Math.max(data.length,1) * 0.3));
+    data.forEach(d => {
+        if(d.ref === 1 || d.lo===null || d.hi===null) return;
+        g.append('line').attr('x1',x(d.x)).attr('x2',x(d.x)).attr('y1',y(d.lo)).attr('y2',y(d.hi))
+            .attr('stroke','$(color)').attr('stroke-width',1.5);
+        g.append('line').attr('x1',x(d.x)-capW/2).attr('x2',x(d.x)+capW/2).attr('y1',y(d.lo)).attr('y2',y(d.lo))
+            .attr('stroke','$(color)').attr('stroke-width',1.5);
+        g.append('line').attr('x1',x(d.x)-capW/2).attr('x2',x(d.x)+capW/2).attr('y1',y(d.hi)).attr('y2',y(d.hi))
+            .attr('stroke','$(color)').attr('stroke-width',1.5);
+    });
+
+    // Points: filled dot per event time; HOLLOW marker at the reference period
+    data.forEach(d => {
+        if(d.y===null) return;
+        if(d.ref === 1) {
+            g.append('circle').attr('cx',x(d.x)).attr('cy',y(d.y)).attr('r',5)
+                .attr('fill','none').attr('stroke','$(color)').attr('stroke-width',1.6);
+        } else {
+            g.append('circle').attr('cx',x(d.x)).attr('cy',y(d.y)).attr('r',4)
+                .attr('fill','$(color)').attr('stroke','#fff').attr('stroke-width',0.8);
+        }
+    });
+
+    // Axes
+    $(xaxis_js)
+    g.append('g').attr('class','axis').call(d3.axisLeft(y).ticks(6));
+
+$(_axis_labels_js(xlabel, ylabel))
+
+    // Tooltip (nearest event time)
+    svg.append('rect').attr('width',W).attr('height',h+margin.top+margin.bottom)
+        .attr('fill','none').attr('pointer-events','all')
+        .on('mousemove', function(evt) {
+            const [mx] = d3.pointer(evt, g.node());
+            const x0 = x.invert(mx);
+            const idx = d3.minIndex(data, d => Math.abs(d.x - x0));
+            const d = data[idx];
+            let html = '<b>'+(pointLabel ? pointLabel : 'x')+' @ '+d.x+'</b>';
+            if(d.y!==null) html += '<br>'+fmt(d.y);
+            if(d.ref === 1) html += '<br>(reference period)';
+            else if(d.lo!==null && d.hi!==null) html += '<br>CI: ['+fmt(d.lo)+', '+fmt(d.hi)+']';
+            showTip(evt, html);
+        })
+        .on('mouseout', hideTip);
+})();
+"""
+end
+
+# =============================================================================
+# Horizontal Coefficient / Forest Plot Renderer (relocated from reg.jl — A1; PLT-09)
+# =============================================================================
+
+"""
+Generate D3.js code for a horizontal coefficient (dot-and-whisker) plot with CI
+error bars.
+
+- `id`: SVG container element ID
+- `data_json`: JSON array of {name, effect, ci_lo, ci_hi} objects
+- `color`: dot / whisker / bar color (default `_PLOT_COLORS[1]`)
+- `logx`: log-scale the x (effect) axis and suppress the from-reference bars — a
+  forest plot of ratios (odds/hazard/risk); requires positive effects and CI ends.
+- `ref_value`: x-position of the dashed reference line (0 for effects, 1 for ratios).
+- `xlabel`, `ylabel`: axis labels
+"""
+function _render_coef_plot_js(id::String, data_json::String;
+                              color::String=_PLOT_COLORS[1],
+                              logx::Bool=false, ref_value::Real=0,
+                              xlabel::String="", ylabel::String="")
+    """
+(function() {
+    const data = $(data_json);
+    const logx = $(logx ? "true" : "false");
+    const refValue = $(_json(float(ref_value)));
+
+    const container = d3.select('#$(id)');
+    const W = Math.max(container.node().clientWidth - 24, 280);
+    const margin = {top:10, right:15, bottom:35, left:100};
+    const w = W - margin.left - margin.right;
+    const h = Math.max(data.length * 28, 120);
+
+    const svg = container.append('svg').attr('width', W).attr('height', h + margin.top + margin.bottom);
+    const g = svg.append('g').attr('transform', 'translate('+margin.left+','+margin.top+')');
+
+    // Scales
+    const allX = [];
+    data.forEach(d => { allX.push(d.effect, d.ci_lo, d.ci_hi); });
+    let x;
+    if(logx) {
+        const pos = allX.filter(v => v > 0);
+        const lo = pos.length ? Math.min.apply(null, pos) : 1e-6;
+        const hi = pos.length ? Math.max.apply(null, pos) : 1;
+        x = d3.scaleLog().domain([lo / 1.3, hi * 1.3]).range([0, w]).clamp(true);
+    } else {
+        allX.push(refValue);
+        const xExt = d3.extent(allX);
+        const xPad = (xExt[1] - xExt[0]) * 0.12 || 0.1;
+        x = d3.scaleLinear().domain([xExt[0] - xPad, xExt[1] + xPad]).range([0, w]);
+    }
+    const y = d3.scaleBand().domain(data.map(d => d.name)).range([0, h]).padding(0.3);
+
+    // Grid
+    g.append('g').attr('class','grid')
+        .call(d3.axisBottom(x).tickSize(h).tickFormat(''))
+        .attr('transform','translate(0,0)');
+
+    // Reference line (0 for effects, 1 for ratios) — the reserved alert color
+    g.append('line')
+        .attr('x1', x(refValue)).attr('x2', x(refValue))
+        .attr('y1', 0).attr('y2', h)
+        .attr('stroke', '#d62728').attr('stroke-width', 1)
+        .attr('stroke-dasharray', '6,3');
+
+    // CI whiskers (horizontal lines)
+    g.selectAll('.ci-line').data(data).join('line')
+        .attr('class', 'ci-line')
+        .attr('x1', d => x(d.ci_lo))
+        .attr('x2', d => x(d.ci_hi))
+        .attr('y1', d => y(d.name) + y.bandwidth()/2)
+        .attr('y2', d => y(d.name) + y.bandwidth()/2)
+        .attr('stroke', '$(color)')
+        .attr('stroke-width', 1.5);
+
+    // CI caps (vertical lines at ends)
+    const capH = y.bandwidth() * 0.4;
+    g.selectAll('.ci-cap-lo').data(data).join('line')
+        .attr('class', 'ci-cap-lo')
+        .attr('x1', d => x(d.ci_lo)).attr('x2', d => x(d.ci_lo))
+        .attr('y1', d => y(d.name) + y.bandwidth()/2 - capH/2)
+        .attr('y2', d => y(d.name) + y.bandwidth()/2 + capH/2)
+        .attr('stroke', '$(color)').attr('stroke-width', 1.5);
+    g.selectAll('.ci-cap-hi').data(data).join('line')
+        .attr('class', 'ci-cap-hi')
+        .attr('x1', d => x(d.ci_hi)).attr('x2', d => x(d.ci_hi))
+        .attr('y1', d => y(d.name) + y.bandwidth()/2 - capH/2)
+        .attr('y2', d => y(d.name) + y.bandwidth()/2 + capH/2)
+        .attr('stroke', '$(color)').attr('stroke-width', 1.5);
+
+    // Effect bars (from the reference to the effect) — linear scale only
+    if(!logx) {
+        g.selectAll('.effect-bar').data(data).join('rect')
+            .attr('class', 'effect-bar')
+            .attr('x', d => x(Math.min(refValue, d.effect)))
+            .attr('y', d => y(d.name) + y.bandwidth() * 0.15)
+            .attr('width', d => Math.abs(x(d.effect) - x(refValue)))
+            .attr('height', y.bandwidth() * 0.7)
+            .attr('fill', '$(color)')
+            .attr('opacity', 0.7);
+    }
+
+    // Effect dots (circles at effect value)
+    g.selectAll('.effect-dot').data(data).join('circle')
+        .attr('class', 'effect-dot')
+        .attr('cx', d => x(d.effect))
+        .attr('cy', d => y(d.name) + y.bandwidth()/2)
+        .attr('r', 4)
+        .attr('fill', '$(color)')
+        .attr('stroke', '#fff')
+        .attr('stroke-width', 1);
+
+    // Axes
+    g.append('g').attr('class','axis').attr('transform','translate(0,'+h+')')
+        .call(d3.axisBottom(x).ticks(8));
+    g.append('g').attr('class','axis')
+        .call(d3.axisLeft(y));
+
+$(_axis_labels_js(xlabel, ylabel; yl_y="-85"))
+
+    // Tooltip
+    svg.append('rect').attr('width',W).attr('height',h+margin.top+margin.bottom)
+        .attr('fill','none').attr('pointer-events','all')
+        .on('mousemove', function(evt) {
+            const [mx, my] = d3.pointer(evt, g.node());
+            const names = data.map(d => d.name);
+            const bandY = y.step();
+            const idx = Math.min(Math.floor(my / bandY), data.length-1);
+            const d = data[Math.max(0,idx)];
+            if(!d) return;
+            showTip(evt, '<b>'+d.name+'</b><br>Effect: '+fmt(d.effect)+'<br>CI: ['+fmt(d.ci_lo)+', '+fmt(d.ci_hi)+']');
+        })
+        .on('mouseout', hideTip);
+})();
+"""
+end
+
+# =============================================================================
+# OccBin Panel Renderer (linear vs piecewise + binding shading; relocated from
+# models.jl — A1; one IIFE, plain identifiers — A3; PLT-09)
+# =============================================================================
+
+"""
+Render a single OccBin panel: linear (dashed) vs piecewise (solid) lines, shaded
+binding-period rectangles, and a zero reference line. Data format:
+`[{h, lin, pw, bind}, …]` with `bind ∈ {0,1}`.
+
+- `lin_label`/`pw_label`/`bind_label`: legend/tooltip labels (domain-agnostic, A2).
+- `lin_color`/`pw_color`/`bind_color`: series + binding-shade colors.
+- `xlabel`, `ylabel`: axis labels (`xlabel` also prefixes the tooltip, A2).
+"""
+function _render_occbin_panel_js(id::String, data_json::String;
+                                 xlabel::String="", ylabel::String="",
+                                 lin_label::String="Linear",
+                                 pw_label::String="Piecewise",
+                                 bind_label::String="Binding",
+                                 lin_color::String=_PLOT_COLORS[3],
+                                 pw_color::String=_PLOT_COLORS[1],
+                                 bind_color::String="#d62728")
+    """
+(function() {
+    const data = $(data_json);
+    const linLabel = $(_json(lin_label));
+    const pwLabel = $(_json(pw_label));
+    const bindLabel = $(_json(bind_label));
+    const tipLabel = $(_json(xlabel));
+
+    const container = d3.select('#$(id)');
+    const W = Math.max(container.node().clientWidth - 24, 280);
+    const margin = {top:10, right:15, bottom:35, left:55};
+    const w = W - margin.left - margin.right;
+    const h = Math.min(w * 0.6, 250);
+
+    const svg = container.append('svg').attr('width', W).attr('height', h + margin.top + margin.bottom);
+    const g = svg.append('g').attr('transform', 'translate('+margin.left+','+margin.top+')');
+
+    // Compute domains
+    const xVals = data.map(d => d.h);
+    const allY = [];
+    data.forEach(d => { if(d.lin!==null) allY.push(d.lin); if(d.pw!==null) allY.push(d.pw); });
+    allY.push(0);
+
+    const x = d3.scaleLinear().domain(d3.extent(xVals)).range([0, w]);
+    const yExt = d3.extent(allY);
+    const yPad = (yExt[1] - yExt[0]) * 0.08 || 0.1;
+    const y = d3.scaleLinear().domain([yExt[0] - yPad, yExt[1] + yPad]).range([h, 0]);
+
+    // Grid
+    g.append('g').attr('class','grid').call(d3.axisLeft(y).tickSize(-w).tickFormat(''));
+
+    // Binding-period shaded rectangles
+    const xStep = w / Math.max(xVals.length - 1, 1);
+    data.forEach(d => {
+        if(d.bind === 1) {
+            const x0 = x(d.h) - xStep * 0.5;
+            const x1 = x(d.h) + xStep * 0.5;
+            g.append('rect')
+                .attr('x', Math.max(0, x0)).attr('y', 0)
+                .attr('width', Math.min(x1, w) - Math.max(0, x0)).attr('height', h)
+                .attr('fill', '$(bind_color)').attr('opacity', 0.08);
+        }
+    });
+
+    // Zero reference line
+    g.append('line').attr('x1', 0).attr('x2', w)
+        .attr('y1', y(0)).attr('y2', y(0))
+        .attr('stroke', '#999').attr('stroke-width', 1).attr('stroke-dasharray', '4,3');
+
+    // Linear line (dashed)
+    const linLine = d3.line().x(d => x(d.h)).y(d => y(d.lin)).defined(d => d.lin !== null);
+    g.append('path').datum(data).attr('d', linLine)
+        .attr('fill', 'none').attr('stroke', '$(lin_color)')
+        .attr('stroke-width', 1.8).attr('stroke-dasharray', '6,3');
+
+    // Piecewise line (solid)
+    const pwLine = d3.line().x(d => x(d.h)).y(d => y(d.pw)).defined(d => d.pw !== null);
+    g.append('path').datum(data).attr('d', pwLine)
+        .attr('fill', 'none').attr('stroke', '$(pw_color)').attr('stroke-width', 1.8);
+
+    // Axes
+    g.append('g').attr('class','axis').attr('transform', 'translate(0,'+h+')')
+        .call(d3.axisBottom(x).ticks(Math.min(xVals.length, 8)));
+    g.append('g').attr('class','axis').call(d3.axisLeft(y).ticks(6));
+
+$(_axis_labels_js(xlabel, ylabel))
+
+    // Legend — shared width-aware engine (PLT-16)
+    window.__mem_core.legend(g, [
+        {label:linLabel, color:'$(lin_color)', type:'line', dash:'6,3'},
+        {label:pwLabel, color:'$(pw_color)', type:'line'},
+        {label:bindLabel, color:'$(bind_color)', type:'rect', alpha:0.15}
+    ], w, 0);
+
+    // Tooltip
+    svg.append('rect').attr('width', W).attr('height', h + margin.top + margin.bottom)
+        .attr('fill','none').attr('pointer-events','all')
+        .on('mousemove', function(evt) {
+            const [mx] = d3.pointer(evt, g.node());
+            const x0 = x.invert(mx);
+            const idx = d3.minIndex(data, d => Math.abs(d.h - x0));
+            const d = data[idx];
+            let html = '<b>'+(tipLabel ? tipLabel+' ' : '')+d.h+'</b>';
+            if(d.lin!==null) html += '<br>'+linLabel+': '+fmt(d.lin);
+            if(d.pw!==null) html += '<br>'+pwLabel+': '+fmt(d.pw);
+            if(d.bind===1) html += '<br><span style="color:$(bind_color)">'+bindLabel+'</span>';
+            showTip(evt, html);
+        })
+        .on('mouseout', hideTip);
 })();
 """
 end
@@ -516,15 +1894,25 @@ end
 # Panel Body Rendering
 # =============================================================================
 
-function _render_body_single(panel::_PanelSpec; title::String="")
+function _render_body_single(panel::_PanelSpec; title::String="",
+                             source::String="", note::String="")
     html = ""
     if !isempty(title)
-        html *= "<div class=\"figure-title\">$(title)</div>\n"
+        html *= "<div class=\"figure-title\">$(_esc_html(title))</div>\n"
     end
     html *= """<div class="panel">
-<div class="panel-title">$(panel.title)</div>
+<div class="panel-title">$(_esc_html(panel.title))</div>
 <div id="$(panel.id)"></div>
 </div>"""
+    # C7: a cap/figure note must stay visible even on a single-panel figure —
+    # _render_body_figure already appends it; the single-panel path must too, or
+    # any "showing k of N" truncation note silently vanishes.
+    if !isempty(source)
+        html *= "\n<div class=\"figure-source\">$(_esc_html(source))</div>"
+    end
+    if !isempty(note)
+        html *= "\n<div class=\"figure-source\">$(_esc_html(note))</div>"
+    end
     html
 end
 
@@ -532,21 +1920,21 @@ function _render_body_figure(panels::Vector{_PanelSpec}; title::String="",
                              source::String="", note::String="")
     html = ""
     if !isempty(title)
-        html *= "<div class=\"figure-title\">$(title)</div>\n"
+        html *= "<div class=\"figure-title\">$(_esc_html(title))</div>\n"
     end
     html *= "<div class=\"panel-grid\">\n"
     for p in panels
         html *= """<div class="panel">
-<div class="panel-title">$(p.title)</div>
+<div class="panel-title">$(_esc_html(p.title))</div>
 <div id="$(p.id)"></div>
 </div>\n"""
     end
     html *= "</div>\n"
     if !isempty(source)
-        html *= "<div class=\"figure-source\">$(source)</div>\n"
+        html *= "<div class=\"figure-source\">$(_esc_html(source))</div>\n"
     end
     if !isempty(note)
-        html *= "<div class=\"figure-source\">$(note)</div>\n"
+        html *= "<div class=\"figure-source\">$(_esc_html(note))</div>\n"
     end
     html
 end
@@ -567,15 +1955,16 @@ function _make_plot(panels::Vector{_PanelSpec}; title::String="",
 
     css = _render_css(ncols)
     if length(panels) == 1
-        body = _render_body_single(panels[1]; title=title)
+        body = _render_body_single(panels[1]; title=title, source=source, note=note)
     else
         body = _render_body_figure(panels; title=title, source=source, note=note)
     end
     scripts = join([p.js for p in panels], "\n")
 
-    html = _render_html(; title=isempty(title) ? "MacroEconometricModels Plot" : title,
-                         css=css, body=body, scripts=scripts)
-    PlotOutput(html)
+    doc_title = isempty(title) ? "MacroEconometricModels Plot" : title
+    html = _render_html(; title=doc_title, css=css, body=body, scripts=scripts)
+    fragment = _render_fragment(; css=css, body=body, scripts=scripts)
+    PlotOutput(html, fragment)
 end
 
 # =============================================================================
@@ -618,13 +2007,16 @@ function display_plot(p::PlotOutput)
     tmpfile
 end
 
+# Embeddable fragment for notebook/Documenter pages (A11); full standalone document
+# is kept for save_plot/display_plot. Directly-constructed outputs (empty fragment)
+# fall back to the full html.
 function Base.show(io::IO, ::MIME"text/html", p::PlotOutput)
-    print(io, p.html)
+    print(io, isempty(p.fragment) ? p.html : p.fragment)
 end
 
 function Base.show(io::IO, ::MIME"text/plain", p::PlotOutput)
     n = length(p.html)
-    print(io, "PlotOutput($(n) bytes HTML with inline D3.js)")
+    print(io, "PlotOutput($(n) bytes, self-contained inline D3.js)")
 end
 
 function Base.show(io::IO, p::PlotOutput)

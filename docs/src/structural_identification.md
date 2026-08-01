@@ -251,6 +251,8 @@ nothing # hide
 | `n_draws` | `Int` | `1000` | Target number of accepted draws |
 | `n_rotations` | `Int` | `1000` | Maximum attempts per target draw |
 | `compute_weights` | `Bool` | `true` | Compute importance weights |
+| `normalize_weights` | `Bool` | `true` | Scale stored weights to sum to 1 (`false` keeps the raw volume-element scale) |
+| `rng` | `AbstractRNG` | `default_rng()` | Random number generator |
 
 | Field | Type | Description |
 |-------|------|-------------|
@@ -259,6 +261,28 @@ nothing # hide
 | `weights` | `Vector{T}` | Importance weights (normalized to sum to 1) |
 | `acceptance_rate` | `T` | Fraction of draws satisfying all restrictions |
 | `restrictions` | `SVARRestrictions` | Imposed restrictions |
+| `ess` | `T` | Kish effective sample size of the importance weights |
+| `ess_fraction` | `T` | ``\mathrm{ESS} / n_{\text{draws}}`` |
+
+### Effective Sample Size
+
+Uneven importance weights mean the weighted IRF summaries rest on fewer draws than the nominal count. The result reports Kish's (1965) **effective sample size**
+
+```math
+\mathrm{ESS} = \frac{\left(\sum_s w_s\right)^2}{\sum_s w_s^2}
+```
+
+where:
+- ``w_s`` is draw ``s``'s importance weight (the ratio is scale-invariant, so normalization does not matter)
+- ``\mathrm{ESS} = n`` exactly when the weights are uniform, and approaches 1 when one draw carries all the mass
+
+Under pure sign restrictions the weights are uniform and `ess_fraction` is exactly 1 — nothing is lost, because no importance sampling takes place. Zero restrictions make the weights uneven, so `ess_fraction` falls below 1; a value near zero means the posterior rests on a handful of draws and the credible bands are far less precise than `n_draws` suggests. Below 10% of the draw count the sampler is reported as degenerate and `identify_arias` warns:
+
+```@example sid
+result.ess, result.ess_fraction
+```
+
+This is the same degenerate-weights signal that triggers resampling in sequential Monte Carlo. Treat a low value as evidence that the zero and sign restrictions are close to contradictory, not as a reason to draw more rotations — the weight distribution is a property of the restriction set.
 
 ### Bayesian Integration
 
@@ -266,9 +290,12 @@ For Bayesian VARs, `identify_arias_bayesian` applies the Arias algorithm to each
 
 ```julia
 post = estimate_bvar(Y, 2; n_draws=500)
-irf_q, irf_m, acc, total, w = identify_arias_bayesian(post, restrictions, 20;
+res = identify_arias_bayesian(post, restrictions, 20;
     n_rotations=100, quantiles=[0.16, 0.5, 0.84])
+res.irf_quantiles, res.irf_mean, res.ess, res.ess_fraction
 ```
+
+Weights are pooled across posterior draws on the raw volume-element scale and normalized once at the end, so `ess` measures degeneracy over the whole pooled sample. Each per-draw call accepts a single rotation, so normalizing within it would force every weight to 1 and reduce the weighted summaries to unweighted ones.
 
 ---
 
@@ -366,9 +393,11 @@ With the interest rate ordered last, the Cholesky scheme forces the contemporane
 
 3. **Low acceptance rates.** If `identify_sign` or `identify_arias` produces acceptance rates below 1%, the restrictions may be nearly contradictory. Relax restrictions or increase `max_draws`.
 
-4. **Uhlig may not converge.** If `result.converged == false`, increase `n_starts` or relax sign restrictions. The optimizer found a local minimum where some sign conditions are violated.
+4. **Reading `identify_arias` draw counts at face value.** The acceptance rate says how many draws survived the restrictions; `ess_fraction` says how many of them actually count. With zero restrictions the two diverge — check `ess_fraction` before trusting the width of a credible band.
 
-5. **Long-run identification requires stationarity.** If the VAR has a near-unit root, ``(I - A(1))`` is nearly singular and the long-run matrix ``C(1)`` explodes. Use a VECM specification for cointegrated systems.
+5. **Uhlig may not converge.** If `result.converged == false`, increase `n_starts` or relax sign restrictions. The optimizer found a local minimum where some sign conditions are violated.
+
+6. **Long-run identification requires stationarity.** If the VAR has a near-unit root, ``(I - A(1))`` is nearly singular and the long-run matrix ``C(1)`` explodes. Use a VECM specification for cointegrated systems.
 
 ---
 
@@ -388,6 +417,8 @@ With the interest rate ordered last, the Cholesky scheme forces the contemporane
 
 - Christiano, L. J., Eichenbaum, M., & Evans, C. L. (1999). Monetary Policy Shocks: What Have We Learned and to What End?
   In *Handbook of Macroeconomics*, Vol. 1A, 65--148. [DOI](https://doi.org/10.1016/S1574-0048(99)01005-8)
+
+- Kish, L. (1965). *Survey Sampling*. Wiley. ISBN 978-0-471-48900-9.
 
 - Kilian, L., & Lütkepohl, H. (2017). *Structural Vector Autoregressive Analysis*.
   Cambridge University Press. [DOI](https://doi.org/10.1017/9781108164818)

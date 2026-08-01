@@ -1,21 +1,29 @@
 using Test, MacroEconometricModels
 
+# PLT-39: adopt the shared structural-assertion helper (parses EXTRACTED JSON
+# literals, checks self-containment/DOCTYPE) instead of substring-only smoke.
+# This file runs in the "Coverage-C + IO" group, which does not otherwise load the
+# helper, so self-bootstrap it (dependency-free — plotrule A12).
+isdefined(@__MODULE__, :check_plot) ||
+    include(joinpath(@__DIR__, "..", "plotting", "plot_test_helpers.jl"))
+
 @testset "IO plotting recipes" begin
     io = load_example(:wiot)
-    p1 = plot_result(multipliers(io))
-    @test p1 isa PlotOutput
-    @test !isempty(p1.html)
-    p2 = plot_result(linkages(io))
-    @test p2 isa PlotOutput
-    p3 = plot_result(leontief(io))
-    @test p3 isa PlotOutput
 
-    # save_path branch for each recipe
+    # IOMultipliers, LinkageResult, LeontiefModel dispatches (structural smoke).
+    for obj in (multipliers(io), linkages(io), leontief(io))
+        p = plot_result(obj)
+        check_plot(p)
+        assert_all_json_valid(p)
+    end
+
+    # save_path branch for each recipe (C8): writes a self-contained document.
     d = mktempdir()
-    plot_result(multipliers(io); save_path=joinpath(d, "m.html"))
-    plot_result(linkages(io); save_path=joinpath(d, "l.html"))
-    plot_result(leontief(io); save_path=joinpath(d, "h.html"))
-    @test isfile(joinpath(d, "m.html"))
-    @test isfile(joinpath(d, "l.html"))
-    @test isfile(joinpath(d, "h.html"))
+    for (obj, name) in ((multipliers(io), "m.html"),
+                        (linkages(io), "l.html"),
+                        (leontief(io), "h.html"))
+        p = plot_result(obj; save_path=joinpath(d, name))
+        @test p isa PlotOutput
+        @test startswith(strip(read(joinpath(d, name), String)), "<!DOCTYPE html>")
+    end
 end

@@ -1,0 +1,742 @@
+# MacroEconometricModels.jl
+# Copyright (C) 2025-2026 Wookyung Chung <chung@friedman.jp>
+#
+# This file is part of MacroEconometricModels.jl.
+# Licensed under GPL-3.0-or-later. See LICENSE for details.
+
+"""
+True life-cycle overlapping-generations model with age-dependent EGM.
+
+[`BlanchardOLG`](@ref) is *perpetual youth*: every agent faces the same constant
+survival probability, so there is no age structure at all. A **life-cycle** model
+in the Auerbach–Kotlikoff / İmrohoroğlu–İmrohoroğlu–Joines tradition has finitely
+lived agents whose earnings, mortality, and policies all depend on age
+`j = 1, …, J`. That is what pension, demographic, and lifecycle-inequality
+questions require.
+
+The household problem is solved by **backward induction over age** — one
+endogenous-grid sweep per age, from the terminal age down to age 1. There is no
+fixed point over policies: age `J` is known (assets are exhausted), and each
+earlier age follows from the next. The only fixed point in the model is the
+market-clearing interest rate.
+
+# References
+- Auerbach, A. J., & Kotlikoff, L. J. (1987). *Dynamic Fiscal Policy*.
+  Cambridge University Press.
+- İmrohoroğlu, A., İmrohoroğlu, S., & Joines, D. H. (1995). A life cycle analysis
+  of social security. *Economic Theory*, 6(1), 83–114.
+- Carroll, C. D. (2006). The method of endogenous gridpoints for solving dynamic
+  stochastic optimization problems. *Economics Letters*, 91(3), 312–320.
+- Young, E. R. (2010). Solving the incomplete markets model with aggregate
+  uncertainty using the Krusell-Smith algorithm and non-stochastic simulations.
+  *Journal of Economic Dynamics and Control*, 34(1), 36–41.
+"""
+
+using LinearAlgebra
+
+# =============================================================================
+# LifeCycleOLG — model specification
+# =============================================================================
+
+"""
+    LifeCycleOLG{T}
+
+Stationary life-cycle overlapping-generations economy.
+
+Households live at most `J` ages, work through age `J_retire − 1` with a
+deterministic age-earnings profile `earnings[j]` and persistent idiosyncratic
+productivity, then retire on a pay-as-you-go pension. Survival from age `j` to
+`j+1` is `survival[j]`, with `survival[J] = 0`. Firms are competitive with
+Cobb-Douglas technology.
+
+# Constructor
+
+    LifeCycleOLG(; J=60, J_retire=45, survival=0.99, earnings=nothing,
+                   income=rouwenhorst(0.95, 0.2, 5), a_max=60.0, n_a=200,
+                   beta=0.97, sigma=2.0, alpha=0.36, delta=0.06, Z=1.0,
+                   n_pop=0.0, replacement=0.4, credit_limit=0.0,
+                   annuities=true, grid_type=:double_exp)
+
+| Field | Type | Description |
+|---|---|---|
+| `J` | `Int` | Maximum age |
+| `J_retire` | `Int` | First retired age (`J_retire > J` ⇒ nobody retires) |
+| `survival` | `Vector{T}` | `s_j`, length `J`, with `s_J = 0`; a scalar is broadcast |
+| `earnings` | `Vector{T}` | Deterministic age-earnings profile `κ_j`, length `J`; defaults to the standard quadratic hump peaking near mid-career, zero after retirement |
+| `income` | `IncomeProcess{T}` | Persistent idiosyncratic productivity |
+| `grid` | `HAGrid{T}` | Asset grid (`grid_type=:double_exp` packs points near the credit limit) |
+| `beta`, `sigma` | `T` | Discount factor and CRRA curvature (`sigma = 1` ⇒ log) |
+| `alpha`, `delta`, `Z` | `T` | Capital share, depreciation, TFP |
+| `n_pop` | `T` | Population growth rate |
+| `replacement` | `T` | Pension as a fraction of average gross labor income (`0` ⇒ no social security) |
+| `credit_limit` | `T` | Lower bound on assets |
+| `annuities` | `Bool` | `true` ⇒ actuarially fair annuities (survivors earn `(1+r)/s_j`, no accidental bequests); `false` ⇒ accidental bequests rebated lump-sum, solved by an inner fixed point |
+
+# Accidental bequests
+
+With `annuities = true` the assets of the deceased are absorbed by an actuarially
+fair annuity, exactly the Blanchard–Yaari device the perpetual-youth model uses,
+so the two families nest. With `annuities = false` the assets of those who die are
+rebated equally to the living, which makes the transfer a fixed point: policies
+depend on the transfer and the transfer on the policies.
+"""
+struct LifeCycleOLG{T<:AbstractFloat}
+    J::Int
+    J_retire::Int
+    survival::Vector{T}
+    earnings::Vector{T}
+    income::IncomeProcess{T}
+    grid::HAGrid{T}
+    beta::T
+    sigma::T
+    alpha::T
+    delta::T
+    Z::T
+    n_pop::T
+    replacement::T
+    credit_limit::T
+    annuities::Bool
+end
+
+"""
+    _lifecycle_earnings(J, J_retire) -> Vector{Float64}
+
+Default deterministic age-earnings profile: a quadratic hump in experience,
+normalized to a mean of one over working ages and zero thereafter. Hump-shaped
+earnings are what generate the life-cycle consumption hump.
+"""
+function _lifecycle_earnings(J::Int, J_retire::Int)
+    kappa = zeros(Float64, J)
+    n_work = min(J_retire - 1, J)
+    n_work <= 0 && return kappa
+    for j in 1:n_work
+        x = (j - 1) / max(n_work - 1, 1)
+        kappa[j] = 1.0 + 1.6 * x - 1.8 * x^2       # peaks at roughly 45% of working life
+    end
+    m = sum(@view kappa[1:n_work]) / n_work
+    m > 0 && (kappa[1:n_work] ./= m)
+    return kappa
+end
+
+"""
+    lifecycle_income(rho, sigma, n; method=:rouwenhorst) -> IncomeProcess
+
+Discretize log productivity `log e' = ρ log e + σ ε` and return the chain **in
+levels**, normalized so that `E[e] = 1`.
+
+[`rouwenhorst`](@ref) and [`tauchen`](@ref) return the grid in *logs*, symmetric
+about zero, so their mean is zero rather than one. Feeding that straight into a
+production economy makes aggregate efficiency labor collapse to zero and every
+factor price with it. This helper does the `exp`-and-normalize step, and
+[`LifeCycleOLG`](@ref) rejects any income process whose states are not positive.
+"""
+function lifecycle_income(rho::Real, sigma::Real, n::Int; method::Symbol=:rouwenhorst)
+    method in (:rouwenhorst, :tauchen) || throw(ArgumentError(
+        "`method` must be :rouwenhorst or :tauchen (got :$method)"))
+    raw = method === :tauchen ? tauchen(rho, sigma, n) : rouwenhorst(rho, sigma, n)
+    e = exp.(raw.states)
+    e ./= dot(raw.stationary_dist, e)
+    return IncomeProcess{Float64}(raw.transition, e, raw.stationary_dist, :income)
+end
+
+"""
+    lifecycle_survival(J; age0=21, makeham=0.0002, gompertz=2.7e-5, growth=0.095)
+        -> Vector{Float64}
+
+Gompertz–Makeham survival profile `s_j = exp(−μ(x))` with hazard
+`μ(x) = makeham + gompertz · exp(growth · x)` at calendar age `x = age0 + j − 1`,
+truncated by `s_J = 0`.
+
+The defaults give roughly 0.04% annual mortality at age 21 rising to about 8% at
+age 85 — steep enough that late-life mortality actually bends the consumption
+path. A flat survival probability cannot produce a life-cycle consumption hump.
+"""
+function lifecycle_survival(J::Int; age0::Real=21, makeham::Real=0.0002,
+                            gompertz::Real=2.7e-5, growth::Real=0.095)
+    J >= 2 || throw(ArgumentError("`J` must be at least 2"))
+    s = [exp(-(makeham + gompertz * exp(growth * (age0 + j - 1)))) for j in 1:J]
+    s = clamp.(Float64.(s), 0.0, 1.0)
+    s[J] = 0.0
+    return s
+end
+
+function LifeCycleOLG(; J::Int=60, J_retire::Int=45,
+                        survival::Union{Real,AbstractVector{<:Real}}=0.99,
+                        earnings::Union{Nothing,AbstractVector{<:Real}}=nothing,
+                        income::IncomeProcess{T}=lifecycle_income(0.95, 0.2, 5),
+                        a_max::Real=60.0, n_a::Int=200,
+                        beta::Real=0.97, sigma::Real=2.0,
+                        alpha::Real=0.36, delta::Real=0.06, Z::Real=1.0,
+                        n_pop::Real=0.0, replacement::Real=0.4,
+                        credit_limit::Real=0.0, annuities::Bool=true,
+                        grid_type::Symbol=:double_exp) where {T<:AbstractFloat}
+    J >= 2 || throw(ArgumentError("`J` must be at least 2 (got $J)"))
+    J_retire >= 2 || throw(ArgumentError("`J_retire` must be at least 2 (got $J_retire)"))
+    0 < beta < 1 || throw(ArgumentError("`beta` must lie in (0, 1), got $beta"))
+    sigma > 0 || throw(ArgumentError("`sigma` must be positive, got $sigma"))
+    0 < alpha < 1 || throw(ArgumentError("`alpha` must lie in (0, 1), got $alpha"))
+    0 <= delta <= 1 || throw(ArgumentError("`delta` must lie in [0, 1], got $delta"))
+    n_pop > -1 || throw(ArgumentError("`n_pop` must exceed −1, got $n_pop"))
+    replacement >= 0 || throw(ArgumentError("`replacement` must be non-negative"))
+    n_a >= 3 || throw(ArgumentError("`n_a` must be at least 3"))
+    a_max > credit_limit || throw(ArgumentError("`a_max` must exceed `credit_limit`"))
+    # `rouwenhorst`/`tauchen` return LOG states, whose mean is zero. Passing one
+    # straight in silently zeroes aggregate efficiency labor and every factor price.
+    all(>(0), income.states) || throw(ArgumentError(
+        "`income.states` must be productivity LEVELS, all strictly positive (got " *
+        "$(round.(income.states; digits=4))). `rouwenhorst`/`tauchen` return log " *
+        "states — use `lifecycle_income(rho, sigma, n)` to exponentiate and " *
+        "normalize to unit mean."))
+
+    s = if survival isa Real
+        0 < survival <= 1 || throw(ArgumentError("scalar `survival` must lie in (0, 1]"))
+        fill(T(survival), J)
+    else
+        length(survival) == J || throw(ArgumentError(
+            "`survival` has $(length(survival)) entries but J = $J"))
+        all(x -> 0 <= x <= 1, survival) || throw(ArgumentError(
+            "every survival probability must lie in [0, 1]"))
+        collect(T, survival)
+    end
+    s[J] = zero(T)                       # nobody survives the terminal age
+
+    kappa = if earnings === nothing
+        collect(T, _lifecycle_earnings(J, J_retire))
+    else
+        length(earnings) == J || throw(ArgumentError(
+            "`earnings` has $(length(earnings)) entries but J = $J"))
+        collect(T, earnings)
+    end
+
+    # Use the package's own grid builder so that `_build_transition_matrix` is fed the
+    # IDENTICAL nodes the policies were computed on. Constructing an `HAGrid` from
+    # bounds while carrying a separately-built vector would silently map the savings
+    # policy onto the wrong nodes.
+    grid = HAGrid(; assets=(Float64(credit_limit), Float64(a_max), n_a),
+                    income_states=length(income.states), grid_type=grid_type)
+
+    return LifeCycleOLG{T}(J, J_retire, s, kappa, income, grid, T(beta), T(sigma),
+                           T(alpha), T(delta), T(Z), T(n_pop), T(replacement),
+                           T(credit_limit), annuities)
+end
+
+# CRRA marginal utility and its inverse (σ = 1 ⇒ log).
+_lc_uprime(c::T, sigma::T) where {T} = c > zero(T) ? c^(-sigma) : T(Inf)
+_lc_uprime_inv(m::T, sigma::T) where {T} = m > zero(T) ? m^(-one(T) / sigma) : T(Inf)
+function _lc_utility(c::T, sigma::T) where {T}
+    c <= zero(T) && return T(-Inf)
+    return isapprox(sigma, one(T)) ? log(c) : (c^(one(T) - sigma) - one(T)) / (one(T) - sigma)
+end
+
+"""
+    _lc_interp(x, y, xi) -> yi
+
+Linear interpolation with **linear** extrapolation above the last knot and flat
+extrapolation below the first.
+
+Above the endogenous grid the consumption function is close to linear in wealth,
+so extending the last segment is far more accurate than holding it flat — and in a
+life-cycle model, where assets peak just before retirement, the top of the grid is
+exactly where households spend their highest-wealth years. Below the first knot the
+household is credit constrained and the caller uses the analytic branch instead, so
+flat is harmless there.
+"""
+function _lc_interp(x::AbstractVector{T}, y::AbstractVector{T}, xi::T) where {T<:AbstractFloat}
+    n = length(x)
+    xi <= x[1] && return y[1]
+    if xi >= x[n]
+        dx = x[n] - x[n-1]
+        dx <= zero(T) && return y[n]
+        return y[n] + (xi - x[n]) / dx * (y[n] - y[n-1])
+    end
+    k = clamp(searchsortedfirst(x, xi) - 1, 1, n - 1)
+    dx = x[k+1] - x[k]
+    dx <= zero(T) && return y[k]
+    return y[k] + (xi - x[k]) / dx * (y[k+1] - y[k])
+end
+
+# =============================================================================
+# Prices, taxes, demographics
+# =============================================================================
+
+"Competitive factor prices at capital-labor ratio `K/L`."
+function _lc_prices(m::LifeCycleOLG{T}, KL::T) where {T<:AbstractFloat}
+    r = m.alpha * m.Z * KL^(m.alpha - one(T)) - m.delta
+    w = (one(T) - m.alpha) * m.Z * KL^m.alpha
+    return (r, w)
+end
+
+"""
+    _lc_cohort_mass(m) -> Vector{T}
+
+Stationary population share of each age, `μ_j ∝ ∏_{k<j} s_k / (1+n)^{j-1}`,
+normalized to sum to one.
+"""
+function _lc_cohort_mass(m::LifeCycleOLG{T}) where {T<:AbstractFloat}
+    mu = zeros(T, m.J)
+    mu[1] = one(T)
+    for j in 2:m.J
+        mu[j] = mu[j-1] * m.survival[j-1] / (one(T) + m.n_pop)
+    end
+    s = sum(mu)
+    s > zero(T) && (mu ./= s)
+    return mu
+end
+
+"Aggregate efficiency labor supply per capita, given the cohort masses."
+function _lc_labor(m::LifeCycleOLG{T}, mu::Vector{T}) where {T<:AbstractFloat}
+    mean_e = dot(m.income.stationary_dist, m.income.states)
+    L = zero(T)
+    for j in 1:min(m.J_retire - 1, m.J)
+        L += mu[j] * m.earnings[j] * mean_e
+    end
+    return L
+end
+
+# =============================================================================
+# Backward EGM sweep over age
+# =============================================================================
+
+"""
+    lifecycle_policies(m, r, w; tau=0, pension=0, transfer=0) -> (c_pol, a_pol)
+
+Solve the household problem by **backward induction over age**: one endogenous-grid
+sweep per age, from the terminal age `J` down to age 1.
+
+At the terminal age assets are exhausted, so consumption is all of cash-on-hand
+above the credit limit. At every earlier age the Euler equation
+
+```math
+u'(c_j) = \\beta\\, s_j\\, R_j\\, E\\!\\left[u'\\!\\left(c_{j+1}(a', e')\\right) \\mid e\\right]
+```
+
+is inverted on the exogenous savings grid to give the endogenous cash-on-hand at
+which each `a'` is chosen; interpolating back onto the asset grid gives the age-`j`
+policy, and assets below the smallest endogenous point are credit constrained.
+
+`R_j` is `(1+r)/s_j` with actuarially fair annuities and `1+r` without — with
+annuities the survival probability cancels out of the Euler equation exactly, which
+is the Blanchard–Yaari result the perpetual-youth model relies on.
+
+Unlike infinite-horizon EGM this is a **finite sweep**: there is no policy fixed
+point, so there is no convergence flag here. The only fixed point in the model is
+the market-clearing price.
+
+# Returns
+- `c_pol::Array{T,3}` — consumption, `n_a × n_e × J`
+- `a_pol::Array{T,3}` — end-of-period assets, `n_a × n_e × J`
+"""
+function lifecycle_policies(m::LifeCycleOLG{T}, r::Real, w::Real;
+                            tau::Real=0.0, pension::Real=0.0,
+                            transfer::Real=0.0) where {T<:AbstractFloat}
+    a_grid = m.grid.grids[1]
+    n_a = length(a_grid)
+    e_vals = m.income.states
+    n_e = length(e_vals)
+    Pi = m.income.transition
+    a_min = m.credit_limit
+    sigma = m.sigma
+    R = one(T) + T(r)
+    wT = T(w); tauT = T(tau); penT = T(pension); trT = T(transfer)
+
+    # Gross income at age j in productivity state e (before asset income).
+    inc(j, ie) = j < m.J_retire ? (one(T) - tauT) * wT * m.earnings[j] * e_vals[ie] : penT
+
+    c_pol = zeros(T, n_a, n_e, m.J)
+    a_pol = zeros(T, n_a, n_e, m.J)
+
+    # ── Terminal age: exhaust assets ────────────────────────────────────────
+    # Households may borrow *during* life (down to `credit_limit`) but cannot die in
+    # debt, so terminal assets are `max(credit_limit, 0)` — NOT the credit limit
+    # itself, which would let them consume an unfunded windfall and break the
+    # lifetime budget constraint.
+    a_term = max(a_min, zero(T))
+    for ie in 1:n_e, i in 1:n_a
+        gross = m.annuities ? _lc_gross_return(m, r, m.J - 1) : R
+        coh = gross * a_grid[i] + inc(m.J, ie) + trT
+        c_pol[i, ie, m.J] = max(coh - a_term, T(1e-12))
+        a_pol[i, ie, m.J] = a_term
+    end
+
+    emu = zeros(T, n_a)
+    c_endo = zeros(T, n_a)
+    a_endo = zeros(T, n_a)
+
+    for j in (m.J - 1):-1:1
+        gross_next = m.annuities ? _lc_gross_return(m, r, j) : R    # return on a' saved at j
+        gross_now = m.annuities ? _lc_gross_return(m, r, j - 1) : R # return on a brought into j
+        for ie in 1:n_e
+            fill!(emu, zero(T))
+            for je in 1:n_e
+                p = Pi[ie, je]
+                p == zero(T) && continue
+                for i in 1:n_a
+                    emu[i] += p * _lc_uprime(c_pol[i, je, j+1], sigma)
+                end
+            end
+            for i in 1:n_a
+                # With annuities R_j = (1+r)/s_j, so β s_j R_j = β(1+r): survival cancels.
+                rhs = m.beta * m.survival[j] * gross_next * emu[i]
+                c_endo[i] = _lc_uprime_inv(rhs, sigma)
+                a_endo[i] = (c_endo[i] + a_grid[i] - inc(j, ie) - trT) / gross_now
+            end
+            for i in 1:n_a
+                a_val = a_grid[i]
+                coh = gross_now * a_val + inc(j, ie) + trT
+                if a_val <= a_endo[1]
+                    c_pol[i, ie, j] = max(coh - a_min, T(1e-12))
+                    a_pol[i, ie, j] = a_min
+                else
+                    cj = _lc_interp(a_endo, c_endo, a_val)
+                    cj = clamp(cj, T(1e-12), coh - a_min)
+                    c_pol[i, ie, j] = cj
+                    a_pol[i, ie, j] = clamp(coh - cj, a_min, a_grid[end])
+                end
+            end
+        end
+    end
+    return c_pol, a_pol
+end
+
+"Gross return earned on assets saved at age `j` (age 0 means the newborn's zero assets)."
+function _lc_gross_return(m::LifeCycleOLG{T}, r::Real, j::Int) where {T<:AbstractFloat}
+    R = one(T) + T(r)
+    (j < 1 || j > m.J) && return R
+    s = m.survival[j]
+    return s > zero(T) ? R / s : R
+end
+
+# =============================================================================
+# Age-extended Young histogram
+# =============================================================================
+
+"""
+    lifecycle_distribution(m, a_pol; initial_assets=0.0) -> Array{T,3}
+
+Cross-sectional distribution over `(assets, productivity, age)`, `n_a × n_e × J`,
+weighted by the stationary cohort masses so the whole array sums to one.
+
+Newborns enter at age 1 with `initial_assets` (split across the two bracketing grid
+nodes by the Young lottery) and the stationary productivity distribution. Each
+later age is the previous age's distribution pushed through that age's savings
+policy. Because survival is independent of assets and productivity, mortality
+rescales cohorts without distorting the within-cohort distribution — so the age
+dimension enters only through the cohort weights.
+"""
+function lifecycle_distribution(m::LifeCycleOLG{T}, a_pol::Array{T,3};
+                                initial_assets::Real=0.0) where {T<:AbstractFloat}
+    a_grid = m.grid.grids[1]
+    n_a = length(a_grid)
+    n_e = length(m.income.states)
+    mu = _lc_cohort_mass(m)
+
+    # Age-1 distribution: newborn assets × stationary productivity.
+    phi = zeros(T, n_a * n_e)
+    a0 = clamp(T(initial_assets), a_grid[1], a_grid[end])
+    k = clamp(searchsortedfirst(a_grid, a0) - 1, 1, n_a - 1)
+    dx = a_grid[k+1] - a_grid[k]
+    wgt = dx > zero(T) ? (a0 - a_grid[k]) / dx : zero(T)
+    for ie in 1:n_e
+        pe = T(m.income.stationary_dist[ie])
+        phi[(ie - 1) * n_a + k] += pe * (one(T) - wgt)
+        phi[(ie - 1) * n_a + k + 1] += pe * wgt
+    end
+
+    dist = zeros(T, n_a, n_e, m.J)
+    for j in 1:m.J
+        dist[:, :, j] = reshape(phi, n_a, n_e) .* mu[j]
+        j == m.J && break
+        Lambda = _build_transition_matrix(Matrix{T}(@view a_pol[:, :, j]), m.grid, m.income)
+        phi = Lambda * phi
+        s = sum(phi)
+        s > zero(T) && (phi ./= s)          # renormalize within the surviving cohort
+    end
+    return dist
+end
+
+# =============================================================================
+# LifeCycleSteadyState
+# =============================================================================
+
+"""
+    LifeCycleSteadyState{T}
+
+Stationary equilibrium of a [`LifeCycleOLG`](@ref) economy.
+
+| Field | Type | Description |
+|---|---|---|
+| `r`, `w` | `T` | Equilibrium interest rate and wage |
+| `K`, `L` | `T` | Aggregate capital (the integral of `dist` over assets) and efficiency labor, per capita |
+| `Y` | `T` | Output |
+| `tau`, `pension` | `T` | Payroll tax rate and pension benefit balancing the pay-as-you-go budget |
+| `transfer` | `T` | Lump-sum rebate of accidental bequests (`0` under annuities) |
+| `c_policy`, `a_policy` | `Array{T,3}` | `n_a × n_e × J` policies |
+| `dist` | `Array{T,3}` | `n_a × n_e × J` population distribution, sums to one |
+| `cohort_mass` | `Vector{T}` | Stationary population share by age |
+| `asset_profile` | `Vector{T}` | Mean assets held at each age |
+| `consumption_profile` | `Vector{T}` | Mean consumption at each age |
+| `income_profile` | `Vector{T}` | Mean non-asset income at each age |
+| `converged` | `Bool` | Whether the market-clearing bisection met `tol` |
+| `iterations` | `Int` | Bisection iterations used |
+| `excess_demand` | `T` | Final `K_supply − K_demand` |
+| `spec` | `LifeCycleOLG{T}` | Model solved |
+"""
+struct LifeCycleSteadyState{T<:AbstractFloat}
+    r::T
+    w::T
+    K::T
+    L::T
+    Y::T
+    tau::T
+    pension::T
+    transfer::T
+    c_policy::Array{T,3}
+    a_policy::Array{T,3}
+    dist::Array{T,3}
+    cohort_mass::Vector{T}
+    asset_profile::Vector{T}
+    consumption_profile::Vector{T}
+    income_profile::Vector{T}
+    converged::Bool
+    iterations::Int
+    excess_demand::T
+    spec::LifeCycleOLG{T}
+end
+
+"""
+    _lc_supply(m, KL; bequest_iter, bequest_tol) -> NamedTuple
+
+Household capital supply at capital-labor ratio `KL`, together with everything the
+steady-state report needs. Without annuities the accidental-bequest rebate is a
+fixed point — policies depend on the transfer and the transfer on the policies — so
+it is iterated to `bequest_tol` here, inside the price loop.
+"""
+function _lc_supply(m::LifeCycleOLG{T}, KL::T; bequest_iter::Int=50,
+                    bequest_tol::Real=1e-10) where {T<:AbstractFloat}
+    r, w = _lc_prices(m, KL)
+    mu = _lc_cohort_mass(m)
+    L = _lc_labor(m, mu)
+
+    # Pay-as-you-go social security: τ w L = pension × (retired mass).
+    mass_ret = sum(@view mu[min(m.J_retire, m.J + 1):end])
+    mass_work = sum(@view mu[1:min(m.J_retire - 1, m.J)])
+    pension = zero(T); tau = zero(T)
+    if m.replacement > zero(T) && mass_ret > zero(T) && mass_work > zero(T)
+        pension = m.replacement * w * (L / mass_work)
+        tau = pension * mass_ret / (w * L)
+    end
+
+    transfer = zero(T)
+    local c_pol, a_pol, dist
+    for _ in 1:(m.annuities ? 1 : bequest_iter)
+        c_pol, a_pol = lifecycle_policies(m, r, w; tau=tau, pension=pension,
+                                          transfer=transfer)
+        dist = lifecycle_distribution(m, a_pol)
+        m.annuities && break
+        # Assets of those who die at the end of age j, rebated to the living.
+        beq = zero(T)
+        for j in 1:m.J
+            (one(T) - m.survival[j]) == zero(T) && continue
+            beq += (one(T) - m.survival[j]) * (one(T) + r) *
+                   sum(@view(dist[:, :, j]) .* a_pol[:, :, j])
+        end
+        beq /= (one(T) + m.n_pop)
+        if abs(beq - transfer) < T(bequest_tol)
+            transfer = beq
+            break
+        end
+        transfer = T(0.5) * transfer + T(0.5) * beq       # damped, the map is a contraction
+    end
+
+    a_grid = m.grid.grids[1]
+    n_a = length(a_grid)
+    K_supply = zero(T)
+    a_prof = zeros(T, m.J); c_prof = zeros(T, m.J); y_prof = zeros(T, m.J)
+    e_vals = m.income.states
+    for j in 1:m.J
+        mj = sum(@view dist[:, :, j])
+        acc = zero(T); cc = zero(T); yy = zero(T)
+        for ie in 1:length(e_vals), i in 1:n_a
+            wgt = dist[i, ie, j]
+            wgt == zero(T) && continue
+            acc += wgt * a_grid[i]
+            cc += wgt * c_pol[i, ie, j]
+            yy += wgt * (j < m.J_retire ? (one(T) - tau) * w * m.earnings[j] * e_vals[ie]
+                                        : pension)
+        end
+        K_supply += acc
+        if mj > zero(T)
+            a_prof[j] = acc / mj; c_prof[j] = cc / mj; y_prof[j] = yy / mj
+        end
+    end
+
+    return (r=r, w=w, L=L, K_supply=K_supply, tau=tau, pension=pension,
+            transfer=transfer, c_pol=c_pol, a_pol=a_pol, dist=dist, mu=mu,
+            a_prof=a_prof, c_prof=c_prof, y_prof=y_prof)
+end
+
+"""
+    lifecycle_steady_state(m; r_bounds=(-0.02, 0.10), tol=1e-6, max_iter=60,
+                              bequest_iter=50, verbose=false) -> LifeCycleSteadyState
+
+Stationary equilibrium of a life-cycle OLG economy.
+
+Bisects on the capital-labor ratio implied by the interest rate until household
+capital supply — obtained from the backward EGM sweep and the age-extended Young
+histogram — equals firm capital demand. Raising `K/L` lowers the interest rate, so
+household supply falls while firm demand `(K/L)·L` rises: excess supply is
+decreasing in `K/L` and crosses zero once, which makes bisection globally reliable.
+
+# Arguments
+| Keyword | Type | Default | Description |
+|---|---|---|---|
+| `r_bounds` | `Tuple` | `(-0.02, 0.10)` | Interest-rate bracket, converted to a `K/L` bracket |
+| `tol` | `Real` | ``10^{-6}`` | Absolute tolerance on excess capital supply |
+| `max_iter` | `Int` | `60` | Bisection iterations |
+| `bequest_iter` | `Int` | `50` | Inner iterations for the bequest rebate (`annuities=false` only) |
+| `verbose` | `Bool` | `false` | Print bisection diagnostics |
+
+Non-convergence is reported in `converged`/`excess_demand`, never silently
+accepted: a life-cycle economy whose asset grid truncates the pre-retirement peak
+will fail to clear, and that must be visible.
+
+# Returns
+[`LifeCycleSteadyState{T}`](@ref).
+"""
+function lifecycle_steady_state(m::LifeCycleOLG{T};
+                                r_bounds::Tuple{<:Real,<:Real}=(-0.02, 0.10),
+                                tol::Real=1e-6, max_iter::Int=60,
+                                bequest_iter::Int=50,
+                                verbose::Bool=false) where {T<:AbstractFloat}
+    r_lo, r_hi = T(r_bounds[1]), T(r_bounds[2])
+    r_lo < r_hi || throw(ArgumentError("`r_bounds` must be increasing, got $r_bounds"))
+    # r = αZ(K/L)^{α−1} − δ  ⇒  K/L = (αZ / (r + δ))^{1/(1−α)}; r high ⇒ K/L low.
+    kl(rv) = (m.alpha * m.Z / (rv + m.delta))^(one(T) / (one(T) - m.alpha))
+    (r_lo + m.delta) > zero(T) || throw(ArgumentError(
+        "`r_bounds[1]` must exceed −delta = $(-m.delta) for a finite capital-labor ratio"))
+
+    # Excess capital SUPPLY as a function of K/L (increasing in K/L).
+    lo = kl(r_hi); hi = kl(r_lo)
+    res_lo = _lc_supply(m, lo; bequest_iter=bequest_iter)
+    res_hi = _lc_supply(m, hi; bequest_iter=bequest_iter)
+    f_lo = res_lo.K_supply - lo * res_lo.L
+    f_hi = res_hi.K_supply - hi * res_hi.L
+
+    best = f_lo * f_lo <= f_hi * f_hi ? res_lo : res_hi
+    best_kl = f_lo * f_lo <= f_hi * f_hi ? lo : hi
+    best_f = f_lo * f_lo <= f_hi * f_hi ? f_lo : f_hi
+    iters = 0
+    converged = false
+
+    if f_lo * f_hi <= zero(T)
+        a, b = lo, hi
+        fa = f_lo
+        for it in 1:max_iter
+            iters = it
+            mid = (a + b) / 2
+            res = _lc_supply(m, mid; bequest_iter=bequest_iter)
+            fm = res.K_supply - mid * res.L
+            if abs(fm) < abs(best_f)
+                best = res; best_kl = mid; best_f = fm
+            end
+            verbose && println("lifecycle bisection $it: K/L = $mid, excess = $fm")
+            if abs(fm) < T(tol)
+                converged = true
+                best = res; best_kl = mid; best_f = fm
+                break
+            end
+            if fa * fm <= zero(T)
+                b = mid
+            else
+                a = mid; fa = fm
+            end
+        end
+    else
+        @warn "lifecycle_steady_state: excess capital supply does not change sign on the " *
+              "requested bracket; returning the closest endpoint" r_bounds=r_bounds excess_lo=f_lo excess_hi=f_hi
+    end
+
+    # Report the capital households actually hold — the integral of the age-asset
+    # distribution — so the accounting identity holds by construction. The gap
+    # against firm demand `best_kl * best.L` is exactly `excess_demand`.
+    K = best.K_supply
+    Y = m.Z * K^m.alpha * best.L^(one(T) - m.alpha)
+    return LifeCycleSteadyState{T}(best.r, best.w, K, best.L, Y, best.tau,
+                                   best.pension, best.transfer, best.c_pol,
+                                   best.a_pol, best.dist, best.mu, best.a_prof,
+                                   best.c_prof, best.y_prof, converged, iters,
+                                   best_f, m)
+end
+
+# =============================================================================
+# Display
+# =============================================================================
+
+function Base.show(io::IO, m::LifeCycleOLG{T}) where {T}
+    print(io, "LifeCycleOLG{$T}: J=", m.J, ", retire at ", m.J_retire,
+          ", ", length(m.income.states), " income states, ",
+          m.annuities ? "annuities" : "accidental bequests")
+end
+
+function Base.show(io::IO, ss::LifeCycleSteadyState{T}) where {T}
+    print(io, "LifeCycleSteadyState{$T}: r=", round(ss.r; digits=5),
+          ", K/Y=", round(ss.K / ss.Y; digits=3),
+          ", converged=", ss.converged)
+end
+
+"""
+    report(ss::LifeCycleSteadyState)
+
+Print the stationary equilibrium: convergence, prices and aggregates, the social
+security budget, and the age profiles of assets, consumption, and income.
+"""
+function report(ss::LifeCycleSteadyState{T}) where {T}
+    io = stdout
+    m = ss.spec
+    head = Any[
+        "Converged"              ss.converged ? "Yes" : "No";
+        "Bisection iterations"   ss.iterations;
+        "Excess capital supply"  _fmt(ss.excess_demand; digits=8);
+        "Ages J"                 m.J;
+        "Retirement age"         m.J_retire;
+        "Annuities"              m.annuities ? "Yes" : "No (bequests rebated)"
+    ]
+    _pretty_table(io, head;
+        title="Life-Cycle OLG Steady State",
+        column_labels=["", "Value"],
+        alignment=[:l, :r])
+
+    agg = Any[
+        "Interest rate r"     _fmt(ss.r; digits=6);
+        "Wage w"              _fmt(ss.w; digits=6);
+        "Capital K"           _fmt(ss.K; digits=6);
+        "Labor L"             _fmt(ss.L; digits=6);
+        "Output Y"            _fmt(ss.Y; digits=6);
+        "K/Y"                 _fmt(ss.K / ss.Y; digits=6);
+        "Payroll tax τ"       _fmt(ss.tau; digits=6);
+        "Pension benefit"     _fmt(ss.pension; digits=6);
+        "Bequest transfer"    _fmt(ss.transfer; digits=6)
+    ]
+    _pretty_table(io, agg;
+        title="Prices and Aggregates",
+        column_labels=["", "Value"],
+        alignment=[:l, :r])
+
+    # Age profiles, thinned so the table stays readable for J = 60+.
+    step = max(cld(m.J, 12), 1)
+    ages = collect(1:step:m.J)
+    ages[end] == m.J || push!(ages, m.J)
+    data = Matrix{Any}(undef, length(ages), 5)
+    for (i, j) in enumerate(ages)
+        data[i, 1] = j
+        data[i, 2] = j < m.J_retire ? "work" : "retired"
+        data[i, 3] = _fmt(ss.asset_profile[j]; digits=4)
+        data[i, 4] = _fmt(ss.consumption_profile[j]; digits=4)
+        data[i, 5] = _fmt(ss.income_profile[j]; digits=4)
+    end
+    _pretty_table(io, data;
+        title="Age Profiles" * (step > 1 ? " (every $(step)th age)" : ""),
+        column_labels=["Age", "Status", "Assets", "Consumption", "Income"],
+        alignment=[:r, :l, :r, :r, :r])
+    return nothing
+end

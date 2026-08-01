@@ -1908,3 +1908,360 @@ end
         @test_throws ArgumentError estimate_reg(d, :y, [:nonexistent])
     end
 end
+
+@testset "Quantile regression, Koenker-Bassett (#361/T262)" begin
+    M = MacroEconometricModels
+    checkloss(u, t) = sum(ui -> ui * (t - (ui < 0 ? 1.0 : 0.0)), u)
+
+    @testset "check-function loss" begin
+        @test M._check_loss([1.0], 0.5) ≈ 0.5
+        @test M._check_loss([-1.0], 0.5) ≈ 0.5           # symmetric at the median
+        @test M._check_loss([1.0], 0.9) ≈ 0.9
+        @test M._check_loss([-1.0], 0.9) ≈ 0.1           # under-prediction cheap at tau=0.9
+        @test M._check_loss([0.0], 0.3) == 0.0
+        @test M._check_loss([2.0, -3.0], 0.5) ≈ 2.5      # = |u|/2 at the median
+    end
+
+    @testset "matches EXACT basic-solution enumeration" begin
+        # The Koenker-Bassett optimum interpolates k observations exactly, so on a small
+        # problem every k-subset can be enumerated for the true optimum.
+        function brute(X, y, tau)
+            n, k = size(X); best = nothing; bl = Inf
+            function rec(start, acc)
+                if length(acc) == k
+                    Xs = X[acc, :]
+                    abs(det(Xs)) < 1e-10 && return
+                    b = Xs \ y[acc]; L = checkloss(y .- X * b, tau)
+                    L < bl - 1e-12 && (bl = L; best = b)
+                    return
+                end
+                for i in start:n
+                    rec(i + 1, vcat(acc, i))
+                end
+            end
+            rec(1, Int[]); return best, bl
+        end
+        rng = Random.MersenneTwister(7)
+        for tau in (0.25, 0.5, 0.75), (n, k) in ((14, 2), (16, 3))
+            X = hcat(ones(n), randn(rng, n, k - 1))
+            y = X * ones(k) .+ randn(rng, n)
+            m = estimate_qreg(y, X, tau)
+            b_exact, L_exact = brute(X, y, tau)
+            @test vec(coef(m)) ≈ b_exact atol = 1e-6
+            @test m.objective[1] ≈ L_exact atol = 1e-8
+            @test m.objective[1] >= L_exact - 1e-10        # never below the true optimum
+            @test m.converged[1]
+        end
+    end
+
+    @testset "median regression recovers OLS on a homoskedastic Gaussian DGP" begin
+        rng = Random.MersenneTwister(11); n = 3000
+        X = hcat(ones(n), randn(rng, n), randn(rng, n))
+        y = X * [1.0, 2.0, -0.5] .+ randn(rng, n)
+        mo = estimate_reg(y, X)
+        mq = estimate_qreg(y, X, 0.5)
+        @test vec(coef(mq))[2:3] ≈ mo.beta[2:3] atol = 0.08
+        @test vec(coef(mq))[2:3] ≈ [2.0, -0.5] atol = 0.08
+        # no coordinate perturbation lowers the loss (a first-order optimality check)
+        L0 = checkloss(vec(residuals(mq)), 0.5)
+        for j in 1:3, d in (-1e-4, 1e-4)
+            b2 = copy(vec(coef(mq))); b2[j] += d
+            @test checkloss(y .- X * b2, 0.5) >= L0 - 1e-9
+        end
+        # the median fit splits the sample: about tau of the residuals are negative
+        @test isapprox(Statistics.mean(vec(residuals(mq)) .< 0), 0.5; atol=0.02)
+    end
+
+    @testset "residual sign split tracks tau" begin
+        rng = Random.MersenneTwister(31); n = 2000
+        X = hcat(ones(n), randn(rng, n))
+        y = X * [1.0, 0.5] .+ randn(rng, n)
+        for t in (0.1, 0.25, 0.5, 0.75, 0.9)
+            m = estimate_qreg(y, X, t)
+            @test isapprox(Statistics.mean(vec(residuals(m)) .< 0), t; atol=0.03)
+        end
+    end
+
+    @testset "heteroskedastic DGP fans the slopes out across quantiles" begin
+        # A location-scale DGP with a CLOSED-FORM quantile line: with x > 0 and
+        #   y = a + b x + (1 + c x) z,   z ~ N(0,1),
+        # the tau-quantile is  a + z_tau + (b + c z_tau) x, so slope(tau) = b + c z_tau
+        # is exactly monotone in tau and analytically known.
+        rng = Random.MersenneTwister(23); n = 6000
+        a0, b0, c0 = 1.0, 0.5, 0.5
+        x = 2 .* rand(rng, n); X = hcat(ones(n), x)
+        y = a0 .+ b0 .* x .+ (1.0 .+ c0 .* x) .* randn(rng, n)
+        taus = [0.1, 0.25, 0.5, 0.75, 0.9]
+        m = estimate_qreg(y, X, taus)
+        slopes = m.beta[2, :]
+        @test issorted(slopes)
+        for (j, t) in enumerate(taus)
+            z_t = Distributions.quantile(Distributions.Normal(), t)
+            @test slopes[j] ≈ b0 + c0 * z_t atol = 0.12          # closed form
+            @test m.beta[1, j] ≈ a0 + z_t atol = 0.12
+        end
+        @test slopes[end] - slopes[1] > 1.0
+        # intercepts must be increasing in tau (the quantiles cannot cross at x = 0)
+        @test issorted(m.beta[1, :])
+        @test size(m.beta) == (2, 5)
+        @test length(m.taus) == 5 && length(m.vcov_mats) == 5
+    end
+
+    @testset "standard errors agree with each other and with theory" begin
+        # For median regression with N(0,1) errors the sparsity is s(0.5) = 1/phi(0) =
+        # sqrt(2 pi), so V = 0.25 * 2pi * (X'X)^-1 and se(slope) -> sqrt(pi/2)/sqrt(n).
+        rng = Random.MersenneTwister(11); n = 3000
+        X = hcat(ones(n), randn(rng, n))
+        y = X * [1.0, 2.0] .+ randn(rng, n)
+        theory = sqrt(pi / 2) / sqrt(n)
+        m_iid = estimate_qreg(y, X, 0.5; se=:iid)
+        m_rob = estimate_qreg(y, X, 0.5; se=:robust)
+        m_bt = estimate_qreg(y, X, 0.5; se=:boot, n_boot=120,
+                             rng=Random.MersenneTwister(5))
+        for m in (m_iid, m_rob, m_bt)
+            @test vec(m.stderr)[2] ≈ theory rtol = 0.25
+            @test all(vec(m.stderr) .> 0)
+            @test all(isfinite, m.stderr)
+        end
+        @test m_iid.se_type === :iid
+        @test m_bt.se_type === :boot
+        # covariance is symmetric PSD
+        for m in (m_iid, m_rob, m_bt)
+            V = m.vcov_mats[1]
+            @test V ≈ V' atol = 1e-12
+            @test all(diag(V) .>= 0)
+        end
+    end
+
+    @testset "pseudo R1 and the objective" begin
+        rng = Random.MersenneTwister(41); n = 800
+        X = hcat(ones(n), randn(rng, n))
+        y = X * [1.0, 1.5] .+ randn(rng, n)
+        m = estimate_qreg(y, X, 0.5)
+        # Koenker-Machado R1 = 1 - V(fit)/V(intercept-only)
+        v0 = checkloss(y .- Statistics.quantile(y, 0.5), 0.5)
+        @test m.pseudo_r2[1] ≈ 1 - m.objective[1] / v0 rtol = 1e-10
+        @test 0 < m.pseudo_r2[1] < 1
+        @test m.objective[1] ≈ checkloss(vec(residuals(m)), 0.5) rtol = 1e-10
+        # an intercept-only fit has R1 = 0 and reproduces the sample quantile
+        # Odd n so the LAD median is UNIQUE: for even n the intercept-only solution is
+        # set-valued (any point between the two middle order statistics minimizes the loss).
+        rng2 = Random.MersenneTwister(42); n_odd = 801
+        y_odd = randn(rng2, n_odd)
+        m0 = estimate_qreg(y_odd, reshape(ones(n_odd), n_odd, 1), 0.5)
+        @test m0.pseudo_r2[1] ≈ 0.0 atol = 1e-8
+        @test vec(coef(m0))[1] ≈ Statistics.quantile(y_odd, 0.5) atol = 1e-6
+    end
+
+    @testset "StatsAPI interface and shapes" begin
+        rng = Random.MersenneTwister(13); n = 300
+        X = hcat(ones(n), randn(rng, n))
+        y = X * [1.0, 0.5] .+ randn(rng, n)
+        ms = estimate_qreg(y, X, 0.5)
+        mv = estimate_qreg(y, X, [0.25, 0.75])
+        @test size(coef(ms)) == (2,)                 # scalar tau ⇒ vectors
+        @test size(fitted(ms)) == (n,)
+        @test size(residuals(ms)) == (n,)
+        @test size(predict(ms, X)) == (n,)
+        @test size(coef(mv)) == (2, 2)               # vector tau ⇒ matrices
+        @test size(fitted(mv)) == (n, 2)
+        @test size(predict(mv, X)) == (n, 2)
+        @test nobs(ms) == n
+        @test fitted(ms) ≈ y .- residuals(ms)
+        @test predict(ms, X) ≈ fitted(ms)
+        @test size(vcov(ms)) == (2, 2)
+        @test length(stderror(ms)) == 2
+        @test_throws ArgumentError predict(ms, ones(n, 3))
+        io = IOBuffer(); show(io, mv); @test occursin("QuantileRegModel", String(take!(io)))
+        report(mv)
+        refs(mv)
+    end
+
+    @testset "input validation" begin
+        rng = Random.MersenneTwister(17); n = 60
+        X = hcat(ones(n), randn(rng, n)); y = randn(rng, n)
+        @test_throws ArgumentError estimate_qreg(y, X, 0.0)
+        @test_throws ArgumentError estimate_qreg(y, X, 1.0)
+        @test_throws ArgumentError estimate_qreg(y, X, -0.1)
+        @test_throws ArgumentError estimate_qreg(y, X, [0.5, 1.5])
+        @test_throws ArgumentError estimate_qreg(y, X, Float64[])
+        @test_throws ArgumentError estimate_qreg(y, X, 0.5; se=:bogus)
+        @test_throws ArgumentError estimate_qreg(y, X, 0.5; se=:boot, n_boot=0)
+        @test_throws ArgumentError estimate_qreg(y, X[1:10, :], 0.5)
+        @test_throws ArgumentError estimate_qreg(y, X, 0.5; varnames=["only_one"])
+        # Integer inputs are converted internally
+        mi = estimate_qreg(collect(1:20) .+ 0.0, hcat(ones(20), collect(1.0:20.0)), 0.5)
+        @test all(isfinite, coef(mi))
+    end
+end
+
+@testset "Regression discontinuity, CCT (#362/T263)" begin
+    M = MacroEconometricModels
+
+    @testset "kernels" begin
+        @test M._rd_kernel(0.0, :triangular) == 1.0
+        @test M._rd_kernel(0.5, :triangular) ≈ 0.5
+        @test M._rd_kernel(1.0, :triangular) == 0.0
+        @test M._rd_kernel(1.5, :triangular) == 0.0
+        @test M._rd_kernel(-0.5, :triangular) ≈ 0.5          # symmetric
+        @test M._rd_kernel(0.0, :epanechnikov) ≈ 0.75
+        @test M._rd_kernel(0.5, :uniform) == 1.0
+        @test M._rd_kernel(1.5, :uniform) == 0.0
+    end
+
+    @testset "conventional estimate equals a hand-rolled two-sided WLS" begin
+        # With a uniform kernel, p = 1 and a fixed h the estimator is just the difference of
+        # two OLS intercepts, which can be computed independently.
+        rng = Random.MersenneTwister(5); n = 800
+        x = 2 .* rand(rng, n) .- 1
+        y = (@. 1.0 + 0.8 * x + 0.7 * (x >= 0)) .+ 0.2 .* randn(rng, n)
+        h = 0.5
+        rd = estimate_rdd(y, x; cutoff=0.0, kernel=:uniform, p=1, h=h, b=h)
+        function side_intercept(mask)
+            d = x[mask]; X = hcat(ones(count(mask)), d)
+            ((X'X) \ (X' * y[mask]))[1]
+        end
+        ml = (x .< 0) .& (abs.(x) .<= h)
+        mr = (x .>= 0) .& (abs.(x) .<= h)
+        @test rd.tau_conventional ≈ side_intercept(mr) - side_intercept(ml) atol = 1e-10
+        @test rd.n_left == count(ml)
+        @test rd.n_right == count(mr)
+        @test rd.h == h
+        @test rd.design === :sharp
+        @test rd.first_stage === nothing
+    end
+
+    @testset "recovers a known sharp jump" begin
+        for tau0 in (0.0, 0.5, 1.0)
+            # A 95% CI misses the truth 5% of the time BY DESIGN, and a single
+            # bias-corrected estimate has sd ~0.05 with deviations up to 0.14 at
+            # this sample size — larger than any single-draw tolerance worth
+            # writing. Which draw you get depends on the RNG stream, which is not
+            # stable across Julia versions. So assert the two properties that are
+            # actually claimed: the interval covers at close to its nominal rate,
+            # and the estimator is centred on the true jump.
+            nrep = 15
+            n_cov = 0
+            taus = Float64[]
+            local rd
+            for s in 1:nrep
+                rng = Random.MersenneTwister(1000 * s + 7); n = 3000
+                x = 2 .* rand(rng, n) .- 1
+                y = (@. 0.5 + 1.2 * x + 0.4 * x^2 + tau0 * (x >= 0)) .+ 0.3 .* randn(rng, n)
+                rd = estimate_rdd(y, x; cutoff=0.0)
+                n_cov += rd.ci_robust[1] <= tau0 <= rd.ci_robust[2]
+                push!(taus, rd.tau_bias_corrected)
+            end
+            @test n_cov >= nrep - 3                  # nominal 95% => ~14.25/15
+            @test isapprox(Statistics.mean(taus), tau0; atol=0.06)  # measured |dev| <= 0.033
+
+            # The structural properties below hold draw by draw.
+            @test 0 < rd.h < 2                       # finite and inside the support
+            @test rd.b >= rd.h                       # the pilot is at least as wide
+            @test rd.n_left > 10 && rd.n_right > 10
+            @test rd.se_robust > 0 && rd.se_conventional > 0
+            @test isfinite(rd.pvalue_robust) && 0 <= rd.pvalue_robust <= 1
+        end
+    end
+
+    @testset "bias correction works where the bandwidth makes bias bite" begin
+        # At the MSE-optimal bandwidth the conventional estimator is already nearly unbiased,
+        # so there is nothing to correct. The CCT contribution shows up when h is large
+        # enough for the bias to dominate — which is exactly when a practitioner would be
+        # misled by the conventional interval.
+        tau0 = 0.6; reps = 60
+        for hfix in (0.6, 0.9)
+            bias_c = Float64[]; bias_b = Float64[]; cov_c = 0; cov_r = 0
+            for r in 1:reps
+                rr = Random.MersenneTwister(3000 + r); n = 2000
+                x = 2 .* rand(rr, n) .- 1
+                # curvature only on the LEFT, so the two intercept biases cannot cancel
+                y = (@. 0.5 + 1.0 * x + 4.0 * x^2 * (x < 0) + tau0 * (x >= 0)) .+
+                    0.2 .* randn(rr, n)
+                rd = estimate_rdd(y, x; cutoff=0.0, h=hfix, b=hfix * 1.5)
+                push!(bias_c, rd.tau_conventional - tau0)
+                push!(bias_b, rd.tau_bias_corrected - tau0)
+                rd.ci_conventional[1] <= tau0 <= rd.ci_conventional[2] && (cov_c += 1)
+                rd.ci_robust[1] <= tau0 <= rd.ci_robust[2] && (cov_r += 1)
+            end
+            # the correction removes essentially all of the bias (measured: +0.144 → -0.001
+            # at h = 0.6, and +0.325 → -0.000 at h = 0.9)
+            @test abs(Statistics.mean(bias_b)) < abs(Statistics.mean(bias_c)) / 5
+            @test abs(Statistics.mean(bias_b)) < 0.02
+            # the conventional interval collapses; the robust one holds its nominal level
+            @test cov_r > cov_c
+            @test cov_r / reps > 0.85
+        end
+    end
+
+    @testset "the robust standard error exceeds the conventional one" begin
+        rng = Random.MersenneTwister(7); n = 2000
+        x = 2 .* rand(rng, n) .- 1
+        y = (@. 0.5 + 1.0 * x + 1.5 * x^2 + 0.6 * (x >= 0)) .+ 0.3 .* randn(rng, n)
+        rd = estimate_rdd(y, x; cutoff=0.0)
+        # estimating the bias costs variance — that is why the robust CI is wider
+        @test rd.se_robust > rd.se_conventional
+        @test (rd.ci_robust[2] - rd.ci_robust[1]) > (rd.ci_conventional[2] - rd.ci_conventional[1])
+    end
+
+    @testset "fuzzy design recovers the local Wald ratio" begin
+        rng = Random.MersenneTwister(31); n = 6000
+        x = 2 .* rand(rng, n) .- 1
+        pr = @. 0.25 + 0.5 * (x >= 0)               # treatment probability jumps by 0.5
+        d = rand(rng, n) .< pr
+        y = (@. 0.5 + 0.8 * x + 1.0 * d) .+ 0.3 .* randn(rng, n)
+        rd = estimate_rdd(y, x; cutoff=0.0, fuzzy=Float64.(d))
+        @test rd.design === :fuzzy
+        @test rd.first_stage !== nothing
+        @test isapprox(rd.first_stage, 0.5; atol=0.12)
+        @test isapprox(rd.tau_bias_corrected, 1.0; atol=0.2)
+        @test rd.ci_robust[1] <= 1.0 <= rd.ci_robust[2]
+        # a first stage of zero is not identified
+        @test_throws ArgumentError estimate_rdd(y, x; cutoff=0.0, fuzzy=ones(n))
+    end
+
+    @testset "kernels and polynomial orders all run and agree roughly" begin
+        rng = Random.MersenneTwister(77); n = 2500
+        x = 2 .* rand(rng, n) .- 1
+        y = (@. 0.5 + 1.0 * x + 0.8 * (x >= 0)) .+ 0.25 .* randn(rng, n)
+        ests = Float64[]
+        for kern in (:triangular, :epanechnikov, :uniform), pp in (1, 2)
+            rd = estimate_rdd(y, x; cutoff=0.0, kernel=kern, p=pp)
+            @test isfinite(rd.tau_bias_corrected)
+            @test rd.kernel === kern && rd.p == pp
+            push!(ests, rd.tau_bias_corrected)
+        end
+        @test all(isapprox.(ests, 0.8; atol=0.2))
+    end
+
+    @testset "non-zero cutoff is handled by shifting, not by luck" begin
+        rng = Random.MersenneTwister(19); n = 2500
+        x = 2 .* rand(rng, n) .- 1
+        y = (@. 1.0 + 0.5 * x + 0.7 * (x >= 0.3)) .+ 0.2 .* randn(rng, n)
+        rd = estimate_rdd(y, x; cutoff=0.3)
+        @test rd.cutoff == 0.3
+        @test isapprox(rd.tau_bias_corrected, 0.7; atol=0.2)
+        # shifting the running variable and the cutoff together is the same problem
+        rd2 = estimate_rdd(y, x .- 0.3; cutoff=0.0, h=rd.h, b=rd.b)
+        rd1 = estimate_rdd(y, x; cutoff=0.3, h=rd.h, b=rd.b)
+        @test rd1.tau_conventional ≈ rd2.tau_conventional rtol = 1e-10
+        @test rd1.tau_bias_corrected ≈ rd2.tau_bias_corrected rtol = 1e-10
+    end
+
+    @testset "display and validation" begin
+        rng = Random.MersenneTwister(3); n = 600
+        x = 2 .* rand(rng, n) .- 1
+        y = (@. 0.5 * x + 0.5 * (x >= 0)) .+ 0.2 .* randn(rng, n)
+        rd = estimate_rdd(y, x; cutoff=0.0)
+        io = IOBuffer(); show(io, rd); @test occursin("RDDResult", String(take!(io)))
+        report(rd)
+        @test_throws ArgumentError estimate_rdd(y, x; cutoff=0.0, kernel=:bogus)
+        @test_throws ArgumentError estimate_rdd(y, x; cutoff=0.0, p=0)
+        @test_throws ArgumentError estimate_rdd(y, x; cutoff=0.0, level=0.0)
+        @test_throws ArgumentError estimate_rdd(y, x; cutoff=0.0, level=1.0)
+        @test_throws ArgumentError estimate_rdd(y, x[1:10]; cutoff=0.0)
+        @test_throws ArgumentError estimate_rdd(y, x; cutoff=0.0, fuzzy=ones(5))
+        @test_throws ArgumentError estimate_rdd(y, x; cutoff=99.0)     # nothing above
+        @test_throws ArgumentError estimate_rdd(y, x; cutoff=-99.0)    # nothing below
+    end
+end

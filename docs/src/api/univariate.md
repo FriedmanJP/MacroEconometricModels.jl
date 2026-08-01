@@ -48,6 +48,7 @@ ARModel
 MAModel
 ARMAModel
 ARIMAModel
+SARIMAModel
 ARIMAForecast
 ARIMAOrderSelection
 ```
@@ -61,6 +62,7 @@ estimate_ar
 estimate_ma
 estimate_arma
 estimate_arima
+estimate_sarima
 ```
 
 ### Forecasting
@@ -76,6 +78,7 @@ Order   = [:function]
 ```@docs
 select_arima_order
 auto_arima
+auto_sarima
 ic_table
 ```
 
@@ -94,6 +97,7 @@ MacroEconometricModels.StatsAPI.stderror(::ARModel)
 MacroEconometricModels.StatsAPI.stderror(::MAModel)
 MacroEconometricModels.StatsAPI.stderror(::ARMAModel)
 MacroEconometricModels.StatsAPI.stderror(::ARIMAModel)
+MacroEconometricModels.StatsAPI.stderror(::SARIMAModel)
 ```
 
 ---
@@ -304,6 +308,7 @@ HansenLinearityTest
 STARModel
 STARForecast
 MSRegModel
+MSForecast
 ```
 
 ---

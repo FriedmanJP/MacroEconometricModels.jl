@@ -24,7 +24,7 @@
 
 Build the forward filter's initial `(mean, covariance)`. Modes:
 - `:explicit`   — pass `a0`,`P0` through (caller-supplied, e.g. nowcast).
-- `:stationary` — `a0=0`; `P0` solves `P = Tt P Tt' + RQR` via `_dlyap_doubling`. Errors if `Tt` is not stable.
+- `:stationary` — `a0=0`; `P0` solves `P = Tt P Tt' + RQR` via `_dlyap` (doubling, residual-checked, Bartels-Stewart fallback). Errors if `Tt` is not stable.
 - `:diffuse`    — `a0=0`; `P0 = _diffuse_initial_covariance(Tt, RQR; kappa, tol)` (κ on the unit-root subspace, finite Lyapunov on the stationary complement). Collapses to `:stationary` when `Tt` is fully stable.
 - `:kappa`      — `a0=0`; `P0 = kappa·I` (flat large-variance prior; the bit-compat bridge for the old `1e6·I` / `10·I` / `P[1,1]=1e6` fallbacks).
 """
@@ -42,7 +42,8 @@ function _kalman_init(mode::Symbol, Tt::AbstractMatrix{T}, RQR::AbstractMatrix{T
         rho >= one(T) - T(stationary_tol) &&
             throw(ArgumentError("Kalman init :stationary but the transition is not stable " *
                 "(max|eig| = $(rho) ≥ 1); use :diffuse or :kappa."))
-        return a_init, Matrix{T}(_dlyap_doubling(Tt, RQR))
+        return a_init, Matrix{T}(_dlyap(Matrix{T}(Tt), Matrix{T}(RQR);
+                                        warn_label="Kalman :stationary init"))
     elseif mode === :diffuse
         return a_init, Matrix{T}(_diffuse_initial_covariance(Tt, RQR; kappa=T(kappa), tol=T(stationary_tol)))
     elseif mode === :kappa

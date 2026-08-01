@@ -5,8 +5,21 @@
 # Licensed under GPL-3.0-or-later. See LICENSE for details.
 
 """
-plot_result methods for nonlinear time series models (`ThresholdModel`).
+plot_result methods for nonlinear time series models (`ThresholdModel`, `STARModel`,
+`MSRegModel`), each with a `view=:diagnostics` residual figure (PLT-24).
 """
+
+# Lane-local (A5): the shared four-panel residual diagnostics for a nonlinear TS model.
+# `y` and `residuals` are effective-sample aligned, so the mean fitted is `y − residual`.
+function _nl_diag_panels(m; acf_lags::Int=0)
+    resid = Float64[Float64(v) for v in m.residuals]
+    fitted = if hasproperty(m, :y) && length(m.y) >= length(resid)
+        Float64[Float64(v) for v in @view m.y[end-length(resid)+1:end]] .- resid
+    else
+        zeros(Float64, length(resid))
+    end
+    _residual_diagnostics_panels(resid, fitted; acf_lags=acf_lags)
+end
 
 # =============================================================================
 # ThresholdModel — regime-shaded series and SSR-profile views
@@ -21,15 +34,20 @@ Visualise a fitted [`ThresholdModel`](@ref).
   (`q ≤ γ̂` vs `q > γ̂`), a shared reference line at the split.
 - `view=:ssr`: the concentrated SSR profile `S(γ)` over the threshold grid, with a
   reference line marking the SSR-minimising γ̂.
+- `view=:diagnostics`: the shared four-panel residual diagnostics (PLT-24).
 """
-function plot_result(m::ThresholdModel{T}; view::Symbol=:regimes,
+function plot_result(m::ThresholdModel{T}; view::Symbol=:regimes, acf_lags::Int=0,
                      title::String="", save_path::Union{String,Nothing}=nothing) where {T}
     if view === :regimes
         p = _plot_threshold_regimes(m; title=title)
     elseif view === :ssr
         p = _plot_threshold_ssr(m; title=title)
+    elseif view === :diagnostics
+        panels = _nl_diag_panels(m; acf_lags=acf_lags)
+        isempty(title) && (title = "Threshold Model Residual Diagnostics")
+        p = _make_plot(panels; title=title, ncols=2)
     else
-        throw(ArgumentError("Unknown view :$view for ThresholdModel; use :regimes or :ssr."))
+        throw(ArgumentError("Unknown view :$view for ThresholdModel; use :regimes, :ssr, or :diagnostics."))
     end
     save_path !== nothing && save_plot(p, save_path)
     p
@@ -96,15 +114,20 @@ Visualise a fitted [`STARModel`](@ref).
   `G(sₜ; γ̂, ĉ)` plotted against the transition variable `sₜ` (sorted), showing
   how sharply the process moves between the two regimes.
 - `view=:weights`: the transition weight `G` over the sample in time order.
+- `view=:diagnostics`: the shared four-panel residual diagnostics (PLT-24).
 """
-function plot_result(m::STARModel{T}; view::Symbol=:transition,
+function plot_result(m::STARModel{T}; view::Symbol=:transition, acf_lags::Int=0,
                      title::String="", save_path::Union{String,Nothing}=nothing) where {T}
     if view === :transition
         p = _plot_star_transition(m; title=title)
     elseif view === :weights
         p = _plot_star_weights(m; title=title)
+    elseif view === :diagnostics
+        panels = _nl_diag_panels(m; acf_lags=acf_lags)
+        isempty(title) && (title = "STAR Model Residual Diagnostics")
+        p = _make_plot(panels; title=title, ncols=2)
     else
-        throw(ArgumentError("Unknown view :$view for STARModel; use :transition or :weights."))
+        throw(ArgumentError("Unknown view :$view for STARModel; use :transition, :weights, or :diagnostics."))
     end
     save_path !== nothing && save_plot(p, save_path)
     p
@@ -159,15 +182,20 @@ Visualise a fitted [`MSRegModel`](@ref) (Markov-switching regression / MS-AR).
   `Pr(sₜ=k | ℱ_T)` over the sample as a stacked area (each layer a regime; the
   layers sum to 1 at every date), showing the inferred regime timeline.
 - `view=:filtered`: the same but for the filtered probabilities `Pr(sₜ=k | ℱₜ)`.
+- `view=:diagnostics`: the shared four-panel residual diagnostics (PLT-24).
 """
-function plot_result(m::MSRegModel{T}; view::Symbol=:probabilities,
+function plot_result(m::MSRegModel{T}; view::Symbol=:probabilities, acf_lags::Int=0,
                      title::String="", save_path::Union{String,Nothing}=nothing) where {T}
     if view === :probabilities
         p = _plot_ms_probs(m, m.smoothed_prob, "Smoothed"; title=title)
     elseif view === :filtered
         p = _plot_ms_probs(m, m.filtered_prob, "Filtered"; title=title)
+    elseif view === :diagnostics
+        panels = _nl_diag_panels(m; acf_lags=acf_lags)
+        isempty(title) && (title = "Markov-Switching Residual Diagnostics")
+        p = _make_plot(panels; title=title, ncols=2)
     else
-        throw(ArgumentError("Unknown view :$view for MSRegModel; use :probabilities or :filtered."))
+        throw(ArgumentError("Unknown view :$view for MSRegModel; use :probabilities, :filtered, or :diagnostics."))
     end
     save_path !== nothing && save_plot(p, save_path)
     p

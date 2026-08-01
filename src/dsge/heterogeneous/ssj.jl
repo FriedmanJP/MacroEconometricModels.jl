@@ -29,7 +29,16 @@ using LinearAlgebra
 # =============================================================================
 
 """
-    _ssj_outcome_vector(output_var, c_pol, a_pol) → Vector{T}
+    _ssj_needs_labor(output_var) → Bool
+
+Whether an SSJ output variable is a labor aggregate and therefore needs an hours
+policy alongside consumption and savings.
+"""
+_ssj_needs_labor(output_var::Symbol) =
+    output_var in (:N, :n, :hours, :labor, :L, :efficiency_labor)
+
+"""
+    _ssj_outcome_vector(output_var, c_pol, a_pol, n_pol=nothing, income=nothing) → Vector{T}
 
 Individual-level outcome that is aggregated to `output_var`, flattened to an
 `N = n_a·n_e` vector (column-major, income slowest — matching the transition
@@ -37,14 +46,40 @@ matrix index convention). Asset/capital/bond aggregates (`:K`, `:A`, `:B`,
 `:assets`, `:a`, `:savings`) use the savings policy `a'(a,e)`; consumption
 aggregates (`:C`, `:c`, `:consumption`) use the consumption policy `c(a,e)`.
 
+With an endogenous-labor model, pass the hours policy `n_pol` to enable the
+labor aggregates: `:N`, `:n`, `:hours` give mean hours `∫n dμ`, and `:L`
+(which also needs `income`) gives efficiency units `∫e·n dμ` — the quantity that
+enters the production function. The two coincide only when every income state
+is 1.
+
 This threads `output_var` through the aggregation (closing #240/H-16 for the SSJ
 path), replacing the old hardcoded `_aggregate(...; var_index=1)` asset-only
 aggregation.
 """
 function _ssj_outcome_vector(output_var::Symbol, c_pol::AbstractMatrix{T},
-                             a_pol::AbstractMatrix{T}) where {T<:AbstractFloat}
+                             a_pol::AbstractMatrix{T},
+                             n_pol::Union{Nothing,AbstractMatrix{T}}=nothing,
+                             income::Union{Nothing,IncomeProcess{T}}=nothing) where {T<:AbstractFloat}
     if output_var in (:C, :c, :consumption)
         return vec(c_pol)
+    elseif output_var in (:N, :n, :hours, :labor)
+        n_pol === nothing && throw(ArgumentError(
+            "_ssj_outcome_vector: output :$output_var needs an hours policy, which " *
+            "only an endogenous-labor model has (IndividualProblem(...; labor=...))."))
+        return vec(n_pol)
+    elseif output_var in (:L, :efficiency_labor)
+        (n_pol === nothing || income === nothing) && throw(ArgumentError(
+            "_ssj_outcome_vector: output :$output_var needs both an hours policy and " *
+            "the income process (efficiency units are ∫e·n dμ)."))
+        n_a, n_e = size(n_pol)
+        out = Vector{T}(undef, n_a * n_e)
+        @inbounds for j in 1:n_e
+            ej = income.states[j]
+            for i in 1:n_a
+                out[(j - 1) * n_a + i] = ej * n_pol[i, j]
+            end
+        end
+        return out
     else
         # :K, :A, :B, :assets, :a, :savings → asset/savings aggregate
         return vec(a_pol)
@@ -78,7 +113,6 @@ function _egm_backward_step(ip::IndividualProblem{T}, grid::HAGrid{T},
     Pi = income.transition
     e_vals = income.states
     r = prices[:r]
-    w = prices[:w]
 
     c_now = zeros(T, n_a, n_e)
     a_now = zeros(T, n_a, n_e)
@@ -98,8 +132,18 @@ function _egm_backward_step(ip::IndividualProblem{T}, grid::HAGrid{T},
         for i in 1:n_a
             c_endo[i] = u_prime_inv(beta * (one(T) + r) * emu[i])
         end
+        # Endogenous beginning-of-period assets. Route the non-asset income
+        # through budget_fn exactly as `_egm_solve` does (#235/H-09): the
+        # hardcoded `w*e` here silently dropped any budget offset such as `div`
+        # in `_hank1_budget`, so a single step applied to the converged
+        # `_egm_solve` policy moved it — contradicting this kernel's own
+        # docstring and differencing every SSJ Jacobian around a point that was
+        # not the steady state. budget_fn is affine in own assets, so the net
+        # income is budget_fn(0, e) and the gross return its own-asset slope.
+        net_income = ip.budget_fn(zero(T), e_vals[j], prices)
+        gross_R = ip.budget_fn(one(T), e_vals[j], prices) - net_income
         for i in 1:n_a
-            a_endo[i] = (c_endo[i] + a_grid[i] - w * e_vals[j]) / (one(T) + r)
+            a_endo[i] = (c_endo[i] + a_grid[i] - net_income) / gross_R
         end
         for i in 1:n_a
             a_val = a_grid[i]
@@ -197,7 +241,11 @@ function _ssj_jacobian(ss::HASteadyState{T}, ip::IndividualProblem{T},
     Lambda_ss = _build_transition_matrix(a_pol_ss, grid, income)
 
     # Outcome vector aggregated to output_var (savings for asset aggregates).
-    y_out_ss = _ssj_outcome_vector(output_var, c_pol_ss, a_pol_ss)
+    # Labor aggregates additionally need the hours policy, which responds to the
+    # wage — so it is recomputed at the perturbed prices inside the loop below.
+    want_labor = _ssj_needs_labor(output_var)
+    n_pol_ss = want_labor ? labor_policy(ip, grid, income, prices_ss, c_pol_ss) : nothing
+    y_out_ss = _ssj_outcome_vector(output_var, c_pol_ss, a_pol_ss, n_pol_ss, income)
 
     # ── Expectation vectors: curlyE[u] = (Λ*')^{u-1} y_out_ss ────────────────
     curlyE = Vector{Vector{T}}(undef, Th)
@@ -219,7 +267,8 @@ function _ssj_jacobian(ss::HASteadyState{T}, ip::IndividualProblem{T},
             prices_step[input_var] = prices_ss[input_var] + dx_T   # contemporaneous shock
         end
         c_now, a_now = _egm_backward_step(ip, grid, income, prices_step, c_cont)
-        y_now = _ssj_outcome_vector(output_var, c_now, a_now)
+        n_now = want_labor ? labor_policy(ip, grid, income, prices_step, c_now) : nothing
+        y_now = _ssj_outcome_vector(output_var, c_now, a_now, n_now, income)
         dY[s] = dot(y_now .- y_out_ss, D_ss) / dx_T
         Lambda_now = _build_transition_matrix(a_now, grid, income)
         dD[s] = (Lambda_now * D_ss .- Lambda_ss * D_ss) ./ dx_T
@@ -467,19 +516,32 @@ function _ssj_solve(spec::HADSGESpec{T}, ss::HASteadyState{T};
     # The bond clears in zero net supply (A_t = 0 ∀t). With an aggregate endowment
     # shock w_t (AR(1)), solve for the market-clearing rate path:
     #   H_U · dr + H_Z · dw = 0  ⟹  dr = -H_U \ (H_Z · dw).
-    # H_U = ∂A/∂r-path, H_Z = ∂A/∂w-path (both via the existing finite-difference
-    # Jacobian, which aggregates household assets). Ho-Kalman realizes the rate IRF.
+    # This is assembled as a two-block DAG (#352/T253) — a `HetBlock` household
+    # (r, w → A) feeding a `SimpleBlock` bond market (A → bond_mkt) — so the
+    # hard-wired close below is now a special case of `combine_blocks` +
+    # `ssj_jacobian` + `ssj_irf`. H_U = ∂A/∂r-path, H_Z = ∂A/∂w-path.
+    # Ho-Kalman realizes the rate IRF.
     if spec.model === :huggett
-        H_U = _ssj_jacobian(ss, spec.individual, spec.grid, spec.income,
-                            :r, :A; T_horizon=T_horizon)
-        H_Z = _ssj_jacobian(ss, spec.individual, spec.grid, spec.income,
-                            :w, :A; T_horizon=T_horizon)
+        household = HetBlock(spec, ss; inputs=[:r, :w], outputs=[:A],
+                             name=:household)
+        bond_market = SimpleBlock(x -> [x[1]];
+                                  inputs=[:A], outputs=[:bond_mkt],
+                                  ss_inputs=Dict(:A => household.ss_outputs[:A]),
+                                  name=:bond_market)
+        dag = combine_blocks(household, bond_market; name=:huggett)
+        # `target_tol=Inf`: for the zero-net-supply close the target level IS
+        # `ss.excess_demand`, which `report(ss)` already reports, so the DAG guard
+        # would only duplicate it on every solve. Hand-built DAGs keep the default.
+        gej = ssj_jacobian(dag; unknowns=[:r], targets=[:bond_mkt], shocks=[:w],
+                           T_horizon=T_horizon, target_tol=Inf)
+        H_U = gej.curlyJ[:bond_mkt][:r]
+        H_Z = gej.curlyJ[:bond_mkt][:w]
         jacobians[:H_U] = H_U
         jacobians[:H_Z] = H_Z
 
         rho = T(get(spec.het_params, :rho_e, 0.9))
         dw = T[rho^(t - 1) for t in 1:T_horizon]          # endowment-shock impulse path
-        dr = -(H_U \ (H_Z * dw))                          # clearing rate path (IRF of r)
+        dr = ssj_irf(gej, Dict(:w => dw); residual=false).paths[:r]  # clearing rate path
 
         irf_seq = [reshape([dr[t]], 1, 1) for t in 1:T_horizon]
         k = max(min(n_reduced, div(T_horizon, 2) - 1), 1)

@@ -30,6 +30,17 @@ _no_raw_exp(s)  = !occursin(r"\.\d{3,}[eE][-+]?\d", s)
 _no_blank_band(s) = !occursin("\n\n\n\n", s)
 # S8 — booleans render as Yes/No, never raw `true`/`false`, anywhere in the table.
 _no_raw_bool(s) = !occursin(r"\b(?:true|false)\b", s)
+# S8 (#407) — `cov_type` renders through `_label`, never `string(sym)`. Every label is
+# capitalized or parenthesized, so a value that is a bare lower-case internal token
+# (`cluster`, `driscoll_kraay`, `pcse`) is a raw-symbol leak.
+function _no_raw_cov_type(s)
+    for line in split(s, '\n')
+        occursin("Cov. type", line) || continue
+        val = strip(replace(line, r"^.*Cov\. type" => ""))
+        occursin(r"^[a-z][a-z0-9_]*$", val) && return false
+    end
+    return true
+end
 
 @testset "Display invariants (T176/#275)" begin
     fixtures = display_fixtures()
@@ -44,6 +55,7 @@ _no_raw_bool(s) = !occursin(r"\b(?:true|false)\b", s)
         @test _no_raw_exp(s)                # S2
         @test _no_blank_band(s)             # S7
         @test _no_raw_bool(s)               # S8
+        @test _no_raw_cov_type(s)           # S8 / #407
 
         if f.stars
             # A high-SNR estimate → the coefficient table must carry a significance star.

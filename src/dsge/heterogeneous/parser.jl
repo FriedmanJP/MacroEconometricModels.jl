@@ -529,7 +529,10 @@ chosen solution method.
 
 # Methods
 - `:ssj` — Sequence-Space Jacobian (Auclert et al. 2021). Default.
-- `:reiter` — Reiter (2009) linearization with distribution reduction.
+- `:reiter` — Reiter (2009) linearization with distribution reduction. When the
+  spec carries `distribution=:winberry`, the distribution state is the Winberry
+  (2018) moment vector (`n_income × n_moments`) instead of the SVD-compressed
+  histogram; the general-equilibrium closure is the same.
 - `:krusell_smith` — Krusell & Smith (1998) simulation with PLM regression.
 
 # Arguments
@@ -540,6 +543,7 @@ chosen solution method.
 # Keyword Arguments (passed to steady state and solver)
 - `K_init`, `r_bounds`, `max_iter`, `tol`, `verbose` — steady-state kwargs
 - `T_horizon`, `n_reduced` — SSJ/Reiter kwargs
+- `n_moments`, `n_quad` — Winberry kwargs (`method=:reiter` with `distribution=:winberry`)
 - `T_sim`, `T_burn`, `max_outer`, `rho_z`, `sigma_z` — Krusell-Smith kwargs
 
 # Returns
@@ -552,6 +556,8 @@ chosen solution method.
   *Econometrica*, 89(5), 2375–2408.
 - Reiter, M. (2009). Solving heterogeneous-agent models by projection and
   perturbation. *Journal of Economic Dynamics and Control*, 33(3), 649–665.
+- Winberry, T. (2018). A method for solving and estimating heterogeneous agent
+  macro models. *Quantitative Economics*, 9(3), 1123–1151.
 - Krusell, P., & Smith, A. A. (1998). Income and wealth heterogeneity in the
   macroeconomy. *Journal of Political Economy*, 106(5), 867–896.
 """
@@ -561,7 +567,8 @@ function solve(spec::HADSGESpec{T}; method::Symbol=:ssj,
     # Compute steady state if not supplied
     if ss === nothing
         # Extract steady-state relevant kwargs
-        ss_keys = (:K_init, :r_bounds, :max_iter, :tol, :verbose, :price_fn)
+        ss_keys = (:K_init, :r_bounds, :max_iter, :tol, :verbose, :price_fn,
+                   :n_moments, :n_quad, :grid_check, :winberry_tol)
         ss_kwargs = Dict{Symbol,Any}()
         for k in ss_keys
             if haskey(kwargs, k)
@@ -585,10 +592,20 @@ function solve(spec::HADSGESpec{T}; method::Symbol=:ssj,
         reiter_params = merge(
             Dict{Symbol,T}(k => T(v) for (k, v) in spec.aggregate_spec.param_values),
             spec.het_params)
-        G1, impact, n_red, explained, U_k = _reiter_linearize(
-            ss, spec.individual, spec.grid, spec.income; n_reduced=n_reduced,
-            model=spec.model, het_params=reiter_params
-        )
+        G1, impact, n_red, explained, U_k = if spec.distribution === :winberry
+            # Winberry (2018): identical GE closure, but the distribution state is
+            # the n_income × n_moments moment vector instead of the SVD-compressed
+            # histogram (#356/T257).
+            _winberry_linearize(
+                ss, spec.individual, spec.grid, spec.income;
+                n_moments=get(kwargs, :n_moments, 3),
+                n_quad=get(kwargs, :n_quad, 4),
+                model=spec.model, het_params=reiter_params)
+        else
+            _reiter_linearize(
+                ss, spec.individual, spec.grid, spec.income; n_reduced=n_reduced,
+                model=spec.model, het_params=reiter_params)
+        end
 
         # Build a minimal DSGESolution and HADSGESolution from Reiter output
         n_sys = size(G1, 1)

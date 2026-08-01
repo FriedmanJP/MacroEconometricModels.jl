@@ -71,7 +71,19 @@ where:
 Filtering and smoothing run through the shared kernel `_kalman_filter!` / `_rts_smoother`; the estimator maximizes the prediction-error-decomposition log-likelihood ``\sum_t \log p(y_t \mid y_{1:t-1})``.
 
 !!! note "Initialization"
-    Nonstationary states are seeded with a large-``\kappa`` approximate-diffuse prior (``P_1 = \kappa I``, ``\kappa = 10^6``), matching statsmodels' `UnobservedComponents` default. Pass `init_mode=:stationary` for a fully stationary state (Lyapunov seed) or `init_mode=:diffuse` for the kernel's exact unit-root/stationary split.
+    The default is `init_mode=:kappa`: a large-``\kappa`` approximate-diffuse prior ``P_1 = \kappa I`` with ``\kappa = 10^6`` on **every** state direction, matching statsmodels' `UnobservedComponents` default. The alternatives are
+
+    | `init_mode` | ``P_1`` |
+    |---|---|
+    | `:kappa` (default) | ``\kappa I`` on all directions |
+    | `:diffuse` | ``\kappa`` on the nonstationary subspace, the stationary Lyapunov solution elsewhere (warns when it splits) |
+    | `:stationary` | the Lyapunov solution (errors if the transition is not stable) |
+    | `:explicit` | whatever `a1`/`P1` you pass |
+
+    `:kappa` and `:diffuse` coincide only when every direction is nonstationary — a pure local level, for instance — which is why the difference is easy to miss.
+
+!!! warning "`a1` and `P1` must be supplied together"
+    Passing only one raises an `ArgumentError`. Before v0.7.2 the supplied half was silently discarded, so `StateSpaceModel(Z, H, T, Q; a1=[999.0])` quietly returned the ``\kappa``-initialized model instead of the one written. On a 150-observation random walk the two differ by three orders of magnitude in log-likelihood (``-251.8`` against ``-249637``), and the *ignored* specification is the one that looks plausible — so nothing prompted a second look (#512).
 
 ---
 

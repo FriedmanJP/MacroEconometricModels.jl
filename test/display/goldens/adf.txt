@@ -1,26 +1,26 @@
- Augmented Dickey-Fuller Unit Root Test
+Augmented Dickey-Fuller Unit Root Test
 
- Specification
+Specification
 
- H₀ Series has a unit root (non-stationary)
- H₁ Series is stationary
- Deterministic terms Constant
- Lag length N
- Observations N
+H₀ Series has a unit root (non-stationary)
+H₁ Series is stationary
+Deterministic terms Constant
+Lag length N
+Observations N
 
- Results
+Results
 
- Value
+Value
 
- Test statistic (τ) N
- P-value N
+Test statistic (τ) N
+P-value N
 
- Critical Values
+Critical Values
 
- N% N% N%
+N% N% N%
 
- N N N
+N N N
 
 
- Conclusion Fail to reject H₀ (series appears non-stationary)
- Note pN, pN, pN
+Conclusion Fail to reject H₀ (series appears non-stationary)
+Note pN, pN, pN

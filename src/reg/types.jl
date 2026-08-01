@@ -780,6 +780,17 @@ function Base.show(io::IO, m::RegModel{T}) where {T}
 
     _coef_table(io, "Coefficients", m.varnames, m.beta, stderror(m);
         dist = :t, dof_r = dof_residual(m))
+
+    # Weak-instrument guidance (T244): the Wald interval printed above is the one that
+    # fails under weak identification. Point at the Anderson-Rubin set, which does not.
+    if m.method == :iv && m.first_stage_f !== nothing && m.stock_yogo_10pct !== nothing &&
+       isfinite(m.first_stage_f) && m.first_stage_f < m.stock_yogo_10pct
+        println(io, "Weak instruments: 1st-stage F = $(_fmt(m.first_stage_f; digits=2)) is " *
+                    "below the Stock-Yogo 10% critical value $(_fmt(m.stock_yogo_10pct; digits=2)). " *
+                    "The coefficient CIs above are Wald intervals and under-cover; use " *
+                    "`anderson_rubin_ci(model)` for a weak-instrument-robust confidence set.")
+    end
+
     _sig_legend(io)
 end
 

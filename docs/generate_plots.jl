@@ -3,11 +3,23 @@
 #
 # Uses real datasets (FRED-MD, FRED-QD, Penn World Table) when available,
 # falling back to synthetic data if loading fails.
+#
+# Assets are COMMITTED to the repo (docs/src/assets/plots/) and regenerated
+# whenever plotting code changes. Every emitted asset is embedded by some docs
+# page (mostly the Visualization gallery in docs/src/plotting.md); orphan assets
+# are deleted. New/experimental dispatches are wrapped in `try_save` so a single
+# estimator failure never aborts the whole generator (mirrors the `use_real`
+# dataset fallback). The generator doubles as a plotting smoke test — it exercises
+# dispatches that unit tests may not reach.
 
 using MacroEconometricModels
 using DataFrames
 using Distributions
 using Random
+using LinearAlgebra
+using SparseArrays
+
+const MEM = MacroEconometricModels
 
 Random.seed!(42)
 
@@ -19,6 +31,16 @@ function save(name::String, p::PlotOutput)
     path = joinpath(PLOT_DIR, name)
     save_plot(p, path)
     println("  ✓ $name")
+end
+
+# Guarded save: build the plot inside `thunk` and write it under `name`; on any
+# failure, warn and continue so the generator finishes the remaining assets.
+function try_save(thunk, name::String)
+    try
+        save(name, thunk())
+    catch e
+        @warn "Skipped $name" exception=(e, catch_backtrace())
+    end
 end
 
 function _clean_rows(M::Matrix)
@@ -654,6 +676,176 @@ function main()
         dsge_hd = historical_decomposition(dsge_sol, Y_dsge_hd, [:Y, :C, :K, :A];
                                            measurement_error=fill(0.01, 4))
         save("dsge_hd.html", plot_result(dsge_hd))
+    end
+
+    # ===================================================================
+    # PLT-40 gallery — full dispatch set. Each block is guarded (try_save
+    # or a topic-level try) so one estimator failure never aborts the run.
+    # ===================================================================
+    println("\n-- PLT-40 gallery assets --")
+
+    # 54. Panel VAR — orthogonalized IRF + companion-eigenvalue stability
+    try
+        rng = MersenneTwister(7)
+        N, Tt, mm = 18, 22, 2
+        A1 = [0.35 0.05; -0.04 0.30] .+ 0.02 .* randn(rng, mm, mm)
+        dm = zeros(N * Tt, mm)
+        for i in 1:N
+            mu = randn(rng, mm); off = (i - 1) * Tt; dm[off + 1, :] = mu
+            for t in 2:Tt
+                dm[off + t, :] = mu .+ A1 * dm[off + t - 1, :] .+ 0.10 .* randn(rng, mm)
+            end
+        end
+        df_pv = DataFrame(dm, ["output", "prices"])
+        df_pv.id = repeat(1:N, inner=Tt); df_pv.time = repeat(1:Tt, outer=N)
+        pv = estimate_pvar_feols(xtset(df_pv, :id, :time), 1)
+        save("pvar_irf.html", plot_result(pv; view=:oirf, H=12))
+        save("pvar_stability.html", plot_result(pv; view=:stability))
+    catch e
+        @warn "Skipped PVAR gallery" exception=(e, catch_backtrace())
+    end
+
+    # 55. Set-identified SVAR — median response + nested identified-set band
+    try_save("svar_setid_band.html") do
+        H = 20; n = 2; nd = 300
+        draws = randn(MersenneTwister(3), nd, H, n, n) .* 0.35
+        for a in 1:nd, hh in 1:H
+            draws[a, hh, :, :] .+= 0.9 * exp(-0.14 * (hh - 1))
+        end
+        sis = MEM.SignIdentifiedSet{Float64}([randn(n, n) for _ in 1:nd], draws, nd,
+                600, nd / 600, ["output", "inflation"], ["demand", "supply"])
+        plot_result(sis)
+    end
+
+    # 56. Markov-switching SVAR — smoothed regime probabilities (stacked area)
+    try_save("ms_regime_probs.html") do
+        Tt = 140; K = 2
+        rp = zeros(Tt, K)
+        for t in 1:Tt
+            p1 = clamp(0.5 + 0.45 * sin(2π * t / 70), 0.02, 0.98)
+            rp[t, 1] = p1; rp[t, 2] = 1 - p1
+        end
+        ms = MEM.MarkovSwitchingSVARResult([1.0 0.2; 0.3 1.0], Matrix(1.0I, 2, 2),
+                [Matrix(1.0I, 2, 2), Matrix(2.0I, 2, 2)], [[1.0, 1.0], [1.5, 2.0]],
+                rp, [0.9 0.1; 0.2 0.8], -100.0, true, 25, K)
+        plot_result(ms; view=:regimes)
+    end
+
+    # 57. HA-DSGE (Krusell-Smith) — distribution IRF + inequality response
+    try
+        ha_spec = load_ha_example(:krusell_smith)
+        ha_ss   = compute_steady_state(ha_spec; r_bounds=(-0.02, 0.04), max_iter=60, tol=1e-3)
+        ha_sol  = solve(ha_spec; method=:reiter, ss=ha_ss, n_reduced=12)
+        save("ha_distribution_dynamics.html", plot_result(ha_sol; horizon=16, max_bins=50))
+        save("ha_inequality.html", plot_result(ha_sol; view=:inequality, horizon=16))
+    catch e
+        @warn "Skipped HA dynamics gallery" exception=(e, catch_backtrace())
+    end
+
+    # 58. Continuous-time Aiyagari — wealth distribution + policy functions
+    try
+        Ig = 60
+        ag = collect(range(0.0, 15.0; length=Ig))
+        gg = hcat(exp.(-0.30 .* ag), 0.6 .* exp.(-0.24 .* ag))
+        da = ag[2] - ag[1]; gg ./= (sum(gg) * da)
+        cg = hcat(0.5 .+ 0.30 .* ag, 0.7 .+ 0.30 .* ag)
+        sg = hcat(0.10 .* (8 .- ag), 0.10 .* (9 .- ag))
+        vg = -exp.(-0.10 .* hcat(ag, ag))
+        ct_ss = MEM.CTSteadyState{Float64}(0.03, 1.2, 4.0, 1.0, ag, gg, vg, cg, sg,
+                    spzeros(2Ig, 2Ig), true)
+        save("ct_distribution.html", plot_result(ct_ss; view=:distribution))
+        save("ct_policy.html", plot_result(ct_ss; view=:policy))
+    catch e
+        @warn "Skipped CT gallery" exception=(e, catch_backtrace())
+    end
+
+    # 59. Panel-regression coefficient forest (fixed effects)
+    try_save("micro_coef_forest.html") do
+        rng = MersenneTwister(61); Np, Tp = 20, 15
+        dfm = DataFrame(id=repeat(1:Np, inner=Tp), time=repeat(1:Tp, outer=Np))
+        dfm.capital = randn(rng, Np * Tp); dfm.labor = randn(rng, Np * Tp)
+        dfm.rnd = randn(rng, Np * Tp)
+        dfm.output = 0.5 .* dfm.capital .- 0.3 .* dfm.labor .+ 0.2 .* dfm.rnd .+
+                     randn(rng, Np * Tp)
+        preg = estimate_xtreg(xtset(dfm, :id, :time), :output, [:capital, :labor, :rnd])
+        plot_result(preg)
+    end
+
+    # 60. Odds-ratio forest plot (logit, log x-axis, reference at 1)
+    try_save("odds_ratio_forest.html") do
+        rng = MersenneTwister(62); nb = 500
+        Xb = hcat(randn(rng, nb), randn(rng, nb), randn(rng, nb))
+        eta = Xb * [0.8, -0.5, 0.3]
+        yb = Float64.(rand(rng, nb) .< 1 ./ (1 .+ exp.(-eta)))
+        plot_result(odds_ratio(estimate_logit(yb, Xb; varnames=["age", "income", "educ"])))
+    end
+
+    # 61. GMM moment-discrepancy bar + J-test annotation
+    try_save("gmm_moment_fit.html") do
+        rng = MersenneTwister(63); ng = 300
+        Xg = randn(rng, ng, 2); yg = Xg * [1.0, -0.5] .+ randn(rng, ng)
+        Zg = hcat(Xg, randn(rng, ng)); datag = hcat(yg, Zg)
+        mfn = (theta, d) -> d[:, 2:4] .* (d[:, 1] .- d[:, 2:3] * theta)
+        plot_result(estimate_gmm(mfn, [0.0, 0.0], datag; weighting=:two_step))
+    end
+
+    # 62. GARCH news-impact curve (view=:news_impact on the existing GARCH fit)
+    try_save("news_impact_curve.html") do
+        plot_result(gm; view=:news_impact)
+    end
+
+    # 63. Mincer-Zarnowitz forecast-efficiency line vs the 45° reference
+    try_save("mincer_zarnowitz.html") do
+        rng = MersenneTwister(64); a_mz = randn(rng, 80)
+        f_mz = 0.2 .+ 0.9 .* a_mz .+ 0.3 .* randn(rng, 80)
+        plot_result(mincer_zarnowitz(a_mz, f_mz))
+    end
+
+    # 64. State-dependent local projection — expansion vs recession IRFs
+    try_save("state_lp.html") do
+        Yl = randn(MersenneTwister(51), 160, 2)
+        statev = cumsum(randn(MersenneTwister(52), 160))
+        slp = estimate_state_lp(Yl, 1, statev, 12; lags=3, varnames=["activity", "spread"])
+        plot_result(slp)
+    end
+
+    # 65. Leontief inverse heatmap (sequential single-hue ramp + color legend)
+    try_save("leontief_heatmap.html") do
+        plot_result(leontief(load_example(:wiot)))
+    end
+
+    # 66. TimeSeriesData correlation heatmap (view=:corr)
+    try_save("data_timeseries_corr.html") do
+        if use_real
+            cv = [v for v in ["INDPRO", "CPIAUCSL", "FEDFUNDS", "UNRATE", "M2SL",
+                              "GS10", "PAYEMS", "TB3MS"] if v in varnames(fred_gm)]
+            Xc = to_matrix(apply_tcode(fred_gm[:, cv]))
+            gc = [j for j in 1:size(Xc, 2) if !any(isnan, Xc[:, j])]
+            TimeSeriesData(_clean_rows(Xc[:, gc]); varnames=cv[gc])
+        else
+            d_ts
+        end |> d -> plot_result(d; view=:corr)
+    end
+
+    # 67. Binscatter with controls (CrossSectionData view=:binscatter)
+    try_save("binscatter.html") do
+        rng = MersenneTwister(65); nbc = 800
+        xb = randn(rng, nbc); zb = randn(rng, nbc)
+        yb = 0.7 .* xb .+ 0.4 .* zb .+ randn(rng, nbc)
+        csb = CrossSectionData(hcat(xb, yb, zb); varnames=["schooling", "wage", "ability"])
+        plot_result(csb; view=:binscatter, x="schooling", y="wage", controls=["ability"])
+    end
+
+    # 68. MCMC trace (BVAR posterior draws, view=:trace)
+    try_save("mcmc_trace.html") do
+        plot_result(post; view=:trace, params=[1, 2, 3])
+    end
+
+    # 69. Prior/posterior overlap diagnostic (identification screen)
+    try_save("prior_posterior.html") do
+        o = MEM.PriorPosteriorOverlap{Float64}([:β, :α, :δ, :ρ, :σ],
+                [0.28, 0.62, 0.91, 0.45, 0.83], [false, false, true, false, true], 0.8)
+        plot_result(o)
     end
 
     println("\nDone! Generated $(length(readdir(PLOT_DIR))) HTML files in $PLOT_DIR")

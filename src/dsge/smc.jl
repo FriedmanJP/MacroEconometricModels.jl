@@ -71,6 +71,12 @@ Returns `-Inf` on any failure (non-convergence, singular matrices, etc.).
 - `solver::Symbol` — solver method (e.g., `:gensys`)
 - `solver_kwargs::NamedTuple` — additional keyword arguments for `solve`
 
+# Keywords
+- `trends::Union{Nothing,ObservationTrends{T}}` — deterministic trend terms in the
+  measurement equation. When supplied, `trendₜ` is re-evaluated at the current θ (its
+  coefficients may be model parameters) and subtracted from the data before filtering,
+  which is exactly `yₜ = d + Z sₜ + trendₜ + vₜ`.
+
 # Returns
 Closure `(θ::Vector{T}) → T` returning log-likelihood or `-Inf`.
 """
@@ -78,6 +84,7 @@ function _build_likelihood_fn(spec::DSGESpec{T}, param_names::Vector{Symbol},
                                data::AbstractMatrix, observables::Vector{Symbol},
                                measurement_error, solver::Symbol,
                                solver_kwargs::NamedTuple;
+                               trends::Union{Nothing,ObservationTrends{T}}=nothing,
                                failures::Threads.Atomic{Int}=Threads.Atomic{Int}(0),
                                evals::Threads.Atomic{Int}=Threads.Atomic{Int}(0)) where {T<:AbstractFloat}
     data = Matrix{T}(data)  # convert Adjoint/SubArray to concrete Matrix
@@ -121,8 +128,14 @@ function _build_likelihood_fn(spec::DSGESpec{T}, param_names::Vector{Symbol},
 
             ss = _build_state_space(sol, Z, d, H)
 
+            # Deterministic observation trends (T240): y_t = d + Z s_t + trend_t + v_t.
+            # Coefficients may be model parameters, so the trend is rebuilt at each θ and
+            # removed from the data before filtering (equivalent to a time-varying d).
+            data_t = trends === nothing ? data :
+                     data .- _trend_matrix(trends, new_spec.param_values, size(data, 2), T)
+
             # Evaluate Kalman log-likelihood
-            ll = _kalman_loglikelihood(ss, data)
+            ll = _kalman_loglikelihood(ss, data_t)
 
             if isfinite(ll)
                 return ll
@@ -556,6 +569,7 @@ function _smc_sample(spec::DSGESpec{T}, data::AbstractMatrix,
                       measurement_error=nothing,
                       solver::Symbol=:gensys,
                       solver_kwargs::NamedTuple=NamedTuple(),
+                      trends::Union{Nothing,ObservationTrends{T}}=nothing,
                       max_stages::Int=500, min_dphi::Real=1e-10,
                       rng::AbstractRNG=Random.default_rng()) where {T<:AbstractFloat}
     data = Matrix{T}(data)  # convert Adjoint/SubArray to concrete Matrix
@@ -567,6 +581,7 @@ function _smc_sample(spec::DSGESpec{T}, data::AbstractMatrix,
     lik_evals = Threads.Atomic{Int}(0)
     ll_fn = _build_likelihood_fn(spec, param_names, data, observables,
                                   measurement_error, solver, solver_kwargs;
+                                  trends=trends,
                                   failures=lik_failures, evals=lik_evals)
 
     # Initialize particles from prior
@@ -786,6 +801,7 @@ function _mh_sample(spec::DSGESpec{T}, data::AbstractMatrix,
                      measurement_error=nothing,
                      solver::Symbol=:gensys,
                      solver_kwargs::NamedTuple=NamedTuple(),
+                     trends::Union{Nothing,ObservationTrends{T}}=nothing,
                      rng::AbstractRNG=Random.default_rng()) where {T<:AbstractFloat}
     data = Matrix{T}(data)  # convert Adjoint/SubArray to concrete Matrix
     n_params = length(param_names)
@@ -795,6 +811,7 @@ function _mh_sample(spec::DSGESpec{T}, data::AbstractMatrix,
     lik_evals = Threads.Atomic{Int}(0)
     ll_fn = _build_likelihood_fn(spec, param_names, data, observables,
                                   measurement_error, solver, solver_kwargs;
+                                  trends=trends,
                                   failures=lik_failures, evals=lik_evals)
 
     # Transform layer: the walk runs on x (= θ untransformed, or y = T(θ)

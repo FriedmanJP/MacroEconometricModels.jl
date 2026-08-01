@@ -2,7 +2,7 @@
 
 The **Blanchard (1985) perpetual-youth** model embeds overlapping generations into an otherwise standard neoclassical growth model. Agents survive each period with probability ``\gamma`` and newborns enter with zero financial wealth, so the economy is populated by households of different ages and wealth. This generational turnover breaks the representative-agent benchmark: the equilibrium interest rate exceeds the rate of time preference, and government debt is net wealth that crowds out capital — the failure of Ricardian equivalence.
 
-The implementation is the analytically tractable discrete-time Blanchard-Yaari case with log utility and fair annuities.
+The implementation is the analytically tractable discrete-time Blanchard-Yaari case with log utility and fair annuities. For a genuine age structure — age-specific mortality, an age-earnings profile, retirement, and backward induction over age — see [True Life Cycle: Age-Dependent EGM](@ref lifecycle_olg).
 
 ## Quick Start
 
@@ -194,19 +194,102 @@ The perpetual-youth economy has a higher interest rate and lower capital than th
 
 ---
 
+## [True Life Cycle: Age-Dependent EGM](@id lifecycle_olg)
+
+Perpetual youth gives every agent the same constant survival probability, so the economy has no **age structure**: a 25-year-old and a 75-year-old face identical problems. Pension reform, demographic transition, and lifecycle inequality all turn on precisely the differences perpetual youth assumes away. [`LifeCycleOLG`](@ref) is the Auerbach–Kotlikoff / İmrohoroğlu–İmrohoroğlu–Joines alternative: agents live at most ``J`` ages, with age-specific mortality ``s_j``, a deterministic age-earnings profile ``\kappa_j``, persistent idiosyncratic productivity, and retirement onto a pay-as-you-go pension.
+
+```math
+V_j(a, e) = \max_{c,\, a' \ge \underline{a}} \; u(c) + \beta\, s_j\, E\!\left[V_{j+1}(a', e') \mid e\right],
+\qquad c + a' = R_j\, a + y_j(e)
+```
+
+where:
+- ``j = 1, \dots, J`` is age and ``s_j`` the probability of surviving to ``j+1`` (``s_J = 0``)
+- ``y_j(e) = (1-\tau) w \kappa_j e`` while working and the pension thereafter
+- ``R_j`` is the gross return on savings: ``(1+r)/s_j`` under actuarially fair annuities, ``1+r`` otherwise
+- ``\underline{a}`` is the credit limit; households may borrow during life but cannot die in debt
+
+The household problem is solved by **backward induction over age** — one endogenous-grid sweep per age, from ``J`` down to 1. This is a *finite sweep*, not a fixed point: age ``J`` is known because assets are exhausted, and every earlier age follows from the next. The only fixed point in the model is the market-clearing interest rate.
+
+!!! warning "Income processes must be in levels"
+    [`rouwenhorst`](@ref) and [`tauchen`](@ref) return the productivity grid in **logs**, symmetric about zero, so its mean is zero rather than one. Passing one straight in would zero out aggregate efficiency labor and every factor price. Use [`lifecycle_income`](@ref), which exponentiates and normalizes to unit mean; the constructor rejects any process with non-positive states.
+
+```@example olg
+lc = LifeCycleOLG(; J=40, J_retire=31, survival=0.995,
+                  income=lifecycle_income(0.95, 0.2, 3),
+                  a_max=50.0, n_a=120, beta=0.97, sigma=2.0, replacement=0.4)
+ss_lc = lifecycle_steady_state(lc; r_bounds=(-0.01, 0.10), tol=1e-6)
+report(ss_lc)
+```
+
+The equilibrium interest rate clears the capital market at a capital-output ratio near 3.1. Assets trace the classic hump: zero at birth, peaking just before retirement, then run down. The reported aggregate capital **is** the integral of the age-asset distribution, so the accounting identity holds by construction and `excess_demand` is the honest measure of how well the market clears.
+
+| Keyword | Type | Default | Description |
+|---------|------|---------|-------------|
+| `J` / `J_retire` | `Int` | `60` / `45` | Maximum age and first retired age |
+| `survival` | `Real` or `Vector` | `0.99` | Survival probabilities; a scalar is broadcast, `s_J` forced to zero |
+| `earnings` | `Vector` | hump | Deterministic age-earnings profile ``\kappa_j`` |
+| `replacement` | `Real` | `0.4` | Pension as a fraction of average labor income (`0` ⇒ no social security) |
+| `annuities` | `Bool` | `true` | Actuarially fair annuities, else accidental bequests rebated lump-sum |
+| `n_pop` | `Real` | `0.0` | Population growth rate |
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `K`, `L`, `Y` | `T` | Aggregate capital (the integral of `dist`), efficiency labor, output |
+| `dist` | `Array{T,3}` | ``n_a \times n_e \times J`` population distribution, sums to one |
+| `asset_profile`, `consumption_profile`, `income_profile` | `Vector{T}` | Means by age |
+| `excess_demand` | `T` | Market-clearing residual |
+
+### The Consumption Hump Requires Imperfect Annuitization
+
+With actuarially fair annuities survivors earn ``R_j = (1+r)/s_j``, so ``\beta s_j R_j = \beta(1+r)`` **exactly**: survival cancels out of the Euler equation and mortality cannot bend the consumption path. This is the same Blanchard–Yaari device the perpetual-youth model uses, and it is why the two families nest — but it also means an annuitized life-cycle model cannot produce a consumption hump. Switch annuities off and the Euler growth factor becomes ``(\beta s_j (1+r))^{1/\sigma}``, which falls below one once late-life mortality bites.
+
+```@example olg
+surv = lifecycle_survival(65)                       # Gompertz-Makeham mortality
+common = (J=65, J_retire=45, survival=surv, income=lifecycle_income(0.95, 0.2, 3),
+          a_max=60.0, n_a=110, beta=0.97, sigma=2.0, replacement=0.4)
+hump = lifecycle_steady_state(LifeCycleOLG(; common..., annuities=false);
+                              r_bounds=(-0.01, 0.20), tol=1e-6)
+flat = lifecycle_steady_state(LifeCycleOLG(; common..., annuities=true);
+                              r_bounds=(-0.01, 0.20), tol=1e-6)
+(hump_peak_age = argmax(hump.consumption_profile),
+ flat_peak_age = argmax(flat.consumption_profile),
+ bequest_transfer = round(hump.transfer, digits=4))
+```
+
+Without annuities consumption peaks at the retirement age and declines thereafter — the life-cycle hump. With annuities it peaks at the very last age, rising monotonically throughout, because ``\beta(1+r) > 1`` and mortality has been insured away. The accidental bequests that annuities would have absorbed are instead rebated lump-sum, which is itself a fixed point: policies depend on the transfer and the transfer on the policies.
+
+```julia
+plot_result(ss_lc)                        # age profiles + cohort mass
+plot_result(ss_lc; view=:distribution)    # mean and interquartile wealth by age
+plot_result(ss_lc; view=:policy)          # consumption policy at three ages
+```
+
+---
+
 ## Common Pitfalls
 
 1. **`γ = 1` is the representative-agent limit.** With certain survival the Blanchard correction vanishes, the interest rate equals ``1/\beta-1``, and Ricardian equivalence holds. Use ``\gamma < 1`` for genuine OLG effects.
 
 2. **Large debt and multiple roots.** The OLG consumption function can admit a second, degenerate low-capital root with an implausibly high interest rate. The solver scans from high capital downward to select the economically relevant root; very large `b` may have no high-capital equilibrium (`converged` will be `false`).
 
-3. **Log utility only.** The closed-form marginal propensity to consume ``1-\beta\gamma`` requires log utility (``\sigma = 1``). General CRRA implies a wealth- and rate-dependent propensity that this implementation does not cover.
+3. **Log utility only.** The closed-form marginal propensity to consume ``1-\beta\gamma`` requires log utility (``\sigma = 1``). General CRRA implies a wealth- and rate-dependent propensity that this implementation does not cover. This restriction applies to `BlanchardOLG` alone — [`LifeCycleOLG`](@ref) takes any CRRA curvature.
+
+4. **Life-cycle income processes must be in levels.** `rouwenhorst`/`tauchen` return log states with mean zero; use [`lifecycle_income`](@ref). The constructor rejects non-positive states rather than silently returning an economy with no labor.
+
+5. **No hump under annuities.** With actuarially fair annuities survival cancels out of the Euler equation exactly, so consumption cannot turn over no matter how steep mortality is. Set `annuities=false` (and use a realistic mortality profile such as [`lifecycle_survival`](@ref)) to generate a life-cycle consumption hump.
+
+6. **Bracket the equilibrium rate.** `lifecycle_steady_state` bisects on the capital-labor ratio and reports `converged=false` with a warning when excess capital supply does not change sign on `r_bounds`. Accidental bequests raise the equilibrium rate, so the annuity calibration's bracket is often too narrow for `annuities=false` — widen `r_bounds` rather than raising `tol`.
 
 ---
 
 ## References
 
 - Blanchard, Olivier J. 1985. "Debt, Deficits, and Finite Horizons." *Journal of Political Economy* 93 (2): 223--247. [DOI](https://doi.org/10.1086/261297)
+
+- Auerbach, Alan J., and Laurence J. Kotlikoff. 1987. *Dynamic Fiscal Policy*. Cambridge: Cambridge University Press. ISBN 978-0521303880.
+
+- İmrohoroğlu, Ayşe, Selahattin İmrohoroğlu, and Douglas H. Joines. 1995. "A Life Cycle Analysis of Social Security." *Economic Theory* 6 (1): 83--114. [DOI](https://doi.org/10.1007/BF01213942)
 
 - Yaari, Menahem E. 1965. "Uncertain Lifetime, Life Insurance, and the Theory of the Consumer." *Review of Economic Studies* 32 (2): 137--150. [DOI](https://doi.org/10.2307/2296058)
 

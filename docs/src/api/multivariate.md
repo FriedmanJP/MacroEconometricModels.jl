@@ -98,6 +98,29 @@ AbstractPrior
 
 ```@docs
 BVARPosterior
+TVPVARPosterior
+MFVARPosterior
+GLPHyperparameters
+```
+
+### Time-Varying Parameter VAR
+
+```@docs
+estimate_tvpvar
+volatility_path
+```
+
+### Mixed-Frequency VAR
+
+```@docs
+estimate_mfvar
+latent_path
+```
+
+### Hyperparameter Selection
+
+```@docs
+optimize_hyperparameters_glp
 ```
 
 ---
@@ -108,6 +131,15 @@ BVARPosterior
 AbstractForecastResult
 VARForecast
 BVARForecast
+ConditionalForecast
+ForecastCondition
+```
+
+### Conditional Forecasting
+
+```@docs
+conditional_forecast
+forecast_condition
 ```
 
 ---
@@ -248,6 +280,15 @@ Order   = [:function]
 Modules = [MacroEconometricModels]
 Pages   = ["lp/iv.jl"]
 Order   = [:function]
+```
+
+### LP-IV Weak-Instrument-Robust Inference
+
+```@docs
+montiel_olea_pflueger_f
+lp_iv_ar_band
+MontielOleaPfluegerF
+LPIVARBand
 ```
 
 ### Smooth LP (Barnichon & Brownlees 2019)

@@ -1,65 +1,65 @@
- Vector Autoregression — VAR(N)
+Vector Autoregression — VAR(N)
 
- Specification
+Specification
 
- Variables N
- Lags N
- Observations (effective) N
- Parameters per equation N
+Variables N
+Lags N
+Observations (effective) N
+Parameters per equation N
 
- Equation Summary
+Equation Summary
 
- Equation Parms RMSE R² Adj. R² F-stat
+Equation Parms RMSE R² Adj. R² F-stat
 
- yN N N N N N
- yN N N N N N
+yN N N N N N
+yN N N N N N
 
- Equation: yN
+Equation: yN
 
- Coef. Std.Err. t P>|t| CI lower CI upper
+Coef. Std.Err. t P>|t| CI lower CI upper
 
- (Intercept) N N N N N N
- yN.LN N N N N N N
- yN.LN N N N N N N
- yN.LN N N N N N N
- yN.LN N N N N N N
+(Intercept) N N N N N N
+yN.LN N N N N N N
+yN.LN N N N N N N
+yN.LN N N N N N N
+yN.LN N N N N N N
 
- Equation: yN
+Equation: yN
 
- Coef. Std.Err. t P>|t| CI lower CI upper
+Coef. Std.Err. t P>|t| CI lower CI upper
 
- (Intercept) N N N N N N
- yN.LN N N N N N N
- yN.LN N N N N N N
- yN.LN N N N N N N
- yN.LN N N N N N N
+(Intercept) N N N N N N
+yN.LN N N N N N N
+yN.LN N N N N N N
+yN.LN N N N N N N
+yN.LN N N N N N N
 
- Information Criteria
+Information Criteria
 
- Criterion Value
+Criterion Value
 
- Log-likelihood N
- AIC (per obs.) N
- BIC (per obs.) N
- HQIC (per obs.) N
+Log-likelihood N
+AIC (per obs.) N
+BIC (per obs.) N
+HQIC (per obs.) N
 
- Residual Covariance (Σ)
+Residual Covariance (Σ)
 
- yN yN
+yN yN
 
- yN N N
- yN N N
+yN N N
+yN N N
 
- Residual Correlation
+Residual Correlation
 
- yN yN
+yN yN
 
- yN N N
- yN N N
+yN N N
+yN N N
 
- Stationarity
+Stationarity
 
- Stationary Yes
- Max |λ| N
+Stationary Yes
+Max |λ| N
 
 Significance: pN, pN, pN

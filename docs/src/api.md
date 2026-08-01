@@ -145,7 +145,10 @@ Impulse response functions, forecast error variance decomposition, historical de
 | Function | Description |
 |----------|-------------|
 | `irf(model, H; ...)` | Compute impulse response functions |
+| `irf(model, H; bootstrap=:wild)` | Wild / moving-block residual bootstrap bands |
+| `irf(model, H; bias_correct=true)` | Kilian (1998) bias-corrected bootstrap bands |
 | `fevd(model, H; ...)` | Forecast error variance decomposition |
+| `generalized_fevd(model, H)` | Pesaran-Shin (1998) generalized FEVD — order-invariant, no orthogonalization |
 | `identify_cholesky(model)` | Cholesky identification |
 | `identify_sign(model; ...)` | Sign restriction identification |
 | `identify_long_run(model)` | Blanchard-Quah identification |
@@ -225,6 +228,7 @@ Convenience functions for extracting impulse responses from fitted LP models. Se
 | Function | Description |
 |----------|-------------|
 | `lp_irf(model; ...)` | Extract IRF from LPModel |
+| `lp_irf(model; ci_type=:bootstrap)` | Fixed-design wild/block bootstrap bands for LP |
 | `lp_iv_irf(model; ...)` | Extract IRF from LPIVModel |
 | `smooth_lp_irf(model; ...)` | Extract smoothed IRF |
 | `state_irf(model; ...)` | Extract state-dependent IRFs |
@@ -360,7 +364,7 @@ Publication-quality tables, display backend switching, and bibliographic referen
 | `with_min_level(f, level)` | Run `f()` with a scoped minimum log level |
 | `capture_manifest(; seed)` | Capture a reproducibility manifest (seed, threads, versions, git) |
 | `reproduce(result)` | Re-run a randomized result from its seed; returns a `ReproReport` |
-| `save_model(model, path)` | Persist a fitted model to a versioned container (needs JLD2) |
+| `save_model(model, path)` | Persist a fitted model or data container to a versioned container (needs JLD2) |
 | `load_model(path)` | Reconstruct a saved model, validating the format version |
 | `refs(model; format=...)` | Bibliographic references |
 | `refs(io, :method; format=...)` | References by method name |
@@ -402,12 +406,15 @@ Specify, solve, simulate, and estimate Dynamic Stochastic General Equilibrium mo
 | `gensys(Γ₀, Γ₁, C, Ψ, Π)` | Sims (2002) QZ decomposition solver |
 | `blanchard_kahn(ld, spec)` | Blanchard-Kahn (1980) eigenvalue counting |
 | `klein(ld, spec)` | Klein (2000) generalized Schur solver |
+| `solve(spec; sparse=true)` | Matrix-free Newton route for large sparse models (`:auto` by default) |
 | `perturbation_solver(spec; order=2)` | Higher-order perturbation solver |
-| `collocation_solver(spec; ...)` | Chebyshev collocation projection |
+| `collocation_solver(spec; ...)` | Chebyshev collocation projection (isotropic/anisotropic Smolyak, `adaptive=true` refinement) |
 | `pfi_solver(spec; ...)` | Policy function iteration |
 | `vfi_solver(spec; ...)` | Value function iteration |
-| `is_determined(sol)` | Check existence and uniqueness |
+| `is_determined(sol)` | Check existence and uniqueness (Sims 2002 rank test) |
 | `is_stable(sol)` | Check stability of solution |
+| `determinacy_region(spec; params, grids)` | Determinacy verdict over a 1- or 2-parameter grid |
+| `determinacy_boundary(m)` | Grid location of the boundary in a 1-parameter sweep |
 
 ### DSGE Simulation and Analysis
 
@@ -419,6 +426,7 @@ Specify, solve, simulate, and estimate Dynamic Stochastic General Equilibrium mo
 | `historical_decomposition(sol, data, obs)` | DSGE historical decomposition |
 | `solve_lyapunov(G1, impact)` | Unconditional covariance (Lyapunov equation) |
 | `analytical_moments(sol; lags)` | Analytical variance and autocovariances |
+| `pruned_state_space(sol)` | Pruned state-space object (shared recursion + control map) |
 | `perfect_foresight(spec; T_periods, shock_path)` | Deterministic transition path |
 
 ### DSGE Estimation
@@ -437,10 +445,35 @@ Heterogeneous-agent (Reiter/SSJ/Krusell-Smith), continuous-time (HJB/KFE), and O
 | `load_ha_example(:krusell_smith)` | Built-in HA-DSGE model specs (see [Heterogeneous Agents](dsge_ha.md)) |
 | `compute_steady_state(spec::HADSGESpec)` | HA stationary equilibrium (EGM + distribution + market clearing) |
 | `solve(spec::HADSGESpec; method=:ssj)` | HA-DSGE solution (SSJ/Reiter/Krusell-Smith) |
-| `rouwenhorst(ρ, σ, n)` / `tauchen(ρ, σ, n)` | Income process discretization |
+| `rouwenhorst(ρ, σ, n)` / `tauchen(ρ, σ, n)` | Income process discretization (`σ` = **innovation** sd; pass `sigma_is=:unconditional` for sd(y)) |
 | `distribution_irf(sol, H)` / `inequality_irf(sol, H)` | Distribution dynamics / Gini response |
 | `simulate_panel(ss; N_agents, T_periods)` | Simulate individual-level panel from HA steady state |
-| `den_haan_test(ks_sol)` | Den Haan (2010) forecast accuracy |
+| `den_haan_test(ks_sol)` / `den_haan_test(ha_sol)` | Den Haan (2010) accuracy for a Krusell-Smith PLM or an `:ssj`/`:reiter` linearization |
+| `ha_grid_diagnostics(ss)` | Asset-grid adequacy: ceiling mass, `∫a′dμ − ∫a dμ` clearing residual |
+| `adapt_ha_grid(spec, ss)` / `adaptive_asset_grid(nodes, mass)` | Re-place asset nodes by stationary-density curvature (de Boor equidistribution) |
+| `LaborSupply(; kind=:ghh, psi, frisch)` | Endogenous labor supply (GHH / separable) for an `IndividualProblem` |
+| `labor_supply(ls, w*e[, u′(c)])` / `labor_policy(ip, …)` | Intratemporal hours FOC / hours policy `n(a,e)` |
+| `HetBlock(spec, ss)` / `SimpleBlock(f; ...)` | Sequence-space blocks (household / equation) |
+| `combine_blocks(blocks...)` | Assemble blocks into a DAG (topological sort) |
+| `ssj_jacobian(model; unknowns, targets, shocks)` | General-equilibrium sequence-space Jacobian `H_U`, `H_Z` |
+| `ssj_irf(gej, dZ; order=2)` | First- and second-order sequence-space impulse responses |
+| `dcegm_solve(prob)` | DCEGM discrete-continuous choice with upper envelope (Iskhakov et al. 2017) |
+| `ct_two_asset_solve(m)` | Continuous-time two-asset household block (KMV upwind; `cost=:quadratic`/`:kinked`) |
+| `ct_two_asset_ge(m)` | Two-asset stationary general equilibrium (capital + bond market clearing) |
+| `ct_two_asset_mit(m, ge, Z_path)` | Two-asset MIT-shock transition (backward HJB / forward KFE shooting) |
+| `hand_to_mouth(sol)` / `ceiling_mass(sol)` | Poor vs wealthy hand-to-mouth shares; mass on the grid ceilings |
+| `ct_two_asset_stationarity(m)` | Whether the calibration can bound illiquid wealth (see #509) |
+| `dcegm_retirement_model(; ...)` | Canonical work/retire problem |
+| `dcegm_threshold(sol, t, d_prev, j; ...)` | Cash-on-hand at which the discrete choice switches |
+| `dcegm_simulate(sol, grid)` | Young histogram respecting the discrete choice |
+| `fit_parametric_density(moments; bounds)` | Winberry (2018) exponential family matching centered moments |
+| `parametric_density(pd, a)` / `parametric_moments(pd, nodes, weights)` | Evaluate a fitted density / invert `λ` back to moments |
+| `fit_winberry(ss; n_moments=3)` | Fit the parametric family to a Young histogram (one density per income state) |
+| `winberry_moments(dist, grid)` / `winberry_histogram(fam, grid)` | Histogram → conditional moments / family → grid rendering |
+| `winberry_quadrature(grid; n_quad=4)` | Composite Gauss-Legendre rule on the asset-grid intervals |
+| `LifeCycleOLG(; J, J_retire, ...)` | True life-cycle OLG (age-dependent EGM) |
+| `lifecycle_steady_state(m)` | Stationary equilibrium: backward age sweep + age-extended histogram |
+| `lifecycle_income(ρ, σ, n)` / `lifecycle_survival(J)` | Unit-mean level income process / Gompertz-Makeham mortality |
 
 ### Occasionally Binding Constraints (OccBin)
 
@@ -465,13 +498,20 @@ OLS, WLS, IV/2SLS, logit, probit, ordered, and multinomial estimation for cross-
 
 | Function | Description |
 |----------|-------------|
-| `estimate_reg(y, X; ...)` | OLS/WLS regression (HC0–HC3, cluster-robust SEs) |
+| `estimate_reg(y, X; ...)` | OLS/WLS regression (HC0–HC3, cluster-robust, Conley spatial SEs) |
+| `conley_se(m; coords, cutoff)` | Conley (1999) spatial HAC SEs (also `cov_type=:conley`) |
+| `estimate_qreg(y, X, tau)` | Quantile regression (Koenker-Bassett; `:iid`/`:robust`/`:boot` SEs) |
+| `estimate_rdd(y, running; cutoff)` | Sharp/fuzzy RDD with CCT robust bias-corrected inference |
 | `estimate_iv(y, X, Z; ...)` | IV/2SLS estimation |
 | `estimate_logit(y, X)` | Logit MLE via IRLS |
 | `estimate_probit(y, X)` | Probit MLE via IRLS |
 | `estimate_ologit(y, X)` | Ordered logit MLE |
 | `estimate_oprobit(y, X)` | Ordered probit MLE |
 | `estimate_mlogit(y, X)` | Multinomial logit MLE |
+| `estimate_poisson(y, X; exposure)` | Poisson regression, QMLE sandwich SEs by default |
+| `estimate_nbreg(y, X)` | Negative-Binomial-2 regression (`Var = mu + alpha*mu^2`) |
+| `dispersion_test(m::PoissonModel)` | Cameron-Trivedi (1990) overdispersion test (NB1 & NB2 forms) |
+| `incidence_rate_ratio(m)` | Incidence-rate ratios `exp(beta)` for count models |
 | `marginal_effects(m; ...)` | AME/MEM/MER with delta-method SEs |
 | `odds_ratio(m)` | Odds ratios for logit models |
 | `classification_table(m)` | Classification accuracy table |
@@ -482,6 +522,8 @@ OLS, WLS, IV/2SLS, logit, probit, ordered, and multinomial estimation for cross-
 | `harvey_test(m)` | Harvey multiplicative heteroskedasticity test |
 | `breusch_godfrey_test(m; lags)` | Breusch-Godfrey serial-correlation LM test |
 | `reset_test(m; powers)` | Ramsey RESET functional-form test |
+| `residuals(m; kind)` | Ordered/multinomial residual matrix (`:response`/`:pearson`/`:deviance`) |
+| `generalized_residuals(m)` | Ordered-model score residual (Chesher-Irish), length `n` |
 | `brant_test(m)` | Brant test for parallel regression |
 | `hausman_iia(m)` | Hausman test for IIA assumption |
 
@@ -492,6 +534,8 @@ FE, RE, FD, Between, CRE, Arellano-Bond, and Blundell-Bond panel estimators. See
 | Function | Description |
 |----------|-------------|
 | `estimate_xtreg(pd, :y, :x1, :x2; ...)` | Panel FE/RE/FD/Between/CRE/AB/BB |
+| `estimate_xtreg(pd, :y, :x; absorb=[...])` | High-dimensional FE (reghdfe-style alternating projections) |
+| `absorb_fe(y, X, fe_groups; ...)` | Absorb HDFE dimensions from raw arrays |
 | `estimate_xtiv(pd, :y, :x; ...)` | Panel IV (FE-IV/RE-IV/FD-IV/Hausman-Taylor) |
 | `estimate_xtlogit(pd, :y, :x; ...)` | Panel logit (pooled/FE/RE/CRE) |
 | `estimate_xtprobit(pd, :y, :x; ...)` | Panel probit (pooled/FE/RE/CRE) |

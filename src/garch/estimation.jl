@@ -130,7 +130,8 @@ end
 # Negative Log-Likelihoods
 # =============================================================================
 
-function _garch_negloglik(params::Vector{T}, y::Vector{T}, p::Int, q::Int) where {T}
+function _garch_negloglik(params::Vector{T}, y::Vector{T}, p::Int, q::Int;
+                          dist::Symbol=:normal) where {T}
     n = length(y)
     # Unpack: mu, log(omega), log(alpha_1..q), log(beta_1..p)
     mu = params[1]
@@ -144,10 +145,12 @@ function _garch_negloglik(params::Vector{T}, y::Vector{T}, p::Int, q::Int) where
     resid = y .- mu
     resid_sq = resid .^ 2
     h = _garch_filter(omega, alpha, beta, resid_sq)
-    _volatility_negloglik(h, resid_sq, n)
+    shape = _vol_shape_transform(params[end], dist)
+    _vol_negloglik_dist(h, resid_sq, n, dist, shape)
 end
 
-function _egarch_negloglik(params::Vector{T}, y::Vector{T}, p::Int, q::Int) where {T}
+function _egarch_negloglik(params::Vector{T}, y::Vector{T}, p::Int, q::Int;
+                           dist::Symbol=:normal) where {T}
     n = length(y)
     # Unpack: mu, omega, alpha_1..q, gamma_1..q, beta_1..p (all unconstrained)
     mu = params[1]
@@ -163,10 +166,12 @@ function _egarch_negloglik(params::Vector{T}, y::Vector{T}, p::Int, q::Int) wher
     backcast_logh = log(var(resid; corrected=false))
     h, _, _ = _egarch_filter(omega, alpha, gamma, beta, resid, backcast_logh)
     resid_sq = resid .^ 2
-    _volatility_negloglik(h, resid_sq, n)
+    shape = _vol_shape_transform(params[end], dist)
+    _vol_negloglik_dist(h, resid_sq, n, dist, shape)
 end
 
-function _gjr_negloglik(params::Vector{T}, y::Vector{T}, p::Int, q::Int) where {T}
+function _gjr_negloglik(params::Vector{T}, y::Vector{T}, p::Int, q::Int;
+                        dist::Symbol=:normal) where {T}
     n = length(y)
     # Unpack: mu, log(omega), log(alpha_1..q), log(gamma_1..q), log(beta_1..p)
     mu = params[1]
@@ -181,7 +186,8 @@ function _gjr_negloglik(params::Vector{T}, y::Vector{T}, p::Int, q::Int) where {
     resid = y .- mu
     h = _gjr_garch_filter(omega, alpha, gamma, beta, resid)
     resid_sq = resid .^ 2
-    _volatility_negloglik(h, resid_sq, n)
+    shape = _vol_shape_transform(params[end], dist)
+    _vol_negloglik_dist(h, resid_sq, n, dist, shape)
 end
 
 # =============================================================================
@@ -192,7 +198,7 @@ end
 # per-observation Gaussian log-lik contributions. ForwardDiff.jacobian of these gives the
 # n×k score matrix S; the filters are generic `where {T}` so Duals propagate.
 
-function _garch_loglik_contribs(params, y, p::Int, q::Int)
+function _garch_loglik_contribs(params, y, p::Int, q::Int; dist::Symbol=:normal)
     mu = params[1]
     omega = exp(params[2])
     alpha = exp.(params[3:2+q])
@@ -200,10 +206,10 @@ function _garch_loglik_contribs(params, y, p::Int, q::Int)
     resid = y .- mu
     rsq = resid .^ 2
     h = _garch_filter(omega, alpha, beta, rsq)
-    _volatility_loglik_contribs(h, rsq)
+    _vol_loglik_contribs_dist(h, rsq, dist, _vol_shape_transform(params[end], dist))
 end
 
-function _egarch_loglik_contribs(params, y, p::Int, q::Int)
+function _egarch_loglik_contribs(params, y, p::Int, q::Int; dist::Symbol=:normal)
     mu = params[1]
     omega = params[2]
     alpha = params[3:2+q]
@@ -213,10 +219,10 @@ function _egarch_loglik_contribs(params, y, p::Int, q::Int)
     backcast_logh = log(var(resid; corrected=false))
     h, _, _ = _egarch_filter(omega, alpha, gamma, beta, resid, backcast_logh)
     rsq = resid .^ 2
-    _volatility_loglik_contribs(h, rsq)
+    _vol_loglik_contribs_dist(h, rsq, dist, _vol_shape_transform(params[end], dist))
 end
 
-function _gjr_loglik_contribs(params, y, p::Int, q::Int)
+function _gjr_loglik_contribs(params, y, p::Int, q::Int; dist::Symbol=:normal)
     mu = params[1]
     omega = exp(params[2])
     alpha = exp.(params[3:2+q])
@@ -225,7 +231,7 @@ function _gjr_loglik_contribs(params, y, p::Int, q::Int)
     resid = y .- mu
     h = _gjr_garch_filter(omega, alpha, gamma, beta, resid)
     rsq = resid .^ 2
-    _volatility_loglik_contribs(h, rsq)
+    _vol_loglik_contribs_dist(h, rsq, dist, _vol_shape_transform(params[end], dist))
 end
 
 # =============================================================================
@@ -251,7 +257,9 @@ model = estimate_garch(y, 1, 1)
 println("Persistence: ", persistence(model))
 ```
 """
-function estimate_garch(y::AbstractVector{T}, p::Int=1, q::Int=1; method::Symbol=:mle) where {T<:AbstractFloat}
+function estimate_garch(y::AbstractVector{T}, p::Int=1, q::Int=1; method::Symbol=:mle,
+                        dist::Symbol=:normal) where {T<:AbstractFloat}
+    _vol_dist_check(dist)
     _validate_data(y, "y")
     _validate_volatility_inputs(y, p, q)
     y_vec = Vector{T}(y)
@@ -265,9 +273,12 @@ function estimate_garch(y::AbstractVector{T}, p::Int=1, q::Int=1; method::Symbol
     beta_init = fill(T(0.85) / p, p)
 
     params_init = _sanitize_init_params(vcat(mu_init, log(omega_init), log.(alpha_init), log.(beta_init)))
+    # The shape parameter of a fat-tailed innovation distribution is estimated jointly,
+    # appended at the END so every existing index slice is untouched.
+    dist === :normal || (params_init = vcat(params_init, _vol_shape_init(dist, T)))
 
     # Two-stage optimization
-    obj = params -> _garch_negloglik(params, y_vec, p, q)
+    obj = params -> _garch_negloglik(params, y_vec, p, q; dist=dist)
     result1 = Optim.optimize(obj, params_init, Optim.NelderMead(),
         Optim.Options(iterations=2000, show_trace=false))
     result = Optim.optimize(obj, Optim.minimizer(result1), Optim.LBFGS(),
@@ -278,6 +289,7 @@ function estimate_garch(y::AbstractVector{T}, p::Int=1, q::Int=1; method::Symbol
     omega = exp(params_opt[2])
     alpha = exp.(params_opt[3:2+q])
     beta = exp.(params_opt[3+q:2+q+p])
+    shape = dist === :normal ? T(NaN) : _vol_shape_transform(params_opt[end], dist)
 
     resid = y_vec .- mu
     resid_sq = resid .^ 2
@@ -285,7 +297,7 @@ function estimate_garch(y::AbstractVector{T}, p::Int=1, q::Int=1; method::Symbol
     z = resid ./ sqrt.(h)
 
     loglik = -Optim.minimum(result)
-    k = 2 + q + p
+    k = 2 + q + p + _vol_dist_nparams(dist)      # the shape counts toward AIC/BIC
     aic_val, bic_val = _compute_aic_bic(loglik, k, n)
 
     # Cache the QMLE sandwich covariance (optimization space) once; stderror
@@ -293,9 +305,11 @@ function estimate_garch(y::AbstractVector{T}, p::Int=1, q::Int=1; method::Symbol
     # Evaluated at the RECONSTRUCTED parameter vector (log∘exp of the stored
     # fields) — exactly what the per-call stderror recompute used before.
     params_cache = vcat(mu, log(omega), log.(alpha), log.(beta))
+    dist === :normal || (params_cache = vcat(params_cache, _vol_shape_inverse(shape, dist)))
     param_vcov = try
         H = _numerical_hessian(obj, params_cache)
-        S = ForwardDiff.jacobian(θ -> _garch_loglik_contribs(θ, y_vec, p, q), params_cache)
+        S = ForwardDiff.jacobian(θ -> _garch_loglik_contribs(θ, y_vec, p, q; dist=dist),
+                                 params_cache)
         Matrix{T}(_qmle_sandwich_cov(H, S))
     catch
         fill(T(NaN), k, k)
@@ -313,16 +327,17 @@ function estimate_garch(y::AbstractVector{T}, p::Int=1, q::Int=1; method::Symbol
     converged = Optim.converged(result)
     if !converged
         converged = try
-            score = ForwardDiff.jacobian(θ -> _garch_loglik_contribs(θ, y_vec, p, q), params_cache)
+            score = ForwardDiff.jacobian(θ -> _garch_loglik_contribs(θ, y_vec, p, q; dist=dist),
+                                         params_cache)
             norm(vec(sum(score; dims=1))) < T(1e-3)
         catch
             false
         end
     end
 
-    GARCHModel(y_vec, p, q, mu, omega, alpha, beta, h, z, resid, fill(mu, n),
-               loglik, aic_val, bic_val, method, converged, Optim.iterations(result),
-               param_vcov)
+    GARCHModel{T}(y_vec, p, q, mu, omega, alpha, beta, h, z, resid, fill(mu, n),
+                  loglik, aic_val, bic_val, method, converged, Optim.iterations(result),
+                  param_vcov; dist=dist, shape=shape)
 end
 
 estimate_garch(y::AbstractVector, p::Int=1, q::Int=1; kwargs...) = estimate_garch(Float64.(y), p, q; kwargs...)
@@ -402,7 +417,9 @@ model = estimate_egarch(y, 1, 1)
 println("Leverage: ", model.gamma[1])
 ```
 """
-function estimate_egarch(y::AbstractVector{T}, p::Int=1, q::Int=1; method::Symbol=:mle) where {T<:AbstractFloat}
+function estimate_egarch(y::AbstractVector{T}, p::Int=1, q::Int=1; method::Symbol=:mle,
+                        dist::Symbol=:normal) where {T<:AbstractFloat}
+    _vol_dist_check(dist)
     _validate_data(y, "y")
     _validate_volatility_inputs(y, p, q)
     y_vec = Vector{T}(y)
@@ -416,8 +433,9 @@ function estimate_egarch(y::AbstractVector{T}, p::Int=1, q::Int=1; method::Symbo
     beta_init = fill(T(0.9) / p, p)
 
     params_init = _sanitize_init_params(vcat(mu_init, omega_init, alpha_init, gamma_init, beta_init))
+    dist === :normal || (params_init = vcat(params_init, _vol_shape_init(dist, T)))
 
-    obj = params -> _egarch_negloglik(params, y_vec, p, q)
+    obj = params -> _egarch_negloglik(params, y_vec, p, q; dist=dist)
     result1 = Optim.optimize(obj, params_init, Optim.NelderMead(),
         Optim.Options(iterations=2000, show_trace=false))
     result = Optim.optimize(obj, Optim.minimizer(result1), Optim.LBFGS(),
@@ -429,29 +447,31 @@ function estimate_egarch(y::AbstractVector{T}, p::Int=1, q::Int=1; method::Symbo
     alpha = params_opt[3:2+q]
     gamma = params_opt[3+q:2+2q]
     beta = params_opt[3+2q:2+2q+p]
+    shape = dist === :normal ? T(NaN) : _vol_shape_transform(params_opt[end], dist)
 
     resid = y_vec .- mu
     backcast_logh = log(var(resid; corrected=false))
     h, z, _ = _egarch_filter(omega, alpha, gamma, beta, resid, backcast_logh)
 
     loglik = -Optim.minimum(result)
-    k = 2 + 2q + p
+    k = 2 + 2q + p + _vol_dist_nparams(dist)
     aic_val, bic_val = _compute_aic_bic(loglik, k, n)
 
     # Cache evaluated at the reconstructed parameter vector (== stored fields;
     # EGARCH params are untransformed) — matches the per-call recompute exactly
     params_cache = vcat(mu, omega, alpha, gamma, beta)
+    dist === :normal || (params_cache = vcat(params_cache, _vol_shape_inverse(shape, dist)))
     param_vcov = try
         H = _numerical_hessian(obj, params_cache)
-        S = ForwardDiff.jacobian(θ -> _egarch_loglik_contribs(θ, y_vec, p, q), params_cache)
+        S = ForwardDiff.jacobian(θ -> _egarch_loglik_contribs(θ, y_vec, p, q; dist=dist), params_cache)
         Matrix{T}(_qmle_sandwich_cov(H, S))
     catch
         fill(T(NaN), k, k)
     end
 
-    EGARCHModel(y_vec, p, q, mu, omega, alpha, gamma, beta, h, z, resid, fill(mu, n),
+    EGARCHModel{T}(y_vec, p, q, mu, omega, alpha, gamma, beta, h, z, resid, fill(mu, n),
                 loglik, aic_val, bic_val, method, Optim.converged(result), Optim.iterations(result),
-                param_vcov)
+                param_vcov; dist=dist, shape=shape)
 end
 
 estimate_egarch(y::AbstractVector, p::Int=1, q::Int=1; kwargs...) = estimate_egarch(Float64.(y), p, q; kwargs...)
@@ -519,7 +539,9 @@ model = estimate_gjr_garch(y, 1, 1)
 println("Asymmetry: ", model.gamma[1])
 ```
 """
-function estimate_gjr_garch(y::AbstractVector{T}, p::Int=1, q::Int=1; method::Symbol=:mle) where {T<:AbstractFloat}
+function estimate_gjr_garch(y::AbstractVector{T}, p::Int=1, q::Int=1; method::Symbol=:mle,
+                        dist::Symbol=:normal) where {T<:AbstractFloat}
+    _vol_dist_check(dist)
     _validate_data(y, "y")
     _validate_volatility_inputs(y, p, q)
     y_vec = Vector{T}(y)
@@ -533,8 +555,9 @@ function estimate_gjr_garch(y::AbstractVector{T}, p::Int=1, q::Int=1; method::Sy
     beta_init = fill(T(0.85) / p, p)
 
     params_init = _sanitize_init_params(vcat(mu_init, log(omega_init), log.(alpha_init), log.(gamma_init), log.(beta_init)))
+    dist === :normal || (params_init = vcat(params_init, _vol_shape_init(dist, T)))
 
-    obj = params -> _gjr_negloglik(params, y_vec, p, q)
+    obj = params -> _gjr_negloglik(params, y_vec, p, q; dist=dist)
     result1 = Optim.optimize(obj, params_init, Optim.NelderMead(),
         Optim.Options(iterations=2000, show_trace=false))
     result = Optim.optimize(obj, Optim.minimizer(result1), Optim.LBFGS(),
@@ -546,29 +569,31 @@ function estimate_gjr_garch(y::AbstractVector{T}, p::Int=1, q::Int=1; method::Sy
     alpha = exp.(params_opt[3:2+q])
     gamma = exp.(params_opt[3+q:2+2q])
     beta = exp.(params_opt[3+2q:2+2q+p])
+    shape = dist === :normal ? T(NaN) : _vol_shape_transform(params_opt[end], dist)
 
     resid = y_vec .- mu
     h = _gjr_garch_filter(omega, alpha, gamma, beta, resid)
     z = resid ./ sqrt.(h)
 
     loglik = -Optim.minimum(result)
-    k = 2 + 2q + p
+    k = 2 + 2q + p + _vol_dist_nparams(dist)
     aic_val, bic_val = _compute_aic_bic(loglik, k, n)
 
     # Cache evaluated at the reconstructed (log∘exp) parameter vector — exactly
     # what the per-call stderror recompute used before
     params_cache = vcat(mu, log(omega), log.(alpha), log.(gamma), log.(beta))
+    dist === :normal || (params_cache = vcat(params_cache, _vol_shape_inverse(shape, dist)))
     param_vcov = try
         H = _numerical_hessian(obj, params_cache)
-        S = ForwardDiff.jacobian(θ -> _gjr_loglik_contribs(θ, y_vec, p, q), params_cache)
+        S = ForwardDiff.jacobian(θ -> _gjr_loglik_contribs(θ, y_vec, p, q; dist=dist), params_cache)
         Matrix{T}(_qmle_sandwich_cov(H, S))
     catch
         fill(T(NaN), k, k)
     end
 
-    GJRGARCHModel(y_vec, p, q, mu, omega, alpha, gamma, beta, h, z, resid, fill(mu, n),
+    GJRGARCHModel{T}(y_vec, p, q, mu, omega, alpha, gamma, beta, h, z, resid, fill(mu, n),
                   loglik, aic_val, bic_val, method, Optim.converged(result), Optim.iterations(result),
-                  param_vcov)
+                  param_vcov; dist=dist, shape=shape)
 end
 
 estimate_gjr_garch(y::AbstractVector, p::Int=1, q::Int=1; kwargs...) = estimate_gjr_garch(Float64.(y), p, q; kwargs...)
