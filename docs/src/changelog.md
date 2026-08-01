@@ -6,6 +6,62 @@ output, not just documentation.
 
 ---
 
+## v0.7.2
+
+Patch release closing the last open issues in the `#407`–`#512` range: one new
+estimator family, four correctness fixes, and two API gaps. **Two reported accuracy
+numbers change** — see the correctness notes below.
+
+**New**
+
+- **Count-data regression** (`#427`, EV-19): `estimate_poisson` (IRLS on the log link,
+  Gourieroux–Monfort–Trognon pseudo-ML sandwich standard errors by default) and
+  `estimate_nbreg` (Negative-Binomial-2, fit jointly in ``(\beta, \log\alpha)``), with
+  `dispersion_test` (Cameron–Trivedi 1990), `incidence_rate_ratio`, marginal effects,
+  and `offset`/`exposure` support. Validated against R's `glm(family=poisson)` and
+  `MASS::glm.nb` to 8–10 significant digits. Zero-inflated and hurdle variants are out
+  of scope.
+- **Markov-switching fitted values and forecasts** (`#510`): `fitted`/`predict` expose
+  the regime-probability-weighted conditional mean the estimator already computed
+  (`y - fitted(m) == residuals(m)` exactly), with `probs=:filtered` for the real-time
+  weighting. `forecast(m, h)` for MS-AR and `forecast(m, X_new)` for switching
+  regressions return an exact analytic mean path with simulated mixture bands.
+- **Residuals for ordered and multinomial models** (`#507`): `residuals(m; kind=)`
+  returns the ``n \times K`` response / Pearson / deviance matrix, and
+  `generalized_residuals` the length-``n`` Chesher–Irish score residual for ordered
+  models. Note the shape differs from the binary models, which return a vector.
+
+**Correctness**
+
+- **The HA Euler-error statistic was near-zero by construction where the solution was
+  worst** (`#508`). It evaluated only at grid nodes, where EGM solves the Euler equation
+  exactly, and flat-extrapolated above ``a_{\max}`` so that truncated cells reported
+  machine-precision residuals. It is now measured off-node at cell midpoints, with
+  out-of-grid cells excluded and counted. **Every HA accuracy number moves by 2.5–3.8
+  ``\log_{10}`` units** — Krusell–Smith from ``-6.04`` to ``-2.25``, one-asset HANK from
+  ``-6.06`` to ``-2.28``, Huggett from ``-4.47`` to ``-1.94``. This is a metric-honesty
+  change, not a solver regression; `compute_steady_state(spec; euler_points=:nodes)`
+  restores the old convention and `ss.euler` carries both.
+- **The continuous-time two-asset stationarity check was inverted for the kinked cost**
+  (`#509`). In the KMV parameterization ``\chi_1`` multiplies the withdrawal, so a
+  *larger* ``\chi_1`` is more stationary; the old test certified divergent calibrations
+  (96% of mass on the ceiling) as sound. `ct_two_asset_solve` now also warns when the
+  calibration cannot bound illiquid wealth instead of returning a grid artifact with
+  `converged = true`.
+- **A lone `a1` or `P1` was silently discarded** by `StateSpaceModel` (`#512`), returning
+  a different model from the one written — and the quieter one, differing by three
+  orders of magnitude in log-likelihood. It now raises, and the explicit path validates
+  dimensions.
+- **Panel `report()` printed the raw covariance symbol** (`#407`) — `cluster` rather than
+  `Cluster-robust`. Cosmetic only; the covariance matrix and standard errors were correct.
+
+**Documentation**
+
+- Six state-space entry points documented `init_mode=:diffuse` while defaulting to
+  `:kappa` (`#512`); the docstrings now match the code, with a table of what each mode does.
+- `docs/src/dsge_ha.md` no longer claims "values below ``-3`` are standard in the
+  literature" — that survived on the node metric and does not survive the corrected one.
+
 ## v0.7.1
 
 Documentation-only patch. No public API or numerical changes.

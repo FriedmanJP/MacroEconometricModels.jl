@@ -13,7 +13,7 @@
 - **StatsAPI interface**: `coef`, `vcov`, `predict`, `confint`, `stderror`, `nobs`, `r2`
 
 ```@setup reg
-using MacroEconometricModels, Random
+using MacroEconometricModels, Random, Distributions
 Random.seed!(42)
 ```
 
@@ -1429,6 +1429,88 @@ report(heck_ml)
 
 ---
 
+## Count Data: Poisson and Negative Binomial
+
+Event counts — bank failures, patent filings, sovereign-default episodes, central-bank communication events — are nonnegative integers, often with a mass at zero. OLS on a count ignores that support and can predict negative means; the log link keeps the fit on the right scale.
+
+[`estimate_poisson`](@ref) fits
+
+```math
+E[y_i \mid x_i] = \mu_i = \exp(x_i'\beta + \text{offset}_i),
+\qquad \mathrm{Var}[y_i \mid x_i] = \mu_i,
+```
+
+where
+
+- ``y_i`` is a nonnegative integer count,
+- ``\mu_i`` is the conditional mean,
+- ``\text{offset}_i`` enters the index with coefficient fixed at 1 — pass `exposure` to set it to ``\log(\text{exposure}_i)`` and model a *rate* rather than a count.
+
+The equality of mean and variance is the Poisson model's strongest and least credible assumption. It matters far less than it appears to: the Poisson quasi-MLE is consistent for ``\beta`` whenever the *mean* is correctly specified, whatever the variance does (Gourieroux, Monfort & Trognon 1984). What breaks under overdispersion is not the point estimate but the standard error.
+
+!!! note "Why `cov_type` defaults to `:robust`"
+    `estimate_poisson` reports the Gourieroux–Monfort–Trognon sandwich ``A^{-1}BA^{-1}`` with ``A = X'\mathrm{diag}(\mu)X`` and ``B = X'\mathrm{diag}((y-\mu)^2)X`` by default. The information-matrix errors (`cov_type=:mle`) are valid *only* under equidispersion; on overdispersed data they understate uncertainty severely. In the example below the naive errors are about 40 % too small.
+
+**Poisson with robust errors.** `report()` shows the log-likelihood, the deviance against the intercept-only null, and the coefficient table:
+
+```@example reg
+n = 400
+Xc = hcat(ones(n), randn(n), Float64.(rand(n) .< 0.4))
+mu_true = exp.(0.5 .+ 0.6 .* Xc[:, 2] .- 0.4 .* Xc[:, 3])
+y_cnt = Float64.(rand.(Poisson.(mu_true)))
+pois = estimate_poisson(y_cnt, Xc; varnames=["const", "x1", "x2"])
+report(pois)
+```
+
+Coefficients are semi-elasticities: ``\beta_j`` is the proportional change in the expected count per unit of ``x_j``. [`incidence_rate_ratio`](@ref) exponentiates them into the multiplicative form most readers prefer, with delta-method standard errors and confidence intervals formed on the log scale:
+
+```@example reg
+report(incidence_rate_ratio(pois))
+```
+
+**Testing for overdispersion.** [`dispersion_test`](@ref) runs the Cameron & Trivedi (1990) auxiliary regression of ``z_i = [(y_i-\hat\mu_i)^2 - y_i]/\hat\mu_i`` on ``\hat\mu_i`` (the NB2 alternative ``\mathrm{Var} = \mu + \alpha\mu^2``) and on a constant (the NB1 alternative ``\mathrm{Var} = (1+\alpha)\mu``). A significantly positive ``\hat\alpha`` rejects equidispersion:
+
+```@example reg
+overdisp = 0.5
+y_od = Float64.(rand.(NegativeBinomial.(1 / overdisp, 1 ./ (1 .+ overdisp .* mu_true))))
+report(dispersion_test(estimate_poisson(y_od, Xc)))
+```
+
+**Negative Binomial 2.** When the test fires, [`estimate_nbreg`](@ref) keeps the same mean but lets the variance grow quadratically:
+
+```math
+E[y_i \mid x_i] = \mu_i, \qquad \mathrm{Var}[y_i \mid x_i] = \mu_i + \alpha\mu_i^2 .
+```
+
+``\alpha`` is estimated jointly with ``\beta`` in the ``(\beta, \log\alpha)`` parameterization, so it is positive by construction, and is reported with its own delta-method standard error. ``\alpha \to 0`` is the Poisson limit.
+
+```@example reg
+nb = estimate_nbreg(y_od, Xc; varnames=["const", "x1", "x2"])
+report(nb)
+```
+
+The coefficients move little relative to Poisson — both are consistent for the mean — but the standard errors widen to reflect the true variance.
+
+!!! warning "R reports `theta`, not `alpha`"
+    `MASS::glm.nb` parameterizes the same model by ``\theta = 1/\alpha``. Invert before comparing. The coefficient standard errors also follow a different convention: `glm.nb` computes them with ``\theta`` held fixed, whereas `estimate_nbreg` uses the ``(\beta,\beta)`` block of the inverse joint ``(\beta, \log\alpha)`` Hessian, which charges for ``\alpha`` having been estimated. The expected information is block diagonal (Lawless 1987), so the two agree asymptotically.
+
+**Marginal effects.** A count-model coefficient is a semi-elasticity, not a marginal effect. [`marginal_effects`](@ref) returns ``\partial E[y]/\partial x_j = \beta_j \mu_i`` averaged over the sample for continuous regressors, and the discrete change ``E[y \mid x_j{=}1] - E[y \mid x_j{=}0]`` for binary ones:
+
+```@example reg
+report(marginal_effects(pois))
+```
+
+| Keyword | Type | Default | Description |
+|---|---|---|---|
+| `offset` | `AbstractVector` | `nothing` | Added to the index with coefficient 1 |
+| `exposure` | `AbstractVector` | `nothing` | Strictly positive exposure; enters as `log(exposure)` |
+| `cov_type` | `Symbol` | `:robust` | `:robust` (QMLE sandwich), `:mle`, `:hc1`, `:hc2`, `:hc3`, `:cluster` |
+| `clusters` | `AbstractVector` | `nothing` | Cluster assignments, required for `:cluster` |
+
+Zero-inflated and hurdle models are not implemented.
+
+---
+
 ## Robust Regression: M- and MM-Estimation
 
 Ordinary least squares breaks down under outliers: a single gross error, given full weight by the squared-error loss, can dominate the fit. Robust regression bounds each observation's influence. [`estimate_robust`](@ref) implements two classical strategies.
@@ -1675,7 +1757,21 @@ The OLS estimate of the return to education is biased upward because ability is 
 - Friedman, J., Hastie, T., & Tibshirani, R. (2010). Regularization Paths for Generalized Linear Models via Coordinate Descent.
   *Journal of Statistical Software*, 33(1), 1-22. [DOI](https://doi.org/10.18637/jss.v033.i01)
 
+- Cameron, A. C., & Trivedi, P. K. (1986). Econometric Models Based on Count Data: Comparisons and Applications of Some Estimators and Tests.
+  *Journal of Applied Econometrics*, 1(1), 29-53. [DOI](https://doi.org/10.1002/jae.3950010104)
+
+- Cameron, A. C., & Trivedi, P. K. (1990). Regression-Based Tests for Overdispersion in the Poisson Model.
+  *Journal of Econometrics*, 46(3), 347-364. [DOI](https://doi.org/10.1016/0304-4076(90)90014-K)
+
+- Cameron, A. C., & Trivedi, P. K. (2013). *Regression Analysis of Count Data*. 2nd ed. Cambridge: Cambridge University Press. [DOI](https://doi.org/10.1017/CBO9781139013567)
+
+- Gourieroux, C., Monfort, A., & Trognon, A. (1984). Pseudo Maximum Likelihood Methods: Applications to Poisson Models.
+  *Econometrica*, 52(3), 701-720. [DOI](https://doi.org/10.2307/1913472)
+
 - Greene, W. H. (2018). *Econometric Analysis*. 8th ed. New York: Pearson. ISBN 978-0-13-446136-6.
+
+- Lawless, J. F. (1987). Negative Binomial and Mixed Poisson Regression.
+  *The Canadian Journal of Statistics*, 15(3), 209-225. [DOI](https://doi.org/10.2307/3314912)
 
 - Hoerl, A. E., & Kennard, R. W. (1970). Ridge Regression: Biased Estimation for Nonorthogonal Problems.
   *Technometrics*, 12(1), 55-67. [DOI](https://doi.org/10.1080/00401706.1970.10488634)

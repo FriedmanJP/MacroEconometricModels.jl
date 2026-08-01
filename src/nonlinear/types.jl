@@ -366,6 +366,30 @@ struct STARForecast{T<:AbstractFloat} <: AbstractForecastResult{T}
     reps::Int
 end
 
+"""
+    MSForecast{T} <: AbstractForecastResult{T}
+
+Multi-step forecast of a Markov-switching model (#510). See [`forecast`](@ref).
+
+Fields mirror [`ThresholdForecast`](@ref) — `forecast`, `ci_lower`, `ci_upper`, `se`,
+`horizon`, `conf_level`, `reps` — plus `regime_prob`, the `h × K` matrix of predicted
+regime probabilities `ξ_{t+h|t} = (P')^h ξ_{t|t}`.
+
+The `forecast` path is the **exact** conditional mean, computed analytically; the bands and
+`se` come from simulating the Gaussian-mixture predictive density, because a Markov mixture
+has no convenient closed-form quantile.
+"""
+struct MSForecast{T<:AbstractFloat} <: AbstractForecastResult{T}
+    forecast::Vector{T}
+    ci_lower::Vector{T}
+    ci_upper::Vector{T}
+    se::Vector{T}
+    regime_prob::Matrix{T}
+    horizon::Int
+    conf_level::T
+    reps::Int
+end
+
 # Human-readable transition-type label.
 function _star_type_label(t::Symbol)
     t === :lstr1 ? "LSTR1 (logistic, one location)" :
@@ -544,6 +568,28 @@ struct MSRegModel{T<:AbstractFloat} <: AbstractNonlinearTSModel
     iterations::Int
     xnames::Vector{String}
     yname::String
+    # #510: the regime-probability-weighted conditional mean. `fitted` uses the SMOOTHED
+    # probabilities, so `y - fitted == residuals` holds exactly; `fitted_filtered` uses the
+    # filtered ones and is the real-time analogue (it does NOT satisfy that identity).
+    # Both are trailing KEYWORDS, so the 29-positional construction contract is unchanged;
+    # `fitted` falls back to `y - residuals`, which is what it is by construction.
+    fitted::Vector{T}
+    fitted_filtered::Vector{T}
+
+    function MSRegModel{T}(model_type, y, X, k_regimes, p, mu, coefs, se_coefs, ar, se_ar,
+                           sigma2, se_sigma2, P, ergodic, expected_durations,
+                           filtered_prob, smoothed_prob, residuals, loglik, aic, bic,
+                           n, n_params, switching_var, switching_ar, converged,
+                           iterations, xnames, yname;
+                           fitted::Vector{T}=T[],
+                           fitted_filtered::Vector{T}=T[]) where {T<:AbstractFloat}
+        fit = isempty(fitted) ? Vector{T}(y) .- Vector{T}(residuals) : fitted
+        new{T}(model_type, y, X, k_regimes, p, mu, coefs, se_coefs, ar, se_ar,
+               sigma2, se_sigma2, P, ergodic, expected_durations,
+               filtered_prob, smoothed_prob, residuals, loglik, aic, bic,
+               n, n_params, switching_var, switching_ar, converged,
+               iterations, xnames, yname, fit, fitted_filtered)
+    end
 end
 
 function Base.show(io::IO, m::MSRegModel{T}) where {T}
@@ -616,6 +662,46 @@ report(io::IO, m::MSRegModel) = show(io, m)
 
 StatsAPI.nobs(m::MSRegModel) = m.n
 StatsAPI.residuals(m::MSRegModel) = m.residuals
+
+"""
+    fitted(m::MSRegModel) -> Vector{T}
+
+Regime-probability-weighted conditional mean
+
+```math
+\\hat y_t = \\sum_k \\Pr(s_t = k \\mid \\mathcal F_T)\\, E[y_t \\mid s_t = k, \\mathcal F_{t-1}],
+```
+
+the standard smoothed fitted value in applied Markov-switching work. Weighted by the
+**smoothed** regime probabilities, so `y - fitted(m) == residuals(m)` exactly.
+
+For the real-time analogue use [`predict`](@ref) with `probs=:filtered`.
+"""
+StatsAPI.fitted(m::MSRegModel) = m.fitted
+
+"""
+    predict(m::MSRegModel; probs=:smoothed) -> Vector{T}
+
+In-sample conditional mean of a Markov-switching model.
+
+- `probs=:smoothed` (default) — weighted by `Pr(s_t = k | ℱ_T)`; identical to
+  [`fitted`](@ref) and consistent with [`residuals`](@ref).
+- `probs=:filtered` — weighted by `Pr(s_t = k | ℱ_t)`, the real-time weighting wanted for
+  pseudo-out-of-sample evaluation. Both are computed exactly, over the expanded regime
+  state for `:ms_ar`.
+
+!!! warning
+    `y - predict(m; probs=:filtered)` is **not** `residuals(m)`. The published residuals are
+    the smoothed-weighted ones; the filtered mean uses strictly less information and differs.
+"""
+function StatsAPI.predict(m::MSRegModel{T}; probs::Symbol=:smoothed) where {T}
+    probs in (:smoothed, :filtered) ||
+        throw(ArgumentError("probs must be :smoothed or :filtered; got :$probs"))
+    probs === :smoothed && return m.fitted
+    isempty(m.fitted_filtered) && throw(ArgumentError(
+        "this MSRegModel carries no filtered fitted values (it was built without them)"))
+    return m.fitted_filtered
+end
 StatsAPI.loglikelihood(m::MSRegModel) = m.loglik
 StatsAPI.aic(m::MSRegModel) = m.aic
 StatsAPI.bic(m::MSRegModel) = m.bic

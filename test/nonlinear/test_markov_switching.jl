@@ -296,3 +296,127 @@ end
         @test isapprox(vec(ts.data)[end], 0.1480; atol=1e-4)
     end
 end
+
+@testset "#510: MS fitted values and forecasts" begin
+    # Part A asked for the regime-weighted conditional mean the estimator already
+    # computed and then discarded; Part B for the forecast the family lacked.
+    y, _ = _sim_ms_ar1(MersenneTwister(510); n=600, mu=(-1.0, 2.0),
+                       phi=0.5, sigma=0.6, P=[0.95 0.05; 0.10 0.90])
+    m = estimate_ms_ar(y, 1; k_regimes=2)
+    @test m.converged
+
+    @testset "Part A — fitted / predict" begin
+        # The published residuals ARE y - fitted, exactly: the estimator built them
+        # from this quantity. Anything else would mean the two disagree.
+        @test length(fitted(m)) == m.n
+        @test m.y .- fitted(m) ≈ residuals(m) atol = 0
+        @test predict(m) === fitted(m)
+        @test predict(m; probs=:smoothed) === fitted(m)
+
+        # The filtered weighting uses strictly less information, so it differs, and
+        # it does NOT satisfy the residual identity -- documented, not accidental.
+        pf = predict(m; probs=:filtered)
+        @test length(pf) == m.n
+        @test !isapprox(pf, fitted(m); rtol=1e-6)
+        @test !isapprox(m.y .- pf, residuals(m); rtol=1e-6)
+        @test_throws ArgumentError predict(m; probs=:bogus)
+
+        # Both are genuine convex combinations of the regime-specific means, so they
+        # lie inside the range those means can produce.
+        @test all(isfinite, pf)
+    end
+
+    @testset "Part A — switching regression" begin
+        rng = MersenneTwister(5102)
+        n = 400
+        X = hcat(ones(n), randn(rng, n))
+        st = ones(Int, n)
+        for t in 2:n
+            st[t] = rand(rng) < (st[t-1] == 1 ? 0.93 : 0.10) ? 1 : 2
+        end
+        yr = [dot(X[t, :], st[t] == 1 ? [0.5, 1.0] : [-0.5, -1.0]) + 0.5 * randn(rng)
+              for t in 1:n]
+        mr = estimate_ms(yr, X; k_regimes=2)
+        @test mr.y .- fitted(mr) ≈ residuals(mr) atol = 0
+        @test !isapprox(predict(mr; probs=:filtered), fitted(mr); rtol=1e-6)
+    end
+
+    @testset "Part B — exact mean, validated against Monte Carlo" begin
+        h = 8
+        f = forecast(m, h; reps=2000, rng=MersenneTwister(1))
+        @test f isa MSForecast{Float64}
+        @test f.horizon == h && length(f.forecast) == h
+        @test size(f.regime_prob) == (h, m.k_regimes)
+        @test all(≈(1.0), sum(f.regime_prob; dims=2))
+        @test all(f.ci_lower .< f.forecast .< f.ci_upper)
+        @test all(f.se .> 0)
+        # Uncertainty accumulates.
+        @test f.se[end] > f.se[1]
+
+        # The mean path is computed analytically from the z_t = y_t - mu_{s_t}
+        # recursion, NOT from the simulation, so it must match an independent
+        # Monte Carlo of the model definition. 100k draws give a standard error of
+        # roughly 0.006 here.
+        R = 100_000
+        mrng = MersenneTwister(99)
+        mu_h = m.mu; ph = m.ar; sg = sqrt.(m.sigma2); Pm = m.P
+        xi0 = m.filtered_prob[end, :]
+        zlast = m.y[end] - dot(m.smoothed_prob[end, :], mu_h)
+        acc = zeros(h)
+        for _ in 1:R
+            s = rand(mrng) < xi0[1] ? 1 : 2
+            z = zlast
+            for k in 1:h
+                s = rand(mrng) < Pm[s, 1] ? 1 : 2
+                z = ph[1] * z + sg[s] * randn(mrng)
+                acc[k] += z + mu_h[s]
+            end
+        end
+        @test maximum(abs, f.forecast .- acc ./ R) < 0.03
+
+        # Two seeds give the SAME mean (it is analytic) but different bands.
+        f2 = forecast(m, h; reps=2000, rng=MersenneTwister(2))
+        @test f2.forecast ≈ f.forecast atol = 1e-14
+        @test f2.ci_lower != f.ci_lower
+    end
+
+    @testset "Part B — long-horizon limit is the ergodic mean" begin
+        # z_t is a stationary AR(p), so E[z] -> 0, and the regime probabilities
+        # converge to the ergodic distribution. The forecast must therefore tend to
+        # the ergodic average of the regime means. This is exact, not asymptotic in
+        # the simulation, because the mean path is analytic.
+        f = forecast(m, 400; reps=50, rng=MersenneTwister(3))
+        @test f.forecast[end] ≈ dot(m.ergodic, m.mu) atol = 1e-8
+        # ... and the propagated regime probabilities converge to the ergodic vector.
+        @test f.regime_prob[end, :] ≈ m.ergodic atol = 1e-8
+    end
+
+    @testset "Part B — switching regression needs future regressors" begin
+        rng = MersenneTwister(5103)
+        n = 300
+        X = hcat(ones(n), randn(rng, n))
+        st = ones(Int, n)
+        for t in 2:n
+            st[t] = rand(rng) < (st[t-1] == 1 ? 0.93 : 0.10) ? 1 : 2
+        end
+        yr = [dot(X[t, :], st[t] == 1 ? [1.0, 1.0] : [-1.0, -1.0]) + 0.5 * randn(rng)
+              for t in 1:n]
+        mr = estimate_ms(yr, X; k_regimes=2)
+
+        Xn = hcat(ones(5), randn(MersenneTwister(4), 5))
+        fr = forecast(mr, Xn; reps=2000, rng=MersenneTwister(5))
+        @test fr.horizon == 5
+        @test size(fr.regime_prob) == (5, 2)
+        # Exact mean: sum_k xi_k * x'beta_k.
+        expected = [sum(fr.regime_prob[s, k] * dot(Xn[s, :], mr.coefs[:, k])
+                        for k in 1:mr.k_regimes) for s in 1:5]
+        @test fr.forecast ≈ expected atol = 1e-12
+
+        # The two signatures are not interchangeable, and say so.
+        @test_throws ArgumentError forecast(mr, 5)
+        @test_throws ArgumentError forecast(m, Xn)
+        @test_throws ArgumentError forecast(mr, hcat(ones(5), randn(5), randn(5)))
+        @test_throws ArgumentError forecast(m, 0)
+        @test_throws ArgumentError forecast(m, 4; level=1.5)
+    end
+end

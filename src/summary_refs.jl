@@ -1219,6 +1219,42 @@ const _REFERENCES = Dict{Symbol, _RefEntry}(
     :greene2018 => (key=:greene2018, authors="Greene, William H.", year=2018,
         title="Econometric Analysis", journal="", volume="", issue="", pages="",
         doi="", isbn="978-0134461366", publisher="Pearson (8th ed.)", entry_type=:book),
+    # --- Generalized residuals for ordered models (#507) ---
+    :chesher_irish1987 => (key=:chesher_irish1987,
+        authors="Chesher, Andrew and Irish, Margaret", year=1987,
+        title="Residual Analysis in the Grouped and Censored Normal Linear Model",
+        journal="Journal of Econometrics", volume="34", issue="1-2", pages="33--61",
+        doi="10.1016/0304-4076(87)90067-2", isbn="", publisher="", entry_type=:article),
+    :gourieroux_etal1987 => (key=:gourieroux_etal1987,
+        authors="Gourieroux, Christian and Monfort, Alain and Renault, Eric and Trognon, Alain", year=1987,
+        title="Generalised Residuals",
+        journal="Journal of Econometrics", volume="34", issue="1-2", pages="5--32",
+        doi="10.1016/0304-4076(87)90065-9", isbn="", publisher="", entry_type=:article),
+    # --- Count-data regression: Poisson / NegBin2 (EV-19, #427) ---
+    :gourieroux_monfort_trognon1984 => (key=:gourieroux_monfort_trognon1984,
+        authors="Gourieroux, Christian and Monfort, Alain and Trognon, Alain", year=1984,
+        title="Pseudo Maximum Likelihood Methods: Applications to Poisson Models",
+        journal="Econometrica", volume="52", issue="3", pages="701--720",
+        doi="10.2307/1913472", isbn="", publisher="", entry_type=:article),
+    :cameron_trivedi1986 => (key=:cameron_trivedi1986,
+        authors="Cameron, A. Colin and Trivedi, Pravin K.", year=1986,
+        title="Econometric Models Based on Count Data: Comparisons and Applications of Some Estimators and Tests",
+        journal="Journal of Applied Econometrics", volume="1", issue="1", pages="29--53",
+        doi="10.1002/jae.3950010104", isbn="", publisher="", entry_type=:article),
+    :cameron_trivedi1990 => (key=:cameron_trivedi1990,
+        authors="Cameron, A. Colin and Trivedi, Pravin K.", year=1990,
+        title="Regression-Based Tests for Overdispersion in the Poisson Model",
+        journal="Journal of Econometrics", volume="46", issue="3", pages="347--364",
+        doi="10.1016/0304-4076(90)90014-K", isbn="", publisher="", entry_type=:article),
+    :cameron_trivedi2013 => (key=:cameron_trivedi2013,
+        authors="Cameron, A. Colin and Trivedi, Pravin K.", year=2013,
+        title="Regression Analysis of Count Data", journal="", volume="", issue="", pages="",
+        doi="10.1017/CBO9781139013567", isbn="978-1107667273",
+        publisher="Cambridge University Press (2nd ed.)", entry_type=:book),
+    :lawless1987 => (key=:lawless1987, authors="Lawless, Jerald F.", year=1987,
+        title="Negative Binomial and Mixed Poisson Regression",
+        journal="The Canadian Journal of Statistics", volume="15", issue="3", pages="209--225",
+        doi="10.2307/3314912", isbn="", publisher="", entry_type=:article),
     # --- Robust regression: M / MM estimation (EV-40, #448) ---
     :huber1964 => (key=:huber1964, authors="Huber, Peter J.", year=1964,
         title="Robust Estimation of a Location Parameter",
@@ -2053,6 +2089,12 @@ const _TYPE_REFS = Dict{Symbol, Vector{Symbol}}(
     :TobitModel => [:tobin1958, :olsen1978, :mcdonald_moffitt1980, :wooldridge2010],
     :TruncRegModel => [:hausman_wise1977, :wooldridge2010],
     :estimate_tobit => [:tobin1958, :olsen1978, :mcdonald_moffitt1980],
+    :PoissonModel => [:gourieroux_monfort_trognon1984, :cameron_trivedi2013, :wooldridge2010],
+    :NegBinModel => [:cameron_trivedi1986, :lawless1987, :cameron_trivedi2013],
+    :DispersionTest => [:cameron_trivedi1990, :cameron_trivedi2013],
+    :estimate_poisson => [:gourieroux_monfort_trognon1984, :cameron_trivedi2013],
+    :estimate_nbreg => [:cameron_trivedi1986, :lawless1987],
+    :dispersion_test => [:cameron_trivedi1990],
     :estimate_truncreg => [:hausman_wise1977, :wooldridge2010],
     # Heckman sample-selection model (EV-18, #426)
     :HeckmanModel => [:heckman1979, :greene2018, :mroz1987, :wooldridge2010],
@@ -2078,8 +2120,8 @@ const _TYPE_REFS = Dict{Symbol, Vector{Symbol}}(
     :ParkAddedResult => [:park1990_added, :park1992],
     :park_added_test => [:park1990_added, :park1992],
     # Ordered & Multinomial models
-    :OrderedLogitModel => [:mccullagh1980, :brant1990, :wooldridge2010],
-    :OrderedProbitModel => [:mccullagh1980, :wooldridge2010],
+    :OrderedLogitModel => [:mccullagh1980, :brant1990, :wooldridge2010, :chesher_irish1987, :gourieroux_etal1987],
+    :OrderedProbitModel => [:mccullagh1980, :wooldridge2010, :chesher_irish1987, :gourieroux_etal1987],
     :MultinomialLogitModel => [:mcfadden1974, :hausman_mcfadden1984, :wooldridge2010],
     :estimate_ologit => [:mccullagh1980, :brant1990, :wooldridge2010],
     :estimate_oprobit => [:mccullagh1980, :wooldridge2010],
@@ -2575,6 +2617,9 @@ end
 refs(io::IO, ::SelectionResult; kw...) = refs(io, _TYPE_REFS[:SelectionResult]; kw...)
 
 # Censored / truncated regression (EV-17, #425)
+refs(io::IO, ::PoissonModel; kw...) = refs(io, _TYPE_REFS[:PoissonModel]; kw...)
+refs(io::IO, ::NegBinModel; kw...) = refs(io, _TYPE_REFS[:NegBinModel]; kw...)
+refs(io::IO, ::DispersionTest; kw...) = refs(io, _TYPE_REFS[:DispersionTest]; kw...)
 refs(io::IO, ::TobitModel; kw...) = refs(io, _TYPE_REFS[:TobitModel]; kw...)
 refs(io::IO, ::TruncRegModel; kw...) = refs(io, _TYPE_REFS[:TruncRegModel]; kw...)
 refs(io::IO, ::HeckmanModel; kw...) = refs(io, _TYPE_REFS[:HeckmanModel]; kw...)  # EV-18 (#426)

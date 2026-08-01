@@ -696,6 +696,123 @@ for MT in (:OrderedLogitModel, :OrderedProbitModel)
 end
 
 # =============================================================================
+# Residuals for multi-category responses (#507)
+#
+# Shared by the ordered models here and by MultinomialLogitModel (multinomial.jl
+# is included after this file). A K-category response has K residuals per
+# observation, so these return an n x K matrix rather than the length-n vector
+# the binary models return.
+# =============================================================================
+
+"""
+    _category_residuals(y, P, kind) -> Matrix{T}
+
+Residual matrix for a discrete response with `K` categories, given the observed
+category codes `y` (values in `1:K`) and the fitted probability matrix `P` (`n x K`).
+
+With the indicator `dᵢⱼ = 1{yᵢ = j}`:
+
+- `:response` — `rᵢⱼ = dᵢⱼ - P̂ᵢⱼ`. Rows sum to exactly zero.
+- `:pearson`  — `rᵢⱼ / sqrt(P̂ᵢⱼ(1 - P̂ᵢⱼ))`, the variance-standardized form.
+- `:deviance` — `sign(rᵢⱼ)·sqrt(2 dᵢⱼ log(dᵢⱼ / P̂ᵢⱼ))`, which is nonzero only in the
+  observed cell and whose total sum of squares is the model deviance `-2·loglik`.
+"""
+function _category_residuals(y::Vector{Int}, P::Matrix{T}, kind::Symbol) where {T<:AbstractFloat}
+    kind in (:response, :pearson, :deviance) ||
+        throw(ArgumentError("kind must be :response, :pearson, or :deviance; got :$kind"))
+    n, K = size(P)
+    length(y) == n || throw(ArgumentError("y and the fitted matrix disagree on n"))
+    R = Matrix{T}(undef, n, K)
+    @inbounds for i in 1:n, j in 1:K
+        d = y[i] == j ? one(T) : zero(T)
+        p = clamp(P[i, j], T(1e-15), one(T) - T(1e-15))
+        r = d - p
+        R[i, j] = if kind === :response
+            r
+        elseif kind === :pearson
+            r / sqrt(p * (one(T) - p))
+        else
+            # 0·log0 = 0, so every unobserved cell contributes nothing.
+            d > zero(T) ? sign(r) * sqrt(2 * d * log(d / p)) : zero(T)
+        end
+    end
+    R
+end
+
+for MT in (:OrderedLogitModel, :OrderedProbitModel)
+    @eval begin
+        """
+            residuals(m::$($MT); kind=:response) -> Matrix{T}
+
+        Residual matrix (`n x K`, one column per outcome category) for an ordered model.
+
+        Unlike [`LogitModel`](@ref)/[`ProbitModel`](@ref), which return a length-`n` vector
+        of deviance residuals, a `K`-category response has `K` residuals per observation, so
+        this returns a matrix. For the length-`n` analogue of the binary score residual — the
+        quantity score and LM specification tests are built on — use
+        [`generalized_residuals`](@ref).
+
+        `kind` selects `:response` (default, `dᵢⱼ - P̂ᵢⱼ`, rows summing to zero), `:pearson`,
+        or `:deviance` (sum of squares equals `-2·loglik`).
+        """
+        StatsAPI.residuals(m::$MT{T}; kind::Symbol=:response) where {T} =
+            _category_residuals(m.y, m.fitted, kind)
+    end
+end
+
+"""
+    generalized_residuals(m::OrderedLogitModel) -> Vector{T}
+    generalized_residuals(m::OrderedProbitModel) -> Vector{T}
+
+Generalized residuals for an ordered model (Chesher & Irish 1987; Gourieroux, Monfort,
+Renault & Trognon 1987): the length-`n` vector
+
+```math
+e_i = \\frac{f(c_{j-1} - x_i'\\beta) - f(c_j - x_i'\\beta)}{P(y_i = j \\mid x_i)},
+\\qquad j = y_i,
+```
+
+with `c₀ = -∞`, `c_K = +∞`, and `f` the logistic or standard-normal density. Equivalently
+`eᵢ = ∂ℓᵢ/∂(x_i'β)`, the score of the observation's log-likelihood with respect to its
+index, which for the probit case is exactly `E[εᵢ | yᵢ, xᵢ]`.
+
+This is the quantity that makes outer-product-of-gradients LM specification tests work, and
+it is the length-`n` analogue of the binary models' score residual: on a two-category fit it
+reduces exactly to `yᵢ - p̂ᵢ`.
+
+For the per-category residual matrix, see [`residuals`](@ref).
+
+# References
+- Chesher, A. & Irish, M. (1987). *Journal of Econometrics* 34(1-2), 33-61.
+- Gourieroux, C., Monfort, A., Renault, E. & Trognon, A. (1987). *Journal of Econometrics*
+  34(1-2), 5-32.
+"""
+function generalized_residuals(m::OrderedLogitModel{T}) where {T<:AbstractFloat}
+    _ordered_gen_resid(m, _logistic_pdf)
+end
+
+function generalized_residuals(m::OrderedProbitModel{T}) where {T<:AbstractFloat}
+    _ordered_gen_resid(m, _normal_pdf)
+end
+
+function _ordered_gen_resid(m, F_pdf::Function)
+    T = eltype(m.beta)
+    n = length(m.y)
+    J = length(m.cutpoints) + 1
+    xb = m.X * m.beta
+    e = Vector{T}(undef, n)
+    @inbounds for i in 1:n
+        j = m.y[i]
+        # f(-Inf) = f(+Inf) = 0, so the boundary categories drop one term.
+        f_lo = j == 1 ? zero(T) : F_pdf(T, m.cutpoints[j-1] - xb[i])
+        f_hi = j == J ? zero(T) : F_pdf(T, m.cutpoints[j] - xb[i])
+        p = max(m.fitted[i, j], T(1e-15))
+        e[i] = (f_lo - f_hi) / p
+    end
+    e
+end
+
+# =============================================================================
 # Predict (out-of-sample)
 # =============================================================================
 

@@ -300,6 +300,48 @@ plot_result(m; view=:filtered)        # filtered probabilities
 !!! note "Distinct from variance-regime identification"
     `estimate_ms`/`estimate_ms_ar` switch the conditional *mean*. This is a separate code path from the Markov-switching *variance* regimes used for SVAR identification in [Statistical Identification](@ref nongaussian_page) (`src/nongaussian/heteroskedastic.jl`), and from the Hamilton (2018) detrending [`hamilton_filter`](@ref). All three use a Hamilton–Kim filter but model different objects.
 
+### Fitted Values and Forecasts
+
+The fitted value of a Markov-switching model is the regime-probability-weighted conditional mean
+
+```math
+\hat y_t = \sum_k \Pr(s_t = k \mid \mathcal I)\, E[y_t \mid s_t = k, \mathcal F_{t-1}],
+```
+
+where
+
+- ``\Pr(s_t = k \mid \mathcal I)`` is the regime probability under information set ``\mathcal I``,
+- ``E[y_t \mid s_t = k, \mathcal F_{t-1}]`` is the regime-``k`` conditional mean.
+
+[`fitted`](@ref) weights by the **smoothed** probabilities (``\mathcal I = \mathcal F_T``), so `y - fitted(m)` is exactly [`residuals`](@ref). [`predict`](@ref) with `probs=:filtered` weights by ``\mathcal F_t`` instead — the real-time analogue wanted for pseudo-out-of-sample evaluation. Both are computed exactly, over the ``K^{p+1}`` expanded regime state for MS-AR.
+
+```@example ms
+(identity_holds = maximum(abs, m.y .- fitted(m) .- residuals(m)),
+ filtered_differs = round(maximum(abs, predict(m; probs=:filtered) .- fitted(m)); digits=4))
+```
+
+!!! warning "The filtered mean does not reproduce the residuals"
+    `y - predict(m; probs=:filtered)` is **not** `residuals(m)`. The published residuals are the smoothed-weighted ones. Use the filtered series for forecast evaluation, the smoothed one for in-sample diagnostics.
+
+[`forecast`](@ref) propagates the regime probabilities through the transition matrix, ``\xi_{t+h|t} = (P')^h \xi_{t|t}``, and mixes the regime-specific means with those weights. Which signature applies depends on the model:
+
+- **MS-AR** — `forecast(m, h)`. Because ``z_t = y_t - \mu_{s_t}`` follows a *regime-free* AR(``p``), the exact ``h``-step mean needs no expansion of the ``K^{p+1}`` state space and no simulation.
+- **Switching regression** — `forecast(m, X_new)`, since ``y_t = x_t'\beta_{s_t} + \varepsilon_t`` cannot be projected without future regressors.
+
+```@example ms
+f = forecast(m, 8)
+(mean_path = round.(f.forecast; digits=3),
+ recession_prob = round.(f.regime_prob[:, 1]; digits=3))
+```
+
+The `forecast` field is the **exact** analytic mean; the `level` bands and `se` come from simulating the Gaussian-mixture predictive density, because a Markov mixture has no convenient closed-form quantile. Two consequences worth knowing: the mean path is reproducible across RNG seeds while the bands are not, and as ``h \to \infty`` the mean converges to the ergodic average ``\sum_k \pi_k \mu_k``.
+
+```@example ms
+f_long = forecast(m, 400; reps=50)
+(long_horizon = round(f_long.forecast[end]; digits=6),
+ ergodic_mean = round(sum(m.ergodic .* m.mu); digits=6))
+```
+
 ---
 
 ## Complete Example

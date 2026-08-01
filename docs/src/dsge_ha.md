@@ -116,7 +116,19 @@ ss_egm = compute_steady_state(spec_ks; K_init=10.0, r_bounds=(-0.02, 0.04),
 report(ss_egm)
 ```
 
-The steady state report displays convergence diagnostics, equilibrium prices, aggregate quantities, and wealth distribution statistics. A negative Euler error (in ``\log_{10}`` units) indicates the accuracy of the consumption policy --- values below ``-3`` are standard in the literature.
+The steady state report displays convergence diagnostics, equilibrium prices, aggregate quantities, and wealth distribution statistics. The Euler error (in ``\log_{10}`` units) measures the accuracy of the consumption policy: the largest residual of the Euler equation over the evaluated states.
+
+!!! warning "The Euler error is measured off-node, and the number is not comparable to node-based figures"
+    `ss.euler_error` evaluates the residual at the cell **midpoints**, where the policy is genuinely an interpolant. Evaluating at the grid **nodes** — the convention this package used before v0.7.2, and the one behind most published figures — measures interpolation round-trip error rather than approximation error, because EGM *solves* the Euler equation at exactly those points. The gap is large: the shipped one-asset examples report ``-2.25`` (Krusell--Smith), ``-2.28`` (one-asset HANK) and ``-1.94`` (Huggett) off-node against ``-6.04``, ``-6.06`` and ``-4.47`` at the nodes — 2.5 to 3.8 ``\log_{10}`` units. Both statistics are kept on `ss.euler`, and `compute_steady_state(spec; euler_points=:nodes)` restores the old headline number.
+
+    Cells whose savings policy leaves the grid (``a' > a_{\max}``) are **excluded and counted** rather than scored. `_linear_interp` flat-extrapolates above ``a_{\max}``, so the continuation consumption there is looked up at the same clamped point the solver used and the residual collapses to machine precision — which made a *truncating* model report its best accuracy exactly where it was broken.
+
+```@example dsge_ha
+(euler_error   = round(ss.euler_error; digits=4),          # off-node maximum
+ mean_residual = round(ss.euler.midpoints.mean; digits=4), # ... and the mean
+ at_nodes      = round(ss.euler.nodes.max; digits=4),      # the old convention
+ excluded      = ss.euler.midpoints.n_offgrid)
+```
 
 ### Choosing an Asset Grid
 
@@ -126,14 +138,16 @@ Two decisions matter, and they trade off against each other on one grid shape bu
 
 **Raising the ceiling must not cost resolution at the constraint.** The `:double_exp` grid is a fixed curve rescaled by ``(a_{\max} - a_{\min})``, so its bottom spacing is *linear* in ``a_{\max}`` --- widening the grid five-fold coarsens the borrowing constraint five-fold. The `:geometric` grid is equidistant in ``\log(a - a_{\min} + \text{pivot})``, so its bottom spacing grows only logarithmically. Measured on the Krusell--Smith calibration at ``n_a = 200``:
 
-| Grid | ``a_{\max}`` | First step ``\Delta a_1`` | Mass at floor | Mass at ceiling | Euler error |
-|------|--------------|---------------------------|---------------|-----------------|-------------|
-| `:double_exp` | 200 | 0.2208 | 6.41% | ``7.1 \times 10^{-3}`` | ``-4.54`` |
-| `:double_exp` | 1000 | 1.1039 | 8.15% | ``0`` | ``-4.21`` |
-| `:geometric` | 200 | 0.0085 | 6.12% | ``8.7 \times 10^{-3}`` | ``-6.09`` |
-| `:geometric` | 1000 | 0.0106 | 6.31% | ``4.4 \times 10^{-13}`` | ``-6.04`` |
+| Grid | ``a_{\max}`` | First step ``\Delta a_1`` | Mass at floor | Mass at ceiling | Euler error (off-node) | (at nodes) |
+|------|--------------|---------------------------|---------------|-----------------|------------------------|------------|
+| `:double_exp` | 200 | 0.2208 | 6.41% | ``7.1 \times 10^{-3}`` | ``-1.76`` | ``-4.54`` |
+| `:double_exp` | 1000 | 1.1039 | 8.15% | ``0`` | ``-1.79`` | ``-4.21`` |
+| `:geometric` | 200 | 0.0085 | 6.12% | ``8.7 \times 10^{-3}`` | ``-2.32`` | ``-6.09`` |
+| `:geometric` | 1000 | 0.0106 | 6.31% | ``4.4 \times 10^{-13}`` | ``-2.25`` | ``-6.04`` |
 
-Widening `:double_exp` fixes the ceiling but degrades the Euler error from ``-4.54`` to ``-4.21``; `:geometric` clears the ceiling *and* holds accuracy near ``-6``. This is why the built-in one-asset examples use `grid_type=:geometric`. The default remains `:double_exp` for backward compatibility.
+`:geometric` clears the ceiling and is the more accurate curve on both conventions --- roughly half a ``\log_{10}`` unit off-node and a full 1.8 units at the nodes. This is why the built-in one-asset examples use `grid_type=:geometric`. The default remains `:double_exp` for backward compatibility.
+
+The two conventions disagree about what widening `:double_exp` costs. At the nodes it looks like a real degradation, ``-4.54 \to -4.21``; off-node the two are indistinguishable, ``-1.76 \to -1.79``. The node reading was an artifact: widening coarsens the grid at the constraint, which inflates the round-trip error at the nodes without changing how well the policy is approximated between them. Choose ``a_{\max}`` from the ceiling mass, not from either Euler error.
 
 Grid *resolution* is a separate matter, and refining ``n_a`` does **not** fix a binding ceiling. On the truncating configuration, sweeping ``n_a`` from 100 to 1600 at fixed ``a_{\max} = 200`` moves the relative clearing residual only from ``1.6844\%`` to ``1.6848\%`` --- unchanged to four significant figures across a 16-fold refinement, while the solve time rises from 2.4 s to 47.6 s. Only ``a_{\max}`` fixes truncation.
 
@@ -180,8 +194,8 @@ The gain over `:geometric` is modest because that curve is already tuned for thi
 !!! warning "Never disable `monitor_cap` on a model with a borrowing constraint"
     The stationary distribution has an **atom** at the constraint, and a histogram atom in a cell of width ``w`` reports ``|p''| \sim 1/w^2`` --- a discretization artifact, not curvature. Uncapped, that single node attracts 153 of 200 grid points into the bottom 0.5% of the domain and the grid becomes the *worst* of the five above. The default `monitor_cap=3.0` caps the monitor at three times its positive median.
 
-!!! note "The node Euler error does not rank grids"
-    `ss.euler_error` evaluates the Euler equation at the grid **nodes**, where EGM is exact by construction (issue #508). The adapted grid reports ``-4.67`` against ``-6.04`` for `:geometric` while being *closer* to the high-resolution reference on both ``r`` and ``K``. Rank grids against a refined reference solution, not against the node metric.
+!!! note "The Euler error does not rank grids"
+    The adapted grid reports a *worse* Euler error than `:geometric` on both conventions --- ``-1.76`` against ``-2.25`` off-node, ``-4.67`` against ``-6.04`` at the nodes --- while being *closer* to the high-resolution reference on both ``r`` and ``K``. Moving the honest metric off-node (issue #508) shrank the gap but did not reverse it. Rank grids against a refined reference solution, not against either Euler statistic.
 
 ### VFI with Howard Improvement
 
@@ -461,7 +475,8 @@ The one-asset HANK steady state clears at a **higher** interest rate and a **low
 | `distribution` | `Matrix{T}` | ``N_a \times N_e`` stationary distribution |
 | `policies` | `Dict{Symbol,Matrix{T}}` | Policy functions (`:consumption`, `:savings`) |
 | `excess_demand` | `T` | Final excess demand for capital |
-| `euler_error` | `T` | ``\log_{10}`` Euler equation error |
+| `euler_error` | `T` | ``\log_{10}`` maximum Euler residual, measured off-node |
+| `euler` | `NamedTuple` | `(midpoints=…, nodes=…)`, each with `max`, `mean`, `n_evaluated`, `n_constrained`, `n_offgrid` |
 | `grid` | `HAGrid{T}` | Asset grid used |
 
 ---

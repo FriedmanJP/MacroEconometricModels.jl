@@ -118,6 +118,7 @@ const TEST_GROUPS = [
         "reg/test_selection.jl",   # EV-04 (#412): stepwise / best-subset / GETS
         "reg/test_tobit.jl",       # EV-17 (#425): Tobit + truncated regression
         "reg/test_heckman.jl",     # EV-18 (#426): Heckman sample-selection (two-step + MLE)
+        "reg/test_count.jl",       # EV-19 (#427): Poisson / NegBin2 count-data regression
         "reg/test_robust.jl",      # EV-40 (#448): robust regression — Huber/bisquare M + Yohai MM
         "system/test_system.jl",   # EV-35 (#443): SUR / 3SLS systems estimation
         "reg/test_wildboot.jl",          # T243 (#342): wild cluster bootstrap (boottest-style)

@@ -97,13 +97,25 @@ end
 # -----------------------------------------------------------------------------
 """
     StateSpaceModel(Z, H, T_mat, Q; d=nothing, c=nothing, R=nothing,
-                    a1=nothing, P1=nothing, init_mode=:diffuse, kappa=1e6)
+                    a1=nothing, P1=nothing, init_mode=:kappa, kappa=1e6)
 
 Build an (unfitted) `StateSpaceModel` from fixed system matrices. `d`/`c` default to
 zero vectors, `R` to the identity, and the initial `(a1, P1)` are formed via the
-kernel's `_kalman_init` (`:diffuse` large-κ initialization by default). Filter,
-smooth, and log-likelihood-evaluate it with [`estimate_statespace`](@ref); forecast
-with [`forecast`](@ref) once fitted.
+kernel's `_kalman_init` under `init_mode` (`:kappa` by default). Filter, smooth, and
+log-likelihood-evaluate it with [`estimate_statespace`](@ref); forecast with
+[`forecast`](@ref) once fitted.
+
+`init_mode` selects the initial covariance when `a1`/`P1` are not supplied:
+`:kappa` (the default) puts `kappa*I` on every state direction; `:diffuse` puts
+`kappa` only on the nonstationary subspace and the stationary Lyapunov solution
+elsewhere, and warns when it does so; `:stationary` solves the Lyapunov equation
+(and errors if the transition is not stable). The two large-kappa modes coincide
+only when every direction is nonstationary, as in a pure local level.
+
+!!! warning "`a1` and `P1` go together"
+    Supplying only one raises an `ArgumentError`. A half-specified initialization
+    used to be silently discarded, which returned a different model from the one
+    written -- and the quieter one, so nothing signalled the loss (#512).
 """
 function StateSpaceModel(Z::AbstractMatrix, H::AbstractMatrix,
                          T_mat::AbstractMatrix, Q::AbstractMatrix;
@@ -124,9 +136,25 @@ function StateSpaceModel(Z::AbstractMatrix, H::AbstractMatrix,
     length(cv) == n_state || throw(ArgumentError("c must have length n_state=$n_state"))
     RQR = Matrix{T}(Hermitian(Rm * Qm * Rm'))
     mode = init_mode
+    # #512: a half-specified initialization is unambiguously a mistake. Silently
+    # dropping the supplied half returns a DIFFERENT model from the one written --
+    # and the quieter, more plausible-looking log-likelihood at that, so nothing
+    # prompts the user to look. `_kalman_init` already refuses :explicit without
+    # both; the constructor just never let it get there.
+    if (a1 === nothing) != (P1 === nothing)
+        given, missing_one = a1 === nothing ? ("P1", "a1") : ("a1", "P1")
+        throw(ArgumentError(
+            "StateSpaceModel: a1 and P1 must be supplied together (got $given without " *
+            "$missing_one). Supply both for an explicit initialization, or neither to " *
+            "use init_mode=:$(init_mode)."))
+    end
     if a1 !== nothing && P1 !== nothing
         mode = :explicit
         a_init = Vector{T}(a1); P_init = Matrix{T}(P1)
+        length(a_init) == n_state || throw(ArgumentError(
+            "a1 must have length n_state=$n_state, got $(length(a_init))"))
+        size(P_init) == (n_state, n_state) || throw(ArgumentError(
+            "P1 must be n_state×n_state = $((n_state, n_state)), got $(size(P_init))"))
     else
         a_init, P_init = _kalman_init(mode, Tm, RQR, n_state; kappa=T(kappa))
     end
@@ -144,7 +172,7 @@ end
 # Parametric-builder constructor — carries a closure for MLE.
 # -----------------------------------------------------------------------------
 """
-    StateSpaceModel(build::Function, θ0::AbstractVector; init_mode=:diffuse, kappa=1e6,
+    StateSpaceModel(build::Function, θ0::AbstractVector; init_mode=:kappa, kappa=1e6,
                     param_names=nothing)
 
 Build an (unfitted) parametric `StateSpaceModel`. `build(θ)` must return a

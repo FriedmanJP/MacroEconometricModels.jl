@@ -135,6 +135,7 @@ include("reg/logit.jl")
 include("reg/probit.jl")
 include("reg/tobit.jl")        # EV-17 (#425): Tobit (censored) + truncated regression
 include("reg/heckman.jl")      # EV-18 (#426): Heckman sample-selection (two-step + MLE)
+include("reg/count.jl")        # EV-19 (#427): Poisson / NegBin2 count-data regression
 include("reg/robust.jl")       # EV-40 (#448): robust regression — Huber/bisquare M + Yohai MM
 include("reg/margins.jl")
 include("reg/diagnostics.jl")
@@ -1212,7 +1213,7 @@ export estimate_threshold, estimate_setar, hansen_linearity_test
 export STARModel, STARForecast
 export estimate_star, star_linearity_test
 # EV-07: Markov-switching regression / mean-switching AR (Hamilton 1989; Kim 1994)
-export MSRegModel
+export MSRegModel, MSForecast
 export estimate_ms, estimate_ms_ar
 
 # =============================================================================
@@ -1313,6 +1314,7 @@ export load_example
 # Types
 export RegModel, LogitModel, ProbitModel, MarginalEffects
 export OrderedLogitModel, OrderedProbitModel, estimate_ologit, estimate_oprobit
+export generalized_residuals   # #507: ordered-model score residual
 export MultinomialLogitModel, estimate_mlogit
 
 # Estimation
@@ -1334,6 +1336,10 @@ export TobitModel, TruncRegModel, estimate_tobit, estimate_truncreg
 
 # Heckman sample-selection model — EV-18 (#426)
 export HeckmanModel, estimate_heckman
+
+# Count-data regression — EV-19 (#427)
+export PoissonModel, NegBinModel, DispersionTest,
+       estimate_poisson, estimate_nbreg, dispersion_test, incidence_rate_ratio
 
 # Robust regression (M / MM estimation) — EV-40 (#448)
 export RobustRegModel, estimate_robust

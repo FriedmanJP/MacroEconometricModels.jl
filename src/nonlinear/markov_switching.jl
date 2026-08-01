@@ -386,6 +386,8 @@ function estimate_ms(y::AbstractVector, X::AbstractMatrix; k_regimes::Int=2,
     # --- Diagnostics ---
     fitmean = [dot(smoothed[t, :], [dot(Xm[t, :], B[:, k]) for k in 1:K]) for t in 1:n]
     resid = yv .- fitmean
+    # Real-time analogue: the same weighted mean under the FILTERED probabilities (#510).
+    fitmean_filt = [dot(filtered[t, :], [dot(Xm[t, :], B[:, k]) for k in 1:K]) for t in 1:n]
     ergodic = _ms_ergodic(P)
     durations = T[one(T) / max(one(T) - P[k, k], eps(T)) for k in 1:K]
     n_params = K * kx + nσ + K * (K - 1)
@@ -396,7 +398,8 @@ function estimate_ms(y::AbstractVector, X::AbstractMatrix; k_regimes::Int=2,
     return MSRegModel{T}(:regression, yv, Xm, K, 0, means, B, se_B, T[], T[],
         Vector{T}(sig2), Vector{T}(se_sig2), P, ergodic, durations,
         filtered, smoothed, resid, loglik, aic, bic, n, n_params,
-        switching_variance, false, converged, iters, xnms, "y")
+        switching_variance, false, converged, iters, xnms, "y";
+        fitted=Vector{T}(fitmean), fitted_filtered=Vector{T}(fitmean_filt))
 end
 
 estimate_ms(y::AbstractVector; kwargs...) =
@@ -601,9 +604,11 @@ function estimate_ms_ar(y::AbstractVector, p::Int; k_regimes::Int=2,
     # --- Diagnostics ---
     # Smoothed conditional mean at each t (over expanded paths).
     fitmean = Vector{T}(undef, n)
+    fitmean_filt = Vector{T}(undef, n)     # #510: filtered-probability weighting
     for tau in 1:n
         t = p + tau
         m_t = zero(T)
+        m_f = zero(T)
         for a in 1:size(states, 1)
             i0 = states[a, 1]
             mval = mu[i0]                     # NB: perm applied to mu already
@@ -613,8 +618,10 @@ function estimate_ms_ar(y::AbstractVector, p::Int; k_regimes::Int=2,
                 mval += phi[j] * (yv[t - j] - mu[states[a, j + 1]])
             end
             m_t += smoothed_e[tau, a] * mval
+            m_f += filtered_e[tau, a] * mval
         end
         fitmean[tau] = m_t
+        fitmean_filt[tau] = m_f
     end
     # smoothed_e was computed with ORDERED μ/P, and `states` index regimes in the
     # ordered labelling — consistent, so fitmean is correct.
@@ -634,7 +641,8 @@ function estimate_ms_ar(y::AbstractVector, p::Int; k_regimes::Int=2,
         coefs, se_coefs, Vector{T}(phi), Vector{T}(se_phi),
         Vector{T}(sig2), Vector{T}(se_sig2), P, ergodic, durations,
         filtered, smoothed, resid, loglik, aic, bic, n, n_params,
-        switching_variance, false, converged, iters, xnms, yname)
+        switching_variance, false, converged, iters, xnms, yname;
+        fitted=Vector{T}(fitmean), fitted_filtered=Vector{T}(fitmean_filt))
 end
 
 # Marginalise expanded-state probabilities (n × M) to regime marginals (n × K).
@@ -698,4 +706,185 @@ function _ms_ar_nat(theta::AbstractVector, K::Int, p::Int, nσ::Int)
     off += nσ
     P = _logits_to_P(theta[(off + 1):end], K)
     return vcat(mu, phi, sig2, vec(P))
+end
+
+# =============================================================================
+# Forecasting (#510)
+# =============================================================================
+
+"""
+    _ms_predicted_regimes(m, h) -> Matrix{T}
+
+`h × K` matrix of predicted regime probabilities `ξ_{t+s|t} = (P')^s ξ_{t|t}`, `s = 1…h`,
+started from the last filtered probability vector.
+"""
+function _ms_predicted_regimes(m::MSRegModel{T}, h::Int) where {T<:AbstractFloat}
+    K = m.k_regimes
+    xi = Vector{T}(m.filtered_prob[end, :])
+    Pt = transpose(m.P)
+    out = Matrix{T}(undef, h, K)
+    @inbounds for s in 1:h
+        xi = Pt * xi
+        xi ./= sum(xi)                       # guard against drift from repeated products
+        out[s, :] = xi
+    end
+    out
+end
+
+"""
+    forecast(m::MSRegModel, h; reps=1000, level=0.90, rng=Random.default_rng()) -> MSForecast
+    forecast(m::MSRegModel, X_new; reps=1000, level=0.90, rng=Random.default_rng()) -> MSForecast
+
+Multi-step forecast of a Markov-switching model (Hamilton 1994, ch. 22; Krolzig 1997).
+
+Regime probabilities are propagated through the transition matrix,
+`ξ_{t+h|t} = (P')^h ξ_{t|t}`, and the regime-specific conditional means are mixed with those
+weights. Which signature applies depends on the model:
+
+- **`model_type = :ms_ar`** — call `forecast(m, h)`. The Hamilton form is written in
+  deviations from regime-dependent means, and `z_t = y_t − μ_{s_t}` follows a *regime-free*
+  AR(p), so the exact `h`-step mean is
+
+  ```math
+  E[y_{t+h} \\mid \\mathcal F_t] = \\sum_{j=1}^{p}\\varphi_j\\, E[z_{t+h-j}\\mid\\mathcal F_t]
+                                   + \\sum_k \\xi_{t+h\\mid t,k}\\,\\mu_k,
+  ```
+
+  with `E[z_s | ℱ_t] = y_s − Σ_k Pr(s_s = k | ℱ_t) μ_k` for the observed tail. No expansion
+  of the `K^{p+1}` state space is needed for the mean, and no simulation error enters it.
+
+- **`model_type = :regression`** — call `forecast(m, X_new)` with an `h × k` matrix of future
+  regressors, since `y_t = x_t'β_{s_t} + ε_t` cannot be projected without them. The mean is
+  `Σ_k ξ_{t+h|t,k}·x_{t+h}'β_k`.
+
+The `forecast` field is that exact analytic mean. Because the predictive density is a
+Gaussian **mixture** over regime paths, the `level` bands and `se` are obtained by simulating
+`reps` regime paths with their own `N(0, σ²_{s})` innovations; `regime_prob` returns the
+propagated regime probabilities.
+
+# Examples
+```julia
+m = estimate_ms_ar(y; k_regimes=2, p=1)
+f = forecast(m, 8)
+f.forecast          # exact mean path
+f.regime_prob       # 8 x 2 predicted regime probabilities
+```
+
+# References
+- Hamilton, J. D. (1994). *Time Series Analysis*, ch. 22. Princeton University Press.
+- Krolzig, H.-M. (1997). *Markov-Switching Vector Autoregressions*. Springer.
+"""
+function forecast(m::MSRegModel{T}, h::Int; reps::Int=1000, level::Real=0.90,
+                  rng::Random.AbstractRNG=Random.default_rng()) where {T<:AbstractFloat}
+    m.model_type === :ms_ar || throw(ArgumentError(
+        "forecast(m, h) is defined for :ms_ar models. A switching REGRESSION needs future " *
+        "regressors — call forecast(m, X_new) with an h x k matrix instead."))
+    h >= 1 || throw(ArgumentError("horizon h must be >= 1."))
+    (0 < level < 1) || throw(ArgumentError("level must satisfy 0 < level < 1."))
+
+    K = m.k_regimes; p = m.p
+    mu = m.mu; phi = m.ar; sig = sqrt.(m.sigma2)
+    xi_h = _ms_predicted_regimes(m, h)
+
+    # Observed tail of z_s = y_s - mu_{s_s}, replacing the unobserved regime by its
+    # smoothed expectation given the full sample (which is F_t at the end of the sample).
+    n = length(m.y)
+    z_hist = Vector{T}(undef, p)
+    @inbounds for j in 1:p
+        idx = n - p + j
+        z_hist[j] = m.y[idx] - dot(view(m.smoothed_prob, idx, :), mu)
+    end
+
+    # Exact mean recursion on z, then add back the mixed regime mean.
+    zbuf = copy(z_hist)                      # zbuf[end] is the most recent
+    fmean = Vector{T}(undef, h)
+    @inbounds for s in 1:h
+        znext = zero(T)
+        for j in 1:p
+            znext += phi[j] * zbuf[end - j + 1]
+        end
+        push!(zbuf, znext)
+        fmean[s] = znext + dot(view(xi_h, s, :), mu)
+    end
+
+    # Bands: simulate regime paths and their own innovations.
+    paths = Matrix{T}(undef, reps, h)
+    xi0 = Vector{T}(m.filtered_prob[end, :])
+    @inbounds for r in 1:reps
+        state = _ms_draw_categorical(rng, xi0)
+        zb = copy(z_hist)
+        for s in 1:h
+            state = _ms_draw_categorical(rng, view(m.P, state, :))
+            znext = zero(T)
+            for j in 1:p
+                znext += phi[j] * zb[end - j + 1]
+            end
+            znext += sig[state] * randn(rng, T)
+            push!(zb, znext)
+            paths[r, s] = znext + mu[state]
+        end
+    end
+
+    _ms_bands(fmean, paths, xi_h, h, level, reps)
+end
+
+function forecast(m::MSRegModel{T}, X_new::AbstractMatrix; reps::Int=1000,
+                  level::Real=0.90,
+                  rng::Random.AbstractRNG=Random.default_rng()) where {T<:AbstractFloat}
+    m.model_type === :regression || throw(ArgumentError(
+        "forecast(m, X_new) is defined for switching REGRESSIONS. An :ms_ar model " *
+        "projects itself — call forecast(m, h)."))
+    Xf = Matrix{T}(X_new)
+    size(Xf, 2) == size(m.coefs, 1) || throw(ArgumentError(
+        "X_new must have $(size(m.coefs, 1)) columns (got $(size(Xf, 2)))."))
+    h = size(Xf, 1)
+    h >= 1 || throw(ArgumentError("X_new must have at least one row."))
+    (0 < level < 1) || throw(ArgumentError("level must satisfy 0 < level < 1."))
+
+    K = m.k_regimes
+    B = m.coefs; sig = sqrt.(m.sigma2)
+    xi_h = _ms_predicted_regimes(m, h)
+
+    # Exact mean: mix the regime-specific means with the propagated probabilities.
+    fmean = Vector{T}(undef, h)
+    @inbounds for s in 1:h
+        acc = zero(T)
+        for k in 1:K
+            acc += xi_h[s, k] * dot(view(Xf, s, :), view(B, :, k))
+        end
+        fmean[s] = acc
+    end
+
+    paths = Matrix{T}(undef, reps, h)
+    xi0 = Vector{T}(m.filtered_prob[end, :])
+    @inbounds for r in 1:reps
+        state = _ms_draw_categorical(rng, xi0)
+        for s in 1:h
+            state = _ms_draw_categorical(rng, view(m.P, state, :))
+            paths[r, s] = dot(view(Xf, s, :), view(B, :, state)) + sig[state] * randn(rng, T)
+        end
+    end
+
+    _ms_bands(fmean, paths, xi_h, h, level, reps)
+end
+
+# Draw a categorical index from a probability vector.
+@inline function _ms_draw_categorical(rng::Random.AbstractRNG, w::AbstractVector{T}) where {T}
+    u = rand(rng, T) * sum(w)
+    acc = zero(T)
+    @inbounds for k in eachindex(w)
+        acc += w[k]
+        u <= acc && return k
+    end
+    return lastindex(w)
+end
+
+# Assemble an MSForecast from the analytic mean and the simulated mixture paths.
+function _ms_bands(fmean::Vector{T}, paths::Matrix{T}, xi_h::Matrix{T},
+                   h::Int, level::Real, reps::Int) where {T<:AbstractFloat}
+    alpha = (1 - level) / 2
+    fse = vec(std(paths; dims=1))
+    lo = T[Statistics.quantile(view(paths, :, s), alpha) for s in 1:h]
+    hi = T[Statistics.quantile(view(paths, :, s), 1 - alpha) for s in 1:h]
+    MSForecast{T}(fmean, lo, hi, fse, xi_h, h, T(level), reps)
 end

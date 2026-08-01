@@ -102,7 +102,7 @@ end
 # estimate_statespace — public MLE / filter entry points
 # =============================================================================
 """
-    estimate_statespace(build::Function, θ0::AbstractVector, y; init_mode=:diffuse,
+    estimate_statespace(build::Function, θ0::AbstractVector, y; init_mode=:kappa,
                         kappa=1e6, param_names=nothing, theta_transform=identity,
                         display_names=nothing, iterations=1000, g_tol=1e-8) -> StateSpaceModel
 
@@ -156,7 +156,7 @@ end
 # Convenience wrappers
 # =============================================================================
 """
-    local_level(y; init_mode=:diffuse, kappa=1e6) -> StateSpaceModel
+    local_level(y; init_mode=:kappa, kappa=1e6) -> StateSpaceModel
 
 Fit the local-level (random-walk-plus-noise) model
 
@@ -177,7 +177,7 @@ function local_level(y; init_mode::Symbol=:kappa, kappa::Real=1e6)
 end
 
 """
-    local_linear_trend(y; init_mode=:diffuse, kappa=1e6) -> StateSpaceModel
+    local_linear_trend(y; init_mode=:kappa, kappa=1e6) -> StateSpaceModel
 
 Fit the local-linear-trend (integrated random walk with drift) structural model
 
@@ -199,7 +199,7 @@ function local_linear_trend(y; init_mode::Symbol=:kappa, kappa::Real=1e6)
 end
 
 """
-    estimate_tvp_reg(y, X; intercept=true, init_mode=:diffuse, kappa=1e6) -> StateSpaceModel
+    estimate_tvp_reg(y, X; intercept=true, init_mode=:kappa, kappa=1e6) -> StateSpaceModel
 
 Time-varying-parameter regression with random-walk coefficients:
 

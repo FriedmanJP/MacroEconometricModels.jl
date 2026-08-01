@@ -22,41 +22,61 @@ via EGM, (2) compute the stationary distribution, (3) check market clearing,
 """
 
 # =============================================================================
-# _compute_euler_error — max Euler equation residual
+# Euler-equation accuracy (#508)
 # =============================================================================
 
 """
-    _compute_euler_error(c_pol, a_pol, ip, grid, income, prices) → T
+    _euler_error_stats(c_pol, a_pol, ip, grid, income, prices; points=:midpoints)
+        → NamedTuple
 
-Compute the maximum Euler equation error (in log10 units) at unconstrained
-grid points.
+Euler-equation residuals for a solved one-asset household problem.
 
-For each (a_i, e_j) where the borrowing constraint does not bind
-(a'(a_i, e_j) > a_min + ε), the Euler residual is:
+For each evaluation point `(a, e_j)` at which the borrowing constraint does not bind,
+the residual is
 
-    err_ij = |1 − β(1+r) E[u'(c(a', e'))] / u'(c(a_i, e_j))|
+    err = |1 − β(1+r) E[u'(c(a′, e′))] / u'(c(a, e_j))|
 
-Returns `log10(max err_ij)` over unconstrained points. If no unconstrained
-points exist, returns `NaN`.
+and the statistic returned is `log10` of the maximum and of the mean over the evaluated
+points.
+
+# `points`
+- `:midpoints` (default) — evaluate at the cell midpoints `(aᵢ + aᵢ₊₁)/2`, interpolating
+  both `c` and `a′`. This measures **approximation** error.
+- `:nodes` — evaluate at the grid nodes. EGM *solves* the Euler equation there, so the
+  residual only measures interpolation round-trip error and is optimistically small by
+  construction. Retained for continuity with published numbers, not because it is
+  informative.
+
+# Excluded cells
+Two classes of point carry no information and are counted rather than scored:
+
+- **constrained** (`a′ ≤ a_min + 1e-6`) — the Euler equation holds with inequality there.
+- **off-grid** (`a′ > a_max`) — `_linear_interp` flat-extrapolates above the grid, so the
+  continuation consumption is looked up at exactly the clamped point the solver itself
+  used and the residual collapses to machine precision. Scoring those cells makes a
+  *truncating* model look more accurate precisely where it is broken.
+
+Returns `(points, max, mean, n_evaluated, n_constrained, n_offgrid)`; `max` and `mean` are
+`NaN` when nothing was evaluated.
 """
-function _compute_euler_error(c_pol::Matrix{T}, a_pol::Matrix{T},
-                               ip::IndividualProblem{T}, grid::HAGrid{T},
-                               income::IncomeProcess{T},
-                               prices::Dict{Symbol,T}) where {T<:AbstractFloat}
+function _euler_error_stats(c_pol::Matrix{T}, a_pol::Matrix{T},
+                            ip::IndividualProblem{T}, grid::HAGrid{T},
+                            income::IncomeProcess{T},
+                            prices::Dict{Symbol,T};
+                            points::Symbol=:midpoints) where {T<:AbstractFloat}
+    points in (:nodes, :midpoints) ||
+        throw(ArgumentError("points must be :nodes or :midpoints; got :$points"))
+
     a_grid = grid.grids[1]
     n_a = length(a_grid)
     n_e = length(income.states)
     a_min = ip.borrowing_constraint[1]
+    a_max = a_grid[end]
 
     beta = ip.beta
     u_prime = ip.utility_prime
     r = prices[:r]
-
     Pi = income.transition
-
-    max_err = zero(T)
-    n_checked = 0
-    constraint_tol = a_min + T(1e-6)
 
     # Under GHH preferences marginal utility is U'(x) with x = c − v(n), not
     # U'(c): the Euler equation holds in the composite good. `shift[j]` is v(n_j),
@@ -71,40 +91,69 @@ function _compute_euler_error(c_pol::Matrix{T}, a_pol::Matrix{T},
         end
     end
 
+    eval_pts = points === :nodes ? a_grid :
+               T[(a_grid[i] + a_grid[i+1]) / 2 for i in 1:(n_a-1)]
+
+    max_err = zero(T)
+    sum_err = zero(T)
+    n_checked = 0
+    n_constrained = 0
+    n_offgrid = 0
+    constraint_tol = a_min + T(1e-6)
+
     @inbounds for j in 1:n_e
-        for i in 1:n_a
-            # Skip constrained points
-            if a_pol[i, j] <= constraint_tol
+        c_j = view(c_pol, :, j)
+        a_j = view(a_pol, :, j)
+        for (k, a_pt) in enumerate(eval_pts)
+            # At a node the policy value IS the stored one; off-node it is the
+            # interpolant, which is the whole point of the :midpoints metric.
+            c_here = points === :nodes ? c_pol[k, j] : _linear_interp(a_grid, c_j, a_pt)
+            a_next = points === :nodes ? a_pol[k, j] : _linear_interp(a_grid, a_j, a_pt)
+
+            if a_next <= constraint_tol
+                n_constrained += 1
+                continue
+            end
+            if a_next > a_max
+                n_offgrid += 1
                 continue
             end
 
-            # Expected marginal utility at (a', e')
             emu = zero(T)
             for jp in 1:n_e
-                c_tomorrow = _linear_interp(a_grid, view(c_pol, :, jp), a_pol[i, j])
+                c_tomorrow = _linear_interp(a_grid, view(c_pol, :, jp), a_next)
                 c_tomorrow = max(c_tomorrow - shift[jp], T(1e-15))
                 emu += Pi[j, jp] * u_prime(c_tomorrow)
             end
 
-            # Euler residual
-            up_today = u_prime(max(c_pol[i, j] - shift[j], T(1e-15)))
+            up_today = u_prime(max(c_here - shift[j], T(1e-15)))
             if up_today > zero(T) && isfinite(emu)
                 euler_resid = abs(one(T) - beta * (one(T) + r) * emu / up_today)
-                if euler_resid > max_err
-                    max_err = euler_resid
-                end
+                euler_resid > max_err && (max_err = euler_resid)
+                sum_err += euler_resid
                 n_checked += 1
             end
         end
     end
 
-    if n_checked == 0
-        return T(NaN)
-    end
-
-    # Return in log10 units
-    return max_err > zero(T) ? log10(max_err) : T(-16)
+    lg(x) = x > zero(T) ? log10(x) : T(-16)
+    (points = points,
+     max = n_checked == 0 ? T(NaN) : lg(max_err),
+     mean = n_checked == 0 ? T(NaN) : lg(sum_err / T(n_checked)),
+     n_evaluated = n_checked,
+     n_constrained = n_constrained,
+     n_offgrid = n_offgrid)
 end
+
+"""
+    _compute_euler_error(c_pol, a_pol, ip, grid, income, prices; points=:midpoints) → T
+
+Scalar `log10` maximum Euler residual — the `max` field of [`_euler_error_stats`](@ref).
+"""
+_compute_euler_error(c_pol::Matrix{T}, a_pol::Matrix{T}, ip::IndividualProblem{T},
+                     grid::HAGrid{T}, income::IncomeProcess{T},
+                     prices::Dict{Symbol,T}; points::Symbol=:midpoints) where {T<:AbstractFloat} =
+    _euler_error_stats(c_pol, a_pol, ip, grid, income, prices; points=points).max
 
 # =============================================================================
 # _ha_steady_state — bisection on interest rate
@@ -159,7 +208,10 @@ function _ha_steady_state(ip::IndividualProblem{T}, grid::HAGrid{T},
                            distribution::Symbol=:young,
                            n_moments::Int=3,
                            n_quad::Int=4,
-                           winberry_tol::Real=1e-9) where {T<:AbstractFloat}
+                           winberry_tol::Real=1e-9,
+                           euler_points::Symbol=:midpoints) where {T<:AbstractFloat}
+    euler_points in (:nodes, :midpoints) || throw(ArgumentError(
+        "_ha_steady_state: euler_points must be :nodes or :midpoints, got :$euler_points."))
     distribution in (:young, :winberry) || throw(ArgumentError(
         "_ha_steady_state: distribution must be :young or :winberry, got :$distribution."))
     grid.n_dims == 1 || throw(ArgumentError(
@@ -368,8 +420,15 @@ function _ha_steady_state(ip::IndividualProblem{T}, grid::HAGrid{T},
         r_hi - r_lo <= T(r_atol) && break
     end
 
-    # Compute Euler equation error
-    euler_err = _compute_euler_error(best_c_pol, best_a_pol, ip, grid, income, best_prices)
+    # Euler-equation accuracy (#508). Both conventions are measured — the off-node
+    # statistic is what `euler_error` reports, the node statistic is kept alongside it
+    # because it is what every published number for this package used to mean.
+    euler_mid = _euler_error_stats(best_c_pol, best_a_pol, ip, grid, income, best_prices;
+                                   points=:midpoints)
+    euler_nodes = _euler_error_stats(best_c_pol, best_a_pol, ip, grid, income, best_prices;
+                                     points=:nodes)
+    euler_stats = (midpoints=euler_mid, nodes=euler_nodes)
+    euler_err = euler_points === :nodes ? euler_nodes.max : euler_mid.max
 
     # Compute output: Cobb-Douglas for production economies, aggregate endowment otherwise
     if best_K_d > zero(T)
@@ -467,7 +526,8 @@ function _ha_steady_state(ip::IndividualProblem{T}, grid::HAGrid{T},
         final_iter,
         euler_err,
         best_excess;
-        parametric=best_family
+        parametric=best_family,
+        euler=euler_stats
     )
 end
 
@@ -606,7 +666,8 @@ function compute_steady_state(spec::HADSGESpec{T};
                           distribution::Union{Nothing,Symbol}=nothing,
                           n_moments::Int=3,
                           n_quad::Int=4,
-                          winberry_tol::Real=1e-9) where {T<:AbstractFloat}
+                          winberry_tol::Real=1e-9,
+                          euler_points::Symbol=:midpoints) where {T<:AbstractFloat}
     pfn = isnothing(price_fn) ? _default_cobb_douglas_price_fn : price_fn
 
     # Extract parameters: merge het_params with aggregate steady-state params
@@ -645,6 +706,7 @@ function compute_steady_state(spec::HADSGESpec{T};
         ceiling_mass_tol=ceiling_mass_tol, residual_tol=residual_tol,
         verbose=verbose, clearing_fn=clr,
         distribution=isnothing(distribution) ? spec.distribution : distribution,
-        n_moments=n_moments, n_quad=n_quad, winberry_tol=winberry_tol
+        n_moments=n_moments, n_quad=n_quad, winberry_tol=winberry_tol,
+        euler_points=euler_points
     )
 end

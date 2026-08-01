@@ -187,13 +187,15 @@ end
 
 """
     report(ss::HASteadyState)
+    report(io::IO, ss::HASteadyState)
 
 Print a detailed summary of the heterogeneous agent steady state including
 convergence diagnostics, equilibrium prices, aggregate quantities, and
 wealth distribution statistics.
 """
-function report(ss::HASteadyState{T}) where {T}
-    io = stdout
+report(ss::HASteadyState) = report(stdout, ss)
+
+function report(io::IO, ss::HASteadyState{T}) where {T}
 
     # --- Header ---
     _pretty_table(io, Any["" ""];
@@ -208,6 +210,23 @@ function report(ss::HASteadyState{T}) where {T}
         "Excess demand"   _fmt(ss.excess_demand; digits=6);
         "Euler error (log10)"  _fmt(ss.euler_error; digits=4)
     ]
+    # #508: name the convention and show the mean alongside the max, so the headline
+    # number cannot be read as "the model is accurate everywhere". The node statistic
+    # is shown for continuity — it is what this row used to mean.
+    if ss.euler !== nothing
+        e = ss.euler
+        which = e.midpoints.max == ss.euler_error ? e.midpoints : e.nodes
+        conv_data = vcat(conv_data, Any[
+            "  measured at"        string(which.points);
+            "  mean (log10)"       _fmt(which.mean; digits=4);
+            "  points evaluated"   which.n_evaluated;
+            "  at grid nodes"      _fmt(e.nodes.max; digits=4)
+        ])
+        if which.n_offgrid > 0
+            conv_data = vcat(conv_data, Any[
+                "  excluded (a' > a_max)"  which.n_offgrid])
+        end
+    end
     _pretty_table(io, conv_data;
         title="Convergence",
         column_labels=["", "Value"],

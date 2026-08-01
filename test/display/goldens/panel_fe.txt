@@ -14,7 +14,7 @@ sigma_e N
 rho N
 F-statistic N
 F p-value N
-Cov. type cluster
+Cov. type Cluster-robust
 
 Coefficients
 

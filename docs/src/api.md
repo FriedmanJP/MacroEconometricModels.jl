@@ -508,6 +508,10 @@ OLS, WLS, IV/2SLS, logit, probit, ordered, and multinomial estimation for cross-
 | `estimate_ologit(y, X)` | Ordered logit MLE |
 | `estimate_oprobit(y, X)` | Ordered probit MLE |
 | `estimate_mlogit(y, X)` | Multinomial logit MLE |
+| `estimate_poisson(y, X; exposure)` | Poisson regression, QMLE sandwich SEs by default |
+| `estimate_nbreg(y, X)` | Negative-Binomial-2 regression (`Var = mu + alpha*mu^2`) |
+| `dispersion_test(m::PoissonModel)` | Cameron-Trivedi (1990) overdispersion test (NB1 & NB2 forms) |
+| `incidence_rate_ratio(m)` | Incidence-rate ratios `exp(beta)` for count models |
 | `marginal_effects(m; ...)` | AME/MEM/MER with delta-method SEs |
 | `odds_ratio(m)` | Odds ratios for logit models |
 | `classification_table(m)` | Classification accuracy table |
@@ -518,6 +522,8 @@ OLS, WLS, IV/2SLS, logit, probit, ordered, and multinomial estimation for cross-
 | `harvey_test(m)` | Harvey multiplicative heteroskedasticity test |
 | `breusch_godfrey_test(m; lags)` | Breusch-Godfrey serial-correlation LM test |
 | `reset_test(m; powers)` | Ramsey RESET functional-form test |
+| `residuals(m; kind)` | Ordered/multinomial residual matrix (`:response`/`:pearson`/`:deviance`) |
+| `generalized_residuals(m)` | Ordered-model score residual (Chesher-Irish), length `n` |
 | `brant_test(m)` | Brant test for parallel regression |
 | `hausman_iia(m)` | Hausman test for IIA assumption |
 

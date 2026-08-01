@@ -428,7 +428,6 @@ function Base.show(io::IO, m::PanelRegModel{T}) where {T}
                  m.method == :bb ? "Blundell-Bond" : "Correlated RE"
     twoway_str = m.twoway ? " (Two-way)" :
                  m.hdfe !== nothing ? " (HDFE)" : ""
-    cov_str = m.cov_type == :pcse ? "Panel-corrected (Beck-Katz)" : string(m.cov_type)
 
     spec = Any[
         "Method"         method_str * twoway_str;
@@ -443,7 +442,7 @@ function Base.show(io::IO, m::PanelRegModel{T}) where {T}
         "rho"            _fmt(m.rho);
         "F-statistic"    _fmt(m.f_stat; digits=2);
         "F p-value"      _format_pvalue(m.f_pval);
-        "Cov. type"      cov_str
+        "Cov. type"      _label(m.cov_type)
     ]
     if m.theta !== nothing
         spec = vcat(spec, Any["theta" _fmt(m.theta)])
@@ -514,7 +513,7 @@ function Base.show(io::IO, m::PanelIVModel{T}) where {T}
         "1st-stage F"      _fmt(m.first_stage_f; digits=2);
         "Endogenous"       join(m.endog_names, ", ");
         "Instruments"      join(m.instrument_names, ", ");
-        "Cov. type"        string(m.cov_type)
+        "Cov. type"        _label(m.cov_type)
     ]
     if m.sargan_stat !== nothing
         # Robust cov_type ⇒ the overid statistic is the clustered Hansen J, not Sargan.
