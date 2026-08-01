@@ -911,8 +911,7 @@ Both criteria select ``p = 4``, the top of the search range. The Cholesky orderi
   *Econometrica*, 83(5), 1963-1999. [DOI](https://doi.org/10.3982/ECTA12356)
 
 - Blanchard, O. J., & Quah, D. (1989). The Dynamic Effects of Aggregate Demand and Supply Disturbances.
-  *American Economic Review*, 79(4), 655-673. No DOI is registered for this article; the working-paper version is
-  NBER Working Paper 2737, [DOI](https://doi.org/10.3386/w2737).
+  *American Economic Review*, 79(4), 655-673. [JSTOR](https://www.jstor.org/stable/1827924)
 
 - Christiano, L. J., Eichenbaum, M., & Evans, C. L. (1999). Monetary Policy Shocks: What Have We Learned and to What End?
   In *Handbook of Macroeconomics*, Vol. 1, edited by J. B. Taylor & M. Woodford, 65-148. Amsterdam: Elsevier. [DOI](https://doi.org/10.1016/S1574-0048(99)01005-8)
