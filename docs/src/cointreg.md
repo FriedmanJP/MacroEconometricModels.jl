@@ -315,7 +315,7 @@ All three estimators recover the true slope vector ``(0.8, -0.5)`` to within ``0
 
 ## Common Pitfalls
 
-1. **The regressors must be ``I(1)`` and cointegrated with ``y``.** FMOLS/CCR/DOLS assume a genuine cointegrating relationship; applied to unrelated ``I(1)`` series they estimate a spurious "long-run" vector. Pre-test for cointegration (e.g. the Gregory–Hansen or Johansen tests on the [Unit Root & Cointegration](@ref tests_unitroot_page) page) first. If some regressors are ``I(0)``, use [ARDL & Bounds Testing](@ref ardl_page) instead.
+1. **The regressors must be ``I(1)`` and cointegrated with ``y``.** FMOLS/CCR/DOLS assume a genuine cointegrating relationship; applied to unrelated ``I(1)`` series they estimate a spurious "long-run" vector. Pre-test for cointegration first — the Johansen test lives on [Unit Root & Cointegration](@ref tests_unitroot_page), the residual-based tests on [Residual-Based Cointegration](@ref tests_cointegration_page), and the Gregory–Hansen test with a break on [Structural Breaks](@ref tests_breaks_page). If some regressors are ``I(0)``, use [ARDL & Bounds Testing](@ref ardl_page) instead.
 
 2. **`X` carries no deterministic column.** The intercept and trend are added internally via `trend`; passing a constant column double-counts the intercept.
 
