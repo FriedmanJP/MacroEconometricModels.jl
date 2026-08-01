@@ -1,10 +1,9 @@
 # [Nonlinear Solution Methods](@id dsge_nonlinear)
 
-First-order linear solutions impose **certainty equivalence** --- agents behave as if shocks have zero variance. This rules out risk premia, precautionary savings, welfare costs of uncertainty, and asymmetric dynamics. Nonlinear methods capture all of these by retaining higher-order terms in the Taylor expansion of the policy function or by solving the functional equation globally. MacroEconometricModels.jl provides four families: **higher-order perturbation** (local, Schmitt-Grohe & Uribe 2004; Andreasen, Fernandez-Villaverde & Rubio-Ramirez 2018), **Chebyshev projection** (global polynomial, Judd 1992, 1998), **policy function iteration** (global iterative, Coleman 1990), and `vfi_solver` (a historically-named **Euler time-iteration** solver, algorithmically equivalent to policy function iteration --- not genuine value-function iteration; see the warning under [Value Function Iteration](@ref)). All three global solvers support Anderson acceleration (Walker & Ni 2011) and multi-threading. For model specification and linearization, see [DSGE Models](@ref dsge_page). For first-order solvers, see [Linear Solvers](@ref dsge_linear).
-
+First-order linear solutions impose **certainty equivalence** --- agents behave as if shocks have zero variance. This rules out risk premia, precautionary savings, welfare costs of uncertainty, and asymmetric dynamics. Nonlinear methods capture all of these by retaining higher-order terms in the Taylor expansion of the policy function or by solving the functional equation globally. MacroEconometricModels.jl provides four families: **higher-order perturbation** (local, Schmitt-Grohe & Uribe 2004; Andreasen, Fernandez-Villaverde & Rubio-Ramirez 2018), **Chebyshev projection** (global polynomial, Judd 1992, 1998), **policy function iteration** (global iterative, Coleman 1990), and `vfi_solver` (a historically-named **Euler time-iteration** solver, algorithmically equivalent to policy function iteration --- not genuine value-function iteration; see the warning under [Value Function Iteration](@ref)). All three global solvers support multi-threading, and the two iterative ones support Anderson acceleration (Walker & Ni 2011). For model specification and linearization, see [DSGE Models](@ref dsge_page). For first-order solvers, see [Linear Solvers](@ref dsge_linear).
 
 ```@setup dsge_nonlinear
-using MacroEconometricModels, Random
+using MacroEconometricModels, Random, LinearAlgebra, Statistics
 Random.seed!(42)
 ```
 
@@ -57,23 +56,21 @@ plot_result(girf3)
 
 ```@example dsge_nonlinear
 proj = collocation_solver(spec; degree=5, grid=:tensor, max_iter=200)
-y = evaluate_policy(proj, proj.steady_state[proj.state_indices])
-err = max_euler_error(proj)
+err = max_euler_error(proj; n_test=1000, rng=MersenneTwister(42))
+(converged = proj.converged, iterations = proj.iterations,
+ nodes = size(proj.collocation_nodes, 1), max_euler_error = err)
 ```
 
-**Recipe 4: PFI with damped updates**
+Gauss-Newton drives the collocation residual to zero in 26 iterations on a 36-node tensor grid, and the resulting policy has a maximum Euler error of ``2.2 \times 10^{-4}`` — ``\log_{10}`` of ``-3.7``, "good" on the usual accuracy scale. Note that the residual at the nodes and the Euler error away from them are different quantities; the second is the one that measures accuracy.
 
-```@example dsge_nonlinear
-pfi = pfi_solver(spec; degree=5, damping=0.5, max_iter=200)
-report(pfi)
-```
-
-**Recipe 5: `vfi_solver` (Euler time iteration) with Howard-style re-solves and Anderson acceleration**
+**Recipe 4: `vfi_solver` (Euler time iteration) with Howard-style re-solves and Anderson acceleration**
 
 ```@example dsge_nonlinear
 vfi = vfi_solver(spec; degree=5, howard_steps=5, anderson_m=3, max_iter=500)
 report(vfi)
 ```
+
+Howard re-solves and Anderson mixing together cut the iteration count to 19. Neither acceleration works alone on this model: plain time iteration and Anderson-only both exhaust `max_iter=500` without converging, while `howard_steps=5` on its own needs 434 iterations. The combination is what makes the solver practical.
 
 ---
 
@@ -97,13 +94,22 @@ where:
 
 ```@example dsge_nonlinear
 psol = perturbation_solver(spec; order=2)
-nothing # hide
+(states = spec.varnames[psol.state_indices], h_sigma_sigma = psol.hσσ,
+ controls = spec.varnames[psol.control_indices], g_sigma_sigma = psol.gσσ)
 ```
+
+The variance corrections are the whole point of going to second order. Capital carries ``h_{\sigma\sigma} = +0.0145`` and consumption ``g_{\sigma\sigma} = -0.0145``: facing technology risk, the household holds *more* capital and consumes *less* than the deterministic steady state prescribes. That is the precautionary savings motive, and it is identically zero at first order. Technology and output take no correction, because neither is a choice made under uncertainty — one is exogenous, the other a static function of predetermined inputs.
 
 | Keyword | Type | Default | Description |
 |---------|------|---------|-------------|
 | `order` | `Int` | `2` | Perturbation order (1, 2, or 3) |
-| `method` | `Symbol` | `:gensys` | First-order solver (`:gensys` or `:blanchard_kahn`) |
+| `sylvester_method` | `Symbol` | `:auto` | Solver for the order-2/3 Kronecker-Sylvester systems |
+| `sylvester_tol` | `Real` | ``10^{-8}`` | Residual gate on the Sylvester solve |
+| `gmres_tol` | `Real` | ``10^{-8}`` | Convergence tolerance of the GMRES fallback |
+| `gmres_max_outer` | `Int` | `20` | Outer restarts allowed in the GMRES fallback |
+
+!!! warning "`method=` is accepted but has no effect"
+    `perturbation_solver` takes a `method` keyword documented as selecting the first-order solver, but the body never reads it: the first-order step always routes through the companion-QZ core. Passing `method=:blanchard_kahn` silently changes nothing. Do not rely on it.
 
 ### Algorithm
 
@@ -136,8 +142,11 @@ where:
 
 ```@example dsge_nonlinear
 psol3 = perturbation_solver(spec; order=3)
-nothing # hide
+(gxxx = size(psol3.gxxx), hxxx = size(psol3.hxxx),
+ g_sigma3 = psol3.gσσσ, h_sigma3 = psol3.hσσσ)
 ```
+
+With ``n_v = 3`` the third-order tensors are ``2 \times 27`` for both controls and states — the flattened triple Kronecker product. Both cubic variance corrections come back exactly zero, as they must: ``f_{\sigma\sigma\sigma}`` is proportional to the third moment of the shocks, and Gaussian innovations have none. The term becomes active only under skewed innovations, which is the case third-order perturbation exists to handle.
 
 ### Algorithm
 
@@ -175,6 +184,7 @@ The third-order computation extends the second-order procedure with six addition
 | `state_indices` | `Vector{Int}` | Indices of state variables |
 | `control_indices` | `Vector{Int}` | Indices of control variables |
 | `eu` | `Vector{Int}` | Existence/uniqueness from first-order |
+| `method` | `Symbol` | Always `:perturbation` |
 | `spec` | `DSGESpec{T}` | Back-reference to specification |
 | `linear` | `LinearDSGE{T}` | Linearized system |
 
@@ -252,6 +262,7 @@ report(pss)
 | `gx_state`, `eta_y` | Control loadings on the **lagged** state and the current shock |
 | `hxx`, `gxx`, `hss`, `gss` | Second-order blocks over ``v \otimes v`` and the ``\sigma^2`` corrections |
 | `hxxx`, `gxxx`, `hssx`, `gssx`, `hsss`, `gsss` | Third-order blocks (zeros below order 3) |
+| `steady_state`, `spec` | Deterministic steady state and back-reference, for mapping deviations back to levels |
 
 !!! warning "The control is evaluated on the lagged state"
     Policy functions here are written over ``v_t = [x_{t-1}; \varepsilon_t]``, so ``g_x`` loads the **lagged** state and ``\eta_y`` the current shock. Evaluating the control on the freshly-updated state instead applies a lagged-state loading to a current-dated state --- the state channel propagates twice, and every control series comes out shifted forward by one period. On an exactly linear model, where orders 2 and 3 must reproduce the first-order solution to machine precision, that shift is unmistakable. Both the simulation and the moment routine now evaluate the control on the same ``v`` blocks that drive the state.
@@ -315,8 +326,12 @@ irf_analytical = irf(psol3, 40)
 
 # GIRFs (captures nonlinear dynamics, Monte Carlo)
 girf = irf(psol3, 40; irf_type=:girf, n_draws=100)
-nothing # hide
+
+(analytical_impact = round.(irf_analytical.values[1, :, 1]; digits=5),
+ girf_impact = round.(girf.values[1, :, 1]; digits=5))
 ```
+
+The two impact responses agree to three decimals — the nonlinear terms contribute little at a one-standard-deviation impulse, which is the regime where certainty equivalence is a good approximation. The residual gap is part genuine second- and third-order curvature and part Monte-Carlo noise from the 100 draws; raising `n_draws` shrinks the second but not the first. GIRFs earn their cost at large impulses and in models with strong asymmetries, not here.
 
 ```julia
 plot_result(girf)
@@ -349,7 +364,12 @@ fv1 = fevd(psol2, 40)
 
 # Unconditional FEVD (order≥2, augmented Lyapunov)
 fv2 = fevd(psol2, 1; unconditional=true)
+
+(h_step = round.(fv1.proportions[:, 1, 40]; digits=4),
+ unconditional = round.(fv2.proportions[:, 1, 1]; digits=4))
 ```
+
+Both decompositions assign the entire forecast error variance of every variable to ``\varepsilon_A``, because the RBC model has exactly one shock and the shares must sum to one by construction. The comparison becomes informative only with two or more shocks, where the ``h``-step and unconditional decompositions genuinely differ: the first weights the transition path, the second the ergodic distribution, and nonlinear propagation redistributes variance between them.
 
 The unconditional FEVD captures second-order cross-terms through the Kronecker state block ``\text{vec}(x^f \otimes x^f)`` in the augmented system. At order 1, it reduces to the standard asymptotic first-order decomposition. At order 2, it reflects how nonlinear propagation redistributes variance across shocks.
 
@@ -402,6 +422,8 @@ report(proj)
 | `scale` | `Real` | `3.0` | State bounds as multiples of unconditional std |
 | `tol` | `Real` | ``10^{-8}`` | Newton convergence tolerance |
 | `max_iter` | `Int` | `100` | Maximum Newton iterations |
+| `threaded` | `Bool` | `false` | Compute Jacobian columns in parallel |
+| `verbose` | `Bool` | `false` | Print per-iteration residuals |
 | `initial_coeffs` | `Union{Nothing, Matrix}` | `nothing` | Warm-start coefficients from previous solve |
 | `adaptive` | `Bool` | `false` | Enable dimension-adaptive Smolyak refinement |
 | `euler_tol` | `Real` | ``10^{-6}`` | Target max Euler error for adaptive refinement |
@@ -453,7 +475,7 @@ Both grids carry 29 nodes, but the anisotropic one reaches a max Euler error of 
 
 ### Adaptive Refinement
 
-Choosing ``\boldsymbol{\mu}`` by hand requires knowing where the curvature is. Setting `adaptive=true` discovers it instead. Starting from the requested level set, each round:
+Choosing ``\boldsymbol{\mu}`` by hand requires knowing where the curvature is. Setting `adaptive=true` discovers it instead, following the dimension-adaptive refinement strategy of Brumm & Scheidegger (2017). Starting from the requested level set, each round:
 
 1. Solves the collocation system on the current grid
 2. Measures the max Euler error on a **fixed** set of `n_euler_test` random points (fixed across rounds, so round-to-round comparisons reflect the grid and not resampling noise)
@@ -480,19 +502,32 @@ Refinement grows the 5-node ``\mu = 1`` grid into a 57-node grid whose per-state
 
 ### Evaluating the Policy Function
 
-The `evaluate_policy` function maps state vectors to the full vector of endogenous variables using the stored Chebyshev coefficients:
+`evaluate_policy` maps a state vector to the full vector of endogenous variables using the stored Chebyshev coefficients. The argument is the **lagged** state ``x_{t-1}`` in physical units, and the return value is the current-period vector of all ``n`` endogenous variables in `spec.varnames` order — the same ``v_t = [x_{t-1}; \varepsilon_t]`` convention the perturbation solutions use.
 
 ```@example dsge_nonlinear
-y = evaluate_policy(proj, proj.steady_state[proj.state_indices])  # single point (vector)
+x_lag = [37.0, 1.0]                     # K_{t-1} = 37, A_{t-1} = 1
+y = evaluate_policy(proj, x_lag)
+(variables = spec.varnames, length_of_y = length(y),
+ state_bounds = proj.state_bounds)
 ```
+
+Passing a matrix of `n_points × nx` states instead returns an `n_points × n_vars` matrix, which is how you tabulate a policy function over a grid.
+
+The Chebyshev basis is fitted only on `state_bounds` — here ``K \in [34.19, 41.79]`` and ``A \in [0.90, 1.10]``, computed as ``\bar{x}_i \pm \text{scale} \cdot \sigma_i`` from the first-order Lyapunov solution. `evaluate_policy` warns once when asked for a point outside that box and clamps to the boundary before evaluating, so out-of-domain values are flat rather than divergent. Widen `scale` rather than reading clamped output.
 
 ### Euler Equation Errors
 
-The **Euler equation error** measures the accuracy of the global approximation by evaluating residuals at random test points drawn uniformly within the state bounds:
+The **Euler equation error** measures the accuracy of the global approximation by evaluating residuals at random test points drawn uniformly within the state bounds. Because the points are random, pass an explicit `rng` whenever the number has to be reproducible:
 
 ```@example dsge_nonlinear
-err = max_euler_error(proj; n_test=1000)
+err = max_euler_error(proj; n_test=1000, rng=MersenneTwister(42))
+(err = err, log10_err = log10(err))
 ```
+
+| Keyword | Type | Default | Description |
+|---------|------|---------|-------------|
+| `n_test` | `Int` | `1000` | Random test points drawn inside the state bounds |
+| `rng` | `AbstractRNG` | `default_rng()` | Generator for the test points |
 
 The error is reported in levels. Convert to ``\log_{10}`` for the standard accuracy metric:
 
@@ -516,17 +551,25 @@ The algorithm iterates three sub-steps at each grid point ``j``:
 3. **Refit**: project the updated policy values onto the Chebyshev basis via least squares
 
 ```@example dsge_nonlinear
-pfi = pfi_solver(spec; degree=5, damping=0.5, max_iter=200)
-report(pfi)
+pfi = pfi_solver(spec; degree=5, damping=0.5, anderson_m=3, max_iter=500)
+(converged = pfi.converged, iterations = pfi.iterations,
+ residual_norm = pfi.residual_norm, method = pfi.method)
 ```
+
+On this calibration PFI does **not** converge: it exhausts all 500 iterations at a policy sup-norm of ``2.8 \times 10^{-3}``, four orders above the ``10^{-8}`` target. Raising `max_iter` to 1000 only reaches ``2.4 \times 10^{-3}`` and no combination of `damping` and `anderson_m` closes the gap. The `converged` flag is the field to check — a `ProjectionSolution` is returned either way, and an unconverged policy will quietly produce wrong IRFs and moments downstream.
 
 | Keyword | Type | Default | Description |
 |---------|------|---------|-------------|
 | `degree` | `Int` | `5` | Chebyshev polynomial degree |
 | `grid` | `Symbol` | `:auto` | `:tensor`, `:smolyak`, or `:auto` |
+| `smolyak_mu` | `Int` or `Vector{Int}` | `3` | Smolyak approximation level (scalar isotropic, vector anisotropic) |
+| `quadrature` | `Symbol` | `:auto` | `:gauss_hermite` or `:monomial` |
+| `n_quad` | `Int` | `5` | Quadrature nodes per dimension |
+| `scale` | `Real` | `3.0` | State bounds as multiples of unconditional std |
 | `damping` | `Real` | `1.0` | Damping factor (0.5 for slow convergence, 1.0 for no damping) |
 | `anderson_m` | `Int` | `0` | Anderson acceleration depth (0 = disabled; see [Anderson Acceleration](@ref anderson_accel)) |
 | `threaded` | `Bool` | `false` | Multi-threaded grid-point Euler evaluation |
+| `verbose` | `Bool` | `false` | Print per-iteration residuals |
 | `tol` | `Real` | ``10^{-8}`` | Sup-norm convergence tolerance |
 | `max_iter` | `Int` | `500` | Maximum iterations |
 | `initial_coeffs` | `Union{Nothing, Matrix}` | `nothing` | Warm-start from previous solve |
@@ -549,6 +592,10 @@ report(pfi)
 | `quadrature` | `Symbol` | `:gauss_hermite` or `:monomial` |
 | `converged` | `Bool` | Newton convergence flag |
 | `iterations` | `Int` | Iterations until convergence |
+| `spec` | `DSGESpec{T}` | Back-reference to model specification |
+| `linear` | `LinearDSGE{T}` | Linearized system |
+| `impact` | `Matrix{T}` | Cached first-order shock-impact matrix used by `irf`/`simulate` |
+| `steady_state` | `Vector{T}` | Cached steady-state vector |
 | `state_indices` | `Vector{Int}` | State variable indices |
 | `control_indices` | `Vector{Int}` | Control variable indices |
 | `method` | `Symbol` | `:projection`, `:pfi`, or `:vfi` |
@@ -573,15 +620,18 @@ The algorithm proceeds in four steps:
 4. **Convergence**: Check sup-norm of policy change; iterate until ``\|y_{\text{new}} - y_{\text{old}}\|_\infty < \text{tol}``
 
 ```@example dsge_nonlinear
-vfi = vfi_solver(spec; degree=5, max_iter=500)
-report(vfi)
+vfi_plain = vfi_solver(spec; degree=5, max_iter=500)
+(converged = vfi_plain.converged, iterations = vfi_plain.iterations,
+ residual_norm = vfi_plain.residual_norm)
 ```
+
+Unaccelerated time iteration is not viable here: it runs out its 500-step budget at a sup-norm of ``4.9 \times 10^{-3}``. The accelerations below are not a convenience on this model, they are the difference between a solution and none.
 
 | Keyword | Type | Default | Description |
 |---------|------|---------|-------------|
 | `degree` | `Int` | `5` | Chebyshev polynomial degree |
 | `grid` | `Symbol` | `:auto` | `:tensor`, `:smolyak`, or `:auto` |
-| `smolyak_mu` | `Int` | `3` | Smolyak approximation level |
+| `smolyak_mu` | `Int` or `Vector{Int}` | `3` | Smolyak approximation level (scalar isotropic, vector anisotropic) |
 | `quadrature` | `Symbol` | `:auto` | `:gauss_hermite` or `:monomial` |
 | `n_quad` | `Int` | `5` | Quadrature nodes per dimension |
 | `scale` | `Real` | `3.0` | State bounds as multiples of unconditional std |
@@ -589,38 +639,43 @@ report(vfi)
 | `howard_steps` | `Int` | `0` | Extra Euler re-solves per iteration (0 = plain time iteration) |
 | `anderson_m` | `Int` | `0` | Anderson acceleration depth (0 = disabled; see [Anderson Acceleration](@ref anderson_accel)) |
 | `threaded` | `Bool` | `false` | Multi-threaded grid-point evaluation |
+| `verbose` | `Bool` | `false` | Print per-iteration residuals |
 | `tol` | `Real` | ``10^{-8}`` | Policy sup-norm convergence tolerance |
 | `max_iter` | `Int` | `1000` | Maximum time-iteration steps |
 | `initial_coeffs` | `Union{Nothing, Matrix}` | `nothing` | Warm-start coefficients from previous solve |
 
 ### Howard Improvement Steps
 
-Pure VFI updates the policy at every iteration, but each policy update requires solving a nonlinear system at every grid point. **Howard improvement steps** (Howard 1960; Santos & Rust 2003) amortize the cost: after each policy update, hold the policy fixed and re-evaluate the Euler equation ``howard_steps`` times, updating only the value (Chebyshev coefficients). Because value evaluation is cheaper than policy optimization, Howard steps reduce the total iteration count at modest per-iteration cost.
+Pure time iteration updates the policy at every iteration, and each update solves a nonlinear system at every grid point. **Howard improvement steps** (Howard 1960; Santos & Rust 2003) amortize the cost: after each policy update, hold the policy fixed and re-solve the Euler equation `howard_steps` more times, refreshing only the Chebyshev coefficients. Because the re-solve is cheaper than a fresh policy step, the total iteration count falls.
 
 ```@example dsge_nonlinear
 vfi_howard = vfi_solver(spec; degree=5, howard_steps=5, max_iter=500)
-report(vfi_howard)
+(converged = vfi_howard.converged, iterations = vfi_howard.iterations)
 ```
+
+Five Howard steps turn a non-converging solve into one that finishes in 434 iterations. Adding `anderson_m=3` on top cuts that to 19, and `howard_steps=10` with the same Anderson depth reaches 13 — the two accelerations are complementary, and neither substitutes for the other.
 
 ### VFI vs PFI vs Collocation
 
-All three global solvers return `ProjectionSolution{T}` and share the same post-solution API (`evaluate_policy`, `simulate`, `irf`, `max_euler_error`). The methods differ in convergence properties:
+All three global solvers return `ProjectionSolution{T}` and share the same post-solution API (`evaluate_policy`, `simulate`, `irf`, `max_euler_error`). They differ in convergence behaviour:
 
-- **Collocation** (Gauss-Newton on residuals): fastest for smooth problems, but can stall at local minima
-- **PFI** (fixed-point on the Euler equation): more robust for models with kinks, but requires good initialization
-- **VFI** (fixed-point on the Bellman operator): most general convergence guarantees (contraction under Blackwell conditions), but slowest without acceleration
+- **Collocation** (Gauss-Newton on the residual vector): fastest for smooth problems, but can stall at local minima
+- **PFI** (fixed point on the Euler equation): more robust in the presence of kinks, but needs a good initialization
+- **`vfi_solver`** (the same fixed point, plus Howard and Anderson acceleration): converges here where PFI does not
+
+The three do **not** have to agree, and on this calibration they do not:
 
 ```@example dsge_nonlinear
-sol_vfi = vfi_solver(spec; degree=5, max_iter=500)
-sol_pfi = pfi_solver(spec; degree=5, damping=0.5, max_iter=200)
+sol_vfi  = vfi_solver(spec; degree=5, howard_steps=5, anderson_m=3, max_iter=500)
+sol_pfi  = pfi_solver(spec; degree=5, damping=0.5, max_iter=200)
 sol_proj = collocation_solver(spec; degree=5, max_iter=200)
 
-# All three agree at the steady state
-y_vfi = evaluate_policy(sol_vfi, sol_vfi.steady_state[sol_vfi.state_indices])
-y_pfi = evaluate_policy(sol_pfi, sol_pfi.steady_state[sol_pfi.state_indices])
-y_proj = evaluate_policy(sol_proj, sol_proj.steady_state[sol_proj.state_indices])
-nothing # hide
+[(m = s.method, converged = s.converged,
+  euler = max_euler_error(s; n_test=1000, rng=MersenneTwister(42)))
+ for s in (sol_proj, sol_pfi, sol_vfi)]
 ```
+
+Collocation reaches a maximum Euler error of ``2.2 \times 10^{-4}``, the unconverged PFI solve ``3.8 \times 10^{-3}``, and the converged time-iteration solve ``9.2 \times 10^{-3}``. Note that the ranking does **not** follow the convergence flags: PFI stopped short of its tolerance and is still the more accurate of the two iterative solves. `converged` reports that the coefficient update fell below `tol`, which is a statement about the iteration, not about how well the resulting policy satisfies the Euler equation between the nodes. Comparing solvers by whether their policies coincide is the wrong test; compare `max_euler_error`, which scores each policy against the equilibrium conditions themselves.
 
 ---
 
@@ -682,7 +737,7 @@ where:
 - ``G_1`` is the state transition matrix from the first-order solution
 - ``\text{impact}`` is the ``n \times n_\varepsilon`` shock impact matrix
 
-The Kronecker reading of this equation, ``\text{vec}(\Sigma) = (I_{n^2} - G_1 \otimes G_1)^{-1} \, \text{vec}(\text{impact} \cdot \text{impact}')``, forms an ``n^2 \times n^2`` matrix and costs ``O(n^6)`` — 11.9 GB at ``n = 200``. `solve_lyapunov` instead uses the doubling (squaring) iteration, which converges quadratically in ``O(n^3)`` products, and verifies its relative residual; if doubling misses tolerance, a direct Bartels-Stewart solve (complex Schur plus a triangular column sweep) takes over. Autocovariances at lag ``h`` follow from ``\Gamma_h = G_1^h \, \Sigma``.
+The Kronecker reading of this equation, ``\text{vec}(\Sigma) = (I_{n^2} - G_1 \otimes G_1)^{-1} \, \text{vec}(\text{impact} \cdot \text{impact}')``, forms an ``n^2 \times n^2`` matrix and costs ``O(n^6)`` — 11.9 GB at ``n = 200``. `solve_lyapunov` instead uses the doubling (squaring) iteration (Barraud 1977), which converges quadratically in ``O(n^3)`` products, and verifies its relative residual; if doubling misses tolerance, a direct Bartels-Stewart (1972) solve — complex Schur plus a triangular column sweep — takes over. Autocovariances at lag ``h`` follow from ``\Gamma_h = G_1^h \, \Sigma``.
 
 ```@example dsge_nonlinear
 sol = solve(spec)
@@ -692,9 +747,10 @@ Sigma = solve_lyapunov(sol.G1, sol.impact)
 
 # Moment vector matching autocovariance_moments format
 m = analytical_moments(sol; lags=2)
+(std_devs = round.(sqrt.(diag(Sigma)); digits=5), n_moments = length(m))
 ```
 
-The moment vector contains two blocks: (1) the upper triangle of the variance-covariance matrix (``k(k+1)/2`` elements) and (2) diagonal autocovariances at each lag (``k`` elements per lag). This format matches `autocovariance_moments(data, lags)` for direct comparison in [Estimation](@ref dsge_estimation).
+The moment vector contains two blocks: (1) the upper triangle of the variance-covariance matrix (``k(k+1)/2`` elements) and (2) diagonal autocovariances at each lag (``k`` elements per lag). With ``k = 4`` and two lags that is ``10 + 4 + 4 = 18`` entries. This format matches `autocovariance_moments(data, lags)` for direct comparison in [Estimation](@ref dsge_estimation).
 
 ### Second-Order Moments (Andreasen et al. 2018)
 
@@ -711,19 +767,18 @@ The `:gmm` format returns mean shifts and product moments suitable for higher-or
 ```@example dsge_nonlinear
 # Second-order moments (closed-form augmented Lyapunov)
 m2 = analytical_moments(psol2; lags=1, format=:gmm)
+mc = analytical_moments(psol2; lags=1)          # default :covariance format
+(gmm = length(m2), covariance = length(mc))
 ```
 
 | Keyword | Type | Default | Description |
 |---------|------|---------|-------------|
 | `lags` | `Int` | `1` | Number of autocovariance lags |
-| `format` | `Symbol` | `:covariance` | `:covariance` for backward-compatible format, `:gmm` for closed-form augmented Lyapunov |
+| `format` | `Symbol` | `:covariance` | `:covariance` for the backward-compatible vector, `:gmm` for mean shifts plus product moments |
 
-Both **order 2 and order 3** compute the default `:covariance` format from this closed form; neither draws a shock.
+The `:gmm` format returns 18 entries against 14 for `:covariance` at one lag: it carries the mean shifts that second-order perturbation induces, which the covariance format discards. Use `:gmm` when the estimation targets include the stochastic steady-state shift itself, `:covariance` when matching second moments against `autocovariance_moments`.
 
-```@example dsge_nonlinear
-# Simulation-free at both orders
-analytical_moments(psol2; lags=1)
-```
+Both **order 2 and order 3** compute the default `:covariance` format from this closed form; neither draws a shock. Comparing the order-2 covariance moments against the first-order values above shows the two agree to roughly ``10^{-5}`` on this calibration — the risk correction shifts the mean far more than it shifts the second moments.
 
 ### Order-3 Moments Without Simulation
 
@@ -748,8 +803,7 @@ Both expectations integrate a polynomial of degree ``\le 6`` in ``\varepsilon``,
 !!! note "The ``\text{Cov}(\xi_t, z_{t-1})`` term is not optional"
     ``E_\varepsilon[\Xi(\varepsilon)]`` is **not** zero: the ``\varepsilon^2 x^f`` terms inside the ``x^f \otimes x^f \otimes x^f`` block correlate the innovation with the state it is added to. The Lyapunov constant is therefore ``\text{Var}(\xi) + \text{Cov}(\xi,z)A' + A\,\text{Cov}(\xi,z)'``, and the same term propagates through the autocovariance recursion. It vanishes identically at order 2, which is why it can be ignored there --- and it was omitted here before, biasing the third-order variance.
 
-!!! note "Technical Note"
-    The innovation variance ``\text{Var}(u)`` includes quartic shock moments (``E[\varepsilon^4] = 3`` for Gaussian shocks) via a ``(2n_x + n_x^2) \times (2n_x + n_x^2)`` block matrix assembled from ``E[(\varepsilon \otimes \varepsilon)(\varepsilon \otimes \varepsilon)']``. Third moments vanish for symmetric shocks (``E[\varepsilon^3] = 0``).
+At order 2 the innovation variance ``\text{Var}(u)`` already needs quartic shock moments (``E[\varepsilon^4] = 3`` for Gaussian innovations), assembled into a ``(2n_x + n_x^2) \times (2n_x + n_x^2)`` block matrix from ``E[(\varepsilon \otimes \varepsilon)(\varepsilon \otimes \varepsilon)']``; third moments drop out for any symmetric shock distribution.
 
 !!! warning "What the augmented state can and cannot carry"
     This package writes the second-order term over ``v \otimes v`` with ``v = [x; \varepsilon]``, so ``h_{xx}`` carries four blocks. The augmented recursion above is stated for the ``x \otimes x`` block. The ``\varepsilon \otimes \varepsilon`` block has mean ``\text{vec}(I)`` and is folded into the constant exactly. The ``x \otimes \varepsilon`` blocks are bilinear in the lagged state and the current shock: they are mean-zero and uncorrelated with the rest, so means and autocovariance cross-terms are unaffected, but they contribute to the **variance** and are not included. The understatement is ``O(\sigma^2)`` relative to the state variance --- on the RBC benchmark the closed form sits within Monte-Carlo error of a ``2 \times 10^6``-draw pruned simulation.
@@ -783,20 +837,21 @@ proj = collocation_solver(spec; degree=5, grid=:tensor, max_iter=200)
 report(proj)
 ```
 
+The three ergodic means are sample averages over 10,000 draws from the global RNG, so they move from run to run; the *systematic* risk correction is the deterministic ``\frac{1}{2}\sigma^2 h_{\sigma\sigma}`` reported earlier, not the difference between these simulated averages, which at this shock size is swamped by Monte-Carlo noise. Read the stochastic steady-state shift off `psol.hσσ`, or pass `shock_draws` so the three orders see identical innovations.
+
 ```@example dsge_nonlinear
-# Euler equation accuracy
-err = max_euler_error(proj; n_test=1000)
+# Euler equation accuracy, with a fixed RNG so the numbers are reproducible
+err = max_euler_error(proj; n_test=1000, rng=MersenneTwister(42))
 
-# PFI for comparison
-pfi = pfi_solver(spec; degree=5, damping=0.5, max_iter=200)
-err_pfi = max_euler_error(pfi; n_test=1000)
-
-# VFI with Howard steps
-vfi = vfi_solver(spec; degree=5, howard_steps=5, max_iter=500)
-err_vfi = max_euler_error(vfi; n_test=1000)
+# Accelerated time iteration for comparison
+vfi = vfi_solver(spec; degree=5, howard_steps=5, anderson_m=3, max_iter=500)
+err_vfi = max_euler_error(vfi; n_test=1000, rng=MersenneTwister(42))
 
 # Analytical moments for estimation targets
 m = analytical_moments(sol1; lags=2)
+
+(collocation = (proj.converged, err), time_iteration = (vfi.converged, err_vfi),
+ n_moments = length(m))
 ```
 
 ```julia
@@ -807,7 +862,7 @@ plot_result(girf)
 <iframe src="../assets/plots/dsge_girf.html" width="100%" height="500" frameborder="0" style="border:1px solid #ddd;border-radius:4px;"></iframe>
 ```
 
-The stochastic steady state shifts from second-order perturbation reflect precautionary savings: the ergodic mean of capital exceeds the deterministic steady state because risk-averse agents over-accumulate capital as a buffer against productivity shocks. Third-order perturbation adds state-dependent risk premia --- the precautionary effect is stronger in recessions than expansions.
+The second-order variance correction shifts the stochastic steady state of capital up by ``+0.0145`` and consumption down by the same amount: risk-averse agents over-accumulate capital as a buffer against productivity shocks, and pay for it with lower average consumption. Third-order perturbation adds the ``f_{\sigma\sigma v}`` term, which makes that precautionary wedge state-dependent — stronger when capital is scarce than when it is abundant. Collocation converges on this model and reaches a maximum Euler error of ``2.2 \times 10^{-4}``, against ``9.2 \times 10^{-3}`` for accelerated time iteration; both are usable, but the projection solution is roughly forty times more accurate here.
 
 ---
 
@@ -817,17 +872,23 @@ The stochastic steady state shifts from second-order perturbation reflect precau
 
 2. **Tensor grids in high dimensions**: A tensor grid with degree 5 and ``n_x = 6`` states requires ``6^6 = 46{,}656`` nodes. Use `grid=:smolyak` for ``n_x > 4``.
 
-3. **Poor Euler errors**: If `max_euler_error` returns values above ``10^{-2}``, increase the polynomial `degree`, widen the state bounds via the `scale` parameter, or switch from collocation to PFI. On a Smolyak grid, raise the level only in the states that need it (`smolyak_mu=[4, 2]`) or let `adaptive=true` find them.
+3. **Poor Euler errors**: If `max_euler_error` returns values above ``10^{-2}``, increase the polynomial `degree`, widen the state bounds via the `scale` parameter, or switch solver. On a Smolyak grid, raise the level only in the states that need it (`smolyak_mu=[4, 2]`) or let `adaptive=true` find them.
 
-4. **Non-convergence of collocation**: The Gauss-Newton solver uses backtracking line search but can stall at local minima. Warm-start with `initial_coeffs` from a lower-degree solution or from PFI.
+4. **Ignoring the `converged` flag**: every global solver returns a `ProjectionSolution` whether or not it converged. PFI exhausts `max_iter` on the RBC model above at a sup-norm of ``2.8 \times 10^{-3}`` and still hands back a usable-looking policy. Check `sol.converged` before trusting a global solution — and note the converse, that `converged=true` is a statement about the iteration stopping, not a certificate of accuracy.
 
-5. **Lyapunov equation instability**: `solve_lyapunov` throws an error if the first-order solution has eigenvalues on or outside the unit circle. Check determinacy with `is_determined(sol)` before computing moments.
+5. **Comparing solvers by whether their policies agree**: two unconverged solvers disagreeing tells you nothing about which is right, and two converged ones can differ by more than either's error. `max_euler_error` is the comparison that means something, because it scores each policy against the equilibrium conditions rather than against a rival approximation.
 
-6. **VFI convergence speed**: Pure VFI is slow --- use `howard_steps=5` or `howard_steps=10` to reduce iteration count by 3--5x. Combine with `anderson_m=3` for further acceleration.
+6. **Non-convergence of collocation**: The Gauss-Newton solver uses backtracking line search but can stall at local minima. Warm-start with `initial_coeffs` from a lower-degree solution.
 
-7. **Trusting `residual_norm`**: A converged collocation solve drives ``\|R\|`` to zero *at the nodes* and says nothing about the points in between. The isotropic ``\mu = 3`` grid in [Anisotropic Smolyak Grids](@ref) reaches ``\|R\| \approx 7 \times 10^{-11}`` with a max Euler error of ``0.64``. Report `max_euler_error`, or set `adaptive=true` and read `sol.euler_error`.
+7. **Lyapunov equation instability**: `solve_lyapunov` throws an error if the first-order solution has eigenvalues on or outside the unit circle. Check determinacy with `is_determined(sol)` before computing moments.
 
-8. **`adaptive=true` on a tensor grid**: Refinement grows a Smolyak level set, so it throws an `ArgumentError` when `grid=:tensor` is requested explicitly. Leave `grid=:auto`, which upgrades to `:smolyak` automatically.
+8. **Expecting one acceleration to be enough**: `howard_steps` and `anderson_m` are complementary. On the RBC model neither alone converges `vfi_solver` within 500 iterations except `howard_steps=5` at 434; together (`howard_steps=5, anderson_m=3`) they finish in 19.
+
+9. **Unseeded Monte Carlo**: `max_euler_error`, `irf(...; irf_type=:girf)` and `simulate` all draw from the global RNG by default. Pass `rng=MersenneTwister(...)` or `shock_draws` whenever a reported number must be reproducible.
+
+10. **Trusting `residual_norm`**: A converged collocation solve drives ``\|R\|`` to zero *at the nodes* and says nothing about the points in between. The isotropic ``\mu = 3`` grid in [Anisotropic Smolyak Grids](@ref) reaches ``\|R\| \approx 7 \times 10^{-11}`` with a max Euler error of ``0.64``. Report `max_euler_error`, or set `adaptive=true` and read `sol.euler_error`.
+
+11. **`adaptive=true` on a tensor grid**: Refinement grows a Smolyak level set, so it throws an `ArgumentError` when `grid=:tensor` is requested explicitly. Leave `grid=:auto`, which upgrades to `:smolyak` automatically.
 
 ---
 
@@ -860,7 +921,5 @@ The stochastic steady state shifts from second-order perturbation reflect precau
 - Santos, M. S., & Rust, J. (2003). Convergence Properties of Policy Iteration. *SIAM Journal on Control and Optimization*, 42(6), 2094--2115. [DOI](https://doi.org/10.1137/S0363012902399824)
 
 - Schmitt-Grohe, S., & Uribe, M. (2004). Solving Dynamic General Equilibrium Models Using a Second-Order Approximation to the Policy Function. *Journal of Economic Dynamics and Control*, 28(4), 755--775. [DOI](https://doi.org/10.1016/S0165-1889(03)00043-5)
-
-- Stokey, N. L., Lucas, R. E., & Prescott, E. C. (1989). *Recursive Methods in Economic Dynamics*. Harvard University Press. ISBN: 978-0-674-75096-8.
 
 - Walker, H. F., & Ni, P. (2011). Anderson Acceleration for Fixed-Point Iterations. *SIAM Journal on Numerical Analysis*, 49(4), 1715--1735. [DOI](https://doi.org/10.1137/10078356X)
