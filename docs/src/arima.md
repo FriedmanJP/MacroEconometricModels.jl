@@ -14,6 +14,8 @@
 ```@setup arima
 using MacroEconometricModels
 fred = load_example(:fred_md)
+# One log difference of the CPI level = monthly inflation. Deliberately NOT
+# apply_tcode, whose tcode 6 for CPIAUCSL is the SECOND log difference.
 cpi_raw = fred[:, "CPIAUCSL"]
 y = filter(isfinite, diff(log.(cpi_raw)))
 y = y[end-99:end]
@@ -141,7 +143,7 @@ ar_mle = estimate_ar(y, 2; method=:mle)
 report(ar_mle)
 ```
 
-The AR(2) model on CPI inflation captures the short-run momentum (positive ``\phi_1``) and mean-reversion (negative ``\phi_2``) that characterize CPI inflation dynamics. OLS and MLE produce nearly identical estimates for this large sample, but MLE provides exact inference through proper likelihood treatment.
+The AR(2) on monthly CPI inflation captures short-run momentum (``\hat\phi_1 = 0.581`` by OLS) and mild mean reversion (``\hat\phi_2 = -0.079``); MLE returns ``0.573`` and ``-0.079``, so the two estimators agree to the second decimal. The information criteria do not: OLS reports AIC ``-898.5`` against MLE's ``-916.9``, because the conditional OLS likelihood is evaluated over the ``n - p`` usable rows while the Kalman likelihood uses all ``n``. Compare AIC or BIC across models only when they were computed under the same estimation method.
 
 | Keyword | Type | Default | Description |
 |---------|------|---------|-------------|
@@ -202,7 +204,7 @@ ma = estimate_ma(y, 1; method=:css_mle)
 report(ma)
 ```
 
-The estimated MA(1) coefficient ``\hat\theta_1 \approx 0.60`` captures one-period serial correlation in shocks to CPI inflation. Its positive sign indicates that a positive inflation surprise this month raises the forecast for next month beyond the unconditional mean.
+The estimated MA(1) coefficient ``\hat\theta_1 = 0.599`` captures one-period serial correlation in shocks to CPI inflation. Its positive sign means a positive inflation surprise this month raises next month's forecast above the unconditional mean ``\hat c = 0.0029`` (0.29% per month). With a BIC of ``-911.6`` this two-parameter model is the most parsimonious fit on the page — the grid search below selects exactly this specification.
 
 | Keyword | Type | Default | Description |
 |---------|------|---------|-------------|
@@ -254,7 +256,7 @@ arma = estimate_arma(y, 1, 1; method=:css_mle)
 report(arma)
 ```
 
-The ARMA(1,1) model captures both the autoregressive persistence in CPI inflation (``\hat\phi_1 \approx 0.23``) and the one-period shock amplification (``\hat\theta_1 \approx 0.41``). Its BIC of about ``-908`` improves on the AR(2) model estimated above (BIC ``\approx -888``), because the MA component absorbs short-run dynamics that would otherwise require additional AR lags.
+The ARMA(1,1) splits the persistence of CPI inflation between an autoregressive root (``\hat\phi_1 = 0.226``) and a one-period moving-average term (``\hat\theta_1 = 0.409``). Its BIC of ``-908.0`` beats the MLE-estimated AR(2) (``-906.5``) by a hair, and both lose to the plain MA(1) at ``-911.6``: the AR and MA roots here are close enough that the pair is nearly a common factor, so the extra parameter buys almost no fit. This near-cancellation is the identification problem in Pitfall 5, visible in a single comparison.
 
 | Keyword | Type | Default | Description |
 |---------|------|---------|-------------|
@@ -308,7 +310,7 @@ model = estimate_arima(y_level, 1, 1, 0)
 report(model)
 ```
 
-The ARIMA(1,1,0) on the synthetic log-level series (`y_level = cumsum(y)`, an I(1) series accumulated from CPI inflation, approximately a log price level) first-differences the level, then fits an AR(1) to the resulting inflation series. The AR coefficient on the differenced series captures month-to-month momentum in CPI inflation.
+The ARIMA(1,1,0) runs on `y_level = cumsum(y)`, the accumulated inflation series — an I(1) process that is, up to a constant, the log price level. The estimator first-differences it back to inflation and fits an AR(1), giving ``\hat\phi_1 = 0.534``: month-to-month momentum, and close to the AR(2)'s ``\hat\phi_1 + \hat\phi_2 = 0.502`` total persistence. The reported `fitted` and `residuals` live on the differenced scale, while `forecast` returns levels.
 
 | Keyword | Type | Default | Description |
 |---------|------|---------|-------------|
@@ -435,6 +437,7 @@ The search recovers the airline orders (0,1,1)(0,1,1)₁₂.
 | `max_P`, `max_Q` | `Int` | `1` | Seasonal search bounds |
 | `criterion` | `Symbol` | `:aic` | `:aic` or `:bic` |
 | `method` | `Symbol` | `:css_mle` | Estimation method for the final refit |
+| `include_intercept` | `Bool` | `true` | Constant on the differenced series |
 
 !!! note "Seasonal period support in `D` selection"
     The HEGY test is tabulated for quarterly and monthly data only, so automatic ``D`` selection applies when `s ∈ {4, 12}` and the sample has at least ``3s + 5`` observations. At any other period `D` defaults to `0` and should be supplied explicitly.
@@ -553,7 +556,7 @@ p = plot_result(fc; history=y, n_history=30)
 <iframe src="../assets/plots/forecast_arma.html" width="100%" height="400" frameborder="0" style="border:1px solid #ddd;border-radius:4px;"></iframe>
 ```
 
-The forecast fan widens with the horizon as cumulative ``\psi``-weight variance grows. For the ARMA(1,1) model, the one-step-ahead standard error equals ``\sigma`` (the innovation standard deviation), while longer-horizon forecasts converge toward the unconditional mean with uncertainty approaching ``\sigma / \sqrt{1 - \phi_1^2}``.
+The forecast fan widens with the horizon as cumulative ``\psi``-weight variance grows. For this ARMA(1,1) the one-step standard error is 0.00235, exactly ``\hat\sigma``, since ``\psi_0 = 1`` and no future shocks have accumulated. By ``h = 12`` it has risen to 0.00281 and is within a rounding of its limit, the unconditional standard deviation ``\hat\sigma\sqrt{(1 + 2\hat\phi_1\hat\theta_1 + \hat\theta_1^2)/(1 - \hat\phi_1^2)} = 0.00281``. Point forecasts converge to ``\hat c/(1-\hat\phi_1)`` over the same horizon, so the band is effectively at its stationary width after a year.
 
 | Keyword | Type | Default | Description |
 |---------|------|---------|-------------|
@@ -586,7 +589,7 @@ sel = select_arima_order(y, 4, 4)
 report(sel)
 ```
 
-Here the AIC selects an ARMA(1,2) while the BIC selects the more parsimonious ARMA(0,1), because BIC penalizes free parameters more heavily (penalty ``k \log n`` vs. ``2k``). For forecasting applications, BIC-selected models often outperform AIC-selected models at longer horizons due to reduced parameter estimation uncertainty.
+The AIC selects an ARMA(1,2) at ``-922.4`` while the BIC selects the more parsimonious ARMA(0,1) at ``-911.6``, because BIC penalizes free parameters more heavily (``k \log n`` against ``2k``, and ``\log 100 = 4.6``). The disagreement is the usual one over two extra parameters that improve in-sample fit by less than the BIC charges for them. For forecasting, BIC-selected models often win at longer horizons because they carry less parameter-estimation uncertainty.
 
 !!! note "CSS order comparability"
     Under `:css` estimation the conditional likelihood is evaluated over ``n - \max(p,q)`` observations, a window that varies with the candidate order. `select_arima_order` therefore rescores every `:css` candidate's AIC/BIC on a **common conditioning window** ``n - \max(\text{max\_p}, \text{max\_q})`` so the criteria are comparable across orders; MLE / CSS-MLE candidates already use the full sample.
@@ -613,12 +616,14 @@ Here the AIC selects an ARMA(1,2) while the BIC selects the more parsimonious AR
 
 ### Automatic Selection
 
-`auto_arima` implements a fully automatic model selection procedure. It first determines the integration order ``d`` by iterating an **Augmented Dickey-Fuller unit-root test** --- differencing while ADF fails to reject a unit root (``p > 0.05``), up to ``max_d`` (falling back to a variance-reduction rule only when a differenced series is too short for a reliable ADF test) --- then performs a grid search over ``p`` and ``q``:
+`auto_arima` implements a fully automatic model selection procedure. It first determines the integration order ``d`` by iterating an **Augmented Dickey-Fuller unit-root test** --- differencing while ADF fails to reject a unit root (``p > 0.05``), stopping at ``max_d`` or as soon as a differenced series falls below 20 observations, and falling back to a variance-reduction rule only when the ADF test itself errors on a degenerate series. It then searches ``p`` and ``q`` by the **Hyndman-Khandakar (2008) stepwise** procedure: fit the seeds (0,0), (1,0), (0,1), (2,2), then walk to neighbours differing by ``\pm 1`` in ``p`` or ``q`` until no move improves the criterion. Pass `stepwise=false` for an exhaustive grid instead.
 
 ```@example arima
 best = auto_arima(y_level; max_p=5, max_q=5, max_d=2, criterion=:bic)
 report(best)
 ```
+
+The search differences once and settles on ARIMA(0,1,1) with BIC ``-902.0`` --- the same MA(1) structure the grid search found on the already-differenced series, which is the consistency check worth running whenever `auto_arima` is handed a level series.
 
 | Keyword | Type | Default | Description |
 |---------|------|---------|-------------|
@@ -628,6 +633,7 @@ report(best)
 | `criterion` | `Symbol` | `:bic` | Selection criterion (`:aic` or `:bic`) |
 | `method` | `Symbol` | `:css_mle` | Estimation method for each candidate |
 | `include_intercept` | `Bool` | `true` | Whether to include constant term |
+| `stepwise` | `Bool` | `true` | Hyndman-Khandakar stepwise search; `false` for an exhaustive ``(p,q)`` grid |
 
 ---
 
@@ -638,28 +644,26 @@ All ARIMA-class models implement the Julia `StatsAPI.RegressionModel` interface,
 ```@example arima
 model = estimate_arma(y, 1, 1)
 
-# Standard accessors
-coef(model)          # Coefficient vector [c, phi_1, theta_1]
-nobs(model)          # Number of observations
-dof(model)           # Degrees of freedom (number of parameters)
-dof_residual(model)  # Residual degrees of freedom
-loglikelihood(model) # Log-likelihood
-aic(model)           # Akaike Information Criterion
-bic(model)           # Bayesian Information Criterion
-residuals(model)     # Residual vector
-fitted(model)        # Fitted values
-r2(model)            # R-squared
-
-# fit interface
-model = fit(ARModel, y, 2)           # AR(2)
-model = fit(MAModel, y, 1)           # MA(1)
-model = fit(ARMAModel, y, 1, 1)      # ARMA(1,1)
-
-# Prediction
-yhat = predict(model, 12)  # 12-step point forecasts
+(coef        = round.(coef(model), digits=4),   # [c, φ₁, θ₁]
+ nobs        = nobs(model),
+ dof         = dof(model),                      # estimated parameters
+ dof_residual = dof_residual(model),
+ loglik      = round(loglikelihood(model), digits=2),
+ aic         = round(aic(model), digits=2),
+ bic         = round(bic(model), digits=2),
+ r2          = round(r2(model), digits=4))
 ```
 
-The `fit` interface provides a standard constructor pattern consistent with other Julia statistical packages. The `predict` method with an integer argument returns point forecasts (without confidence intervals); use `forecast` for the full `ARIMAForecast` object with standard errors and confidence bands.
+`residuals(model)` and `fitted(model)` return the corresponding vectors. The `fit` constructor pattern matches the rest of the Julia statistics ecosystem, and `predict` with an integer horizon returns point forecasts only:
+
+```@example arima
+m_ar = fit(ARModel, y, 2)          # equivalently estimate_ar(y, 2)
+m_ma = fit(MAModel, y, 1)
+m_arma = fit(ARMAModel, y, 1, 1)
+round.(predict(m_arma, 12), digits=5)
+```
+
+Use `forecast` instead of `predict` when standard errors and confidence bands are needed --- it returns the full `ARIMAForecast` object documented above.
 
 ---
 
@@ -700,7 +704,7 @@ p = plot_result(fc; history=y, n_history=50)
 <iframe src="../assets/plots/forecast_arima.html" width="100%" height="400" frameborder="0" style="border:1px solid #ddd;border-radius:4px;"></iframe>
 ```
 
-The ADF test rejects the unit root null at the 1% level, confirming that CPI inflation is stationary and no differencing is required. The BIC grid search identifies the optimal ARMA order, balancing fit against parsimony. The 12-month forecast shows CPI inflation reverting toward its unconditional mean, with widening confidence bands that reflect increasing uncertainty at longer horizons. The one-step standard error provides the minimal forecast uncertainty, while the 12-step band is substantially wider due to the accumulation of ``\psi``-weight variance.
+The ADF statistic of ``-5.48`` clears the 1% critical value of ``-3.49``, so CPI inflation is stationary and no differencing is required --- consistent with `auto_arima` choosing ``d = 1`` for the *level* series above. The BIC grid search then picks ARMA(0,1), the plain MA(1). Its 12-month forecast starts at 0.334% for the month ahead, where the MA term still carries information, and settles on the unconditional mean 0.287% from ``h = 2`` onward, because an MA(1) has no memory beyond one period. The standard error rises only from 0.236% to 0.275% across the same horizons: for a short-memory model almost all of the forecast uncertainty is present at the first step.
 
 ---
 
@@ -725,20 +729,41 @@ For ``0 < d < 0.5`` the process is stationary but long-range dependent; for ``-0
 
 `estimate_arfima(y, p, q; method)` jointly estimates ``d`` and the ARMA parameters. Two methods are available:
 
-- `:css` (default) --- conditional sum of squares. The series is fractionally differenced and the ARMA conditional likelihood is maximized. Fast, and robust for moderate samples.
-- `:mle` --- exact Gaussian ML via the Durbin--Levinson recursion over the Sowell (1992) / Hosking (1981) ARFIMA autocovariances. More accurate but ``O(T^2)``.
+- `:css` (default) --- conditional sum of squares. The series is fractionally differenced and the ARMA conditional likelihood is maximized. Fast, and adequate when the ARMA part is the object of interest.
+- `:mle` --- exact Gaussian ML via the Durbin--Levinson recursion over the Sowell (1992) / Hosking (1981) ARFIMA autocovariances. ``O(T^2)``, and the accurate choice for ``d`` itself.
 
 The order ``d`` is kept strictly inside ``(-0.5, 0.5)`` through an internal logit reparameterization, and its standard error is reported via the delta method.
 
 ```@example arima
-using MacroEconometricModels
-
 nile = load_example(:nile)         # annual Nile flow at Aswan, 1871–1970
-flow = nile.data[:, 1]
+flow = to_vector(nile)
 
-m = estimate_arfima(flow, 0, 0; method=:css)
+m = estimate_arfima(flow, 0, 0; method=:mle)
 report(m)
 ```
+
+Exact ML puts the fractional order at ``\hat d = 0.364`` (SE 0.069), squarely in the stationary long-memory region ``0 < d < 0.5`` and comfortably away from both the ``d = 0`` short-memory null and the ``d = 0.5`` nonstationary edge. The two semiparametric estimators below corroborate it. The `:css` default disagrees sharply on this series --- it returns ``\hat d = -0.081``, the anti-persistent sign --- so when ``d`` itself is the object of interest, fit with `:mle` and treat a CSS estimate as a starting value rather than a result.
+
+| Keyword | Type | Default | Description |
+|---------|------|---------|-------------|
+| `method` | `Symbol` | `:css` | `:css` (conditional sum of squares) or `:mle` (exact Gaussian ML) |
+| `d0` | `Real` | `nothing` | Starting value for ``d``; derived from the data when omitted |
+| `trunc` | `Int` | `200` | Truncation lag of the fractional-difference filter |
+| `max_iter` | `Int` | `500` | Optimizer iteration cap |
+
+### ARFIMAModel Return Values
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `d` | `T` | Estimated fractional integration order |
+| `d_se` | `T` | Delta-method standard error of ``\hat d`` |
+| `c` | `T` | Estimated mean ``\hat\mu`` |
+| `phi`, `theta` | `Vector{T}` | ARMA coefficients of the fractionally differenced series |
+| `sigma2` | `T` | Innovation variance |
+| `residuals`, `fitted` | `Vector{T}` | Residuals and fitted values |
+| `loglik`, `aic`, `bic` | `T` | Log-likelihood and information criteria |
+| `method` | `Symbol` | `:css` or `:mle` |
+| `converged` | `Bool` | Convergence indicator |
 
 ### Semiparametric estimators
 
@@ -757,7 +782,7 @@ lw = local_whittle(flow)
 lw
 ```
 
-Both flag positive long memory in the Nile series, with ``\hat d \approx 0.4`` --- the classic result for this benchmark long-memory series.
+Both point estimates land near the classic value for this benchmark series: ``\hat d_{\text{GPH}} = 0.390`` and ``\hat d_{\text{LW}} = 0.464``, against ``0.364`` from exact ML. Only local Whittle rejects ``H_0: d = 0`` (``p = 0.003``); GPH does not (``p = 0.184``), because with ``T = 100`` the default bandwidth is ``m = \lfloor\sqrt{100}\rfloor = 10`` frequencies and the log-periodogram regression has a standard error of 0.294 on ten points. Widen ``m`` to trade that variance against the bias from letting short-memory dynamics leak into the band.
 
 ### Forecasting
 
@@ -767,6 +792,8 @@ Both flag positive long memory in the Nile series, with ``\hat d \approx 0.4`` -
 fc = forecast(m, 10)
 report(fc)
 ```
+
+The forecasts climb from 811.7 back toward the estimated mean ``\hat\mu = 929.9`` but are still 56 units short of it after ten years --- hyperbolic memory pulls the level home far more slowly than the geometric decay of an ARMA. The standard errors rise from 140.5 to 162.1 and then flatten: for ``0 < d < 0.5`` the ``\psi``-weights are square-summable, so the forecast variance approaches a finite limit instead of diverging as it would under a unit root.
 
 The shared filter helpers `MacroEconometricModels._frac_diff_weights(d, K)` and `_frac_diff(y, d)` (with an ``O(T\log T)`` FFT path, Jensen--Nielsen 2014) are also used by the FIGARCH long-memory volatility model.
 
@@ -788,6 +815,8 @@ The shared filter helpers `MacroEconometricModels._frac_diff_weights(d, K)` and 
 
 7. **ARFIMA ``d``/AR identification**: In an ARFIMA(p, d, q) model, the fractional order ``d`` and the AR persistence both govern long-run behavior and are only weakly separable in moderate samples. Jointly estimated ``\hat d`` and ``\hat\phi`` can trade off substantially at ``T`` of a few hundred; use longer samples, or the semiparametric `gph_test` / `local_whittle` estimators (which do not require specifying the ARMA part) to corroborate ``\hat d``.
 
+8. **ARFIMA `:css` and `:mle` can disagree on ``d``**: The two estimators optimize different objectives, and at ``T = 100`` the gap is not academic --- on the Nile series `:css` returns ``\hat d = -0.081`` and `:mle` returns ``\hat d = 0.364``. Estimate ``d`` with `method=:mle` and use the semiparametric estimators as a cross-check; reserve `:css` for long samples or for cases where only the ARMA part matters.
+
 ---
 
 ## References
@@ -806,6 +835,9 @@ The shared filter helpers `MacroEconometricModels._frac_diff_weights(d, K)` and 
 
 - Geweke, J., & Porter-Hudak, S. (1983). The Estimation and Application of Long Memory Time Series Models.
   *Journal of Time Series Analysis*, 4(4), 221-238. [DOI](https://doi.org/10.1111/j.1467-9892.1983.tb00371.x)
+
+- Granger, C. W. J., & Joyeux, R. (1980). An Introduction to Long-Memory Time Series Models and Fractional Differencing.
+  *Journal of Time Series Analysis*, 1(1), 15-29. [DOI](https://doi.org/10.1111/j.1467-9892.1980.tb00297.x)
 
 - Hyndman, R. J., & Khandakar, Y. (2008). Automatic Time Series Forecasting: The forecast Package for R.
   *Journal of Statistical Software*, 27(3), 1-22. [DOI](https://doi.org/10.18637/jss.v027.i03)
