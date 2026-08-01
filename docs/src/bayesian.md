@@ -9,7 +9,16 @@
 - **Forecasting**: Multi-step-ahead forecasts with posterior credible intervals, integrating over parameter uncertainty across all posterior draws
 - **Large BVAR**: Scalable estimation for high-dimensional systems (20+ variables) where the Minnesota prior prevents overfitting
 
-All results integrate with `report()` for publication-quality output and `plot_result()` for interactive D3.js visualization.
+All results integrate with `report()` for publication-quality output and `plot_result()` for interactive D3.js visualization. The reduced-form model, its identification schemes, and the frequentist counterparts of every function here are documented on the [VAR](@ref var_page) page; cointegrated systems belong in a [VECM](@ref vecm_page).
+
+The examples use the same three FRED-MD series as the [VAR](@ref var_page) page, under their official transformation codes: `INDPRO` (`tcode=5`, log difference) and `CPIAUCSL` (`tcode=6`, second log difference) rescaled to percent, and `FEDFUNDS` (`tcode=2`, first difference), already in percentage points.
+
+!!! warning "Scale the data before estimating"
+    The inverse-Wishart prior scale is fixed at ``S_0 = I_n``, so it is *not* invariant to the
+    units of `Y`. On raw log differences, whose standard deviation is around 0.008, that prior
+    swamps the likelihood: the posterior draws of ``\Sigma`` come out two orders of magnitude
+    too large and nearly every draw is explosive. Putting all series on a percent scale, as the
+    setup below does, is what keeps the posterior usable.
 
 ```@setup bvar
 using MacroEconometricModels, Random
@@ -17,6 +26,7 @@ Random.seed!(42)
 fred = load_example(:fred_md)
 Y = to_matrix(apply_tcode(fred[:, ["INDPRO", "CPIAUCSL", "FEDFUNDS"]]))
 Y = Y[all.(isfinite, eachrow(Y)), :]
+Y[:, 1:2] .*= 100          # log differences to percent; FEDFUNDS is already in percentage points
 Y = Y[end-59:end, :]
 post = estimate_bvar(Y, 2; n_draws=100, prior=:minnesota, varnames=["INDPRO", "CPI", "FFR"])
 ```
@@ -135,33 +145,41 @@ The **Minnesota prior** (Litterman 1986; Doan, Litterman & Sims 1984) shrinks VA
 E[A_{1,ii}] = 1, \quad E[A_{1,ij}] = 0 \text{ for } i \neq j, \quad E[A_l] = 0 \text{ for } l > 1
 ```
 
-The prior variance for coefficient ``(i,j)`` at lag ``l`` controls the degree of shrinkage:
+The prior is imposed through **dummy observations** in the Bańbura-Giannone-Reichlin stacked form. The autoregressive block contributes one pseudo-observation per (lag, variable) pair, scaled by ``\sigma_i l^{d} / \tau``, which under the conjugate Kronecker structure ``\Sigma \otimes \Omega_0`` implies
 
 ```math
-\text{Var}(A_{l,ij}) = \begin{cases}
-\dfrac{\tau^2}{l^d} & \text{if } i = j \\[6pt]
-\dfrac{\tau^2 \omega^2}{l^d} \cdot \dfrac{\sigma_i^2}{\sigma_j^2} & \text{if } i \neq j
-\end{cases}
+\text{Var}(A_{l,ji} \mid \Sigma) = \Sigma_{jj} \cdot \frac{\tau^2}{\sigma_i^2 \, l^{2d}}
 ```
 
 where:
-- ``\tau`` is the **overall tightness** parameter controlling shrinkage intensity (lower values produce stronger shrinkage toward the prior)
-- ``d`` is the **lag decay** exponent (higher values penalize distant lags more aggressively)
-- ``\omega`` controls **cross-variable shrinkage** (values below 1 penalize other variables' lags relative to own lags)
-- ``\sigma_i^2`` is the residual variance from a univariate AR(1) for variable ``i``, used to normalize units across variables
+- ``A_{l,ji}`` is the coefficient on lag ``l`` of variable ``i`` in the equation for variable ``j``
+- ``\tau`` is the **overall tightness**, entering as an *inverse* tightness --- the dummy observations are divided by ``\tau``, so a **larger** ``\tau`` gives a **looser** prior and a smaller one shrinks harder toward the random walk
+- ``d`` is the **lag decay** exponent; the prior variance falls as ``l^{-2d}``, so distant lags are shrunk more aggressively
+- ``\sigma_i^2`` is the residual variance of a univariate AR(1) fitted to variable ``i``, which puts the regressor side on a common scale
+- ``\Sigma_{jj}`` is the equation-``j`` innovation variance, supplied by the Kronecker structure rather than by a hyperparameter
+
+Own and cross-variable lags carry the same prior variance in this parameterization: the asymmetry that distinguishes them comes from the prior *mean*, which is 1 for a variable's own first lag and 0 everywhere else. Two further dummy blocks impose the **sum-of-coefficients** prior (weight ``\lambda``) and the **dummy initial observation**, or co-persistence, prior (weight ``\mu``). Both divide by their hyperparameter, so as with ``\tau``, larger means looser.
 
 ### Hyperparameter Interpretation
 
 | Hyperparameter | Field | Default | Effect |
 |----------------|-------|---------|--------|
-| ``\tau`` | `tau` | `3.0` | Overall shrinkage (lower = tighter prior, closer to random walk) |
+| ``\tau`` | `tau` | `3.0` | Overall tightness, inverse scale (lower = tighter, closer to the random walk) |
 | ``d`` | `decay` | `0.5` | Lag decay exponent (higher = faster decay of distant lags) |
-| ``\lambda`` | `lambda` | `5.0` | Sum-of-coefficients scaling (controls unit root prior tightness) |
-| ``\mu`` | `mu` | `2.0` | Co-persistence scaling (controls common stochastic trend prior) |
-| ``\omega`` | `omega` | `2.0` | Covariance scaling (controls prior on error covariance) |
+| ``\lambda`` | `lambda` | `5.0` | Sum-of-coefficients prior, inverse scale (lower = tighter unit-root prior) |
+| ``\mu`` | `mu` | `2.0` | Co-persistence / dummy-initial-observation prior, inverse scale (lower = tighter) |
+| ``\omega`` | `omega` | `2.0` | Switches the residual-covariance dummy block on when positive |
+
+!!! warning "Naming clashes with other toolboxes"
+    Two conventions differ from the reference implementations. First, `omega` acts as a
+    **switch**: any positive value appends the residual-covariance dummy block ``\text{diag}(\sigma)``,
+    and its magnitude never enters the block. Second, the roles of `lambda` and `mu` are
+    **swapped** relative to Ferroni-Canova's `BVAR_`/`rfvar3`, where `lambda` is co-persistence
+    and `mu` is sum-of-coefficients. Translating hyperparameters from a paper that uses that
+    toolbox requires exchanging the two.
 
 !!! note "Technical Note"
-    The Minnesota prior is implemented via **dummy observations** (Theil-Goldberger mixed estimation). Augmenting the data with pseudo-observations and running OLS on the combined system is algebraically equivalent to computing the posterior mean under the NIW conjugate prior. This approach avoids explicit construction of the ``\Sigma \otimes \Omega_0`` Kronecker prior covariance.
+    Dummy observations implement Theil-Goldberger mixed estimation: augmenting the data with pseudo-observations and running OLS on the combined system is algebraically equivalent to computing the posterior mean under the NIW conjugate prior. This avoids ever forming the ``\Sigma \otimes \Omega_0`` Kronecker prior covariance.
 
 ```@example bvar
 # Define hyperparameters explicitly
@@ -178,17 +196,19 @@ post_hyper = estimate_bvar(Y, 2; n_draws=100, prior=:minnesota, hyper=hyper,
 report(post_hyper)
 ```
 
-The `tau=0.5` setting provides moderate shrinkage --- coefficient estimates are pulled halfway between the data-driven OLS values and the random walk prior. With `decay=2.0`, the prior variance for lag-``l`` coefficients decays as ``1/l^2``, so distant lags are strongly penalized. Setting `mu=1.0` treats cross-variable and own lags symmetrically; reducing `mu` (e.g., to 0.5) imposes stronger cross-variable shrinkage, reflecting the common finding that own lags carry more predictive power.
+The shrinkage is visible in the own-first-lag coefficients, which the prior pulls toward 1. OLS puts them at ``-0.447``, ``-0.454`` and ``0.697`` for output, prices and the funds rate; under `tau=0.5` the posterior means move to ``-0.288``, ``-0.284`` and ``0.738``. Every coefficient moves toward 1, but the two badly-determined growth-rate equations move by about 0.16 while the funds-rate equation --- which the data pin down well --- moves by only 0.04. With `decay=2.0` the prior variance falls as ``l^{-4}``, so the second lag is shrunk sixteen times harder than the first.
 
 ### `MinnesotaHyperparameters` Fields
 
 | Field | Type | Description |
 |-------|------|-------------|
-| `tau` | `T` | Overall tightness (lower = more shrinkage toward random walk prior) |
+| `tau` | `T` | Overall tightness, inverse scale (lower = more shrinkage toward the random-walk prior) |
 | `decay` | `T` | Lag decay exponent (higher = faster decay of lag importance) |
-| `lambda` | `T` | Sum-of-coefficients scaling (controls unit root belief) |
-| `mu` | `T` | Co-persistence scaling (controls common trend belief) |
-| `omega` | `T` | Covariance scaling (controls prior on error covariance) |
+| `lambda` | `T` | Sum-of-coefficients prior, inverse scale (lower = tighter unit-root belief) |
+| `mu` | `T` | Co-persistence prior, inverse scale (lower = tighter common-trend belief) |
+| `omega` | `T` | Residual-covariance dummy block: included when positive, magnitude unused |
+
+The constructor is keyword-only and every field defaults, so `MinnesotaHyperparameters(tau=0.5)` keeps the package defaults for the rest.
 
 ---
 
@@ -231,7 +251,7 @@ post_tau = estimate_bvar(Y, 2; n_draws=100, prior=:minnesota, hyper=best_tau,
 report(post_tau)
 ```
 
-The optimal ``\tau`` balances fit and complexity: values near 0.01 produce near-dogmatic shrinkage to the random walk (useful for high-dimensional systems), while values near 1.0 produce minimal shrinkage (approaching OLS). The marginal likelihood automatically penalizes overfitting, so the optimal ``\tau`` increases with sample size as data evidence accumulates.
+The search returns ``\hat{\tau} = 0.536``, an interior point of the ``[0.01, 10]`` range, at a log marginal likelihood of ``-70.07``. The bottom of the range is near-dogmatic shrinkage to the random walk, useful for high-dimensional systems; the top approaches unrestricted OLS. Because the marginal likelihood integrates out the parameters it penalizes overfitting automatically, so the selected ``\tau`` loosens as the sample grows and the data carry more of the inference. A value pinned to either endpoint means the range is too narrow, not that the prior should be that extreme.
 
 | Keyword | Type | Default | Description |
 |---------|------|---------|-------------|
@@ -264,7 +284,7 @@ post_joint = estimate_bvar(Y, 2; n_draws=100, prior=:minnesota, hyper=best_joint
 report(post_joint)
 ```
 
-Joint optimization is particularly important for large systems (``n \geq 10``), where the optimal ``\mu`` is often substantially below 1.0 --- imposing strong cross-variable shrinkage while allowing own lags to remain relatively free. For small systems (``n \leq 5``), the simpler tau-only search is usually sufficient.
+The three-dimensional grid returns ``(\hat{\tau}, \hat{\lambda}, \hat{\mu}) = (0.644, 10.0, 1.0)`` at a log marginal likelihood of ``-68.35``, better than the ``-70.07`` the tau-only search reaches. Letting ``\lambda`` move to the top of its grid all but switches off the sum-of-coefficients prior, and the freed-up slack lets ``\tau`` sit looser than the one-dimensional search could afford. Joint selection matters most in large systems, where these priors interact strongly; for ``n \leq 5`` the gain over a tau-only search is usually small. Note that ``\hat{\lambda}`` here sits on a grid boundary, which is the signal to widen `lambda_grid` rather than to accept 10.0 as the optimum.
 
 | Keyword | Type | Default | Description |
 |---------|------|---------|-------------|
@@ -292,7 +312,7 @@ glp = optimize_hyperparameters_glp(Y, 2)
 report(glp)
 ```
 
-The result carries the diagnostics needed to decide whether to trust it. `converged` is `true` only when the optimizer converged **and** no hyperparameter sits on a bound; a pinned value sets `at_bound` and clears `converged`, and the reported log marginal likelihood can be compared against `log_ml_default` (the package defaults) to see how much the selection bought.
+The joint optimizer converges in 74 iterations to ``(\hat{\tau}, \hat{\lambda}, \hat{\mu}) = (0.561, 1.264, 0.608)`` with no hyperparameter on a bound, so `converged` is `true`. Its log marginal likelihood of ``-67.82`` beats both grid searches and improves on the ``-88.87`` obtained at the package defaults --- selection is worth roughly 21 log points here, which is exactly the comparison `log_ml_default` exists to support. The maximized objective, `log_posterior = -69.64`, sits below `log_ml` because the Gamma hyperpriors penalize a ``\tau`` above their mode of 0.2. A pinned hyperparameter would instead set `at_bound` and clear `converged`, and such a result must not be used as an estimate.
 
 !!! note "Technical Note"
     Optimization runs in log space, so every hyperparameter stays positive without a constrained solver, and uses a derivative-free Nelder-Mead restarted from several dispersed starting points --- the marginal-likelihood surface is not concave in the hyperparameters, and a single start can settle in a local optimum. The lag decay and covariance scaling are held fixed (GLP fix the lag decay rather than estimate it) and can be shifted with the `decay` and `omega` keywords.
@@ -329,7 +349,7 @@ using Statistics
 round.([mean(post_glp.B_draws[:, 2, 1]) mean(post_grid.B_draws[:, 2, 1])], digits=4)
 ```
 
-An explicit `hyper=` bypasses selection entirely under either setting.
+On a well-behaved three-variable system the two routes agree closely --- the posterior mean of the own first-lag coefficient in the output equation is ``-0.301`` under `:glp` and ``-0.355`` under `:grid`. The gap widens with the system dimension, where the tau-only grid cannot trade overall tightness against the other two priors. An explicit `hyper=` bypasses selection entirely under either setting.
 
 ---
 
@@ -369,7 +389,15 @@ post_gibbs = estimate_bvar(Y, 2; n_draws=100, sampler=:gibbs,
 report(post_direct)
 ```
 
-The `:direct` sampler is typically 10--100x faster than Gibbs because it avoids iterative sampling. For a 3-variable VAR(2) with `n_draws=1000`, estimation takes under 1 second. If the posterior summaries from `:direct` and `:gibbs` agree closely, the implementation is validated.
+```julia
+plot_result(post_direct; view=:trace, params=[1, 2, 3])
+```
+
+```@raw html
+<iframe src="../assets/plots/mcmc_trace.html" style="width:100%; height:520px; border:none;"></iframe>
+```
+
+The `:direct` sampler is typically 10--100x faster than Gibbs because it avoids iterative sampling; a 3-variable VAR(2) with `n_draws=1000` finishes in well under a second. Its trace plot is pure white noise by construction --- there is no chain, so there is nothing to converge. The Gibbs trace is the one worth inspecting, and close agreement between the two posterior summaries is the standard check that the sampler is correct. `plot_result` on a posterior also accepts `view=:density`, `:running`, and `:acf`.
 
 ### `estimate_bvar` Keyword Arguments
 
@@ -377,11 +405,14 @@ The `:direct` sampler is typically 10--100x faster than Gibbs because it avoids 
 |---------|------|---------|-------------|
 | `n_draws` | `Int` | `1000` | Number of posterior draws to retain |
 | `sampler` | `Symbol` | `:direct` | Sampling algorithm (`:direct` or `:gibbs`) |
-| `burnin` | `Int` | `0` | Burn-in period (`:gibbs` only; defaults to 200 when `sampler=:gibbs`) |
+| `burnin` | `Int` | `0` | Burn-in period (`:gibbs` only; `0` becomes 200 when `sampler=:gibbs`) |
 | `thin` | `Int` | `1` | Thinning interval (`:gibbs` only) |
 | `prior` | `Symbol` | `:normal` | Prior type (`:normal` for diffuse, `:minnesota` for Minnesota) |
-| `hyper` | `MinnesotaHyperparameters` | `nothing` | Minnesota hyperparameters (auto-optimized when `nothing` and `prior=:minnesota`) |
+| `hyper` | `MinnesotaHyperparameters` | `nothing` | Fixed hyperparameters; `nothing` selects them via `hyperopt` when `prior=:minnesota` |
+| `hyperopt` | `Symbol` | `:glp` | Selection route when `hyper=nothing`: `:glp` (joint GLP optimization) or `:grid` (tau-only) |
 | `varnames` | `Vector{String}` | `nothing` | Variable display names |
+| `seed` | `Integer` | `nothing` | Seed owning the RNG; records a manifest so `reproduce(post)` can re-draw bit-for-bit |
+| `rng` | `AbstractRNG` | `default_rng()` | Random number generator, when no `seed` is given |
 
 ### `BVARPosterior{T}` Fields
 
@@ -396,6 +427,7 @@ The `:direct` sampler is typically 10--100x faster than Gibbs because it avoids 
 | `prior` | `Symbol` | Prior used (`:normal` or `:minnesota`) |
 | `sampler` | `Symbol` | Sampler used (`:direct` or `:gibbs`) |
 | `varnames` | `Vector{String}` | Variable names |
+| `manifest` | `ReproManifest` | Seed and environment, or `nothing` unless `seed=` was passed |
 
 ---
 
@@ -414,10 +446,10 @@ median_model = posterior_median_model(post)
 # Standard VAR tools work on the point estimate
 stab = is_stationary(mean_model)
 irfs_mean = irf(mean_model, 20; method=:cholesky)
-nothing # hide
+round.([stab.max_modulus is_stationary(median_model).max_modulus], digits=4)
 ```
 
-The `posterior_mean_model` averages ``B`` and ``\Sigma`` across all posterior draws, providing a point estimate that integrates over parameter uncertainty. The `posterior_median_model` uses the element-wise median, which is more robust to outlier draws. The `BVARPosterior` stores the original data, so residuals are computed automatically for downstream analyses such as `historical_decomposition`.
+`posterior_mean_model` averages ``B`` and ``\Sigma`` element-wise across all draws; `posterior_median_model` takes the element-wise median, which is more robust to outlier draws. Both are stationary here, with largest companion eigenvalue moduli of 0.859 and 0.862 --- note that this is a property of the *averaged* coefficients and does not imply that individual draws are stationary, which is why the analysis functions still filter draw by draw. Because `BVARPosterior` stores the original data, residuals are reconstructed automatically for downstream analyses such as `historical_decomposition`.
 
 ---
 
@@ -440,7 +472,13 @@ plot_result(birf_chol)
 <iframe src="../assets/plots/irf_bayesian.html" style="width:100%; height:520px; border:none;"></iframe>
 ```
 
-The Cholesky ordering [INDPRO, CPI, FFR] identifies a monetary policy shock as the third orthogonalized innovation. The posterior median IRF at ``h = 0`` for INDPRO is zero by construction (ordered first, so it does not respond on impact). Unlike frequentist bootstrap confidence intervals, Bayesian credible intervals integrate over parameter uncertainty in ``(B, \Sigma)`` across all posterior draws, providing a complete characterization of inference uncertainty.
+The Cholesky ordering [INDPRO, CPI, FFR] identifies a monetary policy shock as the third orthogonalized innovation. Its impact effect on the funds rate is 0.149 percentage points with a 68% credible interval of ``[0.139, 0.162]``; the response of industrial production is exactly zero on impact, by construction, and reaches ``-0.047`` percent at ``h = 6`` with an interval of ``[-0.077, -0.018]`` that excludes zero. Unlike frequentist bootstrap bands, which resample around a fixed point estimate, these intervals integrate over the posterior of ``(B, \Sigma)`` directly.
+
+!!! note "Draws are silently dropped"
+    Non-stationary posterior draws and draws for which identification fails are skipped, and the
+    result records the accounting: `n_requested`, `n_effective`, and `n_failed`. Here 89 of 100
+    draws are usable. A warning is emitted only once **more than half** the draws are lost, so
+    always read `n_effective` rather than assuming it equals `n_draws`.
 
 !!! note "Point Estimate Selection"
     By default, `irf`, `fevd`, and `historical_decomposition` use the **posterior mean** as the central tendency (`point_estimate=:mean`). Pass `point_estimate=:median` to use the posterior median instead. The `.point_estimate` field of the result stores whichever was selected.
@@ -461,7 +499,7 @@ birf_sign = irf(post, 20; method=:sign, check_func=check_monetary, max_draws=500
 report(birf_sign)
 ```
 
-The sign-restricted credible intervals combine both parameter uncertainty (from posterior draws of ``(B, \Sigma)``) and identification uncertainty (from the rotation ``Q``). The sign restrictions ensure a contractionary monetary shock raises the federal funds rate and lowers output and prices on impact, consistent with conventional monetary transmission.
+Set identification changes the answer materially. Because every draw is rotated until the impact signs hold, the impact response of industrial production is now ``-0.35`` percent with a 68% interval of ``[-0.59, -0.10]``, an order of magnitude larger than the ``-0.047`` the Cholesky scheme produces at ``h = 6`` and no longer forced to zero on impact. The intervals combine parameter uncertainty (posterior draws of ``(B, \Sigma)``) with identification uncertainty (the rotation ``Q``), so they are wider than a Cholesky band computed on the same draws. `max_draws` caps the rotation attempts per posterior draw; a draw for which no admissible rotation is found is dropped and counted in `n_failed`.
 
 ### `irf` Keyword Arguments (BVAR dispatch)
 
@@ -472,18 +510,24 @@ The sign-restricted credible intervals combine both parameter uncertainty (from 
 | `point_estimate` | `Symbol` | `:mean` | Central tendency (`:mean` or `:median`) |
 | `check_func` | `Function` | `nothing` | Sign restriction check function |
 | `narrative_check` | `Function` | `nothing` | Narrative restriction check function |
+| `max_draws` | `Int` | `1000` | Rotation attempts per posterior draw, for set-identified methods |
+| `data` | `AbstractMatrix` | `post.data` | Override the data used for residuals and narrative checks |
+| `shock_names` | `Vector{String}` | `nothing` | Shock display names |
 | `threaded` | `Bool` | `false` | Use threaded quantile computation |
 
 ### `BayesianImpulseResponse{T}` Fields
 
 | Field | Type | Description |
 |-------|------|-------------|
-| `quantiles` | `Array{T,4}` | ``(H+1) \times n \times n \times n_q``: posterior quantiles of IRFs |
-| `point_estimate` | `Array{T,3}` | ``(H+1) \times n \times n`` posterior point estimate (mean or median) |
+| `quantiles` | `Array{T,4}` | ``H \times n \times n \times n_q``: posterior quantiles of IRFs |
+| `point_estimate` | `Array{T,3}` | ``H \times n \times n`` posterior point estimate (mean or median) |
 | `horizon` | `Int` | Maximum IRF horizon |
 | `variables` | `Vector{String}` | Variable names |
 | `shocks` | `Vector{String}` | Shock names |
 | `quantile_levels` | `Vector{T}` | Quantile levels used |
+| `n_requested` | `Int` | Posterior draws supplied (`post.n_draws`) |
+| `n_effective` | `Int` | Draws that were stationary and identifiable |
+| `n_failed` | `Int` | Draws dropped (`n_requested - n_effective`) |
 
 ---
 
@@ -504,7 +548,7 @@ plot_result(bfevd_sec)
 <iframe src="../assets/plots/fevd_bayesian.html" style="width:100%; height:520px; border:none;"></iframe>
 ```
 
-At short horizons, the monetary shock (shock 3) explains a small fraction of INDPRO forecast error variance --- consistent with the Cholesky ordering where INDPRO does not respond on impact. As the horizon increases, the monetary transmission mechanism operates through lagged effects, and the monetary shock's contribution grows. The wide credible intervals at long horizons reflect cumulating parameter uncertainty through the VMA representation.
+At ``h = 1`` the monetary shock explains exactly none of the forecast error variance of industrial production --- the Cholesky ordering forbids a contemporaneous response, so the share is 0 with a degenerate ``[0, 0]`` interval. Transmission then works through lagged effects: by ``h = 20`` the shares are 83.4% own, 8.4% price and 8.2% monetary, and the credible interval on the monetary share, ``[0.026, 0.127]``, is wide enough to span a factor of five. That width is the honest summary of what 60 observations can say about a variance share twenty months out.
 
 ### `BayesianFEVD{T}` Fields
 
@@ -516,6 +560,7 @@ At short horizons, the monetary shock (shock 3) explains a small fraction of IND
 | `variables` | `Vector{String}` | Variable names |
 | `shocks` | `Vector{String}` | Shock names |
 | `quantile_levels` | `Vector{T}` | Quantile levels used |
+| `n_requested` / `n_effective` / `n_failed` | `Int` | Draw accounting, as for `BayesianImpulseResponse` |
 
 ---
 
@@ -536,7 +581,7 @@ plot_result(bhd_sec)
 <iframe src="../assets/plots/hd_bayesian.html" style="width:100%; height:520px; border:none;"></iframe>
 ```
 
-The historical decomposition reveals which structural shocks drove each variable's movements at each point in time. Credible intervals on the shock contributions reflect posterior uncertainty in both the VAR parameters and the structural identification. For the [INDPRO, CPI, FFR] system, the decomposition shows how supply, demand, and monetary policy shocks combine to explain the observed dynamics of output, prices, and the policy rate.
+The decomposition covers the 58 effective observations left after two lags, splitting each into a contribution from every structural shock plus the initial-condition path carried in `initial_point_estimate`. Reading it alongside the variance decomposition is the point: the FEVD says *on average* how much each shock matters, while the historical decomposition says *which* episodes each shock produced. Credible intervals on the contributions reflect posterior uncertainty in the VAR parameters and, under set identification, in the rotation as well.
 
 ### `BayesianHistoricalDecomposition{T}` Fields
 
@@ -546,11 +591,14 @@ The historical decomposition reveals which structural shocks drove each variable
 | `point_estimate` | `Array{T,3}` | ``T_{\text{eff}} \times n \times n_{\text{shocks}}`` point estimate contributions |
 | `initial_quantiles` | `Array{T,3}` | ``T_{\text{eff}} \times n \times n_q``: initial condition quantiles |
 | `initial_point_estimate` | `Matrix{T}` | ``T_{\text{eff}} \times n`` initial condition point estimate |
+| `shocks_point_estimate` | `Matrix{T}` | ``T_{\text{eff}} \times n_{\text{shocks}}`` point estimate of the structural shocks |
 | `actual` | `Matrix{T}` | ``T_{\text{eff}} \times n`` actual observed values |
 | `T_eff` | `Int` | Effective sample size |
 | `variables` | `Vector{String}` | Variable names |
 | `shock_names` | `Vector{String}` | Shock names |
+| `quantile_levels` | `Vector{T}` | Quantile levels used |
 | `method` | `Symbol` | Identification method used |
+| `n_requested` / `n_effective` / `n_failed` | `Int` | Draw accounting, as for `BayesianImpulseResponse` |
 
 ---
 
@@ -571,7 +619,7 @@ plot_result(fc_sec)
 <iframe src="../assets/plots/forecast_bvar.html" style="width:100%; height:520px; border:none;"></iframe>
 ```
 
-The posterior credible intervals widen with the forecast horizon, reflecting both parameter uncertainty (from the posterior distribution of ``(B, \Sigma)``) and shock uncertainty (from the stochastic future innovations). Non-stationary draws are automatically filtered out to prevent explosive forecast paths.
+The intervals widen with the horizon because they carry two distinct sources of uncertainty: the posterior spread of ``(B, \Sigma)`` and the fresh ``N(0, \Sigma^{(s)})`` innovations drawn along each simulated path. For the funds rate the 90% band runs from ``[-0.31, 0.17]`` at ``h = 1`` to ``[-0.36, 0.44]`` at ``h = 12``, 66% wider. Industrial production widens by only 30% over the same range, because a stationary growth rate has a bounded forecast variance and almost all of its band comes from parameter uncertainty rather than from accumulating shocks. Non-stationary draws are filtered out before simulation, so explosive paths never enter the quantiles.
 
 ### `forecast` Keyword Arguments (BVAR dispatch)
 
@@ -580,6 +628,7 @@ The posterior credible intervals widen with the forecast horizon, reflecting bot
 | `reps` | `Int` | `nothing` | Number of posterior draws to use (default: all) |
 | `conf_level` | `Real` | `0.95` | Credible interval level |
 | `point_estimate` | `Symbol` | `:mean` | Central tendency (`:mean` or `:median`) |
+| `rng` | `AbstractRNG` | `default_rng()` | Random number generator for the simulated shock paths |
 
 ### `BVARForecast{T}` Fields
 
@@ -606,7 +655,7 @@ cfc = conditional_forecast(post, scenario, 12)
 report(cfc)
 ```
 
-The conditioned rows are pinned to 2.0 with a degenerate band — a hard condition holds in every posterior draw — while the other variables show the scenario's spillovers with credible intervals that reflect the full posterior.
+The conditioned rows are pinned to 2.0 with a degenerate ``[2.0, 2.0]`` band — a hard condition holds in every posterior draw — against an unconditional funds-rate path of about ``-0.04``. The spillovers carry credible intervals that reflect the full posterior: industrial production is put at ``+1.35`` percent in the first conditioned month, but with a 95% band of ``[-1.48, 4.14]`` that straddles zero. Compare this with the [VAR](@ref var_page) dispatch, which conditions on a single point estimate and therefore reports a far tighter band for the same scenario. `n_draws` on the result records how many posterior draws survived the stationarity filter — 89 of 100 here.
 
 ```julia
 plot_result(cfc)
@@ -657,8 +706,10 @@ The report shows the posterior mean volatility path at several dates — the obj
 
 ```@example bvar
 vol, vol_bands = volatility_path(tvp)
-size(vol), size(vol_bands)
+round.([vol[1, :] vol[end, :]], digits=4)
 ```
+
+The training block absorbs the first 15 observations, leaving 45 effective periods, so `vol` is ``45 \times 3`` and `vol_bands` is ``45 \times 3 \times 3``. Comparing the two ends of the sample shows how much drift the posterior actually finds: 0.518 to 0.518 for industrial production, 0.207 to 0.205 for inflation, 0.073 to 0.071 for the funds rate. The paths are nearly flat here, which is the honest result on 45 periods at the reduced draw counts these docs use --- Primiceri-style estimation needs `n_draws` in the thousands and a sample spanning a genuine change in regime before drift is identified.
 
 ### Time-Varying Impulse Responses
 
@@ -669,6 +720,15 @@ early = irf(tvp, 12; t=5, n_draws=50)
 late  = irf(tvp, 12; t=tvp.T_eff, n_draws=50)
 round.([early.point_estimate[1, :, 3]  late.point_estimate[1, :, 3]], digits=4)
 ```
+
+The impact column of the third shock is the recursive impact matrix ``A_t^{-1}\Sigma_t`` at the chosen date: zero for the two variables ordered above the funds rate, and 0.072 early against 0.073 late for the rate itself. The two dates are indistinguishable, consistent with the flat volatility path above; on a longer sample spanning a genuine regime change this comparison is where a change in transmission would show up. `t` indexes the effective sample, so `t=1` is the first post-training period and `t=tvp.T_eff` the last.
+
+| Keyword | Type | Default | Description |
+|---------|------|---------|-------------|
+| `t` | `Int` | `post.T_eff` | Date within the effective sample at which to evaluate the response |
+| `n_draws` | `Int` | `500` | Posterior draws used, capped at the number available |
+| `quantile_levels` | `Vector{<:Real}` | `[0.05, 0.16, 0.84, 0.95]` | Credible-band levels |
+| `stationary_only` | `Bool` | `true` | Drop draws whose companion matrix at date `t` is explosive |
 
 ```julia
 plot_result(late)
@@ -705,14 +765,17 @@ Symmetrically, `sv=false` freezes the volatilities at their training-sample valu
 | Field | Type | Description |
 |-------|------|-------------|
 | `B_draws` | `Array{T,3}` | ``n_{draws}\times T_{eff}\times k`` drifting VAR coefficients, ``k = n(1+np)`` |
-| `A_draws` | `Array{T,3}` | ``n_{draws}\times T_{eff}\times n_a`` free elements of ``A_t``, ``n_a = n(n-1)/2`` |
+| `A_draws` | `Array{T,3}` | ``n_{draws}\times T_{eff}\times n_a`` free elements of ``A_t``, ``n_a = n(n-1)/2``, stacked row-wise |
 | `H_draws` | `Array{T,3}` | ``n_{draws}\times T_{eff}\times n`` log-**variances** ``\log\sigma^2_{i,t}`` |
 | `Q_draws` | `Array{T,3}` | Coefficient random-walk covariance draws |
 | `S_draws` | `Array{T,3}` | Block-diagonal ``A_t`` random-walk covariance draws |
 | `W_draws` | `Matrix{T}` | Log-volatility random-walk variances |
+| `Y` | `Matrix{T}` | The original data |
+| `p` / `n` | `Int` | Lag order and number of variables |
 | `T_eff` | `Int` | Effective sample after the training block |
 | `n_train` | `Int` | Training-sample length used for the priors |
 | `tvp` / `sv` | `Bool` | Which blocks were allowed to drift |
+| `varnames` | `Vector{String}` | Variable names |
 
 ---
 
@@ -760,6 +823,8 @@ maximum(abs(sum(mu[t-j+1, 3] for j in 1:3) - mf_data[t, 3])
         for t in 3:size(mf_data, 1) if !isnan(mf_data[t, 3]))
 ```
 
+The largest violation of the aggregation identity across all reference dates is of order ``10^{-7}``, i.e. numerical noise rather than approximation error. That exactness is the point of the Durbin-Koopman construction: because the aggregation carries no measurement error, applying the observation map to the simulated path reproduces the observed low-frequency value exactly, so the interpolated monthly series is guaranteed to sum back to the published quarterly figure.
+
 Because the parameter draws are ordinary VAR draws, the existing analysis dispatches apply at the high frequency:
 
 ```@example bvar
@@ -767,7 +832,7 @@ fc_mf = forecast(mf, 6)
 report(fc_mf)
 ```
 
-With `low_freq` empty nothing is latent and the sampler reduces to the conjugate BVAR. See also the [Nowcasting](nowcast.md) pages, which solve the same ragged-edge problem with a dynamic factor model instead.
+With `low_freq` empty nothing is latent and the sampler reduces to the conjugate BVAR. See also the [Nowcasting](@ref nowcast_page) pages, which solve the same ragged-edge problem with a dynamic factor model instead.
 
 ### `estimate_mfvar` Keyword Arguments
 
@@ -791,9 +856,12 @@ With `low_freq` empty nothing is latent and the sampler reduces to the conjugate
 | `Sigma_draws` | `Array{T,3}` | ``n_{draws}\times n\times n`` innovation covariances |
 | `Z_draws` | `Array{T,3}` | ``n_{draws}\times T_{hf}\times n`` latent high-frequency paths |
 | `data` | `Matrix{T}` | The input panel, `NaN` where unobserved |
+| `p` / `n` | `Int` | Lag order and number of variables |
+| `T_hf` | `Int` | Number of high-frequency periods |
 | `low_freq` | `Vector{Int}` | Low-frequency column indices |
 | `freq_ratio` | `Int` | High-frequency periods per low-frequency period |
 | `aggregation` | `Vector{Symbol}` | Aggregation rule per low-frequency series |
+| `varnames` | `Vector{String}` | Variable names |
 
 ---
 
@@ -815,16 +883,16 @@ X_lg = X_lg[all.(isfinite, eachrow(X_lg)), 1:min(20, size(X_lg, 2))]
 hyper_large = MinnesotaHyperparameters(
     tau = 0.1,      # Strong overall shrinkage
     decay = 2.0,    # Quadratic lag decay
-    lambda = 1.0,   # Sum-of-coefficients prior
-    mu = 0.5,       # Penalize cross-variable coefficients
-    omega = 1.0     # Covariance scaling
+    lambda = 1.0,   # Tight sum-of-coefficients prior
+    mu = 0.5,       # Tight co-persistence prior
+    omega = 1.0     # Include the residual-covariance dummy block
 )
 
 post_lg = estimate_bvar(X_lg, 4; n_draws=100, prior=:minnesota, hyper=hyper_large)
 report(post_lg)
 ```
 
-For 20 variables at 4 lags, the VAR has ``20^2 \times 4 + 20 = 1620`` parameters per equation. With a typical monthly sample of 600 observations, OLS is ill-conditioned. The Minnesota prior with `tau=0.1` and `mu=0.5` regularizes the system by imposing strong cross-variable shrinkage while allowing own lags to retain flexibility. The `optimize_hyperparameters_full` function automates the selection of ``(\tau, \lambda, \mu)`` for large systems.
+At 20 variables and 4 lags the system carries ``20^2 \times 4 + 20 = 1620`` free parameters in total, or ``1 + 20 \times 4 = 81`` per equation. The sample used here has 570 usable observations, so OLS is estimable but poorly conditioned, and unrestricted estimates would be dominated by sampling noise. The Minnesota prior with `tau=0.1` shrinks hard toward the random walk, `decay=2.0` all but eliminates the distant lags, and the tight sum-of-coefficients and co-persistence priors keep the implied long-run behavior sensible: all 100 posterior draws come back stationary. `optimize_hyperparameters_full` automates the ``(\tau, \lambda, \mu)`` choice when a hand-set prior is not wanted.
 
 ---
 
@@ -861,9 +929,10 @@ report(fc_ce)
 # Step 7: Extract posterior mean VARModel for stationarity check
 mean_model_ce = posterior_mean_model(post_ce)
 stab_ce = is_stationary(mean_model_ce)
+stab_ce
 ```
 
-This workflow demonstrates the complete Bayesian pipeline: hyperparameter optimization selects the optimal shrinkage ``\tau`` via marginal likelihood, the conjugate NIW sampler produces 100 posterior draws, and the structural analysis functions compute IRFs, FEVD, and historical decomposition with credible intervals. The Cholesky ordering [INDPRO, CPI, FFR] identifies a monetary policy shock as the third innovation. The forecast integrates over the full posterior distribution of ``(B, \Sigma)``, providing credible intervals that account for both parameter and shock uncertainty. The posterior mean model confirms stationarity of the system.
+The pipeline runs end to end: the grid search selects ``\hat{\tau} = 0.536``, the conjugate NIW sampler draws 100 posteriors from it, and the structural functions turn those draws into IRFs, variance shares, and a historical decomposition, each with credible intervals rather than point estimates. The Cholesky ordering [INDPRO, CPI, FFR] identifies the monetary policy shock as the third innovation, so output and prices are held to zero on impact and respond only with a lag. The forecast integrates over the full posterior of ``(B, \Sigma)`` and adds fresh innovations along each path, which is why its bands are wider than any bootstrap band computed at a single point estimate. The final stationarity check on the posterior mean model closes the loop --- it is stationary, so the reported IRFs and variance decompositions are well defined.
 
 ---
 
@@ -873,11 +942,11 @@ This workflow demonstrates the complete Bayesian pipeline: hyperparameter optimi
 
 2. **Prior sensitivity with diffuse prior**: Setting `prior=:normal` (the default) uses a diffuse NIW prior that provides minimal regularization. For systems with more than 5 variables, switch to `prior=:minnesota` to avoid overfitting. The diffuse prior is appropriate only for small, well-identified systems with ample data.
 
-3. **Minnesota prior assumes random walk**: The Minnesota prior centers on a random walk --- each variable's own first lag is 1, all others are 0. For stationary variables (e.g., interest rates, unemployment), the prior mean is inappropriate. Consider demeaning or detrending before estimation, or use a lower `tau` to let the data dominate.
+3. **Minnesota prior assumes random walk**: The Minnesota prior centers on a random walk --- each variable's own first lag is 1, all others are 0. For stationary variables (interest rates, unemployment, any differenced series) that prior mean is wrong, and it pulls the posterior toward the unit circle. Demean or detrend before estimation, or raise `tau` to loosen the prior and let the data dominate. Note the direction: `tau` is an *inverse* tightness, so a **larger** value means **less** shrinkage.
 
-4. **Hyperparameter optimization convergence**: The `optimize_hyperparameters` function uses a discrete grid search, so the result depends on `grid_size` and `tau_range`. If the optimal ``\tau`` is at a grid boundary, widen `tau_range`. Increase `grid_size` for finer resolution.
+4. **Hyperparameter optimization convergence**: `optimize_hyperparameters` is a discrete grid search, so its answer depends on `grid_size` and `tau_range`; `optimize_hyperparameters_full` searches a three-dimensional grid with the same caveat. If the selected value sits on a boundary, widen the range rather than accepting it. `optimize_hyperparameters_glp` reports this directly through `at_bound` and refuses to set `converged` when a hyperparameter is pinned.
 
-5. **Non-stationary posterior draws**: The forecast function automatically filters out non-stationary draws (those with companion matrix eigenvalues at or above unity). If more than half the draws are non-stationary, estimation raises a warning. This typically indicates the prior is too diffuse --- increase shrinkage by lowering `tau`.
+5. **Non-stationary posterior draws**: `irf`, `fevd`, `historical_decomposition`, `forecast`, and `conditional_forecast` all silently discard draws whose companion matrix has an eigenvalue at or above unity, and warn only once more than half are gone. Read `n_effective` on the result. Mass rejection usually means the prior is too loose (raise the shrinkage by lowering `tau`) or, more often, that `Y` is on a scale where the fixed ``S_0 = I_n`` inverse-Wishart prior dominates the likelihood --- see the warning at the top of this page.
 
 6. **Gibbs sampler autocorrelation**: The `:gibbs` sampler produces correlated draws. Without thinning, effective sample size is smaller than `n_draws`. Use `thin=5` or `thin=10` and increase `burnin` to at least 500 for reliable posterior summaries. The `:direct` sampler avoids this issue entirely.
 

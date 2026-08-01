@@ -13,6 +13,8 @@
 
 All results integrate with `report()` for publication-quality output and `plot_result()` for interactive D3.js visualization.
 
+Local Projections and VARs target the same population impulse responses (Plagborg-Møller & Wolf 2021); the [VAR](@ref var_page) page documents the system-based route and the [LP vs. VAR](@ref) section below sets out the trade-off. The variance decomposition on this page is the LP-specific estimator of Gorodnichenko & Lee (2019) — the VMA-based FEVD and the concept itself live on [Variance Decomposition](@ref ia_fevd_page).
+
 ```@setup lp
 using MacroEconometricModels, Random, Statistics
 Random.seed!(42)
@@ -20,7 +22,10 @@ fred = load_example(:fred_md)
 Y = to_matrix(apply_tcode(fred[:, ["INDPRO", "CPIAUCSL", "FEDFUNDS"]]))
 Y = Y[all.(isfinite, eachrow(Y)), :]
 Y = Y[end-59:end, :]
+vnames = ["INDPRO", "CPIAUCSL", "FEDFUNDS"]
 ```
+
+The examples use three FRED-MD series transformed by their published `tcode`: industrial production and the federal funds rate in first differences of logs and levels respectively, and `CPIAUCSL` under `tcode=6`, the **second log difference** — the change in inflation, not inflation itself.
 
 ## Quick Start
 
@@ -28,7 +33,7 @@ Y = Y[end-59:end, :]
 
 ```@example lp
 # LP-IRF of a federal funds rate shock up to horizon 20
-lp = estimate_lp(Y, 3, 20; lags=4, cov_type=:newey_west)
+lp = estimate_lp(Y, 3, 20; lags=4, cov_type=:newey_west, varnames=vnames)
 result = lp_irf(lp; conf_level=0.95)
 report(result)
 ```
@@ -41,22 +46,23 @@ report(result)
 # stage and identifies nothing.
 Z = reshape([0.0; diff(Y[:, 3])] .+ 1.5 * std(diff(Y[:, 3])) *
             randn(Random.MersenneTwister(7), size(Y, 1)), :, 1)
-lpiv = estimate_lp_iv(Y, 3, Z, 20; lags=4, cov_type=:newey_west)
+lpiv = estimate_lp_iv(Y, 3, Z, 20; lags=4, cov_type=:newey_west, varnames=vnames)
 report(lpiv)
 ```
 
 **Recipe 3: Smooth LP with B-splines**
 
 ```@example lp
-slp = estimate_smooth_lp(Y, 3, 20; lambda=1.0, n_knots=4, lags=4)
-report(slp)
+smooth_lp = estimate_smooth_lp(Y, 3, 20; lambda=1.0, n_knots=4, lags=4, varnames=vnames)
+report(smooth_lp)
 ```
 
 **Recipe 4: Structural LP with Cholesky identification**
 
 ```@example lp
 # Cholesky ordering: output -> prices -> monetary policy
-slp = structural_lp(Y, 20; method=:cholesky, lags=4)
+slp = structural_lp(Y, 20; method=:cholesky, lags=4, varnames=vnames)
+report(slp)
 ```
 
 ```julia
@@ -70,20 +76,22 @@ plot_result(slp)
 **Recipe 5: State-dependent LP (recession vs. expansion)**
 
 ```@example lp
-# 7-month MA of IP growth as state variable
+# 7-month MA of IP growth as state variable, standardized
 ip_growth = Y[:, 1]
 state_var = [mean(ip_growth[max(1, t-6):t]) for t in 1:length(ip_growth)]
 state_var = Float64.((state_var .- mean(state_var)) ./ std(state_var))
 
-slm = estimate_state_lp(Y, 3, state_var, 20; gamma=:estimate, threshold=:estimate, lags=4)
+slm = estimate_state_lp(Y, 3, state_var, 20; gamma=1.5, threshold=0.0, lags=4,
+                        varnames=vnames)
 report(slm)
 ```
 
 **Recipe 6: LP-FEVD with bias correction**
 
 ```@example lp
-slp = structural_lp(Y, 20; method=:cholesky, lags=4)
-lfevd = lp_fevd(slp, 20; method=:r2, bias_correct=true, n_boot=50)
+lfevd = lp_fevd(slp, 20; method=:r2, bias_correct=true, n_boot=50,
+                rng=MersenneTwister(20260801))
+report(lfevd)
 ```
 
 ```julia
@@ -145,15 +153,12 @@ where:
 lp_model = estimate_lp(Y, 3, 20;       # shock_var=3 (FEDFUNDS)
     lags = 4,                           # Control lags
     cov_type = :newey_west,             # HAC standard errors
-    bandwidth = 0                       # 0 = automatic bandwidth
+    bandwidth = 0,                      # 0 = automatic bandwidth
+    varnames = vnames
 )
 
 # Extract IRF with confidence intervals
 irf_result = lp_irf(lp_model; conf_level=0.95)
-
-# Bootstrap bands instead of HAC ones ([T271]): the design is held fixed and only the
-# errors are resampled, which is what makes it valid for LP's MA(h)-correlated residuals.
-boot_result = lp_irf(lp_model; ci_type=:bootstrap, bootstrap=:wild, reps=500, seed=1)
 report(irf_result)
 ```
 
@@ -165,32 +170,43 @@ plot_result(irf_result)
 <iframe src="../assets/plots/irf_lp.html" width="100%" height="500" frameborder="0" style="border:1px solid #ddd;border-radius:4px;"></iframe>
 ```
 
-The `irf_result.values` matrix has dimension ``(H+1) \times n_{\text{resp}}``, where each row gives the response at a particular horizon. At ``h = 0``, the coefficient ``\hat{\beta}_0`` captures the contemporaneous impact effect. Standard errors in `irf_result.se` widen as ``h`` increases because longer-horizon LP residuals exhibit stronger serial correlation and the effective sample shrinks by one observation per horizon.
+The `irf_result.values` matrix has dimension ``(H+1) \times n_{\text{resp}}``, where each row gives the response at a particular horizon. At ``h = 0`` the shock variable moves by ``1.000`` by construction, and the same-period response of industrial production is ``0.0201`` — significant at 5%, which is the recursive-ordering artefact of projecting on the *reduced-form* federal funds rate rather than on an identified monetary policy shock (the [Structural Local Projections](@ref) section fixes this). The funds rate response decays from ``0.92`` at ``h=1`` to ``0.26`` by ``h=8`` and is indistinguishable from zero thereafter. Standard errors in `irf_result.se` widen from ``0.0081`` at ``h=0`` to roughly ``0.006``–``0.010`` across horizons for `INDPRO` and much more sharply for the funds rate itself, because longer-horizon LP residuals are more strongly serially correlated and the effective sample shrinks by one observation per horizon — from 56 usable observations at ``h=0`` to 36 at ``h=20``.
 
 ### Keyword Arguments
 
 | Keyword | Type | Default | Description |
 |---------|------|---------|-------------|
 | `lags` | `Int` | `4` | Number of control lags ``p`` |
+| `response_vars` | `Vector{Int}` | all columns | Indices of response variables |
 | `cov_type` | `Symbol` | `:newey_west` | Covariance estimator (`:newey_west`, `:white`, `:ols`) |
+| `bandwidth` | `Int` | `0` | HAC bandwidth (`0` = automatic) |
+| `conf_level` | `Real` | `0.95` | Confidence level carried into the IRF |
+| `varnames` | `Vector{String}` | `["y1", …]` | Variable labels used in `report` and plots |
 
 ### `lp_irf` Confidence Intervals
 
+The bootstrap is **fixed-design**: at each horizon the regressor matrix is held fixed and only the errors are resampled (``y^* = X_h\hat{\beta}_h + u^*``, refit by OLS). That is the right form for LP, whose regressors are predetermined but whose errors are MA(``h``)-correlated by construction. `:wild` is the default here --- unlike the VAR, where `:iid` is --- because LP residuals are serially correlated *and* frequently heteroskedastic. Only the bands change: the reported responses and standard errors remain the analytical ones, so switching `ci_type` never moves the point estimate.
+
+```@example lp
+# Bootstrap bands instead of HAC ones: the design is held fixed and only the errors
+# are resampled, which is what makes it valid for LP's MA(h)-correlated residuals.
+boot_result = lp_irf(lp_model; ci_type=:bootstrap, bootstrap=:wild, reps=500, seed=1)
+(analytical_lower = round.(irf_result.ci_lower[1:4, 1], digits=4),
+ bootstrap_lower  = round.(boot_result.ci_lower[1:4, 1], digits=4),
+ values_identical = irf_result.values == boot_result.values)
+```
+
+The two lower bands for `INDPRO` track each other closely over the first four horizons — ``0.0042`` against ``0.0051`` at ``h=0``, ``-0.0363`` against ``-0.0342`` at ``h=1`` — so at this sample size the normal approximation underlying the HAC bands is adequate. The wild bootstrap is slightly tighter here, which is typical when the residuals are less heteroskedastic than the analytical formula's implicit worst case. The point estimates are bit-for-bit identical, confirming that `ci_type` changes only the interval construction.
+
 | Keyword | Type | Default | Description |
 |---------|------|---------|-------------|
+| `conf_level` | `Real` | `0.95` | Confidence level for CIs |
 | `ci_type` | `Symbol` | `:analytical` | `:analytical` (HAC) or `:bootstrap` (percentile bands) |
 | `bootstrap` | `Symbol` | `:wild` | Resampling scheme: `:wild`, `:block`, `:iid` |
 | `block_length` | `Int` | `0` | Moving-block length; `0` selects ``\lceil T^{1/3} \rceil`` |
 | `wild_dist` | `Symbol` | `:rademacher` | `:rademacher` or `:mammen` |
 | `reps` | `Int` | `500` | Bootstrap replications |
-| `seed` | `Int` | `nothing` | Fixes the bands for reproducibility |
-
-The bootstrap is **fixed-design**: at each horizon the regressor matrix is held fixed and only the errors are resampled (``y^* = X_h\hat{\beta}_h + u^*``, refit by OLS). That is the right form for LP, whose regressors are predetermined but whose errors are MA(``h``)-correlated by construction. `:wild` is the default here --- unlike the VAR, where `:iid` is --- because LP residuals are serially correlated *and* frequently heteroskedastic.
-
-Only the bands change: the reported responses and standard errors remain the analytical ones, so switching `ci_type` never moves the estimate.
-| `bandwidth` | `Int` | `0` | HAC bandwidth (0 = automatic) |
-| `response_vars` | `Vector{Int}` | all | Indices of response variables |
-| `conf_level` | `Real` | `0.95` | Confidence level for CIs |
+| `seed` | `Union{Integer,Nothing}` | `nothing` | Fixes the bands for reproducibility |
 
 ### Return Values (`LPModel`)
 
@@ -206,6 +222,7 @@ Only the bands change: the reported responses and standard errors remain the ana
 | `vcov` | `Vector{Matrix{T}}` | Variance-covariance matrices (HAC) |
 | `T_eff` | `Vector{Int}` | Effective sample size at each horizon |
 | `cov_estimator` | `AbstractCovarianceEstimator` | Covariance estimator used |
+| `varnames` | `Vector{String}` | Variable labels |
 
 ### Return Values (`LPImpulseResponse`)
 
@@ -270,15 +287,23 @@ An external instrument is a **noisy measure** of the structural shock — a narr
 # LP-IV with the proxy instrument built in the Quick Start
 lpiv_model = estimate_lp_iv(Y, 3, Z, 20;    # shock_var=3 (FEDFUNDS)
     lags = 4,
-    cov_type = :newey_west
+    cov_type = :newey_west,
+    varnames = vnames
 )
 
 # Check first-stage strength
 weak_test = weak_instrument_test(lpiv_model; threshold=10.0)
+(min_F = round(weak_test.min_F, digits=2), weak_horizons = weak_test.weak_horizons,
+ passes = weak_test.passes_threshold)
+```
+
+The `weak_test.min_F` reports the minimum first-stage F-statistic across all horizons: ``60.82`` here, six times the Stock & Yogo (2005) rule-of-thumb threshold of 10, with `weak_horizons` empty so the instrument is strong at every one of the 21 horizons. Because the proxy is the funds-rate change plus mean-zero noise, its relevance does not decay with the horizon — the first-stage F drifts *up* from ``67.30`` at ``h=0`` to a maximum of ``122.51``. With a genuine narrative or high-frequency instrument the opposite pattern is common, and the minimum across horizons, not the ``h=0`` value, is the number to check.
+
+```@example lp
 report(lpiv_model)
 ```
 
-The `weak_test.min_F` reports the minimum first-stage F-statistic across all horizons. If it exceeds the Stock & Yogo (2005) threshold of 10, the instruments are strong at every horizon. First-stage strength typically declines at longer horizons because the instrument's predictive power weakens.
+The instrumented responses differ noticeably from the reduced-form LP above: the impact response of `INDPRO` falls from ``0.0201`` to ``0.0130`` and loses significance, and the funds-rate path turns negative at long horizons (``-0.76`` at ``h=12``) where the OLS projection stayed positive. Instrumenting removes the component of the funds-rate change that is a systematic response to output and prices, so what remains is closer to an exogenous policy movement. The wider bands are the price: 2SLS discards the variation the instrument cannot explain, so LP-IV standard errors always exceed their OLS counterparts at the same horizon.
 
 ### Weak-Instrument-Robust Inference
 
@@ -303,7 +328,12 @@ mop = montiel_olea_pflueger_f(lpiv_model)
 report(mop)
 ```
 
-The critical values are Montiel Olea and Pflueger's **simplified**, nuisance-parameter-free bounds by worst-case relative bias of 2SLS (`tau` = 0.05, 0.10, 0.20, 0.30 → 37.42, 23.11, 15.06, 12.04), as tabulated in Andrews, Stock & Sun (2019). They are conservative: the exact MOP critical values depend on the estimated covariance structure and are weakly smaller. Note how much higher the bar is than the familiar `F > 10`.
+The effective F of ``67.30`` clears the 10%-worst-case-bias critical value of ``23.11`` comfortably, so the 2SLS bands reported above are trustworthy. The critical values are Montiel Olea and Pflueger's **simplified**, nuisance-parameter-free bounds by worst-case relative bias of 2SLS (`tau` = 0.05, 0.10, 0.20, 0.30 → 37.42, 23.11, 15.06, 12.04), as tabulated in Andrews, Stock & Sun (2019). They are conservative: the exact MOP critical values depend on the estimated covariance structure and are weakly smaller. Note how much higher the bar is than the familiar `F > 10` — an instrument with ``F = 15`` passes Stock–Yogo but fails the MOP 10% bias threshold.
+
+| Keyword | Type | Default | Description |
+|---------|------|---------|-------------|
+| `tau` | `Real` | `0.10` | Worst-case relative bias target (`0.05`, `0.10`, `0.20`, `0.30`) |
+| `bandwidth` | `Int` | `0` | Fixed HAC lag length for the first-stage covariance; `0` uses the data-driven rule |
 
 **Anderson-Rubin bands** give correct coverage at any instrument strength. At each horizon `h`, the AR test of ``H_0: \theta_h = \theta_0`` regresses ``y_{t+h} - \theta_0 x_t`` on the controls and instruments and tests the instruments' joint irrelevance — a restriction that holds under ``H_0`` regardless of how weak the first stage is. Inverting the test over ``\theta_0`` gives the band:
 
@@ -314,7 +344,7 @@ report(ar_band)
 
 The covariance uses **Newey-West with a lag length that scales with the horizon** — `max(data-driven, h+1)`, the rule `estimate_lp_iv` applies to its own standard errors, because the horizon-`h` LP residual is MA(`h`) by construction. The bandwidth actually used at each horizon and response is returned in `bandwidths`.
 
-An AR set is not forced to be an interval: where the instrument is too weak to bound the response the set is **unbounded** and reported as `±∞`, and the corresponding Wald band there is over-confident. Where the instrument is strong the two bands nearly coincide.
+An AR set is not forced to be an interval: where the instrument is too weak to bound the response the set is **unbounded** and reported as `±∞`, and the corresponding Wald band there is over-confident. Here the instrument is strong at every horizon, so all 21 cells are bounded (`Unbounded cells 0 / 21`) and the AR and Wald bands nearly coincide — at ``h = 0`` the AR interval is ``[-0.0069, 0.0307]`` against a Wald interval of ``[-0.0052, 0.0313]``. That agreement is itself the diagnostic: with a weak instrument the AR set would widen or open up while the Wald band stayed narrow, and only the AR band would retain correct coverage.
 
 | Keyword | Type | Default | Description |
 |---------|------|---------|-------------|
@@ -322,7 +352,7 @@ An AR set is not forced to be an interval: where the instrument is too weak to b
 | `n_grid` | `Int` | `401` | Grid points per horizon/response cell |
 | `span` | `Real` | `20` | Half-width of the search range, in 2SLS standard errors |
 | `bandwidth` | `Int` | `0` | Fixed HAC lag length; `0` uses `max(auto, h+1)` |
-| `responses` | `Vector{Int}` | all | Subset of response positions to compute |
+| `responses` | `Union{Nothing,Vector{Int}}` | `nothing` (all) | Subset of response positions to compute |
 
 `LPIVARBand{T}` return value:
 
@@ -396,29 +426,36 @@ where:
 
 Reported confidence bands propagate the full cross-horizon covariance of ``\hat{\beta}`` through the spline map, ``\text{Var}(\hat{\theta}) = (B'WB+\lambda R)^{-1} B'W\,\text{Cov}(\hat{\beta})\,WB(B'WB+\lambda R)^{-1}``, rather than a per-horizon diagonal — otherwise the strong correlation between overlapping horizons would make the bands systematically too narrow.
 
-The smoothing parameter ``\lambda`` controls the bias-variance trade-off. Larger values impose more smoothness, shrinking the IRF toward a low-frequency polynomial. Cross-validation selects the ``\lambda`` that minimizes out-of-sample prediction error.
+The smoothing parameter ``\lambda`` controls the bias-variance trade-off. Larger values impose more smoothness, shrinking the IRF toward a low-frequency polynomial. The default ``\lambda = 0`` gives the *unpenalized* spline fit — smoothing then comes only from the finite basis, not from the roughness penalty — so a positive `lambda` must be supplied (or selected) to obtain a genuinely penalized estimator.
 
 ```@example lp
 # Smooth LP with cubic splines
 smooth_model = estimate_smooth_lp(Y, 3, 20;   # shock_var=3 (FEDFUNDS)
     degree = 3,           # Cubic splines
     n_knots = 4,          # Interior knots
-    lambda = 1.0,         # Smoothing penalty
-    lags = 4
+    lambda = 1.0,         # Smoothing penalty (source default is 0.0 = unpenalized)
+    lags = 4,
+    varnames = vnames
 )
 report(smooth_model)
+```
 
+The smoothed impact response of `INDPRO` is ``0.0137`` against the standard LP's ``0.0201``: the spline pulls the noisy horizon-by-horizon estimates toward a smooth curve, damping the impact spike. The funds-rate path is visibly cleaner — a monotone decay from ``1.000`` to ``0.21`` by ``h=8`` rather than the standard LP's jagged ``0.92, 0.65, 0.95, 0.82`` sequence over the first four horizons — and its standard errors fall from around ``0.28`` to ``0.17`` in the middle horizons. The cubic basis with four interior knots forces the fitted IRF to zero at the right edge, which is why ``h=20`` reports exactly ``0.0000``; that endpoint behaviour is a property of the basis, not evidence that the effect has died out.
+
+```@example lp
 # Automatic lambda selection via cross-validation
 optimal_lambda = cross_validate_lambda(Y, 3, 20;
     lambda_grid = 10.0 .^ (-4:0.5:2),
     k_folds = 5
 )
 
-# Compare smooth vs standard LP
+# Compare smooth vs standard LP: the ratio of mean squared standard errors
 comparison = compare_smooth_lp(Y, 3, 20; lambda=optimal_lambda)
+(lambda = optimal_lambda,
+ variance_reduction = round(comparison.variance_reduction, digits=4))
 ```
 
-The `smooth_model.irf_values` matrix contains the smoothed impulse responses. Comparing `comparison.variance_reduction` against zero reveals whether the smooth IRF achieves lower pointwise variance --- a favorable trade-off in moderate samples where standard LP confidence bands are wide. Cross-validation balances bias and variance automatically.
+`comparison.variance_reduction` is the **ratio** ``\text{mean}(\text{se}^2_{\text{smooth}}) / \text{mean}(\text{se}^2_{\text{standard}})``, so values below 1 mean the smooth IRF is more precise; comparing it to 1, not to 0, is the correct reading. Here it is ``0.628``, a 37% reduction in average sampling variance — the favourable trade-off that motivates smooth LP in moderate samples where standard LP bands are wide. Five-fold cross-validation selects ``\lambda = 10^{-4}``, the smallest value on the grid, so on this 60-observation sample nearly all of the variance reduction comes from the spline basis itself rather than from the roughness penalty.
 
 ### Keyword Arguments
 
@@ -426,9 +463,13 @@ The `smooth_model.irf_values` matrix contains the smoothed impulse responses. Co
 |---------|------|---------|-------------|
 | `degree` | `Int` | `3` | B-spline degree (3 = cubic) |
 | `n_knots` | `Int` | `4` | Number of interior knots |
-| `lambda` | `Real` | `1.0` | Smoothing penalty parameter |
+| `lambda` | `Real` | `0.0` | Roughness penalty; `0` gives the unpenalized spline fit |
 | `lags` | `Int` | `4` | Number of control lags |
+| `response_vars` | `Vector{Int}` | all columns | Indices of response variables |
 | `cov_type` | `Symbol` | `:newey_west` | Covariance estimator |
+| `bandwidth` | `Int` | `0` | HAC bandwidth (`0` = automatic) |
+
+`cross_validate_lambda` searches `lambda_grid` (default ``10^{-4}, 10^{-3.5}, \ldots, 10^{2}``) with `k_folds=5`; `compare_smooth_lp` takes `lambda` (default `1.0`) and forwards the rest to both estimators.
 
 ### Return Values (`SmoothLPModel`)
 
@@ -445,8 +486,8 @@ The `smooth_model.irf_values` matrix contains the smoothed impulse responses. Co
 | `lambda` | `T` | Smoothing penalty parameter |
 | `irf_values` | `Matrix{T}` | Smoothed IRF point estimates |
 | `irf_se` | `Matrix{T}` | Standard errors of smoothed IRF |
-| `residuals` | `Matrix{T}` | Regression residuals |
-| `T_eff` | `Int` | Effective sample size |
+| `residuals` | `Matrix{T}` | Regression residuals stacked over horizons |
+| `T_eff` | `Int` | Observations pooled across all horizons, ``\sum_h (T - h - p)`` — not a per-horizon count |
 | `cov_estimator` | `AbstractCovarianceEstimator` | Covariance estimator used |
 
 ---
@@ -492,7 +533,10 @@ where:
 - The variance-covariance terms use HAC standard errors
 
 !!! note "Optimization of Transition Parameters"
-    When `gamma=:estimate` and `threshold=:estimate`, the transition parameters ``(\gamma, c)`` are jointly optimized using Nelder-Mead over the nonlinear least squares objective. The threshold ``c`` is box-constrained within the data's interquartile range, and ``\gamma > 0`` is enforced.
+    When `gamma=:estimate` and `threshold=:estimate` (both defaults), the transition parameters ``(\gamma, c)`` are jointly optimized using Nelder-Mead over the nonlinear least squares objective. The threshold ``c`` is box-constrained within the data's interquartile range, and ``\gamma > 0`` is enforced.
+
+!!! warning "Each regime needs its own sample"
+    The model fits ``2(2 + np)`` coefficients per horizon, so a short sample with a lopsided transition function leaves one regime nearly unidentified and the HAC covariance near-singular. Check the reported `% in expansion`: values far from 50% on a small sample are the warning sign. Calibrating ``\gamma`` and setting ``c = 0`` on a standardized state variable, as Auerbach & Gorodnichenko (2012) and Ramey & Zubairy (2018) do, keeps both regimes populated.
 
 ```@example lp
 # Construct state variable: 7-month MA of industrial production growth
@@ -500,23 +544,33 @@ ip_growth = Y[:, 1]
 state_var = [mean(ip_growth[max(1, t-6):t]) for t in 1:length(ip_growth)]
 state_var = Float64.((state_var .- mean(state_var)) ./ std(state_var))
 
-# Estimate state-dependent LP: FFR shock with IP growth as state
+# Estimate state-dependent LP: FFR shock with IP growth as state.
+# gamma and threshold are calibrated rather than estimated — with 60 observations
+# the optimizer drives the transition into a corner and starves one regime.
 state_model = estimate_state_lp(Y, 3, state_var, 20;
-    gamma = :estimate,
-    threshold = :estimate,
-    lags = 4
+    gamma = 1.5,
+    threshold = 0.0,
+    lags = 4,
+    varnames = vnames
 )
 report(state_model)
-
-# Extract regime-specific IRFs
-irf_expansion = state_irf(state_model; regime=:expansion)
-irf_recession = state_irf(state_model; regime=:recession)
-
-# Test for regime differences at each horizon
-diff_test = test_regime_difference(state_model)
 ```
 
-The `irf_expansion` and `irf_recession` objects contain regime-specific impulse responses. Comparing them reveals whether a monetary policy shock has asymmetric effects across the business cycle. The `test_regime_difference` function computes a Wald-type test of ``H_0: \beta_E = \beta_R`` at each horizon using HAC standard errors; rejection implies statistically significant state dependence.
+The transition function puts 47.3% of the sample in the expansion regime, so both branches are estimated on comparable numbers of effective observations. The funds-rate shock propagates very differently across regimes: in recessions the rate itself stays elevated (``1.01`` at ``h=1``, ``2.00`` at ``h=4``, still ``0.67`` at ``h=20``), while in expansions the path reverses sign by ``h=4`` and ends at ``-1.02``. The output responses are correspondingly asymmetric — `INDPRO` rises ``0.050`` on impact in recessions against ``0.007`` in expansions — which is the qualitative pattern Auerbach & Gorodnichenko report for fiscal shocks and Ramey & Zubairy revisit critically.
+
+```@example lp
+# Extract regime-specific IRFs and test H0: β_E = β_R at each horizon
+irf_expansion = state_irf(state_model; regime=:expansion)
+irf_recession = state_irf(state_model; regime=:recession)
+diff_test = test_regime_difference(state_model)
+
+(t_stats_h0 = round.(diff_test.t_stats[1, :], digits=3),
+ p_values_h0 = round.(diff_test.p_values[1, :], digits=3),
+ joint = (avg_t = round(diff_test.joint_test.avg_t_stat, digits=3),
+          p = round(diff_test.joint_test.p_value, digits=4)))
+```
+
+`test_regime_difference` computes a Wald-type ``t`` on ``\hat\beta_E - \hat\beta_R`` at each horizon using the HAC covariance of the difference, plus a joint test averaging across horizons. At ``h = 0`` only `CPIAUCSL` separates the regimes (``t = 2.445``, ``p = 0.014``); `INDPRO` and the funds rate do not. The joint statistic of ``2.573`` with ``p = 0.010`` rejects regime equality overall, so the state dependence visible in the two IRF tables is not attributable to sampling noise alone. Horizon-by-horizon rejections should be read with care: 21 horizons times three responses is 63 tests, and no multiplicity correction is applied.
 
 ### Keyword Arguments
 
@@ -525,7 +579,17 @@ The `irf_expansion` and `irf_recession` objects contain regime-specific impulse 
 | `gamma` | `Real` or `Symbol` | `:estimate` | Transition speed (`:estimate` for optimization) |
 | `threshold` | `Real` or `Symbol` | `:estimate` | Threshold parameter (`:estimate` for optimization) |
 | `lags` | `Int` | `4` | Number of control lags |
+| `response_vars` | `Vector{Int}` | all columns | Indices of response variables |
 | `cov_type` | `Symbol` | `:newey_west` | Covariance estimator |
+| `bandwidth` | `Int` | `0` | HAC bandwidth (`0` = automatic) |
+
+```julia
+plot_result(state_model)
+```
+
+```@raw html
+<iframe src="../assets/plots/state_lp.html" width="100%" height="460" frameborder="0" style="border:1px solid #ddd;border-radius:4px;"></iframe>
+```
 
 ### Return Values (`StateLPModel`)
 
@@ -610,35 +674,54 @@ covariates = Y_trim[:, 1:2]
 ipw_model = estimate_propensity_lp(Y_trim, treatment, covariates, 20;
     ps_method = :logit,
     trimming = (0.01, 0.99),
-    lags = 4
+    lags = 4,
+    varnames = vnames
 )
 
 # Doubly robust estimation
 dr_model = doubly_robust_lp(Y_trim, treatment, covariates, 20;
     ps_method = :logit,
     trimming = (0.01, 0.99),
-    lags = 4
+    lags = 4,
+    varnames = vnames
 )
-
-# Extract ATE impulse responses
-ate_irf = propensity_irf(ipw_model)
-dr_irf = propensity_irf(dr_model)
 report(dr_model)
-
-# Diagnostics: overlap and covariate balance
-diagnostics = propensity_diagnostics(ipw_model)
 ```
 
-The `ate_irf` and `dr_irf` objects contain the estimated Average Treatment Effect of large FFR changes at each horizon. The diagnostics check overlap (sufficient common support between treated and control distributions) and balance (covariate means equalized after reweighting, with standardized differences below 0.1).
+The treatment splits 59 observations into 15 treated and 44 control periods, and the doubly robust ATE of a large funds-rate move on the funds rate itself is ``0.085`` on impact, decaying to near zero by ``h=4``. The effects on `INDPRO` and `CPIAUCSL` are an order of magnitude smaller and mostly insignificant, which is the expected result: a top-quartile *absolute* rate change mixes tightenings and easings, so the average treatment effect on output nets out.
+
+```@example lp
+# ATE paths from both estimators, for the funds-rate response
+ate_irf = propensity_irf(ipw_model)
+dr_irf  = propensity_irf(dr_model)
+(ipw = round.(ate_irf.values[1:4, 3], digits=4),
+ dr  = round.(dr_irf.values[1:4, 3], digits=4))
+```
+
+The two estimators separate most at impact — IPW gives ``0.0075`` where the doubly robust estimator gives ``0.0851`` — and converge from ``h=2`` onward. That gap is informative rather than alarming: the two agree asymptotically only when the propensity model is correctly specified, so a divergence signals that the outcome regression in the DR influence function is carrying weight. Following the recommendation above, the DR path is the one to report.
+
+```@example lp
+# Diagnostics: overlap and covariate balance
+diagnostics = propensity_diagnostics(ipw_model)
+(common_support = round.(diagnostics.overlap.common_support, digits=4),
+ treated_in_support = round(diagnostics.overlap.treated_in_support, digits=4),
+ control_in_support = round(diagnostics.overlap.control_in_support, digits=4))
+```
+
+Common support spans propensity scores in ``[0.165, 0.369]``: every treated period lies inside it, and 90.9% of control periods do. Narrow but non-degenerate overlap like this is the well-behaved case — no score approaches 0 or 1, so the inverse weights stay bounded and the `trimming=(0.01, 0.99)` cap never binds. The 9% of control observations outside the support contribute no comparable treated match and are the observations that drive any remaining bias.
 
 ### Keyword Arguments
+
+Both `estimate_propensity_lp` and `doubly_robust_lp` take the same keywords.
 
 | Keyword | Type | Default | Description |
 |---------|------|---------|-------------|
 | `ps_method` | `Symbol` | `:logit` | Propensity score model (`:logit`, `:probit`) |
-| `trimming` | `Tuple` | `(0.01, 0.99)` | Propensity score trimming bounds |
+| `trimming` | `Tuple{T,T}` | `(0.01, 0.99)` | Propensity score trimming bounds |
 | `lags` | `Int` | `4` | Number of control lags |
+| `response_vars` | `Vector{Int}` | all columns | Indices of response variables |
 | `cov_type` | `Symbol` | `:newey_west` | Covariance estimator |
+| `bandwidth` | `Int` | `0` | HAC bandwidth (`0` = automatic) |
 
 ### Return Values (`PropensityLPModel`)
 
@@ -707,7 +790,7 @@ For a moment-based alternative to the OLS projection, [`estimate_lp_gmm`](@ref) 
 
 ```@example lp
 # Structural LP with Cholesky identification
-slp = structural_lp(Y, 20; method=:cholesky, lags=4)
+slp = structural_lp(Y, 20; method=:cholesky, lags=4, varnames=vnames)
 report(slp)
 ```
 
@@ -719,20 +802,34 @@ plot_result(slp)
 <iframe src="../assets/plots/irf_structural_lp.html" width="100%" height="500" frameborder="0" style="border:1px solid #ddd;border-radius:4px;"></iframe>
 ```
 
-The `slp.irf.values` array has shape ``H \times n \times n``, where `values[h, i, j]` gives the response of variable ``i`` to structural shock ``j`` at horizon ``h``. Under Cholesky identification with ordering [INDPRO, CPI, FFR], the monetary policy shock (shock 3) affects all variables contemporaneously, but the federal funds rate does not respond to output or price shocks within the period. Standard errors in `slp.se` are computed from HAC-corrected LP regressions and tend to be wider than VAR-based IRF confidence bands, reflecting the efficiency cost of LP's robustness.
+The `slp.irf.values` array has shape ``H \times n \times n``, where `values[h, i, j]` gives the response of variable ``i`` to structural shock ``j`` at horizon ``h``. Under Cholesky identification with ordering [INDPRO, CPIAUCSL, FEDFUNDS], the monetary policy shock (shock 3) affects all variables contemporaneously, but the federal funds rate does not respond to output or price shocks within the period. The identified policy shock raises the funds rate by ``0.077`` at ``h=1`` and leaves output essentially untouched (``-0.0006``, against the ``0.020`` the reduced-form projection reported) — removing the endogenous policy response is precisely what the identification buys. Standard errors in `slp.se` come from the HAC-corrected LP regressions and tend to be wider than VAR-based IRF bands, reflecting the efficiency cost of LP's robustness.
 
 ```@example lp
 # With bootstrap confidence intervals
-slp_ci = structural_lp(Y, 20; method=:cholesky, ci_type=:bootstrap, reps=50)
+slp_ci = structural_lp(Y, 20; method=:cholesky, ci_type=:bootstrap, reps=50,
+                       varnames=vnames, rng=MersenneTwister(1))
 
 # With sign restrictions: positive supply shock raises output and lowers prices
 check_fn(irf) = irf[1, 1, 1] > 0 && irf[1, 2, 1] < 0
-slp_sign = structural_lp(Y, 20; method=:sign, check_func=check_fn)
+slp_sign = structural_lp(Y, 20; method=:sign, check_func=check_fn, varnames=vnames,
+                         rng=MersenneTwister(2))
 
-# Dispatch to FEVD and historical decomposition
+(cholesky_bootstrap_reps = slp_ci.n_effective,
+ cholesky_ci = slp_ci.irf.ci_type,
+ sign_identified = slp_sign.method)
+```
+
+All 50 bootstrap draws were usable (`n_failed` is zero), so the percentile bands on `slp_ci` rest on the full requested sample of rotations; a shortfall here would mean draws were discarded by the recoverable-error catch and the bands are thinner than requested. The sign-restricted fit searches rotations until one satisfies `check_fn`, so its shock ordering and scale are not comparable to the Cholesky fit's — sign restrictions identify a *set*, and `slp_sign` reports one admissible member of it.
+
+Once identified, a `StructuralLP` dispatches to the same downstream tools as an SVAR:
+
+```@example lp
 decomp = fevd(slp, 20)
 hd = historical_decomposition(slp)
+(fevd_type = typeof(decomp).name.name, hd_type = typeof(hd).name.name)
 ```
+
+`fevd(slp, H)` routes to the LP-specific estimator documented in [LP-Based FEVD](@ref) below and returns an `LPFEVD`, not the VMA-based `FEVD` of [Variance Decomposition](@ref ia_fevd_page); `historical_decomposition` returns the ordinary `HistoricalDecomposition` computed from the identified shocks.
 
 ### Keyword Arguments
 
@@ -740,10 +837,16 @@ hd = historical_decomposition(slp)
 |---------|------|---------|-------------|
 | `method` | `Symbol` | `:cholesky` | Identification method (see table above) |
 | `lags` | `Int` | `4` | Number of LP control lags |
+| `var_lags` | `Union{Nothing,Int}` | `nothing` (uses `lags`) | Lag order of the identification VAR, if different |
 | `cov_type` | `Symbol` | `:newey_west` | HAC estimator type |
+| `conf_level` | `Real` | `0.95` | Confidence level for the reported bands |
 | `ci_type` | `Symbol` | `:none` | CI method (`:none`, `:bootstrap`) |
 | `reps` | `Int` | `200` | Bootstrap replications |
 | `check_func` | `Function` | `nothing` | Sign restriction check function |
+| `narrative_check` | `Function` | `nothing` | Narrative restriction check function |
+| `max_draws` | `Int` | `1000` | Maximum rotation draws for set-identified methods |
+| `varnames` | `Vector{String}` | `["y1", …]` | Variable labels |
+| `shock_names` | `Union{Nothing,Vector{String}}` | `nothing` (uses `varnames`) | Structural shock labels |
 
 ### Return Values (`StructuralLP`)
 
@@ -757,7 +860,8 @@ hd = historical_decomposition(slp)
 | `lags` | `Int` | Number of LP control lags |
 | `cov_type` | `Symbol` | HAC estimator type |
 | `se` | `Array{T,3}` | ``H \times n \times n`` standard errors |
-| `lp_models` | `Vector{LPModel{T}}` | Individual LP model per shock |
+| `lp_models` | `Vector{LPModel{T}}` | Individual LP model per shock, fitted on ``[\hat\varepsilon_j\ \ Y]`` |
+| `n_requested` / `n_effective` / `n_failed` | `Int` | Bootstrap draws attempted, usable, and dropped; all zero unless `ci_type=:bootstrap` |
 
 ---
 
@@ -785,13 +889,19 @@ This direct approach avoids compounding misspecification errors across horizons,
 | `:bootstrap` | Residual resampling with percentile CIs |
 | `:none` | Point forecasts only |
 
-```@example lp
-# Estimate LP model
-lp = estimate_lp(Y, 3, 20; lags=4, cov_type=:newey_west)
+| Keyword | Type | Default | Description |
+|---------|------|---------|-------------|
+| `ci_method` | `Symbol` | `:analytical` | CI construction (`:analytical`, `:bootstrap`, `:none`) |
+| `conf_level` | `Real` | `0.95` | Confidence level |
+| `n_boot` | `Int` | `500` | Bootstrap replications when `ci_method=:bootstrap` |
+| `rng` | `AbstractRNG` | `Random.default_rng()` | Draw source for the bootstrap |
 
-# Forecast with a unit shock path
+`shock_path` must have length ``H``, matching the LP model's horizon.
+
+```@example lp
+# Forecast with a unit shock path sustained over the forecast window
 shock_path = ones(20)
-fc = forecast(lp, shock_path; ci_method=:analytical, conf_level=0.95)
+fc = forecast(lp_model, shock_path; ci_method=:analytical, conf_level=0.95)
 report(fc)
 ```
 
@@ -803,15 +913,19 @@ plot_result(fc)
 <iframe src="../assets/plots/forecast_lp.html" width="100%" height="400" frameborder="0" style="border:1px solid #ddd;border-radius:4px;"></iframe>
 ```
 
-The `fc.forecast` matrix has shape ``H \times n_{\text{resp}}``, where each row gives the point forecast at a given horizon. Analytical CIs widen with the horizon because LP regression residuals exhibit increasing variance at longer horizons and the effective sample shrinks. Bootstrap CIs are more reliable in small samples because they do not rely on the normal approximation.
+The `fc.forecast` matrix has shape ``H \times n_{\text{resp}}``, where each row gives the point forecast at a given horizon. A sustained unit funds-rate shock produces a funds-rate path that starts at ``0.958`` and decays to roughly zero by ``h = 13``, while the output and price forecasts stay within ``\pm 0.02`` — the scale difference reflects the `tcode` transformations, since `FEDFUNDS` is in levels while the other two are differenced logs. Analytical CIs widen with the horizon because LP residual variance grows and the effective sample shrinks: the funds-rate standard error rises from ``0.125`` at ``h=1`` to ``0.306`` at ``h=2`` and stays in that range. Bootstrap CIs are more reliable at this sample size because they do not rely on the normal approximation.
 
 ```@example lp
-# Structural LP forecast with monetary policy shock
-slp = structural_lp(Y, 20; method=:cholesky)
+# Structural LP forecast driven by the identified monetary policy shock
 fc_struct = forecast(slp, 3, shock_path;  # shock_idx=3 (monetary policy)
-                     ci_method=:bootstrap, n_boot=50)
+                     ci_method=:bootstrap, n_boot=50, rng=MersenneTwister(3))
 report(fc_struct)
 ```
+
+!!! note "Response labels in structural LP forecasts"
+    `structural_lp` fits each per-shock LP on the augmented matrix ``[\hat\varepsilon_j\ \ Y]``, so the returned `LPForecast` indexes its responses against that augmented layout: `Var 2`, `Var 3`, and `Var 4` are `INDPRO`, `CPIAUCSL`, and `FEDFUNDS` in the original order, and `Shock variable 1` is the identified shock, not data column 1.
+
+The bootstrap bands are visibly asymmetric — at ``h=6`` the funds-rate interval is ``[0.154, 0.873]`` around a point forecast of ``0.345``, with far more room above than below — which is exactly the behaviour the percentile method is meant to capture and a normal approximation would miss. The identified-shock forecast is also much smaller in magnitude than the reduced-form one above (``0.050`` against ``0.958`` at ``h=1``), because a one-unit *structural* shock is one standard deviation of the orthogonalized innovation rather than a one-unit move in the observed rate.
 
 ### Return Values (`LPForecast`)
 
@@ -832,7 +946,7 @@ report(fc_struct)
 
 ## LP-Based FEVD
 
-Standard FEVD computes variance shares from the VMA representation, inheriting any VAR misspecification. Gorodnichenko & Lee (2019) propose an **LP-based FEVD** that estimates variance shares directly via R² regressions, inheriting LP's robustness properties.
+Standard FEVD computes variance shares from the VMA representation, inheriting any VAR misspecification. Gorodnichenko & Lee (2019) propose an **LP-based FEVD** that estimates variance shares directly via R² regressions, inheriting LP's robustness properties. The decomposition concept, the VMA-based estimator, and the Bayesian variant are documented on [Variance Decomposition](@ref ia_fevd_page); `lp_fevd` is documented here because it is an LP estimator rather than a different view of the same object.
 
 ### The R² Estimator
 
@@ -881,11 +995,10 @@ LP-FEVD estimates can be biased in finite samples. Following Kilian (1998), the 
 5. Bias-corrected estimate = raw - bias
 
 ```@example lp
-# Structural LP with Cholesky ordering [INDPRO, CPI, FFR]
-slp = structural_lp(Y, 20; method=:cholesky, lags=4)
-
-# R²-based LP-FEVD with bias correction
-lfevd = lp_fevd(slp, 20; method=:r2, bias_correct=true, n_boot=50)
+# R²-based LP-FEVD with bias correction, on the Cholesky-identified structural LP
+# A seeded RNG keeps the bootstrap bias correction reproducible across builds.
+lfevd = lp_fevd(slp, 20; method=:r2, bias_correct=true, n_boot=50,
+                rng=MersenneTwister(20260801))
 report(lfevd)
 ```
 
@@ -897,7 +1010,15 @@ plot_result(lfevd)
 <iframe src="../assets/plots/fevd_lp.html" width="100%" height="500" frameborder="0" style="border:1px solid #ddd;border-radius:4px;"></iframe>
 ```
 
-The raw FEVD proportions in `lfevd.proportions[i, j, h]` give the R² from regressing variable ``i``'s forecast error on shock ``j``'s leads at horizon ``h``. Bias correction matters most at short horizons where finite-sample bias is largest. Comparing the three estimators (`:r2`, `:lp_a`, `:lp_b`) provides a robustness check --- substantial disagreement suggests the VAR specification may be unreliable, in which case LP-based estimates are preferred.
+Each variable's own shock dominates its forecast error at every horizon — 86.2%, 87.4%, and 88.8% at ``h=1``, still 75.5%, 84.9%, and 79.9% at ``h=20`` — which is the expected pattern under a Cholesky ordering on weakly-related monthly series. The monetary policy shock explains essentially none of the variance of `INDPRO` or `CPIAUCSL` at any horizon, while the price shock accounts for a growing share of funds-rate variance (3.5% at ``h=1``, 23.7% at ``h=12``), consistent with a policy rule that responds to inflation with a lag. Bootstrap standard errors in parentheses run 2-18 percentage points, so at 50 replications on 60 observations these shares are indicative rather than sharply estimated.
+
+```@example lp
+# The raw and bias-corrected estimates differ where finite-sample bias bites
+(raw = round.(lfevd.proportions[1, 3, 1:5], digits=4),
+ corrected = round.(lfevd.bias_corrected[1, 3, 1:5], digits=4))
+```
+
+`lfevd.proportions[i, j, h]` holds the raw R² from regressing variable ``i``'s forecast error on shock ``j``'s leads; `lfevd.bias_corrected` holds the Kilian (1998) bootstrap-corrected version, and it is the corrected array that `report` displays. For `INDPRO`'s share attributable to the policy shock the raw values climb from 0.14% to 8.66% over the first five horizons while the corrected values stay at or within 0.01% of zero — the entire raw share is finite-sample bias, since an R² is bounded below by 0 and therefore biased upward whenever the true share is near zero. That gap is largest at short horizons, exactly where the correction is designed to bite. Comparing the three estimators (`:r2`, `:lp_a`, `:lp_b`) is a further robustness check: substantial disagreement suggests the VAR specification behind the identification is unreliable, in which case the LP-based estimates are preferred.
 
 ### Keyword Arguments
 
@@ -907,6 +1028,8 @@ The raw FEVD proportions in `lfevd.proportions[i, j, h]` give the R² from regre
 | `bias_correct` | `Bool` | `true` | Apply bootstrap bias correction |
 | `n_boot` | `Int` | `500` | Number of bootstrap replications |
 | `conf_level` | `Real` | `0.95` | Confidence level for CIs |
+| `var_lags` | `Union{Nothing,Int}` | `nothing` | Lag order of the bias-correction VAR; `nothing` selects by HQIC |
+| `rng` | `AbstractRNG` | `Random.default_rng()` | Draw source for the bootstrap |
 
 ### Return Values (`LPFEVD`)
 
@@ -922,6 +1045,8 @@ The raw FEVD proportions in `lfevd.proportions[i, j, h]` give the R² from regre
 | `n_boot` | `Int` | Number of bootstrap replications |
 | `conf_level` | `T` | Confidence level |
 | `bias_correction` | `Bool` | Whether bias correction was applied |
+| `variables` / `shocks` | `Vector{String}` | Variable and shock labels |
+| `n_requested` / `n_effective` / `n_failed` | `Int` | Bootstrap draws attempted, usable, and dropped across all cells |
 
 ---
 
@@ -947,16 +1072,17 @@ The key trade-off is bias vs. variance:
 | **Nonlinearities** | Requires extensions | Easy to incorporate |
 | **External instruments** | SVAR-IV | LP-IV |
 
-Use LP when concerned about VAR misspecification, when incorporating external instruments or nonlinearities, when working with discrete treatments, or at long horizons where VAR error compounds.
+Use LP when concerned about VAR misspecification, when incorporating external instruments or nonlinearities, when working with discrete treatments, or at long horizons where VAR error compounds. The VAR side of this comparison — estimation, identification, and bootstrap inference — is documented on the [VAR](@ref var_page) page.
 
 The [`compare_var_lp`](@ref) helper quantifies this equivalence directly, estimating both a Cholesky-identified VAR and the matching Cholesky LP on the same data and returning their IRFs alongside the horizon-by-horizon difference:
 
 ```@example lp
 cmp = compare_var_lp(Y, 20; lags=4)
-round.(cmp.difference[1:5, :, 3], digits=3)   # VAR − LP gap, first 5 horizons, FFR shock
+(gap_first5 = round.(cmp.difference[1:5, :, 3], digits=3),  # VAR − LP, FFR shock
+ max_abs_gap = round(maximum(abs.(cmp.difference)), digits=3))
 ```
 
-Under correct specification the differences shrink toward zero as the sample grows; the residual gaps here reflect finite-sample bias-variance trade-offs rather than a population discrepancy.
+Over the first five horizons the VAR−LP gap for the funds-rate shock never exceeds ``0.035`` in absolute value, and for the two differenced series it is ``0.001`` or smaller — the two estimators are telling the same story about this data. The largest disagreement anywhere in the ``20 \times 3 \times 3`` array is ``0.126``, and it occurs at long horizons where the LP effective sample has shrunk to 36 observations. Under correct specification these differences shrink toward zero as the sample grows; the residual gaps here reflect finite-sample bias-variance trade-offs, not a population discrepancy. A gap that *grows* with the horizon instead of shrinking is the diagnostic signature of VAR misspecification, and it is the case in which LP should be preferred.
 
 ---
 
@@ -966,29 +1092,36 @@ This example demonstrates a full LP workflow --- estimation, structural identifi
 
 ```@example lp
 # Step 1: Standard LP-IRF with Newey-West standard errors
-lp = estimate_lp(Y, 3, 20; lags=4, cov_type=:newey_west)
-irf_result = lp_irf(lp; conf_level=0.95)
-report(irf_result)
+lp_full = estimate_lp(Y, 3, 20; lags=4, cov_type=:newey_west, varnames=vnames)
+irf_full = lp_irf(lp_full; conf_level=0.95)
+report(irf_full)
+```
 
+```@example lp
 # Step 2: Structural LP with Cholesky identification
-slp = structural_lp(Y, 20; method=:cholesky, lags=4)
-report(slp)
+slp_full = structural_lp(Y, 20; method=:cholesky, lags=4, varnames=vnames)
+report(slp_full)
+```
 
+```@example lp
 # Step 3: LP-FEVD with bias correction
-lfevd = lp_fevd(slp, 20; method=:r2, bias_correct=true, n_boot=50)
-report(lfevd)
+lfevd_full = lp_fevd(slp_full, 20; method=:r2, bias_correct=true, n_boot=50,
+                     rng=MersenneTwister(20260801))
+report(lfevd_full)
+```
 
-# Step 4: Direct multi-step forecast
-shock_path = zeros(20); shock_path[1] = 1.0  # unit impulse
-fc = forecast(lp, shock_path; ci_method=:analytical, conf_level=0.95)
-report(fc)
+```@example lp
+# Step 4: Direct multi-step forecast from a one-period impulse
+impulse_path = zeros(20); impulse_path[1] = 1.0
+fc_full = forecast(lp_full, impulse_path; ci_method=:analytical, conf_level=0.95)
+report(fc_full)
 ```
 
 ```julia
-plot_result(irf_result)
-plot_result(slp)
-plot_result(lfevd)
-plot_result(fc)
+plot_result(irf_full)
+plot_result(slp_full)
+plot_result(lfevd_full)
+plot_result(fc_full)
 ```
 
 ```@raw html
@@ -1007,7 +1140,7 @@ plot_result(fc)
 <iframe src="../assets/plots/forecast_lp.html" width="100%" height="500" frameborder="0" style="border:1px solid #ddd;border-radius:4px;"></iframe>
 ```
 
-The `estimate_lp` call fits 21 horizon-specific OLS regressions (``h = 0, \ldots, 20``) with Newey-West HAC standard errors, producing the reduced-form IRF of a federal funds rate innovation. The `structural_lp` call estimates a VAR(4) for Cholesky identification, recovers orthogonalized structural shocks, and re-estimates the LP regressions using each structural shock as the impulse variable. The LP-FEVD uses R² regressions with bootstrap bias correction to decompose forecast error variance without relying on the VMA representation. The direct forecast projects each response variable forward using the LP coefficients and an assumed unit-impulse shock path.
+The `estimate_lp` call fits 21 horizon-specific OLS regressions (``h = 0, \ldots, 20``) with Newey-West HAC standard errors, producing the reduced-form IRF of a federal funds rate innovation on 56 effective observations at ``h = 0``, falling to 36 at ``h = 20``. The `structural_lp` call estimates a VAR(4) for Cholesky identification, recovers orthogonalized structural shocks, and re-estimates the LP regressions using each structural shock as the impulse variable; comparing its `INDPRO` impact response of ``-0.0006`` with the reduced-form ``0.0201`` shows how much of the raw correlation was the endogenous policy response. The LP-FEVD decomposes forecast error variance without the VMA representation, and its bias correction removes the entire raw share attributed to the policy shock at short horizons. The direct forecast projects each response variable forward from the LP coefficients under a one-period unit impulse, and its intervals widen with the horizon exactly as the shrinking effective sample implies.
 
 ---
 
@@ -1017,13 +1150,17 @@ The `estimate_lp` call fits 21 horizon-specific OLS regressions (``h = 0, \ldots
 
 2. **Newey-West bandwidth too small**: The default automatic bandwidth ensures ``m \geq h + 1`` at each horizon ``h``, accounting for the MA(``h-1``) serial correlation. Manually setting a small bandwidth (e.g., `bandwidth=1`) produces invalid standard errors at horizons ``h > 1``. Use `bandwidth=0` for automatic selection.
 
-3. **State variable choice in state-dependent LP**: The state variable ``z_t`` must be predetermined (known at time ``t`` before the shock realization). Using a contemporaneous variable creates endogeneity. The standard choice is a backward-looking moving average of GDP growth, standardized to zero mean and unit variance.
+3. **State variable choice in state-dependent LP**: The state variable ``z_t`` must be predetermined (known at time ``t`` before the shock realization). Using a contemporaneous variable creates endogeneity. The standard choice is a backward-looking moving average of GDP growth, standardized to zero mean and unit variance. Check the reported `% in expansion`: an estimated transition that concentrates the sample in one regime leaves the other with too few effective observations, and the HAC covariance turns near-singular. Calibrating ``\gamma`` and setting ``c = 0`` avoids this on short samples.
 
 4. **Propensity score overlap**: Extreme propensity scores (near 0 or 1) produce large inverse weights that inflate variance and can cause numerical instability. Always set `trimming=(0.01, 0.99)` to cap extreme weights. Check `propensity_diagnostics()` for overlap violations before interpreting ATE estimates.
 
 5. **Effective sample shrinks with horizon**: Each horizon ``h`` loses ``h`` observations from the end of the sample. At ``h = 20`` with ``T = 100``, only 80 observations remain. With short samples and long horizons, estimates at large ``h`` are unreliable regardless of the standard error correction.
 
 6. **Smooth LP overfitting with few knots**: Too few interior knots in the B-spline basis restrict the IRF to low-frequency shapes that cannot capture sharp impact effects. Too many knots reduce the smoothing benefit. Use `cross_validate_lambda` to select the smoothing parameter automatically.
+
+7. **`estimate_smooth_lp` does not smooth by default**: `lambda` defaults to `0.0`, the *unpenalized* spline fit — the only smoothing then comes from the finite basis. Supply a positive `lambda`, or select one with `cross_validate_lambda`, to use the roughness penalty at all.
+
+8. **`variance_reduction` is a ratio, not a difference**: `compare_smooth_lp` returns ``\text{mean}(\text{se}^2_{\text{smooth}}) / \text{mean}(\text{se}^2_{\text{standard}})``. Values below 1 mean the smooth IRF is more precise; comparing it to 0 always looks favourable and says nothing.
 
 ---
 
@@ -1050,7 +1187,7 @@ The `estimate_lp` call fits 21 horizon-specific OLS regressions (``h = 0, \ldots
   *Review of Economics and Statistics*, 101(3), 522-530. [DOI](https://doi.org/10.1162/rest_a_00778)
 
 - Blanchard, O. J., & Quah, D. (1989). The Dynamic Effects of Aggregate Demand and Supply Disturbances.
-  *American Economic Review*, 79(4), 655-673. [DOI](https://doi.org/10.2307/1827924)
+  *American Economic Review*, 79(4), 655-673. [JSTOR](https://www.jstor.org/stable/1827924)
 
 - Gorodnichenko, Y., & Lee, B. (2019). Forecast Error Variance Decompositions with Local Projections.
   *Journal of Business & Economic Statistics*, 38(4), 921-933. [DOI](https://doi.org/10.1080/07350015.2019.1610661)
