@@ -53,7 +53,7 @@ size(panel)
 
 The panel matrix contains simulated asset holdings for 500 agents over 100 periods, enabling cross-sectional and longitudinal analyses of wealth dynamics at the micro level.
 
-**Recipe 5: Inequality dynamics at steady state**
+**Recipe 5: Steady-state inequality statistics**
 
 ```@example dsge_ha
 ineq = inequality_irf(ss; T_periods=10)
@@ -61,6 +61,8 @@ ineq = inequality_irf(ss; T_periods=10)
  p50  = round(ineq[:p50][1], digits=2),
  p90  = round(ineq[:p90][1], digits=2))
 ```
+
+Called on a steady state, `inequality_irf` returns the cross-sectional Gini and wealth percentiles repeated over `T_periods` --- nothing moves, because the stationary distribution is fixed. The 90th percentile sits several times the median, the right skew that borrowing constraints and precautionary saving produce. Pass an `HADSGESolution` instead to get genuine dynamics after an aggregate shock.
 
 **Recipe 6: Krusell-Smith simulation method**
 
@@ -130,9 +132,18 @@ The steady state report displays convergence diagnostics, equilibrium prices, ag
  excluded      = ss.euler.midpoints.n_offgrid)
 ```
 
-### Choosing an Asset Grid
+### VFI with Howard Improvement
 
-Two decisions matter, and they trade off against each other on one grid shape but not the other.
+When EGM is not applicable (non-separable utility, complex constraints), **Value Function Iteration** with **Howard improvement steps** provides a robust alternative. Each VFI iteration consists of one policy maximization step followed by ``K`` policy-evaluation steps (default ``K = 20``), which are cheap linear operations that dramatically accelerate convergence.
+
+!!! note "Two-asset steady states"
+    `compute_steady_state` bisects on a single interest rate and therefore supports **one-asset models only**. Clearing a two-asset model requires a two-dimensional market-clearing solve, which is not implemented; calling `compute_steady_state(load_ha_example(:two_asset_hank))` raises an `ArgumentError` saying so. The two-asset individual problem itself (nested EGM, adjustment costs) is fully available --- it is the general-equilibrium close that is missing.
+
+---
+
+## [The Asset Grid](@id ha_grid)
+
+The asset grid is the discretization choice that most affects an HA-DSGE solution. Two decisions matter, and they trade off against each other on one grid shape but not the other.
 
 **The ceiling must not bind.** The Young (2010) transition clamps the savings policy into ``[a_{\min}, a_{\max}]``, so any mass that wants to save past ``a_{\max}`` is silently pushed back onto the top node --- see Common Pitfalls. Choose ``a_{\max}`` from the *right tail* of the wealth distribution, not from the mean: the built-in examples run to ``a_{\max} = 1000`` against an equilibrium ``K \approx 42``, a ratio of about ``24``.
 
@@ -194,15 +205,15 @@ The gain over `:geometric` is modest because that curve is already tuned for thi
 !!! warning "Never disable `monitor_cap` on a model with a borrowing constraint"
     The stationary distribution has an **atom** at the constraint, and a histogram atom in a cell of width ``w`` reports ``|p''| \sim 1/w^2`` --- a discretization artifact, not curvature. Uncapped, that single node attracts 153 of 200 grid points into the bottom 0.5% of the domain and the grid becomes the *worst* of the five above. The default `monitor_cap=3.0` caps the monitor at three times its positive median.
 
+| Keyword | Type | Default | Description |
+|---------|------|---------|-------------|
+| `n_points` | `Vector{Int}` | `grid.n_points` | Node count per asset dimension; defaults to the current grid |
+| `curvature` | `Real` | `0.9` | Share ``\lambda`` of nodes allocated by curvature rather than uniformly |
+| `monitor_cap` | `Real` | `3.0` | Cap on the monitor, as a multiple of its positive median |
+| `smoothing` | `Int` | `2` | Smoothing passes applied to the monitor before integrating it |
+
 !!! note "The Euler error does not rank grids"
     The adapted grid reports a *worse* Euler error than `:geometric` on both conventions --- ``-1.76`` against ``-2.25`` off-node, ``-4.67`` against ``-6.04`` at the nodes --- while being *closer* to the high-resolution reference on both ``r`` and ``K``. Moving the honest metric off-node (issue #508) shrank the gap but did not reverse it. Rank grids against a refined reference solution, not against either Euler statistic.
-
-### VFI with Howard Improvement
-
-When EGM is not applicable (non-separable utility, complex constraints), **Value Function Iteration** with **Howard improvement steps** provides a robust alternative. Each VFI iteration consists of one policy maximization step followed by ``K`` policy-evaluation steps (default ``K = 20``), which are cheap linear operations that dramatically accelerate convergence.
-
-!!! note "Two-asset steady states"
-    `compute_steady_state` bisects on a single interest rate and therefore supports **one-asset models only**. Clearing a two-asset model requires a two-dimensional market-clearing solve, which is not implemented; calling `compute_steady_state(load_ha_example(:two_asset_hank))` raises an `ArgumentError` saying so. The two-asset individual problem itself (nested EGM, adjustment costs) is fully available --- it is the general-equilibrium close that is missing.
 
 ---
 
@@ -378,11 +389,11 @@ The 7-state discretization spans the ergodic support of the log-productivity pro
 
     At ``\rho = 0.966`` the two readings differ by ``3.87\times`` in logs and ``15\times`` in variance --- more than enough to move the stationary wealth distribution off any reasonable asset grid. The built-in examples target ``\mathrm{sd}(\log e) = 0.5`` and pass `sigma_is=:unconditional` accordingly.
 
+`rouwenhorst(rho, sigma, n; sigma_is=:innovation)` takes three positional arguments --- persistence ``\rho``, a standard deviation, and the number of states --- and one keyword:
+
 | Keyword | Type | Default | Description |
 |---------|------|---------|-------------|
-| `rho` | `Real` | — | Persistence parameter |
-| `sigma` | `Real` | — | Standard deviation of innovations |
-| `n` | `Int` | — | Number of grid points |
+| `sigma_is` | `Symbol` | `:innovation` | Whether `sigma` is the innovation ``\sigma_\varepsilon`` or the unconditional ``\mathrm{sd}(y_t)`` |
 
 | Field | Type | Description |
 |-------|------|-------------|
@@ -402,9 +413,12 @@ inc_t = tauchen(0.9, 0.2, 5; m=3)
 
 With lower persistence (``\rho = 0.9``), Tauchen produces a wider grid and a flatter stationary distribution than Rouwenhorst. The ``m = 3`` setting covers three unconditional standard deviations on each side.
 
+`tauchen(rho, sigma, n; m=3, sigma_is=:innovation)` adds one keyword to the same three positional arguments:
+
 | Keyword | Type | Default | Description |
 |---------|------|---------|-------------|
-| `m` | `Int` | `3` | Number of standard deviations to cover |
+| `m` | `Real` | `3` | Number of standard deviations to cover |
+| `sigma_is` | `Symbol` | `:innovation` | Same convention switch as `rouwenhorst` |
 
 ---
 
@@ -461,9 +475,11 @@ The one-asset HANK steady state clears at a **higher** interest rate and a **low
 | Keyword | Type | Default | Description |
 |---------|------|---------|-------------|
 | `K_init` | `T` | `10.0` | Initial guess for aggregate capital |
-| `r_bounds` | `Tuple{T,T}` | `(-0.01, 0.04)` | Bisection bounds for interest rate |
+| `r_bounds` | `Tuple{T,T}` | `nothing` | Bisection bounds; defaults to `(-0.01, 0.04)`, or `(-0.05, 1/β - 1 - 10^{-4})` when `spec.model === :huggett` |
 | `max_iter` | `Int` | `200` | Maximum bisection iterations |
 | `tol` | `Real` | ``10^{-8}`` | Convergence tolerance on excess demand |
+| `grid_check` | `Symbol` | `:warn` | Grid-adequacy check: `:warn`, `:error`, or `:none` |
+| `euler_points` | `Symbol` | `:midpoints` | Where the headline Euler residual is measured (`:midpoints` or `:nodes`) |
 | `verbose` | `Bool` | `false` | Print iteration progress |
 
 | Field | Type | Description |
@@ -472,11 +488,14 @@ The one-asset HANK steady state clears at a **higher** interest rate and a **low
 | `iterations` | `Int` | Number of bisection iterations |
 | `prices` | `Dict{Symbol,T}` | Equilibrium prices (``r``, ``w``) |
 | `aggregates` | `Dict{Symbol,T}` | Aggregate quantities (``K``, ``Y``, ``C``) |
-| `distribution` | `Matrix{T}` | ``N_a \times N_e`` stationary distribution |
-| `policies` | `Dict{Symbol,Matrix{T}}` | Policy functions (`:consumption`, `:savings`) |
+| `distribution` | `Array{T}` | Stationary distribution; ``N_a \times N_e`` for one asset, three-dimensional for two |
+| `policies` | `Dict{Symbol,Array{T}}` | Policy functions (`:consumption`, `:savings`, and `:labor` under endogenous hours) |
+| `value_fn` | `Array{T}` | Value function on the same grid as `distribution` |
+| `income` | `IncomeProcess{T}` | Discretized productivity process |
 | `excess_demand` | `T` | Final excess demand for capital |
 | `euler_error` | `T` | ``\log_{10}`` maximum Euler residual, measured off-node |
 | `euler` | `NamedTuple` | `(midpoints=…, nodes=…)`, each with `max`, `mean`, `n_evaluated`, `n_constrained`, `n_offgrid` |
+| `parametric` | `WinberryFamily{T}` or `nothing` | Fitted parametric family when `distribution=:winberry` |
 | `grid` | `HAGrid{T}` | Asset grid used |
 
 ---
@@ -505,7 +524,6 @@ The SSJ method reduces the full sequence-space representation (dimension ``T``) 
 |---------|------|---------|-------------|
 | `T_horizon` | `Int` | `300` | Truncation horizon for sequences |
 | `n_reduced` | `Int` | `30` | Reduced state-space dimension (Ho-Kalman) |
-| `dx` | `Real` | ``10^{-4}`` | Finite-difference step size |
 
 | Field | Type | Description |
 |-------|------|-------------|
@@ -529,12 +547,30 @@ sol_reiter = solve(spec; method=:reiter, ss=ss, n_reduced=15)
 report(sol_reiter)
 ```
 
+Because Reiter keeps a real distribution basis, the reduced solution maps back onto the histogram, so the full distributional response to an aggregate shock is available — the wealth histogram deviating period by period, and the induced Gini and percentile paths:
+
+```julia
+plot_result(sol_reiter; horizon=16, max_bins=50)      # distribution dynamics
+plot_result(sol_reiter; view=:inequality, horizon=16) # Gini and percentile paths
+```
+
+```@raw html
+<iframe src="../assets/plots/ha_distribution_dynamics.html" width="100%" height="460" frameborder="0" style="border:1px solid #ddd;border-radius:4px;"></iframe>
+```
+
+```@raw html
+<iframe src="../assets/plots/ha_inequality.html" width="100%" height="460" frameborder="0" style="border:1px solid #ddd;border-radius:4px;"></iframe>
+```
+
+Neither view is available from an `:ssj` solution: the Ho-Kalman realization's coordinates are abstract minimal-realization states with no map back to the ``(a, e)`` histogram, so `distribution_irf` raises an error there and directs you to `:reiter`.
+
 The Reiter method produces an equivalent reduced state-space form to SSJ. The explained variance confirms that 15 reduced states capture nearly all aggregate dynamics. The two methods yield identical IRFs up to numerical precision for the same `n_reduced`, but differ in computational cost: SSJ is faster for models with few aggregate inputs, while Reiter scales better when many prices affect household decisions.
 
 | Keyword | Type | Default | Description |
 |---------|------|---------|-------------|
-| `n_reduced` | `Int` | `50` | Maximum reduced dimension |
-| `dx` | `Real` | ``10^{-6}`` | Finite-difference step size |
+| `n_reduced` | `Int` | `30` | Maximum reduced dimension |
+
+The finite-difference step used to probe the distribution (``10^{-6}``) is fixed by the internal linearizer and is not reachable through `solve`.
 
 ---
 
@@ -569,6 +605,8 @@ The PLM ``R^2`` near unity confirms that aggregate capital plus the aggregate sh
 | `max_outer` | `Int` | `20` | Maximum PLM iterations |
 | `rho_z` | `Real` | `0.95` | Aggregate shock persistence |
 | `sigma_z` | `Real` | `0.007` | Aggregate shock standard deviation |
+| `rho_e` | `Real` | `0.9` | Idiosyncratic persistence used in the simulation; falls back to `spec.het_params[:rho_e]` |
+| `sigma_e` | `Real` | `0.01` | Idiosyncratic innovation size; falls back to `spec.het_params[:sigma_e]` |
 
 | Field | Type | Description |
 |-------|------|-------------|
@@ -577,6 +615,7 @@ The PLM ``R^2`` near unity confirms that aggregate capital plus the aggregate sh
 | `plm_coefficients` | `Dict{Symbol,Vector{T}}` | PLM regression coefficients per variable |
 | `r_squared` | `Dict{Symbol,T}` | ``R^2`` of PLM regression per variable |
 | `steady_state` | `HASteadyState{T}` | Underlying stationary equilibrium |
+| `spec` | `HADSGESpec{T}` | Model solved, carried for `den_haan_test` |
 
 ---
 
@@ -619,11 +658,12 @@ One subtlety is load-bearing. The Krusell-Smith machinery prices the aggregate s
 
 | Keyword | Type | Default | Description |
 |---------|------|---------|-------------|
-| `T_sim` | `Int` | `10000` | Simulation length |
-| `T_burn` | `Int` | `1000` | Burn-in periods to discard |
+| `T_sim` | `Int` | `10000` / `2000` | Simulation length; the second value is the `HADSGESolution` default |
+| `T_burn` | `Int` | `1000` / `200` | Burn-in periods to discard; the second value is the `HADSGESolution` default |
 | `rho_z` | `Real` | `0.95` | Aggregate shock persistence |
 | `sigma_z` | `Real` | `0.007` | Aggregate shock standard deviation |
 | `T_fit` | `Int` | `4000` | Periods used to recover the implied law (`HADSGESolution` only) |
+| `seed` | `Int` | `98765` | Seed for the shock path, so the statistic is reproducible |
 
 | Field | Type | Description |
 |-------|------|-------------|
@@ -654,8 +694,10 @@ a' = (1 + r_a) \, a + d, \qquad b' \geq \underline{b}
 where:
 - ``b`` is liquid bonds, ``a`` is illiquid equity
 - ``d`` is the deposit/withdrawal from the illiquid account
-- ``\chi(d, a) = \chi_0 |d / a|^{\chi_1} \cdot a`` is the convex adjustment cost
+- ``\chi(d, a) = \tfrac{1}{2}\,(d/\bar a)^2\,\bar a`` is the convex adjustment cost the shipped example uses, with ``\bar a = \max(a, 0.01)`` flooring the deposit *rate* so it stays finite at ``a = 0``
 - ``r_b, r_a`` are liquid and illiquid returns
+
+The cost is quadratic in the deposit rate and therefore smooth at ``d = 0``. The continuous-time module carries the Kaplan-Moll-Violante linear-plus-convex alternative, whose kink at zero generates a genuine inaction region — see [Continuous Time](@ref dsge_continuous).
 
 The individual problem is solved via **nested EGM**: an outer loop over deposit choices with an inner EGM on the liquid dimension.
 
@@ -667,7 +709,7 @@ spec_2a = load_ha_example(:two_asset_hank)
  has_adjustment_cost = spec_2a.individual.adjustment_cost !== nothing)
 ```
 
-The two-asset model uses a two-dimensional grid (liquid ``\times`` illiquid) with 2500 total points. The presence of the adjustment cost ``\chi(d, a)`` induces an inaction region where households neither deposit nor withdraw from the illiquid account, generating realistic portfolio rebalancing behavior.
+The two-asset model uses a two-dimensional grid (liquid ``\times`` illiquid) of 50 × 50 = 2500 points, and the individual problem carries the adjustment cost. Because that cost is quadratic and therefore differentiable at ``d = 0``, its marginal cost passes smoothly through zero: every household whose marginal valuations differ rebalances, by an amount that shrinks continuously to zero as ``V_a/V_b \to 1``. There is no inaction band here — generating one requires a cost with a kink at the origin, which is the `cost=:kinked` specification documented under [Continuous Time](@ref dsge_continuous).
 
 ---
 
@@ -845,6 +887,7 @@ The fit recovers ``\lambda = (-1, 0, 0, 0)`` — in standardized coordinates ``z
 | `nodes`, `weights` | `Vector` | `nothing` | Explicit quadrature in asset units, e.g. from [`winberry_quadrature`](@ref) |
 | `n_segments` | `Int` | `64` | Subintervals of the default rule built from `bounds` |
 | `n_quad` | `Int` | `5` | Gauss-Legendre nodes per subinterval |
+| `max_iter` | `Int` | `100` | Newton iteration cap |
 | `tol` | `Real` | ``10^{-10}`` | Tolerance on the largest standardized moment residual |
 | `lambda_init` | `Vector` | `nothing` | Warm start; defaults to the Gaussian ``(0, -1/2, 0, \ldots)`` |
 
@@ -893,7 +936,7 @@ Aggregate capital is *exactly* linear in the moment state, ``K = \sum_j \text{ma
 
 ## Built-in Examples
 
-Four canonical models are available via `load_ha_example`:
+Five canonical models are available via `load_ha_example`:
 
 | Model | Assets | Grid | Income | Key Feature |
 |-------|--------|------|--------|-------------|
@@ -907,10 +950,11 @@ Four canonical models are available via `load_ha_example`:
 [let s = load_ha_example(name)
     (model = name, assets = s.grid.n_dims, beta = s.individual.beta,
      grid = join(s.grid.n_points, "×"))
- end for name in [:krusell_smith, :one_asset_hank, :two_asset_hank, :huggett]]
+ end for name in [:krusell_smith, :one_asset_hank, :two_asset_hank, :huggett,
+                  :endogenous_labor]]
 ```
 
-The Krusell-Smith economy is the simplest benchmark with a single asset and Cobb-Douglas production. The one-asset HANK adds New Keynesian features (sticky prices, monetary policy, dividends) and allows borrowing. The two-asset HANK introduces portfolio choice between liquid and illiquid assets, capturing the empirical finding that most household wealth is illiquid.
+The Krusell-Smith economy is the simplest benchmark with a single asset and Cobb-Douglas production. The one-asset HANK adds New Keynesian features (sticky prices, monetary policy, dividends) and allows borrowing; its lower ``\beta = 0.986`` is what puts its equilibrium rate above Krusell-Smith's. The two-asset HANK introduces portfolio choice between liquid and illiquid assets, capturing the empirical finding that most household wealth is illiquid. Huggett is the only one of the five with no production — its two-state endowment and tight ``[-2, 4]`` grid make it the fastest model on the page. The endogenous-labor example is Krusell-Smith with GHH hours and a wider ceiling, since labor income raises the savings target.
 
 ---
 
@@ -990,7 +1034,7 @@ plot_result(ss_ks; view=:policy)      # policy functions by income
 
 1. **Bisection bounds too narrow.** If `compute_steady_state` does not converge, widen `r_bounds`. The equilibrium interest rate can be negative in Aiyagari economies with patient agents.
 
-2. **Grid too coarse near the borrowing constraint.** The EGM interpolation is least accurate near kinks in the policy function. Use `grid_type=:double_exp` (default) for denser spacing near the lower bound.
+2. **Grid too coarse near the borrowing constraint.** The EGM interpolation is least accurate near the kink in the policy function. Prefer `grid_type=:geometric`, whose bottom spacing grows only logarithmically in ``a_{\max}``; the `:double_exp` default is a fixed curve rescaled by ``a_{\max} - a_{\min}``, so widening the grid coarsens the constraint proportionally. All built-in one-asset examples set `:geometric` for this reason — see [The Asset Grid](@ref ha_grid).
 
 3. **Rouwenhorst vs Tauchen for persistent income.** For ``\rho > 0.95``, Rouwenhorst is significantly more accurate. Tauchen requires very fine grids to match the stationary distribution of highly persistent processes.
 
@@ -1026,6 +1070,8 @@ plot_result(ss_ks; view=:policy)      # policy functions by income
 
 ## References
 
+- Aiyagari, S. Rao. 1994. "Uninsured Idiosyncratic Risk and Aggregate Saving." *Quarterly Journal of Economics* 109 (3): 659--684. [DOI](https://doi.org/10.2307/2118417)
+
 - Auclert, Adrien, Bence Bardóczy, Matthew Rognlie, and Ludwig Straub. 2021. "Using the Sequence-Space Jacobian to Solve and Estimate Heterogeneous-Agent Models." *Econometrica* 89 (5): 2375--2408. [DOI](https://doi.org/10.3982/ECTA17434)
 
 - Bhandari, Anmol, Thomas Bourany, David Evans, and Mikhail Golosov. 2023. "A Perturbational Approach for Approximating Heterogeneous-Agent Models." NBER Working Paper 31744. [DOI](https://doi.org/10.3386/w31744)
@@ -1035,11 +1081,12 @@ plot_result(ss_ks; view=:policy)      # policy functions by income
 - Carroll, Christopher D. 2006. "The Method of Endogenous Gridpoints for Solving Dynamic Stochastic Optimization Problems." *Economics Letters* 91 (3): 312--320. [DOI](https://doi.org/10.1016/j.econlet.2005.09.013)
 
 - Greenwood, Jeremy, Zvi Hercowitz, and Gregory W. Huffman. 1988. "Investment, Capacity Utilization, and the Real Business Cycle." *American Economic Review* 78 (3): 402--417.
-- den Haan, Wouter J. 2010. "Assessing the Accuracy of the Aggregate Law of Motion in Models with Heterogeneous Agents." *Journal of Economic Dynamics and Control* 34 (1): 79--99. [DOI](https://doi.org/10.1016/j.jedc.2009.07.006)
 
-- Iskhakov, Fedor, Thomas H. Jørgensen, John Rust, and Bertel Schjerning. 2017. "The Endogenous Grid Method for Discrete-Continuous Dynamic Choice Models with (or without) Taste Shocks." *Quantitative Economics* 8 (2): 317--365. [DOI](https://doi.org/10.3982/QE643)
+- den Haan, Wouter J. 2010. "Assessing the Accuracy of the Aggregate Law of Motion in Models with Heterogeneous Agents." *Journal of Economic Dynamics and Control* 34 (1): 79--99. [DOI](https://doi.org/10.1016/j.jedc.2008.12.009)
 
 - Huggett, Mark. 1993. "The Risk-Free Rate in Heterogeneous-Agent Incomplete-Insurance Economies." *Journal of Economic Dynamics and Control* 17 (5--6): 953--969. [DOI](https://doi.org/10.1016/0165-1889(93)90024-M)
+
+- Iskhakov, Fedor, Thomas H. Jørgensen, John Rust, and Bertel Schjerning. 2017. "The Endogenous Grid Method for Discrete-Continuous Dynamic Choice Models with (or without) Taste Shocks." *Quantitative Economics* 8 (2): 317--365. [DOI](https://doi.org/10.3982/QE643)
 
 - Kaplan, Greg, Benjamin Moll, and Giovanni L. Violante. 2018. "Monetary Policy According to HANK." *American Economic Review* 108 (3): 697--743. [DOI](https://doi.org/10.1257/aer.20160042)
 
@@ -1049,8 +1096,8 @@ plot_result(ss_ks; view=:policy)      # policy functions by income
 
 - Rouwenhorst, K. Geert. 1995. "Asset Pricing Implications of Equilibrium Business Cycle Models." In *Frontiers of Business Cycle Research*, edited by Thomas F. Cooley, 294--330. Princeton: Princeton University Press.
 
-- Winberry, Thomas. 2018. "A Method for Solving and Estimating Heterogeneous Agent Macro Models." *Quantitative Economics* 9 (3): 1123--1151. [DOI](https://doi.org/10.3982/QE740)
-
 - Tauchen, George. 1986. "Finite State Markov-Chain Approximations to Univariate and Vector Autoregressions." *Economics Letters* 20 (2): 177--181. [DOI](https://doi.org/10.1016/0165-1765(86)90168-0)
+
+- Winberry, Thomas. 2018. "A Method for Solving and Estimating Heterogeneous Agent Macro Models." *Quantitative Economics* 9 (3): 1123--1151. [DOI](https://doi.org/10.3982/QE740)
 
 - Young, Eric R. 2010. "Solving the Incomplete Markets Model with Aggregate Uncertainty Using the Krusell--Smith Algorithm and Non-Stochastic Simulations." *Journal of Economic Dynamics and Control* 34 (1): 36--41. [DOI](https://doi.org/10.1016/j.jedc.2008.11.010)
