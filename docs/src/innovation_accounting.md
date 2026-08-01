@@ -65,7 +65,7 @@ All six methods integrate seamlessly with `irf()`, `fevd()`, and `historical_dec
 
 2. **Sign restrictions produce set-identified results.** The median response across admissible rotations is a summary statistic, not a point estimate. Report the full credible set, not just the median, to avoid overstating precision (Uhlig 2005).
 
-3. **HD verification should always pass.** After computing `hd = historical_decomposition(model, T)`, call `verify_decomposition(hd)` to confirm the additive identity ``y_t = \sum_j \text{HD}_j(t) + \text{initial}(t)`` holds to numerical precision. A failure indicates a bug, not a data issue.
+3. **HD verification should always pass.** The additive identity ``y_t = \sum_j \text{HD}_j(t) + \text{initial}(t)`` holds by construction — the initial-conditions component is defined as the residual — so `verify_decomposition(hd)` can fail only on non-finite values. Treat it as a sanity check for numerical corruption, not as evidence the decomposition is economically valid; see [Historical Decomposition](@ref ia_hd_page) for what the identity does and does not guarantee.
 
 4. **LP-based results are wider than VAR-based results.** Each horizon is estimated independently without cross-horizon restrictions, producing larger standard errors. This is a feature (robustness to dynamic misspecification), not a deficiency (Kilian and Lütkepohl 2017, Chapter 12).
 
