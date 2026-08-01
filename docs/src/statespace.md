@@ -245,7 +245,7 @@ Every point forecast equals 798.5, the terminal filtered level: a random-walk le
 | `obs_cov` | `Array{T,3}` | ``n_\text{obs} \times n_\text{obs} \times h`` observation forecast covariances |
 
 ```@example ss
-refs(m)
+print(refs(m))
 ```
 
 ---
