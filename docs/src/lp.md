@@ -366,6 +366,62 @@ An AR set is not forced to be an interval: where the instrument is too weak to b
 | `bandwidths` | `Matrix{Int}` | HAC lag length used at each horizon/response |
 | `critical_value` | `T` | AR critical value at `level` |
 
+### Overidentification
+
+Relevance and validity are separate questions. The first-stage F and the effective F above ask whether the instruments *move* the shock; the Sargan-Hansen ``J`` asks whether they agree with each other about *what* the shock did. With ``q`` instruments and one endogenous regressor there are ``q - 1`` overidentifying restrictions, and `sargan_test(model, h)` tests them at a single horizon ``h``:
+
+```math
+J_h = \frac{\hat{u}_h' \tilde{Z} \, (\tilde{Z}'\tilde{Z})^{-1} \tilde{Z}' \hat{u}_h}{\hat{\sigma}^2_h}
+      \;\overset{d}{\longrightarrow}\; \chi^2(q-1)
+```
+
+where:
+- ``\hat{u}_h`` is the horizon-``h`` second-stage residual vector
+- ``\tilde{Z} = M_W Z`` is the instrument matrix with the LP controls ``W`` partialled out
+- ``\hat{\sigma}^2_h = \hat{u}_h'\hat{u}_h / T_h`` is the residual variance at that horizon
+- ``q`` is the number of instruments, so the test has ``q - 1`` degrees of freedom
+
+Residualizing ``Z`` on the same controls the second stage conditions on matters: the 2SLS residuals are already orthogonal to ``W``, so leaving ``Z`` un-partialled lets the component of ``Z`` spanned by the controls inflate the statistic.
+
+The page's LP-IV model is exactly identified — one instrument, zero overidentifying restrictions — so there is nothing to test, and the function says so rather than returning a number:
+
+```@example lp
+exact = sargan_test(lpiv_model, 1)
+(J_stat = exact.J_stat, df = exact.df, valid = exact.valid)
+```
+
+`valid=false` with `df=0` and a `NaN` statistic is the exactly-identified signal: with ``q = 1`` the moment condition is used up fitting the coefficient and no restriction is left over. **Always branch on `valid` before reading `J_stat`** — a `NaN` compared against a threshold is silently false, so an unguarded `p_value < 0.05` check reports "not rejected" for a model that was never tested.
+
+Adding a second, independent proxy for the same policy shock makes the model overidentified and the test informative:
+
+```@example lp
+# Two noisy measurements of the same underlying shock: q = 2, so df = 1
+Z2 = hcat(Z, [0.0; diff(Y[:, 3])] .+ 1.5 * std(diff(Y[:, 3])) *
+             randn(Random.MersenneTwister(8), size(Y, 1)))
+lpiv2 = estimate_lp_iv(Y, 3, Z2, 20; lags=4, cov_type=:newey_west, varnames=vnames)
+
+sargan_path = [sargan_test(lpiv2, h) for h in 0:6]
+(J = round.([s.J_stat for s in sargan_path], digits=3),
+ p = round.([s.p_value for s in sargan_path], digits=3),
+ df = first(sargan_path).df)
+```
+
+The ``J`` statistics run from ``0.022`` to ``2.741`` against a ``\chi^2(1)`` 5% critical value of ``3.841``, and the smallest p-value over the full 21 horizons is ``0.078`` — the overidentifying restrictions are never rejected. That is the right answer here by construction: both instruments are the same funds-rate change plus independent mean-zero noise, so they genuinely identify the same shock. The cost of the extra instrument is relevance, not validity — the minimum first-stage F falls from ``60.82`` to ``31.08``, because the second proxy adds as much noise as signal.
+
+!!! warning "The reported J is averaged across response equations"
+    LP-IV fits one second-stage regression per response variable, giving one ``J`` per equation at each horizon. `sargan_test` returns their **mean**, not a joint system statistic, so the ``\chi^2(q-1)`` reference distribution is an approximation. Equations whose residual variance is numerically zero are dropped first — at ``h = 0`` the shock variable's own response is a regression on itself, fits exactly, and would otherwise contribute a divide-by-zero term that rejects valid instruments.
+
+`sargan_test` takes the horizon positionally and has **no keyword arguments**. It returns a `NamedTuple`:
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `J_stat` | `T` | Sargan-Hansen ``J``, averaged over the retained response equations; `NaN` when `valid=false` |
+| `p_value` | `T` | Upper-tail ``\chi^2(\text{df})`` p-value; `NaN` when `valid=false` |
+| `df` | `Int` | Overidentifying restrictions, ``q - 1``; `0` when exactly identified |
+| `valid` | `Bool` | `false` when ``q \le 1`` or every equation was dropped — the statistic is undefined, not insignificant |
+
+A non-rejection means the overidentifying moments agree with each other, not that they are jointly valid: if all instruments share the same violation of the exclusion restriction, the ``J`` has no power against it. For the panel analogue — the Sargan-Hansen statistic on fixed-effects and first-difference panel IV, reported as `sargan_stat`/`sargan_pval` on the fitted model rather than through a separate function — see [Panel Regression](@ref panel_reg_page).
+
 ### Keyword Arguments
 
 | Keyword | Type | Default | Description |
