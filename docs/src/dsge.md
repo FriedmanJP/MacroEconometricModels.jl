@@ -1,52 +1,21 @@
 # [DSGE Models](@id dsge_page)
 
-**MacroEconometricModels.jl** provides a complete toolkit for specifying, solving, simulating, and estimating Dynamic Stochastic General Equilibrium (DSGE) models. The package covers the full workflow from model definition through structural estimation, with seven solution methods spanning linear, higher-order, and global approaches.
+Dynamic Stochastic General Equilibrium (DSGE) models describe an economy as the equilibrium outcome of optimizing agents facing stochastic shocks. **MacroEconometricModels.jl** covers the full workflow: the `@dsge` macro parses equilibrium conditions written with time-indexed variables, `compute_steady_state` locates the deterministic steady state, `linearize` produces the Sims (2002) canonical form, and `solve` dispatches to one of seven solution algorithms. Impulse responses, variance decompositions, simulation, historical decomposition, and structural estimation all operate on the resulting solution object.
 
-- **Specification**: The `@dsge` macro provides a domain-specific language for writing equilibrium conditions with time-indexed variables
-- **Steady State**: Analytical or numerical steady-state computation via NonlinearSolve.jl (`TrustRegion()` default) with built-in constrained solvers (Optim.jl, NLopt.jl, JuMP+Ipopt) and an optional PATH backend
-- **Linearization**: Automatic first-order approximation via numerical Jacobians in the Sims (2002) canonical form
-- **Linear Solvers**: Three first-order solvers --- Gensys (Sims 2002), Blanchard-Kahn (1980), and Klein (2000) --- producing the state-space solution; see [Linear Solvers](@ref dsge_linear)
-- **Nonlinear Methods**: Up to 3rd-order perturbation with Andreasen, Fernandez-Villaverde & Rubio-Ramirez (2018) pruning, Chebyshev collocation, policy function iteration, and value function iteration (with Howard steps and Anderson acceleration) for globally accurate policy functions; see [Nonlinear Methods](@ref dsge_nonlinear)
-- **Constraints**: Perfect foresight paths, OccBin occasionally-binding constraints (Guerrieri & Iacoviello 2015), and constrained optimization via Optim.jl/NLopt.jl and JuMP/Ipopt (NLP) — all built in — with an optional PATH (MCP) backend; see [Constraints](@ref dsge_constraints)
-- **Estimation**: Four GMM-based methods (one-step, two-step, iterative, CU) for IRF matching, plus Bayesian estimation via SMC, SMC`` ^2 `` with two-stage delayed acceptance, and Random-Walk Metropolis-Hastings; see [Estimation](@ref dsge_estimation)
-- **Simulation and IRFs**: Stochastic and pruned simulation, analytical and generalized impulse responses, FEVD, and unconditional moments via Lyapunov equation; see [Nonlinear Methods](@ref dsge_nonlinear)
-- **Historical Decomposition**: Kalman smoother-based shock attribution for linear models, FFBSi particle smoother for nonlinear models, and Bayesian posterior bands; see [Historical Decomposition](@ref dsge_hd_page)
-- **Heterogeneous Agents**: Krusell-Smith and one- and two-asset HANK models via sequence-space Jacobian, Reiter, and Krusell-Smith solvers; see [Heterogeneous Agents](@ref dsge_ha)
-- **Overlapping Generations**: Blanchard (1985) perpetual-youth OLG models; see [Overlapping Generations](@ref dsge_olg)
-- **Continuous Time**: Achdou et al. (2022) continuous-time heterogeneous-agent models via HJB and Kolmogorov-Forward finite differences; see [Continuous Time](@ref dsge_continuous)
-- **Dynare Replication**: 24-model replication suite validated against Dynare 6.5+ reference values for steady states, IRFs, variance decomposition, and theoretical moments; includes Smets & Wouters (2007) Bayesian estimation pipeline
+This page owns the three stages every model shares --- specification, steady state, and linearization --- and routes to the child page that owns each solution and estimation method. Representative-agent models divide by solution class: linear first-order solvers, higher-order and global methods, and occasionally binding constraints. Heterogeneous-agent, overlapping-generations, and continuous-time models carry their own solvers and their own pages. A 24-model replication suite validates every stage against Dynare 6.5+.
 
 All results integrate with `plot_result()` for interactive D3.js visualization and `report()` for publication-quality output.
 
 ```@setup dsge_overview
 using MacroEconometricModels, Random
 Random.seed!(42)
-# Pre-define the RBC spec for reuse across blocks
-_spec_rbc = @dsge begin
-    parameters: β = 0.99, α = 0.36, δ = 0.025, ρ = 0.9, σ = 0.01
-    endogenous: Y, C, K, A
-    exogenous: ε_A
-    Y[t] = A[t] * K[t-1]^α
-    C[t] + K[t] = Y[t] + (1 - δ) * K[t-1]
-    1 = β * (C[t] / C[t+1]) * (α * A[t+1] * K[t]^(α - 1) + 1 - δ)
-    A[t] = ρ * A[t-1] + σ * ε_A[t]
-    steady_state = begin
-        A_ss = 1.0
-        K_ss = (α * β / (1 - β * (1 - δ)))^(1 / (1 - α))
-        Y_ss = K_ss^α
-        C_ss = Y_ss - δ * K_ss
-        [Y_ss, C_ss, K_ss, A_ss]
-    end
-end
-_spec_rbc = compute_steady_state(_spec_rbc)
 ```
 
 ## Quick Start
 
-**Recipe 1: Solve and plot IRFs**
+Specify an RBC model, solve it with the default Gensys algorithm, and trace the impulse responses to a technology shock:
 
 ```@example dsge_overview
-# Specify a simple RBC model
 spec = @dsge begin
     parameters: β = 0.99, α = 0.36, δ = 0.025, ρ = 0.9, σ = 0.01
     endogenous: Y, C, K, A
@@ -79,72 +48,29 @@ plot_result(result)
 <iframe src="../assets/plots/dsge_irf.html" width="100%" height="500" frameborder="0" style="border:1px solid #ddd;border-radius:4px;"></iframe>
 ```
 
-**Recipe 2: Second-order perturbation with pruning**
-
-```@example dsge_overview
-psol = perturbation_solver(spec; order=2)
-Y_sim = simulate(psol, 1000)  # pruned simulation (Kim et al. 2008)
-girf = irf(psol, 40; irf_type=:girf, n_draws=100)
-nothing # hide
-```
-
-**Recipe 3: Estimate with GMM**
-
-```julia
-est = estimate_dsge(spec, Y_data, [:β, :α, :ρ];
-                    method=:irf_matching, var_lags=4, irf_horizon=20)
-```
-
-**Recipe 4: OccBin with ZLB**
-
-```julia
-# Illustrative signatures: `R` is an interest-rate variable declared in the
-# model and `shocks` a user-supplied shock path.
-constraint = parse_constraint(:(R[t] >= 0), spec)
-occ_sol = occbin_solve(spec, constraint; shock_path=shocks)
-occ_irf = occbin_irf(spec, constraint, 1, 40)
-plot_result(occ_irf)
-```
-
-```@raw html
-<iframe src="../assets/plots/occbin_irf.html" width="100%" height="500" frameborder="0" style="border:1px solid #ddd;border-radius:4px;"></iframe>
-```
-
-**Recipe 5: Chebyshev projection**
-
-```@example dsge_overview
-proj = collocation_solver(spec; degree=5, grid=:tensor, max_iter=200)
-y = evaluate_policy(proj, proj.steady_state[proj.state_indices])
-err = max_euler_error(proj)
-nothing # hide
-```
-
-**Recipe 6: Bayesian estimation via SMC``^2``**
-
-```julia
-using Distributions
-result = estimate_dsge_bayes(spec, data, [0.99, 0.9, 0.01];
-    priors=Dict(:β => Beta(99, 1), :ρ => Beta(5, 2), :σ => InverseGamma(2, 0.01)),
-    method=:smc2, observables=[:Y], n_smc=200, n_particles=100,
-    solver=:projection, solver_kwargs=(degree=5,))
-```
-
-**Recipe 7: Historical decomposition**
-
-```@example dsge_overview
-data_hd = simulate(sol, 100)
-# 4 observables vs 1 structural shock: measurement error keeps the
-# observation covariance nonsingular
-hd = historical_decomposition(sol, data_hd, [:Y, :C, :K, :A];
-                              measurement_error=fill(0.01, 4))
-report(hd)
-```
-
 ---
 
-## Solution Methods
+## Choosing a Method
 
-`solve(spec; method=...)` is the single entry point for the first-order and global DSGE solvers. Seven distinct algorithms are available, spanning linear, higher-order, and global approaches:
+The economic question determines the solution class, and the solution class determines the child page:
+
+| Feature needed | Recommended | Why |
+|----------------|-------------|-----|
+| Business-cycle IRFs and moments | [Linear Solvers](@ref dsge_linear) | Certainty equivalence suffices |
+| Determinacy diagnostics | [Linear Solvers](@ref dsge_linear) | Explicit eigenvalue counting |
+| Risk premia, precautionary saving | [Nonlinear Methods](@ref dsge_nonlinear) | Curvature survives the approximation |
+| Accuracy far from steady state | [Nonlinear Methods](@ref dsge_nonlinear) | Global solution on a grid |
+| Zero lower bound, borrowing limits | [Constraints](@ref dsge_constraints) | Piecewise-linear regime switching |
+| Deterministic transition paths | [Constraints](@ref dsge_constraints) | Newton solve over the full path |
+| Structural parameters from data | [Estimation](@ref dsge_estimation) | GMM and Bayesian samplers |
+| Shock attribution over history | [Historical Decomposition](@ref dsge_hd_page) | Smoother-based additive identity |
+| Wealth distribution and MPC heterogeneity | [Heterogeneous Agents](@ref dsge_ha) | Distribution is a state variable |
+| Life-cycle and demographic structure | [Overlapping Generations](@ref dsge_olg) | Finite horizons break Ricardian equivalence |
+| HJB and Kolmogorov-Forward formulation | [Continuous Time](@ref dsge_continuous) | Sparse finite differences, no simulation |
+
+### `solve` Methods
+
+`solve(spec; method=...)` is the single entry point for the representative-agent solvers. Seven algorithms are available:
 
 | `method` | Class | Algorithm | Page |
 |----------|-------|-----------|------|
@@ -156,7 +82,20 @@ report(hd)
 | `:pfi` | Global | Policy function iteration / Euler-equation time iteration (Coleman 1990) | [Nonlinear Methods](@ref dsge_nonlinear) |
 | `:perfect_foresight` | Deterministic | Newton solver for perfect-foresight paths | [Constraints](@ref dsge_constraints) |
 
-The symbol `:vfi` is accepted as a historical alias of `:pfi` (Euler-equation time iteration, Coleman 1990) --- despite the name it does **not** perform value function iteration. Heterogeneous-agent, overlapping-generations, and continuous-time models use their own solvers; see the child pages linked in the feature list above.
+The symbol `:vfi` is accepted as a historical alias of `:pfi` (Euler-equation time iteration, Coleman 1990) --- despite the name it does **not** perform value function iteration. Heterogeneous-agent, overlapping-generations, and continuous-time models use their own entry points: `solve(spec; method=:ssj)`, `blanchard_steady_state`, and `ct_steady_state` respectively.
+
+---
+
+## Child Pages
+
+- [Linear Solvers](@ref dsge_linear) --- Gensys, Blanchard-Kahn, and Klein first-order solutions, determinacy conditions, simulation, IRFs, FEVD, and unconditional moments
+- [Nonlinear Methods](@ref dsge_nonlinear) --- second- and third-order perturbation with pruning, generalized IRFs, Chebyshev collocation, policy function iteration, and analytical moments
+- [Constraints](@ref dsge_constraints) --- perfect-foresight paths, constrained steady states, and OccBin occasionally binding constraints (Guerrieri & Iacoviello 2015)
+- [Estimation](@ref dsge_estimation) --- GMM IRF matching (one-step, two-step, iterative, CU) and Bayesian estimation via SMC, SMC``^2``, and Random-Walk Metropolis-Hastings
+- [Historical Decomposition](@ref dsge_hd_page) --- Kalman-smoother shock attribution for linear models, FFBSi particle smoother for nonlinear models, and posterior bands
+- [Heterogeneous Agents](@ref dsge_ha) --- Krusell-Smith and one- and two-asset HANK models via sequence-space Jacobian, Reiter, and Krusell-Smith solvers
+- [Overlapping Generations](@ref dsge_olg) --- Blanchard (1985) perpetual-youth models, non-Ricardian debt, and age-dependent life-cycle EGM
+- [Continuous Time](@ref dsge_continuous) --- Achdou et al. (2022) HJB and Kolmogorov-Forward finite differences, MIT shocks, and two-asset HANK
 
 ---
 
@@ -259,32 +198,7 @@ The solver converges to the steady state from a default initial guess of ones. F
 
 ### Analytical Steady State
 
-For models where the steady state has a closed-form solution, specify it in a `steady_state = begin ... end` block. The block must return a vector matching the endogenous variable ordering:
-
-```@example dsge_overview
-spec = @dsge begin
-    parameters: β = 0.99, α = 0.36, δ = 0.025, ρ = 0.9, σ = 0.01
-    endogenous: Y, C, K, A
-    exogenous: ε_A
-
-    Y[t] = A[t] * K[t-1]^α
-    C[t] + K[t] = Y[t] + (1 - δ) * K[t-1]
-    1 = β * (C[t] / C[t+1]) * (α * A[t+1] * K[t]^(α - 1) + 1 - δ)
-    A[t] = ρ * A[t-1] + σ * ε_A[t]
-
-    steady_state = begin
-        A_ss = 1.0
-        K_ss = (α * β / (1 - β * (1 - δ)))^(1 / (1 - α))
-        Y_ss = K_ss^α
-        C_ss = Y_ss - δ * K_ss
-        [Y_ss, C_ss, K_ss, A_ss]
-    end
-end
-spec = compute_steady_state(spec)
-nothing # hide
-```
-
-When the `steady_state` block is provided, `compute_steady_state` (or `solve`) uses it directly and validates the result against the equations. The analytical path is faster and avoids numerical convergence issues, but the user is responsible for correctness --- the validator checks that ``\|f(\bar{y})\| < 10^{-10}``.
+For models where the steady state has a closed-form solution, specify it in a `steady_state = begin ... end` block. The block must return a vector matching the endogenous variable ordering, as in the Quick Start model above. When the block is provided, `compute_steady_state` (or `solve`) uses it directly and validates the result against the equations. The analytical path is faster and avoids numerical convergence issues, but the user is responsible for correctness --- the validator checks that ``\|f(\bar{y})\| < 10^{-10}``.
 
 ### Constrained Steady State
 
@@ -309,8 +223,6 @@ debt_limit = nonlinear_constraint(
 
 spec = compute_steady_state(spec; constraints=[bound, debt_limit])
 ```
-
-### Advanced: Explicit Solver Backends
 
 For large-scale problems or complementarity formulations, JuMP-based backends provide additional power:
 
@@ -366,39 +278,6 @@ The matrix pair ``(\Gamma_0, \Gamma_1)`` defines a generalized eigenvalue proble
 | `Psi` | `Matrix{T}` | ``n \times n_{shocks}`` shock loading |
 | `Pi` | `Matrix{T}` | ``n \times n_{expect}`` expectation error selection |
 | `spec` | `DSGESpec{T}` | Back-reference to specification |
-
----
-
-## Complete Example
-
-This example specifies, solves, and analyzes a full RBC model using the core functions covered on this page:
-
-```@example dsge_overview
-# Verify steady state (spec defined in Quick Start)
-report(spec)
-```
-
-```@example dsge_overview
-# Linearize and inspect the canonical form matrices
-ld = linearize(spec)
-
-# Solve with default Gensys method
-sol = solve(spec)
-
-# IRFs and FEVD
-result = irf(sol, 40)
-report(result)
-```
-
-```julia
-plot_result(result)
-```
-
-```@raw html
-<iframe src="../assets/plots/dsge_irf.html" width="100%" height="500" frameborder="0" style="border:1px solid #ddd;border-radius:4px;"></iframe>
-```
-
-The `spec` object stores the parsed model. `linearize` produces the Sims (2002) canonical form ``(\Gamma_0, \Gamma_1, C, \Psi, \Pi)``. `solve` dispatches to the Gensys algorithm and returns a `DSGESolution` with the state-space representation ``y_t = G_1 y_{t-1} + C + \text{impact} \cdot \varepsilon_t``. The IRF and FEVD functions operate on this solution. For higher-order or global solutions, see [Nonlinear Methods](@ref dsge_nonlinear).
 
 ---
 

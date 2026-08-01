@@ -2,6 +2,8 @@
 
 Panel-level hypothesis testing addresses several distinct phases of the empirical workflow. **Panel unit root tests** detect non-stationarity in panel datasets, a prerequisite for correct specification of panel VARs and factor models. **Panel cointegration tests** then ask whether non-stationary panel series share a long-run equilibrium. **Panel VAR specification tests** validate GMM instrument validity and select optimal lag orders after estimation. This page covers five **first-generation** panel unit root tests (LLC, IPS, Breitung, Fisher, Hadri — the EViews "Panel Unit Root Test" dialog, which assume cross-sectional independence), three **second-generation** tests robust to cross-sectional dependence (PANIC, Pesaran CIPS, Moon-Perron), four **panel cointegration** tests (Pedroni, Kao, Westerlund, Fisher-Johansen — the EViews "Panel Cointegration Test" dialog), the **Dumitrescu-Hurlin** heterogeneous-panel Granger non-causality test (the EViews "Panel Granger Causality" dialog), and three Panel VAR diagnostics (Hansen J-test, Andrews-Lu MMSC, lag selection).
 
+For the full test battery and the tables that route a question to a test, see [Hypothesis Tests](@ref tests_page).
+
 - **Levin-Lin-Chu**: Pooled bias-adjusted t-statistic with a common autoregressive root (Levin, Lin & Chu 2002)
 - **Im-Pesaran-Shin**: Averaged per-unit ADF t-statistics standardized with finite-sample moments (Im, Pesaran & Shin 2003)
 - **Breitung**: Bias-free pooled statistic via forward orthogonal deviations (Breitung 2000)

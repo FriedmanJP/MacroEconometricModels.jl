@@ -1,4 +1,4 @@
-# MIDAS Regression
+# [MIDAS Regression](@id midas_page)
 
 **MIDAS** (MIxed-DAta Sampling) regression relates a low-frequency target to many
 high-frequency lags of an indicator through a parsimonious weighting function.
@@ -8,6 +8,8 @@ observation and lets a small parameter vector ``\theta`` shape their weights —
 monthly indicator's within-quarter timing is exploited without discretionary
 aggregation. Central banks use MIDAS and ADL-MIDAS for GDP nowcasting from monthly
 and daily data.
+
+For an overview of all nowcasting methods and method comparison, see [Nowcasting](@ref nowcast_page).
 
 This page covers:
 

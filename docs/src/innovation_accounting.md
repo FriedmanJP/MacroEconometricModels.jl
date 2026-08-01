@@ -1,12 +1,8 @@
 # [Innovation Accounting](@id innovation_accounting_page)
 
-Innovation accounting decomposes the dynamics of a structural VAR into the contributions of individual structural shocks. Starting from the reduced-form residual decomposition ``u_t = B_0 \varepsilon_t``, where ``B_0`` is the structural impact matrix and ``\varepsilon_t`` are orthogonal structural shocks, the package provides three complementary tools:
+Innovation accounting decomposes the dynamics of a structural VAR into the contributions of individual structural shocks. Starting from the reduced-form residual decomposition ``u_t = B_0 \varepsilon_t``, where ``B_0`` is the structural impact matrix and ``\varepsilon_t`` are orthogonal structural shocks, the package provides three complementary tools: impulse responses trace the dynamic effect of a shock, variance decompositions measure how much forecast uncertainty each shock explains, and historical decompositions attribute realized movements in the data to specific shocks. One child page owns each tool.
 
-- **Impulse Response Functions (IRF)**: trace the dynamic effect of a one-unit structural shock on each endogenous variable across horizons; see [Impulse Responses](@ref ia_irf_page)
-- **Forecast Error Variance Decomposition (FEVD)**: measure the share of each variable's forecast uncertainty attributable to each structural shock; see [Variance Decomposition](@ref ia_fevd_page)
-- **Historical Decomposition (HD)**: attribute observed variable movements to individual structural shocks over the sample period; see [Historical Decomposition](@ref ia_hd_page)
-
-All three tools support frequentist VAR, Bayesian VAR, VECM, FAVAR, DSGE, and Local Projection estimation, with six structural identification schemes and interactive D3.js visualization via `plot_result()`.
+All three support frequentist VAR, Bayesian VAR, VECM, FAVAR, DSGE, and Local Projection estimation, with six structural identification schemes and interactive D3.js visualization via `plot_result()`.
 
 ```@setup ia
 using MacroEconometricModels, Random
@@ -20,56 +16,36 @@ model = estimate_var(Y, 2; varnames=["INDPRO", "CPIAUCSL", "FEDFUNDS"])
 
 ## Quick Start
 
-**Recipe 1: Cholesky IRF with bootstrap confidence intervals**
+Identify an estimated VAR recursively (INDPRO → CPIAUCSL → FEDFUNDS) and trace the impulse responses with bootstrap confidence intervals:
 
 ```@example ia
-# Recursive identification: INDPRO -> CPIAUCSL -> FEDFUNDS
 irfs = irf(model, 20; ci_type=:bootstrap, reps=50)
 report(irfs)
 ```
 
-**Recipe 2: Forecast error variance decomposition**
+---
 
-```@example ia
-decomp = fevd(model, 20)
-report(decomp)
-```
+## Choosing a Method
 
-**Recipe 3: Historical decomposition with verification**
+The three tools answer different questions about the same identified system:
 
-```@example ia
-hd = historical_decomposition(model, size(model.U, 1))
-verify_decomposition(hd)
-report(hd)
-```
+| Feature needed | Recommended | Why |
+|----------------|-------------|-----|
+| Dynamic effect of a shock over time | [Impulse Responses](@ref ia_irf_page) | Traces the moving-average representation |
+| Share of forecast uncertainty per shock | [Variance Decomposition](@ref ia_fevd_page) | Normalized forecast-error MSE contributions |
+| Which shocks drove a specific episode | [Historical Decomposition](@ref ia_hd_page) | Attributes realized data to shocks |
+| Robustness to dynamic misspecification | [Impulse Responses](@ref ia_irf_page), `structural_lp` | Each horizon estimated separately |
+| Uncertainty bands on variance shares | [Variance Decomposition](@ref ia_fevd_page), Bayesian or LP | Frequentist FEVD is a point estimate |
+| Sign, narrative, or long-run restrictions | [Structural Identification](@ref structural_identification_page) | Fixes ``B_0`` before any tool runs |
+| Identification from higher moments | [Statistical Identification](@ref nongaussian_page) | No economic restrictions required |
 
-**Recipe 4: Bayesian IRF with credible intervals**
+---
 
-```@example ia
-post = estimate_bvar(Y, 2; n_draws=500, varnames=["INDPRO", "CPIAUCSL", "FEDFUNDS"])
+## Child Pages
 
-# Posterior median IRF with 68% credible intervals
-birfs = irf(post, 20)
-report(birfs)
-```
-
-**Recipe 5: Sign-restricted IRF**
-
-```@example ia
-# Demand shock: positive output and positive prices on impact
-check_demand = irf_array -> irf_array[1, 1, 1] > 0 && irf_array[1, 2, 1] > 0
-irfs_sign = irf(model, 20; method=:sign, check_func=check_demand)
-report(irfs_sign)
-```
-
-**Recipe 6: Structural LP impulse responses**
-
-```@example ia
-# LP-based IRF robust to VAR misspecification
-slp = structural_lp(Y, 20; method=:cholesky, lags=4)
-lp_irfs = irf(slp)
-report(lp_irfs)
-```
+- [Impulse Responses](@ref ia_irf_page) --- IRF definition, companion form representation, cumulative IRFs, bootstrap and Bayesian confidence intervals, stationarity filtering (Kilian & Lütkepohl 2017), LP-based IRFs
+- [Variance Decomposition](@ref ia_fevd_page) --- FEVD definition, properties, generalized FEVD, LP-FEVD (Gorodnichenko & Lee 2019), Bayesian FEVD, bootstrap CIs
+- [Historical Decomposition](@ref ia_hd_page) --- HD definition, decomposition identity, shock contributions, Bayesian HD, display and table output
 
 ---
 
@@ -83,27 +59,15 @@ All six methods integrate seamlessly with `irf()`, `fevd()`, and `historical_dec
 
 ---
 
-## Sub-Page Guide
-
-For detailed treatment of each tool --- theory, equations, return value tables, and advanced usage:
-
-- [Impulse Responses](@ref ia_irf_page) --- IRF definition, companion form representation, cumulative IRFs, bootstrap and Bayesian confidence intervals, stationarity filtering (Kilian & Lütkepohl 2017), LP-based IRFs
-- [Variance Decomposition](@ref ia_fevd_page) --- FEVD definition, properties, LP-FEVD (Gorodnichenko & Lee 2019), Bayesian FEVD, bootstrap CIs
-- [Historical Decomposition](@ref ia_hd_page) --- HD definition, decomposition identity, shock contributions, LP-based HD, display and table output
-
----
-
 ## Common Pitfalls
 
-1. **Variable ordering matters for Cholesky.** The default `irf(model, H)` uses Cholesky identification, where the column ordering of the data matrix determines the recursive causal structure. Placing the federal funds rate last assumes monetary policy does not contemporaneously affect output or prices.
+1. **Confidence bands require explicit activation.** The `ci_lower` and `ci_upper` fields contain zeros unless `ci_type=:bootstrap` is set (frequentist) or a Bayesian posterior is passed. Always check `irfs.ci_type` before interpreting bands.
 
-2. **Confidence bands require explicit activation.** The `ci_lower` and `ci_upper` fields contain zeros unless `ci_type=:bootstrap` is set (frequentist) or a Bayesian posterior is passed. Always check `irfs.ci_type` before interpreting bands.
+2. **Sign restrictions produce set-identified results.** The median response across admissible rotations is a summary statistic, not a point estimate. Report the full credible set, not just the median, to avoid overstating precision (Uhlig 2005).
 
-3. **Sign restrictions produce set-identified IRFs.** The median response across admissible rotations is a summary statistic, not a point estimate. Report the full credible set, not just the median, to avoid overstating precision (Uhlig 2005).
+3. **HD verification should always pass.** After computing `hd = historical_decomposition(model, T)`, call `verify_decomposition(hd)` to confirm the additive identity ``y_t = \sum_j \text{HD}_j(t) + \text{initial}(t)`` holds to numerical precision. A failure indicates a bug, not a data issue.
 
-4. **HD verification should always pass.** After computing `hd = historical_decomposition(model, T)`, call `verify_decomposition(hd)` to confirm the additive identity ``y_t = \sum_j \text{HD}_j(t) + \text{initial}(t)`` holds to numerical precision. A failure indicates a bug, not a data issue.
-
-5. **LP-based IRFs are wider than VAR-based IRFs.** Each horizon is estimated independently without cross-horizon restrictions, producing larger standard errors. This is a feature (robustness to dynamic misspecification), not a deficiency (Kilian and Lütkepohl 2017, Chapter 12).
+4. **LP-based results are wider than VAR-based results.** Each horizon is estimated independently without cross-horizon restrictions, producing larger standard errors. This is a feature (robustness to dynamic misspecification), not a deficiency (Kilian and Lütkepohl 2017, Chapter 12).
 
 ---
 

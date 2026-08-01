@@ -2,7 +2,7 @@
 
 Pre-estimation stationarity analysis determines whether a time series is stationary (I(0)) or contains a unit root (I(1)). This distinction drives the choice between VAR in levels, VAR in first differences, and VECM specifications. MacroEconometricModels.jl provides five unit root tests, a multivariate cointegration test, and convenience functions for batch analysis.
 
-For advanced unit root tests with improved power under structural breaks and GLS detrending --- Fourier ADF/KPSS, DF-GLS/ERS, LM unit root, and two-break ADF --- see [Advanced Unit Root Tests](tests_unitroot_advanced.md).
+For the full test battery and the tables that route a question to a test, see [Hypothesis Tests](@ref tests_page). For advanced unit root tests with improved power under structural breaks and GLS detrending --- Fourier ADF/KPSS, DF-GLS/ERS, LM unit root, and two-break ADF --- see [Advanced Unit Root Tests](tests_unitroot_advanced.md).
 
 The ADF and KPSS tests are complementary: ADF tests the null of a unit root, while KPSS tests the null of stationarity. Running both provides stronger inference than either alone. When structural breaks are suspected, the Zivot-Andrews test avoids the size distortions that plague standard tests.
 

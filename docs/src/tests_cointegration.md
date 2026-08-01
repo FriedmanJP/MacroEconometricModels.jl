@@ -2,6 +2,8 @@
 
 **MacroEconometricModels.jl** provides four single-equation cointegration tests that operate on the residuals (or the coefficient path) of a static cointegrating regression ``y_t = D_t'\delta + x_t'\beta + u_t`` with an ``I(1)`` regressor vector ``x_t``. Two are residual-unit-root tests of the null of **no cointegration**, and two are parameter-based tests whose null is **genuine, stable cointegration**.
 
+For the full test battery and the tables that route a question to a test, see [Hypothesis Tests](@ref tests_page). For the system approach to cointegrating rank, see the Johansen test on [Unit Root & Cointegration](@ref tests_unitroot_page).
+
 - **Engle–Granger** — `engle_granger_test(y, X)` runs an augmented Dickey–Fuller regression on the levels residuals; the ``t``-statistic is compared to the MacKinnon (1996/2010) cointegration surface indexed by the number of ``I(1)`` series
 - **Phillips–Ouliaris** — `phillips_ouliaris_test(y, X)` forms the semiparametric (Phillips–Perron-style) normalized-bias ``\hat Z_\alpha`` and ``t``-ratio ``\hat Z_t`` on the residual AR(1) root, reusing the EV-12 long-run-variance toolkit
 - **Hansen ``L_c``** — `hansen_instability_test(m)` tests a fitted [`CointRegModel`](@ref) for coefficient stability; a large ``L_c`` signals parameter drift (observationally equivalent to no cointegration)

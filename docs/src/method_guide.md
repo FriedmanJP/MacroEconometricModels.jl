@@ -79,7 +79,7 @@ Reduced-form residuals are correlated across equations and carry no economic int
 | Restrict long-run effects to zero | `identify_long_run` | Blanchard-Quah supply-demand split | [Structural Identification](@ref structural_identification_page) |
 | Identify from non-Gaussian residuals | `identify_fastica`, `identify_jade`, `identify_sobi`, `identify_student_t` | Statistical identification, no restrictions | [Non-Gaussian Methods](@ref id_nongaussian_page) |
 | Identify from changing volatility | `identify_markov_switching`, `identify_garch`, `identify_smooth_transition`, `identify_external_volatility` | Regime variance shifts identify shocks | [Heteroskedasticity](@ref id_heteroskedastic_page) |
-| Compare the statistical schemes | `compute_Q` | Eighteen methods, one interface | [Statistical Identification](@ref nongaussian_page) |
+| Compare the statistical schemes | `irf(m, H; method=...)` | Eighteen `method=` symbols, one call | [Statistical Identification](@ref nongaussian_page) |
 | Check that identification holds | independence and non-Gaussianity tests | Statistical ID needs testable assumptions | [Identification Testing](@ref id_testing_page) |
 | Trace a shock through time | `irf` | Dynamic causal effect paths | [Impulse Responses](@ref ia_irf_page) |
 | Attribute forecast error variance | `fevd` | Relative importance by horizon | [Variance Decomposition](@ref ia_fevd_page) |

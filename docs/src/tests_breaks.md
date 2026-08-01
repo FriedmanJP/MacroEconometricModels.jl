@@ -1,6 +1,6 @@
 # [Structural Breaks](@id tests_breaks_page)
 
-This page covers tests for parameter instability and structural change in time series models. Structural breaks --- abrupt shifts in regression coefficients, factor loadings, or the number of latent factors --- invalidate standard inference and produce misleading forecasts if left undetected. Four complementary frameworks are provided:
+This page covers tests for parameter instability and structural change in time series models. Structural breaks --- abrupt shifts in regression coefficients, factor loadings, or the number of latent factors --- invalidate standard inference and produce misleading forecasts if left undetected. For the full test battery and the tables that route a question to a test, see [Hypothesis Tests](@ref tests_page). Four complementary frameworks are provided:
 
 - **Andrews (1993)**: Tests for a single unknown break point in a linear regression. Nine test variants combine three base statistics (Wald, LR, LM) with three functionals (supremum, exponential average, mean).
 - **Bai-Perron (1998, 2003)**: Tests for multiple unknown break points. Dynamic programming finds globally optimal break dates, with sequential testing and information criteria (BIC, LWZ) for break number selection.

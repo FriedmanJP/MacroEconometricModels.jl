@@ -2,7 +2,7 @@
 
 The **Blanchard (1985) perpetual-youth** model embeds overlapping generations into an otherwise standard neoclassical growth model. Agents survive each period with probability ``\gamma`` and newborns enter with zero financial wealth, so the economy is populated by households of different ages and wealth. This generational turnover breaks the representative-agent benchmark: the equilibrium interest rate exceeds the rate of time preference, and government debt is net wealth that crowds out capital — the failure of Ricardian equivalence.
 
-The implementation is the analytically tractable discrete-time Blanchard-Yaari case with log utility and fair annuities. For a genuine age structure — age-specific mortality, an age-earnings profile, retirement, and backward induction over age — see [True Life Cycle: Age-Dependent EGM](@ref lifecycle_olg).
+This page is part of the [DSGE Models](@ref dsge_page) suite. The implementation is the analytically tractable discrete-time Blanchard-Yaari case with log utility and fair annuities. For a genuine age structure — age-specific mortality, an age-earnings profile, retirement, and backward induction over age — see [True Life Cycle: Age-Dependent EGM](@ref lifecycle_olg).
 
 ## Quick Start
 

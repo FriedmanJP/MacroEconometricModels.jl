@@ -1,6 +1,6 @@
 # [DSGE Historical Decomposition](@id dsge_hd_page)
 
-Historical decomposition for DSGE models decomposes observed variable movements into contributions from individual structural shocks plus initial conditions. The package provides three methods spanning linear, nonlinear, and Bayesian DSGE models:
+Historical decomposition for DSGE models decomposes observed variable movements into contributions from individual structural shocks plus initial conditions. The package provides three methods spanning linear, nonlinear, and Bayesian DSGE models. This page is part of the [DSGE Models](@ref dsge_page) suite; for the VAR-based counterpart, see [Historical Decomposition](@ref ia_hd_page).
 
 - **Linear DSGE**: Exact additive decomposition via the Kalman smoother (Rauch, Tung & Striebel 1965) and structural MA coefficients
 - **Nonlinear DSGE**: Counterfactual simulation using the FFBSi particle smoother (Godsill, Doucet & West 2004) for higher-order perturbation solutions

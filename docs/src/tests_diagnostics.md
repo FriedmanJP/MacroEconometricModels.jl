@@ -2,6 +2,8 @@
 
 Post-estimation specification testing validates the assumptions underlying statistical inference in estimated models. This page covers six categories of diagnostic tests: VAR stability checks via companion matrix eigenvalues, Granger causality tests for predictive relationships, multivariate normality tests for residual distributional assumptions, ARCH diagnostics for conditional heteroskedasticity, likelihood-based model comparison tests for nested specifications, and Panel VAR diagnostics for GMM-estimated models.
 
+For the full test battery and the tables that route a question to a test, see [Hypothesis Tests](@ref tests_page).
+
 - **VAR Stationarity**: Companion matrix eigenvalue check for stable dynamics
 - **Granger Causality**: Pairwise and block Wald tests for predictive causality (Granger 1969)
 - **Normality Tests**: Jarque-Bera, Mardia, Doornik-Hansen, and Henze-Zirkler tests for multivariate normality

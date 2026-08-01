@@ -2,6 +2,8 @@
 
 Standard unit root tests (ADF, PP, KPSS) perform well when the data-generating process is a simple autoregressive model with fixed deterministic components. Real macroeconomic series, however, exhibit smooth structural changes, multiple regime shifts, and near-unit-root behavior that erode the power of classical tests. This page covers several advanced unit root tests that address these limitations through Fourier approximation of smooth breaks, GLS detrending for optimal power, point-optimal and seasonal-frequency testing, LM-based testing with endogenous breaks under the null, and two-break ADF extensions.
 
+For the full test battery and the tables that route a question to a test, see [Hypothesis Tests](@ref tests_page). For the standard ADF, KPSS, PP, Zivot-Andrews, and Ng-Perron tests, see [Unit Root & Cointegration](@ref tests_unitroot_page).
+
 - **Fourier ADF** (Enders & Lee 2012): Captures smooth, unknown structural breaks with trigonometric terms
 - **Fourier KPSS** (Becker, Enders & Lee 2006): Stationarity test robust to smooth breaks
 - **DF-GLS / ERS** (Elliott, Rothenberg & Stock 1996): GLS-detrended ADF with near-optimal power
