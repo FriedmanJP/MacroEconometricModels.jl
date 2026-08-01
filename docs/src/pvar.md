@@ -9,6 +9,8 @@
 - **Bootstrap inference**: Group-level block bootstrap for IRF confidence intervals
 - **Specification tests**: Hansen (1982) J-test, Andrews-Lu (2001) MMSC, and lag selection
 
+Panel VAR treats several panel series as jointly endogenous. For single-equation panel models — fixed effects, random effects, panel IV, and the Arellano-Bond estimator with one dependent variable — see [Panel Regression](@ref panel_reg_page). For causal designs built on treatment timing rather than lag structure, see [Difference-in-Differences](@ref did_page) and [Event Study LP](@ref event_study_page). Panel unit-root pretests, which decide whether the series need differencing before any of this, live on [Panel Tests](@ref tests_panel_page).
+
 ```@setup pvar
 using MacroEconometricModels, Random, DataFrames
 Random.seed!(42)
@@ -30,9 +32,12 @@ pd = xtset(_df, :id, :time)
 **Recipe 1: FD-GMM with two-step estimation**
 
 ```@example pvar
-# PWT panel data (pre-loaded in setup: log first-differenced, NaN-filtered)
-# Arellano-Bond two-step GMM
-model = estimate_pvar(pd, 2; dependent_vars=["rgdpna", "emp", "hc"], steps=:twostep)
+# PWT growth panel (pre-loaded in setup: log first-differenced, NaN-filtered)
+dep_vars = ["rgdpna", "emp", "hc"]
+
+# Arellano-Bond two-step GMM; collapse the instruments because N is only 38
+model = estimate_pvar(pd, 1; dependent_vars=dep_vars, steps=:twostep,
+                      collapse=true, max_lag_endo=6)
 report(model)
 ```
 
@@ -40,8 +45,8 @@ report(model)
 
 ```@example pvar
 # System GMM adds level equations instrumented by lagged differences
-model_sys = estimate_pvar(pd, 2; dependent_vars=["rgdpna", "emp", "hc"],
-                          system_instruments=true, steps=:twostep)
+model_sys = estimate_pvar(pd, 1; dependent_vars=dep_vars, system_instruments=true,
+                          steps=:twostep, collapse=true, max_lag_endo=6)
 report(model_sys)
 ```
 
@@ -49,41 +54,42 @@ report(model_sys)
 
 ```@example pvar
 # Within estimator with cluster-robust SEs
-model_fe = estimate_pvar_feols(pd, 2; dependent_vars=["rgdpna", "emp", "hc"])
+model_fe = estimate_pvar_feols(pd, 1; dependent_vars=dep_vars)
 report(model_fe)
 ```
 
 **Recipe 4: Specification tests and lag selection**
 
 ```@example pvar
-dep_vars = ["rgdpna", "emp", "hc"]
-
-model = estimate_pvar(pd, 2; dependent_vars=dep_vars, steps=:twostep)
-
 # Hansen J-test for overidentifying restrictions
 j = pvar_hansen_j(model)
 report(j)
+```
 
-# Andrews-Lu MMSC for model selection
-mmsc = pvar_mmsc(model)
-
-# Lag selection across candidate models
-sel = pvar_lag_selection(pd, 4; dependent_vars=dep_vars)
+```@example pvar
+# Andrews-Lu MMSC across candidate lag orders
+sel = pvar_lag_selection(pd, 4; dependent_vars=dep_vars,
+                         collapse=true, max_lag_endo=6)
+(best_bic = sel.best_bic, best_aic = sel.best_aic, best_hqic = sel.best_hqic)
 ```
 
 **Recipe 5: Structural analysis with bootstrap CIs**
 
 ```@example pvar
-dep_vars = ["rgdpna", "emp", "hc"]
-
-model = estimate_pvar(pd, 1; dependent_vars=dep_vars, steps=:twostep)
-
 # Orthogonalized IRFs and FEVD
 irfs = pvar_oirf(model, 10)
 decomp = pvar_fevd(model, 10)
 
-# Bootstrap confidence intervals (n_draws=20 for a fast build; use 500+ in applied work)
-boot = pvar_bootstrap_irf(model, 10; n_draws=20, ci=0.90)
+# Impact matrix: rows are responses, columns are shocks
+round.(irfs[1, :, :], digits=4)
+```
+
+```julia
+plot_result(model; view=:oirf, H=10)
+```
+
+```@raw html
+<iframe src="../assets/plots/pvar_irf.html" style="width:100%;height:420px;border:1px solid #eee;border-radius:8px;" loading="lazy"></iframe>
 ```
 
 ---
@@ -123,24 +129,25 @@ pwt_demo = load_example(:pwt)
 
 # Convert to growth rates for stationarity
 pd_demo = apply_tcode(pwt_demo, 5)  # tcode 5 = log first difference
-nothing # hide
+
+(n_groups = pd_demo.n_groups, n_obs = pd_demo.T_obs, variables = length(pd_demo.varnames))
 ```
 
-All numeric columns are treated as potential endogenous variables. Use the `dependent_vars` keyword to select a subset:
+The examples below work with the last 30 periods of the three-variable subpanel, which after dropping non-finite rows leaves a balanced 38-country panel — small enough to build quickly and, more importantly, small enough that instrument proliferation is a live concern rather than a footnote.
+
+All numeric columns are treated as potential endogenous variables. Use the `dependent_vars` keyword to select a subset — the examples on this page use real GDP growth, employment growth, and human-capital growth.
+
+For custom panel data, construct a `PanelData` object via `xtset`. Never build a `PanelData` from a raw matrix; `xtset` is the supported constructor and it derives the group and time indices the estimators rely on:
 
 ```@example pvar
-model = estimate_pvar(pd, 2; dependent_vars=["rgdpna", "emp", "hc"])
-nothing # hide
-```
-
-For custom panel data, construct a `PanelData` object via `xtset`:
-
-```@example pvar
+Random.seed!(11)
 df = DataFrame(country=repeat(1:20, inner=30), year=repeat(1:30, outer=20),
                gdp=randn(600), inv=randn(600), cons=randn(600))
 pd_custom = xtset(df, :country, :year)
-model_custom = estimate_pvar(pd_custom, 2; dependent_vars=["gdp", "inv", "cons"])
-nothing # hide
+model_custom = estimate_pvar(pd_custom, 1; dependent_vars=["gdp", "inv", "cons"],
+                             collapse=true, max_lag_endo=6)
+(n_groups = model_custom.n_groups, n_obs = model_custom.n_obs,
+ n_instruments = model_custom.n_instruments)
 ```
 
 ### Data Cleaning
@@ -182,21 +189,20 @@ Lagged **levels** ``\mathbf{y}_{i,t-2}, \mathbf{y}_{i,t-3}, \ldots`` serve as in
     The two-step estimator is asymptotically efficient but its naive standard errors are severely downward-biased in finite samples. The package automatically applies the Windmeijer (2005) correction for two-step GMM, which restores proper inference.
 
 ```@example pvar
-dep_vars = ["rgdpna", "emp", "hc"]
-
 # One-step GMM (heteroskedasticity-robust SEs)
-m1 = estimate_pvar(pd, 2; dependent_vars=dep_vars, steps=:onestep)
-
-# Two-step GMM (Windmeijer-corrected SEs)
-m2 = estimate_pvar(pd, 2; dependent_vars=dep_vars, steps=:twostep)
+m1 = estimate_pvar(pd, 1; dependent_vars=dep_vars, steps=:onestep,
+                   collapse=true, max_lag_endo=6)
 
 # Forward orthogonal deviations (Arellano & Bover 1995)
-m3 = estimate_pvar(pd, 2; dependent_vars=dep_vars,
-                   transformation=:fod, steps=:twostep)
-nothing # hide
+m3 = estimate_pvar(pd, 1; dependent_vars=dep_vars, transformation=:fod,
+                   steps=:twostep, collapse=true, max_lag_endo=6)
+
+(onestep = round(m1.Phi[1, 1], digits=4),
+ twostep = round(model.Phi[1, 1], digits=4),
+ fod     = round(m3.Phi[1, 1], digits=4))
 ```
 
-The forward orthogonal deviations (FOD) transformation preserves orthogonality of the transformed errors, making the initial weighting matrix more efficient than first-differencing when the panel is unbalanced.
+The three estimates of the own-persistence coefficient on GDP growth bracket each other closely: 0.3164 one-step, 0.2513 two-step, and 0.2695 under forward orthogonal deviations. One-step and two-step differ only in the weighting matrix, so a gap of this size is ordinary sampling variation rather than a specification difference; the two-step version is the efficient one and is the default. The forward orthogonal deviations (FOD) transformation subtracts the mean of all *future* observations instead of the previous one, which preserves orthogonality of the transformed errors and — unlike first-differencing — does not lose an observation at every internal gap, making it the better choice on unbalanced panels.
 
 ### System GMM (Blundell-Bond)
 
@@ -211,19 +217,18 @@ where:
 - The bottom block uses lagged differences ``\Delta \mathbf{y}_{i,t-1}`` as instruments for the level equation
 
 ```@example pvar
-
-m_sys = estimate_pvar(pd, 2; dependent_vars=["rgdpna", "emp", "hc"],
-                      system_instruments=true, steps=:twostep)
+m_sys = estimate_pvar(pd, 1; dependent_vars=dep_vars, system_instruments=true,
+                      steps=:twostep, collapse=true, max_lag_endo=6)
 report(m_sys)
 ```
 
-The system estimator exploits additional moment conditions but requires the assumption that first differences are uncorrelated with fixed effects.
+Adding the level equations doubles the effective sample from 1064 to 2128 observations and raises the instrument count only from 15 to 19, which is why system GMM is the standard remedy for weak instruments under persistence. Its estimates diverge sharply from FD-GMM on the human-capital equation: own-persistence rises from 0.2804 (insignificant) to 0.9092 (``z = 14.71``), and the GDP equation's loading on lagged human capital jumps from 1.0148 to 3.0713. That divergence is itself diagnostic — human-capital growth is highly persistent, exactly the case where lagged levels are weak instruments for differences and the extra level moments carry most of the identification. It is also the case where the additional assumption bites hardest: system GMM requires that first differences be uncorrelated with the fixed effects (mean stationarity), and a large FD/system gap should prompt a Hansen J on the system moments before the level results are believed.
 
 ### Keyword Arguments
 
 | Keyword | Type | Default | Description |
 |---------|------|---------|-------------|
-| `dependent_vars` | `Vector{String}` | `nothing` | Endogenous variable names (default: all columns) |
+| `dependent_vars` | `Union{Vector{String},Nothing}` | `nothing` | Endogenous variable names (`nothing` = all columns) |
 | `predet_vars` | `Vector{String}` | `String[]` | Predetermined variable names |
 | `exog_vars` | `Vector{String}` | `String[]` | Strictly exogenous variable names |
 | `transformation` | `Symbol` | `:fd` | `:fd` (first-difference) or `:fod` (forward orthogonal deviations) |
@@ -251,9 +256,22 @@ The system estimator exploits additional moment conditions but requires the assu
 | `method` | `Symbol` | `:fd_gmm`, `:system_gmm`, or `:fe_ols` |
 | `transformation` | `Symbol` | `:fd`, `:fod`, or `:demean` |
 | `steps` | `Symbol` | `:onestep`, `:twostep`, or `:mstep` |
+| `n_predet` / `n_exog` | `Int` | Counts of predetermined and strictly exogenous regressors |
+| `predet_names` / `exog_names` | `Vector{String}` | Their names |
+| `system_constant` | `Bool` | Whether the level equation carries a constant |
 | `n_groups` | `Int` | Number of panel groups |
+| `n_periods` | `Int` | Number of distinct time periods |
 | `n_obs` | `Int` | Total effective observations |
+| `obs_per_group` | `NamedTuple` | `(min, avg, max)` observations per group |
 | `n_instruments` | `Int` | Number of moment conditions |
+| `instruments` | `Vector{Matrix{T}}` | Per-group instrument blocks |
+| `weighting_matrix` | `Matrix{T}` | GMM weighting matrix used |
+| `coef_vcov` | `Vector{Matrix{T}}` | Per-equation ``K \times K`` coefficient covariance |
+| `data` | `PanelData{T}` | The panel the model was fitted on |
+
+`StatsAPI` accessors are defined: `coef(m)` returns `vec(m.Phi)`, `stderror(m)` returns
+`vec(m.se)`, and `vcov(m)` assembles the block-diagonal coefficient covariance from
+`coef_vcov`.
 
 ---
 
@@ -262,12 +280,13 @@ The system estimator exploits additional moment conditions but requires the assu
 For panels with large ``T``, the within (FE-OLS) estimator provides a simpler alternative. The estimator demeans each entity's data (removing ``\boldsymbol{\mu}_i``) and runs pooled OLS on the stacked system with cluster-robust standard errors at the group level:
 
 ```@example pvar
-
-m_fe = estimate_pvar_feols(pd, 2; dependent_vars=["rgdpna", "emp", "hc"])
+m_fe = estimate_pvar_feols(pd, 1; dependent_vars=dep_vars)
 report(m_fe)
 ```
 
-The FE-OLS estimator accepts the same `dependent_vars`, `predet_vars`, and `exog_vars` keywords as the GMM estimator. Standard errors are clustered at the group level by default.
+On this panel FE-OLS and two-step FD-GMM agree closely on the GDP equation — own-persistence 0.2486 against 0.2513 — which is what the theory predicts once ``T`` is large enough for the ``O(1/T)`` Nickell bias to be small. With 29 periods per country the bias is on the order of a few percent, so the within estimator is a reasonable cross-check and its standard errors are noticeably tighter because it uses no instruments. The two disagree more on the human-capital equation (0.3495 against 0.2804), the most persistent series, where GMM's weak-instrument problem and FE-OLS's Nickell bias both bite hardest.
+
+The FE-OLS estimator accepts the same `dependent_vars`, `predet_vars`, and `exog_vars` keywords as the GMM estimator, but none of the instrument keywords, since it uses no instruments. Standard errors are clustered at the group level.
 
 ---
 
@@ -276,22 +295,27 @@ The FE-OLS estimator accepts the same `dependent_vars`, `predet_vars`, and `exog
 When the number of instruments is large relative to ``N``, standard errors become unreliable and the Hansen J-test loses power. Several options control instrument proliferation:
 
 ```@example pvar
-dep_vars = ["rgdpna", "emp", "hc"]
-
-# Restrict instrument lags to avoid proliferation
-m = estimate_pvar(pd, 2; dependent_vars=dep_vars,
-                  min_lag_endo=2, max_lag_endo=4)
-
-# Collapse instruments (one column per lag distance)
-m = estimate_pvar(pd, 2; dependent_vars=dep_vars, collapse=true)
-
-# PCA instrument reduction
-m = estimate_pvar(pd, 2; dependent_vars=dep_vars, pca_instruments=true)
-nothing # hide
+# The moment count does not depend on `steps`, so compare with the cheap one-step fit
+counts = map(kw -> estimate_pvar(pd, 1; dependent_vars=dep_vars,
+                                 steps=:onestep, kw...).n_instruments,
+             [NamedTuple(),                            # defaults: every available lag
+              (min_lag_endo=2, max_lag_endo=4),        # shallow lag window
+              (collapse=true,),                        # one column per lag distance
+              (collapse=true, max_lag_endo=6),         # collapse + shallow window
+              (pca_instruments=true,)])                # PCA reduction
+(defaults = counts[1], lag_window = counts[2], collapse = counts[3],
+ collapse_window = counts[4], pca = counts[5], n_groups = pd.n_groups)
 ```
 
+The defaults generate 1218 moment conditions from 38 countries — 32 instruments per group, an extreme case of the proliferation problem. Restricting the lag window to 2-4 cuts this to 243, still far too many. `collapse=true` replaces the block-diagonal design with one column per (variable, lag distance) pair, giving 84; combining it with `max_lag_endo=6` gives the 15 used throughout this page, comfortably below ``N``. PCA reduction lands at 27. The four routes are not equivalent — collapsing preserves the moment interpretation while PCA does not — but any of them is preferable to the default on a panel this narrow.
+
 !!! warning "Instrument Proliferation"
-    A rule of thumb: the number of instruments should not exceed ``N`` (the number of groups). When it does, the two-step GMM weighting matrix overfits the moment conditions, inflating the J-statistic and producing misleadingly small standard errors. Consider collapsing instruments or restricting lag depth.
+    Keep the instrument count below ``N``. When it exceeds ``N`` the sample moment
+    covariance has rank at most ``N`` and its inverse is a pseudo-inverse, so the two-step
+    weighting matrix overfits the moment conditions and the Hansen J degenerates: on this
+    panel the default specification returns ``J = 38.0000`` — exactly the number of groups
+    — with 1215 degrees of freedom and ``p = 1.0``, a result that carries no information.
+    `report` flags the condition with a `⚠ too many` marker next to the instrument count.
 
 ---
 
@@ -310,11 +334,20 @@ where:
 - ``P`` is the lower-triangular Cholesky factor of ``\Sigma``
 - ``J = [I_m \mid 0 \cdots 0]`` is the ``m \times mp`` selection matrix
 
-```@example pvar
-model = estimate_pvar(pd, 1; dependent_vars=["rgdpna", "emp", "hc"], steps=:twostep)
+`pvar_oirf` returns an ``(H+1) \times m \times m`` array indexed as `[horizon, response, shock]`:
 
-irfs = pvar_oirf(model, 20)   # H+1 x m x m array
+```@example pvar
+irfs = pvar_oirf(model, 10)
+round.(irfs[1, :, :], digits=4)     # impact matrix (h = 0)
 ```
+
+The impact matrix is lower triangular by construction — that is what the Cholesky ordering imposes. With the ordering `rgdpna, emp, hc`, a one-standard-deviation GDP-growth shock raises GDP growth by 3.14 percentage points on impact and employment growth by 1.22, while employment and human-capital shocks are defined to have no contemporaneous effect on GDP. The ordering is an identifying assumption, not a property of the data; reverse it and the impact matrix changes.
+
+```@example pvar
+round.(irfs[2, :, :], digits=4)     # one period later (h = 1)
+```
+
+Responses collapse within one period: the own-response of GDP growth falls from 0.0314 to 0.0067, and by ``h = 5`` every entry rounds to zero at four decimals. This is exactly what the stability analysis below predicts from companion moduli near 0.27 — growth rates, unlike levels, carry almost no propagation, so the interesting dynamics here are contemporaneous rather than persistent.
 
 **Generalized IRFs** (Pesaran & Shin 1998) do not depend on variable ordering:
 
@@ -327,8 +360,11 @@ where:
 - ``\sigma_{jj} = \Sigma[j,j]`` is the variance of the ``j``-th variable
 
 ```@example pvar
-girfs = pvar_girf(model, 20)   # H+1 x m x m array
+girfs = pvar_girf(model, 10)
+round.(girfs[1, :, :], digits=4)
 ```
+
+The generalized impact matrix is not triangular: an employment shock now moves GDP growth by 0.0208 on impact, because GIRFs condition on the historically observed correlation between shocks rather than zeroing it out. GIRFs sidestep the ordering choice at the cost of not corresponding to any single structural experiment — the columns are responses to *typical* correlated shocks, so they do not sum to a variance decomposition.
 
 ### Forecast Error Variance Decomposition
 
@@ -345,8 +381,11 @@ where:
 Each row sums to 1 (100% of forecast error variance accounted for).
 
 ```@example pvar
-decomp = pvar_fevd(model, 20)   # H+1 x m x m array
+decomp = pvar_fevd(model, 10)
+round.(decomp[11, :, :], digits=4)   # horizon 10
 ```
+
+At a ten-year horizon GDP growth is 98.2% own-shock, human-capital growth 97.8% own-shock, and employment growth splits 51.8/48.1 between GDP shocks and its own. The employment row is the substantive result: half of the unpredictable variation in employment growth is attributable to output shocks, consistent with employment responding to demand rather than driving it. Because the responses die out so fast, the decomposition at ``h = 10`` is nearly identical to the one at ``h = 1``.
 
 ### Stability Analysis
 
@@ -354,9 +393,17 @@ The system is stable if all eigenvalues of the companion matrix lie inside the u
 
 ```@example pvar
 stab = pvar_stability(model)
-stab.is_stable      # true if all |lambda| < 1
-stab.moduli          # moduli of eigenvalues (sorted descending)
 report(stab)
+```
+
+All three moduli — 0.2651, 0.2651, and 0.1585 — sit well inside the unit circle, so the estimated PVAR is stationary and its impulse responses converge to zero. This is expected: the panel was differenced with `apply_tcode(pwt, 5)`, so the variables are growth rates rather than levels. A modulus at or above 1 would mean the growth-rate system is itself explosive and would invalidate every IRF and FEVD on this page.
+
+```julia
+plot_result(model; view=:stability)
+```
+
+```@raw html
+<iframe src="../assets/plots/pvar_stability.html" style="width:100%;height:420px;border:1px solid #eee;border-radius:8px;" loading="lazy"></iframe>
 ```
 
 | Field | Type | Description |
@@ -371,16 +418,35 @@ report(stab)
 
 Group-level block bootstrap preserves the within-group time structure. For each bootstrap draw, ``N`` groups are resampled with replacement, the PVAR is re-estimated, and IRFs are computed. Quantile-based confidence intervals are constructed from the bootstrap distribution:
 
-```@example pvar
-model = estimate_pvar(pd, 1; dependent_vars=["rgdpna", "emp", "hc"], steps=:twostep)
+!!! warning "The bootstrap does not inherit the instrument controls"
+    `pvar_bootstrap_irf` re-estimates each draw carrying over `transformation`, `steps`,
+    `system_instruments`, and `system_constant` — but **not** `collapse`, `min_lag_endo`,
+    `max_lag_endo`, or `pca_instruments`. A model fitted with collapsed instruments is
+    therefore resampled with the full default instrument set, which changes the estimator
+    being bootstrapped and, on a panel like this one, makes each draw hundreds of times
+    more expensive. Until this is addressed, bootstrap the FE-OLS estimator, which uses no
+    instruments and is unaffected.
 
-# n_draws=20 keeps the documentation build fast; use 500+ in applied work
-boot = pvar_bootstrap_irf(model, 20;
+```@example pvar
+Random.seed!(7)
+# n_draws=200 is fast for FE-OLS; use 500+ for publication
+boot = pvar_bootstrap_irf(model_fe, 10;
     irf_type=:oirf,   # or :girf
-    n_draws=20,
-    ci=0.95
+    n_draws=200,
+    ci=0.90
 )
-nothing # hide
+
+(impact = round(boot.irf[1, 1, 1], digits=4),
+ lower  = round(boot.lower[1, 1, 1], digits=4),
+ upper  = round(boot.upper[1, 1, 1], digits=4))
+```
+
+The own-impact response of GDP growth is 0.0308 with a 90% interval of ``[0.0281, 0.0338]``, comfortably away from zero and closely matching the 0.0314 the GMM fit reports. Because groups rather than observations are resampled, the interval accounts for arbitrary serial correlation within a country while treating countries as exchangeable. The percentile interval is not bias-corrected, so at horizons where the response is near zero the point estimate can fall outside the band — at ``h = 2`` the point estimate rounds to 0.0000 against an interval of ``[-0.0007, 0.0012]``, which is a statement about bootstrap skewness rather than about the data.
+
+Pass the result to `plot_result` through the `ci` keyword to draw the bands on the IRF panel:
+
+```julia
+plot_result(model_fe; view=:oirf, H=10, ci=boot)
 ```
 
 The returned named tuple contains `boot.irf` (point estimate), `boot.lower` and `boot.upper` (CI bounds), and `boot.draws` (all bootstrap draws). All arrays have shape ``(H+1) \times m \times m``.
@@ -390,6 +456,7 @@ The returned named tuple contains `boot.irf` (point estimate), `boot.lower` and 
 | `irf_type` | `Symbol` | `:oirf` | `:oirf` (orthogonalized) or `:girf` (generalized) |
 | `n_draws` | `Int` | `500` | Number of bootstrap replications |
 | `ci` | `Real` | `0.95` | Confidence level |
+| `rng` | `AbstractRNG` | `Random.default_rng()` | Generator for the per-draw seeds |
 
 | Field | Type | Description |
 |-------|------|-------------|
@@ -416,13 +483,11 @@ where:
 - ``c`` is the number of instruments and ``b`` is the number of estimated parameters
 
 ```@example pvar
-model = estimate_pvar(pd, 1; dependent_vars=["rgdpna", "emp", "hc"], steps=:twostep)
-
 j = pvar_hansen_j(model)
 report(j)
 ```
 
-Rejection suggests instrument invalidity or model misspecification. Non-rejection does not validate the instruments --- it only means the data cannot reject the moment conditions at the given sample size.
+The J-statistic of 18.61 on 12 degrees of freedom gives ``p = 0.0983``, so the overidentifying restrictions survive at the 5% level but not comfortably — a p-value in the 0.05-0.10 band is a signal to check the specification rather than a clean pass. The degrees of freedom are ``c - b`` computed per equation (15 instruments against 3 parameters), which is why `df` is 12 rather than ``15 - 9``. Rejection suggests instrument invalidity or model misspecification; non-rejection does not validate the instruments, it only means the data cannot reject the moment conditions at this sample size.
 
 | Field | Type | Description |
 |-------|------|-------------|
@@ -433,75 +498,109 @@ Rejection suggests instrument invalidity or model misspecification. Non-rejectio
 | `n_instruments` | `Int` | Number of moment conditions ``c`` |
 | `n_params` | `Int` | Number of estimated parameters ``b`` |
 
+`pvar_hansen_j` throws an `ArgumentError` on an `estimate_pvar_feols` model — the within estimator uses no moment conditions, so there is nothing to overidentify.
+
 ### Andrews-Lu MMSC
 
 Andrews & Lu (2001) Model and Moment Selection Criteria extend information criteria to GMM settings:
 
 ```math
 \text{MMSC-BIC} = J - (c - b) \ln(n), \quad
-\text{MMSC-AIC} = J - 2(c - b)
+\text{MMSC-AIC} = J - 2(c - b), \quad
+\text{MMSC-HQIC} = J - \kappa (c - b) \ln \ln(n)
 ```
 
 where:
 - ``J`` is the Hansen J-statistic
 - ``c`` is the number of instruments, ``b`` is the number of parameters, ``n`` is the number of observations
+- ``\kappa > 2`` is the Hannan-Quinn constant, set by the `hq_criterion` keyword (default 2.1)
 
-Lower values are preferred. These criteria penalize overidentification, balancing model fit against instrument proliferation.
+Lower values are preferred. Unlike an ordinary information criterion these penalize *overidentification* rather than parameter count, so a specification with more valid instruments scores better at equal fit:
 
 ```@example pvar
 mmsc = pvar_mmsc(model)
-(bic = mmsc.bic, aic = mmsc.aic, hqic = mmsc.hqic)
+(bic = round(mmsc.bic, digits=3), aic = round(mmsc.aic, digits=3),
+ hqic = round(mmsc.hqic, digits=3))
 ```
+
+All three criteria are strongly negative because the overidentification term ``(c - b) \ln(n)`` dominates a J-statistic of 18.61. The absolute values carry no meaning; only comparisons across specifications estimated on the same sample do.
 
 ---
 
 ## Lag Selection
 
-The `pvar_lag_selection` function compares MMSC criteria across candidate lag orders to select the optimal specification:
+The `pvar_lag_selection` function estimates a PVAR at each candidate lag order, computes the MMSC criteria for each, and reports the minimizing lag. Any keyword accepted by `estimate_pvar` is forwarded, so the instrument controls must be repeated here to keep the comparison meaningful:
 
 ```@example pvar
+sel = pvar_lag_selection(pd, 4; dependent_vars=dep_vars,
+                         collapse=true, max_lag_endo=6)
+sel.table
+```
 
-sel = pvar_lag_selection(pd, 4; dependent_vars=["rgdpna", "emp", "hc"])
+```@example pvar
 (best_bic = sel.best_bic, best_aic = sel.best_aic, best_hqic = sel.best_hqic)
 ```
 
-The function estimates PVAR models for lags 1 through the maximum candidate, computes MMSC criteria for each, and returns the lag order that minimizes each criterion.
+All three criteria select ``p = 1``, and the BIC column deteriorates monotonically from ``-65.02`` at one lag to ``-18.49`` at four. Annual growth rates carry little serial dependence beyond one lag, so the extra coefficients buy no fit while each additional lag consumes instruments. If estimation fails at some candidate lag the corresponding criteria are set to infinity and the row prints as `—`, so a table with dashes means those specifications could not be estimated, not that they scored badly.
+
+The returned named tuple carries `table` (the formatted comparison), `best_bic`, `best_aic`, `best_hqic` (the minimizing lag orders), and `models` (the fitted `PVARModel` at each lag).
 
 ---
 
 ## Complete Example
 
 ```@example pvar
-# Load Penn World Table and convert to growth rates
-dep_vars = ["rgdpna", "emp", "hc"]
+# Lag selection across candidate orders
+sel = pvar_lag_selection(pd, 3; dependent_vars=dep_vars,
+                         collapse=true, max_lag_endo=6)
+sel.table
+```
 
-# Lag selection
-sel = pvar_lag_selection(pd, 3; dependent_vars=dep_vars)
-
-# Estimate via two-step FD-GMM
-model = estimate_pvar(pd, 1; dependent_vars=dep_vars, steps=:twostep)
+```@example pvar
+# Estimate at the selected lag via two-step FD-GMM
+model = estimate_pvar(pd, sel.best_bic; dependent_vars=dep_vars, steps=:twostep,
+                      collapse=true, max_lag_endo=6)
 report(model)
+```
 
-# Specification tests
+```@example pvar
+# Instrument validity
 j = pvar_hansen_j(model)
 report(j)
+```
 
-# Stability check
+```@example pvar
+# Stationarity of the estimated system
 stab = pvar_stability(model)
 report(stab)
+```
 
+```@example pvar
 # Structural analysis
 irfs = pvar_oirf(model, 10)
 decomp = pvar_fevd(model, 10)
-
-# Bootstrap confidence intervals (n_draws=20 for a fast build; use 500+ in applied work)
-boot = pvar_bootstrap_irf(model, 10; n_draws=20, ci=0.90)
-
-# Academic references
-refs(model)
+round.(decomp[11, :, :], digits=4)
 ```
 
-The `model` object stores the GMM coefficient estimates with Windmeijer-corrected standard errors, per-equation coefficient tables, and all GMM internals needed for specification testing. The Hansen J-test evaluates instrument validity, while the stability analysis confirms that the companion matrix eigenvalues lie inside the unit circle. The orthogonalized IRFs trace out the dynamic transmission of shocks through the GDP-employment-human capital system, and the bootstrap provides pointwise confidence intervals that account for estimation uncertainty. The FEVD quantifies how much of the forecast error variance in each variable is attributable to each structural shock at different horizons.
+```@example pvar
+# Bootstrap confidence intervals (FE-OLS: see the caveat in the bootstrap section)
+Random.seed!(7)
+boot = pvar_bootstrap_irf(model_fe, 10; n_draws=200, ci=0.90)
+(impact = round(boot.irf[1, 1, 1], digits=4),
+ ci = (round(boot.lower[1, 1, 1], digits=4), round(boot.upper[1, 1, 1], digits=4)))
+```
+
+```@example pvar
+# Academic references for the estimator
+print(refs(model))
+```
+
+The workflow runs in one direction: choose the lag order, estimate, validate, then interpret. All three MMSC criteria select one lag, so the model is a PVAR(1) in growth rates estimated by two-step FD-GMM with 15 collapsed instruments against 38 countries. The Hansen J of 18.61 on 12 degrees of freedom does not reject the overidentifying restrictions at 5%, and all companion moduli lie near 0.27, so the system is comfortably stationary and its impulse responses converge. The FEVD then delivers the economic content: output and human capital are essentially own-shock driven at every horizon, while roughly half of the forecast error variance in employment growth traces back to output shocks. The FE-OLS block bootstrap confirms that the contemporaneous own-effect of an output shock, 0.0308, is estimated precisely enough to exclude zero at the 90% level.
+
+!!! warning "`refs` returns a String"
+    Call `print(refs(model))`, not `refs(model)`. The single-argument form builds the
+    bibliography into a `String` and returns it, so evaluating it bare renders the escaped
+    literal (`"Holtz-Eakin, Douglas...\n"`) instead of the formatted list.
 
 ---
 
@@ -509,13 +608,19 @@ The `model` object stores the GMM coefficient estimates with Windmeijer-correcte
 
 1. **Nickell bias in FE-OLS**: The within estimator is biased of order ``O(1/T)`` in dynamic panels (Nickell 1981). For panels with ``T < 20``, FE-OLS overestimates the persistence of the lagged dependent variable. Use GMM estimation (`estimate_pvar`) instead of `estimate_pvar_feols` when the time dimension is short relative to the cross-section.
 
-2. **Instrument count exceeding N**: When the number of instruments exceeds ``N`` (the number of groups), the Hansen J-test loses power and standard errors become unreliable. Use `collapse=true`, restrict `max_lag_endo`, or apply `pca_instruments=true` to reduce instrument count. A rule of thumb: keep the instrument count below ``N``.
+2. **Accepting the default instrument set**: The block-diagonal design generates one instrument per available lag at every period, which on this 38-country, 30-period panel means 1218 moment conditions. Always pass `collapse=true` and a finite `max_lag_endo` unless ``N`` is large; check `model.n_instruments` against `model.n_groups` before reading anything else.
 
-3. **Hansen J-test interpretation**: A high p-value (non-rejection) does not prove instrument validity --- it only means the data cannot reject the moment conditions. Conversely, with many instruments, the J-test almost never rejects even when some instruments are invalid. Always report the instrument count alongside the J-statistic.
+3. **Instrument count exceeding N**: Once the moment count passes ``N`` the moment covariance is rank-deficient, the Hansen J degenerates to ``J = N`` with ``p = 1``, and standard errors become unreliable. `report` marks this with `⚠ too many`.
 
-4. **Unbalanced panels**: First-differencing loses one observation per gap in the panel. Forward orthogonal deviations (`transformation=:fod`) handle unbalanced panels more efficiently by preserving orthogonality of the transformed errors. Use `:fod` when the panel has missing periods or unequal group sizes.
+4. **Hansen J-test interpretation**: A high p-value (non-rejection) does not prove instrument validity — it only means the data cannot reject the moment conditions. Conversely, with many instruments the J-test almost never rejects even when some instruments are invalid. Always report the instrument count alongside the J-statistic.
 
-5. **System GMM stationarity assumption**: Blundell-Bond system GMM requires that first differences are uncorrelated with fixed effects --- a mean stationarity condition. If the data exhibit trending behavior or structural breaks, the additional level-equation instruments are invalid and FD-GMM is preferred.
+5. **Comparing MMSC across different instrument sets**: The criteria penalize ``c - b``, so a specification with more instruments scores differently for reasons unrelated to lag length. Hold `collapse`, `min_lag_endo`, and `max_lag_endo` fixed across the candidates being compared, and pass them to `pvar_lag_selection` explicitly.
+
+6. **Unbalanced panels**: First-differencing loses one observation per gap in the panel. Forward orthogonal deviations (`transformation=:fod`) handle unbalanced panels more efficiently by preserving orthogonality of the transformed errors. Use `:fod` when the panel has missing periods or unequal group sizes.
+
+7. **System GMM stationarity assumption**: Blundell-Bond system GMM requires that first differences are uncorrelated with fixed effects — a mean stationarity condition. If the data exhibit trending behavior or structural breaks, the additional level-equation instruments are invalid and FD-GMM is preferred. A large gap between FD and system estimates on the most persistent equation is the warning sign.
+
+8. **Reading a Cholesky IRF as ordering-free**: The impact matrix of `pvar_oirf` is lower triangular by assumption. Reorder `dependent_vars` and the impact responses change. Use `pvar_girf` when no defensible ordering exists, accepting that generalized responses do not decompose variance.
 
 ---
 
@@ -532,6 +637,9 @@ The `model` object stores the GMM coefficient estimates with Windmeijer-correcte
 
 - Blundell, Richard, and Stephen Bond. 1998. "Initial Conditions and Moment Restrictions in Dynamic Panel Data Models."
   *Journal of Econometrics* 87 (1): 115--143. [DOI](https://doi.org/10.1016/S0304-4076(98)00009-8)
+
+- Feenstra, Robert C., Robert Inklaar, and Marcel P. Timmer. 2015. "The Next Generation of the Penn World Table."
+  *American Economic Review* 105 (10): 3150--3182. [DOI](https://doi.org/10.1257/aer.20130954)
 
 - Hansen, Lars Peter. 1982. "Large Sample Properties of Generalized Method of Moments Estimators."
   *Econometrica* 50 (4): 1029--1054. [DOI](https://doi.org/10.2307/1912775)
