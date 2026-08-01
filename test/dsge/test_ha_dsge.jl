@@ -3060,15 +3060,10 @@ end
         #     z = a − 1, so the answer is λ = (−1, 0, 0, 0).
         pd4 = fit_parametric_density([1.0, 1.0, 2.0, 9.0]; bounds=(0.0, 40.0),
                                      n_segments=400, n_quad=6, tol=1e-12)
-        # `converged` compares an absolute internal residual against `tol`, and the
-        # FOUR-moment basis is the ill-conditioned one (Hessian cond ~1e8), so that
-        # residual is not portable: 4.1e-15 on 1.12/arm64 and 6.5e-15 on 1.10/arm64,
-        # but above the 1e-12 request on Windows. The same platform spread is already
-        # documented for the round-trip testset below. What this testset actually
-        # claims is POINTWISE accuracy, and that is stable everywhere measured —
-        # lambda[1] = -1 to 12 digits and a max relative density error of 5.1e-13,
-        # against the rtol=1e-6 asserted below. Assert a hard residual bound instead
-        # of the flag.
+        # `tol` is RELATIVE to the target scale since #514, so the flag is portable
+        # on the ill-conditioned four-moment basis again. Measured residual 4.1e-15
+        # against an effective tolerance of 9e-12 — 2177x of headroom.
+        @test pd4.converged
         @test pd4.residual < 1e-6
         @test pd4.lambda[1] ≈ -1.0 atol=1e-8
         @test all(abs.(pd4.lambda[2:end]) .< 1e-8)
@@ -3080,25 +3075,63 @@ end
     @testset "moment round trip (fit ∘ moments = identity)" begin
         nodes, wts = MacroEconometricModels._composite_quadrature(
             collect(range(-6.0, 12.0; length=301)), 5)
-        # `converged` compares an internal residual against `tol`, and for the
-        # FOUR-moment basis — the ill-conditioned one, whose Hessian reaches cond
-        # 1e8 — that residual spans five orders of magnitude across platforms:
-        # 3.6e-16 on 1.10/arm64, 8.9e-11 on 1.12/arm64 (89% of a 1e-10 tolerance),
-        # and above 1e-10 on Windows. No absolute tolerance makes the flag portable
-        # there, so assert it only for the well-conditioned bases.
-        #
-        # What the round trip actually claims is ACCURACY, and that IS stable: the
-        # recovered moments agree to <= 3e-11 everywhere measured, against the
-        # rtol=1e-7 asserted below for every case including four moments.
+        # `converged` used to compare an ABSOLUTE residual against `tol`, which the
+        # four-moment basis (Hessian cond ~1e8) could not meet portably — its
+        # residual is 2.8e-10 here against a 1e-10 request, so the flag was asserted
+        # only for the well-conditioned bases. Since #514 the test is relative to the
+        # target scale max(1, max|mu|), which is 3.5 for this basis, so 2.8e-10 sits
+        # inside an effective 3.5e-10 and every basis can assert the flag again.
         for targets in ([2.0, 4.0], [2.0, 4.0, 3.0], [1.0, 2.0, 1.5, 14.0])
             pd = MacroEconometricModels._fit_parametric_density(
                 copy(targets), nodes, wts; tol=1e-10)
-            length(targets) <= 3 && @test pd.converged
+            @test pd.converged
             @test pd.residual < 1e-6            # a hard bound for every basis
             @test parametric_moments(pd, nodes, wts) ≈ targets rtol=1e-7
             # The density integrates to one over the reference interval.
             @test sum(wts .* [parametric_density(pd, a) for a in nodes]) ≈ 1.0 atol=1e-10
         end
+    end
+
+    @testset "#514: convergence is relative to the target scale, not absolute" begin
+        MEM = MacroEconometricModels
+        # The residual is a moment mismatch in STANDARDIZED units, so an absolute
+        # threshold demands more relative precision the larger the targets are --
+        # and they are largest exactly where the basis is worst conditioned.
+        for (mom, want) in (([0.0, 1.0], 1.0), ([2.0, 4.0, 3.0], 1.0),
+                            ([1.0, 2.0, 1.5, 14.0], 3.5), ([1.0, 1.0, 2.0, 9.0], 9.0))
+            _, _, mu = MEM._standardized_targets(collect(Float64, mom))
+            @test max(1.0, maximum(abs, mu)) ≈ want
+        end
+
+        # Every basis converges, including the two four-moment ones that could not
+        # meet an absolute tolerance.
+        pd4 = fit_parametric_density([1.0, 1.0, 2.0, 9.0]; bounds=(0.0, 40.0),
+                                     n_segments=400, n_quad=6, tol=1e-12)
+        @test pd4.converged
+        @test pd4.residual < 1e-12 * 9.0        # inside the RELATIVE tolerance
+
+        # A tolerance no arithmetic can meet still converges, because below
+        # sqrt(eps) relative the residual is gradient noise rather than a mismatch
+        # the solve could act on. The fit is fully accurate there.
+        pd_floor = fit_parametric_density([1.0, 1.0, 2.0, 9.0]; bounds=(0.0, 40.0),
+                                          n_segments=400, n_quad=6, tol=1e-30)
+        @test pd_floor.converged
+        @test pd_floor.residual < sqrt(eps(Float64)) * 9.0
+        @test pd_floor.lambda[1] ≈ -1.0 atol=1e-8
+        for a in (0.0, 1.0, 5.0)
+            @test parametric_density(pd_floor, a) ≈ exp(-a) rtol=1e-6
+        end
+
+        # ... and that leniency must NOT rescue a fit that genuinely failed. Both
+        # of these stall at an O(1) residual, nowhere near the floor.
+        infeasible = fit_parametric_density([0.0, 1.0, 3.0, 1.0]; bounds=(-8.0, 8.0),
+                                            tol=1e-30)
+        @test !infeasible.converged
+        @test infeasible.residual > 1.0
+        starved = fit_parametric_density([1.0, 1.0, 2.0, 9.0]; bounds=(0.0, 40.0),
+                                         n_segments=400, n_quad=6, max_iter=1)
+        @test !starved.converged
+        @test starved.residual > 1.0
     end
 
     @testset "analytic gradient/Hessian match ForwardDiff" begin
