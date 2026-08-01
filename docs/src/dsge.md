@@ -2,7 +2,7 @@
 
 Dynamic Stochastic General Equilibrium (DSGE) models describe an economy as the equilibrium outcome of optimizing agents facing stochastic shocks. **MacroEconometricModels.jl** covers the full workflow: the `@dsge` macro parses equilibrium conditions written with time-indexed variables, `compute_steady_state` locates the deterministic steady state, `linearize` produces the Sims (2002) canonical form, and `solve` dispatches to one of seven solution algorithms. Impulse responses, variance decompositions, simulation, historical decomposition, and structural estimation all operate on the resulting solution object.
 
-This page owns the three stages every model shares --- specification, steady state, and linearization --- and routes to the child page that owns each solution and estimation method. Representative-agent models divide by solution class: linear first-order solvers, higher-order and global methods, and occasionally binding constraints. Heterogeneous-agent, overlapping-generations, and continuous-time models carry their own solvers and their own pages. A 24-model replication suite validates every stage against Dynare 6.5+.
+This page owns the three stages every representative-agent model shares --- specification, steady state, and linearization --- and routes to the child page that owns each solution and estimation method. Those children divide by solution class: linear first-order solvers, higher-order and global methods, and occasionally binding constraints. Models that abandon the representative agent altogether --- heterogeneous-agent, overlapping-generations, and continuous-time --- bypass this pipeline entirely and are grouped under the [Heterogeneity & Continuous Time](@ref dsge_heterogeneity) sub-hub. A 24-model replication suite validates every stage against Dynare 6.5+.
 
 All results integrate with `plot_result()` for interactive D3.js visualization and `report()` for publication-quality output.
 
@@ -82,7 +82,7 @@ The economic question determines the solution class, and the solution class dete
 | `:pfi` | Global | Policy function iteration / Euler-equation time iteration (Coleman 1990) | [Nonlinear Methods](@ref dsge_nonlinear) |
 | `:perfect_foresight` | Deterministic | Newton solver for perfect-foresight paths | [Constraints](@ref dsge_constraints) |
 
-The symbol `:vfi` is accepted as a historical alias of `:pfi` (Euler-equation time iteration, Coleman 1990) --- despite the name it does **not** perform value function iteration. Heterogeneous-agent, overlapping-generations, and continuous-time models use their own entry points: `solve(spec; method=:ssj)`, `blanchard_steady_state`, and `ct_steady_state` respectively.
+The symbol `:vfi` is accepted as a historical alias of `:pfi` (Euler-equation time iteration, Coleman 1990) --- despite the name it does **not** perform value function iteration. The families under [Heterogeneity & Continuous Time](@ref dsge_heterogeneity) use their own entry points instead: `solve(spec; method=:ssj)`, `blanchard_steady_state`, and `ct_steady_state` respectively.
 
 ---
 
@@ -93,9 +93,7 @@ The symbol `:vfi` is accepted as a historical alias of `:pfi` (Euler-equation ti
 - [Constraints](@ref dsge_constraints) --- perfect-foresight paths, constrained steady states, and OccBin occasionally binding constraints (Guerrieri & Iacoviello 2015)
 - [Estimation](@ref dsge_estimation) --- GMM IRF matching (one-step, two-step, iterative, CU) and Bayesian estimation via SMC, SMC``^2``, and Random-Walk Metropolis-Hastings
 - [Historical Decomposition](@ref dsge_hd_page) --- Kalman-smoother shock attribution for linear models, FFBSi particle smoother for nonlinear models, and posterior bands
-- [Heterogeneous Agents](@ref dsge_ha) --- Krusell-Smith and one- and two-asset HANK models via sequence-space Jacobian, Reiter, and Krusell-Smith solvers
-- [Overlapping Generations](@ref dsge_olg) --- Blanchard (1985) perpetual-youth models, non-Ricardian debt, and age-dependent life-cycle EGM
-- [Continuous Time](@ref dsge_continuous) --- Achdou et al. (2022) HJB and Kolmogorov-Forward finite differences, MIT shocks, and two-asset HANK
+- [Heterogeneity & Continuous Time](@ref dsge_heterogeneity) --- sub-hub fronting the three families that drop the representative agent: heterogeneous-agent, overlapping-generations, and continuous-time models
 
 ---
 

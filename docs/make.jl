@@ -67,9 +67,12 @@ makedocs(;
             "Constraints" => "dsge_constraints.md",
             "Estimation" => "dsge_estimation.md",
             "Historical Decomposition" => "dsge_hd.md",
-            "Heterogeneous Agents" => "dsge_ha.md",
-            "Overlapping Generations" => "dsge_olg.md",
-            "Continuous Time" => "dsge_continuous.md",
+            "Heterogeneity & Continuous Time" => [
+                "Overview" => "dsge_heterogeneity.md",
+                "Heterogeneous Agents" => "dsge_ha.md",
+                "Overlapping Generations" => "dsge_olg.md",
+                "Continuous Time" => "dsge_continuous.md",
+            ],
         ],
         "Input-Output Analysis" => [
             "Overview" => "io.md",
