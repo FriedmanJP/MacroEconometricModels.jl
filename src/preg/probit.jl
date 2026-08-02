@@ -300,7 +300,8 @@ end
 """
 Entity-clustered (or pure-information) VCE for RE/CRE probit `theta = [β; log σ_u]`.
 Numerical Hessian of the total loglik supplies the bread; under `:cluster` the meat is
-the outer product of per-group scores (panel-robust sandwich).
+the outer product of per-group scores (panel-robust sandwich) carrying the pooled path's
+`G/(G−1)·(n−1)/(n−k)` finite-sample correction.
 """
 function _re_probit_vcov(theta::Vector{T}, y::Vector{T}, X_c::Matrix{T},
                          groups::Vector{Int}, unique_groups::Vector{Int},
@@ -333,6 +334,13 @@ function _re_probit_vcov(theta::Vector{T}, y::Vector{T}, X_c::Matrix{T},
         _, s_g = _re_probit_loglik(theta, y, X_c, groups, [g],
                                     Dict(g => group_obs[g]), nodes, weights)
         meat .+= s_g * s_g'
+    end
+    # Same finite-sample correction as the pooled path (_panel_cluster_vcov), so the
+    # dof convention does not silently change between :pooled and :re/:cre (#542).
+    G = length(unique_groups)
+    n = length(y)
+    if G > 1
+        meat .*= T(G) / T(G - 1) * T(n - 1) / T(max(n - n_params, 1))
     end
     V = bread * meat * bread
     Matrix{T}((V .+ V') ./ 2)

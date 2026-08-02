@@ -75,20 +75,26 @@ function _first_stage_f(X::Matrix{T}, Z::Matrix{T},
 end
 
 """
-    _cragg_donald_f(X, Z, endogenous) -> T
+    _cragg_donald_f(X, Z, endogenous; df_absorb=0) -> T
 
 Cragg-Donald (1993) weak-instrument F: the minimum generalized eigenvalue of the concentration
 matrix, scaled by the number of excluded instruments q. Generalizes the partial first-stage F
 to multiple endogenous regressors under homoskedasticity; for a single endogenous regressor it
 equals `_first_stage_f`. Returns `NaN` if under-identified.
+
+`df_absorb` is the number of fixed effects partialled out of `X`/`Z` before the call (they
+cost degrees of freedom that the design matrix no longer shows). On a within-demeaned panel
+pass the number of units, matching `xtivreg2, fe`; the default 0 leaves cross-sectional
+behaviour unchanged.
 """
 function _cragg_donald_f(X::Matrix{T}, Z::Matrix{T},
-                         endogenous::Vector{Int}) where {T<:AbstractFloat}
+                         endogenous::Vector{Int};
+                         df_absorb::Int=0) where {T<:AbstractFloat}
     n, m = size(Z); k = size(X, 2); k_endog = length(endogenous)
     k_endog == 0 && return T(NaN)
     incl = setdiff(1:k, endogenous)
     W = X[:, incl]; Xen = X[:, endogenous]
-    q = m - length(incl); df2 = n - m
+    q = m - length(incl); df2 = n - m - df_absorb
     (q < k_endog || df2 <= 0) && return T(NaN)
 
     Xt = _partial_out(Xen, W)                       # M_W · X_endog
@@ -103,20 +109,24 @@ function _cragg_donald_f(X::Matrix{T}, Z::Matrix{T},
 end
 
 """
-    _kleibergen_paap_f(X, Z, endogenous; cov_type=:hc1) -> T
+    _kleibergen_paap_f(X, Z, endogenous; cov_type=:hc1, df_absorb=0) -> T
 
 Kleibergen-Paap (2006) rk Wald F: the heteroskedasticity-robust weak-instrument F. For a single
 endogenous regressor this is exactly the HC-robust first-stage F (reduces to Cragg-Donald under
 homoskedasticity); with several endogenous regressors the per-regressor minimum robust F is
 reported. Returns `NaN` if under-identified.
+
+`df_absorb` counts fixed effects partialled out before the call and enters both the
+identification check and the `:hc1` small-sample factor (`xtivreg2, fe` convention).
 """
 function _kleibergen_paap_f(X::Matrix{T}, Z::Matrix{T}, endogenous::Vector{Int};
-                            cov_type::Symbol=:hc1) where {T<:AbstractFloat}
+                            cov_type::Symbol=:hc1,
+                            df_absorb::Int=0) where {T<:AbstractFloat}
     n, m = size(Z); k = size(X, 2)
     length(endogenous) == 0 && return T(NaN)
     incl = setdiff(1:k, endogenous)
     W = X[:, incl]
-    q = m - length(incl); df2 = n - m
+    q = m - length(incl); df2 = n - m - df_absorb
     (q <= 0 || df2 <= 0) && return T(NaN)
 
     Zt = _partial_out(Z, W)
@@ -137,7 +147,7 @@ function _kleibergen_paap_f(X::Matrix{T}, Z::Matrix{T}, endogenous::Vector{Int};
                 Vg[a, b] += Zb[i, a] * Zb[i, b] * w2
             end
         end
-        cov_type == :hc1 && (Vg .*= T(n) / T(n - m))
+        cov_type == :hc1 && (Vg .*= T(n) / T(df2))
         wald = dot(gamma, robust_inv(Symmetric(Vg)) * gamma)
         f_min = min(f_min, wald / T(r))
     end

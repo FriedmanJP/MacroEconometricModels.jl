@@ -64,25 +64,31 @@ end
 # =============================================================================
 
 """
-    _panel_weak_iv_diagnostics(X, Z, endogenous; cov_type=:cluster) -> (cd, kp, sy)
+    _panel_weak_iv_diagnostics(X, Z, endogenous; cov_type=:cluster, df_absorb=0) -> (cd, kp, sy)
 
 Cragg-Donald F, Kleibergen-Paap rk Wald F, and Stock-Yogo 10% critical value evaluated
 on the *already transformed* panel design (`X`, `Z` demeaned / differenced / quasi-demeaned).
-`endogenous` indexes the endogenous columns of `X`. Returns `(nothing, nothing, nothing)`
-on failure / underidentification.
+`endogenous` indexes the endogenous columns of `X`. `df_absorb` is the number of fixed
+effects the transformation removed from the design and is subtracted from the F denominator
+degrees of freedom (`xtivreg2, fe`). Returns `(nothing, nothing, nothing)` on failure /
+underidentification.
 """
 function _panel_weak_iv_diagnostics(X::Matrix{T}, Z::Matrix{T}, endogenous::Vector{Int};
-                                    cov_type::Symbol=:cluster) where {T<:AbstractFloat}
+                                    cov_type::Symbol=:cluster,
+                                    df_absorb::Int=0) where {T<:AbstractFloat}
     isempty(endogenous) && return (nothing, nothing, nothing)
     cd = try
-        v = _cragg_donald_f(X, Z, endogenous)
+        v = _cragg_donald_f(X, Z, endogenous; df_absorb=df_absorb)
         isfinite(v) ? v : nothing
     catch
         nothing
     end
+    # kp_cov selects the small-sample factor only: the KP meat is heteroskedasticity-robust
+    # in every branch — a cluster-robust rk statistic is not implemented, so under
+    # cov_type=:cluster the reported KP F ignores within-entity dependence.
     kp_cov = cov_type == :ols ? :hc0 : :hc1
     kp = try
-        v = _kleibergen_paap_f(X, Z, endogenous; cov_type=kp_cov)
+        v = _kleibergen_paap_f(X, Z, endogenous; cov_type=kp_cov, df_absorb=df_absorb)
         isfinite(v) ? v : nothing
     catch
         nothing
@@ -198,7 +204,9 @@ function _estimate_fe_iv(pd::PanelData{T}, y::Vector{T}, X_exog::Matrix{T},
     # Included exogenous lead the within-demeaned instrument set: W = X_exog columns.
     first_stage_f = _panel_first_stage_f(X_endog_dm, Z_dm; n_incl=size(X_exog, 2))
     endog_idx = collect(size(X_exog, 2)+1:k)
-    cd_f, kp_f, sy_cv = _panel_weak_iv_diagnostics(X_dm, Z_dm, endog_idx; cov_type=cov_type)
+    # Within-demeaning estimates one mean per unit, so N unit effects are absorbed.
+    cd_f, kp_f, sy_cv = _panel_weak_iv_diagnostics(X_dm, Z_dm, endog_idx; cov_type=cov_type,
+                                                   df_absorb=length(unique_groups))
 
     # Sargan test
     sargan_s, sargan_p = _panel_sargan_test(resid_dm, Z_dm, k, cov_type, groups)
@@ -346,6 +354,8 @@ function _estimate_fd_iv(pd::PanelData{T}, y::Vector{T}, X_exog::Matrix{T},
     first_stage_f = _panel_first_stage_f(dX_endog, dZ_c; n_incl=1 + size(X_exog, 2))
     # dX_c = [1 | dX_exog | dX_endog]; endogenous cols start after intercept+exog
     endog_idx_fd = collect(2 + size(X_exog, 2):size(dX_c, 2))
+    # Differencing removes the unit effects without estimating them; the one parameter the
+    # transformed design does spend (the constant) is an explicit column, so df_absorb = 0.
     cd_f, kp_f, sy_cv = _panel_weak_iv_diagnostics(dX_c, dZ_c, endog_idx_fd; cov_type=cov_type)
 
     # Sargan test
@@ -493,6 +503,8 @@ function _estimate_re_iv(pd::PanelData{T}, y::Vector{T}, X_exog::Matrix{T},
     # 1 + #X_exog columns are the (quasi-demeaned) included exogenous — heuristic partial-F.
     first_stage_f = _panel_first_stage_f(X_endog_qd, Z_ec2sls_c; n_incl=1 + size(X_exog, 2))
     endog_idx_re = collect(2 + size(X_exog, 2):size(X_qd_c, 2))
+    # Quasi-demeaning keeps the constant in the design and estimates no unit effects, so no
+    # degrees of freedom are hidden from the F denominator.
     cd_f, kp_f, sy_cv = _panel_weak_iv_diagnostics(X_qd_c, Z_ec2sls_c, endog_idx_re; cov_type=cov_type)
 
     # Sargan test
@@ -708,6 +720,7 @@ function _estimate_hausman_taylor(pd::PanelData{T}, y::Vector{T},
     k_ti_ex = length(ti_exog_names); k_ti_en = length(ti_endog_names)
     endog_idx_ht = vcat(collect(2 + k_tv_ex:1 + k_tv_ex + k_tv_en),
                         collect(2 + k_tv_ex + k_tv_en + k_ti_ex:1 + k_tv_ex + k_tv_en + k_ti_ex + k_ti_en))
+    # As for RE: quasi-demeaning retains the constant and absorbs no unit effects.
     cd_f, kp_f, sy_cv = _panel_weak_iv_diagnostics(X_qd_c, Z_qd_c, endog_idx_ht; cov_type=cov_type)
 
     # Sargan test

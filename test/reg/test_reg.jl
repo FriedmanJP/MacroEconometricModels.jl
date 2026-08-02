@@ -2074,7 +2074,7 @@ end
         @test_throws ArgumentError predict(ms, ones(n, 3))
         io = IOBuffer(); show(io, mv); @test occursin("QuantileRegModel", String(take!(io)))
         report(mv)
-        refs(mv)
+        @test !isempty(sprint(io2 -> refs(io2, mv)))
     end
 
     @testset "input validation" begin

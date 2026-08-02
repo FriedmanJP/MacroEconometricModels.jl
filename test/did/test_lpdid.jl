@@ -512,4 +512,35 @@ end
         @test r.nocomp == true
     end
 
+    # =========================================================================
+    # #540: IPW reweighting must also weight the time demeaning
+    # =========================================================================
+    @testset "IPW reweighting targets the equally-weighted ATE (#540)" begin
+        # Noise-free design: 30 units adopt at t=3 with effect 1.0 (p_3 = 0.30),
+        # 10 adopt at t=5 with effect 3.0 (p_5 = 1/7), 60 never-treated.
+        n_units, n_periods = 100, 6
+        cohort = vcat(fill(3, 30), fill(5, 10), fill(0, 60))
+        rows = NamedTuple[]
+        for i in 1:n_units, t in 1:n_periods
+            g = cohort[i]
+            eff = g > 0 && t >= g ? (g == 3 ? 1.0 : 3.0) : 0.0
+            push!(rows, (id=i, t=t, y=0.5i + 0.1t + eff, gcol=Float64(g)))
+        end
+        pd = xtset(DataFrame(rows), :id, :t)
+
+        r_un = estimate_lp_did(pd, :y, :gcol, 0; pre_window=1, post_window=0, reweight=false)
+        r_rw = estimate_lp_did(pd, :y, :gcol, 0; pre_window=1, post_window=0, reweight=true)
+        h0 = findfirst(==(0), r_un.event_times)
+
+        # Unweighted LP-DiD aggregates the two treatment periods with the
+        # variance weights N_t p_t(1 − p_t)
+        w_var = [100 * 0.3 * 0.7, 70 * (10 / 70) * (1 - 10 / 70)]
+        @test isapprox(r_un.coefficients[h0], sum(w_var .* [1.0, 3.0]) / sum(w_var); atol=1e-6)
+
+        # With IPW weights applied to BOTH the demeaning and the WLS transform the
+        # period weights collapse to N_t: (100·1 + 70·3)/170. Demeaning with
+        # unweighted period means instead returns 1.95361 (a third estimand).
+        @test isapprox(r_rw.coefficients[h0], 310 / 170; atol=1e-6)
+    end
+
 end

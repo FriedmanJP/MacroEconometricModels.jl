@@ -193,10 +193,21 @@ const _suppress_warnings = MacroEconometricModels._suppress_warnings
             pd_yr = xtset(df_yr, :id, :year; cohort=:first_treat)
             @test Set(unique(pd_yr.cohort_id)) == Set([0, 2004, 2007])
             @test pd_yr.time_id[1] == 2003
-            # Cohort period not in time_id → ArgumentError
-            df_bad = DataFrame(id=[1,1], year=[2003,2004], y=[1.0,2.0],
+            # #587: a cohort period outside the sample (out-of-window adoption year,
+            # categorical group label) is kept verbatim with one warning, not rejected —
+            # absorb=:cohort consumes such columns.
+            df_out = DataFrame(id=[1,1], year=[2003,2004], y=[1.0,2.0],
                                first_treat=[1999,1999])
-            @test_throws ArgumentError xtset(df_bad, :id, :year; cohort=:first_treat)
+            pd_out = @test_logs (:warn, r"do not match any period") xtset(
+                df_out, :id, :year; cohort=:first_treat)
+            @test Set(unique(pd_out.cohort_id)) == Set([1999])
+
+            # #587: negative adoption periods are real event-time cohorts, not
+            # never-treated markers (only 0/missing mean never-treated)
+            df_evt = DataFrame(id=repeat(1:3, inner=5), t=repeat(-2:2, 3), y=randn(15),
+                               coh=repeat([0, -1, 1], inner=5))
+            pd_evt = xtset(df_evt, :id, :t; cohort=:coh)
+            @test Set(unique(pd_evt.cohort_id)) == Set([0, -1, 1])
         end
 
         @testset "group_data extraction" begin
@@ -711,6 +722,32 @@ const _suppress_warnings = MacroEconometricModels._suppress_warnings
         @testset "Transform length validation" begin
             d = TimeSeriesData(randn(50, 2))
             @test_throws ArgumentError apply_tcode(d, [1])  # wrong length
+        end
+
+        @testset "Non-positive column demoted from tcode 4 (#588)" begin
+            # tcode 4 loses no rows but its non-positive fallback (tcode 2) loses one, so
+            # the row budget must come from the EFFECTIVE codes. Taken from the declared
+            # codes it stayed at T_obs and the aligned copy indexed col[0:end] — BoundsError.
+            X = hcat(rand(20) .+ 1.0, rand(20) .+ 1.0, rand(20) .+ 1.0)
+            X[7, 2] = 0.0            # kills tcode 4 on column 2
+            X[3, 3] = -1.5           # and on column 3
+
+            d = TimeSeriesData(X; varnames=["a", "b", "c"], tcode=[1, 4, 4])
+            d2 = apply_tcode(d)
+            @test nobs(d2) == 19                   # one row lost to the demotion
+            @test d2.tcode == [1, 2, 2]            # effective codes are recorded
+            @test d2.data[:, 1] ≈ X[2:end, 1]      # levels column aligned to the end
+            @test d2.data[:, 2] ≈ diff(X[:, 2])
+            @test all(isfinite, d2.data)
+
+            # Same demotion through the uniform and per-variable entry points
+            d3 = apply_tcode(TimeSeriesData(X; tcode=[1, 1, 1]), 4)
+            @test nobs(d3) == 19
+            @test d3.tcode == [4, 2, 2]
+            @test d3.data[:, 1] ≈ log.(X[2:end, 1])
+            d4 = apply_tcode(TimeSeriesData(X[:, 2:3]; tcode=[1, 1]), [4, 1])
+            @test nobs(d4) == 19
+            @test d4.tcode == [2, 1]
         end
 
         @testset "PanelData apply_tcode per-variable" begin

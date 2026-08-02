@@ -30,7 +30,9 @@ Estimate a panel logistic regression model.
 - `model::Symbol` -- `:pooled`, `:fe`, `:re`, or `:cre` (default: `:pooled`)
 - `cov_type::Symbol` -- covariance type: `:ols`, `:cluster` (default)
 - `maxiter::Int` -- maximum iterations (default 2000; FE conditional logit often needs 1000+)
-- `tol` -- convergence tolerance (default 1e-8)
+- `tol` -- convergence tolerance (default 1e-8). Under `model=:fe` it is applied to the
+  sup-norm of the conditional score, floored at `1e-5`; standard errors come from the
+  conditional information (`:ols`) or its entity-clustered sandwich (`:cluster`)
 - `n_quadrature::Int` -- Gauss-Hermite quadrature points for RE/CRE (default 12)
 
 # Returns
@@ -86,7 +88,8 @@ function estimate_xtlogit(pd::PanelData{T}, depvar::Symbol, indepvars::Vector{Sy
     if model == :pooled
         return _xtlogit_pooled(pd, y, X, groups, unique_groups, N, n, k, indepvars, cov_type, maxiter, T(tol))
     elseif model == :fe
-        return _xtlogit_fe(pd, y, X, groups, unique_groups, N, n, k, indepvars, maxiter, T(tol))
+        return _xtlogit_fe(pd, y, X, groups, unique_groups, N, n, k, indepvars, cov_type,
+                           maxiter, T(tol))
     elseif model == :re
         return _xtlogit_re(pd, y, X, groups, unique_groups, N, n, k, indepvars, cov_type, maxiter, T(tol), n_quadrature)
     elseif model == :cre
@@ -210,10 +213,61 @@ function _clogit_dp_logsum(X_g::AbstractMatrix{T}, beta::Vector{T}, s::Int) wher
     return log_denom, prob
 end
 
+"""
+    _clogit_ll_grad(X, y, keep_groups, group_obs, beta, k) -> (loglik, grad, scores)
+
+Conditional log-likelihood, its exact score `Σ_g X_g'(y_g − p_g)`, and the per-group
+score contributions, with `p_g` the forward-backward DP conditional probabilities.
+"""
+function _clogit_ll_grad(X::Matrix{T}, y::Vector{T}, keep_groups::Vector{Int},
+                         group_obs::Dict{Int,Vector{Int}}, beta::Vector{T},
+                         k::Int) where {T<:AbstractFloat}
+    loglik = zero(T)
+    grad = zeros(T, k)
+    scores = Vector{Vector{T}}(undef, length(keep_groups))
+    for (j, g) in enumerate(keep_groups)
+        idx = group_obs[g]
+        X_g = X[idx, :]
+        y_g = y[idx]
+        s_g = round(Int, sum(y_g))
+        log_denom, prob = _clogit_dp_logsum(X_g, beta, s_g)
+        loglik += dot(y_g, X_g * beta) - log_denom
+        score_g = X_g' * (y_g .- prob)
+        scores[j] = score_g
+        grad .+= score_g
+    end
+    (loglik, grad, scores)
+end
+
+"""
+    _clogit_information(X, y, keep_groups, group_obs, beta, k) -> Matrix{T}
+
+Observed conditional information `−∇²ℓ` by central differences of the exact DP score.
+The analytic second derivative needs the pairwise probabilities `Pr(y_t=1, y_s=1 | Σy)`,
+which the forward-backward recursion does not return; differencing the exact gradient is
+accurate to `O(h²)` at a cost of `2k` DP passes (the technique `_re_probit_vcov` uses).
+Unlike the independent-Bernoulli matrix `X_g' Diag(p(1−p)) X_g` this is invariant to
+within-group shifts of `X`, as the conditional likelihood itself is (#543).
+"""
+function _clogit_information(X::Matrix{T}, y::Vector{T}, keep_groups::Vector{Int},
+                             group_obs::Dict{Int,Vector{Int}}, beta::Vector{T},
+                             k::Int) where {T<:AbstractFloat}
+    H = zeros(T, k, k)
+    for j in 1:k
+        h = T(1e-4) * max(one(T), abs(beta[j]))
+        beta_p = copy(beta); beta_p[j] += h
+        beta_m = copy(beta); beta_m[j] -= h
+        _, g_p, _ = _clogit_ll_grad(X, y, keep_groups, group_obs, beta_p, k)
+        _, g_m, _ = _clogit_ll_grad(X, y, keep_groups, group_obs, beta_m, k)
+        H[:, j] .= (g_p .- g_m) ./ (2h)
+    end
+    -(H .+ H') ./ 2
+end
+
 function _xtlogit_fe(pd::PanelData{T}, y::Vector{T}, X::Matrix{T},
                      groups::Vector{Int}, unique_groups::Vector{Int},
                      N::Int, n::Int, k::Int, indepvars::Vector{Symbol},
-                     maxiter::Int, tol::T) where {T}
+                     cov_type::Symbol, maxiter::Int, tol::T) where {T}
     # No intercept for conditional logit (conditioned out)
     vn = [String(v) for v in indepvars]
 
@@ -234,82 +288,59 @@ function _xtlogit_fe(pd::PanelData{T}, y::Vector{T}, X::Matrix{T},
     length(keep_groups) >= 2 ||
         throw(ArgumentError("Fewer than 2 groups with variation in y; cannot estimate FE logit"))
 
-    # Newton-Raphson on conditional log-likelihood
+    # Newton-Raphson on the conditional log-likelihood (globally concave), stepping with
+    # the conditional information. Convergence is judged on ‖∇‖∞: the loglik-change rule
+    # declared convergence at points where the score was still far from zero. The 1e-5
+    # floor matches the RE path and the precision attainable for a score summed over
+    # thousands of groups (#543).
+    gtol = max(T(tol), T(1e-5))
     beta = zeros(T, k)
-    loglik_old = T(-Inf)
     converged = false
     iterations = 0
 
     for iter in 1:maxiter
         iterations = iter
-        loglik = zero(T)
-        grad = zeros(T, k)
-        hess = zeros(T, k, k)
+        loglik, grad, _ = _clogit_ll_grad(X, y, keep_groups, group_obs, beta, k)
 
-        for g in keep_groups
-            idx = group_obs[g]
-            X_g = X[idx, :]
-            y_g = y[idx]
-            s_g = round(Int, sum(y_g))
-
-            log_denom, prob = _clogit_dp_logsum(X_g, beta, s_g)
-
-            # Conditional log-likelihood: y_g' * X_g * beta - log(denom)
-            loglik += dot(y_g, X_g * beta) - log_denom
-
-            # Gradient: X_g' * (y_g - prob)
-            grad .+= X_g' * (y_g .- prob)
-
-            # Hessian: -X_g' * diag(prob .* (1 .- prob)) * X_g
-            w_g = prob .* (one(T) .- prob)
-            hess .-= X_g' * Diagonal(w_g) * X_g
-        end
-
-        # Convergence check
-        if abs(loglik - loglik_old) < tol * (abs(loglik_old) + one(T))
+        if maximum(abs, grad) < gtol
             converged = true
-            loglik_old = loglik
             break
         end
-        loglik_old = loglik
 
-        # Newton step: beta_new = beta - H^{-1} g
-        hess_reg = hess
-        # Regularize if needed
-        if any(isnan, hess_reg) || any(isinf, hess_reg)
-            break
-        end
+        info = _clogit_information(X, y, keep_groups, group_obs, beta, k)
+        (any(isnan, info) || any(isinf, info)) && break
         step = try
-            hess_reg \ grad
+            info \ grad
         catch
             break
         end
-        beta .-= step
+        # Backtrack if the full Newton step does not improve the likelihood (guards
+        # against a near-singular information on weakly identified designs).
+        t_step = one(T)
+        for _ in 1:20
+            _clogit_ll_grad(X, y, keep_groups, group_obs, beta .+ t_step .* step, k)[1] > loglik && break
+            t_step /= 2
+        end
+        beta .+= t_step .* step
     end
 
     if !converged
         @warn "FE conditional logit did not converge in $iterations iterations " *
-              "(maxiter=$maxiter, tol=$tol). Coefficient estimates may be unreliable. " *
-              "Raise maxiter (often ≥2000 on long panels) or relax tol." maxlog=1
+              "(maxiter=$maxiter, score tolerance $gtol). Coefficient estimates may be " *
+              "unreliable. Raise maxiter or relax tol." maxlog=1
     end
 
-    # Covariance: -H^{-1}
-    hess_final = zeros(T, k, k)
-    loglik_final = zero(T)
-    fitted_all = zeros(T, n)
+    # Covariance from the conditional information (Stata `clogit`), optionally sandwiched
+    # with the per-group score meat when entity-clustered SEs are requested. The
+    # independent-Bernoulli matrix used previously is not the conditional information: it
+    # scales with the LEVEL of X, which the conditional likelihood conditions away (#543).
+    loglik_final, _, scores = _clogit_ll_grad(X, y, keep_groups, group_obs, beta, k)
+    info_final = _clogit_information(X, y, keep_groups, group_obs, beta, k)
 
+    fitted_all = zeros(T, n)
     for g in keep_groups
         idx = group_obs[g]
-        X_g = X[idx, :]
-        y_g = y[idx]
-        s_g = round(Int, sum(y_g))
-
-        log_denom, prob = _clogit_dp_logsum(X_g, beta, s_g)
-        loglik_final += dot(y_g, X_g * beta) - log_denom
-
-        w_g = prob .* (one(T) .- prob)
-        hess_final .-= X_g' * Diagonal(w_g) * X_g
-
+        _, prob = _clogit_dp_logsum(X[idx, :], beta, round(Int, sum(y[idx])))
         # Store conditional probabilities as fitted values
         for (j, i) in enumerate(idx)
             fitted_all[i] = prob[j]
@@ -317,7 +348,20 @@ function _xtlogit_fe(pd::PanelData{T}, y::Vector{T}, X::Matrix{T},
     end
 
     vcov_mat = try
-        robust_inv(-hess_final)
+        bread = Matrix{T}(robust_inv(Hermitian((info_final .+ info_final') ./ 2)))
+        if cov_type == :cluster
+            meat = zeros(T, k, k)
+            for s_g in scores
+                meat .+= s_g * s_g'
+            end
+            G = length(keep_groups)
+            n_used_c = sum(length(group_obs[g]) for g in keep_groups)
+            meat .*= T(G) / T(G - 1) * T(n_used_c - 1) / T(max(n_used_c - k, 1))
+            V = bread * meat * bread
+            Matrix{T}((V .+ V') ./ 2)
+        else
+            bread
+        end
     catch
         zeros(T, k, k)
     end
@@ -344,7 +388,7 @@ function _xtlogit_fe(pd::PanelData{T}, y::Vector{T}, X::Matrix{T},
         beta, vcov_mat, y, X, fitted_all,
         loglik_final, loglik_null, pseudo_r2, aic_val, bic_val,
         nothing, nothing,  # sigma_u, rho (not applicable for conditional)
-        vn, :fe, :ols, converged, iterations, n_used, length(keep_groups), pd
+        vn, :fe, cov_type, converged, iterations, n_used, length(keep_groups), pd
     )
 end
 
@@ -640,7 +684,8 @@ Under `cov_type == :cluster` (the default) forms the group-score sandwich
     V = H⁻¹ (Σ_g s_g s_g') H⁻¹
 
 where `s_g = ∇_θ ℓ_g` is the score of the adaptive-GH group log-likelihood and
-`H = −∇²ℓ` is the observed information of the full-sample negative loglik. This is
+`H = −∇²ℓ` is the observed information of the full-sample negative loglik. The meat
+carries the pooled path's `G/(G−1)·(n−1)/(n−k)` finite-sample correction. This is
 the standard panel-robust VCE (Stata `xtlogit, re vce(robust)`); the pure Hessian
 inverse overstates precision by roughly a factor of √T̄ on moderately long panels.
 """
@@ -666,6 +711,13 @@ function _re_logit_vcov(nll, theta::Vector{T}, y::Vector{T}, X_c::Matrix{T},
             Dict(g => idx), nodes, weights)
         s_g = ForwardDiff.gradient(nll_g, theta)
         meat .+= s_g * s_g'
+    end
+    # Same finite-sample correction as the pooled path (_panel_cluster_vcov), so the
+    # dof convention does not silently change between :pooled and :re/:cre (#542).
+    G = length(unique_groups)
+    n = length(y)
+    if G > 1
+        meat .*= T(G) / T(G - 1) * T(n - 1) / T(max(n - n_params, 1))
     end
     V = bread * meat * bread
     Matrix{T}((V .+ V') ./ 2)

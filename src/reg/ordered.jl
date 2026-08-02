@@ -1067,7 +1067,10 @@ function brant_test(m::OrderedLogitModel{T}) where {T<:AbstractFloat}
     X_bin = hcat(ones(T, n), m.X)  # n x (K+1)
 
     binary_coefs = Matrix{T}(undef, K, Jm1)
-    # Per-observation scores for slopes (for joint meat): K × n per cutpoint
+    # Per-observation scores for the FULL [1 X] parameter vector (K+1 × n per cutpoint).
+    # The binary logits carry an intercept, so the slope covariance is the slope block of
+    # the (K+1)-dimensional sandwich — dropping the intercept before inverting the bread
+    # leaves the statistic location-dependent (#547).
     scores = Vector{Matrix{T}}(undef, Jm1)
     breads = Vector{Matrix{T}}(undef, Jm1)
 
@@ -1076,30 +1079,30 @@ function brant_test(m::OrderedLogitModel{T}) where {T<:AbstractFloat}
         mj = estimate_logit(y_bin, X_bin; maxiter=200)
         binary_coefs[:, j] = mj.beta[2:end]
 
-        # Score contribution s_i = x_i (y_i − μ_i) for slopes; bread = (X'WX)^{-1}
+        # Score contribution s_i = x_i (y_i − μ_i); bread = (X'WX)^{-1}
         mu = mj.fitted
-        X_slopes = m.X
         resid = y_bin .- mu
-        sc = Matrix{T}(undef, K, n)
+        sc = Matrix{T}(undef, K + 1, n)
         @inbounds for i in 1:n
-            for k in 1:K
-                sc[k, i] = X_slopes[i, k] * resid[i]
+            for k in 1:(K + 1)
+                sc[k, i] = X_bin[i, k] * resid[i]
             end
         end
         scores[j] = sc
         w = mu .* (one(T) .- mu)
-        XtWX = X_slopes' * (X_slopes .* w)
+        XtWX = X_bin' * (X_bin .* w)
         breads[j] = Matrix{T}(robust_inv(Hermitian((XtWX .+ XtWX') ./ 2)))
     end
 
-    # Joint covariance Cov(β̂_a, β̂_b) = Bread_a · (Σ_i s_{a,i} s_{b,i}') · Bread_b
+    # Joint covariance Cov(β̂_a, β̂_b) = Bread_a · (Σ_i s_{a,i} s_{b,i}') · Bread_b,
+    # formed in full dimension and then restricted to the slope block.
     function _joint_cov(a::Int, b::Int)
-        meat = zeros(T, K, K)
+        meat = zeros(T, K + 1, K + 1)
         sa = scores[a]; sb = scores[b]
         @inbounds for i in 1:n
             meat .+= sa[:, i] * sb[:, i]'
         end
-        breads[a] * meat * breads[b]
+        (breads[a] * meat * breads[b])[2:end, 2:end]
     end
 
     # Contrasts: β̂_j − β̂_{J−1} for j = 1,...,J-2 (equality of binary slopes)

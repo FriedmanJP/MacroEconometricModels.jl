@@ -26,8 +26,15 @@ Under the null and treating residual cross-equation correlation as negligible
 where `K` is the per-equation parameter count and `m` is the number of
 equations. This matches Stata `xtabond2` for the single-equation (`m = 1`)
 case (`df = n_instruments − K`) and extends it to multi-equation PVAR under
-equation-independence. The reported `n_parameters` field is the **system**
-count `m · K`.
+equation-independence. The reported `n_instruments` and `n_params` fields are
+both **system** counts (`m · q` and `m · K`), so `df == n_instruments − n_params`.
+
+!!! warning "Multi-equation reference distribution"
+    For `m > 1` the χ²(m(q − K)) reference treats the per-equation J statistics as
+    independent. Residuals are correlated across equations in almost any PVAR, and
+    that correlation makes `Σ_eq J_eq` more variable than a χ² with `m(q − K)` df:
+    the test **over-rejects** instrument validity. Read a rejection with `m > 1` as
+    suggestive, or test one equation at a time.
 
 H0: All moment conditions are valid.
 H1: Some moment conditions are invalid.
@@ -79,11 +86,14 @@ function pvar_hansen_j(model::PVARModel{T}) where {T}
     end
 
     # System overidentification: sum of equation J-statistics under independence.
-    # df = m * (n_instruments − K_per_eq). Matches xtabond2 when m = 1.
-    n_params_system = K * max(n_eq_valid, 1)
+    # df = m * (n_instruments − K_per_eq). Matches xtabond2 when m = 1. Both reported
+    # counts are system-wide so that df == n_instruments − n_params (#552).
+    n_eq = max(n_eq_valid, 1)
+    n_inst_system = n_inst * n_eq
+    n_params_system = K * n_eq
     df = max(n_eq_valid * (n_inst - K), 0)
 
     pval = df > 0 ? T(1 - cdf(Chisq(df), J_total)) : one(T)
 
-    PVARTestResult{T}("Hansen J-test", J_total, pval, df, n_inst, n_params_system)
+    PVARTestResult{T}("Hansen J-test", J_total, pval, df, n_inst_system, n_params_system)
 end

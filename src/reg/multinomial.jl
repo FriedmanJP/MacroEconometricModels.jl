@@ -618,34 +618,26 @@ function _mlogit_ame_se(m::MultinomialLogitModel{T}, keep::Vector{Int},
     J = size(ame, 2)
     Jm1 = J - 1
     Kk = length(keep)
-    n_free_full = K * Jm1
-    size(m.vcov_mat, 1) < n_free_full && return nothing
+    n_free = K * Jm1
+    size(m.vcov_mat, 1) == n_free || return nothing
 
-    # Free-parameter indices in vec(m.beta) column-major: (k, ℓ) → (ℓ-1)*K + k
-    free_idx = Int[]
-    for ℓ in 1:Jm1, k in keep
-        push!(free_idx, (ℓ - 1) * K + k)
-    end
-    n_free = length(free_idx)
-    V_free = m.vcov_mat[free_idx, free_idx]
-
-    # Finite-difference Jacobian G: (Kk*J) × n_free
+    # Finite-difference Jacobian G: (Kk*J) × n_free over ALL free parameters —
+    # the AME depends on every coefficient (intercepts included) through the
+    # fitted probabilities, so the delta method must propagate the full vcov,
+    # not just the covariance of the reported (non-intercept) rows.
     G = zeros(T, Kk * J, n_free)
     h = sqrt(eps(T))
     beta0 = copy(m.beta)
     ame0 = vec(ame)
-    for p in 1:n_free
+    for ℓ in 1:Jm1, k in 1:K
+        p = (ℓ - 1) * K + k          # vec(beta) column-major index
         β = copy(beta0)
-        # Map free index p back to (k, ℓ) among kept rows
-        ℓ = div(p - 1, Kk) + 1
-        r = mod(p - 1, Kk) + 1
-        k = keep[r]
         step = max(abs(β[k, ℓ]), one(T)) * h
         β[k, ℓ] += step
         ame_p = vec(_mlogit_ame(β, m.X, keep, J))
         G[:, p] .= (ame_p .- ame0) ./ step
     end
-    V_ame = G * V_free * G'
+    V_ame = G * m.vcov_mat * G'
     reshape(sqrt.(max.(diag(V_ame), zero(T))), Kk, J)
 end
 
@@ -686,7 +678,8 @@ function Base.show(io::IO, me::MultinomialMarginalEffects{T}) where {T}
             column_labels = has_se ? ["", "dy/dx", "Std.Err."] : ["", "dy/dx"],
             alignment = has_se ? [:l, :r, :r] : [:l, :r])
     end
-    println(io, "Note: standard errors for multinomial AME are not reported (delta method deferred).")
+    has_se ||
+        println(io, "Note: standard errors unavailable (model covariance missing).")
 end
 
 # =============================================================================

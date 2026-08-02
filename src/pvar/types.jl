@@ -148,8 +148,10 @@ Specification test result for Panel VAR (Hansen J-test, etc.).
 - `statistic::T` — test statistic value
 - `pvalue::T` — p-value
 - `df::Int` — degrees of freedom
-- `n_instruments::Int` — number of instruments (moment conditions)
-- `n_params::Int` — number of estimated parameters
+- `n_instruments::Int` — moment conditions entering the statistic, counted over the whole
+  system (`m·q` for `m` equations sharing a `q`-column instrument matrix)
+- `n_params::Int` — estimated parameters, likewise system-wide (`m·K`), so that
+  `df == n_instruments − n_params`
 """
 struct PVARTestResult{T<:AbstractFloat} <: StatsAPI.HypothesisTest
     test_name::String
@@ -241,9 +243,9 @@ function Base.show(io::IO, t::PVARTestResult{T}) where {T}
         "Test"          t.test_name;
         "Statistic"     _fmt(t.statistic);
         "P-value"       _format_pvalue(t.pvalue);
-        "DF"            t.df;
-        "Instruments"   t.n_instruments;
-        "Parameters"    t.n_params;
+        "DF"                     t.df;
+        "Instruments (system)"   t.n_instruments;
+        "Parameters (system)"    t.n_params;
     ]
     _pretty_table(io, data;
         title = t.test_name,

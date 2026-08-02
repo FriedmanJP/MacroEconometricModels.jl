@@ -587,6 +587,21 @@ using LinearAlgebra, Statistics, Random, Distributions
         @test bt.pvalue < 0.05
     end
 
+    @testset "Brant test — location invariance (#547)" begin
+        # The binary logits are fit WITH an intercept, so the slope covariance is the
+        # slope block of the (K+1)-dimensional sandwich. Building the bread from slope
+        # columns only made the statistic depend on the origin of X.
+        rng = MersenneTwister(8080)
+        y, X = generate_ordered_data(rng, 1500, [1.0, -0.5], [0.0, 1.5]; link=:logit)
+
+        bt = brant_test(estimate_ologit(y, X; varnames=["x1", "x2"]))
+        bt_shift = brant_test(estimate_ologit(y, X .+ 5; varnames=["x1", "x2"]))
+
+        @test isapprox(bt.statistic, bt_shift.statistic; rtol=1e-6)
+        @test isapprox(bt.pvalue, bt_shift.pvalue; rtol=1e-6)
+        @test isapprox(bt.per_variable, bt_shift.per_variable; rtol=1e-6)
+    end
+
     # =========================================================================
     # Edge case: exactly 3 categories required
     # =========================================================================

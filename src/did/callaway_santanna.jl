@@ -172,11 +172,11 @@ function _estimate_callaway_santanna(pd::PanelData{T}, outcome_col::Int, treat_c
     Phi = zeros(T, n_units, n_evt)   # Φ[i,ei] = per-unit influence of the event-time-e ATT
 
     for (ei, e) in enumerate(event_times_all)
-        # Reference period e=-1 is normalized to zero in storage so field access
-        # matches the report mask "(ref) —". Under :universal this is exact by
-        # construction; under :varying the adjacent-period pre-trend at e=-1 is
-        # estimable but is still the omitted reference for the event-study path.
-        if e == reference_period
+        # Under :universal, e=-1 IS the base period, so ATT(g,g−1) is identically zero:
+        # normalize it in storage so the report can mask it as "(ref) —". Under :varying
+        # the cell compares g−1 against g−2 — the adjacent-period placebo R's `did`
+        # reports — so it is estimated like any other event time (#548).
+        if e == reference_period && base_period == :universal
             att_agg[ei] = zero(T)
             continue                                     # Φ column stays 0 ⇒ se = 0
         end
@@ -249,5 +249,5 @@ function _estimate_callaway_santanna(pd::PanelData{T}, outcome_col::Int, treat_c
                  pd.T_obs, pd.n_groups, n_treated, n_control,
                  :callaway_santanna,
                  pd.varnames[outcome_col], pd.varnames[treat_col],
-                 control_group, cluster, T(conf_level), att_vcov)
+                 control_group, cluster, T(conf_level), att_vcov, base_period)
 end

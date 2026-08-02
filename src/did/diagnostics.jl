@@ -303,7 +303,10 @@ High p-value -> no evidence against parallel trends.
 `PretrendTestResult{T}` with F-statistic and p-value.
 """
 function pretrend_test(result::DIDResult{T}) where {T<:AbstractFloat}
-    pre_mask = result.event_times .< 0 .&& result.event_times .!= result.reference_period
+    # Under :varying the e=−1 cell is an estimated adjacent-period placebo, so it belongs
+    # in the pre-trend test; under :universal it is a structural zero and must be dropped.
+    pre_mask = result.base_period == :varying ? result.event_times .< 0 :
+               result.event_times .< 0 .&& result.event_times .!= result.reference_period
     pre_coefs = result.att[pre_mask]
     pre_ses = result.se[pre_mask]
     # Prefer the full-covariance joint Wald when the estimator supplies a cross-horizon

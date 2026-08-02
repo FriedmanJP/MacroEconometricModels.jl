@@ -1440,9 +1440,10 @@ const _MPDTA = load_example(:mpdta)
         em1_idx = findfirst(==(-1), evt)
         @test isapprox(att[em3_idx], 0.0305; atol=0.005)
         @test isapprox(att[em2_idx], -0.0006; atol=0.005)
-        # #548: reference e=-1 is stored as zero (report masks it as "(ref) —");
-        # the free adjacent-period pre-trend (~−0.0245) is omitted by convention.
-        @test att[em1_idx] == 0.0
+        # #548: under :varying, e=-1 is the estimable adjacent-period placebo
+        # ATT(g,g-1) vs base g-2 that R's `did` reports — not a normalized zero.
+        @test isapprox(att[em1_idx], -0.0245; atol=0.005)
+        @test did.base_period == :varying
     end
 
     @testset "CS varying base — notyettreated (mpdta verification)" begin
@@ -1494,7 +1495,7 @@ const _MPDTA = load_example(:mpdta)
         @test isapprox(coef(did)[e0_idx], -0.0199; atol=0.005)
     end
 
-    @testset "CS varying base zeros reference index (#548)" begin
+    @testset "CS reference index by base_period (#548)" begin
         pd = _MPDTA
         did = estimate_did(pd, "lemp", "first_treat";
                            method=:callaway_santanna,
@@ -1503,10 +1504,23 @@ const _MPDTA = load_example(:mpdta)
                            base_period=:varying)
         em1_idx = findfirst(==(-1), did.event_times)
         @test em1_idx !== nothing
-        # Storage must match report's "(ref) —" mask: zero (not a free estimate)
-        @test coef(did)[em1_idx] == 0.0
-        @test stderror(did)[em1_idx] == 0.0
-        @test did.att[em1_idx] == 0.0
+        # :varying — e=-1 is ATT(g,g-1) against base g-2, an estimate with real uncertainty
+        @test isapprox(coef(did)[em1_idx], -0.0245; atol=0.005)
+        @test stderror(did)[em1_idx] > 0.0
+        @test did.base_period == :varying
+        # ... and it enters the pre-trend test rather than being dropped
+        @test pretrend_test(did).df == count(<(0), did.event_times)
+
+        # :universal — e=-1 IS the base period, so the cell is a structural zero
+        did_u = estimate_did(pd, "lemp", "first_treat";
+                             method=:callaway_santanna,
+                             leads=3, horizon=3,
+                             control_group=:never_treated,
+                             base_period=:universal)
+        @test did_u.base_period == :universal
+        @test coef(did_u)[em1_idx] == 0.0
+        @test stderror(did_u)[em1_idx] == 0.0
+        @test pretrend_test(did_u).df == count(<(0), did_u.event_times) - 1
     end
 
     @testset "CS base_period validation" begin

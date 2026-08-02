@@ -537,3 +537,66 @@ end
     @test err isa ArgumentError
     @test occursin("incidental parameters", err.msg)
 end
+
+# =============================================================================
+# #543: FE conditional logit — conditional information, not the Bernoulli one
+# =============================================================================
+
+@testset "#543 FE conditional logit: invariance, convergence, SEs" begin
+    rng = Random.MersenneTwister(543543)
+    N_g = 40; T_p = 8; n = N_g * T_p
+    ids = repeat(1:N_g, inner=T_p)
+    ts = repeat(1:T_p, N_g)
+    x1 = randn(rng, n)
+    alpha = repeat(randn(rng, N_g), inner=T_p)
+    y = Float64.(rand(rng, n) .< 1 ./ (1 .+ exp.(-(0.9 .* x1 .+ alpha))))
+    pd = xtset(DataFrame(id=ids, t=ts, x1=x1, y=y), :id, :t)
+    m = estimate_xtlogit(pd, :y, [:x1]; model=:fe)
+
+    # The conditional likelihood conditions the group level away, so shifting the
+    # regressor within every group must leave BOTH the estimate and its SE alone.
+    # The independent-Bernoulli Hessian used previously scaled with the level of x.
+    pd_shift = xtset(DataFrame(id=ids, t=ts, x1=x1 .+ 8.0, y=y), :id, :t)
+    m_shift = estimate_xtlogit(pd_shift, :y, [:x1]; model=:fe)
+    @test isapprox(coef(m), coef(m_shift); atol=1e-6)
+    @test isapprox(stderror(m), stderror(m_shift); rtol=1e-4)
+
+    # Convergence is reported on the score, and Newton on the conditional
+    # information reaches it in a handful of iterations.
+    @test m.converged
+    @test m.iterations < 50
+
+    # Model-based SEs come from the conditional information; :cluster sandwiches it
+    # with the per-group score meat, and the recorded cov_type is the one used.
+    @test m.cov_type == :cluster                       # default
+    m_ml = estimate_xtlogit(pd, :y, [:x1]; model=:fe, cov_type=:ols)
+    @test m_ml.cov_type == :ols
+    @test coef(m_ml) ≈ coef(m)
+    @test stderror(m_ml)[1] > 0
+    @test stderror(m_ml) != stderror(m)
+end
+
+# =============================================================================
+# #542: RE/CRE cluster sandwich carries the pooled finite-sample correction
+# =============================================================================
+
+@testset "#542 RE cluster sandwich finite-sample correction" begin
+    rng = Random.MersenneTwister(542542)
+    N_g = 20; T_p = 6; n = N_g * T_p
+    ids = repeat(1:N_g, inner=T_p)
+    ts = repeat(1:T_p, N_g)
+    x1 = randn(rng, n)
+    alpha = repeat(0.8 .* randn(rng, N_g), inner=T_p)
+    y = Float64.(rand(rng, n) .< 1 ./ (1 .+ exp.(-(0.8 .* x1 .+ alpha))))
+    pd = xtset(DataFrame(id=ids, t=ts, x1=x1, y=y), :id, :t)
+
+    m_cl = estimate_xtlogit(pd, :y, [:x1]; model=:re, cov_type=:cluster)
+    m_ml = estimate_xtlogit(pd, :y, [:x1]; model=:re, cov_type=:ols)
+    # Correction is G/(G-1)·(n-1)/(n-k) with k = length([β; log σ_u]); it only
+    # scales the meat, so the sandwich stays distinct from the pure information
+    @test all(stderror(m_cl) .> 0)
+    @test stderror(m_cl) != stderror(m_ml)
+
+    m_probit = estimate_xtprobit(pd, :y, [:x1]; model=:re, cov_type=:cluster)
+    @test all(stderror(m_probit) .> 0)
+end

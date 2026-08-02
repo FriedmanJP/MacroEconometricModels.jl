@@ -36,9 +36,11 @@ whether the panel is balanced.
 - `cohort::Union{Symbol,Nothing}` — column name identifying treatment-cohort adoption
   periods (default: `nothing`). Stored in the same integer encoding as `time_id`
   so DiD estimators can compare `cohort_id` to `time_id` directly. Convention:
-  `0` (and missing) = never-treated; positive values = adoption period. Calendar-year
-  cohorts (e.g. `2004`) are kept as-is when times are integer years — they are **not**
-  rank-encoded.
+  `0` (and missing) = never-treated; every other value is an adoption period, including
+  negative ones on event-time panels. Calendar-year cohorts (e.g. `2004`) are kept as-is
+  when times are integer years — they are **not** rank-encoded. Values that match no
+  sample period (out-of-window adoption years, categorical group labels for
+  `absorb=:cohort`) are stored verbatim and warned about once.
 
 # Examples
 ```julia
@@ -136,45 +138,44 @@ function xtset(df::DataFrame, group_col::Symbol, time_col::Symbol;
     # Extract cohort IDs if specified.
     # DiD consumers compare cohort_id to time_id as adoption periods, so we
     # must store values in the same integer encoding as time_id — NOT ranks of
-    # unique cohort labels. Convention: 0 (and missing) = never-treated;
-    # positive values = adoption period in the time_id scale.
+    # unique cohort labels. Convention: 0 (and missing) = never-treated; every
+    # other value is an adoption period in the time_id scale, INCLUDING negative
+    # ones (event-time panels are indexed from a negative period).
     cohort_id_vec = if cohort !== nothing
         raw_cohorts = sorted[!, cohort]
         mapped = Vector{Int}(undef, T_total)
+        unmatched = Set{Any}()
         for i in 1:T_total
             c = raw_cohorts[i]
-            if ismissing(c) || (c isa Number && (isnan(c) || isinf(c)))
+            if ismissing(c) || (c isa Number && (isnan(c) || isinf(c))) ||
+               (c isa Number && iszero(c))
                 mapped[i] = 0
                 continue
             end
-            # Never-treated markers: 0 or negative
-            if c isa Number && c <= 0
-                mapped[i] = 0
-                continue
-            end
-            # Map into time_id encoding
+            # Map into time_id encoding: prefer an exact key match in the raw-time →
+            # rank map, else read c as an already-ranked integer period.
             local cid::Int
-            if times_are_integer
+            if time_map !== nothing && haskey(time_map, c)
+                cid = time_map[c]
+            elseif c isa Number
                 cid = Int(round(Float64(c)))
             else
-                # Prefer exact key match in the raw-time → rank map; fall back to
-                # interpreting c as an already-ranked integer period.
-                if haskey(time_map, c)
-                    cid = time_map[c]
-                elseif c isa Number
-                    cid = Int(round(Float64(c)))
-                else
-                    throw(ArgumentError(
-                        "Cohort value $c cannot be mapped to a time period"))
-                end
-            end
-            if cid != 0 && cid ∉ valid_time_values
                 throw(ArgumentError(
-                    "Cohort value $c maps to period $cid which does not appear " *
-                    "in time_id. Cohort adoption periods must match the time " *
-                    "index encoding (0 = never-treated)."))
+                    "Cohort value $c (::$(typeof(c))) is neither numeric nor a value of " *
+                    "the time column, so it cannot be encoded as an adoption period"))
             end
+            # Out-of-sample adoption periods and categorical group labels are kept
+            # verbatim (absorb=:cohort consumes them); only DiD grouping needs them
+            # to land on a sample period.
+            cid ∉ valid_time_values && push!(unmatched, c)
             mapped[i] = cid
+        end
+        if !isempty(unmatched)
+            @warn "Cohort value(s) $(join(sort!(collect(unmatched); by=string), ", ")) do " *
+                  "not match any period in the sample. They are stored as given (usable as " *
+                  "categorical group labels, e.g. absorb=:cohort), but DiD estimators will " *
+                  "not form a treatment group for them. Adoption periods must use the same " *
+                  "encoding as time_id, with 0 for never-treated."
         end
         mapped
     else
