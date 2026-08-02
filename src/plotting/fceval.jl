@@ -35,11 +35,14 @@ function plot_result(ev::ForecastEvaluation{T};
                      view::Symbol=:metrics, metric::Union{String,Nothing}=nothing,
                      title::String="", save_path::Union{String,Nothing}=nothing) where {T}
     M = length(ev.models)
+    # ME is a signed bias — its best value is the one closest to zero, not the smallest.
+    # Every other metric in `_FCEVAL_METRICS` is lower-is-better (#592).
+    _rank_key(mname, v) = mname == "ME" ? abs.(v) : v
     if view === :metrics && metric !== nothing
-        # Single ranked metric (best/smallest first).
+        # Single ranked metric (best first).
         k = findfirst(==(metric), ev.metrics)
         k === nothing && throw(ArgumentError("metric must be one of $(ev.metrics); got \"$metric\""))
-        ord = sortperm(ev.values[:, k])
+        ord = sortperm(_rank_key(metric, ev.values[:, k]))
         id = _next_plot_id("fceval_rank")
         rows = Vector{Pair{String,String}}[]
         for j in ord
@@ -57,7 +60,7 @@ function plot_result(ev::ForecastEvaluation{T};
         # (e.g. MAPE vs RMSE) collapsing on a single linear scale.
         panels = _PanelSpec[]
         for (mi, mname) in enumerate(ev.metrics)
-            ord = sortperm(ev.values[:, mi])
+            ord = sortperm(_rank_key(mname, ev.values[:, mi]))
             id = _next_plot_id("fceval_m$mi")
             rows = Vector{Pair{String,String}}[]
             for j in ord

@@ -396,17 +396,25 @@ end
 
 @testset "BVAR Nowcasting" begin
     @testset "GLP hyperparameter sanity flag (B4/T173 / #571)" begin
-        # With the proper NIW closed-form marginal likelihood (#571), the optimizer
-        # no longer parks λ at the exp(5)≈148 box wall on the plug-in likelihood.
-        # A short/wide panel should still produce finite positive hyperparameters.
+        # T173: a hyperparameter parked on the |log-param| ≤ 5 box edge must be reported,
+        # never presented bare. Which panels pin is data-dependent once the dummy design
+        # and the NIW marginal likelihood are correct (#571/#572), so assert the detector's
+        # invariant rather than one panel's outcome: pinned ⇔ !converged, and !converged
+        # ⇒ show() carries the warning.
         m = nowcast_bvar(randn(Random.MersenneTwister(9), 50, 10), 6, 4; lags=5)
-        @test isfinite(m.lambda) && m.lambda > 0
-        @test m.lambda < 50   # not the old plug-in box wall
-        @test isfinite(m.loglik)
+        log_pars = log.([m.lambda, m.theta, m.miu, m.alpha])
+        @test m.converged == !any(x -> abs(x) >= 5 - 1e-3, log_pars)
+        @test m.converged || occursin("WARNING", sprint(show, m))
+        @test isfinite(m.loglik) && m.loglik > -1e9   # not the degenerate -1e10 sentinel
         # A well-conditioned interior fit converges and does NOT warn.
         m2 = nowcast_bvar(randn(Random.MersenneTwister(300), 100, 6), 4, 2; lags=3, max_iter=50)
         @test m2.converged
         @test !occursin("WARNING", sprint(show, m2))
+        # Display half of the detector: flag down ⇒ warning, whatever the fit produced.
+        m_pinned = MacroEconometricModels.NowcastBVAR{Float64}(
+            m2.X_sm, m2.beta, m2.sigma, exp(5.0), m2.theta, m2.miu, m2.alpha,
+            m2.lags, m2.loglik, m2.nM, m2.nQ, m2.data, false)
+        @test occursin("WARNING", sprint(show, m_pinned))
     end
 
     @testset "Basic estimation" begin
@@ -473,34 +481,75 @@ end
         @test_throws ArgumentError nowcast_bvar(Y, 5, 0; lags=0)  # lags < 1
     end
 
-    @testset "Theta cross-variable shrinkage" begin
+    @testset "Minnesota dummy design is one-nonzero-per-row (#571/#572)" begin
+        # Replaces the old cross-variable-entry test: packing the own-lag and every cross
+        # entry of an equation into ONE row restricts their SUM, so each lag block has rank
+        # 1, X_d'X_d is singular and the NIW marginal likelihood collapses to the -1e10
+        # sentinel. Cross-vs-own relative tightness is not a free hyperparameter of a
+        # conjugate NIW prior (it is √(Σ_mm/Σ_jj)); theta is the lag-decay exponent (#572).
         rng = Random.MersenneTwister(500)
-        N = 3
-        lags = 2
+        N, lags = 3, 2
         Y0 = randn(rng, lags, N)
-        sigma_ar = ones(N)
-        lambda = 0.2
+        sigma_ar = [1.0, 2.0, 3.0]
+        lambda, theta = 0.2, 2.0
+        k = 1 + N * lags
 
-        # Theta = 1: cross-variable same as own-lag
-        Y_d1, X_d1 = MacroEconometricModels._bvar_dummy_obs(Y0, lags, sigma_ar,
-                                                              lambda, 1.0, 0.0, 0.0)
-        # Theta = 10: tighter cross-variable shrinkage
-        Y_d10, X_d10 = MacroEconometricModels._bvar_dummy_obs(Y0, lags, sigma_ar,
-                                                                lambda, 10.0, 0.0, 0.0)
+        Y_d, X_d = MacroEconometricModels._bvar_dummy_obs(Y0, lags, sigma_ar,
+                                                          lambda, theta, 1.0, 2.0)
 
-        # Off-diagonal X_d entries should be non-zero (fix for #36)
-        # For lag 1, variable i=1, cross-variable j=2: column 1 + (1-1)*3 + 2 = 3
-        @test X_d1[1, 3] != 0.0  # off-diagonal must be non-zero
-        @test X_d10[1, 3] != 0.0
+        # One restriction per Minnesota row, and the stacked design restricts every column
+        for r in 1:(N * lags)
+            @test count(!iszero, X_d[r, :]) == 1
+        end
+        @test rank(X_d) == k
+        @test isfinite(logdet(X_d' * X_d))
 
-        # Higher theta => smaller off-diagonal (more shrinkage)
-        @test abs(X_d10[1, 3]) < abs(X_d1[1, 3])
+        # Row (lag, i) scale = sigma_i * lag^theta / lambda; only lag 1 carries the RW mean
+        @test X_d[1, 2] ≈ sigma_ar[1] * 1.0^theta / lambda
+        @test Y_d[1, 1] ≈ X_d[1, 2]
+        @test X_d[N + 1, 2 + N] ≈ sigma_ar[1] * 2.0^theta / lambda
+        @test all(iszero, Y_d[(N + 1):(2 * N), :])
 
-        # theta=1 should make off-diagonal == diagonal
-        @test X_d1[1, 2] ≈ X_d1[1, 3]  # own-lag == cross-variable when theta=1
+        # Larger theta shrinks the higher lags harder and leaves lag 1 untouched
+        _, X_hi = MacroEconometricModels._bvar_dummy_obs(Y0, lags, sigma_ar,
+                                                         lambda, 3.0, 1.0, 2.0)
+        @test X_hi[N + 1, 2 + N] > X_d[N + 1, 2 + N]
+        @test X_hi[1, 2] ≈ X_d[1, 2]
 
-        # theta=10 off-diagonal should be 1/10 of theta=1 off-diagonal
-        @test X_d10[1, 3] ≈ X_d1[1, 3] / 10.0
+        # Closing inverse-Wishart scale block (Y = diag(sigma), X = 0): without it the
+        # random-walk B solves every dummy row exactly and the prior SSR is singular.
+        @test all(iszero, X_d[(end - N + 1):end, :])
+        @test Y_d[(end - N + 1):end, :] ≈ diagm(sigma_ar)
+    end
+
+    @testset "Marginal likelihood is a smooth surface (#571/#572)" begin
+        # 4-variable AR(0.7) panel: the log marginal likelihood must be finite at the
+        # default start and vary smoothly in the hyperparameters. With the rank-1 lag
+        # blocks, K_prior was singular, logdet_safe returned -Inf and EVERY evaluation
+        # clamped to -1e10 — a flat plateau that pinned the optimizer at the box wall.
+        rng = Random.MersenneTwister(4242)
+        N, T_burn, T_obs = 4, 50, 120
+        Yb = zeros(T_burn + T_obs, N)
+        for t in 2:(T_burn + T_obs), j in 1:N
+            Yb[t, j] = 0.7 * Yb[t - 1, j] + randn(rng)
+        end
+        Y = Yb[(T_burn + 1):end, :]
+        sigma_ar = [std(diff(Y[:, j])) for j in 1:N]
+        ml(lam, th) = MacroEconometricModels._bvar_estimate(Y, 2, sigma_ar, lam, th,
+                                                            1.0, 2.0)[3]
+
+        @test isfinite(ml(0.2, 1.0)) && ml(0.2, 1.0) > -1e9
+        for lam in (0.02, 0.05, 0.2), th in (0.5, 1.0, 1.1)
+            @test isfinite(ml(lam, th)) && ml(lam, th) > -1e9
+        end
+        # Smooth through theta = 1: the midpoint of the neighbours matches the value there
+        @test ml(0.2, 1.0) ≈ (ml(0.2, 0.99) + ml(0.2, 1.01)) / 2 rtol=1e-4
+        @test ml(0.2, 0.5) < ml(0.2, 1.1)   # monotone over this stretch, no spike at 1
+
+        # The optimizer now reaches an interior optimum on this panel
+        m = nowcast_bvar(Y, 3, 1; lags=2)
+        @test m.converged
+        @test all(x -> abs(log(x)) < 5 - 1e-3, (m.lambda, m.theta, m.miu, m.alpha))
     end
 
     @testset "StatsAPI interface" begin
@@ -674,6 +723,43 @@ _NC_M = nowcast_dfm(_NC_Y, 4, 1; r=1, p=1, max_iter=20, thresh=1e-3)
         # overlapping information wrongly and dumped a large residual into impact_reestimation.
         rev = news.new_nowcast - news.old_nowcast
         @test abs(news.impact_reestimation) <= 1e-6 * (abs(rev) + 1)
+    end
+
+    @testset "Revisions are not news (#573)" begin
+        Y, _, _, _ = _make_nowcast_data(T_obs=80, nM=4, nQ=1, r=1, seed=717)
+        m = nowcast_dfm(Y, 4, 1; r=1, p=1, max_iter=30, thresh=1e-4)
+
+        # A pure revision: one cell observed in BOTH vintages changes value. The news
+        # weights are derived for cells MISSING in the old vintage, so applying them here
+        # misattributed part of the impact to re-estimation (#573). With parameters held
+        # fixed the whole nowcast delta must land in impact_revision.
+        X_old = copy(Y)
+        X_new = copy(Y)
+        X_new[79, 2] += 0.5
+        news = nowcast_news(X_new, X_old, m, 79; target_var=5)
+        delta = news.new_nowcast - news.old_nowcast
+
+        @test length(news.impact_news) == 0
+        @test news.impact_revision ≈ delta atol=1e-10
+        @test abs(news.impact_reestimation) <= 1e-10
+        @test abs(delta) > 1e-4                       # the revision actually moved the nowcast
+
+        # Re-standardization noise (~1e-13) must not register as a revision — the exact
+        # `!=` test flagged every observed cell and built a T·N-square revision system.
+        X_noise = copy(Y) .+ 1e-13
+        news_noise = nowcast_news(X_noise, Y, m, 79; target_var=5)
+        @test news_noise.impact_revision == 0.0
+
+        # News and revisions together: the decomposition identity still holds
+        X_old2 = copy(Y)
+        X_old2[76:80, 1:2] .= NaN
+        X_new2 = copy(Y)
+        X_new2[60, 3] += 0.3
+        news2 = nowcast_news(X_new2, X_old2, m, 78; target_var=5)
+        @test length(news2.impact_news) > 1
+        @test news2.new_nowcast - news2.old_nowcast ≈
+              sum(news2.impact_news) + news2.impact_revision + news2.impact_reestimation atol=1e-8
+        @test abs(news2.impact_reestimation) <= 1e-6 * (abs(news2.new_nowcast - news2.old_nowcast) + 1)
     end
 
     @testset "Kalman lagged smoother cross-covariance recursion (T094 #194)" begin

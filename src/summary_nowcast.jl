@@ -46,7 +46,7 @@ function Base.show(io::IO, m::NowcastBVAR{T}) where {T}
         "Lags"             m.lags;
         "Log-likelihood"   _fmt(m.loglik);
         "Lambda (shrinkage)" _fmt(m.lambda);
-        "Theta (cross-var)"  _fmt(m.theta);
+        "Theta (lag decay)"  _fmt(m.theta);
         "Miu (unit root)"    _fmt(m.miu);
         "Alpha (co-persist)" _fmt(m.alpha);
         "Missing values"   n_nan;

@@ -96,16 +96,13 @@ function apply_tcode(d::TimeSeriesData{T}, tcodes::Vector{Int}) where {T}
         return 0
     end
 
-    max_lost = maximum(_rows_lost(tc) for tc in tcodes)
-    new_T = d.T_obs - max_lost
-    new_T < 1 && throw(ArgumentError("Not enough observations after transformation"))
-
-    # Transform each column and align to common length; fall back to tcode 1
-    # if a column has non-positive values incompatible with log-based tcodes
+    # Transform each column first; a column with non-positive values falls back to
+    # tcode 2, which loses a row the declared code did not (e.g. 4 → 2), so the row
+    # budget must come from the EFFECTIVE codes, not the declared ones (#588).
     effective_tcodes = copy(tcodes)
-    new_data = Matrix{Float64}(undef, new_T, n)
+    cols = Vector{Vector{Float64}}(undef, n)
     for j in 1:n
-        col_transformed = try
+        cols[j] = try
             apply_tcode(d.data[:, j], tcodes[j])
         catch e
             if e isa ArgumentError && tcodes[j] >= 4
@@ -117,9 +114,17 @@ function apply_tcode(d::TimeSeriesData{T}, tcodes::Vector{Int}) where {T}
                 rethrow(e)
             end
         end
-        # Take the last new_T elements (align to end)
-        offset = length(col_transformed) - new_T
-        new_data[:, j] = col_transformed[(offset + 1):end]
+    end
+
+    max_lost = maximum(_rows_lost(tc) for tc in effective_tcodes)
+    new_T = d.T_obs - max_lost
+    new_T < 1 && throw(ArgumentError("Not enough observations after transformation"))
+
+    # Align every column to the common length (take the last new_T elements)
+    new_data = Matrix{Float64}(undef, new_T, n)
+    for j in 1:n
+        offset = length(cols[j]) - new_T
+        new_data[:, j] = cols[j][(offset + 1):end]
     end
 
     # Trim time_index to match

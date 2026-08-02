@@ -82,7 +82,7 @@ via marginal likelihood maximization.
 - `beta::Matrix{T}` — posterior mode VAR coefficients
 - `sigma::Matrix{T}` — posterior mode error covariance
 - `lambda::T` — overall shrinkage
-- `theta::T` — cross-variable shrinkage
+- `theta::T` — Minnesota lag-decay exponent (Litterman `d` / GLP `α`)
 - `miu::T` — sum-of-coefficients prior weight
 - `alpha::T` — co-persistence prior weight
 - `lags::Int` — number of lags

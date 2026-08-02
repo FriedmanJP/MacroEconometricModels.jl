@@ -38,7 +38,9 @@ quarterly (observed every 3rd month). The BVAR is estimated on the complete
 - `thresh::Real=1e-6` — optimization convergence threshold
 - `max_iter::Int=200` — max optimization iterations
 - `lambda0::Real=0.2` — initial overall shrinkage
-- `theta0::Real=1.0` — initial cross-variable shrinkage
+- `theta0::Real=1.0` — initial lag-decay exponent (Litterman `d` / GLP `α`; larger ⇒
+  higher lags shrunk harder). See [`_bvar_dummy_obs`](@ref) for why own-vs-cross relative
+  tightness is not a separate hyperparameter under the conjugate NIW prior (#572).
 - `miu0::Real=1.0` — initial sum-of-coefficients weight
 - `alpha0::Real=2.0` — initial co-persistence weight
 
@@ -213,7 +215,13 @@ function _bvar_estimate(Y::Matrix{T}, lags::Int, sigma_ar::Vector{T},
         T_d = size(Y_d, 1)
         K_post = X_star' * X_star
         K_prior = X_d' * X_d
-        B_prior = robust_inv(K_prior + T(1e-10) * I(k)) * (X_d' * Y_d)
+        # Prior mean by column-equilibrated least squares. The lag^theta scaling spreads
+        # the dummy columns over many orders of magnitude; inverting the raw Gram matrix
+        # sends robust_inv into its truncated pseudo-inverse, whose residual inflates
+        # S_prior by a large step and hands the optimizer a spurious log-ML jump toward
+        # the box wall (#571).
+        col_scale = [max(norm(@view X_d[:, j]), eps(T)) for j in 1:k]
+        B_prior = ((X_d ./ col_scale') \ Y_d) ./ col_scale
         S_post = (Y_star - X_star * beta)' * (Y_star - X_star * beta)
         S_prior = (Y_d - X_d * B_prior)' * (Y_d - X_d * B_prior)
         nu_prior = T_d - k
@@ -243,22 +251,33 @@ end
 """
     _bvar_dummy_obs(Y0, lags, sigma_ar, lambda, theta, miu, alpha) -> (Y_d, X_d)
 
-Construct Minnesota prior dummy observations (BGR / stacked-dummy form).
+Construct Minnesota prior dummy observations (GLP / stacked-dummy form).
 
-Matches `gen_dummy_obs` in `src/bvar/priors.jl`: dummy scale is
-`σ · lag^d / λ` so higher lags get *more* prior mass (tighter shrinkage) (#572).
+Every Minnesota row carries exactly ONE nonzero regressor entry, as in `gen_dummy_obs`
+(`src/bvar/priors.jl`): the row for lag `l` and variable `i` scales the coefficient on
+`y_{t-l}[i]` by `σ_i · l^θ / λ` and targets 1 (own equation, lag 1) or 0. Putting the
+own-lag and all cross-lag entries of one equation into the SAME row instead restricts
+their *sum*: every lag block collapses to rank 1, `X_d'X_d` is singular, and the NIW
+marginal likelihood degenerates to the `-1e10` sentinel on the default start (#571/#572).
 
-- `lambda`: overall tightness (smaller ⇒ tighter; inverse of prior SD scale)
-- `theta`: cross-variable relative tightness (smaller ⇒ more cross-variable shrinkage;
-  `theta=1` treats cross like own). Note: higher `theta` is *looser* on cross lags.
-- `miu`: sum-of-coefficients (unit root prior)
-- `alpha`: co-persistence (common stochastic trend prior)
+- `lambda` — overall tightness (smaller ⇒ tighter; inverse of the prior SD scale)
+- `theta` — lag-decay exponent (Litterman `d`, GLP `α`): larger ⇒ higher lags shrunk
+  harder toward zero. Own-vs-cross *relative* tightness is not a free hyperparameter of a
+  conjugate NIW prior: dummy observations imply prior variance `Σ_mm · (X_d'X_d)⁻¹_cc` for
+  coefficient `(c, m)`, so for regressor `j` the cross/own prior SD ratio is `√(Σ_mm/Σ_jj)`
+  — the standard Minnesota asymmetry — under *any* row scale (#572).
+- `miu` — sum-of-coefficients (unit root prior)
+- `alpha` — co-persistence (common stochastic trend prior); also the intercept prior scale
+
+The closing block is the inverse-Wishart scale prior (`Y = diag(σ)`, `X = 0`). Without it
+the random-walk `B` satisfies every dummy row exactly, the prior SSR is singular, and the
+marginal likelihood collapses again — this is the block that fixes the prior location
+`E[Σ] ∝ diag(σ̂²)` and supplies the prior degrees of freedom.
 """
 function _bvar_dummy_obs(Y0::AbstractMatrix{T}, lags::Int, sigma_ar::Vector{T},
                          lambda::T, theta::T, miu::T, alpha::T) where {T<:AbstractFloat}
     N = size(Y0, 2)
     k = 1 + N * lags
-    decay = T(2)  # lag-decay exponent (Litterman d=2)
 
     # Mean of initial observations (NaN-safe for mixed-frequency data)
     y_bar = zeros(T, N)
@@ -271,29 +290,20 @@ function _bvar_dummy_obs(Y0::AbstractMatrix{T}, lags::Int, sigma_ar::Vector{T},
     dummy_Y = Matrix{T}(undef, 0, N)
     dummy_X = Matrix{T}(undef, 0, k)
 
-    # 1. Minnesota tightness dummies (Litterman 1986 / BGR 2010)
-    # Dummy ∝ lag^decay / lambda so higher lags receive MORE prior weight (#572).
-    for lag in 1:lags
-        Y_d = zeros(T, N, N)
-        X_d = zeros(T, N, k)
-        scale_lag = T(lag)^decay
-        for i in 1:N
-            # Diagonal (own-lag): random-walk mean on lag 1 only
-            own = sigma_ar[i] * scale_lag / lambda
-            if lag == 1
-                Y_d[i, i] = own
-            end
-            X_d[i, 1 + (lag - 1) * N + i] = own
-            # Off-diagonal (cross-variable): relative tightness theta
-            for j in 1:N
-                if i != j
-                    X_d[i, 1 + (lag - 1) * N + j] = sigma_ar[i] * scale_lag / (theta * lambda)
-                end
-            end
-        end
-        dummy_Y = vcat(dummy_Y, Y_d)
-        dummy_X = vcat(dummy_X, X_d)
+    # 1. Minnesota tightness dummies (Litterman 1986 / BGR 2010): one row per
+    # (lag, variable), single nonzero. Dummy ∝ lag^theta / lambda so higher lags
+    # receive MORE prior weight (#572).
+    Y_mn = zeros(T, N * lags, N)
+    X_mn = zeros(T, N * lags, k)
+    row = 0
+    for lag in 1:lags, i in 1:N
+        row += 1
+        scale = sigma_ar[i] * T(lag)^theta / lambda
+        lag == 1 && (Y_mn[row, i] = scale)   # random-walk mean on lag 1 only
+        X_mn[row, 1 + (lag - 1) * N + i] = scale
     end
+    dummy_Y = vcat(dummy_Y, Y_mn)
+    dummy_X = vcat(dummy_X, X_mn)
 
     # 2. Sum-of-coefficients prior (unit root)
     if miu > 0
@@ -320,6 +330,12 @@ function _bvar_dummy_obs(Y0::AbstractMatrix{T}, lags::Int, sigma_ar::Vector{T},
         dummy_Y = vcat(dummy_Y, Y_d)
         dummy_X = vcat(dummy_X, X_d)
     end
+
+    # 4. Inverse-Wishart scale prior (Sims varprior / GLP): X = 0, so it constrains Σ only.
+    # Blocks 1-3 are all satisfied exactly by the random-walk B, so this block is what keeps
+    # the prior SSR (and hence the NIW marginal likelihood) nonsingular (#571).
+    dummy_Y = vcat(dummy_Y, diagm(sigma_ar))
+    dummy_X = vcat(dummy_X, zeros(T, N, k))
 
     return dummy_Y, dummy_X
 end

@@ -55,8 +55,12 @@ function lp_fevd(slp::StructuralLP{T}, horizon::Int;
                  n_boot::Int=500,
                  conf_level::Real=0.95,
                  var_lags::Union{Nothing,Int}=nothing,
+                 seed::Union{Integer,Nothing}=nothing,
                  rng::AbstractRNG=Random.default_rng()) where {T<:AbstractFloat}
 
+    # Reproducibility parity with irf(::VARModel; seed=) (#537): a seed owns the
+    # RNG so the bootstrap bands are reproducible bit-for-bit.
+    rng = _resolve_repro_rng(rng, seed)
     @assert method ∈ (:r2, :lp_a, :lp_b) "method must be :r2, :lp_a, or :lp_b"
 
     n = nvars(slp)

@@ -73,9 +73,7 @@ function _midas_weights(theta::AbstractVector{T}, K::Int, kind::Symbol) where {T
         else
             length(theta) == 2 || throw(ArgumentError(":beta2 expects 2 parameters"))
         end
-        s = sum(u)
-        s > zero(T) || throw(ArgumentError(":beta3 weights sum to non-positive; check θ"))
-        return u ./ s
+        return u ./ sum(u)
     elseif kind === :almon
         length(theta) >= 1 || throw(ArgumentError(":almon expects ≥ 1 parameter"))
         k = T.(1:K)
@@ -132,8 +130,12 @@ function _midas_weights_jac(theta::AbstractVector{T}, K::Int, kind::Symbol) wher
         d_a = base .* log.(x)                 # ∂base/∂a
         d_b = base .* log.(one(T) .- x)       # ∂base/∂b
         if kind === :beta3
-            u = base .+ theta[3]
-            du = hcat(d_a, d_b, ones(T, K))   # ∂u/∂θ₃ = 1
+            # Mirror the max(θ₃, 0) clamp of the forward map (#575): the level constant
+            # is frozen at 0 for θ₃ ≤ 0, so its derivative there is 0, not 1. At the kink
+            # take the right derivative so an optimizer started at θ₃ = 0 can still move.
+            u = base .+ max(theta[3], zero(T))
+            d_t3 = theta[3] >= zero(T) ? ones(T, K) : zeros(T, K)
+            du = hcat(d_a, d_b, d_t3)
             return _normalize_jac(u, du)
         else
             u = base

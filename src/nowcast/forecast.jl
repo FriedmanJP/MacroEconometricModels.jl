@@ -86,7 +86,16 @@ function nowcast(model::NowcastBridge{T}; target_var::Union{Int,Nothing}=nothing
     tv = something(target_var, N)
 
     now_val = model.Y_nowcast[n_quarters]
-    fc_val = isnan(now_val) ? now_val : now_val  # Bridge doesn't do multi-step forecast natively
+    # A bridge equation maps *observed* monthly indicators onto the quarterly target, so it
+    # has no multi-step forecast of its own: the next quarter carries the current nowcast
+    # forward. If that quarter has no usable bridge prediction (NaN), fall back to the most
+    # recent quarter that does.
+    fc_val = if isnan(now_val)
+        q = findlast(!isnan, model.Y_nowcast)
+        q === nothing ? now_val : model.Y_nowcast[q]
+    else
+        now_val
+    end
 
     NowcastResult{T}(model, model.X_sm, tv, now_val, fc_val, :bridge)
 end

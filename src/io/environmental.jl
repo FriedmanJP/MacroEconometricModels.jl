@@ -15,6 +15,10 @@ end
 Attach a satellite account `name` with stressor flows `F` (`n_stressor × n`) to
 `io`, computing intensities `S = F x̂⁻¹`. `F_Y` (`n_stressor × n_fd`) gives
 direct stressor flows in final demand (defaults to zeros).
+
+`unit` accepts a single string (applied to every stressor row) or a vector with
+one entry per row; `stressors` accepts a vector of names, or a single string
+when `F` has one row (#520).
 """
 function add_extension!(io::IOData{T}, name::AbstractString, F::AbstractMatrix;
                         stressors, unit, F_Y=nothing) where {T}
@@ -34,9 +38,19 @@ function add_extension!(io::IOData{T}, name::AbstractString, F::AbstractMatrix;
             "unit must be a string or a vector of $n_s strings (one per extension row); got length $(length(u))"))
         u
     end
-    stress_vec = collect(String.(stressors))
-    length(stress_vec) == n_s || throw(ArgumentError(
-        "stressors must have length $n_s (one per extension row); got $(length(stress_vec))"))
+    # Same scalar-vs-vector trap as `unit` (#520): a bare String broadcasts
+    # character-by-character, so handle it explicitly.
+    stress_vec = if stressors isa AbstractString
+        n_s == 1 || throw(ArgumentError(
+            "stressors must be a vector of $n_s names (one per extension row); " *
+            "got the single string $(repr(stressors))"))
+        [String(stressors)]
+    else
+        s = collect(String.(stressors))
+        length(s) == n_s || throw(ArgumentError(
+            "stressors must have length $n_s (one per extension row); got $(length(s))"))
+        s
+    end
     io.extensions[String(name)] =
         IOExtension{T}(Fm, FYm, S, stress_vec, unit_vec)
     io
