@@ -358,21 +358,28 @@ function main()
     end
 
     # -------------------------------------------------------------------
-    # 28. Nowcast result
+    # 28. Nowcast result (matches the nowcast.md @setup exactly: the last 100
+    #     months of the FRED-MD panel, four monthly indicators plus a quarterly
+    #     target observed every third month, AR(1) idiosyncratic components)
     # -------------------------------------------------------------------
     if use_real
-        nc_md  = fred_gm[:, ["INDPRO", "UNRATE", "CPIAUCSL", "M2SL", "FEDFUNDS"]]
-        Y_nc   = _clean_rows(to_matrix(apply_tcode(nc_md)))
+        Random.seed!(42)
+        nc_md  = fred_md[:, ["INDPRO", "UNRATE", "CPIAUCSL", "M2SL", "FEDFUNDS"]]
+        Y_nc   = to_matrix(apply_tcode(nc_md))
+        Y_nc   = Y_nc[all.(isfinite, eachrow(Y_nc)), :]
         Y_nc   = Y_nc[end-99:end, :]
     else
         Y_nc = randn(100, 5)
     end
-    Y_nc[end, end] = NaN
-    dfm_nc = nowcast_dfm(Y_nc, 4, 1; r=2, p=1)
+    for t in 1:size(Y_nc, 1)
+        mod(t, 3) != 0 && (Y_nc[t, end] = NaN)   # quarterly target, monthly panel
+    end
+    Y_nc[end, end] = NaN                          # current quarter not yet published
+    dfm_nc = nowcast_dfm(Y_nc, 4, 1; r=2, p=1, idio=:ar1)
     nr = nowcast(dfm_nc)
     save("nowcast_result.html", plot_result(nr))
     save("nowcast_heatmap.html", plot_result(nr; view=:heatmap,
-         variable_names=["INDPRO", "UNRATE", "CPI", "M2", "FFR"]))
+         variable_names=["INDPRO", "UNRATE", "CPIAUCSL", "M2SL", "FEDFUNDS"]))
     save("nowcast_contributions.html", plot_result(nr; view=:contributions))
 
     # -------------------------------------------------------------------
@@ -557,33 +564,29 @@ function main()
     end
 
     # -------------------------------------------------------------------
-    # 40. Logit Model
+    # 40-42 + 60. Logit, probit, average marginal effects, and odds-ratio
+    #        forest. Reproduces the binary_choice.md matrix-interface fit
+    #        exactly — the Mroz (1987) participation extract, seven
+    #        regressors plus the intercept — so all four figures and the
+    #        numbers the page quotes are one model. (The odds-ratio save
+    #        lives here because m_logit is local to this try block.)
     # -------------------------------------------------------------------
-    begin
-        Random.seed!(125)
-        n_bin = 500
-        X_bin = hcat(ones(n_bin), randn(n_bin), randn(n_bin))
-        eta = X_bin * [0.0, 1.0, -0.5]
-        prob_bin = 1.0 ./ (1.0 .+ exp.(-eta))
-        y_bin = Float64.(rand(n_bin) .< prob_bin)
-        m_logit = estimate_logit(y_bin, X_bin; varnames=["const", "x₁", "x₂"])
+    try
+        mroz_bc  = load_example(:mroz)
+        y_bc = mroz_bc[:, "inlf"]
+        X_bc = hcat(ones(mroz_bc.N_obs), mroz_bc[:, "nwifeinc"], mroz_bc[:, "educ"],
+                    mroz_bc[:, "exper"], mroz_bc[:, "expersq"], mroz_bc[:, "age"],
+                    mroz_bc[:, "kidslt6"], mroz_bc[:, "kidsge6"])
+        xnames_bc = ["(Intercept)", "nwifeinc", "educ", "exper", "expersq", "age",
+                     "kidslt6", "kidsge6"]
+        m_logit  = estimate_logit(y_bc, X_bc; varnames=xnames_bc)
+        m_probit_bc = estimate_probit(y_bc, X_bc; varnames=xnames_bc)
         save("reg_logit.html", plot_result(m_logit))
-    end
-
-    # -------------------------------------------------------------------
-    # 41. Probit Model
-    # -------------------------------------------------------------------
-    begin
-        m_probit_reg = estimate_probit(y_bin, X_bin; varnames=["const", "x₁", "x₂"])
-        save("reg_probit.html", plot_result(m_probit_reg))
-    end
-
-    # -------------------------------------------------------------------
-    # 42. Marginal Effects
-    # -------------------------------------------------------------------
-    begin
-        me_ame = marginal_effects(m_logit; type=:ame)
-        save("reg_marginal_effects.html", plot_result(me_ame))
+        save("reg_probit.html", plot_result(m_probit_bc))
+        save("reg_marginal_effects.html", plot_result(marginal_effects(m_logit)))
+        save("odds_ratio_forest.html", plot_result(odds_ratio(m_logit)))
+    catch e
+        @warn "Skipped binary-choice gallery" exception=(e, catch_backtrace())
     end
 
     # -------------------------------------------------------------------
@@ -784,14 +787,8 @@ function main()
         plot_result(preg)
     end
 
-    # 60. Odds-ratio forest plot (logit, log x-axis, reference at 1)
-    try_save("odds_ratio_forest.html") do
-        rng = MersenneTwister(62); nb = 500
-        Xb = hcat(randn(rng, nb), randn(rng, nb), randn(rng, nb))
-        eta = Xb * [0.8, -0.5, 0.3]
-        yb = Float64.(rand(rng, nb) .< 1 ./ (1 .+ exp.(-eta)))
-        plot_result(odds_ratio(estimate_logit(yb, Xb; varnames=["age", "income", "educ"])))
-    end
+    # 60. Odds-ratio forest plot — moved into the 40-42 Mroz block above so it
+    #     shares m_logit's scope (the synthetic entry drifted from the page).
 
     # 61. GMM moment-discrepancy bar + J-test annotation
     try_save("gmm_moment_fit.html") do

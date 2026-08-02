@@ -121,25 +121,26 @@ Each method computes the forecast differently: DFM projects the state vector 3 m
 
 ## Visualization
 
-The `plot_result` function supports multiple views for a `NowcastResult`, following the visualization patterns of the ECB Nowcasting Toolbox (Linzenich and Meunier 2024). The default view displays the smoothed target variable with nowcast/forecast extension. For DFM models, extracted factor panels are appended automatically.
+The `plot_result` function supports multiple views for a `NowcastResult`, following the visualization patterns of the ECB Nowcasting Toolbox (Linzenich and Meunier 2024). The default view leads with the target panel --- the smoothed quarterly series extended by the nowcast and the one-quarter-ahead forecast --- then adds one panel per monthly indicator and, for DFM models, one panel per extracted factor.
 
 ```julia
-plot_result(nr)                          # default: target + factors (DFM)
-plot_result(nr; view=:heatmap)           # z-score heatmap with ragged edge
-plot_result(nr; view=:contributions)     # group contributions (DFM only)
+plot_result(result)                      # default: target + factors (DFM)
+plot_result(result; view=:heatmap,       # z-score heatmap with ragged edge
+            variable_names=["INDPRO", "UNRATE", "CPIAUCSL", "M2SL", "FEDFUNDS"])
+plot_result(result; view=:contributions) # group contributions (DFM only)
 ```
 
 ```@raw html
 <iframe src="../assets/plots/nowcast_result.html" width="100%" height="400" frameborder="0" style="border:1px solid #ddd;border-radius:4px;"></iframe>
 ```
 
-The **heatmap view** computes z-scores for each variable and renders the last `n_periods` (default 18) as a color-coded matrix. Missing values appear in grey, revealing the ragged edge --- the characteristic pattern of staggered data releases.
+The **heatmap view** computes z-scores for each variable and renders the last `n_periods` (default 18) as a color-coded matrix, labelling the rows with `variable_names`. Missing values appear in grey, revealing the ragged edge --- here the two months in every three for which the quarterly target is unobserved, plus the unpublished current quarter.
 
 ```@raw html
 <iframe src="../assets/plots/nowcast_heatmap.html" width="100%" height="350" frameborder="0" style="border:1px solid #ddd;border-radius:4px;"></iframe>
 ```
 
-The **contributions view** decomposes the nowcast into factor/block group contributions, showing how each group drives the current-quarter estimate and the one-quarter-ahead forecast.
+The **contributions view** draws three stacked bars --- the target's sample mean, the factor contribution to the current-quarter nowcast, and the factor contribution to the one-quarter-ahead forecast --- with one stack segment per factor block. A single-block DFM like this one yields one segment; pass `groups` and `group_names` to split the factors into named blocks.
 
 ```@raw html
 <iframe src="../assets/plots/nowcast_contributions.html" width="100%" height="350" frameborder="0" style="border:1px solid #ddd;border-radius:4px;"></iframe>

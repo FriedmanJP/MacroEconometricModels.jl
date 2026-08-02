@@ -431,7 +431,7 @@ round.(p_hat, digits=3)
 
 ## Visualization
 
-`plot_result` renders logit and probit fits as sorted fitted-probability curves split by observed outcome, marginal effects as a horizontal coefficient plot with confidence bars, and odds ratios as a forest plot on a log axis with its reference line at 1.
+`plot_result` renders a logit or probit fit as a two-panel adequacy screen --- the fitted probabilities sorted and coloured by the observed outcome, above their distribution by outcome group --- marginal effects as a horizontal coefficient plot with confidence bars, and odds ratios as a forest plot on a log axis with its reference line at 1. Every figure below is the Mroz fit `m` estimated above; the marginal-effects panel omits the intercept, whose effect is `NaN`.
 
 ```julia
 p = plot_result(m)
