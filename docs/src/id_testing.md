@@ -387,7 +387,7 @@ The four checks pass in sequence: the residuals are non-normal on all seven test
 
 - Jarque, Carlos M., and Anil K. Bera. 1980. "Efficient Tests for Normality, Homoscedasticity and Serial Independence of Regression Residuals." *Economics Letters* 6 (3): 255--259. [DOI](https://doi.org/10.1016/0165-1765(80)90024-5)
 
-- Lewis, Daniel J. 2022. "Robust Inference in Models Identified via Heteroskedasticity." *Review of Economics and Statistics* 104 (3): 510--524. [DOI](https://doi.org/10.1162/rest_a_00977)
+- Lewis, Daniel J. 2022. "Robust Inference in Models Identified via Heteroskedasticity." *Review of Economics and Statistics* 104 (3): 510--524. [DOI](https://doi.org/10.1162/rest_a_00963)
 
 - Lütkepohl, Helmut. 2005. *New Introduction to Multiple Time Series Analysis*. Berlin: Springer. ISBN 978-3-540-40172-8.
 

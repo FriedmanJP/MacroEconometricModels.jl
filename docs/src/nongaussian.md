@@ -2,7 +2,7 @@
 
 Statistical identification recovers the structural impact matrix ``B_0`` from higher-moment information --- time-varying variances (heteroskedasticity) or non-Gaussian shock distributions --- without imposing recursive orderings, sign restrictions, or zero restrictions. The classification follows Lewis (2025), the definitive survey of higher-moment identification in macroeconometrics.
 
-Thirteen estimators and six diagnostic tests divide across three child pages: nine methods exploit non-Gaussianity (five ICA, four maximum likelihood), four exploit heteroskedasticity, and the testing page covers the diagnostics that decide whether either source of identification is present. Every method produces a rotation ``Q`` consumed by `irf()`, `fevd()`, and `historical_decomposition()`.
+Fourteen estimators and six diagnostic tests divide across three child pages: ten methods exploit non-Gaussianity (five ICA, five maximum likelihood, counting the adaptive `:nongaussian_ml` dispatcher), four exploit heteroskedasticity, and the testing page covers the diagnostics that decide whether either source of identification is present. Every method produces a rotation ``Q`` consumed by `irf()`, `fevd()`, and `historical_decomposition()`.
 
 ```@setup id_overview
 using MacroEconometricModels, Random
@@ -27,7 +27,7 @@ report(ica)
 
 ## Choosing a Method
 
-All 14 methods return a rotation matrix ``Q`` and structural impact matrix ``B_0 = L Q`` where ``L = \text{chol}(\Sigma)``. The shape of the data --- fat tails, bimodality, skewness, regime shifts, volatility clustering --- selects the estimator:
+All 14 methods return a rotation matrix ``Q`` and structural impact matrix ``B_0 = P Q`` where ``P = \text{chol}(\Sigma)``. The shape of the data --- fat tails, bimodality, skewness, regime shifts, volatility clustering --- selects the estimator:
 
 | Feature needed | Recommended | Why |
 |----------------|-------------|-----|
@@ -156,7 +156,7 @@ Statistical identification recovers ``B_0`` only up to **column permutation and 
 
 ### Diagnostics
 
-- Lewis, D. J. (2022). Robust Inference in Models Identified via Heteroskedasticity. *Review of Economics and Statistics*, 104(3), 510--524. [DOI: 10.1162/rest_a_00977](https://doi.org/10.1162/rest_a_00977)
+- Lewis, D. J. (2022). Robust Inference in Models Identified via Heteroskedasticity. *Review of Economics and Statistics*, 104(3), 510--524. [DOI: 10.1162/rest_a_00963](https://doi.org/10.1162/rest_a_00963)
 - Jarque, C. M. & Bera, A. K. (1980). Efficient Tests for Normality, Homoscedasticity and Serial Independence. *Economics Letters*, 6(3), 255--259. [DOI: 10.1016/0165-1765(80)90024-5](https://doi.org/10.1016/0165-1765(80)90024-5)
 - Mardia, K. V. (1970). Measures of Multivariate Skewness and Kurtosis with Applications. *Biometrika*, 57(3), 519--530. [DOI: 10.1093/biomet/57.3.519](https://doi.org/10.1093/biomet/57.3.519)
 - Doornik, J. A. & Hansen, H. (2008). An Omnibus Test for Univariate and Multivariate Normality. *Oxford Bulletin of Economics and Statistics*, 70, 927--939. [DOI: 10.1111/j.1468-0084.2008.00537.x](https://doi.org/10.1111/j.1468-0084.2008.00537.x)

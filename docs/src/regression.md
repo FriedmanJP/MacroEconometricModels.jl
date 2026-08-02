@@ -1907,7 +1907,7 @@ OLS puts the return to education at 0.966 against a true 0.8, biased upward by t
   *Econometrica*, 28(3), 591-605. [DOI](https://doi.org/10.2307/1910133)
 
 - Edgerton, D., & Wells, C. (1994). Critical Values for the CUSUMSQ Statistic in Medium and Large Sized Samples.
-  *Oxford Bulletin of Economics and Statistics*, 56(3), 355-365. [DOI](https://doi.org/10.1111/j.1468-0084.1994.mp56003008.x)
+  *Oxford Bulletin of Economics and Statistics*, 56(3), 355-365. [DOI](https://doi.org/10.1111/j.1468-0084.1994.mp56003007.x)
 
 - Den Haan, W. J., & Levin, A. T. (1997). A Practitioner's Guide to Robust Covariance Matrix Estimation.
   In *Handbook of Statistics*, Vol. 15, 299-342. Elsevier. [DOI](https://doi.org/10.1016/S0169-7161(97)15014-3)
@@ -2024,7 +2024,7 @@ OLS puts the return to education at 0.966 against a true 0.8, biased upward by t
   *The Annals of Mathematical Statistics*, 39(1), 70-75. [DOI](https://doi.org/10.1214/aoms/1177698505)
 
 - McElroy, M. B. (1977). Goodness of Fit for Seemingly Unrelated Regressions.
-  *Journal of Econometrics*, 6(3), 381-387. [DOI](https://doi.org/10.1016/0304-4076(77)90008-1)
+  *Journal of Econometrics*, 6(3), 381-387. [DOI](https://doi.org/10.1016/0304-4076(77)90008-2)
 
 - Henningsen, A., & Hamann, J. D. (2007). systemfit: A Package for Estimating Systems of Simultaneous Equations in R.
   *Journal of Statistical Software*, 23(4), 1-40. [DOI](https://doi.org/10.18637/jss.v023.i04)

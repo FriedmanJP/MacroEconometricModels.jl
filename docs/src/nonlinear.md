@@ -513,4 +513,4 @@ Linearity is rejected, so a threshold model is warranted. The two regimes carry 
 - Luukkonen, R., Saikkonen, P. & Teräsvirta, T. (1988). Testing linearity against smooth transition autoregressive models. *Biometrika* 75(3), 491–499. [doi:10.1093/biomet/75.3.491](https://doi.org/10.1093/biomet/75.3.491)
 - Teräsvirta, T. (1994). Specification, estimation, and evaluation of smooth transition autoregressive models. *Journal of the American Statistical Association* 89(425), 208–218. [doi:10.1080/01621459.1994.10476462](https://doi.org/10.1080/01621459.1994.10476462)
 - Tong, H. (1990). *Non-linear Time Series: A Dynamical System Approach.* Oxford University Press. ISBN 978-0-19-852300-6.
-- van Dijk, D., Teräsvirta, T. & Franses, P. H. (2002). Smooth transition autoregressive models — a survey of recent developments. *Econometric Reviews* 21(1), 1–47. [doi:10.1081/ETC-120015876](https://doi.org/10.1081/ETC-120015876)
+- van Dijk, D., Teräsvirta, T. & Franses, P. H. (2002). Smooth transition autoregressive models — a survey of recent developments. *Econometric Reviews* 21(1), 1–47. [doi:10.1081/ETC-120008723](https://doi.org/10.1081/ETC-120008723)

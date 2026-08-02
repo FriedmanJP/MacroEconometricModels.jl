@@ -844,7 +844,7 @@ IC2 selects four factors, one more than the three used in the sections above, an
   *Review of Economics and Statistics*, 94(4), 1014-1024. [DOI](https://doi.org/10.1162/REST_a_00225)
 
 - Forni, M., Giannone, D., Lippi, M., & Reichlin, L. (2009). Opening the Black Box: Structural Factor Models with Large Cross-Sections.
-  *Econometric Theory*, 25(5), 1319-1347. [DOI](https://doi.org/10.1017/S0266466608090527)
+  *Econometric Theory*, 25(5), 1319-1347. [DOI](https://doi.org/10.1017/S026646660809052X)
 
 - Forni, M., Hallin, M., Lippi, M., & Reichlin, L. (2000). The Generalized Dynamic-Factor Model: Identification and Estimation.
   *Review of Economics and Statistics*, 82(4), 540-554. [DOI](https://doi.org/10.1162/003465300559037)
