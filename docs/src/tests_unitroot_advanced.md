@@ -97,7 +97,9 @@ A joint ``F``-test of ``H_0: a_k = b_k = 0`` says whether the Fourier terms earn
 ```@example test_ur_adv
 result = fourier_adf_test(cpi; regression=:constant, fmax=3)
 report(result)
+```
 
+```@example test_ur_adv
 (frequency = result.frequency, F = round(result.f_statistic, digits=3),
  F_pvalue = result.f_pvalue, F_cv5 = result.f_critical_values[5])
 ```
@@ -158,7 +160,9 @@ with ``\hat{\sigma}^2_{LR}`` the Bartlett long-run variance. The hypotheses are 
 ```@example test_ur_adv
 result = fourier_kpss_test(cpi; regression=:constant, fmax=3)
 report(result)
+```
 
+```@example test_ur_adv
 (frequency = result.frequency, F = round(result.f_statistic, digits=1),
  F_pvalue = result.f_pvalue, bandwidth = result.bandwidth)
 ```
@@ -233,7 +237,9 @@ which carries no intercept or trend, since GLS already removed them.
 ```@example test_ur_adv
 result = dfgls_test(cpi; regression=:constant, lags=:aic)
 report(result)
+```
 
+```@example test_ur_adv
 (tau = round(result.statistic, digits=3), Pt = round(result.pt_statistic, digits=2),
  MZt = round(result.MZt, digits=3), MZt_cv5 = result.mgls_critical_values[:MZt][5])
 ```

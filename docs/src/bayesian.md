@@ -439,7 +439,9 @@ After estimation, it is often useful to extract a single `VARModel` based on the
 # Extract VARModel with posterior mean parameters
 mean_model = posterior_mean_model(post)
 report(mean_model)
+```
 
+```@example bvar
 # Extract VARModel with posterior median parameters
 median_model = posterior_median_model(post)
 
@@ -925,7 +927,9 @@ report(bhd_ce)
 # Step 6: 12-step-ahead forecast
 fc_ce = forecast(post_ce, 12; conf_level=0.95)
 report(fc_ce)
+```
 
+```@example bvar
 # Step 7: Extract posterior mean VARModel for stationarity check
 mean_model_ce = posterior_mean_model(post_ce)
 stab_ce = is_stationary(mean_model_ce)

@@ -532,6 +532,7 @@ report(g)
 # Step 6: Convert to VAR for FEVD
 var_model = to_var(vecm)
 decomp = fevd(var_model, 20)
+report(decomp)
 ```
 
 ```julia

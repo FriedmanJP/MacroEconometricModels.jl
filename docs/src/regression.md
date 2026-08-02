@@ -1830,7 +1830,9 @@ Z = hcat(ones(n), z1, z2, experience)   # Instruments + exogenous regressors
 m_iv = estimate_iv(wage, X, Z; endogenous=[2],
                     varnames=["(Intercept)", "education", "experience"])
 report(m_iv)
+```
 
+```@example reg
 # ──────────────────────────────────────────────────────────────────────
 # Step 5: Compare the education coefficient across estimators
 # ──────────────────────────────────────────────────────────────────────
