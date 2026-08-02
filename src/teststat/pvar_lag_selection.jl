@@ -31,8 +31,10 @@ function pvar_lag_selection(d::PanelData{T}, max_p::Int;
                             kwargs...) where {T}
     max_p < 1 && throw(ArgumentError("max_p must be at least 1"))
 
-    models = Vector{PVARModel{T}}(undef, max_p)
-    criteria = Matrix{T}(undef, max_p, 3)  # BIC, AIC, HQIC
+    # Use Union{Nothing,...} so failed orders are `nothing` rather than
+    # undef slots that throw UndefRefError on access (issue #585).
+    models = Vector{Union{PVARModel{T}, Nothing}}(nothing, max_p)
+    criteria = fill(T(Inf), max_p, 3)  # BIC, AIC, HQIC
 
     for p_try in 1:max_p
         try
@@ -42,13 +44,12 @@ function pvar_lag_selection(d::PanelData{T}, max_p::Int;
             criteria[p_try, 1] = mmsc.bic
             criteria[p_try, 2] = mmsc.aic
             criteria[p_try, 3] = mmsc.hqic
-        catch e
-            # If estimation fails for this lag, set criteria to Inf
-            criteria[p_try, :] .= T(Inf)
+        catch
+            # Estimation failed for this lag — leave criteria at Inf / model nothing
         end
     end
 
-    # Find best
+    # Find best among finite criteria
     valid = [isfinite(criteria[p, 1]) for p in 1:max_p]
     best_bic = any(valid) ? argmin(criteria[:, 1]) : 1
     best_aic = any(valid) ? argmin(criteria[:, 2]) : 1

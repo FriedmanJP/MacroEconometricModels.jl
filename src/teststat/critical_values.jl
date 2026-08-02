@@ -1060,8 +1060,14 @@ const LM_UNITROOT_RSF = Dict(
 # LM 1-break Model A fixed CVs (Lee & Strazicich 2013)
 const LM_1BREAK_A_CV = Dict(1 => -4.239, 5 => -3.566, 10 => -3.211)
 
+# LM 1-break Model C (level+trend break) CVs (Lee & Strazicich 2013, λ≈0.5)
+const LM_1BREAK_C_CV = Dict(1 => -5.11, 5 => -4.50, 10 => -4.21)
+
 # LM 2-break Model A CVs (Lee & Strazicich 2003, Table 2)
 const LM_2BREAK_A_CV = Dict(1 => -4.545, 5 => -3.842, 10 => -3.504)
+
+# LM 2-break Model C CVs (Lee & Strazicich 2003, Table 2, mid-λ ≈ (0.4, 0.6))
+const LM_2BREAK_C_CV = Dict(1 => -6.45, 5 => -5.82, 10 => -5.49)
 
 # =============================================================================
 # Narayan-Popp & Gregory-Hansen Critical Values

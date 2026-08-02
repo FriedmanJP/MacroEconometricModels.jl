@@ -59,19 +59,45 @@ function unit_root_summary(y::AbstractVector{T};
         end
     end
 
-    # Determine conclusion
-    has_unit_root_adf = haskey(results, :adf) && results[:adf].pvalue > 0.05
-    is_stationary_kpss = haskey(results, :kpss) && results[:kpss].pvalue > 0.05
-    has_unit_root_pp = haskey(results, :pp) && results[:pp].pvalue > 0.05
+    # Conclusion only references tests that actually ran (issue #579: previously
+    # always mentioned KPSS even when tests=[:adf,:pp]).
+    has_adf  = haskey(results, :adf)
+    has_kpss = haskey(results, :kpss)
+    has_pp   = haskey(results, :pp)
 
-    conclusion = if has_unit_root_adf && !is_stationary_kpss
-        "Unit root detected (ADF fails to reject, KPSS rejects stationarity)"
-    elseif !has_unit_root_adf && is_stationary_kpss
-        "Series appears stationary (ADF rejects unit root, KPSS fails to reject)"
-    elseif has_unit_root_adf && is_stationary_kpss
-        "Inconclusive (ADF and KPSS both fail to reject)"
+    ur_adf  = has_adf  && results[:adf].pvalue  > 0.05   # fail to reject unit root
+    ur_pp   = has_pp   && results[:pp].pvalue   > 0.05
+    st_kpss = has_kpss && results[:kpss].pvalue > 0.05   # fail to reject stationarity
+
+    conclusion = if has_adf && has_kpss
+        if ur_adf && !st_kpss
+            "Unit root detected (ADF fails to reject, KPSS rejects stationarity)"
+        elseif !ur_adf && st_kpss
+            "Series appears stationary (ADF rejects unit root, KPSS fails to reject)"
+        elseif ur_adf && st_kpss
+            "Inconclusive (ADF and KPSS both fail to reject)"
+        else
+            "Conflicting results (ADF rejects unit root, KPSS rejects stationarity)"
+        end
+    elseif has_adf && has_pp
+        if ur_adf && ur_pp
+            "Unit root detected (ADF and PP both fail to reject)"
+        elseif !ur_adf && !ur_pp
+            "Series appears stationary (ADF and PP both reject unit root)"
+        else
+            "Conflicting results (ADF and PP disagree)"
+        end
+    elseif has_adf
+        ur_adf ? "Unit root detected (ADF fails to reject)" :
+                 "Series appears stationary (ADF rejects unit root)"
+    elseif has_pp
+        ur_pp ? "Unit root detected (PP fails to reject)" :
+                "Series appears stationary (PP rejects unit root)"
+    elseif has_kpss
+        st_kpss ? "Series appears stationary (KPSS fails to reject)" :
+                  "Unit root / non-stationarity (KPSS rejects stationarity)"
     else
-        "Conflicting results (ADF rejects unit root, KPSS rejects stationarity)"
+        "See individual test results"
     end
 
     (results=results, conclusion=conclusion)

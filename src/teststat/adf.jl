@@ -68,9 +68,11 @@ function adf_test(y::AbstractVector{T};
     Y = dy[(p+1):end]
     nobs = length(Y)
 
-    # OLS estimation
+    # OLS estimation. silent=true: trend regressions on trending levels often
+    # hit robust_inv's warn threshold (cond ~1e8) while still being well below
+    # the 1e12 safety cutoff used by panel unit-root batteries (issue #584).
     XtX = X'X
-    XtX_inv = robust_inv(XtX)
+    XtX_inv = robust_inv(XtX; silent=true)
     B = XtX_inv * (X'Y)
     resid = Y - X * B
 

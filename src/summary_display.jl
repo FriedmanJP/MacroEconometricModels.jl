@@ -875,7 +875,8 @@ function Base.show(io::IO, r::AriasSVARResult)
     # Posterior-mean IRF summary — was restrictions/penalties only. (S4/T168)
     if n_draws > 0
         im = irf_mean(r)
-        var_labels = ["var$i" for i in 1:r.restrictions.n_vars]
+        nv = r.restrictions.n_vars
+        var_labels = length(r.varnames) == nv ? r.varnames : ["var$i" for i in 1:nv]
         for s in 1:size(im, 3)
             _irf_points_table(io, im[:, :, s], var_labels, "Posterior-mean IRF to Shock $s")
         end
@@ -908,7 +909,7 @@ function Base.show(io::IO, r::UhligSVARResult)
         alignment = [:l, :l, :r],
     )
     # IRF summary for the identified shocks — was restrictions/penalties only. (S4/T168)
-    var_labels = ["var$i" for i in 1:n]
+    var_labels = length(r.varnames) == n ? r.varnames : ["var$i" for i in 1:n]
     for s in 1:size(r.irf, 3)
         _irf_points_table(io, r.irf[:, :, s], var_labels, "IRF to Shock $s")
     end

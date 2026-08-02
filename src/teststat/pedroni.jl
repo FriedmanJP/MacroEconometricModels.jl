@@ -300,7 +300,14 @@ function _pedroni_core(Y::Matrix{T}, X::Array{T,3}, trend::Symbol,
         dY = diff(collect(yi))
         dX = diff(Matrix(Xi); dims=1)
         eta = _resid_ols(dY, dX)
-        L11[i] = _stata_lrv(eta, nw)
+        # Floor L11 away from zero: when a unit is near-cointegrated the
+        # differenced-regression LRV collapses and L11^{-2} explodes, which
+        # makes the *weighted* panel-ADF (num/√denom with common weight w)
+        # scale as √w → ∞ (issue #584). Floor at a small fraction of residual
+        # variance so the weight stays O(1).
+        lrv_i = _stata_lrv(eta, nw)
+        eta_var = max(dot(eta, eta) / max(length(eta), 1), eps(T))
+        L11[i] = max(lrv_i, T(1e-8) * eta_var, eps(T))
 
         # AR(1) residuals μ̂: e_t on e_{t-1} (no intercept)
         el = ei[1:(Tobs-1)]
@@ -344,17 +351,18 @@ function _pedroni_core(Y::Matrix{T}, X::Array{T,3}, trend::Symbol,
 
         rhogroup += sum_num / sum_ell2
         tgroupnp += sum_num / sqrt(sigmahat2[i] * sum_ell2)
-        tgrouppar += sum_num_par / sqrt(shat2[i] * sum_ell2)
+        # Parametric group-ADF uses ŝ*² (ADF residual variance), not ŝ²
+        tgrouppar += sum_num_par / sqrt(max(shatstar2[i], eps(T)) * sum_ell2)
     end
 
     raw = Vector{T}(undef, 7)
-    raw[1] = Tobs^2 * N^(T(3)/2) / nipa                              # panel-v
-    raw[2] = Tobs * sqrt(T(N)) / nipa * lel                          # panel-ρ
-    raw[3] = lel / sqrt(sigmatilde2 * nipa)                          # panel-t (np)
-    raw[4] = num_par / sqrt(stildestar2 * denom_par)                 # panel-ADF-t
-    raw[5] = Tobs / sqrt(T(N)) * rhogroup                            # group-ρ
-    raw[6] = tgroupnp / sqrt(T(N))                                   # group-t (np)
-    raw[7] = tgrouppar / sqrt(T(N))                                  # group-ADF-t
+    raw[1] = Tobs^2 * N^(T(3)/2) / max(nipa, eps(T))                              # panel-v
+    raw[2] = Tobs * sqrt(T(N)) / max(nipa, eps(T)) * lel                          # panel-ρ
+    raw[3] = lel / sqrt(max(sigmatilde2 * nipa, eps(T)))                          # panel-t (np)
+    raw[4] = num_par / sqrt(max(stildestar2 * denom_par, eps(T)))                 # panel-ADF-t
+    raw[5] = Tobs / sqrt(T(N)) * rhogroup                                         # group-ρ
+    raw[6] = tgroupnp / sqrt(T(N))                                                # group-t (np)
+    raw[7] = tgrouppar / sqrt(T(N))                                               # group-ADF-t
 
     mu, vv = _pedroni_moments(k, trend)
     std = Vector{T}(undef, 7)

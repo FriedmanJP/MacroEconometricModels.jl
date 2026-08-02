@@ -280,14 +280,29 @@ function _dfgls_critical_values(regression::Symbol, nobs::Int, lags::Int, ::Type
     )
 end
 
-"""Compute LM unit root critical values via response surface."""
-function _lm_unitroot_critical_values(breaks::Int, nobs::Int, lags::Int, ::Type{TF}=Float64) where {TF<:AbstractFloat}
+"""
+Compute LM unit root critical values.
+
+- `breaks=0`: Nazlioglu–Lee (2020) response surface (Model A / C share the no-break table).
+- `breaks=1,2` + `regression=:level` (Model A): Lee–Strazicich fixed CVs.
+- `breaks=1,2` + `regression=:both` (Model C): Lee–Strazicich Model C CVs
+  (mid-λ asymptotic; more negative than Model A — required for correct size).
+
+The previous implementation always returned Model A CVs, so Model C searches
+were grossly oversized (issue #577).
+"""
+function _lm_unitroot_critical_values(breaks::Int, nobs::Int, lags::Int,
+                                       regression::Symbol=:level,
+                                       ::Type{TF}=Float64) where {TF<:AbstractFloat}
     if breaks == 2
-        return Dict{Int,TF}(k => TF(v) for (k, v) in LM_2BREAK_A_CV)
+        table = regression == :both ? LM_2BREAK_C_CV : LM_2BREAK_A_CV
+        return Dict{Int,TF}(k => TF(v) for (k, v) in table)
     end
     if breaks == 1
-        return Dict{Int,TF}(k => TF(v) for (k, v) in LM_1BREAK_A_CV)
+        table = regression == :both ? LM_1BREAK_C_CV : LM_1BREAK_A_CV
+        return Dict{Int,TF}(k => TF(v) for (k, v) in table)
     end
+    # breaks == 0: response surface (uses RSF[0]; RSF[1] reserved for 1-break RS)
     coefs = LM_UNITROOT_RSF[0]
     invT = 1.0 / nobs
     pT = lags / nobs

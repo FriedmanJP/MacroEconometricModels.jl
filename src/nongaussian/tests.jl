@@ -146,7 +146,8 @@ function _cross_correlation_test(shocks::Matrix{T}, max_lag::Int) where {T<:Abst
 end
 
 """Distance covariance independence test on all shock pairs."""
-function _dcov_independence_test(shocks::Matrix{T}) where {T<:AbstractFloat}
+function _dcov_independence_test(shocks::Matrix{T};
+                                  rng::AbstractRNG=Random.default_rng()) where {T<:AbstractFloat}
     T_obs, n = size(shocks)
     stat = zero(T)
 
@@ -155,13 +156,13 @@ function _dcov_independence_test(shocks::Matrix{T}) where {T<:AbstractFloat}
         stat += T_obs * dcov
     end
 
-    # Approximate p-value via permutation
+    # Approximate p-value via permutation (seeded for reproducibility)
     n_perm = 199
     count_ge = 0
     for _ in 1:n_perm
         shocks_perm = copy(shocks)
         for j in 2:n
-            shocks_perm[:, j] = shocks_perm[randperm(T_obs), j]
+            shocks_perm[:, j] = shocks_perm[randperm(rng, T_obs), j]
         end
         stat_perm = zero(T)
         for i in 1:n-1, j in (i+1):n
@@ -353,27 +354,30 @@ Test independence of recovered structural shocks.
 Uses both cross-correlation (portmanteau) and distance covariance tests.
 Independence is a necessary condition for valid identification.
 """
-function test_shock_independence(result::ICASVARResult{T}; max_lag::Int=10) where {T<:AbstractFloat}
-    _test_independence_impl(result.shocks, max_lag)
+function test_shock_independence(result::ICASVARResult{T}; max_lag::Int=10,
+                                  rng::AbstractRNG=Random.default_rng()) where {T<:AbstractFloat}
+    _test_independence_impl(result.shocks, max_lag; rng=rng)
 end
 
-function test_shock_independence(result::NonGaussianMLResult{T}; max_lag::Int=10) where {T<:AbstractFloat}
-    _test_independence_impl(result.shocks, max_lag)
+function test_shock_independence(result::NonGaussianMLResult{T}; max_lag::Int=10,
+                                  rng::AbstractRNG=Random.default_rng()) where {T<:AbstractFloat}
+    _test_independence_impl(result.shocks, max_lag; rng=rng)
 end
 
-function _test_independence_impl(shocks::Matrix{T}, max_lag::Int) where {T<:AbstractFloat}
+function _test_independence_impl(shocks::Matrix{T}, max_lag::Int;
+                                  rng::AbstractRNG=Random.default_rng()) where {T<:AbstractFloat}
     # Cross-correlation test
     cc_stat, cc_pval, cc_df = _cross_correlation_test(shocks, max_lag)
 
     # Distance covariance test (on subset for speed)
     T_obs = size(shocks, 1)
     if T_obs > 500
-        idx = randperm(T_obs)[1:500]
+        idx = randperm(rng, T_obs)[1:500]
         shocks_sub = shocks[idx, :]
     else
         shocks_sub = shocks
     end
-    dcov_stat, dcov_pval = _dcov_independence_test(shocks_sub)
+    dcov_stat, dcov_pval = _dcov_independence_test(shocks_sub; rng=rng)
 
     # Combined: use Fisher's method
     # χ² = -2 Σ log(pᵢ)
@@ -417,27 +421,56 @@ function test_overidentification(model::VARModel{T}, result::AbstractNonGaussian
     Q = result.Q
 
     # Compute residual from Σ = B₀ B₀'
-    L = safe_cholesky(model.Sigma)
     Sigma_model = B0 * B0'
     discrepancy = norm(Sigma_model - model.Sigma) / norm(model.Sigma)
 
     # Check orthogonality of Q
     orth_err = norm(Q' * Q - I)
 
-    stat = discrepancy + orth_err
+    # Optional user restrictions (e.g. zero pattern on B₀). When absent the
+    # test reduces to a pure covariance-fit + orthogonality check, which is
+    # exactly zero for any just-identified B₀ = L·Q with Q orthogonal.
+    restr_err = zero(T)
+    if restrictions !== nothing
+        restr_err = T(restrictions(B0, Q))
+    end
 
-    # Bootstrap under the null
-    boot_stats = T[]
-    for _ in 1:n_bootstrap
+    # Common statistic used for both the sample and the bootstrap.
+    _oid_stat(disc, orth, rerr) = disc + orth + rerr
+    stat = _oid_stat(discrepancy, orth_err, restr_err)
+
+    # Just-identified B₀ with no extra restrictions: the statistic is
+    # machine-epsilon by construction and the test has no content.
+    just_id = restrictions === nothing && discrepancy < T(1e-10) && orth_err < T(1e-10)
+    if just_id
+        @warn "test_overidentification: B₀ is just-identified (Σ ≈ B₀B₀', Q orthogonal) " *
+              "with no extra restrictions; the test has no power. " *
+              "Pass `restrictions=f` that returns a non-negative discrepancy, " *
+              "or use an overidentified estimator."
+        return IdentifiabilityTestResult{T}(:overidentification, stat, one(T), true,
+                                            Dict{Symbol, Any}(:discrepancy => discrepancy,
+                                                               :orthogonality_error => orth_err,
+                                                               :restriction_error => restr_err,
+                                                               :n_bootstrap => 0,
+                                                               :just_identified => true))
+    end
+
+    # Bootstrap the SAME statistic under residual resampling with fixed Q.
+    boot_stats = Vector{T}(undef, n_bootstrap)
+    for b in 1:n_bootstrap
         idx = rand(rng, 1:T_obs, T_obs)
         U_boot = model.U[idx, :]
-        Sigma_boot = cov(U_boot) + eps(T) * I
+        Sigma_boot = cov(U_boot; corrected=true)
+        # Symmetrize / regularize
+        Sigma_boot = (Sigma_boot + Sigma_boot') / 2 + T(1e-12) * I
 
         L_boot = safe_cholesky(Sigma_boot)
         B0_boot = Matrix(L_boot) * Q
         Sigma_model_boot = B0_boot * B0_boot'
-        disc_boot = norm(Sigma_model_boot - Sigma_boot) / norm(Sigma_boot)
-        push!(boot_stats, disc_boot)
+        disc_boot = norm(Sigma_model_boot - Sigma_boot) / max(norm(Sigma_boot), eps(T))
+        orth_boot = norm(Q' * Q - I)  # Q fixed ⇒ same orth_err
+        rerr_boot = restrictions !== nothing ? T(restrictions(B0_boot, Q)) : zero(T)
+        boot_stats[b] = _oid_stat(disc_boot, orth_boot, rerr_boot)
     end
 
     pval = mean(boot_stats .>= stat)
@@ -446,5 +479,7 @@ function test_overidentification(model::VARModel{T}, result::AbstractNonGaussian
     IdentifiabilityTestResult{T}(:overidentification, stat, T(pval), identified,
                                   Dict{Symbol, Any}(:discrepancy => discrepancy,
                                                      :orthogonality_error => orth_err,
-                                                     :n_bootstrap => n_bootstrap))
+                                                     :restriction_error => restr_err,
+                                                     :n_bootstrap => n_bootstrap,
+                                                     :just_identified => false))
 end

@@ -12,6 +12,10 @@ using Distributions
 using StatsAPI
 
 const _suppress_warnings = MacroEconometricModels._suppress_warnings
+# Allow standalone include (runtests.jl also defines FAST at the suite root).
+if !@isdefined(FAST)
+    const FAST = get(ENV, "MACRO_FAST_TESTS", "") == "1"
+end
 
 @testset "Non-Gaussian SVAR Identification" begin
     Random.seed!(54321)
@@ -293,10 +297,13 @@ const _suppress_warnings = MacroEconometricModels._suppress_warnings
             end
 
             @testset "Overidentification" begin
+                # Just-identified B₀ has no content: expect warn + p=1 identified=true (#568)
                 result = test_overidentification(model, ica; n_bootstrap=(FAST ? 49 : 99))
                 @test result isa IdentifiabilityTestResult{Float64}
                 @test result.test_name == :overidentification
                 @test result.statistic >= 0
+                @test result.identified == true
+                @test get(result.details, :just_identified, false) == true
                 @test 0 <= result.pvalue <= 1
             end
 

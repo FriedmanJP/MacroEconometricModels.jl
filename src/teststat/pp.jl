@@ -85,10 +85,14 @@ function pp_test(y::AbstractVector{T};
     gamma0 = var(resid; corrected=false)
     lambda2 = _long_run_variance(resid, bw)
 
-    # Phillips-Perron Zt statistic
-    # Zt = sqrt(γ₀/λ²) * t_ρ - (λ² - γ₀) / (2λ * se_ρ * sqrt(T))
+    # Phillips-Perron Z_t (Phillips 1987 / Hamilton 17.6.8):
+    #   Z_t = √(γ₀/λ²)·t_ρ − (λ²−γ₀) / (2·√λ²·√S̃)
+    # where S̃ = residualized Σ ỹ_{t−1}² = 1 / (X'X)^{-1}_{ρρ}.
+    # The previous form divided by se_ρ·√T and dropped the residual SE, so the
+    # correction carried the units of y (not scale-invariant).
+    Sll_eff = one(T) / max(XtX_inv[rho_idx, rho_idx], eps(T))
     stat = sqrt(gamma0 / lambda2) * t_rho -
-           (lambda2 - gamma0) / (2 * sqrt(lambda2) * rho_se * sqrt(nobs))
+           (lambda2 - gamma0) / (2 * sqrt(lambda2) * sqrt(Sll_eff))
 
     # Critical values (same as ADF with 0 lags)
     cv = adf_critical_values(regression, nobs, 0, T)

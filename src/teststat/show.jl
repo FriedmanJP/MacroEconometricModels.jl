@@ -480,9 +480,17 @@ function Base.show(io::IO, r::FourierKPSSResult)
         column_labels = ["1%", "5%", "10%"],
         alignment = :r,
     )
-    reject_5 = r.statistic > r.critical_values[5]
-    conclusion = reject_5 ? "Reject H₀ at 5% level (unit root)" :
-                            "Fail to reject H₀ (series appears stationary)"
+    # Report the tightest level at which H₀ is rejected (issue #579: was
+    # hardcoded "at 5% level" even when the 1% CV was crossed).
+    conclusion = if r.statistic > r.critical_values[1]
+        "Reject H₀ at 1% level (unit root)"
+    elseif r.statistic > r.critical_values[5]
+        "Reject H₀ at 5% level (unit root)"
+    elseif r.statistic > r.critical_values[10]
+        "Reject H₀ at 10% level (unit root)"
+    else
+        "Fail to reject H₀ (series appears stationary)"
+    end
     conc_data = Any["Conclusion" conclusion; "Note" "*** p<0.01, ** p<0.05, * p<0.10"]
     _pretty_table(io, conc_data; column_labels=["",""], alignment=[:l,:l])
 end

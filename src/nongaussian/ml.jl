@@ -68,8 +68,12 @@ function Base.show(io::IO, r::NonGaussianMLResult{T}) where {T}
     n = size(r.B0, 1)
     lr_stat = T(2) * (r.loglik - r.loglik_gaussian)
     lr_stat = max(lr_stat, zero(T))
-    # Degrees of freedom: number of additional distribution parameters
-    n_dist_params = length(get(r.dist_params, :all_params, T[]))
+    # Degrees of freedom: number of additional distribution parameters (n · p_dist)
+    n_dist_params = if haskey(r.dist_params, :all_params)
+        length(r.dist_params[:all_params])
+    else
+        _n_dist_params(r.distribution) * n
+    end
     lr_df = max(n_dist_params, 1)
     lr_pval = lr_stat > 0 ? T(1) - cdf(Chisq(lr_df), lr_stat) : one(T)
     lr_stars = _significance_stars(lr_pval)
@@ -131,11 +135,23 @@ function _skew_normal_logpdf(x::T, alpha::T) where {T<:AbstractFloat}
     log(T(2)) + logpdf(Normal(), x) + logcdf(Normal(), alpha * x)
 end
 
-"""Pearson Type IV log-pdf for PML (approximation via scaled-t with skewness)."""
+"""
+Pearson Type IV log-pdf for PML (scaled-t base with bounded skewness tilt).
+
+The raw tilt `κ·x³/6` is not a density (unnormalized and unbounded in κ). We
+(1) bound |κ| so the cubic tilt cannot dominate the Student-t tails, and
+(2) subtract a Gaussian padé normalizer so the objective stays finite and
+comparable across κ. This keeps the PML criterion from diverging in κ.
+"""
 function _pearson_iv_logpdf(x::T, kappa::T, nu::T) where {T<:AbstractFloat}
-    # Simplified Pearson IV: use Student-t with additional kurtosis parameter
     nu_safe = max(nu, T(2.01))
-    _student_t_logpdf(x, nu_safe) + kappa * (x^3 / T(6))  # skewness correction
+    # Bound skewness: |κ| ≲ 1.5 keeps the cubic tilt O(1) on the unit-variance scale
+    kappa_b = clamp(kappa, T(-1.5), T(1.5))
+    base = _student_t_logpdf(x, nu_safe)
+    tilt = kappa_b * (x^3 / T(6))
+    # Closed-form padé for log E_φ[exp(κ Z³/6)] ≈ κ²/24 under N(0,1)
+    log_norm = kappa_b^2 / T(24)
+    base + tilt - log_norm
 end
 
 # =============================================================================
@@ -372,16 +388,21 @@ function _estimate_nongaussian_ml(model::VARModel{T}, distribution::Symbol;
     T_obs = size(model.U, 1)
     if distribution == :student_t
         dp_dict[:nu] = [max(exp(dp_opt[j]) + T(2.01), T(2.01)) for j in 1:n]
+        dp_dict[:all_params] = copy(dp_dict[:nu])
     elseif distribution == :mixture_normal
         p_mix_vals = [one(T) / (one(T) + exp(-dp_opt[(j-1)*2+1])) for j in 1:n]
         dp_dict[:p_mix] = p_mix_vals
         dp_dict[:sigma1] = [sqrt((one(T) / p_mix_vals[j]) *
                             (one(T) / (one(T) + exp(-dp_opt[(j-1)*2+2])))) for j in 1:n]
+        dp_dict[:all_params] = vcat(p_mix_vals, dp_dict[:sigma1])
     elseif distribution == :pml
-        dp_dict[:kappa] = [dp_opt[(j-1)*2+1] for j in 1:n]
+        # Report clamped κ (matches the density used in the likelihood)
+        dp_dict[:kappa] = [clamp(dp_opt[(j-1)*2+1], T(-1.5), T(1.5)) for j in 1:n]
         dp_dict[:nu] = [max(exp(dp_opt[(j-1)*2+2]) + T(2.01), T(2.01)) for j in 1:n]
+        dp_dict[:all_params] = vcat(dp_dict[:kappa], dp_dict[:nu])
     elseif distribution == :skew_normal
         dp_dict[:alpha] = [dp_opt[j] for j in 1:n]
+        dp_dict[:all_params] = copy(dp_dict[:alpha])
     end
 
     n_params = length(params_opt)
@@ -432,6 +453,8 @@ Each shock εⱼ ~ p_j N(0,σ₁ⱼ²) + (1-p_j) N(0,σ₂ⱼ²) with unit varia
 """
 function identify_mixture_normal(model::VARModel{T}; n_components::Int=2,
                                  max_iter::Int=500, tol::T=T(1e-6)) where {T<:AbstractFloat}
+    n_components == 2 || throw(ArgumentError(
+        "identify_mixture_normal currently supports only n_components=2 (got $n_components)"))
     _estimate_nongaussian_ml(model, :mixture_normal; max_iter=max_iter, tol=tol)
 end
 
