@@ -12,7 +12,7 @@ The first question is what your data looks like. Everything else follows from it
 |-----------------|------------|-----|---------|
 | One series observed over time | `hp_filter`, `estimate_arima`, `estimate_garch` | Trend, dynamics, volatility | [Univariate Time Series](@ref mg_univariate) |
 | Several series observed jointly | `estimate_var`, `estimate_bvar`, `estimate_lp` | System dynamics and spillovers | [Multivariate Time Series](@ref mg_multivariate) |
-| An estimated system needing economic shocks | `irf`, `identify_sign`, `compute_Q` | Reduced form is not structural | [Structural Analysis](@ref mg_structural) |
+| An estimated system needing economic shocks | `irf`, `identify_sign`, `fevd` | Reduced form is not structural | [Structural Analysis](@ref mg_structural) |
 | Independent observations, no time dimension | `estimate_reg`, `estimate_logit` | Cross-sectional inference | [Cross-Section and Panel](@ref mg_micro) |
 | Many units observed over time | `estimate_xtreg`, `estimate_did`, `estimate_pvar` | Unobserved heterogeneity handled | [Cross-Section and Panel](@ref mg_micro) |
 | A theoretical model rather than data | `@dsge`, `solve` | Structural equilibrium restrictions | [DSGE Models](@ref mg_dsge) |

@@ -189,16 +189,6 @@ Order   = [:function]
 Private = false
 ```
 
-### Package-Wide `predict`
-
-`predict` is generic across every model family. This entry collects all of its methods,
-including those for cross-sectional models documented on
-[Cross-Sectional Models](@ref api_cross_section).
-
-```@docs
-MacroEconometricModels.StatsAPI.predict
-```
-
 ### Forecast Accessors
 
 ```@docs

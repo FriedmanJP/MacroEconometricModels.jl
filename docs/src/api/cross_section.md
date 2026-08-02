@@ -118,3 +118,14 @@ Modules = [MacroEconometricModels]
 Pages   = ["reg/penalized.jl", "reg/robust.jl", "reg/tobit.jl", "reg/heckman.jl", "reg/count.jl", "reg/selection.jl"]
 Filter  = f -> f !== MacroEconometricModels.marginal_effects
 ```
+
+### Prediction
+
+`predict` methods for the cross-sectional model families.
+
+```@autodocs
+Modules = [MacroEconometricModels]
+Pages   = ["src/reg/predict.jl", "reg/quantile.jl", "reg/ordered.jl", "reg/multinomial.jl"]
+Order   = [:function]
+Filter  = f -> f === MacroEconometricModels.StatsAPI.predict
+```
