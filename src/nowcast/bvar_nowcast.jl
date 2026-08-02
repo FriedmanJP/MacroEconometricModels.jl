@@ -12,6 +12,8 @@ Hyperparameters (lambda, theta, miu, alpha) optimized via marginal
 log-likelihood maximization.
 """
 
+using Distributions: loggamma
+
 # =============================================================================
 # Public API
 # =============================================================================
@@ -199,19 +201,37 @@ function _bvar_estimate(Y::Matrix{T}, lags::Int, sigma_ar::Vector{T},
         return zeros(T, k, N), Matrix{T}(I(N)), -T(1e10)
     end
 
-    # Residuals and posterior sigma
+    # Residuals and posterior sigma (on the augmented system)
     resid = Y_star - X_star * beta
     sigma = (resid' * resid) / T(size(Y_star, 1) - k)
     sigma = (sigma + sigma') / T(2)
 
-    # Log marginal likelihood (Normal-IW closed form approximation)
-    resid_data = Y_dep - X_reg * beta
-    SSR = resid_data' * resid_data
-    ld = logdet_safe(sigma)
-    sigma_inv = Matrix{T}(robust_inv(sigma + T(1e-6) * I(N); silent=true))
-    logml = -T(0.5) * T_eff * N * log(T(2π)) -
-            T(0.5) * T_eff * ld -
-            T(0.5) * tr(sigma_inv * SSR)
+    # Full Normal-Inverse-Wishart closed-form log marginal likelihood (#571).
+    # The earlier plug-in Gaussian likelihood had no |X'X| ratio / Gamma terms, so
+    # it rose monotonically in lag order and pushed λ to the box wall.
+    logml = try
+        T_d = size(Y_d, 1)
+        K_post = X_star' * X_star
+        K_prior = X_d' * X_d
+        B_prior = robust_inv(K_prior + T(1e-10) * I(k)) * (X_d' * Y_d)
+        S_post = (Y_star - X_star * beta)' * (Y_star - X_star * beta)
+        S_prior = (Y_d - X_d * B_prior)' * (Y_d - X_d * B_prior)
+        nu_prior = T_d - k
+        if nu_prior <= N - 1
+            -T(1e10)
+        else
+            nu_post = T_eff + nu_prior
+            logmvgamma(a) = T(N * (N - 1)) / 4 * log(T(π)) +
+                            sum(loggamma(a + T(1 - j) / 2) for j in 1:N)
+            T(0.5) * N * (logdet_safe(K_prior) - logdet_safe(K_post)) -
+            T(0.5) * nu_post * logdet_safe(S_post) +
+            T(0.5) * nu_prior * logdet_safe(S_prior) -
+            T(0.5) * T_eff * N * log(T(π)) +
+            logmvgamma(T(nu_post) / 2) - logmvgamma(T(nu_prior) / 2)
+        end
+    catch
+        -T(1e10)
+    end
 
     if !isfinite(logml)
         logml = -T(1e10)
@@ -223,10 +243,14 @@ end
 """
     _bvar_dummy_obs(Y0, lags, sigma_ar, lambda, theta, miu, alpha) -> (Y_d, X_d)
 
-Construct Minnesota prior dummy observations.
+Construct Minnesota prior dummy observations (BGR / stacked-dummy form).
 
-- `lambda`: overall shrinkage
-- `theta`: cross-variable shrinkage (1 = same as own, higher = more shrinkage)
+Matches `gen_dummy_obs` in `src/bvar/priors.jl`: dummy scale is
+`σ · lag^d / λ` so higher lags get *more* prior mass (tighter shrinkage) (#572).
+
+- `lambda`: overall tightness (smaller ⇒ tighter; inverse of prior SD scale)
+- `theta`: cross-variable relative tightness (smaller ⇒ more cross-variable shrinkage;
+  `theta=1` treats cross like own). Note: higher `theta` is *looser* on cross lags.
 - `miu`: sum-of-coefficients (unit root prior)
 - `alpha`: co-persistence (common stochastic trend prior)
 """
@@ -234,6 +258,7 @@ function _bvar_dummy_obs(Y0::AbstractMatrix{T}, lags::Int, sigma_ar::Vector{T},
                          lambda::T, theta::T, miu::T, alpha::T) where {T<:AbstractFloat}
     N = size(Y0, 2)
     k = 1 + N * lags
+    decay = T(2)  # lag-decay exponent (Litterman d=2)
 
     # Mean of initial observations (NaN-safe for mixed-frequency data)
     y_bar = zeros(T, N)
@@ -246,18 +271,23 @@ function _bvar_dummy_obs(Y0::AbstractMatrix{T}, lags::Int, sigma_ar::Vector{T},
     dummy_Y = Matrix{T}(undef, 0, N)
     dummy_X = Matrix{T}(undef, 0, k)
 
-    # 1. Minnesota tightness dummies (Litterman 1986)
+    # 1. Minnesota tightness dummies (Litterman 1986 / BGR 2010)
+    # Dummy ∝ lag^decay / lambda so higher lags receive MORE prior weight (#572).
     for lag in 1:lags
         Y_d = zeros(T, N, N)
         X_d = zeros(T, N, k)
+        scale_lag = T(lag)^decay
         for i in 1:N
-            # Diagonal (own-lag): standard Minnesota dummy
-            Y_d[i, i] = sigma_ar[i] / (lambda * T(lag)^T(2))
-            X_d[i, 1 + (lag - 1) * N + i] = sigma_ar[i] / (lambda * T(lag)^T(2))
-            # Off-diagonal (cross-variable): shrunk by theta
+            # Diagonal (own-lag): random-walk mean on lag 1 only
+            own = sigma_ar[i] * scale_lag / lambda
+            if lag == 1
+                Y_d[i, i] = own
+            end
+            X_d[i, 1 + (lag - 1) * N + i] = own
+            # Off-diagonal (cross-variable): relative tightness theta
             for j in 1:N
                 if i != j
-                    X_d[i, 1 + (lag - 1) * N + j] = sigma_ar[i] / (theta * lambda * T(lag)^T(2))
+                    X_d[i, 1 + (lag - 1) * N + j] = sigma_ar[i] * scale_lag / (theta * lambda)
                 end
             end
         end

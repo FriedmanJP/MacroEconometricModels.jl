@@ -535,6 +535,12 @@ function ct_two_asset_solve(m::CTTwoAsset{T}; max_iter::Int=200, tol::Real=1e-6,
     A = spzeros(T, n, n)
     converged = false
     hjb_iters = 0
+    # Track policy change and second-difference of V for convergence (#558).
+    # Raw ‖ΔV‖_∞ can carry a level drift that never clears tol even when the
+    # solution (policies + aggregates) is already bit-stable.
+    c_prev = nothing
+    d_prev = nothing
+    dist_prev = T(Inf)
     for it in 1:max_iter
         hjb_iters = it
         c, d, sb, sa, A = _ct2_policy_and_generator(m, V, b, a, dbg, dag, Aswitch)
@@ -542,8 +548,19 @@ function ct_two_asset_solve(m::CTTwoAsset{T}; max_iter::Int=200, tol::Real=1e-6,
         B = (one(T) / Δ + ρ) * LinearAlgebra.I - A
         V_new = reshape(B \ (u_vec + vec(V) / Δ), Ib, Ia, 2)
         dist = maximum(abs.(V_new - V))
+        # Policy change (consumption + deposit) — the economically relevant residual.
+        pol_dist = if c_prev === nothing
+            T(Inf)
+        else
+            max(maximum(abs.(c - c_prev)), maximum(abs.(d - d_prev)))
+        end
+        # Change-in-change of V: detects a pure level drift that ‖ΔV‖ never clears.
+        ddist = abs(dist - dist_prev)
         V = V_new
-        if dist < tol
+        c_prev = copy(c)
+        d_prev = copy(d)
+        dist_prev = dist
+        if dist < tol || pol_dist < tol || ddist < tol
             converged = true
             break
         end
@@ -716,14 +733,26 @@ economic reason rather than a numerical one. Read [`ceiling_mass`](@ref) as well
 
 See issue #509.
 """
-function ct_two_asset_stationarity(m::CTTwoAsset{T}) where {T<:AbstractFloat}
+function ct_two_asset_stationarity(m::CTTwoAsset{T};
+                                   margin::Real=T(0.9),
+                                   max_ceiling_mass::Union{Nothing,Real}=nothing,
+                                   solution::Union{Nothing,CTTwoAssetSolution}=nothing) where {T<:AbstractFloat}
+    # `margin` (#559): require a_max ≤ margin · a* so the natural bound is not pressed
+    # against the grid ceiling (a* just above a_max still dumps mass on the illiquid ceiling).
+    # When a solution is provided (or max_ceiling_mass is set), also flag excessive ceiling mass.
+    mgn = T(margin)
+    (zero(T) < mgn ≤ one(T)) || throw(ArgumentError(
+        "ct_two_asset_stationarity: margin must be in (0, 1]; got $margin"))
+
     if m.cost === :kinked
         # Maximum withdrawal RATE, from the implemented FOC at V_a/V_b = 0.
         rate = m.chi1 * (one(T) - m.chi0)^(one(T) / m.chi2)
         a_star_dmax = m.dmax / m.r_a          # where the absolute dmax cap re-binds
         ok_rate = rate > m.r_a
-        ok = ok_rate && m.a_max < a_star_dmax
+        # With infinite a* (rate ok and dmax never binds on the grid), treat as unbounded.
         a_star = ok_rate ? (m.a_max < a_star_dmax ? T(Inf) : a_star_dmax) : zero(T)
+        ok_margin = isinf(a_star) || m.a_max ≤ mgn * a_star
+        ok = ok_rate && m.a_max < a_star_dmax && ok_margin
         msg = if !ok_rate
             "kinked cost: the maximum withdrawal rate chi1*(1-chi0)^(1/chi2) = " *
             "$(round(rate; sigdigits=4)) does not exceed r_a = $(m.r_a), so illiquid " *
@@ -736,23 +765,60 @@ function ct_two_asset_stationarity(m::CTTwoAsset{T}) where {T<:AbstractFloat}
             "dmax = $(m.dmax) binds above a* = dmax/r_a = " *
             "$(round(a_star_dmax; sigdigits=4)) <= a_max = $(m.a_max), which re-imposes " *
             "a constant withdrawal and hence divergence. Raise dmax or lower a_max. See #509."
+        elseif !ok_margin
+            "kinked cost: a_max = $(m.a_max) is within $(round((one(T)-mgn)*100; digits=1))% " *
+            "of a* = $(round(a_star; sigdigits=4)) (required a_max ≤ $(mgn)·a* = " *
+            "$(round(mgn * a_star; sigdigits=4))). Near-boundary grids pile mass on the " *
+            "illiquid ceiling even when the formal bound holds. Raise a_max or dmax, or " *
+            "lower r_a. See #559."
         else
             "kinked cost: maximum withdrawal rate chi1*(1-chi0)^(1/chi2) = " *
-            "$(round(rate; sigdigits=4)) > r_a = $(m.r_a); illiquid wealth is bounded."
+            "$(round(rate; sigdigits=4)) > r_a = $(m.r_a); illiquid wealth is bounded " *
+            "with margin $(mgn)."
         end
-        return (ok=ok, bound=rate, a_star=a_star, message=msg)
+        base = (ok=ok, bound=rate, a_star=a_star, message=msg)
     else
         bound = one(T) / (m.chi * m.r_a)
-        ok = m.a_max < bound
-        msg = ok ?
-            "quadratic cost: a_max = $(m.a_max) < 1/(chi*r_a) = $(round(bound; sigdigits=4)); " *
-            "illiquid wealth is bounded on this grid." :
+        ok_margin = m.a_max ≤ mgn * bound
+        ok = m.a_max < bound && ok_margin
+        msg = if m.a_max >= bound
             "quadratic cost: a_max = $(m.a_max) >= 1/(chi*r_a) = $(round(bound; sigdigits=4)). " *
             "The level-quadratic cost caps withdrawals at the constant 1/chi, which cannot " *
             "offset the return r_a*a, so illiquid wealth diverges above a* and the mass " *
             "piles onto the ceiling. Use cost=:kinked, or shrink a_max below a*. See #509."
-        return (ok=ok, bound=bound, a_star=bound, message=msg)
+        elseif !ok_margin
+            "quadratic cost: a_max = $(m.a_max) is within " *
+            "$(round((one(T)-mgn)*100; digits=1))% of a* = $(round(bound; sigdigits=4)) " *
+            "(required a_max ≤ $(mgn)·a* = $(round(mgn * bound; sigdigits=4))). " *
+            "Near-boundary grids pile mass on the illiquid ceiling. Shrink a_max or " *
+            "raise chi. See #559."
+        else
+            "quadratic cost: a_max = $(m.a_max) < $(mgn)/(chi*r_a) = " *
+            "$(round(mgn * bound; sigdigits=4)); illiquid wealth is bounded with margin $(mgn)."
+        end
+        base = (ok=ok, bound=bound, a_star=bound, message=msg)
     end
+
+    # Optional ceiling-mass diagnostic when a solved distribution is available (#559).
+    if solution !== nothing || max_ceiling_mass !== nothing
+        sol = solution
+        if sol === nothing
+            # Cannot compute ceiling mass without a solution — leave check as margin-only.
+            return base
+        end
+        cm = ceiling_mass(sol)
+        cm_ill = cm.illiquid
+        cap = max_ceiling_mass === nothing ? T(0.05) : T(max_ceiling_mass)
+        if cm_ill > cap
+            msg2 = base.message * " Illiquid ceiling mass = $(round(cm_ill; sigdigits=4)) exceeds " *
+                   "threshold $(cap); raise a_max or reparameterize. See #559."
+            return (ok=false, bound=base.bound, a_star=base.a_star, message=msg2,
+                    ceiling_mass=cm)
+        end
+        return (ok=base.ok, bound=base.bound, a_star=base.a_star, message=base.message,
+                ceiling_mass=cm)
+    end
+    return base
 end
 
 # =============================================================================

@@ -8,7 +8,7 @@ n_years = 5
 years = [2003, 2004, 2005, 2006, 2007]
 frequency = "Yearly"
 desc = "Callaway & Sant Anna (2021) Minimum Wage Dataset (500 US counties, 2003-2007)"
-source_refs = ["callaway_santanna_2021"]
+source_refs = ["callaway_santanna2021"]
 
 [variables]
 names = ["lemp", "lpop", "first_treat"]

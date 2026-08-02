@@ -29,8 +29,8 @@ Apply FRED transformation code to a univariate series.
 
 Codes 4–7 require strictly positive data.
 The output vector is shorter than the input for difference-based codes:
-- tcode 1: same length
-- tcode 2, 4, 5: length T-1
+- tcode 1, 4: same length (levels / log levels)
+- tcode 2, 5: length T-1
 - tcode 3, 6, 7: length T-2
 
 # Examples
@@ -88,10 +88,10 @@ function apply_tcode(d::TimeSeriesData{T}, tcodes::Vector{Int}) where {T}
     length(tcodes) != n && throw(ArgumentError(
         "tcodes length ($(length(tcodes))) must match n_vars ($n)"))
 
-    # Compute the number of rows lost per tcode
+    # Compute the number of rows lost per tcode (#588: tcode 4 = log levels, no row loss)
     function _rows_lost(tc::Int)
-        tc == 1 && return 0
-        tc ∈ (2, 4, 5) && return 1
+        tc ∈ (1, 4) && return 0
+        tc ∈ (2, 5) && return 1
         tc ∈ (3, 6, 7) && return 2
         return 0
     end

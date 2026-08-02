@@ -45,8 +45,10 @@ function estimate_dsge(spec::DSGESpec{T}, data::AbstractMatrix,
                         n_boot::Int=200,
                         n_lags_instruments::Int=4,
                         sim_ratio::Int=5, burn::Int=100,
-                        moments_fn::Function=d -> autocovariance_moments(d; lags=1),
-                        contributions_fn::Function=d -> autocovariance_moment_contributions(d; lags=1),
+                        # Default moments are scale-normalized (correlations + autocorrelations)
+                        # so level-scale variables cannot dominate the SMM objective (#562).
+                        moments_fn::Function=d -> autocovariance_moments(d; lags=1, standardize=true),
+                        contributions_fn::Function=d -> autocovariance_moment_contributions(d; lags=1, standardize=true),
                         bounds::Union{Nothing,ParameterTransform}=nothing,
                         lags::Int=1,
                         rng=Random.default_rng(),
@@ -75,10 +77,17 @@ function estimate_dsge(spec::DSGESpec{T}, data::AbstractMatrix,
                                     contributions_fn=contributions_fn,
                                     bounds=bounds, rng=rng)
     elseif method == :analytical_gmm
-        # Note: analytical GMM uses identity weighting (deterministic moment
-        # function with single "observation" — HAC weighting is meaningless)
+        # Analytical GMM matches deterministic model moments to a single data-moment
+        # vector, so HAC / two-step weighting on the 1×q residual is degenerate.
+        # Identity is the only supported choice; warn if the user asked for another.
+        if weighting !== :identity
+            @warn "estimate_dsge(:analytical_gmm) uses identity weighting " *
+                  "(single-observation moment residual; HAC/two-step are degenerate). " *
+                  "Ignoring weighting=:$weighting."
+        end
         return _estimate_dsge_analytical_gmm(spec, data_T, param_names;
                                               lags=lags,
+                                              weighting=:identity,
                                               bounds=bounds,
                                               solve_method=solve_method,
                                               solve_order=solve_order,
@@ -145,6 +154,29 @@ function _estimate_irf_matching(spec::DSGESpec{T}, data::Matrix{T},
     # Extract initial parameter values as starting point
     theta0 = T[spec.param_values[p] for p in param_names]
 
+    # Eager dimension check (#554): model IRF is H×n×n_shocks while the VAR-Cholesky
+    # target is H×n×n. A silent penalty made the objective flat and returned θ₀ as the
+    # "estimate". Fail fast before optimizing.
+    begin
+        try
+            ss0 = compute_steady_state(spec)
+            sol0 = solve(ss0; method=:gensys)
+            if is_determined(sol0)
+                m0 = vec(irf(sol0, irf_horizon).values)
+                length(m0) == n_moments || throw(DimensionMismatch(
+                    "IRF matching: model IRF has $(length(m0)) elements " *
+                    "(H×n_endog×n_shocks) but target has $n_moments " *
+                    "(H×n_vars×n_vars from VAR-Cholesky). Align shock/variable " *
+                    "dimensions (e.g. pass a target_irfs ImpulseResponse whose " *
+                    "size matches irf(solve(spec), H).values), or subset both " *
+                    "to a common set of shocks/variables."))
+            end
+        catch e
+            e isa DimensionMismatch && rethrow(e)
+            # Unsolvable at θ₀ — leave the in-loop penalty path to handle it.
+        end
+    end
+
     # Compute model IRF distance for a given parameter vector
     function irf_distance(theta)
         new_pv = copy(spec.param_values)
@@ -161,10 +193,15 @@ function _estimate_irf_matching(spec::DSGESpec{T}, data::Matrix{T},
             model_irfs = irf(sol, irf_horizon)
             model_vec = vec(model_irfs.values)
             if length(model_vec) != n_moments
-                return fill(T(1e6), n_moments)
+                # Should have been caught by the eager check; keep as hard error
+                # so a mid-path dimension change cannot silently flatten the objective.
+                throw(DimensionMismatch(
+                    "IRF matching: model IRF length $(length(model_vec)) ≠ " *
+                    "target length $n_moments at θ = $theta"))
             end
             model_vec .- target_vec
-        catch
+        catch e
+            e isa DimensionMismatch && rethrow(e)
             fill(T(1e6), n_moments)
         end
     end
@@ -194,22 +231,35 @@ function _estimate_irf_matching(spec::DSGESpec{T}, data::Matrix{T},
         Matrix{T}(I, n_moments, n_moments)
     end
 
-    # Near-singular Ω is common at long horizons: warn (efficient weighting unstable).
+    # Near-singular Ω is common at long horizons (#594). Under efficient weighting
+    # robust_inv falls back to pinv with a generic near-singular warning; instead
+    # degrade cleanly to diagonal (CEE) weighting so the metric stays well-defined.
+    Omega_near_singular = false
     if !identity_fallback
         sv = svdvals(Omega)
-        if sv[end] < sqrt(eps(T)) * sv[1]
-            @warn "IRF-matching: target IRF covariance Ω is near-singular (common at " *
-                  "long horizons); efficient weighting is unstable — consider weighting=:diagonal."
-        end
+        Omega_near_singular = sv[end] < sqrt(eps(T)) * sv[1]
     end
 
     # Resolve the weighting matrix W and whether a χ² J is meaningful.
     W, report_J = if identity_fallback
         (Matrix{T}(I, n_moments, n_moments), false)
     elseif weighting in (:efficient, :optimal, :two_step)
-        (robust_inv(Omega), true)
+        if Omega_near_singular
+            @warn "IRF-matching: target IRF covariance Ω is near-singular (common at " *
+                  "long horizons); falling back from weighting=:$weighting to " *
+                  "diagonal (CEE) weighting so the metric stays well-defined. " *
+                  "Pass weighting=:diagonal explicitly to silence this message, " *
+                  "or reduce irf_horizon / n_boot."
+            d = diag(Omega)
+            d = map(x -> x > eps(T) ? x : one(T), d)
+            (Matrix{T}(Diagonal(one(T) ./ d)), false)
+        else
+            (robust_inv(Omega), true)
+        end
     elseif weighting in (:diagonal, :cee)
-        (Matrix{T}(Diagonal(one(T) ./ diag(Omega))), false)
+        d = diag(Omega)
+        d = map(x -> x > eps(T) ? x : one(T), d)
+        (Matrix{T}(Diagonal(one(T) ./ d)), false)
     elseif weighting === :identity
         (Matrix{T}(I, n_moments, n_moments), false)
     else

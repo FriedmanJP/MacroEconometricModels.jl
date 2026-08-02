@@ -431,9 +431,18 @@ function Base.show(io::IO, fc::LPForecast{T}) where {T}
     H = fc.horizon
     n_resp = length(fc.response_vars)
 
+    # Prefer real variable names over bare indices (#531, #532).
+    function _lp_fc_label(idx::Int)
+        if !isempty(fc.varnames) && 1 <= idx <= length(fc.varnames)
+            return fc.varnames[idx]
+        end
+        return "Var $idx"
+    end
+    shock_label = _lp_fc_label(fc.shock_var)
+
     _show_spec_table(io, "LP Forecast",
         ["Forecast horizon" => H, "Response variables" => n_resp,
-         "Shock variable" => fc.shock_var, "CI method" => string(fc.ci_method),
+         "Shock variable" => shock_label, "CI method" => string(fc.ci_method),
          "Confidence level" => _fmt_pct(fc.conf_level)];
         left_label="Specification")
 
@@ -442,14 +451,15 @@ function Base.show(io::IO, fc::LPForecast{T}) where {T}
     col_labels = String["h"]
 
     for (j, rv) in enumerate(fc.response_vars)
+        rlabel = _lp_fc_label(rv)
         if fc.ci_method == :none
-            push!(col_labels, "Var $rv")
+            push!(col_labels, rlabel)
             for h in 1:H
                 data[h, 1] = h
                 data[h, 1 + j] = _fmt(fc.forecast[h, j])
             end
         else
-            push!(col_labels, "Var $rv")
+            push!(col_labels, rlabel)
             push!(col_labels, "Lower")
             push!(col_labels, "Upper")
             col_offset = 1 + (j - 1) * 3
@@ -787,16 +797,22 @@ function Base.show(io::IO, m::PropensityLPModel)
                m.cov_estimator isa WhiteEstimator ? "White (HC0)" : "Driscoll-Kraay"
     n_t = n_treated(m)
     n_c = n_control(m)
-    _show_spec_table(io, "Propensity Score LP Model (Angrist et al. 2018)",
+    est = m.estimator
+    est_label = est === :doubly_robust ? "Doubly Robust" : "IPW"
+    title = est === :doubly_robust ?
+        "Doubly Robust LP Model (Angrist et al. 2018)" :
+        "Propensity Score LP Model (Angrist et al. 2018)"
+    _show_spec_table(io, title,
         ["Variables" => size(m.Y, 2), "Horizon" => m.horizon,
          "Treated" => n_t, "Control" => n_c,
          "Covariates" => size(m.covariates, 2),
          "PS method" => string(m.config.method),
+         "Estimator" => est_label,
          "Trimming" => string(m.config.trimming),
          "Observations" => size(m.Y, 1), "Covariance" => cov_name])
-    # PropensityLPModel is treatment-based (no shock_var) — report the IPW ATE path.
+    # Header tracks estimator field so DR is not mislabeled as IPW (#533).
     _irf_horizon_table(io, m.ate, m.ate_se, _lp_resp_labels(m),
-        "Average Treatment Effects (IPW)")
+        "Average Treatment Effects ($est_label)")
     _show_note(io, _LP_IRF_NOTE)
 end
 

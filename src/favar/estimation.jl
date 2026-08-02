@@ -43,8 +43,8 @@ Estimate a Factor-Augmented VAR (Bernanke, Boivin & Eliasz, 2005).
 # Keyword Arguments
 - `method::Symbol=:two_step`: Estimation method (currently only `:two_step`)
 - `panel_varnames::Union{Nothing, Vector{String}}=nothing`: Names for the N panel variables
-- `n_draws::Int=5000`: Number of posterior draws (for Bayesian, reserved for future use)
-- `burnin::Int=1000`: Burn-in draws (for Bayesian, reserved for future use)
+- `n_draws::Int=5000`: Number of posterior draws (Bayesian Gibbs path)
+- `burnin::Int=1000`: Burn-in draws (Bayesian Gibbs path)
 
 # Returns
 `FAVARModel{T}` with estimated VAR on [F_tilde, Y_key], factor loadings,

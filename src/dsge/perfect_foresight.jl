@@ -89,7 +89,11 @@ function perfect_foresight(spec::DSGESpec{FT};
                 end
             end
             bounds_ok && return pf
-            # Escalate to projected Newton (always available)
+            # Unconstrained path violated bounds. Prefer Ipopt when JuMP is loaded
+            # (#556: projected Newton stalls when bounds bind); else projected Newton.
+            if hasmethod(_jump_compute_steady_state, Tuple{DSGESpec, Vector})
+                return _jump_perfect_foresight(spec, T_periods, shocks, constraints)
+            end
             return _projected_newton_pf(spec, T_periods, shocks, lower, upper;
                         max_iter=max_iter, tol=tol, abstol=abstol)
         elseif chosen == :nlopt

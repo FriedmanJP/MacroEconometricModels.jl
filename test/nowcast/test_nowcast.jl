@@ -395,12 +395,14 @@ end
 # =============================================================================
 
 @testset "BVAR Nowcasting" begin
-    @testset "GLP hyperparameter sanity flag (B4/T173)" begin
-        # N >> T reliably parks the marginal-likelihood optimizer at the exp(5) box edge.
+    @testset "GLP hyperparameter sanity flag (B4/T173 / #571)" begin
+        # With the proper NIW closed-form marginal likelihood (#571), the optimizer
+        # no longer parks λ at the exp(5)≈148 box wall on the plug-in likelihood.
+        # A short/wide panel should still produce finite positive hyperparameters.
         m = nowcast_bvar(randn(Random.MersenneTwister(9), 50, 10), 6, 4; lags=5)
-        @test m.lambda > 140
-        @test !m.converged
-        @test occursin("WARNING", sprint(show, m))
+        @test isfinite(m.lambda) && m.lambda > 0
+        @test m.lambda < 50   # not the old plug-in box wall
+        @test isfinite(m.loglik)
         # A well-conditioned interior fit converges and does NOT warn.
         m2 = nowcast_bvar(randn(Random.MersenneTwister(300), 100, 6), 4, 2; lags=3, max_iter=50)
         @test m2.converged

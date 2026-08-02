@@ -117,7 +117,8 @@ function estimate_structural_dfm(X::AbstractMatrix{T}, q::Int;
     standardize::Bool=true,
     bandwidth::Int=0,
     kernel::Symbol=:bartlett,
-    varnames::Union{Nothing,Vector{String}}=nothing
+    varnames::Union{Nothing,Vector{String}}=nothing,
+    rng::AbstractRNG=Random.default_rng(),
 ) where {T<:AbstractFloat}
 
     # Estimate GDFM
@@ -126,7 +127,7 @@ function estimate_structural_dfm(X::AbstractMatrix{T}, q::Int;
     # Delegate to GDFM-based method
     estimate_structural_dfm(gdfm;
         identification=identification, p=p, H=H,
-        sign_check=sign_check, max_draws=max_draws, varnames=varnames)
+        sign_check=sign_check, max_draws=max_draws, varnames=varnames, rng=rng)
 end
 
 @float_fallback estimate_structural_dfm X
@@ -159,7 +160,8 @@ function estimate_structural_dfm(gdfm::GeneralizedDynamicFactorModel{T};
     H::Int=40,
     sign_check::Union{Nothing,Function}=nothing,
     max_draws::Int=1000,
-    varnames::Union{Nothing,Vector{String}}=nothing
+    varnames::Union{Nothing,Vector{String}}=nothing,
+    rng::AbstractRNG=Random.default_rng(),
 ) where {T<:AbstractFloat}
 
     # Validate inputs
@@ -191,8 +193,8 @@ function estimate_structural_dfm(gdfm::GeneralizedDynamicFactorModel{T};
     if identification == :cholesky
         Q = Matrix{T}(I, q, q)  # Cholesky: Q = I (compute_irf handles the Cholesky internally)
     else
-        # Sign restrictions
-        Q, _ = identify_sign(factor_var, H, sign_check; max_draws=max_draws)
+        # Sign restrictions — thread rng for reproducibility (#537)
+        Q, _ = identify_sign(factor_var, H, sign_check; max_draws=max_draws, rng=rng)
     end
 
     # Step 3: Compute structural factor IRFs (H x q x q)

@@ -63,6 +63,9 @@ function nowcast_news(X_new::AbstractMatrix, X_old::AbstractMatrix,
 
     # Identify new data releases: positions where old is NaN but new is not
     i_new = findall((isnan.(X_old_mat)) .& (.!isnan.(X_new_mat)))
+    # Identify revisions: both vintages observed but values differ (#573)
+    i_rev = findall((.!isnan.(X_old_mat)) .& (.!isnan.(X_new_mat)) .&
+                    (X_old_mat .!= X_new_mat))
 
     # Run Kalman smoother on both vintages
     y_old = x_old'
@@ -75,7 +78,8 @@ function nowcast_news(X_new::AbstractMatrix, X_old::AbstractMatrix,
     # Old-vintage smoother WITH lagged cross-covariances (needed for the joint news system);
     # the new vintage only needs the smoothed target.
     release_times = [idx[1] for idx in i_new]
-    all_times = vcat(target_period, release_times)
+    rev_times = [idx[1] for idx in i_rev]
+    all_times = vcat(target_period, release_times, rev_times)
     kmax = max(min(maximum(all_times) - minimum(all_times), T_obs - 1), 1)
     x_smooth_old, P_smooth_old, Plag_old, _ = _kalman_smoother_lag(y_old, A, C, Q, R, Z_0, V_0, kmax)
     x_smooth_new, _, _, _ = _kalman_smoother_missing(y_new, A, C, Q, R, Z_0, V_0)
@@ -84,23 +88,20 @@ function nowcast_news(X_new::AbstractMatrix, X_old::AbstractMatrix,
     now_old = dot(C[target_var, :], x_smooth_old[:, target_period]) * model.Wx[target_var] + model.Mx[target_var]
     now_new = dot(C[target_var, :], x_smooth_new[:, target_period]) * model.Wx[target_var] + model.Mx[target_var]
 
-    # Compute news impacts
+    # Cov(state_ta, state_tb) from the lagged smoother covariances
+    function _xcov(ta::Int, tb::Int)
+        ta == tb && return P_smooth_old[:, :, ta]
+        ta > tb && return Plag_old[ta - tb][:, :, ta]
+        return permutedims(Plag_old[tb - ta][:, :, tb])
+    end
+
+    # Compute news impacts (Bańbura–Modugno joint news system)
     n_releases = length(i_new)
     impact_news = zeros(T, n_releases)
     variable_names = String[]
 
     if n_releases > 0
-        # Joint news system (Bańbura–Modugno): with innovation vector I (new data minus its
-        # old-vintage forecast), the smoothed-target revision equals B·I where the news weights
-        # are B = Cov(F, I)·Var(I)^{-1}. This splits overlapping information across releases
-        # correctly (order-invariant), unlike a per-release scalar Kalman gain.
         release_var = [idx[2] for idx in i_new]
-        # Cov(state_ta, state_tb) from the lagged smoother covariances (Plag[j][:,:,t]=Cov(x_t,x_{t-j})).
-        function _xcov(ta::Int, tb::Int)
-            ta == tb && return P_smooth_old[:, :, ta]
-            ta > tb && return Plag_old[ta - tb][:, :, ta]
-            return permutedims(Plag_old[tb - ta][:, :, tb])
-        end
         I_vec = zeros(T, n_releases)
         for k in 1:n_releases
             t_k, v_k = release_times[k], release_var[k]
@@ -119,16 +120,45 @@ function nowcast_news(X_new::AbstractMatrix, X_old::AbstractMatrix,
             t_k, v_k = release_times[k], release_var[k]
             CovFI[k] = C[target_var, :]' * _xcov(target_period, t_k) * C[v_k, :]
         end
-        Bw = robust_inv(Symmetric(VarI)) * CovFI     # = Var(I)^{-1} Cov(I, F); news weight per release
+        Bw = robust_inv(Symmetric(VarI)) * CovFI
         for k in 1:n_releases
             impact_news[k] = Bw[k] * I_vec[k] * model.Wx[target_var]
         end
     end
 
-    # Total revision
+    # Revision impacts (#573): previously published values that changed between vintages.
+    # Same Bańbura–Modugno weight construction on the revision innovations
+    # I_rev = x_new − x_old (both observed).
+    n_revs = length(i_rev)
+    impact_revision = zero(T)
+    if n_revs > 0
+        rev_var = [idx[2] for idx in i_rev]
+        I_rev = zeros(T, n_revs)
+        for k in 1:n_revs
+            t_k, v_k = rev_times[k], rev_var[k]
+            I_rev[k] = x_new[t_k, v_k] - x_old[t_k, v_k]
+        end
+        VarR = zeros(T, n_revs, n_revs)
+        for k in 1:n_revs, l in 1:n_revs
+            t_k, v_k = rev_times[k], rev_var[k]
+            t_l, v_l = rev_times[l], rev_var[l]
+            VarR[k, l] = C[v_k, :]' * _xcov(t_k, t_l) * C[v_l, :]
+            (t_k == t_l) && (VarR[k, l] += R[v_k, v_l])
+        end
+        CovFR = zeros(T, n_revs)
+        for k in 1:n_revs
+            t_k, v_k = rev_times[k], rev_var[k]
+            CovFR[k] = C[target_var, :]' * _xcov(target_period, t_k) * C[v_k, :]
+        end
+        Br = robust_inv(Symmetric(VarR)) * CovFR
+        for k in 1:n_revs
+            impact_revision += Br[k] * I_rev[k] * model.Wx[target_var]
+        end
+    end
+
+    # Total revision decomposition: news + data revisions + residual (re-estimation)
     total_revision = now_new - now_old
     sum_news = sum(impact_news)
-    impact_revision = zero(T)
     impact_reestimation = total_revision - sum_news - impact_revision
 
     # Group aggregation

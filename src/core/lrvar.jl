@@ -39,9 +39,14 @@ Normalize a public kernel symbol to the internal `kernel_weight` name. Accepts t
 short alias `:qs` for the quadratic-spectral kernel in addition to the internal names.
 """
 function _lrv_kernel(kernel::Symbol)
+    # Accept both short aliases used by cointreg and the core covariance names (#535).
     kernel === :qs && return :quadratic_spectral
+    kernel === :newey_west && return :bartlett          # NW default kernel
+    kernel === :nw && return :bartlett
     kernel ∈ (:bartlett, :parzen, :quadratic_spectral, :tukey_hanning) && return kernel
-    throw(ArgumentError("kernel must be :bartlett, :parzen, :qs (:quadratic_spectral), or :tukey_hanning; got :$kernel"))
+    throw(ArgumentError(
+        "kernel must be :bartlett/:newey_west, :parzen, :qs/:quadratic_spectral, " *
+        "or :tukey_hanning; got :$kernel"))
 end
 
 """

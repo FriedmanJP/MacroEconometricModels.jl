@@ -12,7 +12,7 @@ to `sum(w) == 1`. Supported kinds:
 
 - `:expalmon` — exponential Almon, `wₖ ∝ exp(θ₁k + θ₂k²)`, k=1..K.
 - `:beta2`    — two-parameter Beta, `wₖ ∝ x^{θ₁−1}(1−x)^{θ₂−1}` on a guarded (0,1) grid.
-- `:beta3`    — three-parameter Beta, adds a nonnegative level constant `θ₃`.
+- `:beta3`    — three-parameter Beta, adds a level constant `θ₃ ≥ 0` (clamped).
 - `:almon`    — polynomial Almon of degree `d = length(θ)−1` (then normalized).
 - `:umidas`   — placeholder equal weights (U-MIDAS is estimated by plain OLS).
 
@@ -67,11 +67,15 @@ function _midas_weights(theta::AbstractVector{T}, K::Int, kind::Symbol) where {T
         u = (x .^ (a - one(T))) .* ((one(T) .- x) .^ (b - one(T)))
         if kind === :beta3
             length(theta) == 3 || throw(ArgumentError(":beta3 expects 3 parameters"))
-            u = u .+ theta[3]
+            # Nonnegative level constant (#575): clamp so weights cannot flip sign
+            # when θ₃ is driven negative by an unconstrained optimizer.
+            u = u .+ max(theta[3], zero(T))
         else
             length(theta) == 2 || throw(ArgumentError(":beta2 expects 2 parameters"))
         end
-        return u ./ sum(u)
+        s = sum(u)
+        s > zero(T) || throw(ArgumentError(":beta3 weights sum to non-positive; check θ"))
+        return u ./ s
     elseif kind === :almon
         length(theta) >= 1 || throw(ArgumentError(":almon expects ≥ 1 parameter"))
         k = T.(1:K)

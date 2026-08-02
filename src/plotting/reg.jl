@@ -114,14 +114,25 @@ end
 # =============================================================================
 
 """
-    plot_result(m::LogitModel{T}; title="", save_path=nothing)
+    plot_result(m::LogitModel{T}; view=:default, title="", save_path=nothing)
 
-Plot logit model diagnostics: sorted predicted probabilities by outcome and
-distribution of predictions by outcome group.
+Plot logit model diagnostics.
+
+# Views
+- `:default` — sorted predicted probabilities by outcome + distribution by group
+- `:classification` — confusion-style counts at threshold 0.5 and accuracy / sensitivity /
+  specificity vs classification threshold (#593)
 """
 function plot_result(m::LogitModel{T};
+                     view::Symbol=:default,
                      title::String="", save_path::Union{String,Nothing}=nothing) where {T}
-    _plot_binary_choice(m.y, m.fitted, "Logit"; title=title, save_path=save_path)
+    if view === :classification
+        return _plot_binary_classification(m.y, m.fitted, "Logit"; title=title, save_path=save_path)
+    elseif view === :default
+        return _plot_binary_choice(m.y, m.fitted, "Logit"; title=title, save_path=save_path)
+    else
+        throw(ArgumentError("Unknown view :$view for LogitModel; use :default or :classification"))
+    end
 end
 
 # =============================================================================
@@ -129,14 +140,79 @@ end
 # =============================================================================
 
 """
-    plot_result(m::ProbitModel{T}; title="", save_path=nothing)
+    plot_result(m::ProbitModel{T}; view=:default, title="", save_path=nothing)
 
-Plot probit model diagnostics: sorted predicted probabilities by outcome and
-distribution of predictions by outcome group.
+Plot probit model diagnostics. Same views as [`plot_result(::LogitModel)`](@ref).
 """
 function plot_result(m::ProbitModel{T};
+                     view::Symbol=:default,
                      title::String="", save_path::Union{String,Nothing}=nothing) where {T}
-    _plot_binary_choice(m.y, m.fitted, "Probit"; title=title, save_path=save_path)
+    if view === :classification
+        return _plot_binary_classification(m.y, m.fitted, "Probit"; title=title, save_path=save_path)
+    elseif view === :default
+        return _plot_binary_choice(m.y, m.fitted, "Probit"; title=title, save_path=save_path)
+    else
+        throw(ArgumentError("Unknown view :$view for ProbitModel; use :default or :classification"))
+    end
+end
+
+"""Classification diagnostics: threshold sweep + confusion counts at 0.5 (#593)."""
+function _plot_binary_classification(y::AbstractVector, fitted::AbstractVector,
+                                     model_name::String;
+                                     title::String="", save_path::Union{String,Nothing}=nothing)
+    yb = [yi > 0.5 for yi in y]
+    p_hat = collect(fitted)
+    n = length(yb)
+    # Confusion at threshold 0.5
+    thr0 = 0.5
+    pred0 = p_hat .>= thr0
+    tp = count(i -> pred0[i] && yb[i], 1:n)
+    tn = count(i -> !pred0[i] && !yb[i], 1:n)
+    fp = count(i -> pred0[i] && !yb[i], 1:n)
+    fn = count(i -> !pred0[i] && yb[i], 1:n)
+
+    id1 = _next_plot_id("clf_cm")
+    rows1 = [
+        ["x" => _json("TP"), "s1" => _json(tp)],
+        ["x" => _json("TN"), "s1" => _json(tn)],
+        ["x" => _json("FP"), "s1" => _json(fp)],
+        ["x" => _json("FN"), "s1" => _json(fn)],
+    ]
+    data1 = _json_array_of_objects(rows1)
+    s1 = _series_json(["Count"], [_PLOT_COLORS[1]]; keys=["s1"])
+    js1 = _render_bar_js(id1, data1, s1; mode="stacked", xlabel="Cell", ylabel="Count")
+    acc0 = (tp + tn) / max(n, 1)
+    p1 = _PanelSpec(id1, "Confusion @ 0.5 (acc=$(round(acc0; digits=3)))", js1)
+
+    # Threshold sweep
+    thresholds = range(0.05, 0.95; length=19)
+    id2 = _next_plot_id("clf_thr")
+    rows2 = Vector{Pair{String,String}}[]
+    for thr in thresholds
+        pred = p_hat .>= thr
+        tp_ = count(i -> pred[i] && yb[i], 1:n)
+        tn_ = count(i -> !pred[i] && !yb[i], 1:n)
+        fp_ = count(i -> pred[i] && !yb[i], 1:n)
+        fn_ = count(i -> !pred[i] && yb[i], 1:n)
+        acc = (tp_ + tn_) / max(n, 1)
+        sens = tp_ / max(tp_ + fn_, 1)
+        spec = tn_ / max(tn_ + fp_, 1)
+        push!(rows2, ["x" => _json(Float64(thr)),
+                      "acc" => _json(acc),
+                      "sens" => _json(sens),
+                      "spec" => _json(spec)])
+    end
+    data2 = _json_array_of_objects(rows2)
+    s2 = _series_json(["Accuracy", "Sensitivity", "Specificity"],
+                      _colors_for(["Accuracy", "Sensitivity", "Specificity"]);
+                      keys=["acc", "sens", "spec"])
+    js2 = _render_line_js(id2, data2, s2; xlabel="Threshold", ylabel="Rate")
+    p2 = _PanelSpec(id2, "Metrics vs Threshold", js2)
+
+    isempty(title) && (title = "$model_name Classification Diagnostics")
+    p = _make_plot([p1, p2]; title=title, ncols=1)
+    save_path !== nothing && save_plot(p, save_path)
+    p
 end
 
 # =============================================================================

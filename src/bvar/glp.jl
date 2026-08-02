@@ -212,7 +212,7 @@ bound.
 - `starts::Int=4` — dispersed restarts of the optimizer
 - `max_iter::Int=500` — iterations per restart
 - `f_reltol::Real=1e-8` — relative objective tolerance
-- `verbose::Bool=false` — warn on non-convergence
+- `verbose::Bool=true` — warn on non-convergence
 
 # Returns
 [`GLPHyperparameters`](@ref).

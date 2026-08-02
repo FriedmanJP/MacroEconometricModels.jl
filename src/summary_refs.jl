@@ -892,6 +892,13 @@ const _REFERENCES = Dict{Symbol, _RefEntry}(
         title="Difference-in-Differences with Multiple Time Periods",
         journal="Journal of Econometrics", volume="225", issue="2", pages="200--230",
         doi="10.1016/j.jeconom.2020.12.001", isbn="", publisher="", entry_type=:article),
+    # Acemoglu–Naidu–Restrepo–Robinson (2019) Democracy and income (DDCG panel; #586)
+    :acemoglu_naidu_restrepo_robinson2019 => (key=:acemoglu_naidu_restrepo_robinson2019,
+        authors="Acemoglu, Daron and Naidu, Suresh and Restrepo, Pascual and Robinson, James A.",
+        year=2019,
+        title="Democracy Does Cause Growth",
+        journal="Journal of Political Economy", volume="127", issue="1", pages="47--100",
+        doi="10.1086/700936", isbn="", publisher="", entry_type=:article),
     :goodman_bacon2021 => (key=:goodman_bacon2021,
         authors="Goodman-Bacon, Andrew", year=2021,
         title="Difference-in-Differences with Variation in Treatment Timing",

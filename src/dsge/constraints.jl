@@ -144,18 +144,25 @@ end
 """
     _select_solver(constraints, solver_override) -> Symbol
 
-Auto-detect solver: NonlinearConstraints → :ipopt, otherwise → :nonlinearsolve.
+Auto-detect solver:
+- NonlinearConstraints → :ipopt (if JuMP loaded) else :nlopt
+- Box bounds only → :ipopt when JuMP is loaded (projected Newton stalls when
+  bounds bind; #556), else :nonlinearsolve (unconstrained try + projected Newton)
 User override always wins. PATH still reachable via `solver=:path`.
 """
 function _select_solver(constraints::Vector, solver_override::Union{Nothing,Symbol})
     solver_override !== nothing && return solver_override
     has_nlcon = any(c -> c isa NonlinearConstraint, constraints)
+    has_bounds = any(c -> c isa VariableBound, constraints)
+    jump_available = hasmethod(_jump_compute_steady_state, Tuple{DSGESpec, Vector})
     if has_nlcon
         # Prefer Ipopt when JuMP extension is loaded (more robust for large NLP)
-        if hasmethod(_jump_compute_steady_state, Tuple{DSGESpec, Vector})
-            return :ipopt
-        end
-        return :nlopt
+        return jump_available ? :ipopt : :nlopt
+    end
+    # Box-constrained PF: prefer Ipopt when available — projected Newton often
+    # fails to satisfy the NCP residual once a bound actually binds (#556).
+    if has_bounds && jump_available
+        return :ipopt
     end
     return :nonlinearsolve
 end
