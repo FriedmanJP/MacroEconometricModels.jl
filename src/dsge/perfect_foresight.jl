@@ -89,11 +89,10 @@ function perfect_foresight(spec::DSGESpec{FT};
                 end
             end
             bounds_ok && return pf
-            # Unconstrained path violated bounds. Prefer Ipopt when JuMP is loaded
-            # (#556: projected Newton stalls when bounds bind); else projected Newton.
-            if hasmethod(_jump_compute_steady_state, Tuple{DSGESpec, Vector})
-                return _jump_perfect_foresight(spec, T_periods, shocks, constraints)
-            end
+            # Escalate to the semismooth projected Newton (always available).
+            # Ipopt is NOT a valid escalation target here: `_jump_perfect_foresight`
+            # poses hard equalities + bounds, which is infeasible whenever a bound
+            # genuinely binds (the binding case is a complementarity problem, #556).
             return _projected_newton_pf(spec, T_periods, shocks, lower, upper;
                         max_iter=max_iter, tol=tol, abstol=abstol)
         elseif chosen == :nlopt
@@ -224,10 +223,17 @@ end
     _projected_newton_pf(spec, T_periods, shocks, lower, upper;
                           max_iter=100, tol=1e-8)
 
-Box-constrained perfect foresight via projected Newton with Armijo backtracking.
+Box-constrained perfect foresight via semismooth (min-map) Newton with NCP
+backtracking.
 
-Uses the existing block-tridiagonal sparse Jacobian (`_pf_jacobian`) for the
-Newton step, then clamps to bounds. Preserves O(T·n) sparsity structure.
+Solves the mixed complementarity system: at interior points the equation in the
+variable's slot holds (`F_j = 0`); at a binding lower bound `F_j ≥ 0`; at a
+binding upper bound `F_j ≤ 0`. Each iteration estimates the active set from the
+min-map `x - F` and replaces the Jacobian rows of pinned variables with identity
+rows (the bound replaces the equation), so the reduced Newton step is consistent
+with complementarity — a full step `-(J \\ F)` followed by clamping stalls as
+soon as a bound genuinely binds (#556). Preserves the block-tridiagonal
+sparsity of `_pf_jacobian`.
 """
 function _projected_newton_pf(spec::DSGESpec{FT}, T_periods::Int,
         shocks::Matrix{FT}, lower::Vector{FT}, upper::Vector{FT};
@@ -265,20 +271,48 @@ function _projected_newton_pf(spec::DSGESpec{FT}, T_periods::Int,
         return ncp
     end
 
-    converged = false
+    converged = _ncp_residual(x, F) < FT(abstol)
     iter = 0
 
+    x_trial = similar(x)
+    F_trial = similar(F)
+
     for k in 1:max_iter
+        converged && break
         iter = k
 
-        # Build sparse Jacobian and compute Newton direction
         J = _pf_jacobian(x, spec, shocks, T_periods)
-        d = -(J \ F)  # Newton step (sparse LU)
+
+        # Min-map active set: variable j is pinned at a bound when x_j - F_j
+        # crosses it. Pinned rows are replaced by identity rows so the step
+        # drives x_j exactly onto the bound while the remaining equations are
+        # solved on the reduced system (complementarity: bound replaces equation).
+        pinned_at = fill(FT(NaN), N)   # NaN = free; otherwise the bound value
+        for j in 1:N
+            z = x[j] - F[j]
+            if isfinite(lower_stacked[j]) && z <= lower_stacked[j]
+                pinned_at[j] = lower_stacked[j]
+            elseif isfinite(upper_stacked[j]) && z >= upper_stacked[j]
+                pinned_at[j] = upper_stacked[j]
+            end
+        end
+
+        rows, cols, vals = findnz(J)
+        keep = [isnan(pinned_at[r]) for r in rows]
+        pin_idx = findall(!isnan, pinned_at)
+        M = sparse(vcat(rows[keep], pin_idx), vcat(cols[keep], pin_idx),
+                   vcat(vals[keep], ones(FT, length(pin_idx))), N, N)
+        rhs = [isnan(pinned_at[j]) ? -F[j] : pinned_at[j] - x[j] for j in 1:N]
+
+        d = try
+            M \ rhs
+        catch err
+            err isa SingularException || rethrow()
+            -(J \ F)  # fall back to the full (clamped) Newton direction
+        end
 
         # Damped step with backtracking on NCP residual
         α = FT(1.0)
-        x_trial = similar(x)
-        F_trial = similar(F)
         ncp_old = _ncp_residual(x, F)
 
         for _ls in 1:20
@@ -301,12 +335,12 @@ function _projected_newton_pf(spec::DSGESpec{FT}, T_periods::Int,
     end
 
     if !converged
-        # `merit` was never defined here → the old throw itself raised UndefVarError. Report
-        # the same NCP residual the convergence test (line 279) uses.
         final_resid = _ncp_residual(x, F)
         throw(ErrorException(
             "Projected Newton PF did not converge after $max_iter iterations " *
-            "(||F||_NCP = $(final_resid)). Try solver=:ipopt with JuMP + Ipopt."))
+            "(||F||_NCP = $(final_resid)). A binding box constraint is a " *
+            "complementarity problem: try a larger max_iter, or solver=:path " *
+            "(PATH MCP solver, weak dependency)."))
     end
 
     # Reshape solution

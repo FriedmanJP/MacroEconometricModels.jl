@@ -535,12 +535,6 @@ function ct_two_asset_solve(m::CTTwoAsset{T}; max_iter::Int=200, tol::Real=1e-6,
     A = spzeros(T, n, n)
     converged = false
     hjb_iters = 0
-    # Track policy change and second-difference of V for convergence (#558).
-    # Raw ‖ΔV‖_∞ can carry a level drift that never clears tol even when the
-    # solution (policies + aggregates) is already bit-stable.
-    c_prev = nothing
-    d_prev = nothing
-    dist_prev = T(Inf)
     for it in 1:max_iter
         hjb_iters = it
         c, d, sb, sa, A = _ct2_policy_and_generator(m, V, b, a, dbg, dag, Aswitch)
@@ -548,19 +542,15 @@ function ct_two_asset_solve(m::CTTwoAsset{T}; max_iter::Int=200, tol::Real=1e-6,
         B = (one(T) / Δ + ρ) * LinearAlgebra.I - A
         V_new = reshape(B \ (u_vec + vec(V) / Δ), Ib, Ia, 2)
         dist = maximum(abs.(V_new - V))
-        # Policy change (consumption + deposit) — the economically relevant residual.
-        pol_dist = if c_prev === nothing
-            T(Inf)
-        else
-            max(maximum(abs.(c - c_prev)), maximum(abs.(d - d_prev)))
-        end
-        # Change-in-change of V: detects a pure level drift that ‖ΔV‖ never clears.
-        ddist = abs(dist - dist_prev)
         V = V_new
-        c_prev = copy(c)
-        d_prev = copy(d)
-        dist_prev = dist
-        if dist < tol || pol_dist < tol || ddist < tol
+        # Strict sup-norm only (#558): on ceiling-pressed calibrations the upwind
+        # policy chatters at the illiquid-ceiling corner and ‖ΔV‖_∞ stalls well
+        # above tol while the aggregates are stable (the stationary distribution
+        # carries ~0 mass there). That is genuine pointwise non-convergence, so
+        # the flag must say so — read `kfe_residual` and aggregate stability
+        # alongside it. Per-iteration-change criteria (policy change, change of
+        # ‖ΔV‖) declare the chatter converged at a platform-dependent iteration.
+        if dist < tol
             converged = true
             break
         end
@@ -594,9 +584,23 @@ function ct_two_asset_solve(m::CTTwoAsset{T}; max_iter::Int=200, tol::Real=1e-6,
         Aagg += a[j] * g[i, j, k] * w
     end
 
-    return CTTwoAssetSolution{T}(b, a, V, c, d, sb, sa, g, Bagg, Aagg, A, converged;
-                                 kfe_residual=kfe_res, hjb_iterations=hjb_iters,
-                                 bdelta=bdelta, adelta=adelta)
+    sol = CTTwoAssetSolution{T}(b, a, V, c, d, sb, sa, g, Bagg, Aagg, A, converged;
+                                kfe_residual=kfe_res, hjb_iterations=hjb_iters,
+                                bdelta=bdelta, adelta=adelta)
+
+    # #559: the pre-solve stationarity check is necessary but not sufficient —
+    # a calibration can pass it and still pile stationary mass on the illiquid
+    # ceiling (a* just above a_max). Diagnose it from the solved distribution
+    # so the reported aggregate A is not silently "where the grid ends".
+    if check_stationarity
+        cm_ill = ceiling_mass(sol).illiquid
+        cm_ill > T(0.05) && @warn "ct_two_asset_solve: $(round(100 * cm_ill; digits=1))% " *
+            "of stationary mass sits on the illiquid grid ceiling a_max = $(m.a_max); " *
+            "the aggregate illiquid stock partly reflects the grid bound, not household " *
+            "behavior. Raise a_max (or move a* = 1/(chi*r_a) further above it). See #559."
+    end
+
+    return sol
 end
 
 # =============================================================================
@@ -751,8 +755,10 @@ function ct_two_asset_stationarity(m::CTTwoAsset{T};
         ok_rate = rate > m.r_a
         # With infinite a* (rate ok and dmax never binds on the grid), treat as unbounded.
         a_star = ok_rate ? (m.a_max < a_star_dmax ? T(Inf) : a_star_dmax) : zero(T)
-        ok_margin = isinf(a_star) || m.a_max ≤ mgn * a_star
-        ok = ok_rate && m.a_max < a_star_dmax && ok_margin
+        # No margin requirement here (#559): below a_star_dmax the withdrawal RATE
+        # strictly exceeds r_a, so the drift at the ceiling is strictly inward —
+        # the near-boundary mass pile-up is specific to the level-quadratic cost.
+        ok = ok_rate && m.a_max < a_star_dmax
         msg = if !ok_rate
             "kinked cost: the maximum withdrawal rate chi1*(1-chi0)^(1/chi2) = " *
             "$(round(rate; sigdigits=4)) does not exceed r_a = $(m.r_a), so illiquid " *
@@ -765,16 +771,9 @@ function ct_two_asset_stationarity(m::CTTwoAsset{T};
             "dmax = $(m.dmax) binds above a* = dmax/r_a = " *
             "$(round(a_star_dmax; sigdigits=4)) <= a_max = $(m.a_max), which re-imposes " *
             "a constant withdrawal and hence divergence. Raise dmax or lower a_max. See #509."
-        elseif !ok_margin
-            "kinked cost: a_max = $(m.a_max) is within $(round((one(T)-mgn)*100; digits=1))% " *
-            "of a* = $(round(a_star; sigdigits=4)) (required a_max ≤ $(mgn)·a* = " *
-            "$(round(mgn * a_star; sigdigits=4))). Near-boundary grids pile mass on the " *
-            "illiquid ceiling even when the formal bound holds. Raise a_max or dmax, or " *
-            "lower r_a. See #559."
         else
             "kinked cost: maximum withdrawal rate chi1*(1-chi0)^(1/chi2) = " *
-            "$(round(rate; sigdigits=4)) > r_a = $(m.r_a); illiquid wealth is bounded " *
-            "with margin $(mgn)."
+            "$(round(rate; sigdigits=4)) > r_a = $(m.r_a); illiquid wealth is bounded."
         end
         base = (ok=ok, bound=rate, a_star=a_star, message=msg)
     else
@@ -799,26 +798,28 @@ function ct_two_asset_stationarity(m::CTTwoAsset{T};
         base = (ok=ok, bound=bound, a_star=bound, message=msg)
     end
 
-    # Optional ceiling-mass diagnostic when a solved distribution is available (#559).
-    if solution !== nothing || max_ceiling_mass !== nothing
-        sol = solution
-        if sol === nothing
-            # Cannot compute ceiling mass without a solution — leave check as margin-only.
-            return base
-        end
-        cm = ceiling_mass(sol)
-        cm_ill = cm.illiquid
-        cap = max_ceiling_mass === nothing ? T(0.05) : T(max_ceiling_mass)
-        if cm_ill > cap
-            msg2 = base.message * " Illiquid ceiling mass = $(round(cm_ill; sigdigits=4)) exceeds " *
-                   "threshold $(cap); raise a_max or reparameterize. See #559."
-            return (ok=false, bound=base.bound, a_star=base.a_star, message=msg2,
-                    ceiling_mass=cm)
-        end
+    # Ceiling-mass diagnostic (#559) — only computable from a solved distribution.
+    # The return always carries the same 5 fields (ceiling_mass = nothing when no
+    # solution is supplied) so the NamedTuple shape is caller-stable.
+    if max_ceiling_mass !== nothing && solution === nothing
+        throw(ArgumentError(
+            "ct_two_asset_stationarity: max_ceiling_mass requires solution=<CTTwoAssetSolution> " *
+            "— the ceiling mass is a property of the solved stationary distribution"))
+    end
+    if solution === nothing
         return (ok=base.ok, bound=base.bound, a_star=base.a_star, message=base.message,
+                ceiling_mass=nothing)
+    end
+    cm = ceiling_mass(solution)
+    cap = max_ceiling_mass === nothing ? T(0.05) : T(max_ceiling_mass)
+    if cm.illiquid > cap
+        msg2 = base.message * " Illiquid ceiling mass = $(round(cm.illiquid; sigdigits=4)) " *
+               "exceeds threshold $(cap); raise a_max or reparameterize. See #559."
+        return (ok=false, bound=base.bound, a_star=base.a_star, message=msg2,
                 ceiling_mass=cm)
     end
-    return base
+    return (ok=base.ok, bound=base.bound, a_star=base.a_star, message=base.message,
+            ceiling_mass=cm)
 end
 
 # =============================================================================

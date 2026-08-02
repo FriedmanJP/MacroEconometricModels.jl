@@ -146,23 +146,23 @@ end
 
 Auto-detect solver:
 - NonlinearConstraints → :ipopt (if JuMP loaded) else :nlopt
-- Box bounds only → :ipopt when JuMP is loaded (projected Newton stalls when
-  bounds bind; #556), else :nonlinearsolve (unconstrained try + projected Newton)
+- Box bounds only → :nonlinearsolve (unconstrained try, then semismooth
+  projected Newton for PF / Optim Fminbox for SS). Ipopt is deliberately NOT
+  auto-selected for bounds-only problems: the JuMP formulation holds every model
+  equation as a hard equality, so it is infeasible whenever a bound genuinely
+  binds — the binding case is a complementarity problem (#556; `:path` is the
+  explicit MCP route).
 User override always wins. PATH still reachable via `solver=:path`.
 """
 function _select_solver(constraints::Vector, solver_override::Union{Nothing,Symbol})
     solver_override !== nothing && return solver_override
     has_nlcon = any(c -> c isa NonlinearConstraint, constraints)
-    has_bounds = any(c -> c isa VariableBound, constraints)
-    jump_available = hasmethod(_jump_compute_steady_state, Tuple{DSGESpec, Vector})
     if has_nlcon
         # Prefer Ipopt when JuMP extension is loaded (more robust for large NLP)
-        return jump_available ? :ipopt : :nlopt
-    end
-    # Box-constrained PF: prefer Ipopt when available — projected Newton often
-    # fails to satisfy the NCP residual once a bound actually binds (#556).
-    if has_bounds && jump_available
-        return :ipopt
+        if hasmethod(_jump_compute_steady_state, Tuple{DSGESpec, Vector})
+            return :ipopt
+        end
+        return :nlopt
     end
     return :nonlinearsolve
 end

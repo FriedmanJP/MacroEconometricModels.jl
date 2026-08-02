@@ -150,12 +150,10 @@ function _breitung_eickmeier_test(X::AbstractMatrix{T}, r::Int) where {T<:Abstra
         FtF_sub_inv = robust_inv(FtF_sub)
         Lambda_t = X_sub' * F_sub * FtF_sub_inv  # N × r
 
-        # Fluctuation: scaled difference in vectorized loadings.
-        # Divide by √(N·r) so the process is O_p(1) under H0 (previous code
-        # used χ²(N·r) which raised the bar with N and drove size → 0).
+        # Fluctuation: scaled difference in vectorized loadings
         diff_vec = vec(Lambda_t - Lambda_T)
-        fluct_path[idx] = sqrt(T(t) / T_obs) * norm(diff_vec) /
-                          sqrt(max(sigma2_hat * n_params, T(1e-10)))
+        # Scale by sqrt(t) for Brownian bridge normalization
+        fluct_path[idx] = sqrt(T(t) / T_obs) * norm(diff_vec) / sqrt(max(sigma2_hat, T(1e-10)))
     end
 
     # Sup statistic
@@ -163,32 +161,29 @@ function _breitung_eickmeier_test(X::AbstractMatrix{T}, r::Int) where {T<:Abstra
     break_idx = argmax(fluct_path)
     break_date = t_start + break_idx - 1
 
-    # P-value: Kolmogorov–Smirnov-type tail for sup of a Brownian bridge
-    # (dimension-free after the √(N·r) scaling above).
-    pval = _breitung_eickmeier_pvalue(stat)
+    # P-value: asymptotic distribution is sup of Bessel process
+    # Approximate using chi-squared with df = N*r (loading parameters)
+    # The statistic squared is approximately chi-squared under the null
+    pval = _breitung_eickmeier_pvalue(stat, n_params)
 
     FactorBreakResult{T}(stat, pval, break_date, :breitung_eickmeier, r, T_obs, N)
 end
 
 """
-Approximate p-value for the Breitung–Eickmeier CUSUM statistic.
+Approximate p-value for Breitung-Eickmeier CUSUM statistic.
 
-After √(N·r) scaling the sup fluctuation converges to the Kolmogorov
-distribution of sup|B⁰(s)| on [0,1]:
-  P(sup|B⁰| > x) ≈ 2 Σ_{j=1}^∞ (−1)^{j+1} exp(−2 j² x²).
+Uses the asymptotic distribution of the supremum of a Brownian bridge process.
+For the multivariate case with `k` parameters, approximated via
+chi-squared(k) applied to the squared statistic.
 """
-function _breitung_eickmeier_pvalue(stat::T) where {T<:AbstractFloat}
-    x = Float64(stat)
-    x <= 0 && return one(T)
-    # Kolmogorov series (rapidly convergent for x ≳ 0.3)
-    s = 0.0
-    for j in 1:50
-        term = (-1.0)^(j + 1) * exp(-2.0 * j^2 * x^2)
-        s += term
-        abs(term) < 1e-15 && break
-    end
-    pval = T(clamp(2 * s, 0.0, 1.0))
-    return pval
+function _breitung_eickmeier_pvalue(stat::T, k::Int) where {T<:AbstractFloat}
+    # The squared CUSUM stat is asymptotically related to sup of
+    # squared Brownian bridge. Use Kolmogorov-Smirnov-type approximation:
+    # P(sup|B(s)| > x) ≈ 2 * sum_{j=1}^∞ (-1)^{j+1} exp(-2j²x²)
+    # For multivariate generalization, use chi-squared approximation
+    stat_sq = stat^2
+    pval = ccdf(Chisq(k), stat_sq)
+    clamp(pval, zero(T), one(T))
 end
 
 # =============================================================================
@@ -244,24 +239,14 @@ function _chen_dolado_gonzalo_test(X::AbstractMatrix{T}) where {T<:AbstractFloat
         stat_path[idx] = norm_factor * max_diff
     end
 
-    # Test statistic: maximum over candidate breaks of the scaled ER gap.
-    # This is a *max* of eigenvalue-ratio differences, not a quadratic form —
-    # χ²(r_max) was catastrophically oversized (issue #583). Use a Gumbel-type
-    # extreme-value approximation on the studentized max, calibrated so that
-    # under stable loadings the 5% critical value is around 3 (Monte-Carlo
-    # consistent with mid-size T,N panels).
+    # Test statistic: maximum over candidate breaks
     stat = maximum(stat_path)
 
-    # Extreme-value / Gumbel tail for a max of weakly dependent mean-zero terms:
-    # after the √(t(T−t)/T) norm_factor the max is O_p(√log m); map via
-    # P(M > x) ≈ 1 − exp(−exp(−(x − b_m)/a_m)) with a_m=1, b_m=√(2 log m).
-    m = length(stat_path)
-    b_m = sqrt(2 * log(max(m, 2)))
-    a_m = one(T)
-    z = (stat - b_m) / a_m
-    # Gumbel survival: 1 − exp(−exp(−z)); for large positive z → 0 (reject)
-    pval = T(clamp(1 - exp(-exp(-Float64(z))), 0.0, 1.0))
+    # P-value: chi-squared approximation with df = r_max
+    pval = ccdf(Chisq(r_max), stat)
+    pval = clamp(pval, zero(T), one(T))
 
+    # Chen-Dolado-Gonzalo doesn't precisely localize the break
     break_idx = argmax(stat_path)
     break_date = t_start + break_idx - 1
 

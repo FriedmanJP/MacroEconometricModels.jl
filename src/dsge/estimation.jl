@@ -41,14 +41,20 @@ function estimate_dsge(spec::DSGESpec{T}, data::AbstractMatrix,
                         method::Symbol=:irf_matching,
                         target_irfs::Union{Nothing,ImpulseResponse}=nothing,
                         var_lags::Int=4, irf_horizon::Int=20,
-                        weighting::Symbol=:two_step,
+                        weighting::Union{Nothing,Symbol}=nothing,
                         n_boot::Int=200,
                         n_lags_instruments::Int=4,
                         sim_ratio::Int=5, burn::Int=100,
-                        # Default moments are scale-normalized (correlations + autocorrelations)
-                        # so level-scale variables cannot dominate the SMM objective (#562).
-                        moments_fn::Function=d -> autocovariance_moments(d; lags=1, standardize=true),
-                        contributions_fn::Function=d -> autocovariance_moment_contributions(d; lags=1, standardize=true),
+                        # Default moments stay in LEVELS (#562): correlations/autocorrelations
+                        # are invariant to a common shock-scale change, so standardize=true as
+                        # the default would make every σ-type parameter exactly unidentified
+                        # (m(σ)=m(cσ) for all c) and zero out the k diagonal moments while they
+                        # still count toward J-test df. Scale imbalance across level variables
+                        # is what the two-step weighting matrix (built from contributions_fn)
+                        # corrects — without discarding scale information. Opt in to
+                        # standardize=true only when no scale parameter is being estimated.
+                        moments_fn::Function=d -> autocovariance_moments(d; lags=1),
+                        contributions_fn::Function=d -> autocovariance_moment_contributions(d; lags=1),
                         bounds::Union{Nothing,ParameterTransform}=nothing,
                         lags::Int=1,
                         rng=Random.default_rng(),
@@ -59,28 +65,34 @@ function estimate_dsge(spec::DSGESpec{T}, data::AbstractMatrix,
                         observable_indices::Union{Nothing,Vector{Int}}=nothing) where {T<:AbstractFloat}
     data_T = Matrix{T}(data)
 
+    # `weighting=nothing` means "method default": :two_step for the sample-moment
+    # methods, :identity for :analytical_gmm. The sentinel lets the
+    # :analytical_gmm warning below fire only on an EXPLICIT non-identity
+    # request, not on every default call (#561).
+    w = something(weighting, :two_step)
+
     if method == :irf_matching
         return _estimate_irf_matching(spec, data_T, param_names;
                                        target_irfs=target_irfs,
                                        var_lags=var_lags,
                                        irf_horizon=irf_horizon,
-                                       weighting=weighting,
+                                       weighting=w,
                                        n_boot=n_boot)
     elseif method == :euler_gmm
         return _estimate_euler_gmm(spec, data_T, param_names;
                                     n_lags=n_lags_instruments,
-                                    weighting=weighting)
+                                    weighting=w)
     elseif method == :smm
         return _estimate_dsge_smm(spec, data_T, param_names;
                                     sim_ratio=sim_ratio, burn=burn,
-                                    weighting=weighting, moments_fn=moments_fn,
+                                    weighting=w, moments_fn=moments_fn,
                                     contributions_fn=contributions_fn,
                                     bounds=bounds, rng=rng)
     elseif method == :analytical_gmm
         # Analytical GMM matches deterministic model moments to a single data-moment
         # vector, so HAC / two-step weighting on the 1×q residual is degenerate.
-        # Identity is the only supported choice; warn if the user asked for another.
-        if weighting !== :identity
+        # Identity is the only supported choice; warn only on an explicit override.
+        if weighting !== nothing && weighting !== :identity
             @warn "estimate_dsge(:analytical_gmm) uses identity weighting " *
                   "(single-observation moment residual; HAC/two-step are degenerate). " *
                   "Ignoring weighting=:$weighting."
@@ -129,6 +141,10 @@ overidentification statistic `J = g'Ω⁻¹g ~ χ²(dim g − dim θ)`. Under di
 `weighting`: `:two_step`/`:efficient`/`:optimal` → `W = Ω⁻¹` (χ² J reported);
 `:diagonal`/`:cee` → `W = diag(Ω)⁻¹`; `:identity` → `W = I`. If no valid bootstrap
 draws are available, falls back to identity weighting with a warning (SEs not CEE-valid).
+When `Ω` is near-singular (common at long horizons) the efficient path degrades
+to the diagonal `W = diag(Ω)⁻¹` with a warning (#594): the sandwich above remains
+valid for any `W`, but the χ² J-statistic is then suppressed because it requires
+the full efficient weighting.
 
 Shock units: both the model IRF (whose impact matrix embeds the structural-shock
 standard deviations via the σ parameters) and the VAR Cholesky target use 1-s.d.
@@ -585,6 +601,28 @@ function _estimate_dsge_analytical_gmm(spec::DSGESpec{T}, data::Matrix{T},
     gmm_result = estimate_gmm(analytical_moment_fn, theta0, data;
                                 weighting=weighting, bounds=bounds)
 
+    # Classical-minimum-distance variance (#561). The GMM residual here is a
+    # single 1×q vector, so gmm_estimate has no valid Ω — and (G'G)⁻¹ alone is
+    # not an asymptotic variance (it is not even invariant to rescaling the
+    # moment vector). All sampling noise enters through m̂_data: m_model(θ) is
+    # deterministic. Under W = I,
+    #   V(θ̂) = (G'G)⁻¹ G' Ω̂ G (G'G)⁻¹ / T,
+    # with Ω̂ the HAC long-run covariance of the per-observation data-moment
+    # contributions and G = ∂g/∂θ at θ̂.
+    vcov_cmd = if use_perturbation
+        # No per-observation contributions exist for the perturbation moment
+        # format — report NaN rather than a number that is not a variance.
+        fill(T(NaN), length(gmm_result.theta), length(gmm_result.theta))
+    else
+        contribs = autocovariance_moment_contributions(data; lags=lags)
+        Omega = long_run_covariance(contribs .- mean(contribs, dims=1))
+        Gj = numerical_gradient(t -> vec(analytical_moment_fn(t, data)),
+                                gmm_result.theta)
+        bread = Matrix{T}(robust_inv(Hermitian(Gj' * Gj)))
+        V = bread * (Gj' * Omega * Gj) * bread ./ T(size(data, 1))
+        T(0.5) .* (V .+ V')
+    end
+
     # Build solution at estimated parameters
     final_pv = copy(spec.param_values)
     for (i, pn) in enumerate(param_names)
@@ -599,7 +637,7 @@ function _estimate_dsge_analytical_gmm(spec::DSGESpec{T}, data::Matrix{T},
     end
 
     DSGEEstimation{T}(
-        gmm_result.theta, gmm_result.vcov, param_names,
+        gmm_result.theta, vcov_cmd, param_names,
         :analytical_gmm, gmm_result.J_stat, gmm_result.J_pvalue,
         final_sol, gmm_result.converged, final_spec
     )
