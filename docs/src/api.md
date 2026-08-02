@@ -1,6 +1,6 @@
-# API Reference
+# [API Reference](@id api_page)
 
-This section provides the complete API documentation for **MacroEconometricModels.jl**. Docstrings are split into per-domain reference pages; the quick-reference tables below link each function to its narrative page.
+Complete API documentation for **MacroEconometricModels.jl**. Every export carries its docstring on exactly one of the twelve per-domain reference pages below. The quick-reference tables that follow group the exported functions by task and route each group to the narrative page that explains it.
 
 The full API documentation is organized into the following per-domain pages:
 
@@ -58,7 +58,7 @@ Markdown.parse("```\n" * String(take!(_io)) * "```")
 
 ## Quick Reference Tables
 
-Typed data containers, built-in datasets (FRED-MD, FRED-QD, Penn World Table), and data cleaning utilities. See [Data Management](data.md) for theory and examples.
+Typed data containers, built-in datasets (FRED-MD, FRED-QD, Penn World Table), and data cleaning utilities. See [Data Management](@ref data_page) for theory and examples.
 
 ### Data Management
 
@@ -81,7 +81,7 @@ Typed data containers, built-in datasets (FRED-MD, FRED-QD, Penn World Table), a
 | `rename_vars!(d, old => new)` | Rename variables |
 | `load_example(:fred_md)` / `load_example(:fred_qd)` / `load_example(:pwt)` / `load_example(:ddcg)` / `load_example(:mpdta)` / `load_example(:wiot)` | Load built-in datasets: FRED-MD, FRED-QD, PWT, DDCG (Acemoglu et al. 2019 → `PanelData`), mpdta (Callaway & Sant'Anna 2021 → `PanelData`), WIOT (WIOD → `IOData`) |
 
-AR, MA, ARMA, and ARIMA model estimation with automatic order selection. See [ARIMA Models](arima.md) for estimation methods, forecasting, and model selection.
+AR, MA, ARMA, and ARIMA model estimation with automatic order selection. See [ARIMA Models](@ref arima_page) for estimation methods, forecasting, and model selection.
 
 ### ARIMA Estimation Functions
 
@@ -91,12 +91,49 @@ AR, MA, ARMA, and ARIMA model estimation with automatic order selection. See [AR
 | `estimate_ma(y, q; method=:css_mle)` | MA(q) via CSS, MLE, or CSS-MLE |
 | `estimate_arma(y, p, q; method=:css_mle)` | ARMA(p,q) via CSS, MLE, or CSS-MLE |
 | `estimate_arima(y, p, d, q; method=:css_mle)` | ARIMA(p,d,q) via differencing + ARMA |
+| `estimate_sarima(y, p, d, q, P, D, Q, s)` | Seasonal ARIMA |
 | `forecast(model, h; conf_level=0.95)` | Multi-step forecasting with confidence intervals |
 | `select_arima_order(y, max_p, max_q)` | Grid search for optimal ARMA order |
-| `auto_arima(y)` | Automatic ARIMA order selection |
+| `auto_arima(y)` / `auto_sarima(y)` | Automatic (seasonal) ARIMA order selection |
 | `ic_table(y, max_p, max_q)` | Information criteria comparison table |
+| `ar_order(m)` / `ma_order(m)` / `diff_order(m)` | Extract fitted orders |
 
-Trend-cycle decomposition via HP, Hamilton, Beveridge-Nelson, Baxter-King, and boosted HP filters. See [Time Series Filters](filters.md) for theory and comparisons.
+Fractionally integrated ARMA and semiparametric estimation of the long-memory parameter ``d``. See [ARIMA Models](@ref arima_page).
+
+### Long-Memory Models
+
+| Function | Description |
+|----------|-------------|
+| `estimate_arfima(y, p, q; method=:css)` | ARFIMA(p,d,q) with estimated fractional order |
+| `gph_test(y; m)` | Geweke-Porter-Hudak log-periodogram regression |
+| `local_whittle(y; m)` | Local Whittle estimator of ``d`` |
+
+Linear Gaussian state-space models estimated by the Kalman filter and smoother. See [State-Space Models](@ref statespace_page) for the `a1`/`P1`/`init_mode` semantics.
+
+### State-Space Models
+
+| Function | Description |
+|----------|-------------|
+| `local_level(y; init_mode=:kappa)` | Local level (random walk plus noise) model |
+| `local_linear_trend(y; init_mode=:kappa)` | Local linear trend model |
+| `estimate_statespace(ss, y)` | Run the filter/smoother on a built `StateSpaceModel` |
+| `estimate_statespace(build, theta0, y; ...)` | Estimate free parameters by MLE from a builder function |
+| `estimate_tvp_reg(y, X; intercept=true)` | Time-varying-parameter regression |
+
+Threshold, smooth-transition, and Markov-switching regression for univariate series. See [Nonlinear Time Series](@ref nonlinear_page).
+
+### Nonlinear Time Series
+
+| Function | Description |
+|----------|-------------|
+| `estimate_threshold(y, X, q; trim=0.15)` | Hansen (2000) threshold regression |
+| `estimate_setar(y, p, d=1; ...)` | Self-exciting threshold autoregression |
+| `estimate_star(y, p; type=:auto)` | Smooth-transition AR (`:auto` selects LSTAR vs ESTAR) |
+| `estimate_ms(y; ...)` / `estimate_ms_ar(y, p; k_regimes=2)` | Markov-switching regression / autoregression |
+| `hansen_linearity_test(y, X, q; reps=1000)` | Hansen bootstrap test of linearity vs threshold |
+| `star_linearity_test(y, p; s, d=1)` | Luukkonen-Saikkonen-Terasvirta LM linearity test |
+
+Trend-cycle decomposition via HP, Hamilton, Beveridge-Nelson, Baxter-King, and boosted HP filters. See [Time Series Filters](@ref filters_page) for theory and comparisons.
 
 ### Time Series Filters
 
@@ -107,11 +144,11 @@ Trend-cycle decomposition via HP, Hamilton, Beveridge-Nelson, Baxter-King, and b
 | `beveridge_nelson(y; p=:auto, q=:auto)` | Beveridge-Nelson permanent/transitory decomposition |
 | `baxter_king(y; pl=6, pu=32, K=12)` | Baxter-King band-pass filter |
 | `boosted_hp(y; stopping=:BIC, lambda=1600.0)` | Boosted HP filter (Phillips & Shi 2021) |
-| `x13_filter(y; frequency=12, method=:seats)` | X-13ARIMA-SEATS seasonal adjustment (see [X-13ARIMA-SEATS](x13.md)) |
+| `x13_filter(y; frequency=12, method=:seats)` | X-13ARIMA-SEATS seasonal adjustment (see [X-13ARIMA-SEATS](@ref x13_page)) |
 | `trend(result)` | Extract trend component from filter result |
 | `cycle(result)` | Extract cyclical component from filter result |
 
-VAR, VECM, BVAR, Local Projections, Factor Models, and Panel VAR estimation. See [VAR](manual.md), [VECM](vecm.md), [BVAR](bayesian.md), [LP](lp.md), [Factor Models](factormodels.md), and [Panel VAR](pvar.md) for theory and examples.
+VAR, VECM, BVAR, Local Projections, Factor Models, and Panel VAR estimation. See [VAR](@ref var_page), [VECM](@ref vecm_page), [BVAR](@ref bvar_page), [LP](@ref lp_page), [Factor Models](@ref factor_page), and [Panel VAR](@ref pvar_page) for theory and examples.
 
 ### Multivariate Estimation Functions
 
@@ -131,14 +168,61 @@ VAR, VECM, BVAR, Local Projections, Factor Models, and Panel VAR estimation. See
 | `estimate_pvar(pd, p; ...)` | Panel VAR via GMM (FD or System) |
 | `estimate_pvar_feols(pd, p; ...)` | Panel VAR via Fixed-Effects OLS |
 | `estimate_gmm(moment_fn, theta0, data; ...)` | GMM estimation |
+| `estimate_lp_multi(Y, shock_vars, H; ...)` | LP for several shocks jointly |
+| `estimate_lp_cholesky(Y, H; lags)` | Recursively identified LP |
+| `estimate_lp_gmm(Y, shock_var, H; weighting)` | GMM-weighted LP |
 | `structural_lp(Y, H; method=:cholesky, ...)` | Structural LP with multi-shock IRFs |
 | `estimate_vecm(Y, p; rank=:auto, ...)` | Estimate VECM via Johansen MLE or Engle-Granger |
 | `to_var(vecm)` | Convert VECM to VAR in levels |
+| `conditional_forecast(model, conditions, h; ...)` | Forecast subject to conditioning paths |
+| `forecast_condition(variable, horizon, value; sd)` | Build one conditioning restriction |
 | `select_vecm_rank(Y, p; ...)` | Select cointegrating rank |
 | `granger_causality_vecm(vecm, cause, effect)` | VECM Granger causality test |
 | `forecast(vecm, h; ci_method=:none, ...)` | VECM forecast preserving cointegration |
 
-Impulse response functions, forecast error variance decomposition, historical decomposition, and 18+ structural identification methods. See [Innovation Accounting](innovation_accounting.md) and [Non-Gaussian Identification](nongaussian.md).
+Single-equation dynamic models in levels: ARDL with the Pesaran-Shin-Smith bounds test, its asymmetric NARDL extension, and the panel pooled mean group estimator. See [ARDL](@ref ardl_page).
+
+### ARDL, NARDL, and PMG
+
+| Function | Description |
+|----------|-------------|
+| `estimate_ardl(y, X; p, q, ic=:aic)` | ARDL(p,q) with optional automatic lag selection |
+| `bounds_test(m; case=3, level=0.05)` | Pesaran-Shin-Smith (2001) bounds test for a level relationship |
+| `estimate_nardl(y, X; asymmetric)` | Nonlinear (asymmetric) ARDL |
+| `dynamic_multipliers(m, H; bootstrap=false)` | NARDL cumulative dynamic multipliers |
+| `estimate_pmg(pd, y, xs...; method=:pmg)` | Pooled mean group / mean group / dynamic FE panel ARDL |
+
+Single-equation cointegrating-vector estimators that correct the OLS second-order bias. See [Cointegrating Regression](@ref cointreg_page).
+
+### Cointegrating Regression
+
+| Function | Description |
+|----------|-------------|
+| `estimate_cointreg(y, X; method=:fmols)` | FMOLS, CCR, or DOLS cointegrating regression |
+| `estimate_xtcointreg(pd, y, xs...; pooling)` | Panel FMOLS/CCR/DOLS (grouped or pooled) |
+
+Seemingly unrelated regressions and three-stage least squares for systems of linear equations. See [VAR](@ref var_page) for the multivariate context.
+
+### Systems of Equations
+
+| Function | Description |
+|----------|-------------|
+| `estimate_sur(eqs; iterate=false)` | Zellner SUR (feasible GLS, optionally iterated) |
+| `estimate_3sls(eqs, Z; instruments)` | Three-stage least squares for simultaneous systems |
+
+Bayesian VARs whose coefficients or volatilities move over time, and VARs mixing monthly and quarterly observables. See [BVAR](@ref bvar_page).
+
+### Time-Varying and Mixed-Frequency VAR
+
+| Function | Description |
+|----------|-------------|
+| `estimate_tvpvar(Y, p; tvp=true, sv=true)` | Primiceri TVP-VAR with stochastic volatility |
+| `volatility_path(post)` | Posterior stochastic-volatility paths |
+| `estimate_mfvar(data, p; freq_ratio=3)` | Mixed-frequency VAR with latent monthly states |
+| `latent_path(post)` | Posterior paths of the latent high-frequency series |
+| `optimize_hyperparameters_glp(Y, p; ...)` | Giannone-Lenza-Primiceri hierarchical prior selection |
+
+Impulse response functions, forecast error variance decomposition, historical decomposition, six restriction-based identification schemes, and 14 statistical identification methods (5 ICA, 5 non-Gaussian ML, 4 heteroskedasticity). See [Innovation Accounting](@ref innovation_accounting_page), [Structural Identification](@ref structural_identification_page), and [Statistical Identification](@ref nongaussian_page).
 
 ### Structural Analysis Functions
 
@@ -177,8 +261,10 @@ Impulse response functions, forecast error variance decomposition, historical de
 | `lp_fevd(slp, H; method=:r2, ...)` | LP-FEVD (Gorodnichenko & Lee 2019) |
 | `cumulative_irf(lp_irfs)` | Cumulative IRF from LP impulse response |
 | `historical_decomposition(slp)` | Historical decomposition from structural LP |
+| `contribution(hd, shock)` / `total_shock_contribution(hd)` | Per-shock and total contributions from a decomposition |
+| `verify_decomposition(hd)` | Check that the shock contributions reproduce the data |
 
-Direct multi-step forecasting from Local Projection models. See [Local Projections](lp.md) for estimation details.
+Direct multi-step forecasting from Local Projection models. See [Local Projections](@ref lp_page) for estimation details.
 
 ### LP Forecasting Functions
 
@@ -187,7 +273,7 @@ Direct multi-step forecasting from Local Projection models. See [Local Projectio
 | `forecast(lp, shock_path; ...)` | Direct multi-step LP forecast |
 | `forecast(slp, shock_idx, shock_path; ...)` | Structural LP conditional forecast |
 
-Augmented Dickey-Fuller, KPSS, Phillips-Perron, Zivot-Andrews, Ng-Perron, and Johansen cointegration tests. See [Hypothesis Tests](tests.md) for interpretation and examples.
+Augmented Dickey-Fuller, KPSS, Phillips-Perron, Zivot-Andrews, Ng-Perron, and Johansen cointegration tests. See [Hypothesis Tests](@ref tests_page) for interpretation and examples.
 
 ### Unit Root Test Functions
 
@@ -203,7 +289,7 @@ Augmented Dickey-Fuller, KPSS, Phillips-Perron, Zivot-Andrews, Ng-Perron, and Jo
 | `unit_root_summary(y; ...)` | Run multiple tests with summary |
 | `test_all_variables(Y; ...)` | Apply test to all columns |
 
-Likelihood ratio (LR) and Lagrange multiplier (LM/score) tests for comparing nested models across ARIMA, VAR, and GARCH families. See [Hypothesis Tests](tests.md).
+Likelihood ratio (LR) and Lagrange multiplier (LM/score) tests for comparing nested models across ARIMA, VAR, and GARCH families. See [Hypothesis Tests](@ref tests_page).
 
 ### Model Comparison Tests
 
@@ -212,7 +298,7 @@ Likelihood ratio (LR) and Lagrange multiplier (LM/score) tests for comparing nes
 | `lr_test(m1, m2)` | Likelihood ratio test for nested models |
 | `lm_test(m1, m2)` | Lagrange multiplier (score) test for nested models |
 
-Pairwise and block Wald tests for Granger causality in VAR models. See [Hypothesis Tests](tests.md) for details.
+Pairwise and block Wald tests for Granger causality in VAR models. See [Hypothesis Tests](@ref tests_page) for details.
 
 ### Granger Causality Tests
 
@@ -221,7 +307,7 @@ Pairwise and block Wald tests for Granger causality in VAR models. See [Hypothes
 | `granger_test(model, cause, effect)` | Pairwise or block Granger causality test |
 | `granger_test_all(model)` | All-pairs pairwise Granger causality matrix |
 
-Convenience functions for extracting impulse responses from fitted LP models. See [Local Projections](lp.md).
+Convenience functions for extracting impulse responses from fitted LP models. See [Local Projections](@ref lp_page).
 
 ### LP IRF Extraction
 
@@ -234,7 +320,7 @@ Convenience functions for extracting impulse responses from fitted LP models. Se
 | `state_irf(model; ...)` | Extract state-dependent IRFs |
 | `propensity_irf(model; ...)` | Extract ATE impulse response |
 
-Static PCA, Dynamic Factor, and Generalized Dynamic Factor model estimation, forecasting, and selection criteria. See [Factor Models](factormodels.md).
+Static PCA, Dynamic Factor, and Generalized Dynamic Factor model estimation, forecasting, and selection criteria. See [Factor Models](@ref factor_page).
 
 ### Factor Model Functions
 
@@ -260,7 +346,7 @@ Static PCA, Dynamic Factor, and Generalized Dynamic Factor model estimation, for
 | `loglikelihood(dfm)` | Log-likelihood (DFM only) |
 | `aic(dfm)` / `bic(dfm)` | Information criteria (DFM only) |
 
-Bayesian prior optimization, instrument strength tests, and Panel VAR specification tests. See [BVAR](bayesian.md) and [Panel VAR](pvar.md).
+Bayesian prior optimization, instrument strength tests, and Panel VAR specification tests. See [BVAR](@ref bvar_page) and [Panel VAR](@ref pvar_page).
 
 ### Diagnostic Functions
 
@@ -271,6 +357,11 @@ Bayesian prior optimization, instrument strength tests, and Panel VAR specificat
 | `posterior_mean_model(post; ...)` | VARModel from posterior mean |
 | `posterior_median_model(post; ...)` | VARModel from posterior median |
 | `weak_instrument_test(model; ...)` | Test for weak instruments |
+| `montiel_olea_pflueger_f(model)` | Montiel Olea-Pflueger effective first-stage F |
+| `lp_iv_ar_band(model; level=0.95)` | Anderson-Rubin weak-instrument-robust LP-IV band |
+| `compare_var_lp(Y, H; lags)` | Compare VAR and LP impulse responses |
+| `compare_smooth_lp(Y, shock_var, H; lambda)` | Compare smooth-LP fits across ``\lambda`` |
+| `cross_validate_lambda(Y, shock_var, H; lambda_grid)` | Cross-validate the smooth-LP penalty |
 | `sargan_test(model, h)` | Overidentification test |
 | `test_regime_difference(model; ...)` | Test regime differences |
 | `propensity_diagnostics(model)` | Propensity score diagnostics |
@@ -280,7 +371,7 @@ Bayesian prior optimization, instrument strength tests, and Panel VAR specificat
 | `j_test(model)` | Hansen J-test for GMM |
 | `gmm_summary(model)` | Summary statistics for GMM |
 
-Multivariate normality tests for VAR residuals. See [Non-Gaussian Identification](nongaussian.md) for using these as pre-tests for ICA/ML identification.
+Multivariate normality tests for VAR residuals. See [Statistical Identification](@ref nongaussian_page) for using these as pre-tests for ICA/ML identification.
 
 ### Normality Test Functions
 
@@ -292,7 +383,7 @@ Multivariate normality tests for VAR residuals. See [Non-Gaussian Identification
 | `henze_zirkler_test(model)` | Henze-Zirkler characteristic function test |
 | `normality_test_suite(model)` | Run all normality tests |
 
-Diagnostic tests for non-Gaussian SVAR identification validity. See [Non-Gaussian Identification](nongaussian.md).
+Diagnostic tests for non-Gaussian SVAR identification validity. See [Statistical Identification](@ref nongaussian_page).
 
 ### Identifiability Test Functions
 
@@ -304,7 +395,7 @@ Diagnostic tests for non-Gaussian SVAR identification validity. See [Non-Gaussia
 | `test_identification_strength(model; ...)` | Bootstrap identification strength test |
 | `test_overidentification(model, result; ...)` | Overidentification test |
 
-ARCH, GARCH, EGARCH, GJR-GARCH, and Stochastic Volatility estimation, forecasting, and diagnostics. See [Volatility Models](volatility.md).
+ARCH, GARCH, EGARCH, GJR-GARCH, and Stochastic Volatility estimation, forecasting, and diagnostics. See [Volatility Models](@ref volatility_page).
 
 ### Volatility Model Functions
 
@@ -314,11 +405,19 @@ ARCH, GARCH, EGARCH, GJR-GARCH, and Stochastic Volatility estimation, forecastin
 | `estimate_garch(y, p, q)` | GARCH(p,q) via MLE |
 | `estimate_egarch(y, p, q)` | EGARCH(p,q) via MLE |
 | `estimate_gjr_garch(y, p, q)` | GJR-GARCH(p,q) via MLE |
+| `estimate_igarch(y; ...)` | Integrated GARCH (unit persistence imposed) |
+| `estimate_cgarch(y; ...)` | Component GARCH (permanent + transitory variance) |
+| `estimate_aparch(y; ...)` | Asymmetric power ARCH |
+| `estimate_figarch(r; p, q, truncation=1000)` | Fractionally integrated GARCH |
+| `estimate_fiegarch(r; p, q, truncation=1000)` | Fractionally integrated EGARCH |
 | `estimate_garch_midas(r, x_lf; K, m_freq)` | GARCH-MIDAS long/short-run components |
 | `estimate_sv(y; variant, ...)` | Stochastic Volatility via KSC Gibbs |
 | `forecast(vol_model, h)` | Volatility forecast with simulation CIs |
 | `arch_lm_test(y_or_model, q)` | ARCH-LM test for conditional heteroskedasticity |
 | `ljung_box_squared(z_or_model, K)` | Ljung-Box test on squared residuals |
+| `sign_bias_test(z_or_model)` | Engle-Ng sign and size bias tests |
+| `nyblom_test(m)` | Nyblom parameter-constancy test |
+| `component_variances(m)` | Permanent/transitory split of a `CGARCHModel` |
 | `news_impact_curve(model)` | News impact curve (GARCH family) |
 | `persistence(model)` | Persistence measure |
 | `halflife(model)` | Volatility half-life |
@@ -333,7 +432,40 @@ ARCH, GARCH, EGARCH, GJR-GARCH, and Stochastic Volatility estimation, forecastin
 | `aic(m)` / `bic(m)` | Information criteria (ARCH/GARCH) |
 | `dof(m)` | Number of estimated parameters |
 
-Mixed-frequency nowcasting via DFM, BVAR, and bridge equations with news decomposition. See [Nowcasting](nowcast.md) for theory and examples.
+Constant-correlation, dynamic-correlation, and BEKK models for the conditional covariance of a vector of returns. See [Volatility Models](@ref volatility_page).
+
+### Multivariate GARCH
+
+| Function | Description |
+|----------|-------------|
+| `estimate_ccc(Y; p=1, q=1)` | Bollerslev constant conditional correlation |
+| `estimate_dcc(Y; p=1, q=1)` | Engle dynamic conditional correlation |
+| `estimate_bekk(Y; kind=:scalar)` | BEKK (`:scalar` or `:diagonal`) |
+| `forecast(mgarch, h)` | Conditional covariance forecast |
+
+Regressions that mix a low-frequency dependent variable with high-frequency regressors through a parametric lag polynomial. See [MIDAS Regression](@ref midas_page).
+
+### MIDAS Regression
+
+| Function | Description |
+|----------|-------------|
+| `estimate_midas(y_lf, X_hf; m, K, weights=:expalmon)` | MIDAS regression with exponential-Almon or beta weights |
+| `midas_weights(m)` | Fitted high-frequency weighting curve |
+
+Accuracy metrics, equal-predictive-ability tests, and forecast combination. See [Forecast Evaluation](@ref forecast_evaluation_page).
+
+### Forecast Evaluation
+
+| Function | Description |
+|----------|-------------|
+| `forecast_evaluate(actual, fc; ...)` | RMSE/MAE/MAPE/MASE/Theil accuracy table |
+| `diebold_mariano(e1, e2; h=1, loss=:se)` | Diebold-Mariano equal-predictive-ability test (HLN correction on by default) |
+| `clark_west(e_small, e_big, f_adj; h)` | Clark-West test for nested models |
+| `mincer_zarnowitz(actual, fc; lags)` | Mincer-Zarnowitz unbiasedness regression |
+| `forecast_encompassing(actual, fc1, fc2)` | Forecast encompassing test |
+| `combine_forecasts(F, actual; method=:equal)` | Combine competing forecasts (equal, inverse-MSE, OLS weights) |
+
+Mixed-frequency nowcasting via DFM, BVAR, and bridge equations with news decomposition. See [Nowcasting](@ref nowcast_page) for theory and examples.
 
 ### Nowcasting Functions
 
@@ -393,7 +525,7 @@ Low-level matrix construction and numerical utilities used internally.
 | `robust_inv(A)` | Robust matrix inverse |
 | `safe_cholesky(A; ...)` | Stable Cholesky decomposition |
 
-Specify, solve, simulate, and estimate Dynamic Stochastic General Equilibrium models. See [DSGE Models](dsge.md) for the full guide.
+Specify, solve, simulate, and estimate Dynamic Stochastic General Equilibrium models. See [DSGE Models](@ref dsge_page) for the full guide.
 
 ### DSGE Specification and Solution
 
@@ -436,13 +568,13 @@ Specify, solve, simulate, and estimate Dynamic Stochastic General Equilibrium mo
 | `estimate_dsge(spec, data, params; method)` | GMM estimation (IRF matching, Euler, SMM, analytical) |
 | `estimate_dsge_bayes(spec, data, θ0; ...)` | Bayesian estimation (SMC/SMC²/MH) |
 
-Heterogeneous-agent (Reiter/SSJ/Krusell-Smith), continuous-time (HJB/KFE), and OLG solvers. See [Heterogeneous Agents](dsge_ha.md), [Continuous Time](dsge_continuous.md), and [Overlapping Generations](dsge_olg.md).
+Heterogeneous-agent (Reiter/SSJ/Krusell-Smith), continuous-time (HJB/KFE), and OLG solvers. See [Heterogeneous Agents](@ref dsge_ha), [Continuous Time](@ref dsge_continuous), and [Overlapping Generations](@ref dsge_olg).
 
 ### Heterogeneous-Agent DSGE
 
 | Function | Description |
 |----------|-------------|
-| `load_ha_example(:krusell_smith)` | Built-in HA-DSGE model specs (see [Heterogeneous Agents](dsge_ha.md)) |
+| `load_ha_example(:krusell_smith)` | Built-in HA-DSGE model specs (see [Heterogeneous Agents](@ref dsge_ha)) |
 | `compute_steady_state(spec::HADSGESpec)` | HA stationary equilibrium (EGM + distribution + market clearing) |
 | `solve(spec::HADSGESpec; method=:ssj)` | HA-DSGE solution (SSJ/Reiter/Krusell-Smith) |
 | `rouwenhorst(ρ, σ, n)` / `tauchen(ρ, σ, n)` | Income process discretization (`σ` = **innovation** sd; pass `sigma_is=:unconditional` for sd(y)) |
@@ -492,7 +624,7 @@ Heterogeneous-agent (Reiter/SSJ/Krusell-Smith), continuous-time (HJB/KFE), and O
 | `evaluate_policy(sol, grid)` | Evaluate policy function on grid |
 | `max_euler_error(sol, grid)` | Maximum Euler equation error |
 
-OLS, WLS, IV/2SLS, logit, probit, ordered, and multinomial estimation for cross-sectional data. See [Regression](regression.md) and [Binary Choice](binary_choice.md) for theory and examples.
+OLS, WLS, IV/2SLS, logit, probit, ordered, and multinomial estimation for cross-sectional data. See [Linear Regression](@ref regression_page) and [Binary Choice](@ref binary_choice_page) for theory and examples.
 
 ### Cross-Sectional Models
 
@@ -522,12 +654,28 @@ OLS, WLS, IV/2SLS, logit, probit, ordered, and multinomial estimation for cross-
 | `harvey_test(m)` | Harvey multiplicative heteroskedasticity test |
 | `breusch_godfrey_test(m; lags)` | Breusch-Godfrey serial-correlation LM test |
 | `reset_test(m; powers)` | Ramsey RESET functional-form test |
+| `chow_test(m, break_index; type)` | Chow structural-break test at a known break |
+| `cusum_test(m; level=0.05)` / `cusumsq_test(m; level=0.05)` | CUSUM and CUSUM-of-squares stability tests |
+| `anderson_rubin_test(m, beta0)` / `anderson_rubin_ci(m; level)` | Weak-instrument-robust IV inference |
 | `residuals(m; kind)` | Ordered/multinomial residual matrix (`:response`/`:pearson`/`:deviance`) |
 | `generalized_residuals(m)` | Ordered-model score residual (Chesher-Irish), length `n` |
 | `brant_test(m)` | Brant test for parallel regression |
 | `hausman_iia(m)` | Hausman test for IIA assumption |
 
-FE, RE, FD, Between, CRE, Arellano-Bond, and Blundell-Bond panel estimators. See [Panel Models](pvar.md) for theory and examples.
+Penalized, robust, and limited-dependent-variable estimators for cross-sectional data. See [Linear Regression](@ref regression_page).
+
+### Penalized, Robust, and Limited-Dependent Regression
+
+| Function | Description |
+|----------|-------------|
+| `estimate_lasso(y, X; ...)` / `estimate_ridge(y, X; ...)` | L1 and L2 penalized regression |
+| `estimate_elastic_net(y, X; alpha=1.0, lambda=:cv)` | Elastic net; `alpha=1` is LASSO, `alpha=0` is ridge |
+| `estimate_robust(y, X; psi=:huber, method=:m)` | M / MM robust regression |
+| `estimate_tobit(y, X; lower=0.0, upper=Inf)` | Censored (Tobit) regression |
+| `estimate_truncreg(y, X; lower, upper)` | Truncated regression |
+| `estimate_heckman(y, X, d, Z; method=:twostep)` | Heckman selection model |
+
+FE, RE, FD, Between, CRE, Arellano-Bond, and Blundell-Bond panel estimators. See [Panel Regression](@ref panel_reg_page) for theory and examples.
 
 ### Panel Regression
 
@@ -546,7 +694,7 @@ FE, RE, FD, Between, CRE, Arellano-Bond, and Blundell-Bond panel estimators. See
 | `modified_wald_test(m)` | Modified Wald heteroskedasticity test |
 | `f_test_fe(m)` | F-test for fixed effects |
 
-TWFE, Callaway-Sant'Anna, Sun-Abraham, BJS, and did_multiplegt estimators plus LP-DiD and diagnostics. See [DiD](did.md) and [Event Study](event_study.md) for theory and examples.
+TWFE, Callaway-Sant'Anna, Sun-Abraham, BJS, and did_multiplegt estimators plus LP-DiD and diagnostics. See [DiD](@ref did_page) and [Event Study LP](@ref event_study_page) for theory and examples.
 
 ### Difference-in-Differences
 
@@ -560,7 +708,7 @@ TWFE, Callaway-Sant'Anna, Sun-Abraham, BJS, and did_multiplegt estimators plus L
 | `negative_weight_check(pd, :y, :treat)` | Negative weight diagnostic |
 | `honest_did(result; ...)` | HonestDiD sensitivity analysis |
 
-Two-step or Bayesian Gibbs FAVAR with factor-to-observable IRF mapping. See [FAVAR](favar.md) for theory and examples.
+Two-step or Bayesian Gibbs FAVAR with factor-to-observable IRF mapping. See [FAVAR](@ref favar_page) for theory and examples.
 
 ### FAVAR
 
@@ -570,7 +718,7 @@ Two-step or Bayesian Gibbs FAVAR with factor-to-observable IRF mapping. See [FAV
 | `favar_panel_irf(favar, H)` | Map factor IRFs to N observables |
 | `favar_panel_forecast(favar, h)` | FAVAR multi-step forecasting |
 
-Structural DFM combining GDFM spectral estimation with structural VAR identification. See [Factor Models](factormodels.md) for theory and examples.
+Structural DFM combining GDFM spectral estimation with structural VAR identification. See [Factor Models](@ref factor_page) for theory and examples.
 
 ### Structural DFM
 
@@ -579,7 +727,7 @@ Structural DFM combining GDFM spectral estimation with structural VAR identifica
 | `estimate_structural_dfm(X, q; ...)` | Structural DFM (GDFM + VAR) |
 | `sdfm_panel_irf(sdfm, H)` | Map structural factor IRFs to observables |
 
-Periodogram, Welch/Daniell/AR spectral density, cross-spectrum, coherence, and autocorrelation functions. See [Hypothesis Tests](tests_diagnostics.md) for serial correlation tests.
+Periodogram, Welch/Daniell/AR spectral density, cross-spectrum, coherence, and autocorrelation functions. See [Spectral Analysis](@ref spectral_page) for theory and examples, and [Model Diagnostics](@ref tests_diagnostics_page) for serial correlation tests.
 
 ### Spectral Analysis
 
@@ -597,7 +745,7 @@ Periodogram, Welch/Daniell/AR spectral density, cross-spectrum, coherence, and a
 | `ideal_bandpass(y; pl, pu)` | Ideal bandpass filter |
 | `transfer_function(b, a; ...)` | Filter transfer function |
 
-Ljung-Box, Box-Pierce, and Durbin-Watson tests for autocorrelation and serial correlation. See [Hypothesis Tests](tests_diagnostics.md) for details.
+Ljung-Box, Box-Pierce, and Durbin-Watson tests for autocorrelation and serial correlation. Their worked examples live on [Spectral Analysis](@ref spectral_page); see [Model Diagnostics](@ref tests_diagnostics_page) for the regression-residual diagnostics.
 
 ### Portmanteau and Serial Correlation Tests
 
@@ -609,7 +757,7 @@ Ljung-Box, Box-Pierce, and Durbin-Watson tests for autocorrelation and serial co
 | `bartlett_white_noise_test(y)` | Bartlett white noise test |
 | `fisher_test(y)` | Fisher exact periodogram test |
 
-Fourier ADF/KPSS, DF-GLS, LM unit root, two-break ADF, and Gregory-Hansen cointegration tests. See [Advanced Unit Root Tests](tests_unitroot_advanced.md) for details.
+Fourier ADF/KPSS, DF-GLS, LM unit root, two-break ADF, and Gregory-Hansen cointegration tests. See [Advanced Unit Root Tests](@ref tests_unitroot_advanced_page) for details.
 
 ### Advanced Unit Root Tests
 
@@ -622,7 +770,23 @@ Fourier ADF/KPSS, DF-GLS, LM unit root, two-break ADF, and Gregory-Hansen cointe
 | `adf_2break_test(y; ...)` | Two-break ADF test (Narayan & Popp 2010) |
 | `gregory_hansen_test(Y; ...)` | Gregory-Hansen cointegration test with break |
 
-Andrews SupWald/SupLM/SupLR, Bai-Perron multiple break detection, and factor structural break tests. See [Structural Break Tests](tests_breaks.md) for details.
+Seasonal unit roots, explosive-bubble detection, nonlinearity, distributional comparison, and random-walk tests. See [Advanced Unit Root Tests](@ref tests_unitroot_advanced_page) and [Model Diagnostics](@ref tests_diagnostics_page).
+
+### Higher-Moment, Bubble, and Distribution Tests
+
+| Function | Description |
+|----------|-------------|
+| `hegy_test(y; frequency, deterministic)` | HEGY seasonal unit root test |
+| `ers_test(y; trend)` | Elliott-Rothenberg-Stock point-optimal test |
+| `sadf_test(y; r0, adflag)` / `gsadf_test(y; r0, adflag)` | PSY supremum ADF bubble detection |
+| `bds_test(y; m, eps_frac)` | Brock-Dechert-Scheinkman i.i.d. test |
+| `variance_ratio_test(y; q, robust)` | Lo-MacKinlay variance ratio test |
+| `edf_test(y; dist, test)` | EDF goodness-of-fit (KS, Anderson-Darling, Cramer-von Mises) |
+| `cor_test(x, y; method)` | Pearson/Spearman/Kendall correlation test |
+| `equality_test(y, g; test)` / `anova_test(y, g)` / `ttest(x; mu)` | Group mean/variance equality tests |
+| `symmetry_test(m)` | Wald test of long-run symmetry in a fitted NARDL |
+
+Andrews SupWald/SupLM/SupLR, Bai-Perron multiple break detection, and factor structural break tests. See [Structural Breaks](@ref tests_breaks_page) for details.
 
 ### Structural Break Tests
 
@@ -632,7 +796,7 @@ Andrews SupWald/SupLM/SupLR, Bai-Perron multiple break detection, and factor str
 | `bai_perron_test(y, X; ...)` | Bai-Perron (1998) multiple break detection |
 | `factor_break_test(X; ...)` | Factor structural break test |
 
-PANIC, Pesaran CIPS, and Moon-Perron panel unit root tests. See [Panel Unit Root Tests](tests_panel.md) for details.
+PANIC, Pesaran CIPS, and Moon-Perron panel unit root tests. See [Panel Tests](@ref tests_panel_page) for details.
 
 ### Panel Unit Root Tests
 
@@ -641,6 +805,12 @@ PANIC, Pesaran CIPS, and Moon-Perron panel unit root tests. See [Panel Unit Root
 | `panic_test(pd; ...)` | Bai-Ng (2004) PANIC test |
 | `pesaran_cips_test(pd; ...)` | Pesaran (2007) CIPS test |
 | `moon_perron_test(pd; ...)` | Moon-Perron (2004) test |
+| `llc_test(X; deterministic, lags)` | Levin-Lin-Chu common-root test |
+| `ips_test(X; deterministic, lags)` | Im-Pesaran-Shin heterogeneous-root test |
+| `breitung_panel_test(X; deterministic)` | Breitung unbiased panel test |
+| `hadri_test(X; deterministic, hetero)` | Hadri panel stationarity (KPSS-type) test |
+| `fisher_panel_test(X; base=:adf, combine)` | Fisher-type combination of per-unit tests |
+| `dh_causality_test(pd, x, y; p)` | Dumitrescu-Hurlin panel Granger causality |
 | `panel_unit_root_summary(pd; ...)` | Run all panel unit root tests |
 
 ### Panel Cointegration Tests
@@ -652,7 +822,49 @@ PANIC, Pesaran CIPS, and Moon-Perron panel unit root tests. See [Panel Unit Root
 | `westerlund_test(pd, y, xs...; ...)` | Westerlund (2007) ECM test (Gt/Ga/Pt/Pa) |
 | `fisher_johansen_test(pd, ys...; ...)` | Fisher-type (Maddala-Wu/Choi) combined Johansen test |
 
-Within-group lag, lead, and differencing utilities for panel data construction. See [Data Management](data.md) for details.
+Leontief and Ghosh accounting, multipliers and linkages, structural decomposition, environmental extensions, and the production-network approach of Baqaee & Farhi (2019). See [Input-Output Analysis](@ref io_page) for the hub and its four child pages.
+
+### Input-Output Analysis
+
+| Function | Description |
+|----------|-------------|
+| `technical_coefficients(io)` | Direct requirements matrix ``A`` |
+| `leontief(io)` / `leontief_inverse(io)` | Leontief system and total requirements ``L = (I-A)^{-1}`` |
+| `ghosh(io)` / `ghosh_inverse(io)` | Supply-side (allocation) Ghosh model |
+| `allocation_coefficients(io)` | Output allocation matrix ``B`` |
+| `multipliers(io; kind=:output)` | Output, income, and employment multipliers |
+| `linkages(io; forward=:ghosh)` | Backward and forward linkage indices |
+| `key_sectors(io)` | Key-sector classification from the linkage quadrants |
+| `hypothetical_extraction(io, sectors)` | Output loss from extracting a sector |
+| `sda(io0, io1; method=:additive)` | Structural decomposition between two tables |
+| `domar_weights(io)` | Sales-to-GDP (Domar) weights |
+| `baqaee_farhi(io; theta, sigma)` | Production-network shock propagation and influence vector |
+| `add_extension!(io, name, F; unit)` | Attach an environmental/satellite account |
+| `emission_multipliers(io, name)` / `footprint(io, name)` | Extension multipliers and consumption-based footprints |
+
+Downloaders and parsers for the public multi-region input-output databases. See [Downloading IO Data](@ref io_download_page).
+
+### Input-Output Data Sources
+
+| Function | Description |
+|----------|-------------|
+| `list_io_sources()` | Available databases and their required credentials |
+| `download_io(source; storage_folder, years)` | Download WIOD, OECD ICIO, EXIOBASE3, Eora26, or GLORIA |
+| `parse_io(path; source, year)` | Parse a downloaded table into `IOData` |
+| `io_file_digest(path)` | Content hash of a downloaded file |
+
+D3.js visualizations for every model family, plus backend and file-export helpers. See [Plotting](@ref plotting_page) for the gallery.
+
+### Visualization
+
+| Function | Description |
+|----------|-------------|
+| `plot_result(obj; ...)` | Render a fitted model or result as an interactive plot |
+| `save_plot(p, path)` | Write a `PlotOutput` to an HTML file |
+| `display_plot(p)` | Show a `PlotOutput` in the active display |
+| `with_display_backend(f, backend)` | Run `f()` with a scoped display backend |
+
+Within-group lag, lead, and differencing utilities for panel data construction. See [Data Management](@ref data_page) for details.
 
 ### Panel Data Utilities
 

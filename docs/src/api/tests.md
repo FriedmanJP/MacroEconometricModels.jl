@@ -1,6 +1,9 @@
 # [Hypothesis Tests API](@id api_tests)
 
-Unit root and cointegration tests, structural break tests, model comparison, Granger causality, and portmanteau serial-correlation tests. See [Hypothesis Tests](../tests.md) for interpretation and examples.
+Every hypothesis test in the package: unit root and cointegration, structural breaks, panel unit roots, model comparison, Granger causality, portmanteau serial correlation, and the higher-moment, bubble, and distribution tests. The [Hypothesis Tests](@ref tests_page) hub routes each family to the child page that interprets it.
+
+!!! note "Where the worked examples live"
+    The portmanteau tests (`ljung_box_test`, `box_pierce_test`, `durbin_watson_test`) are demonstrated on [Spectral Analysis](@ref spectral_page), next to their frequency-domain counterparts. The regression specification tests (`chow_test`, `cusum_test`, `breusch_godfrey_test`, `reset_test`, `white_test`, `breusch_pagan_test`) are on [Linear Regression](@ref regression_page), since each takes a fitted `RegModel`.
 
 ---
 
@@ -74,6 +77,11 @@ FisherTestResult
 
 ## Unit Root and Cointegration Tests
 
+ADF, KPSS, Phillips-Perron, Zivot-Andrews, Ng-Perron, and Johansen, together with the
+Fourier, DF-GLS, LM, and two-break variants and the Gregory-Hansen cointegration test with
+a break. See [Unit Root Tests](@ref tests_unitroot_page) and
+[Advanced Unit Root Tests](@ref tests_unitroot_advanced_page).
+
 ```@autodocs
 Modules = [MacroEconometricModels]
 Pages   = ["teststat/adf.jl", "teststat/kpss.jl", "teststat/pp.jl", "teststat/za.jl", "teststat/ngperron.jl", "teststat/johansen.jl", "teststat/fourier.jl", "teststat/dfgls.jl", "teststat/lm_unitroot.jl", "teststat/adf_2break.jl", "teststat/gregory_hansen.jl", "teststat/stationarity.jl", "teststat/convenience.jl"]
@@ -114,6 +122,9 @@ fisher_test
 
 ## Structural Break Tests
 
+Unknown-break-date tests and multiple-break detection. See
+[Structural Breaks](@ref tests_breaks_page).
+
 ```@docs
 andrews_test
 bai_perron_test
@@ -134,6 +145,9 @@ ParkAddedResult
 ---
 
 ## Residual-Based Cointegration Tests
+
+Single-equation alternatives to Johansen, testing the residual of a cointegrating
+regression. See [Cointegration Tests](@ref tests_cointegration_page).
 
 ```@docs
 engle_granger_test
@@ -161,6 +175,9 @@ DumitrescuHurlinResult
 ---
 
 ## Higher-Moment, Bubble & Distribution Tests
+
+Seasonal unit roots, explosive-bubble detection, nonlinearity, random-walk, and
+distributional-comparison tests.
 
 ```@autodocs
 Modules = [MacroEconometricModels]

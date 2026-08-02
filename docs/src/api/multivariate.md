@@ -1,6 +1,6 @@
 # [Multivariate Models API](@id api_multivariate)
 
-VAR, VECM, BVAR, Local Projections, Factor Models, FAVAR, and Structural DFM, plus innovation accounting (IRF/FEVD/HD). See [VAR](../manual.md), [VECM](../vecm.md), [BVAR](../bayesian.md), [Local Projections](../lp.md), [Factor Models](../factormodels.md), and [FAVAR](../favar.md) for theory and examples.
+Multi-equation models: VAR, VECM, BVAR (including time-varying-parameter and mixed-frequency variants), Local Projections, factor models, FAVAR, and Structural DFM, plus innovation accounting (IRF/FEVD/historical decomposition), multivariate GARCH, cointegrating regression, systems of equations, and ARDL. See [VAR](@ref var_page), [VECM](@ref vecm_page), [BVAR](@ref bvar_page), [Local Projections](@ref lp_page), [Factor Models](@ref factor_page), [FAVAR](@ref favar_page), [ARDL](@ref ardl_page), and [Cointegrating Regression](@ref cointreg_page) for theory and examples.
 
 ---
 
@@ -168,30 +168,35 @@ StructuralDFM
 
 ### Frequentist Estimation
 
-```@docs
-estimate_var
-select_lag_order
-MacroEconometricModels.StatsAPI.vcov(::VARModel)
-MacroEconometricModels.StatsAPI.predict
-MacroEconometricModels.StatsAPI.r2(::VARModel)
-MacroEconometricModels.StatsAPI.loglikelihood
-MacroEconometricModels.StatsAPI.confint(::VARModel)
+Reduced-form estimation, lag-order selection, forecasting, and the `StatsAPI` accessors
+defined for `VARModel`.
+
+```@autodocs
+Modules = [MacroEconometricModels]
+Pages   = ["src/var/estimation.jl"]
+Order   = [:function]
+Private = false
 ```
 
 ### Bayesian Estimation
 
-```@docs
-estimate_bvar
-posterior_mean_model
-posterior_median_model
-```
-
-### VAR/BVAR Forecasting
+Posterior sampling, posterior summary models, and predictive simulation for the BVAR.
 
 ```@autodocs
 Modules = [MacroEconometricModels]
-Pages   = ["var/estimation.jl", "bvar/estimation.jl"]
+Pages   = ["src/bvar/estimation.jl"]
 Order   = [:function]
+Private = false
+```
+
+### Package-Wide `predict`
+
+`predict` is generic across every model family. This entry collects all of its methods,
+including those for cross-sectional models documented on
+[Cross-Sectional Models](@ref api_cross_section).
+
+```@docs
+MacroEconometricModels.StatsAPI.predict
 ```
 
 ### Forecast Accessors
@@ -403,7 +408,7 @@ AbstractMGARCHModel
 
 ```@autodocs
 Modules = [MacroEconometricModels]
-Pages   = ["mgarch/types.jl", "mgarch/ccc.jl", "mgarch/dcc.jl", "mgarch/bekk.jl"]
+Pages   = ["mgarch/types.jl", "mgarch/ccc.jl", "mgarch/dcc.jl", "mgarch/bekk.jl", "mgarch/forecast.jl"]
 ```
 
 ---
