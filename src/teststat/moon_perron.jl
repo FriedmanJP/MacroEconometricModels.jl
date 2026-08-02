@@ -76,8 +76,11 @@ function moon_perron_test(X::AbstractMatrix{T};
         r
     end
 
-    # Step 1: PCA on differences → loadings; de-factor levels via Q_⊥ = I − Λ(Λ'Λ)⁻¹Λ'
-    fm = estimate_factors(dX, n_factors; standardize=true)
+    # Step 1: PCA on differences → loadings; de-factor levels via Q_⊥ = I − Λ(Λ'Λ)⁻¹Λ'.
+    # standardize=false (#582): Q_⊥ is applied to RAW levels below, so the loadings
+    # must span the raw-scale factor space — standardized loadings project out the
+    # wrong subspace when series scales differ (panic_test does the same).
+    fm = estimate_factors(dX, n_factors; standardize=false)
     Lambda_hat = fm.loadings  # N × r
 
     LtL = Lambda_hat' * Lambda_hat

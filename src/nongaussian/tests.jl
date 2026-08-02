@@ -457,6 +457,7 @@ function test_overidentification(model::VARModel{T}, result::AbstractNonGaussian
 
     # Bootstrap the SAME statistic under residual resampling with fixed Q.
     boot_stats = Vector{T}(undef, n_bootstrap)
+    rerr_boots = Vector{T}(undef, n_bootstrap)
     for b in 1:n_bootstrap
         idx = rand(rng, 1:T_obs, T_obs)
         U_boot = model.U[idx, :]
@@ -469,11 +470,23 @@ function test_overidentification(model::VARModel{T}, result::AbstractNonGaussian
         Sigma_model_boot = B0_boot * B0_boot'
         disc_boot = norm(Sigma_model_boot - Sigma_boot) / max(norm(Sigma_boot), eps(T))
         orth_boot = norm(Q' * Q - I)  # Q fixed ⇒ same orth_err
-        rerr_boot = restrictions !== nothing ? T(restrictions(B0_boot, Q)) : zero(T)
-        boot_stats[b] = _oid_stat(disc_boot, orth_boot, rerr_boot)
+        rerr_boots[b] = restrictions !== nothing ? T(restrictions(B0_boot, Q)) : zero(T)
+        boot_stats[b] = _oid_stat(disc_boot, orth_boot, rerr_boots[b])
     end
 
-    pval = mean(boot_stats .>= stat)
+    # p-value (#568). With Q held at the sample estimate the bootstrap draws are
+    # centred on the SAMPLE restriction value, so the uncentred `boot ≥ stat`
+    # returned p ≈ 0.5 no matter how badly the restriction was violated. When a
+    # restriction is supplied, test ONLY its component, centred at the sample
+    # value (under H₀ the restriction discrepancy is 0): the disc/orth terms
+    # have no bootstrap analogue — `L_boot·Q` reconstructs `Σ_boot` exactly, so
+    # their bootstrap counterparts are degenerate at 0 and including them makes
+    # the comparison mechanical, not statistical.
+    pval = if restrictions === nothing
+        mean(boot_stats .>= stat)
+    else
+        mean(abs.(rerr_boots .- restr_err) .>= restr_err)
+    end
     identified = pval >= T(0.05)  # fail to reject → restrictions OK
 
     IdentifiabilityTestResult{T}(:overidentification, stat, T(pval), identified,

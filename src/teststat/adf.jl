@@ -68,12 +68,23 @@ function adf_test(y::AbstractVector{T};
     Y = dy[(p+1):end]
     nobs = length(Y)
 
-    # OLS estimation. silent=true: trend regressions on trending levels often
-    # hit robust_inv's warn threshold (cond ~1e8) while still being well below
-    # the 1e12 safety cutoff used by panel unit-root batteries (issue #584).
-    XtX = X'X
-    XtX_inv = robust_inv(XtX; silent=true)
-    B = XtX_inv * (X'Y)
+    # OLS via QR (#584): forming X'X squares the condition number, and on
+    # large-scale trending levels robust_inv's pinv fallback truncates a
+    # genuine singular direction — a pure rescaling of y flipped the ADF stat
+    # from −2.47 to +0.51. QR solves the least-squares problem at cond(X),
+    # and R⁻¹R⁻ᵀ gives (X'X)⁻¹ for the standard errors without the squared
+    # conditioning; silencing the old warning would have hidden real corruption.
+    qrX = qr(X)
+    Rdiag = abs.(diag(qrX.R))
+    if minimum(Rdiag) < sqrt(eps(T)) * maximum(Rdiag)
+        # Genuinely degenerate design: keep the (warned) robust fallback.
+        XtX_inv = Matrix{T}(robust_inv(Hermitian(X'X)))
+        B = XtX_inv * (X'Y)
+    else
+        B = qrX \ Y
+        Rinv = inv(UpperTriangular(Matrix(qrX.R)))
+        XtX_inv = Rinv * Rinv'
+    end
     resid = Y - X * B
 
     # Compute standard error of γ coefficient

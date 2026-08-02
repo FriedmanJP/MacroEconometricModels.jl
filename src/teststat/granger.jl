@@ -240,45 +240,6 @@ function granger_test_all(model::VARModel{T}) where {T}
     results
 end
 
-"""
-Pretty-print the all-pairs Granger matrix as a starred p-value grid
-(rows = effect, columns = cause; diagonal "—").
-"""
-function Base.show(io::IO, M::Matrix{Union{GrangerCausalityResult{T}, Nothing}}) where {T}
-    n = size(M, 1)
-    size(M, 2) == n || (show(io, MIME"text/plain"(), M); return)
-    # Infer variable count / names from the first non-nothing entry
-    sample = nothing
-    for i in 1:n, j in 1:n
-        if M[i, j] !== nothing
-            sample = M[i, j]
-            break
-        end
-    end
-    sample === nothing && (println(io, "Empty Granger causality matrix"); return)
-
-    labels = ["y$i" for i in 1:n]
-    grid = Matrix{Any}(undef, n, n + 1)
-    for i in 1:n
-        grid[i, 1] = labels[i]
-        for j in 1:n
-            if i == j || M[i, j] === nothing
-                grid[i, j + 1] = "—"
-            else
-                r = M[i, j]
-                stars = _significance_stars(r.pvalue)
-                grid[i, j + 1] = string(_format_pvalue(r.pvalue), stars)
-            end
-        end
-    end
-    _pretty_table(io, grid;
-        title = "Pairwise Granger Causality (p-values; row ← column)",
-        column_labels = vcat(["Effect \\ Cause"], labels),
-        alignment = vcat([:l], fill(:r, n)),
-    )
-    println(io, "Note: *** p<0.01, ** p<0.05, * p<0.10. Entry [i,j] tests whether j Granger-causes i.")
-end
-
 # =============================================================================
 # Display Methods
 # =============================================================================

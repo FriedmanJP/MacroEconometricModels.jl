@@ -122,24 +122,17 @@ function panic_test(X::AbstractMatrix{T};
         individual_pvals[i] = adf_result.pvalue
     end
 
-    # Step 5: Bai–Ng (2004) pooled P̄ statistic via average of individual ADF
-    # t-statistics, studentized by the Dickey–Fuller (no-constant) mean/variance.
-    # Using raw p-value sums is fragile because finite-sample ADF p-values are
-    # not exactly U(0,1) after factor estimation (issue #581: 100% rejection).
-    # DF no-constant asymptotic: E[t] ≈ −0.42? Use Monte-Carlo-standard values
-    # for the no-constant DF t under H0 (Phillips 1987): μ ≈ −0.283, σ² ≈ 0.55
-    # for large T with lags=0; more accurately from Bai–Ng tables we use
-    # μ = −1.145, σ = 0.600 (common panel-DF calibration for the demeaned case
-    # after recumulation with free intercept of the partial-sum process).
-    # With regression=:none and S_1=0 the effective mean is closer to the
-    # no-constant DF: μ_df ≈ −0.42? Empirically we centre by the sample-free
-    # constants used by Bai–Ng's P_c̄:
-    μ_df = T(-1.145)   # approximate E[ADF_t] under H0 (panel literature)
-    σ_df = T(0.600)
-    Cbar = mean(individual_stats)
-    Pa = sqrt(T(N)) * (Cbar - μ_df) / σ_df
-    # Left-tailed: large negative ⇒ evidence of stationarity
-    pooled_pval = T(cdf(Normal(), Pa))
+    # Step 5: Bai–Ng (2004) pooled statistic — the Fisher-type combination of
+    # the individual DF p-values (their eq. for P̂):
+    #   P = (−2 Σᵢ log pᵢ − 2N) / √(4N)  →  N(0,1)  under H0,
+    # right-tailed (small pᵢ ⇒ large P ⇒ evidence of pooled stationarity).
+    # This is the statistic the paper defines; an IPS-style standardized mean-t
+    # would need the no-constant DF t moments (measured ≈ −0.42/0.96, NOT the
+    # −1.145/0.600 a previous revision hardcoded — those produced size 0.000
+    # after fixing the 100%-rejection defect it replaced; #581).
+    logp_sum = sum(log.(clamp.(individual_pvals, floatmin(T), one(T))))
+    Pa = (-2 * logp_sum - 2 * T(N)) / sqrt(4 * T(N))
+    pooled_pval = T(ccdf(Normal(), Pa))
 
     PANICResult{T}(
         factor_adf_stats,

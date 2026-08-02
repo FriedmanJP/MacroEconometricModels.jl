@@ -56,12 +56,14 @@ struct NeweyWestEstimator{T<:AbstractFloat} <: AbstractCovarianceEstimator
     function NeweyWestEstimator{T}(bandwidth::Int=0, kernel::Symbol=:bartlett,
                                     prewhiten::Bool=false) where {T<:AbstractFloat}
         bandwidth < 0 && throw(ArgumentError("bandwidth must be non-negative"))
-        # Normalize short aliases shared with cointreg (#535)
-        k = kernel === :qs ? :quadratic_spectral :
-            (kernel === :newey_west || kernel === :nw) ? :bartlett : kernel
+        # Normalize the :qs short alias shared with cointreg (#535). Deliberately
+        # NOT aliased: :newey_west / :nw are covariance-TYPE symbols (and :nw94 a
+        # bandwidth rule), not kernels — silently mapping them to :bartlett would
+        # trade an informative error for a guess.
+        k = kernel === :qs ? :quadratic_spectral : kernel
         k ∉ (:bartlett, :parzen, :quadratic_spectral, :tukey_hanning) &&
             throw(ArgumentError(
-                "kernel must be :bartlett/:newey_west, :parzen, :qs/:quadratic_spectral, " *
+                "kernel must be :bartlett, :parzen, :qs/:quadratic_spectral, " *
                 "or :tukey_hanning; got :$kernel"))
         new{T}(bandwidth, k, prewhiten)
     end
@@ -112,9 +114,8 @@ Kernels:
 - :tukey_hanning: cosine kernel
 """
 function kernel_weight(j::Int, bandwidth::Int, kernel::Symbol, ::Type{T}=Float64) where {T<:AbstractFloat}
-    # Normalize aliases shared with cointreg (#535)
-    kernel = kernel === :qs ? :quadratic_spectral :
-             (kernel === :newey_west || kernel === :nw) ? :bartlett : kernel
+    # Normalize the :qs short alias shared with cointreg (#535)
+    kernel = kernel === :qs ? :quadratic_spectral : kernel
     bandwidth == 0 && return zero(T)
     x = T(j) / T(bandwidth + 1)
     # Only compact-support kernels truncate at |x|>1. The quadratic-spectral kernel

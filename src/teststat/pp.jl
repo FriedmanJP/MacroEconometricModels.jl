@@ -60,10 +60,12 @@ function pp_test(y::AbstractVector{T};
         X = hcat(ones(T, nobs), t, y_lag)
     end
 
-    # OLS estimation
-    XtX = X'X
-    XtX_inv = inv(XtX)
-    B = XtX_inv * (X'y_curr)
+    # OLS via QR (same conditioning hazard as adf_test; #584): normal equations
+    # square cond(X) and a pinv fallback would silently corrupt the statistic.
+    qrX = qr(X)
+    B = qrX \ y_curr
+    Rinv = inv(UpperTriangular(Matrix(qrX.R)))
+    XtX_inv = Rinv * Rinv'
     resid = y_curr - X * B
 
     # Standard error under homoskedasticity
@@ -86,13 +88,15 @@ function pp_test(y::AbstractVector{T};
     lambda2 = _long_run_variance(resid, bw)
 
     # Phillips-Perron Z_t (Phillips 1987 / Hamilton 17.6.8):
-    #   Z_t = √(γ₀/λ²)·t_ρ − (λ²−γ₀) / (2·√λ²·√S̃)
-    # where S̃ = residualized Σ ỹ_{t−1}² = 1 / (X'X)^{-1}_{ρρ}.
-    # The previous form divided by se_ρ·√T and dropped the residual SE, so the
-    # correction carried the units of y (not scale-invariant).
+    #   Z_t = √(γ₀/λ²)·t_ρ − (λ²−γ₀)·T·se(ρ̂) / (2·λ·s)
+    # With se(ρ̂) = s·√[(X'X)⁻¹]_ρρ = s/√S̃ the correction is
+    # (λ²−γ₀)·T / (2·λ·√S̃), where S̃ = 1/(X'X)⁻¹_ρρ is the residualized
+    # Σ ỹ²_{t−1} — scale-invariant AND O(1) in T (#576: an earlier revision
+    # omitted the factor T, making the correction vanish asymptotically; the
+    # pre-#576 form divided by se_ρ·√T and carried the units of y).
     Sll_eff = one(T) / max(XtX_inv[rho_idx, rho_idx], eps(T))
     stat = sqrt(gamma0 / lambda2) * t_rho -
-           (lambda2 - gamma0) / (2 * sqrt(lambda2) * sqrt(Sll_eff))
+           (lambda2 - gamma0) * nobs / (2 * sqrt(lambda2) * sqrt(Sll_eff))
 
     # Critical values (same as ADF with 0 lags)
     cv = adf_critical_values(regression, nobs, 0, T)

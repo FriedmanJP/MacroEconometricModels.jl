@@ -300,11 +300,11 @@ function _pedroni_core(Y::Matrix{T}, X::Array{T,3}, trend::Symbol,
         dY = diff(collect(yi))
         dX = diff(Matrix(Xi); dims=1)
         eta = _resid_ols(dY, dX)
-        # Floor L11 away from zero: when a unit is near-cointegrated the
-        # differenced-regression LRV collapses and L11^{-2} explodes, which
-        # makes the *weighted* panel-ADF (num/√denom with common weight w)
-        # scale as √w → ∞ (issue #584). Floor at a small fraction of residual
-        # variance so the weight stays O(1).
+        # L11 stores the differenced-regression long-run VARIANCE, i.e. L̂₁₁ᵢ²
+        # in Pedroni's notation (L̂₁₁ᵢ is the Cholesky element). The pooled
+        # statistics weight by L̂₁₁ᵢ⁻² = 1/L11 — weighting by L11⁻² = 1/LRV²
+        # destroys scale-invariance and made panel-v/panel-adf blow up as c^±2
+        # under a rescaling of the data (#584). Floor away from zero as a guard.
         lrv_i = _stata_lrv(eta, nw)
         eta_var = max(dot(eta, eta) / max(length(eta), 1), eps(T))
         L11[i] = max(lrv_i, T(1e-8) * eta_var, eps(T))
@@ -323,8 +323,10 @@ function _pedroni_core(Y::Matrix{T}, X::Array{T,3}, trend::Symbol,
         shatstar2[i] = dot(mustar, mustar) / length(mustar)
     end
 
-    stildestar2 = sum(shatstar2) / N
-    sigmatilde2 = sum(i -> L11[i]^(-2) * sigmahat2[i], 1:N) / N
+    # Both variance aggregates carry Pedroni's L̂₁₁ᵢ⁻² = 1/L11 weight — the
+    # parametric s̃*² was previously unweighted while its twin was weighted (#584).
+    stildestar2 = sum(i -> shatstar2[i] / L11[i], 1:N) / N
+    sigmatilde2 = sum(i -> sigmahat2[i] / L11[i], 1:N) / N
 
     # pooled numerator/denominator building blocks
     nipa = zero(T)                              # Σᵢ L11⁻² Σₜ ê²_{t-1}
@@ -339,7 +341,7 @@ function _pedroni_core(Y::Matrix{T}, X::Array{T,3}, trend::Symbol,
         ei = @view e[:, i]
         el = ei[1:(Tobs-1)]                     # ê_{t-1}
         de = diff(collect(ei))                  # Δê_t  (length T-1, aligned with el)
-        w = L11[i]^(-2)
+        w = one(T) / L11[i]          # L̂₁₁ᵢ⁻² with L11 = L̂₁₁ᵢ² (#584)
         sum_ell2 = dot(el, el)
         sum_num = dot(el, de) - lambda[i] * (Tobs - 1)   # Σ (ê_{t-1}Δê_t − λ̂ᵢ)
         sum_num_par = dot(el, de)                          # Σ ê_{t-1}Δê_t (no λ̂ for ADF)

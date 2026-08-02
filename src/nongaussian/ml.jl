@@ -16,7 +16,7 @@ References:
 - Lewis, D. J. (2025). "Identification based on higher moments in macroeconometrics."
 - Lanne, M., Meitz, M. & Saikkonen, P. (2017). "Identification and estimation of non-Gaussian SVAR."
 - Gourieroux, C., Monfort, A. & Renne, J.-P. (2017). "Statistical inference for independent component analysis."
-- Lanne, M. & Lütkepohl, H. (2010). "Structural VAR analysis in a data-rich environment."
+- Lanne, M. & Lütkepohl, H. (2010). "Structural Vector Autoregressions With Nonnormal Residuals."
 - Herwartz, H. (2018). "Hodges-Lehmann detection of structural shocks."
 - Azzalini, A. (1985). "A class of distributions which includes the normal ones."
 """
@@ -138,10 +138,13 @@ end
 """
 Pearson Type IV log-pdf for PML (scaled-t base with bounded skewness tilt).
 
-The raw tilt `κ·x³/6` is not a density (unnormalized and unbounded in κ). We
-(1) bound |κ| so the cubic tilt cannot dominate the Student-t tails, and
-(2) subtract a Gaussian padé normalizer so the objective stays finite and
-comparable across κ. This keeps the PML criterion from diverging in κ.
+The raw tilt `κ·x³/6` makes this a PSEUDO-density: `exp(κx³/6)` beats any
+polynomial-tail base, so `∫exp(logpdf)` diverges for every κ ≠ 0 and NO finite
+normalizing constant exists (#566). Bounding |κ| keeps the sample objective
+finite and concave in κ (the pre-#566 estimator ran to κ ≈ −141), but the
+criterion value is NOT a log-likelihood — do not compare it, or AIC/BIC built
+from it, against genuine densities (`:student_t`, `:gaussian`); it wins those
+comparisons by construction.
 """
 function _pearson_iv_logpdf(x::T, kappa::T, nu::T) where {T<:AbstractFloat}
     nu_safe = max(nu, T(2.01))
@@ -149,9 +152,7 @@ function _pearson_iv_logpdf(x::T, kappa::T, nu::T) where {T<:AbstractFloat}
     kappa_b = clamp(kappa, T(-1.5), T(1.5))
     base = _student_t_logpdf(x, nu_safe)
     tilt = kappa_b * (x^3 / T(6))
-    # Closed-form padé for log E_φ[exp(κ Z³/6)] ≈ κ²/24 under N(0,1)
-    log_norm = kappa_b^2 / T(24)
-    base + tilt - log_norm
+    base + tilt
 end
 
 # =============================================================================
