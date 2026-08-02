@@ -278,9 +278,11 @@ Minnesota prior hyperparameters (Bańbura–Giannone–Reichlin stacked-dummy pa
 - `decay`  — lag decay; higher lags shrink toward zero faster (scaling `lag^decay`).
 - `lambda` — weight on the **sum-of-coefficients** prior (shrinks toward Σₗ Aₗ = I).
 - `mu`     — weight on the **co-persistence / dummy-initial-observation** prior.
-- `omega`  — residual-covariance prior tightness: dummy rows are `diag(σ̂) / omega`, so
-             LARGER `omega` ⇒ LOOSER residual-covariance prior (same direction as `tau`/`lambda`/`mu`).
-             `omega ≤ 0` omits the covariance dummy block entirely.
+- `omega`  — residual-covariance prior **weight**: the number of replications of the
+             `diag(σ̂)` dummy block (rounded, minimum 1 when positive). Each copy adds `n`
+             prior degrees of freedom around the same location `E[Σ] ∝ diag(σ̂²)`, so
+             LARGER `omega` ⇒ TIGHTER (more informative) residual-covariance prior —
+             opposite direction to `tau`. `omega ≤ 0` omits the covariance dummy block.
 
 Reference-naming caveat (audit F-03): in Ferroni–Canova `BVAR_`/`rfvar3`, `lambda` is
 co-persistence and `mu` is own/sum-of-coefficients — i.e. our `lambda`/`mu` roles are SWAPPED
@@ -296,7 +298,7 @@ struct MinnesotaHyperparameters{T<:AbstractFloat} <: AbstractPrior
 end
 
 function MinnesotaHyperparameters(; tau::Real=3.0, decay::Real=0.5,
-                                   lambda::Real=5.0, mu::Real=2.0, omega::Real=2.0)
+                                   lambda::Real=5.0, mu::Real=2.0, omega::Real=1.0)
     T = promote_type(typeof(tau), typeof(decay), typeof(lambda), typeof(mu), typeof(omega))
     MinnesotaHyperparameters{T}(T(tau), T(decay), T(lambda), T(mu), T(omega))
 end

@@ -175,7 +175,12 @@ function favar_panel_irf(favar::FAVARModel{T}, irf_result::ImpulseResponse{T}) w
         end
     elseif has_ci
         # Fallback when raw draws are unavailable: map endpoints then order with min/max
-        # so inverted intervals cannot leak into the result.
+        # so inverted intervals cannot leak into the result. This is an APPROXIMATION —
+        # it assumes the augmented components are comonotonic, which understates the
+        # band whenever loadings mix components of opposite sign. The bootstrap path
+        # above (ci_type=:bootstrap keeps raw draws) is the supported route (#524);
+        # the IRF coefficient covariance needed for an exact analytic mapping is not
+        # retained on ImpulseResponse.
         panel_ci_lower = zeros(T, H, N, n_shocks)
         panel_ci_upper = zeros(T, H, N, n_shocks)
         for h in 1:H, j in 1:n_shocks
@@ -241,11 +246,16 @@ end
 """
     favar_panel_irf(bfavar::BayesianFAVAR, irf_result::BayesianImpulseResponse) -> BayesianImpulseResponse
 
-Map Bayesian factor-space IRFs to all N panel variables using posterior mean loadings
-and the direct Y_key channel `Lambda_y` (#525).
+Map Bayesian factor-space IRFs to all N panel variables using posterior mean loadings.
 
 For each panel variable i and shock j:
-    panel_irf[h, i, j] = Λ[i,:]·factor_irf[h,:,j] + Λ_y[i,:]·y_irf[h,:,j]
+    panel_irf[h, i, j] = Λ[i,:]·factor_irf[h,:,j]
+
+There is no direct `Λ_y` channel here (#525): the Gibbs measurement equation is
+`X = F Λ' + e` with factors never orthogonalized against `Y_key`, so the factor
+responses already carry the entire `Y_key`-transmitted component — adding a
+`Λ_y · y_irf` term would double-count it. (The two-step path differs because
+`_remove_double_counting` makes its factors orthogonal to `Y_key`.)
 
 Key variables use their direct VAR IRF responses. When raw posterior draws are available
 on `irf_result`, they are pushed through the loadings and quantiles are recomputed in
@@ -266,21 +276,19 @@ function favar_panel_irf(bfavar::BayesianFAVAR{T}, irf_result::BayesianImpulseRe
     H = irf_result.horizon
     n_q = length(irf_result.quantile_levels)
 
-    # Posterior mean loadings + direct Y channel
+    # Posterior mean loadings
     Lambda = dropdims(mean(bfavar.loadings_draws, dims=1), dims=1)  # N x r
-    Lambda_y = bfavar.Lambda_y  # N x n_key
 
     # Validate dimensions
     n_shocks = size(irf_result.point_estimate, 3)
     n_shocks == n_aug || throw(ArgumentError(
         "IRF has $n_shocks shocks but Bayesian FAVAR has $n_aug VAR variables"))
 
-    # Map point estimate (includes Lambda_y direct channel; #525)
+    # Map point estimate through the factor loadings
     panel_pe = zeros(T, H, N, n_shocks)
     for h in 1:H, j in 1:n_shocks
         factor_irfs_h = @view irf_result.point_estimate[h, 1:r, j]
-        y_irfs_h = @view irf_result.point_estimate[h, (r + 1):(r + n_key), j]
-        panel_pe[h, :, j] = Lambda * factor_irfs_h + Lambda_y * y_irfs_h
+        panel_pe[h, :, j] = Lambda * factor_irfs_h
     end
     _favar_override_key_irf!(panel_pe, irf_result.point_estimate, bfavar.Y_key_indices, r, N)
 
@@ -293,8 +301,7 @@ function favar_panel_irf(bfavar::BayesianFAVAR{T}, irf_result::BayesianImpulseRe
         panel_draws = zeros(T, n_reps, H, N, n_shocks)
         for rep in 1:n_reps, h in 1:H, j in 1:n_shocks
             factor_d = @view draws[rep, h, 1:r, j]
-            y_d = @view draws[rep, h, (r + 1):(r + n_key), j]
-            panel_draws[rep, h, :, j] = Lambda * factor_d + Lambda_y * y_d
+            panel_draws[rep, h, :, j] = Lambda * factor_d
         end
         _favar_override_key_draws!(panel_draws, draws, bfavar.Y_key_indices, r, N)
         @inbounds for qi in 1:n_q, h in 1:H, v in 1:N, s in 1:n_shocks
@@ -305,8 +312,7 @@ function favar_panel_irf(bfavar::BayesianFAVAR{T}, irf_result::BayesianImpulseRe
         # Fallback: map quantile endpoints then order (cannot invert without draws)
         for qi in 1:n_q, h in 1:H, j in 1:n_shocks
             factor_q_h = @view irf_result.quantiles[h, 1:r, j, qi]
-            y_q_h = @view irf_result.quantiles[h, (r + 1):(r + n_key), j, qi]
-            panel_q[h, :, j, qi] = Lambda * factor_q_h + Lambda_y * y_q_h
+            panel_q[h, :, j, qi] = Lambda * factor_q_h
         end
         if !isempty(bfavar.Y_key_indices)
             for (k_idx, panel_idx) in enumerate(bfavar.Y_key_indices)
@@ -381,6 +387,7 @@ function favar_panel_forecast(favar::FAVARModel{T}, fc::VARForecast{T}) where {T
     # CI: push bootstrap draws through Λ when available (#524); else order mapped endpoints.
     panel_lo = zeros(T, h, N)
     panel_hi = zeros(T, h, N)
+    panel_draws = nothing
     if fc.ci_method != :none && fc._draws !== nothing
         draws = fc._draws  # (reps, h, n_aug)
         n_reps = size(draws, 1)
@@ -407,13 +414,34 @@ function favar_panel_forecast(favar::FAVARModel{T}, fc::VARForecast{T}) where {T
             panel_hi[step, j] = quantile(d, one(T) - alpha)
         end
     elseif fc.ci_method != :none
+        # Analytic panel bands (#524). Mapping interval ENDPOINTS through Λ
+        # assumes the augmented variables are comonotonic and produces invalid
+        # (sometimes near-zero-width) bands. The correct band uses the full
+        # forecast-error covariance of the augmented VAR:
+        #   Var(x̂_i(h)) = [Λ_aug · MSE(h) · Λ_aug']_{ii},
+        # with MSE(h) = Σ_{s<h} Φ_s Σ Φ_s' (Lütkepohl §3.5) and Λ_aug = [Λ Λ_y].
+        n_aug = r + n_key
+        A = extract_ar_coefficients(favar.B, n_aug, favar.p)
+        Phi = Vector{Matrix{T}}(undef, h)
+        Phi[1] = Matrix{T}(I, n_aug, n_aug)
+        for i in 1:(h - 1)
+            acc = zeros(T, n_aug, n_aug)
+            for j in 1:min(i, favar.p)
+                acc .+= Phi[i - j + 1] * A[j]
+            end
+            Phi[i + 1] = acc
+        end
+        Lambda_aug = hcat(Lambda, Lambda_y)          # N × n_aug
+        z = T(quantile(Normal(), 1 - (1 - fc.conf_level) / 2))
+        mse = zeros(T, n_aug, n_aug)
         for step in 1:h
-            a = Lambda * (@view fc.ci_lower[step, 1:r]) +
-                Lambda_y * (@view fc.ci_lower[step, (r + 1):(r + n_key)])
-            b = Lambda * (@view fc.ci_upper[step, 1:r]) +
-                Lambda_y * (@view fc.ci_upper[step, (r + 1):(r + n_key)])
-            panel_lo[step, :] = min.(a, b)
-            panel_hi[step, :] = max.(a, b)
+            mse .+= Phi[step] * favar.Sigma * Phi[step]'
+            pv = Lambda_aug * mse * Lambda_aug'
+            for j in 1:N
+                se = sqrt(max(pv[j, j], zero(T)))
+                panel_lo[step, j] = panel_fc[step, j] - z * se
+                panel_hi[step, j] = panel_fc[step, j] + z * se
+            end
         end
     end
 
@@ -439,7 +467,8 @@ function favar_panel_forecast(favar::FAVARModel{T}, fc::VARForecast{T}) where {T
         h,
         fc.ci_method,
         fc.conf_level,
-        copy(favar.panel_varnames)
+        copy(favar.panel_varnames),
+        panel_draws
     )
 end
 

@@ -70,6 +70,14 @@ function irf(model::VARModel{T}, horizon::Int;
     rng = _resolve_repro_rng(rng, seed)
     _validate_data(model.Sigma, "Sigma")
     _validate_data(model.B, "B")
+    # Kilian bias correction needs the bootstrap machinery to estimate Psi; with
+    # any other ci_type it used to be silently ignored, returning the uncorrected
+    # point under a kwarg that promised correction (#564).
+    if bias_correct && ci_type != :bootstrap
+        throw(ArgumentError(
+            "bias_correct=true requires ci_type=:bootstrap (Kilian 1998 estimates " *
+            "the coefficient bias by bootstrap); got ci_type=:$ci_type"))
+    end
     n = nvars(model)
     p = model.p
     Q = compute_Q(model, method, horizon, check_func, narrative_check;

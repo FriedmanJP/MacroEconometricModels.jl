@@ -292,13 +292,20 @@ function forecast(model::VARModel{T}, h::Int;
     VARForecast{T}(point, ci_lower, ci_upper, h, ci_method, T(conf_level), model.varnames, sim_draws)
 end
 
-"""Select optimal lag order via information criterion (:aic, :bic, :hqic)."""
+"""Select optimal lag order via information criterion (:aic, :bic, :hqic).
+
+All candidates are estimated on the common sample `t = max_p+1, …, T` (Lütkepohl
+2005 §4.3; Stata `varsoc`): each candidate `p` drops the same `max_p` initial
+conditions, so the `log det Σ̃` terms are computed on identical data and the
+criteria are comparable across `p`. Ragged per-candidate samples bias the
+selection toward `max_p` on short samples (#522).
+"""
 function select_lag_order(Y::AbstractMatrix{T}, max_p::Int; criterion::Symbol=:bic) where {T<:AbstractFloat}
     max_p < 1 && throw(ArgumentError("max_p must be positive"))
     size(Y, 1) <= max_p + 2 && throw(ArgumentError("Not enough observations"))
 
     ic = map(1:max_p) do p
-        m = estimate_var(Y, p)
+        m = estimate_var(@view(Y[(max_p - p + 1):end, :]), p)
         criterion == :aic ? m.aic : criterion == :bic ? m.bic :
         criterion == :hqic ? m.hqic : throw(ArgumentError("Unknown criterion: $criterion"))
     end

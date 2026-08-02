@@ -199,8 +199,7 @@ function estimate_favar(X::AbstractMatrix{T}, key_indices::Vector{Int}, r::Int, 
             result.n,
             result.p,
             result.data,
-            result.varnames,
-            result.Lambda_y
+            result.varnames
         )
     end
 
@@ -444,9 +443,6 @@ function _estimate_favar_bayesian(X::Matrix{T}, Y_key::Matrix{T}, r::Int, p::Int
         sigma2_e[j] = max(var(@view(resid_X[:, j])), T(1e-10))
     end
 
-    # Minnesota prior hyperparameters for the VAR block (BBE §IV informative prior; #528)
-    mn_hyper = MinnesotaHyperparameters()
-
     # Pre-allocate storage for posterior draws
     k = 1 + n_var * p  # number of coefficients per equation in VAR
     B_draws = Array{T,3}(undef, n_draws, k, n_var)
@@ -469,12 +465,16 @@ function _estimate_favar_bayesian(X::Matrix{T}, Y_key::Matrix{T}, r::Int, p::Int
             Y_aug[:, 1:r] = F_curr
             Y_aug[:, (r+1):n_var] = Y_key
 
-            # Minnesota-augmented NIW posterior (not flat): dummy observations shrink
-            # toward unit-root / residual-scale targets and keep small-T draws stationary (#528).
-            Y_eff, X_reg = construct_var_matrices(Y_aug, p)
-            Y_d, X_d = gen_dummy_obs(Y_aug, p, mn_hyper)
-            Y_data = vcat(Y_eff, Y_d)
-            X_data = vcat(X_reg, X_d)
+            # Flat-prior NIW posterior. Deliberately NOT Minnesota-augmented (#528):
+            # `gen_dummy_obs` would recompute its scale moments from the *current
+            # draw* of Y_aug every sweep — a state-dependent prior with no fixed
+            # invariant distribution — and, because the sampler imposes no scale
+            # normalization on (F, Λ), the shrinking dummies track the factor
+            # scale downward instead of anchoring it, accelerating the collapse
+            # they were meant to prevent. The observed explosive draws are a
+            # factor-scale identification problem, to be fixed by normalizing
+            # (F, Λ) in the Gibbs blocks, not by this prior.
+            Y_data, X_data = construct_var_matrices(Y_aug, p)
             XtX = X_data' * X_data
             XtX_inv = Matrix{T}(robust_inv(XtX))
             XtX_inv = T(0.5) * (XtX_inv + XtX_inv')
@@ -558,12 +558,6 @@ function _estimate_favar_bayesian(X::Matrix{T}, Y_key::Matrix{T}, r::Int, p::Int
     F_final = dropdims(mean(factor_draws, dims=1), dims=1)
     data_aug = hcat(F_final, Y_key)
 
-    # Implied direct Y_key loadings (two-step analogue on posterior means; #525):
-    # F_raw ≈ B_y' * Y_key + F_tilde  ⇒  X ≈ F_tilde Λ' + Y_key Λ_y' with Λ_y = Λ B_y'.
-    Lambda_mean = dropdims(mean(loadings_draws, dims=1), dims=1)  # N × r
-    _, B_y = _remove_double_counting(Matrix{T}(F_final), Y_key)
-    Lambda_y = Lambda_mean * B_y'   # N × n_key
-
     BayesianFAVAR{T}(
         B_draws,
         Sigma_draws,
@@ -577,7 +571,6 @@ function _estimate_favar_bayesian(X::Matrix{T}, Y_key::Matrix{T}, r::Int, p::Int
         n_var,
         p,
         data_aug,
-        aug_varnames,
-        Lambda_y
+        aug_varnames
     )
 end

@@ -93,8 +93,12 @@ factors, and loadings.
 - `p::Int`: VAR lag order
 - `data::Matrix{T}`: Augmented VAR data [F, Y_key]
 - `varnames::Vector{String}`: VAR variable names
-- `Lambda_y::Matrix{T}`: N × n_key implied direct panel loadings on Y_key
-  (posterior-mean analogue of the two-step `FAVARModel.Lambda_y`; #525)
+
+Note (#525): unlike the two-step `FAVARModel`, this struct carries no `Lambda_y`.
+The Gibbs sampler's measurement equation is `X = F Λ' + e` — the factors are
+never orthogonalized against `Y_key` — so the factor responses already contain
+the entire `Y_key`-transmitted component. Adding a `Λ_y · y_irf` term on top
+would double-count it.
 """
 struct BayesianFAVAR{T<:AbstractFloat}
     B_draws::Array{T,3}
@@ -110,17 +114,6 @@ struct BayesianFAVAR{T<:AbstractFloat}
     p::Int
     data::Matrix{T}
     varnames::Vector{String}
-    Lambda_y::Matrix{T}
-end
-
-# Backward-compatible constructor (pre-#525, no Lambda_y → zeros)
-function BayesianFAVAR{T}(B_draws, Sigma_draws, factor_draws, loadings_draws, X_panel,
-                          panel_varnames, Y_key_indices, n_factors, n_key, n, p, data,
-                          varnames) where {T}
-    N = size(X_panel, 2)
-    BayesianFAVAR{T}(B_draws, Sigma_draws, factor_draws, loadings_draws, X_panel,
-                     panel_varnames, Y_key_indices, n_factors, n_key, n, p, data,
-                     varnames, zeros(T, N, n_key))
 end
 
 # =============================================================================
@@ -155,14 +148,16 @@ function to_var(favar::FAVARModel{T}) where {T}
     U = favar.U
     Sigma = favar.Sigma
 
-    # Compute information criteria from the VAR representation
+    # Compute information criteria from the VAR representation. System parameter
+    # count n·k, matching estimate_var (#522) — the same fitted VAR must report
+    # the same criteria through either accessor.
     T_eff = size(U, 1)
-    k = size(B, 1)
+    k_sys = size(Y_aug, 2) * size(B, 1)
     Sigma_ml = (U'U) / T_eff
     log_det = logdet_safe(Sigma_ml)
-    aic_val = log_det + 2 * k / T_eff
-    bic_val = log_det + k * log(T_eff) / T_eff
-    hqic_val = log_det + 2 * k * log(log(T_eff)) / T_eff
+    aic_val = log_det + 2 * k_sys / T_eff
+    bic_val = log_det + k_sys * log(T_eff) / T_eff
+    hqic_val = log_det + 2 * k_sys * log(log(T_eff)) / T_eff
 
     VARModel(Y_aug, p, B, U, Sigma, aic_val, bic_val, hqic_val, favar.varnames)
 end

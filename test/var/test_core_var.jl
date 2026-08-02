@@ -817,9 +817,13 @@ end
         end
         bc = irf(mv, 12; ci_type=:bootstrap, reps=80, seed=1, bias_correct=true, bias_reps=40)
         @test all(isfinite, bc.ci_lower) && all(bc.ci_lower .<= bc.ci_upper)
-        # Kilian (1998): bias_correct also corrects the point IRF (#564)
+        # Kilian (1998): bias_correct also corrects the point IRF (#564) — the
+        # corrected point must actually move relative to the uncorrected one.
         @test all(isfinite, bc.values)
         @test size(bc.values) == size(base.values)
+        @test maximum(abs, bc.values .- base.values) > 1e-10
+        # Rejected outside the bootstrap machinery rather than silently ignored
+        @test_throws ArgumentError irf(mv, 12; ci_type=:none, bias_correct=true)
         # reproducible at a fixed seed
         @test irf(mv, 12; ci_type=:bootstrap, reps=40, seed=99, bootstrap=:wild).ci_lower ==
               irf(mv, 12; ci_type=:bootstrap, reps=40, seed=99, bootstrap=:wild).ci_lower

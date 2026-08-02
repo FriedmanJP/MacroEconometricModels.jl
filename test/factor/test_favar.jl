@@ -699,15 +699,15 @@ using MacroEconometricModels
         n_key = bfavar.n_key
         key_set = Set(bfavar.Y_key_indices)
 
-        # Non-key variables: Lambda * factor_irf + Lambda_y * y_irf (#525)
-        @test size(bfavar.Lambda_y) == (20, n_key)
+        # Non-key variables: Lambda * factor_irf only (#525) — the Gibbs
+        # measurement equation is X = FΛ' with factors not orthogonalized
+        # against Y_key, so a separate Λ_y channel would double-count.
+        @test !hasproperty(bfavar, :Lambda_y)
         for i in 1:20
             if !(i in key_set)
                 for h in 1:10, j in 1:4
                     factor_irfs = irf_aug.point_estimate[h, 1:r, j]
-                    y_irfs = irf_aug.point_estimate[h, (r+1):(r+n_key), j]
-                    expected = dot(Lambda_mean[i, :], factor_irfs) +
-                               dot(bfavar.Lambda_y[i, :], y_irfs)
+                    expected = dot(Lambda_mean[i, :], factor_irfs)
                     @test isapprox(panel_irf.point_estimate[h, i, j], expected; atol=1e-10)
                 end
             end

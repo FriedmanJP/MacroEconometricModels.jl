@@ -296,30 +296,35 @@ function Base.show(io::IO, m::FactorModel{T}) where {T}
     )
     # Variance explained
     n_show = min(m.r, 5)
-    var_data = Matrix{Any}(undef, n_show, 3)
     if m.block_names !== nothing
-        # Per-block shares (not panel-wide PC shares mislabelled with block names; #526)
+        # Per-block shares (not panel-wide PC shares mislabelled with block names;
+        # #526). No Cumulative column here: per-block shares are computed against
+        # different denominators (each block's own ‖X_b‖²), so their running sum
+        # is meaningless (it can exceed 100%).
         block_expl = _block_explained_variance(m)
-        block_cumul = cumsum(block_expl)
+        var_data = Matrix{Any}(undef, n_show, 2)
         for i in 1:n_show
             var_data[i, 1] = string(m.block_names[i])
             var_data[i, 2] = _fmt_pct(block_expl[i])
-            var_data[i, 3] = _fmt_pct(block_cumul[i])
         end
-        var_title = "Variance Explained (per-block share)"
+        _pretty_table(io, var_data;
+            title = "Variance Explained (per-block share)",
+            column_labels = ["", "Variance"],
+            alignment = [:l, :r],
+        )
     else
+        var_data = Matrix{Any}(undef, n_show, 3)
         for i in 1:n_show
             var_data[i, 1] = "Factor $i"
             var_data[i, 2] = _fmt_pct(m.explained_variance[i])
             var_data[i, 3] = _fmt_pct(m.cumulative_variance[i])
         end
-        var_title = "Variance Explained"
+        _pretty_table(io, var_data;
+            title = "Variance Explained",
+            column_labels = ["", "Variance", "Cumulative"],
+            alignment = [:l, :r, :r],
+        )
     end
-    _pretty_table(io, var_data;
-        title = var_title,
-        column_labels = ["", "Variance", "Cumulative"],
-        alignment = [:l, :r, :r],
-    )
     # Top loadings per factor (top 5 for up to 3 factors)
     n_factors_show = min(m.r, 3)
     n_top = min(5, N)

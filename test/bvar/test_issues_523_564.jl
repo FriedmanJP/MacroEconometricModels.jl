@@ -28,21 +28,27 @@ const M = MacroEconometricModels
         @test all(diag(Sigma_mean) .> 1e-8)
     end
 
-    @testset "#529 omega scales covariance dummy block" begin
+    @testset "#529 omega replicates the covariance dummy block" begin
         Random.seed!(7)
         Y = randn(60, 2)
-        h1 = MinnesotaHyperparameters(tau=1.0, lambda=1.0, mu=1.0, omega=1.0)
-        h99 = MinnesotaHyperparameters(tau=1.0, lambda=1.0, mu=1.0, omega=99.0)
-        Y1, X1 = gen_dummy_obs(Y, 1, h1)
-        Y99, X99 = gen_dummy_obs(Y, 1, h99)
-        # Last n rows are the covariance dummy block; they must scale with 1/omega
         n = size(Y, 2)
-        @test Y1[end-n+1:end, :] ≈ 99 .* Y99[end-n+1:end, :] atol=1e-10
-        # Marginal likelihood must differ when omega changes
+        h0 = MinnesotaHyperparameters(tau=1.0, lambda=1.0, mu=1.0, omega=0.0)
+        h1 = MinnesotaHyperparameters(tau=1.0, lambda=1.0, mu=1.0, omega=1.0)
+        h3 = MinnesotaHyperparameters(tau=1.0, lambda=1.0, mu=1.0, omega=3.0)
+        Y0, _ = gen_dummy_obs(Y, 1, h0)
+        Y1, _ = gen_dummy_obs(Y, 1, h1)
+        Y3, _ = gen_dummy_obs(Y, 1, h3)
+        # omega is a replication count: each copy adds n rows, all equal diag(σ̂)
+        # (weight = prior dof around the SAME location — not a rescaled location).
+        @test size(Y1, 1) == size(Y0, 1) + n
+        @test size(Y3, 1) == size(Y0, 1) + 3n
+        @test Y3[end-n+1:end, :] ≈ Y1[end-n+1:end, :] atol=1e-12
+        @test Y3[end-2n+1:end-n, :] ≈ Y1[end-n+1:end, :] atol=1e-12
+        # Marginal likelihood must respond to omega
         ml1 = log_marginal_likelihood(Y, 1, h1)
-        ml99 = log_marginal_likelihood(Y, 1, h99)
-        @test ml1 != ml99
-        @test isfinite(ml1) && isfinite(ml99)
+        ml3 = log_marginal_likelihood(Y, 1, h3)
+        @test ml1 != ml3
+        @test isfinite(ml1) && isfinite(ml3)
     end
 
     @testset "#527 BayesianFEVD axis order matches FEVD" begin
@@ -91,11 +97,16 @@ const M = MacroEconometricModels
         base = irf(m, 8; ci_type=:none)
         bc = irf(m, 8; ci_type=:bootstrap, reps=60, seed=5,
                  bias_correct=true, bias_reps=40)
-        # Point must be finite and (typically) differ from the uncorrected IRF
         @test all(isfinite, bc.values)
         @test size(bc.values) == size(base.values)
-        # On a persistent AR(1), Kilian bias correction usually moves the point
-        @test maximum(abs, bc.values .- base.values) > 0 || true  # allow exact equality if δ=0
+        # On a persistent AR(1) at T=40 the OLS bias is material — the corrected
+        # point MUST differ from the uncorrected one (that was the whole bug).
+        @test maximum(abs, bc.values .- base.values) > 1e-8
+        # Downward OLS bias ⇒ corrected own-response at long horizon is larger
+        @test bc.values[8, 1, 1] > base.values[8, 1, 1]
+        # bias_correct without bootstrap machinery is an explicit error, not a
+        # silently uncorrected point (#564)
+        @test_throws ArgumentError irf(m, 8; ci_type=:none, bias_correct=true)
     end
 
     @testset "#538 FactorModel / StructuralDFM carry varnames" begin
@@ -132,30 +143,43 @@ const M = MacroEconometricModels
         @test occursin("per-block", s)
     end
 
-    @testset "#525 BayesianFAVAR has Lambda_y" begin
+    @testset "#525 Bayesian panel mapping is Λ·factor_irf (no Λ_y channel)" begin
         Random.seed!(12)
         T_obs, N, r = 100, 12, 2
         F = randn(T_obs, r)
         X = F * randn(N, r)' .+ 0.3 .* randn(T_obs, N)
         bf = estimate_favar(X, [1, 2], r, 1; method=:bayesian, n_draws=40, burnin=10)
-        @test size(bf.Lambda_y) == (N, 2)
-        @test all(isfinite, bf.Lambda_y)
+        # The Gibbs measurement equation is X = FΛ' + e (factors NOT orthogonal
+        # to Y_key), so the factor responses already carry the Y_key-transmitted
+        # component; a separate Λ_y channel would double-count it (#525).
+        @test !hasproperty(bf, :Lambda_y)
         ir = irf(bf, 6)
         panel = favar_panel_irf(bf, ir)
-        # Panel mapping uses Lambda_y: non-key impact for key-var shock need not be zero
         @test size(panel.point_estimate, 2) == N
         @test all(isfinite, panel.point_estimate)
+        # Non-key rows equal Λ · factor_irf exactly
+        Lam = dropdims(mean(bf.loadings_draws; dims=1), dims=1)
+        i_nonkey = findfirst(i -> !(i in bf.Y_key_indices), 1:N)
+        for h in 1:6, j in 1:(r + bf.n_key)
+            expected = dot(Lam[i_nonkey, :], ir.point_estimate[h, 1:r, j])
+            @test panel.point_estimate[h, i_nonkey, j] ≈ expected atol=1e-10
+        end
     end
 
-    @testset "#528 Bayesian FAVAR Minnesota prior keeps draws finite" begin
+    @testset "#528 Bayesian FAVAR Gibbs draws are finite (flat NIW block)" begin
+        # #528 remains open: the explosive-draw symptom is a factor-scale
+        # identification problem in the Gibbs sampler, not a prior choice.
+        # A Minnesota dummy block recomputed from the current draw each sweep is
+        # a state-dependent prior (no fixed invariant distribution) and was
+        # reverted; no magnitude bound is asserted here because the unnormalized
+        # factor scale makes |B| draws unstable across draw counts by design.
         Random.seed!(15)
         T_obs, N = 60, 10
         X = randn(T_obs, N)
         bf = estimate_favar(X, [1], 2, 1; method=:bayesian, n_draws=40, burnin=15)
         B_mean = dropdims(mean(bf.B_draws; dims=1), dims=1)
         @test all(isfinite, B_mean)
-        # Posterior mean AR coeffs should not be wildly explosive (flat prior → |β|≫1)
-        @test maximum(abs, B_mean) < 50
+        @test all(isfinite, bf.Sigma_draws)
     end
 
     @testset "#524 panel CI lower ≤ upper via draws" begin

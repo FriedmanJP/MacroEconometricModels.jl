@@ -300,7 +300,17 @@ end
 # type's real constructor (validation preserved). Forward-safe: a v1 loader
 # knows exactly the v1 field set via `fieldnames(T)`.
 function _from_serializable(::Type{T}, p::AbstractDict, ::Int) where {T}
-    args = Any[_deser_field(p[String(f)]) for f in fieldnames(T)]
+    args = Any[]
+    for f in fieldnames(T)
+        key = String(f)
+        # A field added to the struct after the file was written must surface as
+        # the format's typed error, not a raw KeyError (#538).
+        haskey(p, key) || throw(SerializationError(
+            "field '$key' of $(nameof(T)) is missing from the payload — the file " *
+            "was saved by an older package version, before this field existed. " *
+            "Re-create and re-save the object with the current version."))
+        push!(args, _deser_field(p[key]))
+    end
     return _generic_construct(T, args)
 end
 
