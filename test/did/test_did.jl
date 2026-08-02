@@ -1440,7 +1440,9 @@ const _MPDTA = load_example(:mpdta)
         em1_idx = findfirst(==(-1), evt)
         @test isapprox(att[em3_idx], 0.0305; atol=0.005)
         @test isapprox(att[em2_idx], -0.0006; atol=0.005)
-        @test isapprox(att[em1_idx], -0.0245; atol=0.005)
+        # #548: reference e=-1 is stored as zero (report masks it as "(ref) —");
+        # the free adjacent-period pre-trend (~−0.0245) is omitted by convention.
+        @test att[em1_idx] == 0.0
     end
 
     @testset "CS varying base — notyettreated (mpdta verification)" begin
@@ -1490,6 +1492,21 @@ const _MPDTA = load_example(:mpdta)
         # Post-treatment should match varying (both use g-1 as base for t >= g)
         e0_idx = findfirst(==(0), did.event_times)
         @test isapprox(coef(did)[e0_idx], -0.0199; atol=0.005)
+    end
+
+    @testset "CS varying base zeros reference index (#548)" begin
+        pd = _MPDTA
+        did = estimate_did(pd, "lemp", "first_treat";
+                           method=:callaway_santanna,
+                           leads=3, horizon=3,
+                           control_group=:never_treated,
+                           base_period=:varying)
+        em1_idx = findfirst(==(-1), did.event_times)
+        @test em1_idx !== nothing
+        # Storage must match report's "(ref) —" mask: zero (not a free estimate)
+        @test coef(did)[em1_idx] == 0.0
+        @test stderror(did)[em1_idx] == 0.0
+        @test did.att[em1_idx] == 0.0
     end
 
     @testset "CS base_period validation" begin

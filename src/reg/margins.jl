@@ -389,12 +389,13 @@ Confidence intervals on log scale: exp(beta +/- z * SE(beta)).
 - `conf_level::Real` — confidence level (default 0.95)
 
 # Returns
-Named tuple with fields:
+[`OddsRatio{T}`](@ref) with fields:
 - `or::Vector{T}` — odds ratios exp(beta)
 - `se::Vector{T}` — delta-method standard errors
 - `ci_lower::Vector{T}` — lower CI bounds
 - `ci_upper::Vector{T}` — upper CI bounds
 - `varnames::Vector{String}` — variable names
+- `conf_level::T` — confidence level used for the intervals
 
 # Examples
 ```julia
@@ -422,5 +423,5 @@ function odds_ratio(m::LogitModel{T}; conf_level::Real=0.95) where {T<:AbstractF
     ci_lower = exp.(beta .- z_crit .* se_beta)
     ci_upper = exp.(beta .+ z_crit .* se_beta)
 
-    OddsRatio{T}(or, se_or, ci_lower, ci_upper, copy(m.varnames), T(conf_level))
+    OddsRatio(or, se_or, ci_lower, ci_upper, copy(m.varnames), T(conf_level))
 end

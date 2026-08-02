@@ -787,7 +787,32 @@ function _lpdid_horizon_regression(pd::PanelData{T}, outcome_col, cov_cols,
         X_dm[:, k] = col
     end
 
-    # OLS
+    # Optional IPW reweighting for an equally-weighted ATE (Dube et al. 2025 /
+    # Stata lpdid `reweight`): inverse-probability weights based on the
+    # period-specific treatment propensity in the CCS estimation sample.
+    # w_it = ΔD_it / p_t + (1 − ΔD_it) / (1 − p_t), with p_t = E[ΔD | t, CCS].
+    if reweight
+        p_by_t = Dict{Int,T}()
+        for t in unique(time_ids)
+            mask = time_ids .== t
+            p_by_t[t] = clamp(mean(@view d_vec[mask]), T(1e-6), one(T) - T(1e-6))
+        end
+        w = Vector{T}(undef, N)
+        @inbounds for i in 1:N
+            p = p_by_t[time_ids[i]]
+            d = d_vec[i]
+            w[i] = d / p + (one(T) - d) / (one(T) - p)
+        end
+        sw = sqrt.(w)
+        @inbounds for i in 1:N
+            y_dm[i] *= sw[i]
+            for k in 1:K
+                X_dm[i, k] *= sw[i]
+            end
+        end
+    end
+
+    # OLS (or WLS after sqrt-weight transform)
     XtX_inv = robust_inv(X_dm' * X_dm; silent=true)
     beta_vec = XtX_inv * (X_dm' * y_dm)
     resid = y_dm - X_dm * beta_vec
@@ -937,6 +962,24 @@ function _lpdid_pooled_regression(pd::PanelData{T}, outcome_col, cov_cols,
         col = X_dm[:, k]
         _lpdid_time_demean!(col, time_ids)
         X_dm[:, k] = col
+    end
+
+    # IPW reweighting (same period-propensity weights as the horizon path)
+    if reweight
+        p_by_t = Dict{Int,T}()
+        for t in unique(time_ids)
+            mask = time_ids .== t
+            p_by_t[t] = clamp(mean(@view d_vec[mask]), T(1e-6), one(T) - T(1e-6))
+        end
+        @inbounds for i in 1:N
+            p = p_by_t[time_ids[i]]
+            d = d_vec[i]
+            sw = sqrt(d / p + (one(T) - d) / (one(T) - p))
+            y_dm[i] *= sw
+            for k in 1:K
+                X_dm[i, k] *= sw
+            end
+        end
     end
 
     XtX_inv = robust_inv(X_dm' * X_dm; silent=true)

@@ -17,7 +17,7 @@ using LinearAlgebra, Statistics, Distributions
 
 """
     estimate_xtlogit(pd, depvar, indepvars; model=:pooled, cov_type=:cluster,
-                     maxiter=200, tol=1e-8, n_quadrature=12) -> PanelLogitModel{T}
+                     maxiter=2000, tol=1e-8, n_quadrature=12) -> PanelLogitModel{T}
 
 Estimate a panel logistic regression model.
 
@@ -29,7 +29,7 @@ Estimate a panel logistic regression model.
 # Keyword Arguments
 - `model::Symbol` -- `:pooled`, `:fe`, `:re`, or `:cre` (default: `:pooled`)
 - `cov_type::Symbol` -- covariance type: `:ols`, `:cluster` (default)
-- `maxiter::Int` -- maximum iterations (default 200)
+- `maxiter::Int` -- maximum iterations (default 2000; FE conditional logit often needs 1000+)
 - `tol` -- convergence tolerance (default 1e-8)
 - `n_quadrature::Int` -- Gauss-Hermite quadrature points for RE/CRE (default 12)
 
@@ -54,7 +54,7 @@ m_re = estimate_xtlogit(pd, :y, [:x1, :x2]; model=:re)
 """
 function estimate_xtlogit(pd::PanelData{T}, depvar::Symbol, indepvars::Vector{Symbol};
                           model::Symbol=:pooled, cov_type::Symbol=:cluster,
-                          maxiter::Int=200, tol::Real=1e-8,
+                          maxiter::Int=2000, tol::Real=1e-8,
                           n_quadrature::Int=12) where {T<:AbstractFloat}
     model in (:pooled, :fe, :re, :cre) ||
         throw(ArgumentError("model must be :pooled, :fe, :re, or :cre; got :$model"))
@@ -285,6 +285,12 @@ function _xtlogit_fe(pd::PanelData{T}, y::Vector{T}, X::Matrix{T},
             break
         end
         beta .-= step
+    end
+
+    if !converged
+        @warn "FE conditional logit did not converge in $iterations iterations " *
+              "(maxiter=$maxiter, tol=$tol). Coefficient estimates may be unreliable. " *
+              "Raise maxiter (often ≥2000 on long panels) or relax tol." maxlog=1
     end
 
     # Covariance: -H^{-1}
@@ -578,15 +584,15 @@ function _xtlogit_re(pd::PanelData{T}, y::Vector{T}, X::Matrix{T},
 
     # Honest convergence: reported only when the true gradient norm is near zero.
     converged = isfinite(gnorm) && gnorm < T(1e-5)
-
-    # SEs from observed information = Hessian of the NEGATIVE loglik (no sign flip).
-    n_params = k_full + 1
-    H = ForwardDiff.hessian(nll, theta)
-    vcov_full = try
-        Matrix{T}(robust_inv(Hermitian((H .+ H') ./ 2)))
-    catch
-        zeros(T, n_params, n_params)
+    if !converged
+        @warn "RE logit did not reach a stationary point (‖∇nll‖=$gnorm after " *
+              "$iterations LBFGS iterations + Newton polish). Raise maxiter/tol." maxlog=1
     end
+
+    # Covariance: observed-information bread, optionally sandwich-clustered by entity.
+    n_params = k_full + 1
+    vcov_full = _re_logit_vcov(nll, theta, y, X_c, unique_groups, group_obs, nodes, weights,
+                               cov_type)
     vcov_mat = vcov_full[1:k_full, 1:k_full]
 
     # Fitted probabilities (marginal, integrating out alpha)
@@ -623,6 +629,46 @@ function _xtlogit_re(pd::PanelData{T}, y::Vector{T}, X::Matrix{T},
         sigma_u, rho,
         vn, :re, cov_type, converged, iterations, n, N, pd
     )
+end
+
+"""
+    _re_logit_vcov(nll, theta, y, X_c, unique_groups, group_obs, nodes, weights, cov_type)
+
+Observed-information VCE for the RE/CRE logit parameter vector `theta = [β; log σ_u]`.
+Under `cov_type == :cluster` (the default) forms the group-score sandwich
+
+    V = H⁻¹ (Σ_g s_g s_g') H⁻¹
+
+where `s_g = ∇_θ ℓ_g` is the score of the adaptive-GH group log-likelihood and
+`H = −∇²ℓ` is the observed information of the full-sample negative loglik. This is
+the standard panel-robust VCE (Stata `xtlogit, re vce(robust)`); the pure Hessian
+inverse overstates precision by roughly a factor of √T̄ on moderately long panels.
+"""
+function _re_logit_vcov(nll, theta::Vector{T}, y::Vector{T}, X_c::Matrix{T},
+                        unique_groups::Vector{Int}, group_obs::Dict{Int,Vector{Int}},
+                        nodes::Vector{Float64}, weights::Vector{Float64},
+                        cov_type::Symbol) where {T<:AbstractFloat}
+    n_params = length(theta)
+    H = ForwardDiff.hessian(nll, theta)
+    bread = try
+        Matrix{T}(robust_inv(Hermitian((H .+ H') ./ 2)))
+    catch
+        return zeros(T, n_params, n_params)
+    end
+    cov_type == :cluster || return bread
+
+    # Group scores of the POSITIVE group loglik (= −∇nll_g)
+    meat = zeros(T, n_params, n_params)
+    for g in unique_groups
+        idx = group_obs[g]
+        # Per-group negative loglik so score of nll_g has the same sign as the bread
+        nll_g(th) = -_re_logit_agh_loglik(th, y, X_c, [g],
+            Dict(g => idx), nodes, weights)
+        s_g = ForwardDiff.gradient(nll_g, theta)
+        meat .+= s_g * s_g'
+    end
+    V = bread * meat * bread
+    Matrix{T}((V .+ V') ./ 2)
 end
 
 # =============================================================================
@@ -688,14 +734,14 @@ function _xtlogit_cre(pd::PanelData{T}, y::Vector{T}, X::Matrix{T},
     loglik_final = _re_logit_agh_loglik(theta, y, X_c, unique_groups, group_obs, nodes, weights)
 
     converged = isfinite(gnorm) && gnorm < T(1e-5)
+    if !converged
+        @warn "CRE logit did not reach a stationary point (‖∇nll‖=$gnorm after " *
+              "$iterations LBFGS iterations + Newton polish). Raise maxiter/tol." maxlog=1
+    end
 
     n_params = k_full + 1
-    H = ForwardDiff.hessian(nll, theta)
-    vcov_full = try
-        Matrix{T}(robust_inv(Hermitian((H .+ H') ./ 2)))
-    catch
-        zeros(T, n_params, n_params)
-    end
+    vcov_full = _re_logit_vcov(nll, theta, y, X_c, unique_groups, group_obs, nodes, weights,
+                               cov_type)
     vcov_mat = vcov_full[1:k_full, 1:k_full]
 
     # Fitted probabilities

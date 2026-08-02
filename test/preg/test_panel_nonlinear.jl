@@ -376,14 +376,15 @@ end
 
         me = marginal_effects(m)
         @test me isa MarginalEffects{Float64}
-        @test length(me.effects) == 3  # intercept + 2 vars
+        @test length(me.effects) == 2  # intercept dropped (#544); x1, x2 remain
+        @test me.varnames == ["x1", "x2"]
         @test all(me.se .> 0)
         # AME for x1 should be positive, x2 negative
-        @test me.effects[2] > 0
-        @test me.effects[3] < 0
+        @test me.effects[1] > 0
+        @test me.effects[2] < 0
         # AMEs should be smaller in magnitude than raw coefficients (attenuation by f(eta))
-        @test abs(me.effects[2]) < abs(coef(m)[2])
-        @test abs(me.effects[3]) < abs(coef(m)[3])
+        @test abs(me.effects[1]) < abs(coef(m)[2])
+        @test abs(me.effects[2]) < abs(coef(m)[3])
     end
 
     @testset "RE logit — attenuation" begin
@@ -403,12 +404,13 @@ end
 
         me = marginal_effects(m)
         @test me isa MarginalEffects{Float64}
-        @test length(me.effects) == 2  # intercept + x1
+        @test length(me.effects) == 1  # intercept dropped; x1 only
+        @test me.varnames == ["x1"]
         @test all(me.se .> 0)
         # AME for x1 should be positive
-        @test me.effects[2] > 0
+        @test me.effects[1] > 0
         # Effects should be smaller than coefficients (attenuation)
-        @test abs(me.effects[2]) < abs(coef(m)[2])
+        @test abs(me.effects[1]) < abs(coef(m)[2])
     end
 
     @testset "FE logit" begin
@@ -453,11 +455,12 @@ end
 
         me = marginal_effects(m)
         @test me isa MarginalEffects{Float64}
-        @test length(me.effects) == 3  # intercept + 2
+        @test length(me.effects) == 2  # intercept dropped; x1, x2
+        @test me.varnames == ["x1", "x2"]
         @test all(me.se .> 0)
-        @test me.effects[2] > 0
-        @test me.effects[3] < 0
-        @test abs(me.effects[2]) < abs(coef(m)[2])
+        @test me.effects[1] > 0
+        @test me.effects[2] < 0
+        @test abs(me.effects[1]) < abs(coef(m)[2])
     end
 
     @testset "CRE logit — only original vars" begin

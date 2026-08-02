@@ -60,6 +60,45 @@ function _panel_first_stage_f(X_endog::Matrix{T}, Z::Matrix{T};
 end
 
 # =============================================================================
+# Panel weak-instrument diagnostics (reuse cross-section helpers on transformed data)
+# =============================================================================
+
+"""
+    _panel_weak_iv_diagnostics(X, Z, endogenous; cov_type=:cluster) -> (cd, kp, sy)
+
+Cragg-Donald F, Kleibergen-Paap rk Wald F, and Stock-Yogo 10% critical value evaluated
+on the *already transformed* panel design (`X`, `Z` demeaned / differenced / quasi-demeaned).
+`endogenous` indexes the endogenous columns of `X`. Returns `(nothing, nothing, nothing)`
+on failure / underidentification.
+"""
+function _panel_weak_iv_diagnostics(X::Matrix{T}, Z::Matrix{T}, endogenous::Vector{Int};
+                                    cov_type::Symbol=:cluster) where {T<:AbstractFloat}
+    isempty(endogenous) && return (nothing, nothing, nothing)
+    cd = try
+        v = _cragg_donald_f(X, Z, endogenous)
+        isfinite(v) ? v : nothing
+    catch
+        nothing
+    end
+    kp_cov = cov_type == :ols ? :hc0 : :hc1
+    kp = try
+        v = _kleibergen_paap_f(X, Z, endogenous; cov_type=kp_cov)
+        isfinite(v) ? v : nothing
+    catch
+        nothing
+    end
+    q = size(Z, 2) - (size(X, 2) - length(endogenous))
+    sy = try
+        let cv = _stock_yogo_cv(length(endogenous), q)
+            cv === nothing ? nothing : T(cv)
+        end
+    catch
+        nothing
+    end
+    (cd, kp, sy)
+end
+
+# =============================================================================
 # Panel Sargan-Hansen Test
 # =============================================================================
 
@@ -158,6 +197,8 @@ function _estimate_fe_iv(pd::PanelData{T}, y::Vector{T}, X_exog::Matrix{T},
     # First-stage F on demeaned endogenous
     # Included exogenous lead the within-demeaned instrument set: W = X_exog columns.
     first_stage_f = _panel_first_stage_f(X_endog_dm, Z_dm; n_incl=size(X_exog, 2))
+    endog_idx = collect(size(X_exog, 2)+1:k)
+    cd_f, kp_f, sy_cv = _panel_weak_iv_diagnostics(X_dm, Z_dm, endog_idx; cov_type=cov_type)
 
     # Sargan test
     sargan_s, sargan_p = _panel_sargan_test(resid_dm, Z_dm, k, cov_type, groups)
@@ -211,7 +252,7 @@ function _estimate_fe_iv(pd::PanelData{T}, y::Vector{T}, X_exog::Matrix{T},
         r2_within, r2_between, r2_overall,
         sigma_u, sigma_e, rho,
         first_stage_f, sargan_s, sargan_p,
-        nothing, nothing, nothing,   # cragg_donald_f, kleibergen_paap_f, stock_yogo_10pct
+        cd_f, kp_f, sy_cv,
         vn, en, in_,
         :fe_iv, cov_type, n, N, pd
     )
@@ -303,6 +344,9 @@ function _estimate_fd_iv(pd::PanelData{T}, y::Vector{T}, X_exog::Matrix{T},
     # First-stage F on differenced endogenous
     # dZ_c leads with an intercept then differenced included exogenous.
     first_stage_f = _panel_first_stage_f(dX_endog, dZ_c; n_incl=1 + size(X_exog, 2))
+    # dX_c = [1 | dX_exog | dX_endog]; endogenous cols start after intercept+exog
+    endog_idx_fd = collect(2 + size(X_exog, 2):size(dX_c, 2))
+    cd_f, kp_f, sy_cv = _panel_weak_iv_diagnostics(dX_c, dZ_c, endog_idx_fd; cov_type=cov_type)
 
     # Sargan test
     sargan_s, sargan_p = _panel_sargan_test(resid_fd, dZ_c, k_full, cov_type, dgroups)
@@ -333,7 +377,7 @@ function _estimate_fd_iv(pd::PanelData{T}, y::Vector{T}, X_exog::Matrix{T},
         r2_within, r2_between, r2_overall,
         zero(T), sigma_e, zero(T),
         first_stage_f, sargan_s, sargan_p,
-        nothing, nothing, nothing,   # cragg_donald_f, kleibergen_paap_f, stock_yogo_10pct
+        cd_f, kp_f, sy_cv,
         vn, en, in_,
         :fd_iv, cov_type, n_fd, N_fd, pd
     )
@@ -448,6 +492,8 @@ function _estimate_re_iv(pd::PanelData{T}, y::Vector{T}, X_exog::Matrix{T},
     # EC2SLS Z_ec2sls_c = [intercept, quasi-demeaned(X_exog,Z_excl), between(...)]; the leading
     # 1 + #X_exog columns are the (quasi-demeaned) included exogenous — heuristic partial-F.
     first_stage_f = _panel_first_stage_f(X_endog_qd, Z_ec2sls_c; n_incl=1 + size(X_exog, 2))
+    endog_idx_re = collect(2 + size(X_exog, 2):size(X_qd_c, 2))
+    cd_f, kp_f, sy_cv = _panel_weak_iv_diagnostics(X_qd_c, Z_ec2sls_c, endog_idx_re; cov_type=cov_type)
 
     # Sargan test
     sargan_s, sargan_p = _panel_sargan_test(resid_qd, Z_ec2sls_c, k_full, cov_type, groups)
@@ -474,7 +520,7 @@ function _estimate_re_iv(pd::PanelData{T}, y::Vector{T}, X_exog::Matrix{T},
         r2_within, r2_between, r2_overall,
         sigma_u, sigma_e, rho,
         first_stage_f, sargan_s, sargan_p,
-        nothing, nothing, nothing,   # cragg_donald_f, kleibergen_paap_f, stock_yogo_10pct
+        cd_f, kp_f, sy_cv,
         vn, en, in_,
         :re_iv, cov_type, n, N, pd
     )
@@ -657,6 +703,12 @@ function _estimate_hausman_taylor(pd::PanelData{T}, y::Vector{T},
     # Hausman-Taylor instrument set is non-standard; partial out only the leading intercept
     # (a demeaning) as a conservative heuristic first-stage F.
     first_stage_f = _panel_first_stage_f(X_endog_qd, Z_qd_c; n_incl=1)
+    # Endogenous block in X_full_qd_c = [1 | tv_exog | tv_endog | ti_exog | ti_endog]
+    k_tv_ex = length(tv_exog_names); k_tv_en = length(tv_endog_names)
+    k_ti_ex = length(ti_exog_names); k_ti_en = length(ti_endog_names)
+    endog_idx_ht = vcat(collect(2 + k_tv_ex:1 + k_tv_ex + k_tv_en),
+                        collect(2 + k_tv_ex + k_tv_en + k_ti_ex:1 + k_tv_ex + k_tv_en + k_ti_ex + k_ti_en))
+    cd_f, kp_f, sy_cv = _panel_weak_iv_diagnostics(X_qd_c, Z_qd_c, endog_idx_ht; cov_type=cov_type)
 
     # Sargan test
     sargan_s, sargan_p = _panel_sargan_test(resid_qd, Z_qd_c, k_full, cov_type, groups)
@@ -688,7 +740,7 @@ function _estimate_hausman_taylor(pd::PanelData{T}, y::Vector{T},
         r2_within, r2_between, r2_overall,
         sigma_u, sigma_e, rho,
         first_stage_f, sargan_s, sargan_p,
-        nothing, nothing, nothing,   # cragg_donald_f, kleibergen_paap_f, stock_yogo_10pct
+        cd_f, kp_f, sy_cv,
         vn, en, in_,
         :hausman_taylor, cov_type, n, N, pd
     )

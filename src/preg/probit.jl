@@ -251,28 +251,13 @@ function _xtprobit_re(pd::PanelData{T}, y::Vector{T}, X::Matrix{T},
     sigma_u = exp(theta[k_full + 1])
     loglik_final = loglik_old
 
-    # Numerical Hessian
-    n_params = k_full + 1
-    hess = zeros(T, n_params, n_params)
-    eps_h = T(1e-4)
-    for i in 1:n_params
-        theta_p = copy(theta)
-        theta_m = copy(theta)
-        theta_p[i] += eps_h
-        theta_m[i] -= eps_h
-        _, g_p = _re_probit_loglik(theta_p, y, X_c, groups, unique_groups,
-                                    group_obs, nodes, weights)
-        _, g_m = _re_probit_loglik(theta_m, y, X_c, groups, unique_groups,
-                                    group_obs, nodes, weights)
-        hess[:, i] .= (g_p .- g_m) ./ (2 * eps_h)
+    if !converged
+        @warn "RE probit did not converge in $iterations iterations (maxiter=$maxiter). " *
+              "Raise maxiter or relax tol." maxlog=1
     end
-    hess = (hess .+ hess') ./ 2
 
-    vcov_full = try
-        robust_inv(-hess)
-    catch
-        zeros(T, n_params, n_params)
-    end
+    vcov_full = _re_probit_vcov(theta, y, X_c, groups, unique_groups, group_obs,
+                                nodes, weights, cov_type)
     vcov_mat = vcov_full[1:k_full, 1:k_full]
 
     # Fitted probabilities
@@ -296,6 +281,7 @@ function _xtprobit_re(pd::PanelData{T}, y::Vector{T}, X::Matrix{T},
     p_bar = clamp(mean(y), T(1e-10), one(T) - T(1e-10))
     loglik_null = T(n) * (p_bar * log(p_bar) + (one(T) - p_bar) * log(one(T) - p_bar))
 
+    n_params = k_full + 1
     pseudo_r2 = one(T) - loglik_final / loglik_null
     aic_val = -2 * loglik_final + 2 * T(n_params)
     bic_val = -2 * loglik_final + log(T(n)) * T(n_params)
@@ -309,6 +295,47 @@ function _xtprobit_re(pd::PanelData{T}, y::Vector{T}, X::Matrix{T},
         sigma_u, rho,
         vn, :re, cov_type, converged, iterations, n, N, pd
     )
+end
+
+"""
+Entity-clustered (or pure-information) VCE for RE/CRE probit `theta = [β; log σ_u]`.
+Numerical Hessian of the total loglik supplies the bread; under `:cluster` the meat is
+the outer product of per-group scores (panel-robust sandwich).
+"""
+function _re_probit_vcov(theta::Vector{T}, y::Vector{T}, X_c::Matrix{T},
+                         groups::Vector{Int}, unique_groups::Vector{Int},
+                         group_obs::Dict{Int,Vector{Int}},
+                         nodes::Vector{Float64}, weights::Vector{Float64},
+                         cov_type::Symbol) where {T<:AbstractFloat}
+    n_params = length(theta)
+    hess = zeros(T, n_params, n_params)
+    eps_h = T(1e-4)
+    for i in 1:n_params
+        theta_p = copy(theta); theta_m = copy(theta)
+        theta_p[i] += eps_h; theta_m[i] -= eps_h
+        _, g_p = _re_probit_loglik(theta_p, y, X_c, groups, unique_groups,
+                                    group_obs, nodes, weights)
+        _, g_m = _re_probit_loglik(theta_m, y, X_c, groups, unique_groups,
+                                    group_obs, nodes, weights)
+        hess[:, i] .= (g_p .- g_m) ./ (2 * eps_h)
+    end
+    hess = (hess .+ hess') ./ 2
+    bread = try
+        Matrix{T}(robust_inv(-hess))
+    catch
+        return zeros(T, n_params, n_params)
+    end
+    cov_type == :cluster || return bread
+
+    meat = zeros(T, n_params, n_params)
+    for g in unique_groups
+        # Score of group loglik at current theta
+        _, s_g = _re_probit_loglik(theta, y, X_c, groups, [g],
+                                    Dict(g => group_obs[g]), nodes, weights)
+        meat .+= s_g * s_g'
+    end
+    V = bread * meat * bread
+    Matrix{T}((V .+ V') ./ 2)
 end
 
 # =============================================================================
@@ -381,27 +408,14 @@ function _xtprobit_cre(pd::PanelData{T}, y::Vector{T}, X::Matrix{T},
     sigma_u = exp(theta[k_full + 1])
     loglik_final = loglik_old
 
-    n_params = k_full + 1
-    hess = zeros(T, n_params, n_params)
-    eps_h = T(1e-4)
-    for i in 1:n_params
-        theta_p = copy(theta)
-        theta_m = copy(theta)
-        theta_p[i] += eps_h
-        theta_m[i] -= eps_h
-        _, g_p = _re_probit_loglik(theta_p, y, X_c, groups, unique_groups,
-                                    group_obs, nodes, weights)
-        _, g_m = _re_probit_loglik(theta_m, y, X_c, groups, unique_groups,
-                                    group_obs, nodes, weights)
-        hess[:, i] .= (g_p .- g_m) ./ (2 * eps_h)
+    if !converged
+        @warn "CRE probit did not converge in $iterations iterations (maxiter=$maxiter). " *
+              "Raise maxiter or relax tol." maxlog=1
     end
-    hess = (hess .+ hess') ./ 2
 
-    vcov_full = try
-        robust_inv(-hess)
-    catch
-        zeros(T, n_params, n_params)
-    end
+    n_params = k_full + 1
+    vcov_full = _re_probit_vcov(theta, y, X_c, groups, unique_groups, group_obs,
+                                nodes, weights, cov_type)
     vcov_mat = vcov_full[1:k_full, 1:k_full]
 
     # Fitted probabilities

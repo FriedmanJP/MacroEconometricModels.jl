@@ -172,8 +172,11 @@ function _estimate_callaway_santanna(pd::PanelData{T}, outcome_col::Int, treat_c
     Phi = zeros(T, n_units, n_evt)   # Φ[i,ei] = per-unit influence of the event-time-e ATT
 
     for (ei, e) in enumerate(event_times_all)
-        # With universal base, reference period e=-1 is zero by construction
-        if base_period == :universal && e == reference_period
+        # Reference period e=-1 is normalized to zero in storage so field access
+        # matches the report mask "(ref) —". Under :universal this is exact by
+        # construction; under :varying the adjacent-period pre-trend at e=-1 is
+        # estimable but is still the omitted reference for the event-study path.
+        if e == reference_period
             att_agg[ei] = zero(T)
             continue                                     # Φ column stays 0 ⇒ se = 0
         end

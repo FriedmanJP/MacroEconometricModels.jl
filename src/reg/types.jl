@@ -770,6 +770,12 @@ function Base.show(io::IO, m::RegModel{T}) where {T}
                 spec = vcat(spec, Any["Anderson LR p" _format_pvalue(ar_p)])
             end
         end
+        # Sargan-Hansen J overidentification (populated for overidentified IV fits)
+        if m.sargan_stat !== nothing
+            spec = vcat(spec, Any["Sargan-Hansen J" _fmt(m.sargan_stat; digits=2)])
+            m.sargan_pval !== nothing && (spec = vcat(spec, Any[
+                "Sargan-Hansen p" _format_pvalue(m.sargan_pval)]))
+        end
     end
 
     _pretty_table(io, spec;
@@ -893,7 +899,15 @@ struct OddsRatio{T<:AbstractFloat}
     ci_upper::Vector{T}
     varnames::Vector{String}
     conf_level::T
+    # Display labels — defaults keep logit "Odds Ratios"; count models pass IRR labels
+    title::String
+    ratio_label::String
 end
+
+# Back-compat: 6-arg constructor defaults to odds-ratio labels
+OddsRatio(or::Vector{T}, se::Vector{T}, ci_lower::Vector{T}, ci_upper::Vector{T},
+          varnames::Vector{String}, conf_level::T) where {T<:AbstractFloat} =
+    OddsRatio{T}(or, se, ci_lower, ci_upper, varnames, conf_level, "Odds Ratios", "Odds Ratio")
 
 function Base.show(io::IO, r::OddsRatio{T}) where {T}
     ci_pct = round(Int, 100 * r.conf_level)
@@ -909,8 +923,8 @@ function Base.show(io::IO, r::OddsRatio{T}) where {T}
         data[row, 5] = _fmt(r.ci_upper[i])
     end
     _pretty_table(io, data;
-        title = "Odds Ratios",
-        column_labels = ["", "Odds Ratio", "Std.Err.", "[$ci_pct%", "CI]"],
+        title = r.title,
+        column_labels = ["", r.ratio_label, "Std.Err.", "[$ci_pct%", "CI]"],
         alignment = [:l, :r, :r, :r, :r])
 end
 

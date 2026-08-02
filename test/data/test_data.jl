@@ -163,6 +163,10 @@ const _suppress_warnings = MacroEconometricModels._suppress_warnings
             @test pd.cohort_id !== nothing
             @test length(pd.cohort_id) == 60
             @test length(unique(pd.cohort_id)) == 3
+            # #587: cohort values stored verbatim (NOT ranks). Never-treated stays 0.
+            @test Set(unique(pd.cohort_id)) == Set([0, 1, 2])
+            @test pd.cohort_id[1] == 1          # first unit treated at t=1
+            @test pd.cohort_id[end] == 0        # last unit never-treated
             # cohort column should be excluded from data
             @test nvars(pd) == 1
             @test varnames(pd) == ["y"]
@@ -178,6 +182,21 @@ const _suppress_warnings = MacroEconometricModels._suppress_warnings
             panel_summary(buf, pd)
             summary_str = String(take!(buf))
             @test occursin("Cohorts: 3", summary_str)
+
+            # Calendar-year cohorts preserved against calendar time_id (#587)
+            df_yr = DataFrame(
+                id = repeat(1:4, inner=5),
+                year = repeat(2003:2007, 4),
+                y = randn(20),
+                first_treat = repeat([0, 2004, 2007, 0], inner=5),
+            )
+            pd_yr = xtset(df_yr, :id, :year; cohort=:first_treat)
+            @test Set(unique(pd_yr.cohort_id)) == Set([0, 2004, 2007])
+            @test pd_yr.time_id[1] == 2003
+            # Cohort period not in time_id → ArgumentError
+            df_bad = DataFrame(id=[1,1], year=[2003,2004], y=[1.0,2.0],
+                               first_treat=[1999,1999])
+            @test_throws ArgumentError xtset(df_bad, :id, :year; cohort=:first_treat)
         end
 
         @testset "group_data extraction" begin

@@ -402,17 +402,30 @@ end
 # Shared Finalization Helpers
 # =============================================================================
 
-"""Compute SE from full Jacobian G and vcov V, then build MarginalEffects."""
+"""Compute SE from full Jacobian G and vcov V, then build MarginalEffects.
+Drops intercept columns (`_cons` / `const` / etc.) — their AMEs are not interpretable."""
 function _panel_me_finalize(me::Vector{T}, G::Matrix{T}, V::Matrix{T},
                              varnames::Vector{String}, conf_level::T) where {T}
-    var_me = G * V * G'
+    keep = findall(v -> _display_intercept(v) != _INTERCEPT_LABEL, varnames)
+    isempty(keep) && (keep = collect(eachindex(varnames)))
+    me_k = me[keep]
+    G_k = G[keep, :]
+    vn_k = varnames[keep]
+    var_me = G_k * V * G_k'
     se = sqrt.(max.(diag(var_me), zero(T)))
-    _panel_me_stats(me, se, varnames, conf_level)
+    _panel_me_stats(me_k, se, vn_k, conf_level)
 end
 
 """Build MarginalEffects from AME vector and SE vector."""
 function _panel_me_stats(me::Vector{T}, se::Vector{T},
                           varnames::Vector{String}, conf_level::T) where {T}
+    # Drop intercept rows if any slipped through (e.g. CRE path)
+    keep = findall(v -> _display_intercept(v) != _INTERCEPT_LABEL, varnames)
+    if !isempty(keep) && length(keep) < length(varnames)
+        me = me[keep]
+        se = se[keep]
+        varnames = varnames[keep]
+    end
     k = length(me)
     z_stat = Vector{T}(undef, k)
     p_values = Vector{T}(undef, k)
