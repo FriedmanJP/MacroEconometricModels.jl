@@ -414,7 +414,7 @@ Persist a fitted `model` — or a data container — to `path` in a versioned,
 self-describing container. Coverage spans every VAR/regression/panel/volatility/
 factor/ARIMA/local-projection/GMM model and the data containers
 (`TimeSeriesData`, `PanelData`, `CrossSectionData`, `IOData`); the full set is
-[`MacroEconometricModels._SERIALIZABLE_TYPES`](@ref). The file records the
+`MacroEconometricModels._SERIALIZABLE_TYPES`. The file records the
 [`SERIALIZATION_FORMAT_VERSION`](@ref), the package and Julia versions, a
 timestamp, and — for a randomized result — its reproducibility manifest. Only
 public fields are stored; cached factorizations are recomputed on load, and

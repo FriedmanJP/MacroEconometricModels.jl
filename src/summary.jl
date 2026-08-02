@@ -210,11 +210,15 @@ function report(io::IO, model::VARModel{T}) where {T}
 end
 
 """
-    report(post::BVARPosterior)
+    report(post::BVARPosterior; repro = false)
 
 Print comprehensive Bayesian VAR posterior summary.
+
+`repro = true` appends the reproducibility footer; see `report(::ImpulseResponse)`
+for why it is opt-in.
 """
-report(post::BVARPosterior) = show(stdout, post)
+report(post::BVARPosterior; repro::Bool = false) =
+    show(IOContext(stdout, :repro => repro), post)
 
 """
     report(vecm::VECMModel)
@@ -405,12 +409,22 @@ Print X-13ARIMA-SEATS seasonal adjustment summary.
 report(r::X13FilterResult) = show(stdout, r)
 
 """
-    report(irf::ImpulseResponse)
+    report(irf::ImpulseResponse; repro = false)
     report(irf::BayesianImpulseResponse)
 
 Print IRF summary with values at selected horizons.
+
+`repro = true` appends the reproducibility footer, recording the seed, thread
+count, package and Julia versions, and the git revision of the working tree. It
+is opt-in because the revision goes stale on the next commit and carries a
+`+dirty` flag when the tree is dirty, which must not be baked into durable
+artifacts such as built documentation (#521). The footer appears only when the
+IRF carries a manifest, which the bootstrap path attaches and `ci_type = :none`
+leaves as `nothing`; `irf.manifest` holds the same information and stays readable
+regardless of this keyword.
 """
-report(irf::ImpulseResponse) = show(stdout, irf)
+report(irf::ImpulseResponse; repro::Bool = false) =
+    show(IOContext(stdout, :repro => repro), irf)
 report(irf::BayesianImpulseResponse) = show(stdout, irf)
 
 """

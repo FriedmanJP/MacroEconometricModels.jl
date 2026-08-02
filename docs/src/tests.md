@@ -1,12 +1,8 @@
 # [Hypothesis Tests](@id tests_page)
 
-MacroEconometricModels.jl provides a comprehensive suite of statistical hypothesis tests for macroeconomic time series analysis. The test battery covers pre-estimation diagnostics (unit root, cointegration, structural breaks, panel stationarity), post-estimation specification checks (Granger causality, normality, ARCH effects, model comparison), and panel-level instrument validation. All result types implement the StatsAPI interface for uniform access to test statistics, p-values, and degrees of freedom.
+MacroEconometricModels.jl provides a comprehensive suite of statistical hypothesis tests for macroeconomic time series analysis. The battery covers pre-estimation diagnostics --- integration order, cointegration, structural breaks, panel stationarity --- and post-estimation specification checks --- Granger causality, normality, ARCH effects, independence, distributional fit, and nested model comparison.
 
-- **[Unit Root & Cointegration](tests_unitroot.md)**: ADF, KPSS, Phillips-Perron, Zivot-Andrews, and Ng-Perron tests for univariate stationarity; Johansen cointegration test
-- **[Advanced Unit Root](tests_unitroot_advanced.md)**: Fourier ADF/KPSS, DF-GLS/ERS, LM unit root (0/1/2 breaks), and two-break ADF for improved power under structural breaks
-- **[Structural Breaks](tests_breaks.md)**: Andrews single-break, Bai-Perron multiple-break, and factor loading stability tests for detecting parameter instability
-- **[Panel Tests](tests_panel.md)**: PANIC, Pesaran CIPS, and Moon-Perron tests for panel unit roots with cross-sectional dependence
-- **[Model Diagnostics](tests_diagnostics.md)**: Granger causality, multivariate normality, ARCH-LM, Ljung-Box, Hansen J, Andrews-Lu MMSC, and likelihood ratio / Lagrange multiplier tests
+The six child pages divide the battery by question. Two pages cover univariate integration order (standard tests and the high-power variants designed for breaks, seasonality, and bubbles), one covers residual-based cointegration, one covers structural breaks, one covers panel data, and one covers everything applied to an estimated model. This page owns the shared material: the decision tables that route a question to a test, and the StatsAPI interface every result type implements.
 
 ```@setup tests_overview
 using MacroEconometricModels, Random
@@ -17,206 +13,113 @@ Random.seed!(42)
 
 ## Quick Start
 
-**Recipe 1: ADF unit root test**
+Test a price level for a unit root with automatic lag selection:
 
 ```@example tests_overview
-# Test CPI price level for a unit root
 fred = load_example(:fred_md)
 cpi = filter(isfinite, fred[:, "CPIAUCSL"])
 result = adf_test(cpi; lags=:aic, regression=:constant)
 report(result)
 ```
 
-**Recipe 2: Andrews structural break test**
-
-```@example tests_overview
-# Detect a structural break in a linear regression
-T = 200
-X = hcat(ones(T), randn(T))
-y = X * [1.0, 2.0] + randn(T) * 0.5
-y[101:end] .+= X[101:end, 2] .* 3.0   # break at midpoint
-
-result = andrews_test(y, X; test=:supwald, trimming=0.15)
-report(result)
-```
-
-**Recipe 3: PANIC panel unit root test**
-
-```@example tests_overview
-# Panel data: 100 time periods, 20 cross-section units
-X_panel = cumsum(randn(100, 20), dims=1)   # I(1) panel with common factors
-result = panic_test(X_panel; r=:auto, method=:pooled)
-report(result)
-```
-
-**Recipe 4: Normality test suite on VAR residuals**
-
-```@example tests_overview
-# Estimate a VAR and test residual normality
-fred = load_example(:fred_md)
-Y = to_matrix(apply_tcode(fred[:, ["INDPRO", "CPIAUCSL", "FEDFUNDS"]]))
-Y = Y[all.(isfinite, eachrow(Y)), :]
-m = estimate_var(Y, 2)
-
-suite = normality_test_suite(m)
-report(suite)
-```
+The test statistic of 2.15 lies far above the 5% critical value of ``-2.85``, so the test fails to reject the unit root null --- the expected verdict for a price *level*. Confirm the finding with `kpss_test`, whose null is stationarity, before differencing the series.
 
 ---
 
-## Test Taxonomy
+## Choosing a Method
 
-The package exports over 30 test functions organized into ten categories. Each function returns a typed result struct with a `show` method for publication-quality display and full StatsAPI compatibility.
+### Integration Order
 
-### Unit Root Tests
+The first step before specifying a VAR, VECM, or Local Projection. See [Unit Root & Cointegration](@ref tests_unitroot_page) and [Advanced Unit Root](@ref tests_unitroot_advanced_page).
 
-Tests for univariate stationarity and integration order. See [Unit Root & Cointegration](tests_unitroot.md) for full documentation.
-
-1. `adf_test` -- Augmented Dickey-Fuller test (Dickey & Fuller 1979). Null: unit root
-2. `kpss_test` -- KPSS stationarity test (Kwiatkowski et al. 1992). Null: stationarity
-3. `pp_test` -- Phillips-Perron non-parametric unit root test (Phillips & Perron 1988)
-4. `za_test` -- Zivot-Andrews unit root test with endogenous structural break (Zivot & Andrews 1992)
-5. `ngperron_test` -- Ng-Perron GLS-detrended tests with improved size properties (Ng & Perron 2001)
-6. `fourier_adf_test` -- Fourier ADF unit root test with flexible Fourier form (Enders & Lee 2012). Null: unit root
-7. `fourier_kpss_test` -- Fourier KPSS stationarity test with Fourier terms (Becker, Enders & Lee 2006). Null: stationarity
-8. `dfgls_test` -- DF-GLS / ERS point-optimal unit root test with GLS detrending (Elliott, Rothenberg & Stock 1996). Null: unit root
-9. `lm_unitroot_test` -- LM unit root test with 0, 1, or 2 structural breaks (Schmidt-Phillips 1992; Lee-Strazicich 2003, 2013). Null: unit root with breaks
-10. `adf_2break_test` -- Two-break ADF unit root test (Narayan & Popp 2010). Null: unit root with two breaks
+| Feature needed | Recommended | Why |
+|----------------|-------------|-----|
+| Baseline unit root test | `adf_test` | Automatic lag selection via AIC |
+| Confirmation under the opposite null | `kpss_test` | Resolves non-rejection ambiguity |
+| Serially correlated errors | `pp_test` | Non-parametric variance correction |
+| One unknown structural break | `za_test` | Break date estimated endogenously |
+| Small sample (``T < 100``) | `ngperron_test` | GLS detrending improves size |
+| Smooth or gradual breaks | `fourier_adf_test`, `fourier_kpss_test` | No break dates to specify |
+| Maximum power near unity | `dfgls_test`, `ers_test` | Near-optimal against local alternatives |
+| Breaks present under the null | `lm_unitroot_test` | Rejection is unambiguous |
+| Two break dates | `adf_2break_test` | Grid search over both dates |
+| Seasonal unit roots | `hegy_test` | Tests each seasonal frequency |
+| Explosive bubble behaviour | `sadf_test`, `gsadf_test` | Right-tailed sup-ADF with date-stamping |
+| Quick multi-test verdict | `unit_root_summary` | Combines ADF, KPSS, and PP |
+| Every column of a data matrix | `test_all_variables` | One call screens the panel |
 
 ### Cointegration
 
-Tests for multivariate long-run equilibrium relationships. See [Unit Root & Cointegration](tests_unitroot.md).
+See [Unit Root & Cointegration](@ref tests_unitroot_page) for the system approach and [Residual-Based Cointegration](@ref tests_cointegration_page) for single-equation tests.
 
-11. `johansen_test` -- Johansen trace and maximum eigenvalue tests (Johansen 1991)
-12. `gregory_hansen_test` -- Gregory-Hansen cointegration test with structural break (Gregory & Hansen 1996). Null: no cointegration
-
-### Structural Breaks
-
-Tests for parameter instability at unknown break dates. See [Structural Breaks](tests_breaks.md).
-
-13. `andrews_test` -- Andrews (1993) sup-Wald / Andrews-Ploberger (1994) exp- and mean-Wald tests for a single structural break
-14. `bai_perron_test` -- Bai-Perron (1998, 2003) multiple structural break test with dynamic programming and BIC/LWZ selection
-15. `factor_break_test` -- Structural break tests for factor models: Breitung-Eickmeier (2011) loading stability, Chen-Dolado-Gonzalo (2014) factor number change, Han-Inoue (2015) sup-Wald
-
-### Panel Unit Root
-
-Tests for panel stationarity under cross-sectional dependence. See [Panel Tests](tests_panel.md).
-
-16. `panic_test` -- Bai-Ng (2004, 2010) PANIC decomposition into common factors and idiosyncratic components
-17. `pesaran_cips_test` -- Pesaran (2007) cross-sectionally augmented IPS test
-18. `moon_perron_test` -- Moon-Perron (2004) factor-adjusted pooled t-statistics
-19. `panel_unit_root_summary` -- Runs all three panel tests and prints a consolidated summary table
-
-### VAR Diagnostics
-
-Specification tests for Vector Autoregressive models. See [Model Diagnostics](tests_diagnostics.md).
-
-20. `is_stationary` -- Companion matrix eigenvalue check for VAR stability
-21. `granger_test` -- Pairwise or block Granger causality Wald test (Granger 1969)
-22. `granger_test_all` -- All-pairs Granger causality matrix
-
-### Panel VAR
-
-GMM instrument validation and lag selection for Panel VARs. See [Model Diagnostics](tests_diagnostics.md).
-
-23. `pvar_hansen_j` -- Hansen (1982) J-test for overidentifying restrictions
-24. `pvar_mmsc` -- Andrews-Lu (2001) model and moment selection criteria (BIC/AIC/HQIC)
-25. `pvar_lag_selection` -- Optimal lag order via MMSC comparison across specifications
-
-### Normality
-
-Multivariate normality tests for model residuals. See [Model Diagnostics](tests_diagnostics.md).
-
-26. `jarque_bera_test` -- Multivariate and component-wise Jarque-Bera (Jarque & Bera 1980)
-27. `mardia_test` -- Mardia skewness, kurtosis, and combined tests (Mardia 1970)
-28. `doornik_hansen_test` -- Doornik-Hansen omnibus test (Doornik & Hansen 2008)
-29. `henze_zirkler_test` -- Henze-Zirkler invariant test (Henze & Zirkler 1990)
-30. `normality_test_suite` -- Runs all seven normality tests and returns a consolidated `NormalityTestSuite`
-
-### ARCH Diagnostics
-
-Tests for conditional heteroskedasticity in residuals. See [Model Diagnostics](tests_diagnostics.md).
-
-31. `arch_lm_test` -- Engle (1982) ARCH-LM test (``T \cdot R^2`` from squared residual regression)
-32. `ljung_box_squared` -- Ljung-Box test on squared residuals for remaining ARCH effects
-
-### Model Comparison
-
-Generic nested model comparison tests. See [Model Diagnostics](tests_diagnostics.md).
-
-33. `lr_test` -- Likelihood ratio test for any pair of nested models with `loglikelihood` (Wilks 1938)
-34. `lm_test` -- Lagrange multiplier (score) test for ARIMA, VAR, ARCH, and GARCH families (Rao 1948)
-
-### Convenience
-
-Batch testing utilities for multi-variable workflows.
-
-35. `unit_root_summary` -- Runs ADF, KPSS, PP, and optionally Fourier ADF, DF-GLS on a single series and reports a combined verdict
-36. `test_all_variables` -- Applies a unit root test (including Fourier ADF, DF-GLS, LM unit root) to every column of a data matrix
-
----
-
-## Decision Flowchart
-
-### Pre-Estimation: Integration Order
-
-Determining the integration order of each variable is the first step before specifying a VAR, VECM, or Local Projection.
-
-| Situation | Recommended test | Rationale |
-|-----------|-----------------|-----------|
-| Standard unit root test | `adf_test` | Baseline; automatic lag selection via AIC |
-| Confirm ADF finding | `kpss_test` | Opposite null hypothesis eliminates ambiguity |
-| Autocorrelation concerns | `pp_test` | Non-parametric; no lag specification needed |
-| Suspected structural break | `za_test` | ADF has low power against break-stationary alternatives |
-| Small sample (``T < 100``) | `ngperron_test` | GLS detrending improves size and power |
-| Multiple variables, I(1) | `johansen_test` | Tests for cointegrating rank before VECM estimation |
-| Smooth structural breaks | `fourier_adf_test` | Fourier terms capture gradual shifts without specifying break dates |
-| Best power against near-unit-root | `dfgls_test` | GLS detrending; reports ERS Pt and MGLS statistics |
-| Unit root with breaks under H₀ | `lm_unitroot_test` | Breaks included under the null; 0/1/2 breaks |
-| Two known-type structural breaks | `adf_2break_test` | Grid search over two break dates |
-| Quick multi-test diagnosis | `unit_root_summary` | Combines ADF + KPSS + PP with automatic verdict |
-
-### Pre-Estimation: Panel Data
-
-Panel unit root tests account for cross-sectional dependence that invalidates standard IPS-type tests.
-
-| Situation | Recommended test | Rationale |
-|-----------|-----------------|-----------|
-| Factor-driven dependence | `panic_test` | Separates common and idiosyncratic components |
-| General cross-section dependence | `pesaran_cips_test` | Augments ADF with cross-section averages |
-| Large N, moderate T | `moon_perron_test` | Factor-adjusted pooled statistics |
-| Comprehensive panel check | `panel_unit_root_summary` | All three tests with consolidated output |
+| Feature needed | Recommended | Why |
+|----------------|-------------|-----|
+| Cointegrating rank of a system | `johansen_test` | Trace and maximum-eigenvalue statistics |
+| Single equation, rank not needed | `engle_granger_test` | ADF on the cointegrating residual |
+| Serial correlation in the residual | `phillips_ouliaris_test` | Semiparametric long-run variance |
+| Null of cointegration | `hansen_instability_test` | ``L_c`` parameter-instability statistic |
+| Superfluous-regressor check | `park_added_test` | ``H(p,q)`` added-variables test |
+| Regime shift in the relationship | `gregory_hansen_test` | Break allowed under the alternative |
+| Panel cointegration | `pedroni_test`, `kao_test`, `westerlund_test` | Pool evidence across units |
 
 ### Structural Stability
 
-Structural break tests detect changes in regression parameters at unknown dates.
+Parameter instability at unknown dates. See [Structural Breaks](@ref tests_breaks_page).
 
-| Situation | Recommended test | Rationale |
-|-----------|-----------------|-----------|
-| Single unknown break | `andrews_test` | sup-Wald for point detection; exp/mean for average evidence |
-| Multiple unknown breaks | `bai_perron_test` | Dynamic programming with BIC/LWZ break selection |
-| Factor loading instability | `factor_break_test` | Loading CUSUM, factor number change, or sup-Wald |
-| Cointegration with regime shift | `gregory_hansen_test` | Three models (C/CT/CS), three statistics (ADF*/Zt*/Za*) |
+| Feature needed | Recommended | Why |
+|----------------|-------------|-----|
+| Single unknown break | `andrews_test` | sup-, exp-, and mean-Wald functionals |
+| Multiple unknown breaks | `bai_perron_test` | Dynamic programming with BIC/LWZ |
+| Factor loading instability | `factor_break_test` | Loading CUSUM, sup-Wald, rank change |
+
+### Panel Data
+
+Panel tests account for cross-sectional dependence that invalidates pooled time-series tests. See [Panel Tests](@ref tests_panel_page).
+
+| Feature needed | Recommended | Why |
+|----------------|-------------|-----|
+| Factor-driven dependence | `panic_test` | Separates common and idiosyncratic parts |
+| General cross-section dependence | `pesaran_cips_test` | Augments ADF with cross-section means |
+| Large ``N``, moderate ``T`` | `moon_perron_test` | Factor-adjusted pooled statistics |
+| Cross-sectionally independent panel | `llc_test`, `ips_test`, `fisher_panel_test` | First-generation, no factor structure |
+| Null of panel stationarity | `hadri_test` | KPSS-type null for panels |
+| Heterogeneous panel causality | `dh_causality_test` | Coefficients vary across units |
+| Comprehensive panel check | `panel_unit_root_summary` | Three tests, one table |
 
 ### Post-Estimation Diagnostics
 
-After estimating a model, specification tests validate the assumptions underlying inference.
+Specification tests that validate the assumptions underlying inference. See [Model Diagnostics](@ref tests_diagnostics_page).
 
-| Situation | Recommended test | Rationale |
-|-----------|-----------------|-----------|
-| VAR stability | `is_stationary` | Eigenvalue check ensures non-explosive dynamics |
-| Predictive causality | `granger_test` / `granger_test_all` | Pairwise and block Wald tests |
-| Residual normality | `normality_test_suite` | Seven tests covering skewness, kurtosis, and omnibus |
-| Conditional heteroskedasticity | `arch_lm_test` / `ljung_box_squared` | Detects remaining ARCH effects |
-| Nested model comparison | `lr_test` / `lm_test` | Likelihood ratio and score-based nesting tests |
+| Feature needed | Recommended | Why |
+|----------------|-------------|-----|
+| VAR stability | `is_stationary` | Companion eigenvalue check |
+| Predictive causality | `granger_test`, `granger_test_all` | Pairwise and block Wald tests |
+| Residual normality | `normality_test_suite` | Seven tests in one call |
+| Conditional heteroskedasticity | `arch_lm_test`, `ljung_box_squared` | Detects remaining ARCH effects |
+| Nonlinear dependence | `bds_test` | Finds structure linear tests miss |
+| Distributional fit | `edf_test` | Anderson-Darling and Kolmogorov-Smirnov |
+| Random-walk behaviour | `variance_ratio_test` | Heteroskedasticity-robust Lo-MacKinlay |
+| Nested model comparison | `lr_test`, `lm_test` | Likelihood ratio and score tests |
+| Group and rank comparisons | `equality_test`, `cor_test` | Distribution equality and rank correlation |
 | PVAR instrument validity | `pvar_hansen_j` | Overidentifying restrictions |
-| PVAR model selection | `pvar_mmsc` / `pvar_lag_selection` | Andrews-Lu MMSC criteria |
+| PVAR lag order | `pvar_mmsc`, `pvar_lag_selection` | Andrews-Lu MMSC criteria |
+
+---
+
+## Child Pages
+
+- [Unit Root & Cointegration](@ref tests_unitroot_page) --- ADF, KPSS, Phillips-Perron, Zivot-Andrews, and Ng-Perron tests, the `unit_root_summary` and `test_all_variables` batch utilities, and the Johansen system cointegration test
+- [Advanced Unit Root](@ref tests_unitroot_advanced_page) --- Fourier ADF/KPSS, DF-GLS and ERS point-optimal, HEGY seasonal roots, LM unit root with 0/1/2 breaks, two-break ADF, and SADF/GSADF bubble detection
+- [Residual-Based Cointegration](@ref tests_cointegration_page) --- Engle-Granger two-step, Phillips-Ouliaris, Hansen ``L_c`` instability, and Park ``H(p,q)`` added-variables tests
+- [Structural Breaks](@ref tests_breaks_page) --- Andrews single-break, Bai-Perron multiple-break, factor model break tests, and Gregory-Hansen cointegration with a regime shift
+- [Panel Tests](@ref tests_panel_page) --- first- and second-generation panel unit root tests, PANIC, Pesaran CIPS, Moon-Perron, panel cointegration, Dumitrescu-Hurlin causality, and Panel VAR specification tests
+- [Model Diagnostics](@ref tests_diagnostics_page) --- VAR stationarity, Granger causality, normality suite, ARCH diagnostics, BDS independence, EDF goodness-of-fit, variance-ratio tests, and nested model comparison
 
 ---
 
 ## StatsAPI Interface
 
-All test result types implement the StatsAPI.jl interface. This provides a uniform way to extract test statistics, p-values, and degrees of freedom regardless of the specific test.
+All test result types implement the StatsAPI.jl interface, providing a uniform way to extract test statistics, p-values, and degrees of freedom regardless of the specific test.
 
 ```@example tests_overview
 fred = load_example(:fred_md)
@@ -231,54 +134,31 @@ pvalue(result)    # p-value
 
 ### Type Hierarchy
 
+The results form a three-level hierarchy rooted at `StatsAPI.HypothesisTest`:
+
 ```
 StatsAPI.HypothesisTest
-  AbstractUnitRootTest
-    ADFResult{T}
-    KPSSResult{T}
-    PPResult{T}
-    ZAResult{T}
-    NgPerronResult{T}
-    FourierADFResult{T}
-    FourierKPSSResult{T}
-    DFGLSResult{T}
-    LMUnitRootResult{T}
-    ADF2BreakResult{T}
-    GregoryHansenResult{T}
-    JohansenResult{T}
-    AndrewsResult{T}
-    BaiPerronResult{T}
-    PANICResult{T}
-    PesaranCIPSResult{T}
-    MoonPerronResult{T}
-    FactorBreakResult{T}
-  AbstractNormalityTest
+  AbstractUnitRootTest      # unit root, cointegration, break, and panel results
+    ADFResult{T}, KPSSResult{T}, PPResult{T}, ZAResult{T}, NgPerronResult{T}, ...
+  AbstractNormalityTest     # multivariate normality results
     NormalityTestResult{T}
-  GrangerCausalityResult{T}
-  PVARTestResult{T}
-  LRTestResult{T}
-  LMTestResult{T}
-  VARStationarityResult{T}
+  GrangerCausalityResult{T}, LRTestResult{T}, LMTestResult{T}, PVARTestResult{T}, ...
 ```
 
-Every result type supports `nobs()`, `dof()`, and `pvalue()`. For tests with multiple statistics (Ng-Perron returns four, Moon-Perron returns two), `pvalue()` returns the primary statistic's p-value (MZt for Ng-Perron, ``t_a^*`` for Moon-Perron). Access individual statistics through the result fields documented on each sub-page.
+`AbstractUnitRootTest` is the widest branch: every unit root, cointegration, structural break, and panel result type descends from it, including the newer `BubbleResult`, `HEGYResult`, `ERSResult`, `EDFTestResult`, `VarianceRatioResult`, `BDSResult`, and `DumitrescuHurlinResult` types. The complete catalog with field documentation lives on the [Hypothesis Tests API](@ref api_tests) page.
 
-!!! note "Technical Note"
-    The `NormalityTestSuite` returned by `normality_test_suite` is not itself a `HypothesisTest` subtype --- it is a container holding multiple `NormalityTestResult` objects. Iterate over `suite.results` to access individual test p-values, or use `report(suite)` for a consolidated display.
+For tests with multiple statistics (Ng-Perron returns four, Moon-Perron returns two), `pvalue()` returns the primary statistic's p-value (MZt for Ng-Perron, ``t_a^*`` for Moon-Perron). Access individual statistics through the result fields documented on each child page.
+
+!!! note "Two results are not hypothesis tests"
+    `is_stationary` returns a `VARStationarityResult`, an eigenvalue diagnostic with no p-value. The `NormalityTestSuite` returned by `normality_test_suite` is a container holding multiple `NormalityTestResult` objects. Iterate over `suite.results` for individual p-values, or use `report(suite)` for a consolidated display.
 
 ---
 
 ## Common Pitfalls
 
-1. **Conflating ADF and KPSS null hypotheses.** The ADF null is "unit root" while the KPSS null is "stationarity." A non-significant ADF result does not confirm a unit root --- it means insufficient evidence against one. Always run both tests and consult the decision matrix in the [Unit Root & Cointegration](tests_unitroot.md) page.
+1. **Applying time-series unit root tests to panels.** Standard ADF, KPSS, and PP tests assume independent observations and produce invalid inference under cross-sectional dependence. For panel data, use `panic_test`, `pesaran_cips_test`, or `moon_perron_test`, which explicitly account for common factor structures.
 
-2. **Ignoring structural breaks in unit root tests.** Standard ADF and PP tests have low power against trend-stationary series with a structural break. If economic events suggest a regime change (e.g., the Great Moderation, the Global Financial Crisis), use `za_test` or pre-test with `andrews_test` before concluding non-stationarity.
-
-3. **Applying time-series unit root tests to panels.** Standard ADF, KPSS, and PP tests assume independent observations and produce invalid inference under cross-sectional dependence. For panel data, use `panic_test`, `pesaran_cips_test`, or `moon_perron_test`, which explicitly account for common factor structures.
-
-4. **Running Granger causality on non-stationary data.** The asymptotic ``\chi^2`` distribution for the Granger Wald test requires the VAR to be stationary. Apply unit root tests first, difference or cointegration-adjust the data, and verify `is_stationary(model)` before interpreting Granger causality results.
-
-5. **Over-relying on the Hansen J-test in Panel VARs.** The J-test has low power when the instrument count is large relative to the cross-section dimension ``N``. A non-rejection does not validate instruments --- it may reflect low power. Combine J-test results with Andrews-Lu MMSC criteria and economic reasoning about instrument relevance.
+2. **Running Granger causality on non-stationary data.** The asymptotic ``\chi^2`` distribution for the Granger Wald test requires the VAR to be stationary. Apply unit root tests first, difference or cointegration-adjust the data, and verify `is_stationary(model)` before interpreting Granger causality results.
 
 ---
 

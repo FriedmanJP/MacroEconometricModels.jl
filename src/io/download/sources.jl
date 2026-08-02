@@ -122,7 +122,7 @@ end
     download_eora26(folder; email, password, years=nothing, overwrite_existing=false) -> IOMetaData
 
 Download EORA26 tables (requires a worldmrio.com account). Credential-gated; the
-login POST uses [`fetch_file`](@ref) with `method="POST"`.
+login POST uses `fetch_file` with `method="POST"`.
 """
 function download_eora26(folder; email, password, years=nothing,
                          overwrite_existing::Bool=false, fetch=fetch_file)
@@ -159,7 +159,7 @@ Dispatch to the per-source downloader for `source` (`:oecd`, `:wiod`,
 `:exiobase3`, `:eora26`, `:gloria`). Returns the [`IOMetaData`](@ref) log.
 
 Pass `verify=true` (default) to check each downloaded archive's SHA-256 against
-[`IO_CHECKSUMS`](@ref): a registered digest that mismatches throws (corrupt or
+`IO_CHECKSUMS`: a registered digest that mismatches throws (corrupt or
 substituted file), while a URL with no registered digest downloads with a warning.
 Set `verify=false` to skip integrity checks entirely.
 """

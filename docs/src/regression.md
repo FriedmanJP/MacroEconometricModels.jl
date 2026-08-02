@@ -1,16 +1,23 @@
 # [Linear Regression](@id regression_page)
 
-**MacroEconometricModels.jl** provides a complete cross-sectional linear regression toolkit covering OLS, WLS, and IV/2SLS estimation with modern robust inference. All estimators produce Stata/EViews-style coefficient tables via `report()` and integrate with the package's D3.js visualization system.
+**MacroEconometricModels.jl** provides a complete cross-sectional regression toolkit: OLS, WLS, and IV/2SLS at the core, surrounded by the estimators applied work reaches for when the classical assumptions fail — robust and clustered inference, shrinkage, limited dependent variables, counts, quantiles, and systems of equations. All estimators produce Stata/EViews-style coefficient tables via `report()` and integrate with the package's D3.js visualization system.
 
 - **OLS / WLS** estimation with automatic intercept handling and goodness-of-fit statistics
 - **Heteroskedasticity-robust standard errors**: HC0 (White 1980), HC1, HC2, HC3 (MacKinnon & White 1985)
-- **Cluster-robust standard errors** with finite-sample correction (Arellano 1987)
-- **Instrumental variables / 2SLS** with first-stage F-statistic and Sargan-Hansen overidentification test
-- **Variance Inflation Factors** for multicollinearity diagnostics (Belsley, Kuh & Welsch 1980)
+- **Cluster-robust standard errors** with finite-sample correction (Arellano 1987), **Conley (1999) spatial-HAC**, and the **wild cluster bootstrap** for few clusters (Cameron, Gelbach & Miller 2008)
+- **Instrumental variables / 2SLS**, LIML, Fuller and k-class, with first-stage F, Sargan-Hansen overidentification, and weak-instrument-robust Anderson-Rubin sets
+- **Quantile regression** across the conditional distribution (Koenker & Bassett 1978) and **regression discontinuity** with CCT robust bias-corrected inference (Calonico, Cattaneo & Titiunik 2014)
+- **Long-run variance estimation**: kernel HAC (`lrvar`, `lrcov`, `lrcov_oneside`) and parametric VARHAC (Den Haan & Levin 1997)
+- **Penalized regression**: ridge, LASSO, elastic net, adaptive and post-selection variants; plus stepwise and general-to-specific model selection
 - **Censored (Tobit) and truncated regression** by MLE with McDonald–Moffitt marginal effects (Tobin 1958; Hausman & Wise 1977)
 - **Heckman sample-selection model** (two-step Heckit + full-information ML) with the Greene corrected two-step covariance (Heckman 1979)
+- **Count data**: Poisson QMLE, Negative Binomial 2, Cameron–Trivedi overdispersion test, incidence-rate ratios
+- **Robust M- and MM-estimation** (Huber 1964; Yohai 1987) and **systems**: SUR and 3SLS (Zellner 1962; Zellner & Theil 1962)
+- **Specification, stability, and influence diagnostics**: `white_test`, `breusch_pagan_test`, `breusch_godfrey_test`, `reset_test`, `chow_test`, `cusum_test`, `influence_stats`, `vif`
 - **CrossSectionData dispatch** for symbol-based formula-like syntax
 - **StatsAPI interface**: `coef`, `vcov`, `predict`, `confint`, `stderror`, `nobs`, `r2`
+
+The regression-specific specification tests are documented on this page rather than on [Model Diagnostics](@ref tests_diagnostics_page), because each one is an auxiliary regression run on a fitted [`RegModel`](@ref) and is read alongside its coefficient table. Model Diagnostics covers the residual tests that apply to any fitted model — ARCH effects, normality, Granger causality, BDS independence — and the Quandt–Andrews sup-Wald test for an *unknown* break date.
 
 ```@setup reg
 using MacroEconometricModels, Random, Distributions
@@ -80,7 +87,8 @@ x3 = randn(n)
 X = hcat(ones(n), x1, x2, x3)
 y = X * [1.0, 2.0, -1.0, 0.5] + randn(n)
 m = estimate_reg(y, X; varnames=["(Intercept)", "x1", "x2", "x3"])
-report(m)
+# vif returns one value per non-intercept regressor, in varnames order
+(vifs = round.(vif(m); digits=2), names = m.varnames[2:end])
 ```
 
 **Recipe 6: CrossSectionData dispatch**
@@ -200,16 +208,23 @@ m = estimate_reg(y, X; varnames=["(Intercept)", "education", "experience", "tenu
 report(m)
 ```
 
-The estimated coefficients recover the true data-generating process. With ``n = 500`` and ``\sigma = 0.5``, the standard errors are small enough to reject ``H_0: \beta_j = 0`` for all slope coefficients. The ``R^2`` is high because the signal-to-noise ratio is large. The F-statistic rejects the null of joint insignificance at all conventional levels.
+Every coefficient is recovered to within two standard errors of its true value: 2.020 against 2.0, 1.511 against 1.5, ``-0.776`` against ``-0.8``, and 0.299 against 0.3. With ``n = 500`` and ``\sigma = 0.5`` the standard errors are near 0.023, so all four ``t``-statistics exceed 13 and the ``R^2`` of 0.919 reflects a signal-to-noise ratio that is high by cross-sectional standards. The F-statistic of 1876 rejects joint insignificance at any conventional level. `Cov. type  HC1 (robust)` in the specification block records that these are heteroskedasticity-consistent errors, which is the default here rather than the classical ones.
 
 ### Keyword Arguments
 
 | Keyword | Type | Default | Description |
 |---------|------|---------|-------------|
-| `cov_type` | `Symbol` | `:hc1` | Covariance estimator: `:ols`, `:hc0`, `:hc1`, `:hc2`, `:hc3`, `:cluster` |
-| `weights` | `Union{Nothing,Vector}` | `nothing` | WLS weights (positive values); `nothing` for OLS |
+| `cov_type` | `Symbol` | `:hc1` | Covariance estimator: `:ols`, `:hc0`, `:hc1`, `:hc2`, `:hc3`, `:cluster`, `:conley` |
+| `weights` | `Union{Nothing,AbstractVector}` | `nothing` | WLS weights (positive values); `nothing` for OLS |
 | `varnames` | `Union{Nothing,Vector{String}}` | `nothing` | Coefficient names (auto-generated if `nothing`) |
-| `clusters` | `Union{Nothing,Vector}` | `nothing` | Cluster assignments (required for `:cluster`) |
+| `clusters` | `Union{Nothing,AbstractVector}` | `nothing` | Cluster assignments (required for `:cluster`) |
+| `coords` | `Union{Nothing,AbstractMatrix}` | `nothing` | Positions (required for `:conley`) |
+| `cutoff` | `Real` | `0.0` | Conley distance cutoff |
+| `conley_kernel` | `Symbol` | `:bartlett` | Conley spatial kernel: `:bartlett` or `:uniform` |
+| `conley_metric` | `Symbol` | `:euclidean` | `:euclidean` or `:haversine` |
+| `time` | `Union{Nothing,AbstractVector}` | `nothing` | Time index for the spatial-panel variant |
+| `time_cutoff` | `Int` | `0` | Newey-West lag cutoff multiplying the spatial weight |
+| `conley_psd` | `Bool` | `true` | Clip negative eigenvalues of the Conley meat |
 
 ### Return Values
 
@@ -274,7 +289,14 @@ m_wls = estimate_reg(y, X; weights=w, varnames=["(Intercept)", "x1"])
 report(m_wls)
 ```
 
-The WLS standard errors are smaller than the OLS standard errors when the weight specification correctly captures the heteroskedasticity pattern. Both estimators are consistent, but WLS is more efficient. In practice, the weights often come from a preliminary regression of the squared OLS residuals on the regressors (feasible GLS).
+```@example reg
+(ols_se = round.(stderror(m_ols); digits=4),
+ wls_se = round.(stderror(m_wls); digits=4),
+ ols_slope = round(coef(m_ols)[2]; digits=4),
+ wls_slope = round(coef(m_wls)[2]; digits=4))
+```
+
+WLS is the more precise of the two: its standard errors are 0.120 and 0.077 against the OLS 0.155 and 0.096, a reduction of roughly 20% on both coefficients. The point estimates barely move — 2.985 for the slope against the OLS 2.922, both close to the true 3.0 — which is the expected pattern, since both estimators are consistent and only their efficiency differs. In practice the weights rarely arrive known; they usually come from a preliminary regression of the squared OLS residuals on the regressors, which is feasible GLS.
 
 ---
 
@@ -314,15 +336,14 @@ X = hcat(ones(n), randn(n, 2))
 u = randn(n) .* (1.0 .+ abs.(X[:, 2]))   # Variance depends on x1
 y = X * [1.0, 2.0, -0.5] + u
 
-# Compare HC variants
-for cov in [:ols, :hc0, :hc1, :hc2, :hc3]
-    m = estimate_reg(y, X; cov_type=cov, varnames=["(Intercept)", "x1", "x2"])
-    se = stderror(m)
-    report(m)
-end
+# One fit per variant; the point estimates are identical, only the SEs move.
+# Each entry is the SE vector for [(Intercept), x1, x2].
+variants = (:ols, :hc0, :hc1, :hc2, :hc3)
+NamedTuple{variants}(Tuple(round.(stderror(estimate_reg(y, X; cov_type=c)); digits=4)
+                           for c in variants))
 ```
 
-The classical OLS standard errors understate the true sampling variability when heteroskedasticity is present. HC1 (the default) provides a simple finite-sample correction that performs well in most applied settings. HC3 produces the most conservative inference and is preferred when the sample contains high-leverage observations.
+The point estimates are identical across all five rows — only the covariance changes. The classical OLS errors understate the sampling variability for `x1`, the regressor the variance actually depends on: 0.1246 against 0.1742 under HC3, an understatement of 28%. For the intercept the ordering reverses slightly (0.1320 under OLS against 0.1278 under HC0), a reminder that "robust errors are larger" is a tendency and not a theorem. Within the robust family the four variants are ordered HC0 < HC1 < HC2 < HC3 by construction, and the spread between them — 0.1687 to 0.1742 on `x1` — is small at ``n = 200`` because no single observation carries extreme leverage.
 
 ### Cluster-Robust Standard Errors
 
@@ -357,7 +378,14 @@ m = estimate_reg(y, X; cov_type=:cluster, clusters=clusters,
 report(m)
 ```
 
-The cluster-robust standard errors for the intercept are substantially larger than the HC1 standard errors because the cluster-level shock induces within-group correlation that inflates the effective variance. The slope coefficient is less affected because the regressor `x1` varies independently across observations within each cluster.
+```@example reg
+m_hc1 = estimate_reg(y, X; varnames=["(Intercept)", "x1"])   # HC1, ignores clustering
+(hc1_se = round.(stderror(m_hc1); digits=4),
+ cluster_se = round.(stderror(m); digits=4),
+ ratio = round.(stderror(m) ./ stderror(m_hc1); digits=2))
+```
+
+The intercept's standard error rises from 0.034 to 0.139 once clustering is acknowledged, a factor of 4.05. That is the cluster-level shock making itself felt: the intercept is identified off variation *between* clusters, of which there are effectively 50 rather than 1000. The slope moves the other way, to 0.87 of its HC1 value, because `x1` varies independently within each cluster and so carries no common component to inflate. Treating 1000 observations as 1000 independent draws would therefore have produced a confidence interval for the intercept four times too narrow.
 
 ### Spatial Correlation: Conley Standard Errors
 
@@ -397,21 +425,19 @@ The Conley standard error is several times the HC0 one. In a 300-replication sim
 !!! warning "The regressor has to be spatially correlated too"
     Spatially correlated *errors* alone do not make HC wrong. The meat is built from ``x_i u_i``, so with an independent regressor ``E[x_i u_i \, x_j u_j] = E[x_i x_j]\,E[u_i u_j] = 0`` and the correction is asymptotically moot. It matters when the common spatial component is in both — which is the usual case for regional policy variables.
 
-!!! note "Cost and positive-semidefiniteness"
-    The estimator is ``O(n^2)``: every pair must be weighted. The kernel is zero beyond the cutoff, so distant pairs are skipped as soon as their distance is known.
+Two implementation facts govern how the estimator behaves. It is ``O(n^2)`` — every pair must be weighted — though the kernel is zero beyond the cutoff, so distant pairs are discarded as soon as their distance is known. And Conley's ``S`` need not be positive semi-definite in finite samples: `psd=true` (the default) clips negative eigenvalues to zero and warns, as Stata's `acreg` does, with the returned `adjusted` flag recording whether the clipping fired. Pass `psd=false` for the raw estimator.
 
-    Conley's ``S`` need not be positive semi-definite in finite samples. `psd=true` (the default) clips negative eigenvalues to zero and warns, as Stata's `acreg` does; the returned `adjusted` flag records whether it fired. Pass `psd=false` for the raw estimator.
-
-Setting `cutoff = 0` leaves only the own-observation term, so the estimator collapses to HC0 exactly — a useful sanity check on a new coordinate set.
+Setting `cutoff = 0` leaves only the own-observation term, so the estimator collapses to HC0 exactly — a useful sanity check on a new coordinate set. The same spatial covariance is available inside `estimate_reg` through `cov_type=:conley` (with the `coords`, `cutoff`, `conley_kernel`, `conley_metric`, and `conley_psd` keywords), which puts it directly in the coefficient table instead of returning it separately.
 
 | Keyword | Type | Default | Description |
 |---------|------|---------|-------------|
-| `coords` | `AbstractMatrix` | — | ``n \times d`` positions; first two columns are latitude/longitude for `:haversine` |
-| `cutoff` | `Real` | — | Distance beyond which errors are uncorrelated (km for `:haversine`) |
+| `coords` | `AbstractMatrix` | required | ``n \times d`` positions; first two columns are latitude/longitude for `:haversine` |
+| `cutoff` | `Real` | required | Distance beyond which errors are uncorrelated (km for `:haversine`) |
 | `kernel` | `Symbol` | `:bartlett` | `:bartlett` (linear decay) or `:uniform` |
 | `metric` | `Symbol` | `:euclidean` | `:haversine` for latitude/longitude |
-| `time` | `AbstractVector` | `nothing` | Time index for the spatial-panel variant |
+| `time` | `Union{Nothing,AbstractVector}` | `nothing` | Time index for the spatial-panel variant |
 | `time_cutoff` | `Int` | `0` | Newey-West lag cutoff multiplying the spatial weight |
+| `time_kernel` | `Symbol` | `:bartlett` | Kernel applied in ``\lvert t_i - t_j \rvert`` |
 | `psd` | `Bool` | `true` | Clip negative eigenvalues of the meat |
 
 | Field | Type | Description |
@@ -472,7 +498,7 @@ wild_cluster_bootstrap(pm, "x", 0.0)
 | `ci` | `Bool` | `true` | Compute the inverted-test confidence interval |
 | `level` | `Real` | `0.95` | CI coverage |
 | `ci_gridpoints` | `Int` | `25` | Grid used to bracket the CI crossings |
-| `enumerate` | `Bool` | `nothing` | Force or forbid exact enumeration of the ``2^G`` sign vectors |
+| `enumerate` | `Union{Nothing,Bool}` | `nothing` | Force or forbid exact enumeration of the ``2^G`` sign vectors; `nothing` decides automatically |
 | `rng` | `AbstractRNG` | `default_rng()` | Random number generator |
 
 `WildClusterBootstrap{T}` return value:
@@ -512,7 +538,16 @@ mq = estimate_qreg(yq, Xq, [0.1, 0.5, 0.9]; varnames=["(Intercept)", "x"])
 report(mq)
 ```
 
-The slope rises with ``\tau``. That is the point of the exercise: the error scale here grows with ``x``, so the upper conditional quantiles of ``y`` separate from the lower ones as ``x`` increases — a spreading that a single OLS slope cannot express. In this location-scale design the true quantile line is available in closed form: with ``y = a + bx + (1 + cx)z`` and ``z \sim N(0,1)``, the ``\tau``-quantile is ``a + z_\tau + (b + c\,z_\tau)x``, so the slope is exactly ``b + c\,z_\tau``.
+```@example reg
+# Location-scale design y = a + bx + (1 + cx)z: the τ-quantile slope is b + c·z_τ
+zt = [Distributions.quantile(Distributions.Normal(), t) for t in mq.taus]
+(taus = mq.taus,
+ fitted_slopes = round.(mq.beta[2, :]; digits=3),
+ true_slopes = round.(0.5 .+ 0.5 .* zt; digits=3),
+ pseudo_r2 = round.(mq.pseudo_r2; digits=3))
+```
+
+The slope rises monotonically with ``\tau`` — ``-0.186`` at the 10th percentile, 0.595 at the median, 1.210 at the 90th — against theoretical values of ``-0.141``, 0.500, and 1.141. That spread is the point of the exercise: the error scale grows with ``x``, so the upper conditional quantiles separate from the lower ones as ``x`` increases, and a single OLS slope cannot express it. The `pseudo_r2` values (0.004, 0.026, 0.098) are Koenker–Machado ``R^1(\tau)`` statistics and are small by construction; they compare check-function losses, not variances.
 
 ### Solver and standard errors
 
@@ -526,13 +561,15 @@ The check loss is piecewise linear, so the optimum is a **basic solution**: it i
 
 The sparsity ``s(\tau)`` is estimated by the Siddiqui–Hendricks–Koenker difference quotient with the Hall–Sheather bandwidth. On a median regression with standard normal errors all three agree with the analytic ``\sqrt{\pi/2}/\sqrt{n}``.
 
+`tau` is the third **positional** argument of `estimate_qreg(y, X, tau=0.5)`, not a keyword; the remaining controls are keywords:
+
 | Keyword | Type | Default | Description |
 |---------|------|---------|-------------|
-| `tau` | `Real` or `AbstractVector` | `0.5` | Quantile(s) in ``(0,1)``; one fit per quantile |
 | `se` | `Symbol` | `:iid` | `:iid`, `:robust`, or `:boot` |
 | `n_boot` | `Int` | `500` | Bootstrap replications when `se = :boot` |
 | `alpha` | `Real` | `0.05` | Level for the Hall–Sheather bandwidth |
-| `varnames` | `Vector{String}` | `nothing` | Coefficient names |
+| `rng` | `AbstractRNG` | `default_rng()` | Generator for the xy-pair bootstrap |
+| `varnames` | `Union{Nothing,Vector{String}}` | `nothing` | Coefficient names |
 
 | Field | Type | Description |
 |-------|------|-------------|
@@ -540,8 +577,10 @@ The sparsity ``s(\tau)`` is estimated by the Siddiqui–Hendricks–Koenker diff
 | `beta` | `Matrix{T}` | ``k \times n_\tau`` coefficients, one column per quantile |
 | `stderr` | `Matrix{T}` | ``k \times n_\tau`` standard errors |
 | `vcov_mats` | `Vector{Matrix{T}}` | Covariance per quantile |
+| `residuals`, `fitted` | `Matrix{T}` | ``n \times n_\tau``, one column per quantile |
 | `objective` | `Vector{T}` | Check-function loss at the optimum |
 | `pseudo_r2` | `Vector{T}` | Koenker–Machado ``R^1(\tau)`` — loss relative to the intercept-only fit |
+| `se_type` | `Symbol` | Standard-error estimator actually used |
 | `converged` | `Vector{Bool}` | Solver convergence per quantile |
 
 !!! note "`pseudo_r2` is not an OLS `R²`"
@@ -608,11 +647,17 @@ dr = Float64.(rand(n) .< prob)
 yf = (@. 0.5 + 0.8 * xr + 1.0 * dr) .+ 0.3 .* randn(n)
 
 rdf = estimate_rdd(yf, xr; cutoff=0.0, fuzzy=dr)
-(first_stage = round(rdf.first_stage; digits=3),
- wald_ratio = round(rdf.tau_bias_corrected; digits=3))
+report(rdf)
 ```
 
-The first stage recovers the 0.5 jump in treatment probability and the ratio recovers the effect on the treated.
+```@example reg
+(first_stage_jump = round(rdf.first_stage; digits=3),   # true jump in Pr(treated) = 0.5
+ wald_ratio = round(rdf.tau_bias_corrected; digits=3),  # true effect = 1.0
+ robust_ci = round.(rdf.ci_robust; digits=3),
+ eff_obs = (rdf.n_left, rdf.n_right))
+```
+
+The estimated jump in treatment probability is 0.393 against a true 0.5, and the Wald ratio is 0.779 against a true 1.0. Both are noticeably below target, and the reason is the sample the estimator actually uses: the MSE-optimal bandwidth leaves 82 observations on the left and 81 on the right, so the local first stage is estimated on about a sixth of the data. The robust interval ``[0.317, 1.240]`` covers the true effect comfortably. Fuzzy designs pay for the ratio twice — once in the outcome jump and once in the treatment jump — so they need substantially more data than a sharp design to reach the same precision.
 
 | Keyword | Type | Default | Description |
 |---------|------|---------|-------------|
@@ -667,7 +712,7 @@ naive = sum(abs2, u .- sum(u)/T) / T                     # naive variance ignore
 round.((Omega, naive); digits=3)
 ```
 
-The long-run variance (about ``1/(1-0.6)^2 \approx 6.25`` times the innovation variance) exceeds the naive sample variance because positive serial correlation inflates the variance of the sample mean --- exactly the correction HAC inference applies.
+The long-run variance is 7.40 against a naive sample variance of 1.57. The two estimate different objects: the naive figure targets the unconditional variance ``1/(1-\rho^2) = 1.56`` for ``\rho = 0.6``, while ``\Omega`` targets ``\sigma^2/(1-\rho)^2 = 6.25``. Their ratio is the standard factor ``(1+\rho)/(1-\rho) = 4`` — near the observed 4.7 — and it is exactly the correction HAC inference applies. Using the naive variance for a ``t``-statistic on the mean of this series would overstate precision by a factor of two.
 
 ### Bandwidth and Kernel Selection
 
@@ -703,7 +748,18 @@ Omega_vh = varhac(u; ic=:aic)
 round(Omega_vh; digits=3)
 ```
 
-VARHAC and kernel HAC estimate the same population object; VARHAC is often more accurate when the serial correlation is well approximated by a low-order VAR.
+VARHAC returns 8.92 against the kernel estimate of 7.40, both bracketing the population value of 6.25 from above. The two target the same object by different routes, and neither dominates: VARHAC is usually the more accurate when the serial correlation is well approximated by a low-order VAR, as here, but it inherits whatever bias the lag-order criterion introduces, where the kernel estimator inherits the bandwidth's.
+
+`lrvar`, `lrcov`, and `lrcov_oneside` share one keyword set; `varhac` has its own:
+
+| Keyword | Type | Default | Applies to | Description |
+|---|---|---|---|---|
+| `kernel` | `Symbol` | `:bartlett` | kernel HAC | `:bartlett`, `:parzen`, `:qs`, `:tukey_hanning` |
+| `bandwidth` | `Symbol` or `Real` | `:andrews` | kernel HAC | `:andrews`, `:nw94`, or a fixed truncation lag |
+| `prewhiten` | `Bool` | `false` | kernel HAC | Andrews–Monahan VAR(1) prewhitening with recoloring |
+| `demean` | `Bool` | `true` | both | Subtract the column means before accumulating autocovariances |
+| `ic` | `Symbol` | `:aic` | `varhac` | Lag-order criterion, `:aic` or `:bic` |
+| `max_lag` | `Symbol` or `Int` | `:auto` | `varhac` | `:auto` uses ``\lfloor T^{1/3} \rfloor`` |
 
 ---
 
@@ -778,7 +834,15 @@ m_iv = estimate_iv(wage, X, Z; endogenous=[2], varnames=["(Intercept)", "educati
 report(m_iv)
 ```
 
-The OLS coefficient on education is biased upward because ability enters both the education equation and the wage equation. The 2SLS estimator removes this bias by instrumenting education with distance to college and quarter of birth. The first-stage F well exceeds 10, confirming that the instruments are strong. The Sargan test p-value fails to reject the null that both instruments are valid.
+```@example reg
+# The Sargan-Hansen J-test is stored on the model rather than printed in the footer
+(ols_education = round(coef(m_ols)[2]; digits=3),
+ iv_education = round(coef(m_iv)[2]; digits=3),
+ sargan_stat = round(m_iv.sargan_stat; digits=3),
+ sargan_pval = round(m_iv.sargan_pval; digits=3))
+```
+
+OLS puts the return to education at 0.998 against a true 0.8 — a 25% upward bias, because ability raises both schooling and wages and is absorbed into the education coefficient. Instrumenting with distance to college and quarter of birth brings the estimate to 0.886, and the true value lies inside its confidence interval. The first-stage F of 152.9 is far above both the Staiger-Stock rule of thumb and the Stock-Yogo 10% critical value of 19.93, so weak identification is not a concern. The Sargan-Hansen ``J`` of 2.345 (``p = 0.126``) does not reject the joint validity of the two instruments — note that this statistic is stored on the model rather than printed in the `report` footer, so it has to be read off `sargan_stat` and `sargan_pval`.
 
 ### LIML, Fuller, and k-class estimators
 
@@ -910,6 +974,9 @@ When the reported first-stage F falls below the Stock-Yogo 10% critical value, `
 | `first_stage_f` | `T` | Minimum first-stage F-statistic across endogenous variables |
 | `sargan_stat` | `Union{Nothing,T}` | Sargan-Hansen J-statistic (`nothing` if exactly identified) |
 | `sargan_pval` | `Union{Nothing,T}` | p-value of the Sargan test |
+| `cragg_donald_f` | `Union{Nothing,T}` | Cragg-Donald minimum-eigenvalue statistic |
+| `kleibergen_paap_f` | `Union{Nothing,T}` | Kleibergen-Paap rank-robust analogue |
+| `stock_yogo_10pct` | `Union{Nothing,T}` | Stock-Yogo 10% maximal-size critical value |
 | `kclass_k` | `Union{Nothing,T}` | k-class scalar actually used (`nothing` for plain 2SLS) |
 | `kappa_hat` | `Union{Nothing,T}` | LIML ``\hat{\kappa}`` (`:liml`/`:fuller` only) |
 
@@ -944,12 +1011,15 @@ X = hcat(ones(n), x1, x2, x3)
 y = X * [1.0, 2.0, -1.0, 0.5] + randn(n)
 
 m = estimate_reg(y, X; varnames=["(Intercept)", "x1", "x2", "x3"])
-v = vif(m)
 report(m)
+```
+
+```@example reg
+v = vif(m)
 (x1 = round(v[1], digits=2), x2 = round(v[2], digits=2), x3 = round(v[3], digits=2))
 ```
 
-The VIF values for `x1` and `x2` are large because these two variables are correlated at ``r = 0.95``. The inflated standard errors make it difficult to distinguish the individual effects of `x1` and `x2`. The VIF for `x3` is close to 1, confirming that it is not collinear with the other regressors.
+The VIFs for `x1` and `x2` are 380.4 and 380.3 — the variance of each coefficient is roughly 380 times what it would be if the two were orthogonal. The coefficient table shows the consequence directly: `x1` and `x2` have true values 2.0 and ``-1.0`` but are estimated at 1.157 and ``-0.038`` with standard errors above 1.09, neither significant, even though the model as a whole fits well (``R^2 = 0.64``). `x3` has a VIF of 1.01 and is estimated tightly at 0.521 against a true 0.5. Collinearity does not bias anything; it just makes the individual effects unidentifiable in this sample.
 
 ---
 
@@ -965,6 +1035,8 @@ After fitting an OLS model, a standard battery of residual diagnostics checks th
 | [`harvey_test`](@ref) | Homoskedasticity | ``\log \hat{u}^2`` on regressors | ``nR^2 \sim \chi^2`` |
 | [`breusch_godfrey_test`](@ref) | No serial correlation | ``\hat{u}`` on regressors + lagged residuals | ``nR^2 \sim \chi^2(p)`` + F |
 | [`reset_test`](@ref) | Correct functional form | ``y`` on regressors + ``\hat{y}^2\dots\hat{y}^k`` | ``F`` |
+
+Each test also accepts `(resid, X)` directly for a fit produced outside this package. Residual tests that are not specific to a linear regression — ARCH effects, normality, Granger causality, BDS independence — live on [Model Diagnostics](@ref tests_diagnostics_page).
 
 !!! note "Name collision with the panel test"
     `breusch_pagan_test` also has a method for `PanelRegModel` — the Breusch–Pagan random-effects Lagrange-multiplier test, a *different* test. Dispatch on the model type selects the correct one: pass a `RegModel` for the heteroskedasticity test documented here.
@@ -985,12 +1057,28 @@ report(white_test(m))
 report(breusch_pagan_test(m))          # RegModel ⇒ heteroskedasticity test
 ```
 
+Neither test rejects, on data that are genuinely heteroskedastic — White gives ``p = 0.095`` and Breusch–Pagan ``p = 0.854``. This is a power failure, not a false negative to shrug at. The error standard deviation here is ``0.5 + 0.8\lvert x_1 \rvert``, which is symmetric in ``x_1``, so a regression of ``\hat u^2`` on ``x_1`` in *levels* — which is all Breusch–Pagan runs — finds nothing. White's test adds squares and cross-products and so at least gets within reach of the 10% level. The lesson generalizes: these tests detect the variance patterns their auxiliary regression can span, and no others.
+
 Glejser and Harvey target specific variance forms — Glejser F-tests ``\lvert\hat{u}\rvert`` against the regressors, while Harvey regresses ``\log\hat{u}^2`` (multiplicative heteroskedasticity):
 
 ```@example reg
 report(glejser_test(m))
 report(harvey_test(m))
 ```
+
+The remedy is to give the auxiliary regression a regressor the variance is actually monotone in. Multiplicative heteroskedasticity, ``\sigma_i = \exp(0.4 x_1)``, is the case every one of these tests is built for:
+
+```@example reg
+u_mono = exp.(0.4 .* x1) .* randn(n)                   # variance rises monotonically in x1
+m_mono = estimate_reg(1.0 .+ 2.0 .* x1 .- x2 .+ u_mono, hcat(ones(n), x1, x2);
+                      varnames=["const", "x1", "x2"])
+(white = round(white_test(m_mono).pvalue; sigdigits=2),
+ breusch_pagan = round(breusch_pagan_test(m_mono).pvalue; sigdigits=2),
+ glejser = round(glejser_test(m_mono).pvalue; sigdigits=2),
+ harvey = round(harvey_test(m_mono).pvalue; sigdigits=2))
+```
+
+All four now reject decisively — ``p = 1.6\times10^{-6}`` (White), ``3.0\times10^{-7}`` (Breusch–Pagan), ``7.3\times10^{-9}`` (Glejser), ``9.1\times10^{-5}`` (Harvey). Nothing about the tests changed; only the variance function did. Glejser is the sharpest here because ``\lvert\hat u\rvert`` is close to linear in ``x_1`` under an exponential scale, and Harvey the least sharp because taking logs of ``\hat u^2`` amplifies the small residuals. When a heteroskedasticity test fails to reject, the first thing to ask is whether the auxiliary regression could have seen the pattern at all.
 
 ### Serial Correlation
 
@@ -1077,6 +1165,18 @@ report(chow_test(mb, 100; type=:breakpoint))
 report(chow_test(mb, 150; type=:forecast))
 ```
 
+The breakpoint test returns ``F(3, 194) = 115.2`` and rejects overwhelmingly, which it should: the outcome was shifted by 3.0 from observation 101 onward and the test is evaluated at exactly that date. The forecast test, applied at observation 150 — inside the already-broken segment — gives ``F(50, 147) = 2.07`` and also rejects, but far less emphatically. The gap between the two ``F`` values is the cost of testing at the wrong date: the breakpoint test compares two internally homogeneous halves, while the forecast test treats a post-break window as if it should be predictable from a sample that already contains the break.
+
+| Function | Keyword | Type | Default | Description |
+|---|---|---|---|---|
+| `chow_test` | `type` | `Symbol` | `:breakpoint` | `:breakpoint` (segment-wise fits) or `:forecast` |
+| `chow_test` | `level` | `Real` | `0.05` | Level reported alongside the statistic |
+| `cusum_test`, `cusumsq_test` | `level` | `Real` | `0.05` | Significance level setting the bound sequences |
+| `white_test` | `cross_terms` | `Bool` | `true` | Include pairwise cross-products in the auxiliary regression |
+| `breusch_pagan_test` | `studentized` | `Bool` | `true` | Koenker studentized form (robust to non-normal errors) |
+| `breusch_godfrey_test` | `lags` | `Int` | `1` | Number of lagged residuals in the auxiliary regression |
+| `reset_test` | `powers` | `AbstractRange` | `2:4` | Powers of ``\hat y`` added to the regression |
+
 ### Influence Statistics
 
 [`influence_stats`](@ref) returns per-observation leverage and influence measures (Belsley, Kuh & Welsch 1980), reusing the fitted ``(X'X)^{-1}``: the hat-diagonal ``h_{ii}``, internally and externally studentized residuals, ``\text{DFFITS}_i``, Cook's distance ``D_i``, and the ``n \times k`` DFBETAS matrix. Observations are flagged high-leverage when ``h_{ii} > 2k/n`` and influential when ``|\text{DFFITS}_i| > 2\sqrt{k/n}``.
@@ -1127,6 +1227,18 @@ report(m)
 ```
 
 The `CrossSectionData` dispatch automatically extracts the dependent variable column by name, builds the regressor matrix with an `(Intercept)` column prepended, maps `endogenous` symbols to column indices in the regressor matrix, and constructs the instrument matrix from exogenous regressors plus excluded instruments.
+
+The container also plots directly. The `:binscatter` view bins the running variable, plots conditional means, and overlays the fitted line — with `controls` the axes are first residualized on those covariates (Frisch–Waugh), so the picture shows the partial relationship the regression coefficient measures:
+
+```julia
+csb = CrossSectionData(hcat(schooling, wage, ability);
+                       varnames=["schooling", "wage", "ability"])
+plot_result(csb; view=:binscatter, x="schooling", y="wage", controls=["ability"])
+```
+
+```@raw html
+<iframe src="../assets/plots/binscatter.html" width="100%" height="440" frameborder="0" style="border:1px solid #ddd;border-radius:4px;"></iframe>
+```
 
 ---
 
@@ -1245,11 +1357,19 @@ plot_result(lasso; view=:cv)     # CV MSE curve with λ_min / 1-SE markers
 |---|---|---|---|
 | `alpha` | `Real` | `1.0` | Mixing: `1`=LASSO, `0`=ridge, in-between=elastic net |
 | `lambda` | `Symbol`/`Real`/`Vector` | `:cv` | `:cv` builds a path; a scalar/vector fixes it |
+| `nlambda` | `Int` | `100` | Path length when `lambda=:cv` |
+| `lambda_min_ratio` | `Real` | ``10^{-4}`` | Smallest ``\lambda`` on the path, as a fraction of ``\lambda_{\max}`` |
 | `select` | `Symbol` | `:cv` | `:cv`, `:aic`, `:bic`, or `:ebic` |
 | `cv` | `Symbol` | `:kfold` | `:kfold` (shuffled) or `:timeseries` (contiguous) |
 | `nfolds` | `Int` | `10` | Number of CV folds |
 | `adaptive` | `Bool` | `false` | Adaptive-LASSO weights (Zou 2006) |
+| `adaptive_gamma` | `Real` | `1.0` | Exponent on the adaptive weights |
 | `post` | `Bool` | `false` | Post-selection OLS refit (Belloni-Chernozhukov) |
+| `standardize` | `Bool` | `true` | Fit on unit-variance regressors, then unstandardize |
+| `seed` | `Int` | `1234` | Seeds the CV fold shuffle, so a `:cv` fit is reproducible |
+| `tol` / `maxit` | `Real` / `Int` | ``10^{-9}`` / `100000` | Coordinate-descent controls |
+
+`estimate_lasso` and `estimate_ridge` are `estimate_elastic_net` with `alpha` fixed at `1` and `0`; they accept the same keywords. Because `seed` defaults to a fixed value, cross-validated fits reproduce across runs without seeding the global RNG.
 
 ---
 
@@ -1300,7 +1420,9 @@ gets.encompassing_pval   # parsimonious-encompassing F p-value (selection vs GUM
 | `p_enter` / `p_remove` | `Real` | `0.05` / `0.10` | Stepwise entry / removal levels (require `p_remove ≥ p_enter`) |
 | `p_gets` | `Real` | `0.05` | GETS deletion significance level |
 | `diag_level` | `Real` | `0.05` | GETS misspecification-gate level |
-| `keep` | `Vector{Int}` | `nothing` | Columns forced into every model |
+| `bg_lags` | `Int` | `1` | Lag order of the Breusch–Godfrey test in the GETS gate |
+| `keep` | `Union{Nothing,AbstractVector{<:Integer}}` | `nothing` | Columns forced into every model |
+| `varnames` | `Union{Nothing,Vector{String}}` | `nothing` | Coefficient names carried into `result.final` |
 
 !!! warning "Post-selection inference is invalid"
     The standard errors, ``t``-statistics, and p-values on `result.final` are **conditional on the selected specification** and ignore the search that produced them; they are not valid unconditional inference. Report them as descriptive, not as a basis for hypothesis tests. For a shrinkage alternative that regularizes rather than searches, see the Penalized Regression section above — `estimate_lasso` selects a sparse model along a single tuning path.
@@ -1349,7 +1471,7 @@ me = marginal_effects(tob; which=:unconditional)   # average marginal effects
 report(me)
 ```
 
-The intercept has no marginal effect and is reported as a blank row.
+The average marginal effects are 0.626 and ``-0.506``, against index coefficients of 0.969 and ``-0.783``. The attenuation factor is ``\Phi(x_i'\beta/\sigma)`` averaged over the sample: roughly 65% of observations are away from the censoring boundary, so a unit change in ``x_1`` moves the *observed* mean by about two-thirds of what it moves the latent index. Reporting the raw Tobit coefficient as a marginal effect therefore overstates the effect on the outcome by about half. The intercept carries no marginal effect and is omitted from the table entirely.
 
 **Truncated regression.** When the boundary observations are missing entirely, `estimate_truncreg` maximizes the Hausman–Wise truncated-normal likelihood. Every `y` must lie strictly inside `(lower, upper)`; an out-of-range value is an error.
 
@@ -1370,7 +1492,10 @@ The `dist` keyword also supports `:logistic` and `:extreme_value` latent-error l
 | `lower` | `Real` | `0.0` | Lower censoring/truncation bound (`-Inf` for none) |
 | `upper` | `Real` | `Inf` | Upper censoring/truncation bound (`Inf` for none) |
 | `dist` | `Symbol` | `:normal` | Latent error law: `:normal`, `:logistic`, `:extreme_value` (Tobit only) |
-| `varnames` | `Vector{String}` | auto | Coefficient names |
+| `varnames` | `Union{Nothing,Vector{String}}` | `nothing` | Coefficient names |
+| `maxiter` / `tol` | `Int` / `Real` | `1000` / ``10^{-10}`` | Optimiser controls |
+
+`marginal_effects` on a `TobitModel` takes `which` (`:unconditional`, `:conditional`, `:probability`) and `conf_level` (default `0.95`).
 
 ---
 
@@ -1424,8 +1549,9 @@ report(heck_ml)
 | Keyword | Type | Default | Description |
 |---|---|---|---|
 | `method` | `Symbol` | `:twostep` | `:twostep` (Heckit) or `:mle` (full-information ML) |
-| `outcome_names` | `Vector{String}` | auto | Outcome-equation coefficient names |
-| `select_names` | `Vector{String}` | auto | Selection-equation coefficient names |
+| `outcome_names` | `Union{Nothing,Vector{String}}` | `nothing` | Outcome-equation coefficient names |
+| `select_names` | `Union{Nothing,Vector{String}}` | `nothing` | Selection-equation coefficient names |
+| `maxiter` / `tol` | `Int` / `Real` | `1000` / ``10^{-10}`` | ML optimiser controls |
 
 ---
 
@@ -1449,7 +1575,7 @@ where
 The equality of mean and variance is the Poisson model's strongest and least credible assumption. It matters far less than it appears to: the Poisson quasi-MLE is consistent for ``\beta`` whenever the *mean* is correctly specified, whatever the variance does (Gourieroux, Monfort & Trognon 1984). What breaks under overdispersion is not the point estimate but the standard error.
 
 !!! note "Why `cov_type` defaults to `:robust`"
-    `estimate_poisson` reports the Gourieroux–Monfort–Trognon sandwich ``A^{-1}BA^{-1}`` with ``A = X'\mathrm{diag}(\mu)X`` and ``B = X'\mathrm{diag}((y-\mu)^2)X`` by default. The information-matrix errors (`cov_type=:mle`) are valid *only* under equidispersion; on overdispersed data they understate uncertainty severely. In the example below the naive errors are about 40 % too small.
+    `estimate_poisson` reports the Gourieroux–Monfort–Trognon sandwich ``A^{-1}BA^{-1}`` with ``A = X'\mathrm{diag}(\mu)X`` and ``B = X'\mathrm{diag}((y-\mu)^2)X`` by default. The information-matrix errors (`cov_type=:mle`) are valid *only* under equidispersion; on overdispersed data they understate uncertainty, as the comparison below the overdispersion test shows.
 
 **Poisson with robust errors.** `report()` shows the log-likelihood, the deviance against the intercept-only null, and the coefficient table:
 
@@ -1468,13 +1594,29 @@ Coefficients are semi-elasticities: ``\beta_j`` is the proportional change in th
 report(incidence_rate_ratio(pois))
 ```
 
+Each entry is ``e^{\beta_j}``: a one-unit rise in `x1` multiplies the expected count by 1.81, and switching `x2` on multiplies it by 0.81. The confidence intervals are formed on the log scale and then exponentiated, so they are asymmetric around the ratio and never cross zero. The table reuses the shared ratio renderer and is headed "Odds Ratios"; for a count model the quantity is an incidence-rate ratio.
+
 **Testing for overdispersion.** [`dispersion_test`](@ref) runs the Cameron & Trivedi (1990) auxiliary regression of ``z_i = [(y_i-\hat\mu_i)^2 - y_i]/\hat\mu_i`` on ``\hat\mu_i`` (the NB2 alternative ``\mathrm{Var} = \mu + \alpha\mu^2``) and on a constant (the NB1 alternative ``\mathrm{Var} = (1+\alpha)\mu``). A significantly positive ``\hat\alpha`` rejects equidispersion:
 
 ```@example reg
 overdisp = 0.5
 y_od = Float64.(rand.(NegativeBinomial.(1 / overdisp, 1 ./ (1 .+ overdisp .* mu_true))))
-report(dispersion_test(estimate_poisson(y_od, Xc)))
+pois_od = estimate_poisson(y_od, Xc; varnames=["const", "x1", "x2"])
+report(dispersion_test(pois_od))
 ```
+
+The NB2 form estimates ``\hat\alpha = 0.418`` with a ``t`` of 7.29, and the NB1 form ``\hat\alpha = 0.614`` with a ``t`` of 3.99 — both reject equidispersion decisively. The NB2 estimate is close to the 0.5 used to generate the data, which is the alternative the NB2 auxiliary regression is designed for. The footer says so in words, which matters because rejecting here does not invalidate the Poisson point estimates; it invalidates the Poisson *information-matrix* standard errors.
+
+The two covariance choices on that same overdispersed sample show what the test is warning about:
+
+```@example reg
+se_mle = stderror(estimate_poisson(y_od, Xc; cov_type=:mle))
+(mle_se = round.(se_mle; digits=4),
+ robust_se = round.(stderror(pois_od); digits=4),
+ ratio = round.(se_mle ./ stderror(pois_od); digits=3))
+```
+
+The naive information-matrix errors are 0.052, 0.034, and 0.089; the QMLE sandwich gives 0.067, 0.084, and 0.119. The naive error on `x1` is 40% of the robust one — an understatement of 60%, which would turn a ``t`` of 12 into a ``t`` of 30 and shrink the confidence interval by more than half. This is why `cov_type` defaults to `:robust`: the point estimates survive overdispersion, the standard errors do not, and the failure is silent unless it is tested for.
 
 **Negative Binomial 2.** When the test fires, [`estimate_nbreg`](@ref) keeps the same mean but lets the variance grow quadratically:
 
@@ -1489,7 +1631,14 @@ nb = estimate_nbreg(y_od, Xc; varnames=["const", "x1", "x2"])
 report(nb)
 ```
 
-The coefficients move little relative to Poisson — both are consistent for the mean — but the standard errors widen to reflect the true variance.
+```@example reg
+(poisson_coef = round.(coef(pois_od); digits=4),
+ nbreg_coef = round.(coef(nb); digits=4),
+ poisson_robust_se = round.(stderror(pois_od); digits=4),
+ nbreg_se = round.(stderror(nb); digits=4))
+```
+
+The Poisson and NB2 coefficients differ moderately — 0.732 against 0.615 on `x1`, ``-0.571`` against ``-0.496`` on `x2`, with true values 0.6 and ``-0.4`` — reflecting sampling error rather than inconsistency, since both are consistent for a correctly specified mean. The standard errors are the informative comparison: NB2 gives 0.068, 0.051, and 0.116 against the Poisson sandwich's 0.067, 0.084, and 0.119. The two are close, and where they differ NB2 is *tighter*, because modelling the variance function correctly buys efficiency that a sandwich correction can only insure against. Both remain far above the naive Poisson errors.
 
 !!! warning "R reports `theta`, not `alpha`"
     `MASS::glm.nb` parameterizes the same model by ``\theta = 1/\alpha``. Invert before comparing. The coefficient standard errors also follow a different convention: `glm.nb` computes them with ``\theta`` held fixed, whereas `estimate_nbreg` uses the ``(\beta,\beta)`` block of the inverse joint ``(\beta, \log\alpha)`` Hessian, which charges for ``\alpha`` having been estimated. The expected information is block diagonal (Lawless 1987), so the two agree asymptotically.
@@ -1502,10 +1651,13 @@ report(marginal_effects(pois))
 
 | Keyword | Type | Default | Description |
 |---|---|---|---|
-| `offset` | `AbstractVector` | `nothing` | Added to the index with coefficient 1 |
-| `exposure` | `AbstractVector` | `nothing` | Strictly positive exposure; enters as `log(exposure)` |
-| `cov_type` | `Symbol` | `:robust` | `:robust` (QMLE sandwich), `:mle`, `:hc1`, `:hc2`, `:hc3`, `:cluster` |
-| `clusters` | `AbstractVector` | `nothing` | Cluster assignments, required for `:cluster` |
+| `offset` | `Union{Nothing,AbstractVector}` | `nothing` | Added to the index with coefficient 1 |
+| `exposure` | `Union{Nothing,AbstractVector}` | `nothing` | Strictly positive exposure; enters as `log(exposure)` |
+| `cov_type` | `Symbol` | `:robust` | `:robust` (QMLE sandwich), `:mle`, `:hc0`, `:hc1`, `:hc2`, `:hc3`, `:cluster` |
+| `clusters` | `Union{Nothing,AbstractVector}` | `nothing` | Cluster assignments, required for `:cluster` |
+| `varnames` | `Union{Nothing,Vector{String}}` | `nothing` | Coefficient names |
+
+`cov_type` and `clusters` are `estimate_poisson` keywords only. `estimate_nbreg` takes `offset`, `exposure`, and `varnames`: its covariance is always the inverse joint ``(\beta, \log\alpha)`` Hessian, because the NB2 variance function is estimated rather than assumed and there is no quasi-likelihood sandwich to fall back on.
 
 Zero-inflated and hurdle models are not implemented.
 
@@ -1531,7 +1683,7 @@ m = estimate_robust(y, X, psi=:huber, method=:m,
 report(m)
 ```
 
-The `weights` field flags outliers: observations with ``w_i \approx 0`` are downweighted. Huber and bisquare M-estimates match R's `MASS::rlm(method="M")` to machine tolerance.
+The Huber M-estimate downweights 3 of the 21 observations but rejects none — `Rejected (w≈0)` is 0 — which is exactly what a monotone ``\psi`` guarantees: influence is bounded but never zeroed. The fit gives an Air.Flow coefficient of 0.829 and a robust ``R^2`` of 0.808, and matches R's `MASS::rlm(method="M")` to machine tolerance. The `weights` field carries the per-observation ``\psi``-weights for inspection; under Huber they identify *suspects*, and only a redescending ``\psi`` such as the bisquare below actually discards them.
 
 **MM-estimation** (Yohai 1987) combines a high-breakdown start with high efficiency. First a 50%-breakdown S-estimate of scale is found by the fast-S subsampling algorithm (Salibian-Barrera & Yohai 2006); that scale is then held fixed while ``\beta`` is re-estimated by a high-efficiency bisquare M-step. It resists up to 50% contamination yet retains ≈95% Gaussian efficiency. The subsampling is seeded — pass an `rng` for reproducibility.
 
@@ -1557,8 +1709,10 @@ Covariance is the Huber–Ronchetti sandwich ``V = \hat s^2\,\frac{(1/n)\sum \ps
 |---|---|---|---|
 | `psi` | `Symbol` | `:huber` | Influence function `:huber` or `:bisquare` (forced `:bisquare` for MM) |
 | `method` | `Symbol` | `:m` | `:m` (M-estimation) or `:mm` (Yohai MM) |
-| `k` | `Real` | `1.345`/`4.685` | ψ tuning constant (Huber `k` / bisquare `c`) |
+| `k` | `Union{Nothing,Real}` | `nothing` | ψ tuning constant; resolves to `1.345` (Huber) or `4.685` (bisquare) |
 | `scale_update` | `Symbol` | `:mad` | `:mad` or Huber `:proposal2` (M-estimation only) |
+| `maxiter` / `tol` | `Int` / `Real` | `50` / `1e-6` | IRLS iteration cap and convergence tolerance |
+| `n_resample` | `Int` | `500` | Fast-S subsamples drawn for the MM start |
 | `rng` | `AbstractRNG` | `default_rng()` | Seeds MM fast-S subsampling |
 
 ---
@@ -1621,6 +1775,8 @@ m3 = estimate_3sls([(ge.data[:, 1], Xge, cols), (wh.data[:, 1], Xwh, cols)], Z;
 report(m3)
 ```
 
+The 3SLS estimates are far less precise than the SUR ones — the GE `value` coefficient flips sign to ``-0.082`` with a standard error of 0.266, against 0.038 (s.e. 0.013) under SUR — and ``\det\hat\Sigma`` rises from 27{,}456 to 466{,}418. That is the instruments talking, not a defect in the estimator: ``[1, C_{GE}, C_{WH}]`` explains firm value weakly, so projecting `value` onto that space throws away most of its variation. The example is here to show the mechanics; a real simultaneous system needs instruments with a genuine first stage, and 3SLS should only be preferred over SUR when there is an endogeneity problem worth paying this variance for.
+
 When the instrument set spans every regressor, ``P_{Z_i} X_i = X_i`` and 3SLS collapses to SUR; when every equation is exactly identified it collapses to equation-by-equation 2SLS.
 
 !!! note "Ill-conditioned raw-scale designs"
@@ -1646,8 +1802,8 @@ This example demonstrates a full cross-sectional regression workflow: OLS estima
 # ──────────────────────────────────────────────────────────────────────
 n = 500
 ability = randn(n)                                           # Unobserved
-z1 = randn(n)                                                # Instrument 1
-z2 = randn(n)                                                # Instrument 2
+z1 = randn(n)                                                # Distance to college
+z2 = randn(n)                                                # Quarter of birth
 education = 12.0 .+ 0.5 * z1 .+ 0.3 * z2 .+ 0.4 * ability .+ randn(n)
 experience = abs.(5.0 .+ 3.0 * randn(n))
 wage = 5.0 .+ 0.8 * education .+ 0.3 * experience .+ 0.6 * ability .+ experience .* 0.2 .* randn(n)
@@ -1674,11 +1830,18 @@ Z = hcat(ones(n), z1, z2, experience)   # Instruments + exogenous regressors
 m_iv = estimate_iv(wage, X, Z; endogenous=[2],
                     varnames=["(Intercept)", "education", "experience"])
 report(m_iv)
+```
 
+```@example reg
 # ──────────────────────────────────────────────────────────────────────
-# Step 5: VIF diagnostics
+# Step 5: Compare the education coefficient across estimators
 # ──────────────────────────────────────────────────────────────────────
-round.(vif(m_ols), digits=2)
+(true_effect = 0.8,
+ ols = round(coef(m_ols)[2]; digits=3),
+ wls = round(coef(m_wls)[2]; digits=3),
+ iv = round(coef(m_iv)[2]; digits=3),
+ first_stage_f = round(m_iv.first_stage_f; digits=1),
+ vifs = round.(vif(m_ols); digits=2))
 ```
 
 ```julia
@@ -1686,7 +1849,7 @@ p_ols = plot_result(m_ols)
 p_iv = plot_result(m_iv)
 ```
 
-The OLS estimate of the return to education is biased upward because ability is positively correlated with both education and wages. The 2SLS estimator instruments education with distance to college and quarter of birth, recovering a coefficient closer to the true value of 0.8. The first-stage F confirms strong instruments, and the Sargan test does not reject instrument validity. The VIF values are low, indicating no multicollinearity concerns between education and experience. The WLS estimates account for heteroskedasticity driven by experience, producing more efficient coefficient estimates for the wage equation.
+OLS puts the return to education at 0.966 against a true 0.8, biased upward by the omitted ability term. WLS gives 1.137 — *further* from the truth, which is the instructive part: weighting corrects heteroskedasticity, not endogeneity, so a more efficient estimator of a biased quantity is still biased. Only 2SLS recovers the parameter, at 0.806, with a first-stage F of 56.3 that clears the Stock-Yogo threshold comfortably. The VIFs of 1.00 confirm that education and experience are not collinear, so nothing here is a multicollinearity problem — it is an identification problem, and only the instruments solve it.
 
 ---
 
@@ -1746,13 +1909,34 @@ The OLS estimate of the return to education is biased upward because ability is 
   *Econometrica*, 28(3), 591-605. [DOI](https://doi.org/10.2307/1910133)
 
 - Edgerton, D., & Wells, C. (1994). Critical Values for the CUSUMSQ Statistic in Medium and Large Sized Samples.
-  *Oxford Bulletin of Economics and Statistics*, 56(3), 355-365. [DOI](https://doi.org/10.1111/j.1468-0084.1994.mp56003008.x)
+  *Oxford Bulletin of Economics and Statistics*, 56(3), 355-365. [DOI](https://doi.org/10.1111/j.1468-0084.1994.mp56003007.x)
 
 - Den Haan, W. J., & Levin, A. T. (1997). A Practitioner's Guide to Robust Covariance Matrix Estimation.
   In *Handbook of Statistics*, Vol. 15, 299-342. Elsevier. [DOI](https://doi.org/10.1016/S0169-7161(97)15014-3)
 
 - Cameron, A. C., & Miller, D. L. (2015). A Practitioner's Guide to Cluster-Robust Inference.
   *Journal of Human Resources*, 50(2), 317-372. [DOI](https://doi.org/10.3368/jhr.50.2.317)
+
+- Calonico, S., Cattaneo, M. D., & Titiunik, R. (2014). Robust Nonparametric Confidence Intervals for Regression-Discontinuity Designs.
+  *Econometrica*, 82(6), 2295-2326. [DOI](https://doi.org/10.3982/ECTA11757)
+
+- Conley, T. G. (1999). GMM Estimation with Cross Sectional Dependence.
+  *Journal of Econometrics*, 92(1), 1-45. [DOI](https://doi.org/10.1016/S0304-4076(98)00084-0)
+
+- Koenker, R., & Bassett, G. (1978). Regression Quantiles.
+  *Econometrica*, 46(1), 33-50. [DOI](https://doi.org/10.2307/1913643)
+
+- Hausman, J. A., & Wise, D. A. (1977). Social Experimentation, Truncated Distributions, and Efficient Estimation.
+  *Econometrica*, 45(4), 919-938. [DOI](https://doi.org/10.2307/1912682)
+
+- McDonald, J. F., & Moffitt, R. A. (1980). The Uses of Tobit Analysis.
+  *The Review of Economics and Statistics*, 62(2), 318-321. [DOI](https://doi.org/10.2307/1924766)
+
+- Olsen, R. J. (1978). Note on the Uniqueness of the Maximum Likelihood Estimator for the Tobit Model.
+  *Econometrica*, 46(5), 1211-1215. [DOI](https://doi.org/10.2307/1911445)
+
+- Tobin, J. (1958). Estimation of Relationships for Limited Dependent Variables.
+  *Econometrica*, 26(1), 24-36. [DOI](https://doi.org/10.2307/1907382)
 
 - Friedman, J., Hastie, T., & Tibshirani, R. (2010). Regularization Paths for Generalized Linear Models via Coordinate Descent.
   *Journal of Statistical Software*, 33(1), 1-22. [DOI](https://doi.org/10.18637/jss.v033.i01)
@@ -1842,7 +2026,7 @@ The OLS estimate of the return to education is biased upward because ability is 
   *The Annals of Mathematical Statistics*, 39(1), 70-75. [DOI](https://doi.org/10.1214/aoms/1177698505)
 
 - McElroy, M. B. (1977). Goodness of Fit for Seemingly Unrelated Regressions.
-  *Journal of Econometrics*, 6(3), 381-387. [DOI](https://doi.org/10.1016/0304-4076(77)90008-1)
+  *Journal of Econometrics*, 6(3), 381-387. [DOI](https://doi.org/10.1016/0304-4076(77)90008-2)
 
 - Henningsen, A., & Hamann, J. D. (2007). systemfit: A Package for Estimating Systems of Simultaneous Equations in R.
   *Journal of Statistical Software*, 23(4), 1-40. [DOI](https://doi.org/10.18637/jss.v023.i04)

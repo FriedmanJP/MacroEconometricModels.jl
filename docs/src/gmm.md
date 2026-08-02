@@ -36,6 +36,16 @@ m_iv = estimate_gmm(iv_moments, [0.0], data; weighting=:two_step)
 report(m_iv)
 ```
 
+```julia
+plot_result(m_iv)
+```
+
+```@raw html
+<iframe src="../assets/plots/gmm_moment_fit.html" width="100%" height="440" frameborder="0" style="border:1px solid #ddd;border-radius:4px;"></iframe>
+```
+
+The estimate recovers the true slope ``\beta = 2`` despite the regressor being correlated with the error — OLS on the same sample would be biased upward, since ``X`` loads on ``u`` with coefficient 0.5. Three instruments for one parameter leave two over-identifying restrictions, and the Hansen J-test does not reject them: the instruments are valid, as they are by construction here. The plot renders the moment discrepancies as bars with the J-test annotated, which is the quickest way to see *which* moment a rejection comes from.
+
 **Recipe 2: Nonlinear Euler-equation GMM**
 
 ```@example gmm
@@ -59,6 +69,8 @@ end
 m_euler = estimate_gmm(euler_moments, [0.95, 1.5], edata; weighting=:two_step)
 report(m_euler)
 ```
+
+``\theta[1]`` is the discount factor ``\beta`` and ``\theta[2]`` the coefficient of relative risk aversion ``\gamma``; both are recovered near their data-generating values of 0.97 and 2.0. Three moments against two parameters leave a single over-identifying restriction. This is the Hansen & Singleton (1982) consumption-based asset-pricing setup in miniature — note that no model is ever solved, only the Euler residual evaluated on the data.
 
 **Recipe 3: Simulated Method of Moments on an AR(1)**
 
@@ -90,6 +102,8 @@ m_smm = estimate_smm(sim_ar1, d -> autocovariance_moments(d; lags=2),
                      bounds=bounds, rng=Random.MersenneTwister(99))
 report(m_smm)
 ```
+
+``\theta[1]`` is the persistence ``\rho`` and ``\theta[2]`` the innovation standard deviation ``\sigma``, against data-generating values of 0.7 and 0.5. Three moments — the variance plus two autocovariance lags of a univariate series — identify two parameters, leaving one over-identifying restriction. `bounds` keeps the search inside ``\rho \in (-1, 1)`` and ``\sigma > 0`` without penalty terms, and the explicit `rng` makes the simulated moments a deterministic function of ``\theta``.
 
 ---
 
@@ -155,11 +169,11 @@ estimate_gmm(moment_fn, theta0, data;
 | `weighting` | `Symbol` | `:two_step` | Weighting scheme (see above) |
 | `max_iter` | `Int` | `100` | Maximum optimizer / iterated-GMM iterations |
 | `tol` | `Real` | ``10^{-8}`` | Convergence tolerance |
-| `hac` | `Bool` | `true` | Use HAC correction for the optimal weighting matrix |
+| `hac` | `Bool` | `true` | Use HAC correction when building the optimal weighting matrix |
 | `bandwidth` | `Int` | `0` | HAC bandwidth (`0` = automatic Newey-West selection) |
 | `bounds` | `ParameterTransform` or `nothing` | `nothing` | Optional box constraints via bijective transforms; SEs corrected by the delta method |
 
-The optimizer is LBFGS with a Nelder-Mead fallback. When `bounds` are supplied the search runs in an unconstrained space via `ParameterTransform`, so parameters such as variances or probabilities can be constrained without penalty terms.
+The optimizer is LBFGS with a Nelder-Mead fallback. When `bounds` are supplied the search runs in an unconstrained space via `ParameterTransform`, so parameters such as variances or probabilities can be constrained without penalty terms. `hac` governs only the weighting matrix; the ``\Omega`` entering the identity-weighting sandwich is always the Bartlett long-run covariance.
 
 `estimate_gmm` returns a `GMMModel`:
 
@@ -200,6 +214,8 @@ s = gmm_summary(m_iv)
  J_pvalue = round(s.j_test.p_value, digits=4))
 ```
 
+The J-statistic is small relative to its two degrees of freedom and the p-value is comfortably interior, so the three instrument moments are mutually consistent. `gmm_summary` returns the same numbers `report` prints, in a NamedTuple that also carries `t_stats`, `p_values`, `n_moments`, `n_params`, `n_obs`, `weighting`, `converged`, and `iterations` — use it when the numbers feed further computation rather than a table.
+
 To compare non-nested moment specifications, `andrews_lu_mmsc` computes the Andrews-Lu (2001) Model and Moment Selection Criteria from the J-statistic. Lower values indicate a better-specified moment set:
 
 ```math
@@ -213,6 +229,8 @@ To compare non-nested moment specifications, `andrews_lu_mmsc` computes the Andr
 ```@example gmm
 andrews_lu_mmsc(m_iv.J_stat, m_iv.n_moments, m_iv.n_params, m_iv.n_obs)
 ```
+
+All three criteria are strongly negative because the J-statistic is small while the penalty term rewards the two extra moments: with ``n = 500`` the BIC penalty alone is ``2\log 500 \approx 12.4``. The absolute levels carry no meaning — only differences across competing moment sets estimated on the same data do, and the criteria disagree in general, with BIC the most and AIC the least willing to add moments.
 
 The `hq_criterion` keyword (default `2.1`) sets the HQIC penalty ``Q``.
 
@@ -242,7 +260,7 @@ V   = gmm_sandwich_vcov(S_ZX, W, Ze' * Ze)
 (beta = round.(beta_hat, digits=4), se = round.(sqrt.(diag(V)), digits=4))
 ```
 
-These building blocks bypass the numerical optimizer entirely, which matters for the inner loop of panel and system estimators.
+This is the 2SLS estimator written out in GMM form: with ``W = (Z'Z)^{-1}`` the quadratic form has a closed-form minimizer, so no optimizer runs at all. The slope lands within a fraction of a standard error of the two-step `estimate_gmm` fit above — the two differ only through the weighting matrix, and the standard error differs again because `gmm_sandwich_vcov` is the one-step robust sandwich rather than the efficient two-step form. These building blocks bypass the numerical optimizer entirely, which matters for the inner loop of panel and system estimators.
 
 ---
 
@@ -285,10 +303,14 @@ The asymptotic covariance carries the simulation-noise inflation factor ``(1 + 1
 autocovariance_moments(ar1data; lags=2)
 ```
 
+For the single-variable AR(1) sample this is three numbers: the variance, then the lag-1 and lag-2 autocovariances. Their ratios are the sample autocorrelations — the second entry over the first is near the data-generating ``\rho = 0.7``, and the third continues the geometric decay. These are exactly the features SMM matches to pin down persistence, and the geometric pattern is why adding lags beyond two buys little extra identification for an AR(1).
+
 !!! note "Why `contributions_fn` matters"
     A demeaning moment function evaluated one row at a time produces identically-zero rows and a degenerate ``\Omega``. `autocovariance_moment_contributions` returns the ``n \times q`` matrix whose column means equal `autocovariance_moments` exactly, giving a well-defined optimal weighting matrix and sandwich standard errors. Supply it for two-step SMM; without it, two-step weighting silently falls back to identity.
 
-`estimate_smm` returns an `SMMModel`, which shares every field of `GMMModel` and adds `sim_ratio`. It supports the same StatsAPI methods and `report`.
+`estimate_smm` returns an `SMMModel`, which shares every field of `GMMModel` and adds `sim_ratio`. It supports the same StatsAPI methods and `report`. Its optimizer ordering is the reverse of `estimate_gmm`'s: Nelder-Mead first, with LBFGS as the fallback, because a simulation-based objective is only piecewise smooth even when the RNG is held fixed.
+
+Unlike `estimate_gmm`, `estimate_smm` reports a ``\chi^2`` p-value for the J-statistic under **every** weighting scheme, including `:identity`. That p-value is only interpretable when the weighting is efficient — under identity weighting read the statistic as a descriptive measure of moment fit, not as a test.
 
 ---
 
@@ -324,7 +346,7 @@ fit = estimate_smm(simulate_ar1, d -> autocovariance_moments(d; lags=2),
 report(fit)
 ```
 
-The SMM estimator recovers the persistence and innovation-standard-deviation parameters by matching the variance and the first two autocovariances of the simulated process to their empirical counterparts. Because the moment vector has three elements for two parameters, the Hansen J-test provides a specification check: a large p-value confirms that the fitted AR(1) reproduces the sample second moments, consistent with the AR(1) data-generating process.
+The SMM estimator recovers the persistence and innovation-standard-deviation parameters by matching the variance and the first two autocovariances of the simulated process to their empirical counterparts; both land near the data-generating ``\rho = 0.6`` and ``\sigma = 0.4``. Because the moment vector has three elements for two parameters, the Hansen J-test provides a specification check on the single remaining restriction, and it does not reject at conventional levels — the fitted AR(1) reproduces the sample second moments, as it should given the data-generating process. Simulation noise alone moves this statistic noticeably between seeds at ``\tau = 3``; raise `sim_ratio` before reading a marginal p-value as evidence of misspecification.
 
 ```@example gmm
 ρ_ols = (z[1:end-1]' * z[2:end]) / (z[1:end-1]' * z[1:end-1])
@@ -340,7 +362,7 @@ The SMM and OLS persistence estimates are close, as expected when both target th
 ## Common Pitfalls
 
 1. **Fewer moments than parameters.** GMM and SMM require ``q \geq k``; `estimate_gmm` and `estimate_smm` assert this. Add moment conditions (more instruments or more autocovariance lags) if the model is underidentified.
-2. **Reading the J-test under identity weighting.** The J-statistic is ``\chi^2`` only with efficient weighting. Under `:identity` the p-value is `NaN` — re-estimate with `:two_step` before interpreting the overidentification test.
+2. **Reading the J-test under identity weighting.** The J-statistic is ``\chi^2`` only with efficient weighting. `estimate_gmm` returns `J_pvalue = NaN` under `:identity` to make that explicit; `estimate_smm` returns a numeric p-value regardless, so under identity weighting it is on you not to read it as a test. Re-estimate with `:two_step` before interpreting the overidentification test either way.
 3. **Two-step SMM without `contributions_fn`.** Omitting it makes the optimal weighting matrix degenerate; the estimator warns and falls back to identity weighting. Always pass a contributions function whose column means equal your moment vector.
 4. **Non-deterministic SMM objective.** The simulator must be a deterministic function of ``\theta`` given the RNG. `estimate_smm` copies `rng` on every call for this reason — do not advance a shared global RNG inside `simulator_fn`.
 5. **Moment function shape.** `moment_fn(theta, data)` must return an ``n \times q`` matrix (rows = observations), not the ``q``-vector of sample means. `estimate_gmm` averages the rows internally.

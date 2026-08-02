@@ -198,10 +198,10 @@ end
     _sims_existence_uniqueness(f_0, f_1, f_lead, f_ε; divhat, rank_rtol=1e-8) → NamedTuple
 
 Sims (2002) determinacy verdict for the quadratic system `f_lead·G² + f_0·G + f_1 = 0`.
-Builds the Sims canonical form ([`_sims_augmented_system`](@ref)), orders its QZ by the
-stable/unstable split at `divhat`, and applies the rank conditions ([`_sims_rank_eu`](@ref)).
+Builds the Sims canonical form (`_sims_augmented_system`), orders its QZ by the
+stable/unstable split at `divhat`, and applies the rank conditions (`_sims_rank_eu`).
 
-`divhat` is passed in already placed by [`_place_divhat`](@ref) so the caller's near-unit-root
+`divhat` is passed in already placed by `_place_divhat` so the caller's near-unit-root
 warning fires exactly once.
 """
 function _sims_existence_uniqueness(f_0::AbstractMatrix{T}, f_1::AbstractMatrix{T},
@@ -247,7 +247,7 @@ Companion pencil `L·x = λ·M·x` with `x = [a; λ·a]` and `(f_lead·λ² + f_
         [ -f_1  -f_0 ]          [ 0   f_lead ]
 
 Determinacy `eu` is the **Sims (2002) existence/uniqueness rank verdict**
-([`_sims_existence_uniqueness`](@ref)), not a root count. The Blanchard-Kahn count
+(`_sims_existence_uniqueness`), not a root count. The Blanchard-Kahn count
 (`n_stable == n` → `[1,1]`; `> n` → `[1,0]`; `< n` → `[0,0]`) is still computed and returned as
 `eu_count` for diagnostics, and the two agree away from the degenerate cases that root-counting
 gets wrong. `residual = ‖f_lead·G² + f_0·G + f_1‖∞` is a convention-independent self-check on

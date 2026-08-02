@@ -18,7 +18,7 @@ spec = @dsge begin
     exogenous: ε_A
 
     C[t] + K[t] = (1-δ)*K[t-1] + K[t-1]^α
-    A[t] = ρ * A[t-1] + σ * ε_A[t]
+    A[t] = A[t-1]^ρ * exp(σ * ε_A[t])
 end
 ```
 

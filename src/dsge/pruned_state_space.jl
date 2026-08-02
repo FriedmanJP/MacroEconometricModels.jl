@@ -50,7 +50,7 @@ The pruned state-space representation of a `PerturbationSolution`, built by
 Holds the policy-function blocks in the split form the pruned recursion needs, together with
 the variable bookkeeping (`state_indices` / `control_indices`, steady state, augmentation) that
 turns pruned components back into observable variables. `simulate`, the unconditional FEVD, and
-the closed-form moments all step the system through [`_pss_step`](@ref), so the three cannot
+the closed-form moments all step the system through `_pss_step`, so the three cannot
 drift apart.
 
 # Fields
@@ -335,14 +335,14 @@ innovation variance derived from it — is stated for the `x⊗x` block alone, w
 channel carried separately.
 
 - The `ε⊗ε` block has a nonzero mean, `E[ε⊗ε] = vec(I)`, so it is folded into `d` (and into the
-  augmented system's constant) exactly, via [`_pss_ee_mean`](@ref).
+  augmented system's constant) exactly, via `_pss_ee_mean`.
 - The `x⊗ε` and `ε⊗x` blocks are bilinear in the lagged state and the current shock. They are
   mean-zero and uncorrelated with `C·z` and with `ε`, so they leave `E` and the autocovariance
   cross-term untouched, but they **do** contribute to the variance and are **not** included
   here. The resulting variance understatement is `O(σ²)` relative to the state variance; on the
   RBC benchmark the closed form sits within Monte-Carlo error of a 2·10⁶-draw pruned simulation.
 
-Consequently `C·z_{t-1} + noise·ε_t + d` reproduces [`_pss_step`](@ref) **exactly** when those
+Consequently `C·z_{t-1} + noise·ε_t + d` reproduces `_pss_step` **exactly** when those
 two blocks vanish (any model whose shocks enter linearly), and differs by the bilinear term
 otherwise. The tests assert both halves of that statement rather than assuming the first.
 """

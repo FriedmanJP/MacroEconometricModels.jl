@@ -448,7 +448,7 @@ in the composite good `x = c - ψ n^{1+1/φ}/(1+1/φ)`, with net labor income
 couples hours to consumption, so hours carry a wealth effect. On the
 unconstrained EGM branch consumption is known before hours, so `n` is still
 explicit; on the constrained branch `c` and `n` must be solved jointly, which
-[`_egm_solve`](@ref) does with a bracketed scalar root-find.
+`_egm_solve` does with a bracketed scalar root-find.
 
 See also [`IndividualProblem`](@ref), [`labor_supply`](@ref).
 """

@@ -22,7 +22,7 @@ Solve the linear RE system via QZ decomposition (Sims 2002).
 
 Returns `(G1, impact, C_sol, eu, eigenvalues)` where:
 - `eu = [exist, unique]`: 1=yes, 0=no, from the **Sims (2002) rank conditions**
-  ([`_sims_rank_eu`](@ref)) — existence is `col span(Q₂Ψ) ⊆ col span(Q₂Π)`, uniqueness is
+  (`_sims_rank_eu`) — existence is `col span(Q₂Ψ) ⊆ col span(Q₂Π)`, uniqueness is
   `row span(Q₁Π) ⊆ row span(Q₂Π)`. Neither is a root count.
 - `div` is the dividing line between stable (|lambda| < div) and unstable eigenvalues.
 - `rank_rtol` is the relative tolerance for those rank/span tests.

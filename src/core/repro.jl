@@ -321,8 +321,17 @@ reproduce(x) = ReproReport(missing, ReproFieldDiff[], nothing, 0, Threads.nthrea
 
 """Append a one-line reproducibility footer to a result's `show`/`report`. Plain
 text (not a table) so it cannot inherit PrettyTables horizontal-crop truncation,
-mirroring `_sig_legend`. A no-op when no manifest is attached."""
+mirroring `_sig_legend`. A no-op when no manifest is attached.
+
+**Opt-in** (#521): emitted only when the `:repro` IOContext key is `true`. The
+line pins a git revision and a `+dirty` flag, so leaving it off by default keeps
+it out of durable artifacts — built documentation, committed fixtures, golden
+files — where a hash goes stale on the next commit. `report(x; repro = true)`
+sets the key; so does `show(IOContext(io, :repro => true), x)` for a direct
+`show`. The manifest itself is always attached and always inspectable via
+`x.manifest`; only this display line is gated."""
 function _manifest_footer(io::IO, m::ReproManifest)
+    get(io, :repro, false) === true || return nothing
     seedstr = m.seed === nothing ? "unset" : string(m.seed)
     shastr = m.git_sha == "unknown" ? "unknown" :
              first(m.git_sha, 8) * (m.git_dirty ? "+dirty" : "")
@@ -337,7 +346,12 @@ function Base.show(io::IO, m::ReproManifest)
     println(io, "  threads      : ", m.n_threads)
     println(io, "  julia        : ", m.julia_version)
     println(io, "  package      : v", m.package_version)
-    println(io, "  git          : ", m.git_sha, m.git_dirty ? " (dirty)" : "")
+    # The git line is the only volatile field: it pins a revision that goes stale
+    # and flags a dirty tree. `:repro => false` drops it so built docs and other
+    # durable artifacts stay stable across commits (#521).
+    if get(io, :repro, true) !== false
+        println(io, "  git          : ", m.git_sha, m.git_dirty ? " (dirty)" : "")
+    end
     println(io, "  os / machine : ", m.os, " / ", m.machine)
     print(io,   "  captured     : ", m.timestamp)
 end

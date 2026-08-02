@@ -175,7 +175,7 @@ end
 Construct the alternative (binding) regime specification by replacing the constrained
 variable's defining equation with `var[t] = bound` (residual `y_t[var_idx] - bound`) and
 dropping it from the forward-looking set. The defining equation is picked by the sensitivity
-heuristic [`_defining_equation_index`](@ref); when `warn_ambiguous` and that pick is not
+heuristic `_defining_equation_index`; when `warn_ambiguous` and that pick is not
 decisive (runner-up/top > `decisiveness_tol`), a warning suggests the explicit
 `Dict(variable => equation_index)` overload.
 """

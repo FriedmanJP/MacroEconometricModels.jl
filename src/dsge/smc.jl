@@ -993,7 +993,7 @@ end
     _adapt_n_particles(N_x::Int, est_var::Real, threshold::Real) → Int
 
 Adapt the number of inner state particles for SMC². If the **PF estimator
-variance** at fixed θ (see [`_pf_estimator_variance`](@ref)) exceeds `threshold`,
+variance** at fixed θ (see `_pf_estimator_variance`) exceeds `threshold`,
 double `N_x`; otherwise return `N_x` unchanged. Chopin et al. (2013) §3.4 target a
 log-likelihood-estimator variance of roughly 1–3.
 """

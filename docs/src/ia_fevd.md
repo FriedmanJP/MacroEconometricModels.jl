@@ -1,41 +1,42 @@
 # [Variance Decomposition](@id ia_fevd_page)
 
-Forecast Error Variance Decomposition (FEVD) quantifies the proportion of each variable's forecast error variance attributable to each structural shock at a given horizon. FEVD answers the question "which shocks matter most for which variables?" and is a cornerstone of structural VAR analysis alongside impulse response functions and historical decomposition.
+Forecast Error Variance Decomposition (FEVD) quantifies the proportion of each variable's forecast error variance attributable to each structural shock at a given horizon. It answers the question "which shocks matter most for which variables?" and is, with impulse responses and historical decomposition, one of the three standard innovation-accounting tools of structural VAR analysis (Sims 1980).
 
-- **Frequentist FEVD**: VMA-based decomposition (point estimate)
-- **Bayesian FEVD**: Posterior distributions over variance shares with credible intervals
-- **LP-Based FEVD**: R²-based estimator robust to VAR dynamic misspecification (Gorodnichenko & Lee 2019)
+- **Frequentist FEVD**: VMA-based decomposition of the orthogonalized forecast error (point estimate)
+- **Generalized FEVD**: order-invariant decomposition that never orthogonalizes (Pesaran & Shin 1998)
+- **Bayesian FEVD**: posterior distributions over variance shares with credible intervals
+- **LP-based FEVD**: ``R^2``-based estimator robust to VAR dynamic misspecification (Gorodnichenko & Lee 2019)
 
-For an overview and method comparison, see [Innovation Accounting](@ref innovation_accounting_page). For impulse responses, see [Impulse Responses](@ref ia_irf_page).
+For an overview and method comparison, see [Innovation Accounting](@ref innovation_accounting_page). For impulse responses, see [Impulse Responses](@ref ia_irf_page); for episode-level attribution, see [Historical Decomposition](@ref ia_hd_page).
 
 ```@setup ia_fevd
 using MacroEconometricModels, Random
-Random.seed!(42)
 fred = load_example(:fred_md)
 Y = to_matrix(apply_tcode(fred[:, ["INDPRO", "CPIAUCSL", "FEDFUNDS"]]))
-Y = Y[all.(isfinite, eachrow(Y)), :]
-Y = Y[end-59:end, :]
-model = estimate_var(Y, 2; varnames=["INDPRO", "CPIAUCSL", "FEDFUNDS"])
-post = estimate_bvar(Y, 2; n_draws=100, varnames=["INDPRO", "CPIAUCSL", "FEDFUNDS"])
+Y = Y[339:588, :]        # 1987:03-2007:12, the Great Moderation
+Y[:, 1:2] .*= 100        # log differences expressed in percent
+model = estimate_var(Y, 4; varnames=["INDPRO", "CPIAUCSL", "FEDFUNDS"])
+post = estimate_bvar(Y, 4; n_draws=200, varnames=["INDPRO", "CPIAUCSL", "FEDFUNDS"], seed=20260802)
 ```
+
+The examples use a three-variable monthly monetary VAR(4) estimated on FRED-MD over the Great Moderation (1987:03--2007:12, 250 observations), with industrial production in percent monthly growth, the consumer price index as the monthly change in log inflation, and the federal funds rate as its monthly change.
 
 ## Quick Start
 
-**Recipe 1: Basic FEVD with Cholesky identification**
+**Recipe 1: FEVD with Cholesky identification**
 
 ```@example ia_fevd
-# FEVD at horizon 20 with Cholesky identification
+# Recursive ordering INDPRO -> CPIAUCSL -> FEDFUNDS
 decomp = fevd(model, 20)
 report(decomp)
 ```
 
-**Recipe 2: Frequentist FEVD is a point estimate**
+**Recipe 2: Order-invariant generalized FEVD**
 
 ```@example ia_fevd
-# Frequentist FEVD has no confidence bands; use the Bayesian (Recipe 3)
-# or LP-based (Recipe 4) estimators for uncertainty quantification
-decomp8 = fevd(model, 8)
-report(decomp8)
+# No orthogonalization, so no dependence on the variable ordering
+gdecomp = generalized_fevd(model, 20)
+report(gdecomp)
 ```
 
 **Recipe 3: Bayesian FEVD with credible intervals**
@@ -48,15 +49,15 @@ report(bfevd)
 **Recipe 4: LP-based FEVD with bias correction**
 
 ```@example ia_fevd
-slp = structural_lp(Y, 20; method=:cholesky, lags=4)
-lp_decomp = fevd(slp, 20; bias_correct=true, n_boot=50)
+slp = structural_lp(Y, 20; method=:cholesky, lags=4,
+                    varnames=["INDPRO", "CPIAUCSL", "FEDFUNDS"])
+lp_decomp = fevd(slp, 20; bias_correct=true, n_boot=50, rng=MersenneTwister(20260802))
 report(lp_decomp)
 ```
 
-**Recipe 5: FEVD table output at selected horizons**
+**Recipe 5: Table output at selected horizons**
 
 ```@example ia_fevd
-decomp = fevd(model, 20)
 print_table(stdout, decomp, "INDPRO"; horizons=[1, 4, 8, 12, 20])
 ```
 
@@ -64,7 +65,7 @@ print_table(stdout, decomp, "INDPRO"; horizons=[1, 4, 8, 12, 20])
 
 ## Frequentist FEVD
 
-The FEVD measures the proportion of the ``h``-step ahead forecast error variance of variable ``i`` attributable to structural shock ``j``. It derives from the Vector Moving Average (VMA) representation of the structural VAR (Lutkepohl 2005, Section 2.3.3).
+The FEVD measures the proportion of the ``h``-step ahead forecast error variance of variable ``i`` attributable to structural shock ``j``. It derives from the Vector Moving Average (VMA) representation of the structural VAR (Lütkepohl 2005, Section 2.3.3).
 
 ```math
 \text{FEVD}_{ij}(h) = \frac{\sum_{s=0}^{h-1} (\Theta_s)_{ij}^2}{\sum_{s=0}^{h-1} \sum_{k=1}^{n} (\Theta_s)_{ik}^2}
@@ -74,42 +75,35 @@ where:
 - ``\text{FEVD}_{ij}(h)`` is the share of variable ``i``'s ``h``-step forecast error variance due to shock ``j``
 - ``(\Theta_s)_{ij}`` is the ``(i,j)`` element of the structural impulse response matrix at horizon ``s``
 - ``\Theta_s = \Phi_s P`` are the structural MA coefficients, with ``\Phi_s`` the reduced-form MA coefficients and ``P`` the impact matrix
-- The numerator sums the squared contributions of shock ``j`` through horizon ``h-1``
-- The denominator sums contributions from all ``n`` shocks, ensuring ``\sum_j \text{FEVD}_{ij}(h) = 1``
+- the numerator accumulates the squared contributions of shock ``j`` through horizon ``h-1``
+- the denominator accumulates contributions from all ``n`` shocks
 
-### Properties
+The decomposition satisfies three properties. It is **bounded**: ``0 \leq \text{FEVD}_{ij}(h) \leq 1``. Its **rows sum to one**, ``\sum_{j} \text{FEVD}_{ij}(h) = 1``, by construction of the normalization. And it **converges**: as ``h \to \infty`` the shares approach the unconditional variance decomposition, revealing the long-run drivers of each variable's fluctuations. At short horizons own shocks typically dominate; as the horizon grows, transmission lets other shocks explain more.
 
-The FEVD satisfies three fundamental properties:
-
-1. **Boundedness**: ``0 \leq \text{FEVD}_{ij}(h) \leq 1`` for all ``i, j, h``
-2. **Row-sum unity**: ``\sum_{j=1}^{n} \text{FEVD}_{ij}(h) = 1`` for all ``i, h`` — the variance shares exhaust the total forecast error variance
-3. **Convergence**: As ``h \to \infty``, the FEVD converges to the unconditional variance decomposition, revealing the dominant long-run drivers of each variable's fluctuations
-
-At short horizons, own shocks typically dominate (large diagonal entries in the FEVD matrix). As the horizon increases, transmission mechanisms allow other shocks to explain a growing share of the forecast error variance.
-
-### Code Example
+!!! warning "The normalization is not a validity check"
+    Because each row is divided by its own total, the rows sum to one for *any* impact matrix, valid or not. The accumulated total is the true forecast error variance only when ``P P' = \Sigma``. `fevd` verifies this in the ``\Sigma``-metric and warns once when it fails — some ICA and heteroskedasticity-based identifications return a rotation that is not exactly orthonormal. Use `generalized_fevd` for genuinely non-orthogonal identifications.
 
 ```@example ia_fevd
-# Cholesky FEVD: ordering implies INDPRO → CPI → FFR
-decomp = fevd(model, 20)
-report(decomp)
-
-# Tabular output at selected horizons
-print_table(stdout, decomp, 1; horizons=[1, 4, 8, 12, 20])
+# The funds-rate row of the decomposition reported above, at selected horizons
+print_table(stdout, decomp, "FEDFUNDS"; horizons=[1, 4, 8, 12, 20])
 ```
 
-The Cholesky ordering INDPRO, CPIAUCSL, FEDFUNDS implies that monetary policy shocks (FFR) do not contemporaneously affect output or prices. At horizon 1, the INDPRO own shock dominates by construction. By horizon 20, the FEVD reveals the relative importance of supply, demand, and monetary shocks in driving industrial production forecast uncertainty.
+```julia
+plot_result(decomp)
+```
 
 ```@raw html
 <iframe src="../assets/plots/fevd_freq.html" width="100%" height="500" frameborder="0" style="border:1px solid #ddd;border-radius:4px;"></iframe>
 ```
 
-### FEVD Return Values
+At ``h=1`` the recursive ordering fixes the answer: industrial production owes 100% of its one-month forecast error to its own shock, prices 99.6% to theirs, and the funds rate 97.2% to the policy shock. The interesting movement is off the diagonal at longer horizons. Monetary shocks explain 5.2% of industrial production's forecast error variance at ``h=20`` and price shocks 2.4%, so the vast majority of output variation over a 20-month window is not attributable to identified policy or price disturbances. The funds rate is the variable most explained by others: industrial-production shocks account for 17.8% of its forecast error variance at ``h=20``, up from 2.3% at impact. Read together, this is a systematic policy rule responding to real activity, not a large exogenous policy component.
+
+### `FEVD` Return Values
 
 | Field | Type | Description |
 |-------|------|-------------|
-| `decomposition` | `Array{T,3}` | ``n \times n \times H`` raw cumulative variance contributions |
-| `proportions` | `Array{T,3}` | ``n \times n \times H`` proportion of FEV: `proportions[i, j, h]` = share of variable ``i``'s FEV due to shock ``j`` at horizon ``h`` |
+| `decomposition` | `Array{T,3}` | ``n \times n \times H`` cumulative squared-IRF contributions (unnormalized) |
+| `proportions` | `Array{T,3}` | ``n \times n \times H`` variance shares: `proportions[i, j, h]` = share of variable ``i``'s FEV due to shock ``j`` at horizon ``h`` |
 | `variables` | `Vector{String}` | Variable names |
 | `shocks` | `Vector{String}` | Shock names |
 
@@ -117,56 +111,17 @@ The Cholesky ordering INDPRO, CPIAUCSL, FEDFUNDS implies that monetary policy sh
 
 | Keyword | Type | Default | Description |
 |---------|------|---------|-------------|
-| `method` | `Symbol` | `:cholesky` | Identification method (`:cholesky`, `:sign`, `:long_run`, `:narrative`, ICA/ML variants) |
+| `method` | `Symbol` | `:cholesky` | Identification method (`:cholesky`, `:sign`, `:long_run`, `:narrative`, ICA/ML/heteroskedasticity variants) |
 | `check_func` | `Function` | `nothing` | Sign restriction check function |
 | `narrative_check` | `Function` | `nothing` | Narrative restriction check function |
-
----
-
-## Bayesian FEVD
-
-Bayesian FEVD integrates over parameter uncertainty by computing variance shares for each posterior draw and reporting posterior quantiles (Kilian & Lutkepohl 2017, Chapter 12). This produces credible intervals that reflect both estimation uncertainty and identification uncertainty.
-
-```@example ia_fevd
-# Bayesian FEVD with 68% credible intervals
-bfevd = fevd(post, 20; method=:cholesky, quantiles=[0.16, 0.5, 0.84])
-report(bfevd)
-
-# Access posterior median FEVD for variable 1 at horizon 8
-median_share = bfevd.point_estimate[8, 1, :]
-```
-
-The Bayesian FEVD computes variance shares for each accepted posterior draw, discarding non-stationary draws. The `point_estimate` array contains the posterior mean (or median) FEVD, while the `quantiles` array stores the full posterior distribution at each horizon. Wide credible bands indicate that the data are not sufficiently informative to pin down the relative importance of specific shocks.
-
-```@raw html
-<iframe src="../assets/plots/fevd_bayesian.html" width="100%" height="500" frameborder="0" style="border:1px solid #ddd;border-radius:4px;"></iframe>
-```
-
-### BayesianFEVD Return Values
-
-| Field | Type | Description |
-|-------|------|-------------|
-| `quantiles` | `Array{T,4}` | ``H \times n \times n \times n_q``: dimension 4 indexes quantile levels (e.g., 16th, 50th, 84th percentile) |
-| `point_estimate` | `Array{T,3}` | ``H \times n \times n`` posterior point estimate FEVD proportions |
-| `horizon` | `Int` | Maximum FEVD horizon |
-| `variables` | `Vector{String}` | Variable names |
-| `shocks` | `Vector{String}` | Shock names |
-| `quantile_levels` | `Vector{T}` | Quantile levels (e.g., `[0.16, 0.5, 0.84]`) |
-
-### Keyword Arguments
-
-| Keyword | Type | Default | Description |
-|---------|------|---------|-------------|
-| `method` | `Symbol` | `:cholesky` | Identification method |
-| `quantiles` | `Vector{<:Real}` | `[0.16, 0.5, 0.84]` | Posterior quantile levels |
-| `point_estimate` | `Symbol` | `:mean` | Central tendency (`:mean` or `:median`) |
-| `threaded` | `Bool` | `false` | Enable threaded quantile computation for large systems |
+| `shock_names` | `Vector{String}` | variable names | Labels for the shock dimension |
+| `rng` | `AbstractRNG` | `Random.default_rng()` | Draw source for set-identified methods |
 
 ---
 
 ## Generalized FEVD (Pesaran-Shin)
 
-The structural FEVD above accumulates squared **orthogonalized** IRFs. That is a proper variance decomposition only when the impact matrix satisfies ``PP' = \Sigma``, and under a Cholesky identification the answer depends on the variable ordering — an ordering that is often arbitrary. The generalized decomposition of Pesaran & Shin (1998) avoids both problems by using the reduced-form ``\Sigma`` directly, with no orthogonalization at all:
+The structural FEVD above accumulates squared **orthogonalized** IRFs. That is a proper variance decomposition only when the impact matrix satisfies ``PP' = \Sigma``, and under a Cholesky identification the answer depends on the variable ordering — an ordering that is often arbitrary. The generalized decomposition of Pesaran & Shin (1998), building on the generalized impulse response of Koop, Pesaran & Potter (1996), avoids both problems by using the reduced-form ``\Sigma`` directly, with no orthogonalization at all:
 
 ```math
 gFEVD_{ij}(H) = \frac{\sigma_{jj}^{-1}\sum_{h=0}^{H-1}\left(e_i' \Phi_h \Sigma e_j\right)^2}
@@ -175,7 +130,7 @@ gFEVD_{ij}(H) = \frac{\sigma_{jj}^{-1}\sum_{h=0}^{H-1}\left(e_i' \Phi_h \Sigma e
 
 where:
 - ``\Phi_h`` are the **reduced-form** moving-average coefficients (``\Phi_0 = I``)
-- ``\Sigma`` is the reduced-form error covariance and ``\sigma_{jj}`` its ``j``-th diagonal
+- ``\Sigma`` is the reduced-form error covariance and ``\sigma_{jj}`` its ``j``-th diagonal element
 - ``e_i`` are selection vectors, so the numerator is the part of variable ``i``'s forecast error variance attributable to a shock to **variable** ``j``
 
 ```@example ia_fevd
@@ -186,17 +141,15 @@ gn = generalized_fevd(model, 20; normalize=true)
  normalized_row_sums = round.(vec(sum(gn.proportions[:, :, 20]; dims=2)); digits=6))
 ```
 
-### Order invariance, and the price paid for it
+The generalized decomposition is **invariant to the variable ordering**: permuting the variables permutes the result and changes nothing else, to machine precision. Re-estimating this VAR with the ordering reversed and undoing the permutation moves the generalized shares by ``6 \times 10^{-16}``, while the Cholesky shares move by 0.080 — eight percentage points on a quantity bounded by one. That invariance is the reason to reach for it.
 
-The generalized decomposition is **invariant to the variable ordering** — permuting the variables permutes the result and changes nothing else, to machine precision (measured ``3 \times 10^{-16}``), where the Cholesky FEVD on the same data moves by 0.30. That invariance is the reason to reach for it.
-
-The price is that the generalized shocks are **correlated**, so the shares of a given variable do **not** sum to one. The raw row sums above exceed one because correlated shocks each take credit for the common component.
+The price is that the generalized shocks are **correlated**, so the shares of a given variable do not sum to one. The raw row sums above are 1.027, 1.012, and 1.077: correlated shocks each take credit for the common component. Compare the two decompositions for the funds rate at ``h=20`` — Cholesky gives 80.9% to the policy shock, the generalized version 89.0%, and the difference is precisely the contemporaneous covariance that the recursive ordering hands to whichever variable comes first.
 
 !!! warning "`normalize=true` is a convention, not an identity"
     Rescaling each row to sum to one is standard applied practice — it is what the Diebold-Yilmaz connectedness literature does — but it does not turn the generalized shares into an exclusive decomposition of the variance. They genuinely overlap. Report the raw shares when the overlap is itself informative, and say which version you used.
 
 !!! note "Two exact properties worth checking on your own data"
-    At the impact horizon ``\Phi_0 = I``, so ``gFEVD_{ij}(1) = \sigma_{ij}^2/(\sigma_{ii}\sigma_{jj}) = \mathrm{corr}(u_i, u_j)^2`` and the own-variable share is **exactly one**. And when ``\Sigma`` is diagonal there is nothing to orthogonalize, so the generalized and Cholesky decompositions coincide.
+    At the impact horizon ``\Phi_0 = I``, so ``gFEVD_{ij}(1) = \sigma_{ij}^2/(\sigma_{ii}\sigma_{jj}) = \mathrm{corr}(u_i, u_j)^2`` and the own-variable share is **exactly one**. On this sample that identity holds to ``2 \times 10^{-16}``. And when ``\Sigma`` is diagonal there is nothing to orthogonalize, so the generalized and Cholesky decompositions coincide.
 
 | Keyword | Type | Default | Description |
 |---------|------|---------|-------------|
@@ -205,18 +158,76 @@ The price is that the generalized shocks are **correlated**, so the shares of a 
 | `quantiles` | `Vector{<:Real}` | `[0.16, 0.5, 0.84]` | Posterior quantile levels (BVAR method) |
 | `point_estimate` | `Symbol` | `:mean` | Central tendency (BVAR method) |
 | `max_draws` | `Int` | `1000` | Cap on posterior draws used (BVAR method) |
+| `threaded` | `Bool` | `false` | Force threaded quantile computation (BVAR method) |
 
 `generalized_fevd` accepts a `VARModel` (returning an [`FEVD`](@ref)) or a `BVARPosterior` (returning a [`BayesianFEVD`](@ref) with posterior bands). Since nothing is orthogonalized, the BVAR method has no `method`/`check_func` machinery — every draw contributes and there is no rotation to accept or reject.
 
 ---
 
+## Bayesian FEVD
+
+Bayesian FEVD integrates over parameter uncertainty by computing variance shares for each posterior draw and reporting posterior quantiles (Kilian & Lütkepohl 2017, Chapter 12). Non-stationary draws are discarded, and the counts of requested, usable, and dropped draws travel with the result.
+
+!!! warning "Axis order differs between `FEVD` and `BayesianFEVD`"
+    `FEVD.proportions` is indexed ``(\text{variable}, \text{shock}, \text{horizon})`` while `BayesianFEVD.point_estimate` and `.quantiles` are indexed ``(\text{horizon}, \text{variable}, \text{shock})``. Indexing one array with the other's convention silently returns the wrong number instead of erroring.
+
+```@example ia_fevd
+# Bayesian FEVD with 68% credible intervals
+bfevd = fevd(post, 20; method=:cholesky, quantiles=[0.16, 0.5, 0.84])
+report(bfevd)
+```
+
+```julia
+plot_result(bfevd)
+```
+
+```@raw html
+<iframe src="../assets/plots/fevd_bayesian.html" width="100%" height="500" frameborder="0" style="border:1px solid #ddd;border-radius:4px;"></iframe>
+```
+
+```@example ia_fevd
+# point_estimate is (horizon, variable, shock); proportions is (variable, shock, horizon)
+(bayesian = round.(bfevd.point_estimate[20, 1, :], digits=4),
+ frequentist = round.(decomp.proportions[1, :, 20], digits=4),
+ credible_band_policy_shock = round.((bfevd.quantiles[20, 1, 3, 1],
+                                      bfevd.quantiles[20, 1, 3, 3]), digits=4))
+```
+
+All 200 posterior draws are usable here, so the bands rest on the full posterior. The posterior mean assigns industrial production's 20-month forecast error variance as 88.4% own, 4.0% price, and 7.6% policy, against the frequentist 92.4/2.4/5.2. The Bayesian shares are systematically less concentrated on the own shock because averaging over parameter draws mixes in configurations with stronger cross-variable transmission, and a share bounded below by zero cannot average downward as far as it can average upward. The 68% credible interval for the policy share is ``[0.043, 0.108]``, which comfortably contains the frequentist 0.052: the point estimate is not in question, but a band spanning a factor of 2.5 is the honest summary of what 250 observations reveal about the importance of monetary shocks.
+
+### `BayesianFEVD` Return Values
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `quantiles` | `Array{T,4}` | ``H \times n \times n \times n_q``: dimension 4 indexes quantile levels |
+| `point_estimate` | `Array{T,3}` | ``H \times n \times n`` posterior point estimate of the variance shares |
+| `horizon` | `Int` | Maximum FEVD horizon |
+| `variables` | `Vector{String}` | Variable names |
+| `shocks` | `Vector{String}` | Shock names |
+| `quantile_levels` | `Vector{T}` | Quantile levels (e.g., `[0.16, 0.5, 0.84]`) |
+| `n_requested` | `Int` | Posterior draws supplied by the sampler |
+| `n_effective` | `Int` | Draws that were stationary and identified |
+| `n_failed` | `Int` | Draws dropped before the quantiles were formed |
+
+### Keyword Arguments
+
+| Keyword | Type | Default | Description |
+|---------|------|---------|-------------|
+| `method` | `Symbol` | `:cholesky` | Identification method |
+| `quantiles` | `Vector{<:Real}` | `[0.16, 0.5, 0.84]` | Posterior quantile levels |
+| `point_estimate` | `Symbol` | `:mean` | Central tendency (`:mean` or `:median`) |
+| `max_draws` | `Int` | `1000` | Cap on rotation draws per posterior draw for set-identified methods |
+| `threaded` | `Bool` | `false` | Force threaded quantile computation (automatic above ``10^5`` cells) |
+| `check_func` | `Function` | `nothing` | Sign restriction check function |
+| `narrative_check` | `Function` | `nothing` | Narrative restriction check function |
+| `data` | `AbstractMatrix` | `post.data` | Override the data used for narrative checks |
+| `shock_names` | `Vector{String}` | variable names | Labels for the shock dimension |
+
+---
+
 ## LP-Based FEVD
 
-The LP-based FEVD of Gorodnichenko & Lee (2019) estimates variance shares directly via R² regressions rather than inverting the VAR lag polynomial. This approach is robust to dynamic misspecification: even if the VAR lag order is wrong, the LP-FEVD consistently estimates the true variance shares.
-
-### R² Estimator
-
-At each horizon ``h``, the LP-FEVD regresses the LP forecast error ``\hat{f}_{t+h|t-1}`` on structural shock leads ``[z_{t+h}, z_{t+h-1}, \ldots, z_t]``:
+The estimators above invert the VAR lag polynomial, so they inherit any misspecification of it. Gorodnichenko & Lee (2019) estimate variance shares directly from ``R^2`` regressions instead: at each horizon the LP forecast error of variable ``i`` is regressed on leads of structural shock ``j``, and the ``R^2`` is the share.
 
 ```math
 \hat{s}_{ij}(h) = R^2 \left( \hat{f}_{i,t+h|t-1} \sim z_{j,t+h}, z_{j,t+h-1}, \ldots, z_{j,t} \right)
@@ -225,127 +236,101 @@ At each horizon ``h``, the LP-FEVD regresses the LP forecast error ``\hat{f}_{t+
 where:
 - ``\hat{f}_{i,t+h|t-1}`` is the LP forecast error for variable ``i`` at horizon ``h``
 - ``z_{j,t}`` is the identified structural shock ``j`` at time ``t``
-- ``R^2`` measures the fraction of forecast error variance explained by shock ``j``
 
-!!! note "Technical Note"
-    The package implements three LP-FEVD estimators: `:r2` (baseline R² regression), `:lp_a` (uses LP-IRF coefficients directly), and `:lp_b` (hybrid with residual variance in the denominator). All three are consistent; the R² estimator is the default and performs best in finite samples (Gorodnichenko & Lee 2019, Section 3).
-
-### Bias Correction
-
-The raw R² estimator has a finite-sample upward bias. The package applies the VAR-based bootstrap bias correction of Gorodnichenko & Lee (2019, Section 3.4):
-
-1. Fit a bivariate VAR on (shock, response) with HQIC lag selection
-2. Compute the "true" FEVD from the fitted VAR
-3. Simulate ``B`` bootstrap samples from the VAR, compute LP-FEVD for each
-4. Bias = mean(bootstrap LP-FEVD) - true VAR-FEVD
-5. Bias-corrected LP-FEVD = raw LP-FEVD - bias
-
-### Code Example
+`fevd(slp, H)` dispatches to this estimator and returns an `LPFEVD`, not the VMA-based `FEVD` above. A raw ``R^2`` is bounded below by zero and therefore biased upward whenever the true share is near zero, so the package applies the VAR-based bootstrap bias correction of Gorodnichenko & Lee (2019, Section 3.4) by default and builds centred bootstrap intervals in the manner of Kilian (1998).
 
 ```@example ia_fevd
-# Structural LP with Cholesky identification
-slp = structural_lp(Y, 20; method=:cholesky, lags=4)
-
-# LP-FEVD with bias correction and bootstrap CIs
-lp_decomp = fevd(slp, 20; method=:r2, bias_correct=true,
-                 n_boot=50, conf_level=0.95)
-report(lp_decomp)
+# Structural LP with Cholesky identification, then the R2-based decomposition
+lp_fevd_result = fevd(slp, 20; method=:r2, bias_correct=true,
+                      n_boot=50, conf_level=0.95, rng=MersenneTwister(20260802))
+report(lp_fevd_result)
 ```
 
-Consistent with Plagborg-Moller & Wolf (2021), the LP-FEVD produces variance shares that are numerically close to VAR-based FEVD under correct specification, but the LP estimates have wider confidence intervals because each horizon is estimated independently. The bias-corrected shares are bounded to ``[0, 1]`` and clamped to ensure non-negativity.
+```julia
+plot_result(lp_fevd_result)
+```
 
 ```@raw html
 <iframe src="../assets/plots/fevd_lp.html" width="100%" height="500" frameborder="0" style="border:1px solid #ddd;border-radius:4px;"></iframe>
 ```
 
-For full details on structural LP estimation, see [Local Projections](@ref lp_page).
+```@example ia_fevd
+# Bias correction removes most of the raw share at every horizon
+(raw = round.(lp_fevd_result.proportions[1, 3, [1, 4, 8, 20]], digits=4),
+ corrected = round.(lp_fevd_result.bias_corrected[1, 3, [1, 4, 8, 20]], digits=4))
+```
 
-### LPFEVD Return Values
+The raw ``R^2`` attributes a rising 0.0%, 5.3%, 6.7%, and 12.3% of industrial production's forecast error to the policy shock over horizons 1, 4, 8, and 20; the bias-corrected series is 0.0%, 3.3%, 2.9%, and 2.9%. Two thirds of the raw long-horizon share is finite-sample bias, exactly what the correction is designed to expose, and the corrected values sit below the VAR-based 5.2% rather than around it. Because each cell is estimated by its own regression, the corrected shares for a variable need not sum to one — they total 0.964 for industrial production at ``h=20`` — and the gap from one is a rough diagnostic of how far the LP and VAR representations of this system have drifted apart.
 
-| Field | Type | Description |
-|-------|------|-------------|
-| `proportions` | `Array{T,3}` | ``n \times n \times H`` raw R²-based variance shares |
-| `bias_corrected` | `Array{T,3}` | ``n \times n \times H`` bias-corrected shares |
-| `se` | `Array{T,3}` | ``n \times n \times H`` bootstrap standard errors |
-| `ci_lower` | `Array{T,3}` | ``n \times n \times H`` lower CI bound |
-| `ci_upper` | `Array{T,3}` | ``n \times n \times H`` upper CI bound |
-| `method` | `Symbol` | Estimator used (`:r2`, `:lp_a`, `:lp_b`) |
-| `horizon` | `Int` | Maximum FEVD horizon |
-| `n_boot` | `Int` | Number of bootstrap replications |
-| `conf_level` | `T` | Confidence level |
-| `bias_correction` | `Bool` | Whether bias correction was applied |
-| `variables` | `Vector{String}` | Variable names |
-| `shocks` | `Vector{String}` | Shock names |
-
-### Keyword Arguments
-
-| Keyword | Type | Default | Description |
-|---------|------|---------|-------------|
-| `method` | `Symbol` | `:r2` | Estimator (`:r2`, `:lp_a`, `:lp_b`) |
-| `bias_correct` | `Bool` | `true` | Apply VAR-based bootstrap bias correction |
-| `n_boot` | `Int` | `500` | Number of bootstrap replications |
-| `conf_level` | `Real` | `0.95` | Confidence level for CIs |
-| `var_lags` | `Union{Nothing,Int}` | `nothing` | VAR lag order for bias correction (default: HQIC-selected) |
+For the LP-A and LP-B alternatives, the full bias-correction algorithm, the keyword table, and the `LPFEVD` return values, see [Local Projections](@ref lp_page).
 
 ---
 
 ## Complete Example
 
-This example computes frequentist, Bayesian, and LP-based FEVD for a three-variable monetary policy VAR using FRED-MD data, then compares the variance shares across methods.
+This example runs all four estimators on the same monetary VAR and compares what each says about the policy-shock share of industrial production at a 20-month horizon.
 
 ```@example ia_fevd
-# --- Frequentist FEVD ---
-freq_fevd = fevd(model, 20)
-report(freq_fevd)
+# Four decompositions of one system
+chol_fevd  = fevd(model, 20)
+gen_fevd   = generalized_fevd(model, 20)
+bayes_fevd = fevd(post, 20; method=:cholesky)
+lp_r2_fevd = fevd(slp, 20; bias_correct=true, n_boot=50, rng=MersenneTwister(20260802))
+
+# Mind the axis order: (variable, shock, horizon) except for the Bayesian result
+(cholesky    = round(chol_fevd.proportions[1, 3, 20], digits=4),
+ generalized = round(gen_fevd.proportions[1, 3, 20], digits=4),
+ bayesian    = round(bayes_fevd.point_estimate[20, 1, 3], digits=4),
+ lp_r2       = round(lp_r2_fevd.bias_corrected[1, 3, 20], digits=4))
 ```
 
 ```@example ia_fevd
-# --- Bayesian FEVD ---
-bayes_fevd = fevd(post, 20; method=:cholesky)
+# The full Bayesian decomposition, with credible bands
 report(bayes_fevd)
 ```
 
-```@example ia_fevd
-# --- LP-based FEVD ---
-slp_full = structural_lp(Y, 20; method=:cholesky, lags=4)
-lp_fevd_result = fevd(slp_full, 20; bias_correct=true, n_boot=50)
-report(lp_fevd_result)
-
-# --- Tabular comparison at selected horizons ---
-print_table(stdout, freq_fevd, 1; horizons=[1, 4, 8, 20])
-```
-
-```julia
-plot_result(freq_fevd)
-plot_result(bayes_fevd)
-plot_result(lp_fevd_result)
-```
-
-```@raw html
-<iframe src="../assets/plots/fevd_freq.html" width="100%" height="500" frameborder="0" style="border:1px solid #ddd;border-radius:4px;"></iframe>
-```
-
-The frequentist FEVD provides point estimates at each horizon. The Bayesian FEVD adds credible intervals reflecting parameter uncertainty. The LP-FEVD offers robustness to VAR lag misspecification at the cost of wider confidence bands. All three methods agree on the qualitative pattern: own shocks dominate at short horizons, while cross-variable transmission mechanisms become visible at longer horizons.
+The four estimators put the monetary contribution to industrial production between 2.9% and 7.7% at a 20-month horizon. The Cholesky and Bayesian figures (5.2% and 7.6%) bracket the same object under different treatments of parameter uncertainty. The generalized share is the largest (7.7%) because it credits the policy variable with the full contemporaneous covariance rather than assigning it to whichever variable is ordered first. The bias-corrected LP estimate is the smallest (2.9%) and the most robust to lag misspecification, at the cost of the widest sampling uncertainty. Every one of them says the same economics: identified monetary shocks are a minor driver of output fluctuations during the Great Moderation, and disagreement across methods is smaller than the sampling uncertainty within any one of them.
 
 ---
 
 ## Common Pitfalls
 
-1. **FEVD depends on identification ordering.** With Cholesky identification, the FEVD is sensitive to the variable ordering. Placing a variable first gives it maximum contemporaneous explanatory power. Always report the ordering and justify it on economic grounds.
+1. **The rows always sum to one, so that is not a diagnostic.** Each row is normalized by its own accumulated total, which makes the shares add up whether or not ``PP' = \Sigma`` holds. `fevd` checks orthonormality separately and warns once when it fails; heed that warning rather than the row sums, and switch to `generalized_fevd` when the identification is genuinely non-orthogonal.
 
-2. **Row sums equal one only for correctly identified systems.** If the structural impact matrix ``P`` is not orthogonal (e.g., with partial identification), the FEVD rows may not sum to exactly one. The package enforces normalization, but economically the shares are only meaningful under valid identification.
+2. **FEVD inherits the identification ordering.** Under Cholesky identification, reversing the ordering moved the shares by 8 percentage points on this sample. Always report the ordering and justify it economically, or use the order-invariant generalized decomposition.
 
-3. **LP-FEVD shares can exceed one before bias correction.** The raw R²-based LP-FEVD estimates individual shock shares independently, so they are not constrained to sum to one across shocks. The bias correction mitigates this but does not impose the adding-up constraint. Compare with VAR-FEVD to assess magnitude.
+3. **Axis order differs between the frequentist and Bayesian types.** `FEVD.proportions[i, j, h]` is (variable, shock, horizon); `BayesianFEVD.point_estimate[h, i, j]` is (horizon, variable, shock). Whenever the horizon is at least as large as the number of variables, indexing one with the other's convention stays in bounds and returns a plausible wrong number instead of throwing.
 
-4. **Short samples inflate Bayesian FEVD uncertainty.** With fewer than 100 observations, the Minnesota prior dominates the posterior and the FEVD credible intervals may be uninformatively wide. Increase `n_draws` and check prior sensitivity.
+4. **Generalized shares do not decompose the variance.** They overlap, sum to more than one, and `normalize=true` rescales rather than fixes that. Say which version you report.
 
-5. **Horizon must not exceed effective sample size.** For LP-FEVD, each additional horizon reduces the effective sample by one observation. With ``T = 200`` and ``H = 40``, only 160 observations remain at the longest horizon, reducing estimation precision.
+5. **LP-FEVD shares are estimated cell by cell.** Each ``R^2`` is clamped to ``[0,1]``, but nothing constrains a variable's shares to sum to one across shocks. Treat a total far from one as evidence that the LP and VAR representations disagree, and compare against the VAR-based decomposition before drawing conclusions.
+
+6. **Horizon must not exceed the effective sample.** For LP-FEVD each additional horizon costs one observation. With ``T = 250`` and ``H = 20`` the longest-horizon regression uses 226 observations; pushing ``H`` toward ``T/4`` degrades precision quickly.
 
 ---
 
 ## References
 
-- Lutkepohl, Helmut. 2005. *New Introduction to Multiple Time Series Analysis*. Berlin: Springer. ISBN 978-3-540-40172-8.
-- Kilian, Lutz, and Helmut Lutkepohl. 2017. *Structural Vector Autoregressive Analysis*. Cambridge: Cambridge University Press. [DOI: 10.1017/9781108164818](https://doi.org/10.1017/9781108164818)
-- Gorodnichenko, Yuriy, and Byoungchan Lee. 2019. "Forecast Error Variance Decompositions with Local Projections." *NBER Working Paper* No. 25380. [DOI: 10.3386/w25380](https://doi.org/10.3386/w25380)
-- Plagborg-Moller, Mikkel, and Christian K. Wolf. 2021. "Local Projections and VARs Estimate the Same Impulse Responses." *Econometrica*, 89(2), 955--980. [DOI: 10.3982/ECTA17813](https://doi.org/10.3982/ECTA17813)
+- Gorodnichenko, Yuriy, and Byoungchan Lee. 2019. "Forecast Error Variance Decompositions with Local Projections."
+  *Journal of Business & Economic Statistics*, 38(4), 921--933. [DOI](https://doi.org/10.1080/07350015.2019.1610661)
+
+- Kilian, Lutz. 1998. "Small-Sample Confidence Intervals for Impulse Response Functions."
+  *Review of Economics and Statistics*, 80(2), 218--230. [DOI](https://doi.org/10.1162/003465398557465)
+
+- Kilian, Lutz, and Helmut Lütkepohl. 2017. *Structural Vector Autoregressive Analysis*.
+  Cambridge: Cambridge University Press. [DOI](https://doi.org/10.1017/9781108164818)
+
+- Koop, Gary, M. Hashem Pesaran, and Simon M. Potter. 1996. "Impulse Response Analysis in Nonlinear Multivariate Models."
+  *Journal of Econometrics*, 74(1), 119--147. [DOI](https://doi.org/10.1016/0304-4076(95)01753-4)
+
+- Lütkepohl, Helmut. 2005. *New Introduction to Multiple Time Series Analysis*.
+  Berlin: Springer. ISBN 978-3-540-40172-8. [DOI](https://doi.org/10.1007/978-3-540-27752-1)
+
+- Pesaran, H. Hashem, and Yongcheol Shin. 1998. "Generalized Impulse Response Analysis in Linear Multivariate Models."
+  *Economics Letters*, 58(1), 17--29. [DOI](https://doi.org/10.1016/S0165-1765(97)00214-0)
+
+- Plagborg-Møller, Mikkel, and Christian K. Wolf. 2021. "Local Projections and VARs Estimate the Same Impulse Responses."
+  *Econometrica*, 89(2), 955--980. [DOI](https://doi.org/10.3982/ECTA17813)
+
+- Sims, Christopher A. 1980. "Macroeconomics and Reality."
+  *Econometrica*, 48(1), 1--48. [DOI](https://doi.org/10.2307/1912017)

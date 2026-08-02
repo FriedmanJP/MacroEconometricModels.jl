@@ -1,6 +1,6 @@
 # [Data Management API](@id api_data)
 
-Typed data containers, built-in datasets, and data cleaning utilities. See [Data Management](../data.md) for theory and examples.
+Typed data containers, built-in datasets, and data cleaning utilities. See [Data Management](@ref data_page) for theory and examples. Panel lag/lead/difference helpers are documented in [Panel Models API](@ref api_panel).
 
 ---
 

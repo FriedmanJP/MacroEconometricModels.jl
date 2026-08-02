@@ -1,12 +1,14 @@
 # [Factor-Augmented VAR](@id favar_page)
 
-**MacroEconometricModels.jl** provides a complete Factor-Augmented VAR (FAVAR) framework for structural analysis of large macroeconomic panels. The FAVAR combines latent factors extracted from hundreds of variables with a small-scale VAR, enabling impulse response analysis, forecast error variance decomposition, and forecasting at the panel level.
+A VAR holds five or ten variables before parameter proliferation swamps it, but a central bank reads hundreds. The Factor-Augmented VAR (FAVAR) of Bernanke, Boivin & Eliasz (2005) resolves the tension: compress a large panel into ``r`` latent factors, estimate a small VAR on those factors together with the policy variables of interest, then project the structural results back onto every series in the panel.
 
-- **Two-Step Estimation**: Extract ``r`` factors via principal components, remove double-counting against key observed variables, and estimate a VAR on the augmented system (Bernanke, Boivin & Eliasz 2005)
-- **Bayesian FAVAR**: Joint Gibbs sampler drawing factors, loadings, and VAR parameters with posterior credible intervals via Carter-Kohn smoothing and Normal-Inverse-Wishart conjugate updates
-- **Panel-Wide IRFs**: Map structural shocks from the factor VAR to all ``N`` panel variables through the loading matrix ``\Lambda``, producing impulse responses for every series in the dataset
-- **Structural Analysis**: Full integration with Cholesky, sign-restriction, and narrative identification through automatic delegation to the VAR infrastructure
-- **Forecasting**: Multi-step-ahead forecasts in the augmented space with panel-wide mapping via `favar_panel_forecast`
+- **Two-step estimation**: extract ``r`` factors by principal components, remove double-counting against the key observed variables, and estimate a VAR on the augmented system
+- **Bayesian FAVAR**: a joint Gibbs sampler over factors, loadings, and VAR parameters, using Carter–Kohn forward-filtering backward-sampling and Normal-Inverse-Wishart conjugate updates
+- **Panel-wide IRFs**: `favar_panel_irf` maps structural shocks from the factor VAR to all ``N`` panel variables through the loading matrix
+- **Structural analysis**: Cholesky, sign-restriction, and narrative identification, plus FEVD and historical decomposition, by automatic delegation to the VAR infrastructure
+- **Forecasting**: multi-step forecasts in the augmented space, mapped to the panel by `favar_panel_forecast`
+
+The factors themselves — how to extract them, how many to keep, and what they explain — are covered on the [Factor Models](@ref factor_page) page; this page starts where those factors enter a VAR. For the identification schemes the FAVAR inherits, see [Structural Identification](@ref structural_identification_page); for a factor model built for ragged real-time data rather than structural analysis, see [DFM Nowcasting](@ref nowcast_dfm_page).
 
 All results integrate with `report()` for publication-quality output and `plot_result()` for interactive D3.js visualization.
 
@@ -14,54 +16,52 @@ All results integrate with `report()` for publication-quality output and `plot_r
 using MacroEconometricModels, Random
 Random.seed!(42)
 fred = load_example(:fred_md)
-slow_names = ["INDPRO", "CPIAUCSL", "UNRATE"]
-fast_names = ["M2SL", "FEDFUNDS", "TB3MS", "GS10"]
-md = fred[:, vcat(slow_names, fast_names)]
-X = to_matrix(apply_tcode(md))
+panel_names = ["INDPRO", "CPIAUCSL", "UNRATE", "M2SL", "FEDFUNDS", "TB3MS", "GS10"]
+X = to_matrix(apply_tcode(fred[:, panel_names]))
 X = X[all.(isfinite, eachrow(X)), :]
 X = X[end-59:end, :]
 ```
 
 ## Quick Start
 
+Every recipe below runs on `X`, a transformed FRED-MD panel whose columns are, in order, `INDPRO`, `CPIAUCSL`, `UNRATE`, `M2SL`, `FEDFUNDS`, `TB3MS`, `GS10`. Column 5 is therefore the federal funds rate, the key variable in the Bernanke, Boivin & Eliasz specification.
+
 **Recipe 1: Two-step FAVAR estimation**
 
 ```@example favar
-# FAVAR: 2 factors, 2 lags, columns 4-7 as key variables
-favar = estimate_favar(X, [4, 5, 6, 7], 2, 2)
-report(irf(favar, 20; method=:cholesky))
+panel_names = ["INDPRO", "CPIAUCSL", "UNRATE", "M2SL", "FEDFUNDS", "TB3MS", "GS10"]
+favar = estimate_favar(X, [5], 2, 2; panel_varnames=panel_names)
+report(favar)
 ```
 
-**Recipe 2: Bayesian FAVAR with Gibbs sampling**
+**Recipe 2: Structural impulse responses in the augmented space**
 
 ```@example favar
-bfavar = estimate_favar(X, [4, 5], 2, 2;
-    method=:bayesian, n_draws=100, burnin=50)
-report(irf(bfavar, 20))
+r = irf(favar, 20; method=:cholesky)
+report(r)
 ```
 
 **Recipe 3: Panel-wide impulse responses**
 
 ```@example favar
-favar3 = estimate_favar(X, [4, 5], 2, 2)
-r3 = irf(favar3, 20; method=:cholesky)
-r_panel = favar_panel_irf(favar3, r3)
+r_panel = favar_panel_irf(favar, r)
 report(r_panel)
 ```
 
-**Recipe 4: Panel-wide forecasting**
+**Recipe 4: Bayesian FAVAR with Gibbs sampling**
 
 ```@example favar
-fc = forecast(favar3, 12)
-fc_panel = favar_panel_forecast(favar3, fc)
-report(fc_panel)
+bfavar = estimate_favar(X, [5], 2, 2;
+    method=:bayesian, n_draws=100, burnin=50, panel_varnames=panel_names)
+birf = irf(bfavar, 20)
+
+(effective_draws=birf.n_effective, dropped=birf.n_failed)
 ```
 
-**Recipe 5: FEVD and historical decomposition**
+**Recipe 5: Forecast error variance decomposition**
 
 ```@example favar
-d = fevd(favar3, 20)
-h = historical_decomposition(favar3)
+d = fevd(favar, 20)
 report(d)
 ```
 
@@ -69,7 +69,7 @@ report(d)
 
 ## Model Specification
 
-The FAVAR augments a standard VAR with latent factors extracted from a large panel of ``N`` macroeconomic variables. Traditional VARs are limited to a handful of variables due to parameter proliferation. The FAVAR overcomes this curse of dimensionality by summarizing the information content of a large panel into ``r`` factors, then estimating a VAR on the compact augmented system ``[F_t, Y_t^{key}]``.
+The FAVAR treats the observable panel as generated by a small number of latent states, and lets a VAR govern those states jointly with the variables the researcher insists on observing directly. Two equations define it.
 
 The **transition equation** governs the dynamics of the augmented system:
 
@@ -79,10 +79,10 @@ The **transition equation** governs the dynamics of the augmented system:
 
 where:
 - ``F_t`` is the ``r \times 1`` vector of latent factors extracted from the panel
-- ``Y_t^{key}`` is the ``n_{key} \times 1`` vector of key observed variables (e.g., the federal funds rate)
+- ``Y_t^{key}`` is the ``n_{key} \times 1`` vector of key observed variables, typically the policy rate
 - ``A_l`` are ``(r + n_{key}) \times (r + n_{key})`` coefficient matrices at lag ``l``
 - ``c`` is the ``(r + n_{key}) \times 1`` intercept vector
-- ``u_t \sim N(0, \Sigma)`` is the ``(r + n_{key}) \times 1`` reduced-form error vector
+- ``u_t \sim N(0, \Sigma)`` is the reduced-form error vector
 
 The **observation equation** links the factors to all ``N`` panel variables:
 
@@ -92,54 +92,67 @@ X_t = \Lambda \, F_t + e_t
 
 where:
 - ``X_t`` is the ``N \times 1`` vector of panel variables at time ``t``
-- ``\Lambda`` is the ``N \times r`` loading matrix mapping factors to observables
+- ``\Lambda`` is the ``N \times r`` loading matrix
 - ``e_t`` is the ``N \times 1`` vector of idiosyncratic errors
 
 !!! note "Technical Note"
-    The FAVAR nests a standard VAR as a special case when ``r = 0``. With ``r > 0``,
-    the model exploits information from the full panel while keeping the VAR dimension
-    manageable at ``r + n_{key}``. The number of estimated VAR parameters scales as
-    ``(r + n_{key})^2 p`` rather than ``N^2 p``.
+    The FAVAR nests a standard VAR at ``r = 0``. With ``r > 0`` the number of estimated
+    VAR parameters scales as ``(r + n_{key})^2 p`` instead of ``N^2 p``, which is what makes
+    a 100-variable information set tractable inside a system small enough to identify.
+
+The two factors in Recipe 1 carry 28.1% and 17.3% of the variance of the seven-series panel, 45.5% together, and the third eigenvalue is still 15.4%. That slow decay is what a narrow panel looks like: with ``N = 7`` there is no wide cross-section over which idiosyncratic noise can average out, so no small set of factors dominates. A production FAVAR uses the full FRED-MD panel; the seven series here keep every table on this page readable.
 
 ---
 
 ## Two-Step Estimation
 
-The two-step procedure of Bernanke, Boivin & Eliasz (2005) provides a computationally efficient estimator. The key insight is that PCA consistently estimates the factor space even when the factors are correlated with the key observed variables, but double-counting must be removed before forming the VAR.
+The two-step estimator exploits a convenient fact: principal components consistently recover the factor space even when the true factors are correlated with the key observed variables. What PCA cannot do is stop ``Y^{key}`` from entering the system twice, so the second step removes the overlap explicitly.
 
-The algorithm proceeds in three stages:
-
-1. **Extract factors**: Estimate ``r`` factors from the standardized panel ``X`` via principal components (Stock & Watson 2002)
-2. **Remove double-counting**: Regress each extracted factor on ``Y^{key}`` via OLS and retain the residuals as **slow-moving factors** ``\tilde{F}``
-3. **Estimate VAR**: Fit VAR(``p``) on the augmented system ``[\tilde{F}, Y^{key}]``
+1. **Extract factors**: estimate ``r`` factors from the standardized panel ``X`` by principal components (Stock & Watson 2002)
+2. **Remove double-counting**: regress each extracted factor on ``[1, Y^{key}]`` by OLS and keep the residuals as the **slow-moving factors** ``\tilde{F}``
+3. **Estimate the VAR**: fit VAR(``p``) on the augmented system ``[\tilde{F}, Y^{key}]``
 
 !!! note "Technical Note"
-    The double-counting correction is essential: without it, ``Y^{key}`` information
-    enters twice --- once through the factors (which load on all variables including
-    ``Y^{key}``) and once directly. Bernanke, Boivin & Eliasz (2005) resolve this by
-    regressing ``F`` on ``Y^{key}`` and using the residual component as the factors
-    in the VAR.
+    Without step 2, ``Y^{key}`` information enters once through the factors — which load on
+    every variable in the panel, including ``Y^{key}`` itself — and once directly, so the VAR
+    would regress a variable partly on itself. The slopes ``B_y`` from step 2 are not discarded:
+    they are retained as ``\Lambda_y = \Lambda B_y'``, the implied direct loading of each panel
+    variable on ``Y^{key}``, and are used when mapping responses back to the panel.
 
-```@example favar
-# Two-step FAVAR: 2 factors, 2 lags, key variables at columns 4 and 5
-favar_ts = estimate_favar(X, [4, 5], 2, 2)
-report(irf(favar_ts, 20; method=:cholesky))
+`plot_result` draws the estimated factors, which is the first thing to look at after a fit: a factor that is visibly a single spike is picking up one outlying observation rather than a common component.
+
+```julia
+plot_result(favar)
 ```
 
-The estimation extracts factors from the panel, orthogonalizes them against the 2 key variables, and fits a VAR(2) on the resulting 4-variable system. The `report()` call on the IRF displays the structural impulse responses with Cholesky identification, where the ordering places factors before key variables.
+```@raw html
+<iframe src="../assets/plots/favar_factors.html" width="100%" height="420" frameborder="0" style="border:1px solid #ddd;border-radius:4px;"></iframe>
+```
+
+The two slow-moving factors have very different amplitudes — the second varies about two and a half times as much as the first (standard deviations of 1.00 against 0.39), and all four extreme values fall between observations 20 and 24. Neither is dominated by a single spike, so both are common components rather than artefacts, and neither carries any funds-rate variation: step 2 has projected that out.
 
 ### Specifying Key Variables
 
-Key variables enter the FAVAR directly and receive exact (not factor-mapped) impulse responses. They can be specified as column indices or as a matrix:
+Key variables enter the VAR directly and receive exact impulse responses rather than factor-mapped ones. Pass them as column indices into `X`, or as a separate matrix:
 
 ```@example favar
-# By column indices (preferred)
-favar_idx = estimate_favar(X, [4, 5, 6], 2, 2)
-
-# With custom variable names for the panel
-favar_named = estimate_favar(X, [4, 5], 2, 2;
-    panel_varnames=["Slow1", "Slow2", "Slow3", "Fast1", "Fast2", "Fast3", "Fast4"])
+# Two key variables: broad money and the funds rate
+favar_ts = estimate_favar(X, [4, 5], 2, 2; panel_varnames=panel_names)
+report(favar_ts)
 ```
+
+```@example favar
+# The matrix form is equivalent; key columns are recovered by exact matching
+favar_mat = estimate_favar(X, X[:, [4, 5]], 2, 2; panel_varnames=panel_names)
+
+(indices=favar_mat.Y_key_indices, varnames=favar_mat.varnames)
+```
+
+Adding `M2SL` to the key block enlarges the VAR from three variables to four and changes what the factors mean: they are now orthogonal to both money and the funds rate, so the "slow-moving" space excludes the entire monetary block rather than the policy rate alone. The PCA variance shares are unchanged at 28.1% and 17.3%, because double-counting removal operates on the extracted factors and not on the extraction itself. When the matrix form is used and no exact column match is found, `Y_key_indices` comes back empty and the key variables are labelled `Y1, Y2, …` instead of by panel name.
+
+!!! warning "panel_varnames is not optional in practice"
+    Without `panel_varnames`, every panel variable is labelled `X1 … XN`, and `report()` on a
+    panel IRF becomes unreadable. Pass the same names you used to build `X`.
 
 ### Keyword Arguments
 
@@ -147,71 +160,74 @@ favar_named = estimate_favar(X, [4, 5], 2, 2;
 |---------|------|---------|-------------|
 | `method` | `Symbol` | `:two_step` | Estimation method: `:two_step` or `:bayesian` |
 | `panel_varnames` | `Vector{String}` | `nothing` | Display names for the ``N`` panel variables |
-| `n_draws` | `Int` | `5000` | Number of posterior draws (Bayesian only) |
-| `burnin` | `Int` | `1000` | Burn-in draws discarded before collection (Bayesian only) |
+| `n_draws` | `Int` | `5000` | Posterior draws retained (Bayesian only) |
+| `burnin` | `Int` | `1000` | Burn-in draws discarded; `0` falls back to 200 (Bayesian only) |
+| `rng` | `AbstractRNG` | `Random.default_rng()` | Random source for the Gibbs sampler |
 
 ### Return Value (`FAVARModel{T}`)
 
 | Field | Type | Description |
 |-------|------|-------------|
-| `Y` | `Matrix{T}` | Augmented data ``[\tilde{F}, Y^{key}]`` (``T_{eff} \times (r + n_{key})``) |
+| `Y` | `Matrix{T}` | Augmented data ``[\tilde{F}, Y^{key}]`` (``T \times (r + n_{key})``) |
 | `p` | `Int` | VAR lag order |
 | `B` | `Matrix{T}` | VAR coefficient matrix (``(1 + p(r + n_{key})) \times (r + n_{key})``) |
 | `U` | `Matrix{T}` | VAR residuals |
 | `Sigma` | `Matrix{T}` | Residual covariance (``(r + n_{key}) \times (r + n_{key})``) |
+| `varnames` | `Vector{String}` | Augmented VAR variable names |
 | `X_panel` | `Matrix{T}` | Original panel data (``T \times N``) |
 | `panel_varnames` | `Vector{String}` | Panel variable names (length ``N``) |
-| `Y_key_indices` | `Vector{Int}` | Column indices of key variables in `X_panel` |
+| `Y_key_indices` | `Vector{Int}` | Column indices of key variables in `X_panel`, empty if unmatched |
 | `n_factors` | `Int` | Number of latent factors ``r`` |
 | `n_key` | `Int` | Number of key observed variables ``n_{key}`` |
-| `factors` | `Matrix{T}` | Extracted slow-moving factors (``T \times r``) |
+| `factors` | `Matrix{T}` | Slow-moving factors ``\tilde{F}`` (``T \times r``) |
 | `loadings` | `Matrix{T}` | Factor loading matrix ``\Lambda`` (``N \times r``) |
-| `factor_model` | `FactorModel{T}` | Underlying PCA factor model with variance explained |
-| `aic` | `T` | Akaike information criterion |
-| `bic` | `T` | Bayesian information criterion |
-| `loglik` | `T` | Log-likelihood |
+| `Lambda_y` | `Matrix{T}` | Implied direct panel loadings on ``Y^{key}`` (``N \times n_{key}``) |
+| `factor_model` | `FactorModel{T}` | Underlying PCA factor model |
+| `aic` | `T` | Akaike information criterion, per observation |
+| `bic` | `T` | Bayesian information criterion, per observation |
+| `loglik` | `T` | Gaussian log-likelihood of the augmented VAR |
 
 ---
 
 ## Bayesian FAVAR
 
-The Bayesian approach jointly estimates factors, loadings, and VAR parameters via Gibbs sampling (Bernanke, Boivin & Eliasz 2005, Section IV). Joint estimation accounts for the uncertainty in the extracted factors, which the two-step procedure treats as known. This produces wider and more honest credible intervals on structural analysis.
+The two-step estimator treats the extracted factors as data. They are not: they are estimates, and pretending otherwise understates the uncertainty in everything downstream. The Bayesian FAVAR (Bernanke, Boivin & Eliasz 2005, Section IV) samples factors, loadings, and VAR parameters jointly, so the credible interval on a structural response includes the error in the factor extraction itself.
 
-The Gibbs sampler iterates three blocks:
+The Gibbs sampler cycles three blocks:
 
-1. **Draw** ``\Lambda \mid F, X``: Equation-by-equation OLS regression with Normal posterior, drawing each row of ``\Lambda`` conditional on the current factors and idiosyncratic variances
-2. **Draw** ``F \mid \Lambda, B, \Sigma, X, Y^{key}``: Posterior regression combining the observation equation likelihood with a standard Normal prior, producing time-``t`` factor draws
-3. **Draw** ``(B, \Sigma) \mid F, Y^{key}``: Normal-Inverse-Wishart conjugate posterior from the VAR on the augmented system ``[F, Y^{key}]``, in the informative-prior tradition of Doan, Litterman & Sims (1984)
+1. **Draw** ``(B, \Sigma) \mid F, Y^{key}``: Normal-Inverse-Wishart conjugate posterior from the VAR on the augmented system under a flat prior, in the tradition of Doan, Litterman & Sims (1984)
+2. **Draw** ``\Lambda \mid F, X``: equation by equation, each row of ``\Lambda`` from its Normal posterior given the current factors and idiosyncratic variances
+3. **Draw** ``F \mid \Lambda, B, \Sigma, X, Y^{key}``: Carter–Kohn forward-filtering backward-sampling on the companion state-space form, with the intercept and lagged ``Y^{key}`` feedback entering as a known drift
 
 ```@example favar
-# Bayesian FAVAR with 100 posterior draws and 50 burn-in
-bfavar = estimate_favar(X, [4, 5], 2, 2;
-    method=:bayesian, n_draws=100, burnin=50)
-
-# Bayesian IRF with posterior credible intervals
-birf = irf(bfavar, 20)
 report(birf)
 ```
 
-The Bayesian FAVAR produces posterior draws of the VAR coefficients, covariance matrix, factors, and loadings. The IRF computation propagates parameter uncertainty by computing impulse responses at each draw and reporting posterior median and credible intervals. Wider intervals relative to the two-step approach reflect the additional uncertainty from treating factors as latent.
+Ten of the 100 posterior draws are discarded because their companion matrix is explosive, leaving 90 effective draws — `report` states this in the header rather than silently averaging over whatever survived. The Bayesian and two-step answers differ substantially on the same data: the median response of the funds rate to the first factor shock is ``-0.061`` at ``h = 4`` against ``-0.042`` from the two-step point estimate, and the first factor's own-shock response starts at 0.63 rather than 0.35. That is not sampling noise. The Gibbs sampler re-draws the factors at every sweep, so it never conditions on the fixed principal components the two-step estimator takes as given.
+
+!!! warning "100 draws is a documentation setting, not a research setting"
+    The examples here use `n_draws=100, burnin=50` so the page builds quickly, and the flat
+    prior leaves the VAR block essentially unregularized on 58 effective observations — which is
+    why one draw in ten is explosive. With a panel of ``N > 100`` variables use `burnin` of at
+    least 2000 and several thousand draws, and confirm the posterior is stable across settings.
 
 ### Bayesian Structural Analysis
 
-All structural analysis methods --- IRFs, FEVD, and historical decomposition --- operate draw-by-draw through automatic delegation to the `BVARPosterior` infrastructure:
+IRFs, FEVD, and historical decomposition all operate draw by draw, through automatic delegation to the `BVARPosterior` infrastructure:
 
 ```@example favar
-# Bayesian FEVD and historical decomposition
 bfevd = fevd(bfavar, 20)
-bhd = historical_decomposition(bfavar)
 report(bfevd)
 ```
+
+At the 20-period horizon the funds rate's own shock explains 13.7% of its forecast error variance in the Bayesian FAVAR, against 50.6% in the two-step model; the first factor alone takes 75.5%. Sampling the factors instead of fixing them moves variance from the identified policy shock to the common component, which is the direction the generated-regressor problem predicts. Read the two decompositions as answers to different questions, not as competing estimates of one number.
 
 ### Return Value (`BayesianFAVAR{T}`)
 
 | Field | Type | Description |
 |-------|------|-------------|
-| `B_draws` | `Array{T,3}` | Posterior VAR coefficient draws (``n_{draws} \times k \times n_{var}``) |
-| `Sigma_draws` | `Array{T,3}` | Posterior covariance draws (``n_{draws} \times n_{var} \times n_{var}``) |
+| `B_draws` | `Array{T,3}` | Posterior VAR coefficient draws (``n_{draws} \times k \times n``) |
+| `Sigma_draws` | `Array{T,3}` | Posterior covariance draws (``n_{draws} \times n \times n``) |
 | `factor_draws` | `Array{T,3}` | Posterior factor draws (``n_{draws} \times T \times r``) |
 | `loadings_draws` | `Array{T,3}` | Posterior loading draws (``n_{draws} \times N \times r``) |
 | `X_panel` | `Matrix{T}` | Original panel data (``T \times N``) |
@@ -219,142 +235,165 @@ report(bfevd)
 | `Y_key_indices` | `Vector{Int}` | Key variable column indices |
 | `n_factors` | `Int` | Number of factors ``r`` |
 | `n_key` | `Int` | Number of key variables ``n_{key}`` |
-| `n` | `Int` | Total VAR dimension (``r + n_{key}``) |
+| `n` | `Int` | Total VAR dimension ``r + n_{key}`` |
 | `p` | `Int` | VAR lag order |
-| `data` | `Matrix{T}` | Augmented VAR data ``[F, Y^{key}]`` (posterior mean factors) |
-| `varnames` | `Vector{String}` | VAR variable names |
+| `data` | `Matrix{T}` | Augmented VAR data ``[F, Y^{key}]`` at the posterior mean factors |
+| `varnames` | `Vector{String}` | Augmented VAR variable names |
 
 ---
 
 ## Panel-Wide Impulse Responses
 
-The defining feature of FAVAR is the ability to trace structural shocks through to all ``N`` panel variables. The `favar_panel_irf` function maps factor-space IRFs to the full panel via the loading matrix:
+Tracing a structural shock through to every series in the panel is what the FAVAR exists for. `favar_panel_irf` performs the mapping:
 
 ```math
-\text{response}_i(h, j) = \sum_{k=1}^{r} \Lambda_{ik} \cdot \text{IRF}_{F_k}(h, j)
+\text{response}_i(h, j) = \sum_{k=1}^{r} \Lambda_{ik} \cdot \text{IRF}_{F_k}(h, j) + \sum_{m=1}^{n_{key}} \Lambda_{y,im} \cdot \text{IRF}_{Y_m}(h, j)
 ```
 
 where:
 - ``\text{response}_i(h, j)`` is the response of panel variable ``i`` at horizon ``h`` to structural shock ``j``
 - ``\Lambda_{ik}`` is the loading of variable ``i`` on factor ``k``
-- ``\text{IRF}_{F_k}(h, j)`` is the impulse response of factor ``k`` at horizon ``h`` to shock ``j``
+- ``\Lambda_{y,im}`` is the implied direct loading of variable ``i`` on key variable ``m``
+- ``\text{IRF}_{F_k}`` and ``\text{IRF}_{Y_m}`` are augmented-VAR responses of factor ``k`` and key variable ``m``
 
-Key observed variables bypass the factor mapping and use their direct VAR impulse responses, providing exact structural responses for the variables that enter the FAVAR directly.
+Key observed variables skip the mapping entirely and keep their direct VAR responses, so the series the researcher chose to observe get exact structural answers.
 
-```@example favar
-favar_panel = estimate_favar(X, [4, 5], 2, 2)
+The panel IRF reported in Recipe 3 delivers a textbook monetary contraction. On impact `INDPRO` falls 0.040, `CPIAUCSL` falls 0.101, and `UNRATE` rises 0.090, while the short rate `TB3MS` jumps 0.364 and the ten-year `GS10` moves only 0.077 — a flattening of the curve. Both the output and price responses are still negative at ``h = 12`` (``-0.009`` and ``-0.022``), so the contraction persists rather than reversing.
 
-# Standard IRF in the augmented space
-r_aug = irf(favar_panel, 20; method=:cholesky)
+Plotting the mapped responses shows all seven series answering one shock, which is the FAVAR's selling point over a three-variable VAR:
 
-# Map to all panel variables via Lambda
-r_panel = favar_panel_irf(favar_panel, r_aug)
-report(r_panel)
+```julia
+plot_result(r_panel; shock="FEDFUNDS")
 ```
 
-The panel IRF result contains responses for all variables. Key variables use their direct VAR responses, while remaining variables are reconstructed through the loading matrix. The mapping preserves confidence intervals when available.
+```@raw html
+<iframe src="../assets/plots/favar_panel_irf.html" width="100%" height="700" frameborder="0" style="border:1px solid #ddd;border-radius:4px;"></iframe>
+```
+
+The sign pattern at impact is the one theory asks for — activity and prices down, unemployment up, the whole yield curve up with the ten-year moving a fifth as much as the three-month — but no response is monotone. Most peak one period *after* impact (`CPIAUCSL` reaches ``-0.153`` at ``h = 1`` against ``-0.101`` on impact), and `M2SL` and `GS10` cross zero on the way down. All seven have decayed to under 15% of their impact magnitude by the end of the horizon. The bands are drawn flat at zero because the `irf` call above requested no confidence intervals; `ci_type=:bootstrap` fills them in, subject to the mapping caveat below.
+
+The two channels of the mapping can be separated directly:
+
+```@example favar
+# Impact response of INDPRO to the funds-rate shock, channel by channel
+factor_channel = sum(favar.loadings[1, :] .* r.values[1, 1:2, 3])
+direct_channel = favar.Lambda_y[1, 1] * r.values[1, 3, 3]
+
+(factor=round(factor_channel, digits=4),
+ direct=round(direct_channel, digits=4),
+ total=round(r_panel.values[1, 1, 3], digits=4))
+```
+
+The factor channel contributes exactly zero at impact: under the Cholesky ordering a shock to the last variable cannot move the factors contemporaneously, so ``\Lambda_y`` carries the whole impact response of every non-key series. From ``h = 2`` onward the factors respond and the two channels both contribute.
+
+!!! warning "Mapped intervals are images, not quantiles"
+    When the source IRF carries confidence bands, `favar_panel_irf` maps the lower and upper
+    bounds through the same ``\Lambda``. Loadings can be negative, so the image of a lower bound
+    is not necessarily below the image of an upper bound. Read a mapped band as the range
+    spanned by two mapped endpoints, and take the point estimate from `values`.
 
 ### Bayesian Panel IRFs
 
-The Bayesian variant uses posterior mean loadings for the panel mapping:
+The Bayesian variant maps the posterior median and every quantile through the posterior mean loadings:
 
 ```@example favar
 birf_panel = favar_panel_irf(bfavar, birf)
 report(birf_panel)
 ```
 
+Every non-key series has an impact response of exactly zero to the funds-rate shock, and responses appear only from ``h = 2``. The Bayesian mapping uses the factor channel alone: unlike the two-step path it adds no ``\Lambda_y`` term, because `BayesianFAVAR` samples the factors directly and never forms the double-counting regression that produces ``B_y``. Impact responses of non-key variables to a shock ordered last are therefore zero by construction here, whereas the two-step panel IRF reports them through ``\Lambda_y``. Compare the two mappings on the factor shocks, where both are live, rather than on the impact row of a recursively ordered policy shock.
+
 ---
 
 ## Forecasting
 
-FAVAR forecasts operate in the augmented VAR space ``[F, Y^{key}]`` and can be mapped to the full panel via `favar_panel_forecast`. The forecast delegates to the standard VAR forecast infrastructure through `to_var()`.
+FAVAR forecasts run in the augmented space ``[\tilde F, Y^{key}]``; `forecast` delegates to the VAR machinery through `to_var()`.
 
 ```@example favar
-# VAR-space forecast
-fc_favar = forecast(favar_panel, 12)
-
-# Map to all panel variables
-fc_panel_full = favar_panel_forecast(favar_panel, fc_favar)
-report(fc_panel_full)
+fc = forecast(favar, 6)
+report(fc)
 ```
 
-The panel forecast maps factor forecasts through ``\Lambda`` for non-key variables and uses direct VAR forecasts for key variables. Confidence intervals are mapped through the same loading matrix, preserving the relative width across variables proportional to their factor loadings.
+`favar_panel_forecast` maps those forecasts to the full panel, taking key variables from their direct VAR path and reconstructing the rest as ``\Lambda \hat F_{T+h} + \Lambda_y \hat Y^{key}_{T+h}``:
+
+```@example favar
+fc_panel = favar_panel_forecast(favar, fc)
+
+# Panel point forecasts: 6 horizons × 7 series, in panel_names order
+round.(fc_panel.forecast, digits=4)
+```
+
+Panel forecasts contain only the factor-mediated and policy-mediated components; the idiosyncratic dynamics of each series are not modelled and so are not forecast. Bootstrap intervals on the augmented system are wide relative to the point forecasts at every horizon, which is the honest reading of a VAR estimated on 58 effective observations. The interval endpoints are mapped through ``\Lambda`` by the same linear image used for IRFs, so the caveat above applies to `fc_panel.ci_lower` and `fc_panel.ci_upper` as well.
 
 | Keyword | Type | Default | Description |
 |---------|------|---------|-------------|
-| `ci_method` | `Symbol` | `:bootstrap` | Confidence interval method: `:none` or `:bootstrap` |
-| `reps` | `Int` | `500` | Number of bootstrap replications |
-| `conf_level` | `Real` | `0.95` | Confidence level for intervals |
+| `ci_method` | `Symbol` | `:bootstrap` | Interval method: `:none` or `:bootstrap` |
+| `reps` | `Int` | `500` | Bootstrap replications |
+| `conf_level` | `Real` | `0.95` | Confidence level |
 
 ---
 
 ## Structural Identification
 
-The FAVAR inherits all structural identification methods from the VAR infrastructure through automatic `to_var()` delegation. The ordering convention places factors first and key variables last, which determines the Cholesky recursive structure.
+The FAVAR inherits every identification method available to a VAR, since `to_var()` hands the augmented system to the standard machinery. The ordering convention puts factors first and key variables last, which sets the recursive structure under Cholesky.
+
+Ordering the slow-moving factors ahead of the funds rate encodes the Bernanke, Boivin & Eliasz identification: the policy rate responds within the month to the state of the economy summarized by the factors, but the factors respond to policy only with a lag. The restriction is visible in the Recipe 2 table — both factor responses to the funds-rate shock are exactly zero at ``h = 1`` and become non-zero from ``h = 2``.
+
+Sign restrictions drop the ordering assumption. The check function receives the full ``H \times n \times n`` IRF array of the **augmented** system, indexed `[horizon, variable, shock]`:
 
 ```@example favar
-# Cholesky identification (factors ordered before key variables)
-r_chol = irf(favar_panel, 20; method=:cholesky)
-report(r_chol)
-```
-
-```@example favar
-# Sign restrictions via check function (irf_matrix is H × n × n)
+# Shock 1 raises the first factor and lowers the funds rate on impact
 check_fn(irf_matrix) = irf_matrix[1, 1, 1] > 0 && irf_matrix[1, 3, 1] < 0
-r_sign_favar = irf(favar_panel, 20; method=:sign, check_func=check_fn)
-report(r_sign_favar)
+r_sign = irf(favar, 20; method=:sign, check_func=check_fn, seed=42)
+report(r_sign)
 ```
 
-The Cholesky identification places the slow-moving factors before the fast-moving key variables, consistent with the Bernanke, Boivin & Eliasz (2005) identification scheme where monetary policy (the key variable) responds contemporaneously to factor movements but not vice versa. For a detailed treatment of identification methods, see [Innovation Accounting](@ref innovation_accounting_page).
+Here `irf_matrix[1, 3, 1]` is the impact response of the third augmented variable — the funds rate — to the first structural shock, so the predicate imposes an aggregate-demand pattern without any ordering. The accepted rotation raises the first factor by 0.340 on impact while lowering the funds rate by 0.013, and it leaves the factors free to move contemporaneously with policy: the third shock now shifts them by 0.031 and 0.521 at ``h = 1``, where Cholesky forced exact zeros. Sign restrictions identify a set rather than a point, and `irf` returns the first accepted draw — pass `seed` to make the choice reproducible, as here, and re-run across seeds before concluding anything from a single rotation.
+
+For the full catalogue of identification schemes, including narrative and long-run restrictions, see [Innovation Accounting](@ref innovation_accounting_page) and [Structural Identification](@ref structural_identification_page).
 
 ---
 
 ## Complete Example
 
-This example estimates a FAVAR on FRED-MD data, performs structural analysis with both frequentist and Bayesian approaches, and maps results to the full panel:
+The end-to-end workflow: estimate, identify, decompose the history, and compare the frequentist and Bayesian readings of the same specification.
 
 ```@example favar
-# --- Two-step FAVAR ---
-favar_full = estimate_favar(X, [4, 5], 2, 2)
+favar_full = estimate_favar(X, [5], 2, 2; panel_varnames=panel_names)
 
-# Structural analysis in the augmented space
 r_aug_full = irf(favar_full, 20; method=:cholesky)
 d_aug_full = fevd(favar_full, 20)
-hd_full = historical_decomposition(favar_full)
-
-# Panel-wide mapping: IRFs and forecasts for all variables
 r_panel_full = favar_panel_irf(favar_full, r_aug_full)
-fc_full = forecast(favar_full, 12)
-fc_panel_map = favar_panel_forecast(favar_full, fc_full)
 
-# --- Bayesian FAVAR ---
-bfavar_full = estimate_favar(X, [4, 5], 2, 2;
-    method=:bayesian, n_draws=100, burnin=50)
-
-birf_full = irf(bfavar_full, 20)
-birf_panel_full = favar_panel_irf(bfavar_full, birf_full)
-bfevd_full = fevd(bfavar_full, 20)
-
-# Display results
-report(r_panel_full)
-report(bfevd_full)
+hd_full = historical_decomposition(favar_full)
+report(hd_full)
 ```
 
-The two-step FAVAR extracts 2 factors from the 7-variable panel, removes the component spanned by the 2 key variables, and estimates a VAR(2) on the resulting 4-variable augmented system. The panel-wide IRFs map structural shocks to all 7 variables through the ``N \times r`` loading matrix ``\Lambda``. The Bayesian FAVAR additionally quantifies uncertainty in the factor extraction through 100 Gibbs draws, producing wider credible intervals that account for estimation error in both the factors and the VAR parameters.
+```@example favar
+# Share of the funds rate's 20-period forecast error assigned to its own shock.
+# FEVD.proportions is indexed (variable, shock, horizon);
+# BayesianFEVD.point_estimate is indexed (horizon, variable, shock).
+(twostep=round(100 * d_aug_full.proportions[3, 3, 20], digits=1),
+ bayesian=round(100 * bfevd.point_estimate[20, 3, 3], digits=1))
+```
+
+The two-step FAVAR extracts 2 factors from the 7-series panel, removes the component spanned by the federal funds rate, and estimates a VAR(2) on the resulting 3-variable augmented system — 58 effective observations after lags. The historical decomposition passes its identity check, and its mean absolute contributions show the funds rate driven mostly by its own shock (0.097) with the two factor shocks contributing 0.068 each, while the factors are driven overwhelmingly by factor shocks. Panel-wide IRFs then carry the three structural shocks out to all 7 series through the ``7 \times 2`` loading matrix ``\Lambda`` and the ``7 \times 1`` direct channel ``\Lambda_y``. The final comparison is the point of running both estimators: the funds-rate shock owns 50.6% of its own forecast error variance when the factors are treated as data and 13.7% when they are sampled, and that gap is the cost of the generated-regressor assumption, not a disagreement about the data.
 
 ---
 
 ## Common Pitfalls
 
-1. **Slow/fast variable classification**: The ordering ``[F, Y^{key}]`` implies that factors are "slow" and key variables are "fast" under Cholesky identification. Placing a slow-moving variable (e.g., GDP) as a key variable violates this assumption. Use the factor ordering to encode your identification scheme, or switch to sign restrictions.
+1. **Slow/fast misclassification.** The ordering ``[\tilde F, Y^{key}]`` makes the factors slow and the key variables fast under Cholesky. Putting a genuinely slow-moving series such as GDP in `Y_key` asserts that it responds to policy within the period. Encode the identification through the factor ordering, or switch to sign restrictions.
 
-2. **Number of factors**: Too few factors omit relevant information; too many introduce noise and reduce degrees of freedom in the VAR. Use `ic_criteria(X, r_max)` from the [Factor Models](@ref factor_page) page to select ``r`` via the Bai & Ng (2002) information criteria before estimating the FAVAR.
+2. **Choosing ``r`` by eye.** Too few factors omit relevant information; too many burn degrees of freedom in a VAR that has few to spare. Select ``r`` with `ic_criteria(X, r_max)` from the [Factor Models](@ref factor_page) page before estimating the FAVAR, and remember that the augmented VAR dimension is ``r + n_{key}``, not ``r``.
 
-3. **Gibbs burn-in too short**: The Bayesian FAVAR Gibbs sampler requires adequate burn-in for the factor and loading draws to converge from the PCA initialization. With ``N > 100`` panel variables, set `burnin` to at least 2000. Monitor convergence by comparing results across different `burnin` values.
+3. **Burn-in too short.** The Gibbs sampler starts from the PCA factors and loadings, and the factor block mixes slowly. With ``N > 100`` panel variables use `burnin` of at least 2000 and check that the posterior is stable across settings. Passing `burnin=0` silently substitutes 200, which is not a considered choice.
 
-4. **Panel IRF interpretation**: Panel IRFs for non-key variables are linear projections through ``\Lambda`` and reflect the factor-mediated component only. Idiosyncratic responses (variable-specific shocks) are not captured. A near-zero panel IRF does not mean the variable is unaffected --- it means the variable's response is orthogonal to the common factor structure.
+4. **Over-reading a small panel IRF.** For non-key variables the panel IRF is a linear projection through ``\Lambda`` and ``\Lambda_y``, capturing only the factor-mediated and policy-mediated components. A near-zero panel response does not mean the variable is unaffected — it means its response is orthogonal to the common structure the FAVAR models.
 
-5. **Double-counting correction**: The two-step procedure automatically removes double-counting by orthogonalizing factors against ``Y^{key}``. Manually pre-processing the data to exclude key variables from the panel before factor extraction is unnecessary and discards information that improves factor estimation.
+5. **Treating mapped bands as credible intervals.** `favar_panel_irf` and `favar_panel_forecast` map interval endpoints through ``\Lambda``, which is not a quantile-preserving operation when loadings are negative. Use them as a range; when a genuine interval on a panel variable is required, estimate the Bayesian FAVAR and read the mapped quantiles of `birf_panel` on the factor shocks.
+
+6. **Pre-filtering the panel.** The two-step procedure removes double-counting itself. Dropping the key variables from `X` before extraction is unnecessary and throws away information that improves the factor estimates.
 
 ---
 
@@ -364,13 +403,16 @@ The two-step FAVAR extracts 2 factors from the 7-variable panel, removes the com
   *Econometrica*, 70(1), 191-221. [DOI](https://doi.org/10.1111/1468-0262.00273)
 
 - Bernanke, B. S., Boivin, J., & Eliasz, P. (2005). Measuring the Effects of Monetary Policy: A Factor-Augmented Vector Autoregressive (FAVAR) Approach.
-  *Quarterly Journal of Economics*, 120(1), 387-422. [DOI](https://doi.org/10.1162/0033553053970344)
+  *Quarterly Journal of Economics*, 120(1), 387-422. [DOI](https://doi.org/10.1162/0033553053327452)
 
 - Carter, C. K., & Kohn, R. (1994). On Gibbs Sampling for State Space Models.
   *Biometrika*, 81(3), 541-553. [DOI](https://doi.org/10.1093/biomet/81.3.541)
 
 - Doan, T., Litterman, R., & Sims, C. (1984). Forecasting and Conditional Projection Using Realistic Prior Distributions.
   *Econometric Reviews*, 3(1), 1-100. [DOI](https://doi.org/10.1080/07474938408800053)
+
+- McCracken, M. W., & Ng, S. (2016). FRED-MD: A Monthly Database for Macroeconomic Research.
+  *Journal of Business & Economic Statistics*, 34(4), 574-589. [DOI](https://doi.org/10.1080/07350015.2015.1086655)
 
 - Stock, J. H., & Watson, M. W. (2002). Forecasting Using Principal Components from a Large Number of Predictors.
   *Journal of the American Statistical Association*, 97(460), 1167-1179. [DOI](https://doi.org/10.1198/016214502388618960)

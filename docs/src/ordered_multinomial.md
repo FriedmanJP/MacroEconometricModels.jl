@@ -1,523 +1,525 @@
 # [Ordered & Multinomial Models](@id ordered_multinomial_page)
 
-**MacroEconometricModels.jl** provides ordered logit/probit and multinomial logit regression for categorical dependent variables with three or more outcomes, estimated via Newton-Raphson maximum likelihood. All models produce Stata-style output and integrate with the package's StatsAPI interface, marginal effects infrastructure, and specification testing.
+**MacroEconometricModels.jl** estimates ordered logit, ordered probit, and multinomial logit models for categorical dependent variables with three or more outcomes, all by Newton-Raphson maximum likelihood with analytic derivatives. The models produce Stata-style output through `report()` and carry the package's marginal-effects, prediction, residual, and specification-testing infrastructure. For two-category outcomes see [Binary Choice Models](@ref binary_choice_page); for panel versions of discrete choice see [Panel Regression](@ref panel_reg_page).
 
 - **Ordered logit** (cumulative logistic link) for ordinal outcomes (McCullagh 1980)
-- **Ordered probit** (cumulative normal link) for ordinal outcomes
-- **Multinomial logit** (softmax) for unordered categorical outcomes (McFadden 1974)
-- **Average marginal effects** (AME) for all three models with proper K × J output (Cameron & Trivedi 2005)
-- **Brant test** of the proportional odds assumption for ordered logit (Brant 1990)
+- **Ordered probit** (cumulative normal link) for the same design
+- **Multinomial logit** (softmax) for unordered alternatives (McFadden 1974)
+- **Average marginal effects** for all three models, as a ``K \times J`` variables-by-categories matrix (Cameron & Trivedi 2005)
+- **Brant test** of the proportional-odds assumption, overall and per variable (Brant 1990)
 - **Hausman-McFadden IIA test** for multinomial logit (Hausman & McFadden 1984)
-- **Robust inference**: MLE, HC0, HC1, and cluster-robust standard errors
-- **StatsAPI interface**: `coef`, `vcov`, `predict`, `confint`, `stderror`, `nobs`, `loglikelihood`
+- **Residuals**: per-category response, Pearson, and deviance matrices, plus generalized residuals for the ordered models (Chesher & Irish 1987)
+- **Robust inference**: observed-information, HC0, HC1, and cluster-robust standard errors
+- **StatsAPI interface**: `coef`, `vcov`, `predict`, `confint`, `stderror`, `nobs`, `loglikelihood`, `residuals`
 
 ```@setup ordmult
-using MacroEconometricModels, Random, Distributions
-Random.seed!(42)
-# Helper: generate ordinal outcome from cumulative logistic model
-function _gen_ordered_logit(rng, n, X, beta, cuts)
-    xb = X * beta
-    y = Vector{Int}(undef, n)
-    for i in 1:n
-        u = rand(rng)
-        y[i] = length(cuts) + 1  # default = highest category
-        for (j, c) in enumerate(cuts)
-            if u < 1.0 / (1.0 + exp(-(c - xb[i])))
-                y[i] = j; break
-            end
-        end
-    end
-    y
-end
-# Helper: generate ordinal outcome from cumulative probit model
-function _gen_ordered_probit(rng, n, X, beta, cuts)
-    xb = X * beta
-    d = Normal()
-    y = Vector{Int}(undef, n)
-    for i in 1:n
-        u = rand(rng)
-        y[i] = length(cuts) + 1
-        for (j, c) in enumerate(cuts)
-            if u < cdf(d, c - xb[i])
-                y[i] = j; break
-            end
-        end
-    end
-    y
-end
+using MacroEconometricModels, Statistics
+mroz = load_example(:mroz)
 ```
+
+Every example models labour-supply intensity in the Mroz (1987) extract: 753 married women observed in 1975, with annual hours banded into four ordered categories — no work (325 women), part time under 1000 hours (155), 1000 to 1999 hours (201), and 2000 hours or more (72). The covariates are non-wife household income in thousands (`nwifeinc`), years of schooling (`educ`), labour-market experience (`exper`), `age`, and the number of children under six (`kidslt6`).
 
 ## Quick Start
 
 **Recipe 1: Ordered logit**
 
 ```@example ordmult
-n = 1000
-X = randn(n, 2)
-y = _gen_ordered_logit(Random.default_rng(), n, X, [1.0, -0.5], [0.0, 1.5])
-m = estimate_ologit(y, X; varnames=["income", "education"])
-report(m)
+hours = mroz[:, "hours"]
+supply = [h == 0 ? 1 : h < 1000 ? 2 : h < 2000 ? 3 : 4 for h in hours]
+Xo = hcat(mroz[:, "nwifeinc"], mroz[:, "educ"], mroz[:, "exper"],
+          mroz[:, "age"], mroz[:, "kidslt6"])
+onames = ["nwifeinc", "educ", "exper", "age", "kidslt6"]
+
+m_ologit = estimate_ologit(supply, Xo; varnames=onames)
+report(m_ologit)
 ```
 
-**Recipe 2: Ordered probit**
+**Recipe 2: Ordered probit on the same design**
 
 ```@example ordmult
-n = 1000
-X = randn(n, 2)
-y = _gen_ordered_probit(Random.default_rng(), n, X, [0.8, -0.5], [0.0, 1.0])
-m = estimate_oprobit(y, X; varnames=["income", "education"])
-report(m)
+m_oprobit = estimate_oprobit(supply, Xo; varnames=onames)
+report(m_oprobit)
 ```
 
-**Recipe 3: Multinomial logit**
+**Recipe 3: Multinomial logit (needs its own intercept)**
 
 ```@example ordmult
-n = 1000
-X = hcat(ones(n), randn(n, 2))
-# True coefficients: K=3 covariates × (J-1)=2 alternatives
-beta_true = [0.5 -0.3; 1.0 -0.5; -0.5 0.8]
-V = X * beta_true
-eV = exp.(V)
-P = hcat(ones(n), eV) ./ (1.0 .+ sum(eV, dims=2))
-# Draw from categorical distribution
-y = [findfirst(cumsum(P[i, :]) .>= rand()) for i in 1:n]
-m = estimate_mlogit(y, X; varnames=["const", "x1", "x2"])
-report(m)
+Xm = hcat(ones(mroz.N_obs), Xo)
+mnames = ["(Intercept)"; onames]
+
+m_mlogit = estimate_mlogit(supply, Xm; varnames=mnames)
+report(m_mlogit)
 ```
 
-**Recipe 4: Marginal effects for ordered logit**
+**Recipe 4: Average marginal effects**
 
 ```@example ordmult
-n = 1000
-X = randn(n, 2)
-y = _gen_ordered_logit(Random.default_rng(), n, X, [1.0, -0.5], [0.0, 1.5])
-m = estimate_ologit(y, X; varnames=["income", "education"])
-me = marginal_effects(m)
-# K × J matrix: each row sums to zero across categories
-round.(me.effects, digits=4)
+me = marginal_effects(m_ologit)
+round.(me.effects, digits=4)   # rows = variables, columns = categories
 ```
 
-**Recipe 5: Brant test (proportional odds)**
+**Recipe 5: Brant test of proportional odds**
 
 ```@example ordmult
-n = 1000
-X = randn(n, 2)
-y = _gen_ordered_logit(Random.default_rng(), n, X, [1.0, -0.5], [0.0, 1.5])
-m = estimate_ologit(y, X; varnames=["income", "education"])
-bt = brant_test(m)
-round(bt.pvalue, digits=4)
+bt = brant_test(m_ologit)
+(chi2 = round(bt.statistic, digits=3), df = bt.df, pvalue = round(bt.pvalue, digits=4))
 ```
 
-**Recipe 6: Hausman IIA test**
+**Recipe 6: Hausman-McFadden IIA test**
 
 ```@example ordmult
-# Need J >= 4 so that omitting one category leaves >= 3
-n = 1500
-X = hcat(ones(n), randn(n, 2))
-beta_true = [0.3 -0.2 0.1; 0.8 -0.4 0.5; -0.3 0.6 -0.2]  # K=3 × (J-1)=3 → J=4
-V = X * beta_true
-eV = exp.(V)
-P = hcat(ones(n), eV) ./ (1.0 .+ sum(eV, dims=2))
-y = [findfirst(cumsum(P[i, :]) .>= rand()) for i in 1:n]
-m = estimate_mlogit(y, X; varnames=["const", "x1", "x2"])
-# Test IIA by omitting category 4
-iia = hausman_iia(m; omit_category=4)
-round(iia.pvalue, digits=4)
+iia = hausman_iia(m_mlogit; omit_category=4)
+(chi2 = round(iia.statistic, digits=3), df = iia.df, pvalue = round(iia.pvalue, digits=4))
 ```
 
 ---
 
 ## Ordered Logit
 
-The **ordered logit** (proportional odds) model relates an ordinal outcome ``y_i \in \{1, 2, \ldots, J\}`` to regressors ``x_i`` through the cumulative logistic distribution (McCullagh 1980):
+The **ordered logit**, or proportional-odds model, relates an ordinal outcome ``y_i \in \{1, \ldots, J\}`` to regressors through the cumulative logistic distribution (McCullagh 1980):
 
 ```math
 P(y_i \leq j \mid x_i) = \Lambda(\alpha_j - x_i' \beta), \quad j = 1, \ldots, J-1
 ```
 
 where:
-- ``y_i`` is the ordinal dependent variable with ``J`` categories
-- ``x_i`` is the ``K \times 1`` regressor vector (**no intercept** — absorbed by cutpoints)
-- ``\beta`` is the ``K \times 1`` slope coefficient vector
-- ``\alpha_1 < \alpha_2 < \cdots < \alpha_{J-1}`` are the **cutpoints** (thresholds)
+- ``y_i`` is the ordinal outcome with ``J`` ordered categories
+- ``x_i`` is the ``K \times 1`` regressor vector, **without an intercept**
+- ``\beta`` is the ``K \times 1`` slope vector, common to every cutpoint
+- ``\alpha_1 < \alpha_2 < \cdots < \alpha_{J-1}`` are the cutpoints on the latent index
 - ``\Lambda(\cdot)`` is the logistic CDF
 
-The category probabilities follow from differencing:
+Category probabilities follow by differencing the cumulative probabilities:
 
 ```math
 P(y_i = j \mid x_i) = F(\alpha_j - x_i' \beta) - F(\alpha_{j-1} - x_i' \beta)
 ```
 
-with the convention ``F(\alpha_0) = 0`` and ``F(\alpha_J) = 1``.
+where:
+- ``F`` is the link CDF, logistic here and standard normal for ordered probit
+- ``F(\alpha_0 - x_i'\beta) \equiv 0`` and ``F(\alpha_J - x_i'\beta) \equiv 1`` close the system
+
+A positive ``\beta_k`` raises the latent index and therefore shifts probability mass toward higher categories. Because a single ``\beta`` governs every cutpoint, the log-odds of ``y \leq j`` shift in parallel — the assumption the [Brant test](@ref specification-tests) checks.
 
 !!! warning "No intercept in X"
-    The intercept is absorbed into the cutpoints. Including a column of ones in X causes identification failure.
+    The cutpoints absorb the intercept. A column of ones in `X` makes the parameter vector unidentified and the Hessian singular. Only the multinomial logit on this page takes an explicit intercept column.
 
-### Estimation
-
-The model is estimated by Newton-Raphson MLE using the BHHH (outer product of gradients) approximation to the Hessian. The optimizer enforces cutpoint ordering ``\alpha_1 < \alpha_2 < \cdots < \alpha_{J-1}`` at each iteration.
+!!! note "Technical Note"
+    Estimation is true Newton-Raphson on ``\theta = [\beta; \alpha]`` using the **analytic observed-information Hessian**, not the BHHH outer-product approximation: the curvature block ``(\partial^2 p / \partial\theta^2)/p`` that BHHH drops is computed from the density derivative ``f'``. Cutpoint ordering is enforced after every step, and iteration stops when ``|\ell^{(t+1)} - \ell^{(t)}| < \texttt{tol}\,(|\ell^{(t)}| + 1)``. With `cov_type=:ols` the reported covariance is ``(-H)^{-1}``, which matches Stata's `vce(oim)`.
 
 ```@example ordmult
-n = 1000
-X = randn(n, 3)
-y = _gen_ordered_logit(Random.default_rng(), n, X, [1.0, -0.5, 0.3], [0.0, 1.5])
-m = estimate_ologit(y, X; varnames=["income", "education", "age"], cov_type=:hc1)
-report(m)
+report(estimate_ologit(supply, Xo; varnames=onames, cov_type=:hc1))
 ```
 
-The output reports slope coefficients and cutpoints separately. A positive ``\beta_k`` shifts probability mass toward higher categories. McFadden's pseudo ``R^2 = 1 - \ell(\hat{\beta}) / \ell_0`` measures improvement over the null (cutpoints-only) model.
+Every slope is significant at the 5% level or better. An extra year of schooling raises the latent labour-supply index by 0.158 and an extra year of experience by 0.116, while each additional year of age lowers it by 0.082 and each preschool child by 1.328 — the dominant force in the model, as in the participation decision on the [binary choice page](@ref binary_choice_page). The three cutpoints ``(-1.30, -0.20, 1.81)`` are spaced unevenly: the gap between the second and third is far wider than between the first and second, which says that crossing from part time into the 1000-1999 hour band takes much more of a push in the latent index than crossing from no work into part time. The sandwich standard errors here differ from the observed-information ones by only a few percent, so misspecification of the conditional variance is not a live concern in this sample.
 
-### Keywords
+### Keyword Arguments
+
+`estimate_ologit` and `estimate_oprobit` share this signature.
 
 | Keyword | Type | Default | Description |
 |---------|------|---------|-------------|
-| `cov_type` | `Symbol` | `:ols` | Covariance estimator: `:ols` (MLE), `:hc0`, `:hc1`, `:cluster` |
-| `varnames` | `Vector{String}` | auto | Coefficient names |
-| `clusters` | `AbstractVector` | `nothing` | Cluster assignments (required for `:cluster`) |
+| `cov_type` | `Symbol` | `:ols` | Covariance estimator: `:ols` (observed information), `:hc0`, `:hc1`, `:cluster` |
+| `varnames` | `Union{Nothing,Vector{String}}` | `nothing` | Coefficient names (`"x1"`, `"x2"`, … if `nothing`) |
+| `clusters` | `Union{Nothing,AbstractVector}` | `nothing` | Cluster assignments (required for `:cluster`) |
 | `maxiter` | `Int` | `200` | Maximum Newton-Raphson iterations |
-| `tol` | `Real` | ``10^{-8}`` | Convergence tolerance |
+| `tol` | `Real` | ``10^{-8}`` | Relative convergence tolerance on the log-likelihood |
 
 ### Return Values
 
+`estimate_ologit` returns an `OrderedLogitModel{T}` and `estimate_oprobit` an `OrderedProbitModel{T}`, with identical fields:
+
 | Field | Type | Description |
 |-------|------|-------------|
-| `beta` | `Vector{T}` | Slope coefficients (K) |
-| `cutpoints` | `Vector{T}` | Estimated cutpoints (J-1) |
-| `vcov_mat` | `Matrix{T}` | Joint vcov of ``[\beta; \alpha]`` |
-| `fitted` | `Matrix{T}` | Predicted probabilities (n × J) |
+| `y` | `Vector{Int}` | Outcome remapped to ``1:J`` in sorted category order |
+| `X` | `Matrix{T}` | ``n \times K`` regressor matrix (no intercept) |
+| `beta` | `Vector{T}` | ``K \times 1`` slope coefficients |
+| `cutpoints` | `Vector{T}` | ``J-1`` estimated cutpoints |
+| `vcov_mat` | `Matrix{T}` | Joint covariance of ``[\beta; \alpha]``, ``(K + J - 1)`` square |
+| `fitted` | `Matrix{T}` | ``n \times J`` fitted category probabilities |
 | `loglik` | `T` | Maximized log-likelihood |
-| `pseudo_r2` | `T` | McFadden's pseudo R-squared |
-| `categories` | `Vector` | Original category values |
-| `converged` | `Bool` | Convergence flag |
+| `loglik_null` | `T` | Log-likelihood of the sample-frequency model |
+| `pseudo_r2` | `T` | McFadden's pseudo ``R^2`` |
+| `aic`, `bic` | `T` | Information criteria on ``K + J - 1`` parameters |
+| `varnames` | `Vector{String}` | Coefficient names |
+| `categories` | `Vector` | Original category labels, sorted |
+| `converged` | `Bool` | Whether Newton-Raphson met the tolerance |
+| `iterations` | `Int` | Iterations performed |
+| `cov_type` | `Symbol` | Covariance estimator used |
 
 ---
 
 ## Ordered Probit
 
-The **ordered probit** model uses the standard normal CDF ``\Phi(\cdot)`` as the link function:
+The **ordered probit** replaces the logistic CDF with the standard normal:
 
 ```math
 P(y_i \leq j \mid x_i) = \Phi(\alpha_j - x_i' \beta)
 ```
 
-The API is identical to ordered logit. The choice between logit and probit is largely a matter of convention — both produce similar marginal effects in practice.
+where:
+- ``\Phi(\cdot)`` is the standard normal CDF
+- ``\alpha_j`` and ``\beta`` carry the same meaning as under the logistic link
+
+The latent-variable reading is the sharper one here: ``y_i^* = x_i'\beta + \varepsilon_i`` with ``\varepsilon_i \sim N(0,1)``, and ``y_i = j`` when ``\alpha_{j-1} < y_i^* \le \alpha_j``. The API is identical to ordered logit.
 
 ```@example ordmult
-n = 1000
-X = randn(n, 2)
-y = _gen_ordered_probit(Random.default_rng(), n, X, [0.8, -0.5], [0.0, 1.0])
-m = estimate_oprobit(y, X; varnames=["income", "education"])
-report(m)
+round.(coef(m_ologit) ./ coef(m_oprobit), digits=2)
 ```
+
+The slope ratios run from 1.70 to 1.79, the familiar logistic-to-normal scale factor, so the two links tell the same story on different rulers. The ordered probit log-likelihood is ``-831.54`` against the ordered logit's ``-828.85``, and its McFadden index is 0.127 against 0.130 — a difference well inside sampling noise, which is why the choice between the links is conventionally made on convenience. Cutpoints rescale by the same factor: the probit's ``(-0.81, -0.15, 0.98)`` map onto the logit's ``(-1.30, -0.20, 1.81)``.
 
 ---
 
 ## Multinomial Logit
 
-The **multinomial logit** model relates an unordered categorical outcome ``y_i \in \{1, 2, \ldots, J\}`` to regressors through the softmax function (McFadden 1974):
+The **multinomial logit** treats the outcomes as unordered alternatives and models them with the softmax (McFadden 1974):
 
 ```math
-P(y_i = j \mid x_i) = \frac{\exp(x_i' \beta_j)}{\sum_{k=1}^{J} \exp(x_i' \beta_k)}
+P(y_i = j \mid x_i) = \frac{\exp(x_i' \beta_j)}{\sum_{l=1}^{J} \exp(x_i' \beta_l)}
 ```
 
 where:
-- ``\beta_1 = 0`` (base category normalization)
-- ``\beta_j`` is the ``K \times 1`` coefficient vector for alternative ``j = 2, \ldots, J``
-- The model estimates ``K \times (J-1)`` free parameters
+- ``\beta_1 = 0`` normalizes the first sorted category as the base
+- ``\beta_j`` is the ``K \times 1`` coefficient vector of alternative ``j = 2, \ldots, J``
+- the model has ``K(J-1)`` free parameters, and ``x_i`` must include an explicit intercept
+
+Each ``\beta_{j,k}`` is the effect of ``x_k`` on the log-odds of alternative ``j`` against the base, ``\log[P(y=j)/P(y=1)]``. Nothing constrains those effects to move monotonically across alternatives, which is exactly the flexibility the ordered models give up.
 
 !!! note "Technical Note"
-    The implementation uses the log-sum-exp trick for numerical stability and computes the analytical Hessian (not BHHH) for fast convergence. The `coef(m)` function returns `vec(beta)` of length ``K(J-1)``.
-
-### Estimation
+    The likelihood is evaluated with the log-sum-exp trick and maximized by Newton-Raphson on the analytic Hessian, so convergence takes six iterations here. `coef(m)` returns `vec(m.beta)` of length ``K(J-1)``, stacked alternative by alternative, and `vcov(m)` is the matching ``K(J-1)`` square matrix — index block ``j`` as rows `(j-1)K+1 : jK`.
 
 ```@example ordmult
-n = 1000
-X = hcat(ones(n), randn(n, 2))
-beta_true = [0.5 -0.3; 1.0 -0.5; -0.5 0.8]
-V = X * beta_true
-eV = exp.(V)
-P = hcat(ones(n), eV) ./ (1.0 .+ sum(eV, dims=2))
-y = [findfirst(cumsum(P[i, :]) .>= rand()) for i in 1:n]
-m = estimate_mlogit(y, X; varnames=["const", "x1", "x2"])
-report(m)
+report(m_mlogit)
 ```
 
-The output displays one coefficient table per alternative (relative to the base category). Positive ``\beta_{j,k}`` means higher ``x_k`` increases the probability of choosing alternative ``j`` relative to the base.
+Reading the blocks against the base category of not working: schooling raises the log-odds of every working state by a similar amount (0.230, 0.216, 0.236), so education mostly drives the participation margin rather than the choice of hours. Experience does the opposite, rising monotonically from 0.076 for part time to 0.174 for full-time work, so experience is what sorts working women into longer hours. Preschool children push against all three working states, most strongly against the 1000-1999 hour band (``-1.963``). The multinomial fit costs 18 parameters against the ordered logit's 8 and buys 8.4 log-likelihood points (``-820.41`` against ``-828.85``), which the BIC (1760.06 against 1710.70) judges a poor trade.
 
-### Keywords
+### Keyword Arguments
 
 | Keyword | Type | Default | Description |
 |---------|------|---------|-------------|
-| `cov_type` | `Symbol` | `:ols` | Covariance estimator: `:ols` (MLE), `:hc0`, `:hc1`, `:cluster` |
-| `varnames` | `Vector{String}` | auto | Coefficient names |
-| `clusters` | `AbstractVector` | `nothing` | Cluster assignments (required for `:cluster`) |
+| `cov_type` | `Symbol` | `:ols` | Covariance estimator: `:ols` (observed information), `:hc0`, `:hc1`, `:cluster` |
+| `varnames` | `Union{Nothing,Vector{String}}` | `nothing` | Coefficient names, one per column of `X` |
+| `clusters` | `Union{Nothing,AbstractVector}` | `nothing` | Cluster assignments (required for `:cluster`) |
 | `maxiter` | `Int` | `200` | Maximum Newton-Raphson iterations |
-| `tol` | `Real` | ``10^{-8}`` | Convergence tolerance |
+| `tol` | `Real` | ``10^{-8}`` | Relative convergence tolerance on the log-likelihood |
 
 ### Return Values
 
+`estimate_mlogit` returns a `MultinomialLogitModel{T}`:
+
 | Field | Type | Description |
 |-------|------|-------------|
-| `beta` | `Matrix{T}` | Coefficient matrix (K × (J-1)), base = category 1 |
-| `vcov_mat` | `Matrix{T}` | Vcov of `vec(beta)`, K(J-1) × K(J-1) |
-| `fitted` | `Matrix{T}` | Predicted probabilities (n × J) |
+| `y` | `Vector{Int}` | Outcome remapped to ``1:J`` in sorted category order |
+| `X` | `Matrix{T}` | ``n \times K`` regressor matrix, intercept included |
+| `beta` | `Matrix{T}` | ``K \times (J-1)`` coefficients; column ``j`` belongs to category ``j+1`` |
+| `vcov_mat` | `Matrix{T}` | Covariance of `vec(beta)`, ``K(J-1)`` square |
+| `fitted` | `Matrix{T}` | ``n \times J`` fitted probabilities |
 | `loglik` | `T` | Maximized log-likelihood |
-| `pseudo_r2` | `T` | McFadden's pseudo R-squared |
-| `categories` | `Vector` | Original category values |
+| `loglik_null` | `T` | Constants-only log-likelihood (Stata-comparable) |
+| `pseudo_r2` | `T` | McFadden's pseudo ``R^2`` |
+| `aic`, `bic` | `T` | Information criteria on ``K(J-1)`` parameters |
+| `varnames` | `Vector{String}` | Coefficient names |
+| `categories` | `Vector` | Original category labels; the first is the base |
+| `converged` | `Bool` | Whether Newton-Raphson met the tolerance |
+| `iterations` | `Int` | Iterations performed |
+| `cov_type` | `Symbol` | Covariance estimator used |
 
 ---
 
 ## Marginal Effects
 
-Coefficients in ordered and multinomial models do not have direct marginal effect interpretations because the probability functions are nonlinear. **Average marginal effects** (AME) compute the mean derivative across all observations (Cameron & Trivedi 2005).
+Neither model's coefficients are marginal effects: the probabilities are nonlinear in the index, and in the multinomial case a coefficient can even carry the opposite sign to the effect on its own category's probability. `marginal_effects` returns average marginal effects — the sample mean of the observation-level derivative (Cameron & Trivedi 2005, ch. 15) — as a ``K \times J`` matrix whose rows are variables and columns are categories.
 
-### Ordered Models
-
-For the ordered logit, the AME of variable ``k`` on outcome ``j`` is:
+For an ordered model the derivative of the category probability is a difference of link densities:
 
 ```math
 \text{AME}_{k,j} = \frac{1}{n} \sum_{i=1}^{n} \left[ f(\alpha_{j-1} - x_i' \beta) - f(\alpha_j - x_i' \beta) \right] \beta_k
 ```
 
-where ``f(\cdot)`` is the logistic PDF. The AMEs sum to zero across categories for each variable — increasing probability in one category must decrease it elsewhere.
+where:
+- ``f(\cdot)`` is the logistic or standard normal density
+- ``f(\alpha_0 - x_i'\beta) \equiv 0`` and ``f(\alpha_J - x_i'\beta) \equiv 0`` at the open ends
+
+Each row sums to zero across categories: probability moved into one category must leave another.
 
 ```@example ordmult
-n = 1000
-X = randn(n, 2)
-y = _gen_ordered_logit(Random.default_rng(), n, X, [1.0, -0.5], [0.0, 1.5])
-m = estimate_ologit(y, X; varnames=["income", "education"])
-me = marginal_effects(m)
-# Row k = variable, column j = category
-round.(me.effects, digits=4)
+me_o = marginal_effects(m_ologit)
+round.(me_o.effects, digits=4)
 ```
 
-### Multinomial Logit
+Row five is the preschool-child effect: one more young child raises the probability of not working by 25.1 points and takes 13.5 points off the 1000-1999 hour band and 10.2 points off full-time work. Education works in the opposite direction and at a tenth of the size, lifting the two full-time bands by 1.6 and 1.2 points at the expense of a 3.0-point fall in non-participation. The part-time column is nearly inert for every regressor — the middle band's two density terms almost cancel — so the covariates here move women between not working and working long hours, rather than into part-time work. Rows sum to zero by construction, which is the check to run on any hand-rolled marginal-effect code.
 
-For the multinomial logit, the AME formula accounts for the softmax structure:
+For the multinomial logit the derivative involves the probability-weighted average coefficient:
 
 ```math
-\text{AME}_{k,j} = \frac{1}{n} \sum_{i=1}^{n} p_{ij} \left( \beta_{j,k} - \sum_{m=1}^{J} p_{im} \beta_{m,k} \right)
+\text{AME}_{k,j} = \frac{1}{n} \sum_{i=1}^{n} p_{ij} \left( \beta_{j,k} - \sum_{l=1}^{J} p_{il} \beta_{l,k} \right)
 ```
 
+where:
+- ``p_{ij}`` is observation ``i``'s fitted probability of alternative ``j``
+- ``\beta_{1,k} = 0`` for the base category
+
 ```@example ordmult
-n = 1000
-X = hcat(ones(n), randn(n, 2))
-beta_true = [0.5 -0.3; 1.0 -0.5; -0.5 0.8]
-V = X * beta_true
-eV = exp.(V)
-P = hcat(ones(n), eV) ./ (1.0 .+ sum(eV, dims=2))
-y = [findfirst(cumsum(P[i, :]) .>= rand()) for i in 1:n]
-m = estimate_mlogit(y, X; varnames=["const", "x1", "x2"])
-me = marginal_effects(m)
-round.(me.effects, digits=4)
+me_m = marginal_effects(m_mlogit)
+report(me_m)
 ```
+
+The multinomial marginal effects agree closely with the ordered ones despite the far looser parameterization: an extra preschool child moves 21.5 points out of the 1000-1999 hour band and 5.4 points out of full-time work, against the ordered model's 13.5 and 10.2. Schooling again raises every working state, most strongly part time (1.9 points). `report` prints one panel per non-base alternative and drops the intercept row, whose "effect" is a numerical artefact of a constant regressor.
+
+!!! note "Standard errors for multinomial AME"
+    `MultinomialMarginalEffects.se` is `nothing`: the delta method for the softmax marginal effects is not implemented, so no standard errors, z-statistics, or intervals are reported, and `plot_result` draws the points without whiskers. Ordered-model marginal effects are returned as a plain `NamedTuple` of `effects`, `varnames`, and `categories`, also without standard errors. Where inference on a marginal effect is required, bootstrap the estimation and the effect together.
 
 ---
 
-## Specification Tests
+## [Specification Tests](@id specification-tests)
 
-### Brant Test (Proportional Odds)
+### Brant Test
 
-The **Brant test** evaluates the proportional odds (parallel regression) assumption underlying ordered logit (Brant 1990). Under the null, the slope coefficients are equal across all ``J-1`` binary logits that split the outcome at each cutpoint.
+The **Brant test** examines the proportional-odds assumption behind ordered logit (Brant 1990). It fits the ``J-1`` binary logits that split the outcome at each cutpoint (``y \leq j`` against ``y > j``) and asks whether their slope vectors agree. Under the null they estimate the same ``\beta``; systematic differences mean the ordered logit forces one slope on relationships that vary with the threshold.
 
-The test fits ``J-1`` separate binary logits (``y \leq j`` vs ``y > j``) and constructs a Wald statistic comparing the binary logit coefficients to each other. Rejection suggests the ordered logit model is misspecified — different cutpoints produce different slope estimates.
+The overall statistic stacks the contrasts ``\hat\beta^{(j)} - \hat\beta^{(J-1)}`` for ``j = 1, \ldots, J-2`` and is ``\chi^2`` with ``K(J-2)`` degrees of freedom; the per-variable statistics use the same contrasts one coefficient at a time, with ``J-2`` degrees of freedom each.
 
 ```@example ordmult
-n = 1000
-X = randn(n, 2)
-y = _gen_ordered_logit(Random.default_rng(), n, X, [1.0, -0.5], [0.0, 1.5])
-m = estimate_ologit(y, X; varnames=["income", "education"])
-bt = brant_test(m)
-# Overall test
-(chi2=round(bt.statistic, digits=3), pvalue=round(bt.pvalue, digits=4))
+bt = brant_test(m_ologit)
+(statistic = round(bt.statistic, digits=3), df = bt.df, pvalue = round(bt.pvalue, digits=4))
 ```
 
 ```@example ordmult
-# Per-variable p-values
-round.(bt.per_variable, digits=4)
+NamedTuple{Tuple(Symbol.(onames))}(Tuple(round.(bt.per_variable, digits=4)))
 ```
+
+The overall statistic of 13.82 on 10 degrees of freedom gives ``p = 0.181``, so the joint proportional-odds restriction survives at conventional levels. The per-variable breakdown is the more informative half: `age` rejects on its own (``p = 0.024``) while the other four regressors sit far from any critical value. Reading the binary-logit coefficients in `bt.binary_coefs` shows why — the age slope is 0.095 and 0.088 at the first two splits but only 0.044 at the third, so age separates non-participants from workers much more sharply than it separates long-hours workers from the rest. A single rejecting variable is a warning rather than a verdict: refit with `age` interacted with the threshold, or move to the multinomial specification, and check whether the substantive conclusions move.
+
+!!! note "Independence across the binary fits"
+    The contrast variance is formed as ``\text{Var}(\hat\beta^{(j)}) + \text{Var}(\hat\beta^{(J-1)})``, treating the ``J-1`` binary logits as independent. They are not — they use the same observations — so the covariance term is dropped and the statistic is conservative relative to Brant's (1990) full covariance form. Read a marginal non-rejection as weak evidence in favour of proportional odds, not as a clean pass.
 
 | Field | Type | Description |
 |-------|------|-------------|
 | `statistic` | `T` | Overall Wald statistic |
-| `pvalue` | `T` | P-value (chi-squared with ``K(J-2)`` df) |
-| `df` | `Int` | Degrees of freedom |
-| `per_variable` | `Vector{T}` | Per-variable p-values (``J-2`` df each) |
-| `binary_coefs` | `Matrix{T}` | K × (J-1) matrix of binary logit coefficients |
+| `pvalue` | `T` | Overall p-value, ``\chi^2`` with ``K(J-2)`` df |
+| `df` | `Int` | Degrees of freedom, ``K(J-2)`` |
+| `per_variable` | `Vector{T}` | Per-variable p-values, length ``K``, ``J-2`` df each |
+| `binary_coefs` | `Matrix{T}` | ``K \times (J-1)`` slopes from the binary logits |
 
 ### Hausman-McFadden IIA Test
 
-The **independence of irrelevant alternatives** (IIA) assumption states that the odds ratio between any two alternatives is independent of other alternatives. The Hausman-McFadden test (1984) re-estimates the multinomial logit excluding one category and compares the coefficients to the full model.
+**Independence of irrelevant alternatives** requires that the odds between any two alternatives not depend on what other alternatives exist. The Hausman-McFadden test (1984) re-estimates the model on the subsample that excludes one category and compares the two coefficient vectors, after renormalizing the restricted fit onto the full model's base category:
 
-```@example ordmult
-# Need J >= 4 so that omitting one leaves >= 3
-n = 1500
-X = hcat(ones(n), randn(n, 2))
-beta_true = [0.3 -0.2 0.1; 0.8 -0.4 0.5; -0.3 0.6 -0.2]
-V = X * beta_true
-eV = exp.(V)
-P = hcat(ones(n), eV) ./ (1.0 .+ sum(eV, dims=2))
-y = [findfirst(cumsum(P[i, :]) .>= rand()) for i in 1:n]
-m = estimate_mlogit(y, X; varnames=["const", "x1", "x2"])
-iia = hausman_iia(m; omit_category=4)
-(chi2=round(iia.statistic, digits=3), pvalue=round(iia.pvalue, digits=4))
+```math
+H = (\hat\beta_r - \hat\beta_f)' (\hat V_r - \hat V_f)^{-1} (\hat\beta_r - \hat\beta_f)
 ```
 
-Failure to reject supports the IIA assumption. If IIA is rejected, consider nested logit or mixed logit alternatives.
+where:
+- ``\hat\beta_r`` and ``\hat V_r`` come from the restricted model, estimated without the omitted category
+- ``\hat\beta_f`` and ``\hat V_f`` are the corresponding full-model quantities, base-adjusted
+- ``H`` is ``\chi^2`` with ``K`` times the number of comparable non-base alternatives degrees of freedom
+
+Under IIA the restricted estimator stays consistent and the difference is noise; a large ``H`` says dropping an alternative reshuffles the remaining odds. The test needs at least three categories left after the omission, so it requires ``J \geq 4``.
+
+```@example ordmult
+iia_tests = [(omitted = j,
+              statistic = round(hausman_iia(m_mlogit; omit_category=j).statistic, digits=3),
+              pvalue = round(hausman_iia(m_mlogit; omit_category=j).pvalue, digits=4))
+             for j in 2:4]
+```
+
+None of the three admissible omissions comes close to rejecting: the statistics are 3.70, 5.22, and 0.28 on 12 degrees of freedom, with p-values of 0.99, 0.95, and 1.00. Dropping any single hours band leaves the odds among the remaining ones essentially unchanged, which is what IIA asserts and what makes the multinomial logit defensible here. Rejection would call for nested logit or mixed logit, which relax the independence of the alternative-specific errors. The statistic is clamped at zero because ``\hat V_r - \hat V_f`` can fail to be positive definite in finite samples, a well-known feature of Hausman-type tests.
 
 | Field | Type | Description |
 |-------|------|-------------|
-| `statistic` | `T` | Hausman test statistic |
-| `pvalue` | `T` | P-value (chi-squared) |
-| `df` | `Int` | Degrees of freedom |
-| `omitted_category` | any | Label of the omitted category |
+| `statistic` | `T` | Hausman statistic, clamped at zero |
+| `pvalue` | `T` | ``\chi^2`` p-value |
+| `df` | `Int` | Degrees of freedom, ``K`` times the comparable non-base alternatives |
+| `omitted_category` | any | Label of the omitted category, from `m.categories` |
 
 ---
 
-## Out-of-Sample Prediction
+## Prediction
 
-All three models support `predict(m, X_new)` for computing predicted probabilities on new data:
+`predict(m, X_new)` returns an ``n_{\text{new}} \times J`` matrix of category probabilities whose rows sum to one, for all three models. The columns of `X_new` must match the estimation matrix — no intercept for the ordered models, an intercept column for the multinomial.
 
 ```@example ordmult
-n = 1000
-X = randn(n, 2)
-y = _gen_ordered_logit(Random.default_rng(), n, X, [1.0, -0.5], [0.0, 1.5])
-m = estimate_ologit(y, X; varnames=["income", "education"])
-# Predict on new observations
-X_new = randn(5, 2)
-probs = predict(m, X_new)
-round.(probs, digits=3)
+profile = vec(mean(Xo, dims=1))          # kidslt6 is the last column
+kids = permutedims(hcat([[profile[1:4]; k] for k in 0.0:2.0]...))
+round.(predict(m_ologit, kids), digits=3)
 ```
 
-Each row sums to 1. For multinomial logit, the same interface applies via `predict(m, X_new)`.
+Each row holds income, schooling, experience, and age at their sample means and varies only the number of preschool children. With no young child the woman is more likely to work than not: 34.2% chance of no work against a combined 65.8% across the three working bands, with the 1000-1999 hour band at 31.0%. One young child flips this to 66.3% non-participation, and two leaves 88.1%. The probability of full-time work falls from 7.9% to 2.2% to 0.6% — the ordered structure forces this monotone collapse across all higher categories at once, which is precisely the restriction the multinomial logit relaxes.
 
 ---
 
 ## Residuals
 
-A ``K``-category response has no single scalar residual, so the models here expose two distinct quantities. Choosing between them is a matter of what the diagnostic needs, not of convenience.
+A ``J``-category response has no single scalar residual, so these models expose two distinct quantities. Which one to use is a question of what the diagnostic needs, not of convenience.
 
-**Per-category residuals.** [`residuals`](@ref) returns an ``n \times K`` matrix — one column per outcome category — for ordered logit, ordered probit, and multinomial logit alike. With the indicator ``d_{ij} = 1\{y_i = j\}``:
+**Per-category residuals.** `residuals` returns an ``n \times J`` matrix — one column per outcome category — for ordered logit, ordered probit, and multinomial logit alike. With the indicator ``d_{ij} = 1\{y_i = j\}``:
 
 ```math
-r_{ij} = d_{ij} - \hat P_{ij},
+r_{ij} = d_{ij} - \hat P_{ij}
 ```
 
-where
-
-- ``d_{ij}`` is 1 when observation ``i`` falls in category ``j`` and 0 otherwise,
-- ``\hat P_{ij}`` is the fitted probability of category ``j`` for observation ``i``.
+where:
+- ``d_{ij}`` is 1 when observation ``i`` falls in category ``j`` and 0 otherwise
+- ``\hat P_{ij}`` is the fitted probability of category ``j`` for observation ``i``
 
 Rows sum to exactly zero. The `kind` keyword selects `:response` (the default, above), `:pearson` (``r_{ij}/\sqrt{\hat P_{ij}(1-\hat P_{ij})}``), or `:deviance`, whose total sum of squares equals the model deviance ``-2\hat\ell``.
 
+!!! warning "The shape differs from the binary models"
+    `residuals(::LogitModel)` and `residuals(::ProbitModel)` return a length-``n`` **vector** of deviance residuals. The ordered and multinomial versions return an ``n \times J`` **matrix**, because a ``J``-category response genuinely has ``J`` residuals per observation. Code written generically over binary models must handle this rather than assume a vector.
+
 ```@example ordmult
-r = residuals(m)                       # n x K response residuals
-rd = residuals(m; kind=:deviance)
-round.([sum(abs2, rd), -2 * loglikelihood(m)], digits=6)
+rd = residuals(m_ologit; kind=:deviance)
+round.([sum(abs2, rd), -2 * loglikelihood(m_ologit)], digits=6)
 ```
 
-!!! warning "The shape differs from the binary models"
-    `residuals(::LogitModel)` and `residuals(::ProbitModel)` return a length-``n`` **vector** of deviance residuals. The ordered and multinomial versions return an ``n \times K`` **matrix**, because a ``K``-category response genuinely has ``K`` residuals per observation. Code written generically over binary models must account for this rather than assume a vector.
-
-**Generalized residuals.** For ordered models, [`generalized_residuals`](@ref) returns the length-``n`` vector
+**Generalized residuals.** For the ordered models, `generalized_residuals` returns the length-``n`` vector
 
 ```math
-e_i = \frac{f(c_{j-1} - x_i'\beta) - f(c_j - x_i'\beta)}{P(y_i = j \mid x_i)}, \qquad j = y_i,
+e_i = \frac{f(\alpha_{j-1} - x_i'\beta) - f(\alpha_j - x_i'\beta)}{P(y_i = j \mid x_i)}, \qquad j = y_i
 ```
 
-where
+where:
+- ``\alpha_0 = -\infty`` and ``\alpha_J = +\infty``, so the boundary categories drop one term
+- ``f`` is the logistic or standard normal density
 
-- ``c_0 = -\infty`` and ``c_K = +\infty``, so the boundary categories drop one term,
-- ``f`` is the logistic or standard-normal density.
-
-Equivalently ``e_i = \partial \ell_i / \partial (x_i'\beta)``, the score of observation ``i``'s log-likelihood with respect to its index — and for the probit case exactly ``E[\varepsilon_i \mid y_i, x_i]``. This is the vector that outer-product-of-gradients LM specification tests are built on (Chesher & Irish 1987), and the ordered score with respect to ``\beta`` is ``X'e``, so it is orthogonal to the regressors at the MLE:
+Equivalently ``e_i = \partial \ell_i / \partial (x_i'\beta)``, the score of observation ``i``'s log-likelihood with respect to its own index — and for the probit case exactly ``E[\varepsilon_i \mid y_i, x_i]``. This is the vector that outer-product-of-gradients LM specification tests are built on (Chesher & Irish 1987; Gourieroux, Monfort, Renault & Trognon 1987). Because the ordered score with respect to ``\beta`` is ``X'e``, it is orthogonal to the regressors at the optimum:
 
 ```@example ordmult
-e = generalized_residuals(m)
-round.(vec(maximum(abs, m.X' * e, dims=1)), digits=10)   # ~0 at the optimum
+e = generalized_residuals(m_ologit)
+round(maximum(abs, m_ologit.X' * e), sigdigits=2)
 ```
 
-On a two-category fit ``e_i`` collapses to ``y_i - \hat p_i``, the familiar binary score residual — which is the sense in which it, not the residual matrix, is the true analogue of the binary case.
+The largest element of ``X'e`` is 4.5e-7, zero to the Newton convergence tolerance rather than to machine precision, which is the honest way to read a first-order condition at a numerical optimum. On a two-category fit ``e_i`` collapses to ``y_i - \hat p_i``, the familiar binary score residual — the sense in which it, and not the residual matrix, is the true analogue of the binary case.
 
-`generalized_residuals` is deliberately **not** defined for multinomial logit: an unordered response has no single latent index, so there is no length-``n`` scalar score. Its score is ``X'(d_j - P_j)`` per alternative, which is precisely the `:response` residual matrix above.
+`generalized_residuals` is deliberately **not** defined for multinomial logit: an unordered response has no single latent index, so no length-``n`` scalar score exists. Its score is ``X'(d_j - \hat P_j)`` per alternative, which is precisely the `:response` residual matrix above.
+
+---
+
+## Visualization
+
+`plot_result` renders both model families as horizontal dot-and-whisker plots at 95% intervals, and the multinomial marginal effects as one facet per non-base alternative:
+
+```julia
+plot_result(m_ologit)     # slopes and cutpoints, two panels
+plot_result(m_mlogit)     # one coefficient facet per non-base alternative
+plot_result(me_m)         # marginal-effect facets (points only, no whiskers)
+```
+
+The ordered figure separates the two parameter blocks because they live on different scales: the slopes measure how a regressor shifts the latent index, the cutpoints are positions *on* that index.
+
+```@raw html
+<iframe src="../assets/plots/ordered_coef.html" width="100%" height="520" frameborder="0" style="border:1px solid #ddd;border-radius:4px;"></iframe>
+```
+
+The preschool-child coefficient of ``-1.328`` sits far to the left of every other slope, on an interval — ``[-1.672, -0.985]`` — five times wider than the next widest. At the opposite extreme `nwifeinc` is the one slope whose interval nearly touches zero, reaching ``-0.003`` at its upper end. The cutpoint panel shows the three thresholds ordered and well separated at ``-1.303``, ``-0.196`` and 1.811, on intervals roughly 2.4 units wide: the four bands are distinguishable, but the thresholds themselves are the least precisely estimated parameters in the model.
+
+The multinomial figure draws one panel per alternative, each labelled with the band code and its base category:
+
+```@raw html
+<iframe src="../assets/plots/mlogit_coef.html" width="100%" height="620" frameborder="0" style="border:1px solid #ddd;border-radius:4px;"></iframe>
+```
+
+Reading a regressor across the three panels is the visual form of the parallel-regression question. Experience behaves exactly as the ordered model assumes, rising monotonically with the hours band (0.076, 0.137, 0.174), and schooling is flat across the three at 0.216 to 0.236 — a single common slope would lose nothing. Preschool children do not: the coefficient is ``-0.994`` for part-time work but ``-1.963`` for the 1000--1999 hour band and ``-1.813`` for full-time work, so the effect peaks in the middle of the ordering rather than growing with it. That non-monotonicity is what a single ordered slope cannot represent, and it is why the [Specification Tests](@ref specification-tests) above matter before the ordered fit is reported.
 
 ---
 
 ## Complete Example
 
-A full workflow estimating ordered and multinomial models on the same simulated survey data:
+An end-to-end labour-supply study: fit the ordered model, test the assumption it rests on, refit without that assumption, and compare what the two say.
 
 ```@example ordmult
-# Simulate ordinal satisfaction data (5 categories)
-n = 2000
-X = randn(n, 3)
-xb = X * [0.8, -0.4, 0.3]
-cuts = [-1.5, -0.5, 0.5, 1.5]
-d = Normal()
-F = hcat([cdf.(d, c .- xb) for c in cuts]...)
-u = rand(n)
-y = ones(Int, n) .* 5
-for j in 4:-1:1
-    y[u .< F[:, j]] .= j
-end
-
-# Ordered logit
-m_ologit = estimate_ologit(y, X; varnames=["income", "education", "age"])
-report(m_ologit)
+# Step 1 — ordered logit on the four hours bands
+fit_o = estimate_ologit(supply, Xo; varnames=onames)
+report(fit_o)
 ```
 
 ```@example ordmult
-# Marginal effects
-me = marginal_effects(m_ologit)
-round.(me.effects, digits=4)
+# Step 2 — does the proportional-odds restriction hold?
+bt_full = brant_test(fit_o)
+(overall_p = round(bt_full.pvalue, digits=4),
+ worst_variable = onames[argmin(bt_full.per_variable)],
+ worst_p = round(minimum(bt_full.per_variable), digits=4))
 ```
 
 ```@example ordmult
-# Brant test
-bt = brant_test(m_ologit)
-round(bt.pvalue, digits=4)
+# Step 3 — drop the ordering restriction entirely
+fit_m = estimate_mlogit(supply, Xm; varnames=mnames)
+(ordered = (loglik = round(fit_o.loglik, digits=2), params = length(coef(fit_o)) + length(fit_o.cutpoints),
+            bic = round(fit_o.bic, digits=2)),
+ multinomial = (loglik = round(fit_m.loglik, digits=2), params = length(coef(fit_m)),
+                bic = round(fit_m.bic, digits=2)))
 ```
 
 ```@example ordmult
-# Ordered probit on same data
-m_oprobit = estimate_oprobit(y, X; varnames=["income", "education", "age"])
-report(m_oprobit)
+# Step 4 — is the multinomial fit internally consistent?
+iia_4 = hausman_iia(fit_m; omit_category=4)
+(statistic = round(iia_4.statistic, digits=3), pvalue = round(iia_4.pvalue, digits=4))
 ```
 
 ```@example ordmult
-# Multinomial logit on unordered version
-m_mlogit = estimate_mlogit(y, hcat(ones(n), X); varnames=["const", "income", "education", "age"])
-report(m_mlogit)
+# Step 5 — the two models' marginal effects on the same scale
+(ordered = round.(marginal_effects(fit_o).effects[5, :], digits=4),
+ multinomial = round.(marginal_effects(fit_m).effects[6, :], digits=4))
 ```
 
-The ordered logit recovers the data-generating signs: `income` carries a positive coefficient, pushing observations toward higher satisfaction categories, while `education` is negative. The ordered probit produces the same sign pattern on a rescaled latent index, so the two links agree qualitatively. The Brant test p-value indicates whether the proportional-odds (parallel-regression) assumption holds — a small p-value would flag category-specific slopes and favor the multinomial specification. The multinomial logit reports one coefficient block per non-base category, each interpreted as the log-odds of that category relative to the base; the `income` log-odds rise monotonically across the higher categories, mirroring the ordinal structure that the ordered models impose by construction.
+The ordered logit buys its parsimony with the proportional-odds restriction, and the Brant test finds that restriction acceptable overall (``p = 0.181``) though strained by `age` (``p = 0.024``). Relaxing it costs ten extra parameters for 8.4 log-likelihood points, and the BIC prefers the ordered model by roughly 49 points, so the restriction pays for itself here. The IIA test then clears the multinomial specification on its own terms (``p = 1.00`` when the full-time band is dropped), meaning the disagreement between the two models is about the ordering assumption alone, not about a failure of the softmax. Step 5 shows how little that disagreement amounts to for the quantity most often reported: the two models put the preschool-child effect on non-participation at 25.1 and 27.5 points, and differ mainly in how they split the remaining mass between the part-time and full-time bands.
 
 ---
 
 ## Common Pitfalls
 
-1. **Including an intercept in ordered models.** The cutpoints absorb the intercept. Adding a column of ones to X causes multicollinearity and estimation failure.
+1. **Putting an intercept in an ordered model's `X`.** The cutpoints already play that role. A constant column leaves the index unidentified, and the Newton step works against a singular Hessian. The multinomial logit is the opposite case — it needs an explicit intercept column, as `Xm` above supplies.
 
-2. **Fewer than 3 categories.** Both ordered and multinomial models require ``J \geq 3``. For binary outcomes, use `estimate_logit` or `estimate_probit` instead.
+2. **Fewer than three categories.** Both families require ``J \geq 3`` and throw an `ArgumentError` otherwise. Use `estimate_logit` or `estimate_probit` from the [binary choice page](@ref binary_choice_page) for two-category outcomes.
 
-3. **Ignoring the proportional odds assumption.** Always run `brant_test` after ordered logit. If rejected, the coefficients vary across cutpoints and a generalized ordered logit or multinomial logit is more appropriate.
+3. **Assuming the Brant test blesses the specification.** The overall test can pass while a single covariate violates proportional odds, exactly as `age` does here. Read `per_variable` before concluding, and remember that the contrast variances treat the binary fits as independent, which makes the test conservative.
 
-4. **Interpreting multinomial logit coefficients as marginal effects.** The ``\beta_{j,k}`` coefficients measure log-odds ratios relative to the base category, not marginal changes in probability. Always compute `marginal_effects(m)` for substantive interpretation.
+4. **Reading multinomial coefficients as effects on a probability.** ``\beta_{j,k}`` is the effect on the log-odds of alternative ``j`` against the base. A positive coefficient can coexist with a negative marginal effect on ``P(y = j)`` when a competing alternative rises faster. Always compute `marginal_effects(m)` before interpreting.
 
-5. **IIA violations in multinomial logit.** If `hausman_iia` rejects for any omitted category, the multinomial logit model is misspecified. The relative odds between remaining alternatives should not change when an alternative is removed.
+5. **Expecting standard errors on multinomial marginal effects.** They are not computed — `se` is `nothing` — and `plot_result` honours that by drawing points without whiskers. Bootstrap if inference is needed.
+
+6. **Running the IIA test with too few categories.** `hausman_iia` re-estimates on the subsample without the omitted category and needs at least three categories to remain, so a four-category outcome is the minimum. It also silently drops every observation in the omitted category, so a large omitted category leaves a much smaller restricted sample.
+
+7. **Treating an ordered outcome's category codes as cardinal.** The models use only the ordering of `categories`, which is the sorted vector of the original labels. Banding a continuous variable, as `supply` bands hours, discards within-band variation; when the underlying variable is observed, a model for the level (or a Tobit for a corner solution at zero) uses more of it.
 
 ---
 
 ## References
 
-- Agresti, A. (2010). *Analysis of Ordinal Categorical Data*. 2nd ed. Wiley. ISBN 978-0-470-08289-8.
-- Brant, R. (1990). Assessing Proportionality in the Proportional Odds Model for Ordinal Logistic Regression. *Biometrics* 46(4), 1171-1178. [DOI](https://doi.org/10.2307/2532457)
-- Cameron, A. C. & Trivedi, P. K. (2005). *Microeconometrics: Methods and Applications*. Cambridge University Press. ISBN 978-0-521-84805-3.
-- Chesher, A. & Irish, M. (1987). Residual Analysis in the Grouped and Censored Normal Linear Model. *Journal of Econometrics* 34(1-2), 33-61. [DOI](https://doi.org/10.1016/0304-4076(87)90067-2)
-- Gourieroux, C., Monfort, A., Renault, E. & Trognon, A. (1987). Generalised Residuals. *Journal of Econometrics* 34(1-2), 5-32. [DOI](https://doi.org/10.1016/0304-4076(87)90065-9)
-- Greene, W. H. (2012). *Econometric Analysis*. 7th ed. Prentice Hall. ISBN 978-0-131-39538-1.
-- Hausman, J. A. & McFadden, D. (1984). Specification Tests for the Multinomial Logit Model. *Econometrica* 52(5), 1219-1240. [DOI](https://doi.org/10.2307/1910997)
-- McCullagh, P. (1980). Regression Models for Ordinal Data. *Journal of the Royal Statistical Society: Series B* 42(2), 109-142. [DOI](https://doi.org/10.1111/j.2517-6161.1980.tb01109.x)
-- McFadden, D. (1974). Conditional Logit Analysis of Qualitative Choice Behavior. In P. Zarembka (Ed.), *Frontiers in Econometrics* (pp. 105-142). Academic Press.
-- Train, K. E. (2009). *Discrete Choice Methods with Simulation*. 2nd ed. Cambridge University Press. ISBN 978-0-521-74738-7.
-- Wooldridge, J. M. (2010). *Econometric Analysis of Cross Section and Panel Data*. 2nd ed. MIT Press. ISBN 978-0-262-23258-6.
+- Agresti, A. (2010). *Analysis of Ordinal Categorical Data*. 2nd ed.
+  Hoboken, NJ: Wiley. ISBN 978-0-470-08289-8.
+
+- Brant, R. (1990). Assessing Proportionality in the Proportional Odds Model for Ordinal Logistic Regression.
+  *Biometrics*, 46(4), 1171--1178. [DOI](https://doi.org/10.2307/2532457)
+
+- Cameron, A. C., & Trivedi, P. K. (2005). *Microeconometrics: Methods and Applications*.
+  Cambridge: Cambridge University Press. ISBN 978-0-521-84805-3.
+
+- Chesher, A., & Irish, M. (1987). Residual Analysis in the Grouped and Censored Normal Linear Model.
+  *Journal of Econometrics*, 34(1--2), 33--61. [DOI](https://doi.org/10.1016/0304-4076(87)90066-2)
+
+- Gourieroux, C., Monfort, A., Renault, E., & Trognon, A. (1987). Generalised Residuals.
+  *Journal of Econometrics*, 34(1--2), 5--32. [DOI](https://doi.org/10.1016/0304-4076(87)90065-0)
+
+- Greene, W. H. (2012). *Econometric Analysis*. 7th ed.
+  Boston: Prentice Hall. ISBN 978-0-131-39538-1.
+
+- Hausman, J. A., & McFadden, D. (1984). Specification Tests for the Multinomial Logit Model.
+  *Econometrica*, 52(5), 1219--1240. [DOI](https://doi.org/10.2307/1910997)
+
+- McCullagh, P. (1980). Regression Models for Ordinal Data.
+  *Journal of the Royal Statistical Society: Series B*, 42(2), 109--127. [DOI](https://doi.org/10.1111/j.2517-6161.1980.tb01109.x)
+
+- McFadden, D. (1974). Conditional Logit Analysis of Qualitative Choice Behavior.
+  In P. Zarembka (Ed.), *Frontiers in Econometrics* (pp. 105--142). New York: Academic Press.
+
+- Mroz, T. A. (1987). The Sensitivity of an Empirical Model of Married Women's Hours of Work to Economic and Statistical Assumptions.
+  *Econometrica*, 55(4), 765--799. [DOI](https://doi.org/10.2307/1911029)
+
+- Train, K. E. (2009). *Discrete Choice Methods with Simulation*. 2nd ed.
+  Cambridge: Cambridge University Press. ISBN 978-0-521-74738-7.
+
+- Wooldridge, J. M. (2010). *Econometric Analysis of Cross Section and Panel Data*. 2nd ed.
+  Cambridge, MA: MIT Press. ISBN 978-0-262-23258-6.

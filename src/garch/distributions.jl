@@ -108,7 +108,7 @@ Negative log likelihood of a volatility model under a standardized innovation di
 
 With `z_t = resid_t / sqrt(h_t)`, the observation density carries the Jacobian of that
 transformation, so each term is `-0.5 log h_t + log f(z_t)`. For `:normal` this reduces
-exactly to the Gaussian form in [`_volatility_negloglik`](@ref).
+exactly to the Gaussian form in `_volatility_negloglik`.
 """
 function _vol_negloglik_dist(h, resid_sq, n::Int, dist::Symbol, shape)
     ll = zero(eltype(h))

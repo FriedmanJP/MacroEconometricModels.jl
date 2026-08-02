@@ -6,10 +6,12 @@
 - **Lag Selection**: Data-driven lag order selection via AIC, BIC, or HQIC minimization
 - **Structural Identification**: Six methods --- Cholesky (recursive), sign restrictions, narrative restrictions, long-run (Blanchard-Quah), Arias et al. (2018) zero + sign, and Mountford-Uhlig (2009) penalty function
 - **Robust Inference**: Newey-West HAC, White heteroscedasticity-robust (HC0), and Driscoll-Kraay panel-robust covariance estimators
-- **Innovation Accounting**: IRF, FEVD, and historical decomposition with bootstrap or asymptotic confidence intervals; see [Innovation Accounting](innovation_accounting.md)
-- **Forecasting**: Multi-step ahead point forecasts with bootstrap confidence intervals
+- **Innovation Accounting**: IRF, FEVD, and historical decomposition with bootstrap or asymptotic confidence intervals; see [Innovation Accounting](@ref innovation_accounting_page)
+- **Forecasting**: Multi-step ahead point forecasts, bootstrap prediction intervals, and Waggoner-Zha conditional forecasts
 
-All results integrate with `report()` for publication-quality output and `plot_result()` for interactive D3.js visualization.
+All results integrate with `report()` for publication-quality output and `plot_result()` for interactive D3.js visualization. Bayesian estimation of the same model is documented on the [Bayesian VAR](@ref bvar_page) page; cointegrated systems belong in a [VECM](@ref vecm_page).
+
+The examples throughout use three FRED-MD series under their official transformation codes: `INDPRO` (`tcode=5`, log difference) and `CPIAUCSL` (`tcode=6`, second log difference), both rescaled to percent, together with `FEDFUNDS` (`tcode=2`, first difference), already in percentage points. All three are therefore measured on a common percent scale.
 
 ```@setup var
 using MacroEconometricModels, Random
@@ -17,6 +19,7 @@ Random.seed!(42)
 fred = load_example(:fred_md)
 Y = to_matrix(apply_tcode(fred[:, ["INDPRO", "CPIAUCSL", "FEDFUNDS"]]))
 Y = Y[all.(isfinite, eachrow(Y)), :]
+Y[:, 1:2] .*= 100          # log differences to percent; FEDFUNDS is already in percentage points
 Y = Y[end-59:end, :]
 ```
 
@@ -33,10 +36,10 @@ report(model)
 
 ```@example var
 # Select lag order minimizing BIC (default)
-p_bic = select_lag_order(Y, 13)
+p_bic = select_lag_order(Y, 4)
 
 # Select via AIC
-p_aic = select_lag_order(Y, 13; criterion=:aic)
+p_aic = select_lag_order(Y, 4; criterion=:aic)
 
 model = estimate_var(Y, p_bic)
 report(model)
@@ -49,6 +52,7 @@ model = estimate_var(Y, 4)
 
 # Cholesky IRF with bootstrap confidence intervals
 result = irf(model, 20; method=:cholesky, ci_type=:bootstrap, reps=50)
+report(result)
 ```
 
 ```julia
@@ -67,6 +71,7 @@ model = estimate_var(Y, 4)
 # Contractionary monetary shock: FFR rises on impact
 check = ir -> ir[1, 3, 3] > 0
 result = irf(model, 20; method=:sign, check_func=check)
+report(result)
 ```
 
 ```julia
@@ -88,7 +93,7 @@ restrictions = SVARRestrictions(3;
              sign_restriction(1, 1, :positive)]          # Output rises to demand shock
 )
 result = identify_arias(model_short, restrictions, 20; n_draws=500)
-result
+report(result)
 ```
 
 **Recipe 6: Uhlig identification**
@@ -102,7 +107,7 @@ restrictions = SVARRestrictions(3;
              sign_restriction(3, 3, :positive)]     # Monetary shock raises FFR
 )
 result = identify_uhlig(model_short, restrictions, 20)
-result
+report(result)
 ```
 
 ---
@@ -148,22 +153,28 @@ The compact form ``Y = XB + U`` yields the OLS estimator:
 where:
 - ``\hat{B}`` is the ``k \times n`` coefficient matrix ``[c, A_1, \ldots, A_p]'``
 
-The residual covariance matrix is:
+The `Sigma` field holds the maximum-likelihood residual covariance:
 
 ```math
-\hat{\Sigma} = \frac{1}{T_{\text{eff}} - k} \hat{U}'\hat{U}
+\hat{\Sigma} = \frac{1}{T_{\text{eff}}} \hat{U}'\hat{U}
 ```
 
 where:
 - ``\hat{U} = Y - X\hat{B}`` is the ``T_{\text{eff}} \times n`` residual matrix
-- ``k = 1 + np`` is the number of regressors per equation
+
+!!! note "Two residual covariances"
+    `model.Sigma` is the ML estimator with denominator ``T_{\text{eff}}``, which is what the
+    information criteria, the Gaussian log-likelihood, and the impulse responses consume.
+    `vcov(model)` instead builds ``\hat{\Sigma}_{\text{dof}} \otimes (X'X)^{-1}`` from the
+    small-sample estimator ``\hat{U}'\hat{U} / (T_{\text{eff}} - k)``, so coefficient standard
+    errors carry the degrees-of-freedom correction while ``\Sigma`` does not.
 
 ```@example var
 model = estimate_var(Y, 4; varnames=["INDPRO", "CPI", "FFR"])
 report(model)
 ```
 
-The `report` output displays the VAR specification (number of variables, lags, observations) alongside the AIC, BIC, and HQIC values. The coefficient matrix `model.B` stores the intercept in row 1, followed by ``A_1, A_2, \ldots, A_p`` stacked vertically. To extract lag-``i`` coefficients for an ``n``-variable system: `A_i = model.B[(i-1)*n+2 : i*n+1, :]`.
+The `report` output displays the VAR specification (number of variables, lags, observations) alongside the AIC, BIC, and HQIC values. The coefficient matrix `model.B` stores the intercept in row 1, followed by ``A_1, A_2, \ldots, A_p`` stacked vertically. To extract lag-``i`` coefficients for an ``n``-variable system: `A_i = model.B[(i-1)*n+2 : i*n+1, :]'`. On this 60-observation sample the residual standard deviations are 0.67 percent for industrial production, 0.22 percent for inflation, and 0.086 percentage points for the funds rate --- the policy rate is by far the least volatile of the three at a monthly frequency.
 
 | Keyword | Type | Default | Description |
 |---------|------|---------|-------------|
@@ -217,44 +228,46 @@ stab = is_stationary(model)
 stab
 ```
 
-The `max_modulus` field reports the largest eigenvalue modulus. A value below 1.0 confirms stationarity; values near 1.0 indicate near-unit-root behavior suggesting the system may require differencing or a VECM specification.
+`is_stationary` returns a `VARStationarityResult`, not a `Bool`: `stab.is_stationary` is the verdict, `stab.max_modulus` the largest eigenvalue modulus, `stab.eigenvalues` the full companion spectrum, and `stab.companion_matrix` the ``np \times np`` matrix itself. Here the largest modulus is 0.83, comfortably inside the unit circle. Values near 1.0 indicate near-unit-root behavior and suggest the system requires differencing or a [VECM](@ref vecm_page) specification.
 
 ### Information Criteria
 
-The optimal lag length minimizes an information criterion that balances fit against model complexity. For a Gaussian VAR:
+The lag length minimizes an information criterion that balances fit against model complexity. Each criterion adds a penalty in the number of regressors per equation ``k = 1 + np`` to the log determinant of the ML residual covariance:
 
 ```math
-\text{AIC}(p) = \log|\hat{\Sigma}| + \frac{2}{T}(n^2 p + n)
-```
-
-```math
-\text{BIC}(p) = \log|\hat{\Sigma}| + \frac{\log T}{T}(n^2 p + n)
-```
-
-```math
-\text{HQ}(p) = \log|\hat{\Sigma}| + \frac{2 \log(\log T)}{T}(n^2 p + n)
+\text{AIC}(p) = \log|\hat{\Sigma}_p| + \frac{2k}{T_{\text{eff}}}, \qquad
+\text{BIC}(p) = \log|\hat{\Sigma}_p| + \frac{k \log T_{\text{eff}}}{T_{\text{eff}}}, \qquad
+\text{HQ}(p) = \log|\hat{\Sigma}_p| + \frac{2k \log(\log T_{\text{eff}})}{T_{\text{eff}}}
 ```
 
 where:
-- ``\hat{\Sigma}`` is the ML residual covariance at lag order ``p``
-- ``T`` is the effective sample size
+- ``\hat{\Sigma}_p`` is the ML residual covariance at lag order ``p``
+- ``T_{\text{eff}} = T - p`` is the effective sample size
+- ``k = 1 + np`` is the number of regressors per equation
 - ``n`` is the number of endogenous variables
-- ``n^2 p + n`` is the total number of free parameters (``n^2`` per lag plus ``n`` intercepts)
 
-AIC tends to overfit in finite samples; BIC is consistent (selects the true order with probability approaching 1 as ``T \to \infty``); HQIC offers an intermediate trade-off.
+AIC tends to overfit in finite samples; BIC penalizes complexity more heavily as ``T`` grows; HQIC sits between them. All three are stored on the fitted model as `aic`, `bic`, and `hqic`.
+
+!!! warning "Check the selected order, do not trust it blindly"
+    Because the penalty scales with the per-equation regressor count rather than the ``n^2 p + n``
+    system-wide parameter count, it is weak relative to the gain in fit from extra lags. On short
+    samples every criterion is then minimized at the top of the search range, and the "selected"
+    order is really just `max_p`. Always confirm the choice with `is_stationary` and keep `max_p`
+    small when ``T`` is small: with 60 observations and three variables, a VAR(4) already spends
+    13 coefficients per equation on 56 usable observations.
 
 ```@example var
 # BIC-optimal lag order (default)
-p_bic = select_lag_order(Y, 13)
+p_bic = select_lag_order(Y, 4)
 
 # AIC-optimal lag order
-p_aic = select_lag_order(Y, 13; criterion=:aic)
+p_aic = select_lag_order(Y, 4; criterion=:aic)
 
 model = estimate_var(Y, p_bic)
 report(model)
 ```
 
-The function `select_lag_order` evaluates all lag orders from 1 to `max_p` and returns the integer lag order minimizing the selected criterion. The BIC default provides the most parsimonious specification and is the standard choice for structural analysis (Lütkepohl 2005).
+`select_lag_order` evaluates every lag order from 1 to `max_p` and returns the integer minimizing the chosen criterion. On this sample both criteria are minimized at the boundary, ``\hat{p} = 4``, exactly the behavior the warning above describes --- the fit gain from the extra lags (the log determinant falls from ``-7.63`` at ``p = 1`` to ``-8.86`` at ``p = 4``) outruns the penalty. The resulting VAR(4) is stationary, so the order is usable; had `max_p` been set to 13 the same search would have returned a non-stationary VAR(13).
 
 | Keyword | Type | Default | Description |
 |---------|------|---------|-------------|
@@ -294,18 +307,38 @@ model = estimate_var(Y, 4)
 
 # Cholesky IRF with bootstrap 90% CI
 result = irf(model, 20; method=:cholesky, ci_type=:bootstrap, reps=50, conf_level=0.90)
+report(result)
 ```
 
-#### Bootstrap Schemes and Bias Correction
+A one-standard-deviation policy shock raises the funds rate by 0.082 percentage points on impact. Industrial production and prices are zero on impact by construction, then turn negative: output reaches a trough of ``-0.068`` percent at ``h = 5`` and inflation falls 0.046 percent at ``h = 2``. Both responses are economically small and statistically indistinguishable from zero --- the 90% band for the output response at ``h = 3`` runs from ``-0.22`` to ``0.07`` percent, which is what 56 usable observations buy.
+
+| Keyword | Type | Default | Description |
+|---------|------|---------|-------------|
+| `method` | `Symbol` | `:cholesky` | Identification scheme; see [Structural Identification](@ref structural_identification_page) for the full list |
+| `ci_type` | `Symbol` | `:none` | `:none`, `:bootstrap` (residual bootstrap), or `:theoretical` (asymptotic delta method) |
+| `reps` | `Int` | `200` | Replications used for the bands |
+| `conf_level` | `Real` | `0.95` | Band coverage |
+| `stationary_only` | `Bool` | `false` | Reject and redraw replications whose re-estimated companion matrix is explosive |
+| `check_func` | `Function` | `nothing` | Sign-restriction predicate (`method=:sign`) |
+| `narrative_check` | `Function` | `nothing` | Narrative-restriction predicate (`method=:narrative`) |
+| `seed` | `Integer` | `nothing` | Seed owning the bootstrap RNG; makes bands reproducible bit-for-bit |
+| `rng` | `AbstractRNG` | `default_rng()` | Random number generator, when no `seed` is given |
+
+### Bootstrap Schemes and Bias Correction
 
 The residual bootstrap resamples rows i.i.d. by default, which is valid only under conditionally homoskedastic, serially independent errors. Two alternatives relax that, and Kilian's (1998) bias correction addresses the small-sample bias of the OLS coefficients:
 
 ```@example var
-wild  = irf(model, 20; ci_type=:bootstrap, reps=50, bootstrap=:wild)
-block = irf(model, 20; ci_type=:bootstrap, reps=50, bootstrap=:block, block_length=8)
+iid   = irf(model, 20; ci_type=:bootstrap, reps=50, seed=1)
+wild  = irf(model, 20; ci_type=:bootstrap, reps=50, bootstrap=:wild, seed=1)
+block = irf(model, 20; ci_type=:bootstrap, reps=50, bootstrap=:block, block_length=8, seed=1)
 bc    = irf(model, 20; ci_type=:bootstrap, reps=50, bias_correct=true, seed=1)
-nothing # hide
+
+# 90% band width for the output response to the policy shock at h = 3
+[w.ci_upper[3, 1, 3] - w.ci_lower[3, 1, 3] for w in (iid, wild, block, bc)]
 ```
+
+At a common seed the four schemes disagree by about a quarter of the band width: the wild bootstrap widens the i.i.d. band from 0.292 to 0.313 percentage points, the bias correction gives a similar 0.310, and the moving-block scheme narrows it to 0.250 because concatenating contiguous residual blocks reduces the effective number of independent resampled observations. The spread is the size of the specification choice --- reporting a single scheme without saying which one hides it.
 
 | Keyword | Type | Default | Description |
 |---------|------|---------|-------------|
@@ -344,8 +377,7 @@ Sign restrictions identify structural shocks by constraining the signs of impuls
 4. Compute IRFs ``\Theta_0 = B_0, \Theta_1, \ldots`` from the candidate ``B_0``
 5. Accept if all sign conditions hold; otherwise discard and repeat
 
-!!! note "Technical Note"
-    With `store_all=true`, `identify_sign` returns a `SignIdentifiedSet` containing all accepted rotation matrices and their IRFs, enabling characterization of the full identified set (Baumeister & Hamilton 2015). Use `irf_bounds` and `irf_median` to summarize the identified set.
+By default `identify_sign` stops at the first rotation that clears the check and returns the pair `(Q, irf)`. With `store_all=true` it instead exhausts `max_draws` and returns a `SignIdentifiedSet` holding every accepted rotation and its IRF, which is what characterizing the full identified set requires (Baumeister & Hamilton 2015). `irf_median` and `irf_bounds` then summarize that set pointwise.
 
 ```@example var
 model = estimate_var(Y, 4)
@@ -356,13 +388,42 @@ check = ir -> ir[1, 3, 3] > 0 && ir[1, 1, 3] < 0 && ir[1, 2, 3] < 0
 # Full identified set
 id_set = identify_sign(model, 20, check; max_draws=5000, store_all=true)
 id_set
-
-# Pointwise median and 68% credible bands
-med = irf_median(id_set)
-lower, upper = irf_bounds(id_set; quantiles=[0.16, 0.84])
 ```
 
-The acceptance rate indicates what fraction of random draws satisfy all sign conditions simultaneously. Rates below 1% suggest the restrictions may be overly stringent or nearly contradictory.
+```@example var
+# Pointwise median and 68% bands over the identified set
+med = irf_median(id_set)
+lower, upper = irf_bounds(id_set; quantiles=[0.16, 0.84])
+round.([med[1, 1, 3] lower[1, 1, 3] upper[1, 1, 3]], digits=4)
+```
+
+```julia
+plot_result(id_set)
+```
+
+```@raw html
+<iframe src="../assets/plots/svar_setid_band.html" width="100%" height="500" frameborder="0" style="border:1px solid #ddd;border-radius:4px;"></iframe>
+```
+
+476 of 5000 rotations satisfy all three impact conditions, an acceptance rate of 9.5%. Across that set the median impact response of industrial production to the policy shock is ``-0.27`` percent, with a 68% interval of ``[-0.50, -0.08]`` that excludes zero --- unsurprising, since the sign restriction imposes the negative sign directly. The response decays quickly: by ``h = 6`` the median is ``-0.03`` percent. Rates below 1% suggest the restrictions are overly stringent or nearly contradictory; `irf_bounds` and `irf_median` summarize the set without collapsing it to a single rotation.
+
+| Keyword | Type | Default | Description |
+|---------|------|---------|-------------|
+| `max_draws` | `Int` | `1000` | Rotation draws attempted |
+| `store_all` | `Bool` | `false` | Return the full `SignIdentifiedSet` instead of the first accepted `(Q, irf)` pair |
+| `shock_names` | `Vector{String}` | `nothing` | Shock display names |
+| `rng` | `AbstractRNG` | `default_rng()` | Random number generator |
+
+**`SignIdentifiedSet{T}` fields:**
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `Q_draws` | `Vector{Matrix{T}}` | Accepted rotation matrices |
+| `irf_draws` | `Array{T,4}` | ``n_{\text{accepted}} \times H \times n \times n`` stacked IRFs |
+| `n_accepted` | `Int` | Number of accepted draws |
+| `n_total` | `Int` | Draws attempted (equal to `max_draws`) |
+| `acceptance_rate` | `T` | ``n_{\text{accepted}} / n_{\text{total}}`` |
+| `variables` / `shocks` | `Vector{String}` | Variable and shock names |
 
 ### Narrative Restrictions
 
@@ -381,9 +442,10 @@ sign_check = ir -> ir[1, 3, 3] > 0 && ir[1, 1, 3] < 0
 narrative_check = shocks -> shocks[20, 3] > 0
 
 Q, irfs, shocks = identify_narrative(model, 20, sign_check, narrative_check; max_draws=5000)
+round.([shocks[20, 3] irfs[1, 3, 3] irfs[1, 1, 3]], digits=4)
 ```
 
-The algorithm first filters for sign-satisfying rotations, then checks whether the recovered structural shocks ``\varepsilon = B_0^{-1} u`` satisfy the narrative conditions. This sequential filtering sharply reduces the identified set.
+The algorithm first filters for sign-satisfying rotations, then checks whether the recovered structural shocks ``\varepsilon = B_0^{-1} u`` satisfy the narrative conditions. It returns the first rotation clearing both filters, as a `(Q, irf, shocks)` tuple, and throws an `IdentificationError` if none is found in `max_draws` attempts. The `shocks` matrix is ``T_{\text{eff}} \times n``, here ``56 \times 3``. The accepted rotation puts the date-20 monetary shock at ``+0.030`` and delivers an impact output response of ``-0.087`` percent. Because the narrative condition is imposed on one date of one shock, it discards rotations that the sign restrictions alone would keep, sharply reducing the identified set.
 
 ### Long-Run (Blanchard-Quah)
 
@@ -402,6 +464,9 @@ Blanchard & Quah (1989) impose that ``C(1)`` is lower triangular, so that shocks
 ```@example var
 model = estimate_var(Y, 4)
 result = irf(model, 40; method=:long_run)
+
+# Cumulative 40-period response of INDPRO to each structural shock
+round.([sum(result.values[:, 1, j]) for j in 1:3]', digits=4)
 ```
 
 ```julia
@@ -411,6 +476,8 @@ plot_result(result)
 ```@raw html
 <iframe src="../assets/plots/irf_longrun.html" width="100%" height="500" frameborder="0" style="border:1px solid #ddd;border-radius:4px;"></iframe>
 ```
+
+Because industrial production enters as a growth rate, the cumulative sum of its impulse response is the response of the *level*. The restriction shows up exactly there: the first shock moves the level of output permanently by 0.28 percent, while the second and third accumulate to zero to four decimal places. Shock 1 is the only one with a permanent effect on output, which is what the Blanchard-Quah triangularity of ``C(1)`` imposes.
 
 ### Arias et al. (2018) Zero + Sign Restrictions
 
@@ -434,13 +501,16 @@ restrictions = SVARRestrictions(3;
 )
 
 result = identify_arias(model_short, restrictions, 20; n_draws=1000)
-result
-
-# Weighted IRF percentiles (importance-weight-corrected)
-pct = irf_percentiles(result; quantiles=[0.16, 0.5, 0.84])
+report(result)
 ```
 
-The acceptance rate reports the fraction of draws satisfying all restrictions. Low rates (below 1%) suggest overly stringent restrictions. The importance weights correct for non-uniform sampling --- the weighted percentiles provide correctly calibrated credible intervals.
+```@example var
+# Weighted IRF percentiles (importance-weight-corrected)
+pct = irf_percentiles(result; quantiles=[0.16, 0.5, 0.84])
+round.(pct[1, 3, 3, :]', digits=4)
+```
+
+The acceptance rate is 26.2%: roughly one draw in four satisfies both sign conditions. The weighted median impact response of the funds rate to its own shock is 0.052 percentage points, with a 68% interval of ``[0.018, 0.090]``. Because these restrictions are sign-only, the importance weights are uniform and `ess_fraction` is exactly 1 --- all 1000 accepted draws contribute equally. Adding a zero restriction would make the weights uneven and pull `ess_fraction` below 1; low rates (under 1%) instead signal overly stringent or contradictory restrictions.
 
 | Keyword | Type | Default | Description |
 |---------|------|---------|-------------|
@@ -492,10 +562,10 @@ restrictions = SVARRestrictions(3;
 )
 
 result = identify_uhlig(model_short, restrictions, 20)
-result
+report(result)
 ```
 
-The `converged` field indicates whether all sign restrictions are satisfied at the optimum. A `false` value means the optimizer found a local minimum where some sign conditions are violated --- increasing `n_starts` or relaxing restrictions may help.
+The optimizer converges with a total penalty of ``-199.24``, split as ``[-99.62, 0, -99.62]`` across the three shocks: shocks 1 and 3 each carry a restriction and each attains the satisfied-restriction weight ``w_s = 100``, while shock 2 is unrestricted and contributes nothing. At that rotation output rises 0.71 percent to its own shock and the funds rate rises 0.108 percentage points to the policy shock, both with the required sign. The `converged` field is `true` only when every sign restriction holds at the optimum; a `false` value means the optimizer settled in a local minimum that violates some condition, and increasing `n_starts` or relaxing restrictions is the remedy.
 
 | Keyword | Type | Default | Description |
 |---------|------|---------|-------------|
@@ -602,6 +672,8 @@ where:
 For panel data with both cross-sectional and temporal dependence, the Driscoll & Kraay (1998) estimator applies HAC estimation to the cross-sectional averages of moment conditions. This produces standard errors robust to heteroscedasticity, serial correlation, and cross-sectional dependence.
 
 ```@example var
+using LinearAlgebra
+
 # Construct VAR design matrices
 Y_eff, X = construct_var_matrices(Y, 2)
 residuals = Y_eff - X * ((X'X) \ (X'Y_eff))
@@ -614,9 +686,12 @@ V_w = white_vcov(X, residuals)
 
 # Automatic bandwidth selection
 bw = optimal_bandwidth_nw(residuals)
+
+# Ratio of HAC to White standard errors, first equation
+round.((sqrt.(diag(V_nw)) ./ sqrt.(diag(V_w)))[1:7]', digits=3)
 ```
 
-The Newey-West estimator is the standard choice for time series with heteroscedastic and serially correlated errors --- the default for VAR and LP applications. The White estimator is simpler but inconsistent when errors are autocorrelated. The Driscoll-Kraay estimator extends HAC to panel settings where cross-sectional units may be correlated.
+Both estimators return the full ``k n_{eq} \times k n_{eq}`` sandwich for the stacked system --- ``21 \times 21`` here, for ``k = 7`` regressors in each of three equations. The Newey-West (1994) rule selects a bandwidth of 1, so only the first autocovariance enters, and the HAC standard errors sit within roughly 4% below to 16% above their White counterparts. That gap is the cost of ignoring residual autocorrelation. Newey-West is the default for VAR and local-projection applications; White is simpler but inconsistent when errors are serially correlated, and Driscoll-Kraay extends HAC to panels whose cross-sectional units are correlated.
 
 ---
 
@@ -632,21 +707,42 @@ where:
 - ``\hat{y}_{T+h}`` is the ``h``-step ahead point forecast
 - ``\hat{y}_{T+j}`` for ``j \leq 0`` uses the observed data
 
-Bootstrap confidence intervals resample the residuals and simulate forecast paths to construct empirical prediction intervals.
+The default `:bootstrap` bands implement Kilian's (1998) bootstrap-B. Each replication builds a pseudo-sample by resampling the residuals, **re-estimates** the VAR on it, and then simulates forward from the true last ``p`` observations using those re-estimated coefficients and fresh resampled shocks. The bands therefore carry both future-innovation and coefficient-estimation uncertainty, at a cost of `reps` VAR re-estimations. The `:analytic` alternative uses the Lütkepohl (2005, §3.5) known-coefficient forecast MSE ``\Sigma_y(h) = \sum_{i=0}^{h-1} \Phi_i \Sigma_u \Phi_i'`` with symmetric Gaussian bands, which is cheaper but ignores parameter uncertainty.
 
 ```@example var
 model = estimate_var(Y, 4; varnames=["INDPRO", "CPI", "FFR"])
 fc = forecast(model, 12; ci_method=:bootstrap, reps=50, conf_level=0.95)
-fc
+report(fc)
 ```
 
-The forecast object displays per-variable tables with point forecasts and confidence interval bounds at each horizon. The bootstrap intervals account for both parameter uncertainty and future shock uncertainty.
+```julia
+plot_result(fc)
+```
+
+```@raw html
+<iframe src="../assets/plots/forecast_var.html" width="100%" height="500" frameborder="0" style="border:1px solid #ddd;border-radius:4px;"></iframe>
+```
+
+The point forecast reverts to the unconditional mean within a few months: industrial production is projected at 0.12 percent one month ahead and 0.05 percent at twelve, and the funds rate moves from ``-0.06`` to ``+0.05`` percentage points. The bands widen with the horizon as the accumulating shock variance implies --- the 95% interval for the funds rate goes from ``[-0.22, 0.09]`` at ``h = 1`` to ``[-0.31, 0.40]`` at ``h = 12``, and for industrial production from ``[-0.61, 1.11]`` to ``[-1.91, 2.27]`` percent. Bootstrap-B bands widen faster than an analytic MSE band would, because re-estimating the VAR on every replication feeds coefficient uncertainty into the long horizons as well.
 
 | Keyword | Type | Default | Description |
 |---------|------|---------|-------------|
-| `ci_method` | `Symbol` | `:bootstrap` | Confidence interval method: `:bootstrap` or `:none` |
+| `ci_method` | `Symbol` | `:bootstrap` | `:bootstrap` (Kilian bootstrap-B), `:analytic` (known-coefficient MSE), or `:none` |
 | `reps` | `Int` | `500` | Number of bootstrap replications |
 | `conf_level` | `Real` | `0.95` | Confidence level for intervals |
+| `stationary_only` | `Bool` | `false` | Discard bootstrap replications whose re-estimated companion matrix is explosive |
+| `rng` | `AbstractRNG` | `default_rng()` | Random number generator |
+
+`VARForecast{T}` return value:
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `forecast` | `Matrix{T}` | ``h \times n`` point forecast |
+| `ci_lower` / `ci_upper` | `Matrix{T}` | ``h \times n`` interval bounds (zero-width when `ci_method=:none`) |
+| `horizon` | `Int` | Forecast horizon |
+| `ci_method` | `Symbol` | Interval method used |
+| `conf_level` | `T` | Confidence level |
+| `varnames` | `Vector{String}` | Variable display names |
 
 ### Conditional Forecasts and Scenario Analysis
 
@@ -678,7 +774,7 @@ cfc = conditional_forecast(model, scenario, 12; reps=200)
 report(cfc)
 ```
 
-Each variable's table places the conditional path next to the unconditional one, so the scenario's effect is read off directly. Conditions are built either as a `Dict` keyed by `(variable, horizon)` or with [`forecast_condition`](@ref), which also builds **soft** conditions — a target with a tolerance:
+Each variable's table places the conditional path next to the unconditional one, so the scenario's effect is read off directly. Over the first four months the funds rate is pinned at exactly 2.0 with a degenerate ``[2.0, 2.0]`` band, against an unconditional path of roughly ``-0.06``; holding the rate two full percentage points above where the VAR would have put it is a very large shock, and the spillovers are correspondingly violent --- industrial production jumps to ``+4.5`` percent in the first month before overshooting to ``-2.7`` percent by the third. Unconstrained variables keep genuine uncertainty: at ``h = 1`` the 95% band for output is ``[3.43, 5.66]`` percent. Conditions are built either as a `Dict` keyed by `(variable, horizon)` or with [`forecast_condition`](@ref), which also builds **soft** conditions — a target with a tolerance:
 
 ```@example var
 soft = [forecast_condition("FFR", h, 2.0; sd=0.25) for h in 1:4]
@@ -686,7 +782,7 @@ cfc_soft = conditional_forecast(model, soft, 12; reps=200)
 round.(cfc_soft.forecast[1:4, 3], digits=3)   # shrunk toward 2.0, not pinned to it
 ```
 
-A soft condition treats the target as a noisy observation with standard deviation `sd`, so the path is shrunk toward it rather than hit exactly, and `sd → 0` recovers the hard condition.
+A soft condition treats the target as a noisy observation with standard deviation `sd`, so the path is shrunk toward it rather than hit exactly, and `sd → 0` recovers the hard condition. With `sd=0.25` the four conditioned months come out at 0.45, 0.73, 0.78 and 1.03 rather than 2.0 --- the tolerance is large relative to what the shocks can deliver, so the restriction is only partly enforced.
 
 ```julia
 plot_result(cfc)
@@ -708,19 +804,22 @@ plot_result(cfc)
 |-------|------|-------------|
 | `forecast` | `Matrix{T}` | ``h \times n`` conditional mean path |
 | `ci_lower` / `ci_upper` | `Matrix{T}` | ``h \times n`` band bounds |
-| `unconditional` | `Matrix{T}` | ``h \times n`` unconditional forecast, for comparison |
-| `shocks` | `Matrix{T}` | ``h \times n`` mean structural shocks implied by the conditions |
+| `horizon` | `Int` | Forecast horizon |
+| `conf_level` | `T` | Band coverage |
+| `varnames` | `Vector{String}` | Variable display names |
 | `conditions` | `Vector{ForecastCondition{T}}` | The restrictions imposed, with variable indices resolved |
+| `unconditional` | `Matrix{T}` | ``h \times n`` unconditional forecast, for comparison |
+| `shocks` | `Matrix{T}` | ``h \times n_{\text{shocks}}`` mean structural shocks implied by the conditions |
 | `identification` | `Symbol` | `:cholesky` or `:custom` |
 | `n_draws` | `Int` | Draws used for the bands |
 
-The same function dispatches on `BVARPosterior` to integrate the scenario over the posterior — see [Bayesian VAR](bayesian.md).
+The same function dispatches on `BVARPosterior` to integrate the scenario over the posterior — see [Bayesian VAR](@ref bvar_page).
 
 ---
 
 ## Innovation Accounting and Bayesian VAR
 
-For detailed coverage of impulse response functions, forecast error variance decomposition, and historical decomposition, see the dedicated [Innovation Accounting](innovation_accounting.md) page. For Bayesian VAR estimation with Minnesota priors, conjugate NIW sampling, and hyperparameter optimization, see [Bayesian VAR](bayesian.md).
+For detailed coverage of impulse response functions, forecast error variance decomposition, and historical decomposition, see the dedicated [Innovation Accounting](@ref innovation_accounting_page) page. For Bayesian VAR estimation with Minnesota priors, conjugate NIW sampling, and hyperparameter optimization, see [Bayesian VAR](@ref bvar_page).
 
 ---
 
@@ -730,19 +829,24 @@ This example demonstrates an end-to-end VAR workflow from data loading through s
 
 ```@example var
 # Step 1: Select lag order
-p_opt = select_lag_order(Y, 13)
+p_opt = select_lag_order(Y, 4)
 
 # Step 2: Estimate VAR
 model = estimate_var(Y, p_opt; varnames=["INDPRO", "CPI", "FFR"])
 report(model)
+```
 
+```@example var
 # Step 3: Check stability
 stab = is_stationary(model)
 stab
+```
 
+```@example var
 # Step 4: Cholesky IRF with bootstrap CI
 # Ordering: [INDPRO, CPI, FFR] — monetary policy shock is shock 3
 result = irf(model, 20; method=:cholesky, ci_type=:bootstrap, reps=50)
+report(result)
 ```
 
 ```julia
@@ -756,18 +860,22 @@ plot_result(result)
 ```@example var
 # Step 5: FEVD
 decomp = fevd(model, 20)
-decomp
+report(decomp)
+```
 
+```@example var
 # Step 6: Historical decomposition
 hd = historical_decomposition(model, size(model.U, 1))
 verify_decomposition(hd)
-
-# Step 7: Forecast
-fc = forecast(model, 12)
-fc
 ```
 
-The BIC selects a parsimonious lag order for the 3-variable system. The Cholesky ordering [INDPRO, CPI, FFR] implements the standard recursive identification of Christiano, Eichenbaum & Evans (1999): a monetary policy shock (shock 3) raises the federal funds rate on impact while output and prices respond with a lag. The FEVD reveals the fraction of industrial production forecast error variance attributable to monetary shocks at each horizon. The historical decomposition identity ``y_t = \sum_j \text{HD}_j(t) + \text{initial}(t)`` holds exactly up to numerical precision, verified by `verify_decomposition`.
+```@example var
+# Step 7: Forecast
+fc = forecast(model, 12)
+report(fc)
+```
+
+Both criteria select ``p = 4``, the top of the search range. The Cholesky ordering [INDPRO, CPI, FFR] implements the recursive identification of Christiano, Eichenbaum & Evans (1999): a monetary policy shock (shock 3) raises the federal funds rate on impact while output and prices respond only with a lag. The variance decomposition says the policy shock is a minor driver of industrial production --- 2.7% of its forecast error variance at twenty months, against 92.5% for output's own shock and 4.8% for the price shock. The funds rate is the variable most exposed to the rest of the system: 79.2% own, but 16.4% attributable to output shocks, the signature of a policy rule that reacts to real activity. The historical decomposition identity ``y_t = \sum_j \text{HD}_j(t) + \text{initial}(t)`` holds to numerical precision over all 56 effective observations, which `verify_decomposition` confirms by returning `true`.
 
 ---
 
@@ -775,9 +883,9 @@ The BIC selects a parsimonious lag order for the 3-variable system. The Cholesky
 
 1. **Variable ordering matters for Cholesky identification.** The Cholesky decomposition imposes a recursive causal structure where variable ``i`` responds contemporaneously only to shocks ``1, \ldots, i``. Reordering the columns of ``Y`` changes the economic interpretation of the structural shocks. The standard monetary VAR ordering places slow-moving variables first (output, prices) and the policy instrument last.
 
-2. **Non-stationary VAR produces unreliable inference.** If `is_stationary` returns `false`, the companion matrix has unit-root eigenvalues and the asymptotic distribution theory underlying OLS standard errors and bootstrap confidence intervals is invalid. Consider differencing the data, applying the appropriate transformation codes via `apply_tcode`, or estimating a [VECM](vecm.md) for cointegrated systems.
+2. **Non-stationary VAR produces unreliable inference.** `is_stationary` returns a `VARStationarityResult`, not a `Bool` --- test `is_stationary(model).is_stationary`. When it is `false` the companion matrix has eigenvalues on or outside the unit circle and the asymptotic theory underlying OLS standard errors and bootstrap confidence intervals no longer applies. Difference the data, apply the appropriate transformation codes via `apply_tcode`, or estimate a [VECM](@ref vecm_page) for cointegrated systems.
 
-3. **Too many lags exhaust degrees of freedom.** Each additional lag adds ``n^2`` parameters. For an ``n = 7`` variable system, each lag costs 49 parameters. With moderate sample sizes (``T < 200``), overfitting degrades forecast accuracy and inflates IRF confidence intervals. Use `select_lag_order` with BIC for parsimony.
+3. **Too many lags exhaust degrees of freedom.** Each additional lag adds ``n^2`` parameters to the system and ``n`` regressors to every equation. For an ``n = 7`` variable system each lag costs 49 parameters. With moderate sample sizes (``T < 200``) overfitting degrades forecast accuracy and inflates IRF confidence intervals. Cap `max_p` at a value the sample can support rather than relying on the criterion to stop early --- as the Information Criteria section shows, on short samples it often does not.
 
 4. **Low acceptance rate for sign restrictions.** When `identify_sign` or `identify_arias` reports an acceptance rate below 1%, the imposed sign conditions are difficult to satisfy jointly. This may indicate contradictory economic restrictions or an overidentified specification. Relaxing some conditions (e.g., restricting only impact responses rather than multiple horizons) typically improves acceptance.
 
@@ -803,7 +911,7 @@ The BIC selects a parsimonious lag order for the 3-variable system. The Cholesky
   *Econometrica*, 83(5), 1963-1999. [DOI](https://doi.org/10.3982/ECTA12356)
 
 - Blanchard, O. J., & Quah, D. (1989). The Dynamic Effects of Aggregate Demand and Supply Disturbances.
-  *American Economic Review*, 79(4), 655-673. [DOI](https://doi.org/10.2307/1827924)
+  *American Economic Review*, 79(4), 655-673. [JSTOR](https://www.jstor.org/stable/1827924)
 
 - Christiano, L. J., Eichenbaum, M., & Evans, C. L. (1999). Monetary Policy Shocks: What Have We Learned and to What End?
   In *Handbook of Macroeconomics*, Vol. 1, edited by J. B. Taylor & M. Woodford, 65-148. Amsterdam: Elsevier. [DOI](https://doi.org/10.1016/S1574-0048(99)01005-8)

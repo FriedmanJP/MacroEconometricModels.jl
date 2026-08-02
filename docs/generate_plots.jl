@@ -18,6 +18,7 @@ using Distributions
 using Random
 using LinearAlgebra
 using SparseArrays
+using Statistics
 
 const MEM = MacroEconometricModels
 
@@ -84,6 +85,9 @@ function main()
         # Must match doc @setup blocks: ["INDPRO", "CPIAUCSL", "FEDFUNDS"]
         key_md = fred_gm[:, ["INDPRO", "CPIAUCSL", "FEDFUNDS"]]
         Y3 = _clean_rows(to_matrix(apply_tcode(key_md)))
+        # INDPRO and CPIAUCSL are log differences; the innovation-accounting pages
+        # (ia_irf/ia_fevd/ia_hd) express them in percent, so scale to match their axes.
+        Y3[:, 1:2] .*= 100
 
         # Trending I(1) series: log INDPRO (for filters + ARIMA(1,1,0) with widening CIs)
         y_rw = filter(isfinite, log.(fred_gm[:, "INDPRO"]))
@@ -354,37 +358,58 @@ function main()
     end
 
     # -------------------------------------------------------------------
-    # 28. Nowcast result
+    # 28. Nowcast result (matches the nowcast.md @setup exactly: the last 100
+    #     months of the FRED-MD panel, four monthly indicators plus a quarterly
+    #     target observed every third month, AR(1) idiosyncratic components)
     # -------------------------------------------------------------------
     if use_real
-        nc_md  = fred_gm[:, ["INDPRO", "UNRATE", "CPIAUCSL", "M2SL", "FEDFUNDS"]]
-        Y_nc   = _clean_rows(to_matrix(apply_tcode(nc_md)))
+        Random.seed!(42)
+        nc_md  = fred_md[:, ["INDPRO", "UNRATE", "CPIAUCSL", "M2SL", "FEDFUNDS"]]
+        Y_nc   = to_matrix(apply_tcode(nc_md))
+        Y_nc   = Y_nc[all.(isfinite, eachrow(Y_nc)), :]
         Y_nc   = Y_nc[end-99:end, :]
     else
         Y_nc = randn(100, 5)
     end
-    Y_nc[end, end] = NaN
-    dfm_nc = nowcast_dfm(Y_nc, 4, 1; r=2, p=1)
+    for t in 1:size(Y_nc, 1)
+        mod(t, 3) != 0 && (Y_nc[t, end] = NaN)   # quarterly target, monthly panel
+    end
+    Y_nc[end, end] = NaN                          # current quarter not yet published
+    dfm_nc = nowcast_dfm(Y_nc, 4, 1; r=2, p=1, idio=:ar1)
     nr = nowcast(dfm_nc)
     save("nowcast_result.html", plot_result(nr))
     save("nowcast_heatmap.html", plot_result(nr; view=:heatmap,
-         variable_names=["INDPRO", "UNRATE", "CPI", "M2", "FFR"]))
+         variable_names=["INDPRO", "UNRATE", "CPIAUCSL", "M2SL", "FEDFUNDS"]))
     save("nowcast_contributions.html", plot_result(nr; view=:contributions))
 
     # -------------------------------------------------------------------
-    # 29. Nowcast news
+    # 29. Nowcast news (matches the nowcast_news.md @setup exactly: monthly
+    #     FRED-MD panel with a quarterly target, three monthly indicators
+    #     published at T — a multi-release vintage pair, not a single cell)
     # -------------------------------------------------------------------
-    X_old = copy(Y_nc)
-    X_new = copy(X_old); X_new[end, end] = X_old[end-1, end]
-    dfm_news = nowcast_dfm(X_old, 4, 1; r=2, p=1)
-    nn = nowcast_news(X_new, X_old, dfm_news, 5)
+    if use_real
+        Random.seed!(42)
+        nc_news_md = fred_md[:, ["INDPRO", "UNRATE", "CPIAUCSL", "M2SL", "FEDFUNDS"]]
+        Y_news = to_matrix(apply_tcode(nc_news_md))
+        Y_news = Y_news[all.(isfinite, eachrow(Y_news)), :]
+        Y_news = Y_news[end-59:end, :]
+    else
+        Y_news = randn(60, 5)
+    end
+    for t in 1:size(Y_news, 1)
+        mod(t, 3) != 0 && (Y_news[t, end] = NaN)   # quarterly target, monthly panel
+    end
+    Y_news[end, end] = NaN                          # current quarter not yet published
+    T_news = size(Y_news, 1)
+    dfm_news = nowcast_dfm(Y_news, 4, 1; r=2, p=1, idio=:ar1)
+
+    X_old_news = copy(Y_news)
+    X_old_news[end, 1:3] .= NaN                     # INDPRO, UNRATE, CPI still unpublished
+    nn = nowcast_news(Y_news, X_old_news, dfm_news, T_news; target_var=5)
     save("nowcast_news.html", plot_result(nn))
 
-    X_old2 = copy(Y_nc)
-    X_old2[end, 1:3] .= NaN
-    groups = [1, 1, 2, 2, 2]
-    nn_grp = nowcast_news(Y_nc, X_old2, dfm_nc, size(Y_nc, 1);
-             target_var=5, groups=groups,
+    nn_grp = nowcast_news(Y_news, X_old_news, dfm_news, T_news;
+             target_var=5, groups=[1, 1, 2, 2, 2],
              group_names=["Real", "Nominal"])
     save("nowcast_news_groups.html", plot_result(nn_grp; view=:groups))
     save("nowcast_news_individual.html", plot_result(nn_grp; view=:individual))
@@ -400,7 +425,7 @@ function main()
         Y[t] = A[t] * K[t-1]^α
         C[t] + K[t] = Y[t] + (1 - δ) * K[t-1]
         1 = β * (C[t] / C[t+1]) * (α * A[t+1] * K[t]^(α - 1) + 1 - δ)
-        A[t] = ρ * A[t-1] + σ * ε_A[t]
+        A[t] = A[t-1]^ρ * exp(σ * ε_A[t])
 
         steady_state = begin
             A_ss = 1.0
@@ -539,44 +564,35 @@ function main()
     end
 
     # -------------------------------------------------------------------
-    # 40. Logit Model
+    # 40-42 + 60. Logit, probit, average marginal effects, and odds-ratio
+    #        forest. Reproduces the binary_choice.md matrix-interface fit
+    #        exactly — the Mroz (1987) participation extract, seven
+    #        regressors plus the intercept — so all four figures and the
+    #        numbers the page quotes are one model. (The odds-ratio save
+    #        lives here because m_logit is local to this try block.)
     # -------------------------------------------------------------------
-    begin
-        Random.seed!(125)
-        n_bin = 500
-        X_bin = hcat(ones(n_bin), randn(n_bin), randn(n_bin))
-        eta = X_bin * [0.0, 1.0, -0.5]
-        prob_bin = 1.0 ./ (1.0 .+ exp.(-eta))
-        y_bin = Float64.(rand(n_bin) .< prob_bin)
-        m_logit = estimate_logit(y_bin, X_bin; varnames=["const", "x₁", "x₂"])
+    try
+        mroz_bc  = load_example(:mroz)
+        y_bc = mroz_bc[:, "inlf"]
+        X_bc = hcat(ones(mroz_bc.N_obs), mroz_bc[:, "nwifeinc"], mroz_bc[:, "educ"],
+                    mroz_bc[:, "exper"], mroz_bc[:, "expersq"], mroz_bc[:, "age"],
+                    mroz_bc[:, "kidslt6"], mroz_bc[:, "kidsge6"])
+        xnames_bc = ["(Intercept)", "nwifeinc", "educ", "exper", "expersq", "age",
+                     "kidslt6", "kidsge6"]
+        m_logit  = estimate_logit(y_bc, X_bc; varnames=xnames_bc)
+        m_probit_bc = estimate_probit(y_bc, X_bc; varnames=xnames_bc)
         save("reg_logit.html", plot_result(m_logit))
-    end
-
-    # -------------------------------------------------------------------
-    # 41. Probit Model
-    # -------------------------------------------------------------------
-    begin
-        m_probit_reg = estimate_probit(y_bin, X_bin; varnames=["const", "x₁", "x₂"])
-        save("reg_probit.html", plot_result(m_probit_reg))
-    end
-
-    # -------------------------------------------------------------------
-    # 42. Marginal Effects
-    # -------------------------------------------------------------------
-    begin
-        me_ame = marginal_effects(m_logit; type=:ame)
-        save("reg_marginal_effects.html", plot_result(me_ame))
-    end
-
-    # -------------------------------------------------------------------
-    # 43. Classification Diagnostics
-    # -------------------------------------------------------------------
-    begin
-        save("reg_classification.html", plot_result(m_logit; title="Logit Classification Diagnostics"))
+        save("reg_probit.html", plot_result(m_probit_bc))
+        save("reg_marginal_effects.html", plot_result(marginal_effects(m_logit)))
+        save("odds_ratio_forest.html", plot_result(odds_ratio(m_logit)))
+    catch e
+        @warn "Skipped binary-choice gallery" exception=(e, catch_backtrace())
     end
 
     # -------------------------------------------------------------------
     # 44. ACF/PACF Correlogram (ACFResult)
+    #     (43 was a duplicate of the LogitModel figure under a different title —
+    #      plot_result(::LogitModel) has no classification view; entry removed)
     # -------------------------------------------------------------------
     begin
         y_acf = use_real ? filter(isfinite, diff(log.(fred_gm[:, "INDPRO"]))) : randn(200)
@@ -771,14 +787,8 @@ function main()
         plot_result(preg)
     end
 
-    # 60. Odds-ratio forest plot (logit, log x-axis, reference at 1)
-    try_save("odds_ratio_forest.html") do
-        rng = MersenneTwister(62); nb = 500
-        Xb = hcat(randn(rng, nb), randn(rng, nb), randn(rng, nb))
-        eta = Xb * [0.8, -0.5, 0.3]
-        yb = Float64.(rand(rng, nb) .< 1 ./ (1 .+ exp.(-eta)))
-        plot_result(odds_ratio(estimate_logit(yb, Xb; varnames=["age", "income", "educ"])))
-    end
+    # 60. Odds-ratio forest plot — moved into the 40-42 Mroz block above so it
+    #     shares m_logit's scope (the synthetic entry drifted from the page).
 
     # 61. GMM moment-discrepancy bar + J-test annotation
     try_save("gmm_moment_fit.html") do
@@ -846,6 +856,127 @@ function main()
         o = MEM.PriorPosteriorOverlap{Float64}([:β, :α, :δ, :ρ, :σ],
                 [0.28, 0.62, 0.91, 0.45, 0.83], [false, false, true, false, true], 0.8)
         plot_result(o)
+    end
+
+    # ===================================================================
+    # Page-faithful assets. Each block reproduces the owning page's own
+    # @setup data exactly, so the embedded figure matches the numbers the
+    # page quotes (docrule "Embedding Plot Iframes", plotrule Docs Rules).
+    # ===================================================================
+    println("\n-- page-faithful assets --")
+
+    # 70. MIDAS weight curve — midas.md (quarterly GDP on six monthly IP lags)
+    try_save("midas_weights.html") do
+        ip_monthly = vec(to_matrix(apply_tcode(fred_md[:, ["INDPRO"]]))) .* 100
+        gdp_all    = vec(to_matrix(apply_tcode(fred_qd[:, ["GDPC1"]]))) .* 100
+        gdp_q = gdp_all[1:end-1][end-119:end]
+        ip_m  = ip_monthly[1:end-3][end-359:end]
+        plot_result(estimate_midas(gdp_q, ip_m; m=3, K=6, weights=:expalmon, p_ar=1);
+                    view=:weights)
+    end
+
+    # 71. Forecast-accuracy ranking — forecast_evaluation.md (80-quarter
+    #     pseudo-out-of-sample race on GDP growth through 2019Q4). One metric,
+    #     ranked: the all-metrics grouped bar puts MAPE (~163) and MAE (~0.4)
+    #     on one linear axis, which hides six of the eight metrics.
+    try_save("fceval_rmse.html") do
+        gdp_fe = vec(to_matrix(apply_tcode(fred_qd[:, ["GDPC1"]]))) .* 100
+        gdp_fe = gdp_fe[1:243]
+        f_ar, f_rw, f_mean = Float64[], Float64[], Float64[]
+        for t in (length(gdp_fe) - 79):length(gdp_fe)
+            train = gdp_fe[1:t-1]
+            push!(f_ar, forecast(estimate_ar(train, 2), 1).forecast[1])
+            push!(f_rw, train[end])
+            push!(f_mean, mean(train))
+        end
+        plot_result(forecast_evaluate(gdp_fe[end-79:end], hcat(f_ar, f_rw, f_mean);
+                    model_names=["AR(2)", "Random walk", "Mean"]); metric="RMSE")
+    end
+
+    # 72-74. Nonlinear models — nonlinear.md. The SETAR/STAR pair runs on the
+    #        page's fixed-seed two-regime process; MS-AR on Hamilton's GNP series.
+    begin
+        Random.seed!(20240716)
+        n_nl = 400
+        y_nl = zeros(n_nl)
+        for t in 2:n_nl
+            y_nl[t] = y_nl[t-1] <= 0.0 ? 0.6 + 0.5 * y_nl[t-1] + 0.4 * randn() :
+                                         -0.6 - 0.4 * y_nl[t-1] + 0.4 * randn()
+        end
+        try_save("nonlinear_regimes.html") do
+            plot_result(estimate_setar(y_nl, 1, 1); view=:regimes)
+        end
+        try_save("nonlinear_star_transition.html") do
+            plot_result(estimate_star(y_nl, 1; d=1, type=:lstr1); view=:transition)
+        end
+        try_save("nonlinear_ms_probabilities.html") do
+            g_gnp = vec(load_example(:gnp_hamilton).data)
+            plot_result(estimate_ms_ar(g_gnp, 4); view=:probabilities)
+        end
+    end
+
+    # 75-76. Ordered & multinomial coefficients — ordered_multinomial.md
+    #        (Mroz labour-supply bands: 1 none, 2 part time, 3 1000-1999h, 4 full time)
+    begin
+        mroz_om = load_example(:mroz)
+        supply_om = [h == 0 ? 1 : h < 1000 ? 2 : h < 2000 ? 3 : 4
+                     for h in mroz_om[:, "hours"]]
+        Xo_om = hcat(mroz_om[:, "nwifeinc"], mroz_om[:, "educ"], mroz_om[:, "exper"],
+                     mroz_om[:, "age"], mroz_om[:, "kidslt6"])
+        onames_om = ["nwifeinc", "educ", "exper", "age", "kidslt6"]
+        try_save("ordered_coef.html") do
+            plot_result(estimate_ologit(supply_om, Xo_om; varnames=onames_om))
+        end
+        try_save("mlogit_coef.html") do
+            plot_result(estimate_mlogit(supply_om, hcat(ones(mroz_om.N_obs), Xo_om);
+                        varnames=["(Intercept)"; onames_om]))
+        end
+    end
+
+    # 77-78. FAVAR — favar.md (7-variable FRED-MD panel, FEDFUNDS as the key variable)
+    begin
+        Random.seed!(42)
+        fav_names = ["INDPRO", "CPIAUCSL", "UNRATE", "M2SL", "FEDFUNDS", "TB3MS", "GS10"]
+        X_fav = to_matrix(apply_tcode(fred_md[:, fav_names]))
+        X_fav = X_fav[all.(isfinite, eachrow(X_fav)), :]
+        X_fav = X_fav[end-59:end, :]
+        favar_m = nothing
+        try_save("favar_factors.html") do
+            favar_m = estimate_favar(X_fav, [5], 2, 2; panel_varnames=fav_names)
+            plot_result(favar_m)
+        end
+        try_save("favar_panel_irf.html") do
+            r_fav = irf(favar_m, 20; method=:cholesky)
+            plot_result(favar_panel_irf(favar_m, r_fav); shock="FEDFUNDS", ncols=3)
+        end
+    end
+
+    # 79. GSADF bubble monitor — tests_unitroot_advanced.md (random walk with an
+    #     explosive window over [70, 110], then a collapse)
+    try_save("bubble_monitor.html") do
+        Random.seed!(7)
+        price_b = zeros(160)
+        for t in 2:160
+            price_b[t] = (70 <= t <= 110 ? 1.05 : 1.0) * price_b[t-1] + randn()
+        end
+        plot_result(gsadf_test(price_b; adflag=0, mc_reps=299))
+    end
+
+    # 80. Panel fixed-effects coefficients — panel_reg.md (PWT growth regression)
+    try_save("panel_reg_coef.html") do
+        df_pwt = DataFrame(pwt.data, pwt.varnames)
+        df_pwt.country = pwt.group_names[pwt.group_id]
+        df_pwt.year = pwt.time_id
+        valid_pwt = .!isnan.(df_pwt.rgdpna) .& .!isnan.(df_pwt.rkna) .&
+                    .!isnan.(df_pwt.emp) .& .!isnan.(df_pwt.pop) .&
+                    .!isnan.(df_pwt.hc) .& .!isnan.(df_pwt.labsh) .&
+                    .!isnan.(df_pwt.csh_i) .&
+                    (df_pwt.emp .> 0) .& (df_pwt.pop .> 0) .&
+                    (df_pwt.rgdpna .> 0) .& (df_pwt.rkna .> 0)
+        df_pwt = df_pwt[valid_pwt, :]
+        df_pwt.lngdppc = log.(df_pwt.rgdpna ./ df_pwt.pop)
+        df_pwt.lnk = log.(df_pwt.rkna ./ df_pwt.emp)
+        plot_result(estimate_xtreg(xtset(df_pwt, :country, :year), :lngdppc, [:hc, :lnk]))
     end
 
     println("\nDone! Generated $(length(readdir(PLOT_DIR))) HTML files in $PLOT_DIR")

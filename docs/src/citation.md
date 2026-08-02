@@ -10,7 +10,7 @@ version.
 
 Plain-text (AEA style):
 
-> Chung, Wookyung. 2026. *MacroEconometricModels.jl*. Zenodo.
+> Chung, Wookyung. 2026. *MacroEconometricModels.jl*, version 0.7.2. Zenodo.
 > [https://doi.org/10.5281/zenodo.18439170](https://doi.org/10.5281/zenodo.18439170).
 
 BibTeX:
@@ -20,14 +20,16 @@ BibTeX:
   author    = {Chung, Wookyung},
   title     = {{MacroEconometricModels.jl}},
   year      = {2026},
+  version   = {0.7.2},
   doi       = {10.5281/zenodo.18439170},
   url       = {https://doi.org/10.5281/zenodo.18439170},
   publisher = {Zenodo}
 }
 ```
 
-The DOI resolves to the Zenodo record for the software; cite the version-specific DOI listed there
-for the exact release you used (see [Changelog / What's New](@ref changelog) for the version history).
+This entry is also kept at the repository root as `CITATION.bib`. The DOI resolves to the Zenodo
+record for the software; cite the version-specific DOI listed there for the exact release you used
+(see [Changelog / What's New](@ref changelog) for the version history).
 
 ---
 
@@ -47,7 +49,7 @@ refs(model; format = :bibtex)  # BibTeX entries
 refs(io, :multipliers; format = :latex)
 ```
 
-See the API Reference pages for the full `refs` signature.
+See [Utilities & Display API](@ref api_utilities) for the full `refs` signature.
 
 ---
 
@@ -55,7 +57,11 @@ See the API Reference pages for the full `refs` signature.
 
 | Field | Value |
 |-------|-------|
-| Author | Wookyung Chung <chung@friedman.jp> |
+| Author | Wookyung Chung (`chung@friedman.jp`) |
 | Version | 0.7.2 |
 | Repository | [github.com/FriedmanJP/MacroEconometricModels.jl](https://github.com/FriedmanJP/MacroEconometricModels.jl) |
 | License | GPL-3.0-or-later |
+| Software DOI | [10.5281/zenodo.18439170](https://doi.org/10.5281/zenodo.18439170) |
+
+The version above tracks `Project.toml` and is updated at each release; `pkgversion(MacroEconometricModels)`
+reports the version actually installed.

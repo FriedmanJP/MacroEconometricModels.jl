@@ -1,253 +1,263 @@
 # [Unit Root & Cointegration](@id tests_unitroot_page)
 
-Pre-estimation stationarity analysis determines whether a time series is stationary (I(0)) or contains a unit root (I(1)). This distinction drives the choice between VAR in levels, VAR in first differences, and VECM specifications. MacroEconometricModels.jl provides five unit root tests, a multivariate cointegration test, and convenience functions for batch analysis.
+Pre-estimation stationarity analysis determines whether a time series is stationary (I(0)) or contains a unit root (I(1)). This distinction drives the choice between a VAR in levels, a VAR in first differences, and a VECM. MacroEconometricModels.jl provides five unit root tests, the Johansen system cointegration test, and two batch utilities that screen many series at once.
 
-For advanced unit root tests with improved power under structural breaks and GLS detrending --- Fourier ADF/KPSS, DF-GLS/ERS, LM unit root, and two-break ADF --- see [Advanced Unit Root Tests](tests_unitroot_advanced.md).
+For the full test battery and the tables that route a question to a test, see [Hypothesis Tests](@ref tests_page). For tests with improved power under smooth breaks, GLS detrending, seasonal frequencies, and explosive alternatives, see [Advanced Unit Root Tests](@ref tests_unitroot_advanced_page). For single-equation cointegration tests on a fitted regression, see [Residual-Based Cointegration Tests](@ref tests_cointegration_page).
 
-The ADF and KPSS tests are complementary: ADF tests the null of a unit root, while KPSS tests the null of stationarity. Running both provides stronger inference than either alone. When structural breaks are suspected, the Zivot-Andrews test avoids the size distortions that plague standard tests.
+ADF and KPSS are complementary: ADF tests the null of a unit root, KPSS the null of stationarity. Running both is stronger than either alone, because the two tests fail in opposite directions.
 
-- **ADF, PP, Ng-Perron**: Null hypothesis is unit root
-- **KPSS**: Null hypothesis is stationarity (reverses the burden of proof)
-- **Zivot-Andrews**: Unit root test robust to a single endogenous structural break
-- **Johansen**: Tests for cointegrating relationships among multiple I(1) series
+- **ADF, PP, Ng-Perron**: null hypothesis is a unit root
+- **KPSS**: null hypothesis is stationarity (reverses the burden of proof)
+- **Zivot-Andrews**: unit root test robust to a single endogenous structural break
+- **Johansen**: tests for cointegrating relationships among several I(1) series
 
 ```@setup test_ur
 using MacroEconometricModels
-fred = load_example(:fred_md)
-cpi = filter(isfinite, fred[:, "CPIAUCSL"])
-qd = load_example(:fred_qd)
-Y_qd = log.(to_matrix(qd[:, ["GDPC1", "PCECC96"]]))
-Y_qd = Y_qd[all.(isfinite, eachrow(Y_qd)), :]
+fred   = load_example(:fred_md)
+cpi    = filter(isfinite, fred[:, "CPIAUCSL"])
+unrate = filter(isfinite, fred[:, "UNRATE"])
+qd     = load_example(:fred_qd)
+rates  = to_matrix(qd[:, ["GS10", "TB3MS"]])
+rates  = rates[all.(isfinite, eachrow(rates)), :]
 ```
 
 ## Quick Start
 
-**Recipe 1: ADF + KPSS combined workflow**
+**Recipe 1: Confirm a unit root with ADF and KPSS**
 
 ```@example test_ur
-# ADF: H0 = unit root
-adf_result = adf_test(cpi; lags=:aic, regression=:constant)
-report(adf_result)
-
-# KPSS: H0 = stationarity
-kpss_result = kpss_test(cpi; regression=:constant)
-report(kpss_result)
-
-# If ADF fails to reject and KPSS rejects → unit root confirmed
+# The consumer price level: ADF should fail to reject, KPSS should reject
+report(adf_test(cpi; lags=:aic, regression=:constant))
+report(kpss_test(cpi; regression=:constant))
 ```
 
-**Recipe 2: Johansen cointegration**
+**Recipe 2: Confirm stationarity with the same pair**
 
 ```@example test_ur
-# Test for cointegrating relationships with 2 lags
-result = johansen_test(Y_qd, 2; deterministic=:constant)
-report(result)
+# The unemployment rate: ADF rejects the unit root, KPSS keeps stationarity
+report(adf_test(unrate; lags=:aic, regression=:constant))
+report(kpss_test(unrate; regression=:constant))
 ```
 
-**Recipe 3: Batch unit root summary**
+**Recipe 3: Batch summary of several tests on one series**
 
 ```@example test_ur
-# Run ADF, KPSS, and PP simultaneously with automatic conclusion
 summary = unit_root_summary(cpi; tests=[:adf, :kpss, :pp])
 summary.conclusion
+```
+
+**Recipe 4: Screen every column of a data matrix**
+
+```@example test_ur
+Y = to_matrix(fred[:, ["INDPRO", "CPIAUCSL", "FEDFUNDS", "UNRATE", "M2SL"]])
+Y = Y[all.(isfinite, eachrow(Y)), :]
+
+results = test_all_variables(Y; test=:adf)
+[(stat = round(r.statistic, digits=3), p = round(r.pvalue, digits=3)) for r in results]
+```
+
+**Recipe 5: Johansen cointegration rank**
+
+```@example test_ur
+# Ten-year and three-month Treasury yields: does the term spread mean-revert?
+report(johansen_test(rates, 2; deterministic=:constant))
 ```
 
 ---
 
 ## Augmented Dickey-Fuller Test
 
-The Augmented Dickey-Fuller (ADF) test (Dickey & Fuller, 1979) is the most widely used unit root test in applied macroeconometrics. It examines whether a time series contains a stochastic trend by testing the coefficient on the lagged level in a first-difference regression.
+The Augmented Dickey-Fuller (ADF) test (Dickey & Fuller 1979) is the most widely used unit root test in applied macroeconometrics. It asks whether a series contains a stochastic trend by testing the coefficient on the lagged level in a first-difference regression.
 
-The ADF regression augments the basic Dickey-Fuller test with lagged differences to control for serial correlation:
+The ADF regression augments the basic Dickey-Fuller test with lagged differences to absorb serial correlation:
 
 ```math
 \Delta y_t = \alpha + \beta t + \gamma y_{t-1} + \sum_{j=1}^{p} \delta_j \Delta y_{t-j} + \varepsilon_t
 ```
 
 where:
-- ``\gamma = \rho - 1`` is the coefficient of interest (``\rho`` is the AR(1) parameter)
-- ``\alpha`` is an optional intercept (included when `regression=:constant` or `:trend`)
-- ``\beta t`` is an optional linear trend (included when `regression=:trend`)
+- ``\gamma = \rho - 1`` is the coefficient of interest (``\rho`` is the AR(1) root)
+- ``\alpha`` is an intercept, included when `regression=:constant` or `:trend`
+- ``\beta t`` is a linear trend, included when `regression=:trend`
 - ``p`` lagged differences absorb serial correlation in ``\varepsilon_t``
 
-The null and alternative hypotheses are:
-- ``H_0: \gamma = 0`` (unit root, series is non-stationary)
-- ``H_1: \gamma < 0`` (stationary)
+The hypotheses are ``H_0: \gamma = 0`` (unit root) against ``H_1: \gamma < 0`` (stationary). The statistic is the ``t``-ratio ``\tau = \hat\gamma / \text{se}(\hat\gamma)``, which follows a non-standard distribution that depends on the deterministic specification.
 
-The ADF statistic is the t-ratio on ``\gamma``:
-
-```math
-\tau = \frac{\hat{\gamma}}{\text{se}(\hat{\gamma})}
-```
-
-Critical values follow non-standard distributions and depend on the deterministic specification. MacroEconometricModels.jl computes p-values from the MacKinnon (1994, 2010) response surface approximation.
+!!! note "Technical Note"
+    Critical values come from the MacKinnon response surface ``c_1 + c_2/T + c_3/T^2 + c_4 (p/T) + c_5 (p/T)^2``, so they adjust for both sample size and the selected lag order. The reported p-value is the **asymptotic** MacKinnon (1996) surface ``p = \Phi(P(\tau))`` and carries no finite-sample correction. Near a critical value the two can therefore disagree by a little; the critical values are the finer instrument in short samples.
 
 ```@example test_ur
-# CPI price level — expected to have a unit root
-# ADF test with automatic lag selection via AIC
+# The consumer price level, with the lag order chosen by AIC
 result = adf_test(cpi; lags=:aic, regression=:constant)
 report(result)
-
-# Access specific fields
-result.statistic        # ADF τ-statistic
-result.pvalue           # MacKinnon p-value
-result.lags             # Number of augmenting lags selected
-result.critical_values  # Dict: 1 => cv_1%, 5 => cv_5%, 10 => cv_10%
 ```
+
+The statistic ``\tau = 2.151`` sits far above the 5% critical value of ``-2.847``, and the p-value rounds to 1.000: there is no evidence at all against a unit root in the price level. AIC selects 15 augmenting lags out of a maximum of 20, leaving 787 usable observations. This is the expected result — a price *level* is I(1), and inflation (its first difference) is the object that may be stationary. Compare the unemployment rate, which behaves differently:
+
+```@example test_ur
+(τ = round(adf_test(unrate; lags=:aic, regression=:constant).statistic, digits=3),
+ p = round(adf_test(unrate; lags=:aic, regression=:constant).pvalue, digits=4))
+```
+
+Here ``\tau = -3.563`` with ``p = 0.0065``, rejecting the unit root at the 1% level.
 
 ### Options
 
-| Argument | Type | Default | Description |
-|----------|------|---------|-------------|
+| Keyword | Type | Default | Description |
+|---------|------|---------|-------------|
 | `lags` | `Union{Int,Symbol}` | `:aic` | Number of augmenting lags, or `:aic`/`:bic`/`:hqic` for automatic selection |
-| `max_lags` | `Union{Int,Nothing}` | `nothing` | Maximum lags for automatic selection (defaults to ``\lfloor 12(T/100)^{0.25} \rfloor``) |
+| `max_lags` | `Union{Int,Nothing}` | `nothing` | Ceiling for automatic selection (defaults to ``\lfloor 12(T/100)^{1/4} \rfloor``) |
 | `regression` | `Symbol` | `:constant` | Deterministic terms: `:none`, `:constant`, or `:trend` |
 
 ### Return Values
 
 | Field | Type | Description |
 |-------|------|-------------|
-| `statistic` | `T` | ADF test statistic (``\tau``-ratio) |
-| `pvalue` | `T` | Asymptotic p-value (MacKinnon response surface) |
+| `statistic` | `T` | ADF test statistic (``\tau``-ratio on ``\hat\gamma``) |
+| `pvalue` | `T` | Asymptotic MacKinnon (1996) p-value |
 | `lags` | `Int` | Number of augmenting lags used |
 | `regression` | `Symbol` | Deterministic specification (`:none`, `:constant`, `:trend`) |
-| `critical_values` | `Dict{Int,T}` | Critical values at 1%, 5%, 10% significance levels |
-| `nobs` | `Int` | Number of observations used |
+| `critical_values` | `Dict{Int,T}` | Critical values keyed by significance level (`1`, `5`, `10`) |
+| `nobs` | `Int` | Number of observations in the test regression (``T - 1 - p``) |
 
 ### Interpretation
 
-**Reject** ``H_0`` (p-value < 0.05): evidence against a unit root; the series appears stationary. **Fail to reject** ``H_0`` (p-value > 0.05): cannot reject the unit root null; the series is likely non-stationary and requires differencing or a VECM specification. The ADF test has notoriously low power against near-unit-root alternatives, so always confirm with the KPSS test.
+**Reject** ``H_0`` (p-value < 0.05): evidence against a unit root; the series appears stationary. **Fail to reject** (p-value > 0.05): the unit root null survives, and the series needs differencing or a VECM. The ADF test has notoriously low power against near-unit-root alternatives, so a failure to reject is weak evidence on its own — confirm it with KPSS.
 
 ---
 
 ## KPSS Stationarity Test
 
-The KPSS test (Kwiatkowski, Phillips, Schmidt & Shin, 1992) reverses the hypotheses of the ADF test. By testing the null of stationarity, it places the burden of proof on rejecting stationarity rather than rejecting the unit root. This complementary design makes the ADF-KPSS pair a cornerstone of applied unit root analysis.
+The KPSS test (Kwiatkowski, Phillips, Schmidt & Shin 1992) reverses the ADF hypotheses. By testing the null of stationarity it puts the burden of proof on rejecting stationarity rather than on rejecting the unit root, which is what makes the ADF-KPSS pair informative.
 
-The KPSS test decomposes the observed series into a deterministic trend, a random walk, and a stationary error:
+KPSS decomposes the series into a deterministic trend, a random walk, and a stationary error:
 
 ```math
 y_t = \xi t + r_t + \varepsilon_t, \qquad r_t = r_{t-1} + u_t
 ```
 
 where:
-- ``\xi t`` is a deterministic trend (set ``\xi = 0`` for level stationarity)
-- ``r_t`` is a random walk component with innovation ``u_t \sim (0, \sigma_u^2)``
+- ``\xi t`` is a deterministic trend (``\xi = 0`` under `regression=:constant`)
+- ``r_t`` is a random walk with innovation ``u_t \sim (0, \sigma_u^2)``
 - ``\varepsilon_t`` is a stationary error
 
-Under the null ``H_0: \sigma_u^2 = 0``, the random walk component vanishes and the series is stationary. The KPSS statistic is:
+Under ``H_0: \sigma_u^2 = 0`` the random walk vanishes and the series is stationary. The statistic is
 
 ```math
 \text{KPSS} = \frac{\sum_{t=1}^{T} S_t^2}{T^2 \hat{\sigma}^2_{LR}}
 ```
 
 where:
-- ``S_t = \sum_{s=1}^{t} \hat{e}_s`` are partial sums of OLS residuals from regressing ``y_t`` on deterministic terms
-- ``\hat{\sigma}^2_{LR}`` is the long-run variance estimated using a Bartlett kernel
+- ``S_t = \sum_{s=1}^{t} \hat{e}_s`` are partial sums of the residuals from regressing ``y_t`` on the deterministic terms
+- ``\hat{\sigma}^2_{LR}`` is the Bartlett-kernel long-run variance of those residuals
+
+Large partial sums indicate an accumulating (random-walk) component, so KPSS is **right-tailed**: reject stationarity for large statistics.
+
+!!! note "Bandwidth selection"
+    With `bandwidth=:auto` the Bartlett lag truncation is the Andrews (1991) AR(1) plug-in rule ``\lfloor 1.1447 \, (4 \hat\rho^2 T / (1-\hat\rho^2)^2)^{1/3} \rfloor``, where ``\hat\rho`` is the first-order autocorrelation of the residuals. Strongly persistent residuals therefore draw a long bandwidth, which inflates ``\hat{\sigma}^2_{LR}`` and shrinks the statistic — the mechanism by which KPSS loses power on near-unit-root data.
 
 ```@example test_ur
-# CPI inflation rate (Δlog CPI) — expected to be stationary
-cpi_growth = diff(log.(cpi))
-
-result = kpss_test(cpi_growth; regression=:constant)
+# The unemployment rate: a series that should pass a stationarity test
+result = kpss_test(unrate; regression=:constant)
 report(result)
 
-# Test for trend stationarity
-result_trend = kpss_test(cpi_growth; regression=:trend)
-report(result_trend)
+# The price level, for contrast
+report(kpss_test(cpi; regression=:constant))
 ```
+
+For the unemployment rate the statistic is 0.098, far below the 10% critical value of 0.347, so stationarity survives comfortably — the same verdict the ADF test reached from the opposite direction. For the price level the statistic is 0.482, above the 5% critical value of 0.463, so stationarity is rejected at 5%. Read together with Recipe 1, the price level lands squarely in the "unit root" cell of the decision matrix below and the unemployment rate in the "stationary" cell.
 
 ### Options
 
-| Argument | Type | Default | Description |
-|----------|------|---------|-------------|
+| Keyword | Type | Default | Description |
+|---------|------|---------|-------------|
 | `regression` | `Symbol` | `:constant` | Stationarity type: `:constant` (level) or `:trend` (trend) |
-| `bandwidth` | `Union{Int,Symbol}` | `:auto` | Bartlett kernel bandwidth, or `:auto` for Newey-West selection |
+| `bandwidth` | `Union{Int,Symbol}` | `:auto` | Bartlett lag truncation, or `:auto` for the Andrews (1991) plug-in rule |
 
 ### Return Values
 
 | Field | Type | Description |
 |-------|------|-------------|
 | `statistic` | `T` | KPSS test statistic |
-| `pvalue` | `T` | Asymptotic p-value |
+| `pvalue` | `T` | Interpolated p-value, clipped to ``[0.01, 0.50]`` |
 | `regression` | `Symbol` | Stationarity type (`:constant` or `:trend`) |
-| `critical_values` | `Dict{Int,T}` | Critical values at 1%, 5%, 10% |
-| `bandwidth` | `Int` | Bartlett kernel bandwidth used |
-| `nobs` | `Int` | Number of observations |
-
-### Interpretation
-
-**Reject** ``H_0`` (p-value < 0.05): evidence against stationarity; the series has a unit root. **Fail to reject** ``H_0`` (p-value > 0.05): cannot reject stationarity; the series appears mean-reverting. Unlike the ADF test, failure to reject here is the desirable outcome for stationary data.
+| `critical_values` | `Dict{Int,T}` | Critical values keyed by significance level (`1`, `5`, `10`) |
+| `bandwidth` | `Int` | Bartlett lag truncation used |
+| `nobs` | `Int` | Number of observations (the full series length) |
 
 ### Combining ADF and KPSS
 
-Running both tests together resolves the ambiguity inherent in any single test:
+Running both tests resolves the ambiguity inherent in either one:
 
 | ADF Result | KPSS Result | Conclusion |
 |------------|-------------|------------|
 | Reject (stationary) | Fail to reject (stationary) | **Stationary** |
 | Fail to reject (unit root) | Reject (unit root) | **Unit root** |
-| Reject | Reject | Conflicting (possible structural break) |
-| Fail to reject | Fail to reject | Inconclusive |
+| Reject | Reject | Conflicting — suspect a structural break |
+| Fail to reject | Fail to reject | Inconclusive — the sample is uninformative |
 
-When both tests reject, the series likely contains a structural break that distorts both null distributions. The Zivot-Andrews test addresses this case directly.
+When both tests reject, a structural break that distorts both null distributions is the usual explanation, and the Zivot-Andrews test addresses that case directly. When neither rejects, no amount of re-specification helps: the sample simply does not separate the hypotheses.
 
 ---
 
 ## Phillips-Perron Test
 
-The Phillips-Perron (PP) test (Phillips & Perron, 1988) is a non-parametric alternative to the ADF test. Instead of adding lagged differences to absorb serial correlation, the PP test applies a Newey-West correction directly to the t-statistic from the simple Dickey-Fuller regression.
-
-The PP test estimates the unadjusted regression:
+The Phillips-Perron (PP) test (Phillips & Perron 1988) is the non-parametric counterpart to ADF. Instead of adding lagged differences to soak up serial correlation, it estimates the plain Dickey-Fuller regression
 
 ```math
 y_t = \alpha + \rho y_{t-1} + u_t
 ```
 
-The PP ``Z_t`` statistic corrects the OLS t-ratio for serial correlation and heteroskedasticity:
+and corrects the resulting ``t``-ratio for serial correlation and heteroskedasticity after the fact. The corrected statistic is
 
 ```math
-Z_t = \sqrt{\frac{\hat{\gamma}_0}{\hat{\lambda}^2}} \, t_\rho - \frac{\hat{\lambda}^2 - \hat{\gamma}_0}{2 \hat{\lambda} \cdot \text{se}(\hat{\rho}) \cdot \sqrt{T}}
+Z_t = \sqrt{\frac{\hat{\gamma}_0}{\hat{\lambda}^2}} \, t_\rho \; - \; \frac{\hat{\lambda}^2 - \hat{\gamma}_0}{2 \hat{\lambda}} \cdot \frac{T \cdot \text{se}(\hat{\rho})}{s}
 ```
 
 where:
-- ``\hat{\gamma}_0 = T^{-1} \sum_{t=1}^{T} \hat{u}_t^2`` is the short-run variance
-- ``\hat{\lambda}^2`` is the Newey-West long-run variance estimate
-- ``t_\rho`` is the OLS t-ratio on ``\hat{\rho}``
+- ``\hat{\gamma}_0`` is the short-run variance of the residuals ``\hat u_t``
+- ``\hat{\lambda}^2`` is their Bartlett long-run variance and ``\hat\lambda = \sqrt{\hat\lambda^2}``
+- ``t_\rho`` is the OLS ``t``-ratio testing ``\rho = 1``
+- ``s`` is the standard error of the Dickey-Fuller regression
 
-The PP test shares the same null distribution as the ADF test, so MacKinnon critical values apply. Its advantage is that it does not require specifying the number of augmenting lags, although bandwidth selection for the Newey-West estimator plays an analogous role.
+``Z_t`` shares the ADF null distribution, so the same MacKinnon critical values apply. Its advantage is that no lag order has to be chosen, although bandwidth selection for the long-run variance plays the analogous role.
+
+!!! warning "The ``Z_t`` correction term is not scale-invariant"
+    The implemented second term omits the ``T \cdot \text{se}(\hat\rho)/s`` factor above, which leaves ``Z_t`` dependent on the units of ``y``. Multiplying a series by 100 shifts the reported statistic by roughly an order of magnitude (a random walk that gives ``Z_t = -1.71`` in its own units gives ``-21.4`` after rescaling), so the test over-rejects badly on series measured in large units. Rescale to logs or percentages before using it, and treat `adf_test` or `dfgls_test` as the authority when they disagree.
 
 ```@example test_ur
-# CPI price level — non-parametric unit root test
-result = pp_test(cpi; regression=:constant)
+# The unemployment rate, measured in percent
+result = pp_test(unrate; regression=:constant)
 report(result)
 ```
 
+The Andrews rule picks a bandwidth of 2, and ``Z_t = -3.546`` clears the 1% critical value of ``-3.436``, giving ``p = 0.0069``. That is within 0.02 of the ADF statistic for the same series, which is the reassuring case: the parametric lag augmentation and the non-parametric correction agree, so the verdict does not hinge on how serial correlation was handled.
+
 ### Options
 
-| Argument | Type | Default | Description |
-|----------|------|---------|-------------|
+| Keyword | Type | Default | Description |
+|---------|------|---------|-------------|
 | `regression` | `Symbol` | `:constant` | Deterministic terms: `:none`, `:constant`, or `:trend` |
-| `bandwidth` | `Union{Int,Symbol}` | `:auto` | Newey-West bandwidth, or `:auto` for automatic selection |
+| `bandwidth` | `Union{Int,Symbol}` | `:auto` | Bartlett lag truncation, or `:auto` for the Andrews (1991) plug-in rule |
 
 ### Return Values
 
 | Field | Type | Description |
 |-------|------|-------------|
-| `statistic` | `T` | Phillips-Perron ``Z_t`` test statistic |
-| `pvalue` | `T` | Asymptotic p-value |
+| `statistic` | `T` | Phillips-Perron ``Z_t`` statistic |
+| `pvalue` | `T` | Asymptotic MacKinnon (1996) p-value |
 | `regression` | `Symbol` | Deterministic specification |
-| `critical_values` | `Dict{Int,T}` | Critical values at 1%, 5%, 10% |
-| `bandwidth` | `Int` | Newey-West bandwidth used |
-| `nobs` | `Int` | Number of observations |
+| `critical_values` | `Dict{Int,T}` | Critical values keyed by significance level (`1`, `5`, `10`) |
+| `bandwidth` | `Int` | Bartlett lag truncation used |
+| `nobs` | `Int` | Number of observations in the test regression (``T - 1``) |
 
 ---
 
 ## Zivot-Andrews Test
 
-The Zivot-Andrews test (Zivot & Andrews, 1992) extends the ADF framework by allowing for a single endogenous structural break. Standard unit root tests lose power dramatically in the presence of structural breaks: a stationary series with a level shift can appear to have a unit root under the ADF test. The Zivot-Andrews test searches over all candidate break dates and selects the one that provides the strongest evidence against the unit root null.
+The Zivot-Andrews test (Zivot & Andrews 1992) extends the ADF framework to allow one endogenous structural break. Standard unit root tests lose power badly under breaks: a stationary series with a level shift looks like a random walk to ADF. Zivot-Andrews searches every candidate break date and keeps the one giving the strongest evidence against the unit root null, so the reported statistic is a minimum over the trimmed grid.
 
-Three specifications control which deterministic terms admit a structural break:
+Three specifications control which deterministic terms may break. All three carry an intercept and a linear trend; they differ only in the break dummies.
 
 **Break in intercept** (`:constant`):
 
@@ -255,95 +265,89 @@ Three specifications control which deterministic terms admit a structural break:
 \Delta y_t = \alpha + \beta t + \theta DU_t + \gamma y_{t-1} + \sum_{j=1}^{p} \delta_j \Delta y_{t-j} + \varepsilon_t
 ```
 
-**Break in trend** (`:trend`):
+**Break in trend** (`:trend`): replace ``\theta DU_t`` with ``\phi DT_t``. **Break in both** (`:both`): include both dummies. In each case:
 
-```math
-\Delta y_t = \alpha + \beta t + \phi DT_t + \gamma y_{t-1} + \sum_{j=1}^{p} \delta_j \Delta y_{t-j} + \varepsilon_t
-```
+- ``DU_t = \mathbf{1}(t \geq T_B)`` is the level shift dummy
+- ``DT_t = (t - T_B + 1) \cdot \mathbf{1}(t \geq T_B)`` is the trend shift dummy
+- ``T_B`` is the break date, chosen to minimize the ``t``-statistic on ``\gamma``
+- the trimming parameter excludes the first and last `trim` fraction of the sample from the search
 
-**Break in both** (`:both`):
-
-```math
-\Delta y_t = \alpha + \beta t + \theta DU_t + \phi DT_t + \gamma y_{t-1} + \sum_{j=1}^{p} \delta_j \Delta y_{t-j} + \varepsilon_t
-```
-
-where:
-- ``DU_t = \mathbf{1}(t > T_B)`` is the level shift dummy
-- ``DT_t = (t - T_B) \cdot \mathbf{1}(t > T_B)`` is the trend shift dummy
-- ``T_B`` is the break date, selected to minimize the ADF t-statistic on ``\gamma``
-- The trimming parameter excludes endpoints from the search (default: 15% on each side)
+!!! note "Innovational and additive outliers"
+    `outlier=:io` (the default) puts the break dummies directly in the ADF regression, so the level shift propagates through the dynamics. `outlier=:ao` instead detrends ``y`` on the deterministics and break dummies first, then runs an ADF regression on the residuals with a pulse dummy at ``T_B`` and its lags. Use `:io` when the shift is transmitted gradually and `:ao` when it is a one-off jump in the level.
 
 ```@example test_ur
-# CPI price level — test for unit root allowing a structural break
+# The price level, allowing a break in both intercept and trend
 result = za_test(cpi; regression=:both)
 report(result)
-
-# Access break point information
-result.break_index     # Observation index of detected break
-result.break_fraction  # Break location as fraction of sample
 ```
+
+The minimum ``t``-statistic across all candidate breaks is ``-3.983``, still well above the 5% critical value of ``-5.08``, so ``p = 0.152`` and the unit root survives even with a break allowed. The estimated break sits at observation 667, 83% of the way through the sample. The lesson is that CPI is not a stationary series masquerading as I(1) because of one shift: the unit root is genuine, and the level must be differenced regardless of how the deterministics are specified.
 
 ### Options
 
-| Argument | Type | Default | Description |
-|----------|------|---------|-------------|
+| Keyword | Type | Default | Description |
+|---------|------|---------|-------------|
 | `regression` | `Symbol` | `:both` | Break type: `:constant`, `:trend`, or `:both` |
-| `trim` | `Real` | `0.15` | Trimming fraction for break search (excludes endpoints) |
+| `trim` | `Real` | `0.15` | Trimming fraction for the break search, in ``(0, 0.5)`` |
 | `lags` | `Union{Int,Symbol}` | `:aic` | Augmenting lags, or `:aic`/`:bic` for automatic selection |
+| `max_lags` | `Union{Int,Nothing}` | `nothing` | Ceiling for automatic selection (defaults to ``\lfloor 12(T/100)^{1/4} \rfloor``) |
+| `outlier` | `Symbol` | `:io` | Break model: `:io` (innovational) or `:ao` (additive) |
 
 ### Return Values
 
 | Field | Type | Description |
 |-------|------|-------------|
-| `statistic` | `T` | Minimum ADF t-statistic over all candidate break dates |
-| `pvalue` | `T` | Asymptotic p-value |
-| `break_index` | `Int` | Estimated break point (observation index) |
-| `break_fraction` | `T` | Break location as fraction of sample (0 to 1) |
+| `statistic` | `T` | Minimum ``t``-statistic over all candidate break dates |
+| `pvalue` | `T` | Interpolated p-value against the Zivot-Andrews table |
+| `break_index` | `Int` | Estimated break point (observation index into `y`) |
+| `break_fraction` | `T` | Break location as a fraction of the sample |
 | `regression` | `Symbol` | Break specification (`:constant`, `:trend`, `:both`) |
-| `critical_values` | `Dict{Int,T}` | Critical values at 1%, 5%, 10% |
-| `lags` | `Int` | Number of augmenting lags |
-| `nobs` | `Int` | Number of observations |
+| `critical_values` | `Dict{Int,T}` | Zivot-Andrews (1992, Table 4) critical values for this specification |
+| `lags` | `Int` | Number of augmenting lags at the selected break |
+| `nobs` | `Int` | Number of observations in the test regression (``T - 1 - p``) |
 
-!!! note "Technical Note"
-    The Zivot-Andrews test assumes at most one structural break under the alternative hypothesis. If the data-generating process contains multiple breaks, the test has reduced power. For multiple breaks, consider the Lumsdaine-Papell (1997) extension or panel unit root tests that exploit cross-sectional information.
+Because the statistic is a minimum over the grid, it is mechanically more negative than a single-date ADF ``t``-ratio, and the critical values are correspondingly further left (``-5.08`` at 5% for `:both`, against ``-2.85`` for ADF). Reading a Zivot-Andrews statistic against ADF critical values is the standard way to manufacture a spurious rejection. The test also assumes **at most one** break under the alternative; with several breaks it loses power, and `lm_unitroot_test` or `adf_2break_test` on the [advanced page](@ref tests_unitroot_advanced_page) are the right tools.
 
 ---
 
 ## Ng-Perron Tests
 
-The Ng-Perron tests (Ng & Perron, 2001) address the well-known size distortions of the ADF test, particularly when the initial condition is far from zero or the errors have a large negative MA root. These tests apply GLS detrending to the data before computing four modified test statistics with superior size and power properties.
+The Ng-Perron tests (Ng & Perron 2001) target the size distortions of ADF and PP, which are severe when the errors carry a large negative moving-average root. They apply GLS detrending before computing four modified statistics with better size and power.
 
-The GLS detrending procedure quasi-differences the data using a local-to-unity parameter:
+GLS detrending quasi-differences the data at a local-to-unity parameter:
 
 ```math
-\tilde{y}_1 = y_1, \qquad \tilde{y}_t = y_t - \bar{c}/T \cdot y_{t-1}, \quad t = 2, \ldots, T
+\tilde{y}_1 = y_1, \qquad \tilde{y}_t = y_t - \bar{\alpha} \, y_{t-1}, \quad t = 2, \ldots, T
 ```
 
-where ``\bar{c} = -7`` for level stationarity (`:constant`) and ``\bar{c} = -13.5`` for trend stationarity (`:trend`). The four test statistics are:
+where:
+- ``\bar{\alpha} = 1 + \bar{c}/T`` is the quasi-differencing coefficient
+- ``\bar{c} = -7`` for `regression=:constant` and ``\bar{c} = -13.5`` for `:trend`
 
-- **MZa** (``MZ_\alpha``): Modified Phillips ``Z_\alpha`` statistic
-- **MZt** (``MZ_t``): Modified Phillips ``Z_t`` statistic (most commonly reported)
-- **MSB**: Modified Sargan-Bhargava statistic
-- **MPT**: Modified point-optimal statistic
+The deterministic regressors are quasi-differenced the same way, the coefficients ``\hat\delta`` are estimated from that transformed regression, and the detrended series is ``y_t^d = y_t - Z_t \hat\delta``. All four statistics are built from ``y^d``:
 
-All four statistics are computed from the GLS-detrended series and use the autoregressive spectral density estimator for the long-run variance.
+- **MZa** (``MZ_\alpha``): modified Phillips ``Z_\alpha``
+- **MZt** (``MZ_t``): modified Phillips ``Z_t``, the most commonly reported of the four
+- **MSB**: modified Sargan-Bhargava statistic
+- **MPT**: modified point-optimal statistic
+
+MZa, MZt, and MSB reject for **small** values; MPT rejects for **small** values as well, since it measures the residual cost of imposing the unit root.
+
+!!! note "Implementation Detail"
+    The long-run variance is the autoregressive spectral density at frequency zero, obtained by fitting an AR(``k``) model to ``\Delta y_t^d`` with ``k = \lfloor 4 (T/100)^{2/9} \rfloor`` and forming ``s^2_{AR} = \hat\sigma^2 / (1 - \sum_j \hat\rho_j)^2``. `dfgls_test` reuses exactly this construction, so the `MZa`/`MZt`/`MSB`/`MPT` fields of a `DFGLSResult` are bit-for-bit identical to those of `ngperron_test` on the same data and specification.
 
 ```@example test_ur
-# CPI price level — GLS-detrended unit root tests
-result = ngperron_test(cpi; regression=:constant)
+# The unemployment rate under GLS detrending
+result = ngperron_test(unrate; regression=:constant)
 report(result)
-
-# Access individual statistics
-result.MZa   # Modified Zα
-result.MZt   # Modified Zt (most commonly reported)
-result.MSB   # Modified Sargan-Bhargava
-result.MPT   # Modified point-optimal
 ```
+
+All four statistics reject: ``MZ_\alpha = -18.51`` against a 5% value of ``-8.1``, ``MZ_t = -3.007`` against ``-1.98``, ``MSB = 0.162`` against ``0.233``, and ``MPT = 1.316`` against ``3.17``. Unanimity across the four is the outcome to look for, because they are different functionals of the same detrended series and disagreement usually signals a badly chosen deterministic specification. Running the same test on the price level gives ``MZ_t = 3.288`` — the wrong side of zero entirely, and no rejection.
 
 ### Options
 
-| Argument | Type | Default | Description |
-|----------|------|---------|-------------|
+| Keyword | Type | Default | Description |
+|---------|------|---------|-------------|
 | `regression` | `Symbol` | `:constant` | Deterministic terms: `:constant` or `:trend` |
 
 ### Return Values
@@ -351,75 +355,73 @@ result.MPT   # Modified point-optimal
 | Field | Type | Description |
 |-------|------|-------------|
 | `MZa` | `T` | Modified Phillips ``Z_\alpha`` statistic |
-| `MZt` | `T` | Modified Phillips ``Z_t`` statistic (most commonly reported) |
+| `MZt` | `T` | Modified Phillips ``Z_t`` statistic |
 | `MSB` | `T` | Modified Sargan-Bhargava statistic |
 | `MPT` | `T` | Modified point-optimal statistic |
 | `regression` | `Symbol` | Deterministic specification |
-| `critical_values` | `Dict{Symbol,Dict{Int,T}}` | Critical values keyed by statistic name (`:MZa`, `:MZt`, `:MSB`, `:MPT`) |
-| `nobs` | `Int` | Number of observations |
+| `critical_values` | `Dict{Symbol,Dict{Int,T}}` | Ng-Perron (2001, Table 1) values keyed by statistic (`:MZa`, `:MZt`, `:MSB`, `:MPT`) then by level |
+| `nobs` | `Int` | Number of observations (the full series length) |
 
-!!! note "Technical Note"
-    The Ng-Perron tests use GLS detrending which provides substantially better size properties than the standard ADF test in small samples (``T < 100``). When the ADF test yields borderline results, the MZt statistic is a more reliable indicator. However, ADF remains preferable when the data-generating process has a large negative MA root, as GLS-based tests can be oversized in that case (Perron & Ng, 1996).
-
-!!! note "Implementation Detail"
-    The autoregressive spectral density estimator ``s^2_{AR}`` is computed by fitting an AR model to the differenced GLS-detrended series ``\Delta \tilde{y}_t``, following Ng & Perron (2001, equation 11). This ensures the spectral density estimate is consistent under the unit root null.
+GLS detrending buys substantially better size than ADF in small samples (``T < 100``), so when ADF is borderline, ``MZ_t`` is the more reliable read. The exception is a large negative MA root in the errors, where GLS-based tests become oversized and plain ADF is safer (Perron & Ng 1996).
 
 ---
 
-## Convenience Functions
+## Batch Utilities
 
-Two convenience functions simplify batch unit root analysis across multiple tests and multiple variables.
+Two functions turn the individual tests into screening tools.
 
-### Unit Root Summary
-
-The `unit_root_summary` function runs multiple unit root tests on a single series and synthesizes the results into an overall conclusion based on the ADF-KPSS decision matrix.
+`unit_root_summary` runs several tests on one series and synthesizes an overall verdict. The verdict is driven by the ADF and KPSS p-values alone, following the decision matrix above; the other tests are reported but do not enter the conclusion.
 
 ```@example test_ur
-# Run ADF, KPSS, and PP simultaneously
-summary = unit_root_summary(cpi; tests=[:adf, :kpss, :pp])
+summary = unit_root_summary(cpi; tests=[:adf, :kpss, :pp, :dfgls])
 
-# Also available: :fourier_adf, :dfgls, :za, :ngperron
-summary = unit_root_summary(cpi; tests=[:adf, :kpss, :pp, :fourier_adf, :dfgls])
-
-# Access individual results
-summary.results[:adf]
-summary.results[:kpss]
-
-# Overall conclusion synthesizes ADF + KPSS
-summary.conclusion
+# The individual results stay addressable by test name
+(pp = round(summary.results[:pp].statistic, digits=3),
+ dfgls = round(summary.results[:dfgls].statistic, digits=3),
+ verdict = summary.conclusion)
 ```
 
-### Test All Variables
-
-The `test_all_variables` function applies a single unit root test to every column of a data matrix, returning a vector of results for quick screening.
+`test_all_variables` applies one test to every column of a matrix and returns a vector of results, which is the fastest way to sort a panel into I(0) and I(1) groups before specifying a VAR.
 
 ```@example test_ur
-vars = fred[:, ["INDPRO", "CPIAUCSL", "FEDFUNDS", "UNRATE", "M2SL"]]
-Y_vars = to_matrix(vars)
-Y_vars = Y_vars[all.(isfinite, eachrow(Y_vars)), :]
+Y = to_matrix(fred[:, ["INDPRO", "CPIAUCSL", "FEDFUNDS", "UNRATE", "M2SL"]])
+Y = Y[all.(isfinite, eachrow(Y)), :]
 
-# Apply ADF test to all columns (also supports :fourier_adf, :dfgls, :lm_unitroot)
-results = test_all_variables(Y_vars; test=:adf)
-
-# Display each result
-for r in results
-    report(r)
-end
+labels = ["INDPRO", "CPIAUCSL", "FEDFUNDS", "UNRATE", "M2SL"]
+[(v, round(r.pvalue, digits=3), r.pvalue < 0.05 ? "I(0)" : "I(1)")
+ for (v, r) in zip(labels, test_all_variables(Y; test=:adf))]
 ```
+
+Industrial production (``p = 0.692``), the price level (``p = 1.000``), and the money stock (``p = 1.000``) all fail to reject and enter a VAR in differences; the funds rate (``p = 0.026``) and the unemployment rate (``p = 0.007``) reject and can stay in levels. The money stock's p-value of 1.000 comes from a *positive* ADF statistic of 4.115, the signature of an explosively trending series that needs a trend term or a log transform before any of these tests mean much.
+
+### Options
+
+| Keyword | Type | Default | Description |
+|---------|------|---------|-------------|
+| `tests` | `Vector{Symbol}` | `[:adf, :kpss, :pp]` | Tests `unit_root_summary` runs: `:adf`, `:kpss`, `:pp`, `:za`, `:ngperron`, `:fourier_adf`, `:dfgls` |
+| `regression` | `Symbol` | `:constant` | Deterministic specification forwarded to every test (`:none` becomes `:constant` for tests that reject it) |
+| `test` | `Symbol` | `:adf` | Test `test_all_variables` applies: `:adf`, `:kpss`, `:pp`, `:za`, `:ngperron`, `:fourier_adf`, `:dfgls`, `:lm_unitroot` |
+
+The two functions accept different test sets: `:lm_unitroot` works in `test_all_variables` but is silently ignored by `unit_root_summary`. Any further keywords passed to `test_all_variables` are forwarded to the underlying test.
+
+### Return Values
+
+`unit_root_summary` returns a `NamedTuple`:
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `results` | `Dict{Symbol,AbstractUnitRootTest}` | Individual test results keyed by test name |
+| `conclusion` | `String` | Verdict synthesized from the ADF and KPSS p-values |
+
+`test_all_variables` returns a `Vector{AbstractUnitRootTest}` with one entry per column of `Y`, in column order.
 
 ---
 
 ## Johansen Cointegration Test
 
-The Johansen test (Johansen, 1991) examines whether multiple I(1) series share common stochastic trends, i.e., whether linear combinations of the series are stationary. Cointegration implies a long-run equilibrium relationship that constrains the joint dynamics, and the estimated cointegrating vectors become the error correction terms in a VECM.
+The Johansen test (Johansen 1991) asks whether several I(1) series share common stochastic trends — equivalently, whether some linear combination of them is stationary. Cointegration implies a long-run equilibrium that constrains the joint dynamics, and the estimated cointegrating vectors become the error correction terms of a VECM.
 
-Consider a VAR(p) in levels:
-
-```math
-y_t = A_1 y_{t-1} + \cdots + A_p y_{t-p} + u_t
-```
-
-Rewriting in Vector Error Correction Model (VECM) form gives:
+Start from a VAR(``p``) in levels and rewrite it in vector error correction form:
 
 ```math
 \Delta y_t = \Pi y_{t-1} + \sum_{i=1}^{p-1} \Gamma_i \Delta y_{t-i} + u_t
@@ -427,139 +429,159 @@ Rewriting in Vector Error Correction Model (VECM) form gives:
 
 where:
 - ``\Pi = \alpha \beta'`` is the ``n \times n`` long-run impact matrix
-- ``\beta`` contains the cointegrating vectors (equilibrium relationships)
-- ``\alpha`` contains the adjustment coefficients (speed of adjustment to equilibrium)
-- ``\text{rank}(\Pi) = r`` equals the number of cointegrating relationships
+- ``\beta`` holds the cointegrating vectors (the equilibrium relationships)
+- ``\alpha`` holds the adjustment coefficients (the speed of return to equilibrium)
+- ``\text{rank}(\Pi) = r`` is the number of cointegrating relationships
 
-The Johansen procedure tests the rank of ``\Pi`` using two likelihood ratio statistics:
+The procedure tests the rank of ``\Pi`` with two likelihood ratio statistics built from the ordered eigenvalues ``\hat\lambda_1 \geq \cdots \geq \hat\lambda_n`` of a reduced-rank regression.
 
-**Trace test** -- tests ``H_0: \text{rank}(\Pi) \leq r`` against ``H_1: \text{rank}(\Pi) > r``:
+**Trace test** — ``H_0: \text{rank}(\Pi) \leq r`` against ``H_1: \text{rank}(\Pi) > r``:
 
 ```math
 \lambda_{\text{trace}}(r) = -T \sum_{i=r+1}^{n} \ln(1 - \hat{\lambda}_i)
 ```
 
-**Maximum eigenvalue test** -- tests ``H_0: \text{rank}(\Pi) = r`` against ``H_1: \text{rank}(\Pi) = r + 1``:
+**Maximum eigenvalue test** — ``H_0: \text{rank}(\Pi) = r`` against ``H_1: \text{rank}(\Pi) = r + 1``:
 
 ```math
 \lambda_{\max}(r) = -T \ln(1 - \hat{\lambda}_{r+1})
 ```
 
-where ``\hat{\lambda}_1 \geq \hat{\lambda}_2 \geq \cdots \geq \hat{\lambda}_n`` are the ordered eigenvalues from the reduced-rank regression. Critical values are from Osterwald-Lenum (1992).
-
-!!! note "Technical Note"
-    The `deterministic` keyword controls the placement of deterministic terms following Johansen's (1995) five cases. With `:constant` (Case 2), the intercept is restricted to the cointegrating space -- it enters the error correction term ``\Pi y_{t-1}`` but not the short-run dynamics, preventing linear trends in levels. With `:trend` (Case 4), a linear trend is restricted to the cointegrating space, allowing quadratic trends in levels. Critical values are tabulated separately for each case.
+!!! note "Deterministic cases and p-values"
+    The `deterministic` keyword selects among Johansen's (1995) cases. `:constant` is Case 2: the intercept is restricted to the cointegrating space, so it enters ``\Pi y_{t-1}`` but not the short-run dynamics, ruling out linear trends in levels. `:trend` is Case 4: a linear trend is restricted to the cointegrating space and the constant is unrestricted, allowing linear trends in levels. Critical values are the Osterwald-Lenum (1992) tables for the matching case; p-values are the Doornik (1998) gamma approximation to the MacKinnon-Haug-Michelis (1999) asymptotic distributions. The two sources can disagree marginally near a critical value, and the reported `rank` follows the tabulated critical values.
 
 ```@example test_ur
-# Test cointegration between log real GDP and log real consumption
-# Johansen test with 2 lags in VECM
-result = johansen_test(Y_qd, 2; deterministic=:constant)
+# Ten-year and three-month Treasury yields, two lags in the VECM
+result = johansen_test(rates, 2; deterministic=:constant)
 report(result)
-
-# Access results
-result.rank                              # Estimated cointegration rank
-result.eigenvectors[:, 1:result.rank]    # Cointegrating vectors
-result.adjustment                        # Loading matrix α
 ```
+
+The trace statistic at ``r = 0`` is 30.89 against a 5% critical value of 19.96, so no cointegration is rejected. At ``r \leq 1`` it falls to 3.50 against 9.24 and is not rejected, so the sequence stops and the estimated rank is 1. The maximum eigenvalue test agrees (27.39 against 15.67, then 3.50 against 9.24). One cointegrating vector among two I(1) yields is exactly what the expectations hypothesis of the term structure predicts: the levels wander, but the spread between them does not.
+
+```@example test_ur
+# Normalize the cointegrating vector on the long rate
+beta = result.eigenvectors[:, 1] ./ result.eigenvectors[1, 1]
+(cointegrating_vector = round.(beta, digits=3), adjustment = round.(result.adjustment[:, 1], digits=3))
+```
+
+The normalized vector is ``(1, -1.040)``, so the stationary combination is the ten-year yield minus roughly one times the bill rate — the term spread, recovered from the data rather than imposed. The adjustment coefficients ``(0.090, -0.148)`` say that when the spread is above equilibrium the long rate drifts up further while the bill rate falls, with the short end doing most of the correcting.
 
 ### Options
 
-The lag order `p` is passed as a positional argument (`johansen_test(Y, p)`) specifying the number of lags in the VECM representation. The remaining behavior is controlled by one keyword:
+The lag order ``p`` is a positional argument giving the number of lags in the VECM representation. Two keywords control the rest:
 
 | Keyword | Type | Default | Description |
 |---------|------|---------|-------------|
-| `deterministic` | `Symbol` | `:constant` | Deterministic terms: `:none`, `:constant`, or `:trend` |
+| `deterministic` | `Symbol` | `:constant` | Deterministic terms: `:none` (Case 1), `:constant` (Case 2), or `:trend` (Case 4) |
+| `significance` | `Real` | `0.05` | Level at which the trace sequence selects `rank` (`≤ 0.01`, `≤ 0.05`, else 10%) |
 
 ### Return Values
 
+Let ``r`` denote the estimated rank and ``r_{\text{eff}} = \max(r, 1)``.
+
 | Field | Type | Description |
 |-------|------|-------------|
-| `trace_stats` | `Vector{T}` | Trace test statistics for each rank hypothesis |
-| `trace_pvalues` | `Vector{T}` | P-values for trace statistics |
-| `max_eigen_stats` | `Vector{T}` | Maximum eigenvalue test statistics |
-| `max_eigen_pvalues` | `Vector{T}` | P-values for max eigenvalue statistics |
+| `trace_stats` | `Vector{T}` | Trace statistics, one per rank hypothesis ``r = 0, \ldots, n-1`` |
+| `trace_pvalues` | `Vector{T}` | Doornik (1998) p-values for the trace statistics |
+| `max_eigen_stats` | `Vector{T}` | Maximum eigenvalue statistics |
+| `max_eigen_pvalues` | `Vector{T}` | Doornik (1998) p-values for the maximum eigenvalue statistics |
 | `rank` | `Int` | Estimated cointegration rank |
-| `eigenvectors` | `Matrix{T}` | ``n \times n`` matrix of cointegrating vectors (columns) |
-| `adjustment` | `Matrix{T}` | ``n \times n`` adjustment (loading) matrix ``\alpha`` |
-| `eigenvalues` | `Vector{T}` | Ordered eigenvalues from reduced-rank regression |
-| `critical_values_trace` | `Matrix{T}` | ``n \times 3`` critical values for trace test (1%, 5%, 10%) |
-| `critical_values_max` | `Matrix{T}` | ``n \times 3`` critical values for max eigenvalue test |
-| `deterministic` | `Symbol` | Deterministic specification (`:none`, `:constant`, `:trend`) |
+| `eigenvectors` | `Matrix{T}` | ``n \times r_{\text{eff}}`` cointegrating vectors ``\beta`` (columns) |
+| `adjustment` | `Matrix{T}` | ``n \times r_{\text{eff}}`` adjustment matrix ``\alpha`` |
+| `eigenvalues` | `Vector{T}` | The ``n`` ordered eigenvalues of the reduced-rank regression |
+| `critical_values_trace` | `Matrix{T}` | ``n \times 3`` trace critical values, columns ordered **10%, 5%, 1%** |
+| `critical_values_max` | `Matrix{T}` | ``n \times 3`` maximum eigenvalue critical values, same column order |
+| `deterministic` | `Symbol` | Deterministic specification |
 | `lags` | `Int` | Number of VECM lags |
-| `nobs` | `Int` | Number of observations |
+| `nobs` | `Int` | Effective number of observations (``T - p``) |
+
+The critical-value columns run **10%, 5%, 1%**, which is the reverse of the `Dict`-keyed critical values returned by the univariate tests. Indexing `critical_values_trace[:, 1]` for the 1% column is a common and silent error.
 
 ### Interpretation
 
-The sequential testing procedure starts from ``r = 0`` and increases:
+The sequential procedure starts at ``r = 0`` and stops at the first non-rejection:
 
-1. Test ``H_0: r = 0`` (no cointegration). If rejected, proceed.
-2. Test ``H_0: r \leq 1``. If rejected, proceed.
-3. Continue until ``H_0: r \leq k`` is not rejected.
+1. Test ``H_0: r = 0`` (no cointegration). If rejected, continue.
+2. Test ``H_0: r \leq 1``. If rejected, continue.
+3. Continue until ``H_0: r \leq k`` is not rejected; that ``k`` is the rank.
 
-The first non-rejected hypothesis gives the cointegration rank. With rank ``r > 0``, estimate a VECM with `estimate_vecm(Y, p; rank=r)` to incorporate the long-run equilibrium constraints. See the [VECM page](vecm.md) for estimation details.
+A rank of ``0`` means no cointegration — difference the data and fit a VAR. A rank equal to ``n`` means ``\Pi`` has full rank, which is only possible if the series were stationary to begin with, and signals that the integration-order pretests were wrong or the deterministic case is misspecified. Anything strictly between is genuine cointegration: estimate `estimate_vecm(Y, p; rank=r)` to impose the long-run constraints. See the [VECM page](@ref vecm_page) for estimation and the [Residual-Based Cointegration Tests](@ref tests_cointegration_page) page for the single-equation alternatives.
 
 ---
 
 ## Complete Example
 
-This workflow demonstrates the full pre-estimation stationarity analysis pipeline: screen individual series for unit roots, confirm with complementary tests, and test for cointegration among I(1) variables.
+The full pre-estimation pipeline: screen each series, confirm the borderline ones with complementary tests, check for breaks, and test the I(1) group for cointegration.
 
 ```@example test_ur
-# ── Step 1: Extract key macroeconomic variables ────────────────
-indpro = filter(isfinite, fred[:, "INDPRO"])
-ffr    = filter(isfinite, fred[:, "FEDFUNDS"])
+# ── Step 1: Screen every candidate series with ADF ───────────────
+panel = ["INDPRO", "CPIAUCSL", "FEDFUNDS", "UNRATE", "M2SL"]
+Y = to_matrix(fred[:, panel])
+Y = Y[all.(isfinite, eachrow(Y)), :]
 
-# ── Step 2: Individual unit root tests (ADF + KPSS) ───────────
-for (name, y) in [("INDPRO", indpro), ("CPI", cpi), ("FFR", ffr)]
-    adf  = adf_test(y; lags=:aic, regression=:constant)
-    kpss = kpss_test(y; regression=:constant)
-    report(adf)
-    report(kpss)
-end
-
-# ── Step 3: Comprehensive summary for CPI ──────────────────────
-summary = unit_root_summary(cpi; tests=[:adf, :kpss, :pp])
-summary.conclusion
-
-# ── Step 4: Check for structural breaks in CPI ─────────────────
-za = za_test(cpi; regression=:both)
-report(za)
-za.break_index
-
-# ── Step 5: Ng-Perron as robustness check ──────────────────────
-np = ngperron_test(cpi; regression=:constant)
-report(np)
-
-# ── Step 6: Test cointegration among I(1) variables ────────────
-johansen = johansen_test(Y_qd, 2; deterministic=:constant)
-report(johansen)
-
-johansen.rank > 0 ? "Cointegration rank = $(johansen.rank) → estimate VECM" :
-                    "No cointegration → use VAR in first differences"
+screen = test_all_variables(Y; test=:adf)
+[(v, round(r.pvalue, digits=3)) for (v, r) in zip(panel, screen)]
 ```
+
+```@example test_ur
+# ── Step 2: Confirm the two verdicts with KPSS ───────────────────
+report(kpss_test(cpi; regression=:constant))
+report(kpss_test(unrate; regression=:constant))
+```
+
+```@example test_ur
+# ── Step 3: Rule out a structural break as the cause ─────────────
+za = za_test(cpi; regression=:both)
+(statistic = round(za.statistic, digits=3), cv5 = za.critical_values[5],
+ break_fraction = round(za.break_fraction, digits=3))
+```
+
+```@example test_ur
+# ── Step 4: GLS-detrended robustness check ───────────────────────
+np = ngperron_test(cpi; regression=:constant)
+(MZt = round(np.MZt, digits=3), cv5 = np.critical_values[:MZt][5])
+```
+
+```@example test_ur
+# ── Step 5: Test the I(1) pair for cointegration ─────────────────
+joh = johansen_test(rates, 2; deterministic=:constant)
+
+joh.rank == 0 ? "No cointegration — VAR in first differences" :
+joh.rank == size(rates, 2) ? "Full rank — the series are stationary, use a VAR in levels" :
+"Rank $(joh.rank) — estimate a VECM with estimate_vecm(rates, 2; rank=$(joh.rank))"
+```
+
+Steps 1 and 2 put CPI and M2 in the I(1) group and the unemployment rate in the I(0) group. Step 3 shows the CPI unit root is not an artifact of a single break: even with the break allowed, ``-3.983`` falls short of ``-5.08``. Step 4 corroborates with GLS detrending, ``MZ_t = 3.288`` against ``-1.98``. Step 5 finds one cointegrating vector among the two Treasury yields, so those two belong in a VECM rather than a differenced VAR.
 
 ---
 
 ## Common Pitfalls
 
-1. **Wrong regression specification.** Including a trend term (`:trend`) when the series has no deterministic trend reduces power. Use `:constant` for series that fluctuate around a fixed mean, `:trend` only when visual inspection shows a clear linear trend, and `:none` only for demeaned or detrended data.
+1. **Wrong deterministic specification.** Including a trend when the series has none costs power; omitting one when the series trends guarantees a failure to reject. Use `:constant` for series fluctuating around a fixed mean, `:trend` when a linear trend is visible, and `:none` only for data that has already been demeaned or detrended.
 
-2. **Ignoring KPSS confirmation.** The ADF test has low power against near-unit-root alternatives. A failure to reject in ADF alone does not confirm a unit root. Always run KPSS as a complementary test: concordant results (ADF fails to reject, KPSS rejects) provide much stronger evidence than either test alone.
+2. **Treating a failure to reject as proof of a unit root.** ADF has low power against roots near one, so a large p-value often just means the sample is short. Run KPSS as well: concordant results (ADF fails to reject, KPSS rejects) are much stronger than either alone, and the "inconclusive" cell of the decision matrix is an honest answer.
 
-3. **Structural breaks biasing unit root tests.** A stationary series with a level shift mimics a unit root process, causing ADF, PP, and KPSS to produce misleading results. When both ADF and KPSS reject their respective nulls (the "conflicting" cell in the decision matrix), a structural break is the most common explanation. Use `za_test` to test for a unit root while allowing for an endogenous break.
+3. **Structural breaks masquerading as unit roots.** A stationary series with a level shift mimics a random walk, which pushes ADF, PP, and KPSS to reject their respective nulls simultaneously. That "conflicting" cell is the signature of a break. Use `za_test` for one break and the tests on the [advanced page](@ref tests_unitroot_advanced_page) for two or more.
 
-4. **Johansen lag sensitivity.** The Johansen test is sensitive to the lag order ``p`` in the VECM representation. Too few lags leave serial correlation in the residuals, distorting the test size. Too many lags waste degrees of freedom. Select ``p`` using information criteria (estimate VARs at multiple lag orders and compare AIC/BIC) before running the cointegration test.
+4. **Reading a break-search statistic against ADF critical values.** Zivot-Andrews minimizes over the break grid, so its statistic is mechanically more negative than a fixed-date ``t``-ratio. Its 5% value for `:both` is ``-5.08``, not ``-2.85``. Always compare against `result.critical_values`.
+
+5. **Johansen lag sensitivity.** The rank decision moves with the VECM lag order ``p``: too few lags leave serial correlation in the residuals and distort test size, too many waste degrees of freedom. Choose ``p`` by fitting VARs at several orders and comparing AIC/BIC before running the cointegration test, and re-run at neighbouring orders to check the rank is stable.
+
+6. **Column order in the Johansen critical-value matrices.** `critical_values_trace` and `critical_values_max` run 10%, 5%, 1% left to right, the reverse of the `Dict` keys used by the univariate tests. Column 2 is the 5% value.
 
 ---
 
 ## References
 
+- Andrews, Donald W. K. 1991. "Heteroskedasticity and Autocorrelation Consistent Covariance Matrix Estimation." *Econometrica* 59 (3): 817--858. [https://doi.org/10.2307/2938229](https://doi.org/10.2307/2938229)
 - Dickey, David A., and Wayne A. Fuller. 1979. "Distribution of the Estimators for Autoregressive Time Series with a Unit Root." *Journal of the American Statistical Association* 74 (366): 427--431. [https://doi.org/10.1080/01621459.1979.10482531](https://doi.org/10.1080/01621459.1979.10482531)
+- Doornik, Jurgen A. 1998. "Approximations to the Asymptotic Distributions of Cointegration Tests." *Journal of Economic Surveys* 12 (5): 573--593. [https://doi.org/10.1111/1467-6419.00068](https://doi.org/10.1111/1467-6419.00068)
 - Johansen, Soren. 1991. "Estimation and Hypothesis Testing of Cointegration Vectors in Gaussian Vector Autoregressive Models." *Econometrica* 59 (6): 1551--1580. [https://doi.org/10.2307/2938278](https://doi.org/10.2307/2938278)
-- Johansen, Soren. 1995. *Likelihood-Based Inference in Cointegrated Vector Autoregressive Models*. Oxford: Oxford University Press. ISBN 978-0-19-877450-5.
+- Johansen, Soren. 1995. *Likelihood-Based Inference in Cointegrated Vector Autoregressive Models*. Oxford: Oxford University Press. ISBN 978-0-19-877450-1.
 - Kwiatkowski, Denis, Peter C. B. Phillips, Peter Schmidt, and Yongcheol Shin. 1992. "Testing the Null Hypothesis of Stationarity Against the Alternative of a Unit Root." *Journal of Econometrics* 54 (1--3): 159--178. [https://doi.org/10.1016/0304-4076(92)90104-Y](https://doi.org/10.1016/0304-4076(92)90104-Y)
 - MacKinnon, James G. 1994. "Approximate Asymptotic Distribution Functions for Unit-Root and Cointegration Tests." *Journal of Business & Economic Statistics* 12 (2): 167--176. [https://doi.org/10.1080/07350015.1994.10510005](https://doi.org/10.1080/07350015.1994.10510005)
-- MacKinnon, James G. 2010. "Critical Values for Cointegration Tests." Queen's Economics Department Working Paper No. 1227.
+- MacKinnon, James G. 1996. "Numerical Distribution Functions for Unit Root and Cointegration Tests." *Journal of Applied Econometrics* 11 (6): 601--618. [https://doi.org/10.1002/(SICI)1099-1255(199611)11:6<601::AID-JAE417>3.0.CO;2-T](https://doi.org/10.1002/(SICI)1099-1255(199611)11:6%3C601::AID-JAE417%3E3.0.CO;2-T)
+- MacKinnon, James G., Alfred A. Haug, and Leo Michelis. 1999. "Numerical Distribution Functions of Likelihood Ratio Tests for Cointegration." *Journal of Applied Econometrics* 14 (5): 563--577. [https://doi.org/10.1002/(SICI)1099-1255(199909/10)14:5<563::AID-JAE530>3.0.CO;2-R](https://doi.org/10.1002/(SICI)1099-1255(199909/10)14:5%3C563::AID-JAE530%3E3.0.CO;2-R)
 - Ng, Serena, and Pierre Perron. 2001. "Lag Length Selection and the Construction of Unit Root Tests with Good Size and Power." *Econometrica* 69 (6): 1519--1554. [https://doi.org/10.1111/1468-0262.00256](https://doi.org/10.1111/1468-0262.00256)
 - Osterwald-Lenum, Michael. 1992. "A Note with Quantiles of the Asymptotic Distribution of the Maximum Likelihood Cointegration Rank Test Statistics." *Oxford Bulletin of Economics and Statistics* 54 (3): 461--472. [https://doi.org/10.1111/j.1468-0084.1992.tb00013.x](https://doi.org/10.1111/j.1468-0084.1992.tb00013.x)
 - Perron, Pierre, and Serena Ng. 1996. "Useful Modifications to Some Unit Root Tests with Dependent Errors and Their Local Asymptotic Properties." *Review of Economic Studies* 63 (3): 435--463. [https://doi.org/10.2307/2297890](https://doi.org/10.2307/2297890)
