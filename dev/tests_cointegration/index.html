@@ -1,0 +1,329 @@
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="UTF-8"/><meta name="viewport" content="width=device-width, initial-scale=1.0"/><title>Residual-Based Cointegration · MacroEconometricModels.jl</title><meta name="title" content="Residual-Based Cointegration · MacroEconometricModels.jl"/><meta property="og:title" content="Residual-Based Cointegration · MacroEconometricModels.jl"/><meta property="twitter:title" content="Residual-Based Cointegration · MacroEconometricModels.jl"/><meta name="description" content="Documentation for MacroEconometricModels.jl."/><meta property="og:description" content="Documentation for MacroEconometricModels.jl."/><meta property="twitter:description" content="Documentation for MacroEconometricModels.jl."/><meta property="og:url" content="https://FriedmanJP.github.io/MacroEconometricModels.jl/tests_cointegration/"/><meta property="twitter:url" content="https://FriedmanJP.github.io/MacroEconometricModels.jl/tests_cointegration/"/><link rel="canonical" href="https://FriedmanJP.github.io/MacroEconometricModels.jl/tests_cointegration/"/><script data-outdated-warner src="../assets/warner.js"></script><link href="https://cdnjs.cloudflare.com/ajax/libs/lato-font/3.0.0/css/lato-font.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/juliamono/0.050/juliamono.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.2/css/fontawesome.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.2/css/solid.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.2/css/brands.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.8/katex.min.css" rel="stylesheet" type="text/css"/><script>documenterBaseURL=".."</script><script src="https://cdnjs.cloudflare.com/ajax/libs/require.js/2.3.6/require.min.js" data-main="../assets/documenter.js"></script><script src="../search_index.js"></script><script src="../siteinfo.js"></script><script src="../../versions.js"></script><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../assets/themes/catppuccin-mocha.css" data-theme-name="catppuccin-mocha"/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../assets/themes/catppuccin-macchiato.css" data-theme-name="catppuccin-macchiato"/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../assets/themes/catppuccin-frappe.css" data-theme-name="catppuccin-frappe"/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../assets/themes/catppuccin-latte.css" data-theme-name="catppuccin-latte"/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../assets/themes/documenter-dark.css" data-theme-name="documenter-dark" data-theme-primary-dark/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../assets/themes/documenter-light.css" data-theme-name="documenter-light" data-theme-primary/><script src="../assets/themeswap.js"></script><link href="../assets/custom.css" rel="stylesheet" type="text/css"/><script src="../assets/theme-toggle.js"></script></head><body><div id="documenter"><nav class="docs-sidebar"><div class="docs-package-name"><span class="docs-autofit"><a href="../">MacroEconometricModels.jl</a></span></div><button class="docs-search-query input is-rounded is-small is-clickable my-2 mx-auto py-1 px-2" id="documenter-search-query">Search docs (Ctrl + /)</button><ul class="docs-menu"><li><a class="tocitem" href="../">Home</a></li><li><span class="tocitem">Getting Started</span><ul><li><a class="tocitem" href="../getting_started/">Installation &amp; First Model</a></li><li><a class="tocitem" href="../method_guide/">Choosing a Method</a></li><li><a class="tocitem" href="../data/">Data Management</a></li></ul></li><li><span class="tocitem">Univariate Models</span><ul><li><a class="tocitem" href="../filters/">Time Series Filters</a></li><li><a class="tocitem" href="../x13/">X-13ARIMA-SEATS</a></li><li><a class="tocitem" href="../spectral/">Spectral Analysis</a></li><li><a class="tocitem" href="../arima/">ARIMA</a></li><li><a class="tocitem" href="../statespace/">State-Space Models</a></li><li><a class="tocitem" href="../volatility/">Volatility Models</a></li><li><a class="tocitem" href="../nonparametric/">Nonparametric Regression &amp; Density</a></li></ul></li><li><span class="tocitem">Multivariate Models</span><ul><li><a class="tocitem" href="../manual/">VAR</a></li><li><a class="tocitem" href="../bayesian/">Bayesian VAR</a></li><li><a class="tocitem" href="../vecm/">VECM</a></li><li><a class="tocitem" href="../ardl/">ARDL &amp; Bounds Test</a></li><li><a class="tocitem" href="../cointreg/">Cointegrating Regression</a></li><li><a class="tocitem" href="../lp/">Local Projections</a></li><li><a class="tocitem" href="../factormodels/">Factor Models</a></li><li><a class="tocitem" href="../favar/">FAVAR</a></li></ul></li><li><span class="tocitem">Nonlinear Time Series</span><ul><li><a class="tocitem" href="../nonlinear/">Threshold &amp; SETAR</a></li></ul></li><li><span class="tocitem">Cross-Section &amp; Panel</span><ul><li><a class="tocitem" href="../regression/">Linear Regression</a></li><li><a class="tocitem" href="../binary_choice/">Binary Choice Models</a></li><li><a class="tocitem" href="../ordered_multinomial/">Ordered &amp; Multinomial</a></li><li><a class="tocitem" href="../panel_reg/">Panel Regression</a></li><li><a class="tocitem" href="../pvar/">Panel VAR</a></li><li><a class="tocitem" href="../did/">Difference-in-Differences</a></li><li><a class="tocitem" href="../event_study/">Event Study LP</a></li></ul></li><li><a class="tocitem" href="../gmm/">GMM &amp; SMM</a></li><li><span class="tocitem">DSGE Models</span><ul><li><a class="tocitem" href="../dsge/">Overview</a></li><li><a class="tocitem" href="../dsge_linear/">Linear Solvers</a></li><li><a class="tocitem" href="../dsge_nonlinear/">Nonlinear Methods</a></li><li><a class="tocitem" href="../dsge_constraints/">Constraints</a></li><li><a class="tocitem" href="../dsge_estimation/">Estimation</a></li><li><a class="tocitem" href="../dsge_hd/">Historical Decomposition</a></li><li><input class="collapse-toggle" id="menuitem-8-7" type="checkbox"/><label class="tocitem" for="menuitem-8-7"><span class="docs-label">Heterogeneity &amp; Continuous Time</span><i class="docs-chevron"></i></label><ul class="collapsed"><li><a class="tocitem" href="../dsge_heterogeneity/">Overview</a></li><li><a class="tocitem" href="../dsge_ha/">Heterogeneous Agents</a></li><li><a class="tocitem" href="../dsge_olg/">Overlapping Generations</a></li><li><a class="tocitem" href="../dsge_continuous/">Continuous Time</a></li></ul></li></ul></li><li><span class="tocitem">Input-Output Analysis</span><ul><li><a class="tocitem" href="../io/">Overview</a></li><li><a class="tocitem" href="../io_classical/">Classical Analysis</a></li><li><a class="tocitem" href="../io_environmental/">Environmental Extensions</a></li><li><a class="tocitem" href="../io_baqaee_farhi/">Baqaee &amp; Farhi (2019)</a></li><li><a class="tocitem" href="../io_download/">Downloading Data</a></li></ul></li><li><span class="tocitem">Structural Analysis</span><ul><li><a class="tocitem" href="../structural_identification/">Structural Identification</a></li><li><input class="collapse-toggle" id="menuitem-10-2" type="checkbox"/><label class="tocitem" for="menuitem-10-2"><span class="docs-label">Statistical Identification</span><i class="docs-chevron"></i></label><ul class="collapsed"><li><a class="tocitem" href="../nongaussian/">Overview</a></li><li><a class="tocitem" href="../id_nongaussian/">Non-Gaussian Methods</a></li><li><a class="tocitem" href="../id_heteroskedastic/">Heteroskedasticity</a></li><li><a class="tocitem" href="../id_testing/">Testing</a></li></ul></li><li><input class="collapse-toggle" id="menuitem-10-3" type="checkbox"/><label class="tocitem" for="menuitem-10-3"><span class="docs-label">Innovation Accounting</span><i class="docs-chevron"></i></label><ul class="collapsed"><li><a class="tocitem" href="../innovation_accounting/">Overview</a></li><li><a class="tocitem" href="../ia_irf/">Impulse Responses</a></li><li><a class="tocitem" href="../ia_fevd/">Variance Decomposition</a></li><li><a class="tocitem" href="../ia_hd/">Historical Decomposition</a></li></ul></li></ul></li><li><span class="tocitem">Nowcasting</span><ul><li><a class="tocitem" href="../nowcast/">Overview</a></li><li><a class="tocitem" href="../nowcast_dfm/">DFM Nowcasting</a></li><li><a class="tocitem" href="../nowcast_bvar/">BVAR Nowcasting</a></li><li><a class="tocitem" href="../nowcast_bridge/">Bridge Equations</a></li><li><a class="tocitem" href="../nowcast_news/">News Decomposition</a></li><li><a class="tocitem" href="../midas/">MIDAS Regression</a></li></ul></li><li><a class="tocitem" href="../forecast_evaluation/">Forecast Evaluation</a></li><li><span class="tocitem">Hypothesis Tests</span><ul><li><a class="tocitem" href="../tests/">Overview</a></li><li><a class="tocitem" href="../tests_unitroot/">Unit Root &amp; Cointegration</a></li><li><a class="tocitem" href="../tests_unitroot_advanced/">Advanced Unit Root</a></li><li class="is-active"><a class="tocitem" href>Residual-Based Cointegration</a><ul class="internal"><li><a class="tocitem" href="#Quick-Start"><span>Quick Start</span></a></li><li><a class="tocitem" href="#Engle-Granger-Two-Step-Test"><span>Engle-Granger Two-Step Test</span></a></li><li><a class="tocitem" href="#Phillips-Ouliaris-Test"><span>Phillips-Ouliaris Test</span></a></li><li><a class="tocitem" href="#Hansen-L_c-Parameter-Instability-Test"><span>Hansen <span>$L_c$</span> Parameter-Instability Test</span></a></li><li><a class="tocitem" href="#Park-H(p,q)-Added-Variables-Test"><span>Park <span>$H(p,q)$</span> Added-Variables Test</span></a></li><li><a class="tocitem" href="#Choosing-Between-the-Four"><span>Choosing Between the Four</span></a></li><li><a class="tocitem" href="#Complete-Example"><span>Complete Example</span></a></li><li><a class="tocitem" href="#Common-Pitfalls"><span>Common Pitfalls</span></a></li><li><a class="tocitem" href="#References"><span>References</span></a></li></ul></li><li><a class="tocitem" href="../tests_breaks/">Structural Breaks</a></li><li><a class="tocitem" href="../tests_panel/">Panel Tests</a></li><li><a class="tocitem" href="../tests_diagnostics/">Model Diagnostics</a></li></ul></li><li><a class="tocitem" href="../plotting/">Visualization</a></li><li><span class="tocitem">Project</span><ul><li><a class="tocitem" href="../notation/">Notation</a></li><li><a class="tocitem" href="../bibliography/">Bibliography</a></li><li><a class="tocitem" href="../changelog/">Changelog</a></li><li><a class="tocitem" href="../citation/">How to Cite</a></li></ul></li><li><span class="tocitem">API Reference</span><ul><li><a class="tocitem" href="../api/">Overview</a></li><li><a class="tocitem" href="../api/data/">Data Management</a></li><li><a class="tocitem" href="../api/univariate/">Univariate Models</a></li><li><a class="tocitem" href="../api/multivariate/">Multivariate Models</a></li><li><a class="tocitem" href="../api/cross_section/">Cross-Sectional Models</a></li><li><a class="tocitem" href="../api/panel/">Panel Models</a></li><li><a class="tocitem" href="../api/dsge/">DSGE Models</a></li><li><a class="tocitem" href="../api/structural/">Structural &amp; Statistical Identification</a></li><li><a class="tocitem" href="../api/gmm/">GMM &amp; SMM</a></li><li><a class="tocitem" href="../api/tests/">Hypothesis Tests</a></li><li><a class="tocitem" href="../api/nowcasting/">Nowcasting</a></li><li><a class="tocitem" href="../api/visualization/">Visualization</a></li><li><a class="tocitem" href="../api/utilities/">Utilities &amp; Display</a></li></ul></li></ul><div class="docs-version-selector field has-addons"><div class="control"><span class="docs-label button is-static is-size-7">Version</span></div><div class="docs-selector control is-expanded"><div class="select is-fullwidth is-size-7"><select id="documenter-version-selector"></select></div></div></div></nav><div class="docs-main"><header class="docs-navbar"><a class="docs-sidebar-button docs-navbar-link fa-solid fa-bars is-hidden-desktop" id="documenter-sidebar-button" href="#"></a><nav class="breadcrumb"><ul class="is-hidden-mobile"><li><a class="is-disabled">Hypothesis Tests</a></li><li class="is-active"><a href>Residual-Based Cointegration</a></li></ul><ul class="is-hidden-tablet"><li class="is-active"><a href>Residual-Based Cointegration</a></li></ul></nav><div class="docs-right"><a class="docs-navbar-link" href="https://github.com/FriedmanJP/MacroEconometricModels.jl" title="View the repository on GitHub"><span class="docs-icon fa-brands"></span><span class="docs-label is-hidden-touch">GitHub</span></a><a class="docs-navbar-link" href="https://github.com/FriedmanJP/MacroEconometricModels.jl/blob/main/docs/src/tests_cointegration.md#" title="Edit source on GitHub"><span class="docs-icon fa-solid"></span></a><a class="docs-settings-button docs-navbar-link fa-solid fa-gear" id="documenter-settings-button" href="#" title="Settings"></a><a class="docs-article-toggle-button fa-solid fa-chevron-up" id="documenter-article-toggle-button" href="javascript:;" title="Collapse all docstrings"></a></div></header><article class="content" id="documenter-page"><h1 id="tests_cointegration_page"><a class="docs-heading-anchor" href="#tests_cointegration_page">Residual-Based Cointegration Tests</a><a id="tests_cointegration_page-1"></a><a class="docs-heading-anchor-permalink" href="#tests_cointegration_page" title="Permalink"></a></h1><p>Four single-equation cointegration tests operate on the residuals — or the coefficient path — of a static cointegrating regression <span>$y_t = D_t&#39;\delta + x_t&#39;\beta + u_t$</span> with an I(1) regressor vector <span>$x_t$</span>. Two are residual unit root tests whose null is <strong>no cointegration</strong>; two are parameter-based tests whose null is <strong>genuine, stable cointegration</strong>. Running one of each is the single-equation analogue of pairing ADF with KPSS: the two families fail in opposite directions, so agreement between them is much stronger evidence than either alone.</p><p>For the full test battery and the tables that route a question to a test, see <a href="../tests/#tests_page">Hypothesis Tests</a>. For the system approach to cointegrating rank, see the Johansen test on <a href="../tests_unitroot/#tests_unitroot_page">Unit Root &amp; Cointegration</a>. For cointegration that survives a regime shift, see the Gregory-Hansen test on <a href="../tests_breaks/#tests_breaks_page">Structural Breaks</a>. The <code>CointRegModel</code> these tests consume comes from <a href="../cointreg/#cointreg_page">Cointegrating Regression</a>.</p><ul><li><strong>Engle-Granger</strong> — <code>engle_granger_test(y, X)</code> runs an augmented Dickey-Fuller regression on the levels residuals; the <span>$t$</span>-statistic is read against the MacKinnon cointegration surface indexed by the number of I(1) series</li><li><strong>Phillips-Ouliaris</strong> — <code>phillips_ouliaris_test(y, X)</code> forms the semiparametric normalized-bias <span>$\hat Z_\alpha$</span> and <span>$t$</span>-ratio <span>$\hat Z_t$</span> on the residual AR(1) root</li><li><strong>Hansen <span>$L_c$</span></strong> — <code>hansen_instability_test(m)</code> tests a fitted <a href="../api/multivariate/#MacroEconometricModels.CointRegModel"><code>CointRegModel</code></a> for coefficient stability; a large <span>$L_c$</span> signals parameter drift, which is observationally equivalent to no cointegration</li><li><strong>Park <span>$H(p,q)$</span></strong> — <code>park_added_test(m)</code> adds superfluous deterministic trends; under genuine cointegration their coefficients are zero, under a spurious regression the statistic diverges</li></ul><div class="admonition is-info" id="The-cointegration-p-value-trap-f207ec56dad8e739"><header class="admonition-header">The cointegration p-value trap<a class="admonition-anchor" href="#The-cointegration-p-value-trap-f207ec56dad8e739" title="Permalink"></a></header><div class="admonition-body"><p>Residual-based cointegration statistics do <strong>not</strong> follow the univariate Dickey-Fuller distribution. Because the residuals are estimated rather than observed, their null distribution depends on <span>$N = k+1$</span>, the number of I(1) series in the cointegrating vector. All four tests here index the MacKinnon cointegration response surface by <span>$N$</span> automatically; feeding the residuals to <code>adf_test</code> instead would use the <span>$N = 1$</span> surface and badly under-reject.</p></div></div><h2 id="Quick-Start"><a class="docs-heading-anchor" href="#Quick-Start">Quick Start</a><a id="Quick-Start-1"></a><a class="docs-heading-anchor-permalink" href="#Quick-Start" title="Permalink"></a></h2><p><strong>Recipe 1: Engle-Granger two-step test</strong></p><pre><code class="language-julia hljs"># H0: no cointegration. A small p-value rejects in favour of cointegration.
+report(engle_granger_test(y, x; trend=:constant))</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">             Engle-Granger Two-Step Cointegration Test
+
+  Specification
+
+  H₀                    No cointegration (unit root in residuals)
+  H₁                                                Cointegration
+  Deterministic terms                                    Constant
+  I(1) series (N=k+1)                                           2
+  Augmenting lags                                               0
+  Observations                                                200
+
+               Results
+
+                              Value
+
+  ADF statistic (τ)     -9.7697 ***
+  P-value (MacKinnon)        &lt;0.001
+
+
+  Conclusion   Reject H₀ at 1% (cointegration)
+  Note         *** p&lt;0.01, ** p&lt;0.05, * p&lt;0.10</code></pre><p><strong>Recipe 2: Phillips-Ouliaris <span>$\hat Z_t$</span> and <span>$\hat Z_\alpha$</span></strong></p><pre><code class="language-julia hljs">report(phillips_ouliaris_test(y, x; trend=:constant))</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">   Phillips-Ouliaris Cointegration Test
+
+  Specification
+
+  H₀                    No cointegration
+  H₁                       Cointegration
+  Deterministic terms           Constant
+  I(1) series (N=k+1)                  2
+  Kernel / bandwidth      bartlett / 4.0
+  Observations                       200
+
+                 Results
+
+                                   Value
+
+  Ẑ_t statistic              -9.8165 ***
+  Ẑ_t p-value (MacKinnon)         &lt;0.001
+  Ẑ_α statistic             -129.2756 **
+  Ẑ_α p-value (MC table)            0.01
+
+
+  Conclusion   Reject H₀ at 5% (cointegration)
+  Note         *** p&lt;0.01, ** p&lt;0.05, * p&lt;0.10</code></pre><p><strong>Recipe 3: Contrast with an independent random-walk pair</strong></p><pre><code class="language-julia hljs">report(engle_granger_test(yn, xn))</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">             Engle-Granger Two-Step Cointegration Test
+
+  Specification
+
+  H₀                    No cointegration (unit root in residuals)
+  H₁                                                Cointegration
+  Deterministic terms                                    Constant
+  I(1) series (N=k+1)                                           2
+  Augmenting lags                                               0
+  Observations                                                200
+
+             Results
+
+                           Value
+
+  ADF statistic (τ)     -2.4097
+  P-value (MacKinnon)     0.3203
+
+
+  Conclusion   Fail to reject H₀ (no cointegration)
+  Note         *** p&lt;0.01, ** p&lt;0.05, * p&lt;0.10</code></pre><p><strong>Recipe 4: Hansen <span>$L_c$</span> stability test on a fitted regression</strong></p><pre><code class="language-julia hljs">m = estimate_cointreg(y, x; method=:fmols, trend=:const)
+report(hansen_instability_test(m))</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">           Hansen (1992) Lc Parameter-Instability Test
+
+  Specification
+
+  H₀                      Cointegration with stable coefficients
+  H₁                    Parameter instability / no cointegration
+  Deterministic terms                                   Constant
+  Parameters (p=d+k)                                           2
+  Observations                                               200
+
+            Results
+
+                         Value
+
+  Lc statistic         0.2186
+  P-value (MC table)    0.3095
+
+
+  Conclusion   Fail to reject H₀ (stable cointegration)
+  Note         *** p&lt;0.01, ** p&lt;0.05, * p&lt;0.10</code></pre><p><strong>Recipe 5: Park <span>$H(p,q)$</span> spurious-regression test</strong></p><pre><code class="language-julia hljs">report(park_added_test(m; q_add=2))</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">              Park (1990) Added-Variables H(p,q) Test
+
+  Specification
+
+  H₀                           Genuine cointegration (I(0) errors)
+  H₁                             Spurious regression (I(1) errors)
+  Deterministic terms                                     Constant
+  Superfluous trends (q_add)                                     2
+  Base trend order (p)                                           0
+  Observations                                                 200
+
+           Results
+
+                       Value
+
+  H(p,q) statistic   2.8753
+  P-value (χ²(2))     0.2375
+
+
+  Conclusion   Fail to reject H₀ (cointegration)
+  Note         *** p&lt;0.01, ** p&lt;0.05, * p&lt;0.10</code></pre><hr/><h2 id="Engle-Granger-Two-Step-Test"><a class="docs-heading-anchor" href="#Engle-Granger-Two-Step-Test">Engle-Granger Two-Step Test</a><a id="Engle-Granger-Two-Step-Test-1"></a><a class="docs-heading-anchor-permalink" href="#Engle-Granger-Two-Step-Test" title="Permalink"></a></h2><p>Engle &amp; Granger (1987) test the null of <strong>no cointegration</strong> in two steps. Stage 1 estimates the static relationship by OLS in levels. Stage 2 runs an augmented Dickey-Fuller regression <strong>with no deterministic term</strong> on the residuals <span>$\hat u_t$</span>:</p><p class="math-container">\[\Delta \hat u_t = \rho\, \hat u_{t-1} + \sum_{j=1}^{p} \gamma_j\, \Delta \hat u_{t-j} + \varepsilon_t\]</p><p>where:</p><ul><li><span>$\hat u_t$</span> are the stage-1 levels residuals</li><li><span>$\rho$</span> is the coefficient of interest, with <span>$H_0: \rho = 0$</span> (residual unit root, hence no cointegration)</li><li><span>$p$</span> augmenting lags absorb serial correlation in the residual dynamics</li></ul><p>The statistic is the <span>$t$</span>-ratio on <span>$\rho$</span>. Rejecting the residual unit root is evidence of cointegration. The stage-2 regression carries no intercept because the stage-1 residuals are orthogonal to the deterministics by construction.</p><pre><code class="language-julia hljs">result = engle_granger_test(y, x; trend=:constant, lags=:aic)
+report(result)</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">             Engle-Granger Two-Step Cointegration Test
+
+  Specification
+
+  H₀                    No cointegration (unit root in residuals)
+  H₁                                                Cointegration
+  Deterministic terms                                    Constant
+  I(1) series (N=k+1)                                           2
+  Augmenting lags                                               0
+  Observations                                                200
+
+               Results
+
+                              Value
+
+  ADF statistic (τ)     -9.7697 ***
+  P-value (MacKinnon)        &lt;0.001
+
+
+  Conclusion   Reject H₀ at 1% (cointegration)
+  Note         *** p&lt;0.01, ** p&lt;0.05, * p&lt;0.10</code></pre><p>The ADF statistic is <span>$-9.770$</span> with a MacKinnon p-value below 0.001, so the residual unit root is decisively rejected and the pair is cointegrated — which is correct by construction, since the equation error was generated as a stationary AR(1). AIC selects zero augmenting lags, and <span>$N = k + 1 = 2$</span> identifies the surface used for the p-value. The independent pair tells the opposite story:</p><pre><code class="language-julia hljs">null_result = engle_granger_test(yn, xn)
+(statistic = round(null_result.statistic, digits=3), pvalue = round(null_result.pvalue, digits=3))</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">(statistic = -2.41, pvalue = 0.32)</code></pre><p>Here <span>$-2.410$</span> gives <span>$p = 0.320$</span>, nowhere near rejection. Note how much closer to zero this is than a Dickey-Fuller critical value would suggest is needed: on the <span>$N = 2$</span> cointegration surface a statistic must reach roughly <span>$-3.4$</span> to reject at 5%, against <span>$-2.86$</span> for a univariate ADF, precisely because the residuals were fitted rather than observed.</p><h3 id="Options"><a class="docs-heading-anchor" href="#Options">Options</a><a id="Options-1"></a><a class="docs-heading-anchor-permalink" href="#Options" title="Permalink"></a></h3><table><tr><th style="text-align: right">Keyword</th><th style="text-align: right">Type</th><th style="text-align: right">Default</th><th style="text-align: right">Description</th></tr><tr><td style="text-align: right"><code>trend</code></td><td style="text-align: right"><code>Symbol</code></td><td style="text-align: right"><code>:constant</code></td><td style="text-align: right">Deterministics in the cointegrating regression: <code>:none</code>, <code>:constant</code> (or <code>:const</code>), or <code>:trend</code> (or <code>:linear</code>). Selects the MacKinnon surface</td></tr><tr><td style="text-align: right"><code>lags</code></td><td style="text-align: right"><code>Union{Int,Symbol}</code></td><td style="text-align: right"><code>:aic</code></td><td style="text-align: right">Augmenting lags <span>$p$</span>, or <code>:aic</code>/<code>:bic</code> to select over <code>0:max_lags</code></td></tr><tr><td style="text-align: right"><code>max_lags</code></td><td style="text-align: right"><code>Union{Int,Nothing}</code></td><td style="text-align: right"><code>nothing</code></td><td style="text-align: right">Ceiling for automatic selection (defaults to <span>$\lfloor 12(T/100)^{1/4} \rfloor$</span>)</td></tr></table><p>Call it as <code>engle_granger_test(y, X)</code> with a vector or matrix of regressors, or as <code>engle_granger_test(Y)</code> on a single matrix whose first column is the dependent variable. At least <span>$3k + 13$</span> observations are required for <span>$k$</span> regressors.</p><h3 id="Return-Values"><a class="docs-heading-anchor" href="#Return-Values">Return Values</a><a id="Return-Values-1"></a><a class="docs-heading-anchor-permalink" href="#Return-Values" title="Permalink"></a></h3><table><tr><th style="text-align: right">Field</th><th style="text-align: right">Type</th><th style="text-align: right">Description</th></tr><tr><td style="text-align: right"><code>statistic</code></td><td style="text-align: right"><code>T</code></td><td style="text-align: right">ADF <span>$t$</span>-statistic on the residual lagged level</td></tr><tr><td style="text-align: right"><code>pvalue</code></td><td style="text-align: right"><code>T</code></td><td style="text-align: right">MacKinnon (1996/2010) cointegration-surface p-value at <span>$N = k+1$</span></td></tr><tr><td style="text-align: right"><code>lags</code></td><td style="text-align: right"><code>Int</code></td><td style="text-align: right">Number of augmenting lags used</td></tr><tr><td style="text-align: right"><code>regression</code></td><td style="text-align: right"><code>Symbol</code></td><td style="text-align: right">Normalized deterministic case (<code>:none</code>, <code>:constant</code>, <code>:trend</code>)</td></tr><tr><td style="text-align: right"><code>k</code></td><td style="text-align: right"><code>Int</code></td><td style="text-align: right">Number of I(1) regressors</td></tr><tr><td style="text-align: right"><code>N</code></td><td style="text-align: right"><code>Int</code></td><td style="text-align: right">Number of I(1) series in the cointegrating vector, <span>$k + 1$</span></td></tr><tr><td style="text-align: right"><code>nobs</code></td><td style="text-align: right"><code>Int</code></td><td style="text-align: right">Length of the input series</td></tr></table><p>The p-value matches <code>egranger</code> in Stata and <code>coint</code> in statsmodels for the same specification.</p><hr/><h2 id="Phillips-Ouliaris-Test"><a class="docs-heading-anchor" href="#Phillips-Ouliaris-Test">Phillips-Ouliaris Test</a><a id="Phillips-Ouliaris-Test-1"></a><a class="docs-heading-anchor-permalink" href="#Phillips-Ouliaris-Test" title="Permalink"></a></h2><p>Phillips &amp; Ouliaris (1990) replace the parametric lag augmentation with a semiparametric correction applied directly to the residual AR(1) root <span>$\hat\rho$</span>, exactly as the Phillips-Perron test does for a univariate series. With short-run variance <span>$s^2$</span> and long-run variance <span>$\omega^2$</span> of the AR(1) innovations,</p><p class="math-container">\[\hat Z_\alpha = T(\hat\rho - 1) - \tfrac{1}{2}(\omega^2 - s^2)\, \frac{T^2}{\sum \hat u_{t-1}^2},
+\qquad
+\hat Z_t = \sqrt{\tfrac{s^2}{\omega^2}}\, t_{\hat\rho} - \frac{\omega^2 - s^2}{2\,\omega\,(T^{-1}\sum \hat u_{t-1}^2)^{1/2}\sqrt{T}}\]</p><p>where:</p><ul><li><span>$\hat\rho$</span> is the OLS root from <span>$\hat u_t = \hat\rho \hat u_{t-1} + \xi_t$</span> on the levels residuals</li><li><span>$s^2 = T^{-1}\sum \xi_t^2$</span> is the short-run variance and <span>$\omega^2$</span> the HAC long-run variance of <span>$\xi$</span></li><li><span>$t_{\hat\rho}$</span> is the uncorrected <span>$t$</span>-ratio testing <span>$\hat\rho = 1$</span></li></ul><p><span>$\hat Z_t$</span> is the studentized statistic and shares the MacKinnon cointegration surface with Engle-Granger. <span>$\hat Z_\alpha$</span> is the normalized bias, which has no closed-form surface, so its p-value brackets Monte-Carlo critical values validated against the Phillips-Ouliaris (1990) tables. Both are left-tailed: large negative values reject no cointegration.</p><pre><code class="language-julia hljs">result = phillips_ouliaris_test(y, x; trend=:constant, kernel=:bartlett)
+report(result)</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">   Phillips-Ouliaris Cointegration Test
+
+  Specification
+
+  H₀                    No cointegration
+  H₁                       Cointegration
+  Deterministic terms           Constant
+  I(1) series (N=k+1)                  2
+  Kernel / bandwidth      bartlett / 4.0
+  Observations                       200
+
+                 Results
+
+                                   Value
+
+  Ẑ_t statistic              -9.8165 ***
+  Ẑ_t p-value (MacKinnon)         &lt;0.001
+  Ẑ_α statistic             -129.2756 **
+  Ẑ_α p-value (MC table)            0.01
+
+
+  Conclusion   Reject H₀ at 5% (cointegration)
+  Note         *** p&lt;0.01, ** p&lt;0.05, * p&lt;0.10</code></pre><p><span>$\hat Z_t = -9.817$</span> is within 0.05 of the Engle-Granger statistic on the same data, and <span>$\hat Z_\alpha = -129.28$</span> rejects at the 1% level from the normalized-bias side. That agreement is the useful diagnostic: the parametric and semiparametric routes to the same null are handling the residual serial correlation the same way, so the verdict does not depend on which was chosen. When they diverge, the residual dynamics are richer than an AR(1) plus a HAC correction can capture, and the Engle-Granger form with a properly selected lag order is the safer read.</p><pre><code class="language-julia hljs"># The independent pair, for contrast
+spurious = phillips_ouliaris_test(yn, xn; trend=:constant)
+(Z_t = round(spurious.statistic, digits=3), p_t = round(spurious.pvalue, digits=3),
+ Z_alpha = round(spurious.z_alpha, digits=2), p_alpha = round(spurious.z_alpha_pvalue, digits=3))</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">(Z_t = -2.367, p_t = 0.341, Z_alpha = -9.55, p_alpha = 0.236)</code></pre><h3 id="Options-2"><a class="docs-heading-anchor" href="#Options-2">Options</a><a class="docs-heading-anchor-permalink" href="#Options-2" title="Permalink"></a></h3><table><tr><th style="text-align: right">Keyword</th><th style="text-align: right">Type</th><th style="text-align: right">Default</th><th style="text-align: right">Description</th></tr><tr><td style="text-align: right"><code>trend</code></td><td style="text-align: right"><code>Symbol</code></td><td style="text-align: right"><code>:constant</code></td><td style="text-align: right">Deterministics: <code>:none</code>, <code>:constant</code> (or <code>:const</code>), <code>:trend</code> (or <code>:linear</code>)</td></tr><tr><td style="text-align: right"><code>kernel</code></td><td style="text-align: right"><code>Symbol</code></td><td style="text-align: right"><code>:bartlett</code></td><td style="text-align: right">HAC kernel: <code>:bartlett</code>, <code>:parzen</code>, <code>:qs</code>, or <code>:tukey_hanning</code></td></tr><tr><td style="text-align: right"><code>bandwidth</code></td><td style="text-align: right"><code>Symbol</code> or number</td><td style="text-align: right"><code>:nw</code></td><td style="text-align: right"><code>:nw</code> uses the fixed rule <span>$\lfloor 4(T/100)^{1/4} \rfloor$</span>; <code>:andrews</code> and <code>:nw94</code> are the data-dependent plug-ins; a number is used directly</td></tr></table><p>The <code>kernel</code> and <code>bandwidth</code> keywords are forwarded to the shared <code>lrvar</code> HAC estimator. Note that the <code>bandwidth</code> <strong>field</strong> of the result reports the fixed-rule value whenever a symbolic plug-in was requested, so it does not reflect what <code>:andrews</code> or <code>:nw94</code> actually chose.</p><h3 id="Return-Values-2"><a class="docs-heading-anchor" href="#Return-Values-2">Return Values</a><a class="docs-heading-anchor-permalink" href="#Return-Values-2" title="Permalink"></a></h3><table><tr><th style="text-align: right">Field</th><th style="text-align: right">Type</th><th style="text-align: right">Description</th></tr><tr><td style="text-align: right"><code>statistic</code></td><td style="text-align: right"><code>T</code></td><td style="text-align: right"><span>$\hat Z_t$</span>, the studentized statistic (the primary one)</td></tr><tr><td style="text-align: right"><code>pvalue</code></td><td style="text-align: right"><code>T</code></td><td style="text-align: right">MacKinnon cointegration-surface p-value for <span>$\hat Z_t$</span> at <span>$N = k+1$</span></td></tr><tr><td style="text-align: right"><code>z_alpha</code></td><td style="text-align: right"><code>T</code></td><td style="text-align: right"><span>$\hat Z_\alpha$</span> normalized-bias statistic</td></tr><tr><td style="text-align: right"><code>z_alpha_pvalue</code></td><td style="text-align: right"><code>T</code></td><td style="text-align: right">Bracketing p-value from the Monte-Carlo <span>$\hat Z_\alpha$</span> table, floored at 0.01</td></tr><tr><td style="text-align: right"><code>regression</code></td><td style="text-align: right"><code>Symbol</code></td><td style="text-align: right">Normalized deterministic case</td></tr><tr><td style="text-align: right"><code>kernel</code></td><td style="text-align: right"><code>Symbol</code></td><td style="text-align: right">HAC kernel used</td></tr><tr><td style="text-align: right"><code>bandwidth</code></td><td style="text-align: right"><code>T</code></td><td style="text-align: right">Bandwidth reported (see the caveat above)</td></tr><tr><td style="text-align: right"><code>k</code>, <code>N</code></td><td style="text-align: right"><code>Int</code></td><td style="text-align: right">Number of I(1) regressors, and <span>$k+1$</span></td></tr><tr><td style="text-align: right"><code>nobs</code></td><td style="text-align: right"><code>Int</code></td><td style="text-align: right">Length of the input series</td></tr></table><hr/><h2 id="Hansen-L_c-Parameter-Instability-Test"><a class="docs-heading-anchor" href="#Hansen-L_c-Parameter-Instability-Test">Hansen <span>$L_c$</span> Parameter-Instability Test</a><a id="Hansen-L_c-Parameter-Instability-Test-1"></a><a class="docs-heading-anchor-permalink" href="#Hansen-L_c-Parameter-Instability-Test" title="Permalink"></a></h2><p>Hansen (1992) turns the question around. Instead of testing for a residual unit root, it tests a fitted cointegrating regression for coefficient <strong>stability</strong>. The null is cointegration with constant coefficients; the alternative is that the loadings follow a martingale, which is observationally equivalent to no cointegration. With regressor rows <span>$Z_t = [D_t; x_t]$</span>, residuals <span>$\hat u_t$</span>, cumulative scores <span>$\hat S_t = \sum_{i\le t} Z_i \hat u_i$</span>, and the conditional long-run variance <span>$\hat\omega^2_{u\cdot v}$</span> stored on the model,</p><p class="math-container">\[L_c = \hat\omega_{u\cdot v}^{-2}\; T^{-1} \sum_{t=1}^T \hat S_t&#39; \left(\sum_i Z_i Z_i&#39;\right)^{-1} \hat S_t\]</p><p>where:</p><ul><li><span>$Z_t$</span> has <span>$p = d + k$</span> columns, <span>$d$</span> deterministics and <span>$k$</span> I(1) regressors</li><li><span>$\hat S_t$</span> accumulates the scores, so it drifts when the coefficients drift</li><li><span>$\hat\omega^2_{u\cdot v}$</span> is inherited from the <code>CointRegModel</code>, not re-estimated</li></ul><p><span>$L_c$</span> is right-tailed: a <strong>large</strong> value rejects stability.</p><pre><code class="language-julia hljs">m = estimate_cointreg(y, x; method=:fmols, trend=:const)
+report(hansen_instability_test(m))</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">           Hansen (1992) Lc Parameter-Instability Test
+
+  Specification
+
+  H₀                      Cointegration with stable coefficients
+  H₁                    Parameter instability / no cointegration
+  Deterministic terms                                   Constant
+  Parameters (p=d+k)                                           2
+  Observations                                               200
+
+            Results
+
+                         Value
+
+  Lc statistic         0.2186
+  P-value (MC table)    0.3095
+
+
+  Conclusion   Fail to reject H₀ (stable cointegration)
+  Note         *** p&lt;0.01, ** p&lt;0.05, * p&lt;0.10</code></pre><p><span>$L_c = 0.219$</span> with <span>$p = 0.309$</span> fails to reject, so the cointegrating relationship is stable — the right answer for a pair generated with a fixed slope of 2.0, which FMOLS recovers as 2.031. Compare the independent pair, where the &quot;relationship&quot; is spurious and its coefficients therefore wander:</p><pre><code class="language-julia hljs">m_spurious = estimate_cointreg(yn, xn; method=:fmols, trend=:const)
+(Lc = round(hansen_instability_test(m_spurious).statistic, digits=3),
+ pvalue = hansen_instability_test(m_spurious).pvalue)</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">(Lc = 1.361, pvalue = 0.01)</code></pre><p><span>$L_c = 1.361$</span> rejects at 1%. This is what makes the Hansen test a useful complement: Engle-Granger and Phillips-Ouliaris both <em>failed to reject</em> on this pair, which is only weak evidence against cointegration, while Hansen <em>rejects</em> its own null, which is direct evidence for instability.</p><h3 id="Options-3"><a class="docs-heading-anchor" href="#Options-3">Options</a><a class="docs-heading-anchor-permalink" href="#Options-3" title="Permalink"></a></h3><p><code>hansen_instability_test(m)</code> takes no keywords. Everything it needs — the deterministic case, the regressors, the residuals, and <span>$\hat\omega^2_{u\cdot v}$</span> — comes from the fitted <code>CointRegModel</code>, so the kernel and bandwidth are whatever <code>estimate_cointreg</code> used.</p><h3 id="Return-Values-3"><a class="docs-heading-anchor" href="#Return-Values-3">Return Values</a><a class="docs-heading-anchor-permalink" href="#Return-Values-3" title="Permalink"></a></h3><table><tr><th style="text-align: right">Field</th><th style="text-align: right">Type</th><th style="text-align: right">Description</th></tr><tr><td style="text-align: right"><code>statistic</code></td><td style="text-align: right"><code>T</code></td><td style="text-align: right"><span>$L_c$</span> statistic (right-tailed)</td></tr><tr><td style="text-align: right"><code>pvalue</code></td><td style="text-align: right"><code>T</code></td><td style="text-align: right">Bracketing p-value from the Monte-Carlo table, floored at 0.01</td></tr><tr><td style="text-align: right"><code>regression</code></td><td style="text-align: right"><code>Symbol</code></td><td style="text-align: right">Normalized deterministic case</td></tr><tr><td style="text-align: right"><code>trend</code></td><td style="text-align: right"><code>Symbol</code></td><td style="text-align: right">The <code>trend</code> keyword of the underlying <code>CointRegModel</code></td></tr><tr><td style="text-align: right"><code>nparam</code></td><td style="text-align: right"><code>Int</code></td><td style="text-align: right">Number of regressor columns <span>$p = d + k$</span></td></tr><tr><td style="text-align: right"><code>k</code></td><td style="text-align: right"><code>Int</code></td><td style="text-align: right">Number of I(1) regressors</td></tr><tr><td style="text-align: right"><code>nobs</code></td><td style="text-align: right"><code>Int</code></td><td style="text-align: right">Number of observations</td></tr></table><p>Critical values are Monte-Carlo quantiles indexed by the deterministic case and by <span>$k$</span> (clamped to 1 through 5), spot-checked against Hansen (1992, Table 1). The p-value never falls below 0.01, so read the statistic itself when the rejection is decisive.</p><hr/><h2 id="Park-H(p,q)-Added-Variables-Test"><a class="docs-heading-anchor" href="#Park-H(p,q)-Added-Variables-Test">Park <span>$H(p,q)$</span> Added-Variables Test</a><a id="Park-H(p,q)-Added-Variables-Test-1"></a><a class="docs-heading-anchor-permalink" href="#Park-H(p,q)-Added-Variables-Test" title="Permalink"></a></h2><p>Park (1990) augments the cointegrating regression with superfluous deterministic trends and tests whether they matter. Under genuine cointegration the errors are I(0) and the added trends have zero coefficients; under a spurious regression the errors are I(1), the added trends soak up part of that wandering, and the statistic diverges.</p><p>Let <span>$p$</span> be the highest trend order already present — 0 for <code>:none</code> and <code>:const</code>, 1 for <code>:linear</code>. The regression is re-estimated by OLS with <span>$q_{\mathrm{add}}$</span> extra normalized-time trends <span>$(t/T)^{p+1}, \dots, (t/T)^{p+q_{\mathrm{add}}}$</span> appended, and their joint significance is tested with a long-run-variance-corrected Wald statistic:</p><p class="math-container">\[H(p,q) = \hat\gamma&#39;\left(\hat\omega^2\,[(Z&#39;Z)^{-1}]_{AA}\right)^{-1}\hat\gamma \;\sim\; \chi^2(q_{\mathrm{add}})\]</p><p>where:</p><ul><li><span>$\hat\gamma$</span> collects the coefficients on the added trends</li><li><span>$A$</span> indexes the added-trend columns of the augmented design <span>$Z$</span></li><li><span>$\hat\omega^2$</span> is the long-run variance of the augmented-regression residuals</li></ul><p>Unlike the other three tests, the null distribution here is standard, so the p-value is an exact <span>$\chi^2$</span> upper tail rather than a table lookup.</p><pre><code class="language-julia hljs">report(park_added_test(m; q_add=2))</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">              Park (1990) Added-Variables H(p,q) Test
+
+  Specification
+
+  H₀                           Genuine cointegration (I(0) errors)
+  H₁                             Spurious regression (I(1) errors)
+  Deterministic terms                                     Constant
+  Superfluous trends (q_add)                                     2
+  Base trend order (p)                                           0
+  Observations                                                 200
+
+           Results
+
+                       Value
+
+  H(p,q) statistic   2.8753
+  P-value (χ²(2))     0.2375
+
+
+  Conclusion   Fail to reject H₀ (cointegration)
+  Note         *** p&lt;0.01, ** p&lt;0.05, * p&lt;0.10</code></pre><p><span>$H(0,2) = 2.875$</span> against a <span>$\chi^2(2)$</span> distribution gives <span>$p = 0.237$</span>: the two superfluous trends are jointly insignificant, and genuine cointegration survives. The spurious pair behaves completely differently:</p><pre><code class="language-julia hljs">(H = round(park_added_test(m_spurious; q_add=2).statistic, digits=2),
+ pvalue = park_added_test(m_spurious; q_add=2).pvalue)</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">(H = 82.64, pvalue = 1.1338530170003914e-18)</code></pre><p><span>$H = 82.64$</span> on 2 degrees of freedom is a p-value around <span>$10^{-18}$</span>. The divergence is the whole point of the test: with I(1) errors the statistic is not bounded in probability, so the magnitude grows with the sample rather than settling into a <span>$\chi^2$</span>. Read a very large <span>$H$</span> as &quot;the errors are not I(0)&quot;, not as a calibrated significance level.</p><h3 id="Options-4"><a class="docs-heading-anchor" href="#Options-4">Options</a><a class="docs-heading-anchor-permalink" href="#Options-4" title="Permalink"></a></h3><table><tr><th style="text-align: right">Keyword</th><th style="text-align: right">Type</th><th style="text-align: right">Default</th><th style="text-align: right">Description</th></tr><tr><td style="text-align: right"><code>q_add</code></td><td style="text-align: right"><code>Int</code></td><td style="text-align: right"><code>2</code></td><td style="text-align: right">Number of superfluous trends added; also the <span>$\chi^2$</span> degrees of freedom. Must be <span>$\geq 1$</span></td></tr><tr><td style="text-align: right"><code>kernel</code></td><td style="text-align: right"><code>Symbol</code></td><td style="text-align: right"><code>:bartlett</code></td><td style="text-align: right">HAC kernel for <span>$\hat\omega^2$</span>: <code>:bartlett</code>, <code>:parzen</code>, <code>:qs</code>, or <code>:tukey_hanning</code></td></tr><tr><td style="text-align: right"><code>bandwidth</code></td><td style="text-align: right"><code>Symbol</code> or number</td><td style="text-align: right"><code>:nw</code></td><td style="text-align: right"><code>:nw</code> uses <span>$\lfloor 4(T/100)^{1/4} \rfloor$</span>; <code>:andrews</code> and <code>:nw94</code> are the plug-ins; a number is used directly</td></tr></table><h3 id="Return-Values-4"><a class="docs-heading-anchor" href="#Return-Values-4">Return Values</a><a class="docs-heading-anchor-permalink" href="#Return-Values-4" title="Permalink"></a></h3><table><tr><th style="text-align: right">Field</th><th style="text-align: right">Type</th><th style="text-align: right">Description</th></tr><tr><td style="text-align: right"><code>statistic</code></td><td style="text-align: right"><code>T</code></td><td style="text-align: right"><span>$H(p,q)$</span> Wald statistic, clipped at zero</td></tr><tr><td style="text-align: right"><code>pvalue</code></td><td style="text-align: right"><code>T</code></td><td style="text-align: right">Exact <span>$\chi^2(q_{\mathrm{add}})$</span> upper-tail p-value</td></tr><tr><td style="text-align: right"><code>q_add</code></td><td style="text-align: right"><code>Int</code></td><td style="text-align: right">Number of superfluous trends, the degrees of freedom</td></tr><tr><td style="text-align: right"><code>base_order</code></td><td style="text-align: right"><code>Int</code></td><td style="text-align: right">Highest trend order already in the regression (<span>$p$</span>)</td></tr><tr><td style="text-align: right"><code>regression</code></td><td style="text-align: right"><code>Symbol</code></td><td style="text-align: right">Normalized deterministic case</td></tr><tr><td style="text-align: right"><code>trend</code></td><td style="text-align: right"><code>Symbol</code></td><td style="text-align: right">The <code>trend</code> keyword of the underlying <code>CointRegModel</code></td></tr><tr><td style="text-align: right"><code>k</code></td><td style="text-align: right"><code>Int</code></td><td style="text-align: right">Number of I(1) regressors</td></tr><tr><td style="text-align: right"><code>nobs</code></td><td style="text-align: right"><code>Int</code></td><td style="text-align: right">Number of observations</td></tr></table><hr/><h2 id="Choosing-Between-the-Four"><a class="docs-heading-anchor" href="#Choosing-Between-the-Four">Choosing Between the Four</a><a id="Choosing-Between-the-Four-1"></a><a class="docs-heading-anchor-permalink" href="#Choosing-Between-the-Four" title="Permalink"></a></h2><table><tr><th style="text-align: right">Question</th><th style="text-align: right">Test</th><th style="text-align: right">Null</th><th style="text-align: right">Reject means</th></tr><tr><td style="text-align: right">Is there a long-run relationship at all?</td><td style="text-align: right"><code>engle_granger_test</code></td><td style="text-align: right">No cointegration</td><td style="text-align: right">Cointegration</td></tr><tr><td style="text-align: right">Same, without choosing a lag order</td><td style="text-align: right"><code>phillips_ouliaris_test</code></td><td style="text-align: right">No cointegration</td><td style="text-align: right">Cointegration</td></tr><tr><td style="text-align: right">Is the relationship I already fitted stable?</td><td style="text-align: right"><code>hansen_instability_test</code></td><td style="text-align: right">Stable cointegration</td><td style="text-align: right">Instability</td></tr><tr><td style="text-align: right">Are the errors really I(0)?</td><td style="text-align: right"><code>park_added_test</code></td><td style="text-align: right">Genuine cointegration</td><td style="text-align: right">Spurious regression</td></tr></table><p>The first two need only the raw series; the last two need a fitted <code>CointRegModel</code> and therefore also give you the long-run coefficients. Running one from each half is the informative combination, because a failure to reject in the first half is weak evidence while a rejection in the second half is strong.</p><hr/><h2 id="Complete-Example"><a class="docs-heading-anchor" href="#Complete-Example">Complete Example</a><a id="Complete-Example-1"></a><a class="docs-heading-anchor-permalink" href="#Complete-Example" title="Permalink"></a></h2><p>A fresh cointegrated pair put through all four tests, from raw series to verdict.</p><pre><code class="language-julia hljs"># ── Step 1: Simulate a cointegrated pair ────────────────────────
+Random.seed!(7)
+Tn = 220
+xx = cumsum(randn(Tn))
+uu = zeros(Tn)
+for t in 2:Tn
+    uu[t] = 0.5 * uu[t-1] + 0.8 * randn()      # I(0) AR(1) error -&gt; cointegration
+end
+yy = 3.0 .+ 1.2 .* xx .+ uu
+
+# ── Step 2: Both no-cointegration nulls ─────────────────────────
+eg = engle_granger_test(yy, xx; trend=:constant)
+po = phillips_ouliaris_test(yy, xx; trend=:constant)
+report(eg)
+report(po)</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">             Engle-Granger Two-Step Cointegration Test
+
+  Specification
+
+  H₀                    No cointegration (unit root in residuals)
+  H₁                                                Cointegration
+  Deterministic terms                                    Constant
+  I(1) series (N=k+1)                                           2
+  Augmenting lags                                               5
+  Observations                                                220
+
+               Results
+
+                              Value
+
+  ADF statistic (τ)     -6.3137 ***
+  P-value (MacKinnon)        &lt;0.001
+
+
+  Conclusion   Reject H₀ at 1% (cointegration)
+  Note         *** p&lt;0.01, ** p&lt;0.05, * p&lt;0.10
+
+   Phillips-Ouliaris Cointegration Test
+
+  Specification
+
+  H₀                    No cointegration
+  H₁                       Cointegration
+  Deterministic terms           Constant
+  I(1) series (N=k+1)                  2
+  Kernel / bandwidth      bartlett / 4.0
+  Observations                       220
+
+                 Results
+
+                                  Value
+
+  Ẑ_t statistic             -8.7267 ***
+  Ẑ_t p-value (MacKinnon)        &lt;0.001
+  Ẑ_α statistic             -116.813 **
+  Ẑ_α p-value (MC table)           0.01
+
+
+  Conclusion   Reject H₀ at 5% (cointegration)
+  Note         *** p&lt;0.01, ** p&lt;0.05, * p&lt;0.10</code></pre><pre><code class="language-julia hljs"># ── Step 3: Fit the long-run relationship ───────────────────────
+cr = estimate_cointreg(yy, xx; method=:fmols, trend=:const)
+report(cr)</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">          Cointegrating Regression
+
+  Specification
+
+  Method           FMOLS (Phillips–Hansen)
+  Observations                         220
+  Deterministics                  constant
+  Kernel                          Bartlett
+  Bandwidth                          4.000
+  LR variance                       1.6280
+
+                           Long-run coefficients
+
+           Coef.   Std.Err.         t    P&gt;|t|   CI lower   CI upper
+
+  const   2.9098     0.1446   20.1196   &lt;0.001     2.6247     3.1948   ***
+  x       1.1902     0.0129   92.4844   &lt;0.001     1.1649     1.2156   ***
+
+Significance: *** p&lt;0.01, ** p&lt;0.05, * p&lt;0.10</code></pre><pre><code class="language-julia hljs"># ── Step 4: Both genuine-cointegration nulls ────────────────────
+lc = hansen_instability_test(cr)
+pk = park_added_test(cr; q_add=2)
+report(lc)
+report(pk)</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">           Hansen (1992) Lc Parameter-Instability Test
+
+  Specification
+
+  H₀                      Cointegration with stable coefficients
+  H₁                    Parameter instability / no cointegration
+  Deterministic terms                                   Constant
+  Parameters (p=d+k)                                           2
+  Observations                                               220
+
+            Results
+
+                        Value
+
+  Lc statistic         0.267
+  P-value (MC table)   0.2674
+
+
+  Conclusion   Fail to reject H₀ (stable cointegration)
+  Note         *** p&lt;0.01, ** p&lt;0.05, * p&lt;0.10
+
+              Park (1990) Added-Variables H(p,q) Test
+
+  Specification
+
+  H₀                           Genuine cointegration (I(0) errors)
+  H₁                             Spurious regression (I(1) errors)
+  Deterministic terms                                     Constant
+  Superfluous trends (q_add)                                     2
+  Base trend order (p)                                           0
+  Observations                                                 220
+
+           Results
+
+                       Value
+
+  H(p,q) statistic   1.2879
+  P-value (χ²(2))     0.5252
+
+
+  Conclusion   Fail to reject H₀ (cointegration)
+  Note         *** p&lt;0.01, ** p&lt;0.05, * p&lt;0.10</code></pre><pre><code class="language-julia hljs"># ── Step 5: Read the four together ──────────────────────────────
+[(&quot;Engle-Granger&quot;,     round(eg.statistic, digits=2), eg.pvalue &lt; 0.05 ? &quot;cointegrated&quot; : &quot;no cointegration&quot;),
+ (&quot;Phillips-Ouliaris&quot;, round(po.statistic, digits=2), po.pvalue &lt; 0.05 ? &quot;cointegrated&quot; : &quot;no cointegration&quot;),
+ (&quot;Hansen Lc&quot;,         round(lc.statistic, digits=3), lc.pvalue &lt; 0.05 ? &quot;unstable&quot; : &quot;stable&quot;),
+ (&quot;Park H(p,q)&quot;,       round(pk.statistic, digits=3), pk.pvalue &lt; 0.05 ? &quot;spurious&quot; : &quot;genuine&quot;)]</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">4-element Vector{Tuple{String, Float64, String}}:
+ (&quot;Engle-Granger&quot;, -6.31, &quot;cointegrated&quot;)
+ (&quot;Phillips-Ouliaris&quot;, -8.73, &quot;cointegrated&quot;)
+ (&quot;Hansen Lc&quot;, 0.267, &quot;stable&quot;)
+ (&quot;Park H(p,q)&quot;, 1.288, &quot;genuine&quot;)</code></pre><p>All four agree. Engle-Granger returns <span>$-6.314$</span> and Phillips-Ouliaris <span>$\hat Z_t = -8.727$</span>, both with p-values below <span>$10^{-6}$</span>, rejecting no cointegration. Hansen gives <span>$L_c = 0.267$</span> (<span>$p = 0.267$</span>) and Park gives <span>$H = 1.288$</span> (<span>$p = 0.525$</span>), neither rejecting genuine, stable cointegration. FMOLS recovers a slope of 1.190 against the true 1.2 and an intercept of 2.910 against 3.0. Unanimity across both halves is the outcome to insist on before treating an estimated long-run vector as structural.</p><hr/><h2 id="Common-Pitfalls"><a class="docs-heading-anchor" href="#Common-Pitfalls">Common Pitfalls</a><a id="Common-Pitfalls-1"></a><a class="docs-heading-anchor-permalink" href="#Common-Pitfalls" title="Permalink"></a></h2><ol><li><p><strong>Do not use the ADF p-value surface.</strong> Residual-based cointegration statistics depend on <span>$N = k+1$</span>, because the residuals were estimated. All four tests here index the correct MacKinnon cointegration surface automatically; passing residuals to <code>adf_test</code> yourself would use the <span>$N = 1$</span> surface and badly under-reject.</p></li><li><p><strong>Order the columns correctly.</strong> The convenience matrix methods <code>engle_granger_test(Y)</code> and <code>phillips_ouliaris_test(Y)</code> treat <code>Y[:, 1]</code> as the dependent variable and <code>Y[:, 2:end]</code> as the I(1) regressors. Swapping them changes the normalization of the cointegrating vector and, in finite samples, the test statistic.</p></li><li><p><strong>The null direction differs between the two halves.</strong> Engle-Granger and Phillips-Ouliaris test <span>$H_0$</span>: <em>no</em> cointegration, so a small p-value means cointegration. Hansen and Park test <span>$H_0$</span>: <em>genuine or stable</em> cointegration, so a small p-value means instability or spuriousness. Reading all four as &quot;small p is good&quot; inverts half the battery.</p></li><li><p><strong>Ensure the inputs are I(1).</strong> These tests assume each series has exactly one unit root. A stationary regressor makes the whole framework inapplicable, and an I(2) series invalidates the asymptotics. Pre-test with <a href="../api/tests/#MacroEconometricModels.adf_test-Union{Tuple{AbstractVector{T}}, Tuple{T}} where T&lt;:AbstractFloat"><code>adf_test</code></a> and <a href="../api/tests/#MacroEconometricModels.kpss_test-Union{Tuple{AbstractVector{T}}, Tuple{T}} where T&lt;:AbstractFloat"><code>kpss_test</code></a>, and see <a href="../ardl/#ardl_page">ARDL &amp; Bounds Testing</a> when the integration orders are mixed.</p></li><li><p><strong>Kernel and bandwidth move the Phillips-Ouliaris and Park statistics.</strong> Both depend on a HAC long-run variance. Their defaults use the fixed rule <span>$\lfloor 4(T/100)^{1/4} \rfloor$</span> rather than a data-dependent plug-in, which is conservative under strong residual persistence. Try <code>bandwidth=:andrews</code> as a robustness check, and be aware that the <code>bandwidth</code> field the Phillips-Ouliaris result reports still shows the fixed-rule value in that case.</p></li><li><p><strong>A very large Park <span>$H$</span> is not a calibrated p-value.</strong> Under a spurious regression the statistic diverges rather than converging to <span>$\chi^2$</span>, so p-values of <span>$10^{-18}$</span> mean &quot;the errors are not I(0)&quot; and nothing more precise. The same caution applies to the floored p-values of Hansen and <span>$\hat Z_\alpha$</span>, which never report below 0.01.</p></li></ol><hr/><h2 id="References"><a class="docs-heading-anchor" href="#References">References</a><a id="References-1"></a><a class="docs-heading-anchor-permalink" href="#References" title="Permalink"></a></h2><ul><li>Engle, Robert F., and Clive W. J. Granger. 1987. &quot;Co-Integration and Error Correction: Representation, Estimation, and Testing.&quot; <em>Econometrica</em> 55 (2): 251–276. <a href="https://doi.org/10.2307/1913236">https://doi.org/10.2307/1913236</a></li><li>Hansen, Bruce E. 1992. &quot;Tests for Parameter Instability in Regressions with I(1) Processes.&quot; <em>Journal of Business &amp; Economic Statistics</em> 10 (3): 321–335. <a href="https://doi.org/10.1080/07350015.1992.10509908">https://doi.org/10.1080/07350015.1992.10509908</a></li><li>MacKinnon, James G. 1996. &quot;Numerical Distribution Functions for Unit Root and Cointegration Tests.&quot; <em>Journal of Applied Econometrics</em> 11 (6): 601–618. <a href="https://doi.org/10.1002/(SICI)1099-1255(199611)11:6%3C601::AID-JAE417%3E3.0.CO;2-T">https://doi.org/10.1002/(SICI)1099-1255(199611)11:6&lt;601::AID-JAE417&gt;3.0.CO;2-T</a></li><li>MacKinnon, James G. 2010. &quot;Critical Values for Cointegration Tests.&quot; Queen&#39;s Economics Department Working Paper No. 1227. <a href="https://www.econ.queensu.ca/research/working-papers/1227">https://www.econ.queensu.ca/research/working-papers/1227</a></li><li>Park, Joon Y. 1990. &quot;Testing for Unit Roots and Cointegration by Variable Addition.&quot; In <em>Advances in Econometrics</em> 8, edited by Thomas B. Fomby and George F. Rhodes, 107–133. Greenwich, CT: JAI Press.</li><li>Phillips, Peter C. B., and Bruce E. Hansen. 1990. &quot;Statistical Inference in Instrumental Variables Regression with I(1) Processes.&quot; <em>Review of Economic Studies</em> 57 (1): 99–125. <a href="https://doi.org/10.2307/2297545">https://doi.org/10.2307/2297545</a></li><li>Phillips, Peter C. B., and Sam Ouliaris. 1990. &quot;Asymptotic Properties of Residual Based Tests for Cointegration.&quot; <em>Econometrica</em> 58 (1): 165–193. <a href="https://doi.org/10.2307/2938339">https://doi.org/10.2307/2938339</a></li></ul></article><nav class="docs-footer"><a class="docs-footer-prevpage" href="../tests_unitroot_advanced/">« Advanced Unit Root</a><a class="docs-footer-nextpage" href="../tests_breaks/">Structural Breaks »</a><div class="flexbox-break"></div><p class="footer-message">Powered by <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> and the <a href="https://julialang.org/">Julia Programming Language</a>.</p></nav></div><div class="modal" id="documenter-settings"><div class="modal-background"></div><div class="modal-card"><header class="modal-card-head"><p class="modal-card-title">Settings</p><button class="delete"></button></header><section class="modal-card-body"><p><label class="label">Theme</label><div class="select"><select id="documenter-themepicker"><option value="auto">Automatic (OS)</option><option value="documenter-light">documenter-light</option><option value="documenter-dark">documenter-dark</option><option value="catppuccin-latte">catppuccin-latte</option><option value="catppuccin-frappe">catppuccin-frappe</option><option value="catppuccin-macchiato">catppuccin-macchiato</option><option value="catppuccin-mocha">catppuccin-mocha</option></select></div></p><hr/><p>This document was generated with <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> version 1.17.0 on <span class="colophon-date" title="Sunday 2 August 2026 22:42">Sunday 2 August 2026</span>. Using Julia version 1.12.6.</p></section><footer class="modal-card-foot"></footer></div></div></div></body></html>
