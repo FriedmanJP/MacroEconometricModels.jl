@@ -83,7 +83,14 @@ struct VARForecast{T<:AbstractFloat} <: AbstractForecastResult{T}
     ci_method::Symbol
     conf_level::T
     varnames::Vector{String}
+    # Optional raw bootstrap draws (reps × h × n) for consumers that must push
+    # uncertainty through a linear map (e.g. favar_panel_forecast; #524).
+    _draws::Union{Nothing,Array{T,3}}
 end
+
+# Backward-compatible constructor (no draws)
+VARForecast{T}(forecast, ci_lower, ci_upper, horizon, ci_method, conf_level, varnames) where {T} =
+    VARForecast{T}(forecast, ci_lower, ci_upper, horizon, ci_method, conf_level, varnames, nothing)
 
 function Base.show(io::IO, fc::VARForecast{T}) where {T}
     n_vars = length(fc.varnames)
@@ -225,10 +232,16 @@ struct FEVD{T<:AbstractFloat} <: AbstractFEVD
     shocks::Vector{String}
 end
 
-"""Bayesian FEVD with posterior quantiles."""
+"""
+Bayesian FEVD with posterior quantiles.
+
+Axis order matches [`FEVD`](@ref) / [`LPFEVD`](@ref) (#527):
+- `point_estimate`: (variable, shock, horizon)
+- `quantiles`: (variable, shock, horizon, quantile)
+"""
 struct BayesianFEVD{T<:AbstractFloat} <: AbstractFEVD
-    quantiles::Array{T,4}
-    point_estimate::Array{T,3}
+    quantiles::Array{T,4}          # (variable, shock, horizon, quantile)
+    point_estimate::Array{T,3}     # (variable, shock, horizon)
     horizon::Int
     variables::Vector{String}
     shocks::Vector{String}
@@ -258,7 +271,9 @@ Minnesota prior hyperparameters (Bańbura–Giannone–Reichlin stacked-dummy pa
 - `decay`  — lag decay; higher lags shrink toward zero faster (scaling `lag^decay`).
 - `lambda` — weight on the **sum-of-coefficients** prior (shrinks toward Σₗ Aₗ = I).
 - `mu`     — weight on the **co-persistence / dummy-initial-observation** prior.
-- `omega`  — weight on the prior for the residual covariance.
+- `omega`  — residual-covariance prior tightness: dummy rows are `diag(σ̂) / omega`, so
+             LARGER `omega` ⇒ LOOSER residual-covariance prior (same direction as `tau`/`lambda`/`mu`).
+             `omega ≤ 0` omits the covariance dummy block entirely.
 
 Reference-naming caveat (audit F-03): in Ferroni–Canova `BVAR_`/`rfvar3`, `lambda` is
 co-persistence and `mu` is own/sum-of-coefficients — i.e. our `lambda`/`mu` roles are SWAPPED

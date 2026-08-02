@@ -105,11 +105,13 @@ function table(f::BayesianFEVD{T}, var::Int;
     hs = isnothing(horizons) ? (1:f.horizon) : horizons
     n_shocks = length(f.shocks)
 
+    # Axis order unified with FEVD: (variable, shock, horizon) [#527]
     result = Matrix{T}(undef, length(hs), n_shocks + 1)
     for (i, h) in enumerate(hs)
         result[i, 1] = h
         for j in 1:n_shocks
-            result[i, j + 1] = stat == :mean ? f.point_estimate[h, var, j] : f.quantiles[h, var, j, stat]
+            result[i, j + 1] = stat == :mean ? f.point_estimate[var, j, h] :
+                                               f.quantiles[var, j, h, stat]
         end
     end
     result

@@ -696,18 +696,33 @@ using MacroEconometricModels
 
         Lambda_mean = dropdims(mean(bfavar.loadings_draws, dims=1), dims=1)
         r = bfavar.n_factors
+        n_key = bfavar.n_key
         key_set = Set(bfavar.Y_key_indices)
 
-        # Non-key variables should be mapped via loadings
+        # Non-key variables: Lambda * factor_irf + Lambda_y * y_irf (#525)
+        @test size(bfavar.Lambda_y) == (20, n_key)
         for i in 1:20
             if !(i in key_set)
                 for h in 1:10, j in 1:4
                     factor_irfs = irf_aug.point_estimate[h, 1:r, j]
-                    expected = dot(Lambda_mean[i, :], factor_irfs)
+                    y_irfs = irf_aug.point_estimate[h, (r+1):(r+n_key), j]
+                    expected = dot(Lambda_mean[i, :], factor_irfs) +
+                               dot(bfavar.Lambda_y[i, :], y_irfs)
                     @test isapprox(panel_irf.point_estimate[h, i, j], expected; atol=1e-10)
                 end
             end
         end
+    end
+
+    @testset "favar_panel_irf CI not inverted (#524)" begin
+        X, _ = make_favar_data(N=15, T_obs=120)
+        favar = estimate_favar(X, [1, 5], 2, 1)
+        irf_ci = irf(favar, 8; ci_type=:bootstrap, reps=30, seed=7)
+        panel = favar_panel_irf(favar, irf_ci)
+        @test all(panel.ci_lower .<= panel.ci_upper)
+        fc = forecast(favar, 4; ci_method=:bootstrap, reps=30)
+        panel_fc = favar_panel_forecast(favar, fc)
+        @test all(panel_fc.ci_lower .<= panel_fc.ci_upper)
     end
 
     @testset "_to_bvar_posterior conversion" begin

@@ -93,6 +93,8 @@ factors, and loadings.
 - `p::Int`: VAR lag order
 - `data::Matrix{T}`: Augmented VAR data [F, Y_key]
 - `varnames::Vector{String}`: VAR variable names
+- `Lambda_y::Matrix{T}`: N × n_key implied direct panel loadings on Y_key
+  (posterior-mean analogue of the two-step `FAVARModel.Lambda_y`; #525)
 """
 struct BayesianFAVAR{T<:AbstractFloat}
     B_draws::Array{T,3}
@@ -108,6 +110,17 @@ struct BayesianFAVAR{T<:AbstractFloat}
     p::Int
     data::Matrix{T}
     varnames::Vector{String}
+    Lambda_y::Matrix{T}
+end
+
+# Backward-compatible constructor (pre-#525, no Lambda_y → zeros)
+function BayesianFAVAR{T}(B_draws, Sigma_draws, factor_draws, loadings_draws, X_panel,
+                          panel_varnames, Y_key_indices, n_factors, n_key, n, p, data,
+                          varnames) where {T}
+    N = size(X_panel, 2)
+    BayesianFAVAR{T}(B_draws, Sigma_draws, factor_draws, loadings_draws, X_panel,
+                     panel_varnames, Y_key_indices, n_factors, n_key, n, p, data,
+                     varnames, zeros(T, N, n_key))
 end
 
 # =============================================================================

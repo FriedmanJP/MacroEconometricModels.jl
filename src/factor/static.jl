@@ -25,7 +25,8 @@ using LinearAlgebra, Statistics, StatsAPI
 
 Static factor model via PCA: Xₜ = Λ Fₜ + eₜ.
 
-Fields: X, factors, loadings, eigenvalues, explained_variance, cumulative_variance, r, standardized, block_names.
+Fields: X, factors, loadings, eigenvalues, explained_variance, cumulative_variance, r,
+standardized, block_names, varnames.
 """
 struct FactorModel{T<:AbstractFloat} <: AbstractFactorModel
     X::Matrix{T}
@@ -37,7 +38,15 @@ struct FactorModel{T<:AbstractFloat} <: AbstractFactorModel
     r::Int
     standardized::Bool
     block_names::Union{Vector{Symbol}, Nothing}
+    varnames::Vector{String}
 end
+
+# Backward-compatible constructor (pre-#538, no varnames)
+FactorModel{T}(X, factors, loadings, eigenvalues, explained_variance, cumulative_variance,
+               r, standardized, block_names) where {T} =
+    FactorModel{T}(X, factors, loadings, eigenvalues, explained_variance, cumulative_variance,
+                   r, standardized, block_names,
+                   ["Var $i" for i in 1:size(X, 2)])
 
 # =============================================================================
 # Static Factor Model Estimation
@@ -59,10 +68,13 @@ or via block-restricted EM when `blocks` is provided.
   When provided, each key is a block (factor) name and the value is a vector of variable
   indices that load on that factor. Variables not in a block have zero loadings on that
   factor. The number of blocks must equal `r`.
+- `varnames::Union{Nothing, Vector{String}}=nothing`: Names for the N panel variables
+  (defaults to `"Var 1"`, …). Used by `report` / loadings tables (#538).
 
 # Returns
 `FactorModel` containing factors, loadings, eigenvalues, and explained variance.
 When `blocks` is provided, `block_names` is set on the returned model.
+
 
 # Example
 ```julia
@@ -77,14 +89,18 @@ fm_restricted = estimate_factors(X, 2; blocks=blocks)
 """
 function estimate_factors(X::AbstractMatrix{T}, r::Int;
         standardize::Bool=true,
-        blocks::Union{Nothing, Dict{Symbol, Vector{Int}}}=nothing) where {T<:AbstractFloat}
+        blocks::Union{Nothing, Dict{Symbol, Vector{Int}}}=nothing,
+        varnames::Union{Nothing, Vector{String}}=nothing) where {T<:AbstractFloat}
     _validate_data(X, "X")
     T_obs, N = size(X)
     validate_factor_inputs(T_obs, N, r)
+    vn = something(varnames, ["Var $i" for i in 1:N])
+    length(vn) == N || throw(ArgumentError(
+        "varnames has $(length(vn)) entries but X has $N columns"))
 
     # Route to block-restricted EM if blocks provided
     if blocks !== nothing
-        return _estimate_restricted_em(X, r, blocks, standardize)
+        return _estimate_restricted_em(X, r, blocks, standardize, vn)
     end
 
     X_orig = copy(X)
@@ -110,7 +126,7 @@ function estimate_factors(X::AbstractMatrix{T}, r::Int;
     expl = λ / total
     cumul = cumsum(expl)
 
-    FactorModel{T}(X_orig, factors, loadings, λ, expl, cumul, r, standardize, nothing)
+    FactorModel{T}(X_orig, factors, loadings, λ, expl, cumul, r, standardize, nothing, vn)
 end
 
 @float_fallback estimate_factors X
@@ -120,7 +136,7 @@ end
 # =============================================================================
 
 """
-    _estimate_restricted_em(X, r, blocks, standardize; max_iter=500, tol=1e-6) -> FactorModel
+    _estimate_restricted_em(X, r, blocks, standardize, varnames; max_iter=500, tol=1e-6) -> FactorModel
 
 Estimate block-restricted factor model via EM algorithm.
 
@@ -135,9 +151,14 @@ enforces zero loadings outside each block.
    - E-step: F = X Λ (Λ'Λ)⁻¹ (posterior mean of factors given loadings)
    - M-step: Λ_new = (F'F)⁻¹ F'X, masked by R (zero out restricted entries)
 5. Convergence when max absolute change in Λ < tol
+
+The stored `explained_variance` retains the full-panel PC eigenvalue spectrum
+(length N) for API compatibility. Display uses per-block shares via
+`_block_explained_variance` so block names are not mislabelled (#526).
 """
 function _estimate_restricted_em(X::AbstractMatrix{T}, r::Int,
-        blocks::Dict{Symbol, Vector{Int}}, standardize::Bool;
+        blocks::Dict{Symbol, Vector{Int}}, standardize::Bool,
+        varnames::Vector{String}=String[];
         max_iter::Int=500, tol::T=T(1e-6)) where {T<:AbstractFloat}
     T_obs, N = size(X)
 
@@ -225,17 +246,37 @@ function _estimate_restricted_em(X::AbstractMatrix{T}, r::Int,
     ΛtΛ_inv = Matrix{T}(robust_inv(ΛtΛ))
     factors .= X_proc * Λ * ΛtΛ_inv
 
-    # Compute eigenvalues from factor covariance (for variance explained)
+    # Full-panel PC eigenvalue spectrum (length N) retained for diagnostics / API
+    # compatibility. Per-block shares are computed separately for display (#526).
     Σ_full = (X_proc'X_proc) / T_obs
     eig_full = eigen(Symmetric(Σ_full))
     idx_sort = sortperm(eig_full.values, rev=true)
     λ_all = eig_full.values[idx_sort]
-
     total_var = sum(λ_all)
     expl = λ_all / total_var
     cumul = cumsum(expl)
 
-    FactorModel{T}(X_orig, factors, Λ, λ_all, expl, cumul, r, standardize, block_names)
+    vn = isempty(varnames) ? ["Var $i" for i in 1:N] : varnames
+    FactorModel{T}(X_orig, factors, Λ, λ_all, expl, cumul, r, standardize, block_names, vn)
+end
+
+"""Per-block variance share: fraction of block-i variance fit by its restricted factor (#526)."""
+function _block_explained_variance(m::FactorModel{T}) where {T}
+    m.block_names === nothing && return m.explained_variance[1:m.r]
+    X_proc = m.standardized ? _standardize(m.X) : m.X
+    expl = zeros(T, m.r)
+    # Reconstruct block index sets from non-zero loadings
+    for f in 1:m.r
+        idx = findall(!iszero, @view m.loadings[:, f])
+        isempty(idx) && continue
+        Xb = @view X_proc[:, idx]
+        total_b = sum(abs2, Xb)
+        total_b > 0 || continue
+        fitted_b = m.factors[:, f] * m.loadings[idx, f]'
+        share = sum(abs2, fitted_b) / total_b
+        expl[f] = min(max(share, zero(T)), one(T))
+    end
+    expl
 end
 
 function Base.show(io::IO, m::FactorModel{T}) where {T}
@@ -256,27 +297,40 @@ function Base.show(io::IO, m::FactorModel{T}) where {T}
     # Variance explained
     n_show = min(m.r, 5)
     var_data = Matrix{Any}(undef, n_show, 3)
-    for i in 1:n_show
-        fname = m.block_names !== nothing ? string(m.block_names[i]) : "Factor $i"
-        var_data[i, 1] = fname
-        var_data[i, 2] = _fmt_pct(m.explained_variance[i])
-        var_data[i, 3] = _fmt_pct(m.cumulative_variance[i])
+    if m.block_names !== nothing
+        # Per-block shares (not panel-wide PC shares mislabelled with block names; #526)
+        block_expl = _block_explained_variance(m)
+        block_cumul = cumsum(block_expl)
+        for i in 1:n_show
+            var_data[i, 1] = string(m.block_names[i])
+            var_data[i, 2] = _fmt_pct(block_expl[i])
+            var_data[i, 3] = _fmt_pct(block_cumul[i])
+        end
+        var_title = "Variance Explained (per-block share)"
+    else
+        for i in 1:n_show
+            var_data[i, 1] = "Factor $i"
+            var_data[i, 2] = _fmt_pct(m.explained_variance[i])
+            var_data[i, 3] = _fmt_pct(m.cumulative_variance[i])
+        end
+        var_title = "Variance Explained"
     end
     _pretty_table(io, var_data;
-        title = "Variance Explained",
+        title = var_title,
         column_labels = ["", "Variance", "Cumulative"],
         alignment = [:l, :r, :r],
     )
     # Top loadings per factor (top 5 for up to 3 factors)
     n_factors_show = min(m.r, 3)
     n_top = min(5, N)
+    names = m.varnames
     for f in 1:n_factors_show
         loadings_f = m.loadings[:, f]
         sorted_idx = sortperm(abs.(loadings_f); rev=true)
         top_idx = sorted_idx[1:n_top]
         load_data = Matrix{Any}(undef, n_top, 2)
         for (row, idx) in enumerate(top_idx)
-            load_data[row, 1] = "Var $idx"
+            load_data[row, 1] = names[idx]
             load_data[row, 2] = _fmt(loadings_f[idx])   # sorted by |loading|; the sort key is internal (I01/T174)
         end
         ftitle = m.block_names !== nothing ? "Top Loadings — $(m.block_names[f])" : "Top Loadings — Factor $f"

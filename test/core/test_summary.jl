@@ -301,11 +301,11 @@ using Statistics
     # =================================================================
 
     @testset "BayesianFEVD" begin
-        # Construct a synthetic BayesianFEVD
+        # Construct a synthetic BayesianFEVD — axis order (variable, shock, horizon) (#527)
         H, n = 8, 2
         nq = 3
-        quantiles_arr = abs.(randn(H, n, n, nq))
-        mean_arr = abs.(randn(H, n, n))
+        quantiles_arr = abs.(randn(n, n, H, nq))
+        mean_arr = abs.(randn(n, n, H))
         vars = ["Var 1", "Var 2"]
         shocks = ["Shock 1", "Shock 2"]
         q_levels = [0.16, 0.5, 0.84]
@@ -1123,8 +1123,8 @@ using Statistics
     @testset "table() for BayesianFEVD quantile stat" begin
         H, n = 8, 2
         nq = 3
-        quantiles_arr = abs.(randn(H, n, n, nq))
-        mean_arr = abs.(randn(H, n, n))
+        quantiles_arr = abs.(randn(n, n, H, nq))
+        mean_arr = abs.(randn(n, n, H))
         vars = ["Var 1", "Var 2"]
         shocks = ["Shock 1", "Shock 2"]
         q_levels = [0.16, 0.5, 0.84]

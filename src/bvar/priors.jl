@@ -21,7 +21,8 @@ using Distributions: loggamma
 Generate Minnesota prior dummy observations (stacked-dummy / BGR parameterization).
 Hyperparameters (see [`MinnesotaHyperparameters`](@ref) for exact conventions): `tau`
 (inverse-tightness — larger ⇒ looser), `decay`, `lambda` (sum-of-coefficients), `mu`
-(co-persistence), `omega` (residual-covariance). Note `lambda`/`mu` roles are swapped relative to
+(co-persistence), `omega` (residual-covariance tightness — larger ⇒ looser; scales the
+covariance dummy block as `diag(σ̂)/omega`). Note `lambda`/`mu` roles are swapped relative to
 the reference `BVAR_`/`rfvar3` toolbox (audit F-03).
 """
 function gen_dummy_obs(Y::AbstractMatrix{T}, p::Int, hyper::MinnesotaHyperparameters) where {T<:AbstractFloat}
@@ -46,8 +47,10 @@ function gen_dummy_obs(Y::AbstractMatrix{T}, p::Int, hyper::MinnesotaHyperparame
     # Dummy initial observation (co-persistence)
     mu > 0 && (push!(blocks_Y, _dio_Y(n, y_bar, mu)); push!(blocks_X, _dio_X(n, p, k, y_bar, mu)))
 
-    # Covariance prior
-    omega > 0 && (push!(blocks_Y, diagm(sigmas)); push!(blocks_X, zeros(T, n, k)))
+    # Covariance prior (omega is a continuous weight / tightness, not a mere switch).
+    # Larger omega ⇒ looser residual-covariance prior (dummy rows divided by omega),
+    # matching the lambda/mu/tau convention. omega ≤ 0 omits the block (#529).
+    omega > 0 && (push!(blocks_Y, diagm(sigmas ./ omega)); push!(blocks_X, zeros(T, n, k)))
 
     vcat(blocks_Y...), vcat(blocks_X...)
 end

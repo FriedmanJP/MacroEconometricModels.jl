@@ -225,6 +225,7 @@ function forecast(model::VARModel{T}, h::Int;
     ci_lower = zeros(T, h, n)
     ci_upper = zeros(T, h, n)
 
+    sim_draws = nothing
     if ci_method == :bootstrap
         T_eff = effective_nobs(model)
         Y_init = model.Y[1:p, :]                     # first p obs seed the pseudo-sample
@@ -254,6 +255,7 @@ function forecast(model::VARModel{T}, h::Int;
             @warn "Only $rep/$reps $(stationary_only ? "stationary " : "")bootstrap forecast draws obtained after $attempts attempts"
             sim = sim[1:max(rep, 1), :, :]
         end
+        sim_draws = sim  # retain for panel-space quantile mapping (#524)
 
         alpha_half = (1 - T(conf_level)) / 2
         for hi in 1:h, j in 1:n
@@ -287,7 +289,7 @@ function forecast(model::VARModel{T}, h::Int;
         end
     end
 
-    VARForecast{T}(point, ci_lower, ci_upper, h, ci_method, T(conf_level), model.varnames)
+    VARForecast{T}(point, ci_lower, ci_upper, h, ci_method, T(conf_level), model.varnames, sim_draws)
 end
 
 """Select optimal lag order via information criterion (:aic, :bic, :hqic)."""

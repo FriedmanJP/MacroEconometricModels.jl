@@ -282,23 +282,24 @@ function Base.show(io::IO, irf::BayesianImpulseResponse{T}) where {T}
     _show_spec_table(io, "Bayesian Impulse Response Functions", spec_pairs)
 
     horizons_show = _select_horizons(H)
-    median_idx = nq >= 3 ? 2 : 1
-    q_label = _fmt_pct(irf.quantile_levels[median_idx]; digits=0)
+    # Honour the requested point estimate (mean/median stored in point_estimate),
+    # not the middle quantile level (#563).
+    pe_label = "Point"
 
     for j in 1:n_shocks
         data = Matrix{Any}(undef, n_vars, length(horizons_show) + 1)
         for v in 1:n_vars
             data[v, 1] = irf.variables[v]
             for (hi, h) in enumerate(horizons_show)
-                med = irf.quantiles[h, v, j, median_idx]
+                pe = irf.point_estimate[h, v, j]
                 lo, up = irf.quantiles[h, v, j, 1], irf.quantiles[h, v, j, nq]
                 sig = (lo > 0 || up < 0) ? "*" : ""
-                data[v, hi + 1] = string(_fmt(med), sig)
+                data[v, hi + 1] = string(_fmt(pe), sig)
             end
         end
 
         _pretty_table(io, data;
-            title = "Shock: $(irf.shocks[j]) ($q_label)",
+            title = "Shock: $(irf.shocks[j]) ($pe_label)",
             column_labels = vcat([""], ["h=$h" for h in horizons_show]),
             alignment = vcat([:l], fill(:r, length(horizons_show))),
         )
@@ -347,7 +348,8 @@ function Base.show(io::IO, f::BayesianFEVD{T}) where {T}
         for i in 1:n_vars
             data[i, 1] = f.variables[i]
             for j in 1:n_shocks
-                data[i, j + 1] = _fmt_pct(f.point_estimate[h, i, j])
+                # point_estimate is (variable, shock, horizon) — unified with FEVD (#527)
+                data[i, j + 1] = _fmt_pct(f.point_estimate[i, j, h])
             end
         end
 

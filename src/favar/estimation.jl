@@ -199,7 +199,8 @@ function estimate_favar(X::AbstractMatrix{T}, key_indices::Vector{Int}, r::Int, 
             result.n,
             result.p,
             result.data,
-            result.varnames
+            result.varnames,
+            result.Lambda_y
         )
     end
 
@@ -400,10 +401,13 @@ Bayesian FAVAR via Gibbs sampling (Bernanke, Boivin & Eliasz 2005, Section IV).
 Algorithm:
 1. Initialize factors via PCA
 2. Gibbs sampler iterates:
-   - Draw (B, Σ) | F, Y_key from the VAR posterior
+   - Draw (B, Σ) | F, Y_key from the Minnesota-augmented NIW VAR posterior
    - Draw Λ | F, X equation-by-equation
-   - Draw F | Λ, B, Σ, X, Y_key via regression posterior
+   - Draw F | Λ, B, Σ, X, Y_key via Carter–Kohn FFBS
 3. Store post-burnin draws
+
+The VAR block uses Minnesota dummy observations (`gen_dummy_obs`) rather than a flat
+NIW prior: on short samples a flat prior yields explosive posterior medians (#528).
 """
 function _estimate_favar_bayesian(X::Matrix{T}, Y_key::Matrix{T}, r::Int, p::Int,
     n_draws::Int, burnin::Int, pvn::Vector{String},
@@ -440,6 +444,9 @@ function _estimate_favar_bayesian(X::Matrix{T}, Y_key::Matrix{T}, r::Int, p::Int
         sigma2_e[j] = max(var(@view(resid_X[:, j])), T(1e-10))
     end
 
+    # Minnesota prior hyperparameters for the VAR block (BBE §IV informative prior; #528)
+    mn_hyper = MinnesotaHyperparameters()
+
     # Pre-allocate storage for posterior draws
     k = 1 + n_var * p  # number of coefficients per equation in VAR
     B_draws = Array{T,3}(undef, n_draws, k, n_var)
@@ -462,20 +469,22 @@ function _estimate_favar_bayesian(X::Matrix{T}, Y_key::Matrix{T}, r::Int, p::Int
             Y_aug[:, 1:r] = F_curr
             Y_aug[:, (r+1):n_var] = Y_key
 
-            # Draw (B, Σ) from the conjugate Normal–Inverse-Wishart posterior with a flat prior:
-            #   Σ ~ IW(T_eff, S),  vec(B) | Σ ~ N(vec(B_hat), Σ ⊗ (X'X)^{-1})
-            # reusing the BVAR direct-sampler formulas (S = residual SSR, B_hat = OLS).
-            var_model = estimate_var(Y_aug, p; check_stability=false, varnames=aug_varnames)
-            _, X_reg = construct_var_matrices(Y_aug, p)
-            T_eff_var = size(X_reg, 1)
-            XtX_inv = Matrix{T}(robust_inv(X_reg' * X_reg))
+            # Minnesota-augmented NIW posterior (not flat): dummy observations shrink
+            # toward unit-root / residual-scale targets and keep small-T draws stationary (#528).
+            Y_eff, X_reg = construct_var_matrices(Y_aug, p)
+            Y_d, X_d = gen_dummy_obs(Y_aug, p, mn_hyper)
+            Y_data = vcat(Y_eff, Y_d)
+            X_data = vcat(X_reg, X_d)
+            XtX = X_data' * X_data
+            XtX_inv = Matrix{T}(robust_inv(XtX))
             XtX_inv = T(0.5) * (XtX_inv + XtX_inv')
-            B_hat = Matrix{T}(var_model.B)
-            S_post = Matrix{T}(var_model.U' * var_model.U)
+            B_hat = XtX_inv * (X_data' * Y_data)
+            U_aug = Y_data - X_data * B_hat
+            S_post = Matrix{T}(U_aug' * U_aug)
             S_post = T(0.5) * (S_post + S_post')
-            # Flat-prior marginal: Σ ~ IW(T_eff - k, U'U). Integrating B out of the matrix-normal
-            # likelihood shifts the degrees of freedom by k = #regressors/equation (not T_eff).
-            nu_sigma = max(T_eff_var - k, n_var + 2)
+            T_data = size(Y_data, 1)
+            # Degrees of freedom after integrating B: T_data - k (augmented sample length).
+            nu_sigma = max(T_data - k, n_var + 2)
             Sigma_curr = _draw_inverse_wishart(nu_sigma, S_post, rng)
             randn!(rng, Z_Bdraw)
             B_curr = B_hat + safe_cholesky(XtX_inv) * Z_Bdraw * safe_cholesky(Sigma_curr)'
@@ -549,6 +558,12 @@ function _estimate_favar_bayesian(X::Matrix{T}, Y_key::Matrix{T}, r::Int, p::Int
     F_final = dropdims(mean(factor_draws, dims=1), dims=1)
     data_aug = hcat(F_final, Y_key)
 
+    # Implied direct Y_key loadings (two-step analogue on posterior means; #525):
+    # F_raw ≈ B_y' * Y_key + F_tilde  ⇒  X ≈ F_tilde Λ' + Y_key Λ_y' with Λ_y = Λ B_y'.
+    Lambda_mean = dropdims(mean(loadings_draws, dims=1), dims=1)  # N × r
+    _, B_y = _remove_double_counting(Matrix{T}(F_final), Y_key)
+    Lambda_y = Lambda_mean * B_y'   # N × n_key
+
     BayesianFAVAR{T}(
         B_draws,
         Sigma_draws,
@@ -562,6 +577,7 @@ function _estimate_favar_bayesian(X::Matrix{T}, Y_key::Matrix{T}, r::Int, p::Int
         n_var,
         p,
         data_aug,
-        aug_varnames
+        aug_varnames,
+        Lambda_y
     )
 end
