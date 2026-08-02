@@ -975,7 +975,7 @@ spec_rbc = @dsge begin
     Y[t] = A[t] * K[t-1]^α
     C[t] + K[t] = Y[t] + (1 - δ) * K[t-1]
     1 = β * (C[t] / C[t+1]) * (α * A[t+1] * K[t]^(α - 1) + 1 - δ)
-    A[t] = ρ * A[t-1] + σ * ε_A[t]
+    A[t] = A[t-1]^ρ * exp(σ * ε_A[t])
 
     steady_state = begin
         A_ss = 1.0

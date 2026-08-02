@@ -20,7 +20,7 @@ spec = @dsge begin
     Y[t] = A[t] * K[t-1]^α
     C[t] + K[t] = Y[t] + (1 - δ) * K[t-1]
     1 = β * (C[t] / C[t+1]) * (α * A[t+1] * K[t]^(α - 1) + 1 - δ)
-    A[t] = ρ * A[t-1] + σ * ε_A[t]
+    A[t] = A[t-1]^ρ * exp(σ * ε_A[t])
 
     steady_state = begin
         A_ss = 1.0
@@ -63,7 +63,7 @@ plot_result(decomp)
 round.(sqrt.(diag(Σ)); digits=4)   # unconditional std of Y, C, K, A
 ```
 
-A one-percent technology innovation generates a business cycle whose unconditional standard deviations are 10.7% for output, 5.4% for consumption, 103.3% for capital, and 2.3% for technology. Consumption is roughly half as volatile as output — the permanent-income smoothing that is the RBC model's signature — while the capital stock, integrating every past innovation, is an order of magnitude more volatile than either.
+The numbers are standard deviations in **levels**, not percentages: 0.1071 for output, 0.0540 for consumption, 1.0331 for capital, and 0.0229 for technology. Scaled by their steady states (3.70, 2.75, 37.99, 1.00) they become 2.9%, 2.0%, 2.7% and 2.3%. Both readings matter and they say different things. In levels, capital swings by an order of magnitude more than output, because it integrates every past innovation. Relative to its own mean, capital is the *smoother* series — the household spreads a technology windfall over the whole future rather than spending it, which is why consumption is half as volatile as output in levels and the least volatile of the four in relative terms. That is the permanent-income smoothing that is the RBC model's signature.
 
 **Recipe 4: Map the determinacy region of a policy parameter**
 
@@ -598,7 +598,7 @@ The three solvers agree to ``1.2 \times 10^{-12}``, the model is determinate, an
 
 4. **Expecting `solve` to mutate `spec`**: it does not. `solve` computes the steady state into its own copy, so `spec.steady_state` is still empty afterwards. `linearize` and `perturbation_solver` require `spec = compute_steady_state(spec)` first; only `solve` handles it internally.
 
-5. **A steady-state block that is not a steady state**: `compute_steady_state` with an explicit `steady_state` block accepts the values you supply without checking that they zero the residuals. Linearizing around a non-stationary point yields a system whose constant is silently assumed to be zero. Verify the residuals at your declared steady state before trusting the solution.
+5. **A steady-state block that is not a steady state**: `compute_steady_state` with an explicit `steady_state` block accepts the values you supply without checking that they zero the residuals — only the numerical path verifies them. Linearizing around a non-stationary point yields a system whose constant ``C`` is silently assumed to be zero, so the first-order solution looks entirely healthy while every higher-order and global solver expands around the wrong point. Verify the residuals at your declared steady state before trusting the solution; see [Analytical Steady State](@ref) for the check.
 
 6. **Explosive simulation paths**: `simulate` does not check stability during simulation. If the model sits on the boundary of determinacy, numerical error can produce slowly diverging paths. Verify `is_stable(sol)` before long simulations.
 

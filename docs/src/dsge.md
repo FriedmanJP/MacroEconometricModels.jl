@@ -24,7 +24,7 @@ spec = @dsge begin
     Y[t] = A[t] * K[t-1]^α
     C[t] + K[t] = Y[t] + (1 - δ) * K[t-1]
     1 = β * (C[t] / C[t+1]) * (α * A[t+1] * K[t]^(α - 1) + 1 - δ)
-    A[t] = ρ * A[t-1] + σ * ε_A[t]
+    A[t] = A[t-1]^ρ * exp(σ * ε_A[t])
 
     steady_state = begin
         A_ss = 1.0
@@ -113,7 +113,7 @@ spec_demo = @dsge begin
     Y[t] = A[t] * K[t-1]^α
     C[t] + K[t] = Y[t] + (1 - δ) * K[t-1]
     1 = β * (C[t] / C[t+1]) * (α * A[t+1] * K[t]^(α - 1) + 1 - δ)
-    A[t] = ρ * A[t-1] + σ * ε_A[t]
+    A[t] = A[t-1]^ρ * exp(σ * ε_A[t])
 end
 ```
 
@@ -196,7 +196,17 @@ The solver converges to the steady state from a default initial guess of ones. F
 
 ### Analytical Steady State
 
-For models where the steady state has a closed-form solution, specify it in a `steady_state = begin ... end` block. The block must return a vector matching the endogenous variable ordering, as in the Quick Start model above. When the block is provided, `compute_steady_state` (or `solve`) uses it directly and validates the result against the equations. The analytical path is faster and avoids numerical convergence issues, but the user is responsible for correctness --- the validator checks that ``\|f(\bar{y})\| < 10^{-10}``.
+For models where the steady state has a closed-form solution, specify it in a `steady_state = begin ... end` block. The block must return a vector matching the endogenous variable ordering, as in the Quick Start model above. When the block is provided, `compute_steady_state` (or `solve`) uses it directly. The analytical path is faster and avoids numerical convergence issues, at the cost of shifting correctness onto the modeller.
+
+!!! warning "The analytical path is not validated"
+    The numerical route throws a `DSGESolveError` when ``\|f(\bar{y})\|_\infty > 10^{-6}``; an analytical `steady_state` block gets **no such check**. Linearizing around a point that is not a steady state produces a system whose constant is silently taken to be zero, so the first-order solution looks healthy while every higher-order and global solver expands around the wrong point. Verify it yourself --- every entry must be zero:
+
+    ```julia
+    ss = spec.steady_state
+    [f(ss, ss, ss, zeros(spec.n_exog), spec.param_values) for f in spec.residual_fns]
+    ```
+
+The usual way to fail that check is declaring ``\bar{A} = 1`` for a technology process written in levels as `A[t] = ρ*A[t-1] + σ*ε_A[t]`, whose actual steady state is 0. Writing it as `A[t] = A[t-1]^ρ * exp(σ*ε_A[t])` --- the log-AR(1)-in-levels form used by the RBC model throughout these pages --- makes ``\bar{A} = 1`` exact while leaving the first-order dynamics identical.
 
 ### Constrained Steady State
 

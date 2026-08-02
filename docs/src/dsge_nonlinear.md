@@ -19,7 +19,7 @@ spec = @dsge begin
     Y[t] = A[t] * K[t-1]^α
     C[t] + K[t] = Y[t] + (1 - δ) * K[t-1]
     1 = β * (C[t] / C[t+1]) * (α * A[t+1] * K[t]^(α - 1) + 1 - δ)
-    A[t] = ρ * A[t-1] + σ * ε_A[t]
+    A[t] = A[t-1]^ρ * exp(σ * ε_A[t])
     steady_state = begin
         A_ss = 1.0
         K_ss = (α * β / (1 - β * (1 - δ)))^(1 / (1 - α))
@@ -61,7 +61,7 @@ err = max_euler_error(proj; n_test=1000, rng=MersenneTwister(42))
  nodes = size(proj.collocation_nodes, 1), max_euler_error = err)
 ```
 
-Gauss-Newton drives the collocation residual to zero in 26 iterations on a 36-node tensor grid, and the resulting policy has a maximum Euler error of ``2.2 \times 10^{-4}`` — ``\log_{10}`` of ``-3.7``, "good" on the usual accuracy scale. Note that the residual at the nodes and the Euler error away from them are different quantities; the second is the one that measures accuracy.
+Gauss-Newton drives the collocation residual to zero in 6 iterations on a 36-node tensor grid, and the resulting policy has a maximum Euler error of ``4.9 \times 10^{-4}`` — ``\log_{10}`` of ``-3.3``, "good" on the usual accuracy scale. Note that the residual at the nodes and the Euler error away from them are different quantities; the second is the one that measures accuracy.
 
 **Recipe 4: `vfi_solver` (Euler time iteration) with Howard-style re-solves and Anderson acceleration**
 
@@ -70,7 +70,7 @@ vfi = vfi_solver(spec; degree=5, howard_steps=5, anderson_m=3, max_iter=500)
 report(vfi)
 ```
 
-Howard re-solves and Anderson mixing together cut the iteration count to 19. Neither acceleration works alone on this model: plain time iteration and Anderson-only both exhaust `max_iter=500` without converging, while `howard_steps=5` on its own needs 434 iterations. The combination is what makes the solver practical.
+Howard re-solves and Anderson mixing together cut the iteration count to 23, against 161 for plain time iteration. Each acceleration helps on its own — Anderson alone needs 126 iterations, `howard_steps=5` alone 34 — and the two compose: `howard_steps=10` with the same Anderson depth finishes in 14.
 
 ---
 
@@ -98,7 +98,7 @@ psol = perturbation_solver(spec; order=2)
  controls = spec.varnames[psol.control_indices], g_sigma_sigma = psol.gσσ)
 ```
 
-The variance corrections are the whole point of going to second order. Capital carries ``h_{\sigma\sigma} = +0.0145`` and consumption ``g_{\sigma\sigma} = -0.0145``: facing technology risk, the household holds *more* capital and consumes *less* than the deterministic steady state prescribes. That is the precautionary savings motive, and it is identically zero at first order. Technology and output take no correction, because neither is a choice made under uncertainty — one is exogenous, the other a static function of predetermined inputs.
+The variance corrections are the whole point of going to second order. Capital carries ``h_{\sigma\sigma} = +0.0175`` and consumption ``g_{\sigma\sigma} = -0.0175``: facing technology risk, the household holds *more* capital and consumes *less* than the deterministic steady state prescribes. That is the precautionary savings motive, and it is identically zero at first order. Technology and output take no correction, because neither is a choice made under uncertainty — one is exogenous, the other a static function of predetermined inputs.
 
 | Keyword | Type | Default | Description |
 |---------|------|---------|-------------|
@@ -459,7 +459,7 @@ where:
 
 Setting ``\mu_k = \mu`` for every ``k`` recovers the isotropic rule exactly, so anisotropy is a strict generalization. The package derives the grid, the polynomial index set, and the Smolyak combination coefficients from this same rule.
 
-In the stochastic growth model the capital domain is ``[34.19, 41.79]`` while productivity spans only ``[0.90, 1.10]``, and the policy is far more curved in ``K``. Spending the level budget accordingly costs nothing and buys three orders of magnitude:
+Whether it pays is an empirical question, and the way to answer it is to hold the node count fixed and compare Euler errors. In the stochastic growth model the capital domain is ``[34.19, 41.79]`` while productivity spans only ``[0.90, 1.10]``, which invites the guess that capital deserves the larger share of the level budget:
 
 ```@example dsge_nonlinear
 iso = collocation_solver(spec; grid=:smolyak, smolyak_mu=3, max_iter=200)
@@ -471,7 +471,7 @@ ani = collocation_solver(spec; grid=:smolyak, smolyak_mu=[4, 2], max_iter=200)
  euler_ani  = max_euler_error(ani; n_test=500, rng=MersenneTwister(42)))
 ```
 
-Both grids carry 29 nodes, but the anisotropic one reaches a max Euler error of ``2.1 \times 10^{-4}`` against ``6.4 \times 10^{-1}`` for the isotropic grid. The isotropic set spends half its levels resolving a productivity direction that is nearly linear, and it has too few cross-terms left to represent the curvature in ``K``. The state ordering is `sol.state_indices`, so `spec.varnames[iso.state_indices]` names the entries of the level vector.
+The guess is wrong. Both grids carry 29 nodes, and the anisotropic one is the *less* accurate of the two: ``7.4 \times 10^{-4}`` against ``6.3 \times 10^{-4}`` for the isotropic grid. A wide domain is not the same thing as a curved policy, and on this calibration the two states need comparable resolution — shifting levels from productivity to capital sacrifices cross-terms without buying anything back. Raising the isotropic level to ``\mu = 4`` (65 nodes) reaches ``3.4 \times 10^{-4}``; more nodes help here, redistributing them does not. Anisotropy earns its keep when a state is genuinely near-linear — a slow-moving demographic or policy state alongside a sharply curved asset holding — and the way to find out is the comparison above, not the domain widths. The state ordering is `sol.state_indices`, so `spec.varnames[iso.state_indices]` names the entries of the level vector.
 
 ### Adaptive Refinement
 
@@ -486,7 +486,7 @@ Because the refined index set is a superset of the old one, the warm start is ex
 
 ```@example dsge_nonlinear
 ada = collocation_solver(spec; grid=:smolyak, smolyak_mu=1, adaptive=true,
-                         euler_tol=1e-4, max_nodes=300, max_refinements=12,
+                         euler_tol=1e-3, max_nodes=300, max_refinements=12,
                          rng=MersenneTwister(42))
 
 (nodes       = size(ada.collocation_nodes, 1),
@@ -495,10 +495,10 @@ ada = collocation_solver(spec; grid=:smolyak, smolyak_mu=1, adaptive=true,
  levels      = vec(maximum(ada.smolyak_levels; dims=1)))
 ```
 
-Refinement grows the 5-node ``\mu = 1`` grid into a 57-node grid whose per-state levels are ``(4, 3)`` — it spends more on capital than on productivity without being told to — and reaches a max Euler error of ``7.4 \times 10^{-5}``, below the ``10^{-4}`` target. The hand-tuned ``\boldsymbol{\mu} = (4, 2)`` grid above is the more economical of the two at 29 nodes; adaptivity trades nodes for not having to know where the curvature is.
+Five refinement rounds grow the 5-node ``\mu = 1`` grid into a 21-node grid with level 2 in both states, reaching a max Euler error of ``6.3 \times 10^{-4}`` and stopping there because the ``10^{-3}`` target is met. The refiner arrives unprompted at the same verdict the hand comparison reached — the two states want equal resolution — and it does so at 21 nodes rather than the 29 the isotropic ``\mu = 3`` grid spends for comparable accuracy. That is what adaptivity buys: not knowing where the curvature is in advance.
 
 !!! warning "`residual_norm` is not accuracy"
-    `residual_norm` measures the fit **at the collocation nodes only**, where the solver forces it to zero. The isotropic ``\mu = 3`` solve above converges to ``\|R\| \approx 7 \times 10^{-11}`` and still has a max Euler error of ``0.64`` --- the polynomial oscillates between nodes. Always report `max_euler_error`, which samples the domain uniformly. This is why `adaptive=true` targets `euler_tol` rather than `tol`.
+    `residual_norm` measures the fit **at the collocation nodes only**, where the solver forces it to zero. The isotropic ``\mu = 3`` solve above converges to ``\|R\| \approx 6 \times 10^{-14}`` and still has a max Euler error of ``6.3 \times 10^{-4}`` --- ten orders of magnitude apart, because the polynomial is pinned only at the nodes and free between them. Always report `max_euler_error`, which samples the domain uniformly. This is why `adaptive=true` targets `euler_tol` rather than `tol`.
 
 ### Evaluating the Policy Function
 
@@ -556,7 +556,7 @@ pfi = pfi_solver(spec; degree=5, damping=0.5, anderson_m=3, max_iter=500)
  residual_norm = pfi.residual_norm, method = pfi.method)
 ```
 
-On this calibration PFI does **not** converge: it exhausts all 500 iterations at a policy sup-norm of ``2.8 \times 10^{-3}``, four orders above the ``10^{-8}`` target. Raising `max_iter` to 1000 only reaches ``2.4 \times 10^{-3}`` and no combination of `damping` and `anderson_m` closes the gap. The `converged` flag is the field to check — a `ProjectionSolution` is returned either way, and an unconverged policy will quietly produce wrong IRFs and moments downstream.
+PFI reaches the ``10^{-8}`` sup-norm target in 223 iterations here — roughly forty times the 6 Gauss-Newton steps collocation needs on the same grid, which is the price of a first-order fixed point against a Newton method. Damping is what costs the iterations: `damping=0.5` halves every update, and dropping it (`damping=1.0`) finishes in 126. The `converged` flag is the field to check regardless — a `ProjectionSolution` is returned either way, and a policy that stopped short of tolerance will quietly produce wrong IRFs and moments downstream.
 
 | Keyword | Type | Default | Description |
 |---------|------|---------|-------------|
@@ -625,7 +625,7 @@ vfi_plain = vfi_solver(spec; degree=5, max_iter=500)
  residual_norm = vfi_plain.residual_norm)
 ```
 
-Unaccelerated time iteration is not viable here: it runs out its 500-step budget at a sup-norm of ``4.9 \times 10^{-3}``. The accelerations below are not a convenience on this model, they are the difference between a solution and none.
+Unaccelerated time iteration converges, but it takes 161 passes over the grid to do it, and every pass solves a nonlinear system at each of the 36 nodes. The accelerations below cut that by an order of magnitude at no cost in accuracy.
 
 | Keyword | Type | Default | Description |
 |---------|------|---------|-------------|
@@ -653,21 +653,21 @@ vfi_howard = vfi_solver(spec; degree=5, howard_steps=5, max_iter=500)
 (converged = vfi_howard.converged, iterations = vfi_howard.iterations)
 ```
 
-Five Howard steps turn a non-converging solve into one that finishes in 434 iterations. Adding `anderson_m=3` on top cuts that to 19, and `howard_steps=10` with the same Anderson depth reaches 13 — the two accelerations are complementary, and neither substitutes for the other.
+Five Howard steps cut the plain solve from 161 iterations to 34. Adding `anderson_m=3` on top brings it to 23, and `howard_steps=10` with the same Anderson depth reaches 14 — the two accelerations are complementary, and neither substitutes for the other.
 
 ### VFI vs PFI vs Collocation
 
-All three global solvers return `ProjectionSolution{T}` and share the same post-solution API (`evaluate_policy`, `simulate`, `irf`, `max_euler_error`). They differ in convergence behaviour:
+All three global solvers return `ProjectionSolution{T}` and share the same post-solution API (`evaluate_policy`, `simulate`, `irf`, `max_euler_error`). They differ in how they get to the fixed point:
 
 - **Collocation** (Gauss-Newton on the residual vector): fastest for smooth problems, but can stall at local minima
 - **PFI** (fixed point on the Euler equation): more robust in the presence of kinks, but needs a good initialization
-- **`vfi_solver`** (the same fixed point, plus Howard and Anderson acceleration): converges here where PFI does not
+- **`vfi_solver`** (the same fixed point, plus Howard and Anderson acceleration): the cheapest of the two iterative routes
 
-The three do **not** have to agree, and on this calibration they do not:
+Run on the same degree-5 grid, all three converge, and they converge to the same policy:
 
 ```@example dsge_nonlinear
 sol_vfi  = vfi_solver(spec; degree=5, howard_steps=5, anderson_m=3, max_iter=500)
-sol_pfi  = pfi_solver(spec; degree=5, damping=0.5, max_iter=200)
+sol_pfi  = pfi_solver(spec; degree=5, damping=0.5, max_iter=500)
 sol_proj = collocation_solver(spec; degree=5, max_iter=200)
 
 [(m = s.method, converged = s.converged,
@@ -675,7 +675,10 @@ sol_proj = collocation_solver(spec; degree=5, max_iter=200)
  for s in (sol_proj, sol_pfi, sol_vfi)]
 ```
 
-Collocation reaches a maximum Euler error of ``2.2 \times 10^{-4}``, the unconverged PFI solve ``3.8 \times 10^{-3}``, and the converged time-iteration solve ``9.2 \times 10^{-3}``. Note that the ranking does **not** follow the convergence flags: PFI stopped short of its tolerance and is still the more accurate of the two iterative solves. `converged` reports that the coefficient update fell below `tol`, which is a statement about the iteration, not about how well the resulting policy satisfies the Euler equation between the nodes. Comparing solvers by whether their policies coincide is the wrong test; compare `max_euler_error`, which scores each policy against the equilibrium conditions themselves.
+All three land on a maximum Euler error of ``4.93 \times 10^{-4}``, agreeing to six significant figures while their iteration counts differ by a factor of fifty (6 for collocation, 295 for PFI, 23 for accelerated time iteration). That is the useful lesson: on a smooth problem the **basis sets the accuracy and the solver sets the cost**. Raising `degree` from 5 to 7 moves all three to ``2.00 \times 10^{-4}``, again agreeing to six figures; switching solver at fixed degree changes nothing but the runtime. Three independent routes agreeing to six digits is also the strongest available evidence that the policy is right — but agreement is a cross-check, not an accuracy measure. `converged` reports that the coefficient update fell below `tol`, which is a statement about the iteration; `max_euler_error` is what scores a policy against the equilibrium conditions themselves.
+
+!!! warning "`max_iter` is part of the comparison"
+    PFI needs 295 iterations here at `damping=0.5`. Left at the `max_iter=200` a casual benchmark might use, it stops early and reports `converged=false` with a sup-norm of ``1.2 \times 10^{-7}`` — close enough to look usable, far enough to be a different policy. Give every solver the budget it needs before comparing them, and check `converged` on each.
 
 ---
 
@@ -778,7 +781,7 @@ mc = analytical_moments(psol2; lags=1)          # default :covariance format
 
 The `:gmm` format returns 18 entries against 14 for `:covariance` at one lag: it carries the mean shifts that second-order perturbation induces, which the covariance format discards. Use `:gmm` when the estimation targets include the stochastic steady-state shift itself, `:covariance` when matching second moments against `autocovariance_moments`.
 
-Both **order 2 and order 3** compute the default `:covariance` format from this closed form; neither draws a shock. Comparing the order-2 covariance moments against the first-order values above shows the two agree to roughly ``10^{-5}`` on this calibration — the risk correction shifts the mean far more than it shifts the second moments.
+Both **order 2 and order 3** compute the default `:covariance` format from this closed form; neither draws a shock. Comparing the order-2 covariance moments against the first-order values above shows the two agree to ``5 \times 10^{-5}`` on this calibration — the risk correction shifts the mean far more than it shifts the second moments.
 
 ### Order-3 Moments Without Simulation
 
@@ -862,7 +865,7 @@ plot_result(girf)
 <iframe src="../assets/plots/dsge_girf.html" width="100%" height="500" frameborder="0" style="border:1px solid #ddd;border-radius:4px;"></iframe>
 ```
 
-The second-order variance correction shifts the stochastic steady state of capital up by ``+0.0145`` and consumption down by the same amount: risk-averse agents over-accumulate capital as a buffer against productivity shocks, and pay for it with lower average consumption. Third-order perturbation adds the ``f_{\sigma\sigma v}`` term, which makes that precautionary wedge state-dependent — stronger when capital is scarce than when it is abundant. Collocation converges on this model and reaches a maximum Euler error of ``2.2 \times 10^{-4}``, against ``9.2 \times 10^{-3}`` for accelerated time iteration; both are usable, but the projection solution is roughly forty times more accurate here.
+The second-order variance correction shifts the stochastic steady state of capital up by ``+0.0175`` and consumption down by the same amount: risk-averse agents over-accumulate capital as a buffer against productivity shocks, and pay for it with lower average consumption. Third-order perturbation adds the ``f_{\sigma\sigma v}`` term, which makes that precautionary wedge state-dependent — stronger when capital is scarce than when it is abundant. Collocation and accelerated time iteration both converge and both reach a maximum Euler error of ``4.93 \times 10^{-4}``: on a problem this smooth the two routes find the same degree-5 policy, and the choice between them is a choice about cost, not accuracy.
 
 ---
 
@@ -872,21 +875,21 @@ The second-order variance correction shifts the stochastic steady state of capit
 
 2. **Tensor grids in high dimensions**: A tensor grid with degree 5 and ``n_x = 6`` states requires ``6^6 = 46{,}656`` nodes. Use `grid=:smolyak` for ``n_x > 4``.
 
-3. **Poor Euler errors**: If `max_euler_error` returns values above ``10^{-2}``, increase the polynomial `degree`, widen the state bounds via the `scale` parameter, or switch solver. On a Smolyak grid, raise the level only in the states that need it (`smolyak_mu=[4, 2]`) or let `adaptive=true` find them.
+3. **Poor Euler errors**: If `max_euler_error` returns values above ``10^{-2}``, increase the polynomial `degree` or widen the state bounds via the `scale` parameter. Switching solver will not help — on a smooth model the three global solvers reach the same accuracy at the same degree. On a Smolyak grid, raise the overall level or let `adaptive=true` decide which states get it; a hand-chosen `smolyak_mu` vector is as likely to hurt as to help unless you have measured the curvature.
 
-4. **Ignoring the `converged` flag**: every global solver returns a `ProjectionSolution` whether or not it converged. PFI exhausts `max_iter` on the RBC model above at a sup-norm of ``2.8 \times 10^{-3}`` and still hands back a usable-looking policy. Check `sol.converged` before trusting a global solution — and note the converse, that `converged=true` is a statement about the iteration stopping, not a certificate of accuracy.
+4. **Ignoring the `converged` flag**: every global solver returns a `ProjectionSolution` whether or not it converged. PFI needs 295 iterations on the RBC model above at `damping=0.5`; capped at `max_iter=200` it stops at a sup-norm of ``1.2 \times 10^{-7}`` and still hands back a usable-looking policy. Check `sol.converged` before trusting a global solution — and note the converse, that `converged=true` is a statement about the iteration stopping, not a certificate of accuracy.
 
-5. **Comparing solvers by whether their policies agree**: two unconverged solvers disagreeing tells you nothing about which is right, and two converged ones can differ by more than either's error. `max_euler_error` is the comparison that means something, because it scores each policy against the equilibrium conditions rather than against a rival approximation.
+5. **Comparing solvers by whether their policies agree**: two unconverged solvers disagreeing tells you nothing about which is right, and two converged ones can differ by more than either's error. Agreement is a cross-check; `max_euler_error` is the comparison that means something, because it scores each policy against the equilibrium conditions rather than against a rival approximation.
 
 6. **Non-convergence of collocation**: The Gauss-Newton solver uses backtracking line search but can stall at local minima. Warm-start with `initial_coeffs` from a lower-degree solution.
 
 7. **Lyapunov equation instability**: `solve_lyapunov` throws an error if the first-order solution has eigenvalues on or outside the unit circle. Check determinacy with `is_determined(sol)` before computing moments.
 
-8. **Expecting one acceleration to be enough**: `howard_steps` and `anderson_m` are complementary. On the RBC model neither alone converges `vfi_solver` within 500 iterations except `howard_steps=5` at 434; together (`howard_steps=5, anderson_m=3`) they finish in 19.
+8. **Expecting one acceleration to be enough**: `howard_steps` and `anderson_m` are complementary. On the RBC model plain time iteration takes 161 passes, `anderson_m=3` alone 126, and `howard_steps=5` alone 34; together (`howard_steps=5, anderson_m=3`) they finish in 23, and `howard_steps=10` with the same depth in 14.
 
 9. **Unseeded Monte Carlo**: `max_euler_error`, `irf(...; irf_type=:girf)` and `simulate` all draw from the global RNG by default. Pass `rng=MersenneTwister(...)` or `shock_draws` whenever a reported number must be reproducible.
 
-10. **Trusting `residual_norm`**: A converged collocation solve drives ``\|R\|`` to zero *at the nodes* and says nothing about the points in between. The isotropic ``\mu = 3`` grid in [Anisotropic Smolyak Grids](@ref) reaches ``\|R\| \approx 7 \times 10^{-11}`` with a max Euler error of ``0.64``. Report `max_euler_error`, or set `adaptive=true` and read `sol.euler_error`.
+10. **Trusting `residual_norm`**: A converged collocation solve drives ``\|R\|`` to zero *at the nodes* and says nothing about the points in between. The isotropic ``\mu = 3`` grid in [Anisotropic Smolyak Grids](@ref) reaches ``\|R\| \approx 6 \times 10^{-14}`` with a max Euler error of ``6.3 \times 10^{-4}`` — ten orders of magnitude apart. Report `max_euler_error`, or set `adaptive=true` and read `sol.euler_error`.
 
 11. **`adaptive=true` on a tensor grid**: Refinement grows a Smolyak level set, so it throws an `ArgumentError` when `grid=:tensor` is requested explicitly. Leave `grid=:auto`, which upgrades to `:smolyak` automatically.
 
