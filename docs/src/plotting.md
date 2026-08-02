@@ -80,43 +80,59 @@ The keyword vocabulary is standardized — these names carry these exact meaning
 | `title` | `String` | `""` | Override the auto-generated figure title |
 | `save_path` | `String` / `nothing` | `nothing` | Also write the HTML to this path |
 | `history` / `n_history` | `Vector` / `Int` | `nothing` / `50` | Prepend observed history to a forecast fan |
-| `stat` | `Symbol` | `:mean` | Posterior central line (`:mean` or `:median`) on Bayesian IRF/FEVD/HD |
+| `stat` | `Symbol` | type-specific | Posterior central line (`:mean` or `:median`) on Bayesian IRF/FEVD/HD |
 
 **Name-and-index selection.** `var`, `shock`, and `vars` accept an `Int` position or a `String` name wherever the result stores names. An out-of-range index or an unknown name raises an `ArgumentError` rather than a downstream `BoundsError`.
 
 **`save_path` semantics.** When given, `plot_result` writes the file and still returns the `PlotOutput`; it never opens a browser implicitly — that is `display_plot`'s job.
 
+**`stat` defaults split by object.** `BayesianImpulseResponse` and `BayesianDSGESimulation` centre their fans on the posterior **median**; `BayesianFEVD` and `BayesianHistoricalDecomposition` centre theirs on the posterior **mean**. Each accepts the other value, so pass `stat` explicitly whenever the central line is compared across exhibits.
+
+The docstrings for `plot_result`, `PlotOutput`, `save_plot`, and `display_plot` are catalogued on the [Visualization API](@ref api_visualization) page. Rendering is orthogonal to result display: `set_display_backend`, `with_display_backend`, and the `table`/`long_table` tidy exports on the [Utilities & Display API](@ref api_utilities) page govern how `report()` and tabular output appear, and never affect `plot_result`.
+
 ---
 
 ## Type-specific views and keywords
 
-Results that carry more than one natural exhibit dispatch on `view::Symbol`. Passing a `view` a type does not define raises an `ArgumentError` that lists the accepted values, so the valid set is always discoverable. The most common multi-view types:
+Results that carry more than one natural exhibit dispatch on `view::Symbol`. Passing a `view` a type does not define raises an `ArgumentError` that lists the accepted values, so the valid set is always discoverable.
 
 | Result type | `view=` values |
 |-------------|----------------|
-| `HASteadyState` | `:distribution` (default), `:lorenz`, `:policy` |
+| `HASteadyState` | `:default` / `:distribution` (default), `:lorenz`, `:policy` |
 | `HADSGESolution` | `:distribution_dynamics` (default; alias `:distribution`), `:inequality` |
+| `CTSteadyState` | `:distribution` (default), `:policy`, `:lorenz` |
+| `CTTwoAssetSolution` | `:consumption` (default), `:density`, `:deposit`, `:liquid_drift`, `:illiquid_drift` |
 | `NowcastResult` | `:default`, `:heatmap`, `:contributions` |
 | `NowcastNews` | `:releases` (default), `:groups`, `:individual` |
 | `PVARModel` | `:oirf` (default), `:girf`, `:fevd`, `:stability` |
-| `CTSteadyState` | `:distribution` (default), `:policy`, `:lorenz` |
-| `CTTwoAssetSolution` | `:consumption`, `:density`, `:deposit`, `:liquid_drift`, `:illiquid_drift` |
 | `MarkovSwitchingSVARResult` | `:regimes` (default), `:B0`, `:transition` |
 | `ICASVARResult` | `:mixing` (default), `:unmixing`, `:shocks` |
 | `GARCHSVARResult` | `:variance` (default), `:shocks` |
-| GARCH-family models | `:default`, `:diagnostics`, `:news_impact` |
+| `AbstractARIMAModel` | `:fit` (default), `:resid`, `:roots`, `:diagnostics` |
+| `ARIMAOrderSelection` | `:aic` (default), `:bic` |
+| `GARCHModel`, `EGARCHModel`, `GJRGARCHModel`, `IGARCHModel`, `APARCHModel` | `:default`, `:diagnostics`, `:news_impact` |
+| `ARCHModel`, `FIGARCHModel`, `FIEGARCHModel`, `SVModel` | `:default`, `:diagnostics` |
+| `CGARCHModel` | `:components` (default), `:default`, `:diagnostics`, `:news_impact` |
+| `GarchMidasModel` | `:components` (default), `:weights`, `:diagnostics` |
+| `MGARCHModel` | `:correlations` (default), `:covariance_heatmap` |
+| `MidasModel` | `:weights` (default), `:fit`, `:diagnostics` |
+| `ThresholdModel` | `:regimes` (default), `:ssr`, `:diagnostics` |
+| `STARModel` | `:transition` (default), `:weights`, `:diagnostics` |
+| `MSRegModel` | `:probabilities` (default), `:filtered`, `:diagnostics` |
+| `LPModel`, `LPIVModel` | `:irf` (default), `:diagnostics` |
+| `PanelRegModel`, `PanelIVModel` | `:coef` (default), `:diagnostics` |
 | `PerfectForesightPath` | `:levels` (default), `:deviations` |
 | `BaiPerronResult` | `:criteria` (default), `:breaks` |
 | `HeckmanModel` | `:outcome` (default), `:selection` |
 | `ForecastEvaluation` | `:metrics` (default), `:theil` |
-| `TimeSeriesData` | `:line` (default), `:corr` |
-| `CrossSectionData` | `:hist` (default), `:corr`, `:binscatter` |
-| `PanelData` | `:lines` (default), `:binscatter` |
-| `BVARPosterior`, `BayesianDSGE` | `:trace` |
+| `TimeSeriesData` | `:line` (default), `:scatter`, `:hist`, `:density`, `:corr`, `:growth`, `:binscatter` |
+| `CrossSectionData` | `:hist` (default), `:density`, `:scatter`, `:corr`, `:pairs`, `:binscatter` |
+| `PanelData` | `:lines` (default), `:quantiles`, `:spaghetti`, `:groups`, `:scatter`, `:binscatter` |
+| `BVARPosterior`, `BayesianDSGE` | `:trace` (default), `:density`, `:running`, `:acf` |
 
-Reduced-form and estimated models additionally expose `view=:diagnostics`, a shared four-panel residual figure (fitted-vs-residual, residual ACF, histogram, and Q-Q), so a model's specification can be screened without leaving the plotting API.
+Reduced-form and estimated models additionally expose `view=:diagnostics`, a shared four-panel residual figure (residual-vs-fitted, residual histogram with a fitted normal, Normal Q-Q, and residual ACF), so a model's specification can be screened without leaving the plotting API. On the multi-equation families — `VARModel` and `VECMModel` — `eq=` selects the equation by index or name, and `acf_lags=` sets the correlogram length.
 
-Other keywords are scoped to the results that use them: `stat=:mean`/`:median` selects the central line of a Bayesian `irf`/`fevd`/`historical_decomposition` fan; `history=`/`n_history=` prepend observed data to any forecast fan (VAR, BVAR, VECM, factor, ARIMA, volatility, LP); `type=:both`/`:factors`/`:observables` and `n_obs` control a `FactorForecast`; and `original=` overlays the raw series on a filter's trend/cycle panels.
+Other keywords are scoped to the results that use them: `history=`/`n_history=` prepend observed data to any forecast fan (VAR, BVAR, VECM, factor, ARIMA, volatility, LP); `type=:both`/`:factors`/`:observables` and `n_obs` control a `FactorForecast`; `params=` and `thin=` subset and subsample MCMC draws; and `original=` overlays the raw series on a filter's trend/cycle panels.
 
 ---
 
@@ -261,7 +277,7 @@ An occasionally-binding-constraint (OccBin) solution path shades the periods in 
 <iframe src="../assets/plots/occbin_solution.html" width="100%" height="460" frameborder="0" style="border:1px solid #ddd;border-radius:4px;"></iframe>
 ```
 
-### 3. Data-analysis & cross-section plotting
+### 3. Data-analysis & cross-section
 
 Container-level exploration: time-series correlation heatmaps, panel small-multiples, and binscatters with within-group demeaning and controls.
 
@@ -299,7 +315,7 @@ A binary-choice model additionally renders a classification-diagnostics panel (c
 <iframe src="../assets/plots/reg_classification.html" width="100%" height="460" frameborder="0" style="border:1px solid #ddd;border-radius:4px;"></iframe>
 ```
 
-### 5. New model & test dispatches
+### 5. Structural ID, HA/DSGE dynamics & tests
 
 Panel VAR structural analysis, set-identified and statistically-identified SVARs, heterogeneous-agent and continuous-time dynamics, and micro/forecast-evaluation exhibits.
 
@@ -367,7 +383,7 @@ Beyond this gallery, worked visualizations are embedded on each section page:
 | VECM, factor, and LP forecasts | [VECM](@ref vecm_page), [Factor Models](@ref factor_page), [Local Projections](@ref lp_page) |
 | Data containers | [Data Management](@ref data_page) |
 | Nowcast results and news | [Nowcasting](@ref nowcast_page) |
-| DSGE IRF, FEVD, OccBin | [DSGE Overview](dsge.md) |
+| DSGE IRF, FEVD, OccBin | [DSGE Models](@ref dsge_page) |
 
 ---
 
@@ -406,5 +422,3 @@ save_plot(p, "irf_freq.html")   # written to docs/src/assets/plots/
   *IEEE Transactions on Visualization and Computer Graphics*, 17(12), 2301-2309.
   [DOI: 10.1109/TVCG.2011.185](https://doi.org/10.1109/TVCG.2011.185)
 - Plotting authoring standard: [`docs/plotrule.md`](https://github.com/FriedmanJP/MacroEconometricModels.jl/blob/main/docs/plotrule.md).
-</content>
-</invoke>
