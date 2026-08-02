@@ -262,14 +262,14 @@ qd = load_example(:fred_qd)
 (desc(qd), vardesc(qd, "GDPC1"), qd.tcode[findfirst(==("GDPC1"), varnames(qd))])
 ```
 
-Real GDP carries code 5, the log first difference --- quarterly real growth. `refs` resolves the reference keys stored on a container into a formatted bibliography in `:text`, `:latex`, `:bibtex`, or `:html`. The one-argument form **returns** a `String` instead of printing it, so wrap it in `print` to display it.
+Real GDP carries code 5, the log first difference --- quarterly real growth. `refs` resolves the reference keys stored on a container into a formatted bibliography in `:text`, `:latex`, `:bibtex`, or `:html`. The one-argument form **prints** to `stdout` and returns `nothing`, matching `report()`; use `sprint(refs, qd)` when the bibliography is needed as a `String`.
 
 ```@example data
-print(refs(qd))
+refs(qd)
 ```
 
 ```@example data
-print(refs(:fred_md; format=:bibtex))
+refs(:fred_md; format=:bibtex)
 ```
 
 ### Research Panels
@@ -317,15 +317,15 @@ where:
 - ``\ln`` is the natural logarithm, so ``\Delta \ln x_t`` is the continuously compounded growth rate
 - code 7 differences the simple percentage change, not the level
 
-| Code | Transformation | Economic reading | Rows lost (vector) | Rows lost (container) |
-|------|----------------|------------------|--------------------|-----------------------|
-| 1 | Level | The series itself | 0 | 0 |
-| 2 | First difference | Change in the level | 1 | 1 |
-| 3 | Second difference | Change in the change | 2 | 2 |
-| 4 | Log level | Log of the series | 0 | 1 |
-| 5 | Log first difference | Growth rate | 1 | 1 |
-| 6 | Log second difference | **Change in the growth rate** | 2 | 2 |
-| 7 | Difference of percent change | Change in the percentage growth rate | 2 | 2 |
+| Code | Transformation | Economic reading | Rows lost |
+|------|----------------|------------------|-----------|
+| 1 | Level | The series itself | 0 |
+| 2 | First difference | Change in the level | 1 |
+| 3 | Second difference | Change in the change | 2 |
+| 4 | Log level | Log of the series | 0 |
+| 5 | Log first difference | Growth rate | 1 |
+| 6 | Log second difference | **Change in the growth rate** | 2 |
+| 7 | Difference of percent change | Change in the percentage growth rate | 2 |
 
 !!! warning "Code 6 is not inflation"
     `CPIAUCSL` carries code 6, so `apply_tcode` returns ``\Delta^2 \ln \text{CPI}_t`` --- the
@@ -333,11 +333,12 @@ where:
     itself is code 5. The same holds for `M2SL`. Reading a code-6 column as a rate rather than
     as a change in a rate inverts the sign of every interpretation built on it.
 
-!!! note "Code 4 costs a row inside a container"
-    The vector method `apply_tcode(y, 4)` returns `log.(y)` at full length, but the container
-    method budgets one lost row for code 4 and trims the sample accordingly. A `TimeSeriesData`
-    transformed with code 4 therefore has ``T_{obs} - 1`` rows even though the log transform
-    discards nothing.
+!!! note "Log codes demote to first differences on non-positive data"
+    Codes 4 to 7 require strictly positive data. The vector method throws when they do not
+    get it; the container method warns, refits that column as code 2, and records the
+    effective code in the returned `tcode` field. The row budget follows the effective
+    codes, so a demoted code-4 column costs the whole sample the row that code 2 loses even
+    though the declared transform loses none.
 
 ### Applying Transformations
 
@@ -471,12 +472,19 @@ pd_did = xtset(df_did, :firm, :year; cohort=:cohort)
 sort(unique(pd_did.cohort_id))
 ```
 
-!!! warning "`xtset` stores cohort ranks, not cohort values"
-    The cohort column is mapped to 1-based ranks over its sorted unique values, so
-    `[0, 2004, 2007]` is stored as `[1, 2, 3]`. DiD estimators read `cohort_id` as an adoption
-    *period* and compare it against `time_id`, so calendar-year cohorts do not survive the
-    round trip. Pass cohorts already expressed on the `time_id` scale, or let the estimators
-    derive timing from the treatment column. See [Difference-in-Differences](@ref did_page).
+Cohort values survive verbatim — `[0, 2004, 2007]` on this calendar-year panel, with `0`
+marking the two never-treated firms — because `cohort_id` is stored in the same encoding as
+`time_id`. Integer times are kept as they are; non-integer times are ranked ``1, \ldots, T``
+and cohorts map onto those ranks through the same dictionary. A DiD estimator can therefore
+compare `cohort_id` against `time_id` directly.
+
+!!! note "Cohort values that match no sample period"
+    `0` and `missing` mark never-treated units; every other value is an adoption period,
+    negative ones included, which is what an event-time panel needs. A value matching no
+    period in the sample — an adoption year predating the panel, or a categorical cluster
+    label — is stored as given and warned about once. It still works as a fixed-effect
+    dimension (`absorb=:cohort`), but no DiD estimator forms a treatment group from it.
+    See [Difference-in-Differences](@ref did_page).
 
 | Keyword | Type | Default | Description |
 |---------|------|---------|-------------|
@@ -866,7 +874,7 @@ Filtering log real GDP for three countries over 1950-2023 gives cyclical standar
 
 8. **Filters can unbalance a panel.** Hamilton and Baxter-King trim each group against that group's own valid range, so a balanced panel of unequal-length groups comes back unbalanced. Check `isbalanced` after filtering, or use HP, Beveridge-Nelson, or Boosted HP, which preserve the row count.
 
-9. **`refs` returns a `String`.** The one-argument form builds the bibliography and hands it back rather than printing it, so a bare `refs(d)` displays an escaped string literal. Use `print(refs(d))`, or `refs(stdout, d)`, to render it.
+9. **`refs` prints and returns `nothing`.** The one-argument form writes the bibliography to `stdout`, so `print(refs(d))` renders it and then appends a stray `nothing`. Call `refs(d)` bare, or `refs(io, d)` to target another stream; `sprint(refs, d)` captures it as a `String`.
 
 ---
 

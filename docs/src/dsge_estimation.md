@@ -175,7 +175,18 @@ est_agmm = estimate_dsge(spec, Y_data, [:rho];
 report(est_agmm)
 ```
 
-Analytical GMM matches the same five second moments as SMM but computes the model side exactly from the Lyapunov equation, so it carries no simulation noise and drives the moment discrepancy essentially to zero. The price is that it reports no inference: the moment "sample" is a single deterministic discrepancy vector, so the long-run covariance is degenerate, the J p-value is `NaN`, and the standard errors come back `NaN` as well. The estimator therefore always runs under identity weighting regardless of the `weighting` keyword. Reach for it when a fast, noise-free point estimate is what is wanted, and for SMM or Euler GMM when standard errors matter. Use `solve_method=:perturbation` with `solve_order=2` to match moments from second-order solutions, which capture risk premia and precautionary behavior absent from linear approximations; that path switches the moment vector to the richer means-plus-product-moments format and reads its lags from `auto_lags` rather than `lags`.
+Analytical GMM matches the same five second moments as SMM but computes the model side exactly from the Lyapunov equation, so it carries no simulation noise and drives the moment discrepancy essentially to zero — the J-statistic here is 0.006 across five moments. Because the model moments are deterministic, all sampling uncertainty enters through the *data* moments, and the reported covariance is the classical minimum-distance sandwich:
+
+```math
+V(\hat{\theta}) = (G'G)^{-1} G' \, \hat{\Omega} \, G \, (G'G)^{-1} / T
+```
+
+where:
+- ``G = \partial g / \partial \theta`` is the Jacobian of the moment discrepancy at ``\hat\theta``
+- ``\hat{\Omega}`` is the HAC long-run covariance of the per-observation data-moment contributions
+- ``T`` is the number of observations
+
+The standard errors this delivers are genuine: ``\hat\rho = 0.897`` carries a standard error of 0.027 on 200 observations, and refitting the same model on 3200 observations shrinks it to 0.007 — the ``1/\sqrt{T}`` rate. What stays `NaN` is the J p-value, because identity weighting is not the efficient choice and the statistic has no ``\chi^2`` limit. Use `solve_method=:perturbation` with `solve_order=2` to match moments from second-order solutions, which capture risk premia and precautionary behavior absent from linear approximations; that path switches the moment vector to the richer means-plus-product-moments format, reads its lags from `auto_lags` rather than `lags`, and reports a `NaN` covariance, since the per-observation contributions the sandwich needs are not defined for that format.
 
 ### Hansen J-test
 
@@ -202,7 +213,7 @@ A large J-statistic (low p-value) indicates model misspecification --- the model
 | Keyword | Type | Default | Description |
 |---------|------|---------|-------------|
 | `method` | `Symbol` | `:irf_matching` | Moment condition: `:irf_matching`, `:euler_gmm`, `:smm`, `:analytical_gmm` |
-| `weighting` | `Symbol` | `:two_step` | Weighting scheme (see the note below) |
+| `weighting` | `Symbol` | `nothing` | Weighting scheme; `nothing` takes the method default, `:two_step` for the sample-moment methods and `:identity` for `:analytical_gmm` (see the note below) |
 | `var_lags` | `Int` | `4` | VAR lag order for empirical IRFs (IRF matching only) |
 | `irf_horizon` | `Int` | `20` | IRF horizon for matching (IRF matching only) |
 | `target_irfs` | `ImpulseResponse` | `nothing` | Pre-computed target IRFs (bypasses internal VAR) |
@@ -224,8 +235,9 @@ A large J-statistic (low p-value) indicates model misspecification --- the model
     `:euler_gmm` and `:smm` route through `estimate_gmm`/`estimate_smm` and accept
     `:identity`, `:optimal`, `:two_step`, and `:iterated` (SMM: `:identity` or `:two_step`).
     `:irf_matching` accepts `:two_step`/`:efficient`/`:optimal`, `:diagonal`/`:cee`, and
-    `:identity`. `:analytical_gmm` ignores the keyword entirely and always uses identity
-    weighting.
+    `:identity`. `:analytical_gmm` supports `:identity` only — its moment residual is a
+    single ``1 \times q`` vector, so HAC and two-step weighting are degenerate. An explicit
+    non-identity request warns and falls back to identity; the default call is silent.
 
 ### GMM Return Value (`DSGEEstimation{T}`)
 

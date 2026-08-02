@@ -418,14 +418,12 @@ plot_result(model; view=:stability)
 
 Group-level block bootstrap preserves the within-group time structure. For each bootstrap draw, ``N`` groups are resampled with replacement, the PVAR is re-estimated, and IRFs are computed. Quantile-based confidence intervals are constructed from the bootstrap distribution:
 
-!!! warning "The bootstrap does not inherit the instrument controls"
-    `pvar_bootstrap_irf` re-estimates each draw carrying over `transformation`, `steps`,
-    `system_instruments`, and `system_constant` — but **not** `collapse`, `min_lag_endo`,
-    `max_lag_endo`, or `pca_instruments`. A model fitted with collapsed instruments is
-    therefore resampled with the full default instrument set, which changes the estimator
-    being bootstrapped and, on a panel like this one, makes each draw hundreds of times
-    more expensive. Until this is addressed, bootstrap the FE-OLS estimator, which uses no
-    instruments and is unaffected.
+!!! note "One keyword the bootstrap does not inherit"
+    `pvar_bootstrap_irf` re-estimates each draw with the fitted model's `transformation`,
+    `steps`, `system_instruments`, `system_constant`, `collapse`, `min_lag_endo`,
+    `max_lag_endo`, `pca_instruments`, and `pca_max_components`, so the resampled estimator
+    matches the one being bootstrapped. `max_iter` is the exception: a `steps=:mstep` model
+    is re-estimated at the default iteration cap rather than the one it was fitted with.
 
 ```@example pvar
 Random.seed!(7)
@@ -583,7 +581,7 @@ round.(decomp[11, :, :], digits=4)
 ```
 
 ```@example pvar
-# Bootstrap confidence intervals (FE-OLS: see the caveat in the bootstrap section)
+# Bootstrap confidence intervals (FE-OLS: no instruments to re-build per draw)
 Random.seed!(7)
 boot = pvar_bootstrap_irf(model_fe, 10; n_draws=200, ci=0.90)
 (impact = round(boot.irf[1, 1, 1], digits=4),
@@ -592,15 +590,15 @@ boot = pvar_bootstrap_irf(model_fe, 10; n_draws=200, ci=0.90)
 
 ```@example pvar
 # Academic references for the estimator
-print(refs(model))
+refs(model)
 ```
 
 The workflow runs in one direction: choose the lag order, estimate, validate, then interpret. All three MMSC criteria select one lag, so the model is a PVAR(1) in growth rates estimated by two-step FD-GMM with 15 collapsed instruments against 38 countries. The Hansen J of 18.61 on 12 degrees of freedom does not reject the overidentifying restrictions at 5%, and all companion moduli lie near 0.27, so the system is comfortably stationary and its impulse responses converge. The FEVD then delivers the economic content: output and human capital are essentially own-shock driven at every horizon, while roughly half of the forecast error variance in employment growth traces back to output shocks. The FE-OLS block bootstrap confirms that the contemporaneous own-effect of an output shock, 0.0308, is estimated precisely enough to exclude zero at the 90% level.
 
-!!! warning "`refs` returns a String"
-    Call `print(refs(model))`, not `refs(model)`. The single-argument form builds the
-    bibliography into a `String` and returns it, so evaluating it bare renders the escaped
-    literal (`"Holtz-Eakin, Douglas...\n"`) instead of the formatted list.
+!!! note "`refs` prints, like `report`"
+    Call `refs(model)` bare. The single-argument form writes the formatted bibliography to
+    `stdout` and returns `nothing`, so wrapping it in `print` renders the list and then a
+    stray `nothing`. Use `sprint(refs, model)` to capture the bibliography as a `String`.
 
 ---
 

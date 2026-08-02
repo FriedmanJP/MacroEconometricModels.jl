@@ -113,14 +113,14 @@ m = estimate_var(d, p)
 report(m)
 ```
 
-BIC selects eleven lags: monthly macro series carry close to a year of own- and cross-dynamics even after differencing. Always check that the selected order is interior to the search range — a criterion that returns `max_p` itself means the range is too narrow. Decompose the forecast error variance over a two-year horizon:
+BIC selects two lags out of a search range of twelve: once the transformation codes have rendered each series stationary, two months of own- and cross-dynamics absorb most of the predictable variation, and BIC's system-wide parameter penalty makes the remaining gains too expensive. Always check that the selected order is interior to the search range — a criterion that returns `max_p` itself means the range is too narrow. Decompose the forecast error variance over a two-year horizon:
 
 ```@example gs
 vd = fevd(m, 24; method=:cholesky)
 report(vd)
 ```
 
-Each row gives the share of one variable's ``h``-step forecast error variance attributable to each structural shock, and the shares sum to 100% across the row at every horizon. Own shocks dominate throughout: 85% for industrial production growth and 95% for the CPI series at two years. Unemployment is the exception — 39% of its forecast error traces to industrial production shocks even on impact, the Okun's-law link recovered without imposing it. The monetary shock's contribution to industrial production grows from zero on impact to 3.0% at two years, the delayed transmission of policy to real activity.
+Each row gives the share of one variable's ``h``-step forecast error variance attributable to each structural shock, and the shares sum to 100% across the row at every horizon. Own shocks dominate throughout: 94% for industrial production growth and 97% for the CPI series at two years. Unemployment is the exception — 36% of its forecast error traces to industrial production shocks even on impact, the Okun's-law link recovered without imposing it. The monetary shock's contribution to industrial production grows from zero on impact to 1.2% at two years, the delayed transmission of policy to real activity.
 
 ---
 

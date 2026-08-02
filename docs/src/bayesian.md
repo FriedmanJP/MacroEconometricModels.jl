@@ -550,14 +550,14 @@ plot_result(bfevd_sec)
 <iframe src="../assets/plots/fevd_bayesian.html" style="width:100%; height:520px; border:none;"></iframe>
 ```
 
-At ``h = 1`` the monetary shock explains exactly none of the forecast error variance of industrial production --- the Cholesky ordering forbids a contemporaneous response, so the share is 0 with a degenerate ``[0, 0]`` interval. Transmission then works through lagged effects: by ``h = 20`` the shares are 83.4% own, 8.4% price and 8.2% monetary, and the credible interval on the monetary share, ``[0.026, 0.127]``, is wide enough to span a factor of five. That width is the honest summary of what 60 observations can say about a variance share twenty months out.
+At ``h = 1`` the monetary shock explains exactly none of the forecast error variance of industrial production --- the Cholesky ordering forbids a contemporaneous response, so the share is 0 with a degenerate ``[0, 0]`` interval. Transmission then works through lagged effects: by ``h = 20`` the shares are 89.0% own, 7.5% price and 3.5% monetary, and the credible interval on the monetary share, ``[0.011, 0.057]``, is wide enough to span a factor of five. That width is the honest summary of what 60 observations can say about a variance share twenty months out.
 
 ### `BayesianFEVD{T}` Fields
 
 | Field | Type | Description |
 |-------|------|-------------|
-| `quantiles` | `Array{T,4}` | ``H \times n \times n \times n_q``: posterior quantiles of FEVD shares |
-| `point_estimate` | `Array{T,3}` | ``H \times n \times n`` posterior point estimate FEVD proportions |
+| `quantiles` | `Array{T,4}` | ``n \times n \times H \times n_q``: posterior quantiles of FEVD shares |
+| `point_estimate` | `Array{T,3}` | ``n \times n \times H`` posterior point estimate FEVD proportions, matching `FEVD.proportions` |
 | `horizon` | `Int` | Maximum horizon |
 | `variables` | `Vector{String}` | Variable names |
 | `shocks` | `Vector{String}` | Shock names |

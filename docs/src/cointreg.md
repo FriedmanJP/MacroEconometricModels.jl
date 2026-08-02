@@ -332,7 +332,7 @@ All three estimators recover the true slope vector ``(0.8, -0.5)`` to within ``0
 ## References
 
 ```@example cointreg
-print(refs(m))
+refs(m)
 ```
 
 - Phillips, P. C. B., & Hansen, B. E. (1990). Statistical Inference in Instrumental Variables Regression with I(1) Processes.

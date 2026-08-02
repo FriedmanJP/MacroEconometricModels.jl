@@ -243,18 +243,18 @@ The lag length minimizes an information criterion that balances fit against mode
 where:
 - ``\hat{\Sigma}_p`` is the ML residual covariance at lag order ``p``
 - ``T_{\text{eff}} = T - p`` is the effective sample size
-- ``k = 1 + np`` is the number of regressors per equation
+- ``k = n(1 + np)`` is the **system** parameter count: ``n`` equations of ``1 + np`` regressors each
 - ``n`` is the number of endogenous variables
 
 AIC tends to overfit in finite samples; BIC penalizes complexity more heavily as ``T`` grows; HQIC sits between them. All three are stored on the fitted model as `aic`, `bic`, and `hqic`.
 
-!!! warning "Check the selected order, do not trust it blindly"
-    Because the penalty scales with the per-equation regressor count rather than the ``n^2 p + n``
-    system-wide parameter count, it is weak relative to the gain in fit from extra lags. On short
-    samples every criterion is then minimized at the top of the search range, and the "selected"
-    order is really just `max_p`. Always confirm the choice with `is_stationary` and keep `max_p`
-    small when ``T`` is small: with 60 observations and three variables, a VAR(4) already spends
-    13 coefficients per equation on 56 usable observations.
+!!! note "System penalty and a common estimation sample"
+    Two conventions make the criteria comparable across ``p``, both following Lütkepohl (2005 §4.3)
+    and Stata's `varsoc`. The penalty counts the ``n(1 + np)`` system-wide parameters rather than
+    the ``1 + np`` regressors of a single equation, which is a factor of ``n`` heavier. And
+    `select_lag_order` estimates every candidate on the common sample ``t = \text{max\_p}+1, \ldots, T``,
+    so each ``\log|\hat\Sigma_p|`` is computed on identical data. Per-candidate ragged samples
+    combined with the lighter penalty pushed the selection to `max_p` on short samples.
 
 ```@example var
 # BIC-optimal lag order (default)
@@ -267,7 +267,7 @@ model = estimate_var(Y, p_bic)
 report(model)
 ```
 
-`select_lag_order` evaluates every lag order from 1 to `max_p` and returns the integer minimizing the chosen criterion. On this sample both criteria are minimized at the boundary, ``\hat{p} = 4``, exactly the behavior the warning above describes --- the fit gain from the extra lags (the log determinant falls from ``-7.63`` at ``p = 1`` to ``-8.86`` at ``p = 4``) outruns the penalty. The resulting VAR(4) is stationary, so the order is usable; had `max_p` been set to 13 the same search would have returned a non-stationary VAR(13).
+`select_lag_order` evaluates every lag order from 1 to `max_p` and returns the integer minimizing the chosen criterion. The two criteria disagree on this sample: BIC selects ``\hat{p} = 1`` while AIC selects ``\hat{p} = 4``. The log determinant falls steadily with ``p`` --- from ``-7.57`` at ``p = 1`` to ``-8.86`` at ``p = 4`` --- but the system penalty adds ``n(1+np)`` parameters at every step, which is enough for BIC's ``\log T_{\text{eff}}`` factor to overwhelm the fit gain and not enough for AIC's factor of 2. That gap is the textbook one: AIC overfits in finite samples, and 60 observations on three variables is a finite sample. Prefer the BIC order here, and confirm either choice with `is_stationary`.
 
 | Keyword | Type | Default | Description |
 |---------|------|---------|-------------|
@@ -875,7 +875,7 @@ fc = forecast(model, 12)
 report(fc)
 ```
 
-Both criteria select ``p = 4``, the top of the search range. The Cholesky ordering [INDPRO, CPI, FFR] implements the recursive identification of Christiano, Eichenbaum & Evans (1999): a monetary policy shock (shock 3) raises the federal funds rate on impact while output and prices respond only with a lag. The variance decomposition says the policy shock is a minor driver of industrial production --- 2.7% of its forecast error variance at twenty months, against 92.5% for output's own shock and 4.8% for the price shock. The funds rate is the variable most exposed to the rest of the system: 79.2% own, but 16.4% attributable to output shocks, the signature of a policy rule that reacts to real activity. The historical decomposition identity ``y_t = \sum_j \text{HD}_j(t) + \text{initial}(t)`` holds to numerical precision over all 56 effective observations, which `verify_decomposition` confirms by returning `true`.
+BIC selects ``p = 1``, well inside the search range. The Cholesky ordering [INDPRO, CPI, FFR] implements the recursive identification of Christiano, Eichenbaum & Evans (1999): a monetary policy shock (shock 3) raises the federal funds rate on impact while output and prices respond only with a lag. The variance decomposition says the policy shock is a minor driver of industrial production --- 2.0% of its forecast error variance at twenty months, against 92.0% for output's own shock and 6.0% for the price shock. The funds rate is the variable most exposed to the rest of the system: 94.1% own, but 4.8% attributable to output shocks, the signature of a policy rule that reacts to real activity. A parsimonious VAR(1) leaves less room for cross-variable transmission than the VAR(4) that AIC would select, so read these shares as the conservative end of the range. The historical decomposition identity ``y_t = \sum_j \text{HD}_j(t) + \text{initial}(t)`` holds to numerical precision over all 59 effective observations, which `verify_decomposition` confirms by returning `true`.
 
 ---
 
@@ -885,7 +885,7 @@ Both criteria select ``p = 4``, the top of the search range. The Cholesky orderi
 
 2. **Non-stationary VAR produces unreliable inference.** `is_stationary` returns a `VARStationarityResult`, not a `Bool` --- test `is_stationary(model).is_stationary`. When it is `false` the companion matrix has eigenvalues on or outside the unit circle and the asymptotic theory underlying OLS standard errors and bootstrap confidence intervals no longer applies. Difference the data, apply the appropriate transformation codes via `apply_tcode`, or estimate a [VECM](@ref vecm_page) for cointegrated systems.
 
-3. **Too many lags exhaust degrees of freedom.** Each additional lag adds ``n^2`` parameters to the system and ``n`` regressors to every equation. For an ``n = 7`` variable system each lag costs 49 parameters. With moderate sample sizes (``T < 200``) overfitting degrades forecast accuracy and inflates IRF confidence intervals. Cap `max_p` at a value the sample can support rather than relying on the criterion to stop early --- as the Information Criteria section shows, on short samples it often does not.
+3. **Too many lags exhaust degrees of freedom.** Each additional lag adds ``n^2`` parameters to the system and ``n`` regressors to every equation. For an ``n = 7`` variable system each lag costs 49 parameters. With moderate sample sizes (``T < 200``) overfitting degrades forecast accuracy and inflates IRF confidence intervals. Cap `max_p` at a value the sample can support, and prefer BIC over AIC when ``T`` is small --- as the Information Criteria section shows, AIC selects four lags on this 60-observation sample where BIC selects one.
 
 4. **Low acceptance rate for sign restrictions.** When `identify_sign` or `identify_arias` reports an acceptance rate below 1%, the imposed sign conditions are difficult to satisfy jointly. This may indicate contradictory economic restrictions or an overidentified specification. Relaxing some conditions (e.g., restricting only impact responses rather than multiple horizons) typically improves acceptance.
 

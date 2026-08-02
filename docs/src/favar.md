@@ -371,10 +371,9 @@ report(hd_full)
 
 ```@example favar
 # Share of the funds rate's 20-period forecast error assigned to its own shock.
-# FEVD.proportions is indexed (variable, shock, horizon);
-# BayesianFEVD.point_estimate is indexed (horizon, variable, shock).
+# Both arrays are indexed (variable, shock, horizon).
 (twostep=round(100 * d_aug_full.proportions[3, 3, 20], digits=1),
- bayesian=round(100 * bfevd.point_estimate[20, 3, 3], digits=1))
+ bayesian=round(100 * bfevd.point_estimate[3, 3, 20], digits=1))
 ```
 
 The two-step FAVAR extracts 2 factors from the 7-series panel, removes the component spanned by the federal funds rate, and estimates a VAR(2) on the resulting 3-variable augmented system — 58 effective observations after lags. The historical decomposition passes its identity check, and its mean absolute contributions show the funds rate driven mostly by its own shock (0.097) with the two factor shocks contributing 0.068 each, while the factors are driven overwhelmingly by factor shocks. Panel-wide IRFs then carry the three structural shocks out to all 7 series through the ``7 \times 2`` loading matrix ``\Lambda`` and the ``7 \times 1`` direct channel ``\Lambda_y``. The final comparison is the point of running both estimators: the funds-rate shock owns 50.6% of its own forecast error variance when the factors are treated as data and 13.7% when they are sampled, and that gap is the cost of the generated-regressor assumption, not a disagreement about the data.

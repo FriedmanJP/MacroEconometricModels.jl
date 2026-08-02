@@ -199,6 +199,8 @@ Two thirds of household wealth (an illiquid share of 0.658, ``A = 0.636`` agains
 
 [`hand_to_mouth`](@ref) splits the liquidity-poor by illiquid holdings, and [`ceiling_mass`](@ref) reports the mass on the top node of each grid. Both default to a one-grid-step threshold; pass `b_threshold`/`a_threshold` for a calibration-based definition such as a fraction of average income.
 
+[`ct_two_asset_stationarity`](@ref) takes three keywords beyond the model. `margin` (default `0.9`, quadratic cost only) demands ``a_{\max} \le \text{margin} \cdot a^\star`` rather than the bare inequality, because an ``a^\star`` sitting just above the ceiling still dumps mass on it; the calibration above passes at the default and fails at `margin=0.75`. `solution=` supplies a solved [`CTTwoAssetSolution`](@ref) so the check can add a ceiling-mass diagnostic, and `max_ceiling_mass=` sets the threshold that diagnostic applies (default `0.05`) — passing it without `solution` throws an `ArgumentError`, since the ceiling mass is a property of the solved distribution and not of the calibration. The return is always a five-field named tuple `(ok, bound, a_star, message, ceiling_mass)`, with `ceiling_mass` set to `nothing` when no solution is supplied, so the shape is stable across call styles. `ct_two_asset_solve` runs the same diagnostic itself: it warns after solving whenever more than 5% of the stationary mass ends up on the illiquid ceiling, which catches the calibrations that satisfy the analytical bound and still report an aggregate shaped by the grid.
+
 | Keyword | Type | Default | Description |
 |---------|------|---------|-------------|
 | `max_iter` | `Int` | `200` | Maximum HJB value-function iterations |

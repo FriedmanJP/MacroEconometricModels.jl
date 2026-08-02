@@ -266,10 +266,10 @@ me_m = marginal_effects(m_mlogit)
 report(me_m)
 ```
 
-The multinomial marginal effects agree closely with the ordered ones despite the far looser parameterization: an extra preschool child moves 21.5 points out of the 1000-1999 hour band and 5.4 points out of full-time work, against the ordered model's 13.5 and 10.2. Schooling again raises every working state, most strongly part time (1.9 points). `report` prints one panel per non-base alternative and drops the intercept row, whose "effect" is a numerical artefact of a constant regressor.
+The multinomial marginal effects agree closely with the ordered ones despite the far looser parameterization: an extra preschool child moves 21.5 points out of the 1000-1999 hour band and 5.4 points out of full-time work, against the ordered model's 13.5 and 10.2. Schooling again raises every working state, most strongly part time (1.9 points). The standard errors sort these into what the data can and cannot resolve: the 21.5-point effect on the middle band carries a standard error of 4.4 points, while the 0.7-point effect on part-time work carries 3.2 and is indistinguishable from zero. The intercept row is dropped when the effects are built — the marginal effect of a constant regressor is a numerical artefact — so `me_m.effects` has one row per genuine covariate, and `report` prints one panel per non-base alternative.
 
-!!! note "Standard errors for multinomial AME"
-    `MultinomialMarginalEffects.se` is `nothing`: the delta method for the softmax marginal effects is not implemented, so no standard errors, z-statistics, or intervals are reported, and `plot_result` draws the points without whiskers. Ordered-model marginal effects are returned as a plain `NamedTuple` of `effects`, `varnames`, and `categories`, also without standard errors. Where inference on a marginal effect is required, bootstrap the estimation and the effect together.
+!!! note "Standard errors for marginal effects"
+    Both families report delta-method standard errors. For the multinomial logit the Jacobian of the AME is taken by finite differences over **every** free coefficient, intercepts included, and propagated through the full coefficient covariance, because each coefficient enters the AME through the fitted probabilities; restricting the covariance to the reported rows understates the variance. For the ordered models the Jacobian runs over ``[\beta; \alpha]``, so cutpoint uncertainty enters the interval. `MultinomialMarginalEffects.se` is `nothing` only when the model covariance is unavailable, and `plot_result` then draws points without whiskers.
 
 ---
 
@@ -290,10 +290,10 @@ bt = brant_test(m_ologit)
 NamedTuple{Tuple(Symbol.(onames))}(Tuple(round.(bt.per_variable, digits=4)))
 ```
 
-The overall statistic of 13.82 on 10 degrees of freedom gives ``p = 0.181``, so the joint proportional-odds restriction survives at conventional levels. The per-variable breakdown is the more informative half: `age` rejects on its own (``p = 0.024``) while the other four regressors sit far from any critical value. Reading the binary-logit coefficients in `bt.binary_coefs` shows why — the age slope is 0.095 and 0.088 at the first two splits but only 0.044 at the third, so age separates non-participants from workers much more sharply than it separates long-hours workers from the rest. A single rejecting variable is a warning rather than a verdict: refit with `age` interacted with the threshold, or move to the multinomial specification, and check whether the substantive conclusions move.
+The overall statistic of 15.574 on 10 degrees of freedom gives ``p = 0.113``, so the joint proportional-odds restriction survives at conventional levels. The per-variable breakdown is the more informative half: `educ` rejects on its own (``p = 0.033``) and `age` sits just outside the 5% line (``p = 0.058``), while the other three regressors are nowhere near it. Reading the binary-logit coefficients in `bt.binary_coefs` shows why — the education slope is ``-0.223`` at the first split, ``-0.120`` at the second and ``-0.083`` at the third (the split logits model ``y \leq j``, so their signs are the mirror of the ordered slopes), so schooling separates non-participants from workers roughly three times as sharply as it separates full-time workers from everyone below them. A single rejecting variable is a warning rather than a verdict: refit with `educ` interacted with the threshold, or move to the multinomial specification, and check whether the substantive conclusions move.
 
-!!! note "Independence across the binary fits"
-    The contrast variance is formed as ``\text{Var}(\hat\beta^{(j)}) + \text{Var}(\hat\beta^{(J-1)})``, treating the ``J-1`` binary logits as independent. They are not — they use the same observations — so the covariance term is dropped and the statistic is conservative relative to Brant's (1990) full covariance form. Read a marginal non-rejection as weak evidence in favour of proportional odds, not as a clean pass.
+!!! note "Joint covariance across the binary fits"
+    The ``J-1`` binary logits share one sample, so the contrast variance uses the joint sandwich ``\text{Cov}(\hat\beta^{(a)}, \hat\beta^{(b)}) = B_a \left( \sum_i s_{a,i} s_{b,i}' \right) B_b`` rather than the independence approximation ``\text{Var}(\hat\beta^{(a)}) + \text{Var}(\hat\beta^{(b)})``, which is Brant's (1990) full covariance form. Bread and meat are formed over the split logits' complete ``(K+1)``-dimensional parameter vector and restricted to the slope block afterwards, so the intercepts are partialled out rather than discarded — dropping them before inverting the bread leaves the statistic dependent on where the regressors are centred.
 
 | Field | Type | Description |
 |-------|------|-------------|
@@ -404,7 +404,7 @@ The largest element of ``X'e`` is 4.5e-7, zero to the Newton convergence toleran
 ```julia
 plot_result(m_ologit)     # slopes and cutpoints, two panels
 plot_result(m_mlogit)     # one coefficient facet per non-base alternative
-plot_result(me_m)         # marginal-effect facets (points only, no whiskers)
+plot_result(me_m)         # marginal-effect facets with delta-method whiskers
 ```
 
 The ordered figure separates the two parameter blocks because they live on different scales: the slopes measure how a regressor shifts the latent index, the cutpoints are positions *on* that index.
@@ -459,12 +459,13 @@ iia_4 = hausman_iia(fit_m; omit_category=4)
 ```
 
 ```@example ordmult
-# Step 5 — the two models' marginal effects on the same scale
+# Step 5 — the preschool-child effect from both models (row 5 in each:
+# the multinomial effects carry no intercept row)
 (ordered = round.(marginal_effects(fit_o).effects[5, :], digits=4),
- multinomial = round.(marginal_effects(fit_m).effects[6, :], digits=4))
+ multinomial = round.(marginal_effects(fit_m).effects[5, :], digits=4))
 ```
 
-The ordered logit buys its parsimony with the proportional-odds restriction, and the Brant test finds that restriction acceptable overall (``p = 0.181``) though strained by `age` (``p = 0.024``). Relaxing it costs ten extra parameters for 8.4 log-likelihood points, and the BIC prefers the ordered model by roughly 49 points, so the restriction pays for itself here. The IIA test then clears the multinomial specification on its own terms (``p = 1.00`` when the full-time band is dropped), meaning the disagreement between the two models is about the ordering assumption alone, not about a failure of the softmax. Step 5 shows how little that disagreement amounts to for the quantity most often reported: the two models put the preschool-child effect on non-participation at 25.1 and 27.5 points, and differ mainly in how they split the remaining mass between the part-time and full-time bands.
+The ordered logit buys its parsimony with the proportional-odds restriction, and the Brant test finds that restriction acceptable overall (``p = 0.113``) though strained by `educ` (``p = 0.033``). Relaxing it costs ten extra parameters for 8.4 log-likelihood points, and the BIC prefers the ordered model by roughly 49 points, so the restriction pays for itself here. The IIA test then clears the multinomial specification on its own terms (``p = 1.00`` when the full-time band is dropped), meaning the disagreement between the two models is about the ordering assumption alone, not about a failure of the softmax. Step 5 shows how little that disagreement amounts to for the quantity most often reported: the two models put the preschool-child effect on non-participation at 25.1 and 27.5 points, and differ mainly in how they split the remaining mass between the part-time and full-time bands.
 
 ---
 
@@ -474,11 +475,11 @@ The ordered logit buys its parsimony with the proportional-odds restriction, and
 
 2. **Fewer than three categories.** Both families require ``J \geq 3`` and throw an `ArgumentError` otherwise. Use `estimate_logit` or `estimate_probit` from the [binary choice page](@ref binary_choice_page) for two-category outcomes.
 
-3. **Assuming the Brant test blesses the specification.** The overall test can pass while a single covariate violates proportional odds, exactly as `age` does here. Read `per_variable` before concluding, and remember that the contrast variances treat the binary fits as independent, which makes the test conservative.
+3. **Assuming the Brant test blesses the specification.** The overall test can pass while a single covariate violates proportional odds, exactly as `educ` does here. Read `per_variable` before concluding: the joint statistic averages one genuine violation against four well-behaved regressors.
 
 4. **Reading multinomial coefficients as effects on a probability.** ``\beta_{j,k}`` is the effect on the log-odds of alternative ``j`` against the base. A positive coefficient can coexist with a negative marginal effect on ``P(y = j)`` when a competing alternative rises faster. Always compute `marginal_effects(m)` before interpreting.
 
-5. **Expecting standard errors on multinomial marginal effects.** They are not computed — `se` is `nothing` — and `plot_result` honours that by drawing points without whiskers. Bootstrap if inference is needed.
+5. **Building marginal-effect standard errors from the reported coefficients alone.** Every coefficient enters an AME through the fitted probabilities, intercepts included, so a delta method restricted to the covariance of the reported rows understates the variance. `marginal_effects` propagates the full covariance for the multinomial and the joint ``[\beta; \alpha]`` covariance for the ordered models. `se` is `nothing` only when the model covariance is unavailable.
 
 6. **Running the IIA test with too few categories.** `hausman_iia` re-estimates on the subsample without the omitted category and needs at least three categories to remain, so a four-category outcome is the minimum. It also silently drops every observation in the omitted category, so a large omitted category leaves a much smaller restricted sample.
 

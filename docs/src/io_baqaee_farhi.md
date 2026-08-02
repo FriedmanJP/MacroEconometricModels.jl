@@ -150,13 +150,13 @@ baqaee_farhi(io; sigma=2.0).second_order
 Alongside the two orders, the decomposition reports three summaries of where each sector sits in the production network. They are the input-output objects that Acemoglu et al. (2012) and Carvalho & Tahbaz-Salehi (2019) use to explain why idiosyncratic shocks fail to wash out in aggregate.
 
 ```math
-v = \beta' \Psi, \qquad
+v = \Psi \beta, \qquad
 \text{up}_i = \sum_{j} \Psi_{ij}, \qquad
 \text{down}_j = \sum_{i} \Psi_{ij}
 ```
 
 where:
-- ``v_j`` is the **influence** of sector ``j``, the final-demand-weighted column aggregation of the Leontief inverse
+- ``v_i`` is the **influence** of sector ``i``, the final-demand-weighted row aggregation of the Leontief inverse — the gross output of ``i`` that the observed composition of final demand requires
 - ``\text{up}_i`` is the **upstreamness** of sector ``i``, the row sum of ``\Psi`` — the output of ``i`` required by one unit of final demand for every product
 - ``\text{down}_j`` is the **downstreamness** of sector ``j``, the column sum of ``\Psi`` — the total production triggered by one unit of final demand for ``j``
 - ``\beta`` is the vector of final-demand shares, as above
@@ -171,12 +171,13 @@ bf.upstreamness, bf.downstreamness
 
 Agriculture is the more **upstream** sector (1.584 against 1.386): a unit of final demand for either product draws more heavily on farm output than on manufacturing output, relative to the two sectors' sizes. Manufacturing is the less **downstream** one (1.452 against 1.518), because it buys fewer intermediates per unit of output. These two vectors are not new quantities — `downstreamness` is exactly the backward linkage and the Type I output multiplier, and `upstreamness` is exactly the Chenery-Watanabe forward linkage of the [Classical Analysis](@ref io_classical_page) page. Antràs et al. (2012) build a closely related upstreamness index from the allocation coefficients rather than the Leontief inverse.
 
-!!! note "`influence` is a column aggregation, not the Domar weight"
-    Under this package's orientation of ``\Psi`` — where ``x = \Psi y`` — the Domar weights are
-    recovered by the *row* aggregation ``\Psi\beta``, which reproduces ``[0.488, 0.976]``
-    exactly. The `influence` field reports the *column* aggregation ``\beta'\Psi``, here
-    ``[0.433, 0.987]``. The two agree only when ``\Psi`` is symmetric, so read `influence` as a
-    demand-weighted average requirement rather than as an alternative Domar weight.
+!!! note "`influence` reproduces the Domar weights"
+    Under this package's orientation of ``\Psi`` — where ``x = \Psi y`` — the row aggregation
+    ``\Psi\beta`` *is* the Domar weight vector, here ``[0.488, 0.976]``, identical to `bf.domar`
+    entry by entry. That identity is Hulten's theorem restated on the network: influence and
+    sales share are the same statistic. Baqaee & Farhi write the same object as ``\beta'\Psi``
+    under a row-oriented layout, so transcribing that expression literally into this package's
+    column convention returns a different — and wrong — vector.
 
 ### Return Values
 
@@ -185,7 +186,7 @@ Agriculture is the more **upstream** sector (1.584 against 1.386): a unit of fin
 | `domar` | `Vector{Float64}` | Domar weights ``\lambda_i = x_i / \text{GDP}`` |
 | `first_order` | `Vector{Float64}` | Hulten first-order elasticities, a copy of `domar` |
 | `second_order` | `Matrix{Float64}` | ``n \times n`` symmetrized "beyond Hulten" Hessian |
-| `influence` | `Vector{Float64}` | Influence vector ``\beta'\Psi`` |
+| `influence` | `Vector{Float64}` | Influence vector ``\Psi\beta``, equal to `domar` under Hulten |
 | `upstreamness` | `Vector{Float64}` | Row sums of ``\Psi`` |
 | `downstreamness` | `Vector{Float64}` | Column sums of ``\Psi`` |
 | `sectors` | `Vector{String}` | Sector labels |
