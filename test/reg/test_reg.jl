@@ -1808,20 +1808,20 @@ end
         y = X * [1.0, 2.0] + randn(rng, n)
 
         m = estimate_reg(y, X)
-        r = refs(m)
+        r = sprint(io -> refs(io, m))
         @test r isa String
         @test occursin("White", r) || occursin("Wooldridge", r)
 
         # Logit refs
         y_bin = Float64.(y .> 0)
         m_logit = estimate_logit(y_bin, X)
-        r2 = refs(m_logit)
+        r2 = sprint(io -> refs(io, m_logit))
         @test r2 isa String
         @test occursin("Wooldridge", r2) || occursin("Cameron", r2)
 
         # Probit refs
         m_probit = estimate_probit(y_bin, X)
-        r3 = refs(m_probit)
+        r3 = sprint(io -> refs(io, m_probit))
         @test r3 isa String
     end
 end

@@ -621,24 +621,25 @@ using Statistics
     # =================================================================
     # refs() Returns String (Issue #16)
     # =================================================================
-    @testset "refs() Returns String" begin
+    @testset "refs() prints to stdout (#530)" begin
         Y = randn(100, 3)
         model = estimate_var(Y, 2)
 
-        # refs() should return a String, not print to stdout
-        result = refs(model)
+        # one-arg refs() prints (like report()) and returns nothing
+        result = sprint(io -> refs(io, model))
         @test result isa String
         @test !isempty(result)
         @test occursin("Sims", result) || occursin("Lütkepohl", result) || length(result) > 10
+        @test refs(model) === nothing
 
         # BibTeX format
-        bib = refs(model; format=:bibtex)
+        bib = sprint(io -> refs(io, model; format=:bibtex))
         @test bib isa String
         @test occursin("@", bib)
 
         # Multiple formats
         for fmt in (:text, :bibtex, :html, :latex)
-            r = refs(model; format=fmt)
+            r = sprint(io -> refs(io, model; format=fmt))
             @test r isa String
             @test !isempty(r)
         end
@@ -906,7 +907,7 @@ using Statistics
     # =================================================================
     @testset "refs() comprehensive format and dispatch" begin
         # Symbol dispatch
-        r = refs(:johansen)
+        r = sprint(io -> refs(io, :johansen))
         @test r isa String
         @test !isempty(r)
 
@@ -914,52 +915,52 @@ using Statistics
         Y = randn(100, 3)
         lp = estimate_lp(Y, 1, 8)
         for fmt in (:text, :latex, :bibtex, :html)
-            r = refs(lp; format=fmt)
+            r = sprint(io -> refs(io, lp; format=fmt))
             @test r isa String
             @test !isempty(r)
         end
 
         # refs for BVAR posterior
         post = estimate_bvar(Y, 2; n_draws=50)
-        r = refs(post)
+        r = sprint(io -> refs(io, post))
         @test r isa String
         @test !isempty(r)
 
         # refs for filter types
         y = cumsum(randn(200))
         for f in [hp_filter(y), hamilton_filter(y)]
-            r = refs(f)
+            r = sprint(io -> refs(io, f))
             @test r isa String
             @test !isempty(r)
         end
 
         # LaTeX format should have \bibitem
-        r_latex = refs(Y |> x -> estimate_var(x, 2); format=:latex)
+        r_latex = sprint(io -> refs(io, estimate_var(Y, 2); format=:latex))
         @test occursin("\\bibitem", r_latex)
 
         # BibTeX format should have @article or @book
-        r_bib = refs(estimate_var(Y, 2); format=:bibtex)
+        r_bib = sprint(io -> refs(io, estimate_var(Y, 2); format=:bibtex))
         @test occursin("@article", r_bib) || occursin("@book", r_bib)
 
         # HTML format should have <p> tags
-        r_html = refs(estimate_var(Y, 2); format=:html)
+        r_html = sprint(io -> refs(io, estimate_var(Y, 2); format=:html))
         @test occursin("<p>", r_html)
 
         # refs for ARIMA models
         ar = estimate_ar(randn(200), 2)
-        r = refs(ar; format=:bibtex)
+        r = sprint(io -> refs(io, ar; format=:bibtex))
         @test r isa String
         @test !isempty(r)
 
         # refs for volatility models
         gm = estimate_garch(randn(300), 1, 1)
-        r = refs(gm)
+        r = sprint(io -> refs(io, gm))
         @test r isa String
         @test !isempty(r)
 
         # refs for unit root tests
         adf_r = adf_test(randn(200))
-        r = refs(adf_r)
+        r = sprint(io -> refs(io, adf_r))
         @test r isa String
     end
 

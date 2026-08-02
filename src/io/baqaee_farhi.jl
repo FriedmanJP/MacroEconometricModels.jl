@@ -40,7 +40,9 @@ function baqaee_farhi(io::IOData; theta=nothing, sigma=nothing)
     L = leontief_inverse(io)
     first_order = copy(λ)
     y = vec(sum(io.Y, dims=2)); β = y ./ sum(y)
-    influence = vec(L' * β)
+    # Column-convention Leontief: influence = L*β (= Domar weights under Hulten).
+    # L'*β is the B&F row-orientation identity transcribed under the wrong layout (#516).
+    influence = vec(L * β)
     upstreamness = vec(sum(L, dims=2))
     downstreamness = vec(sum(L, dims=1))
     second_order = _bf_second_order(io, A, L, λ, theta, sigma)

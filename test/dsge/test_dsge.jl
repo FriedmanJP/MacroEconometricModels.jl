@@ -2891,45 +2891,45 @@ end
     sol = solve(spec)
 
     # refs for DSGESolution
-    r = refs(sol)
+    r = sprint(io -> refs(io, sol))
     @test occursin("Sims", r)
     @test occursin("Blanchard", r)
 
     # refs for DSGESpec
-    r_spec = refs(spec)
+    r_spec = sprint(io -> refs(io, spec))
     @test occursin("Sims", r_spec)
 
     # Symbol dispatch
-    r_sym = refs(:gensys)
+    r_sym = sprint(io -> refs(io, :gensys))
     @test occursin("Sims", r_sym)
-    r_bk = refs(:blanchard_kahn)
+    r_bk = sprint(io -> refs(io, :blanchard_kahn))
     @test occursin("Blanchard", r_bk)
 
     # BibTeX format
-    r_bib = refs(sol; format=:bibtex)
+    r_bib = sprint(io -> refs(io, sol; format=:bibtex))
     @test occursin("@article{sims2002", r_bib)
 
     # Symbol dispatch for solver methods
-    r_klein = refs(:klein)
+    r_klein = sprint(io -> refs(io, :klein))
     @test occursin("Klein", r_klein)
     @test occursin("2000", r_klein)
-    r_pert = refs(:perturbation_solver)
+    r_pert = sprint(io -> refs(io, :perturbation_solver))
     @test occursin("Schmitt", r_pert)
     @test occursin("Kim", r_pert)
-    r_coll = refs(:collocation_solver)
+    r_coll = sprint(io -> refs(io, :collocation_solver))
     @test occursin("Judd", r_coll)
-    r_pfi = refs(:pfi_solver)
+    r_pfi = sprint(io -> refs(io, :pfi_solver))
     @test occursin("Coleman", r_pfi)
     @test occursin("Judd", r_pfi)
 
     # LinearDSGE refs
     spec_ss = compute_steady_state(spec)
     lin = linearize(spec_ss)
-    r_lin = refs(lin)
+    r_lin = sprint(io -> refs(io, lin))
     @test occursin("Sims", r_lin)
 
     # DSGEEstimation includes Smets-Wouters
-    r_est = refs(:irf_matching)
+    r_est = sprint(io -> refs(io, :irf_matching))
     @test occursin("Christiano", r_est)
 end
 
@@ -3651,13 +3651,13 @@ end
     shock_path[1, 1] = -1.0
     sol = occbin_solve(spec, constraint; shock_path=shock_path, nperiods=20)
 
-    r = refs(sol)
+    r = sprint(io -> refs(io, sol))
     @test occursin("Guerrieri", r)
     @test occursin("Iacoviello", r)
     @test occursin("2015", r)
 
     # Symbol dispatch
-    r2 = refs(:occbin)
+    r2 = sprint(io -> refs(io, :occbin))
     @test occursin("Guerrieri", r2)
     end # _suppress_warnings
 end

@@ -309,8 +309,8 @@ _yg2() = (vcat(G1, G2), vcat(fill(1, 6), fill(2, 5)))
         io2 = IOBuffer(); show(io2, MIME"text/plain"(), cc); s2 = String(take!(io2))
         @test occursin("Pearson", s2)
         # refs render
-        @test occursin("Kruskal", refs(rc))
-        @test occursin("Kendall", refs(cor_test(ax, ay; method=:kendall)))
+        @test occursin("Kruskal", sprint(io -> refs(io, rc)))
+        @test occursin("Kendall", sprint(io -> refs(io, cor_test(ax, ay; method=:kendall))))
         # StatsAPI
         @test pvalue(rc) == rc.pvalue
         @test nobs(rc) == 17

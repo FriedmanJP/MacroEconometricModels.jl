@@ -2678,9 +2678,11 @@ refs(io::IO, ::ForecastEncompassingResult; kw...) = refs(io, _TYPE_REFS[:Forecas
 refs(io::IO, ::ForecastCombination; kw...) = refs(io, _TYPE_REFS[:ForecastCombination]; kw...)
 
 # --- Convenience: stdout fallback ---
+# One-arg form prints to stdout (matching report()), so bare `refs(m)` in the
+# REPL or Documenter @example renders the bibliography rather than an escaped
+# String literal (#530). Use `sprint(refs, x)` when a String is needed.
 function refs(x; kw...)
-    io = IOBuffer()
-    refs(io, x; kw...)
-    String(take!(io))
+    refs(stdout, x; kw...)
+    nothing
 end
 

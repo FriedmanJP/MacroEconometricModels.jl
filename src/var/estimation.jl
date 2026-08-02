@@ -45,12 +45,16 @@ function estimate_var(Y::AbstractMatrix{T}, p::Int; check_stability::Bool=true, 
     # the previous `max(T_eff-k, T_eff)` could never select T_eff−k, so SEs were too small).
     Sigma = (U'U) / T_eff
 
-    # Information criteria (ML estimate)
+    # Information criteria (ML estimate). Penalty uses the *system* parameter
+    # count n·k = n(1 + n p) (Lütkepohl 2005 eq. 4.3.2; Stata varsoc / EViews),
+    # not the per-equation regressor count k = 1+n p. The latter under-penalizes
+    # by a factor ~n and makes select_lag_order return max_p on short samples (#522).
     Sigma_ml = (U'U) / T_eff
     log_det = logdet_safe(Sigma_ml)
-    aic = log_det + 2k / T_eff
-    bic = log_det + k * log(T_eff) / T_eff
-    hqic = log_det + 2k * log(log(T_eff)) / T_eff
+    k_sys = n * k
+    aic = log_det + 2k_sys / T_eff
+    bic = log_det + k_sys * log(T_eff) / T_eff
+    hqic = log_det + 2k_sys * log(log(T_eff)) / T_eff
 
     vn = something(varnames, ["y$i" for i in 1:n])
     model = VARModel(Y, p, B, U, Sigma, aic, bic, hqic, vn)

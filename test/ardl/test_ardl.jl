@@ -291,7 +291,7 @@ using Test, MacroEconometricModels, Random, LinearAlgebra, Statistics
         io = IOBuffer(); report(io, m); @test !isempty(String(take!(io)))
         io = IOBuffer(); report(io, bt); @test !isempty(String(take!(io)))
 
-        rs = refs(m); @test occursin("Pesaran", rs)
-        rb = refs(bt); @test occursin("Pesaran", rb)
+        rs = sprint(io -> refs(io, m)); @test occursin("Pesaran", rs)
+        rb = sprint(io -> refs(io, bt)); @test occursin("Pesaran", rb)
     end
 end

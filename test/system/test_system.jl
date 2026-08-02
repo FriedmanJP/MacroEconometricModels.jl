@@ -232,8 +232,8 @@ const TSLS_OI_SE  = [30.985759302, 0.015573021, 0.023105637, 7.356168244, 0.0144
         m3 = estimate_3sls(grunfeld_eqs(), hcat(ones(_T), _GE.data[:, 3], _WH.data[:, 3]))
         io3 = IOBuffer(); report(io3, m3); s3 = String(take!(io3))
         @test occursin("3SLS", s3)
-        rs = refs(m); @test occursin("Zellner", rs)
-        rs3 = refs(m3); @test occursin("Theil", rs3)
+        rs = sprint(io -> refs(io, m)); @test occursin("Zellner", rs)
+        rs3 = sprint(io -> refs(io, m3)); @test occursin("Theil", rs3)
     end
 
     @testset "Input validation" begin

@@ -7,7 +7,7 @@ using Test, MacroEconometricModels
     Y1 = io0.Y .* 1.2
     io1 = IOData(Z1, Y1, [330.0 1100.0; 385.0 440.0]; sectors=io0.sectors, check=false)
 
-    r = sda(io0, io1; method=:additive, factors=:LY, average=:two_polar)
+    r = sda(io0, io1; method=:additive)
     dx = io1.x .- io0.x
     @test r.effects[:L] .+ r.effects[:Y] ≈ dx atol=1e-8     # additive & exact
     @test all(abs.(r.residual) .< 1e-8)
@@ -15,5 +15,8 @@ using Test, MacroEconometricModels
 
     rm = sda(io0, io1; method=:multiplicative)
     @test haskey(rm.effects, :L)
+    @test haskey(rm.effects, :Y)
     @test rm.method == :multiplicative
+    # Two-polar geometric mean: product of effects recovers the output ratio.
+    @test rm.effects[:L] .* rm.effects[:Y] ≈ rm.total rtol=1e-8
 end

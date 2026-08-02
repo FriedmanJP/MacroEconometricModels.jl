@@ -10,20 +10,20 @@ struct SDAResult
 end
 
 """
-    sda(io0, io1; method=:additive, factors=:LY, average=:two_polar) -> SDAResult
+    sda(io0, io1; method=:additive) -> SDAResult
 
 Decompose the change in gross output `x = L y` between two periods into a
-technology (`ΔL`) effect and a final-demand (`Δy`) effect.
+technology (`ΔL`) effect and a final-demand (`Δy`) effect (two-factor `L`/`Y`
+split).
 
 - `method=:additive` uses the Dietzenbacher & Los (1998) two-polar average,
-  which is exact (zero residual).
-- `method=:multiplicative` returns the analogous ratio decomposition.
-
-`factors=:LY` selects the two-factor `L`/`Y` decomposition (a stable hook for
-finer splits); `average=:two_polar` selects the averaging scheme.
+  which is exact (zero residual up to floating-point noise).
+- `method=:multiplicative` uses the two-polar geometric mean of the polar
+  ratio decompositions. The residual is zero by construction of the geometric
+  identity `ratio = L_eff ⊙ Y_eff` when both polars are averaged this way; it
+  is reported for API symmetry with the additive branch.
 """
-function sda(io0::IOData, io1::IOData; method::Symbol=:additive,
-             factors::Symbol=:LY, average::Symbol=:two_polar)
+function sda(io0::IOData, io1::IOData; method::Symbol=:additive)
     L0 = leontief_inverse(io0); L1 = leontief_inverse(io1)
     y0 = vec(sum(io0.Y, dims=2)); y1 = vec(sum(io1.Y, dims=2))
     ΔL = L1 - L0; Δy = y1 - y0
@@ -36,10 +36,18 @@ function sda(io0::IOData, io1::IOData; method::Symbol=:additive,
         resid = total .- (L_eff .+ Y_eff)
         return SDAResult(Dict(:L => L_eff, :Y => Y_eff), total, resid, :additive)
     elseif method == :multiplicative
+        # Two-polar geometric mean of ratio decompositions (Dietzenbacher & Los).
+        # Polar 1 holds L at period 0 for the Y effect (and L at 1 for L effect on y0);
+        # polar 2 swaps the time index. Geometric mean of the two polars.
         x0 = L0 * y0; x1 = L1 * y1
-        ratio = x1 ./ max.(x0, eps())
-        L_eff = (L1 * y0) ./ max.(x0, eps())
-        Y_eff = ratio ./ max.(L_eff, eps())
+        epsT = eps(eltype(x0))
+        ratio = x1 ./ max.(x0, epsT)
+        L_p1 = (L1 * y0) ./ max.(x0, epsT)          # L change, y fixed at 0
+        Y_p1 = (L0 * y1) ./ max.(x0, epsT)          # Y change, L fixed at 0
+        L_p2 = (L1 * y1) ./ max.(L0 * y1, epsT)     # L change, y fixed at 1
+        Y_p2 = (L1 * y1) ./ max.(L1 * y0, epsT)     # Y change, L fixed at 1
+        L_eff = sqrt.(max.(L_p1 .* L_p2, zero(eltype(x0))))
+        Y_eff = sqrt.(max.(Y_p1 .* Y_p2, zero(eltype(x0))))
         return SDAResult(Dict(:L => L_eff, :Y => Y_eff), ratio,
                          ratio .- (L_eff .* Y_eff), :multiplicative)
     else

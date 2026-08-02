@@ -210,7 +210,7 @@ end
     @test occursin("Φ[1]", out)
     @test occursin("Θ[1]", out)
     @test report(m) === nothing
-    @test occursin("Box", refs(m))
+    @test occursin("Box", sprint(io -> refs(io, m)))
 
     @test plot_result(m) isa PlotOutput
 end
