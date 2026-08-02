@@ -10,7 +10,7 @@ version.
 
 Plain-text (AEA style):
 
-> Chung, Wookyung. 2026. *MacroEconometricModels.jl*. Zenodo.
+> Chung, Wookyung. 2026. *MacroEconometricModels.jl*, version 0.7.2. Zenodo.
 > [https://doi.org/10.5281/zenodo.18439170](https://doi.org/10.5281/zenodo.18439170).
 
 BibTeX:
@@ -20,6 +20,7 @@ BibTeX:
   author    = {Chung, Wookyung},
   title     = {{MacroEconometricModels.jl}},
   year      = {2026},
+  version   = {0.7.2},
   doi       = {10.5281/zenodo.18439170},
   url       = {https://doi.org/10.5281/zenodo.18439170},
   publisher = {Zenodo}
