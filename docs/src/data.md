@@ -729,8 +729,16 @@ Randomized results --- bootstrap IRF bands, BVAR posteriors --- carry a `ReproMa
 
 ```@example data
 post = estimate_bvar(d, 2; n_draws=200, seed=20260802)
-post.manifest
+show(IOContext(stdout, :repro => false), post.manifest)
 ```
+
+A bare `post.manifest` adds a `git` line carrying the package revision the result
+was produced under, and marks it `(dirty)` when the working tree had uncommitted
+changes. `:repro => false` drops that one line, which is what keeps a rebuilt
+page from changing on every commit; the revision is still stored and readable as
+`post.manifest.git_sha`. The same key controls the one-line reproducibility
+footer on `report`, which is off by default for the same reason --- pass
+`report(post; repro = true)` to see it.
 
 ```@example data
 reproduce(post)
