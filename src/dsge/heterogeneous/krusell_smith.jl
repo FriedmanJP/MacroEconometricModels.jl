@@ -594,7 +594,7 @@ end
     _den_haan_core(spec, ss, b, T_sim, T_burn, rho_z, sigma_z, rng) → DenHaanAccuracy
 
 Shared Den Haan (2010) machinery: given an aggregate law of motion
-`log K' = b₁ + b₂ log K + b₃ z` and a price convention `z_channel` (see [`_ks_prices`](@ref)),
+`log K' = b₁ + b₂ log K + b₃ z` and a price convention `z_channel` (see `_ks_prices`),
 simulate the aggregate two ways under the SAME shock path and compare. The law and the
 reference simulation MUST share the convention, or the statistic measures their mismatch
 rather than the solution's accuracy.

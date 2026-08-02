@@ -166,9 +166,9 @@ the affected methods.
 
 ## v0.6.0
 
-Input-Output analysis module (issue #374): the [Input-Output Analysis](@ref) container, Leontief/Ghosh
-models, multipliers/linkages/SDA/extraction, environmental extensions, Baqaee-Farhi (2019), and the
-pymrio-style MRIO downloaders.
+[Input-Output Analysis](@ref io_page) module (issue #374): the [`IOData`](@ref) container,
+Leontief/Ghosh models, multipliers/linkages/SDA/extraction, environmental extensions,
+Baqaee-Farhi (2019), and the pymrio-style MRIO downloaders.
 
 ---
 

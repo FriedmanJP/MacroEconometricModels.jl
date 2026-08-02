@@ -755,7 +755,7 @@ report(oirf::OccBinIRF) = show(stdout, oirf)
 Internal DSGE solve/estimation failure that legitimately implies zero posterior
 mass (indeterminacy, no-solution, steady-state non-convergence) — as opposed to a
 code bug. Likelihood closures catch this (and the concrete numeric-failure types in
-[`_benign_solve_error`](@ref)) and return `-Inf`, counting the draw as failed;
+`_benign_solve_error`) and return `-Inf`, counting the draw as failed;
 everything else is rethrown.
 """
 struct DSGESolveError <: Exception

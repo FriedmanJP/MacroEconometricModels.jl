@@ -215,7 +215,7 @@ Aggregate labor supply under the distribution `d`:
     L = Σ_j Σ_i  e_j · n(a_i, e_j) · d[(j-1)*n_a + i]     (efficiency units)
     N = Σ_j Σ_i        n(a_i, e_j) · d[(j-1)*n_a + i]     (raw hours)
 
-`L` is what enters the production function; use [`_aggregate_hours`](@ref) for
+`L` is what enters the production function; use `_aggregate_hours` for
 the unweighted mean `N`. The two coincide only when every income state is 1.
 """
 function _aggregate_labor(d::AbstractVector{T}, n_policy::AbstractMatrix{T},

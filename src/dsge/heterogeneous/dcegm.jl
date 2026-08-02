@@ -460,7 +460,7 @@ u_c(c, d) = \\beta R\\, E_j\\!\\left[\\sum_{d'} P(d' \\mid M') \\, u_c(c'(M', d'
 ```
 
 Because the discrete choice makes the continuation value non-concave, the
-resulting `M` sequence is non-monotone; [`_upper_envelope`](@ref) deletes the
+resulting `M` sequence is non-monotone; `_upper_envelope` deletes the
 suboptimal branches and inserts the exact switching thresholds.
 
 With `n_periods > 0` the solver runs backward induction from a terminal period in

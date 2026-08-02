@@ -56,7 +56,7 @@ end
     _resolved_bw(U, kernel, bandwidth) -> Float64
 
 The integer truncation lag `lrcov`/`lrcov_oneside` resolve `bandwidth` to (for display /
-storage). Mirrors [`_resolve_bandwidth`](@ref).
+storage). Mirrors `_resolve_bandwidth`.
 """
 function _resolved_bw(U::AbstractMatrix{T}, kernel::Symbol, bandwidth) where {T<:AbstractFloat}
     ki = _lrv_kernel(kernel)

@@ -44,7 +44,7 @@ Compute a perturbation approximation to the policy functions of a DSGE model.
 - `sylvester_method::Symbol=:auto` — solver for the order-2/3 Kronecker-Sylvester systems.
   `:auto` uses the generalized-Schur (Kamenik 2005) solver and falls back to `:dense`/`:gmres`
   if it does not certify; `:kamenik`, `:dense`, `:gmres` force one path. See
-  [`_solve_kronecker_sylvester`](@ref).
+  `_solve_kronecker_sylvester`.
 - `sylvester_tol::T=1e-8` — relative residual the generalized-Schur solve must reach before it
   is accepted; above this, `:auto` falls back and `:kamenik` warns
 - `gmres_tol::T=1e-8` — relative tolerance for the matrix-free GMRES Sylvester solve, used only
@@ -905,7 +905,7 @@ allocation `O(n · nv^d)` instead of `O(nv^{2d})`. Matches dense `X * kron(M,…
 floating-point tolerance (the order-3 `nv³ × nv³` operator is never materialized).
 
 `T` is `<:Number` rather than `<:AbstractFloat` because the generalized-Schur Sylvester solver
-([`_kamenik_sylvester`](@ref)) applies the same Kronecker powers in the complex Schur basis.
+(`_kamenik_sylvester`) applies the same Kronecker powers in the complex Schur basis.
 """
 function _apply_kron_power(X::AbstractMatrix{T}, M::AbstractMatrix{T}, d::Int) where {T<:Number}
     d <= 0 && return Matrix{T}(X)
@@ -1038,7 +1038,7 @@ Solve the order-aware Kronecker-Sylvester system whose operator is a Kronecker p
 
 ## Solver selection (`sylvester_method`)
 
-- `:auto` (default) — the generalized-Schur solver [`_kamenik_sylvester`](@ref) first, falling
+- `:auto` (default) — the generalized-Schur solver `_kamenik_sylvester` first, falling
   back to `:dense` (small systems) or `:gmres` (large) if it fails to certify. This is a direct
   `O(n³ + n²·nvᵈ)` method: it is both faster and more accurate than the alternatives, and it
   reports a near-singular pencil instead of quietly returning a wrong tensor.
@@ -1047,7 +1047,7 @@ Solve the order-aware Kronecker-Sylvester system whose operator is a Kronecker p
   `O((n·nvᵈ)³)` in time and `O((n·nvᵈ)²)` in memory, so it is only viable for small models.
 - `:gmres` — matrix-free restarted GMRES. Retained as the iterative fallback.
 
-Every path applies the operator through [`_apply_kron_power`](@ref) or [`_kron_power`](@ref) as
+Every path applies the operator through `_apply_kron_power` or `_kron_power` as
 appropriate; on the `:kamenik` and `:gmres` paths the `nv^order × nv^order` Kronecker matrix is
 **never formed**, which is what makes order 3 tractable for large models (materializing
 `kron(M,M,M)` at n≈35, nv≈14 would need ~120 GB).

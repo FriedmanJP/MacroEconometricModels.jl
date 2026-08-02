@@ -454,7 +454,7 @@ temporal aggregates of the latent high-frequency path,
 y^{lo}_{i,t} = \\sum_{j} w_j\\, z_{i,t-j+1}
 ```
 
-with weights set by `aggregation` (see [`_mf_agg_weights`](@ref) for the exact rules;
+with weights set by `aggregation` (see `_mf_agg_weights` for the exact rules;
 `:growth` uses the Mariano-Murasawa triangular filter).
 
 A two-block Gibbs sampler alternates between the conjugate NIW draw of `(B, Σ)` given the

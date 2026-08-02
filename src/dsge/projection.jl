@@ -390,7 +390,7 @@ Smolyak sparse grid at approximation level `mu`, which may be a scalar (isotropi
 `nx`-vector of per-dimension levels (anisotropic).
 
 Uses nested Chebyshev extrema (Clenshaw-Curtis) points. The isotropic selection rule is
-`|alpha|_1 <= mu + nx` for multi-indices `alpha`; see [`_smolyak_admissible_levels`](@ref)
+`|alpha|_1 <= mu + nx` for multi-indices `alpha`; see `_smolyak_admissible_levels`
 for the anisotropic generalization.
 
 Returns:

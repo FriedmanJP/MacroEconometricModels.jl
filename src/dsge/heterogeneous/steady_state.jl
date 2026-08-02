@@ -148,7 +148,7 @@ end
 """
     _compute_euler_error(c_pol, a_pol, ip, grid, income, prices; points=:midpoints) → T
 
-Scalar `log10` maximum Euler residual — the `max` field of [`_euler_error_stats`](@ref).
+Scalar `log10` maximum Euler residual — the `max` field of `_euler_error_stats`.
 """
 _compute_euler_error(c_pol::Matrix{T}, a_pol::Matrix{T}, ip::IndividualProblem{T},
                      grid::HAGrid{T}, income::IncomeProcess{T},

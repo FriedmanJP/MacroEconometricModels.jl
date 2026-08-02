@@ -432,7 +432,7 @@ end
     _endogenous_labor_example(; kind=:ghh, psi=3.0, frisch=0.5, a_max=2000.0, n_a=200)
 
 Aiyagari economy with **endogenous labor supply**. Identical to
-[`_ks_example`](@ref) except that households also choose hours.
+`_ks_example` except that households also choose hours.
 
 `psi = 3.0` is chosen so aggregate labor in efficiency units is `L ≈ 1` at the
 steady state, matching the `L = 1` normalization the exogenous-labor examples

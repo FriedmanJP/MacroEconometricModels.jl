@@ -222,6 +222,7 @@ granger_causality_vecm
 Modules = [MacroEconometricModels]
 Pages   = ["vecm/analysis.jl", "vecm/forecast.jl"]
 Order   = [:function]
+Private = false
 ```
 
 ---
@@ -234,6 +235,7 @@ Order   = [:function]
 Modules = [MacroEconometricModels]
 Pages   = ["core/irf.jl"]
 Order   = [:function]
+Private = false
 ```
 
 ### Forecast Error Variance Decomposition
@@ -242,6 +244,7 @@ Order   = [:function]
 Modules = [MacroEconometricModels]
 Pages   = ["core/fevd.jl"]
 Order   = [:function]
+Private = false
 ```
 
 ### Historical Decomposition
@@ -250,6 +253,7 @@ Order   = [:function]
 Modules = [MacroEconometricModels]
 Pages   = ["core/hd.jl"]
 Order   = [:function]
+Private = false
 ```
 
 ### Summary Tables
@@ -303,6 +307,7 @@ Order   = [:function]
 Modules = [MacroEconometricModels]
 Pages   = ["lp/state.jl"]
 Order   = [:function]
+Private = false
 ```
 
 ### Propensity Score LP (Angrist et al. 2018)
@@ -319,6 +324,7 @@ Order   = [:function]
 Modules = [MacroEconometricModels]
 Pages   = ["lp/forecast.jl"]
 Order   = [:function]
+Private = false
 ```
 
 ### LP-FEVD (Gorodnichenko & Lee 2019)
@@ -327,6 +333,7 @@ Order   = [:function]
 Modules = [MacroEconometricModels]
 Pages   = ["lp/fevd.jl"]
 Order   = [:function]
+Private = false
 ```
 
 ---
@@ -339,6 +346,7 @@ Order   = [:function]
 Modules = [MacroEconometricModels]
 Pages   = ["factor/static.jl"]
 Order   = [:function]
+Private = false
 ```
 
 ### Dynamic Factor Model
@@ -347,6 +355,7 @@ Order   = [:function]
 Modules = [MacroEconometricModels]
 Pages   = ["factor/dynamic.jl"]
 Order   = [:function]
+Private = false
 ```
 
 ### Generalized Dynamic Factor Model
@@ -355,6 +364,7 @@ Order   = [:function]
 Modules = [MacroEconometricModels]
 Pages   = ["factor/generalized.jl"]
 Order   = [:function]
+Private = false
 ```
 
 ---
@@ -399,6 +409,7 @@ AbstractMGARCHModel
 ```@autodocs
 Modules = [MacroEconometricModels]
 Pages   = ["mgarch/types.jl", "mgarch/ccc.jl", "mgarch/dcc.jl", "mgarch/bekk.jl", "mgarch/forecast.jl"]
+Private = false
 ```
 
 ---
@@ -408,6 +419,7 @@ Pages   = ["mgarch/types.jl", "mgarch/ccc.jl", "mgarch/dcc.jl", "mgarch/bekk.jl"
 ```@autodocs
 Modules = [MacroEconometricModels]
 Pages   = ["cointreg/types.jl", "cointreg/fmols.jl", "cointreg/ccr.jl", "cointreg/dols.jl", "cointreg/panel.jl"]
+Private = false
 ```
 
 ---
@@ -417,6 +429,7 @@ Pages   = ["cointreg/types.jl", "cointreg/fmols.jl", "cointreg/ccr.jl", "cointre
 ```@autodocs
 Modules = [MacroEconometricModels]
 Pages   = ["system/types.jl", "system/sur.jl", "system/threesls.jl"]
+Private = false
 ```
 
 ---

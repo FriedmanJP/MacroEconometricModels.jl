@@ -261,7 +261,7 @@ with the scalar `k` selecting the estimator:
 | `method`   | `k`                     | Notes |
 |:-----------|:------------------------|:------|
 | `:tsls` / `:2sls` (default) | `1`        | Two-stage least squares (bit-for-bit the classic path) |
-| `:liml`    | `κ̂`                    | LIML — the LIML least-variance ratio (see [`_liml_kappa`](@ref)) |
+| `:liml`    | `κ̂`                    | LIML — the LIML least-variance ratio (see `_liml_kappa`) |
 | `:fuller`  | `κ̂ − fuller_a/(n−m)`   | Fuller (1977); with `fuller_a=1` it is approximately unbiased |
 | `:kclass`  | user `k`                | generic k-class (`k=0` ⇒ OLS, `k=1` ⇒ 2SLS) |
 
