@@ -1,6 +1,6 @@
 # [DSGE Models API](@id api_dsge)
 
-Specify, solve, simulate, and estimate Dynamic Stochastic General Equilibrium models. See [DSGE Models](../dsge.md) for the full guide.
+Specify, solve, simulate, and estimate Dynamic Stochastic General Equilibrium models. See [DSGE Models](@ref dsge_page) for the representative-agent guide and [Heterogeneity & Continuous Time](@ref dsge_heterogeneity) for the heterogeneous-agent, life-cycle, and continuous-time families documented in the second half of this page.
 
 ---
 
@@ -73,7 +73,9 @@ vfi_solver
 
 ---
 
-## DSGE IRF and FEVD
+## DSGE Simulation, IRF, and FEVD
+
+`simulate`, `irf`, `fevd`, and `analytical_moments` for first-order, perturbation, and projection solutions, including the pruned higher-order state space.
 
 ```@autodocs
 Modules = [MacroEconometricModels]
@@ -87,13 +89,20 @@ irf(::BayesianDSGE{T}, ::Int) where {T<:AbstractFloat}
 fevd(::BayesianDSGE{T}, ::Int) where {T<:AbstractFloat}
 ```
 
-### Simulation and Analysis
+### State-Space Moments
 
 ```@docs
-simulate
 solve_lyapunov
-analytical_moments
 pruned_state_space
+```
+
+Unconditional moments of a first-order solution. The higher-order counterpart for [`PerturbationSolution`](@ref) appears in the block above.
+
+```@autodocs
+Modules = [MacroEconometricModels]
+Pages   = ["dsge/analytical.jl"]
+Order   = [:function]
+Filter  = f -> f === MacroEconometricModels.analytical_moments
 ```
 
 ### Determinacy Regions
@@ -127,6 +136,7 @@ bridge_sampling_ml
 bayes_factor
 prior_posterior_table
 posterior_predictive
+simulate(::BayesianDSGE{T}, ::Int) where {T<:AbstractFloat}
 mcmc_diagnostics
 MCMCDiagnostics
 trace
@@ -179,6 +189,7 @@ nonlinear_constraint
 ```@docs
 HADSGESpec
 HAGrid
+HAGrid()
 IncomeProcess
 IndividualProblem
 HASteadyState
@@ -187,6 +198,7 @@ KrusellSmithSolution
 DenHaanAccuracy
 HAGridDiagnostics
 LaborSupply
+LaborSupply()
 ```
 
 ### Heterogeneous-Agent Solvers and Analysis
@@ -200,14 +212,22 @@ inequality_irf
 simulate_panel
 den_haan_test
 ha_grid_diagnostics
-report(::HASteadyState)
 adaptive_asset_grid
 adapt_ha_grid
 labor_supply
 labor_policy
 irf(::HADSGESolution{T}, ::Int) where {T<:AbstractFloat}
 fevd(::HADSGESolution{T}, ::Int) where {T<:AbstractFloat}
-report(::DenHaanAccuracy{T}) where {T}
+simulate(::HADSGESolution{T}, ::Int) where {T<:AbstractFloat}
+```
+
+Formatted summaries for heterogeneous-agent steady states, solutions, and accuracy diagnostics.
+
+```@autodocs
+Modules = [MacroEconometricModels]
+Pages   = ["dsge/heterogeneous/display.jl"]
+Order   = [:function]
+Filter  = f -> f === MacroEconometricModels.report
 ```
 
 ### Sequence-Space Block Composition
@@ -224,9 +244,13 @@ block_jacobian
 ssj_jacobian
 ssj_irf
 ssj_arg_order
-report(::SSJModel{T}) where {T}
-report(::SSJGEJacobian{T}) where {T}
-report(::SSJImpulseResponse{T}) where {T}
+```
+
+```@autodocs
+Modules = [MacroEconometricModels]
+Pages   = ["dsge/heterogeneous/blocks.jl"]
+Order   = [:function]
+Filter  = f -> f === MacroEconometricModels.report
 ```
 
 ### Discrete-Continuous Choice (DCEGM)
@@ -241,8 +265,13 @@ dcegm_choice_probabilities
 dcegm_threshold
 dcegm_simulate
 dcegm_retirement_model
-report(::DCEGMSolution{T}) where {T}
-report(::DCEGMDistribution{T}) where {T}
+```
+
+```@autodocs
+Modules = [MacroEconometricModels]
+Pages   = ["dsge/heterogeneous/dcegm.jl"]
+Order   = [:function]
+Filter  = f -> f === MacroEconometricModels.report
 ```
 
 ---
@@ -273,7 +302,13 @@ lifecycle_policies
 lifecycle_distribution
 lifecycle_income
 lifecycle_survival
-report(::LifeCycleSteadyState{T}) where {T}
+```
+
+```@autodocs
+Modules = [MacroEconometricModels]
+Pages   = ["olg/lifecycle.jl"]
+Order   = [:function]
+Filter  = f -> f === MacroEconometricModels.report
 ```
 
 ---

@@ -1,6 +1,6 @@
 # [Utilities & Display API](@id api_utilities)
 
-HAC/robust covariance estimators, output/display infrastructure, bibliographic references, and low-level numerical utilities.
+HAC and robust covariance estimators, the long-run-variance toolkit, output and display infrastructure, bibliographic references, logging, reproducibility manifests, model serialization, and low-level numerical utilities.
 
 ---
 
@@ -44,6 +44,8 @@ optimal_bandwidth_nw94
 
 ## Display and References
 
+`set_display_backend` and `with_display_backend` select how `report` renders tables; `table` builds the tabular views used throughout the package. See [Visualization](@ref plotting_page) for the plotting counterpart.
+
 ```@autodocs
 Modules = [MacroEconometricModels]
 Pages   = ["core/display.jl"]
@@ -72,10 +74,12 @@ with_min_level
 
 ### Reproducibility
 
+`reproduce` is documented here in its generic form; the per-result methods for [`BVARPosterior`](@ref) and bootstrap [`ImpulseResponse`](@ref) results appear in [Multivariate Models API](@ref api_multivariate).
+
 ```@docs
 ReproManifest
 capture_manifest
-reproduce
+reproduce(::Any)
 ReproReport
 ```
 
