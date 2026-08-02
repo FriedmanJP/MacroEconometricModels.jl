@@ -141,11 +141,11 @@
 <div class="panel-grid">
 <div class="panel">
 <div class="panel-title">Sorted Predicted Probabilities</div>
-<div id="bc_sort_10"></div>
+<div id="bc_sort_190"></div>
 </div>
 <div class="panel">
 <div class="panel-title">Distribution by Outcome</div>
-<div id="bc_dist_11"></div>
+<div id="bc_dist_191"></div>
 </div>
 </div>
 
@@ -988,7 +988,7 @@ var hideTip = window.__mem_core.hideTip;
         subN = data.length;
     }
 
-    const container = d3.select('#bc_sort_10');
+    const container = d3.select('#bc_sort_190');
     const W = Math.max(container.node().clientWidth - 24, 280);
     const margin = {top:10, right:15, bottom:35, left:55};
     const w = W - margin.left - margin.right;
@@ -1135,7 +1135,7 @@ var hideTip = window.__mem_core.hideTip;
     const orientation = 'v';
     const logscale = false;
 
-    const container = d3.select('#bc_dist_11');
+    const container = d3.select('#bc_dist_191');
     const W = Math.max(container.node().clientWidth - 24, 280);
     const keys = series.map(s => s.key);
 

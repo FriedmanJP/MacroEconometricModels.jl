@@ -86,7 +86,7 @@ A positive value favors the first model; following Kass & Raftery (1995), ``2 \c
 
 ---
 
-## GMM Estimation
+## [GMM Estimation](@id dsge_est_gmm)
 
 `estimate_dsge` estimates deep structural parameters by matching model-implied moments to data moments via Generalized Method of Moments. Four moment conditions are available: IRF matching, Euler equation GMM, simulated method of moments (SMM), and analytical GMM.
 
@@ -992,7 +992,7 @@ Y_rbc = simulate(sol_rbc, 200)
 nothing # hide
 ```
 
-The RBC model carries one structural shock against four endogenous variables, so IRF matching against a four-variable VAR is not available here (see the dimension warning under [GMM Estimation](@ref)) and the Kalman likelihood needs either a single observable or measurement error. SMM sidesteps both constraints, provided the moments are chosen to speak to the parameter: the default moment vector mixes the level-scale variances of ``Y``, ``C``, and ``K``, and capital's variance dominates the objective. Targeting the technology process — the only place ``\rho`` appears — is both faster and better identified:
+The RBC model carries one structural shock against four endogenous variables, so IRF matching against a four-variable VAR is not available here (see the dimension warning under [GMM Estimation](@ref dsge_est_gmm)) and the Kalman likelihood needs either a single observable or measurement error. SMM sidesteps both constraints, provided the moments are chosen to speak to the parameter: the default moment vector mixes the level-scale variances of ``Y``, ``C``, and ``K``, and capital's variance dominates the objective. Targeting the technology process — the only place ``\rho`` appears — is both faster and better identified:
 
 ```@example dsge_estimation
 # 3. Frequentist: SMM on the technology process alone (column 4 of the data)

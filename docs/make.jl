@@ -140,9 +140,9 @@ makedocs(;
     checkdocs=:exports,
     # example/setup/docs/autodocs block failures must FAIL the build (docrule: "@example
     # blocks MUST run"). Every exported docstring is now registered on a reference page
-    # ([T202]/[T177]/[T178]), so :missing_docs is a hard error. :cross_references is
-    # deferred to the docs-consistency stage (xref burn-down not yet done).
-    warnonly=[:cross_references],
+    # ([T202]/[T177]/[T178]), so :missing_docs is a hard error. :cross_references became
+    # a hard error too after the 2026-08 xref burn-down (docs/overhaul) took the site to
+    # zero unresolved references — no warnonly remains.
 )
 
 # Since v0.6.x docs are NOT built or deployed by CI (Documentation.yml removed

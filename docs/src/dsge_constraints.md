@@ -60,7 +60,7 @@ occ_sol = occbin_solve(borrow_spec, constraint; shock_path=borrow_shocks)
 report(occ_sol)
 ```
 
-The regime sequence converges in two guess-and-verify passes, and the constraint binds in all 60 periods. That is not a horizon that is too short — see the discussion under [Occasionally Binding Constraints (OccBin)](@ref) — but a property of the calibration: with ``\beta R = 1`` the asset position follows a random walk, so once a large enough shock pushes the household to the borrowing limit it never accumulates its way back off. OccBin emits two warnings on this model, one about the terminal period and one about the defining-equation heuristic; both are expected here and are explained below.
+The regime sequence converges in two guess-and-verify passes, and the constraint binds in all 60 periods. That is not a horizon that is too short — see the discussion under [Occasionally Binding Constraints (OccBin)](@ref occbin_section) — but a property of the calibration: with ``\beta R = 1`` the asset position follows a random walk, so once a large enough shock pushes the household to the borrowing limit it never accumulates its way back off. OccBin emits two warnings on this model, one about the terminal period and one about the defining-equation heuristic; both are expected here and are explained below.
 
 ```julia
 plot_result(occ_sol)
@@ -245,7 +245,7 @@ Everything except PATH ships with the package. `:path` requires the PATHSolver w
 
 ---
 
-## Occasionally Binding Constraints (OccBin)
+## [Occasionally Binding Constraints (OccBin)](@id occbin_section)
 
 The **OccBin** algorithm (Guerrieri & Iacoviello 2015) solves DSGE models with occasionally binding constraints using a piecewise-linear approach. Unlike the global methods on the [Nonlinear Methods](@ref dsge_nonlinear) page, OccBin uses the linearized model and switches between regimes (constraint binding vs. slack) period by period. This makes it fast and easy to implement, at the cost of local (rather than global) accuracy.
 

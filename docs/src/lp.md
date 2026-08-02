@@ -885,7 +885,7 @@ hd = historical_decomposition(slp)
 (fevd_type = typeof(decomp).name.name, hd_type = typeof(hd).name.name)
 ```
 
-`fevd(slp, H)` routes to the LP-specific estimator documented in [LP-Based FEVD](@ref) below and returns an `LPFEVD`, not the VMA-based `FEVD` of [Variance Decomposition](@ref ia_fevd_page); `historical_decomposition` returns the ordinary `HistoricalDecomposition` computed from the identified shocks.
+`fevd(slp, H)` routes to the LP-specific estimator documented in [LP-Based FEVD](@ref lp_fevd_section) below and returns an `LPFEVD`, not the VMA-based `FEVD` of [Variance Decomposition](@ref ia_fevd_page); `historical_decomposition` returns the ordinary `HistoricalDecomposition` computed from the identified shocks.
 
 ### Keyword Arguments
 
@@ -1000,7 +1000,7 @@ The bootstrap bands are visibly asymmetric — at ``h=6`` the funds-rate interva
 
 ---
 
-## LP-Based FEVD
+## [LP-Based FEVD](@id lp_fevd_section)
 
 Standard FEVD computes variance shares from the VMA representation, inheriting any VAR misspecification. Gorodnichenko & Lee (2019) propose an **LP-based FEVD** that estimates variance shares directly via R² regressions, inheriting LP's robustness properties. The decomposition concept, the VMA-based estimator, and the Bayesian variant are documented on [Variance Decomposition](@ref ia_fevd_page); `lp_fevd` is documented here because it is an LP estimator rather than a different view of the same object.
 
