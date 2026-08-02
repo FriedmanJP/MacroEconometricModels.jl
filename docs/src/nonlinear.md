@@ -223,6 +223,12 @@ plot_result(m; view=:ssr)           # SSR profile S(γ) with γ̂ annotated
 plot_result(m; view=:diagnostics)   # residual diagnostics
 ```
 
+```@raw html
+<iframe src="../assets/plots/nonlinear_regimes.html" width="100%" height="420" frameborder="0" style="border:1px solid #ddd;border-radius:4px;"></iframe>
+```
+
+The two colours alternate at almost every date rather than clustering into long spells: with ``q_t = y_{t-1}`` and ``\hat\gamma = 0``, regime membership is decided by the sign of the previous observation, and the fitted laws of motion push the process back across zero at once. That is the signature of a self-exciting threshold in a mean-reverting series, and it is what separates the SETAR reading from a Markov-switching one, where the regime persists because the chain does.
+
 ---
 
 ## Smooth-Transition Autoregression (STAR)
@@ -319,6 +325,12 @@ plot_result(ms; view=:weights)        # G over time
 plot_result(ms; view=:diagnostics)    # residual diagnostics
 ```
 
+```@raw html
+<iframe src="../assets/plots/nonlinear_star_transition.html" width="100%" height="420" frameborder="0" style="border:1px solid #ddd;border-radius:4px;"></iframe>
+```
+
+At ``\hat\gamma = 203.8`` the curve is a step: ``G`` sits at 0 for every ``s_t`` below ``\hat c = -0.001`` and at 1 above it, with 5 of the 399 observations landing anywhere on the ramp between. This is the picture behind the flat objective — the plot is the diagnostic that tells a genuinely smooth transition apart from an indicator that the logistic has merely reparameterized.
+
 !!! note "Distinct from smooth-transition heteroskedasticity"
     STAR models a smooth transition in the conditional *mean*. The smooth-transition SVAR used for statistical identification in [Statistical Identification](@ref nongaussian_page) drives the shock *covariance* with the same logistic function and leaves the autoregression alone. The two share the functional form and nothing else.
 
@@ -390,6 +402,12 @@ plot_result(mh; view=:probabilities)   # smoothed regime timeline
 plot_result(mh; view=:filtered)        # filtered probabilities
 plot_result(mh; view=:diagnostics)     # residual diagnostics
 ```
+
+```@raw html
+<iframe src="../assets/plots/nonlinear_ms_probabilities.html" width="100%" height="420" frameborder="0" style="border:1px solid #ddd;border-radius:4px;"></iframe>
+```
+
+The low-mean state takes more than half the smoothed probability in 36 of the 131 estimation quarters, arriving in seven separate spells — the same count as the NBER recessions dated between 1953 and 1982, and the reason Hamilton's model is read as a statistical business-cycle chronology rather than a two-mean mixture. The layers stack to 1 at every date, so the width of the lower band is the probability the quarter belongs to the recession state.
 
 Both entry points return an [`MSRegModel`](@ref):
 

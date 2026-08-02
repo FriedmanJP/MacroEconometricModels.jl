@@ -119,6 +119,18 @@ The two-step estimator exploits a convenient fact: principal components consiste
     they are retained as ``\Lambda_y = \Lambda B_y'``, the implied direct loading of each panel
     variable on ``Y^{key}``, and are used when mapping responses back to the panel.
 
+`plot_result` draws the estimated factors, which is the first thing to look at after a fit: a factor that is visibly a single spike is picking up one outlying observation rather than a common component.
+
+```julia
+plot_result(favar)
+```
+
+```@raw html
+<iframe src="../assets/plots/favar_factors.html" width="100%" height="420" frameborder="0" style="border:1px solid #ddd;border-radius:4px;"></iframe>
+```
+
+The two slow-moving factors have very different amplitudes — the second varies about two and a half times as much as the first (standard deviations of 1.00 against 0.39), and all four extreme values fall between observations 20 and 24. Neither is dominated by a single spike, so both are common components rather than artefacts, and neither carries any funds-rate variation: step 2 has projected that out.
+
 ### Specifying Key Variables
 
 Key variables enter the VAR directly and receive exact impulse responses rather than factor-mapped ones. Pass them as column indices into `X`, or as a separate matrix:
@@ -246,7 +258,21 @@ where:
 
 Key observed variables skip the mapping entirely and keep their direct VAR responses, so the series the researcher chose to observe get exact structural answers.
 
-The panel IRF reported in Recipe 3 delivers a textbook monetary contraction. On impact `INDPRO` falls 0.040, `CPIAUCSL` falls 0.101, and `UNRATE` rises 0.090, while the short rate `TB3MS` jumps 0.364 and the ten-year `GS10` moves only 0.077 — a flattening of the curve. Both the output and price responses are still negative at ``h = 12`` (``-0.009`` and ``-0.022``), so the contraction persists rather than reversing. The two channels of the mapping can be separated directly:
+The panel IRF reported in Recipe 3 delivers a textbook monetary contraction. On impact `INDPRO` falls 0.040, `CPIAUCSL` falls 0.101, and `UNRATE` rises 0.090, while the short rate `TB3MS` jumps 0.364 and the ten-year `GS10` moves only 0.077 — a flattening of the curve. Both the output and price responses are still negative at ``h = 12`` (``-0.009`` and ``-0.022``), so the contraction persists rather than reversing.
+
+Plotting the mapped responses shows all seven series answering one shock, which is the FAVAR's selling point over a three-variable VAR:
+
+```julia
+plot_result(r_panel; shock="FEDFUNDS")
+```
+
+```@raw html
+<iframe src="../assets/plots/favar_panel_irf.html" width="100%" height="700" frameborder="0" style="border:1px solid #ddd;border-radius:4px;"></iframe>
+```
+
+The sign pattern at impact is the one theory asks for — activity and prices down, unemployment up, the whole yield curve up with the ten-year moving a fifth as much as the three-month — but no response is monotone. Most peak one period *after* impact (`CPIAUCSL` reaches ``-0.153`` at ``h = 1`` against ``-0.101`` on impact), and `M2SL` and `GS10` cross zero on the way down. All seven have decayed to under 15% of their impact magnitude by the end of the horizon. The bands are drawn flat at zero because the `irf` call above requested no confidence intervals; `ci_type=:bootstrap` fills them in, subject to the mapping caveat below.
+
+The two channels of the mapping can be separated directly:
 
 ```@example favar
 # Impact response of INDPRO to the funds-rate shock, channel by channel

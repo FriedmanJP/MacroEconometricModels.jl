@@ -397,6 +397,34 @@ The largest element of ``X'e`` is 4.5e-7, zero to the Newton convergence toleran
 
 ---
 
+## Visualization
+
+`plot_result` renders both model families as horizontal dot-and-whisker plots at 95% intervals, and the multinomial marginal effects as one facet per non-base alternative:
+
+```julia
+plot_result(m_ologit)     # slopes and cutpoints, two panels
+plot_result(m_mlogit)     # one coefficient facet per non-base alternative
+plot_result(me_m)         # marginal-effect facets (points only, no whiskers)
+```
+
+The ordered figure separates the two parameter blocks because they live on different scales: the slopes measure how a regressor shifts the latent index, the cutpoints are positions *on* that index.
+
+```@raw html
+<iframe src="../assets/plots/ordered_coef.html" width="100%" height="520" frameborder="0" style="border:1px solid #ddd;border-radius:4px;"></iframe>
+```
+
+The preschool-child coefficient of ``-1.328`` sits far to the left of every other slope, on an interval — ``[-1.672, -0.985]`` — five times wider than the next widest. At the opposite extreme `nwifeinc` is the one slope whose interval nearly touches zero, reaching ``-0.003`` at its upper end. The cutpoint panel shows the three thresholds ordered and well separated at ``-1.303``, ``-0.196`` and 1.811, on intervals roughly 2.4 units wide: the four bands are distinguishable, but the thresholds themselves are the least precisely estimated parameters in the model.
+
+The multinomial figure draws one panel per alternative, each labelled with the band code and its base category:
+
+```@raw html
+<iframe src="../assets/plots/mlogit_coef.html" width="100%" height="620" frameborder="0" style="border:1px solid #ddd;border-radius:4px;"></iframe>
+```
+
+Reading a regressor across the three panels is the visual form of the parallel-regression question. Experience behaves exactly as the ordered model assumes, rising monotonically with the hours band (0.076, 0.137, 0.174), and schooling is flat across the three at 0.216 to 0.236 — a single common slope would lose nothing. Preschool children do not: the coefficient is ``-0.994`` for part-time work but ``-1.963`` for the 1000--1999 hour band and ``-1.813`` for full-time work, so the effect peaks in the middle of the ordering rather than growing with it. That non-monotonicity is what a single ordered slope cannot represent, and it is why the [Specification Tests](@ref specification-tests) above matter before the ordered fit is reported.
+
+---
+
 ## Complete Example
 
 An end-to-end labour-supply study: fit the ordered model, test the assumption it rests on, refit without that assumption, and compare what the two say.

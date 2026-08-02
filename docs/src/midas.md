@@ -306,6 +306,16 @@ Check the `:weights` view first. A curve that has collapsed onto a single lag, o
 has run flat at ``\theta = 0``, signals that the profiled objective stalled on a ridge
 rather than that the data prefer a degenerate shape.
 
+```@raw html
+<iframe src="../assets/plots/midas_weights.html" width="100%" height="400" frameborder="0" style="border:1px solid #ddd;border-radius:4px;"></iframe>
+```
+
+The estimated exponential-Almon curve is single-peaked and interior: weight rises from
+0.011 on the most recent month to 0.410 at lag 3, then decays to 0.006 by lag 6. The
+quarter's information about GDP growth is concentrated in the middle of the preceding
+two quarters rather than in the latest month — the hump shape that motivates a
+parametric weight function over six free coefficients.
+
 ---
 
 ## Complete Example

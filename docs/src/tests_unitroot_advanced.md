@@ -589,6 +589,12 @@ The signature PSY chart plots the ``\mathrm{BSADF}(r_2)`` sequence against its 9
 plot_result(res)   # BSADF vs 95% CV, shaded bubble episodes
 ```
 
+```@raw html
+<iframe src="../assets/plots/bubble_monitor.html" width="100%" height="440" frameborder="0" style="border:1px solid #ddd;border-radius:4px;"></iframe>
+```
+
+The sequence begins at observation 24, the first ``r_2`` the minimum window admits, and stays below its critical-value line until observation 65. It peaks at 9.126 at observation 110 — the last period of the explosive segment, where the accumulated run is fully inside the window — and the shaded episode covers 65 to 154. Reading the chart rather than the scalar statistic is the point of the exercise: the peak locates the end of the explosive run, the shading brackets it, and the gap between the two lines outside the episode shows how far from exuberance the series otherwise is.
+
 ### Options
 
 Both functions take the same keywords.

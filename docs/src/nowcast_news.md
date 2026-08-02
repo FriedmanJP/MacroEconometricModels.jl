@@ -175,9 +175,15 @@ The third positional argument after the model, `target_period`, selects the peri
 `plot_result` renders a `NowcastNews` in three views:
 
 ```julia
-plot_result(news_grp)                    # :releases — one bar per release (default)
+plot_result(news)                        # :releases — one bar per release (default)
 plot_result(news_grp; view=:groups)      # stacked bar by group
 plot_result(news_grp; view=:individual)  # sorted by absolute impact
+```
+
+The default `:releases` view draws one horizontal bar per element of ``\mathcal{J}``, labelled with the release identifier `Var{j}_t{t}`, against a zero line. The three monthly publications of the current quarter appear as `Var1_t60`, `Var2_t60` and `Var3_t60` — industrial production and CPI pushing the nowcast up, unemployment pulling it down:
+
+```@raw html
+<iframe src="../assets/plots/nowcast_news.html" width="100%" height="350" frameborder="0" style="border:1px solid #ddd;border-radius:4px;"></iframe>
 ```
 
 The `:groups` view stacks each group's net contribution into a single revision bar, so the question "real or nominal?" is answered by which segment dominates:

@@ -811,6 +811,12 @@ plot_result(m_fe)
 plot_result(m_fe; view=:diagnostics)
 ```
 
+```@raw html
+<iframe src="../assets/plots/panel_reg_coef.html" width="100%" height="380" frameborder="0" style="border:1px solid #ddd;border-radius:4px;"></iframe>
+```
+
+The coefficient view omits the intercept — a within estimator's constant is an artefact of the demeaning, not a quantity to interpret — and draws each slope against a zero reference line. Both PWT slopes sit far from it: human capital at 0.417 on ``[0.261, 0.573]`` and capital per worker at 0.516 on ``[0.414, 0.618]``. The whiskers are ``\hat\beta \pm 1.96\,\mathrm{SE}`` taken from `vcov_mat`, so they inherit whichever covariance estimator the fit used — cluster-robust here, since that is the `estimate_xtreg` default. A figure drawn from the `cov_type=:driscoll_kraay` refit above puts the same two points on a visibly shorter whisker for capital per worker, whose standard error falls from 0.0521 to 0.0198.
+
 ---
 
 ## Complete Example

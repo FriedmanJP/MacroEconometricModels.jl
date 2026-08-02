@@ -343,6 +343,20 @@ plot_result(dm)                      # loss differential with its 95% interval
 plot_result(comb)                    # combination weights and standalone MSEs
 ```
 
+Pass `metric` whenever the models are to be compared on one criterion. The bars come
+back sorted best-first, so the ranking is read off the order rather than reconstructed
+from bar heights: the AR(2) leads the race on RMSE at 0.5669, the historical mean
+follows at 0.6429, and the random walk trails at 0.6783.
+
+```@raw html
+<iframe src="../assets/plots/fceval_rmse.html" width="100%" height="400" frameborder="0" style="border:1px solid #ddd;border-radius:4px;"></iframe>
+```
+
+Without `metric` all eight measures share one linear axis, where MAPE at 134--163
+compresses MAE, RMSE and the Theil coefficients into the baseline. Draw the grouped view
+only for metrics of comparable magnitude, and reach for `view=:theil` when the question
+is how each model's error splits into bias, variance and covariance.
+
 The `MincerZarnowitzResult` plot draws the fitted efficiency line alone: the result
 stores no forecast or actual series, so there is no scatter to overlay.
 

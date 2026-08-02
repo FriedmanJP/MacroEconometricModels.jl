@@ -309,10 +309,10 @@ Model-adequacy screens and posterior diagnostics: the shared four-panel OLS resi
 <iframe src="../assets/plots/prior_posterior.html" width="100%" height="440" frameborder="0" style="border:1px solid #ddd;border-radius:4px;"></iframe>
 ```
 
-A binary-choice model additionally renders a classification-diagnostics panel (confusion counts and threshold sweep):
+A binary-choice fit gets its own two-panel adequacy screen: fitted probabilities sorted and split by the observed outcome, above their distribution by outcome group. Separation between the two colours is the visual counterpart of the classification table.
 
 ```@raw html
-<iframe src="../assets/plots/reg_classification.html" width="100%" height="460" frameborder="0" style="border:1px solid #ddd;border-radius:4px;"></iframe>
+<iframe src="../assets/plots/reg_logit.html" width="100%" height="460" frameborder="0" style="border:1px solid #ddd;border-radius:4px;"></iframe>
 ```
 
 ### 5. Structural ID, HA/DSGE dynamics & tests
