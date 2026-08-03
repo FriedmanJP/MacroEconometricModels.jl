@@ -193,23 +193,45 @@ Adding `M2SL` to the key block enlarges the VAR from three variables to four and
 
 The two-step estimator treats the extracted factors as data. They are not: they are estimates, and pretending otherwise understates the uncertainty in everything downstream. The Bayesian FAVAR (Bernanke, Boivin & Eliasz 2005, Section IV) samples factors, loadings, and VAR parameters jointly, so the credible interval on a structural response includes the error in the factor extraction itself.
 
+The measurement equation carries a direct loading on the key variables, which the two-step observation equation handles instead by removing double-counting:
+
+```math
+X_t = \Lambda \, F_t + \Lambda_y \, Y_t^{key} + e_t, \qquad e_t \sim N(0, \operatorname{diag}(\sigma_e^2))
+```
+
 The Gibbs sampler cycles three blocks:
 
 1. **Draw** ``(B, \Sigma) \mid F, Y^{key}``: Normal-Inverse-Wishart conjugate posterior from the VAR on the augmented system under a flat prior, in the tradition of Doan, Litterman & Sims (1984)
-2. **Draw** ``\Lambda \mid F, X``: equation by equation, each row of ``\Lambda`` from its Normal posterior given the current factors and idiosyncratic variances
-3. **Draw** ``F \mid \Lambda, B, \Sigma, X, Y^{key}``: Carter–Kohn forward-filtering backward-sampling on the companion state-space form, with the intercept and lagged ``Y^{key}`` feedback entering as a known drift
+2. **Draw** ``(\Lambda, \Lambda_y) \mid F, X, Y^{key}``: equation by equation, each row from its Normal posterior given the current factors and idiosyncratic variances
+3. **Draw** ``F \mid \Lambda, \Lambda_y, B, \Sigma, X, Y^{key}``: Carter–Kohn forward-filtering backward-sampling on the companion state-space form, with the intercept and lagged ``Y^{key}`` feedback entering as a known drift
+
+!!! note "Technical Note"
+    The likelihood identifies only the column space of ``\Lambda``: for any invertible
+    ``r \times r`` matrix ``G``, ``F \Lambda' = (F G')(\Lambda G^{-1})'``. The sampler fixes
+    those ``r^2`` free elements with the Bernanke, Boivin & Eliasz normalization
+    ``\Lambda_{[a]} = I_r`` and ``\Lambda_{y,[a]} = 0``, where the anchor rows ``a`` are the
+    first ``r`` columns of `X` that are not key variables — here `INDPRO` and `CPIAUCSL`,
+    the slow-moving series the restriction assumes respond to policy only through the
+    factors. **Column order therefore matters**: factor ``i`` is the common component of
+    anchor series ``i``. The ``\Lambda_y`` term is what keeps the factors from absorbing the
+    funds rate's own variation; without it ``F_1`` came out 90% correlated with `FEDFUNDS`,
+    the VAR design matrix on ``[F, Y^{key}]`` was near-singular, and the coefficient
+    posterior diverged.
 
 ```@example favar
 report(birf)
 ```
 
-Ten of the 100 posterior draws are discarded because their companion matrix is explosive, leaving 90 effective draws — `report` states this in the header rather than silently averaging over whatever survived. The Bayesian and two-step answers differ substantially on the same data: the median response of the funds rate to the first factor shock is ``-0.061`` at ``h = 4`` against ``-0.042`` from the two-step point estimate, and the first factor's own-shock response starts at 0.63 rather than 0.35. That is not sampling noise. The Gibbs sampler re-draws the factors at every sweep, so it never conditions on the fixed principal components the two-step estimator takes as given.
+Eight of the 100 posterior draws are discarded because their companion matrix is explosive, leaving 92 effective draws — `report` states this in the header rather than silently averaging over whatever survived. The Bayesian and two-step answers differ substantially on the same data: the median response of the funds rate to the first factor shock is ``-0.006`` at ``h = 4`` against ``-0.042`` from the two-step point estimate, and the first factor's own-shock response starts at 0.19 rather than 0.35. That is not sampling noise. The Gibbs sampler re-draws the factors at every sweep, so it never conditions on the fixed principal components the two-step estimator takes as given.
 
 !!! warning "100 draws is a documentation setting, not a research setting"
     The examples here use `n_draws=100, burnin=50` so the page builds quickly, and the flat
     prior leaves the VAR block essentially unregularized on 58 effective observations — which is
-    why one draw in ten is explosive. With a panel of ``N > 100`` variables use `burnin` of at
-    least 2000 and several thousand draws, and confirm the posterior is stable across settings.
+    why roughly one draw in twelve is explosive. That residual share is the honest posterior
+    for a persistent three-variable system on a short sample, not a symptom: the median draw
+    has a largest companion eigenvalue near 0.92. With a panel of ``N > 100`` variables use
+    `burnin` of at least 2000 and several thousand draws, and confirm the posterior is stable
+    across settings.
 
 ### Bayesian Structural Analysis
 
@@ -220,7 +242,7 @@ bfevd = fevd(bfavar, 20)
 report(bfevd)
 ```
 
-At the 20-period horizon the funds rate's own shock explains 13.7% of its forecast error variance in the Bayesian FAVAR, against 50.6% in the two-step model; the first factor alone takes 75.5%. Sampling the factors instead of fixing them moves variance from the identified policy shock to the common component, which is the direction the generated-regressor problem predicts. Read the two decompositions as answers to different questions, not as competing estimates of one number.
+At the 20-period horizon the funds rate's own shock explains 53.6% of its forecast error variance in the Bayesian FAVAR, against 50.6% in the two-step model; the second factor takes 38.0% and the first only 8.4%. The two estimators agree on the headline share while disagreeing on how the remainder splits between the factors, which is the expected pattern: they identify the same policy shock but attribute the common component differently because one samples the factors and the other conditions on fixed principal components. Read the two decompositions as answers to different questions, not as competing estimates of one number.
 
 ### Return Value (`BayesianFAVAR{T}`)
 
@@ -229,7 +251,8 @@ At the 20-period horizon the funds rate's own shock explains 13.7% of its foreca
 | `B_draws` | `Array{T,3}` | Posterior VAR coefficient draws (``n_{draws} \times k \times n``) |
 | `Sigma_draws` | `Array{T,3}` | Posterior covariance draws (``n_{draws} \times n \times n``) |
 | `factor_draws` | `Array{T,3}` | Posterior factor draws (``n_{draws} \times T \times r``) |
-| `loadings_draws` | `Array{T,3}` | Posterior loading draws (``n_{draws} \times N \times r``) |
+| `loadings_draws` | `Array{T,3}` | Posterior factor loading draws (``n_{draws} \times N \times r``) |
+| `lambda_y_draws` | `Array{T,3}` | Posterior direct key-variable loading draws (``n_{draws} \times N \times n_{key}``), in the VAR's ``Y^{key}`` units; zero on the anchor rows |
 | `X_panel` | `Matrix{T}` | Original panel data (``T \times N``) |
 | `panel_varnames` | `Vector{String}` | Panel variable names |
 | `Y_key_indices` | `Vector{Int}` | Key variable column indices |
@@ -294,14 +317,16 @@ The factor channel contributes exactly zero at impact: under the Cholesky orderi
 
 ### Bayesian Panel IRFs
 
-The Bayesian variant maps the posterior median and every quantile through the posterior mean loadings:
+The Bayesian variant maps the posterior median and every quantile through both posterior mean loading matrices, ``\Lambda \hat F_h + \Lambda_y \hat Y^{key}_h``, so the factor channel and the direct policy channel are both live:
 
 ```@example favar
 birf_panel = favar_panel_irf(bfavar, birf)
 report(birf_panel)
 ```
 
-Every non-key series has an impact response of exactly zero to the funds-rate shock, and responses appear only from ``h = 2``. The Bayesian mapping uses the factor channel alone: unlike the two-step path it adds no ``\Lambda_y`` term, because `BayesianFAVAR` samples the factors directly and never forms the double-counting regression that produces ``B_y``. Impact responses of non-key variables to a shock ordered last are therefore zero by construction here, whereas the two-step panel IRF reports them through ``\Lambda_y``. Compare the two mappings on the factor shocks, where both are live, rather than on the impact row of a recursively ordered policy shock.
+The impact row of the funds-rate shock reads the identification directly. `TB3MS` moves 0.383 on impact, `UNRATE` 0.057, and `GS10` ``-0.028``, all of it through ``\Lambda_y``: the funds rate is ordered last under Cholesky, so the factors do not move within the period and the entire impact response is the direct channel. `INDPRO` and `CPIAUCSL` are exactly zero instead — they are the two anchor series, restricted to ``\Lambda_y = 0``, and that restriction is precisely the assumption that output and prices respond to policy only through the factors. The zeros are an identifying assumption on display, not a finding about the data.
+
+The two-step mapping puts `INDPRO` at ``-0.040`` and `CPIAUCSL` at ``-0.101`` on that same impact row, non-zero because its ``\Lambda_y = \Lambda B_y'`` is an unrestricted regression slope rather than an identifying assumption. Both mappings are live on both channels; they differ only in what they are willing to assume about the slow-moving series.
 
 ---
 
@@ -376,7 +401,7 @@ report(hd_full)
  bayesian=round(100 * bfevd.point_estimate[3, 3, 20], digits=1))
 ```
 
-The two-step FAVAR extracts 2 factors from the 7-series panel, removes the component spanned by the federal funds rate, and estimates a VAR(2) on the resulting 3-variable augmented system — 58 effective observations after lags. The historical decomposition passes its identity check, and its mean absolute contributions show the funds rate driven mostly by its own shock (0.097) with the two factor shocks contributing 0.068 each, while the factors are driven overwhelmingly by factor shocks. Panel-wide IRFs then carry the three structural shocks out to all 7 series through the ``7 \times 2`` loading matrix ``\Lambda`` and the ``7 \times 1`` direct channel ``\Lambda_y``. The final comparison is the point of running both estimators: the funds-rate shock owns 50.6% of its own forecast error variance when the factors are treated as data and 13.7% when they are sampled, and that gap is the cost of the generated-regressor assumption, not a disagreement about the data.
+The two-step FAVAR extracts 2 factors from the 7-series panel, removes the component spanned by the federal funds rate, and estimates a VAR(2) on the resulting 3-variable augmented system — 58 effective observations after lags. The historical decomposition passes its identity check, and its mean absolute contributions show the funds rate driven mostly by its own shock (0.097) with the two factor shocks contributing 0.068 each, while the factors are driven overwhelmingly by factor shocks. Panel-wide IRFs then carry the three structural shocks out to all 7 series through the ``7 \times 2`` loading matrix ``\Lambda`` and the ``7 \times 1`` direct channel ``\Lambda_y``. The final comparison is the point of running both estimators: the funds-rate shock owns 50.6% of its own forecast error variance when the factors are treated as data and 53.6% when they are sampled, and the gap between them measures the cost of the generated-regressor assumption rather than a disagreement about the data.
 
 ---
 
@@ -390,9 +415,11 @@ The two-step FAVAR extracts 2 factors from the 7-series panel, removes the compo
 
 4. **Over-reading a small panel IRF.** For non-key variables the panel IRF is a linear projection through ``\Lambda`` and ``\Lambda_y``, capturing only the factor-mediated and policy-mediated components. A near-zero panel response does not mean the variable is unaffected — it means its response is orthogonal to the common structure the FAVAR models.
 
-5. **Treating mapped bands as credible intervals.** `favar_panel_irf` and `favar_panel_forecast` map interval endpoints through ``\Lambda``, which is not a quantile-preserving operation when loadings are negative. Use them as a range; when a genuine interval on a panel variable is required, estimate the Bayesian FAVAR and read the mapped quantiles of `birf_panel` on the factor shocks.
+5. **Treating mapped bands as credible intervals.** `favar_panel_irf` and `favar_panel_forecast` map interval endpoints through ``\Lambda``, which is not a quantile-preserving operation when loadings are negative. Use them as a range; when a genuine interval on a panel variable is required, estimate the Bayesian FAVAR, where the panel draws are mapped individually and the quantiles are recomputed in panel space rather than mapped endpoint by endpoint.
 
 6. **Pre-filtering the panel.** The two-step procedure removes double-counting itself. Dropping the key variables from `X` before extraction is unnecessary and throws away information that improves the factor estimates.
+
+7. **Ignoring column order under `method=:bayesian`.** The Gibbs sampler anchors the factor scale on the first ``r`` non-key columns of `X`, restricting them to unit loadings and no direct policy response. Put slow-moving series there — output and prices, not asset prices — and check that they are not near-collinear in the factor space, which raises an `ArgumentError`. Factor ``i`` is then read as the common component of anchor series ``i``. The two-step estimator is invariant to column order; the Bayesian one is not.
 
 ---
 

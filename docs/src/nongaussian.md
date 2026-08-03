@@ -37,7 +37,7 @@ All 14 methods return a rotation matrix ``Q`` and structural impact matrix ``B_0
 | Independence beyond fourth moments | `identify_dcov`, `identify_hsic` | Nonparametric and kernel criteria |
 | Heavy tails | `identify_student_t` | Parametric ML on fat tails |
 | Bimodal shocks | `identify_mixture_normal` | Two-component Gaussian mixture |
-| Skewness and kurtosis jointly | `identify_pml` | Pseudo-ML on both moments |
+| Skewness and kurtosis jointly | `identify_pml` | Pearson Type IV ML on both moments |
 | Asymmetric shocks | `identify_skew_normal` | Azzalini skew-normal likelihood |
 | Discrete volatility regimes | `identify_markov_switching` | EM over latent regimes |
 | Volatility clustering | `identify_garch` | Conditional variance dynamics |

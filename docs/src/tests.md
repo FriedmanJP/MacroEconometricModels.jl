@@ -70,7 +70,7 @@ Parameter instability at unknown dates. See [Structural Breaks](@ref tests_break
 |----------------|-------------|-----|
 | Single unknown break | `andrews_test` | sup-, exp-, and mean-Wald functionals |
 | Multiple unknown breaks | `bai_perron_test` | Dynamic programming with BIC/LWZ |
-| Factor loading instability | `factor_break_test` | Loading CUSUM, sup-Wald, rank change |
+| Factor loading instability | `factor_break_test` | Pooled per-series LM, sup-Wald |
 
 ### Panel Data
 

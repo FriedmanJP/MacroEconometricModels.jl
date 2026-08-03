@@ -639,19 +639,21 @@ m_re_logit = estimate_xtlogit(pd_ddcg, :dem, [:lngdppc]; model=:re, tol=1e-12)
 report(m_re_logit)
 ```
 
-Random effects keeps all 175 countries and integrates over a normal country effect with estimated ``\hat{\sigma}_u = 4.5531``, implying ``\rho = 0.8630``: 86% of the latent-variable residual variance is permanent country heterogeneity. Absorbing that heterogeneity raises the pseudo R-squared from 0.1581 to 0.5191 and the income slope to 1.0962, above both the pooled 0.6879 and the conditional-FE 1.8515's lower neighbourhood. All three estimates share the sign that supports the Lipset hypothesis; they differ in which variation identifies it.
+Random effects keeps all 175 countries and integrates over a normal country effect with estimated ``\hat{\sigma}_u = 4.8225``, implying ``\rho = 0.8761``: 88% of the latent-variable residual variance is permanent country heterogeneity. Absorbing that heterogeneity raises the pseudo R-squared from 0.1581 to 0.5233 and the income slope to 1.8483 — essentially the conditional-FE 1.8515, which is exactly what a correctly specified RE model should deliver: both estimators isolate the within-country association, they just weight the switching countries differently. The entity-clustered standard error of 0.5217 puts ``z = 3.54``, in line with the clustered conditional-FE ``z`` of 3.44 below. All three estimates share the sign that supports the Lipset hypothesis; they differ in which variation identifies it.
 
-!!! warning "This RE fit does not reach a stationary point"
-    The report above says `Converged: No` after 44 iterations, and the two standard errors
-    come back at ``5 \times 10^{-11}`` and ``3 \times 10^{-10}`` — small enough that the
-    coefficient table prints `—` rather than a z-statistic. Both are symptoms of the same
-    open defect in the RE/CRE observed-information covariance
-    ([#542](https://github.com/FriedmanJP/MacroEconometricModels.jl/issues/542)), not of the
-    data. Read the point estimates, which are stable across starting values and tolerances,
-    and do **not** quote the standard errors, confidence intervals, or significance stars
-    from an RE or CRE panel logit until that issue closes. `tol` is the optimizer's
-    *relative function* tolerance, so tightening it (as here, `tol=1e-12`) buys more
-    iterations but does not repair the covariance.
+!!! note "Two defects used to corrupt this fit (#542)"
+    Earlier releases reported `Converged: No` with standard errors near ``10^{-10}``
+    on this example. Two distinct defects, both fixed in
+    [#542](https://github.com/FriedmanJP/MacroEconometricModels.jl/issues/542): the
+    inner posterior-mode search of the adaptive quadrature ran a fixed number of Newton
+    steps, leaving the likelihood *value* jagged — optimizers stopped on noise-dependent
+    pseudo-optima 20+ log-likelihood units above the true optimum (which is why older
+    documentation quoted a slope of 1.10) — and the covariance differentiated through
+    that truncated search, inflating the observed information by orders of magnitude.
+    The mode search now converges to machine precision, and the covariance uses the
+    Louis (1982) score/information identities computed by posterior quadrature. The fit
+    converges in 14 iterations, the optimum is unique across starting values, and the
+    reported standard errors respect the complete-data information bound.
 
 !!! note "The fit itself no longer aborts"
     Before
@@ -664,13 +666,14 @@ Random effects keeps all 175 countries and integrates over a normal country effe
     reach.
 
 !!! note "Which standard errors you get"
-    `cov_type` applies to the pooled **and** conditional-FE estimators. The FE fit inverts
-    the conditional information for `:ols` and sandwiches it with the per-group conditional
-    scores for `:cluster`, the default — 0.5379 against 0.1490 on `lngdppc` here, a ``z`` of
-    3.44 rather than 12.42, since the clustered version prices in the within-country
-    dependence the conditional likelihood does not model. The RE and CRE fits report
-    model-based standard errors from the observed information of the quadrature likelihood,
-    with no cluster correction.
+    `cov_type` applies to every estimator. The FE fit inverts the conditional information
+    for `:ols` and sandwiches it with the per-group conditional scores for `:cluster`, the
+    default — 0.5379 against 0.1490 on `lngdppc` here, a ``z`` of 3.44 rather than 12.42,
+    since the clustered version prices in the within-country dependence the conditional
+    likelihood does not model. The RE and CRE fits build the bread from the Louis
+    observed information of the marginal likelihood and, under `:cluster`, sandwich it
+    with the per-group marginal scores using the same ``G/(G-1)\cdot(n-1)/(n-k)``
+    finite-sample correction as the pooled path.
 
 ### Panel Probit
 
@@ -681,7 +684,7 @@ m_probit = estimate_xtprobit(pd_ddcg, :dem, [:lngdppc])
 report(m_probit)
 ```
 
-Probit coefficients are on the standard-normal scale, so they are not directly comparable to logit ones; the usual rule of thumb ``\beta_{\text{logit}} \approx 1.6 \, \beta_{\text{probit}}`` holds here (0.6879 against 0.4185). Marginal effects, computed next, are the scale-free way to compare the two link functions. `model=:re` and `model=:cre` integrate over a normal country effect exactly as the logit versions do, subject to the same convergence caveat.
+Probit coefficients are on the standard-normal scale, so they are not directly comparable to logit ones; the usual rule of thumb ``\beta_{\text{logit}} \approx 1.6 \, \beta_{\text{probit}}`` holds here (0.6879 against 0.4185). Marginal effects, computed next, are the scale-free way to compare the two link functions. `model=:re` and `model=:cre` integrate over a normal country effect, but with *fixed* (non-adaptive) Gauss-Hermite nodes and a likelihood-change stopping rule — on panels with large ``\sigma_u`` like this one the probit quadrature under-resolves where the adaptive logit version does not, so read its RE output with more caution than the logit's.
 
 ### Panel Marginal Effects
 

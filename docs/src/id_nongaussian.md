@@ -312,19 +312,23 @@ The mixture needs 1321 Nelder-Mead iterations to converge, so the default `max_i
 
 ### PML (Pearson Type IV)
 
-Pseudo maximum likelihood (Herwartz 2018) targets shocks with both skewness and excess kurtosis. Each shock carries a skewness parameter ``\kappa_j`` and a tail parameter ``\nu_j``, and the implementation forms the log-density as a standardized Student-t core plus a cubic skewness correction ``\kappa_j x^3 / 6``.
+The `:pml` distribution (Herwartz 2018; the symbol is kept for API stability) fits each shock with the genuine Pearson Type IV density, standardized to zero mean and unit variance:
 
-!!! warning "PML log-likelihoods are not comparable across distributions"
-    The cubic correction term carries no normalizing constant, so the PML objective is not a proper log-density and increases without bound in ``\kappa_j``. On this sample the optimizer runs ``\kappa`` past ``\pm 100`` and ``\nu`` to values of order ``10^{138}``, producing a log-likelihood an order of magnitude above every other specification. Never rank `:pml` against the other distributions by AIC or BIC, and inspect `dist_params` for boundary values before using its ``B_0``.
-
-```@example id_ng
-pml = identify_pml(model)
-(kappa = round.(pml.dist_params[:kappa], digits=2),
- log10_nu = round.(log10.(pml.dist_params[:nu]), digits=1),
- loglik = round(pml.loglik, digits=1))
+```math
+f_j(x;\, \nu_j, m_j) = k_j \left[1 + z_j^2\right]^{-m_j} e^{-\nu_j \arctan z_j}, \qquad z_j = \frac{x - \lambda_j}{a_j}
 ```
 
-Every ``\kappa_j`` has run to a boundary value of magnitude ``100`` or more, the degrees of freedom have exploded to between ``10^{16}`` and ``10^{138}``, and the reported log-likelihood of ``20157`` sits far above the Gaussian benchmark of ``979.75`` --- a gap no genuine density could deliver on 118 observations. Use `:student_t` for heavy tails and `:skew_normal` for asymmetry until the Pearson IV normalization is in place.
+where ``\nu_j`` controls skewness (``\nu_j = 0`` is symmetric and recovers the unit-variance scaled Student-t with ``2m_j - 1`` degrees of freedom), ``m_j > 2`` controls tail weight, ``a_j`` and ``\lambda_j`` are pinned by the zero-mean/unit-variance constraints, and the normalizing constant ``k_j`` involves ``|\Gamma(m_j + i\nu_j/2)|^2`` (Heinrich 2004). Because the density integrates to one for every parameter value, `loglik`, AIC/BIC, and the likelihood-ratio test against Gaussian shocks are all valid statistics — earlier releases used an unnormalized cubic-tilt approximation whose objective was unbounded in the skewness parameter ([#566](https://github.com/FriedmanJP/MacroEconometricModels.jl/issues/566)).
+
+```@example id_ng
+pml = identify_pml(model; max_iter=3000)
+(kappa = round.(pml.dist_params[:kappa], digits=2),
+ m = round.(pml.dist_params[:nu], digits=2),
+ loglik = round(pml.loglik, digits=1),
+ converged = pml.converged)
+```
+
+In `dist_params`, `:kappa` holds the skewness parameters ``\nu_j`` and `:nu` the tail exponents ``m_j``. All three shocks come out right-skewed (``\kappa`` between 0.12 and 0.82) with heavy tails — ``m`` for the first and third shocks sits at the ``m > 2`` boundary that unit variance requires, the Pearson-IV way of saying the tails are barely square-integrable. The log-likelihood of 1034.57 now sits a plausible 55 points above the Gaussian benchmark of 979.75 rather than the pre-#566 fabricated 20157. Like the mixture, the fit needs more than the default `max_iter=500` Nelder-Mead iterations (535 here) — always check `converged`.
 
 ### Skew-Normal
 
@@ -360,11 +364,11 @@ comparison = [(dist = d,
                AIC = round(m.aic, digits=2),
                BIC = round(m.bic, digits=2),
                converged = m.converged)
-              for d in [:student_t, :mixture_normal, :skew_normal]
-              for m in (identify_nongaussian_ml(model; distribution=d, max_iter=2000),)]
+              for d in [:student_t, :mixture_normal, :pml, :skew_normal]
+              for m in (identify_nongaussian_ml(model; distribution=d, max_iter=3000),)]
 ```
 
-Student-t wins on both criteria (AIC ``-2059.88`` against ``-2048.98`` for the mixture and ``-1947.50`` for the skew-normal), consistent with the fitted degrees of freedom near 3. The skew-normal is the worst fit precisely because it spends parameters on asymmetry that the data do not exhibit. `:pml` is excluded from the comparison for the reason given above. The `loglik_gaussian` field carries the Gaussian benchmark for the likelihood-ratio test formalized on [Testing](@ref id_testing_page).
+Student-t wins on both criteria (AIC ``-2059.88`` against ``-2051.13`` for the Pearson IV, ``-2048.98`` for the mixture, and ``-1947.50`` for the skew-normal), consistent with the fitted degrees of freedom near 3. Since the #566 normalization, `:pml` competes on equal terms and lands where a two-parameter-per-shock density should — a slightly better log-likelihood than the one-parameter Student-t, not enough to pay its extra three parameters. The skew-normal is the worst fit precisely because it spends parameters on asymmetry that the data barely exhibit. The `loglik_gaussian` field carries the Gaussian benchmark for the likelihood-ratio test formalized on [Testing](@ref id_testing_page).
 
 | Keyword | Type | Default | Description |
 |---------|------|---------|-------------|
@@ -452,7 +456,7 @@ Step 3 reports, for each FastICA column, the smallest angular distance to any St
 
 5. **Nelder-Mead finds local optima.** The ML estimators and the dCov/HSIC objectives are all derivative-free. For ``n > 4``, run several initializations or compare across methods; consistent ``B_0`` estimates across objectives are the practical convergence diagnostic.
 
-6. **The LR test requires correct nesting.** Comparing the non-Gaussian and Gaussian likelihoods is valid only when the Gaussian model is nested in the non-Gaussian one: ``\nu_j \to \infty`` for Student-t, ``\sigma_{1j} = \sigma_{2j}`` for the mixture, ``\alpha_j = 0`` for the skew-normal. The `:pml` objective is not a normalized density and is excluded from likelihood comparisons entirely.
+6. **The LR test requires correct nesting.** Comparing the non-Gaussian and Gaussian likelihoods is valid only when the Gaussian model is nested in the non-Gaussian one: ``\nu_j \to \infty`` for Student-t, ``\sigma_{1j} = \sigma_{2j}`` for the mixture, ``\alpha_j = 0`` for the skew-normal, and ``(\nu_j, m_j) \to (0, \infty)`` for the Pearson IV — approached through the scaled Student-t as ``m_j`` grows, with the tail cap at ``m \approx 10^4`` making the limit numerically reachable.
 
 ---
 

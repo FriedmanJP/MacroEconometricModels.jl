@@ -361,7 +361,7 @@ result_q = hegy_test(yq; frequency=4)
 report(result_q)
 ```
 
-Now no null is rejected: ``t(\pi_1) = -2.487`` against ``-3.47``, ``t(\pi_2) = -1.275`` against ``-2.92``, and the harmonic ``F = 2.295`` against 6.57. Since ``\Delta_4 = (1-L)(1+L)(1+L^2)`` contains one factor per frequency, and every frequency carries a root, full seasonal differencing is the correct transformation for this series.
+Now no null is rejected: ``t(\pi_1) = -2.486`` against ``-3.47``, ``t(\pi_2) = -1.275`` against ``-2.92``, and the harmonic ``F = 2.295`` against 6.57. Since ``\Delta_4 = (1-L)(1+L)(1+L^2)`` contains one factor per frequency, and every frequency carries a root, full seasonal differencing is the correct transformation for this series.
 
 ### Options
 
@@ -399,30 +399,31 @@ Rejecting ``t(\pi_1)`` removes the zero-frequency root; rejecting ``t(\pi_2)`` r
 
 ## LM Unit Root Test
 
-The LM unit root test (Schmidt & Phillips 1992; Lee & Strazicich 2003, 2013) takes a different route to structural breaks from Zivot-Andrews and Narayan-Popp. Its defining feature is that breaks enter under the **null** as well as the alternative. Under Zivot-Andrews, breaks appear only under the alternative, so a rejection is ambiguous: it may mean the series is stationary, or it may mean the series is a unit root process that happens to break. The LM formulation removes that ambiguity, at least in theory — rejection implies stationarity whether or not breaks are present.
+The LM unit root test (Schmidt & Phillips 1992; Lee & Strazicich 2003, 2013) takes a different route to structural breaks from Zivot-Andrews and Narayan-Popp. Its defining feature is that breaks enter under the **null** as well as the alternative. Under Zivot-Andrews, breaks appear only under the alternative, so a rejection is ambiguous: it may mean the series is stationary, or it may mean the series is a unit root process that happens to break. The LM formulation removes that ambiguity: rejection implies stationarity whether or not breaks are present.
 
 Three variants handle different break counts. `breaks=0` is the basic Schmidt-Phillips test; `breaks=1` grid-searches one break date (Lee & Strazicich 2013); `breaks=2` grid-searches a pair (Lee & Strazicich 2003).
 
-The procedure detrends under the null and then runs an ADF-type regression on the detrended series:
+The procedure detrends **under the null** and then runs an ADF-type regression on the detrended series:
 
 ```math
-\tilde{S}_t = y_t - Z_t \tilde{\delta}, \qquad
-\Delta \tilde{S}_t = \phi \, \tilde{S}_{t-1} + \sum_{j=1}^{p} \delta_j \Delta \tilde{S}_{t-j} + \varepsilon_t
+\tilde{S}_t = y_t - Z_t \tilde{\delta} - \tilde{\psi}, \qquad
+\Delta \tilde{S}_t = \phi \, \tilde{S}_{t-1} + \Delta Z_t' \gamma + \sum_{j=1}^{p} \beta_j \Delta \tilde{S}_{t-j} + \varepsilon_t
 ```
 
 where:
 - ``Z_t`` collects an intercept, a linear trend, and the break dummies ``DU_{it} = \mathbf{1}(t > T_{Bi})``
 - for `regression=:both`, ``Z_t`` also carries the trend-shift dummies ``DT_{it} = (t - T_{Bi}) \cdot \mathbf{1}(t > T_{Bi})``
-- ``\tilde{\delta}`` is estimated by OLS of ``y`` on ``Z`` in levels
+- ``\tilde{\delta}`` is estimated by OLS of ``\Delta y`` on ``\Delta Z`` — the *differenced* regression, which is the one that holds under ``H_0``, not a levels regression
+- ``\tilde{\psi} = y_1 - Z_1 \tilde{\delta}`` shifts the detrended series so that ``\tilde{S}_1 = 0``
 - ``\phi`` is the coefficient of interest, with ``H_0: \phi = 0`` (unit root with possible breaks) against ``H_1: \phi < 0`` (trend-stationary with possible breaks)
 
-The statistic is the ``t``-ratio on ``\phi``, minimized over the trimmed grid of break dates.
+Detrending in differences is what puts the breaks under the null: ``\tilde{\delta}`` never sees the levels, so a break in ``Z`` cannot be absorbed as mean reversion. The statistic is the ``t``-ratio on ``\phi``, minimized over the trimmed grid of break dates.
 
-!!! note "Critical values do not vary with the break location"
-    Lee & Strazicich tabulate critical values that depend on the break fractions ``\lambda_i = T_{Bi}/T``. This implementation uses a single Model A (level-shift) table for `breaks=1` and another for `breaks=2`, with no interpolation over ``\lambda`` and no separate table for `regression=:both`. The `breaks=0` values are a genuine response surface in ``1/T`` and ``p/T``.
+!!! note "Where the critical values come from"
+    Lee & Strazicich tabulate values that depend on the break fractions ``\lambda_i = T_{Bi}/T`` and on their own detrending, and neither matches the statistic computed here; read against those tables, `breaks=1` rejected a driftless random walk 55% of the time and `breaks=2` 85%. The critical values are instead simulated from the null distribution of *this* minimized statistic (`LM_UNITROOT_SIM_CV`, 10,000 driftless-random-walk replications per cell), with one table for each of the six `(breaks, regression)` combinations, interpolated linearly in ``1/T`` across ``T = 100, 150, 250, 500`` and carried unchanged outside that range. There is still no interpolation over ``\lambda``, by design: the simulated distribution already integrates over where the minimizing break lands.
 
-!!! warning "The break-search variants over-reject badly"
-    On driftless random walks with no breaks (``T = 150``, 60 replications, `lags=0`), `breaks=0` held its nominal 5% size while `breaks=1` rejected 55% of the time and `breaks=2` 85%. Minimizing over the grid drives the statistic far below what the fixed tables anticipate. Treat a rejection from `breaks=1` or `breaks=2` as suggestive only, and corroborate with `dfgls_test` or `fourier_adf_test` before a differencing decision rests on it.
+!!! note "What the tables are conditional on"
+    They are simulated at `lags = 0` and the default `trim = 0.15`. Under that design a fresh-seed Monte Carlo on driftless random walks puts empirical size between 2% and 6% at a 5% nominal level in every `(breaks, regression)` cell at ``T = 150`` and ``T = 250``, with power of 1.00 against a stationary AR(0.5) at ``T = 150``. Moving `trim`, or letting `lags=:aic` add augmentation, shifts the null distribution while the critical values stay put, so p-values off that design are approximate.
 
 When the series is genuinely stationary around shifting means, the test rejects and pins the dates:
 
@@ -434,9 +435,9 @@ result = lm_unitroot_test(ys; breaks=2, regression=:level)
  breaks = result.break_dates, cv5 = result.critical_values[5])
 ```
 
-Here ``\tau = -12.379`` against a 5% value of ``-3.842``, and the estimated dates 103 and 201 sit within two observations of the truth. Recovering the true break locations is the diagnostic that separates a genuine rejection from an artifact — dates that cluster at the trimming boundary, or that correspond to nothing in the data, mean the grid search found noise.
+Here ``\tau = -4.941`` against a 5% value of ``-3.586``, so ``p = 0.001`` and the unit root is rejected decisively. The estimated dates 104 and 200 sit on the true shifts at ``T_{B1} = 100`` and ``T_{B2} = 200`` — the second exactly, the first four observations late. Recovering the true break locations is the diagnostic that separates a genuine rejection from an artifact — dates that cluster at the trimming boundary, or that correspond to nothing in the data, mean the grid search found noise.
 
-The size distortion is easy to see directly. Apply the one-break test to a random walk that also shifts level, where the correct answer is "unit root":
+Matching `breaks` to the data matters more than it looks. Apply both the one-break and the no-break test to a random walk that also shifts level, where the correct answer is "unit root":
 
 ```@example test_ur_adv
 # A random walk with a level shift at t = 101 — an I(1) series, breaks and all
@@ -450,7 +451,9 @@ no_break  = lm_unitroot_test(y; breaks=0, regression=:level)
  without_break = (round(no_break.statistic, digits=3), no_break.critical_values[5]))
 ```
 
-The theory says this series should survive both tests, since breaks sit under ``H_0``. In practice `breaks=1` returns ``\tau = -4.172`` against a 5% value of ``-3.566`` and rejects, while `breaks=0` returns ``-3.340`` against ``-3.041`` and also rejects. Both are false positives on a series that is I(1) by construction, and the one-break statistic is the more distorted of the two — a concrete instance of the size problem above rather than a counterexample to the LM design. Schmidt-Phillips (`breaks=0`) is correctly sized on average; this particular draw is simply unlucky.
+Only `breaks=1` has this series under its null, and the two calls behave very differently. `breaks=1` finds the break at observation 100 — the shift date exactly — and returns ``\tau = -3.739`` against a 5% value of ``-3.409``, a marginal rejection at ``p = 0.023``. `breaks=0` returns ``-3.170`` against a 5% value of ``-1.948`` and rejects at ``p = 0.001``.
+
+Those two rejections have different causes, and only one of them is bad luck. Re-run the same innovation draw *without* the level shift and `breaks=0` gives ``\tau = -0.528`` with ``p = 0.20``: the shift is what produced its rejection. That is a specification failure, not a size failure — the Schmidt-Phillips design carries an intercept and nothing else, so a level shift is not in its null at all, and leaving it unmodelled makes an I(1) series look mean-reverting. The `breaks=1` rejection is the honest Type I error of a correctly sized test on one draw: on the same innovations without the shift it returns ``-3.243`` and ``p = 0.078``, and the shift moves it just past the 5% line. Set `breaks` to the number of shifts the series plausibly has; a `breaks=0` call on visibly shifting data is not a conservative choice.
 
 ### Options
 
@@ -469,13 +472,13 @@ At least 50 observations are required. A trend is included in ``Z_t`` for `break
 | Field | Type | Description |
 |-------|------|-------------|
 | `statistic` | `T` | LM statistic (``t``-ratio on ``\phi``), minimized over the break grid |
-| `pvalue` | `T` | Interpolated p-value, clipped to ``[0.001, 0.20]`` |
+| `pvalue` | `T` | Piecewise-linear p-value against the simulated null quantiles, clipped to ``[0.001, 0.20]`` |
 | `breaks` | `Int` | Number of breaks (0, 1, or 2) |
 | `break_dates` | `Vector{Int}` | Estimated break dates as observation indices; empty when `breaks=0` |
 | `break_fractions` | `Vector{T}` | Break locations as fractions of the sample; empty when `breaks=0` |
 | `lags` | `Int` | Number of augmenting lags used |
 | `regression` | `Symbol` | Break specification |
-| `critical_values` | `Dict{Int,T}` | Critical values at 1%, 5%, 10% |
+| `critical_values` | `Dict{Int,T}` | Simulated critical values at 1%, 5%, 10% for this `(breaks, regression)` pair, interpolated in ``1/T`` |
 | `nobs` | `Int` | Number of observations in the test regression (``T - 1 - p``) |
 
 ---
@@ -498,10 +501,10 @@ The two-break ADF test (Narayan & Popp 2010) extends the ADF framework to two en
 - ``H_0: \gamma = 0`` (unit root with two breaks) against ``H_1: \gamma < 0`` (stationary with two breaks)
 
 !!! note "Technical Note"
-    The grid search is quadratic in the sample: with trimming ``\tau`` the number of candidate pairs is ``O\big((T(1-2\tau))^2\big)``, and each pair re-runs the lag selection. The default ``\tau = 0.10`` excludes the first and last 10% of the sample. The minimum gap between dates is 2 observations for `:level` and 3 for `:both`, enough to identify the break parameters separately. Critical values are the Narayan-Popp (2010) tables selected by the nearest sample-size bracket (50, 200, 400, larger), with no interpolation between brackets.
+    The grid search is quadratic in the sample: with trimming ``\tau`` the number of candidate pairs is ``O\big((T(1-2\tau))^2\big)``, and each pair re-runs the lag selection. The default ``\tau = 0.10`` excludes the first and last 10% of the sample. The minimum gap between dates is 2 observations for `:level` and 3 for `:both`, enough to identify the break parameters separately.
 
-!!! warning "Empirical size far exceeds nominal"
-    In the same Monte Carlo check as the LM test — driftless random walks with no breaks, ``T = 150``, 60 replications, `lags=0` — this test rejected 70% of the time at a nominal 5% level. Grid minimization over pairs drives the statistic well past what the tabulated values allow for. A rejection here is a reason to look at the estimated break dates, not a licence to model the series as stationary.
+!!! note "Where the critical values come from"
+    This regression is the **additive-outlier** form — the break dummies enter the ADF equation directly — so the Narayan-Popp (2010) published tables, computed for their unobserved-components statistic, do not describe this statistic, and using them left the test rejecting a driftless random walk about 70% of the time at a nominal 5% level. The critical values are instead simulated from the null distribution of *this* minimized statistic (`ADF_2BREAK_SIM_CV`, 10,000 driftless-random-walk replications per cell, one table per `model`), interpolated linearly in ``1/T`` across ``T = 100, 150, 250, 500``. They are conditional on the design they were generated under: `trim = 0.10` and `lags = 0`.
 
 ```@example test_ur_adv
 # Stationary AR(1) with level shifts at t = 81 and t = 161
@@ -516,7 +519,7 @@ result = adf_2break_test(yb; model=:level, lags=:aic)
 report(result)
 ```
 
-The minimum ``t``-statistic is ``-10.186`` against a 5% value of ``-4.136``, and the breaks land at observations 83 and 163, within three of the true shift points. On this genuinely stationary series the rejection is correct and the dates are informative. The contrast with the LM test matters for how you read it: there, breaks sit under the null, so rejection points to stationarity; here they sit under the alternative, so rejection is consistent with either stationarity or a unit root that breaks. When that distinction drives a modelling decision, `lm_unitroot_test` gives the cleaner inference in principle — subject to the size caveats attached to both.
+The minimum ``t``-statistic is ``-10.186`` against a 5% value of ``-5.802``, and the breaks land at observations 83 and 163, within two of the true shift points. Note how far left that critical value sits: the minimum over roughly 18,000 admissible pairs is a far more negative object than a fixed-date ADF ``t``-ratio, and only a null distribution simulated from the same minimization can say how negative. On this genuinely stationary series the rejection is correct and the dates are informative. The contrast with the LM test matters for how you read it: there, breaks sit under the null, so rejection points to stationarity; here they sit under the alternative, so rejection is consistent with either stationarity or a unit root that breaks. When that distinction drives a modelling decision, `lm_unitroot_test` gives the cleaner inference.
 
 ### Options
 
@@ -532,12 +535,12 @@ The minimum ``t``-statistic is ``-10.186`` against a 5% value of ``-4.136``, and
 | Field | Type | Description |
 |-------|------|-------------|
 | `statistic` | `T` | Minimum ADF ``t``-statistic over all candidate break pairs |
-| `pvalue` | `T` | Interpolated p-value against the Narayan-Popp table, clipped to ``[0.001, 0.20]`` |
+| `pvalue` | `T` | Piecewise-linear p-value against the simulated null quantiles, clipped to ``[0.001, 0.20]`` |
 | `break1`, `break2` | `Int` | Estimated break dates as observation indices |
 | `break1_fraction`, `break2_fraction` | `T` | Break locations as fractions of the sample |
 | `lags` | `Int` | Number of augmenting lags at the selected pair |
 | `model` | `Symbol` | Break specification (`:level` or `:both`) |
-| `critical_values` | `Dict{Int,T}` | Critical values at 1%, 5%, 10% for the matching sample bracket |
+| `critical_values` | `Dict{Int,T}` | Simulated critical values at 1%, 5%, 10%, interpolated in ``1/T`` |
 | `nobs` | `Int` | Number of observations in the test regression (``T - 1 - p``) |
 
 ---
@@ -587,7 +590,7 @@ sres = sadf_test(price; adflag=0, mc_reps=299)
  episodes = sres.episodes)
 ```
 
-SADF gives 8.857 against a 95% value of 1.235 — also a decisive rejection, and its stamped episode opens at exactly ``t = 70``, since the fixed start makes the recursive statistic respond as soon as the explosive segment enters the window. This series contains a single bubble, which is the case SADF handles well. GSADF is nevertheless the standard real-time exuberance monitor, because the double supremum is what recovers the second and third episodes of a periodically collapsing series, where a fixed start dilutes each one against the growing earlier sample.
+SADF gives 8.857 against a 95% value of 1.235 — also a decisive rejection. Its stamped episode runs from observation 66 to 160, the last observation: with the start pinned at ``r_1 = 0`` the explosive run stays inside every later window, so the recursive statistic never crosses back below its critical-value sequence and no termination is stamped within the sample. GSADF, whose windows are free to begin after the run, closes its episode at 154. That is one reason GSADF is the standard real-time exuberance monitor; the other is that the double supremum recovers the second and third episodes of a periodically collapsing series, where a fixed start dilutes each one against the growing earlier sample.
 
 The signature PSY chart plots the ``\mathrm{BSADF}(r_2)`` sequence against its 95% critical-value sequence with the stamped episodes shaded:
 
@@ -680,7 +683,7 @@ verdict(p) = p < 0.05 ? "reject H0" : "fail to reject H0"
  ("Fourier KPSS",   verdict(fkpss.pvalue))]
 ```
 
-The four tests whose null is a unit root and whose statistic is not a grid minimum — ADF (2.387), Fourier ADF (0.307), DF-GLS (1.938), and the point-optimal ``P_t`` (124.02) — all fail to reject, and Fourier KPSS rejects stationarity at 0.1%. That is a unanimous I(1) verdict from five directions. The two break-search tests dissent: LM with one break gives ``-3.946`` (``p = 0.027``) and the Narayan-Popp two-break test gives ``-5.287`` (``p = 0.001``). Given their measured over-rejection under an I(1) null, the dissent is much better explained by the size distortion of grid minimization than by genuine break-stationarity in the US price level. Difference the series.
+The four tests whose null is a unit root and whose statistic is not a grid minimum — ADF (2.387), Fourier ADF (0.307), DF-GLS (1.938), and the point-optimal ``P_t`` (124.02) — all fail to reject, and Fourier KPSS rejects stationarity at 0.1%. The two break-search tests agree with them rather than dissenting. LM with one break gives ``-1.682`` against a 5% value of ``-3.358``, nowhere near rejection, and the two-break ADF gives ``-5.287``, which does not reach even its 10% value of ``-5.561`` despite being free to place two breaks anywhere in the middle 80% of the sample. Both report ``p = 0.20``, the top of the tabulated range. The battery now speaks with one voice: five tests fail to reject a unit root null and Fourier KPSS rejects a stationarity null, which is the same conclusion read from opposite directions. The US price level is I(1), and allowing one or two endogenous breaks does not change that. Difference the series.
 
 ---
 
@@ -690,7 +693,7 @@ The four tests whose null is a unit root and whose statistic is not a grid minim
 
 2. **DF-GLS oversizing with a large negative MA root.** The GLS detrending that gives DF-GLS its power backfires when the errors carry a large negative moving-average root (say ``\theta < -0.8``), where it rejects far too often in finite samples (Perron & Ng 1996). When ADF and DF-GLS disagree and MA contamination is plausible, ADF is the safer read, and `MZt` from the same call is less sensitive than the DF-GLS ``\tau``.
 
-3. **Trusting a break-search rejection on its own.** `lm_unitroot_test` with `breaks=1` or `2` and `adf_2break_test` both minimize over a grid of break dates, and both reject far more often than their nominal size under an I(1) null. Corroborate with a test that has no grid — `dfgls_test`, `fourier_adf_test`, or plain `adf_test` — and check that the estimated break dates correspond to something economically real rather than clustering at the trimming boundary.
+3. **Reading a break-search test outside the design its critical values were simulated under.** The `lm_unitroot_test` and `adf_2break_test` tables are simulated at `lags = 0` and the default trimming. Moving `trim`, or letting `lags=:aic` add augmentation, changes the null distribution the statistic is drawn from while the critical values stay where they are, so the p-value becomes approximate. Keep `trim` at its default when the exact tail probability matters, corroborate a marginal rejection with a test that has no grid — `dfgls_test`, `fourier_adf_test`, or plain `adf_test` — and check that the estimated break dates correspond to something economically real rather than clustering at the trimming boundary.
 
 4. **Confusing where the breaks sit.** In `lm_unitroot_test` breaks are under ``H_0``, so a rejection points to stationarity. In `za_test` and `adf_2break_test` they are under ``H_1``, so a rejection is consistent with stationarity *or* with a unit root that breaks. Use the LM formulation when that distinction drives the specification.
 
