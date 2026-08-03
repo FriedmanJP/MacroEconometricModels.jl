@@ -426,6 +426,66 @@ end
         result = factor_break_test(round.(Int, randn(80, 15) .* 10), 2)
         @test result isa FactorBreakResult{Float64}
     end
+
+    @testset "Calibration on stable vs broken panels (#583)" begin
+        # r = 3 AR(0.7) factors, iid N(0,1) loadings and idiosyncratic errors.
+        # With `brk`, half the panel's loadings flip sign from `brk+1` onward.
+        function _break_panel(rng; T_obs=300, N=60, r=3, brk=nothing)
+            F = zeros(T_obs, r)
+            for j in 1:r
+                f = 0.0
+                for t in 1:T_obs
+                    f = 0.7 * f + randn(rng)
+                    F[t, j] = f
+                end
+            end
+            Lam = randn(rng, N, r)
+            E = randn(rng, T_obs, N)
+            X = F * Lam' + E
+            if brk !== nothing
+                nb = N ÷ 2
+                Lam2 = copy(Lam)
+                Lam2[1:nb, :] .= -Lam[1:nb, :]
+                X[(brk+1):end, :] = F[(brk+1):end, :] * Lam2' + E[(brk+1):end, :]
+            end
+            return X
+        end
+
+        # Counts over 8 panels, not verdicts on one: each test has a few percent of
+        # false rejections by construction, and Chen-Dolado-Gonzalo sees this break
+        # on ~87% of panels, so single-panel assertions would be a coin flip (and
+        # `MersenneTwister` streams are not stable across Julia versions).
+        stable = [_break_panel(Random.MersenneTwister(583_000 + s)) for s in 1:8]
+        broken = [_break_panel(Random.MersenneTwister(583_100 + s); brk=150) for s in 1:8]
+
+        # Stable loadings: rejections stay rare. Before #583 the eigenvalue-ratio
+        # Chen-Dolado-Gonzalo statistic rejected every stable panel (size 1.00), and
+        # the Breitung-Eickmeier χ²(N·r) bar meant it rejected none even under a break.
+        for method in (:breitung_eickmeier, :chen_dolado_gonzalo, :han_inoue)
+            n_rej = count(factor_break_test(X, 3; method=method).pvalue < 0.05
+                          for X in stable)
+            @test n_rej <= 3
+        end
+
+        # Break at t = 150: the two pooled tests reject on every panel and date it
+        # inside 10% of T; the regression-based CDG catches most panels.
+        for method in (:breitung_eickmeier, :han_inoue)
+            results = [factor_break_test(X, 3; method=method) for X in broken]
+            @test all(r -> r.pvalue < 0.05, results)
+            @test all(r -> abs(r.break_date - 150) <= 30, results)
+        end
+        cdg = [factor_break_test(X, 3; method=:chen_dolado_gonzalo) for X in broken]
+        @test count(r -> r.pvalue < 0.05, cdg) >= 4
+
+        # The pooled Breitung-Eickmeier p-value is reproducible (fixed default seed)
+        # and a different simulation size / seed does not change the verdict.
+        p1 = factor_break_test(stable[1], 3; method=:breitung_eickmeier).pvalue
+        p2 = factor_break_test(stable[1], 3; method=:breitung_eickmeier).pvalue
+        @test p1 == p2
+        p_alt = factor_break_test(stable[1], 3; method=:breitung_eickmeier,
+                                  nsim=500, seed=99).pvalue
+        @test (p_alt < 0.05) == (p1 < 0.05)
+    end
 end
 
 @testset "PANIC Panel Unit Root" begin

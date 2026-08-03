@@ -371,14 +371,16 @@ end
 
 Structural break test for factor models.
 
-Tests for structural instability in factor loadings or the number of
-factors, following Breitung-Eickmeier (2011) or Chen-Dolado-Gonzalo (2014).
+Tests for structural instability in the factor loadings at an unknown break
+date: the pooled per-series loading-break LM test of Breitung-Eickmeier (2011),
+the big-break regression sup-LM test of Chen-Dolado-Gonzalo (2014), or the
+sup-Wald loading-instability test of Han-Inoue (2015).
 
 Fields:
-- `statistic`: Test statistic
-- `pvalue`: P-value
+- `statistic`: Test statistic (a supremum or pooled supremum over candidate dates)
+- `pvalue`: P-value (simulated-null or Andrews/Hansen sup reference — never χ², #583)
 - `break_date`: Estimated break date index (nothing if no break detected)
-- `method`: Test method (:breitung_eickmeier, :chen_dolado_gonzalo)
+- `method`: Test method (:breitung_eickmeier, :chen_dolado_gonzalo, :han_inoue)
 - `n_factors`: Number of factors in the model
 - `nobs`: Time dimension (T)
 - `n_vars`: Number of observed variables
