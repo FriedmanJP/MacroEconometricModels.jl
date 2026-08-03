@@ -206,8 +206,23 @@ const _suppress_warnings = MacroEconometricModels._suppress_warnings
             # never-treated markers (only 0/missing mean never-treated)
             df_evt = DataFrame(id=repeat(1:3, inner=5), t=repeat(-2:2, 3), y=randn(15),
                                coh=repeat([0, -1, 1], inner=5))
+            # (this panel also trips the #598 ambiguity warning below: it has a period 0
+            # and a never-treated unit)
             pd_evt = xtset(df_evt, :id, :t; cohort=:coh)
             @test Set(unique(pd_evt.cohort_id)) == Set([0, -1, 1])
+
+            # #598: 0 is the never-treated sentinel, so on a panel whose periods include 0
+            # "adopted at 0" and "never treated" are the same stored value. Warn once —
+            # silently treating those units as controls is how ATT collapses to 0.0.
+            df_amb = DataFrame(id=repeat(1:4, inner=5), t=repeat(-2:2, 4), y=randn(20),
+                               coh=repeat([0, 0, 1, 1], inner=5))
+            pd_amb = @test_logs (:warn, r"never-treated sentinel") match_mode = :any xtset(
+                df_amb, :id, :t; cohort=:coh)
+            @test Set(unique(pd_amb.cohort_id)) == Set([0, 1])
+            # No period 0 in the sample -> no ambiguity, no warning.
+            df_ok = DataFrame(id=repeat(1:4, inner=5), t=repeat(1:5, 4), y=randn(20),
+                              coh=repeat([0, 0, 2, 2], inner=5))
+            @test_logs xtset(df_ok, :id, :t; cohort=:coh)
         end
 
         @testset "group_data extraction" begin

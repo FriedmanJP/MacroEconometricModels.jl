@@ -179,6 +179,8 @@ When `cohort_id` is `nothing` (the default), cohorts are inferred from the treat
 
 Cohort values are stored in the time index's own encoding — calendar years stay calendar years, non-integer times are ranked ``1, \ldots, T`` — with `0` and `missing` reserved for never-treated units and every other value read as an adoption period. A value matching no period in the sample is kept verbatim and warned about once: it still serves as a categorical grouping, which is what `absorb=:cohort` on the [panel regression](@ref panel_reg_page) estimators consumes, but no DiD estimator forms a treatment group from it. Labels that happen to coincide with sample periods are indistinguishable from adoption dates, so on a panel indexed ``1, \ldots, T`` give geographic cohorts labels outside that range.
 
+`0` is the *only* never-treated sentinel. Negative adoption periods are ordinary cohorts, which is what an event-time panel indexed ``-p, \ldots, q`` requires: every estimator forms a treatment group from a cohort of ``-1`` exactly as it would from ``+4``, and translating the time axis leaves the estimates unchanged. The one ambiguity is period `0` itself — on a panel that contains it, "adopted at 0" and "never treated" are the same stored value, and `xtset` warns. A panel in which no unit is treated has no estimand at all, so the estimators throw rather than report an overall ATT of zero.
+
 !!! note "Treatment column is a period, not a flag"
     Every function on this page reads the treatment column as the **period of first
     treatment** (`2004`), with `0` or `NaN` for never-treated units, and requires the value
@@ -476,6 +478,17 @@ Inference uses the Armstrong & Kolesár (2018) **fixed-length confidence interva
 The **breakdown value** is the smallest bound (``\bar{M}^*`` or ``M^*``) at which the robust confidence interval for at least one post-treatment period includes zero. A large breakdown value indicates that the result is robust to substantial departures from parallel trends.
 
 `honest_did` uses the joint event-study covariance stored by the estimator (`att_vcov`) when available and falls back to a diagonal covariance from the per-period standard errors otherwise (with a warning).
+
+!!! warning "`base_period=:varying` drops the adjacent-period placebo here"
+    Rambachan-Roth define ``\hat\beta = [\beta_{pre}; \beta_{post}]`` relative to a **single
+    normalized** reference period, and the ``\Delta`` sets and fixed-length CI construction
+    are written against that normalization. Under `base_period=:universal` the ``e=-1`` cell
+    is a structural zero and dropping it is correct. Under `:varying` it is an *estimated*
+    placebo against its own base ``g-2``, so there is no common normalization and
+    `honest_did` excludes it, with a warning. [`pretrend_test`](@ref pretrend_test) *does*
+    include it — the two therefore run on different pre-period sets by design, and the
+    sensitivity analysis uses one coefficient fewer than the pre-trend test reports. Re-run
+    with `base_period=:universal` when the two need to agree.
 
 ```@example did
 h = honest_did(did_cs; restriction=:rm, Mbar=1.0, conf_level=0.95)

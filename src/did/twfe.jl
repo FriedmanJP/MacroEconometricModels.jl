@@ -56,6 +56,42 @@ function _extract_treatment_timing(pd::PanelData{T}, treat_col::Int) where {T<:A
 end
 
 """
+    _cohort_set(timing) -> Vector{Int}
+
+Sorted distinct adoption periods among treated units.
+
+Only `0` marks a never-treated unit. Negative adoption periods are legitimate — an
+event-time panel whose `time_id` is centred on the treatment date has periods like `-3:3`,
+and `xtset(...; cohort=)` stores such values verbatim (`src/data/panel.jl`). Filtering on
+`t > 0` dropped them from every cohort set while `never_treated` (which tests `t == 0`)
+excluded them too, so those units contributed to neither side of any comparison: the
+estimators returned `ATT = 0.0` with an empty cohort vector and no warning. Translating the
+time axis — something no DiD estimand depends on — changed the answer. (#598)
+
+Note that [`_extract_treatment_timing`](@ref) reads a *treatment-timing column*, whose
+documented sentinels are `0`, `-1`, `NaN` and `Inf`, and therefore never yields a negative
+adoption period. Negative cohorts reach the estimators only through the explicit
+`pd.cohort_id` override, where `0` is the sole never-treated sentinel.
+"""
+_cohort_set(timing::AbstractDict{Int,Int}) =
+    sort(unique([t for (_, t) in timing if t != 0]))
+
+"""
+    _require_cohorts(cohorts, method) -> cohorts
+
+Guard against a silently degenerate fit. With no adoption period there is no DiD estimand,
+and returning `ATT = 0.0` reads as "no effect" rather than "nothing was estimated" (#598).
+"""
+function _require_cohorts(cohorts::AbstractVector{Int}, method::AbstractString)
+    isempty(cohorts) && throw(ArgumentError(
+        "$method found no treated cohort: every unit has adoption period 0 (never " *
+        "treated). If units ARE treated, check the encoding — adoption periods must use " *
+        "the same values as `time_id`, with 0 reserved for never-treated. On an " *
+        "event-time panel whose periods include 0, shift the time axis so that 0 is free."))
+    cohorts
+end
+
+"""
     _estimate_twfe(pd::PanelData{T}, outcome_col::Int, treat_col::Int;
                    leads::Int=0, horizon::Int=5, covariate_cols::Vector{Int}=Int[],
                    control_group::Symbol=:never_treated,
@@ -87,7 +123,7 @@ function _estimate_twfe(pd::PanelData{T}, outcome_col::Int, treat_col::Int;
     end
 
     # Identify treated/control groups
-    treated_groups = [g for (g, t) in timing if t > 0]
+    treated_groups = [g for (g, t) in timing if t != 0]
     control_groups = [g for (g, t) in timing if t == 0]
     n_treated = length(treated_groups)
     n_control = length(control_groups)
@@ -108,7 +144,7 @@ function _estimate_twfe(pd::PanelData{T}, outcome_col::Int, treat_col::Int;
         g = pd.group_id[i]
         t = pd.time_id[i]
         g_time = timing[g]
-        if g_time > 0  # treated unit
+        if g_time != 0  # treated unit (0 is the only never-treated sentinel, #598)
             evt = t - g_time
             for (j, e) in enumerate(event_times_est)
                 if evt == e

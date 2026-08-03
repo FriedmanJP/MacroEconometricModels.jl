@@ -55,7 +55,8 @@ function _estimate_callaway_santanna(pd::PanelData{T}, outcome_col::Int, treat_c
     n_times = length(all_times)
 
     # Identify cohorts and control groups
-    cohorts = sort(unique([t for (_, t) in timing if t > 0]))
+    cohorts = _cohort_set(timing)
+    _require_cohorts(cohorts, "Callaway-Sant'Anna")
     never_treated = [g for (g, t) in timing if t == 0]
     n_cohorts = length(cohorts)
     n_control = length(never_treated)
@@ -241,7 +242,7 @@ function _estimate_callaway_santanna(pd::PanelData{T}, outcome_col::Int, treat_c
         overall_se = zero(T)
     end
 
-    n_treated = length([g for (g, t) in timing if t > 0])
+    n_treated = length([g for (g, t) in timing if t != 0])
 
     DIDResult{T}(att_agg, se_agg, ci_lower, ci_upper, event_times_all,
                  reference_period, group_time_att, cohorts,

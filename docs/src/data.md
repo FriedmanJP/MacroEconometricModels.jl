@@ -486,6 +486,14 @@ compare `cohort_id` against `time_id` directly.
     dimension (`absorb=:cohort`), but no DiD estimator forms a treatment group from it.
     See [Difference-in-Differences](@ref did_page).
 
+!!! warning "Period `0` collides with the never-treated sentinel"
+    Because `0` marks a never-treated unit, a panel whose periods include `0` — an
+    event-time layout centred on the treatment date — cannot distinguish "adopted at period
+    0" from "never treated", and the DiD estimators read those units as controls. `xtset`
+    warns once when it sees both. Negative adoption periods are unaffected and work
+    normally; only `0` itself is ambiguous. Shift the axis to ``1, \ldots, T`` when a cohort
+    genuinely adopts at the origin.
+
 | Keyword | Type | Default | Description |
 |---------|------|---------|-------------|
 | `varnames` | `Union{Vector{String},Nothing}` | `nothing` | Override variable names (default: the column names) |

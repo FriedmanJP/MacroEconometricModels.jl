@@ -177,6 +177,16 @@ function xtset(df::DataFrame, group_col::Symbol, time_col::Symbol;
                   "not form a treatment group for them. Adoption periods must use the same " *
                   "encoding as time_id, with 0 for never-treated."
         end
+        # 0 is the never-treated sentinel, so on a panel whose periods include 0 — an
+        # event-time layout centred on the treatment date — "adopted at period 0" and
+        # "never treated" are the same stored value and cannot be told apart downstream.
+        # Negative adoption periods on such a panel are fine; only 0 is ambiguous. (#598)
+        if 0 in valid_time_values && any(iszero, mapped)
+            @warn "Cohort value 0 is the never-treated sentinel, but 0 is also a period of " *
+                  "this panel, so units adopting at period 0 are indistinguishable from " *
+                  "never-treated ones and DiD estimators will treat them as controls. " *
+                  "Shift the time axis (e.g. periods 1:T) so that 0 is reserved." maxlog = 1
+        end
         mapped
     else
         nothing
