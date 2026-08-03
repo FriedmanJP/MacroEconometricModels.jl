@@ -578,14 +578,23 @@ function _re_logit_agh_loglik(theta::AbstractVector{S}, y::Vector{T}, X_c::Matri
 end
 
 """
-    _agh_newton_polish(nll, theta) -> (theta, gnorm)
+    _agh_newton_polish(nll, theta) -> (theta, gnorm, stationary)
 
 Damped-Newton polish of the adaptive-GH marginal negative loglik around the LBFGS
 minimizer. Optim's `f_reltol` stopping can halt with `‖∇nll‖` marginally above the
 honest-convergence FOC threshold (the exact stopping point varies across Optim
 versions); a few backtracking Newton steps on the exact ForwardDiff Hessian drive
 the gradient to numerical zero whenever the solution is a genuine local optimum.
-Returns the (possibly improved) parameter vector and the final gradient norm.
+
+`stationary` is a scale-aware FOC check for stiff surfaces: when the Hessian is
+badly conditioned (ddcg RE logit: eigenvalues 1e2 .. 5e12), the gradient at the
+machine-precision optimum floats on rounding noise of order `eps(f)·‖H‖ ≫ 1e-5`,
+so an absolute `‖∇‖` cutoff misreports non-convergence. Instead measure the
+gradient in the Hessian metric: with `H ≻ 0`, `‖H⁻¹∇‖ ≤ √eps·(1 + ‖θ‖)` means
+the remaining Newton step is below parameter resolution — θ IS the stationary
+point to machine precision.
+Returns the (possibly improved) parameter vector, the final gradient norm, and
+the stationarity flag.
 """
 function _agh_newton_polish(nll::F, theta::Vector{T}) where {F,T<:AbstractFloat}
     g = ForwardDiff.gradient(nll, theta)
@@ -615,7 +624,18 @@ function _agh_newton_polish(nll::F, theta::Vector{T}) where {F,T<:AbstractFloat}
         accepted || break
         g = ForwardDiff.gradient(nll, theta)
     end
-    return theta, norm(g)
+    gnorm = norm(g)
+    stationary = gnorm < T(1e-8)
+    if !stationary && isfinite(gnorm)
+        H = ForwardDiff.hessian(nll, theta)
+        F_c = cholesky(Hermitian((H .+ H') ./ 2); check=false)
+        if issuccess(F_c)
+            newton_step = F_c \ g
+            stationary = all(isfinite, newton_step) &&
+                         norm(newton_step) <= sqrt(eps(T)) * (one(T) + norm(theta))
+        end
+    end
+    return theta, gnorm, stationary
 end
 
 function _xtlogit_re(pd::PanelData{T}, y::Vector{T}, X::Matrix{T},
@@ -649,14 +669,15 @@ function _xtlogit_re(pd::PanelData{T}, y::Vector{T}, X::Matrix{T},
                          Optim.Options(g_tol=T(1e-8), iterations=maxiter, f_reltol=tol))
     theta = Optim.minimizer(res)
     iterations = Optim.iterations(res)
-    theta, gnorm = _agh_newton_polish(nll, theta)
+    theta, gnorm, stationary = _agh_newton_polish(nll, theta)
 
     beta = theta[1:k_full]
     sigma_u = exp(theta[k_full + 1])
     loglik_final = _re_logit_agh_loglik(theta, y, X_c, unique_groups, group_obs, nodes, weights)
 
-    # Honest convergence: reported only when the true gradient norm is near zero.
-    converged = isfinite(gnorm) && gnorm < T(1e-5)
+    # Honest convergence: the true gradient norm is near zero, or the FOC holds in the
+    # Hessian metric (stiff surfaces float the raw gradient on rounding noise > 1e-5).
+    converged = isfinite(gnorm) && (gnorm < T(1e-5) || stationary)
     if !converged
         @warn "RE logit did not reach a stationary point (‖∇nll‖=$gnorm after " *
               "$iterations LBFGS iterations + Newton polish). Raise maxiter/tol." maxlog=1
@@ -807,14 +828,14 @@ function _xtlogit_cre(pd::PanelData{T}, y::Vector{T}, X::Matrix{T},
                          Optim.Options(g_tol=T(1e-8), iterations=maxiter, f_reltol=tol))
     theta = Optim.minimizer(res)
     iterations = Optim.iterations(res)
-    theta, gnorm = _agh_newton_polish(nll, theta)
+    theta, gnorm, stationary = _agh_newton_polish(nll, theta)
 
     beta = theta[1:k_full]
     sigma_u = exp(theta[k_full + 1])
     # Recompute the loglik at the optimum (the old code reused loglik_old — a stale value).
     loglik_final = _re_logit_agh_loglik(theta, y, X_c, unique_groups, group_obs, nodes, weights)
 
-    converged = isfinite(gnorm) && gnorm < T(1e-5)
+    converged = isfinite(gnorm) && (gnorm < T(1e-5) || stationary)
     if !converged
         @warn "CRE logit did not reach a stationary point (‖∇nll‖=$gnorm after " *
               "$iterations LBFGS iterations + Newton polish). Raise maxiter/tol." maxlog=1

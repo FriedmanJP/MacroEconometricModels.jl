@@ -523,7 +523,10 @@ end
             @test haskey(result.details, :discrepancy)
             @test haskey(result.details, :orthogonality_error)
             @test haskey(result.details, :n_bootstrap)
-            @test result.details[:n_bootstrap] == nb
+            # FastICA's Q sits at machine-precision orthogonality on some platform/Julia
+            # combos, tripping the just-identified early return (n_bootstrap = 0); on
+            # others it misses the 1e-10 cutoff and the bootstrap runs. Both are correct.
+            @test result.details[:n_bootstrap] == (result.details[:just_identified] ? 0 : nb)
         end
 
         @testset "with ML result" begin
