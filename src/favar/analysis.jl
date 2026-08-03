@@ -249,13 +249,14 @@ end
 Map Bayesian factor-space IRFs to all N panel variables using posterior mean loadings.
 
 For each panel variable i and shock j:
-    panel_irf[h, i, j] = Λ[i,:]·factor_irf[h,:,j]
+    panel_irf[h, i, j] = Λ[i,:]·factor_irf[h,:,j] + Λ_y[i,:]·y_irf[h,:,j]
 
-There is no direct `Λ_y` channel here (#525): the Gibbs measurement equation is
-`X = F Λ' + e` with factors never orthogonalized against `Y_key`, so the factor
-responses already carry the entire `Y_key`-transmitted component — adding a
-`Λ_y · y_irf` term would double-count it. (The two-step path differs because
-`_remove_double_counting` makes its factors orthogonal to `Y_key`.)
+Since the #528 fix the Gibbs measurement equation is BBE (2005) eq. 3,
+`X = F Λ' + Y_key Λ_y' + e`, so the factors are purged of the key variables' own
+variation and the direct channel `Λ_y · y_irf` must be added back — omitting it
+would understate the response of `Y_key`-loading panel series. (Before #528 the
+factors absorbed the entire `Y_key` co-movement and adding `Λ_y` would have
+double-counted, which was the original #525 resolution; the model changed.)
 
 Key variables use their direct VAR IRF responses. When raw posterior draws are available
 on `irf_result`, they are pushed through the loadings and quantiles are recomputed in
@@ -276,19 +277,21 @@ function favar_panel_irf(bfavar::BayesianFAVAR{T}, irf_result::BayesianImpulseRe
     H = irf_result.horizon
     n_q = length(irf_result.quantile_levels)
 
-    # Posterior mean loadings
-    Lambda = dropdims(mean(bfavar.loadings_draws, dims=1), dims=1)  # N x r
+    # Posterior mean loadings (common factors + direct key-variable channel, #528)
+    Lambda = dropdims(mean(bfavar.loadings_draws, dims=1), dims=1)     # N x r
+    Lambda_y = dropdims(mean(bfavar.lambda_y_draws, dims=1), dims=1)   # N x n_key
 
     # Validate dimensions
     n_shocks = size(irf_result.point_estimate, 3)
     n_shocks == n_aug || throw(ArgumentError(
         "IRF has $n_shocks shocks but Bayesian FAVAR has $n_aug VAR variables"))
 
-    # Map point estimate through the factor loadings
+    # Map point estimate through the factor loadings + the direct Λ_y channel
     panel_pe = zeros(T, H, N, n_shocks)
     for h in 1:H, j in 1:n_shocks
         factor_irfs_h = @view irf_result.point_estimate[h, 1:r, j]
-        panel_pe[h, :, j] = Lambda * factor_irfs_h
+        y_irfs_h = @view irf_result.point_estimate[h, (r+1):n_aug, j]
+        panel_pe[h, :, j] = Lambda * factor_irfs_h + Lambda_y * y_irfs_h
     end
     _favar_override_key_irf!(panel_pe, irf_result.point_estimate, bfavar.Y_key_indices, r, N)
 
@@ -301,7 +304,8 @@ function favar_panel_irf(bfavar::BayesianFAVAR{T}, irf_result::BayesianImpulseRe
         panel_draws = zeros(T, n_reps, H, N, n_shocks)
         for rep in 1:n_reps, h in 1:H, j in 1:n_shocks
             factor_d = @view draws[rep, h, 1:r, j]
-            panel_draws[rep, h, :, j] = Lambda * factor_d
+            y_d = @view draws[rep, h, (r+1):n_aug, j]
+            panel_draws[rep, h, :, j] = Lambda * factor_d + Lambda_y * y_d
         end
         _favar_override_key_draws!(panel_draws, draws, bfavar.Y_key_indices, r, N)
         @inbounds for qi in 1:n_q, h in 1:H, v in 1:N, s in 1:n_shocks
@@ -312,7 +316,8 @@ function favar_panel_irf(bfavar::BayesianFAVAR{T}, irf_result::BayesianImpulseRe
         # Fallback: map quantile endpoints then order (cannot invert without draws)
         for qi in 1:n_q, h in 1:H, j in 1:n_shocks
             factor_q_h = @view irf_result.quantiles[h, 1:r, j, qi]
-            panel_q[h, :, j, qi] = Lambda * factor_q_h
+            y_q_h = @view irf_result.quantiles[h, (r+1):n_aug, j, qi]
+            panel_q[h, :, j, qi] = Lambda * factor_q_h + Lambda_y * y_q_h
         end
         if !isempty(bfavar.Y_key_indices)
             for (k_idx, panel_idx) in enumerate(bfavar.Y_key_indices)

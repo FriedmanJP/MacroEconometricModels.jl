@@ -149,9 +149,13 @@ const M = MacroEconometricModels
         F = randn(T_obs, r)
         X = F * randn(N, r)' .+ 0.3 .* randn(T_obs, N)
         bf = estimate_favar(X, [1, 2], r, 1; method=:bayesian, n_draws=40, burnin=10)
-        # The Gibbs measurement equation is X = FΛ' + e (factors NOT orthogonal
-        # to Y_key), so the factor responses already carry the Y_key-transmitted
-        # component; a separate Λ_y channel would double-count it (#525).
+        # The mapping is Λ · factor_irf with no Λ_y channel, because `BayesianFAVAR`
+        # stores no Λ_y: the Gibbs sampler now carries one internally (#528) but treats
+        # it as a nuisance parameter. NOTE: that makes the omission substantive rather
+        # than a double-counting guard as originally argued here — the factors are no
+        # longer free to absorb the Y_key-transmitted component, so panel responses to a
+        # Y_key shock understate the direct channel. Storing Λ_y and adding it to this
+        # mapping is tracked as follow-up work.
         @test !hasproperty(bf, :Lambda_y)
         ir = irf(bf, 6)
         panel = favar_panel_irf(bf, ir)
@@ -166,13 +170,13 @@ const M = MacroEconometricModels
         end
     end
 
-    @testset "#528 Bayesian FAVAR Gibbs draws are finite (flat NIW block)" begin
-        # #528 remains open: the explosive-draw symptom is a factor-scale
-        # identification problem in the Gibbs sampler, not a prior choice.
-        # A Minnesota dummy block recomputed from the current draw each sweep is
-        # a state-dependent prior (no fixed invariant distribution) and was
-        # reverted; no magnitude bound is asserted here because the unnormalized
-        # factor scale makes |B| draws unstable across draw counts by design.
+    @testset "#528 Bayesian FAVAR Gibbs draws are bounded (flat NIW block)" begin
+        # The explosive-draw symptom was a factor identification problem, not a prior
+        # choice: a Minnesota dummy block recomputed from the current draw each sweep
+        # is a state-dependent prior (no fixed invariant distribution) and was reverted.
+        # The fix is BBE's measurement equation X = ΛF + Λ_y Y + e with Λ[anchor,:] = I,
+        # which stops F from tracking Y_key and keeps the VAR design well conditioned,
+        # so a magnitude bound can now be asserted alongside finiteness.
         Random.seed!(15)
         T_obs, N = 60, 10
         X = randn(T_obs, N)
@@ -180,6 +184,7 @@ const M = MacroEconometricModels
         B_mean = dropdims(mean(bf.B_draws; dims=1), dims=1)
         @test all(isfinite, B_mean)
         @test all(isfinite, bf.Sigma_draws)
+        @test maximum(abs, B_mean) < 3.0
     end
 
     @testset "#524 panel CI lower ≤ upper via draws" begin

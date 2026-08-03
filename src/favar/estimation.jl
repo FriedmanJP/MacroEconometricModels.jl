@@ -34,6 +34,26 @@ Estimate a Factor-Augmented VAR (Bernanke, Boivin & Eliasz, 2005).
    as slow-moving factors `F_tilde`
 3. Estimate VAR(p) on augmented system `[F_tilde, Y_key]`
 
+# Bayesian Algorithm (`method=:bayesian`, BBE 2005 Section IV)
+Gibbs sampler over `(B, Σ)`, the loadings `Λ`, and the factor path `F`, with the factors
+initialized by PCA and drawn by Carter–Kohn FFBS. The measurement equation is BBE's
+
+    X_t = Λ F_t + Λ_y Y_t^key + e_t
+
+The direct loading `Λ_y` is the Bayesian counterpart of the two-step path's
+double-counting removal: it stops the factors from absorbing the key variables' own
+variation, which would otherwise leave `F` nearly collinear with `Y_key` and make the VAR
+coefficient posterior explode (#528). Its draws are stored as `lambda_y_draws`
+(rescaled to the VAR's original `Y_key` units) and `favar_panel_irf` adds the
+direct channel `Λ_y · y_irf` to the panel mapping.
+
+Identification uses the BBE normalization `Λ[anchor, :] = I_r`, `Λ_y[anchor, :] = 0`,
+where `anchor` is the first `r` columns of `X` that are not key variables. **The ordering
+of `X` therefore matters**: put `r` slow-moving series that are informative about, and not
+collinear in, the factors first, and read factor `i` as the common component of anchor
+series `i`. Estimation throws an `ArgumentError` if that loading block is numerically
+singular, or if fewer than `r` non-key columns are available.
+
 # Arguments
 - `X`: Panel data matrix (T x N) — large cross-section of macroeconomic variables
 - `Y_key`: Key observed variables (T x n_key) or column indices into X
@@ -191,6 +211,7 @@ function estimate_favar(X::AbstractMatrix{T}, key_indices::Vector{Int}, r::Int, 
             result.Sigma_draws,
             result.factor_draws,
             result.loadings_draws,
+            result.lambda_y_draws,
             result.X_panel,
             result.panel_varnames,
             key_indices,
@@ -397,16 +418,29 @@ end
 
 Bayesian FAVAR via Gibbs sampling (Bernanke, Boivin & Eliasz 2005, Section IV).
 
+Measurement equation (BBE 2005, eq. 3), on standardized data:
+
+    X_t = Λ F_t + Λ_y Y_t^key + e_t,    e_t ~ N(0, diag(σ²_e))
+
 Algorithm:
-1. Initialize factors via PCA
+1. Initialize F via PCA and (Λ, Λ_y) by regressing X on [F, Y_key], then rotate to the
+   normalization below
 2. Gibbs sampler iterates:
-   - Draw (B, Σ) | F, Y_key from the Minnesota-augmented NIW VAR posterior
-   - Draw Λ | F, X equation-by-equation
-   - Draw F | Λ, B, Σ, X, Y_key via Carter–Kohn FFBS
+   - Draw (B, Σ) | F, Y_key from the flat-prior NIW VAR posterior
+   - Draw (Λ, Λ_y) | F, X, Y_key equation-by-equation, holding the anchor rows fixed
+   - Draw F | Λ, Λ_y, B, Σ, X, Y_key via Carter–Kohn FFBS
 3. Store post-burnin draws
 
-The VAR block uses Minnesota dummy observations (`gen_dummy_obs`) rather than a flat
-NIW prior: on short samples a flat prior yields explosive posterior medians (#528).
+Identification (#528). The `anchor` rows — the first `r` panel columns that are not key
+variables — are restricted to `Λ[anchor, :] = I_r` and `Λ_y[anchor, :] = 0`. The identity
+block fixes the r² free elements of the (F, Λ) rotation/scale indeterminacy, which the
+likelihood does not pin down; the zero block is BBE's "slow-moving" restriction. The `Λ_y`
+term is what keeps `F` from absorbing the key variables' own variation: without it `F`
+comes out nearly collinear with `Y_key` (correlation ≈ 0.9 on the docs panel), the VAR
+design matrix on `[F, Y_key]` is near-singular, and the coefficient posterior explodes.
+`Λ_y` draws are stored on `BayesianFAVAR.lambda_y_draws`, rescaled per draw to the
+VAR's original `Y_key` units so panel mappings can apply them to VAR responses
+directly.
 """
 function _estimate_favar_bayesian(X::Matrix{T}, Y_key::Matrix{T}, r::Int, p::Int,
     n_draws::Int, burnin::Int, pvn::Vector{String},
@@ -420,12 +454,23 @@ function _estimate_favar_bayesian(X::Matrix{T}, Y_key::Matrix{T}, r::Int, p::Int
     eff_burnin = burnin == 0 ? 200 : burnin
     total_iters = n_draws + eff_burnin
 
-    # --- Step 1: Initialize factors via PCA ---
-    fm = estimate_factors(X, r; standardize=true)
-    F_curr = Matrix{T}(fm.factors)       # T_obs x r
-    Lambda_curr = Matrix{T}(fm.loadings) # N x r
+    # --- Anchor rows for the BBE identification (see below) ---
+    # The anchors must be informational series, never the key variables themselves: pinning
+    # X_a = F_a would make a factor a noisy copy of a variable the VAR already contains.
+    anchor = setdiff(1:N, Y_key_indices)
+    length(anchor) >= r || throw(ArgumentError(
+        "Bayesian FAVAR needs at least r=$r panel columns that are not key variables to " *
+        "anchor the factors, but X has only $(length(anchor)) (N=$N, of which " *
+        "$(length(Y_key_indices)) are key). Supply a larger panel or reduce r."))
+    anchor = anchor[1:r]
+    anchor_pos = zeros(Int, N)          # panel row -> anchored factor index (0 = free row)
+    for (i, a) in enumerate(anchor)
+        anchor_pos[a] = i
+    end
 
-    # Standardize X for idiosyncratic variance estimation
+    # --- Standardize the panel and the key variables ---
+    # X_std feeds both the measurement equation and the idiosyncratic variances; Y_std enters
+    # the measurement equation only (the VAR block keeps Y_key on its original scale).
     X_std = Matrix{T}(undef, T_obs, N)
     X_means = vec(mean(X, dims=1))
     X_stds = vec(std(X, dims=1))
@@ -435,9 +480,56 @@ function _estimate_favar_bayesian(X::Matrix{T}, Y_key::Matrix{T}, r::Int, p::Int
             X_std[t, j] = (X[t, j] - X_means[j]) / s
         end
     end
+    Y_std = Matrix{T}(undef, T_obs, n_key)
+    Y_means = vec(mean(Y_key, dims=1))
+    Y_stds = vec(std(Y_key, dims=1))
+    for j in 1:n_key
+        s = max(Y_stds[j], T(1e-10))
+        @inbounds for t in 1:T_obs
+            Y_std[t, j] = (Y_key[t, j] - Y_means[j]) / s
+        end
+    end
 
-    # Initialize idiosyncratic variances from PCA residuals
-    resid_X = X_std - F_curr * Lambda_curr'
+    # --- Step 1: Initialize factors via PCA ---
+    fm = estimate_factors(X, r; standardize=true)
+    F_curr = Matrix{T}(fm.factors)       # T_obs x r
+
+    # --- Step 2: Initialize (Λ, Λ_y) from the joint regression X = F Λ' + Y Λ_y' + e ---
+    # The measurement equation carries a direct Y_key loading Λ_y, as in BBE (2005) eq. (3).
+    # Without it the factors have to absorb the key variables' own variation, so F comes out
+    # nearly collinear with Y_key; the VAR on [F, Y_key] is then near-singular and its
+    # coefficient posterior explodes (#528). Λ_y is the Bayesian counterpart of the two-step
+    # path's `_remove_double_counting`; it identifies F, and its draws are stored
+    # (rescaled to Y-units) for the panel mapping's direct channel.
+    W_init = hcat(F_curr, Y_std)
+    coef_init = Matrix{T}(robust_inv(W_init' * W_init)) * (W_init' * X_std)  # (r+n_key) x N
+    Lambda_curr = Matrix{T}(permutedims(coef_init[1:r, :]))                  # N x r
+    Lambda_y = Matrix{T}(permutedims(coef_init[(r+1):(r+n_key), :]))         # N x n_key
+
+    # --- Step 3: BBE (2005, §IV) normalization: Λ[anchor, :] = I_r and Λ_y[anchor, :] = 0 ---
+    # The likelihood pins down only the column space of Λ: any invertible r × r rotation G
+    # leaves F·Λ' = (F G')·(Λ G⁻¹)' unchanged, so the sampler's factor scale and rotation
+    # would wander from sweep to sweep. Anchoring r informational series to unit loadings on
+    # one factor each removes exactly the r² free elements of that indeterminacy. Λ_y = 0 on
+    # the same rows is BBE's "slow-moving" restriction: the anchor series respond to the key
+    # variables only through the factors.
+    G = Matrix{T}(Lambda_curr[anchor, :])
+    cond_G = cond(G)
+    isfinite(cond_G) && cond_G < T(1e10) || throw(ArgumentError(
+        "Panel columns $anchor do not identify the $r factors: their loading block is " *
+        "numerically singular (cond = $cond_G). The Bayesian FAVAR anchors the factor scale " *
+        "on the first $r non-key columns of X (Bernanke, Boivin & Eliasz 2005), so those " *
+        "series must load on r distinct factors. Reorder the columns of X so that its " *
+        "leading non-key series are informative about, and not collinear in, the factors, " *
+        "or reduce r."))
+    F_curr = F_curr * G'
+    Lambda_curr = Lambda_curr / G
+    # Impose the restrictions exactly (the solve is accurate only to rounding).
+    Lambda_curr[anchor, :] = Matrix{T}(I, r, r)
+    Lambda_y[anchor, :] .= zero(T)
+
+    # Initialize idiosyncratic variances from the normalized measurement residuals
+    resid_X = X_std - F_curr * Lambda_curr' - Y_std * Lambda_y'
     sigma2_e = Vector{T}(undef, N)
     for j in 1:N
         sigma2_e[j] = max(var(@view(resid_X[:, j])), T(1e-10))
@@ -449,13 +541,21 @@ function _estimate_favar_bayesian(X::Matrix{T}, Y_key::Matrix{T}, r::Int, p::Int
     Sigma_draws = Array{T,3}(undef, n_draws, n_var, n_var)
     factor_draws = Array{T,3}(undef, n_draws, T_obs, r)
     loadings_draws = Array{T,3}(undef, n_draws, N, r)
+    # Direct key-variable loadings, stored per draw RESCALED from standardized-Y to the
+    # VAR's original Y units (divide column k by sd(Y_k)), so favar_panel_irf can apply
+    # them straight to the augmented VAR's Y_key responses (#528 follow-up).
+    lambda_y_draws = Array{T,3}(undef, n_draws, N, n_key)
+    Y_sds_c = max.(Y_stds, T(1e-10))
 
     # Pre-allocate workspace
     Y_aug = Matrix{T}(undef, T_obs, n_var)
     # Reused per-sweep standard-normal shock buffers; `randn!` draws from the same global stream
     # as the previous `randn(T, …)` calls, so every draw is unchanged. (#210 box D)
     Z_Bdraw = Matrix{T}(undef, k, n_var)   # Block 1: (B | Σ) matrix-normal shock
-    z_lambda = Vector{T}(undef, r)         # Block 2: per-equation loading shock
+    z_lambda = Vector{T}(undef, r + n_key) # Block 2: per-equation (λ, λ_y) loading shock
+    W_lam = Matrix{T}(undef, T_obs, r + n_key)  # Block 2 design [F, Y_std]
+    W_lam[:, (r+1):(r+n_key)] = Y_std           # the Y_key block never changes
+    X_obs = Matrix{T}(undef, T_obs, N)      # Block 3 observation net of the Λ_y term
     draw_idx = 0
 
     for iter in 1:total_iters
@@ -468,12 +568,11 @@ function _estimate_favar_bayesian(X::Matrix{T}, Y_key::Matrix{T}, r::Int, p::Int
             # Flat-prior NIW posterior. Deliberately NOT Minnesota-augmented (#528):
             # `gen_dummy_obs` would recompute its scale moments from the *current
             # draw* of Y_aug every sweep — a state-dependent prior with no fixed
-            # invariant distribution — and, because the sampler imposes no scale
-            # normalization on (F, Λ), the shrinking dummies track the factor
-            # scale downward instead of anchoring it, accelerating the collapse
-            # they were meant to prevent. The observed explosive draws are a
-            # factor-scale identification problem, to be fixed by normalizing
-            # (F, Λ) in the Gibbs blocks, not by this prior.
+            # invariant distribution — and the shrinking dummies would track the
+            # factor scale rather than anchor it. The explosive draws that motivated
+            # the dummies were a factor-scale/rotation identification problem; it is
+            # fixed by the Λ[1:r, 1:r] = I normalization imposed at initialization and
+            # held fixed in Block 2, which leaves this prior free to stay flat.
             Y_data, X_data = construct_var_matrices(Y_aug, p)
             XtX = X_data' * X_data
             XtX_inv = Matrix{T}(robust_inv(XtX))
@@ -489,32 +588,47 @@ function _estimate_favar_bayesian(X::Matrix{T}, Y_key::Matrix{T}, r::Int, p::Int
             randn!(rng, Z_Bdraw)
             B_curr = B_hat + safe_cholesky(XtX_inv) * Z_Bdraw * safe_cholesky(Sigma_curr)'
 
-            # === Block 2: Draw Λ | F, X ===
-            # Equation-by-equation: X_i = F * λ_i + e_i
-            # Posterior: λ_i ~ N(β_hat_i, σ²_i * (F'F)^{-1})
-            FtF = F_curr' * F_curr
-            FtF_inv = Matrix{T}(robust_inv(FtF))
+            # === Block 2: Draw (Λ, Λ_y) | F, X, Y_key ===
+            # Equation-by-equation on the BBE measurement equation
+            #   X_i = F λ_i + Y_std λ_y,i + e_i,
+            # posterior (λ_i, λ_y,i) ~ N(β_hat_i, σ²_i (W'W)^{-1}) with W = [F, Y_std].
+            # The anchor rows are NOT drawn: they stay pinned at λ = e_a, λ_y = 0, which is
+            # what fixes the factor scale and rotation (#528). Their idiosyncratic variances
+            # are still updated, from the residual X_a − F_a.
+            W_lam[:, 1:r] = F_curr
+            WtW_inv = Matrix{T}(robust_inv(W_lam' * W_lam))
 
             # Ensure positive definiteness
-            FtF_inv = T(0.5) * (FtF_inv + FtF_inv')
-            for i in 1:r
-                FtF_inv[i, i] = max(FtF_inv[i, i], T(1e-10))
+            WtW_inv = T(0.5) * (WtW_inv + WtW_inv')
+            for i in 1:(r + n_key)
+                WtW_inv[i, i] = max(WtW_inv[i, i], T(1e-10))
             end
 
-            L_FtF_inv = safe_cholesky(FtF_inv)
+            L_WtW_inv = safe_cholesky(WtW_inv)
 
             for j in 1:N
                 x_j = @view X_std[:, j]
-                beta_hat = FtF_inv * (F_curr' * x_j)
+
+                a = anchor_pos[j]
+                if a > 0
+                    # Anchored row: λ_j = e_a and λ_y,j = 0, so the residual is x_j − F[:, a].
+                    resid_j = x_j - @view(F_curr[:, a])
+                    sigma2_e[j] = max(dot(resid_j, resid_j) / T(T_obs), T(1e-10))
+                    continue
+                end
+
+                beta_hat = WtW_inv * (W_lam' * x_j)
 
                 # Update idiosyncratic variance estimate
-                resid_j = x_j - F_curr * beta_hat
+                resid_j = x_j - W_lam * beta_hat
                 sigma2_j = max(dot(resid_j, resid_j) / T(T_obs), T(1e-10))
                 sigma2_e[j] = sigma2_j
 
-                # Draw λ_i from posterior
+                # Draw (λ_i, λ_y,i) from posterior
                 randn!(rng, z_lambda)
-                Lambda_curr[j, :] = beta_hat + sqrt(sigma2_j) * L_FtF_inv * z_lambda
+                lam_j = beta_hat + sqrt(sigma2_j) * L_WtW_inv * z_lambda
+                Lambda_curr[j, :] = @view lam_j[1:r]
+                Lambda_y[j, :] = @view lam_j[(r+1):(r+n_key)]
             end
 
             # === Block 3: Draw F | Λ, B, Σ, X_std via Carter–Kohn FFBS ===
@@ -541,7 +655,10 @@ function _estimate_favar_bayesian(X::Matrix{T}, Y_key::Matrix{T}, r::Int, p::Int
             end
             Sigma_eta = Matrix{T}(Sigma_curr[1:r, 1:r])
             Sigma_eta = T(0.5) * (Sigma_eta + Sigma_eta')
-            F_curr = _favar_ffbs(X_std, Lambda_curr, A_lags, Sigma_eta, sigma2_e, r, p, drift, rng)
+            # Net the known Λ_y term out of the observation, leaving X_obs = Λ F_t + e_t.
+            mul!(X_obs, Y_std, Lambda_y')
+            X_obs .= X_std .- X_obs
+            F_curr = _favar_ffbs(X_obs, Lambda_curr, A_lags, Sigma_eta, sigma2_e, r, p, drift, rng)
 
             # === Store draws after burnin ===
             if iter > eff_burnin
@@ -550,6 +667,7 @@ function _estimate_favar_bayesian(X::Matrix{T}, Y_key::Matrix{T}, r::Int, p::Int
                 Sigma_draws[draw_idx, :, :] = Sigma_curr
                 factor_draws[draw_idx, :, :] = F_curr
                 loadings_draws[draw_idx, :, :] = Lambda_curr
+                lambda_y_draws[draw_idx, :, :] = Lambda_y ./ Y_sds_c'
             end
         end  # _suppress_warnings
     end  # iter
@@ -563,6 +681,7 @@ function _estimate_favar_bayesian(X::Matrix{T}, Y_key::Matrix{T}, r::Int, p::Int
         Sigma_draws,
         factor_draws,
         loadings_draws,
+        lambda_y_draws,
         Matrix{T}(X),
         pvn,
         Y_key_indices,

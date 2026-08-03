@@ -105,6 +105,7 @@ using MacroEconometricModels
             randn(n_draws, n_var, n_var),     # Sigma_draws
             randn(n_draws, T_obs, r),         # factor_draws
             randn(n_draws, 20, r),            # loadings_draws
+            randn(n_draws, 20, n_key),        # lambda_y_draws
             randn(T_obs, 20),                 # X_panel
             ["X$i" for i in 1:20],            # panel_varnames
             [1],                              # Y_key_indices
@@ -690,28 +691,36 @@ using MacroEconometricModels
         end
     end
 
-    @testset "Bayesian FAVAR panel IRF loadings mapping" begin
+    @testset "Bayesian FAVAR panel IRF loadings mapping (#525 → #528)" begin
         irf_aug = irf(bfavar, 10)
         panel_irf = favar_panel_irf(bfavar, irf_aug)
 
         Lambda_mean = dropdims(mean(bfavar.loadings_draws, dims=1), dims=1)
+        Lambda_y_mean = dropdims(mean(bfavar.lambda_y_draws, dims=1), dims=1)
         r = bfavar.n_factors
         n_key = bfavar.n_key
+        n_aug = r + n_key
         key_set = Set(bfavar.Y_key_indices)
 
-        # Non-key variables: Lambda * factor_irf only (#525) — the Gibbs
-        # measurement equation is X = FΛ' with factors not orthogonalized
-        # against Y_key, so a separate Λ_y channel would double-count.
-        @test !hasproperty(bfavar, :Lambda_y)
+        # Non-key variables: Λ·factor_irf + Λ_y·y_irf. Since #528 the measurement
+        # equation carries BBE's direct Λ_y channel and the factors are purged of
+        # Y_key variation, so the direct term must be included. (#525's no-Λ_y
+        # resolution was correct only for the old unpurged factors.)
+        @test size(bfavar.lambda_y_draws) == (size(bfavar.loadings_draws, 1), 20, n_key)
         for i in 1:20
             if !(i in key_set)
                 for h in 1:10, j in 1:4
                     factor_irfs = irf_aug.point_estimate[h, 1:r, j]
-                    expected = dot(Lambda_mean[i, :], factor_irfs)
+                    y_irfs = irf_aug.point_estimate[h, (r+1):n_aug, j]
+                    expected = dot(Lambda_mean[i, :], factor_irfs) +
+                               dot(Lambda_y_mean[i, :], y_irfs)
                     @test isapprox(panel_irf.point_estimate[h, i, j], expected; atol=1e-10)
                 end
             end
         end
+        # the direct channel is estimated, not degenerate
+        nonkey = setdiff(1:20, collect(key_set))
+        @test any(abs.(Lambda_y_mean[nonkey, :]) .> 1e-3)
     end
 
     @testset "favar_panel_irf CI not inverted (#524)" begin
@@ -792,4 +801,43 @@ end  # @testset "FAVAR Tests"
     @test bf1.factor_draws == bf2.factor_draws
     @test bf1.loadings_draws == bf2.loadings_draws
     @test all(isfinite, bf1.B_draws) && all(isfinite, bf1.factor_draws)
+end
+
+@testset "#528 factor-scale identification" begin
+    # The Gibbs sampler imposes the BBE (2005 §IV) normalization Λ[anchor, :] = I_r on the
+    # first r non-key panel columns, and carries the direct loading Λ_y in the measurement
+    # equation. Together these pin the factor scale/rotation and keep F from absorbing the
+    # key variable's own variation. Without them a docs-sized sample produced VAR posterior
+    # means in the hundreds (#528).
+    T_obs, N, r, p = 60, 8, 2, 2
+    Random.seed!(528)
+    F_true = zeros(T_obs, r)
+    for t in 2:T_obs
+        F_true[t, :] = 0.6 .* F_true[t-1, :] .+ randn(r)
+    end
+    X = F_true * randn(N, r)' .+ 0.5 .* randn(T_obs, N)
+
+    Random.seed!(528)
+    bf = estimate_favar(X, [5], r, p; method=:bayesian, n_draws=60, burnin=30)
+
+    # (1) Every stored loading draw satisfies the identity block exactly. Column 5 is the key
+    #     variable, so the anchors are panel columns 1 and 2.
+    Ir = Matrix{Float64}(I, r, r)
+    @test maximum(maximum(abs, bf.loadings_draws[d, 1:r, 1:r] - Ir)
+                  for d in 1:size(bf.loadings_draws, 1)) == 0.0
+
+    # (2) The VAR coefficient posterior is no longer explosive on a short sample.
+    B_mean = dropdims(mean(bf.B_draws; dims=1), dims=1)
+    @test all(isfinite, B_mean)
+    @test maximum(abs, B_mean) < 3.0
+
+    # (3) An anchor row may never be a key variable — pinning X_a = F_a on a series the VAR
+    #     already contains would rebuild the collinearity the normalization removes.
+    bf2 = estimate_favar(X, [1, 2], r, p; method=:bayesian, n_draws=30, burnin=15)
+    @test maximum(maximum(abs, bf2.loadings_draws[d, 3:4, 1:r] - Ir)
+                  for d in 1:size(bf2.loadings_draws, 1)) == 0.0
+
+    # (4) Too few non-key columns to anchor r factors is rejected, not silently mis-fit.
+    @test_throws ArgumentError estimate_favar(randn(40, 3), [1, 2], 2, 1;
+                                              method=:bayesian, n_draws=5, burnin=5)
 end
