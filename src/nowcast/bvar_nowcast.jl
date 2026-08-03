@@ -36,28 +36,59 @@ quarterly (observed every 3rd month). The BVAR is estimated on the complete
 # Keyword Arguments
 - `lags::Int=5` — number of lags
 - `thresh::Real=1e-6` — optimization convergence threshold
-- `max_iter::Int=200` — max optimization iterations
+- `max_iter::Union{Int,Nothing}=nothing` — max Nelder-Mead iterations. Defaults to `200`
+  under `:conjugate` (4 hyperparameters) and `2000` under `:litterman`, whose search is
+  5-dimensional and typically needs ~1000 iterations to reach a stationary point. An
+  explicit value is always honoured.
 - `lambda0::Real=0.2` — initial overall shrinkage
 - `theta0::Real=1.0` — initial lag-decay exponent (Litterman `d` / GLP `α`; larger ⇒
   higher lags shrunk harder). See [`_bvar_dummy_obs`](@ref) for why own-vs-cross relative
   tightness is not a separate hyperparameter under the conjugate NIW prior (#572).
 - `miu0::Real=1.0` — initial sum-of-coefficients weight
 - `alpha0::Real=2.0` — initial co-persistence weight
+- `prior::Symbol=:conjugate` — `:conjugate` for the GLP Normal-Inverse-Wishart
+  dummy-observation prior, or `:litterman` for Litterman's (1986) non-conjugate prior with
+  `Σ` fixed at `diag(σ̂²)`. Only `:litterman` admits `theta_cross`; see
+  [`_litterman_prior_rows`](@ref) (#602).
+- `theta_cross0::Real=1.0` — initial cross-variable relative tightness. `:litterman` only;
+  passing it under `:conjugate` throws, because no dummy-observation prior can express it.
 
 # Returns
 `NowcastBVAR{T}` with smoothed data and posterior parameters.
 
+!!! warning "`loglik` is not comparable across priors"
+    The conjugate value integrates out both the coefficients and `Σ`; the Litterman value
+    integrates out the coefficients with `Σ` held fixed. They are different objectives on
+    different parameter spaces. Compare lag orders or hyperparameters *within* a prior, and
+    compare priors by out-of-sample performance instead.
+
 # References
 - Cimadomo, J., Giannone, D., Lenza, M., Monti, F. & Sokol, A. (2022).
   Nowcasting with Large Bayesian Vector Autoregressions.
+- Litterman, R. B. (1986). Forecasting with Bayesian Vector Autoregressions —
+  Five Years of Experience. *Journal of Business & Economic Statistics* 4(1), 25-38.
+- Kadiyala, K. R. & Karlsson, S. (1997). Numerical Methods for Estimation and Inference
+  in Bayesian VAR-Models. *Journal of Applied Econometrics* 12(2), 99-132.
 """
 function nowcast_bvar(Y::AbstractMatrix, nM::Int, nQ::Int;
-                      lags::Int=5, thresh::Real=1e-6, max_iter::Int=200,
+                      lags::Int=5, thresh::Real=1e-6,
+                      max_iter::Union{Int,Nothing}=nothing,
                       lambda0::Real=0.2, theta0::Real=1.0,
-                      miu0::Real=1.0, alpha0::Real=2.0)
+                      miu0::Real=1.0, alpha0::Real=2.0,
+                      prior::Symbol=:conjugate,
+                      theta_cross0::Union{Real,Nothing}=nothing)
     T_obs, N = size(Y)
     N == nM + nQ || throw(ArgumentError("nM ($nM) + nQ ($nQ) must equal number of columns ($N)"))
     lags >= 1 || throw(ArgumentError("lags must be >= 1, got $lags"))
+    prior in (:conjugate, :litterman) ||
+        throw(ArgumentError("prior must be :conjugate or :litterman, got :$prior"))
+    if prior == :conjugate && theta_cross0 !== nothing
+        throw(ArgumentError(
+            "theta_cross is not a parameter of the conjugate prior: dummy observations " *
+            "imply Var(vec(B)) = Σ ⊗ (X_d'X_d)⁻¹, so for a given regressor the cross/own " *
+            "prior SD ratio is √(Σ_mm/Σ_jj) whatever the dummy rows are. Use " *
+            "prior=:litterman to make it a free hyperparameter."))
+    end
 
     Tf = eltype(Y) <: AbstractFloat ? eltype(Y) : Float64
     Ymat = Matrix{Tf}(Y)
@@ -106,22 +137,33 @@ function nowcast_bvar(Y::AbstractMatrix, nM::Int, nQ::Int;
         end
     end
 
-    # Optimize hyperparameters via marginal log-likelihood
-    par0 = [log(Tf(lambda0)), log(Tf(theta0)), log(Tf(miu0)), log(Tf(alpha0))]
+    # Optimize hyperparameters via marginal log-likelihood. The Litterman path carries a
+    # fifth coordinate, log(theta_cross) — the knob the conjugate prior cannot express.
+    par0 = prior == :litterman ?
+        [log(Tf(lambda0)), log(Tf(theta0)), log(Tf(theta_cross0 === nothing ? 1.0 : theta_cross0)),
+         log(Tf(miu0)), log(Tf(alpha0))] :
+        [log(Tf(lambda0)), log(Tf(theta0)), log(Tf(miu0)), log(Tf(alpha0))]
 
+    log_ml = prior == :litterman ? _litterman_log_ml : _bvar_log_ml
     obj = par -> begin
-        val = -_bvar_log_ml(par, Ybal, lags, sigma_ar)
+        val = -log_ml(par, Ybal, lags, sigma_ar)
         isfinite(val) ? val : Tf(1e10)
     end
 
+    # The Litterman search carries a fifth coordinate and needs roughly 1000 Nelder-Mead
+    # iterations on a typical macro panel; 200 stops it well short of a stationary point
+    # (and the box-edge `converged` flag would not catch that). The conjugate default is
+    # left at 200 so existing fits are bit-identical.
+    iters = max_iter === nothing ? (prior == :litterman ? 2000 : 200) : max_iter
     result = Optim.optimize(obj, par0, Optim.NelderMead(),
-                            Optim.Options(iterations=max_iter, f_reltol=Tf(thresh)))
+                            Optim.Options(iterations=iters, f_reltol=Tf(thresh)))
 
     par_opt = Optim.minimizer(result)
     lambda_opt = exp(par_opt[1])
     theta_opt = exp(par_opt[2])
-    miu_opt = exp(par_opt[3])
-    alpha_opt = exp(par_opt[4])
+    theta_cross_opt = prior == :litterman ? exp(par_opt[3]) : Tf(NaN)
+    miu_opt = exp(par_opt[prior == :litterman ? 4 : 3])
+    alpha_opt = exp(par_opt[prior == :litterman ? 5 : 4])
 
     # The log-hyperparameter box is |par| ≤ 5; a hit at the corner (λ = exp(5) ≈ 148.4)
     # means the marginal-likelihood optimizer diverged to the boundary rather than an
@@ -130,14 +172,17 @@ function nowcast_bvar(Y::AbstractMatrix, nM::Int, nQ::Int;
     converged = !any(x -> abs(x) >= Tf(5) - Tf(1e-3), par_opt)
 
     # Estimate BVAR with optimal hyperparameters
-    beta, sigma, ml = _bvar_estimate(Ybal, lags, sigma_ar,
-                                      lambda_opt, theta_opt, miu_opt, alpha_opt)
+    beta, sigma, ml = prior == :litterman ?
+        _litterman_estimate(Ybal, lags, sigma_ar, lambda_opt, theta_opt,
+                            theta_cross_opt, miu_opt, alpha_opt) :
+        _bvar_estimate(Ybal, lags, sigma_ar, lambda_opt, theta_opt, miu_opt, alpha_opt)
 
     # Use Kalman smoother to fill missing data
     X_sm = _bvar_smooth_missing(Ymat, beta, sigma, lags, t_complete)
 
     NowcastBVAR{Tf}(X_sm, beta, sigma, lambda_opt, theta_opt, miu_opt,
-                     alpha_opt, lags, ml, nM, nQ, Ymat, converged)
+                     alpha_opt, lags, ml, nM, nQ, Ymat, converged,
+                     Tf(theta_cross_opt), prior)
 end
 
 # =============================================================================
@@ -338,6 +383,184 @@ function _bvar_dummy_obs(Y0::AbstractMatrix{T}, lags::Int, sigma_ar::Vector{T},
     dummy_X = vcat(dummy_X, zeros(T, N, k))
 
     return dummy_Y, dummy_X
+end
+
+# =============================================================================
+# Litterman (non-conjugate, fixed diagonal Sigma) prior — #602
+# =============================================================================
+
+"""
+    _litterman_prior_rows(m, N, lags, sigma_ar, y_bar, lambda, theta, theta_cross,
+                          miu, alpha) -> (A, c)
+
+Prior rows `A β_m ≈ c` for equation `m` of the Litterman (1986) prior.
+
+The prior is `β_m ~ N(b_m, (A'A)^{-1})` with `A'A b_m = A'c`, i.e. exactly the
+dummy-observation representation — but written **per equation**, which is the whole point:
+`A` depends on `m` through the `σ_m/σ_j` cross terms, so the implied `Var(vec(B))` is no
+longer `Σ ⊗ V` and the own-versus-cross ratio stops being pinned at `√(Σ_mm/Σ_jj)` (#602).
+
+Prior standard deviations for the coefficient on lag `l` of variable `j` in equation `m`:
+
+| | prior SD | prior mean |
+|---|---|---|
+| own (`j == m`) | `λ / l^θ` | 1 at `l == 1`, else 0 |
+| cross (`j != m`) | `λ · θ_cross · σ_m / (l^θ · σ_j)` | 0 |
+| intercept | `λ · _LITTERMAN_INTERCEPT_SCALE` (diffuse) | 0 |
+
+`θ_cross = 1` reproduces the conjugate prior's Minnesota asymmetry; `θ_cross < 1` shrinks
+other variables' lags harder than own lags. The `σ_m/σ_j` factor puts the cross coefficient
+on the scale of the ratio of residual standard deviations, so the restriction is invariant
+to the units each series is measured in.
+
+Rows for the sum-of-coefficients (`miu`) and co-persistence (`alpha`) priors follow the
+conjugate construction, restricted to the column of the dummy block that belongs to
+equation `m`; they are what pin the long-run behaviour on a persistent macro panel, so the
+two priors impose comparable structure and their fits are worth comparing.
+"""
+const _LITTERMAN_INTERCEPT_SCALE = 100.0    # diffuse but proper intercept prior
+
+function _litterman_prior_rows(m::Int, N::Int, lags::Int, sigma_ar::Vector{T},
+                               y_bar::Vector{T}, lambda::T, theta::T, theta_cross::T,
+                               miu::T, alpha::T) where {T<:AbstractFloat}
+    k = 1 + N * lags
+    n_mn = k                                   # one Minnesota row per coefficient
+    n_soc = miu > 0 ? N : 0
+    n_cop = alpha > 0 ? 1 : 0
+    A = zeros(T, n_mn + n_soc + n_cop, k)
+    c = zeros(T, n_mn + n_soc + n_cop)
+
+    # --- Minnesota block: one row per coefficient, weight = 1/prior SD ---
+    A[1, 1] = one(T) / (lambda * T(_LITTERMAN_INTERCEPT_SCALE))     # intercept, mean 0
+    row = 1
+    for lag in 1:lags, j in 1:N
+        row += 1
+        col = 1 + (lag - 1) * N + j
+        sd = j == m ? lambda / T(lag)^theta :
+                      lambda * theta_cross * sigma_ar[m] / (T(lag)^theta * sigma_ar[j])
+        w = one(T) / max(sd, eps(T))
+        A[row, col] = w
+        (j == m && lag == 1) && (c[row] = w)                        # random-walk prior mean
+    end
+
+    # --- Sum-of-coefficients: own lags of variable i sum to 1 (target ȳ_m only for i == m) ---
+    if miu > 0
+        for i in 1:N
+            r = n_mn + i
+            for lag in 1:lags
+                A[r, 1 + (lag - 1) * N + i] = y_bar[i] / miu
+            end
+            i == m && (c[r] = y_bar[i] / miu)
+        end
+    end
+
+    # --- Co-persistence: a single common stochastic trend ---
+    if alpha > 0
+        r = n_mn + n_soc + 1
+        A[r, 1] = one(T) / alpha
+        for lag in 1:lags, j in 1:N
+            A[r, 1 + (lag - 1) * N + j] = y_bar[j] / alpha
+        end
+        c[r] = y_bar[m] / alpha
+    end
+
+    return A, c
+end
+
+"""
+    _litterman_estimate(Y, lags, sigma_ar, lambda, theta, theta_cross, miu, alpha)
+        -> (beta, sigma, logml)
+
+Posterior mean and log marginal likelihood of the Litterman prior with `Σ = diag(σ̂²)` held
+fixed. The equations separate, so this is one `k × k` solve each — no MCMC.
+
+With known `σ_m²` and prior `β_m ~ N(b_m, P_m^{-1})`, completing the square gives
+
+    p(y_m) = (2πσ_m²)^{-T/2} |P_m|^{1/2} |M_m|^{-1/2}
+             exp(-½[ y'y/σ_m² + b'P b − g'M^{-1}g ])
+
+with `M_m = P_m + X'X/σ_m²` and `g_m = P_m b_m + X'y_m/σ_m²`. `β̂_m = M_m^{-1} g_m` is the
+posterior mean. The reported `logml` is `Σ_m log p(y_m)`: a genuine marginal likelihood over
+the coefficients, so it penalizes complexity and is comparable across `(λ, θ, θ_cross, μ,
+α)`. It is **not** comparable to the conjugate NIW value — that one also integrates out `Σ`,
+which this model holds fixed.
+"""
+function _litterman_estimate(Y::Matrix{T}, lags::Int, sigma_ar::Vector{T},
+                             lambda::T, theta::T, theta_cross::T,
+                             miu::T, alpha::T) where {T<:AbstractFloat}
+    T_obs, N = size(Y)
+    Y_dep = Y[(lags + 1):end, :]
+    T_eff = size(Y_dep, 1)
+    X_reg = ones(T, T_eff, 1)
+    for lag in 1:lags
+        X_reg = hcat(X_reg, Y[(lags + 1 - lag):(end - lag), :])
+    end
+    k = size(X_reg, 2)
+
+    y_bar = zeros(T, N)
+    for j in 1:N
+        valid = filter(!isnan, @view Y[1:lags, j])
+        y_bar[j] = isempty(valid) ? zero(T) : mean(valid)
+    end
+
+    beta = zeros(T, k, N)
+    sigma = Matrix{T}(Diagonal(sigma_ar .^ 2))
+    if !all(isfinite, X_reg) || !all(isfinite, Y_dep)
+        return beta, sigma, -T(1e10)
+    end
+
+    XtX = X_reg' * X_reg
+    logml = zero(T)
+    for m in 1:N
+        s2 = max(sigma_ar[m]^2, eps(T))
+        A, c = _litterman_prior_rows(m, N, lags, sigma_ar, y_bar, lambda, theta,
+                                     theta_cross, miu, alpha)
+        P = A' * A
+        P = (P + P') / T(2)
+        b = try
+            A \ c                                  # least-squares prior mean; P b = A'c
+        catch
+            return beta, sigma, -T(1e10)
+        end
+
+        M = P + XtX / s2
+        M = (M + M') / T(2)
+        y_m = @view Y_dep[:, m]
+        g = P * b + (X_reg' * y_m) / s2
+
+        chol_M = try
+            cholesky(Hermitian(M))
+        catch
+            return beta, sigma, -T(1e10)
+        end
+        bm = chol_M \ g
+        beta[:, m] = bm
+
+        chol_P = try
+            cholesky(Hermitian(P))
+        catch
+            return beta, sigma, -T(1e10)
+        end
+        quad = dot(y_m, y_m) / s2 + dot(b, P * b) - dot(g, bm)
+        logml += -T(0.5) * T_eff * log(2 * T(π) * s2) +
+                 T(0.5) * logdet(chol_P) - T(0.5) * logdet(chol_M) -
+                 T(0.5) * quad
+    end
+
+    if !all(isfinite, beta) || !isfinite(logml)
+        return zeros(T, k, N), Matrix{T}(Diagonal(sigma_ar .^ 2)), -T(1e10)
+    end
+    return beta, sigma, logml
+end
+
+"""Log marginal likelihood of the Litterman prior at log-hyperparameters `par`
+(`[log λ, log θ, log θ_cross, log μ, log α]`), boxed to `|par| ≤ 5` like the conjugate path."""
+function _litterman_log_ml(par::AbstractVector{T}, Y::Matrix{T}, lags::Int,
+                           sigma_ar::Vector{T}) where {T<:AbstractFloat}
+    any(x -> abs(x) > T(5), par) && return -T(1e10)
+    _, _, ml = _litterman_estimate(Y, lags, sigma_ar, exp(par[1]), exp(par[2]),
+                                   exp(par[3]), exp(par[4]), exp(par[5]))
+    return isfinite(ml) ? ml : -T(1e10)
 end
 
 # =============================================================================

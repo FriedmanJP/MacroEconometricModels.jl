@@ -417,6 +417,117 @@ end
         @test occursin("WARNING", sprint(show, m_pinned))
     end
 
+    @testset "Litterman non-conjugate prior (#602)" begin
+        MEM = MacroEconometricModels
+        rng = Random.MersenneTwister(602)
+        N, lags, T_obs = 3, 2, 40
+        Y = randn(rng, T_obs, N)
+        for t in 2:T_obs
+            Y[t, :] .+= 0.6 .* Y[t-1, :]
+        end
+        sar = [std(diff(Y[:, j])) for j in 1:N]
+        lam, th, tc, mu, al = 0.4, 1.3, 0.7, 1.1, 0.9
+
+        beta, sigma, logml = MEM._litterman_estimate(Y, lags, sar, lam, th, tc, mu, al)
+
+        # Rebuild the regression independently.
+        Y_dep = Y[(lags+1):end, :]
+        T_eff = size(Y_dep, 1)
+        X = ones(T_eff, 1)
+        for l in 1:lags
+            X = hcat(X, Y[(lags+1-l):(end-l), :])
+        end
+        y_bar = [mean(Y[1:lags, j]) for j in 1:N]
+
+        ref_logml = 0.0
+        for m in 1:N
+            A, c = MEM._litterman_prior_rows(m, N, lags, sar, y_bar, lam, th, tc, mu, al)
+            P = A'A
+            b = A \ c
+            s2 = sar[m]^2
+            # (1) posterior mean is the plain generalized-ridge / GLS solution
+            @test (P + X'X / s2) \ (P * b + X' * Y_dep[:, m] / s2) ≈ beta[:, m] atol = 1e-10
+            # (2) marginal likelihood equals a direct T x T Gaussian density, written out by
+            #     hand — the completion-of-square algebra must be exact, not close. Under
+            #     beta ~ N(b, P^-1) and known s2, y ~ N(X b, s2 I + X P^-1 X').
+            Cov = Symmetric(s2 * Matrix(I, T_eff, T_eff) + X * inv(P) * X')
+            e = Y_dep[:, m] - X * b
+            ref_logml += -0.5 * (T_eff * log(2π) + logdet(Cov) + dot(e, Cov \ e))
+        end
+        @test logml ≈ ref_logml atol = 1e-8
+
+        # (3) Sigma is the FIXED diag(sigma_ar^2), not a posterior mode
+        @test sigma ≈ Matrix(Diagonal(sar .^ 2))
+
+        # (4) theta_cross = 1 reproduces the conjugate Minnesota asymmetry exactly: for a
+        #     given regressor the cross/own prior SD ratio is sigma_m/sigma_j, which is the
+        #     ONLY own-vs-cross asymmetry a Sigma-kron-V prior can express.
+        A1, _ = MEM._litterman_prior_rows(1, N, lags, sar, y_bar, lam, th, 1.0, 0.0, 0.0)
+        A2, _ = MEM._litterman_prior_rows(2, N, lags, sar, y_bar, lam, th, 1.0, 0.0, 0.0)
+        col = 1 + 2                                    # lag 1, variable 2
+        @test (1 / A1[col, col]) / (1 / A2[col, col]) ≈ sar[1] / sar[2] atol = 1e-12
+        # ...and theta_cross scales exactly that ratio, which is the point of the feature.
+        A1h, _ = MEM._litterman_prior_rows(1, N, lags, sar, y_bar, lam, th, 0.5, 0.0, 0.0)
+        @test (1 / A1h[col, col]) ≈ 0.5 * (1 / A1[col, col]) atol = 1e-12
+        # own-lag rows are untouched by theta_cross
+        own_col = 1 + 1
+        A1o, _ = MEM._litterman_prior_rows(1, N, lags, sar, y_bar, lam, th, 0.5, 0.0, 0.0)
+        @test A1o[own_col, own_col] ≈ A1[own_col, own_col] atol = 1e-12
+
+        # (5) theta_cross is identified: the criterion is not flat in it
+        mls = [MEM._litterman_estimate(Y, lags, sar, lam, th, t, mu, al)[3]
+               for t in (0.1, 0.5, 1.0, 3.0)]
+        @test length(unique(round.(mls, digits=6))) == 4
+        @test all(isfinite, mls)
+
+        # (6) end-to-end through the public API
+        rng2 = Random.MersenneTwister(6021)
+        Yn = randn(rng2, 70, 4)
+        for t in 2:70
+            Yn[t, :] .+= 0.5 .* Yn[t-1, :]
+        end
+        Yn[68:70, 4] .= NaN
+        ml_fit = nowcast_bvar(Yn, 3, 1; lags=2, max_iter=120, prior=:litterman)
+        @test ml_fit.prior == :litterman
+        @test isfinite(ml_fit.theta_cross) && ml_fit.theta_cross > 0
+        @test isfinite(ml_fit.loglik) && ml_fit.loglik > -1e9
+        @test !any(isnan, ml_fit.X_sm)
+        @test occursin("Litterman", sprint(show, ml_fit))
+
+        # (7) the conjugate prior must REFUSE theta_cross rather than silently ignore it
+        cj_fit = nowcast_bvar(Yn, 3, 1; lags=2, max_iter=120)
+        @test cj_fit.prior == :conjugate
+        @test isnan(cj_fit.theta_cross)
+        @test occursin("fixed by", sprint(show, cj_fit))
+        @test_throws ArgumentError nowcast_bvar(Yn, 3, 1; lags=2, theta_cross0=0.5)
+        @test_throws ArgumentError nowcast_bvar(Yn, 3, 1; lags=2, prior=:bogus)
+
+        # (8) back-compat: the pre-#602 13-argument positional constructor still works
+        legacy = MEM.NowcastBVAR{Float64}(
+            cj_fit.X_sm, cj_fit.beta, cj_fit.sigma, cj_fit.lambda, cj_fit.theta,
+            cj_fit.miu, cj_fit.alpha, cj_fit.lags, cj_fit.loglik, cj_fit.nM,
+            cj_fit.nQ, cj_fit.data, cj_fit.converged)
+        @test legacy.prior == :conjugate
+        @test isnan(legacy.theta_cross)
+
+        # (9) box-edge warning names the edge that was actually hit
+        pinned_lo = MEM.NowcastBVAR{Float64}(
+            ml_fit.X_sm, ml_fit.beta, ml_fit.sigma, ml_fit.lambda, ml_fit.theta,
+            ml_fit.miu, exp(-5.0), ml_fit.lags, ml_fit.loglik, ml_fit.nM, ml_fit.nQ,
+            ml_fit.data, false, exp(-5.0), :litterman)
+        s_lo = sprint(show, pinned_lo)
+        @test occursin("floor", s_lo)
+        @test occursin("theta_cross", s_lo)
+        @test !occursin("ceiling", s_lo)
+        pinned_hi = MEM.NowcastBVAR{Float64}(
+            ml_fit.X_sm, ml_fit.beta, ml_fit.sigma, exp(5.0), ml_fit.theta,
+            ml_fit.miu, ml_fit.alpha, ml_fit.lags, ml_fit.loglik, ml_fit.nM, ml_fit.nQ,
+            ml_fit.data, false, ml_fit.theta_cross, :litterman)
+        s_hi = sprint(show, pinned_hi)
+        @test occursin("ceiling", s_hi)
+        @test occursin("lambda", s_hi)
+    end
+
     @testset "Basic estimation" begin
         rng = Random.MersenneTwister(100)
         Y = randn(rng, 80, 5)

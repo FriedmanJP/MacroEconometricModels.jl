@@ -95,8 +95,8 @@ The Normal-Inverse-Wishart prior is imposed through **dummy observations** — a
 
 Every Minnesota row carries exactly one nonzero regressor entry — the coefficient on ``y_{i,t-l}`` in equation ``i`` — and targets 1 at lag 1 and 0 at every longer lag, so the block restricts each coefficient on its own rather than restricting a sum of them. Every entry is a scale: the larger the dummy, the more prior information it injects. Dividing by ``\lambda`` therefore makes a smaller ``\lambda`` a tighter overall prior, and the same holds for ``\mu`` and ``\alpha`` within their blocks. The exponent ``\theta`` sets how fast tightness grows with the lag: at ``\theta = 0`` every lag is shrunk alike, and the larger ``\theta`` the harder the long lags are pushed to zero.
 
-!!! note "Why there is no cross-variable tightness parameter"
-    Dummy observations imply a prior variance ``\Sigma_{mm} (X_d' X_d)^{-1}_{cc}`` for coefficient ``c`` of equation ``m``, so for any given regressor the cross-to-own prior standard-deviation ratio is ``\sqrt{\Sigma_{mm} / \Sigma_{jj}}`` — the classical Minnesota asymmetry — whatever row scale is chosen. Relative own-versus-cross tightness is structurally fixed in a conjugate Normal-Inverse-Wishart prior and cannot be a free hyperparameter, which is why ``\theta`` is the lag-decay exponent (Litterman's ``d``, GLP's ``\alpha``) rather than a cross-variable weight.
+!!! note "Why the conjugate prior has no cross-variable tightness parameter"
+    Dummy observations imply a prior variance ``\Sigma_{mm} (X_d' X_d)^{-1}_{cc}`` for coefficient ``c`` of equation ``m``, so for any given regressor the cross-to-own prior standard-deviation ratio is ``\sqrt{\Sigma_{mm} / \Sigma_{jj}}`` — the classical Minnesota asymmetry — whatever row scale is chosen. Relative own-versus-cross tightness is structurally fixed in a conjugate Normal-Inverse-Wishart prior and cannot be a free hyperparameter, which is why ``\theta`` is the lag-decay exponent (Litterman's ``d``, GLP's ``\alpha``) rather than a cross-variable weight. Set `prior=:litterman` to get that knob; see [The Litterman prior](@ref nowcast_bvar_litterman) below.
 
 !!! note "Technical Note"
     Stacking the dummies on the data and running OLS returns the posterior mode of the conjugate Normal-Inverse-Wishart model in closed form, so no MCMC is involved and a fit costs one least-squares solve. The ``\sigma_i`` used to scale the prior are estimated from the data beforehand, which puts each equation's prior on the scale of its own residual variance. The closing inverse-Wishart block sets ``X = 0`` and therefore constrains ``\Sigma`` alone: the random-walk prior mean satisfies every other dummy row exactly, so without this block the prior sum of squares is singular and the marginal likelihood degenerates.
@@ -146,6 +146,43 @@ At three lags the search settles at ``\lambda = 0.7350``, ``\theta = 1.4378``, `
 
 ---
 
+## [The Litterman Prior](@id nowcast_bvar_litterman)
+
+`prior=:litterman` replaces the conjugate Normal-Inverse-Wishart prior with Litterman's (1986) original formulation: ``\Sigma`` is **fixed** at ``\text{diag}(\hat\sigma_1^2, \ldots, \hat\sigma_N^2)`` rather than integrated out. Fixing ``\Sigma`` separates the equations, and separated equations are what make a cross-variable tightness parameter possible. The prior standard deviation of the coefficient on lag ``l`` of variable ``j`` in equation ``m`` is
+
+```math
+\text{sd}(B^{(l)}_{mj}) =
+\begin{cases}
+\lambda \, / \, l^{\theta} & j = m \quad \text{(own lag)} \\[4pt]
+\lambda \, \theta_{\text{cross}} \, \sigma_m \, / \, (l^{\theta} \sigma_j) & j \neq m \quad \text{(cross lag)}
+\end{cases}
+```
+
+where:
+- ``\lambda`` is overall tightness, ``\theta`` the lag-decay exponent — both as in the conjugate prior
+- ``\theta_{\text{cross}}`` is the cross-variable relative tightness: ``\theta_{\text{cross}} = 1`` reproduces the conjugate prior's ``\sigma_m/\sigma_j`` asymmetry exactly, and ``\theta_{\text{cross}} < 1`` shrinks other variables' lags harder than own lags
+- ``\sigma_m / \sigma_j`` puts the restriction on the ratio of residual standard deviations, so it is invariant to the units each series is measured in
+
+The prior mean is a random walk (1 on the own lag-1 coefficient, 0 elsewhere), the intercept prior is diffuse, and the sum-of-coefficients and co-persistence blocks carry over unchanged so that the two priors impose comparable long-run structure.
+
+```@example nc_bvar
+bvar_lit = nowcast_bvar(Y, nM, nQ; lags=5, prior=:litterman)
+report(bvar_lit)
+```
+
+On this panel the criterion drives both ``\theta_{\text{cross}}`` and ``\alpha`` to the floor of the box, ``e^{-5} \approx 0.0067``: with 26 coefficients per equation and 55 usable observations it prefers to shrink cross-variable dynamics essentially to zero while tightening the common-trend block as hard as it can, leaving something close to five separate autoregressions tied together only by a common trend. That is a substantive finding rather than a numerical failure, and `report` names which hyperparameters hit which edge instead of presenting the boundary values as estimates. A panel long enough to identify cross-variable transmission would leave ``\theta_{\text{cross}}`` interior.
+
+The nowcast moves from 0.0739 under the conjugate prior to 0.0207 under Litterman — the gap is the cross-variable channel, which the conjugate prior cannot switch off and this one shuts down almost entirely.
+
+!!! warning "`loglik` is not comparable across priors"
+    The conjugate value integrates out the coefficients **and** ``\Sigma``; the Litterman value integrates out the coefficients with ``\Sigma`` held fixed. They are different objectives over different parameter spaces, so the Litterman fit's higher number is not evidence that it fits better. Compare lag orders and hyperparameters *within* a prior; compare the two priors by out-of-sample nowcast accuracy.
+
+Because the search is five-dimensional rather than four, `max_iter` defaults to `2000` under `:litterman` (against `200` under `:conjugate`) — roughly a thousand Nelder-Mead iterations are needed to reach a stationary point on a panel this size. An explicit `max_iter` is always honoured, and setting it too low stops the search early at a point that is not an optimum.
+
+Passing `theta_cross0` to the conjugate prior throws rather than being silently ignored, because no dummy-observation prior can express it.
+
+---
+
 ## Filling the Ragged Edge
 
 Missing entries are filled by a genuine Kalman smoother, not by projecting the VAR forward from the last complete row. The estimated BVAR is cast in companion state-space form with state ``[y_t; \ldots; y_{t-p+1}]``, transition built from the lag blocks of `beta`, state noise `sigma`, observation matrix ``C = [I \;\; 0]`` and a negligible measurement ridge; the panel is centred on the implied steady-state mean ``(I - \sum_i B_i)^{-1} c`` before smoothing, falling back to column means when that inverse is ill-conditioned near a unit root.
@@ -185,11 +222,13 @@ The path oscillates — 0.0184, 0.0336, 0.0617 over the first three months — r
 |---------|------|---------|-------------|
 | `lags` | `Int` | `5` | Number of VAR lags |
 | `thresh` | `Real` | ``10^{-6}`` | Relative-tolerance stopping rule for the Nelder-Mead search |
-| `max_iter` | `Int` | `200` | Maximum Nelder-Mead iterations |
+| `max_iter` | `Int` or `nothing` | `nothing` | Maximum Nelder-Mead iterations; resolves to `200` under `:conjugate` and `2000` under `:litterman` |
 | `lambda0` | `Real` | `0.2` | Starting value for overall shrinkage |
 | `theta0` | `Real` | `1.0` | Starting value for the lag-decay exponent |
 | `miu0` | `Real` | `1.0` | Starting value for the sum-of-coefficients weight |
 | `alpha0` | `Real` | `2.0` | Starting value for the co-persistence weight |
+| `prior` | `Symbol` | `:conjugate` | `:conjugate` for the GLP Normal-Inverse-Wishart prior, `:litterman` for the non-conjugate prior with fixed ``\Sigma`` |
+| `theta_cross0` | `Real` or `nothing` | `nothing` | Starting value for cross-variable relative tightness; `:litterman` only, and throws under `:conjugate` |
 
 ---
 
@@ -199,13 +238,15 @@ The path oscillates — 0.0184, 0.0336, 0.0617 over the first three months — r
 |-------|------|-------------|
 | `X_sm` | `Matrix{T}` | Smoothed panel with every missing entry filled |
 | `beta` | `Matrix{T}` | Posterior mode coefficients, ``(1 + Np) \times N``, first row the intercept |
-| `sigma` | `Matrix{T}` | Posterior mode innovation covariance, ``N \times N`` |
+| `sigma` | `Matrix{T}` | Innovation covariance, ``N \times N`` — the posterior mode under `:conjugate`, the fixed ``\text{diag}(\hat\sigma^2)`` under `:litterman` |
 | `lambda` | `T` | Overall shrinkage at the optimum |
 | `theta` | `T` | Lag-decay exponent at the optimum |
 | `miu` | `T` | Sum-of-coefficients weight at the optimum |
 | `alpha` | `T` | Co-persistence weight at the optimum |
+| `theta_cross` | `T` | Cross-variable relative tightness at the optimum; `NaN` under `:conjugate`, where it is not a free parameter |
+| `prior` | `Symbol` | `:conjugate` or `:litterman` |
 | `lags` | `Int` | Number of VAR lags |
-| `loglik` | `T` | Log marginal likelihood attained at the optimum |
+| `loglik` | `T` | Log marginal likelihood attained at the optimum, for the prior actually used — not comparable across priors |
 | `nM` | `Int` | Number of monthly variables |
 | `nQ` | `Int` | Number of quarterly variables |
 | `data` | `Matrix{T}` | Original input panel, NaN included |
@@ -252,6 +293,8 @@ dfm = nowcast_dfm(Y, nM, nQ; r=2, p=1)
 
 5. **Lags cost parameters quadratically in ``N``.** Each additional lag adds ``N`` coefficients to every one of the ``N`` equations. With ``N = 10`` and `lags=5` the system carries 510 coefficients; the prior keeps this estimable, but the flatter the resulting objective, the more likely the hyperparameter search ends on the box edge.
 
+6. **Do not compare `loglik` across priors.** The conjugate and Litterman criteria integrate out different things, so the two numbers are not on a common scale. Choosing between the priors is an out-of-sample question.
+
 ---
 
 ## References
@@ -260,3 +303,4 @@ dfm = nowcast_dfm(Y, nM, nQ; r=2, p=1)
 - Bańbura, Marta, Domenico Giannone, and Lucrezia Reichlin. 2010. "Large Bayesian Vector Auto Regressions." *Journal of Applied Econometrics* 25 (1): 71--92. [https://doi.org/10.1002/jae.1137](https://doi.org/10.1002/jae.1137)
 - Giannone, Domenico, Michele Lenza, and Giorgio E. Primiceri. 2015. "Prior Selection for Vector Autoregressions." *Review of Economics and Statistics* 97 (2): 436--451. [https://doi.org/10.1162/REST_a_00483](https://doi.org/10.1162/REST_a_00483)
 - Litterman, Robert B. 1986. "Forecasting with Bayesian Vector Autoregressions --- Five Years of Experience." *Journal of Business & Economic Statistics* 4 (1): 25--38. [https://doi.org/10.1080/07350015.1986.10509491](https://doi.org/10.1080/07350015.1986.10509491)
+- Kadiyala, K. Rao, and Sune Karlsson. 1997. "Numerical Methods for Estimation and Inference in Bayesian VAR-Models." *Journal of Applied Econometrics* 12 (2): 99--132. [https://doi.org/10.1002/(SICI)1099-1255(199703)12:2<99::AID-JAE429>3.0.CO;2-A](https://doi.org/10.1002/(SICI)1099-1255(199703)12:2%3C99::AID-JAE429%3E3.0.CO;2-A)
