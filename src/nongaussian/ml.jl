@@ -136,23 +136,36 @@ function _skew_normal_logpdf(x::T, alpha::T) where {T<:AbstractFloat}
 end
 
 """
-Pearson Type IV log-pdf for PML (scaled-t base with bounded skewness tilt).
+Genuine Pearson Type IV log-pdf, standardized to zero mean and unit variance (#566).
 
-The raw tilt `κ·x³/6` makes this a PSEUDO-density: `exp(κx³/6)` beats any
-polynomial-tail base, so `∫exp(logpdf)` diverges for every κ ≠ 0 and NO finite
-normalizing constant exists (#566). Bounding |κ| keeps the sample objective
-finite and concave in κ (the pre-#566 estimator ran to κ ≈ −141), but the
-criterion value is NOT a log-likelihood — do not compare it, or AIC/BIC built
-from it, against genuine densities (`:student_t`, `:gaussian`); it wins those
-comparisons by construction.
+    f(x) = k·[1 + z²]^{−m}·exp(−ν·arctan(z)),   z = (x − λ)/a
+    log k = (2m−2)·log 2 + 2·Re log Γ(m + iν/2) − log π − log a − log Γ(2m−1)
+
+(Heinrich 2004 parameterization) with scale/location pinned via r = 2(m−1):
+
+    a = r·√((r−1)/(r² + ν²)),   λ = a·ν/r
+
+so the density integrates to 1 with mean 0 and variance 1 for every skewness ν ∈ ℝ
+and tail exponent m > 2 (verified by quadrature over m ∈ [2.06, 50], |ν| ≤ 60). At
+ν = 0 it reduces exactly to the unit-variance scaled Student t with 2m−1 df.
+
+This replaces the pre-#566 cubic-tilt pseudo-density `exp(κx³/6)·t_ν(x)`, which is
+NOT normalizable for any κ ≠ 0 (the tilt beats every polynomial tail): its
+"log-likelihood" was unbounded in κ — fits ran to κ ≈ −141 with loglik 20157 vs the
+Gaussian 980 — and beat genuine densities in any AIC/BIC comparison by construction.
+With a true density, `loglik`, AIC/BIC, and the LR test against Gaussian shocks are
+valid statistics again.
 """
-function _pearson_iv_logpdf(x::T, kappa::T, nu::T) where {T<:AbstractFloat}
-    nu_safe = max(nu, T(2.01))
-    # Bound skewness: |κ| ≲ 1.5 keeps the cubic tilt O(1) on the unit-variance scale
-    kappa_b = clamp(kappa, T(-1.5), T(1.5))
-    base = _student_t_logpdf(x, nu_safe)
-    tilt = kappa_b * (x^3 / T(6))
-    base + tilt
+function _pearson_iv_logpdf(x::T, skew::T, m::T) where {T<:AbstractFloat}
+    m_safe = max(m, T(2.05))                 # m > 2 ⟺ the variance exists
+    r = 2 * (m_safe - one(T))
+    a = r * sqrt((r - one(T)) / (r^2 + skew^2))
+    lam = a * skew / r
+    z = (x - lam) / a
+    logk = (2 * m_safe - 2) * log(T(2)) +
+           2 * real(SpecialFunctions.loggamma(complex(m_safe, skew / 2))) -
+           log(T(pi)) - log(a) - SpecialFunctions.loggamma(2 * m_safe - one(T))
+    logk - m_safe * log1p(z^2) - skew * atan(z)
 end
 
 # =============================================================================
@@ -212,10 +225,12 @@ function _nongaussian_loglik(angles::AbstractVector{T}, dist_params_vec::Abstrac
     elseif distribution == :pml
         for j in 1:n
             idx = (j - 1) * 2
-            kappa = dist_params_vec[idx + 1]
-            nu = max(exp(dist_params_vec[idx + 2]) + T(2.01), T(2.01))
+            skew = dist_params_vec[idx + 1]                          # ν: any real
+            # tail m ∈ (2.05, ~1e4]: m > 2 for unit variance; the cap kills the flat
+            # ridge m → ∞ on near-Gaussian shocks (m = 1e4 is Gaussian to ~1e-4)
+            m = T(2.05) + exp(clamp(dist_params_vec[idx + 2], T(-30), T(9.2)))
             for t in 1:T_obs
-                loglik += _pearson_iv_logpdf(shocks[t, j], kappa, nu)
+                loglik += _pearson_iv_logpdf(shocks[t, j], skew, m)
             end
         end
     elseif distribution == :skew_normal
@@ -351,7 +366,7 @@ function _estimate_nongaussian_ml(model::VARModel{T}, distribution::Symbol;
         elseif distribution == :mixture_normal
             dist_params0 = repeat([T(0.0), T(0.0)], n)  # p=0.5, σ₁²=σ₂²=1 at sigmoid(0)=0.5
         elseif distribution == :pml
-            dist_params0 = repeat([T(0.0), log(T(5.0) - T(2.01))], n)  # κ=0, ν≈5
+            dist_params0 = repeat([T(0.0), log(T(5.0) - T(2.05))], n)  # ν=0, m≈5 (≈ t₉)
         elseif distribution == :skew_normal
             dist_params0 = zeros(T, n)  # α=0 (no skewness initially)
         end
@@ -397,9 +412,10 @@ function _estimate_nongaussian_ml(model::VARModel{T}, distribution::Symbol;
                             (one(T) / (one(T) + exp(-dp_opt[(j-1)*2+2])))) for j in 1:n]
         dp_dict[:all_params] = vcat(p_mix_vals, dp_dict[:sigma1])
     elseif distribution == :pml
-        # Report clamped κ (matches the density used in the likelihood)
-        dp_dict[:kappa] = [clamp(dp_opt[(j-1)*2+1], T(-1.5), T(1.5)) for j in 1:n]
-        dp_dict[:nu] = [max(exp(dp_opt[(j-1)*2+2]) + T(2.01), T(2.01)) for j in 1:n]
+        # Pearson IV: :kappa holds the skewness parameter ν, :nu the tail exponent m
+        # (key names kept for API stability; the density is _pearson_iv_logpdf, #566)
+        dp_dict[:kappa] = [dp_opt[(j-1)*2+1] for j in 1:n]
+        dp_dict[:nu] = [T(2.05) + exp(clamp(dp_opt[(j-1)*2+2], T(-30), T(9.2))) for j in 1:n]
         dp_dict[:all_params] = vcat(dp_dict[:kappa], dp_dict[:nu])
     elseif distribution == :skew_normal
         dp_dict[:alpha] = [dp_opt[j] for j in 1:n]
@@ -462,11 +478,17 @@ end
 """
     identify_pml(model::VARModel; max_iter=500, tol=1e-6) -> NonGaussianMLResult
 
-Identify SVAR via Pseudo Maximum Likelihood using Pearson Type IV distributions.
+Identify SVAR by maximum likelihood with Pearson Type IV structural shocks
+(genuine normalized density since #566; the `:pml` name is kept for API stability).
 
-Allows both skewness and excess kurtosis in the structural shocks.
+Allows both skewness and excess kurtosis in the structural shocks: per shock,
+`dist_params[:kappa]` is the Pearson-IV skewness parameter ν (sign flips the skew
+direction; 0 = symmetric) and `dist_params[:nu]` the tail exponent m (> 2; at ν = 0
+the density is the unit-variance scaled Student t with 2m−1 df). `loglik`, AIC/BIC,
+and the LR test against Gaussian shocks are valid likelihood statistics.
 
-**Reference**: Herwartz (2018)
+**References**: Pearson (1895); Heinrich (2004) for the normalized parameterization;
+Herwartz (2018) for PML-based SVAR identification.
 """
 function identify_pml(model::VARModel{T}; max_iter::Int=500,
                       tol::T=T(1e-6)) where {T<:AbstractFloat}
@@ -496,7 +518,7 @@ Unified non-Gaussian ML SVAR identification dispatcher.
 Supported distributions:
 - `:student_t` — independent Student-t shocks (Lanne, Meitz & Saikkonen 2017)
 - `:mixture_normal` — mixture of two normals (Lanne & Lütkepohl 2010)
-- `:pml` — Pearson Type IV / Pseudo-ML (Herwartz 2018)
+- `:pml` — Pearson Type IV ML, normalized density (Heinrich 2004; Herwartz 2018)
 - `:skew_normal` — skew-normal (Azzalini 1985)
 """
 function identify_nongaussian_ml(model::VARModel{T}; distribution::Symbol=:student_t,
