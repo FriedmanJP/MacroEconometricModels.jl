@@ -166,6 +166,55 @@ end
     @test isfinite(loglikelihood(mc))
 end
 
+@testset "#600 AGH loglik is total — no non-finite value or gradient" begin
+    FD = MacroEconometricModels.ForwardDiff
+    agh = MacroEconometricModels._re_logit_agh_loglik
+    ghnw = MacroEconometricModels._gauss_hermite_nodes_weights
+
+    rng = Random.MersenneTwister(600); N = 40; Tp = 6; nn = N * Tp
+    ids = repeat(1:N, inner=Tp); ts = repeat(1:Tp, N)
+    x1 = randn(rng, nn); alpha = repeat(randn(rng, N) .* 0.8, inner=Tp)
+    y = Float64.(rand(rng, nn) .< 1.0 ./ (1.0 .+ exp.(-(alpha .+ 0.9 .* x1))))
+    X_c = hcat(ones(nn), x1); ug = sort(unique(ids))
+    gobs = Dict(g => findall(==(g), ids) for g in ug)
+    nodes, weights = ghnw(12)
+    nll(th) = -agh(th, y, X_c, ug, gobs, nodes, weights)
+
+    # HagerZhang asserts isfinite on BOTH the trial value and its directional derivative,
+    # so a single NaN partial anywhere the line search can probe aborts the whole fit.
+    # exp(-eta) used to overflow to Inf (-> Inf/Inf = NaN in the dual) and exp(2 log sigma_u)
+    # used to overflow the prior variance.
+    for ls in (-1e4, -700.0, -340.0, -20.0, 0.0, 20.0, 340.0, 700.0, 1e4),
+        s  in (1.0, 1e2, 1e3, 1e4, 1e6)
+        th = [-0.3 * s, 0.9 * s, ls]
+        @test isfinite(nll(th))
+        @test all(isfinite, FD.gradient(nll, th))
+    end
+
+    # sigma_u -> 0 must land on the pooled logit loglik and stay FLAT. Clamping the prior
+    # variance without clamping the -log(sigma_u) normalizer breaks the cancellation against
+    # log(sighat) in the quadrature weight and manufactures an optimum at the degenerate point.
+    b0 = [-0.3, 0.9]
+    eta0 = X_c * b0
+    pooled_ll = sum(y .* eta0 .- log1p.(exp.(eta0)))
+    @test agh(vcat(b0, -40.0), y, X_c, ug, gobs, nodes, weights) ≈ pooled_ll rtol = 1e-8
+    deep = [agh(vcat(b0, ls), y, X_c, ug, gobs, nodes, weights) for ls in (-340.0, -1e3, -1e4)]
+    @test all(d -> d ≈ pooled_ll, deep)          # flat, not diverging to +Inf
+
+    # The estimator runs end-to-end on the panel that used to throw from LineSearches.
+    ddcg = load_example(:ddcg)
+    dfd = DataFrame(ddcg.data, ddcg.varnames)
+    dfd.country = ddcg.group_names[ddcg.group_id]
+    dfd.year = ddcg.time_id
+    dfd = dfd[.!isnan.(dfd.y) .& .!isnan.(dfd.dem), :]
+    dfd.lngdppc = dfd.y ./ 100
+    pd_ddcg = xtset(dfd, :country, :year)
+    m_re = estimate_xtlogit(pd_ddcg, :dem, [:lngdppc]; model=:re, tol=1e-12)
+    @test m_re.converged
+    @test isfinite(loglikelihood(m_re))
+    @test m_re.sigma_u > 0
+end
+
 @testset "estimate_xtlogit -- RE" begin
     rng = Random.MersenneTwister(9012)
     N_g = 50; T_p = 10; n = N_g * T_p

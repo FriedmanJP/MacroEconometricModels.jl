@@ -475,6 +475,17 @@ function _re_logit_loglik(theta::Vector{T}, y::Vector{T}, X_c::Matrix{T},
     return loglik, grad
 end
 
+"""Overflow-safe logistic. `exp(-z)` overflows to `Inf` for `z ≲ -709`; the value survives
+(`1/(1+Inf) = 0`) but the ForwardDiff dual carries `Inf/Inf = NaN` into the gradient. (#600)"""
+_agh_logistic(z::S) where {S} =
+    z >= zero(S) ? one(S) / (one(S) + exp(-z)) : (e = exp(z); e / (one(S) + e))
+
+"""Overflow-safe `log(1 + exp(z))`, used for the Bernoulli log-likelihood in the form
+`y·z − log1pexp(z)`. Never forms `exp(large)`, so neither the value nor its derivative
+overflows and no probability clamp is needed. (#600)"""
+_agh_log1pexp(z::S) where {S} =
+    z > zero(S) ? z + log1p(exp(-z)) : log1p(exp(z))
+
 """
     _re_logit_agh_loglik(theta, y, X_c, unique_groups, group_obs, x_nodes, w_nodes;
                          agh_newton_iters=8) -> S
@@ -486,6 +497,14 @@ Newton) and rescaled by the curvature `σ̂` (Liu & Pierce 1994; Rabe-Hesketh, S
 Pickles 2005): nodes `a_q = μ̂ + √2·σ̂·x_q`, log-weights `log(√2·σ̂) + log(w_q) + x_q²`
 (the `+x_q²` cancels the `e^{-x²}` baked into the standard GH weights). Reduces to the
 Laplace approximation at `length(x_nodes)==1`.
+
+Everything below is written so that neither the value nor the ForwardDiff gradient can go
+non-finite anywhere the optimizer can reach (#600): probabilities go through
+[`_agh_logistic`](@ref)/[`_agh_log1pexp`](@ref) rather than a clamp on `1/(1+exp(-z))`, and
+the prior enters as `inv_s2 = exp(-2 log σ_u)` and the additive `log σ_u` rather than
+`s2 = exp(2 log σ_u)` — a large trial `log σ_u` then underflows `inv_s2` to zero instead of
+producing `Inf/Inf`. `HagerZhang` asserts finiteness of the trial value *and* its
+directional derivative, so a single `NaN` partial aborted the whole fit.
 """
 function _re_logit_agh_loglik(theta::AbstractVector{S}, y::Vector{T}, X_c::Matrix{T},
                               unique_groups::Vector{Int}, group_obs::Dict{Int,Vector{Int}},
@@ -493,8 +512,15 @@ function _re_logit_agh_loglik(theta::AbstractVector{S}, y::Vector{T}, X_c::Matri
                               agh_newton_iters::Int=8) where {S,T}
     k = size(X_c, 2)
     beta = theta[1:k]
-    sigma_u = exp(theta[k+1])
-    s2 = sigma_u^2
+    # Carry the *inverse* variance: exp(-2ℓ) underflows to 0 for a large trial ℓ, whereas
+    # s2 = exp(2ℓ) overflows to Inf and turns 1/s2 and a²/(2s2) into NaN partials (#600).
+    # ℓ is clamped to a range where exp(±2ℓ) is representable; the clamp must apply to
+    # EVERY use of ℓ, because the −log σ_u normalizer in logφ cancels against log σ̂ in the
+    # quadrature weight — clamping one and not the other sends the objective to +∞ as
+    # σ_u → 0 and manufactures an optimum at the degenerate point. σ_u = e^{±340} is
+    # numerically 0/∞ anyway, so a flat objective out there is the honest limit.
+    log_sigma_u = clamp(theta[k+1], S(-340), S(340))
+    inv_s2 = exp(-2 * log_sigma_u)
     nq = length(x_nodes)
     half_log2pi = S(0.5 * log(2π))
     log_sqrt2 = S(0.5 * log(2.0))
@@ -508,22 +534,25 @@ function _re_logit_agh_loglik(theta::AbstractVector{S}, y::Vector{T}, X_c::Matri
         # (a) posterior mode μ̂ of h(α) = ℓ_g(α) − α²/(2σ²) via scalar Newton from 0
         alpha = zero(S)
         for _ in 1:agh_newton_iters
-            hp = -alpha / s2
-            hpp = -one(S) / s2
+            hp = -alpha * inv_s2
+            hpp = -inv_s2
             @inbounds for j in eachindex(eta)
-                mu = one(S) / (one(S) + exp(-(eta[j] + alpha)))
+                mu = _agh_logistic(eta[j] + alpha)
                 hp += yg[j] - mu
                 hpp -= mu * (one(S) - mu)
             end
+            # h''<0 analytically, but both terms underflow to 0 at extreme trial points;
+            # floor the magnitude so the Newton step stays finite instead of dividing by 0.
+            hpp = min(hpp, -eps(one(S)))
             alpha -= hp / hpp                      # h''<0 ⇒ stable Newton toward the mode
             abs(hp) < S(1e-10) && break
         end
-        info = one(S) / s2                          # curvature σ̂ = 1/√(−h''(μ̂))
+        info = inv_s2                               # curvature σ̂ = 1/√(−h''(μ̂))
         @inbounds for j in eachindex(eta)
-            mu = one(S) / (one(S) + exp(-(eta[j] + alpha)))
+            mu = _agh_logistic(eta[j] + alpha)
             info += mu * (one(S) - mu)
         end
-        sighat = one(S) / sqrt(info)
+        sighat = one(S) / sqrt(max(info, eps(one(S))))
 
         # (b,c) adaptive nodes + stable logsumexp of logω_q + ℓ_g(a_q) + logφ(a_q;0,σ²)
         logvals = Vector{S}(undef, nq)
@@ -532,10 +561,10 @@ function _re_logit_agh_loglik(theta::AbstractVector{S}, y::Vector{T}, X_c::Matri
             logw = log_sqrt2 + log(sighat) + log(S(w_nodes[q])) + S(x_nodes[q])^2
             ll = zero(S)
             for j in eachindex(eta)
-                mu = clamp(one(S) / (one(S) + exp(-(eta[j] + a))), S(1e-12), one(S) - S(1e-12))
-                ll += yg[j] * log(mu) + (one(S) - yg[j]) * log(one(S) - mu)
+                z = eta[j] + a                      # y·z − log(1+e^z): exact, never overflows
+                ll += yg[j] * z - _agh_log1pexp(z)
             end
-            logphi = -half_log2pi - log(sigma_u) - a^2 / (2 * s2)
+            logphi = -half_log2pi - log_sigma_u - a^2 * inv_s2 / 2
             logvals[q] = logw + ll + logphi
         end
         mx = maximum(logvals)

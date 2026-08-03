@@ -639,15 +639,29 @@ m_re_logit = estimate_xtlogit(pd_ddcg, :dem, [:lngdppc]; model=:re, tol=1e-12)
 report(m_re_logit)
 ```
 
-Random effects keeps all 175 countries and integrates over a normal country effect with estimated ``\hat{\sigma}_u = 4.5537``, implying ``\rho = 0.8631``: 86% of the latent-variable residual variance is permanent country heterogeneity. Absorbing that heterogeneity raises the pseudo R-squared from 0.1581 to 0.5182 and the income slope to 0.9734, between the pooled and conditional-FE values. All three estimates share the sign that supports the Lipset hypothesis; they differ in which variation identifies it.
+Random effects keeps all 175 countries and integrates over a normal country effect with estimated ``\hat{\sigma}_u = 4.5531``, implying ``\rho = 0.8630``: 86% of the latent-variable residual variance is permanent country heterogeneity. Absorbing that heterogeneity raises the pseudo R-squared from 0.1581 to 0.5191 and the income slope to 1.0962, above both the pooled 0.6879 and the conditional-FE 1.8515's lower neighbourhood. All three estimates share the sign that supports the Lipset hypothesis; they differ in which variation identifies it.
 
-!!! warning "Check `converged` on RE and CRE fits"
-    The quadrature-based RE and CRE likelihoods are flat enough near the optimum that the
-    default `tol=1e-8` stops LBFGS at a score norm around ``4 \times 10^{-4}`` and the fit
-    reports `Converged: No` with a warning. `tol` is the optimizer's *relative function*
-    tolerance, so the fix is to **tighten** it, not to relax it: `tol=1e-12` above reaches a
-    stationary point in 43 iterations at the same estimates. Read the `Converged` line
-    before interpreting an RE or CRE coefficient.
+!!! warning "This RE fit does not reach a stationary point"
+    The report above says `Converged: No` after 44 iterations, and the two standard errors
+    come back at ``5 \times 10^{-11}`` and ``3 \times 10^{-10}`` — small enough that the
+    coefficient table prints `—` rather than a z-statistic. Both are symptoms of the same
+    open defect in the RE/CRE observed-information covariance
+    ([#542](https://github.com/FriedmanJP/MacroEconometricModels.jl/issues/542)), not of the
+    data. Read the point estimates, which are stable across starting values and tolerances,
+    and do **not** quote the standard errors, confidence intervals, or significance stars
+    from an RE or CRE panel logit until that issue closes. `tol` is the optimizer's
+    *relative function* tolerance, so tightening it (as here, `tol=1e-12`) buys more
+    iterations but does not repair the covariance.
+
+!!! note "The fit itself no longer aborts"
+    Before
+    [#600](https://github.com/FriedmanJP/MacroEconometricModels.jl/issues/600) this call
+    threw an `AssertionError` from inside the line search: the adaptive Gauss-Hermite
+    likelihood formed `exp(-eta)` and `exp(2 log sigma_u)` directly, both of which overflow
+    on this panel and put a `NaN` in the ForwardDiff gradient, and `HagerZhang` asserts that
+    the trial value and its directional derivative are finite. The likelihood is now written
+    so that neither the value nor its gradient can go non-finite anywhere the optimizer can
+    reach.
 
 !!! note "Which standard errors you get"
     `cov_type` applies to the pooled **and** conditional-FE estimators. The FE fit inverts
