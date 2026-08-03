@@ -487,16 +487,103 @@ _agh_log1pexp(z::S) where {S} =
     z > zero(S) ? z + log1p(exp(-z)) : log1p(exp(z))
 
 """
+    _agh_group_mode(eta, yg, inv_s2; maxiter=200) -> alpha
+
+Posterior mode μ̂ of `h(α) = ℓ_g(α) − α²/(2σ²)` for one group, by safeguarded Newton:
+`h'` is strictly decreasing (h'' < 0 everywhere), so the root is bracketed by doubling
+and every Newton step that leaves the bracket is replaced by bisection. The mode MUST
+be converged tightly, not run for a fixed iteration count: a truncated inner iteration
+makes the marginal loglik VALUE jagged in θ (on ddcg, O(1) jumps under 1e-3 parameter
+moves), which sent LBFGS to noise-dependent pseudo-optima several loglik units apart
+across Optim versions and made finite-difference Hessians indefinite (#542).
+
+When `inv_s2` underflows and the group is degenerate (all-0/all-1), `h'` never crosses
+zero; the bracket expansion then caps at ~2⁶⁰ and returns the capped point — the
+integrand is flat out there and the quadrature value stays finite (#600 regime).
+Generic in `S` so ForwardDiff duals pass through; at a converged root the residual is
+~0, so the dual parts agree with the implicit-function derivative.
+"""
+function _agh_group_mode(eta::AbstractVector{S}, yg::AbstractVector{<:Real},
+                         inv_s2::S; maxiter::Int=200) where {S}
+    # Bernoulli part only: c(α) = Σ_j (y_j − μ_j), c'(α) = −Σ_j μ_j(1−μ_j). Kept separate
+    # from the prior term −α·inv_s2 so the Newton update can be evaluated in the
+    # cancellation-free form α₊ = (c − α·c')/(inv_s2 − c'): the naive α − h'/h'' rounds to
+    # exactly α (i.e. a zero step) whenever α·inv_s2 dominates c in Float64, which turned
+    # the loop into pure arithmetic bisection that cannot reach a root at 1e-295 (σ_u → 0).
+    bern = function (alpha::S)
+        c = zero(S)
+        cp = zero(S)
+        @inbounds for j in eachindex(eta)
+            mu = _agh_logistic(eta[j] + alpha)
+            c += yg[j] - mu
+            cp -= mu * (one(S) - mu)
+        end
+        c, cp
+    end
+    alpha = zero(S)
+    c, cp = bern(alpha)
+    hp = c - alpha * inv_s2
+    abs(hp) < S(1e-10) && return alpha
+    # Bracket [lo, hi] with h'(lo) > 0 > h'(hi); h' is strictly decreasing.
+    local lo::S, hi::S
+    if hp > 0
+        lo = alpha
+        step = one(S)
+        hi = lo + step
+        hp_hi = (ch = bern(hi)[1]; ch - hi * inv_s2)
+        nexp = 0
+        while hp_hi > 0 && nexp < 60
+            lo = hi
+            step *= 2
+            hi = lo + step
+            hp_hi = (ch = bern(hi)[1]; ch - hi * inv_s2)
+            nexp += 1
+        end
+        hp_hi > 0 && return hi          # no root (degenerate group, σ_u → ∞): capped
+    else
+        hi = alpha
+        step = one(S)
+        lo = hi - step
+        hp_lo = (cl = bern(lo)[1]; cl - lo * inv_s2)
+        nexp = 0
+        while hp_lo < 0 && nexp < 60
+            hi = lo
+            step *= 2
+            lo = hi - step
+            hp_lo = (cl = bern(lo)[1]; cl - lo * inv_s2)
+            nexp += 1
+        end
+        hp_lo < 0 && return lo
+    end
+    for _ in 1:maxiter
+        denom = max(inv_s2 - cp, eps(one(S)))       # −h'' > 0 always
+        cand = (c - alpha * cp) / denom             # Newton step, cancellation-free form
+        alpha_new = (lo < cand < hi) ? cand : (lo + hi) / 2
+        alpha_new == alpha && break                 # no representable progress left
+        alpha = alpha_new
+        c, cp = bern(alpha)
+        hp = c - alpha * inv_s2
+        abs(hp) < S(1e-10) && break
+        if hp > 0
+            lo = alpha
+        else
+            hi = alpha
+        end
+    end
+    alpha
+end
+
+"""
     _re_logit_agh_loglik(theta, y, X_c, unique_groups, group_obs, x_nodes, w_nodes;
-                         agh_newton_iters=8) -> S
+                         agh_newton_iters=200) -> S
 
 Adaptive Gauss-Hermite marginal log-likelihood for the RE/CRE logit. Generic in the element
 type `S` of `theta = [β; log σ_u]` so ForwardDiff can differentiate through it. For each
-group the integrand over `α ~ N(0, σ_u²)` is recentered at its posterior mode `μ̂` (scalar
-Newton) and rescaled by the curvature `σ̂` (Liu & Pierce 1994; Rabe-Hesketh, Skrondal &
-Pickles 2005): nodes `a_q = μ̂ + √2·σ̂·x_q`, log-weights `log(√2·σ̂) + log(w_q) + x_q²`
-(the `+x_q²` cancels the `e^{-x²}` baked into the standard GH weights). Reduces to the
-Laplace approximation at `length(x_nodes)==1`.
+group the integrand over `α ~ N(0, σ_u²)` is recentered at its posterior mode `μ̂`
+([`_agh_group_mode`](@ref)) and rescaled by the curvature `σ̂` (Liu & Pierce 1994;
+Rabe-Hesketh, Skrondal & Pickles 2005): nodes `a_q = μ̂ + √2·σ̂·x_q`, log-weights
+`log(√2·σ̂) + log(w_q) + x_q²` (the `+x_q²` cancels the `e^{-x²}` baked into the standard
+GH weights). Reduces to the Laplace approximation at `length(x_nodes)==1`.
 
 Everything below is written so that neither the value nor the ForwardDiff gradient can go
 non-finite anywhere the optimizer can reach (#600): probabilities go through
@@ -509,7 +596,7 @@ directional derivative, so a single `NaN` partial aborted the whole fit.
 function _re_logit_agh_loglik(theta::AbstractVector{S}, y::Vector{T}, X_c::Matrix{T},
                               unique_groups::Vector{Int}, group_obs::Dict{Int,Vector{Int}},
                               x_nodes::Vector{Float64}, w_nodes::Vector{Float64};
-                              agh_newton_iters::Int=8) where {S,T}
+                              agh_newton_iters::Int=200) where {S,T}
     k = size(X_c, 2)
     beta = theta[1:k]
     # Carry the *inverse* variance: exp(-2ℓ) underflows to 0 for a large trial ℓ, whereas
@@ -531,22 +618,9 @@ function _re_logit_agh_loglik(theta::AbstractVector{S}, y::Vector{T}, X_c::Matri
         eta = @view(X_c[idx, :]) * beta           # Vector{S}
         yg = @view y[idx]
 
-        # (a) posterior mode μ̂ of h(α) = ℓ_g(α) − α²/(2σ²) via scalar Newton from 0
-        alpha = zero(S)
-        for _ in 1:agh_newton_iters
-            hp = -alpha * inv_s2
-            hpp = -inv_s2
-            @inbounds for j in eachindex(eta)
-                mu = _agh_logistic(eta[j] + alpha)
-                hp += yg[j] - mu
-                hpp -= mu * (one(S) - mu)
-            end
-            # h''<0 analytically, but both terms underflow to 0 at extreme trial points;
-            # floor the magnitude so the Newton step stays finite instead of dividing by 0.
-            hpp = min(hpp, -eps(one(S)))
-            alpha -= hp / hpp                      # h''<0 ⇒ stable Newton toward the mode
-            abs(hp) < S(1e-10) && break
-        end
+        # (a) posterior mode μ̂ of h(α) = ℓ_g(α) − α²/(2σ²), converged to |h'| < 1e-10
+        # by safeguarded Newton — see _agh_group_mode for why truncation is not an option.
+        alpha = _agh_group_mode(eta, yg, inv_s2; maxiter=agh_newton_iters)
         info = inv_s2                               # curvature σ̂ = 1/√(−h''(μ̂))
         @inbounds for j in eachindex(eta)
             mu = _agh_logistic(eta[j] + alpha)
@@ -578,7 +652,132 @@ function _re_logit_agh_loglik(theta::AbstractVector{S}, y::Vector{T}, X_c::Matri
 end
 
 """
-    _agh_newton_polish(nll, theta) -> (theta, gnorm, stationary)
+    _re_logit_agh_score_info(theta, y, X_c, unique_groups, group_obs, x_nodes, w_nodes)
+        -> (score, info, group_scores)
+
+Marginal score and Louis (1982) observed information of the RE/CRE logit marginal
+loglik, via posterior expectations over each group's random effect computed on the
+same adaptive Gauss–Hermite rule as the loglik. For group g with complete-data loglik
+`ℓ_c(α) = Σ_j [y_j z_j − log(1+e^{z_j})] + log φ(α; 0, σ_u²)`, `z_j = x_j'β + α`:
+
+    ∇ℓ_g = E[∇ℓ_c | y_g]                      (Fisher's identity)
+    −∇²ℓ_g = E[−∇²ℓ_c | y_g] − Var[∇ℓ_c | y_g]  (missing-information principle)
+
+with complete-data derivatives w.r.t. θ = [β; ℓ], ℓ = log σ_u:
+
+    s_β = Σ_j (y_j − μ_j) x_j     s_ℓ = α²/σ² − 1
+    −H_ββ = Σ_j μ_j(1−μ_j) x_j x_j'   −H_ℓℓ = 2α²/σ²   −H_βℓ = 0
+
+This deliberately never differentiates through the inner mode search: the ForwardDiff
+Hessian of the AGH objective carried a spurious O(1e11) eigenvalue on ddcg and produced
+standard errors below the complete-data information bound — mathematically impossible
+values like z = 2674 for a logit slope (#542). Returns the total score, the observed
+information (positive definite at a genuine optimum), and the per-group scores
+(n_params × G) for the cluster sandwich.
+
+Note these approximate the EXACT marginal score/information (verified against dense
+numerical integration to 1e-6): at the optimum of the AGH-`n_quadrature` objective the
+returned score is O(quadrature error), not 0 — the right target for inference, but not
+the objective gradient. Use the objective's own gradient for FOC checks.
+"""
+function _re_logit_agh_score_info(theta::Vector{T}, y::Vector{T}, X_c::Matrix{T},
+                                  unique_groups::Vector{Int},
+                                  group_obs::Dict{Int,Vector{Int}},
+                                  x_nodes::Vector{Float64},
+                                  w_nodes::Vector{Float64}) where {T<:AbstractFloat}
+    k = size(X_c, 2)
+    n_params = k + 1
+    log_sigma_u = clamp(theta[k+1], T(-340), T(340))
+    inv_s2 = exp(-2 * log_sigma_u)
+    beta = theta[1:k]
+    nq = length(x_nodes)
+    half_log2pi = T(0.5 * log(2π))
+    log_sqrt2 = T(0.5 * log(2.0))
+    G = length(unique_groups)
+
+    score = zeros(T, n_params)
+    info = zeros(T, n_params, n_params)
+    group_scores = zeros(T, n_params, G)
+    logvals = Vector{T}(undef, nq)
+    a_nodes = Vector{T}(undef, nq)
+    s_node = zeros(T, n_params)
+    Es = zeros(T, n_params)
+    Ess = zeros(T, n_params, n_params)
+    EnegH = zeros(T, n_params, n_params)
+
+    for (gi, g) in enumerate(unique_groups)
+        idx = group_obs[g]
+        X_g = @view X_c[idx, :]
+        eta = X_g * beta
+        yg = @view y[idx]
+
+        alpha = _agh_group_mode(eta, yg, inv_s2)
+        info_h = inv_s2
+        @inbounds for j in eachindex(eta)
+            mu = _agh_logistic(eta[j] + alpha)
+            info_h += mu * (one(T) - mu)
+        end
+        sighat = one(T) / sqrt(max(info_h, eps(one(T))))
+
+        @inbounds for q in 1:nq
+            a = alpha + sqrt(T(2)) * sighat * T(x_nodes[q])
+            a_nodes[q] = a
+            logw = log_sqrt2 + log(sighat) + log(T(w_nodes[q])) + T(x_nodes[q])^2
+            ll = zero(T)
+            for j in eachindex(eta)
+                z = eta[j] + a
+                ll += yg[j] * z - _agh_log1pexp(z)
+            end
+            logphi = -half_log2pi - log_sigma_u - a^2 * inv_s2 / 2
+            logvals[q] = logw + ll + logphi
+        end
+        mx = maximum(logvals)
+        acc = zero(T)
+        @inbounds for q in 1:nq
+            acc += exp(logvals[q] - mx)
+        end
+
+        fill!(Es, zero(T)); fill!(Ess, zero(T)); fill!(EnegH, zero(T))
+        @inbounds for q in 1:nq
+            p_q = exp(logvals[q] - mx) / acc
+            p_q > 0 || continue
+            a = a_nodes[q]
+            # complete-data score at (β, ℓ; α = a)
+            fill!(s_node, zero(T))
+            for j in eachindex(eta)
+                mu = _agh_logistic(eta[j] + a)
+                r = yg[j] - mu
+                w = mu * (one(T) - mu)
+                for c in 1:k
+                    s_node[c] += r * X_g[j, c]
+                    for c2 in c:k
+                        EnegH[c, c2] += p_q * w * X_g[j, c] * X_g[j, c2]
+                    end
+                end
+            end
+            s_node[n_params] = a^2 * inv_s2 - one(T)
+            EnegH[n_params, n_params] += p_q * 2 * a^2 * inv_s2
+            for c in 1:n_params
+                Es[c] += p_q * s_node[c]
+                for c2 in c:n_params
+                    Ess[c, c2] += p_q * s_node[c] * s_node[c2]
+                end
+            end
+        end
+        # I_g = E[−H_c] − (E[s s'] − E[s]E[s]')  (upper triangles accumulated)
+        @inbounds for c in 1:n_params, c2 in c:n_params
+            v = EnegH[c, c2] - (Ess[c, c2] - Es[c] * Es[c2])
+            info[c, c2] += v
+            c2 > c && (info[c2, c] += v)
+        end
+        score .+= Es
+        group_scores[:, gi] .= Es
+    end
+    score, info, group_scores
+end
+
+"""
+    _agh_newton_polish(nll, theta) -> (theta, gnorm)
 
 Damped-Newton polish of the adaptive-GH marginal negative loglik around the LBFGS
 minimizer. Optim's `f_reltol` stopping can halt with `‖∇nll‖` marginally above the
@@ -586,15 +785,9 @@ honest-convergence FOC threshold (the exact stopping point varies across Optim
 versions); a few backtracking Newton steps on the exact ForwardDiff Hessian drive
 the gradient to numerical zero whenever the solution is a genuine local optimum.
 
-`stationary` is a scale-aware FOC check for stiff surfaces: when the Hessian is
-badly conditioned (ddcg RE logit: eigenvalues 1e2 .. 5e12), the gradient at the
-machine-precision optimum floats on rounding noise of order `eps(f)·‖H‖ ≫ 1e-5`,
-so an absolute `‖∇‖` cutoff misreports non-convergence. Instead measure the
-gradient in the Hessian metric: with `H ≻ 0`, `‖H⁻¹∇‖ ≤ √eps·(1 + ‖θ‖)` means
-the remaining Newton step is below parameter resolution — θ IS the stationary
-point to machine precision.
-Returns the (possibly improved) parameter vector, the final gradient norm, and
-the stationarity flag.
+Returns the (possibly improved) parameter vector and the final gradient VECTOR.
+The scale-aware FOC verdict lives in [`_agh_foc_stationary`](@ref), computed on
+the Louis observed information rather than the AD Hessian (#542).
 """
 function _agh_newton_polish(nll::F, theta::Vector{T}) where {F,T<:AbstractFloat}
     g = ForwardDiff.gradient(nll, theta)
@@ -624,18 +817,28 @@ function _agh_newton_polish(nll::F, theta::Vector{T}) where {F,T<:AbstractFloat}
         accepted || break
         g = ForwardDiff.gradient(nll, theta)
     end
-    gnorm = norm(g)
-    stationary = gnorm < T(1e-8)
-    if !stationary && isfinite(gnorm)
-        H = ForwardDiff.hessian(nll, theta)
-        F_c = cholesky(Hermitian((H .+ H') ./ 2); check=false)
-        if issuccess(F_c)
-            newton_step = F_c \ g
-            stationary = all(isfinite, newton_step) &&
-                         norm(newton_step) <= sqrt(eps(T)) * (one(T) + norm(theta))
-        end
-    end
-    return theta, gnorm, stationary
+    return theta, g
+end
+
+"""
+    _agh_foc_stationary(g, info, theta) -> Bool
+
+Scale-aware first-order-condition check for stiff marginal-likelihood surfaces: `g`
+is the gradient of the OBJECTIVE actually minimized (the AGH-n negative loglik) and
+`info` the Louis observed information used as the curvature metric. With `I ≻ 0`,
+`‖I⁻¹·g‖ ≤ √eps·(1 + ‖θ‖)` means the remaining Newton step is below parameter
+resolution — θ IS the stationary point to machine precision even when the raw
+gradient floats on rounding noise above an absolute cutoff (ddcg RE logit: the
+objective value is O(1e3), so `eps(f)`-level noise in ∇ can exceed 1e-5). Do NOT
+pass the Louis score here: at the AGH-n optimum the exact-marginal score is
+O(quadrature error), not 0, so the check would never fire.
+"""
+function _agh_foc_stationary(g::Vector{T}, info::Matrix{T},
+                             theta::Vector{T}) where {T<:AbstractFloat}
+    F_c = cholesky(Hermitian((info .+ info') ./ 2); check=false)
+    issuccess(F_c) || return false
+    step = F_c \ g
+    all(isfinite, step) && norm(step) <= sqrt(eps(T)) * (one(T) + norm(theta))
 end
 
 function _xtlogit_re(pd::PanelData{T}, y::Vector{T}, X::Matrix{T},
@@ -669,24 +872,30 @@ function _xtlogit_re(pd::PanelData{T}, y::Vector{T}, X::Matrix{T},
                          Optim.Options(g_tol=T(1e-8), iterations=maxiter, f_reltol=tol))
     theta = Optim.minimizer(res)
     iterations = Optim.iterations(res)
-    theta, gnorm, stationary = _agh_newton_polish(nll, theta)
+    theta, g_pol = _agh_newton_polish(nll, theta)
+    gnorm = norm(g_pol)
 
     beta = theta[1:k_full]
     sigma_u = exp(theta[k_full + 1])
     loglik_final = _re_logit_agh_loglik(theta, y, X_c, unique_groups, group_obs, nodes, weights)
 
+    # Louis score/information: one pass serves the honest-convergence FOC check and the
+    # covariance (bread + cluster meat) without differentiating through the mode search.
+    _, info_L, group_scores = _re_logit_agh_score_info(theta, y, X_c, unique_groups,
+                                                       group_obs, nodes, weights)
+
     # Honest convergence: the true gradient norm is near zero, or the FOC holds in the
-    # Hessian metric (stiff surfaces float the raw gradient on rounding noise > 1e-5).
-    converged = isfinite(gnorm) && (gnorm < T(1e-5) || stationary)
+    # information metric (stiff surfaces float the raw gradient on rounding noise > 1e-5).
+    converged = isfinite(gnorm) && (gnorm < T(1e-5) ||
+                                    _agh_foc_stationary(g_pol, info_L, theta))
     if !converged
         @warn "RE logit did not reach a stationary point (‖∇nll‖=$gnorm after " *
               "$iterations LBFGS iterations + Newton polish). Raise maxiter/tol." maxlog=1
     end
 
-    # Covariance: observed-information bread, optionally sandwich-clustered by entity.
+    # Covariance: Louis observed-information bread, optionally sandwich-clustered by entity.
     n_params = k_full + 1
-    vcov_full = _re_logit_vcov(nll, theta, y, X_c, unique_groups, group_obs, nodes, weights,
-                               cov_type)
+    vcov_full = _re_logit_vcov(info_L, group_scores, n, cov_type)
     vcov_mat = vcov_full[1:k_full, 1:k_full]
 
     # Fitted probabilities (marginal, integrating out alpha)
@@ -726,46 +935,28 @@ function _xtlogit_re(pd::PanelData{T}, y::Vector{T}, X::Matrix{T},
 end
 
 """
-    _re_logit_vcov(nll, theta, y, X_c, unique_groups, group_obs, nodes, weights, cov_type)
+    _re_logit_vcov(info, group_scores, n, cov_type)
 
-Observed-information VCE for the RE/CRE logit parameter vector `theta = [β; log σ_u]`.
-Under `cov_type == :cluster` (the default) forms the group-score sandwich
+Entity-clustered (or pure-information) VCE for the RE/CRE logit `theta = [β; log σ_u]`
+from the Louis observed information and per-group marginal scores computed by
+[`_re_logit_agh_score_info`](@ref). Bread = I⁻¹; under `cov_type == :cluster` (the
+default) forms the group-score sandwich
 
-    V = H⁻¹ (Σ_g s_g s_g') H⁻¹
+    V = I⁻¹ (Σ_g s_g s_g') I⁻¹
 
-where `s_g = ∇_θ ℓ_g` is the score of the adaptive-GH group log-likelihood and
-`H = −∇²ℓ` is the observed information of the full-sample negative loglik. The meat
-carries the pooled path's `G/(G−1)·(n−1)/(n−k)` finite-sample correction. This is
-the standard panel-robust VCE (Stata `xtlogit, re vce(robust)`); the pure Hessian
-inverse overstates precision by roughly a factor of √T̄ on moderately long panels.
+carrying the pooled path's `G/(G−1)·(n−1)/(n−k)` finite-sample correction, so the dof
+convention does not silently change between `:pooled` and `:re`/`:cre` (#542). This is
+the standard panel-robust VCE (Stata `xtlogit, re vce(robust)`); the pure information
+inverse overstates precision on moderately long panels.
 """
-function _re_logit_vcov(nll, theta::Vector{T}, y::Vector{T}, X_c::Matrix{T},
-                        unique_groups::Vector{Int}, group_obs::Dict{Int,Vector{Int}},
-                        nodes::Vector{Float64}, weights::Vector{Float64},
+function _re_logit_vcov(info::Matrix{T}, group_scores::Matrix{T}, n::Int,
                         cov_type::Symbol) where {T<:AbstractFloat}
-    n_params = length(theta)
-    H = ForwardDiff.hessian(nll, theta)
-    bread = try
-        Matrix{T}(robust_inv(Hermitian((H .+ H') ./ 2)))
-    catch
-        return zeros(T, n_params, n_params)
-    end
-    cov_type == :cluster || return bread
+    n_params = size(info, 1)
+    bread = Matrix{T}(robust_inv(Hermitian((info .+ info') ./ 2)))
+    cov_type == :cluster || return Matrix{T}((bread .+ bread') ./ 2)
 
-    # Group scores of the POSITIVE group loglik (= −∇nll_g)
-    meat = zeros(T, n_params, n_params)
-    for g in unique_groups
-        idx = group_obs[g]
-        # Per-group negative loglik so score of nll_g has the same sign as the bread
-        nll_g(th) = -_re_logit_agh_loglik(th, y, X_c, [g],
-            Dict(g => idx), nodes, weights)
-        s_g = ForwardDiff.gradient(nll_g, theta)
-        meat .+= s_g * s_g'
-    end
-    # Same finite-sample correction as the pooled path (_panel_cluster_vcov), so the
-    # dof convention does not silently change between :pooled and :re/:cre (#542).
-    G = length(unique_groups)
-    n = length(y)
+    meat = group_scores * group_scores'
+    G = size(group_scores, 2)
     if G > 1
         meat .*= T(G) / T(G - 1) * T(n - 1) / T(max(n - n_params, 1))
     end
@@ -828,22 +1019,25 @@ function _xtlogit_cre(pd::PanelData{T}, y::Vector{T}, X::Matrix{T},
                          Optim.Options(g_tol=T(1e-8), iterations=maxiter, f_reltol=tol))
     theta = Optim.minimizer(res)
     iterations = Optim.iterations(res)
-    theta, gnorm, stationary = _agh_newton_polish(nll, theta)
+    theta, g_pol = _agh_newton_polish(nll, theta)
+    gnorm = norm(g_pol)
 
     beta = theta[1:k_full]
     sigma_u = exp(theta[k_full + 1])
     # Recompute the loglik at the optimum (the old code reused loglik_old — a stale value).
     loglik_final = _re_logit_agh_loglik(theta, y, X_c, unique_groups, group_obs, nodes, weights)
 
-    converged = isfinite(gnorm) && (gnorm < T(1e-5) || stationary)
+    _, info_L, group_scores = _re_logit_agh_score_info(theta, y, X_c, unique_groups,
+                                                       group_obs, nodes, weights)
+    converged = isfinite(gnorm) && (gnorm < T(1e-5) ||
+                                    _agh_foc_stationary(g_pol, info_L, theta))
     if !converged
         @warn "CRE logit did not reach a stationary point (‖∇nll‖=$gnorm after " *
               "$iterations LBFGS iterations + Newton polish). Raise maxiter/tol." maxlog=1
     end
 
     n_params = k_full + 1
-    vcov_full = _re_logit_vcov(nll, theta, y, X_c, unique_groups, group_obs, nodes, weights,
-                               cov_type)
+    vcov_full = _re_logit_vcov(info_L, group_scores, n, cov_type)
     vcov_mat = vcov_full[1:k_full, 1:k_full]
 
     # Fitted probabilities

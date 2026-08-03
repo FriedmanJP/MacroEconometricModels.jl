@@ -649,3 +649,48 @@ end
     m_probit = estimate_xtprobit(pd, :y, [:x1]; model=:re, cov_type=:cluster)
     @test all(stderror(m_probit) .> 0)
 end
+
+@testset "#542 Louis information: exact marginal score and sane SEs" begin
+    FD = MacroEconometricModels.ForwardDiff
+    # (1) Fisher identity: the Louis score equals the AGH objective gradient (to
+    # quadrature error) at an arbitrary point, and group scores sum to the total
+    rng = Random.MersenneTwister(1542)
+    N_g = 12; T_p = 5; n = N_g * T_p
+    ids = repeat(1:N_g, inner=T_p)
+    x1 = randn(rng, n)
+    alpha = repeat(0.9 .* randn(rng, N_g), inner=T_p)
+    y = Float64.(rand(rng, n) .< 1 ./ (1 .+ exp.(-(0.4 .* x1 .+ alpha))))
+    X_c = hcat(ones(n), x1); ug = sort(unique(ids))
+    gobs = Dict(g => findall(==(g), ids) for g in ug)
+    nodes, weights = MacroEconometricModels._gauss_hermite_nodes_weights(12)
+    theta = [0.2, 0.5, -0.1]
+    sc, info, Sg = MacroEconometricModels._re_logit_agh_score_info(theta, y, X_c, ug,
+                                                                   gobs, nodes, weights)
+    ll(th) = MacroEconometricModels._re_logit_agh_loglik(th, y, X_c, ug, gobs, nodes, weights)
+    @test isapprox(sc, FD.gradient(ll, theta); atol=1e-4)
+    @test vec(sum(Sg; dims=2)) ≈ sc atol=1e-12
+    @test norm(info - info') < 1e-10
+    @test isposdef(Symmetric((info .+ info') ./ 2))
+
+    # (2) ddcg: SEs must respect the complete-data information bound. The pre-#542
+    # AD-through-the-mode-search Hessian carried a spurious O(1e11) eigenvalue and
+    # reported a slope SE BELOW the bound (z up to 2674 — mathematically impossible);
+    # the truncated 8-iteration mode search also made the loglik jagged, so LBFGS
+    # landed on pseudo-optima 20+ loglik units above the true optimum.
+    ddcg = load_example(:ddcg)
+    dfd = DataFrame(ddcg.data, ddcg.varnames)
+    dfd.country = ddcg.group_names[ddcg.group_id]
+    dfd.year = ddcg.time_id
+    dfd = dfd[.!isnan.(dfd.y) .& .!isnan.(dfd.dem), :]
+    dfd.lngdppc = dfd.y ./ 100
+    pd2 = xtset(dfd, :country, :year)
+    m = estimate_xtlogit(pd2, :dem, [:lngdppc]; model=:re)
+    se = stderror(m)
+    se_bound = 1 / sqrt(sum(abs2, dfd.lngdppc) / 4)
+    @test m.converged
+    @test se[2] > se_bound
+    @test all(abs.(coef(m) ./ se) .< 50)
+    # smooth objective, single optimum (multistart-verified); pin loosely
+    @test isapprox(coef(m)[2], 1.85; atol=0.2)
+    @test isapprox(m.sigma_u, 4.82; atol=0.3)
+end
