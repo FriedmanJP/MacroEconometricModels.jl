@@ -493,6 +493,33 @@ const MEM = MacroEconometricModels
         @test stat >= 0
         @test 0 <= pval <= 1
     end
+
+    @testset "#566 Pearson IV is a genuine normalized density" begin
+        # ν = 0 reduces exactly to the unit-variance scaled Student t with 2m−1 df
+        for m in (3.0, 8.0)
+            @test maximum(abs(MEM._pearson_iv_logpdf(x, 0.0, m) -
+                              MEM._student_t_logpdf(x, 2m - 1)) for x in -6:0.5:6) < 1e-10
+        end
+        # ∫f = 1, mean 0, variance 1 at skewed parameters (sinh-grid quadrature).
+        # The pre-#566 cubic-tilt pseudo-density diverged for every κ ≠ 0.
+        for (v, m) in ((2.0, 3.0), (-4.0, 5.0), (1.0, 2.2))
+            ts = range(-15.0, 15.0; length=200_001)
+            dt = step(ts)
+            Z = m1 = m2 = 0.0
+            for t in ts
+                x = sinh(t)
+                w = exp(MEM._pearson_iv_logpdf(x, v, m)) * cosh(t) * dt
+                Z += w; m1 += x * w; m2 += x^2 * w
+            end
+            @test isapprox(Z, 1.0; atol=1e-6)
+            @test isapprox(m1, 0.0; atol=1e-6)
+            @test isapprox(m2, 1.0; atol=1e-5)
+        end
+        # finite everywhere the optimizer can reach
+        @test all(isfinite, [MEM._pearson_iv_logpdf(x, v, m)
+                             for x in (-30.0, 0.0, 30.0), v in (-60.0, 0.0, 60.0),
+                                 m in (2.05, 5.0, 9912.0)])
+    end
 end
 
 # =============================================================================

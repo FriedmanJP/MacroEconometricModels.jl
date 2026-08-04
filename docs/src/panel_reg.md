@@ -321,9 +321,8 @@ The coefficient covariance (`vcov(m)`) is the full Windmeijer (2005) corrected G
     every period, so the moment count grows as ``O(T^2)`` per equation. Once it exceeds
     the number of groups the Hansen J stops rejecting anything (`p > 0.999` is the
     tell-tale) and the two-step weighting matrix overfits. `estimate_xtreg` emits a
-    warning naming the ratio; shorten the panel or move to [Panel VAR](@ref pvar_page),
-    whose `collapse` and `max_lag_endo` keywords control instrument proliferation
-    directly.
+    warning naming the ratio; pass `collapse=true` or a finite `max_lag_endo` to
+    `estimate_xtreg` itself, which accepts both for `:ab` and `:bb`, or shorten the panel.
 
 ---
 
@@ -510,7 +509,7 @@ FD-IV gives 1.9781, again unbiased, on 950 rather than 1000 observations — dif
 
 ### Weak Instruments and Overidentification
 
-Two diagnostics appear in the specification block of every `estimate_xtiv` fit and should be read before the coefficients. The **first-stage F** tests whether the excluded instruments explain the endogenous regressor after partialling out the included exogenous ones; when several regressors are endogenous, `first_stage_f` reports the *minimum* across them. The conventional threshold is 10 (Staiger & Stock 1997), and the example clears it by an order of magnitude.
+The specification block of every `estimate_xtiv` fit carries the instrument diagnostics, and they should be read before the coefficients. Two of them do the work. The **first-stage F** tests whether the excluded instruments explain the endogenous regressor after partialling out the included exogenous ones; when several regressors are endogenous, `first_stage_f` reports the *minimum* across them. The conventional threshold is 10 (Staiger & Stock 1997), and the example clears it by an order of magnitude.
 
 The **Sargan-Hansen J** tests the overidentifying restrictions: with more instruments than endogenous regressors, the surplus moments are testable, and a rejection says at least one instrument fails the exclusion restriction. The statistic is the classical homoskedastic Sargan ``J = e'P_Z e / \hat{\sigma}^2`` when `cov_type=:ols` and the entity-clustered Hansen J otherwise, so it inherits the robustness of the covariance you chose:
 
@@ -574,6 +573,9 @@ Experience, the time-varying regressor, is recovered precisely at 1.5459 against
 | `beta` | `Vector{T}` | Estimated coefficients |
 | `vcov_mat` | `Matrix{T}` | Variance-covariance matrix |
 | `first_stage_f` | `T` | Minimum first-stage F-statistic |
+| `cragg_donald_f` | `Union{Nothing,T}` | Cragg-Donald weak-instrument F on the transformed design |
+| `kleibergen_paap_f` | `Union{Nothing,T}` | Kleibergen-Paap rk Wald F, heteroskedasticity-robust |
+| `stock_yogo_10pct` | `Union{Nothing,T}` | Stock-Yogo 10% maximal-size critical value |
 | `sargan_stat` | `Union{Nothing,T}` | Sargan-Hansen J statistic (`nothing` if exactly identified) |
 | `sargan_pval` | `Union{Nothing,T}` | J-test p-value (`nothing` if exactly identified) |
 | `r2_within` / `r2_between` / `r2_overall` | `T` | R-squared variants |
@@ -585,9 +587,19 @@ Experience, the time-varying regressor, is recovered precisely at 1.5459 against
 | `n_obs` / `n_groups` | `Int` | Effective observations and panel units |
 | `Z` | `Matrix{T}` | Instrument matrix actually used |
 
-The `cragg_donald_f`, `kleibergen_paap_f`, and `stock_yogo_10pct` fields exist on
-`PanelIVModel` for interface compatibility with the cross-sectional IV estimator but are
-always `nothing` for panel IV — use `first_stage_f` for instrument strength.
+The three weak-instrument fields are computed on the *transformed* design — demeaned for FE,
+differenced for FD, quasi-demeaned for RE and Hausman-Taylor — so they measure the strength of
+the moments that actually identify ``\beta``. The FE-IV fit above reports a Cragg-Donald F of
+103.02 and a Kleibergen-Paap F of 94.06 against a Stock-Yogo 10% critical value of 19.93, all
+consistent with its first-stage F of 108.46. The Cragg-Donald denominator degrees of freedom
+subtract the fixed effects the transformation absorbed, matching `xtivreg2, fe`. They are
+`nothing` when the model is underidentified or the statistic fails to evaluate.
+
+!!! warning "Kleibergen-Paap is robust to heteroskedasticity, not to clustering"
+    The reported rk Wald F uses a heteroskedasticity-robust meat in every branch; a
+    cluster-robust rk statistic is not implemented. Under the default `cov_type=:cluster`
+    it therefore ignores within-entity dependence and overstates instrument strength
+    whenever the first stage is serially correlated within units.
 
 ---
 
@@ -615,33 +627,53 @@ Pooled logit puts the log-odds slope at 0.6879 with a cluster-robust standard er
 
 ```@example preg
 # FE conditional logit — within-country variation only
-m_fe_logit = estimate_xtlogit(pd_ddcg, :dem, [:lngdppc]; model=:fe, maxiter=2000, tol=1e-6)
+m_fe_logit = estimate_xtlogit(pd_ddcg, :dem, [:lngdppc]; model=:fe)
 report(m_fe_logit)
 ```
 
-Conditioning on each country's number of democratic years drops the 87 countries that never switch regime, leaving 88 countries and 3589 observations — the sample where within-country identification is even possible. The slope rises to 1.6870, well above the pooled 0.6879, so within the switching countries income and democratization move together more strongly than the pooled fit suggests.
+Conditioning on each country's number of democratic years drops the 87 countries that never switch regime, leaving 88 countries and 3589 observations — the sample where within-country identification is even possible. The slope rises to 1.8515, well above the pooled 0.6879, so within the switching countries income and democratization move together more strongly than the pooled fit suggests. The conditional log-likelihood is globally concave and the Newton step uses its exact information matrix, computed by central-differencing the dynamic-programming score, so the fit converges in five iterations from a zero start.
 
 ```@example preg
 # RE logit — integrates over country-level heterogeneity
-m_re_logit = estimate_xtlogit(pd_ddcg, :dem, [:lngdppc]; model=:re)
+m_re_logit = estimate_xtlogit(pd_ddcg, :dem, [:lngdppc]; model=:re, tol=1e-12)
 report(m_re_logit)
 ```
 
-Random effects keeps all 175 countries and integrates over a normal country effect with estimated ``\hat{\sigma}_u = 4.5537``, implying ``\rho = 0.8631``: 86% of the latent-variable residual variance is permanent country heterogeneity. Absorbing that heterogeneity raises the pseudo R-squared from 0.1581 to 0.5182 and the income slope to 0.9734, between the pooled and conditional-FE values. All three estimates share the sign that supports the Lipset hypothesis; they differ in which variation identifies it.
+Random effects keeps all 175 countries and integrates over a normal country effect with estimated ``\hat{\sigma}_u = 4.8225``, implying ``\rho = 0.8761``: 88% of the latent-variable residual variance is permanent country heterogeneity. Absorbing that heterogeneity raises the pseudo R-squared from 0.1581 to 0.5233 and the income slope to 1.8483 — essentially the conditional-FE 1.8515, which is exactly what a correctly specified RE model should deliver: both estimators isolate the within-country association, they just weight the switching countries differently. The entity-clustered standard error of 0.5217 puts ``z = 3.54``, in line with the clustered conditional-FE ``z`` of 3.44 below. All three estimates share the sign that supports the Lipset hypothesis; they differ in which variation identifies it.
 
-!!! warning "Check `converged` on RE, CRE, and FE fits"
-    Only the pooled estimators converge in a handful of IRLS steps. The conditional-FE
-    likelihood and the quadrature-based RE/CRE likelihoods are flat enough near the optimum
-    that the defaults (`maxiter=200`, `tol=1e-8`) frequently return `Converged: No` — the FE
-    fit above needs about 1600 iterations. Always read the `Converged` line, and raise
-    `maxiter` (and relax `tol`) until it reads `Yes` before interpreting a coefficient.
+!!! note "Two defects used to corrupt this fit (#542)"
+    Earlier releases reported `Converged: No` with standard errors near ``10^{-10}``
+    on this example. Two distinct defects, both fixed in
+    [#542](https://github.com/FriedmanJP/MacroEconometricModels.jl/issues/542): the
+    inner posterior-mode search of the adaptive quadrature ran a fixed number of Newton
+    steps, leaving the likelihood *value* jagged — optimizers stopped on noise-dependent
+    pseudo-optima 20+ log-likelihood units above the true optimum (which is why older
+    documentation quoted a slope of 1.10) — and the covariance differentiated through
+    that truncated search, inflating the observed information by orders of magnitude.
+    The mode search now converges to machine precision, and the covariance uses the
+    Louis (1982) score/information identities computed by posterior quadrature. The fit
+    converges in 14 iterations, the optimum is unique across starting values, and the
+    reported standard errors respect the complete-data information bound.
+
+!!! note "The fit itself no longer aborts"
+    Before
+    [#600](https://github.com/FriedmanJP/MacroEconometricModels.jl/issues/600) this call
+    threw an `AssertionError` from inside the line search: the adaptive Gauss-Hermite
+    likelihood formed `exp(-eta)` and `exp(2 log sigma_u)` directly, both of which overflow
+    on this panel and put a `NaN` in the ForwardDiff gradient, and `HagerZhang` asserts that
+    the trial value and its directional derivative are finite. The likelihood is now written
+    so that neither the value nor its gradient can go non-finite anywhere the optimizer can
+    reach.
 
 !!! note "Which standard errors you get"
-    `cov_type` applies to the **pooled** estimators only. The conditional-FE fit reports
-    classical conditional-likelihood standard errors, and the RE/CRE fits report
-    model-based standard errors from the observed information of the quadrature
-    likelihood, with no cluster correction. They are therefore not comparable to the
-    cluster-robust pooled standard errors and are typically much smaller.
+    `cov_type` applies to every estimator. The FE fit inverts the conditional information
+    for `:ols` and sandwiches it with the per-group conditional scores for `:cluster`, the
+    default — 0.5379 against 0.1490 on `lngdppc` here, a ``z`` of 3.44 rather than 12.42,
+    since the clustered version prices in the within-country dependence the conditional
+    likelihood does not model. The RE and CRE fits build the bread from the Louis
+    observed information of the marginal likelihood and, under `:cluster`, sandwich it
+    with the per-group marginal scores using the same ``G/(G-1)\cdot(n-1)/(n-k)``
+    finite-sample correction as the pooled path.
 
 ### Panel Probit
 
@@ -652,7 +684,7 @@ m_probit = estimate_xtprobit(pd_ddcg, :dem, [:lngdppc])
 report(m_probit)
 ```
 
-Probit coefficients are on the standard-normal scale, so they are not directly comparable to logit ones; the usual rule of thumb ``\beta_{\text{logit}} \approx 1.6 \, \beta_{\text{probit}}`` holds here (0.6879 against 0.4185). Marginal effects, computed next, are the scale-free way to compare the two link functions. `model=:re` and `model=:cre` integrate over a normal country effect exactly as the logit versions do, subject to the same convergence caveat.
+Probit coefficients are on the standard-normal scale, so they are not directly comparable to logit ones; the usual rule of thumb ``\beta_{\text{logit}} \approx 1.6 \, \beta_{\text{probit}}`` holds here (0.6879 against 0.4185). Marginal effects, computed next, are the scale-free way to compare the two link functions. `model=:re` and `model=:cre` integrate over a normal country effect, but with *fixed* (non-adaptive) Gauss-Hermite nodes and a likelihood-change stopping rule — on panels with large ``\sigma_u`` like this one the probit quadrature under-resolves where the adaptive logit version does not, so read its RE output with more caution than the logit's.
 
 ### Panel Marginal Effects
 
@@ -670,9 +702,9 @@ The AME of 0.1368 is the interpretable quantity: averaged over the observed dist
 | Keyword | Type | Default | Description |
 |---------|------|---------|-------------|
 | `model` | `Symbol` | `:pooled` | Method: `:pooled`, `:fe`, `:re`, `:cre` (logit); `:pooled`, `:re`, `:cre` (probit) |
-| `cov_type` | `Symbol` | `:cluster` | Covariance estimator: `:ols`, `:cluster` (pooled only) |
-| `maxiter` | `Int` | `200` | Maximum iterations |
-| `tol` | `Real` | ``10^{-8}`` | Convergence tolerance |
+| `cov_type` | `Symbol` | `:cluster` | Covariance estimator: `:ols`, `:cluster` (pooled and FE) |
+| `maxiter` | `Int` | `2000` (logit), `200` (probit) | Maximum iterations |
+| `tol` | `Real` | ``10^{-8}`` | Convergence tolerance; score tolerance on `:fe`, relative function tolerance on `:re`/`:cre` |
 | `n_quadrature` | `Int` | `12` | Gauss-Hermite quadrature points (RE/CRE) |
 
 ### Return Values
@@ -881,7 +913,7 @@ The chain of tests narrows the specification. Breusch-Pagan rejects a common int
 
 6. **Ignoring cross-sectional dependence.** Standard cluster-robust SEs assume independence across entities. Run `pesaran_cd_test` and switch to `cov_type=:driscoll_kraay` if rejected.
 
-7. **Letting the AB/BB instrument count exceed ``N``.** The block-diagonal instrument matrix grows as ``O(T^2)``, and once the moment count passes the number of groups the Hansen J stops rejecting (`p > 0.999`) and standard errors turn unreliable. Shorten the panel or use [Panel VAR](@ref pvar_page), which exposes `collapse` and `max_lag_endo`.
+7. **Letting the AB/BB instrument count exceed ``N``.** The block-diagonal instrument matrix grows as ``O(T^2)``, and once the moment count passes the number of groups the Hansen J stops rejecting (`p > 0.999`) and standard errors turn unreliable. Rein it in where the model is fitted: `estimate_xtreg` takes `collapse`, `min_lag_endo`, `max_lag_endo`, `pca_instruments`, and `pca_max_components` for `:ab` and `:bb`.
 
 8. **Trusting a dynamic-panel fit without the AR(2) test.** A correctly specified Arellano-Bond model *rejects* AR(1) — the differenced error is MA(1) by construction — but must *not* reject AR(2). Rejection at order 2 means the level errors are serially correlated and the lagged-level instruments are invalid.
 
@@ -889,7 +921,7 @@ The chain of tests narrows the specification. Breusch-Pagan rejects a common int
 
 10. **Ignoring the `hdfe.converged` flag.** Alternating projections converge slowly when fixed-effect dimensions are weakly connected. A `MAP converged: NO` line means the coefficients have not settled — raise `hdfe_maxiter` rather than reporting them.
 
-11. **Reporting a non-converged discrete-choice fit.** The conditional-FE and quadrature-based RE/CRE panel logit and probit likelihoods routinely exhaust the default `maxiter=200`. Read the `Converged` line and raise `maxiter` before interpreting the coefficients.
+11. **Reporting a non-converged discrete-choice fit.** The quadrature-based RE and CRE panel logit and probit likelihoods routinely stop short of a stationary point at the default `tol=1e-8`. Read the `Converged` line and tighten `tol` before interpreting the coefficients. The conditional-FE logit is the exception: it is globally concave and settles in a handful of Newton steps.
 
 12. **Prais-Winsten on near-unit-root data.** With ``\hat{\rho}`` close to 1 the quasi-difference approaches a first difference and the coefficients become short-run growth responses, not level elasticities. Inspect `m.ar1_rho` and prefer `model=:fd` when it is near unity.
 

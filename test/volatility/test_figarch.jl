@@ -246,7 +246,7 @@ end
         io = IOBuffer(); show(io, m); s = String(take!(io))
         @test occursin("FIGARCH", s)
         @test occursin("d (frac. int.)", s)
-        rb = refs(m)
+        rb = sprint(io -> refs(io, m))
         @test occursin("Baillie", rb)
 
         # invalid dist rejected
@@ -286,7 +286,7 @@ end
         # display + refs
         io = IOBuffer(); show(io, m); s = String(take!(io))
         @test occursin("FIEGARCH", s)
-        rb = refs(m)
+        rb = sprint(io -> refs(io, m))
         @test occursin("Bollerslev", rb)
 
         @test_throws ArgumentError estimate_fiegarch(r; dist=:t)

@@ -57,115 +57,93 @@ function moon_perron_test(X::AbstractMatrix{T};
     T_obs < 20 && throw(ArgumentError(
         "Time dimension T=$T_obs too small; need at least 20 observations"))
 
-    # Determine number of factors
+    # Moon–Perron (2004): estimate factors from *first differences*, recumulate,
+    # then de-factor the levels and form bias-corrected pooled t-statistics.
+    dX = diff(X; dims=1)                   # (T_obs-1) × N
+    Td = size(dX, 1)
+
     n_factors = if r === :auto
-        r_max = min(10, min(T_obs, N) - 1)
+        r_max = min(10, min(Td, N) - 1)
         r_max < 1 && throw(ArgumentError(
             "Panel too small for automatic factor selection"))
-        ic = ic_criteria(X, r_max; standardize=true)
+        ic = ic_criteria(dX, r_max; standardize=true)
         max(1, ic.r_IC2)
     else
         r::Int
         r < 1 && throw(ArgumentError("Number of factors r must be >= 1, got r=$r"))
-        r > min(T_obs, N) - 1 && throw(ArgumentError(
-            "Number of factors r=$r too large for panel of size ($T_obs, $N)"))
+        r > min(Td, N) - 1 && throw(ArgumentError(
+            "Number of factors r=$r too large for differenced panel of size ($Td, $N)"))
         r
     end
 
-    # Step 1: Estimate factors and de-factor the data
-    fm = estimate_factors(X, n_factors; standardize=true)
-    Lambda_hat = fm.loadings  # N x r
+    # Step 1: PCA on differences → loadings; de-factor levels via Q_⊥ = I − Λ(Λ'Λ)⁻¹Λ'.
+    # standardize=false (#582): Q_⊥ is applied to RAW levels below, so the loadings
+    # must span the raw-scale factor space — standardized loadings project out the
+    # wrong subspace when series scales differ (panic_test does the same).
+    fm = estimate_factors(dX, n_factors; standardize=false)
+    Lambda_hat = fm.loadings  # N × r
 
-    # Projection matrix: Q_perp = I - Lambda (Lambda'Lambda)^{-1} Lambda'
     LtL = Lambda_hat' * Lambda_hat
-    LtL_inv = robust_inv(LtL)
+    LtL_inv = robust_inv(LtL; silent=true)
     Q_perp = Matrix{T}(I, N, N) - Lambda_hat * LtL_inv * Lambda_hat'
 
-    # De-factored data: X* = X * Q_perp' (project out factor space from each row)
+    # De-factored levels
     X_star = X * Q_perp'
 
-    # Step 2: Pooled AR(1) estimation on de-factored data
-    # For each unit i: x*_{i,t} = rho_i * x*_{i,t-1} + u_{i,t}
-    # Pooled estimator: rho_pool = sum_i(x*_{i,t-1}' x*_{i,t}) / sum_i(x*_{i,t-1}' x*_{i,t-1})
+    # Step 2: Pooled AR(1) on de-factored data + per-unit long-run variances.
+    # Moon–Perron (2004) eqs (8)–(10) / feasible forms after Lemma 4:
+    #   ρ̂*_pool = [tr(Z_{-1} Q Z') − N·T·λ̂_e] / tr(Z_{-1} Q Z_{-1}')
+    #   t*_a = √N·T·(ρ̂*−1) / √(2 φ̂_e⁴ / ω̂_e⁴)
+    #   t*_b = √N·T·(ρ̂*−1) · √(tr(Z_{-1}Q Z_{-1}')/(N T²)) · (ω̂_e / φ̂_e²)
+    # Bias correction is INSIDE ρ̂* (the −N T λ̂_e term), not a post-hoc t subtractand.
+    numerator_rho = zero(T)   # tr(Z_{-1} Q Z') = Σ_i Σ_t x*_{i,t-1} x*_{i,t}
+    denominator_rho = zero(T) # tr(Z_{-1} Q Z_{-1}') = Σ_i Σ_t x*_{i,t-1}²
 
-    numerator_rho = zero(T)
-    denominator_rho = zero(T)
-    numerator_t = zero(T)
-
-    # Per-unit quantities for bias/variance corrections
-    sigma2_hat = Vector{T}(undef, N)       # innovation variance per unit
-    omega2_hat = Vector{T}(undef, N)       # long-run variance per unit
-    phi4_hat = Vector{T}(undef, N)         # fourth moment for variance correction
+    sigma2_hat = Vector{T}(undef, N)
+    omega2_hat = Vector{T}(undef, N)
+    lambda_hat = Vector{T}(undef, N)   # one-sided LR cov λ_{e,i}
 
     for i in 1:N
         xi = X_star[:, i]
         xi_lag = xi[1:end-1]
         xi_cur = xi[2:end]
-        T_eff = length(xi_cur)
+        T_eff_i = length(xi_cur)
 
-        # OLS: x_{t} = rho * x_{t-1} + u_t
-        sum_xy = dot(xi_lag, xi_cur)
-        sum_xx = dot(xi_lag, xi_lag)
+        numerator_rho += dot(xi_lag, xi_cur)
+        denominator_rho += dot(xi_lag, xi_lag)
 
-        numerator_rho += sum_xy
-        denominator_rho += sum_xx
-
-        # Residuals under unit root null (rho = 1)
-        ui = xi_cur - xi_lag  # first differences under H0
-        sigma2_hat[i] = sum(ui .^ 2) / T_eff
-
-        # Long-run variance via Bartlett kernel
+        # Innovations under the unit-root null (for nuisance estimation)
+        ui = xi_cur .- xi_lag
+        sigma2_hat[i] = sum(abs2, ui) / T_eff_i
         bw = _nw_bandwidth(ui)
-        omega2_hat[i] = _long_run_variance(ui, bw)
-
-        # For t-statistic pooling
-        rho_i = sum_xx > T(1e-20) ? sum_xy / sum_xx : one(T)
-        resid_i = xi_cur - rho_i * xi_lag
-        sig2_i = sum(resid_i .^ 2) / T_eff
-        se_rho_i = sqrt(max(sig2_i / max(sum_xx, T(1e-20)), T(1e-20)))
-        numerator_t += (rho_i - one(T)) / se_rho_i
-
-        # Fourth moment for variance formula
-        phi4_hat[i] = omega2_hat[i]^2
+        omega2_hat[i] = max(_long_run_variance(ui, bw), eps(T))
+        # λ_e,i = (ω² − σ²)/2  (one-sided long-run covariance)
+        lambda_hat[i] = (omega2_hat[i] - sigma2_hat[i]) / 2
     end
 
-    rho_pool = denominator_rho > T(1e-20) ? numerator_rho / denominator_rho : one(T)
     T_eff = T_obs - 1
+    lambda_mean = mean(lambda_hat)                 # λ̂_e
+    omega2_mean = max(mean(omega2_hat), eps(T))    # ω̂_e²
+    # φ̂_e⁴ = (1/N) Σ ω_{e,i}⁴   (Assumption 8 / eq 17)
+    phi4_mean = max(mean(ω -> ω^2, omega2_hat), eps(T))
 
-    # Step 3: Bias and variance corrections
-    # Ratio of long-run to short-run variance
-    omega2_mean = mean(omega2_hat)
-    sigma2_mean = mean(sigma2_hat)
-    phi4_mean = mean(phi4_hat)
+    # Bias-modified pooled estimator (eq 8 / feasible ρ̂*)
+    denom = max(denominator_rho, eps(T))
+    rho_star = (numerator_rho - T(N) * T(T_eff) * lambda_mean) / denom
 
-    # Bias correction terms (Moon-Perron 2004, Theorem 1)
-    # t*_a = (sqrt(N) * T * (rho_pool - 1) - correction_a) / se_a
-    # t*_b = (sqrt(N) * t_pool - correction_b) / se_b
+    # t*_a (eq after Lemma 4)
+    se_a = sqrt(max(2 * phi4_mean / (omega2_mean^2), T(1e-10)))
+    t_a_star = sqrt(T(N)) * T(T_eff) * (rho_star - one(T)) / se_a
 
-    # Correction for t*_a
-    correction_a = sqrt(T(N)) * T_eff * (omega2_mean - sigma2_mean) / (T(2) * omega2_mean)
+    # t*_b
+    # √(tr /(N T²)) · ω / φ², with φ² := √(φ⁴)
+    tr_scale = sqrt(denom / (T(N) * T(T_eff)^2))
+    phi2 = sqrt(phi4_mean)
+    omega_bar = sqrt(omega2_mean)
+    t_b_star = sqrt(T(N)) * T(T_eff) * (rho_star - one(T)) * tr_scale *
+               (omega_bar / max(phi2, eps(T)))
 
-    # Variance for t*_a
-    ratio_a = phi4_mean / omega2_mean^2
-    se_a = sqrt(max(ratio_a, T(1e-10))) * T_eff
-
-    # Compute t*_a
-    t_a_raw = sqrt(T(N)) * T_eff * (rho_pool - one(T))
-    t_a_star = se_a > T(1e-20) ? (t_a_raw - correction_a) / se_a : zero(T)
-
-    # For t*_b: pooled t-statistic
-    t_pool = numerator_t / N  # average of individual t-statistics
-
-    # Correction for t*_b
-    correction_b = sqrt(T(N)) * (omega2_mean - sigma2_mean) / (T(2) * sqrt(omega2_mean * sigma2_mean + T(1e-20)))
-
-    # Variance for t*_b
-    se_b = sqrt(max(phi4_mean / (T(4) * omega2_mean * sigma2_mean + T(1e-20)), T(1e-10)))
-
-    # Compute t*_b
-    t_b_star = se_b > T(1e-20) ? (sqrt(T(N)) * t_pool - correction_b) / se_b : zero(T)
-
-    # P-values: left-tailed, N(0,1) under H0 (reject for large negative values)
+    # P-values: left-tailed N(0,1) under H0 (reject for large negative values)
     pvalue_a = T(cdf(Normal(), t_a_star))
     pvalue_b = T(cdf(Normal(), t_b_star))
 
@@ -311,9 +289,10 @@ end
 """
     panel_unit_root_summary(X; r=:auto, lags=:auto) -> PanelUnitRootSummary
 
-Run the three panel unit-root tests — PANIC (Bai-Ng 2004), Pesaran CIPS (2007), and
-Moon-Perron (2004) — and return a [`PanelUnitRootSummary`](@ref). Pass an `io` first
-argument to also print the battery.
+Run the full panel unit-root battery (eight tests since EV-20): first-generation
+LLC, IPS, Breitung, Fisher, Hadri; second-generation PANIC (Bai-Ng 2004),
+Pesaran CIPS (2007), and Moon-Perron (2004). Returns a
+[`PanelUnitRootSummary`](@ref). Pass an `io` first argument to also print the battery.
 
 # Arguments
 - `X::AbstractMatrix`: Panel data (T × N)

@@ -135,83 +135,112 @@ function favar_panel_irf(favar::FAVARModel{T}, irf_result::ImpulseResponse{T}) w
     n_aug = r + n_key  # number of VAR variables
     H = irf_result.horizon
     Lambda = favar.loadings  # N x r
+    Lambda_y = favar.Lambda_y
 
     # Validate dimensions
     n_shocks = size(irf_result.values, 3)
     n_shocks == n_aug || throw(ArgumentError(
         "IRF has $n_shocks shocks but FAVAR has $n_aug VAR variables"))
 
-    # Map factor IRFs to panel variables
+    # Map factor IRFs to panel variables (point estimate)
     panel_values = zeros(T, H, N, n_shocks)
-
-    for h in 1:H
-        for j in 1:n_shocks
-            # Factor contribution plus the direct Y_key channel via the implied loadings.
-            factor_irfs_h = @view irf_result.values[h, 1:r, j]
-            y_irfs_h = @view irf_result.values[h, (r + 1):(r + n_key), j]
-            panel_values[h, :, j] = Lambda * factor_irfs_h + favar.Lambda_y * y_irfs_h
-        end
+    for h in 1:H, j in 1:n_shocks
+        factor_irfs_h = @view irf_result.values[h, 1:r, j]
+        y_irfs_h = @view irf_result.values[h, (r + 1):(r + n_key), j]
+        panel_values[h, :, j] = Lambda * factor_irfs_h + Lambda_y * y_irfs_h
     end
+    _favar_override_key_irf!(panel_values, irf_result.values, favar.Y_key_indices, r, N)
 
-    # Override key variables with direct VAR IRF
-    if !isempty(favar.Y_key_indices)
-        for (k_idx, panel_idx) in enumerate(favar.Y_key_indices)
-            if 1 <= panel_idx <= N
-                var_idx = r + k_idx  # position of key var in augmented VAR
-                for h in 1:H, j in 1:n_shocks
-                    panel_values[h, panel_idx, j] = irf_result.values[h, var_idx, j]
-                end
-            end
-        end
-    end
-
-    # Map confidence intervals if available
+    # Confidence intervals: push DRAWS through Λ and take quantiles in panel space (#524).
+    # Never map interval endpoints — a linear map with negative loadings inverts bounds.
     has_ci = irf_result.ci_type != :none
-    if has_ci
+    panel_draws = nothing
+    if has_ci && irf_result._draws !== nothing
+        draws = irf_result._draws  # (reps, H, n_aug, n_shocks)
+        n_reps = size(draws, 1)
+        panel_draws = zeros(T, n_reps, H, N, n_shocks)
+        for rep in 1:n_reps, h in 1:H, j in 1:n_shocks
+            factor_d = @view draws[rep, h, 1:r, j]
+            y_d = @view draws[rep, h, (r + 1):(r + n_key), j]
+            panel_draws[rep, h, :, j] = Lambda * factor_d + Lambda_y * y_d
+        end
+        _favar_override_key_draws!(panel_draws, draws, favar.Y_key_indices, r, N)
+        alpha = (one(T) - irf_result._conf_level) / 2
         panel_ci_lower = zeros(T, H, N, n_shocks)
         panel_ci_upper = zeros(T, H, N, n_shocks)
-
+        @inbounds for h in 1:H, v in 1:N, s in 1:n_shocks
+            d = @view panel_draws[:, h, v, s]
+            panel_ci_lower[h, v, s] = quantile(d, alpha)
+            panel_ci_upper[h, v, s] = quantile(d, one(T) - alpha)
+        end
+    elseif has_ci
+        # Fallback when raw draws are unavailable: map endpoints then order with min/max
+        # so inverted intervals cannot leak into the result. This is an APPROXIMATION —
+        # it assumes the augmented components are comonotonic, which understates the
+        # band whenever loadings mix components of opposite sign. The bootstrap path
+        # above (ci_type=:bootstrap keeps raw draws) is the supported route (#524);
+        # the IRF coefficient covariance needed for an exact analytic mapping is not
+        # retained on ImpulseResponse.
+        panel_ci_lower = zeros(T, H, N, n_shocks)
+        panel_ci_upper = zeros(T, H, N, n_shocks)
         for h in 1:H, j in 1:n_shocks
-            factor_lo = @view irf_result.ci_lower[h, 1:r, j]
-            factor_hi = @view irf_result.ci_upper[h, 1:r, j]
-            y_lo = @view irf_result.ci_lower[h, (r + 1):(r + n_key), j]
-            y_hi = @view irf_result.ci_upper[h, (r + 1):(r + n_key), j]
-            panel_ci_lower[h, :, j] = Lambda * factor_lo + favar.Lambda_y * y_lo
-            panel_ci_upper[h, :, j] = Lambda * factor_hi + favar.Lambda_y * y_hi
+            a = Lambda * (@view irf_result.ci_lower[h, 1:r, j]) +
+                Lambda_y * (@view irf_result.ci_lower[h, (r + 1):(r + n_key), j])
+            b = Lambda * (@view irf_result.ci_upper[h, 1:r, j]) +
+                Lambda_y * (@view irf_result.ci_upper[h, (r + 1):(r + n_key), j])
+            panel_ci_lower[h, :, j] = min.(a, b)
+            panel_ci_upper[h, :, j] = max.(a, b)
         end
-
-        # Override key variable CIs
-        if !isempty(favar.Y_key_indices)
-            for (k_idx, panel_idx) in enumerate(favar.Y_key_indices)
-                if 1 <= panel_idx <= N
-                    var_idx = r + k_idx
-                    for h in 1:H, j in 1:n_shocks
-                        panel_ci_lower[h, panel_idx, j] = irf_result.ci_lower[h, var_idx, j]
-                        panel_ci_upper[h, panel_idx, j] = irf_result.ci_upper[h, var_idx, j]
-                    end
-                end
-            end
-        end
+        _favar_override_key_irf!(panel_ci_lower, irf_result.ci_lower, favar.Y_key_indices, r, N)
+        _favar_override_key_irf!(panel_ci_upper, irf_result.ci_upper, favar.Y_key_indices, r, N)
     else
         panel_ci_lower = zeros(T, H, N, n_shocks)
         panel_ci_upper = zeros(T, H, N, n_shocks)
     end
-
-    # Build variable and shock names for panel IRF
-    panel_var_names = copy(favar.panel_varnames)
-    shock_names = irf_result.shocks
 
     ImpulseResponse{T}(
         panel_values,
         panel_ci_lower,
         panel_ci_upper,
         H,
-        panel_var_names,
-        shock_names,
+        copy(favar.panel_varnames),
+        irf_result.shocks,
         irf_result.ci_type,
-        nothing,
+        panel_draws,
         irf_result._conf_level
     )
+end
+
+"""Override key-variable slices of a panel (H × N × n_shocks) array with direct VAR values."""
+function _favar_override_key_irf!(panel::AbstractArray{T,3}, src::AbstractArray{T,3},
+                                  key_indices::Vector{Int}, r::Int, N::Int) where {T}
+    isempty(key_indices) && return panel
+    H = size(panel, 1)
+    n_shocks = size(panel, 3)
+    for (k_idx, panel_idx) in enumerate(key_indices)
+        (1 <= panel_idx <= N) || continue
+        var_idx = r + k_idx
+        for h in 1:H, j in 1:n_shocks
+            panel[h, panel_idx, j] = src[h, var_idx, j]
+        end
+    end
+    panel
+end
+
+"""Override key-variable slices of a draws array (reps × H × N × n_shocks)."""
+function _favar_override_key_draws!(panel::AbstractArray{T,4}, src::AbstractArray{T,4},
+                                    key_indices::Vector{Int}, r::Int, N::Int) where {T}
+    isempty(key_indices) && return panel
+    n_reps, H = size(panel, 1), size(panel, 2)
+    n_shocks = size(panel, 4)
+    for (k_idx, panel_idx) in enumerate(key_indices)
+        (1 <= panel_idx <= N) || continue
+        var_idx = r + k_idx
+        for rep in 1:n_reps, h in 1:H, j in 1:n_shocks
+            panel[rep, h, panel_idx, j] = src[rep, h, var_idx, j]
+        end
+    end
+    panel
 end
 
 """
@@ -220,9 +249,18 @@ end
 Map Bayesian factor-space IRFs to all N panel variables using posterior mean loadings.
 
 For each panel variable i and shock j:
-    panel_irf[h, i, j] = sum_k Lambda_mean[i, k] * irf_result.point_estimate[h, k, j]
+    panel_irf[h, i, j] = Λ[i,:]·factor_irf[h,:,j] + Λ_y[i,:]·y_irf[h,:,j]
 
-Key variables use their direct VAR IRF responses.
+Since the #528 fix the Gibbs measurement equation is BBE (2005) eq. 3,
+`X = F Λ' + Y_key Λ_y' + e`, so the factors are purged of the key variables' own
+variation and the direct channel `Λ_y · y_irf` must be added back — omitting it
+would understate the response of `Y_key`-loading panel series. (Before #528 the
+factors absorbed the entire `Y_key` co-movement and adding `Λ_y` would have
+double-counted, which was the original #525 resolution; the model changed.)
+
+Key variables use their direct VAR IRF responses. When raw posterior draws are available
+on `irf_result`, they are pushed through the loadings and quantiles are recomputed in
+panel space (#524) — never map quantile endpoints through Λ.
 
 # Arguments
 - `bfavar`: Estimated Bayesian FAVAR model
@@ -239,55 +277,77 @@ function favar_panel_irf(bfavar::BayesianFAVAR{T}, irf_result::BayesianImpulseRe
     H = irf_result.horizon
     n_q = length(irf_result.quantile_levels)
 
-    # Use posterior mean loadings for the mapping
-    Lambda = dropdims(mean(bfavar.loadings_draws, dims=1), dims=1)  # N x r
+    # Posterior mean loadings (common factors + direct key-variable channel, #528)
+    Lambda = dropdims(mean(bfavar.loadings_draws, dims=1), dims=1)     # N x r
+    Lambda_y = dropdims(mean(bfavar.lambda_y_draws, dims=1), dims=1)   # N x n_key
 
     # Validate dimensions
     n_shocks = size(irf_result.point_estimate, 3)
     n_shocks == n_aug || throw(ArgumentError(
         "IRF has $n_shocks shocks but Bayesian FAVAR has $n_aug VAR variables"))
 
-    # Map point estimate
+    # Map point estimate through the factor loadings + the direct Λ_y channel
     panel_pe = zeros(T, H, N, n_shocks)
     for h in 1:H, j in 1:n_shocks
         factor_irfs_h = @view irf_result.point_estimate[h, 1:r, j]
-        panel_pe[h, :, j] = Lambda * factor_irfs_h
+        y_irfs_h = @view irf_result.point_estimate[h, (r+1):n_aug, j]
+        panel_pe[h, :, j] = Lambda * factor_irfs_h + Lambda_y * y_irfs_h
     end
+    _favar_override_key_irf!(panel_pe, irf_result.point_estimate, bfavar.Y_key_indices, r, N)
 
-    # Map quantiles
+    panel_draws = nothing
     panel_q = zeros(T, H, N, n_shocks, n_q)
-    for qi in 1:n_q, h in 1:H, j in 1:n_shocks
-        factor_q_h = @view irf_result.quantiles[h, 1:r, j, qi]
-        panel_q[h, :, j, qi] = Lambda * factor_q_h
-    end
-
-    # Override key variables with direct VAR IRF
-    if !isempty(bfavar.Y_key_indices)
-        for (k_idx, panel_idx) in enumerate(bfavar.Y_key_indices)
-            if 1 <= panel_idx <= N
+    if irf_result._draws !== nothing
+        # Push draws through loadings; recompute quantiles in panel space (#524)
+        draws = irf_result._draws  # (samples, H, n_aug, n_shocks)
+        n_reps = size(draws, 1)
+        panel_draws = zeros(T, n_reps, H, N, n_shocks)
+        for rep in 1:n_reps, h in 1:H, j in 1:n_shocks
+            factor_d = @view draws[rep, h, 1:r, j]
+            y_d = @view draws[rep, h, (r+1):n_aug, j]
+            panel_draws[rep, h, :, j] = Lambda * factor_d + Lambda_y * y_d
+        end
+        _favar_override_key_draws!(panel_draws, draws, bfavar.Y_key_indices, r, N)
+        @inbounds for qi in 1:n_q, h in 1:H, v in 1:N, s in 1:n_shocks
+            panel_q[h, v, s, qi] = quantile(@view(panel_draws[:, h, v, s]),
+                                            irf_result.quantile_levels[qi])
+        end
+    else
+        # Fallback: map quantile endpoints then order (cannot invert without draws)
+        for qi in 1:n_q, h in 1:H, j in 1:n_shocks
+            factor_q_h = @view irf_result.quantiles[h, 1:r, j, qi]
+            y_q_h = @view irf_result.quantiles[h, (r+1):n_aug, j, qi]
+            panel_q[h, :, j, qi] = Lambda * factor_q_h + Lambda_y * y_q_h
+        end
+        if !isempty(bfavar.Y_key_indices)
+            for (k_idx, panel_idx) in enumerate(bfavar.Y_key_indices)
+                (1 <= panel_idx <= N) || continue
                 var_idx = r + k_idx
-                for h in 1:H, j in 1:n_shocks
-                    panel_pe[h, panel_idx, j] = irf_result.point_estimate[h, var_idx, j]
-                    for qi in 1:n_q
-                        panel_q[h, panel_idx, j, qi] = irf_result.quantiles[h, var_idx, j, qi]
-                    end
+                for h in 1:H, j in 1:n_shocks, qi in 1:n_q
+                    panel_q[h, panel_idx, j, qi] = irf_result.quantiles[h, var_idx, j, qi]
+                end
+            end
+        end
+        # Ensure lower ≤ upper across quantile levels for each (h,v,s)
+        if n_q >= 2
+            @inbounds for h in 1:H, v in 1:N, s in 1:n_shocks
+                lo, hi = panel_q[h, v, s, 1], panel_q[h, v, s, n_q]
+                if lo > hi
+                    panel_q[h, v, s, 1] = hi
+                    panel_q[h, v, s, n_q] = lo
                 end
             end
         end
     end
 
-    panel_var_names = copy(bfavar.panel_varnames)
-    shock_names = irf_result.shocks
-
     BayesianImpulseResponse{T}(
         panel_q,
         panel_pe,
         H,
-        panel_var_names,
-        shock_names,
+        copy(bfavar.panel_varnames),
+        irf_result.shocks,
         irf_result.quantile_levels,
-        nothing,  # no raw draws for panel mapping
-        # deterministic loadings projection of the source draws — propagate MC counts (#244)
+        panel_draws,
         irf_result.n_requested,
         irf_result.n_effective,
         irf_result.n_failed
@@ -319,32 +379,85 @@ function favar_panel_forecast(favar::FAVARModel{T}, fc::VARForecast{T}) where {T
     N = size(favar.X_panel, 2)
     h = fc.horizon
     Lambda = favar.loadings  # N x r
+    Lambda_y = favar.Lambda_y
 
-    # Map factor forecasts to panel
+    # Map factor forecasts to panel (point)
     panel_fc = zeros(T, h, N)
-    panel_lo = zeros(T, h, N)
-    panel_hi = zeros(T, h, N)
-
     for step in 1:h
         factor_fc = @view fc.forecast[step, 1:r]
         y_fc = @view fc.forecast[step, (r + 1):(r + n_key)]
-        panel_fc[step, :] = Lambda * factor_fc + favar.Lambda_y * y_fc
-
-        factor_lo = @view fc.ci_lower[step, 1:r]
-        factor_hi = @view fc.ci_upper[step, 1:r]
-        y_lo = @view fc.ci_lower[step, (r + 1):(r + n_key)]
-        y_hi = @view fc.ci_upper[step, (r + 1):(r + n_key)]
-        panel_lo[step, :] = Lambda * factor_lo + favar.Lambda_y * y_lo
-        panel_hi[step, :] = Lambda * factor_hi + favar.Lambda_y * y_hi
+        panel_fc[step, :] = Lambda * factor_fc + Lambda_y * y_fc
     end
 
-    # Override key variables with direct forecasts
+    # CI: push bootstrap draws through Λ when available (#524); else order mapped endpoints.
+    panel_lo = zeros(T, h, N)
+    panel_hi = zeros(T, h, N)
+    panel_draws = nothing
+    if fc.ci_method != :none && fc._draws !== nothing
+        draws = fc._draws  # (reps, h, n_aug)
+        n_reps = size(draws, 1)
+        panel_draws = zeros(T, n_reps, h, N)
+        for rep in 1:n_reps, step in 1:h
+            factor_d = @view draws[rep, step, 1:r]
+            y_d = @view draws[rep, step, (r + 1):(r + n_key)]
+            panel_draws[rep, step, :] = Lambda * factor_d + Lambda_y * y_d
+        end
+        # Override key variables with direct forecast draws
+        if !isempty(favar.Y_key_indices)
+            for (k_idx, panel_idx) in enumerate(favar.Y_key_indices)
+                (1 <= panel_idx <= N) || continue
+                var_idx = r + k_idx
+                for rep in 1:n_reps, step in 1:h
+                    panel_draws[rep, step, panel_idx] = draws[rep, step, var_idx]
+                end
+            end
+        end
+        alpha = (one(T) - fc.conf_level) / 2
+        @inbounds for step in 1:h, j in 1:N
+            d = @view panel_draws[:, step, j]
+            panel_lo[step, j] = quantile(d, alpha)
+            panel_hi[step, j] = quantile(d, one(T) - alpha)
+        end
+    elseif fc.ci_method != :none
+        # Analytic panel bands (#524). Mapping interval ENDPOINTS through Λ
+        # assumes the augmented variables are comonotonic and produces invalid
+        # (sometimes near-zero-width) bands. The correct band uses the full
+        # forecast-error covariance of the augmented VAR:
+        #   Var(x̂_i(h)) = [Λ_aug · MSE(h) · Λ_aug']_{ii},
+        # with MSE(h) = Σ_{s<h} Φ_s Σ Φ_s' (Lütkepohl §3.5) and Λ_aug = [Λ Λ_y].
+        n_aug = r + n_key
+        A = extract_ar_coefficients(favar.B, n_aug, favar.p)
+        Phi = Vector{Matrix{T}}(undef, h)
+        Phi[1] = Matrix{T}(I, n_aug, n_aug)
+        for i in 1:(h - 1)
+            acc = zeros(T, n_aug, n_aug)
+            for j in 1:min(i, favar.p)
+                acc .+= Phi[i - j + 1] * A[j]
+            end
+            Phi[i + 1] = acc
+        end
+        Lambda_aug = hcat(Lambda, Lambda_y)          # N × n_aug
+        z = T(quantile(Normal(), 1 - (1 - fc.conf_level) / 2))
+        mse = zeros(T, n_aug, n_aug)
+        for step in 1:h
+            mse .+= Phi[step] * favar.Sigma * Phi[step]'
+            pv = Lambda_aug * mse * Lambda_aug'
+            for j in 1:N
+                se = sqrt(max(pv[j, j], zero(T)))
+                panel_lo[step, j] = panel_fc[step, j] - z * se
+                panel_hi[step, j] = panel_fc[step, j] + z * se
+            end
+        end
+    end
+
+    # Override key variables with direct forecasts (point + CI when no draws path)
     if !isempty(favar.Y_key_indices)
         for (k_idx, panel_idx) in enumerate(favar.Y_key_indices)
-            if 1 <= panel_idx <= N
-                var_idx = r + k_idx
-                for step in 1:h
-                    panel_fc[step, panel_idx] = fc.forecast[step, var_idx]
+            (1 <= panel_idx <= N) || continue
+            var_idx = r + k_idx
+            for step in 1:h
+                panel_fc[step, panel_idx] = fc.forecast[step, var_idx]
+                if fc.ci_method != :none && fc._draws === nothing
                     panel_lo[step, panel_idx] = fc.ci_lower[step, var_idx]
                     panel_hi[step, panel_idx] = fc.ci_upper[step, var_idx]
                 end
@@ -359,7 +472,8 @@ function favar_panel_forecast(favar::FAVARModel{T}, fc::VARForecast{T}) where {T
         h,
         fc.ci_method,
         fc.conf_level,
-        copy(favar.panel_varnames)
+        copy(favar.panel_varnames),
+        panel_draws
     )
 end
 
@@ -390,7 +504,7 @@ function irf(sdfm::StructuralDFM{T}, horizon::Int; kwargs...) where {T}
     ci_lo = zeros(T, H, N, q)
     ci_hi = zeros(T, H, N, q)
 
-    panel_names = ["Var $i" for i in 1:N]
+    panel_names = copy(sdfm.varnames)
 
     ImpulseResponse{T}(values, ci_lo, ci_hi, H, panel_names,
         sdfm.shock_names, :none, nothing, zero(T))
@@ -482,7 +596,7 @@ function _sdfm_project_irf(sdfm::StructuralDFM{T}, factor_irf::AbstractArray{T,3
         end
     end
 
-    panel_names = ["Var $i" for i in 1:N]
+    panel_names = copy(sdfm.varnames)
     ci_lo = zeros(T, H, N, q)
     ci_hi = zeros(T, H, N, q)
 

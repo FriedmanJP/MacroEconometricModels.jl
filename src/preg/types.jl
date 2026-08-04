@@ -135,9 +135,9 @@ Panel instrumental-variables regression model (FE-IV, RE-IV, FD-IV, Hausman-Tayl
 - `first_stage_f::T` — minimum excluded-instrument partial first-stage F
 - `sargan_stat::Union{Nothing,T}` — Sargan overidentification statistic
 - `sargan_pval::Union{Nothing,T}` — Sargan test p-value
-- `cragg_donald_f::Union{Nothing,T}` — Cragg-Donald F (nothing on transformed panel sets)
-- `kleibergen_paap_f::Union{Nothing,T}` — Kleibergen-Paap rk Wald F (nothing on transformed sets)
-- `stock_yogo_10pct::Union{Nothing,T}` — Stock-Yogo 10% critical value (nothing on transformed sets)
+- `cragg_donald_f::Union{Nothing,T}` — Cragg-Donald weak-instrument F (on transformed design)
+- `kleibergen_paap_f::Union{Nothing,T}` — Kleibergen-Paap rk Wald F (on transformed design)
+- `stock_yogo_10pct::Union{Nothing,T}` — Stock-Yogo 10% critical value
 - `varnames::Vector{String}` — coefficient names
 - `endog_names::Vector{String}` — endogenous variable names
 - `instrument_names::Vector{String}` — instrument names

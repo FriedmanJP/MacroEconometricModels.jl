@@ -67,7 +67,6 @@ Posterior draws from a time-varying-parameter VAR with stochastic volatility.
 - `n_train::Int` — training-sample length used to calibrate the priors
 - `tvp::Bool` / `sv::Bool` — whether coefficients drift / volatilities drift
 - `varnames::Vector{String}` — variable names
-- `acceptance::T` — fraction of Gibbs sweeps retained (always 1; kept for interface parity)
 """
 struct TVPVARPosterior{T<:AbstractFloat}
     B_draws::Array{T,3}

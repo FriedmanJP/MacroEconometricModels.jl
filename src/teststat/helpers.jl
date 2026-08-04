@@ -280,21 +280,67 @@ function _dfgls_critical_values(regression::Symbol, nobs::Int, lags::Int, ::Type
     )
 end
 
-"""Compute LM unit root critical values via response surface."""
-function _lm_unitroot_critical_values(breaks::Int, nobs::Int, lags::Int, ::Type{TF}=Float64) where {TF<:AbstractFloat}
-    if breaks == 2
-        return Dict{Int,TF}(k => TF(v) for (k, v) in LM_2BREAK_A_CV)
+"""
+    _interp_cv_row(table, Tgrid, n) -> NTuple{4,Float64}
+
+Interpolate a simulated critical-value table (rows = `Tgrid`, columns =
+1%, 2.5%, 5%, 10%) at sample size `n`, linearly in 1/T. Outside the grid the
+end rows are used unchanged rather than extrapolated.
+"""
+function _interp_cv_row(table::Matrix{Float64}, Tgrid::NTuple{G,Int}, n::Int) where {G}
+    row(i) = (table[i,1], table[i,2], table[i,3], table[i,4])
+    n <= Tgrid[1] && return row(1)
+    n >= Tgrid[G] && return row(G)
+    j = 1
+    while j < G - 1 && n > Tgrid[j+1]
+        j += 1
     end
-    if breaks == 1
-        return Dict{Int,TF}(k => TF(v) for (k, v) in LM_1BREAK_A_CV)
-    end
-    coefs = LM_UNITROOT_RSF[0]
-    invT = 1.0 / nobs
-    pT = lags / nobs
-    Dict{Int,TF}(
-        level => TF(c[1] + c[2]*invT + c[3]*invT^2 + c[4]*pT + c[5]*pT^2)
-        for (level, c) in coefs
-    )
+    x, x0, x1 = 1/n, 1/Tgrid[j], 1/Tgrid[j+1]
+    w = (x - x1) / (x0 - x1)                      # w = 1 at Tgrid[j], 0 at Tgrid[j+1]
+    a, b = row(j), row(j+1)
+    ntuple(i -> w * a[i] + (1 - w) * b[i], 4)
+end
+
+"""Build the 1%/5%/10% dict carried by a unit-root result from a 4-quantile row."""
+_cv_dict(row::NTuple{4,Float64}, ::Type{TF}) where {TF<:AbstractFloat} =
+    Dict{Int,TF}(1 => TF(row[1]), 5 => TF(row[3]), 10 => TF(row[4]))
+
+"""
+    _lm_unitroot_cv_row(breaks, n, regression) -> NTuple{4,Float64}
+
+Simulated (1%, 2.5%, 5%, 10%) critical values of the minimised LM statistic for
+a series of length `n`, interpolated in 1/T. Every (breaks, regression) pair has
+its own table: the no-break `:level` design is Schmidt-Phillips intercept-only,
+`:both` adds the trend, and the break designs are Lee-Strazicich Models A and C.
+See `LM_UNITROOT_SIM_CV` for how the tables were generated and what they are
+conditional on.
+"""
+function _lm_unitroot_cv_row(breaks::Int, n::Int, regression::Symbol=:level)
+    key = (breaks, regression == :both ? :both : :level)
+    _interp_cv_row(LM_UNITROOT_SIM_CV[key], BREAK_TEST_SIM_T, n)
+end
+
+"""Compute LM unit root 1%/5%/10% critical values (see `_lm_unitroot_cv_row`)."""
+_lm_unitroot_critical_values(breaks::Int, n::Int, regression::Symbol=:level,
+                             ::Type{TF}=Float64) where {TF<:AbstractFloat} =
+    _cv_dict(_lm_unitroot_cv_row(breaks, n, regression), TF)
+
+"""
+    _break_test_pvalue(stat, row) -> T
+
+Piecewise-linear p-value for a minimised break-search statistic from its
+simulated (1%, 2.5%, 5%, 10%) quantile row. Only the left tail is tabulated, so
+the result saturates at 0.001 below the 1% point and is reported as 0.20 above
+the 10% point.
+"""
+function _break_test_pvalue(stat::T, row::NTuple{4,Float64}) where {T<:AbstractFloat}
+    c1, c25, c5, c10 = T(row[1]), T(row[2]), T(row[3]), T(row[4])
+    seg(lo, hi, plo, phi) = plo + (stat - lo) / max(hi - lo, eps(T)) * (phi - plo)
+    stat <= c1 && return T(0.001)
+    stat <= c25 && return seg(c1, c25, T(0.01), T(0.025))
+    stat <= c5 && return seg(c25, c5, T(0.025), T(0.05))
+    stat <= c10 && return seg(c5, c10, T(0.05), T(0.10))
+    return T(0.20)
 end
 
 """Get sample bracket for Fourier critical values."""
@@ -302,12 +348,20 @@ function _fourier_sample_bracket(n::Int)
     n <= 150 ? 1 : n <= 349 ? 2 : n <= 500 ? 3 : 4
 end
 
-"""Get Narayan-Popp critical values based on sample size."""
-function _narayan_popp_cv(model::Symbol, n::Int, ::Type{TF}=Float64) where {TF<:AbstractFloat}
-    table = NARAYAN_POPP_CV[model]
-    key = n <= 50 ? 50 : n <= 200 ? 200 : n <= 400 ? 400 : 999
-    Dict{Int,TF}(k => TF(v) for (k, v) in table[key])
-end
+"""
+    _adf_2break_cv_row(model, n) -> NTuple{4,Float64}
+
+Simulated (1%, 2.5%, 5%, 10%) critical values of the minimised two-break ADF
+statistic for a series of length `n`, interpolated in 1/T. See
+`ADF_2BREAK_SIM_CV` for the generation parameters.
+"""
+_adf_2break_cv_row(model::Symbol, n::Int) =
+    _interp_cv_row(ADF_2BREAK_SIM_CV[model == :both ? :both : :level],
+                   BREAK_TEST_SIM_T, n)
+
+"""Compute two-break ADF 1%/5%/10% critical values (see `_adf_2break_cv_row`)."""
+_adf_2break_cv(model::Symbol, n::Int, ::Type{TF}=Float64) where {TF<:AbstractFloat} =
+    _cv_dict(_adf_2break_cv_row(model, n), TF)
 
 """Get ERS Pt critical values by interpolating sample size."""
 function _ers_pt_critical_values(regression::Symbol, nobs::Int, ::Type{TF}=Float64) where {TF<:AbstractFloat}

@@ -45,12 +45,16 @@ function estimate_var(Y::AbstractMatrix{T}, p::Int; check_stability::Bool=true, 
     # the previous `max(T_eff-k, T_eff)` could never select T_eff−k, so SEs were too small).
     Sigma = (U'U) / T_eff
 
-    # Information criteria (ML estimate)
+    # Information criteria (ML estimate). Penalty uses the *system* parameter
+    # count n·k = n(1 + n p) (Lütkepohl 2005 eq. 4.3.2; Stata varsoc / EViews),
+    # not the per-equation regressor count k = 1+n p. The latter under-penalizes
+    # by a factor ~n and makes select_lag_order return max_p on short samples (#522).
     Sigma_ml = (U'U) / T_eff
     log_det = logdet_safe(Sigma_ml)
-    aic = log_det + 2k / T_eff
-    bic = log_det + k * log(T_eff) / T_eff
-    hqic = log_det + 2k * log(log(T_eff)) / T_eff
+    k_sys = n * k
+    aic = log_det + 2k_sys / T_eff
+    bic = log_det + k_sys * log(T_eff) / T_eff
+    hqic = log_det + 2k_sys * log(log(T_eff)) / T_eff
 
     vn = something(varnames, ["y$i" for i in 1:n])
     model = VARModel(Y, p, B, U, Sigma, aic, bic, hqic, vn)
@@ -221,6 +225,7 @@ function forecast(model::VARModel{T}, h::Int;
     ci_lower = zeros(T, h, n)
     ci_upper = zeros(T, h, n)
 
+    sim_draws = nothing
     if ci_method == :bootstrap
         T_eff = effective_nobs(model)
         Y_init = model.Y[1:p, :]                     # first p obs seed the pseudo-sample
@@ -250,6 +255,7 @@ function forecast(model::VARModel{T}, h::Int;
             @warn "Only $rep/$reps $(stationary_only ? "stationary " : "")bootstrap forecast draws obtained after $attempts attempts"
             sim = sim[1:max(rep, 1), :, :]
         end
+        sim_draws = sim  # retain for panel-space quantile mapping (#524)
 
         alpha_half = (1 - T(conf_level)) / 2
         for hi in 1:h, j in 1:n
@@ -283,16 +289,23 @@ function forecast(model::VARModel{T}, h::Int;
         end
     end
 
-    VARForecast{T}(point, ci_lower, ci_upper, h, ci_method, T(conf_level), model.varnames)
+    VARForecast{T}(point, ci_lower, ci_upper, h, ci_method, T(conf_level), model.varnames, sim_draws)
 end
 
-"""Select optimal lag order via information criterion (:aic, :bic, :hqic)."""
+"""Select optimal lag order via information criterion (:aic, :bic, :hqic).
+
+All candidates are estimated on the common sample `t = max_p+1, …, T` (Lütkepohl
+2005 §4.3; Stata `varsoc`): each candidate `p` drops the same `max_p` initial
+conditions, so the `log det Σ̃` terms are computed on identical data and the
+criteria are comparable across `p`. Ragged per-candidate samples bias the
+selection toward `max_p` on short samples (#522).
+"""
 function select_lag_order(Y::AbstractMatrix{T}, max_p::Int; criterion::Symbol=:bic) where {T<:AbstractFloat}
     max_p < 1 && throw(ArgumentError("max_p must be positive"))
     size(Y, 1) <= max_p + 2 && throw(ArgumentError("Not enough observations"))
 
     ic = map(1:max_p) do p
-        m = estimate_var(Y, p)
+        m = estimate_var(@view(Y[(max_p - p + 1):end, :]), p)
         criterion == :aic ? m.aic : criterion == :bic ? m.bic :
         criterion == :hqic ? m.hqic : throw(ArgumentError("Unknown criterion: $criterion"))
     end

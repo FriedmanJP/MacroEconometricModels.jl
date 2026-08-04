@@ -235,20 +235,26 @@ round.(r_pmd.coefficients[end-3:end], digits=3)
 
 ### IPW Reweighting
 
-Dube et al. (2025) propose inverse probability weights that equalize the weight each calendar period receives in the pooled average treatment effect, correcting for compositional change in the treatment-control balance:
+Dube et al. (2025) propose inverse probability weights that equalize the weight each calendar period receives in the pooled average treatment effect, correcting for compositional change in the treatment-control balance. With `reweight=true` every observation in the clean control sample carries
+
+```math
+w_{it} = \frac{\Delta D_{it}}{p_t} + \frac{1 - \Delta D_{it}}{1 - p_t}
+```
+
+where:
+- ``\Delta D_{it}`` is the switching indicator
+- ``p_t`` is the period-specific treatment propensity, the share of switchers among the observations that survive the clean control sample at that horizon
 
 ```@example event
 r_rw = estimate_lp_did(ddcg, :y, :dem, 10;
                        pre_window=5, ylags=4, nonabsorbing=5, reweight=true)
-(reweight_flag = r_rw.reweight,
- identical_to_unweighted = r_rw.coefficients == r_non.coefficients)
+(unweighted = round.(r_non.coefficients[end-3:end], digits=3),
+ reweighted = round.(r_rw.coefficients[end-3:end], digits=3))
 ```
 
-**The flag does not currently change the estimates.** It is recorded on the result and
-printed in the `report` header as `Reweighted: Yes (IPW)`, but the horizon and pooled
-regressions are unweighted OLS regardless of its value — coefficients, standard errors, and
-per-horizon sample sizes are bit-identical with and without it, as the comparison above
-shows. Do not rely on `reweight=true` for compositional correction until this is resolved.
+The weights enter the fit twice: the time fixed effects are partialled out with weighted period means, and the horizon regression is then WLS in ``\sqrt{w_{it}}``. Both steps are needed — demeaning with unweighted period means and only then weighting the regression does not produce the weighted within estimator. Because each period contributes total weight ``2 n_t`` and a weighted treated share of one half, reweighting strips out the ``p_t (1 - p_t)`` variance weighting that the default OLS fit applies: unweighted LP-DiD loads on the calendar periods where the treated share is closest to one half, while the reweighted fit lets every period count in proportion to its sample size, which is the equally weighted ATE of Dube et al. (2025).
+
+On DDCG the two answers separate at long horizons — 5.156 unweighted against 2.161 reweighted at ``h = 10`` — because democratic transitions cluster in a handful of calendar years that the variance weighting favours. Standard errors fall as well (2.97 against 4.00 at ``h = 10``), and the per-horizon sample sizes are unchanged, since weighting reweights observations rather than dropping them. The `report` header records the choice as `Reweighted: Yes (IPW)`.
 
 ### Pooled Estimates
 
@@ -280,7 +286,7 @@ Averaged over the first eleven years, a democratic transition raises log GDP per
 | `nevertreated` | `Bool` | `false` | Restrict to never-treated controls |
 | `firsttreat` | `Bool` | `false` | Use only first treatment event per unit |
 | `pmd` | `Union{Nothing,Symbol,Int}` | `nothing` | Pre-mean differencing (`:max` or integer ``k``) |
-| `reweight` | `Bool` | `false` | IPW flag; recorded but does not currently affect the estimates |
+| `reweight` | `Bool` | `false` | IPW reweighting toward the equally weighted ATE |
 | `nocomp` | `Bool` | `false` | Restrict to obs in CCS at all horizons |
 | `cluster` | `Symbol` | `:unit` | SE clustering: `:unit`, `:time`, or `:twoway` |
 | `conf_level` | `Real` | `0.95` | Confidence level |
@@ -496,7 +502,7 @@ The baseline specification estimates the causal effect of democratic transitions
 
 6. **`oneoff` requires `nonabsorbing`**: one-off treatment is a special case of non-absorbing treatment where the indicator lasts exactly one period. Calling `oneoff=true` without `nonabsorbing` raises an error.
 
-7. **Expecting `reweight=true` to change anything**: the flag is recorded and displayed, but the underlying regressions are unweighted. Treat any result labelled `Reweighted: Yes (IPW)` as unweighted until this is fixed.
+7. **Comparing weighted and unweighted estimates as if they targeted the same quantity**: `reweight=true` estimates the equally weighted ATE, the default estimates the variance-weighted one. A gap between them is compositional, not a bug — it says the effect differs across the calendar periods where treatment is unbalanced.
 
 8. **Redundant PMD**: `pmd=k` has no effect when `ylags` is at least ``k``, because the pre-treatment mean is then spanned by the controls. Use `pmd=:max` with a small `ylags` if pre-mean differencing is the point.
 

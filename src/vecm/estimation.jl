@@ -247,13 +247,14 @@ function to_var(vecm::VECMModel{T}) where {T}
     Y_eff, X = construct_var_matrices(vecm.Y, p)
     U = Y_eff - X * B
 
-    # Covariance and information criteria
+    # Covariance and information criteria (system parameter count n·k; #522)
     T_eff = size(U, 1)
     Sigma = (U'U) / T_eff
     log_det = logdet_safe(Sigma)
-    aic_val = log_det + 2 * k / T_eff
-    bic_val = log_det + k * log(T_eff) / T_eff
-    hqic_val = log_det + 2 * k * log(log(T_eff)) / T_eff
+    k_sys = n * k
+    aic_val = log_det + 2 * k_sys / T_eff
+    bic_val = log_det + k_sys * log(T_eff) / T_eff
+    hqic_val = log_det + 2 * k_sys * log(log(T_eff)) / T_eff
 
     VARModel(vecm.Y, p, B, U, Sigma, aic_val, bic_val, hqic_val, vecm.varnames)
 end

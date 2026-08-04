@@ -168,8 +168,8 @@ The price is that the generalized shocks are **correlated**, so the shares of a 
 
 Bayesian FEVD integrates over parameter uncertainty by computing variance shares for each posterior draw and reporting posterior quantiles (Kilian & Lütkepohl 2017, Chapter 12). Non-stationary draws are discarded, and the counts of requested, usable, and dropped draws travel with the result.
 
-!!! warning "Axis order differs between `FEVD` and `BayesianFEVD`"
-    `FEVD.proportions` is indexed ``(\text{variable}, \text{shock}, \text{horizon})`` while `BayesianFEVD.point_estimate` and `.quantiles` are indexed ``(\text{horizon}, \text{variable}, \text{shock})``. Indexing one array with the other's convention silently returns the wrong number instead of erroring.
+!!! note "Axis order matches the frequentist `FEVD`"
+    `BayesianFEVD.point_estimate` is indexed ``(\text{variable}, \text{shock}, \text{horizon})``, exactly like `FEVD.proportions`, and `.quantiles` appends the quantile as a fourth axis. Swapping a frequentist decomposition for a Bayesian one therefore leaves every index expression unchanged. `BayesianImpulseResponse` and `BayesianHistoricalDecomposition` keep the IRF convention ``(\text{horizon}, \text{variable}, \text{shock})``.
 
 ```@example ia_fevd
 # Bayesian FEVD with 68% credible intervals
@@ -186,21 +186,21 @@ plot_result(bfevd)
 ```
 
 ```@example ia_fevd
-# point_estimate is (horizon, variable, shock); proportions is (variable, shock, horizon)
-(bayesian = round.(bfevd.point_estimate[20, 1, :], digits=4),
+# Both are (variable, shock, horizon); quantiles adds the quantile last
+(bayesian = round.(bfevd.point_estimate[1, :, 20], digits=4),
  frequentist = round.(decomp.proportions[1, :, 20], digits=4),
- credible_band_policy_shock = round.((bfevd.quantiles[20, 1, 3, 1],
-                                      bfevd.quantiles[20, 1, 3, 3]), digits=4))
+ credible_band_policy_shock = round.((bfevd.quantiles[1, 3, 20, 1],
+                                      bfevd.quantiles[1, 3, 20, 3]), digits=4))
 ```
 
-All 200 posterior draws are usable here, so the bands rest on the full posterior. The posterior mean assigns industrial production's 20-month forecast error variance as 88.4% own, 4.0% price, and 7.6% policy, against the frequentist 92.4/2.4/5.2. The Bayesian shares are systematically less concentrated on the own shock because averaging over parameter draws mixes in configurations with stronger cross-variable transmission, and a share bounded below by zero cannot average downward as far as it can average upward. The 68% credible interval for the policy share is ``[0.043, 0.108]``, which comfortably contains the frequentist 0.052: the point estimate is not in question, but a band spanning a factor of 2.5 is the honest summary of what 250 observations reveal about the importance of monetary shocks.
+All 200 posterior draws are usable here, so the bands rest on the full posterior. The posterior mean assigns industrial production's 20-month forecast error variance as 89.6% own, 3.7% price, and 6.7% policy, against the frequentist 92.4/2.4/5.2. The Bayesian shares are systematically less concentrated on the own shock because averaging over parameter draws mixes in configurations with stronger cross-variable transmission, and a share bounded below by zero cannot average downward as far as it can average upward. The 68% credible interval for the policy share is ``[0.038, 0.094]``, which comfortably contains the frequentist 0.052: the point estimate is not in question, but a band spanning a factor of 2.5 is the honest summary of what 250 observations reveal about the importance of monetary shocks.
 
 ### `BayesianFEVD` Return Values
 
 | Field | Type | Description |
 |-------|------|-------------|
-| `quantiles` | `Array{T,4}` | ``H \times n \times n \times n_q``: dimension 4 indexes quantile levels |
-| `point_estimate` | `Array{T,3}` | ``H \times n \times n`` posterior point estimate of the variance shares |
+| `quantiles` | `Array{T,4}` | ``n \times n \times H \times n_q``: variable, shock, horizon, then quantile level |
+| `point_estimate` | `Array{T,3}` | ``n \times n \times H`` posterior point estimate of the variance shares |
 | `horizon` | `Int` | Maximum FEVD horizon |
 | `variables` | `Vector{String}` | Variable names |
 | `shocks` | `Vector{String}` | Shock names |
@@ -277,10 +277,10 @@ gen_fevd   = generalized_fevd(model, 20)
 bayes_fevd = fevd(post, 20; method=:cholesky)
 lp_r2_fevd = fevd(slp, 20; bias_correct=true, n_boot=50, rng=MersenneTwister(20260802))
 
-# Mind the axis order: (variable, shock, horizon) except for the Bayesian result
+# All four share the axis order (variable, shock, horizon)
 (cholesky    = round(chol_fevd.proportions[1, 3, 20], digits=4),
  generalized = round(gen_fevd.proportions[1, 3, 20], digits=4),
- bayesian    = round(bayes_fevd.point_estimate[20, 1, 3], digits=4),
+ bayesian    = round(bayes_fevd.point_estimate[1, 3, 20], digits=4),
  lp_r2       = round(lp_r2_fevd.bias_corrected[1, 3, 20], digits=4))
 ```
 
@@ -289,7 +289,7 @@ lp_r2_fevd = fevd(slp, 20; bias_correct=true, n_boot=50, rng=MersenneTwister(202
 report(bayes_fevd)
 ```
 
-The four estimators put the monetary contribution to industrial production between 2.9% and 7.7% at a 20-month horizon. The Cholesky and Bayesian figures (5.2% and 7.6%) bracket the same object under different treatments of parameter uncertainty. The generalized share is the largest (7.7%) because it credits the policy variable with the full contemporaneous covariance rather than assigning it to whichever variable is ordered first. The bias-corrected LP estimate is the smallest (2.9%) and the most robust to lag misspecification, at the cost of the widest sampling uncertainty. Every one of them says the same economics: identified monetary shocks are a minor driver of output fluctuations during the Great Moderation, and disagreement across methods is smaller than the sampling uncertainty within any one of them.
+The four estimators put the monetary contribution to industrial production between 2.9% and 7.7% at a 20-month horizon. The Cholesky and Bayesian figures (5.2% and 6.7%) bracket the same object under different treatments of parameter uncertainty. The generalized share is the largest (7.7%) because it credits the policy variable with the full contemporaneous covariance rather than assigning it to whichever variable is ordered first. The bias-corrected LP estimate is the smallest (2.9%) and the most robust to lag misspecification, at the cost of the widest sampling uncertainty. Every one of them says the same economics: identified monetary shocks are a minor driver of output fluctuations during the Great Moderation, and disagreement across methods is smaller than the sampling uncertainty within any one of them.
 
 ---
 
@@ -299,7 +299,7 @@ The four estimators put the monetary contribution to industrial production betwe
 
 2. **FEVD inherits the identification ordering.** Under Cholesky identification, reversing the ordering moved the shares by 8 percentage points on this sample. Always report the ordering and justify it economically, or use the order-invariant generalized decomposition.
 
-3. **Axis order differs between the frequentist and Bayesian types.** `FEVD.proportions[i, j, h]` is (variable, shock, horizon); `BayesianFEVD.point_estimate[h, i, j]` is (horizon, variable, shock). Whenever the horizon is at least as large as the number of variables, indexing one with the other's convention stays in bounds and returns a plausible wrong number instead of throwing.
+3. **Every FEVD type indexes as (variable, shock, horizon), but the IRF types do not.** `FEVD.proportions[i, j, h]`, `BayesianFEVD.point_estimate[i, j, h]`, and `LPFEVD.bias_corrected[i, j, h]` agree. `BayesianImpulseResponse.point_estimate[h, i, j]` and `BayesianHistoricalDecomposition` lead with the horizon instead, following the IRF convention. Mixing the two conventions stays in bounds whenever the horizon exceeds the number of variables, so it returns a plausible wrong number rather than throwing.
 
 4. **Generalized shares do not decompose the variance.** They overlap, sum to more than one, and `normalize=true` rescales rather than fixes that. Say which version you report.
 

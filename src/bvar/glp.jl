@@ -207,12 +207,12 @@ points because the marginal-likelihood surface is not concave in the hyperparame
 bound.
 
 # Keywords
-- `decay::Real=0.5` / `omega::Real=2.0` — held fixed (GLP fix the lag decay rather than
+- `decay::Real=0.5` / `omega::Real=1.0` — held fixed (GLP fix the lag decay rather than
   estimate it); pass different values to shift them
 - `starts::Int=4` — dispersed restarts of the optimizer
 - `max_iter::Int=500` — iterations per restart
 - `f_reltol::Real=1e-8` — relative objective tolerance
-- `verbose::Bool=false` — warn on non-convergence
+- `verbose::Bool=true` — warn on non-convergence
 
 # Returns
 [`GLPHyperparameters`](@ref).
@@ -222,7 +222,7 @@ bound.
   97(2), 436-451.
 """
 function optimize_hyperparameters_glp(Y::AbstractMatrix{T}, p::Int;
-                                      decay::Real=0.5, omega::Real=2.0,
+                                      decay::Real=0.5, omega::Real=1.0,
                                       starts::Int=4, max_iter::Int=500,
                                       f_reltol::Real=1e-8,
                                       verbose::Bool=true) where {T<:AbstractFloat}

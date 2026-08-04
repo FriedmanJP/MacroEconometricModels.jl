@@ -12,8 +12,9 @@
 #                                     _pesaran_cips_critical_values_and_pvalue (4 p-value branches),
 #                                     _nearest_val, show
 #   src/teststat/factor_break.jl    — Float64 fallback (no-r), FactorModel dispatch (han_inoue),
-#                                     _breitung_eickmeier_pvalue, _han_inoue_pvalue (4 branches),
-#                                     _sorted_eigenvalues, show (3 conclusion branches, break_date nothing),
+#                                     _be_sup_lm_path/_be_null_pool/_be_pooled_pvalue,
+#                                     _hi_null_paths/_hi_pooled_sups (#605), _sup_lm_hac, _cdg_select_r,
+#                                     show (3 conclusion branches, break_date nothing, per-series table #606),
 #                                     matrix-only dispatch error for :breitung_eickmeier/:han_inoue
 #   src/teststat/andrews.jl         — Float64 fallback, all 9 variants (3 stats x 3 functionals),
 #                                     _andrews_functional (sup/exp/mean), _andrews_critical_values (3 tables),
@@ -493,56 +494,90 @@ Random.seed!(9010)
         @test_throws ArgumentError factor_break_test(randn(100, 20); method=:invalid)
     end
 
-    @testset "_breitung_eickmeier_pvalue" begin
-        # Small stat → large p-value
-        pval1 = MacroEconometricModels._breitung_eickmeier_pvalue(0.5, 6)
-        @test pval1 > 0.50
+    @testset "_be_sup_lm_path / _be_null_pool / _be_pooled_pvalue" begin
+        rng = Random.MersenneTwister(3009)
+        X = randn(rng, 120, 15)
+        r = 2
+        fm = estimate_factors(X, r; standardize=true)
+        F = fm.factors
+        Xs = MacroEconometricModels._standardize(X)
+        Lam = Xs' * F * MacroEconometricModels.robust_inv(F' * F)
+        E = Xs - F * Lam'
+        s2 = vec(sum(abs2, E; dims=1)) ./ 120
 
-        # Large stat → small p-value
-        pval2 = MacroEconometricModels._breitung_eickmeier_pvalue(50.0, 6)
-        @test pval2 < 0.01
+        sup, dates, pooled, paths = MacroEconometricModels._be_sup_lm_path(F, E, s2, 18, 102)
+        @test length(sup) == 15
+        @test length(dates) == 15
+        @test length(pooled) == 102 - 18 + 1
+        @test all(sup .>= 0)
+        @test all(d -> 18 <= d <= 102, dates)
+        # The pooled path sums the same LM values the suprema are taken over, so its
+        # maximum can never exceed the sum of the per-series maxima.
+        @test maximum(pooled) <= sum(sup) + 1e-8
+        # The path matrix is consistent with its own summaries (#605)
+        @test size(paths) == (102 - 18 + 1, 15)
+        @test vec(maximum(paths; dims=1)) ≈ sup
+        @test vec(sum(paths; dims=2)) ≈ pooled
 
-        # Edge: stat_sq = 0 → p-value = 1
-        pval3 = MacroEconometricModels._breitung_eickmeier_pvalue(0.0, 6)
-        @test pval3 ≈ 1.0
+        pool = MacroEconometricModels._be_null_pool(F, 18, 102, 200,
+                                                    Random.MersenneTwister(7))
+        @test length(pool) == 200
+        @test all(pool .> 0)
+
+        # A pooled sum far above / below the null pool maps to a small / unit p-value
+        p_hi = MacroEconometricModels._be_pooled_pvalue(1e6, pool, 15,
+                                                        Random.MersenneTwister(8), 200)
+        p_lo = MacroEconometricModels._be_pooled_pvalue(0.0, pool, 15,
+                                                        Random.MersenneTwister(8), 200)
+        @test p_hi < 0.01
+        @test p_lo ≈ 1.0
     end
 
-    @testset "_han_inoue_pvalue: all 4 branches" begin
-        # Need to look up critical values for a specific k
-        k = 2
-        cv = MacroEconometricModels.HANSEN_ANDREWS_CV[k]
+    @testset "_hi_null_paths / _hi_pooled_sups (#605)" begin
+        rng = Random.MersenneTwister(3012)
+        X = randn(rng, 120, 15)
+        fm = estimate_factors(X, 2; standardize=true)
+        F = fm.factors
 
-        # Branch 1: stat >= cv1 (beyond 1% CV)
-        pval1 = MacroEconometricModels._han_inoue_pvalue(Float64(cv[1]) + 10.0, k)
-        @test pval1 <= 0.01
+        # Chunking is exercised via a nsim that is not a multiple of the 2000 chunk
+        paths = MacroEconometricModels._hi_null_paths(F, 18, 102, 150,
+                                                      Random.MersenneTwister(7))
+        @test size(paths) == (102 - 18 + 1, 150)
+        @test all(paths .>= 0)
 
-        # Branch 2: between cv5 and cv1
-        stat_b2 = (Float64(cv[1]) + Float64(cv[5])) / 2
-        pval2 = MacroEconometricModels._han_inoue_pvalue(stat_b2, k)
-        @test 0.01 <= pval2 <= 0.05
-
-        # Branch 3: between cv10 and cv5
-        stat_b3 = (Float64(cv[5]) + Float64(cv[10])) / 2
-        pval3 = MacroEconometricModels._han_inoue_pvalue(stat_b3, k)
-        @test 0.05 <= pval3 <= 0.10
-
-        # Branch 4: below cv10
-        pval4 = MacroEconometricModels._han_inoue_pvalue(0.01, k)
-        @test pval4 >= 0.10
-
-        # k clamped to 1..10
-        pval_big_k = MacroEconometricModels._han_inoue_pvalue(100.0, 15)
-        @test pval_big_k <= 0.01
+        pool = MacroEconometricModels._hi_pooled_sups(paths, 15,
+                                                      Random.MersenneTwister(8), 300)
+        @test length(pool) == 300
+        @test all(pool .> 0)
+        # A pooled sup aggregates 15 per-series paths pointwise, so it can never
+        # exceed 15 times the largest single path value
+        @test maximum(pool) <= 15 * maximum(paths) + 1e-8
     end
 
-    @testset "_sorted_eigenvalues" begin
+    @testset "_sup_lm_hac / _cdg_select_r" begin
         rng = Random.MersenneTwister(3010)
-        X = randn(rng, 50, 10)
-        eigs = MacroEconometricModels._sorted_eigenvalues(X)
-        @test length(eigs) == 10
-        # Should be sorted descending
-        @test issorted(eigs; rev=true)
-        @test all(isfinite, eigs)
+        n = 150
+        Z = hcat(ones(n), randn(rng, n, 2))
+        y = Z * [1.0, 0.5, -0.5] + randn(rng, n)
+
+        stat_stable, bd = MacroEconometricModels._sup_lm_hac(y, Z, 0.15)
+        @test stat_stable >= 0
+        @test bd isa Int
+        @test 22 <= bd <= 128
+
+        # A large coefficient shift raises the statistic and is dated near the truth
+        y_brk = copy(y)
+        y_brk[76:end] .+= Z[76:end, 2] .* 6.0
+        stat_brk, bd_brk = MacroEconometricModels._sup_lm_hac(y_brk, Z, 0.15)
+        @test stat_brk > stat_stable
+        @test abs(bd_brk - 75) <= 15
+
+        # No candidate dates survive trimming → (0, nothing)
+        @test MacroEconometricModels._sup_lm_hac(y[1:5], Z[1:5, :], 0.15) == (0.0, nothing)
+
+        # Bai-Ng IC2 selection stays inside the r_max = floor(sqrt(min(T,N))) grid
+        r_sel = MacroEconometricModels._cdg_select_r(randn(Random.MersenneTwister(3011), 100, 9))
+        @test 1 <= r_sel <= 3
     end
 
     @testset "factor_break_test show: all 3 conclusion branches" begin
@@ -565,12 +600,16 @@ Random.seed!(9010)
         s2 = String(take!(io2))
         @test occursin("Chen-Dolado-Gonzalo", s2)
 
-        # Show with han_inoue
+        # Show with han_inoue — pooled tests list the largest per-series statistics (#606)
         result_hi = factor_break_test(X, 2; method=:han_inoue)
         io3 = IOBuffer()
         show(io3, result_hi)
         s3 = String(take!(io3))
         @test occursin("Han-Inoue", s3)
+        @test occursin("Largest per-series break statistics", s3)
+        @test occursin("Largest per-series break statistics", sprint(show, result_be))
+        # CDG pools nothing, so it has no per-series table
+        @test !occursin("Largest per-series break statistics", s2)
 
         # Show with break_date = nothing (manually constructed)
         result_nothing = FactorBreakResult(0.0, 1.0, nothing, :chen_dolado_gonzalo, 2, 100, 25)

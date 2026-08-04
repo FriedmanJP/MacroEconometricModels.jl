@@ -8,6 +8,7 @@ using Test
 using MacroEconometricModels
 using StatsAPI
 using Random
+using Statistics
 
 @testset "Structural Break & Panel Unit Root Types" begin
     @testset "AndrewsResult construction" begin
@@ -119,10 +120,18 @@ using Random
         @test StatsAPI.pvalue(r) == 0.01
         @test StatsAPI.dof(r) == 3
 
-        # break_date can be nothing
+        # break_date can be nothing; the 7-argument form leaves per-series fields empty
         r2 = FactorBreakResult(3.2, 0.05, nothing, :chen_dolado_gonzalo, 2, 100, 15)
         @test r2.break_date === nothing
         @test r2.method == :chen_dolado_gonzalo
+        @test r2.series_statistics === nothing
+        @test r2.series_break_dates === nothing
+
+        # Full 9-argument form carries per-series statistics and dates (#606)
+        r3 = FactorBreakResult{Float64}(4.5, 0.01, 50, :breitung_eickmeier, 3, 200, 3,
+                                        [7.0, 12.5, 6.1], [48, 51, 60])
+        @test r3.series_statistics == [7.0, 12.5, 6.1]
+        @test r3.series_break_dates == [48, 51, 60]
     end
 
     @testset "Float32 parametric types" begin
@@ -415,6 +424,20 @@ end
         @test result isa FactorBreakResult{Float64}
         @test result.method == :han_inoue
         @test result.break_date isa Int
+
+        # Per-series diagnostics ride along on the pooled tests (#606)
+        @test length(result.series_statistics) == 20
+        @test length(result.series_break_dates) == 20
+        @test all(result.series_statistics .>= 0)
+        @test all(d -> 1 <= d <= 100, result.series_break_dates)
+
+        # Fixed default seed makes the simulated-null p-value reproducible (#605),
+        # and the null controls (nsim/nboot/seed) are accepted
+        p1 = factor_break_test(X, 2; method=:han_inoue).pvalue
+        @test p1 == result.pvalue
+        p_alt = factor_break_test(X, 2; method=:han_inoue,
+                                  nsim=500, nboot=999, seed=99).pvalue
+        @test 0.0 < p_alt <= 1.0
     end
 
     @testset "Error handling" begin
@@ -425,6 +448,82 @@ end
     @testset "Float64 fallback" begin
         result = factor_break_test(round.(Int, randn(80, 15) .* 10), 2)
         @test result isa FactorBreakResult{Float64}
+    end
+
+    @testset "Calibration on stable vs broken panels (#583)" begin
+        # r = 3 AR(0.7) factors, iid N(0,1) loadings and idiosyncratic errors.
+        # With `brk`, half the panel's loadings flip sign from `brk+1` onward.
+        function _break_panel(rng; T_obs=300, N=60, r=3, brk=nothing, nb=N ÷ 2)
+            F = zeros(T_obs, r)
+            for j in 1:r
+                f = 0.0
+                for t in 1:T_obs
+                    f = 0.7 * f + randn(rng)
+                    F[t, j] = f
+                end
+            end
+            Lam = randn(rng, N, r)
+            E = randn(rng, T_obs, N)
+            X = F * Lam' + E
+            if brk !== nothing
+                Lam2 = copy(Lam)
+                Lam2[1:nb, :] .= -Lam[1:nb, :]
+                X[(brk+1):end, :] = F[(brk+1):end, :] * Lam2' + E[(brk+1):end, :]
+            end
+            return X
+        end
+
+        # Counts over 8 panels, not verdicts on one: each test has a few percent of
+        # false rejections by construction, and Chen-Dolado-Gonzalo sees this break
+        # on ~87% of panels, so single-panel assertions would be a coin flip (and
+        # `MersenneTwister` streams are not stable across Julia versions).
+        stable = [_break_panel(Random.MersenneTwister(583_000 + s)) for s in 1:8]
+        broken = [_break_panel(Random.MersenneTwister(583_100 + s); brk=150) for s in 1:8]
+
+        # Stable loadings: rejections stay rare. Before #583 the eigenvalue-ratio
+        # Chen-Dolado-Gonzalo statistic rejected every stable panel (size 1.00), and
+        # the Breitung-Eickmeier χ²(N·r) bar meant it rejected none even under a break.
+        for method in (:breitung_eickmeier, :chen_dolado_gonzalo, :han_inoue)
+            n_rej = count(factor_break_test(X, 3; method=method).pvalue < 0.05
+                          for X in stable)
+            @test n_rej <= 3
+        end
+
+        # Break at t = 150: the two pooled tests reject on every panel and date it
+        # inside 10% of T; the regression-based CDG catches most panels.
+        for method in (:breitung_eickmeier, :han_inoue)
+            results = [factor_break_test(X, 3; method=method) for X in broken]
+            @test all(r -> r.pvalue < 0.05, results)
+            @test all(r -> abs(r.break_date - 150) <= 30, results)
+        end
+
+        # Per-series diagnostics (#606): when a FEW series break, their sup
+        # statistics identify them exactly. (Under the half-panel flip above they
+        # deliberately do NOT separate — a break that large rotates the estimated
+        # factor space, which elevates the stable series' statistics too.)
+        sparse_broken = [_break_panel(Random.MersenneTwister(583_200 + s);
+                                      brk=150, nb=6) for s in 1:4]
+        for X in sparse_broken
+            res = factor_break_test(X, 3; method=:breitung_eickmeier)
+            @test sort(partialsortperm(res.series_statistics, 1:6; rev=true)) == 1:6
+        end
+        # Both pooled tests compute the per-series statistics from the same
+        # full-sample factor regression, so their diagnostics agree exactly
+        r_hi = factor_break_test(sparse_broken[1], 3; method=:han_inoue)
+        r_be = factor_break_test(sparse_broken[1], 3; method=:breitung_eickmeier)
+        @test r_hi.series_statistics ≈ r_be.series_statistics
+        @test r_hi.series_break_dates == r_be.series_break_dates
+        cdg = [factor_break_test(X, 3; method=:chen_dolado_gonzalo) for X in broken]
+        @test count(r -> r.pvalue < 0.05, cdg) >= 4
+
+        # The pooled Breitung-Eickmeier p-value is reproducible (fixed default seed)
+        # and a different simulation size / seed does not change the verdict.
+        p1 = factor_break_test(stable[1], 3; method=:breitung_eickmeier).pvalue
+        p2 = factor_break_test(stable[1], 3; method=:breitung_eickmeier).pvalue
+        @test p1 == p2
+        p_alt = factor_break_test(stable[1], 3; method=:breitung_eickmeier,
+                                  nsim=500, seed=99).pvalue
+        @test (p_alt < 0.05) == (p1 < 0.05)
     end
 end
 

@@ -61,7 +61,7 @@ function bacon_decomposition(pd::PanelData{T}, outcome::Union{String,Symbol},
         panel[g][t] = pd.data[i, outcome_col]
     end
 
-    cohorts = sort(unique([t for (_, t) in timing if t > 0]))
+    cohorts = _cohort_set(timing)
     never_treated = [g for (g, t) in timing if t == 0]
     n_total = pd.n_groups
 
@@ -303,7 +303,10 @@ High p-value -> no evidence against parallel trends.
 `PretrendTestResult{T}` with F-statistic and p-value.
 """
 function pretrend_test(result::DIDResult{T}) where {T<:AbstractFloat}
-    pre_mask = result.event_times .< 0 .&& result.event_times .!= result.reference_period
+    # Under :varying the e=−1 cell is an estimated adjacent-period placebo, so it belongs
+    # in the pre-trend test; under :universal it is a structural zero and must be dropped.
+    pre_mask = result.base_period == :varying ? result.event_times .< 0 :
+               result.event_times .< 0 .&& result.event_times .!= result.reference_period
     pre_coefs = result.att[pre_mask]
     pre_ses = result.se[pre_mask]
     # Prefer the full-covariance joint Wald when the estimator supplies a cross-horizon
@@ -408,7 +411,7 @@ function negative_weight_check(pd::PanelData{T}, treatment::Union{String,Symbol}
     pairs = Tuple{Int,Int}[]
 
     # For each treated (group, time) cell, compute the weight in TWFE regression
-    cohorts = sort(unique([t for (_, t) in timing if t > 0]))
+    cohorts = _cohort_set(timing)
     n_total = pd.n_groups
     n_times = length(all_times)
 
@@ -422,7 +425,7 @@ function negative_weight_check(pd::PanelData{T}, treatment::Union{String,Symbol}
 
             # Treatment indicator variance contribution
             # D_bar_t = share of treated at time t
-            n_treated_t = count(g -> timing[g] > 0 && timing[g] <= t, 1:n_total)
+            n_treated_t = count(g -> timing[g] != 0 && timing[g] <= t, 1:n_total)
             D_bar_t = T(n_treated_t) / T(n_total)
 
             if D_bar_t > 0 && D_bar_t < 1

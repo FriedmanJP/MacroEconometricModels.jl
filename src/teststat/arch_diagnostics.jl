@@ -52,15 +52,24 @@ function _arch_lm_core(eps_sq::Vector{T}, q::Int) where {T}
     n = length(eps_sq)
     n_eff = n - q
 
+    # Scale-invariance: an O(1) intercept mixed with O(sd⁴) squared-residual
+    # columns is disastrously conditioned when residuals are small (e.g. CPI
+    # growth). Standardize ε² by its sample mean so columns are O(1); R² is
+    # invariant to a common positive scale of y and the lagged columns.
+    m2 = mean(eps_sq)
+    scale = m2 > zero(T) ? m2 : one(T)
+    e2 = eps_sq ./ scale
+
     # Build regression: ε²ₜ on [1, ε²ₜ₋₁, ..., ε²ₜ₋q]
     X = ones(T, n_eff, q + 1)
     for lag in 1:q
-        X[:, lag+1] = eps_sq[q+1-lag:n-lag]
+        X[:, lag+1] = e2[q+1-lag:n-lag]
     end
-    y_reg = eps_sq[q+1:n]
+    y_reg = e2[q+1:n]
 
-    # OLS
-    XtX_inv = robust_inv(X' * X)
+    # OLS (silent: cond guard below handles near-singularity)
+    XtX = X' * X
+    XtX_inv = robust_inv(XtX; silent=true)
     beta = XtX_inv * (X' * y_reg)
     fitted = X * beta
     resid = y_reg .- fitted
@@ -68,7 +77,8 @@ function _arch_lm_core(eps_sq::Vector{T}, q::Int) where {T}
     # R²
     ss_res = sum(abs2, resid)
     ss_tot = sum(abs2, y_reg .- mean(y_reg))
-    r2 = one(T) - ss_res / ss_tot
+    r2 = ss_tot > zero(T) ? one(T) - ss_res / ss_tot : zero(T)
+    r2 = clamp(r2, zero(T), one(T))
 
     statistic = T(n_eff) * r2
     pvalue = one(T) - cdf(Chisq(q), statistic)

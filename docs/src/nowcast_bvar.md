@@ -88,15 +88,18 @@ The Normal-Inverse-Wishart prior is imposed through **dummy observations** — a
 
 | Block | Hyperparameter | Dummy entry | Shrinks toward |
 |-------|----------------|-------------|----------------|
-| Minnesota, own lag ``l`` | ``\lambda`` | ``\sigma_i / (\lambda l^2)`` | Random walk in each variable |
-| Minnesota, cross lag ``l`` | ``\theta`` | ``\sigma_i / (\theta \lambda l^2)`` | Zero coefficients on other variables |
+| Minnesota, variable ``i`` at lag ``l`` | ``\lambda``, ``\theta`` | ``\sigma_i \, l^{\theta} / \lambda`` | Random walk at lag 1, zero beyond |
 | Sum-of-coefficients | ``\mu`` | ``\bar{y}_i / \mu`` | Own lags summing to one (unit root) |
 | Co-persistence | ``\alpha`` | ``\bar{y}_i / \alpha`` | A single common stochastic trend |
+| Inverse-Wishart scale | --- | ``\text{diag}(\sigma)`` against ``X = 0`` | ``\mathbb{E}[\Sigma] \propto \text{diag}(\hat\sigma_i^2)`` |
 
-Every entry is a scale: the larger the dummy, the more prior information it injects. Dividing by ``\lambda`` therefore makes a smaller ``\lambda`` a tighter overall prior, and the same holds for ``\mu`` and ``\alpha`` within their blocks. The cross-variable entries carry the extra ``1/\theta`` factor, so ``\theta`` sets the size of the cross-variable dummy block relative to the own-lag block, and the ``1/l^2`` factor makes the dummy scale depend on lag order.
+Every Minnesota row carries exactly one nonzero regressor entry — the coefficient on ``y_{i,t-l}`` in equation ``i`` — and targets 1 at lag 1 and 0 at every longer lag, so the block restricts each coefficient on its own rather than restricting a sum of them. Every entry is a scale: the larger the dummy, the more prior information it injects. Dividing by ``\lambda`` therefore makes a smaller ``\lambda`` a tighter overall prior, and the same holds for ``\mu`` and ``\alpha`` within their blocks. The exponent ``\theta`` sets how fast tightness grows with the lag: at ``\theta = 0`` every lag is shrunk alike, and the larger ``\theta`` the harder the long lags are pushed to zero.
+
+!!! note "Why the conjugate prior has no cross-variable tightness parameter"
+    Dummy observations imply a prior variance ``\Sigma_{mm} (X_d' X_d)^{-1}_{cc}`` for coefficient ``c`` of equation ``m``, so for any given regressor the cross-to-own prior standard-deviation ratio is ``\sqrt{\Sigma_{mm} / \Sigma_{jj}}`` — the classical Minnesota asymmetry — whatever row scale is chosen. Relative own-versus-cross tightness is structurally fixed in a conjugate Normal-Inverse-Wishart prior and cannot be a free hyperparameter, which is why ``\theta`` is the lag-decay exponent (Litterman's ``d``, GLP's ``\alpha``) rather than a cross-variable weight. Set `prior=:litterman` to get that knob; see [The Litterman prior](@ref nowcast_bvar_litterman) below.
 
 !!! note "Technical Note"
-    Stacking the dummies on the data and running OLS returns the posterior mode of the conjugate Normal-Inverse-Wishart model in closed form, so no MCMC is involved and a fit costs one least-squares solve. The ``\sigma_i`` used to scale the prior are estimated from the data beforehand, which puts each equation's prior on the scale of its own residual variance.
+    Stacking the dummies on the data and running OLS returns the posterior mode of the conjugate Normal-Inverse-Wishart model in closed form, so no MCMC is involved and a fit costs one least-squares solve. The ``\sigma_i`` used to scale the prior are estimated from the data beforehand, which puts each equation's prior on the scale of its own residual variance. The closing inverse-Wishart block sets ``X = 0`` and therefore constrains ``\Sigma`` alone: the random-walk prior mean satisfies every other dummy row exactly, so without this block the prior sum of squares is singular and the marginal likelihood degenerates.
 
 ---
 
@@ -111,15 +114,13 @@ t_complete = findlast(t -> !any(isnan, Y[t, :]), 1:T_obs)
 
 With the standard quarterly mask the last complete row is month 57 — month 60 is the ragged edge and months 58 and 59 are not quarter ends — and 38 entries of the quarterly column inside that window are set to the column mean. This is the estimator's mixed-frequency approximation, and it is coarse: the quarterly series contributes its own variation only one month in three. Panels whose series mostly share a frequency suit this estimator best; for a genuinely mixed-frequency panel the [DFM](@ref nowcast_dfm_page) treats the quarterly block properly through temporal aggregation instead of imputing it.
 
-The hyperparameters are then searched by Nelder-Mead over ``(\log \lambda, \log \theta, \log \mu, \log \alpha)``, maximizing the Gaussian log-likelihood of the data evaluated at the implied posterior mode. The search is confined to the box ``|\log(\cdot)| \le 5``, so each hyperparameter is restricted to ``[e^{-5}, e^{5}] \approx [0.0067, 148.41]``. The optimum is reported in the `lambda`, `theta`, `miu` and `alpha` fields and the attained objective in `loglik`.
+The hyperparameters are then searched by Nelder-Mead over ``(\log \lambda, \log \theta, \log \mu, \log \alpha)``, maximizing the closed-form Normal-Inverse-Wishart **log marginal likelihood** of Giannone, Lenza & Primiceri (2015) — the criterion that integrates the coefficients and ``\Sigma`` out, carrying the ``|X_d'X_d| / |X_*'X_*|`` determinant ratio and the multivariate gamma terms, rather than a fit evaluated at the mode. The search is confined to the box ``|\log(\cdot)| \le 5``, so each hyperparameter is restricted to ``[e^{-5}, e^{5}] \approx [0.0067, 148.41]``. The optimum is reported in the `lambda`, `theta`, `miu` and `alpha` fields and the attained log marginal likelihood in `loglik`.
 
 ---
 
 ## Hyperparameter Diagnostics
 
-The objective this routine maximizes is a fit criterion evaluated at the posterior mode, not a marginal likelihood integrated over the parameters, so it carries **no complexity penalty**. Two consequences matter in practice, and both are visible on this panel.
-
-First, the reported `loglik` rises monotonically with the lag order and cannot be used to choose ``p``:
+Because the objective integrates the coefficients and ``\Sigma`` out instead of evaluating a fit at the posterior mode, it carries a genuine complexity penalty and can be read as a model-selection criterion over the lag order:
 
 ```@example nc_bvar
 map(2:5) do L
@@ -129,19 +130,56 @@ map(2:5) do L
 end
 ```
 
-Adding lags moves the objective from 799.0 to 870.4 without interruption, exactly as an in-sample fit measure does. Select the lag order on out-of-sample criteria or on the frequency of the data — five lags for a monthly panel is the conventional choice — rather than on this number.
+Two lags maximize the marginal likelihood at 657.1, four lags minimize it at 642.8, and five recovers to 645.8 — a non-monotone path, which is the signature of the penalty an in-sample fit measure lacks. The spread is 14 log points across the whole range on 55 usable observations, so read the ranking as weak evidence rather than a verdict: five lags for a monthly panel remains the conventional choice, and this criterion does not contradict it strongly enough to overturn it.
 
-Second, the search frequently terminates on the wall of the box. The `converged` field records whether the optimum is interior: it is `false` when any log-hyperparameter reaches ``\pm 5`` to within ``10^{-3}``, and `report` then prints an explicit warning instead of presenting the boundary values as an estimate.
+The search can still terminate on the wall of the box. The `converged` field records whether the optimum is interior: it is `false` when any log-hyperparameter reaches ``\pm 5`` to within ``10^{-3}``, and `report` then prints an explicit warning instead of presenting the boundary values as an estimate.
 
-!!! warning "Boundary optima are common on short panels"
-    A hyperparameter reported at 148.41 has hit ``e^{5}``: the objective was still improving when the search ran out of box, so that value is a truncation point, not an optimum. Check `converged` before quoting any of the four hyperparameters.
+!!! warning "Check `converged` before quoting a hyperparameter"
+    A value reported at 148.41 has hit ``e^{5}`` and one at 0.0067 has hit ``e^{-5}``: the objective was still improving when the search ran out of box, so the number is a truncation point, not an optimum. Every fit on this panel lands in the interior, but a flat objective on a short or near-collinear panel does reach the wall.
 
 ```@example nc_bvar
 bvar_short = nowcast_bvar(Y, nM, nQ; lags=3)
 report(bvar_short)
 ```
 
-At three lags the search drives ``\lambda`` to 148.40 and the run is flagged as a boundary optimum, while at five lags it settles at ``\lambda = 21.43`` with ``\theta = 148.23``, a hair inside the ceiling. The starting values matter as much as the specification: the same five-lag model started from ``\lambda_0 = 0.5`` in Recipe 2 lands at ``\lambda = 113.70`` with an objective of 871.32, higher than the 870.44 reached from the default start. A search that finds a better optimum from a different starting point has not converged to a global one, so re-run from several starts whenever the shrinkage values themselves are part of the answer, and read wide disagreement as evidence that the panel is too short to identify them.
+At three lags the search settles at ``\lambda = 0.7350``, ``\theta = 1.4378``, ``\mu = 1.0759`` and ``\alpha = 0.6399``, all interior. The five-lag fit is slightly looser overall (``\lambda = 0.8391``) but far tighter on the two persistence blocks (``\mu = 0.1557``, ``\alpha = 0.1595``), which is how the longer system holds itself together: the extra lags are free to move only because the unit-root and common-trend dummies pin down their sum. Recipe 2 starts the same five-lag search from ``\lambda_0 = 0.5`` and ``\alpha_0 = 1.0`` and reaches that optimum to four decimals. Agreement across starts is not something a Nelder-Mead search over four correlated hyperparameters can be assumed to give, so repeat it from a second start whenever the shrinkage values themselves are part of the answer.
+
+---
+
+## [The Litterman Prior](@id nowcast_bvar_litterman)
+
+`prior=:litterman` replaces the conjugate Normal-Inverse-Wishart prior with Litterman's (1986) original formulation: ``\Sigma`` is **fixed** at ``\text{diag}(\hat\sigma_1^2, \ldots, \hat\sigma_N^2)`` rather than integrated out. Fixing ``\Sigma`` separates the equations, and separated equations are what make a cross-variable tightness parameter possible. The prior standard deviation of the coefficient on lag ``l`` of variable ``j`` in equation ``m`` is
+
+```math
+\text{sd}(B^{(l)}_{mj}) =
+\begin{cases}
+\lambda \, / \, l^{\theta} & j = m \quad \text{(own lag)} \\[4pt]
+\lambda \, \theta_{\text{cross}} \, \sigma_m \, / \, (l^{\theta} \sigma_j) & j \neq m \quad \text{(cross lag)}
+\end{cases}
+```
+
+where:
+- ``\lambda`` is overall tightness, ``\theta`` the lag-decay exponent — both as in the conjugate prior
+- ``\theta_{\text{cross}}`` is the cross-variable relative tightness: ``\theta_{\text{cross}} = 1`` reproduces the conjugate prior's ``\sigma_m/\sigma_j`` asymmetry exactly, and ``\theta_{\text{cross}} < 1`` shrinks other variables' lags harder than own lags
+- ``\sigma_m / \sigma_j`` puts the restriction on the ratio of residual standard deviations, so it is invariant to the units each series is measured in
+
+The prior mean is a random walk (1 on the own lag-1 coefficient, 0 elsewhere), the intercept prior is diffuse, and the sum-of-coefficients and co-persistence blocks carry over unchanged so that the two priors impose comparable long-run structure.
+
+```@example nc_bvar
+bvar_lit = nowcast_bvar(Y, nM, nQ; lags=5, prior=:litterman)
+report(bvar_lit)
+```
+
+On this panel the criterion drives both ``\theta_{\text{cross}}`` and ``\alpha`` to the floor of the box, ``e^{-5} \approx 0.0067``: with 26 coefficients per equation and 55 usable observations it prefers to shrink cross-variable dynamics essentially to zero while tightening the common-trend block as hard as it can, leaving something close to five separate autoregressions tied together only by a common trend. That is a substantive finding rather than a numerical failure, and `report` names which hyperparameters hit which edge instead of presenting the boundary values as estimates. A panel long enough to identify cross-variable transmission would leave ``\theta_{\text{cross}}`` interior.
+
+The nowcast moves from 0.0739 under the conjugate prior to 0.0207 under Litterman — the gap is the cross-variable channel, which the conjugate prior cannot switch off and this one shuts down almost entirely.
+
+!!! warning "`loglik` is not comparable across priors"
+    The conjugate value integrates out the coefficients **and** ``\Sigma``; the Litterman value integrates out the coefficients with ``\Sigma`` held fixed. They are different objectives over different parameter spaces, so the Litterman fit's higher number is not evidence that it fits better. Compare lag orders and hyperparameters *within* a prior; compare the two priors by out-of-sample nowcast accuracy.
+
+Because the search is five-dimensional rather than four, `max_iter` defaults to `2000` under `:litterman` (against `200` under `:conjugate`) — roughly a thousand Nelder-Mead iterations are needed to reach a stationary point on a panel this size. An explicit `max_iter` is always honoured, and setting it too low stops the search early at a point that is not an optimum.
+
+Passing `theta_cross0` to the conjugate prior throws rather than being silently ignored, because no dummy-observation prior can express it.
 
 ---
 
@@ -174,7 +212,7 @@ where ``\hat{y}_{T+h-i}`` is the smoothed observation when ``h - i \le 0`` and a
 forecast(bvar, 6; target_var=N)
 ```
 
-The path oscillates — 0.0781, 0.0221, 0.0894 — rather than decaying smoothly, because with 26 coefficients per equation and a prior this loose the estimated companion matrix carries complex roots that a factor model would never produce. Omitting `target_var` returns the whole ``h \times N`` panel. `nowcast(bvar)` reports the single-step version of the same recursion as its `forecast` field.
+The path oscillates — 0.0184, 0.0336, 0.0617 over the first three months — rather than decaying smoothly, because with 26 coefficients per equation the estimated companion matrix carries complex roots that a factor model would never produce. Omitting `target_var` returns the whole ``h \times N`` panel. `nowcast(bvar)` reports the single-step version of the same recursion as its `forecast` field.
 
 ---
 
@@ -184,11 +222,13 @@ The path oscillates — 0.0781, 0.0221, 0.0894 — rather than decaying smoothly
 |---------|------|---------|-------------|
 | `lags` | `Int` | `5` | Number of VAR lags |
 | `thresh` | `Real` | ``10^{-6}`` | Relative-tolerance stopping rule for the Nelder-Mead search |
-| `max_iter` | `Int` | `200` | Maximum Nelder-Mead iterations |
+| `max_iter` | `Int` or `nothing` | `nothing` | Maximum Nelder-Mead iterations; resolves to `200` under `:conjugate` and `2000` under `:litterman` |
 | `lambda0` | `Real` | `0.2` | Starting value for overall shrinkage |
-| `theta0` | `Real` | `1.0` | Starting value for cross-variable shrinkage |
+| `theta0` | `Real` | `1.0` | Starting value for the lag-decay exponent |
 | `miu0` | `Real` | `1.0` | Starting value for the sum-of-coefficients weight |
 | `alpha0` | `Real` | `2.0` | Starting value for the co-persistence weight |
+| `prior` | `Symbol` | `:conjugate` | `:conjugate` for the GLP Normal-Inverse-Wishart prior, `:litterman` for the non-conjugate prior with fixed ``\Sigma`` |
+| `theta_cross0` | `Real` or `nothing` | `nothing` | Starting value for cross-variable relative tightness; `:litterman` only, and throws under `:conjugate` |
 
 ---
 
@@ -198,13 +238,15 @@ The path oscillates — 0.0781, 0.0221, 0.0894 — rather than decaying smoothly
 |-------|------|-------------|
 | `X_sm` | `Matrix{T}` | Smoothed panel with every missing entry filled |
 | `beta` | `Matrix{T}` | Posterior mode coefficients, ``(1 + Np) \times N``, first row the intercept |
-| `sigma` | `Matrix{T}` | Posterior mode innovation covariance, ``N \times N`` |
+| `sigma` | `Matrix{T}` | Innovation covariance, ``N \times N`` — the posterior mode under `:conjugate`, the fixed ``\text{diag}(\hat\sigma^2)`` under `:litterman` |
 | `lambda` | `T` | Overall shrinkage at the optimum |
-| `theta` | `T` | Cross-variable shrinkage at the optimum |
+| `theta` | `T` | Lag-decay exponent at the optimum |
 | `miu` | `T` | Sum-of-coefficients weight at the optimum |
 | `alpha` | `T` | Co-persistence weight at the optimum |
+| `theta_cross` | `T` | Cross-variable relative tightness at the optimum; `NaN` under `:conjugate`, where it is not a free parameter |
+| `prior` | `Symbol` | `:conjugate` or `:litterman` |
 | `lags` | `Int` | Number of VAR lags |
-| `loglik` | `T` | Objective attained at the optimum |
+| `loglik` | `T` | Log marginal likelihood attained at the optimum, for the prior actually used — not comparable across priors |
 | `nM` | `Int` | Number of monthly variables |
 | `nQ` | `Int` | Number of quarterly variables |
 | `data` | `Matrix{T}` | Original input panel, NaN included |
@@ -235,7 +277,7 @@ dfm = nowcast_dfm(Y, nM, nQ; r=2, p=1)
  dfm=round(nowcast(dfm).nowcast, digits=4))
 ```
 
-**Interpretation.** The BVAR estimates all 130 coefficients of the five-variable, five-lag system from 55 usable observations, which only the dummy-observation prior makes possible. The search leaves ``\lambda`` at 21.43 but pushes ``\theta`` to 148.23, the top of its box, so the data do not identify how much cross-variable dynamics should be shrunk on a panel this short. The Kalman smoother fills the quarterly mask and the ragged edge in one pass, giving a current-quarter estimate of 0.1055 against the DFM's 0.0375 on the same data. A gap that wide is itself the finding: the DFM reads the quarter off two factors extracted from all five series, whereas the BVAR imputes two of every three quarterly observations with a column mean before it ever sees the data. Where the two disagree by more than their historical revision spread, prefer the DFM on mixed-frequency panels and treat the BVAR as the robustness check.
+**Interpretation.** The BVAR estimates all 130 coefficients of the five-variable, five-lag system from 55 usable observations, which only the dummy-observation prior makes possible. The marginal likelihood picks a moderate overall tightness (``\lambda = 0.8391``) with a lag decay of ``\theta = 1.2717``, so the dummy that shrinks a lag-5 coefficient is ``5^{1.2717} \approx 7.7`` times the size of its lag-1 counterpart, and it pulls the two persistence blocks tight. The Kalman smoother fills the quarterly mask and the ragged edge in one pass, giving a current-quarter estimate of 0.0739 against the DFM's 0.0375 on the same data. A gap that wide is itself the finding: the DFM reads the quarter off two factors extracted from all five series, whereas the BVAR imputes two of every three quarterly observations with a column mean before it ever sees the data. Where the two disagree by more than their historical revision spread, prefer the DFM on mixed-frequency panels and treat the BVAR as the robustness check.
 
 ---
 
@@ -243,13 +285,15 @@ dfm = nowcast_dfm(Y, nM, nQ; r=2, p=1)
 
 1. **Check `converged` before quoting hyperparameters.** A value of 148.41 is ``e^{5}``, the edge of the search box, and means the objective never turned around. `report` prints a warning in that case; the estimates remain usable, but the hyperparameters are not.
 
-2. **Do not select the lag order on `loglik`.** The objective is an in-sample fit measure at the posterior mode with no complexity penalty, so it increases with every lag added. Choose ``p`` from the data frequency or an out-of-sample criterion.
+2. **Do not read small `loglik` differences as a lag-order decision.** The objective is a marginal likelihood, so it does penalize complexity and is comparable across ``p`` — but the spread across two to five lags on a 60-month panel is 14 log points, well inside what a different sample would reshuffle. Corroborate with the data frequency or an out-of-sample criterion.
 
 3. **Column-mean imputation degrades a sparse quarterly block.** Everything missing inside the estimation window is replaced by a column mean before the prior is calibrated, so a quarterly series contributes real variation in only one month of three. Use the DFM when the quarterly block is large relative to the panel.
 
 4. **The estimation window ends at the last complete row.** Rows after `t_complete` are filled by the smoother but never enter the likelihood. A panel with a deep ragged edge therefore estimates on materially fewer observations than `nobs` reports, and if the complete block is shorter than `lags + 2` rows the routine silently falls back to the full sample.
 
 5. **Lags cost parameters quadratically in ``N``.** Each additional lag adds ``N`` coefficients to every one of the ``N`` equations. With ``N = 10`` and `lags=5` the system carries 510 coefficients; the prior keeps this estimable, but the flatter the resulting objective, the more likely the hyperparameter search ends on the box edge.
+
+6. **Do not compare `loglik` across priors.** The conjugate and Litterman criteria integrate out different things, so the two numbers are not on a common scale. Choosing between the priors is an out-of-sample question.
 
 ---
 
@@ -259,3 +303,4 @@ dfm = nowcast_dfm(Y, nM, nQ; r=2, p=1)
 - Bańbura, Marta, Domenico Giannone, and Lucrezia Reichlin. 2010. "Large Bayesian Vector Auto Regressions." *Journal of Applied Econometrics* 25 (1): 71--92. [https://doi.org/10.1002/jae.1137](https://doi.org/10.1002/jae.1137)
 - Giannone, Domenico, Michele Lenza, and Giorgio E. Primiceri. 2015. "Prior Selection for Vector Autoregressions." *Review of Economics and Statistics* 97 (2): 436--451. [https://doi.org/10.1162/REST_a_00483](https://doi.org/10.1162/REST_a_00483)
 - Litterman, Robert B. 1986. "Forecasting with Bayesian Vector Autoregressions --- Five Years of Experience." *Journal of Business & Economic Statistics* 4 (1): 25--38. [https://doi.org/10.1080/07350015.1986.10509491](https://doi.org/10.1080/07350015.1986.10509491)
+- Kadiyala, K. Rao, and Sune Karlsson. 1997. "Numerical Methods for Estimation and Inference in Bayesian VAR-Models." *Journal of Applied Econometrics* 12 (2): 99--132. [https://doi.org/10.1002/(SICI)1099-1255(199703)12:2<99::AID-JAE429>3.0.CO;2-A](https://doi.org/10.1002/(SICI)1099-1255(199703)12:2%3C99::AID-JAE429%3E3.0.CO;2-A)

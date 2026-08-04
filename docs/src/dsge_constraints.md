@@ -175,17 +175,18 @@ The backend is auto-detected from the constraint types. Pure `VariableBound` con
 
 Box constraints require no additional packages. The solver solves the unconstrained Newton system first; if any variable violates its bounds it escalates to a projected Newton method that preserves the sparse block-tridiagonal Jacobian structure:
 
-```julia
+```@example dsge_constraints
 # The model above is written in deviations, so the ZLB sits at minus the
 # steady-state rate, not at zero.
 zlb = variable_bound(:R, lower=-0.005)
 pf = perfect_foresight(spec; shock_path=shocks, constraints=[zlb])
+(converged = pf.converged, min_R = round(minimum(pf.path[:, 3]); digits=6))
 ```
 
-The projected Newton solver uses NCP (nonlinear complementarity problem) convergence criteria: at interior points the residual must equal zero, at a binding lower bound the residual must be non-negative, and at a binding upper bound the residual must be non-positive.
+The unconstrained rate bottoms out at ``-0.038``; with the bound in place the path sits exactly on ``-0.005`` through the binding quarters and the solver reports convergence. A binding box constraint is a complementarity problem — in the binding periods the bound replaces the equation in that variable's slot — and the escalation solves it with a semismooth (min-map) Newton step: at interior points the residual must equal zero, at a binding lower bound the residual must be non-negative, and at a binding upper bound the residual must be non-positive.
 
 !!! warning "Get the bound right, and check that it converged"
-    Two failures are easy to hit here. First, a bound stated in levels is wrong for a model written in deviations: this page's New Keynesian block has an all-zero steady state, so `lower=0.0` on `R` says "the policy rate may never fall at all" rather than "the policy rate may not go below zero". Second, projected Newton is not guaranteed to converge — on this model it exhausts its 100 iterations for every bound that actually binds and throws, with a message pointing at `solver=:ipopt`. Treat that escalation as the supported route for a genuinely binding box constraint on a perfect-foresight path, and use OccBin when the constraint is occasionally binding rather than always.
+    Two failures are easy to hit here. First, a bound stated in levels is wrong for a model written in deviations: this page's New Keynesian block has an all-zero steady state, so `lower=0.0` on `R` says "the policy rate may never fall at all" rather than "the policy rate may not go below zero". Second, always read `pf.converged`: when the NCP iteration exhausts `max_iter` the escalation throws rather than returning a spurious path. `solver=:ipopt` is not the escape hatch for a binding box constraint — the Ipopt formulation holds every model equation as a hard equality alongside the bound, which is infeasible precisely when the bound binds, and Ipopt reports local infeasibility. Raise `max_iter`, pose the problem explicitly as an MCP with `solver=:path`, or use OccBin when the constraint is occasionally binding rather than always.
 
 ### Nonlinear Constraints
 
@@ -452,7 +453,7 @@ The unconstrained model is determinate, and the two IRFs diverge by up to 12.14 
 
 1. **A bound stated in the wrong units**: `variable_bound` and `parse_constraint` both take the bound in the same units as the model's variables. In a model written in deviations with an all-zero steady state, `lower=0.0` on a rate means "may never fall below steady state", not "may not go negative". Check the steady state before writing the bound.
 
-2. **Projected Newton failing to converge**: a genuinely binding box constraint on a perfect-foresight path can exhaust the projected Newton iteration limit and throw rather than return. The error message points at `solver=:ipopt`, which is the supported escalation. If the constraint is *occasionally* binding rather than always, OccBin is the better tool.
+2. **Projected Newton failing to converge**: when the semismooth iteration cannot reach the NCP tolerance it throws rather than returning a spurious path. Raise `max_iter`, or pose the problem explicitly as an MCP with `solver=:path`. `solver=:ipopt` is not the escape hatch: it holds all model equations as hard equalities and reports infeasibility exactly when a bound binds. If the constraint is *occasionally* binding rather than always, OccBin is the better tool.
 
 3. **Non-convergence in perfect foresight**: increase `T_periods` or reduce the shock magnitude. The terminal condition assumes a return to steady state, so the horizon must be long enough for the economy to get back.
 

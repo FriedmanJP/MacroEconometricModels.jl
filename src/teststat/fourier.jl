@@ -40,6 +40,9 @@ function fourier_adf_test(y::AbstractVector{T};
                            trim::Real=0.15) where {T<:AbstractFloat}
     regression in (:constant, :trend) || throw(ArgumentError("regression must be :constant or :trend"))
     1 <= fmax <= 5 || throw(ArgumentError("fmax must be between 1 and 5"))
+    # `trim` is accepted for API symmetry with break-search tests but is unused:
+    # Fourier-ADF selects frequency by min SSR over the full sample (Enders-Lee).
+    (0 < trim < 0.5) || throw(ArgumentError("trim must lie in (0, 0.5), got $trim"))
 
     n = length(y)
     n < 50 && throw(ArgumentError("Need at least 50 observations, got $n"))

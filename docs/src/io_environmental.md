@@ -70,19 +70,19 @@ report(io)
 
 The account is stored in `io.extensions["land"]` and joins the summary alongside the `CO2` and `employment` accounts that ship with the table and the water accounts attached in the Quick Start. `add_extension!` mutates the table in place and returns it, so accounts accumulate across calls.
 
-!!! warning "Orientation and units are checked differently"
+!!! warning "Orientation is checked, labels are broadcast"
     `F` must be ``n_s \times n`` — stressors down the rows, sectors across the columns. A
-    transposed matrix throws `ArgumentError` naming the column count. `unit`, by contrast,
-    must be a *vector* with one entry per stressor: passing the bare string `"kha"` throws a
-    `MethodError` about converting `Char` to `String`, because the string is collected
-    character by character.
+    transposed matrix throws `ArgumentError` naming the column count. `unit` and `stressors`
+    each take either a vector with one entry per stressor or a bare string: `unit="kha"`
+    applies that unit to every row, and `stressors="area"` is accepted only when `F` has a
+    single row. A length that disagrees with ``n_s`` throws `ArgumentError` naming the keyword.
 
 ### Keyword Arguments
 
 | Keyword | Type | Default | Description |
 |---------|------|---------|-------------|
-| `stressors` | `AbstractVector` | — | Required. Stressor labels, one per row of `F` |
-| `unit` | `AbstractVector` | — | Required. Physical unit, one per stressor |
+| `stressors` | `AbstractVector`/`AbstractString` | — | Required. Stressor labels, one per row of `F`; a bare string only when `F` has one row |
+| `unit` | `AbstractVector`/`AbstractString` | — | Required. Physical unit, one per stressor; a bare string applies to every row |
 | `F_Y` | `AbstractMatrix` | `nothing` | ``n_s \times n_{fd}`` direct stressor use in final demand; zeros when omitted |
 
 ### Return Values
@@ -228,7 +228,7 @@ Agriculture uses 0.045 TJ per unit of gross output against manufacturing's 0.060
 
 1. **`F` is stressors by sectors, not sectors by stressors.** The matrix must be ``n_s \times n``. A single-stressor account for two sectors is `[12.0 28.0]` — a ``1 \times 2`` row — not a ``2 \times 1`` column. The wrong orientation throws `ArgumentError` naming the column count, which is the good case; a square table would accept it silently.
 
-2. **`unit` must be a vector even for one stressor.** Pass `unit=["kt"]`, not `unit="kt"`. A bare string is collected character by character and fails with a `MethodError` about `Char` and `String` that does not name the keyword.
+2. **A bare-string `stressors` is a one-row shorthand, a bare-string `unit` is not.** `unit="kt"` broadcasts to every stressor, so a two-row account labelled `unit="kt"` gets `["kt", "kt"]` — check that both rows really share the unit. `stressors="CO2"` is accepted only when `F` has one row; with more rows it throws `ArgumentError` naming the required length rather than silently labelling one row.
 
 3. **Intensities are frozen at attach time.** `add_extension!` divides `F` by the gross output of the table *as it stands*. Rebuilding or rescaling the table afterwards leaves stale intensities behind. Attach accounts after the table is final, or re-attach.
 

@@ -125,7 +125,7 @@ Fields:
 - irf_values: Smoothed IRF point estimates (H+1 × n_response)
 - irf_se: Standard errors of smoothed IRF
 - residuals: Pooled residuals
-- T_eff: Effective sample size
+- T_eff: Pooled observation count Σ_h (T − h − p) across horizons (not an ESS; #536)
 - cov_estimator: Covariance estimator used
 """
 struct SmoothLPModel{T<:AbstractFloat} <: AbstractLPModel
@@ -141,7 +141,7 @@ struct SmoothLPModel{T<:AbstractFloat} <: AbstractLPModel
     irf_values::Matrix{T}
     irf_se::Matrix{T}
     residuals::Matrix{T}
-    T_eff::Int
+    T_eff::Int  # pooled Σ_h (T−h−p); name kept for API stability (#536)
     cov_estimator::AbstractCovarianceEstimator
     varnames::Vector{String}
 
@@ -350,6 +350,7 @@ struct PropensityLPModel{T<:AbstractFloat} <: AbstractLPModel
     T_eff::Vector{Int}
     cov_estimator::AbstractCovarianceEstimator
     varnames::Vector{String}
+    estimator::Symbol  # :ipw or :doubly_robust (#533)
 
     function PropensityLPModel{T}(Y::Matrix{T}, treatment::AbstractVector{Bool}, response_vars::Vector{Int},
                                   covariates::Matrix{T}, horizon::Int, propensity_scores::Vector{T},
@@ -357,7 +358,8 @@ struct PropensityLPModel{T<:AbstractFloat} <: AbstractLPModel
                                   residuals::Vector{Matrix{T}}, vcov::Vector{Matrix{T}},
                                   ate::Matrix{T}, ate_se::Matrix{T}, config::PropensityScoreConfig{T},
                                   T_eff::Vector{Int}, cov_estimator::AbstractCovarianceEstimator,
-                                  varnames::Vector{String}=["y$i" for i in 1:size(Y,2)]) where {T<:AbstractFloat}
+                                  varnames::Vector{String}=["y$i" for i in 1:size(Y,2)],
+                                  estimator::Symbol=:ipw) where {T<:AbstractFloat}
         n = size(Y, 2)
         @assert length(treatment) == size(Y, 1)
         @assert all(1 .<= response_vars .<= n)
@@ -366,8 +368,10 @@ struct PropensityLPModel{T<:AbstractFloat} <: AbstractLPModel
         @assert all(0 .<= propensity_scores .<= 1)
         @assert size(ate, 1) == horizon + 1
         @assert size(ate, 2) == length(response_vars)
+        @assert estimator in (:ipw, :doubly_robust) "estimator must be :ipw or :doubly_robust"
         new{T}(Y, collect(Bool, treatment), response_vars, covariates, horizon, propensity_scores,
-               ipw_weights, B, residuals, vcov, ate, ate_se, config, T_eff, cov_estimator, varnames)
+               ipw_weights, B, residuals, vcov, ate, ate_se, config, T_eff, cov_estimator, varnames,
+               estimator)
     end
 end
 

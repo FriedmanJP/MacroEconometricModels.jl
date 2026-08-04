@@ -446,12 +446,18 @@ function structural_lp(Y::AbstractMatrix{T}, horizon::Int;
     @assert size(eps, 1) == size(Y_eff, 1) "Dimension mismatch between shocks and effective Y"
 
     response_vars_aug = collect(2:(n+1))
+    # Name the augmented [ε_j Y] columns so forecast/report can map back to the
+    # original data space (#531): col 1 = structural shock, cols 2:(n+1) = originals.
+    orig_varnames = var_model.varnames
     lp_models_raw = Vector{Any}(undef, n)
     for shock in 1:n
         Y_aug = hcat(eps[:, shock], Y_eff)
+        shock_label = isnothing(shock_names) ? "ε$shock" : shock_names[shock]
+        aug_varnames = vcat([shock_label], orig_varnames)
         lp_models_raw[shock] = estimate_lp(Y_aug, 1, horizon; lags=lags,
                                             response_vars=response_vars_aug,
-                                            cov_type=cov_type, conf_level=conf_level)
+                                            cov_type=cov_type, conf_level=conf_level,
+                                            varnames=aug_varnames)
     end
     # Determine element type from first model (may differ from T due to promotions)
     ET = eltype(lp_models_raw[1].Y)

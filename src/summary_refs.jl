@@ -722,10 +722,10 @@ const _REFERENCES = Dict{Symbol, _RefEntry}(
         journal="Journal of Business \\& Economic Statistics", volume="34", issue="4", pages="574--589",
         doi="10.1080/07350015.2015.1086655", isbn="", publisher="", entry_type=:article),
     :mccracken_ng2020 => (key=:mccracken_ng2020,
-        authors="McCracken, Michael W. and Ng, Serena", year=2020,
+        authors="McCracken, Michael W. and Ng, Serena", year=2021,
         title="FRED-QD: A Quarterly Database for Macroeconomic Research",
-        journal="Federal Reserve Bank of St. Louis Working Paper", volume="2020-005", issue="", pages="",
-        doi="10.20955/wp.2020.005", isbn="", publisher="", entry_type=:article),
+        journal="Federal Reserve Bank of St. Louis Review", volume="103", issue="1", pages="1--44",
+        doi="10.20955/r.103.1-44", isbn="", publisher="", entry_type=:article),
     :feenstra_etal2015 => (key=:feenstra_etal2015,
         authors="Feenstra, Robert C. and Inklaar, Robert and Timmer, Marcel P.", year=2015,
         title="The Next Generation of the Penn World Table",
@@ -892,6 +892,13 @@ const _REFERENCES = Dict{Symbol, _RefEntry}(
         title="Difference-in-Differences with Multiple Time Periods",
         journal="Journal of Econometrics", volume="225", issue="2", pages="200--230",
         doi="10.1016/j.jeconom.2020.12.001", isbn="", publisher="", entry_type=:article),
+    # Acemoglu–Naidu–Restrepo–Robinson (2019) Democracy and income (DDCG panel; #586)
+    :acemoglu_naidu_restrepo_robinson2019 => (key=:acemoglu_naidu_restrepo_robinson2019,
+        authors="Acemoglu, Daron and Naidu, Suresh and Restrepo, Pascual and Robinson, James A.",
+        year=2019,
+        title="Democracy Does Cause Growth",
+        journal="Journal of Political Economy", volume="127", issue="1", pages="47--100",
+        doi="10.1086/700936", isbn="", publisher="", entry_type=:article),
     :goodman_bacon2021 => (key=:goodman_bacon2021,
         authors="Goodman-Bacon, Andrew", year=2021,
         title="Difference-in-Differences with Variation in Treatment Timing",
@@ -2678,9 +2685,11 @@ refs(io::IO, ::ForecastEncompassingResult; kw...) = refs(io, _TYPE_REFS[:Forecas
 refs(io::IO, ::ForecastCombination; kw...) = refs(io, _TYPE_REFS[:ForecastCombination]; kw...)
 
 # --- Convenience: stdout fallback ---
+# One-arg form prints to stdout (matching report()), so bare `refs(m)` in the
+# REPL or Documenter @example renders the bibliography rather than an escaped
+# String literal (#530). Use `sprint(refs, x)` when a String is needed.
 function refs(x; kw...)
-    io = IOBuffer()
-    refs(io, x; kw...)
-    String(take!(io))
+    refs(stdout, x; kw...)
+    nothing
 end
 

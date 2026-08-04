@@ -27,8 +27,10 @@ without re-running the (expensive) double-sup null loop. Only the analytic
 (`:asymptotic`) null is cached — the wild bootstrap depends on the sample's own
 residuals and is recomputed every call.
 """
+# Cache: (sup_stats, bsadf_matrix, adf0_matrix) so SADF date-stamping can use
+# the matching fixed-start null sequence (issue #578).
 const _BUBBLE_CV_CACHE = Dict{Tuple{Symbol,Int,Int,Int,Symbol,Int,Int},
-                              Tuple{Vector{Float64},Matrix{Float64}}}()
+                              Tuple{Vector{Float64},Matrix{Float64},Matrix{Float64}}}()
 const _BUBBLE_CV_CACHE_CAP = 64
 
 # -----------------------------------------------------------------------------
@@ -56,7 +58,9 @@ const _BUBBLE_CV_CACHE_CAP = 64
     end
     XtX = X'X
     (isfinite(cond(XtX)) && cond(XtX) < 1e12) || return T(-Inf)
-    XtXi = robust_inv(XtX)
+    # silent=true: the cond guard above already rejects near-singular designs;
+    # avoid leaking robust_inv @warn into Documenter / bubble MC output.
+    XtXi = robust_inv(XtX; silent=true)
     B = XtXi * (X'Y)
     resid = Y - X * B
     dof = n - k
@@ -102,8 +106,8 @@ end
 # draw so results are thread-order independent).
 #
 # `kind` selects which sup the returned `sup_stats` records (`:gsadf` → row-max
-# of BSADF, `:sadf` → max of the fixed-start ADF0 sequence); the BSADF matrix is
-# always returned so the per-r2 CV sequence uses the correct backward-sup null.
+# of BSADF, `:sadf` → max of the fixed-start ADF0 sequence). Both the BSADF and
+# ADF0 matrices are returned so date-stamping uses the matching null (issue #578).
 # -----------------------------------------------------------------------------
 function _simulate_bubble_null(kind::Symbol, Tn::Int, swindow0::Int, p::Int,
                                mc_reps::Int, seed::Int;
@@ -112,6 +116,7 @@ function _simulate_bubble_null(kind::Symbol, Tn::Int, swindow0::Int, p::Int,
     m = Tn - swindow0 + 1
     sup_stats = Vector{Float64}(undef, mc_reps)
     bsadf_mat = Matrix{Float64}(undef, mc_reps, m)
+    adf0_mat  = Matrix{Float64}(undef, mc_reps, m)
 
     # Wild-bootstrap innovations (Phillips & Shi 2020): resample the sample's own
     # driftless first-difference residuals with N(0,1) multipliers to preserve
@@ -145,9 +150,10 @@ function _simulate_bubble_null(kind::Symbol, Tn::Int, swindow0::Int, p::Int,
         end
         bs, a0 = _bsadf_sequences(ystar, swindow0, p)
         @inbounds bsadf_mat[b, :] .= bs
+        @inbounds adf0_mat[b, :]  .= a0
         sup_stats[b] = kind == :sadf ? maximum(a0) : maximum(bs)
     end
-    return sup_stats, bsadf_mat
+    return sup_stats, bsadf_mat, adf0_mat
 end
 
 # Fetch (from cache when analytic) the simulated null arrays.
@@ -229,17 +235,21 @@ function _bubble_core(y::AbstractVector{T}, kind::Symbol;
 
     # Null simulation → sup CVs, per-r2 CV sequence, p-value.
     y64 = Vector{Float64}(collect(float.(y)))
-    sup_stats, bsadf_mat = _bubble_null_arrays(kind, Tn, swindow0, adflag,
-                                               mc_reps, seed, cv, y64)
+    sup_stats, bsadf_mat, adf0_mat = _bubble_null_arrays(kind, Tn, swindow0, adflag,
+                                                         mc_reps, seed, cv, y64)
     cvals = Dict{Int,T}(
         10 => T(quantile(sup_stats, 0.90)),
         5  => T(quantile(sup_stats, 0.95)),
         1  => T(quantile(sup_stats, 0.99)),
     )
+    # Date-stamp against the matching null sequence: SADF stamps adf0 against
+    # its own per-r2 quantiles (PWY 2011); GSADF stamps BSADF against BSADF CVs
+    # (issue #578).
     m = length(r2_index)
+    stamp_mat = kind == :sadf ? adf0_mat : bsadf_mat
     cv_seq = Vector{T}(undef, m)
     @inbounds for j in 1:m
-        cv_seq[j] = T(quantile(view(bsadf_mat, :, j), 0.95))
+        cv_seq[j] = T(quantile(view(stamp_mat, :, j), 0.95))
     end
     pval = T(count(>=(Float64(stat)), sup_stats) / mc_reps)
 

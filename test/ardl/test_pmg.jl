@@ -185,7 +185,7 @@ end
         s = String(take!(io))
         @test occursin("Long-run coefficients", s)
         @test occursin("Error-correction speed", s)
-        r = refs(pmg)
+        r = sprint(io -> refs(io, pmg))
         @test occursin("Pooled Mean Group", r)
         @test occursin("Blackburne", r)
     end

@@ -222,8 +222,8 @@ where:
 
 ``Z_t`` shares the ADF null distribution, so the same MacKinnon critical values apply. Its advantage is that no lag order has to be chosen, although bandwidth selection for the long-run variance plays the analogous role.
 
-!!! warning "The ``Z_t`` correction term is not scale-invariant"
-    The implemented second term omits the ``T \cdot \text{se}(\hat\rho)/s`` factor above, which leaves ``Z_t`` dependent on the units of ``y``. Multiplying a series by 100 shifts the reported statistic by roughly an order of magnitude (a random walk that gives ``Z_t = -1.71`` in its own units gives ``-21.4`` after rescaling), so the test over-rejects badly on series measured in large units. Rescale to logs or percentages before using it, and treat `adf_test` or `dfgls_test` as the authority when they disagree.
+!!! note "Technical Note"
+    The correction term uses the identity ``\text{se}(\hat\rho)/s = 1/\sqrt{S_{ll}}``, where ``S_{ll}`` is the sum of squares of ``y_{t-1}`` after the deterministic terms are projected out of it. Formed that way the correction is invariant to the units of ``y`` — multiplying a series by 100 leaves ``Z_t`` unchanged to machine precision — and stays ``O(1)`` in ``T`` instead of vanishing asymptotically.
 
 ```@example test_ur
 # The unemployment rate, measured in percent
@@ -231,7 +231,7 @@ result = pp_test(unrate; regression=:constant)
 report(result)
 ```
 
-The Andrews rule picks a bandwidth of 2, and ``Z_t = -3.546`` clears the 1% critical value of ``-3.436``, giving ``p = 0.0069``. That is within 0.02 of the ADF statistic for the same series, which is the reassuring case: the parametric lag augmentation and the non-parametric correction agree, so the verdict does not hinge on how serial correlation was handled.
+The Andrews rule picks a bandwidth of 2, and ``Z_t = -3.596`` clears the 1% critical value of ``-3.436``, giving ``p = 0.0058``. That is within 0.04 of the ADF statistic for the same series, which is the reassuring case: the parametric lag augmentation and the non-parametric correction agree, so the verdict does not hinge on how serial correlation was handled.
 
 ### Options
 
@@ -392,7 +392,7 @@ labels = ["INDPRO", "CPIAUCSL", "FEDFUNDS", "UNRATE", "M2SL"]
  for (v, r) in zip(labels, test_all_variables(Y; test=:adf))]
 ```
 
-Industrial production (``p = 0.692``), the price level (``p = 1.000``), and the money stock (``p = 1.000``) all fail to reject and enter a VAR in differences; the funds rate (``p = 0.026``) and the unemployment rate (``p = 0.007``) reject and can stay in levels. The money stock's p-value of 1.000 comes from a *positive* ADF statistic of 4.115, the signature of an explosively trending series that needs a trend term or a log transform before any of these tests mean much.
+Industrial production (``p = 0.692``), the price level (``p = 1.000``), and the money stock (``p = 1.000``) all fail to reject and enter a VAR in differences; the funds rate (``p = 0.026``) and the unemployment rate (``p = 0.007``) reject and can stay in levels. The money stock's p-value of 1.000 comes from a *positive* ADF statistic of 3.169, the signature of an explosively trending series that needs a trend term or a log transform before any of these tests mean much.
 
 ### Options
 

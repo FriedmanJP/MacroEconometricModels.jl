@@ -529,6 +529,18 @@ Uses the joint event-study covariance `result.att_vcov` when available;
 otherwise falls back to a diagonal covariance built from the per-period
 standard errors (with a warning).
 
+!!! note "base_period=:varying excludes the adjacent-period placebo"
+    Rambachan-Roth define `betahat = [beta_pre; beta_post]` relative to a **single
+    normalized** reference period, and the ``\\Delta`` sets and FLCI construction are
+    written against that normalization. Under `base_period=:universal` the `e = -1` cell is
+    a structural zero and is correctly dropped. Under `:varying` it is an *estimated*
+    adjacent-period placebo (each cell carries its own base period), so there is no common
+    normalization and the RR transform does not apply to it unchanged — it is excluded here
+    and a warning is issued. [`pretrend_test`](@ref) *does* include it, so the two report
+    pre-period evidence on different coefficient sets by design. Re-run with
+    `base_period=:universal` if you want the sensitivity analysis and the pre-trend test to
+    use the same pre-periods. (#599)
+
 # Example
 ```julia
 did = estimate_did(pd, :y, :treat)
@@ -539,6 +551,15 @@ h.breakdown_value  # smallest Mbar that overturns significance
 function honest_did(result::DIDResult{T}; restriction::Symbol=:rm,
                     Mbar::Real=1.0, M::Real=0.0,
                     conf_level::Real=0.95) where {T<:AbstractFloat}
+    if result.base_period == :varying &&
+       any(e -> e == result.reference_period, result.event_times)
+        @warn "base_period=:varying estimates ATT at e=$(result.reference_period) (the " *
+              "adjacent-period placebo), but honest_did excludes it: Rambachan-Roth " *
+              "normalize all pre-period coefficients against ONE reference period, which " *
+              "a varying base does not provide. pretrend_test does include it, so the two " *
+              "use different pre-periods. Use base_period=:universal for a common " *
+              "normalization." maxlog = 1
+    end
     _honest_did_eventstudy(result.att, result.se, result.event_times,
                            result.reference_period, result.att_vcov;
                            restriction=restriction, Mbar=T(Mbar), M=T(M),

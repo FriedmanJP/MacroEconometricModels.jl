@@ -208,9 +208,10 @@ function _estimate_did_multiplegt(pd::PanelData{T}, outcome_col::Int, treat_col:
     all_times = sort(unique(pd.time_id))
 
     # Identify cohorts and control groups
-    cohorts = sort(unique([t for (_, t) in timing if t > 0]))
+    cohorts = _cohort_set(timing)
+    _require_cohorts(cohorts, "de Chaisemartin-D'Haultfoeuille")
     never_treated = [g for (g, t) in timing if t == 0]
-    n_treated = length([g for (g, t) in timing if t > 0])
+    n_treated = length([g for (g, t) in timing if t != 0])
     n_control = length(never_treated)
 
     if control_group == :never_treated && n_control == 0
@@ -264,7 +265,7 @@ function _estimate_did_multiplegt(pd::PanelData{T}, outcome_col::Int, treat_col:
         end
 
         # Identify bootstrap cohorts and controls
-        boot_cohorts = sort(unique([t for (_, t) in boot_timing if t > 0]))
+        boot_cohorts = _cohort_set(boot_timing)
         boot_never = [g for (g, t) in boot_timing if t == 0]
 
         # Skip replications where no cohorts or no controls exist

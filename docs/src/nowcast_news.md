@@ -115,7 +115,7 @@ news = nowcast_news(Y, X_old, dfm, T_obs; target_var=N)
 report(news)
 ```
 
-Publishing the three monthly indicators lifts the current-quarter estimate from 0.0368 to 0.0375. The CPI release accounts for 0.0006 of the 0.0007 revision and industrial production for a further 0.0003, while unemployment came in on the strong side of the model's expectation and subtracts 0.0002. The three impacts sum to the revision to within ``6 \times 10^{-18}``: with the DFM parameters held fixed across vintages, the joint news system reproduces the smoother's own answer exactly, so `impact_reestimation` is numerical noise rather than an unexplained residual.
+Publishing the three monthly indicators lifts the current-quarter estimate from 0.0368 to 0.0375. The CPI release accounts for 0.0006 of the 0.0007 revision and industrial production for a further 0.0003, while unemployment came in on the strong side of the model's expectation and subtracts 0.0002. No already-published value moved between these two vintages, so `impact_revision` is zero and the three impacts sum to the revision to within ``6 \times 10^{-18}``: with the DFM parameters held fixed across vintages, the joint news system reproduces the smoother's own answer exactly, so `impact_reestimation` is numerical noise rather than an unexplained residual.
 
 The **total revision** splits three ways in principle:
 
@@ -126,8 +126,19 @@ The **total revision** splits three ways in principle:
   + \underbrace{\Delta_{\text{re-estimation}}}_{\texttt{impact\_reestimation}}
 ```
 
-!!! warning "`impact_revision` is always zero"
-    The current implementation identifies news only at positions that were missing in the old vintage. A value that was already published and has since been *revised* is not detected as a release, so its effect on the nowcast lands in `impact_reestimation` rather than in `impact_revision`, which is returned as zero unconditionally. Comparing vintages that contain genuine back-revisions therefore gives a residual that is real, not numerical.
+!!! note "Revisions are not news"
+    The Bańbura-Modugno weights are derived for cells that were *missing* in the old vintage, so they cannot price a cell that was already published and merely changed value. Such a cell is a **revision**, and `impact_revision` is the difference between the nowcast under the old vintage and the nowcast under the old vintage with the revised values patched in, with the DFM parameters held fixed. The news step then runs from that patched baseline, so the news weights only ever see genuinely new cells. A cell counts as revised when it moves by more than ``10^{-9}`` relative to its own magnitude, which keeps standardization round-trip noise from turning every observed cell into a revision.
+
+A vintage that revises an already-published figure and releases nothing new isolates the term:
+
+```@example nc_news
+X_revised = copy(Y)
+X_revised[end-1, 1] += 0.01     # industrial production revised up, nothing new published
+news_rev = nowcast_news(X_revised, Y, dfm, T_obs; target_var=N)
+report(news_rev)
+```
+
+The upward revision to industrial production in the second-to-last month pulls the current-quarter estimate down from 0.0375 to 0.0344, and the whole ``-0.0031`` is booked as revision impact: there are no releases, so `impact_news` is empty, and `impact_reestimation` is exactly zero rather than a residual absorbing the move. When a vintage carries both revisions and releases, the revisions are patched into the baseline first and the news impacts are measured against that baseline, so the three terms still sum to the total revision.
 
 ### Grouping Releases
 
@@ -162,8 +173,8 @@ The third positional argument after the model, `target_period`, selects the peri
 | `old_nowcast` | `T` | Nowcast implied by the old vintage, in original units |
 | `new_nowcast` | `T` | Nowcast implied by the new vintage |
 | `impact_news` | `Vector{T}` | Impact of each new release, one entry per element of ``\mathcal{J}`` |
-| `impact_revision` | `T` | Impact of data revisions; always zero in the current implementation |
-| `impact_reestimation` | `T` | Residual: total revision minus the news impacts |
+| `impact_revision` | `T` | Impact of cells revised between the vintages, at fixed parameters; zero when none moved |
+| `impact_reestimation` | `T` | Residual: total revision minus the news and revision impacts |
 | `group_impacts` | `Vector{T}` | News aggregated by group, or per variable when `groups` is omitted |
 | `group_names` | `Vector{String}` | Labels matching `group_impacts` |
 | `variable_names` | `Vector{String}` | Release identifiers, formatted `"Var{j}_t{t}"` |
@@ -242,7 +253,7 @@ report(news4)
 
 1. **The vintages must be the same size.** `X_new` and `X_old` are compared element by element, and a size mismatch throws. Build the old vintage by copying the new one and blanking entries, never by truncating rows.
 
-2. **Only positions that were `NaN` and became observed count as news.** A position observed in both vintages contributes nothing to `impact_news` no matter how much its value changed; a position missing in both is ignored. This is what makes back-revisions invisible to the decomposition — see the warning above.
+2. **Only positions that were `NaN` and became observed count as news.** A position observed in both vintages contributes to `impact_revision`, never to `impact_news`, however much its value changed; a position missing in both is ignored. Reading a back-revision off `impact_news` therefore finds nothing — read `impact_revision`.
 
 3. **Parameters are held fixed across vintages.** The function re-runs the Kalman smoother on both vintages with the same estimated DFM; it does not re-estimate. That is the correct experiment for attributing a revision to data, but it means a nowcast that changed because the model was re-fitted is not decomposed by this function.
 

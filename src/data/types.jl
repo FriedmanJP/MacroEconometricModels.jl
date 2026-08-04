@@ -16,11 +16,21 @@ TimeSeriesData, PanelData, CrossSectionData with constructors and accessors.
 """
     Frequency
 
-Enumeration of time series data frequencies.
+Data-frequency enum for [`TimeSeriesData`](@ref) / panel containers.
 
-Values: `Daily`, `Monthly`, `Quarterly`, `Yearly`, `Mixed`, `Other`.
+# Values
+- `Daily`, `Monthly`, `Quarterly`, `Yearly` — regular calendar frequencies
+- `Mixed` — mixed-frequency (e.g. monthly + quarterly in one container)
+- `Other` — unspecified / irregular
 """
-@enum Frequency Daily Monthly Quarterly Yearly Mixed Other
+@enum Frequency begin
+    Daily
+    Monthly
+    Quarterly
+    Yearly
+    Mixed
+    Other
+end
 
 # =============================================================================
 # TimeSeriesData
@@ -413,7 +423,7 @@ function Base.getindex(d::TimeSeriesData{T}, ::Colon, col::Int) where {T}
     d.data[:, col]
 end
 
-"""Row-slice by date string: `d["2020Q1", :]` returns a NamedTuple of values."""
+"""Row-slice by date string: `d["2020Q1", :]` returns a `Vector{T}` of values across variables."""
 function Base.getindex(d::TimeSeriesData{T}, date::String, ::Colon) where {T}
     isempty(d.dates) && throw(ArgumentError("No dates set. Use `set_dates!` first."))
     idx = findfirst(==(date), d.dates)
@@ -421,7 +431,11 @@ function Base.getindex(d::TimeSeriesData{T}, date::String, ::Colon) where {T}
     d.data[idx, :]
 end
 
-"""Row-slice by date range: `d["2020Q1":"2020Q4", :]` returns a sub-TimeSeriesData."""
+"""
+Row-slice by a vector of date strings: `d[["2020Q1", "2020Q2", "2020Q3", "2020Q4"], :]`
+returns a sub-`TimeSeriesData`. (Julia does not define `(:)(::String, ::String)`, so the
+colon-range syntax `d["2020Q1":"2020Q4", :]` is not supported.)
+"""
 function Base.getindex(d::TimeSeriesData{T}, dates_range::AbstractVector{String}, ::Colon) where {T}
     isempty(d.dates) && throw(ArgumentError("No dates set. Use `set_dates!` first."))
     idxs = Int[]

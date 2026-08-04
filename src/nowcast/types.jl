@@ -74,19 +74,32 @@ end
 
 Large Bayesian VAR nowcasting result (Cimadomo et al. 2022).
 
-Uses GLP-style normal-inverse-Wishart prior with hyperparameter optimization
-via marginal likelihood maximization.
+Two priors are available, selected by `prior`:
+
+- `:conjugate` (default) — the GLP Normal-Inverse-Wishart dummy-observation prior. `Σ` is
+  integrated out; the posterior mode is one stacked least-squares solve.
+- `:litterman` — Litterman's (1986) non-conjugate prior with `Σ` fixed and diagonal. The
+  equations separate, which is what makes `theta_cross` possible: under the conjugate prior
+  `Var(vec(B)) = Σ ⊗ (X_d'X_d)^{-1}`, so the own-versus-cross prior variance ratio for a
+  given regressor is `Σ_mm/Σ_jj` whatever the dummy rows are, and no cross-variable
+  tightness parameter can exist. (#602)
 
 # Fields
 - `X_sm::Matrix{T}` — smoothed data (NaN filled)
 - `beta::Matrix{T}` — posterior mode VAR coefficients
-- `sigma::Matrix{T}` — posterior mode error covariance
+- `sigma::Matrix{T}` — error covariance (posterior mode under `:conjugate`; the fixed
+  `diag(σ̂²)` under `:litterman`)
 - `lambda::T` — overall shrinkage
-- `theta::T` — cross-variable shrinkage
+- `theta::T` — Minnesota lag-decay exponent (Litterman `d` / GLP `α`)
 - `miu::T` — sum-of-coefficients prior weight
 - `alpha::T` — co-persistence prior weight
+- `theta_cross::T` — cross-variable relative tightness; `< 1` shrinks other variables' lags
+  harder than own lags. `NaN` under `:conjugate`, where it is not a free parameter.
+- `prior::Symbol` — `:conjugate` or `:litterman`
 - `lags::Int` — number of lags
-- `loglik::T` — marginal log-likelihood
+- `loglik::T` — log marginal likelihood **of the prior actually used**; the conjugate NIW
+  and the fixed-`Σ` Litterman criteria are different objectives and are NOT comparable
+  across `prior` settings
 - `nM::Int` — number of monthly variables
 - `nQ::Int` — number of quarterly variables
 - `data::Matrix{T}` — original data with NaN
@@ -105,7 +118,17 @@ struct NowcastBVAR{T<:AbstractFloat} <: AbstractNowcastModel
     nQ::Int
     data::Matrix{T}
     converged::Bool   # GLP hyperparameter optimizer reached an interior optimum (not the box edge)
+    theta_cross::T
+    prior::Symbol
 end
+
+# Back-compat outer constructor: the pre-#602 13-argument positional form defaults to the
+# conjugate prior, for which `theta_cross` is not a parameter (hence NaN, not 1.0 — there is
+# no cross-variable knob to report a value for).
+NowcastBVAR{T}(X_sm, beta, sigma, lambda, theta, miu, alpha, lags, loglik,
+               nM, nQ, data, converged) where {T<:AbstractFloat} =
+    NowcastBVAR{T}(X_sm, beta, sigma, lambda, theta, miu, alpha, lags, loglik,
+                   nM, nQ, data, converged, T(NaN), :conjugate)
 
 # =============================================================================
 # Bridge Equation Nowcasting Result

@@ -23,9 +23,9 @@ converters are the frozen helpers.jl converters plus lane-local `_`-prefixed hel
 
 Plot a multi-model forecast evaluation.
 
-- `view=:metrics` (default) — a grouped bar comparing the models within each accuracy
-  metric (one bar group per metric, one bar per model). Pass `metric="RMSE"` to draw a
-  single ranked metric instead.
+- `view=:metrics` (default) — faceted per-metric ranked bars (independent y-axes), so
+  percentage metrics like MAPE are not collapsed by level metrics like RMSE (#592).
+  Pass `metric="RMSE"` to draw a single ranked metric instead.
 - `view=:theil` — a stacked bar of each model's Theil MSE decomposition (bias / variance
   / covariance proportions, summing to 1).
 
@@ -35,11 +35,14 @@ function plot_result(ev::ForecastEvaluation{T};
                      view::Symbol=:metrics, metric::Union{String,Nothing}=nothing,
                      title::String="", save_path::Union{String,Nothing}=nothing) where {T}
     M = length(ev.models)
+    # ME is a signed bias — its best value is the one closest to zero, not the smallest.
+    # Every other metric in `_FCEVAL_METRICS` is lower-is-better (#592).
+    _rank_key(mname, v) = mname == "ME" ? abs.(v) : v
     if view === :metrics && metric !== nothing
-        # Single ranked metric (best/smallest first).
+        # Single ranked metric (best first).
         k = findfirst(==(metric), ev.metrics)
         k === nothing && throw(ArgumentError("metric must be one of $(ev.metrics); got \"$metric\""))
-        ord = sortperm(ev.values[:, k])
+        ord = sortperm(_rank_key(metric, ev.values[:, k]))
         id = _next_plot_id("fceval_rank")
         rows = Vector{Pair{String,String}}[]
         for j in ord
@@ -53,21 +56,23 @@ function plot_result(ev::ForecastEvaluation{T};
         save_path !== nothing && save_plot(p, save_path)
         return p
     elseif view === :metrics
-        # Grouped bar: one group per metric, one bar per model.
-        id = _next_plot_id("fceval_metrics")
-        rows = Vector{Pair{String,String}}[]
+        # Facet per metric with independent axes (#592) — avoids incommensurable metrics
+        # (e.g. MAPE vs RMSE) collapsing on a single linear scale.
+        panels = _PanelSpec[]
         for (mi, mname) in enumerate(ev.metrics)
-            row = Pair{String,String}["x" => _json(mname)]
-            for j in 1:M
-                push!(row, "s$j" => _json(ev.values[j, mi]))
+            ord = sortperm(_rank_key(mname, ev.values[:, mi]))
+            id = _next_plot_id("fceval_m$mi")
+            rows = Vector{Pair{String,String}}[]
+            for j in ord
+                push!(rows, ["x" => _json(ev.models[j]), "s1" => _json(ev.values[j, mi])])
             end
-            push!(rows, row)
+            data = _json_array_of_objects(rows)
+            s = _series_json([mname], [_PLOT_COLORS[mod1(mi, length(_PLOT_COLORS))]]; keys=["s1"])
+            js = _render_bar_js(id, data, s; mode="stacked", xlabel="Model", ylabel=mname)
+            push!(panels, _PanelSpec(id, mname, js))
         end
-        data = _json_array_of_objects(rows)
-        s = _series_json(ev.models, _colors_for(ev.models); keys=["s$j" for j in 1:M])
-        js = _render_bar_js(id, data, s; mode="grouped", xlabel="Metric", ylabel="Value")
         isempty(title) && (title = "Forecast Accuracy Metrics (n=$(ev.n))")
-        p = _make_plot([_PanelSpec(id, title, js)]; title=title)
+        p = _make_plot(panels; title=title)
         save_path !== nothing && save_plot(p, save_path)
         return p
     elseif view === :theil

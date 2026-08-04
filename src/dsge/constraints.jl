@@ -144,7 +144,14 @@ end
 """
     _select_solver(constraints, solver_override) -> Symbol
 
-Auto-detect solver: NonlinearConstraints → :ipopt, otherwise → :nonlinearsolve.
+Auto-detect solver:
+- NonlinearConstraints → :ipopt (if JuMP loaded) else :nlopt
+- Box bounds only → :nonlinearsolve (unconstrained try, then semismooth
+  projected Newton for PF / Optim Fminbox for SS). Ipopt is deliberately NOT
+  auto-selected for bounds-only problems: the JuMP formulation holds every model
+  equation as a hard equality, so it is infeasible whenever a bound genuinely
+  binds — the binding case is a complementarity problem (#556; `:path` is the
+  explicit MCP route).
 User override always wins. PATH still reachable via `solver=:path`.
 """
 function _select_solver(constraints::Vector, solver_override::Union{Nothing,Symbol})

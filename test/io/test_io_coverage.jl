@@ -105,9 +105,9 @@ end
     @test mg isa MacroEconometricModels.IOMetaData
     @test !isempty(mg.files)                                # GLORIA_URLS is populated
     @test all(!occursin('?', fn) for (_, fn) in mg.files)   # query stripped -> Windows-safe
-    # EORA26 (history + error)
-    me = download_eora26(dir; email="you@example.com", password="pw")
-    @test !isempty(me.history)
+    # EORA26: not implemented — clear error (not a silent empty success); accepts verify (#518)
+    @test_throws ErrorException download_eora26(dir; email="you@example.com", password="pw")
+    @test_throws ErrorException download_eora26(dir; email="you@example.com", password="pw", verify=false)
     @test_throws ArgumentError download_eora26(dir; email="", password="")
 
     # _match_year occursin branch on range keys, plus download_io dispatch routes
@@ -117,5 +117,5 @@ end
     @test download_io(:wiod; storage_folder=dir, fetch=mf, fetch_text=mt) isa MacroEconometricModels.IOMetaData
     @test download_io(:exiobase3; storage_folder=dir, fetch=mf, fetch_text=mt2) isa MacroEconometricModels.IOMetaData
     @test download_io(:gloria; storage_folder=dir, fetch=mf) isa MacroEconometricModels.IOMetaData
-    @test download_io(:eora26; storage_folder=dir, email="a@b.c", password="p") isa MacroEconometricModels.IOMetaData
+    @test_throws ErrorException download_io(:eora26; storage_folder=dir, email="a@b.c", password="p", verify=false)
 end

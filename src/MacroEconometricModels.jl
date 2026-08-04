@@ -1371,7 +1371,7 @@ export estimate_midas, MidasModel, MidasForecast, midas_weights
 # Exports — ARDL & Bounds Test (EV-08, #416)
 # =============================================================================
 
-export estimate_ardl, bounds_test, long_run, ARDLModel, ARDLBoundsTest
+export estimate_ardl, bounds_test, long_run, ecm_form, ARDLModel, ARDLLongRun, ARDLBoundsTest
 # NARDL — nonlinear (asymmetric) ARDL (EV-09, #417)
 export estimate_nardl, symmetry_test, dynamic_multipliers,
        NARDLModel, NARDLSymmetryTest, NARDLMultipliers

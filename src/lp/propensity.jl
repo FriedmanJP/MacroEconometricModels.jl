@@ -172,7 +172,7 @@ function estimate_propensity_lp(Y::AbstractMatrix{T}, treatment::AbstractVector{
 
     PropensityLPModel{T}(Matrix{T}(Y), treatment, response_vars, Matrix{T}(covariates),
                          horizon, propensity, ipw_weights, B, residuals_store, vcov_vec,
-                         ate, ate_se, config, T_eff, cov_estimator, varnames)
+                         ate, ate_se, config, T_eff, cov_estimator, varnames, :ipw)
 end
 
 estimate_propensity_lp(Y::AbstractMatrix, treatment::AbstractVector, covariates::AbstractMatrix,
@@ -292,7 +292,7 @@ function doubly_robust_lp(Y::AbstractMatrix{T}, treatment::AbstractVector{Bool},
 
     PropensityLPModel{T}(Matrix{T}(Y), treatment, response_vars, Matrix{T}(covariates),
                          horizon, propensity, ipw_weights, B, residuals_store, vcov_vec,
-                         ate, ate_se, config, T_eff, cov_estimator, varnames)
+                         ate, ate_se, config, T_eff, cov_estimator, varnames, :doubly_robust)
 end
 
 """

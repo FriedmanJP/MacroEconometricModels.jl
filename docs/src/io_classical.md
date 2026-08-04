@@ -337,26 +337,31 @@ Agricultural gross output *falls* by 10 units between the two tables even though
 
 ### The Multiplicative Form
 
-The multiplicative variant reports the same story as growth factors that multiply to the observed output ratio:
+The multiplicative variant reports the same story as growth factors that multiply to the observed output ratio. It applies the Dietzenbacher & Los two-polar average in geometric rather than arithmetic form: each factor is the square root of the product of its two polar ratio decompositions.
 
 ```math
-\frac{x^1_i}{x^0_i} = \underbrace{\frac{(L^1 y^0)_i}{x^0_i}}_{\text{technology factor}} \cdot
-\underbrace{\frac{x^1_i}{(L^1 y^0)_i}}_{\text{final-demand factor}}
+\frac{x^1_i}{x^0_i}
+= \underbrace{\sqrt{\frac{(L^1 y^0)_i}{x^0_i} \cdot \frac{x^1_i}{(L^0 y^1)_i}}}_{\text{technology factor}}
+\cdot
+\underbrace{\sqrt{\frac{(L^0 y^1)_i}{x^0_i} \cdot \frac{x^1_i}{(L^1 y^0)_i}}}_{\text{final-demand factor}}
 ```
+
+where:
+- ``x^0 = L^0 y^0`` and ``x^1 = L^1 y^1`` are gross output in the base and comparison periods
+- the first ratio under each root is the polar that holds the *other* determinant at its period-0 value, the second the polar that holds it at its period-1 value
+- the four inner ratios cancel to ``x^1_i / x^0_i`` under the product, so the reported `residual` is zero by construction rather than by approximation
 
 ```@example io_classical
 sda(io, io_2010; method=:multiplicative)
 ```
 
-Agriculture's factors are 0.825 and 1.200, whose product is the observed 0.99 output ratio: the new technology alone would have cut agricultural output by 17.5 percent, and the 20 percent demand expansion almost exactly offset it. Unlike the additive form, this variant evaluates technology first and demand second rather than averaging the two polar orderings, so the two factors are not symmetric in the two periods.
+Agriculture's factors are 0.825 and 1.200, whose product is the observed 0.99 output ratio: the new technology alone would have cut agricultural output by 17.5 percent, and the 20 percent demand expansion almost exactly offset it. The geometric mean makes this split symmetric in the two periods, exactly as the arithmetic mean does in the additive form — neither determinant is privileged by being evaluated first.
 
 ### Keyword Arguments
 
 | Keyword | Type | Default | Description |
 |---------|------|---------|-------------|
-| `method` | `Symbol` | `:additive` | `:additive` for the two-polar difference form, `:multiplicative` for the ratio form |
-| `factors` | `Symbol` | `:LY` | Factor split; only the two-factor ``L``/``y`` decomposition is implemented |
-| `average` | `Symbol` | `:two_polar` | Averaging scheme; only the two-polar average is implemented |
+| `method` | `Symbol` | `:additive` | `:additive` for the two-polar difference form, `:multiplicative` for the two-polar geometric form |
 
 ### Return Values
 
@@ -472,7 +477,7 @@ The four diagnostics agree on the economics but rank the sectors differently, wh
 
 6. **Forward linkages change meaning with the `forward` keyword.** The default `:ghosh` normalizes sales by the supplying sector's own output; `:leontief` gives the Chenery & Watanabe (1958) row sums of ``L``. The two indices rank sectors differently — here agriculture's sensitivity index falls from 1.208 to 1.067 — so never compare a Ghosh-based index against a Leontief-based one.
 
-7. **`factors` and `average` are reserved, not dispatched.** `sda` accepts both keywords for forward compatibility but implements only the two-factor ``L``/``y`` split with the two-polar average. Any other value is accepted silently and changes nothing.
+7. **`method` is the only keyword `sda` accepts.** `factors` and `average` are not keyword arguments — passing either throws `MethodError`. The two-factor ``L``/``y`` split under the two-polar average is the only decomposition implemented, so there is nothing for those keywords to select.
 
 8. **Extraction losses are not additive across sectors.** The loss from removing two sectors together is smaller than the sum of the two individual losses, because the shared indirect requirements are counted once. Compare group extractions against group extractions, never against a sum of singletons.
 

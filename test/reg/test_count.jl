@@ -177,6 +177,11 @@ end
         # delta method: SE(IRR) = IRR * SE(beta); CI formed on the log scale
         @test irr.se ≈ irr.or .* stderror(m) atol = 1e-12
         @test irr.ci_lower[2] < irr.or[2] < irr.ci_upper[2]
+        # #546: count models label the ratio table as IRR, not Odds Ratios
+        @test irr.title == "Incidence Rate Ratios"
+        @test irr.ratio_label == "IRR"
+        @test occursin("Incidence Rate", sprint(show, irr))
+        @test !occursin("Odds Ratio", sprint(show, irr))
 
         # NegBin2 has the same conditional mean, so the same AME formula applies.
         mn = estimate_nbreg(D.y_nb, D.X; varnames=VN)

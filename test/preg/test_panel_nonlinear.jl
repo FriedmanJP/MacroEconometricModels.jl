@@ -166,6 +166,55 @@ end
     @test isfinite(loglikelihood(mc))
 end
 
+@testset "#600 AGH loglik is total — no non-finite value or gradient" begin
+    FD = MacroEconometricModels.ForwardDiff
+    agh = MacroEconometricModels._re_logit_agh_loglik
+    ghnw = MacroEconometricModels._gauss_hermite_nodes_weights
+
+    rng = Random.MersenneTwister(600); N = 40; Tp = 6; nn = N * Tp
+    ids = repeat(1:N, inner=Tp); ts = repeat(1:Tp, N)
+    x1 = randn(rng, nn); alpha = repeat(randn(rng, N) .* 0.8, inner=Tp)
+    y = Float64.(rand(rng, nn) .< 1.0 ./ (1.0 .+ exp.(-(alpha .+ 0.9 .* x1))))
+    X_c = hcat(ones(nn), x1); ug = sort(unique(ids))
+    gobs = Dict(g => findall(==(g), ids) for g in ug)
+    nodes, weights = ghnw(12)
+    nll(th) = -agh(th, y, X_c, ug, gobs, nodes, weights)
+
+    # HagerZhang asserts isfinite on BOTH the trial value and its directional derivative,
+    # so a single NaN partial anywhere the line search can probe aborts the whole fit.
+    # exp(-eta) used to overflow to Inf (-> Inf/Inf = NaN in the dual) and exp(2 log sigma_u)
+    # used to overflow the prior variance.
+    for ls in (-1e4, -700.0, -340.0, -20.0, 0.0, 20.0, 340.0, 700.0, 1e4),
+        s  in (1.0, 1e2, 1e3, 1e4, 1e6)
+        th = [-0.3 * s, 0.9 * s, ls]
+        @test isfinite(nll(th))
+        @test all(isfinite, FD.gradient(nll, th))
+    end
+
+    # sigma_u -> 0 must land on the pooled logit loglik and stay FLAT. Clamping the prior
+    # variance without clamping the -log(sigma_u) normalizer breaks the cancellation against
+    # log(sighat) in the quadrature weight and manufactures an optimum at the degenerate point.
+    b0 = [-0.3, 0.9]
+    eta0 = X_c * b0
+    pooled_ll = sum(y .* eta0 .- log1p.(exp.(eta0)))
+    @test agh(vcat(b0, -40.0), y, X_c, ug, gobs, nodes, weights) ≈ pooled_ll rtol = 1e-8
+    deep = [agh(vcat(b0, ls), y, X_c, ug, gobs, nodes, weights) for ls in (-340.0, -1e3, -1e4)]
+    @test all(d -> d ≈ pooled_ll, deep)          # flat, not diverging to +Inf
+
+    # The estimator runs end-to-end on the panel that used to throw from LineSearches.
+    ddcg = load_example(:ddcg)
+    dfd = DataFrame(ddcg.data, ddcg.varnames)
+    dfd.country = ddcg.group_names[ddcg.group_id]
+    dfd.year = ddcg.time_id
+    dfd = dfd[.!isnan.(dfd.y) .& .!isnan.(dfd.dem), :]
+    dfd.lngdppc = dfd.y ./ 100
+    pd_ddcg = xtset(dfd, :country, :year)
+    m_re = estimate_xtlogit(pd_ddcg, :dem, [:lngdppc]; model=:re, tol=1e-12)
+    @test m_re.converged
+    @test isfinite(loglikelihood(m_re))
+    @test m_re.sigma_u > 0
+end
+
 @testset "estimate_xtlogit -- RE" begin
     rng = Random.MersenneTwister(9012)
     N_g = 50; T_p = 10; n = N_g * T_p
@@ -376,14 +425,15 @@ end
 
         me = marginal_effects(m)
         @test me isa MarginalEffects{Float64}
-        @test length(me.effects) == 3  # intercept + 2 vars
+        @test length(me.effects) == 2  # intercept dropped (#544); x1, x2 remain
+        @test me.varnames == ["x1", "x2"]
         @test all(me.se .> 0)
         # AME for x1 should be positive, x2 negative
-        @test me.effects[2] > 0
-        @test me.effects[3] < 0
+        @test me.effects[1] > 0
+        @test me.effects[2] < 0
         # AMEs should be smaller in magnitude than raw coefficients (attenuation by f(eta))
-        @test abs(me.effects[2]) < abs(coef(m)[2])
-        @test abs(me.effects[3]) < abs(coef(m)[3])
+        @test abs(me.effects[1]) < abs(coef(m)[2])
+        @test abs(me.effects[2]) < abs(coef(m)[3])
     end
 
     @testset "RE logit — attenuation" begin
@@ -403,12 +453,13 @@ end
 
         me = marginal_effects(m)
         @test me isa MarginalEffects{Float64}
-        @test length(me.effects) == 2  # intercept + x1
+        @test length(me.effects) == 1  # intercept dropped; x1 only
+        @test me.varnames == ["x1"]
         @test all(me.se .> 0)
         # AME for x1 should be positive
-        @test me.effects[2] > 0
+        @test me.effects[1] > 0
         # Effects should be smaller than coefficients (attenuation)
-        @test abs(me.effects[2]) < abs(coef(m)[2])
+        @test abs(me.effects[1]) < abs(coef(m)[2])
     end
 
     @testset "FE logit" begin
@@ -453,11 +504,12 @@ end
 
         me = marginal_effects(m)
         @test me isa MarginalEffects{Float64}
-        @test length(me.effects) == 3  # intercept + 2
+        @test length(me.effects) == 2  # intercept dropped; x1, x2
+        @test me.varnames == ["x1", "x2"]
         @test all(me.se .> 0)
-        @test me.effects[2] > 0
-        @test me.effects[3] < 0
-        @test abs(me.effects[2]) < abs(coef(m)[2])
+        @test me.effects[1] > 0
+        @test me.effects[2] < 0
+        @test abs(me.effects[1]) < abs(coef(m)[2])
     end
 
     @testset "CRE logit — only original vars" begin
@@ -533,4 +585,112 @@ end
     end
     @test err isa ArgumentError
     @test occursin("incidental parameters", err.msg)
+end
+
+# =============================================================================
+# #543: FE conditional logit — conditional information, not the Bernoulli one
+# =============================================================================
+
+@testset "#543 FE conditional logit: invariance, convergence, SEs" begin
+    rng = Random.MersenneTwister(543543)
+    N_g = 40; T_p = 8; n = N_g * T_p
+    ids = repeat(1:N_g, inner=T_p)
+    ts = repeat(1:T_p, N_g)
+    x1 = randn(rng, n)
+    alpha = repeat(randn(rng, N_g), inner=T_p)
+    y = Float64.(rand(rng, n) .< 1 ./ (1 .+ exp.(-(0.9 .* x1 .+ alpha))))
+    pd = xtset(DataFrame(id=ids, t=ts, x1=x1, y=y), :id, :t)
+    m = estimate_xtlogit(pd, :y, [:x1]; model=:fe)
+
+    # The conditional likelihood conditions the group level away, so shifting the
+    # regressor within every group must leave BOTH the estimate and its SE alone.
+    # The independent-Bernoulli Hessian used previously scaled with the level of x.
+    pd_shift = xtset(DataFrame(id=ids, t=ts, x1=x1 .+ 8.0, y=y), :id, :t)
+    m_shift = estimate_xtlogit(pd_shift, :y, [:x1]; model=:fe)
+    @test isapprox(coef(m), coef(m_shift); atol=1e-6)
+    @test isapprox(stderror(m), stderror(m_shift); rtol=1e-4)
+
+    # Convergence is reported on the score, and Newton on the conditional
+    # information reaches it in a handful of iterations.
+    @test m.converged
+    @test m.iterations < 50
+
+    # Model-based SEs come from the conditional information; :cluster sandwiches it
+    # with the per-group score meat, and the recorded cov_type is the one used.
+    @test m.cov_type == :cluster                       # default
+    m_ml = estimate_xtlogit(pd, :y, [:x1]; model=:fe, cov_type=:ols)
+    @test m_ml.cov_type == :ols
+    @test coef(m_ml) ≈ coef(m)
+    @test stderror(m_ml)[1] > 0
+    @test stderror(m_ml) != stderror(m)
+end
+
+# =============================================================================
+# #542: RE/CRE cluster sandwich carries the pooled finite-sample correction
+# =============================================================================
+
+@testset "#542 RE cluster sandwich finite-sample correction" begin
+    rng = Random.MersenneTwister(542542)
+    N_g = 20; T_p = 6; n = N_g * T_p
+    ids = repeat(1:N_g, inner=T_p)
+    ts = repeat(1:T_p, N_g)
+    x1 = randn(rng, n)
+    alpha = repeat(0.8 .* randn(rng, N_g), inner=T_p)
+    y = Float64.(rand(rng, n) .< 1 ./ (1 .+ exp.(-(0.8 .* x1 .+ alpha))))
+    pd = xtset(DataFrame(id=ids, t=ts, x1=x1, y=y), :id, :t)
+
+    m_cl = estimate_xtlogit(pd, :y, [:x1]; model=:re, cov_type=:cluster)
+    m_ml = estimate_xtlogit(pd, :y, [:x1]; model=:re, cov_type=:ols)
+    # Correction is G/(G-1)·(n-1)/(n-k) with k = length([β; log σ_u]); it only
+    # scales the meat, so the sandwich stays distinct from the pure information
+    @test all(stderror(m_cl) .> 0)
+    @test stderror(m_cl) != stderror(m_ml)
+
+    m_probit = estimate_xtprobit(pd, :y, [:x1]; model=:re, cov_type=:cluster)
+    @test all(stderror(m_probit) .> 0)
+end
+
+@testset "#542 Louis information: exact marginal score and sane SEs" begin
+    FD = MacroEconometricModels.ForwardDiff
+    # (1) Fisher identity: the Louis score equals the AGH objective gradient (to
+    # quadrature error) at an arbitrary point, and group scores sum to the total
+    rng = Random.MersenneTwister(1542)
+    N_g = 12; T_p = 5; n = N_g * T_p
+    ids = repeat(1:N_g, inner=T_p)
+    x1 = randn(rng, n)
+    alpha = repeat(0.9 .* randn(rng, N_g), inner=T_p)
+    y = Float64.(rand(rng, n) .< 1 ./ (1 .+ exp.(-(0.4 .* x1 .+ alpha))))
+    X_c = hcat(ones(n), x1); ug = sort(unique(ids))
+    gobs = Dict(g => findall(==(g), ids) for g in ug)
+    nodes, weights = MacroEconometricModels._gauss_hermite_nodes_weights(12)
+    theta = [0.2, 0.5, -0.1]
+    sc, info, Sg = MacroEconometricModels._re_logit_agh_score_info(theta, y, X_c, ug,
+                                                                   gobs, nodes, weights)
+    ll(th) = MacroEconometricModels._re_logit_agh_loglik(th, y, X_c, ug, gobs, nodes, weights)
+    @test isapprox(sc, FD.gradient(ll, theta); atol=1e-4)
+    @test vec(sum(Sg; dims=2)) ≈ sc atol=1e-12
+    @test norm(info - info') < 1e-10
+    @test isposdef(Symmetric((info .+ info') ./ 2))
+
+    # (2) ddcg: SEs must respect the complete-data information bound. The pre-#542
+    # AD-through-the-mode-search Hessian carried a spurious O(1e11) eigenvalue and
+    # reported a slope SE BELOW the bound (z up to 2674 — mathematically impossible);
+    # the truncated 8-iteration mode search also made the loglik jagged, so LBFGS
+    # landed on pseudo-optima 20+ loglik units above the true optimum.
+    ddcg = load_example(:ddcg)
+    dfd = DataFrame(ddcg.data, ddcg.varnames)
+    dfd.country = ddcg.group_names[ddcg.group_id]
+    dfd.year = ddcg.time_id
+    dfd = dfd[.!isnan.(dfd.y) .& .!isnan.(dfd.dem), :]
+    dfd.lngdppc = dfd.y ./ 100
+    pd2 = xtset(dfd, :country, :year)
+    m = estimate_xtlogit(pd2, :dem, [:lngdppc]; model=:re)
+    se = stderror(m)
+    se_bound = 1 / sqrt(sum(abs2, dfd.lngdppc) / 4)
+    @test m.converged
+    @test se[2] > se_bound
+    @test all(abs.(coef(m) ./ se) .< 50)
+    # smooth objective, single optimum (multistart-verified); pin loosely
+    @test isapprox(coef(m)[2], 1.85; atol=0.2)
+    @test isapprox(m.sigma_u, 4.82; atol=0.3)
 end

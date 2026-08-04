@@ -436,7 +436,10 @@ end
         @test j.statistic >= 0
         @test 0 <= j.pvalue <= 1
         @test j.df >= 0
-        @test j.n_instruments == model.n_instruments
+        # #552: both reported counts are system-wide (m·q and m·K), so the display
+        # is coherent and df == n_instruments - n_params
+        @test j.n_instruments == model.n_instruments * model.m
+        @test j.df == j.n_instruments - j.n_params
     end
 
     @testset "Hansen J not for FE-OLS" begin

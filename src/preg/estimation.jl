@@ -233,7 +233,13 @@ Estimate a linear panel regression model.
 - `indepvars::Vector{Symbol}` — independent variable names
 
 # Keyword Arguments
-- `model::Symbol` — `:fe`, `:re`, `:fd`, `:between`, or `:cre` (default: `:fe`)
+- `model::Symbol` — `:fe`, `:re`, `:fd`, `:between`, `:cre`, `:ab` (Arellano-Bond),
+  or `:bb` (Blundell-Bond) (default: `:fe`)
+- `collapse::Bool` — collapse GMM instruments (`:ab`/`:bb` only; default `false`)
+- `min_lag_endo::Int` / `max_lag_endo::Int` — instrument lag window for endogenous
+  regressors (`:ab`/`:bb` only; defaults `2` / `99`)
+- `pca_instruments::Bool` / `pca_max_components::Int` — PCA instrument reduction
+  (`:ab`/`:bb` only)
 - `twoway::Bool` — entity **and** time fixed effects (FE only, default: `false`).
   Equivalent to `absorb=[:entity, :time]`, and computed the same way: by alternating
   projections, which are exact on unbalanced panels too. The additive identity
@@ -294,7 +300,13 @@ function estimate_xtreg(pd::PanelData{T}, depvar::Symbol, indepvars::Vector{Symb
                         cov_type::Symbol=:cluster,
                         bandwidth::Union{Nothing,Int}=nothing,
                         pcse_unbalanced::Symbol=:casewise,
-                        ar1::Symbol=:none) where {T<:AbstractFloat}
+                        ar1::Symbol=:none,
+                        # Instrument-proliferation controls (model=:ab / :bb only)
+                        collapse::Bool=false,
+                        min_lag_endo::Int=2,
+                        max_lag_endo::Int=99,
+                        pca_instruments::Bool=false,
+                        pca_max_components::Int=0) where {T<:AbstractFloat}
     model in (:fe, :re, :fd, :between, :cre, :ab, :bb) ||
         throw(ArgumentError("model must be :fe, :re, :fd, :between, :cre, :ab, or :bb; got :$model"))
     if !isempty(absorb)
@@ -381,9 +393,17 @@ function estimate_xtreg(pd::PanelData{T}, depvar::Symbol, indepvars::Vector{Symb
                              N, n_times, n, k, indepvars, cov_type, bandwidth;
                              pcse_unbalanced=pcse_unbalanced, ar1_rho=ar1_rho)
     elseif model == :ab
-        return _estimate_ab(pd, depvar, indepvars, n, N, k)
+        return _estimate_ab(pd, depvar, indepvars, n, N, k;
+                            collapse=collapse, min_lag_endo=min_lag_endo,
+                            max_lag_endo=max_lag_endo,
+                            pca_instruments=pca_instruments,
+                            pca_max_components=pca_max_components)
     elseif model == :bb
-        return _estimate_bb(pd, depvar, indepvars, n, N, k)
+        return _estimate_bb(pd, depvar, indepvars, n, N, k;
+                            collapse=collapse, min_lag_endo=min_lag_endo,
+                            max_lag_endo=max_lag_endo,
+                            pca_instruments=pca_instruments,
+                            pca_max_components=pca_max_components)
     end
 end
 
@@ -1222,8 +1242,14 @@ end
 # =============================================================================
 
 function _estimate_ab(pd::PanelData{T}, depvar::Symbol, indepvars::Vector{Symbol},
-                      n::Int, N::Int, k::Int) where {T}
-    _estimate_dynamic_panel(pd, depvar, indepvars, n, N, k, :ab, false)
+                      n::Int, N::Int, k::Int;
+                      collapse::Bool=false, min_lag_endo::Int=2, max_lag_endo::Int=99,
+                      pca_instruments::Bool=false, pca_max_components::Int=0) where {T}
+    _estimate_dynamic_panel(pd, depvar, indepvars, n, N, k, :ab, false;
+                            collapse=collapse, min_lag_endo=min_lag_endo,
+                            max_lag_endo=max_lag_endo,
+                            pca_instruments=pca_instruments,
+                            pca_max_components=pca_max_components)
 end
 
 # =============================================================================
@@ -1231,25 +1257,43 @@ end
 # =============================================================================
 
 function _estimate_bb(pd::PanelData{T}, depvar::Symbol, indepvars::Vector{Symbol},
-                      n::Int, N::Int, k::Int) where {T}
-    _estimate_dynamic_panel(pd, depvar, indepvars, n, N, k, :bb, true)
+                      n::Int, N::Int, k::Int;
+                      collapse::Bool=false, min_lag_endo::Int=2, max_lag_endo::Int=99,
+                      pca_instruments::Bool=false, pca_max_components::Int=0) where {T}
+    _estimate_dynamic_panel(pd, depvar, indepvars, n, N, k, :bb, true;
+                            collapse=collapse, min_lag_endo=min_lag_endo,
+                            max_lag_endo=max_lag_endo,
+                            pca_instruments=pca_instruments,
+                            pca_max_components=pca_max_components)
 end
 
 """
-    _estimate_dynamic_panel(pd, depvar, indepvars, n, N, k, method, system_instruments) -> PanelRegModel{T}
+    _estimate_dynamic_panel(pd, depvar, indepvars, n, N, k, method, system_instruments;
+                            collapse, min_lag_endo, max_lag_endo, pca_instruments,
+                            pca_max_components) -> PanelRegModel{T}
 
 Shared implementation for Arellano-Bond and Blundell-Bond dynamic panel estimators.
 Dispatches to `estimate_pvar` and extracts the first equation's coefficients.
+Instrument-proliferation knobs are forwarded to the PVAR GMM machinery.
 """
 function _estimate_dynamic_panel(pd::PanelData{T}, depvar::Symbol, indepvars::Vector{Symbol},
                                   n::Int, N::Int, k::Int, method::Symbol,
-                                  system_instruments::Bool) where {T}
+                                  system_instruments::Bool;
+                                  collapse::Bool=false, min_lag_endo::Int=2,
+                                  max_lag_endo::Int=99,
+                                  pca_instruments::Bool=false,
+                                  pca_max_components::Int=0) where {T}
     m_pvar = estimate_pvar(pd, 1;
         dependent_vars=[String(depvar)],
         exog_vars=String.(indepvars),
         transformation=:fd,
         steps=:twostep,
-        system_instruments=system_instruments)
+        system_instruments=system_instruments,
+        collapse=collapse,
+        min_lag_endo=min_lag_endo,
+        max_lag_endo=max_lag_endo,
+        pca_instruments=pca_instruments,
+        pca_max_components=pca_max_components)
 
     # Extract first (only) equation results from PVARModel
     # Phi is m x K where K = m*p + n_exog

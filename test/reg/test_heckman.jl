@@ -206,7 +206,7 @@ end
         @test occursin("Selection equation", str)
         @test occursin("Outcome equation", str)
         @test occursin("no selection", str)          # two-step footer
-        r = refs(m)
+        r = sprint(io -> refs(io, m))
         @test occursin("Heckman", r)
         @test occursin("Mroz", r) || occursin("1987", r)
         # StatsAPI

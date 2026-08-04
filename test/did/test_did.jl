@@ -1440,7 +1440,10 @@ const _MPDTA = load_example(:mpdta)
         em1_idx = findfirst(==(-1), evt)
         @test isapprox(att[em3_idx], 0.0305; atol=0.005)
         @test isapprox(att[em2_idx], -0.0006; atol=0.005)
+        # #548: under :varying, e=-1 is the estimable adjacent-period placebo
+        # ATT(g,g-1) vs base g-2 that R's `did` reports — not a normalized zero.
         @test isapprox(att[em1_idx], -0.0245; atol=0.005)
+        @test did.base_period == :varying
     end
 
     @testset "CS varying base — notyettreated (mpdta verification)" begin
@@ -1492,11 +1495,72 @@ const _MPDTA = load_example(:mpdta)
         @test isapprox(coef(did)[e0_idx], -0.0199; atol=0.005)
     end
 
+    @testset "CS reference index by base_period (#548)" begin
+        pd = _MPDTA
+        did = estimate_did(pd, "lemp", "first_treat";
+                           method=:callaway_santanna,
+                           leads=3, horizon=3,
+                           control_group=:never_treated,
+                           base_period=:varying)
+        em1_idx = findfirst(==(-1), did.event_times)
+        @test em1_idx !== nothing
+        # :varying — e=-1 is ATT(g,g-1) against base g-2, an estimate with real uncertainty
+        @test isapprox(coef(did)[em1_idx], -0.0245; atol=0.005)
+        @test stderror(did)[em1_idx] > 0.0
+        @test did.base_period == :varying
+        # ... and it enters the pre-trend test rather than being dropped
+        @test pretrend_test(did).df == count(<(0), did.event_times)
+
+        # :universal — e=-1 IS the base period, so the cell is a structural zero
+        did_u = estimate_did(pd, "lemp", "first_treat";
+                             method=:callaway_santanna,
+                             leads=3, horizon=3,
+                             control_group=:never_treated,
+                             base_period=:universal)
+        @test did_u.base_period == :universal
+        @test coef(did_u)[em1_idx] == 0.0
+        @test stderror(did_u)[em1_idx] == 0.0
+        @test pretrend_test(did_u).df == count(<(0), did_u.event_times) - 1
+    end
+
     @testset "CS base_period validation" begin
         pd = _MPDTA
         @test_throws ArgumentError estimate_did(pd, "lemp", "first_treat";
                                                 method=:callaway_santanna,
                                                 base_period=:invalid)
+    end
+
+    @testset "honest_did excludes e=-1 under :varying and says so (#599)" begin
+        pd = _MPDTA
+        did_v = estimate_did(pd, "lemp", "first_treat"; method=:callaway_santanna,
+                             leads=3, horizon=3, control_group=:never_treated,
+                             base_period=:varying)
+        did_u = estimate_did(pd, "lemp", "first_treat"; method=:callaway_santanna,
+                             leads=3, horizon=3, control_group=:never_treated,
+                             base_period=:universal)
+
+        # RR normalizes every pre-period against ONE reference; a varying base does not
+        # provide one, so e=-1 is excluded — but the user must be told, because
+        # pretrend_test keeps it and the two then disagree on the pre-period set.
+        hv = @test_logs (:warn, r"base_period=:varying") match_mode = :any honest_did(
+            did_v; restriction=:rm, Mbar=1.0)
+        @test all(isfinite, hv.robust_ci_lower)
+
+        # num_pre is not a field of HonestDiDResult; read it off the assembler.
+        assemble = MacroEconometricModels._honest_assemble
+        p_v = assemble(did_v.att, did_v.se, did_v.event_times,
+                       did_v.reference_period, did_v.att_vcov)[3]
+        @test p_v == count(<(0), did_v.event_times) - 1
+        @test pretrend_test(did_v).df == count(<(0), did_v.event_times)
+        @test p_v == pretrend_test(did_v).df - 1            # the documented disagreement
+
+        # :universal has a common normalization: no warning, and the two agree.
+        hu = honest_did(did_u; restriction=:rm, Mbar=1.0)
+        p_u = assemble(did_u.att, did_u.se, did_u.event_times,
+                       did_u.reference_period, did_u.att_vcov)[3]
+        @test p_u == pretrend_test(did_u).df
+        @test all(isfinite, hu.robust_ci_lower)
+        @test all(isfinite, hu.robust_ci_upper)
     end
 
     @testset "DiD covariance aggregation & pre-trend Wald (T068/T069)" begin
@@ -1717,6 +1781,66 @@ const _MPDTA = load_example(:mpdta)
                                                   restriction=:bogus)
             @test_throws ArgumentError honest_did(betahat[1:5], sigma; num_pre=3, num_post=3)
             @test_throws ArgumentError honest_did(betahat, sigma; num_pre=0, num_post=6)
+        end
+    end
+
+    @testset "Non-positive cohorts are real adoption periods (#598)" begin
+        # Identical data under two encodings: an event-time panel adopting at period -1,
+        # and the same panel with every period and cohort shifted +5. No DiD estimand
+        # depends on where the time origin sits, so both must give the same answer.
+        # The `t > 0` cohort filter used to drop the negative cohort while never_treated
+        # (`t == 0`) also excluded it, so the units vanished and ATT collapsed to 0.0.
+        n_units, periods = 12, -3:3
+        N598 = n_units * length(periods)
+        function _build598(shift)
+            rng = Random.MersenneTwister(598)
+            data = Matrix{Float64}(undef, N598, 2)
+            gid = Vector{Int}(undef, N598); tid = Vector{Int}(undef, N598)
+            coh = Vector{Int}(undef, N598)
+            row = 1
+            for g in 1:n_units, t in periods
+                adopt = g <= 6 ? -1 : 0                      # half adopt at event time -1
+                treated = (adopt != 0 && t >= adopt) ? 1.0 : 0.0
+                data[row, 1] = 0.5 * treated + randn(rng)    # y
+                data[row, 2] = treated                       # d
+                gid[row] = g; tid[row] = t + shift
+                coh[row] = adopt == 0 ? 0 : adopt + shift
+                row += 1
+            end
+            PanelData{Float64}(data, ["y", "d"], Quarterly, [1, 1], gid, tid, coh,
+                               ["u$i" for i in 1:n_units], n_units, 2, N598, true,
+                               ["#598"], Dict{String,String}(), Symbol[])
+        end
+        pd_neg = _build598(0)      # cohort = -1
+        pd_pos = _build598(5)      # cohort = +4, same data
+
+        for m in (:callaway_santanna, :sun_abraham, :bjs, :twfe, :did_multiplegt)
+            r_neg = estimate_did(pd_neg, "y", "d"; method=m, leads=2, horizon=2)
+            r_pos = estimate_did(pd_pos, "y", "d"; method=m, leads=2, horizon=2)
+            @test r_neg.overall_att ≈ r_pos.overall_att atol = 1e-10
+            @test r_neg.overall_att != 0.0                    # not the degenerate zero
+            if r_neg.cohorts !== nothing
+                @test r_neg.cohorts == [-1]                   # the negative cohort survives
+            end
+        end
+
+        # A panel with no treated cohort must throw rather than report ATT = 0.0: with no
+        # adoption period there is no estimand, and 0.0 reads as "no effect".
+        rng0 = Random.MersenneTwister(5981)
+        n0, p0 = 6, 5
+        N0 = n0 * p0
+        d0 = Matrix{Float64}(undef, N0, 2)
+        g0 = Vector{Int}(undef, N0); t0 = Vector{Int}(undef, N0)
+        r0 = 1
+        for g in 1:n0, t in 1:p0
+            d0[r0, 1] = randn(rng0); d0[r0, 2] = 0.0
+            g0[r0] = g; t0[r0] = t; r0 += 1
+        end
+        pd_none = PanelData{Float64}(d0, ["y", "d"], Quarterly, [1, 1], g0, t0,
+                                     zeros(Int, N0), ["u$i" for i in 1:n0], n0, 2, N0,
+                                     true, ["#598"], Dict{String,String}(), Symbol[])
+        for m in (:callaway_santanna, :sun_abraham, :bjs, :did_multiplegt)
+            @test_throws ArgumentError estimate_did(pd_none, "y", "d"; method=m)
         end
     end
 

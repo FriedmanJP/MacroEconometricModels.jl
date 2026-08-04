@@ -142,15 +142,16 @@ function fevd(post::BVARPosterior, horizon::Int;
         transition_var=transition_var, regime_indicator=regime_indicator
     )
 
-    # Stack results: samples are (n, n, horizon), need to rearrange to (horizon, n, n) for output
-    all_fevds = zeros(ET, samples, horizon, n, n)
+    # Stack results in FEVD axis order (variable, shock, horizon) — unified with
+    # FEVD.proportions / LPFEVD (#527). samples is the leading MC axis for quantiles.
+    all_fevds = zeros(ET, samples, n, n, horizon)
     @inbounds for s in 1:samples
         for h in 1:horizon, v in 1:n, sh in 1:n
-            all_fevds[s, h, v, sh] = results[s][v, sh, h]
+            all_fevds[s, v, sh, h] = results[s][v, sh, h]
         end
     end
 
-    # Compute quantiles using shared utility
+    # Compute quantiles using shared utility → (n, n, horizon, nq) and (n, n, horizon)
     q_vec = ET.(quantiles)
     use_threaded = threaded || (samples * horizon * n * n > 100000)
     fevd_q, fevd_m = compute_posterior_quantiles(all_fevds, q_vec; threaded=use_threaded, central=point_estimate)
@@ -332,7 +333,8 @@ function generalized_fevd(post::BVARPosterior, horizon::Int;
     n_draws = size(post.B_draws, 1)
     n_use = min(n_draws, max_draws)
 
-    all_fevds = zeros(ET, n_use, horizon, n, n)
+    # Stack in (variable, shock, horizon) order — unified with FEVD (#527)
+    all_fevds = zeros(ET, n_use, n, n, horizon)
     @inbounds for s in 1:n_use
         # Posterior draws are stored with the DRAW on the first axis:
         # `B_draws[s, :, :]` is (1+n*p) x n, matching `VARModel.B`, which is what
@@ -342,7 +344,7 @@ function generalized_fevd(post::BVARPosterior, horizon::Int;
         Phi = _reduced_form_ma(B_s, n, p, horizon)
         _, props, _ = _generalized_fevd_arrays(Phi, S_s, horizon; normalize=normalize)
         for h in 1:horizon, v in 1:n, sh in 1:n
-            all_fevds[s, h, v, sh] = props[v, sh, h]
+            all_fevds[s, v, sh, h] = props[v, sh, h]
         end
     end
 

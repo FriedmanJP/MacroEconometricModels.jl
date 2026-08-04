@@ -127,9 +127,14 @@ The `weights` keyword selects the functional form of ``w_k(\theta)``:
 |---|---|---|
 | `:expalmon` | ``w_k \propto \exp(\theta_1 k + \theta_2 k^2)`` | 2 |
 | `:beta2` | ``w_k \propto x_k^{\theta_1-1}(1-x_k)^{\theta_2-1}``, ``x_k`` on a grid over ``(0,1)`` | 2 |
-| `:beta3` | Beta plus a level constant ``\theta_3`` | 3 |
+| `:beta3` | Beta plus a level constant ``\max(\theta_3, 0)`` | 3 |
 | `:almon` | ``w_k \propto \sum_{d=0}^{D} \theta_{d+1}\, k^{d}``, then normalized | `poly_degree`+1 |
 | `:umidas` | unrestricted lag coefficients, no weight function | ``K`` |
+
+The `:beta3` level constant is clamped at zero, and its gradient with it: an unclamped
+negative ``\theta_3`` would drive individual weights negative and the normalization would
+then flip their signs. An estimate far below zero therefore means the level term is
+switched off and `:beta3` has collapsed onto `:beta2`, not that the shape is exotic.
 
 The exponential-Almon weight reduces to equal weights ``1/K`` at ``\theta = 0``, which
 makes ``\theta = 0`` both the natural starting value and a useful sanity check.
@@ -192,14 +197,36 @@ the ``K`` stacked lags (Foroni, Marcellino & Schumacher 2015).
 | `weights` | `Symbol` | `:expalmon` | `:expalmon`, `:beta2`, `:beta3`, `:almon`, or `:umidas` |
 | `p_ar` | `Int` | `0` | Autoregressive lags of the target (ADL-MIDAS) |
 | `poly_degree` | `Int` | `2` | Polynomial degree for `:almon` |
-| `h` | `Int` | `1` | Direct forecast horizon recorded on the model |
+| `h` | `Int` | `1` | Direct multi-step horizon: regress ``y_{t+h-1}`` on data dated ``t`` |
 | `max_iter` | `Int` | `500` | LBFGS iteration cap per starting value |
 
-!!! warning "`h` labels the horizon, it does not shift the data"
-    `h` is stored on the model and printed by `report`, but the estimator always aligns
-    the high-frequency block to the *same* low-frequency period. For a genuine direct
-    ``h``-step regression, shift the inputs: estimate on `y_lf[(1+h):end]` against
-    `X_hf[1:(end - h*m)]`.
+### Direct Multi-Step Horizons
+
+`h` selects the direct regression rather than labelling one. The target is ``y_{t+h-1}``
+and the regressors — the ``K`` high-frequency lags and the ``p_{ar}`` own lags — are dated
+``t``, so `h=1` nowcasts ``y_t`` from data through the end of quarter ``t``, and `h=4`
+projects four quarters out from that same information set. Periods whose ``h``-step target
+falls past the end of the sample are dropped, so the estimation sample loses ``h-1``
+observations:
+
+```@example midas
+map([1, 2, 4]) do hh
+    mh = estimate_midas(gdp_q, ip_m; m=3, K=6, weights=:expalmon, p_ar=1, h=hh)
+    (h = hh, nobs = nobs(mh), r2 = round(mh.r2; digits=4),
+     point = round(forecast(mh, reverse(ip_monthly[end-5:end])).forecast[1]; digits=4))
+end
+```
+
+These are three different regressions with three different answers: the fit falls from
+``R^2 = 0.8213`` at ``h = 1`` to 0.5250 at ``h = 2`` and 0.0125 at ``h = 4``, and the point
+forecasts move from 0.4530 to 0.8506 to 0.6213. Monthly industrial production carries
+almost nothing about GDP growth a year ahead, which is what the near-zero ``R^2`` at
+``h = 4`` reports honestly; MIDAS earns its keep at the nowcast and one-quarter horizons,
+where the ragged edge is the binding constraint. The ``h = 2`` fit warns that its
+covariance is near-singular, and the weight curve says why: it collapses onto the two most
+recent months (0.825 and 0.175) and puts numerical zero on the other four, so the
+Gauss-Newton Jacobian loses rank in the ``\theta`` block and those standard errors come
+from a pseudo-inverse. A degenerate weight curve is the signal to cut ``K``.
 
 **Return value** (`MidasModel`):
 
@@ -213,7 +240,7 @@ the ``K`` stacked lags (Foroni, Marcellino & Schumacher 2015).
 | `ssr` / `sigma2` | `T` | Sum of squared residuals and ``\hat\sigma^2 = \text{SSR}/(n-p)`` |
 | `r2` / `adj_r2` | `T` | Coefficient of determination, unadjusted and adjusted |
 | `loglik` / `aic` / `bic` | `T` | Gaussian log-likelihood and information criteria |
-| `converged` | `Bool` | NLS convergence flag, always `true` under `:umidas` |
+| `converged` | `Bool` | NLS convergence flag; `report` prints `Method: OLS (closed form)` instead under `:umidas`, which has nothing to converge |
 
 The `StatsAPI` interface is available throughout: `coef`, `vcov`, `stderror`, `nobs`,
 `dof`, `dof_residual`, `residuals`, `fitted`, `predict`, `aic`, `bic`,
@@ -359,8 +386,10 @@ pass them to [Forecast Evaluation](@ref forecast_evaluation_page).
 4. **Beta endpoints.** The Beta grid is guarded away from 0 and 1 to avoid
    ``0^{\text{negative}}``, which forces the first and last weights to zero whenever both
    shape parameters exceed one. Use `:expalmon` when the endpoints must carry mass.
-5. **`h` is a label, not a specification.** Setting `h=4` does not estimate a
-   four-quarter-ahead regression; shift the inputs as described under Estimation.
+5. **`h` shortens the sample.** Setting `h=4` estimates the direct four-step regression of
+   ``y_{t+3}`` on data dated ``t``, which drops the last three periods. Comparing `bic`
+   across horizons compares fits on different samples, so it is not a horizon-selection
+   criterion.
 6. **One indicator only.** `estimate_midas` handles a single high-frequency series. For
    several indicators, use [bridge equations](@ref nowcast_bridge_page) or a
    [mixed-frequency DFM](@ref nowcast_dfm_page).

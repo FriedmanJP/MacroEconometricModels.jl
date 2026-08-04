@@ -177,6 +177,10 @@ did_grouped = estimate_did(pd_cohort, :gdp, :reform; method=:callaway_santanna)
 
 When `cohort_id` is `nothing` (the default), cohorts are inferred from the treatment column. `PanelData.cohort_id` takes precedence wherever it is set: `estimate_did`, `bacon_decomposition`, and `negative_weight_check` all rebuild their cohort assignment from it rather than from the treatment timing.
 
+Cohort values are stored in the time index's own encoding — calendar years stay calendar years, non-integer times are ranked ``1, \ldots, T`` — with `0` and `missing` reserved for never-treated units and every other value read as an adoption period. A value matching no period in the sample is kept verbatim and warned about once: it still serves as a categorical grouping, which is what `absorb=:cohort` on the [panel regression](@ref panel_reg_page) estimators consumes, but no DiD estimator forms a treatment group from it. Labels that happen to coincide with sample periods are indistinguishable from adoption dates, so on a panel indexed ``1, \ldots, T`` give geographic cohorts labels outside that range.
+
+`0` is the *only* never-treated sentinel. Negative adoption periods are ordinary cohorts, which is what an event-time panel indexed ``-p, \ldots, q`` requires: every estimator forms a treatment group from a cohort of ``-1`` exactly as it would from ``+4``, and translating the time axis leaves the estimates unchanged. The one ambiguity is period `0` itself — on a panel that contains it, "adopted at 0" and "never treated" are the same stored value, and `xtset` warns. A panel in which no unit is treated has no estimand at all, so the estimators throw rather than report an overall ATT of zero.
+
 !!! note "Treatment column is a period, not a flag"
     Every function on this page reads the treatment column as the **period of first
     treatment** (`2004`), with `0` or `NaN` for never-treated units, and requires the value
@@ -250,14 +254,16 @@ On this dataset TWFE and Callaway-Sant'Anna happen to agree closely — aggregat
 | `cluster` | `Symbol` | Clustering level applied |
 | `conf_level` | `T` | Confidence level of `ci_lower`/`ci_upper` |
 | `att_vcov` | `Union{Matrix{T}, Nothing}` | Joint cross-horizon covariance of `att`; `nothing` when the estimator does not supply one |
+| `base_period` | `Symbol` | `:varying` or `:universal`; every estimator other than Callaway-Sant'Anna reports `:universal` |
 
 !!! warning "`att` includes the reference period"
     `att` and `event_times` are the same length and both contain the reference index, so
-    `att[findfirst(==(-1), event_times)]` is **not** guaranteed to be zero. TWFE stores an
-    exact `0.0` there, but Callaway-Sant'Anna with `base_period=:varying` stores the
-    estimated placebo coefficient (``-0.0245`` on `mpdta`) even though `report` prints the
-    row as `(ref) —`. Drop the reference index explicitly before aggregating or plotting
-    `att` yourself; `pretrend_test` and `honest_did` already do.
+    `att[findfirst(==(-1), event_times)]` is **not** guaranteed to be zero. Under
+    `base_period=:universal` — TWFE, Sun-Abraham, BJS, dCDH, and Callaway-Sant'Anna when
+    asked for it — the cell is a structural `0.0` with a zero standard error, printed as
+    `(ref) —`. Under `base_period=:varying` it holds the estimated placebo ATT(g, g−1)
+    (``-0.0245`` on `mpdta`), which `report` prints as an ordinary row. Aggregating `att`
+    yourself therefore requires filtering on `base_period`, not on `event_times`.
 
 ---
 
@@ -292,6 +298,8 @@ report(did_univ)
 ```
 
 The base period changes only the pre-treatment coefficients — post-treatment estimates are identical to the `:varying` fit at ``-0.0199``, ``-0.0510``, ``-0.1373``, ``-0.1008``, because both definitions compare ``Y_t`` to ``Y_{g-1}`` after treatment. Before treatment they differ: `:varying` reports adjacent-period changes (``0.0305`` at ``e=-3``, significant at 5%) while `:universal` reports cumulative deviations from ``g-1`` (``0.0250``, insignificant). Neither is more correct; `:varying` is more sensitive to a one-off blip in a single year and `:universal` to a slow drift, so disagreement between them localizes where a pre-trend lives.
+
+The two definitions also differ over ``e = -1``. Under `:universal` that cell *is* the normalization and prints as `(ref) —`. Under `:varying` it is the estimable placebo ``\text{ATT}(g, g-1)``, the adjacent change from ``g-2`` to ``g-1``, which the table above reports as an ordinary row: ``-0.0245`` with a standard error of 0.0142, matching the R `did` package. Reading it as omitted throws away the pre-treatment period closest to treatment — the one most likely to reveal anticipation — which is why `pretrend_test` includes it and tests three coefficients rather than two here. The `:universal` fit puts the same information in its ``e = -2`` coefficient of ``0.0245``, the sign-flipped counterpart, because it accumulates from ``g-1`` backwards.
 
 The `group_time_att` field stores the full ``n_{\text{cohorts}} \times n_{\text{periods}}`` matrix of ``\text{ATT}(g,t)`` estimates, with `NaN` in cells that no comparison identifies:
 
@@ -392,19 +400,20 @@ The weights sum to 1 and `overall_att` reproduces the **static** two-way fixed-e
 The `pretrend_test` function performs a joint Wald test of the null hypothesis that all pre-treatment event-time coefficients are zero:
 
 ```math
-H_0: \beta_{-K} = \beta_{-K+1} = \cdots = \beta_{-2} = 0
+H_0: \beta_{-K} = \beta_{-K+1} = \cdots = \beta_{-1} = 0
 ```
 
 where:
 - ``\beta_k`` is the event-time coefficient at relative time ``k``
 - ``K`` is the number of pre-treatment leads
+- ``\beta_{-1}`` enters only under `base_period=:varying`, where it is estimated; under `:universal` it is the normalization and the null stops at ``\beta_{-2}``
 
 ```@example did
 pt = pretrend_test(did_cs)
 report(pt)
 ```
 
-The joint Wald statistic is 4.1468 on 2 degrees of freedom, ``p = 0.1258``, so the two pre-treatment coefficients are not jointly distinguishable from zero and there is no evidence against parallel trends at conventional levels. Note that this is a *joint* test: the individual ``e=-3`` coefficient of ``0.0305`` is significant at 5% on its own, and the joint test does not reject because ``e=-2`` is essentially zero. The test uses the full cross-horizon covariance when the estimator supplies `att_vcov` (Callaway-Sant'Anna does) and falls back to a diagonal form otherwise; the reference period is always excluded.
+The joint Wald statistic is 7.3418 on 3 degrees of freedom, ``p = 0.0618``, so the three pre-treatment coefficients are not jointly distinguishable from zero at 5%, though the margin is thin enough that the design deserves the sensitivity analysis below rather than a clean bill of health. Note that this is a *joint* test: the individual ``e=-3`` coefficient of ``0.0305`` is significant at 5% on its own, and ``e=-1`` at ``-0.0245`` is significant at 10%, while ``e=-2`` is essentially zero. The same fit with `base_period=:universal` tests two coefficients instead of three and returns 3.0425 with ``p = 0.2184`` — a reminder that the two base periods pose different null hypotheses, not two versions of one. The test uses the full cross-horizon covariance when the estimator supplies `att_vcov` (Callaway-Sant'Anna does) and falls back to a diagonal form otherwise; coefficients with a zero standard error, which is how every estimator other than Callaway-Sant'Anna stores its reference period, are dropped.
 
 | Field | Type | Description |
 |-------|------|-------------|
@@ -469,6 +478,17 @@ Inference uses the Armstrong & Kolesár (2018) **fixed-length confidence interva
 The **breakdown value** is the smallest bound (``\bar{M}^*`` or ``M^*``) at which the robust confidence interval for at least one post-treatment period includes zero. A large breakdown value indicates that the result is robust to substantial departures from parallel trends.
 
 `honest_did` uses the joint event-study covariance stored by the estimator (`att_vcov`) when available and falls back to a diagonal covariance from the per-period standard errors otherwise (with a warning).
+
+!!! warning "`base_period=:varying` drops the adjacent-period placebo here"
+    Rambachan-Roth define ``\hat\beta = [\beta_{pre}; \beta_{post}]`` relative to a **single
+    normalized** reference period, and the ``\Delta`` sets and fixed-length CI construction
+    are written against that normalization. Under `base_period=:universal` the ``e=-1`` cell
+    is a structural zero and dropping it is correct. Under `:varying` it is an *estimated*
+    placebo against its own base ``g-2``, so there is no common normalization and
+    `honest_did` excludes it, with a warning. [`pretrend_test`](@ref pretrend_test) *does*
+    include it — the two therefore run on different pre-period sets by design, and the
+    sensitivity analysis uses one coefficient fewer than the pre-trend test reports. Re-run
+    with `base_period=:universal` when the two need to agree.
 
 ```@example did
 h = honest_did(did_cs; restriction=:rm, Mbar=1.0, conf_level=0.95)
@@ -636,7 +656,7 @@ plot_result(h_sim)
 
 The three robust estimators agree — 3.3365 for Callaway-Sant'Anna and Sun-Abraham, 3.3093 for BJS — while TWFE returns 1.0999, less than a third of the true average effect. The TWFE event-study path shows why the failure is not subtle: it reports pre-treatment coefficients of ``-1.2503`` and ``-1.2043``, large and precisely estimated, in a simulation where the untreated potential outcomes satisfy parallel trends by construction. Those "pre-trends" are an artifact of the late cohort being used as a control for the early one after its own treatment begins.
 
-The Bacon decomposition isolates the mechanism: the later-vs-earlier comparison of cohort 12 against cohort 8 returns 1.8530 against a truth above 3, and it carries 15.6% of the total weight. The pre-trend test on the Callaway-Sant'Anna fit does not reject (``p = 0.6607``), correctly, and the HonestDiD analysis reports a breakdown value of 1.4482 — the result survives post-treatment trend violations up to 1.45 times the largest observed pre-treatment violation, which is a genuinely robust finding rather than one propped up by the parallel-trends assumption.
+The Bacon decomposition isolates the mechanism: the later-vs-earlier comparison of cohort 12 against cohort 8 returns 1.8530 against a truth above 3, and it carries 15.6% of the total weight. The pre-trend test on the Callaway-Sant'Anna fit does not reject (``p = 0.7911`` across all three pre-periods, ``e = -1`` included), correctly, and the HonestDiD analysis reports a breakdown value of 1.4482 — the result survives post-treatment trend violations up to 1.45 times the largest observed pre-treatment violation, which is a genuinely robust finding rather than one propped up by the parallel-trends assumption.
 
 ---
 
@@ -669,7 +689,7 @@ Choose the estimators here when treatment is absorbing and the question is a coh
 
 5. **Treatment column format**: The treatment variable must contain the **period number** when treatment first occurs, not a binary 0/1 indicator. Passing a binary indicator causes the package to misidentify cohorts. Use `0` or `NaN` for never-treated units, and keep the value constant within each unit.
 
-6. **Reading `att` at the reference index**: `att` has the same length as `event_times` and includes the reference period. Callaway-Sant'Anna with `base_period=:varying` stores a nonzero placebo estimate there even though `report` prints it as omitted. Filter on `event_times .!= reference_period` before aggregating.
+6. **Reading `att` at the reference index**: `att` has the same length as `event_times` and includes the reference period. Under `base_period=:universal` that cell is an exact zero; under Callaway-Sant'Anna's default `:varying` it is the estimated placebo ATT(g, g−1) and `report` prints it as an ordinary row. Check `result.base_period` before deciding whether to drop `event_times .== reference_period` — dropping it unconditionally discards a real estimate.
 
 7. **Expecting a pre-trend test from BJS**: The imputation estimator fits its fixed effects on untreated cells only, so pre-treatment effects are identically zero with zero standard errors. Run `pretrend_test` on a Callaway-Sant'Anna or Sun-Abraham fit instead.
 

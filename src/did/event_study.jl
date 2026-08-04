@@ -81,7 +81,7 @@ function estimate_event_study_lp(pd::PanelData{T}, outcome::Union{String,Symbol}
         for g in 1:pd.n_groups
             mask = pd.group_id .== g
             cid = pd.cohort_id[findfirst(mask)]
-            if cid > 0
+            if cid != 0            # 0 is the only never-treated sentinel (#598)
                 first_treat_time[g] = cid
             end
         end

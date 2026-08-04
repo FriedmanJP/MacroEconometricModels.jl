@@ -113,12 +113,15 @@ function estimate_bvar(Y::AbstractMatrix{T}, p::Int;
 
     # Set up prior hyperparameters
     # Prior: vec(B) | Σ ~ N(b₀, Σ ⊗ V₀), Σ ~ IW(ν₀, S₀)
-    # Diffuse prior: V₀ = κ·I (large κ), ν₀ = n+2, S₀ = I
+    # Diffuse Normal: V₀ = κ·I (large κ). Scale-invariant IW: S₀ = diag(σ̂ᵢ²) from
+    # univariate AR residual variances (same scale used by gen_dummy_obs / Minnesota),
+    # not I_n — on raw log-differences (sd ≈ 0.008) S₀ = I swamps the likelihood (#523).
     κ = T(100.0)
     V0_inv = (one(T) / κ) * Matrix{T}(I, k, k)
     B0 = zeros(T, k, n)
     ν0 = n + 2
-    S0 = Matrix{T}(I, n, n)
+    sigmas = [univariate_ar_variance(@view Y[:, i]) for i in 1:n]
+    S0 = diagm(sigmas .^ 2)
 
     # Posterior parameters (conjugate update)
     XtX = X_data' * X_data

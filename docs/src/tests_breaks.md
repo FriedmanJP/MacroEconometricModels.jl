@@ -4,7 +4,7 @@ This page covers tests for parameter instability and structural change. Structur
 
 - **Andrews (1993)**: One unknown break point in a linear regression. Nine variants combine three base statistics (Wald, LR, LM) with three functionals (supremum, exponential average, mean).
 - **Bai-Perron (1998, 2003)**: Multiple unknown break points. Dynamic programming finds globally optimal break dates; sequential sup-F tests and the BIC and LWZ criteria select the number of breaks.
-- **Factor model break tests**: Instability in factor loadings or in the number of factors --- Breitung-Eickmeier (2011) CUSUM, Chen-Dolado-Gonzalo (2014) eigenvalue ratio, and Han-Inoue (2015) sup-Wald.
+- **Factor model break tests**: Instability in factor loadings --- Breitung-Eickmeier (2011) pooled per-series LM, Chen-Dolado-Gonzalo (2014) regression sup-LM, and Han-Inoue (2015) sup-Wald.
 - **Gregory-Hansen (1996)**: Cointegration allowing one structural break in the long-run relationship. Three break models (level shift, level + trend, regime shift) and three residual statistics (ADF\*, Zt\*, Za\*).
 
 Every test on this page returns a result object that `report` renders as a specification block, a statistics block, a critical-value block, and a conclusion line. Unit root and cointegration tests without breaks live on [Unit Root & Cointegration](@ref tests_unitroot_page); the regression-stability tests that condition on a *known* break date (`chow_test`, `cusum_test`) live on [Linear Regression](@ref regression_page).
@@ -303,7 +303,9 @@ P-values interpolate the Bai & Perron (1998, 2003) critical-value tables, indexe
 
 ## Factor Model Break Tests
 
-A factor model assumes that a large cross-section ``X_{it}`` loads on a few common factors ``F_t`` through time-invariant loadings ``\Lambda``. Instability in the loadings, or a change in the number of factors, breaks principal-components estimation and everything built on it. Three tests target different forms of that instability, and all three accept either a ``T \times N`` matrix or an estimated [`FactorModel`](@ref).
+A factor model assumes that a large cross-section ``X_{it}`` loads on a few common factors ``F_t`` through time-invariant loadings ``\Lambda``. Instability in the loadings breaks principal-components estimation and everything built on it. Three tests target different forms of that instability, and all three accept either a ``T \times N`` matrix or an estimated [`FactorModel`](@ref).
+
+All three treat the break date as unknown, so all three maximize a statistic over the trimmed grid ``\pi \in [0.15, 0.85]``. A supremum is not ``\chi^2``: Chen-Dolado-Gonzalo reads its p-value from the Andrews (1993)/Hansen (1997) sup-Wald tables, and the two pooled tests --- Breitung-Eickmeier and Han-Inoue --- simulate their null references conditional on the estimated factors.
 
 The examples in this section use one panel with genuinely stable loadings and one in which every loading shifts halfway through the sample:
 
@@ -321,24 +323,25 @@ size(X_stable, 1), size(X_stable, 2)
 
 ### Han-Inoue (2015)
 
-The Han-Inoue test aggregates individual Wald statistics for loading instability across all ``N`` cross-section units. For variable ``i`` and candidate break date ``t``, the loading regression ``x_{it} = F_t' \lambda_i + e_{it}`` is estimated on ``[1, t]`` and ``[t+1, T]``, giving
+The Han-Inoue test asks whether the panel's loadings break at **one common date**. For variable ``i`` and candidate break date ``t``, the loading regression ``x_{it} = F_t' \lambda_i + e_{it}`` is estimated on ``[1, t]`` and ``[t+1, T]``, giving the Chow-Wald statistic
 
 ```math
 W_i(t) = (\hat{\lambda}_{1,i} - \hat{\lambda}_{2,i})' \left[ \hat{\sigma}_i^2 \left( (F_1'F_1)^{-1} + (F_2'F_2)^{-1} \right) \right]^{-1} (\hat{\lambda}_{1,i} - \hat{\lambda}_{2,i})
 ```
 
-and the test statistic averages across units before maximizing over dates:
+and the panel statistic pools the evidence at each date before maximizing, then standardizes against its simulated null:
 
 ```math
-\text{HI} = \sup_t \frac{1}{N} \sum_{i=1}^{N} W_i(t)
+W = \sup_t \sum_{i=1}^{N} W_i(t), \qquad Z = \frac{W - \hat{\mu}}{\hat{\sigma}}
 ```
 
 where:
 - ``\hat{\lambda}_{1,i}`` and ``\hat{\lambda}_{2,i}`` are sub-sample loading estimates for variable ``i``
 - ``\hat{\sigma}_i^2`` is the full-sample residual variance for variable ``i``
 - ``F_1`` and ``F_2`` are the estimated factor matrices for the two sub-samples
+- ``\hat{\mu}`` and ``\hat{\sigma}`` are the mean and standard deviation of ``W`` under the simulated null
 
-Averaging across the cross-section is what supplies power when many loadings move together. P-values use the Andrews (1993) sup-Wald critical values with ``k = r`` degrees of freedom.
+Pooling at a common date is what distinguishes Han-Inoue from Breitung-Eickmeier below, which sups each series at its own date: Han-Inoue concentrates power on an economy-wide break, and its estimated date is the single date the whole panel agrees on. At any fixed date each ``W_i(t)`` is approximately ``\chi^2(r)``, so the pooled path concentrates near ``Nr`` under the null and its supremum has no tabulated reference. The null distribution of ``W`` is therefore simulated conditional on the estimated factors, with the same machinery as Breitung-Eickmeier: per-series null statistic paths from ``N(0,1)`` series projected off ``\hat{F}``, resampled into panels of ``N`` and pooled, with `nsim`, `nboot`, and `seed` controlling the draws.
 
 ```@example test_breaks
 report(factor_break_test(X_stable, 3; method=:han_inoue))
@@ -348,38 +351,49 @@ report(factor_break_test(X_stable, 3; method=:han_inoue))
 report(factor_break_test(X_break, 3; method=:han_inoue))
 ```
 
-On the stable panel the statistic is 3.4637 with a p-value of 0.3255, so loading stability survives; on the broken panel it is 121.2991, the p-value collapses below 0.001, and the estimated break lands on observation 100, the true date. The gap between 3.46 and 121.30 is the cross-sectional averaging at work: each of the 60 individual Wald statistics contributes a small amount of evidence that would be unconvincing on its own. Note the break date of 52 reported on the stable panel --- meaningless, because the null was not rejected. Han-Inoue is the default choice when ``r`` is known and ``N`` is large.
+On the stable panel the standardized statistic is ``-0.4777`` --- half a standard deviation *below* the simulated null mean --- with a p-value of 0.6712, so loading stability survives. On the broken panel the statistic is 453.2525 standard deviations above the null, the p-value hits the ``1/2001`` resampling floor of 0.0005, and the estimated break lands on observation 100, the true date. Note the break date of 52 reported on the stable panel --- meaningless, because the null was not rejected.
+
+Both pooled tests also report the largest **per-series** sup statistics with each series' own maximizing date, stored in `series_statistics` and `series_break_dates`. On the broken panel every series posts a three-digit statistic because every loading moved by construction; when only a few series break, the ranking singles them out --- subject to the attribution caveat in Pitfall 5.
 
 ### Breitung-Eickmeier (2011)
 
-The Breitung-Eickmeier test applies a CUSUM fluctuation principle to the same loadings. The factor model is:
+The Breitung-Eickmeier test runs one loading-break regression per series and pools the results across the cross-section. For series ``i`` and candidate date ``\tau``, the auxiliary regression
 
 ```math
-X_t = \Lambda F_t + e_t
+x_{it} = \lambda_i' \hat{F}_t + \delta_i' \hat{F}_t \cdot 1(t > \tau) + e_{it}
+```
+
+is tested for ``H_0: \delta_i = 0`` by the LM statistic
+
+```math
+LM_i(\tau) = \frac{S_i(\tau)' \left[ A_1(\tau)^{-1} + A_2(\tau)^{-1} \right] S_i(\tau)}{\hat{\sigma}_i^2}
 ```
 
 where:
-- ``X_t`` is the ``N \times 1`` vector of observed variables at time ``t``
-- ``\Lambda`` is the ``N \times r`` matrix of factor loadings
-- ``F_t`` is the ``r \times 1`` vector of common factors
-- ``e_t`` is the ``N \times 1`` idiosyncratic error
+- ``S_i(\tau) = \sum_{t \leq \tau} \hat{F}_t \hat{e}_{it}`` is the partial sum of the full-sample loading scores
+- ``A_1(\tau) = \sum_{t \leq \tau} \hat{F}_t \hat{F}_t'`` and ``A_2(\tau) = \hat{F}'\hat{F} - A_1(\tau)``
+- ``\hat{\sigma}_i^2`` is the full-sample idiosyncratic variance of series ``i``
 
-Loadings are estimated on the sub-sample ``[1, t]`` and compared with the full-sample loadings ``\hat{\Lambda}_T``:
+At a fixed ``\tau`` this is algebraically the Chow-Wald statistic for equality of the pre- and post-break loadings of series ``i``, and is asymptotically ``\chi^2(r)``. The break date is unknown, so the series-level statistic is the supremum ``M_i = \sup_\tau LM_i(\tau)``, and the panel statistic standardizes the pooled sum:
 
 ```math
-S_t = \sqrt{t / T} \cdot \frac{\| \text{vec}(\hat{\Lambda}_t - \hat{\Lambda}_T) \|}{\hat{\sigma}}
+Z = \frac{\sum_{i=1}^{N} M_i - N \hat{\mu}}{\hat{\sigma} \sqrt{N}}
 ```
 
-where ``\hat{\sigma}^2`` is the pooled residual variance of the loading regression. The statistic is ``\sup_t S_t`` over the trimmed range; its asymptotic null distribution is the supremum of a Bessel process, and the reported p-value uses a ``\chi^2(Nr)`` approximation applied to ``S_t^2``.
+where ``\hat{\mu}`` and ``\hat{\sigma}`` are the mean and standard deviation of ``M_i`` under the null. A supremum of ``LM_i(\tau)`` is not ``\chi^2(r)`` and a pool of ``N`` of them is not ``\chi^2(Nr)``, so both moments are simulated rather than tabulated.
+
+!!! note "Technical Note"
+    The null reference draws `nsim` independent ``N(0,1)`` series of length ``T``, projects them off ``\hat{F}``, and runs them through the same statistic path, so it conditions on the estimated factors and on the trimmed grid actually in use. The p-value is the Monte Carlo upper tail of ``\sum_i M_i`` under resampling from that pool, which accommodates the right skewness a normal approximation to the sum would miss. `nsim`, `nboot`, and `seed` control the simulation; the fixed default seed makes the p-value reproducible across calls on the same data.
+
+```@example test_breaks
+report(factor_break_test(X_stable, 3; method=:breitung_eickmeier))
+```
 
 ```@example test_breaks
 report(factor_break_test(X_break, 3; method=:breitung_eickmeier))
 ```
 
-The statistic of 20.8265 peaks at observation 100, the correct date, and rejects with a p-value below 0.001. The reference distribution deserves attention: with ``N = 60`` and ``r = 3`` the ``\chi^2(Nr)`` approximation carries 180 degrees of freedom, so the test needs ``S_t^2`` to exceed roughly 210 before it rejects at 5%. That is a conservative bar for a statistic whose true limit is the supremum of a Bessel process, and a loading break smaller than the one built into `X_break` will be located correctly by the CUSUM path while the p-value stays above 0.05. Read the `break_date` as the more reliable output of the two, and take the reject decision from Han-Inoue.
-
-!!! warning "Conservative p-values grow more conservative with N"
-    The degrees of freedom of the ``\chi^2(Nr)`` approximation scale with the cross-section, so the Breitung-Eickmeier p-value becomes *harder* to reject as ``N`` grows --- the opposite of the asymptotics the test is derived under, where large ``N`` supplies power. A non-rejection from this method in a wide panel is not evidence of loading stability.
+On the stable panel the pooled statistic is 0.4886 --- half a standard deviation above the simulated null mean --- with a p-value of 0.3038. On the broken panel it is 280.9414, the p-value hits 0.0005, and the break is dated at observation 100, the true date. That 0.0005 is a floor, not a measurement: with `nboot = 2000` resampling draws the smallest attainable p-value is ``1/2001``. Because ``Z`` is standardized by the cross-section, the statistic is comparable across panels of different width, unlike the raw pooled sum.
 
 The `FactorModel` dispatch reuses factors that have already been estimated:
 
@@ -391,58 +405,87 @@ be = factor_break_test(fm; method=:breitung_eickmeier)
  break_date = be.break_date)
 ```
 
-The dispatch reads `fm.X` and `fm.r` off the model and returns the same statistic, 20.827 at observation 100, as the matrix call. Use it whenever a factor model has already been fitted for other purposes, since it avoids re-running the principal-components step.
+The dispatch reads `fm.X` and `fm.r` off the model and returns the same statistic, 280.941 at observation 100, as the matrix call. Use it whenever a factor model has already been fitted for other purposes, since it avoids re-running the principal-components step.
 
 ### Chen-Dolado-Gonzalo (2014)
 
-The Chen-Dolado-Gonzalo test targets a change in the *number* of factors rather than in the loadings, and is the only one of the three that does not require ``r`` as an input. The **eigenvalue ratio** criterion identifies the number of factors as
+The Chen-Dolado-Gonzalo test targets a **big break** --- one large enough that the full sample needs more principal components than either sub-sample --- and is the only one of the three that does not require ``r`` as an input. A big break in ``\Lambda`` inflates the apparent number of factors, and the extra estimated factors are mixtures of the pre- and post-break factor spaces. That mixing is the signal. Regressing the first estimated factor on the remaining ones,
 
 ```math
-\hat{r} = \arg\max_{k \leq k_{\max}} \frac{\lambda_k}{\lambda_{k+1}}
+\hat{F}_{1t} = c + \beta' \hat{F}_{2:r,t} + u_t
 ```
 
-where ``\lambda_1 \geq \lambda_2 \geq \cdots`` are the ordered eigenvalues of the sample covariance matrix. Eigenvalue ratios are computed on ``[1, t]`` and ``[t+1, T]`` and the largest normalized gap is maximized over dates:
+gives coefficients that are constant under ``H_0`` --- and zero, since principal components are orthogonal over the full sample --- but shift at the break date under ``H_1``. The test is a sup-LM test for instability in that regression:
 
 ```math
-\text{CDG}(t) = \sqrt{\frac{t(T - t)}{T}} \cdot \max_k \left| \frac{\lambda_k^{(1)}}{\lambda_{k+1}^{(1)}} - \frac{\lambda_k^{(2)}}{\lambda_{k+1}^{(2)}} \right|
+\text{CDG} = \sup_{\pi \in [0.15,\, 0.85]} \frac{S(\tau)' \hat{\Omega}^{-1} S(\tau)}{\pi (1 - \pi)}, \qquad \pi = \tau / T
 ```
 
-with ``r_{\max} = \min(\lfloor \sqrt{\min(T, N)} \rfloor, 10)`` set automatically, and the reported p-value taken from a ``\chi^2(r_{\max})`` approximation.
+where:
+- ``S(\tau) = T^{-1/2} \sum_{t \leq \tau} Z_t \hat{u}_t`` is the partial sum of the regression scores, with ``Z_t = (1, \hat{F}_{2:r,t}')'``
+- ``\hat{u}_t`` are the full-sample regression residuals
+- ``\hat{\Omega}`` is a Newey-West HAC estimate of the long-run variance of ``Z_t u_t``, with the Newey-West (1994) automatic bandwidth
 
-!!! warning "The Chen-Dolado-Gonzalo p-value is not calibrated"
-    ``\text{CDG}(t)`` is a scaled maximum of eigenvalue-ratio differences, not a quadratic form, so the ``\chi^2(r_{\max})`` reference distribution understates the null quantiles badly. In simulations with stable loadings the test rejects at the nominal 5% level essentially always. Treat the statistic as a descriptive fluctuation measure --- compare it across specifications or sub-samples --- and take the reject/fail-to-reject decision from `:han_inoue`.
+The p-value comes from the Andrews (1993)/Hansen (1997) sup-Wald tables with ``p = r`` parameters under test --- the intercept plus ``r - 1`` slopes --- the same machinery `andrews_test` uses. The HAC variance is not optional: estimated factors are serially correlated, and a homoskedastic-i.i.d. variance makes the same statistic reject far too often.
+
+Omitting ``r`` selects it by the Bai-Ng (2002) IC2 criterion over ``r \leq \min(\lfloor\sqrt{\min(T, N)}\rfloor, 10)``:
 
 ```@example test_breaks
-cdg = factor_break_test(X_break; method=:chen_dolado_gonzalo)
-(statistic = round(cdg.statistic, digits=2),
- r_max = cdg.n_factors,
- break_date = cdg.break_date)
+report(factor_break_test(X_break; method=:chen_dolado_gonzalo))
 ```
 
-With ``T = 200`` and ``N = 60`` the automatic rule sets ``r_{\max} = \lfloor\sqrt{60}\rfloor = 7``, and the statistic reaches 503.49 at observation 127. The date is 27 observations away from the true break at 100, which is the expected behaviour: the eigenvalue-ratio criterion detects that the factor structure changed somewhere without localizing it sharply, because both sub-samples must be long enough for the covariance eigenvalues to stabilize.
+IC2 reads 7 factors off the broken panel --- more than the 3 that generated it, which is exactly the inflation the test exploits --- and the sup-LM statistic of 23.4356 rejects at 5% with the break dated at observation 100. On the stable panel the same call selects 5 factors and returns 10.0023 with a p-value of 0.3620.
+
+Supplying ``r`` is not automatically the stronger choice:
+
+```@example test_breaks
+cdg_r3 = factor_break_test(X_break, 3; method=:chen_dolado_gonzalo)
+(statistic = round(cdg_r3.statistic, digits=3),
+ pvalue = round(cdg_r3.pvalue, digits=4),
+ break_date = cdg_r3.break_date)
+```
+
+Fixing ``r`` at 3 --- the number of factors that generated the data --- drops the statistic to 7.418 and the p-value to 0.3875, and the test no longer rejects: the extra factor directions the break creates are precisely what was discarded. Neither call dominates, and which one wins depends on how much of the cross-section moves. In simulation on ``T = 200``, ``N = 60``, ``r = 3`` panels, a sign flip in half the loadings is found 69% of the time at 5% with ``r = 3`` supplied against 41% by the IC2 dispatch, while a flip in only a quarter of them reverses the ranking, 15% against 46%.
+
+!!! warning "A break that flips every loading is not identified"
+    If every loading changes sign at ``\tau``, then ``X = \tilde{F}\Lambda'`` with ``\tilde{F}_t = F_t`` before the break and ``-F_t`` after fits the same data with *stable* loadings. No test on this page rejects that alternative, and none should: in simulation all three reject it at roughly their nominal size (0.035, 0.040, and 0.030 at the 5% level). Loading breaks are identified only relative to a fixed normalization of the factors.
 
 ### Choosing a method
 
 | Feature needed | Recommended | Why |
 |----------------|-------------|-----|
-| Calibrated reject/fail decision | `:han_inoue` | Correct size, high power |
-| ``r`` known, want a break date | `:han_inoue` | Sharpest date localization |
+| Reject/fail decision, ``r`` known | `:breitung_eickmeier` or `:han_inoue` | Size near nominal, power 1.00 |
+| One economy-wide break date | `:han_inoue` | Pools evidence at a common date |
+| Series breaking at their own dates | `:breitung_eickmeier` | Sups each series separately |
 | ``r`` unknown | `:chen_dolado_gonzalo` | Only method not needing ``r`` |
-| Loading path as a diagnostic | `:breitung_eickmeier` | CUSUM path, conservative p-value |
+| Very narrow panel (``N \lesssim 10``) | `:breitung_eickmeier` | Han-Inoue over-rejects there |
+
+Simulated size at the 5% level with stable loadings runs 0.017 to 0.043 for Breitung-Eickmeier, 0.050 to 0.055 for Han-Inoue, and 0.013 to 0.063 for Chen-Dolado-Gonzalo across ``(T, N, r)`` from ``(35, 8, 2)`` to ``(300, 120, 3)`` --- except that Han-Inoue reaches 0.115 on the smallest panel (Pitfall 6). Against a sign flip in half the loadings at ``T/2``, Breitung-Eickmeier and Han-Inoue reject on every replication and date the break to within 0.1% of ``T``; Chen-Dolado-Gonzalo rejects 69% of the time. Highly persistent factors are the one regime where the size guarantees weaken --- with AR(0.9) factors Chen-Dolado-Gonzalo rejects 11.3% of stable panels, Breitung-Eickmeier turns very conservative at 0.7%, and Han-Inoue holds up best at 3.5%.
 
 ### Options and return values
 
-`factor_break_test` takes one keyword, `method`, defaulting to `:breitung_eickmeier` for the two-argument form `factor_break_test(X, r)` and to `:chen_dolado_gonzalo` for the one-argument form `factor_break_test(X)`. Passing `:breitung_eickmeier` or `:han_inoue` without `r` raises an `ArgumentError`. All three methods require at least 30 time periods and standardize the panel internally, so no pre-scaling is needed. Breitung-Eickmeier and Han-Inoue need ``r`` as an input: determine it first with `ic_criteria(X, r_max)`, which reports the Bai-Ng (2002) criteria, and see [Factor Models](@ref factor_page).
+`factor_break_test` takes `method`, defaulting to `:breitung_eickmeier` for the two-argument form `factor_break_test(X, r)` and to `:chen_dolado_gonzalo` for the one-argument form `factor_break_test(X)`. Passing `:breitung_eickmeier` or `:han_inoue` without `r` raises an `ArgumentError`. All three methods require at least 30 time periods and standardize the panel internally, so no pre-scaling is needed. Breitung-Eickmeier and Han-Inoue need ``r`` as an input: determine it first with `ic_criteria(X, r_max)`, which reports the Bai-Ng (2002) criteria, and see [Factor Models](@ref factor_page).
+
+| Keyword | Type | Default | Description |
+|---------|------|---------|-------------|
+| `method` | `Symbol` | `:breitung_eickmeier` or `:chen_dolado_gonzalo` | Test method, depending on the dispatch |
+| `nsim` | `Int` | `0` | Null-reference draws; `0` selects ``\min(\max(100N, 2000), 20000)`` |
+| `nboot` | `Int` | `2000` | Resampling draws behind the pooled p-value |
+| `seed` | `Integer` | `20110711` / `20151031` | Seed for the null reference (Breitung-Eickmeier / Han-Inoue) |
+
+`nsim`, `nboot`, and `seed` tune the simulated references of the two pooled tests and are ignored by `:chen_dolado_gonzalo`.
 
 | Field | Type | Description |
 |-------|------|-------------|
 | `statistic` | `T` | Test statistic |
-| `pvalue` | `T` | Approximate p-value (see the method notes above) |
+| `pvalue` | `T` | Monte Carlo p-value for the pooled tests, Hansen (1997) tables for `:chen_dolado_gonzalo` |
 | `break_date` | `Union{Int, Nothing}` | Estimated break index, `nothing` when the trimmed range is empty |
 | `method` | `Symbol` | Method used |
-| `n_factors` | `Int` | ``r``, or ``r_{\max}`` for Chen-Dolado-Gonzalo |
+| `n_factors` | `Int` | ``r``, or the IC2 selection when Chen-Dolado-Gonzalo is called without it |
 | `nobs` | `Int` | Number of time periods ``T`` |
 | `n_vars` | `Int` | Number of cross-section units ``N`` |
+| `series_statistics` | `Union{Vector{T}, Nothing}` | Per-series sup statistics ``M_i`` for the pooled tests, `nothing` for `:chen_dolado_gonzalo` |
+| `series_break_dates` | `Union{Vector{Int}, Nothing}` | Date maximizing each series' own statistic path, same availability |
 
 ---
 
@@ -595,9 +638,9 @@ The economics is in the AR(1) coefficient. Before the break, growth is positivel
 
 4. **Bai-Perron silently reducing `max_breaks`.** Each regime needs at least ``\max(k+1, \lceil \pi T \rceil)`` observations, so the feasible maximum is ``\lfloor T/h \rfloor - 1``. With many regressors or a short sample the requested `max_breaks` is cut without an error. Check `length(result.supf_stats)` to see how many breaks were actually searched.
 
-5. **Trusting the factor-break p-values uniformly.** Only the Han-Inoue p-value is calibrated against a table built for its own statistic. Breitung-Eickmeier uses a ``\chi^2(Nr)`` approximation that is badly conservative for large ``N``, and Chen-Dolado-Gonzalo uses a ``\chi^2(r_{\max})`` approximation that rejects far too often. Take the decision from `:han_inoue`, and use the other two for their statistic paths and break dates.
+5. **Reading the per-series statistics as an attribution under a big break.** `series_statistics` ranks the breaking series reliably when a modest subset of the panel breaks --- with 6 of 60 series breaking, the six largest statistics are exactly the breakers in simulation. But a break large enough to rotate the estimated factor space, such as half the panel flipping sign, elevates the *stable* series' statistics too, because loading breaks are only identified relative to the factor normalization. Pooled rejection first, attribution second, and only when the rejection is not a panel-wide rotation.
 
-6. **Applying factor break tests to small cross-sections.** Breitung-Eickmeier and Han-Inoue rely on averaging across units, which needs ``N`` large enough for the asymptotics to bite; below ``N = 30`` their size properties deteriorate. For small panels, apply `andrews_test` or `bai_perron_test` to the individual equations instead.
+6. **Expecting power from a narrow cross-section.** Size holds in small panels for Breitung-Eickmeier --- it rejects 4.3% of stable panels at ``T = 35``, ``N = 8``, while Han-Inoue over-rejects there (11.5%), so prefer `:breitung_eickmeier` on very narrow panels. Power, though, comes from pooling across units: a break confined to a few series in a narrow panel goes undetected. For small panels, apply `andrews_test` or `bai_perron_test` to the individual equations instead.
 
 7. **Choosing the Gregory-Hansen model by fit rather than by theory.** The `:CS` regime shift lets every slope change at the break, which makes it the most flexible alternative and therefore the least powerful: it estimates ``m`` extra coefficients under ``H_1``. Start with `:C` and move to `:CT` or `:CS` only when theory says the trend or the slopes should shift.
 
@@ -630,3 +673,5 @@ The economics is in the AR(1) coefficient. Before the break, growth is positivel
 - Liu, J., Wu, S., & Zidek, J. V. (1997). On segmented multivariate regression. *Statistica Sinica*, 7(2), 497-525.
 
 - McCracken, M. W., & Ng, S. (2021). FRED-QD: A quarterly database for macroeconomic research. *Federal Reserve Bank of St. Louis Review*, 103(1), 1-44. [DOI](https://doi.org/10.20955/r.103.1-44)
+
+- Newey, W. K., & West, K. D. (1994). Automatic lag selection in covariance matrix estimation. *Review of Economic Studies*, 61(4), 631-653. [DOI](https://doi.org/10.2307/2297912)

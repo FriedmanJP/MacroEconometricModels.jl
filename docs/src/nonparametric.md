@@ -289,10 +289,10 @@ The density of ``y`` peaks at ``0.8309`` rather than at zero, the signature of a
 
 ```@example np
 # Bibliography for the methods a fitted object actually used
-print(refs(kr; format=:text))
+refs(kr; format=:text)
 ```
 
-`refs` returns the formatted bibliography as a `String` rather than printing it, so wrap the call in `print` to display it. Pass `format=:bibtex`, `:latex`, or `:html` for the other output styles.
+`refs` prints the formatted bibliography to `stdout` and returns `nothing`, exactly as `report` does, so call it bare. Pass `format=:bibtex`, `:latex`, or `:html` for the other output styles, and `sprint(io -> refs(io, kr; format=:bibtex))` to capture the text as a `String`.
 
 ---
 

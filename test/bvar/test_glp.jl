@@ -118,7 +118,7 @@ end
 
     # The unoptimized hyperparameters are passed through untouched
     @test r.hyper.decay == 0.5
-    @test r.hyper.omega == 2.0
+    @test r.hyper.omega == 1.0
     r2 = optimize_hyperparameters_glp(Y, p; decay=1.5, omega=3.0)
     @test r2.hyper.decay == 1.5 && r2.hyper.omega == 3.0
 

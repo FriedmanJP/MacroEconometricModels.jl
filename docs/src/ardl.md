@@ -398,7 +398,7 @@ AIC selects ARDL(1; 1) on 249 effective observations — here the criterion reco
 ## References
 
 ```@example ardl
-print(refs(m))
+refs(m)
 ```
 
 - Pesaran, M. H., & Shin, Y. (1999). An Autoregressive Distributed Lag Modelling Approach to Cointegration Analysis. In S. Strøm (Ed.), *Econometrics and Economic Theory in the 20th Century*, 371-413. Cambridge University Press. ISBN 978-0-521-63323-9.

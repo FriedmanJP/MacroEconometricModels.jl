@@ -283,7 +283,10 @@ function _joint_diagonalization(matrices::Vector{Matrix{T}}; max_iter::Int=100,
                 h[3] += 2 * ip * iq  # redundant with h[1] but keeps notation clear
             end
 
-            theta = atan(2 * h[1], h[2]) / 2
+            # Cardoso–Souloumiac (1993) Jacobi angle: quarter-angle, not half.
+            # atan2(2·h₁, h₂)/2 is a fixed point of the off-diagonal criterion
+            # (no rotation); the joint-diagonalization optimum is atan2/4.
+            theta = atan(2 * h[1], h[2]) / 4
 
             # Apply rotation
             c, s = cos(theta), sin(theta)
@@ -592,16 +595,17 @@ HSIC with a characteristic kernel (Gaussian) is zero iff variables are independe
 """
 function identify_hsic(model::VARModel{T}; kernel::Symbol=:gaussian,
                         sigma::T=T(1.0), max_iter::Int=200,
-                        tol::T=T(1e-6)) where {T<:AbstractFloat}
+                        tol::T=T(1e-6),
+                        rng::AbstractRNG=Random.default_rng()) where {T<:AbstractFloat}
     n = nvars(model)
     Z, W_white, dewhiten = _whiten(model.U)
 
-    # Use median heuristic for bandwidth if not specified
+    # Use median heuristic for bandwidth if not specified (seeded subsample)
     if sigma == one(T)
         dists = T[]
         T_obs = size(Z, 1)
         n_sample = min(T_obs, 200)
-        idx = randperm(T_obs)[1:n_sample]
+        idx = randperm(rng, T_obs)[1:n_sample]
         for i in idx, j in idx
             i < j && push!(dists, norm(@view(Z[i, :]) .- @view(Z[j, :])))
         end

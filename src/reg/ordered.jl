@@ -454,7 +454,8 @@ X should NOT include an intercept column -- it is absorbed into cutpoints.
 # Arguments
 - `y::AbstractVector` -- ordinal dependent variable (will be remapped to 1:J)
 - `X::AbstractMatrix{T}` -- regressor matrix (n x K, no intercept)
-- `cov_type::Symbol` -- covariance estimator: `:ols` (MLE), `:hc1` (sandwich)
+- `cov_type::Symbol` -- covariance estimator: `:ols` (MLE information), `:hc0`, `:hc1`
+  (sandwich), or `:cluster` (requires `clusters`)
 - `varnames::Union{Nothing,Vector{String}}` -- coefficient names (auto-generated if nothing)
 - `clusters::Union{Nothing,AbstractVector}` -- cluster assignments (for `:cluster`)
 - `maxiter::Int` -- maximum Newton-Raphson iterations (default 200)
@@ -501,7 +502,7 @@ Cumulative link model: P(y <= j | x) = Phi(alpha_j - x' beta).
 X should NOT include an intercept column -- it is absorbed into cutpoints.
 
 # Arguments
-Same as `estimate_ologit`.
+Same as `estimate_ologit` (including `cov_type ∈ (:ols, :hc0, :hc1, :cluster)`).
 
 # Returns
 `OrderedProbitModel{T}` with estimated coefficients, cutpoints, and joint vcov.
@@ -931,6 +932,7 @@ Key property: AMEs sum to zero across categories for each variable.
 # Returns
 Named tuple with fields:
 - `effects::Matrix{T}` -- K x J matrix of AMEs
+- `se::Matrix{T}` -- delta-method standard errors (same shape)
 - `varnames::Vector{String}` -- variable names
 - `categories::Vector` -- category labels
 
@@ -958,36 +960,60 @@ function marginal_effects(m::OrderedProbitModel{T}) where {T<:AbstractFloat}
     _ordered_marginal_effects(m, _normal_pdf)
 end
 
-"""Internal: compute AME for ordered logit/probit."""
+"""Internal: compute AME + delta-method SEs for ordered logit/probit."""
 function _ordered_marginal_effects(m, F_pdf::Function)
     T_type = eltype(m.beta)
-    n = length(m.y)
     K = length(m.beta)
     J = length(m.cutpoints) + 1
     alpha = m.cutpoints
     beta = m.beta
 
-    ame = zeros(T_type, K, J)
+    ame = _ordered_ame_core(m.X, beta, alpha, F_pdf)
 
+    # Finite-difference Jacobian of vec(AME) w.r.t. θ = [β; α]
+    n_theta = K + length(alpha)
+    G = zeros(T_type, K * J, n_theta)
+    h = sqrt(eps(T_type))
+    ame0 = vec(ame)
+    theta0 = vcat(beta, alpha)
+    for p in 1:n_theta
+        theta = copy(theta0)
+        step = max(abs(theta[p]), one(T_type)) * h
+        theta[p] += step
+        ame_p = vec(_ordered_ame_core(m.X, theta[1:K], theta[K+1:end], F_pdf))
+        G[:, p] .= (ame_p .- ame0) ./ step
+    end
+    V = m.vcov_mat
+    se = if size(V, 1) >= n_theta
+        V_ame = G * V[1:n_theta, 1:n_theta] * G'
+        reshape(sqrt.(max.(diag(V_ame), zero(T_type))), K, J)
+    else
+        fill(T_type(NaN), K, J)
+    end
+
+    (effects=ame, se=se, varnames=copy(m.varnames), categories=copy(m.categories))
+end
+
+function _ordered_ame_core(X::Matrix{T}, beta::AbstractVector{S}, alpha::AbstractVector{S},
+                           F_pdf::Function) where {T,S}
+    n = size(X, 1)
+    K = length(beta)
+    J = length(alpha) + 1
+    ame = zeros(S, K, J)
     @inbounds for i in 1:n
-        xi = @view m.X[i, :]
+        xi = @view X[i, :]
         xb = dot(xi, beta)
-
         for j in 1:J
-            # f(alpha_{j-1} - xb) - f(alpha_j - xb)
-            f_lower = j == 1 ? zero(T_type) : F_pdf(T_type, alpha[j-1] - xb)
-            f_upper = j == J ? zero(T_type) : F_pdf(T_type, alpha[j] - xb)
+            f_lower = j == 1 ? zero(S) : F_pdf(S, alpha[j-1] - xb)
+            f_upper = j == J ? zero(S) : F_pdf(S, alpha[j] - xb)
             factor = f_lower - f_upper
-
             for k in 1:K
                 ame[k, j] += factor * beta[k]
             end
         end
     end
-
-    ame ./= T_type(n)
-
-    (effects=ame, varnames=copy(m.varnames), categories=copy(m.categories))
+    ame ./= S(n)
+    ame
 end
 
 # =============================================================================
@@ -998,17 +1024,24 @@ end
     brant_test(m::OrderedLogitModel{T}) -> NamedTuple
 
 Brant test of the proportional odds (parallel regression) assumption for
-an ordered logit model.
+an ordered logit model (Brant 1990).
 
-For each cutpoint j = 1,...,J-1, fits a binary logit (y <= j vs y > j).
-Under H0 (proportional odds), all binary logit coefficients should be equal.
+For each cutpoint j = 1,...,J-1, fits a binary logit (y ≤ j vs y > j).
+Under H0 (proportional odds) the binary-logit slope vectors are equal:
 
-# Algorithm
-1. Fit J-1 binary logits splitting at each cutpoint
-2. Compute Wald statistic comparing each binary logit's beta to the
-   pooled ordered logit estimate
-3. Overall test: chi-squared with K*(J-2) degrees of freedom
-4. Per-variable tests: chi-squared with (J-2) df each
+    β̂₁ = β̂₂ = ⋯ = β̂_{J−1}
+
+Contrasts are formed against the last binary logit,
+
+    d_j = β̂_j − β̂_{J−1},  j = 1,…,J−2
+
+with the **joint** score covariance of the binary logits (shared sample —
+not the independence approximation). Overall Wald χ² has K·(J−2) degrees of
+freedom; per-variable tests have (J−2) df each.
+
+Note: the binary slopes are **not** compared to the pooled ordered-logit
+`m.beta` — under H0 the binary MLEs need not equal the ologit MLE (different
+likelihoods), only each other.
 
 # Returns
 Named tuple with fields:
@@ -1031,71 +1064,85 @@ function brant_test(m::OrderedLogitModel{T}) where {T<:AbstractFloat}
     Jm1 >= 2 || throw(ArgumentError("Brant test requires at least 3 categories (J >= 3)"))
 
     # Fit J-1 binary logits: y <= j vs y > j
-    # X must include intercept for binary logit
     X_bin = hcat(ones(T, n), m.X)  # n x (K+1)
 
     binary_coefs = Matrix{T}(undef, K, Jm1)
-    binary_vcovs = Vector{Matrix{T}}(undef, Jm1)
+    # Per-observation scores for the FULL [1 X] parameter vector (K+1 × n per cutpoint).
+    # The binary logits carry an intercept, so the slope covariance is the slope block of
+    # the (K+1)-dimensional sandwich — dropping the intercept before inverting the bread
+    # leaves the statistic location-dependent (#547).
+    scores = Vector{Matrix{T}}(undef, Jm1)
+    breads = Vector{Matrix{T}}(undef, Jm1)
 
     for j in 1:Jm1
         y_bin = T.(m.y .<= j)
         mj = estimate_logit(y_bin, X_bin; maxiter=200)
-        # Extract slope coefficients (skip intercept at index 1)
         binary_coefs[:, j] = mj.beta[2:end]
-        # Extract vcov for slopes only
-        binary_vcovs[j] = mj.vcov_mat[2:end, 2:end]
-    end
 
-    # Overall Wald test: compare each binary logit's beta to the ordered logit beta
-    # Under H0, beta_j = beta for all j
-    # Use the first J-2 contrasts: beta_j - beta_{J-1} for j = 1,...,J-2
-    # (comparing each to the last binary logit)
-    if Jm1 == 2
-        # Simple case: one contrast beta_1 - beta_2
-        d = binary_coefs[:, 1] - binary_coefs[:, 2]
-        V_d = binary_vcovs[1] + binary_vcovs[2]
-        V_d_inv = Matrix{T}(robust_inv(Hermitian(V_d)))
-        stat_overall = dot(d, V_d_inv * d)
-        df_overall = K
-    else
-        # Stack contrasts: (beta_j - beta_{J-1}) for j = 1,...,J-2
-        n_contrasts = Jm1 - 1
-        d_stack = Vector{T}(undef, K * n_contrasts)
-        V_stack = zeros(T, K * n_contrasts, K * n_contrasts)
-
-        for j in 1:n_contrasts
-            offset = (j - 1) * K
-            d_stack[offset+1:offset+K] = binary_coefs[:, j] - binary_coefs[:, Jm1]
-            # Var(beta_j - beta_{J-1}) = Var(beta_j) + Var(beta_{J-1})
-            # (assuming independence across binary logits)
-            V_stack[offset+1:offset+K, offset+1:offset+K] =
-                binary_vcovs[j] + binary_vcovs[Jm1]
+        # Score contribution s_i = x_i (y_i − μ_i); bread = (X'WX)^{-1}
+        mu = mj.fitted
+        resid = y_bin .- mu
+        sc = Matrix{T}(undef, K + 1, n)
+        @inbounds for i in 1:n
+            for k in 1:(K + 1)
+                sc[k, i] = X_bin[i, k] * resid[i]
+            end
         end
-
-        V_stack_inv = Matrix{T}(robust_inv(Hermitian(V_stack)))
-        stat_overall = dot(d_stack, V_stack_inv * d_stack)
-        df_overall = K * n_contrasts
+        scores[j] = sc
+        w = mu .* (one(T) .- mu)
+        XtWX = X_bin' * (X_bin .* w)
+        breads[j] = Matrix{T}(robust_inv(Hermitian((XtWX .+ XtWX') ./ 2)))
     end
 
+    # Joint covariance Cov(β̂_a, β̂_b) = Bread_a · (Σ_i s_{a,i} s_{b,i}') · Bread_b,
+    # formed in full dimension and then restricted to the slope block.
+    function _joint_cov(a::Int, b::Int)
+        meat = zeros(T, K + 1, K + 1)
+        sa = scores[a]; sb = scores[b]
+        @inbounds for i in 1:n
+            meat .+= sa[:, i] * sb[:, i]'
+        end
+        (breads[a] * meat * breads[b])[2:end, 2:end]
+    end
+
+    # Contrasts: β̂_j − β̂_{J−1} for j = 1,...,J-2 (equality of binary slopes)
+    n_contrasts = Jm1 - 1
+    d_stack = Vector{T}(undef, K * n_contrasts)
+    V_stack = zeros(T, K * n_contrasts, K * n_contrasts)
+    ref = Jm1
+    for j in 1:n_contrasts
+        offset = (j - 1) * K
+        d_stack[offset+1:offset+K] = binary_coefs[:, j] - binary_coefs[:, ref]
+        for j2 in 1:n_contrasts
+            offset2 = (j2 - 1) * K
+            # Var(β_j − β_ref, β_{j2} − β_ref) = V_jj2 − V_j,ref − V_ref,j2 + V_ref,ref
+            V_stack[offset+1:offset+K, offset2+1:offset2+K] =
+                _joint_cov(j, j2) - _joint_cov(j, ref) -
+                _joint_cov(ref, j2) + _joint_cov(ref, ref)
+        end
+    end
+    V_stack = (V_stack .+ V_stack') ./ 2
+    V_stack_inv = Matrix{T}(robust_inv(Hermitian(V_stack)))
+    stat_overall = max(dot(d_stack, V_stack_inv * d_stack), zero(T))
+    df_overall = K * n_contrasts
     pval_overall = T(1 - cdf(Chisq(df_overall), stat_overall))
 
-    # Per-variable tests: for each k, test that beta_{k,1} = ... = beta_{k,J-1}
+    # Per-variable tests: β_{k,1} = ⋯ = β_{k,J−1}
     per_var_pvals = Vector{T}(undef, K)
-    n_contrasts = Jm1 - 1
     df_per_var = n_contrasts
-
     for k in 1:K
         d_k = Vector{T}(undef, n_contrasts)
         V_k = zeros(T, n_contrasts, n_contrasts)
-
         for j in 1:n_contrasts
-            d_k[j] = binary_coefs[k, j] - binary_coefs[k, Jm1]
-            # Variance of the contrast
-            V_k[j, j] = binary_vcovs[j][k, k] + binary_vcovs[Jm1][k, k]
+            d_k[j] = binary_coefs[k, j] - binary_coefs[k, ref]
+            for j2 in 1:n_contrasts
+                V_k[j, j2] = (_joint_cov(j, j2) - _joint_cov(j, ref) -
+                              _joint_cov(ref, j2) + _joint_cov(ref, ref))[k, k]
+            end
         end
-
+        V_k = (V_k .+ V_k') ./ 2
         V_k_inv = Matrix{T}(robust_inv(Hermitian(V_k)))
-        stat_k = dot(d_k, V_k_inv * d_k)
+        stat_k = max(dot(d_k, V_k_inv * d_k), zero(T))
         per_var_pvals[k] = T(1 - cdf(Chisq(df_per_var), stat_k))
     end
 

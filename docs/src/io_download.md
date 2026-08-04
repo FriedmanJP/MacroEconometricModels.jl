@@ -68,7 +68,7 @@ list_io_sources()
 | `:oecd` | OECD ICIO (Yamano et al. 2023) | `v2016`, `v2018`, `v2021`, `v2023` | No | Fixed per-version URL table |
 | `:wiod` | WIOD 2013 (Timmer et al. 2015) | `2013` | No | Scrape of the release page for `wiot*.xlsx` |
 | `:exiobase3` | EXIOBASE 3 (Stadler et al. 2018) | `3.8.2` | No | Scrape of the Zenodo record for `IOT_YYYY_{pxp,ixi}.zip` |
-| `:eora26` | EORA26 (Lenzen et al. 2013) | `26` | Yes | worldmrio.com account |
+| `:eora26` | EORA26 (Lenzen et al. 2013) | `26` | Yes | Manual only — interactive worldmrio.com login |
 | `:gloria` | GLORIA (Lenzen et al. 2017) | `053` | No | Fixed URL set |
 
 The two scraping sources are the fragile ones: they match a regular expression against the live release page, so a redesign upstream breaks them while the fixed-URL sources keep working. The OECD tables are grouped into multi-year blocks from version `v2021` onward, so a `years` filter matches a key such as `"2016-2020"` whenever any requested year falls inside it.
@@ -93,9 +93,11 @@ download_exiobase3("mrio"; system="pxp", years=[2010])
 download_wiod("mrio")
 download_gloria("mrio")
 
-# EORA26 requires a worldmrio.com account
+# EORA26 has no automated path: this call throws and explains why
 download_eora26("mrio"; email="you@example.com", password=ENV["MRIO_PASSWORD"])
 ```
+
+EORA26 is registered as a source but is not downloadable from here. worldmrio.com authenticates through an interactive session that cannot be reproduced headlessly, so `download_eora26` validates the email and then throws an `ErrorException` naming the manual route — fetch the tables from the site and read them with `parse_io`. It fails loudly rather than returning an empty log that reads like success.
 
 ### Keyword Arguments
 
@@ -107,7 +109,7 @@ download_eora26("mrio"; email="you@example.com", password=ENV["MRIO_PASSWORD"])
 | `overwrite_existing` | `Bool` | `false` | Re-fetch files that already exist on disk |
 | `email` / `password` | `AbstractString`/`Nothing` | `nothing` | Credentials; EORA26 only |
 | `system` | `AbstractString` | `"pxp"` | EXIOBASE only: `"pxp"` product-by-product or `"ixi"` industry-by-industry |
-| `verify` | `Bool` | `true` | Check each archive's SHA-256 against `IO_CHECKSUMS`; not accepted by `:eora26` |
+| `verify` | `Bool` | `true` | Check each archive's SHA-256 against `IO_CHECKSUMS`; accepted but unused by `:eora26` |
 | `fetch` | `Function` | `fetch_file` | File downloader, injectable |
 | `fetch_text` | `Function` | `fetch_text` | HTML fetcher for the scraping sources, injectable |
 
@@ -277,11 +279,11 @@ The pipeline separates three concerns that are easy to conflate. Fetching produc
 
 1. **Downloading does not parse.** `download_io` returns an `IOMetaData`, never an `IOData`. The two steps are deliberately separate, following the `pymrio` convention, because a single MRIO archive contains many tables and only the caller knows which one is wanted.
 
-2. **`verify` is not accepted by `:eora26`.** `download_eora26` has no `verify` keyword, so `download_io(:eora26; storage_folder=…, verify=false)` throws a `MethodError` listing the unsupported keyword. Omit `verify` for that source.
+2. **`:eora26` accepts `verify` but never downloads.** `download_eora26` takes the same `verify`/`fetch` keywords as every other source, so `download_io(:eora26; storage_folder=…, verify=false)` type-checks; it then throws an `ErrorException` because the automated fetch is not implemented. The keyword parity is for uniform forwarding through `download_io`, not a promise that the source works.
 
 3. **`IO_CHECKSUMS` is empty, so every real download warns.** The warning means "not verified", not "verification failed". Silence it by registering the digest with `io_file_digest` after a first trusted fetch, or by passing `verify=false` when the check is not wanted.
 
-4. **`parse_io` records neither `source` nor `year` on the table.** Both keywords exist to select and configure the parser; the returned `IOData` carries `source=""` and `year=nothing`. Rebuild the table with `IOData(...; source=…, year=…)` when the provenance must travel with it.
+4. **`parse_io` records `source` and `year`, so pass `year` when it matters.** The returned `IOData` carries `source` as the string form of the symbol given, and `year` exactly as supplied. `year` is optional and defaults to `nothing`, so a table parsed without it keeps no vintage — give `year=` at parse time rather than rebuilding the table afterwards.
 
 5. **`n_sectors` is required for delimited files.** `_parse_csv_io` has no default, so omitting it is a `MethodError`. The ZIP and XLSX parsers default `n_sectors=0`, which means "use every row", and silently mis-slice a file that carries label rows or a value-added block.
 
@@ -289,7 +291,7 @@ The pipeline separates three concerns that are easy to conflate. Fetching produc
 
 7. **Existing files are skipped, including truncated ones.** `fetch_file` returns early whenever the destination exists and `overwrite_existing` is false, so an interrupted download is never repaired by re-running the same call. Delete the partial file or pass `overwrite_existing=true`.
 
-8. **EORA26 fetches nothing.** The downloader validates the email, writes an explanatory line into the log, and returns. The worldmrio.com session flow is interactive, so per-year URLs have to be supplied after authenticating.
+8. **EORA26 throws instead of fetching.** The downloader validates the email — an empty one is an `ArgumentError` — and then raises an `ErrorException` pointing at the manual download. Wrap the call in `try`/`catch` if a batch script iterates over every registered source.
 
 9. **Scraped sources depend on the publisher's page.** WIOD and EXIOBASE URLs come from a regular expression matched against a live HTML page. A page redesign yields an empty `files` list rather than an error, so check `length(meta.files)` before assuming a download succeeded.
 

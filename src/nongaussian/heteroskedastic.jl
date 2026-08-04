@@ -477,9 +477,20 @@ end
 
 """Estimate GARCH(1,1) parameters for a single series."""
 function _estimate_garch11(epsilon_sq::Vector{T}) where {T<:AbstractFloat}
-    params0 = [log(var(epsilon_sq) * T(0.05)), T(0.0), T(2.0)]  # omega, alpha, beta init
+    # Stationary GARCH(1,1) start: α≈0.05, β≈0.90 ⇒ α+β=0.95 < 1.
+    # Inverse of α = 0.5/(1+exp(-p2)) ⇒ p2 = -log(0.5/α - 1); same for β with cap 0.99.
+    # Previous init [log(var*0.05), 0, 2] mapped to (α,β)=(0.25,0.872) with α+β>1 (Inf loglik).
+    α0, β0 = T(0.05), T(0.90)
+    p2_0 = -log(T(0.5) / α0 - one(T))          # logit for α-map
+    p3_0 = -log(T(0.99) / β0 - one(T))          # logit for β-map
+    var_eps = max(var(epsilon_sq), eps(T))
+    params0 = [log(var_eps * (one(T) - α0 - β0)), p2_0, p3_0]
 
-    result = Optim.optimize(p -> _garch11_loglik(p, epsilon_sq), params0,
+    obj = p -> begin
+        ll = _garch11_loglik(p, epsilon_sq)
+        ifelse(isfinite(ll), ll, T(1e20))  # reject Inf / NaN starts inside Nelder-Mead
+    end
+    result = Optim.optimize(obj, params0,
                             Optim.NelderMead(),
                             Optim.Options(iterations=500))
 
@@ -487,6 +498,12 @@ function _estimate_garch11(epsilon_sq::Vector{T}) where {T<:AbstractFloat}
     omega = exp(p[1])
     alpha = one(T) / (one(T) + exp(-p[2])) * T(0.5)
     beta = one(T) / (one(T) + exp(-p[3])) * T(0.99)
+    # Final stationarity clip (should already hold via the barrier)
+    if alpha + beta >= one(T)
+        s = alpha + beta
+        alpha *= T(0.99) / s
+        beta  *= T(0.99) / s
+    end
 
     h = _garch11_filter(omega, alpha, beta, epsilon_sq)
     (omega, alpha, beta, h)
