@@ -946,7 +946,9 @@ function analytical_moments(sol::PerturbationSolution{T};
     if nx > 0
         Sigma[sol.state_indices, sol.state_indices] = Sigma_x
         if ny > 0
-            Sigma_xy = Sigma_x * gx_state'
+            # y_t = gx·x_{t-1} + η_y·ε_t, so Cov(x_t, y_t) = hx·Σ_x·gx' + η_x·η_y' —
+            # Σ_x·gx' alone is the LAGGED cross-covariance Cov(x_{t-1}, y_t) (#607)
+            Sigma_xy = hx_state * Sigma_x * gx_state' + eta_x * eta_y'
             Sigma[sol.state_indices, sol.control_indices] = Sigma_xy
             Sigma[sol.control_indices, sol.state_indices] = Sigma_xy'
             Sigma[sol.control_indices, sol.control_indices] = gx_state * Sigma_x * gx_state' + eta_y * eta_y'
@@ -965,12 +967,14 @@ function analytical_moments(sol::PerturbationSolution{T};
         k = n
     end
 
-    # Build G1-equivalent transition matrix for autocovariances
+    # Build G1-equivalent transition matrix for autocovariances: w_t = G1·w_{t-1} + Η·ε_t
+    # with a control reading the lagged state directly, y_t = gx·x_{t-1} + η_y·ε_t, so the
+    # control rows carry gx itself — composing gx·hx lags controls one extra period (#607)
     G1_equiv = zeros(T, n, n)
     if nx > 0
         G1_equiv[sol.state_indices, sol.state_indices] = hx_state
         if ny > 0
-            G1_equiv[sol.control_indices, sol.state_indices] = gx_state * hx_state
+            G1_equiv[sol.control_indices, sol.state_indices] = gx_state
         end
     end
     if sol.spec.augmented
@@ -1043,20 +1047,22 @@ function _analytical_moments_gmm(sol::PerturbationSolution{T}; lags::Int=1) wher
         if nx > 0
             Var_y[sol.state_indices, sol.state_indices] = Var_xf
             if ny > 0
-                Var_y[sol.state_indices, sol.control_indices] = Var_xf * gx_state'
-                Var_y[sol.control_indices, sol.state_indices] = gx_state * Var_xf
+                # Contemporaneous cross block: Cov(x_t, y_t) = hx·Σ_x·gx' + η_x·η_y' (#607)
+                Sigma_xy = hx_state * Var_xf * gx_state' + eta_x * eta_y'
+                Var_y[sol.state_indices, sol.control_indices] = Sigma_xy
+                Var_y[sol.control_indices, sol.state_indices] = Sigma_xy'
                 Var_y[sol.control_indices, sol.control_indices] = gx_state * Var_xf * gx_state' + eta_y * eta_y'
             end
         elseif ny > 0
             Var_y[sol.control_indices, sol.control_indices] = eta_y * eta_y'
         end
 
-        # Autocovariances
+        # Autocovariances: control rows carry gx itself, not gx·hx (#607)
         G1_equiv = zeros(T, n, n)
         if nx > 0
             G1_equiv[sol.state_indices, sol.state_indices] = hx_state
             if ny > 0
-                G1_equiv[sol.control_indices, sol.state_indices] = gx_state * hx_state
+                G1_equiv[sol.control_indices, sol.state_indices] = gx_state
             end
         end
 

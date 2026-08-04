@@ -3058,6 +3058,52 @@ end
     end
 end
 
+@testset "analytical_moments: order-1 control moments are contemporaneous (#607)" begin
+    # y is an exact scaling of an AR(1) state, so every moment is known in closed
+    # form: corr(z,y) = 1 and autocorr(y,k) = ρᵏ. The order-1 branch used to lag
+    # the state↔control covariance one period (corr = ρ) and double-apply hx in
+    # the autocovariance transition (autocorr(y,k) = ρ^(k+2)).
+    rho, sig, alp = 0.7, 0.02, 0.4
+    spec = @dsge begin
+        parameters: rho_z = 0.7, sigma_z = 0.02, alpha = 0.4
+        endogenous: z, y
+        exogenous: eps_z
+        z[t] = rho_z * z[t-1] + sigma_z * eps_z[t]
+        y[t] = alpha * z[t]
+    end
+    spec = compute_steady_state(spec)
+    sol1 = perturbation_solver(spec; order=1)
+    vz = sig^2 / (1 - rho^2)
+
+    # :covariance layout — upper triangle (zz, zy, yy), then diag autocovariances
+    mc = analytical_moments(sol1; lags=2)
+    @test mc[1] ≈ vz rtol = 1e-10
+    @test mc[2] ≈ alp * vz rtol = 1e-10          # contemporaneous, NOT alp*rho*vz
+    @test mc[3] ≈ alp^2 * vz rtol = 1e-10
+    @test mc[5] / mc[3] ≈ rho rtol = 1e-10       # autocorr(y,1), NOT rho^3
+    @test mc[7] / mc[3] ≈ rho^2 rtol = 1e-10     # autocorr(y,2), NOT rho^4
+
+    # :gmm layout agrees, and order 2 (exact for a linear model) matches order 1
+    mg = analytical_moments(sol1; lags=2, format=:gmm)
+    @test mg ≈ analytical_moments(perturbation_solver(spec; order=2);
+                                  lags=2, format=:gmm) atol = 1e-9
+
+    # A control reading the LAGGED state stays correct: y[t] = κ·x[t-1]
+    lin = @dsge begin
+        parameters: ρ = 0.8, κ = 0.5, σ = 1.0
+        endogenous: x, y
+        exogenous: ε
+        x[t] = ρ * x[t-1] + σ * ε[t]
+        y[t] = κ * x[t-1]
+    end
+    lin = compute_steady_state(lin)
+    vx = 1 / (1 - 0.8^2)
+    ml = analytical_moments(perturbation_solver(lin; order=1); lags=2)
+    @test ml ≈ [vx, 0.5 * 0.8 * vx, 0.25 * vx,
+                0.8 * vx, 0.25 * 0.8 * vx,
+                0.64 * vx, 0.25 * 0.64 * vx] rtol = 1e-10
+end
+
 @testset "analytical_moments: lags=0" begin
     spec = @dsge begin
         parameters: rho = 0.5
