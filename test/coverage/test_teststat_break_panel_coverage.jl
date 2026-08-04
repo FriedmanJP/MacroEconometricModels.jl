@@ -12,9 +12,9 @@
 #                                     _pesaran_cips_critical_values_and_pvalue (4 p-value branches),
 #                                     _nearest_val, show
 #   src/teststat/factor_break.jl    — Float64 fallback (no-r), FactorModel dispatch (han_inoue),
-#                                     _be_sup_lm_path/_be_null_pool/_be_pooled_pvalue, _han_inoue_pvalue
-#                                     (4 branches), _sup_lm_hac, _cdg_select_r, show (3 conclusion
-#                                     branches, break_date nothing),
+#                                     _be_sup_lm_path/_be_null_pool/_be_pooled_pvalue,
+#                                     _hi_null_paths/_hi_pooled_sups (#605), _sup_lm_hac, _cdg_select_r,
+#                                     show (3 conclusion branches, break_date nothing, per-series table #606),
 #                                     matrix-only dispatch error for :breitung_eickmeier/:han_inoue
 #   src/teststat/andrews.jl         — Float64 fallback, all 9 variants (3 stats x 3 functionals),
 #                                     _andrews_functional (sup/exp/mean), _andrews_critical_values (3 tables),
@@ -505,7 +505,7 @@ Random.seed!(9010)
         E = Xs - F * Lam'
         s2 = vec(sum(abs2, E; dims=1)) ./ 120
 
-        sup, dates, pooled = MacroEconometricModels._be_sup_lm_path(F, E, s2, 18, 102)
+        sup, dates, pooled, paths = MacroEconometricModels._be_sup_lm_path(F, E, s2, 18, 102)
         @test length(sup) == 15
         @test length(dates) == 15
         @test length(pooled) == 102 - 18 + 1
@@ -514,6 +514,10 @@ Random.seed!(9010)
         # The pooled path sums the same LM values the suprema are taken over, so its
         # maximum can never exceed the sum of the per-series maxima.
         @test maximum(pooled) <= sum(sup) + 1e-8
+        # The path matrix is consistent with its own summaries (#605)
+        @test size(paths) == (102 - 18 + 1, 15)
+        @test vec(maximum(paths; dims=1)) ≈ sup
+        @test vec(sum(paths; dims=2)) ≈ pooled
 
         pool = MacroEconometricModels._be_null_pool(F, 18, 102, 200,
                                                     Random.MersenneTwister(7))
@@ -529,32 +533,25 @@ Random.seed!(9010)
         @test p_lo ≈ 1.0
     end
 
-    @testset "_han_inoue_pvalue: all 4 branches" begin
-        # Need to look up critical values for a specific k
-        k = 2
-        cv = MacroEconometricModels.HANSEN_ANDREWS_CV[k]
+    @testset "_hi_null_paths / _hi_pooled_sups (#605)" begin
+        rng = Random.MersenneTwister(3012)
+        X = randn(rng, 120, 15)
+        fm = estimate_factors(X, 2; standardize=true)
+        F = fm.factors
 
-        # Branch 1: stat >= cv1 (beyond 1% CV)
-        pval1 = MacroEconometricModels._han_inoue_pvalue(Float64(cv[1]) + 10.0, k)
-        @test pval1 <= 0.01
+        # Chunking is exercised via a nsim that is not a multiple of the 2000 chunk
+        paths = MacroEconometricModels._hi_null_paths(F, 18, 102, 150,
+                                                      Random.MersenneTwister(7))
+        @test size(paths) == (102 - 18 + 1, 150)
+        @test all(paths .>= 0)
 
-        # Branch 2: between cv5 and cv1
-        stat_b2 = (Float64(cv[1]) + Float64(cv[5])) / 2
-        pval2 = MacroEconometricModels._han_inoue_pvalue(stat_b2, k)
-        @test 0.01 <= pval2 <= 0.05
-
-        # Branch 3: between cv10 and cv5
-        stat_b3 = (Float64(cv[5]) + Float64(cv[10])) / 2
-        pval3 = MacroEconometricModels._han_inoue_pvalue(stat_b3, k)
-        @test 0.05 <= pval3 <= 0.10
-
-        # Branch 4: below cv10
-        pval4 = MacroEconometricModels._han_inoue_pvalue(0.01, k)
-        @test pval4 >= 0.10
-
-        # k clamped to 1..10
-        pval_big_k = MacroEconometricModels._han_inoue_pvalue(100.0, 15)
-        @test pval_big_k <= 0.01
+        pool = MacroEconometricModels._hi_pooled_sups(paths, 15,
+                                                      Random.MersenneTwister(8), 300)
+        @test length(pool) == 300
+        @test all(pool .> 0)
+        # A pooled sup aggregates 15 per-series paths pointwise, so it can never
+        # exceed 15 times the largest single path value
+        @test maximum(pool) <= 15 * maximum(paths) + 1e-8
     end
 
     @testset "_sup_lm_hac / _cdg_select_r" begin
@@ -603,12 +600,16 @@ Random.seed!(9010)
         s2 = String(take!(io2))
         @test occursin("Chen-Dolado-Gonzalo", s2)
 
-        # Show with han_inoue
+        # Show with han_inoue — pooled tests list the largest per-series statistics (#606)
         result_hi = factor_break_test(X, 2; method=:han_inoue)
         io3 = IOBuffer()
         show(io3, result_hi)
         s3 = String(take!(io3))
         @test occursin("Han-Inoue", s3)
+        @test occursin("Largest per-series break statistics", s3)
+        @test occursin("Largest per-series break statistics", sprint(show, result_be))
+        # CDG pools nothing, so it has no per-series table
+        @test !occursin("Largest per-series break statistics", s2)
 
         # Show with break_date = nothing (manually constructed)
         result_nothing = FactorBreakResult(0.0, 1.0, nothing, :chen_dolado_gonzalo, 2, 100, 25)

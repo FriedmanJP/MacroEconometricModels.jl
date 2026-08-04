@@ -384,6 +384,10 @@ Fields:
 - `n_factors`: Number of factors in the model
 - `nobs`: Time dimension (T)
 - `n_vars`: Number of observed variables
+- `series_statistics`: Per-series sup statistics `Mᵢ = sup_τ LMᵢ(τ)` (length-N vector
+  for the two pooled tests; `nothing` for :chen_dolado_gonzalo, which pools nothing) (#606)
+- `series_break_dates`: The date maximizing each series' own statistic path (same
+  availability as `series_statistics`)
 """
 struct FactorBreakResult{T<:AbstractFloat} <: AbstractUnitRootTest
     statistic::T
@@ -393,6 +397,22 @@ struct FactorBreakResult{T<:AbstractFloat} <: AbstractUnitRootTest
     n_factors::Int
     nobs::Int
     n_vars::Int
+    series_statistics::Union{Vector{T}, Nothing}
+    series_break_dates::Union{Vector{Int}, Nothing}
+end
+
+# 7-argument constructors predate the per-series fields (#606); methods without
+# per-series information (and user code built against the old layout) use these.
+function FactorBreakResult{T}(statistic, pvalue, break_date::Union{Int, Nothing},
+                              method::Symbol, n_factors::Int, nobs::Int,
+                              n_vars::Int) where {T<:AbstractFloat}
+    FactorBreakResult{T}(statistic, pvalue, break_date, method, n_factors, nobs,
+                         n_vars, nothing, nothing)
+end
+function FactorBreakResult(statistic::T, pvalue::Real, break_date::Union{Int, Nothing},
+                           method::Symbol, n_factors::Int, nobs::Int,
+                           n_vars::Int) where {T<:AbstractFloat}
+    FactorBreakResult{T}(statistic, T(pvalue), break_date, method, n_factors, nobs, n_vars)
 end
 
 """
