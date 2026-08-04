@@ -65,6 +65,13 @@ nlags(model::VARModel) = model.p
 Number of estimated coefficients per equation, ``1 + n p`` (intercept plus ``p`` lags of ``n`` variables).
 """
 ncoefs(model::VARModel) = 1 + nvars(model) * model.p
+
+"""
+    effective_nobs(model) -> Int
+
+Effective sample size after lag trimming (e.g. `T − p` for a VAR). Exported
+accessor shared by VAR / VECM / FAVAR result types.
+"""
 effective_nobs(model::VARModel) = size(model.Y, 1) - model.p
 varnames(model::VARModel) = model.varnames
 
@@ -83,7 +90,14 @@ struct VARForecast{T<:AbstractFloat} <: AbstractForecastResult{T}
     ci_method::Symbol
     conf_level::T
     varnames::Vector{String}
+    # Optional raw bootstrap draws (reps × h × n) for consumers that must push
+    # uncertainty through a linear map (e.g. favar_panel_forecast; #524).
+    _draws::Union{Nothing,Array{T,3}}
 end
+
+# Backward-compatible constructor (no draws)
+VARForecast{T}(forecast, ci_lower, ci_upper, horizon, ci_method, conf_level, varnames) where {T} =
+    VARForecast{T}(forecast, ci_lower, ci_upper, horizon, ci_method, conf_level, varnames, nothing)
 
 function Base.show(io::IO, fc::VARForecast{T}) where {T}
     n_vars = length(fc.varnames)
@@ -225,10 +239,16 @@ struct FEVD{T<:AbstractFloat} <: AbstractFEVD
     shocks::Vector{String}
 end
 
-"""Bayesian FEVD with posterior quantiles."""
+"""
+Bayesian FEVD with posterior quantiles.
+
+Axis order matches [`FEVD`](@ref) / [`LPFEVD`](@ref) (#527):
+- `point_estimate`: (variable, shock, horizon)
+- `quantiles`: (variable, shock, horizon, quantile)
+"""
 struct BayesianFEVD{T<:AbstractFloat} <: AbstractFEVD
-    quantiles::Array{T,4}
-    point_estimate::Array{T,3}
+    quantiles::Array{T,4}          # (variable, shock, horizon, quantile)
+    point_estimate::Array{T,3}     # (variable, shock, horizon)
     horizon::Int
     variables::Vector{String}
     shocks::Vector{String}
@@ -258,7 +278,11 @@ Minnesota prior hyperparameters (Bańbura–Giannone–Reichlin stacked-dummy pa
 - `decay`  — lag decay; higher lags shrink toward zero faster (scaling `lag^decay`).
 - `lambda` — weight on the **sum-of-coefficients** prior (shrinks toward Σₗ Aₗ = I).
 - `mu`     — weight on the **co-persistence / dummy-initial-observation** prior.
-- `omega`  — weight on the prior for the residual covariance.
+- `omega`  — residual-covariance prior **weight**: the number of replications of the
+             `diag(σ̂)` dummy block (rounded, minimum 1 when positive). Each copy adds `n`
+             prior degrees of freedom around the same location `E[Σ] ∝ diag(σ̂²)`, so
+             LARGER `omega` ⇒ TIGHTER (more informative) residual-covariance prior —
+             opposite direction to `tau`. `omega ≤ 0` omits the covariance dummy block.
 
 Reference-naming caveat (audit F-03): in Ferroni–Canova `BVAR_`/`rfvar3`, `lambda` is
 co-persistence and `mu` is own/sum-of-coefficients — i.e. our `lambda`/`mu` roles are SWAPPED
@@ -274,7 +298,7 @@ struct MinnesotaHyperparameters{T<:AbstractFloat} <: AbstractPrior
 end
 
 function MinnesotaHyperparameters(; tau::Real=3.0, decay::Real=0.5,
-                                   lambda::Real=5.0, mu::Real=2.0, omega::Real=2.0)
+                                   lambda::Real=5.0, mu::Real=2.0, omega::Real=1.0)
     T = promote_type(typeof(tau), typeof(decay), typeof(lambda), typeof(mu), typeof(omega))
     MinnesotaHyperparameters{T}(T(tau), T(decay), T(lambda), T(mu), T(omega))
 end

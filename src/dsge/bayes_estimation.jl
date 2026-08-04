@@ -1824,12 +1824,12 @@ function fevd(result::BayesianDSGE{T}, horizon::Int;
         "($(round(100*n_skipped/n_sim; digits=1))%) that failed to solve; bands conditioned on $(n_valid) draws."
     n_valid == 0 && error("All posterior draws failed to produce valid FEVDs")
 
-    # Stack: FEVD proportions are (n_vars x n_shocks x horizon)
-    # Rearrange to (n_valid x horizon x n_vars x n_shocks) for quantile computation
-    stacked = zeros(T, n_valid, horizon, n_vars, n_shocks)
+    # Stack: FEVD proportions are (n_vars × n_shocks × horizon) — keep that order so
+    # BayesianFEVD matches FEVD.proportions axis layout (#527).
+    stacked = zeros(T, n_valid, n_vars, n_shocks, horizon)
     for (s, arr) in enumerate(all_fevds)
         for h in 1:horizon, v in 1:n_vars, sh in 1:n_shocks
-            stacked[s, h, v, sh] = arr[v, sh, h]
+            stacked[s, v, sh, h] = arr[v, sh, h]
         end
     end
 

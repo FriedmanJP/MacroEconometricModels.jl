@@ -228,7 +228,8 @@ end
 # =============================================================================
 
 """
-    _whisker_data_json(event_times, coefs, ci_lo, ci_hi, reference_period) -> String
+    _whisker_data_json(event_times, coefs, ci_lo, ci_hi, reference_period;
+                       mark_reference=true) -> String
 
 Build the `[{x, y, lo, hi, ref}]` payload for `_render_whisker_js` (event-study
 coefplot; PLT-17). Each estimated event time carries its point + CI; the reference /
@@ -236,22 +237,26 @@ omitted period is emitted with `ref:1`, `null` CI (so the renderer draws a hollo
 marker and no whisker). When `reference_period` is not among `event_times`, a
 synthetic `(reference_period, 0)` row is added so the omitted category is always
 visible. Rows are sorted by event time.
+
+`mark_reference=false` treats every event time as estimated — used when the reference
+period carries a real coefficient (Callaway-Sant'Anna with `base_period=:varying`).
 """
 function _whisker_data_json(event_times::AbstractVector{<:Integer},
                             coefs::AbstractVector, ci_lo::AbstractVector,
-                            ci_hi::AbstractVector, reference_period::Integer)
+                            ci_hi::AbstractVector, reference_period::Integer;
+                            mark_reference::Bool=true)
     xs = Int[]; ys = Float64[]
     los = Union{Float64,Nothing}[]; his = Union{Float64,Nothing}[]; refs = Int[]
     ref_present = false
     for i in eachindex(event_times)
-        et = Int(event_times[i]); isref = et == Int(reference_period)
+        et = Int(event_times[i]); isref = mark_reference && et == Int(reference_period)
         isref && (ref_present = true)
         push!(xs, et); push!(ys, Float64(coefs[i]))
         push!(los, isref ? nothing : Float64(ci_lo[i]))
         push!(his, isref ? nothing : Float64(ci_hi[i]))
         push!(refs, isref ? 1 : 0)
     end
-    if !ref_present
+    if mark_reference && !ref_present
         push!(xs, Int(reference_period)); push!(ys, 0.0)
         push!(los, nothing); push!(his, nothing); push!(refs, 1)
     end

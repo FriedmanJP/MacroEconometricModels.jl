@@ -62,7 +62,7 @@ end
     _hdfe_index_sets(codes, G) -> Vector{Vector{Int}}
 
 Group → observation-indices map for dense codes `1:G`, built in two O(n) passes
-(count, then fill). Same contract as [`_group_index_map`](@ref) — buckets fill in
+(count, then fill). Same contract as `_group_index_map` — buckets fill in
 ascending index order — specialized to dense integer codes so the map is a
 `Vector` of exactly-sized `Vector{Int}` rather than a `Dict`. Built once and
 reused by every sweep of the projection loop, which is the whole point: the inner

@@ -54,6 +54,10 @@ group-time ATTs for Callaway-Sant'Anna. All DiD methods return this type.
   vector (rows/cols aligned 1:1 with `att`/`event_times`), or `nothing` when the
   estimator does not (yet) supply a cross-horizon covariance. Consumed by the
   covariance-based overall-ATT SE and the joint pre-trend Wald test.
+- `base_period::Symbol` — `:universal` (the reference period is a structural zero,
+  masked as "(ref) —" and dropped from the pre-trend test) or `:varying`
+  (Callaway-Sant'Anna only: the e=−1 cell is the estimable adjacent-period placebo
+  ATT(g,g−1) vs base g−2 and is reported like any other event time)
 
 # References
 - Callaway, B. & Sant'Anna, P. H. C. (2021). *JoE* 225(2), 200-230.
@@ -81,12 +85,14 @@ struct DIDResult{T<:AbstractFloat} <: AbstractFrequentistResult
     cluster::Symbol
     conf_level::T
     att_vcov::Union{Matrix{T}, Nothing}
+    base_period::Symbol
 end
 
-# Back-compat outer constructor: legacy 20-arg positional calls (through `conf_level`)
+# Back-compat outer constructors: legacy 20-arg positional calls (through `conf_level`)
 # default `att_vcov` to `nothing`, so estimators that do not supply a cross-horizon
-# covariance (and any hand-built DIDResult) compile UNCHANGED. Only estimators that
-# populate the covariance pass the 21st argument explicitly.
+# covariance (and any hand-built DIDResult) compile UNCHANGED. Both short forms default
+# `base_period` to `:universal` — every estimator except Callaway-Sant'Anna normalizes
+# the reference period to an exact zero.
 function DIDResult{T}(att, se, ci_lower, ci_upper, event_times, reference_period,
                       group_time_att, cohorts, overall_att, overall_se, n_obs,
                       n_groups, n_treated, n_control, method, outcome_var,
@@ -94,7 +100,18 @@ function DIDResult{T}(att, se, ci_lower, ci_upper, event_times, reference_period
     DIDResult{T}(att, se, ci_lower, ci_upper, event_times, reference_period,
                  group_time_att, cohorts, overall_att, overall_se, n_obs,
                  n_groups, n_treated, n_control, method, outcome_var,
-                 treatment_var, control_group, cluster, conf_level, nothing)
+                 treatment_var, control_group, cluster, conf_level, nothing, :universal)
+end
+
+function DIDResult{T}(att, se, ci_lower, ci_upper, event_times, reference_period,
+                      group_time_att, cohorts, overall_att, overall_se, n_obs,
+                      n_groups, n_treated, n_control, method, outcome_var,
+                      treatment_var, control_group, cluster, conf_level,
+                      att_vcov) where {T<:AbstractFloat}
+    DIDResult{T}(att, se, ci_lower, ci_upper, event_times, reference_period,
+                 group_time_att, cohorts, overall_att, overall_se, n_obs,
+                 n_groups, n_treated, n_control, method, outcome_var,
+                 treatment_var, control_group, cluster, conf_level, att_vcov, :universal)
 end
 
 # StatsAPI interface
@@ -418,12 +435,14 @@ function Base.show(io::IO, r::DIDResult{T}) where {T}
         alignment = [:l, :r],
     )
 
-    # Event-study coefficient table
+    # Event-study coefficient table. Under :varying the e=−1 row is an estimated
+    # adjacent-period placebo, not a normalization, so it is printed (#548).
     n_evt = length(r.event_times)
     evt_names = ["e=" * string(e) for e in r.event_times]
+    ref_rows = r.base_period == :varying ? Int[] :
+               findall(==(r.reference_period), r.event_times)
     _coef_table(io, "Event-Study Coefficients", evt_names,
-                T.(r.att), T.(r.se); dist=:z,
-                ref_rows=findall(==(r.reference_period), r.event_times))
+                T.(r.att), T.(r.se); dist=:z, ref_rows=ref_rows)
 
     # Overall ATT
     println(io)

@@ -228,16 +228,18 @@ _latex_mathify_cell(v, _i, _j) = (v isa AbstractString && _needs_math(v)) ?
 
 """Select representative horizons for display.
 
-`unique` drops the duplicated endpoint when `H` coincides with a fixed anchor (e.g. `H=8`
-gave `[1,4,8,8]` → a doubled row in forecast/IRF tables). `unique` preserves
-first-occurrence order and never reorders. (B2/T165) NOTE follow-up: for `H` in `6:7` the
-anchor `8` exceeds `H`; that pre-existing quirk is out of T165 scope."""
+Anchors are filtered to `<= H` before `H` is appended, so the result never exceeds `H`:
+callers index an `H`-sized dimension with these values, and the unfiltered `8` anchor made
+every IRF/FEVD/LP `show` throw `BoundsError` at `H ∈ 6:7` (#601). `unique` then drops the
+duplicated endpoint when `H` coincides with an anchor (e.g. `H=8` gave `[1,4,8,8]` → a
+doubled row in forecast/IRF tables); it preserves first-occurrence order and never
+reorders. (B2/T165)"""
 function _select_horizons(H::Int)
     H <= 5 && return collect(1:H)
-    hs = H <= 12 ? [1, 4, 8, H] :
-         H <= 24 ? [1, 4, 8, 12, H] :
-                   [1, 4, 8, 12, 24, H]
-    return unique(hs)
+    anchors = H <= 12 ? [1, 4, 8] :
+              H <= 24 ? [1, 4, 8, 12] :
+                        [1, 4, 8, 12, 24]
+    return unique(vcat(filter(<=(H), anchors), H))
 end
 
 """

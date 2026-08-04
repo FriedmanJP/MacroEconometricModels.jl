@@ -12,7 +12,7 @@ to `sum(w) == 1`. Supported kinds:
 
 - `:expalmon` — exponential Almon, `wₖ ∝ exp(θ₁k + θ₂k²)`, k=1..K.
 - `:beta2`    — two-parameter Beta, `wₖ ∝ x^{θ₁−1}(1−x)^{θ₂−1}` on a guarded (0,1) grid.
-- `:beta3`    — three-parameter Beta, adds a nonnegative level constant `θ₃`.
+- `:beta3`    — three-parameter Beta, adds a level constant `θ₃ ≥ 0` (clamped).
 - `:almon`    — polynomial Almon of degree `d = length(θ)−1` (then normalized).
 - `:umidas`   — placeholder equal weights (U-MIDAS is estimated by plain OLS).
 
@@ -67,7 +67,9 @@ function _midas_weights(theta::AbstractVector{T}, K::Int, kind::Symbol) where {T
         u = (x .^ (a - one(T))) .* ((one(T) .- x) .^ (b - one(T)))
         if kind === :beta3
             length(theta) == 3 || throw(ArgumentError(":beta3 expects 3 parameters"))
-            u = u .+ theta[3]
+            # Nonnegative level constant (#575): clamp so weights cannot flip sign
+            # when θ₃ is driven negative by an unconstrained optimizer.
+            u = u .+ max(theta[3], zero(T))
         else
             length(theta) == 2 || throw(ArgumentError(":beta2 expects 2 parameters"))
         end
@@ -128,8 +130,12 @@ function _midas_weights_jac(theta::AbstractVector{T}, K::Int, kind::Symbol) wher
         d_a = base .* log.(x)                 # ∂base/∂a
         d_b = base .* log.(one(T) .- x)       # ∂base/∂b
         if kind === :beta3
-            u = base .+ theta[3]
-            du = hcat(d_a, d_b, ones(T, K))   # ∂u/∂θ₃ = 1
+            # Mirror the max(θ₃, 0) clamp of the forward map (#575): the level constant
+            # is frozen at 0 for θ₃ ≤ 0, so its derivative there is 0, not 1. At the kink
+            # take the right derivative so an optimizer started at θ₃ = 0 can still move.
+            u = base .+ max(theta[3], zero(T))
+            d_t3 = theta[3] >= zero(T) ? ones(T, K) : zeros(T, K)
+            du = hcat(d_a, d_b, d_t3)
             return _normalize_jac(u, du)
         else
             u = base

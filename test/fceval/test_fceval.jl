@@ -128,7 +128,7 @@ using Test, MacroEconometricModels, Random, LinearAlgebra, Statistics
         # Display + refs render
         @test occursin("Forecast Evaluation", sprint(show, ev))
         @test occursin("Theil", sprint(show, ev))
-        @test !isempty(refs(ev))
+        @test !isempty(sprint(io -> refs(io, ev)))
     end
 
     @testset "MAPE/sMAPE zero-actual guard" begin
@@ -180,7 +180,7 @@ using Test, MacroEconometricModels, Random, LinearAlgebra, Statistics
         @test cw.statistic > 1.645
         @test cw.pvalue < 0.05
         @test occursin("Clark", sprint(show, cw))
-        @test !isempty(refs(cw))
+        @test !isempty(sprint(io -> refs(io, cw)))
     end
 
     @testset "Forecast combination" begin
@@ -216,7 +216,7 @@ using Test, MacroEconometricModels, Random, LinearAlgebra, Statistics
         @test rmse(cgr.combined) <= rmse(ceq.combined) + 1e-8
 
         @test occursin("Combination", sprint(show, cgr))
-        @test !isempty(refs(cgr))
+        @test !isempty(sprint(io -> refs(io, cgr)))
     end
 
     @testset "plot_result renders" begin

@@ -63,52 +63,76 @@ function panic_test(X::AbstractMatrix{T};
     method in (:pooled, :individual) || throw(ArgumentError(
         "method must be :pooled or :individual, got :$method"))
 
-    # Determine number of factors
+    # Bai–Ng (2004) PANIC pipeline:
+    #   1. Difference the panel
+    #   2. Estimate factors by PCA on the *differenced* data
+    #   3. Recumulate factors and residuals to levels
+    #   4. ADF on recumulated factors / idiosyncratic components
+    # Estimating factors from levels (previous code) confounds common stochastic
+    # trends with idiosyncratic I(1) and makes the pooled Pa reject ~100% under H0.
+
+    dX = diff(X; dims=1)                   # (T_obs-1) × N
+    Td = size(dX, 1)
+
     n_factors = if r === :auto
-        r_max = min(10, min(T_obs, N) - 1)
+        r_max = min(10, min(Td, N) - 1)
         r_max < 1 && throw(ArgumentError(
             "Panel too small for automatic factor selection"))
-        ic = ic_criteria(X, r_max; standardize=true)
-        ic.r_IC2
+        ic = ic_criteria(dX, r_max; standardize=true)
+        max(1, ic.r_IC2)
     else
         r::Int
         r < 1 && throw(ArgumentError("Number of factors r must be >= 1, got r=$r"))
-        r > min(T_obs, N) - 1 && throw(ArgumentError(
-            "Number of factors r=$r too large for panel of size ($T_obs, $N)"))
+        r > min(Td, N) - 1 && throw(ArgumentError(
+            "Number of factors r=$r too large for differenced panel of size ($Td, $N)"))
         r
     end
 
-    # Step 1: Estimate factors via PCA
-    fm = estimate_factors(X, n_factors; standardize=true)
-    F_hat = fm.factors          # T_obs x r
-    Lambda_hat = fm.loadings    # N x r
-    e_hat = Matrix{T}(residuals(fm))  # T_obs x N idiosyncratic residuals
+    # Step 1: PCA on differences (no standardize — Bai–Ng accumulate raw
+    # residuals; standardizing before accumulation distorts the I(1) scale).
+    fm = estimate_factors(dX, n_factors; standardize=false)
+    dF = fm.factors                        # Td × r
+    de_hat = Matrix{T}(residuals(fm))      # Td × N
 
-    # Step 2: Factor unit root tests
+    # Step 2: Recumulate to levels (start at 0)
+    F_hat = Matrix{T}(undef, T_obs, n_factors)
+    e_hat = Matrix{T}(undef, T_obs, N)
+    F_hat[1, :] .= zero(T)
+    e_hat[1, :] .= zero(T)
+    @inbounds for t in 1:Td
+        F_hat[t + 1, :] = F_hat[t, :] .+ dF[t, :]
+        e_hat[t + 1, :] = e_hat[t, :] .+ de_hat[t, :]
+    end
+
+    # Step 3: Factor unit root tests on recumulated factors
     factor_adf_stats = Vector{T}(undef, n_factors)
     factor_adf_pvals = Vector{T}(undef, n_factors)
     for j in 1:n_factors
-        adf_result = adf_test(F_hat[:, j]; regression=:constant)
+        adf_result = adf_test(F_hat[:, j]; regression=:none, lags=0)
         factor_adf_stats[j] = adf_result.statistic
         factor_adf_pvals[j] = adf_result.pvalue
     end
 
-    # Step 3: Idiosyncratic unit root tests (no deterministics for defactored residuals)
+    # Step 4: Idiosyncratic unit root tests (DF without constant — series start at 0)
     individual_stats = Vector{T}(undef, N)
     individual_pvals = Vector{T}(undef, N)
     for i in 1:N
-        ei = e_hat[:, i]
-        adf_result = adf_test(ei; regression=:none)
+        adf_result = adf_test(e_hat[:, i]; regression=:none, lags=0)
         individual_stats[i] = adf_result.statistic
         individual_pvals[i] = adf_result.pvalue
     end
 
-    # Step 4: Pooled statistic
-    # Under H0, individual p-values ~ U(0,1), so Pa standardizes their sum
-    # Pa = (sum(p_i) - N*0.5) / sqrt(N/12) -> N(0,1) under H0
-    Pa = (sum(individual_pvals) - N * T(0.5)) / sqrt(N / T(12))
-    # Left-tailed: reject when Pa is large negative (many small p-values = stationarity)
-    pooled_pval = T(cdf(Normal(), Pa))
+    # Step 5: Bai–Ng (2004) pooled statistic — the Fisher-type combination of
+    # the individual DF p-values (their eq. for P̂):
+    #   P = (−2 Σᵢ log pᵢ − 2N) / √(4N)  →  N(0,1)  under H0,
+    # right-tailed (small pᵢ ⇒ large P ⇒ evidence of pooled stationarity).
+    # This is the statistic the paper defines; an IPS-style standardized mean-t
+    # would need the no-constant DF t moments (measured ≈ −0.42/0.96, NOT the
+    # −1.145/0.600 a previous revision hardcoded — those produced size 0.000
+    # after fixing the 100%-rejection defect it replaced; #581).
+    logp_sum = sum(log.(clamp.(individual_pvals, floatmin(T), one(T))))
+    Pa = (-2 * logp_sum - 2 * T(N)) / sqrt(4 * T(N))
+    pooled_pval = T(ccdf(Normal(), Pa))
 
     PANICResult{T}(
         factor_adf_stats,

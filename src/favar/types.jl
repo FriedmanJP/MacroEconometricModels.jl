@@ -84,6 +84,9 @@ factors, and loadings.
 - `Sigma_draws::Array{T,3}`: Covariance draws (n_draws × n_var × n_var)
 - `factor_draws::Array{T,3}`: Factor draws (n_draws × T_obs × r)
 - `loadings_draws::Array{T,3}`: Loading draws (n_draws × N × r)
+- `lambda_y_draws::Array{T,3}`: Direct key-variable loading draws (n_draws × N × n_key),
+  rescaled so that `Λ_y · y_irf` with `y_irf` in the VAR's original `Y_key` units yields
+  a response in standardized panel units — the same units as `Λ · f_irf`
 - `X_panel::Matrix{T}`: Original panel data (T_obs × N)
 - `panel_varnames::Vector{String}`: Panel variable names
 - `Y_key_indices::Vector{Int}`: Key variable column indices
@@ -93,12 +96,20 @@ factors, and loadings.
 - `p::Int`: VAR lag order
 - `data::Matrix{T}`: Augmented VAR data [F, Y_key]
 - `varnames::Vector{String}`: VAR variable names
+
+Since the #528 fix, the Gibbs measurement equation is BBE (2005) eq. 3,
+`X = F Λ' + Y_key Λ_y' + e`, with the factors purged of the key variables' own
+variation. The #525 double-counting concern applied to the OLD equation without
+`Λ_y` (factors then absorbed the entire `Y_key` co-movement); with the factors
+purged, panel mappings MUST add the stored direct channel `Λ_y · y_irf` back, or
+responses of `Y_key`-loading series are understated. `favar_panel_irf` does this.
 """
 struct BayesianFAVAR{T<:AbstractFloat}
     B_draws::Array{T,3}
     Sigma_draws::Array{T,3}
     factor_draws::Array{T,3}
     loadings_draws::Array{T,3}
+    lambda_y_draws::Array{T,3}
     X_panel::Matrix{T}
     panel_varnames::Vector{String}
     Y_key_indices::Vector{Int}
@@ -142,14 +153,16 @@ function to_var(favar::FAVARModel{T}) where {T}
     U = favar.U
     Sigma = favar.Sigma
 
-    # Compute information criteria from the VAR representation
+    # Compute information criteria from the VAR representation. System parameter
+    # count n·k, matching estimate_var (#522) — the same fitted VAR must report
+    # the same criteria through either accessor.
     T_eff = size(U, 1)
-    k = size(B, 1)
+    k_sys = size(Y_aug, 2) * size(B, 1)
     Sigma_ml = (U'U) / T_eff
     log_det = logdet_safe(Sigma_ml)
-    aic_val = log_det + 2 * k / T_eff
-    bic_val = log_det + k * log(T_eff) / T_eff
-    hqic_val = log_det + 2 * k * log(log(T_eff)) / T_eff
+    aic_val = log_det + 2 * k_sys / T_eff
+    bic_val = log_det + k_sys * log(T_eff) / T_eff
+    hqic_val = log_det + 2 * k_sys * log(log(T_eff)) / T_eff
 
     VARModel(Y_aug, p, B, U, Sigma, aic_val, bic_val, hqic_val, favar.varnames)
 end

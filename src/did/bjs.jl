@@ -73,7 +73,8 @@ function _estimate_bjs(pd::PanelData{T}, outcome_col::Int, treat_col::Int;
     n_times = length(all_times)
 
     # Identify cohorts and control groups
-    cohorts = sort(unique([t for (_, t) in timing if t > 0]))
+    cohorts = _cohort_set(timing)
+    _require_cohorts(cohorts, "Borusyak-Jaravel-Spiess")
     never_treated = [g for (g, t) in timing if t == 0]
     n_cohorts = length(cohorts)
     n_control = length(never_treated)
@@ -82,7 +83,7 @@ function _estimate_bjs(pd::PanelData{T}, outcome_col::Int, treat_col::Int;
         throw(ArgumentError("No never-treated units found. Use control_group=:not_yet_treated"))
     end
 
-    n_treated = length([g for (g, t) in timing if t > 0])
+    n_treated = length([g for (g, t) in timing if t != 0])
 
     # =========================================================================
     # Step 1: Build panel lookup and identify untreated observations
@@ -142,7 +143,7 @@ function _estimate_bjs(pd::PanelData{T}, outcome_col::Int, treat_col::Int;
                     push!(control_t, t)
                 end
             else
-                # Treated observation: g_time > 0 and t >= g_time
+                # Treated observation: g_time != 0 and t >= g_time
                 push!(treated_y, y_val)
                 push!(treated_g, g)
                 push!(treated_t, t)

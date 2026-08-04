@@ -65,7 +65,7 @@ Plot a Bayesian FEVD as nested posterior credible fans of each shock's contribut
 share, one panel per `(variable, shock)` (PLT-28). Unlike the old point-only stacked
 area, **all** quantile bands in `f.quantile_levels` render — the posterior uncertainty
 that was previously discarded (audit M23). `stat` selects the central line:
-- `:mean` (default) — `f.point_estimate` (H × n_vars × n_shocks);
+- `:mean` (default) — `f.point_estimate` (n_vars × n_shocks × H; #527);
 - `:median` — the 0.5 quantile from `f.quantiles` (requires that level in
   `f.quantile_levels`, else an `ArgumentError`).
 """
@@ -97,9 +97,10 @@ function plot_result(f::BayesianFEVD{T};
     for vi in vars_to_plot
         for si in shocks_to_plot
             ptitle = "$(f.variables[vi]) ← $(f.shocks[si])"
-            qmat = f.quantiles[1:H, vi, si, :]                 # H×nq contribution share
-            central = stat == :median ? f.quantiles[1:H, vi, si, qidx] :
-                                        f.point_estimate[1:H, vi, si]
+            # Axis order unified with FEVD: (variable, shock, horizon[, quantile]) (#527)
+            qmat = f.quantiles[vi, si, 1:H, :]                 # H×nq contribution share
+            central = stat == :median ? f.quantiles[vi, si, 1:H, qidx] :
+                                        f.point_estimate[vi, si, 1:H]
             panel, _ = _bayes_fan_panel("bfevd", ptitle, xs, qmat, levels,
                                         central, central_label, nothing, 0;
                                         xlabel="Horizon", ylabel="Variance share")

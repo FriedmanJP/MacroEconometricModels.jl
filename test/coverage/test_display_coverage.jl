@@ -458,25 +458,25 @@ end
         Y = randn(rng, 100, 3)
         m = estimate_var(Y, 2)
         for fmt in (:text, :latex, :bibtex, :html)
-            r = refs(m; format=fmt)
+            r = sprint(io -> refs(io, m; format=fmt))
             @test r isa String
             @test !isempty(r)
         end
         # Spot-check format-specific content
-        @test occursin("\\bibitem", refs(m; format=:latex))
-        @test occursin("@article", refs(m; format=:bibtex)) || occursin("@book", refs(m; format=:bibtex))
-        @test occursin("<p>", refs(m; format=:html))
+        @test occursin("\\bibitem", sprint(io -> refs(io, m; format=:latex)))
+        @test occursin("@article", sprint(io -> refs(io, m; format=:bibtex))) || occursin("@book", sprint(io -> refs(io, m; format=:bibtex)))
+        @test occursin("<p>", sprint(io -> refs(io, m; format=:html)))
     end
 
     @testset "refs.jl — symbol dispatch" begin
-        r = refs(:johansen)
+        r = sprint(io -> refs(io, :johansen))
         @test r isa String
         @test !isempty(r)
 
-        r2 = refs(:fastica; format=:bibtex)
+        r2 = sprint(io -> refs(io, :fastica; format=:bibtex))
         @test occursin("@article", r2)
 
-        r3 = refs(:gensys; format=:latex)
+        r3 = sprint(io -> refs(io, :gensys; format=:latex))
         @test occursin("Sims", r3)
     end
 
@@ -486,7 +486,7 @@ end
         X = hcat(ones(200), randn(rng, 200))
         ar = andrews_test(y, X; test=:supwald)
         for fmt in (:text, :bibtex)
-            r = refs(ar; format=fmt)
+            r = sprint(io -> refs(io, ar; format=fmt))
             @test r isa String
             @test !isempty(r)
         end
@@ -497,7 +497,7 @@ end
         y = randn(rng, 200)
         X = hcat(ones(200), randn(rng, 200))
         bp = bai_perron_test(y, X; max_breaks=2, trimming=0.15)
-        r = refs(bp)
+        r = sprint(io -> refs(io, bp))
         @test occursin("Bai", r)
     end
 
@@ -506,7 +506,7 @@ end
         X = randn(rng, 100, 10)
         pr = panic_test(X; r=2)
         for fmt in (:text, :html)
-            r = refs(pr; format=fmt)
+            r = sprint(io -> refs(io, pr; format=fmt))
             @test r isa String
             @test !isempty(r)
         end
@@ -516,7 +516,7 @@ end
         rng = Random.MersenneTwister(9054)
         X = randn(rng, 100, 10)
         pc = pesaran_cips_test(X; lags=1)
-        r = refs(pc)
+        r = sprint(io -> refs(io, pc))
         @test occursin("Pesaran", r)
     end
 
@@ -524,7 +524,7 @@ end
         rng = Random.MersenneTwister(9055)
         X = randn(rng, 100, 10)
         mp = moon_perron_test(X; r=2)
-        r = refs(mp)
+        r = sprint(io -> refs(io, mp))
         @test occursin("Moon", r)
     end
 
@@ -533,7 +533,7 @@ end
         X = randn(rng, 200, 20)
         fb = factor_break_test(X, 3)
         for fmt in (:text, :latex, :bibtex, :html)
-            r = refs(fb; format=fmt)
+            r = sprint(io -> refs(io, fb; format=fmt))
             @test r isa String
             @test !isempty(r)
         end
@@ -543,7 +543,7 @@ end
         rng = Random.MersenneTwister(9057)
         X = randn(rng, 200, 20)
         fm = estimate_factors(X, 3)
-        r = refs(fm)
+        r = sprint(io -> refs(io, fm))
         @test occursin("Bai", r) || occursin("Stock", r)
     end
 
@@ -551,11 +551,11 @@ end
         rng = Random.MersenneTwister(9058)
         Y = randn(rng, 100, 3)
         lp = estimate_lp(Y, 1, 8; lags=2)
-        r = refs(lp)
+        r = sprint(io -> refs(io, lp))
         @test occursin("Jord", r)
 
         slp = structural_lp(Y, 8; method=:cholesky, lags=2)
-        r2 = refs(slp)
+        r2 = sprint(io -> refs(io, slp))
         @test r2 isa String
     end
 
@@ -567,20 +567,20 @@ end
         egarch_m = estimate_egarch(y, 1, 1)
         gjr_m = estimate_gjr_garch(y, 1, 1)
 
-        @test occursin("Engle", refs(arch_m))
-        @test occursin("Bollerslev", refs(garch_m))
-        @test occursin("Nelson", refs(egarch_m))
-        @test occursin("Glosten", refs(gjr_m))
+        @test occursin("Engle", sprint(io -> refs(io, arch_m)))
+        @test occursin("Bollerslev", sprint(io -> refs(io, garch_m)))
+        @test occursin("Nelson", sprint(io -> refs(io, egarch_m)))
+        @test occursin("Glosten", sprint(io -> refs(io, gjr_m)))
     end
 
     @testset "refs.jl — Filter refs" begin
         rng = Random.MersenneTwister(9060)
         y = cumsum(randn(rng, 200))
-        @test !isempty(refs(hp_filter(y)))
-        @test !isempty(refs(hamilton_filter(y)))
-        @test !isempty(refs(beveridge_nelson(y)))
-        @test !isempty(refs(baxter_king(y)))
-        @test !isempty(refs(boosted_hp(y)))
+        @test !isempty(sprint(io -> refs(io, hp_filter(y))))
+        @test !isempty(sprint(io -> refs(io, hamilton_filter(y))))
+        @test !isempty(sprint(io -> refs(io, beveridge_nelson(y))))
+        @test !isempty(sprint(io -> refs(io, baxter_king(y))))
+        @test !isempty(sprint(io -> refs(io, boosted_hp(y))))
     end
 
     @testset "refs.jl — DSGE type refs" begin
@@ -592,14 +592,14 @@ end
         end
         spec = compute_steady_state(spec)
         sol = solve(spec; method=:gensys)
-        r = refs(sol)
+        r = sprint(io -> refs(io, sol))
         @test occursin("Sims", r)
-        r2 = refs(spec)
+        r2 = sprint(io -> refs(io, spec))
         @test r2 isa String
     end
 
     @testset "refs.jl — OccBin refs via symbol" begin
-        r = refs(:occbin)
+        r = sprint(io -> refs(io, :occbin))
         @test occursin("Guerrieri", r)
     end
 
@@ -607,7 +607,7 @@ end
         rng = Random.MersenneTwister(9062)
         Y = cumsum(randn(rng, 150, 3), dims=1)
         vecm = estimate_vecm(Y, 2; rank=1)
-        r = refs(vecm)
+        r = sprint(io -> refs(io, vecm))
         @test occursin("Johansen", r) || occursin("Engle", r)
     end
 
@@ -617,16 +617,16 @@ end
         Y_nc = randn(rng, 100, nM + nQ)
         Y_nc[end, end] = NaN
         dfm_nc = nowcast_dfm(Y_nc, nM, nQ; r=2, p=1)
-        r = refs(dfm_nc)
+        r = sprint(io -> refs(io, dfm_nc))
         @test r isa String
         @test !isempty(r)
     end
 
     @testset "refs.jl — DiD refs via symbol" begin
-        r = refs(:callaway_santanna)
+        r = sprint(io -> refs(io, :callaway_santanna))
         @test occursin("Callaway", r)
 
-        r2 = refs(:twfe)
+        r2 = sprint(io -> refs(io, :twfe))
         @test occursin("Goodman", r2) || occursin("Bacon", r2)
     end
 
@@ -634,12 +634,12 @@ end
         rng = Random.MersenneTwister(9064)
         y = randn(rng, 200)
         ar = estimate_ar(y, 2)
-        r = refs(ar)
+        r = sprint(io -> refs(io, ar))
         @test occursin("Box", r)
     end
 
     @testset "refs.jl — Granger refs" begin
-        r = refs(:granger)
+        r = sprint(io -> refs(io, :granger))
         @test occursin("Granger", r)
     end
 
@@ -722,7 +722,7 @@ end
     end
 
     @testset "refs.jl — Panel VAR refs" begin
-        r = refs(:pvar)
+        r = sprint(io -> refs(io, :pvar))
         @test occursin("Holtz-Eakin", r) || occursin("Arellano", r)
     end
 
@@ -731,20 +731,20 @@ end
         data_gmm = randn(rng, 200, 3)
         g = (theta, data) -> data[:, 2:3] .* (data[:, 1] .- theta[1])
         gmm_m = estimate_gmm(g, [0.0], data_gmm)
-        r = refs(gmm_m)
+        r = sprint(io -> refs(io, gmm_m))
         @test occursin("Hansen", r)
     end
 
     @testset "refs.jl — BayesianDSGE refs via symbol" begin
-        r = refs(:estimate_dsge_bayes)
+        r = sprint(io -> refs(io, :estimate_dsge_bayes))
         @test occursin("Herbst", r) || occursin("Schorfheide", r)
     end
 
     @testset "refs.jl — Normality test refs" begin
-        r = refs(:jarque_bera)
+        r = sprint(io -> refs(io, :jarque_bera))
         @test occursin("Jarque", r)
 
-        r2 = refs(:doornik_hansen)
+        r2 = sprint(io -> refs(io, :doornik_hansen))
         @test occursin("Doornik", r2)
     end
 

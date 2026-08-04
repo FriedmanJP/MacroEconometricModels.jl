@@ -38,6 +38,11 @@ re-estimation.
 - `transformation::Symbol` — :fd, :fod, :demean
 - `steps::Symbol` — :onestep, :twostep, :mstep
 - `system_constant::Bool` — whether level equation includes a constant
+- `min_lag_endo::Int` — minimum instrument lag for endogenous variables
+- `max_lag_endo::Int` — maximum instrument lag
+- `collapse::Bool` — whether instruments were collapsed
+- `pca_instruments::Bool` — whether PCA reduction was applied to instruments
+- `pca_max_components::Int` — max PCA components (0 = auto)
 - `n_groups::Int` — number of panel groups
 - `n_periods::Int` — number of time periods (max)
 - `n_obs::Int` — total effective observations
@@ -74,6 +79,11 @@ struct PVARModel{T<:AbstractFloat} <: StatsAPI.RegressionModel
     transformation::Symbol      # :fd, :fod, :demean
     steps::Symbol               # :onestep, :twostep, :mstep
     system_constant::Bool
+    min_lag_endo::Int
+    max_lag_endo::Int
+    collapse::Bool
+    pca_instruments::Bool
+    pca_max_components::Int
 
     # Panel descriptors
     n_groups::Int
@@ -138,8 +148,10 @@ Specification test result for Panel VAR (Hansen J-test, etc.).
 - `statistic::T` — test statistic value
 - `pvalue::T` — p-value
 - `df::Int` — degrees of freedom
-- `n_instruments::Int` — number of instruments (moment conditions)
-- `n_params::Int` — number of estimated parameters
+- `n_instruments::Int` — moment conditions entering the statistic, counted over the whole
+  system (`m·q` for `m` equations sharing a `q`-column instrument matrix)
+- `n_params::Int` — estimated parameters, likewise system-wide (`m·K`), so that
+  `df == n_instruments − n_params`
 """
 struct PVARTestResult{T<:AbstractFloat} <: StatsAPI.HypothesisTest
     test_name::String
@@ -231,9 +243,9 @@ function Base.show(io::IO, t::PVARTestResult{T}) where {T}
         "Test"          t.test_name;
         "Statistic"     _fmt(t.statistic);
         "P-value"       _format_pvalue(t.pvalue);
-        "DF"            t.df;
-        "Instruments"   t.n_instruments;
-        "Parameters"    t.n_params;
+        "DF"                     t.df;
+        "Instruments (system)"   t.n_instruments;
+        "Parameters (system)"    t.n_params;
     ]
     _pretty_table(io, data;
         title = t.test_name,

@@ -92,7 +92,7 @@ end
 
 Solve `(I + α·S)·x = rhs` in place for an **upper-triangular** `S`. The Lyapunov column sweep
 bottoms out here, on `(I − conj(s_jj)·S)·p̃_j = r_j`. Same aliasing contract and same
-smallest-pivot return as [`_tri_pencil_solve!`](@ref); kept separate so the identity term costs
+smallest-pivot return as `_tri_pencil_solve!`; kept separate so the identity term costs
 no arithmetic.
 """
 @inline function _tri_shift_solve!(x::AbstractVector{C}, S::AbstractMatrix{C},
@@ -140,7 +140,7 @@ the triangular pencil solve `(S + α·Tm)·x = r`. Blocks are visited in increas
 
 The `Σ_{l<m}` term is accumulated by scattering forward (each solved `X_m` is added into the
 accumulators of all later blocks) rather than re-summed per block, and `·P` is applied through
-[`_apply_kron_power`](@ref) so the `nv^{d-1} × nv^{d-1}` operator is never formed.
+`_apply_kron_power` so the `nv^{d-1} × nv^{d-1}` operator is never formed.
 """
 function _sylv_triangular!(X::AbstractMatrix{C}, D::AbstractMatrix{C},
                            S::AbstractMatrix{C}, Tm::AbstractMatrix{C}, Tc::AbstractMatrix{C},
@@ -190,7 +190,7 @@ end
     _sylvester_residual(A, B, C, X, D, d) → relative residual
 
 Relative Frobenius residual of `A·X + B·X·C^{⊗d} − D`, computed matrix-free through
-[`_apply_kron_power`](@ref). Used to certify every solve produced here ([T145]): a direct method
+`_apply_kron_power`. Used to certify every solve produced here ([T145]): a direct method
 still fails on a near-singular pencil, and it must say so rather than return a plausible-looking
 tensor.
 """
@@ -228,10 +228,10 @@ This never throws on a numerically hopeless problem — it reports.
 3. Change variables to `Ỹ = Zᴴ·X·Z_c^{⊗d}`. Since `(Z_cᴴ)^{⊗d}·C^{⊗d} = T_c^{⊗d}·(Z_cᴴ)^{⊗d}`,
    the equation becomes `S·Ỹ + Tm·Ỹ·T_c^{⊗d} = D̃` with `D̃ = Qᴴ·D·Z_c^{⊗d}`, in which ALL
    THREE operators are triangular.
-4. Back-substitute ([`_sylv_triangular!`](@ref)).
+4. Back-substitute (`_sylv_triangular!`).
 5. Transform back: `X = Z·Ỹ·(Z_cᴴ)^{⊗d}`.
 
-The Kronecker powers in steps 3 and 5 are applied through [`_apply_kron_power`](@ref), so the
+The Kronecker powers in steps 3 and 5 are applied through `_apply_kron_power`, so the
 `nv^d × nv^d` operator is never materialized at any point.
 
 The equation is solvable exactly when no generalized eigenvalue `−S[i,i]/Tm[i,i]` of the pencil
@@ -377,7 +377,7 @@ end
     _dlyap(A, Qm; tol=1e-8, warn_label="") → Matrix
 
 Solve `P = A·P·A' + Q`, certifying the result: the doubling iteration
-[`_dlyap_doubling`](@ref) runs first, and [`_bartels_stewart_dlyap`](@ref) takes over when
+[`_dlyap_doubling`](@ref) runs first, and `_bartels_stewart_dlyap` takes over when
 doubling's relative residual misses `tol`.
 
 ## Why doubling leads

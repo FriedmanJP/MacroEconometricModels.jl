@@ -45,6 +45,14 @@ struct ARDLLongRun{T<:AbstractFloat}
     varnames::Vector{String}
 end
 
+"""Print long-run multipliers as a Stata-style coefficient table (#534)."""
+function Base.show(io::IO, lr::ARDLLongRun{T}) where {T}
+    _coef_table(io, "ARDL Long-Run Multipliers", lr.varnames, lr.theta, lr.se;
+                dist=:z)
+    println(io, "  Speed-of-adjustment denom (1 − Σφ̂) = ", _fmt(lr.denom))
+    _sig_legend(io)
+end
+
 # =============================================================================
 # ARDLModel — single-equation ARDL(p, q₁…q_k) estimated by OLS on lagged levels
 # =============================================================================

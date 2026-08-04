@@ -70,15 +70,15 @@ using Random
         fevd_bayes = fevd(post, horizon; method=:cholesky)
 
         # Check Mean Proportions
-        # Structure: BayesianFEVD.point_estimate is [Horizon, Var, Shock]
-        @test size(fevd_bayes.point_estimate) == (horizon, n, n)
+        # Structure: BayesianFEVD.point_estimate is (variable, shock, horizon) — unified with FEVD (#527)
+        @test size(fevd_bayes.point_estimate) == (n, n, horizon)
 
         # Check specific values with relaxed tolerance for MCMC
         for h in 1:horizon
             # Var 1 (v=1) driven by Shock 1 (sh=1)
-            mean_prop_1_1 = fevd_bayes.point_estimate[h, 1, 1]
+            mean_prop_1_1 = fevd_bayes.point_estimate[1, 1, h]
             # Var 1 (v=1) driven by Shock 2 (sh=2)
-            mean_prop_1_2 = fevd_bayes.point_estimate[h, 1, 2]
+            mean_prop_1_2 = fevd_bayes.point_estimate[1, 2, h]
 
             @test isapprox(mean_prop_1_1, 1.0, atol=0.25)  # Relaxed for MCMC variability
             @test isapprox(mean_prop_1_2, 0.0, atol=0.25)

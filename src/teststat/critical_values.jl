@@ -1039,49 +1039,82 @@ const HEGY_CV_MONTHLY = Dict(
 )
 
 # =============================================================================
-# LM Unit Root & Break Test Critical Values
+# LM Unit Root & Two-Break ADF Critical Values — SIMULATED (issue #577)
 # =============================================================================
+#
+# Simulated from the null distribution of THIS package's own minimised
+# statistics (same search grid, same trimming, same detrending), because the
+# published Lee-Strazicich / Nazlioglu-Lee / Narayan-Popp tables were computed
+# for different statistic constructions and left the tests rejecting a driftless
+# random walk 55-85% of the time at a 5% nominal level.
+#
+# Generation (test/oracle/gen_lm_adf2break_cvs.jl — rerun it to regenerate):
+#   DGP driftless RW, y_t = y_{t-1} + N(0,1); reps 10000 per cell;
+#   MersenneTwister(5770000 + rep) per-rep seeding; lags = 0;
+#   trim 0.15 (min-LM) / 0.10 (two-break ADF); T grid (100, 150, 250, 500);
+#   columns are the 1%, 2.5%, 5%, 10% quantiles of the minimised statistic.
+# Lookup interpolates linearly in 1/T and clamps outside the grid
+# (`_interp_cv_row`); p-values are piecewise linear (`_break_test_pvalue`).
+# The tables are conditional on the search design: lags = 0 at default trimming.
 
-# LM Unit Root Response Surface (Nazlioglu & Lee 2020)
-# Format: (c, 1/T, 1/T^2, p/T, (p/T)^2)
-const LM_UNITROOT_RSF = Dict(
-    0 => Dict(
-        1  => (-3.5672, -8.0488, -32.753, 2.0548, -2.7275),
-        5  => (-3.0249, -3.2352, -13.013, 1.5236, -0.7349),
-        10 => (-2.7533, -2.7164,  17.017, 1.5083, -0.7971)
-    ),
-    1 => Dict(
-        1  => (-4.1943,  1.1688, -507.171, 2.2601, -12.419),
-        5  => (-3.6694,  0.7216, -276.013, 1.9365,  -8.925),
-        10 => (-3.4021,  0.3486, -194.637, 1.6701,  -6.884)
-    )
+# T grid: (100, 150, 250, 500)   columns: 1%, 2.5%, 5%, 10%
+const BREAK_TEST_SIM_T = (100, 150, 250, 500)
+const LM_UNITROOT_SIM_CV = Dict{Tuple{Int,Symbol},Matrix{Float64}}(
+    (0, :level) => [
+          -2.546   -2.248   -1.957   -1.630;   # T = 100
+          -2.581   -2.227   -1.924   -1.601;   # T = 150
+          -2.650   -2.297   -1.963   -1.628;   # T = 250
+          -2.560   -2.209   -1.934   -1.600;   # T = 500
+    ],
+    (0, :both) => [
+          -3.674   -3.330   -3.061   -2.761;   # T = 100
+          -3.637   -3.316   -3.061   -2.775;   # T = 150
+          -3.613   -3.338   -3.069   -2.782;   # T = 250
+          -3.549   -3.261   -3.022   -2.740;   # T = 500
+    ],
+    (1, :level) => [
+          -4.121   -3.795   -3.480   -3.151;   # T = 100
+          -4.098   -3.714   -3.433   -3.130;   # T = 150
+          -3.981   -3.682   -3.395   -3.093;   # T = 250
+          -3.851   -3.561   -3.285   -2.971;   # T = 500
+    ],
+    (1, :both) => [
+          -4.915   -4.628   -4.373   -4.092;   # T = 100
+          -4.909   -4.586   -4.354   -4.048;   # T = 150
+          -4.933   -4.592   -4.343   -4.059;   # T = 250
+          -4.806   -4.513   -4.284   -4.007;   # T = 500
+    ],
+    (2, :level) => [
+          -4.487   -4.119   -3.780   -3.442;   # T = 100
+          -4.367   -3.982   -3.706   -3.371;   # T = 150
+          -4.242   -3.932   -3.644   -3.306;   # T = 250
+          -4.070   -3.751   -3.469   -3.142;   # T = 500
+    ],
+    (2, :both) => [
+          -5.977   -5.625   -5.343   -5.072;   # T = 100
+          -5.872   -5.528   -5.290   -5.003;   # T = 150
+          -5.748   -5.467   -5.234   -4.969;   # T = 250
+          -5.760   -5.423   -5.169   -4.904;   # T = 500
+    ],
+)
+const ADF_2BREAK_SIM_CV = Dict{Symbol,Matrix{Float64}}(
+    :level => [
+          -6.366   -6.082   -5.840   -5.578;   # T = 100
+          -6.324   -6.040   -5.823   -5.553;   # T = 150
+          -6.278   -6.028   -5.801   -5.556;   # T = 250
+          -6.279   -6.029   -5.792   -5.572;   # T = 500
+    ],
+    :both => [
+          -6.918   -6.615   -6.387   -6.096;   # T = 100
+          -6.864   -6.550   -6.316   -6.055;   # T = 150
+          -6.782   -6.519   -6.310   -6.061;   # T = 250
+          -6.824   -6.556   -6.293   -6.067;   # T = 500
+    ],
 )
 
-# LM 1-break Model A fixed CVs (Lee & Strazicich 2013)
-const LM_1BREAK_A_CV = Dict(1 => -4.239, 5 => -3.566, 10 => -3.211)
-
-# LM 2-break Model A CVs (Lee & Strazicich 2003, Table 2)
-const LM_2BREAK_A_CV = Dict(1 => -4.545, 5 => -3.842, 10 => -3.504)
-
 # =============================================================================
-# Narayan-Popp & Gregory-Hansen Critical Values
+# Gregory-Hansen Critical Values
 # =============================================================================
-
-# Narayan-Popp 2-Break CVs (Narayan & Popp 2010, Table 3)
-const NARAYAN_POPP_CV = Dict(
-    :level => Dict(
-        50  => Dict(1=>-5.259, 5=>-4.514, 10=>-4.143),
-        200 => Dict(1=>-4.958, 5=>-4.316, 10=>-3.980),
-        400 => Dict(1=>-4.731, 5=>-4.136, 10=>-3.825),
-        999 => Dict(1=>-4.672, 5=>-4.081, 10=>-3.772),
-    ),
-    :both => Dict(
-        50  => Dict(1=>-5.949, 5=>-5.181, 10=>-4.789),
-        200 => Dict(1=>-5.576, 5=>-4.937, 10=>-4.596),
-        400 => Dict(1=>-5.318, 5=>-4.741, 10=>-4.430),
-        999 => Dict(1=>-5.287, 5=>-4.692, 10=>-4.396),
-    )
-)
 
 # Gregory-Hansen Cointegration CVs (Gregory & Hansen 1996, Tables 1-2)
 # Indexed by (model, m) => Dict(statistic => Dict(level => cv))

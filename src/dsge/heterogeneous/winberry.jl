@@ -795,7 +795,7 @@ end
         → (; moments, mass, lambdas, converged, iterations, jacobian)
 
 Stationary distribution in *moment space*: the fixed point of
-[`_winberry_forward`](@ref), `M = F(M)`, at a fixed savings policy.  This is
+`_winberry_forward`, `M = F(M)`, at a fixed savings policy.  This is
 the parametric analogue of `_stationary_dist_young`, and is computed
 independently of the histogram — so comparing the two is a genuine accuracy
 test of the reduction, not a tautology.
@@ -1110,13 +1110,13 @@ Winberry (2018) parametric family instead of the Young histogram.
 
 The distribution state is the standardized moment vector — `n_income ×
 n_moments` coordinates rather than `n_a × n_income`.  Its law of motion is
-[`_winberry_forward`](@ref), differentiated by central finite differences in
+`_winberry_forward`, differentiated by central finite differences in
 standardized units; the general-equilibrium closure is identical to the one
 `_reiter_linearize` uses, because only the *representation* of the
 distribution changes, not the economics:
 
 - **Aiyagari** — state `[x_t; K_t; Z_t]`, prices from the firm FOC at a
-  predetermined `K` (see [`_aiyagari_foc_derivatives`](@ref)).
+  predetermined `K` (see `_aiyagari_foc_derivatives`).
 - **Huggett** — state `[x_t; w_t]`, the rate pinned every period by bond market
   clearing `∫a′ = 0`.
 

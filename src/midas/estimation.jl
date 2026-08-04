@@ -55,19 +55,28 @@ end
 # =============================================================================
 
 """
-    _ar_block(y_lf, retained, p_ar) -> (Wlin, keep, y_used)
+    _ar_block(y_lf, retained, p_ar; h=1) -> (Wlin, keep, y_used)
 
 Assemble the linear block `[1, y_{t-1}, …, y_{t-p_ar}]` for the retained
 low-frequency periods that also have `p_ar` available own-lags. Returns the
 `n×(1+p_ar)` matrix, the sub-index into `retained` that was kept, and the
 aligned target vector.
+
+When `h > 1`, implements the direct multi-step regression of `y_{t+h-1}` on
+information dated `t` (#574): the HF lag block at period `t` predicts the
+low-frequency outcome `h−1` periods ahead. `h=1` is the nowcast of `y_t`.
 """
-function _ar_block(y_lf::AbstractVector{T}, retained::Vector{Int}, p_ar::Int) where {T<:AbstractFloat}
+function _ar_block(y_lf::AbstractVector{T}, retained::Vector{Int}, p_ar::Int;
+                   h::Int=1) where {T<:AbstractFloat}
+    h >= 1 || throw(ArgumentError("h must be ≥ 1 (got h=$h)"))
+    T_lf = length(y_lf)
     keep = Int[]
     for (i, t) in enumerate(retained)
-        t - p_ar >= 1 && push!(keep, i)
+        # Need AR lags of y at t and the direct-h target y_{t+h-1} in sample.
+        t - p_ar >= 1 && (t + h - 1) <= T_lf && push!(keep, i)
     end
-    isempty(keep) && throw(ArgumentError("no periods with $p_ar autoregressive lags available"))
+    isempty(keep) && throw(ArgumentError(
+        "no periods with $p_ar autoregressive lags and direct horizon h=$h available"))
     n = length(keep)
     Wlin = Matrix{T}(undef, n, 1 + p_ar)
     y_used = Vector{T}(undef, n)
@@ -77,7 +86,7 @@ function _ar_block(y_lf::AbstractVector{T}, retained::Vector{Int}, p_ar::Int) wh
         for j in 1:p_ar
             Wlin[r, 1 + j] = y_lf[t - j]
         end
-        y_used[r] = y_lf[t]
+        y_used[r] = y_lf[t + h - 1]
     end
     return Wlin, keep, y_used
 end
@@ -124,7 +133,8 @@ through the weight function `weights`.
 - `weights::Symbol` — `:expalmon` (default), `:beta2`, `:beta3`, `:almon`, `:umidas`.
 - `p_ar::Int` — autoregressive lags of the target (ADL-MIDAS).
 - `poly_degree::Int` — polynomial degree for `:almon`.
-- `h::Int` — direct forecast horizon the model targets (stored for `forecast`).
+- `h::Int` — direct multi-step horizon: regress `y_{t+h-1}` on HF lags dated `t`
+  (`h=1` = nowcast of `y_t`; #574).
 - `max_iter::Int` — LBFGS iteration cap per start.
 
 # Method
@@ -149,8 +159,9 @@ function estimate_midas(y_lf::AbstractVector, X_hf::AbstractVector;
     K >= 1 || throw(ArgumentError("K must be ≥ 1"))
     p_ar >= 0 || throw(ArgumentError("p_ar must be ≥ 0"))
 
+    h >= 1 || throw(ArgumentError("h must be ≥ 1 (got h=$h)"))
     Xlags_all, retained = _align_hf(yv, xv; m=m, K=K)
-    Wlin, keep, y = _ar_block(yv, retained, p_ar)
+    Wlin, keep, y = _ar_block(yv, retained, p_ar; h=h)
     Xlags = Xlags_all[keep, :]
     n = length(y)
 
@@ -290,6 +301,9 @@ function Base.show(io::IO, m::MidasModel{T}) where {T}
     p = dof(m)
     kind_str = get(_MIDAS_KIND_LABEL, m.weights_kind, string(m.weights_kind))
 
+    conv_label = m.weights_kind === :umidas ? "Method" : "Converged"
+    conv_value = m.weights_kind === :umidas ? "OLS (closed form)" :
+                 (m.converged ? "Yes" : "No")  # U-MIDAS is closed-form OLS (#575)
     spec = Any[
         "Weight scheme"  kind_str;
         "Frequency (m)"  m.m;
@@ -303,7 +317,7 @@ function Base.show(io::IO, m::MidasModel{T}) where {T}
         "SSR"            _fmt(m.ssr; digits=4);
         "AIC"            _fmt(m.aic; digits=2);
         "BIC"            _fmt(m.bic; digits=2);
-        "Converged"      (m.converged ? "Yes" : "No")
+        conv_label       conv_value
     ]
     _pretty_table(io, spec;
         title = "MIDAS Regression",

@@ -392,10 +392,19 @@ end
         @testset "Multinomial marginal effects — dots only when SE missing (C6)" begin
             ym = rand(rng, 1:3, n)
             me = marginal_effects(estimate_mlogit(ym, X; varnames=["x1", "x2"]))
-            @test me.se === nothing
+            # #550: the estimator path now carries delta-method SEs → real whiskers
+            @test me.se isa Matrix
+            @test size(me.se) == size(me.effects)
+            @test all(me.se .>= 0)
             p = plot_result(me)
             check_plot(p); assert_all_json_valid(p)
-            @test occursin("points only", p.html)                # honest subtitle (C6)
+            @test !occursin("points only", p.html)
+            # C6 branch survives for results without a covariance: dots only
+            me0 = MultinomialMarginalEffects{Float64}(me.effects, nothing,
+                                                      me.varnames, me.categories)
+            p0 = plot_result(me0)
+            check_plot(p0); assert_all_json_valid(p0)
+            @test occursin("points only", p0.html)               # honest subtitle (C6)
         end
 
         @testset "OddsRatio forest plot (log x, ref = 1)" begin

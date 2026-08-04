@@ -385,19 +385,18 @@ using LinearAlgebra, Statistics, Random, Distributions
         @test me.varnames isa Vector{String}
         @test me.categories isa Vector{String}
 
-        # K x J matrix
-        K = size(m.X, 2)
+        # Intercept column is dropped from AME (#544); slopes remain
         J = length(m.categories)
-        @test size(me.effects) == (K, J)
+        @test me.varnames == ["x1", "x2"]
+        @test size(me.effects) == (2, J)
+        @test me.se !== nothing
+        @test size(me.se) == (2, J)
 
         # Key property: AMEs sum to ~0 across categories for each variable
         row_sums = sum(me.effects, dims=2)
-        for k in 1:K
+        for k in 1:2
             @test abs(row_sums[k]) < 1e-10
         end
-
-        # Variable names preserved
-        @test me.varnames == ["const", "x1", "x2"]
     end
 
     @testset "Multinomial Logit — marginal effects 4-category" begin
@@ -411,7 +410,7 @@ using LinearAlgebra, Statistics, Random, Distributions
         m = estimate_mlogit(y, X; varnames=["const", "x1", "x2"])
         me = marginal_effects(m)
 
-        K = 3
+        K = 2   # intercept dropped from AME
         J = 4
         @test size(me.effects) == (K, J)
 

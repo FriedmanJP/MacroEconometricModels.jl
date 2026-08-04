@@ -113,7 +113,12 @@ function pvar_bootstrap_irf(model::PVARModel{T}, H::Int;
                               transformation=model.transformation,
                               steps=model.steps,
                               system_instruments=(model.method == :system_gmm),
-                              system_constant=model.system_constant)
+                              system_constant=model.system_constant,
+                              min_lag_endo=model.min_lag_endo,
+                              max_lag_endo=model.max_lag_endo,
+                              collapse=model.collapse,
+                              pca_instruments=model.pca_instruments,
+                              pca_max_components=model.pca_max_components)
             end
 
             irf_b = irf_type == :oirf ? pvar_oirf(model_b, H) : pvar_girf(model_b, H)

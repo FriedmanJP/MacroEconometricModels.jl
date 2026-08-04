@@ -42,9 +42,16 @@ function _po_pp_stats(resid::AbstractVector{T}; kernel::Symbol=:bartlett,
     xi = e_curr .- rho .* e_lag
     s2 = dot(xi, xi) / nobs                          # short-run variance γ̂₀
 
-    bw = bandwidth === :nw ? floor(Int, 4 * (nobs / 100)^0.25) : bandwidth
-    omega2 = lrvar(xi; kernel=kernel, bandwidth=bw, demean=false)
-    bw_used = bw isa Int ? bw : floor(Int, 4 * (nobs / 100)^0.25)
+    # Resolve the integer truncation lag *before* calling lrvar so the stored
+    # bandwidth matches what was actually used (issue #579: :andrews/:nw94
+    # previously fell back to the fixed NW rule in the reported field).
+    kernel_internal = kernel === :bartlett ? :bartlett :
+                      kernel === :parzen   ? :parzen   :
+                      kernel === :qs       ? :qs       : :bartlett
+    bw_arg = bandwidth === :nw ? floor(Int, 4 * (nobs / 100)^0.25) : bandwidth
+    Ud = reshape(collect(xi), :, 1)
+    bw_used = _resolve_bandwidth(Ud, kernel_internal, bw_arg; prewhiten=false)
+    omega2 = lrvar(xi; kernel=kernel, bandwidth=bw_used, demean=false)
 
     lambda = (omega2 - s2) / 2                        # one-sided correction
 

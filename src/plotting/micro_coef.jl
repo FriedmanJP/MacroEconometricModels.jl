@@ -272,8 +272,8 @@ function plot_result(r::OddsRatio{T};
     js = _render_coef_plot_js(id, data_json; logx=true, ref_value=1,
                               xlabel="Odds ratio (log scale)", ylabel="")
     ci_pct = round(Int, 100 * r.conf_level)
-    panel = _PanelSpec(id, "Odds Ratios ($(ci_pct)% CI, ref = 1)", js)
-    ftitle = isempty(title) ? "Odds Ratios" : title
+    panel = _PanelSpec(id, "$(r.title) ($(ci_pct)% CI, ref = 1)", js)
+    ftitle = isempty(title) ? r.title : title
     p = _make_plot([panel]; title=ftitle, ncols=1)
     save_path !== nothing && save_plot(p, save_path)
     p

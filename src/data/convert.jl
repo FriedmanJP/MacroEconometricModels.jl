@@ -84,9 +84,9 @@ estimate_vecm(d::TimeSeriesData, p::Int; kwargs...) =
 estimate_bvar(d::TimeSeriesData, p::Int; kwargs...) =
     estimate_bvar(to_matrix(d), p; kwargs...)
 
-# Factor models
+# Factor models (forward container names like the VAR/LP dispatches do; #538)
 estimate_factors(d::TimeSeriesData, r::Int; kwargs...) =
-    estimate_factors(to_matrix(d), r; kwargs...)
+    estimate_factors(to_matrix(d), r; varnames=d.varnames, kwargs...)
 
 estimate_dynamic_factors(d::TimeSeriesData, r::Int, p::Int; kwargs...) =
     estimate_dynamic_factors(to_matrix(d), r, p; kwargs...)

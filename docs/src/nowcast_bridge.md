@@ -1,182 +1,225 @@
 # [Bridge Equations](@id nowcast_bridge_page)
 
-Bridge equations provide a simple, transparent approach to nowcasting by regressing a quarterly target on aggregated monthly indicators via OLS. Multiple equations --- one per pair of monthly indicators, plus univariate equations --- are combined through the **median**, producing a robust current-quarter estimate. For the broader nowcasting framework, see [Nowcasting](@ref nowcast_page).
+Bridge equations are the transparent baseline of nowcasting: aggregate the monthly indicators to quarterly frequency, regress the quarterly target on them by OLS, and read off the fitted value for the current quarter. The fragility of any single such regression is handled by estimating many of them — one per pair of monthly indicators plus one per indicator alone — and combining their predictions with the **median**, which is unmoved by an equation that overfits or collapses under collinearity (Bańbura et al. 2023). No latent states, no priors, no iteration.
+
+For the shared data layout, the `nowcast()` interface, and the result visualizations, see [Nowcasting](@ref nowcast_page). Sibling estimators: [DFM Nowcasting](@ref nowcast_dfm_page) and [BVAR Nowcasting](@ref nowcast_bvar_page).
 
 ```@setup nc_bridge
 using MacroEconometricModels, Random
 Random.seed!(42)
-```
-
-## Quick Start
-
-```@example nc_bridge
-# Standard mixed-frequency data setup (used throughout this page)
 fred = load_example(:fred_md)
 nc_md = fred[:, ["INDPRO", "UNRATE", "CPIAUCSL", "M2SL", "FEDFUNDS"]]
 Y = to_matrix(apply_tcode(nc_md))
 Y = Y[all.(isfinite, eachrow(Y)), :]
-Y = Y[end-99:end, :]
+Y = Y[end-59:end, :]
 nM, nQ = 4, 1
+N = nM + nQ
 for t in 1:size(Y, 1)
     if mod(t, 3) != 0
         Y[t, end] = NaN
     end
 end
 Y[end, end] = NaN
-nothing # hide
+T_obs = size(Y, 1)
 ```
 
-**Recipe 1: Basic bridge equation nowcast**
+The examples run on a FRED-MD panel in the standard mixed-frequency layout: four monthly indicators (`INDPRO`, `UNRATE`, `CPIAUCSL`, `M2SL`) in the leading columns and one quarterly target (`FEDFUNDS`) in the last, observed only at quarter-end months and missing in the most recent month.
+
+## Quick Start
+
+**Recipe 1: Bridge nowcast with default lags**
 
 ```@example nc_bridge
 bridge = nowcast_bridge(Y, nM, nQ)
 report(bridge)
 ```
 
-**Recipe 2: Bridge with custom lags**
+**Recipe 2: Richer lag structure**
 
 ```@example nc_bridge
-bridge = nowcast_bridge(Y, nM, nQ; lagM=2, lagQ=1, lagY=2)
-report(bridge)
+bridge_2 = nowcast_bridge(Y, nM, nQ; lagM=2, lagQ=1, lagY=2)
+report(bridge_2)
 ```
 
-**Recipe 3: Individual equation results**
+**Recipe 3: The individual equations behind the median**
 
 ```@example nc_bridge
-bridge = nowcast_bridge(Y, nM, nQ)
-n_quarters = length(bridge.Y_nowcast)
-eqs = [(eq=eq, nowcast=round(bridge.Y_individual[n_quarters, eq], digits=4))
-       for eq in 1:bridge.n_equations
-       if !isnan(bridge.Y_individual[n_quarters, eq])]
-(equations=eqs, combined_median=round(bridge.Y_nowcast[n_quarters], digits=4))
+q = length(bridge.Y_nowcast)
+preds = bridge.Y_individual[q, :]
+(equations=bridge.n_equations, min=round(minimum(preds), digits=4),
+ median=round(bridge.Y_nowcast[q], digits=4), max=round(maximum(preds), digits=4))
 ```
 
-**Recipe 4: Bridge with TimeSeriesData**
+**Recipe 4: Read off the nowcast**
 
 ```@example nc_bridge
-ts = TimeSeriesData(Y; varnames=["INDPRO", "UNRATE", "CPI", "M2", "FEDFUNDS"], frequency=Monthly)
-bridge = nowcast_bridge(ts, nM, nQ)
-result = nowcast(bridge)
-report(result)
+report(nowcast(bridge))
+```
+
+**Recipe 5: `TimeSeriesData` dispatch**
+
+```@example nc_bridge
+ts = TimeSeriesData(Y; varnames=["INDPRO", "UNRATE", "CPI", "M2", "FEDFUNDS"],
+                    frequency=Monthly)
+report(nowcast(nowcast_bridge(ts, nM, nQ)))
 ```
 
 ---
 
 ## Model Specification
 
-Bridge equations translate monthly indicator information into a quarterly forecast through a two-step procedure: aggregate monthly data to quarterly frequency, then regress the quarterly target on these aggregated regressors using OLS. The method constructs multiple regression equations and combines them via the median (Banbura et al. 2023).
-
-For each pair ``(m_1, m_2)`` of monthly indicators (or a single indicator when ``m_1 = m_2``):
+A bridge equation is an ordinary quarterly regression whose regressors happen to be built from monthly data. For a pair ``(m_1, m_2)`` of monthly indicators — or a single indicator when ``m_1 = m_2`` — the equation is
 
 ```math
-Y_t^Q = \beta_0 + \sum_{l=0}^{L_M} \beta_{m_1,l} \, X_{m_1,t-l}^Q + \sum_{l=0}^{L_M} \beta_{m_2,l} \, X_{m_2,t-l}^Q + \sum_{l=1}^{L_Q} \gamma_l \, X_{t-l}^Q + \sum_{l=1}^{L_Y} \delta_l \, Y_{t-l}^Q + \varepsilon_t
+Y_q = \beta_0 + \sum_{l=0}^{L_M} \beta_{m_1,l} \, X_{m_1,q-l} + \sum_{l=0}^{L_M} \beta_{m_2,l} \, X_{m_2,q-l}
+      + \sum_{l=1}^{L_Q} \sum_{k} \gamma_{k,l} \, Z_{k,q-l} + \sum_{l=1}^{L_Y} \delta_l \, Y_{q-l} + \varepsilon_q
 ```
 
 where:
-- ``Y_t^Q`` is the quarterly target variable (last column of the data)
-- ``X_{m,t-l}^Q`` are monthly indicators aggregated to quarterly frequency at lag ``l``
-- ``X_{t-l}^Q`` are quarterly covariates (columns between monthly and target)
-- ``L_M``, ``L_Q``, ``L_Y`` are the lag orders for monthly, quarterly, and autoregressive terms
+- ``Y_q`` is the quarterly target, the last column of the data
+- ``X_{m,q-l}`` is monthly indicator ``m`` aggregated to quarter ``q-l``
+- ``Z_{k,q-l}`` are the non-target quarterly variables, the columns between the monthly block and the target
+- ``L_M``, ``L_Q``, ``L_Y`` are `lagM`, `lagQ` and `lagY`
 - ``\beta_0`` is the intercept
 
-**Quarterly aggregation.** Monthly data is converted to quarterly frequency via 3-month averages: for quarter ``q``, the aggregated value is the arithmetic mean of months ``3(q-1)+1`` through ``3q``. Missing monthly values are filled by linear interpolation before aggregation.
+The monthly terms start at lag ``0``: the current quarter's own indicator values are the whole point of the exercise. Quarterly and autoregressive terms start at lag ``1``, since the contemporaneous target is what is being predicted. In a univariate equation the two indicator sums collapse to one — the duplicate regressor is dropped rather than entered twice, which would make the design rank-deficient.
 
-**Combination.** The model constructs ``\binom{n_M}{2} + n_M`` bridge equations (all pairwise combinations plus univariate equations). The final nowcast is the **median** across all individual equation predictions, providing robustness to individual equation failures or outlying forecasts.
+**Quarterly aggregation.** Monthly series are averaged three months at a time: quarter ``q`` takes the mean of months ``3(q-1)+1`` through ``3q``, or of however many of those months exist for a partial final quarter. Non-target quarterly columns are read at the quarter-end month rather than averaged. Missing monthly values are filled beforehand by linear interpolation between the neighbouring observations, with forward fill after the last observation and backward fill before the first.
+
+**Combination.** The model builds ``\binom{n_M}{2} + n_M`` equations — every unordered pair plus every singleton — and reports the median of their predictions. With four monthly indicators that is ``6 + 4 = 10`` equations. The median is what makes the procedure robust: two highly correlated indicators entering the same equation can produce a wild coefficient pair and an extreme forecast, and the median simply steps over it.
+
+!!! note "Quarter indexing"
+    The number of quarters is ``\lceil T_{\text{obs}} / 3 \rceil``, using ceiling division so that the current, partially observed quarter — the very quarter a nowcast exists to produce — gets a row. A 60-month panel therefore yields 20 quarters, and `Y_nowcast[20]` is the current-quarter estimate.
 
 ---
 
 ## Estimation
 
-Each bridge equation is estimated by OLS with regularization. The procedure is fully automatic: construct regressors, solve the normal equations, and combine predictions via median.
+Each equation is estimated by OLS on the quarters where the target is observed, with a ``10^{-6}`` ridge on the normal equations to survive near-singular designs and a `robust_inv` fallback if that still fails. Quarters before ``\max(L_M, L_Q, L_Y) + 1`` cannot form a complete lag vector and are skipped; an equation with fewer than three usable quarters, or with fewer observations than coefficients, is abandoned and contributes `NaN` to every quarter rather than a spurious fit.
 
 ```@example nc_bridge
 bridge = nowcast_bridge(Y, nM, nQ; lagM=1, lagQ=1, lagY=1)
-report(bridge)
+(equations=bridge.n_equations, quarters=length(bridge.Y_nowcast),
+ coef_counts=unique(length.(bridge.coefficients)),
+ skipped_quarters=count(isnan, bridge.Y_nowcast))
 ```
+
+Ten equations are fitted over 20 quarters. The pairwise equations carry six coefficients — an intercept, two indicators at lags 0 and 1, and one autoregressive term — and the univariate equations four, because the collapsed duplicate removes two columns. One quarter is `NaN`: the first, which has no lagged quarter to draw on. There are no quarterly covariates here, since `nQ = 1` means the only quarterly column is the target itself.
+
+Predictions are then formed for **every** quarter from the same coefficients, including quarters where the target is missing. That is what produces the nowcast: the final quarter's regressors are complete because the monthly indicators are observed, even though the target is not.
+
+---
+
+## Reading the Individual Equations
+
+`Y_individual` keeps every equation's prediction, so the dispersion across equations is available as a diagnostic that the median alone hides.
 
 ```@example nc_bridge
-bridge.n_equations  # C(4,2) + 4 = 10
+q = length(bridge.Y_nowcast)
+preds = bridge.Y_individual[q, :]
+(n=count(!isnan, preds), min=round(minimum(preds), digits=4),
+ median=round(bridge.Y_nowcast[q], digits=4), max=round(maximum(preds), digits=4))
 ```
 
-The median combination provides robustness because individual equations may overfit or suffer from collinearity. When two monthly indicators are highly correlated, their pairwise equation may produce an extreme forecast, but the median is unaffected.
+All ten equations produce a current-quarter number, spanning 0.0082 to 0.0525 around a median of 0.0301. A spread that wide relative to the median means the answer depends materially on which indicators are used, and the combined nowcast should be treated as one draw from a genuinely uncertain range rather than a point estimate. A tight cluster would say the opposite: the indicators agree and the choice among them is immaterial.
 
-### Keyword Arguments
+Lag structure moves the answer as much as indicator choice does:
+
+```@example nc_bridge
+bridge_2 = nowcast_bridge(Y, nM, nQ; lagM=2, lagQ=1, lagY=2)
+(lags_1=round(nowcast(bridge).nowcast, digits=4),
+ lags_2=round(nowcast(bridge_2).nowcast, digits=4))
+```
+
+Going from one monthly and one autoregressive lag to two of each moves the nowcast from 0.0301 to 0.0055. With 20 quarters and up to eight regressors, the richer specification spends a quarter of its degrees of freedom on lags that a 60-month sample cannot pin down. Prefer the parsimonious setting unless the target is known to respond to indicators with a delay.
+
+---
+
+## Keyword Arguments
 
 | Keyword | Type | Default | Description |
 |---------|------|---------|-------------|
-| `lagM` | `Int` | `1` | Monthly indicator lags after quarterly aggregation |
-| `lagQ` | `Int` | `1` | Quarterly indicator lags |
-| `lagY` | `Int` | `1` | Autoregressive lags for target |
+| `lagM` | `Int` | `1` | Monthly indicator lags after quarterly aggregation; lag 0 is always included |
+| `lagQ` | `Int` | `1` | Lags of the non-target quarterly variables |
+| `lagY` | `Int` | `1` | Autoregressive lags of the target |
 
-### `NowcastBridge` Return Values
+---
+
+## NowcastBridge Return Values
 
 | Field | Type | Description |
 |-------|------|-------------|
-| `X_sm` | `Matrix{T}` | Smoothed data with NaN filled by interpolation |
-| `Y_nowcast` | `Vector{T}` | Combined nowcast per quarter (median across equations) |
-| `Y_individual` | `Matrix{T}` | Individual equation nowcasts (``n_{\text{quarters}} \times n_{\text{equations}}``) |
-| `n_equations` | `Int` | Number of bridge equations |
-| `coefficients` | `Vector{Vector{T}}` | OLS coefficients per equation |
+| `X_sm` | `Matrix{T}` | Monthly panel with missing values filled by interpolation |
+| `Y_nowcast` | `Vector{T}` | Median across equations per quarter, length ``\lceil T_{\text{obs}}/3 \rceil`` |
+| `Y_individual` | `Matrix{T}` | Per-equation predictions, ``n_{\text{quarters}} \times n_{\text{equations}}`` |
+| `n_equations` | `Int` | Number of bridge equations, ``\binom{n_M}{2} + n_M`` |
+| `coefficients` | `Vector{Vector{T}}` | OLS coefficients per equation; empty for equations that could not be fitted |
 | `nM` | `Int` | Number of monthly variables |
 | `nQ` | `Int` | Number of quarterly variables |
-| `lagM` | `Int` | Monthly indicator lags used |
-| `lagQ` | `Int` | Quarterly indicator lags used |
+| `lagM` | `Int` | Monthly lags used |
+| `lagQ` | `Int` | Quarterly lags used |
 | `lagY` | `Int` | Autoregressive lags used |
-| `data` | `Matrix{T}` | Original data with NaN |
+| `data` | `Matrix{T}` | Original input panel, NaN included |
+
+`predict(bridge)` returns `X_sm` and `nobs(bridge)` the number of months. `loglikelihood` is not defined — bridge equations are estimated by OLS, not by maximum likelihood over a joint model.
+
+!!! warning "`forecast` is not defined for bridge models"
+    There is no `forecast(::NowcastBridge, h)` method: a bridge equation needs quarterly aggregates of monthly indicators as inputs, which do not exist beyond the current quarter. `nowcast(bridge)` returns a `NowcastResult` whose `forecast` field repeats the nowcast for that reason.
 
 ---
 
 ## Complete Example
 
 ```@example nc_bridge
-# === Step 1: Estimate bridge models with different lag structures ===
+# === Step 1: Estimate under two lag structures ===
 bridge_1 = nowcast_bridge(Y, nM, nQ; lagM=1, lagQ=1, lagY=1)
 bridge_2 = nowcast_bridge(Y, nM, nQ; lagM=2, lagQ=1, lagY=2)
-
-# === Step 2: Compare nowcasts ===
-r1 = nowcast(bridge_1)
-r2 = nowcast(bridge_2)
-(lag1=round(r1.nowcast, digits=4), lag2=round(r2.nowcast, digits=4))
-```
-
-```@example nc_bridge
-# === Step 3: Inspect individual equations ===
 report(bridge_1)
 ```
 
 ```@example nc_bridge
-n_quarters = length(bridge_1.Y_nowcast)
-valid_preds = filter(!isnan, bridge_1.Y_individual[n_quarters, :])
-(min=round(minimum(valid_preds), digits=4),
- median=round(bridge_1.Y_nowcast[n_quarters], digits=4),
- max=round(maximum(valid_preds), digits=4))
+# === Step 2: Compare the combined nowcasts ===
+(lags_1=round(nowcast(bridge_1).nowcast, digits=4),
+ lags_2=round(nowcast(bridge_2).nowcast, digits=4))
 ```
 
 ```@example nc_bridge
-# === Step 4: Compare with DFM ===
-dfm = nowcast_dfm(Y, nM, nQ; r=2, p=1, idio=:ar1)
-r_dfm = nowcast(dfm)
-(bridge=round(r1.nowcast, digits=4), dfm=round(r_dfm.nowcast, digits=4))
+# === Step 3: Dispersion across equations in the current quarter ===
+q = length(bridge_1.Y_nowcast)
+preds = bridge_1.Y_individual[q, :]
+(min=round(minimum(preds), digits=4), median=round(bridge_1.Y_nowcast[q], digits=4),
+ max=round(maximum(preds), digits=4))
 ```
 
-**Interpretation.** The bridge approach constructs 10 equations from the 4 monthly FRED-MD indicators (6 pairwise + 4 univariate). Each equation aggregates monthly indicators to quarterly frequency via 3-month averages, then runs OLS on the quarterly target. The spread between minimum and maximum individual equation nowcasts reveals disagreement across indicator combinations --- a wide spread suggests the choice of indicators matters, while a narrow spread indicates consensus.
+```@example nc_bridge
+# === Step 4: Cross-check against the DFM on the same panel ===
+dfm = nowcast_dfm(Y, nM, nQ; r=2, p=1, idio=:ar1)
+(bridge=round(nowcast(bridge_1).nowcast, digits=4),
+ dfm=round(nowcast(dfm).nowcast, digits=4))
+```
+
+**Interpretation.** Ten equations built from the four monthly FRED-MD indicators produce a current-quarter median of 0.0301, with individual predictions between 0.0082 and 0.0525. The DFM gives 0.0375 on the same panel — inside the bridge equations' own spread, so the two methods agree to within the disagreement the bridge combination already reports. That is the useful reading of a bridge nowcast: the median is the estimate and the spread is its credibility. The lag comparison is the warning attached to it, since doubling the monthly and autoregressive lags moves the median to 0.0055, further than any of the indicator combinations moved it.
 
 ---
 
 ## Common Pitfalls
 
-1. **Too few monthly indicators.** With ``n_M = 2``, the model constructs only 3 equations (1 pair + 2 univariate), which is too few for the median to provide meaningful robustness. Use at least 4 monthly indicators.
+1. **Too few monthly indicators leaves nothing to combine.** With ``n_M = 2`` there are only ``1 + 2 = 3`` equations and the median is the middle of three highly overlapping fits. Four indicators (ten equations) is a practical minimum for the combination to add robustness.
 
-2. **Excessive lags with short samples.** Each additional lag consumes one quarterly observation. With 100 monthly observations (33 quarters), setting `lagM=3, lagQ=3, lagY=3` leaves only about 30 observations per equation. Keep total lag count below one-third of the available quarters.
+2. **Lags are expensive at quarterly frequency.** A 60-month panel is 20 quarters, and each lag both consumes an initial quarter and adds regressors to every equation. Keep the total lag count below a third of the available quarters; the default `lagM=lagQ=lagY=1` is the right starting point for a sample this size.
 
-3. **Non-stationary data.** Bridge equations assume stationary relationships. Apply appropriate transformations (differencing, log-differencing) before estimation. The `apply_tcode()` function handles standard FRED-MD transformation codes.
+3. **Bridge equations assume stationarity.** OLS on trending levels produces a spurious fit that the median will happily propagate. Transform first — `apply_tcode()` applies the FRED-MD transformation codes.
 
-4. **Confusing quarterly indexing.** The `Y_nowcast` vector has length ``\lfloor T/3 \rfloor``, not ``T``. Quarter ``q`` corresponds to months ``3(q-1)+1`` through ``3q``.
+4. **`Y_nowcast` is indexed by quarter, not by month.** Its length is ``\lceil T_{\text{obs}}/3 \rceil``, and quarter ``q`` covers months ``3(q-1)+1`` through ``3q``. Indexing it with a month number silently reads the wrong quarter.
+
+5. **The leading quarters are `NaN` by construction.** Quarters before ``\max(L_M, L_Q, L_Y) + 1`` have no complete lag vector and are left missing. Filter with `!isnan` before taking statistics over `Y_nowcast`, and do not read a leading `NaN` as an estimation failure.
+
+6. **Interpolation runs before aggregation, not after.** Gaps in the monthly indicators are filled by straight-line interpolation, and the edges are carried flat. A long gap at the end of an indicator therefore enters the quarterly average as a repeated last value, which damps that indicator's contribution rather than dropping it.
 
 ---
 
 ## References
 
-- Banbura, Marta, Irina Belousova, Katalin Bodnar, and Mate Barnabas Toth. 2023.
-  "Nowcasting Employment in the Euro Area." *ECB Working Paper* No. 2815.
-
+- Bańbura, Marta, Irina Belousova, Katalin Bodnár, and Máté Barnabás Tóth. 2023. "Nowcasting Employment in the Euro Area." *ECB Working Paper* No. 2815.
+- Bańbura, Marta, Domenico Giannone, and Lucrezia Reichlin. 2011. "Nowcasting." In *The Oxford Handbook of Economic Forecasting*, 193--224. Oxford: Oxford University Press. [https://doi.org/10.1093/oxfordhb/9780195398649.013.0008](https://doi.org/10.1093/oxfordhb/9780195398649.013.0008)
+- Giannone, Domenico, Lucrezia Reichlin, and David Small. 2008. "Nowcasting: The Real-Time Informational Content of Macroeconomic Data." *Journal of Monetary Economics* 55 (4): 665--676. [https://doi.org/10.1016/j.jmoneco.2008.05.010](https://doi.org/10.1016/j.jmoneco.2008.05.010)

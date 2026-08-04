@@ -1,6 +1,6 @@
 # [Panel Models API](@id api_panel)
 
-Panel VAR, panel regression (FE/RE/FD/Between/CRE/AB/BB + IV + discrete choice), difference-in-differences, panel unit root tests, and panel data utilities. See [Panel VAR](../pvar.md), [Panel Regression](../panel_reg.md), [DiD](../did.md), and [Event Study](../event_study.md).
+Panel VAR, panel regression (FE/RE/FD/Between/CRE/AB/BB + IV + discrete choice), difference-in-differences, panel unit root and cointegration tests, and panel data utilities. See [Panel VAR](@ref pvar_page), [Panel Regression](@ref panel_reg_page), [Difference-in-Differences](@ref did_page), [Event Study LP](@ref event_study_page), and [Panel Tests](@ref tests_panel_page) for theory and examples.
 
 ---
 
@@ -81,6 +81,8 @@ pvar_oirf
 pvar_girf
 pvar_fevd
 pvar_stability
+pvar_irf(::PVARModel{T}, ::Int) where {T}
+pvar_fevd_result(::PVARModel{T}, ::Int) where {T}
 ```
 
 ### Bootstrap
@@ -124,9 +126,11 @@ estimate_xtprobit
 
 ### Panel Specification Tests
 
+`hausman_test` and `breusch_pagan_test` are also defined for other model families — the pooled-ARDL Hausman test in [Multivariate Models API](@ref api_multivariate) and the cross-sectional heteroskedasticity test in [Cross-Sectional Models API](@ref api_cross_section). The panel methods are the ones documented here.
+
 ```@docs
-hausman_test
-breusch_pagan_test
+hausman_test(::PanelRegModel{T}, ::PanelRegModel{T}) where {T}
+breusch_pagan_test(::PanelRegModel{T}) where {T}
 pesaran_cd_test
 wooldridge_ar_test
 modified_wald_test

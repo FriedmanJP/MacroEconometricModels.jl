@@ -45,6 +45,7 @@ Structural Dynamic Factor Model combining GDFM with structural identification.
 - `loadings_td::Matrix{T}`: Time-domain loadings (N x q), Lambda = (F'F)^{-1} F' X
 - `p_var::Int`: VAR lag order on factors
 - `shock_names::Vector{String}`: Names for structural shocks
+- `varnames::Vector{String}`: Panel variable names (length N; #538)
 """
 struct StructuralDFM{T<:AbstractFloat} <: AbstractFactorModel
     gdfm::GeneralizedDynamicFactorModel{T}
@@ -56,7 +57,14 @@ struct StructuralDFM{T<:AbstractFloat} <: AbstractFactorModel
     loadings_td::Matrix{T}
     p_var::Int
     shock_names::Vector{String}
+    varnames::Vector{String}
 end
+
+# Backward-compatible constructor (pre-#538)
+StructuralDFM{T}(gdfm, factor_var, B0, Q, identification, structural_irf, loadings_td,
+                 p_var, shock_names) where {T} =
+    StructuralDFM{T}(gdfm, factor_var, B0, Q, identification, structural_irf, loadings_td,
+                     p_var, shock_names, ["Var $i" for i in 1:size(gdfm.X, 2)])
 
 # =============================================================================
 # Estimation — From Raw Data
@@ -108,7 +116,9 @@ function estimate_structural_dfm(X::AbstractMatrix{T}, q::Int;
     max_draws::Int=1000,
     standardize::Bool=true,
     bandwidth::Int=0,
-    kernel::Symbol=:bartlett
+    kernel::Symbol=:bartlett,
+    varnames::Union{Nothing,Vector{String}}=nothing,
+    rng::AbstractRNG=Random.default_rng(),
 ) where {T<:AbstractFloat}
 
     # Estimate GDFM
@@ -117,7 +127,7 @@ function estimate_structural_dfm(X::AbstractMatrix{T}, q::Int;
     # Delegate to GDFM-based method
     estimate_structural_dfm(gdfm;
         identification=identification, p=p, H=H,
-        sign_check=sign_check, max_draws=max_draws)
+        sign_check=sign_check, max_draws=max_draws, varnames=varnames, rng=rng)
 end
 
 @float_fallback estimate_structural_dfm X
@@ -149,7 +159,9 @@ function estimate_structural_dfm(gdfm::GeneralizedDynamicFactorModel{T};
     p::Int=1,
     H::Int=40,
     sign_check::Union{Nothing,Function}=nothing,
-    max_draws::Int=1000
+    max_draws::Int=1000,
+    varnames::Union{Nothing,Vector{String}}=nothing,
+    rng::AbstractRNG=Random.default_rng(),
 ) where {T<:AbstractFloat}
 
     # Validate inputs
@@ -169,6 +181,10 @@ function estimate_structural_dfm(gdfm::GeneralizedDynamicFactorModel{T};
     T_obs > p + q || throw(ArgumentError(
         "Not enough observations (T=$T_obs) for VAR($p) with $q factors"))
 
+    vn = something(varnames, ["Var $i" for i in 1:N])
+    length(vn) == N || throw(ArgumentError(
+        "varnames has $(length(vn)) entries but panel has $N columns"))
+
     # Step 1: Fit VAR(p) on the q time-domain factors
     factor_varnames = ["Factor $i" for i in 1:q]
     factor_var = estimate_var(F, p; check_stability=false, varnames=factor_varnames)
@@ -177,8 +193,8 @@ function estimate_structural_dfm(gdfm::GeneralizedDynamicFactorModel{T};
     if identification == :cholesky
         Q = Matrix{T}(I, q, q)  # Cholesky: Q = I (compute_irf handles the Cholesky internally)
     else
-        # Sign restrictions
-        Q, _ = identify_sign(factor_var, H, sign_check; max_draws=max_draws)
+        # Sign restrictions — thread rng for reproducibility (#537)
+        Q, _ = identify_sign(factor_var, H, sign_check; max_draws=max_draws, rng=rng)
     end
 
     # Step 3: Compute structural factor IRFs (H x q x q)
@@ -205,7 +221,7 @@ function estimate_structural_dfm(gdfm::GeneralizedDynamicFactorModel{T};
     shock_names = ["Shock $i" for i in 1:q]
 
     StructuralDFM{T}(gdfm, factor_var, B0, Q, identification,
-        structural_irf, Lambda, p, shock_names)
+        structural_irf, Lambda, p, shock_names, vn)
 end
 
 # =============================================================================

@@ -444,8 +444,9 @@ using LinearAlgebra, Statistics, Random, Distributions
         m = estimate_ologit(y, X; varnames=["x1", "x2"])
         me = marginal_effects(m)
 
-        # Returns a NamedTuple with effects, varnames, categories
+        # Returns a NamedTuple with effects, se, varnames, categories
         @test haskey(me, :effects)
+        @test haskey(me, :se)
         @test haskey(me, :varnames)
         @test haskey(me, :categories)
 
@@ -453,6 +454,8 @@ using LinearAlgebra, Statistics, Random, Distributions
         K = length(coef(m))
         J = length(m.categories)
         @test size(me.effects) == (K, J)
+        @test size(me.se) == (K, J)
+        @test all(me.se .>= 0) || all(isfinite, me.se)
 
         # Key property: AMEs sum to ~0 across categories for each variable
         row_sums = sum(me.effects, dims=2)
@@ -467,6 +470,7 @@ using LinearAlgebra, Statistics, Random, Distributions
         mp = estimate_oprobit(y, X; varnames=["x1", "x2"])
         me_p = marginal_effects(mp)
         @test size(me_p.effects) == (K, J)
+        @test size(me_p.se) == (K, J)
         row_sums_p = sum(me_p.effects, dims=2)
         for k in 1:K
             @test abs(row_sums_p[k]) < 1e-10
@@ -521,7 +525,7 @@ using LinearAlgebra, Statistics, Random, Distributions
         @test bt.df isa Int
         @test length(bt.per_variable) == 2
 
-        # df should be K*(J-2) = 2*1 = 2
+        # df = K*(J-2): equality of J-1 binary slopes has J-2 free contrasts
         K = length(coef(m))
         J = length(m.categories)
         @test bt.df == K * (J - 2)
@@ -581,6 +585,21 @@ using LinearAlgebra, Statistics, Random, Distributions
 
         # Should reject at 0.05 level
         @test bt.pvalue < 0.05
+    end
+
+    @testset "Brant test — location invariance (#547)" begin
+        # The binary logits are fit WITH an intercept, so the slope covariance is the
+        # slope block of the (K+1)-dimensional sandwich. Building the bread from slope
+        # columns only made the statistic depend on the origin of X.
+        rng = MersenneTwister(8080)
+        y, X = generate_ordered_data(rng, 1500, [1.0, -0.5], [0.0, 1.5]; link=:logit)
+
+        bt = brant_test(estimate_ologit(y, X; varnames=["x1", "x2"]))
+        bt_shift = brant_test(estimate_ologit(y, X .+ 5; varnames=["x1", "x2"]))
+
+        @test isapprox(bt.statistic, bt_shift.statistic; rtol=1e-6)
+        @test isapprox(bt.pvalue, bt_shift.pvalue; rtol=1e-6)
+        @test isapprox(bt.per_variable, bt_shift.per_variable; rtol=1e-6)
     end
 
     # =========================================================================

@@ -161,7 +161,7 @@ end
 # =============================================================================
 
 """
-    autocovariance_moments(data::AbstractMatrix{T}; lags::Int=1) -> Vector{T}
+    autocovariance_moments(data::AbstractMatrix{T}; lags::Int=1, standardize::Bool=false) -> Vector{T}
 
 Compute standard DSGE moment vector from data matrix.
 
@@ -169,21 +169,36 @@ Returns: `[upper-triangle variance-covariance elements; diagonal autocovariances
 
 For k variables, lags L: `k*(k+1)/2 + k*L` moments total.
 
+When `standardize=true` (#562), variance-covariance elements become correlations
+(diagonal → 1) and lag autocovariances become autocorrelations. This prevents
+level-scale variables (e.g. capital stock) from dominating the SMM objective.
+
 # Arguments
 - `data` --- T_obs x k data matrix
 - `lags` --- number of autocovariance lags (default: 1)
+- `standardize` --- scale-normalize to correlations / autocorrelations (default: false)
 """
-function autocovariance_moments(data::AbstractMatrix{T}; lags::Int=1) where {T<:AbstractFloat}
+function autocovariance_moments(data::AbstractMatrix{T}; lags::Int=1,
+                                standardize::Bool=false) where {T<:AbstractFloat}
     n, k = size(data)
     means = vec(mean(data, dims=1))
     data_c = data .- means'
+
+    # Per-variable sample variances (1/n), used for optional standardization.
+    vars = T[dot(data_c[:, i], data_c[:, i]) / n for i in 1:k]
 
     moments = T[]
 
     # Upper triangle of variance-covariance matrix (1/n divisor)
     for i in 1:k
         for j in i:k
-            push!(moments, dot(data_c[:, i], data_c[:, j]) / n)
+            cov_ij = dot(data_c[:, i], data_c[:, j]) / n
+            if standardize
+                denom = sqrt(max(vars[i], eps(T)) * max(vars[j], eps(T)))
+                push!(moments, cov_ij / denom)
+            else
+                push!(moments, cov_ij)
+            end
         end
     end
 
@@ -191,7 +206,11 @@ function autocovariance_moments(data::AbstractMatrix{T}; lags::Int=1) where {T<:
     for lag in 1:lags
         for i in 1:k
             acov = dot(data_c[(lag+1):n, i], data_c[1:(n-lag), i]) / n
-            push!(moments, acov)
+            if standardize
+                push!(moments, acov / max(vars[i], eps(T)))
+            else
+                push!(moments, acov)
+            end
         end
     end
 
@@ -221,11 +240,14 @@ the `/n` divisor of `autocovariance_moments` is reproduced by the column mean).
 # Arguments
 - `data` --- T_obs × k data matrix
 - `lags` --- number of autocovariance lags (default: 1)
+- `standardize` --- match `autocovariance_moments(...; standardize=true)` scaling (#562)
 """
-function autocovariance_moment_contributions(data::AbstractMatrix{T}; lags::Int=1) where {T<:AbstractFloat}
+function autocovariance_moment_contributions(data::AbstractMatrix{T}; lags::Int=1,
+                                             standardize::Bool=false) where {T<:AbstractFloat}
     n, k = size(data)
     means  = vec(mean(data, dims=1))
     data_c = data .- means'
+    vars = T[dot(data_c[:, i], data_c[:, i]) / n for i in 1:k]
     q = k * (k + 1) ÷ 2 + k * lags
     H = zeros(T, n, q)
     col = 0
@@ -233,15 +255,17 @@ function autocovariance_moment_contributions(data::AbstractMatrix{T}; lags::Int=
     for i in 1:k
         for j in i:k
             col += 1
-            @views H[:, col] .= data_c[:, i] .* data_c[:, j]
+            scale = standardize ? sqrt(max(vars[i], eps(T)) * max(vars[j], eps(T))) : one(T)
+            @views H[:, col] .= (data_c[:, i] .* data_c[:, j]) ./ scale
         end
     end
     # Diagonal autocovariance block, same order as autocovariance_moments
     for lag in 1:lags
         for i in 1:k
             col += 1
+            scale = standardize ? max(vars[i], eps(T)) : one(T)
             @inbounds for t in (lag+1):n
-                H[t, col] = data_c[t, i] * data_c[t-lag, i]  # 0 for t<=lag ⇒ column mean uses /n divisor
+                H[t, col] = (data_c[t, i] * data_c[t-lag, i]) / scale  # 0 for t<=lag ⇒ column mean uses /n divisor
             end
         end
     end

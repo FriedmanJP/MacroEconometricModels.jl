@@ -2,7 +2,7 @@
 
 The **Blanchard (1985) perpetual-youth** model embeds overlapping generations into an otherwise standard neoclassical growth model. Agents survive each period with probability ``\gamma`` and newborns enter with zero financial wealth, so the economy is populated by households of different ages and wealth. This generational turnover breaks the representative-agent benchmark: the equilibrium interest rate exceeds the rate of time preference, and government debt is net wealth that crowds out capital — the failure of Ricardian equivalence.
 
-The implementation is the analytically tractable discrete-time Blanchard-Yaari case with log utility and fair annuities. For a genuine age structure — age-specific mortality, an age-earnings profile, retirement, and backward induction over age — see [True Life Cycle: Age-Dependent EGM](@ref lifecycle_olg).
+This page is part of the [Heterogeneity & Continuous Time](@ref dsge_heterogeneity) sub-hub of the [DSGE Models](@ref dsge_page) suite. The implementation is the analytically tractable discrete-time Blanchard-Yaari case with log utility and fair annuities. For a genuine age structure — age-specific mortality, an age-earnings profile, retirement, and backward induction over age — see [True Life Cycle: Age-Dependent EGM](@ref lifecycle_olg).
 
 ## Quick Start
 
@@ -18,6 +18,8 @@ ss = blanchard_steady_state(m)
 report(ss)
 ```
 
+Bisection settles on capital of 5.12 supporting consumption of 1.39 at an interest rate of 4.65%, and the log-utility marginal propensity to consume out of total wealth is ``1 - \beta\gamma = 0.0592``.
+
 **Recipe 2: Finite horizons raise the interest rate**
 
 ```@example olg
@@ -25,6 +27,8 @@ ramsey = blanchard_steady_state(BlanchardOLG(; gamma=1.0)).r     # representativ
 olg    = blanchard_steady_state(BlanchardOLG(; gamma=0.98)).r    # perpetual youth
 (ramsey_rate = round(ramsey, digits=5), olg_rate = round(olg, digits=5))
 ```
+
+A 2% per-period death rate lifts the equilibrium rate from the Ramsey value ``1/\beta - 1 = 4.17\%`` to 4.65%. Newborns enter with zero wealth and dilute the aggregate stock, so capital sits below the modified golden rule and its return is correspondingly higher.
 
 **Recipe 3: Non-Ricardian government debt**
 
@@ -34,6 +38,8 @@ debt    = blanchard_steady_state(BlanchardOLG(; gamma=0.98, b=0.1))
 (Δr = round(debt.r - no_debt.r, digits=6), Δk = round(debt.k - no_debt.k, digits=4))
 ```
 
+Issuing debt worth 0.1 per capita raises the interest rate by 9.1 basis points and crowds out 0.0057 of capital. Under Ricardian equivalence both differences would be exactly zero.
+
 **Recipe 4: Saddle-path dynamics**
 
 ```@example olg
@@ -42,6 +48,8 @@ sol = blanchard_solve(m, ss)
  determinate = sol.determinate,
  consumption_slope = round(sol.policy_slope, digits=4))
 ```
+
+Exactly one eigenvalue lies inside the unit circle, so the saddle path is locally unique. Capital converges at 0.8838 per period — a half-life of about six periods — and consumption rises 0.163 for every unit of capital along the path.
 
 ---
 
@@ -114,7 +122,10 @@ The equilibrium interest rate (``\approx`` 5.8% here) lies **above** the pure ra
 | `w` | `T` | Wage |
 | `H` | `T` | Aggregate human wealth |
 | `mpc` | `T` | Marginal propensity to consume ``1-\beta\gamma`` |
+| `b` | `T` | Per-capita government debt the steady state was solved at |
 | `converged` | `Bool` | Whether the bisection converged |
+
+The solver itself takes two keywords: `tol` (default ``10^{-10}``, the residual at which the bisection stops) and `max_iter` (default `200`). Both bind only after the 400-point downward scan has bracketed the high-capital root.
 
 ---
 
@@ -163,7 +174,7 @@ Starting 30% below the steady state, capital rises monotonically toward ``k^*`` 
 | `policy_slope` | `T` | Consumption policy slope ``dC/dk`` along the saddle path |
 | `determinate` | `Bool` | `true` when exactly one eigenvalue lies inside the unit circle |
 
-`blanchard_transition` returns a `NamedTuple` of length-``H+1`` paths:
+`blanchard_transition(m, sol, k0; H=50)` returns a `NamedTuple` of length-``H+1`` paths:
 
 | Field | Type | Description |
 |-------|------|-------------|
@@ -171,6 +182,13 @@ Starting 30% below the steady state, capital rises monotonically toward ``k^*`` 
 | `C` | `Vector{T}` | Consumption path |
 | `r` | `Vector{T}` | Interest-rate path (evaluated at each period's capital) |
 | `w` | `Vector{T}` | Wage path |
+
+Plotting the solution draws the stable manifold ``C = C^* + \texttt{policy\_slope}\cdot(k - k^*)`` in ``(k, C)`` space over ``k^* \pm`` `k_span`` \cdot k^*``, with the steady state marked and the stable eigenvalue and determinacy flag in the panel title. The bare steady state is a handful of scalars and has no chart — read it through `report`.
+
+```julia
+plot_result(sol)                # saddle path through the steady state
+plot_result(sol; k_span=0.6)    # widen the plotted capital range
+```
 
 ---
 
@@ -228,17 +246,58 @@ The equilibrium interest rate clears the capital market at a capital-output rati
 |---------|------|---------|-------------|
 | `J` / `J_retire` | `Int` | `60` / `45` | Maximum age and first retired age |
 | `survival` | `Real` or `Vector` | `0.99` | Survival probabilities; a scalar is broadcast, `s_J` forced to zero |
-| `earnings` | `Vector` | hump | Deterministic age-earnings profile ``\kappa_j`` |
+| `earnings` | `Vector` | `nothing` | Deterministic age-earnings profile ``\kappa_j``; defaults to a hump |
+| `income` | `IncomeProcess` | `lifecycle_income(0.95, 0.2, 5)` | Idiosyncratic productivity in **levels** |
 | `replacement` | `Real` | `0.4` | Pension as a fraction of average labor income (`0` ⇒ no social security) |
 | `annuities` | `Bool` | `true` | Actuarially fair annuities, else accidental bequests rebated lump-sum |
 | `n_pop` | `Real` | `0.0` | Population growth rate |
+| `beta` / `sigma` | `Real` | `0.97` / `2.0` | Discount factor and CRRA curvature |
+| `alpha` / `delta` / `Z` | `Real` | `0.36` / `0.06` / `1.0` | Capital share, depreciation, TFP |
+| `a_max` / `n_a` | `Int` | `60.0` / `200` | Asset-grid ceiling and node count |
+| `credit_limit` | `Real` | `0.0` | Borrowing floor ``\underline{a}``; households may borrow but cannot die in debt |
+| `grid_type` | `Symbol` | `:double_exp` | Asset-grid curve |
+
+`lifecycle_steady_state` bisects on the capital-labor ratio:
+
+| Keyword | Type | Default | Description |
+|---------|------|---------|-------------|
+| `r_bounds` | `Tuple` | `(-0.02, 0.10)` | Bracket for the equilibrium interest rate |
+| `tol` | `Real` | ``10^{-6}`` | Tolerance on excess capital supply |
+| `max_iter` | `Int` | `60` | Maximum bisection iterations |
+| `bequest_iter` | `Int` | `50` | Inner iterations on the accidental-bequest fixed point |
+| `verbose` | `Bool` | `false` | Print bisection progress |
 
 | Field | Type | Description |
 |-------|------|-------------|
+| `r`, `w` | `T` | Equilibrium interest rate and wage |
 | `K`, `L`, `Y` | `T` | Aggregate capital (the integral of `dist`), efficiency labor, output |
+| `tau`, `pension` | `T` | Payroll tax and benefit balancing the pay-as-you-go budget |
+| `transfer` | `T` | Lump-sum rebate of accidental bequests (`0` under annuities) |
+| `c_policy`, `a_policy` | `Array{T,3}` | ``n_a \times n_e \times J`` consumption and savings policies |
 | `dist` | `Array{T,3}` | ``n_a \times n_e \times J`` population distribution, sums to one |
+| `cohort_mass` | `Vector{T}` | Stationary population share by age |
 | `asset_profile`, `consumption_profile`, `income_profile` | `Vector{T}` | Means by age |
 | `excess_demand` | `T` | Market-clearing residual |
+| `converged`, `iterations` | `Bool`, `Int` | Bisection outcome |
+| `spec` | `LifeCycleOLG{T}` | Model solved |
+
+### Solving the Household Problem Directly
+
+The two halves of the steady state are callable on their own, which is what you want when prices come from somewhere other than this model's capital market — a partial-equilibrium exercise, or a calibration where the government budget is imposed rather than solved.
+
+[`lifecycle_policies`](@ref) runs the backward sweep at a given ``(r, w)`` and returns `(c_pol, a_pol)`, each ``n_a \times n_e \times J``. [`lifecycle_distribution`](@ref) pushes a cohort forward through a savings policy and returns the ``n_a \times n_e \times J`` population array, weighted by stationary cohort masses so it sums to one.
+
+```@example olg
+c_pol, a_pol = lifecycle_policies(lc, 0.04, 1.0; tau=0.1, pension=0.3)
+dist = lifecycle_distribution(lc, a_pol)
+mean_assets = vec(sum(dist .* lc.grid.grids[1]; dims=(1, 2))) ./ vec(sum(dist; dims=(1, 2)))
+(policy_shape = size(c_pol),
+ total_mass = round(sum(dist), digits=12),
+ peak_asset_age = argmax(mean_assets),
+ retirement_age = lc.J_retire)
+```
+
+The array carries unit mass by construction. Mean assets peak at age 28, three ages before retirement at 31: households accumulate through working life, stop just as earnings give way to the pension, and run the stock down thereafter. Because survival is independent of assets and productivity, mortality rescales cohorts without distorting the within-cohort distribution, so age enters the array only through the cohort weights — which is why this profile matches `ss_lc.asset_profile` in shape even though no market has been cleared here.
 
 ### The Consumption Hump Requires Imperfect Annuitization
 
@@ -287,10 +346,10 @@ plot_result(ss_lc; view=:policy)          # consumption policy at three ages
 
 - Blanchard, Olivier J. 1985. "Debt, Deficits, and Finite Horizons." *Journal of Political Economy* 93 (2): 223--247. [DOI](https://doi.org/10.1086/261297)
 
-- Auerbach, Alan J., and Laurence J. Kotlikoff. 1987. *Dynamic Fiscal Policy*. Cambridge: Cambridge University Press. ISBN 978-0521303880.
+- Auerbach, Alan J., and Laurence J. Kotlikoff. 1987. *Dynamic Fiscal Policy*. Cambridge: Cambridge University Press. ISBN 978-0521300414.
 
 - İmrohoroğlu, Ayşe, Selahattin İmrohoroğlu, and Douglas H. Joines. 1995. "A Life Cycle Analysis of Social Security." *Economic Theory* 6 (1): 83--114. [DOI](https://doi.org/10.1007/BF01213942)
 
 - Yaari, Menahem E. 1965. "Uncertain Lifetime, Life Insurance, and the Theory of the Consumer." *Review of Economic Studies* 32 (2): 137--150. [DOI](https://doi.org/10.2307/2296058)
 
-- Fujiwara, Ippei, and Yuki Teranishi. 2008. "A Dynamic New Keynesian Life-Cycle Model: Societal Aging, Demographics, and Monetary Policy." *Journal of Economic Dynamics and Control* 32 (7): 2398--2427. [DOI](https://doi.org/10.1016/j.jedc.2007.09.013)
+- Fujiwara, Ippei, and Yuki Teranishi. 2008. "A Dynamic New Keynesian Life-Cycle Model: Societal Aging, Demographics, and Monetary Policy." *Journal of Economic Dynamics and Control* 32 (8): 2398--2427. [DOI](https://doi.org/10.1016/j.jedc.2007.09.002)

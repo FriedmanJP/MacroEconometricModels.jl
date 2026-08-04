@@ -617,7 +617,8 @@ function incidence_rate_ratio(m::Union{PoissonModel{T},NegBinModel{T}};
     OddsRatio{T}(irr, irr .* se_beta,
                  exp.(beta .- z_crit .* se_beta),
                  exp.(beta .+ z_crit .* se_beta),
-                 copy(m.varnames), T(conf_level))
+                 copy(m.varnames), T(conf_level),
+                 "Incidence Rate Ratios", "IRR")
 end
 
 # =============================================================================

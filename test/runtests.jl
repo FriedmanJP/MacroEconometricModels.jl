@@ -49,6 +49,7 @@ const TEST_GROUPS = [
         "bvar/test_tvpvar.jl",   # T250 (#349): Primiceri TVP-VAR-SV / Cogley-Sargent SV-BVAR
         "bvar/test_mfvar.jl",    # T251 (#350): Schorfheide-Song mixed-frequency VAR
         "bvar/test_glp.jl",      # T252 (#351): GLP hierarchical hyperparameter optimization
+        "bvar/test_issues_523_564.jl",   # PR #597 regression tests (BVAR/FAVAR/IRF fixes)
         "var/test_arias2018.jl",
         "var/test_uhlig.jl",
         "var/test_conditional_forecast.jl",   # T241 (#340): Waggoner-Zha conditional forecasts
@@ -438,6 +439,7 @@ else
         @testset "Bayesian Utils" begin include("bvar/test_bayesian_utils.jl") end
         @testset "Minnesota Prior" begin include("bvar/test_minnesota.jl") end
         @testset "BGR Optimization" begin include("bvar/test_bgr.jl") end
+        @testset "Issue fixes #523-#564" begin include("bvar/test_issues_523_564.jl") end
         @testset "Arias et al. (2018) SVAR Identification" begin include("var/test_arias2018.jl") end
         @testset "Mountford-Uhlig (2009) SVAR Identification" begin include("var/test_uhlig.jl") end
 

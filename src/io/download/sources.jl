@@ -119,18 +119,27 @@ function download_exiobase3(folder; years=nothing, system::AbstractString="pxp",
 end
 
 """
-    download_eora26(folder; email, password, years=nothing, overwrite_existing=false) -> IOMetaData
+    download_eora26(folder; email, password, years=nothing, overwrite_existing=false,
+                    fetch=fetch_file, verify=true) -> IOMetaData
 
-Download EORA26 tables (requires a worldmrio.com account). Credential-gated; the
-login POST uses [`fetch_file`](@ref) with `method="POST"`.
+Download EORA26 tables (requires a worldmrio.com account).
+
+!!! warning
+    Automated fetch is **not implemented**: worldmrio.com requires an interactive
+    session login that cannot be reproduced headlessly. This function accepts the
+    standard `verify`/`fetch` keywords for API parity with other downloaders and
+    then throws a clear `ErrorException` directing the user to download manually.
 """
 function download_eora26(folder; email, password, years=nothing,
-                         overwrite_existing::Bool=false, fetch=fetch_file)
+                         overwrite_existing::Bool=false, fetch=fetch_file,
+                         verify::Bool=true)
     isempty(email) && throw(ArgumentError("EORA26 requires an email"))
-    meta = IOMetaData(; source="EORA26", version="26")
-    push!(meta.history, "EORA26 download requires interactive worldmrio.com login " *
-                        "for user $(email); populate per-year URLs after authentication.")
-    meta
+    # Accept verify/fetch for download_io kwargs forwarding (#518); do not silently
+    # return an empty metadata object that looks like a successful download.
+    error("EORA26 automated download is not implemented: worldmrio.com requires " *
+          "an interactive login session. Download tables manually from " *
+          "https://www.worldmrio.com/ for user $(email) into $(folder), then parse " *
+          "with parse_io. (verify=$verify is accepted for API parity but unused.)")
 end
 
 """
@@ -159,7 +168,7 @@ Dispatch to the per-source downloader for `source` (`:oecd`, `:wiod`,
 `:exiobase3`, `:eora26`, `:gloria`). Returns the [`IOMetaData`](@ref) log.
 
 Pass `verify=true` (default) to check each downloaded archive's SHA-256 against
-[`IO_CHECKSUMS`](@ref): a registered digest that mismatches throws (corrupt or
+`IO_CHECKSUMS`: a registered digest that mismatches throws (corrupt or
 substituted file), while a URL with no registered digest downloads with a warning.
 Set `verify=false` to skip integrity checks entirely.
 """

@@ -15,16 +15,44 @@ end
 Attach a satellite account `name` with stressor flows `F` (`n_stressor × n`) to
 `io`, computing intensities `S = F x̂⁻¹`. `F_Y` (`n_stressor × n_fd`) gives
 direct stressor flows in final demand (defaults to zeros).
+
+`unit` accepts a single string (applied to every stressor row) or a vector with
+one entry per row; `stressors` accepts a vector of names, or a single string
+when `F` has one row (#520).
 """
 function add_extension!(io::IOData{T}, name::AbstractString, F::AbstractMatrix;
                         stressors, unit, F_Y=nothing) where {T}
     Fm = Matrix{T}(F)
+    n_s = size(Fm, 1)
     size(Fm, 2) == length(io.x) ||
         throw(ArgumentError("F cols ($(size(Fm, 2))) must equal n=$(length(io.x))"))
     S = Fm * Diagonal(_invdiag(io.x))
-    FYm = F_Y === nothing ? zeros(T, size(Fm, 1), size(io.Y, 2)) : Matrix{T}(F_Y)
+    FYm = F_Y === nothing ? zeros(T, n_s, size(io.Y, 2)) : Matrix{T}(F_Y)
+    # Accept a scalar unit string (broadcast to all stressors) or a per-row vector.
+    # A bare `String` used to be iterated character-by-character → Char MethodError (#520).
+    unit_vec = if unit isa AbstractString
+        fill(String(unit), n_s)
+    else
+        u = collect(String.(unit))
+        length(u) == n_s || throw(ArgumentError(
+            "unit must be a string or a vector of $n_s strings (one per extension row); got length $(length(u))"))
+        u
+    end
+    # Same scalar-vs-vector trap as `unit` (#520): a bare String broadcasts
+    # character-by-character, so handle it explicitly.
+    stress_vec = if stressors isa AbstractString
+        n_s == 1 || throw(ArgumentError(
+            "stressors must be a vector of $n_s names (one per extension row); " *
+            "got the single string $(repr(stressors))"))
+        [String(stressors)]
+    else
+        s = collect(String.(stressors))
+        length(s) == n_s || throw(ArgumentError(
+            "stressors must have length $n_s (one per extension row); got $(length(s))"))
+        s
+    end
     io.extensions[String(name)] =
-        IOExtension{T}(Fm, FYm, S, collect(String.(stressors)), collect(String.(unit)))
+        IOExtension{T}(Fm, FYm, S, stress_vec, unit_vec)
     io
 end
 

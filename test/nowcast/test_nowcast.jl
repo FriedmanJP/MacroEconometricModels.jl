@@ -395,16 +395,137 @@ end
 # =============================================================================
 
 @testset "BVAR Nowcasting" begin
-    @testset "GLP hyperparameter sanity flag (B4/T173)" begin
-        # N >> T reliably parks the marginal-likelihood optimizer at the exp(5) box edge.
+    @testset "GLP hyperparameter sanity flag (B4/T173 / #571)" begin
+        # T173: a hyperparameter parked on the |log-param| ≤ 5 box edge must be reported,
+        # never presented bare. Which panels pin is data-dependent once the dummy design
+        # and the NIW marginal likelihood are correct (#571/#572), so assert the detector's
+        # invariant rather than one panel's outcome: pinned ⇔ !converged, and !converged
+        # ⇒ show() carries the warning.
         m = nowcast_bvar(randn(Random.MersenneTwister(9), 50, 10), 6, 4; lags=5)
-        @test m.lambda > 140
-        @test !m.converged
-        @test occursin("WARNING", sprint(show, m))
+        log_pars = log.([m.lambda, m.theta, m.miu, m.alpha])
+        @test m.converged == !any(x -> abs(x) >= 5 - 1e-3, log_pars)
+        @test m.converged || occursin("WARNING", sprint(show, m))
+        @test isfinite(m.loglik) && m.loglik > -1e9   # not the degenerate -1e10 sentinel
         # A well-conditioned interior fit converges and does NOT warn.
         m2 = nowcast_bvar(randn(Random.MersenneTwister(300), 100, 6), 4, 2; lags=3, max_iter=50)
         @test m2.converged
         @test !occursin("WARNING", sprint(show, m2))
+        # Display half of the detector: flag down ⇒ warning, whatever the fit produced.
+        m_pinned = MacroEconometricModels.NowcastBVAR{Float64}(
+            m2.X_sm, m2.beta, m2.sigma, exp(5.0), m2.theta, m2.miu, m2.alpha,
+            m2.lags, m2.loglik, m2.nM, m2.nQ, m2.data, false)
+        @test occursin("WARNING", sprint(show, m_pinned))
+    end
+
+    @testset "Litterman non-conjugate prior (#602)" begin
+        MEM = MacroEconometricModels
+        rng = Random.MersenneTwister(602)
+        N, lags, T_obs = 3, 2, 40
+        Y = randn(rng, T_obs, N)
+        for t in 2:T_obs
+            Y[t, :] .+= 0.6 .* Y[t-1, :]
+        end
+        sar = [std(diff(Y[:, j])) for j in 1:N]
+        lam, th, tc, mu, al = 0.4, 1.3, 0.7, 1.1, 0.9
+
+        beta, sigma, logml = MEM._litterman_estimate(Y, lags, sar, lam, th, tc, mu, al)
+
+        # Rebuild the regression independently.
+        Y_dep = Y[(lags+1):end, :]
+        T_eff = size(Y_dep, 1)
+        X = ones(T_eff, 1)
+        for l in 1:lags
+            X = hcat(X, Y[(lags+1-l):(end-l), :])
+        end
+        y_bar = [mean(Y[1:lags, j]) for j in 1:N]
+
+        ref_logml = 0.0
+        for m in 1:N
+            A, c = MEM._litterman_prior_rows(m, N, lags, sar, y_bar, lam, th, tc, mu, al)
+            P = A'A
+            b = A \ c
+            s2 = sar[m]^2
+            # (1) posterior mean is the plain generalized-ridge / GLS solution
+            @test (P + X'X / s2) \ (P * b + X' * Y_dep[:, m] / s2) ≈ beta[:, m] atol = 1e-10
+            # (2) marginal likelihood equals a direct T x T Gaussian density, written out by
+            #     hand — the completion-of-square algebra must be exact, not close. Under
+            #     beta ~ N(b, P^-1) and known s2, y ~ N(X b, s2 I + X P^-1 X').
+            Cov = Symmetric(s2 * Matrix(I, T_eff, T_eff) + X * inv(P) * X')
+            e = Y_dep[:, m] - X * b
+            ref_logml += -0.5 * (T_eff * log(2π) + logdet(Cov) + dot(e, Cov \ e))
+        end
+        @test logml ≈ ref_logml atol = 1e-8
+
+        # (3) Sigma is the FIXED diag(sigma_ar^2), not a posterior mode
+        @test sigma ≈ Matrix(Diagonal(sar .^ 2))
+
+        # (4) theta_cross = 1 reproduces the conjugate Minnesota asymmetry exactly: for a
+        #     given regressor the cross/own prior SD ratio is sigma_m/sigma_j, which is the
+        #     ONLY own-vs-cross asymmetry a Sigma-kron-V prior can express.
+        A1, _ = MEM._litterman_prior_rows(1, N, lags, sar, y_bar, lam, th, 1.0, 0.0, 0.0)
+        A2, _ = MEM._litterman_prior_rows(2, N, lags, sar, y_bar, lam, th, 1.0, 0.0, 0.0)
+        col = 1 + 2                                    # lag 1, variable 2
+        @test (1 / A1[col, col]) / (1 / A2[col, col]) ≈ sar[1] / sar[2] atol = 1e-12
+        # ...and theta_cross scales exactly that ratio, which is the point of the feature.
+        A1h, _ = MEM._litterman_prior_rows(1, N, lags, sar, y_bar, lam, th, 0.5, 0.0, 0.0)
+        @test (1 / A1h[col, col]) ≈ 0.5 * (1 / A1[col, col]) atol = 1e-12
+        # own-lag rows are untouched by theta_cross
+        own_col = 1 + 1
+        A1o, _ = MEM._litterman_prior_rows(1, N, lags, sar, y_bar, lam, th, 0.5, 0.0, 0.0)
+        @test A1o[own_col, own_col] ≈ A1[own_col, own_col] atol = 1e-12
+
+        # (5) theta_cross is identified: the criterion is not flat in it
+        mls = [MEM._litterman_estimate(Y, lags, sar, lam, th, t, mu, al)[3]
+               for t in (0.1, 0.5, 1.0, 3.0)]
+        @test length(unique(round.(mls, digits=6))) == 4
+        @test all(isfinite, mls)
+
+        # (6) end-to-end through the public API
+        rng2 = Random.MersenneTwister(6021)
+        Yn = randn(rng2, 70, 4)
+        for t in 2:70
+            Yn[t, :] .+= 0.5 .* Yn[t-1, :]
+        end
+        Yn[68:70, 4] .= NaN
+        ml_fit = nowcast_bvar(Yn, 3, 1; lags=2, max_iter=120, prior=:litterman)
+        @test ml_fit.prior == :litterman
+        @test isfinite(ml_fit.theta_cross) && ml_fit.theta_cross > 0
+        @test isfinite(ml_fit.loglik) && ml_fit.loglik > -1e9
+        @test !any(isnan, ml_fit.X_sm)
+        @test occursin("Litterman", sprint(show, ml_fit))
+
+        # (7) the conjugate prior must REFUSE theta_cross rather than silently ignore it
+        cj_fit = nowcast_bvar(Yn, 3, 1; lags=2, max_iter=120)
+        @test cj_fit.prior == :conjugate
+        @test isnan(cj_fit.theta_cross)
+        @test occursin("fixed by", sprint(show, cj_fit))
+        @test_throws ArgumentError nowcast_bvar(Yn, 3, 1; lags=2, theta_cross0=0.5)
+        @test_throws ArgumentError nowcast_bvar(Yn, 3, 1; lags=2, prior=:bogus)
+
+        # (8) back-compat: the pre-#602 13-argument positional constructor still works
+        legacy = MEM.NowcastBVAR{Float64}(
+            cj_fit.X_sm, cj_fit.beta, cj_fit.sigma, cj_fit.lambda, cj_fit.theta,
+            cj_fit.miu, cj_fit.alpha, cj_fit.lags, cj_fit.loglik, cj_fit.nM,
+            cj_fit.nQ, cj_fit.data, cj_fit.converged)
+        @test legacy.prior == :conjugate
+        @test isnan(legacy.theta_cross)
+
+        # (9) box-edge warning names the edge that was actually hit
+        pinned_lo = MEM.NowcastBVAR{Float64}(
+            ml_fit.X_sm, ml_fit.beta, ml_fit.sigma, ml_fit.lambda, ml_fit.theta,
+            ml_fit.miu, exp(-5.0), ml_fit.lags, ml_fit.loglik, ml_fit.nM, ml_fit.nQ,
+            ml_fit.data, false, exp(-5.0), :litterman)
+        s_lo = sprint(show, pinned_lo)
+        @test occursin("floor", s_lo)
+        @test occursin("theta_cross", s_lo)
+        @test !occursin("ceiling", s_lo)
+        pinned_hi = MEM.NowcastBVAR{Float64}(
+            ml_fit.X_sm, ml_fit.beta, ml_fit.sigma, exp(5.0), ml_fit.theta,
+            ml_fit.miu, ml_fit.alpha, ml_fit.lags, ml_fit.loglik, ml_fit.nM, ml_fit.nQ,
+            ml_fit.data, false, ml_fit.theta_cross, :litterman)
+        s_hi = sprint(show, pinned_hi)
+        @test occursin("ceiling", s_hi)
+        @test occursin("lambda", s_hi)
     end
 
     @testset "Basic estimation" begin
@@ -471,34 +592,75 @@ end
         @test_throws ArgumentError nowcast_bvar(Y, 5, 0; lags=0)  # lags < 1
     end
 
-    @testset "Theta cross-variable shrinkage" begin
+    @testset "Minnesota dummy design is one-nonzero-per-row (#571/#572)" begin
+        # Replaces the old cross-variable-entry test: packing the own-lag and every cross
+        # entry of an equation into ONE row restricts their SUM, so each lag block has rank
+        # 1, X_d'X_d is singular and the NIW marginal likelihood collapses to the -1e10
+        # sentinel. Cross-vs-own relative tightness is not a free hyperparameter of a
+        # conjugate NIW prior (it is √(Σ_mm/Σ_jj)); theta is the lag-decay exponent (#572).
         rng = Random.MersenneTwister(500)
-        N = 3
-        lags = 2
+        N, lags = 3, 2
         Y0 = randn(rng, lags, N)
-        sigma_ar = ones(N)
-        lambda = 0.2
+        sigma_ar = [1.0, 2.0, 3.0]
+        lambda, theta = 0.2, 2.0
+        k = 1 + N * lags
 
-        # Theta = 1: cross-variable same as own-lag
-        Y_d1, X_d1 = MacroEconometricModels._bvar_dummy_obs(Y0, lags, sigma_ar,
-                                                              lambda, 1.0, 0.0, 0.0)
-        # Theta = 10: tighter cross-variable shrinkage
-        Y_d10, X_d10 = MacroEconometricModels._bvar_dummy_obs(Y0, lags, sigma_ar,
-                                                                lambda, 10.0, 0.0, 0.0)
+        Y_d, X_d = MacroEconometricModels._bvar_dummy_obs(Y0, lags, sigma_ar,
+                                                          lambda, theta, 1.0, 2.0)
 
-        # Off-diagonal X_d entries should be non-zero (fix for #36)
-        # For lag 1, variable i=1, cross-variable j=2: column 1 + (1-1)*3 + 2 = 3
-        @test X_d1[1, 3] != 0.0  # off-diagonal must be non-zero
-        @test X_d10[1, 3] != 0.0
+        # One restriction per Minnesota row, and the stacked design restricts every column
+        for r in 1:(N * lags)
+            @test count(!iszero, X_d[r, :]) == 1
+        end
+        @test rank(X_d) == k
+        @test isfinite(logdet(X_d' * X_d))
 
-        # Higher theta => smaller off-diagonal (more shrinkage)
-        @test abs(X_d10[1, 3]) < abs(X_d1[1, 3])
+        # Row (lag, i) scale = sigma_i * lag^theta / lambda; only lag 1 carries the RW mean
+        @test X_d[1, 2] ≈ sigma_ar[1] * 1.0^theta / lambda
+        @test Y_d[1, 1] ≈ X_d[1, 2]
+        @test X_d[N + 1, 2 + N] ≈ sigma_ar[1] * 2.0^theta / lambda
+        @test all(iszero, Y_d[(N + 1):(2 * N), :])
 
-        # theta=1 should make off-diagonal == diagonal
-        @test X_d1[1, 2] ≈ X_d1[1, 3]  # own-lag == cross-variable when theta=1
+        # Larger theta shrinks the higher lags harder and leaves lag 1 untouched
+        _, X_hi = MacroEconometricModels._bvar_dummy_obs(Y0, lags, sigma_ar,
+                                                         lambda, 3.0, 1.0, 2.0)
+        @test X_hi[N + 1, 2 + N] > X_d[N + 1, 2 + N]
+        @test X_hi[1, 2] ≈ X_d[1, 2]
 
-        # theta=10 off-diagonal should be 1/10 of theta=1 off-diagonal
-        @test X_d10[1, 3] ≈ X_d1[1, 3] / 10.0
+        # Closing inverse-Wishart scale block (Y = diag(sigma), X = 0): without it the
+        # random-walk B solves every dummy row exactly and the prior SSR is singular.
+        @test all(iszero, X_d[(end - N + 1):end, :])
+        @test Y_d[(end - N + 1):end, :] ≈ diagm(sigma_ar)
+    end
+
+    @testset "Marginal likelihood is a smooth surface (#571/#572)" begin
+        # 4-variable AR(0.7) panel: the log marginal likelihood must be finite at the
+        # default start and vary smoothly in the hyperparameters. With the rank-1 lag
+        # blocks, K_prior was singular, logdet_safe returned -Inf and EVERY evaluation
+        # clamped to -1e10 — a flat plateau that pinned the optimizer at the box wall.
+        rng = Random.MersenneTwister(4242)
+        N, T_burn, T_obs = 4, 50, 120
+        Yb = zeros(T_burn + T_obs, N)
+        for t in 2:(T_burn + T_obs), j in 1:N
+            Yb[t, j] = 0.7 * Yb[t - 1, j] + randn(rng)
+        end
+        Y = Yb[(T_burn + 1):end, :]
+        sigma_ar = [std(diff(Y[:, j])) for j in 1:N]
+        ml(lam, th) = MacroEconometricModels._bvar_estimate(Y, 2, sigma_ar, lam, th,
+                                                            1.0, 2.0)[3]
+
+        @test isfinite(ml(0.2, 1.0)) && ml(0.2, 1.0) > -1e9
+        for lam in (0.02, 0.05, 0.2), th in (0.5, 1.0, 1.1)
+            @test isfinite(ml(lam, th)) && ml(lam, th) > -1e9
+        end
+        # Smooth through theta = 1: the midpoint of the neighbours matches the value there
+        @test ml(0.2, 1.0) ≈ (ml(0.2, 0.99) + ml(0.2, 1.01)) / 2 rtol=1e-4
+        @test ml(0.2, 0.5) < ml(0.2, 1.1)   # monotone over this stretch, no spike at 1
+
+        # The optimizer now reaches an interior optimum on this panel
+        m = nowcast_bvar(Y, 3, 1; lags=2)
+        @test m.converged
+        @test all(x -> abs(log(x)) < 5 - 1e-3, (m.lambda, m.theta, m.miu, m.alpha))
     end
 
     @testset "StatsAPI interface" begin
@@ -672,6 +834,46 @@ _NC_M = nowcast_dfm(_NC_Y, 4, 1; r=1, p=1, max_iter=20, thresh=1e-3)
         # overlapping information wrongly and dumped a large residual into impact_reestimation.
         rev = news.new_nowcast - news.old_nowcast
         @test abs(news.impact_reestimation) <= 1e-6 * (abs(rev) + 1)
+    end
+
+    @testset "Revisions are not news (#573)" begin
+        Y, _, _, _ = _make_nowcast_data(T_obs=80, nM=4, nQ=1, r=1, seed=717)
+        m = nowcast_dfm(Y, 4, 1; r=1, p=1, max_iter=30, thresh=1e-4)
+
+        # A pure revision: one cell observed in BOTH vintages changes value. The news
+        # weights are derived for cells MISSING in the old vintage, so applying them here
+        # misattributed part of the impact to re-estimation (#573). With parameters held
+        # fixed the whole nowcast delta must land in impact_revision.
+        X_old = copy(Y)
+        X_new = copy(Y)
+        X_new[79, 2] += 0.5
+        news = nowcast_news(X_new, X_old, m, 79; target_var=5)
+        delta = news.new_nowcast - news.old_nowcast
+
+        @test length(news.impact_news) == 0
+        @test news.impact_revision ≈ delta atol=1e-10
+        @test abs(news.impact_reestimation) <= 1e-10
+        # Non-vacuity guard: the revision actually moved the nowcast. The magnitude is
+        # seed-stream dependent (Julia 1.10's RNG gives variable 2 a near-zero loading,
+        # delta ≈ 1e-5), so the bar sits well above the 1e-10 identity atol, not at 1e-4.
+        @test abs(delta) > 1e-8
+
+        # Re-standardization noise (~1e-13) must not register as a revision — the exact
+        # `!=` test flagged every observed cell and built a T·N-square revision system.
+        X_noise = copy(Y) .+ 1e-13
+        news_noise = nowcast_news(X_noise, Y, m, 79; target_var=5)
+        @test news_noise.impact_revision == 0.0
+
+        # News and revisions together: the decomposition identity still holds
+        X_old2 = copy(Y)
+        X_old2[76:80, 1:2] .= NaN
+        X_new2 = copy(Y)
+        X_new2[60, 3] += 0.3
+        news2 = nowcast_news(X_new2, X_old2, m, 78; target_var=5)
+        @test length(news2.impact_news) > 1
+        @test news2.new_nowcast - news2.old_nowcast ≈
+              sum(news2.impact_news) + news2.impact_revision + news2.impact_reestimation atol=1e-8
+        @test abs(news2.impact_reestimation) <= 1e-6 * (abs(news2.new_nowcast - news2.old_nowcast) + 1)
     end
 
     @testset "Kalman lagged smoother cross-covariance recursion (T094 #194)" begin

@@ -61,16 +61,25 @@ struct AriasSVARResult{T<:AbstractFloat}
     restrictions::SVARRestrictions
     ess::T
     ess_fraction::T
+    varnames::Vector{String}
 end
 
-# Back-compatible arity: pre-ESS construction sites omit the trailing diagnostics,
-# which are then derived from the weights they pass.
+# Back-compatible arities: pre-ESS / pre-varnames construction sites omit trailing fields.
 function AriasSVARResult{T}(Q_draws, irf_draws, weights, acceptance_rate,
                             restrictions) where {T<:AbstractFloat}
     ess = T(_effective_sample_size(weights))
     n = length(weights)
+    nv = restrictions.n_vars
     AriasSVARResult{T}(Q_draws, irf_draws, weights, acceptance_rate, restrictions,
-                       ess, n > 0 ? ess / T(n) : zero(T))
+                       ess, n > 0 ? ess / T(n) : zero(T),
+                       ["var$i" for i in 1:nv])
+end
+
+function AriasSVARResult{T}(Q_draws, irf_draws, weights, acceptance_rate,
+                            restrictions, ess, ess_fraction) where {T<:AbstractFloat}
+    nv = restrictions.n_vars
+    AriasSVARResult{T}(Q_draws, irf_draws, weights, acceptance_rate, restrictions,
+                       ess, ess_fraction, ["var$i" for i in 1:nv])
 end
 
 """
@@ -639,8 +648,9 @@ function identify_arias(model::VARModel{T}, restrictions::SVARRestrictions, hori
     _warn_low_ess(ess, ess_frac, n_acc, "identify_arias")
 
     w_out = normalize_weights ? weights ./ sum(weights) : weights
+    vnames = copy(model.varnames)
     AriasSVARResult{T}(Q_draws, irf_array, w_out, T(n_acc / n_attempts), restrictions,
-                       ess, ess_frac)
+                       ess, ess_frac, vnames)
 end
 
 # --- Bayesian Integration ---

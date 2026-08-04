@@ -1,6 +1,6 @@
 # [GMM & SMM API](@id api_gmm)
 
-Generalized Method of Moments and Simulated Method of Moments estimation. See [GMM & SMM](../gmm.md) for theory and examples.
+Generalized Method of Moments and Simulated Method of Moments estimation. See [Generalized & Simulated Method of Moments](@ref gmm_page) for theory and examples.
 
 ---
 
@@ -16,6 +16,8 @@ GMMWeighting
 ---
 
 ## GMM Estimation
+
+Objective, weighting matrices, the estimator itself, overidentification testing, and the linear-GMM and sandwich-covariance utilities.
 
 ```@autodocs
 Modules = [MacroEconometricModels]
@@ -38,12 +40,4 @@ to_unconstrained
 to_constrained
 transform_jacobian
 log_jacobian
-```
-
-### GMM Utilities
-
-```@docs
-linear_gmm_solve
-gmm_sandwich_vcov
-andrews_lu_mmsc
 ```

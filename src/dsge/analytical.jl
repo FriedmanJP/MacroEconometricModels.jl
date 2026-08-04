@@ -20,9 +20,9 @@ using LinearAlgebra
 
 Solve the discrete Lyapunov equation: `Sigma = G1 * Sigma * G1' + impact * impact'`.
 
-Uses [`_dlyap`](@ref): the smart-doubling (squaring) iteration [`_dlyap_doubling`](@ref), with
+Uses `_dlyap`: the smart-doubling (squaring) iteration [`_dlyap_doubling`](@ref), with
 its relative residual checked and the direct Bartels-Stewart / Barraud solver
-[`_bartels_stewart_dlyap`](@ref) taking over if doubling misses tolerance. Both are `O(n³)`-class
+`_bartels_stewart_dlyap` taking over if doubling misses tolerance. Both are `O(n³)`-class
 and replace the dense `(I - G1 ⊗ G1)⁻¹` solve, which is `O(n⁶)` on an `n²×n²` system.
 
 Returns the unconditional covariance matrix `Sigma` (n x n, symmetric positive semi-definite).
@@ -55,7 +55,7 @@ Internal: solve the discrete Lyapunov equation `A P A' - P + C = 0` for a **stab
 `solve_lyapunov`, which takes an impact matrix and forms `C = impact*impact'`). Used
 for the stationary subspace inside `_diffuse_initial_covariance`.
 
-Routed through [`_dlyap`](@ref) since [T266]; it previously formed the `n²×n²` matrix
+Routed through `_dlyap` since [T266]; it previously formed the `n²×n²` matrix
 `I - kron(A, A)` and factored it, which is `O(n⁶)`.
 """
 function _lyapunov_from_cov(A::AbstractMatrix{T}, C::AbstractMatrix{T}) where {T<:AbstractFloat}

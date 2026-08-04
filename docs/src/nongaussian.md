@@ -2,10 +2,7 @@
 
 Statistical identification recovers the structural impact matrix ``B_0`` from higher-moment information --- time-varying variances (heteroskedasticity) or non-Gaussian shock distributions --- without imposing recursive orderings, sign restrictions, or zero restrictions. The classification follows Lewis (2025), the definitive survey of higher-moment identification in macroeconometrics.
 
-- **13 identification methods**: 5 ICA + 4 ML (non-Gaussianity) and 4 heteroskedasticity estimators
-- **6 diagnostic tests**: normality suite, shock Gaussianity, LR test, independence, identification strength, overidentification
-- **Full pipeline integration**: all methods produce a rotation ``Q`` consumed by `irf()`, `fevd()`, `historical_decomposition()`
-- **Sub-pages**: [Non-Gaussian Methods](@ref id_nongaussian_page) | [Heteroskedasticity](@ref id_heteroskedastic_page) | [Testing](@ref id_testing_page)
+Fourteen estimators and six diagnostic tests divide across three child pages: ten methods exploit non-Gaussianity (five ICA, five maximum likelihood, counting the adaptive `:nongaussian_ml` dispatcher), four exploit heteroskedasticity, and the testing page covers the diagnostics that decide whether either source of identification is present. Every method produces a rotation ``Q`` consumed by `irf()`, `fevd()`, and `historical_decomposition()`.
 
 ```@setup id_overview
 using MacroEconometricModels, Random
@@ -14,60 +11,47 @@ Random.seed!(42)
 
 ## Quick Start
 
-**Recipe 1: FastICA identification**
+Estimate a VAR and identify the structural shocks by FastICA, which requires no ordering, sign, or exclusion restriction:
 
 ```@example id_overview
 fred = load_example(:fred_md)
 Y = to_matrix(apply_tcode(fred[:, ["INDPRO", "CPIAUCSL", "FEDFUNDS"]]))
 Y = Y[all.(isfinite, eachrow(Y)), :]
 model = estimate_var(Y, 2)
+
 ica = identify_fastica(model)
 report(ica)
 ```
 
-**Recipe 2: Student-t ML identification**
+---
 
-```@example id_overview
-ml = identify_student_t(model)
-report(ml)
-```
+## Choosing a Method
 
-**Recipe 3: Markov-switching heteroskedasticity**
+All 14 methods return a rotation matrix ``Q`` and structural impact matrix ``B_0 = P Q`` where ``P = \text{chol}(\Sigma)``. The shape of the data --- fat tails, bimodality, skewness, regime shifts, volatility clustering --- selects the estimator:
 
-```@example id_overview
-ms = identify_markov_switching(model; n_regimes=2)
-report(ms)
-```
+| Feature needed | Recommended | Why |
+|----------------|-------------|-----|
+| Nonparametric, no distribution assumed | `identify_fastica` | Negentropy maximization |
+| Fourth-moment structure | `identify_jade` | Cumulant diagonalization |
+| Serially correlated shocks | `identify_sobi` | Autocovariance-based separation |
+| Independence beyond fourth moments | `identify_dcov`, `identify_hsic` | Nonparametric and kernel criteria |
+| Heavy tails | `identify_student_t` | Parametric ML on fat tails |
+| Bimodal shocks | `identify_mixture_normal` | Two-component Gaussian mixture |
+| Skewness and kurtosis jointly | `identify_pml` | Pearson Type IV ML on both moments |
+| Asymmetric shocks | `identify_skew_normal` | Azzalini skew-normal likelihood |
+| Discrete volatility regimes | `identify_markov_switching` | EM over latent regimes |
+| Volatility clustering | `identify_garch` | Conditional variance dynamics |
+| Gradual variance shifts | `identify_smooth_transition` | Logistic transition variable |
+| Externally known regimes | `identify_external_volatility` | Regime dates supplied by the user |
+| Whether identification holds at all | [Testing](@ref id_testing_page) | Diagnostics before interpretation |
 
-**Recipe 4: Normality test suite**
+---
 
-```@example id_overview
-suite = normality_test_suite(model)
-report(suite)
-```
+## Child Pages
 
-**Recipe 5: Shock Gaussianity test**
-
-```@example id_overview
-ica = identify_fastica(model)
-result = test_shock_gaussianity(ica)
-report(result)
-```
-
-**Recipe 6: IRF via statistical identification**
-
-```@example id_overview
-irfs = irf(model, 20; method=:fastica)
-report(irfs)
-```
-
-```julia
-plot_result(irfs)
-```
-
-```@raw html
-<iframe src="../assets/plots/nongaussian_irf.html" width="100%" height="500" frameborder="0" style="border:1px solid #ddd;border-radius:4px;"></iframe>
-```
+- [Non-Gaussian Methods](@ref id_nongaussian_page) --- ICA (FastICA, JADE, SOBI, distance covariance, HSIC), ML (Student-t, mixture normal, PML, skew-normal), Darmois-Skitovich theorem, contrast functions, unified dispatcher
+- [Heteroskedasticity](@ref id_heteroskedastic_page) --- eigendecomposition identification, Markov-switching, GARCH, smooth transition, external volatility instruments, result field tables
+- [Testing](@ref id_testing_page) --- normality suite (7 tests), shock Gaussianity, LR test, independence, identification strength, overidentification, weak identification diagnostics
 
 ---
 
@@ -91,37 +75,29 @@ The covariance ``\Sigma = B_0 B_0'`` provides ``n(n+1)/2`` equations for ``n^2``
 
 ---
 
-## Method Comparison
-
-All 13 methods return a rotation matrix ``Q`` and structural impact matrix ``B_0 = L Q`` where ``L = \text{chol}(\Sigma)``.
-
-| Approach | Method | Function | Key Feature |
-|----------|--------|----------|-------------|
-| Non-Gaussian (ICA) | FastICA | `identify_fastica` | Negentropy maximization |
-| Non-Gaussian (ICA) | JADE | `identify_jade` | Cumulant diagonalization |
-| Non-Gaussian (ICA) | SOBI | `identify_sobi` | Autocovariance-based |
-| Non-Gaussian (ICA) | Distance Cov. | `identify_dcov` | Nonparametric independence |
-| Non-Gaussian (ICA) | HSIC | `identify_hsic` | Kernel independence |
-| Non-Gaussian (ML) | Student-t | `identify_student_t` | Heavy tails |
-| Non-Gaussian (ML) | Mixture Normal | `identify_mixture_normal` | Bimodality |
-| Non-Gaussian (ML) | PML | `identify_pml` | Skewness + kurtosis |
-| Non-Gaussian (ML) | Skew-Normal | `identify_skew_normal` | Asymmetry |
-| Heteroskedasticity | Markov-switching | `identify_markov_switching` | Regime changes |
-| Heteroskedasticity | GARCH | `identify_garch` | Conditional variance |
-| Heteroskedasticity | Smooth Transition | `identify_smooth_transition` | Gradual shifts |
-| Heteroskedasticity | External | `identify_external_volatility` | Known regimes |
-
----
-
 ## IRF Pipeline Integration
 
-All 13 methods integrate with `irf()`, `fevd()`, and `historical_decomposition()` via `compute_Q()`. Pass the method name as a symbol:
+All 14 methods plug into `irf()`, `fevd()`, and `historical_decomposition()` through the same internal rotation interface. Pass the method name as a symbol:
 
 ```@example id_overview
-irfs_ica = irf(model, 20; method=:fastica)
-irfs_ml  = irf(model, 20; method=:student_t)
-irfs_ms  = irf(model, 20; method=:markov_switching)
-decomp   = fevd(model, 20; method=:jade)
+irfs = irf(model, 20; method=:fastica)
+report(irfs)
+```
+
+```julia
+plot_result(irfs)
+```
+
+```@raw html
+<iframe src="../assets/plots/nongaussian_irf.html" width="100%" height="500" frameborder="0" style="border:1px solid #ddd;border-radius:4px;"></iframe>
+```
+
+The same symbol works across the whole pipeline:
+
+```@example id_overview
+irfs_ml = irf(model, 20; method=:student_t)
+irfs_ms = irf(model, 20; method=:markov_switching)
+decomp  = fevd(model, 20; method=:jade)
 nothing # hide
 ```
 
@@ -135,25 +111,11 @@ Statistical identification recovers ``B_0`` only up to **column permutation and 
 
 ---
 
-## Sub-Page Guide
-
-- [Non-Gaussian Methods](@ref id_nongaussian_page) --- ICA (FastICA, JADE, SOBI, distance covariance, HSIC), ML (Student-t, mixture normal, PML, skew-normal), Darmois-Skitovich theorem, contrast functions, unified dispatcher
-- [Heteroskedasticity](@ref id_heteroskedastic_page) --- Eigendecomposition identification, Markov-switching, GARCH, smooth transition, external volatility instruments, result field tables
-- [Testing](@ref id_testing_page) --- Normality suite (7 tests), shock Gaussianity, LR test, independence, identification strength, overidentification, weak identification diagnostics
-
----
-
 ## Common Pitfalls
 
-1. **Non-Gaussianity is a prerequisite, not an assumption.** ICA and ML methods require at most one Gaussian shock. Run `normality_test_suite(model)` first. If residuals are Gaussian, the problem is unidentified.
+1. **Weak identification is common in practice.** When variance changes are small or deviations from Gaussianity are mild, Wald tests have poor size properties (Lewis 2022). Run `test_identification_strength` as a diagnostic before interpreting any structural result.
 
-2. **Column permutation differs across bootstrap replications.** The Procrustes distance in `test_identification_strength` accounts for this, but naive bootstrap CIs on individual ``B_0`` entries do not. Verify identification stability before interpreting shock-by-shock results.
-
-3. **Heteroskedasticity requires distinct eigenvalues.** If two shocks have identical variance ratios across regimes, the eigendecomposition of ``\Sigma_1^{-1}\Sigma_2`` does not uniquely identify the corresponding columns. Check that `Lambda` values are well-separated.
-
-4. **Weak identification is common in practice.** When variance changes are small or deviations from Gaussianity are mild, Wald tests have poor size properties (Lewis 2022). Run `test_identification_strength` as a diagnostic.
-
-5. **Smooth transition needs an external variable.** Unlike Markov-switching and GARCH, `identify_smooth_transition` requires a transition variable `s` of the same length as the residuals (e.g., a lagged endogenous variable).
+2. **Smooth transition needs an external variable.** Unlike Markov-switching and GARCH, `identify_smooth_transition` requires a transition variable `s` of the same length as the residuals (e.g., a lagged endogenous variable).
 
 ---
 
@@ -194,7 +156,7 @@ Statistical identification recovers ``B_0`` only up to **column permutation and 
 
 ### Diagnostics
 
-- Lewis, D. J. (2022). Robust Inference in Models Identified via Heteroskedasticity. *Review of Economics and Statistics*, 104(3), 510--524. [DOI: 10.1162/rest_a_00977](https://doi.org/10.1162/rest_a_00977)
+- Lewis, D. J. (2022). Robust Inference in Models Identified via Heteroskedasticity. *Review of Economics and Statistics*, 104(3), 510--524. [DOI: 10.1162/rest_a_00963](https://doi.org/10.1162/rest_a_00963)
 - Jarque, C. M. & Bera, A. K. (1980). Efficient Tests for Normality, Homoscedasticity and Serial Independence. *Economics Letters*, 6(3), 255--259. [DOI: 10.1016/0165-1765(80)90024-5](https://doi.org/10.1016/0165-1765(80)90024-5)
 - Mardia, K. V. (1970). Measures of Multivariate Skewness and Kurtosis with Applications. *Biometrika*, 57(3), 519--530. [DOI: 10.1093/biomet/57.3.519](https://doi.org/10.1093/biomet/57.3.519)
 - Doornik, J. A. & Hansen, H. (2008). An Omnibus Test for Univariate and Multivariate Normality. *Oxford Bulletin of Economics and Statistics*, 70, 927--939. [DOI: 10.1111/j.1468-0084.2008.00537.x](https://doi.org/10.1111/j.1468-0084.2008.00537.x)

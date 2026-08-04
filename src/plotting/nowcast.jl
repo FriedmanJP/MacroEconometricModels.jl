@@ -29,7 +29,7 @@ Plot nowcast result with multiple view options.
 - `save_path::Union{String,Nothing}=nothing` — save HTML to file
 - `groups::Union{Vector{Int},Nothing}=nothing` — group assignment per factor (heatmap/contributions)
 - `group_names::Union{Vector{String},Nothing}=nothing` — labels for groups (heatmap row prefixes; contributions legend)
-- `variable_names::Union{Vector{String},Nothing}=nothing` — labels for variables (heatmap)
+- `variable_names::Union{Vector{String},Nothing}=nothing` — labels for variables (`:default` panels and heatmap)
 - `dates::Union{Vector{String},Nothing}=nothing` — calendar/vintage labels for the heatmap columns (length ≥ T_obs)
 - `n_periods::Int=18` — number of recent periods to show (heatmap)
 """
@@ -43,7 +43,7 @@ function plot_result(nr::NowcastResult{T};
                      dates::Union{Vector{String},Nothing}=nothing,
                      n_periods::Int=18) where {T}
     if view == :default
-        p = _plot_nowcast_default(nr; ncols=ncols, title=title)
+        p = _plot_nowcast_default(nr; ncols=ncols, title=title, variable_names=variable_names)
     elseif view == :heatmap
         p = _plot_nowcast_heatmap(nr; title=title, groups=groups,
                                   group_names=group_names,
@@ -64,16 +64,20 @@ end
 # Default View
 # =============================================================================
 
-function _plot_nowcast_default(nr::NowcastResult{T}; ncols::Int=0, title::String="") where {T}
+function _plot_nowcast_default(nr::NowcastResult{T}; ncols::Int=0, title::String="",
+                               variable_names::Union{Vector{String},Nothing}=nothing) where {T}
     T_obs, n_vars = size(nr.X_sm)
     n_show = min(n_vars, 6)
+    # Resolve display labels (#595)
+    vlab(i) = (variable_names !== nothing && 1 <= i <= length(variable_names)) ?
+              variable_names[i] : "Variable $i"
 
     panels = _PanelSpec[]
 
     # Target variable panel with nowcast/forecast extension
     ti = nr.target_index
     id = _next_plot_id("nc_target")
-    ptitle = "Target (col $ti) — Nowcast: $(round(nr.nowcast, digits=3)), Forecast: $(round(nr.forecast, digits=3))"
+    ptitle = "Target ($(vlab(ti))) — Nowcast: $(round(nr.nowcast, digits=3)), Forecast: $(round(nr.forecast, digits=3))"
 
     rows = Vector{Pair{String,String}}[]
     for t in 1:T_obs
@@ -113,10 +117,10 @@ function _plot_nowcast_default(nr::NowcastResult{T}; ncols::Int=0, title::String
             ])
         end
         data_v = _json_array_of_objects(rows_v)
-        s_v = _series_json(["Smoothed var $vi"], [_PLOT_COLORS[mod1(vi, length(_PLOT_COLORS))]];
+        s_v = _series_json(["Smoothed $(vlab(vi))"], [_PLOT_COLORS[mod1(vi, length(_PLOT_COLORS))]];
                            keys=["v1"])
         js_v = _render_line_js(id_v, data_v, s_v; xlabel="Period", ylabel="")
-        push!(panels, _PanelSpec(id_v, "Variable $vi", js_v))
+        push!(panels, _PanelSpec(id_v, vlab(vi), js_v))
     end
 
     # DFM factor panels

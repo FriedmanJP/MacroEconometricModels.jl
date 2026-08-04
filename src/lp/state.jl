@@ -104,7 +104,7 @@ end
                                shock_var::Int; method::Symbol=:nlls, lags::Int=4, ...) -> NamedTuple
 
 Estimate smooth transition parameters (γ, c) by minimizing the horizon-0 state-dependent LP
-SSR ([`_state_lp_transition_ssr`](@ref)) over `(γ, c)` via `:nlls` (Nelder–Mead in an
+SSR (`_state_lp_transition_ssr`) over `(γ, c)` via `:nlls` (Nelder–Mead in an
 unconstrained reparameterization) or `:grid_search`. `lags` should match the lag order of the
 downstream [`estimate_state_lp`](@ref) fit so the objective mirrors it.
 """

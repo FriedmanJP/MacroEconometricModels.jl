@@ -508,6 +508,36 @@ end
     @test all(allunique(MEM._select_horizons(H)) for H in 1:60)
 end
 
+@testset "_select_horizons never exceeds H (#601)" begin
+    MEM = MacroEconometricModels
+    # The `8` anchor used to survive at H ∈ 6:7, and every consumer indexes an H-sized
+    # dimension with these values -> BoundsError in show().
+    @test MEM._select_horizons(6) == [1, 4, 6]
+    @test MEM._select_horizons(7) == [1, 4, 7]
+    for H in 1:60
+        hs = MEM._select_horizons(H)
+        @test !isempty(hs)
+        @test maximum(hs) <= H          # the defect
+        @test minimum(hs) >= 1
+        @test hs[end] == H              # the endpoint is always shown
+        @test issorted(hs)
+        @test maximum(MEM._irf_horizons(H)) <= H
+        @test minimum(MEM._irf_horizons(H)) == 0
+    end
+
+    # show() must round-trip for every horizon on the result types that consume it.
+    for H in 1:30
+        vals = randn(H, 2, 2)
+        ir = MEM.ImpulseResponse{Float64}(vals, vals .- 1, vals .+ 1, H,
+                                          ["y1", "y2"], ["s1", "s2"], :bootstrap)
+        bir = MEM.BayesianImpulseResponse{Float64}(randn(H, 2, 2, 3), vals, H,
+                                                  ["y1", "y2"], ["s1", "s2"],
+                                                  [0.16, 0.5, 0.84])
+        @test (sprint(show, ir); true)
+        @test (sprint(show, bir); true)
+    end
+end
+
 @testset "Dust/reference-row guard + degenerate-fit banner (S6/T164)" begin
     set_display_backend(:text)
     MEM = MacroEconometricModels

@@ -653,24 +653,58 @@ end
 # Time demeaning (NOT double-demean)
 # =============================================================================
 
-function _lpdid_time_demean!(y::Vector{T}, time_ids::Vector{Int}) where {T}
+# With `w` supplied the period means are WEIGHTED: WLS with time dummies partials
+# out weighted period means (Stata `reghdfe [pw=]`), so unweighted demeaning would
+# leave part of the time effect in the residual and change the estimand.
+function _lpdid_time_demean!(y::Vector{T}, time_ids::Vector{Int},
+                             w::Union{Nothing,Vector{T}}=nothing) where {T}
     for t in unique(time_ids)
         mask = time_ids .== t
         n_t = count(mask)
         n_t > 0 || continue
         m = zero(T)
-        for i in eachindex(y)
-            if mask[i]
-                m += y[i]
+        if w === nothing
+            for i in eachindex(y)
+                if mask[i]
+                    m += y[i]
+                end
             end
+            m /= n_t
+        else
+            sw = zero(T)
+            for i in eachindex(y)
+                if mask[i]
+                    m += w[i] * y[i]
+                    sw += w[i]
+                end
+            end
+            sw > zero(T) || continue
+            m /= sw
         end
-        m /= n_t
         for i in eachindex(y)
             if mask[i]
                 y[i] -= m
             end
         end
     end
+end
+
+# IPW weights for an equally-weighted ATE (Dube et al. 2025 / Stata lpdid
+# `reweight`): w_it = ΔD_it / p_t + (1 − ΔD_it) / (1 − p_t), with the
+# period-specific treatment propensity p_t = E[ΔD | t, CCS].
+function _lpdid_ipw_weights(d_vec::Vector{T}, time_ids::Vector{Int}) where {T}
+    p_by_t = Dict{Int,T}()
+    for t in unique(time_ids)
+        mask = time_ids .== t
+        p_by_t[t] = clamp(mean(@view d_vec[mask]), T(1e-6), one(T) - T(1e-6))
+    end
+    w = Vector{T}(undef, length(d_vec))
+    @inbounds for i in eachindex(d_vec)
+        p = p_by_t[time_ids[i]]
+        d = d_vec[i]
+        w[i] = d / p + (one(T) - d) / (one(T) - p)
+    end
+    w
 end
 
 # =============================================================================
@@ -777,17 +811,29 @@ function _lpdid_horizon_regression(pd::PanelData{T}, outcome_col, cov_cols,
         end
     end
 
-    # Time-only demeaning
+    # Time-only demeaning, weighted by the IPW weights when reweighting so that the
+    # partialled-out time effects are the ones WLS would fit (#540).
+    w = reweight ? _lpdid_ipw_weights(d_vec, time_ids) : nothing
     y_dm = copy(y_vec)
-    _lpdid_time_demean!(y_dm, time_ids)
+    _lpdid_time_demean!(y_dm, time_ids, w)
     X_dm = copy(X)
     for k in 1:K
         col = X_dm[:, k]
-        _lpdid_time_demean!(col, time_ids)
+        _lpdid_time_demean!(col, time_ids, w)
         X_dm[:, k] = col
     end
 
-    # OLS
+    if w !== nothing
+        sw = sqrt.(w)
+        @inbounds for i in 1:N
+            y_dm[i] *= sw[i]
+            for k in 1:K
+                X_dm[i, k] *= sw[i]
+            end
+        end
+    end
+
+    # OLS (or WLS after sqrt-weight transform)
     XtX_inv = robust_inv(X_dm' * X_dm; silent=true)
     beta_vec = XtX_inv * (X_dm' * y_dm)
     resid = y_dm - X_dm * beta_vec
@@ -930,13 +976,25 @@ function _lpdid_pooled_regression(pd::PanelData{T}, outcome_col, cov_cols,
         end
     end
 
+    # IPW reweighting (same period-propensity weights as the horizon path)
+    w = reweight ? _lpdid_ipw_weights(d_vec, time_ids) : nothing
     y_dm = copy(y_vec)
-    _lpdid_time_demean!(y_dm, time_ids)
+    _lpdid_time_demean!(y_dm, time_ids, w)
     X_dm = copy(X)
     for k in 1:K
         col = X_dm[:, k]
-        _lpdid_time_demean!(col, time_ids)
+        _lpdid_time_demean!(col, time_ids, w)
         X_dm[:, k] = col
+    end
+
+    if w !== nothing
+        @inbounds for i in 1:N
+            sw = sqrt(w[i])
+            y_dm[i] *= sw
+            for k in 1:K
+                X_dm[i, k] *= sw
+            end
+        end
     end
 
     XtX_inv = robust_inv(X_dm' * X_dm; silent=true)

@@ -51,6 +51,8 @@ Load a built-in example dataset.
 - `:pwt` — Penn World Table 10.01, 38 OECD countries (42 variables × 74 years, 1950–2023) → `PanelData`
 - `:ddcg` — Acemoglu et al. (2019) Democracy-GDP Panel (2 variables × 9,384 obs, 184 countries × 51 years) → `PanelData`
 - `:mpdta` — Callaway & Sant'Anna (2021) Minimum Wage Panel (3 variables × 2,500 obs, 500 counties × 5 years) → `PanelData`
+- `:wiot` — Hypothetical two-sector input-output table (Miller & Blair 2009, Table 2.3), with
+  `employment` and `CO2` satellite accounts attached → `IOData`. See [`IOData`](@ref).
 - `:nile` — Annual flow of the river Nile at Aswan, 1871–1970 (100 obs, 10^8 m^3) → `TimeSeriesData`
 - `:mroz` — Mroz (1987) female labor-supply extract (753 obs × 22 vars; `lwage`/`wage` are `NaN`
   for the 325 non-participants) → `CrossSectionData`. Used for the Heckman selection model.

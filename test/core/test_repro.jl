@@ -128,19 +128,67 @@ const _MEM = MacroEconometricModels
         @test occursin("not implemented", rep.note)
     end
 
-    @testset "reproducibility footer appears in show output" begin
+    @testset "reproducibility footer is opt-in (#521)" begin
         Y = randn(MersenneTwister(4), 80, 2)
         post = estimate_bvar(Y, 2; n_draws=50, seed=5)
-        s = sprint(show, post)
+        model = estimate_var(Y, 2)
+        boot = irf(model, 10; ci_type=:bootstrap, reps=20, seed=5)
+
+        # Off by default, so no git revision is baked into built docs or any
+        # other durable artifact that captures `show`/`report` output.
+        for obj in (post, boot)
+            @test !occursin("Reproducibility:", sprint(show, obj))
+        end
+
+        # Opt in via the IOContext key or the `report` keyword.
+        s = sprint(io -> show(IOContext(io, :repro => true), post))
         @test occursin("Reproducibility:", s)
         @test occursin("seed=5", s)
 
+        s_irf = sprint(io -> show(IOContext(io, :repro => true), boot))
+        @test occursin("Reproducibility:", s_irf)
+        @test occursin("seed=5", s_irf)
+
+        # `report` plumbs the keyword into that same IOContext key.
+        @test (redirect_stdout(devnull) do; report(post; repro=true) end; true)
+        @test (redirect_stdout(devnull) do; report(boot; repro=true) end; true)
+        @test (redirect_stdout(devnull) do; report(post) end; true)
+        @test (redirect_stdout(devnull) do; report(boot) end; true)
+
         post_ns = estimate_bvar(Y, 2; n_draws=50)
-        s_ns = sprint(show, post_ns)
+        s_ns = sprint(io -> show(IOContext(io, :repro => true), post_ns))
         @test occursin("seed=unset", s_ns)
 
-        # ReproManifest and ReproReport render without error
-        @test occursin("ReproManifest", sprint(show, post.manifest))
+        # A manifest-free result never emits the footer, opt-in or not.
+        plain = irf(model, 10)
+        @test plain.manifest === nothing
+        @test !occursin("Reproducibility:",
+                        sprint(io -> show(IOContext(io, :repro => true), plain)))
+    end
+
+    @testset "ReproManifest display gates only the git line (#521)" begin
+        Y = randn(MersenneTwister(4), 80, 2)
+        post = estimate_bvar(Y, 2; n_draws=50, seed=5)
+        m = post.manifest
+
+        # Shown by default — asking for the manifest is asking for provenance.
+        full = sprint(show, m)
+        @test occursin("ReproManifest", full)
+        @test occursin("git", full)
+        @test occursin(m.git_sha, full)
+
+        # `:repro => false` drops it, leaving every stable field in place.
+        masked = sprint(io -> show(IOContext(io, :repro => false), m))
+        @test occursin("ReproManifest", masked)
+        @test !occursin(m.git_sha, masked)
+        @test !occursin("(dirty)", masked)
+        for field in ("seed", "threads", "julia", "package", "os / machine", "captured")
+            @test occursin(field, masked)
+        end
+
+        # The revision is suppressed from the display only, never from the data.
+        @test m.git_sha isa AbstractString
+
         @test occursin("ReproReport", sprint(show, reproduce(post)))
     end
 end

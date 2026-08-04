@@ -175,7 +175,7 @@ end
 Construct the alternative (binding) regime specification by replacing the constrained
 variable's defining equation with `var[t] = bound` (residual `y_t[var_idx] - bound`) and
 dropping it from the forward-looking set. The defining equation is picked by the sensitivity
-heuristic [`_defining_equation_index`](@ref); when `warn_ambiguous` and that pick is not
+heuristic `_defining_equation_index`; when `warn_ambiguous` and that pick is not
 decisive (runner-up/top > `decisiveness_tol`), a warning suggests the explicit
 `Dict(variable => equation_index)` overload.
 """
@@ -198,8 +198,10 @@ function _derive_alternative_regime(spec::DSGESpec{T}, constraint::OccBinConstra
         runner = partialsort(mags, 2; rev=true)
         top > zero(T) && runner / top > T(decisiveness_tol) && @warn "OccBin: the defining " *
             "equation for :$(constraint.variable) is ambiguous (runner-up/top = " *
-            "$(round(runner / top; digits=3)) > $decisiveness_tol); pass an explicit " *
-            "Dict(variable => equation_index) to disambiguate."
+            "$(round(runner / top; digits=3)) > $decisiveness_tol). Disambiguate by " *
+            "passing an explicit alternative-regime DSGESpec as the third argument: " *
+            "occbin_solve(spec, constraint, alt_spec; ...). For two constraints, pass a " *
+            "regime-tuple Dict with keys (1,0), (0,1), (1,1) mapping to alt DSGESpecs."
     end
 
     # Build new equations vector: replace the defining equation
@@ -1108,8 +1110,9 @@ function occbin_solve(spec::DSGESpec{T}, c1::OccBinConstraint{T}, c2::OccBinCons
         eq2 = _defining_equation_index(spec, var_c2)[1]
         eq1 == eq2 && throw(ArgumentError(
             "OccBin: constraints on :$(c1.variable) and :$(c2.variable) map to the same defining " *
-            "equation ($eq1); the two-constraint heuristic cannot separate them. Pass an explicit " *
-            "Dict(variable => equation_index) via the Dict overload of occbin_solve."))
+            "equation ($eq1); the two-constraint heuristic cannot separate them. Pass explicit " *
+            "alternative regimes via the Dict overload: " *
+            "occbin_solve(spec, c1, c2, Dict((1,0)=>alt1, (0,1)=>alt2, (1,1)=>alt12); ...)."))
     end
 
     # Derive 3 alternative regime specifications

@@ -223,5 +223,27 @@ function forecast(slp::StructuralLP{T}, shock_idx::Int,
     @assert 1 <= shock_idx <= n "shock_idx must be in 1:$n"
 
     lp_model = slp.lp_models[shock_idx]
-    forecast(lp_model, shock_path; ci_method=ci_method, conf_level=conf_level, n_boot=n_boot, rng=rng)
+    fc = forecast(lp_model, shock_path; ci_method=ci_method, conf_level=conf_level,
+                  n_boot=n_boot, rng=rng)
+    # Remap internal augmented-matrix indices (shock=1, responses=2:n+1) back to the
+    # original data space so report/show label user variables, not internal cols (#531).
+    orig_varnames = slp.var_model.varnames
+    mapped_names = copy(orig_varnames)
+    n_needed = max(n, shock_idx)
+    if length(mapped_names) < n_needed
+        append!(mapped_names, ["y$i" for i in (length(mapped_names)+1):n_needed])
+    end
+    # Keep a user-supplied shock name (structural_lp(...; shock_names=...)) as the
+    # shock label rather than overwriting it with the variable name in that slot;
+    # the default labels ("ε<k>" or the variable name itself) map to the variable.
+    shock_label = lp_model.varnames[1]
+    shock_pos = if shock_label == "ε$shock_idx" || shock_label == mapped_names[shock_idx]
+        shock_idx
+    else
+        push!(mapped_names, shock_label)
+        length(mapped_names)
+    end
+    LPForecast(fc.forecast, fc.ci_lower, fc.ci_upper, fc.se, fc.horizon,
+               collect(1:n), shock_pos, fc.shock_path, fc.conf_level, fc.ci_method,
+               mapped_names)
 end

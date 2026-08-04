@@ -42,6 +42,15 @@ struct UhligSVARResult{T<:AbstractFloat}
     shock_penalties::Vector{T}
     restrictions::SVARRestrictions
     converged::Bool
+    varnames::Vector{String}
+end
+
+# Back-compatible arity without varnames
+function UhligSVARResult{T}(Q, irf, penalty, shock_penalties, restrictions,
+                            converged) where {T<:AbstractFloat}
+    nv = restrictions.n_vars
+    UhligSVARResult{T}(Q, irf, penalty, shock_penalties, restrictions, converged,
+                       ["var$i" for i in 1:nv])
 end
 
 # =============================================================================
@@ -410,5 +419,6 @@ function identify_uhlig(model::VARModel{T}, restrictions::SVARRestrictions, hori
     # Per-shock penalty diagnostics
     shock_penalties = _uhlig_shock_penalties(Q, restrictions, Phi, L, model, max_h)
 
-    UhligSVARResult{T}(Q, irf, best_val, shock_penalties, restrictions, converged)
+    UhligSVARResult{T}(Q, irf, best_val, shock_penalties, restrictions, converged,
+                       copy(model.varnames))
 end

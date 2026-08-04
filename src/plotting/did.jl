@@ -41,8 +41,11 @@ function plot_result(did::DIDResult{T};
            "{\"value\":0,\"color\":\"$(_PLOT_ALERT)\",\"dash\":\"6,3\",\"axis\":\"x\"}]"
 
     if style == :whisker
+        # Under base_period=:varying the e=−1 coefficient is estimated, so it is drawn
+        # as an ordinary point with its whisker rather than a hollow reference (#548).
         data_json = _whisker_data_json(did.event_times, did.att, did.ci_lower,
-                                       did.ci_upper, did.reference_period)
+                                       did.ci_upper, did.reference_period;
+                                       mark_reference=did.base_period != :varying)
         js = _render_whisker_js(id, data_json; color=_PLOT_SERIES[1], point_label="ATT",
                                 ref_lines_json=refs, integer_x=true,
                                 xlabel="Event Time", ylabel="ATT")

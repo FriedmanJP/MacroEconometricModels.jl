@@ -1,6 +1,6 @@
 # [Univariate Models API](@id api_univariate)
 
-Time series filters, ARIMA models, volatility models, and spectral analysis. See [Time Series Filters](../filters.md), [ARIMA](../arima.md), [Volatility Models](../volatility.md), and [Spectral Analysis](../spectral.md) for theory and examples.
+Single-series models: time series filters, ARIMA and long-memory models, state-space models, the ARCH/GARCH/SV volatility family, spectral analysis, nonlinear time series, nonparametric regression, and MIDAS. See [Time Series Filters](@ref filters_page), [ARIMA Models](@ref arima_page), [State-Space Models](@ref statespace_page), [Volatility Models](@ref volatility_page), [Spectral Analysis](@ref spectral_page), [Nonlinear Time Series](@ref nonlinear_page), [Nonparametric Methods](@ref nonparametric_page), and [MIDAS Regression](@ref midas_page) for theory and examples.
 
 ---
 
@@ -73,6 +73,10 @@ Pages   = ["arima/forecast.jl"]
 Order   = [:function]
 ```
 
+```@docs
+forecast(::SARIMAModel{T}, ::Int) where {T<:AbstractFloat}
+```
+
 ### Order Selection
 
 ```@docs
@@ -97,14 +101,13 @@ MacroEconometricModels.StatsAPI.stderror(::ARModel)
 MacroEconometricModels.StatsAPI.stderror(::MAModel)
 MacroEconometricModels.StatsAPI.stderror(::ARMAModel)
 MacroEconometricModels.StatsAPI.stderror(::ARIMAModel)
-MacroEconometricModels.StatsAPI.stderror(::SARIMAModel)
 ```
 
 ---
 
 ## State-Space Models
 
-See [State-Space Models](../statespace.md) for theory and examples.
+See [State-Space Models](@ref statespace_page) for theory and examples.
 
 ```@docs
 StateSpaceModel
@@ -160,6 +163,17 @@ component_variances
 news_impact_curve
 ```
 
+### Long-Memory GARCH
+
+Fractionally integrated GARCH and EGARCH: estimation, filtering, forecasting, and the
+fractional-differencing standard errors.
+
+```@autodocs
+Modules = [MacroEconometricModels]
+Pages   = ["src/garch/figarch.jl"]
+Order   = [:function]
+```
+
 ### Extended GARCH Diagnostics
 
 ```@docs
@@ -177,7 +191,7 @@ estimate_sv
 
 ```@autodocs
 Modules = [MacroEconometricModels]
-Pages   = ["arch/forecast.jl", "garch/forecast.jl", "garch/figarch.jl", "sv/forecast.jl"]
+Pages   = ["src/arch/forecast.jl", "src/garch/forecast.jl", "src/sv/forecast.jl"]
 Order   = [:function]
 ```
 
@@ -244,13 +258,32 @@ MacroEconometricModels.StatsAPI.bic(::GarchMidasModel)
 MacroEconometricModels.StatsAPI.dof(::GarchMidasModel)
 MacroEconometricModels.StatsAPI.dof_residual(::GarchMidasModel)
 MacroEconometricModels.StatsAPI.islinear(::GarchMidasModel)
-MacroEconometricModels.StatsAPI.stderror(::GJRGARCHModel{T}) where {T}
 MacroEconometricModels.StatsAPI.confint(m::AbstractVolatilityModel)
 MacroEconometricModels.StatsAPI.vcov(::AbstractVolatilityModel)
 MacroEconometricModels.StatsAPI.dof_residual(::ARCHModel)
 MacroEconometricModels.StatsAPI.dof_residual(::GARCHModel)
 MacroEconometricModels.StatsAPI.dof_residual(::EGARCHModel)
 MacroEconometricModels.StatsAPI.dof_residual(::GJRGARCHModel)
+```
+
+Standard errors come from the numerical Hessian of each estimator, so they are documented
+per model alongside the estimation routine.
+
+```@autodocs
+Modules = [MacroEconometricModels]
+Pages   = ["src/arch/estimation.jl", "src/garch/estimation.jl", "src/garch/midas.jl"]
+Order   = [:function]
+Filter  = f -> f === MacroEconometricModels.StatsAPI.stderror
+```
+
+`predict` returns the conditional variance series and `loglikelihood` the maximized
+log-likelihood, for every univariate volatility and nonlinear model.
+
+```@autodocs
+Modules = [MacroEconometricModels]
+Pages   = ["src/arch/types.jl", "src/garch/types.jl", "src/sv/types.jl", "src/nonlinear/types.jl"]
+Order   = [:function]
+Filter  = f -> f === MacroEconometricModels.StatsAPI.predict || f === MacroEconometricModels.StatsAPI.loglikelihood
 ```
 
 ---
@@ -309,6 +342,7 @@ STARModel
 STARForecast
 MSRegModel
 MSForecast
+fitted(::MSRegModel)
 ```
 
 ---

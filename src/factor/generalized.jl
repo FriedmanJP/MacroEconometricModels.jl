@@ -353,7 +353,8 @@ Forecast h steps ahead using AR extrapolation of factors.
 - `h`: Forecast horizon
 
 # Keyword Arguments
-- `method::Symbol=:ar`: Forecasting method (currently only `:ar` supported)
+- `method::Symbol=:ar`: Forecasting method (`:ar` or `:spectral`; both use the same
+  time-domain AR(1) factor recursion — `:spectral` is accepted for API compatibility)
 - `ci_method::Symbol=:theoretical`: CI method — `:none`, `:theoretical`, or `:bootstrap`
 - `conf_level::Real=0.95`: Confidence level for intervals
 - `n_boot::Int=1000`: Bootstrap replications (for `:bootstrap`)

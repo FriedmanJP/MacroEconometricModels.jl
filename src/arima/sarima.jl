@@ -425,6 +425,12 @@ function _sarima_mle_stderror(m::SARIMAModel)
     end
 end
 
+"""
+    stderror(m::SARIMAModel) -> Vector
+
+Standard errors of the SARIMA MLE coefficients from the inverse observed Hessian
+(with a NaN fallback when the Hessian is not invertible).
+"""
 StatsAPI.stderror(m::SARIMAModel) = _sarima_mle_stderror(m)
 
 # =============================================================================

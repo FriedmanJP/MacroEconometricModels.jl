@@ -61,7 +61,8 @@ function _estimate_sun_abraham(pd::PanelData{T}, outcome_col::Int, treat_col::In
     all_times = sort(unique(pd.time_id))
 
     # Identify cohorts and control groups
-    cohorts = sort(unique([t for (_, t) in timing if t > 0]))
+    cohorts = _cohort_set(timing)
+    _require_cohorts(cohorts, "Sun-Abraham")
     n_cohorts = length(cohorts)
 
     never_treated = Set(g for (g, t) in timing if t == 0)
@@ -70,7 +71,7 @@ function _estimate_sun_abraham(pd::PanelData{T}, outcome_col::Int, treat_col::In
             throw(ArgumentError("No never-treated units found. Use control_group=:not_yet_treated"))
     end
 
-    treated_groups = [g for (g, t) in timing if t > 0]
+    treated_groups = [g for (g, t) in timing if t != 0]
     n_treated = length(treated_groups)
     n_control = length(never_treated)
     cohort_size = Dict(e => count(g -> timing[g] == e, keys(timing)) for e in cohorts)

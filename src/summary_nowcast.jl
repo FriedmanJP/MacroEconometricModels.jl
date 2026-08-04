@@ -39,16 +39,20 @@ function Base.show(io::IO, m::NowcastBVAR{T}) where {T}
     T_obs, N = size(m.data)
     n_nan = count(isnan, m.data)
 
+    lit = m.prior == :litterman
     spec_data = Any[
-        "Method"           "Large BVAR (GLP prior)";
+        "Method"           (lit ? "Large BVAR (Litterman prior)" : "Large BVAR (GLP prior)");
         "Variables"        "$N ($(m.nM) monthly, $(m.nQ) quarterly)";
         "Observations"     T_obs;
         "Lags"             m.lags;
-        "Log-likelihood"   _fmt(m.loglik);
+        "Log marg. lik."   _fmt(m.loglik);
         "Lambda (shrinkage)" _fmt(m.lambda);
-        "Theta (cross-var)"  _fmt(m.theta);
+        "Theta (lag decay)"  _fmt(m.theta);
         "Miu (unit root)"    _fmt(m.miu);
         "Alpha (co-persist)" _fmt(m.alpha);
+        # Only the non-conjugate prior has a cross-variable knob; under the conjugate NIW
+        # prior the own/cross ratio is fixed at √(Σ_mm/Σ_jj), so there is no value to show.
+        "Theta_cross (cross-var)" (lit ? _fmt(m.theta_cross) : "— (fixed by Σ⊗V)");
         "Missing values"   n_nan;
     ]
     _pretty_table(io, spec_data;
@@ -59,11 +63,29 @@ function Base.show(io::IO, m::NowcastBVAR{T}) where {T}
     # The headline the model exists to produce (default target = last variable). (S4/T168)
     _pretty_table(io, Any["Current nowcast" _fmt(m.X_sm[end, end])];
         title = "Nowcast", column_labels = ["", ""], alignment = [:l, :r])
-    # Sanity flag: a boundary-hit optimizer parks λ at exp(5)≈148.4 — never present it bare. (B4/T173)
+    # Sanity flag: a boundary-hit optimizer parks a hyperparameter at exp(±5) — never
+    # present it bare. Name which ones and which edge: the ceiling (exp(5) ≈ 148.4) and the
+    # floor (exp(-5) ≈ 0.0067) mean opposite things, and the old text said "λ = exp(5)"
+    # even when the hit was a floor on a different hyperparameter. (B4/T173, #602)
     if !m.converged
-        println(io, "WARNING: GLP hyperparameters hit the |log-param| ≤ 5 box edge " *
-                    "(λ = exp(5) ≈ 148.4) — the marginal-likelihood optimizer did not reach " *
-                    "an interior optimum; treat the shrinkage values with caution.")
+        hi, lo = exp(one(T) * 5), exp(-one(T) * 5)
+        atedge(v, e) = isfinite(v) && abs(log(v) - log(e)) < T(1e-3)
+        pairs = ("lambda" => m.lambda, "theta" => m.theta, "miu" => m.miu,
+                 "alpha" => m.alpha, "theta_cross" => m.theta_cross)
+        ceil_hits = [n for (n, v) in pairs if atedge(v, hi)]
+        floor_hits = [n for (n, v) in pairs if atedge(v, lo)]
+        parts = String[]
+        isempty(ceil_hits) || push!(parts, "$(join(ceil_hits, ", ")) at the ceiling exp(5) ≈ 148.4")
+        isempty(floor_hits) || push!(parts, "$(join(floor_hits, ", ")) at the floor exp(-5) ≈ 0.0067")
+        detail = isempty(parts) ? "a hyperparameter reached the edge" : join(parts, "; ")
+        println(io, "WARNING: hyperparameters hit the |log-param| ≤ 5 box — $detail. The " *
+                    "marginal likelihood was still improving, so these are truncation " *
+                    "points, not optima; treat them as bounds, not estimates.")
+        if "theta_cross" in floor_hits
+            println(io, "NOTE: theta_cross at the floor means the criterion wants " *
+                        "cross-variable lags shrunk essentially to zero — the panel " *
+                        "supports little more than N separate autoregressions.")
+        end
     end
 end
 

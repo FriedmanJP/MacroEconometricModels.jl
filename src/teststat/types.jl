@@ -371,17 +371,23 @@ end
 
 Structural break test for factor models.
 
-Tests for structural instability in factor loadings or the number of
-factors, following Breitung-Eickmeier (2011) or Chen-Dolado-Gonzalo (2014).
+Tests for structural instability in the factor loadings at an unknown break
+date: the pooled per-series loading-break LM test of Breitung-Eickmeier (2011),
+the big-break regression sup-LM test of Chen-Dolado-Gonzalo (2014), or the
+sup-Wald loading-instability test of Han-Inoue (2015).
 
 Fields:
-- `statistic`: Test statistic
-- `pvalue`: P-value
+- `statistic`: Test statistic (a supremum or pooled supremum over candidate dates)
+- `pvalue`: P-value (simulated-null or Andrews/Hansen sup reference — never χ², #583)
 - `break_date`: Estimated break date index (nothing if no break detected)
-- `method`: Test method (:breitung_eickmeier, :chen_dolado_gonzalo)
+- `method`: Test method (:breitung_eickmeier, :chen_dolado_gonzalo, :han_inoue)
 - `n_factors`: Number of factors in the model
 - `nobs`: Time dimension (T)
 - `n_vars`: Number of observed variables
+- `series_statistics`: Per-series sup statistics `Mᵢ = sup_τ LMᵢ(τ)` (length-N vector
+  for the two pooled tests; `nothing` for :chen_dolado_gonzalo, which pools nothing) (#606)
+- `series_break_dates`: The date maximizing each series' own statistic path (same
+  availability as `series_statistics`)
 """
 struct FactorBreakResult{T<:AbstractFloat} <: AbstractUnitRootTest
     statistic::T
@@ -391,6 +397,22 @@ struct FactorBreakResult{T<:AbstractFloat} <: AbstractUnitRootTest
     n_factors::Int
     nobs::Int
     n_vars::Int
+    series_statistics::Union{Vector{T}, Nothing}
+    series_break_dates::Union{Vector{Int}, Nothing}
+end
+
+# 7-argument constructors predate the per-series fields (#606); methods without
+# per-series information (and user code built against the old layout) use these.
+function FactorBreakResult{T}(statistic, pvalue, break_date::Union{Int, Nothing},
+                              method::Symbol, n_factors::Int, nobs::Int,
+                              n_vars::Int) where {T<:AbstractFloat}
+    FactorBreakResult{T}(statistic, pvalue, break_date, method, n_factors, nobs,
+                         n_vars, nothing, nothing)
+end
+function FactorBreakResult(statistic::T, pvalue::Real, break_date::Union{Int, Nothing},
+                           method::Symbol, n_factors::Int, nobs::Int,
+                           n_vars::Int) where {T<:AbstractFloat}
+    FactorBreakResult{T}(statistic, T(pvalue), break_date, method, n_factors, nobs, n_vars)
 end
 
 """

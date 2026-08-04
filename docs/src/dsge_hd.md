@@ -1,6 +1,6 @@
 # [DSGE Historical Decomposition](@id dsge_hd_page)
 
-Historical decomposition for DSGE models decomposes observed variable movements into contributions from individual structural shocks plus initial conditions. The package provides three methods spanning linear, nonlinear, and Bayesian DSGE models:
+Historical decomposition for DSGE models decomposes observed variable movements into contributions from individual structural shocks plus initial conditions. The package provides three methods spanning linear, nonlinear, and Bayesian DSGE models. This page is part of the [DSGE Models](@ref dsge_page) suite; for the VAR-based counterpart, see [Historical Decomposition](@ref ia_hd_page).
 
 - **Linear DSGE**: Exact additive decomposition via the Kalman smoother (Rauch, Tung & Striebel 1965) and structural MA coefficients
 - **Nonlinear DSGE**: Counterfactual simulation using the FFBSi particle smoother (Godsill, Doucet & West 2004) for higher-order perturbation solutions
@@ -19,7 +19,7 @@ _spec_hd = @dsge begin
     Y[t] = A[t] * K[t-1]^α
     C[t] + K[t] = Y[t] + (1 - δ) * K[t-1]
     1 = β * (C[t] / C[t+1]) * (α * A[t+1] * K[t]^(α - 1) + 1 - δ)
-    A[t] = ρ * A[t-1] + σ * ε_A[t]
+    A[t] = A[t-1]^ρ * exp(σ * ε_A[t])
 
     steady_state = begin
         A_ss = 1.0
@@ -54,19 +54,13 @@ report(hd)
 
 ```@example dsge_hd
 # The identity y_t = sum_j HD_j(t) + initial(t) holds to machine precision
-verified = verify_decomposition(hd)
+verify_decomposition(hd)
 ```
 
 **Recipe 3: HD visualization**
 
-```@example dsge_hd
-hd_plot = historical_decomposition(_sol_hd, _data_hd, [:Y, :C, :K, :A];
-                                   measurement_error=fill(0.01, 4))
-nothing # hide
-```
-
 ```julia
-plot_result(hd_plot)
+plot_result(hd)
 ```
 
 ```@raw html
@@ -103,15 +97,16 @@ verify_decomposition(hd_lin)
 ```
 
 ```@example dsge_hd
-# Extract the technology shock's contribution to output
+# Extract the technology shock's contribution to output, and the total
+# shock-driven component (which excludes initial conditions)
 tech_to_output = contribution(hd_lin, "Y", "ε_A")
-
-# Total shock-driven component of output (excludes initial conditions)
 total_Y = total_shock_contribution(hd_lin, "Y")
-nothing # hide
+
+(shock = round.(tech_to_output[1:4]; digits=5),
+ total = round.(total_Y[1:4]; digits=5))
 ```
 
-The single-shock RBC model attributes all output movements to the technology shock ``\varepsilon_A``. In multi-shock models, the decomposition reveals which shocks drove specific historical episodes.
+With a single structural shock the two series coincide exactly: ``\varepsilon_A`` is the only contributor, so its contribution *is* the total shock-driven component, and whatever the two miss is by construction the initial-condition term. In a multi-shock model `contribution` isolates one shock's role in a specific historical episode while `total_shock_contribution` sums all of them, and their gap measures how much of the path the initial state still explains.
 
 ### Decomposing All States
 
@@ -123,12 +118,16 @@ hd_all = historical_decomposition(sol, data, [:Y, :C, :K, :A]; states=:all,
 report(hd_all)
 ```
 
+Here every endogenous variable is already observed, so `states=:all` reproduces the observable decomposition. The setting matters when the model carries latent states — an unobserved capital stock or a shadow rate — whose shock attribution is otherwise not reported at all.
+
 ### Keyword Arguments
 
 | Keyword | Type | Default | Description |
 |---------|------|---------|-------------|
 | `states` | `Symbol` | `:observables` | Decompose `:observables` only or `:all` states |
 | `measurement_error` | `Vector`/`Symbol` | `nothing` | Measurement error std devs, `:auto` (10% of each series' variance), or `nothing` for zero ME (requires `n_obs ≤ n_shocks`) |
+
+`verify_decomposition(hd; tol)` checks the identity and returns a `Bool`; the tolerance defaults to ``10^{-10}`` for `HistoricalDecomposition` and ``10^{-6}`` for the Bayesian variant, whose bands are pointwise averages rather than an exact algebraic identity.
 
 ### Return Values
 
@@ -178,7 +177,7 @@ hd_nl = historical_decomposition(psol, _data_hd, [:Y, :A];
 report(hd_nl)
 ```
 
-Since the RBC model has a single shock, the counterfactual approach reduces to zeroing out the only shock and attributing the full baseline path to it. In multi-shock nonlinear models, interaction terms between shocks produce a non-zero initial conditions component even at interior periods.
+Since the RBC model has a single shock, the counterfactual approach reduces to zeroing out the only shock and attributing the full baseline path to it. The reported contributions differ from the linear decomposition above because the particle smoother is a Monte Carlo procedure and the second-order policy rules make shock effects non-additive: the difference between the baseline and the zeroed-out path is no longer the same object as a structural MA coefficient. In multi-shock nonlinear models, interaction terms between shocks produce a non-zero initial-conditions component even at interior periods, which is why `verify_decomposition` needs a looser tolerance here.
 
 ### Keyword Arguments
 
@@ -194,7 +193,7 @@ Since the RBC model has a single shock, the counterfactual approach reduces to z
 
 ## Bayesian DSGE HD
 
-For Bayesian DSGE posteriors (from `estimate_dsge_bayes`), historical decomposition accounts for parameter uncertainty by re-solving the model and re-smoothing at each posterior draw (Herbst & Schorfheide 2015, Ch. 6).
+For Bayesian DSGE posteriors (from `estimate_dsge_bayes`, documented under [DSGE Estimation](@ref dsge_estimation)), historical decomposition accounts for parameter uncertainty by re-solving the model and re-smoothing at each posterior draw (Herbst & Schorfheide 2015, Ch. 6).
 
 Two modes are available:
 
@@ -227,7 +226,9 @@ hd_bayes = historical_decomposition(bayes, Y_bayes, [:Y, :A];
 report(hd_bayes)
 ```
 
-The `mode_only` path is orders of magnitude faster --- it calls the linear HD exactly once. The full posterior path iterates over subsampled draws, discarding any that produce indeterminate solutions. Wide credible bands indicate parameter uncertainty substantially affects the attribution of observed movements to specific shocks.
+Both paths attribute everything to technology — with one shock there is nowhere else to put it — but their magnitudes differ by an order of magnitude, and that gap is the point. The `mode_only` path calls the linear HD exactly once at a single parameter vector and is correspondingly fast. The full posterior path re-solves and re-smooths at each of the 50 subsampled draws; draws with higher persistence imply far larger swings in the capital stock, and averaging over them inflates the mean absolute contribution well above its mode-only value. Read that as the honest answer: the attribution of these movements is highly sensitive to ``\rho``, which is exactly what the mode-only summary hides.
+
+Note that both calls pass explicit measurement-error standard deviations even though the estimation used `:auto`. The decomposition builds its own observation equation, so nothing about the estimation's measurement error carries over.
 
 ### Keyword Arguments
 
@@ -269,6 +270,8 @@ smoother = dsge_smoother(ss, data_dev)
 smoother
 ```
 
+The result carries the full filtering and smoothing output: `smoothed_states` and `smoothed_shocks` are what the linear decomposition consumes, while `log_likelihood` from the forward pass is the same quantity `estimate_dsge_bayes` maximizes. Reach for the standalone smoother when the smoothed shock series or the state covariances are the object of interest and the decomposition itself is not.
+
 The smoother handles missing data (NaN entries) by reducing the observation dimension for periods with missing values. This enables estimation with ragged-edge or mixed-frequency data.
 
 ### FFBSi Particle Smoother (Nonlinear)
@@ -281,6 +284,8 @@ nss = MacroEconometricModels._build_nonlinear_state_space(psol, Z, d, H)
 psmoother = dsge_particle_smoother(nss, data_dev; N=200, N_back=50)
 psmoother
 ```
+
+The particle smoother returns the same `KalmanSmootherResult` type, so downstream code is unchanged, but the covariances are particle approximations rather than exact Riccati recursions and the whole result is stochastic. Pass an explicit `rng` whenever the smoothed shocks feed a reported number, and raise `N` and `N_back` until repeated runs agree to the precision being reported.
 
 ### KalmanSmootherResult Fields
 
@@ -311,7 +316,7 @@ spec = @dsge begin
     Y[t] = A[t] * K[t-1]^α
     C[t] + K[t] = Y[t] + (1 - δ) * K[t-1]
     1 = β * (C[t] / C[t+1]) * (α * A[t+1] * K[t]^(α - 1) + 1 - δ)
-    A[t] = ρ * A[t-1] + σ * ε_A[t]
+    A[t] = A[t-1]^ρ * exp(σ * ε_A[t])
 
     steady_state = begin
         A_ss = 1.0
@@ -383,13 +388,14 @@ KalmanSmootherResult
 ## References
 
 - Canova, F. (2007). *Methods for Applied Macroeconomic Research*.
-  Princeton University Press. ISBN 978-0-691-11583-1.
+  Princeton University Press. ISBN 978-0-691-11504-7. [DOI](https://doi.org/10.2307/j.ctvcm4hrv)
 
 - Godsill, S. J., Doucet, A., & West, M. (2004). Monte Carlo Smoothing for Nonlinear Time Series.
   *Journal of the American Statistical Association*, 99(465), 156--168. [DOI](https://doi.org/10.1198/016214504000000151)
 
 - Herbst, E. P., & Schorfheide, F. (2015). *Bayesian Estimation of DSGE Models*.
   Princeton University Press. ISBN 978-0-691-16108-2.
+  [DOI](https://doi.org/10.23943/princeton/9780691161082.001.0001)
 
 - Rauch, H. E., Tung, F., & Striebel, C. T. (1965). Maximum Likelihood Estimates of Linear Dynamic Systems.
   *AIAA Journal*, 3(8), 1445--1450. [DOI](https://doi.org/10.2514/3.3166)

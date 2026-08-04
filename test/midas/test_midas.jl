@@ -86,6 +86,32 @@ import ForwardDiff
     end
 
     # =========================================================================
+    # O3b (#575) — beta3 Jacobian honours the max(θ₃, 0) clamp of the forward map
+    # =========================================================================
+    @testset "beta3 θ₃ clamp is mirrored in the Jacobian (#575)" begin
+        K = 6
+        h = 1e-6
+        w(th) = _midas_weights(th, K, :beta3)
+        for t3 in (-0.05, 0.0, 0.05)
+            th = [1.2, 4.0, t3]
+            Ja = _midas_weights_jac(th, K, :beta3)
+            # Central above the kink; second-order one-sided at and below it, where the
+            # clamp freezes the level constant and the Jacobian reports the right derivative.
+            fd = if t3 > 0
+                (w([th[1], th[2], t3 + h]) .- w([th[1], th[2], t3 - h])) ./ (2h)
+            else
+                (-3 .* w(th) .+ 4 .* w([th[1], th[2], t3 + h]) .-
+                 w([th[1], th[2], t3 + 2h])) ./ (2h)
+            end
+            @test Ja[:, 3] ≈ fd atol = 1e-6
+        end
+        # Below the clamp the weights do not move at all, so the derivative is exactly 0
+        @test all(iszero, _midas_weights_jac([1.2, 4.0, -0.05], K, :beta3)[:, 3])
+        @test _midas_weights([1.2, 4.0, -0.05], K, :beta3) ==
+              _midas_weights([1.2, 4.0, 0.0], K, :beta3)
+    end
+
+    # =========================================================================
     # O5 — frequency alignment structure & ragged-edge trimming
     # =========================================================================
     @testset "_align_hf block layout & trimming" begin

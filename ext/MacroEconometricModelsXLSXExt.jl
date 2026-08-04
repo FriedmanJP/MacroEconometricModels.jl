@@ -15,7 +15,9 @@ function _parse_xlsx_io(path::AbstractString; source=nothing, year=nothing,
     ns = n_sectors == 0 ? size(M, 1) : n_sectors
     Z = M[1:ns, 1:ns]
     Y = M[1:ns, ns+1:ns+n_fd]
-    IOData(Z, Y, vec(sum(Z, dims=2)) .+ vec(sum(Y, dims=2)); sectors=sectors, check=false)
+    src = source === nothing ? "" : String(source)
+    IOData(Z, Y, vec(sum(Z, dims=2)) .+ vec(sum(Y, dims=2));
+           sectors=sectors, source=src, year=year, check=false)
 end
 
 end # module

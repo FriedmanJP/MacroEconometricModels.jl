@@ -215,9 +215,29 @@ end
 
 # Accessors
 nvars(sol::DSGESolution) = sol.spec.n_endog
+
+"""
+    nshocks(sol) -> Int
+
+Number of structural shocks (exogenous driving processes) in a DSGE solution.
+"""
 nshocks(sol::DSGESolution) = sol.spec.n_exog
+
+"""
+    is_determined(sol) -> Bool
+
+Return `true` if the linear RE solution is unique (Blanchard–Kahn / Sims `eu == [1,1]`).
+"""
 is_determined(sol::DSGESolution) = sol.eu[1] == 1 && sol.eu[2] == 1
+
 # Reuse the cached eigenvalues (all ctors store eigvals(G1)) instead of recomputing (S-17 / #224).
+# The comment must stay ABOVE the docstring: a comment between a docstring and the
+# definition makes Julia discard the docstring silently (#590).
+"""
+    is_stable(sol) -> Bool
+
+Return `true` if all eigenvalues of the state transition `G1` lie inside the unit circle.
+"""
 is_stable(sol::DSGESolution) = maximum(abs.(sol.eigenvalues); init=0.0) < 1.0
 
 """Render a variable→steady-state two-column table (S4/T168). Skips silently if empty."""
@@ -755,7 +775,7 @@ report(oirf::OccBinIRF) = show(stdout, oirf)
 Internal DSGE solve/estimation failure that legitimately implies zero posterior
 mass (indeterminacy, no-solution, steady-state non-convergence) — as opposed to a
 code bug. Likelihood closures catch this (and the concrete numeric-failure types in
-[`_benign_solve_error`](@ref)) and return `-Inf`, counting the draw as failed;
+`_benign_solve_error`) and return `-Inf`, counting the draw as failed;
 everything else is rethrown.
 """
 struct DSGESolveError <: Exception

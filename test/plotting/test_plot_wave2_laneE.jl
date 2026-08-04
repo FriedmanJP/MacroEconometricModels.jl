@@ -260,6 +260,22 @@ end
             pt = plot_result(ev; view=:theil)
             check_plot(pt); assert_all_json_valid(pt)
             @test_throws ArgumentError plot_result(ev; view=:bogus)
+
+            # ME is a signed bias, so its facet ranks by |ME| — an ascending sort would
+            # crown the most negative model (#592). ME is the first facet, so the first
+            # occurrence of each model name in the page belongs to it.
+            ev_me = forecast_evaluate(actual, hcat(actual .+ 2.0, actual .- 0.5);
+                                      model_names=["BigNegBias", "SmallPosBias"])
+            @test ev_me.values[1, 1] ≈ -2.0 atol=1e-8
+            @test ev_me.values[2, 1] ≈ 0.5 atol=1e-8
+            for pme in (plot_result(ev_me), plot_result(ev_me; view=:metrics, metric="ME"))
+                @test first(findfirst("SmallPosBias", pme.html)) <
+                      first(findfirst("BigNegBias", pme.html))
+            end
+            # Lower-is-better metrics keep the plain ascending order
+            pr = plot_result(ev_me; view=:metrics, metric="MAE")
+            @test first(findfirst("SmallPosBias", pr.html)) <
+                  first(findfirst("BigNegBias", pr.html))
         end
 
         @testset "MincerZarnowitz efficiency line (no scatter, NaN)" begin

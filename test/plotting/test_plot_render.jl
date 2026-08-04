@@ -207,8 +207,9 @@ end
     # -------------------------------------------------------------------------
     @testset "PLT-05 Bayesian FEVD/HD stat kwarg" begin
         H = 4; nv = 2; ns = 2; levels = [0.16, 0.5, 0.84]; nq = 3
-        pe = zeros(H, nv, ns); pe[:, :, 1] .= 0.8; pe[:, :, 2] .= 0.2
-        q  = zeros(H, nv, ns, nq); q[:, :, 1, :] .= 0.2; q[:, :, 2, :] .= 0.8
+        # Axis order (variable, shock, horizon) — unified with FEVD (#527)
+        pe = zeros(nv, ns, H); pe[:, 1, :] .= 0.8; pe[:, 2, :] .= 0.2
+        q  = zeros(nv, ns, H, nq); q[:, 1, :, :] .= 0.2; q[:, 2, :, :] .= 0.8
         f  = M.BayesianFEVD{Float64}(q, pe, H, ["a", "b"], ["s1", "s2"], levels)
         pm  = plot_result(f; stat=:mean)
         pmd = plot_result(f; stat=:median)

@@ -572,34 +572,73 @@ function marginal_effects(m::MultinomialLogitModel{T}) where {T<:AbstractFloat}
     J = size(m.fitted, 2)
     Jm1 = J - 1
 
-    # Build full K x J coefficient matrix (base category = column 1, all zeros)
-    beta_full = zeros(T, K, J)
+    # Drop intercept columns — AME of a constant is not interpretable
+    kinds = _me_column_kinds(m.X)
+    keep = findall(!=(:intercept), kinds)
+    isempty(keep) && (keep = collect(1:K))
+    Kk = length(keep)
+
+    ame = _mlogit_ame(m.beta, m.X, keep, J)
+    se = _mlogit_ame_se(m, keep, ame)
+
+    MultinomialMarginalEffects{T}(ame, se, m.varnames[keep], string.(m.categories))
+end
+
+"""Average marginal effects for non-intercept columns `keep` of an mlogit."""
+function _mlogit_ame(beta::Matrix{T}, X::Matrix{T}, keep::Vector{Int}, J::Int) where {T}
+    n = size(X, 1)
+    Kk = length(keep)
+    Jm1 = J - 1
+    beta_full = zeros(T, Kk, J)
     @inbounds for j in 1:Jm1
-        beta_full[:, j+1] = m.beta[:, j]
+        beta_full[:, j+1] = beta[keep, j]
     end
-
-    ame = zeros(T, K, J)
-
+    ame = zeros(T, Kk, J)
     @inbounds for i in 1:n
-        xi = @view m.X[i, :]
-        probs = _mlogit_probs(xi, m.beta, J)
-
-        # Weighted average coefficient: sum_m p_m * beta_{m,k}
-        for k in 1:K
+        xi = @view X[i, :]
+        probs = _mlogit_probs(xi, beta, J)
+        for kk in 1:Kk
             beta_bar_k = zero(T)
             for jj in 1:J
-                beta_bar_k += probs[jj] * beta_full[k, jj]
+                beta_bar_k += probs[jj] * beta_full[kk, jj]
             end
-
             for j in 1:J
-                ame[k, j] += probs[j] * (beta_full[k, j] - beta_bar_k)
+                ame[kk, j] += probs[j] * (beta_full[kk, j] - beta_bar_k)
             end
         end
     end
-
     ame ./= T(n)
+    ame
+end
 
-    MultinomialMarginalEffects{T}(ame, nothing, copy(m.varnames), string.(m.categories))
+"""Delta-method SEs for mlogit AME via finite-difference Jacobian of AME(θ)."""
+function _mlogit_ame_se(m::MultinomialLogitModel{T}, keep::Vector{Int},
+                        ame::Matrix{T}) where {T}
+    K = size(m.X, 2)
+    J = size(ame, 2)
+    Jm1 = J - 1
+    Kk = length(keep)
+    n_free = K * Jm1
+    size(m.vcov_mat, 1) == n_free || return nothing
+
+    # Finite-difference Jacobian G: (Kk*J) × n_free over ALL free parameters —
+    # the AME depends on every coefficient (intercepts included) through the
+    # fitted probabilities, so the delta method must propagate the full vcov,
+    # not just the covariance of the reported (non-intercept) rows.
+    G = zeros(T, Kk * J, n_free)
+    h = sqrt(eps(T))
+    beta0 = copy(m.beta)
+    ame0 = vec(ame)
+    for ℓ in 1:Jm1, k in 1:K
+        p = (ℓ - 1) * K + k          # vec(beta) column-major index
+        β = copy(beta0)
+        step = max(abs(β[k, ℓ]), one(T)) * h
+        β[k, ℓ] += step
+        ame_p = vec(_mlogit_ame(β, m.X, keep, J))
+        G[:, p] .= (ame_p .- ame0) ./ step
+    end
+    V_ame = G * m.vcov_mat * G'
+    reshape(sqrt.(max.(diag(V_ame), zero(T))), Kk, J)
 end
 
 # =============================================================================
@@ -610,9 +649,8 @@ end
     MultinomialMarginalEffects{T}
 
 Average marginal effects for a multinomial logit: `effects` is K variables × J categories
-(base category in column 1). `se` is `nothing` — delta-method standard errors are deferred
-(the softmax likelihood is not ForwardDiff-ready). Replaces the former bare NamedTuple so
-the result carries a `show`/`report` display.
+(base category in column 1). `se` holds delta-method standard errors (same shape), or
+`nothing` if the model covariance is unavailable.
 """
 struct MultinomialMarginalEffects{T<:AbstractFloat}
     effects::Matrix{T}
@@ -623,21 +661,25 @@ end
 
 function Base.show(io::IO, me::MultinomialMarginalEffects{T}) where {T}
     K, J = size(me.effects)
-    # omit the intercept row (its marginal effect is not interpretable)
+    # intercept rows are already dropped at construction; keep defensive filter
     keep = findall(v -> _display_intercept(v) != _INTERCEPT_LABEL, me.varnames)
     isempty(keep) && (keep = collect(1:K))
+    has_se = me.se !== nothing
     for j in 2:J   # skip base category (column 1 is all zeros by construction)
-        data = Matrix{Any}(undef, length(keep), 2)
+        ncols = has_se ? 3 : 2
+        data = Matrix{Any}(undef, length(keep), ncols)
         for (row, i) in enumerate(keep)
             data[row, 1] = me.varnames[i]
             data[row, 2] = _fmt(me.effects[i, j])
+            has_se && (data[row, 3] = _fmt(me.se[i, j]))
         end
         _pretty_table(io, data;
             title = "Marginal Effects — $(me.categories[j]) (vs $(me.categories[1]))",
-            column_labels = ["", "dy/dx"],
-            alignment = [:l, :r])
+            column_labels = has_se ? ["", "dy/dx", "Std.Err."] : ["", "dy/dx"],
+            alignment = has_se ? [:l, :r, :r] : [:l, :r])
     end
-    println(io, "Note: standard errors for multinomial AME are not reported (delta method deferred).")
+    has_se ||
+        println(io, "Note: standard errors unavailable (model covariance missing).")
 end
 
 # =============================================================================

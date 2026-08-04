@@ -55,7 +55,8 @@ function _estimate_callaway_santanna(pd::PanelData{T}, outcome_col::Int, treat_c
     n_times = length(all_times)
 
     # Identify cohorts and control groups
-    cohorts = sort(unique([t for (_, t) in timing if t > 0]))
+    cohorts = _cohort_set(timing)
+    _require_cohorts(cohorts, "Callaway-Sant'Anna")
     never_treated = [g for (g, t) in timing if t == 0]
     n_cohorts = length(cohorts)
     n_control = length(never_treated)
@@ -172,8 +173,11 @@ function _estimate_callaway_santanna(pd::PanelData{T}, outcome_col::Int, treat_c
     Phi = zeros(T, n_units, n_evt)   # Φ[i,ei] = per-unit influence of the event-time-e ATT
 
     for (ei, e) in enumerate(event_times_all)
-        # With universal base, reference period e=-1 is zero by construction
-        if base_period == :universal && e == reference_period
+        # Under :universal, e=-1 IS the base period, so ATT(g,g−1) is identically zero:
+        # normalize it in storage so the report can mask it as "(ref) —". Under :varying
+        # the cell compares g−1 against g−2 — the adjacent-period placebo R's `did`
+        # reports — so it is estimated like any other event time (#548).
+        if e == reference_period && base_period == :universal
             att_agg[ei] = zero(T)
             continue                                     # Φ column stays 0 ⇒ se = 0
         end
@@ -238,7 +242,7 @@ function _estimate_callaway_santanna(pd::PanelData{T}, outcome_col::Int, treat_c
         overall_se = zero(T)
     end
 
-    n_treated = length([g for (g, t) in timing if t > 0])
+    n_treated = length([g for (g, t) in timing if t != 0])
 
     DIDResult{T}(att_agg, se_agg, ci_lower, ci_upper, event_times_all,
                  reference_period, group_time_att, cohorts,
@@ -246,5 +250,5 @@ function _estimate_callaway_santanna(pd::PanelData{T}, outcome_col::Int, treat_c
                  pd.T_obs, pd.n_groups, n_treated, n_control,
                  :callaway_santanna,
                  pd.varnames[outcome_col], pd.varnames[treat_col],
-                 control_group, cluster, T(conf_level), att_vcov)
+                 control_group, cluster, T(conf_level), att_vcov, base_period)
 end

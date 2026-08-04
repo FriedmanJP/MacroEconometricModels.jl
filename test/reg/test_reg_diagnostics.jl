@@ -263,11 +263,11 @@ end
         @test occursin("Breusch-Godfrey", s)
         @test occursin("F statistic", s)      # F-form row rendered
 
-        rstr = refs(w)
+        rstr = sprint(io -> refs(io, w))
         @test occursin("White", rstr)
-        @test occursin("Breusch", refs(breusch_pagan_test(m)))
-        @test occursin("Ramsey", refs(reset_test(m)))
-        @test occursin("Godfrey", refs(bg))
+        @test occursin("Breusch", sprint(io -> refs(io, breusch_pagan_test(m))))
+        @test occursin("Ramsey", sprint(io -> refs(io, reset_test(m))))
+        @test occursin("Godfrey", sprint(io -> refs(io, bg)))
 
         # Raw-data (resid, X) methods agree with model methods.
         wr = white_test(m.residuals, X)

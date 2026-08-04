@@ -29,7 +29,7 @@ References:
 
 """
     fisher_johansen_test(pd::PanelData, ys::Symbol...; deterministic=:constant,
-                         lags=1, combine=:mw) -> FisherJohansenResult
+                         lags=2, combine=:mw) -> FisherJohansenResult
 
 Fisher-type combination of per-unit Johansen trace and max-eigenvalue tests for a
 panel of `n = length(ys)` I(1) series. Returns combined statistics for each rank

@@ -1,6 +1,6 @@
 # [Cross-Sectional Models API](@id api_cross_section)
 
-OLS, WLS, IV/2SLS, logit, probit, ordered, and multinomial estimation for cross-sectional data. See [Regression](../regression.md) and [Binary Choice](../binary_choice.md) for theory and examples.
+Cross-sectional estimation — OLS/WLS, IV/2SLS, quantile regression, regression discontinuity, binary, ordered and multinomial choice, penalized and robust regression, limited-dependent and count models — together with the regression diagnostics and parameter-stability tests that accompany them. See [Linear Regression](@ref regression_page), [Binary Choice Models](@ref binary_choice_page), and [Ordered & Multinomial Models](@ref ordered_multinomial_page) for theory and examples.
 
 ---
 
@@ -18,6 +18,8 @@ OddsRatio
 WildClusterBootstrap
 AndersonRubinTest
 AndersonRubinCI
+report(::IO, ::QuantileRegModel{T}) where {T}
+report(::IO, ::RDDResult{T}) where {T}
 ```
 
 ---
@@ -64,11 +66,13 @@ marginal_effects
 odds_ratio
 ```
 
-### Diagnostics
+### Regression Diagnostics
 
-```@docs
-vif
-classification_table
+Collinearity, classification accuracy, and the heteroskedasticity, serial-correlation, and functional-form tests for [`RegModel`](@ref). The panel counterpart of `breusch_pagan_test` — the random-effects LM test — is documented in [Panel Models API](@ref api_panel).
+
+```@autodocs
+Modules = [MacroEconometricModels]
+Pages   = ["reg/diagnostics.jl"]
 ```
 
 ### Stability and Influence Diagnostics
@@ -76,11 +80,11 @@ classification_table
 ```@docs
 StabilityResult
 InfluenceStats
-recursive_residuals
-cusum_test
-cusumsq_test
-chow_test
-influence_stats
+```
+
+```@autodocs
+Modules = [MacroEconometricModels]
+Pages   = ["reg/stability.jl"]
 ```
 
 ---
@@ -100,17 +104,28 @@ generalized_residuals
 
 ## Regularized, Robust & Limited-Dependent Regression
 
+Lasso, ridge and elastic net; M- and MM-estimators; Tobit, truncated and Heckman selection models; Poisson and negative binomial counts; and stepwise variable selection. Their `marginal_effects` methods are documented under Marginal Effects and Odds Ratios above.
+
 ```@docs
 PenalizedRegModel
 RobustRegModel
 HeckmanModel
 SelectionResult
-PoissonModel
-NegBinModel
-DispersionTest
 ```
 
 ```@autodocs
 Modules = [MacroEconometricModels]
-Pages   = ["reg/penalized.jl", "reg/robust.jl", "reg/tobit.jl", "reg/heckman.jl", "reg/count.jl", "reg/selection.jl", "reg/stability.jl", "reg/diagnostics.jl"]
+Pages   = ["reg/penalized.jl", "reg/robust.jl", "reg/tobit.jl", "reg/heckman.jl", "reg/count.jl", "reg/selection.jl"]
+Filter  = f -> f !== MacroEconometricModels.marginal_effects
+```
+
+### Prediction
+
+`predict` methods for the cross-sectional model families.
+
+```@autodocs
+Modules = [MacroEconometricModels]
+Pages   = ["src/reg/predict.jl", "reg/quantile.jl", "reg/ordered.jl", "reg/multinomial.jl"]
+Order   = [:function]
+Filter  = f -> f === MacroEconometricModels.StatsAPI.predict
 ```

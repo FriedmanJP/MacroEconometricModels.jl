@@ -282,23 +282,24 @@ function Base.show(io::IO, irf::BayesianImpulseResponse{T}) where {T}
     _show_spec_table(io, "Bayesian Impulse Response Functions", spec_pairs)
 
     horizons_show = _select_horizons(H)
-    median_idx = nq >= 3 ? 2 : 1
-    q_label = _fmt_pct(irf.quantile_levels[median_idx]; digits=0)
+    # Honour the requested point estimate (mean/median stored in point_estimate),
+    # not the middle quantile level (#563).
+    pe_label = "Point"
 
     for j in 1:n_shocks
         data = Matrix{Any}(undef, n_vars, length(horizons_show) + 1)
         for v in 1:n_vars
             data[v, 1] = irf.variables[v]
             for (hi, h) in enumerate(horizons_show)
-                med = irf.quantiles[h, v, j, median_idx]
+                pe = irf.point_estimate[h, v, j]
                 lo, up = irf.quantiles[h, v, j, 1], irf.quantiles[h, v, j, nq]
                 sig = (lo > 0 || up < 0) ? "*" : ""
-                data[v, hi + 1] = string(_fmt(med), sig)
+                data[v, hi + 1] = string(_fmt(pe), sig)
             end
         end
 
         _pretty_table(io, data;
-            title = "Shock: $(irf.shocks[j]) ($q_label)",
+            title = "Shock: $(irf.shocks[j]) ($pe_label)",
             column_labels = vcat([""], ["h=$h" for h in horizons_show]),
             alignment = vcat([:l], fill(:r, length(horizons_show))),
         )
@@ -347,7 +348,8 @@ function Base.show(io::IO, f::BayesianFEVD{T}) where {T}
         for i in 1:n_vars
             data[i, 1] = f.variables[i]
             for j in 1:n_shocks
-                data[i, j + 1] = _fmt_pct(f.point_estimate[h, i, j])
+                # point_estimate is (variable, shock, horizon) — unified with FEVD (#527)
+                data[i, j + 1] = _fmt_pct(f.point_estimate[i, j, h])
             end
         end
 
@@ -429,9 +431,18 @@ function Base.show(io::IO, fc::LPForecast{T}) where {T}
     H = fc.horizon
     n_resp = length(fc.response_vars)
 
+    # Prefer real variable names over bare indices (#531, #532).
+    function _lp_fc_label(idx::Int)
+        if !isempty(fc.varnames) && 1 <= idx <= length(fc.varnames)
+            return fc.varnames[idx]
+        end
+        return "Var $idx"
+    end
+    shock_label = _lp_fc_label(fc.shock_var)
+
     _show_spec_table(io, "LP Forecast",
         ["Forecast horizon" => H, "Response variables" => n_resp,
-         "Shock variable" => fc.shock_var, "CI method" => string(fc.ci_method),
+         "Shock variable" => shock_label, "CI method" => string(fc.ci_method),
          "Confidence level" => _fmt_pct(fc.conf_level)];
         left_label="Specification")
 
@@ -440,14 +451,15 @@ function Base.show(io::IO, fc::LPForecast{T}) where {T}
     col_labels = String["h"]
 
     for (j, rv) in enumerate(fc.response_vars)
+        rlabel = _lp_fc_label(rv)
         if fc.ci_method == :none
-            push!(col_labels, "Var $rv")
+            push!(col_labels, rlabel)
             for h in 1:H
                 data[h, 1] = h
                 data[h, 1 + j] = _fmt(fc.forecast[h, j])
             end
         else
-            push!(col_labels, "Var $rv")
+            push!(col_labels, rlabel)
             push!(col_labels, "Lower")
             push!(col_labels, "Upper")
             col_offset = 1 + (j - 1) * 3
@@ -785,16 +797,22 @@ function Base.show(io::IO, m::PropensityLPModel)
                m.cov_estimator isa WhiteEstimator ? "White (HC0)" : "Driscoll-Kraay"
     n_t = n_treated(m)
     n_c = n_control(m)
-    _show_spec_table(io, "Propensity Score LP Model (Angrist et al. 2018)",
+    est = m.estimator
+    est_label = est === :doubly_robust ? "Doubly Robust" : "IPW"
+    title = est === :doubly_robust ?
+        "Doubly Robust LP Model (Angrist et al. 2018)" :
+        "Propensity Score LP Model (Angrist et al. 2018)"
+    _show_spec_table(io, title,
         ["Variables" => size(m.Y, 2), "Horizon" => m.horizon,
          "Treated" => n_t, "Control" => n_c,
          "Covariates" => size(m.covariates, 2),
          "PS method" => string(m.config.method),
+         "Estimator" => est_label,
          "Trimming" => string(m.config.trimming),
          "Observations" => size(m.Y, 1), "Covariance" => cov_name])
-    # PropensityLPModel is treatment-based (no shock_var) — report the IPW ATE path.
+    # Header tracks estimator field so DR is not mislabeled as IPW (#533).
     _irf_horizon_table(io, m.ate, m.ate_se, _lp_resp_labels(m),
-        "Average Treatment Effects (IPW)")
+        "Average Treatment Effects ($est_label)")
     _show_note(io, _LP_IRF_NOTE)
 end
 
@@ -857,7 +875,8 @@ function Base.show(io::IO, r::AriasSVARResult)
     # Posterior-mean IRF summary — was restrictions/penalties only. (S4/T168)
     if n_draws > 0
         im = irf_mean(r)
-        var_labels = ["var$i" for i in 1:r.restrictions.n_vars]
+        nv = r.restrictions.n_vars
+        var_labels = length(r.varnames) == nv ? r.varnames : ["var$i" for i in 1:nv]
         for s in 1:size(im, 3)
             _irf_points_table(io, im[:, :, s], var_labels, "Posterior-mean IRF to Shock $s")
         end
@@ -890,7 +909,7 @@ function Base.show(io::IO, r::UhligSVARResult)
         alignment = [:l, :l, :r],
     )
     # IRF summary for the identified shocks — was restrictions/penalties only. (S4/T168)
-    var_labels = ["var$i" for i in 1:n]
+    var_labels = length(r.varnames) == n ? r.varnames : ["var$i" for i in 1:n]
     for s in 1:size(r.irf, 3)
         _irf_points_table(io, r.irf[:, :, s], var_labels, "IRF to Shock $s")
     end

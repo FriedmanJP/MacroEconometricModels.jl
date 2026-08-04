@@ -1,124 +1,71 @@
 # [News Decomposition](@id nowcast_news_page)
 
-When new data releases arrive, the nowcast changes. The **news decomposition** (Banbura and Modugno 2014) attributes this revision to individual data releases, answering a central question in real-time forecasting: *which releases drove the revision?* For the underlying DFM model, see [Nowcasting](@ref nowcast_page).
+Every data release moves the nowcast, and the question a forecaster is actually asked is not *what is the number* but *why did it change*. The news decomposition (Bańbura & Modugno 2014) answers it by splitting the revision between two data vintages into a contribution from each newly published observation, weighted by how surprising that observation was relative to what the model already expected. Releases that merely confirm the model's forecast contribute nothing, however large the number itself.
+
+The decomposition is a property of the state-space representation, so it requires an estimated [DFM](@ref nowcast_dfm_page). For the shared data layout and the `nowcast()` interface, see [Nowcasting](@ref nowcast_page).
 
 ```@setup nc_news
 using MacroEconometricModels, Random
 Random.seed!(42)
-```
-
-## Quick Start
-
-```@example nc_news
-# Standard mixed-frequency data setup (used throughout this page)
 fred = load_example(:fred_md)
 nc_md = fred[:, ["INDPRO", "UNRATE", "CPIAUCSL", "M2SL", "FEDFUNDS"]]
 Y = to_matrix(apply_tcode(nc_md))
 Y = Y[all.(isfinite, eachrow(Y)), :]
-Y = Y[end-99:end, :]
+Y = Y[end-59:end, :]
 nM, nQ = 4, 1
+N = nM + nQ
 for t in 1:size(Y, 1)
     if mod(t, 3) != 0
         Y[t, end] = NaN
     end
 end
 Y[end, end] = NaN
-
-# Estimate DFM (required for news decomposition)
-dfm = nowcast_dfm(Y, nM, nQ; r=2, p=1, idio=:ar1)
 T_obs = size(Y, 1)
-N = size(Y, 2)
-nothing # hide
+dfm = nowcast_dfm(Y, nM, nQ; r=2, p=1, idio=:ar1)
 ```
 
-**Recipe 1: Basic news decomposition**
+The examples reuse the FRED-MD panel of the [DFM page](@ref nowcast_dfm_page) — four monthly indicators, one quarterly target — with `dfm` estimated on it. The old vintage is constructed by blanking the most recent month of the monthly indicators, so publishing them is the event whose effect is decomposed.
+
+## Quick Start
+
+**Recipe 1: Decompose a revision across three releases**
 
 ```@example nc_news
 X_old = copy(Y)
-X_new = copy(Y)
-X_old[end, 1:3] .= NaN   # simulate 3 missing releases in old vintage
-
-news = nowcast_news(X_new, X_old, dfm, T_obs; target_var=N)
+X_old[end, 1:3] .= NaN          # INDPRO, UNRATE and CPI not yet published
+news = nowcast_news(Y, X_old, dfm, T_obs; target_var=N)
 report(news)
 ```
 
-**Recipe 2: News with grouped releases**
+**Recipe 2: Aggregate impacts into named groups**
 
 ```@example nc_news
-X_old = copy(Y)
-X_new = copy(Y)
-X_old[end, 1:3] .= NaN
-
-# Group: 1=real (INDPRO,UNRATE), 2=nominal (CPI,M2,FFR)
-groups = [1, 1, 2, 2, 2]
-news = nowcast_news(X_new, X_old, dfm, T_obs; target_var=N,
-                    groups=groups, group_names=["Real", "Nominal"])
-round.(news.group_impacts, digits=4)
-```
-
-**Recipe 3: Visualize per-release impacts**
-
-```@example nc_news
-X_old = copy(Y)
-X_new = copy(Y)
-X_old[end, 1:3] .= NaN
-
-news = nowcast_news(X_new, X_old, dfm, T_obs; target_var=N)
-nothing # hide
-```
-
-```julia
-plot_result(news)
-```
-
-```@raw html
-<iframe src="../assets/plots/nowcast_news.html" width="100%" height="400" frameborder="0" style="border:1px solid #ddd;border-radius:4px;"></iframe>
-```
-
-**Recipe 4: News by group (stacked bar)**
-
-```@example nc_news
-X_old = copy(Y)
-X_new = copy(Y)
-X_old[end, 1:3] .= NaN
-
-groups = [1, 1, 2, 2, 2]
-news_grp = nowcast_news(X_new, X_old, dfm, T_obs; target_var=N,
+groups = [1, 1, 2, 2, 2]        # real activity, then nominal
+news_grp = nowcast_news(Y, X_old, dfm, T_obs; target_var=N,
                         groups=groups, group_names=["Real", "Nominal"])
-nothing # hide
+[g => round(v, digits=5) for (g, v) in zip(news_grp.group_names, news_grp.group_impacts)]
 ```
 
-```julia
-plot_result(news_grp; view=:groups)
+**Recipe 3: Per-release impacts as a named vector**
+
+```@example nc_news
+[r => round(v, digits=5) for (r, v) in zip(news.variable_names, news.impact_news)]
 ```
 
-```@raw html
-<iframe src="../assets/plots/nowcast_news_groups.html" width="100%" height="350" frameborder="0" style="border:1px solid #ddd;border-radius:4px;"></iframe>
-```
-
-**Recipe 5: Sorted individual impacts**
-
-```julia
-plot_result(news; view=:individual)
-```
-
-```@raw html
-<iframe src="../assets/plots/nowcast_news_individual.html" width="100%" height="350" frameborder="0" style="border:1px solid #ddd;border-radius:4px;"></iframe>
-```
-
-**Recipe 6: Multi-vintage tracking**
+**Recipe 4: Track the nowcast across a release calendar**
 
 ```@example nc_news
 base = copy(Y)
-base[end, 1:3] .= NaN
+base[end, 1:4] .= NaN
+varnames = ["INDPRO", "UNRATE", "CPI", "M2"]
 
-# Simulate sequential releases
-revisions = map(1:3) do col
-    v_new = copy(base)
-    v_new[end, col] = Y[end, col]
-    news = nowcast_news(v_new, base, dfm, T_obs; target_var=N)
-    base[end, col] = Y[end, col]   # update base for next iteration
-    (release=col, delta=round(news.new_nowcast - news.old_nowcast, digits=4))
+map(1:4) do col
+    vintage = copy(base)
+    vintage[end, col] = Y[end, col]
+    step = nowcast_news(vintage, base, dfm, T_obs; target_var=N)
+    base[end, col] = Y[end, col]        # carry the release into the next vintage
+    (release=varnames[col], nowcast=round(step.new_nowcast, digits=4),
+     delta=round(step.new_nowcast - step.old_nowcast, digits=4))
 end
 ```
 
@@ -126,138 +73,200 @@ end
 
 ## The News Concept
 
-Central banks and forecasters update their nowcasts as new data releases arrive throughout the quarter. The **news** framework (Banbura and Modugno 2014) decomposes the total nowcast revision into three components: the surprise content of new releases, the effect of data revisions, and a residual from parameter re-estimation.
+Let ``\mathcal{J}`` collect the positions ``(t_k, v_k)`` that are missing in the old vintage and observed in the new one. The **news** carried by release ``k`` is the part of its value that the old vintage could not have predicted:
 
 ```math
-\hat{y}^{\text{new}} - \hat{y}^{\text{old}} = \underbrace{\sum_{j \in \mathcal{J}} w_j \cdot (x_j^{\text{actual}} - x_j^{\text{forecast}})}_{\text{news}} + \underbrace{\Delta_{\text{revision}}}_{\text{data revisions}} + \underbrace{\Delta_{\text{re-estimation}}}_{\text{parameter updates}}
+I_k = x_{v_k, t_k}^{\text{new}} - C_{v_k}' \, \hat{z}_{t_k \mid \text{old}}
 ```
 
 where:
-- ``\hat{y}^{\text{new}}`` and ``\hat{y}^{\text{old}}`` are the nowcasts from the new and old data vintages
-- ``\mathcal{J}`` is the set of new releases (positions where ``X_{\text{old}}`` is NaN but ``X_{\text{new}}`` is observed)
-- ``w_j`` is the Kalman-gain-derived weight linking release ``j`` to the target
-- ``x_j^{\text{actual}} - x_j^{\text{forecast}}`` is the **innovation** --- the difference between the actual release and the model's expectation
-- ``\Delta_{\text{revision}}`` captures the effect of revised data
-- ``\Delta_{\text{re-estimation}}`` is the residual attributable to parameter updating
+- ``x_{v_k, t_k}^{\text{new}}`` is the newly published (standardized) value
+- ``C_{v_k}`` is the observation-equation row for variable ``v_k``
+- ``\hat{z}_{t_k \mid \text{old}}`` is the smoothed state at ``t_k`` given the old vintage
 
-The weights ``w_j`` are derived from the DFM state-space structure:
+Releases do not arrive one at a time in general, and two indicators published together carry overlapping information about the same factors. The decomposition therefore solves for all releases **jointly** rather than applying a scalar Kalman gain to each in turn:
 
 ```math
-w_j = \frac{C_{\text{target}}' \, P_{t|t-1} \, C_j}{C_j' \, P_{t|t-1} \, C_j + R_{jj}}
+b = \operatorname{Var}(I)^{-1} \operatorname{Cov}(I, F), \qquad
+\text{impact}_k = b_k \, I_k \, W_{\text{target}}
 ```
 
-where ``P_{t|t-1}`` is the state forecast covariance from the Kalman smoother, ``C_{\text{target}}`` and ``C_j`` are factor loadings, and ``R_{jj}`` is the observation noise variance for variable ``j``.
+where:
+- ``\operatorname{Var}(I)_{k\ell} = C_{v_k}' \operatorname{Cov}(z_{t_k}, z_{t_\ell}) C_{v_\ell} + R_{v_k v_\ell} \mathbb{1}_{\{t_k = t_\ell\}}`` is the innovation covariance
+- ``\operatorname{Cov}(I, F)_k = C_{\text{target}}' \operatorname{Cov}(z_\tau, z_{t_k}) C_{v_k}`` links each release to the target at the nowcast period ``\tau``
+- ``\operatorname{Cov}(z_{t}, z_{s})`` comes from the old-vintage smoother, which returns lagged cross-covariances alongside the usual smoothed variances
+- ``W_{\text{target}}`` is the target's standard deviation, restoring original units
 
-!!! note "Interpretation"
-    A positive `impact_news[j]` means the actual value of release ``j`` exceeded the model's expectation, contributing to an **upward** revision of the nowcast. The sum of all news impacts plus the re-estimation residual equals the total revision.
+Solving jointly is what makes the attribution well posed: the weights split shared information across the releases that carry it, so the answer does not depend on the order in which the releases are listed, and two perfectly collinear releases cannot both be credited with the same move.
+
+!!! note "Reading the sign"
+    A positive `impact_news[k]` means release ``k`` came in above what the old vintage implied and pushed the nowcast up. The magnitude combines surprise with relevance: a large surprise in a series that loads weakly on the target's factors moves the nowcast less than a small surprise in a series that loads heavily.
 
 ---
 
 ## Usage
 
-The `nowcast_news` function requires two data vintages and a pre-estimated DFM model. The **old vintage** (`X_old`) contains more NaN values than the **new vintage** (`X_new`), representing the state of the data before and after new releases.
+`nowcast_news` takes the new vintage, the old vintage, an estimated `NowcastDFM`, and the period whose nowcast is being decomposed. The two vintages must have identical dimensions; the old one is the more incomplete of the pair.
 
 ```@example nc_news
 X_old = copy(Y)
-X_new = copy(Y)
 X_old[end, 1:3] .= NaN
-
-news = nowcast_news(X_new, X_old, dfm, T_obs; target_var=N)
+news = nowcast_news(Y, X_old, dfm, T_obs; target_var=N)
 report(news)
 ```
 
-The `report()` function displays a formatted table with old and new nowcasts, total revision, and top contributing releases ranked by absolute impact. The `plot_result` function supports three views: `:releases` (default per-release bar chart), `:groups` (stacked bar by variable group), and `:individual` (sorted by absolute impact).
+Publishing the three monthly indicators lifts the current-quarter estimate from 0.0368 to 0.0375. The CPI release accounts for 0.0006 of the 0.0007 revision and industrial production for a further 0.0003, while unemployment came in on the strong side of the model's expectation and subtracts 0.0002. No already-published value moved between these two vintages, so `impact_revision` is zero and the three impacts sum to the revision to within ``6 \times 10^{-18}``: with the DFM parameters held fixed across vintages, the joint news system reproduces the smoother's own answer exactly, so `impact_reestimation` is numerical noise rather than an unexplained residual.
 
-```@raw html
-<iframe src="../assets/plots/nowcast_news.html" width="100%" height="400" frameborder="0" style="border:1px solid #ddd;border-radius:4px;"></iframe>
+The **total revision** splits three ways in principle:
+
+```math
+\hat{y}^{\text{new}} - \hat{y}^{\text{old}}
+  = \underbrace{\textstyle\sum_{k} \text{impact}_k}_{\texttt{impact\_news}}
+  + \underbrace{\Delta_{\text{revision}}}_{\texttt{impact\_revision}}
+  + \underbrace{\Delta_{\text{re-estimation}}}_{\texttt{impact\_reestimation}}
 ```
+
+!!! note "Revisions are not news"
+    The Bańbura-Modugno weights are derived for cells that were *missing* in the old vintage, so they cannot price a cell that was already published and merely changed value. Such a cell is a **revision**, and `impact_revision` is the difference between the nowcast under the old vintage and the nowcast under the old vintage with the revised values patched in, with the DFM parameters held fixed. The news step then runs from that patched baseline, so the news weights only ever see genuinely new cells. A cell counts as revised when it moves by more than ``10^{-9}`` relative to its own magnitude, which keeps standardization round-trip noise from turning every observed cell into a revision.
+
+A vintage that revises an already-published figure and releases nothing new isolates the term:
+
+```@example nc_news
+X_revised = copy(Y)
+X_revised[end-1, 1] += 0.01     # industrial production revised up, nothing new published
+news_rev = nowcast_news(X_revised, Y, dfm, T_obs; target_var=N)
+report(news_rev)
+```
+
+The upward revision to industrial production in the second-to-last month pulls the current-quarter estimate down from 0.0375 to 0.0344, and the whole ``-0.0031`` is booked as revision impact: there are no releases, so `impact_news` is empty, and `impact_reestimation` is exactly zero rather than a residual absorbing the move. When a vintage carries both revisions and releases, the revisions are patched into the baseline first and the news impacts are measured against that baseline, so the three terms still sum to the total revision.
+
+### Grouping Releases
+
+Passing `groups` aggregates the per-release impacts into sectors. The vector assigns a group index to each **variable** (not to each release), and `group_names` labels them.
+
+```@example nc_news
+groups = [1, 1, 2, 2, 2]
+news_grp = nowcast_news(Y, X_old, dfm, T_obs; target_var=N,
+                        groups=groups, group_names=["Real", "Nominal"])
+[g => round(v, digits=5) for (g, v) in zip(news_grp.group_names, news_grp.group_impacts)]
+```
+
+The real-activity block contributes 0.00015 net — industrial production and unemployment nearly cancel — against 0.00057 from the nominal block, which here is CPI alone. Netting within a group is the point of the view: it answers whether the quarter was revised on real or on nominal news, not which individual series moved.
+
+!!! note "Default grouping"
+    With `groups` omitted, `group_impacts` has one entry per **variable** in the panel, not one per group, and `group_names` defaults to `"Var1"`, `"Var2"`, … . Variables with no new release get a zero entry. When `groups` is supplied, the length of `group_names` must equal `maximum(groups)`; otherwise it must equal ``N``.
 
 ### Keyword Arguments
 
 | Keyword | Type | Default | Description |
 |---------|------|---------|-------------|
-| `target_var` | `Int` | `size(Y,2)` | Target variable column index |
-| `groups` | `Vector{Int}` or `nothing` | `nothing` | Group assignment per variable for impact aggregation |
-| `group_names` | `Vector{String}` or `nothing` | `nothing` | Labels for each group; auto-generated as `"Group 1"`, `"Group 2"`, ... if omitted |
+| `target_var` | `Int` | `size(X_new, 2)` | Column index of the variable being nowcast |
+| `groups` | `Vector{Int}` or `nothing` | `nothing` | Group index per variable; without it, impacts are reported per variable |
+| `group_names` | `Vector{String}` or `nothing` | `nothing` | Group labels; defaults to `"Var1"`, `"Var2"`, … |
 
-### `NowcastNews` Return Values
+The third positional argument after the model, `target_period`, selects the period whose nowcast is decomposed and must lie in ``1 \ldots T_{\text{obs}}``. Passing `T_obs` decomposes the current-quarter estimate, which is the usual case.
+
+### NowcastNews Return Values
 
 | Field | Type | Description |
 |-------|------|-------------|
-| `old_nowcast` | `T` | Previous nowcast from old data vintage |
-| `new_nowcast` | `T` | Updated nowcast from new data vintage |
-| `impact_news` | `Vector{T}` | Per-release news impact on the nowcast |
-| `impact_revision` | `T` | Impact from data revisions |
-| `impact_reestimation` | `T` | Residual impact from parameter re-estimation |
-| `group_impacts` | `Vector{T}` | News impacts aggregated by variable group |
-| `group_names` | `Vector{String}` | Labels for each group (auto-generated if not provided) |
-| `variable_names` | `Vector{String}` | Release identifiers (format: `"Var{j}_t{t}"`) |
+| `old_nowcast` | `T` | Nowcast implied by the old vintage, in original units |
+| `new_nowcast` | `T` | Nowcast implied by the new vintage |
+| `impact_news` | `Vector{T}` | Impact of each new release, one entry per element of ``\mathcal{J}`` |
+| `impact_revision` | `T` | Impact of cells revised between the vintages, at fixed parameters; zero when none moved |
+| `impact_reestimation` | `T` | Residual: total revision minus the news and revision impacts |
+| `group_impacts` | `Vector{T}` | News aggregated by group, or per variable when `groups` is omitted |
+| `group_names` | `Vector{String}` | Labels matching `group_impacts` |
+| `variable_names` | `Vector{String}` | Release identifiers, formatted `"Var{j}_t{t}"` |
+
+---
+
+## Visualization
+
+`plot_result` renders a `NowcastNews` in three views:
+
+```julia
+plot_result(news)                        # :releases — one bar per release (default)
+plot_result(news_grp; view=:groups)      # stacked bar by group
+plot_result(news_grp; view=:individual)  # sorted by absolute impact
+```
+
+The default `:releases` view draws one horizontal bar per element of ``\mathcal{J}``, labelled with the release identifier `Var{j}_t{t}`, against a zero line. The three monthly publications of the current quarter appear as `Var1_t60`, `Var2_t60` and `Var3_t60` — industrial production and CPI pushing the nowcast up, unemployment pulling it down:
+
+```@raw html
+<iframe src="../assets/plots/nowcast_news.html" width="100%" height="350" frameborder="0" style="border:1px solid #ddd;border-radius:4px;"></iframe>
+```
+
+The `:groups` view stacks each group's net contribution into a single revision bar, so the question "real or nominal?" is answered by which segment dominates:
+
+```@raw html
+<iframe src="../assets/plots/nowcast_news_groups.html" width="100%" height="350" frameborder="0" style="border:1px solid #ddd;border-radius:4px;"></iframe>
+```
+
+The `:individual` view drops the grouping and ranks releases by absolute impact, which is the view to reach for when the question is which single series moved the number:
+
+```@raw html
+<iframe src="../assets/plots/nowcast_news_individual.html" width="100%" height="350" frameborder="0" style="border:1px solid #ddd;border-radius:4px;"></iframe>
+```
+
+All three titles carry the old nowcast, the new nowcast and the revision, so a chart is self-contained when it is lifted into a briefing.
 
 ---
 
 ## Complete Example
 
 ```@example nc_news
-# === Step 1: Estimate DFM ===
-dfm = nowcast_dfm(Y, nM, nQ; r=2, p=1, idio=:ar1, max_iter=100)
+# === Step 1: The estimated DFM the decomposition runs against ===
 report(dfm)
 ```
 
 ```@example nc_news
-# === Step 2: Simulate sequential data releases ===
+# === Step 2: Walk a four-release calendar, one publication at a time ===
 base = copy(Y)
 base[end, 1:4] .= NaN
 varnames = ["INDPRO", "UNRATE", "CPI", "M2"]
 
-revisions = map(1:4) do col
-    v_new = copy(base)
-    v_new[end, col] = Y[end, col]
-    news = nowcast_news(v_new, base, dfm, T_obs; target_var=N)
+map(1:4) do col
+    vintage = copy(base)
+    vintage[end, col] = Y[end, col]
+    step = nowcast_news(vintage, base, dfm, T_obs; target_var=N)
     base[end, col] = Y[end, col]
-    (release=varnames[col],
-     old=round(news.old_nowcast, digits=4),
-     new=round(news.new_nowcast, digits=4),
-     delta=round(news.new_nowcast - news.old_nowcast, digits=4))
+    (release=varnames[col], old=round(step.old_nowcast, digits=4),
+     new=round(step.new_nowcast, digits=4),
+     delta=round(step.new_nowcast - step.old_nowcast, digits=4))
 end
 ```
 
 ```@example nc_news
-# === Step 3: Full decomposition ===
-X_old = copy(Y)
-X_old[end, 1:4] .= NaN
-news = nowcast_news(Y, X_old, dfm, T_obs; target_var=N)
-report(news)
+# === Step 3: Decompose the same four releases jointly ===
+X_old4 = copy(Y)
+X_old4[end, 1:4] .= NaN
+news4 = nowcast_news(Y, X_old4, dfm, T_obs; target_var=N)
+report(news4)
 ```
 
-```julia
-plot_result(news)                    # per-release impacts
-plot_result(news; view=:individual)  # sorted by absolute impact
-```
-
-```@raw html
-<iframe src="../assets/plots/nowcast_news.html" width="100%" height="400" frameborder="0" style="border:1px solid #ddd;border-radius:4px;"></iframe>
-```
-
-**Interpretation.** The sequential release simulation reveals how each monthly indicator contributes to the quarterly nowcast. Industrial production and unemployment typically carry the largest weights because they load heavily on the common factors driving the quarterly target. The `:individual` view sorts releases by absolute impact, immediately identifying the key drivers of the nowcast revision. The `:groups` view aggregates impacts by sector, revealing whether the revision was driven by real-activity or nominal-sector data.
+**Interpretation.** Released one at a time, the four indicators move the nowcast by +0.0003, ``-``0.0002, +0.0006 and ``-``0.0005, walking it from 0.0373 to 0.0375. Decomposed jointly, the same four releases produce a total revision of 0.0002 with CPI (+0.0006) and M2 (``-``0.0005) as the largest opposing contributions — the sequential deltas and the joint impacts agree here because these releases carry largely distinct information. They need not agree in general: a sequential walk credits whichever series is published first with the information two series share, whereas the joint system splits it, which is why the joint decomposition is the one to quote. The near-cancellation across the four is itself the result — the month's data were collectively uninformative about the quarter, even though individual series surprised in both directions.
 
 ---
 
 ## Common Pitfalls
 
-1. **Vintages must have identical dimensions.** `X_new` and `X_old` must be the same size. The old vintage must have strictly more NaN values at the positions representing new releases. Positions where both are NaN or both are observed contribute nothing to the news.
+1. **The vintages must be the same size.** `X_new` and `X_old` are compared element by element, and a size mismatch throws. Build the old vintage by copying the new one and blanking entries, never by truncating rows.
 
-2. **DFM parameters are held fixed.** The function re-runs the Kalman smoother on both vintages using the same model parameters. It does not re-estimate the factor model. Any discrepancy between the sum of news impacts and the total revision is attributed to `impact_reestimation`.
+2. **Only positions that were `NaN` and became observed count as news.** A position observed in both vintages contributes to `impact_revision`, never to `impact_news`, however much its value changed; a position missing in both is ignored. Reading a back-revision off `impact_news` therefore finds nothing — read `impact_revision`.
 
-3. **Only DFM models are supported.** The `nowcast_news` function accepts only `NowcastDFM` because the decomposition relies on Kalman gain weights from the state-space representation. BVAR and bridge models do not support news decomposition.
+3. **Parameters are held fixed across vintages.** The function re-runs the Kalman smoother on both vintages with the same estimated DFM; it does not re-estimate. That is the correct experiment for attributing a revision to data, but it means a nowcast that changed because the model was re-fitted is not decomposed by this function.
 
-4. **Variable names are auto-generated.** Release identifiers follow the format `"Var{j}_t{t}"` where `j` is the column index and `t` is the row index. Map these to meaningful names using your data matrix's variable ordering.
+4. **Only `NowcastDFM` is supported.** The weights come from the state-space representation, so there is no method for `NowcastBVAR` or `NowcastBridge`. To decompose revisions for those, nowcast the same panel with a DFM and decompose that.
+
+5. **Release identifiers are positional.** `variable_names` entries read `"Var{j}_t{t}"` for column ``j`` at row ``t``; the function never sees your column labels. Zip them against your own variable names, as Recipe 3 does, before showing them to anyone.
+
+6. **`groups` indexes variables, not releases.** The vector has one entry per column of the panel even when only a few columns carry new releases, and `maximum(groups)` sets the length of `group_impacts`. Sizing it to the number of releases throws or silently mislabels.
 
 ---
 
 ## References
 
-- Banbura, Marta, and Michele Modugno. 2014. "Maximum Likelihood Estimation of Factor Models on Datasets with Arbitrary Pattern of Missing Data."
-  *Journal of Applied Econometrics* 29 (1): 133--160. [DOI: 10.1002/jae.2306](https://doi.org/10.1002/jae.2306)
-
-- Banbura, Marta, Domenico Giannone, and Lucrezia Reichlin. 2011. "Nowcasting."
-  *Oxford Handbook of Economic Forecasting*, Chapter 7, Oxford University Press. [DOI: 10.1093/oxfordhb/9780195398649.013.0008](https://doi.org/10.1093/oxfordhb/9780195398649.013.0008)
+- Bańbura, Marta, and Michele Modugno. 2014. "Maximum Likelihood Estimation of Factor Models on Datasets with Arbitrary Pattern of Missing Data." *Journal of Applied Econometrics* 29 (1): 133--160. [https://doi.org/10.1002/jae.2306](https://doi.org/10.1002/jae.2306)
+- Bańbura, Marta, Domenico Giannone, and Lucrezia Reichlin. 2011. "Nowcasting." In *The Oxford Handbook of Economic Forecasting*, 193--224. Oxford: Oxford University Press. [https://doi.org/10.1093/oxfordhb/9780195398649.013.0008](https://doi.org/10.1093/oxfordhb/9780195398649.013.0008)
+- Giannone, Domenico, Lucrezia Reichlin, and David Small. 2008. "Nowcasting: The Real-Time Informational Content of Macroeconomic Data." *Journal of Monetary Economics* 55 (4): 665--676. [https://doi.org/10.1016/j.jmoneco.2008.05.010](https://doi.org/10.1016/j.jmoneco.2008.05.010)

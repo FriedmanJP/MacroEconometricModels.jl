@@ -47,8 +47,9 @@ Note: `:smooth_transition` requires `transition_var` kwarg.
   moment as well).
 - `bias_correct::Bool=false` --- Kilian (1998) bootstrap-after-bootstrap. An inner bootstrap
   estimates the small-sample bias `Ψ = E[B*] − B̂`; the DGP is re-centred at `B̂ − δΨ` with
-  Kilian's stationarity shrinkage, and each outer draw is corrected by the same `Ψ` before its
-  IRF is computed. Off by default, so existing bands are unchanged.
+  Kilian's stationarity shrinkage, each outer draw is corrected by the same `Ψ` before its
+  IRF is computed, **and the reported point IRF is computed from the bias-corrected
+  coefficients** (`B̂ − δΨ`). Off by default, so existing bands/points are unchanged.
 - `bias_reps::Int=reps` --- replications for the inner bias bootstrap.
 """
 function irf(model::VARModel{T}, horizon::Int;
@@ -69,10 +70,36 @@ function irf(model::VARModel{T}, horizon::Int;
     rng = _resolve_repro_rng(rng, seed)
     _validate_data(model.Sigma, "Sigma")
     _validate_data(model.B, "B")
+    # Kilian bias correction needs the bootstrap machinery to estimate Psi; with
+    # any other ci_type it used to be silently ignored, returning the uncorrected
+    # point under a kwarg that promised correction (#564).
+    if bias_correct && ci_type != :bootstrap
+        throw(ArgumentError(
+            "bias_correct=true requires ci_type=:bootstrap (Kilian 1998 estimates " *
+            "the coefficient bias by bootstrap); got ci_type=:$ci_type"))
+    end
     n = nvars(model)
+    p = model.p
     Q = compute_Q(model, method, horizon, check_func, narrative_check;
                   transition_var=transition_var, regime_indicator=regime_indicator, rng=rng)
-    point_irf = compute_irf(model, Q, horizon)
+
+    # Kilian (1998) bias-corrects the coefficient estimate itself, so the reported
+    # point IRF must also use the bias-corrected B when bias_correct=true (#564).
+    # Psi is estimated once here and reused for the outer bootstrap DGP/corrections.
+    model_point = model
+    Psi_point = nothing
+    if bias_correct && ci_type == :bootstrap
+        nb = bias_reps > 0 ? bias_reps : reps
+        Psi_point = _estimate_var_bias(model, nb, bootstrap, rng;
+                                       block_length=block_length, wild_dist=wild_dist)
+        B_bc, _ = _kilian_bias_correction(model.B, Psi_point, n, p)
+        model_point = VARModel(model.Y, p, B_bc, model.U, model.Sigma,
+                               model.aic, model.bic, model.hqic, model.varnames)
+        # Re-identify at the bias-corrected coefficients so the point Q matches.
+        Q = compute_Q(model_point, method, horizon, check_func, narrative_check;
+                      transition_var=transition_var, regime_indicator=regime_indicator, rng=rng)
+    end
+    point_irf = compute_irf(model_point, Q, horizon)
 
     ci_lower, ci_upper = zeros(T, horizon, n, n), zeros(T, horizon, n, n)
     sim_irfs = nothing
@@ -82,7 +109,7 @@ function irf(model::VARModel{T}, horizon::Int;
                                   transition_var=transition_var, regime_indicator=regime_indicator,
                                   rng=rng, bootstrap=bootstrap, block_length=block_length,
                                   wild_dist=wild_dist, bias_correct=bias_correct,
-                                  bias_reps=bias_reps)
+                                  bias_reps=bias_reps, Psi_precomputed=Psi_point)
         alpha = (1 - T(conf_level)) / 2
         @inbounds for h in 1:horizon, v in 1:n, s in 1:n
             d = @view sim_irfs[:, h, v, s]
@@ -104,7 +131,11 @@ function irf(model::VARModel{T}, horizon::Int;
                        model.varnames, snames, ci_type, sim_irfs, cl; manifest=manifest)
 end
 
-"""Simulate IRFs for confidence intervals (bootstrap or asymptotic)."""
+"""Simulate IRFs for confidence intervals (bootstrap or asymptotic).
+
+`Psi_precomputed` optionally supplies a bias matrix already estimated by the caller
+(so the point IRF and bands share the same Ψ under `bias_correct=true`; #564).
+"""
 function _simulate_irfs(model::VARModel{T}, method::Symbol, horizon::Int,
     check_func, narrative_check, ci_type::Symbol, reps::Int;
     stationary_only::Bool=false,
@@ -112,7 +143,8 @@ function _simulate_irfs(model::VARModel{T}, method::Symbol, horizon::Int,
     regime_indicator::Union{Nothing,AbstractVector{Int}}=nothing,
     rng::AbstractRNG=Random.default_rng(),
     bootstrap::Symbol=:iid, block_length::Int=0, wild_dist::Symbol=:rademacher,
-    bias_correct::Bool=false, bias_reps::Int=0
+    bias_correct::Bool=false, bias_reps::Int=0,
+    Psi_precomputed::Union{Nothing,AbstractMatrix}=nothing
 ) where {T<:AbstractFloat}
     n, p = nvars(model), model.p
     bootstrap in (:iid, :wild, :block) || throw(ArgumentError(
@@ -127,9 +159,13 @@ function _simulate_irfs(model::VARModel{T}, method::Symbol, horizon::Int,
         B_dgp = model.B
         Psi = zeros(T, size(model.B))
         if bias_correct
-            nb = bias_reps > 0 ? bias_reps : reps
-            Psi = _estimate_var_bias(model, nb, bootstrap, rng;
-                                     block_length=block_length, wild_dist=wild_dist)
+            if Psi_precomputed !== nothing
+                Psi = Matrix{T}(Psi_precomputed)
+            else
+                nb = bias_reps > 0 ? bias_reps : reps
+                Psi = _estimate_var_bias(model, nb, bootstrap, rng;
+                                         block_length=block_length, wild_dist=wild_dist)
+            end
             B_dgp, _ = _kilian_bias_correction(model.B, Psi, n, p)
         end
 

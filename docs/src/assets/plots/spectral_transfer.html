@@ -141,11 +141,11 @@
 <div class="panel-grid">
 <div class="panel">
 <div class="panel-title">Gain (Amplitude)</div>
-<div id="tfgain_202"></div>
+<div id="tfgain_201"></div>
 </div>
 <div class="panel">
 <div class="panel-title">Phase Shift</div>
-<div id="tfphase_203"></div>
+<div id="tfphase_202"></div>
 </div>
 </div>
 
@@ -480,7 +480,7 @@ var hideTip = window.__mem_core.hideTip;
     const refLines = [];
     const regions = [];
 
-    const container = d3.select('#tfgain_202');
+    const container = d3.select('#tfgain_201');
     const W = Math.max(container.node().clientWidth - 24, 280);
     const margin = {top:10, right:15, bottom:35, left:55};
     const w = W - margin.left - margin.right;
@@ -841,7 +841,7 @@ var hideTip = window.__mem_core.hideTip;
     const refLines = [{"value":0,"color":"#999","dash":"4,3"}];
     const regions = [];
 
-    const container = d3.select('#tfphase_203');
+    const container = d3.select('#tfphase_202');
     const W = Math.max(container.node().clientWidth - 24, 280);
     const margin = {top:10, right:15, bottom:35, left:55};
     const w = W - margin.left - margin.right;

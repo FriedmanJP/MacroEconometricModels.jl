@@ -10,6 +10,8 @@
 
 All results support unified `trend()` and `cycle()` accessors, `report()` for tabular output, and `plot_result()` for interactive D3.js visualization.
 
+Two neighboring pages cover related decompositions. [State-Space Models](@ref statespace_page) estimates trend and cycle as latent states of an explicit model, and is the natural next step when the decomposition needs a likelihood. [X-13ARIMA-SEATS](@ref x13_page) removes the *seasonal* component rather than the trend. [Spectral Analysis](@ref spectral_page) supplies `transfer_function`, which plots exactly which frequencies each filter on this page passes.
+
 ```@setup filters
 using MacroEconometricModels, Statistics
 fred = load_example(:fred_md)
@@ -17,6 +19,8 @@ y = filter(isfinite, log.(fred[:, "INDPRO"]))
 ```
 
 ## Quick Start
+
+The examples below filter the log of U.S. industrial production (`INDPRO` from FRED-MD, 804 monthly observations).
 
 **Recipe 1: HP filter on monthly data**
 
@@ -55,12 +59,14 @@ bhp = boosted_hp(y; lambda=129600.0, stopping=:BIC)
 report(bhp)
 ```
 
-**Recipe 6: Visualize any filter result**
+**Recipe 6: Compare cycle amplitudes through the unified accessors**
 
-```julia
-hp = hp_filter(y; lambda=129600.0)
-p = plot_result(hp)
-save_plot(p, "hp_filter.html")
+```@example filters
+(hp = round(std(cycle(hp)), digits=4),
+ hamilton = round(std(cycle(ham)), digits=4),
+ bn = round(std(cycle(bn)), digits=4),
+ bk = round(std(cycle(bk)), digits=4),
+ boosted = round(std(cycle(bhp)), digits=4))
 ```
 
 ---
@@ -82,7 +88,7 @@ where:
 The first term penalizes deviations of the trend from the data; the second penalizes curvature (second differences) in the trend. As ``\lambda \to 0`` the trend converges to the data; as ``\lambda \to \infty`` the trend converges to a linear time trend.
 
 !!! note "Technical Note"
-    The closed-form solution is ``\tau = (I + \lambda D'D)^{-1} y`` where ``D`` is the ``(T-2) \times T`` second-difference matrix. The implementation builds a sparse pentadiagonal system and solves via Cholesky factorization, giving ``O(T)`` computational cost.
+    The closed-form solution is ``\tau = (I + \lambda D'D)^{-1} y`` where ``D`` is the ``(T-2) \times T`` second-difference matrix. The implementation builds a sparse pentadiagonal system and solves via Cholesky factorization, giving ``O(T)`` computational cost. Setting `lambda=0` short-circuits the solve and returns ``\tau = y`` with a zero cycle.
 
 ### Choosing ``\lambda``
 
@@ -109,7 +115,7 @@ p = plot_result(hp)
 <iframe src="../assets/plots/filter_hp.html" width="100%" height="500" frameborder="0" style="border:1px solid #ddd;border-radius:4px;"></iframe>
 ```
 
-The HP trend tracks the low-frequency movements in log industrial production, while the cycle component captures business cycle fluctuations. Here the reported cycle standard deviation is ``0.0314`` (about 3.1 log points), measuring the amplitude of the extracted fluctuations relative to trend.
+The HP trend tracks the low-frequency movements in log industrial production; its mean of ``4.1288`` corresponds to an index level of ``e^{4.1288} \approx 62`` averaged over the sample. The cycle standard deviation is ``0.0314``, so a typical HP business-cycle deviation is about 3.1 percent of trend output. Because the cycle is defined residually as ``y - \tau``, all variation the penalty declines to absorb — including high-frequency measurement noise — lands in the cycle.
 
 ### Keyword Arguments
 
@@ -153,9 +159,11 @@ The fitted values ``\hat{y}_{t+h}`` form the trend and the OLS residuals ``v_t``
 # Monthly parameters: 2-year horizon, 12 monthly lags
 ham = hamilton_filter(y; h=24, p=12)
 report(ham)
+```
 
+```@example filters
 # OLS coefficients from the predictive regression
-ham.beta
+round.(ham.beta, digits=4)
 ```
 
 ```julia
@@ -167,7 +175,7 @@ p = plot_result(ham; original=y)
 <iframe src="../assets/plots/filter_hamilton.html" width="100%" height="500" frameborder="0" style="border:1px solid #ddd;border-radius:4px;"></iframe>
 ```
 
-The Hamilton cycle avoids the spurious cyclicality that plagues the HP filter at sample endpoints. Hamilton (2018) demonstrates that this filter is robust to unit roots and structural breaks, making it the preferred choice when endpoint behavior matters.
+Of the 804 original observations, 769 survive the ``h + p - 1 = 35``-observation loss, leaving a valid range of ``36{:}804``. The regression loads on the current level (``1.2187``), the first lag (``-0.4626``), and the two lags closest to the one-year mark (``-0.3310`` and ``0.5673``); every intervening coefficient is below ``0.1`` in absolute value. The slope coefficients sum to ``0.92``, so the trend is a slightly shrunk projection of the level. The resulting cycle standard deviation, ``0.0609``, is nearly double the HP cycle: what the Hamilton filter calls "cycle" is everything unpredictable at a 24-month horizon, which includes medium-run variation the HP penalty assigns to trend. Hamilton (2018) shows this construction is robust to unit roots and structural breaks, making it the preferred choice when endpoint behavior matters.
 
 ### Keyword Arguments
 
@@ -215,19 +223,18 @@ where:
 - ``c_t`` is the transitory component (mean-zero stationary process)
 
 !!! note "Technical Note"
-    Two methods are available. The classic `:arima` method fits an ARMA model to ``\Delta y_t``, computes the ``\psi``-weights from the MA(``\infty``) representation, and constructs the transitory component. The `:statespace` method estimates the correlated unobserved components (UC) model of Morley, Nelson & Zivot (2003) via MLE and Kalman smoother, allowing correlation between permanent and transitory innovations.
+    The classic `:arima` method fits an ARMA model to ``\Delta y_t`` (order chosen by `auto_arima` over ``p, q \le 6`` when either is `:auto`), computes the ``\psi``-weights from the MA(``\infty``) representation, and constructs the transitory component. When the selected order is ARMA(0,0) the series is a random walk with drift, the transitory component is identically zero, and `report()` says so.
 
 ```@example filters
 # Automatic ARMA order selection for Δy
 bn = beveridge_nelson(y)
 report(bn)
+```
 
+```@example filters
 # Manual ARMA order specification
 bn2 = beveridge_nelson(y; p=2, q=1)
-
-# Correlated UC model (Morley, Nelson & Zivot 2003)
-bn_ss = beveridge_nelson(y; method=:statespace, cycle_order=2)
-nothing # hide
+report(bn2)
 ```
 
 ```julia
@@ -239,7 +246,22 @@ p = plot_result(bn)
 <iframe src="../assets/plots/filter_bn.html" width="100%" height="500" frameborder="0" style="border:1px solid #ddd;border-radius:4px;"></iframe>
 ```
 
-The permanent component tracks the stochastic trend in log industrial production, while the transitory component captures stationary deviations from trend. The long-run multiplier ``\psi(1)`` quantifies how much of each unit innovation becomes permanent --- values above 1 indicate that transitory dynamics amplify the long-run effect of shocks.
+Automatic selection lands on ARIMA(0,1,1) for log industrial production, with drift ``0.0019`` — average monthly growth of 0.19 percent, or 2.3 percent annualized. The long-run multiplier ``\psi(1) = 1.3070`` says a one-unit innovation ultimately shifts the level by 1.31 units, so the transitory dynamics *amplify* rather than damp the permanent effect. Forcing the richer ARMA(2,1) specification barely moves either quantity (``\psi(1) = 1.3388``), which is the usual sign that the MA(1) term already captures the short-run dynamics. The transitory standard deviation, ``0.0029``, is an order of magnitude below every other cycle on this page: under the BN definition almost all movement in industrial production is permanent.
+
+### State-Space Decomposition
+
+The `:statespace` method estimates the correlated unobserved-components model of Morley, Nelson & Zivot (2003) by maximum likelihood and extracts the components with a Kalman smoother. Unlike the ARIMA route it allows the permanent and transitory innovations to be correlated, which is what makes the UC cycle differ from the BN cycle in the first place.
+
+!!! warning "Different field semantics under `:statespace`"
+    The `:statespace` path reuses the `BeveridgeNelsonResult` container but not all of its fields carry the ARIMA meaning. `long_run_multiplier` is fixed at ``1.0`` (the UC model has no ARIMA long-run multiplier) and `arima_order` reports ``(\text{cycle\_order}, 0, 0)``, the AR order of the cycle, not an ARIMA specification. Estimation runs Nelder-Mead to 5000 iterations, takes several seconds on a full monthly sample, and may report near-singular matrix warnings from the diffuse-trend Kalman recursion.
+
+```@example filters
+# Correlated UC model (Morley, Nelson & Zivot 2003)
+bn_ss = beveridge_nelson(y; method=:statespace, cycle_order=2)
+report(bn_ss)
+```
+
+The UC cycle has standard deviation ``0.0103``, roughly three and a half times the ARIMA-based BN cycle, and the two correlate at ``0.70``. The gap is the point of Morley, Nelson & Zivot (2003): once the permanent and transitory innovations are allowed to correlate, the likelihood prefers a materially larger cycle than the BN identity delivers. The drift estimate, ``0.0019``, is essentially identical across the two methods, since both must reproduce the same average growth rate.
 
 ### Keyword Arguments
 
@@ -248,8 +270,8 @@ The permanent component tracks the stochastic trend in log industrial production
 | `method` | `Symbol` | `:arima` | Decomposition method (`:arima` or `:statespace`) |
 | `p` | `Int` or `Symbol` | `:auto` | AR order for ARMA model of ``\Delta y`` (`:auto` uses `auto_arima`) |
 | `q` | `Int` or `Symbol` | `:auto` | MA order for ARMA model of ``\Delta y`` (`:auto` uses `auto_arima`) |
-| `max_terms` | `Int` | `500` | Maximum ``\psi``-weights for MA(``\infty``) truncation |
-| `cycle_order` | `Int` | `2` | AR order for cyclical component (`:statespace` method, 1 or 2) |
+| `max_terms` | `Int` | `500` | Maximum ``\psi``-weights for MA(``\infty``) truncation (`:arima` only) |
+| `cycle_order` | `Int` | `2` | AR order for cyclical component (`:statespace` only, 1 or 2) |
 
 ### Return Value (`BeveridgeNelsonResult{T}`)
 
@@ -258,8 +280,8 @@ The permanent component tracks the stochastic trend in log industrial production
 | `permanent` | `Vector{T}` | Permanent (trend) component |
 | `transitory` | `Vector{T}` | Transitory (cycle) component |
 | `drift` | `T` | Estimated drift ``\mu`` |
-| `long_run_multiplier` | `T` | Long-run multiplier ``\psi(1)`` |
-| `arima_order` | `Tuple{Int,Int,Int}` | ``(p, d, q)`` order used |
+| `long_run_multiplier` | `T` | Long-run multiplier ``\psi(1)``; fixed at ``1.0`` under `:statespace` |
+| `arima_order` | `Tuple{Int,Int,Int}` | ``(p, d, q)`` order used; ``(\text{cycle\_order}, 0, 0)`` under `:statespace` |
 | `T_obs` | `Int` | Number of observations |
 
 ---
@@ -305,10 +327,12 @@ where:
 # Monthly business cycle band: 18–96 months (1.5–8 years), K=36
 bk = baxter_king(y; pl=18, pu=96, K=36)
 report(bk)
+```
 
-# Verify weights sum to zero by construction
+```@example filters
+# Weights sum to zero by construction
 w = bk.weights
-total = w[1] + 2 * sum(w[2:end])  # ≈ 0
+w[1] + 2 * sum(w[2:end])
 ```
 
 ```julia
@@ -320,7 +344,7 @@ p = plot_result(bk; original=y)
 <iframe src="../assets/plots/filter_bk.html" width="100%" height="500" frameborder="0" style="border:1px solid #ddd;border-radius:4px;"></iframe>
 ```
 
-The BK filter extracts fluctuations in the 1.5--8 year range, corresponding to the NBER business cycle definition. The zero-sum weight constraint ensures that unit root processes pass through the filter as stationary series, making it appropriate for trending data without prior differencing.
+The filter returns 732 of the 804 observations — ``2K = 72`` months, six years, are trimmed from the ends — over a valid range of ``37{:}768``. The weights sum to ``-4.2 \times 10^{-17}``, zero to machine precision, which is what allows a unit root process to pass through the filter as a stationary series without prior differencing. The extracted cycle has standard deviation ``0.0294``, just under the HP cycle's ``0.0314``: restricting attention to the 18--96 month band discards the high-frequency noise the HP residual retains, but the two agree closely on the business-cycle content itself.
 
 ### Keyword Arguments
 
@@ -361,12 +385,12 @@ where:
 
 ### Stopping Criteria
 
-Three stopping rules determine the optimal number of iterations ``m^*``:
+Three stopping rules determine the number of iterations ``m^*``:
 
 | Criterion | Symbol | Behavior |
 |-----------|--------|----------|
-| **Phillips-Shi IC** | `:BIC` | Fit AR(1) to cycle at each iteration; stop when the information criterion increases |
-| **ADF test** | `:ADF` | Run ADF test on cycle; stop when unit root null is rejected at level `sig_p` |
+| **Phillips-Shi IC** | `:BIC` | Fit the IC at each iteration; stop at the last iteration before it increases |
+| **ADF test** | `:ADF` | Run an ADF test on the cycle; stop when the unit root null is rejected at level `sig_p` |
 | **Fixed** | `:fixed` | Run exactly `max_iter` iterations |
 
 !!! note "Technical Note"
@@ -376,13 +400,6 @@ Three stopping rules determine the optimal number of iterations ``m^*``:
 # BIC stopping (default) with monthly lambda
 bhp = boosted_hp(y; lambda=129600.0, stopping=:BIC)
 report(bhp)
-
-# ADF stopping — ensures the cycle is stationary
-bhp_adf = boosted_hp(y; lambda=129600.0, stopping=:ADF, sig_p=0.05)
-
-# Fixed iterations for comparison
-bhp_fixed = boosted_hp(y; lambda=129600.0, stopping=:fixed, max_iter=5)
-nothing # hide
 ```
 
 ```julia
@@ -394,7 +411,24 @@ p = plot_result(bhp)
 <iframe src="../assets/plots/filter_boosted_hp.html" width="100%" height="500" frameborder="0" style="border:1px solid #ddd;border-radius:4px;"></iframe>
 ```
 
-The boosted HP trend is sharper than the standard HP trend, tracking structural shifts more closely. Here BIC stopping requires 51 iterations to remove unit root behavior from the cycle --- more iterations imply stronger trend persistence in the original data. Mei, Phillips & Shi (2024) show that the boosted HP filter encompasses the standard HP filter as the special case ``m^* = 1``.
+BIC stopping runs 51 iterations before the information criterion turns up, driving the cycle standard deviation down to ``0.0151``, less than half the single-pass HP value of ``0.0314``. Each pass moves persistent variation out of the cycle and into the trend, so the boosted trend tracks the data more closely than the single-pass HP trend and bends to follow level shifts instead of smoothing through them. Mei, Phillips & Shi (2024) show the boosted HP filter encompasses the standard HP filter as the special case ``m^* = 1``.
+
+!!! warning "The ADF rule can run to `max_iter`"
+    On a strongly trending series the ADF test may never reject: on log industrial production the p-value stalls near ``0.99`` and `:ADF` exhausts `max_iter` without stopping, returning whatever iteration the budget allows. At high iteration counts the ADF regression design becomes ill-conditioned and `adf_test` reports near-singular matrix warnings. Check `iterations` against `max_iter` before trusting an `:ADF` result.
+
+```@example filters
+# ADF stopping — never rejects here, so it runs the full budget
+bhp_adf = boosted_hp(y; lambda=129600.0, stopping=:ADF, sig_p=0.05, max_iter=20)
+
+# Fixed iterations for replication
+bhp_fixed = boosted_hp(y; lambda=129600.0, stopping=:fixed, max_iter=5)
+
+(adf_iterations = bhp_adf.iterations,
+ adf_last_pvalue = round(bhp_adf.adf_pvalues[end], digits=4),
+ fixed_cycle_std = round(std(cycle(bhp_fixed)), digits=4))
+```
+
+The ADF variant stops only because it hits the 20-iteration budget, and its final p-value of ``0.9977`` confirms the cycle is nowhere near rejecting a unit root. The 5-iteration fixed run leaves a cycle standard deviation of ``0.0239``, between the single HP pass and the 51-iteration BIC solution — a direct illustration that the iteration count, not the criterion, is what sets the amplitude.
 
 ### Keyword Arguments
 
@@ -414,31 +448,23 @@ The boosted HP trend is sharper than the standard HP trend, tracking structural 
 | `lambda` | `T` | Smoothing parameter used |
 | `iterations` | `Int` | Number of boosting iterations performed |
 | `stopping` | `Symbol` | Stopping criterion used (`:ADF`, `:BIC`, or `:fixed`) |
-| `bic_path` | `Vector{T}` | Phillips-Shi IC value at each iteration |
-| `adf_pvalues` | `Vector{T}` | ADF p-values at each iteration |
+| `bic_path` | `Vector{T}` | Phillips-Shi IC value at each iteration (empty unless `stopping=:BIC`) |
+| `adf_pvalues` | `Vector{T}` | ADF p-values at each iteration (empty unless `stopping=:ADF`) |
 | `T_obs` | `Int` | Number of observations |
 
 ---
 
 ## Unified Accessors
 
-All filter results inherit from `AbstractFilterResult` and support the `trend()` and `cycle()` accessors for uniform access to decomposition components:
+All filter results inherit from `AbstractFilterResult` and support the `trend()` and `cycle()` accessors, so code that consumes a decomposition never needs to know which filter produced it:
 
 ```@example filters
-hp  = hp_filter(y; lambda=129600.0)
-ham = hamilton_filter(y; h=24, p=12)
-bn  = beveridge_nelson(y)
-bk  = baxter_king(y; pl=18, pu=96, K=36)
-bhp = boosted_hp(y; lambda=129600.0)
+results = ["HP" => hp, "Hamilton" => ham, "BN" => bn, "BK" => bk, "Boosted HP" => bhp]
 
-# Uniform interface across all filter types
-for r in [hp, ham, bn, bk, bhp]
-    t = trend(r)   # trend component
-    c = cycle(r)   # cyclical component
-end
+[(name, length(trend(r)), round(std(cycle(r)), digits=4)) for (name, r) in results]
 ```
 
-For `BeveridgeNelsonResult`, `trend()` returns the permanent component and `cycle()` returns the transitory component.
+For `BeveridgeNelsonResult`, `trend()` returns the permanent component and `cycle()` returns the transitory component. `HamiltonFilterResult` and `BaxterKingResult` return shortened vectors — 769 and 732 elements against the 804 the other three return — so align them with the original series through their `valid_range` field before comparing dates.
 
 ---
 
@@ -447,29 +473,25 @@ For `BeveridgeNelsonResult`, `trend()` returns the permanent component and `cycl
 This example applies all five filters to log industrial production from FRED-MD and compares the extracted business cycles:
 
 ```@example filters
-# Apply all five filters with monthly parameters
 hp  = hp_filter(y; lambda=129600.0)
 ham = hamilton_filter(y; h=24, p=12)
 bn  = beveridge_nelson(y)
 bk  = baxter_king(y; pl=18, pu=96, K=36)
 bhp = boosted_hp(y; lambda=129600.0, stopping=:BIC)
 
-# Report each filter
-report(hp)
-report(ham)
-report(bn)
 report(bk)
-report(bhp)
-
-# Compare cycle amplitudes
-round(std(cycle(hp)), digits=4)
-round(std(cycle(ham)), digits=4)
-round(std(cycle(bn)), digits=4)
-round(std(cycle(bk)), digits=4)
-round(std(cycle(bhp)), digits=4)
 ```
 
-The Hamilton and Baxter-King cycles are shorter than the full sample due to observation loss, while the HP, boosted HP, and Beveridge-Nelson cycles retain full sample length. Cycle standard deviations differ sharply across filters because each isolates a different frequency range: the Hamilton cycle is largest at ``0.0609``, followed by the HP (``0.0314``) and Baxter-King (``0.0294``) cycles, while the boosted HP (``0.0151``) and Beveridge-Nelson (``0.0029``) cycles are far smaller. The BK filter targets a specific band (18--96 months), the HP filter penalizes curvature globally, and the Hamilton filter captures predictable variation over a 2-year horizon. The boosted HP cycle is smaller in amplitude than the standard HP cycle because additional iterations remove residual trend contamination.
+```@example filters
+# Cycle amplitude, in log points, for each decomposition
+(hamilton = round(std(cycle(ham)), digits=4),
+ hp = round(std(cycle(hp)), digits=4),
+ bk = round(std(cycle(bk)), digits=4),
+ boosted_hp = round(std(cycle(bhp)), digits=4),
+ bn = round(std(cycle(bn)), digits=4))
+```
+
+Cycle standard deviations span a factor of twenty across the five filters, because each isolates a different frequency range. The Hamilton cycle is largest at ``0.0609`` — it treats everything unforecastable two years ahead as cyclical. The HP (``0.0314``) and Baxter-King (``0.0294``) cycles agree closely, which is reassuring: one penalizes curvature globally and the other targets the 18--96 month band explicitly, yet they recover nearly the same business-cycle amplitude. The boosted HP cycle (``0.0151``) is smaller because 51 iterations move persistent variation into the trend, and the Beveridge-Nelson cycle (``0.0029``) is smallest because the BN identity attributes nearly all movement in industrial production to the permanent component. Report the filter alongside any cycle statistic: the number means nothing without it.
 
 ---
 
@@ -483,9 +505,11 @@ The Hamilton and Baxter-King cycles are shorter than the full sample due to obse
 
 4. **Beveridge-Nelson on I(0) data.** The BN decomposition assumes the series is I(1). Applying it to a stationary series produces a degenerate decomposition where the permanent component absorbs nearly all variation. Verify the unit root assumption with `adf_test` or `kpss_test` before using.
 
-5. **Boosted HP stopping criterion choice.** The `:BIC` criterion balances parsimony and fit but may stop too early on series with strong trend persistence. The `:ADF` criterion ensures cycle stationarity but may over-iterate on near-unit-root processes. Use `:fixed` with a known iteration count for replication studies.
+5. **Reading `:statespace` fields as ARIMA quantities.** Under `method=:statespace` the `long_run_multiplier` field is a hard-coded ``1.0`` and `arima_order` reports the cycle AR order as ``(p, 0, 0)``. Neither is an estimate. Use the `:arima` method when the long-run multiplier is the quantity of interest.
 
-6. **HP filter endpoint bias.** The HP filter exhibits spurious cyclicality at sample endpoints (Hamilton 2018). Real-time analysis that depends on the most recent observations should prefer the Hamilton filter or boosted HP, which are more robust at the boundary.
+6. **Boosted HP stopping criterion choice.** The `:BIC` criterion balances parsimony and fit. The `:ADF` criterion targets cycle stationarity but frequently exhausts `max_iter` on near-unit-root processes — always compare `iterations` against `max_iter`. Use `:fixed` with a known iteration count for replication studies.
+
+7. **HP filter endpoint bias.** The HP filter exhibits spurious cyclicality at sample endpoints (Hamilton 2018). Real-time analysis that depends on the most recent observations should prefer the Hamilton filter or boosted HP, which are more robust at the boundary.
 
 ---
 
@@ -504,7 +528,7 @@ The Hamilton and Baxter-King cycles are shorter than the full sample due to obse
   *Journal of Monetary Economics*, 7(2), 151--174. [DOI](https://doi.org/10.1016/0304-3932(81)90040-4)
 
 - Morley, J. C., Nelson, C. R., & Zivot, E. (2003). Why Are the Beveridge-Nelson and Unobserved-Components Decompositions of GDP So Different?
-  *Review of Economics and Statistics*, 85(2), 235--243. [DOI](https://doi.org/10.1162/003465303765299774)
+  *Review of Economics and Statistics*, 85(2), 235--243. [DOI](https://doi.org/10.1162/003465303765299765)
 
 - Baxter, M., & King, R. G. (1999). Measuring Business Cycles: Approximate Band-Pass Filters for Economic Time Series.
   *Review of Economics and Statistics*, 81(4), 575--593. [DOI](https://doi.org/10.1162/003465399558454)
@@ -512,5 +536,5 @@ The Hamilton and Baxter-King cycles are shorter than the full sample due to obse
 - Phillips, P. C. B., & Shi, Z. (2021). Boosting: Why You Can Use the HP Filter.
   *International Economic Review*, 62(2), 521--570. [DOI](https://doi.org/10.1111/iere.12495)
 
-- Mei, Z., Phillips, P. C. B., & Shi, Z. (2024). The Boosted HP Filter Is More General Than You Might Think.
+- Mei, Z., Phillips, P. C. B., & Shi, Z. (2024). The Boosted Hodrick-Prescott Filter Is More General Than You Might Think.
   *Journal of Applied Econometrics*, 39(7), 1260--1281. [DOI](https://doi.org/10.1002/jae.3086)

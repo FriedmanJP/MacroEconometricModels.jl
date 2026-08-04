@@ -678,18 +678,19 @@ end
         post = estimate_bvar(Y3, 2; n_draws=150)
         g = generalized_fevd(post, 8)
         gn = generalized_fevd(post, 8; normalize=true)
-        @test size(g.quantiles) == (8, 2, 2, 3)          # (horizon, var, shock, quantile)
-        @test size(g.point_estimate) == (8, 2, 2)
+        # Axis order unified with FEVD: (variable, shock, horizon[, quantile]) (#527)
+        @test size(g.quantiles) == (2, 2, 8, 3)
+        @test size(g.point_estimate) == (2, 2, 8)
         @test all(isfinite, g.quantiles)
         @test all(g.quantiles .>= -1e-12)
         # bands are ordered across the QUANTILE axis (which is last)
         @test all(g.quantiles[:, :, :, 1] .<= g.quantiles[:, :, :, 2] .+ 1e-12)
         @test all(g.quantiles[:, :, :, 2] .<= g.quantiles[:, :, :, 3] .+ 1e-12)
-        @test all(isapprox.(vec(sum(gn.point_estimate[8, :, :]; dims=2)), 1.0; atol=1e-8))
+        @test all(isapprox.(vec(sum(gn.point_estimate[:, :, 8]; dims=2)), 1.0; atol=1e-8))
         @test g.n_effective == 150 && g.n_failed == 0
         # the posterior mean sits close to the OLS point estimate
         gv = generalized_fevd(estimate_var(Y3, 2), 8)
-        @test maximum(abs.(g.point_estimate[8, :, :] .- gv.proportions[:, :, 8])) < 0.1
+        @test maximum(abs.(g.point_estimate[:, :, 8] .- gv.proportions[:, :, 8])) < 0.1
     end
 
     @testset "validation and display" begin
@@ -816,7 +817,13 @@ end
         end
         bc = irf(mv, 12; ci_type=:bootstrap, reps=80, seed=1, bias_correct=true, bias_reps=40)
         @test all(isfinite, bc.ci_lower) && all(bc.ci_lower .<= bc.ci_upper)
-        @test bc.values == base.values
+        # Kilian (1998): bias_correct also corrects the point IRF (#564) — the
+        # corrected point must actually move relative to the uncorrected one.
+        @test all(isfinite, bc.values)
+        @test size(bc.values) == size(base.values)
+        @test maximum(abs, bc.values .- base.values) > 1e-10
+        # Rejected outside the bootstrap machinery rather than silently ignored
+        @test_throws ArgumentError irf(mv, 12; ci_type=:none, bias_correct=true)
         # reproducible at a fixed seed
         @test irf(mv, 12; ci_type=:bootstrap, reps=40, seed=99, bootstrap=:wild).ci_lower ==
               irf(mv, 12; ci_type=:bootstrap, reps=40, seed=99, bootstrap=:wild).ci_lower

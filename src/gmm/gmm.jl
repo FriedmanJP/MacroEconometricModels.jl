@@ -468,7 +468,12 @@ function estimate_gmm(moment_fn::Function, theta0::AbstractVector{T}, data;
     bread_inv = robust_inv(bread)
 
     # For efficient GMM (W = Ω^{-1}), the variance simplifies to (G'WG)^{-1}
-    if weighting in (:optimal, :two_step, :iterated)
+    # Single-observation moments (n_obs == 1, e.g. analytical DSGE GMM matching a
+    # deterministic moment vector) make demeaned HAC Ω degenerate (#561). Treat as
+    # classical minimum-distance under the chosen W: V = (G'WG)^{-1}.
+    if n_obs == 1
+        vcov = bread_inv
+    elseif weighting in (:optimal, :two_step, :iterated)
         vcov = bread_inv / n_obs
     else
         # General sandwich

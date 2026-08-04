@@ -40,3 +40,10 @@ function is_stationary(model::VARModel{T}) where {T}
     max_mod = T(maximum(abs.(eigs)))
     VARStationarityResult(max_mod < one(T), eigs, max_mod, F)
 end
+
+"""Stata/EViews-style report for [`VARStationarityResult`](@ref) (issue #585)."""
+function report(io::IO, r::VARStationarityResult)
+    show(io, r)
+    return r
+end
+report(r::VARStationarityResult) = report(stdout, r)

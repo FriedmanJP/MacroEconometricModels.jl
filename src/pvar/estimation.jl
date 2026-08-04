@@ -418,6 +418,7 @@ function estimate_pvar(d::PanelData{T}, p::Int;
         m_dim, p, n_predet, n_exog,
         dep_names, predet_vars, exog_vars,
         method, transformation, steps, system_constant && system_instruments,
+        min_lag_endo, max_lag_endo, collapse, pca_instruments, pca_max_components,
         N, n_periods_max, total_obs,
         (min=min_obs, avg=avg_obs, max=max_obs),
         group_Z, group_resid_trans, W_final, n_inst,
@@ -690,6 +691,7 @@ function estimate_pvar_feols(d::PanelData{T}, p::Int;
         m_dim, p, n_predet, n_exog,
         dep_names, predet_vars, exog_vars,
         :fe_ols, :demean, :onestep, false,
+        2, 99, false, false, 0,   # instrument knobs unused for FE-OLS
         N, n_periods_max, total_obs,
         (min=minimum(eff_obs), avg=mean(eff_obs), max=maximum(eff_obs)),
         empty_Z, empty_E, zeros(T, 0, 0), 0,

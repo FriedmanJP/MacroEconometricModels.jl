@@ -75,6 +75,45 @@ using Test, MacroEconometricModels, Random, StatsAPI
         @test_throws ArgumentError adf_2break_test(y_2break; model=:invalid)
     end
 
+    # Issue #577: the Narayan-Popp tables do not describe this additive-outlier
+    # statistic; they left a driftless random walk rejecting ~70% of the time at
+    # 5%. Critical values are now simulated from the null of this implementation
+    # (test/oracle/gen_lm_adf2break_cvs.jl).
+    @testset "Simulated critical values (#577)" begin
+        M = MacroEconometricModels
+        grid = M.BREAK_TEST_SIM_T
+
+        for model in (:level, :both), n in (60, 100, 150, 250, 500, 900)
+            row = M._adf_2break_cv_row(model, n)
+            @test row[1] < row[2] < row[3] < row[4]
+            cv = M._adf_2break_cv(model, n, Float64)
+            @test cv[1] == row[1] && cv[5] == row[3] && cv[10] == row[4]
+        end
+
+        for (i, Tg) in enumerate(grid)
+            row = M._adf_2break_cv_row(:both, Tg)
+            @test all(collect(row) .≈ M.ADF_2BREAK_SIM_CV[:both][i, :])
+            @test all(abs.(collect(M._adf_2break_cv_row(:both, Tg - 1)) .- collect(row)) .< 0.01)
+            @test all(abs.(collect(M._adf_2break_cv_row(:both, Tg + 1)) .- collect(row)) .< 0.01)
+        end
+        @test M._adf_2break_cv_row(:level, 40) == M._adf_2break_cv_row(:level, grid[1])
+        @test M._adf_2break_cv_row(:level, 5000) == M._adf_2break_cv_row(:level, grid[end])
+        # trend breaks add regressors: Model C needs a more negative cutoff
+        @test M._adf_2break_cv_row(:both, 200)[3] < M._adf_2break_cv_row(:level, 200)[3]
+
+        # A driftless random walk (the null) must not reject; white noise must.
+        y_null = cumsum(randn(MersenneTwister(577_001), 200))
+        y_alt = randn(MersenneTwister(577_002), 200)
+        for model in (:level, :both)
+            r0 = adf_2break_test(y_null; model=model, lags=0)
+            @test r0.statistic > r0.critical_values[5]
+            @test r0.pvalue > 0.05
+            r1 = adf_2break_test(y_alt; model=model, lags=0)
+            @test r1.statistic < r1.critical_values[5]
+            @test r1.pvalue < 0.05
+        end
+    end
+
     @testset "show method" begin
         result = result_A
         io = IOBuffer()

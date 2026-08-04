@@ -1,11 +1,13 @@
 # [Structural Breaks](@id tests_breaks_page)
 
-This page covers tests for parameter instability and structural change in time series models. Structural breaks --- abrupt shifts in regression coefficients, factor loadings, or the number of latent factors --- invalidate standard inference and produce misleading forecasts if left undetected. Four complementary frameworks are provided:
+This page covers tests for parameter instability and structural change. Structural breaks --- abrupt shifts in regression coefficients, factor loadings, or a cointegrating relationship --- invalidate standard inference and produce misleading forecasts when they go undetected. For the full test battery and the tables that route a question to a test, see [Hypothesis Tests](@ref tests_page). Four complementary frameworks are provided:
 
-- **Andrews (1993)**: Tests for a single unknown break point in a linear regression. Nine test variants combine three base statistics (Wald, LR, LM) with three functionals (supremum, exponential average, mean).
-- **Bai-Perron (1998, 2003)**: Tests for multiple unknown break points. Dynamic programming finds globally optimal break dates, with sequential testing and information criteria (BIC, LWZ) for break number selection.
-- **Factor model break tests**: Three methods for detecting instability in factor loadings or the number of factors --- Breitung-Eickmeier (2011) CUSUM, Chen-Dolado-Gonzalo (2014) eigenvalue ratio, and Han-Inoue (2015) sup-Wald.
-- **Gregory-Hansen (1996)**: Tests for cointegration allowing a single structural break in the cointegrating relationship. Three models (level shift, level + trend, regime shift) and three test statistics (ADF*, Zt*, Za*).
+- **Andrews (1993)**: One unknown break point in a linear regression. Nine variants combine three base statistics (Wald, LR, LM) with three functionals (supremum, exponential average, mean).
+- **Bai-Perron (1998, 2003)**: Multiple unknown break points. Dynamic programming finds globally optimal break dates; sequential sup-F tests and the BIC and LWZ criteria select the number of breaks.
+- **Factor model break tests**: Instability in factor loadings --- Breitung-Eickmeier (2011) pooled per-series LM, Chen-Dolado-Gonzalo (2014) regression sup-LM, and Han-Inoue (2015) sup-Wald.
+- **Gregory-Hansen (1996)**: Cointegration allowing one structural break in the long-run relationship. Three break models (level shift, level + trend, regime shift) and three residual statistics (ADF\*, Zt\*, Za\*).
+
+Every test on this page returns a result object that `report` renders as a specification block, a statistics block, a critical-value block, and a conclusion line. Unit root and cointegration tests without breaks live on [Unit Root & Cointegration](@ref tests_unitroot_page); the regression-stability tests that condition on a *known* break date (`chow_test`, `cusum_test`) live on [Linear Regression](@ref regression_page).
 
 ```@setup test_breaks
 using MacroEconometricModels, Random
@@ -14,57 +16,56 @@ Random.seed!(42)
 
 ## Quick Start
 
-**Recipe 1: Andrews SupF test on a regression**
+Each recipe seeds its own generator, so the numbers below reproduce exactly when the block is copied into a fresh session.
+
+**Recipe 1: Andrews sup-Wald test for one unknown break**
 
 ```@example test_breaks
-# Linear regression with a break in the slope at t=100
-X = hcat(ones(200), randn(200))
-y = X * [1.0, 2.0] + randn(200) * 0.5
-y[101:end] .+= X[101:end, 2] .* 3.0  # slope shifts from 2.0 to 5.0
+Random.seed!(42)
+X = hcat(ones(200), randn(200))                  # intercept + one regressor
+y = X * [1.0, 2.0] + 0.5 * randn(200)
+y[101:end] .+= 3.0 .* X[101:end, 2]              # slope jumps from 2.0 to 5.0 at t = 100
 
-result = andrews_test(y, X; test=:supwald)
-report(result)
+report(andrews_test(y, X; test=:supwald))
 ```
 
-**Recipe 2: Bai-Perron multiple break detection**
+**Recipe 2: Bai-Perron search for multiple breaks**
 
 ```@example test_breaks
-# Three regimes with different intercepts
-T_len = 300
-X = ones(T_len, 1)
-y = vcat(ones(100) * 2.0, ones(100) * 5.0, ones(100) * 1.0) + randn(T_len) * 0.5
+Random.seed!(43)
+X_bp = ones(300, 1)                              # intercept-only regression
+y_bp = vcat(fill(2.0, 100), fill(5.0, 100), fill(1.0, 100)) + 0.5 * randn(300)
 
-result = bai_perron_test(y, X; max_breaks=5)
-report(result)
+report(bai_perron_test(y_bp, X_bp; max_breaks=5))
 ```
 
-**Recipe 3: Factor break test**
+**Recipe 3: Factor loading stability**
 
 ```@example test_breaks
-# Panel with 50 variables and 3 factors
-X = randn(200, 50)
-result = factor_break_test(X, 3; method=:breitung_eickmeier)
-report(result)
+Random.seed!(44)
+F = randn(200, 3)                                # 3 common factors
+Lambda = randn(60, 3)                            # stable loadings for 60 variables
+X_fac = F * Lambda' + 0.5 * randn(200, 60)
+
+report(factor_break_test(X_fac, 3; method=:han_inoue))
 ```
 
-**Recipe 4: Gregory-Hansen cointegration test with regime shift**
+**Recipe 4: Cointegration with a regime shift**
 
 ```@example test_breaks
-# Two cointegrated series with a regime shift at t=100
-T_len = 200
-x = cumsum(randn(T_len))
-y = vcat(1.0 .+ 0.8 .* x[1:100], 3.0 .+ 1.5 .* x[101:end]) + randn(T_len) * 0.5
+Random.seed!(45)
+x_gh = cumsum(randn(200))                        # I(1) regressor
+y_gh = vcat(1.0 .+ 0.8 .* x_gh[1:100],           # slope and intercept both shift
+            3.0 .+ 1.5 .* x_gh[101:end]) + 0.5 * randn(200)
 
-Y = hcat(y, x)
-result = gregory_hansen_test(Y; model=:CS)
-report(result)
+report(gregory_hansen_test(hcat(y_gh, x_gh); model=:CS))
 ```
 
 ---
 
 ## Andrews Structural Break Test
 
-The Andrews (1993) test detects a single structural break at an unknown date in a linear regression model. The null hypothesis is parameter constancy: all regression coefficients remain stable over the entire sample. The test searches over a trimmed range of candidate break dates and selects the date producing the most extreme test statistic.
+The Andrews (1993) test detects a single structural break at an unknown date in a linear regression. The null hypothesis is parameter constancy: every coefficient is the same over the whole sample. The test evaluates a break statistic at each candidate date in a trimmed range and aggregates the resulting sequence with a functional.
 
 Consider the linear model:
 
@@ -78,39 +79,39 @@ where:
 - ``\beta`` is the ``k \times 1`` parameter vector
 - ``u_t`` is the error term
 
-Under the alternative hypothesis, the parameter vector shifts at some unknown break date ``t_b``:
+Under the alternative the parameter vector shifts at an unknown break date ``t_b``:
 
 ```math
 \beta = \begin{cases} \beta_1 & t \leq t_b \\ \beta_2 & t > t_b \end{cases}
 ```
 
-The **Wald statistic** at a candidate break date ``t_b`` compares sub-sample estimates:
+The **Wald statistic** at a candidate break date ``t_b`` compares the two sub-sample estimates:
 
 ```math
 W(t_b) = (\hat{\beta}_1 - \hat{\beta}_2)' \left[ V_1 + V_2 \right]^{-1} (\hat{\beta}_1 - \hat{\beta}_2)
 ```
 
 where:
-- ``\hat{\beta}_1`` and ``\hat{\beta}_2`` are OLS estimates from the two sub-samples
-- ``V_1 = \hat{\sigma}_1^2 (X_1' X_1)^{-1}`` and ``V_2 = \hat{\sigma}_2^2 (X_2' X_2)^{-1}`` are their covariance matrices
+- ``\hat{\beta}_1`` and ``\hat{\beta}_2`` are OLS estimates from observations ``1{:}t_b`` and ``(t_b{+}1){:}T``
+- ``V_1 = \hat{\sigma}_1^2 (X_1' X_1)^{-1}`` and ``V_2 = \hat{\sigma}_2^2 (X_2' X_2)^{-1}`` are their covariance matrices, each using the degrees-of-freedom-corrected sub-sample variance
 
 The **LR statistic** compares the full-sample and split-sample residual sums of squares:
 
 ```math
-\text{LR}(t_b) = T \left[ \ln(\text{SSR}_0 / T) - \ln(\text{SSR}_{split} / T) \right]
+\text{LR}(t_b) = T \left[ \ln(\text{SSR}_0 / T) - \ln(\text{SSR}_{\text{split}} / T) \right]
 ```
 
-The **LM statistic** is a score-based test requiring only the full-sample estimates:
+The **LM statistic** is a score test that needs only the full-sample estimates:
 
 ```math
 \text{LM}(t_b) = \frac{S(t_b)' (X'X)^{-1} S(t_b)}{\hat{\sigma}^2 \cdot \tau (1 - \tau)}
 ```
 
-where ``S(t_b) = \sum_{t=1}^{t_b} X_t \hat{u}_t`` is the partial sum of scores and ``\tau = t_b / T``.
+where ``S(t_b) = \sum_{t=1}^{t_b} X_t \hat{u}_t`` is the partial sum of scores, ``\tau = t_b / T``, and ``\hat{\sigma}^2 = \text{SSR}_0/T``.
 
 Three **functionals** aggregate the base statistic over the trimmed range ``[\pi T, (1 - \pi) T]``:
 
-| Variant | Functional | Base Statistic | Reference |
+| Variant | Functional | Base statistic | Reference |
 |---------|-----------|----------------|-----------|
 | `:supwald` | Supremum | Wald | Andrews (1993) |
 | `:suplr` | Supremum | LR | Andrews (1993) |
@@ -122,59 +123,81 @@ Three **functionals** aggregate the base statistic over the trimmed range ``[\pi
 | `:meanlr` | Mean | LR | Andrews-Ploberger (1994) |
 | `:meanlm` | Mean | LM | Andrews-Ploberger (1994) |
 
-The **supremum** functional takes the maximum statistic over all candidate dates and has optimal power against a single large break. The **exponential** functional computes ``\log(\text{mean}(\exp(W/2)))`` and the **mean** functional computes ``\text{mean}(W)``; both have superior power against small or gradual parameter changes (Andrews & Ploberger 1994).
+The **supremum** functional takes the maximum statistic over all candidate dates and has optimal power against a single large break. The **exponential** functional computes ``\log(\text{mean}(\exp(W/2)))`` and the **mean** functional computes ``\text{mean}(W)``; both weight every candidate date and gain power against small or gradual parameter changes (Andrews & Ploberger 1994). All three report the same `break_index` --- the date at which the base statistic peaks --- because only the aggregation, not the argmax, differs across functionals.
 
 !!! note "Technical Note"
-    P-values are computed by interpolation from Hansen (1997) critical value tables, which are tabulated by the number of parameters ``k`` and the functional type. Critical values depend on the trimming fraction ``\pi`` and are pre-computed for the standard ``\pi = 0.15`` setting. The asymptotic distribution under the null is a functional of a ``k``-dimensional Brownian bridge process.
+    P-values interpolate the Hansen (1997) critical-value tables, which are indexed by the number of parameters ``k`` and the functional. Models with ``k > 10`` reuse the ``k = 10`` column. The tables are computed for the standard trimming ``\pi = 0.15``, so a different `trimming` changes the statistic but not the reference distribution. Interpolated p-values are floored at 0.005 beyond the 1% critical value and rise toward 1.0 below the 10% value; the asymptotic null distribution is a functional of a ``k``-dimensional Brownian bridge.
 
 ```@example test_breaks
-# Generate data with a break in slope at t=100
-T_len = 200
-X = hcat(ones(T_len), randn(T_len))
-beta_pre = [1.0, 2.0]
-beta_post = [1.0, 5.0]
-y = vcat(X[1:100, :] * beta_pre, X[101:end, :] * beta_post) + randn(T_len) * 0.5
+Random.seed!(101)
+X_a = hcat(ones(200), randn(200))
+y_a = vcat(X_a[1:100, :] * [1.0, 2.0],           # slope 2.0 for the first half
+           X_a[101:end, :] * [1.0, 5.0]) + 0.5 * randn(200)
 
-# Sup-Wald test (highest power against a single sharp break)
-result_sup = andrews_test(y, X; test=:supwald)
-report(result_sup)
-
-# Exp-Wald test (power against gradual changes)
-result_exp = andrews_test(y, X; test=:expwald)
-report(result_exp)
+report(andrews_test(y_a, X_a; test=:supwald))
 ```
 
-The sup-Wald test rejects the null of parameter constancy when the p-value falls below the chosen significance level (typically 0.05). The `break_index` field reports the estimated break location --- the observation at which the test statistic achieves its supremum. Comparing across the three functionals provides robustness: rejection by the supremum functional points to a sharp break, while rejection by the exponential or mean functional suggests a more diffuse shift.
+The sup-Wald statistic of 1803.77 sits two orders of magnitude above the 1% critical value of 14.72, so the p-value hits its 0.005 floor and parameter constancy is rejected decisively. The estimated break at observation 100 --- a break fraction of exactly 0.5 --- recovers the true break date, and the 200-observation sample with a slope shift from 2.0 to 5.0 leaves no ambiguity about the split. This is the configuration the supremum functional is built for: one sharp, large change at a single date.
+
+The exponential and mean functionals apply different weights to the same statistic sequence:
+
+```@example test_breaks
+report(andrews_test(y_a, X_a; test=:expwald))
+```
+
+```@example test_breaks
+report(andrews_test(y_a, X_a; test=:meanwald))
+```
+
+Exp-Wald returns 896.94 against a 1% critical value of 5.01, and mean-Wald returns 411.73 against 7.58 --- both reject at the same 0.005 floor and both place the break at observation 100. The statistics are not comparable in level across functionals because each has its own null distribution; only the position relative to the matching critical values carries information. Agreement across all three functionals, as here, is the signature of a break sharp enough that the weighting scheme does not matter.
+
+Under the null the test is correctly sized but not conservative, because the supremum searches over every admissible split:
+
+```@example test_breaks
+Random.seed!(102)
+X_0 = hcat(ones(200), randn(200))
+y_0 = X_0 * [1.0, 2.0] + 0.5 * randn(200)        # no break
+r_0 = andrews_test(y_0, X_0; test=:supwald)
+(statistic = round(r_0.statistic, digits=3),
+ pvalue = round(r_0.pvalue, digits=3),
+ break_index = r_0.break_index)
+```
+
+With no break in the data the statistic falls to 9.967, below the 5% critical value of 11.03, and the test correctly fails to reject at conventional levels. The p-value of 0.078 is nevertheless small enough to look suggestive, which is exactly the size behaviour to expect: the maximum of a Brownian-bridge functional over 140 candidate dates is large by construction, and the reported `break_index` of 96 is a sampling artefact with no economic content. Never read a break date from a test that does not reject.
 
 ### Options
 
-| Argument | Type | Default | Description |
+| Keyword | Type | Default | Description |
 |----------|------|---------|-------------|
-| `test` | `Symbol` | `:supwald` | Test variant: any of the 9 combinations listed above |
-| `trimming` | `Real` | `0.15` | Fraction of sample trimmed from each end |
+| `test` | `Symbol` | `:supwald` | Any of the nine functional/base-statistic combinations above |
+| `trimming` | `Real` | `0.15` | Fraction of the sample trimmed from each end, in ``(0, 0.5)`` |
 
-### AndrewsResult Return Values
+The test requires at least 20 observations and ``y`` and ``X`` with matching row counts.
+
+### Return values
 
 | Field | Type | Description |
 |-------|------|-------------|
-| `statistic` | `T` | Test statistic (functional applied to base statistic sequence) |
-| `pvalue` | `T` | Approximate p-value from Hansen (1997) critical value tables |
-| `break_index` | `Int` | Estimated break date (observation index of supremum) |
-| `break_fraction` | `T` | Break location as fraction of sample |
-| `test_type` | `Symbol` | Test variant (e.g. `:supwald`, `:explr`) |
-| `critical_values` | `Dict{Int,T}` | Critical values at 1%, 5%, 10% significance levels |
-| `stat_sequence` | `Vector{T}` | Full sequence of base statistics across candidate break dates |
+| `statistic` | `T` | Functional applied to the base-statistic sequence |
+| `pvalue` | `T` | Interpolated p-value from the Hansen (1997) tables |
+| `break_index` | `Int` | Observation index at which the base statistic peaks |
+| `break_fraction` | `T` | `break_index / nobs` |
+| `test_type` | `Symbol` | Test variant, e.g. `:supwald` |
+| `critical_values` | `Dict{Int,T}` | Critical values keyed by `1`, `5`, `10` (percent) |
+| `stat_sequence` | `Vector{T}` | Base statistic at every candidate break date |
 | `trimming` | `T` | Trimming fraction used |
 | `nobs` | `Int` | Number of observations |
-| `n_params` | `Int` | Number of regressors (``k``) |
+| `n_params` | `Int` | Number of regressors ``k`` |
+
+`plot_result(result)` draws the full `stat_sequence` over the trimmed candidate range, with the estimated break date as a vertical line and the 5% critical value as a dashed horizontal reference.
 
 ---
 
 ## Bai-Perron Multiple Break Test
 
-The Bai-Perron (1998, 2003) procedure detects and dates multiple structural breaks in a linear regression model. Dynamic programming finds globally optimal break dates that minimize the total sum of squared residuals, avoiding the suboptimality of sequential single-break methods.
+The Bai-Perron (1998, 2003) procedure detects and dates multiple structural breaks. Dynamic programming finds the break dates that globally minimize the total sum of squared residuals, avoiding the suboptimality of sequential single-break searches.
 
-Consider the linear model with ``m`` breaks (``m + 1`` regimes):
+The model with ``m`` breaks has ``m + 1`` regimes:
 
 ```math
 y_t = X_t' \beta_j + u_t, \quad t = T_{j-1} + 1, \ldots, T_j, \quad j = 1, \ldots, m + 1
@@ -191,18 +214,18 @@ The optimal break dates minimize the total SSR:
 (\hat{T}_1, \ldots, \hat{T}_m) = \arg\min_{T_1, \ldots, T_m} \sum_{j=1}^{m+1} \sum_{t=T_{j-1}+1}^{T_j} (y_t - X_t' \hat{\beta}_j)^2
 ```
 
-The **sup-F test** for ``l`` breaks against zero breaks is:
+The **sup-F test** of ``l`` breaks against zero breaks is:
 
 ```math
 \text{sup-}F(l) = \frac{(\text{SSR}_0 - \text{SSR}_l) / (l \cdot k)}{\text{SSR}_l / (T - (l+1) \cdot k)}
 ```
 
 where:
-- ``\text{SSR}_0`` is the full-sample residual sum of squares (no breaks)
+- ``\text{SSR}_0`` is the full-sample residual sum of squares
 - ``\text{SSR}_l`` is the minimized SSR with ``l`` optimally placed breaks
 - ``k`` is the number of regressors
 
-The **sequential sup-F test** ``\text{sup-}F(l+1 | l)`` tests whether adding one more break significantly improves the fit over the ``l``-break model. Two **information criteria** provide alternative break number selection:
+The **sequential test** ``\text{sup-}F(l+1 \mid l)`` asks whether one more break improves the fit over the ``l``-break model. Two **information criteria** offer an alternative to sequential testing:
 
 ```math
 \text{BIC}(m) = T \ln(\text{SSR}_m / T) + (m+1) k \ln T
@@ -214,202 +237,263 @@ The **sequential sup-F test** ``\text{sup-}F(l+1 | l)`` tests whether adding one
 
 where:
 - ``m`` is the number of breaks
-- The LWZ criterion (Liu, Wu & Zidek 1997) penalizes additional breaks more heavily than BIC
+- ``(m+1)k`` is the total number of estimated coefficients
+- the LWZ criterion (Liu, Wu & Zidek 1997) penalizes each additional regime more heavily than BIC
+
+Both criteria are always computed; `criterion` chooses which one sets the reported `n_breaks`.
 
 !!! note "Technical Note"
-    The dynamic programming algorithm has complexity ``O(T^2 \cdot m_{\max})``, where ``T`` is the sample size and ``m_{\max}`` is the maximum number of breaks. A segment SSR matrix is pre-computed and reused across all candidate break configurations. Each segment requires at least ``h = \max(k+1, \lceil \pi T \rceil)`` observations, where ``\pi`` is the trimming fraction.
+    The dynamic program has complexity ``O(T^2 \cdot m_{\max})``. A segment SSR matrix is pre-computed once and reused across all candidate configurations. Each segment needs at least ``h = \max(k+1, \lceil \pi T \rceil)`` observations, so `max_breaks` is silently reduced to ``\lfloor T/h \rfloor - 1`` when the requested value is infeasible. Break-date confidence intervals follow Bai (1997), with a half-width of ``1.96^2 \hat{\sigma}^2 / (\delta' \hat{Q} \delta)`` where ``\delta`` is the coefficient change at the break.
 
 ```@example test_breaks
-# Generate data with 2 breaks: regimes at t=1-100, 101-200, 201-300
-T_len = 300
-X = hcat(ones(T_len), randn(T_len))
+Random.seed!(103)
+X_2 = hcat(ones(300), randn(300))
+y_2 = vcat(X_2[1:100, :]   * [1.0,  2.0],        # regime 1
+           X_2[101:200, :] * [3.0, -1.0],        # regime 2
+           X_2[201:300, :] * [0.0,  4.0]) + 0.5 * randn(300)
 
-beta1 = [1.0, 2.0]
-beta2 = [3.0, -1.0]
-beta3 = [0.0, 4.0]
-
-y = vcat(
-    X[1:100, :] * beta1,
-    X[101:200, :] * beta2,
-    X[201:300, :] * beta3
-) + randn(T_len) * 0.5
-
-result = bai_perron_test(y, X; max_breaks=5, criterion=:bic)
-report(result)
-
-# Examine regime-specific coefficients
-[(regime=j, intercept=round(coefs[1], digits=2), slope=round(coefs[2], digits=2))
- for (j, coefs) in enumerate(result.regime_coefs)]
-
-# Compare BIC and LWZ break number selection
-(bic_breaks=argmin(result.bic_values) - 1, lwz_breaks=argmin(result.lwz_values) - 1)
+bp = bai_perron_test(y_2, X_2; max_breaks=5, criterion=:bic)
+report(bp)
 ```
 
-The `n_breaks` field reports the selected number of breaks. The `break_dates` vector gives the observation indices where breaks occur. The `regime_coefs` and `regime_ses` vectors contain coefficient estimates and standard errors for each regime. The `supf_stats` and `sequential_stats` vectors provide the test statistics for formal inference, while `bic_values` and `lwz_values` give information criteria for each candidate number of breaks (0 through `max_breaks`).
+The procedure recovers the design exactly: two breaks at observations 100 and 200, each with a 95% confidence interval two observations wide. The sequential column tells the same story --- sup-F(2|1) is 1142.21 with a p-value at the 0.001 floor, while sup-F(3|2) falls to 3.21 with a p-value of 0.765 --- so the sequential rule stops at two breaks. BIC and LWZ both mark ``m = 2`` as the minimum, so all three selection devices agree; disagreement between them is the normal signal that the break structure is weakly identified.
 
-The sequential testing procedure starts from the null of zero breaks: if sup-F(1) rejects, test sup-F(2|1), and continue until the first non-rejection. BIC and LWZ provide complementary model selection. BIC tends to select more breaks in large samples, while LWZ is more conservative.
+The regime coefficients recover the true parameter vectors to within two standard errors:
 
-P-values interpolate the Bai & Perron (1998, 2003) critical-value tables, indexed by the number of breaking regressors ``q`` (every regressor breaks in this pure structural-change model, so ``q = k``) and the trimming fraction ``\varepsilon \in \{0.05, 0.10, 0.15, 0.20, 0.25\}`` (requested trimmings snap to the nearest tabulated value). The tables cover ``q \leq 10``; sup-F critical values are tabulated up to 9, 8, 5, 3, and 2 breaks for the five trimmings respectively.
+```@example test_breaks
+[(regime = j,
+  intercept = round(c[1], digits=2), se_intercept = round(s[1], digits=3),
+  slope = round(c[2], digits=2), se_slope = round(s[2], digits=3))
+ for (j, (c, s)) in enumerate(zip(bp.regime_coefs, bp.regime_ses))]
+```
+
+Regime 1 returns ``(0.99, 1.92)`` against the true ``(1.0, 2.0)``, regime 2 returns ``(2.98, -0.99)`` against ``(3.0, -1.0)``, and regime 3 returns ``(0.00, 4.00)`` against ``(0.0, 4.0)``. Standard errors near 0.05 make every deviation statistically indistinguishable from zero. Because the break dates are estimated, these standard errors condition on the selected dates and understate the true uncertainty; use `break_cis` to gauge how much the dates themselves could move.
+
+P-values interpolate the Bai & Perron (1998, 2003) critical-value tables, indexed by the number of breaking regressors ``q`` (every regressor breaks in this pure structural-change model, so ``q = k``, and ``q \leq 10`` is required) and by the trimming fraction ``\varepsilon \in \{0.05, 0.10, 0.15, 0.20, 0.25\}``. A requested trimming off that grid snaps to the nearest tabulated value with a warning. The sup-F tables cover 9, 8, 5, 3, and 2 breaks for the five trimmings respectively; a statistic beyond the tabulated break count returns `NaN` rather than an extrapolated number.
 
 ### Options
 
-| Argument | Type | Default | Description |
+| Keyword | Type | Default | Description |
 |----------|------|---------|-------------|
-| `max_breaks` | `Int` | `5` | Maximum number of breaks to consider |
+| `max_breaks` | `Int` | `5` | Maximum number of breaks searched, reduced automatically when segments are too short |
 | `trimming` | `Real` | `0.15` | Minimum fraction of observations per segment |
-| `criterion` | `Symbol` | `:bic` | Information criterion for break selection: `:bic` or `:lwz` |
+| `criterion` | `Symbol` | `:bic` | Criterion that sets `n_breaks`: `:bic` or `:lwz` |
 
-### BaiPerronResult Return Values
+### Return values
 
 | Field | Type | Description |
 |-------|------|-------------|
-| `n_breaks` | `Int` | Selected number of structural breaks |
+| `n_breaks` | `Int` | Number of breaks selected by `criterion` |
 | `break_dates` | `Vector{Int}` | Estimated break date indices |
-| `break_cis` | `Vector{Tuple{Int,Int}}` | 95% confidence intervals for break dates |
-| `regime_coefs` | `Vector{Vector{T}}` | OLS coefficient estimates for each regime |
+| `break_cis` | `Vector{Tuple{Int,Int}}` | 95% confidence intervals for the break dates (Bai 1997) |
+| `regime_coefs` | `Vector{Vector{T}}` | OLS coefficients for each of the ``m+1`` regimes |
 | `regime_ses` | `Vector{Vector{T}}` | Standard errors for each regime |
 | `supf_stats` | `Vector{T}` | sup-F(l) statistics for ``l = 1, \ldots, m_{\max}`` |
-| `supf_pvalues` | `Vector{T}` | P-values for sup-F statistics |
+| `supf_pvalues` | `Vector{T}` | P-values for sup-F, `NaN` beyond the tabulated break count |
 | `sequential_stats` | `Vector{T}` | Sequential sup-F(l+1\|l) statistics |
-| `sequential_pvalues` | `Vector{T}` | P-values for sequential statistics |
-| `bic_values` | `Vector{T}` | BIC values for 0 through ``m_{\max}`` breaks |
-| `lwz_values` | `Vector{T}` | LWZ values for 0 through ``m_{\max}`` breaks |
+| `sequential_pvalues` | `Vector{T}` | P-values for the sequential statistics |
+| `bic_values` | `Vector{T}` | BIC for 0 through ``m_{\max}`` breaks |
+| `lwz_values` | `Vector{T}` | LWZ for 0 through ``m_{\max}`` breaks |
 | `trimming` | `T` | Trimming fraction used |
 | `nobs` | `Int` | Number of observations |
+
+`plot_result(bp)` draws the BIC and LWZ paths against the number of breaks with the selection marked; `plot_result(bp; view=:breaks)` draws the estimated break dates as a timeline with their confidence bands shaded.
 
 ---
 
 ## Factor Model Break Tests
 
-Factor models assume that a large cross-section of variables ``X_{it}`` loads on a small number of common factors ``F_t`` with time-invariant loadings ``\Lambda``. Structural instability in the loadings or the number of factors invalidates principal components estimation and downstream inference. Three complementary tests detect different forms of instability.
+A factor model assumes that a large cross-section ``X_{it}`` loads on a few common factors ``F_t`` through time-invariant loadings ``\Lambda``. Instability in the loadings breaks principal-components estimation and everything built on it. Three tests target different forms of that instability, and all three accept either a ``T \times N`` matrix or an estimated [`FactorModel`](@ref).
 
-### Breitung-Eickmeier (2011)
+All three treat the break date as unknown, so all three maximize a statistic over the trimmed grid ``\pi \in [0.15, 0.85]``. A supremum is not ``\chi^2``: Chen-Dolado-Gonzalo reads its p-value from the Andrews (1993)/Hansen (1997) sup-Wald tables, and the two pooled tests --- Breitung-Eickmeier and Han-Inoue --- simulate their null references conditional on the estimated factors.
 
-The Breitung-Eickmeier test applies a CUSUM fluctuation principle to factor loading stability. The factor model is:
-
-```math
-X_t = \Lambda F_t + e_t
-```
-
-where:
-- ``X_t`` is the ``N \times 1`` vector of observed variables at time ``t``
-- ``\Lambda`` is the ``N \times r`` matrix of factor loadings
-- ``F_t`` is the ``r \times 1`` vector of common factors
-- ``e_t`` is the ``N \times 1`` idiosyncratic error
-
-The test estimates loadings from the sub-sample ``[1, t]`` and compares them to the full-sample loadings ``\hat{\Lambda}_T``. The fluctuation statistic at date ``t`` is:
-
-```math
-S_t = \sqrt{t / T} \cdot \frac{\| \text{vec}(\hat{\Lambda}_t - \hat{\Lambda}_T) \|}{\hat{\sigma}}
-```
-
-where ``\hat{\sigma}^2`` is the estimated loading regression variance. The test statistic is ``\sup_t S_t`` over the trimmed range. Under the null of stable loadings, the statistic converges to the supremum of a Bessel process. Rejection indicates that the factor-variable relationships shift at some point in the sample.
+The examples in this section use one panel with genuinely stable loadings and one in which every loading shifts halfway through the sample:
 
 ```@example test_breaks
-# Matrix dispatch
-X = randn(200, 50)
-result = factor_break_test(X, 3; method=:breitung_eickmeier)
-report(result)
+Random.seed!(104)
+F_t = randn(200, 3)                              # 3 factors, T = 200
+Lambda_1 = randn(60, 3)                          # loadings for N = 60 variables
+Lambda_2 = Lambda_1 .+ 1.5 .* randn(60, 3)       # every loading shifts at t = 100
 
-# FactorModel dispatch
-fm = estimate_factors(X, 3)
-result = factor_break_test(fm; method=:breitung_eickmeier)
-report(result)
-```
-
-### Chen-Dolado-Gonzalo (2014)
-
-The Chen-Dolado-Gonzalo test detects changes in the number of factors by comparing eigenvalue ratios across sub-samples. The **eigenvalue ratio** criterion identifies the number of factors as:
-
-```math
-\hat{r} = \arg\max_{k \leq k_{\max}} \frac{\lambda_k}{\lambda_{k+1}}
-```
-
-where ``\lambda_1 \geq \lambda_2 \geq \cdots`` are the ordered eigenvalues of the sample covariance matrix. The test computes eigenvalue ratios from sub-samples ``[1, t]`` and ``[t+1, T]`` for each candidate break date ``t``, then takes the supremum of the normalized maximum difference:
-
-```math
-\text{CDG}(t) = \sqrt{\frac{t(T - t)}{T}} \cdot \max_k \left| \frac{\lambda_k^{(1)}}{\lambda_{k+1}^{(1)}} - \frac{\lambda_k^{(2)}}{\lambda_{k+1}^{(2)}} \right|
-```
-
-This test does not require specifying the number of factors ``r`` in advance, making it useful as a preliminary diagnostic.
-
-```@example test_breaks
-# Chen-Dolado-Gonzalo does not require specifying r
-X = randn(200, 50)
-result = factor_break_test(X; method=:chen_dolado_gonzalo)
-report(result)
+X_stable = F_t * Lambda_1' + 0.5 * randn(200, 60)
+X_break = vcat(F_t[1:100, :] * Lambda_1',
+               F_t[101:end, :] * Lambda_2') + 0.5 * randn(200, 60)
+size(X_stable, 1), size(X_stable, 2)
 ```
 
 ### Han-Inoue (2015)
 
-The Han-Inoue test aggregates individual Wald statistics for loading instability across all ``N`` cross-section units. For each variable ``i`` and candidate break date ``t``, the loading regression ``x_{it} = F_t' \lambda_i + e_{it}`` is estimated on sub-samples ``[1, t]`` and ``[t+1, T]``. The individual Wald statistic is:
+The Han-Inoue test asks whether the panel's loadings break at **one common date**. For variable ``i`` and candidate break date ``t``, the loading regression ``x_{it} = F_t' \lambda_i + e_{it}`` is estimated on ``[1, t]`` and ``[t+1, T]``, giving the Chow-Wald statistic
 
 ```math
 W_i(t) = (\hat{\lambda}_{1,i} - \hat{\lambda}_{2,i})' \left[ \hat{\sigma}_i^2 \left( (F_1'F_1)^{-1} + (F_2'F_2)^{-1} \right) \right]^{-1} (\hat{\lambda}_{1,i} - \hat{\lambda}_{2,i})
 ```
 
-The test statistic aggregates across units and maximizes over break dates:
+and the panel statistic pools the evidence at each date before maximizing, then standardizes against its simulated null:
 
 ```math
-\text{HI} = \sup_t \frac{1}{N} \sum_{i=1}^{N} W_i(t)
+W = \sup_t \sum_{i=1}^{N} W_i(t), \qquad Z = \frac{W - \hat{\mu}}{\hat{\sigma}}
 ```
 
 where:
 - ``\hat{\lambda}_{1,i}`` and ``\hat{\lambda}_{2,i}`` are sub-sample loading estimates for variable ``i``
 - ``\hat{\sigma}_i^2`` is the full-sample residual variance for variable ``i``
-- ``F_1`` and ``F_2`` are the factor matrices for the two sub-samples
+- ``F_1`` and ``F_2`` are the estimated factor matrices for the two sub-samples
+- ``\hat{\mu}`` and ``\hat{\sigma}`` are the mean and standard deviation of ``W`` under the simulated null
 
-The cross-sectional averaging improves power when many loadings shift simultaneously. P-values use the Andrews (1993) sup-Wald critical values with ``k = r`` degrees of freedom.
+Pooling at a common date is what distinguishes Han-Inoue from Breitung-Eickmeier below, which sups each series at its own date: Han-Inoue concentrates power on an economy-wide break, and its estimated date is the single date the whole panel agrees on. At any fixed date each ``W_i(t)`` is approximately ``\chi^2(r)``, so the pooled path concentrates near ``Nr`` under the null and its supremum has no tabulated reference. The null distribution of ``W`` is therefore simulated conditional on the estimated factors, with the same machinery as Breitung-Eickmeier: per-series null statistic paths from ``N(0,1)`` series projected off ``\hat{F}``, resampled into panels of ``N`` and pooled, with `nsim`, `nboot`, and `seed` controlling the draws.
 
 ```@example test_breaks
-# Han-Inoue requires specifying the number of factors
-X = randn(200, 50)
-result = factor_break_test(X, 3; method=:han_inoue)
-report(result)
-
-# FactorModel dispatch also works
-fm = estimate_factors(X, 3)
-result = factor_break_test(fm; method=:han_inoue)
-report(result)
+report(factor_break_test(X_stable, 3; method=:han_inoue))
 ```
 
-### Method Comparison
+```@example test_breaks
+report(factor_break_test(X_break, 3; method=:han_inoue))
+```
+
+On the stable panel the standardized statistic is ``-0.4777`` --- half a standard deviation *below* the simulated null mean --- with a p-value of 0.6712, so loading stability survives. On the broken panel the statistic is 453.2525 standard deviations above the null, the p-value hits the ``1/2001`` resampling floor of 0.0005, and the estimated break lands on observation 100, the true date. Note the break date of 52 reported on the stable panel --- meaningless, because the null was not rejected.
+
+Both pooled tests also report the largest **per-series** sup statistics with each series' own maximizing date, stored in `series_statistics` and `series_break_dates`. On the broken panel every series posts a three-digit statistic because every loading moved by construction; when only a few series break, the ranking singles them out --- subject to the attribution caveat in Pitfall 5.
+
+### Breitung-Eickmeier (2011)
+
+The Breitung-Eickmeier test runs one loading-break regression per series and pools the results across the cross-section. For series ``i`` and candidate date ``\tau``, the auxiliary regression
+
+```math
+x_{it} = \lambda_i' \hat{F}_t + \delta_i' \hat{F}_t \cdot 1(t > \tau) + e_{it}
+```
+
+is tested for ``H_0: \delta_i = 0`` by the LM statistic
+
+```math
+LM_i(\tau) = \frac{S_i(\tau)' \left[ A_1(\tau)^{-1} + A_2(\tau)^{-1} \right] S_i(\tau)}{\hat{\sigma}_i^2}
+```
+
+where:
+- ``S_i(\tau) = \sum_{t \leq \tau} \hat{F}_t \hat{e}_{it}`` is the partial sum of the full-sample loading scores
+- ``A_1(\tau) = \sum_{t \leq \tau} \hat{F}_t \hat{F}_t'`` and ``A_2(\tau) = \hat{F}'\hat{F} - A_1(\tau)``
+- ``\hat{\sigma}_i^2`` is the full-sample idiosyncratic variance of series ``i``
+
+At a fixed ``\tau`` this is algebraically the Chow-Wald statistic for equality of the pre- and post-break loadings of series ``i``, and is asymptotically ``\chi^2(r)``. The break date is unknown, so the series-level statistic is the supremum ``M_i = \sup_\tau LM_i(\tau)``, and the panel statistic standardizes the pooled sum:
+
+```math
+Z = \frac{\sum_{i=1}^{N} M_i - N \hat{\mu}}{\hat{\sigma} \sqrt{N}}
+```
+
+where ``\hat{\mu}`` and ``\hat{\sigma}`` are the mean and standard deviation of ``M_i`` under the null. A supremum of ``LM_i(\tau)`` is not ``\chi^2(r)`` and a pool of ``N`` of them is not ``\chi^2(Nr)``, so both moments are simulated rather than tabulated.
+
+!!! note "Technical Note"
+    The null reference draws `nsim` independent ``N(0,1)`` series of length ``T``, projects them off ``\hat{F}``, and runs them through the same statistic path, so it conditions on the estimated factors and on the trimmed grid actually in use. The p-value is the Monte Carlo upper tail of ``\sum_i M_i`` under resampling from that pool, which accommodates the right skewness a normal approximation to the sum would miss. `nsim`, `nboot`, and `seed` control the simulation; the fixed default seed makes the p-value reproducible across calls on the same data.
+
+```@example test_breaks
+report(factor_break_test(X_stable, 3; method=:breitung_eickmeier))
+```
+
+```@example test_breaks
+report(factor_break_test(X_break, 3; method=:breitung_eickmeier))
+```
+
+On the stable panel the pooled statistic is 0.4886 --- half a standard deviation above the simulated null mean --- with a p-value of 0.3038. On the broken panel it is 280.9414, the p-value hits 0.0005, and the break is dated at observation 100, the true date. That 0.0005 is a floor, not a measurement: with `nboot = 2000` resampling draws the smallest attainable p-value is ``1/2001``. Because ``Z`` is standardized by the cross-section, the statistic is comparable across panels of different width, unlike the raw pooled sum.
+
+The `FactorModel` dispatch reuses factors that have already been estimated:
+
+```@example test_breaks
+fm = estimate_factors(X_break, 3)
+be = factor_break_test(fm; method=:breitung_eickmeier)
+(statistic = round(be.statistic, digits=3),
+ pvalue = round(be.pvalue, digits=4),
+ break_date = be.break_date)
+```
+
+The dispatch reads `fm.X` and `fm.r` off the model and returns the same statistic, 280.941 at observation 100, as the matrix call. Use it whenever a factor model has already been fitted for other purposes, since it avoids re-running the principal-components step.
+
+### Chen-Dolado-Gonzalo (2014)
+
+The Chen-Dolado-Gonzalo test targets a **big break** --- one large enough that the full sample needs more principal components than either sub-sample --- and is the only one of the three that does not require ``r`` as an input. A big break in ``\Lambda`` inflates the apparent number of factors, and the extra estimated factors are mixtures of the pre- and post-break factor spaces. That mixing is the signal. Regressing the first estimated factor on the remaining ones,
+
+```math
+\hat{F}_{1t} = c + \beta' \hat{F}_{2:r,t} + u_t
+```
+
+gives coefficients that are constant under ``H_0`` --- and zero, since principal components are orthogonal over the full sample --- but shift at the break date under ``H_1``. The test is a sup-LM test for instability in that regression:
+
+```math
+\text{CDG} = \sup_{\pi \in [0.15,\, 0.85]} \frac{S(\tau)' \hat{\Omega}^{-1} S(\tau)}{\pi (1 - \pi)}, \qquad \pi = \tau / T
+```
+
+where:
+- ``S(\tau) = T^{-1/2} \sum_{t \leq \tau} Z_t \hat{u}_t`` is the partial sum of the regression scores, with ``Z_t = (1, \hat{F}_{2:r,t}')'``
+- ``\hat{u}_t`` are the full-sample regression residuals
+- ``\hat{\Omega}`` is a Newey-West HAC estimate of the long-run variance of ``Z_t u_t``, with the Newey-West (1994) automatic bandwidth
+
+The p-value comes from the Andrews (1993)/Hansen (1997) sup-Wald tables with ``p = r`` parameters under test --- the intercept plus ``r - 1`` slopes --- the same machinery `andrews_test` uses. The HAC variance is not optional: estimated factors are serially correlated, and a homoskedastic-i.i.d. variance makes the same statistic reject far too often.
+
+Omitting ``r`` selects it by the Bai-Ng (2002) IC2 criterion over ``r \leq \min(\lfloor\sqrt{\min(T, N)}\rfloor, 10)``:
+
+```@example test_breaks
+report(factor_break_test(X_break; method=:chen_dolado_gonzalo))
+```
+
+IC2 reads 7 factors off the broken panel --- more than the 3 that generated it, which is exactly the inflation the test exploits --- and the sup-LM statistic of 23.4356 rejects at 5% with the break dated at observation 100. On the stable panel the same call selects 5 factors and returns 10.0023 with a p-value of 0.3620.
+
+Supplying ``r`` is not automatically the stronger choice:
+
+```@example test_breaks
+cdg_r3 = factor_break_test(X_break, 3; method=:chen_dolado_gonzalo)
+(statistic = round(cdg_r3.statistic, digits=3),
+ pvalue = round(cdg_r3.pvalue, digits=4),
+ break_date = cdg_r3.break_date)
+```
+
+Fixing ``r`` at 3 --- the number of factors that generated the data --- drops the statistic to 7.418 and the p-value to 0.3875, and the test no longer rejects: the extra factor directions the break creates are precisely what was discarded. Neither call dominates, and which one wins depends on how much of the cross-section moves. In simulation on ``T = 200``, ``N = 60``, ``r = 3`` panels, a sign flip in half the loadings is found 69% of the time at 5% with ``r = 3`` supplied against 41% by the IC2 dispatch, while a flip in only a quarter of them reverses the ranking, 15% against 46%.
+
+!!! warning "A break that flips every loading is not identified"
+    If every loading changes sign at ``\tau``, then ``X = \tilde{F}\Lambda'`` with ``\tilde{F}_t = F_t`` before the break and ``-F_t`` after fits the same data with *stable* loadings. No test on this page rejects that alternative, and none should: in simulation all three reject it at roughly their nominal size (0.035, 0.040, and 0.030 at the 5% level). Loading breaks are identified only relative to a fixed normalization of the factors.
+
+### Choosing a method
 
 | Feature needed | Recommended | Why |
 |----------------|-------------|-----|
-| Loading stability check | `:breitung_eickmeier` | CUSUM with known ``r`` |
-| Unknown ``r`` | `:chen_dolado_gonzalo` | Does not require ``r`` |
-| Large ``N`` panels | `:han_inoue` | Cross-sectional power gains |
-| Quick diagnostic | `:chen_dolado_gonzalo` | Fewest assumptions |
+| Reject/fail decision, ``r`` known | `:breitung_eickmeier` or `:han_inoue` | Size near nominal, power 1.00 |
+| One economy-wide break date | `:han_inoue` | Pools evidence at a common date |
+| Series breaking at their own dates | `:breitung_eickmeier` | Sups each series separately |
+| ``r`` unknown | `:chen_dolado_gonzalo` | Only method not needing ``r`` |
+| Very narrow panel (``N \lesssim 10``) | `:breitung_eickmeier` | Han-Inoue over-rejects there |
 
-### Options
+Simulated size at the 5% level with stable loadings runs 0.017 to 0.043 for Breitung-Eickmeier, 0.050 to 0.055 for Han-Inoue, and 0.013 to 0.063 for Chen-Dolado-Gonzalo across ``(T, N, r)`` from ``(35, 8, 2)`` to ``(300, 120, 3)`` --- except that Han-Inoue reaches 0.115 on the smallest panel (Pitfall 6). Against a sign flip in half the loadings at ``T/2``, Breitung-Eickmeier and Han-Inoue reject on every replication and date the break to within 0.1% of ``T``; Chen-Dolado-Gonzalo rejects 69% of the time. Highly persistent factors are the one regime where the size guarantees weaken --- with AR(0.9) factors Chen-Dolado-Gonzalo rejects 11.3% of stable panels, Breitung-Eickmeier turns very conservative at 0.7%, and Han-Inoue holds up best at 3.5%.
 
-| Argument | Type | Default | Description |
-|----------|------|---------|-------------|
-| `method` | `Symbol` | `:breitung_eickmeier` | Test method: `:breitung_eickmeier`, `:chen_dolado_gonzalo`, or `:han_inoue` |
+### Options and return values
 
-!!! note "Technical Note"
-    The Breitung-Eickmeier and Han-Inoue tests require the number of factors ``r`` as input. Use `ic_criteria(X, r_max)` or the Bai-Ng (2002) information criteria to determine ``r`` before applying these tests. The Chen-Dolado-Gonzalo test does not require ``r`` and automatically determines ``r_{\max} = \min(\lfloor \sqrt{\min(T, N)} \rfloor, 10)``.
+`factor_break_test` takes `method`, defaulting to `:breitung_eickmeier` for the two-argument form `factor_break_test(X, r)` and to `:chen_dolado_gonzalo` for the one-argument form `factor_break_test(X)`. Passing `:breitung_eickmeier` or `:han_inoue` without `r` raises an `ArgumentError`. All three methods require at least 30 time periods and standardize the panel internally, so no pre-scaling is needed. Breitung-Eickmeier and Han-Inoue need ``r`` as an input: determine it first with `ic_criteria(X, r_max)`, which reports the Bai-Ng (2002) criteria, and see [Factor Models](@ref factor_page).
 
-### FactorBreakResult Return Values
+| Keyword | Type | Default | Description |
+|---------|------|---------|-------------|
+| `method` | `Symbol` | `:breitung_eickmeier` or `:chen_dolado_gonzalo` | Test method, depending on the dispatch |
+| `nsim` | `Int` | `0` | Null-reference draws; `0` selects ``\min(\max(100N, 2000), 20000)`` |
+| `nboot` | `Int` | `2000` | Resampling draws behind the pooled p-value |
+| `seed` | `Integer` | `20110711` / `20151031` | Seed for the null reference (Breitung-Eickmeier / Han-Inoue) |
+
+`nsim`, `nboot`, and `seed` tune the simulated references of the two pooled tests and are ignored by `:chen_dolado_gonzalo`.
 
 | Field | Type | Description |
 |-------|------|-------------|
 | `statistic` | `T` | Test statistic |
-| `pvalue` | `T` | Approximate p-value |
-| `break_date` | `Union{Int, Nothing}` | Estimated break date (observation index), or `nothing` if insufficient data |
-| `method` | `Symbol` | Test method used |
-| `n_factors` | `Int` | Number of factors (or ``r_{\max}`` for Chen-Dolado-Gonzalo) |
-| `nobs` | `Int` | Number of time periods (``T``) |
-| `n_vars` | `Int` | Number of cross-section units (``N``) |
+| `pvalue` | `T` | Monte Carlo p-value for the pooled tests, Hansen (1997) tables for `:chen_dolado_gonzalo` |
+| `break_date` | `Union{Int, Nothing}` | Estimated break index, `nothing` when the trimmed range is empty |
+| `method` | `Symbol` | Method used |
+| `n_factors` | `Int` | ``r``, or the IC2 selection when Chen-Dolado-Gonzalo is called without it |
+| `nobs` | `Int` | Number of time periods ``T`` |
+| `n_vars` | `Int` | Number of cross-section units ``N`` |
+| `series_statistics` | `Union{Vector{T}, Nothing}` | Per-series sup statistics ``M_i`` for the pooled tests, `nothing` for `:chen_dolado_gonzalo` |
+| `series_break_dates` | `Union{Vector{Int}, Nothing}` | Date maximizing each series' own statistic path, same availability |
 
 ---
 
 ## Gregory-Hansen Cointegration Test
 
-The Gregory-Hansen test (Gregory & Hansen 1996) extends standard residual-based cointegration tests by allowing a single structural break in the cointegrating relationship. Standard cointegration tests lose power when the equilibrium relationship shifts at an unknown date --- what appears to be no cointegration may actually be cointegration with a regime change.
+The Gregory-Hansen test (Gregory & Hansen 1996) extends residual-based cointegration testing by allowing one structural break in the cointegrating relationship. Standard tests lose power when the long-run relationship shifts at an unknown date, so what looks like no cointegration may be cointegration with a regime change.
 
-The test estimates the cointegrating regression at each candidate break date and computes residual-based test statistics. The null hypothesis is no cointegration; the alternative is cointegration with a single structural break.
+The cointegrating regression is estimated at every candidate break date and residual-based statistics are computed from each fit. The null is no cointegration; the alternative is cointegration with a single break.
 
 Three models control the form of the break:
 
@@ -432,163 +516,133 @@ y_{1t} = \mu_1 + \mu_2 D_t + \alpha_1' y_{2t} + \alpha_2' y_{2t} D_t + e_t
 ```
 
 where:
-- ``y_{1t}`` is the dependent variable (first column of `Y`)
-- ``y_{2t}`` is the ``m \times 1`` vector of regressors (remaining columns)
+- ``y_{1t}`` is the dependent variable (the first column of `Y`)
+- ``y_{2t}`` is the ``m \times 1`` vector of regressors (the remaining columns)
 - ``D_t = \mathbf{1}(t > T_B)`` is the break dummy
 - ``T_B`` is the break date, searched over the trimmed range
 
-Three test statistics are computed from the residuals ``\hat{e}_t`` at each break date:
+Three statistics are computed from the residuals ``\hat{e}_t`` at each candidate date, and each takes its own minimum:
 
-- **ADF***: Minimum ADF t-statistic on the residuals across all break dates
-- **Zt***: Minimum Phillips-Perron ``Z_t`` statistic
-- **Za***: Minimum Phillips-Perron ``Z_\alpha`` statistic
+- **ADF\***: smallest ADF t-statistic on the residuals across break dates
+- **Zt\***: smallest Phillips-Perron ``Z_t`` statistic
+- **Za\***: smallest Phillips-Perron ``Z_\alpha`` statistic
 
-Each statistic selects its own optimal break date. The primary statistic is ADF* (most commonly reported).
+ADF\* is the statistic normally reported. ADF\* and Zt\* share one critical-value table; Za\* has its own, because it is a coefficient-based rather than a t-based statistic.
 
 ```@example test_breaks
-# Two cointegrated series with a regime shift at t=100
-T_len = 200
-x = cumsum(randn(T_len))
-y = vcat(1.0 .+ 0.8 .* x[1:100], 3.0 .+ 1.5 .* x[101:end]) + randn(T_len) * 0.5
+Random.seed!(105)
+x_c = cumsum(randn(250))                         # I(1) regressor
+y_c = vcat(2.0 .+ 1.0 .* x_c[1:120],             # intercept jumps 2.0 -> 5.0 at t = 120
+           5.0 .+ 1.0 .* x_c[121:end]) + 0.3 * randn(250)
 
-Y = hcat(y, x)
-result = gregory_hansen_test(Y; model=:CS)
-report(result)
+report(gregory_hansen_test(hcat(y_c, x_c); model=:C))
 ```
 
-### Interpretation
+ADF\* of ``-16.70`` clears the 1% critical value of ``-5.13`` by a wide margin, so the null of no cointegration is rejected and the two series share a long-run relationship once the level shift is allowed. ADF\* and Zt\* both date the break at observation 121, one period after the true shift at 120, while Za\* --- built on the coefficient rather than the t-ratio --- settles on 119. Disagreement of one or two observations across the three statistics is normal and is a useful informal measure of how sharply the break is identified.
 
-**Reject** ``H_0`` (p-value < 0.05): evidence for cointegration with a structural break. The estimated break date identifies when the cointegrating relationship shifted. **Fail to reject** ``H_0`` (p-value > 0.05): cannot reject no cointegration, even allowing for a regime change. When the standard Johansen or Engle-Granger test fails to find cointegration but economic theory suggests a long-run relationship, the Gregory-Hansen test checks whether a regime shift explains the apparent lack of cointegration.
+When the series genuinely do not cointegrate, the test says so:
+
+```@example test_breaks
+Random.seed!(106)
+x_i = cumsum(randn(250))                         # two independent random walks
+y_i = cumsum(randn(250))
+g_i = gregory_hansen_test(hcat(y_i, x_i); model=:C)
+(adf_statistic = round(g_i.adf_statistic, digits=3),
+ adf_pvalue = round(g_i.adf_pvalue, digits=3),
+ adf_break = g_i.adf_break)
+```
+
+ADF\* of ``-4.342`` falls short of the 10% critical value of ``-4.34`` by a hair, and the reported p-value of 0.1 is the flat value assigned to any statistic above the 10% threshold rather than an interpolated number. The estimated break at observation 46 is meaningless under a non-rejection, exactly as with the Andrews test. Two independent random walks will always produce *some* minimizing break date; only the statistic decides whether it means anything.
+
+### Interpreting the outcome
+
+**Reject** ``H_0`` (p-value < 0.05): the series cointegrate once a break is allowed, and the estimated break date says when the relationship shifted. **Fail to reject**: no cointegration, even permitting a regime change. The natural use of the test is diagnostic --- when Johansen or Engle-Granger finds nothing but theory insists on a long-run relationship, Gregory-Hansen checks whether a single regime shift explains the discrepancy.
 
 ### Options
 
-| Argument | Type | Default | Description |
+| Keyword | Type | Default | Description |
 |----------|------|---------|-------------|
 | `model` | `Symbol` | `:C` | Break model: `:C` (level shift), `:CT` (level + trend), `:CS` (regime shift) |
-| `lags` | `Union{Int,Symbol}` | `:aic` | ADF augmenting lags for residual test, or `:aic`/`:bic` |
-| `max_lags` | `Union{Int,Nothing}` | `nothing` | Maximum lags for IC selection |
-| `trim` | `Real` | `0.15` | Trimming fraction for break search |
+| `lags` | `Union{Int,Symbol}` | `:aic` | Augmenting lags for the residual ADF, or `:aic`/`:bic` |
+| `max_lags` | `Union{Int,Nothing}` | `nothing` | Cap for IC selection, default ``\lfloor 12 (T/100)^{1/4} \rfloor`` |
+| `trim` | `Real` | `0.15` | Trimming fraction for the break search |
 
-### GregoryHansenResult Return Values
+At least 50 observations and two columns are required.
+
+### Return values
 
 | Field | Type | Description |
 |-------|------|-------------|
-| `adf_statistic` | `T` | ADF* test statistic (minimum ADF over break dates) |
-| `adf_pvalue` | `T` | P-value for ADF* |
-| `zt_statistic` | `T` | Zt* Phillips-Perron test statistic |
-| `zt_pvalue` | `T` | P-value for Zt* |
-| `za_statistic` | `T` | Za* Phillips-Perron test statistic |
-| `za_pvalue` | `T` | P-value for Za* |
-| `adf_break` | `Int` | Estimated break date for ADF* (observation index) |
-| `zt_break` | `Int` | Estimated break date for Zt* |
-| `za_break` | `Int` | Estimated break date for Za* |
-| `model` | `Symbol` | Break model (`:C`, `:CT`, `:CS`) |
-| `n_regressors` | `Int` | Number of regressors (``m``) |
-| `adf_critical_values` | `Dict{Int,T}` | Critical values for ADF*/Zt* at 1%, 5%, 10% |
-| `za_critical_values` | `Dict{Int,T}` | Critical values for Za* at 1%, 5%, 10% |
+| `adf_statistic` | `T` | ADF\* statistic (minimum ADF over break dates) |
+| `adf_pvalue` | `T` | P-value for ADF\* |
+| `zt_statistic` | `T` | Zt\* Phillips-Perron statistic |
+| `zt_pvalue` | `T` | P-value for Zt\* |
+| `za_statistic` | `T` | Za\* Phillips-Perron statistic |
+| `za_pvalue` | `T` | P-value for Za\* |
+| `adf_break` | `Int` | Break date minimizing ADF\* |
+| `zt_break` | `Int` | Break date minimizing Zt\* |
+| `za_break` | `Int` | Break date minimizing Za\* |
+| `model` | `Symbol` | Break model used |
+| `n_regressors` | `Int` | Number of regressors ``m`` |
+| `adf_critical_values` | `Dict{Int,T}` | Critical values for ADF\* and Zt\* at 1%, 5%, 10% |
+| `za_critical_values` | `Dict{Int,T}` | Critical values for Za\* at 1%, 5%, 10% |
 | `nobs` | `Int` | Number of observations |
 
 !!! note "Technical Note"
-    Critical values depend on the number of regressors ``m`` and the break model. The `:CS` model (regime shift) allows all slope coefficients to change at the break, providing the most flexible alternative but also the least power. Start with `:C` (level shift only) and use `:CS` only when theory suggests the entire relationship changes.
+    Critical values are tabulated by break model and by the number of regressors ``m = 1, \ldots, 4``; a regression with more than four regressors reuses the ``m = 4`` column, which makes the test conservative. P-values interpolate between the 1%, 5%, and 10% values, are floored at 0.001, and are reported as a flat 0.20 for any statistic above the 10% critical value.
 
 ---
 
 ## Complete Example
 
-This example demonstrates a complete structural break analysis workflow: detecting a single break with Andrews, finding multiple breaks with Bai-Perron, testing factor loading stability, and checking for cointegration with a regime shift.
+Real GDP growth is the canonical testing ground for parameter instability. This workflow fits an AR(1) to quarterly US real GDP growth from FRED-QD (McCracken & Ng 2021), tests it for one unknown break with Andrews, then lets Bai-Perron search for several.
 
 ```@example test_breaks
-# =========================================================================
-# Part 1: Andrews single break test
-# =========================================================================
+fred_q = load_example(:fred_qd)
+g = filter(isfinite, to_vector(apply_tcode(fred_q[:, ["GDPC1"]])))   # log growth of real GDP
 
-# Generate regression data with a known break at t=150
-T_len = 300
-X = hcat(ones(T_len), randn(T_len), randn(T_len))
-beta_pre = [1.0, 2.0, -1.0]
-beta_post = [1.0, 2.0, 2.5]  # third coefficient shifts from -1.0 to 2.5
+X_ar = hcat(ones(length(g) - 1), g[1:end-1])     # AR(1): intercept + one lag
+y_ar = g[2:end]
 
-y = vcat(
-    X[1:150, :] * beta_pre,
-    X[151:end, :] * beta_post
-) + randn(T_len) * 0.5
-
-# Test with all three sup-type functionals
-result_sup = andrews_test(y, X; test=:supwald)
-result_exp = andrews_test(y, X; test=:expwald)
-result_mean = andrews_test(y, X; test=:meanwald)
-
-report(result_sup)
-report(result_exp)
-report(result_mean)
-
-# =========================================================================
-# Part 2: Bai-Perron multiple break test
-# =========================================================================
-
-# Generate data with 2 structural breaks
-T_len2 = 450
-X2 = hcat(ones(T_len2), randn(T_len2))
-
-y2 = vcat(
-    X2[1:150, :] * [2.0, 1.0],
-    X2[151:300, :] * [5.0, -2.0],
-    X2[301:450, :] * [0.0, 3.0]
-) + randn(T_len2) * 0.5
-
-result_bp = bai_perron_test(y2, X2; max_breaks=5, criterion=:bic)
-report(result_bp)
-
-# Display regime coefficients
-[(regime=j, intercept=round(coefs[1], digits=2), intercept_se=round(ses[1], digits=2),
-  slope=round(coefs[2], digits=2), slope_se=round(ses[2], digits=2))
- for (j, (coefs, ses)) in enumerate(zip(result_bp.regime_coefs, result_bp.regime_ses))]
-
-# =========================================================================
-# Part 3: Factor model break test
-# =========================================================================
-
-# Generate factor model data with stable loadings
-N, T_obs, r = 60, 200, 3
-F_true = randn(T_obs, r)
-Lambda_true = randn(N, r)
-X_factor = F_true * Lambda_true' + randn(T_obs, N) * 0.3
-
-# Test loading stability
-result_be = factor_break_test(X_factor, r; method=:breitung_eickmeier)
-result_hi = factor_break_test(X_factor, r; method=:han_inoue)
-result_cdg = factor_break_test(X_factor; method=:chen_dolado_gonzalo)
-
-report(result_be)
-report(result_hi)
-report(result_cdg)
-
-# =========================================================================
-# Part 4: Gregory-Hansen cointegration with regime shift
-# =========================================================================
-
-# Two cointegrated series with a level shift at t=120
-T_gh = 250
-x_gh = cumsum(randn(T_gh))
-y_gh = vcat(2.0 .+ 1.0 .* x_gh[1:120], 5.0 .+ 1.0 .* x_gh[121:end]) + randn(T_gh) * 0.3
-
-result_gh = gregory_hansen_test(hcat(y_gh, x_gh); model=:C)
-report(result_gh)
+report(andrews_test(y_ar, X_ar; test=:supwald))
 ```
+
+The sup-Wald statistic of 18.19 exceeds the 1% critical value of 14.72, so the AR(1) coefficients are not constant over the 265 usable quarters, and the p-value hits the 0.005 floor. The peak sits at observation 200, roughly three-quarters of the way through the post-1959 sample. Andrews stops there: it tests for one break and reports where the evidence is strongest, without ruling out more.
+
+```@example test_breaks
+bp_gdp = bai_perron_test(y_ar, X_ar; max_breaks=5)
+report(bp_gdp)
+```
+
+Bai-Perron confirms a single break and dates it at observation 201 with a 95% confidence interval of ``[193, 209]`` --- four years wide on quarterly data, which is about as sharp as break dating gets in macroeconomic samples. All three selection devices agree: sup-F(1) is 12.88 with a p-value of 0.026, the sequential test sup-F(2|1) falls to 2.74 with a p-value of 0.784, and BIC and LWZ both bottom out at one break. Agreement of the sequential rule with both information criteria is the strongest evidence the procedure can deliver.
+
+```@example test_breaks
+[(regime = j,
+  intercept = round(c[1], digits=4),
+  ar1 = round(c[2], digits=3),
+  se_ar1 = round(s[2], digits=3))
+ for (j, (c, s)) in enumerate(zip(bp_gdp.regime_coefs, bp_gdp.regime_ses))]
+```
+
+The economics is in the AR(1) coefficient. Before the break, growth is positively autocorrelated at 0.301 with a standard error of 0.067 --- a strong quarter tends to be followed by another. After it, the coefficient turns to ``-0.283`` with a standard error of 0.122, so growth now reverses itself from quarter to quarter. Both estimates are more than two standard errors from zero and of opposite sign, which is a change in the character of the process, not a change in its scale: forecasting rules and impulse responses estimated on the pooled sample describe neither regime.
 
 ---
 
 ## Common Pitfalls
 
-1. **Trimming too aggressive or too lenient.** The `trimming` parameter controls how much of the sample is excluded from the break search. The default ``\pi = 0.15`` trims 15% from each end, leaving candidate break dates in ``[0.15T, 0.85T]``. Setting ``\pi`` too small (e.g. 0.05) includes extreme dates with few observations in one sub-sample, producing unreliable sub-sample estimates. Setting ``\pi`` too large (e.g. 0.30) excludes potential breaks near the beginning or end of the sample. The 0.15 default follows Andrews (1993) and provides a good balance.
+1. **Reading a break date from a test that does not reject.** Every test on this page reports the date that maximizes its statistic, and that date always exists --- even in i.i.d. data with no break at all. The Andrews example above returns `break_index = 96` for a series generated with constant coefficients. The date is only interpretable once the null has been rejected.
 
-2. **Confusing `:supwald` and `:expwald` power properties.** The supremum functional has optimal power against a single sharp break at an unknown date. The exponential and mean functionals (Andrews & Ploberger 1994) have better power against small or gradual parameter shifts, because they average information across all candidate dates rather than relying on a single maximum. When the nature of the break is unknown, run both and compare.
+2. **Trimming too aggressively or too leniently.** `trimming` controls how much of the sample is excluded from the break search. The default ``\pi = 0.15`` leaves candidate dates in ``[0.15T, 0.85T]``. Setting it near 0.05 admits splits in which one sub-sample has too few observations to estimate ``\beta`` reliably; setting it near 0.30 excludes breaks in the first or last third of the sample entirely. The Bai-Perron critical-value tables are only defined on the ``\{0.05, 0.10, 0.15, 0.20, 0.25\}`` grid, so off-grid values snap to the nearest with a warning.
 
-3. **Bai-Perron minimum segment size.** Each regime segment requires at least ``\max(k+1, \lceil \pi T \rceil)`` observations for OLS estimation. With many regressors or small samples, the maximum feasible number of breaks is reduced below `max_breaks`. The function automatically adjusts `max_breaks` downward when necessary. If the test reports zero breaks despite visual evidence of instability, reduce the number of regressors or increase the sample size.
+3. **Confusing the power properties of `:supwald` and `:expwald`.** The supremum has optimal power against one sharp break at an unknown date. The exponential and mean functionals (Andrews & Ploberger 1994) average information over all candidate dates and do better against small or gradual shifts. When the shape of the break is unknown, run all three: agreement, as in the example above, means the result is not an artefact of the weighting.
 
-4. **Factor break tests require sufficient cross-section dimension.** The Breitung-Eickmeier and Han-Inoue tests rely on cross-sectional averaging, which requires ``N`` large enough for the asymptotic approximation. With ``N < 30``, the CUSUM and sup-Wald statistics have poor size properties. The Chen-Dolado-Gonzalo test has similar requirements for the eigenvalue ratio computation. For small panels, Andrews or Bai-Perron tests applied to individual regression equations provide more reliable inference.
+4. **Bai-Perron silently reducing `max_breaks`.** Each regime needs at least ``\max(k+1, \lceil \pi T \rceil)`` observations, so the feasible maximum is ``\lfloor T/h \rfloor - 1``. With many regressors or a short sample the requested `max_breaks` is cut without an error. Check `length(result.supf_stats)` to see how many breaks were actually searched.
 
-5. **Gregory-Hansen model selection affects power.** The `:CS` model (regime shift) allows all slope coefficients to change at the break, providing the most flexible alternative but also the least power due to the larger number of parameters estimated under the alternative. Start with `:C` (level shift only) unless theory suggests the entire cointegrating relationship changes at the break.
+5. **Reading the per-series statistics as an attribution under a big break.** `series_statistics` ranks the breaking series reliably when a modest subset of the panel breaks --- with 6 of 60 series breaking, the six largest statistics are exactly the breakers in simulation. But a break large enough to rotate the estimated factor space, such as half the panel flipping sign, elevates the *stable* series' statistics too, because loading breaks are only identified relative to the factor normalization. Pooled rejection first, attribution second, and only when the rejection is not a panel-wide rotation.
+
+6. **Expecting power from a narrow cross-section.** Size holds in small panels for Breitung-Eickmeier --- it rejects 4.3% of stable panels at ``T = 35``, ``N = 8``, while Han-Inoue over-rejects there (11.5%), so prefer `:breitung_eickmeier` on very narrow panels. Power, though, comes from pooling across units: a break confined to a few series in a narrow panel goes undetected. For small panels, apply `andrews_test` or `bai_perron_test` to the individual equations instead.
+
+7. **Choosing the Gregory-Hansen model by fit rather than by theory.** The `:CS` regime shift lets every slope change at the break, which makes it the most flexible alternative and therefore the least powerful: it estimates ``m`` extra coefficients under ``H_1``. Start with `:C` and move to `:CT` or `:CS` only when theory says the trend or the slopes should shift.
 
 ---
 
@@ -597,6 +651,10 @@ report(result_gh)
 - Andrews, D. W. K. (1993). Tests for parameter instability and structural change with unknown change point. *Econometrica*, 61(4), 821-856. [DOI](https://doi.org/10.2307/2951764)
 
 - Andrews, D. W. K., & Ploberger, W. (1994). Optimal tests when a nuisance parameter is present only under the alternative. *Econometrica*, 62(6), 1383-1414. [DOI](https://doi.org/10.2307/2951753)
+
+- Bai, J. (1997). Estimation of a change point in multiple regression models. *Review of Economics and Statistics*, 79(4), 551-563. [DOI](https://doi.org/10.1162/003465397557132)
+
+- Bai, J., & Ng, S. (2002). Determining the number of factors in approximate factor models. *Econometrica*, 70(1), 191-221. [DOI](https://doi.org/10.1111/1468-0262.00273)
 
 - Bai, J., & Perron, P. (1998). Estimating and testing linear models with multiple structural changes. *Econometrica*, 66(1), 47-78. [DOI](https://doi.org/10.2307/2998540)
 
@@ -613,3 +671,7 @@ report(result_gh)
 - Hansen, B. E. (1997). Approximate asymptotic p values for structural-change tests. *Journal of Business & Economic Statistics*, 15(1), 60-67. [DOI](https://doi.org/10.1080/07350015.1997.10524687)
 
 - Liu, J., Wu, S., & Zidek, J. V. (1997). On segmented multivariate regression. *Statistica Sinica*, 7(2), 497-525.
+
+- McCracken, M. W., & Ng, S. (2021). FRED-QD: A quarterly database for macroeconomic research. *Federal Reserve Bank of St. Louis Review*, 103(1), 1-44. [DOI](https://doi.org/10.20955/r.103.1-44)
+
+- Newey, W. K., & West, K. D. (1994). Automatic lag selection in covariance matrix estimation. *Review of Economic Studies*, 61(4), 631-653. [DOI](https://doi.org/10.2307/2297912)
