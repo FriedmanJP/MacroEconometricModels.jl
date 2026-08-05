@@ -589,6 +589,7 @@ include("counterfactual/moments.jl")
 include("counterfactual/opp.jl")
 include("counterfactual/constrained.jl")
 include("counterfactual/opp_sequence.jl")
+include("counterfactual/model_bank.jl")
 
 # Display (after all types)
 include("summary.jl")
@@ -828,6 +829,8 @@ export OPPConstraint, PathFloorConstraint, FunctionConstraint
 export constrained_opp, zlb_constraint
 # OPP sequences + time consistency (CF-16, #396)
 export OPPSequence, opp_sequence, opp_sensitivity, robust_weights
+# CMW model bank (CF-17, #397)
+export ModelBankMember, irf_match, posterior_model_probs, model_average
 
 # Local Projection types
 export AbstractLPModel, AbstractLPImpulseResponse, AbstractCovarianceEstimator

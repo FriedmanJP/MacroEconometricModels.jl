@@ -654,6 +654,33 @@ struct OPPSequence{T<:AbstractFloat} <: AbstractCounterfactual
     loss_name::String
 end
 
+"""
+    ModelBankMember{T<:AbstractFloat} <: AbstractCounterfactual
+
+One structural model estimated by limited-information IRF matching
+([`irf_match`](@ref), CMW 2025 §4): the RWMH posterior over its parameters,
+the Geweke log marginal likelihood, and the thinned posterior menus.
+
+# Fields
+- `name::String`, `param_names::Vector{Symbol}`.
+- `theta_draws::Matrix{T}`: kept (thinned) posterior draws, `n_kept × n_params`.
+- `log_post::Vector{T}`: per-kept-draw log posterior kernel.
+- `log_marglik::T`: Geweke modified-harmonic-mean log marginal likelihood.
+- `menu_draws::Vector{PolicyCausalEffects{T}}`: menus rebuilt at the kept
+  draws (horizon-truncated to the `T_store` kwarg — memory honesty).
+- `acceptance_rate::T`, `H_news::Int`.
+"""
+struct ModelBankMember{T<:AbstractFloat} <: AbstractCounterfactual
+    name::String
+    param_names::Vector{Symbol}
+    theta_draws::Matrix{T}
+    log_post::Vector{T}
+    log_marglik::T
+    menu_draws::Vector{PolicyCausalEffects{T}}
+    acceptance_rate::T
+    H_news::Int
+end
+
 # ---------------------------------------------------------------------------
 # Accessors
 # ---------------------------------------------------------------------------
@@ -764,6 +791,13 @@ function Base.show(io::IO, r::OPPResult{T}) where {T}
           "H=$(r.H)$origin",
           r.delta_draws === nothing ? "" :
           ", $(size(r.delta_draws, 2)) sims ($(r.n_failed) failed)")
+end
+
+function Base.show(io::IO, mb::ModelBankMember{T}) where {T}
+    print(io, "ModelBankMember{$T} \"$(mb.name)\": $(size(mb.theta_draws, 1)) kept draws over ",
+          "$(length(mb.param_names)) parameter$(_cf_plural(length(mb.param_names))), ",
+          "log-ML = $(round(mb.log_marglik, sigdigits=6)), ",
+          "acc = $(round(mb.acceptance_rate, sigdigits=3)), H_news = $(mb.H_news)")
 end
 
 function Base.show(io::IO, sq::OPPSequence{T}) where {T}
