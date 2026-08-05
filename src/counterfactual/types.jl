@@ -473,6 +473,51 @@ struct WoldRepresentation{T<:AbstractFloat} <: AbstractCounterfactual
     end
 end
 
+"""
+    PolicyCounterfactual{T<:AbstractFloat} <: AbstractCounterfactual
+
+Result of a McKay–Wolf rule counterfactual ([`policy_counterfactual`](@ref)):
+baseline and counterfactual paths, the enforcing date-0 policy-shock vector
+`ν*`, uncertainty bands, and the honesty diagnostics.
+
+# Fields
+- `outcomes` / `instruments`: variable names (the causal-effect container's).
+- `x_base`/`z_base`, `x_cf`/`z_cf`: length-`H` baseline and counterfactual
+  paths per variable.
+- `x_bands`/`z_bands`: optional `H × n_quantiles` band matrices per variable.
+- `nu::Vector{T}`, `shock_labels`: the enforcing shock vector and its labels.
+- `error_path::Vector{T}`, `rel_residual::T`: the implementation-error path
+  `M·ν* + b` and its relative norm — the honesty signal; a large value means
+  the rule is NOT enforceable with the supplied shocks.
+- `rel_residual_bands::Union{Nothing,Vector{T}}`: draw quantiles of the
+  relative residual.
+- `spanned::Bool`: `rel_residual < spanned_tol` (reporting convenience — the
+  honest object is `rel_residual` itself).
+- `rule_name::String`, `H::Int`, `quantile_levels::Vector{T}`.
+- `n_draws_used::Int`, `n_draws_failed::Int`: draw-propagation honesty counts.
+"""
+struct PolicyCounterfactual{T<:AbstractFloat} <: AbstractCounterfactual
+    outcomes::Vector{Symbol}
+    instruments::Vector{Symbol}
+    x_base::Vector{Vector{T}}
+    z_base::Vector{Vector{T}}
+    x_cf::Vector{Vector{T}}
+    z_cf::Vector{Vector{T}}
+    x_bands::Union{Nothing,Vector{Matrix{T}}}
+    z_bands::Union{Nothing,Vector{Matrix{T}}}
+    nu::Vector{T}
+    shock_labels::Vector{String}
+    error_path::Vector{T}
+    rel_residual::T
+    rel_residual_bands::Union{Nothing,Vector{T}}
+    spanned::Bool
+    rule_name::String
+    H::Int
+    quantile_levels::Vector{T}
+    n_draws_used::Int
+    n_draws_failed::Int
+end
+
 # ---------------------------------------------------------------------------
 # Accessors
 # ---------------------------------------------------------------------------
@@ -559,4 +604,13 @@ function Base.show(io::IO, pf::PolicyForecast{T}) where {T}
     origin = isempty(pf.origin) ? "" : ", origin=$(pf.origin)"
     print(io, "PolicyForecast{$T}: $n_x outcome$(_cf_plural(n_x)) (gaps), ",
           "H=$(pf.H), $(n_draws(pf)) draws$origin")
+end
+
+function Base.show(io::IO, pc::PolicyCounterfactual{T}) where {T}
+    n_x = length(pc.outcomes)
+    n_z = length(pc.instruments)
+    print(io, "PolicyCounterfactual{$T} \"$(pc.rule_name)\": ",
+          "$n_x outcome$(_cf_plural(n_x)), $n_z instrument$(_cf_plural(n_z)), ",
+          "H=$(pc.H), spanned=$(pc.spanned) (rel_residual=$(round(pc.rel_residual, sigdigits=3))), ",
+          "$(pc.n_draws_used) draws used ($(pc.n_draws_failed) failed)")
 end
