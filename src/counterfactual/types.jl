@@ -621,6 +621,39 @@ struct OPPResult{T<:AbstractFloat} <: AbstractCounterfactual
     n_failed::Int
 end
 
+"""
+    OPPSequence{T<:AbstractFloat} <: AbstractCounterfactual
+
+A policy-evaluation history ([`opp_sequence`](@ref)): the OPP at every
+decision date, with the time-consistency decomposition of its revisions.
+
+# Fields
+- `dates::Vector{String}`: opaque date labels.
+- `delta::Matrix{T}`: `n_s × n_dates` OPPs (draw medians when simulated;
+  `NaN` columns for missing/failed dates).
+- `delta_tc::Matrix{T}`: the time-consistent OPP — revisions purged of the
+  preference/operator part (`delta − pref_part`).
+- `news_part`/`pref_part`/`aging_part`: the exact revision decomposition
+  `δ_t − δ_{t−1} = news + pref + aging` (see [`opp_sequence`](@ref); the
+  aging term is the mechanical horizon roll that BM's infinite-horizon
+  stationary operator hides — under finite-`H` truncation it is real).
+- `bands`/`reject`: per-date CF-14 output (`level => n_s×2×n_dates` /
+  `level => n_s×n_dates`), `nothing` without simulation.
+- `shock_labels`, `loss_name`.
+"""
+struct OPPSequence{T<:AbstractFloat} <: AbstractCounterfactual
+    dates::Vector{String}
+    delta::Matrix{T}
+    delta_tc::Matrix{T}
+    news_part::Matrix{T}
+    pref_part::Matrix{T}
+    aging_part::Matrix{T}
+    bands::Union{Nothing,Dict{T,Array{T,3}}}
+    reject::Union{Nothing,Dict{T,Matrix{Bool}}}
+    shock_labels::Vector{String}
+    loss_name::String
+end
+
 # ---------------------------------------------------------------------------
 # Accessors
 # ---------------------------------------------------------------------------
@@ -731,6 +764,14 @@ function Base.show(io::IO, r::OPPResult{T}) where {T}
           "H=$(r.H)$origin",
           r.delta_draws === nothing ? "" :
           ", $(size(r.delta_draws, 2)) sims ($(r.n_failed) failed)")
+end
+
+function Base.show(io::IO, sq::OPPSequence{T}) where {T}
+    n_s, n_d = size(sq.delta)
+    n_ok = count(t -> all(isfinite, @view(sq.delta[:, t])), 1:n_d)
+    print(io, "OPPSequence{$T} \"$(sq.loss_name)\": $n_d date$(_cf_plural(n_d)) ",
+          "($n_ok valid), $n_s shock direction$(_cf_plural(n_s))",
+          sq.bands === nothing ? "" : ", with bands")
 end
 
 function Base.show(io::IO, cm::CounterfactualMoments{T}) where {T}

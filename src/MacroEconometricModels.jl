@@ -588,6 +588,7 @@ include("counterfactual/optimal_policy.jl")
 include("counterfactual/moments.jl")
 include("counterfactual/opp.jl")
 include("counterfactual/constrained.jl")
+include("counterfactual/opp_sequence.jl")
 
 # Display (after all types)
 include("summary.jl")
@@ -825,6 +826,8 @@ export OPPResult, opp, estimate_opp
 # Constrained OPP (CF-15, #395)
 export OPPConstraint, PathFloorConstraint, FunctionConstraint
 export constrained_opp, zlb_constraint
+# OPP sequences + time consistency (CF-16, #396)
+export OPPSequence, opp_sequence, opp_sensitivity, robust_weights
 
 # Local Projection types
 export AbstractLPModel, AbstractLPImpulseResponse, AbstractCovarianceEstimator
