@@ -714,6 +714,61 @@ struct CounterfactualHistory{T<:AbstractFloat} <: AbstractCounterfactual
     n_draws_failed::Int
 end
 
+"""
+    SpanningDiagnostic{T<:AbstractFloat} <: AbstractCounterfactual
+
+"Do we need a structural model?" ([`spanning_diagnostic`](@ref), CMW §6–7):
+the same counterfactual computed with empirics-only (thin) causal effects and
+with a model-extrapolated (square) menu, with the gap quantified.
+
+# Fields
+- `gap`/`gap_rel`: per-outcome max-abs and relative-L2 path gaps.
+- `loading_inside::T`: share of the exact solve's instrument-space
+  perturbation that lies inside the empirical span (`≈ 1` ⇒ data suffice).
+- `rel_residual_emp::T`: implementation error of the thin solve.
+- `spanned::Bool`: convenience verdict — the raw numbers are the result.
+- `outcomes`, `x_cf_emp`/`x_cf_full` (plot overlays), `bands_gap`.
+
+The comparison is against a *chosen* model extrapolation: it answers "does
+the model choice matter for THIS counterfactual", not "is the model true"
+(with CF-17 pooled menus, across-model disagreement widens the full bands).
+"""
+struct SpanningDiagnostic{T<:AbstractFloat} <: AbstractCounterfactual
+    gap::Vector{T}
+    gap_rel::Vector{T}
+    loading_inside::T
+    rel_residual_emp::T
+    spanned::Bool
+    outcomes::Vector{Symbol}
+    x_cf_emp::Vector{Vector{T}}
+    x_cf_full::Vector{Vector{T}}
+    bands_gap::Union{Nothing,Vector{Matrix{T}}}
+end
+
+"""
+    ForecastSufficiency{T<:AbstractFloat} <: AbstractCounterfactual
+
+Forecast-sufficiency / invertibility laboratory
+([`forecast_sufficiency`](@ref), CMW §2.3 + Fig. 1): how much worse do the
+observables' own (Wold/innovations) forecasts do than the full-information
+filter of a reference model? Invertibility is sufficient, not necessary —
+badly non-invertible information sets pass when the observables forecast
+well. A *population* exercise given the model: no data enters.
+
+# Fields
+- `observables::Vector{Symbol}`.
+- `fev_ratio::Matrix{T}`: `H × n_obs` Wold-info FEV / full-info FEV (≥ 1).
+- `one_step_ratio::Vector{T}` and the exact `invertible::Bool` flag.
+- `H::Int`.
+"""
+struct ForecastSufficiency{T<:AbstractFloat} <: AbstractCounterfactual
+    observables::Vector{Symbol}
+    fev_ratio::Matrix{T}
+    one_step_ratio::Vector{T}
+    invertible::Bool
+    H::Int
+end
+
 # ---------------------------------------------------------------------------
 # Accessors
 # ---------------------------------------------------------------------------
@@ -824,6 +879,19 @@ function Base.show(io::IO, r::OPPResult{T}) where {T}
           "H=$(r.H)$origin",
           r.delta_draws === nothing ? "" :
           ", $(size(r.delta_draws, 2)) sims ($(r.n_failed) failed)")
+end
+
+function Base.show(io::IO, sd::SpanningDiagnostic{T}) where {T}
+    print(io, "SpanningDiagnostic{$T}: spanned=$(sd.spanned), ",
+          "max gap_rel = $(round(maximum(sd.gap_rel; init=zero(T)), sigdigits=3)), ",
+          "loading_inside = $(round(sd.loading_inside, sigdigits=4)), ",
+          "thin rel_residual = $(round(sd.rel_residual_emp, sigdigits=3))")
+end
+
+function Base.show(io::IO, fs::ForecastSufficiency{T}) where {T}
+    print(io, "ForecastSufficiency{$T}: $(length(fs.observables)) observable$(_cf_plural(length(fs.observables))), ",
+          "H=$(fs.H), invertible=$(fs.invertible), ",
+          "max FEV ratio = $(round(maximum(fs.fev_ratio), sigdigits=5))")
 end
 
 function Base.show(io::IO, ch::CounterfactualHistory{T}) where {T}

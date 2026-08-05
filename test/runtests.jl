@@ -273,6 +273,7 @@ const TEST_GROUPS = [
         "counterfactual/test_opp_sequence.jl",
         "counterfactual/test_model_bank.jl",
         "counterfactual/test_historical.jl",
+        "counterfactual/test_diagnostics.jl",
     ]),
 ]
 

@@ -591,6 +591,7 @@ include("counterfactual/constrained.jl")
 include("counterfactual/opp_sequence.jl")
 include("counterfactual/model_bank.jl")
 include("counterfactual/historical.jl")
+include("counterfactual/diagnostics.jl")
 
 # Display (after all types)
 include("summary.jl")
@@ -834,6 +835,9 @@ export OPPSequence, opp_sequence, opp_sensitivity, robust_weights
 export ModelBankMember, irf_match, posterior_model_probs, model_average
 # Historical/conditional counterfactuals (CF-18, #398)
 export CounterfactualHistory, counterfactual_forecast, counterfactual_history
+# Spanning + forecast-sufficiency diagnostics (CF-19, #399)
+export SpanningDiagnostic, ForecastSufficiency
+export spanning_diagnostic, forecast_sufficiency
 
 # Local Projection types
 export AbstractLPModel, AbstractLPImpulseResponse, AbstractCovarianceEstimator
