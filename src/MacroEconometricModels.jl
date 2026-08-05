@@ -572,6 +572,9 @@ include("olg/lifecycle.jl")
 include("ct/continuous_aiyagari.jl")
 include("ct/two_asset.jl")
 
+# Policy counterfactuals (Barnichon-Mesters OPP, McKay-Wolf, CMW model bank)
+include("counterfactual/types.jl")
+
 # Display (after all types)
 include("summary.jl")
 
@@ -777,6 +780,9 @@ export ct_hjb, ct_kfe, ct_steady_state, ct_mit_shock
 export CTTwoAsset, CTTwoAssetSolution, ct_two_asset_solve
 export CTTwoAssetGE, CTTwoAssetTransition, ct_two_asset_ge, ct_two_asset_mit
 export hand_to_mouth, ceiling_mass, ct_two_asset_stationarity
+
+# Counterfactual module (CF-01, #381)
+export PolicyCausalEffects, PolicyRule, PolicyLoss, is_square
 
 # Local Projection types
 export AbstractLPModel, AbstractLPImpulseResponse, AbstractCovarianceEstimator
