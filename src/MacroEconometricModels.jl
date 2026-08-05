@@ -579,6 +579,7 @@ include("counterfactual/loss.jl")
 include("counterfactual/kernel.jl")
 include("counterfactual/empirical.jl")
 include("counterfactual/forecast.jl")
+include("counterfactual/irf_target.jl")
 
 # Display (after all types)
 include("summary.jl")
@@ -797,6 +798,8 @@ export BaselinePath, WoldRepresentation
 export policy_causal_effects, baseline_path, wold_representation
 # Forecast adapters (CF-05, #385)
 export PolicyForecast, policy_forecast, interp_to_quarterly
+# IRF-matching targets + CTW covariance (CF-06, #386)
+export stacked_irf_target, ctw_covariance
 
 # Local Projection types
 export AbstractLPModel, AbstractLPImpulseResponse, AbstractCovarianceEstimator
