@@ -535,6 +535,43 @@ PolicyCounterfactual{T}(outcomes, instruments, x_base, z_base, x_cf, z_cf,
                             H, quantile_levels, n_draws_used, n_draws_failed,
                             T(NaN), T(NaN), T(NaN))
 
+"""
+    CounterfactualMoments{T<:AbstractFloat} <: AbstractCounterfactual
+
+Second-moment (Wold) counterfactual ([`counterfactual_moments`](@ref)): the
+unconditional covariance of the mapped variables under the baseline and under
+an alternative rule/loss, from re-solving every orthonormalized Wold column.
+
+# Fields
+- `varnames::Vector{Symbol}`: mapped variables (outcomes then instruments).
+- `Sigma_base`/`Sigma_cf`, `sd_base`/`sd_cf`, `corr_base`/`corr_cf`: VMA-sum
+  covariances (`Σ_h Θ_h Θ_h'`), standard deviations, correlations — band-
+  limited when `freq_band` is set.
+- `sd_cf_bands::Union{Nothing,Matrix{T}}`: draw quantiles of `sd_cf`
+  (`n_vars × n_quantiles`).
+- `Theta_cf::Array{T,3}`: `H × n_vars × n_innovations` counterfactual Wold
+  IRFs.
+- `policy_name::String`, `H::Int`.
+- `tail_share::T`: `‖Θ_cf[last 10 rows]‖/‖Θ_cf‖` — VMA convergence
+  diagnostic; > 1% means `H` must grow.
+- `freq_band::Union{Nothing,Tuple{T,T}}`: `(ω_lo, ω_hi)` when band-limited.
+"""
+struct CounterfactualMoments{T<:AbstractFloat} <: AbstractCounterfactual
+    varnames::Vector{Symbol}
+    Sigma_base::Matrix{T}
+    Sigma_cf::Matrix{T}
+    sd_base::Vector{T}
+    sd_cf::Vector{T}
+    corr_base::Matrix{T}
+    corr_cf::Matrix{T}
+    sd_cf_bands::Union{Nothing,Matrix{T}}
+    Theta_cf::Array{T,3}
+    policy_name::String
+    H::Int
+    tail_share::T
+    freq_band::Union{Nothing,Tuple{T,T}}
+end
+
 # ---------------------------------------------------------------------------
 # Accessors
 # ---------------------------------------------------------------------------
@@ -634,4 +671,12 @@ function Base.show(io::IO, pc::PolicyCounterfactual{T}) where {T}
         print(io, ", loss $(round(pc.loss_base, sigdigits=4)) -> $(round(pc.loss_cf, sigdigits=4)) ",
               "(‖FOC‖=$(round(pc.foc_norm, sigdigits=3)))")
     end
+end
+
+function Base.show(io::IO, cm::CounterfactualMoments{T}) where {T}
+    n = length(cm.varnames)
+    band = cm.freq_band === nothing ? "" :
+           ", band=($(round(cm.freq_band[1], sigdigits=3)), $(round(cm.freq_band[2], sigdigits=3)))"
+    print(io, "CounterfactualMoments{$T} \"$(cm.policy_name)\": $n variable$(_cf_plural(n)), ",
+          "H=$(cm.H), tail_share=$(round(cm.tail_share, sigdigits=3))$band")
 end
