@@ -581,6 +581,7 @@ include("counterfactual/empirical.jl")
 include("counterfactual/forecast.jl")
 include("counterfactual/irf_target.jl")
 include("counterfactual/model_dsge.jl")
+include("counterfactual/model_ha.jl")
 
 # Display (after all types)
 include("summary.jl")
@@ -803,6 +804,8 @@ export PolicyForecast, policy_forecast, interp_to_quarterly
 export stacked_irf_target, ctw_covariance
 # Model-implied news menus (CF-07, #387)
 export policy_news_matrix
+# HA sequence-space policy effects (CF-08, #388)
+export sequence_jacobian
 
 # Local Projection types
 export AbstractLPModel, AbstractLPImpulseResponse, AbstractCovarianceEstimator
