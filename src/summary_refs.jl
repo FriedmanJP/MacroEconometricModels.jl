@@ -15,6 +15,31 @@ const _RefEntry = @NamedTuple{
 }
 
 const _REFERENCES = Dict{Symbol, _RefEntry}(
+    # --- Policy Counterfactuals (CF series, #381-#404) ---
+    :mckay_wolf2023 => (key=:mckay_wolf2023, authors="McKay, Alisdair and Wolf, Christian K.", year=2023,
+        title="What Can Time-Series Regressions Tell Us About Policy Counterfactuals?",
+        journal="Econometrica", volume="91", issue="5", pages="1695--1725",
+        doi="10.3982/ECTA21045", isbn="", publisher="", entry_type=:article),
+    :romer_romer2004 => (key=:romer_romer2004, authors="Romer, Christina D. and Romer, David H.", year=2004,
+        title="A New Measure of Monetary Shocks: Derivation and Implications",
+        journal="American Economic Review", volume="94", issue="4", pages="1055--1084",
+        doi="10.1257/0002828042002651", isbn="", publisher="", entry_type=:article),
+    :wieland_yang2020 => (key=:wieland_yang2020, authors="Wieland, Johannes F. and Yang, Mu-Jeung", year=2020,
+        title="Financial Dampening",
+        journal="Journal of Money, Credit and Banking", volume="52", issue="1", pages="79--113",
+        doi="10.1111/jmcb.12681", isbn="", publisher="", entry_type=:article),
+    :gertler_karadi2015 => (key=:gertler_karadi2015, authors="Gertler, Mark and Karadi, Peter", year=2015,
+        title="Monetary Policy Surprises, Credit Costs, and Economic Activity",
+        journal="American Economic Journal: Macroeconomics", volume="7", issue="1", pages="44--76",
+        doi="10.1257/mac.20130329", isbn="", publisher="", entry_type=:article),
+    :aruoba_drechsel2024 => (key=:aruoba_drechsel2024, authors="Aruoba, S. Boragan and Drechsel, Thomas", year=2024,
+        title="Identifying Monetary Policy Shocks: A Natural Language Approach",
+        journal="CEPR Discussion Paper DP17133", volume="", issue="", pages="",
+        doi="", isbn="", publisher="", entry_type=:article),
+    :ben_zeev_khan2016 => (key=:ben_zeev_khan2016, authors="Ben Zeev, Nadav and Khan, Hashmat", year=2016,
+        title="Investment-Specific News Shocks and U.S. Business Cycles",
+        journal="Journal of Money, Credit and Banking", volume="48", issue="7", pages="1543--1573",
+        doi="10.1111/jmcb.12345", isbn="", publisher="", entry_type=:article),
     # --- Input-Output Analysis ---
     :leontief1936 => (key=:leontief1936, authors="Leontief, Wassily W.", year=1936,
         title="Quantitative Input and Output Relations in the Economic System of the United States",
