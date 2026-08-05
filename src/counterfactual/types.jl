@@ -581,7 +581,10 @@ announced policy optimal, and if not, by how much to adjust?
 # Fields
 - `delta::Vector{T}`: the OPP `δ* = −(R'WR)⁻¹R'W·E_tY⁰` — the recommended
   perturbation per identified shock direction, in that shock's instrument
-  units (length `n_s`).
+  units (length `n_s`). After `estimate_opp` this is the draw **median** (BM
+  convention); `delta_plugin` keeps the plug-in point.
+- `delta_plugin::Vector{T}`: the plug-in point estimate (equals `delta` on
+  the point version).
 - `shock_labels::Vector{String}`.
 - `gradient::Vector{T}`: `R_y'W·E_tY⁰ (+ instrument terms)` — the FOC
   statistic; optimality ⟺ `gradient = 0` ⟺ `δ* = 0`.
@@ -591,11 +594,15 @@ announced policy optimal, and if not, by how much to adjust?
 - `P_base`/`P_opp`: announced/recommended instrument paths (`nothing` for the
   pure optimality test — the recommendation needs them, the test does not).
 - `outcomes`/`instruments`, `H`, `origin`.
-- `delta_draws`, `bands`, `reject`: two-source simulation output — filled by
-  `estimate_opp` (CF-14), `nothing` on the point version.
+- `delta_draws`, `bands`, `reject`, `n_failed`: two-source simulation output —
+  filled by `estimate_opp` (CF-14), `nothing`/0 on the point version. Bands
+  are equal-tailed at the BM levels (default 60/75/90%): **rejection at LOWER
+  levels is the conservative choice for a policymaker averse to running
+  non-optimal policy** (the reversed test polarity, BM §5.1).
 """
 struct OPPResult{T<:AbstractFloat} <: AbstractCounterfactual
     delta::Vector{T}
+    delta_plugin::Vector{T}
     shock_labels::Vector{String}
     gradient::Vector{T}
     loss_base::T
@@ -611,6 +618,7 @@ struct OPPResult{T<:AbstractFloat} <: AbstractCounterfactual
     delta_draws::Union{Nothing,Matrix{T}}
     bands::Union{Nothing,Dict{T,Matrix{T}}}
     reject::Union{Nothing,Dict{T,Vector{Bool}}}
+    n_failed::Int
 end
 
 # ---------------------------------------------------------------------------
@@ -721,7 +729,8 @@ function Base.show(io::IO, r::OPPResult{T}) where {T}
           "($n_s shock direction$(_cf_plural(n_s))), loss ",
           "$(round(r.loss_base, sigdigits=4)) -> $(round(r.loss_opp, sigdigits=4)), ",
           "H=$(r.H)$origin",
-          r.delta_draws === nothing ? "" : ", $(size(r.delta_draws, 2)) sims")
+          r.delta_draws === nothing ? "" :
+          ", $(size(r.delta_draws, 2)) sims ($(r.n_failed) failed)")
 end
 
 function Base.show(io::IO, cm::CounterfactualMoments{T}) where {T}

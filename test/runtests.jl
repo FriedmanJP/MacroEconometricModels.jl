@@ -268,6 +268,7 @@ const TEST_GROUPS = [
         "counterfactual/test_optimal_policy.jl",
         "counterfactual/test_moments.jl",
         "counterfactual/test_opp.jl",
+        "counterfactual/test_opp_inference.jl",
     ]),
 ]
 
