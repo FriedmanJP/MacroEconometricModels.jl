@@ -577,6 +577,7 @@ include("counterfactual/types.jl")
 include("counterfactual/rules.jl")
 include("counterfactual/loss.jl")
 include("counterfactual/kernel.jl")
+include("counterfactual/empirical.jl")
 
 # Display (after all types)
 include("summary.jl")
@@ -790,6 +791,9 @@ export PolicyCausalEffects, PolicyRule, PolicyLoss, is_square
 export rate_peg_rule, rate_target_rule, inflation_target_rule, output_gap_rule
 export ngdp_rule, taylor_rule, custom_rule
 export weight_matrix, policy_loss, ait_loss, smoothing_penalty
+# Empirical causal-effect adapters (CF-04, #384)
+export BaselinePath, WoldRepresentation
+export policy_causal_effects, baseline_path, wold_representation
 
 # Local Projection types
 export AbstractLPModel, AbstractLPImpulseResponse, AbstractCovarianceEstimator

@@ -314,6 +314,113 @@ function PolicyLoss(; outcomes::AbstractVector{Symbol},
                   lam, T(beta), String(name))
 end
 
+"""
+    BaselinePath{T<:AbstractFloat} <: AbstractCounterfactual
+
+The baseline the counterfactual acts on: the IRF of every outcome/instrument to
+ONE non-policy shock (or a forecast path, CF-05), over `H` periods.
+
+# Fields
+- `outcomes::Vector{Symbol}`, `instruments::Vector{Symbol}`: variable names.
+- `x::Vector{Vector{T}}`, `z::Vector{Vector{T}}`: one length-`H` path per
+  outcome / instrument.
+- `x_draws::Union{Nothing,Vector{Matrix{T}}}`, `z_draws`: optional uncertainty
+  draws, one `H × n_draws` matrix per variable.
+- `H::Int`: truncation horizon.
+- `label::String`: what the baseline is (e.g. the non-policy shock name).
+
+Built by [`baseline_path`](@ref) (CF-04) and the forecast adapters (CF-05).
+"""
+struct BaselinePath{T<:AbstractFloat} <: AbstractCounterfactual
+    outcomes::Vector{Symbol}
+    instruments::Vector{Symbol}
+    x::Vector{Vector{T}}
+    z::Vector{Vector{T}}
+    x_draws::Union{Nothing,Vector{Matrix{T}}}
+    z_draws::Union{Nothing,Vector{Matrix{T}}}
+    H::Int
+    label::String
+
+    function BaselinePath{T}(outcomes, instruments, x, z, x_draws, z_draws, H,
+                             label) where {T<:AbstractFloat}
+        length(x) == length(outcomes) || throw(ArgumentError(
+            "x: expected $(length(outcomes)) paths (one per outcome), got $(length(x))"))
+        length(z) == length(instruments) || throw(ArgumentError(
+            "z: expected $(length(instruments)) paths (one per instrument), got $(length(z))"))
+        H >= 1 || throw(ArgumentError("H: expected H >= 1, got $H"))
+        for (i, v) in enumerate(x)
+            length(v) == H || throw(ArgumentError(
+                "x[$i]: expected length H = $H, got $(length(v))"))
+        end
+        for (k, v) in enumerate(z)
+            length(v) == H || throw(ArgumentError(
+                "z[$k]: expected length H = $H, got $(length(v))"))
+        end
+        nd = 0
+        if x_draws !== nothing
+            length(x_draws) == length(outcomes) || throw(ArgumentError(
+                "x_draws: expected $(length(outcomes)) matrices (one per outcome), got $(length(x_draws))"))
+            nd = isempty(x_draws) ? 0 : size(x_draws[1], 2)
+            for (i, D) in enumerate(x_draws)
+                size(D) == (H, nd) || throw(ArgumentError(
+                    "x_draws[$i]: expected size (H, n_draws) = ($H, $nd), got $(size(D))"))
+            end
+        end
+        if z_draws !== nothing
+            length(z_draws) == length(instruments) || throw(ArgumentError(
+                "z_draws: expected $(length(instruments)) matrices (one per instrument), got $(length(z_draws))"))
+            for (k, D) in enumerate(z_draws)
+                nd_k = nd > 0 ? nd : size(z_draws[1], 2)
+                size(D) == (H, nd_k) || throw(ArgumentError(
+                    "z_draws[$k]: expected size (H, n_draws) = ($H, $nd_k), got $(size(D))"))
+            end
+        end
+        new{T}(outcomes, instruments, x, z, x_draws, z_draws, H, label)
+    end
+end
+
+"""
+    WoldRepresentation{T<:AbstractFloat} <: AbstractCounterfactual
+
+Orthonormalized Wold (structural MA) representation of a reduced-form VAR:
+`Theta[h, i, j]` is the response of variable `i` at horizon `h − 1` to
+orthogonalized innovation `j` (`Theta[1, :, :]` is the impact matrix).
+
+# Fields
+- `Theta::Array{T,3}`: `H × n_y × n_y` Wold IRFs.
+- `Sigma_u::Matrix{T}`: innovation covariance (pre-orthogonalization).
+- `varnames::Vector{String}`: variable names.
+- `draws::Union{Nothing,Array{T,4}}`: optional `H × n_y × n_y × n_draws`
+  posterior draws.
+
+Any orthogonalization works: second-moment and historical counterfactuals are
+invariant to the rotation (CMW 2025, App. A.2 — an orthogonal `P` cancels), so
+the Cholesky ordering used by [`wold_representation`](@ref) carries no
+identification content.
+"""
+struct WoldRepresentation{T<:AbstractFloat} <: AbstractCounterfactual
+    Theta::Array{T,3}
+    Sigma_u::Matrix{T}
+    varnames::Vector{String}
+    draws::Union{Nothing,Array{T,4}}
+
+    function WoldRepresentation{T}(Theta, Sigma_u, varnames, draws) where {T<:AbstractFloat}
+        H, n1, n2 = size(Theta)
+        n1 == n2 || throw(ArgumentError(
+            "Theta: expected square variable dimensions, got ($n1, $n2)"))
+        H >= 1 || throw(ArgumentError("Theta: expected H >= 1, got $H"))
+        size(Sigma_u) == (n1, n1) || throw(ArgumentError(
+            "Sigma_u: expected size ($n1, $n1), got $(size(Sigma_u))"))
+        length(varnames) == n1 || throw(ArgumentError(
+            "varnames: expected $n1 names, got $(length(varnames))"))
+        if draws !== nothing
+            size(draws)[1:3] == (H, n1, n1) || throw(ArgumentError(
+                "draws: expected leading size (H, n, n) = ($H, $n1, $n1), got $(size(draws)[1:3])"))
+        end
+        new{T}(Theta, Sigma_u, varnames, draws)
+    end
+end
+
 # ---------------------------------------------------------------------------
 # Accessors
 # ---------------------------------------------------------------------------
@@ -341,6 +448,16 @@ Base.eltype(::Type{PolicyCausalEffects{T}}) where {T} = T
 Base.eltype(::Type{PolicyRule{T}}) where {T} = T
 Base.eltype(::Type{PolicyLoss{T}}) where {T} = T
 
+function n_draws(bp::BaselinePath)
+    bp.x_draws !== nothing && !isempty(bp.x_draws) && return size(bp.x_draws[1], 2)
+    bp.z_draws !== nothing && !isempty(bp.z_draws) && return size(bp.z_draws[1], 2)
+    return 0
+end
+n_draws(w::WoldRepresentation) = w.draws === nothing ? 0 : size(w.draws, 4)
+
+Base.eltype(::Type{BaselinePath{T}}) where {T} = T
+Base.eltype(::Type{WoldRepresentation{T}}) where {T} = T
+
 _rule_horizon(r::PolicyRule) = isempty(r.A_x) ? size(r.A_z[1], 1) : size(r.A_x[1], 1)
 _loss_horizon(l::PolicyLoss) = size(l.W_x[1], 1)
 
@@ -367,4 +484,17 @@ function Base.show(io::IO, l::PolicyLoss{T}) where {T}
     n_z = length(l.instruments)
     print(io, "PolicyLoss{$T} \"$(l.name)\": $n_x outcome$(_cf_plural(n_x)), ",
           "$n_z instrument$(_cf_plural(n_z)), H=$(_loss_horizon(l)), beta=$(l.beta)")
+end
+
+function Base.show(io::IO, bp::BaselinePath{T}) where {T}
+    n_x = length(bp.outcomes)
+    n_z = length(bp.instruments)
+    print(io, "BaselinePath{$T} \"$(bp.label)\": $n_x outcome$(_cf_plural(n_x)), ",
+          "$n_z instrument$(_cf_plural(n_z)), H=$(bp.H), $(n_draws(bp)) draws")
+end
+
+function Base.show(io::IO, w::WoldRepresentation{T}) where {T}
+    H, n, _ = size(w.Theta)
+    print(io, "WoldRepresentation{$T}: $n variable$(_cf_plural(n)), H=$H, ",
+          "$(n_draws(w)) draws")
 end
