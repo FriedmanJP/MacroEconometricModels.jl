@@ -586,6 +586,7 @@ include("counterfactual/behavioral.jl")
 include("counterfactual/counterfactual.jl")
 include("counterfactual/optimal_policy.jl")
 include("counterfactual/moments.jl")
+include("counterfactual/opp.jl")
 
 # Display (after all types)
 include("summary.jl")
@@ -818,6 +819,8 @@ export PolicyCounterfactual, policy_counterfactual
 export optimal_policy, optimal_rule
 # Second-moment (Wold) counterfactuals (CF-12, #392)
 export CounterfactualMoments, counterfactual_moments
+# Barnichon-Mesters OPP (CF-13, #393)
+export OPPResult, opp
 
 # Local Projection types
 export AbstractLPModel, AbstractLPImpulseResponse, AbstractCovarianceEstimator

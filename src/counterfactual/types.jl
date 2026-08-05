@@ -572,6 +572,47 @@ struct CounterfactualMoments{T<:AbstractFloat} <: AbstractCounterfactual
     freq_band::Union{Nothing,Tuple{T,T}}
 end
 
+"""
+    OPPResult{T<:AbstractFloat} <: AbstractCounterfactual
+
+Barnichon–Mesters Optimal Policy Perturbation ([`opp`](@ref)): is the
+announced policy optimal, and if not, by how much to adjust?
+
+# Fields
+- `delta::Vector{T}`: the OPP `δ* = −(R'WR)⁻¹R'W·E_tY⁰` — the recommended
+  perturbation per identified shock direction, in that shock's instrument
+  units (length `n_s`).
+- `shock_labels::Vector{String}`.
+- `gradient::Vector{T}`: `R_y'W·E_tY⁰ (+ instrument terms)` — the FOC
+  statistic; optimality ⟺ `gradient = 0` ⟺ `δ* = 0`.
+- `loss_base::T`, `loss_opp::T`: loss at the announced policy and after the
+  perturbation (`loss_opp ≤ loss_base` by construction).
+- `Y_base`/`Y_opp`: objective gap paths before/after, per loss outcome.
+- `P_base`/`P_opp`: announced/recommended instrument paths (`nothing` for the
+  pure optimality test — the recommendation needs them, the test does not).
+- `outcomes`/`instruments`, `H`, `origin`.
+- `delta_draws`, `bands`, `reject`: two-source simulation output — filled by
+  `estimate_opp` (CF-14), `nothing` on the point version.
+"""
+struct OPPResult{T<:AbstractFloat} <: AbstractCounterfactual
+    delta::Vector{T}
+    shock_labels::Vector{String}
+    gradient::Vector{T}
+    loss_base::T
+    loss_opp::T
+    Y_base::Vector{Vector{T}}
+    Y_opp::Vector{Vector{T}}
+    P_base::Union{Nothing,Vector{Vector{T}}}
+    P_opp::Union{Nothing,Vector{Vector{T}}}
+    outcomes::Vector{Symbol}
+    instruments::Vector{Symbol}
+    H::Int
+    origin::String
+    delta_draws::Union{Nothing,Matrix{T}}
+    bands::Union{Nothing,Dict{T,Matrix{T}}}
+    reject::Union{Nothing,Dict{T,Vector{Bool}}}
+end
+
 # ---------------------------------------------------------------------------
 # Accessors
 # ---------------------------------------------------------------------------
@@ -671,6 +712,16 @@ function Base.show(io::IO, pc::PolicyCounterfactual{T}) where {T}
         print(io, ", loss $(round(pc.loss_base, sigdigits=4)) -> $(round(pc.loss_cf, sigdigits=4)) ",
               "(‖FOC‖=$(round(pc.foc_norm, sigdigits=3)))")
     end
+end
+
+function Base.show(io::IO, r::OPPResult{T}) where {T}
+    n_s = length(r.delta)
+    origin = isempty(r.origin) ? "" : ", origin=$(r.origin)"
+    print(io, "OPPResult{$T}: δ* = $(round.(r.delta, sigdigits=4)) ",
+          "($n_s shock direction$(_cf_plural(n_s))), loss ",
+          "$(round(r.loss_base, sigdigits=4)) -> $(round(r.loss_opp, sigdigits=4)), ",
+          "H=$(r.H)$origin",
+          r.delta_draws === nothing ? "" : ", $(size(r.delta_draws, 2)) sims")
 end
 
 function Base.show(io::IO, cm::CounterfactualMoments{T}) where {T}
