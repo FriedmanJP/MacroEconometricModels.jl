@@ -1002,7 +1002,7 @@ function main()
         peg = rate_peg_rule(Hcf; outcomes=[:infl, :ygap], instruments=[:rate])
         pc_cf = policy_counterfactual(base_cf, ce_cf, peg)
         try_save(() -> plot_result(pc_cf; title="Rate-peg counterfactual (NK news menu)"),
-                 "cf_counterfactual")
+                 "cf_counterfactual.html")
 
         loss_cf = policy_loss([:infl, :ygap], Hcf; lambda=[1.0, 0.25], beta=0.99)
         sdg = MacroEconometricModels._suppress_warnings() do
@@ -1011,10 +1011,10 @@ function main()
                                           Theta_z=[ce_cf.Theta_z[1][:, 1:2]])
             spanning_diagnostic(base_cf, ce_thin, ce_cf, loss_cf)
         end
-        try_save(() -> plot_result(sdg), "cf_spanning")
+        try_save(() -> plot_result(sdg), "cf_spanning.html")
 
         fs_cf = forecast_sufficiency(solve(cf_spec), [:π, :y]; H=24)
-        try_save(() -> plot_result(fs_cf), "cf_sufficiency")
+        try_save(() -> plot_result(fs_cf), "cf_sufficiency.html")
     catch e
         @warn "Skipped CF counterfactual/spanning assets" exception=(e, catch_backtrace())
     end
@@ -1034,7 +1034,7 @@ function main()
         sq_q = opp_sequence(fcs, ce_q, loss_q; n_sim=300, rng=MersenneTwister(23))
         try_save(() -> plot_result(sq_q; view=:fan,
                                    title="OPP sequence with 60/75/90% fans"),
-                 "cf_opp_sequence")
+                 "cf_opp_sequence.html")
 
         # second moments under strict inflation targeting (synthetic Wold)
         wold_q = MacroEconometricModels.WoldRepresentation{Float64}(
@@ -1055,7 +1055,7 @@ function main()
                                    warn_invertibility=false)
         end
         try_save(() -> plot_result(cm_q; title="Volatility under strict inflation targeting"),
-                 "cf_moments")
+                 "cf_moments.html")
     catch e
         @warn "Skipped CF OPP/moments assets" exception=(e, catch_backtrace())
     end
