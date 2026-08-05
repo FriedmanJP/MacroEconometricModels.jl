@@ -578,6 +578,7 @@ include("counterfactual/rules.jl")
 include("counterfactual/loss.jl")
 include("counterfactual/kernel.jl")
 include("counterfactual/empirical.jl")
+include("counterfactual/forecast.jl")
 
 # Display (after all types)
 include("summary.jl")
@@ -794,6 +795,8 @@ export weight_matrix, policy_loss, ait_loss, smoothing_penalty
 # Empirical causal-effect adapters (CF-04, #384)
 export BaselinePath, WoldRepresentation
 export policy_causal_effects, baseline_path, wold_representation
+# Forecast adapters (CF-05, #385)
+export PolicyForecast, policy_forecast, interp_to_quarterly
 
 # Local Projection types
 export AbstractLPModel, AbstractLPImpulseResponse, AbstractCovarianceEstimator

@@ -57,7 +57,8 @@ BVARPosterior{T}(B_draws, Sigma_draws, n_draws, p, n, data, prior, sampler, varn
 
 Bayesian VAR forecast with posterior credible intervals.
 
-Fields: forecast (h×n), ci_lower (h×n), ci_upper (h×n), horizon, conf_level, point_estimate, varnames.
+Fields: forecast (h×n), ci_lower (h×n), ci_upper (h×n), horizon, conf_level, point_estimate, varnames,
+_draws (optional raw posterior draws, n_draws×h×n; populated by `forecast(...; store_draws=true)`, CF-05/#385).
 """
 struct BVARForecast{T<:AbstractFloat} <: AbstractForecastResult{T}
     forecast::Matrix{T}
@@ -67,7 +68,14 @@ struct BVARForecast{T<:AbstractFloat} <: AbstractForecastResult{T}
     conf_level::T
     point_estimate::Symbol
     varnames::Vector{String}
+    # Optional raw posterior forecast draws (n_draws × h × n) for consumers that
+    # need forecast uncertainty beyond quantiles (e.g. policy_forecast; CF-05/#385).
+    _draws::Union{Nothing,Array{T,3}}
 end
+
+# Backward-compatible constructor (no draws)
+BVARForecast{T}(forecast, ci_lower, ci_upper, horizon, conf_level, point_estimate, varnames) where {T} =
+    BVARForecast{T}(forecast, ci_lower, ci_upper, horizon, conf_level, point_estimate, varnames, nothing)
 
 function Base.show(io::IO, fc::BVARForecast{T}) where {T}
     n_vars = length(fc.varnames)

@@ -380,6 +380,58 @@ struct BaselinePath{T<:AbstractFloat} <: AbstractCounterfactual
 end
 
 """
+    PolicyForecast{T<:AbstractFloat} <: AbstractCounterfactual
+
+Baseline forecast of the objective **gaps** `E_t Y_t⁰` — one of the two
+sufficient statistics of the Barnichon–Mesters OPP (CF-13/14).
+
+# Fields
+- `outcomes::Vector{Symbol}`: gap variable names.
+- `values::Vector{Vector{T}}`: one length-`H` **gap** path per outcome
+  (deviations from target, NOT levels — feeding levels makes the OPP drive
+  levels to zero).
+- `draws::Union{Nothing,Vector{Matrix{T}}}`: optional forecast-uncertainty
+  draws, one `H × n_draws` matrix per outcome (semantics aligned with
+  [`BaselinePath`](@ref) — OPP consumes both interchangeably).
+- `H::Int`: forecast horizon.
+- `origin::String`: forecast origin label (e.g. `"2008M4"`, `"2021Q2"`).
+
+Built by [`policy_forecast`](@ref). The forecast must be conditional on the
+**baseline** policy rule: when OPP recommendations are adopted repeatedly,
+each subsequent forecast must still be constructed under the *old* rule
+(Barnichon–Mesters, web appendix S0.5).
+"""
+struct PolicyForecast{T<:AbstractFloat} <: AbstractCounterfactual
+    outcomes::Vector{Symbol}
+    values::Vector{Vector{T}}
+    draws::Union{Nothing,Vector{Matrix{T}}}
+    H::Int
+    origin::String
+
+    function PolicyForecast{T}(outcomes, values, draws, H, origin) where {T<:AbstractFloat}
+        isempty(outcomes) && throw(ArgumentError(
+            "outcomes: expected at least 1 outcome, got 0"))
+        length(values) == length(outcomes) || throw(ArgumentError(
+            "values: expected $(length(outcomes)) paths (one per outcome), got $(length(values))"))
+        H >= 1 || throw(ArgumentError("H: expected H >= 1, got $H"))
+        for (i, v) in enumerate(values)
+            length(v) == H || throw(ArgumentError(
+                "values[$i]: expected length H = $H, got $(length(v))"))
+        end
+        if draws !== nothing
+            length(draws) == length(outcomes) || throw(ArgumentError(
+                "draws: expected $(length(outcomes)) matrices (one per outcome), got $(length(draws))"))
+            nd = isempty(draws) ? 0 : size(draws[1], 2)
+            for (i, D) in enumerate(draws)
+                size(D) == (H, nd) || throw(ArgumentError(
+                    "draws[$i]: expected size (H, n_draws) = ($H, $nd), got $(size(D))"))
+            end
+        end
+        new{T}(outcomes, values, draws, H, origin)
+    end
+end
+
+"""
     WoldRepresentation{T<:AbstractFloat} <: AbstractCounterfactual
 
 Orthonormalized Wold (structural MA) representation of a reduced-form VAR:
@@ -454,9 +506,12 @@ function n_draws(bp::BaselinePath)
     return 0
 end
 n_draws(w::WoldRepresentation) = w.draws === nothing ? 0 : size(w.draws, 4)
+n_draws(pf::PolicyForecast) =
+    (pf.draws === nothing || isempty(pf.draws)) ? 0 : size(pf.draws[1], 2)
 
 Base.eltype(::Type{BaselinePath{T}}) where {T} = T
 Base.eltype(::Type{WoldRepresentation{T}}) where {T} = T
+Base.eltype(::Type{PolicyForecast{T}}) where {T} = T
 
 _rule_horizon(r::PolicyRule) = isempty(r.A_x) ? size(r.A_z[1], 1) : size(r.A_x[1], 1)
 _loss_horizon(l::PolicyLoss) = size(l.W_x[1], 1)
@@ -497,4 +552,11 @@ function Base.show(io::IO, w::WoldRepresentation{T}) where {T}
     H, n, _ = size(w.Theta)
     print(io, "WoldRepresentation{$T}: $n variable$(_cf_plural(n)), H=$H, ",
           "$(n_draws(w)) draws")
+end
+
+function Base.show(io::IO, pf::PolicyForecast{T}) where {T}
+    n_x = length(pf.outcomes)
+    origin = isempty(pf.origin) ? "" : ", origin=$(pf.origin)"
+    print(io, "PolicyForecast{$T}: $n_x outcome$(_cf_plural(n_x)) (gaps), ",
+          "H=$(pf.H), $(n_draws(pf)) draws$origin")
 end

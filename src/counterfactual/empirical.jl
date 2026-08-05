@@ -35,10 +35,10 @@ _pce_draws_slice(D::AbstractArray{T,4}, H::Int, vi::Int, shock_idx::Vector{Int})
 _bp_draws_slice(D::AbstractArray{T,4}, H::Int, vi::Int, si::Int) where {T} =
     permutedims(D[:, 1:H, vi, si], (2, 1))
 
-function _cf_check_horizon(H::Int, avail_H::Int)
+function _cf_check_horizon(H::Int, avail_H::Int; what::String="irf")
     H >= 1 || throw(ArgumentError("H: expected H >= 1, got $H"))
     H <= avail_H || throw(ArgumentError(
-        "H = $H exceeds the available IRF horizon $avail_H; re-run irf with a longer horizon — the solve horizon must exceed the reporting horizon (McKay–Wolf use H = 100)"))
+        "H = $H exceeds the available $what horizon $avail_H; re-run $what with a longer horizon — the solve horizon must exceed the reporting horizon (McKay–Wolf use H = 100)"))
     return nothing
 end
 

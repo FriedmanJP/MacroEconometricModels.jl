@@ -259,6 +259,7 @@ const TEST_GROUPS = [
         "counterfactual/test_rules.jl",
         "counterfactual/test_kernel.jl",
         "counterfactual/test_empirical.jl",
+        "counterfactual/test_forecast.jl",
     ]),
 ]
 
