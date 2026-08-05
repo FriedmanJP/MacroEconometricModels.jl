@@ -256,6 +256,7 @@ const TEST_GROUPS = [
     # test files here. Lightest group; ranked last in _expected_rank.
     ("Counterfactual" => [
         "counterfactual/test_types.jl",
+        "counterfactual/test_rules.jl",
     ]),
 ]
 

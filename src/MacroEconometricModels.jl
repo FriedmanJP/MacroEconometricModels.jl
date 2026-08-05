@@ -574,6 +574,8 @@ include("ct/two_asset.jl")
 
 # Policy counterfactuals (Barnichon-Mesters OPP, McKay-Wolf, CMW model bank)
 include("counterfactual/types.jl")
+include("counterfactual/rules.jl")
+include("counterfactual/loss.jl")
 
 # Display (after all types)
 include("summary.jl")
@@ -783,6 +785,10 @@ export hand_to_mouth, ceiling_mass, ct_two_asset_stationarity
 
 # Counterfactual module (CF-01, #381)
 export PolicyCausalEffects, PolicyRule, PolicyLoss, is_square
+# Rule templates + loss builders (CF-02, #382)
+export rate_peg_rule, rate_target_rule, inflation_target_rule, output_gap_rule
+export ngdp_rule, taylor_rule, custom_rule
+export weight_matrix, policy_loss, ait_loss, smoothing_penalty
 
 # Local Projection types
 export AbstractLPModel, AbstractLPImpulseResponse, AbstractCovarianceEstimator
