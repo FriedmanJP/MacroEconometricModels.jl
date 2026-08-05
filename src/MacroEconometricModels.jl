@@ -592,6 +592,7 @@ include("counterfactual/opp_sequence.jl")
 include("counterfactual/model_bank.jl")
 include("counterfactual/historical.jl")
 include("counterfactual/diagnostics.jl")
+include("counterfactual/show.jl")
 
 # Display (after all types)
 include("summary.jl")

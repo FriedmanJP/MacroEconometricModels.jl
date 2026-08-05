@@ -275,6 +275,7 @@ const TEST_GROUPS = [
         "counterfactual/test_historical.jl",
         "counterfactual/test_diagnostics.jl",
         "counterfactual/test_mp_shocks_data.jl",
+        "counterfactual/test_show.jl",
     ]),
 ]
 
