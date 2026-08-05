@@ -582,6 +582,7 @@ include("counterfactual/forecast.jl")
 include("counterfactual/irf_target.jl")
 include("counterfactual/model_dsge.jl")
 include("counterfactual/model_ha.jl")
+include("counterfactual/behavioral.jl")
 
 # Display (after all types)
 include("summary.jl")
@@ -806,6 +807,8 @@ export stacked_irf_target, ctw_covariance
 export policy_news_matrix
 # HA sequence-space policy effects (CF-08, #388)
 export sequence_jacobian
+# Behavioral-expectations operators (CF-09, #389)
+export cognitive_discounting, sticky_expectations, behavioral
 
 # Local Projection types
 export AbstractLPModel, AbstractLPImpulseResponse, AbstractCovarianceEstimator

@@ -263,6 +263,7 @@ const TEST_GROUPS = [
         "counterfactual/test_irf_target.jl",
         "counterfactual/test_model_dsge.jl",
         "counterfactual/test_model_ha.jl",
+        "counterfactual/test_behavioral.jl",
     ]),
 ]
 
