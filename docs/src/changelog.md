@@ -6,6 +6,49 @@ output, not just documentation.
 
 ---
 
+## v0.8.0
+
+Feature release: the **policy-counterfactual module** (`src/counterfactual/`, series
+`CF-01`--`CF-24` = `#381`--`#404`) — sufficient-statistics policy analysis after
+McKay & Wolf (2023), Barnichon & Mesters (2023), and Caravello, McKay & Wolf (2025).
+The module is a general implementation of the *methods*, validated by a ten-identity
+theorem-level oracle suite in linear laboratories (Proposition-1 exact recovery on RANK
+and HA menus, rule immateriality, the optimal-policy circle, OPP ``\equiv`` optimal
+projection, the Sims--Zha vs. news-based Lucas contrast, an end-to-end historical
+recursion oracle, Wold-rotation invariance, model-averaging degeneracy, and
+second-moment consistency) — not by replicating published tables.
+
+**New**
+
+- **Containers and templates**: `PolicyCausalEffects` (square news menus / thin
+  empirical subsets, with draws), `PolicyRule`/`PolicyLoss` with
+  peg/target/Taylor/NGDP/AIT/smoothing builders; one shared weighted-projection kernel
+  with exact, least-squares, and min-norm regimes and always-surfaced
+  implementation-error diagnostics.
+- **Inputs from everything the package estimates**: `policy_causal_effects` adapters
+  for VAR/BVAR/sign-set/LP IRFs, `baseline_path`, `wold_representation`,
+  `policy_forecast` gap containers (BVAR `forecast(...; store_draws=true)` retention;
+  SEP-style external route), `stacked_irf_target` + `ctw_covariance`,
+  `policy_news_matrix` DSGE news menus (shared news pipeline, linear state growth),
+  public `sequence_jacobian` + HA `policy_causal_effects`, and
+  `cognitive_discounting`/`sticky_expectations`/`behavioral` operators.
+- **Engines**: `policy_counterfactual` (McKay--Wolf), `optimal_policy`/`optimal_rule`,
+  `counterfactual_moments` (with business-cycle frequency bands), `opp`/`estimate_opp`
+  (reversed 60/75/90% band polarity), `constrained_opp` (ZLB/pledges via SLSQP with
+  KKT diagnostics), `opp_sequence`/`opp_sensitivity`/`robust_weights` (exact three-part
+  time-consistency decomposition), `irf_match`/`posterior_model_probs`/`model_average`
+  (CMW model bank), `counterfactual_forecast`/`counterfactual_history` (forecast-revision
+  recursion), `spanning_diagnostic`/`forecast_sufficiency`.
+- **Data**: `load_example(:mp_shocks)` — quarterly US monetary panel (1960Q1--2019Q4)
+  with the Romer--Romer/Wieland--Yang, Gertler--Karadi, Aruoba--Drechsel, and Ben
+  Zeev--Khan shock series (NaN outside published samples).
+- **UX**: `report()`/`refs()` for all nine result types (honesty verdicts, band-polarity
+  notes, model-probability tables), seven `plot_result` dispatches (path overlays with
+  automatic implementation-error panels, OPP fan charts, moment and spanning views), and
+  a four-page "Policy Counterfactuals" documentation section.
+
+---
+
 ## v0.7.3
 
 Patch release resolving the issues filed by the 2026-08 documentation audit (`#516`--`#595`)
