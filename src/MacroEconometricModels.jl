@@ -584,6 +584,7 @@ include("counterfactual/model_dsge.jl")
 include("counterfactual/model_ha.jl")
 include("counterfactual/behavioral.jl")
 include("counterfactual/counterfactual.jl")
+include("counterfactual/optimal_policy.jl")
 
 # Display (after all types)
 include("summary.jl")
@@ -812,6 +813,8 @@ export sequence_jacobian
 export cognitive_discounting, sticky_expectations, behavioral
 # McKay-Wolf rule counterfactuals (CF-10, #390)
 export PolicyCounterfactual, policy_counterfactual
+# Optimal-policy projection (CF-11, #391)
+export optimal_policy, optimal_rule
 
 # Local Projection types
 export AbstractLPModel, AbstractLPImpulseResponse, AbstractCovarianceEstimator

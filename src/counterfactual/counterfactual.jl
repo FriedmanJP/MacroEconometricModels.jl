@@ -8,6 +8,70 @@
 # with fresh shocks would be Sims-Zha, NOT Lucas-robust — the API deliberately
 # has no such path.
 
+# Shared draw-propagation loop (CF-10 rule counterfactuals, CF-11 optimal
+# policy, CF-13 OPP). `solve_fn(Tx_d, Tz_d, xb_d, zb_d)` returns the kernel
+# NamedTuple (needs .nu and .rel_residual) or throws; non-finite/errored
+# draws are dropped and counted (BayesianImpulseResponse honesty precedent).
+function _cf_draw_bands(ce::PolicyCausalEffects{T}, base::BaselinePath{T},
+                        baseline_draws::Symbol, xb::Vector{Vector{T}},
+                        zb::Vector{Vector{T}}, qlev::Vector{T},
+                        solve_fn) where {T<:AbstractFloat}
+    nd = n_draws(ce)
+    H = ce.H
+    nb = n_draws(base)
+    baseline_draws == :match && nb != nd && throw(ArgumentError(
+        "baseline_draws = :match requires matching draw counts, got baseline $nb vs container $nd (use :fixed when the two come from different estimations)"))
+    baseline_draws == :match && !isempty(ce.instruments) && base.z_draws === nothing &&
+        throw(ArgumentError(
+            "baseline_draws = :match requires instrument draws on the baseline (z_draws is missing)"))
+    xd = [Matrix{T}(undef, H, nd) for _ in ce.outcomes]
+    zd = [Matrix{T}(undef, H, nd) for _ in ce.instruments]
+    rrd = Vector{T}(undef, nd)
+    keep = falses(nd)
+    _suppress_warnings() do
+        for d in 1:nd
+            Tx_d = [Matrix{T}(@view(ce.Theta_x_draws[i][:, :, d])) for i in eachindex(ce.outcomes)]
+            Tz_d = [Matrix{T}(@view(ce.Theta_z_draws[k][:, :, d])) for k in eachindex(ce.instruments)]
+            xb_d = baseline_draws == :fixed ? xb :
+                   [Vector{T}(base.x_draws[findfirst(==(s), base.outcomes)][:, d]) for s in ce.outcomes]
+            zb_d = baseline_draws == :fixed ? zb :
+                   [Vector{T}(base.z_draws[findfirst(==(s), base.instruments)][:, d]) for s in ce.instruments]
+            ok = true
+            try
+                r_d = solve_fn(Tx_d, Tz_d, xb_d, zb_d)
+                ok = all(isfinite, r_d.nu)
+                if ok
+                    for i in eachindex(ce.outcomes)
+                        xd[i][:, d] = xb_d[i] + Tx_d[i] * r_d.nu
+                    end
+                    for k in eachindex(ce.instruments)
+                        zd[k][:, d] = zb_d[k] + Tz_d[k] * r_d.nu
+                    end
+                    rrd[d] = r_d.rel_residual
+                end
+            catch
+                ok = false
+            end
+            keep[d] = ok
+        end
+    end
+    used = findall(keep)
+    n_used = length(used)
+    n_failed = nd - n_used
+    n_failed > 0 && @warn "draw propagation: $n_failed of $nd draws failed (non-finite or errored solves) and were dropped"
+    x_bands = nothing
+    z_bands = nothing
+    rr_bands = nothing
+    if n_used > 0
+        x_bands = [Matrix{T}([quantile(@view(xd[i][h, used]), q) for h in 1:H, q in qlev])
+                   for i in eachindex(ce.outcomes)]
+        z_bands = [Matrix{T}([quantile(@view(zd[k][h, used]), q) for h in 1:H, q in qlev])
+                   for k in eachindex(ce.instruments)]
+        rr_bands = [T(quantile(rrd[used], q)) for q in qlev]
+    end
+    return (x_bands, z_bands, rr_bands, n_used, n_failed)
+end
+
 # Align rule symbols to container/baseline entries and assemble (M, b).
 function _mw_assemble(base::BaselinePath{T}, ce::PolicyCausalEffects{T},
                       rule::PolicyRule{T};
@@ -131,57 +195,14 @@ function policy_counterfactual(base::BaselinePath{T}, ce::PolicyCausalEffects{T}
     n_used = 0
     n_failed = 0
     if use_draws
-        nb = n_draws(base)
-        baseline_draws == :match && nb != nd && throw(ArgumentError(
-            "baseline_draws = :match requires matching draw counts, got baseline $nb vs container $nd (use :fixed when the two come from different estimations)"))
-        baseline_draws == :match && !isempty(ce.instruments) && base.z_draws === nothing &&
-            throw(ArgumentError(
-                "baseline_draws = :match requires instrument draws on the baseline (z_draws is missing)"))
-        xd = [Matrix{T}(undef, H, nd) for _ in ce.outcomes]
-        zd = [Matrix{T}(undef, H, nd) for _ in ce.instruments]
-        rrd = Vector{T}(undef, nd)
-        keep = falses(nd)
-        _suppress_warnings() do
-            for d in 1:nd
-                Tx_d = [@view(ce.Theta_x_draws[i][:, :, d]) for i in eachindex(ce.outcomes)]
-                Tz_d = [@view(ce.Theta_z_draws[k][:, :, d]) for k in eachindex(ce.instruments)]
-                xb_d = baseline_draws == :fixed ? xb :
-                       [Vector{T}(base.x_draws[findfirst(==(s), base.outcomes)][:, d]) for s in ce.outcomes]
-                zb_d = baseline_draws == :fixed ? zb :
-                       [Vector{T}(base.z_draws[findfirst(==(s), base.instruments)][:, d]) for s in ce.instruments]
-                ok = true
-                try
-                    M_d, b_d = _mw_assemble(base, ce, rule;
-                                            Theta_x=Tx_d, Theta_z=Tz_d,
-                                            x_base=xb_d, z_base=zb_d)
-                    r_d = _policy_projection(Matrix{T}(M_d), b_d; method=method)
-                    ok = all(isfinite, r_d.nu)
-                    if ok
-                        for i in eachindex(ce.outcomes)
-                            xd[i][:, d] = xb_d[i] + Tx_d[i] * r_d.nu
-                        end
-                        for k in eachindex(ce.instruments)
-                            zd[k][:, d] = zb_d[k] + Tz_d[k] * r_d.nu
-                        end
-                        rrd[d] = r_d.rel_residual
-                    end
-                catch
-                    ok = false
-                end
-                keep[d] = ok
-            end
+        solve_d = (Tx_d, Tz_d, xb_d, zb_d) -> begin
+            M_d, b_d = _mw_assemble(base, ce, rule;
+                                    Theta_x=Tx_d, Theta_z=Tz_d,
+                                    x_base=xb_d, z_base=zb_d)
+            _policy_projection(M_d, b_d; method=method)
         end
-        used = findall(keep)
-        n_used = length(used)
-        n_failed = nd - n_used
-        n_failed > 0 && @warn "policy_counterfactual: $n_failed of $nd draws failed (non-finite or errored solves) and were dropped"
-        if n_used > 0
-            x_bands = [Matrix{T}([quantile(@view(xd[i][h, used]), q) for h in 1:H, q in qlev])
-                       for i in eachindex(ce.outcomes)]
-            z_bands = [Matrix{T}([quantile(@view(zd[k][h, used]), q) for h in 1:H, q in qlev])
-                       for k in eachindex(ce.instruments)]
-            rr_bands = [T(quantile(rrd[used], q)) for q in qlev]
-        end
+        x_bands, z_bands, rr_bands, n_used, n_failed =
+            _cf_draw_bands(ce, base, baseline_draws, xb, zb, qlev, solve_d)
     end
 
     PolicyCounterfactual{T}(copy(ce.outcomes), copy(ce.instruments),

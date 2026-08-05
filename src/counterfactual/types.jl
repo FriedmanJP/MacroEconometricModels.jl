@@ -495,6 +495,9 @@ baseline and counterfactual paths, the enforcing date-0 policy-shock vector
   honest object is `rel_residual` itself).
 - `rule_name::String`, `H::Int`, `quantile_levels::Vector{T}`.
 - `n_draws_used::Int`, `n_draws_failed::Int`: draw-propagation honesty counts.
+- `loss_base::T`, `loss_cf::T`, `foc_norm::T`: loss accounting and the
+  first-order-condition norm — populated by [`optimal_policy`](@ref) (CF-11),
+  `NaN` for plain rule counterfactuals.
 """
 struct PolicyCounterfactual{T<:AbstractFloat} <: AbstractCounterfactual
     outcomes::Vector{Symbol}
@@ -516,7 +519,21 @@ struct PolicyCounterfactual{T<:AbstractFloat} <: AbstractCounterfactual
     quantile_levels::Vector{T}
     n_draws_used::Int
     n_draws_failed::Int
+    loss_base::T
+    loss_cf::T
+    foc_norm::T
 end
+
+# Backward-compatible constructor (CF-10 rule counterfactuals: no loss accounting)
+PolicyCounterfactual{T}(outcomes, instruments, x_base, z_base, x_cf, z_cf,
+                        x_bands, z_bands, nu, shock_labels, error_path,
+                        rel_residual, rel_residual_bands, spanned, rule_name,
+                        H, quantile_levels, n_draws_used, n_draws_failed) where {T<:AbstractFloat} =
+    PolicyCounterfactual{T}(outcomes, instruments, x_base, z_base, x_cf, z_cf,
+                            x_bands, z_bands, nu, shock_labels, error_path,
+                            rel_residual, rel_residual_bands, spanned, rule_name,
+                            H, quantile_levels, n_draws_used, n_draws_failed,
+                            T(NaN), T(NaN), T(NaN))
 
 # ---------------------------------------------------------------------------
 # Accessors
@@ -613,4 +630,8 @@ function Base.show(io::IO, pc::PolicyCounterfactual{T}) where {T}
           "$n_x outcome$(_cf_plural(n_x)), $n_z instrument$(_cf_plural(n_z)), ",
           "H=$(pc.H), spanned=$(pc.spanned) (rel_residual=$(round(pc.rel_residual, sigdigits=3))), ",
           "$(pc.n_draws_used) draws used ($(pc.n_draws_failed) failed)")
+    if !isnan(pc.loss_cf)
+        print(io, ", loss $(round(pc.loss_base, sigdigits=4)) -> $(round(pc.loss_cf, sigdigits=4)) ",
+              "(‖FOC‖=$(round(pc.foc_norm, sigdigits=3)))")
+    end
 end
