@@ -576,6 +576,7 @@ include("ct/two_asset.jl")
 include("counterfactual/types.jl")
 include("counterfactual/rules.jl")
 include("counterfactual/loss.jl")
+include("counterfactual/kernel.jl")
 
 # Display (after all types)
 include("summary.jl")

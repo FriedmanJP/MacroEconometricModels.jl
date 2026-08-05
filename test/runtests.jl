@@ -257,6 +257,7 @@ const TEST_GROUPS = [
     ("Counterfactual" => [
         "counterfactual/test_types.jl",
         "counterfactual/test_rules.jl",
+        "counterfactual/test_kernel.jl",
     ]),
 ]
 
