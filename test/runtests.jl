@@ -269,6 +269,7 @@ const TEST_GROUPS = [
         "counterfactual/test_moments.jl",
         "counterfactual/test_opp.jl",
         "counterfactual/test_opp_inference.jl",
+        "counterfactual/test_constrained_opp.jl",
     ]),
 ]
 

@@ -587,6 +587,7 @@ include("counterfactual/counterfactual.jl")
 include("counterfactual/optimal_policy.jl")
 include("counterfactual/moments.jl")
 include("counterfactual/opp.jl")
+include("counterfactual/constrained.jl")
 
 # Display (after all types)
 include("summary.jl")
@@ -821,6 +822,9 @@ export optimal_policy, optimal_rule
 export CounterfactualMoments, counterfactual_moments
 # Barnichon-Mesters OPP (CF-13, #393; inference CF-14, #394)
 export OPPResult, opp, estimate_opp
+# Constrained OPP (CF-15, #395)
+export OPPConstraint, PathFloorConstraint, FunctionConstraint
+export constrained_opp, zlb_constraint
 
 # Local Projection types
 export AbstractLPModel, AbstractLPImpulseResponse, AbstractCovarianceEstimator
