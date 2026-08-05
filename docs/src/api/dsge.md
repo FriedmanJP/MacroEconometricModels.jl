@@ -11,6 +11,9 @@ AbstractDSGEModel
 DSGESpec
 LinearDSGE
 DSGESolution
+nshocks(::DSGESolution)
+is_determined(::DSGESolution)
+is_stable(::DSGESolution)
 PerturbationSolution
 ProjectionSolution
 PerfectForesightPath

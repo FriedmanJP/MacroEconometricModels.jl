@@ -42,14 +42,14 @@ quarterly (observed every 3rd month). The BVAR is estimated on the complete
   explicit value is always honoured.
 - `lambda0::Real=0.2` — initial overall shrinkage
 - `theta0::Real=1.0` — initial lag-decay exponent (Litterman `d` / GLP `α`; larger ⇒
-  higher lags shrunk harder). See [`_bvar_dummy_obs`](@ref) for why own-vs-cross relative
+  higher lags shrunk harder). See `_bvar_dummy_obs` for why own-vs-cross relative
   tightness is not a separate hyperparameter under the conjugate NIW prior (#572).
 - `miu0::Real=1.0` — initial sum-of-coefficients weight
 - `alpha0::Real=2.0` — initial co-persistence weight
 - `prior::Symbol=:conjugate` — `:conjugate` for the GLP Normal-Inverse-Wishart
   dummy-observation prior, or `:litterman` for Litterman's (1986) non-conjugate prior with
   `Σ` fixed at `diag(σ̂²)`. Only `:litterman` admits `theta_cross`; see
-  [`_litterman_prior_rows`](@ref) (#602).
+  `_litterman_prior_rows` (#602).
 - `theta_cross0::Real=1.0` — initial cross-variable relative tightness. `:litterman` only;
   passing it under `:conjugate` throws, because no dummy-observation prior can express it.
 
