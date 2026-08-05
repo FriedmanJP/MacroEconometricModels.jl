@@ -773,3 +773,48 @@ function _residual_diagnostics_panels(resid::AbstractVector, fitted::AbstractVec
 
     panels
 end
+
+"""
+    _keyed_rows_json(xvals, cols) -> String
+
+Generic multi-series row builder (CF-22): emit `[{x, key₁, key₂, …}, …]` from
+one x-vector and `cols::Vector{Pair{String,<:AbstractVector}}` of equal length.
+`NaN`/`Inf` serialize to `null` via `_json` (renderers gap them). Use this
+instead of hand-rolling row loops in plot methods (plotrule A6).
+"""
+function _keyed_rows_json(xvals::AbstractVector,
+                          cols::Vector{<:Pair{String,<:AbstractVector}})
+    n = length(xvals)
+    for (k, v) in cols
+        length(v) == n || throw(ArgumentError(
+            "_keyed_rows_json: column \"$k\" has length $(length(v)), expected $n"))
+    end
+    rows = Vector{Pair{String,String}}[]
+    for i in 1:n
+        row = Pair{String,String}["x" => _json(xvals[i])]
+        for (k, v) in cols
+            push!(row, k => _json(v[i]))
+        end
+        push!(rows, row)
+    end
+    _json_array_of_objects(rows)
+end
+
+"""
+    _matrix_heat_json(M, row_labels, col_labels) -> String
+
+Heatmap cells `[{x: col_label, y: row_label, v}, …]` from a PRE-COMPUTED matrix
+`M[r, c]` (CF-22 correlation views; `_corr_matrix_json` computes correlations
+from raw data, this one just serializes an existing matrix).
+"""
+function _matrix_heat_json(M::AbstractMatrix, row_labels::Vector{String},
+                           col_labels::Vector{String})
+    size(M) == (length(row_labels), length(col_labels)) || throw(ArgumentError(
+        "_matrix_heat_json: size $(size(M)) does not match labels ($(length(row_labels)), $(length(col_labels)))"))
+    rows = Vector{Pair{String,String}}[]
+    for r in 1:size(M, 1), c in 1:size(M, 2)
+        push!(rows, ["x" => _json(col_labels[c]), "y" => _json(row_labels[r]),
+                     "v" => _json(M[r, c])])
+    end
+    _json_array_of_objects(rows)
+end

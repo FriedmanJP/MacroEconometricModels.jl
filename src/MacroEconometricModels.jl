@@ -655,6 +655,7 @@ include("plotting/ct_olg.jl")          # PLT-35 (#497): CT Aiyagari / two-asset 
 include("plotting/micro_coef.jl")      # PLT-36 (#498): panel/LDV coef & marginal-effect plots
 include("plotting/gmm.jl")             # PLT-37 (#499): GMM/SMM moment fit + news-impact
 include("plotting/fceval.jl")          # PLT-38 (#500): forecast-eval + LP extras
+include("plotting/counterfactual.jl")  # CF-22 (#402): policy-counterfactual result plots
 
 # =============================================================================
 # Exports - Types
