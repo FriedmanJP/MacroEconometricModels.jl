@@ -590,6 +590,7 @@ include("counterfactual/opp.jl")
 include("counterfactual/constrained.jl")
 include("counterfactual/opp_sequence.jl")
 include("counterfactual/model_bank.jl")
+include("counterfactual/historical.jl")
 
 # Display (after all types)
 include("summary.jl")
@@ -831,6 +832,8 @@ export constrained_opp, zlb_constraint
 export OPPSequence, opp_sequence, opp_sensitivity, robust_weights
 # CMW model bank (CF-17, #397)
 export ModelBankMember, irf_match, posterior_model_probs, model_average
+# Historical/conditional counterfactuals (CF-18, #398)
+export CounterfactualHistory, counterfactual_forecast, counterfactual_history
 
 # Local Projection types
 export AbstractLPModel, AbstractLPImpulseResponse, AbstractCovarianceEstimator

@@ -681,6 +681,39 @@ struct ModelBankMember{T<:AbstractFloat} <: AbstractCounterfactual
     H_news::Int
 end
 
+"""
+    CounterfactualHistory{T<:AbstractFloat} <: AbstractCounterfactual
+
+Historical-evolution counterfactual ([`counterfactual_history`](@ref)): the
+realized panel next to the path the economy would have followed had the
+alternative policy been in place from the first date of the window — built
+from forecast REVISIONS only, never from identified structural shocks.
+
+# Fields
+- `dates::Vector{String}`, `varnames::Vector{Symbol}` (outcomes then
+  instruments).
+- `realized::Matrix{T}`, `cf::Matrix{T}`: `n_dates × n_vars` panels.
+- `cf_bands::Union{Nothing,Array{T,3}}`: `n_dates × n_vars × n_quantiles`.
+- `nu::Matrix{T}`: per-date enforcing shock vectors (`n_s × n_dates`).
+- `rel_residual::Vector{T}`: per-date implementation-error residuals.
+- `policy_name::String`, `H::Int`, `quantile_levels::Vector{T}`,
+  `n_draws_used::Int`, `n_draws_failed::Int`.
+"""
+struct CounterfactualHistory{T<:AbstractFloat} <: AbstractCounterfactual
+    dates::Vector{String}
+    varnames::Vector{Symbol}
+    realized::Matrix{T}
+    cf::Matrix{T}
+    cf_bands::Union{Nothing,Array{T,3}}
+    nu::Matrix{T}
+    rel_residual::Vector{T}
+    policy_name::String
+    H::Int
+    quantile_levels::Vector{T}
+    n_draws_used::Int
+    n_draws_failed::Int
+end
+
 # ---------------------------------------------------------------------------
 # Accessors
 # ---------------------------------------------------------------------------
@@ -791,6 +824,14 @@ function Base.show(io::IO, r::OPPResult{T}) where {T}
           "H=$(r.H)$origin",
           r.delta_draws === nothing ? "" :
           ", $(size(r.delta_draws, 2)) sims ($(r.n_failed) failed)")
+end
+
+function Base.show(io::IO, ch::CounterfactualHistory{T}) where {T}
+    n_d, n_v = size(ch.realized)
+    print(io, "CounterfactualHistory{$T} \"$(ch.policy_name)\": $n_d date$(_cf_plural(n_d)), ",
+          "$n_v variable$(_cf_plural(n_v)), max rel_residual = ",
+          "$(round(maximum(ch.rel_residual; init=zero(T)), sigdigits=3)), ",
+          "$(ch.n_draws_used) draws used ($(ch.n_draws_failed) failed)")
 end
 
 function Base.show(io::IO, mb::ModelBankMember{T}) where {T}
