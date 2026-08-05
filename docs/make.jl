@@ -81,6 +81,12 @@ makedocs(;
             "Baqaee & Farhi (2019)" => "io_baqaee_farhi.md",
             "Downloading Data" => "io_download.md",
         ],
+        "Policy Counterfactuals" => [
+            "Overview" => "counterfactual.md",
+            "Rule Counterfactuals (McKay-Wolf)" => "counterfactual_rules.md",
+            "Optimal Policy Perturbations (Barnichon-Mesters)" => "counterfactual_opp.md",
+            "Model Bank & Diagnostics (CMW)" => "counterfactual_bank.md",
+        ],
         "Structural Analysis" => [
             "Structural Identification" => "structural_identification.md",
             "Statistical Identification" => [
@@ -130,6 +136,7 @@ makedocs(;
             "Panel Models" => "api/panel.md",
             "DSGE Models" => "api/dsge.md",
             "Structural & Statistical Identification" => "api/structural.md",
+            "Policy Counterfactuals" => "api/counterfactual.md",
             "GMM & SMM" => "api/gmm.md",
             "Hypothesis Tests" => "api/tests.md",
             "Nowcasting" => "api/nowcasting.md",
