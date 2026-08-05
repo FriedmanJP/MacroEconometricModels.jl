@@ -580,6 +580,7 @@ include("counterfactual/kernel.jl")
 include("counterfactual/empirical.jl")
 include("counterfactual/forecast.jl")
 include("counterfactual/irf_target.jl")
+include("counterfactual/model_dsge.jl")
 
 # Display (after all types)
 include("summary.jl")
@@ -800,6 +801,8 @@ export policy_causal_effects, baseline_path, wold_representation
 export PolicyForecast, policy_forecast, interp_to_quarterly
 # IRF-matching targets + CTW covariance (CF-06, #386)
 export stacked_irf_target, ctw_covariance
+# Model-implied news menus (CF-07, #387)
+export policy_news_matrix
 
 # Local Projection types
 export AbstractLPModel, AbstractLPImpulseResponse, AbstractCovarianceEstimator
