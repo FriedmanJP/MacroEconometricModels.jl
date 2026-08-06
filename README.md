@@ -24,6 +24,8 @@ A comprehensive Julia package for macroeconometric research and analysis.
 
 **Input-Output:** IOData container, Leontief/Ghosh models, output/income/employment multipliers, backward/forward linkages (Rasmussen) & key sectors, structural decomposition analysis, hypothetical extraction, environmental satellite accounts, Baqaee-Farhi (2019), pymrio-style MRIO downloaders (OECD/WIOD/Exiobase3/Eora26/GLORIA)
 
+**Policy Counterfactuals:** sufficient-statistics policy analysis — McKay-Wolf (2023) rule counterfactuals and optimal-policy projections (peg/Taylor/NGDP/AIT templates, second-moment counterfactuals), Barnichon-Mesters (2023) OPP with two-source 60/75/90% inference, ZLB/pre-commitment constraints (SLSQP) and decision-date sequences with time-consistency decomposition, Caravello-McKay-Wolf (2025) model bank (limited-information IRF matching, Geweke marginal likelihoods, model averaging), DSGE news menus + one-asset HANK sequence-space menus + Gabaix/sticky-expectations behavioral operators, historical counterfactuals from forecast revisions, spanning & forecast-sufficiency diagnostics, `load_example(:mp_shocks)` US monetary panel; validated by a ten-identity theorem-level oracle suite
+
 **Cross-Sectional:** OLS, WLS, IV/2SLS (+ LIML/Fuller/k-class), penalized (ridge/LASSO/elastic net), robust (Huber/bisquare/MM), Tobit/truncated, Heckman selection, Logit, Probit, Ordered Logit/Probit, Multinomial Logit (MLE), marginal effects (AME/MEM/MER)
 
 **Nonparametric:** kernel density estimation (Sheather-Jones), Nadaraya-Watson & local-polynomial regression, LOWESS

@@ -373,7 +373,8 @@ varnames(post::BVARPosterior) = post.varnames
 # =============================================================================
 
 """
-    forecast(post::BVARPosterior, h; reps=nothing, conf_level=0.95, point_estimate=:mean) -> BVARForecast{T}
+    forecast(post::BVARPosterior, h; reps=nothing, conf_level=0.95, point_estimate=:mean,
+             store_draws=false) -> BVARForecast{T}
 
 Forecast from Bayesian VAR using posterior draws.
 
@@ -389,6 +390,9 @@ distribution of forecast paths across draws.
 - `reps`: Number of posterior draws to use (default: all)
 - `conf_level`: Credible interval level (default: 0.95)
 - `point_estimate`: `:mean` (default) or `:median` for central tendency
+- `store_draws`: retain the raw posterior forecast draws in `_draws`
+  (n_valid × h × n; default `false` — quantiles only). Consumed by
+  `policy_forecast` (CF-05/#385).
 
 # Returns
 `BVARForecast{T}` with posterior mean forecast and credible intervals.
@@ -403,6 +407,7 @@ function forecast(post::BVARPosterior{T}, h::Int;
                   reps::Union{Nothing,Int}=nothing,
                   conf_level::Real=0.95,
                   point_estimate::Symbol=:mean,
+                  store_draws::Bool=false,
                   rng::AbstractRNG=Random.default_rng()) where {T}
     h < 1 && throw(ArgumentError("Forecast horizon must be positive"))
 
@@ -476,7 +481,8 @@ function forecast(post::BVARPosterior{T}, h::Int;
         ci_upper[hi, j] = quantile(d, 1 - alpha_half)
     end
 
-    BVARForecast{T}(point, ci_lower, ci_upper, h, T(conf_level), point_estimate, post.varnames)
+    BVARForecast{T}(point, ci_lower, ci_upper, h, T(conf_level), point_estimate, post.varnames,
+                    store_draws ? copy(sim_valid) : nothing)
 end
 
 # =============================================================================

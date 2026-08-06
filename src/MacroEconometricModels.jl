@@ -572,6 +572,28 @@ include("olg/lifecycle.jl")
 include("ct/continuous_aiyagari.jl")
 include("ct/two_asset.jl")
 
+# Policy counterfactuals (Barnichon-Mesters OPP, McKay-Wolf, CMW model bank)
+include("counterfactual/types.jl")
+include("counterfactual/rules.jl")
+include("counterfactual/loss.jl")
+include("counterfactual/kernel.jl")
+include("counterfactual/empirical.jl")
+include("counterfactual/forecast.jl")
+include("counterfactual/irf_target.jl")
+include("counterfactual/model_dsge.jl")
+include("counterfactual/model_ha.jl")
+include("counterfactual/behavioral.jl")
+include("counterfactual/counterfactual.jl")
+include("counterfactual/optimal_policy.jl")
+include("counterfactual/moments.jl")
+include("counterfactual/opp.jl")
+include("counterfactual/constrained.jl")
+include("counterfactual/opp_sequence.jl")
+include("counterfactual/model_bank.jl")
+include("counterfactual/historical.jl")
+include("counterfactual/diagnostics.jl")
+include("counterfactual/show.jl")
+
 # Display (after all types)
 include("summary.jl")
 
@@ -633,6 +655,7 @@ include("plotting/ct_olg.jl")          # PLT-35 (#497): CT Aiyagari / two-asset 
 include("plotting/micro_coef.jl")      # PLT-36 (#498): panel/LDV coef & marginal-effect plots
 include("plotting/gmm.jl")             # PLT-37 (#499): GMM/SMM moment fit + news-impact
 include("plotting/fceval.jl")          # PLT-38 (#500): forecast-eval + LP extras
+include("plotting/counterfactual.jl")  # CF-22 (#402): policy-counterfactual result plots
 
 # =============================================================================
 # Exports - Types
@@ -777,6 +800,46 @@ export ct_hjb, ct_kfe, ct_steady_state, ct_mit_shock
 export CTTwoAsset, CTTwoAssetSolution, ct_two_asset_solve
 export CTTwoAssetGE, CTTwoAssetTransition, ct_two_asset_ge, ct_two_asset_mit
 export hand_to_mouth, ceiling_mass, ct_two_asset_stationarity
+
+# Counterfactual module (CF-01, #381)
+export PolicyCausalEffects, PolicyRule, PolicyLoss, is_square
+# Rule templates + loss builders (CF-02, #382)
+export rate_peg_rule, rate_target_rule, inflation_target_rule, output_gap_rule
+export ngdp_rule, taylor_rule, custom_rule
+export weight_matrix, policy_loss, ait_loss, smoothing_penalty
+# Empirical causal-effect adapters (CF-04, #384)
+export BaselinePath, WoldRepresentation
+export policy_causal_effects, baseline_path, wold_representation
+# Forecast adapters (CF-05, #385)
+export PolicyForecast, policy_forecast, interp_to_quarterly
+# IRF-matching targets + CTW covariance (CF-06, #386)
+export stacked_irf_target, ctw_covariance
+# Model-implied news menus (CF-07, #387)
+export policy_news_matrix
+# HA sequence-space policy effects (CF-08, #388)
+export sequence_jacobian
+# Behavioral-expectations operators (CF-09, #389)
+export cognitive_discounting, sticky_expectations, behavioral
+# McKay-Wolf rule counterfactuals (CF-10, #390)
+export PolicyCounterfactual, policy_counterfactual
+# Optimal-policy projection (CF-11, #391)
+export optimal_policy, optimal_rule
+# Second-moment (Wold) counterfactuals (CF-12, #392)
+export CounterfactualMoments, counterfactual_moments
+# Barnichon-Mesters OPP (CF-13, #393; inference CF-14, #394)
+export OPPResult, opp, estimate_opp
+# Constrained OPP (CF-15, #395)
+export OPPConstraint, PathFloorConstraint, FunctionConstraint
+export constrained_opp, zlb_constraint
+# OPP sequences + time consistency (CF-16, #396)
+export OPPSequence, opp_sequence, opp_sensitivity, robust_weights
+# CMW model bank (CF-17, #397)
+export ModelBankMember, irf_match, posterior_model_probs, model_average
+# Historical/conditional counterfactuals (CF-18, #398)
+export CounterfactualHistory, counterfactual_forecast, counterfactual_history
+# Spanning + forecast-sufficiency diagnostics (CF-19, #399)
+export SpanningDiagnostic, ForecastSufficiency
+export spanning_diagnostic, forecast_sufficiency
 
 # Local Projection types
 export AbstractLPModel, AbstractLPImpulseResponse, AbstractCovarianceEstimator

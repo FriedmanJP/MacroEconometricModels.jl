@@ -979,6 +979,87 @@ function main()
         plot_result(estimate_xtreg(xtset(df_pwt, :country, :year), :lngdppc, [:hc, :lnk]))
     end
 
+    # ===================================================================
+    # CF-22 (#402) — policy-counterfactual plots
+    # ===================================================================
+    println("\n-- CF-22 counterfactual assets --")
+
+    try
+        # square NK news menu + demand-shock baseline → rate-peg counterfactual
+        cf_spec = @dsge begin
+            parameters: β = 0.99, κ = 0.1, σ = 1.0, φπ = 1.5
+            endogenous: π, y, i
+            exogenous: eps_i, eps_d
+            π[t] = β * π[t+1] + κ * y[t]
+            y[t] = y[t+1] - σ * (i[t] - π[t+1]) + eps_d[t]
+            i[t] = φπ * π[t] + eps_i[t]
+        end
+        Hcf = 16
+        ce_cf = policy_news_matrix(cf_spec, :eps_i, [:infl => :π, :ygap => :y],
+                                   [:rate => :i]; H=Hcf)
+        base_cf = baseline_path(irf(solve(cf_spec), Hcf), "eps_d",
+                                [:infl => "π", :ygap => "y"], [:rate => "i"]; H=Hcf)
+        peg = rate_peg_rule(Hcf; outcomes=[:infl, :ygap], instruments=[:rate])
+        pc_cf = policy_counterfactual(base_cf, ce_cf, peg)
+        try_save(() -> plot_result(pc_cf; title="Rate-peg counterfactual (NK news menu)"),
+                 "cf_counterfactual.html")
+
+        loss_cf = policy_loss([:infl, :ygap], Hcf; lambda=[1.0, 0.25], beta=0.99)
+        sdg = MacroEconometricModels._suppress_warnings() do
+            ce_thin = PolicyCausalEffects(outcomes=[:infl, :ygap], instruments=[:rate],
+                                          Theta_x=[ce_cf.Theta_x[1][:, 1:2], ce_cf.Theta_x[2][:, 1:2]],
+                                          Theta_z=[ce_cf.Theta_z[1][:, 1:2]])
+            spanning_diagnostic(base_cf, ce_thin, ce_cf, loss_cf)
+        end
+        try_save(() -> plot_result(sdg), "cf_spanning.html")
+
+        fs_cf = forecast_sufficiency(solve(cf_spec), [:π, :y]; H=24)
+        try_save(() -> plot_result(fs_cf), "cf_sufficiency.html")
+    catch e
+        @warn "Skipped CF counterfactual/spanning assets" exception=(e, catch_backtrace())
+    end
+
+    try
+        # OPP sequence fan over synthetic decision dates
+        rngc = MersenneTwister(22)
+        Hq = 8
+        Txq = randn(rngc, Hq, 2)
+        noises = 0.08 .* randn(rngc, 40)
+        Dxq = cat((Txq .* (1 + e) for e in noises)...; dims=3)
+        ce_q = PolicyCausalEffects(outcomes=[:u], Theta_x=[Txq], Theta_x_draws=[Dxq])
+        loss_q = policy_loss([:u], Hq; lambda=[1.0])
+        fcs = [MacroEconometricModels.PolicyForecast{Float64}([:u], [randn(rngc, Hq)],
+                                                              nothing, Hq, "t$q")
+               for q in 1:12]
+        sq_q = opp_sequence(fcs, ce_q, loss_q; n_sim=300, rng=MersenneTwister(23))
+        try_save(() -> plot_result(sq_q; view=:fan,
+                                   title="OPP sequence with 60/75/90% fans"),
+                 "cf_opp_sequence.html")
+
+        # second moments under strict inflation targeting (synthetic Wold)
+        wold_q = MacroEconometricModels.WoldRepresentation{Float64}(
+            permutedims(cat(([0.6^h .* Matrix{Float64}(I, 3, 3) .+
+                              0.1 .* 0.5^h .* ones(3, 3) for h in 0:29])...; dims=3),
+                        (3, 1, 2)),
+            Matrix{Float64}(I, 3, 3), ["u", "infl", "rate"], nothing)
+        ce_m = PolicyCausalEffects(outcomes=[:u, :infl], instruments=[:rate],
+                                   Theta_x=[randn(rngc, 30, 2), randn(rngc, 30, 2)],
+                                   Theta_z=[randn(rngc, 30, 2)])
+        cm_q = MacroEconometricModels._suppress_warnings() do
+            counterfactual_moments(wold_q, ce_m,
+                                   inflation_target_rule(30; pi_var=:infl,
+                                                         outcomes=[:u, :infl],
+                                                         instruments=[:rate]);
+                                   outcomes=[:u => 1, :infl => 2],
+                                   instruments=[:rate => 3],
+                                   warn_invertibility=false)
+        end
+        try_save(() -> plot_result(cm_q; title="Volatility under strict inflation targeting"),
+                 "cf_moments.html")
+    catch e
+        @warn "Skipped CF OPP/moments assets" exception=(e, catch_backtrace())
+    end
+
     println("\nDone! Generated $(length(readdir(PLOT_DIR))) HTML files in $PLOT_DIR")
 end
 

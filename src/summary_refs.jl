@@ -15,6 +15,67 @@ const _RefEntry = @NamedTuple{
 }
 
 const _REFERENCES = Dict{Symbol, _RefEntry}(
+    # --- Policy Counterfactuals (CF series, #381-#404) ---
+    :mckay_wolf2023 => (key=:mckay_wolf2023, authors="McKay, Alisdair and Wolf, Christian K.", year=2023,
+        title="What Can Time-Series Regressions Tell Us About Policy Counterfactuals?",
+        journal="Econometrica", volume="91", issue="5", pages="1695--1725",
+        doi="10.3982/ECTA21045", isbn="", publisher="", entry_type=:article),
+    :romer_romer2004 => (key=:romer_romer2004, authors="Romer, Christina D. and Romer, David H.", year=2004,
+        title="A New Measure of Monetary Shocks: Derivation and Implications",
+        journal="American Economic Review", volume="94", issue="4", pages="1055--1084",
+        doi="10.1257/0002828042002651", isbn="", publisher="", entry_type=:article),
+    :wieland_yang2020 => (key=:wieland_yang2020, authors="Wieland, Johannes F. and Yang, Mu-Jeung", year=2020,
+        title="Financial Dampening",
+        journal="Journal of Money, Credit and Banking", volume="52", issue="1", pages="79--113",
+        doi="10.1111/jmcb.12681", isbn="", publisher="", entry_type=:article),
+    :gertler_karadi2015 => (key=:gertler_karadi2015, authors="Gertler, Mark and Karadi, Peter", year=2015,
+        title="Monetary Policy Surprises, Credit Costs, and Economic Activity",
+        journal="American Economic Journal: Macroeconomics", volume="7", issue="1", pages="44--76",
+        doi="10.1257/mac.20130329", isbn="", publisher="", entry_type=:article),
+    :aruoba_drechsel2024 => (key=:aruoba_drechsel2024, authors="Aruoba, S. Boragan and Drechsel, Thomas", year=2024,
+        title="Identifying Monetary Policy Shocks: A Natural Language Approach",
+        journal="CEPR Discussion Paper DP17133", volume="", issue="", pages="",
+        doi="", isbn="", publisher="", entry_type=:article),
+    :ben_zeev_khan2016 => (key=:ben_zeev_khan2016, authors="Ben Zeev, Nadav and Khan, Hashmat", year=2016,
+        title="Investment-Specific News Shocks and U.S. Business Cycles",
+        journal="Journal of Money, Credit and Banking", volume="48", issue="7", pages="1543--1573",
+        doi="10.1111/jmcb.12345", isbn="", publisher="", entry_type=:article),
+    :barnichon_mesters2023 => (key=:barnichon_mesters2023, authors="Barnichon, Regis and Mesters, Geert", year=2023,
+        title="A Sufficient Statistics Approach for Macroeconomic Policy",
+        journal="American Economic Review", volume="113", issue="11", pages="2809--2845",
+        doi="10.1257/aer.20220581", isbn="", publisher="", entry_type=:article),
+    :caravello_mckay_wolf2025 => (key=:caravello_mckay_wolf2025,
+        authors="Caravello, Tomas E. and McKay, Alisdair and Wolf, Christian K.", year=2025,
+        title="Evaluating Policy Counterfactuals: A VAR-Plus Approach",
+        journal="Working Paper (MIT)", volume="", issue="", pages="",
+        doi="", isbn="", publisher="", entry_type=:article),
+    :sims_zha1995 => (key=:sims_zha1995, authors="Sims, Christopher A. and Zha, Tao", year=1998,
+        title="Bayesian Methods for Dynamic Multivariate Models",
+        journal="International Economic Review", volume="39", issue="4", pages="949--968",
+        doi="10.2307/2527347", isbn="", publisher="", entry_type=:article),
+    :auclert_etal2021 => (key=:auclert_etal2021,
+        authors="Auclert, Adrien and Bard{\\'o}czy, Bence and Rognlie, Matthew and Straub, Ludwig", year=2021,
+        title="Using the Sequence-Space Jacobian to Solve and Estimate Heterogeneous-Agent Models",
+        journal="Econometrica", volume="89", issue="5", pages="2375--2408",
+        doi="10.3982/ECTA17434", isbn="", publisher="", entry_type=:article),
+    :gabaix2020 => (key=:gabaix2020, authors="Gabaix, Xavier", year=2020,
+        title="A Behavioral New Keynesian Model",
+        journal="American Economic Review", volume="110", issue="8", pages="2271--2327",
+        doi="10.1257/aer.20162005", isbn="", publisher="", entry_type=:article),
+    :auclert_rognlie_straub2020 => (key=:auclert_rognlie_straub2020,
+        authors="Auclert, Adrien and Rognlie, Matthew and Straub, Ludwig", year=2020,
+        title="Micro Jumps, Macro Humps: Monetary Policy and Business Cycles in an Estimated HANK Model",
+        journal="NBER Working Paper 26647", volume="", issue="", pages="",
+        doi="10.3386/w26647", isbn="", publisher="", entry_type=:article),
+    :christiano_trabandt_walentin2010 => (key=:christiano_trabandt_walentin2010,
+        authors="Christiano, Lawrence J. and Trabandt, Mathias and Walentin, Karl", year=2010,
+        title="DSGE Models for Monetary Policy Analysis",
+        journal="Handbook of Monetary Economics", volume="3", issue="", pages="285--367",
+        doi="10.1016/B978-0-444-53238-1.00007-7", isbn="", publisher="", entry_type=:article),
+    :geweke1999 => (key=:geweke1999, authors="Geweke, John", year=1999,
+        title="Using Simulation Methods for Bayesian Econometric Models: Inference, Development, and Communication",
+        journal="Econometric Reviews", volume="18", issue="1", pages="1--73",
+        doi="10.1080/07474939908800428", isbn="", publisher="", entry_type=:article),
     # --- Input-Output Analysis ---
     :leontief1936 => (key=:leontief1936, authors="Leontief, Wassily W.", year=1936,
         title="Quantitative Input and Output Relations in the Economic System of the United States",
@@ -1699,6 +1760,18 @@ const _REFERENCES = Dict{Symbol, _RefEntry}(
 # --- Type/method → reference keys mapping ---
 
 const _TYPE_REFS = Dict{Symbol, Vector{Symbol}}(
+    # Policy counterfactuals (CF series, #381-#404)
+    :PolicyCausalEffects => [:mckay_wolf2023, :barnichon_mesters2023, :caravello_mckay_wolf2025],
+    :PolicyCounterfactual => [:mckay_wolf2023, :caravello_mckay_wolf2025],
+    :CounterfactualMoments => [:mckay_wolf2023, :caravello_mckay_wolf2025],
+    :OPPResult => [:barnichon_mesters2023],
+    :OPPSequence => [:barnichon_mesters2023],
+    :ModelBankMember => [:caravello_mckay_wolf2025, :christiano_trabandt_walentin2010, :geweke1999],
+    :SpanningDiagnostic => [:caravello_mckay_wolf2025, :mckay_wolf2023],
+    :ForecastSufficiency => [:caravello_mckay_wolf2025, :plagborg_moller_wolf2021],
+    :CounterfactualHistory => [:caravello_mckay_wolf2025, :sims_zha1995],
+    :counterfactual => [:mckay_wolf2023, :barnichon_mesters2023, :caravello_mckay_wolf2025,
+                        :auclert_etal2021, :gabaix2020, :auclert_rognlie_straub2020],
     # Long-run variance toolkit (EV-12): lrvar/lrcov/lrcov_oneside/varhac
     :lrvar => [:andrews1991, :newey_west1994, :andrews_monahan1992, :den_haan_levin1997],
     # Input-Output analysis
@@ -2683,6 +2756,17 @@ refs(io::IO, ::ClarkWestResult; kw...) = refs(io, _TYPE_REFS[:ClarkWestResult]; 
 refs(io::IO, ::MincerZarnowitzResult; kw...) = refs(io, _TYPE_REFS[:MincerZarnowitzResult]; kw...)
 refs(io::IO, ::ForecastEncompassingResult; kw...) = refs(io, _TYPE_REFS[:ForecastEncompassingResult]; kw...)
 refs(io::IO, ::ForecastCombination; kw...) = refs(io, _TYPE_REFS[:ForecastCombination]; kw...)
+
+# --- Policy counterfactuals (CF-21, #401) ---
+refs(io::IO, ::PolicyCausalEffects; kw...) = refs(io, _TYPE_REFS[:PolicyCausalEffects]; kw...)
+refs(io::IO, ::PolicyCounterfactual; kw...) = refs(io, _TYPE_REFS[:PolicyCounterfactual]; kw...)
+refs(io::IO, ::CounterfactualMoments; kw...) = refs(io, _TYPE_REFS[:CounterfactualMoments]; kw...)
+refs(io::IO, ::OPPResult; kw...) = refs(io, _TYPE_REFS[:OPPResult]; kw...)
+refs(io::IO, ::OPPSequence; kw...) = refs(io, _TYPE_REFS[:OPPSequence]; kw...)
+refs(io::IO, ::ModelBankMember; kw...) = refs(io, _TYPE_REFS[:ModelBankMember]; kw...)
+refs(io::IO, ::SpanningDiagnostic; kw...) = refs(io, _TYPE_REFS[:SpanningDiagnostic]; kw...)
+refs(io::IO, ::ForecastSufficiency; kw...) = refs(io, _TYPE_REFS[:ForecastSufficiency]; kw...)
+refs(io::IO, ::CounterfactualHistory; kw...) = refs(io, _TYPE_REFS[:CounterfactualHistory]; kw...)
 
 # --- Convenience: stdout fallback ---
 # One-arg form prints to stdout (matching report()), so bare `refs(m)` in the

@@ -63,6 +63,12 @@ New users start at [Installation & First Model](@ref getting_started_page); read
 - **Production Networks**: Domar weights, Hulten's theorem, the second-order Baqaee & Farhi (2019) "beyond Hulten" decomposition, and network centralities
 - **Data Downloaders**: pymrio-style loaders for the major public multi-regional input-output databases
 
+**Policy Counterfactuals**
+
+- **Rule Counterfactuals**: McKay & Wolf (2023) news-implemented rule changes and optimal-policy projections from estimated causal effects; peg/Taylor/NGDP/AIT templates; second-moment (Wold) counterfactuals; implementation-error honesty diagnostics throughout
+- **Optimal Policy Perturbations**: Barnichon & Mesters (2023) OPP statistic and optimality test from gap forecasts and policy-shock IRFs; two-source inference with 60/75/90% bands; ZLB and pre-commitment constraints via SLSQP; decision-date sequences with the time-consistency decomposition
+- **Model Bank**: Caravello, McKay & Wolf (2025) limited-information IRF matching with Geweke marginal likelihoods and posterior model averaging; DSGE news menus, one-asset HANK sequence-space menus, and Gabaix/sticky-expectations behavioral variants; historical counterfactuals from forecast revisions; spanning and forecast-sufficiency diagnostics
+
 **Structural Identification**
 
 - Six schemes impose economic restrictions: Cholesky, sign restrictions, long-run (Blanchard-Quah), narrative restrictions, Arias et al. (2018) sign-and-zero, and the Mountford-Uhlig (2009) penalty function
@@ -186,6 +192,7 @@ The package is organized into the following modules:
 | `olg/` | Overlapping generations: perpetual-youth and life-cycle solvers |
 | `ct/` | Continuous-time heterogeneous agents: HJB and Kolmogorov-Forward solvers |
 | `io/` | Input-Output analysis: Leontief/Ghosh models, multipliers, linkages, SDA, extraction, environmental extensions, Baqaee-Farhi (2019), MRIO downloaders |
+| `counterfactual/` | Policy counterfactuals: McKay-Wolf rule counterfactuals and optimal policy, Barnichon-Mesters OPP (with ZLB constraints and sequences), Caravello-McKay-Wolf model bank, spanning and forecast-sufficiency diagnostics |
 | `gmm/` | Generalized Method of Moments and Simulated Method of Moments |
 | `midas/` | MIDAS mixed-frequency regression with restricted and unrestricted lag weighting |
 | `nowcast/` | Nowcasting: DFM (EM + Kalman), large BVAR, bridge equations, news decomposition |

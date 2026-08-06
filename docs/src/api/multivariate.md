@@ -9,6 +9,7 @@ Multi-equation models: VAR, VECM, BVAR (including time-varying-parameter and mix
 ```@docs
 VARModel
 AbstractVARModel
+effective_nobs(::VARModel)
 ```
 
 ---

@@ -29,6 +29,7 @@ const _EXAMPLE_DATASETS = Dict{Symbol, Tuple{String, Symbol}}(
     :stackloss => ("stackloss.toml", :crosssection), # EV-40 (#448): Brownlee (1965) stack loss
     :grunfeld => ("grunfeld.toml", :panel), # EV-35 (#443): Grunfeld (1958) 10-firm investment panel
     :denmark => ("denmark.toml", :timeseries), # EV-38 (#446): Johansen & Juselius (1990) Danish money demand
+    :mp_shocks => ("mp_shocks.toml", :timeseries), # CF-20 (#400): US monetary panel + published policy-shock series
 )
 
 # Parse frequency string to Frequency enum
@@ -66,6 +67,16 @@ Load a built-in example dataset.
 - `:denmark` — Johansen & Juselius (1990) Danish money demand, 1974Q1–1987Q3 (55 obs × 5 vars:
   `LRM`, `LRY`, `LPY`, `IBO`, `IDE`) → `TimeSeriesData`. The canonical cointegration
   money-demand dataset for VECM restriction testing (public domain; ships with R `urca`).
+- `:mp_shocks` — US quarterly monetary panel, 1960Q1–2019Q4 (240 obs × 8 vars), from the
+  McKay & Wolf (2023, ECMA) published data appendix → `TimeSeriesData`. Macro block:
+  `ygap` (HP-filtered log real GDP gap, %; from 1969Q1), `infl` (GDP-deflator inflation,
+  400×Δlog, %), `ffr` (federal funds rate, %), `lpcom` (log commodity prices). Shock block
+  (**`NaN` outside each series' published sample — NaN is NOT zero; zero is a valid shock
+  value**): `rr` (Romer–Romer narrative, Wieland–Yang update, 1969Q1–2007Q4), `mp1`
+  (Gertler–Karadi tight-window HF surprise, 1988Q4–2012Q2), `ad` (Aruoba–Drechsel, 1982Q4–2008Q3),
+  `bzk_ist` (Ben Zeev–Khan IST news — the McKay–Wolf baseline *non-policy* shock, through 2012Q1).
+  Raw units are kept; transformations (demeaning, filtering) belong in examples. Zero-filling
+  shock gaps is an estimation-time choice (the CMW IV-zero convention), not a data property.
 
 For time series datasets, the returned `TimeSeriesData` includes variable names,
 transformation codes, frequency, per-variable descriptions (via `vardesc`),

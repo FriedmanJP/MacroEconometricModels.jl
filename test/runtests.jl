@@ -252,6 +252,33 @@ const TEST_GROUPS = [
         "display/test_display_invariants.jl",
         "display/test_display_goldens.jl",
     ]),
+    # Group 12: Policy counterfactuals (CF-01, #381). Later CF tasks append their
+    # test files here. Lightest group; ranked last in _expected_rank.
+    ("Counterfactual" => [
+        "counterfactual/test_types.jl",
+        "counterfactual/test_rules.jl",
+        "counterfactual/test_kernel.jl",
+        "counterfactual/test_empirical.jl",
+        "counterfactual/test_forecast.jl",
+        "counterfactual/test_irf_target.jl",
+        "counterfactual/test_model_dsge.jl",
+        "counterfactual/test_model_ha.jl",
+        "counterfactual/test_behavioral.jl",
+        "counterfactual/test_counterfactual.jl",
+        "counterfactual/test_optimal_policy.jl",
+        "counterfactual/test_moments.jl",
+        "counterfactual/test_opp.jl",
+        "counterfactual/test_opp_inference.jl",
+        "counterfactual/test_constrained_opp.jl",
+        "counterfactual/test_opp_sequence.jl",
+        "counterfactual/test_model_bank.jl",
+        "counterfactual/test_historical.jl",
+        "counterfactual/test_diagnostics.jl",
+        "counterfactual/test_mp_shocks_data.jl",
+        "counterfactual/test_show.jl",
+        "counterfactual/test_plotting.jl",
+        "counterfactual/test_oracles.jl",
+    ]),
 ]
 
 # Monotone expected-duration ranking (heaviest first) for the longest-first work queue (#124).
@@ -268,6 +295,7 @@ function _expected_rank(name::AbstractString)
     name == "Bayesian & SVAR"     && return 45
     name == "Display"             && return 42   # est-heavy compile; schedule with the medium wave
     startswith(name, "Coverage")  && return 20   # light coverage groups last
+    name == "Counterfactual"      && return 10   # lightest group (CF-01); schedule last
     return 40                                     # default medium
 end
 

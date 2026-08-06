@@ -72,3 +72,11 @@ Modules = [MacroEconometricModels]
 Pages   = ["plotting/teststat.jl", "plotting/teststat_breaks.jl", "plotting/gmm.jl", "plotting/io.jl"]
 Order   = [:function]
 ```
+
+### Policy Counterfactuals
+
+```@autodocs
+Modules = [MacroEconometricModels]
+Pages   = ["plotting/counterfactual.jl"]
+Order   = [:function]
+```
