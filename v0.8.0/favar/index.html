@@ -1,0 +1,410 @@
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="UTF-8"/><meta name="viewport" content="width=device-width, initial-scale=1.0"/><title>FAVAR · MacroEconometricModels.jl</title><meta name="title" content="FAVAR · MacroEconometricModels.jl"/><meta property="og:title" content="FAVAR · MacroEconometricModels.jl"/><meta property="twitter:title" content="FAVAR · MacroEconometricModels.jl"/><meta name="description" content="Documentation for MacroEconometricModels.jl."/><meta property="og:description" content="Documentation for MacroEconometricModels.jl."/><meta property="twitter:description" content="Documentation for MacroEconometricModels.jl."/><meta property="og:url" content="https://FriedmanJP.github.io/MacroEconometricModels.jl/favar/"/><meta property="twitter:url" content="https://FriedmanJP.github.io/MacroEconometricModels.jl/favar/"/><link rel="canonical" href="https://FriedmanJP.github.io/MacroEconometricModels.jl/favar/"/><script data-outdated-warner src="../assets/warner.js"></script><link href="https://cdnjs.cloudflare.com/ajax/libs/lato-font/3.0.0/css/lato-font.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/juliamono/0.050/juliamono.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.2/css/fontawesome.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.2/css/solid.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.2/css/brands.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.8/katex.min.css" rel="stylesheet" type="text/css"/><script>documenterBaseURL=".."</script><script src="https://cdnjs.cloudflare.com/ajax/libs/require.js/2.3.6/require.min.js" data-main="../assets/documenter.js"></script><script src="../search_index.js"></script><script src="../siteinfo.js"></script><script src="../../versions.js"></script><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../assets/themes/catppuccin-mocha.css" data-theme-name="catppuccin-mocha"/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../assets/themes/catppuccin-macchiato.css" data-theme-name="catppuccin-macchiato"/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../assets/themes/catppuccin-frappe.css" data-theme-name="catppuccin-frappe"/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../assets/themes/catppuccin-latte.css" data-theme-name="catppuccin-latte"/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../assets/themes/documenter-dark.css" data-theme-name="documenter-dark" data-theme-primary-dark/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../assets/themes/documenter-light.css" data-theme-name="documenter-light" data-theme-primary/><script src="../assets/themeswap.js"></script><link href="../assets/custom.css" rel="stylesheet" type="text/css"/><script src="../assets/theme-toggle.js"></script></head><body><div id="documenter"><nav class="docs-sidebar"><div class="docs-package-name"><span class="docs-autofit"><a href="../">MacroEconometricModels.jl</a></span></div><button class="docs-search-query input is-rounded is-small is-clickable my-2 mx-auto py-1 px-2" id="documenter-search-query">Search docs (Ctrl + /)</button><ul class="docs-menu"><li><a class="tocitem" href="../">Home</a></li><li><span class="tocitem">Getting Started</span><ul><li><a class="tocitem" href="../getting_started/">Installation &amp; First Model</a></li><li><a class="tocitem" href="../method_guide/">Choosing a Method</a></li><li><a class="tocitem" href="../data/">Data Management</a></li></ul></li><li><span class="tocitem">Univariate Models</span><ul><li><a class="tocitem" href="../filters/">Time Series Filters</a></li><li><a class="tocitem" href="../x13/">X-13ARIMA-SEATS</a></li><li><a class="tocitem" href="../spectral/">Spectral Analysis</a></li><li><a class="tocitem" href="../arima/">ARIMA</a></li><li><a class="tocitem" href="../statespace/">State-Space Models</a></li><li><a class="tocitem" href="../volatility/">Volatility Models</a></li><li><a class="tocitem" href="../nonparametric/">Nonparametric Regression &amp; Density</a></li></ul></li><li><span class="tocitem">Multivariate Models</span><ul><li><a class="tocitem" href="../manual/">VAR</a></li><li><a class="tocitem" href="../bayesian/">Bayesian VAR</a></li><li><a class="tocitem" href="../vecm/">VECM</a></li><li><a class="tocitem" href="../ardl/">ARDL &amp; Bounds Test</a></li><li><a class="tocitem" href="../cointreg/">Cointegrating Regression</a></li><li><a class="tocitem" href="../lp/">Local Projections</a></li><li><a class="tocitem" href="../factormodels/">Factor Models</a></li><li class="is-active"><a class="tocitem" href>FAVAR</a><ul class="internal"><li><a class="tocitem" href="#Quick-Start"><span>Quick Start</span></a></li><li><a class="tocitem" href="#Model-Specification"><span>Model Specification</span></a></li><li><a class="tocitem" href="#Two-Step-Estimation"><span>Two-Step Estimation</span></a></li><li><a class="tocitem" href="#Bayesian-FAVAR"><span>Bayesian FAVAR</span></a></li><li><a class="tocitem" href="#Panel-Wide-Impulse-Responses"><span>Panel-Wide Impulse Responses</span></a></li><li><a class="tocitem" href="#Forecasting"><span>Forecasting</span></a></li><li><a class="tocitem" href="#Structural-Identification"><span>Structural Identification</span></a></li><li><a class="tocitem" href="#Complete-Example"><span>Complete Example</span></a></li><li><a class="tocitem" href="#Common-Pitfalls"><span>Common Pitfalls</span></a></li><li><a class="tocitem" href="#References"><span>References</span></a></li></ul></li></ul></li><li><span class="tocitem">Nonlinear Time Series</span><ul><li><a class="tocitem" href="../nonlinear/">Threshold &amp; SETAR</a></li></ul></li><li><span class="tocitem">Cross-Section &amp; Panel</span><ul><li><a class="tocitem" href="../regression/">Linear Regression</a></li><li><a class="tocitem" href="../binary_choice/">Binary Choice Models</a></li><li><a class="tocitem" href="../ordered_multinomial/">Ordered &amp; Multinomial</a></li><li><a class="tocitem" href="../panel_reg/">Panel Regression</a></li><li><a class="tocitem" href="../pvar/">Panel VAR</a></li><li><a class="tocitem" href="../did/">Difference-in-Differences</a></li><li><a class="tocitem" href="../event_study/">Event Study LP</a></li></ul></li><li><a class="tocitem" href="../gmm/">GMM &amp; SMM</a></li><li><span class="tocitem">DSGE Models</span><ul><li><a class="tocitem" href="../dsge/">Overview</a></li><li><a class="tocitem" href="../dsge_linear/">Linear Solvers</a></li><li><a class="tocitem" href="../dsge_nonlinear/">Nonlinear Methods</a></li><li><a class="tocitem" href="../dsge_constraints/">Constraints</a></li><li><a class="tocitem" href="../dsge_estimation/">Estimation</a></li><li><a class="tocitem" href="../dsge_hd/">Historical Decomposition</a></li><li><input class="collapse-toggle" id="menuitem-8-7" type="checkbox"/><label class="tocitem" for="menuitem-8-7"><span class="docs-label">Heterogeneity &amp; Continuous Time</span><i class="docs-chevron"></i></label><ul class="collapsed"><li><a class="tocitem" href="../dsge_heterogeneity/">Overview</a></li><li><a class="tocitem" href="../dsge_ha/">Heterogeneous Agents</a></li><li><a class="tocitem" href="../dsge_olg/">Overlapping Generations</a></li><li><a class="tocitem" href="../dsge_continuous/">Continuous Time</a></li></ul></li></ul></li><li><span class="tocitem">Input-Output Analysis</span><ul><li><a class="tocitem" href="../io/">Overview</a></li><li><a class="tocitem" href="../io_classical/">Classical Analysis</a></li><li><a class="tocitem" href="../io_environmental/">Environmental Extensions</a></li><li><a class="tocitem" href="../io_baqaee_farhi/">Baqaee &amp; Farhi (2019)</a></li><li><a class="tocitem" href="../io_download/">Downloading Data</a></li></ul></li><li><span class="tocitem">Policy Counterfactuals</span><ul><li><a class="tocitem" href="../counterfactual/">Overview</a></li><li><a class="tocitem" href="../counterfactual_rules/">Rule Counterfactuals (McKay-Wolf)</a></li><li><a class="tocitem" href="../counterfactual_opp/">Optimal Policy Perturbations (Barnichon-Mesters)</a></li><li><a class="tocitem" href="../counterfactual_bank/">Model Bank &amp; Diagnostics (CMW)</a></li></ul></li><li><span class="tocitem">Structural Analysis</span><ul><li><a class="tocitem" href="../structural_identification/">Structural Identification</a></li><li><input class="collapse-toggle" id="menuitem-11-2" type="checkbox"/><label class="tocitem" for="menuitem-11-2"><span class="docs-label">Statistical Identification</span><i class="docs-chevron"></i></label><ul class="collapsed"><li><a class="tocitem" href="../nongaussian/">Overview</a></li><li><a class="tocitem" href="../id_nongaussian/">Non-Gaussian Methods</a></li><li><a class="tocitem" href="../id_heteroskedastic/">Heteroskedasticity</a></li><li><a class="tocitem" href="../id_testing/">Testing</a></li></ul></li><li><input class="collapse-toggle" id="menuitem-11-3" type="checkbox"/><label class="tocitem" for="menuitem-11-3"><span class="docs-label">Innovation Accounting</span><i class="docs-chevron"></i></label><ul class="collapsed"><li><a class="tocitem" href="../innovation_accounting/">Overview</a></li><li><a class="tocitem" href="../ia_irf/">Impulse Responses</a></li><li><a class="tocitem" href="../ia_fevd/">Variance Decomposition</a></li><li><a class="tocitem" href="../ia_hd/">Historical Decomposition</a></li></ul></li></ul></li><li><span class="tocitem">Nowcasting</span><ul><li><a class="tocitem" href="../nowcast/">Overview</a></li><li><a class="tocitem" href="../nowcast_dfm/">DFM Nowcasting</a></li><li><a class="tocitem" href="../nowcast_bvar/">BVAR Nowcasting</a></li><li><a class="tocitem" href="../nowcast_bridge/">Bridge Equations</a></li><li><a class="tocitem" href="../nowcast_news/">News Decomposition</a></li><li><a class="tocitem" href="../midas/">MIDAS Regression</a></li></ul></li><li><a class="tocitem" href="../forecast_evaluation/">Forecast Evaluation</a></li><li><span class="tocitem">Hypothesis Tests</span><ul><li><a class="tocitem" href="../tests/">Overview</a></li><li><a class="tocitem" href="../tests_unitroot/">Unit Root &amp; Cointegration</a></li><li><a class="tocitem" href="../tests_unitroot_advanced/">Advanced Unit Root</a></li><li><a class="tocitem" href="../tests_cointegration/">Residual-Based Cointegration</a></li><li><a class="tocitem" href="../tests_breaks/">Structural Breaks</a></li><li><a class="tocitem" href="../tests_panel/">Panel Tests</a></li><li><a class="tocitem" href="../tests_diagnostics/">Model Diagnostics</a></li></ul></li><li><a class="tocitem" href="../plotting/">Visualization</a></li><li><span class="tocitem">Project</span><ul><li><a class="tocitem" href="../notation/">Notation</a></li><li><a class="tocitem" href="../bibliography/">Bibliography</a></li><li><a class="tocitem" href="../changelog/">Changelog</a></li><li><a class="tocitem" href="../citation/">How to Cite</a></li></ul></li><li><span class="tocitem">API Reference</span><ul><li><a class="tocitem" href="../api/">Overview</a></li><li><a class="tocitem" href="../api/data/">Data Management</a></li><li><a class="tocitem" href="../api/univariate/">Univariate Models</a></li><li><a class="tocitem" href="../api/multivariate/">Multivariate Models</a></li><li><a class="tocitem" href="../api/cross_section/">Cross-Sectional Models</a></li><li><a class="tocitem" href="../api/panel/">Panel Models</a></li><li><a class="tocitem" href="../api/dsge/">DSGE Models</a></li><li><a class="tocitem" href="../api/structural/">Structural &amp; Statistical Identification</a></li><li><a class="tocitem" href="../api/counterfactual/">Policy Counterfactuals</a></li><li><a class="tocitem" href="../api/gmm/">GMM &amp; SMM</a></li><li><a class="tocitem" href="../api/tests/">Hypothesis Tests</a></li><li><a class="tocitem" href="../api/nowcasting/">Nowcasting</a></li><li><a class="tocitem" href="../api/visualization/">Visualization</a></li><li><a class="tocitem" href="../api/utilities/">Utilities &amp; Display</a></li></ul></li></ul><div class="docs-version-selector field has-addons"><div class="control"><span class="docs-label button is-static is-size-7">Version</span></div><div class="docs-selector control is-expanded"><div class="select is-fullwidth is-size-7"><select id="documenter-version-selector"></select></div></div></div></nav><div class="docs-main"><header class="docs-navbar"><a class="docs-sidebar-button docs-navbar-link fa-solid fa-bars is-hidden-desktop" id="documenter-sidebar-button" href="#"></a><nav class="breadcrumb"><ul class="is-hidden-mobile"><li><a class="is-disabled">Multivariate Models</a></li><li class="is-active"><a href>FAVAR</a></li></ul><ul class="is-hidden-tablet"><li class="is-active"><a href>FAVAR</a></li></ul></nav><div class="docs-right"><a class="docs-navbar-link" href="https://github.com/FriedmanJP/MacroEconometricModels.jl" title="View the repository on GitHub"><span class="docs-icon fa-brands"></span><span class="docs-label is-hidden-touch">GitHub</span></a><a class="docs-navbar-link" href="https://github.com/FriedmanJP/MacroEconometricModels.jl/blob/main/docs/src/favar.md#" title="Edit source on GitHub"><span class="docs-icon fa-solid"></span></a><a class="docs-settings-button docs-navbar-link fa-solid fa-gear" id="documenter-settings-button" href="#" title="Settings"></a><a class="docs-article-toggle-button fa-solid fa-chevron-up" id="documenter-article-toggle-button" href="javascript:;" title="Collapse all docstrings"></a></div></header><article class="content" id="documenter-page"><h1 id="favar_page"><a class="docs-heading-anchor" href="#favar_page">Factor-Augmented VAR</a><a id="favar_page-1"></a><a class="docs-heading-anchor-permalink" href="#favar_page" title="Permalink"></a></h1><p>A VAR holds five or ten variables before parameter proliferation swamps it, but a central bank reads hundreds. The Factor-Augmented VAR (FAVAR) of Bernanke, Boivin &amp; Eliasz (2005) resolves the tension: compress a large panel into <span>$r$</span> latent factors, estimate a small VAR on those factors together with the policy variables of interest, then project the structural results back onto every series in the panel.</p><ul><li><strong>Two-step estimation</strong>: extract <span>$r$</span> factors by principal components, remove double-counting against the key observed variables, and estimate a VAR on the augmented system</li><li><strong>Bayesian FAVAR</strong>: a joint Gibbs sampler over factors, loadings, and VAR parameters, using Carter–Kohn forward-filtering backward-sampling and Normal-Inverse-Wishart conjugate updates</li><li><strong>Panel-wide IRFs</strong>: <code>favar_panel_irf</code> maps structural shocks from the factor VAR to all <span>$N$</span> panel variables through the loading matrix</li><li><strong>Structural analysis</strong>: Cholesky, sign-restriction, and narrative identification, plus FEVD and historical decomposition, by automatic delegation to the VAR infrastructure</li><li><strong>Forecasting</strong>: multi-step forecasts in the augmented space, mapped to the panel by <code>favar_panel_forecast</code></li></ul><p>The factors themselves — how to extract them, how many to keep, and what they explain — are covered on the <a href="../factormodels/#factor_page">Factor Models</a> page; this page starts where those factors enter a VAR. For the identification schemes the FAVAR inherits, see <a href="../structural_identification/#structural_identification_page">Structural Identification</a>; for a factor model built for ragged real-time data rather than structural analysis, see <a href="../nowcast_dfm/#nowcast_dfm_page">DFM Nowcasting</a>.</p><p>All results integrate with <code>report()</code> for publication-quality output and <code>plot_result()</code> for interactive D3.js visualization.</p><h2 id="Quick-Start"><a class="docs-heading-anchor" href="#Quick-Start">Quick Start</a><a id="Quick-Start-1"></a><a class="docs-heading-anchor-permalink" href="#Quick-Start" title="Permalink"></a></h2><p>Every recipe below runs on <code>X</code>, a transformed FRED-MD panel whose columns are, in order, <code>INDPRO</code>, <code>CPIAUCSL</code>, <code>UNRATE</code>, <code>M2SL</code>, <code>FEDFUNDS</code>, <code>TB3MS</code>, <code>GS10</code>. Column 5 is therefore the federal funds rate, the key variable in the Bernanke, Boivin &amp; Eliasz specification.</p><p><strong>Recipe 1: Two-step FAVAR estimation</strong></p><pre><code class="language-julia hljs">panel_names = [&quot;INDPRO&quot;, &quot;CPIAUCSL&quot;, &quot;UNRATE&quot;, &quot;M2SL&quot;, &quot;FEDFUNDS&quot;, &quot;TB3MS&quot;, &quot;GS10&quot;]
+favar = estimate_favar(X, [5], 2, 2; panel_varnames=panel_names)
+report(favar)</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">FAVAR(2) — 2 factors, 1 key vars
+
+  Specification
+
+  Factors (r)              2
+  Key variables            1
+  VAR variables            3
+  Panel variables          7
+  VAR lags (p)             2
+  Observations            60
+  Effective obs           58
+  AIC (per obs.)       -6.74
+  BIC                  -5.99
+  Log-lik           -30.4173
+
+      Variance Explained (PCA)
+
+             Variance   Cumulative
+
+  Factor 1      28.1%        28.1%
+  Factor 2      17.3%        45.5%</code></pre><p><strong>Recipe 2: Structural impulse responses in the augmented space</strong></p><pre><code class="language-julia hljs">r = irf(favar, 20; method=:cholesky)
+report(r)</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">Impulse Response Functions
+
+  Variables      3
+  Shocks         3
+  Horizon       20
+  CI          None
+
+                          Shock: F1
+
+                 h=1       h=4       h=8      h=12      h=20
+
+  F1          0.3527    0.0280    0.0047    0.0041    0.0020
+  F2         -0.0820    0.1306    0.0032   -0.0076   -0.0026
+  FEDFUNDS    0.0034   -0.0420   -0.0265   -0.0167   -0.0077
+
+                          Shock: F2
+
+                h=1       h=4       h=8      h=12      h=20
+
+  F1         0.0000    0.0384   -0.0017   -0.0031   -0.0014
+  F2         0.8608   -0.0188   -0.0048    0.0026    0.0018
+  FEDFUNDS   0.0064    0.0267    0.0176    0.0119    0.0054
+
+                       Shock: FEDFUNDS
+
+                h=1       h=4       h=8      h=12      h=20
+
+  F1         0.0000   -0.0251   -0.0089   -0.0047   -0.0022
+  F2         0.0000    0.0679    0.0115    0.0056    0.0029
+  FEDFUNDS   0.0788    0.0350    0.0272    0.0189    0.0087</code></pre><p><strong>Recipe 3: Panel-wide impulse responses</strong></p><pre><code class="language-julia hljs">r_panel = favar_panel_irf(favar, r)
+report(r_panel)</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">Impulse Response Functions
+
+  Variables      7
+  Shocks         3
+  Horizon       20
+  CI          None
+
+                          Shock: F1
+
+                 h=1       h=4       h=8      h=12      h=20
+
+  INDPRO      0.0217    0.0416    0.0143    0.0079    0.0038
+  CPIAUCSL    0.0279    0.1389    0.0369    0.0179    0.0088
+  UNRATE     -0.1014   -0.0260   -0.0307   -0.0218   -0.0099
+  M2SL        0.0045   -0.0921   -0.0188   -0.0074   -0.0039
+  FEDFUNDS    0.0034   -0.0420   -0.0265   -0.0167   -0.0077
+  TB3MS      -0.3216   -0.2180   -0.1265   -0.0813   -0.0377
+  GS10       -0.1413    0.0477   -0.0246   -0.0228   -0.0099
+
+                          Shock: F2
+
+                 h=1       h=4       h=8      h=12      h=20
+
+  INDPRO      0.1119   -0.0123   -0.0097   -0.0060   -0.0027
+  CPIAUCSL    0.5096   -0.0366   -0.0258   -0.0144   -0.0062
+  UNRATE      0.1974    0.0168    0.0194    0.0149    0.0070
+  M2SL       -0.4080    0.0219    0.0136    0.0066    0.0027
+  FEDFUNDS    0.0064    0.0267    0.0176    0.0119    0.0054
+  TB3MS       0.0457    0.0862    0.0826    0.0577    0.0264
+  GS10        0.6342    0.0030    0.0140    0.0142    0.0070
+
+                       Shock: FEDFUNDS
+
+                 h=1       h=4       h=8      h=12      h=20
+
+  INDPRO     -0.0401   -0.0111   -0.0132   -0.0093   -0.0043
+  CPIAUCSL   -0.1010   -0.0098   -0.0300   -0.0219   -0.0099
+  UNRATE      0.0900    0.0612    0.0358    0.0239    0.0111
+  M2SL        0.0500   -0.0077    0.0127    0.0098    0.0044
+  FEDFUNDS    0.0788    0.0350    0.0272    0.0189    0.0087
+  TB3MS       0.3637    0.1866    0.1342    0.0916    0.0423
+  GS10        0.0768    0.0897    0.0370    0.0236    0.0111</code></pre><p><strong>Recipe 4: Bayesian FAVAR with Gibbs sampling</strong></p><pre><code class="language-julia hljs">bfavar = estimate_favar(X, [5], 2, 2;
+    method=:bayesian, n_draws=100, burnin=50, panel_varnames=panel_names)
+birf = irf(bfavar, 20)
+
+(effective_draws=birf.n_effective, dropped=birf.n_failed)</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">(effective_draws = 92, dropped = 8)</code></pre><p><strong>Recipe 5: Forecast error variance decomposition</strong></p><pre><code class="language-julia hljs">d = fevd(favar, 20)
+report(d)</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">Forecast Error Variance Decomposition
+
+  Variables    3
+  Shocks       3
+  Horizon     20
+
+                 h = 1
+
+                 F1      F2   FEDFUNDS
+
+  F1         100.0%    0.0%       0.0%
+  F2           0.9%   99.1%       0.0%
+  FEDFUNDS     0.2%    0.7%      99.2%
+
+                 h = 4
+
+                F1      F2   FEDFUNDS
+
+  F1         88.2%   11.4%       0.4%
+  F2         12.4%   84.9%       2.7%
+  FEDFUNDS   25.2%   21.0%      53.8%
+
+                 h = 8
+
+                F1      F2   FEDFUNDS
+
+  F1         86.7%   12.6%       0.6%
+  F2         13.6%   83.8%       2.6%
+  FEDFUNDS   29.2%   19.1%      51.7%
+
+                h = 12
+
+                F1      F2   FEDFUNDS
+
+  F1         86.6%   12.7%       0.7%
+  F2         13.6%   83.8%       2.7%
+  FEDFUNDS   30.1%   18.9%      51.0%
+
+                h = 20
+
+                F1      F2   FEDFUNDS
+
+  F1         86.5%   12.7%       0.8%
+  F2         13.6%   83.7%       2.7%
+  FEDFUNDS   30.5%   18.8%      50.6%</code></pre><hr/><h2 id="Model-Specification"><a class="docs-heading-anchor" href="#Model-Specification">Model Specification</a><a id="Model-Specification-1"></a><a class="docs-heading-anchor-permalink" href="#Model-Specification" title="Permalink"></a></h2><p>The FAVAR treats the observable panel as generated by a small number of latent states, and lets a VAR govern those states jointly with the variables the researcher insists on observing directly. Two equations define it.</p><p>The <strong>transition equation</strong> governs the dynamics of the augmented system:</p><p class="math-container">\[\begin{bmatrix} F_t \\ Y_t^{key} \end{bmatrix} = c + \sum_{l=1}^{p} A_l \begin{bmatrix} F_{t-l} \\ Y_{t-l}^{key} \end{bmatrix} + u_t\]</p><p>where:</p><ul><li><span>$F_t$</span> is the <span>$r \times 1$</span> vector of latent factors extracted from the panel</li><li><span>$Y_t^{key}$</span> is the <span>$n_{key} \times 1$</span> vector of key observed variables, typically the policy rate</li><li><span>$A_l$</span> are <span>$(r + n_{key}) \times (r + n_{key})$</span> coefficient matrices at lag <span>$l$</span></li><li><span>$c$</span> is the <span>$(r + n_{key}) \times 1$</span> intercept vector</li><li><span>$u_t \sim N(0, \Sigma)$</span> is the reduced-form error vector</li></ul><p>The <strong>observation equation</strong> links the factors to all <span>$N$</span> panel variables:</p><p class="math-container">\[X_t = \Lambda \, F_t + e_t\]</p><p>where:</p><ul><li><span>$X_t$</span> is the <span>$N \times 1$</span> vector of panel variables at time <span>$t$</span></li><li><span>$\Lambda$</span> is the <span>$N \times r$</span> loading matrix</li><li><span>$e_t$</span> is the <span>$N \times 1$</span> vector of idiosyncratic errors</li></ul><div class="admonition is-info" id="Technical-Note-c8ca667e78d49d2c"><header class="admonition-header">Technical Note<a class="admonition-anchor" href="#Technical-Note-c8ca667e78d49d2c" title="Permalink"></a></header><div class="admonition-body"><p>The FAVAR nests a standard VAR at <span>$r = 0$</span>. With <span>$r &gt; 0$</span> the number of estimated VAR parameters scales as <span>$(r + n_{key})^2 p$</span> instead of <span>$N^2 p$</span>, which is what makes a 100-variable information set tractable inside a system small enough to identify.</p></div></div><p>The two factors in Recipe 1 carry 28.1% and 17.3% of the variance of the seven-series panel, 45.5% together, and the third eigenvalue is still 15.4%. That slow decay is what a narrow panel looks like: with <span>$N = 7$</span> there is no wide cross-section over which idiosyncratic noise can average out, so no small set of factors dominates. A production FAVAR uses the full FRED-MD panel; the seven series here keep every table on this page readable.</p><hr/><h2 id="Two-Step-Estimation"><a class="docs-heading-anchor" href="#Two-Step-Estimation">Two-Step Estimation</a><a id="Two-Step-Estimation-1"></a><a class="docs-heading-anchor-permalink" href="#Two-Step-Estimation" title="Permalink"></a></h2><p>The two-step estimator exploits a convenient fact: principal components consistently recover the factor space even when the true factors are correlated with the key observed variables. What PCA cannot do is stop <span>$Y^{key}$</span> from entering the system twice, so the second step removes the overlap explicitly.</p><ol><li><strong>Extract factors</strong>: estimate <span>$r$</span> factors from the standardized panel <span>$X$</span> by principal components (Stock &amp; Watson 2002)</li><li><strong>Remove double-counting</strong>: regress each extracted factor on <span>$[1, Y^{key}]$</span> by OLS and keep the residuals as the <strong>slow-moving factors</strong> <span>$\tilde{F}$</span></li><li><strong>Estimate the VAR</strong>: fit VAR(<span>$p$</span>) on the augmented system <span>$[\tilde{F}, Y^{key}]$</span></li></ol><div class="admonition is-info" id="Technical-Note-8607457020e21575"><header class="admonition-header">Technical Note<a class="admonition-anchor" href="#Technical-Note-8607457020e21575" title="Permalink"></a></header><div class="admonition-body"><p>Without step 2, <span>$Y^{key}$</span> information enters once through the factors — which load on every variable in the panel, including <span>$Y^{key}$</span> itself — and once directly, so the VAR would regress a variable partly on itself. The slopes <span>$B_y$</span> from step 2 are not discarded: they are retained as <span>$\Lambda_y = \Lambda B_y&#39;$</span>, the implied direct loading of each panel variable on <span>$Y^{key}$</span>, and are used when mapping responses back to the panel.</p></div></div><p><code>plot_result</code> draws the estimated factors, which is the first thing to look at after a fit: a factor that is visibly a single spike is picking up one outlying observation rather than a common component.</p><pre><code class="language-julia hljs">plot_result(favar)</code></pre><iframe src="../assets/plots/favar_factors.html" width="100%" height="420" frameborder="0" style="border:1px solid #ddd;border-radius:4px;"></iframe><p>The two slow-moving factors have very different amplitudes — the second varies about two and a half times as much as the first (standard deviations of 1.00 against 0.39), and all four extreme values fall between observations 20 and 24. Neither is dominated by a single spike, so both are common components rather than artefacts, and neither carries any funds-rate variation: step 2 has projected that out.</p><h3 id="Specifying-Key-Variables"><a class="docs-heading-anchor" href="#Specifying-Key-Variables">Specifying Key Variables</a><a id="Specifying-Key-Variables-1"></a><a class="docs-heading-anchor-permalink" href="#Specifying-Key-Variables" title="Permalink"></a></h3><p>Key variables enter the VAR directly and receive exact impulse responses rather than factor-mapped ones. Pass them as column indices into <code>X</code>, or as a separate matrix:</p><pre><code class="language-julia hljs"># Two key variables: broad money and the funds rate
+favar_ts = estimate_favar(X, [4, 5], 2, 2; panel_varnames=panel_names)
+report(favar_ts)</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">FAVAR(2) — 2 factors, 2 key vars
+
+  Specification
+
+  Factors (r)              2
+  Key variables            2
+  VAR variables            4
+  Panel variables          7
+  VAR lags (p)             2
+  Observations            60
+  Effective obs           58
+  AIC (per obs.)      -18.62
+  BIC                 -17.34
+  Log-lik           246.6453
+
+      Variance Explained (PCA)
+
+             Variance   Cumulative
+
+  Factor 1      28.1%        28.1%
+  Factor 2      17.3%        45.5%</code></pre><pre><code class="language-julia hljs"># The matrix form is equivalent; key columns are recovered by exact matching
+favar_mat = estimate_favar(X, X[:, [4, 5]], 2, 2; panel_varnames=panel_names)
+
+(indices=favar_mat.Y_key_indices, varnames=favar_mat.varnames)</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">(indices = [4, 5], varnames = [&quot;F1&quot;, &quot;F2&quot;, &quot;M2SL&quot;, &quot;FEDFUNDS&quot;])</code></pre><p>Adding <code>M2SL</code> to the key block enlarges the VAR from three variables to four and changes what the factors mean: they are now orthogonal to both money and the funds rate, so the &quot;slow-moving&quot; space excludes the entire monetary block rather than the policy rate alone. The PCA variance shares are unchanged at 28.1% and 17.3%, because double-counting removal operates on the extracted factors and not on the extraction itself. When the matrix form is used and no exact column match is found, <code>Y_key_indices</code> comes back empty and the key variables are labelled <code>Y1, Y2, …</code> instead of by panel name.</p><div class="admonition is-warning" id="panel_varnames-is-not-optional-in-practice-1894dddac7ee4005"><header class="admonition-header">panel_varnames is not optional in practice<a class="admonition-anchor" href="#panel_varnames-is-not-optional-in-practice-1894dddac7ee4005" title="Permalink"></a></header><div class="admonition-body"><p>Without <code>panel_varnames</code>, every panel variable is labelled <code>X1 … XN</code>, and <code>report()</code> on a panel IRF becomes unreadable. Pass the same names you used to build <code>X</code>.</p></div></div><h3 id="Keyword-Arguments"><a class="docs-heading-anchor" href="#Keyword-Arguments">Keyword Arguments</a><a id="Keyword-Arguments-1"></a><a class="docs-heading-anchor-permalink" href="#Keyword-Arguments" title="Permalink"></a></h3><table><tr><th style="text-align: right">Keyword</th><th style="text-align: right">Type</th><th style="text-align: right">Default</th><th style="text-align: right">Description</th></tr><tr><td style="text-align: right"><code>method</code></td><td style="text-align: right"><code>Symbol</code></td><td style="text-align: right"><code>:two_step</code></td><td style="text-align: right">Estimation method: <code>:two_step</code> or <code>:bayesian</code></td></tr><tr><td style="text-align: right"><code>panel_varnames</code></td><td style="text-align: right"><code>Vector{String}</code></td><td style="text-align: right"><code>nothing</code></td><td style="text-align: right">Display names for the <span>$N$</span> panel variables</td></tr><tr><td style="text-align: right"><code>n_draws</code></td><td style="text-align: right"><code>Int</code></td><td style="text-align: right"><code>5000</code></td><td style="text-align: right">Posterior draws retained (Bayesian only)</td></tr><tr><td style="text-align: right"><code>burnin</code></td><td style="text-align: right"><code>Int</code></td><td style="text-align: right"><code>1000</code></td><td style="text-align: right">Burn-in draws discarded; <code>0</code> falls back to 200 (Bayesian only)</td></tr><tr><td style="text-align: right"><code>rng</code></td><td style="text-align: right"><code>AbstractRNG</code></td><td style="text-align: right"><code>Random.default_rng()</code></td><td style="text-align: right">Random source for the Gibbs sampler</td></tr></table><h3 id="Return-Value-(FAVARModel{T})"><a class="docs-heading-anchor" href="#Return-Value-(FAVARModel{T})">Return Value (<code>FAVARModel{T}</code>)</a><a id="Return-Value-(FAVARModel{T})-1"></a><a class="docs-heading-anchor-permalink" href="#Return-Value-(FAVARModel{T})" title="Permalink"></a></h3><table><tr><th style="text-align: right">Field</th><th style="text-align: right">Type</th><th style="text-align: right">Description</th></tr><tr><td style="text-align: right"><code>Y</code></td><td style="text-align: right"><code>Matrix{T}</code></td><td style="text-align: right">Augmented data <span>$[\tilde{F}, Y^{key}]$</span> (<span>$T \times (r + n_{key})$</span>)</td></tr><tr><td style="text-align: right"><code>p</code></td><td style="text-align: right"><code>Int</code></td><td style="text-align: right">VAR lag order</td></tr><tr><td style="text-align: right"><code>B</code></td><td style="text-align: right"><code>Matrix{T}</code></td><td style="text-align: right">VAR coefficient matrix (<span>$(1 + p(r + n_{key})) \times (r + n_{key})$</span>)</td></tr><tr><td style="text-align: right"><code>U</code></td><td style="text-align: right"><code>Matrix{T}</code></td><td style="text-align: right">VAR residuals</td></tr><tr><td style="text-align: right"><code>Sigma</code></td><td style="text-align: right"><code>Matrix{T}</code></td><td style="text-align: right">Residual covariance (<span>$(r + n_{key}) \times (r + n_{key})$</span>)</td></tr><tr><td style="text-align: right"><code>varnames</code></td><td style="text-align: right"><code>Vector{String}</code></td><td style="text-align: right">Augmented VAR variable names</td></tr><tr><td style="text-align: right"><code>X_panel</code></td><td style="text-align: right"><code>Matrix{T}</code></td><td style="text-align: right">Original panel data (<span>$T \times N$</span>)</td></tr><tr><td style="text-align: right"><code>panel_varnames</code></td><td style="text-align: right"><code>Vector{String}</code></td><td style="text-align: right">Panel variable names (length <span>$N$</span>)</td></tr><tr><td style="text-align: right"><code>Y_key_indices</code></td><td style="text-align: right"><code>Vector{Int}</code></td><td style="text-align: right">Column indices of key variables in <code>X_panel</code>, empty if unmatched</td></tr><tr><td style="text-align: right"><code>n_factors</code></td><td style="text-align: right"><code>Int</code></td><td style="text-align: right">Number of latent factors <span>$r$</span></td></tr><tr><td style="text-align: right"><code>n_key</code></td><td style="text-align: right"><code>Int</code></td><td style="text-align: right">Number of key observed variables <span>$n_{key}$</span></td></tr><tr><td style="text-align: right"><code>factors</code></td><td style="text-align: right"><code>Matrix{T}</code></td><td style="text-align: right">Slow-moving factors <span>$\tilde{F}$</span> (<span>$T \times r$</span>)</td></tr><tr><td style="text-align: right"><code>loadings</code></td><td style="text-align: right"><code>Matrix{T}</code></td><td style="text-align: right">Factor loading matrix <span>$\Lambda$</span> (<span>$N \times r$</span>)</td></tr><tr><td style="text-align: right"><code>Lambda_y</code></td><td style="text-align: right"><code>Matrix{T}</code></td><td style="text-align: right">Implied direct panel loadings on <span>$Y^{key}$</span> (<span>$N \times n_{key}$</span>)</td></tr><tr><td style="text-align: right"><code>factor_model</code></td><td style="text-align: right"><code>FactorModel{T}</code></td><td style="text-align: right">Underlying PCA factor model</td></tr><tr><td style="text-align: right"><code>aic</code></td><td style="text-align: right"><code>T</code></td><td style="text-align: right">Akaike information criterion, per observation</td></tr><tr><td style="text-align: right"><code>bic</code></td><td style="text-align: right"><code>T</code></td><td style="text-align: right">Bayesian information criterion, per observation</td></tr><tr><td style="text-align: right"><code>loglik</code></td><td style="text-align: right"><code>T</code></td><td style="text-align: right">Gaussian log-likelihood of the augmented VAR</td></tr></table><hr/><h2 id="Bayesian-FAVAR"><a class="docs-heading-anchor" href="#Bayesian-FAVAR">Bayesian FAVAR</a><a id="Bayesian-FAVAR-1"></a><a class="docs-heading-anchor-permalink" href="#Bayesian-FAVAR" title="Permalink"></a></h2><p>The two-step estimator treats the extracted factors as data. They are not: they are estimates, and pretending otherwise understates the uncertainty in everything downstream. The Bayesian FAVAR (Bernanke, Boivin &amp; Eliasz 2005, Section IV) samples factors, loadings, and VAR parameters jointly, so the credible interval on a structural response includes the error in the factor extraction itself.</p><p>The measurement equation carries a direct loading on the key variables, which the two-step observation equation handles instead by removing double-counting:</p><p class="math-container">\[X_t = \Lambda \, F_t + \Lambda_y \, Y_t^{key} + e_t, \qquad e_t \sim N(0, \operatorname{diag}(\sigma_e^2))\]</p><p>The Gibbs sampler cycles three blocks:</p><ol><li><strong>Draw</strong> <span>$(B, \Sigma) \mid F, Y^{key}$</span>: Normal-Inverse-Wishart conjugate posterior from the VAR on the augmented system under a flat prior, in the tradition of Doan, Litterman &amp; Sims (1984)</li><li><strong>Draw</strong> <span>$(\Lambda, \Lambda_y) \mid F, X, Y^{key}$</span>: equation by equation, each row from its Normal posterior given the current factors and idiosyncratic variances</li><li><strong>Draw</strong> <span>$F \mid \Lambda, \Lambda_y, B, \Sigma, X, Y^{key}$</span>: Carter–Kohn forward-filtering backward-sampling on the companion state-space form, with the intercept and lagged <span>$Y^{key}$</span> feedback entering as a known drift</li></ol><div class="admonition is-info" id="Technical-Note-4d6330a20686bf96"><header class="admonition-header">Technical Note<a class="admonition-anchor" href="#Technical-Note-4d6330a20686bf96" title="Permalink"></a></header><div class="admonition-body"><p>The likelihood identifies only the column space of <span>$\Lambda$</span>: for any invertible <span>$r \times r$</span> matrix <span>$G$</span>, <span>$F \Lambda&#39; = (F G&#39;)(\Lambda G^{-1})&#39;$</span>. The sampler fixes those <span>$r^2$</span> free elements with the Bernanke, Boivin &amp; Eliasz normalization <span>$\Lambda_{[a]} = I_r$</span> and <span>$\Lambda_{y,[a]} = 0$</span>, where the anchor rows <span>$a$</span> are the first <span>$r$</span> columns of <code>X</code> that are not key variables — here <code>INDPRO</code> and <code>CPIAUCSL</code>, the slow-moving series the restriction assumes respond to policy only through the factors. <strong>Column order therefore matters</strong>: factor <span>$i$</span> is the common component of anchor series <span>$i$</span>. The <span>$\Lambda_y$</span> term is what keeps the factors from absorbing the funds rate&#39;s own variation; without it <span>$F_1$</span> came out 90% correlated with <code>FEDFUNDS</code>, the VAR design matrix on <span>$[F, Y^{key}]$</span> was near-singular, and the coefficient posterior diverged.</p></div></div><pre><code class="language-julia hljs">report(birf)</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">   Bayesian Impulse Response Functions
+
+  Variables                           3
+  Shocks                              3
+  Horizon                            20
+  Quantiles         16.0%, 50.0%, 84.0%
+  Effective draws    92/100 (8 dropped)
+
+                      Shock: F1 (Point)
+
+                 h=1       h=4       h=8     h=12      h=20
+
+  F1         0.1885*   0.0484*    0.0135   0.0034    0.0004
+  F2         0.8041*   0.2334*    0.0483   0.0095   -0.0008
+  FEDFUNDS    0.0047   -0.0059   -0.0027   0.0004    0.0011
+
+                        Shock: F2 (Point)
+
+                 h=1        h=4        h=8       h=12       h=20
+
+  F1          0.0000    0.0326*     0.0067     0.0002    -0.0005
+  F2         0.2487*    0.1418*     0.0338     0.0120     0.0073
+  FEDFUNDS    0.0091   -0.0529*   -0.0343*   -0.0233*   -0.0142*
+
+                    Shock: FEDFUNDS (Point)
+
+                 h=1       h=4       h=8      h=12       h=20
+
+  F1          0.0000   0.0229*    0.0029   -0.0003    -0.0007
+  F2          0.0000    0.0440   -0.0142   -0.0170   -0.0116*
+  FEDFUNDS   0.0929*   0.0369*   0.0307*   0.0245*    0.0157*
+
+* Credible interval excludes zero</code></pre><p>Eight of the 100 posterior draws are discarded because their companion matrix is explosive, leaving 92 effective draws — <code>report</code> states this in the header rather than silently averaging over whatever survived. The Bayesian and two-step answers differ substantially on the same data: the median response of the funds rate to the first factor shock is <span>$-0.006$</span> at <span>$h = 4$</span> against <span>$-0.042$</span> from the two-step point estimate, and the first factor&#39;s own-shock response starts at 0.19 rather than 0.35. That is not sampling noise. The Gibbs sampler re-draws the factors at every sweep, so it never conditions on the fixed principal components the two-step estimator takes as given.</p><div class="admonition is-warning" id="100-draws-is-a-documentation-setting,-not-a-research-setting-4a74d8ab831c3ad2"><header class="admonition-header">100 draws is a documentation setting, not a research setting<a class="admonition-anchor" href="#100-draws-is-a-documentation-setting,-not-a-research-setting-4a74d8ab831c3ad2" title="Permalink"></a></header><div class="admonition-body"><p>The examples here use <code>n_draws=100, burnin=50</code> so the page builds quickly, and the flat prior leaves the VAR block essentially unregularized on 58 effective observations — which is why roughly one draw in twelve is explosive. That residual share is the honest posterior for a persistent three-variable system on a short sample, not a symptom: the median draw has a largest companion eigenvalue near 0.92. With a panel of <span>$N &gt; 100$</span> variables use <code>burnin</code> of at least 2000 and several thousand draws, and confirm the posterior is stable across settings.</p></div></div><h3 id="Bayesian-Structural-Analysis"><a class="docs-heading-anchor" href="#Bayesian-Structural-Analysis">Bayesian Structural Analysis</a><a id="Bayesian-Structural-Analysis-1"></a><a class="docs-heading-anchor-permalink" href="#Bayesian-Structural-Analysis" title="Permalink"></a></h3><p>IRFs, FEVD, and historical decomposition all operate draw by draw, through automatic delegation to the <code>BVARPosterior</code> infrastructure:</p><pre><code class="language-julia hljs">bfevd = fevd(bfavar, 20)
+report(bfevd)</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">     Bayesian FEVD (posterior mean)
+
+  Variables                           3
+  Shocks                              3
+  Horizon                            20
+  Quantiles         16.0%, 50.0%, 84.0%
+  Effective draws    92/100 (8 dropped)
+
+                 h = 1
+
+                 F1      F2   FEDFUNDS
+
+  F1         100.0%    0.0%       0.0%
+  F2          89.9%   10.1%       0.0%
+  FEDFUNDS     2.3%    3.9%      93.8%
+
+                 h = 4
+
+                F1      F2   FEDFUNDS
+
+  F1         79.9%   11.3%       8.8%
+  F2         77.2%   15.1%       7.7%
+  FEDFUNDS    8.8%   33.8%      57.4%
+
+                 h = 8
+
+                F1      F2   FEDFUNDS
+
+  F1         78.9%   11.9%       9.2%
+  F2         76.5%   15.2%       8.3%
+  FEDFUNDS    8.8%   36.6%      54.6%
+
+                h = 12
+
+                F1      F2   FEDFUNDS
+
+  F1         78.7%   12.0%       9.3%
+  F2         76.2%   15.2%       8.5%
+  FEDFUNDS    8.6%   37.4%      54.0%
+
+                h = 20
+
+                F1      F2   FEDFUNDS
+
+  F1         78.5%   12.1%       9.4%
+  F2         76.0%   15.3%       8.7%
+  FEDFUNDS    8.4%   38.0%      53.6%</code></pre><p>At the 20-period horizon the funds rate&#39;s own shock explains 53.6% of its forecast error variance in the Bayesian FAVAR, against 50.6% in the two-step model; the second factor takes 38.0% and the first only 8.4%. The two estimators agree on the headline share while disagreeing on how the remainder splits between the factors, which is the expected pattern: they identify the same policy shock but attribute the common component differently because one samples the factors and the other conditions on fixed principal components. Read the two decompositions as answers to different questions, not as competing estimates of one number.</p><h3 id="Return-Value-(BayesianFAVAR{T})"><a class="docs-heading-anchor" href="#Return-Value-(BayesianFAVAR{T})">Return Value (<code>BayesianFAVAR{T}</code>)</a><a id="Return-Value-(BayesianFAVAR{T})-1"></a><a class="docs-heading-anchor-permalink" href="#Return-Value-(BayesianFAVAR{T})" title="Permalink"></a></h3><table><tr><th style="text-align: right">Field</th><th style="text-align: right">Type</th><th style="text-align: right">Description</th></tr><tr><td style="text-align: right"><code>B_draws</code></td><td style="text-align: right"><code>Array{T,3}</code></td><td style="text-align: right">Posterior VAR coefficient draws (<span>$n_{draws} \times k \times n$</span>)</td></tr><tr><td style="text-align: right"><code>Sigma_draws</code></td><td style="text-align: right"><code>Array{T,3}</code></td><td style="text-align: right">Posterior covariance draws (<span>$n_{draws} \times n \times n$</span>)</td></tr><tr><td style="text-align: right"><code>factor_draws</code></td><td style="text-align: right"><code>Array{T,3}</code></td><td style="text-align: right">Posterior factor draws (<span>$n_{draws} \times T \times r$</span>)</td></tr><tr><td style="text-align: right"><code>loadings_draws</code></td><td style="text-align: right"><code>Array{T,3}</code></td><td style="text-align: right">Posterior factor loading draws (<span>$n_{draws} \times N \times r$</span>)</td></tr><tr><td style="text-align: right"><code>lambda_y_draws</code></td><td style="text-align: right"><code>Array{T,3}</code></td><td style="text-align: right">Posterior direct key-variable loading draws (<span>$n_{draws} \times N \times n_{key}$</span>), in the VAR&#39;s <span>$Y^{key}$</span> units; zero on the anchor rows</td></tr><tr><td style="text-align: right"><code>X_panel</code></td><td style="text-align: right"><code>Matrix{T}</code></td><td style="text-align: right">Original panel data (<span>$T \times N$</span>)</td></tr><tr><td style="text-align: right"><code>panel_varnames</code></td><td style="text-align: right"><code>Vector{String}</code></td><td style="text-align: right">Panel variable names</td></tr><tr><td style="text-align: right"><code>Y_key_indices</code></td><td style="text-align: right"><code>Vector{Int}</code></td><td style="text-align: right">Key variable column indices</td></tr><tr><td style="text-align: right"><code>n_factors</code></td><td style="text-align: right"><code>Int</code></td><td style="text-align: right">Number of factors <span>$r$</span></td></tr><tr><td style="text-align: right"><code>n_key</code></td><td style="text-align: right"><code>Int</code></td><td style="text-align: right">Number of key variables <span>$n_{key}$</span></td></tr><tr><td style="text-align: right"><code>n</code></td><td style="text-align: right"><code>Int</code></td><td style="text-align: right">Total VAR dimension <span>$r + n_{key}$</span></td></tr><tr><td style="text-align: right"><code>p</code></td><td style="text-align: right"><code>Int</code></td><td style="text-align: right">VAR lag order</td></tr><tr><td style="text-align: right"><code>data</code></td><td style="text-align: right"><code>Matrix{T}</code></td><td style="text-align: right">Augmented VAR data <span>$[F, Y^{key}]$</span> at the posterior mean factors</td></tr><tr><td style="text-align: right"><code>varnames</code></td><td style="text-align: right"><code>Vector{String}</code></td><td style="text-align: right">Augmented VAR variable names</td></tr></table><hr/><h2 id="Panel-Wide-Impulse-Responses"><a class="docs-heading-anchor" href="#Panel-Wide-Impulse-Responses">Panel-Wide Impulse Responses</a><a id="Panel-Wide-Impulse-Responses-1"></a><a class="docs-heading-anchor-permalink" href="#Panel-Wide-Impulse-Responses" title="Permalink"></a></h2><p>Tracing a structural shock through to every series in the panel is what the FAVAR exists for. <code>favar_panel_irf</code> performs the mapping:</p><p class="math-container">\[\text{response}_i(h, j) = \sum_{k=1}^{r} \Lambda_{ik} \cdot \text{IRF}_{F_k}(h, j) + \sum_{m=1}^{n_{key}} \Lambda_{y,im} \cdot \text{IRF}_{Y_m}(h, j)\]</p><p>where:</p><ul><li><span>$\text{response}_i(h, j)$</span> is the response of panel variable <span>$i$</span> at horizon <span>$h$</span> to structural shock <span>$j$</span></li><li><span>$\Lambda_{ik}$</span> is the loading of variable <span>$i$</span> on factor <span>$k$</span></li><li><span>$\Lambda_{y,im}$</span> is the implied direct loading of variable <span>$i$</span> on key variable <span>$m$</span></li><li><span>$\text{IRF}_{F_k}$</span> and <span>$\text{IRF}_{Y_m}$</span> are augmented-VAR responses of factor <span>$k$</span> and key variable <span>$m$</span></li></ul><p>Key observed variables skip the mapping entirely and keep their direct VAR responses, so the series the researcher chose to observe get exact structural answers.</p><p>The panel IRF reported in Recipe 3 delivers a textbook monetary contraction. On impact <code>INDPRO</code> falls 0.040, <code>CPIAUCSL</code> falls 0.101, and <code>UNRATE</code> rises 0.090, while the short rate <code>TB3MS</code> jumps 0.364 and the ten-year <code>GS10</code> moves only 0.077 — a flattening of the curve. Both the output and price responses are still negative at <span>$h = 12$</span> (<span>$-0.009$</span> and <span>$-0.022$</span>), so the contraction persists rather than reversing.</p><p>Plotting the mapped responses shows all seven series answering one shock, which is the FAVAR&#39;s selling point over a three-variable VAR:</p><pre><code class="language-julia hljs">plot_result(r_panel; shock=&quot;FEDFUNDS&quot;)</code></pre><iframe src="../assets/plots/favar_panel_irf.html" width="100%" height="700" frameborder="0" style="border:1px solid #ddd;border-radius:4px;"></iframe><p>The sign pattern at impact is the one theory asks for — activity and prices down, unemployment up, the whole yield curve up with the ten-year moving a fifth as much as the three-month — but no response is monotone. Most peak one period <em>after</em> impact (<code>CPIAUCSL</code> reaches <span>$-0.153$</span> at <span>$h = 1$</span> against <span>$-0.101$</span> on impact), and <code>M2SL</code> and <code>GS10</code> cross zero on the way down. All seven have decayed to under 15% of their impact magnitude by the end of the horizon. The bands are drawn flat at zero because the <code>irf</code> call above requested no confidence intervals; <code>ci_type=:bootstrap</code> fills them in, subject to the mapping caveat below.</p><p>The two channels of the mapping can be separated directly:</p><pre><code class="language-julia hljs"># Impact response of INDPRO to the funds-rate shock, channel by channel
+factor_channel = sum(favar.loadings[1, :] .* r.values[1, 1:2, 3])
+direct_channel = favar.Lambda_y[1, 1] * r.values[1, 3, 3]
+
+(factor=round(factor_channel, digits=4),
+ direct=round(direct_channel, digits=4),
+ total=round(r_panel.values[1, 1, 3], digits=4))</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">(factor = 0.0, direct = -0.0401, total = -0.0401)</code></pre><p>The factor channel contributes exactly zero at impact: under the Cholesky ordering a shock to the last variable cannot move the factors contemporaneously, so <span>$\Lambda_y$</span> carries the whole impact response of every non-key series. From <span>$h = 2$</span> onward the factors respond and the two channels both contribute.</p><div class="admonition is-warning" id="Mapped-intervals-are-images,-not-quantiles-f17b27684eafff8d"><header class="admonition-header">Mapped intervals are images, not quantiles<a class="admonition-anchor" href="#Mapped-intervals-are-images,-not-quantiles-f17b27684eafff8d" title="Permalink"></a></header><div class="admonition-body"><p>When the source IRF carries confidence bands, <code>favar_panel_irf</code> maps the lower and upper bounds through the same <span>$\Lambda$</span>. Loadings can be negative, so the image of a lower bound is not necessarily below the image of an upper bound. Read a mapped band as the range spanned by two mapped endpoints, and take the point estimate from <code>values</code>.</p></div></div><h3 id="Bayesian-Panel-IRFs"><a class="docs-heading-anchor" href="#Bayesian-Panel-IRFs">Bayesian Panel IRFs</a><a id="Bayesian-Panel-IRFs-1"></a><a class="docs-heading-anchor-permalink" href="#Bayesian-Panel-IRFs" title="Permalink"></a></h3><p>The Bayesian variant maps the posterior median and every quantile through both posterior mean loading matrices, <span>$\Lambda \hat F_h + \Lambda_y \hat Y^{key}_h$</span>, so the factor channel and the direct policy channel are both live:</p><pre><code class="language-julia hljs">birf_panel = favar_panel_irf(bfavar, birf)
+report(birf_panel)</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">   Bayesian Impulse Response Functions
+
+  Variables                           7
+  Shocks                              3
+  Horizon                            20
+  Quantiles         16.0%, 50.0%, 84.0%
+  Effective draws    92/100 (8 dropped)
+
+                      Shock: F1 (Point)
+
+                 h=1       h=4       h=8     h=12      h=20
+
+  INDPRO     0.1885*   0.0484*    0.0135   0.0034    0.0004
+  CPIAUCSL   0.8041*   0.2334*    0.0483   0.0095   -0.0008
+  UNRATE     0.0545*    0.0049    0.0037   0.0021    0.0013
+  M2SL        0.0122   -0.0004    0.0011   0.0007    0.0005
+  FEDFUNDS    0.0047   -0.0059   -0.0027   0.0004    0.0011
+  TB3MS       0.0286   -0.0631    0.0037   0.0099    0.0087
+  GS10        0.3532    0.0227    0.0506   0.0199    0.0074
+
+                         Shock: F2 (Point)
+
+                  h=1        h=4        h=8       h=12       h=20
+
+  INDPRO       0.0000    0.0326*     0.0067     0.0002    -0.0005
+  CPIAUCSL    0.2487*    0.1418*     0.0338     0.0120     0.0073
+  UNRATE     -0.0387*   -0.0238*   -0.0200*   -0.0161*   -0.0105*
+  M2SL       -0.0189*   -0.0082*   -0.0065*   -0.0053*   -0.0035*
+  FEDFUNDS     0.0091   -0.0529*   -0.0343*   -0.0233*   -0.0142*
+  TB3MS      -0.3436*   -0.2206*   -0.1492*   -0.1128*   -0.0732*
+  GS10       -0.6562*     0.0701     0.0091    -0.0215    -0.0217
+
+                    Shock: FEDFUNDS (Point)
+
+                  h=1       h=4       h=8      h=12       h=20
+
+  INDPRO       0.0000   0.0229*    0.0029   -0.0003    -0.0007
+  CPIAUCSL     0.0000    0.0440   -0.0142   -0.0170   -0.0116*
+  UNRATE      0.0567*   0.0383*   0.0243*   0.0177*    0.0109*
+  M2SL        0.0175*   0.0128*   0.0082*   0.0059*    0.0036*
+  FEDFUNDS    0.0929*   0.0369*   0.0307*   0.0245*    0.0157*
+  TB3MS       0.3831*   0.2353*   0.1678*   0.1250*    0.0777*
+  GS10       -0.0275*   0.1728*   0.0664*    0.0332     0.0164
+
+* Credible interval excludes zero</code></pre><p>The impact row of the funds-rate shock reads the identification directly. <code>TB3MS</code> moves 0.383 on impact, <code>UNRATE</code> 0.057, and <code>GS10</code> <span>$-0.028$</span>, all of it through <span>$\Lambda_y$</span>: the funds rate is ordered last under Cholesky, so the factors do not move within the period and the entire impact response is the direct channel. <code>INDPRO</code> and <code>CPIAUCSL</code> are exactly zero instead — they are the two anchor series, restricted to <span>$\Lambda_y = 0$</span>, and that restriction is precisely the assumption that output and prices respond to policy only through the factors. The zeros are an identifying assumption on display, not a finding about the data.</p><p>The two-step mapping puts <code>INDPRO</code> at <span>$-0.040$</span> and <code>CPIAUCSL</code> at <span>$-0.101$</span> on that same impact row, non-zero because its <span>$\Lambda_y = \Lambda B_y&#39;$</span> is an unrestricted regression slope rather than an identifying assumption. Both mappings are live on both channels; they differ only in what they are willing to assume about the slow-moving series.</p><hr/><h2 id="Forecasting"><a class="docs-heading-anchor" href="#Forecasting">Forecasting</a><a id="Forecasting-1"></a><a class="docs-heading-anchor-permalink" href="#Forecasting" title="Permalink"></a></h2><p>FAVAR forecasts run in the augmented space <span>$[\tilde F, Y^{key}]$</span>; <code>forecast</code> delegates to the VAR machinery through <code>to_var()</code>.</p><pre><code class="language-julia hljs">fc = forecast(favar, 6)
+report(fc)</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">        VAR Forecast
+
+  Specification
+
+  Horizon                 6
+  Variables               3
+  CI method       bootstrap
+  Conf. level           95%
+
+                   F1
+
+  h   Forecast   Lower 95%   Upper 95%
+
+  1    -0.0081     -0.9514      0.5572
+  2     0.0098     -0.9498      0.6694
+  3     0.0026     -0.8726      0.6202
+  4     0.0188     -0.8632      0.6617
+  5     0.0426     -0.8431      0.7307
+  6     0.0241     -0.8055      0.7593
+
+                   F2
+
+  h   Forecast   Lower 95%   Upper 95%
+
+  1    -0.3001     -2.2794      1.3235
+  2     0.1185     -1.8641      2.0185
+  3     0.1597     -2.0789      2.1665
+  4    -0.0622     -2.2818      1.9414
+  5    -0.1099     -2.5032      2.1034
+  6    -0.0302     -1.9796      2.0582
+
+                FEDFUNDS
+
+  h   Forecast   Lower 95%   Upper 95%
+
+  1    -0.1112     -0.2675      0.0243
+  2    -0.1106     -0.3306      0.1276
+  3    -0.0948     -0.3849      0.1968
+  4    -0.0678     -0.3542      0.2633
+  5    -0.0525     -0.3595      0.2732
+  6    -0.0497     -0.3704      0.3110</code></pre><p><code>favar_panel_forecast</code> maps those forecasts to the full panel, taking key variables from their direct VAR path and reconstructing the rest as <span>$\Lambda \hat F_{T+h} + \Lambda_y \hat Y^{key}_{T+h}$</span>:</p><pre><code class="language-julia hljs">fc_panel = favar_panel_forecast(favar, fc)
+
+# Panel point forecasts: 6 horizons × 7 series, in panel_names order
+round.(fc_panel.forecast, digits=4)</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">6×7 Matrix{Float64}:
+ 0.0156  -0.0399  -0.1912   0.0739  -0.1112  -0.511   -0.3253
+ 0.073    0.2153  -0.1025  -0.1279  -0.1106  -0.5173  -0.0236
+ 0.0698   0.2181  -0.0735  -0.1369  -0.0948  -0.4367   0.0236
+ 0.028    0.0538  -0.0958  -0.0152  -0.0678  -0.332   -0.1159
+ 0.0161   0.011   -0.0947   0.0148  -0.0525  -0.2848  -0.1415
+ 0.0235   0.0511  -0.0693  -0.0196  -0.0497  -0.2527  -0.0762</code></pre><p>Panel forecasts contain only the factor-mediated and policy-mediated components; the idiosyncratic dynamics of each series are not modelled and so are not forecast. Bootstrap intervals on the augmented system are wide relative to the point forecasts at every horizon, which is the honest reading of a VAR estimated on 58 effective observations. The interval endpoints are mapped through <span>$\Lambda$</span> by the same linear image used for IRFs, so the caveat above applies to <code>fc_panel.ci_lower</code> and <code>fc_panel.ci_upper</code> as well.</p><table><tr><th style="text-align: right">Keyword</th><th style="text-align: right">Type</th><th style="text-align: right">Default</th><th style="text-align: right">Description</th></tr><tr><td style="text-align: right"><code>ci_method</code></td><td style="text-align: right"><code>Symbol</code></td><td style="text-align: right"><code>:bootstrap</code></td><td style="text-align: right">Interval method: <code>:none</code> or <code>:bootstrap</code></td></tr><tr><td style="text-align: right"><code>reps</code></td><td style="text-align: right"><code>Int</code></td><td style="text-align: right"><code>500</code></td><td style="text-align: right">Bootstrap replications</td></tr><tr><td style="text-align: right"><code>conf_level</code></td><td style="text-align: right"><code>Real</code></td><td style="text-align: right"><code>0.95</code></td><td style="text-align: right">Confidence level</td></tr></table><hr/><h2 id="Structural-Identification"><a class="docs-heading-anchor" href="#Structural-Identification">Structural Identification</a><a id="Structural-Identification-1"></a><a class="docs-heading-anchor-permalink" href="#Structural-Identification" title="Permalink"></a></h2><p>The FAVAR inherits every identification method available to a VAR, since <code>to_var()</code> hands the augmented system to the standard machinery. The ordering convention puts factors first and key variables last, which sets the recursive structure under Cholesky.</p><p>Ordering the slow-moving factors ahead of the funds rate encodes the Bernanke, Boivin &amp; Eliasz identification: the policy rate responds within the month to the state of the economy summarized by the factors, but the factors respond to policy only with a lag. The restriction is visible in the Recipe 2 table — both factor responses to the funds-rate shock are exactly zero at <span>$h = 1$</span> and become non-zero from <span>$h = 2$</span>.</p><p>Sign restrictions drop the ordering assumption. The check function receives the full <span>$H \times n \times n$</span> IRF array of the <strong>augmented</strong> system, indexed <code>[horizon, variable, shock]</code>:</p><pre><code class="language-julia hljs"># Shock 1 raises the first factor and lowers the funds rate on impact
+check_fn(irf_matrix) = irf_matrix[1, 1, 1] &gt; 0 &amp;&amp; irf_matrix[1, 3, 1] &lt; 0
+r_sign = irf(favar, 20; method=:sign, check_func=check_fn, seed=42)
+report(r_sign)</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">Impulse Response Functions
+
+  Variables      3
+  Shocks         3
+  Horizon       20
+  CI          None
+
+                          Shock: F1
+
+                 h=1       h=4       h=8      h=12      h=20
+
+  F1          0.3400    0.0382    0.0063    0.0046    0.0022
+  F2          0.0477    0.1081   -0.0002   -0.0081   -0.0029
+  FEDFUNDS   -0.0132   -0.0443   -0.0290   -0.0186   -0.0086
+
+                          Shock: F2
+
+                 h=1       h=4       h=8      h=12      h=20
+
+  F1         -0.0888    0.0373    0.0027   -0.0007   -0.0003
+  F2          0.6888   -0.0868   -0.0112    0.0007    0.0004
+  FEDFUNDS   -0.0415    0.0111    0.0046    0.0025    0.0011
+
+                      Shock: FEDFUNDS
+
+                h=1      h=4       h=8      h=12      h=20
+
+  F1         0.0307   0.0063   -0.0076   -0.0053   -0.0024
+  F2         0.5206   0.0532    0.0064    0.0053    0.0032
+  FEDFUNDS   0.0661   0.0402    0.0298    0.0206    0.0095</code></pre><p>Here <code>irf_matrix[1, 3, 1]</code> is the impact response of the third augmented variable — the funds rate — to the first structural shock, so the predicate imposes an aggregate-demand pattern without any ordering. The accepted rotation raises the first factor by 0.340 on impact while lowering the funds rate by 0.013, and it leaves the factors free to move contemporaneously with policy: the third shock now shifts them by 0.031 and 0.521 at <span>$h = 1$</span>, where Cholesky forced exact zeros. Sign restrictions identify a set rather than a point, and <code>irf</code> returns the first accepted draw — pass <code>seed</code> to make the choice reproducible, as here, and re-run across seeds before concluding anything from a single rotation.</p><p>For the full catalogue of identification schemes, including narrative and long-run restrictions, see <a href="../innovation_accounting/#innovation_accounting_page">Innovation Accounting</a> and <a href="../structural_identification/#structural_identification_page">Structural Identification</a>.</p><hr/><h2 id="Complete-Example"><a class="docs-heading-anchor" href="#Complete-Example">Complete Example</a><a id="Complete-Example-1"></a><a class="docs-heading-anchor-permalink" href="#Complete-Example" title="Permalink"></a></h2><p>The end-to-end workflow: estimate, identify, decompose the history, and compare the frequentist and Bayesian readings of the same specification.</p><pre><code class="language-julia hljs">favar_full = estimate_favar(X, [5], 2, 2; panel_varnames=panel_names)
+
+r_aug_full = irf(favar_full, 20; method=:cholesky)
+d_aug_full = fevd(favar_full, 20)
+r_panel_full = favar_panel_irf(favar_full, r_aug_full)
+
+hd_full = historical_decomposition(favar_full)
+report(hd_full)</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">      Historical Decomposition
+
+  Specification
+
+  Identification method   cholesky
+  Variables                      3
+  Shocks                         3
+  Time periods                  58
+
+       Contribution Summary (mean absolute contribution)
+
+  Variable   shock: F1   shock: F2   shock: FEDFUNDS   Initial
+
+  F1            0.2774      0.1086            0.0237    0.0088
+  F2            0.2744      0.7338            0.1253    0.0236
+  FEDFUNDS       0.068      0.0676             0.097    0.0419
+
+
+  Decomposition identity   Passed</code></pre><pre><code class="language-julia hljs"># Share of the funds rate&#39;s 20-period forecast error assigned to its own shock.
+# Both arrays are indexed (variable, shock, horizon).
+(twostep=round(100 * d_aug_full.proportions[3, 3, 20], digits=1),
+ bayesian=round(100 * bfevd.point_estimate[3, 3, 20], digits=1))</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">(twostep = 50.6, bayesian = 53.6)</code></pre><p>The two-step FAVAR extracts 2 factors from the 7-series panel, removes the component spanned by the federal funds rate, and estimates a VAR(2) on the resulting 3-variable augmented system — 58 effective observations after lags. The historical decomposition passes its identity check, and its mean absolute contributions show the funds rate driven mostly by its own shock (0.097) with the two factor shocks contributing 0.068 each, while the factors are driven overwhelmingly by factor shocks. Panel-wide IRFs then carry the three structural shocks out to all 7 series through the <span>$7 \times 2$</span> loading matrix <span>$\Lambda$</span> and the <span>$7 \times 1$</span> direct channel <span>$\Lambda_y$</span>. The final comparison is the point of running both estimators: the funds-rate shock owns 50.6% of its own forecast error variance when the factors are treated as data and 53.6% when they are sampled, and the gap between them measures the cost of the generated-regressor assumption rather than a disagreement about the data.</p><hr/><h2 id="Common-Pitfalls"><a class="docs-heading-anchor" href="#Common-Pitfalls">Common Pitfalls</a><a id="Common-Pitfalls-1"></a><a class="docs-heading-anchor-permalink" href="#Common-Pitfalls" title="Permalink"></a></h2><ol><li><p><strong>Slow/fast misclassification.</strong> The ordering <span>$[\tilde F, Y^{key}]$</span> makes the factors slow and the key variables fast under Cholesky. Putting a genuinely slow-moving series such as GDP in <code>Y_key</code> asserts that it responds to policy within the period. Encode the identification through the factor ordering, or switch to sign restrictions.</p></li><li><p><strong>Choosing <span>$r$</span> by eye.</strong> Too few factors omit relevant information; too many burn degrees of freedom in a VAR that has few to spare. Select <span>$r$</span> with <code>ic_criteria(X, r_max)</code> from the <a href="../factormodels/#factor_page">Factor Models</a> page before estimating the FAVAR, and remember that the augmented VAR dimension is <span>$r + n_{key}$</span>, not <span>$r$</span>.</p></li><li><p><strong>Burn-in too short.</strong> The Gibbs sampler starts from the PCA factors and loadings, and the factor block mixes slowly. With <span>$N &gt; 100$</span> panel variables use <code>burnin</code> of at least 2000 and check that the posterior is stable across settings. Passing <code>burnin=0</code> silently substitutes 200, which is not a considered choice.</p></li><li><p><strong>Over-reading a small panel IRF.</strong> For non-key variables the panel IRF is a linear projection through <span>$\Lambda$</span> and <span>$\Lambda_y$</span>, capturing only the factor-mediated and policy-mediated components. A near-zero panel response does not mean the variable is unaffected — it means its response is orthogonal to the common structure the FAVAR models.</p></li><li><p><strong>Treating mapped bands as credible intervals.</strong> <code>favar_panel_irf</code> and <code>favar_panel_forecast</code> map interval endpoints through <span>$\Lambda$</span>, which is not a quantile-preserving operation when loadings are negative. Use them as a range; when a genuine interval on a panel variable is required, estimate the Bayesian FAVAR, where the panel draws are mapped individually and the quantiles are recomputed in panel space rather than mapped endpoint by endpoint.</p></li><li><p><strong>Pre-filtering the panel.</strong> The two-step procedure removes double-counting itself. Dropping the key variables from <code>X</code> before extraction is unnecessary and throws away information that improves the factor estimates.</p></li><li><p><strong>Ignoring column order under <code>method=:bayesian</code>.</strong> The Gibbs sampler anchors the factor scale on the first <span>$r$</span> non-key columns of <code>X</code>, restricting them to unit loadings and no direct policy response. Put slow-moving series there — output and prices, not asset prices — and check that they are not near-collinear in the factor space, which raises an <code>ArgumentError</code>. Factor <span>$i$</span> is then read as the common component of anchor series <span>$i$</span>. The two-step estimator is invariant to column order; the Bayesian one is not.</p></li></ol><hr/><h2 id="References"><a class="docs-heading-anchor" href="#References">References</a><a id="References-1"></a><a class="docs-heading-anchor-permalink" href="#References" title="Permalink"></a></h2><ul><li><p>Bai, J., &amp; Ng, S. (2002). Determining the Number of Factors in Approximate Factor Models. <em>Econometrica</em>, 70(1), 191-221. <a href="https://doi.org/10.1111/1468-0262.00273">DOI</a></p></li><li><p>Bernanke, B. S., Boivin, J., &amp; Eliasz, P. (2005). Measuring the Effects of Monetary Policy: A Factor-Augmented Vector Autoregressive (FAVAR) Approach. <em>Quarterly Journal of Economics</em>, 120(1), 387-422. <a href="https://doi.org/10.1162/0033553053327452">DOI</a></p></li><li><p>Carter, C. K., &amp; Kohn, R. (1994). On Gibbs Sampling for State Space Models. <em>Biometrika</em>, 81(3), 541-553. <a href="https://doi.org/10.1093/biomet/81.3.541">DOI</a></p></li><li><p>Doan, T., Litterman, R., &amp; Sims, C. (1984). Forecasting and Conditional Projection Using Realistic Prior Distributions. <em>Econometric Reviews</em>, 3(1), 1-100. <a href="https://doi.org/10.1080/07474938408800053">DOI</a></p></li><li><p>McCracken, M. W., &amp; Ng, S. (2016). FRED-MD: A Monthly Database for Macroeconomic Research. <em>Journal of Business &amp; Economic Statistics</em>, 34(4), 574-589. <a href="https://doi.org/10.1080/07350015.2015.1086655">DOI</a></p></li><li><p>Stock, J. H., &amp; Watson, M. W. (2002). Forecasting Using Principal Components from a Large Number of Predictors. <em>Journal of the American Statistical Association</em>, 97(460), 1167-1179. <a href="https://doi.org/10.1198/016214502388618960">DOI</a></p></li></ul></article><nav class="docs-footer"><a class="docs-footer-prevpage" href="../factormodels/">« Factor Models</a><a class="docs-footer-nextpage" href="../nonlinear/">Threshold &amp; SETAR »</a><div class="flexbox-break"></div><p class="footer-message">Powered by <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> and the <a href="https://julialang.org/">Julia Programming Language</a>.</p></nav></div><div class="modal" id="documenter-settings"><div class="modal-background"></div><div class="modal-card"><header class="modal-card-head"><p class="modal-card-title">Settings</p><button class="delete"></button></header><section class="modal-card-body"><p><label class="label">Theme</label><div class="select"><select id="documenter-themepicker"><option value="auto">Automatic (OS)</option><option value="documenter-light">documenter-light</option><option value="documenter-dark">documenter-dark</option><option value="catppuccin-latte">catppuccin-latte</option><option value="catppuccin-frappe">catppuccin-frappe</option><option value="catppuccin-macchiato">catppuccin-macchiato</option><option value="catppuccin-mocha">catppuccin-mocha</option></select></div></p><hr/><p>This document was generated with <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> version 1.17.0 on <span class="colophon-date" title="Thursday 6 August 2026 13:15">Thursday 6 August 2026</span>. Using Julia version 1.12.6.</p></section><footer class="modal-card-foot"></footer></div></div></div></body></html>
