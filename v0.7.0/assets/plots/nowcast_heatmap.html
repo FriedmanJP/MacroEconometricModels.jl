@@ -1,0 +1,231 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Nowcast Data Availability & Z-Scores (dfm)</title>
+<style>* { margin: 0; padding: 0; box-sizing: border-box; }
+body {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Arial, sans-serif;
+    background: #fff;
+    color: #333;
+    padding: 20px;
+}
+.figure-title {
+    font-size: 18px;
+    font-weight: 600;
+    text-align: center;
+    margin-bottom: 16px;
+    color: #222;
+}
+.figure-source {
+    font-size: 11px;
+    color: #888;
+    text-align: center;
+    margin-top: 8px;
+}
+.panel-grid {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 16px;
+    justify-content: center;
+}
+.panel {
+    width: calc(100% - 16px);
+    min-width: 300px;
+    background: #fff;
+    border: 1px solid #e0e0e0;
+    border-radius: 4px;
+    padding: 12px;
+}
+.panel-title {
+    font-size: 13px;
+    font-weight: 600;
+    text-align: center;
+    margin-bottom: 8px;
+    color: #444;
+}
+.axis text { font-size: 11px; fill: #666; }
+.axis line, .axis path { stroke: #ccc; }
+.grid line { stroke: #f0f0f0; stroke-dasharray: 2,2; }
+.grid .domain { stroke: none; }
+.tooltip {
+    position: absolute;
+    background: rgba(0,0,0,0.8);
+    color: #fff;
+    padding: 6px 10px;
+    border-radius: 4px;
+    font-size: 11px;
+    pointer-events: none;
+    opacity: 0;
+    transition: opacity 0.15s;
+    z-index: 1000;
+}
+.legend { font-size: 11px; }
+.legend rect { rx: 2; }
+svg { overflow: visible; }
+</style>
+</head>
+<body>
+<div class="figure-title">Nowcast Data Availability & Z-Scores (dfm)</div>
+<div class="panel">
+<div class="panel-title">Z-Score Heatmap</div>
+<div id="nc_heatmap_149"></div>
+</div>
+<div class="tooltip" id="tooltip"></div>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/d3/7.8.5/d3.min.js"></script>
+<script>
+// Shared utilities
+const tooltip = d3.select('#tooltip');
+function fmt(v) {
+    if (v === null || v === undefined) return '';
+    return Math.abs(v) >= 1000 ? v.toFixed(1) : (Math.abs(v) >= 1 ? v.toFixed(3) : v.toFixed(4));
+}
+function showTip(evt, html) {
+    tooltip.html(html).style('opacity',1)
+        .style('left',(evt.pageX+12)+'px').style('top',(evt.pageY-28)+'px');
+}
+function hideTip() { tooltip.style('opacity',0); }
+
+(function() {
+    const data = [{"x":"83","y":"INDPRO","v":-0.3648376022011433},
+{"x":"84","y":"INDPRO","v":0.6132723369136025},
+{"x":"85","y":"INDPRO","v":-0.594817961123687},
+{"x":"86","y":"INDPRO","v":-0.4917488308090947},
+{"x":"87","y":"INDPRO","v":-0.3463798678682134},
+{"x":"88","y":"INDPRO","v":1.7654792942123316},
+{"x":"89","y":"INDPRO","v":-0.9399044398953332},
+{"x":"90","y":"INDPRO","v":1.6128654177295723},
+{"x":"91","y":"INDPRO","v":0.0933096613314547},
+{"x":"92","y":"INDPRO","v":1.0773817857936892},
+{"x":"93","y":"INDPRO","v":-0.07118420762853085},
+{"x":"94","y":"INDPRO","v":-0.14697824527040673},
+{"x":"95","y":"INDPRO","v":-0.5023020993138593},
+{"x":"96","y":"INDPRO","v":0.12238650708338618},
+{"x":"97","y":"INDPRO","v":0.18158781816075711},
+{"x":"98","y":"INDPRO","v":-0.8269743269769843},
+{"x":"99","y":"INDPRO","v":0.8015355028713834},
+{"x":"100","y":"INDPRO","v":-0.19258320529654785},
+{"x":"83","y":"UNRATE","v":0.7391785822964759},
+{"x":"84","y":"UNRATE","v":-0.06427639846056274},
+{"x":"85","y":"UNRATE","v":-1.6711863599746328},
+{"x":"86","y":"UNRATE","v":-0.8677313792175941},
+{"x":"87","y":"UNRATE","v":0.7391785822964687},
+{"x":"88","y":"UNRATE","v":-0.8677313792175941},
+{"x":"89","y":"UNRATE","v":1.5426335630535002},
+{"x":"90","y":"UNRATE","v":-0.8677313792175941},
+{"x":"91","y":"UNRATE","v":-0.8677313792175941},
+{"x":"92","y":"UNRATE","v":0.7391785822964687},
+{"x":"93","y":"UNRATE","v":-0.8677313792175941},
+{"x":"94","y":"UNRATE","v":1.5426335630535002},
+{"x":"95","y":"UNRATE","v":0.7391785822964759},
+{"x":"96","y":"UNRATE","v":-0.8677313792176012},
+{"x":"97","y":"UNRATE","v":0.7391785822964759},
+{"x":"98","y":"UNRATE","v":-0.06427639846056274},
+{"x":"99","y":"UNRATE","v":-0.06427639846056274},
+{"x":"100","y":"UNRATE","v":2.3460885438105388},
+{"x":"83","y":"CPI","v":0.8793105865423464},
+{"x":"84","y":"CPI","v":-0.3025728265541517},
+{"x":"85","y":"CPI","v":-2.7865063368258136},
+{"x":"86","y":"CPI","v":0.13892182875136652},
+{"x":"87","y":"CPI","v":1.4716651262922633},
+{"x":"88","y":"CPI","v":1.4694837189407663},
+{"x":"89","y":"CPI","v":-1.1259155185791183},
+{"x":"90","y":"CPI","v":0.6580456531187262},
+{"x":"91","y":"CPI","v":0.3906680014231911},
+{"x":"92","y":"CPI","v":-0.6543138435296795},
+{"x":"93","y":"CPI","v":0.33478966685576794},
+{"x":"94","y":"CPI","v":-0.5410398455635885},
+{"x":"95","y":"CPI","v":-0.16094655450735298},
+{"x":"96","y":"CPI","v":-0.4398207339070394},
+{"x":"97","y":"CPI","v":1.1669122852641756},
+{"x":"98","y":"CPI","v":-0.34424985787257295},
+{"x":"99","y":"CPI","v":1.414070839640551},
+{"x":"100","y":"CPI","v":-1.472072163349763},
+{"x":"83","y":"M2","v":0.10116645412059827},
+{"x":"84","y":"M2","v":-0.3065407254340015},
+{"x":"85","y":"M2","v":-0.1260146793922571},
+{"x":"86","y":"M2","v":0.6287787613818443},
+{"x":"87","y":"M2","v":-0.40413117190854214},
+{"x":"88","y":"M2","v":0.20451753561153585},
+{"x":"89","y":"M2","v":-0.1405129880100545},
+{"x":"90","y":"M2","v":-0.6306010237742525},
+{"x":"91","y":"M2","v":0.5009003829195035},
+{"x":"92","y":"M2","v":1.069097122556331},
+{"x":"93","y":"M2","v":-1.6372802980797245},
+{"x":"94","y":"M2","v":0.5316186150077666},
+{"x":"95","y":"M2","v":-0.06781150586341984},
+{"x":"96","y":"M2","v":1.2279360552827652},
+{"x":"97","y":"M2","v":-1.5851800668408274},
+{"x":"98","y":"M2","v":-0.08555635924242494},
+{"x":"99","y":"M2","v":0.27924053615005284},
+{"x":"100","y":"M2","v":0.1260684177116881},
+{"x":"83","y":"FFR","v":1.3283146885486188},
+{"x":"84","y":"FFR","v":0.08233138811769852},
+{"x":"85","y":"FFR","v":0.03041541726641133},
+{"x":"86","y":"FFR","v":0.03041541726641133},
+{"x":"87","y":"FFR","v":0.03041541726641133},
+{"x":"88","y":"FFR","v":-0.021500553584875865},
+{"x":"89","y":"FFR","v":0.08233138811769852},
+{"x":"90","y":"FFR","v":0.08233138811769852},
+{"x":"91","y":"FFR","v":0.03041541726641133},
+{"x":"92","y":"FFR","v":-0.021500553584875865},
+{"x":"93","y":"FFR","v":0.03041541726641133},
+{"x":"94","y":"FFR","v":0.03041541726641133},
+{"x":"95","y":"FFR","v":0.08233138811769852},
+{"x":"96","y":"FFR","v":-1.215567883164509},
+{"x":"97","y":"FFR","v":-0.38491234954389086},
+{"x":"98","y":"FFR","v":-0.9040720580567811},
+{"x":"99","y":"FFR","v":-1.3713157957183706},
+{"x":"100","y":"FFR","v":null}];
+    const rowLabels = ["INDPRO","UNRATE","CPI","M2","FFR"];
+    const colLabels = ["83","84","85","86","87","88","89","90","91","92","93","94","95","96","97","98","99","100"];
+
+    const container = d3.select('#nc_heatmap_149');
+    const W = Math.max(container.node().clientWidth - 24, 280);
+    const maxLabelW = 120;
+    const margin = {top:10, right:15, bottom:35, left: maxLabelW};
+    const w = W - margin.left - margin.right;
+    const cellH = Math.max(Math.min(18, 250 / rowLabels.length), 8);
+    const h = cellH * rowLabels.length;
+
+    const svg = container.append('svg').attr('width', W).attr('height', h + margin.top + margin.bottom);
+    const g = svg.append('g').attr('transform', 'translate('+margin.left+','+margin.top+')');
+
+    const x = d3.scaleBand().domain(colLabels).range([0, w]).padding(0.02);
+    const y = d3.scaleBand().domain(rowLabels).range([0, h]).padding(0.02);
+
+    const color = d3.scaleSequential(t => d3.interpolateRdBu(1 - t))
+        .domain([-3, 3]);
+    const grey = '#d9d9d9';
+
+    g.selectAll('rect.cell').data(data).join('rect').attr('class','cell')
+        .attr('x', d => x(d.x))
+        .attr('y', d => y(d.y))
+        .attr('width', x.bandwidth())
+        .attr('height', y.bandwidth())
+        .attr('fill', d => d.v === null ? grey : color(Math.max(-3, Math.min(3, d.v))))
+        .attr('rx', 1)
+        .on('mouseover', function(evt, d) {
+            const val = d.v === null ? 'Missing' : fmt(d.v);
+            showTip(evt, '<b>'+d.y+'</b><br>Period '+d.x+': '+val);
+        })
+        .on('mouseout', hideTip);
+
+    // Axes
+    g.append('g').attr('class','axis').attr('transform','translate(0,'+h+')')
+        .call(d3.axisBottom(x).tickValues(colLabels.filter((d,i) =>
+            i % Math.max(1, Math.floor(colLabels.length/10)) === 0)));
+    g.append('g').attr('class','axis')
+        .call(d3.axisLeft(y).tickFormat(d => d.length > 20 ? d.slice(0,18)+'..' : d));
+
+    if('Period') g.append('text').attr('x',w/2).attr('y',h+30).attr('text-anchor','middle')
+        .attr('font-size','11px').attr('fill','#666').text('Period');
+    if('') g.append('text').attr('transform','rotate(-90)')
+        .attr('x',-h/2).attr('y',-maxLabelW+10).attr('text-anchor','middle')
+        .attr('font-size','11px').attr('fill','#666').text('');
+})();
+
+</script>
+</body>
+</html>

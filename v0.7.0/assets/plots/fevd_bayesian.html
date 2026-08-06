@@ -1,0 +1,355 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Bayesian FEVD (posterior mean)</title>
+<style>* { margin: 0; padding: 0; box-sizing: border-box; }
+body {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Arial, sans-serif;
+    background: #fff;
+    color: #333;
+    padding: 20px;
+}
+.figure-title {
+    font-size: 18px;
+    font-weight: 600;
+    text-align: center;
+    margin-bottom: 16px;
+    color: #222;
+}
+.figure-source {
+    font-size: 11px;
+    color: #888;
+    text-align: center;
+    margin-top: 8px;
+}
+.panel-grid {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 16px;
+    justify-content: center;
+}
+.panel {
+    width: calc(33% - 16px);
+    min-width: 300px;
+    background: #fff;
+    border: 1px solid #e0e0e0;
+    border-radius: 4px;
+    padding: 12px;
+}
+.panel-title {
+    font-size: 13px;
+    font-weight: 600;
+    text-align: center;
+    margin-bottom: 8px;
+    color: #444;
+}
+.axis text { font-size: 11px; fill: #666; }
+.axis line, .axis path { stroke: #ccc; }
+.grid line { stroke: #f0f0f0; stroke-dasharray: 2,2; }
+.grid .domain { stroke: none; }
+.tooltip {
+    position: absolute;
+    background: rgba(0,0,0,0.8);
+    color: #fff;
+    padding: 6px 10px;
+    border-radius: 4px;
+    font-size: 11px;
+    pointer-events: none;
+    opacity: 0;
+    transition: opacity 0.15s;
+    z-index: 1000;
+}
+.legend { font-size: 11px; }
+.legend rect { rx: 2; }
+svg { overflow: visible; }
+</style>
+</head>
+<body>
+<div class="figure-title">Bayesian FEVD (posterior mean)</div>
+<div class="panel-grid">
+<div class="panel">
+<div class="panel-title">INDPRO</div>
+<div id="bfevd_61"></div>
+</div>
+<div class="panel">
+<div class="panel-title">CPI</div>
+<div id="bfevd_62"></div>
+</div>
+<div class="panel">
+<div class="panel-title">FFR</div>
+<div id="bfevd_63"></div>
+</div>
+</div>
+
+<div class="tooltip" id="tooltip"></div>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/d3/7.8.5/d3.min.js"></script>
+<script>
+// Shared utilities
+const tooltip = d3.select('#tooltip');
+function fmt(v) {
+    if (v === null || v === undefined) return '';
+    return Math.abs(v) >= 1000 ? v.toFixed(1) : (Math.abs(v) >= 1 ? v.toFixed(3) : v.toFixed(4));
+}
+function showTip(evt, html) {
+    tooltip.html(html).style('opacity',1)
+        .style('left',(evt.pageX+12)+'px').style('top',(evt.pageY-28)+'px');
+}
+function hideTip() { tooltip.style('opacity',0); }
+
+(function() {
+    const data = [{"x":1,"s1":1.0,"s2":0.0,"s3":0.0},
+{"x":2,"s1":0.7894825747095111,"s2":0.20553780836607355,"s3":0.004979616924415438},
+{"x":3,"s1":0.694426608489703,"s2":0.2977905776646877,"s3":0.007782813845609364},
+{"x":4,"s1":0.6605135172026523,"s2":0.3287641347530757,"s3":0.010722348044271987},
+{"x":5,"s1":0.6419983320582063,"s2":0.34623509574332234,"s3":0.011766572198471315},
+{"x":6,"s1":0.624425288519762,"s2":0.36228024330089503,"s3":0.0132944681793431},
+{"x":7,"s1":0.6263756785759598,"s2":0.35881877805562146,"s3":0.01480554336841887},
+{"x":8,"s1":0.6080056909408864,"s2":0.3771639731816918,"s3":0.014830335877421871},
+{"x":9,"s1":0.5999892204250572,"s2":0.3841287388489397,"s3":0.01588204072600308},
+{"x":10,"s1":0.5951889123158584,"s2":0.38783689997917886,"s3":0.016974187704962673},
+{"x":11,"s1":0.5946576983335534,"s2":0.38780045155087456,"s3":0.017541850115572067},
+{"x":12,"s1":0.5914388096972498,"s2":0.39084604227297826,"s3":0.017715148029771977},
+{"x":13,"s1":0.5865486789588001,"s2":0.39552765310038795,"s3":0.017923667940811933},
+{"x":14,"s1":0.5836377263796334,"s2":0.39820694695554437,"s3":0.018155326664822207},
+{"x":15,"s1":0.5861202315036999,"s2":0.3953200870254888,"s3":0.018559681470811357},
+{"x":16,"s1":0.5851068254719525,"s2":0.39589192708311005,"s3":0.019001247444937638},
+{"x":17,"s1":0.583419009046863,"s2":0.39759774635474926,"s3":0.018983244598387697},
+{"x":18,"s1":0.5825970173752967,"s2":0.3982992976841706,"s3":0.01910368494053273},
+{"x":19,"s1":0.5826504730979146,"s2":0.39785631307466707,"s3":0.019493213827418306},
+{"x":20,"s1":0.5804976008591463,"s2":0.39991271436421205,"s3":0.019589684776641716}];
+    const series = [{"name":"INDPRO","color":"#1f77b4","key":"s1","dash":""},{"name":"CPI","color":"#ff7f0e","key":"s2","dash":""},{"name":"FFR","color":"#2ca02c","key":"s3","dash":""}];
+
+    const container = d3.select('#bfevd_61');
+    const W = Math.max(container.node().clientWidth - 24, 280);
+    const margin = {top:10, right:15, bottom:35, left:55};
+    const w = W - margin.left - margin.right;
+    const h = Math.min(w * 0.6, 250);
+
+    const svg = container.append('svg').attr('width', W).attr('height', h + margin.top + margin.bottom);
+    const g = svg.append('g').attr('transform', 'translate('+margin.left+','+margin.top+')');
+
+    const keys = series.map(s => s.key);
+    const x = d3.scaleLinear().domain(d3.extent(data, d=>d.x)).range([0,w]);
+    const y = d3.scaleLinear().domain([0,1]).range([h,0]);
+
+    const stack = d3.stack().keys(keys).order(d3.stackOrderNone).offset(d3.stackOffsetNone);
+    const stacked = stack(data);
+
+    const area = d3.area()
+        .x(d => x(d.data.x))
+        .y0(d => y(d[0]))
+        .y1(d => y(d[1]));
+
+    g.selectAll('.layer').data(stacked).join('path')
+        .attr('class','layer')
+        .attr('d', area)
+        .attr('fill', (d,i) => series[i].color)
+        .attr('opacity', 0.85);
+
+    g.append('g').attr('class','grid').call(d3.axisLeft(y).tickSize(-w).tickFormat(''));
+    g.append('g').attr('class','axis').attr('transform','translate(0,'+h+')')
+        .call(d3.axisBottom(x).ticks(Math.min(data.length,8)));
+    g.append('g').attr('class','axis').call(d3.axisLeft(y).ticks(5).tickFormat(d3.format('.0%')));
+
+    if('Horizon') g.append('text').attr('x',w/2).attr('y',h+30).attr('text-anchor','middle')
+        .attr('font-size','11px').attr('fill','#666').text('Horizon');
+    if('Proportion') g.append('text').attr('transform','rotate(-90)')
+        .attr('x',-h/2).attr('y',-42).attr('text-anchor','middle')
+        .attr('font-size','11px').attr('fill','#666').text('Proportion');
+
+    // Legend
+    const leg = g.append('g').attr('class','legend').attr('transform','translate(5,-5)');
+    series.forEach((s,i) => {
+        const gi = leg.append('g').attr('transform','translate('+(i*90)+',0)');
+        gi.append('rect').attr('width',12).attr('height',12).attr('y',-6).attr('fill',s.color).attr('opacity',0.85);
+        gi.append('text').attr('x',16).attr('y',4).attr('font-size','10px').attr('fill','#555').text(s.name);
+    });
+
+    // Tooltip
+    svg.append('rect').attr('width',W).attr('height',h+margin.top+margin.bottom)
+        .attr('fill','none').attr('pointer-events','all')
+        .on('mousemove', function(evt) {
+            const [mx] = d3.pointer(evt, g.node());
+            const x0 = x.invert(mx);
+            const idx = d3.minIndex(data, d => Math.abs(d.x - x0));
+            const d = data[idx];
+            let html = '<b>h='+d.x+'</b>';
+            series.forEach(s => { html += '<br>'+s.name+': '+(d[s.key]*100).toFixed(1)+'%'; });
+            showTip(evt, html);
+        })
+        .on('mouseout', hideTip);
+})();
+
+(function() {
+    const data = [{"x":1,"s1":0.004758996745241859,"s2":0.9952410032547581,"s3":0.0},
+{"x":2,"s1":0.10777574694139753,"s2":0.88976502849325,"s3":0.002459224565352508},
+{"x":3,"s1":0.1980133059405447,"s2":0.7972181743403719,"s3":0.004768519719083467},
+{"x":4,"s1":0.26305447004571314,"s2":0.7290078006889407,"s3":0.00793772926534619},
+{"x":5,"s1":0.2787591919129283,"s2":0.7106917660661652,"s3":0.010549042020906485},
+{"x":6,"s1":0.30028851045533744,"s2":0.6877770360294052,"s3":0.011934453515257395},
+{"x":7,"s1":0.29839780594327797,"s2":0.6889248670391502,"s3":0.012677327017571776},
+{"x":8,"s1":0.3077451427852446,"s2":0.6788011199735463,"s3":0.013453737241209176},
+{"x":9,"s1":0.30793870986213445,"s2":0.6784153800240595,"s3":0.0136459101138061},
+{"x":10,"s1":0.32349734669502506,"s2":0.6623753132839222,"s3":0.014127340021052785},
+{"x":11,"s1":0.3300130441373021,"s2":0.655324589657868,"s3":0.014662366204829915},
+{"x":12,"s1":0.3258834209596132,"s2":0.6589078682072911,"s3":0.015208710833095695},
+{"x":13,"s1":0.3286211031038617,"s2":0.6560553007570094,"s3":0.015323596139128945},
+{"x":14,"s1":0.3315721313469247,"s2":0.6531210995587662,"s3":0.01530676909430907},
+{"x":15,"s1":0.3336651794848741,"s2":0.650473763103138,"s3":0.015861057411987883},
+{"x":16,"s1":0.3378057441702645,"s2":0.6457994679492812,"s3":0.016394787880454273},
+{"x":17,"s1":0.3388420807962426,"s2":0.6448634068676415,"s3":0.016294512336115938},
+{"x":18,"s1":0.3427242221396083,"s2":0.6408749357769671,"s3":0.016400842083424655},
+{"x":19,"s1":0.3441759855611347,"s2":0.6390988550227715,"s3":0.016725159416093757},
+{"x":20,"s1":0.34547056539767673,"s2":0.6377249228765013,"s3":0.016804511725822133}];
+    const series = [{"name":"INDPRO","color":"#1f77b4","key":"s1","dash":""},{"name":"CPI","color":"#ff7f0e","key":"s2","dash":""},{"name":"FFR","color":"#2ca02c","key":"s3","dash":""}];
+
+    const container = d3.select('#bfevd_62');
+    const W = Math.max(container.node().clientWidth - 24, 280);
+    const margin = {top:10, right:15, bottom:35, left:55};
+    const w = W - margin.left - margin.right;
+    const h = Math.min(w * 0.6, 250);
+
+    const svg = container.append('svg').attr('width', W).attr('height', h + margin.top + margin.bottom);
+    const g = svg.append('g').attr('transform', 'translate('+margin.left+','+margin.top+')');
+
+    const keys = series.map(s => s.key);
+    const x = d3.scaleLinear().domain(d3.extent(data, d=>d.x)).range([0,w]);
+    const y = d3.scaleLinear().domain([0,1]).range([h,0]);
+
+    const stack = d3.stack().keys(keys).order(d3.stackOrderNone).offset(d3.stackOffsetNone);
+    const stacked = stack(data);
+
+    const area = d3.area()
+        .x(d => x(d.data.x))
+        .y0(d => y(d[0]))
+        .y1(d => y(d[1]));
+
+    g.selectAll('.layer').data(stacked).join('path')
+        .attr('class','layer')
+        .attr('d', area)
+        .attr('fill', (d,i) => series[i].color)
+        .attr('opacity', 0.85);
+
+    g.append('g').attr('class','grid').call(d3.axisLeft(y).tickSize(-w).tickFormat(''));
+    g.append('g').attr('class','axis').attr('transform','translate(0,'+h+')')
+        .call(d3.axisBottom(x).ticks(Math.min(data.length,8)));
+    g.append('g').attr('class','axis').call(d3.axisLeft(y).ticks(5).tickFormat(d3.format('.0%')));
+
+    if('Horizon') g.append('text').attr('x',w/2).attr('y',h+30).attr('text-anchor','middle')
+        .attr('font-size','11px').attr('fill','#666').text('Horizon');
+    if('Proportion') g.append('text').attr('transform','rotate(-90)')
+        .attr('x',-h/2).attr('y',-42).attr('text-anchor','middle')
+        .attr('font-size','11px').attr('fill','#666').text('Proportion');
+
+    // Legend
+    const leg = g.append('g').attr('class','legend').attr('transform','translate(5,-5)');
+    series.forEach((s,i) => {
+        const gi = leg.append('g').attr('transform','translate('+(i*90)+',0)');
+        gi.append('rect').attr('width',12).attr('height',12).attr('y',-6).attr('fill',s.color).attr('opacity',0.85);
+        gi.append('text').attr('x',16).attr('y',4).attr('font-size','10px').attr('fill','#555').text(s.name);
+    });
+
+    // Tooltip
+    svg.append('rect').attr('width',W).attr('height',h+margin.top+margin.bottom)
+        .attr('fill','none').attr('pointer-events','all')
+        .on('mousemove', function(evt) {
+            const [mx] = d3.pointer(evt, g.node());
+            const x0 = x.invert(mx);
+            const idx = d3.minIndex(data, d => Math.abs(d.x - x0));
+            const d = data[idx];
+            let html = '<b>h='+d.x+'</b>';
+            series.forEach(s => { html += '<br>'+s.name+': '+(d[s.key]*100).toFixed(1)+'%'; });
+            showTip(evt, html);
+        })
+        .on('mouseout', hideTip);
+})();
+
+(function() {
+    const data = [{"x":1,"s1":0.0031706475816875653,"s2":0.004810873053648351,"s3":0.9920184793646641},
+{"x":2,"s1":0.4275603478388978,"s2":0.12490013643223177,"s3":0.4475395157288704},
+{"x":3,"s1":0.3853808504165084,"s2":0.2829750903832033,"s3":0.3316440592002884},
+{"x":4,"s1":0.39631831620975605,"s2":0.3539386499162754,"s3":0.2497430338739685},
+{"x":5,"s1":0.40407759366348334,"s2":0.38201682921798585,"s3":0.21390557711853084},
+{"x":6,"s1":0.41569251484303194,"s2":0.39308557934873484,"s3":0.19122190580823323},
+{"x":7,"s1":0.41744642820283784,"s2":0.40456564085573,"s3":0.17798793094143212},
+{"x":8,"s1":0.4196388860411742,"s2":0.4153437676736164,"s3":0.1650173462852093},
+{"x":9,"s1":0.4193990572076388,"s2":0.4231140757201096,"s3":0.15748686707225157},
+{"x":10,"s1":0.4140641950340601,"s2":0.43644374462095786,"s3":0.14949206034498205},
+{"x":11,"s1":0.4166464087281001,"s2":0.4392600099389358,"s3":0.14409358133296418},
+{"x":12,"s1":0.42221047228042846,"s2":0.4369848441908899,"s3":0.14080468352868164},
+{"x":13,"s1":0.4221752448626774,"s2":0.4400897966109202,"s3":0.13773495852640244},
+{"x":14,"s1":0.4229714304381368,"s2":0.4415597118888448,"s3":0.13546885767301847},
+{"x":15,"s1":0.4203417134758586,"s2":0.4455091107225865,"s3":0.13414917580155492},
+{"x":16,"s1":0.4199549075969402,"s2":0.4478746626603657,"s3":0.13217042974269416},
+{"x":17,"s1":0.4230423389911703,"s2":0.4460899726086882,"s3":0.13086768840014157},
+{"x":18,"s1":0.4231914486907517,"s2":0.4475663432469869,"s3":0.1292422080622614},
+{"x":19,"s1":0.42309614694761943,"s2":0.4483996347426423,"s3":0.12850421830973832},
+{"x":20,"s1":0.42513296804270906,"s2":0.4471490689473772,"s3":0.12771796300991375}];
+    const series = [{"name":"INDPRO","color":"#1f77b4","key":"s1","dash":""},{"name":"CPI","color":"#ff7f0e","key":"s2","dash":""},{"name":"FFR","color":"#2ca02c","key":"s3","dash":""}];
+
+    const container = d3.select('#bfevd_63');
+    const W = Math.max(container.node().clientWidth - 24, 280);
+    const margin = {top:10, right:15, bottom:35, left:55};
+    const w = W - margin.left - margin.right;
+    const h = Math.min(w * 0.6, 250);
+
+    const svg = container.append('svg').attr('width', W).attr('height', h + margin.top + margin.bottom);
+    const g = svg.append('g').attr('transform', 'translate('+margin.left+','+margin.top+')');
+
+    const keys = series.map(s => s.key);
+    const x = d3.scaleLinear().domain(d3.extent(data, d=>d.x)).range([0,w]);
+    const y = d3.scaleLinear().domain([0,1]).range([h,0]);
+
+    const stack = d3.stack().keys(keys).order(d3.stackOrderNone).offset(d3.stackOffsetNone);
+    const stacked = stack(data);
+
+    const area = d3.area()
+        .x(d => x(d.data.x))
+        .y0(d => y(d[0]))
+        .y1(d => y(d[1]));
+
+    g.selectAll('.layer').data(stacked).join('path')
+        .attr('class','layer')
+        .attr('d', area)
+        .attr('fill', (d,i) => series[i].color)
+        .attr('opacity', 0.85);
+
+    g.append('g').attr('class','grid').call(d3.axisLeft(y).tickSize(-w).tickFormat(''));
+    g.append('g').attr('class','axis').attr('transform','translate(0,'+h+')')
+        .call(d3.axisBottom(x).ticks(Math.min(data.length,8)));
+    g.append('g').attr('class','axis').call(d3.axisLeft(y).ticks(5).tickFormat(d3.format('.0%')));
+
+    if('Horizon') g.append('text').attr('x',w/2).attr('y',h+30).attr('text-anchor','middle')
+        .attr('font-size','11px').attr('fill','#666').text('Horizon');
+    if('Proportion') g.append('text').attr('transform','rotate(-90)')
+        .attr('x',-h/2).attr('y',-42).attr('text-anchor','middle')
+        .attr('font-size','11px').attr('fill','#666').text('Proportion');
+
+    // Legend
+    const leg = g.append('g').attr('class','legend').attr('transform','translate(5,-5)');
+    series.forEach((s,i) => {
+        const gi = leg.append('g').attr('transform','translate('+(i*90)+',0)');
+        gi.append('rect').attr('width',12).attr('height',12).attr('y',-6).attr('fill',s.color).attr('opacity',0.85);
+        gi.append('text').attr('x',16).attr('y',4).attr('font-size','10px').attr('fill','#555').text(s.name);
+    });
+
+    // Tooltip
+    svg.append('rect').attr('width',W).attr('height',h+margin.top+margin.bottom)
+        .attr('fill','none').attr('pointer-events','all')
+        .on('mousemove', function(evt) {
+            const [mx] = d3.pointer(evt, g.node());
+            const x0 = x.invert(mx);
+            const idx = d3.minIndex(data, d => Math.abs(d.x - x0));
+            const d = data[idx];
+            let html = '<b>h='+d.x+'</b>';
+            series.forEach(s => { html += '<br>'+s.name+': '+(d[s.key]*100).toFixed(1)+'%'; });
+            showTip(evt, html);
+        })
+        .on('mouseout', hideTip);
+})();
+
+</script>
+</body>
+</html>
