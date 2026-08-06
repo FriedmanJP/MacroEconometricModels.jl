@@ -1,0 +1,960 @@
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="UTF-8"/><meta name="viewport" content="width=device-width, initial-scale=1.0"/><title>Panel Regression · MacroEconometricModels.jl</title><meta name="title" content="Panel Regression · MacroEconometricModels.jl"/><meta property="og:title" content="Panel Regression · MacroEconometricModels.jl"/><meta property="twitter:title" content="Panel Regression · MacroEconometricModels.jl"/><meta name="description" content="Documentation for MacroEconometricModels.jl."/><meta property="og:description" content="Documentation for MacroEconometricModels.jl."/><meta property="twitter:description" content="Documentation for MacroEconometricModels.jl."/><meta property="og:url" content="https://FriedmanJP.github.io/MacroEconometricModels.jl/panel_reg/"/><meta property="twitter:url" content="https://FriedmanJP.github.io/MacroEconometricModels.jl/panel_reg/"/><link rel="canonical" href="https://FriedmanJP.github.io/MacroEconometricModels.jl/panel_reg/"/><script data-outdated-warner src="../assets/warner.js"></script><link href="https://cdnjs.cloudflare.com/ajax/libs/lato-font/3.0.0/css/lato-font.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/juliamono/0.050/juliamono.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.2/css/fontawesome.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.2/css/solid.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.2/css/brands.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.8/katex.min.css" rel="stylesheet" type="text/css"/><script>documenterBaseURL=".."</script><script src="https://cdnjs.cloudflare.com/ajax/libs/require.js/2.3.6/require.min.js" data-main="../assets/documenter.js"></script><script src="../search_index.js"></script><script src="../siteinfo.js"></script><script src="../../versions.js"></script><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../assets/themes/catppuccin-mocha.css" data-theme-name="catppuccin-mocha"/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../assets/themes/catppuccin-macchiato.css" data-theme-name="catppuccin-macchiato"/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../assets/themes/catppuccin-frappe.css" data-theme-name="catppuccin-frappe"/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../assets/themes/catppuccin-latte.css" data-theme-name="catppuccin-latte"/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../assets/themes/documenter-dark.css" data-theme-name="documenter-dark" data-theme-primary-dark/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../assets/themes/documenter-light.css" data-theme-name="documenter-light" data-theme-primary/><script src="../assets/themeswap.js"></script><link href="../assets/custom.css" rel="stylesheet" type="text/css"/><script src="../assets/theme-toggle.js"></script></head><body><div id="documenter"><nav class="docs-sidebar"><div class="docs-package-name"><span class="docs-autofit"><a href="../">MacroEconometricModels.jl</a></span></div><button class="docs-search-query input is-rounded is-small is-clickable my-2 mx-auto py-1 px-2" id="documenter-search-query">Search docs (Ctrl + /)</button><ul class="docs-menu"><li><a class="tocitem" href="../">Home</a></li><li><span class="tocitem">Getting Started</span><ul><li><a class="tocitem" href="../getting_started/">Installation &amp; First Model</a></li><li><a class="tocitem" href="../method_guide/">Choosing a Method</a></li><li><a class="tocitem" href="../data/">Data Management</a></li></ul></li><li><span class="tocitem">Univariate Models</span><ul><li><a class="tocitem" href="../filters/">Time Series Filters</a></li><li><a class="tocitem" href="../x13/">X-13ARIMA-SEATS</a></li><li><a class="tocitem" href="../spectral/">Spectral Analysis</a></li><li><a class="tocitem" href="../arima/">ARIMA</a></li><li><a class="tocitem" href="../statespace/">State-Space Models</a></li><li><a class="tocitem" href="../volatility/">Volatility Models</a></li><li><a class="tocitem" href="../nonparametric/">Nonparametric Regression &amp; Density</a></li></ul></li><li><span class="tocitem">Multivariate Models</span><ul><li><a class="tocitem" href="../manual/">VAR</a></li><li><a class="tocitem" href="../bayesian/">Bayesian VAR</a></li><li><a class="tocitem" href="../vecm/">VECM</a></li><li><a class="tocitem" href="../ardl/">ARDL &amp; Bounds Test</a></li><li><a class="tocitem" href="../cointreg/">Cointegrating Regression</a></li><li><a class="tocitem" href="../lp/">Local Projections</a></li><li><a class="tocitem" href="../factormodels/">Factor Models</a></li><li><a class="tocitem" href="../favar/">FAVAR</a></li></ul></li><li><span class="tocitem">Nonlinear Time Series</span><ul><li><a class="tocitem" href="../nonlinear/">Threshold &amp; SETAR</a></li></ul></li><li><span class="tocitem">Cross-Section &amp; Panel</span><ul><li><a class="tocitem" href="../regression/">Linear Regression</a></li><li><a class="tocitem" href="../binary_choice/">Binary Choice Models</a></li><li><a class="tocitem" href="../ordered_multinomial/">Ordered &amp; Multinomial</a></li><li class="is-active"><a class="tocitem" href>Panel Regression</a><ul class="internal"><li><a class="tocitem" href="#Quick-Start"><span>Quick Start</span></a></li><li><a class="tocitem" href="#Linear-Panel-Models"><span>Linear Panel Models</span></a></li><li><a class="tocitem" href="#High-Dimensional-Fixed-Effects"><span>High-Dimensional Fixed Effects</span></a></li><li><a class="tocitem" href="#Dynamic-Panels:-Arellano-Bond-and-Blundell-Bond"><span>Dynamic Panels: Arellano-Bond and Blundell-Bond</span></a></li><li><a class="tocitem" href="#Panel-Corrected-Standard-Errors-and-Prais-Winsten-AR(1)"><span>Panel-Corrected Standard Errors and Prais-Winsten AR(1)</span></a></li><li><a class="tocitem" href="#estimate_xtreg-Reference"><span><code>estimate_xtreg</code> Reference</span></a></li><li><a class="tocitem" href="#Panel-Instrumental-Variables"><span>Panel Instrumental Variables</span></a></li><li><a class="tocitem" href="#Panel-Discrete-Choice"><span>Panel Discrete Choice</span></a></li><li><a class="tocitem" href="#Specification-Tests"><span>Specification Tests</span></a></li><li><a class="tocitem" href="#Covariance-Estimators"><span>Covariance Estimators</span></a></li><li><a class="tocitem" href="#Complete-Example"><span>Complete Example</span></a></li><li><a class="tocitem" href="#Common-Pitfalls"><span>Common Pitfalls</span></a></li><li><a class="tocitem" href="#References"><span>References</span></a></li></ul></li><li><a class="tocitem" href="../pvar/">Panel VAR</a></li><li><a class="tocitem" href="../did/">Difference-in-Differences</a></li><li><a class="tocitem" href="../event_study/">Event Study LP</a></li></ul></li><li><a class="tocitem" href="../gmm/">GMM &amp; SMM</a></li><li><span class="tocitem">DSGE Models</span><ul><li><a class="tocitem" href="../dsge/">Overview</a></li><li><a class="tocitem" href="../dsge_linear/">Linear Solvers</a></li><li><a class="tocitem" href="../dsge_nonlinear/">Nonlinear Methods</a></li><li><a class="tocitem" href="../dsge_constraints/">Constraints</a></li><li><a class="tocitem" href="../dsge_estimation/">Estimation</a></li><li><a class="tocitem" href="../dsge_hd/">Historical Decomposition</a></li><li><input class="collapse-toggle" id="menuitem-8-7" type="checkbox"/><label class="tocitem" for="menuitem-8-7"><span class="docs-label">Heterogeneity &amp; Continuous Time</span><i class="docs-chevron"></i></label><ul class="collapsed"><li><a class="tocitem" href="../dsge_heterogeneity/">Overview</a></li><li><a class="tocitem" href="../dsge_ha/">Heterogeneous Agents</a></li><li><a class="tocitem" href="../dsge_olg/">Overlapping Generations</a></li><li><a class="tocitem" href="../dsge_continuous/">Continuous Time</a></li></ul></li></ul></li><li><span class="tocitem">Input-Output Analysis</span><ul><li><a class="tocitem" href="../io/">Overview</a></li><li><a class="tocitem" href="../io_classical/">Classical Analysis</a></li><li><a class="tocitem" href="../io_environmental/">Environmental Extensions</a></li><li><a class="tocitem" href="../io_baqaee_farhi/">Baqaee &amp; Farhi (2019)</a></li><li><a class="tocitem" href="../io_download/">Downloading Data</a></li></ul></li><li><span class="tocitem">Structural Analysis</span><ul><li><a class="tocitem" href="../structural_identification/">Structural Identification</a></li><li><input class="collapse-toggle" id="menuitem-10-2" type="checkbox"/><label class="tocitem" for="menuitem-10-2"><span class="docs-label">Statistical Identification</span><i class="docs-chevron"></i></label><ul class="collapsed"><li><a class="tocitem" href="../nongaussian/">Overview</a></li><li><a class="tocitem" href="../id_nongaussian/">Non-Gaussian Methods</a></li><li><a class="tocitem" href="../id_heteroskedastic/">Heteroskedasticity</a></li><li><a class="tocitem" href="../id_testing/">Testing</a></li></ul></li><li><input class="collapse-toggle" id="menuitem-10-3" type="checkbox"/><label class="tocitem" for="menuitem-10-3"><span class="docs-label">Innovation Accounting</span><i class="docs-chevron"></i></label><ul class="collapsed"><li><a class="tocitem" href="../innovation_accounting/">Overview</a></li><li><a class="tocitem" href="../ia_irf/">Impulse Responses</a></li><li><a class="tocitem" href="../ia_fevd/">Variance Decomposition</a></li><li><a class="tocitem" href="../ia_hd/">Historical Decomposition</a></li></ul></li></ul></li><li><span class="tocitem">Nowcasting</span><ul><li><a class="tocitem" href="../nowcast/">Overview</a></li><li><a class="tocitem" href="../nowcast_dfm/">DFM Nowcasting</a></li><li><a class="tocitem" href="../nowcast_bvar/">BVAR Nowcasting</a></li><li><a class="tocitem" href="../nowcast_bridge/">Bridge Equations</a></li><li><a class="tocitem" href="../nowcast_news/">News Decomposition</a></li><li><a class="tocitem" href="../midas/">MIDAS Regression</a></li></ul></li><li><a class="tocitem" href="../forecast_evaluation/">Forecast Evaluation</a></li><li><span class="tocitem">Hypothesis Tests</span><ul><li><a class="tocitem" href="../tests/">Overview</a></li><li><a class="tocitem" href="../tests_unitroot/">Unit Root &amp; Cointegration</a></li><li><a class="tocitem" href="../tests_unitroot_advanced/">Advanced Unit Root</a></li><li><a class="tocitem" href="../tests_cointegration/">Residual-Based Cointegration</a></li><li><a class="tocitem" href="../tests_breaks/">Structural Breaks</a></li><li><a class="tocitem" href="../tests_panel/">Panel Tests</a></li><li><a class="tocitem" href="../tests_diagnostics/">Model Diagnostics</a></li></ul></li><li><a class="tocitem" href="../plotting/">Visualization</a></li><li><span class="tocitem">Project</span><ul><li><a class="tocitem" href="../notation/">Notation</a></li><li><a class="tocitem" href="../bibliography/">Bibliography</a></li><li><a class="tocitem" href="../changelog/">Changelog</a></li><li><a class="tocitem" href="../citation/">How to Cite</a></li></ul></li><li><span class="tocitem">API Reference</span><ul><li><a class="tocitem" href="../api/">Overview</a></li><li><a class="tocitem" href="../api/data/">Data Management</a></li><li><a class="tocitem" href="../api/univariate/">Univariate Models</a></li><li><a class="tocitem" href="../api/multivariate/">Multivariate Models</a></li><li><a class="tocitem" href="../api/cross_section/">Cross-Sectional Models</a></li><li><a class="tocitem" href="../api/panel/">Panel Models</a></li><li><a class="tocitem" href="../api/dsge/">DSGE Models</a></li><li><a class="tocitem" href="../api/structural/">Structural &amp; Statistical Identification</a></li><li><a class="tocitem" href="../api/gmm/">GMM &amp; SMM</a></li><li><a class="tocitem" href="../api/tests/">Hypothesis Tests</a></li><li><a class="tocitem" href="../api/nowcasting/">Nowcasting</a></li><li><a class="tocitem" href="../api/visualization/">Visualization</a></li><li><a class="tocitem" href="../api/utilities/">Utilities &amp; Display</a></li></ul></li></ul><div class="docs-version-selector field has-addons"><div class="control"><span class="docs-label button is-static is-size-7">Version</span></div><div class="docs-selector control is-expanded"><div class="select is-fullwidth is-size-7"><select id="documenter-version-selector"></select></div></div></div></nav><div class="docs-main"><header class="docs-navbar"><a class="docs-sidebar-button docs-navbar-link fa-solid fa-bars is-hidden-desktop" id="documenter-sidebar-button" href="#"></a><nav class="breadcrumb"><ul class="is-hidden-mobile"><li><a class="is-disabled">Cross-Section &amp; Panel</a></li><li class="is-active"><a href>Panel Regression</a></li></ul><ul class="is-hidden-tablet"><li class="is-active"><a href>Panel Regression</a></li></ul></nav><div class="docs-right"><a class="docs-navbar-link" href="https://github.com/FriedmanJP/MacroEconometricModels.jl" title="View the repository on GitHub"><span class="docs-icon fa-brands"></span><span class="docs-label is-hidden-touch">GitHub</span></a><a class="docs-navbar-link" href="https://github.com/FriedmanJP/MacroEconometricModels.jl/blob/main/docs/src/panel_reg.md#" title="Edit source on GitHub"><span class="docs-icon fa-solid"></span></a><a class="docs-settings-button docs-navbar-link fa-solid fa-gear" id="documenter-settings-button" href="#" title="Settings"></a><a class="docs-article-toggle-button fa-solid fa-chevron-up" id="documenter-article-toggle-button" href="javascript:;" title="Collapse all docstrings"></a></div></header><article class="content" id="documenter-page"><h1 id="panel_reg_page"><a class="docs-heading-anchor" href="#panel_reg_page">Panel Regression</a><a id="panel_reg_page-1"></a><a class="docs-heading-anchor-permalink" href="#panel_reg_page" title="Permalink"></a></h1><p><strong>MacroEconometricModels.jl</strong> provides a comprehensive panel regression module following Stata&#39;s <code>xtreg</code>/<code>xtivreg</code>/<code>xtlogit</code>/<code>xtprobit</code> conventions. The module covers linear panel models, panel instrumental variables, panel discrete choice, and six specification tests with five covariance estimators.</p><ul><li><strong>Linear panel</strong> (<code>estimate_xtreg</code>): Fixed Effects, Random Effects (Swamy-Arora), First-Difference, Between, Correlated Random Effects (Mundlak 1978), Arellano-Bond, Blundell-Bond</li><li><strong>High-dimensional FE</strong> (<code>absorb</code>): Any number of categorical dimensions by alternating projections (Guimaraes &amp; Portugal 2010; Correia 2016)</li><li><strong>Panel IV</strong> (<code>estimate_xtiv</code>): FE-IV, RE-IV/EC2SLS (Baltagi 1981), FD-IV, Hausman-Taylor (1981)</li><li><strong>Panel logit</strong> (<code>estimate_xtlogit</code>): Pooled, FE conditional (Chamberlain 1980), RE (Gauss-Hermite quadrature), CRE</li><li><strong>Panel probit</strong> (<code>estimate_xtprobit</code>): Pooled, RE, CRE (no FE — incidental parameters problem)</li><li><strong>Panel marginal effects</strong>: AME with delta-method SEs for panel logit/probit</li><li><strong>Specification tests</strong>: Hausman, Breusch-Pagan LM, F-test for FE, Pesaran CD, Wooldridge AR, Modified Wald</li><li><strong>Covariance estimators</strong>: Classical, entity-cluster (Arellano 1987), two-way cluster (Cameron-Gelbach-Miller 2011), Driscoll-Kraay (1998) HAC, Beck-Katz (1995) panel-corrected SE</li><li><strong>Serial correlation</strong>: Prais-Winsten AR(1) FGLS (<code>ar1=:common</code>/<code>:panel_specific</code>)</li></ul><p>Panel regression estimates the <em>level</em> relationship between an outcome and its covariates. Three sibling pages cover the dynamic and causal extensions: <a href="../pvar/#pvar_page">Panel VAR</a> for multivariate feedback among several endogenous panel series, <a href="../did/#did_page">Difference-in-Differences</a> for static and event-time treatment effects under staggered adoption, and <a href="../event_study/#event_study_page">Event Study LP</a> for the local-projection version of the same design. Panel unit-root and cointegration pretests live on <a href="../tests_panel/#tests_panel_page">Panel Tests</a>.</p><h2 id="Quick-Start"><a class="docs-heading-anchor" href="#Quick-Start">Quick Start</a><a id="Quick-Start-1"></a><a class="docs-heading-anchor-permalink" href="#Quick-Start" title="Permalink"></a></h2><p><strong>Recipe 1: Fixed effects — growth regression</strong></p><pre><code class="language-julia hljs"># PWT: log GDP per capita on human capital and log capital per worker
+m_fe = estimate_xtreg(pd_pwt, :lngdppc, [:hc, :lnk])
+report(m_fe)</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi"> Panel Regression — Fixed Effects
+
+  Specification
+
+  Method           Fixed Effects
+  Observations              2375
+  Groups                      38
+  Avg. periods              62.5
+  R-sq. within            0.9376
+  R-sq. between           0.1294
+  R-sq. overall           0.3468
+  sigma_u                 0.8444
+  sigma_e                 0.1240
+  rho                     0.9789
+  F-statistic             339.18
+  F p-value               &lt;0.001
+  Cov. type       Cluster-robust
+
+                              Coefficients
+
+         Coef.   Std.Err.        t    P&gt;|t|   CI lower   CI upper
+
+  hc    0.4169     0.0794   5.2484   &lt;0.001     0.2611     0.5726   ***
+  lnk   0.5161     0.0521   9.9113   &lt;0.001     0.4140     0.6182   ***
+
+Significance: *** p&lt;0.01, ** p&lt;0.05, * p&lt;0.10</code></pre><p><strong>Recipe 2: Random effects</strong></p><pre><code class="language-julia hljs">m_re = estimate_xtreg(pd_pwt, :lngdppc, [:hc, :lnk]; model=:re)
+report(m_re)</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">Panel Regression — Random Effects
+
+  Specification
+
+  Method          Random Effects
+  Observations              2375
+  Groups                      38
+  Avg. periods              62.5
+  R-sq. within            0.9372
+  R-sq. between           0.1463
+  R-sq. overall           0.3794
+  sigma_u                 0.3731
+  sigma_e                 0.1240
+  rho                     0.9005
+  F-statistic             347.69
+  F p-value               &lt;0.001
+  Cov. type       Cluster-robust
+  theta                   0.9566
+
+                              Coefficients
+
+         Coef.   Std.Err.        t    P&gt;|t|   CI lower   CI upper
+
+  hc    0.4808     0.0766   6.2790   &lt;0.001     0.3307     0.6310   ***
+  lnk   0.4791     0.0499   9.6006   &lt;0.001     0.3813     0.5770   ***
+
+Significance: *** p&lt;0.01, ** p&lt;0.05, * p&lt;0.10</code></pre><p><strong>Recipe 3: Hausman test (FE vs RE)</strong></p><pre><code class="language-julia hljs">ht = hausman_test(m_fe, m_re)
+report(ht)</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">┌ Warning: Hausman test: V_FE - V_RE is not positive semidefinite (a common finite-sample outcome; the asymptotic assumption that RE is efficient under H0 may be violated). Reporting the generalized-inverse statistic with df = rank(dV) = 1; the statistic may be negative — interpret with caution (cf. Stata `hausman`).
+└ @ MacroEconometricModels /private/tmp/claude-501/-Users-chung-Desktop-CODES-MacroEconometricModels/0d103fbb-3b61-4be7-9d09-7c50ea2936af/scratchpad/wt-v0.7.3/src/preg/tests.jl:131
+                               Hausman test
+
+  Test                                                       Hausman test
+  Statistic                                                     -417.7927
+  P-value                                                          &gt;0.999
+  DF                                                                    1
+  Result      [non-PSD dV] Fail to reject H0: RE is consistent (p=&gt;0.999)</code></pre><p><strong>Recipe 4: Panel IV (FE-IV with simulated endogeneity)</strong></p><pre><code class="language-julia hljs">Random.seed!(1)
+# Synthetic panel: one endogenous regressor, two excluded instruments
+N, T_p = 50, 20
+n = N * T_p
+df_iv = DataFrame(id=repeat(1:N, inner=T_p), t=repeat(1:T_p, N),
+                  x=randn(n), z=randn(n), z2=randn(n))
+alpha_i = repeat(randn(N), inner=T_p)
+u = randn(n)                                        # shared error component (endogeneity source)
+df_iv.x_endog = 0.5 .* df_iv.z .+ 0.4 .* df_iv.z2 .+ u .+ randn(n)
+df_iv.wage = alpha_i .+ 1.5 .* df_iv.x .+ 2.0 .* df_iv.x_endog .+ u .+ randn(n)
+pd_iv = xtset(df_iv, :id, :t)
+m_iv = estimate_xtiv(pd_iv, :wage, [:x], [:x_endog]; instruments=[:z, :z2])
+report(m_iv)</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">     Panel IV Regression — FE-IV
+
+  Specification
+
+  Method                       FE-IV
+  Observations                  1000
+  Groups                          50
+  R-sq. within                0.9019
+  R-sq. between               0.3585
+  R-sq. overall               0.8736
+  sigma_u                     1.0247
+  sigma_e                     1.3971
+  rho                         0.3498
+  1st-stage F                 108.46
+  Endogenous                 x_endog
+  Instruments                  z, z2
+  Cov. type           Cluster-robust
+  Hansen J stat.                0.22
+  Hansen J p-val              0.6399
+  Cragg-Donald F              103.02
+  Kleibergen-Paap F            94.06
+  Stock-Yogo 10%               19.93
+
+                                 Coefficients
+
+             Coef.   Std.Err.         t    P&gt;|t|   CI lower   CI upper
+
+  x         1.5731     0.0536   29.3554   &lt;0.001     1.4680     1.6783   ***
+  x_endog   2.0372     0.0584   34.9090   &lt;0.001     1.9227     2.1517   ***
+
+Significance: *** p&lt;0.01, ** p&lt;0.05, * p&lt;0.10</code></pre><p><strong>Recipe 5: Panel logit — democracy and development</strong></p><pre><code class="language-julia hljs"># DDCG: democracy (0/1) on log GDP per capita — Lipset modernization hypothesis
+m_logit = estimate_xtlogit(pd_ddcg, :dem, [:lngdppc])
+report(m_logit)</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">       Panel Logit — Pooled
+
+  Specification
+
+  Model           Logit (Pooled)
+  Observations              6934
+  Groups                     175
+  Log-lik.              -4044.53
+  Log-lik. null         -4803.89
+  Pseudo R-sq.            0.1581
+  AIC                    8093.06
+  BIC                    8106.75
+  Converged                  Yes
+  Iterations                   5
+
+                                   Coefficients
+
+                  Coef.   Std.Err.         z    P&gt;|z|   CI lower   CI upper
+
+  (Intercept)   -5.0757     0.6268   -8.0978   &lt;0.001    -6.3042    -3.8472   ***
+  lngdppc        0.6879     0.0858    8.0135   &lt;0.001     0.5197     0.8561   ***
+
+Significance: *** p&lt;0.01, ** p&lt;0.05, * p&lt;0.10</code></pre><p><strong>Recipe 6: Specification test battery</strong></p><pre><code class="language-julia hljs">bp = breusch_pagan_test(m_re)
+report(bp)</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">                   Breusch-Pagan LM test
+
+  Test                              Breusch-Pagan LM test
+  Statistic                                    39791.7578
+  P-value                                          &lt;0.001
+  DF                                                    1
+  Result      Reject H0: Random effects needed (p=&lt;0.001)</code></pre><hr/><h2 id="Linear-Panel-Models"><a class="docs-heading-anchor" href="#Linear-Panel-Models">Linear Panel Models</a><a id="Linear-Panel-Models-1"></a><a class="docs-heading-anchor-permalink" href="#Linear-Panel-Models" title="Permalink"></a></h2><h3 id="Fixed-Effects-(Within-Estimator)"><a class="docs-heading-anchor" href="#Fixed-Effects-(Within-Estimator)">Fixed Effects (Within Estimator)</a><a id="Fixed-Effects-(Within-Estimator)-1"></a><a class="docs-heading-anchor-permalink" href="#Fixed-Effects-(Within-Estimator)" title="Permalink"></a></h3><p>The <strong>within estimator</strong> eliminates time-invariant unobserved heterogeneity by demeaning within each panel unit (Baltagi 2021):</p><p class="math-container">\[\tilde{y}_{it} = \tilde{x}_{it}&#39; \beta + \tilde{e}_{it}\]</p><p>where:</p><ul><li><span>$\tilde{y}_{it} = y_{it} - \bar{y}_i$</span> is the within-demeaned outcome</li><li><span>$\tilde{x}_{it} = x_{it} - \bar{x}_i$</span> is the within-demeaned regressor</li><li><span>$\beta$</span> is estimated by OLS on demeaned data</li><li>Entity effects <span>$\hat{\alpha}_i = \bar{y}_i - \bar{x}_i&#39; \hat{\beta}$</span> are recovered after estimation</li></ul><p>The model reports three R-squared variants: <strong>within</strong> (variation within entities), <strong>between</strong> (variation of entity means), and <strong>overall</strong> (total variation).</p><pre><code class="language-julia hljs"># PWT: within-country variation in GDP per capita
+m_fe = estimate_xtreg(pd_pwt, :lngdppc, [:hc, :lnk]; cov_type=:cluster)
+report(m_fe)</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi"> Panel Regression — Fixed Effects
+
+  Specification
+
+  Method           Fixed Effects
+  Observations              2375
+  Groups                      38
+  Avg. periods              62.5
+  R-sq. within            0.9376
+  R-sq. between           0.1294
+  R-sq. overall           0.3468
+  sigma_u                 0.8444
+  sigma_e                 0.1240
+  rho                     0.9789
+  F-statistic             339.18
+  F p-value               &lt;0.001
+  Cov. type       Cluster-robust
+
+                              Coefficients
+
+         Coef.   Std.Err.        t    P&gt;|t|   CI lower   CI upper
+
+  hc    0.4169     0.0794   5.2484   &lt;0.001     0.2611     0.5726   ***
+  lnk   0.5161     0.0521   9.9113   &lt;0.001     0.4140     0.6182   ***
+
+Significance: *** p&lt;0.01, ** p&lt;0.05, * p&lt;0.10</code></pre><p>Both elasticities are positive and precisely estimated: a one-unit rise in the human-capital index raises log GDP per capita by 0.4169 within a country, and a one-log-point rise in capital per worker raises it by 0.5161, close to the capital share a Cobb-Douglas production function would imply. The within R-squared of 0.9376 says these two inputs track almost all of the within-country movement in output per head once the country effect is removed. The contrast between <code>rho = 0.9789</code> and the between R-squared of 0.1294 is the substantive point: 98% of the residual variance is the permanent country effect <span>$\alpha_i$</span>, so cross-country level differences dwarf anything the regressors explain in the cross-section, and only the within variation identifies <span>$\beta$</span>.</p><p><strong>Two-way fixed effects</strong> absorb both entity and time effects:</p><pre><code class="language-julia hljs">m_twoway = estimate_xtreg(pd_pwt, :lngdppc, [:hc, :lnk]; twoway=true)
+report(m_twoway)</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi"> Panel Regression — Fixed Effects (Two-way)
+
+  Specification
+
+  Method            Fixed Effects (Two-way)
+  Observations                         2375
+  Groups                                 38
+  Avg. periods                         62.5
+  R-sq. within                       0.6034
+  R-sq. between                      0.1528
+  R-sq. overall                      0.3915
+  sigma_u                            0.8496
+  sigma_e                            0.1201
+  rho                                0.9804
+  F-statistic                         23.23
+  F p-value                          &lt;0.001
+  Cov. type                  Cluster-robust
+  Absorbed FE            entity=38, time=70
+  FE parameters                         107
+  Mobility groups                         1
+  MAP iterations                          4
+  MAP converged                         yes
+
+                              Coefficients
+
+         Coef.   Std.Err.        t    P&gt;|t|   CI lower   CI upper
+
+  hc    0.5550     0.1828   3.0364   0.0024     0.1966     0.9134   ***
+  lnk   0.5137     0.0765   6.7153   &lt;0.001     0.3637     0.6637   ***
+
+Significance: *** p&lt;0.01, ** p&lt;0.05, * p&lt;0.10</code></pre><p>Adding year effects absorbs the global technology trend that all countries share, which is why the within R-squared drops from 0.9376 to 0.6034 while the capital coefficient barely moves (0.5161 to 0.5137). The human-capital coefficient rises to 0.5550 with a standard error nearly twice as large, since only the <em>deviation</em> of a country&#39;s human capital from the world average in that year now identifies it. <code>twoway=true</code> is exactly <code>absorb=[:entity, :time]</code> from the <a href="#High-Dimensional-Fixed-Effects">High-Dimensional Fixed Effects</a> section: it removes entity and time effects by alternating projections rather than by the additive identity <span>$y_{it} - \bar{y}_i - \bar{y}_t + \bar{y}$</span>, which is the two-way within transformation only on a balanced panel. For more than two dimensions, use <code>absorb</code>.</p><h3 id="Random-Effects-(GLS)"><a class="docs-heading-anchor" href="#Random-Effects-(GLS)">Random Effects (GLS)</a><a id="Random-Effects-(GLS)-1"></a><a class="docs-heading-anchor-permalink" href="#Random-Effects-(GLS)" title="Permalink"></a></h3><p>The <strong>random effects</strong> estimator treats entity effects as random draws from a distribution and uses GLS with the Swamy-Arora (1972) variance component estimator:</p><p class="math-container">\[y_{it} - \hat{\theta} \bar{y}_i = (x_{it} - \hat{\theta} \bar{x}_i)&#39; \beta + (1 - \hat{\theta}) \mu + \text{error}\]</p><p>where:</p><ul><li><span>$\hat{\theta} = 1 - \sqrt{\hat{\sigma}_e^2 / (\hat{\sigma}_e^2 + T_i \hat{\sigma}_u^2)}$</span> is the quasi-demeaning parameter</li><li><span>$\hat{\sigma}_e^2$</span> is from the within regression</li><li><span>$\hat{\sigma}_u^2$</span> is from the between regression (Swamy-Arora 1972)</li></ul><pre><code class="language-julia hljs">m_re = estimate_xtreg(pd_pwt, :lngdppc, [:hc, :lnk]; model=:re)
+report(m_re)</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">Panel Regression — Random Effects
+
+  Specification
+
+  Method          Random Effects
+  Observations              2375
+  Groups                      38
+  Avg. periods              62.5
+  R-sq. within            0.9372
+  R-sq. between           0.1463
+  R-sq. overall           0.3794
+  sigma_u                 0.3731
+  sigma_e                 0.1240
+  rho                     0.9005
+  F-statistic             347.69
+  F p-value               &lt;0.001
+  Cov. type       Cluster-robust
+  theta                   0.9566
+
+                              Coefficients
+
+         Coef.   Std.Err.        t    P&gt;|t|   CI lower   CI upper
+
+  hc    0.4808     0.0766   6.2790   &lt;0.001     0.3307     0.6310   ***
+  lnk   0.4791     0.0499   9.6006   &lt;0.001     0.3813     0.5770   ***
+
+Significance: *** p&lt;0.01, ** p&lt;0.05, * p&lt;0.10</code></pre><p>The quasi-demeaning weight is <span>$\hat{\theta} = 0.9566$</span>, so close to 1 that RE removes almost the whole entity mean and its slopes sit near the FE ones — 0.4808 versus 0.4169 for human capital, 0.4791 versus 0.5161 for capital. What RE buys is a smaller <span>$\hat{\sigma}_u$</span> (0.3731 against the FE value of 0.8444, since the entity effect is now a drawn component rather than a free parameter) and coefficients that remain identified for time-invariant regressors. RE is efficient only under <span>$E[\alpha_i \mid x_{it}] = 0$</span>; the <a href="#Hausman-Test-(FE-vs-RE)">Hausman Test (FE vs RE)</a> evaluates exactly that assumption.</p><h3 id="First-Difference"><a class="docs-heading-anchor" href="#First-Difference">First-Difference</a><a id="First-Difference-1"></a><a class="docs-heading-anchor-permalink" href="#First-Difference" title="Permalink"></a></h3><p>The <strong>first-difference</strong> estimator removes entity effects by differencing consecutive observations:</p><p class="math-container">\[\Delta y_{it} = \Delta x_{it}&#39; \beta + \Delta e_{it}\]</p><pre><code class="language-julia hljs">m_fd = estimate_xtreg(pd_pwt, :lngdppc, [:hc, :lnk]; model=:fd)
+report(m_fd)</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">Panel Regression — First-Difference
+
+  Specification
+
+  Method          First-Difference
+  Observations                2337
+  Groups                        38
+  Avg. periods                61.5
+  R-sq. within              0.0203
+  R-sq. between             0.5047
+  R-sq. overall             0.0203
+  sigma_u                   0.0000
+  sigma_e                   0.0330
+  rho                       0.0000
+  F-statistic                 3.17
+  F p-value                 0.0536
+  Cov. type         Cluster-robust
+
+                              Coefficients
+
+         Coef.   Std.Err.        t    P&gt;|t|   CI lower   CI upper
+
+  hc    0.2216     0.1242   1.7832   0.0747    -0.0221     0.4652   *
+  lnk   0.1463     0.0670   2.1842    0.029     0.0149     0.2776   **
+
+Significance: *** p&lt;0.01, ** p&lt;0.05, * p&lt;0.10</code></pre><p>First-differencing gives a very different answer here: 0.2216 for human capital and 0.1463 for capital, roughly a third of the within estimates, with a within R-squared of 0.0203. FD and FE are both consistent under strict exogeneity and differ only in efficiency — FD is the better choice when <span>$e_{it}$</span> is close to a random walk, FE when it is close to white noise. The gap on PWT is a symptom, not a contradiction: annual differences of log GDP per capita are dominated by measurement error and business-cycle noise relative to the slow-moving levels that identify the within estimator, which attenuates the differenced slopes.</p><h3 id="Between-Estimator"><a class="docs-heading-anchor" href="#Between-Estimator">Between Estimator</a><a id="Between-Estimator-1"></a><a class="docs-heading-anchor-permalink" href="#Between-Estimator" title="Permalink"></a></h3><p>The <strong>between estimator</strong> regresses entity means on entity-mean regressors:</p><p class="math-container">\[\bar{y}_i = \bar{x}_i&#39; \beta + \bar{\alpha}_i + \bar{e}_i\]</p><pre><code class="language-julia hljs">m_be = estimate_xtreg(pd_pwt, :lngdppc, [:hc, :lnk]; model=:between, cov_type=:ols)
+report(m_be)</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">Panel Regression — Between
+
+  Specification
+
+  Method          Between
+  Observations         38
+  Groups               38
+  Avg. periods       62.5
+  R-sq. within     0.0000
+  R-sq. between    0.3751
+  R-sq. overall    0.3751
+  sigma_u          0.0000
+  sigma_e          0.3734
+  rho              0.0000
+  F-statistic       10.51
+  F p-value        &lt;0.001
+  Cov. type           OLS
+
+                              Coefficients
+
+         Coef.   Std.Err.        t    P&gt;|t|   CI lower   CI upper
+
+  hc    0.5715     0.1363   4.1931   &lt;0.001     0.2951     0.8479   ***
+  lnk   0.0378     0.0387   0.9763   0.3354    -0.0408     0.1164
+
+Significance: *** p&lt;0.01, ** p&lt;0.05, * p&lt;0.10</code></pre><p>The between regression collapses the 2375 country-year observations to 38 country means, so it answers a different question from FE: it compares <em>levels</em> across countries rather than changes within them. Human capital carries the cross-country variation (0.5715, t = 4.19) while capital per worker is insignificant (0.0378, t = 0.98) — the mirror image of the within estimates, where both matter. Because the regression is one observation per entity, there is nothing left to cluster on: <code>estimate_xtreg</code> reports classical OLS standard errors on the group-means regression and warns if a different <code>cov_type</code> is requested.</p><h3 id="Correlated-Random-Effects-(Mundlak)"><a class="docs-heading-anchor" href="#Correlated-Random-Effects-(Mundlak)">Correlated Random Effects (Mundlak)</a><a id="Correlated-Random-Effects-(Mundlak)-1"></a><a class="docs-heading-anchor-permalink" href="#Correlated-Random-Effects-(Mundlak)" title="Permalink"></a></h3><p>The <strong>CRE</strong> approach (Mundlak 1978) relaxes the RE exogeneity assumption by augmenting the RE model with group means of time-varying regressors:</p><p class="math-container">\[y_{it} = x_{it}&#39; \beta + \bar{x}_i&#39; \gamma + \alpha_i + e_{it}\]</p><pre><code class="language-julia hljs">m_cre = estimate_xtreg(pd_pwt, :lngdppc, [:hc, :lnk]; model=:cre)
+report(m_cre)</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi"> Panel Regression — Correlated RE
+
+  Specification
+
+  Method           Correlated RE
+  Observations              2375
+  Groups                      38
+  Avg. periods              62.5
+  R-sq. within            0.9376
+  R-sq. between           0.3716
+  R-sq. overall           0.5658
+  sigma_u                 0.3731
+  sigma_e                 0.1240
+  rho                     0.9005
+  F-statistic             183.18
+  F p-value               &lt;0.001
+  Cov. type       Cluster-robust
+  theta                   0.9566
+
+                                  Coefficients
+
+               Coef.   Std.Err.         t    P&gt;|t|   CI lower   CI upper
+
+  hc          0.4169     0.0795    5.2450   &lt;0.001     0.2610     0.5727   ***
+  lnk         0.5161     0.0521    9.9050   &lt;0.001     0.4139     0.6182   ***
+  hc_mean     1.2984     0.1618    8.0224   &lt;0.001     0.9810     1.6157   ***
+  lnk_mean   -0.3442     0.0655   -5.2575   &lt;0.001    -0.4726    -0.2159   ***
+
+Significance: *** p&lt;0.01, ** p&lt;0.05, * p&lt;0.10</code></pre><p>The slope estimates <span>$\hat{\beta}$</span> from CRE reproduce FE exactly — 0.4169 and 0.5161, matching the within regression to four decimals — which is the Mundlak equivalence result. The interesting coefficients are the group means: <code>hc_mean</code> at 1.2984 and <code>lnk_mean</code> at <span>$-0.3442$</span>, both significant at 1%. Their joint significance is a direct test of <span>$E[\alpha_i \mid x_{it}] = 0$</span>, and rejecting it says the country effect is systematically correlated with average human capital and capital intensity, so RE is inconsistent and FE (or CRE itself) is the right specification.</p><hr/><h2 id="High-Dimensional-Fixed-Effects"><a class="docs-heading-anchor" href="#High-Dimensional-Fixed-Effects">High-Dimensional Fixed Effects</a><a id="High-Dimensional-Fixed-Effects-1"></a><a class="docs-heading-anchor-permalink" href="#High-Dimensional-Fixed-Effects" title="Permalink"></a></h2><p>The <code>absorb</code> keyword removes any number of categorical fixed-effect dimensions by the <strong>method of alternating projections</strong> (Guimarães &amp; Portugal 2010; Correia 2016), the algorithm behind Stata&#39;s <code>reghdfe</code>. Writing <span>$D$</span> for the stacked dummy design of all absorbed dimensions, the within transformation is the orthogonal projection</p><p class="math-container">\[M = I - D(D&#39;D)^{-}D&#39;\]</p><p>Forming <span>$D$</span> is impossible once the level counts are large — worker × firm, or firm × year × product. Alternating projections compute <span>$M v$</span> by cycling the single-dimension demeaning operators <span>$M_d = I - P_d$</span>, each one O(n):</p><p class="math-container">\[v \leftarrow M_D \cdots M_2 M_1 v \qquad \text{(repeat until } v \text{ stops moving)}\]</p><p>where:</p><ul><li><span>$P_d$</span> projects onto dimension <span>$d$</span>&#39;s dummy span, so <span>$M_d v$</span> subtracts each level&#39;s mean</li><li><span>$M_d$</span> is an orthogonal projection, so by von Neumann–Halperin the cycle converges to the projection onto <span>$\bigcap_d \operatorname{range}(M_d) = \operatorname{range}(M)$</span></li></ul><p>OLS on the absorbed data is therefore the within-all-fixed-effects estimator, with no dummy ever materialized.</p><p>Dimension names resolve to panel variables, or to the reserved indices <code>:entity</code> (<code>:id</code>/<code>:unit</code>/<code>:group</code>), <code>:time</code> (<code>:period</code>), and <code>:cohort</code>:</p><pre><code class="language-julia hljs">m_hdfe = estimate_xtreg(pd_pwt, :lngdppc, [:hc, :lnk]; absorb=[:entity, :time])
+report(m_hdfe)</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi"> Panel Regression — Fixed Effects (HDFE)
+
+  Specification
+
+  Method            Fixed Effects (HDFE)
+  Observations                      2375
+  Groups                              38
+  Avg. periods                      62.5
+  R-sq. within                    0.6034
+  R-sq. between                   0.1528
+  R-sq. overall                   0.3915
+  sigma_u                         0.8496
+  sigma_e                         0.1201
+  rho                             0.9804
+  F-statistic                      23.23
+  F p-value                       &lt;0.001
+  Cov. type               Cluster-robust
+  Absorbed FE         entity=38, time=70
+  FE parameters                      107
+  Mobility groups                      1
+  MAP iterations                       4
+  MAP converged                      yes
+
+                              Coefficients
+
+         Coef.   Std.Err.        t    P&gt;|t|   CI lower   CI upper
+
+  hc    0.5550     0.1828   3.0364   0.0024     0.1966     0.9134   ***
+  lnk   0.5137     0.0765   6.7153   &lt;0.001     0.3637     0.6637   ***
+
+Significance: *** p&lt;0.01, ** p&lt;0.05, * p&lt;0.10</code></pre><p>This is the same estimator as <code>twoway=true</code> above — that keyword routes here. Absorbing entity and time reports 107 fixed-effect parameters: 38 countries plus 70 years minus the one collinearity implied by a single <strong>mobility group</strong> (see below). The distinction matters because the PWT panel is unbalanced, where the additive identity is not the two-way within transformation; it put the capital-deepening coefficient at 0.297 against the dummy-OLS truth of 0.514 that alternating projections recover to 1e-14.</p><p>Any number of dimensions is allowed, and they need not be nested. A common applied specification adds <strong>group × time</strong> effects, which control for shocks common to countries at a similar development level:</p><pre><code class="language-julia hljs"># Income tercile from each country&#39;s first observed GDP per capita
+y0 = Dict(g.country[1] =&gt; g.lngdppc[1] for g in groupby(df_pwt, :country))
+cuts = quantile(collect(values(y0)), [1/3, 2/3])
+df_pwt.income_group = [y0[c] &lt;= cuts[1] ? 1.0 : y0[c] &lt;= cuts[2] ? 2.0 : 3.0
+                       for c in df_pwt.country]
+df_pwt.group_year = 10_000 .* df_pwt.income_group .+ df_pwt.year   # interacted dimension
+
+pd_gy = xtset(df_pwt, :country, :year)
+m_gy = estimate_xtreg(pd_gy, :lngdppc, [:hc, :lnk]; absorb=[:entity, :group_year])
+report(m_gy)</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">    Panel Regression — Fixed Effects (HDFE)
+
+  Specification
+
+  Method                 Fixed Effects (HDFE)
+  Observations                           2375
+  Groups                                   38
+  Avg. periods                           62.5
+  R-sq. within                         0.5706
+  R-sq. between                        0.1680
+  R-sq. overall                        0.4186
+  sigma_u                              0.8409
+  sigma_e                              0.1204
+  rho                                  0.9799
+  F-statistic                           19.18
+  F p-value                            &lt;0.001
+  Cov. type                    Cluster-robust
+  Absorbed FE       entity=38, group_year=210
+  FE parameters                           245
+  Mobility groups                           3
+  MAP iterations                            5
+  MAP converged                           yes
+
+                              Coefficients
+
+         Coef.   Std.Err.        t    P&gt;|t|   CI lower   CI upper
+
+  hc    0.6354     0.2076   3.0600   0.0022     0.2282     1.0426   ***
+  lnk   0.5029     0.0823   6.1080   &lt;0.001     0.3414     0.6643   ***
+
+Significance: *** p&lt;0.01, ** p&lt;0.05, * p&lt;0.10</code></pre><p><strong>Degrees of freedom.</strong> The absorbed-parameter count is the rank of the dummy design, and getting it right is where naive implementations fail. For two dimensions the rank is <span>$G_1 + G_2 - C$</span>, where <span>$C$</span> is the number of <strong>connected components</strong> (Abowd, Creecy &amp; Kramarz 2002 &quot;mobility groups&quot;) of the bipartite graph linking the two dimensions&#39; levels — not <span>$G_1 + G_2 - 1$</span>. The example above reports <span>$C = 3$</span>: countries never change income tercile, so the country ↔ group-year graph splits into exactly one component per tercile, and the design absorbs <span>$38 + 210 - 3 = 245$</span> parameters rather than 247.</p><div class="admonition is-info" id="Three-or-more-dimensions-2af1a464499f7106"><header class="admonition-header">Three or more dimensions<a class="admonition-anchor" href="#Three-or-more-dimensions-2af1a464499f7106" title="Permalink"></a></header><div class="admonition-body"><p>No closed form for the rank exists beyond two dimensions. Each dimension past the second is charged one collinearity, <code>G_d - 1</code>, which is an <strong>upper bound</strong> on its contribution. Absorbed parameters are therefore never understated, so the residual degrees of freedom are never overstated and the small-sample correction errs conservative. Estimated coefficients are unaffected — they depend only on the range of the dummy design, not on the bookkeeping, and are invariant to the order the dimensions are listed in.</p></div></div><p><strong>Cluster-robust standard errors</strong> charge only the fixed-effect dimensions <em>not</em> nested within the clustering variable. Entity fixed effects clustered on entity — the default panel setup — contribute nothing, because the <span>$G/(G-1)$</span> cluster factor already accounts for them. This is why <code>absorb=[:entity]</code> reproduces the plain one-way <code>estimate_xtreg</code> standard errors exactly, while <code>absorb=[:entity, :time]</code> — and equivalently <code>twoway=true</code> — additionally charges the <span>$T-1$</span> non-nested time parameters.</p><p><strong>Convergence.</strong> Plain alternating projections converge linearly at a rate set by the angle between the dummy subspaces, which is punishing when the dimensions are weakly connected (sparse worker–firm mobility). <code>hdfe_accel=true</code> (the default) applies Irons–Tuck vector extrapolation, which is exact for a single geometric mode. The <code>MAP converged</code> line in <code>report</code> and the <code>hdfe.converged</code> field are authoritative — a <code>NO</code> there means the coefficients are still moving, and <code>hdfe_maxiter</code> should be raised:</p><pre><code class="language-julia hljs">m_hdfe.hdfe.converged, m_hdfe.hdfe.iterations, m_hdfe.hdfe.n_absorbed</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">(true, 4, 107)</code></pre><p>Use <a href="../api/panel/#MacroEconometricModels.absorb_fe"><code>absorb_fe</code></a> directly when you want the residualized data rather than a fitted model:</p><pre><code class="language-julia hljs">y_raw = pd_pwt.data[:, findfirst(==(&quot;lngdppc&quot;), pd_pwt.varnames)]
+X_raw = pd_pwt.data[:, [findfirst(==(v), pd_pwt.varnames) for v in (&quot;hc&quot;, &quot;lnk&quot;)]]
+a = absorb_fe(y_raw, X_raw, [pd_pwt.group_id, pd_pwt.time_id])
+a.X \ a.y      # identical to coef(m_hdfe)</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">2-element Vector{Float64}:
+ 0.5549862896523222
+ 0.5137038811293799</code></pre><hr/><h2 id="Dynamic-Panels:-Arellano-Bond-and-Blundell-Bond"><a class="docs-heading-anchor" href="#Dynamic-Panels:-Arellano-Bond-and-Blundell-Bond">Dynamic Panels: Arellano-Bond and Blundell-Bond</a><a id="Dynamic-Panels:-Arellano-Bond-and-Blundell-Bond-1"></a><a class="docs-heading-anchor-permalink" href="#Dynamic-Panels:-Arellano-Bond-and-Blundell-Bond" title="Permalink"></a></h2><p><strong>Dynamic panel</strong> estimators handle a lagged dependent variable using GMM with internal instruments. Both <code>:ab</code> and <code>:bb</code> add the lag of the outcome to the regressor list themselves — pass only the exogenous covariates in <code>indepvars</code> and the reported table gains an <code>L.growth</code> row.</p><p><strong>Arellano-Bond</strong> (1991) differences the equation, which sweeps out <span>$\alpha_i$</span> at the cost of correlating <span>$\Delta y_{i,t-1}$</span> with <span>$\Delta e_{it}$</span>, and instruments the differenced lag with lagged <strong>levels</strong> <span>$y_{i,t-2}, y_{i,t-3}, \ldots$</span>:</p><pre><code class="language-julia hljs">Random.seed!(11)
+# Synthetic dynamic panel: growth follows an AR(1) with persistence 0.5
+N_d, T_d = 100, 10
+n_d = N_d * T_d
+alpha_d = randn(N_d)
+invest, output = randn(n_d), randn(n_d)
+growth = zeros(n_d)
+for i in 1:N_d, s in 1:T_d
+    k = (i - 1) * T_d + s
+    prev = s == 1 ? alpha_d[i] / (1 - 0.5) : growth[k-1]   # start at the unit&#39;s own mean
+    growth[k] = alpha_d[i] + 0.5 * prev + 0.8 * invest[k] - 0.3 * output[k] + randn()
+end
+df_dyn = DataFrame(id=repeat(1:N_d, inner=T_d), t=repeat(1:T_d, N_d),
+                   invest=invest, output=output, growth=growth)
+pd_dyn = xtset(df_dyn, :id, :t)
+m_ab = estimate_xtreg(pd_dyn, :growth, [:invest, :output]; model=:ab)
+report(m_ab)</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi"> Panel Regression — Arellano-Bond
+
+  Specification
+
+  Method           Arellano-Bond
+  Observations               800
+  Groups                     100
+  Avg. periods               8.0
+  R-sq. within            0.0000
+  R-sq. between           0.0000
+  R-sq. overall           0.0000
+  sigma_u                 0.0000
+  sigma_e                 0.0000
+  rho                     0.0000
+  F-statistic              51.48
+  F p-value               &lt;0.001
+  Cov. type       Cluster-robust
+  AR(1) z                 -7.112
+  AR(1) p                 &lt;0.001
+  AR(2) z                 -0.051
+  AR(2) p                  0.959
+  Hansen J                 32.52
+  Hansen df                   33
+  Hansen p                0.4906
+  # instruments               36
+
+                                  Coefficients
+
+               Coef.   Std.Err.         t    P&gt;|t|   CI lower   CI upper
+
+  L.growth    0.4913     0.0487   10.0813   &lt;0.001     0.3956     0.5869   ***
+  invest      0.8276     0.1713    4.8304   &lt;0.001     0.4913     1.1639   ***
+  output     -0.2323     0.1977   -1.1751   0.2403    -0.6203     0.1558
+
+Significance: *** p&lt;0.01, ** p&lt;0.05, * p&lt;0.10</code></pre><p>Arellano-Bond recovers the design closely: the autoregressive coefficient is 0.4913 against a true 0.5, investment 0.8276 against 0.8, and output <span>$-0.2323$</span> against <span>$-0.3$</span>. The diagnostics block is where a dynamic panel is judged. AR(1) rejects at <span>$p &lt; 0.001$</span> and AR(2) does not (<span>$p = 0.959$</span>), which is exactly the signature of a correctly specified model: differencing makes the idiosyncratic error MA(1) by construction, so first-order correlation is expected while second-order correlation would indicate that <span>$e_{it}$</span> was serially correlated in levels and the lagged-level instruments are invalid. The Hansen J does not reject (<span>$p = 0.491$</span>) with 36 moment conditions against 100 groups, comfortably inside the instrument budget discussed below.</p><p><strong>Blundell-Bond</strong> (1998) adds the level equations back, instrumented by lagged <strong>differences</strong>. The extra moments matter when the autoregressive parameter approaches unity, where lagged levels become weak instruments for differences:</p><pre><code class="language-julia hljs">m_bb = estimate_xtreg(pd_dyn, :growth, [:invest, :output]; model=:bb)
+report(m_bb)</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi"> Panel Regression — Blundell-Bond
+
+  Specification
+
+  Method           Blundell-Bond
+  Observations              1600
+  Groups                     100
+  Avg. periods              16.0
+  R-sq. within            0.0000
+  R-sq. between           0.0000
+  R-sq. overall           0.0000
+  sigma_u                 0.0000
+  sigma_e                 0.0000
+  rho                     0.0000
+  F-statistic              82.51
+  F p-value               &lt;0.001
+  Cov. type       Cluster-robust
+  AR(1) z                 -7.071
+  AR(1) p                 &lt;0.001
+  AR(2) z                 -0.192
+  AR(2) p                 0.8479
+  Hansen J                 33.04
+  Hansen df                   35
+  Hansen p                0.5629
+  # instruments               38
+
+                                  Coefficients
+
+               Coef.   Std.Err.         t    P&gt;|t|   CI lower   CI upper
+
+  L.growth    0.4928     0.0373   13.2077   &lt;0.001     0.4197     0.5660   ***
+  invest      0.7629     0.1387    5.4988   &lt;0.001     0.4907     1.0350   ***
+  output     -0.1824     0.2024   -0.9011   0.3677    -0.5794     0.2146
+
+Significance: *** p&lt;0.01, ** p&lt;0.05, * p&lt;0.10</code></pre><p>Retrieve the AR tests programmatically with <a href="../api/panel/#MacroEconometricModels.arellano_bond_ar_test"><code>arellano_bond_ar_test</code></a>, which reads them off <code>m.dynamic_diagnostics</code>:</p><pre><code class="language-julia hljs">arellano_bond_ar_test(m_ab; order=2)</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">(statistic = -0.05138811780820907, pvalue = 0.9590162528796382, order = 2)</code></pre><p>The coefficient covariance (<code>vcov(m)</code>) is the full Windmeijer (2005) corrected GMM covariance, so joint Wald tests across coefficients use the cross-coefficient (off-diagonal) terms rather than the reported standard errors alone.</p><div class="admonition is-warning" id="Instrument-count-grows-with-T-squared-490d6f35f9aabbd2"><header class="admonition-header">Instrument count grows with T squared<a class="admonition-anchor" href="#Instrument-count-grows-with-T-squared-490d6f35f9aabbd2" title="Permalink"></a></header><div class="admonition-body"><p>The block-diagonal instrument matrix contributes one column per available lag at every period, so the moment count grows as <span>$O(T^2)$</span> per equation. Once it exceeds the number of groups the Hansen J stops rejecting anything (<code>p &gt; 0.999</code> is the tell-tale) and the two-step weighting matrix overfits. <code>estimate_xtreg</code> emits a warning naming the ratio; pass <code>collapse=true</code> or a finite <code>max_lag_endo</code> to <code>estimate_xtreg</code> itself, which accepts both for <code>:ab</code> and <code>:bb</code>, or shorten the panel.</p></div></div><hr/><h2 id="Panel-Corrected-Standard-Errors-and-Prais-Winsten-AR(1)"><a class="docs-heading-anchor" href="#Panel-Corrected-Standard-Errors-and-Prais-Winsten-AR(1)">Panel-Corrected Standard Errors and Prais-Winsten AR(1)</a><a id="Panel-Corrected-Standard-Errors-and-Prais-Winsten-AR(1)-1"></a><a class="docs-heading-anchor-permalink" href="#Panel-Corrected-Standard-Errors-and-Prais-Winsten-AR(1)" title="Permalink"></a></h2><p>For <strong>time-series-cross-section (TSCS)</strong> panels — a modest number of units observed over many periods (<span>$T \gtrsim N$</span>) with <strong>contemporaneous cross-section correlation</strong> — Beck &amp; Katz (1995) recommend <strong>panel-corrected standard errors (PCSE)</strong>. PCSE forms the <span>$N \times N$</span> contemporaneous residual covariance <span>$\hat{\Sigma}$</span> and sandwiches it as <span>$(X&#39;X)^{-1} [\sum_t X_t&#39; \hat{\Sigma} X_t] (X&#39;X)^{-1}$</span>. Point estimates are unchanged; only the covariance differs:</p><p>Unbalanced panels choose how <span>$\hat{\Sigma}$</span> is accumulated with <code>pcse_unbalanced</code>: <code>:casewise</code> (default — only fully-observed periods enter <span>$\hat{\Sigma}$</span>) or <code>:pairwise</code> (<span>$\hat{\Sigma}_{ij}$</span> over the overlapping periods of <span>$i$</span> and <span>$j$</span>). PWT has 38 countries but only 30 periods in which all of them are observed, so the casewise <span>$\hat{\Sigma}$</span> is rank-deficient and <code>:pairwise</code> is the right choice here:</p><pre><code class="language-julia hljs">m_pcse = estimate_xtreg(pd_pwt, :lngdppc, [:hc, :lnk];
+                        cov_type=:pcse, pcse_unbalanced=:pairwise)
+report(m_pcse)</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">       Panel Regression — Fixed Effects
+
+  Specification
+
+  Method                        Fixed Effects
+  Observations                           2375
+  Groups                                   38
+  Avg. periods                           62.5
+  R-sq. within                         0.9376
+  R-sq. between                        0.1294
+  R-sq. overall                        0.3468
+  sigma_u                              0.8444
+  sigma_e                              0.1240
+  rho                                  0.9789
+  F-statistic                         7094.68
+  F p-value                            &lt;0.001
+  Cov. type       Panel-corrected (Beck–Katz)
+
+                               Coefficients
+
+         Coef.   Std.Err.         t    P&gt;|t|   CI lower   CI upper
+
+  hc    0.4169     0.0252   16.5421   &lt;0.001     0.3675     0.4663   ***
+  lnk   0.5161     0.0155   33.2590   &lt;0.001     0.4856     0.5465   ***
+
+Significance: *** p&lt;0.01, ** p&lt;0.05, * p&lt;0.10</code></pre><p>The coefficients are identical to the cluster-robust fit — 0.4169 and 0.5161 — because PCSE changes only the covariance. The standard errors, however, fall by roughly a factor of three (0.0521 to 0.0163 on capital), which is the usual TSCS trade: PCSE models the cross-section correlation parametrically through a single <span>$N \times N$</span> matrix instead of letting entity clusters absorb arbitrary within-unit dependence, so it is far more efficient when the Beck-Katz assumptions hold and far too optimistic when they do not.</p><p>When the idiosyncratic error is serially correlated, add a <strong>Prais-Winsten AR(1)</strong> FGLS transform via <code>ar1</code>. The pipeline is <strong>PW transform <span>$\to$</span> estimate <span>$\to$</span> PCSE</strong>: each unit&#39;s series is quasi-differenced (<span>$x_{it} - \hat{\rho}\, x_{i,t-1}$</span>), with the first observation weighted by <span>$\sqrt{1-\hat{\rho}^2}$</span> (dropping that weight silently reverts to Cochrane-Orcutt). Use <code>ar1=:common</code> for one pooled <span>$\hat{\rho}$</span> or <code>ar1=:panel_specific</code> for per-unit <span>$\hat{\rho}_i$</span>. Unlike <code>:pcse</code> alone, the AR(1) FGLS <strong>does</strong> change the point estimates:</p><pre><code class="language-julia hljs">m_ar1 = estimate_xtreg(pd_pwt, :lngdppc, [:hc, :lnk];
+                       cov_type=:pcse, pcse_unbalanced=:pairwise, ar1=:common)
+report(m_ar1)</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">        Panel Regression — Fixed Effects
+
+  Specification
+
+  Method                         Fixed Effects
+  Observations                            2375
+  Groups                                    38
+  Avg. periods                            62.5
+  R-sq. within                          0.9410
+  R-sq. between                         0.1308
+  R-sq. overall                         0.8764
+  sigma_u                               0.0803
+  sigma_e                               0.0749
+  rho                                   0.5350
+  F-statistic                          6688.29
+  F p-value                             &lt;0.001
+  Cov. type        Panel-corrected (Beck–Katz)
+  AR(1) rho (PW)                        0.9472
+
+                                Coefficients
+
+          Coef.   Std.Err.          t    P&gt;|t|   CI lower   CI upper
+
+  hc     2.7123     0.0525    51.6542   &lt;0.001     2.6093     2.8153   ***
+  lnk   -0.6903     0.0260   -26.5947   &lt;0.001    -0.7412    -0.6394   ***
+
+Significance: *** p&lt;0.01, ** p&lt;0.05, * p&lt;0.10</code></pre><p>The pooled <span>$\hat{\rho}$</span> is 0.9472 — log GDP per capita is very nearly a unit root — and quasi-differencing at that value changes the estimand completely: human capital jumps to 2.7123 and capital turns negative at <span>$-0.6903$</span>. This is not a bug but the known hazard of Prais-Winsten on highly persistent data. With <span>$\hat{\rho} \to 1$</span> the transform approaches first-differencing, so the reported coefficients are short-run responses of <em>growth</em> rather than the level elasticities the untransformed regression estimates, and the AR(1) parameter is itself badly biased in a fixed-effects panel. Check <code>m.ar1_rho</code> before interpreting: values near unity mean the model should be respecified in differences (<code>model=:fd</code>) rather than quasi-differenced.</p><p><strong>Which covariance for which panel?</strong></p><table><tr><th style="text-align: right">Situation</th><th style="text-align: right">Recommended</th><th style="text-align: right">Why</th></tr><tr><td style="text-align: right"><span>$T \gtrsim N$</span>, contemporaneous cross-section correlation</td><td style="text-align: right"><code>:pcse</code></td><td style="text-align: right">Beck-Katz (1995) TSCS standard</td></tr><tr><td style="text-align: right"><span>$T \gtrsim N$</span>, serial <strong>and</strong> contemporaneous correlation</td><td style="text-align: right"><code>:pcse</code> + <code>ar1=:common</code></td><td style="text-align: right">PW purges AR(1); PCSE handles cross-section</td></tr><tr><td style="text-align: right">Large <span>$T$</span>, spatial + serial dependence</td><td style="text-align: right"><code>:driscoll_kraay</code></td><td style="text-align: right">HAC across time, robust to cross-section</td></tr><tr><td style="text-align: right">Many entities, within-entity serial correlation</td><td style="text-align: right"><code>:cluster</code></td><td style="text-align: right">Entity clusters absorb arbitrary within-<span>$i$</span> dependence</td></tr><tr><td style="text-align: right">Two-dimensional clustering</td><td style="text-align: right"><code>:twoway</code></td><td style="text-align: right">Cameron-Gelbach-Miller (2011)</td></tr></table><div class="admonition is-info" id="T-N-for-casewise-PCSE-53f503bf8e6a4a33"><header class="admonition-header">T ≥ N for casewise PCSE<a class="admonition-anchor" href="#T-N-for-casewise-PCSE-53f503bf8e6a4a33" title="Permalink"></a></header><div class="admonition-body"><p>The casewise <span>$\hat{\Sigma}$</span> is full rank only when the number of fully-observed periods is at least <span>$N$</span>. With <span>$T &lt; N$</span> it is singular; <code>estimate_xtreg</code> warns and you should prefer <code>pcse_unbalanced=:pairwise</code> or a longer panel (<span>$\hat{\Sigma}$</span> is never inverted, so no garbage is returned).</p></div></div><hr/><h2 id="estimate_xtreg-Reference"><a class="docs-heading-anchor" href="#estimate_xtreg-Reference"><code>estimate_xtreg</code> Reference</a><a id="estimate_xtreg-Reference-1"></a><a class="docs-heading-anchor-permalink" href="#estimate_xtreg-Reference" title="Permalink"></a></h2><h3 id="Keywords"><a class="docs-heading-anchor" href="#Keywords">Keywords</a><a id="Keywords-1"></a><a class="docs-heading-anchor-permalink" href="#Keywords" title="Permalink"></a></h3><table><tr><th style="text-align: right">Keyword</th><th style="text-align: right">Type</th><th style="text-align: right">Default</th><th style="text-align: right">Description</th></tr><tr><td style="text-align: right"><code>model</code></td><td style="text-align: right"><code>Symbol</code></td><td style="text-align: right"><code>:fe</code></td><td style="text-align: right">Estimator: <code>:fe</code>, <code>:re</code>, <code>:fd</code>, <code>:between</code>, <code>:cre</code>, <code>:ab</code>, <code>:bb</code></td></tr><tr><td style="text-align: right"><code>twoway</code></td><td style="text-align: right"><code>Bool</code></td><td style="text-align: right"><code>false</code></td><td style="text-align: right">Entity + time fixed effects (FE only); equivalent to <code>absorb=[:entity, :time]</code></td></tr><tr><td style="text-align: right"><code>absorb</code></td><td style="text-align: right"><code>Vector{Symbol}</code></td><td style="text-align: right"><code>Symbol[]</code></td><td style="text-align: right">High-dimensional FE to absorb by alternating projections (<code>:fe</code> only)</td></tr><tr><td style="text-align: right"><code>hdfe_tol</code></td><td style="text-align: right"><code>Real</code></td><td style="text-align: right"><code>1e-8</code></td><td style="text-align: right">Absorption convergence tolerance</td></tr><tr><td style="text-align: right"><code>hdfe_maxiter</code></td><td style="text-align: right"><code>Int</code></td><td style="text-align: right"><code>1000</code></td><td style="text-align: right">Maximum alternating-projection iterations</td></tr><tr><td style="text-align: right"><code>hdfe_accel</code></td><td style="text-align: right"><code>Bool</code></td><td style="text-align: right"><code>true</code></td><td style="text-align: right">Irons-Tuck acceleration of the projection loop</td></tr><tr><td style="text-align: right"><code>cov_type</code></td><td style="text-align: right"><code>Symbol</code></td><td style="text-align: right"><code>:cluster</code></td><td style="text-align: right">Covariance: <code>:ols</code>, <code>:cluster</code>, <code>:twoway</code>, <code>:driscoll_kraay</code>, <code>:pcse</code></td></tr><tr><td style="text-align: right"><code>bandwidth</code></td><td style="text-align: right"><code>Union{Nothing,Int}</code></td><td style="text-align: right"><code>nothing</code></td><td style="text-align: right">Driscoll-Kraay bandwidth (<code>nothing</code> = Newey-West optimal)</td></tr><tr><td style="text-align: right"><code>pcse_unbalanced</code></td><td style="text-align: right"><code>Symbol</code></td><td style="text-align: right"><code>:casewise</code></td><td style="text-align: right"><code>:pcse</code> unbalanced handling: <code>:casewise</code> or <code>:pairwise</code></td></tr><tr><td style="text-align: right"><code>ar1</code></td><td style="text-align: right"><code>Symbol</code></td><td style="text-align: right"><code>:none</code></td><td style="text-align: right">Prais-Winsten AR(1): <code>:none</code>, <code>:common</code>, <code>:panel_specific</code> (<code>:fe</code>/<code>:re</code>/<code>:cre</code>)</td></tr></table><h3 id="Return-Values"><a class="docs-heading-anchor" href="#Return-Values">Return Values</a><a id="Return-Values-1"></a><a class="docs-heading-anchor-permalink" href="#Return-Values" title="Permalink"></a></h3><table><tr><th style="text-align: right">Field</th><th style="text-align: right">Type</th><th style="text-align: right">Description</th></tr><tr><td style="text-align: right"><code>beta</code></td><td style="text-align: right"><code>Vector{T}</code></td><td style="text-align: right">Estimated coefficients</td></tr><tr><td style="text-align: right"><code>vcov_mat</code></td><td style="text-align: right"><code>Matrix{T}</code></td><td style="text-align: right">Variance-covariance matrix</td></tr><tr><td style="text-align: right"><code>r2_within</code></td><td style="text-align: right"><code>T</code></td><td style="text-align: right">Within R-squared</td></tr><tr><td style="text-align: right"><code>r2_between</code></td><td style="text-align: right"><code>T</code></td><td style="text-align: right">Between R-squared</td></tr><tr><td style="text-align: right"><code>r2_overall</code></td><td style="text-align: right"><code>T</code></td><td style="text-align: right">Overall R-squared</td></tr><tr><td style="text-align: right"><code>sigma_u</code></td><td style="text-align: right"><code>T</code></td><td style="text-align: right">Between-group standard deviation</td></tr><tr><td style="text-align: right"><code>sigma_e</code></td><td style="text-align: right"><code>T</code></td><td style="text-align: right">Within-group standard deviation</td></tr><tr><td style="text-align: right"><code>rho</code></td><td style="text-align: right"><code>T</code></td><td style="text-align: right">Fraction of variance due to <span>$\alpha_i$</span></td></tr><tr><td style="text-align: right"><code>theta</code></td><td style="text-align: right"><code>Union{Nothing,T}</code></td><td style="text-align: right">Quasi-demeaning parameter (<code>:re</code>/<code>:cre</code>; <code>nothing</code> otherwise)</td></tr><tr><td style="text-align: right"><code>group_effects</code></td><td style="text-align: right"><code>Union{Nothing,Vector{T}}</code></td><td style="text-align: right">Estimated entity effects (<code>:fe</code>; <code>nothing</code> otherwise)</td></tr><tr><td style="text-align: right"><code>f_stat</code> / <code>f_pval</code></td><td style="text-align: right"><code>T</code></td><td style="text-align: right">Model F-statistic and its p-value</td></tr><tr><td style="text-align: right"><code>loglik</code> / <code>aic</code> / <code>bic</code></td><td style="text-align: right"><code>T</code></td><td style="text-align: right">Log-likelihood and information criteria</td></tr><tr><td style="text-align: right"><code>method</code></td><td style="text-align: right"><code>Symbol</code></td><td style="text-align: right">Estimation method used</td></tr><tr><td style="text-align: right"><code>cov_type</code></td><td style="text-align: right"><code>Symbol</code></td><td style="text-align: right">Covariance estimator actually applied</td></tr><tr><td style="text-align: right"><code>n_obs</code> / <code>n_groups</code></td><td style="text-align: right"><code>Int</code></td><td style="text-align: right">Effective observations and panel units</td></tr><tr><td style="text-align: right"><code>n_periods_avg</code></td><td style="text-align: right"><code>T</code></td><td style="text-align: right">Average periods per unit</td></tr><tr><td style="text-align: right"><code>dynamic_diagnostics</code></td><td style="text-align: right"><code>Union{Nothing,NamedTuple}</code></td><td style="text-align: right">AR(1)/AR(2) and Hansen J (<code>:ab</code>/<code>:bb</code>; <code>nothing</code> otherwise)</td></tr><tr><td style="text-align: right"><code>ar1_rho</code></td><td style="text-align: right"><code>Union{Nothing,T,Vector{T}}</code></td><td style="text-align: right">Prais-Winsten <span>$\hat{\rho}$</span> (scalar for <code>:common</code>, per-unit for <code>:panel_specific</code>)</td></tr><tr><td style="text-align: right"><code>hdfe</code></td><td style="text-align: right"><code>Union{Nothing,NamedTuple}</code></td><td style="text-align: right">Absorption diagnostics (<code>absorb</code> only; <code>nothing</code> otherwise)</td></tr><tr><td style="text-align: right"><code>residuals</code> / <code>fitted</code></td><td style="text-align: right"><code>Vector{T}</code></td><td style="text-align: right">Residuals and fitted values</td></tr><tr><td style="text-align: right"><code>data</code></td><td style="text-align: right"><code>PanelData{T}</code></td><td style="text-align: right">The panel the model was fitted on</td></tr></table><p><code>dynamic_diagnostics</code> carries <code>ar1</code>, <code>ar1_p</code>, <code>ar2</code>, <code>ar2_p</code>, <code>hansen</code>, <code>hansen_df</code>, <code>hansen_p</code>, and <code>n_instruments</code>.</p><p>When <code>absorb</code> is used, <code>hdfe</code> carries:</p><table><tr><th style="text-align: right">Field</th><th style="text-align: right">Type</th><th style="text-align: right">Description</th></tr><tr><td style="text-align: right"><code>absorb</code></td><td style="text-align: right"><code>Vector{Symbol}</code></td><td style="text-align: right">Absorbed dimension names</td></tr><tr><td style="text-align: right"><code>n_absorbed</code></td><td style="text-align: right"><code>Int</code></td><td style="text-align: right">Absorbed FE parameters (rank of the dummy design)</td></tr><tr><td style="text-align: right"><code>n_levels</code></td><td style="text-align: right"><code>Vector{Int}</code></td><td style="text-align: right">Levels per dimension</td></tr><tr><td style="text-align: right"><code>n_components</code></td><td style="text-align: right"><code>Int</code></td><td style="text-align: right">Mobility groups of the first two dimensions</td></tr><tr><td style="text-align: right"><code>marginal</code></td><td style="text-align: right"><code>Vector{Int}</code></td><td style="text-align: right">Per-dimension contribution to <code>n_absorbed</code></td></tr><tr><td style="text-align: right"><code>n_absorbed_cluster</code></td><td style="text-align: right"><code>Int</code></td><td style="text-align: right">Non-nested parameters charged to the cluster dof</td></tr><tr><td style="text-align: right"><code>converged</code></td><td style="text-align: right"><code>Bool</code></td><td style="text-align: right">Alternating projections reached <code>hdfe_tol</code></td></tr><tr><td style="text-align: right"><code>iterations</code></td><td style="text-align: right"><code>Int</code></td><td style="text-align: right">Iterations run</td></tr><tr><td style="text-align: right"><code>sweeps</code></td><td style="text-align: right"><code>Int</code></td><td style="text-align: right">Total demeaning sweeps</td></tr><tr><td style="text-align: right"><code>change</code></td><td style="text-align: right"><code>T</code></td><td style="text-align: right">Final relative movement</td></tr><tr><td style="text-align: right"><code>tol</code></td><td style="text-align: right"><code>T</code></td><td style="text-align: right">Tolerance the fit used</td></tr><tr><td style="text-align: right"><code>accel</code></td><td style="text-align: right"><code>Bool</code></td><td style="text-align: right">Whether Irons-Tuck acceleration was on</td></tr></table><hr/><h2 id="Panel-Instrumental-Variables"><a class="docs-heading-anchor" href="#Panel-Instrumental-Variables">Panel Instrumental Variables</a><a id="Panel-Instrumental-Variables-1"></a><a class="docs-heading-anchor-permalink" href="#Panel-Instrumental-Variables" title="Permalink"></a></h2><p>The <code>estimate_xtiv</code> function handles endogeneity in panel data through four IV strategies. Each transforms the panel to remove <span>$\alpha_i$</span> and then runs 2SLS on the transformed data, so the <em>same</em> transformation is applied to the outcome, the regressors, and the instruments.</p><p>The synthetic panel from Recipe 4 makes the problem concrete. There, <code>x_endog</code> and <code>wage</code> share the error component <code>u</code>, so plain fixed effects are inconsistent:</p><pre><code class="language-julia hljs">m_naive = estimate_xtreg(pd_iv, :wage, [:x, :x_endog])
+report(m_naive)</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi"> Panel Regression — Fixed Effects
+
+  Specification
+
+  Method           Fixed Effects
+  Observations              1000
+  Groups                      50
+  Avg. periods              20.0
+  R-sq. within            0.9212
+  R-sq. between           0.3495
+  R-sq. overall           0.8763
+  sigma_u                 1.0333
+  sigma_e                 1.2522
+  rho                     0.4051
+  F-statistic            4710.97
+  F p-value               &lt;0.001
+  Cov. type       Cluster-robust
+
+                                 Coefficients
+
+             Coef.   Std.Err.         t    P&gt;|t|   CI lower   CI upper
+
+  x         1.5585     0.0460   33.8512   &lt;0.001     1.4681     1.6488   ***
+  x_endog   2.4157     0.0256   94.2805   &lt;0.001     2.3654     2.4660   ***
+
+Significance: *** p&lt;0.01, ** p&lt;0.05, * p&lt;0.10</code></pre><p>FE puts the coefficient on the endogenous regressor at 2.4157 against a true value of 2.0 — a 21% upward bias that the tight standard error (0.0256) does nothing to signal. The exogenous coefficient on <code>x</code> is fine at 1.5585 because <code>x</code> is uncorrelated with <code>u</code>. Every IV variant below recovers the truth.</p><h3 id="FE-IV"><a class="docs-heading-anchor" href="#FE-IV">FE-IV</a><a id="FE-IV-1"></a><a class="docs-heading-anchor-permalink" href="#FE-IV" title="Permalink"></a></h3><p>Within-transform all variables, then apply 2SLS on the demeaned data:</p><pre><code class="language-julia hljs">m_feiv = estimate_xtiv(pd_iv, :wage, [:x], [:x_endog]; instruments=[:z, :z2], model=:fe)
+report(m_feiv)</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">     Panel IV Regression — FE-IV
+
+  Specification
+
+  Method                       FE-IV
+  Observations                  1000
+  Groups                          50
+  R-sq. within                0.9019
+  R-sq. between               0.3585
+  R-sq. overall               0.8736
+  sigma_u                     1.0247
+  sigma_e                     1.3971
+  rho                         0.3498
+  1st-stage F                 108.46
+  Endogenous                 x_endog
+  Instruments                  z, z2
+  Cov. type           Cluster-robust
+  Hansen J stat.                0.22
+  Hansen J p-val              0.6399
+  Cragg-Donald F              103.02
+  Kleibergen-Paap F            94.06
+  Stock-Yogo 10%               19.93
+
+                                 Coefficients
+
+             Coef.   Std.Err.         t    P&gt;|t|   CI lower   CI upper
+
+  x         1.5731     0.0536   29.3554   &lt;0.001     1.4680     1.6783   ***
+  x_endog   2.0372     0.0584   34.9090   &lt;0.001     1.9227     2.1517   ***
+
+Significance: *** p&lt;0.01, ** p&lt;0.05, * p&lt;0.10</code></pre><p>FE-IV returns 2.0372 for the endogenous coefficient and 1.5731 for the exogenous one, both within a standard error of the truth, and the bias visible in the naive fit is gone. The price is precision: the standard error on <code>x_endog</code> more than doubles (0.0256 to 0.0584), because only the instrumented part of the variation identifies the coefficient.</p><h3 id="RE-IV-(EC2SLS)"><a class="docs-heading-anchor" href="#RE-IV-(EC2SLS)">RE-IV (EC2SLS)</a><a id="RE-IV-(EC2SLS)-1"></a><a class="docs-heading-anchor-permalink" href="#RE-IV-(EC2SLS)" title="Permalink"></a></h3><p>The Baltagi (1981) EC2SLS estimator quasi-demeans all variables, then uses <span>$[\tilde{Z}, \bar{Z}_i]$</span> as instruments:</p><pre><code class="language-julia hljs">m_reiv = estimate_xtiv(pd_iv, :wage, [:x], [:x_endog]; instruments=[:z, :z2], model=:re)
+report(m_reiv)</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">     Panel IV Regression — RE-IV
+
+  Specification
+
+  Method                       RE-IV
+  Observations                  1000
+  Groups                          50
+  R-sq. within                0.9011
+  R-sq. between               0.3587
+  R-sq. overall               0.8734
+  sigma_u                     0.9953
+  sigma_e                     1.3971
+  rho                         0.3366
+  1st-stage F                  43.24
+  Endogenous                 x_endog
+  Instruments                  z, z2
+  Cov. type           Cluster-robust
+  Hansen J stat.                6.82
+  Hansen J p-val              0.1457
+  Cragg-Donald F               43.24
+  Kleibergen-Paap F            39.20
+  Stock-Yogo 10%               26.87
+
+                                 Coefficients
+
+             Coef.   Std.Err.         t    P&gt;|t|   CI lower   CI upper
+
+  x         1.5754     0.0535   29.4289   &lt;0.001     1.4704     1.6805   ***
+  x_endog   2.0293     0.0590   34.3956   &lt;0.001     1.9135     2.1451   ***
+
+Significance: *** p&lt;0.01, ** p&lt;0.05, * p&lt;0.10</code></pre><p>EC2SLS lands on essentially the same estimate (2.0293) with a marginally larger standard error. Doubling the instrument set by adding the group means <span>$\bar{Z}_i$</span> is what makes EC2SLS more efficient than FE-IV in theory; here the entity effects are independent of the regressors by construction, so there is little for the extra moments to add.</p><h3 id="FD-IV"><a class="docs-heading-anchor" href="#FD-IV">FD-IV</a><a id="FD-IV-1"></a><a class="docs-heading-anchor-permalink" href="#FD-IV" title="Permalink"></a></h3><p>First-difference all variables, then apply 2SLS:</p><pre><code class="language-julia hljs">m_fdiv = estimate_xtiv(pd_iv, :wage, [:x], [:x_endog]; instruments=[:z, :z2], model=:fd)
+report(m_fdiv)</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">     Panel IV Regression — FD-IV
+
+  Specification
+
+  Method                       FD-IV
+  Observations                   950
+  Groups                          50
+  R-sq. within                0.8955
+  R-sq. between               0.0000
+  R-sq. overall               0.8955
+  sigma_u                     0.0000
+  sigma_e                     2.0317
+  rho                         0.0000
+  1st-stage F                  95.77
+  Endogenous                 x_endog
+  Instruments                  z, z2
+  Cov. type           Cluster-robust
+  Hansen J stat.                0.05
+  Hansen J p-val              0.8157
+  Cragg-Donald F               95.77
+  Kleibergen-Paap F            97.53
+  Stock-Yogo 10%               19.93
+
+                                 Coefficients
+
+             Coef.   Std.Err.         t    P&gt;|t|   CI lower   CI upper
+
+  x         1.6000     0.0692   23.1291   &lt;0.001     1.4643     1.7358   ***
+  x_endog   1.9781     0.0825   23.9724   &lt;0.001     1.8162     2.1401   ***
+
+Significance: *** p&lt;0.01, ** p&lt;0.05, * p&lt;0.10</code></pre><p>FD-IV gives 1.9781, again unbiased, on 950 rather than 1000 observations — differencing costs one period per unit. Its standard error is the largest of the three (0.0825) because differencing white-noise errors doubles the residual variance.</p><h3 id="Weak-Instruments-and-Overidentification"><a class="docs-heading-anchor" href="#Weak-Instruments-and-Overidentification">Weak Instruments and Overidentification</a><a id="Weak-Instruments-and-Overidentification-1"></a><a class="docs-heading-anchor-permalink" href="#Weak-Instruments-and-Overidentification" title="Permalink"></a></h3><p>The specification block of every <code>estimate_xtiv</code> fit carries the instrument diagnostics, and they should be read before the coefficients. Two of them do the work. The <strong>first-stage F</strong> tests whether the excluded instruments explain the endogenous regressor after partialling out the included exogenous ones; when several regressors are endogenous, <code>first_stage_f</code> reports the <em>minimum</em> across them. The conventional threshold is 10 (Staiger &amp; Stock 1997), and the example clears it by an order of magnitude.</p><p>The <strong>Sargan-Hansen J</strong> tests the overidentifying restrictions: with more instruments than endogenous regressors, the surplus moments are testable, and a rejection says at least one instrument fails the exclusion restriction. The statistic is the classical homoskedastic Sargan <span>$J = e&#39;P_Z e / \hat{\sigma}^2$</span> when <code>cov_type=:ols</code> and the entity-clustered Hansen J otherwise, so it inherits the robustness of the covariance you chose:</p><pre><code class="language-julia hljs">(first_stage_F = round(m_feiv.first_stage_f, digits=2),
+ sargan_J      = round(m_feiv.sargan_stat, digits=4),
+ sargan_p      = round(m_feiv.sargan_pval, digits=4))</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">(first_stage_F = 108.46, sargan_J = 0.2189, sargan_p = 0.6399)</code></pre><p>The J-statistic of 0.2189 against a <span>$\chi^2(1)$</span> gives <span>$p = 0.6399$</span>, so the data cannot reject the exclusion restriction — as they should not, since <code>z</code> and <code>z2</code> were drawn independently of the error. Both fields are <code>nothing</code> when the model is exactly identified (one instrument per endogenous regressor), because there is then no overidentifying restriction to test; the Hausman-Taylor example below is exactly that case.</p><div class="admonition is-warning" id="Non-rejection-is-not-validation-e246adae3b330b18"><header class="admonition-header">Non-rejection is not validation<a class="admonition-anchor" href="#Non-rejection-is-not-validation-e246adae3b330b18" title="Permalink"></a></header><div class="admonition-body"><p>A large Sargan p-value means the overidentifying moments are mutually consistent, not that they are individually valid. If <em>all</em> instruments share the same violation the statistic has no power against it, and adding weak instruments inflates the degrees of freedom faster than the statistic, pushing p toward 1. Report the instrument count and first-stage F alongside every J-test.</p></div></div><h3 id="Hausman-Taylor"><a class="docs-heading-anchor" href="#Hausman-Taylor">Hausman-Taylor</a><a id="Hausman-Taylor-1"></a><a class="docs-heading-anchor-permalink" href="#Hausman-Taylor" title="Permalink"></a></h3><p>The <strong>Hausman-Taylor</strong> (1981) estimator handles endogenous time-invariant regressors by using within-deviations of time-varying exogenous variables as instruments. Time-invariant regressors are wiped out by the within transformation, so FE cannot estimate them at all and RE only can if they are exogenous; HT occupies the middle ground:</p><pre><code class="language-julia hljs">Random.seed!(2)
+# Time-invariant variables (e.g., education level, geographic endowment)
+N_ht, T_ht = 50, 20
+n_ht = N_ht * T_ht
+df_ht = DataFrame(id=repeat(1:N_ht, inner=T_ht), t=repeat(1:T_ht, N_ht),
+                  experience=randn(n_ht))
+df_ht.region = repeat(randn(N_ht), inner=T_ht)        # time-invariant exogenous
+df_ht.education = repeat(randn(N_ht), inner=T_ht)     # time-invariant endogenous
+alpha_ht = repeat(randn(N_ht) .+ 0.5 .* randn(N_ht), inner=T_ht)
+df_ht.earnings = alpha_ht .+ 1.5 .* df_ht.experience .+ 0.3 .* df_ht.region .+ 0.8 .* df_ht.education .+ randn(n_ht)
+pd_ht = xtset(df_ht, :id, :t)
+m_ht = estimate_xtiv(pd_ht, :earnings, [:experience], Symbol[];
+                      model=:hausman_taylor,
+                      time_invariant_exog=[:region],
+                      time_invariant_endog=[:education])
+report(m_ht)</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">   Panel IV Regression — Hausman-Taylor
+
+  Specification
+
+  Method                  Hausman-Taylor
+  Observations                      1000
+  Groups                              50
+  R-sq. within                    0.6977
+  R-sq. between                   0.2947
+  R-sq. overall                   0.5440
+  sigma_u                         1.1530
+  sigma_e                         0.9757
+  rho                             0.5827
+  1st-stage F                      20.47
+  Endogenous                   education
+  Instruments         experience, region
+  Cov. type               Cluster-robust
+  Cragg-Donald F                   48.45
+  Kleibergen-Paap F                55.55
+  Stock-Yogo 10%                   16.38
+
+                                  Coefficients
+
+                Coef.   Std.Err.         t    P&gt;|t|   CI lower   CI upper
+
+  experience   1.5459     0.0283   54.6211   &lt;0.001     1.4904     1.6014   ***
+  region       0.4287     0.2116    2.0256   0.0431     0.0134     0.8439   **
+  education    0.5266     0.9637    0.5464   0.5849    -1.3646     2.4177
+
+Significance: *** p&lt;0.01, ** p&lt;0.05, * p&lt;0.10</code></pre><p>Experience, the time-varying regressor, is recovered precisely at 1.5459 against a true 1.5. The time-invariant coefficients are the ones HT exists to deliver, and they are far noisier: <code>region</code> (exogenous, true 0.3) comes in at 0.4287 with a standard error of 0.2116, and <code>education</code> (endogenous, true 0.8) at 0.5266 with a standard error of 0.9637, indistinguishable from zero. That is the honest cost of identifying a time-invariant effect from 50 entities using within-deviations as instruments — the first-stage F of 20.47 clears the weak-instrument threshold but leaves little precision.</p><h3 id="Keywords-2"><a class="docs-heading-anchor" href="#Keywords-2">Keywords</a><a class="docs-heading-anchor-permalink" href="#Keywords-2" title="Permalink"></a></h3><table><tr><th style="text-align: right">Keyword</th><th style="text-align: right">Type</th><th style="text-align: right">Default</th><th style="text-align: right">Description</th></tr><tr><td style="text-align: right"><code>instruments</code></td><td style="text-align: right"><code>Vector{Symbol}</code></td><td style="text-align: right"><code>Symbol[]</code></td><td style="text-align: right">Excluded instruments</td></tr><tr><td style="text-align: right"><code>model</code></td><td style="text-align: right"><code>Symbol</code></td><td style="text-align: right"><code>:fe</code></td><td style="text-align: right">Method: <code>:fe</code>, <code>:re</code>, <code>:fd</code>, <code>:hausman_taylor</code></td></tr><tr><td style="text-align: right"><code>cov_type</code></td><td style="text-align: right"><code>Symbol</code></td><td style="text-align: right"><code>:cluster</code></td><td style="text-align: right">Covariance: <code>:ols</code>, <code>:cluster</code>, <code>:twoway</code>, <code>:driscoll_kraay</code></td></tr><tr><td style="text-align: right"><code>time_invariant_exog</code></td><td style="text-align: right"><code>Vector{Symbol}</code></td><td style="text-align: right"><code>Symbol[]</code></td><td style="text-align: right">Time-invariant exogenous (HT only)</td></tr><tr><td style="text-align: right"><code>time_invariant_endog</code></td><td style="text-align: right"><code>Vector{Symbol}</code></td><td style="text-align: right"><code>Symbol[]</code></td><td style="text-align: right">Time-invariant endogenous (HT only)</td></tr></table><p><code>estimate_xtiv</code> does not accept <code>:pcse</code>; panel-corrected standard errors are available for <code>estimate_xtreg</code> only.</p><h3 id="Return-Values-2"><a class="docs-heading-anchor" href="#Return-Values-2">Return Values</a><a class="docs-heading-anchor-permalink" href="#Return-Values-2" title="Permalink"></a></h3><table><tr><th style="text-align: right">Field</th><th style="text-align: right">Type</th><th style="text-align: right">Description</th></tr><tr><td style="text-align: right"><code>beta</code></td><td style="text-align: right"><code>Vector{T}</code></td><td style="text-align: right">Estimated coefficients</td></tr><tr><td style="text-align: right"><code>vcov_mat</code></td><td style="text-align: right"><code>Matrix{T}</code></td><td style="text-align: right">Variance-covariance matrix</td></tr><tr><td style="text-align: right"><code>first_stage_f</code></td><td style="text-align: right"><code>T</code></td><td style="text-align: right">Minimum first-stage F-statistic</td></tr><tr><td style="text-align: right"><code>cragg_donald_f</code></td><td style="text-align: right"><code>Union{Nothing,T}</code></td><td style="text-align: right">Cragg-Donald weak-instrument F on the transformed design</td></tr><tr><td style="text-align: right"><code>kleibergen_paap_f</code></td><td style="text-align: right"><code>Union{Nothing,T}</code></td><td style="text-align: right">Kleibergen-Paap rk Wald F, heteroskedasticity-robust</td></tr><tr><td style="text-align: right"><code>stock_yogo_10pct</code></td><td style="text-align: right"><code>Union{Nothing,T}</code></td><td style="text-align: right">Stock-Yogo 10% maximal-size critical value</td></tr><tr><td style="text-align: right"><code>sargan_stat</code></td><td style="text-align: right"><code>Union{Nothing,T}</code></td><td style="text-align: right">Sargan-Hansen J statistic (<code>nothing</code> if exactly identified)</td></tr><tr><td style="text-align: right"><code>sargan_pval</code></td><td style="text-align: right"><code>Union{Nothing,T}</code></td><td style="text-align: right">J-test p-value (<code>nothing</code> if exactly identified)</td></tr><tr><td style="text-align: right"><code>r2_within</code> / <code>r2_between</code> / <code>r2_overall</code></td><td style="text-align: right"><code>T</code></td><td style="text-align: right">R-squared variants</td></tr><tr><td style="text-align: right"><code>sigma_u</code> / <code>sigma_e</code> / <code>rho</code></td><td style="text-align: right"><code>T</code></td><td style="text-align: right">Variance components</td></tr><tr><td style="text-align: right"><code>endog_names</code></td><td style="text-align: right"><code>Vector{String}</code></td><td style="text-align: right">Endogenous regressor names</td></tr><tr><td style="text-align: right"><code>instrument_names</code></td><td style="text-align: right"><code>Vector{String}</code></td><td style="text-align: right">Excluded instrument names</td></tr><tr><td style="text-align: right"><code>method</code></td><td style="text-align: right"><code>Symbol</code></td><td style="text-align: right">IV method used</td></tr><tr><td style="text-align: right"><code>cov_type</code></td><td style="text-align: right"><code>Symbol</code></td><td style="text-align: right">Covariance estimator applied</td></tr><tr><td style="text-align: right"><code>n_obs</code> / <code>n_groups</code></td><td style="text-align: right"><code>Int</code></td><td style="text-align: right">Effective observations and panel units</td></tr><tr><td style="text-align: right"><code>Z</code></td><td style="text-align: right"><code>Matrix{T}</code></td><td style="text-align: right">Instrument matrix actually used</td></tr></table><p>The three weak-instrument fields are computed on the <em>transformed</em> design — demeaned for FE, differenced for FD, quasi-demeaned for RE and Hausman-Taylor — so they measure the strength of the moments that actually identify <span>$\beta$</span>. The FE-IV fit above reports a Cragg-Donald F of 103.02 and a Kleibergen-Paap F of 94.06 against a Stock-Yogo 10% critical value of 19.93, all consistent with its first-stage F of 108.46. The Cragg-Donald denominator degrees of freedom subtract the fixed effects the transformation absorbed, matching <code>xtivreg2, fe</code>. They are <code>nothing</code> when the model is underidentified or the statistic fails to evaluate.</p><div class="admonition is-warning" id="Kleibergen-Paap-is-robust-to-heteroskedasticity,-not-to-clustering-79c73f57101fad46"><header class="admonition-header">Kleibergen-Paap is robust to heteroskedasticity, not to clustering<a class="admonition-anchor" href="#Kleibergen-Paap-is-robust-to-heteroskedasticity,-not-to-clustering-79c73f57101fad46" title="Permalink"></a></header><div class="admonition-body"><p>The reported rk Wald F uses a heteroskedasticity-robust meat in every branch; a cluster-robust rk statistic is not implemented. Under the default <code>cov_type=:cluster</code> it therefore ignores within-entity dependence and overstates instrument strength whenever the first stage is serially correlated within units.</p></div></div><hr/><h2 id="Panel-Discrete-Choice"><a class="docs-heading-anchor" href="#Panel-Discrete-Choice">Panel Discrete Choice</a><a id="Panel-Discrete-Choice-1"></a><a class="docs-heading-anchor-permalink" href="#Panel-Discrete-Choice" title="Permalink"></a></h2><p>For cross-sectional (non-panel) discrete choice models, see <a href="../binary_choice/#binary_choice_page">Binary Choice Models</a>.</p><p>The examples use the DDCG panel of Acemoglu, Naidu, Restrepo &amp; Robinson (2019): 175 countries observed annually, a binary <code>dem</code> indicator, and log GDP per capita. Regressing democracy on income is the classic <strong>Lipset (1959) modernization hypothesis</strong> — richer countries are more likely to be democracies.</p><h3 id="Panel-Logit"><a class="docs-heading-anchor" href="#Panel-Logit">Panel Logit</a><a id="Panel-Logit-1"></a><a class="docs-heading-anchor-permalink" href="#Panel-Logit" title="Permalink"></a></h3><p>The <code>estimate_xtlogit</code> function estimates panel logistic regression with four methods:</p><ul><li><strong>Pooled</strong>: Standard logit ignoring panel structure (with optional cluster-robust SEs)</li><li><strong>FE (conditional)</strong>: Chamberlain (1980) conditional likelihood — eliminates entity effects by conditioning on the within-unit count of successes, a sufficient statistic for <span>$\alpha_i$</span>. Only within-entity variation identifies coefficients.</li><li><strong>RE</strong>: Adaptive Gauss-Hermite quadrature integration over the random effect distribution</li><li><strong>CRE</strong>: Mundlak-style augmentation of the RE model with group means</li></ul><pre><code class="language-julia hljs">m_pooled = estimate_xtlogit(pd_ddcg, :dem, [:lngdppc])
+report(m_pooled)</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">       Panel Logit — Pooled
+
+  Specification
+
+  Model           Logit (Pooled)
+  Observations              6934
+  Groups                     175
+  Log-lik.              -4044.53
+  Log-lik. null         -4803.89
+  Pseudo R-sq.            0.1581
+  AIC                    8093.06
+  BIC                    8106.75
+  Converged                  Yes
+  Iterations                   5
+
+                                   Coefficients
+
+                  Coef.   Std.Err.         z    P&gt;|z|   CI lower   CI upper
+
+  (Intercept)   -5.0757     0.6268   -8.0978   &lt;0.001    -6.3042    -3.8472   ***
+  lngdppc        0.6879     0.0858    8.0135   &lt;0.001     0.5197     0.8561   ***
+
+Significance: *** p&lt;0.01, ** p&lt;0.05, * p&lt;0.10</code></pre><p>Pooled logit puts the log-odds slope at 0.6879 with a cluster-robust standard error of 0.0858, so a one-log-point rise in GDP per capita (roughly a 170% income gain) raises the log odds of democracy by 0.69 — an odds ratio near 2. The pseudo R-squared of 0.1581 is modest, as expected when a single covariate is asked to explain regime type. Pooling ignores the panel structure entirely, so this coefficient mixes the cross-country association (rich countries <em>are</em> democracies) with the within-country one (countries democratize <em>as</em> they get richer), and those are the two things the estimators below separate.</p><pre><code class="language-julia hljs"># FE conditional logit — within-country variation only
+m_fe_logit = estimate_xtlogit(pd_ddcg, :dem, [:lngdppc]; model=:fe)
+report(m_fe_logit)</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">       Panel Logit — Fixed Effects
+
+  Specification
+
+  Model           Logit (Fixed Effects)
+  Observations                     3589
+  Groups                             88
+  Log-lik.                     -1782.11
+  Log-lik. null                -1872.96
+  Pseudo R-sq.                   0.0485
+  AIC                           3566.21
+  BIC                           3572.40
+  Converged                         Yes
+  Iterations                          5
+
+                                Coefficients
+
+             Coef.   Std.Err.        z    P&gt;|z|   CI lower   CI upper
+
+  lngdppc   1.8515     0.5379   3.4418   &lt;0.001     0.7972     2.9059   ***
+
+Significance: *** p&lt;0.01, ** p&lt;0.05, * p&lt;0.10</code></pre><p>Conditioning on each country&#39;s number of democratic years drops the 87 countries that never switch regime, leaving 88 countries and 3589 observations — the sample where within-country identification is even possible. The slope rises to 1.8515, well above the pooled 0.6879, so within the switching countries income and democratization move together more strongly than the pooled fit suggests. The conditional log-likelihood is globally concave and the Newton step uses its exact information matrix, computed by central-differencing the dynamic-programming score, so the fit converges in five iterations from a zero start.</p><pre><code class="language-julia hljs"># RE logit — integrates over country-level heterogeneity
+m_re_logit = estimate_xtlogit(pd_ddcg, :dem, [:lngdppc]; model=:re, tol=1e-12)
+report(m_re_logit)</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">       Panel Logit — Random Effects
+
+  Specification
+
+  Model           Logit (Random Effects)
+  Observations                      6934
+  Groups                             175
+  Log-lik.                      -2290.17
+  Log-lik. null                 -4803.89
+  Pseudo R-sq.                    0.5233
+  AIC                            4586.34
+  BIC                            4606.87
+  Converged                          Yes
+  Iterations                          20
+  sigma_u                         4.8225
+  rho                             0.8761
+
+                                    Coefficients
+
+                   Coef.   Std.Err.         z    P&gt;|z|   CI lower   CI upper
+
+  (Intercept)   -13.5653     3.5998   -3.7684   &lt;0.001   -20.6207    -6.5098   ***
+  lngdppc         1.8483     0.5217    3.5429   &lt;0.001     0.8258     2.8707   ***
+
+Significance: *** p&lt;0.01, ** p&lt;0.05, * p&lt;0.10</code></pre><p>Random effects keeps all 175 countries and integrates over a normal country effect with estimated <span>$\hat{\sigma}_u = 4.8225$</span>, implying <span>$\rho = 0.8761$</span>: 88% of the latent-variable residual variance is permanent country heterogeneity. Absorbing that heterogeneity raises the pseudo R-squared from 0.1581 to 0.5233 and the income slope to 1.8483 — essentially the conditional-FE 1.8515, which is exactly what a correctly specified RE model should deliver: both estimators isolate the within-country association, they just weight the switching countries differently. The entity-clustered standard error of 0.5217 puts <span>$z = 3.54$</span>, in line with the clustered conditional-FE <span>$z$</span> of 3.44 below. All three estimates share the sign that supports the Lipset hypothesis; they differ in which variation identifies it.</p><div class="admonition is-info" id="Two-defects-used-to-corrupt-this-fit-(#542)-758874121e0e7007"><header class="admonition-header">Two defects used to corrupt this fit (#542)<a class="admonition-anchor" href="#Two-defects-used-to-corrupt-this-fit-(#542)-758874121e0e7007" title="Permalink"></a></header><div class="admonition-body"><p>Earlier releases reported <code>Converged: No</code> with standard errors near <span>$10^{-10}$</span> on this example. Two distinct defects, both fixed in <a href="https://github.com/FriedmanJP/MacroEconometricModels.jl/issues/542">#542</a>: the inner posterior-mode search of the adaptive quadrature ran a fixed number of Newton steps, leaving the likelihood <em>value</em> jagged — optimizers stopped on noise-dependent pseudo-optima 20+ log-likelihood units above the true optimum (which is why older documentation quoted a slope of 1.10) — and the covariance differentiated through that truncated search, inflating the observed information by orders of magnitude. The mode search now converges to machine precision, and the covariance uses the Louis (1982) score/information identities computed by posterior quadrature. The fit converges in 14 iterations, the optimum is unique across starting values, and the reported standard errors respect the complete-data information bound.</p></div></div><div class="admonition is-info" id="The-fit-itself-no-longer-aborts-72801f265b605f58"><header class="admonition-header">The fit itself no longer aborts<a class="admonition-anchor" href="#The-fit-itself-no-longer-aborts-72801f265b605f58" title="Permalink"></a></header><div class="admonition-body"><p>Before <a href="https://github.com/FriedmanJP/MacroEconometricModels.jl/issues/600">#600</a> this call threw an <code>AssertionError</code> from inside the line search: the adaptive Gauss-Hermite likelihood formed <code>exp(-eta)</code> and <code>exp(2 log sigma_u)</code> directly, both of which overflow on this panel and put a <code>NaN</code> in the ForwardDiff gradient, and <code>HagerZhang</code> asserts that the trial value and its directional derivative are finite. The likelihood is now written so that neither the value nor its gradient can go non-finite anywhere the optimizer can reach.</p></div></div><div class="admonition is-info" id="Which-standard-errors-you-get-cb1b64391d518f3"><header class="admonition-header">Which standard errors you get<a class="admonition-anchor" href="#Which-standard-errors-you-get-cb1b64391d518f3" title="Permalink"></a></header><div class="admonition-body"><p><code>cov_type</code> applies to every estimator. The FE fit inverts the conditional information for <code>:ols</code> and sandwiches it with the per-group conditional scores for <code>:cluster</code>, the default — 0.5379 against 0.1490 on <code>lngdppc</code> here, a <span>$z$</span> of 3.44 rather than 12.42, since the clustered version prices in the within-country dependence the conditional likelihood does not model. The RE and CRE fits build the bread from the Louis observed information of the marginal likelihood and, under <code>:cluster</code>, sandwich it with the per-group marginal scores using the same <span>$G/(G-1)\cdot(n-1)/(n-k)$</span> finite-sample correction as the pooled path.</p></div></div><h3 id="Panel-Probit"><a class="docs-heading-anchor" href="#Panel-Probit">Panel Probit</a><a id="Panel-Probit-1"></a><a class="docs-heading-anchor-permalink" href="#Panel-Probit" title="Permalink"></a></h3><p>The <code>estimate_xtprobit</code> function supports pooled, RE, and CRE models. <strong>No FE probit</strong> is available because there is no conditioning trick analogous to the logit case — the incidental parameters problem biases FE probit coefficients (Wooldridge 2010, §15.8).</p><pre><code class="language-julia hljs">m_probit = estimate_xtprobit(pd_ddcg, :dem, [:lngdppc])
+report(m_probit)</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">       Panel Probit — Pooled
+
+  Specification
+
+  Model           Probit (Pooled)
+  Observations               6934
+  Groups                      175
+  Log-lik.               -4042.78
+  Log-lik. null          -4803.89
+  Pseudo R-sq.             0.1584
+  AIC                     8089.56
+  BIC                     8103.25
+  Converged                   Yes
+  Iterations                    5
+
+                                    Coefficients
+
+                  Coef.   Std.Err.          z    P&gt;|z|   CI lower   CI upper
+
+  (Intercept)   -3.0835     0.2056   -14.9943   &lt;0.001    -3.4866    -2.6804   ***
+  lngdppc        0.4185     0.0280    14.9644   &lt;0.001     0.3637     0.4733   ***
+
+Significance: *** p&lt;0.01, ** p&lt;0.05, * p&lt;0.10</code></pre><p>Probit coefficients are on the standard-normal scale, so they are not directly comparable to logit ones; the usual rule of thumb <span>$\beta_{\text{logit}} \approx 1.6 \, \beta_{\text{probit}}$</span> holds here (0.6879 against 0.4185). Marginal effects, computed next, are the scale-free way to compare the two link functions. <code>model=:re</code> and <code>model=:cre</code> integrate over a normal country effect, but with <em>fixed</em> (non-adaptive) Gauss-Hermite nodes and a likelihood-change stopping rule — on panels with large <span>$\sigma_u$</span> like this one the probit quadrature under-resolves where the adaptive logit version does not, so read its RE output with more caution than the logit&#39;s.</p><h3 id="Panel-Marginal-Effects"><a class="docs-heading-anchor" href="#Panel-Marginal-Effects">Panel Marginal Effects</a><a id="Panel-Marginal-Effects-1"></a><a class="docs-heading-anchor-permalink" href="#Panel-Marginal-Effects" title="Permalink"></a></h3><p><code>marginal_effects</code> computes average marginal effects with delta-method standard errors for panel logit and probit models. For RE and CRE models the marginal effects integrate over the random effect distribution using Gauss-Hermite quadrature.</p><pre><code class="language-julia hljs">me = marginal_effects(m_pooled)
+report(me)</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">                           Average Marginal Effects
+
+             dy/dx   Std.Err.         z    P&gt;|z|   CI lower   CI upper
+
+  lngdppc   0.1368     0.0106   12.8791   &lt;0.001     0.1160     0.1576   ***
+
+Significance: *** p&lt;0.01, ** p&lt;0.05, * p&lt;0.10</code></pre><p>The AME of 0.1368 is the interpretable quantity: averaged over the observed distribution of income, one additional log point of GDP per capita raises the probability of being a democracy by about 13.7 percentage points. Unlike the log-odds coefficient this is directly comparable across logit and probit and across specifications.</p><h3 id="Keywords-(Logit/Probit)"><a class="docs-heading-anchor" href="#Keywords-(Logit/Probit)">Keywords (Logit/Probit)</a><a id="Keywords-(Logit/Probit)-1"></a><a class="docs-heading-anchor-permalink" href="#Keywords-(Logit/Probit)" title="Permalink"></a></h3><table><tr><th style="text-align: right">Keyword</th><th style="text-align: right">Type</th><th style="text-align: right">Default</th><th style="text-align: right">Description</th></tr><tr><td style="text-align: right"><code>model</code></td><td style="text-align: right"><code>Symbol</code></td><td style="text-align: right"><code>:pooled</code></td><td style="text-align: right">Method: <code>:pooled</code>, <code>:fe</code>, <code>:re</code>, <code>:cre</code> (logit); <code>:pooled</code>, <code>:re</code>, <code>:cre</code> (probit)</td></tr><tr><td style="text-align: right"><code>cov_type</code></td><td style="text-align: right"><code>Symbol</code></td><td style="text-align: right"><code>:cluster</code></td><td style="text-align: right">Covariance estimator: <code>:ols</code>, <code>:cluster</code> (pooled and FE)</td></tr><tr><td style="text-align: right"><code>maxiter</code></td><td style="text-align: right"><code>Int</code></td><td style="text-align: right"><code>2000</code> (logit), <code>200</code> (probit)</td><td style="text-align: right">Maximum iterations</td></tr><tr><td style="text-align: right"><code>tol</code></td><td style="text-align: right"><code>Real</code></td><td style="text-align: right"><span>$10^{-8}$</span></td><td style="text-align: right">Convergence tolerance; score tolerance on <code>:fe</code>, relative function tolerance on <code>:re</code>/<code>:cre</code></td></tr><tr><td style="text-align: right"><code>n_quadrature</code></td><td style="text-align: right"><code>Int</code></td><td style="text-align: right"><code>12</code></td><td style="text-align: right">Gauss-Hermite quadrature points (RE/CRE)</td></tr></table><h3 id="Return-Values-3"><a class="docs-heading-anchor" href="#Return-Values-3">Return Values</a><a class="docs-heading-anchor-permalink" href="#Return-Values-3" title="Permalink"></a></h3><table><tr><th style="text-align: right">Field</th><th style="text-align: right">Type</th><th style="text-align: right">Description</th></tr><tr><td style="text-align: right"><code>beta</code></td><td style="text-align: right"><code>Vector{T}</code></td><td style="text-align: right">Estimated coefficients (intercept first, except <code>:fe</code>)</td></tr><tr><td style="text-align: right"><code>vcov_mat</code></td><td style="text-align: right"><code>Matrix{T}</code></td><td style="text-align: right">Variance-covariance matrix</td></tr><tr><td style="text-align: right"><code>sigma_u</code> / <code>rho</code></td><td style="text-align: right"><code>Union{Nothing,T}</code></td><td style="text-align: right">Random-effect standard deviation and intra-class correlation (RE/CRE; <code>nothing</code> otherwise)</td></tr><tr><td style="text-align: right"><code>loglik</code> / <code>loglik_null</code></td><td style="text-align: right"><code>T</code></td><td style="text-align: right">Fitted and null log-likelihood</td></tr><tr><td style="text-align: right"><code>pseudo_r2</code></td><td style="text-align: right"><code>T</code></td><td style="text-align: right">McFadden pseudo R-squared</td></tr><tr><td style="text-align: right"><code>aic</code> / <code>bic</code></td><td style="text-align: right"><code>T</code></td><td style="text-align: right">Information criteria</td></tr><tr><td style="text-align: right"><code>converged</code></td><td style="text-align: right"><code>Bool</code></td><td style="text-align: right">Whether the optimizer met its tolerance</td></tr><tr><td style="text-align: right"><code>iterations</code></td><td style="text-align: right"><code>Int</code></td><td style="text-align: right">Iterations run</td></tr><tr><td style="text-align: right"><code>method</code></td><td style="text-align: right"><code>Symbol</code></td><td style="text-align: right"><code>:pooled</code>, <code>:fe</code>, <code>:re</code>, or <code>:cre</code></td></tr><tr><td style="text-align: right"><code>n_obs</code> / <code>n_groups</code></td><td style="text-align: right"><code>Int</code></td><td style="text-align: right">Observations and groups actually used (<code>:fe</code> drops non-varying groups)</td></tr></table><hr/><h2 id="Specification-Tests"><a class="docs-heading-anchor" href="#Specification-Tests">Specification Tests</a><a id="Specification-Tests-1"></a><a class="docs-heading-anchor-permalink" href="#Specification-Tests" title="Permalink"></a></h2><p>Six specification tests help choose between estimators and diagnose violations of model assumptions. Each returns a <a href="../api/panel/#MacroEconometricModels.PanelTestResult"><code>PanelTestResult</code></a> carrying the test statistic, p-value, and degrees of freedom.</p><h3 id="Hausman-Test-(FE-vs-RE)"><a class="docs-heading-anchor" href="#Hausman-Test-(FE-vs-RE)">Hausman Test (FE vs RE)</a><a id="Hausman-Test-(FE-vs-RE)-1"></a><a class="docs-heading-anchor-permalink" href="#Hausman-Test-(FE-vs-RE)" title="Permalink"></a></h3><p>Tests whether the RE assumption <span>$E[\alpha_i \mid x_{it}] = 0$</span> holds (Hausman 1978). Rejection favors FE.</p><pre><code class="language-julia hljs">m_fe2 = estimate_xtreg(pd_pwt, :lngdppc, [:hc, :lnk])
+m_re2 = estimate_xtreg(pd_pwt, :lngdppc, [:hc, :lnk]; model=:re)
+ht = hausman_test(m_fe2, m_re2)
+report(ht)</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">┌ Warning: Hausman test: V_FE - V_RE is not positive semidefinite (a common finite-sample outcome; the asymptotic assumption that RE is efficient under H0 may be violated). Reporting the generalized-inverse statistic with df = rank(dV) = 1; the statistic may be negative — interpret with caution (cf. Stata `hausman`).
+└ @ MacroEconometricModels /private/tmp/claude-501/-Users-chung-Desktop-CODES-MacroEconometricModels/0d103fbb-3b61-4be7-9d09-7c50ea2936af/scratchpad/wt-v0.7.3/src/preg/tests.jl:131
+                               Hausman test
+
+  Test                                                       Hausman test
+  Statistic                                                     -417.7927
+  P-value                                                          &gt;0.999
+  DF                                                                    1
+  Result      [non-PSD dV] Fail to reject H0: RE is consistent (p=&gt;0.999)</code></pre><p>The statistic uses the Moore-Penrose generalized inverse of <span>$V_{FE} - V_{RE}$</span> with degrees of freedom equal to its numerical rank. In finite samples this difference is often not positive semidefinite; when that happens the reported statistic can be <strong>negative</strong> (the test emits a warning and cannot reject <span>$H_0$</span>) and the degrees of freedom may fall below the number of coefficients — matching Stata&#39;s <code>hausman</code>. A negative statistic indicates the asymptotic Hausman assumption is violated in the sample, not evidence for RE.</p><h3 id="Breusch-Pagan-LM-Test"><a class="docs-heading-anchor" href="#Breusch-Pagan-LM-Test">Breusch-Pagan LM Test</a><a id="Breusch-Pagan-LM-Test-1"></a><a class="docs-heading-anchor-permalink" href="#Breusch-Pagan-LM-Test" title="Permalink"></a></h3><p>Tests for the presence of random effects: <span>$H_0: \sigma_u^2 = 0$</span> (Breusch &amp; Pagan 1980). Rejection suggests pooled OLS is inefficient and RE or FE is preferred.</p><pre><code class="language-julia hljs">bp = breusch_pagan_test(m_re2)
+report(bp)</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">                   Breusch-Pagan LM test
+
+  Test                              Breusch-Pagan LM test
+  Statistic                                    39791.7578
+  P-value                                          &lt;0.001
+  DF                                                    1
+  Result      Reject H0: Random effects needed (p=&lt;0.001)</code></pre><p>The LM statistic of 39791.76 against a <span>$\chi^2(1)$</span> rejects overwhelmingly, so <span>$\sigma_u^2 &gt; 0$</span> and pooled OLS — which assumes a single common intercept — is both inefficient and has understated standard errors. This is the expected verdict on any country panel with persistent level differences; it says use RE or FE, but not which one.</p><h3 id="F-Test-for-Fixed-Effects"><a class="docs-heading-anchor" href="#F-Test-for-Fixed-Effects">F-Test for Fixed Effects</a><a id="F-Test-for-Fixed-Effects-1"></a><a class="docs-heading-anchor-permalink" href="#F-Test-for-Fixed-Effects" title="Permalink"></a></h3><p>Tests joint significance of all entity fixed effects: <span>$H_0: \alpha_1 = \alpha_2 = \cdots = \alpha_N$</span>.</p><pre><code class="language-julia hljs">ft = f_test_fe(m_fe2)
+report(ft)</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">                        F-test for fixed effects
+
+  Test                                        F-test for fixed effects
+  Statistic                                                   622.5604
+  P-value                                                       &lt;0.001
+  DF                                                        (37, 2335)
+  Result      Reject H0: Entity effects significant, use FE (p=&lt;0.001)</code></pre><p><span>$F(37, 2335) = 622.56$</span> rejects the null that all 38 country intercepts are equal. Together with the Breusch-Pagan result this settles that entity heterogeneity is real; the Hausman test above then decides whether it can be treated as random.</p><h3 id="Pesaran-CD-Test"><a class="docs-heading-anchor" href="#Pesaran-CD-Test">Pesaran CD Test</a><a id="Pesaran-CD-Test-1"></a><a class="docs-heading-anchor-permalink" href="#Pesaran-CD-Test" title="Permalink"></a></h3><p>Tests for cross-sectional dependence in panel residuals (Pesaran 2004). Under <span>$H_0$</span>, residuals are uncorrelated across entities.</p><pre><code class="language-julia hljs">cd = pesaran_cd_test(m_fe2)
+report(cd)</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">                             Pesaran CD test
+
+  Test                                                  Pesaran CD test
+  Statistic                                                     19.8725
+  P-value                                                        &lt;0.001
+  DF                                                                  1
+  Result      Reject H0: Cross-sectional dependence detected (p=&lt;0.001)</code></pre><p>The CD statistic of 19.87 is standard normal under the null and rejects decisively: residuals are correlated <em>across</em> countries, which is exactly what global business cycles and common technology shocks produce. Entity-clustered standard errors assume independence across entities and are therefore too small here — this is the diagnostic that argues for <code>cov_type=:driscoll_kraay</code> or the two-way fixed effects fitted earlier.</p><h3 id="Wooldridge-AR-Test"><a class="docs-heading-anchor" href="#Wooldridge-AR-Test">Wooldridge AR Test</a><a id="Wooldridge-AR-Test-1"></a><a class="docs-heading-anchor-permalink" href="#Wooldridge-AR-Test" title="Permalink"></a></h3><p>Tests for first-order serial correlation in first-differenced residuals (Wooldridge 2010). Under <span>$H_0$</span>, no serial correlation.</p><pre><code class="language-julia hljs">ar = wooldridge_ar_test(m_fe2)
+report(ar)</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">                      Wooldridge AR(1) test
+
+  Test                                    Wooldridge AR(1) test
+  Statistic                                            721.7588
+  P-value                                                &lt;0.001
+  DF                                                    (1, 37)
+  Result      Reject H0: Serial correlation detected (p=&lt;0.001)</code></pre><p><span>$F(1, 37) = 721.76$</span> rejects the null of no first-order serial correlation in the first-differenced residuals. Log GDP per capita is highly persistent, so this is unsurprising; it means the classical <code>:ols</code> covariance is invalid and either cluster-robust standard errors (which absorb arbitrary within-country dependence) or an explicit AR(1) correction is required.</p><h3 id="Modified-Wald-Test"><a class="docs-heading-anchor" href="#Modified-Wald-Test">Modified Wald Test</a><a id="Modified-Wald-Test-1"></a><a class="docs-heading-anchor-permalink" href="#Modified-Wald-Test" title="Permalink"></a></h3><p>Tests for groupwise heteroskedasticity: <span>$H_0: \sigma_i^2 = \sigma^2$</span> for all <span>$i$</span> (Greene 2012). Rejection suggests entity-specific error variances.</p><pre><code class="language-julia hljs">mw = modified_wald_test(m_fe2)
+report(mw)</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">                            Modified Wald test
+
+  Test                                                 Modified Wald test
+  Statistic                                                     3331.6457
+  P-value                                                          &lt;0.001
+  DF                                                                   38
+  Result      Reject H0: Groupwise heteroskedasticity detected (p=&lt;0.001)</code></pre><p>The modified Wald statistic of 3331.65 on 38 degrees of freedom rejects a common error variance across countries. All four diagnostics point the same way for this panel: keep the entity fixed effects, and use a covariance estimator that tolerates heteroskedasticity, serial correlation, and cross-sectional dependence at once — <code>:driscoll_kraay</code> here.</p><h3 id="Recommended-Workflow"><a class="docs-heading-anchor" href="#Recommended-Workflow">Recommended Workflow</a><a id="Recommended-Workflow-1"></a><a class="docs-heading-anchor-permalink" href="#Recommended-Workflow" title="Permalink"></a></h3><table><tr><th style="text-align: right">Question</th><th style="text-align: right">Test</th><th style="text-align: right">If rejected</th></tr><tr><td style="text-align: right">FE or RE?</td><td style="text-align: right"><code>hausman_test</code></td><td style="text-align: right">Use FE</td></tr><tr><td style="text-align: right">Random effects present?</td><td style="text-align: right"><code>breusch_pagan_test</code></td><td style="text-align: right">Use RE or FE, not pooled OLS</td></tr><tr><td style="text-align: right">Entity effects significant?</td><td style="text-align: right"><code>f_test_fe</code></td><td style="text-align: right">Entity heterogeneity matters</td></tr><tr><td style="text-align: right">Cross-sectional dependence?</td><td style="text-align: right"><code>pesaran_cd_test</code></td><td style="text-align: right">Use Driscoll-Kraay SEs</td></tr><tr><td style="text-align: right">Serial correlation?</td><td style="text-align: right"><code>wooldridge_ar_test</code></td><td style="text-align: right">Use cluster-robust SEs or FD</td></tr><tr><td style="text-align: right">Groupwise heteroskedasticity?</td><td style="text-align: right"><code>modified_wald_test</code></td><td style="text-align: right">Use cluster-robust SEs</td></tr></table><hr/><h2 id="Covariance-Estimators"><a class="docs-heading-anchor" href="#Covariance-Estimators">Covariance Estimators</a><a id="Covariance-Estimators-1"></a><a class="docs-heading-anchor-permalink" href="#Covariance-Estimators" title="Permalink"></a></h2><p><code>estimate_xtreg</code> supports five covariance estimators via the <code>cov_type</code> keyword. Point estimates never depend on the choice (with the sole exception of <code>ar1</code>, which is an FGLS transform rather than a covariance); only the standard errors do:</p><table><tr><th style="text-align: right"><code>cov_type</code></th><th style="text-align: right">Formula</th><th style="text-align: right">When to use</th></tr><tr><td style="text-align: right"><code>:ols</code></td><td style="text-align: right"><span>$\hat{\sigma}^2 (X&#39;X)^{-1}$</span></td><td style="text-align: right">Homoskedastic, no correlation</td></tr><tr><td style="text-align: right"><code>:cluster</code></td><td style="text-align: right">Entity-cluster robust (Arellano 1987)</td><td style="text-align: right">Default, heteroskedasticity + within-entity correlation</td></tr><tr><td style="text-align: right"><code>:twoway</code></td><td style="text-align: right">Two-way cluster (Cameron et al. 2011)</td><td style="text-align: right">Cross-sectional + serial dependence</td></tr><tr><td style="text-align: right"><code>:driscoll_kraay</code></td><td style="text-align: right">HAC across both dimensions (Driscoll &amp; Kraay 1998)</td><td style="text-align: right">Large <span>$T$</span>, spatial dependence</td></tr><tr><td style="text-align: right"><code>:pcse</code></td><td style="text-align: right">Beck-Katz (1995) panel-corrected</td><td style="text-align: right"><span>$T \gtrsim N$</span> TSCS panels</td></tr></table><p><code>estimate_xtiv</code> accepts the first four; <code>:pcse</code> is <code>estimate_xtreg</code>-only.</p><pre><code class="language-julia hljs"># Driscoll-Kraay standard errors for PWT growth regression
+m_dk = estimate_xtreg(pd_pwt, :lngdppc, [:hc, :lnk]; cov_type=:driscoll_kraay)
+report(m_dk)</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">    Panel Regression — Fixed Effects
+
+  Specification
+
+  Method                 Fixed Effects
+  Observations                    2375
+  Groups                            38
+  Avg. periods                    62.5
+  R-sq. within                  0.9376
+  R-sq. between                 0.1294
+  R-sq. overall                 0.3468
+  sigma_u                       0.8444
+  sigma_e                       0.1240
+  rho                           0.9789
+  F-statistic                  3333.87
+  F p-value                     &lt;0.001
+  Cov. type       Driscoll–Kraay (HAC)
+
+                               Coefficients
+
+         Coef.   Std.Err.         t    P&gt;|t|   CI lower   CI upper
+
+  hc    0.4169     0.0415   10.0457   &lt;0.001     0.3355     0.4983   ***
+  lnk   0.5161     0.0198   26.0968   &lt;0.001     0.4773     0.5549   ***
+
+Significance: *** p&lt;0.01, ** p&lt;0.05, * p&lt;0.10</code></pre><p>The coefficients are the cluster-robust ones to four decimals — 0.4169 and 0.5161 — while the standard error on capital falls from 0.0521 to 0.0198. Driscoll-Kraay averages the moment contributions <em>across</em> entities within each period before applying a Newey-West kernel over time, so it buys robustness to the cross-sectional dependence the Pesaran CD test detected at the cost of relying on a long time dimension. With 70 years and 38 countries PWT is in the regime where that trade is favourable.</p><p>Visualize the coefficients and the residual diagnostics with <code>plot_result</code>, which accepts <code>view=:coef</code> (default) for a coefficient plot with 95% intervals and <code>view=:diagnostics</code> for the four-panel residual display:</p><pre><code class="language-julia hljs">plot_result(m_fe)
+plot_result(m_fe; view=:diagnostics)</code></pre><iframe src="../assets/plots/panel_reg_coef.html" width="100%" height="380" frameborder="0" style="border:1px solid #ddd;border-radius:4px;"></iframe><p>The coefficient view omits the intercept — a within estimator&#39;s constant is an artefact of the demeaning, not a quantity to interpret — and draws each slope against a zero reference line. Both PWT slopes sit far from it: human capital at 0.417 on <span>$[0.261, 0.573]$</span> and capital per worker at 0.516 on <span>$[0.414, 0.618]$</span>. The whiskers are <span>$\hat\beta \pm 1.96\,\mathrm{SE}$</span> taken from <code>vcov_mat</code>, so they inherit whichever covariance estimator the fit used — cluster-robust here, since that is the <code>estimate_xtreg</code> default. A figure drawn from the <code>cov_type=:driscoll_kraay</code> refit above puts the same two points on a visibly shorter whisker for capital per worker, whose standard error falls from 0.0521 to 0.0198.</p><hr/><h2 id="Complete-Example"><a class="docs-heading-anchor" href="#Complete-Example">Complete Example</a><a id="Complete-Example-1"></a><a class="docs-heading-anchor-permalink" href="#Complete-Example" title="Permalink"></a></h2><p>A full panel analysis workflow using the Penn World Table: estimate, test, and then choose a specification the diagnostics can support.</p><pre><code class="language-julia hljs"># Growth regression: log GDP per capita on human capital and capital deepening
+m_fe_full = estimate_xtreg(pd_pwt, :lngdppc, [:hc, :lnk])
+m_re_full = estimate_xtreg(pd_pwt, :lngdppc, [:hc, :lnk]; model=:re)
+
+# Hausman test: FE vs RE
+ht = hausman_test(m_fe_full, m_re_full)
+report(ht)</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">┌ Warning: Hausman test: V_FE - V_RE is not positive semidefinite (a common finite-sample outcome; the asymptotic assumption that RE is efficient under H0 may be violated). Reporting the generalized-inverse statistic with df = rank(dV) = 1; the statistic may be negative — interpret with caution (cf. Stata `hausman`).
+└ @ MacroEconometricModels /private/tmp/claude-501/-Users-chung-Desktop-CODES-MacroEconometricModels/0d103fbb-3b61-4be7-9d09-7c50ea2936af/scratchpad/wt-v0.7.3/src/preg/tests.jl:131
+                               Hausman test
+
+  Test                                                       Hausman test
+  Statistic                                                     -417.7927
+  P-value                                                          &gt;0.999
+  DF                                                                    1
+  Result      [non-PSD dV] Fail to reject H0: RE is consistent (p=&gt;0.999)</code></pre><pre><code class="language-julia hljs"># Breusch-Pagan: test for random effects
+bp = breusch_pagan_test(m_re_full)
+report(bp)</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">                   Breusch-Pagan LM test
+
+  Test                              Breusch-Pagan LM test
+  Statistic                                    39791.7578
+  P-value                                          &lt;0.001
+  DF                                                    1
+  Result      Reject H0: Random effects needed (p=&lt;0.001)</code></pre><pre><code class="language-julia hljs"># Diagnostics on FE model
+cd = pesaran_cd_test(m_fe_full)
+report(cd)</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">                             Pesaran CD test
+
+  Test                                                  Pesaran CD test
+  Statistic                                                     19.8725
+  P-value                                                        &lt;0.001
+  DF                                                                  1
+  Result      Reject H0: Cross-sectional dependence detected (p=&lt;0.001)</code></pre><pre><code class="language-julia hljs">ar = wooldridge_ar_test(m_fe_full)
+report(ar)</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">                      Wooldridge AR(1) test
+
+  Test                                    Wooldridge AR(1) test
+  Statistic                                            721.7588
+  P-value                                                &lt;0.001
+  DF                                                    (1, 37)
+  Result      Reject H0: Serial correlation detected (p=&lt;0.001)</code></pre><pre><code class="language-julia hljs"># CRE as robustness check
+m_cre_full = estimate_xtreg(pd_pwt, :lngdppc, [:hc, :lnk]; model=:cre)
+report(m_cre_full)</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi"> Panel Regression — Correlated RE
+
+  Specification
+
+  Method           Correlated RE
+  Observations              2375
+  Groups                      38
+  Avg. periods              62.5
+  R-sq. within            0.9376
+  R-sq. between           0.3716
+  R-sq. overall           0.5658
+  sigma_u                 0.3731
+  sigma_e                 0.1240
+  rho                     0.9005
+  F-statistic             183.18
+  F p-value               &lt;0.001
+  Cov. type       Cluster-robust
+  theta                   0.9566
+
+                                  Coefficients
+
+               Coef.   Std.Err.         t    P&gt;|t|   CI lower   CI upper
+
+  hc          0.4169     0.0795    5.2450   &lt;0.001     0.2610     0.5727   ***
+  lnk         0.5161     0.0521    9.9050   &lt;0.001     0.4139     0.6182   ***
+  hc_mean     1.2984     0.1618    8.0224   &lt;0.001     0.9810     1.6157   ***
+  lnk_mean   -0.3442     0.0655   -5.2575   &lt;0.001    -0.4726    -0.2159   ***
+
+Significance: *** p&lt;0.01, ** p&lt;0.05, * p&lt;0.10</code></pre><pre><code class="language-julia hljs"># Final specification: entity + time effects, cross-section-robust SEs
+m_final = estimate_xtreg(pd_pwt, :lngdppc, [:hc, :lnk];
+                         absorb=[:entity, :time], cov_type=:driscoll_kraay)
+report(m_final)</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi"> Panel Regression — Fixed Effects (HDFE)
+
+  Specification
+
+  Method            Fixed Effects (HDFE)
+  Observations                      2375
+  Groups                              38
+  Avg. periods                      62.5
+  R-sq. within                    0.6034
+  R-sq. between                   0.1528
+  R-sq. overall                   0.3915
+  sigma_u                         0.8496
+  sigma_e                         0.1201
+  rho                             0.9804
+  F-statistic                     817.99
+  F p-value                       &lt;0.001
+  Cov. type         Driscoll–Kraay (HAC)
+  Absorbed FE         entity=38, time=70
+  FE parameters                      107
+  Mobility groups                      1
+  MAP iterations                       4
+  MAP converged                      yes
+
+                               Coefficients
+
+         Coef.   Std.Err.         t    P&gt;|t|   CI lower   CI upper
+
+  hc    0.5550     0.0643    8.6364   &lt;0.001     0.4290     0.6810   ***
+  lnk   0.5137     0.0188   27.2696   &lt;0.001     0.4768     0.5506   ***
+
+Significance: *** p&lt;0.01, ** p&lt;0.05, * p&lt;0.10</code></pre><p>The chain of tests narrows the specification. Breusch-Pagan rejects a common intercept, so pooled OLS is out. The Hausman statistic is negative here — the finite-sample <span>$V_{FE} - V_{RE}$</span> is not positive semidefinite — which is uninformative rather than evidence for RE, so the CRE fit is the usable version of the same test: its group-mean coefficients (<code>hc_mean</code> at 1.2984, <code>lnk_mean</code> at <span>$-0.3442$</span>, both significant at 1%) reject <span>$E[\alpha_i \mid x_{it}] = 0$</span> and settle the question in favour of fixed effects. Pesaran CD then rejects cross-sectional independence and Wooldridge AR rejects serial independence, so entity-clustered standard errors are not enough. The final specification absorbs entity and time effects and reports Driscoll-Kraay standard errors, leaving the capital elasticity at 0.5137 — essentially unchanged across every consistent specification on this page, which is the strongest evidence that it is a real feature of the data rather than an artefact of one estimator.</p><hr/><h2 id="Common-Pitfalls"><a class="docs-heading-anchor" href="#Common-Pitfalls">Common Pitfalls</a><a id="Common-Pitfalls-1"></a><a class="docs-heading-anchor-permalink" href="#Common-Pitfalls" title="Permalink"></a></h2><ol><li><p><strong>Forgetting <code>xtset</code>.</strong> All panel estimators require <code>PanelData</code> created via <code>xtset(df, :group, :time)</code>. Passing a raw DataFrame throws an error.</p></li><li><p><strong>Including time-invariant regressors in FE.</strong> The within transformation eliminates all time-invariant variables. Use RE, CRE, or Hausman-Taylor to estimate their effects.</p></li><li><p><strong>Using FE probit.</strong> There is no conditioning trick for probit (unlike logit). The package correctly excludes <code>:fe</code> from <code>estimate_xtprobit</code> — use <code>:re</code> or <code>:cre</code> instead.</p></li><li><p><strong>Weak instruments in panel IV.</strong> Check <code>first_stage_f</code> in the <code>PanelIVModel</code> output. Values below 10 indicate weak instruments (Staiger &amp; Stock 1997), and 2SLS is then more biased than the OLS it was meant to repair.</p></li><li><p><strong>Reading a Sargan p-value as instrument validation.</strong> A non-rejection means the overidentifying moments agree with each other, not that they are valid. <code>sargan_stat</code> is <code>nothing</code> when the model is exactly identified, because there is nothing to test.</p></li><li><p><strong>Ignoring cross-sectional dependence.</strong> Standard cluster-robust SEs assume independence across entities. Run <code>pesaran_cd_test</code> and switch to <code>cov_type=:driscoll_kraay</code> if rejected.</p></li><li><p><strong>Letting the AB/BB instrument count exceed <span>$N$</span>.</strong> The block-diagonal instrument matrix grows as <span>$O(T^2)$</span>, and once the moment count passes the number of groups the Hansen J stops rejecting (<code>p &gt; 0.999</code>) and standard errors turn unreliable. Rein it in where the model is fitted: <code>estimate_xtreg</code> takes <code>collapse</code>, <code>min_lag_endo</code>, <code>max_lag_endo</code>, <code>pca_instruments</code>, and <code>pca_max_components</code> for <code>:ab</code> and <code>:bb</code>.</p></li><li><p><strong>Trusting a dynamic-panel fit without the AR(2) test.</strong> A correctly specified Arellano-Bond model <em>rejects</em> AR(1) — the differenced error is MA(1) by construction — but must <em>not</em> reject AR(2). Rejection at order 2 means the level errors are serially correlated and the lagged-level instruments are invalid.</p></li><li><p><strong>Assuming additive demeaning is the two-way within transformation.</strong> <span>$y_{it} - \bar{y}_i - \bar{y}_t + \bar{y}$</span> equals it only on a balanced panel — on the unbalanced PWT panel that identity puts the capital-deepening coefficient at 0.297 against a truth of 0.514. <code>twoway=true</code> and <code>absorb=[:entity, :time]</code> both use alternating projections and are exact either way, so this is a trap only if you hand-demean your own data.</p></li><li><p><strong>Ignoring the <code>hdfe.converged</code> flag.</strong> Alternating projections converge slowly when fixed-effect dimensions are weakly connected. A <code>MAP converged: NO</code> line means the coefficients have not settled — raise <code>hdfe_maxiter</code> rather than reporting them.</p></li><li><p><strong>Reporting a non-converged discrete-choice fit.</strong> The quadrature-based RE and CRE panel logit and probit likelihoods routinely stop short of a stationary point at the default <code>tol=1e-8</code>. Read the <code>Converged</code> line and tighten <code>tol</code> before interpreting the coefficients. The conditional-FE logit is the exception: it is globally concave and settles in a handful of Newton steps.</p></li><li><p><strong>Prais-Winsten on near-unit-root data.</strong> With <span>$\hat{\rho}$</span> close to 1 the quasi-difference approaches a first difference and the coefficients become short-run growth responses, not level elasticities. Inspect <code>m.ar1_rho</code> and prefer <code>model=:fd</code> when it is near unity.</p></li></ol><hr/><h2 id="References"><a class="docs-heading-anchor" href="#References">References</a><a id="References-1"></a><a class="docs-heading-anchor-permalink" href="#References" title="Permalink"></a></h2><ul><li>Abowd, J. M., Creecy, R. H. &amp; Kramarz, F. (2002). Computing Person and Firm Effects Using Linked Longitudinal Employer-Employee Data. <em>US Census Bureau Technical Paper</em> TP-2002-06.</li><li>Acemoglu, D., Naidu, S., Restrepo, P. &amp; Robinson, J. A. (2019). Democracy Does Cause Growth. <em>Journal of Political Economy</em> 127(1), 47-100. <a href="https://doi.org/10.1086/700936">DOI</a></li><li>Arellano, M. (1987). Computing Robust Standard Errors for Within-Groups Estimators. <em>Oxford Bulletin of Economics and Statistics</em> 49(4), 431-434. <a href="https://doi.org/10.1111/j.1468-0084.1987.mp49004006.x">DOI</a></li><li>Arellano, M. &amp; Bond, S. (1991). Some Tests of Specification for Panel Data: Monte Carlo Evidence and an Application to Employment Equations. <em>Review of Economic Studies</em> 58(2), 277-297. <a href="https://doi.org/10.2307/2297968">DOI</a></li><li>Baltagi, B. H. (1981). Simultaneous Equations with Error Components. <em>Journal of Econometrics</em> 17(2), 189-200. <a href="https://doi.org/10.1016/0304-4076(81)90026-9">DOI</a></li><li>Baltagi, B. H. (2021). <em>Econometric Analysis of Panel Data</em>. 6th ed. Springer. ISBN 978-3-030-53952-8.</li><li>Beck, N. &amp; Katz, J. N. (1995). What To Do (and Not to Do) with Time-Series Cross-Section Data. <em>American Political Science Review</em> 89(3), 634-647. <a href="https://doi.org/10.2307/2082979">DOI</a></li><li>Blundell, R. &amp; Bond, S. (1998). Initial Conditions and Moment Restrictions in Dynamic Panel Data Models. <em>Journal of Econometrics</em> 87(1), 115-143. <a href="https://doi.org/10.1016/S0304-4076(98)00009-8">DOI</a></li><li>Breusch, T. S. &amp; Pagan, A. R. (1980). The Lagrange Multiplier Test and Its Applications to Model Specification in Econometrics. <em>Review of Economic Studies</em> 47(1), 239-253. <a href="https://doi.org/10.2307/2297111">DOI</a></li><li>Cameron, A. C., Gelbach, J. B. &amp; Miller, D. L. (2011). Robust Inference with Multiway Clustering. <em>Journal of Business &amp; Economic Statistics</em> 29(2), 238-249. <a href="https://doi.org/10.1198/jbes.2010.07136">DOI</a></li><li>Cameron, A. C. &amp; Miller, D. L. (2015). A Practitioner&#39;s Guide to Cluster-Robust Inference. <em>Journal of Human Resources</em> 50(2), 317-372. <a href="https://doi.org/10.3368/jhr.50.2.317">DOI</a></li><li>Correia, S. (2016). <em>A Feasible Estimator for Linear Models with Multi-Way Fixed Effects</em>. Working paper (<code>reghdfe</code>). <a href="http://scorreia.com/research/hdfe.pdf">PDF</a></li><li>Chamberlain, G. (1980). Analysis of Covariance with Qualitative Data. <em>Review of Economic Studies</em> 47(1), 225-238. <a href="https://doi.org/10.2307/2297110">DOI</a></li><li>Driscoll, J. C. &amp; Kraay, A. C. (1998). Consistent Covariance Matrix Estimation with Spatially Dependent Panel Data. <em>Review of Economics and Statistics</em> 80(4), 549-560. <a href="https://doi.org/10.1162/003465398557825">DOI</a></li><li>Feenstra, R. C., Inklaar, R. &amp; Timmer, M. P. (2015). The Next Generation of the Penn World Table. <em>American Economic Review</em> 105(10), 3150-3182. <a href="https://doi.org/10.1257/aer.20130954">DOI</a></li><li>Gaure, S. (2013). OLS with Multiple High Dimensional Category Variables. <em>Computational Statistics &amp; Data Analysis</em> 66, 8-18. <a href="https://doi.org/10.1016/j.csda.2013.03.024">DOI</a></li><li>Greene, W. H. (2012). <em>Econometric Analysis</em>. 7th ed. Prentice Hall. ISBN 978-0-131-39538-1.</li><li>Guimaraes, P. &amp; Portugal, P. (2010). A Simple Feasible Procedure to Fit Models with High-Dimensional Fixed Effects. <em>The Stata Journal</em> 10(4), 628-649. <a href="https://doi.org/10.1177/1536867X1101000406">DOI</a></li><li>Hausman, J. A. (1978). Specification Tests in Econometrics. <em>Econometrica</em> 46(6), 1251-1271. <a href="https://doi.org/10.2307/1913827">DOI</a></li><li>Hausman, J. A. &amp; Taylor, W. E. (1981). Panel Data and Unobservable Individual Effects. <em>Econometrica</em> 49(6), 1377-1398. <a href="https://doi.org/10.2307/1911406">DOI</a></li><li>Lipset, S. M. (1959). Some Social Requisites of Democracy: Economic Development and Political Legitimacy. <em>American Political Science Review</em> 53(1), 69-105. <a href="https://doi.org/10.2307/1951731">DOI</a></li><li>Mundlak, Y. (1978). On the Pooling of Time Series and Cross Section Data. <em>Econometrica</em> 46(1), 69-85. <a href="https://doi.org/10.2307/1913646">DOI</a></li><li>Pesaran, M. H. (2004). General Diagnostic Tests for Cross Section Dependence in Panels. CESifo Working Paper No. 1229. <a href="https://doi.org/10.2139/ssrn.572504">DOI</a></li><li>Staiger, D. &amp; Stock, J. H. (1997). Instrumental Variables Regression with Weak Instruments. <em>Econometrica</em> 65(3), 557-586. <a href="https://doi.org/10.2307/2171753">DOI</a></li><li>Swamy, P. A. V. B. &amp; Arora, S. S. (1972). The Exact Finite Sample Properties of the Estimators of Coefficients in the Error Components Regression Models. <em>Econometrica</em> 40(2), 261-275. <a href="https://doi.org/10.2307/1909405">DOI</a></li><li>Windmeijer, F. (2005). A Finite Sample Correction for the Variance of Linear Efficient Two-Step GMM Estimators. <em>Journal of Econometrics</em> 126(1), 25-51. <a href="https://doi.org/10.1016/j.jeconom.2004.02.005">DOI</a></li><li>Wooldridge, J. M. (2010). <em>Econometric Analysis of Cross Section and Panel Data</em>. 2nd ed. MIT Press. ISBN 978-0-262-23258-6.</li></ul></article><nav class="docs-footer"><a class="docs-footer-prevpage" href="../ordered_multinomial/">« Ordered &amp; Multinomial</a><a class="docs-footer-nextpage" href="../pvar/">Panel VAR »</a><div class="flexbox-break"></div><p class="footer-message">Powered by <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> and the <a href="https://julialang.org/">Julia Programming Language</a>.</p></nav></div><div class="modal" id="documenter-settings"><div class="modal-background"></div><div class="modal-card"><header class="modal-card-head"><p class="modal-card-title">Settings</p><button class="delete"></button></header><section class="modal-card-body"><p><label class="label">Theme</label><div class="select"><select id="documenter-themepicker"><option value="auto">Automatic (OS)</option><option value="documenter-light">documenter-light</option><option value="documenter-dark">documenter-dark</option><option value="catppuccin-latte">catppuccin-latte</option><option value="catppuccin-frappe">catppuccin-frappe</option><option value="catppuccin-macchiato">catppuccin-macchiato</option><option value="catppuccin-mocha">catppuccin-mocha</option></select></div></p><hr/><p>This document was generated with <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> version 1.17.0 on <span class="colophon-date" title="Thursday 6 August 2026 12:55">Thursday 6 August 2026</span>. Using Julia version 1.12.6.</p></section><footer class="modal-card-foot"></footer></div></div></div></body></html>
