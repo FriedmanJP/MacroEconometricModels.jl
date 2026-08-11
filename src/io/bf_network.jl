@@ -6,16 +6,21 @@
 """
     ProductionNetwork{T<:AbstractFloat}
 
-Baqaee–Farhi (2019) standard-form nested-CES production network in **row
+Baqaee–Farhi (2019/2020) standard-form nested-CES production network in **row
 orientation**.
 
 # Fields
-- `Omega` — sparse base cost-share matrix `Ω̃`, size `(1+M+F)²`. Row `i` is the
+- `Omega` — sparse base **cost-share** matrix `Ω̃`, size `(1+M+F)²`. Row `i` is the
   expenditure shares of node `i` (rows sum to 1 for household + producers; 0 for
-  factors).
+  factors). Markups do **not** enter `Omega` (B&F 2020: `Ω̃` is cost-based).
 - `theta` — length `1+M` elasticities (household first as `σ`; factors have none).
-- `lambda` — base Domar weights `λ̃ = e₁'(I−Ω̃)⁻¹`, length `1+M+F`.
-- `factor_supplies` — `L_f` normalized so base `w_f = 1` ⇒ `L_f = Λ̃_f`.
+- `lambda` — base **cost-based** Domar weights `λ̃ = e₁'(I−Ω̃)⁻¹`, length `1+M+F`.
+- `lambda_rev` — base **revenue-based** Domar weights `λ = e₁'(I−Ω)⁻¹` with
+  `Ω = diag(1/μ) Ω̃` on producer rows (equals `lambda` when `μ ≡ 1`).
+- `mu` — length-`M` producer markups/wedges `μ ≥ 1` (fictitious nest nodes are
+  competitive: `μ = 1`; real-sector outer nodes carry the sectoral markup).
+- `factor_supplies` — `L_f` normalized so base `w_f = 1` and `E = 1` clear factor
+  markets: `L_f = Λ_f` (revenue-based factor Domar). When `μ ≡ 1`, `Λ = Λ̃`.
 - `node_names` — labels for all `1+M+F` nodes.
 - `parent` — map node → real-sector index (`0` for household / factors).
 - `n`, `M`, `F` — real sectors, producer nodes (incl. fictitious nests), factors.
@@ -25,11 +30,17 @@ orientation**.
 
 Node layout (1-based): index 1 = household; `2:M+1` = producers; `M+2:M+F+1` =
 primary factors.
+
+# Orientation
+Row orientation (B&F). Cost shares: `Ω̃[i,j]` = buyer `i` expenditure on `j` as a
+share of **costs**. Revenue shares: `Ω[i,j] = Ω̃[i,j]/μ_i` for producers.
 """
 struct ProductionNetwork{T<:AbstractFloat}
     Omega::SparseMatrixCSC{T,Int}
     theta::Vector{T}
     lambda::Vector{T}
+    lambda_rev::Vector{T}
+    mu::Vector{T}
     factor_supplies::Vector{T}
     node_names::Vector{String}
     parent::Vector{Int}
@@ -43,7 +54,8 @@ end
 
 """
     production_network(io::IOData; theta=1.0, sigma=1.0, epsilon=1.0, eta=1.0,
-                       nests=:single, factors=:single, check=true) -> ProductionNetwork
+                       nests=:single, factors=:single, mu=1.0,
+                       check=true) -> ProductionNetwork
 
 Calibrate a Baqaee–Farhi standard-form network from a column-oriented
 [`IOData`](@ref) table. Shares are built **once** in row orientation:
@@ -51,6 +63,10 @@ Calibrate a Baqaee–Farhi standard-form network from a column-oriented
 - producer `i` share on producer `j`: `Z[j,i] / x[i]`
 - producer `i` factor shares: `va[f,i] / x[i]` (after the `factors` mapping)
 - household shares: `βⱼ = yⱼ / Σ y` with `y = rowsum(Y)`
+
+These are stored as **cost shares** `Ω̃` (they sum to 1 per producer). Sectoral
+markups `mu` leave `Ω̃` unchanged; revenue shares are `Ω = diag(1/μ) Ω̃` on
+producer rows (Baqaee–Farhi 2020).
 
 # Keyword arguments
 - `theta` — scalar or length-`n` vector: elasticity across intermediate inputs
@@ -64,6 +80,9 @@ Calibrate a Baqaee–Farhi standard-form network from a column-oriented
   fictitious nodes per sector). `:custom` is reserved for a future constructor.
 - `factors` — `:single` (sum VA rows), `:va_cats` (one factor per VA row), or an
   `F×n` matrix of factor payments.
+- `mu` — scalar or length-`n` vector of sectoral markups/wedges `μ ≥ 1` (default
+  `1` = efficient). Applied to real-sector **outer** nodes; fictitious nest
+  nodes remain competitive (`μ = 1`).
 - `check` — if `true` (default), error when clipped negative mass exceeds 1% of
   any row.
 
@@ -77,6 +96,7 @@ function production_network(io::IOData{T};
                             eta=1.0,
                             nests::Symbol=:single,
                             factors=:single,
+                            mu=1.0,
                             check::Bool=true) where {T<:AbstractFloat}
     nests in (:single, :two) || throw(ArgumentError(
         "nests must be :single or :two (got $nests); :custom is not yet implemented"))
@@ -96,6 +116,15 @@ function production_network(io::IOData{T};
     ε_sec = _bf_as_vector(T, epsilon, n, "epsilon")
     η_sec = _bf_as_vector(T, eta, n, "eta")
     σ = T(sigma)
+
+    # ── markups (sectoral → mapped to outer producer nodes in builders) ──────
+    μ_sec = _bf_as_vector(T, mu, n, "mu")
+    all(μ_sec .>= one(T) - T(1e-14)) || throw(ArgumentError(
+        "mu must satisfy μ ≥ 1 for all sectors (got min=$(minimum(μ_sec)))"))
+    # numerical floor at 1
+    for i in eachindex(μ_sec)
+        μ_sec[i] = max(μ_sec[i], one(T))
+    end
 
     # ── intermediate + factor payments (column of IOData) ────────────────────
     # inter_share[j,i] = Z[j,i] / x[i]   (buyer i on supplier j)
@@ -137,9 +166,9 @@ function production_network(io::IOData{T};
     end
 
     if nests === :single
-        return _bf_build_single(io, inter, fac, β, θ_sec, σ, factor_names)
+        return _bf_build_single(io, inter, fac, β, θ_sec, σ, factor_names, μ_sec)
     else
-        return _bf_build_two(io, inter, fac, β, θ_sec, ε_sec, η_sec, σ, factor_names)
+        return _bf_build_two(io, inter, fac, β, θ_sec, ε_sec, η_sec, σ, factor_names, μ_sec)
     end
 end
 
@@ -216,9 +245,68 @@ function _bf_domar(Ω::SparseMatrixCSC{T,Int}) where {T}
     return λ
 end
 
+"""
+Revenue-based IO matrix from cost-based `Ω̃` and length-`M` producer markups.
+Producer row `i` (global node `i+1`) is scaled by `1/μ_i`; household unchanged;
+factor rows stay zero. Orientation: row (B&F).
+"""
+function _bf_revenue_omega(Ω̃::SparseMatrixCSC{T,Int}, μ::Vector{T},
+                           M::Int, F::Int) where {T}
+    length(μ) == M || throw(ArgumentError(
+        "_bf_revenue_omega: mu length $(length(μ)) ≠ M=$M"))
+    N = 1 + M + F
+    size(Ω̃) == (N, N) || throw(ArgumentError(
+        "_bf_revenue_omega: Omega size $(size(Ω̃)) ≠ ($N, $N)"))
+    # Scale producer rows; rebuild sparse
+    Ir = Int[]; Ic = Int[]; Iv = T[]
+    rows = rowvals(Ω̃)
+    vals = nonzeros(Ω̃)
+    for j in 1:N
+        for ptr in nzrange(Ω̃, j)
+            i = rows[ptr]
+            v = vals[ptr]
+            if 2 <= i <= M + 1
+                # producer row i → producer index i-1
+                v = v / μ[i - 1]
+            end
+            # household (i==1) and factors (i>M+1) unchanged (factors are zero)
+            if v != 0
+                push!(Ir, i); push!(Ic, j); push!(Iv, v)
+            end
+        end
+    end
+    return sparse(Ir, Ic, Iv, N, N)
+end
+
+"""Map length-`n` sectoral markups onto length-`M` producer nodes (outers only)."""
+function _bf_mu_producers(μ_sec::Vector{T}, outer_nodes::Vector{Int},
+                          M::Int) where {T}
+    μ = ones(T, M)
+    for (k, g) in enumerate(outer_nodes)
+        μ[g - 1] = μ_sec[k]   # global g → producer index g-1
+    end
+    return μ
+end
+
+function _bf_finish_network(io::IOData{T}, Ω::SparseMatrixCSC{T,Int},
+                            theta::Vector{T}, node_names::Vector{String},
+                            parent::Vector{Int}, n::Int, M::Int, F::Int,
+                            nests::Symbol, outer_nodes::Vector{Int},
+                            μ_sec::Vector{T}) where {T}
+    μ = _bf_mu_producers(μ_sec, outer_nodes, M)
+    λ_cost = _bf_domar(Ω)
+    Ω_rev = _bf_revenue_omega(Ω, μ, M, F)
+    λ_rev = _bf_domar(Ω_rev)
+    # Factor supplies clear at w=1, E=1: L_f = revenue-based factor Domar
+    factor_supplies = copy(λ_rev[M+2:M+1+F])
+    ProductionNetwork{T}(Ω, theta, λ_cost, λ_rev, μ, factor_supplies,
+                         node_names, parent, n, M, F, nests, outer_nodes, io)
+end
+
 function _bf_build_single(io::IOData{T}, inter::Matrix{T}, fac::Matrix{T},
                           β::Vector{T}, θ_sec::Vector{T}, σ::T,
-                          factor_names::Vector{String}) where {T}
+                          factor_names::Vector{String},
+                          μ_sec::Vector{T}) where {T}
     n = length(io.x)
     F = size(fac, 1)
     M = n
@@ -254,19 +342,15 @@ function _bf_build_single(io::IOData{T}, inter::Matrix{T}, fac::Matrix{T},
     append!(node_names, String.(io.sectors))
     append!(node_names, factor_names)
 
-    λ = _bf_domar(Ω)
-    Λ = λ[M+2:N]
-    # numerical guard: factor Domars should sum to 1
-    factor_supplies = copy(Λ)
-
-    ProductionNetwork{T}(Ω, theta, λ, factor_supplies, node_names, parent,
-                         n, M, F, :single, outer_nodes, io)
+    return _bf_finish_network(io, Ω, theta, node_names, parent, n, M, F,
+                              :single, outer_nodes, μ_sec)
 end
 
 function _bf_build_two(io::IOData{T}, inter::Matrix{T}, fac::Matrix{T},
                        β::Vector{T}, θ_sec::Vector{T}, ε_sec::Vector{T},
                        η_sec::Vector{T}, σ::T,
-                       factor_names::Vector{String}) where {T}
+                       factor_names::Vector{String},
+                       μ_sec::Vector{T}) where {T}
     n = length(io.x)
     F = size(fac, 1)
     M = 3n
@@ -345,9 +429,6 @@ function _bf_build_two(io::IOData{T}, inter::Matrix{T}, fac::Matrix{T},
     end
     append!(node_names, factor_names)
 
-    λ = _bf_domar(Ω)
-    factor_supplies = copy(λ[M+2:N])
-
-    ProductionNetwork{T}(Ω, theta, λ, factor_supplies, node_names, parent,
-                         n, M, F, :two, outer_nodes, io)
+    return _bf_finish_network(io, Ω, theta, node_names, parent, n, M, F,
+                              :two, outer_nodes, μ_sec)
 end

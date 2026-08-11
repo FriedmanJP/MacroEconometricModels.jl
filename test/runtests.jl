@@ -236,6 +236,7 @@ const TEST_GROUPS = [
         "io/test_io_bf_network.jl",
         "io/test_io_bf_equilibrium.jl",
         "io/test_io_bf_hessian.jl",
+        "io/test_io_bf_wedges.jl",
         "io/test_io_fetch.jl",
         "io/test_io_registry.jl",
         "io/test_io_sources.jl",
@@ -635,6 +636,7 @@ else
             include("io/test_io_bf_network.jl")
             include("io/test_io_bf_equilibrium.jl")
             include("io/test_io_bf_hessian.jl")
+            include("io/test_io_bf_wedges.jl")
             include("io/test_io_fetch.jl")
             include("io/test_io_registry.jl")
             include("io/test_io_sources.jl")

@@ -109,22 +109,71 @@ end
 """
     plot_result(net::ProductionNetwork; title="", save_path=nothing) -> PlotOutput
 
-Bar chart of base Domar weights on real-sector outer nodes.
+Bar chart of base Domar weights on real-sector outer nodes. With wedges, plots
+cost-based (`λ̃`) and revenue-based (`λ`) side by side.
 """
 function plot_result(net::ProductionNetwork; title::String="",
                      save_path::Union{String,Nothing}=nothing)
     id = _next_plot_id("io_bf_net")
     λ = [net.lambda[g] for g in net.outer_nodes]
+    λr = [net.lambda_rev[g] for g in net.outer_nodes]
     secs = net.io.sectors
-    rows = [Pair{String,String}["x" => _json(secs[i]), "Domar" => _json(λ[i])]
-            for i in 1:length(secs)]
-    data_json = _json_array_of_objects(rows)
-    series_json = "[" * _json_obj(Pair{String,String}[
-        "key" => _json("Domar"), "name" => _json("Domar λ̃"),
-        "color" => _json(_PLOT_COLORS[1])]) * "]"
+    has_wedges = any(m -> m > 1 + 1e-14, net.mu)
+    if has_wedges
+        rows = [Pair{String,String}["x" => _json(secs[i]),
+                                    "Cost-based λ̃" => _json(λ[i]),
+                                    "Revenue-based λ" => _json(λr[i])]
+                for i in 1:length(secs)]
+        data_json = _json_array_of_objects(rows)
+        series_json = "[" *
+            _json_obj(Pair{String,String}[
+                "key" => _json("Cost-based λ̃"), "name" => _json("Cost-based λ̃"),
+                "color" => _json(_PLOT_COLORS[1])]) * "," *
+            _json_obj(Pair{String,String}[
+                "key" => _json("Revenue-based λ"), "name" => _json("Revenue-based λ"),
+                "color" => _json(_PLOT_COLORS[2])]) * "]"
+    else
+        rows = [Pair{String,String}["x" => _json(secs[i]), "Domar" => _json(λ[i])]
+                for i in 1:length(secs)]
+        data_json = _json_array_of_objects(rows)
+        series_json = "[" * _json_obj(Pair{String,String}[
+            "key" => _json("Domar"), "name" => _json("Domar λ̃"),
+            "color" => _json(_PLOT_COLORS[1])]) * "]"
+    end
     js = _render_bar_js(id, data_json, series_json;
                         mode="grouped", xlabel="Sector", ylabel="Domar weight")
     ttl = isempty(title) ? "ProductionNetwork Domar weights ($(net.nests))" : title
+    panel = _PanelSpec(id, ttl, js)
+    p = _make_plot([panel]; title=ttl, ncols=1)
+    save_path !== nothing && save_plot(p, save_path)
+    p
+end
+
+"""
+    plot_result(w::BFWedgeDecomp; title="", save_path=nothing) -> PlotOutput
+
+Bar chart of cost-based vs revenue-based Domar weights from a wedge decomposition.
+"""
+function plot_result(w::BFWedgeDecomp; title::String="",
+                     save_path::Union{String,Nothing}=nothing)
+    id = _next_plot_id("io_bf_wedge")
+    rows = [Pair{String,String}["x" => _json(w.sectors[i]),
+                                "Cost-based λ̃" => _json(w.lambda_cost[i]),
+                                "Revenue-based λ" => _json(w.lambda_rev[i])]
+            for i in 1:length(w.sectors)]
+    data_json = _json_array_of_objects(rows)
+    series_json = "[" *
+        _json_obj(Pair{String,String}[
+            "key" => _json("Cost-based λ̃"), "name" => _json("Cost-based λ̃"),
+            "color" => _json(_PLOT_COLORS[1])]) * "," *
+        _json_obj(Pair{String,String}[
+            "key" => _json("Revenue-based λ"), "name" => _json("Revenue-based λ"),
+            "color" => _json(_PLOT_COLORS[2])]) * "]"
+    js = _render_bar_js(id, data_json, series_json;
+                        mode="grouped", xlabel="Sector", ylabel="Domar weight")
+    ttl = isempty(title) ?
+        "B&F 2020 Domar: tech=$(_fmt(w.technology)), AE=$(_fmt(w.allocative))" :
+        title
     panel = _PanelSpec(id, ttl, js)
     p = _make_plot([panel]; title=ttl, ncols=1)
     save_path !== nothing && save_plot(p, save_path)

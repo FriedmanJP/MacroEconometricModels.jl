@@ -1,12 +1,13 @@
 # [Baqaee & Farhi (2019) Nonlinear Input-Output](@id io_baqaee_farhi_page)
 
-Hulten's (1978) theorem says that, to first order, the effect of a sector's productivity on aggregate output is its sales share and nothing else — the shape of the production network is irrelevant. Baqaee & Farhi (2019) show that this is an artefact of the first order: as soon as shocks are large enough for second-order terms to matter, the network reasserts itself through the elasticities of substitution that govern how inputs are reallocated. This page takes an [`IOData`](@ref) table from first-order Domar weights through the full standard-form nested-CES economy of Baqaee & Farhi — exact nonlinear counterfactuals with endogenous prices, a generalized multi-factor Hessian, and factor-price incidence. See [Input-Output Analysis](@ref io_page) for the container and [Classical Analysis](@ref io_classical_page) for the linear multipliers this decomposition generalizes.
+Hulten's (1978) theorem says that, to first order, the effect of a sector's productivity on aggregate output is its sales share and nothing else — the shape of the production network is irrelevant. Baqaee & Farhi (2019) show that this is an artefact of the first order: as soon as shocks are large enough for second-order terms to matter, the network reasserts itself through the elasticities of substitution that govern how inputs are reallocated. Baqaee & Farhi (2020) extend the framework to *inefficient* economies with markups and wedges, separating pure technology effects from changes in allocative efficiency. This page takes an [`IOData`](@ref) table from first-order Domar weights through the full standard-form nested-CES economy — exact nonlinear counterfactuals with endogenous prices, a generalized multi-factor Hessian, factor-price incidence, and wedge decompositions. See [Input-Output Analysis](@ref io_page) for the container and [Classical Analysis](@ref io_classical_page) for the linear multipliers this decomposition generalizes.
 
 - **First order**: Domar weights and Hulten's theorem, exact under Cobb-Douglas technology
 - **Standard form**: nested CES production networks with heterogeneous elasticities and multiple primary factors
 - **Exact counterfactuals**: nonlinear equilibrium prices and quantities for arbitrary (large) productivity and factor-supply shocks
 - **Second order**: the full multi-factor "beyond Hulten" Hessian, consistent with the exact solver by construction
 - **Incidence**: factor-price, goods-price, and Domar-share responses to productivity shocks
+- **Wedges**: cost-based vs revenue-based Domar weights, markups ``\mu \ge 1``, and the B&F (2020) Theorem 1 technology / allocative-efficiency decomposition
 
 ```@setup io_baqaee_farhi
 using MacroEconometricModels
@@ -48,6 +49,18 @@ eq = bf_equilibrium(net; dlogA=[-0.10, 0.0])
 ```@example io_baqaee_farhi
 sc = bf_shock_curve(net, 1; range=(-0.3, 0.3), points=7)
 report(sc)
+```
+
+**Recipe 6: Markups and Theorem 1 decomposition**
+
+```@example io_baqaee_farhi
+net_μ = production_network(io; theta=0.5, sigma=0.9, mu=[1.2, 1.1])
+(cost_based_domar(net_μ), revenue_based_domar(net_μ))
+```
+
+```@example io_baqaee_farhi
+w = bf_wedge_decomp(net_μ; dlogA=[0.05, 0.0], dlogmu=[0.0, 0.02])
+report(w)
 ```
 
 ```julia
@@ -339,6 +352,76 @@ plot_result(local_bf)   # Hulten bar chart
 
 ---
 
+## Wedges and Allocative Efficiency
+
+Hulten's theorem is a *macro-envelope* result: it requires the initial equilibrium to be efficient. With markups or other wedges the envelope fails, and a productivity shock can change output both by shifting the production frontier and by reallocating resources across distorted producers (Baqaee & Farhi 2020).
+
+### Cost-based vs revenue-based Domar weights
+
+Pass sectoral markups `mu ≥ 1` to [`production_network`](@ref). The **cost-share** matrix ``\tilde\Omega`` is unchanged (expenditure as a share of costs); **revenue** shares are ``\Omega_{ij} = \tilde\Omega_{ij}/\mu_i`` on producer rows. That yields two Domar vectors:
+
+| Object | Definition | Role |
+|--------|------------|------|
+| Cost-based ``\tilde\lambda`` | ``e_1'(I - \tilde\Omega)^{-1}`` | Weights the pure technology effect |
+| Revenue-based ``\lambda`` | ``e_1'(I - \Omega)^{-1}`` | Sales / GDP; factor entries are income shares |
+
+When ``\mu \equiv 1`` the two coincide. When ``\mu > 1``, revenue-based factor shares sum to less than one (the residual is the profit share of GDP), and profits are rebated lump-sum to the household so that nominal GDP ``E = 1`` still.
+
+```@example io_baqaee_farhi
+net_w = production_network(io; mu=[1.25, 1.10])
+report(net_w)
+```
+
+```@example io_baqaee_farhi
+(sum(net_w.lambda[net_w.M+2:end]),          # cost-based Λ̃ sums to 1
+ sum(net_w.lambda_rev[net_w.M+2:end]))      # revenue-based Λ < 1
+```
+
+### Exact equilibrium with wedges
+
+[`bf_equilibrium`](@ref) prices producers at markup over marginal cost, ``p_i = \mu_i c_i``, and clears factor markets with GDP equal to factor income plus profits. Markup shocks enter as `dlogmu` (length ``n``, mapped to outer real-sector nodes; fictitious nest nodes stay competitive).
+
+```@example io_baqaee_farhi
+eq_w = bf_equilibrium(net_w; dlogA=[0.05, -0.02], dlogmu=[0.0, 0.03])
+(eq_w.dlogY, eq_w.technology, eq_w.allocative, eq_w.profit_share, eq_w.converged)
+```
+
+### Theorem 1 decomposition
+
+Baqaee & Farhi (2020, Theorem 1, eq. 4) decompose the first-order change in aggregate output as
+
+```math
+d\log Y = \underbrace{\tilde\lambda'\, d\log A}_{\Delta\text{Technology}}
+\;-\;
+\underbrace{\tilde\lambda'\, d\log\mu \;+\; \tilde\Lambda'\, d\log\Lambda}_{\Delta\text{Allocative efficiency}}.
+```
+
+- **Technology**: holding the allocation of resources fixed, a productivity shock raises output in proportion to the producer's *cost-based* Domar weight.
+- **Allocative efficiency**: equilibrium reallocation of resources. For pure productivity shocks the sufficient statistic is ``-\tilde\Lambda' d\log\Lambda`` (a weighted change in revenue factor shares). Markup shocks add the direct term ``-\tilde\lambda' d\log\mu``.
+
+[`bf_wedge_decomp`](@ref) solves the exact equilibrium and returns a [`BFWedgeDecomp`](@ref) with both pieces. For infinitesimal shocks, `dlogY ≈ technology + allocative`; for large shocks the split remains the first-order formula while `dlogY` is exact.
+
+```@example io_baqaee_farhi
+decomp = bf_wedge_decomp(net_w; dlogA=[0.05, 0.0])
+report(decomp)
+```
+
+```@example io_baqaee_farhi
+# Pure markup shock: technology term is zero; all of the FO effect is allocative
+decomp_μ = bf_wedge_decomp(net_w; dlogmu=[0.02, -0.01])
+(decomp_μ.technology, decomp_μ.allocative, decomp_μ.dlogY)
+```
+
+```julia
+plot_result(net_w)    # cost vs revenue Domar bars
+plot_result(decomp)   # same Domar comparison from the decomp object
+```
+
+!!! note "μ ≡ 1 recovers Hulten"
+    With `mu=1` (the default) the efficient solver is recovered bit-for-bit: cost and revenue Domar coincide, `profit_share = 0`, and the allocative term is zero to first order (Corollary 1 of B&F 2020).
+
+---
+
 ## Network Centralities
 
 Alongside the two orders, the legacy decomposition reports three summaries of where each sector sits in the production network (Acemoglu et al. 2012; Carvalho & Tahbaz-Salehi 2019).
@@ -416,6 +499,10 @@ Hulten prices a 20% agricultural loss at about 9.8% of aggregate output. The sec
 
 11. **Large MRIO Hessians.** Full ``H`` is ``n^2``. Default `hessian=:auto` forms it only for ``n \le 500``; above that use `hessian=:none` and `bf_quadratic(net, v)`.
 
+12. **Cost-based vs revenue-based Domar under wedges.** With `mu > 1`, use `cost_based_domar` (or `net.lambda` on outer nodes) for the pure technology weight and `revenue_based_domar` for sales/GDP. Confusing the two mis-states Hulten-style counterfactuals in inefficient economies.
+
+13. **Theorem 1 is first-order.** `technology` and `allocative` on [`BFEquilibrium`](@ref) / [`BFWedgeDecomp`](@ref) are the B&F (2020) first-order split; `dlogY` is the exact nonlinear change. They add up only for small shocks.
+
 ---
 
 ## API Reference
@@ -433,6 +520,10 @@ bf_elasticities
 BFElasticities
 BFLocal
 bf_quadratic
+bf_wedge_decomp
+BFWedgeDecomp
+cost_based_domar
+revenue_based_domar
 ```
 
 ---

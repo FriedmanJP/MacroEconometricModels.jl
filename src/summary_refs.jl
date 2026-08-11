@@ -1796,11 +1796,12 @@ const _TYPE_REFS = Dict{Symbol, Vector{Symbol}}(
     :ExtractionResult => [:miller_blair_2009],
     :FootprintResult => [:leontief1936, :miller_blair_2009],
     :BaqaeeFarhiResult => [:baqaee_farhi_2019, :miller_blair_2009],
-    :ProductionNetwork => [:baqaee_farhi_2019, :atalay_2017, :miller_blair_2009],
-    :BFEquilibrium => [:baqaee_farhi_2019, :atalay_2017],
+    :ProductionNetwork => [:baqaee_farhi_2019, :baqaee_farhi_2020, :atalay_2017, :miller_blair_2009],
+    :BFEquilibrium => [:baqaee_farhi_2019, :baqaee_farhi_2020, :atalay_2017],
     :BFLocal => [:baqaee_farhi_2019, :atalay_2017],
     :BFElasticities => [:baqaee_farhi_2019],
     :BFShockCurve => [:baqaee_farhi_2019],
+    :BFWedgeDecomp => [:baqaee_farhi_2020, :baqaee_farhi_2019],
     :io => [:leontief1936, :ghosh1958, :miller_blair_2009, :baqaee_farhi_2019],
     # VAR
     :VARModel => [:sims1980, :lutkepohl2005],
@@ -2459,6 +2460,7 @@ refs(io::IO, ::BFEquilibrium; kw...) = refs(io, _TYPE_REFS[:BFEquilibrium]; kw..
 refs(io::IO, ::BFLocal; kw...) = refs(io, _TYPE_REFS[:BFLocal]; kw...)
 refs(io::IO, ::BFElasticities; kw...) = refs(io, _TYPE_REFS[:BFElasticities]; kw...)
 refs(io::IO, ::BFShockCurve; kw...) = refs(io, _TYPE_REFS[:BFShockCurve]; kw...)
+refs(io::IO, ::BFWedgeDecomp; kw...) = refs(io, _TYPE_REFS[:BFWedgeDecomp]; kw...)
 
 # LP types
 refs(io::IO, ::LPModel; kw...) = refs(io, _TYPE_REFS[:LPModel]; kw...)

@@ -60,17 +60,35 @@ function Base.show(io::IO, bf::BaqaeeFarhiResult)
 end
 
 function Base.show(io::IO, net::ProductionNetwork)
+    has_wedges = any(m -> m > 1 + 1e-14, net.mu)
     println(io, "ProductionNetwork ($(net.nests)): n=$(net.n) sectors, ",
-            "M=$(net.M) producers, F=$(net.F) factors")
+            "M=$(net.M) producers, F=$(net.F) factors",
+            has_wedges ? ", wedges μ" : "")
     nshow = min(6, net.n)
     λ_out = [net.lambda[g] for g in net.outer_nodes]
-    data = hcat(net.io.sectors[1:nshow], _fmt.(λ_out[1:nshow]))
-    _pretty_table(io, data;
-        title="Base Domar weights (real sectors)",
-        column_labels=["Sector", "λ̃"], alignment=[:l, :r])
+    λ_rev = [net.lambda_rev[g] for g in net.outer_nodes]
+    μ_out = [net.mu[g - 1] for g in net.outer_nodes]
+    if has_wedges
+        data = hcat(net.io.sectors[1:nshow], _fmt.(λ_out[1:nshow]),
+                    _fmt.(λ_rev[1:nshow]), _fmt.(μ_out[1:nshow]))
+        _pretty_table(io, data;
+            title="Base Domar weights (real sectors)",
+            column_labels=["Sector", "λ̃ (cost)", "λ (rev)", "μ"],
+            alignment=[:l, :r, :r, :r])
+    else
+        data = hcat(net.io.sectors[1:nshow], _fmt.(λ_out[1:nshow]))
+        _pretty_table(io, data;
+            title="Base Domar weights (real sectors)",
+            column_labels=["Sector", "λ̃"], alignment=[:l, :r])
+    end
     Λ = net.lambda[net.M+2:net.M+1+net.F]
-    println(io, "  factor shares Λ̃: ", _fmt.(Λ),
+    Λr = net.lambda_rev[net.M+2:net.M+1+net.F]
+    println(io, "  factor shares Λ̃ (cost): ", _fmt.(Λ),
             "  (sum = $(_fmt(sum(Λ))))")
+    if has_wedges
+        println(io, "  factor shares Λ (rev):  ", _fmt.(Λr),
+                "  (sum = $(_fmt(sum(Λr))))")
+    end
     println(io, "  λ̃₁ (household) = $(_fmt(net.lambda[1]))")
 end
 
@@ -78,6 +96,9 @@ function Base.show(io::IO, eq::BFEquilibrium)
     status = eq.converged ? "converged" : "NOT CONVERGED"
     println(io, "BFEquilibrium [$status]  dlogY = $(_fmt(eq.dlogY))  ",
             "hulten = $(_fmt(eq.hulten))")
+    println(io, "  technology = $(_fmt(eq.technology))  ",
+            "allocative = $(_fmt(eq.allocative))  ",
+            "profit share = $(_fmt(eq.profit_share))")
     println(io, "  iterations=$(eq.iterations)  residual=$(_fmt(eq.residual))")
     nshow = min(6, length(eq.sectors))
     data = hcat(eq.sectors[1:nshow], _fmt.(eq.dlog_p[1:nshow]),
@@ -87,7 +108,22 @@ function Base.show(io::IO, eq::BFEquilibrium)
         column_labels=["Sector", "dlog p", "dlog x"],
         alignment=[:l, :r, :r])
     println(io, "  factor wages w: ", _fmt.(eq.w))
-    println(io, "  factor shares Λ: ", _fmt.(eq.Lambda))
+    println(io, "  factor shares Λ (rev): ", _fmt.(eq.Lambda))
+end
+
+function Base.show(io::IO, w::BFWedgeDecomp)
+    println(io, "BFWedgeDecomp (B&F 2020 Theorem 1)")
+    println(io, "  dlogY       = $(_fmt(w.dlogY))")
+    println(io, "  technology  = $(_fmt(w.technology))")
+    println(io, "  allocative  = $(_fmt(w.allocative))  ",
+            "(μ: $(_fmt(w.allocative_mu)), factors: $(_fmt(w.allocative_factor)))")
+    nshow = min(6, length(w.sectors))
+    data = hcat(w.sectors[1:nshow], _fmt.(w.lambda_cost[1:nshow]),
+                _fmt.(w.lambda_rev[1:nshow]), _fmt.(w.mu[1:nshow]))
+    _pretty_table(io, data;
+        title="Cost vs revenue Domar & markups",
+        column_labels=["Sector", "λ̃ (cost)", "λ (rev)", "μ"],
+        alignment=[:l, :r, :r, :r])
 end
 
 function Base.show(io::IO, bf::BFLocal)
