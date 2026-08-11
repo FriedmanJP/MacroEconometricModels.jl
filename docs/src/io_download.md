@@ -6,7 +6,7 @@ The built-in two-sector table is enough to learn the methods; real work needs a 
 - **Downloaders**: `download_io` dispatches by source symbol; `download_oecd`, `download_wiod`, `download_exiobase3`, `download_eora26`, and `download_gloria` are the per-source entry points
 - **Integrity**: every fetched archive is checked against `IO_CHECKSUMS`, with `io_file_digest` to populate it
 - **Provenance**: each downloader returns an `IOMetaData` log recording every URL it fetched and when
-- **Parsing**: `parse_io` reads CSV and TSV in-core and dispatches ZIP and XLSX to package extensions
+- **Parsing**: `parse_io` reads CSV and TSV in-core and dispatches ZIP and XLSX to package extensions; `parse_icio` and `parse_wiod` are labeled MRIO recipes for OECD ICIO and WIOD 2013
 
 ```@setup io_download
 using MacroEconometricModels
@@ -234,6 +234,61 @@ Without the package loaded, `parse_io` raises an actionable error naming the pac
 
 ---
 
+## Source-Specific Recipes
+
+`parse_io` is deliberately generic: it needs `n_sectors` and does not recover region or final-demand labels. Two recipes wrap the OECD ICIO and WIOD 2013 layouts so a downloaded archive becomes a fully labeled multi-region [`IOData`](@ref) ready for [`export_decomposition`](@ref) and friends.
+
+### OECD ICIO — `parse_icio`
+
+```julia
+using ZipFile   # only needed for .zip archives
+
+# Single-year CSV (any OECD ICIO release: 2016 / 2018 / 2021 / 2023 label style)
+io = parse_icio("ICIO2023_2018.csv"; year=2018)
+
+# Multi-year zip: year= selects the member (or pass member= explicitly)
+io = parse_icio("ICIO_v2023_2016-2020.zip"; year=2018)
+
+# CN1… / MX1… sub-national blocks are aggregated into CHN / MEX by default
+io_raw = parse_icio("ICIO2016_2010.csv"; aggregate_cn_mx=false)
+```
+
+The recipe reads the `REGION_SECTOR` row/column index, splits final-demand columns matching `HFCE|NPISH|GGFC|GFCF|INVNT|…`, takes value-added rows (`VA`, `TLS`, `VALU*`, `TAX*`), and drops `OUT`/`TOTAL`/`OUTPUT` margins. Sector labels on the result are the full `REGION_SECTOR` product so
+`length(io.regions) · (length(io.x) ÷ length(io.regions)) == length(io.x)`.
+
+### WIOD 2013 — `parse_wiod`
+
+```julia
+using XLSX
+
+io = parse_wiod("wiot09_row_apr12.xlsx")          # year inferred from the filename
+io = parse_wiod("wiod_folder"; year=2009)         # picks wiot09*.xlsx in the folder
+```
+
+WIOT workbooks carry a four-row / four-column header (ISIC code, name, region, c-code). The interindustry block ends at the last column/row whose c-code equals `last_interind_code` (default `"c35"` for the official 35-sector tables). Factor-input rows below that block become `va` categories; the rightmost total column is discarded. Pass `names=:full` or `names=:c_codes` to change the sector token used inside the `REGION_*` product labels.
+
+```@example io_download
+# Synthetic ICIO-style CSV (same layout as a real OECD release, tiny)
+icio_csv = joinpath(folder, "ICIO_toy_2010.csv")
+write(icio_csv, """
+,USA_S1,USA_S2,CHN_S1,CHN_S2,USA_HFCE,CHN_HFCE,OUT
+USA_S1,10,5,1,0,20,2,38
+USA_S2,3,15,0,1,25,1,45
+CHN_S1,0,1,12,4,1,30,48
+CHN_S2,1,0,3,10,2,20,36
+VA,24,24,32,21,0,0,101
+OUTPUT,38,45,48,36,48,53,268
+""")
+icio_mrio = parse_icio(icio_csv; year=2010, check=true)
+(length(icio_mrio.regions), length(icio_mrio.x), icio_mrio.regions)
+```
+
+```@example io_download
+region_block(icio_mrio, "USA", "CHN")
+```
+
+---
+
 ## Complete Example
 
 This example runs the acquisition pipeline end to end against a local fixture: fetch, register a digest, re-fetch under verification, inspect the provenance log, parse, and analyse.
@@ -295,6 +350,8 @@ The pipeline separates three concerns that are easy to conflate. Fetching produc
 
 9. **Scraped sources depend on the publisher's page.** WIOD and EXIOBASE URLs come from a regular expression matched against a live HTML page. A page redesign yields an empty `files` list rather than an error, so check `length(meta.files)` before assuming a download succeeded.
 
+10. **`parse_icio` / `parse_wiod` are layout-specific.** They expect the OECD ICIO `REGION_SECTOR` index and the WIOD 2013 four-row header, respectively. A hand-trimmed numeric block still goes through `parse_io`. For reduced WIOT fixtures, pass `last_interind_code=` (default `"c35"`).
+
 ---
 
 ## API Reference
@@ -309,6 +366,8 @@ download_eora26
 download_gloria
 io_file_digest
 parse_io
+parse_icio
+parse_wiod
 IOMetaData
 ```
 

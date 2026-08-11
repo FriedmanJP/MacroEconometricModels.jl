@@ -258,7 +258,7 @@ Pkg.add("MacroEconometricModels")
 - **Hypothetical extraction** - Backward/forward/total linkage extraction quantifying a sector's importance
 - **Environmental extensions** - Satellite accounts via `add_extension!`; direct/total intensities, emission multipliers, and consumption-based footprints
 - **Baqaee & Farhi (2019)** - Nonlinear production-network model: Domar weights (Hulten first-order), second-order Hessian term, Cobb-Douglas (θ=σ=1) special case
-- **MRIO downloaders** - pymrio-style `download_io(:oecd/:wiod/:exiobase3/:eora26/:gloria)` on the `Downloads` stdlib + URL registry; `parse_io` reads CSV/TSV in-core and `.zip`/`.xlsx` via `ZipFile`/`XLSX` package extensions
+- **MRIO downloaders** - pymrio-style `download_io(:oecd/:wiod/:exiobase3/:eora26/:gloria)` on the `Downloads` stdlib + URL registry; `parse_io` reads CSV/TSV in-core and `.zip`/`.xlsx` via `ZipFile`/`XLSX` package extensions; `parse_icio` / `parse_wiod` labeled MRIO recipes
 
 ### GMM
 - **Generalized Method of Moments** - One-step, two-step, and iterated; Hansen J-test

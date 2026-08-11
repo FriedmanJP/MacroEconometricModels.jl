@@ -247,6 +247,7 @@ const TEST_GROUPS = [
         "io/test_io_sources.jl",
         "io/test_io_parse.jl",
         "io/test_io_ext_parse.jl",
+        "io/test_io_source_parse.jl",
         "io/test_io_show.jl",
         "io/test_io_plotting.jl",
         "io/test_io_refs.jl",
@@ -652,6 +653,7 @@ else
             include("io/test_io_sources.jl")
             include("io/test_io_parse.jl")
             include("io/test_io_ext_parse.jl")
+            include("io/test_io_source_parse.jl")
             include("io/test_io_show.jl")
             include("io/test_io_plotting.jl")
             include("io/test_io_refs.jl")

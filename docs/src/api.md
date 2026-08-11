@@ -856,6 +856,8 @@ Downloaders and parsers for the public multi-region input-output databases. See 
 | `list_io_sources()` | Available databases and their required credentials |
 | `download_io(source; storage_folder, years)` | Download WIOD, OECD ICIO, EXIOBASE3, Eora26, or GLORIA |
 | `parse_io(path; source, year)` | Parse a downloaded table into `IOData` |
+| `parse_icio(path; year, …)` | OECD ICIO recipe → labeled multi-region `IOData` |
+| `parse_wiod(path; year, …)` | WIOD 2013 WIOT recipe → labeled multi-region `IOData` |
 | `io_file_digest(path)` | Content hash of a downloaded file |
 
 D3.js visualizations for every model family, plus backend and file-export helpers. See [Plotting](@ref plotting_page) for the gallery.

@@ -695,6 +695,7 @@ export bf_elasticities, bf_quadratic, bf_shock_curve
 export bf_wedge_decomp, cost_based_domar, revenue_based_domar
 export list_io_sources, download_io, download_oecd, download_wiod
 export download_exiobase3, download_eora26, download_gloria, parse_io
+export parse_icio, parse_wiod
 export io_file_digest
 
 # Abstract types
