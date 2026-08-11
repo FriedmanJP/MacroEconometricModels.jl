@@ -76,10 +76,27 @@ function Base.show(io::IO, r::NetworkStatsResult)
 end
 
 function Base.show(io::IO, r::SDAResult)
-    println(io, "Structural Decomposition Analysis ($(r.method))")
-    for k in sort(collect(keys(r.effects)))
+    on_str = r.on isa Symbol ? String(r.on) : string(r.on)
+    println(io, "Structural Decomposition Analysis ($(r.method); on=$(on_str))")
+    println(io, "  factors: ", join(string.(r.factors), ", "))
+    for k in r.factors
+        haskey(r.effects, k) || continue
         println(io, "  $(k) effect: ", _fmt.(r.effects[k]))
     end
+    # any extra keys not in factors (legacy safety)
+    for k in sort(collect(keys(r.effects)))
+        k in r.factors && continue
+        println(io, "  $(k) effect: ", _fmt.(r.effects[k]))
+    end
+    println(io, "  residual: ", _fmt.(r.residual))
+end
+
+function Base.show(io::IO, r::RASResult)
+    println(io, "RASResult ($(r.method); iters=$(r.iterations), ",
+            "converged=$(r.converged))")
+    println(io, "  size: $(size(r.X, 1))×$(size(r.X, 2))")
+    println(io, "  max |row residual|: $(_fmt(maximum(abs, r.residual_u)))")
+    println(io, "  max |col residual|: $(_fmt(maximum(abs, r.residual_v)))")
 end
 
 function Base.show(io::IO, bf::BaqaeeFarhiResult)

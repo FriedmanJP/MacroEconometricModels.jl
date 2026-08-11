@@ -13,6 +13,7 @@ using Test, MacroEconometricModels
 
     # every IO result type resolves references
     for obj in (leontief(io), ghosh(io), multipliers(io), sda(io, io),
+                ras([2.0 1.0; 1.0 2.0], [4.0, 5.0], [3.0, 6.0]),
                 hypothetical_extraction(io, 1),
                 price_model(io; dva=[0.1, 0.0]),
                 impact(io, [1.0, 0.0]),

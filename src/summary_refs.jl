@@ -98,6 +98,27 @@ const _REFERENCES = Dict{Symbol, _RefEntry}(
         title="Structural Decomposition Techniques: Sense and Sensitivity",
         journal="Economic Systems Research", volume="10", issue="4", pages="307--324",
         doi="10.1080/09535319800000023", isbn="", publisher="", entry_type=:article),
+    :junius_oosterhaven2003 => (key=:junius_oosterhaven2003,
+        authors="Junius, Thomas and Oosterhaven, Jan", year=2003,
+        title="The Solution of Updating or Regionalizing a Matrix with both Positive and Negative Entries",
+        journal="Economic Systems Research", volume="15", issue="1", pages="87--96",
+        doi="10.1080/0953531032000056954", isbn="", publisher="", entry_type=:article),
+    :lenzen_wood_gallego2007 => (key=:lenzen_wood_gallego2007,
+        authors="Lenzen, Manfred and Wood, Richard and Gallego, Blanca", year=2007,
+        title="Some Comments on the GRAS Method",
+        journal="Economic Systems Research", volume="19", issue="4", pages="461--465",
+        doi="10.1080/09535310701698613", isbn="", publisher="", entry_type=:article),
+    :temurshoev_miller_bouwmeester2013 => (key=:temurshoev_miller_bouwmeester2013,
+        authors="Temurshoev, Umed and Miller, Ronald E. and Bouwmeester, Maaike C.", year=2013,
+        title="A Note on the GRAS Method",
+        journal="Economic Systems Research", volume="25", issue="3", pages="361--367",
+        doi="10.1080/09535314.2012.746645", isbn="", publisher="", entry_type=:article),
+    :bacharach1970 => (key=:bacharach1970,
+        authors="Bacharach, Michael", year=1970,
+        title="Biproportional Matrices and Input-Output Change",
+        journal="", volume="", issue="", pages="",
+        doi="", isbn="978-0-521-07942-6",
+        publisher="Cambridge University Press", entry_type=:book),
     :miller_blair_2009 => (key=:miller_blair_2009,
         authors="Miller, Ronald E. and Blair, Peter D.", year=2009,
         title="Input-Output Analysis: Foundations and Extensions",
@@ -1823,6 +1844,8 @@ const _TYPE_REFS = Dict{Symbol, Vector{Symbol}}(
     :IOMultipliers => [:miller_blair_2009],
     :LinkageResult => [:rasmussen1956, :hirschman1958, :miller_blair_2009],
     :SDAResult => [:dietzenbacher_los1998, :miller_blair_2009],
+    :RASResult => [:junius_oosterhaven2003, :lenzen_wood_gallego2007,
+                   :temurshoev_miller_bouwmeester2013, :bacharach1970, :miller_blair_2009],
     :ExtractionResult => [:dietzenbacher_lahr2013, :miller_blair_2009],
     :PriceModelResult => [:miller_blair_2009, :oosterhaven1988],
     :ImpactResult => [:miller_blair_2009],
@@ -2488,7 +2511,9 @@ refs(io::IO, ::GhoshModel; kw...) = refs(io, _TYPE_REFS[:GhoshModel]; kw...)
 refs(io::IO, ::IOMultipliers; kw...) = refs(io, _TYPE_REFS[:IOMultipliers]; kw...)
 refs(io::IO, ::LinkageResult; kw...) = refs(io, _TYPE_REFS[:LinkageResult]; kw...)
 refs(io::IO, ::SDAResult; kw...) = refs(io, _TYPE_REFS[:SDAResult]; kw...)
+refs(io::IO, ::RASResult; kw...) = refs(io, _TYPE_REFS[:RASResult]; kw...)
 refs(io::IO, ::ExtractionResult; kw...) = refs(io, _TYPE_REFS[:ExtractionResult]; kw...)
+
 refs(io::IO, ::PriceModelResult; kw...) = refs(io, _TYPE_REFS[:PriceModelResult]; kw...)
 refs(io::IO, ::ImpactResult; kw...) = refs(io, _TYPE_REFS[:ImpactResult]; kw...)
 refs(io::IO, ::NetworkStatsResult; kw...) = refs(io, _TYPE_REFS[:NetworkStatsResult]; kw...)

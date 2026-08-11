@@ -7,7 +7,9 @@ using Test, MacroEconometricModels
                price_model(io; dva=[0.1, 0.0]),
                impact(io, [1.0, 0.0]),
                network_stats(io),
-               baqaee_farhi(io), footprint(io, "CO2")]
+               baqaee_farhi(io), footprint(io, "CO2"),
+               ras([2.0 1.0; 1.0 2.0], [4.0, 5.0], [3.0, 6.0])]
+
     for obj in objs
         s = sprint(show, obj)
         @test !isempty(s)

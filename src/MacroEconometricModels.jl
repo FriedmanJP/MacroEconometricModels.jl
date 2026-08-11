@@ -113,7 +113,9 @@ include("io/coefficients.jl")
 include("io/multipliers.jl")
 include("io/linkages.jl")
 include("io/sda.jl")
+include("io/ras.jl")
 include("io/extraction.jl")
+
 include("io/price.jl")
 include("io/impact.jl")
 include("io/network.jl")
@@ -673,11 +675,13 @@ include("plotting/counterfactual.jl")  # CF-22 (#402): policy-counterfactual res
 export IOData, IOExtension, IOMetaData
 export technical_coefficients, leontief_inverse, allocation_coefficients, ghosh_inverse
 export leontief, ghosh, multipliers, linkages, rasmussen, key_sectors
-export sda, hypothetical_extraction
+export sda, SDAResult, hypothetical_extraction
+export ras, gras, balance, RASResult
 export price_model, PriceModelResult
 export impact, ImpactResult
 export network_stats, NetworkStatsResult
 export ExtractionResult
+
 export add_extension!, intensities, emission_multipliers, footprint
 export aggregate, region_block, region_indices, bilateral_trade, gross_exports
 export vertical_specialization, VerticalSpecialization

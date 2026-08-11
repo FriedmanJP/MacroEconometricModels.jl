@@ -35,6 +35,7 @@ One additional unit of final demand for agricultural output raises gross output 
 | Which sectors generate the largest output, income, or job effects? | `multipliers` | [Classical Analysis](@ref io_classical_page) |
 | Which sectors are key sectors? | `linkages`, `key_sectors` | [Classical Analysis](@ref io_classical_page) |
 | What drove the change in output between two years? | `sda` | [Classical Analysis](@ref io_classical_page) |
+| How do I rebalance a table to new margins? | `ras`, `gras`, `balance` | [Classical Analysis](@ref io_classical_page) |
 | How much of the economy depends on one sector? | `hypothetical_extraction` | [Classical Analysis](@ref io_classical_page) |
 | Who supplies inputs to whom, in value terms? | `ghosh`, `allocation_coefficients` | [Classical Analysis](@ref io_classical_page) |
 | How much CO``_2`` is embodied in final demand? | `footprint` | [Environmental Extensions](@ref io_environmental_page) |

@@ -5,7 +5,8 @@ Classical input-output analysis answers the question that Leontief (1936) posed:
 - **Coefficients and inverses**: technical coefficients ``A``, the Leontief inverse ``L``, allocation coefficients ``B``, and the Ghosh inverse ``G``
 - **Multipliers**: output, income, and employment multipliers as Type I (open) or Type II (closed with respect to households)
 - **Linkages**: backward and forward linkages, Rasmussen dispersion indices, and the key-sector classification
-- **Decomposition**: additive and multiplicative structural decomposition of output change between two tables
+- **Decomposition**: additive n-factor and multiplicative two-factor structural decomposition (output and emission SDA)
+- **Balancing**: RAS / GRAS biproportional update and `balance` repair of intermediate flows
 - **Extraction**: complete, backward, forward, and partial hypothetical extraction (Dietzenbacher & Lahr 2013)
 - **Price model**: Leontief cost-push dual ``\Delta p = (I - A')^{-1}\Delta v``
 - **Impact scenarios**: final-demand shocks through ``L``, with Type II and mixed-model options
@@ -313,7 +314,7 @@ plot_result(lk)
 
 ## Structural Decomposition Analysis
 
-Output changes between two tables for two reasons: technology changes, so each unit of final demand needs a different bundle of inputs, and final demand itself changes. **Structural decomposition analysis** splits the observed change into those two parts. Because the two effects interact, the split depends on which is evaluated at which period's values; Dietzenbacher & Los (1998) show that the average of the two polar orderings is the natural choice, and it is exact.
+Output changes between two tables for two reasons: technology changes, so each unit of final demand needs a different bundle of inputs, and final demand itself changes. **Structural decomposition analysis** splits the observed change into those two parts. Because the two effects interact, the split depends on which is evaluated at which period's values; Dietzenbacher & Los (1998) show that the average of the two polar orderings is the natural choice, and it is exact for any number of determinants.
 
 ```math
 \Delta x = L^1 y^1 - L^0 y^0
@@ -338,9 +339,31 @@ decomp.total
 
 Agricultural gross output *falls* by 10 units between the two tables even though final demand for every product rose 20 percent. The decomposition explains why: the final-demand effect adds 182.5 units, but the technology effect removes 192.5, because manufacturers cut their agricultural input from 500 to 420 and no longer need the extra farm output. Manufacturing gains 340 units on a much smaller technology drag of 55. Without the decomposition the two forces are invisible in the 990-versus-1000 headline.
 
+### n-Factor Decompositions
+
+The same two-polar average extends to any ordered list of determinants. Split final demand into a scalar level and a composition vector, ``y = g\,m`` with ``g = \mathbf{1}'y`` and ``m = y/g``:
+
+```@example io_classical
+sda(io, io_2010; factors=[:technology, :fd_level, :fd_mix])
+```
+
+Because the 20 percent demand expansion is proportional across products, the mix effect is zero and the entire final-demand contribution is attributed to `:fd_level`. With multi-column final demand, add `:fd_destination` to separate category shares from within-category product mix.
+
+### Emission SDA
+
+Set `on` to an extension name to decompose the change in a satellite account ``e = S L y`` into intensity, technology, and demand contributions:
+
+```@example io_classical
+io_e0 = deepcopy(io)
+io_e1 = deepcopy(io_2010)
+add_extension!(io_e0, "CO2", [10.0 20.0]; stressors=["CO2"], unit=["kt"])
+add_extension!(io_e1, "CO2", [12.0 18.0]; stressors=["CO2"], unit=["kt"])
+sda(io_e0, io_e1; on="CO2", factors=[:intensity, :technology, :final_demand])
+```
+
 ### The Multiplicative Form
 
-The multiplicative variant reports the same story as growth factors that multiply to the observed output ratio. It applies the Dietzenbacher & Los two-polar average in geometric rather than arithmetic form: each factor is the square root of the product of its two polar ratio decompositions.
+The multiplicative variant reports the same story as growth factors that multiply to the observed output ratio. It applies the Dietzenbacher & Los two-polar average in geometric rather than arithmetic form: each factor is the square root of the product of its two polar ratio decompositions. Multiplicative form is implemented for the classical two-factor output path only.
 
 ```math
 \frac{x^1_i}{x^0_i}
@@ -364,16 +387,72 @@ Agriculture's factors are 0.825 and 1.200, whose product is the observed 0.99 ou
 
 | Keyword | Type | Default | Description |
 |---------|------|---------|-------------|
-| `method` | `Symbol` | `:additive` | `:additive` for the two-polar difference form, `:multiplicative` for the two-polar geometric form |
+| `method` | `Symbol` | `:additive` | `:additive` for the two-polar difference form, `:multiplicative` for the two-polar geometric form (two-factor output only) |
+| `factors` | `Vector{Symbol}` | two-factor default | Ordered determinants; see below |
+| `on` | `Symbol`/`String` | `:output` | `:output` or an extension name for emission SDA |
+
+Recognized factors: `:technology`, `:final_demand` (alias `:fd`), `:fd_level`, `:fd_mix`, `:fd_destination`, `:intensity` (extension only). When `factors` is omitted on the output path, effect keys remain the legacy `:L` and `:Y`.
 
 ### Return Values
 
 | Field | Type | Description |
 |-------|------|-------------|
-| `effects` | `Dict{Symbol,Vector{Float64}}` | `:L` technology effect and `:Y` final-demand effect, per sector |
-| `total` | `Vector{Float64}` | Output change (additive) or output ratio (multiplicative) |
-| `residual` | `Vector{Float64}` | Change left unattributed by the two effects |
+| `effects` | `Dict{Symbol,Vector{Float64}}` | Per-factor contribution (sector- or stressor-indexed) |
+| `total` | `Vector{Float64}` | Indicator change (additive) or ratio (multiplicative) |
+| `residual` | `Vector{Float64}` | Change left unattributed (≈ 0 for additive two-polar) |
 | `method` | `Symbol` | `:additive` or `:multiplicative` |
+| `on` | `Symbol`/`String` | Indicator (`:output` or extension name) |
+| `factors` | `Vector{Symbol}` | Ordered factor keys used in `effects` |
+
+---
+
+## RAS / GRAS Matrix Balancing
+
+Survey tables rarely satisfy the two accounting identities to machine precision after parsing. **RAS** biproportionally updates a non-negative prior matrix to new row and column margins; **GRAS** (Junius & Oosterhaven 2003; Lenzen–Wood–Gallego corrected target) does the same while preserving the sign of every entry, which is required when intermediate flows contain inventory drawdowns or net taxes.
+
+```math
+X = \hat{r}\,A_0\,\hat{s}
+\quad\text{(RAS)}, \qquad
+X = \hat{r}\,P\,\hat{s} - \hat{r}^{-1}\,N\,\hat{s}^{-1}
+\quad\text{(GRAS)}
+```
+
+where ``A_0 = P - N`` splits the prior into positive and absolute-negative parts, and the multipliers ``(r, s)`` are chosen so that ``X`` meets the prescribed margins ``u`` and ``v``.
+
+```@example io_classical
+A0 = [2.0 1.0; 1.0 2.0]
+ras(A0, [4.0, 5.0], [3.0, 6.0])
+```
+
+```@example io_classical
+# Sign-preserving update with a negative cell
+gras([7.0 3.0 -2.0; 2.0 9.0 1.0], [8.0, 12.0], [6.0, 10.0, 4.0])
+```
+
+`balance(io; method=:ras)` (or `:gras`) repairs the intermediate block of an `IOData` by targeting the margins implied by gross output and the held-fixed final-demand / value-added blocks. An already-balanced table is a fixed point.
+
+```@example io_classical
+balance(io; method=:ras).Z
+```
+
+### Keyword Arguments
+
+| Keyword | Type | Default | Description |
+|---------|------|---------|-------------|
+| `tol` | `Real` | `1e-10` | Convergence tolerance on margin residuals (RAS) or multipliers (GRAS) |
+| `maxiter` | `Integer` | `1000` | Maximum outer iterations |
+| `method` | `Symbol` | `:ras` | `:ras` or `:gras` (only for `balance`) |
+
+### Return Values (`RASResult`)
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `X` | `Matrix` | Balanced matrix |
+| `r`, `s` | `Vector` | Row and column multipliers |
+| `iterations` | `Int` | Outer iterations performed |
+| `converged` | `Bool` | Whether residuals met `tol` |
+| `method` | `Symbol` | `:ras` or `:gras` |
+| `residual_u`, `residual_v` | `Vector` | Final row- and column-sum residuals |
 
 ---
 
@@ -696,7 +775,7 @@ The four diagnostics agree on the economics but rank the sectors differently, wh
 
 6. **Forward linkages change meaning with the `forward` keyword.** The default `:ghosh` normalizes sales by the supplying sector's own output; `:leontief` gives the Chenery & Watanabe (1958) row sums of ``L``. The two indices rank sectors differently — here agriculture's sensitivity index falls from 1.208 to 1.067 — so never compare a Ghosh-based index against a Leontief-based one.
 
-7. **`method` is the only keyword `sda` accepts.** `factors` and `average` are not keyword arguments — passing either throws `MethodError`. The two-factor ``L``/``y`` split under the two-polar average is the only decomposition implemented, so there is nothing for those keywords to select.
+7. **`factors` and `on` are optional, but they must be coherent.** `:intensity` requires `on=<extension>`; `:fd_level` requires `:fd_mix`; `:fd_destination` requires both; and `:final_demand` cannot be combined with the level/mix/destination split. Multiplicative SDA remains two-factor output only.
 
 8. **Extraction losses are not additive across sectors.** The loss from removing two sectors together is smaller than the sum of the two individual losses, because the shared indirect requirements are counted once. Compare group extractions against group extractions, never against a sum of singletons.
 
@@ -705,6 +784,8 @@ The four diagnostics agree on the economics but rank the sectors differently, wh
 10. **`impact(..., fix=...)` holds *output* fixed, not final demand.** The residual final demand of a supply-constrained sector is implied by the mixed model and will generally differ from the observed ``y_k``. Passing `fix` silently switches `type` to `:mixed`.
 
 11. **APL is undefined (reported as zero) when ``L_{ij} = \delta_{ij}``.** A null off-diagonal linkage has no propagation length; do not interpret a zero APL as "instantaneous".
+
+12. **`ras` requires non-negative entries; use `gras` when any cell is negative.** Passing a signed matrix to `ras` throws. Both methods need ``\sum u = \sum v``.
 
 ---
 
@@ -722,6 +803,9 @@ linkages
 rasmussen
 key_sectors
 sda
+ras
+gras
+balance
 hypothetical_extraction
 price_model
 impact
@@ -743,6 +827,16 @@ network_stats
 
 - Dietzenbacher, E., Romero Luna, I., & Bosma, N. S. (2005). Using Average Propagation Lengths to Identify Production Chains in the Andalusian Economy.
   *Estudios de Economía Aplicada*, 23(2), 405--422.
+
+- Junius, T., & Oosterhaven, J. (2003). The Solution of Updating or Regionalizing a Matrix with both Positive and Negative Entries.
+  *Economic Systems Research*, 15(1), 87--96. [DOI](https://doi.org/10.1080/0953531032000056954)
+
+- Lenzen, M., Wood, R., & Gallego, B. (2007). Some Comments on the GRAS Method.
+  *Economic Systems Research*, 19(4), 461--465. [DOI](https://doi.org/10.1080/09535310701698613)
+
+- Temurshoev, U., Miller, R. E., & Bouwmeester, M. C. (2013). A Note on the GRAS Method.
+  *Economic Systems Research*, 25(3), 361--367. [DOI](https://doi.org/10.1080/09535314.2012.746645)
+
 
 - Gabaix, X. (2011). The Granular Origins of Aggregate Fluctuations.
   *Econometrica*, 79(3), 733--772. [DOI](https://doi.org/10.3982/ECTA8769)

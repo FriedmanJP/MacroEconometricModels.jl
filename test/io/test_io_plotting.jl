@@ -15,11 +15,14 @@ isdefined(@__MODULE__, :check_plot) ||
                 hypothetical_extraction(io, 1),
                 price_model(io; dva=[0.1, 0.0]),
                 impact(io, [1.0, 0.0]),
-                network_stats(io))
+                network_stats(io),
+                sda(io, io),
+                ras([2.0 1.0; 1.0 2.0], [4.0, 5.0], [3.0, 6.0]))
         p = plot_result(obj)
         check_plot(p)
         assert_all_json_valid(p)
     end
+
 
     # MRIO trade-accounting plots (KWW two-country toy)
     Z = [50.0 50.0; 0.0 0.0]

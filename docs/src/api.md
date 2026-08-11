@@ -839,7 +839,9 @@ Leontief and Ghosh accounting, multipliers and linkages, structural decompositio
 | `price_model(io; dva, dtax, mode)` | Leontief cost-push price model ``\Delta p = (I-A')^{-1}\Delta v`` |
 | `impact(io, dy; kind, type, fix)` | Final-demand impact scenario (Type I/II or mixed model) |
 | `network_stats(io)` | Domar HHI, APL matrix, degree structure, upstreamness |
-| `sda(io0, io1; method=:additive)` | Structural decomposition between two tables |
+| `sda(io0, io1; method=:additive, factors, on=:output)` | Structural decomposition (n-factor two-polar; emission SDA via `on`) |
+| `ras(A0, u, v)` / `gras(A0, u, v)` | Biproportional matrix balancing (GRAS is sign-preserving) |
+| `balance(io; method=:ras)` | Repair `IOData` intermediate flows to accounting margins |
 | `domar_weights(io)` | Sales-to-GDP (Domar) weights |
 | `baqaee_farhi(io; theta, sigma)` | Production-network shock propagation and influence vector |
 | `add_extension!(io, name, F; unit)` | Attach an environmental/satellite account |

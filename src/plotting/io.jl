@@ -420,6 +420,79 @@ function plot_result(vs::VerticalSpecialization; title::String="",
 end
 
 """
+    plot_result(r::SDAResult; title="", save_path=nothing) -> PlotOutput
+
+Grouped bar of per-factor structural-decomposition effects (first element of
+each effect vector when the indicator is multi-dimensional — typically sector 1
+for output SDA, stressor 1 for emission SDA). For a full multi-sector view the
+stacked contributions across all components of `total` are shown when
+`length(total) ≤ 24`.
+"""
+function plot_result(r::SDAResult; title::String="",
+                     save_path::Union{String,Nothing}=nothing)
+    id = _next_plot_id("io_sda")
+    facs = isempty(r.factors) ? sort(collect(keys(r.effects))) : collect(r.factors)
+    n = length(r.total)
+    # One group per component of the indicator (sector or stressor), series = factors
+    labs = ["c$i" for i in 1:n]
+    rows = Vector{Pair{String,String}}[]
+    for i in 1:n
+        row = Pair{String,String}["x" => _json(labs[i])]
+        for f in facs
+            haskey(r.effects, f) || continue
+            push!(row, string(f) => _json(r.effects[f][i]))
+        end
+        push!(rows, row)
+    end
+    data_json = _json_array_of_objects(rows)
+    series_parts = String[]
+    for (k, f) in enumerate(facs)
+        haskey(r.effects, f) || continue
+        push!(series_parts, _json_obj(Pair{String,String}[
+            "key" => _json(string(f)), "name" => _json(string(f)),
+            "color" => _json(_PLOT_COLORS[mod1(k, length(_PLOT_COLORS))])]))
+    end
+    series_json = "[" * join(series_parts, ",") * "]"
+    js = _render_bar_js(id, data_json, series_json;
+                        mode="stacked", xlabel="Component", ylabel="Effect")
+    on_str = r.on isa Symbol ? String(r.on) : string(r.on)
+    ttl = isempty(title) ? "SDA ($(r.method); on=$(on_str))" : title
+    panel = _PanelSpec(id, ttl, js)
+    p = _make_plot([panel]; title=ttl, ncols=1)
+    save_path !== nothing && save_plot(p, save_path)
+    p
+end
+
+"""
+    plot_result(r::RASResult; title="", save_path=nothing) -> PlotOutput
+
+Heatmap of the balanced matrix ``X``.
+"""
+function plot_result(r::RASResult; title::String="",
+                     save_path::Union{String,Nothing}=nothing)
+    id = _next_plot_id("io_ras")
+    m, n = size(r.X)
+    row_labs = [string(i) for i in 1:m]
+    col_labs = [string(j) for j in 1:n]
+    rows = [Pair{String,String}[
+                "x" => _json(col_labs[j]), "y" => _json(row_labs[i]),
+                "v" => _json(r.X[i, j])]
+            for i in 1:m for j in 1:n]
+    data_json = _json_array_of_objects(rows)
+    mx = maximum(abs, r.X; init=0.0)
+    mx = mx > 0 ? mx : 1.0
+    js = _render_heatmap_js(id, data_json, _json(row_labs), _json(col_labs);
+                            xlabel="Column", ylabel="Row",
+                            scale=:diverging, color_domain=[-float(mx), float(mx)])
+    ttl = isempty(title) ?
+        "RAS/GRAS balanced matrix ($(r.method); iters=$(r.iterations))" : title
+    panel = _PanelSpec(id, ttl, js)
+    p = _make_plot([panel]; title=ttl, ncols=1)
+    save_path !== nothing && save_plot(p, save_path)
+    p
+end
+
+"""
     plot_result(fp::RegionalFootprintResult; title="", save_path=nothing) -> PlotOutput
 
 Grouped bar of production-based vs consumption-based totals by region (first
@@ -427,6 +500,7 @@ stressor row).
 """
 function plot_result(fp::RegionalFootprintResult; title::String="",
                      save_path::Union{String,Nothing}=nothing)
+
     id = _next_plot_id("io_rfp")
     s = 1                                          # first stressor
     rows = [Pair{String,String}[
