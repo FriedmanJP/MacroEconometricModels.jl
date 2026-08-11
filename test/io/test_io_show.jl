@@ -3,8 +3,11 @@ using Test, MacroEconometricModels
 @testset "show & report smoke" begin
     io = load_example(:wiot)
     objs = Any[io, leontief(io), ghosh(io), multipliers(io), linkages(io),
-               sda(io, io), hypothetical_extraction(io, 1), baqaee_farhi(io),
-               footprint(io, "CO2")]
+               sda(io, io), hypothetical_extraction(io, 1),
+               price_model(io; dva=[0.1, 0.0]),
+               impact(io, [1.0, 0.0]),
+               network_stats(io),
+               baqaee_farhi(io), footprint(io, "CO2")]
     for obj in objs
         s = sprint(show, obj)
         @test !isempty(s)

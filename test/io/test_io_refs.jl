@@ -13,7 +13,11 @@ using Test, MacroEconometricModels
 
     # every IO result type resolves references
     for obj in (leontief(io), ghosh(io), multipliers(io), sda(io, io),
-                hypothetical_extraction(io, 1), footprint(io, "CO2"))
+                hypothetical_extraction(io, 1),
+                price_model(io; dva=[0.1, 0.0]),
+                impact(io, [1.0, 0.0]),
+                network_stats(io),
+                footprint(io, "CO2"))
         @test !isempty(sprint(refs, obj))
     end
 end

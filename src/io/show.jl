@@ -39,8 +39,40 @@ function Base.show(io::IO, m::GhoshModel)
 end
 
 function Base.show(io::IO, r::ExtractionResult)
-    println(io, "Hypothetical extraction of sector(s) $(r.extracted)")
-    println(io, "  total output loss: $(_fmt(r.total_loss))")
+    println(io, "Hypothetical extraction of sector(s) $(r.extracted)  ",
+            "[mode=$(r.mode), share=$(_fmt(r.share))]")
+    println(io, "  total output loss: $(_fmt(r.total_loss))  ",
+            "($(_fmt_pct(r.loss_pct_go)) of GO, $(_fmt_pct(r.loss_pct_gdp)) of GDP)")
+end
+
+function Base.show(io::IO, r::PriceModelResult)
+    data = hcat(r.sectors, _fmt.(r.dv), _fmt.(r.dp), _fmt.(r.p))
+    _pretty_table(io, data;
+        title="Price model ($(r.mode))",
+        column_labels=["Sector", "Δv", "Δp", "p"],
+        alignment=[:l, :r, :r, :r])
+end
+
+function Base.show(io::IO, r::ImpactResult)
+    fix_note = isempty(r.fixed) ? "" : "  [mixed; fixed=$(r.fixed)]"
+    println(io, "Impact ($(r.type) $(r.kind))$fix_note")
+    println(io, "  total: $(_fmt(r.total))")
+    data = hcat(r.sectors, _fmt.(r.dy), _fmt.(r.by_sector))
+    _pretty_table(io, data;
+        column_labels=["Sector", "Δy", "Impact"],
+        alignment=[:l, :r, :r])
+end
+
+function Base.show(io::IO, r::NetworkStatsResult)
+    println(io, "NetworkStats  Herfindahl(λ)=$(_fmt(r.herfindahl))  ",
+            "mult. sd=$(_fmt(r.multiplier_dispersion))")
+    data = hcat(r.sectors, _fmt.(r.domar), _fmt.(r.multipliers),
+                _fmt.(r.upstreamness), _fmt.(r.downstreamness),
+                _fmt.(r.in_degree), _fmt.(r.out_degree))
+    _pretty_table(io, data;
+        column_labels=["Sector", "Domar λ", "Mult.", "Upstr.", "Downstr.",
+                       "In-deg", "Out-deg"],
+        alignment=[:l, :r, :r, :r, :r, :r, :r])
 end
 
 function Base.show(io::IO, r::SDAResult)

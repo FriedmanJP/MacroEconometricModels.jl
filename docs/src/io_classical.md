@@ -1,12 +1,15 @@
 # [Classical Input-Output Analysis](@id io_classical_page)
 
-Classical input-output analysis answers the question that Leontief (1936) posed: if final demand for one product rises by one unit, how much output must the whole economy produce? The answer is the Leontief inverse, and every quantity on this page — multipliers, linkages, key sectors, decompositions, extraction losses — is a weighted sum of its entries. See [Input-Output Analysis](@ref io_page) for the `IOData` container these functions read.
+Classical input-output analysis answers the question that Leontief (1936) posed: if final demand for one product rises by one unit, how much output must the whole economy produce? The answer is the Leontief inverse, and every quantity on this page — multipliers, linkages, key sectors, decompositions, extraction losses, price pass-through, and network statistics — is a weighted sum of its entries. See [Input-Output Analysis](@ref io_page) for the `IOData` container these functions read.
 
 - **Coefficients and inverses**: technical coefficients ``A``, the Leontief inverse ``L``, allocation coefficients ``B``, and the Ghosh inverse ``G``
 - **Multipliers**: output, income, and employment multipliers as Type I (open) or Type II (closed with respect to households)
 - **Linkages**: backward and forward linkages, Rasmussen dispersion indices, and the key-sector classification
 - **Decomposition**: additive and multiplicative structural decomposition of output change between two tables
-- **Extraction**: the output loss from hypothetically removing one or more sectors
+- **Extraction**: complete, backward, forward, and partial hypothetical extraction (Dietzenbacher & Lahr 2013)
+- **Price model**: Leontief cost-push dual ``\Delta p = (I - A')^{-1}\Delta v``
+- **Impact scenarios**: final-demand shocks through ``L``, with Type II and mixed-model options
+- **Network statistics**: Domar concentration, average propagation lengths, degree structure
 
 ```@setup io_classical
 using MacroEconometricModels
@@ -384,8 +387,8 @@ x^{(-k)} = \left(I - A^{(-k)}\right)^{-1} y^{(-k)}, \qquad
 ```
 
 where:
-- ``A^{(-k)}`` is ``A`` with rows and columns in the extracted set ``k`` set to zero
-- ``y^{(-k)}`` is total final demand with the extracted entries set to zero
+- ``A^{(-k)}`` is ``A`` with the extracted links scaled or zeroed (see modes below)
+- ``y^{(-k)}`` is total final demand with the extracted entries scaled or zeroed
 - ``x^{(-k)}`` is gross output in the reduced economy
 - `total_loss` is ``\mathbf{1}'\text{loss}``, the economy-wide loss of gross output
 
@@ -397,7 +400,7 @@ hypothetical_extraction(io, "Agriculture")
 hypothetical_extraction(io, "Agriculture").sector_loss
 ```
 
-Removing agriculture costs 1210.5 units of gross output: its own 1000 plus 210.5 of manufacturing output that existed solely to supply it. That is 40.4 percent of the economy's 3000 units of gross output, well above agriculture's own 33.3 percent share — the difference is exactly the indirect dependence that a share-of-output statistic misses. Extracting manufacturing costs 2588.2 units, or 86.3 percent against a direct share of 66.7 percent.
+Removing agriculture costs 1210.5 units of gross output: its own 1000 plus 210.5 of manufacturing output that existed solely to supply it. That is 40.4 percent of the economy's 3000 units of gross output (`loss_pct_go`), well above agriculture's own 33.3 percent share — the difference is exactly the indirect dependence that a share-of-output statistic misses. Extracting manufacturing costs 2588.2 units, or 86.3 percent against a direct share of 66.7 percent. The same loss as a share of GDP is reported in `loss_pct_gdp`.
 
 Sectors can be named or indexed, singly or in groups:
 
@@ -407,6 +410,39 @@ hypothetical_extraction(io, ["Agriculture", "Manufacturing"])
 
 Extracting every sector loses the entire 3000 units of gross output, which is the sanity check on the method.
 
+### Extraction Modes (Dietzenbacher & Lahr 2013)
+
+The default `mode=:complete` is the classical Strassert/Miller–Lahr complete extraction. Dietzenbacher & Lahr (2013) expand the taxonomy:
+
+| `mode` | What is removed |
+|--------|-----------------|
+| `:complete` | Extracted rows **and** columns of ``A``, plus extracted final demand |
+| `:backward` | Extracted **columns** of ``A`` only (sever purchases / backward linkages) |
+| `:forward` | Extracted **rows** of ``A`` only (sever sales / forward linkages) |
+| `:partial` | Same links as `:complete`, scaled by ``(1 - \mathrm{share})`` rather than zeroed |
+
+```@example io_classical
+hypothetical_extraction(io, "Agriculture"; mode=:backward)
+```
+
+```@example io_classical
+hypothetical_extraction(io, "Agriculture"; mode=:forward)
+```
+
+```@example io_classical
+hypothetical_extraction(io, "Agriculture"; mode=:partial, share=0.5)
+```
+
+Backward and forward losses are each smaller than complete extraction, because each severs only one side of the interindustry link. Partial extraction with `share=0.5` removes half the agriculture-related coefficients and lands strictly between zero and the complete loss. On multi-region tables, pass `region="North"` (or a bare region name that is not also a sector label) to extract an entire region block.
+
+### Keyword Arguments
+
+| Keyword | Type | Default | Description |
+|---------|------|---------|-------------|
+| `mode` | `Symbol` | `:complete` | `:complete`, `:backward`, `:forward`, or `:partial` |
+| `share` | `Real` | `1.0` | Extraction intensity in ``(0, 1]``; `1` is full extraction |
+| `region` | `String` or `nothing` | `nothing` | Extract all industries in a named MRIO region |
+
 ### Return Values
 
 | Field | Type | Description |
@@ -414,6 +450,177 @@ Extracting every sector loses the entire 3000 units of gross output, which is th
 | `total_loss` | `Float64` | Economy-wide loss of gross output |
 | `sector_loss` | `Vector{Float64}` | Loss of gross output by sector |
 | `extracted` | `Vector{Int}` | Indices of the extracted sectors |
+| `mode` | `Symbol` | Extraction mode used |
+| `share` | `Float64` | Extraction intensity |
+| `loss_pct_go` | `Float64` | `total_loss` as a fraction of baseline gross output |
+| `loss_pct_gdp` | `Float64` | `total_loss` as a fraction of baseline GDP |
+
+---
+
+## Price Model (Cost-Push)
+
+The Leontief **price model** is the dual of the quantity model: given a change in primary costs per unit of output (wages, taxes, imported-input costs), how do sectoral prices respond?
+
+```math
+p = (I - A')^{-1} v, \qquad \Delta p = (I - A')^{-1} \Delta v
+```
+
+where:
+- ``A`` is the technical-coefficients matrix (column orientation: ``A_{ij}`` = input of ``i`` per unit output of ``j``)
+- ``v_j = (\sum_k V_{kj}) / x_j`` is the value-added coefficient of sector ``j``
+- ``(I - A')^{-1} = L'`` is the transpose of the Leontief inverse
+- In a value table the base prices equal one: ``p = \mathbf{1}`` when ``v = \mathbf{1}'(I - A)``
+
+```@example io_classical
+price_model(io; dva=Dict("Agriculture" => 0.10))
+```
+
+A 0.10 increase in agriculture's value-added coefficient raises agricultural prices by 0.1254 and manufacturing prices by 0.0330 — the full cost-push cascade through ``L'``. The same shock can be supplied as a length-``n`` vector or split across `dva` and `dtax`.
+
+```@example io_classical
+price_model(io; dva=[0.05, 0.0], dtax=[0.05, 0.0]).dp
+```
+
+!!! warning "Ghosh dual is descriptive"
+    `mode=:ghosh` replaces ``(I - A')^{-1}`` with ``(I - B)^{-1}``. Dietzenbacher (1997)
+    shows that the Ghosh system is a valid *price* model under fixed quantities; the
+    *quantity* reading of Ghosh is the interpretation Oosterhaven (1988) finds
+    implausible. Prefer `:leontief` for cost-push analysis.
+
+### Keyword Arguments
+
+| Keyword | Type | Default | Description |
+|---------|------|---------|-------------|
+| `dva` | vector or `Dict` | zeros | Change in value-added coefficients |
+| `dtax` | vector or `Dict` | zeros | Change in tax / other primary-cost coefficients |
+| `mode` | `Symbol` | `:leontief` | `:leontief` or `:ghosh` |
+
+### Return Values
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `dp` | `Vector{Float64}` | Sectoral price changes ``\Delta p`` |
+| `p` | `Vector{Float64}` | New prices (base = ones) |
+| `dv` | `Vector{Float64}` | Effective primary-cost shock ``\Delta v`` |
+| `mode` | `Symbol` | `:leontief` or `:ghosh` |
+| `sectors` | `Vector{String}` | Sector labels |
+
+```julia
+plot_result(price_model(io; dva=Dict("Agriculture" => 0.10)))
+```
+
+---
+
+## Impact Scenarios
+
+`impact` is the practitioner wrapper around ``\Delta x = L\,\Delta y``: pass a final-demand change and read off total and per-sector impacts for output, value added, employment, or any satellite extension.
+
+```math
+\Delta x = L\,\Delta y, \qquad
+\text{impact}_i = h_i\,\Delta x_i
+```
+
+where ``h = \mathbf{1}`` for `kind=:output`, ``h_j = (\sum_v V_{vj}) / x_j`` for `kind=:va` / `:income`, and the corresponding intensity row for employment or an extension.
+
+```@example io_classical
+impact(io, Dict("Agriculture" => 1.0); kind=:output)
+```
+
+```@example io_classical
+impact(io, [1.0, 0.0]; kind=:income).total
+```
+
+A unit of agricultural final demand raises economy-wide gross output by the Type I output multiplier 1.518 and generates exactly one unit of value added (the national-accounting identity). Type II closes the model with respect to households and adds the induced consumption round:
+
+```@example io_classical
+impact(io, [1.0, 0.0]; kind=:output, type=:II).total
+```
+
+### Mixed Model (Miller & Blair ch. 13)
+
+When some sectors' outputs are supply-constrained, pass them as exogenous via `fix`:
+
+```@example io_classical
+impact(io, [10.0, 0.0]; kind=:output, fix=Dict("Manufacturing" => io.x[2]))
+```
+
+Manufacturing output is held at its baseline; only agriculture expands. The residual final demand of the fixed sector is implied by the accounting identity rather than taken as given.
+
+### Keyword Arguments
+
+| Keyword | Type | Default | Description |
+|---------|------|---------|-------------|
+| `kind` | `Symbol` or `String` | `:output` | `:output`, `:va`, `:income`, `:employment`, or an extension name |
+| `type` | `Symbol` | `:I` | `:I` open or `:II` household-closed (ignored when `fix` is set) |
+| `fix` | `Dict` | empty | `sector => x̄` exogenous outputs for the mixed model |
+
+### Return Values
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `total` | `Float64` | Economy-wide impact |
+| `by_sector` | `Vector{Float64}` | Impact by producing sector |
+| `dy` | `Vector{Float64}` | Final-demand change used |
+| `kind` | `Symbol` | Quantity impacted |
+| `type` | `Symbol` | `:I`, `:II`, or `:mixed` |
+| `sectors` | `Vector{String}` | Sector labels |
+| `fixed` | `Vector{Int}` | Indices of output-exogenous sectors |
+
+```julia
+plot_result(impact(io, Dict("Agriculture" => 1.0)))
+```
+
+---
+
+## Network Statistics
+
+`network_stats` packages the cheap network and granularity objects that live on top of ``L``: Domar concentration, multiplier dispersion, average propagation lengths, and the degree structure of ``A``.
+
+```math
+\lambda_i = \frac{x_i}{\mathrm{GDP}}, \qquad
+H = \sum_i \lambda_i^2, \qquad
+H^{\mathrm{APL}} = L(L - I), \qquad
+v_{ij} = \frac{H^{\mathrm{APL}}_{ij}}{L_{ij} - \delta_{ij}}
+```
+
+where:
+- ``\lambda`` are Domar weights and ``H`` is their Herfindahl index — the concentration ingredient of the Gabaix (2011) granular residual
+- ``v_{ij}`` is the average propagation length (Dietzenbacher, Romero & Bosma 2005): the average number of steps for a demand-pull in ``j`` to reach ``i`` (equivalently, a cost-push in ``i`` to reach ``j``)
+- Upstreamness and downstreamness reuse the same row/column sums of ``L`` as `baqaee_farhi`
+
+```@example io_classical
+ns = network_stats(io)
+report(ns)
+```
+
+```@example io_classical
+ns.herfindahl
+```
+
+```@example io_classical
+ns.apl
+```
+
+On this two-sector table the Domar weights are ``(1000/2050,\,2000/2050) \approx (0.488,\,0.976)`` and the Herfindahl is about 1.19. Domar weights sum to gross output over GDP (here 1.46), so their Herfindahl is not bounded by one the way a share-based HHI is — it is still the right concentration ingredient for the granular residual. The APL diagonal entries near 1.2 say that own-sector feedback is short; the off-diagonals near 1.3–1.4 say that cross-sector effects typically take a little more than one intermediate step.
+
+### Return Values
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `domar` | `Vector{Float64}` | Domar weights ``\lambda`` |
+| `herfindahl` | `Float64` | ``\sum_i \lambda_i^2`` |
+| `multipliers` | `Vector{Float64}` | Type I output multipliers |
+| `multiplier_dispersion` | `Float64` | Standard deviation of output multipliers |
+| `apl` | `Matrix{Float64}` | Average-propagation-length matrix |
+| `in_degree` | `Vector{Float64}` | Weighted row sums of ``A`` |
+| `out_degree` | `Vector{Float64}` | Weighted column sums of ``A`` |
+| `upstreamness` | `Vector{Float64}` | Row sums of ``L`` |
+| `downstreamness` | `Vector{Float64}` | Column sums of ``L`` |
+| `sectors` | `Vector{String}` | Sector labels |
+
+```julia
+plot_result(ns)
+```
 
 ---
 
@@ -441,6 +648,18 @@ report(linkages(io_09))
 
 ```@example io_classical
 report(hypothetical_extraction(io_09, "Manufacturing"))
+```
+
+```@example io_classical
+report(price_model(io_09; dva=Dict("Agriculture" => 0.10)))
+```
+
+```@example io_classical
+report(impact(io_09, Dict("Agriculture" => 1.0); kind=:output))
+```
+
+```@example io_classical
+report(network_stats(io_09))
 ```
 
 ```@example io_classical
@@ -481,6 +700,12 @@ The four diagnostics agree on the economics but rank the sectors differently, wh
 
 8. **Extraction losses are not additive across sectors.** The loss from removing two sectors together is smaller than the sum of the two individual losses, because the shared indirect requirements are counted once. Compare group extractions against group extractions, never against a sum of singletons.
 
+9. **`mode=:ghosh` in `price_model` is not a quantity model.** It is a descriptive dual under fixed quantities (Dietzenbacher 1997). Do not read ``\Delta p = (I - B)^{-1}\Delta v`` as a supply-driven output response — that is the Oosterhaven (1988) implausibility.
+
+10. **`impact(..., fix=...)` holds *output* fixed, not final demand.** The residual final demand of a supply-constrained sector is implied by the mixed model and will generally differ from the observed ``y_k``. Passing `fix` silently switches `type` to `:mixed`.
+
+11. **APL is undefined (reported as zero) when ``L_{ij} = \delta_{ij}``.** A null off-diagonal linkage has no propagation length; do not interpret a zero APL as "instantaneous".
+
 ---
 
 ## API Reference
@@ -498,6 +723,9 @@ rasmussen
 key_sectors
 sda
 hypothetical_extraction
+price_model
+impact
+network_stats
 ```
 
 ---
@@ -507,8 +735,17 @@ hypothetical_extraction
 - Chenery, H. B., & Watanabe, T. (1958). International Comparisons of the Structure of Production.
   *Econometrica*, 26(4), 487--521. [DOI](https://doi.org/10.2307/1907514)
 
+- Dietzenbacher, E., & Lahr, M. L. (2013). Expanding Extractions.
+  *Economic Systems Research*, 25(3), 341--360. [DOI](https://doi.org/10.1080/09535314.2013.774266)
+
 - Dietzenbacher, E., & Los, B. (1998). Structural Decomposition Techniques: Sense and Sensitivity.
   *Economic Systems Research*, 10(4), 307--324. [DOI](https://doi.org/10.1080/09535319800000023)
+
+- Dietzenbacher, E., Romero Luna, I., & Bosma, N. S. (2005). Using Average Propagation Lengths to Identify Production Chains in the Andalusian Economy.
+  *Estudios de Economía Aplicada*, 23(2), 405--422.
+
+- Gabaix, X. (2011). The Granular Origins of Aggregate Fluctuations.
+  *Econometrica*, 79(3), 733--772. [DOI](https://doi.org/10.3982/ECTA8769)
 
 - Ghosh, A. (1958). Input-Output Approach in an Allocation System.
   *Economica*, 25(97), 58--64. [DOI](https://doi.org/10.2307/2550694)
@@ -521,6 +758,9 @@ hypothetical_extraction
 
 - Miller, R. E., & Blair, P. D. (2009). *Input-Output Analysis: Foundations and Extensions* (2nd ed.).
   Cambridge University Press. ISBN 978-0-521-51713-3. [DOI](https://doi.org/10.1017/CBO9780511626982)
+
+- Oosterhaven, J. (1988). On the Plausibility of the Supply-Driven Input-Output Model.
+  *Journal of Regional Science*, 28(2), 203--217. [DOI](https://doi.org/10.1111/j.1467-9787.1988.tb01208.x)
 
 - Rasmussen, P. N. (1956). *Studies in Inter-Sectoral Relations*.
   North-Holland.

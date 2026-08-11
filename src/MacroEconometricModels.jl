@@ -114,6 +114,9 @@ include("io/multipliers.jl")
 include("io/linkages.jl")
 include("io/sda.jl")
 include("io/extraction.jl")
+include("io/price.jl")
+include("io/impact.jl")
+include("io/network.jl")
 include("io/environmental.jl")
 include("io/baqaee_farhi.jl")
 include("io/bf_network.jl")
@@ -670,6 +673,10 @@ export IOData, IOExtension, IOMetaData
 export technical_coefficients, leontief_inverse, allocation_coefficients, ghosh_inverse
 export leontief, ghosh, multipliers, linkages, rasmussen, key_sectors
 export sda, hypothetical_extraction
+export price_model, PriceModelResult
+export impact, ImpactResult
+export network_stats, NetworkStatsResult
+export ExtractionResult
 export add_extension!, intensities, emission_multipliers, footprint
 export domar_weights, baqaee_farhi
 export ProductionNetwork, production_network

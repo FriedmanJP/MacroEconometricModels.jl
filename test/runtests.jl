@@ -230,6 +230,9 @@ const TEST_GROUPS = [
         "io/test_io_linkages.jl",
         "io/test_io_sda.jl",
         "io/test_io_extraction.jl",
+        "io/test_io_price.jl",
+        "io/test_io_impact.jl",
+        "io/test_io_network.jl",
         "io/test_io_environmental.jl",
         "io/test_io_bf_first.jl",
         "io/test_io_bf_second.jl",
@@ -630,6 +633,9 @@ else
             include("io/test_io_linkages.jl")
             include("io/test_io_sda.jl")
             include("io/test_io_extraction.jl")
+            include("io/test_io_price.jl")
+            include("io/test_io_impact.jl")
+            include("io/test_io_network.jl")
             include("io/test_io_environmental.jl")
             include("io/test_io_bf_first.jl")
             include("io/test_io_bf_second.jl")

@@ -835,7 +835,10 @@ Leontief and Ghosh accounting, multipliers and linkages, structural decompositio
 | `multipliers(io; kind=:output)` | Output, income, and employment multipliers |
 | `linkages(io; forward=:ghosh)` | Backward and forward linkage indices |
 | `key_sectors(io)` | Key-sector classification from the linkage quadrants |
-| `hypothetical_extraction(io, sectors)` | Output loss from extracting a sector |
+| `hypothetical_extraction(io, sectors; mode, share)` | Output loss from extracting a sector (complete/backward/forward/partial) |
+| `price_model(io; dva, dtax, mode)` | Leontief cost-push price model ``\Delta p = (I-A')^{-1}\Delta v`` |
+| `impact(io, dy; kind, type, fix)` | Final-demand impact scenario (Type I/II or mixed model) |
+| `network_stats(io)` | Domar HHI, APL matrix, degree structure, upstreamness |
 | `sda(io0, io1; method=:additive)` | Structural decomposition between two tables |
 | `domar_weights(io)` | Sales-to-GDP (Domar) weights |
 | `baqaee_farhi(io; theta, sigma)` | Production-network shock propagation and influence vector |

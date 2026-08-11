@@ -104,6 +104,24 @@ const _REFERENCES = Dict{Symbol, _RefEntry}(
         journal="", volume="", issue="", pages="",
         doi="10.1017/CBO9780511626982", isbn="978-0-521-51713-3",
         publisher="Cambridge University Press", entry_type=:book),
+    :dietzenbacher_lahr2013 => (key=:dietzenbacher_lahr2013,
+        authors="Dietzenbacher, Erik and Lahr, Michael L.", year=2013,
+        title="Expanding Extractions",
+        journal="Economic Systems Research", volume="25", issue="3", pages="341--360",
+        doi="10.1080/09535314.2013.774266", isbn="", publisher="", entry_type=:article),
+    :dietzenbacher_romero_bosma2005 => (key=:dietzenbacher_romero_bosma2005,
+        authors="Dietzenbacher, Erik and Romero Luna, Isidoro and Bosma, Niels S.", year=2005,
+        title="Using Average Propagation Lengths to Identify Production Chains in the Andalusian Economy",
+        journal="Estudios de Econom{\\'i}a Aplicada", volume="23", issue="2", pages="405--422",
+        doi="", isbn="", publisher="", entry_type=:article),
+    :gabaix2011 => (key=:gabaix2011, authors="Gabaix, Xavier", year=2011,
+        title="The Granular Origins of Aggregate Fluctuations",
+        journal="Econometrica", volume="79", issue="3", pages="733--772",
+        doi="10.3982/ECTA8769", isbn="", publisher="", entry_type=:article),
+    :oosterhaven1988 => (key=:oosterhaven1988, authors="Oosterhaven, Jan", year=1988,
+        title="On the Plausibility of the Supply-Driven Input-Output Model",
+        journal="Journal of Regional Science", volume="28", issue="2", pages="203--217",
+        doi="10.1111/j.1467-9787.1988.tb01208.x", isbn="", publisher="", entry_type=:article),
     :baqaee_farhi_2019 => (key=:baqaee_farhi_2019,
         authors="Baqaee, David Rezza and Farhi, Emmanuel", year=2019,
         title="The Macroeconomic Impact of Microeconomic Shocks: Beyond Hulten's Theorem",
@@ -1793,7 +1811,10 @@ const _TYPE_REFS = Dict{Symbol, Vector{Symbol}}(
     :IOMultipliers => [:miller_blair_2009],
     :LinkageResult => [:rasmussen1956, :hirschman1958, :miller_blair_2009],
     :SDAResult => [:dietzenbacher_los1998, :miller_blair_2009],
-    :ExtractionResult => [:miller_blair_2009],
+    :ExtractionResult => [:dietzenbacher_lahr2013, :miller_blair_2009],
+    :PriceModelResult => [:miller_blair_2009, :oosterhaven1988],
+    :ImpactResult => [:miller_blair_2009],
+    :NetworkStatsResult => [:dietzenbacher_romero_bosma2005, :gabaix2011, :miller_blair_2009],
     :FootprintResult => [:leontief1936, :miller_blair_2009],
     :BaqaeeFarhiResult => [:baqaee_farhi_2019, :miller_blair_2009],
     :ProductionNetwork => [:baqaee_farhi_2019, :baqaee_farhi_2020, :atalay_2017, :miller_blair_2009],
@@ -2453,6 +2474,9 @@ refs(io::IO, ::IOMultipliers; kw...) = refs(io, _TYPE_REFS[:IOMultipliers]; kw..
 refs(io::IO, ::LinkageResult; kw...) = refs(io, _TYPE_REFS[:LinkageResult]; kw...)
 refs(io::IO, ::SDAResult; kw...) = refs(io, _TYPE_REFS[:SDAResult]; kw...)
 refs(io::IO, ::ExtractionResult; kw...) = refs(io, _TYPE_REFS[:ExtractionResult]; kw...)
+refs(io::IO, ::PriceModelResult; kw...) = refs(io, _TYPE_REFS[:PriceModelResult]; kw...)
+refs(io::IO, ::ImpactResult; kw...) = refs(io, _TYPE_REFS[:ImpactResult]; kw...)
+refs(io::IO, ::NetworkStatsResult; kw...) = refs(io, _TYPE_REFS[:NetworkStatsResult]; kw...)
 refs(io::IO, ::FootprintResult; kw...) = refs(io, _TYPE_REFS[:FootprintResult]; kw...)
 refs(io::IO, ::BaqaeeFarhiResult; kw...) = refs(io, _TYPE_REFS[:BaqaeeFarhiResult]; kw...)
 refs(io::IO, ::ProductionNetwork; kw...) = refs(io, _TYPE_REFS[:ProductionNetwork]; kw...)

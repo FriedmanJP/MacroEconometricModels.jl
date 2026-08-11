@@ -1,6 +1,104 @@
 # io.jl — plotting recipes for Input-Output results (inline D3.js)
 
 """
+    plot_result(r::ExtractionResult; title="", save_path=nothing) -> PlotOutput
+
+Bar chart of per-sector gross-output losses from hypothetical extraction.
+"""
+function plot_result(r::ExtractionResult; title::String="",
+                     save_path::Union{String,Nothing}=nothing)
+    id = _next_plot_id("io_extract")
+    labs = ["sector $(i)" for i in 1:length(r.sector_loss)]
+    rows = [Pair{String,String}["x" => _json(labs[i]), "Loss" => _json(r.sector_loss[i])]
+            for i in 1:length(r.sector_loss)]
+    data_json = _json_array_of_objects(rows)
+    series_json = "[" * _json_obj(Pair{String,String}[
+        "key" => _json("Loss"), "name" => _json("Output loss"),
+        "color" => _json(_PLOT_COLORS[1])]) * "]"
+    js = _render_bar_js(id, data_json, series_json;
+                        mode="grouped", xlabel="Sector", ylabel="Output loss")
+    ttl = isempty(title) ?
+        "Extraction loss (mode=$(r.mode), total=$(_fmt(r.total_loss)))" : title
+    panel = _PanelSpec(id, ttl, js)
+    p = _make_plot([panel]; title=ttl, ncols=1)
+    save_path !== nothing && save_plot(p, save_path)
+    p
+end
+
+"""
+    plot_result(r::PriceModelResult; title="", save_path=nothing) -> PlotOutput
+
+Bar chart of sectoral price changes ``Δp`` from the cost-push price model.
+"""
+function plot_result(r::PriceModelResult; title::String="",
+                     save_path::Union{String,Nothing}=nothing)
+    id = _next_plot_id("io_price")
+    rows = [Pair{String,String}["x" => _json(r.sectors[i]), "Δp" => _json(r.dp[i])]
+            for i in 1:length(r.dp)]
+    data_json = _json_array_of_objects(rows)
+    series_json = "[" * _json_obj(Pair{String,String}[
+        "key" => _json("Δp"), "name" => _json("Δp"),
+        "color" => _json(_PLOT_COLORS[1])]) * "]"
+    js = _render_bar_js(id, data_json, series_json;
+                        mode="grouped", xlabel="Sector", ylabel="Δp")
+    ttl = isempty(title) ? "Price model ($(r.mode))" : title
+    panel = _PanelSpec(id, ttl, js)
+    p = _make_plot([panel]; title=ttl, ncols=1)
+    save_path !== nothing && save_plot(p, save_path)
+    p
+end
+
+"""
+    plot_result(r::ImpactResult; title="", save_path=nothing) -> PlotOutput
+
+Bar chart of per-sector impacts from a final-demand scenario.
+"""
+function plot_result(r::ImpactResult; title::String="",
+                     save_path::Union{String,Nothing}=nothing)
+    id = _next_plot_id("io_impact")
+    rows = [Pair{String,String}["x" => _json(r.sectors[i]),
+                                "Impact" => _json(r.by_sector[i])]
+            for i in 1:length(r.by_sector)]
+    data_json = _json_array_of_objects(rows)
+    series_json = "[" * _json_obj(Pair{String,String}[
+        "key" => _json("Impact"), "name" => _json("Impact"),
+        "color" => _json(_PLOT_COLORS[1])]) * "]"
+    js = _render_bar_js(id, data_json, series_json;
+                        mode="grouped", xlabel="Sector", ylabel="Impact")
+    ttl = isempty(title) ?
+        "Impact ($(r.type) $(r.kind); total=$(_fmt(r.total)))" : title
+    panel = _PanelSpec(id, ttl, js)
+    p = _make_plot([panel]; title=ttl, ncols=1)
+    save_path !== nothing && save_plot(p, save_path)
+    p
+end
+
+"""
+    plot_result(r::NetworkStatsResult; title="", save_path=nothing) -> PlotOutput
+
+Bar chart of Domar weights from network statistics.
+"""
+function plot_result(r::NetworkStatsResult; title::String="",
+                     save_path::Union{String,Nothing}=nothing)
+    id = _next_plot_id("io_network")
+    rows = [Pair{String,String}["x" => _json(r.sectors[i]),
+                                "Domar" => _json(r.domar[i])]
+            for i in 1:length(r.domar)]
+    data_json = _json_array_of_objects(rows)
+    series_json = "[" * _json_obj(Pair{String,String}[
+        "key" => _json("Domar"), "name" => _json("Domar λ"),
+        "color" => _json(_PLOT_COLORS[1])]) * "]"
+    js = _render_bar_js(id, data_json, series_json;
+                        mode="grouped", xlabel="Sector", ylabel="Domar weight")
+    ttl = isempty(title) ?
+        "NetworkStats Domar (HHI=$(_fmt(r.herfindahl)))" : title
+    panel = _PanelSpec(id, ttl, js)
+    p = _make_plot([panel]; title=ttl, ncols=1)
+    save_path !== nothing && save_plot(p, save_path)
+    p
+end
+
+"""
     plot_result(m::IOMultipliers; title="", save_path=nothing) -> PlotOutput
 
 Bar chart of sectoral multipliers.
