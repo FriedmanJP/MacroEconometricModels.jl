@@ -63,6 +63,7 @@ ISBN instead.
 - Banbura, M., Giannone, D., & Reichlin, L. (2011). Nowcasting. In *The Oxford Handbook of Economic Forecasting*, 193--224. Oxford: Oxford University Press. [DOI](https://doi.org/10.1093/oxfordhb/9780195398649.013.0008)
 - Banbura, M., & Modugno, M. (2014). Maximum Likelihood Estimation of Factor Models on Datasets with Arbitrary Pattern of Missing Data. *Journal of Applied Econometrics*, 29(1), 133--160. [DOI](https://doi.org/10.1002/jae.2306)
 - Banbura, M., Belousova, I., Bodnar, K., & Toth, M. B. (2023). Nowcasting Employment in the Euro Area. *ECB Working Paper* No. 2815.
+- Atalay, E. (2017). How Important Are Sectoral Shocks? *American Economic Journal: Macroeconomics*, 9(4), 254--280. [DOI](https://doi.org/10.1257/mac.20160353)
 - Baqaee, D. R., & Farhi, E. (2019). The Macroeconomic Impact of Microeconomic Shocks: Beyond Hulten's Theorem. *Econometrica*, 87(4), 1155--1203. [DOI](https://doi.org/10.3982/ECTA15202)
 - Baqaee, D. R., & Farhi, E. (2020). Productivity and Misallocation in General Equilibrium. *The Quarterly Journal of Economics*, 135(1), 105--163. [DOI](https://doi.org/10.1093/qje/qjz030)
 - Barnichon, R., & Brownlees, C. (2019). Impulse Response Estimation by Smooth Local Projections. *Review of Economics and Statistics*, 101(3), 522--530. [DOI](https://doi.org/10.1162/rest_a_00778)

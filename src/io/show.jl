@@ -90,6 +90,59 @@ function Base.show(io::IO, eq::BFEquilibrium)
     println(io, "  factor shares Λ: ", _fmt.(eq.Lambda))
 end
 
+function Base.show(io::IO, bf::BFLocal)
+    n = length(bf.first_order)
+    has_H = !isempty(bf.second_order)
+    println(io, "BFLocal ($(bf.nests)): n=$n sectors",
+            has_H ? ", Hessian $(size(bf.second_order, 1))×$(size(bf.second_order, 2))" :
+                    ", Hessian omitted")
+    nshow = min(6, n)
+    data = hcat(bf.sectors[1:nshow], _fmt.(bf.first_order[1:nshow]))
+    _pretty_table(io, data;
+        title="Hulten first-order (Domar λ̃)",
+        column_labels=["Sector", "λ̃"], alignment=[:l, :r])
+    println(io, "  factor shares Λ̃: ", _fmt.(bf.Lambda),
+            "  (sum = $(_fmt(sum(bf.Lambda))))")
+    if has_H
+        println(io, "  tr(H) = $(_fmt(tr(bf.second_order)))  ",
+                "‖H‖_F = $(_fmt(norm(bf.second_order)))")
+    end
+    if bf.elasticities !== nothing
+        println(io, "  elasticities: dlogw/dlogA ",
+                size(bf.elasticities.dlogw_dlogA), ", dlogp/dlogA ",
+                size(bf.elasticities.dlogp_dlogA))
+    end
+end
+
+function Base.show(io::IO, e::BFElasticities)
+    println(io, "BFElasticities: F=$(size(e.dlogw_dlogA, 1)) factors × ",
+            "n=$(size(e.dlogw_dlogA, 2)) sectors")
+    nshow = min(6, length(e.sectors))
+    # Show first factor's wage incidence across sectors
+    if size(e.dlogw_dlogA, 1) >= 1
+        data = hcat(e.sectors[1:nshow],
+                    _fmt.(e.dlogw_dlogA[1, 1:nshow]),
+                    _fmt.(e.dlogp_dlogA[1:nshow, 1]))
+        fname = isempty(e.factor_names) ? "factor1" : e.factor_names[1]
+        _pretty_table(io, data;
+            title="Incidence (sample): ∂log $fname / ∂log A_j  &  ∂log p_j / ∂log A_1",
+            column_labels=["Sector", "dlogw/dlogA", "dlogp/dlogA₁"],
+            alignment=[:l, :r, :r])
+    end
+end
+
+function Base.show(io::IO, sc::BFShockCurve)
+    println(io, "BFShockCurve: sector=$(sc.sector) (index $(sc.sector_index)), ",
+            "$(length(sc.shocks)) points")
+    # Show endpoints and zero
+    for (label, s, y, h, q) in (
+            ("min", sc.shocks[1], sc.exact[1], sc.hulten[1], sc.second_order[1]),
+            ("max", sc.shocks[end], sc.exact[end], sc.hulten[end], sc.second_order[end]))
+        println(io, "  $label ΔlogA=$(_fmt(s)): exact=$(_fmt(y))  ",
+                "Hulten=$(_fmt(h))  2nd=$(_fmt(q))")
+    end
+end
+
 function Base.show(io::IO, fp::FootprintResult)
     println(io, "Footprint ($(fp.name)) — consumption-based account")
     data = hcat(fp.stressors, [_fmt(sum(fp.total[i, :])) for i in 1:length(fp.stressors)])

@@ -598,6 +598,9 @@ report(x::ExtractionResult) = show(stdout, x)
 report(x::BaqaeeFarhiResult) = show(stdout, x)
 report(x::ProductionNetwork) = show(stdout, x)
 report(x::BFEquilibrium) = show(stdout, x)
+report(x::BFLocal) = show(stdout, x)
+report(x::BFElasticities) = show(stdout, x)
+report(x::BFShockCurve) = show(stdout, x)
 report(x::FootprintResult) = show(stdout, x)
 
 # --- Show-existing types that lacked a report() dispatch (S3/T167) ---

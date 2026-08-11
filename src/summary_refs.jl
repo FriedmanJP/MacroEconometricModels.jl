@@ -109,6 +109,18 @@ const _REFERENCES = Dict{Symbol, _RefEntry}(
         title="The Macroeconomic Impact of Microeconomic Shocks: Beyond Hulten's Theorem",
         journal="Econometrica", volume="87", issue="4", pages="1155--1203",
         doi="10.3982/ECTA15202", isbn="", publisher="", entry_type=:article),
+    :baqaee_farhi_2020 => (key=:baqaee_farhi_2020,
+        authors="Baqaee, David Rezza and Farhi, Emmanuel", year=2020,
+        title="Productivity and Misallocation in General Equilibrium",
+        journal="The Quarterly Journal of Economics", volume="135", issue="1",
+        pages="105--163",
+        doi="10.1093/qje/qjz030", isbn="", publisher="", entry_type=:article),
+    :atalay_2017 => (key=:atalay_2017,
+        authors="Atalay, Enghin", year=2017,
+        title="How Important Are Sectoral Shocks?",
+        journal="American Economic Journal: Macroeconomics", volume="9", issue="4",
+        pages="254--280",
+        doi="10.1257/mac.20160353", isbn="", publisher="", entry_type=:article),
     # --- VAR & Structural VAR ---
     :sims1980 => (key=:sims1980, authors="Sims, Christopher A.", year=1980,
         title="Macroeconomics and Reality", journal="Econometrica",
@@ -1784,6 +1796,11 @@ const _TYPE_REFS = Dict{Symbol, Vector{Symbol}}(
     :ExtractionResult => [:miller_blair_2009],
     :FootprintResult => [:leontief1936, :miller_blair_2009],
     :BaqaeeFarhiResult => [:baqaee_farhi_2019, :miller_blair_2009],
+    :ProductionNetwork => [:baqaee_farhi_2019, :atalay_2017, :miller_blair_2009],
+    :BFEquilibrium => [:baqaee_farhi_2019, :atalay_2017],
+    :BFLocal => [:baqaee_farhi_2019, :atalay_2017],
+    :BFElasticities => [:baqaee_farhi_2019],
+    :BFShockCurve => [:baqaee_farhi_2019],
     :io => [:leontief1936, :ghosh1958, :miller_blair_2009, :baqaee_farhi_2019],
     # VAR
     :VARModel => [:sims1980, :lutkepohl2005],
@@ -2437,6 +2454,11 @@ refs(io::IO, ::SDAResult; kw...) = refs(io, _TYPE_REFS[:SDAResult]; kw...)
 refs(io::IO, ::ExtractionResult; kw...) = refs(io, _TYPE_REFS[:ExtractionResult]; kw...)
 refs(io::IO, ::FootprintResult; kw...) = refs(io, _TYPE_REFS[:FootprintResult]; kw...)
 refs(io::IO, ::BaqaeeFarhiResult; kw...) = refs(io, _TYPE_REFS[:BaqaeeFarhiResult]; kw...)
+refs(io::IO, ::ProductionNetwork; kw...) = refs(io, _TYPE_REFS[:ProductionNetwork]; kw...)
+refs(io::IO, ::BFEquilibrium; kw...) = refs(io, _TYPE_REFS[:BFEquilibrium]; kw...)
+refs(io::IO, ::BFLocal; kw...) = refs(io, _TYPE_REFS[:BFLocal]; kw...)
+refs(io::IO, ::BFElasticities; kw...) = refs(io, _TYPE_REFS[:BFElasticities]; kw...)
+refs(io::IO, ::BFShockCurve; kw...) = refs(io, _TYPE_REFS[:BFShockCurve]; kw...)
 
 # LP types
 refs(io::IO, ::LPModel; kw...) = refs(io, _TYPE_REFS[:LPModel]; kw...)

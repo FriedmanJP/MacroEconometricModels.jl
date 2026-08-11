@@ -74,6 +74,11 @@ const _SERIALIZABLE_TYPES = Dict{String,Type}(
     "CrossSectionData"              => CrossSectionData,
     "IOData"                        => IOData,
     "IOMetaData"                    => IOMetaData,
+    "BaqaeeFarhiResult"             => BaqaeeFarhiResult,
+    "BFLocal"                       => BFLocal,
+    "BFElasticities"                => BFElasticities,
+    "BFShockCurve"                  => BFShockCurve,
+    "BFEquilibrium"                 => BFEquilibrium,
     # ── cointegration / VECM ─────────────────────────────────────────────────
     "VECMModel"                     => VECMModel,
     "CointRegModel"                 => CointRegModel,

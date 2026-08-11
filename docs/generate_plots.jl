@@ -824,6 +824,12 @@ function main()
         plot_result(leontief(load_example(:wiot)))
     end
 
+    # 65b. B&F shock curve: exact vs Hulten vs second-order (IO2-B2)
+    try_save("bf_shock_curve.html") do
+        net = production_network(load_example(:wiot); theta=0.5, sigma=0.9)
+        plot_result(bf_shock_curve(net, 1; range=(-0.4, 0.4), points=21))
+    end
+
     # 66. TimeSeriesData correlation heatmap (view=:corr)
     try_save("data_timeseries_corr.html") do
         if use_real

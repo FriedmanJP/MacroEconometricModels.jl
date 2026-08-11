@@ -130,3 +130,90 @@ function plot_result(net::ProductionNetwork; title::String="",
     save_path !== nothing && save_plot(p, save_path)
     p
 end
+
+"""
+    plot_result(bf::BFLocal; title="", save_path=nothing) -> PlotOutput
+
+Bar chart of Hulten first-order (Domar) elasticities from a generalized local
+B&F approximation.
+"""
+function plot_result(bf::BFLocal; title::String="",
+                     save_path::Union{String,Nothing}=nothing)
+    id = _next_plot_id("io_bf_local")
+    rows = [Pair{String,String}["x" => _json(bf.sectors[i]),
+                                "Hulten" => _json(bf.first_order[i])]
+            for i in 1:length(bf.sectors)]
+    data_json = _json_array_of_objects(rows)
+    series_json = "[" * _json_obj(Pair{String,String}[
+        "key" => _json("Hulten"), "name" => _json("Hulten λ̃"),
+        "color" => _json(_PLOT_COLORS[1])]) * "]"
+    js = _render_bar_js(id, data_json, series_json;
+                        mode="grouped", xlabel="Sector", ylabel="∂logY/∂logA")
+    ttl = isempty(title) ? "BFLocal Hulten elasticities ($(bf.nests))" : title
+    panel = _PanelSpec(id, ttl, js)
+    p = _make_plot([panel]; title=ttl, ncols=1)
+    save_path !== nothing && save_plot(p, save_path)
+    p
+end
+
+"""
+    plot_result(e::BFElasticities; title="", save_path=nothing) -> PlotOutput
+
+Heatmap of real-sector price incidence ``∂ log p_i / ∂ log A_j``.
+"""
+function plot_result(e::BFElasticities; title::String="",
+                     save_path::Union{String,Nothing}=nothing)
+    id = _next_plot_id("io_bf_elast")
+    secs = e.sectors
+    n = length(secs)
+    rows = Vector{Pair{String,String}}[]
+    for i in 1:n, j in 1:n
+        push!(rows, Pair{String,String}["x" => _json(secs[j]), "y" => _json(secs[i]),
+                                        "v" => _json(e.dlogp_dlogA[i, j])])
+    end
+    data_json = _json_array_of_objects(rows)
+    mx = maximum(abs, e.dlogp_dlogA; init=1.0)
+    js = _render_heatmap_js(id, data_json, _json(secs), _json(secs);
+                            xlabel="shock sector j", ylabel="price sector i",
+                            scale=:diverging, color_domain=[-float(mx), float(mx)])
+    ttl = isempty(title) ? "Price incidence ∂log p / ∂log A" : title
+    panel = _PanelSpec(id, ttl, js)
+    p = _make_plot([panel]; title=ttl, ncols=1)
+    save_path !== nothing && save_plot(p, save_path)
+    p
+end
+
+"""
+    plot_result(sc::BFShockCurve; title="", save_path=nothing) -> PlotOutput
+
+Three-series line chart of exact ``Δ log Y``, Hulten, and second-order Taylor
+along a one-sector productivity shock grid (the signature B&F concavity figure).
+"""
+function plot_result(sc::BFShockCurve; title::String="",
+                     save_path::Union{String,Nothing}=nothing)
+    id = _next_plot_id("io_bf_shock")
+    rows = [Pair{String,String}[
+                "x" => _json(sc.shocks[i]),
+                "Exact" => _json(sc.exact[i]),
+                "Hulten" => _json(sc.hulten[i]),
+                "Second-order" => _json(sc.second_order[i])]
+            for i in 1:length(sc.shocks)]
+    data_json = _json_array_of_objects(rows)
+    series_json = "[" *
+        _json_obj(Pair{String,String}[
+            "key" => _json("Exact"), "name" => _json("Exact"),
+            "color" => _json(_PLOT_COLORS[1])]) * "," *
+        _json_obj(Pair{String,String}[
+            "key" => _json("Hulten"), "name" => _json("Hulten"),
+            "color" => _json(_PLOT_COLORS[2])]) * "," *
+        _json_obj(Pair{String,String}[
+            "key" => _json("Second-order"), "name" => _json("Second-order"),
+            "color" => _json(_PLOT_COLORS[3])]) * "]"
+    js = _render_line_js(id, data_json, series_json;
+                         xlabel="Δ log A ($(sc.sector))", ylabel="Δ log Y")
+    ttl = isempty(title) ? "B&F shock curve: $(sc.sector)" : title
+    panel = _PanelSpec(id, ttl, js)
+    p = _make_plot([panel]; title=ttl, ncols=1)
+    save_path !== nothing && save_plot(p, save_path)
+    p
+end

@@ -1,47 +1,57 @@
 # [Baqaee & Farhi (2019) Nonlinear Input-Output](@id io_baqaee_farhi_page)
 
-Hulten's (1978) theorem says that, to first order, the effect of a sector's productivity on aggregate output is its sales share and nothing else — the shape of the production network is irrelevant. Baqaee & Farhi (2019) show that this is an artefact of the first order: as soon as shocks are large enough for second-order terms to matter, the network reasserts itself through the elasticities of substitution that govern how inputs are reallocated. This page computes both orders from an [`IOData`](@ref) table. See [Input-Output Analysis](@ref io_page) for the container and [Classical Analysis](@ref io_classical_page) for the linear multipliers this decomposition generalizes.
+Hulten's (1978) theorem says that, to first order, the effect of a sector's productivity on aggregate output is its sales share and nothing else — the shape of the production network is irrelevant. Baqaee & Farhi (2019) show that this is an artefact of the first order: as soon as shocks are large enough for second-order terms to matter, the network reasserts itself through the elasticities of substitution that govern how inputs are reallocated. This page takes an [`IOData`](@ref) table from first-order Domar weights through the full standard-form nested-CES economy of Baqaee & Farhi — exact nonlinear counterfactuals with endogenous prices, a generalized multi-factor Hessian, and factor-price incidence. See [Input-Output Analysis](@ref io_page) for the container and [Classical Analysis](@ref io_classical_page) for the linear multipliers this decomposition generalizes.
 
 - **First order**: Domar weights and Hulten's theorem, exact under Cobb-Douglas technology
-- **Second order**: the "beyond Hulten" Hessian of log output in log productivities, parameterized by production and consumption substitution elasticities
-- **Centralities**: the influence vector, upstreamness, and downstreamness of each sector in the production network
+- **Standard form**: nested CES production networks with heterogeneous elasticities and multiple primary factors
+- **Exact counterfactuals**: nonlinear equilibrium prices and quantities for arbitrary (large) productivity and factor-supply shocks
+- **Second order**: the full multi-factor "beyond Hulten" Hessian, consistent with the exact solver by construction
+- **Incidence**: factor-price, goods-price, and Domar-share responses to productivity shocks
 
 ```@setup io_baqaee_farhi
 using MacroEconometricModels
+io = load_example(:wiot)
 ```
 
 ## Quick Start
 
-**Recipe 1: Domar weights**
+**Recipe 1: Domar weights (legacy scalar API)**
 
 ```@example io_baqaee_farhi
-io = load_example(:wiot)
 domar_weights(io)
 ```
 
-**Recipe 2: The full decomposition**
+**Recipe 2: Local Hessian on an `IOData` table**
 
 ```@example io_baqaee_farhi
-bf = baqaee_farhi(io)
+bf = baqaee_farhi(io; theta=2.0, sigma=0.9)
 report(bf)
 ```
 
-**Recipe 3: Gross substitutes in production**
+**Recipe 3: Standard-form network + generalized local approximation**
 
 ```@example io_baqaee_farhi
-baqaee_farhi(io; theta=2.0).second_order
+net = production_network(io; theta=0.5, sigma=0.9)
+local_bf = baqaee_farhi(net)
+report(local_bf)
 ```
 
-**Recipe 4: Complements in production**
+**Recipe 4: Exact counterfactual for a large productivity shock**
 
 ```@example io_baqaee_farhi
-baqaee_farhi(io; theta=0.5).second_order
+eq = bf_equilibrium(net; dlogA=[-0.10, 0.0])
+(eq.dlogY, eq.hulten, eq.converged)
 ```
 
-**Recipe 5: Network centralities**
+**Recipe 5: Shock curve — exact vs Hulten vs second-order**
 
 ```@example io_baqaee_farhi
-bf.upstreamness, bf.downstreamness
+sc = bf_shock_curve(net, 1; range=(-0.3, 0.3), points=7)
+report(sc)
+```
+
+```julia
+plot_result(sc)
 ```
 
 ---
@@ -75,42 +85,27 @@ sum(domar_weights(io))
 Agriculture's weight of 0.488 and manufacturing's 0.976 say that a one percent productivity gain in manufacturing raises output twice as much as the same gain in agriculture, which is exactly the ratio of their sales. Their sum of 1.463 is the economy's gross output of 3000 over its GDP of 2050: the "intermediate-input multiplier" by which the network amplifies value added into sales. Hulten's theorem holds exactly by construction in this package's implementation, so `first_order` is a copy of `domar`:
 
 ```@example io_baqaee_farhi
-bf.first_order == domar_weights(io)
+bf0 = baqaee_farhi(io)
+bf0.first_order == domar_weights(io)
 ```
 
 ---
 
-## The Second-Order "Beyond Hulten" Term
+## The Second-Order "Beyond Hulten" Term (Legacy Scalar API)
 
-The second-order term is the Hessian of log output in log productivities. It aggregates the input-output covariances of the network, weighted by how easily producers and consumers substitute away from a damaged sector.
+The legacy method `baqaee_farhi(io; theta, sigma)` returns a [`BaqaeeFarhiResult`](@ref) whose second-order term is the Hessian of log output in log productivities under one scalar production elasticity ``\theta`` and one consumption elasticity ``\sigma``. With the Cobb-Douglas default (`theta=sigma=1`) the Hessian is exactly zero and Hulten is exact.
 
 ```math
-H_{jk} = \frac{d^2 \log Y}{d \log A_j \, d \log A_k}
-= (\theta - 1)\sum_{i=1}^{n} \lambda_i \operatorname{Cov}_{\Omega^{(i)}}\!\left(\Psi_{(j)}, \Psi_{(k)}\right)
+H_{jk} = (\theta - 1)\sum_{i=1}^{n} \lambda_i \operatorname{Cov}_{\Omega^{(i)}}\!\left(\Psi_{(j)}, \Psi_{(k)}\right)
 + (\sigma - 1)\operatorname{Cov}_{\beta}\!\left(\Psi_{(j)}, \Psi_{(k)}\right)
 ```
 
 where:
-- ``\Psi = L = (I-A)^{-1}`` is the Leontief inverse and ``\Psi_{(j)}`` its ``j``-th column
-- ``\Omega^{(i)} = A_{\cdot i} / \sum_{l} A_{li}`` is sector ``i``'s vector of input-cost shares, normalized to sum to one
+- ``\Psi = L = (I-A)^{-1}`` is the Leontief inverse (column orientation of the classical IO page)
+- ``\Omega^{(i)}`` is sector ``i``'s intermediate cost-share vector, renormalized to sum to one
 - ``\beta = y / \mathbf{1}'y`` is the vector of final-demand shares
-- ``\operatorname{Cov}_{\omega}(u, v) = \sum_{l} \omega_l (u_l - \bar{u})(v_l - \bar{v})`` with ``\bar{u} = \sum_l \omega_l u_l`` is the covariance under the weights ``\omega``
-- ``\theta`` is the elasticity of substitution across intermediate inputs in production
+- ``\theta`` is the elasticity of substitution across intermediate inputs
 - ``\sigma`` is the elasticity of substitution across goods in consumption
-- ``\lambda_i`` are the Domar weights, which weight the producer-side term by each sector's size
-
-The two terms carry the whole economics. The producer term is positive when ``\theta > 1``, because firms facing **gross substitutes** reallocate spending away from the sector whose price has risen. It is negative when ``\theta < 1``, because firms facing **complements** cannot substitute and are dragged along by the bottleneck. The consumer term does the same for households through ``\sigma``.
-
-```math
-\Delta \log Y \approx \sum_{i} \lambda_i \, \Delta \log A_i
-+ \frac{1}{2} \sum_{j} \sum_{k} H_{jk} \, \Delta \log A_j \, \Delta \log A_k
-```
-
-!!! note "Cobb-Douglas is the exact-Hulten case"
-    With ``\theta = \sigma = 1`` — the default when `theta` and `sigma` are not supplied —
-    both coefficients vanish and the Hessian is exactly zero. This is not a numerical
-    accident: under Cobb-Douglas technology cost shares are invariant to prices, there is
-    nothing to reallocate, and Hulten's theorem holds globally rather than locally.
 
 ```@example io_baqaee_farhi
 baqaee_farhi(io).second_order
@@ -120,34 +115,233 @@ baqaee_farhi(io).second_order
 baqaee_farhi(io; theta=2.0).second_order
 ```
 
-With gross substitutes the diagonal is positive: ``H_{11} = 0.250`` makes log output **convex** in agricultural productivity. A ten percent productivity gain in agriculture is worth ``0.488 \times 0.10 = 4.88`` percent at first order plus ``\tfrac{1}{2} \times 0.250 \times 0.01 = 0.13`` percent of reallocation gain, for 5.00 percent in total; a ten percent *loss* costs only 4.75 percent, because the economy substitutes away from the damaged sector. Complements reverse both signs:
+With gross substitutes the diagonal is positive: log output is **convex** in sectoral productivity, and the economy substitutes away from a damaged sector. Complements reverse the sign:
 
 ```@example io_baqaee_farhi
 baqaee_farhi(io; theta=0.5).second_order
 ```
 
-Here ``H_{11} = -0.125`` makes output **concave**: the same ten percent loss now costs 4.94 percent rather than 4.88, and the same gain is worth only 4.82. This asymmetry — losses amplified, gains dampened — is the central result of Baqaee & Farhi (2019), and it is invisible to any first-order or purely linear input-output calculation.
+!!! note "Cobb-Douglas is the exact-Hulten case"
+    With ``\theta = \sigma = 1`` — the default when `theta` and `sigma` are not supplied —
+    both coefficients vanish and the Hessian is exactly zero. Under Cobb-Douglas, cost shares
+    are price-invariant, there is nothing to reallocate, and Hulten's theorem holds *globally*.
 
-The off-diagonal entry of ``-0.200`` at ``\theta = 2`` is what makes uniform shocks different from idiosyncratic ones. Applying a ten percent gain to *both* sectors gives a quadratic form of ``\tfrac{1}{2}(0.250 - 2 \times 0.200 + 0.160) \times 0.01 \approx 0.005`` percent, essentially nothing: a common productivity shock changes no relative price, so there is no reallocation to capture. Second-order effects require dispersion in productivity across sectors, not aggregate TFP movements.
-
-Consumption substitution enters through ``\sigma`` with the same structure:
-
-```@example io_baqaee_farhi
-baqaee_farhi(io; sigma=2.0).second_order
-```
-
-### Keyword Arguments
+### Keyword Arguments (legacy)
 
 | Keyword | Type | Default | Description |
 |---------|------|---------|-------------|
 | `theta` | `Union{Real,Nothing}` | `nothing` | Elasticity of substitution across intermediate inputs; `nothing` is Cobb-Douglas, ``\theta = 1`` |
 | `sigma` | `Union{Real,Nothing}` | `nothing` | Elasticity of substitution in consumption; `nothing` is Cobb-Douglas, ``\sigma = 1`` |
 
+### Return Values ([`BaqaeeFarhiResult`](@ref))
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `domar` | `Vector{Float64}` | Domar weights ``\lambda_i = x_i / \text{GDP}`` |
+| `first_order` | `Vector{Float64}` | Hulten first-order elasticities, a copy of `domar` |
+| `second_order` | `Matrix{Float64}` | ``n \times n`` symmetrized Hessian |
+| `influence` | `Vector{Float64}` | Influence vector ``\Psi\beta``, equal to `domar` under Hulten |
+| `upstreamness` | `Vector{Float64}` | Row sums of ``\Psi`` |
+| `downstreamness` | `Vector{Float64}` | Column sums of ``\Psi`` |
+| `sectors` | `Vector{String}` | Sector labels |
+
+The legacy path is **frozen** for backward compatibility. For heterogeneous elasticities, multiple factors, nests, exact large shocks, or the full B&F (2019) §4 Hessian, use the standard-form API below.
+
+---
+
+## Standard Form and Nests
+
+Baqaee & Farhi write the economy in **standard form**: every node is a single-elasticity CES aggregator, and arbitrary nesting is encoded by adding *fictitious* producer nodes. Calibration from a column-oriented [`IOData`](@ref) happens **once** in [`production_network`](@ref), which converts shares into **row orientation** (``\Omega[i,j]`` = expenditure share of buyer ``i`` on input ``j``).
+
+```math
+\begin{aligned}
+\theta_i \neq 1: &\quad
+  p_i = A_i^{-1}\Bigl[\sum_j \tilde\Omega_{ij}\, p_j^{1-\theta_i}\Bigr]^{1/(1-\theta_i)} \\
+\theta_i = 1: &\quad
+  \log p_i = -\log A_i + \sum_j \tilde\Omega_{ij}\,\log p_j
+\end{aligned}
+```
+
+Node layout (1-based): index 1 is the household (elasticity ``\sigma``); indices ``2,\ldots,M+1`` are producers (real sectors plus fictitious nests); indices ``M+2,\ldots,M+F+1`` are primary factors.
+
+### Nesting schemes
+
+| `nests` | Structure | ``M`` | Typical use |
+|---------|-----------|-------|-------------|
+| `:single` | One CES node per real sector over all inputs (intermediates + factors) | ``n`` | Transparent multi-factor Hessian; default |
+| `:two` | Outer node (``\varepsilon``) buys an intermediate bundle (``\theta``) and a VA bundle (``\eta``) | ``3n`` | Atalay (2017) / B&F quantitative calibrations |
+
+```@example io_baqaee_farhi
+net_single = production_network(io; theta=0.5, sigma=0.9, factors=:single)
+(net_single.n, net_single.M, net_single.F, net_single.nests)
+```
+
+```@example io_baqaee_farhi
+net_two = production_network(io; nests=:two, theta=0.1, epsilon=0.5, eta=1.0,
+                             sigma=0.9, factors=:va_cats)
+(net_two.n, net_two.M, net_two.F)
+```
+
+```@example io_baqaee_farhi
+report(net_two)
+```
+
+Literature calibration guidance (defaults stay Cobb-Douglas = 1.0 for backward compatibility): Atalay (2017) finds intermediate inputs are strong complements (``\theta \approx 0.1``), with outer ``\varepsilon \approx 0.5``–``1``, across-factor ``\eta \approx 1``, and consumption ``\sigma \approx 0.9``–``1``. Baqaee & Farhi (2019) use similar values in their quantitative section.
+
+### Keyword Arguments ([`production_network`](@ref))
+
+| Keyword | Type | Default | Description |
+|---------|------|---------|-------------|
+| `theta` | scalar or length-`n` | `1.0` | Elasticity across intermediate inputs (`:single`: all inputs; `:two`: within intermediate bundle) |
+| `sigma` | scalar | `1.0` | Household elasticity across goods |
+| `epsilon` | scalar or length-`n` | `1.0` | Outer VA-vs-intermediate elasticity (`:two` only) |
+| `eta` | scalar or length-`n` | `1.0` | Across-factor elasticity inside the VA bundle (`:two` only) |
+| `nests` | `:single` or `:two` | `:single` | Nesting scheme |
+| `factors` | `:single`, `:va_cats`, or `F×n` matrix | `:single` | Factor mapping |
+| `check` | `Bool` | `true` | Error if clipped negative share mass exceeds 1% of a row |
+
+Negative table entries (net taxes, inventory drawdowns) are clipped to zero and the row is renormalized, with a single `@warn`. CES cost shares must be non-negative.
+
+---
+
+## Exact Counterfactuals with Endogenous Prices
+
+The headline deliverable of Baqaee & Farhi is **not** the local Hessian — it is the exact nonlinear equilibrium under large shocks. [`bf_equilibrium`](@ref) solves the nested-CES general equilibrium for arbitrary Hicks-neutral productivity shocks `dlogA` (length `n`) and factor-supply shocks `dlogL` (length `F`).
+
+**Numéraire**: nominal GDP ``E = 1``. Base prices are one; factor supplies satisfy ``L_f = \tilde\Lambda_f`` at the base so base wages equal one.
+
+```@example io_baqaee_farhi
+net = production_network(io; theta=0.5, sigma=0.9)
+eq = bf_equilibrium(net; dlogA=[-0.20, 0.0])
+report(eq)
+```
+
+```@example io_baqaee_farhi
+(eq.dlogY, eq.hulten, eq.dlogY - eq.hulten)
+```
+
+Under complements (``\theta = 0.5``) a 20% agricultural productivity loss costs more than Hulten's first-order prediction — the network amplifies bottlenecks. Under Cobb-Douglas the two numbers coincide for any shock size:
+
+```@example io_baqaee_farhi
+net_cd = production_network(io)   # all elasticities = 1
+eq_cd = bf_equilibrium(net_cd; dlogA=[-0.50, 0.30])
+(eq_cd.dlogY, eq_cd.hulten, abs(eq_cd.dlogY - eq_cd.hulten) < 1e-10)
+```
+
+### Shock curve: the signature concavity figure
+
+[`bf_shock_curve`](@ref) sweeps one sector's shock over a grid and returns exact ``\Delta\log Y``, the Hulten line, and the second-order Taylor curve. Under complements the exact path lies below the Hulten line for negative shocks (losses amplified) and below it for positive shocks (gains dampened) — the Baqaee–Farhi asymmetry.
+
+```@example io_baqaee_farhi
+sc = bf_shock_curve(net, "Agriculture"; range=(-0.4, 0.4), points=9)
+(sc.shocks[1], sc.exact[1], sc.hulten[1], sc.second_order[1])
+```
+
+```julia
+plot_result(sc)
+```
+
+```@raw html
+<iframe src="../assets/plots/bf_shock_curve.html" style="width:100%;height:420px;border:none;"></iframe>
+```
+
+### Keyword Arguments ([`bf_equilibrium`](@ref))
+
+| Keyword | Type | Default | Description |
+|---------|------|---------|-------------|
+| `dlogA` | length-`n` | zeros | Hicks-neutral productivity shocks on real-sector outer nodes |
+| `dlogL` | length-`F` | zeros | Factor-supply shocks |
+| `method` | `:newton` or `:fixedpoint` | `:newton` | Inner price fixed-point algorithm |
+| `tol` | `Real` | `1e-10` | Convergence tolerance |
+| `maxiter` | `Int` | `500` | Max iterations |
+| `damping` | `Real` | `0.5` | Damping for Picard / outer loop |
+
+Unconverged solves `@warn` and set `converged=false` rather than returning silently bad numbers. Strong complements (``\theta \to 0``) with large negative shocks are the hard case — that is bottleneck economics, not a bug.
+
+---
+
+## Generalized Local Approximation (Multi-Factor Hessian)
+
+On a [`ProductionNetwork`](@ref), `baqaee_farhi(net)` returns a [`BFLocal`](@ref) with the full B&F (2019) §4 Hessian: heterogeneous elasticities per node, multiple primary factors, and endogenous factor prices. First order is still Hulten on real-sector outer nodes. Second order assembles Cov-blocks without 4-nested loops:
+
+```math
+\begin{aligned}
+K &= \sum_{i=1}^{M+1}(\theta_i-1)\,\tilde\lambda_i\,
+     \bigl(\operatorname{diag}(\omega^{(i)}) - \omega^{(i)}(\omega^{(i)})'\bigr) \\
+\Gamma &= \Psi_F' K \Psi_F,\qquad
+X = \Psi_F' K \Psi_P \\
+\bigl[\operatorname{diag}(\tilde\Lambda) + \Gamma\bigr]\, d\log w &= X\, d\log A \\
+H &= \Psi_P' K \Psi_P - X'(d\log w / d\log A)
+\end{aligned}
+```
+
+where ``\Psi_P`` / ``\Psi_F`` are the producer (outer-node) / factor column blocks of ``\tilde\Psi = (I-\tilde\Omega)^{-1}``, obtained by sparse solves. Single factor implies ``\Psi_f = \mathbf{1}`` and the factor-price correction vanishes. The Hessian is reported at the ``n`` real sectors; for ``n > 500`` the default is `hessian=:none` and [`bf_quadratic`](@ref) evaluates ``v'Hv`` without forming ``H``.
+
+```@example io_baqaee_farhi
+local_bf = baqaee_farhi(net)
+local_bf.second_order
+```
+
+```@example io_baqaee_farhi
+# Quadratic form without the dense matrix
+bf_quadratic(net, [0.1, -0.05])
+```
+
+```@example io_baqaee_farhi
+# Matches the dense path
+v = [0.1, -0.05]
+v' * local_bf.second_order * v
+```
+
+!!! note "Legacy scalar vs standard-form Hessian"
+    The legacy `baqaee_farhi(io; theta, sigma)` Hessian uses intermediate-only cost
+    shares (column-oriented Leontief). The standard-form Hessian includes primary
+    factors in each CES nest (B&F 2019 §4). First-order Domar weights match; second-order
+    numbers generally differ. Prefer `baqaee_farhi(net)` whenever you also use
+    `bf_equilibrium` — the two are cross-validated by finite differences.
+
+### Keyword Arguments ([`baqaee_farhi(net)`](@ref baqaee_farhi))
+
+| Keyword | Type | Default | Description |
+|---------|------|---------|-------------|
+| `hessian` | `:auto`, `:full`, or `:none` | `:auto` | Form `n×n` H when `n ≤ 500` (`:auto`); always / never with `:full` / `:none` |
+| `elasticities` | `Bool` | `true` | Attach a [`BFElasticities`](@ref) block |
+
+---
+
+## Factor Prices and Incidence
+
+The same local system that builds the Hessian yields first-order distributional objects via [`bf_elasticities`](@ref) (also attached to [`BFLocal`](@ref) as `.elasticities`):
+
+| Field | Shape | Content |
+|-------|-------|---------|
+| `dlogw_dlogA` | ``F \times n`` | Factor-price incidence ``∂\log w_f / ∂\log A_j`` |
+| `dlogp_dlogA` | ``n \times n`` | Real-sector price incidence |
+| `dlambda_dlogA` | ``n \times n`` | Domar-share reallocation (equals ``H``) |
+
+```@example io_baqaee_farhi
+e = bf_elasticities(net)
+e.dlogp_dlogA
+```
+
+```@example io_baqaee_farhi
+net_mf = production_network(io; theta=0.5, sigma=0.9, factors=:va_cats)
+e_mf = bf_elasticities(net_mf)
+e_mf.dlogw_dlogA
+```
+
+With a single factor, wages are pinned by the GDP numéraire at fixed supply, so `dlogw_dlogA` is zero. With multiple factors, productivity shocks reallocate income across factors and the incidence matrix is generally nonzero.
+
+```julia
+plot_result(e)          # price-incidence heatmap
+plot_result(local_bf)   # Hulten bar chart
+```
+
 ---
 
 ## Network Centralities
 
-Alongside the two orders, the decomposition reports three summaries of where each sector sits in the production network. They are the input-output objects that Acemoglu et al. (2012) and Carvalho & Tahbaz-Salehi (2019) use to explain why idiosyncratic shocks fail to wash out in aggregate.
+Alongside the two orders, the legacy decomposition reports three summaries of where each sector sits in the production network (Acemoglu et al. 2012; Carvalho & Tahbaz-Salehi 2019).
 
 ```math
 v = \Psi \beta, \qquad
@@ -155,96 +349,72 @@ v = \Psi \beta, \qquad
 \text{down}_j = \sum_{i} \Psi_{ij}
 ```
 
-where:
-- ``v_i`` is the **influence** of sector ``i``, the final-demand-weighted row aggregation of the Leontief inverse — the gross output of ``i`` that the observed composition of final demand requires
-- ``\text{up}_i`` is the **upstreamness** of sector ``i``, the row sum of ``\Psi`` — the output of ``i`` required by one unit of final demand for every product
-- ``\text{down}_j`` is the **downstreamness** of sector ``j``, the column sum of ``\Psi`` — the total production triggered by one unit of final demand for ``j``
-- ``\beta`` is the vector of final-demand shares, as above
-
-```@example io_baqaee_farhi
-bf.influence
-```
-
 ```@example io_baqaee_farhi
 bf.upstreamness, bf.downstreamness
 ```
 
-Agriculture is the more **upstream** sector (1.584 against 1.386): a unit of final demand for either product draws more heavily on farm output than on manufacturing output, relative to the two sectors' sizes. Manufacturing is the less **downstream** one (1.452 against 1.518), because it buys fewer intermediates per unit of output. These two vectors are not new quantities — `downstreamness` is exactly the backward linkage and the Type I output multiplier, and `upstreamness` is exactly the Chenery-Watanabe forward linkage of the [Classical Analysis](@ref io_classical_page) page. Antràs et al. (2012) build a closely related upstreamness index from the allocation coefficients rather than the Leontief inverse.
-
 !!! note "`influence` reproduces the Domar weights"
-    Under this package's orientation of ``\Psi`` — where ``x = \Psi y`` — the row aggregation
-    ``\Psi\beta`` *is* the Domar weight vector, here ``[0.488, 0.976]``, identical to `bf.domar`
-    entry by entry. That identity is Hulten's theorem restated on the network: influence and
-    sales share are the same statistic. Baqaee & Farhi write the same object as ``\beta'\Psi``
-    under a row-oriented layout, so transcribing that expression literally into this package's
-    column convention returns a different — and wrong — vector.
-
-### Return Values
-
-| Field | Type | Description |
-|-------|------|-------------|
-| `domar` | `Vector{Float64}` | Domar weights ``\lambda_i = x_i / \text{GDP}`` |
-| `first_order` | `Vector{Float64}` | Hulten first-order elasticities, a copy of `domar` |
-| `second_order` | `Matrix{Float64}` | ``n \times n`` symmetrized "beyond Hulten" Hessian |
-| `influence` | `Vector{Float64}` | Influence vector ``\Psi\beta``, equal to `domar` under Hulten |
-| `upstreamness` | `Vector{Float64}` | Row sums of ``\Psi`` |
-| `downstreamness` | `Vector{Float64}` | Column sums of ``\Psi`` |
-| `sectors` | `Vector{String}` | Sector labels |
+    Under this package's column orientation of ``\Psi`` — where ``x = \Psi y`` — the
+    aggregation ``\Psi\beta`` *is* the Domar weight vector. That identity is Hulten's
+    theorem restated on the network. Baqaee & Farhi write the same object as
+    ``\beta'\Psi`` under row orientation; the standard-form layer uses row orientation
+    internally and converts once from `IOData`.
 
 ---
 
 ## Complete Example
 
-This example prices a large negative productivity shock two ways: with Hulten's first-order rule, and with the second-order correction that a calibrated network implies. The gap between them is what the Baqaee & Farhi decomposition buys.
+Price a large negative agricultural productivity shock three ways: Hulten, local second-order, and exact equilibrium. Under calibrated complements the three diverge, and the exact answer is the one to trust for large shocks.
 
 ```@example io_baqaee_farhi
 tbl = load_example(:wiot)
 
-# Calibration: intermediate inputs are gross substitutes, consumption goods
-# are mild complements
-bf_cal = baqaee_farhi(tbl; theta=2.0, sigma=0.9)
-report(bf_cal)
+# Atalay-style complements on intermediates, mild consumption complements
+net_cal = production_network(tbl; theta=0.5, sigma=0.9)
+loc = baqaee_farhi(net_cal)
+report(loc)
 ```
 
 ```@example io_baqaee_farhi
-bf_cal.second_order
+dlogA = [-0.20, 0.0]
+hulten = loc.first_order' * dlogA
+correction = 0.5 * dlogA' * loc.second_order * dlogA
+eq_big = bf_equilibrium(net_cal; dlogA=dlogA)
+(hulten, hulten + correction, eq_big.dlogY)
 ```
 
 ```@example io_baqaee_farhi
-# A ten percent productivity loss confined to agriculture
-dlogA = [-0.10, 0.0]
-
-hulten = bf_cal.first_order' * dlogA
-correction = 0.5 * dlogA' * bf_cal.second_order * dlogA
-(hulten, correction, hulten + correction)
+sc_ag = bf_shock_curve(net_cal, 1; range=(-0.3, 0.3), points=7)
+report(sc_ag)
 ```
 
-```@example io_baqaee_farhi
-# The same shock hitting both sectors
-dlogA_common = [-0.10, -0.10]
-(bf_cal.first_order' * dlogA_common,
- 0.5 * dlogA_common' * bf_cal.second_order * dlogA_common)
-```
-
-Hulten prices the agricultural shock at a 4.88 percent fall in aggregate output. The second-order term adds back 0.12 percentage points, because substitution toward manufacturing partly replaces the lost farm output, so the calibrated network puts the true cost at 4.76 percent. The common shock tells the opposite story: its first-order cost of 14.63 percent — the sum of both Domar weights — comes with a correction of essentially zero, since a shock that hits every sector equally leaves no relative price to substitute against. The correction is therefore not a uniform haircut on Hulten; it is a function of how concentrated the shock is.
+Hulten prices a 20% agricultural loss at about 9.8% of aggregate output. The second-order term (complements ⇒ concave) makes the local prediction more severe, and the exact solver confirms the direction: bottlenecks amplify losses. For shocks of a few percent the three nearly coincide; for tens of percent, use `bf_equilibrium`.
 
 ---
 
 ## Common Pitfalls
 
-1. **A zero `second_order` matrix is the expected default.** With no `theta` or `sigma` the model is Cobb-Douglas, both coefficients ``(\theta-1)`` and ``(\sigma-1)`` vanish, and Hulten is exact. Supply at least one elasticity before concluding that the network does not matter.
+1. **A zero `second_order` matrix is the expected default.** With no `theta` or `sigma` (legacy) or all elasticities equal to 1 (standard form) the model is Cobb-Douglas and Hulten is exact. Supply non-unitary elasticities before concluding that the network does not matter.
 
-2. **`theta` and `sigma` are scalars, not vectors.** One production elasticity applies to every sector and one consumption elasticity to every good. Sector-specific elasticities, which Baqaee & Farhi (2019) allow, are not supported — calibrate a representative value or run the decomposition separately under bracketing values.
+2. **Orientation: row vs column.** Classical IO in this package is *column* oriented (`A[i,j]` = input of `i` per unit output of `j`). The B&F standard-form layer is *row* oriented (`Ω[i,j]` = expenditure share of buyer `i` on input `j`). Conversion happens once inside `production_network`. Do not mix conventions inside a single calculation.
 
-3. **Domar weights sum to more than one, and should.** Their sum is gross output over GDP. A sum near one indicates a table with almost no intermediate trade, not a normalization error.
+3. **Negative-share clipping.** Real SUT/MRIO tables carry net taxes and inventory drawdowns as negatives. CES shares must be ≥ 0: `production_network` clips and renormalizes (with `@warn`); `check=true` errors if clipped mass exceeds 1% of any row. The calibrated economy can differ from the raw table — inspect the warning.
 
-4. **GDP is the sum of the entire `va` matrix.** Every value-added category counts, including net taxes on production and any residual row. A table that carries taxes as a separate value-added category yields Domar weights on a different denominator than one that nets them out, so weights are comparable across tables only when the value-added blocks are defined the same way.
+4. **The Hessian is local — use `bf_equilibrium` for large shocks.** Two orders approximate well for shocks of a few percent. For a 20–50% sectoral collapse, solve the exact nonlinear equilibrium. The shock-curve plot is the diagnostic that shows when the Taylor expansion leaves the exact path.
 
 5. **`second_order` is the Hessian, not the contribution.** The factor of ``\tfrac{1}{2}`` belongs to the Taylor expansion, not to the returned matrix. Forgetting it doubles the correction.
 
-6. **The expansion is local.** Two orders approximate well for shocks of a few percent. For a shock large enough to shut a sector down, use [hypothetical extraction](@ref io_classical_page), which solves the counterfactual exactly instead of approximating it.
+6. **Legacy vs standard-form second order.** `baqaee_farhi(io; theta, sigma)` freezes the intermediate-only scalar formula. `baqaee_farhi(net)` implements B&F §4 with factors inside each CES nest. First-order Domar weights match; Hessian numbers generally do not. Prefer the network path when combining with `bf_equilibrium`.
 
-7. **Aggregation changes the answer.** Cost shares are read straight off the table, so a two-sector table and a four-hundred-sector table of the same economy give different Hessians. Substitution possibilities that are within-sector in a coarse classification become across-sector — and therefore visible to the decomposition — in a fine one.
+7. **Domar weights sum to more than one, and should.** Their sum is gross output over GDP. A sum near one indicates almost no intermediate trade, not a normalization error.
+
+8. **GDP is the sum of the entire `va` matrix.** Every value-added category counts. Weights are comparable across tables only when the value-added blocks are defined the same way.
+
+9. **Aggregation changes the answer.** Cost shares are read straight off the table, so a two-sector table and a four-hundred-sector table of the same economy give different Hessians. Substitution possibilities that are within-sector in a coarse classification become across-sector — and therefore visible to the decomposition — in a fine one.
+
+10. **Numéraire interpretation of prices.** Equilibrium prices are relative to nominal GDP ``E = 1``. Real consumption is ``Y = E / P_c``, so ``\Delta\log Y = -\Delta\log P_c``. Factor wages and goods prices are not in currency units of the raw table.
+
+11. **Large MRIO Hessians.** Full ``H`` is ``n^2``. Default `hessian=:auto` forms it only for ``n \le 500``; above that use `hessian=:none` and `bf_quadratic(net, v)`.
 
 ---
 
@@ -253,6 +423,16 @@ Hulten prices the agricultural shock at a 4.88 percent fall in aggregate output.
 ```@docs
 domar_weights
 baqaee_farhi
+production_network
+ProductionNetwork
+bf_equilibrium
+BFEquilibrium
+bf_shock_curve
+BFShockCurve
+bf_elasticities
+BFElasticities
+BFLocal
+bf_quadratic
 ```
 
 ---
@@ -264,6 +444,9 @@ baqaee_farhi
 
 - Antras, P., Chor, D., Fally, T., & Hillberry, R. (2012). Measuring the Upstreamness of Production and Trade Flows.
   *American Economic Review*, 102(3), 412--416. [DOI](https://doi.org/10.1257/aer.102.3.412)
+
+- Atalay, E. (2017). How Important Are Sectoral Shocks?
+  *American Economic Journal: Macroeconomics*, 9(4), 254--280. [DOI](https://doi.org/10.1257/mac.20160353)
 
 - Baqaee, D. R., & Farhi, E. (2019). The Macroeconomic Impact of Microeconomic Shocks: Beyond Hulten's Theorem.
   *Econometrica*, 87(4), 1155--1203. [DOI](https://doi.org/10.3982/ECTA15202)

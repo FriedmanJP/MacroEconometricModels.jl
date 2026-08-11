@@ -118,6 +118,7 @@ include("io/environmental.jl")
 include("io/baqaee_farhi.jl")
 include("io/bf_network.jl")
 include("io/bf_equilibrium.jl")
+include("io/bf_hessian.jl")
 include("io/download/fetch.jl")
 include("io/download/registry.jl")
 include("io/download/sources.jl")
@@ -672,6 +673,8 @@ export add_extension!, intensities, emission_multipliers, footprint
 export domar_weights, baqaee_farhi
 export ProductionNetwork, production_network
 export BFEquilibrium, bf_equilibrium
+export BFLocal, BFElasticities, BFShockCurve
+export bf_elasticities, bf_quadratic, bf_shock_curve
 export list_io_sources, download_io, download_oecd, download_wiod
 export download_exiobase3, download_eora26, download_gloria, parse_io
 export io_file_digest
