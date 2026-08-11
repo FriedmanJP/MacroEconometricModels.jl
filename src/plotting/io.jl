@@ -80,3 +80,53 @@ function plot_result(m::LeontiefModel; title::String="Leontief inverse",
     save_path !== nothing && save_plot(p, save_path)
     p
 end
+
+"""
+    plot_result(eq::BFEquilibrium; title="", save_path=nothing) -> PlotOutput
+
+Bar chart of real-sector log output changes `dlog x` from an exact B&F
+counterfactual.
+"""
+function plot_result(eq::BFEquilibrium; title::String="",
+                     save_path::Union{String,Nothing}=nothing)
+    id = _next_plot_id("io_bf_eq")
+    rows = [Pair{String,String}["x" => _json(eq.sectors[i]),
+                                "dlog x" => _json(eq.dlog_x[i])]
+            for i in 1:length(eq.sectors)]
+    data_json = _json_array_of_objects(rows)
+    series_json = "[" * _json_obj(Pair{String,String}[
+        "key" => _json("dlog x"), "name" => _json("dlog x"),
+        "color" => _json(_PLOT_COLORS[1])]) * "]"
+    js = _render_bar_js(id, data_json, series_json;
+                        mode="grouped", xlabel="Sector", ylabel="dlog x")
+    ttl = isempty(title) ? "B&F equilibrium: sectoral dlog x (dlogY=$(eq.dlogY))" : title
+    panel = _PanelSpec(id, ttl, js)
+    p = _make_plot([panel]; title=ttl, ncols=1)
+    save_path !== nothing && save_plot(p, save_path)
+    p
+end
+
+"""
+    plot_result(net::ProductionNetwork; title="", save_path=nothing) -> PlotOutput
+
+Bar chart of base Domar weights on real-sector outer nodes.
+"""
+function plot_result(net::ProductionNetwork; title::String="",
+                     save_path::Union{String,Nothing}=nothing)
+    id = _next_plot_id("io_bf_net")
+    λ = [net.lambda[g] for g in net.outer_nodes]
+    secs = net.io.sectors
+    rows = [Pair{String,String}["x" => _json(secs[i]), "Domar" => _json(λ[i])]
+            for i in 1:length(secs)]
+    data_json = _json_array_of_objects(rows)
+    series_json = "[" * _json_obj(Pair{String,String}[
+        "key" => _json("Domar"), "name" => _json("Domar λ̃"),
+        "color" => _json(_PLOT_COLORS[1])]) * "]"
+    js = _render_bar_js(id, data_json, series_json;
+                        mode="grouped", xlabel="Sector", ylabel="Domar weight")
+    ttl = isempty(title) ? "ProductionNetwork Domar weights ($(net.nests))" : title
+    panel = _PanelSpec(id, ttl, js)
+    p = _make_plot([panel]; title=ttl, ncols=1)
+    save_path !== nothing && save_plot(p, save_path)
+    p
+end

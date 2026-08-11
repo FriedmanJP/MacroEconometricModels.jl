@@ -59,6 +59,37 @@ function Base.show(io::IO, bf::BaqaeeFarhiResult)
         alignment=[:l, :r, :r, :r])
 end
 
+function Base.show(io::IO, net::ProductionNetwork)
+    println(io, "ProductionNetwork ($(net.nests)): n=$(net.n) sectors, ",
+            "M=$(net.M) producers, F=$(net.F) factors")
+    nshow = min(6, net.n)
+    λ_out = [net.lambda[g] for g in net.outer_nodes]
+    data = hcat(net.io.sectors[1:nshow], _fmt.(λ_out[1:nshow]))
+    _pretty_table(io, data;
+        title="Base Domar weights (real sectors)",
+        column_labels=["Sector", "λ̃"], alignment=[:l, :r])
+    Λ = net.lambda[net.M+2:net.M+1+net.F]
+    println(io, "  factor shares Λ̃: ", _fmt.(Λ),
+            "  (sum = $(_fmt(sum(Λ))))")
+    println(io, "  λ̃₁ (household) = $(_fmt(net.lambda[1]))")
+end
+
+function Base.show(io::IO, eq::BFEquilibrium)
+    status = eq.converged ? "converged" : "NOT CONVERGED"
+    println(io, "BFEquilibrium [$status]  dlogY = $(_fmt(eq.dlogY))  ",
+            "hulten = $(_fmt(eq.hulten))")
+    println(io, "  iterations=$(eq.iterations)  residual=$(_fmt(eq.residual))")
+    nshow = min(6, length(eq.sectors))
+    data = hcat(eq.sectors[1:nshow], _fmt.(eq.dlog_p[1:nshow]),
+                _fmt.(eq.dlog_x[1:nshow]))
+    _pretty_table(io, data;
+        title="Real-sector price & output changes",
+        column_labels=["Sector", "dlog p", "dlog x"],
+        alignment=[:l, :r, :r])
+    println(io, "  factor wages w: ", _fmt.(eq.w))
+    println(io, "  factor shares Λ: ", _fmt.(eq.Lambda))
+end
+
 function Base.show(io::IO, fp::FootprintResult)
     println(io, "Footprint ($(fp.name)) — consumption-based account")
     data = hcat(fp.stressors, [_fmt(sum(fp.total[i, :])) for i in 1:length(fp.stressors)])
