@@ -606,6 +606,9 @@ report(x::BFElasticities) = show(stdout, x)
 report(x::BFShockCurve) = show(stdout, x)
 report(x::BFWedgeDecomp) = show(stdout, x)
 report(x::FootprintResult) = show(stdout, x)
+report(x::RegionalFootprintResult) = show(stdout, x)
+report(x::VerticalSpecialization) = show(stdout, x)
+report(x::ExportDecomposition) = show(stdout, x)
 
 # --- Show-existing types that lacked a report() dispatch (S3/T167) ---
 report(x::GrangerCausalityResult) = show(stdout, x)

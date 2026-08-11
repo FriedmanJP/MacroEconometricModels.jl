@@ -64,7 +64,7 @@ const PROJECT = Set(["notation.md", "bibliography.md", "changelog.md", "citation
 # Children of the io.md hub that inherit the hub's worked examples and carry no
 # standalone Complete Example — treated as hub children, not standalone methods.
 const HUB_CHILDREN = Set(["io_classical.md", "io_environmental.md",
-                          "io_baqaee_farhi.md", "io_download.md"])
+                          "io_mrio.md", "io_baqaee_farhi.md", "io_download.md"])
 
 # save_plot filenames that intentionally differ from the embedded iframe asset
 # (illustrative / placeholder names in reference & getting-started material). The

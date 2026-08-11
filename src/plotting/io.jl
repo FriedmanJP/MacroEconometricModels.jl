@@ -364,3 +364,90 @@ function plot_result(sc::BFShockCurve; title::String="",
     save_path !== nothing && save_plot(p, save_path)
     p
 end
+
+"""
+    plot_result(ed::ExportDecomposition; title="", save_path=nothing) -> PlotOutput
+
+Stacked bar of KWW (2014) DVA / RDV / FVA / PDC components of gross exports.
+"""
+function plot_result(ed::ExportDecomposition; title::String="",
+                     save_path::Union{String,Nothing}=nothing)
+    id = _next_plot_id("io_kww")
+    labs = ["DVA", "RDV", "FVA", "PDC"]
+    vals = [ed.dva, ed.rdv, ed.fva, ed.pdc]
+    rows = [Pair{String,String}["x" => _json(labs[i]), "Value" => _json(vals[i])]
+            for i in 1:4]
+    data_json = _json_array_of_objects(rows)
+    series_json = "[" * _json_obj(Pair{String,String}[
+        "key" => _json("Value"), "name" => _json("Value"),
+        "color" => _json(_PLOT_COLORS[1])]) * "]"
+    js = _render_bar_js(id, data_json, series_json;
+                        mode="grouped", xlabel="Component", ylabel="Value")
+    ttl = isempty(title) ?
+        "KWW export decomposition ($(ed.region); GE=$(_fmt(ed.gross_exports)))" :
+        title
+    panel = _PanelSpec(id, ttl, js)
+    p = _make_plot([panel]; title=ttl, ncols=1)
+    save_path !== nothing && save_plot(p, save_path)
+    p
+end
+
+"""
+    plot_result(vs::VerticalSpecialization; title="", save_path=nothing) -> PlotOutput
+
+Bar chart of sectoral foreign content in exports (HIY / KWW VS).
+"""
+function plot_result(vs::VerticalSpecialization; title::String="",
+                     save_path::Union{String,Nothing}=nothing)
+    id = _next_plot_id("io_vs")
+    labs = ["sector $(i)" for i in 1:length(vs.by_sector)]
+    rows = [Pair{String,String}["x" => _json(labs[i]),
+                                "VS" => _json(vs.by_sector[i])]
+            for i in 1:length(vs.by_sector)]
+    data_json = _json_array_of_objects(rows)
+    series_json = "[" * _json_obj(Pair{String,String}[
+        "key" => _json("VS"), "name" => _json("Foreign content"),
+        "color" => _json(_PLOT_COLORS[1])]) * "]"
+    js = _render_bar_js(id, data_json, series_json;
+                        mode="grouped", xlabel="Sector", ylabel="Foreign content")
+    ttl = isempty(title) ?
+        "Vertical specialization ($(vs.region); share=$(_fmt(vs.vs_share)))" :
+        title
+    panel = _PanelSpec(id, ttl, js)
+    p = _make_plot([panel]; title=ttl, ncols=1)
+    save_path !== nothing && save_plot(p, save_path)
+    p
+end
+
+"""
+    plot_result(fp::RegionalFootprintResult; title="", save_path=nothing) -> PlotOutput
+
+Grouped bar of production-based vs consumption-based totals by region (first
+stressor row).
+"""
+function plot_result(fp::RegionalFootprintResult; title::String="",
+                     save_path::Union{String,Nothing}=nothing)
+    id = _next_plot_id("io_rfp")
+    s = 1                                          # first stressor
+    rows = [Pair{String,String}[
+                "x" => _json(fp.regions[r]),
+                "Production" => _json(fp.production[s, r]),
+                "Consumption" => _json(fp.consumption[s, r])]
+            for r in 1:length(fp.regions)]
+    data_json = _json_array_of_objects(rows)
+    series_json = "[" *
+        _json_obj(Pair{String,String}[
+            "key" => _json("Production"), "name" => _json("Production"),
+            "color" => _json(_PLOT_COLORS[1])]) * "," *
+        _json_obj(Pair{String,String}[
+            "key" => _json("Consumption"), "name" => _json("Consumption"),
+            "color" => _json(_PLOT_COLORS[2])]) * "]"
+    js = _render_bar_js(id, data_json, series_json;
+                        mode="grouped", xlabel="Region", ylabel=fp.stressors[s])
+    ttl = isempty(title) ?
+        "Regional footprint ($(fp.name) / $(fp.stressors[s]))" : title
+    panel = _PanelSpec(id, ttl, js)
+    p = _make_plot([panel]; title=ttl, ncols=1)
+    save_path !== nothing && save_plot(p, save_path)
+    p
+end

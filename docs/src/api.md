@@ -822,7 +822,7 @@ PANIC, Pesaran CIPS, and Moon-Perron panel unit root tests. See [Panel Tests](@r
 | `westerlund_test(pd, y, xs...; ...)` | Westerlund (2007) ECM test (Gt/Ga/Pt/Pa) |
 | `fisher_johansen_test(pd, ys...; ...)` | Fisher-type (Maddala-Wu/Choi) combined Johansen test |
 
-Leontief and Ghosh accounting, multipliers and linkages, structural decomposition, environmental extensions, and the production-network approach of Baqaee & Farhi (2019). See [Input-Output Analysis](@ref io_page) for the hub and its four child pages.
+Leontief and Ghosh accounting, multipliers and linkages, structural decomposition, environmental extensions, MRIO trade accounting (KWW 2014), and the production-network approach of Baqaee & Farhi (2019). See [Input-Output Analysis](@ref io_page) for the hub and its child pages.
 
 ### Input-Output Analysis
 

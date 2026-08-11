@@ -162,6 +162,7 @@ Inter-industry transactions tables, multipliers, and network propagation.
 | Compute multipliers and linkages | `leontief`, `ghosh`, `multipliers`, `linkages`, `key_sectors` | Demand- and supply-driven analysis | [Classical Analysis](io_classical.md) |
 | Decompose change or remove a sector | `sda`, `hypothetical_extraction` | Structural decomposition and counterfactuals | [Classical Analysis](io_classical.md) |
 | Attach emissions or employment accounts | `add_extension!`, `intensities`, `emission_multipliers`, `footprint` | Consumption-based accounting | [Environmental Extensions](io_environmental.md) |
+| Decompose gross exports into value-added | `export_decomposition`, `vertical_specialization`, `aggregate` | KWW (2014) DVA/RDV/FVA/PDC, HIY VS | [MRIO Trade Accounting](io_mrio.md) |
 | Go beyond Hulten's theorem | `baqaee_farhi`, `domar_weights` | Nonlinear network propagation | [Baqaee & Farhi (2019)](io_baqaee_farhi.md) |
 | Fetch a public MRIO database | `list_io_sources`, `download_io`, `parse_io` | WIOD, OECD, EXIOBASE, EORA, GLORIA | [Downloading Data](io_download.md) |
 

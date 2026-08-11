@@ -139,6 +139,18 @@ const _REFERENCES = Dict{Symbol, _RefEntry}(
         journal="American Economic Journal: Macroeconomics", volume="9", issue="4",
         pages="254--280",
         doi="10.1257/mac.20160353", isbn="", publisher="", entry_type=:article),
+    :hummels_ishii_yi2001 => (key=:hummels_ishii_yi2001,
+        authors="Hummels, David and Ishii, Jun and Yi, Kei-Mu", year=2001,
+        title="The Nature and Growth of Vertical Specialization in World Trade",
+        journal="Journal of International Economics", volume="54", issue="1",
+        pages="75--96",
+        doi="10.1016/S0022-1996(00)00093-3", isbn="", publisher="", entry_type=:article),
+    :koopman_wang_wei2014 => (key=:koopman_wang_wei2014,
+        authors="Koopman, Robert and Wang, Zhi and Wei, Shang-Jin", year=2014,
+        title="Tracing Value-Added and Double Counting in Gross Exports",
+        journal="American Economic Review", volume="104", issue="2",
+        pages="459--494",
+        doi="10.1257/aer.104.2.459", isbn="", publisher="", entry_type=:article),
     # --- VAR & Structural VAR ---
     :sims1980 => (key=:sims1980, authors="Sims, Christopher A.", year=1980,
         title="Macroeconomics and Reality", journal="Econometrica",
@@ -1816,6 +1828,9 @@ const _TYPE_REFS = Dict{Symbol, Vector{Symbol}}(
     :ImpactResult => [:miller_blair_2009],
     :NetworkStatsResult => [:dietzenbacher_romero_bosma2005, :gabaix2011, :miller_blair_2009],
     :FootprintResult => [:leontief1936, :miller_blair_2009],
+    :RegionalFootprintResult => [:leontief1936, :miller_blair_2009],
+    :VerticalSpecialization => [:hummels_ishii_yi2001, :koopman_wang_wei2014, :miller_blair_2009],
+    :ExportDecomposition => [:koopman_wang_wei2014, :hummels_ishii_yi2001, :miller_blair_2009],
     :BaqaeeFarhiResult => [:baqaee_farhi_2019, :miller_blair_2009],
     :ProductionNetwork => [:baqaee_farhi_2019, :baqaee_farhi_2020, :atalay_2017, :miller_blair_2009],
     :BFEquilibrium => [:baqaee_farhi_2019, :baqaee_farhi_2020, :atalay_2017],
@@ -2478,6 +2493,9 @@ refs(io::IO, ::PriceModelResult; kw...) = refs(io, _TYPE_REFS[:PriceModelResult]
 refs(io::IO, ::ImpactResult; kw...) = refs(io, _TYPE_REFS[:ImpactResult]; kw...)
 refs(io::IO, ::NetworkStatsResult; kw...) = refs(io, _TYPE_REFS[:NetworkStatsResult]; kw...)
 refs(io::IO, ::FootprintResult; kw...) = refs(io, _TYPE_REFS[:FootprintResult]; kw...)
+refs(io::IO, ::RegionalFootprintResult; kw...) = refs(io, _TYPE_REFS[:RegionalFootprintResult]; kw...)
+refs(io::IO, ::VerticalSpecialization; kw...) = refs(io, _TYPE_REFS[:VerticalSpecialization]; kw...)
+refs(io::IO, ::ExportDecomposition; kw...) = refs(io, _TYPE_REFS[:ExportDecomposition]; kw...)
 refs(io::IO, ::BaqaeeFarhiResult; kw...) = refs(io, _TYPE_REFS[:BaqaeeFarhiResult]; kw...)
 refs(io::IO, ::ProductionNetwork; kw...) = refs(io, _TYPE_REFS[:ProductionNetwork]; kw...)
 refs(io::IO, ::BFEquilibrium; kw...) = refs(io, _TYPE_REFS[:BFEquilibrium]; kw...)

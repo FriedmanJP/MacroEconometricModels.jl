@@ -118,6 +118,7 @@ include("io/price.jl")
 include("io/impact.jl")
 include("io/network.jl")
 include("io/environmental.jl")
+include("io/mrio.jl")
 include("io/baqaee_farhi.jl")
 include("io/bf_network.jl")
 include("io/bf_equilibrium.jl")
@@ -678,6 +679,10 @@ export impact, ImpactResult
 export network_stats, NetworkStatsResult
 export ExtractionResult
 export add_extension!, intensities, emission_multipliers, footprint
+export aggregate, region_block, region_indices, bilateral_trade, gross_exports
+export vertical_specialization, VerticalSpecialization
+export export_decomposition, ExportDecomposition
+export RegionalFootprintResult
 export domar_weights, baqaee_farhi
 export ProductionNetwork, production_network
 export BFEquilibrium, bf_equilibrium

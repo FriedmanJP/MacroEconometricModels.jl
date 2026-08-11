@@ -217,3 +217,40 @@ function Base.show(io::IO, fp::FootprintResult)
     _pretty_table(io, data;
         column_labels=["Stressor", "Total"], alignment=[:l, :r])
 end
+
+function Base.show(io::IO, fp::RegionalFootprintResult)
+    println(io, "RegionalFootprint ($(fp.name)) — production vs consumption")
+    n_s = length(fp.stressors)
+    # One row per (stressor, region)
+    rows = String[]
+    prod = String[]
+    cons = String[]
+    for i in 1:n_s, r in 1:length(fp.regions)
+        push!(rows, "$(fp.stressors[i]) / $(fp.regions[r])")
+        push!(prod, _fmt(fp.production[i, r]))
+        push!(cons, _fmt(fp.consumption[i, r]))
+    end
+    data = hcat(rows, prod, cons)
+    _pretty_table(io, data;
+        column_labels=["Stressor / Region", "Production", "Consumption"],
+        alignment=[:l, :r, :r])
+end
+
+function Base.show(io::IO, vs::VerticalSpecialization)
+    println(io, "VerticalSpecialization ($(vs.region))")
+    println(io, "  gross exports:     $(_fmt(vs.gross_exports))")
+    println(io, "  VS (foreign cont.): $(_fmt(vs.vs))  (share=$(_fmt(vs.vs_share)))")
+    println(io, "  domestic content:  $(_fmt(vs.domestic_content))  (share=$(_fmt(vs.dc_share)))")
+    println(io, "  VS1 (indirect):    $(_fmt(vs.vs1))")
+end
+
+function Base.show(io::IO, ed::ExportDecomposition)
+    println(io, "ExportDecomposition KWW (2014) — $(ed.region)")
+    println(io, "  gross exports: $(_fmt(ed.gross_exports))  VAX ratio: $(_fmt(ed.vax_ratio))")
+    data = hcat(["DVA", "RDV", "FVA", "PDC"],
+                _fmt.([ed.dva, ed.rdv, ed.fva, ed.pdc]))
+    _pretty_table(io, data;
+        column_labels=["Component", "Value"], alignment=[:l, :r])
+    s = ed.dva + ed.rdv + ed.fva + ed.pdc
+    println(io, "  sum DVA+RDV+FVA+PDC = $(_fmt(s))")
+end

@@ -21,6 +21,21 @@ isdefined(@__MODULE__, :check_plot) ||
         assert_all_json_valid(p)
     end
 
+    # MRIO trade-accounting plots (KWW two-country toy)
+    Z = [50.0 50.0; 0.0 0.0]
+    Y = [30.0 20.0; 50.0 0.0]
+    va = reshape([100.0, 0.0], 1, 2)
+    mrio = IOData(Z, Y, va; sectors=["A_g", "B_g"], regions=["A", "B"],
+                  fd_cats=["A_fd", "B_fd"], va_cats=["VA"])
+    add_extension!(mrio, "CO2", [10.0 0.0]; stressors=["CO2"], unit=["kt"])
+    for obj in (export_decomposition(mrio, "A"),
+                vertical_specialization(mrio, "B"),
+                footprint(mrio, "CO2"; by=:region))
+        p = plot_result(obj)
+        check_plot(p)
+        assert_all_json_valid(p)
+    end
+
     # save_path branch for each recipe (C8): writes a self-contained document.
     d = mktempdir()
     for (obj, name) in ((multipliers(io), "m.html"),
