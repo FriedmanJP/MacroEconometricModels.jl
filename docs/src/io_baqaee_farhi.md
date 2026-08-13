@@ -441,7 +441,7 @@ where:
 
 In a horizontal economy (no intermediates, one factor) this collapses to B&F (2020) eq. 19: ``L \approx \tfrac12 \sigma \operatorname{Var}_\lambda(\log\mu)``. Leontief (``\theta \equiv 0``) forces ``K_\mu = 0`` and therefore ``H_\mu = 0``.
 
-[`bf_misallocation`](@ref) solves the exact efficient twin and returns a [`BFMisallocation`](@ref) with that distance plus the local Taylor pieces. `point=:efficient` (default) evaluates ``H_\mu`` at ``\mu=1``: `first_order` is zero and ``L \approx -\tfrac12 v' H_\mu v``. `point=:observed` returns local curvature at the distorted point — not ``\partial^2\log Y/\partial\log\mu^2`` from an efficient origin, and not the distance-to-frontier identity. Exact `distance` always comes from [`bf_equilibrium`](@ref) on the efficient twin and does not depend on `point`.
+[`bf_misallocation`](@ref) solves the exact efficient twin and returns a [`BFMisallocation`](@ref) with that distance plus the local Taylor pieces. `point=:efficient` (default) evaluates ``H_\mu`` at ``\mu=1``: `first_order` is zero and ``L \approx -\tfrac12 v' H_\mu v``. `point=:observed` returns the Proposition 5 Var/Cov object at the distorted point — not the solver Hessian ``\partial^2\log Y/\partial\log\mu^2``, and not the distance-to-frontier identity. Exact `distance` always comes from [`bf_equilibrium`](@ref) on the efficient twin and does not depend on `point`.
 
 ```@example io_baqaee_farhi
 m = bf_misallocation(net_w)
@@ -464,7 +464,7 @@ Agriculture's 25% markup and manufacturing's 10% markup cost 1.18% of log output
 | `distance` | `T` | Exact ``L = \log(Y^*/Y)`` from the solver |
 | `first_order` | `T` | Zero at `:efficient`; eq. 14 ``g'\Delta\log\mu`` at `:observed` |
 | `second_order` | `T` | ``-\tfrac12 v' H_\mu v`` (Harberger of ``L`` only at `:efficient`) |
-| `H_mu` | `Matrix{T}` | Hessian of ``\log Y`` in ``\log\mu`` at `point`; empty if `hessian=:none` |
+| `H_mu` | `Matrix{T}` | At `:efficient`, Hessian of ``\log Y`` in ``\log\mu``; at `:observed`, Prop 5 Var/Cov object (not the solver Hessian). Empty if `hessian=:none` |
 | `delta_logmu` | `Vector{T}` | ``\Delta\log\mu`` on real-sector outer nodes |
 | `point` | `Symbol` | `:efficient` or `:observed` |
 
