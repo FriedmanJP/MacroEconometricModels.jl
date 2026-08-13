@@ -106,11 +106,15 @@ end
     for (p, d, q) in ((1, 0, 1), (2, 0, 0), (0, 0, 1), (1, 1, 1))
         a = estimate_arima(z, p, d, q; method=:css_mle)
         b = estimate_sarima(z, p, d, q, 0, 0, 0, 0; method=:css_mle)
-        @test b.phi ≈ a.phi atol = 1e-10
-        @test b.theta ≈ a.theta atol = 1e-10
-        @test b.c ≈ a.c atol = 1e-10
-        @test b.sigma2 ≈ a.sigma2 atol = 1e-10
-        @test b.loglik ≈ a.loglik atol = 1e-10
+        # Two independent CSS-MLE paths (`_estimate_arma_internal` vs
+        # `_estimate_sarima_internal` at g_tol=1e-8). Windows OpenBLAS lands
+        # ~1.4e-10 apart on θ/σ² — just past atol=1e-10 — so match the
+        # optimizer's own stopping tolerance rather than demand bit identity.
+        @test b.phi ≈ a.phi rtol = 1e-8 atol = 1e-8
+        @test b.theta ≈ a.theta rtol = 1e-8 atol = 1e-8
+        @test b.c ≈ a.c rtol = 1e-8 atol = 1e-8
+        @test b.sigma2 ≈ a.sigma2 rtol = 1e-8 atol = 1e-8
+        @test b.loglik ≈ a.loglik rtol = 1e-8 atol = 1e-8
         @test b.y_diff ≈ a.y_diff atol = 1e-12
         # Expanded polynomials collapse to the non-seasonal ones
         @test b.phi_expanded ≈ a.phi
