@@ -11,11 +11,17 @@ using SparseArrays
 using Random
 using Distributions
 
+if !@isdefined(FAST)
+    const FAST = get(ENV, "MACRO_FAST_TESTS", "") == "1"
+end
+
 # Shared Huggett (1993) credit-limit −2 steady state (T209/#308): three testsets
 # (the Table-1 SS loop, SSJ, and Reiter) recompute the identical cl=−2 equilibrium.
 # Solve it ONCE here at the stricter (tol=5e-4) bar and reuse everywhere.
+# Keep n_a=200 even under FAST — Table 1 atol=0.015 and the #234 @test_broken
+# KS-SSJ items are not monotone in the grid (see HA Bayesian note below).
 const _HUG_SPEC_M2 = MacroEconometricModels._huggett_example(; credit_limit=-2.0, a_max=8.0, n_a=200)
-const _HUG_SS_M2 = compute_steady_state(_HUG_SPEC_M2; max_iter=200, tol=5e-4)
+const _HUG_SS_M2 = compute_steady_state(_HUG_SPEC_M2; max_iter=FAST ? 80 : 200, tol=5e-4)
 
 @testset "HA-DSGE Types" begin
 
@@ -331,7 +337,8 @@ end
 # ─────────────────────────────────────────────────────────────────────────────
 
 @testset "Two-asset nested EGM" begin
-    grid2 = HAGrid(; liquid=(0.0, 20.0, 30), illiquid=(0.0, 50.0, 20), income_states=3)
+    nl, ni = FAST ? (16, 12) : (30, 20)
+    grid2 = HAGrid(; liquid=(0.0, 20.0, nl), illiquid=(0.0, 50.0, ni), income_states=3)
     inc = rouwenhorst(0.966, 0.5, 3)
     ip2 = IndividualProblem{Float64}(
         c -> log(c), c -> 1.0/c, m -> 1.0/m, 0.99,
@@ -340,14 +347,14 @@ end
     )
     prices2 = Dict(:r => 0.01, :r_b => 0.01, :r_a => 0.02, :w => 1.0)
     result = MacroEconometricModels._two_asset_egm_solve(ip2, grid2, inc, prices2;
-        max_iter=200, tol=1e-6, n_deposit=10)
+        max_iter=FAST ? 80 : 200, tol=1e-6, n_deposit=FAST ? 6 : 10)
 
     @test haskey(result, :consumption)
     @test haskey(result, :liquid_savings)
     @test haskey(result, :deposit)
-    @test size(result[:consumption]) == (30, 20, 3)
-    @test size(result[:liquid_savings]) == (30, 20, 3)
-    @test size(result[:deposit]) == (30, 20, 3)
+    @test size(result[:consumption]) == (nl, ni, 3)
+    @test size(result[:liquid_savings]) == (nl, ni, 3)
+    @test size(result[:deposit]) == (nl, ni, 3)
     # Consumption should be positive and finite
     @test all(result[:consumption] .> 0)
     @test all(isfinite, result[:consumption])
@@ -371,7 +378,7 @@ end
     )
     prices2 = Dict(:r => 0.01, :r_b => 0.01, :r_a => 0.015, :w => 1.0)
     res = MacroEconometricModels._two_asset_egm_solve(ip2, grid2, inc, prices2;
-        max_iter=400, tol=1e-6, n_deposit=10)
+        max_iter=FAST ? 120 : 400, tol=1e-6, n_deposit=FAST ? 6 : 10)
     c = res[:consumption]; b = res[:liquid_savings]; d = res[:deposit]
     b_grid = grid2.grids[1]; a_grid = grid2.grids[2]; e_vals = inc.states
     n_b, n_a, n_e = size(c)
@@ -417,7 +424,8 @@ end
 # ─────────────────────────────────────────────────────────────────────────────
 
 @testset "VFI one-asset" begin
-    grid = HAGrid(assets=(0.0, 200.0, 80), income_states=3)
+    na = FAST ? 40 : 80
+    grid = HAGrid(assets=(0.0, 200.0, na), income_states=3)
     inc = rouwenhorst(0.966, 0.5, 3)
     ip = IndividualProblem{Float64}(
         c -> log(c), c -> 1.0/c, m -> 1.0/m, 0.99,
@@ -426,16 +434,18 @@ end
     )
     prices = Dict(:r => 0.01, :w => 1.0)
     V, c_pol, a_pol = MacroEconometricModels._vfi_solve(ip, grid, inc, prices;
-                                                         max_iter=300, tol=1e-6, howard_steps=20)
-    @test size(V) == (80, 3)
-    @test size(c_pol) == (80, 3)
-    @test size(a_pol) == (80, 3)
+                                                         max_iter=FAST ? 80 : 300, tol=1e-6,
+                                                         howard_steps=FAST ? 8 : 20)
+    @test size(V) == (na, 3)
+    @test size(c_pol) == (na, 3)
+    @test size(a_pol) == (na, 3)
     @test all(c_pol .> 0)
     @test all(a_pol .>= -1e-10)
     # Higher income → higher consumption
-    @test c_pol[40, 3] > c_pol[40, 1]
+    mid = na ÷ 2
+    @test c_pol[mid, 3] > c_pol[mid, 1]
     # Value function increasing in assets
-    @test V[70, 2] > V[10, 2]
+    @test V[div(7 * na, 8), 2] > V[max(1, div(na, 8)), 2]
 end
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -484,8 +494,9 @@ end
 # ─────────────────────────────────────────────────────────────────────────────
 
 @testset "HA steady state" begin
-    grid = HAGrid(assets=(0.0, 200.0, 150), income_states=5)
-    inc = rouwenhorst(0.966, 0.5, 5)
+    na, ne = FAST ? (50, 3) : (150, 5)
+    grid = HAGrid(assets=(0.0, 200.0, na), income_states=ne)
+    inc = rouwenhorst(0.966, 0.5, ne)
     ip = IndividualProblem{Float64}(
         c -> log(c), c -> 1.0/c, m -> 1.0/m, 0.99,
         (a, e, prices) -> (1 + prices[:r]) * a + prices[:w] * e,
@@ -502,7 +513,7 @@ end
 
     ss = MacroEconometricModels._ha_steady_state(
         ip, grid, inc, price_fn, params;
-        K_init=10.0, r_bounds=(-0.01, 0.04), max_iter=100, tol=1e-4
+        K_init=10.0, r_bounds=(-0.01, 0.04), max_iter=FAST ? 40 : 100, tol=1e-4
     )
 
     @test ss isa HASteadyState{Float64}
@@ -524,11 +535,11 @@ end
     @test ss.aggregates[:Y] > 0
 
     # Distribution shape
-    @test size(ss.distribution) == (150, 5)
+    @test size(ss.distribution) == (na, ne)
 
     # Policy shapes
-    @test size(ss.policies[:savings]) == (150, 5)
-    @test size(ss.policies[:consumption]) == (150, 5)
+    @test size(ss.policies[:savings]) == (na, ne)
+    @test size(ss.policies[:consumption]) == (na, ne)
 
     # Consumption should be positive everywhere
     @test all(ss.policies[:consumption] .> 0)
@@ -562,7 +573,7 @@ end
 # ─────────────────────────────────────────────────────────────────────────────
 
 @testset "Krusell-Smith simulation" begin
-    grid = HAGrid(assets=(0.0, 200.0, 80), income_states=3)
+    grid = HAGrid(assets=(0.0, 200.0, FAST ? 40 : 80), income_states=3)
     # Normalized income (#231): positive states, E[e]=1. The raw log grid has
     # negative states → negative labor income → the household policy collapses to
     # the borrowing constraint and the KS dynamics are degenerate.
@@ -582,18 +593,19 @@ end
     end
     params = Dict(:alpha => 0.36, :delta => 0.025, :Z => 1.0, :L => 1.0)
     ss = MacroEconometricModels._ha_steady_state(ip, grid, inc, price_fn, params;
-        K_init=10.0, r_bounds=(-0.02, 0.04), max_iter=60, tol=1e-3)
+        K_init=10.0, r_bounds=(-0.02, 0.04), max_iter=FAST ? 30 : 60, tol=1e-3)
 
     result = MacroEconometricModels._krusell_smith_solve(
         ss, ip, grid, inc, price_fn, params;
-        T_sim=300, T_burn=50, max_outer=3, rho_z=0.95, sigma_z=0.007
+        T_sim=FAST ? 120 : 300, T_burn=FAST ? 25 : 50, max_outer=FAST ? 2 : 3,
+        rho_z=0.95, sigma_z=0.007
     )
 
     @test haskey(result.plm_coefficients, :K)
     @test length(result.plm_coefficients[:K]) == 3  # z-augmented PLM: [b1, b2, b3]
     @test haskey(result.r_squared, :K)
     @test result.r_squared[:K] > 0.9  # KS typically gets R² > 0.999
-    @test result.iterations <= 3
+    @test result.iterations <= (FAST ? 2 : 3)
 
     # #229/T130: the household policy — and hence the realized capital path — is a
     # genuine function of the PLM b. Perturbing b, re-solving the (a,e,K,z) policy and
@@ -610,16 +622,17 @@ end
         @views c0[:, :, kK, lz] .= css
     end
     rng_ks = Random.MersenneTwister(11)
-    T_s = 150; zidx = zeros(Int, T_s); zidx[1] = 2; zc = cumsum(zt; dims=2)
+    T_s = FAST ? 60 : 150; zidx = zeros(Int, T_s); zidx[1] = 2; zc = cumsum(zt; dims=2)
     for t in 2:T_s
         u = rand(rng_ks)
         zidx[t] = clamp(searchsortedfirst(view(zc, zidx[t-1], :), u), 1, n_z)
     end
+    ks_egm_iter = FAST ? 200 : 1000
     cA, _ = MacroEconometricModels._ks_egm_solve(ip, grid, inc, [0.0, 1.0, 0.0],
-        zg, zt, Kg, price_fn, params; max_iter=1000, tol=1e-6, init_policy=c0)
+        zg, zt, Kg, price_fn, params; max_iter=ks_egm_iter, tol=1e-6, init_policy=c0)
     KA = MacroEconometricModels._ks_simulate(cA, ss, grid, inc, zidx, zg, Kg, price_fn, params)
     cB, _ = MacroEconometricModels._ks_egm_solve(ip, grid, inc, [0.3, 0.85, 0.05],
-        zg, zt, Kg, price_fn, params; max_iter=1000, tol=1e-6, init_policy=c0)
+        zg, zt, Kg, price_fn, params; max_iter=ks_egm_iter, tol=1e-6, init_policy=c0)
     KB = MacroEconometricModels._ks_simulate(cB, ss, grid, inc, zidx, zg, Kg, price_fn, params)
     @test maximum(abs.(cA .- cB)) > 1e-4    # different PLM → materially different policy
     @test maximum(abs.(KA .- KB)) > 1e-3    # different PLM → different realized path
@@ -651,7 +664,7 @@ end
 end
 
 @testset "SSJ Jacobian" begin
-    grid = HAGrid(assets=(0.0, 200.0, 80), income_states=3)
+    grid = HAGrid(assets=(0.0, 200.0, FAST ? 40 : 80), income_states=3)
     inc = rouwenhorst(0.966, 0.5, 3)
     ip = IndividualProblem{Float64}(
         c -> log(c), c -> 1.0/c, m -> 1.0/m, 0.99,
@@ -666,9 +679,9 @@ end
     end
     params = Dict(:alpha => 0.36, :delta => 0.025, :Z => 1.0, :L => 1.0)
     ss = MacroEconometricModels._ha_steady_state(ip, grid, inc, price_fn_ssj, params;
-        K_init=10.0, r_bounds=(-0.02, 0.04), max_iter=60, tol=1e-3)
+        K_init=10.0, r_bounds=(-0.02, 0.04), max_iter=FAST ? 30 : 60, tol=1e-3)
 
-    T_h = 30
+    T_h = FAST ? 12 : 30
     J = MacroEconometricModels._ssj_jacobian(ss, ip, grid, inc, :r, :K; T_horizon=T_h, dx=1e-4)
     @test size(J) == (T_h, T_h)
     @test all(isfinite.(J))
@@ -681,7 +694,9 @@ end
     # respond BEFORE an announced future price change — so J[t,s] != 0 for some
     # t < s. The old brute force zeroed the t<s block (lower-triangular Toeplitz).
     @test any(abs(J[t, s]) > 1e-10 for t in 1:T_h for s in (t+1):T_h)
-    @test !isapprox(J, LowerTriangular(J))
+    # Default isapprox rtol swallows the ~1e-7 anticipation block on a short
+    # FAST horizon; the any(...) check above is the one that pins density.
+    FAST || @test !isapprox(J, LowerTriangular(J))
     # Mass conservation of the one-step forward push (column-stochastic Λ, no renorm).
     prices_p = copy(ss.prices); prices_p[:r] += 1e-4
     _, a_pol_p = MacroEconometricModels._egm_solve(ip, grid, inc, prices_p;
@@ -866,7 +881,8 @@ end
 # ─────────────────────────────────────────────────────────────────────────────
 
 @testset "Reiter linearization" begin
-    grid = HAGrid(assets=(0.0, 200.0, 50), income_states=3)
+    nred = FAST ? 10 : 15
+    grid = HAGrid(assets=(0.0, 200.0, FAST ? 30 : 50), income_states=3)
     inc = rouwenhorst(0.966, 0.5, 3)
     ip = IndividualProblem{Float64}(
         c -> log(c), c -> 1.0/c, m -> 1.0/m, 0.99,
@@ -884,11 +900,11 @@ end
         K_init=10.0, r_bounds=(-0.02, 0.04), max_iter=60, tol=1e-3)
 
     G1, impact, n_red, explained = MacroEconometricModels._reiter_linearize(
-        ss, ip, grid, inc; n_reduced=15, model=:aiyagari, het_params=params
+        ss, ip, grid, inc; n_reduced=nred, model=:aiyagari, het_params=params
     )
     @test size(G1, 1) == size(G1, 2)  # square
-    @test size(G1, 1) <= 15 + 5  # reduced dim + aggregates
-    @test n_red <= 15
+    @test size(G1, 1) <= nred + 5  # reduced dim + aggregates
+    @test n_red <= nred
     @test explained > 0.95
     @test maximum(abs.(eigvals(G1))) < 1.0 + 0.01  # approximately stable
     @test size(impact, 1) == size(G1, 1)
@@ -911,14 +927,14 @@ end
     # Varying rho_z changes G1 (the TFP AR(1) diagonal), proving it is read.
     params_lo = merge(params, Dict(:rho_z => 0.80))
     G1b, _, _, _ = MacroEconometricModels._reiter_linearize(
-        ss, ip, grid, inc; n_reduced=15, model=:aiyagari, het_params=params_lo)
+        ss, ip, grid, inc; n_reduced=nred, model=:aiyagari, het_params=params_lo)
     @test !(G1 ≈ G1b)
     # A missing required parameter errors informatively (no magic-number default).
     @test_throws ErrorException MacroEconometricModels._reiter_linearize(
-        ss, ip, grid, inc; n_reduced=15, model=:aiyagari,
+        ss, ip, grid, inc; n_reduced=nred, model=:aiyagari,
         het_params=Dict(:alpha => 0.36, :delta => 0.025, :Z => 1.0))   # no :rho_z
     @test_throws ErrorException MacroEconometricModels._reiter_linearize(
-        ss, ip, grid, inc; n_reduced=15, model=:aiyagari,
+        ss, ip, grid, inc; n_reduced=nred, model=:aiyagari,
         het_params=Dict(:delta => 0.025, :rho_z => 0.95, :Z => 1.0))   # no :alpha
 end
 
@@ -1225,7 +1241,8 @@ end
         # ORACLE: for a stationary Young histogram whose policy never leaves the
         # grid, ∫a'dμ == ∫a dμ is FORCED — stationarity says next period's
         # holdings integrate to ∫a dμ, and with no clamping those holdings ARE a'.
-        for name in (:krusell_smith, :one_asset_hank, :huggett)
+        names = FAST ? (:huggett,) : (:krusell_smith, :one_asset_hank, :huggett)
+        for name in names
             ss = compute_steady_state(load_ha_example(name))
             d = ha_grid_diagnostics(ss)
             scale = max(1.0, abs(ss.aggregates[:K]))
@@ -1241,7 +1258,7 @@ end
         end
     end
 
-    @testset "steady state is invariant to the bisection bracket" begin
+    FAST || @testset "steady state is invariant to the bisection bracket" begin
         # ORACLE: the market-clearing rate is a property of the model, not of the
         # interval it is searched over. Any bracket containing the root must give
         # the same answer.
@@ -1296,7 +1313,7 @@ end
         end
     end
 
-    @testset "detects the historical Krusell-Smith defect" begin
+    FAST || @testset "detects the historical Krusell-Smith defect" begin
         # Rebuild EXACTLY the pre-fix KS spec: sigma = 0.5 read as the INNOVATION
         # sd, on the old [0, 200] :double_exp grid. The diagnostics must catch what
         # `excess_demand` could not.
@@ -1676,7 +1693,7 @@ end
             base.individual.budget_fn, [0.0, 0.0], nothing, 2; labor=LaborSupply())
     end
 
-    @testset "exogenous-labor paths are untouched" begin
+    FAST || @testset "exogenous-labor paths are untouched" begin
         base = load_ha_example(:krusell_smith)
         @test base.individual.labor === nothing
         # `labor_policy` returns ones, so ∫e·n dμ reduces to ∫e dμ.
@@ -1733,7 +1750,7 @@ end
         end
     end
 
-    @testset "steady state clears with endogenous labor" begin
+    FAST || @testset "steady state clears with endogenous labor" begin
         # ORACLE: with Cobb-Douglas production the firm FOC pins K/L given r —
         # k = (α Z /(r+δ))^{1/(1-α)} — independent of the household side. So the
         # REALIZED K/L from the distribution must reproduce it exactly, and it is
@@ -1767,7 +1784,7 @@ end
         end
     end
 
-    @testset "wage shock moves hours the right way (SSJ)" begin
+    FAST || @testset "wage shock moves hours the right way (SSJ)" begin
         # ORACLE (analytic): under GHH, n = (w e/ψ)^φ is PURELY STATIC, so
         #   (i) dN/dw = φ·N/w exactly, and
         #   (ii) the sequence-space Jacobian of hours w.r.t. the wage is DIAGONAL —
@@ -1802,6 +1819,7 @@ end
         @test_throws ErrorException load_ha_example(:not_a_model)
         # ψ = 3 is calibrated so efficiency units land on the L = 1 normalization
         # the exogenous-labor examples impose, making the two comparable.
+        FAST && return
         ss = compute_steady_state(spec)
         @test ss.aggregates[:L] ≈ 1.0 atol=0.05
     end
@@ -1993,6 +2011,8 @@ end
     m2 = which(solve, Tuple{DSGESpec{Float64}})
     @test m1 !== m2
 
+    FAST && return
+
     # Verify unknown method raises error
     ss = MacroEconometricModels._ha_steady_state(
         spec.individual, spec.grid, spec.income,
@@ -2019,16 +2039,6 @@ end
     # :double_exp a_max=1000 flips all three). Re-measure them after ANY change to
     # a_max, n_a or grid_type — an unexpected pass is reported as a suite FAILURE.
 
-    # Compute steady state for generating fake data
-    ss = compute_steady_state(spec; K_init=10.0, r_bounds=(-0.02, 0.04), max_iter=50, tol=1e-3)
-    K_ss = ss.aggregates[:K]
-    T_data = 16
-    rng = Random.MersenneTwister(42)
-    data_K = K_ss .+ 0.1 .* randn(rng, T_data)  # K with noise
-
-    # [T206] hoist one shared :ssj solve to avoid re-solving in the two helper testsets below.
-    sol_shared = solve(spec; method=:ssj, ss=ss, T_horizon=30, n_reduced=10)
-
     @testset "_update_ha_params" begin
         param_names = [:alpha]
         theta = [0.30]
@@ -2044,6 +2054,20 @@ end
         new_spec2 = MacroEconometricModels._update_ha_params(spec, param_names2, theta2)
         @test new_spec2.individual.beta ≈ 0.98
     end
+
+    # Full KS SS + SSJ + MH is the HA-DSGE ceiling. Windows/macOS smoke (FAST)
+    # keeps the cheap helper above; Ubuntu still runs the rest.
+    FAST && return
+
+    # Compute steady state for generating fake data
+    ss = compute_steady_state(spec; K_init=10.0, r_bounds=(-0.02, 0.04), max_iter=50, tol=1e-3)
+    K_ss = ss.aggregates[:K]
+    T_data = 16
+    rng = Random.MersenneTwister(42)
+    data_K = K_ss .+ 0.1 .* randn(rng, T_data)  # K with noise
+
+    # [T206] hoist one shared :ssj solve to avoid re-solving in the two helper testsets below.
+    sol_shared = solve(spec; method=:ssj, ss=ss, T_horizon=30, n_reduced=10)
 
     @testset "_build_ha_likelihood_fn" begin
         # Solve model first to have a valid solution for observation equation
@@ -2224,6 +2248,8 @@ end
     spec = load_ha_example(:krusell_smith)
     @test spec.model == :aiyagari                       # new field defaults correctly
 
+    FAST && return
+
     ss = compute_steady_state(spec; r_bounds=(-0.02, 0.04), max_iter=100, tol=1e-3)
     @test ss.aggregates[:K] > 0
     @test isfinite(ss.prices[:r])
@@ -2240,7 +2266,8 @@ end
     # Six model periods per year (Huggett 1993): annualize the per-period rate.
     annualize(rp) = (1 + rp)^6 - 1
     # Table 1 (σ = 1.5): credit limit => equilibrium annual risk-free rate.
-    targets = [(-2.0, -0.071), (-4.0, 0.023), (-6.0, 0.034), (-8.0, 0.040)]
+    targets = FAST ? [(-2.0, -0.071)] :
+              [(-2.0, -0.071), (-4.0, 0.023), (-6.0, 0.034), (-8.0, 0.040)]
 
     r_annuals = Float64[]
     for (cl, r_target) in targets
@@ -2275,7 +2302,8 @@ end
 
 @testset "Huggett SSJ" begin
     spec = _HUG_SPEC_M2; ss = _HUG_SS_M2      # reuse shared cl=−2 SS (T209/#308)
-    sol = solve(spec; method=:ssj, ss=ss, T_horizon=50, n_reduced=20)
+    Th = FAST ? 20 : 50
+    sol = solve(spec; method=:ssj, ss=ss, T_horizon=Th, n_reduced=FAST ? 10 : 20)
     @test sol isa HADSGESolution
     @test sol.method === :ssj
     @test maximum(abs.(eigvals(sol.linear_solution.G1))) <= 1 + 1e-6  # stable
@@ -2283,13 +2311,13 @@ end
     @test haskey(sol.jacobians, :H_Z)                                  # shock Jacobian
     # A positive aggregate endowment shock lowers the clearing risk-free rate on impact.
     H_U = sol.jacobians[:H_U]; H_Z = sol.jacobians[:H_Z]
-    dr = -(H_U \ (H_Z * [0.9^(t - 1) for t in 1:50]))
+    dr = -(H_U \ (H_Z * [0.9^(t - 1) for t in 1:Th]))
     @test dr[1] < 0
 end
 
 @testset "Huggett Reiter" begin
     spec = _HUG_SPEC_M2; ss = _HUG_SS_M2      # reuse shared cl=−2 SS (T209/#308)
-    sol = solve(spec; method=:reiter, ss=ss, n_reduced=30)
+    sol = solve(spec; method=:reiter, ss=ss, n_reduced=FAST ? 15 : 30)
     @test sol isa HADSGESolution
     @test sol.method === :reiter
     @test maximum(abs.(eigvals(sol.linear_solution.G1))) <= 1 + 1e-6   # stable
@@ -2302,9 +2330,11 @@ end
 end
 
 @testset "Huggett Krusell-Smith" begin
-    spec = MacroEconometricModels._huggett_example(; credit_limit=-2.0, a_max=8.0, n_a=100)
-    ss = compute_steady_state(spec; max_iter=100, tol=1e-3)
-    sol = solve(spec; method=:krusell_smith, ss=ss, T_sim=300, T_burn=75, max_outer=3)
+    spec = MacroEconometricModels._huggett_example(; credit_limit=-2.0, a_max=8.0,
+                                                    n_a=FAST ? 60 : 100)
+    ss = compute_steady_state(spec; max_iter=FAST ? 50 : 100, tol=1e-3)
+    sol = solve(spec; method=:krusell_smith, ss=ss,
+                T_sim=FAST ? 120 : 300, T_burn=FAST ? 30 : 75, max_outer=FAST ? 2 : 3)
     @test sol isa KrusellSmithSolution
     @test haskey(sol.plm_coefficients, :r)        # PLM forecasts the clearing rate, not K
     @test sol.r_squared[:r] > 0.7                 # rate is near-linear in the endowment shock
@@ -2315,6 +2345,7 @@ end
 
 @testset "Den Haan (2010) accuracy" begin
     # --- Aiyagari capital model (z-augmented PLM makes the test meaningful) ---
+    if !FAST
     ks_spec = load_ha_example(:krusell_smith)
     ss_a = compute_steady_state(ks_spec; r_bounds=(-0.02, 0.04), max_iter=80, tol=1e-3)
     ks = solve(ks_spec; method=:krusell_smith, ss=ss_a, T_sim=200, T_burn=100, max_outer=3)
@@ -2329,12 +2360,13 @@ end
     @test dh.sigma_plm > 0.2 * dh.sigma_ref             # PLM reproduces the fluctuations
     @test dh.dh_max < 1.0                               # accurate: well under 1% (Den Haan)
     report(dh)                                          # display smoke test
+    end
 
     # --- Huggett: rate accuracy test is intentionally unsupported (errors clearly) ---
-    hug_spec = MacroEconometricModels._huggett_example(; n_a=80)
-    ss_h = compute_steady_state(hug_spec; max_iter=80, tol=1e-3)
-    ks_h = KrusellSmithSolution{Float64}(ss_h,
-        Dict(:r => [ss_h.prices[:r], 0.0]), Dict(:r => 1.0), hug_spec, false, 0)
+    # Reuse the shared cl=−2 SS — no extra solve (the guard fires on spec.model).
+    ks_h = KrusellSmithSolution{Float64}(
+        _HUG_SS_M2, Dict(:r => [_HUG_SS_M2.prices[:r], 0.0]), Dict(:r => 1.0),
+        _HUG_SPEC_M2, false, 0)
     @test_throws ErrorException den_haan_test(ks_h)
 end
 
@@ -3228,6 +3260,10 @@ end
         # The rendered histogram carries roughly the family's own mean.
         @test sum(h .* repeat(a, 2)) ≈ sum(mass .* M[:, 1]) rtol=1e-3
     end
+
+    # Remaining testsets solve shipped HA examples (SS + Reiter). Smoke CI
+    # keeps the quadrature / max-entropy oracles above; Ubuntu still runs these.
+    FAST && return
 
     @testset "moment fixed point is genuinely stationary and tracks Young" begin
         spec = _win_small_spec()

@@ -5,12 +5,14 @@
 # Licensed under GPL-3.0-or-later. See LICENSE for details.
 
 using Test
+using LinearAlgebra
 
 # FAST mode for development iteration (shared across all test files in threaded mode)
 const FAST = get(ENV, "MACRO_FAST_TESTS", "") == "1"
 
 # Shared test data generators (available to all test files)
 include("fixtures.jl")
+include("runner_helpers.jl")
 
 # =============================================================================
 # Parallel test runner: three modes (threaded > multi-process > sequential)
@@ -292,22 +294,18 @@ const TEST_GROUPS = [
     ]),
 ]
 
-# Monotone expected-duration ranking (heaviest first) for the longest-first work queue (#124).
-# Only the ordering matters, not accurate minutes.
-function _expected_rank(name::AbstractString)
-    name == "HA-DSGE"             && return 100
-    name == "DSGE Core"           && return 90
-    name == "DSGE Bayesian & HD"  && return 70
-    name == "Extensions (JuMP/Ipopt/PATH)"    && return 60   # cold-load: schedule early
-    startswith(name, "Coverage-A")            && return 60
-    name == "ARIMA & Tests & Data & Reg"      && return 55
-    name == "Plotting"            && return 52   # render + 11 lanes; schedule early to avoid a straggler
-    name == "IRF & VECM"          && return 50
-    name == "Bayesian & SVAR"     && return 45
-    name == "Display"             && return 42   # est-heavy compile; schedule with the medium wave
-    startswith(name, "Coverage")  && return 20   # light coverage groups last
-    name == "Counterfactual"      && return 10   # lightest group (CF-01); schedule last
-    return 40                                     # default medium
+# Temporarily raise OpenBLAS threads around a group's work (threaded runner).
+# OpenBLAS's thread count is process-global, so HA-DSGE's 2 may briefly apply to
+# a sibling task; other groups request 1 and we restore on the way out.
+function _with_group_blas(group_name::AbstractString, f)
+    n = _blas_threads_for_group(group_name)
+    old = BLAS.get_num_threads()
+    try
+        n != old && BLAS.set_num_threads(n)
+        return f()
+    finally
+        n != old && BLAS.set_num_threads(old)
+    end
 end
 
 # Multi-process runner (fallback when threads unavailable)
@@ -338,11 +336,11 @@ function run_test_group(group_name::String, files::Vector{String})
     # time still falls due to the other savings; off on windows/macOS).
     julia_exe = joinpath(Sys.BINDIR, Base.julia_exename())
     checkbounds_flag = get(ENV, "MACRO_CHECK_BOUNDS", "") == "1" ? `--check-bounds=yes` : ``
-    # Single-thread each child (Julia + OpenBLAS): the test matrices are small, so
-    # multi-threaded BLAS is pure contention and N threads × ~10 children oversubscribes
-    # CI cores. Mirrors the CI.yml env so local multiprocess runs behave identically.
+    # Single Julia thread per child. OpenBLAS stays at 1 except HA-DSGE, which is
+    # the suite ceiling and gets 2 BLAS threads (see _blas_threads_for_group).
     cmd = addenv(`$julia_exe $cov_flag $checkbounds_flag --startup-file=no --project=$(dirname(test_dir)) -e $code`,
-                 "JULIA_NUM_THREADS" => "1", "OPENBLAS_NUM_THREADS" => "1")
+                 "JULIA_NUM_THREADS" => "1",
+                 "OPENBLAS_NUM_THREADS" => string(_blas_threads_for_group(group_name)))
     proc = run(pipeline(cmd; stdout=stdout, stderr=stderr); wait=false)
     return proc
 end
@@ -375,7 +373,7 @@ if !serial && (multiprocess || (!serial && Threads.nthreads() == 1 && Sys.CPU_TH
     # launch at most min(CPU_THREADS, 4) at a time, starting the next as each finishes. This
     # cuts context-switch waste and macOS memory pressure vs spawning all groups at once.
     queue = sort(collect(TEST_GROUPS); by = p -> _expected_rank(first(p)), rev = true)
-    max_conc = min(Sys.CPU_THREADS, 4)
+    max_conc = _runner_max_conc(Sys.CPU_THREADS)
     active = Dict{Base.Process, String}()
     failed_groups = String[]
     while !isempty(queue) || !isempty(active)
@@ -407,42 +405,51 @@ elseif !serial && Threads.nthreads() > 1
     # ─────────────────────────────────────────────────────────────────────
     test_dir = replace(string(@__DIR__), '\\' => '/')
 
-    println("Running $(length(TEST_GROUPS)) test groups in $(Threads.nthreads()) threads (single process)")
+    println("Running $(length(TEST_GROUPS)) test groups in $(Threads.nthreads()) threads (single process, max_conc=$(_runner_max_conc(Threads.nthreads())))")
     FAST && println("FAST mode enabled (reduced sampling)")
     println("Set MACRO_SERIAL_TESTS=1 to run sequentially\n")
 
-    # Load once — all tasks share the compiled code
+    # Load once — all tasks share the compiled code. This is the Windows CI path:
+    # NTFS/pkgimage load is ~6 min per process, so 17 child processes dominate the
+    # job. One load + a concurrency-capped work queue matches the multiprocess
+    # longest-first schedule without paying that tax 17 times.
     t_load = @elapsed using MacroEconometricModels
     @info "MacroEconometricModels loaded in $(round(t_load, digits=1))s"
+    println("FILETIME\t__runner__\tusing MacroEconometricModels\t", round(t_load; digits=1))
 
-    tasks = Pair{String, Task}[]
-    for (group_name, files) in TEST_GROUPS
-        local gn = group_name
-        local fs = files
-        local td = test_dir
-        t = Threads.@spawn begin
-            @testset "$gn" begin
-                for f in fs
-                    include(joinpath(td, f))
-                end
-            end
-        end
-        push!(tasks, gn => t)
+    queue = sort(collect(TEST_GROUPS); by = p -> _expected_rank(first(p)), rev = true)
+    max_conc = _runner_max_conc(Threads.nthreads())
+    work = Channel{Tuple{String, Vector{String}}}(length(queue))
+    for item in queue
+        put!(work, item)
     end
-
-    # Collect results
+    close(work)
     failed_groups = String[]
-    for (name, task) in tasks
-        try
-            fetch(task)
-            @info "Test group '$name' PASSED"
-        catch e
-            inner = e isa TaskFailedException ? e.task.exception : e
-            if inner isa Base.IOError
-                @warn "Test group '$name' hit IOError (stdout pipe closed) — treating as PASSED"
-            else
-                @error "Test group '$name' FAILED" exception=(e, catch_backtrace())
-                push!(failed_groups, name)
+    failed_lock = ReentrantLock()
+    @sync for _ in 1:max_conc
+        Threads.@spawn begin
+            for (gn, fs) in work
+                try
+                    _with_group_blas(gn) do
+                        @testset "$gn" begin
+                            for f in fs
+                                t = @elapsed include(joinpath(test_dir, f))
+                                println("FILETIME\t$(gn)\t$(f)\t", round(t; digits=1))
+                            end
+                        end
+                    end
+                    @info "Test group '$gn' PASSED"
+                catch e
+                    inner = e isa TaskFailedException ? e.task.exception : e
+                    if inner isa Base.IOError
+                        @warn "Test group '$gn' hit IOError (stdout pipe closed) — treating as PASSED"
+                    else
+                        @error "Test group '$gn' FAILED" exception=(e, catch_backtrace())
+                        lock(failed_lock) do
+                            push!(failed_groups, gn)
+                        end
+                    end
+                end
             end
         end
     end

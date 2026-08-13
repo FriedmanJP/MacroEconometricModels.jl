@@ -281,4 +281,22 @@ const MEM_IH = MacroEconometricModels
         bw_empty = MEM_IH.optimal_bandwidth_nw(X_empty)
         @test bw_empty == 0
     end
+
+    # =========================================================================
+    # CI runner helpers (test/runner_helpers.jl)
+    # =========================================================================
+
+    include(joinpath(@__DIR__, "..", "runner_helpers.jl"))
+
+    @testset "CI runner helpers" begin
+        @test _blas_threads_for_group("HA-DSGE") == 2
+        @test _blas_threads_for_group("DSGE Core") == 1
+        @test _blas_threads_for_group("Plotting") == 1
+        @test _runner_max_conc(8) == 4
+        @test _runner_max_conc(2) == 2
+        @test _runner_max_conc(4) == 4
+        @test _expected_rank("HA-DSGE") > _expected_rank("DSGE Core")
+        @test _expected_rank("DSGE Core") > _expected_rank("Counterfactual")
+        @test _expected_rank("Coverage-A") > _expected_rank("Coverage-B")
+    end
 end

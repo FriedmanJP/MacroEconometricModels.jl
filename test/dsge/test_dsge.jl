@@ -1143,11 +1143,11 @@ end
     frontier(pp, py; beta=0.99, kappa=0.3) = kappa * (pp - 1) + (1 - beta) * py
 
     @testset "1-D sweep reproduces the Taylor-principle boundary" begin
-        grid = range(0.0, 3.0; length=61)
+        grid = range(0.0, 3.0; length=FAST ? 21 : 61)
         m = determinacy_region(nk; params=:φ_π, grids=grid)
         @test m isa DeterminacyMap
         @test m.params == [:φ_π]
-        @test size(m.verdict) == (61, 1)
+        @test size(m.verdict) == (length(grid), 1)
         @test isempty(m.failures)
         # Every cell matches the closed-form frontier (φ_y = 0.5 held at its base value).
         for (i, pp) in enumerate(grid)
@@ -1165,10 +1165,10 @@ end
     end
 
     @testset "2-D sweep matches the analytic frontier cell by cell" begin
-        g1 = range(0.0, 2.0; length=11)
-        g2 = range(0.0, 4.0; length=9)
+        g1 = range(0.0, 2.0; length=FAST ? 7 : 11)
+        g2 = range(0.0, 4.0; length=FAST ? 5 : 9)
         m = determinacy_region(nk; params=(:φ_π, :φ_y), grids=(g1, g2))
-        @test size(m.verdict) == (11, 9)
+        @test size(m.verdict) == (length(g1), length(g2))
         @test sort(unique(m.verdict)) == [0, 1]
         bad = 0
         for (i, pp) in enumerate(g1), (j, py) in enumerate(g2)
@@ -1177,7 +1177,8 @@ end
         end
         @test bad == 0
         # The frontier slopes: a larger output response lowers the inflation response needed.
-        @test m.verdict[6, 1] == 0 && m.verdict[6, end] == 1
+        imid = findmin(abs.(collect(g1) .- 1.0))[2]
+        @test m.verdict[imid, 1] == 0 && m.verdict[imid, end] == 1
         @test_throws ArgumentError determinacy_boundary(m)   # a curve, not points
     end
 
@@ -1213,7 +1214,7 @@ end
         @test !isempty(sprint(report, m))
     end
 
-    @testset "threaded equals serial" begin
+    FAST || @testset "threaded equals serial" begin
         g1 = range(0.5, 2.0; length=7)
         g2 = range(0.0, 3.0; length=5)
         ms = determinacy_region(nk; params=(:φ_π, :φ_y), grids=(g1, g2))
@@ -1253,7 +1254,7 @@ end
     end
 
     @testset "report and show" begin
-        m = determinacy_region(nk; params=:φ_π, grids=range(0.0, 3.0; length=21))
+        m = determinacy_region(nk; params=:φ_π, grids=range(0.0, 3.0; length=FAST ? 11 : 21))
         s = sprint(show, m)
         @test occursin("DeterminacyMap", s) && occursin("determinate", s)
         r = sprint(report, m)
@@ -1267,7 +1268,7 @@ end
     end
 
     @testset "plot_result renders both shapes" begin
-        m1 = determinacy_region(nk; params=:φ_π, grids=range(0.0, 3.0; length=21))
+        m1 = determinacy_region(nk; params=:φ_π, grids=range(0.0, 3.0; length=FAST ? 11 : 21))
         p1 = plot_result(m1)
         @test p1 isa MacroEconometricModels.PlotOutput
         @test occursin("dsge_determinacy", p1.html)
@@ -2951,13 +2952,13 @@ end
 
     # Simulate data from the model
     sol = solve(spec; method=:gensys)
-    sim_data = simulate(sol, 500; rng=rng)
+    sim_data = simulate(sol, FAST ? 200 : 500; rng=rng)
 
     # Estimate via SMM (only rho, hold sigma fixed)
     # Use bounds to keep rho in stationary region (-1, 1)
     bounds = ParameterTransform([-0.99], [0.99])
     est = estimate_dsge(spec, sim_data, [:rho];
-                        method=:smm, sim_ratio=5, burn=100,
+                        method=:smm, sim_ratio=FAST ? 2 : 5, burn=FAST ? 40 : 100,
                         bounds=bounds,
                         rng=Random.MersenneTwister(123))
 
@@ -6576,7 +6577,7 @@ end
     end
 end
 
-@testset "PFI threaded matches sequential" begin
+FAST || @testset "PFI threaded matches sequential" begin
     spec = @dsge begin
         parameters: ρ = 0.9, σ = 0.01
         endogenous: y
@@ -6848,7 +6849,7 @@ end
     @test sol.grid_type == :smolyak
 end
 
-@testset "VFI threaded matches sequential" begin
+FAST || @testset "VFI threaded matches sequential" begin
     spec = @dsge begin
         parameters: ρ = 0.9, σ = 0.01
         endogenous: y
