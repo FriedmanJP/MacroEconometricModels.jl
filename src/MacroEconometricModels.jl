@@ -126,6 +126,7 @@ include("io/bf_network.jl")
 include("io/bf_equilibrium.jl")
 include("io/bf_hessian.jl")
 include("io/bf_wedges.jl")
+include("io/bf_misalloc.jl")
 include("io/download/fetch.jl")
 include("io/download/registry.jl")
 include("io/download/sources.jl")
@@ -693,6 +694,7 @@ export BFEquilibrium, bf_equilibrium
 export BFLocal, BFElasticities, BFShockCurve, BFWedgeDecomp
 export bf_elasticities, bf_quadratic, bf_shock_curve
 export bf_wedge_decomp, cost_based_domar, revenue_based_domar
+export BFMisallocation, bf_misallocation
 export list_io_sources, download_io, download_oecd, download_wiod
 export download_exiobase3, download_eora26, download_gloria, parse_io
 export parse_icio, parse_wiod
