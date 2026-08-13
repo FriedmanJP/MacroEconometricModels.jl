@@ -90,6 +90,7 @@ const _SERIALIZABLE_TYPES = Dict{String,Type}(
     "BFShockCurve"                  => BFShockCurve,
     "BFEquilibrium"                 => BFEquilibrium,
     "BFWedgeDecomp"                 => BFWedgeDecomp,
+    "BFMisallocation"               => BFMisallocation,
     # ── cointegration / VECM ─────────────────────────────────────────────────
     "VECMModel"                     => VECMModel,
     "CointRegModel"                 => CointRegModel,

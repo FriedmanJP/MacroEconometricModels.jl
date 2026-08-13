@@ -34,4 +34,7 @@ using Test, MacroEconometricModels
                 footprint(mrio, "CO2"; by=:region))
         @test !isempty(sprint(refs, obj))
     end
+
+    m = bf_misallocation(production_network(io; mu=[1.2, 1.1]))
+    @test occursin("Baqaee", sprint(refs, m))
 end

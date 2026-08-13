@@ -53,3 +53,11 @@ isdefined(@__MODULE__, :check_plot) ||
         @test startswith(strip(read(joinpath(d, name), String)), "<!DOCTYPE html>")
     end
 end
+
+@testset "BFMisallocation plot" begin
+    m = bf_misallocation(production_network(load_example(:wiot); mu=[1.2, 1.1]))
+    p = plot_result(m)
+    @test p isa PlotOutput
+    check_plot(p)
+    assert_all_json_valid(p)
+end

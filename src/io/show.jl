@@ -178,6 +178,32 @@ function Base.show(io::IO, w::BFWedgeDecomp)
         alignment=[:l, :r, :r, :r])
 end
 
+function Base.show(io::IO, m::BFMisallocation)
+    has_H = !isempty(m.H_mu)
+    println(io, "BFMisallocation (B&F 2020 Proposition 5)")
+    println(io, "  point        = $(m.point)")
+    println(io, "  distance     = $(_fmt(m.distance))  (exact log(Y*/Y) to the efficient frontier)")
+    println(io, "  second_order = $(_fmt(m.second_order))",
+            m.point === :efficient ? "  (Harberger −½ v′H_μ v)" : "  (local curvature at observed μ)")
+    if abs(m.first_order) > 1e-14
+        println(io, "  first_order  = $(_fmt(m.first_order))  (eq. 14 at :observed)")
+    else
+        println(io, "  first_order  = $(_fmt(m.first_order))")
+    end
+    if has_H
+        println(io, "  H_μ $(size(m.H_mu, 1))×$(size(m.H_mu, 2)) at $(m.point)")
+    else
+        println(io, "  H_μ omitted")
+    end
+    nshow = min(6, length(m.sectors))
+    data = hcat(m.sectors[1:nshow], _fmt.(m.delta_logmu[1:nshow]),
+                _fmt.(m.mu[1:nshow]))
+    _pretty_table(io, data;
+        title="Sectoral markups and Δlogμ",
+        column_labels=["Sector", "Δlogμ", "μ"],
+        alignment=[:l, :r, :r])
+end
+
 function Base.show(io::IO, bf::BFLocal)
     n = length(bf.first_order)
     has_H = !isempty(bf.second_order)

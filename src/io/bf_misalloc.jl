@@ -1,7 +1,8 @@
 # bf_misalloc.jl — Baqaee–Farhi (2020) Proposition 5 Harberger triangle / H_μ
 #
-# Orientation: ROW (B&F). Hessian of log Y in log μ (same sign as BFLocal.second_order).
-# Distance L = log(Y*/Y) ≈ −½ Δlogμ' H_μ Δlogμ at the efficient point.
+# Orientation: ROW (B&F). At the efficient point, H_μ is the Hessian of log Y
+# in log μ (same sign as BFLocal.second_order). Distance L = log(Y*/Y) ≈
+# −½ Δlogμ' H_μ Δlogμ only at :efficient. :observed H_μ is local curvature.
 # K_μ = Σ_j λ_j θ_j (diag(ω^j) − ω^j ω^j'); H_μ = −Ψ_P' K_μ Ψ_P − Ψ_P' K_μ Ψ_F D.
 
 """
@@ -15,7 +16,7 @@ the Hessian of log real output in log markups (`H_μ`).
 - `first_order` — 0 at `:efficient`; at `:observed`, eq. 14 linear term
   `g'Δlogμ` (gradient of `log Y` in `log μ` at the observed point)
 - `second_order` — `−½ Δlogμ' H Δlogμ` (Harberger of `L` only at `:efficient`)
-- `H_mu` — `n×n` Hessian of log Y in log μ; `0×0` if `hessian=:none`
+- `H_mu` — `n×n` Hessian of log Y in log μ at `point`; `0×0` if `hessian=:none`
 - `delta_logmu` — log μ of real-sector outers (0 if μ≡1)
 - `point` — `:efficient` | `:observed`
 - `lambda` — evaluation-point Domar on outers (length `n`)
@@ -29,7 +30,7 @@ struct BFMisallocation{T<:AbstractFloat}
     distance::T                 # exact L = log(Y*/Y) from bf_equilibrium
     first_order::T              # 0 at :efficient; eq. 14 g'Δlogμ at :observed
     second_order::T             # −½ Δlogμ' H Δlogμ (Harberger of L only at :efficient)
-    H_mu::Matrix{T}             # n×n Hessian of log Y in log μ; 0×0 if hessian=:none
+    H_mu::Matrix{T}             # n×n Hessian of log Y in log μ at `point`; 0×0 if hessian=:none
     delta_logmu::Vector{T}      # log μ of real-sector outers (0 if μ≡1)
     point::Symbol               # :efficient | :observed
     lambda::Vector{T}           # evaluation-point Domar on outers (length n)

@@ -160,4 +160,16 @@ end
         @test m.first_order ≈ dot(g, log.(μ)) atol=1e-12
         @test m.distance ≈ bf_misallocation(net).distance atol=1e-12
     end
+
+    @testset "display / plot / refs / serialization smoke" begin
+        m = bf_misallocation(production_network(load_example(:wiot); mu=[1.2, 1.1]))
+        @test occursin("Misallocation", sprint(show, m)) || occursin("frontier", sprint(show, m))
+        @test occursin("Baqaee", sprint(refs, m))
+        @test plot_result(m) isa PlotOutput
+        m2 = MacroEconometricModels._reconstruct_from_container(
+            MacroEconometricModels._build_container(m))
+        @test m2 isa BFMisallocation
+        @test m2.distance ≈ m.distance
+        @test m2.H_mu ≈ m.H_mu
+    end
 end

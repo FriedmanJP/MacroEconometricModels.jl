@@ -7,7 +7,7 @@ Hulten's (1978) theorem says that, to first order, the effect of a sector's prod
 - **Exact counterfactuals**: nonlinear equilibrium prices and quantities for arbitrary (large) productivity and factor-supply shocks
 - **Second order**: the full multi-factor "beyond Hulten" Hessian, consistent with the exact solver by construction
 - **Incidence**: factor-price, goods-price, and Domar-share responses to productivity shocks
-- **Wedges**: cost-based vs revenue-based Domar weights, markups ``\mu \ge 1``, and the B&F (2020) Theorem 1 technology / allocative-efficiency decomposition
+- **Wedges**: cost-based vs revenue-based Domar weights, markups ``\mu \ge 1``, the B&F (2020) Theorem 1 technology / allocative-efficiency decomposition, and Proposition 5 Harberger misallocation
 
 ```@setup io_baqaee_farhi
 using MacroEconometricModels
@@ -420,6 +420,54 @@ plot_result(decomp)   # same Domar comparison from the decomp object
 !!! note "μ ≡ 1 recovers Hulten"
     With `mu=1` (the default) the efficient solver is recovered bit-for-bit: cost and revenue Domar coincide, `profit_share = 0`, and the allocative term is zero to first order (Corollary 1 of B&F 2020).
 
+### Proposition 5: Harberger misallocation
+
+Theorem 1 is first-order in ``d\log A`` and ``d\log\mu``. The *level* cost of existing markups is a different object: the log-distance from observed output ``Y`` to the efficient frontier ``Y^*``. At an efficient point the envelope theorem kills the first-order term, so the leading cost is the Harberger triangle (Baqaee & Farhi 2020, Proposition 5):
+
+```math
+L = \log(Y^*/Y) \approx -\tfrac12 v' H_\mu v,
+\qquad
+H_\mu = -\Psi_P' K_\mu \Psi_P - \Psi_P' K_\mu \Psi_F D
+```
+
+where:
+- ``L`` is the exact log-distance to the efficient frontier
+- ``Y^*`` is real output at ``\mu=1``; ``Y`` is observed real output
+- ``v = \Delta\log\mu`` is log markup on real-sector outer nodes
+- ``H_\mu`` is the Hessian of ``\log Y`` in ``\log\mu`` at the efficient point
+- ``K_\mu = \sum_j \lambda_j \theta_j (\operatorname{diag}(\omega^j) - \omega^j \omega^{j\prime})``
+- ``\Psi_P``, ``\Psi_F`` are Leontief columns for producers and factors
+- ``D = \partial\log\Lambda / \partial\log\mu`` is the Proposition 3 factor-share response (zero when ``F=1`` at the efficient point)
+
+In a horizontal economy (no intermediates, one factor) this collapses to B&F (2020) eq. 19: ``L \approx \tfrac12 \sigma \operatorname{Var}_\lambda(\log\mu)``. Leontief (``\theta \equiv 0``) forces ``K_\mu = 0`` and therefore ``H_\mu = 0``.
+
+[`bf_misallocation`](@ref) solves the exact efficient twin and returns a [`BFMisallocation`](@ref) with that distance plus the local Taylor pieces. `point=:efficient` (default) evaluates ``H_\mu`` at ``\mu=1``: `first_order` is zero and ``L \approx -\tfrac12 v' H_\mu v``. `point=:observed` returns local curvature at the distorted point — not ``\partial^2\log Y/\partial\log\mu^2`` from an efficient origin, and not the distance-to-frontier identity. Exact `distance` always comes from [`bf_equilibrium`](@ref) on the efficient twin and does not depend on `point`.
+
+```@example io_baqaee_farhi
+m = bf_misallocation(net_w)
+report(m)
+```
+
+```julia
+plot_result(m)
+```
+
+Agriculture's 25% markup and manufacturing's 10% markup cost 1.18% of log output (`distance = 0.0118`). The second-order Harberger term is 0.0130: close, but the markups are not small enough for the quadratic to be exact. The first-order term is zero because the Hessian is evaluated at the efficient point. The table is Cobb-Douglas, so ``H_A`` is zero while ``H_\mu`` is not: substitution across goods still reallocates the markup distortion. [`bf_wedge_quadratic`](@ref) computes ``v' H_\mu v`` without forming the ``n \times n`` matrix; use it when ``n > 500``.
+
+| Keyword | Type | Default | Description |
+|---------|------|---------|-------------|
+| `point` | `Symbol` | `:efficient` | Evaluation point for ``H_\mu`` (`:efficient` or `:observed`) |
+| `hessian` | `Symbol` | `:auto` | `:full` forms ``n \times n`` ``H_\mu``; `:none` skips it; `:auto` uses `:full` when ``n \le 500`` |
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `distance` | `T` | Exact ``L = \log(Y^*/Y)`` from the solver |
+| `first_order` | `T` | Zero at `:efficient`; eq. 14 ``g'\Delta\log\mu`` at `:observed` |
+| `second_order` | `T` | ``-\tfrac12 v' H_\mu v`` (Harberger of ``L`` only at `:efficient`) |
+| `H_mu` | `Matrix{T}` | Hessian of ``\log Y`` in ``\log\mu`` at `point`; empty if `hessian=:none` |
+| `delta_logmu` | `Vector{T}` | ``\Delta\log\mu`` on real-sector outer nodes |
+| `point` | `Symbol` | `:efficient` or `:observed` |
+
 ---
 
 ## Network Centralities
@@ -503,6 +551,8 @@ Hulten prices a 20% agricultural loss at about 9.8% of aggregate output. The sec
 
 13. **Theorem 1 is first-order.** `technology` and `allocative` on [`BFEquilibrium`](@ref) / [`BFWedgeDecomp`](@ref) are the B&F (2020) first-order split for `dlogA` and `dlogμ`. Factor-supply shocks live in `factor_supply = Λ̃'dlogL` and are not part of that split. `dlogY` is the exact nonlinear change. The three first-order pieces add up only for small shocks.
 
+14. **``H_\mu`` is the Hessian of ``\log Y`` at the efficient point.** The Harberger *cost* is ``-\tfrac12 v' H_\mu v``. At ``\mu=1`` the first-order term is zero; that is why the leading cost of markups is second-order. Leontief ``\Rightarrow H_\mu = 0``. This is not `BFLocal.second_order` (that is ``H_A``). At `:observed`, ``H_\mu`` is local curvature at the distorted point, not the distance-to-frontier identity.
+
 ---
 
 ## API Reference
@@ -522,6 +572,9 @@ BFLocal
 bf_quadratic
 bf_wedge_decomp
 BFWedgeDecomp
+bf_misallocation
+BFMisallocation
+bf_wedge_quadratic
 cost_based_domar
 revenue_based_domar
 ```

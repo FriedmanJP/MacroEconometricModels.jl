@@ -279,6 +279,46 @@ function plot_result(w::BFWedgeDecomp; title::String="",
 end
 
 """
+    plot_result(m::BFMisallocation; title="", save_path=nothing) -> PlotOutput
+
+Grouped bar of exact distance to the frontier (`Exact L`) against the
+second-order Harberger term. Includes `First-order` when that term is
+nonzero (`:observed`).
+"""
+function plot_result(m::BFMisallocation; title::String="",
+                     save_path::Union{String,Nothing}=nothing)
+    id = _next_plot_id("io_bf_misalloc")
+    show_fo = abs(m.first_order) > 1e-14
+    row = Pair{String,String}["x" => _json("L"),
+                              "Exact L" => _json(m.distance),
+                              "Second-order" => _json(m.second_order)]
+    show_fo && push!(row, "First-order" => _json(m.first_order))
+    data_json = _json_array_of_objects([row])
+    series_json = "[" *
+        _json_obj(Pair{String,String}[
+            "key" => _json("Exact L"), "name" => _json("Exact L"),
+            "color" => _json(_PLOT_COLORS[1])]) * "," *
+        _json_obj(Pair{String,String}[
+            "key" => _json("Second-order"), "name" => _json("Second-order"),
+            "color" => _json(_PLOT_COLORS[2])])
+    if show_fo
+        series_json *= "," * _json_obj(Pair{String,String}[
+            "key" => _json("First-order"), "name" => _json("First-order"),
+            "color" => _json(_PLOT_COLORS[3])])
+    end
+    series_json *= "]"
+    js = _render_bar_js(id, data_json, series_json;
+                        mode="grouped", xlabel="Misallocation", ylabel="L")
+    ttl = isempty(title) ?
+        "B&F 2020 Prop 5: L=$(_fmt(m.distance)), 2nd=$(_fmt(m.second_order)) ($(m.point))" :
+        title
+    panel = _PanelSpec(id, ttl, js)
+    p = _make_plot([panel]; title=ttl, ncols=1)
+    save_path !== nothing && save_plot(p, save_path)
+    p
+end
+
+"""
     plot_result(bf::BFLocal; title="", save_path=nothing) -> PlotOutput
 
 Bar chart of Hulten first-order (Domar) elasticities from a generalized local

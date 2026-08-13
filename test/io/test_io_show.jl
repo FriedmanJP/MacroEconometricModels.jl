@@ -24,3 +24,13 @@ using Test, MacroEconometricModels
     end
     @test report isa Function
 end
+
+@testset "BFMisallocation show" begin
+    m = bf_misallocation(production_network(load_example(:wiot); mu=[1.2, 1.1]))
+    @test occursin("Misallocation", sprint(show, m)) || occursin("frontier", sprint(show, m))
+    mktemp() do _path, ioh
+        redirect_stdout(ioh) do
+            report(m)
+        end
+    end
+end
