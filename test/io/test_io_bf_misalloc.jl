@@ -11,6 +11,34 @@ function _horizontal_io()
     return IOData(Z, Y, va; sectors=["A", "B"])
 end
 
+"""Balanced 3-sector 2-factor IO table (hard-coded). Copied from test_io_bf_hessian.jl."""
+function _three_sector_io()
+    Z = [50.0 80.0 40.0;
+         60.0 100.0 50.0;
+         30.0 70.0 40.0]
+    Y = reshape([200.0, 300.0, 150.0], 3, 1)
+    x = vec(sum(Z; dims=2)) .+ vec(Y)
+    va_tot = x .- vec(sum(Z; dims=1))
+    va = vcat(0.6 .* va_tot', 0.4 .* va_tot')
+    return IOData(Z, Y, va; sectors=["A", "B", "C"], va_cats=["L", "K"])
+end
+
+"""Central 4-point Hessian of `bf_equilibrium` `dlogY` w.r.t. `dlogmu`."""
+function _fd_hessian_mu(net; ε=1e-4)
+    n = net.n
+    H = zeros(n, n)
+    for j in 1:n, k in 1:n
+        function y(dj, dk)
+            dμ = zeros(n)
+            dμ[j] += dj
+            dμ[k] += dk
+            return bf_equilibrium(net; dlogmu=dμ, tol=1e-14).dlogY
+        end
+        H[j, k] = (y(ε, ε) - y(ε, -ε) - y(-ε, ε) + y(-ε, -ε)) / (4ε^2)
+    end
+    return H
+end
+
 @testset "B&F 2020 Prop 5 misallocation" begin
     @testset "Prop 5 horizontal Harberger" begin
         io = _horizontal_io()
@@ -43,5 +71,32 @@ end
         m = bf_misallocation(net; point=:efficient)
         @test maximum(abs, m.H_mu) < 1e-12
         @test m.second_order ≈ 0 atol=1e-12
+    end
+
+    @testset "Oracle: FD Hessian in log μ vs analytic H_μ (2sec 1fac)" begin
+        net = production_network(load_example(:wiot); theta=0.5, sigma=0.9, mu=1.0)
+        H = bf_misallocation(net; point=:efficient).H_mu
+        H_fd = _fd_hessian_mu(net; ε=1e-4)
+        @test maximum(abs.(H .- H_fd)) < 1e-5
+        @test maximum(abs.(H .- H')) < 1e-8
+    end
+
+    @testset "Oracle: FD Hessian in log μ vs analytic H_μ (3sec 2fac)" begin
+        io = _three_sector_io()
+        net = production_network(io; theta=0.5, sigma=0.9, factors=:va_cats, mu=1.0)
+        H = bf_misallocation(net; point=:efficient).H_mu
+        H_fd = _fd_hessian_mu(net; ε=1e-4)
+        @test maximum(abs.(H .- H_fd)) < 1e-5
+        @test maximum(abs.(H .- H')) < 1e-8
+    end
+
+    @testset "Oracle: FD Hessian in log μ vs analytic H_μ (two-nest 2fac)" begin
+        net = production_network(load_example(:wiot); nests=:two, theta=0.5,
+                                 epsilon=0.8, eta=1.0, sigma=0.9,
+                                 factors=:va_cats, mu=1.0)
+        H = bf_misallocation(net; point=:efficient).H_mu
+        H_fd = _fd_hessian_mu(net; ε=1e-4)
+        @test maximum(abs.(H .- H_fd)) < 1e-5
+        @test maximum(abs.(H .- H')) < 1e-8
     end
 end

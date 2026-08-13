@@ -2,7 +2,7 @@
 #
 # Orientation: ROW (B&F). Hessian of log Y in log μ (same sign as BFLocal.second_order).
 # Distance L = log(Y*/Y) ≈ −½ Δlogμ' H_μ Δlogμ at the efficient point.
-# K_μ = Σ_j λ_j θ_j (diag(ω^j) − ω^j ω^j'); H_μ = −Ψ_P' K_μ Ψ_P (log-Y Hessian).
+# K_μ = Σ_j λ_j θ_j (diag(ω^j) − ω^j ω^j'); H_μ = −Ψ_P' K_μ Ψ_P − Ψ_P' K_μ Ψ_F D.
 
 """
     BFMisallocation{T<:AbstractFloat}
@@ -37,7 +37,7 @@ struct BFMisallocation{T<:AbstractFloat}
 end
 
 # ═══════════════════════════════════════════════════════════════════════════
-# K_μ / efficient-point H_μ (single-factor leading term of Prop 5)
+# K_μ / efficient-point H_μ (Prop 5; multi-factor via Prop 3)
 # ═══════════════════════════════════════════════════════════════════════════
 
 """
@@ -77,14 +77,82 @@ function _bf_assemble_K_mu(net::ProductionNetwork{T},
 end
 
 """
-Efficient-point single-factor ``H_μ`` (Hessian of ``log Y`` in outer-node
-``log μ``). ``H_μ = −Ψ_P' K_μ Ψ_P`` so that
-``L ≈ −½ v' H_μ v`` (``K_μ`` is the PSD Var-block).
+    _bf_dlogLambda_dlogmu(net, point=:efficient) -> Matrix{T}
+
+Proposition 3 factor-share Jacobian ``D = ∂logΛ / ∂logμ`` (``F×n``) at
+`point`. At `:efficient`, ``μ=1``, ``λ=λ̃``, ``Λ=Λ̃``, ``Ψ=Ψ̃`` and the
+Cov-block matches `_bf_local_system` (2019 ``K`` with weights
+``(θ_j-1)λ̃_j``), plus the extra ``-λ_k Ψ̃_{kf}/Λ_f`` impulse:
+
+```
+[diag(Λ̃) + Γ] D = −X − [λ_k Ψ̃_{kf}]_{f,k}
+```
+
+Single-factor: ``Λ≡1`` so ``D = 0``. `:observed` is reserved.
 """
-function _bf_H_mu_efficient_single(net::ProductionNetwork{T}) where {T<:AbstractFloat}
+function _bf_dlogLambda_dlogmu(net::ProductionNetwork{T},
+                               point::Symbol=:efficient) where {T<:AbstractFloat}
+    point in (:efficient, :observed) || throw(ArgumentError(
+        "point must be :efficient or :observed; got $point"))
+    point === :observed && error("_bf_dlogLambda_dlogmu: point=:observed not implemented")
+
+    n, M, F = net.n, net.M, net.F
+    N = 1 + M + F
+    if F == 0
+        return zeros(T, 0, n)
+    end
+    if F == 1
+        return zeros(T, 1, n)
+    end
+
+    outer = net.outer_nodes
+    fac_idx = collect(M + 2:N)
+    Λ = Vector{T}(net.lambda[fac_idx])
+    λ_out = T[net.lambda[g] for g in outer]
+
+    # Prop 3 Cov-block: same K / Γ / X as 2019 local system
+    K = _bf_assemble_K(net)
+    Ψ_P = _bf_psi_columns(net, outer)
+    Ψ_F = _bf_psi_columns(net, fac_idx)
+    Γ = transpose(Ψ_F) * (K * Ψ_F)
+    X = transpose(Ψ_F) * (K * Ψ_P)
+
+    # Impulse[f,k] = λ_k Ψ̃_{k f}; Ψ_F[outer_k, f] = Ψ̃_{k f}
+    impulse = transpose(Ψ_F[outer, :]) * Diagonal(λ_out)
+    # [diag(Λ)+Γ] D = −X − impulse  (pattern of `_bf_solve_dlogw`, different RHS)
+    return _bf_solve_dlogw(Γ, -X .- impulse, Λ)
+end
+
+"""
+Efficient-point ``H_μ`` (Hessian of ``log Y`` in outer-node ``log μ``).
+Leading term ``H_μ = −Ψ_P' K_μ Ψ_P``; multi-factor second line of
+Proposition 5 / eq. (17) adds ``−Ψ_P' K_μ Ψ_F D`` (then symmetrize) so
+``L ≈ −½ v' H_μ v``. Single-factor skips the ``D`` block.
+"""
+function _bf_H_mu_efficient(net::ProductionNetwork{T}) where {T<:AbstractFloat}
     K = _bf_assemble_K_mu(net.theta, net.lambda, net.Omega, net.M)
     Ψ_P = _bf_psi_columns(net, net.outer_nodes)
     # log-Y Hessian = −Ψ'KΨ (K_μ is the Var operator; L ≈ ½ v'(Ψ'KΨ)v)
+    H_raw = -(transpose(Ψ_P) * (K * Ψ_P))
+    if net.F > 1
+        D = _bf_dlogLambda_dlogmu(net, :efficient)
+        fac_idx = collect(net.M + 2:1 + net.M + net.F)
+        Ψ_F = _bf_psi_columns(net, fac_idx)
+        # eq. (17) second line: L += ½ (Ψ_F D v)' K_μ (Ψ_P v)
+        # L ≈ −½ v' H_μ v ⇒ H_μ += −Ψ_P' K_μ Ψ_F D
+        H_raw = H_raw - (transpose(Ψ_P) * (K * Ψ_F) * D)
+    end
+    asym = maximum(abs.(H_raw .- transpose(H_raw)); init=zero(T))
+    if asym > T(1e-8)
+        @warn "bf H_μ asymmetry exceeds 1e-8; possible transcription bug" asymmetry = Float64(asym)
+    end
+    return T(0.5) .* (H_raw .+ transpose(H_raw))
+end
+
+"""Efficient-point single-factor ``H_μ`` (leading Var block only)."""
+function _bf_H_mu_efficient_single(net::ProductionNetwork{T}) where {T<:AbstractFloat}
+    K = _bf_assemble_K_mu(net.theta, net.lambda, net.Omega, net.M)
+    Ψ_P = _bf_psi_columns(net, net.outer_nodes)
     H_raw = -(transpose(Ψ_P) * (K * Ψ_P))
     asym = maximum(abs.(H_raw .- transpose(H_raw)); init=zero(T))
     if asym > T(1e-8)
@@ -155,7 +223,7 @@ function bf_misallocation(net::ProductionNetwork{T}; point::Symbol=:efficient,
     v_zero = maximum(abs, v; init=zero(T)) <= T(1e-14)
 
     H_mu = if do_H
-        _bf_H_mu_efficient_single(net)
+        _bf_H_mu_efficient(net)
     else
         zeros(T, 0, 0)
     end
