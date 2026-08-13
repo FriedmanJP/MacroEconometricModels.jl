@@ -104,7 +104,9 @@ must be given and the matching `ICIO*_YYYY.*` file is selected.
 - Value-added rows are `VA` / `TLS` / labels matching `VALU|TAX`.
 - Totals `OUT` / `TOTAL` / `OUTPUT` are dropped.
 - Optional CN1… / MX1… sub-national blocks are aggregated into `CHN` / `MEX`
-  when `aggregate_cn_mx=true` (default; matches pymrio).
+  when `aggregate_cn_mx=true` (default; matches pymrio). Destination
+  final-demand columns (`CN1_HFCE` + `CN2_HFCE` → `CHN_HFCE`, and likewise
+  for MX) are collapsed in the same pass so `Y` stays destination-blocked.
 
 Region order follows first appearance in the intermediate block; sector labels
 on the returned table are the full `REGION_SECTOR` product (length
@@ -413,19 +415,77 @@ function _icio_aggregate_cn_mx(Z::AbstractMatrix, Y::AbstractMatrix,
         Z2[old_to_new[i], old_to_new[j]] += Z[i, j]
     end
     n_fd = size(Y, 2)
-    Y2 = zeros(T, n_new, n_fd)
-    for i in 1:n, j in 1:n_fd
-        Y2[old_to_new[i], j] += Y[i, j]
-    end
     n_va = size(va, 1)
     va2 = zeros(T, n_va, n_new)
     for k in 1:n_va, j in 1:n
         va2[k, old_to_new[j]] += va[k, j]
     end
 
-    # FD category region tokens: rewrite CN*/MX* destination labels if present.
-    fd2 = String[_icio_rewrite_fd_region(c) for c in fd_cats]
+    # Destination axis: rewrite CN*/MX* labels, then merge columns that share
+    # a (parent region, FD category) key and emit them destination-blocked
+    # (region order = `new_regions`, cats in first-seen order). Unprefixed
+    # leftovers (DISC, …) are appended after the blocked block.
+    Y2, fd2 = _icio_collapse_fd(Y, fd_cats, old_to_new, n_new, new_regions)
     return Z2, Y2, va2, new_labels, new_regions, fd2
+end
+
+"""Collapse FD columns after CN/MX industry aggregation so `Y` stays blocked."""
+function _icio_collapse_fd(Y::AbstractMatrix, fd_cats::Vector{String},
+                           old_to_new::Vector{Int}, n_new::Int,
+                           new_regions::Vector{String})
+    T = promote_type(eltype(Y), Float64)
+    n = size(Y, 1)
+    n_fd = size(Y, 2)
+    n_fd == length(fd_cats) || throw(ArgumentError(
+        "_icio_collapse_fd: fd_cats length $(length(fd_cats)) ≠ n_fd=$n_fd"))
+
+    dests = Vector{String}(undef, n_fd)
+    cats  = Vector{String}(undef, n_fd)
+    for j in 1:n_fd
+        dests[j], cats[j] = _icio_split_fd_label(
+            _icio_rewrite_fd_region(fd_cats[j]), new_regions)
+    end
+
+    cat_order = String[]
+    other_order = String[]
+    for j in 1:n_fd
+        if dests[j] == ""
+            cats[j] in other_order || push!(other_order, cats[j])
+        else
+            cats[j] in cat_order || push!(cat_order, cats[j])
+        end
+    end
+
+    fd2 = String[r * "_" * c for r in new_regions for c in cat_order]
+    append!(fd2, other_order)
+    n_fd2 = length(fd2)
+    key_to_new = Dict{Tuple{String,String},Int}()
+    for (j, lab) in enumerate(fd2)
+        if j <= length(new_regions) * length(cat_order)
+            ridx = (j - 1) ÷ max(length(cat_order), 1) + 1
+            cidx = (j - 1) % max(length(cat_order), 1) + 1
+            key_to_new[(new_regions[ridx], cat_order[cidx])] = j
+        else
+            key_to_new[("", lab)] = j
+        end
+    end
+
+    Y2 = zeros(T, n_new, n_fd2)
+    for i in 1:n, j in 1:n_fd
+        key = dests[j] == "" ? ("", cats[j]) : (dests[j], cats[j])
+        Y2[old_to_new[i], key_to_new[key]] += Y[i, j]
+    end
+    return Y2, fd2
+end
+
+"Split a rewritten FD label into `(destination, category)`; dest is `\"\"` if unknown."
+function _icio_split_fd_label(lab::AbstractString, regions::Vector{String})
+    parts = split(String(lab), '_'; limit=2)
+    length(parts) < 2 && return "", String(lab)
+    a, b = parts[1], parts[2]
+    a in regions && return a, b
+    b in regions && return b, a
+    return "", String(lab)
 end
 
 function _icio_rewrite_fd_region(lab::AbstractString)

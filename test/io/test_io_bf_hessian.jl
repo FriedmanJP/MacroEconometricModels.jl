@@ -146,6 +146,12 @@ end
         @test bf_quadratic(net1, v1) ≈ dot(v1, H1 * v1) atol=1e-12
     end
 
+    # ── μ ≠ 1 warns: Hessian is the efficient 2019 formula ────────────────────
+    @testset "μ ≠ 1 Hessian warning" begin
+        netμ = production_network(io; mu=[1.2, 1.0])
+        @test_logs (:warn, r"μ ≠ 1") baqaee_farhi(netμ; hessian=:none, elasticities=false)
+    end
+
     # ── hessian=:none / :auto ─────────────────────────────────────────────────
     @testset "hessian options" begin
         net = production_network(io; theta=2.0)

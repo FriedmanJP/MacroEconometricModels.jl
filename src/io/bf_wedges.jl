@@ -2,8 +2,8 @@
 #
 # Orientation: ROW (B&F). Cost shares Ω̃; revenue shares Ω = diag(1/μ) Ω̃ on
 # producer rows. Theorem 1 (QJE 2020, eq. 4):
-#   d log Y = λ̃' d log A  −  λ̃' d log μ  −  Λ̃' d log Λ
-#             |__technology__|  |________allocative efficiency________|
+#   d log Y = λ̃' d log A  −  λ̃' d log μ  −  Λ̃' d log Λ  +  Λ̃' d log L
+#             |__technology__|  |________allocative efficiency________|  |_factor supply_|
 
 """
     BFWedgeDecomp{T<:AbstractFloat}
@@ -12,17 +12,20 @@ Baqaee–Farhi (2020) Theorem 1 first-order decomposition of `d log Y` into a
 pure technology term and an allocative-efficiency term, evaluated at a
 [`ProductionNetwork`](@ref) with (optional) markup/productivity shocks.
 
-# Theorem 1 (B&F 2020, eq. 4)
+# Theorem 1 (B&F 2020, eq. 4) plus the Hulten factor-supply term
 
 ```
-d log Y = λ̃' d log A  −  λ̃' d log μ  −  Λ̃' d log Λ
-          |__ΔTechnology__|  |______ΔAllocative efficiency______|
+d log Y = λ̃' d log A  −  λ̃' d log μ  −  Λ̃' d log Λ  +  Λ̃' d log L
+          |__ΔTechnology__|  |______ΔAllocative efficiency______|  |_factor supply_|
 ```
 
-where `λ̃` are **cost-based** Domar weights, `Λ̃` cost-based factor shares
-(`Σ_f Λ̃_f = 1`), and `d log Λ` is the change in **revenue-based** factor
-income shares. When `μ ≡ 1` the allocative term is zero to first order
-(Hulten / Corollary 1).
+Theorem 1 itself is stated for productivity and markup shocks (`d log A`,
+`d log μ`). Factor-supply shocks enter at first order as `Λ̃' d log L`
+(Hulten); they are stored separately as `factor_supply` and are **not** part
+of the technology / allocative split. `λ̃` are **cost-based** Domar weights,
+`Λ̃` cost-based factor shares (`Σ_f Λ̃_f = 1`), and `d log Λ` is the change
+in **revenue-based** factor income shares. When `μ ≡ 1` the allocative term
+is zero to first order (Hulten / Corollary 1).
 
 # Fields
 - `dlogY` — exact (or first-order) change in log real output.
@@ -30,11 +33,13 @@ income shares. When `μ ≡ 1` the allocative term is zero to first order
 - `allocative` — `−Σ_k λ̃_k d log μ_k − Σ_f Λ̃_f d log Λ_f`.
 - `allocative_mu` — markup part `−Σ_k λ̃_k d log μ_k`.
 - `allocative_factor` — factor-reallocation part `−Σ_f Λ̃_f d log Λ_f`.
+- `factor_supply` — Hulten factor-supply term `Σ_f Λ̃_f d log L_f`.
 - `lambda_cost` — base cost-based Domar on real sectors (length `n`).
 - `lambda_rev` — base revenue-based Domar on real sectors (length `n`).
 - `Lambda_cost`, `Lambda_rev` — base factor shares (length `F`).
 - `mu` — sectoral markups length `n` (outer-node markups).
 - `dlogA`, `dlogmu` — shocks used (length `n`).
+- `dlogL` — factor-supply shocks used (length `F`).
 - `dlog_Lambda` — change in revenue factor shares (length `F`).
 - `sectors` — real-sector labels.
 """
@@ -44,6 +49,7 @@ struct BFWedgeDecomp{T<:AbstractFloat}
     allocative::T
     allocative_mu::T
     allocative_factor::T
+    factor_supply::T
     lambda_cost::Vector{T}
     lambda_rev::Vector{T}
     Lambda_cost::Vector{T}
@@ -51,6 +57,7 @@ struct BFWedgeDecomp{T<:AbstractFloat}
     mu::Vector{T}
     dlogA::Vector{T}
     dlogmu::Vector{T}
+    dlogL::Vector{T}
     dlog_Lambda::Vector{T}
     sectors::Vector{String}
 end
@@ -64,8 +71,10 @@ and return the B&F (2020) Theorem 1 decomposition.
 
 The technology and allocative terms are the **first-order** formula of Theorem 1
 evaluated with base cost-based Domars and the equilibrium change in revenue
-factor shares; `dlogY` is the exact nonlinear change. For infinitesimal shocks
-the three agree: `dlogY ≈ technology + allocative`.
+factor shares. `factor_supply = Λ̃' dlogL` is the Hulten factor-supply term
+(`dlogL` is forwarded to the solver; it is outside Theorem 1). `dlogY` is the
+exact nonlinear change. For infinitesimal shocks
+`dlogY ≈ technology + allocative + factor_supply`.
 
 # Orientation
 Row (B&F). See [`BFWedgeDecomp`](@ref).
@@ -84,13 +93,15 @@ function bf_wedge_decomp(net::ProductionNetwork{T};
     Λ_rev0 = net.lambda_rev[M+2:M+1+F]
     dA = eq.dlogA
     dμ = eq.dlogmu
+    dL = eq.dlogL
     dlog_Λ = log.(max.(eq.Lambda, eps(T))) .- log.(max.(Λ_rev0, eps(T)))
     alloc_mu = -dot(λ̃_out, dμ)
     alloc_fac = -dot(Λ̃, dlog_Λ)
+    fac_sup = dot(Λ̃, dL)
     BFWedgeDecomp{T}(eq.dlogY, eq.technology, eq.allocative,
-                     alloc_mu, alloc_fac,
+                     alloc_mu, alloc_fac, fac_sup,
                      λ̃_out, λ_rev_out, Vector{T}(Λ̃), Vector{T}(Λ_rev0),
-                     μ_out, dA, dμ, dlog_Λ, String.(net.io.sectors))
+                     μ_out, dA, dμ, dL, dlog_Λ, String.(net.io.sectors))
 end
 
 """

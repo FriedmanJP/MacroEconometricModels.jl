@@ -166,6 +166,9 @@ function Base.show(io::IO, w::BFWedgeDecomp)
     println(io, "  technology  = $(_fmt(w.technology))")
     println(io, "  allocative  = $(_fmt(w.allocative))  ",
             "(μ: $(_fmt(w.allocative_mu)), factors: $(_fmt(w.allocative_factor)))")
+    if abs(w.factor_supply) > 1e-14
+        println(io, "  factor supply = $(_fmt(w.factor_supply))  (Λ̃'dlogL)")
+    end
     nshow = min(6, length(w.sectors))
     data = hcat(w.sectors[1:nshow], _fmt.(w.lambda_cost[1:nshow]),
                 _fmt.(w.lambda_rev[1:nshow]), _fmt.(w.mu[1:nshow]))

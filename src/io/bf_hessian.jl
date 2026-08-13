@@ -236,9 +236,11 @@ Generalized Baqaee–Farhi (2019) local approximation on a standard-form
 
 First order is Hulten's theorem on real-sector outer nodes. Second order is the
 full multi-factor Hessian with heterogeneous elasticities and endogenous factor
-prices (B&F §4). Single-factor uniform-θ networks reduce to the scalar formula
-(household as node 1); multi-factor systems correct via
-``[diag(Λ̃)+Γ] dlog w = X dlog A``.
+prices (B&F §4). Factors sit inside the CES aggregator, so this Hessian
+**differs** from the legacy intermediate-only `baqaee_farhi(io)` formula;
+first-order Domar weights match. Multi-factor systems correct via
+``[diag(Λ̃)+Γ] dlog w = X dlog A``. The formula is the efficient-economy
+(2019) expansion: if `net.mu` is not identically 1 a warning is emitted.
 
 # Keyword arguments
 - `hessian` — `:full` form the `n×n` matrix; `:none` skip it; `:auto` (default)
@@ -265,6 +267,9 @@ function baqaee_farhi(net::ProductionNetwork{T};
     end
     if hessian === :full && n > 500
         @warn "baqaee_farhi: forming full Hessian for n=$n > 500; consider hessian=:none and bf_quadratic"
+    end
+    if any(m -> m > one(T) + T(1e-14), net.mu)
+        @warn "baqaee_farhi: network has μ ≠ 1; the local Hessian is the efficient-economy (2019) formula on cost shares. Use bf_equilibrium / bf_wedge_decomp for wedges."
     end
 
     λ_out = T[net.lambda[g] for g in net.outer_nodes]

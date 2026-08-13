@@ -399,7 +399,7 @@ d\log Y = \underbrace{\tilde\lambda'\, d\log A}_{\Delta\text{Technology}}
 - **Technology**: holding the allocation of resources fixed, a productivity shock raises output in proportion to the producer's *cost-based* Domar weight.
 - **Allocative efficiency**: equilibrium reallocation of resources. For pure productivity shocks the sufficient statistic is ``-\tilde\Lambda' d\log\Lambda`` (a weighted change in revenue factor shares). Markup shocks add the direct term ``-\tilde\lambda' d\log\mu``.
 
-[`bf_wedge_decomp`](@ref) solves the exact equilibrium and returns a [`BFWedgeDecomp`](@ref) with both pieces. For infinitesimal shocks, `dlogY ≈ technology + allocative`; for large shocks the split remains the first-order formula while `dlogY` is exact.
+[`bf_wedge_decomp`](@ref) solves the exact equilibrium and returns a [`BFWedgeDecomp`](@ref) with both pieces plus the Hulten factor-supply term `factor_supply = Λ̃'dlogL` (outside Theorem 1; `dlogL` is forwarded to the solver). For infinitesimal shocks, `dlogY ≈ technology + allocative + factor_supply`; for large shocks the split remains the first-order formula while `dlogY` is exact.
 
 ```@example io_baqaee_farhi
 decomp = bf_wedge_decomp(net_w; dlogA=[0.05, 0.0])
@@ -501,7 +501,7 @@ Hulten prices a 20% agricultural loss at about 9.8% of aggregate output. The sec
 
 12. **Cost-based vs revenue-based Domar under wedges.** With `mu > 1`, use `cost_based_domar` (or `net.lambda` on outer nodes) for the pure technology weight and `revenue_based_domar` for sales/GDP. Confusing the two mis-states Hulten-style counterfactuals in inefficient economies.
 
-13. **Theorem 1 is first-order.** `technology` and `allocative` on [`BFEquilibrium`](@ref) / [`BFWedgeDecomp`](@ref) are the B&F (2020) first-order split; `dlogY` is the exact nonlinear change. They add up only for small shocks.
+13. **Theorem 1 is first-order.** `technology` and `allocative` on [`BFEquilibrium`](@ref) / [`BFWedgeDecomp`](@ref) are the B&F (2020) first-order split for `dlogA` and `dlogμ`. Factor-supply shocks live in `factor_supply = Λ̃'dlogL` and are not part of that split. `dlogY` is the exact nonlinear change. The three first-order pieces add up only for small shocks.
 
 ---
 

@@ -250,6 +250,7 @@ io = parse_icio("ICIO2023_2018.csv"; year=2018)
 io = parse_icio("ICIO_v2023_2016-2020.zip"; year=2018)
 
 # CN1… / MX1… sub-national blocks are aggregated into CHN / MEX by default
+# (destination FD columns are merged in the same pass so Y stays region-blocked)
 io_raw = parse_icio("ICIO2016_2010.csv"; aggregate_cn_mx=false)
 ```
 

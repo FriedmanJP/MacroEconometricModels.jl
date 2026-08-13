@@ -134,3 +134,14 @@ end
     @test p isa PlotOutput
     @test !isempty(sprint(refs, r))
 end
+
+@testset "RASResult serialization" begin
+    A0 = [2.0 1.0; 1.0 2.0]
+    r = ras(A0, [4.0, 5.0], [3.0, 6.0])
+    r2 = MacroEconometricModels._reconstruct_from_container(
+        MacroEconometricModels._build_container(r))
+    @test r2 isa RASResult
+    @test r2.X ≈ r.X
+    @test r2.method === r.method
+    @test r2.converged == r.converged
+end

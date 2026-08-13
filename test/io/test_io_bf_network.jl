@@ -87,11 +87,8 @@ using Test, MacroEconometricModels, LinearAlgebra, SparseArrays
         # Inject a small negative intermediate flow; keep column balance via VA.
         Z = [150.0 500.0; 200.0 100.0]
         Y = reshape([350.0, 1700.0], 2, 1)
-        va = reshape([650.0, 1400.0], 1, 2)
         Zneg = copy(Z)
-        Zneg[2, 1] = -5.0          # small negative
-        # rebalance: reduce VA so colsum still = x? Constructor checks balance.
-        # Use check=false on IOData and on production_network.
+        Zneg[2, 1] = -5.0          # small negative (~0.5% of x=1000)
         x = [1000.0, 2000.0]
         va_adj = reshape(x .- vec(sum(Zneg; dims=1)), 1, 2)
         io_neg = IOData(Zneg, Y, va_adj; check=false)
@@ -99,6 +96,15 @@ using Test, MacroEconometricModels, LinearAlgebra, SparseArrays
         Ω = Matrix(net.Omega)
         @test all(Ω .>= -1e-15)
         @test all(abs.(sum(Ω[1:1+net.M, :]; dims=2) .- 1) .< 1e-10)
+
+        # >1% clipped mass with check=true is an error.
+        Zbig = copy(Z)
+        Zbig[2, 1] = -20.0         # 20 / (150+20+650) = 2.4% of producer-1 row
+        va_big = reshape(x .- vec(sum(Zbig; dims=1)), 1, 2)
+        io_big = IOData(Zbig, Y, va_big; check=false)
+        @test_throws ArgumentError production_network(io_big; check=true)
+        net_ok = production_network(io_big; check=false)
+        @test all(Matrix(net_ok.Omega) .>= -1e-15)
     end
 
     @testset "rejects :custom nests" begin
@@ -114,5 +120,17 @@ using Test, MacroEconometricModels, LinearAlgebra, SparseArrays
                 report(net)
             end
         end
+    end
+
+    @testset "ProductionNetwork serialization" begin
+        net = production_network(io; theta=0.5, sigma=0.9)
+        net2 = MacroEconometricModels._reconstruct_from_container(
+            MacroEconometricModels._build_container(net))
+        @test net2 isa ProductionNetwork
+        @test Matrix(net2.Omega) ≈ Matrix(net.Omega)
+        @test net2.theta ≈ net.theta
+        @test net2.lambda ≈ net.lambda
+        @test net2.n == net.n && net2.M == net.M && net2.F == net.F
+        @test net2.nests === net.nests
     end
 end

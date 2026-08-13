@@ -42,8 +42,21 @@ end
     @test io.Z[2, 1] ≈ 1.0 atol=1e-12
     # Domestic CHN block: CN1→CN1 8 + CN1→CN2 2 + CN2→CN1 1 + CN2→CN2 6 = 17
     @test io.Z[2, 2] ≈ 17.0 atol=1e-12
-    # Y CHN destinations: columns CN1_HFCE and CN2_HFCE stay separate (fd not collapsed)
-    @test size(io.Y, 2) == 3
+    # Destination FD columns are merged so Y stays region-blocked (G=2, 1 cat).
+    @test size(io.Y, 2) == 2
+    @test io.fd_cats == ["USA_HFCE", "CHN_HFCE"]
+    @test io.Y ≈ [20.0 4.0; 3.0 30.0] atol=1e-12   # CHN_HFCE = CN1+CN2
+
+    # Final-export routes remain visible to MRIO accounting.
+    bt = bilateral_trade(io, "USA", "CHN")
+    @test bt.intermediate ≈ 3.0 atol=1e-12   # USA→CN1 2 + USA→CN2 1
+    @test bt.final ≈ 4.0 atol=1e-12          # 3+1
+    @test gross_exports(io, "USA") ≈ [7.0] atol=1e-12
+    ed = export_decomposition(io, "USA")
+    @test ed.gross_exports ≈ 7.0 atol=1e-10
+    @test ed.dva + ed.rdv + ed.fva + ed.pdc ≈ ed.gross_exports atol=1e-10
+    # Term 1 is DVA in final-goods exports — zero if FD were left unblocked.
+    @test ed.terms[1] > 0
 
     io_raw = parse_icio(path; year=2010, aggregate_cn_mx=false, check=false)
     @test nregions(io_raw) == 3

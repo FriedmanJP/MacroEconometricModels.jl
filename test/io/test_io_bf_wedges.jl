@@ -166,6 +166,21 @@ end
         @test w.dlogY ≈ eq.dlogY atol=1e-14
         @test w.technology ≈ eq.technology atol=1e-14
         @test w.allocative ≈ eq.allocative atol=1e-14
+        @test w.factor_supply ≈ 0 atol=1e-14
+        @test w.dlogL ≈ zeros(net.F) atol=1e-14
+    end
+
+    # ── factor-supply term is Hulten Λ̃'dlogL, outside Theorem 1 ──────────
+    @testset "factor_supply = Λ̃'dlogL" begin
+        net = production_network(io; theta=1.0, sigma=1.0)
+        dL = fill(0.05, net.F)
+        w = bf_wedge_decomp(net; dlogL=dL)
+        Λ̃ = net.lambda[net.M+2:end]
+        @test w.factor_supply ≈ dot(Λ̃, dL) atol=1e-14
+        @test w.technology ≈ 0 atol=1e-14
+        # CD + μ≡1: exact dlogY = Hulten factor-supply term
+        @test w.dlogY ≈ w.factor_supply atol=1e-10
+        @test abs(w.allocative) < 1e-8
     end
 
     # ── report / show / plot / refs smoke ────────────────────────────────────

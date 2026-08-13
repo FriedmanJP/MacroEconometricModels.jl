@@ -132,3 +132,19 @@ end
     @test_throws ArgumentError sda(io, io; method=:multiplicative,
                                     factors=[:technology, :fd_level, :fd_mix])
 end
+
+@testset "SDAResult serialization" begin
+    io0 = load_example(:wiot)
+    Z1 = io0.Z .* 1.1
+    Y1 = io0.Y .* 1.2
+    io1 = IOData(Z1, Y1, [330.0 1100.0; 385.0 440.0]; sectors=io0.sectors, check=false)
+    r = sda(io0, io1)
+    r2 = MacroEconometricModels._reconstruct_from_container(
+        MacroEconometricModels._build_container(r))
+    @test r2 isa SDAResult
+    @test r2.effects[:L] ≈ r.effects[:L]
+    @test r2.effects[:Y] ≈ r.effects[:Y]
+    @test r2.total ≈ r.total
+    @test r2.method === r.method
+    @test r2.factors == r.factors
+end

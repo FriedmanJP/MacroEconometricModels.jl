@@ -397,10 +397,6 @@ function aggregate(io::IOData{T};
                  source=isempty(io.source) ? "aggregate" : io.source * " [aggregated]",
                  meta=io.meta, check=true)
 
-    # Override x with the aggregated x (row-balance construction is fine, but
-    # keep the summed x for exact mass conservation when check is tight).
-    # IOData constructor recomputes x from Z+Y; that is the right mass.
-
     # ── aggregate extensions ──────────────────────────────────────────────
     for (name, ext) in io.extensions
         n_s = size(ext.F, 1)
