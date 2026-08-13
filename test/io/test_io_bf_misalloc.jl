@@ -13,8 +13,7 @@ end
 
 @testset "B&F 2020 Prop 5 misallocation" begin
     @testset "Prop 5 horizontal Harberger" begin
-        io = IOData(zeros(2,2), reshape([1.0,1.0],2,1), reshape([1.0,1.0],1,2);
-                    sectors=["A","B"])
+        io = _horizontal_io()
         μ = [1.2, 1.5]
         σ = 2.0
         net = production_network(io; sigma=σ, theta=1.0, mu=μ)
@@ -28,5 +27,21 @@ end
         @test m.first_order ≈ 0 atol=1e-12          # envelope at μ=1
         @test size(m.H_mu) == (2, 2)
         @test m.second_order ≈ -0.5 * dot(v, m.H_mu * v) atol=1e-12
+    end
+
+    @testset "μ≡1 ⇒ L=0 and H_μ well-defined" begin
+        net = production_network(load_example(:wiot); theta=0.5, sigma=0.9)
+        m = bf_misallocation(net)
+        @test m.distance ≈ 0 atol=1e-12
+        @test m.second_order ≈ 0 atol=1e-12
+        @test all(iszero, m.delta_logmu)
+    end
+
+    @testset "Leontief (all θ=0) ⇒ H_μ = 0" begin
+        io = load_example(:wiot)
+        net = production_network(io; theta=0.0, sigma=0.0, mu=[1.3, 1.1])
+        m = bf_misallocation(net; point=:efficient)
+        @test maximum(abs, m.H_mu) < 1e-12
+        @test m.second_order ≈ 0 atol=1e-12
     end
 end
