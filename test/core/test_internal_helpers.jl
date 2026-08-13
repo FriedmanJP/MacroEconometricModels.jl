@@ -298,5 +298,20 @@ const MEM_IH = MacroEconometricModels
         @test _expected_rank("HA-DSGE") > _expected_rank("DSGE Core")
         @test _expected_rank("DSGE Core") > _expected_rank("Counterfactual")
         @test _expected_rank("Coverage-A") > _expected_rank("Coverage-B")
+
+        # Regression: TEST_GROUPS items are Pairs. A Tuple channel MethodError'd
+        # on Windows before any test ran (CI 31687983257).
+        groups = ["HA-DSGE" => ["dsge/test_ha_dsge.jl"],
+                  "Counterfactual" => ["counterfactual/test_types.jl"],
+                  "Core & VAR" => ["core/test_aqua.jl"]]
+        work = _make_work_queue(groups)
+        names = String[]
+        for (gn, fs) in work
+            push!(names, gn)
+            @test fs isa Vector{String}
+            @test !isempty(fs)
+        end
+        @test names == ["HA-DSGE", "Core & VAR", "Counterfactual"]  # heaviest first
+        @test !isopen(work)
     end
 end

@@ -417,13 +417,8 @@ elseif !serial && Threads.nthreads() > 1
     @info "MacroEconometricModels loaded in $(round(t_load, digits=1))s"
     println("FILETIME\t__runner__\tusing MacroEconometricModels\t", round(t_load; digits=1))
 
-    queue = sort(collect(TEST_GROUPS); by = p -> _expected_rank(first(p)), rev = true)
     max_conc = _runner_max_conc(Threads.nthreads())
-    work = Channel{Tuple{String, Vector{String}}}(length(queue))
-    for item in queue
-        put!(work, item)
-    end
-    close(work)
+    work = _make_work_queue(TEST_GROUPS)
     failed_groups = String[]
     failed_lock = ReentrantLock()
     @sync for _ in 1:max_conc

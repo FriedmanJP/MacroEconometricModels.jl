@@ -30,3 +30,15 @@ end
 _blas_threads_for_group(name::AbstractString) = name == "HA-DSGE" ? 2 : 1
 
 _runner_max_conc(cpu_threads::Integer; cap::Integer=4) = min(Int(cpu_threads), cap)
+
+# TEST_GROUPS uses `"name" => files` Pairs, not Tuples. Type the channel from
+# the collected vector so put! cannot MethodError (Windows CI, 2026-08-13).
+function _make_work_queue(groups)
+    queue = sort(collect(groups); by = p -> _expected_rank(first(p)), rev = true)
+    work = Channel{eltype(queue)}(max(1, length(queue)))
+    for item in queue
+        put!(work, item)
+    end
+    close(work)
+    return work
+end
