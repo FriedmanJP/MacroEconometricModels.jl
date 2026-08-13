@@ -105,4 +105,59 @@ end
         @test maximum(abs.(H .- H_fd)) < 1e-5
         @test maximum(abs.(H .- H')) < 1e-8
     end
+
+    @testset "bf_wedge_quadratic matches v'H v" begin
+        net = production_network(_three_sector_io(); theta=0.5, sigma=0.9, factors=:va_cats)
+        H = bf_misallocation(net).H_mu
+        v = [0.1, -0.05, 0.02]
+        @test bf_wedge_quadratic(net, v) ≈ dot(v, H * v) atol=1e-12
+    end
+
+    @testset "small-μ quadratic vs exact L" begin
+        io = load_example(:wiot)
+        μ = [1.02, 1.03]                         # small — second-order must bite
+        net = production_network(io; theta=0.5, sigma=1.5, mu=μ)
+        m = bf_misallocation(net; point=:efficient)
+        @test m.distance > 0                     # markups reduce Y
+        @test abs(m.distance - m.second_order) < 5e-5
+    end
+
+    @testset "vertical / acyclic: exact L ≈ 0 even if μ ≠ 1" begin
+        # One viable allocation: Z = 0, each sector buys only labor, household
+        # Leontief (σ=0) so no substitution — Corollary 2 style.
+        io = IOData(zeros(2,2), reshape([1.0,1.0],2,1), reshape([1.0,1.0],1,2);
+                    sectors=["A","B"])
+        net = production_network(io; sigma=0.0, theta=1.0, mu=[1.4, 1.8])
+        m = bf_misallocation(net)
+        @test abs(m.distance) < 1e-8
+        @test abs(m.second_order) < 1e-8
+    end
+
+    @testset ":observed is local curvature; exact L independent of point" begin
+        net = production_network(load_example(:wiot); theta=0.5, sigma=0.9, mu=[1.2, 1.1])
+        m_e = bf_misallocation(net; point=:efficient)
+        m_o = bf_misallocation(net; point=:observed)
+        @test m_e.distance ≈ m_o.distance atol=1e-12
+        @test m_e.first_order ≈ 0 atol=1e-12
+        @test m_o.point === :observed
+        v = m_o.delta_logmu
+        @test bf_wedge_quadratic(net, v; point=:observed) ≈ dot(v, m_o.H_mu * v) atol=1e-12
+        @test size(m_o.H_mu) == (2, 2)
+        m_none = bf_misallocation(net; hessian=:none)
+        @test size(m_none.H_mu) == (0, 0)
+        @test m_none.second_order ≈ m_e.second_order atol=1e-12
+    end
+
+    @testset ":observed first_order matches horizontal dlogY/dlogμ" begin
+        io = _horizontal_io()
+        μ = [1.2, 1.5]
+        σ = 2.0
+        net = production_network(io; sigma=σ, theta=1.0, mu=μ)
+        m = bf_misallocation(net; point=:observed)
+        λ = [0.5, 0.5]
+        s = sum(λ ./ μ)
+        g = [λ[k] * σ * ((1 / μ[k]) / s - 1) for k in 1:2]
+        @test m.first_order ≈ dot(g, log.(μ)) atol=1e-12
+        @test m.distance ≈ bf_misallocation(net).distance atol=1e-12
+    end
 end
