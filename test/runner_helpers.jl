@@ -5,7 +5,8 @@
 # Licensed under GPL-3.0-or-later. See LICENSE for details.
 
 # Shared by test/runtests.jl (parent orchestrator) and test/core/test_internal_helpers.jl.
-# Keep this file free of Test / package loads so either side can include it.
+
+using LinearAlgebra
 
 # Monotone expected-duration ranking (heaviest first) for the longest-first work queue (#124).
 # Only the ordering matters, not accurate minutes.
@@ -30,6 +31,20 @@ end
 _blas_threads_for_group(name::AbstractString) = name == "HA-DSGE" ? 2 : 1
 
 _runner_max_conc(cpu_threads::Integer; cap::Integer=4) = min(Int(cpu_threads), cap)
+
+# Do-block argument order: `_with_group_blas(name) do ... end` is
+# `_with_group_blas(f, name)`. (Windows CI 31689698555: the reverse
+# signature MethodError'd every group.)
+function _with_group_blas(f, group_name::AbstractString)
+    n = _blas_threads_for_group(group_name)
+    old = BLAS.get_num_threads()
+    try
+        n != old && BLAS.set_num_threads(n)
+        return f()
+    finally
+        n != old && BLAS.set_num_threads(old)
+    end
+end
 
 # TEST_GROUPS uses `"name" => files` Pairs, not Tuples. Type the channel from
 # the collected vector so put! cannot MethodError (Windows CI, 2026-08-13).

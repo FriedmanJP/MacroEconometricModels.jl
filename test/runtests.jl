@@ -294,20 +294,6 @@ const TEST_GROUPS = [
     ]),
 ]
 
-# Temporarily raise OpenBLAS threads around a group's work (threaded runner).
-# OpenBLAS's thread count is process-global, so HA-DSGE's 2 may briefly apply to
-# a sibling task; other groups request 1 and we restore on the way out.
-function _with_group_blas(group_name::AbstractString, f)
-    n = _blas_threads_for_group(group_name)
-    old = BLAS.get_num_threads()
-    try
-        n != old && BLAS.set_num_threads(n)
-        return f()
-    finally
-        n != old && BLAS.set_num_threads(old)
-    end
-end
-
 # Multi-process runner (fallback when threads unavailable)
 function run_test_group(group_name::String, files::Vector{String})
     test_dir = replace(string(@__DIR__), '\\' => '/')  # forward slashes for Windows compat

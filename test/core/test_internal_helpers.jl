@@ -313,5 +313,19 @@ const MEM_IH = MacroEconometricModels
         end
         @test names == ["HA-DSGE", "Core & VAR", "Counterfactual"]  # heaviest first
         @test !isopen(work)
+
+        # Do-block is f-first. The reverse signature crashed every Windows group
+        # (CI 31689698555) before any include ran.
+        @test hasmethod(_with_group_blas, Tuple{Function, AbstractString})
+        @test !hasmethod(_with_group_blas, Tuple{AbstractString, Function})
+        old = BLAS.get_num_threads()
+        saw = Ref(0)
+        ret = _with_group_blas("HA-DSGE") do
+            saw[] = BLAS.get_num_threads()
+            42
+        end
+        @test ret == 42
+        @test saw[] == 2
+        @test BLAS.get_num_threads() == old
     end
 end
