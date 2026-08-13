@@ -11,15 +11,20 @@ function _horizontal_io()
     return IOData(Z, Y, va; sectors=["A", "B"])
 end
 
-"""Balanced 3-sector 2-factor IO table (hard-coded). Copied from test_io_bf_hessian.jl."""
+"""Balanced 3-sector 2-factor IO table (hard-coded, non-proportional factor intensities).
+
+A is labor-heavy, C is capital-heavy; column VA still sums to residual value added.
+Proportional L/K shares make Prop 5 eq. (17) line 2 vanish, so M4b would not license
+the multi-factor block.
+"""
 function _three_sector_io()
     Z = [50.0 80.0 40.0;
          60.0 100.0 50.0;
          30.0 70.0 40.0]
     Y = reshape([200.0, 300.0, 150.0], 3, 1)
-    x = vec(sum(Z; dims=2)) .+ vec(Y)
-    va_tot = x .- vec(sum(Z; dims=1))
-    va = vcat(0.6 .* va_tot', 0.4 .* va_tot')
+    # va_tot = [230, 260, 160]; L/K shares (0.8/0.2, 0.5/0.5, 0.3/0.7)
+    va = [184.0 130.0  48.0;
+           46.0 130.0 112.0]
     return IOData(Z, Y, va; sectors=["A", "B", "C"], va_cats=["L", "K"])
 end
 
@@ -94,6 +99,7 @@ end
         net = production_network(load_example(:wiot); nests=:two, theta=0.5,
                                  epsilon=0.8, eta=1.0, sigma=0.9,
                                  factors=:va_cats, mu=1.0)
+        @test net.n == 2 && net.F == 2
         H = bf_misallocation(net; point=:efficient).H_mu
         H_fd = _fd_hessian_mu(net; ε=1e-4)
         @test maximum(abs.(H .- H_fd)) < 1e-5

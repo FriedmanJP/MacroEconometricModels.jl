@@ -149,18 +149,6 @@ function _bf_H_mu_efficient(net::ProductionNetwork{T}) where {T<:AbstractFloat}
     return T(0.5) .* (H_raw .+ transpose(H_raw))
 end
 
-"""Efficient-point single-factor ``H_μ`` (leading Var block only)."""
-function _bf_H_mu_efficient_single(net::ProductionNetwork{T}) where {T<:AbstractFloat}
-    K = _bf_assemble_K_mu(net.theta, net.lambda, net.Omega, net.M)
-    Ψ_P = _bf_psi_columns(net, net.outer_nodes)
-    H_raw = -(transpose(Ψ_P) * (K * Ψ_P))
-    asym = maximum(abs.(H_raw .- transpose(H_raw)); init=zero(T))
-    if asym > T(1e-8)
-        @warn "bf H_μ asymmetry exceeds 1e-8; possible transcription bug" asymmetry = Float64(asym)
-    end
-    return T(0.5) .* (H_raw .+ transpose(H_raw))
-end
-
 """Efficient twin: same ``Ω̃`` / elasticities, ``μ ≡ 1``."""
 function _bf_efficient_twin(net::ProductionNetwork{T}) where {T}
     any(m -> m > one(T) + T(1e-14), net.mu) || return net
