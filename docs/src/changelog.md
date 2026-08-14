@@ -6,6 +6,46 @@ output, not just documentation.
 
 ---
 
+## v0.8.1
+
+Patch release: the **Input-Output overhaul** (`#611`) — a Baqaee--Farhi production-network
+layer on top of the classical column Leontief toolkit, plus MRIO trade accounting,
+general SDA, RAS/GRAS, and labeled ICIO/WIOD parsers. Legacy `baqaee_farhi(io)` remains
+the frozen intermediate-only Hessian; the new standard-form path is
+`production_network` → `bf_equilibrium` / `baqaee_farhi(net)`.
+
+This is a patch on the `0.8` series. Downstream `[compat]` of
+`MacroEconometricModels = "0.8"` resolves here; no bound change is required.
+
+**New**
+
+- **Baqaee--Farhi network** (`ProductionNetwork`, `production_network`): row-oriented
+  nested CES (single/two-nest, multi-factor) calibrated from column `IOData` once.
+- **Exact nonlinear equilibrium** (`bf_equilibrium` → `BFEquilibrium`): Newton
+  unit-cost fixed point, factor-market clearing, GDP numéraire.
+- **Local second-order** (`baqaee_farhi(net)`, `BFLocal`, `BFElasticities`,
+  `bf_quadratic`, `bf_shock_curve`): 2019 multi-factor ``H_A`` with incidence; shock
+  curve for large-``d\log A``.
+- **Wedges / markups** (`bf_wedge_decomp`, cost- vs revenue-based Domar): B\&F 2020
+  Theorem 1 technology / allocative-efficiency decomposition.
+- **Misallocation** (`bf_misallocation`, `bf_wedge_quadratic` → `BFMisallocation`):
+  Proposition 5 ``H_\mu`` and the Harberger triangle at the efficient point;
+  `:observed` is the Prop 5 Var/Cov object, not the solver Hessian.
+- **Classical IO**: Leontief `price_model`, Dietzenbacher--Lahr extraction variants,
+  `impact` scenario API (Type I/II + mixed), `network_stats`.
+- **MRIO**: `aggregate`, `region_block`, HIY vertical specialization,
+  KWW 2014 `export_decomposition` (DVA/RDV/FVA/PDC), regional footprints.
+- **SDA / balancing**: general n-determinant Dietzenbacher--Los SDA (incl. emission
+  SDA) and `ras` / `gras` / `balance`.
+- **Parsers**: `parse_icio` / `parse_wiod` labeled MRIO recipes.
+
+**Also**
+
+- Windows CI: threaded single-process runner, FAST HA-DSGE/DSGE, HA-DSGE OpenBLAS
+  threads, skip artifact cache upload.
+
+---
+
 ## v0.8.0
 
 Feature release: the **policy-counterfactual module** (`src/counterfactual/`, series
