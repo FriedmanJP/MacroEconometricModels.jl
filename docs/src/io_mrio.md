@@ -368,6 +368,22 @@ A produces all 80 kt of CO₂ but consumes only the share embodied in its domest
 
 ---
 
+## API Reference
+
+```@docs
+aggregate
+region_block
+region_indices
+bilateral_trade
+gross_exports
+vertical_specialization
+VerticalSpecialization
+export_decomposition
+ExportDecomposition
+```
+
+---
+
 ## References
 
 - Hummels, D., J. Ishii, and K.-M. Yi. 2001. "The Nature and Growth of Vertical Specialization in World Trade." *Journal of International Economics* 54 (1): 75–96. [https://doi.org/10.1016/S0022-1996(00)00093-3](https://doi.org/10.1016/S0022-1996(00)00093-3)

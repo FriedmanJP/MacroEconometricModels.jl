@@ -101,6 +101,7 @@ MacroEconometricModels.StatsAPI.stderror(::ARModel)
 MacroEconometricModels.StatsAPI.stderror(::MAModel)
 MacroEconometricModels.StatsAPI.stderror(::ARMAModel)
 MacroEconometricModels.StatsAPI.stderror(::ARIMAModel)
+MacroEconometricModels.StatsAPI.stderror(::SARIMAModel)
 ```
 
 ---

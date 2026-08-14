@@ -3,11 +3,11 @@
 Input-output analysis reads the inter-industry flow table of an economy and turns it into multipliers, linkages, footprints, and productivity elasticities. The package implements the demand-driven model of Leontief (1936) and the supply-driven model of Ghosh (1958) over a single `IOData` container, extends both with satellite accounts for emissions and employment, adds the Baqaee & Farhi (2019) nonlinear production-network decomposition, and downloads the major public multi-regional input-output (MRIO) databases.
 
 - **Container**: `IOData` stores intermediate flows, final demand, value added, gross output, sector and region labels, and satellite accounts, and validates the two accounting identities at construction
-- **Classical analysis**: Leontief and Ghosh inverses, Type I and Type II multipliers, Rasmussen linkages and key sectors, structural decomposition, and hypothetical extraction
+- **Classical analysis**: Leontief and Ghosh inverses, Type I and Type II multipliers, Rasmussen linkages and key sectors, n-factor SDA, RAS/GRAS, hypothetical extraction, the Leontief price dual, impact scenarios, and network statistics
 - **Environmental extensions**: stressor intensities, consumption-based emission multipliers, and footprints for any satellite account
-- **MRIO trade accounting**: region/sector aggregation, bilateral trade, Hummels–Ishii–Yi vertical specialization, and the Koopman–Wang–Wei (2014) DVA/RDV/FVA/PDC export decomposition
-- **Production networks**: Domar weights, Hulten's theorem, the second-order "beyond Hulten" Hessian, and network centralities
-- **Data acquisition**: OECD ICIO, WIOD, EXIOBASE 3, EORA26, and GLORIA downloaders, plus CSV, TSV, ZIP, and XLSX parsing
+- **MRIO trade accounting**: region/sector aggregation, bilateral trade, Hummels–Ishii–Yi vertical specialization, the Koopman–Wang–Wei (2014) DVA/RDV/FVA/PDC export decomposition, and regional footprints
+- **Production networks**: nested-CES `ProductionNetwork`, exact `bf_equilibrium`, the 2019 multi-factor Hessian, 2020 wedge decompositions, and Proposition 5 Harberger misallocation
+- **Data acquisition**: OECD ICIO, WIOD, EXIOBASE 3, EORA26, and GLORIA downloaders, plus `parse_icio` / `parse_wiod` labeled recipes
 - **Display**: `report()` for every result type and `plot_result()` for multipliers, linkages, and the Leontief inverse
 
 ```@setup io_hub
@@ -43,8 +43,12 @@ One additional unit of final demand for agricultural output raises gross output 
 | What is the import content of a region's exports? | `vertical_specialization` | [MRIO Trade Accounting](@ref io_mrio_page) |
 | How much of gross exports is domestic value-added? | `export_decomposition` | [MRIO Trade Accounting](@ref io_mrio_page) |
 | How do I collapse regions or sectors? | `aggregate` | [MRIO Trade Accounting](@ref io_mrio_page) |
-| How does a sector's productivity shock move GDP? | `domar_weights`, `baqaee_farhi` | [Baqaee & Farhi (2019)](@ref io_baqaee_farhi_page) |
-| Where does a real MRIO table come from? | `download_io`, `parse_io` | [Downloading Data](@ref io_download_page) |
+| How does a sectoral price shock pass through? | `price_model` | [Classical Analysis](@ref io_classical_page) |
+| What is the output effect of a demand scenario? | `impact` | [Classical Analysis](@ref io_classical_page) |
+| How concentrated or upstream is the network? | `network_stats` | [Classical Analysis](@ref io_classical_page) |
+| How does a sector's productivity shock move GDP? | `domar_weights`, `production_network`, `baqaee_farhi`, `bf_equilibrium` | [Baqaee & Farhi (2019)](@ref io_baqaee_farhi_page) |
+| How much of a markup is misallocation? | `bf_misallocation`, `bf_wedge_decomp` | [Baqaee & Farhi (2019)](@ref io_baqaee_farhi_page) |
+| Where does a real MRIO table come from? | `download_io`, `parse_io`, `parse_icio`, `parse_wiod` | [Downloading Data](@ref io_download_page) |
 
 Classical analysis and environmental extensions share the Leontief inverse and are linear in final demand. The Baqaee & Farhi decomposition drops that linearity: it treats the same table as the cost-share structure of a general-equilibrium production network in which sectors substitute across inputs.
 
@@ -52,11 +56,11 @@ Classical analysis and environmental extensions share the Leontief inverse and a
 
 ## Child Pages
 
-- [Classical Analysis](@ref io_classical_page) — Leontief and Ghosh inverses, Type I and Type II multipliers, Rasmussen linkages and key sectors, structural decomposition analysis, and hypothetical extraction
+- [Classical Analysis](@ref io_classical_page) — Leontief and Ghosh inverses, Type I and Type II multipliers, Rasmussen linkages and key sectors, n-factor SDA, RAS/GRAS, hypothetical extraction, the price model, impact scenarios, and network statistics
 - [Environmental Extensions](@ref io_environmental_page) — satellite accounts, per-unit intensities, consumption-based emission multipliers, and footprints
-- [MRIO Trade Accounting](@ref io_mrio_page) — aggregation, bilateral trade, vertical specialization, and the KWW (2014) export decomposition
-- [Baqaee & Farhi (2019)](@ref io_baqaee_farhi_page) — Domar weights, Hulten's theorem, the second-order "beyond Hulten" term, and network centralities
-- [Downloading Data](@ref io_download_page) — the source registry, the per-database downloaders, SHA-256 integrity verification, and parsing archives into `IOData`
+- [MRIO Trade Accounting](@ref io_mrio_page) — aggregation, bilateral trade, vertical specialization, the KWW (2014) export decomposition, and regional footprints
+- [Baqaee & Farhi (2019)](@ref io_baqaee_farhi_page) — nested-CES production networks, exact equilibrium, the multi-factor Hessian, wedge decompositions, and Harberger misallocation
+- [Downloading Data](@ref io_download_page) — the source registry, per-database downloaders, SHA-256 integrity verification, and `parse_icio` / `parse_wiod` labeled MRIO recipes
 
 ---
 

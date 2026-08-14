@@ -803,13 +803,19 @@ linkages
 rasmussen
 key_sectors
 sda
+SDAResult
 ras
 gras
 balance
+RASResult
 hypothetical_extraction
+ExtractionResult
 price_model
+PriceModelResult
 impact
+ImpactResult
 network_stats
+NetworkStatsResult
 ```
 
 ---

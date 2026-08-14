@@ -250,6 +250,8 @@ add_extension!
 intensities
 emission_multipliers
 footprint
+FootprintResult
+RegionalFootprintResult
 ```
 
 ---

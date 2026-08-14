@@ -683,12 +683,12 @@ export impact, ImpactResult
 export network_stats, NetworkStatsResult
 export ExtractionResult
 
-export add_extension!, intensities, emission_multipliers, footprint
+export add_extension!, intensities, emission_multipliers, footprint, FootprintResult
 export aggregate, region_block, region_indices, bilateral_trade, gross_exports
 export vertical_specialization, VerticalSpecialization
 export export_decomposition, ExportDecomposition
 export RegionalFootprintResult
-export domar_weights, baqaee_farhi
+export domar_weights, baqaee_farhi, BaqaeeFarhiResult
 export ProductionNetwork, production_network
 export BFEquilibrium, bf_equilibrium
 export BFLocal, BFElasticities, BFShockCurve, BFWedgeDecomp

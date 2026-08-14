@@ -560,6 +560,7 @@ Hulten prices a 20% agricultural loss at about 9.8% of aggregate output. The sec
 ```@docs
 domar_weights
 baqaee_farhi
+BaqaeeFarhiResult
 production_network
 ProductionNetwork
 bf_equilibrium
