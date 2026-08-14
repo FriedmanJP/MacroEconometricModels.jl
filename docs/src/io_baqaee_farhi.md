@@ -16,7 +16,7 @@ io = load_example(:wiot)
 
 ## Quick Start
 
-**Recipe 1: Domar weights (legacy scalar API)**
+**Recipe 1: Domar weights**
 
 ```@example io_baqaee_farhi
 domar_weights(io)
@@ -41,7 +41,7 @@ report(local_bf)
 
 ```@example io_baqaee_farhi
 eq = bf_equilibrium(net; dlogA=[-0.10, 0.0])
-(eq.dlogY, eq.hulten, eq.converged)
+report(eq)
 ```
 
 **Recipe 5: Shock curve — exact vs Hulten vs second-order**
@@ -61,10 +61,6 @@ net_μ = production_network(io; theta=0.5, sigma=0.9, mu=[1.2, 1.1])
 ```@example io_baqaee_farhi
 w = bf_wedge_decomp(net_μ; dlogA=[0.05, 0.0], dlogmu=[0.0, 0.02])
 report(w)
-```
-
-```julia
-plot_result(sc)
 ```
 
 ---
@@ -120,6 +116,11 @@ where:
 - ``\theta`` is the elasticity of substitution across intermediate inputs
 - ``\sigma`` is the elasticity of substitution across goods in consumption
 
+!!! note "Cobb-Douglas is the exact-Hulten case"
+    With ``\theta = \sigma = 1`` — the default when `theta` and `sigma` are not supplied —
+    both coefficients vanish and the Hessian is exactly zero. Under Cobb-Douglas, cost shares
+    are price-invariant, there is nothing to reallocate, and Hulten's theorem holds *globally*.
+
 ```@example io_baqaee_farhi
 baqaee_farhi(io).second_order
 ```
@@ -133,11 +134,6 @@ With gross substitutes the diagonal is positive: log output is **convex** in sec
 ```@example io_baqaee_farhi
 baqaee_farhi(io; theta=0.5).second_order
 ```
-
-!!! note "Cobb-Douglas is the exact-Hulten case"
-    With ``\theta = \sigma = 1`` — the default when `theta` and `sigma` are not supplied —
-    both coefficients vanish and the Hessian is exactly zero. Under Cobb-Douglas, cost shares
-    are price-invariant, there is nothing to reallocate, and Hulten's theorem holds *globally*.
 
 ### Keyword Arguments (legacy)
 
@@ -255,7 +251,7 @@ plot_result(sc)
 ```
 
 ```@raw html
-<iframe src="../assets/plots/bf_shock_curve.html" style="width:100%;height:420px;border:none;"></iframe>
+<iframe src="../assets/plots/bf_shock_curve.html" width="100%" height="500" frameborder="0" style="border:1px solid #ddd;border-radius:4px;"></iframe>
 ```
 
 ### Keyword Arguments ([`bf_equilibrium`](@ref))
@@ -290,6 +286,13 @@ H &= \Psi_P' K \Psi_P - X'(d\log w / d\log A)
 
 where ``\Psi_P`` / ``\Psi_F`` are the producer (outer-node) / factor column blocks of ``\tilde\Psi = (I-\tilde\Omega)^{-1}``, obtained by sparse solves. Single factor implies ``\Psi_f = \mathbf{1}`` and the factor-price correction vanishes. The Hessian is reported at the ``n`` real sectors; for ``n > 500`` the default is `hessian=:none` and [`bf_quadratic`](@ref) evaluates ``v'Hv`` without forming ``H``.
 
+!!! note "Legacy scalar vs standard-form Hessian"
+    The legacy `baqaee_farhi(io; theta, sigma)` Hessian uses intermediate-only cost
+    shares (column-oriented Leontief). The standard-form Hessian includes primary
+    factors in each CES nest (B&F 2019 §4). First-order Domar weights match; second-order
+    numbers generally differ. Prefer `baqaee_farhi(net)` whenever you also use
+    `bf_equilibrium` — the two are cross-validated by finite differences.
+
 ```@example io_baqaee_farhi
 local_bf = baqaee_farhi(net)
 local_bf.second_order
@@ -305,13 +308,6 @@ bf_quadratic(net, [0.1, -0.05])
 v = [0.1, -0.05]
 v' * local_bf.second_order * v
 ```
-
-!!! note "Legacy scalar vs standard-form Hessian"
-    The legacy `baqaee_farhi(io; theta, sigma)` Hessian uses intermediate-only cost
-    shares (column-oriented Leontief). The standard-form Hessian includes primary
-    factors in each CES nest (B&F 2019 §4). First-order Domar weights match; second-order
-    numbers generally differ. Prefer `baqaee_farhi(net)` whenever you also use
-    `bf_equilibrium` — the two are cross-validated by finite differences.
 
 ### Keyword Arguments ([`baqaee_farhi(net)`](@ref baqaee_farhi))
 
@@ -344,11 +340,6 @@ e_mf.dlogw_dlogA
 ```
 
 With a single factor, wages are pinned by the GDP numéraire at fixed supply, so `dlogw_dlogA` is zero. With multiple factors, productivity shocks reallocate income across factors and the incidence matrix is generally nonzero.
-
-```julia
-plot_result(e)          # price-incidence heatmap
-plot_result(local_bf)   # Hulten bar chart
-```
 
 ---
 
@@ -401,6 +392,9 @@ d\log Y = \underbrace{\tilde\lambda'\, d\log A}_{\Delta\text{Technology}}
 
 [`bf_wedge_decomp`](@ref) solves the exact equilibrium and returns a [`BFWedgeDecomp`](@ref) with both pieces plus the Hulten factor-supply term `factor_supply = Λ̃'dlogL` (outside Theorem 1; `dlogL` is forwarded to the solver). For infinitesimal shocks, `dlogY ≈ technology + allocative + factor_supply`; for large shocks the split remains the first-order formula while `dlogY` is exact.
 
+!!! note "μ ≡ 1 recovers Hulten"
+    With `mu=1` (the default) the efficient solver is recovered bit-for-bit: cost and revenue Domar coincide, `profit_share = 0`, and the allocative term is zero to first order (Corollary 1 of B&F 2020).
+
 ```@example io_baqaee_farhi
 decomp = bf_wedge_decomp(net_w; dlogA=[0.05, 0.0])
 report(decomp)
@@ -411,14 +405,6 @@ report(decomp)
 decomp_μ = bf_wedge_decomp(net_w; dlogmu=[0.02, -0.01])
 (decomp_μ.technology, decomp_μ.allocative, decomp_μ.dlogY)
 ```
-
-```julia
-plot_result(net_w)    # cost vs revenue Domar bars
-plot_result(decomp)   # same Domar comparison from the decomp object
-```
-
-!!! note "μ ≡ 1 recovers Hulten"
-    With `mu=1` (the default) the efficient solver is recovered bit-for-bit: cost and revenue Domar coincide, `profit_share = 0`, and the allocative term is zero to first order (Corollary 1 of B&F 2020).
 
 ### Proposition 5: Harberger misallocation
 
@@ -446,10 +432,6 @@ In a horizontal economy (no intermediates, one factor) this collapses to B&F (20
 ```@example io_baqaee_farhi
 m = bf_misallocation(net_w)
 report(m)
-```
-
-```julia
-plot_result(m)
 ```
 
 Agriculture's 25% markup and manufacturing's 10% markup cost 1.18% of log output (`distance = 0.0118`). The second-order Harberger term is 0.0130: close, but the markups are not small enough for the quadratic to be exact. The first-order term is zero because the Hessian is evaluated at the efficient point. The table is Cobb-Douglas, so ``H_A`` is zero while ``H_\mu`` is not: substitution across goods still reallocates the markup distortion. [`bf_wedge_quadratic`](@ref) computes ``v' H_\mu v`` without forming the ``n \times n`` matrix; use it when ``n > 500``.
@@ -480,9 +462,12 @@ v = \Psi \beta, \qquad
 \text{down}_j = \sum_{i} \Psi_{ij}
 ```
 
-```@example io_baqaee_farhi
-bf.upstreamness, bf.downstreamness
-```
+where:
+- ``v`` is the influence vector (equals the Domar weights under column orientation)
+- ``\Psi = (I-A)^{-1}`` is the Leontief inverse
+- ``\beta`` is the vector of final-demand shares
+- ``\text{up}_i`` is the upstreamness of sector ``i`` (row sum of ``\Psi``)
+- ``\text{down}_j`` is the downstreamness of sector ``j`` (column sum of ``\Psi``)
 
 !!! note "`influence` reproduces the Domar weights"
     Under this package's column orientation of ``\Psi`` — where ``x = \Psi y`` — the
@@ -490,6 +475,10 @@ bf.upstreamness, bf.downstreamness
     theorem restated on the network. Baqaee & Farhi write the same object as
     ``\beta'\Psi`` under row orientation; the standard-form layer uses row orientation
     internally and converts once from `IOData`.
+
+```@example io_baqaee_farhi
+bf.upstreamness, bf.downstreamness
+```
 
 ---
 
