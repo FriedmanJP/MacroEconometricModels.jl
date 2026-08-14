@@ -98,17 +98,80 @@ const _REFERENCES = Dict{Symbol, _RefEntry}(
         title="Structural Decomposition Techniques: Sense and Sensitivity",
         journal="Economic Systems Research", volume="10", issue="4", pages="307--324",
         doi="10.1080/09535319800000023", isbn="", publisher="", entry_type=:article),
+    :junius_oosterhaven2003 => (key=:junius_oosterhaven2003,
+        authors="Junius, Thomas and Oosterhaven, Jan", year=2003,
+        title="The Solution of Updating or Regionalizing a Matrix with both Positive and Negative Entries",
+        journal="Economic Systems Research", volume="15", issue="1", pages="87--96",
+        doi="10.1080/0953531032000056954", isbn="", publisher="", entry_type=:article),
+    :lenzen_wood_gallego2007 => (key=:lenzen_wood_gallego2007,
+        authors="Lenzen, Manfred and Wood, Richard and Gallego, Blanca", year=2007,
+        title="Some Comments on the GRAS Method",
+        journal="Economic Systems Research", volume="19", issue="4", pages="461--465",
+        doi="10.1080/09535310701698613", isbn="", publisher="", entry_type=:article),
+    :temurshoev_miller_bouwmeester2013 => (key=:temurshoev_miller_bouwmeester2013,
+        authors="Temurshoev, Umed and Miller, Ronald E. and Bouwmeester, Maaike C.", year=2013,
+        title="A Note on the GRAS Method",
+        journal="Economic Systems Research", volume="25", issue="3", pages="361--367",
+        doi="10.1080/09535314.2012.746645", isbn="", publisher="", entry_type=:article),
+    :bacharach1970 => (key=:bacharach1970,
+        authors="Bacharach, Michael", year=1970,
+        title="Biproportional Matrices and Input-Output Change",
+        journal="", volume="", issue="", pages="",
+        doi="", isbn="978-0-521-07942-6",
+        publisher="Cambridge University Press", entry_type=:book),
     :miller_blair_2009 => (key=:miller_blair_2009,
         authors="Miller, Ronald E. and Blair, Peter D.", year=2009,
         title="Input-Output Analysis: Foundations and Extensions",
         journal="", volume="", issue="", pages="",
         doi="10.1017/CBO9780511626982", isbn="978-0-521-51713-3",
         publisher="Cambridge University Press", entry_type=:book),
+    :dietzenbacher_lahr2013 => (key=:dietzenbacher_lahr2013,
+        authors="Dietzenbacher, Erik and Lahr, Michael L.", year=2013,
+        title="Expanding Extractions",
+        journal="Economic Systems Research", volume="25", issue="3", pages="341--360",
+        doi="10.1080/09535314.2013.774266", isbn="", publisher="", entry_type=:article),
+    :dietzenbacher_romero_bosma2005 => (key=:dietzenbacher_romero_bosma2005,
+        authors="Dietzenbacher, Erik and Romero Luna, Isidoro and Bosma, Niels S.", year=2005,
+        title="Using Average Propagation Lengths to Identify Production Chains in the Andalusian Economy",
+        journal="Estudios de Econom{\\'i}a Aplicada", volume="23", issue="2", pages="405--422",
+        doi="", isbn="", publisher="", entry_type=:article),
+    :gabaix2011 => (key=:gabaix2011, authors="Gabaix, Xavier", year=2011,
+        title="The Granular Origins of Aggregate Fluctuations",
+        journal="Econometrica", volume="79", issue="3", pages="733--772",
+        doi="10.3982/ECTA8769", isbn="", publisher="", entry_type=:article),
+    :oosterhaven1988 => (key=:oosterhaven1988, authors="Oosterhaven, Jan", year=1988,
+        title="On the Plausibility of the Supply-Driven Input-Output Model",
+        journal="Journal of Regional Science", volume="28", issue="2", pages="203--217",
+        doi="10.1111/j.1467-9787.1988.tb01208.x", isbn="", publisher="", entry_type=:article),
     :baqaee_farhi_2019 => (key=:baqaee_farhi_2019,
         authors="Baqaee, David Rezza and Farhi, Emmanuel", year=2019,
         title="The Macroeconomic Impact of Microeconomic Shocks: Beyond Hulten's Theorem",
         journal="Econometrica", volume="87", issue="4", pages="1155--1203",
         doi="10.3982/ECTA15202", isbn="", publisher="", entry_type=:article),
+    :baqaee_farhi_2020 => (key=:baqaee_farhi_2020,
+        authors="Baqaee, David Rezza and Farhi, Emmanuel", year=2020,
+        title="Productivity and Misallocation in General Equilibrium",
+        journal="The Quarterly Journal of Economics", volume="135", issue="1",
+        pages="105--163",
+        doi="10.1093/qje/qjz030", isbn="", publisher="", entry_type=:article),
+    :atalay_2017 => (key=:atalay_2017,
+        authors="Atalay, Enghin", year=2017,
+        title="How Important Are Sectoral Shocks?",
+        journal="American Economic Journal: Macroeconomics", volume="9", issue="4",
+        pages="254--280",
+        doi="10.1257/mac.20160353", isbn="", publisher="", entry_type=:article),
+    :hummels_ishii_yi2001 => (key=:hummels_ishii_yi2001,
+        authors="Hummels, David and Ishii, Jun and Yi, Kei-Mu", year=2001,
+        title="The Nature and Growth of Vertical Specialization in World Trade",
+        journal="Journal of International Economics", volume="54", issue="1",
+        pages="75--96",
+        doi="10.1016/S0022-1996(00)00093-3", isbn="", publisher="", entry_type=:article),
+    :koopman_wang_wei2014 => (key=:koopman_wang_wei2014,
+        authors="Koopman, Robert and Wang, Zhi and Wei, Shang-Jin", year=2014,
+        title="Tracing Value-Added and Double Counting in Gross Exports",
+        journal="American Economic Review", volume="104", issue="2",
+        pages="459--494",
+        doi="10.1257/aer.104.2.459", isbn="", publisher="", entry_type=:article),
     # --- VAR & Structural VAR ---
     :sims1980 => (key=:sims1980, authors="Sims, Christopher A.", year=1980,
         title="Macroeconomics and Reality", journal="Econometrica",
@@ -1781,9 +1844,24 @@ const _TYPE_REFS = Dict{Symbol, Vector{Symbol}}(
     :IOMultipliers => [:miller_blair_2009],
     :LinkageResult => [:rasmussen1956, :hirschman1958, :miller_blair_2009],
     :SDAResult => [:dietzenbacher_los1998, :miller_blair_2009],
-    :ExtractionResult => [:miller_blair_2009],
+    :RASResult => [:junius_oosterhaven2003, :lenzen_wood_gallego2007,
+                   :temurshoev_miller_bouwmeester2013, :bacharach1970, :miller_blair_2009],
+    :ExtractionResult => [:dietzenbacher_lahr2013, :miller_blair_2009],
+    :PriceModelResult => [:miller_blair_2009, :oosterhaven1988],
+    :ImpactResult => [:miller_blair_2009],
+    :NetworkStatsResult => [:dietzenbacher_romero_bosma2005, :gabaix2011, :miller_blair_2009],
     :FootprintResult => [:leontief1936, :miller_blair_2009],
+    :RegionalFootprintResult => [:leontief1936, :miller_blair_2009],
+    :VerticalSpecialization => [:hummels_ishii_yi2001, :koopman_wang_wei2014, :miller_blair_2009],
+    :ExportDecomposition => [:koopman_wang_wei2014, :hummels_ishii_yi2001, :miller_blair_2009],
     :BaqaeeFarhiResult => [:baqaee_farhi_2019, :miller_blair_2009],
+    :ProductionNetwork => [:baqaee_farhi_2019, :baqaee_farhi_2020, :atalay_2017, :miller_blair_2009],
+    :BFEquilibrium => [:baqaee_farhi_2019, :baqaee_farhi_2020, :atalay_2017],
+    :BFLocal => [:baqaee_farhi_2019, :atalay_2017],
+    :BFElasticities => [:baqaee_farhi_2019],
+    :BFShockCurve => [:baqaee_farhi_2019],
+    :BFWedgeDecomp => [:baqaee_farhi_2020, :baqaee_farhi_2019],
+    :BFMisallocation => [:baqaee_farhi_2020, :baqaee_farhi_2019],
     :io => [:leontief1936, :ghosh1958, :miller_blair_2009, :baqaee_farhi_2019],
     # VAR
     :VARModel => [:sims1980, :lutkepohl2005],
@@ -2434,9 +2512,24 @@ refs(io::IO, ::GhoshModel; kw...) = refs(io, _TYPE_REFS[:GhoshModel]; kw...)
 refs(io::IO, ::IOMultipliers; kw...) = refs(io, _TYPE_REFS[:IOMultipliers]; kw...)
 refs(io::IO, ::LinkageResult; kw...) = refs(io, _TYPE_REFS[:LinkageResult]; kw...)
 refs(io::IO, ::SDAResult; kw...) = refs(io, _TYPE_REFS[:SDAResult]; kw...)
+refs(io::IO, ::RASResult; kw...) = refs(io, _TYPE_REFS[:RASResult]; kw...)
 refs(io::IO, ::ExtractionResult; kw...) = refs(io, _TYPE_REFS[:ExtractionResult]; kw...)
+
+refs(io::IO, ::PriceModelResult; kw...) = refs(io, _TYPE_REFS[:PriceModelResult]; kw...)
+refs(io::IO, ::ImpactResult; kw...) = refs(io, _TYPE_REFS[:ImpactResult]; kw...)
+refs(io::IO, ::NetworkStatsResult; kw...) = refs(io, _TYPE_REFS[:NetworkStatsResult]; kw...)
 refs(io::IO, ::FootprintResult; kw...) = refs(io, _TYPE_REFS[:FootprintResult]; kw...)
+refs(io::IO, ::RegionalFootprintResult; kw...) = refs(io, _TYPE_REFS[:RegionalFootprintResult]; kw...)
+refs(io::IO, ::VerticalSpecialization; kw...) = refs(io, _TYPE_REFS[:VerticalSpecialization]; kw...)
+refs(io::IO, ::ExportDecomposition; kw...) = refs(io, _TYPE_REFS[:ExportDecomposition]; kw...)
 refs(io::IO, ::BaqaeeFarhiResult; kw...) = refs(io, _TYPE_REFS[:BaqaeeFarhiResult]; kw...)
+refs(io::IO, ::ProductionNetwork; kw...) = refs(io, _TYPE_REFS[:ProductionNetwork]; kw...)
+refs(io::IO, ::BFEquilibrium; kw...) = refs(io, _TYPE_REFS[:BFEquilibrium]; kw...)
+refs(io::IO, ::BFLocal; kw...) = refs(io, _TYPE_REFS[:BFLocal]; kw...)
+refs(io::IO, ::BFElasticities; kw...) = refs(io, _TYPE_REFS[:BFElasticities]; kw...)
+refs(io::IO, ::BFShockCurve; kw...) = refs(io, _TYPE_REFS[:BFShockCurve]; kw...)
+refs(io::IO, ::BFWedgeDecomp; kw...) = refs(io, _TYPE_REFS[:BFWedgeDecomp]; kw...)
+refs(io::IO, ::BFMisallocation; kw...) = refs(io, _TYPE_REFS[:BFMisallocation]; kw...)
 
 # LP types
 refs(io::IO, ::LPModel; kw...) = refs(io, _TYPE_REFS[:LPModel]; kw...)

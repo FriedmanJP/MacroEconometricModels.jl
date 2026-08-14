@@ -63,6 +63,7 @@ ISBN instead.
 - Banbura, M., Giannone, D., & Reichlin, L. (2011). Nowcasting. In *The Oxford Handbook of Economic Forecasting*, 193--224. Oxford: Oxford University Press. [DOI](https://doi.org/10.1093/oxfordhb/9780195398649.013.0008)
 - Banbura, M., & Modugno, M. (2014). Maximum Likelihood Estimation of Factor Models on Datasets with Arbitrary Pattern of Missing Data. *Journal of Applied Econometrics*, 29(1), 133--160. [DOI](https://doi.org/10.1002/jae.2306)
 - Banbura, M., Belousova, I., Bodnar, K., & Toth, M. B. (2023). Nowcasting Employment in the Euro Area. *ECB Working Paper* No. 2815.
+- Atalay, E. (2017). How Important Are Sectoral Shocks? *American Economic Journal: Macroeconomics*, 9(4), 254--280. [DOI](https://doi.org/10.1257/mac.20160353)
 - Baqaee, D. R., & Farhi, E. (2019). The Macroeconomic Impact of Microeconomic Shocks: Beyond Hulten's Theorem. *Econometrica*, 87(4), 1155--1203. [DOI](https://doi.org/10.3982/ECTA15202)
 - Baqaee, D. R., & Farhi, E. (2020). Productivity and Misallocation in General Equilibrium. *The Quarterly Journal of Economics*, 135(1), 105--163. [DOI](https://doi.org/10.1093/qje/qjz030)
 - Barnichon, R., & Brownlees, C. (2019). Impulse Response Estimation by Smooth Local Projections. *Review of Economics and Statistics*, 101(3), 522--530. [DOI](https://doi.org/10.1162/rest_a_00778)
@@ -261,6 +262,7 @@ ISBN instead.
 - Huber, P. J., & Ronchetti, E. M. (2009). *Robust Statistics*. 2nd ed. Hoboken, NJ: Wiley. [DOI](https://doi.org/10.1002/9780470434697)
 - Huggett, M. (1993). The Risk-Free Rate in Heterogeneous-Agent Incomplete-Insurance Economies. *Journal of Economic Dynamics and Control*, 17(5--6), 953--969. [DOI](https://doi.org/10.1016/0165-1889(93)90024-M)
 - Hulten, C. R. (1978). Growth Accounting with Intermediate Inputs. *The Review of Economic Studies*, 45(3), 511--518. [DOI](https://doi.org/10.2307/2297252)
+- Hummels, D., Ishii, J., & Yi, K.-M. (2001). The Nature and Growth of Vertical Specialization in World Trade. *Journal of International Economics*, 54(1), 75--96. [DOI](https://doi.org/10.1016/S0022-1996(00)00093-3)
 - Hylleberg, S., Engle, R. F., Granger, C. W. J., & Yoo, B. S. (1990). Seasonal Integration and Cointegration. *Journal of Econometrics*, 44(1--2), 215--238. [DOI](https://doi.org/10.1016/0304-4076(90)90080-D)
 - Hyndman, R. J., & Koehler, A. B. (2006). Another Look at Measures of Forecast Accuracy. *International Journal of Forecasting*, 22(4), 679--688. [DOI](https://doi.org/10.1016/j.ijforecast.2006.03.001)
 - Hyndman, R. J., & Khandakar, Y. (2008). Automatic Time Series Forecasting: The forecast Package for R. *Journal of Statistical Software*, 27(3), 1--22. [DOI](https://doi.org/10.18637/jss.v027.i03)
@@ -300,6 +302,7 @@ ISBN instead.
 - Koenker, R., & Bassett, G. (1978). Regression Quantiles. *Econometrica*, 46(1), 33--50. [DOI](https://doi.org/10.2307/1913643)
 - Koop, G., Pesaran, M. H., & Potter, S. M. (1996). Impulse Response Analysis in Nonlinear Multivariate Models. *Journal of Econometrics*, 74(1), 119--147. [DOI](https://doi.org/10.1016/0304-4076(95)01753-4)
 - Koop, G., Pesaran, M. H., & Smith, R. P. (2013). On Identification of Bayesian DSGE Models. *Journal of Business & Economic Statistics*, 31(3), 300--314. [DOI](https://doi.org/10.1080/07350015.2013.773905)
+- Koopman, R., Wang, Z., & Wei, S.-J. (2014). Tracing Value-Added and Double Counting in Gross Exports. *American Economic Review*, 104(2), 459--494. [DOI](https://doi.org/10.1257/aer.104.2.459)
 - Kripfganz, S., & Schneider, D. C. (2023). ardl: Estimating Autoregressive Distributed Lag and Equilibrium Correction Models. *Stata Journal*, 23(4), 983--1019. [DOI](https://doi.org/10.1177/1536867X231212434)
 - Krusell, P., & Smith, A. A., Jr. (1998). Income and Wealth Heterogeneity in the Macroeconomy. *Journal of Political Economy*, 106(5), 867--896. [DOI](https://doi.org/10.1086/250034)
 - Kruskal, W. H., & Wallis, W. A. (1952). Use of ranks in one-criterion variance analysis. *Journal of the American Statistical Association*, 47(260), 583--621. [DOI](https://doi.org/10.1080/01621459.1952.10483441)

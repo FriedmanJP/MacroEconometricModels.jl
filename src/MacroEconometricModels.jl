@@ -113,9 +113,20 @@ include("io/coefficients.jl")
 include("io/multipliers.jl")
 include("io/linkages.jl")
 include("io/sda.jl")
+include("io/ras.jl")
 include("io/extraction.jl")
+
+include("io/price.jl")
+include("io/impact.jl")
+include("io/network.jl")
 include("io/environmental.jl")
+include("io/mrio.jl")
 include("io/baqaee_farhi.jl")
+include("io/bf_network.jl")
+include("io/bf_equilibrium.jl")
+include("io/bf_hessian.jl")
+include("io/bf_wedges.jl")
+include("io/bf_misalloc.jl")
 include("io/download/fetch.jl")
 include("io/download/registry.jl")
 include("io/download/sources.jl")
@@ -665,11 +676,28 @@ include("plotting/counterfactual.jl")  # CF-22 (#402): policy-counterfactual res
 export IOData, IOExtension, IOMetaData
 export technical_coefficients, leontief_inverse, allocation_coefficients, ghosh_inverse
 export leontief, ghosh, multipliers, linkages, rasmussen, key_sectors
-export sda, hypothetical_extraction
+export sda, SDAResult, hypothetical_extraction
+export ras, gras, balance, RASResult
+export price_model, PriceModelResult
+export impact, ImpactResult
+export network_stats, NetworkStatsResult
+export ExtractionResult
+
 export add_extension!, intensities, emission_multipliers, footprint
+export aggregate, region_block, region_indices, bilateral_trade, gross_exports
+export vertical_specialization, VerticalSpecialization
+export export_decomposition, ExportDecomposition
+export RegionalFootprintResult
 export domar_weights, baqaee_farhi
+export ProductionNetwork, production_network
+export BFEquilibrium, bf_equilibrium
+export BFLocal, BFElasticities, BFShockCurve, BFWedgeDecomp
+export bf_elasticities, bf_quadratic, bf_shock_curve
+export bf_wedge_decomp, cost_based_domar, revenue_based_domar
+export BFMisallocation, bf_misallocation, bf_wedge_quadratic
 export list_io_sources, download_io, download_oecd, download_wiod
 export download_exiobase3, download_eora26, download_gloria, parse_io
+export parse_icio, parse_wiod
 export io_file_digest
 
 # Abstract types

@@ -67,13 +67,23 @@ emission_multipliers(io::IOData, name::AbstractString) =
     _get_ext(io, name).S * leontief_inverse(io)
 
 """
-    footprint(io, name) -> FootprintResult
+    footprint(io, name; by=:sector) -> FootprintResult
+    footprint(io, name; by=:region) -> RegionalFootprintResult
 
-Consumption-based account of extension `name`: `total = M·Y + F_Y` (stressor ×
-final-demand category) and `by_sector = M ⊙ y'` (stressor × sector), where
-`M = S·L` and `y` is total final demand.
+Consumption-based account of extension `name`.
+
+- `by=:sector` (default) — `total = M·Y + F_Y` (stressor × final-demand category)
+  and `by_sector = M ⊙ y'` (stressor × sector), where `M = S·L` and `y` is total
+  final demand. Returns [`FootprintResult`](@ref).
+- `by=:region` — production-based vs consumption-based totals per region. Returns
+  [`RegionalFootprintResult`](@ref) (defined in the MRIO trade-accounting layer).
 """
-function footprint(io::IOData, name::AbstractString)
+function footprint(io::IOData, name::AbstractString; by::Symbol=:sector)
+    if by === :region
+        return _footprint_by_region(io, name)
+    elseif by !== :sector
+        throw(ArgumentError("by must be :sector or :region; got :$by"))
+    end
     ext = _get_ext(io, name)
     L = leontief_inverse(io)
     M = ext.S * L                                  # stressor × sector

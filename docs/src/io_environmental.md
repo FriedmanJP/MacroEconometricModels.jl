@@ -236,7 +236,7 @@ Agriculture uses 0.045 TJ per unit of gross output against manufacturing's 0.060
 
 5. **`by_sector` indexes the consuming product, not the emitting sector.** Entry ``j`` of `by_sector` is the footprint of final demand for product ``j``, computed as ``M_{\cdot j} y_j``. It is not sector ``j``'s own emissions — those are the columns of `F`. Comparing the two is the whole point of the account, so keep them straight.
 
-6. **Footprints of a single-region table cannot show carbon leakage.** With no import block, the consumption-based total necessarily equals the production-based total plus `F_Y`. The interesting divergence between territorial and footprint accounts requires a multi-region table; see [Downloading Data](@ref io_download_page) for the MRIO databases that supply one.
+6. **Footprints of a single-region table cannot show carbon leakage.** With no import block, the consumption-based total necessarily equals the production-based total plus `F_Y`. The interesting divergence between territorial and footprint accounts requires a multi-region table; use `footprint(io, name; by=:region)` on an MRIO (see [MRIO Trade Accounting](@ref io_mrio_page)) or load one from [Downloading Data](@ref io_download_page).
 
 7. **Account names are case-sensitive and exact.** `intensities(io, "co2")` throws even though `"CO2"` exists. The error lists the available names, which is the fastest way to find the right spelling.
 

@@ -822,7 +822,7 @@ PANIC, Pesaran CIPS, and Moon-Perron panel unit root tests. See [Panel Tests](@r
 | `westerlund_test(pd, y, xs...; ...)` | Westerlund (2007) ECM test (Gt/Ga/Pt/Pa) |
 | `fisher_johansen_test(pd, ys...; ...)` | Fisher-type (Maddala-Wu/Choi) combined Johansen test |
 
-Leontief and Ghosh accounting, multipliers and linkages, structural decomposition, environmental extensions, and the production-network approach of Baqaee & Farhi (2019). See [Input-Output Analysis](@ref io_page) for the hub and its four child pages.
+Leontief and Ghosh accounting, multipliers and linkages, structural decomposition, environmental extensions, MRIO trade accounting (KWW 2014), and the production-network approach of Baqaee & Farhi (2019). See [Input-Output Analysis](@ref io_page) for the hub and its child pages.
 
 ### Input-Output Analysis
 
@@ -835,8 +835,13 @@ Leontief and Ghosh accounting, multipliers and linkages, structural decompositio
 | `multipliers(io; kind=:output)` | Output, income, and employment multipliers |
 | `linkages(io; forward=:ghosh)` | Backward and forward linkage indices |
 | `key_sectors(io)` | Key-sector classification from the linkage quadrants |
-| `hypothetical_extraction(io, sectors)` | Output loss from extracting a sector |
-| `sda(io0, io1; method=:additive)` | Structural decomposition between two tables |
+| `hypothetical_extraction(io, sectors; mode, share)` | Output loss from extracting a sector (complete/backward/forward/partial) |
+| `price_model(io; dva, dtax, mode)` | Leontief cost-push price model ``\Delta p = (I-A')^{-1}\Delta v`` |
+| `impact(io, dy; kind, type, fix)` | Final-demand impact scenario (Type I/II or mixed model) |
+| `network_stats(io)` | Domar HHI, APL matrix, degree structure, upstreamness |
+| `sda(io0, io1; method=:additive, factors, on=:output)` | Structural decomposition (n-factor two-polar; emission SDA via `on`) |
+| `ras(A0, u, v)` / `gras(A0, u, v)` | Biproportional matrix balancing (GRAS is sign-preserving) |
+| `balance(io; method=:ras)` | Repair `IOData` intermediate flows to accounting margins |
 | `domar_weights(io)` | Sales-to-GDP (Domar) weights |
 | `baqaee_farhi(io; theta, sigma)` | Production-network shock propagation and influence vector |
 | `add_extension!(io, name, F; unit)` | Attach an environmental/satellite account |
@@ -851,6 +856,8 @@ Downloaders and parsers for the public multi-region input-output databases. See 
 | `list_io_sources()` | Available databases and their required credentials |
 | `download_io(source; storage_folder, years)` | Download WIOD, OECD ICIO, EXIOBASE3, Eora26, or GLORIA |
 | `parse_io(path; source, year)` | Parse a downloaded table into `IOData` |
+| `parse_icio(path; year, …)` | OECD ICIO recipe → labeled multi-region `IOData` |
+| `parse_wiod(path; year, …)` | WIOD 2013 WIOT recipe → labeled multi-region `IOData` |
 | `io_file_digest(path)` | Content hash of a downloaded file |
 
 D3.js visualizations for every model family, plus backend and file-export helpers. See [Plotting](@ref plotting_page) for the gallery.

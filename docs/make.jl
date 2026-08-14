@@ -78,6 +78,7 @@ makedocs(;
             "Overview" => "io.md",
             "Classical Analysis" => "io_classical.md",
             "Environmental Extensions" => "io_environmental.md",
+            "MRIO Trade Accounting" => "io_mrio.md",
             "Baqaee & Farhi (2019)" => "io_baqaee_farhi.md",
             "Downloading Data" => "io_download.md",
         ],

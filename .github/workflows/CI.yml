@@ -62,6 +62,10 @@ jobs:
           arch: ${{ matrix.arch }}
 
       - uses: julia-actions/cache@v3
+        with:
+          # Windows depot artifacts are ~1.5 GB (3× Linux) and dominate the
+          # 4-minute cache upload. compiled/ is what Pkg.test reuse needs.
+          cache-artifacts: ${{ matrix.os != 'windows-latest' }}
 
       # Optim v1 dual-major compat cell (T153/#252): pin Optim to the v1 major before
       # instantiate/precompile so the suite runs against Optim v1 (default cells resolve v2).
@@ -75,13 +79,18 @@ jobs:
       # cross-platform smoke tests; ubuntu stays the full-fidelity reference (full
       # sampling + coverage). ubuntu must NEVER set FAST or coverage of high-sampling
       # branches could drop. '0' is equivalent to unset (FAST const treats only "1" as true).
+      #
+      # Windows uses the threaded single-process runner (package loaded once).
+      # Multiprocess on NTFS pays ~6 min per child to load compiled modules; 17
+      # children made that the job. HA-DSGE still gets 2 OpenBLAS threads via
+      # the runner; every other group stays at 1.
       - uses: julia-actions/julia-runtest@v1
         with:
           coverage: ${{ matrix.os == 'ubuntu-latest' && matrix.version == '1' }}
         env:
-          JULIA_NUM_THREADS: 1
+          JULIA_NUM_THREADS: ${{ matrix.os == 'windows-latest' && 'auto' || '1' }}
           OPENBLAS_NUM_THREADS: "1"
-          MACRO_MULTIPROCESS_TESTS: "1"
+          MACRO_MULTIPROCESS_TESTS: ${{ matrix.os == 'windows-latest' && '0' || '1' }}
           MACRO_FAST_TESTS: ${{ matrix.os == 'ubuntu-latest' && '0' || '1' }}
           # Restore standard Pkg.test bounds-checking on the full-fidelity ubuntu job only (#126).
           MACRO_CHECK_BOUNDS: ${{ matrix.os == 'ubuntu-latest' && '1' || '0' }}

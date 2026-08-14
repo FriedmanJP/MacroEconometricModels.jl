@@ -1,7 +1,7 @@
 module MacroEconometricModelsZipFileExt
 
 using MacroEconometricModels, ZipFile
-import MacroEconometricModels: _parse_zip_io, IOData
+import MacroEconometricModels: _parse_zip_io, _zip_member_text, _zip_member_names, IOData
 
 # Parse a zipped delimited IO block. `member` selects the file inside the
 # archive (defaults to the first); the first `n_sectors` columns are Z and the
@@ -10,6 +10,33 @@ function _parse_zip_io(path::AbstractString; source=nothing, year=nothing,
                        member::AbstractString="", n_sectors::Int=0, n_fd::Int=1,
                        sectors=String[], delim::AbstractChar=',',
                        max_uncompressed::Integer=1_000_000_000, kwargs...)
+    content = _zip_member_text(path; member=member, max_uncompressed=max_uncompressed)
+    rows = Vector{Vector{Float64}}()
+    for line in split(strip(content), '\n')
+        s = strip(line)
+        isempty(s) && continue
+        push!(rows, parse.(Float64, split(s, delim)))
+    end
+    M = reduce(vcat, (reshape(row, 1, :) for row in rows))
+    ns = n_sectors == 0 ? size(M, 1) : n_sectors
+    Z = M[1:ns, 1:ns]
+    Y = M[1:ns, ns+1:ns+n_fd]
+    src = source === nothing ? "" : String(source)
+    return IOData(Z, Y, vec(sum(Z, dims=2)) .+ vec(sum(Y, dims=2));
+                  sectors=sectors, source=src, year=year, check=false)
+end
+
+function _zip_member_names(path::AbstractString)
+    r = ZipFile.Reader(path)
+    try
+        return String[f.name for f in r.files]
+    finally
+        close(r)
+    end
+end
+
+function _zip_member_text(path::AbstractString; member::AbstractString="",
+                          max_uncompressed::Integer=1_000_000_000)
     r = ZipFile.Reader(path)
     try
         target = if isempty(member)
@@ -19,26 +46,12 @@ function _parse_zip_io(path::AbstractString; source=nothing, year=nothing,
             idx === nothing && throw(ArgumentError("member '$member' not found in $path"))
             r.files[idx]
         end
-        # Zip-bomb guard (#254 G-15): refuse to read a member whose declared uncompressed
-        # size exceeds max_uncompressed (default 1 GB) into memory. Raise max_uncompressed
-        # for a genuinely large table.
+        # Zip-bomb guard (#254 G-15): refuse to read a member whose declared
+        # uncompressed size exceeds max_uncompressed (default 1 GB).
         target.uncompressedsize > max_uncompressed && throw(ErrorException(
             "zip member '$(target.name)' declares $(target.uncompressedsize) uncompressed " *
             "bytes, exceeding the $(max_uncompressed)-byte cap; pass max_uncompressed= to raise it."))
-        content = read(target, String)
-        rows = Vector{Vector{Float64}}()
-        for line in split(strip(content), '\n')
-            s = strip(line)
-            isempty(s) && continue
-            push!(rows, parse.(Float64, split(s, delim)))
-        end
-        M = reduce(vcat, (reshape(row, 1, :) for row in rows))
-        ns = n_sectors == 0 ? size(M, 1) : n_sectors
-        Z = M[1:ns, 1:ns]
-        Y = M[1:ns, ns+1:ns+n_fd]
-        src = source === nothing ? "" : String(source)
-        return IOData(Z, Y, vec(sum(Z, dims=2)) .+ vec(sum(Y, dims=2));
-                      sectors=sectors, source=src, year=year, check=false)
+        return read(target, String)
     finally
         close(r)
     end

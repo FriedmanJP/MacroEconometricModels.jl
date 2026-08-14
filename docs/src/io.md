@@ -5,6 +5,7 @@ Input-output analysis reads the inter-industry flow table of an economy and turn
 - **Container**: `IOData` stores intermediate flows, final demand, value added, gross output, sector and region labels, and satellite accounts, and validates the two accounting identities at construction
 - **Classical analysis**: Leontief and Ghosh inverses, Type I and Type II multipliers, Rasmussen linkages and key sectors, structural decomposition, and hypothetical extraction
 - **Environmental extensions**: stressor intensities, consumption-based emission multipliers, and footprints for any satellite account
+- **MRIO trade accounting**: region/sector aggregation, bilateral trade, Hummels–Ishii–Yi vertical specialization, and the Koopman–Wang–Wei (2014) DVA/RDV/FVA/PDC export decomposition
 - **Production networks**: Domar weights, Hulten's theorem, the second-order "beyond Hulten" Hessian, and network centralities
 - **Data acquisition**: OECD ICIO, WIOD, EXIOBASE 3, EORA26, and GLORIA downloaders, plus CSV, TSV, ZIP, and XLSX parsing
 - **Display**: `report()` for every result type and `plot_result()` for multipliers, linkages, and the Leontief inverse
@@ -34,10 +35,14 @@ One additional unit of final demand for agricultural output raises gross output 
 | Which sectors generate the largest output, income, or job effects? | `multipliers` | [Classical Analysis](@ref io_classical_page) |
 | Which sectors are key sectors? | `linkages`, `key_sectors` | [Classical Analysis](@ref io_classical_page) |
 | What drove the change in output between two years? | `sda` | [Classical Analysis](@ref io_classical_page) |
+| How do I rebalance a table to new margins? | `ras`, `gras`, `balance` | [Classical Analysis](@ref io_classical_page) |
 | How much of the economy depends on one sector? | `hypothetical_extraction` | [Classical Analysis](@ref io_classical_page) |
 | Who supplies inputs to whom, in value terms? | `ghosh`, `allocation_coefficients` | [Classical Analysis](@ref io_classical_page) |
 | How much CO``_2`` is embodied in final demand? | `footprint` | [Environmental Extensions](@ref io_environmental_page) |
 | How emission-intensive is each supply chain? | `emission_multipliers` | [Environmental Extensions](@ref io_environmental_page) |
+| What is the import content of a region's exports? | `vertical_specialization` | [MRIO Trade Accounting](@ref io_mrio_page) |
+| How much of gross exports is domestic value-added? | `export_decomposition` | [MRIO Trade Accounting](@ref io_mrio_page) |
+| How do I collapse regions or sectors? | `aggregate` | [MRIO Trade Accounting](@ref io_mrio_page) |
 | How does a sector's productivity shock move GDP? | `domar_weights`, `baqaee_farhi` | [Baqaee & Farhi (2019)](@ref io_baqaee_farhi_page) |
 | Where does a real MRIO table come from? | `download_io`, `parse_io` | [Downloading Data](@ref io_download_page) |
 
@@ -49,6 +54,7 @@ Classical analysis and environmental extensions share the Leontief inverse and a
 
 - [Classical Analysis](@ref io_classical_page) — Leontief and Ghosh inverses, Type I and Type II multipliers, Rasmussen linkages and key sectors, structural decomposition analysis, and hypothetical extraction
 - [Environmental Extensions](@ref io_environmental_page) — satellite accounts, per-unit intensities, consumption-based emission multipliers, and footprints
+- [MRIO Trade Accounting](@ref io_mrio_page) — aggregation, bilateral trade, vertical specialization, and the KWW (2014) export decomposition
 - [Baqaee & Farhi (2019)](@ref io_baqaee_farhi_page) — Domar weights, Hulten's theorem, the second-order "beyond Hulten" term, and network centralities
 - [Downloading Data](@ref io_download_page) — the source registry, the per-database downloaders, SHA-256 integrity verification, and parsing archives into `IOData`
 
