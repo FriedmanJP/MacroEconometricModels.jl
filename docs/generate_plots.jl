@@ -824,10 +824,10 @@ function main()
         plot_result(leontief(load_example(:wiot)))
     end
 
-    # 65b. B&F shock curve: exact vs Hulten vs second-order (IO2-B2)
+    # 65b. B&F shock curve — io_baqaee_farhi.md (Agriculture, ±40%, 9 points)
     try_save("bf_shock_curve.html") do
         net = production_network(load_example(:wiot); theta=0.5, sigma=0.9)
-        plot_result(bf_shock_curve(net, 1; range=(-0.4, 0.4), points=21))
+        plot_result(bf_shock_curve(net, "Agriculture"; range=(-0.4, 0.4), points=9))
     end
 
     # 66. TimeSeriesData correlation heatmap (view=:corr)
@@ -1064,6 +1064,59 @@ function main()
                  "cf_moments.html")
     catch e
         @warn "Skipped CF OPP/moments assets" exception=(e, catch_backtrace())
+    end
+
+    # 79-89. IO pages — page-faithful (io_classical / io_baqaee_farhi / io_mrio)
+    println("\n-- IO page-faithful assets --")
+    begin
+        io_w = load_example(:wiot)
+        try_save("io_multipliers.html") do
+            plot_result(multipliers(io_w; kind=:output, type=:I))
+        end
+        try_save("io_linkages.html") do
+            plot_result(linkages(io_w))
+        end
+        try_save("io_price_model.html") do
+            plot_result(price_model(io_w; dva=Dict("Agriculture" => 0.10)))
+        end
+        try_save("io_impact.html") do
+            plot_result(impact(io_w, Dict("Agriculture" => 1.0)))
+        end
+        try_save("io_network_stats.html") do
+            plot_result(network_stats(io_w))
+        end
+
+        net_bf = production_network(io_w; theta=0.5, sigma=0.9)
+        try_save("bf_local.html") do
+            plot_result(baqaee_farhi(net_bf))
+        end
+        try_save("bf_elasticities.html") do
+            plot_result(bf_elasticities(net_bf))
+        end
+        net_w = production_network(io_w; mu=[1.25, 1.10])
+        try_save("bf_network_wedges.html") do
+            plot_result(net_w)
+        end
+        try_save("bf_wedge_decomp.html") do
+            plot_result(bf_wedge_decomp(net_w; dlogA=[0.05, 0.0]))
+        end
+        try_save("bf_misalloc.html") do
+            plot_result(bf_misallocation(net_w))
+        end
+
+        Z_kww = [50.0 50.0; 0.0 0.0]
+        Y_kww = [30.0 20.0; 50.0 0.0]
+        va_kww = reshape([100.0, 0.0], 1, 2)
+        io_kww = IOData(Z_kww, Y_kww, va_kww;
+                        sectors=["A_goods", "B_goods"], regions=["A", "B"],
+                        fd_cats=["A_fd", "B_fd"], va_cats=["VA"])
+        try_save("io_kww_decomp.html") do
+            plot_result(export_decomposition(io_kww, "A"))
+        end
+        try_save("io_regional_footprint.html") do
+            add_extension!(io_kww, "CO2", [10.0 0.0]; stressors=["CO2"], unit=["kt"])
+            plot_result(footprint(io_kww, "CO2"; by=:region))
+        end
     end
 
     println("\nDone! Generated $(length(readdir(PLOT_DIR))) HTML files in $PLOT_DIR")

@@ -263,6 +263,10 @@ A's VAX ratio of ``20/70 \approx 0.29`` is far below its domestic-content share 
 plot_result(edA)
 ```
 
+```@raw html
+<iframe src="../assets/plots/io_kww_decomp.html" width="100%" height="420" frameborder="0" style="border:1px solid #ddd;border-radius:4px;"></iframe>
+```
+
 ---
 
 ## Regional Footprints
@@ -303,6 +307,10 @@ Production-based emissions equal the columns of ``F`` summed within each region.
 
 ```julia
 plot_result(rfp)
+```
+
+```@raw html
+<iframe src="../assets/plots/io_regional_footprint.html" width="100%" height="420" frameborder="0" style="border:1px solid #ddd;border-radius:4px;"></iframe>
 ```
 
 ---

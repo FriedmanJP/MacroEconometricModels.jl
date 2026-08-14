@@ -341,6 +341,22 @@ e_mf.dlogw_dlogA
 
 With a single factor, wages are pinned by the GDP numéraire at fixed supply, so `dlogw_dlogA` is zero. With multiple factors, productivity shocks reallocate income across factors and the incidence matrix is generally nonzero.
 
+```julia
+plot_result(e)
+```
+
+```@raw html
+<iframe src="../assets/plots/bf_elasticities.html" width="100%" height="500" frameborder="0" style="border:1px solid #ddd;border-radius:4px;"></iframe>
+```
+
+```julia
+plot_result(local_bf)
+```
+
+```@raw html
+<iframe src="../assets/plots/bf_local.html" width="100%" height="420" frameborder="0" style="border:1px solid #ddd;border-radius:4px;"></iframe>
+```
+
 ---
 
 ## Wedges and Allocative Efficiency
@@ -406,6 +422,22 @@ decomp_μ = bf_wedge_decomp(net_w; dlogmu=[0.02, -0.01])
 (decomp_μ.technology, decomp_μ.allocative, decomp_μ.dlogY)
 ```
 
+```julia
+plot_result(net_w)
+```
+
+```@raw html
+<iframe src="../assets/plots/bf_network_wedges.html" width="100%" height="420" frameborder="0" style="border:1px solid #ddd;border-radius:4px;"></iframe>
+```
+
+```julia
+plot_result(decomp)
+```
+
+```@raw html
+<iframe src="../assets/plots/bf_wedge_decomp.html" width="100%" height="420" frameborder="0" style="border:1px solid #ddd;border-radius:4px;"></iframe>
+```
+
 ### Proposition 5: Harberger misallocation
 
 Theorem 1 is first-order in ``d\log A`` and ``d\log\mu``. The *level* cost of existing markups is a different object: the log-distance from observed output ``Y`` to the efficient frontier ``Y^*``. At an efficient point the envelope theorem kills the first-order term, so the leading cost is the Harberger triangle (Baqaee & Farhi 2020, Proposition 5):
@@ -432,6 +464,14 @@ In a horizontal economy (no intermediates, one factor) this collapses to B&F (20
 ```@example io_baqaee_farhi
 m = bf_misallocation(net_w)
 report(m)
+```
+
+```julia
+plot_result(m)
+```
+
+```@raw html
+<iframe src="../assets/plots/bf_misalloc.html" width="100%" height="420" frameborder="0" style="border:1px solid #ddd;border-radius:4px;"></iframe>
 ```
 
 Agriculture's 25% markup and manufacturing's 10% markup cost 1.18% of log output (`distance = 0.0118`). The second-order Harberger term is 0.0130: close, but the markups are not small enough for the quadratic to be exact. The first-order term is zero because the Hessian is evaluated at the efficient point. The table is Cobb-Douglas, so ``H_A`` is zero while ``H_\mu`` is not: substitution across goods still reallocates the markup distortion. [`bf_wedge_quadratic`](@ref) computes ``v' H_\mu v`` without forming the ``n \times n`` matrix; use it when ``n > 500``.

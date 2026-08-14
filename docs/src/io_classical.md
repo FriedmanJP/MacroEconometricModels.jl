@@ -241,6 +241,10 @@ Type II output multipliers of 3.55 and 4.09 are roughly 2.3 and 2.8 times their 
 plot_result(multipliers(io; kind=:output, type=:I))
 ```
 
+```@raw html
+<iframe src="../assets/plots/io_multipliers.html" width="100%" height="420" frameborder="0" style="border:1px solid #ddd;border-radius:4px;"></iframe>
+```
+
 ---
 
 ## Linkages and Key Sectors
@@ -291,6 +295,10 @@ linkages(io; forward=:leontief).Uj
 
 ```julia
 plot_result(lk)
+```
+
+```@raw html
+<iframe src="../assets/plots/io_linkages.html" width="100%" height="420" frameborder="0" style="border:1px solid #ddd;border-radius:4px;"></iframe>
 ```
 
 ### Keyword Arguments
@@ -588,6 +596,10 @@ price_model(io; dva=[0.05, 0.0], dtax=[0.05, 0.0]).dp
 plot_result(price_model(io; dva=Dict("Agriculture" => 0.10)))
 ```
 
+```@raw html
+<iframe src="../assets/plots/io_price_model.html" width="100%" height="420" frameborder="0" style="border:1px solid #ddd;border-radius:4px;"></iframe>
+```
+
 ---
 
 ## Impact Scenarios
@@ -649,6 +661,10 @@ Manufacturing output is held at its baseline; only agriculture expands. The resi
 plot_result(impact(io, Dict("Agriculture" => 1.0)))
 ```
 
+```@raw html
+<iframe src="../assets/plots/io_impact.html" width="100%" height="420" frameborder="0" style="border:1px solid #ddd;border-radius:4px;"></iframe>
+```
+
 ---
 
 ## Network Statistics
@@ -699,6 +715,10 @@ On this two-sector table the Domar weights are ``(1000/2050,\,2000/2050) \approx
 
 ```julia
 plot_result(ns)
+```
+
+```@raw html
+<iframe src="../assets/plots/io_network_stats.html" width="100%" height="420" frameborder="0" style="border:1px solid #ddd;border-radius:4px;"></iframe>
 ```
 
 ---
