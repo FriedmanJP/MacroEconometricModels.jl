@@ -1,6 +1,6 @@
 name = "MacroEconometricModels"
 uuid = "14a6ec33-bcac-448e-845f-2fb6769698f1"
-version = "0.8.1"
+version = "0.8.2"
 authors = ["Wookyung Chung <chung@friedman.jp>"]
 
 [deps]
@@ -75,7 +75,7 @@ StatsAPI = "1"
 TOML = "1"
 Tables = "1"
 Test = "1"
-XLSX = "0.10, 0.11, 0.12"
+XLSX = "0.10, 0.11"
 ZipFile = "0.10, 0.11"
 julia = "1.10"
 
