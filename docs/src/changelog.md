@@ -6,6 +6,19 @@ output, not just documentation.
 
 ---
 
+## v0.8.2
+
+Patch release: restore CI on Julia 1.10. `XLSX` 0.12.2 fails to precompile against
+`XML` 0.4.5 on LTS (`XLSXError: No sheetData node found in worksheet` inside the
+XLSX precompile workload). Compat is tightened to `XLSX = "0.10, 0.11"` until an
+XLSX release loads on Julia 1.10 with the current XML 0.4 series. The Excel
+parser extension is unchanged; `using XLSX` should resolve 0.11.x.
+
+This is a patch on the `0.8` series. Downstream `[compat]` of
+`MacroEconometricModels = "0.8"` resolves here; no bound change is required.
+
+---
+
 ## v0.8.1
 
 Patch release: the **Input-Output overhaul** (`#611`) — a Baqaee--Farhi production-network
