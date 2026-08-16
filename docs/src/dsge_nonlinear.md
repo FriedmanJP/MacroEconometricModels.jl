@@ -595,11 +595,13 @@ PFI reaches the ``10^{-8}`` sup-norm target in 223 iterations here — roughly f
 | `scale` | `Real` | `3.0` | State bounds as multiples of unconditional std |
 | `damping` | `Real` | `1.0` | Damping factor (0.5 for slow convergence, 1.0 for no damping) |
 | `anderson_m` | `Int` | `0` | Anderson acceleration depth (0 = disabled; see [Anderson Acceleration](@ref anderson_accel)) |
-| `threaded` | `Bool` | `false` | Multi-threaded grid-point Euler evaluation |
+| `howard_steps` | `Int` | `0` | Extra Euler re-solves per outer iteration (0 = one pass) |
+| `next_state` | `Symbol` | `:linear` | `:linear` (policy + gensys impact), `:policy` (policy states only), or `:nonlinear` (Newton residual at the quadrature shock) |
+| `threaded` | `Bool` | `false` | Multi-threaded Euler solve and expectation quadrature |
 | `verbose` | `Bool` | `false` | Print per-iteration residuals |
 | `tol` | `Real` | ``10^{-8}`` | Sup-norm convergence tolerance |
 | `max_iter` | `Int` | `500` | Maximum iterations |
-| `initial_coeffs` | `Union{Nothing, Matrix}` | `nothing` | Warm-start from previous solve |
+| `initial_coeffs` | `Union{Nothing, Matrix}` | `nothing` | Warm-start Chebyshev coefficients (`n_vars × n_basis`) |
 
 !!! note "Technical Note"
     PFI, Chebyshev collocation, and `vfi_solver` all return the same `ProjectionSolution{T}` type. All three support `evaluate_policy`, `simulate`, `irf` (a generalized IRF), and `max_euler_error`. The `method` field distinguishes them: `:projection` for collocation, `:pfi` for policy function iteration, `:vfi` for Bellman value-function iteration. `vfi_solver` additionally stores `value_fn` and supports [`evaluate_value`](@ref).
@@ -636,7 +638,7 @@ PFI reaches the ``10^{-8}`` sup-norm target in 223 iterations here — roughly f
 
 `vfi_solver` iterates the Bellman operator on a tensor state grid. At each node it maximizes ``u(c) + \beta E[V(x')]`` over a one-dimensional control box, then applies Howard (1960) policy evaluation: hold the policy fixed and iterate ``V = u + \beta P_\pi V``. Convergence is on ``\|V_{\text{new}} - V\|_\infty``. The exported policy is a Chebyshev fit of that grid policy, so `evaluate_policy`, `simulate`, and `irf` keep working.
 
-`DSGESpec` still exposes only Euler residuals. The reward and the transition are therefore required keywords. Calling `vfi_solver(spec)` without them throws `ArgumentError` and points at [`pfi_solver`](@ref).
+`DSGESpec` still exposes only Euler residuals. The reward can be declared on the spec (`utility: log(C)`, `beta: β`, `controls: C` in `@dsge`) and is then picked up automatically. `transition` and `control_bounds` remain required keywords. Calling `vfi_solver(spec)` with no Bellman data at all throws `ArgumentError` and points at [`pfi_solver`](@ref).
 
 ```math
 V(x) = \max_{a \in \mathcal{A}(x)} \Bigl\{ u(x, a) + \beta \sum_q w_q \, V\bigl(g(x, a, \varepsilon_q)\bigr) \Bigr\}

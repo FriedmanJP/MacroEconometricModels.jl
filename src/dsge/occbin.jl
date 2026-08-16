@@ -225,7 +225,11 @@ function _derive_alternative_regime(spec::DSGESpec{T}, constraint::OccBinConstra
                 augmented=spec.augmented,
                 max_lag=spec.max_lag,
                 max_lead=spec.max_lead,
-                linear=spec.linear)
+                linear=spec.linear,
+                bellman_utility=spec.bellman_utility,
+                bellman_beta=spec.bellman_beta,
+                bellman_consumption=spec.bellman_consumption,
+                bellman_controls=copy(spec.bellman_controls))
 end
 
 # =============================================================================

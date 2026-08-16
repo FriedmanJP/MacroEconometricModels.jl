@@ -44,6 +44,10 @@ Fields:
 - `max_lag::Int` — maximum lag order in the model (1 for standard, >1 if augmented)
 - `max_lead::Int` — maximum lead order in the model (1 for standard, >1 if augmented)
 - `linear::Bool` — whether the model is pre-linearized (variables are deviations from SS)
+- `bellman_utility` — optional period reward for `vfi_solver` (from `@dsge utility:`)
+- `bellman_beta` — optional discount (`Symbol` or value) for `vfi_solver`
+- `bellman_consumption` — optional consumption symbol when `utility` is `u(c)`
+- `bellman_controls` — optional choice-variable names for `vfi_solver`
 """
 struct DSGESpec{T<:AbstractFloat}
     endog::Vector{Symbol}
@@ -68,6 +72,10 @@ struct DSGESpec{T<:AbstractFloat}
     max_lag::Int
     max_lead::Int
     linear::Bool
+    bellman_utility::Any
+    bellman_beta::Any
+    bellman_consumption::Union{Nothing,Symbol}
+    bellman_controls::Vector{Symbol}
 
     function DSGESpec{T}(endog, exog, params, param_values, equations, residual_fns,
                          n_expect, forward_indices, steady_state,
@@ -77,7 +85,11 @@ struct DSGESpec{T<:AbstractFloat}
                          augmented::Bool=false,
                          max_lag::Int=1,
                          max_lead::Int=1,
-                         linear::Bool=false) where {T<:AbstractFloat}
+                         linear::Bool=false,
+                         bellman_utility=nothing,
+                         bellman_beta=nothing,
+                         bellman_consumption::Union{Nothing,Symbol}=nothing,
+                         bellman_controls::AbstractVector=Symbol[]) where {T<:AbstractFloat}
         n_endog = length(endog)
         n_exog = length(exog)
         n_params = length(params)
@@ -90,7 +102,9 @@ struct DSGESpec{T<:AbstractFloat}
         new{T}(endog, exog, params, param_values, equations, residual_fns,
                n_endog, n_exog, n_params, n_expect, forward_indices, steady_state,
                varnames, ss_fn, original_endog, original_equations,
-               n_original_endog, n_original_eq, augmented, max_lag, max_lead, linear)
+               n_original_endog, n_original_eq, augmented, max_lag, max_lead, linear,
+               bellman_utility, bellman_beta, bellman_consumption,
+               Symbol[bellman_controls...])
     end
 end
 
@@ -115,6 +129,10 @@ function _respec(spec::DSGESpec{T}, new_pv) where {T<:AbstractFloat}
         max_lag=spec.max_lag,
         max_lead=spec.max_lead,
         linear=spec.linear,
+        bellman_utility=spec.bellman_utility,
+        bellman_beta=spec.bellman_beta,
+        bellman_consumption=spec.bellman_consumption,
+        bellman_controls=copy(spec.bellman_controls),
     )
 end
 

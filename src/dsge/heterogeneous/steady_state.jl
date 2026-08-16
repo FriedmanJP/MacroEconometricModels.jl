@@ -269,7 +269,7 @@ function _ha_steady_state(ip::IndividualProblem{T}, grid::HAGrid{T},
     # Evaluate excess demand K_s − K_d at a trial rate. A non-finite K_d (firm
     # demand diverges at a too-low rate) is mapped to excess = −∞ (raise r),
     # guarding the escalation path so a valid setup does not throw (#240/H-18).
-    function eval_excess(r::T, warm)
+    function eval_excess(r::T, warm, warm_V=nothing)
         p_loc = copy(params)
         K_d, prices = clr(r, p_loc)
         isfinite(K_d) || return (excess=T(-Inf), K_d=K_d, prices=prices,
@@ -290,9 +290,11 @@ function _ha_steady_state(ip::IndividualProblem{T}, grid::HAGrid{T},
         # and the whole block reduces to the original code path.
         for _ in 1:(has_labor ? 30 : 1)
             if hh_solver === :vfi
-                V_hh, c_pol, a_pol = _vfi_solve(ip, grid, income, prices;
-                                                max_iter=1000, tol=T(1e-8),
-                                                howard_steps=20)
+                V_hh, c_pol, a_pol, _ = _vfi_solve(ip, grid, income, prices;
+                                                   max_iter=1000, tol=T(1e-8),
+                                                   howard_steps=20,
+                                                   init_value=warm_V,
+                                                   init_policy=warm)
             else
                 c_pol, a_pol, _ = _egm_solve(ip, grid, income, prices;
                                              max_iter=1000, tol=T(1e-10),
@@ -343,17 +345,18 @@ function _ha_steady_state(ip::IndividualProblem{T}, grid::HAGrid{T},
         r_lo >= r_hi && (r_lo = r_hi - max(width, T(1e-3)))
     end
     res_lo = eval_excess(r_lo, nothing)
-    res_hi = eval_excess(r_hi, res_lo.c_pol)
+    res_hi = eval_excess(r_hi, res_lo.c_pol, res_lo.value_fn)
     widen = 0
     while res_lo.excess > zero(T) && widen < 60
         r_lo -= max(r_hi - r_lo, T(1e-3))          # expand downward
-        res_lo = eval_excess(r_lo, res_lo.c_pol)
+        res_lo = eval_excess(r_lo, res_lo.c_pol, res_lo.value_fn)
         widen += 1
     end
     widen = 0
     while res_hi.excess < zero(T) && r_hi < r_cap && widen < 60
         r_hi = min(r_hi + max(r_hi - r_lo, T(1e-3)), r_cap)   # expand upward, capped
-        res_hi = eval_excess(r_hi, res_hi.c_pol === nothing ? res_lo.c_pol : res_hi.c_pol)
+        res_hi = eval_excess(r_hi, res_hi.c_pol === nothing ? res_lo.c_pol : res_hi.c_pol,
+                            res_hi.value_fn === nothing ? res_lo.value_fn : res_hi.value_fn)
         widen += 1
     end
     if !(res_lo.excess <= zero(T) <= res_hi.excess)
@@ -364,6 +367,8 @@ function _ha_steady_state(ip::IndividualProblem{T}, grid::HAGrid{T},
               "stationary equilibrium.")
     end
     warm_c = res_lo.c_pol !== nothing ? res_lo.c_pol : res_hi.c_pol
+    warm_V = res_lo.value_fn !== nothing ? res_lo.value_fn :
+             res_hi.value_fn
 
     for iter in 1:max_iter
         final_iter = iter
@@ -385,13 +390,14 @@ function _ha_steady_state(ip::IndividualProblem{T}, grid::HAGrid{T},
             continue
         end
 
-        res = eval_excess(r_mid, warm_c)
+        res = eval_excess(r_mid, warm_c, warm_V)
         if res.c_pol === nothing
             # Demand diverges (e.g. r below the marginal-product floor) → raise r.
             r_lo = r_mid
             continue
         end
         warm_c = res.c_pol
+        warm_V = res.value_fn
         excess = res.excess
 
         _bisect_msg = "Bisection iter $iter: r = $(round(r_mid; digits=6)), " *
@@ -533,8 +539,13 @@ function _ha_steady_state(ip::IndividualProblem{T}, grid::HAGrid{T},
     grid_check === :none ||
         _check_grid_adequacy(gdiag, grid_check; context="compute_steady_state")
 
-    # EGM does not produce a value function; VFI writes the Bellman V.
-    value_fn = best_V === nothing ? zeros(T, n_a, n_e) : best_V
+    # VFI writes the Bellman V during the solve. EGM recovers V afterwards by
+    # Howard policy evaluation of the equilibrium (c, a') policy.
+    value_fn = if best_V !== nothing
+        best_V
+    else
+        _policy_value_fn(best_c_pol, best_a_pol, ip, grid, income)
+    end
 
     return HASteadyState{T}(
         policies,

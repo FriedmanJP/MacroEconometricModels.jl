@@ -23,8 +23,9 @@ non-invertible first-order conditions).
 # =============================================================================
 
 """
-    _vfi_solve(ip, grid, income, prices; max_iter=1000, tol=1e-8, howard_steps=20)
-        -> (V, c_policy, a_policy)
+    _vfi_solve(ip, grid, income, prices; max_iter=1000, tol=1e-8, howard_steps=20,
+               init_value=nothing, init_policy=nothing)
+        -> (V, c_policy, a_policy, converged)
 
 Solve a one-asset household savings problem via Value Function Iteration with
 Howard (1960) policy-evaluation acceleration.
@@ -57,7 +58,9 @@ values upon return.
 function _vfi_solve(ip::IndividualProblem{T}, grid::HAGrid{T},
                      income::IncomeProcess{T}, prices::Dict{Symbol,T};
                      max_iter::Int=1000, tol::T=T(1e-8),
-                     howard_steps::Int=20) where {T<:AbstractFloat}
+                     howard_steps::Int=20,
+                     init_value::Union{Nothing,AbstractMatrix{T}}=nothing,
+                     init_policy::Union{Nothing,AbstractMatrix{T}}=nothing) where {T<:AbstractFloat}
     @assert ip.n_asset_dims == 1 "VFI solver requires n_asset_dims == 1"
     @assert grid.n_dims == 1 "VFI solver requires a one-dimensional grid"
 
@@ -83,10 +86,14 @@ function _vfi_solve(ip::IndividualProblem{T}, grid::HAGrid{T},
     # Clamp cash-on-hand to a small positive value for initialization so that
     # log-utility never produces -Inf (which would poison expected values).
     V = zeros(T, n_a, n_e)
-    for j in 1:n_e
-        for i in 1:n_a
-            c_init = max(coh[i, j] * T(0.5), T(1e-10))
-            V[i, j] = u(c_init) / (one(T) - beta)
+    if init_value !== nothing && size(init_value) == (n_a, n_e)
+        copyto!(V, init_value)
+    else
+        for j in 1:n_e
+            for i in 1:n_a
+                c_init = max(coh[i, j] * T(0.5), T(1e-10))
+                V[i, j] = u(c_init) / (one(T) - beta)
+            end
         end
     end
 
@@ -95,11 +102,24 @@ function _vfi_solve(ip::IndividualProblem{T}, grid::HAGrid{T},
 
     # Policy indices: for each (i, j), store the index into a_grid of optimal a'
     pol_idx = ones(Int, n_a, n_e)
+    if init_policy !== nothing && size(init_policy) == (n_a, n_e)
+        for j in 1:n_e
+            for i in 1:n_a
+                # Snap the warm-start a' onto the nearest grid node
+                ap = init_policy[i, j]
+                k = searchsortedfirst(a_grid, ap)
+                pol_idx[i, j] = clamp(k, 1, n_a)
+            end
+        end
+    end
 
     # Buffers
     V_new = zeros(T, n_a, n_e)
+    converged = false
+    final_iter = 0
 
     for iter in 1:max_iter
+        final_iter = iter
         # Compute expected continuation value
         for j in 1:n_e
             for i in 1:n_a
@@ -187,6 +207,7 @@ function _vfi_solve(ip::IndividualProblem{T}, grid::HAGrid{T},
         copyto!(V, V_new)
 
         if max_diff < tol
+            converged = true
             break
         end
     end
@@ -202,5 +223,51 @@ function _vfi_solve(ip::IndividualProblem{T}, grid::HAGrid{T},
         end
     end
 
-    return V, c_policy, a_policy
+    return V, c_policy, a_policy, converged
+end
+
+"""
+    _policy_value_fn(c_pol, a_pol, ip, grid, income; max_iter=200, tol=1e-8) -> Matrix
+
+Howard policy evaluation of a given one-asset household policy. Used to fill
+`HASteadyState.value_fn` after EGM, which does not iterate a value function.
+"""
+function _policy_value_fn(c_pol::AbstractMatrix{T}, a_pol::AbstractMatrix{T},
+                          ip::IndividualProblem{T}, grid::HAGrid{T},
+                          income::IncomeProcess{T};
+                          max_iter::Int=200, tol::T=T(1e-8)) where {T<:AbstractFloat}
+    a_grid = grid.grids[1]
+    n_a = length(a_grid)
+    n_e = length(income.states)
+    beta = ip.beta
+    u = ip.utility
+    Pi = income.transition
+
+    V = zeros(T, n_a, n_e)
+    for j in 1:n_e
+        for i in 1:n_a
+            V[i, j] = u(max(c_pol[i, j], T(1e-10))) / (one(T) - beta)
+        end
+    end
+    V_new = similar(V)
+    for _ in 1:max_iter
+        max_diff = zero(T)
+        for j in 1:n_e
+            for i in 1:n_a
+                ev = zero(T)
+                ap = a_pol[i, j]
+                for jp in 1:n_e
+                    ev += Pi[j, jp] * _linear_interp(a_grid, view(V, :, jp), ap)
+                end
+                V_new[i, j] = u(max(c_pol[i, j], T(1e-10))) + beta * ev
+                d = abs(V_new[i, j] - V[i, j])
+                if isfinite(d) && d > max_diff
+                    max_diff = d
+                end
+            end
+        end
+        copyto!(V, V_new)
+        max_diff < tol && break
+    end
+    return V
 end

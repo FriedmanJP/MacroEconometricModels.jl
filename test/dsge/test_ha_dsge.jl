@@ -446,6 +446,13 @@ end
     @test c_pol[mid, 3] > c_pol[mid, 1]
     # Value function increasing in assets
     @test V[div(7 * na, 8), 2] > V[max(1, div(na, 8)), 2]
+    # Converged flag is last; warm start is accepted
+    V2, _, _, conv = MacroEconometricModels._vfi_solve(ip, grid, inc, prices;
+                                                       max_iter=FAST ? 80 : 300, tol=1e-6,
+                                                       howard_steps=FAST ? 8 : 20,
+                                                       init_value=V)
+    @test conv isa Bool
+    @test size(V2) == size(V)
 end
 
 @testset "hh_solver=:vfi fills value_fn and agrees with EGM SS" begin
@@ -456,14 +463,15 @@ end
                                 tol=5e-3, grid_check=:none)
     @test isfinite(ss_v.prices[:r])
     @test !all(iszero, ss_v.value_fn)
-    @test all(iszero, ss_e.value_fn)   # EGM path still stores zeros
+    @test !all(iszero, ss_e.value_fn)   # EGM recovers V by policy evaluation
     na = size(ss_v.value_fn, 1)
     @test ss_v.value_fn[div(7 * na, 8), 1] > ss_v.value_fn[max(1, div(na, 8)), 1]
+    @test ss_e.value_fn[div(7 * na, 8), 1] > ss_e.value_fn[max(1, div(na, 8)), 1]
     @test abs(ss_v.prices[:r] - ss_e.prices[:r]) < 5e-3
-    # Default remains EGM
+    # Default remains EGM but now also fills V
     ss_default = compute_steady_state(spec; max_iter=FAST ? 40 : 80, tol=5e-3,
                                       grid_check=:none)
-    @test all(iszero, ss_default.value_fn)
+    @test !all(iszero, ss_default.value_fn)
 end
 
 @testset "hh_solver=:vfi error paths" begin

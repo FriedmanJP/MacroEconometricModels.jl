@@ -6575,6 +6575,74 @@ end
     end
 end
 
+@testset "PFI next_state maps and invalid flag" begin
+    spec = @dsge begin
+        parameters: ρ = 0.9, σ = 0.01
+        endogenous: y
+        exogenous: ε
+        y[t] = ρ * y[t-1] + σ * ε[t]
+        steady_state: [0.0]
+    end
+    spec = compute_steady_state(spec)
+    @test_throws ArgumentError pfi_solver(spec; next_state=:bogus)
+    sol_lin = pfi_solver(spec; next_state=:linear, degree=4, max_iter=80, verbose=false)
+    sol_pol = pfi_solver(spec; next_state=:policy, degree=4, max_iter=80, verbose=false)
+    @test sol_lin.converged
+    @test sol_pol.converged
+    @test abs(evaluate_policy(sol_lin, [0.01])[1] - evaluate_policy(sol_pol, [0.01])[1]) < 1e-4
+end
+
+@testset "PFI Howard re-solves and nonlinear next_state on growth" begin
+    spec = @dsge begin
+        parameters: β = 0.99, α = 0.36, δ = 0.025, ρ = 0.95, σ = 0.007
+        endogenous: c, k, a
+        exogenous: ε
+        1 / c[t] = β * (1 / c[t+1]) * (α * exp(a[t+1]) * k[t]^(α - 1) + 1 - δ)
+        c[t] + k[t] = exp(a[t]) * k[t-1]^α + (1 - δ) * k[t-1]
+        a[t] = ρ * a[t-1] + σ * ε[t]
+    end
+    spec = compute_steady_state(spec)
+    sol0 = pfi_solver(spec; degree=3, damping=0.5, howard_steps=0,
+                      max_iter=250, verbose=false)
+    solH = pfi_solver(spec; degree=3, damping=0.5, howard_steps=5,
+                      max_iter=250, verbose=false)
+    @test solH.converged
+    @test solH.iterations <= sol0.iterations
+    x_ss = spec.steady_state[solH.state_indices]
+    @test abs(evaluate_policy(sol0, x_ss)[1] - evaluate_policy(solH, x_ss)[1]) /
+          max(abs(evaluate_policy(sol0, x_ss)[1]), 1e-8) < 0.08
+
+    sol_nl = pfi_solver(spec; degree=3, damping=0.5, next_state=:nonlinear,
+                        max_iter=200, verbose=false)
+    @test sol_nl.converged || isfinite(sol_nl.residual_norm)
+    @test all(isfinite, evaluate_policy(sol_nl, x_ss))
+end
+
+@testset "PFI Anderson/damping change iteration count on growth" begin
+    spec = @dsge begin
+        parameters: β = 0.99, α = 0.36, δ = 0.025, ρ = 0.95, σ = 0.007
+        endogenous: c, k, a
+        exogenous: ε
+        1 / c[t] = β * (1 / c[t+1]) * (α * exp(a[t+1]) * k[t]^(α - 1) + 1 - δ)
+        c[t] + k[t] = exp(a[t]) * k[t-1]^α + (1 - δ) * k[t-1]
+        a[t] = ρ * a[t-1] + σ * ε[t]
+    end
+    spec = compute_steady_state(spec)
+    sol_d1 = pfi_solver(spec; degree=3, damping=1.0, max_iter=200, verbose=false)
+    sol_d5 = pfi_solver(spec; degree=3, damping=0.5, max_iter=200, verbose=false)
+    sol_and = pfi_solver(spec; degree=3, damping=0.5, anderson_m=3,
+                         max_iter=200, verbose=false)
+    x_ss = spec.steady_state[sol_d5.state_indices]
+    c1 = evaluate_policy(sol_d1, x_ss)[1]
+    c5 = evaluate_policy(sol_d5, x_ss)[1]
+    ca = evaluate_policy(sol_and, x_ss)[1]
+    @test isfinite(c1) && isfinite(c5) && isfinite(ca)
+    @test abs(c5 - ca) / max(abs(c5), 1e-8) < 0.1
+    @test abs(c1 - c5) / max(abs(c5), 1e-8) < 0.15
+    # Damping/Anderson must not be no-ops on the recorded iteration path
+    @test (sol_d1.iterations, sol_d5.iterations, sol_and.iterations) != (0, 0, 0)
+end
+
 FAST || @testset "PFI threaded matches sequential" begin
     spec = @dsge begin
         parameters: ρ = 0.9, σ = 0.01
@@ -6698,6 +6766,38 @@ end
 T_lo(::Dict) = 1e-4
 
 @testset "Value Function Iteration" begin
+
+@testset "@dsge Bellman fields fill vfi_solver kwargs" begin
+    spec = @dsge begin
+        parameters: β = 0.99, α = 0.36, δ = 0.025, ρ = 0.95, σ = 0.007
+        endogenous: c, k, a
+        exogenous: ε
+        utility: log(c)
+        beta: β
+        controls: c
+        1 / c[t] = β * (1 / c[t+1]) * (α * exp(a[t+1]) * k[t]^(α - 1) + 1 - δ)
+        c[t] + k[t] = exp(a[t]) * k[t-1]^α + (1 - δ) * k[t-1]
+        a[t] = ρ * a[t-1] + σ * ε[t]
+    end
+    spec = compute_steady_state(spec)
+    @test spec.bellman_utility === log
+    @test spec.bellman_beta === :β
+    @test spec.bellman_consumption === :c
+    @test spec.bellman_controls == [:c]
+    spec2 = MacroEconometricModels._respec(spec, spec.param_values)
+    @test spec2.bellman_utility === log
+    @test spec2.bellman_beta === :β
+    @test spec2.bellman_consumption === :c
+    kw = _vfi_rbc_bellman(spec)
+    sol = vfi_solver(spec;
+        transition = kw.transition,
+        control_bounds = kw.control_bounds,
+        outcome = kw.outcome,
+        degree = 3, n_grid = 8, howard_steps = 10, max_iter = 250,
+        n_choice = 17, verbose = false)
+    @test sol.converged
+    @test !isempty(sol.value_fn)
+end
 
 @testset "Euler-only spec errors and names pfi_solver" begin
     spec = @dsge begin

@@ -73,6 +73,15 @@ function vfi_solver(spec::DSGESpec{T};
                     verbose::Bool=false,
                     initial_coeffs::Union{Nothing,AbstractMatrix{<:Real}}=nothing) where {T<:AbstractFloat}
 
+    utility === nothing && spec.bellman_utility !== nothing &&
+        (utility = spec.bellman_utility)
+    beta === nothing && spec.bellman_beta !== nothing &&
+        (beta = spec.bellman_beta)
+    consumption === nothing && spec.bellman_consumption !== nothing &&
+        (consumption = spec.bellman_consumption)
+    controls === nothing && !isempty(spec.bellman_controls) &&
+        (controls = spec.bellman_controls)
+
     (utility === nothing || beta === nothing ||
      transition === nothing || control_bounds === nothing) &&
         throw(ArgumentError(_VFI_MISSING_MSG))

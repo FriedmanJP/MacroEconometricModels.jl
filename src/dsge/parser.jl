@@ -25,6 +25,18 @@ end
 Time references: `var[t]` (current), `var[t-1]` (lagged), `var[t+1]` (lead).
 Expectations operator: `E[t](expr)` is stripped under rational expectations.
 
+Optional Bellman declarations for [`vfi_solver`](@ref):
+
+```julia
+    utility: log(C)
+    beta: β
+    controls: C
+```
+
+`vfi_solver` still needs `transition` and `control_bounds` (the residual spec does
+not imply them). `utility` / `beta` / `controls` are read from the spec when the
+corresponding keyword is omitted.
+
 Returns a `DSGESpec{Float64}` with callable residual functions `f(y_t, y_lag, y_lead, ε, θ) → scalar`.
 """
 macro dsge(block)
@@ -44,6 +56,10 @@ function _dsge_impl(block::Expr)
     raw_equations = Expr[]
     ss_body = nothing  # steady_state block body (Expr or nothing)
     is_linear = false  # linear: true declaration
+    bellman_util_ex = nothing
+    bellman_beta_ex = nothing
+    bellman_cons_ex = nothing
+    bellman_ctrl_ex = Symbol[]
 
     stmts = filter(a -> !(a isa LineNumberNode), block.args)
 
@@ -69,6 +85,21 @@ function _dsge_impl(block::Expr)
             # Single-line: steady_state: [expr]
             # AST: (call : steady_state <body_expr>)
             ss_body = stmt.args[3]  # the expression after the colon
+        elseif label === :utility
+            # utility: log(C)  → u=log, consumption=:C
+            # utility: log     → u=log
+            u_rhs = stmt.args[3]
+            if u_rhs isa Expr && u_rhs.head == :call && length(u_rhs.args) == 2
+                bellman_util_ex = u_rhs.args[1]
+                arg = u_rhs.args[2]
+                arg isa Symbol && (bellman_cons_ex = arg)
+            else
+                bellman_util_ex = u_rhs
+            end
+        elseif label === :beta
+            bellman_beta_ex = stmt.args[3]
+        elseif label === :controls
+            bellman_ctrl_ex = _extract_names(stmt)
         elseif label === nothing
             # Check for multi-line: steady_state = begin...end
             # AST: (= :steady_state (block ...))
@@ -219,7 +250,12 @@ function _dsge_impl(block::Expr)
             augmented=$aug_flag,
             max_lag=$max_lag_val,
             max_lead=$max_lead_val,
-            linear=$is_linear
+            linear=$is_linear,
+            bellman_utility=$(bellman_util_ex === nothing ? :nothing : bellman_util_ex),
+            bellman_beta=$(bellman_beta_ex === nothing ? :nothing :
+                (bellman_beta_ex isa Symbol ? QuoteNode(bellman_beta_ex) : bellman_beta_ex)),
+            bellman_consumption=$(bellman_cons_ex === nothing ? :nothing : QuoteNode(bellman_cons_ex)),
+            bellman_controls=$(Expr(:vect, (QuoteNode(s) for s in bellman_ctrl_ex)...))
         )
     end
 
