@@ -332,8 +332,13 @@ function _krusell_smith_solve(ss::HASteadyState{T},
                                n_z::Int=3,
                                n_K::Int=5,
                                seed::Int=1234) where {T<:AbstractFloat}
-    @assert grid.n_dims == 1 "Krusell-Smith solver requires a one-asset grid"
-    @assert ip.n_asset_dims == 1 "Krusell-Smith solver requires a one-asset individual problem"
+    if grid.n_dims == 2
+        return _krusell_smith_two_asset(ss, ip, grid, income, price_fn, params;
+            T_sim=T_sim, T_burn=T_burn, max_outer=max_outer,
+            rho_z=rho_z, sigma_z=sigma_z, tol=tol, damping=damping, seed=seed)
+    end
+    @assert grid.n_dims == 1 "Krusell-Smith solver requires a one- or two-asset grid"
+    @assert ip.n_asset_dims == 1 "One-asset Krusell-Smith requires n_asset_dims == 1"
     @assert T_sim > T_burn "T_sim must exceed T_burn"
 
     if model === :huggett
@@ -543,6 +548,86 @@ function _krusell_smith_huggett(ss::HASteadyState{T}, ip::IndividualProblem{T},
 
     return (; plm_coefficients=Dict{Symbol,Vector{T}}(:r => copy(b)),
               r_squared=Dict{Symbol,T}(:r => best_r2), converged, iterations=final_iter)
+end
+
+"""
+    _krusell_smith_two_asset(...) → NamedTuple
+
+Krusell–Smith on a two-asset SS: each date re-solves the two-asset household
+at current `(K, z)` prices (warm-started), pushes the 2-D Young histogram,
+and fits `log K' = b0 + b1 log K + b2 z`. No 5-D interpolation.
+"""
+function _krusell_smith_two_asset(ss::HASteadyState{T}, ip::IndividualProblem{T},
+                                  grid::HAGrid{T}, income::IncomeProcess{T},
+                                  price_fn::Function, params::Dict{Symbol,T};
+                                  T_sim::Int=200, T_burn::Int=40, max_outer::Int=5,
+                                  rho_z::Real=0.95, sigma_z::Real=0.007,
+                                  tol::Real=1e-3, damping::Real=0.5,
+                                  seed::Int=1234) where {T<:AbstractFloat}
+    rng = Random.MersenneTwister(seed)
+    K_ss = ss.aggregates[:K]
+    n_z = 3
+    z_grid, z_trans = _ks_build_z_grid(T(rho_z), T(sigma_z), n_z)
+    z_idx = ones(Int, T_sim)
+    z_idx[1] = div(n_z + 1, 2)
+    z_cdf = cumsum(z_trans; dims=2)
+    for t in 2:T_sim
+        u = rand(rng, T)
+        j = z_idx[t-1]
+        z_idx[t] = clamp(searchsortedfirst(view(z_cdf, j, :), u), 1, n_z)
+    end
+    z_real = T[z_grid[z_idx[t]] for t in 1:T_sim]
+
+    b_plm = T[log(max(K_ss, T(1e-6))), T(0.95), zero(T)]
+    V_warm = ss.value_fn
+    d = vec(ss.distribution)
+    converged = false
+    final_iter = 0
+    best_r2 = zero(T)
+    K_path = fill(K_ss, T_sim)
+
+    for outer in 1:max_outer
+        final_iter = outer
+        d = vec(ss.distribution)
+        V_warm = ss.value_fn
+        K = K_ss
+        for t in 1:T_sim
+            z = z_real[t]
+            prices = copy(_ks_prices(price_fn, max(K, T(1e-6)), z, params, :effective_capital))
+            r_here = haskey(prices, :r) ? prices[:r] : get(ss.prices, :r_a, zero(T))
+            prices[:r_a] = r_here
+            prices[:r] = r_here
+            prices[:r_b] = get(ss.prices, :r_b, r_here / 2)
+            prices[:tau] = get(ss.prices, :tau, zero(T))
+            prices[:w] = get(prices, :w, get(ss.prices, :w, one(T)))
+            _, b_pol, a_pol, _, V_warm = _two_asset_hh_solve(
+                ip, grid, income, prices; hh_solver=:egm,
+                max_iter=15, tol=T(1e-5), howard_steps=4, init_value=V_warm)
+            Lambda = _build_transition_matrix(b_pol, a_pol, grid, income)
+            d = _forward_iterate(Lambda, d)
+            K = max(_aggregate(d, grid; var_index=2), T(1e-6))
+            K_path[t] = K
+        end
+        idx = (T_burn + 1):(T_sim - 1)
+        length(idx) < 3 && break
+        X = hcat(ones(T, length(idx)),
+                 log.(max.(K_path[idx], T(1e-8))),
+                 z_real[idx])
+        y = log.(max.(K_path[idx .+ 1], T(1e-8)))
+        b_new = X \ y
+        yhat = X * b_new
+        ss_res = sum((y .- yhat) .^ 2)
+        ss_tot = sum((y .- mean(y)) .^ 2)
+        best_r2 = ss_tot > zero(T) ? one(T) - ss_res / ss_tot : one(T)
+        if maximum(abs.(b_new .- b_plm)) < T(tol)
+            b_plm = b_new
+            converged = true
+            break
+        end
+        b_plm = T(damping) .* b_new .+ (one(T) - T(damping)) .* b_plm
+    end
+    return (; plm_coefficients=Dict{Symbol,Vector{T}}(:K => copy(b_plm)),
+              r_squared=Dict{Symbol,T}(:K => best_r2), converged, iterations=final_iter)
 end
 
 # =============================================================================

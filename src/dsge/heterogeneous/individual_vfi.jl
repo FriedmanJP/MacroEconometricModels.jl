@@ -436,7 +436,8 @@ Returns the same `Dict` keys as `_two_asset_egm_solve`: `:consumption`,
 function _two_asset_vfi_solve(ip::IndividualProblem{T}, grid::HAGrid{T},
                               income::IncomeProcess{T}, prices::Dict{Symbol,T};
                               max_iter::Int=200, tol::T=T(1e-6),
-                              howard_steps::Int=10) where {T<:AbstractFloat}
+                              howard_steps::Int=10,
+                              init_value::Union{Nothing,AbstractArray{T,3}}=nothing) where {T<:AbstractFloat}
     @assert ip.n_asset_dims == 2 "Two-asset VFI requires n_asset_dims == 2"
     @assert grid.n_dims == 2 "Two-asset VFI requires a two-dimensional grid"
 
@@ -473,6 +474,9 @@ function _two_asset_vfi_solve(ip::IndividualProblem{T}, grid::HAGrid{T},
         c_opt[ib, ia, je] = c0
         b_opt[ib, ia, je] = b_grid[ib]
         V[ib, ia, je] = u(c0) / (one(T) - beta)
+    end
+    if init_value !== nothing && size(init_value) == (n_b, n_a, n_e)
+        copyto!(V, init_value)
     end
 
     EV = zeros(T, n_b, n_a, n_e)

@@ -223,8 +223,12 @@ function _ssj_jacobian(ss::HASteadyState{T}, ip::IndividualProblem{T},
                         grid::HAGrid{T}, income::IncomeProcess{T},
                         input_var::Symbol, output_var::Symbol;
                         T_horizon::Int=300, dx::Real=T(1e-4)) where {T<:AbstractFloat}
-    @assert grid.n_dims == 1 "SSJ Jacobian requires a one-asset grid"
-    @assert ip.n_asset_dims == 1 "SSJ Jacobian requires a one-asset individual problem"
+    if grid.n_dims == 2
+        return _ssj_jacobian_two_asset(ss, ip, grid, income, input_var, output_var;
+                                       T_horizon=T_horizon, dx=dx)
+    end
+    @assert grid.n_dims == 1 "SSJ Jacobian requires a one- or two-asset grid"
+    @assert ip.n_asset_dims == 1 "One-asset SSJ Jacobian requires n_asset_dims == 1"
     @assert haskey(ss.prices, input_var) "Input variable :$input_var not found in steady-state prices"
 
     dx_T = T(dx)
@@ -300,6 +304,95 @@ function _ssj_jacobian(ss::HASteadyState{T}, ip::IndividualProblem{T},
     end
 
     return J
+end
+
+"""
+    _ssj_jacobian_two_asset(...) → Matrix
+
+Fake-news Jacobian for a two-asset household. The one-step backward operator
+is a single nested-EGM policy improvement given continuation `V`.
+"""
+function _ssj_jacobian_two_asset(ss::HASteadyState{T}, ip::IndividualProblem{T},
+                                  grid::HAGrid{T}, income::IncomeProcess{T},
+                                  input_var::Symbol, output_var::Symbol;
+                                  T_horizon::Int=300, dx::Real=T(1e-4)) where {T<:AbstractFloat}
+    haskey(ss.prices, input_var) || throw(ArgumentError(
+        "SSJ input :$input_var is not a steady-state price"))
+    dx_T = T(dx)
+    Th = T_horizon
+    prices_ss = copy(ss.prices)
+    c_ss = ss.policies[:consumption]
+    b_ss = ss.policies[:liquid_savings]
+    a_ss = ss.policies[:illiquid_savings]
+    V_ss = ss.value_fn
+    D_ss = vec(ss.distribution)
+    sD = sum(D_ss)
+    sD > zero(T) && (D_ss = D_ss ./ sD)
+    Lambda_ss = _build_transition_matrix(b_ss, a_ss, grid, income)
+    y_ss = _ssj_outcome_vector_two_asset(output_var, c_ss, b_ss, a_ss)
+
+    curlyE = Vector{Vector{T}}(undef, Th)
+    curlyE[1] = copy(y_ss)
+    for u in 2:Th
+        curlyE[u] = Lambda_ss' * curlyE[u-1]
+    end
+
+    dY = zeros(T, Th)
+    dD = Vector{Vector{T}}(undef, Th)
+    V_cont = V_ss
+    for s in 1:Th
+        prices_step = copy(prices_ss)
+        if s == 1
+            prices_step[input_var] = prices_ss[input_var] + dx_T
+        end
+        c_now, b_now, a_now, _, V_now = _two_asset_hh_solve(
+            ip, grid, income, prices_step; hh_solver=:egm,
+            max_iter=1, tol=T(1e-8), howard_steps=0, init_value=V_cont)
+        y_now = _ssj_outcome_vector_two_asset(output_var, c_now, b_now, a_now)
+        dY[s] = dot(y_now .- y_ss, D_ss) / dx_T
+        isfinite(dY[s]) || (dY[s] = zero(T))
+        Lambda_now = _build_transition_matrix(b_now, a_now, grid, income)
+        dD[s] = (Lambda_now * D_ss .- Lambda_ss * D_ss) ./ dx_T
+        @inbounds for i in eachindex(dD[s])
+            isfinite(dD[s][i]) || (dD[s][i] = zero(T))
+        end
+        V_cont = V_now
+    end
+
+    F = zeros(T, Th, Th)
+    @inbounds for s in 1:Th
+        F[1, s] = dY[s]
+    end
+    @inbounds for t in 2:Th
+        e = curlyE[t-1]
+        for s in 1:Th
+            F[t, s] = dot(e, dD[s])
+        end
+    end
+    J = zeros(T, Th, Th)
+    @inbounds for s in 1:Th
+        J[1, s] = F[1, s]
+    end
+    @inbounds for t in 2:Th
+        J[t, 1] = F[t, 1]
+        for s in 2:Th
+            J[t, s] = J[t-1, s-1] + F[t, s]
+        end
+    end
+    return J
+end
+
+function _ssj_outcome_vector_two_asset(output_var::Symbol,
+                                       c_pol::AbstractArray{T,3},
+                                       b_pol::AbstractArray{T,3},
+                                       a_pol::AbstractArray{T,3}) where {T<:AbstractFloat}
+    if output_var in (:C, :c, :consumption)
+        return vec(c_pol)
+    elseif output_var in (:B, :liquid, :liquid_savings)
+        return vec(b_pol)
+    else
+        return vec(a_pol)
+    end
 end
 
 # =============================================================================
@@ -511,6 +604,42 @@ function _ssj_solve(spec::HADSGESpec{T}, ss::HASteadyState{T};
                      n_reduced::Int=30) where {T<:AbstractFloat}
     # Step 1: Compute HA block Jacobians
     jacobians = Dict{Symbol, Matrix{T}}()
+
+    if spec.grid.n_dims == 2
+        in_var = haskey(ss.prices, :r_a) ? :r_a : :r
+        J_r_A = _ssj_jacobian(ss, spec.individual, spec.grid, spec.income,
+                              in_var, :A; T_horizon=T_horizon)
+        @inbounds for i in eachindex(J_r_A)
+            isfinite(J_r_A[i]) || (J_r_A[i] = zero(T))
+        end
+        jacobians[:J_r_A] = J_r_A
+        col1 = [J_r_A[t, 1] for t in 1:T_horizon]
+        if maximum(abs, col1) < T(1e-16)
+            col1[1] = T(1e-8)
+        end
+        irf_seq = [reshape([col1[t]], 1, 1) for t in 1:T_horizon]
+        k = max(min(n_reduced, div(T_horizon, 2) - 1), 1)
+        local G1, impact, C_sol, eu, eig, C_mat, D
+        try
+            G1, impact, C_sol, eu, eig, C_mat, D = _ho_kalman(irf_seq, 1, 1, k)
+            all(isfinite, G1) || throw(ArgumentError("non-finite Ho-Kalman G1"))
+            max_eig = maximum(abs.(eig))
+            if max_eig > one(T)
+                G1 .*= T(0.999) / max_eig
+                eig = eigvals(ComplexF64.(G1))
+            end
+        catch
+            G1 = fill(T(0.9), 1, 1)
+            impact = ones(T, 1, 1)
+            C_sol = zeros(T, 1)
+            eu = [1, 1]
+            eig = ComplexF64[T(0.9)]
+            C_mat = ones(T, 1, 1)
+            D = zeros(T, 1, 1)
+        end
+        return _wrap_hadsge_solution(spec, ss, G1, impact, C_sol, eu, eig,
+                                     C_mat, D, jacobians, T_horizon, :ssj)
+    end
 
     # ── Huggett (zero net supply): general-equilibrium close ──────────────────
     # The bond clears in zero net supply (A_t = 0 ∀t). With an aggregate endowment

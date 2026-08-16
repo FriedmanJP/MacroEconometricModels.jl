@@ -305,39 +305,41 @@ function report(io::IO, ss::HASteadyState{T}) where {T}
             alignment=[:l, :r])
     end
 
-    # --- Distribution statistics ---
-    d_vec = vec(ss.distribution)
-    gini = _gini_coefficient(d_vec, ss.grid)
+    # --- Distribution statistics (one-asset histogram only) ---
+    if ss.grid.n_dims == 1
+        d_vec = vec(ss.distribution)
+        gini = _gini_coefficient(d_vec, ss.grid)
 
-    # Mean wealth
-    a_grid = ss.grid.grids[1]
-    n_a = ss.grid.n_points[1]
-    n_e = ss.grid.n_income
-    d_mat = reshape(d_vec, n_a, n_e)
-    d_asset = vec(sum(d_mat; dims=2))
-    total_mass = sum(d_asset)
-    if total_mass > zero(T)
-        d_asset ./= total_mass
+        # Mean wealth
+        a_grid = ss.grid.grids[1]
+        n_a = ss.grid.n_points[1]
+        n_e = ss.grid.n_income
+        d_mat = reshape(d_vec, n_a, n_e)
+        d_asset = vec(sum(d_mat; dims=2))
+        total_mass = sum(d_asset)
+        if total_mass > zero(T)
+            d_asset ./= total_mass
+        end
+        mean_wealth = dot(d_asset, a_grid)
+
+        # Percentiles
+        pctiles = [0.10, 0.25, 0.50, 0.75, 0.90, 0.99]
+        pctile_vals = [_wealth_percentile(d_vec, ss.grid, T(p)) for p in pctiles]
+
+        dist_data = Matrix{Any}(undef, 2 + length(pctiles), 2)
+        dist_data[1, 1] = "Mean wealth"
+        dist_data[1, 2] = _fmt(mean_wealth; digits=4)
+        dist_data[2, 1] = "Gini coefficient"
+        dist_data[2, 2] = _fmt(gini; digits=4)
+        for (i, (p, v)) in enumerate(zip(pctiles, pctile_vals))
+            dist_data[2 + i, 1] = "P$(round(Int, p*100))"
+            dist_data[2 + i, 2] = _fmt(v; digits=4)
+        end
+        _pretty_table(io, dist_data;
+            title="Wealth Distribution",
+            column_labels=["Statistic", "Value"],
+            alignment=[:l, :r])
     end
-    mean_wealth = dot(d_asset, a_grid)
-
-    # Percentiles
-    pctiles = [0.10, 0.25, 0.50, 0.75, 0.90, 0.99]
-    pctile_vals = [_wealth_percentile(d_vec, ss.grid, T(p)) for p in pctiles]
-
-    dist_data = Matrix{Any}(undef, 2 + length(pctiles), 2)
-    dist_data[1, 1] = "Mean wealth"
-    dist_data[1, 2] = _fmt(mean_wealth; digits=4)
-    dist_data[2, 1] = "Gini coefficient"
-    dist_data[2, 2] = _fmt(gini; digits=4)
-    for (i, (p, v)) in enumerate(zip(pctiles, pctile_vals))
-        dist_data[2 + i, 1] = "P$(round(Int, p*100))"
-        dist_data[2 + i, 2] = _fmt(v; digits=4)
-    end
-    _pretty_table(io, dist_data;
-        title="Wealth Distribution",
-        column_labels=["Statistic", "Value"],
-        alignment=[:l, :r])
 
     return nothing
 end

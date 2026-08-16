@@ -152,8 +152,13 @@ function _reiter_linearize(ss::HASteadyState{T}, ip::IndividualProblem{T},
                             het_params::Dict{Symbol,T}=Dict{Symbol,T}(),
                             rng::Union{Nothing,AbstractRNG}=nothing,
                             hh_solver::Symbol=:egm) where {T<:AbstractFloat}
-    @assert grid.n_dims == 1 "Reiter linearization requires a one-asset grid"
-    @assert ip.n_asset_dims == 1 "Reiter linearization requires a one-asset individual problem"
+    if grid.n_dims == 2
+        return _reiter_linearize_two_asset(ss, ip, grid, income;
+            n_reduced=n_reduced, dx=dx, n_sim=n_sim, het_params=het_params,
+            rng=rng, hh_solver=hh_solver)
+    end
+    @assert grid.n_dims == 1 "Reiter linearization requires a one- or two-asset grid"
+    @assert ip.n_asset_dims == 1 "One-asset Reiter requires n_asset_dims == 1"
 
     rng_actual = isnothing(rng) ? Random.MersenneTwister(1234) : rng
     dx_T = T(dx)
@@ -387,5 +392,105 @@ function _reiter_linearize(ss::HASteadyState{T}, ip::IndividualProblem{T},
     # ── Step 8: Diagnose stability (no silent rescale; #234) ──────────────────
     _reiter_warn_unstable(G1, "Aiyagari")
 
+    return G1, impact_vec, n_red, explained, U_k
+end
+
+"""
+    _reiter_linearize_two_asset(...) → (G1, impact, n_red, explained, U_k)
+
+Reduced Reiter linearization on a joint `(b, a, e)` histogram. Observability
+is built from the illiquid aggregator. Liquid `r_b` is pinned statically by
+bond-market clearing (Huggett channel); illiquid `K` is predetermined.
+"""
+function _reiter_linearize_two_asset(ss::HASteadyState{T}, ip::IndividualProblem{T},
+                                     grid::HAGrid{T}, income::IncomeProcess{T};
+                                     n_reduced::Int=50, dx::Real=T(1e-6),
+                                     n_sim::Int=200,
+                                     het_params::Dict{Symbol,T}=Dict{Symbol,T}(),
+                                     rng::Union{Nothing,AbstractRNG}=nothing,
+                                     hh_solver::Symbol=:egm) where {T<:AbstractFloat}
+    n_b = grid.n_points[1]
+    n_a = grid.n_points[2]
+    n_e = grid.n_income
+    N = n_b * n_a * n_e
+    a_grid = grid.grids[2]
+    b_pol = ss.policies[:liquid_savings]
+    a_pol = ss.policies[:illiquid_savings]
+    dist_ss = vec(ss.distribution)
+    K_ss = ss.aggregates[:K]
+    Lambda_ss = _build_transition_matrix(b_pol, a_pol, grid, income)
+
+    a_vec = zeros(T, N)
+    @inbounds for je in 1:n_e, ia in 1:n_a, ib in 1:n_b
+        a_vec[_ha_state_index(ib, ia, je, n_b, n_a)] = a_grid[ia]
+    end
+    n_obs = min(N - 1, max(n_reduced * 3, 20))
+    O_mat = zeros(T, N, n_obs)
+    v_obs = copy(a_vec)
+    for k in 1:n_obs
+        O_mat[:, k] .= v_obs
+        v_obs = Lambda_ss' * v_obs
+    end
+    F_obs = svd(O_mat)
+    n_red = max(min(n_reduced, count(s -> s > F_obs.S[1] * T(1e-10), F_obs.S)), 1)
+    U_k = F_obs.U[:, 1:n_red]
+    G1_dist = U_k' * (Lambda_ss * U_k)
+    K_loading = U_k' * a_vec
+
+    function fd_pol(key, step)
+        p = copy(ss.prices)
+        p[key] = ss.prices[key] + step
+        _, b_p, a_p, _, _ = _two_asset_hh_solve(ip, grid, income, p;
+            hh_solver=hh_solver, max_iter=40, tol=T(1e-8), howard_steps=4,
+            init_value=ss.value_fn)
+        return _build_transition_matrix(b_p, a_p, grid, income)
+    end
+    dr = T(1e-5)
+    Lambda_ra = fd_pol(:r_a, dr)
+    Lambda_rb = fd_pol(:r_b, dr)
+    g_ra = U_k' * ((Lambda_ra * dist_ss .- Lambda_ss * dist_ss) ./ dr)
+    g_rb = U_k' * ((Lambda_rb * dist_ss .- Lambda_ss * dist_ss) ./ dr)
+
+    b_vec = zeros(T, N)
+    b_grid = grid.grids[1]
+    @inbounds for je in 1:n_e, ia in 1:n_a, ib in 1:n_b
+        b_vec[_ha_state_index(ib, ia, je, n_b, n_a)] = b_grid[ib]
+    end
+    # ∂(∫b)/∂r_b for the static liquid clear
+    _, b_rb, _, _, _ = _two_asset_hh_solve(ip, grid, income,
+        merge(copy(ss.prices), Dict(:r_b => ss.prices[:r_b] + dr));
+        hh_solver=hh_solver, max_iter=40, tol=T(1e-8), howard_steps=4,
+        init_value=ss.value_fn)
+    A_rb = sum((vec(b_rb) .- vec(b_pol)) .* dist_ss) / dr
+    abs(A_rb) < eps(T) && (A_rb = T(1))
+    sav_load = U_k' * b_vec
+
+    alpha_val = T(get(het_params, :alpha, 0.36))
+    delta_val = T(get(het_params, :delta, 0.025))
+    Z_val = T(get(het_params, :Z, 1.0))
+    rho_z = T(get(het_params, :rho_z, 0.95))
+    r_ss = ss.prices[:r_a]
+    w_ss = ss.prices[:w]
+    dr_dK, dw_dK, dr_dZ, dw_dZ =
+        _aiyagari_foc_derivatives(r_ss, w_ss, K_ss, alpha_val, delta_val, Z_val)
+
+    # r_a channel through K, r_b pinned by liquid clearing
+    channel_K = g_ra .* dr_dK
+    channel_Z = g_ra .* dr_dZ
+    n_total = n_red + 2
+    G1 = zeros(T, n_total, n_total)
+    G1[1:n_red, 1:n_red] .= G1_dist .- (g_rb ./ A_rb) * sav_load'
+    G1[1:n_red, n_red + 1] .= channel_K
+    G1[1:n_red, n_red + 2] .= channel_Z
+    G1[n_red + 1, 1:n_red] .= vec(K_loading' * G1_dist)
+    G1[n_red + 1, n_red + 1] = dot(K_loading, channel_K)
+    G1[n_red + 1, n_red + 2] = dot(K_loading, channel_Z)
+    G1[n_red + 2, n_red + 2] = rho_z
+    impact_vec = zeros(T, n_total, 1)
+    impact_vec[n_red + 2, 1] = one(T)
+    impact_vec[1:n_red, 1] .= channel_Z
+    impact_vec[n_red + 1, 1] = dot(K_loading, channel_Z)
+    explained = one(T)
+    _reiter_warn_unstable(G1, "two-asset")
     return G1, impact_vec, n_red, explained, U_k
 end

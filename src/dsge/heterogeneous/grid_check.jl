@@ -143,6 +143,67 @@ function _ha_grid_diagnostics(a_policy::AbstractMatrix{T}, dist::AbstractArray{T
 end
 
 """
+    _ha_grid_diagnostics(b_policy, dist, grid; ...) → HAGridDiagnostics
+
+Liquid-grid adequacy of a two-asset histogram. The struct still describes one
+asset dimension: here that dimension is liquid `b` (the borrowing constraint).
+Illiquid truncation is reported separately on `ss.aggregates[:A_policy]`.
+"""
+function _ha_grid_diagnostics(b_policy::AbstractArray{T,3}, dist::AbstractArray{T},
+                              grid::HAGrid{T};
+                              ceiling_mass_tol::Real=T(1e-6),
+                              residual_tol::Real=T(1e-6)) where {T<:AbstractFloat}
+    grid.n_dims == 2 || throw(ArgumentError(
+        "ha_grid_diagnostics: 3-D policy requires a two-asset grid"))
+    b_grid = grid.grids[1]
+    n_b = length(b_grid)
+    n_a = grid.n_points[2]
+    n_e = grid.n_income
+    size(b_policy) == (n_b, n_a, n_e) || throw(DimensionMismatch(
+        "ha_grid_diagnostics: liquid policy is $(size(b_policy)), expected ($n_b, $n_a, $n_e)."))
+    d = collect(vec(dist))
+    length(d) == n_b * n_a * n_e || throw(DimensionMismatch(
+        "ha_grid_diagnostics: distribution length $(length(d)) ≠ $n_b×$n_a×$n_e"))
+    total = sum(d)
+    total > zero(T) || throw(ArgumentError("ha_grid_diagnostics: distribution sums to $total."))
+    d ./= total
+
+    b_lo, b_hi = b_grid[1], b_grid[end]
+    tol_node = sqrt(eps(T)) * max(one(T), abs(b_hi))
+    ceiling_mass = zero(T); floor_mass = zero(T)
+    flux_up = zero(T); flux_down = zero(T)
+    held = zero(T); desired = zero(T)
+    n_above = 0; n_below = 0
+    max_sav = typemin(T)
+
+    @inbounds for je in 1:n_e, ia in 1:n_a, ib in 1:n_b
+        w = d[_ha_state_index(ib, ia, je, n_b, n_a)]
+        bp = b_policy[ib, ia, je]
+        ib == n_b && (ceiling_mass += w)
+        ib == 1 && (floor_mass += w)
+        held += b_grid[ib] * w
+        desired += bp * w
+        bp > max_sav && (max_sav = bp)
+        if bp > b_hi + tol_node
+            n_above += 1
+            flux_up += (bp - b_hi) * w
+        elseif bp < b_lo - tol_node
+            n_below += 1
+            flux_down += (b_lo - bp) * w
+        end
+    end
+    residual = desired - held
+    rel = residual / max(abs(held), one(T))
+    cm_tol = T(ceiling_mass_tol)
+    r_tol = T(residual_tol)
+    adequate = ceiling_mass <= cm_tol && abs(rel) <= r_tol && n_below == 0
+    return HAGridDiagnostics{T}(b_lo, b_hi, n_b, n_e, ceiling_mass, floor_mass,
+                                n_above, n_below, flux_up, flux_down,
+                                held, desired, residual, rel, max_sav,
+                                cm_tol, r_tol, adequate)
+end
+
+"""
     ha_grid_diagnostics(ss::HASteadyState; ceiling_mass_tol=1e-6, residual_tol=1e-6)
         → HAGridDiagnostics
 
@@ -170,8 +231,10 @@ degrade as the ceiling rises) if `adequate` is `false`.
 
 See also [`HAGridDiagnostics`](@ref), [`compute_steady_state`](@ref).
 """
-ha_grid_diagnostics(ss::HASteadyState{T}; kwargs...) where {T<:AbstractFloat} =
-    _ha_grid_diagnostics(ss.policies[:savings], ss.distribution, ss.grid; kwargs...)
+function ha_grid_diagnostics(ss::HASteadyState{T}; kwargs...) where {T<:AbstractFloat}
+    pol = ss.grid.n_dims == 2 ? ss.policies[:liquid_savings] : ss.policies[:savings]
+    return _ha_grid_diagnostics(pol, ss.distribution, ss.grid; kwargs...)
+end
 
 """
     _check_grid_adequacy(d::HAGridDiagnostics, mode::Symbol; context="") → d

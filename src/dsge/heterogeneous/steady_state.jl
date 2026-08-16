@@ -658,9 +658,9 @@ does not provide one, and delegates to `_ha_steady_state`.
 - `ceiling_mass_tol` / `residual_tol` — thresholds for that check (default 1e-6)
 - `verbose::Bool` — print progress (default false)
 - `hh_solver::Symbol` — household solver: `:egm` (default) or `:vfi` (Bellman
-  iteration, including GHH/separable labor). Writes `ss.value_fn`. Two-asset
-  GE still requires a 2-D clearing solve (not implemented). Reiter/Winberry
-  finite-difference kernels honor `hh_solver`; SSJ fake-news and KS stay on EGM.
+  iteration, including GHH/separable labor and two-asset nested VFI). Writes
+  `ss.value_fn`. Two-asset specs use a damped `(K, r_b)` closer. Reiter
+  finite-difference kernels honor `hh_solver`; SSJ fake-news stays on EGM.
 - `price_fn::Function` — custom price function; if not supplied, uses Cobb-Douglas
 - `distribution::Symbol` — override `spec.distribution`: `:young` (default, the
   Young 2010 histogram) or `:winberry` (Winberry 2018 parametric moment family).
@@ -703,6 +703,22 @@ function compute_steady_state(spec::HADSGESpec{T};
                           hh_solver::Symbol=:egm) where {T<:AbstractFloat}
     hh_solver in (:egm, :vfi) || throw(ArgumentError(
         "compute_steady_state: hh_solver must be :egm or :vfi, got :$hh_solver"))
+    if spec.grid.n_dims == 2
+        dist_sym = isnothing(distribution) ? spec.distribution : distribution
+        p2 = copy(spec.het_params)
+        haskey(p2, :alpha) || (p2[:alpha] = T(0.36))
+        haskey(p2, :delta) || (p2[:delta] = T(0.025))
+        haskey(p2, :Z) || (p2[:Z] = one(T))
+        haskey(p2, :L) || (p2[:L] = one(T))
+        haskey(p2, :B_supply) || (p2[:B_supply] = one(T))
+        return _ha_two_asset_steady_state(
+            spec.individual, spec.grid, spec.income, p2;
+            K_init=K_init, max_iter=max_iter, tol=T(tol),
+            hh_solver=hh_solver, grid_check=grid_check,
+            ceiling_mass_tol=ceiling_mass_tol, residual_tol=residual_tol,
+            euler_points=euler_points, verbose=verbose,
+            distribution=dist_sym)
+    end
     pfn = isnothing(price_fn) ? _default_cobb_douglas_price_fn : price_fn
 
     # Extract parameters: merge het_params with aggregate steady-state params

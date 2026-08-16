@@ -475,12 +475,12 @@ end
 end
 
 @testset "hh_solver=:vfi error paths" begin
-    @test_throws ArgumentError compute_steady_state(
-        load_ha_example(:two_asset_hank); hh_solver=:vfi)
     spec = load_ha_example(:huggett)
     @test_throws ArgumentError compute_steady_state(spec; hh_solver=:bogus)
     @test_throws ArgumentError solve(spec; method=:krusell_smith, hh_solver=:vfi,
                                      T_sim=20, T_burn=5, max_outer=1)
+    @test_throws ArgumentError compute_steady_state(
+        load_ha_example(:two_asset_hank); distribution=:winberry)
 end
 
 @testset "VFI with endogenous labor (GHH)" begin
@@ -545,6 +545,49 @@ end
           max(egm[:consumption][ib, ia, je], 1e-8) < 0.35
 end
 
+@testset "Two-asset compute_steady_state closes both markets" begin
+    spec = MacroEconometricModels._two_asset_hank_example(;
+        n_liquid=FAST ? 8 : 12, n_illiquid=FAST ? 6 : 10, n_e=2, B_supply=2.0)
+    ss = compute_steady_state(spec; max_iter=FAST ? 15 : 40, tol=5e-2,
+                              grid_check=:none)
+    @test ss isa HASteadyState
+    @test haskey(ss.prices, :r_a)
+    @test haskey(ss.prices, :r_b)
+    @test haskey(ss.aggregates, :A)
+    @test haskey(ss.aggregates, :B)
+    @test size(ss.distribution) == (spec.grid.n_points[1], spec.grid.n_points[2], 2)
+    @test all(ss.policies[:consumption] .> 0)
+    @test isfinite(ss.euler_error)
+    @test ss.aggregates[:B_supply] == 2.0
+    # Residuals finite; FAST may not fully clear
+    @test isfinite(ss.aggregates[:resid_liquid])
+    @test isfinite(ss.aggregates[:resid_illiquid])
+    gd = ha_grid_diagnostics(ss)
+    @test gd isa MacroEconometricModels.HAGridDiagnostics
+end
+
+@testset "Two-asset SSJ / Reiter / KS on a coarse SS" begin
+    spec = MacroEconometricModels._two_asset_hank_example(;
+        n_liquid=FAST ? 6 : 8, n_illiquid=FAST ? 5 : 6, n_e=2, B_supply=1.0)
+    ss = compute_steady_state(spec; max_iter=FAST ? 8 : 15, tol=5e-2,
+                              grid_check=:none)
+    sol_s = solve(spec; method=:ssj, ss=ss, T_horizon=FAST ? 8 : 16, n_reduced=3)
+    @test sol_s.method === :ssj
+    @test isfinite(sol_s.explained_variance)
+    J = MacroEconometricModels._ssj_jacobian(ss, spec.individual, spec.grid,
+                                             spec.income, :r_b, :B; T_horizon=6)
+    @test size(J) == (6, 6)
+    @test all(isfinite, J)
+    sol_r = solve(spec; method=:reiter, ss=ss, n_reduced=3)
+    @test sol_r.method === :reiter
+    @test size(sol_r.reduction_basis, 1) == length(vec(ss.distribution))
+    sol_k = solve(spec; method=:krusell_smith, ss=ss,
+                  T_sim=FAST ? 25 : 40, T_burn=5, max_outer=1)
+    @test sol_k isa KrusellSmithSolution
+    @test haskey(sol_k.plm_coefficients, :K)
+    @test isfinite(sol_k.r_squared[:K])
+end
+
 @testset "Reiter honors hh_solver=:vfi" begin
     spec = MacroEconometricModels._huggett_example(; n_a=FAST ? 30 : 40)
     ss = compute_steady_state(spec; hh_solver=:vfi, max_iter=60, tol=5e-3,
@@ -602,6 +645,42 @@ end
     K = MacroEconometricModels._aggregate(dist, grid; var_index=1)
     @test K > 0
     @test isfinite(K)
+end
+
+@testset "Young (2010) two-asset product lottery" begin
+    nl, ni, ne = 6, 5, 2
+    grid = HAGrid(; liquid=(0.0, 10.0, nl), illiquid=(0.0, 20.0, ni), income_states=ne)
+    inc = MacroEconometricModels._unit_mean_lognormal_income(0.9, 0.2, ne)
+    b_pol = zeros(nl, ni, ne)
+    a_pol = zeros(nl, ni, ne)
+    bg, ag = grid.grids[1], grid.grids[2]
+    # On-grid: every household stays put
+    for je in 1:ne, ia in 1:ni, ib in 1:nl
+        b_pol[ib, ia, je] = bg[ib]
+        a_pol[ib, ia, je] = ag[ia]
+    end
+    Λ = MacroEconometricModels._build_transition_matrix(b_pol, a_pol, grid, inc)
+    N = nl * ni * ne
+    @test size(Λ) == (N, N)
+    for col in 1:N
+        @test sum(Λ[:, col]) ≈ 1.0 atol=1e-12
+    end
+    # Mid-grid continuous b' splits liquid mass; a' on-grid stays Dirac
+    ib, ia, je = 3, 2, 1
+    b_pol[ib, ia, je] = (bg[ib] + bg[ib + 1]) / 2
+    Λ2 = MacroEconometricModels._build_transition_matrix(b_pol, a_pol, grid, inc)
+    col = MacroEconometricModels._ha_state_index(ib, ia, je, nl, ni)
+    @test sum(Λ2[:, col]) ≈ 1.0 atol=1e-12
+    dest_lo = MacroEconometricModels._ha_state_index(ib, ia, 1, nl, ni)
+    dest_hi = MacroEconometricModels._ha_state_index(ib + 1, ia, 1, nl, ni)
+    @test Λ2[dest_lo, col] > 0
+    @test Λ2[dest_hi, col] > 0
+    d, ok = MacroEconometricModels._stationary_dist_young(Λ)
+    @test ok
+    @test sum(d) ≈ 1.0 atol=1e-10
+    @test length(d) == N
+    @test isfinite(MacroEconometricModels._aggregate(d, grid; var_index=1))
+    @test isfinite(MacroEconometricModels._aggregate(d, grid; var_index=2))
 end
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -1520,12 +1599,6 @@ end
         end
     end
 
-    @testset "two-asset steady state raises an honest error" begin
-        # docs/src/dsge_ha.md used to claim `compute_steady_state` auto-selects a
-        # VFI solver for two-asset models. It does not — it used to fail with a
-        # bare AssertionError on a SHIPPED example.
-        @test_throws ArgumentError compute_steady_state(load_ha_example(:two_asset_hank))
-    end
 end
 
 @testset "Den Haan (2010) accuracy beyond Huggett (#359/T260)" begin

@@ -133,7 +133,7 @@ end
 # Budget function for two-asset HANK: resources from liquid side
 function _hank2_budget(b::Float64, a::Float64, e::Float64, prices::Dict{Symbol,Float64})
     (1.0 + get(prices, :r_b, prices[:r])) * b + prices[:w] * e +
-    get(prices, :div, 0.0)
+    get(prices, :div, 0.0) - get(prices, :tau, 0.0)
 end
 
 # Portfolio adjustment cost: chi(d, a) = 0.5 * |d / max(a, 0.01)|^2 * max(a, 0.01)
@@ -254,7 +254,8 @@ end
 # _two_asset_hank_example — Two-asset HANK
 # =============================================================================
 
-function _two_asset_hank_example()
+function _two_asset_hank_example(; n_liquid::Int=50, n_illiquid::Int=50,
+                                   n_e::Int=7, B_supply::Real=2.0)
     # Calibration
     alpha   = 0.36
     beta    = 0.986
@@ -266,14 +267,12 @@ function _two_asset_hank_example()
 
     # Income: unconditional sd(log e) = 0.5, as in the KS example (see
     # `_unit_mean_lognormal_income` for the sd convention).
-    income = _unit_mean_lognormal_income(0.966, 0.5, 7)
+    income = _unit_mean_lognormal_income(0.966, 0.5, n_e)
 
-    # Two-asset grid: liquid [-2, 50] (50 pts), illiquid [0, 100] (50 pts).
-    # Left as-is: `compute_steady_state` does not support two-asset market
-    # clearing, so no shipped number is computed from these bounds and re-sizing
-    # them would be an unverifiable guess.
-    grid = HAGrid(; liquid=(-2.0, 50.0, 50), illiquid=(0.0, 100.0, 50),
-                    income_states=7)
+    # Two-asset grid: liquid [-2, 50], illiquid [0, 100]. Production GE
+    # (`compute_steady_state`) closes both markets; shrink the grids in tests.
+    grid = HAGrid(; liquid=(-2.0, 50.0, n_liquid), illiquid=(0.0, 100.0, n_illiquid),
+                    income_states=n_e)
 
     # Individual problem — liquid b >= -2, illiquid a >= 0
     individual = IndividualProblem{Float64}(u, up, upi, beta, _hank2_budget,
@@ -290,14 +289,16 @@ function _two_asset_hank_example()
         :A => _agg_var2
     ]
 
-    # HA-specific parameters
+    # HA-specific parameters. B_supply is the net supply of liquid bonds;
+    # τ = r_b · B_supply enters `_hank2_budget`.
     het_params = Dict{Symbol,Float64}(
         :alpha => alpha, :delta => delta, :sigma_c => sigma_c,
-        :Z => 1.0, :L => 1.0
+        :Z => 1.0, :L => 1.0, :B_supply => Float64(B_supply),
+        :rho_z => 0.95
     )
 
     return HADSGESpec{Float64}(agg_spec, individual, income, grid,
-                                aggregation, het_params)
+                                aggregation, het_params; model=:two_asset)
 end
 
 # =============================================================================
