@@ -6957,9 +6957,11 @@ end
 FAST || @testset "VFI threaded matches sequential" begin
     spec = _vfi_rbc_spec()
     kw = _vfi_rbc_bellman(spec)
-    sol_seq = vfi_solver(spec; kw..., degree=3, n_grid=8, max_iter=150, howard_steps=8,
+    # Same budget as the passing `solve(; method=:vfi)` test. 150/8 misses
+    # ||ΔV||_∞ < 1e-8 on Ubuntu OpenBLAS (macOS/Windows still converge).
+    sol_seq = vfi_solver(spec; kw..., degree=3, n_grid=8, max_iter=250, howard_steps=10,
                          n_choice=17, threaded=false, verbose=false)
-    sol_par = vfi_solver(spec; kw..., degree=3, n_grid=8, max_iter=150, howard_steps=8,
+    sol_par = vfi_solver(spec; kw..., degree=3, n_grid=8, max_iter=250, howard_steps=10,
                          n_choice=17, threaded=true, verbose=false)
     @test sol_seq.converged
     @test sol_par.converged
