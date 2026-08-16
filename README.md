@@ -43,6 +43,8 @@ using Pkg
 Pkg.add("MacroEconometricModels")
 ```
 
+**Google Colab only:** new runtimes reset `~/.julia`. Releases that ship Colab assets attach a linux-x86_64 depot tarball (Julia 1.12.6 pin) so the first `estimate_var` does not cold-precompile the full dependency graph. See [`environments/colab/README.md`](environments/colab/README.md). Other platforms keep using `Pkg.add`.
+
 ## Features
 
 ### Univariate Models

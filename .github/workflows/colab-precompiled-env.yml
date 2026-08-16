@@ -1,0 +1,107 @@
+# Colab-only precompiled depot + best-effort sysimage (#610).
+# Trigger: version tags and manual dispatch — not every PR.
+name: Colab precompiled env
+
+on:
+  push:
+    tags:
+      - 'v*.*.*'
+  workflow_dispatch:
+    inputs:
+      skip_sysimage:
+        description: "Skip PackageCompiler sysimage (depot only)"
+        type: boolean
+        default: false
+      upload_to_release:
+        description: "Existing GitHub release tag to attach assets to (empty = artifacts only)"
+        required: false
+        default: ""
+
+permissions:
+  contents: write
+
+concurrency:
+  group: colab-precompiled-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    name: linux-x86_64 Julia 1.12.6
+    runs-on: ubuntu-latest
+    timeout-minutes: 180
+    env:
+      JULIA_PIN: "1.12.6"
+      SKIP_SYSIMAGE: ${{ github.event_name == 'workflow_dispatch' && inputs.skip_sysimage && '1' || '0' }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      - uses: julia-actions/setup-julia@v3
+        with:
+          version: "1.12.6"
+          arch: x64
+
+      - name: Install zstd
+        run: sudo apt-get update -qq && sudo apt-get install -y -qq zstd
+
+      - name: Build depot (and best-effort sysimage)
+        env:
+          OUT_DIR: ${{ runner.temp }}/colab-dist
+        run: |
+          chmod +x environments/colab/build_depot.sh
+          environments/colab/build_depot.sh
+          echo "OUT_DIR=${OUT_DIR}" >> "$GITHUB_ENV"
+
+      - name: Job summary
+        if: always()
+        run: |
+          if [[ -f "${OUT_DIR}/SUMMARY.md" ]]; then
+            cat "${OUT_DIR}/SUMMARY.md" >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "Build produced no SUMMARY.md" >> "$GITHUB_STEP_SUMMARY"
+          fi
+
+      - name: Upload workflow artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: mem-colab-${{ github.sha }}
+          path: |
+            ${{ env.OUT_DIR }}/*.tar.zst
+            ${{ env.OUT_DIR }}/*.so
+            ${{ env.OUT_DIR }}/SHA256SUMS
+            ${{ env.OUT_DIR }}/Project.toml
+            ${{ env.OUT_DIR }}/Manifest.toml
+            ${{ env.OUT_DIR }}/SUMMARY.md
+          if-no-files-found: warn
+          retention-days: 14
+
+      - name: Attach assets to GitHub Release
+        if: success()
+        env:
+          GH_TOKEN: ${{ github.token }}
+          DISPATCH_TAG: ${{ github.event_name == 'workflow_dispatch' && inputs.upload_to_release || '' }}
+        run: |
+          set -euo pipefail
+          TAG=""
+          if [[ "${GITHUB_REF_TYPE}" == "tag" ]]; then
+            TAG="${GITHUB_REF_NAME}"
+          elif [[ -n "${DISPATCH_TAG}" ]]; then
+            TAG="${DISPATCH_TAG}"
+          else
+            echo "No release tag; leaving assets as workflow artifacts only."
+            exit 0
+          fi
+          if ! gh release view "${TAG}" >/dev/null 2>&1; then
+            gh release create "${TAG}" --title "${TAG}" --generate-notes --verify-tag || \
+              gh release create "${TAG}" --title "${TAG}" --generate-notes
+          fi
+          shopt -s nullglob
+          files=("${OUT_DIR}"/*.tar.zst "${OUT_DIR}"/SHA256SUMS "${OUT_DIR}"/Project.toml "${OUT_DIR}"/Manifest.toml)
+          if compgen -G "${OUT_DIR}/*.so" > /dev/null; then
+            files+=("${OUT_DIR}"/*.so)
+          else
+            echo "Sysimage absent — publishing depot only." >> "$GITHUB_STEP_SUMMARY"
+          fi
+          gh release upload "${TAG}" "${files[@]}" --clobber

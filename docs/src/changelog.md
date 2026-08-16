@@ -6,6 +6,32 @@ output, not just documentation.
 
 ---
 
+## v0.8.3
+
+Patch release: optional **Google Colab precompiled assets** (`#610`) so a new
+Colab runtime does not pay a multi-minute cold precompile of
+MacroEconometricModels and its heavy dependency graph. A tag-only CI workflow
+builds a linux-x86_64 depot tarball for Colab's native Julia pin (1.12.6 as of
+the 2026.07 runtime) and attempts a PackageCompiler sysimage; the depot is the
+success criterion. In-package `PrecompileTools` and General-registry `Pkg.add`
+are unchanged. This tag also carries the genuine Bellman VFI work
+(`#615`/`#616`/`#617`) stacked under `#621`.
+
+This is a patch on the `0.8` series. Downstream `[compat]` of
+`MacroEconometricModels = "0.8"` resolves here; no bound change is required.
+
+**New**
+
+- **Colab depot** (`environments/colab/`): pinned Project/Manifest,
+  `colab_precompile.jl` workload, setup notebook, and
+  `.github/workflows/colab-precompiled-env.yml` publishing
+  `mem-colab-depot-vX.Y.Z-julia1.12.6-linux-x86_64.tar.zst` on tag or
+  `workflow_dispatch`.
+- **Bellman VFI**: `vfi_solver` is real value-function iteration (Howard
+  policy evaluation of ``V``); HA production accepts `hh_solver=:vfi`.
+
+---
+
 ## v0.8.2
 
 Patch release: restore CI on Julia 1.10. `XLSX` 0.12.2 fails to precompile against

@@ -88,6 +88,14 @@ Key conventions to follow when contributing:
 - Always run the full test suite before submitting a PR
 - The CI pipeline runs on Ubuntu, macOS, and Windows with Julia 1.12+
 
+### Google Colab precompiled assets
+
+`environments/colab/` is a **Colab-only** parallel channel (depot tarball +
+optional sysimage), not part of a normal `Pkg.add`. Rebuilds run on version
+tags via `.github/workflows/colab-precompiled-env.yml`. See
+`environments/colab/README.md` and the release skill Colab checklist. Do not
+commit compiled depots or `.so` files.
+
 ### Running Documentation Locally
 
 ```bash
