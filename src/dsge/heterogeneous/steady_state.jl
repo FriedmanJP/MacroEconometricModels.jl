@@ -215,11 +215,6 @@ function _ha_steady_state(ip::IndividualProblem{T}, grid::HAGrid{T},
         "_ha_steady_state: euler_points must be :nodes or :midpoints, got :$euler_points."))
     hh_solver in (:egm, :vfi) || throw(ArgumentError(
         "_ha_steady_state: hh_solver must be :egm or :vfi, got :$hh_solver"))
-    if hh_solver === :vfi && ip.labor !== nothing
-        throw(ArgumentError(
-            "compute_steady_state: hh_solver=:vfi does not support endogenous labor. " *
-            "Use hh_solver=:egm, or drop labor from IndividualProblem."))
-    end
     distribution in (:young, :winberry) || throw(ArgumentError(
         "_ha_steady_state: distribution must be :young or :winberry, got :$distribution."))
     grid.n_dims == 1 || throw(ArgumentError(
@@ -662,9 +657,10 @@ does not provide one, and delegates to `_ha_steady_state`.
   [`ha_grid_diagnostics`](@ref)
 - `ceiling_mass_tol` / `residual_tol` — thresholds for that check (default 1e-6)
 - `verbose::Bool` — print progress (default false)
-- `hh_solver::Symbol` — household solver: `:egm` (default) or `:vfi` (one-asset
-  Bellman iteration; writes `ss.value_fn`). `:vfi` errors on two-asset models
-  and on endogenous labor. Reiter/SSJ Jacobians stay on the EGM kernel.
+- `hh_solver::Symbol` — household solver: `:egm` (default) or `:vfi` (Bellman
+  iteration, including GHH/separable labor). Writes `ss.value_fn`. Two-asset
+  GE still requires a 2-D clearing solve (not implemented). Reiter/Winberry
+  finite-difference kernels honor `hh_solver`; SSJ fake-news and KS stay on EGM.
 - `price_fn::Function` — custom price function; if not supplied, uses Cobb-Douglas
 - `distribution::Symbol` — override `spec.distribution`: `:young` (default, the
   Young 2010 histogram) or `:winberry` (Winberry 2018 parametric moment family).

@@ -609,11 +609,13 @@ function solve(spec::HADSGESpec{T}; method::Symbol=:ssj,
                 ss, spec.individual, spec.grid, spec.income;
                 n_moments=get(kwargs, :n_moments, 3),
                 n_quad=get(kwargs, :n_quad, 4),
-                model=spec.model, het_params=reiter_params)
+                model=spec.model, het_params=reiter_params,
+                hh_solver=get(kwargs, :hh_solver, :egm))
         else
             _reiter_linearize(
                 ss, spec.individual, spec.grid, spec.income; n_reduced=n_reduced,
-                model=spec.model, het_params=reiter_params)
+                model=spec.model, het_params=reiter_params,
+                hh_solver=get(kwargs, :hh_solver, :egm))
         end
 
         # Build a minimal DSGESolution and HADSGESolution from Reiter output

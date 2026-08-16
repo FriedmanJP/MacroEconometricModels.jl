@@ -477,12 +477,81 @@ end
 @testset "hh_solver=:vfi error paths" begin
     @test_throws ArgumentError compute_steady_state(
         load_ha_example(:two_asset_hank); hh_solver=:vfi)
-    @test_throws ArgumentError compute_steady_state(
-        load_ha_example(:endogenous_labor); hh_solver=:vfi)
     spec = load_ha_example(:huggett)
     @test_throws ArgumentError compute_steady_state(spec; hh_solver=:bogus)
     @test_throws ArgumentError solve(spec; method=:krusell_smith, hh_solver=:vfi,
                                      T_sim=20, T_burn=5, max_outer=1)
+end
+
+@testset "VFI with endogenous labor (GHH)" begin
+    spec = MacroEconometricModels._endogenous_labor_example(; kind=:ghh, psi=3.0)
+    # Coarse grid: rebuild a small one-asset labor problem
+    na = FAST ? 30 : 50
+    grid = HAGrid(assets=(0.0, 80.0, na), income_states=3)
+    inc = MacroEconometricModels._unit_mean_lognormal_income(0.9, 0.2, 3)
+    ip = spec.individual
+    prices = Dict(:r => 0.01, :w => 1.0)
+    V, c_v, a_v, conv = MacroEconometricModels._vfi_solve(ip, grid, inc, prices;
+                                                          max_iter=FAST ? 60 : 200,
+                                                          tol=1e-6, howard_steps=8)
+    c_e, a_e = MacroEconometricModels._egm_solve(ip, grid, inc, prices; max_iter=300, tol=1e-8)
+    @test conv isa Bool
+    @test all(c_v .> 0)
+    mid = na ÷ 2
+    @test c_e[mid, 2] > 0.05
+    @test abs(c_v[mid, 2] - c_e[mid, 2]) / c_e[mid, 2] < 0.2
+    n_v = labor_policy(ip, grid, inc, prices, c_v)
+    @test all(n_v .> 0)
+end
+
+@testset "VFI with endogenous labor (separable)" begin
+    spec = MacroEconometricModels._endogenous_labor_example(; kind=:separable, psi=3.0)
+    na = FAST ? 30 : 50
+    grid = HAGrid(assets=(0.0, 80.0, na), income_states=3)
+    inc = MacroEconometricModels._unit_mean_lognormal_income(0.9, 0.2, 3)
+    ip = spec.individual
+    prices = Dict(:r => 0.01, :w => 1.0)
+    V, c_v, a_v, conv = MacroEconometricModels._vfi_solve(ip, grid, inc, prices;
+                                                          max_iter=FAST ? 60 : 200,
+                                                          tol=1e-6, howard_steps=8)
+    @test conv isa Bool
+    @test all(c_v .> 0)
+    @test all(isfinite, V)
+    @test all(a_v .>= -1e-10)
+    n_v = labor_policy(ip, grid, inc, prices, c_v)
+    @test all(n_v .>= 0)
+    @test any(n_v .> 0)
+end
+
+@testset "Two-asset VFI agrees with nested EGM on a convex problem" begin
+    nl, ni = FAST ? (10, 8) : (16, 12)
+    grid2 = HAGrid(; liquid=(0.0, 20.0, nl), illiquid=(0.0, 50.0, ni), income_states=2)
+    inc = MacroEconometricModels._unit_mean_lognormal_income(0.9, 0.2, 2)
+    ip2 = IndividualProblem{Float64}(
+        c -> log(c), c -> 1.0/c, m -> 1.0/m, 0.95,
+        (b, a, e, prices) -> (1 + prices[:r_b]) * b + prices[:w] * e,
+        [0.0, 0.0], nothing, 2
+    )
+    prices2 = Dict(:r => 0.01, :r_b => 0.01, :r_a => 0.015, :w => 1.0)
+    vfi = MacroEconometricModels._two_asset_vfi_solve(ip2, grid2, inc, prices2;
+        max_iter=FAST ? 40 : 80, tol=1e-5, howard_steps=6)
+    egm = MacroEconometricModels._two_asset_egm_solve(ip2, grid2, inc, prices2;
+        max_iter=FAST ? 40 : 80, tol=1e-5)
+    @test all(vfi[:consumption] .> 0)
+    @test all(isfinite, vfi[:value])
+    # Mid liquid, low illiquid, first income: consumption in the same ballpark
+    ib, ia, je = max(nl ÷ 2, 1), 1, 1
+    @test abs(vfi[:consumption][ib, ia, je] - egm[:consumption][ib, ia, je]) /
+          max(egm[:consumption][ib, ia, je], 1e-8) < 0.35
+end
+
+@testset "Reiter honors hh_solver=:vfi" begin
+    spec = MacroEconometricModels._huggett_example(; n_a=FAST ? 30 : 40)
+    ss = compute_steady_state(spec; hh_solver=:vfi, max_iter=60, tol=5e-3,
+                              grid_check=:none)
+    sol = solve(spec; method=:reiter, ss=ss, hh_solver=:vfi, n_reduced=4)
+    @test sol.method === :reiter
+    @test !all(iszero, sol.steady_state.value_fn)
 end
 
 @testset "solve forwards hh_solver into the stationary problem" begin
@@ -574,8 +643,9 @@ end
     @test haskey(ss.policies, :savings)
     @test haskey(ss.policies, :consumption)
 
-    # Value function should be zeros for EGM-based solver
-    @test all(ss.value_fn .== 0.0)
+    # EGM recovers V by Howard policy evaluation of the equilibrium policy
+    @test !all(iszero, ss.value_fn)
+    @test ss.value_fn[div(7 * na, 8), 1] > ss.value_fn[max(1, div(na, 8)), 1]
 
     # Aggregate output should be positive
     @test ss.aggregates[:Y] > 0

@@ -30,8 +30,8 @@ using SparseArrays, LinearAlgebra, Random
 
 Reduced-space distribution response to a unit change in the interest rate `r` and
 the wage `w`: `g_r = ∂Λ/∂r · d_ss` and `g_w = ∂Λ/∂w · d_ss`, each projected onto the
-reduction basis `U_k`. Computed by finite-difference re-solves of the EGM policy
-(perturb one price, re-solve, difference the transition matrix).
+reduction basis `U_k`. Computed by finite-difference re-solves of the household
+policy via `_hh_a_policy` (EGM by default, Bellman VFI when `hh_solver=:vfi`).
 
 This is the price→distribution kernel shared by the Huggett and Aiyagari closures of
 `_reiter_linearize`. The *closures* differ (Huggett clears the bond market ∫a'=0;
@@ -43,13 +43,16 @@ function _price_sensitivity_reduced(ss::HASteadyState{T}, ip::IndividualProblem{
                                      U_k::AbstractMatrix{T}, dist_ss::AbstractVector{T},
                                      Lambda_ss::AbstractMatrix{T};
                                      dr_step::T=T(1e-5),
-                                     dw_step::T=T(1e-5)) where {T<:AbstractFloat}
+                                     dw_step::T=T(1e-5),
+                                     hh_solver::Symbol=:egm) where {T<:AbstractFloat}
     prices_r = copy(ss.prices); prices_r[:r] = ss.prices[:r] + dr_step
-    _, a_pol_r = _egm_solve(ip, grid, income, prices_r; max_iter=1000, tol=T(1e-10))
+    a_pol_r = _hh_a_policy(ip, grid, income, prices_r; hh_solver=hh_solver,
+                           max_iter=1000, tol=T(1e-10))
     Lambda_r = _build_transition_matrix(a_pol_r, grid, income)
 
     prices_w = copy(ss.prices); prices_w[:w] = ss.prices[:w] + dw_step
-    _, a_pol_w = _egm_solve(ip, grid, income, prices_w; max_iter=1000, tol=T(1e-10))
+    a_pol_w = _hh_a_policy(ip, grid, income, prices_w; hh_solver=hh_solver,
+                           max_iter=1000, tol=T(1e-10))
     Lambda_w = _build_transition_matrix(a_pol_w, grid, income)
 
     g_r = (Lambda_r * dist_ss .- Lambda_ss * dist_ss) ./ dr_step
@@ -147,7 +150,8 @@ function _reiter_linearize(ss::HASteadyState{T}, ip::IndividualProblem{T},
                             n_sim::Int=200,
                             model::Symbol=:aiyagari,
                             het_params::Dict{Symbol,T}=Dict{Symbol,T}(),
-                            rng::Union{Nothing,AbstractRNG}=nothing) where {T<:AbstractFloat}
+                            rng::Union{Nothing,AbstractRNG}=nothing,
+                            hh_solver::Symbol=:egm) where {T<:AbstractFloat}
     @assert grid.n_dims == 1 "Reiter linearization requires a one-asset grid"
     @assert ip.n_asset_dims == 1 "Reiter linearization requires a one-asset individual problem"
 
@@ -280,11 +284,13 @@ function _reiter_linearize(ss::HASteadyState{T}, ip::IndividualProblem{T},
         dw_step = T(1e-5)
 
         prices_r = copy(ss.prices); prices_r[:r] = ss.prices[:r] + dr_step
-        _, a_pol_r = _egm_solve(ip, grid, income, prices_r; max_iter=1000, tol=T(1e-10))
+        a_pol_r = _hh_a_policy(ip, grid, income, prices_r; hh_solver=hh_solver,
+                               max_iter=1000, tol=T(1e-10))
         Lambda_r = _build_transition_matrix(a_pol_r, grid, income)
 
         prices_w = copy(ss.prices); prices_w[:w] = ss.prices[:w] + dw_step
-        _, a_pol_w = _egm_solve(ip, grid, income, prices_w; max_iter=1000, tol=T(1e-10))
+        a_pol_w = _hh_a_policy(ip, grid, income, prices_w; hh_solver=hh_solver,
+                               max_iter=1000, tol=T(1e-10))
         Lambda_w = _build_transition_matrix(a_pol_w, grid, income)
 
         # Distribution responses (projected) and aggregate-savings sensitivities.
@@ -352,7 +358,8 @@ function _reiter_linearize(ss::HASteadyState{T}, ip::IndividualProblem{T},
 
     # Reduced distribution response to r and w (shared kernel, as in Huggett).
     g_r_red, g_w_red = _price_sensitivity_reduced(ss, ip, grid, income, U_k,
-                                                  dist_ss, Lambda_ss)
+                                                  dist_ss, Lambda_ss;
+                                                  hh_solver=hh_solver)
 
     # Reduced-distribution columns for the K and Z aggregate states.
     K_column = g_r_red .* dr_dK .+ g_w_red .* dw_dK   # ∂d̃_{t+1}/∂K_t (GE feedback)
