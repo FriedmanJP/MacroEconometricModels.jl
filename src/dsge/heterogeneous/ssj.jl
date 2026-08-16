@@ -549,11 +549,12 @@ Used by the Huggett SSJ general-equilibrium path.
 """
 function _wrap_hadsge_solution(spec::HADSGESpec{T}, ss::HASteadyState{T},
                                G1::Matrix{T}, impact::Matrix{T}, C_sol::Vector{T},
-                               eu::Vector{Int}, eigenvalues::Vector{ComplexF64},
+                               eu::Vector{Int}, eigenvalues::AbstractVector,
                                C_obs::Matrix{T}, D_obs::Matrix{T},
                                jacobians::Dict{Symbol,Matrix{T}},
                                T_horizon::Int, method::Symbol;
                                explained_variance::T=one(T)) where {T<:AbstractFloat}
+    eigenvalues = ComplexF64.(eigenvalues)
     n_red = size(G1, 1)
     endog_names = [Symbol("x_$i") for i in 1:n_red]
     dummy_spec = DSGESpec{T}(
@@ -626,7 +627,9 @@ function _ssj_solve(spec::HADSGESpec{T}, ss::HASteadyState{T};
             max_eig = maximum(abs.(eig))
             if max_eig > one(T)
                 G1 .*= T(0.999) / max_eig
-                eig = eigvals(ComplexF64.(G1))
+                eig = ComplexF64.(eigvals(ComplexF64.(G1)))
+            else
+                eig = ComplexF64.(eig)
             end
         catch
             G1 = fill(T(0.9), 1, 1)
@@ -681,7 +684,7 @@ function _ssj_solve(spec::HADSGESpec{T}, ss::HASteadyState{T};
         max_eig = maximum(abs.(eig))
         if max_eig > one(T)
             G1 .*= T(0.999) / max_eig
-            eig = eigvals(ComplexF64.(G1))
+            eig = ComplexF64.(eigvals(ComplexF64.(G1)))
         end
         return _wrap_hadsge_solution(spec, ss, G1, impact, C_sol, eu, eig,
                                      C_mat, D, jacobians, T_horizon, :ssj)
