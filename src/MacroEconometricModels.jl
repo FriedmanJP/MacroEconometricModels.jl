@@ -775,7 +775,7 @@ export simulate, estimate_dsge
 export solve_lyapunov, analytical_moments
 export determinacy_region, determinacy_boundary, determinacy_label, DETERMINACY_CODES
 export pruned_state_space
-export evaluate_policy, max_euler_error, vfi_solver
+export evaluate_policy, evaluate_value, max_euler_error, vfi_solver
 
 # Accessors
 export nshocks, is_determined, is_stable

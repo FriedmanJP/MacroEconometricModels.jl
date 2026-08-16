@@ -448,6 +448,44 @@ end
     @test V[div(7 * na, 8), 2] > V[max(1, div(na, 8)), 2]
 end
 
+@testset "hh_solver=:vfi fills value_fn and agrees with EGM SS" begin
+    spec = MacroEconometricModels._huggett_example(; n_a=FAST ? 40 : 80)
+    ss_v = compute_steady_state(spec; hh_solver=:vfi, max_iter=80,
+                                tol=5e-3, grid_check=:none)
+    ss_e = compute_steady_state(spec; hh_solver=:egm, max_iter=80,
+                                tol=5e-3, grid_check=:none)
+    @test isfinite(ss_v.prices[:r])
+    @test !all(iszero, ss_v.value_fn)
+    @test all(iszero, ss_e.value_fn)   # EGM path still stores zeros
+    na = size(ss_v.value_fn, 1)
+    @test ss_v.value_fn[div(7 * na, 8), 1] > ss_v.value_fn[max(1, div(na, 8)), 1]
+    @test abs(ss_v.prices[:r] - ss_e.prices[:r]) < 5e-3
+    # Default remains EGM
+    ss_default = compute_steady_state(spec; max_iter=FAST ? 40 : 80, tol=5e-3,
+                                      grid_check=:none)
+    @test all(iszero, ss_default.value_fn)
+end
+
+@testset "hh_solver=:vfi error paths" begin
+    @test_throws ArgumentError compute_steady_state(
+        load_ha_example(:two_asset_hank); hh_solver=:vfi)
+    @test_throws ArgumentError compute_steady_state(
+        load_ha_example(:endogenous_labor); hh_solver=:vfi)
+    spec = load_ha_example(:huggett)
+    @test_throws ArgumentError compute_steady_state(spec; hh_solver=:bogus)
+    @test_throws ArgumentError solve(spec; method=:krusell_smith, hh_solver=:vfi,
+                                     T_sim=20, T_burn=5, max_outer=1)
+end
+
+@testset "solve forwards hh_solver into the stationary problem" begin
+    spec = MacroEconometricModels._huggett_example(; n_a=FAST ? 40 : 60)
+    ss = compute_steady_state(spec; hh_solver=:vfi, max_iter=80,
+                              tol=5e-3, grid_check=:none)
+    sol = solve(spec; method=:ssj, ss=ss, T_horizon=20, n_reduced=4)
+    @test sol.steady_state === ss
+    @test !all(iszero, sol.steady_state.value_fn)
+end
+
 # ─────────────────────────────────────────────────────────────────────────────
 # Section 9: Young (2010) distribution tracking
 # ─────────────────────────────────────────────────────────────────────────────

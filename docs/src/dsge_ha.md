@@ -134,7 +134,15 @@ The steady state report displays convergence diagnostics, equilibrium prices, ag
 
 ### VFI with Howard Improvement
 
-When EGM is not applicable (non-separable utility, complex constraints), **Value Function Iteration** with **Howard improvement steps** provides a robust alternative. Each VFI iteration consists of one policy maximization step followed by ``K`` policy-evaluation steps (default ``K = 20``), which are cheap linear operations that dramatically accelerate convergence.
+When EGM is not applicable (non-separable utility, complex constraints), **Value Function Iteration** with **Howard improvement steps** provides a robust alternative. Each VFI iteration consists of one policy maximization step followed by ``K`` policy-evaluation steps (default ``K = 20``), which are cheap linear operations that dramatically accelerate convergence. Pass `hh_solver=:vfi` to `compute_steady_state` (and to `solve`, which forwards the flag into the stationary problem) to use `_vfi_solve` instead of EGM. The default remains `:egm`. `hh_solver=:vfi` writes the Bellman value into `ss.value_fn` (the EGM path still stores zeros). It is one-asset only: two-asset models, endogenous labor, and `solve(...; method=:krusell_smith, hh_solver=:vfi)` throw `ArgumentError`. Reiter and SSJ Jacobians stay on the EGM kernel.
+
+```@example dsge_ha
+spec_vfi = MacroEconometricModels._huggett_example(; n_a=40)
+ss_vfi = compute_steady_state(spec_vfi; hh_solver=:vfi, max_iter=80,
+                              tol=5e-3, grid_check=:none)
+(isfinite_r = isfinite(ss_vfi.prices[:r]),
+ V_increasing = ss_vfi.value_fn[end, 1] > ss_vfi.value_fn[1, 1])
+```
 
 !!! note "Two-asset steady states"
     `compute_steady_state` bisects on a single interest rate and therefore supports **one-asset models only**. Clearing a two-asset model requires a two-dimensional market-clearing solve, which is not implemented; calling `compute_steady_state(load_ha_example(:two_asset_hank))` raises an `ArgumentError` saying so. The two-asset individual problem itself (nested EGM, adjustment costs) is fully available --- it is the general-equilibrium close that is missing.

@@ -482,6 +482,9 @@ Fields:
   grids. `vec(maximum(smolyak_levels; dims=1))` gives the resolution reached in each state,
   which is where an anisotropic or adaptively refined grid differs from an isotropic one.
 - `refinements` — adaptive refinement rounds performed (`0` when `adaptive=false`)
+- `value_fn` — `n_nodes × 1` value function on the collocation nodes; empty unless
+  `method === :vfi`
+- `value_coefficients` — Chebyshev coefficients of `V`; empty unless `method === :vfi`
 """
 struct ProjectionSolution{T<:AbstractFloat}
     coefficients::Matrix{T}         # n_vars × n_basis
@@ -505,9 +508,11 @@ struct ProjectionSolution{T<:AbstractFloat}
     euler_error::T                  # achieved max Euler error (NaN when not measured)
     smolyak_levels::Matrix{Int}     # n_blocks × nx level set (0×0 for tensor grids)
     refinements::Int                # adaptive refinement rounds performed
+    value_fn::Matrix{T}             # n_nodes × 1 Bellman value (empty if not VFI)
+    value_coefficients::Vector{T}   # Chebyshev coefficients of V (empty if not VFI)
 
-    # The accuracy fields are trailing keywords with defaults so every existing 18-positional
-    # construction site (collocation/PFI/VFI) keeps working unchanged.
+    # The accuracy / value-function fields are trailing keywords with defaults so every
+    # existing 18-positional construction site (collocation/PFI) keeps working unchanged.
     function ProjectionSolution{T}(coefficients, state_bounds, grid_type, degree,
                                    collocation_nodes, residual_norm, n_basis, multi_indices,
                                    quadrature, spec, linear, impact, steady_state,
@@ -515,11 +520,14 @@ struct ProjectionSolution{T<:AbstractFloat}
                                    method;
                                    euler_error::Real=T(NaN),
                                    smolyak_levels::Matrix{Int}=zeros(Int, 0, 0),
-                                   refinements::Int=0) where {T<:AbstractFloat}
+                                   refinements::Int=0,
+                                   value_fn::AbstractMatrix{<:Real}=zeros(T, 0, 0),
+                                   value_coefficients::AbstractVector{<:Real}=T[]) where {T<:AbstractFloat}
         new{T}(coefficients, state_bounds, grid_type, degree, collocation_nodes,
                residual_norm, n_basis, multi_indices, quadrature, spec, linear, impact,
                steady_state, state_indices, control_indices, converged, iterations, method,
-               T(euler_error), smolyak_levels, refinements)
+               T(euler_error), smolyak_levels, refinements,
+               Matrix{T}(value_fn), Vector{T}(value_coefficients))
     end
 end
 
@@ -559,8 +567,13 @@ function Base.show(io::IO, sol::ProjectionSolution{T}) where {T}
     if sol.refinements > 0
         spec_data = vcat(spec_data, Any["Refinements" sol.refinements])
     end
+    if !isempty(sol.value_fn)
+        spec_data = vcat(spec_data, Any["Value function" "stored"])
+    end
+    title = sol.method === :vfi ? "DSGE VFI Solution (Bellman / Chebyshev)" :
+            "DSGE Projection Solution (Chebyshev Collocation)"
     _pretty_table(io, spec_data;
-        title = "DSGE Projection Solution (Chebyshev Collocation)",
+        title = title,
         column_labels = ["", ""],
         alignment = [:l, :r],
     )

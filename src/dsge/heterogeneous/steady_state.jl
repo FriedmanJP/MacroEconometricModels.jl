@@ -209,9 +209,17 @@ function _ha_steady_state(ip::IndividualProblem{T}, grid::HAGrid{T},
                            n_moments::Int=3,
                            n_quad::Int=4,
                            winberry_tol::Real=1e-9,
-                           euler_points::Symbol=:midpoints) where {T<:AbstractFloat}
+                           euler_points::Symbol=:midpoints,
+                           hh_solver::Symbol=:egm) where {T<:AbstractFloat}
     euler_points in (:nodes, :midpoints) || throw(ArgumentError(
         "_ha_steady_state: euler_points must be :nodes or :midpoints, got :$euler_points."))
+    hh_solver in (:egm, :vfi) || throw(ArgumentError(
+        "_ha_steady_state: hh_solver must be :egm or :vfi, got :$hh_solver"))
+    if hh_solver === :vfi && ip.labor !== nothing
+        throw(ArgumentError(
+            "compute_steady_state: hh_solver=:vfi does not support endogenous labor. " *
+            "Use hh_solver=:egm, or drop labor from IndividualProblem."))
+    end
     distribution in (:young, :winberry) || throw(ArgumentError(
         "_ha_steady_state: distribution must be :young or :winberry, got :$distribution."))
     grid.n_dims == 1 || throw(ArgumentError(
@@ -249,6 +257,7 @@ function _ha_steady_state(ip::IndividualProblem{T}, grid::HAGrid{T},
     best_dist = zeros(T, n_a * n_e)
     best_prices = Dict{Symbol,T}()
     best_n_pol = has_labor ? zeros(T, n_a, n_e) : nothing
+    best_V = hh_solver === :vfi ? zeros(T, n_a, n_e) : nothing
     best_L = get(params, :L, one(T))
     best_K_s = zero(T)
     best_K_d = zero(T)
@@ -265,9 +274,11 @@ function _ha_steady_state(ip::IndividualProblem{T}, grid::HAGrid{T},
         K_d, prices = clr(r, p_loc)
         isfinite(K_d) || return (excess=T(-Inf), K_d=K_d, prices=prices,
                                  c_pol=nothing, a_pol=nothing, dist=nothing,
-                                 K_s=T(NaN), n_pol=nothing, L=T(NaN))
+                                 K_s=T(NaN), n_pol=nothing, L=T(NaN),
+                                 value_fn=nothing)
         local c_pol, a_pol, dist, K_s
         n_pol = nothing
+        V_hh = nothing
         L_agg = get(p_loc, :L, one(T))
         # With endogenous labor, aggregate efficiency units are an outcome of the
         # household problem, so factor demand cannot be evaluated before it. Iterate
@@ -278,8 +289,15 @@ function _ha_steady_state(ip::IndividualProblem{T}, grid::HAGrid{T},
         # does make prices depend on L. With exogenous labor it runs exactly once
         # and the whole block reduces to the original code path.
         for _ in 1:(has_labor ? 30 : 1)
-            c_pol, a_pol, _ = _egm_solve(ip, grid, income, prices;
-                                         max_iter=1000, tol=T(1e-10), init_policy=warm)
+            if hh_solver === :vfi
+                V_hh, c_pol, a_pol = _vfi_solve(ip, grid, income, prices;
+                                                max_iter=1000, tol=T(1e-8),
+                                                howard_steps=20)
+            else
+                c_pol, a_pol, _ = _egm_solve(ip, grid, income, prices;
+                                             max_iter=1000, tol=T(1e-10),
+                                             init_policy=warm)
+            end
             Lambda = _build_transition_matrix(a_pol, grid, income)
             dist, _ = _stationary_dist_young(Lambda; max_iter=10_000, tol=T(1e-12))
             K_s = _aggregate(dist, grid; var_index=1)
@@ -297,7 +315,7 @@ function _ha_steady_state(ip::IndividualProblem{T}, grid::HAGrid{T},
         end
         return (excess=K_s - K_d, K_d=K_d, prices=prices,
                 c_pol=c_pol, a_pol=a_pol, dist=dist, K_s=K_s,
-                n_pol=n_pol, L=L_agg)
+                n_pol=n_pol, L=L_agg, value_fn=V_hh)
     end
 
     # Bracket check + bounded widening (#240/H-18). excess(r) = K_s − K_d is
@@ -396,6 +414,9 @@ function _ha_steady_state(ip::IndividualProblem{T}, grid::HAGrid{T},
             best_K_d = res.K_d
             best_L = res.L
             best_n_pol === nothing || copyto!(best_n_pol, res.n_pol)
+            if best_V !== nothing && res.value_fn !== nothing
+                copyto!(best_V, res.value_fn)
+            end
         end
 
         # Check convergence. The threshold is scale-free: an absolute tolerance on
@@ -512,7 +533,8 @@ function _ha_steady_state(ip::IndividualProblem{T}, grid::HAGrid{T},
     grid_check === :none ||
         _check_grid_adequacy(gdiag, grid_check; context="compute_steady_state")
 
-    value_fn = zeros(T, n_a, n_e)  # EGM does not produce a value function
+    # EGM does not produce a value function; VFI writes the Bellman V.
+    value_fn = best_V === nothing ? zeros(T, n_a, n_e) : best_V
 
     return HASteadyState{T}(
         policies,
@@ -629,6 +651,9 @@ does not provide one, and delegates to `_ha_steady_state`.
   [`ha_grid_diagnostics`](@ref)
 - `ceiling_mass_tol` / `residual_tol` — thresholds for that check (default 1e-6)
 - `verbose::Bool` — print progress (default false)
+- `hh_solver::Symbol` — household solver: `:egm` (default) or `:vfi` (one-asset
+  Bellman iteration; writes `ss.value_fn`). `:vfi` errors on two-asset models
+  and on endogenous labor. Reiter/SSJ Jacobians stay on the EGM kernel.
 - `price_fn::Function` — custom price function; if not supplied, uses Cobb-Douglas
 - `distribution::Symbol` — override `spec.distribution`: `:young` (default, the
   Young 2010 histogram) or `:winberry` (Winberry 2018 parametric moment family).
@@ -667,7 +692,10 @@ function compute_steady_state(spec::HADSGESpec{T};
                           n_moments::Int=3,
                           n_quad::Int=4,
                           winberry_tol::Real=1e-9,
-                          euler_points::Symbol=:midpoints) where {T<:AbstractFloat}
+                          euler_points::Symbol=:midpoints,
+                          hh_solver::Symbol=:egm) where {T<:AbstractFloat}
+    hh_solver in (:egm, :vfi) || throw(ArgumentError(
+        "compute_steady_state: hh_solver must be :egm or :vfi, got :$hh_solver"))
     pfn = isnothing(price_fn) ? _default_cobb_douglas_price_fn : price_fn
 
     # Extract parameters: merge het_params with aggregate steady-state params
@@ -707,6 +735,6 @@ function compute_steady_state(spec::HADSGESpec{T};
         verbose=verbose, clearing_fn=clr,
         distribution=isnothing(distribution) ? spec.distribution : distribution,
         n_moments=n_moments, n_quad=n_quad, winberry_tol=winberry_tol,
-        euler_points=euler_points
+        euler_points=euler_points, hh_solver=hh_solver
     )
 end
