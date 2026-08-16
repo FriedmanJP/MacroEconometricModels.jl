@@ -1,8 +1,8 @@
 <!DOCTYPE html>
-<html lang="en"><head><meta charset="UTF-8"/><meta name="viewport" content="width=device-width, initial-scale=1.0"/><title>Factor Models · MacroEconometricModels.jl</title><meta name="title" content="Factor Models · MacroEconometricModels.jl"/><meta property="og:title" content="Factor Models · MacroEconometricModels.jl"/><meta property="twitter:title" content="Factor Models · MacroEconometricModels.jl"/><meta name="description" content="Documentation for MacroEconometricModels.jl."/><meta property="og:description" content="Documentation for MacroEconometricModels.jl."/><meta property="twitter:description" content="Documentation for MacroEconometricModels.jl."/><meta property="og:url" content="https://FriedmanJP.github.io/MacroEconometricModels.jl/factormodels/"/><meta property="twitter:url" content="https://FriedmanJP.github.io/MacroEconometricModels.jl/factormodels/"/><link rel="canonical" href="https://FriedmanJP.github.io/MacroEconometricModels.jl/factormodels/"/><script data-outdated-warner src="../assets/warner.js"></script><link href="https://cdnjs.cloudflare.com/ajax/libs/lato-font/3.0.0/css/lato-font.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/juliamono/0.050/juliamono.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.2/css/fontawesome.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.2/css/solid.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.2/css/brands.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.8/katex.min.css" rel="stylesheet" type="text/css"/><script>documenterBaseURL=".."</script><script src="https://cdnjs.cloudflare.com/ajax/libs/require.js/2.3.6/require.min.js" data-main="../assets/documenter.js"></script><script src="../search_index.js"></script><script src="../siteinfo.js"></script><script src="../../versions.js"></script><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../assets/themes/catppuccin-mocha.css" data-theme-name="catppuccin-mocha"/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../assets/themes/catppuccin-macchiato.css" data-theme-name="catppuccin-macchiato"/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../assets/themes/catppuccin-frappe.css" data-theme-name="catppuccin-frappe"/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../assets/themes/catppuccin-latte.css" data-theme-name="catppuccin-latte"/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../assets/themes/documenter-dark.css" data-theme-name="documenter-dark" data-theme-primary-dark/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../assets/themes/documenter-light.css" data-theme-name="documenter-light" data-theme-primary/><script src="../assets/themeswap.js"></script><link href="../assets/custom.css" rel="stylesheet" type="text/css"/><script src="../assets/theme-toggle.js"></script></head><body><div id="documenter"><nav class="docs-sidebar"><div class="docs-package-name"><span class="docs-autofit"><a href="../">MacroEconometricModels.jl</a></span></div><button class="docs-search-query input is-rounded is-small is-clickable my-2 mx-auto py-1 px-2" id="documenter-search-query">Search docs (Ctrl + /)</button><ul class="docs-menu"><li><a class="tocitem" href="../">Home</a></li><li><span class="tocitem">Getting Started</span><ul><li><a class="tocitem" href="../getting_started/">Installation &amp; First Model</a></li><li><a class="tocitem" href="../method_guide/">Choosing a Method</a></li><li><a class="tocitem" href="../data/">Data Management</a></li></ul></li><li><span class="tocitem">Univariate Models</span><ul><li><a class="tocitem" href="../filters/">Time Series Filters</a></li><li><a class="tocitem" href="../x13/">X-13ARIMA-SEATS</a></li><li><a class="tocitem" href="../spectral/">Spectral Analysis</a></li><li><a class="tocitem" href="../arima/">ARIMA</a></li><li><a class="tocitem" href="../statespace/">State-Space Models</a></li><li><a class="tocitem" href="../volatility/">Volatility Models</a></li><li><a class="tocitem" href="../nonparametric/">Nonparametric Regression &amp; Density</a></li></ul></li><li><span class="tocitem">Multivariate Models</span><ul><li><a class="tocitem" href="../manual/">VAR</a></li><li><a class="tocitem" href="../bayesian/">Bayesian VAR</a></li><li><a class="tocitem" href="../vecm/">VECM</a></li><li><a class="tocitem" href="../ardl/">ARDL &amp; Bounds Test</a></li><li><a class="tocitem" href="../cointreg/">Cointegrating Regression</a></li><li><a class="tocitem" href="../lp/">Local Projections</a></li><li class="is-active"><a class="tocitem" href>Factor Models</a><ul class="internal"><li><a class="tocitem" href="#Quick-Start"><span>Quick Start</span></a></li><li><a class="tocitem" href="#The-Static-Factor-Model"><span>The Static Factor Model</span></a></li><li><a class="tocitem" href="#Determining-the-Number-of-Factors"><span>Determining the Number of Factors</span></a></li><li><a class="tocitem" href="#Model-Diagnostics"><span>Model Diagnostics</span></a></li><li><a class="tocitem" href="#Dynamic-Factor-Models"><span>Dynamic Factor Models</span></a></li><li><a class="tocitem" href="#Forecasting"><span>Forecasting</span></a></li><li><a class="tocitem" href="#Generalized-Dynamic-Factor-Model"><span>Generalized Dynamic Factor Model</span></a></li><li><a class="tocitem" href="#block_restricted"><span>Block-Restricted Estimation</span></a></li><li><a class="tocitem" href="#Structural-Dynamic-Factor-Model"><span>Structural Dynamic Factor Model</span></a></li><li><a class="tocitem" href="#Asymptotic-Theory"><span>Asymptotic Theory</span></a></li><li><a class="tocitem" href="#Applications"><span>Applications</span></a></li><li><a class="tocitem" href="#Complete-Example"><span>Complete Example</span></a></li><li><a class="tocitem" href="#Common-Pitfalls"><span>Common Pitfalls</span></a></li><li><a class="tocitem" href="#References"><span>References</span></a></li></ul></li><li><a class="tocitem" href="../favar/">FAVAR</a></li></ul></li><li><span class="tocitem">Nonlinear Time Series</span><ul><li><a class="tocitem" href="../nonlinear/">Threshold &amp; SETAR</a></li></ul></li><li><span class="tocitem">Cross-Section &amp; Panel</span><ul><li><a class="tocitem" href="../regression/">Linear Regression</a></li><li><a class="tocitem" href="../binary_choice/">Binary Choice Models</a></li><li><a class="tocitem" href="../ordered_multinomial/">Ordered &amp; Multinomial</a></li><li><a class="tocitem" href="../panel_reg/">Panel Regression</a></li><li><a class="tocitem" href="../pvar/">Panel VAR</a></li><li><a class="tocitem" href="../did/">Difference-in-Differences</a></li><li><a class="tocitem" href="../event_study/">Event Study LP</a></li></ul></li><li><a class="tocitem" href="../gmm/">GMM &amp; SMM</a></li><li><span class="tocitem">DSGE Models</span><ul><li><a class="tocitem" href="../dsge/">Overview</a></li><li><a class="tocitem" href="../dsge_linear/">Linear Solvers</a></li><li><a class="tocitem" href="../dsge_nonlinear/">Nonlinear Methods</a></li><li><a class="tocitem" href="../dsge_constraints/">Constraints</a></li><li><a class="tocitem" href="../dsge_estimation/">Estimation</a></li><li><a class="tocitem" href="../dsge_hd/">Historical Decomposition</a></li><li><input class="collapse-toggle" id="menuitem-8-7" type="checkbox"/><label class="tocitem" for="menuitem-8-7"><span class="docs-label">Heterogeneity &amp; Continuous Time</span><i class="docs-chevron"></i></label><ul class="collapsed"><li><a class="tocitem" href="../dsge_heterogeneity/">Overview</a></li><li><a class="tocitem" href="../dsge_ha/">Heterogeneous Agents</a></li><li><a class="tocitem" href="../dsge_olg/">Overlapping Generations</a></li><li><a class="tocitem" href="../dsge_continuous/">Continuous Time</a></li></ul></li></ul></li><li><span class="tocitem">Input-Output Analysis</span><ul><li><a class="tocitem" href="../io/">Overview</a></li><li><a class="tocitem" href="../io_classical/">Classical Analysis</a></li><li><a class="tocitem" href="../io_environmental/">Environmental Extensions</a></li><li><a class="tocitem" href="../io_baqaee_farhi/">Baqaee &amp; Farhi (2019)</a></li><li><a class="tocitem" href="../io_download/">Downloading Data</a></li></ul></li><li><span class="tocitem">Structural Analysis</span><ul><li><a class="tocitem" href="../structural_identification/">Structural Identification</a></li><li><input class="collapse-toggle" id="menuitem-10-2" type="checkbox"/><label class="tocitem" for="menuitem-10-2"><span class="docs-label">Statistical Identification</span><i class="docs-chevron"></i></label><ul class="collapsed"><li><a class="tocitem" href="../nongaussian/">Overview</a></li><li><a class="tocitem" href="../id_nongaussian/">Non-Gaussian Methods</a></li><li><a class="tocitem" href="../id_heteroskedastic/">Heteroskedasticity</a></li><li><a class="tocitem" href="../id_testing/">Testing</a></li></ul></li><li><input class="collapse-toggle" id="menuitem-10-3" type="checkbox"/><label class="tocitem" for="menuitem-10-3"><span class="docs-label">Innovation Accounting</span><i class="docs-chevron"></i></label><ul class="collapsed"><li><a class="tocitem" href="../innovation_accounting/">Overview</a></li><li><a class="tocitem" href="../ia_irf/">Impulse Responses</a></li><li><a class="tocitem" href="../ia_fevd/">Variance Decomposition</a></li><li><a class="tocitem" href="../ia_hd/">Historical Decomposition</a></li></ul></li></ul></li><li><span class="tocitem">Nowcasting</span><ul><li><a class="tocitem" href="../nowcast/">Overview</a></li><li><a class="tocitem" href="../nowcast_dfm/">DFM Nowcasting</a></li><li><a class="tocitem" href="../nowcast_bvar/">BVAR Nowcasting</a></li><li><a class="tocitem" href="../nowcast_bridge/">Bridge Equations</a></li><li><a class="tocitem" href="../nowcast_news/">News Decomposition</a></li><li><a class="tocitem" href="../midas/">MIDAS Regression</a></li></ul></li><li><a class="tocitem" href="../forecast_evaluation/">Forecast Evaluation</a></li><li><span class="tocitem">Hypothesis Tests</span><ul><li><a class="tocitem" href="../tests/">Overview</a></li><li><a class="tocitem" href="../tests_unitroot/">Unit Root &amp; Cointegration</a></li><li><a class="tocitem" href="../tests_unitroot_advanced/">Advanced Unit Root</a></li><li><a class="tocitem" href="../tests_cointegration/">Residual-Based Cointegration</a></li><li><a class="tocitem" href="../tests_breaks/">Structural Breaks</a></li><li><a class="tocitem" href="../tests_panel/">Panel Tests</a></li><li><a class="tocitem" href="../tests_diagnostics/">Model Diagnostics</a></li></ul></li><li><a class="tocitem" href="../plotting/">Visualization</a></li><li><span class="tocitem">Project</span><ul><li><a class="tocitem" href="../notation/">Notation</a></li><li><a class="tocitem" href="../bibliography/">Bibliography</a></li><li><a class="tocitem" href="../changelog/">Changelog</a></li><li><a class="tocitem" href="../citation/">How to Cite</a></li></ul></li><li><span class="tocitem">API Reference</span><ul><li><a class="tocitem" href="../api/">Overview</a></li><li><a class="tocitem" href="../api/data/">Data Management</a></li><li><a class="tocitem" href="../api/univariate/">Univariate Models</a></li><li><a class="tocitem" href="../api/multivariate/">Multivariate Models</a></li><li><a class="tocitem" href="../api/cross_section/">Cross-Sectional Models</a></li><li><a class="tocitem" href="../api/panel/">Panel Models</a></li><li><a class="tocitem" href="../api/dsge/">DSGE Models</a></li><li><a class="tocitem" href="../api/structural/">Structural &amp; Statistical Identification</a></li><li><a class="tocitem" href="../api/gmm/">GMM &amp; SMM</a></li><li><a class="tocitem" href="../api/tests/">Hypothesis Tests</a></li><li><a class="tocitem" href="../api/nowcasting/">Nowcasting</a></li><li><a class="tocitem" href="../api/visualization/">Visualization</a></li><li><a class="tocitem" href="../api/utilities/">Utilities &amp; Display</a></li></ul></li></ul><div class="docs-version-selector field has-addons"><div class="control"><span class="docs-label button is-static is-size-7">Version</span></div><div class="docs-selector control is-expanded"><div class="select is-fullwidth is-size-7"><select id="documenter-version-selector"></select></div></div></div></nav><div class="docs-main"><header class="docs-navbar"><a class="docs-sidebar-button docs-navbar-link fa-solid fa-bars is-hidden-desktop" id="documenter-sidebar-button" href="#"></a><nav class="breadcrumb"><ul class="is-hidden-mobile"><li><a class="is-disabled">Multivariate Models</a></li><li class="is-active"><a href>Factor Models</a></li></ul><ul class="is-hidden-tablet"><li class="is-active"><a href>Factor Models</a></li></ul></nav><div class="docs-right"><a class="docs-navbar-link" href="https://github.com/FriedmanJP/MacroEconometricModels.jl" title="View the repository on GitHub"><span class="docs-icon fa-brands"></span><span class="docs-label is-hidden-touch">GitHub</span></a><a class="docs-navbar-link" href="https://github.com/FriedmanJP/MacroEconometricModels.jl/blob/main/docs/src/factormodels.md#" title="Edit source on GitHub"><span class="docs-icon fa-solid"></span></a><a class="docs-settings-button docs-navbar-link fa-solid fa-gear" id="documenter-settings-button" href="#" title="Settings"></a><a class="docs-article-toggle-button fa-solid fa-chevron-up" id="documenter-article-toggle-button" href="javascript:;" title="Collapse all docstrings"></a></div></header><article class="content" id="documenter-page"><h1 id="factor_page"><a class="docs-heading-anchor" href="#factor_page">Factor Models</a><a id="factor_page-1"></a><a class="docs-heading-anchor-permalink" href="#factor_page" title="Permalink"></a></h1><p>Factor models compress a panel of hundreds of macroeconomic indicators into a handful of latent common factors, turning a cross-section that no VAR can hold into a system small enough to estimate. This page covers the four estimators the package provides — static principal components, dynamic factor models with explicit VAR dynamics, the generalized dynamic factor model estimated in the frequency domain, and structural identification of the common shocks.</p><ul><li><strong>Static factor model</strong>: principal components (Stock &amp; Watson 2002a) with automatic panel orientation, standardization, and block-restricted EM estimation</li><li><strong>Information criteria</strong>: Bai &amp; Ng (2002) IC1–IC3 for the number of static factors, AIC/BIC grid search for the dynamic specification, and eigenvalue criteria for the number of dynamic factors</li><li><strong>Dynamic factor model</strong>: two-step (PCA + VAR) or EM (Kalman smoother) estimation with four confidence-interval methods for forecasting (Doz, Giannone &amp; Reichlin 2011, 2012)</li><li><strong>Generalized dynamic factor model</strong>: spectral estimation via the kernel-smoothed periodogram with frequency-by-frequency eigenanalysis (Forni, Hallin, Lippi &amp; Reichlin 2000, 2005)</li><li><strong>Structural DFM</strong>: Cholesky or sign-restriction identification on the common factors, with panel-wide structural impulse responses (Forni, Giannone, Lippi &amp; Reichlin 2009)</li><li><strong>Block-restricted estimation</strong>: EM with masked loadings for theory-guided factor structures</li></ul><p>Factors alone summarize a panel; putting them inside a VAR alongside observed policy variables is the <a href="../favar/#favar_page">Factor-Augmented VAR</a>. For a factor model built to handle ragged real-time data, see <a href="../nowcast_dfm/#nowcast_dfm_page">DFM Nowcasting</a>.</p><p>All results integrate with <code>report()</code> for publication-quality output and <code>plot_result()</code> for interactive D3.js visualization.</p><h2 id="Quick-Start"><a class="docs-heading-anchor" href="#Quick-Start">Quick Start</a><a id="Quick-Start-1"></a><a class="docs-heading-anchor-permalink" href="#Quick-Start" title="Permalink"></a></h2><p>The recipes below run on <code>X</code>, the transformed FRED-MD panel (McCracken &amp; Ng 2016) of 126 monthly indicators.</p><p><strong>Recipe 1: Static factor model from FRED-MD</strong></p><pre><code class="language-julia hljs">fm = estimate_factors(X, 3; standardize=true)
-report(fm)</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">Static Factor Model (r=3)
+<html lang="en"><head><meta charset="UTF-8"/><meta name="viewport" content="width=device-width, initial-scale=1.0"/><title>Factor Models · MacroEconometricModels.jl</title><meta name="title" content="Factor Models · MacroEconometricModels.jl"/><meta property="og:title" content="Factor Models · MacroEconometricModels.jl"/><meta property="twitter:title" content="Factor Models · MacroEconometricModels.jl"/><meta name="description" content="Documentation for MacroEconometricModels.jl."/><meta property="og:description" content="Documentation for MacroEconometricModels.jl."/><meta property="twitter:description" content="Documentation for MacroEconometricModels.jl."/><meta property="og:url" content="https://FriedmanJP.github.io/MacroEconometricModels.jl/factormodels/"/><meta property="twitter:url" content="https://FriedmanJP.github.io/MacroEconometricModels.jl/factormodels/"/><link rel="canonical" href="https://FriedmanJP.github.io/MacroEconometricModels.jl/factormodels/"/><script data-outdated-warner src="../assets/warner.js"></script><link href="https://cdnjs.cloudflare.com/ajax/libs/lato-font/3.0.0/css/lato-font.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/juliamono/0.050/juliamono.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.2/css/fontawesome.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.2/css/solid.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.2/css/brands.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.8/katex.min.css" rel="stylesheet" type="text/css"/><script>documenterBaseURL=".."</script><script src="https://cdnjs.cloudflare.com/ajax/libs/require.js/2.3.6/require.min.js" data-main="../assets/documenter.js"></script><script src="../search_index.js"></script><script src="../siteinfo.js"></script><script src="../../versions.js"></script><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../assets/themes/catppuccin-mocha.css" data-theme-name="catppuccin-mocha"/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../assets/themes/catppuccin-macchiato.css" data-theme-name="catppuccin-macchiato"/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../assets/themes/catppuccin-frappe.css" data-theme-name="catppuccin-frappe"/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../assets/themes/catppuccin-latte.css" data-theme-name="catppuccin-latte"/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../assets/themes/documenter-dark.css" data-theme-name="documenter-dark" data-theme-primary-dark/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../assets/themes/documenter-light.css" data-theme-name="documenter-light" data-theme-primary/><script src="../assets/themeswap.js"></script><link href="../assets/custom.css" rel="stylesheet" type="text/css"/><script src="../assets/theme-toggle.js"></script></head><body><div id="documenter"><nav class="docs-sidebar"><div class="docs-package-name"><span class="docs-autofit"><a href="../">MacroEconometricModels.jl</a></span></div><button class="docs-search-query input is-rounded is-small is-clickable my-2 mx-auto py-1 px-2" id="documenter-search-query">Search docs (Ctrl + /)</button><ul class="docs-menu"><li><a class="tocitem" href="../">Home</a></li><li><span class="tocitem">Getting Started</span><ul><li><a class="tocitem" href="../getting_started/">Installation &amp; First Model</a></li><li><a class="tocitem" href="../method_guide/">Choosing a Method</a></li><li><a class="tocitem" href="../data/">Data Management</a></li></ul></li><li><span class="tocitem">Univariate Models</span><ul><li><a class="tocitem" href="../filters/">Time Series Filters</a></li><li><a class="tocitem" href="../x13/">X-13ARIMA-SEATS</a></li><li><a class="tocitem" href="../spectral/">Spectral Analysis</a></li><li><a class="tocitem" href="../arima/">ARIMA</a></li><li><a class="tocitem" href="../statespace/">State-Space Models</a></li><li><a class="tocitem" href="../volatility/">Volatility Models</a></li><li><a class="tocitem" href="../nonparametric/">Nonparametric Regression &amp; Density</a></li></ul></li><li><span class="tocitem">Multivariate Models</span><ul><li><a class="tocitem" href="../manual/">VAR</a></li><li><a class="tocitem" href="../bayesian/">Bayesian VAR</a></li><li><a class="tocitem" href="../vecm/">VECM</a></li><li><a class="tocitem" href="../ardl/">ARDL &amp; Bounds Test</a></li><li><a class="tocitem" href="../cointreg/">Cointegrating Regression</a></li><li><a class="tocitem" href="../lp/">Local Projections</a></li><li class="is-active"><a class="tocitem" href>Factor Models</a><ul class="internal"><li><a class="tocitem" href="#Quick-Start"><span>Quick Start</span></a></li><li><a class="tocitem" href="#The-Static-Factor-Model"><span>The Static Factor Model</span></a></li><li><a class="tocitem" href="#Determining-the-Number-of-Factors"><span>Determining the Number of Factors</span></a></li><li><a class="tocitem" href="#Model-Diagnostics"><span>Model Diagnostics</span></a></li><li><a class="tocitem" href="#Dynamic-Factor-Models"><span>Dynamic Factor Models</span></a></li><li><a class="tocitem" href="#Forecasting"><span>Forecasting</span></a></li><li><a class="tocitem" href="#Generalized-Dynamic-Factor-Model"><span>Generalized Dynamic Factor Model</span></a></li><li><a class="tocitem" href="#block_restricted"><span>Block-Restricted Estimation</span></a></li><li><a class="tocitem" href="#Structural-Dynamic-Factor-Model"><span>Structural Dynamic Factor Model</span></a></li><li><a class="tocitem" href="#Asymptotic-Theory"><span>Asymptotic Theory</span></a></li><li><a class="tocitem" href="#Applications"><span>Applications</span></a></li><li><a class="tocitem" href="#Complete-Example"><span>Complete Example</span></a></li><li><a class="tocitem" href="#Common-Pitfalls"><span>Common Pitfalls</span></a></li><li><a class="tocitem" href="#References"><span>References</span></a></li></ul></li><li><a class="tocitem" href="../favar/">FAVAR</a></li></ul></li><li><span class="tocitem">Nonlinear Time Series</span><ul><li><a class="tocitem" href="../nonlinear/">Threshold &amp; SETAR</a></li></ul></li><li><span class="tocitem">Cross-Section &amp; Panel</span><ul><li><a class="tocitem" href="../regression/">Linear Regression</a></li><li><a class="tocitem" href="../binary_choice/">Binary Choice Models</a></li><li><a class="tocitem" href="../ordered_multinomial/">Ordered &amp; Multinomial</a></li><li><a class="tocitem" href="../panel_reg/">Panel Regression</a></li><li><a class="tocitem" href="../pvar/">Panel VAR</a></li><li><a class="tocitem" href="../did/">Difference-in-Differences</a></li><li><a class="tocitem" href="../event_study/">Event Study LP</a></li></ul></li><li><a class="tocitem" href="../gmm/">GMM &amp; SMM</a></li><li><span class="tocitem">DSGE Models</span><ul><li><a class="tocitem" href="../dsge/">Overview</a></li><li><a class="tocitem" href="../dsge_linear/">Linear Solvers</a></li><li><a class="tocitem" href="../dsge_nonlinear/">Nonlinear Methods</a></li><li><a class="tocitem" href="../dsge_constraints/">Constraints</a></li><li><a class="tocitem" href="../dsge_estimation/">Estimation</a></li><li><a class="tocitem" href="../dsge_hd/">Historical Decomposition</a></li><li><input class="collapse-toggle" id="menuitem-8-7" type="checkbox"/><label class="tocitem" for="menuitem-8-7"><span class="docs-label">Heterogeneity &amp; Continuous Time</span><i class="docs-chevron"></i></label><ul class="collapsed"><li><a class="tocitem" href="../dsge_heterogeneity/">Overview</a></li><li><a class="tocitem" href="../dsge_ha/">Heterogeneous Agents</a></li><li><a class="tocitem" href="../dsge_olg/">Overlapping Generations</a></li><li><a class="tocitem" href="../dsge_continuous/">Continuous Time</a></li></ul></li></ul></li><li><span class="tocitem">Input-Output Analysis</span><ul><li><a class="tocitem" href="../io/">Overview</a></li><li><a class="tocitem" href="../io_classical/">Classical Analysis</a></li><li><a class="tocitem" href="../io_environmental/">Environmental Extensions</a></li><li><a class="tocitem" href="../io_mrio/">MRIO Trade Accounting</a></li><li><a class="tocitem" href="../io_baqaee_farhi/">Baqaee &amp; Farhi (2019)</a></li><li><a class="tocitem" href="../io_download/">Downloading Data</a></li></ul></li><li><span class="tocitem">Policy Counterfactuals</span><ul><li><a class="tocitem" href="../counterfactual/">Overview</a></li><li><a class="tocitem" href="../counterfactual_rules/">Rule Counterfactuals (McKay-Wolf)</a></li><li><a class="tocitem" href="../counterfactual_opp/">Optimal Policy Perturbations (Barnichon-Mesters)</a></li><li><a class="tocitem" href="../counterfactual_bank/">Model Bank &amp; Diagnostics (CMW)</a></li></ul></li><li><span class="tocitem">Structural Analysis</span><ul><li><a class="tocitem" href="../structural_identification/">Structural Identification</a></li><li><input class="collapse-toggle" id="menuitem-11-2" type="checkbox"/><label class="tocitem" for="menuitem-11-2"><span class="docs-label">Statistical Identification</span><i class="docs-chevron"></i></label><ul class="collapsed"><li><a class="tocitem" href="../nongaussian/">Overview</a></li><li><a class="tocitem" href="../id_nongaussian/">Non-Gaussian Methods</a></li><li><a class="tocitem" href="../id_heteroskedastic/">Heteroskedasticity</a></li><li><a class="tocitem" href="../id_testing/">Testing</a></li></ul></li><li><input class="collapse-toggle" id="menuitem-11-3" type="checkbox"/><label class="tocitem" for="menuitem-11-3"><span class="docs-label">Innovation Accounting</span><i class="docs-chevron"></i></label><ul class="collapsed"><li><a class="tocitem" href="../innovation_accounting/">Overview</a></li><li><a class="tocitem" href="../ia_irf/">Impulse Responses</a></li><li><a class="tocitem" href="../ia_fevd/">Variance Decomposition</a></li><li><a class="tocitem" href="../ia_hd/">Historical Decomposition</a></li></ul></li></ul></li><li><span class="tocitem">Nowcasting</span><ul><li><a class="tocitem" href="../nowcast/">Overview</a></li><li><a class="tocitem" href="../nowcast_dfm/">DFM Nowcasting</a></li><li><a class="tocitem" href="../nowcast_bvar/">BVAR Nowcasting</a></li><li><a class="tocitem" href="../nowcast_bridge/">Bridge Equations</a></li><li><a class="tocitem" href="../nowcast_news/">News Decomposition</a></li><li><a class="tocitem" href="../midas/">MIDAS Regression</a></li></ul></li><li><a class="tocitem" href="../forecast_evaluation/">Forecast Evaluation</a></li><li><span class="tocitem">Hypothesis Tests</span><ul><li><a class="tocitem" href="../tests/">Overview</a></li><li><a class="tocitem" href="../tests_unitroot/">Unit Root &amp; Cointegration</a></li><li><a class="tocitem" href="../tests_unitroot_advanced/">Advanced Unit Root</a></li><li><a class="tocitem" href="../tests_cointegration/">Residual-Based Cointegration</a></li><li><a class="tocitem" href="../tests_breaks/">Structural Breaks</a></li><li><a class="tocitem" href="../tests_panel/">Panel Tests</a></li><li><a class="tocitem" href="../tests_diagnostics/">Model Diagnostics</a></li></ul></li><li><a class="tocitem" href="../plotting/">Visualization</a></li><li><span class="tocitem">Project</span><ul><li><a class="tocitem" href="../notation/">Notation</a></li><li><a class="tocitem" href="../bibliography/">Bibliography</a></li><li><a class="tocitem" href="../changelog/">Changelog</a></li><li><a class="tocitem" href="../citation/">How to Cite</a></li></ul></li><li><span class="tocitem">API Reference</span><ul><li><a class="tocitem" href="../api/">Overview</a></li><li><a class="tocitem" href="../api/data/">Data Management</a></li><li><a class="tocitem" href="../api/univariate/">Univariate Models</a></li><li><a class="tocitem" href="../api/multivariate/">Multivariate Models</a></li><li><a class="tocitem" href="../api/cross_section/">Cross-Sectional Models</a></li><li><a class="tocitem" href="../api/panel/">Panel Models</a></li><li><a class="tocitem" href="../api/dsge/">DSGE Models</a></li><li><a class="tocitem" href="../api/structural/">Structural &amp; Statistical Identification</a></li><li><a class="tocitem" href="../api/counterfactual/">Policy Counterfactuals</a></li><li><a class="tocitem" href="../api/gmm/">GMM &amp; SMM</a></li><li><a class="tocitem" href="../api/tests/">Hypothesis Tests</a></li><li><a class="tocitem" href="../api/nowcasting/">Nowcasting</a></li><li><a class="tocitem" href="../api/visualization/">Visualization</a></li><li><a class="tocitem" href="../api/utilities/">Utilities &amp; Display</a></li></ul></li></ul><div class="docs-version-selector field has-addons"><div class="control"><span class="docs-label button is-static is-size-7">Version</span></div><div class="docs-selector control is-expanded"><div class="select is-fullwidth is-size-7"><select id="documenter-version-selector"></select></div></div></div></nav><div class="docs-main"><header class="docs-navbar"><a class="docs-sidebar-button docs-navbar-link fa-solid fa-bars is-hidden-desktop" id="documenter-sidebar-button" href="#"></a><nav class="breadcrumb"><ul class="is-hidden-mobile"><li><a class="is-disabled">Multivariate Models</a></li><li class="is-active"><a href>Factor Models</a></li></ul><ul class="is-hidden-tablet"><li class="is-active"><a href>Factor Models</a></li></ul></nav><div class="docs-right"><a class="docs-navbar-link" href="https://github.com/FriedmanJP/MacroEconometricModels.jl" title="View the repository on GitHub"><span class="docs-icon fa-brands"></span><span class="docs-label is-hidden-touch">GitHub</span></a><a class="docs-navbar-link" href="https://github.com/FriedmanJP/MacroEconometricModels.jl/blob/main/docs/src/factormodels.md#" title="Edit source on GitHub"><span class="docs-icon fa-solid"></span></a><a class="docs-settings-button docs-navbar-link fa-solid fa-gear" id="documenter-settings-button" href="#" title="Settings"></a><a class="docs-article-toggle-button fa-solid fa-chevron-up" id="documenter-article-toggle-button" href="javascript:;" title="Collapse all docstrings"></a></div></header><article class="content" id="documenter-page"><h1 id="factor_page"><a class="docs-heading-anchor" href="#factor_page">Factor Models</a><a id="factor_page-1"></a><a class="docs-heading-anchor-permalink" href="#factor_page" title="Permalink"></a></h1><p>Factor models compress a panel of hundreds of macroeconomic indicators into a handful of latent common factors, turning a cross-section that no VAR can hold into a system small enough to estimate. This page covers the four estimators the package provides — static principal components, dynamic factor models with explicit VAR dynamics, the generalized dynamic factor model estimated in the frequency domain, and structural identification of the common shocks.</p><ul><li><strong>Static factor model</strong>: principal components (Stock &amp; Watson 2002a) with automatic panel orientation, standardization, and block-restricted EM estimation</li><li><strong>Information criteria</strong>: Bai &amp; Ng (2002) IC1–IC3 for the number of static factors, AIC/BIC grid search for the dynamic specification, and eigenvalue criteria for the number of dynamic factors</li><li><strong>Dynamic factor model</strong>: two-step (PCA + VAR) or EM (Kalman smoother) estimation with four confidence-interval methods for forecasting (Doz, Giannone &amp; Reichlin 2011, 2012)</li><li><strong>Generalized dynamic factor model</strong>: spectral estimation via the kernel-smoothed periodogram with frequency-by-frequency eigenanalysis (Forni, Hallin, Lippi &amp; Reichlin 2000, 2005)</li><li><strong>Structural DFM</strong>: Cholesky or sign-restriction identification on the common factors, with panel-wide structural impulse responses (Forni, Giannone, Lippi &amp; Reichlin 2009)</li><li><strong>Block-restricted estimation</strong>: EM with masked loadings for theory-guided factor structures</li></ul><p>Factors alone summarize a panel; putting them inside a VAR alongside observed policy variables is the <a href="../favar/#favar_page">Factor-Augmented VAR</a>. For a factor model built to handle ragged real-time data, see <a href="../nowcast_dfm/#nowcast_dfm_page">DFM Nowcasting</a>.</p><p>All results integrate with <code>report()</code> for publication-quality output and <code>plot_result()</code> for interactive D3.js visualization.</p><h2 id="Quick-Start"><a class="docs-heading-anchor" href="#Quick-Start">Quick Start</a><a id="Quick-Start-1"></a><a class="docs-heading-anchor-permalink" href="#Quick-Start" title="Permalink"></a></h2><p>The recipes below run on <code>X</code>, the transformed FRED-MD panel (McCracken &amp; Ng 2016) of 126 monthly indicators.</p><p><strong>Recipe 1: Static factor model from FRED-MD</strong></p><pre><code class="language-julia hljs">fm = estimate_factors(X, 3; standardize=true)
+report(fm)</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi"><span class="sgr1">Static Factor Model (r=3)</span>
 
-  Specification
+ <span class="sgr1"> Specification </span> <span class="sgr1">     </span>
 
   Factors           3
   Variables       126
@@ -10,17 +10,17 @@ report(fm)</code></pre><pre class="documenter-example-output"><code class="nohig
   Standardized    Yes
   Estimation      PCA
 
-         Variance Explained
+<span class="sgr1">         Variance Explained</span>
 
-             Variance   Cumulative
+ <span class="sgr1">          </span> <span class="sgr1"> Variance </span> <span class="sgr1"> Cumulative </span>
 
   Factor 1      17.3%        17.3%
   Factor 2      11.4%        28.7%
   Factor 3       9.0%        37.8%
 
-Top Loadings — Factor 1
+<span class="sgr1">Top Loadings — Factor 1</span>
 
-  Variable   Loading
+ <span class="sgr1"> Variable </span> <span class="sgr1"> Loading </span>
 
   Var 90      0.8723
   Var 93      0.8561
@@ -28,9 +28,9 @@ Top Loadings — Factor 1
   Var 92      0.8364
   Var 53      0.8217
 
-Top Loadings — Factor 2
+<span class="sgr1">Top Loadings — Factor 2</span>
 
-  Variable   Loading
+ <span class="sgr1"> Variable </span> <span class="sgr1"> Loading </span>
 
   Var 63     -0.7863
   Var 16      0.7849
@@ -38,9 +38,9 @@ Top Loadings — Factor 2
   Var 6       0.7302
   Var 15      0.7300
 
-Top Loadings — Factor 3
+<span class="sgr1">Top Loadings — Factor 3</span>
 
-  Variable   Loading
+ <span class="sgr1"> Variable </span> <span class="sgr1"> Loading </span>
 
   Var 114    -0.8661
   Var 105    -0.8652
@@ -48,9 +48,9 @@ Top Loadings — Factor 3
   Var 113    -0.8603
   Var 107    -0.8144</code></pre><p><strong>Recipe 2: Select the number of factors</strong></p><pre><code class="language-julia hljs">ic = ic_criteria(X, 10)
 (IC1=ic.r_IC1, IC2=ic.r_IC2, IC3=ic.r_IC3)</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">(IC1 = 4, IC2 = 4, IC3 = 10)</code></pre><p><strong>Recipe 3: Dynamic factor model with VAR dynamics</strong></p><pre><code class="language-julia hljs">dfm = estimate_dynamic_factors(X, 3, 1; method=:twostep, standardize=true)
-report(dfm)</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">Dynamic Factor Model (r=3, p=1)
+report(dfm)</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi"><span class="sgr1">Dynamic Factor Model (r=3, p=1)</span>
 
-  Specification
+ <span class="sgr1"> Specification  </span> <span class="sgr1">            </span>
 
   Factors                   3
   Lags                      1
@@ -61,16 +61,16 @@ report(dfm)</code></pre><pre class="documenter-example-output"><code class="nohi
   Converged               Yes
   Iterations                1
 
-         Variance Explained
+<span class="sgr1">         Variance Explained</span>
 
-             Variance   Cumulative
+ <span class="sgr1">          </span> <span class="sgr1"> Variance </span> <span class="sgr1"> Cumulative </span>
 
   Factor 1      17.3%        17.3%
   Factor 2      11.4%        28.7%
   Factor 3       9.0%        37.8%</code></pre><p><strong>Recipe 4: Generalized dynamic factor model</strong></p><pre><code class="language-julia hljs">gdfm = estimate_gdfm(X, 2; kernel=:bartlett)
-report(gdfm)</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">Generalized Dynamic Factor Model (q=2, r=2)
+report(gdfm)</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi"><span class="sgr1">Generalized Dynamic Factor Model (q=2, r=2)</span>
 
-  Specification
+ <span class="sgr1"> Specification   </span> <span class="sgr1">          </span>
 
   Dynamic factors          2
   Static factors           2
@@ -80,22 +80,22 @@ report(gdfm)</code></pre><pre class="documenter-example-output"><code class="noh
   Bandwidth                4
   Standardized           Yes
 
-         Variance Explained
+<span class="sgr1">         Variance Explained</span>
 
-             Variance   Cumulative
+ <span class="sgr1">          </span> <span class="sgr1"> Variance </span> <span class="sgr1"> Cumulative </span>
 
   Factor 1      45.5%        45.5%
   Factor 2      18.7%        64.1%</code></pre><p><strong>Recipe 5: Forecast with bootstrap confidence intervals</strong></p><pre><code class="language-julia hljs">fc = forecast(dfm, 12; ci_method=:bootstrap, n_boot=50)
-report(fc)</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">          Factor Forecast
+report(fc)</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi"><span class="sgr1">          Factor Forecast</span>
 
   Horizon                      12
   Factors                       3
   Observables                 126
   CI method     bootstrap (95.0%)
 
-    Observable Forecasts (first 8 of 126)
+<span class="sgr1">    Observable Forecasts (first 8 of 126)</span>
 
-              h=1      h=4      h=8     h=12
+ <span class="sgr1">      </span> <span class="sgr1">      h=1 </span> <span class="sgr1">    h=4 </span> <span class="sgr1">    h=8 </span> <span class="sgr1">   h=12 </span>
 
   obs1     0.0004   0.0009   0.0012   0.0013
   obs2     0.0021   0.0020   0.0019   0.0019
@@ -105,9 +105,9 @@ report(fc)</code></pre><pre class="documenter-example-output"><code class="nohig
   obs6     0.0003   0.0006   0.0008   0.0009
   obs7   3.89e-05   0.0002   0.0003   0.0004
   obs8   3.87e-05   0.0002   0.0003   0.0003</code></pre><p><strong>Recipe 6: Structural DFM with Cholesky identification</strong></p><pre><code class="language-julia hljs">sdfm = estimate_structural_dfm(X, 2; identification=:cholesky, p=1, H=20)
-report(sdfm)</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">Structural DFM (q=2, p=1, Cholesky)
+report(sdfm)</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi"><span class="sgr1">Structural DFM (q=2, p=1, Cholesky)</span>
 
-  Specification
+ <span class="sgr1"> Specification       </span> <span class="sgr1">          </span>
 
   Dynamic factors (q)          2
   Panel variables (N)        126
@@ -118,22 +118,22 @@ report(sdfm)</code></pre><pre class="documenter-example-output"><code class="noh
   Kernel                bartlett
   Bandwidth                    4
 
-         Variance Explained
+<span class="sgr1">         Variance Explained</span>
 
-             Variance   Cumulative
+ <span class="sgr1">          </span> <span class="sgr1"> Variance </span> <span class="sgr1"> Cumulative </span>
 
   Factor 1      45.5%        45.5%
   Factor 2      18.7%        64.1%
 
-        Impact Matrix B0
+<span class="sgr1">        Impact Matrix B0</span>
 
-             Shock 1   Shock 2
+ <span class="sgr1">          </span> <span class="sgr1"> Shock 1 </span> <span class="sgr1"> Shock 2 </span>
 
   Factor 1    0.9828    0.0000
   Factor 2    0.0703    0.9807</code></pre><hr/><h2 id="The-Static-Factor-Model"><a class="docs-heading-anchor" href="#The-Static-Factor-Model">The Static Factor Model</a><a id="The-Static-Factor-Model-1"></a><a class="docs-heading-anchor-permalink" href="#The-Static-Factor-Model" title="Permalink"></a></h2><p>The static factor model splits an <span>$N$</span>-dimensional panel into a common component driven by <span>$r$</span> factors and an idiosyncratic remainder. It is the workhorse of empirical macroeconomics with large data sets: a few factors reproduce the bulk of the co-movement in hundreds of series, so the modelling problem collapses from <span>$N$</span> dimensions to <span>$r$</span>.</p><p class="math-container">\[X = F \Lambda&#39; + E\]</p><p>where:</p><ul><li><span>$X$</span> is the <span>$T \times N$</span> data matrix of observables</li><li><span>$F$</span> is the <span>$T \times r$</span> matrix of latent common factors</li><li><span>$\Lambda$</span> is the <span>$N \times r$</span> matrix of factor loadings</li><li><span>$E$</span> is the <span>$T \times N$</span> matrix of idiosyncratic errors</li><li><span>$r$</span> is the number of factors, with <span>$r \ll \min(T, N)$</span></li></ul><p>Factors and loadings minimize the sum of squared idiosyncratic errors:</p><p class="math-container">\[\min_{F, \Lambda} \sum_{i=1}^N \sum_{t=1}^T (x_{it} - \lambda_i&#39; F_t)^2\]</p><p>where:</p><ul><li><span>$\lambda_i$</span> is the <span>$r \times 1$</span> loading vector for variable <span>$i$</span></li><li><span>$F_t$</span> is the <span>$r \times 1$</span> factor vector at time <span>$t$</span></li></ul><p>subject to the normalization <span>$F&#39;F/T = I_r$</span>. The solution is the eigendecomposition of the sample covariance matrix: the first <span>$r$</span> eigenvectors scaled by <span>$\sqrt{\lambda}$</span> form the loadings, and the factors are the corresponding scores rescaled to unit variance.</p><div class="admonition is-info" id="Technical-Note-7cc5e37dc1b1275"><header class="admonition-header">Technical Note<a class="admonition-anchor" href="#Technical-Note-7cc5e37dc1b1275" title="Permalink"></a></header><div class="admonition-body"><p>Factors and loadings are identified only up to an <span>$r \times r$</span> invertible rotation: if <span>$(\hat{F}, \hat{\Lambda})$</span> solves the problem, so does <span>$(\hat{F}H, \hat{\Lambda}H^{-1\prime})$</span> for any invertible <span>$H$</span>. The normalization <span>$F&#39;F/T = I_r$</span> pins down scale but not sign or orientation. Compare estimated factors with true factors through absolute correlations, never raw ones.</p></div></div><pre><code class="language-julia hljs">fm = estimate_factors(X, 3; standardize=true)
-report(fm)</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">Static Factor Model (r=3)
+report(fm)</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi"><span class="sgr1">Static Factor Model (r=3)</span>
 
-  Specification
+ <span class="sgr1"> Specification </span> <span class="sgr1">     </span>
 
   Factors           3
   Variables       126
@@ -141,17 +141,17 @@ report(fm)</code></pre><pre class="documenter-example-output"><code class="nohig
   Standardized    Yes
   Estimation      PCA
 
-         Variance Explained
+<span class="sgr1">         Variance Explained</span>
 
-             Variance   Cumulative
+ <span class="sgr1">          </span> <span class="sgr1"> Variance </span> <span class="sgr1"> Cumulative </span>
 
   Factor 1      17.3%        17.3%
   Factor 2      11.4%        28.7%
   Factor 3       9.0%        37.8%
 
-Top Loadings — Factor 1
+<span class="sgr1">Top Loadings — Factor 1</span>
 
-  Variable   Loading
+ <span class="sgr1"> Variable </span> <span class="sgr1"> Loading </span>
 
   Var 90      0.8723
   Var 93      0.8561
@@ -159,9 +159,9 @@ Top Loadings — Factor 1
   Var 92      0.8364
   Var 53      0.8217
 
-Top Loadings — Factor 2
+<span class="sgr1">Top Loadings — Factor 2</span>
 
-  Variable   Loading
+ <span class="sgr1"> Variable </span> <span class="sgr1"> Loading </span>
 
   Var 63     -0.7863
   Var 16      0.7849
@@ -169,9 +169,9 @@ Top Loadings — Factor 2
   Var 6       0.7302
   Var 15      0.7300
 
-Top Loadings — Factor 3
+<span class="sgr1">Top Loadings — Factor 3</span>
 
-  Variable   Loading
+ <span class="sgr1"> Variable </span> <span class="sgr1"> Loading </span>
 
   Var 114    -0.8661
   Var 105    -0.8652
@@ -191,9 +191,9 @@ resid = residuals(fm)           # T × N idiosyncratic residuals
     standardize=true,
     diagonal_idio=true    # diagonal idiosyncratic covariance
 )
-report(dfm)</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">Dynamic Factor Model (r=3, p=1)
+report(dfm)</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi"><span class="sgr1">Dynamic Factor Model (r=3, p=1)</span>
 
-  Specification
+ <span class="sgr1"> Specification  </span> <span class="sgr1">            </span>
 
   Factors                   3
   Lags                      1
@@ -204,9 +204,9 @@ report(dfm)</code></pre><pre class="documenter-example-output"><code class="nohi
   Converged               Yes
   Iterations                1
 
-         Variance Explained
+<span class="sgr1">         Variance Explained</span>
 
-             Variance   Cumulative
+ <span class="sgr1">          </span> <span class="sgr1"> Variance </span> <span class="sgr1"> Cumulative </span>
 
   Factor 1      17.3%        17.3%
   Factor 2      11.4%        28.7%
@@ -220,16 +220,16 @@ dfm_em = estimate_dynamic_factors(X, 3, 1; method=:em, max_iter=50)
 (r_AIC=ic_dyn.r_AIC, p_AIC=ic_dyn.p_AIC, r_BIC=ic_dyn.r_BIC, p_BIC=ic_dyn.p_BIC)</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">(r_AIC = 5, p_AIC = 1, r_BIC = 5, p_BIC = 1)</code></pre><p>Both criteria select <span>$p = 1$</span> and both run to the grid edge at <span>$r = 5$</span>. The lag choice is informative; the factor choice is not, because the DFM likelihood rises with every factor added while <code>dof</code> grows only linearly in <span>$N$</span>, so AIC and BIC keep buying factors. Use <code>ic_criteria_dynamic</code> to pick <span>$p$</span> given <span>$r$</span>, and pick <span>$r$</span> from the Bai &amp; Ng criteria above.</p><table><tr><th style="text-align: right">Field</th><th style="text-align: right">Type</th><th style="text-align: right">Description</th></tr><tr><td style="text-align: right"><code>AIC</code></td><td style="text-align: right"><code>Matrix{T}</code></td><td style="text-align: right"><span>$r_{\max} \times p_{\max}$</span> AIC values, <code>Inf</code> where estimation failed</td></tr><tr><td style="text-align: right"><code>BIC</code></td><td style="text-align: right"><code>Matrix{T}</code></td><td style="text-align: right"><span>$r_{\max} \times p_{\max}$</span> BIC values</td></tr><tr><td style="text-align: right"><code>r_AIC</code>, <code>p_AIC</code></td><td style="text-align: right"><code>Int</code></td><td style="text-align: right">Grid point minimizing AIC</td></tr><tr><td style="text-align: right"><code>r_BIC</code>, <code>p_BIC</code></td><td style="text-align: right"><code>Int</code></td><td style="text-align: right">Grid point minimizing BIC</td></tr></table><h3 id="Stationarity-Check"><a class="docs-heading-anchor" href="#Stationarity-Check">Stationarity Check</a><a id="Stationarity-Check-1"></a><a class="docs-heading-anchor-permalink" href="#Stationarity-Check" title="Permalink"></a></h3><p><code>companion_matrix_factors</code> builds the <span>$rp \times rp$</span> companion form of the factor VAR, and <code>is_stationary</code> checks that its spectral radius is below one:</p><pre><code class="language-julia hljs">(stationary=is_stationary(dfm),
  max_modulus=round(maximum(abs.(eigvals(companion_matrix_factors(dfm)))), digits=4))</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">(stationary = true, max_modulus = 0.8655)</code></pre><hr/><h2 id="Forecasting"><a class="docs-heading-anchor" href="#Forecasting">Forecasting</a><a id="Forecasting-1"></a><a class="docs-heading-anchor-permalink" href="#Forecasting" title="Permalink"></a></h2><p>Factor forecasts extrapolate the factor VAR forward and project the result onto the observables through the loading matrix. <code>forecast</code> accepts a <code>FactorModel</code> (fitting a VAR on the extracted factors internally), a <code>DynamicFactorModel</code>, or a <code>GeneralizedDynamicFactorModel</code>.</p><p class="math-container">\[\hat{F}_{T+h|T} = \hat{A}_1 \hat{F}_{T+h-1|T} + \cdots + \hat{A}_p \hat{F}_{T+h-p|T}\]</p><p>where:</p><ul><li><span>$\hat{F}_{T+h|T}$</span> is the <span>$h$</span>-step-ahead factor forecast given information at <span>$T$</span></li><li><span>$\hat{A}_1, \ldots, \hat{A}_p$</span> are the estimated factor VAR coefficient matrices</li></ul><p>Observable forecasts follow from the loadings:</p><p class="math-container">\[\hat{X}_{T+h|T} = \hat{\Lambda} \hat{F}_{T+h|T}\]</p><p>where:</p><ul><li><span>$\hat{X}_{T+h|T}$</span> is the <span>$N \times 1$</span> vector of observable forecasts</li><li><span>$\hat{\Lambda}$</span> is the <span>$N \times r$</span> estimated loading matrix</li></ul><p>Theoretical intervals compute the <span>$h$</span>-step forecast error covariance analytically from the VMA(<span>$\infty$</span>) representation:</p><p class="math-container">\[\text{MSE}_h = \sum_{j=0}^{h-1} \Psi_j \, \Sigma_\eta \, \Psi_j&#39;\]</p><p>where:</p><ul><li><span>$\Psi_j = J C^j$</span> are the VMA coefficient matrices from the companion form</li><li><span>$C$</span> is the companion matrix of the factor VAR</li><li><span>$J$</span> selects the first <span>$r$</span> rows</li><li><span>$\Sigma_\eta$</span> is the factor innovation covariance</li></ul><table><tr><th style="text-align: right"><code>ci_method</code></th><th style="text-align: right">Description</th><th style="text-align: right">Available for</th><th style="text-align: right">Best for</th></tr><tr><td style="text-align: right"><code>:none</code></td><td style="text-align: right">Point forecast only, zero bounds</td><td style="text-align: right">all three model types</td><td style="text-align: right">Quick exploration</td></tr><tr><td style="text-align: right"><code>:theoretical</code></td><td style="text-align: right">Analytical VMA intervals, Gaussian</td><td style="text-align: right">all three model types</td><td style="text-align: right">Large samples, fastest</td></tr><tr><td style="text-align: right"><code>:bootstrap</code></td><td style="text-align: right">Resampling of factor VAR residuals</td><td style="text-align: right">all three model types</td><td style="text-align: right">Non-Gaussian innovations</td></tr><tr><td style="text-align: right"><code>:simulation</code></td><td style="text-align: right">Monte Carlo draws from the fitted state space</td><td style="text-align: right"><code>DynamicFactorModel</code> only</td><td style="text-align: right">Full uncertainty propagation</td></tr></table><pre><code class="language-julia hljs">dfm2 = estimate_dynamic_factors(X, 2, 1)
 fc = forecast(dfm2, 10; ci_method=:bootstrap, n_boot=50, conf_level=0.95)
-report(fc)</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">          Factor Forecast
+report(fc)</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi"><span class="sgr1">          Factor Forecast</span>
 
   Horizon                      10
   Factors                       2
   Observables                 126
   CI method     bootstrap (95.0%)
 
-    Observable Forecasts (first 8 of 126)
+<span class="sgr1">    Observable Forecasts (first 8 of 126)</span>
 
-             h=1      h=4      h=8     h=10
+ <span class="sgr1">      </span> <span class="sgr1">     h=1 </span> <span class="sgr1">    h=4 </span> <span class="sgr1">    h=8 </span> <span class="sgr1">   h=10 </span>
 
   obs1    0.0001   0.0008   0.0011   0.0012
   obs2    0.0021   0.0020   0.0019   0.0019
@@ -243,9 +243,9 @@ report(fc)</code></pre><pre class="documenter-example-output"><code class="nohig
     bandwidth=0,          # 0 selects T^(1/3)
     kernel=:bartlett      # :bartlett, :parzen, or :tukey
 )
-report(gdfm)</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">Generalized Dynamic Factor Model (q=2, r=2)
+report(gdfm)</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi"><span class="sgr1">Generalized Dynamic Factor Model (q=2, r=2)</span>
 
-  Specification
+ <span class="sgr1"> Specification   </span> <span class="sgr1">          </span>
 
   Dynamic factors          2
   Static factors           2
@@ -255,9 +255,9 @@ report(gdfm)</code></pre><pre class="documenter-example-output"><code class="noh
   Bandwidth                4
   Standardized           Yes
 
-         Variance Explained
+<span class="sgr1">         Variance Explained</span>
 
-             Variance   Cumulative
+ <span class="sgr1">          </span> <span class="sgr1"> Variance </span> <span class="sgr1"> Cumulative </span>
 
   Factor 1      45.5%        45.5%
   Factor 2      18.7%        64.1%</code></pre><pre><code class="language-julia hljs">chi = gdfm.common_component      # T × N common component
@@ -282,9 +282,9 @@ blocks = Dict(
 )
 
 fm_block = estimate_factors(X_block, 3; blocks=blocks)
-report(fm_block)</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">     Static Factor Model (r=3)
+report(fm_block)</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi"><span class="sgr1">     Static Factor Model (r=3)</span>
 
-  Specification
+ <span class="sgr1"> Specification </span> <span class="sgr1">                  </span>
 
   Factors                        3
   Variables                     15
@@ -292,17 +292,17 @@ report(fm_block)</code></pre><pre class="documenter-example-output"><code class=
   Standardized                 Yes
   Estimation      Block-Restricted
 
-         Variance Explained
+<span class="sgr1">Variance Explained (per-block share)</span>
 
-              Variance   Cumulative
+ <span class="sgr1">           </span> <span class="sgr1"> Variance </span>
 
-  nominal        24.5%        24.5%
-  real           17.7%        42.2%
-  financial      17.2%        59.4%
+  nominal        70.2%
+  real           52.2%
+  financial      50.9%
 
-Top Loadings — nominal
+<span class="sgr1">Top Loadings — nominal</span>
 
-  Variable   Loading
+ <span class="sgr1"> Variable </span> <span class="sgr1"> Loading </span>
 
   Var 7      -0.9687
   Var 6      -0.9659
@@ -310,9 +310,9 @@ Top Loadings — nominal
   Var 9      -0.8536
   Var 10     -0.1095
 
- Top Loadings — real
+<span class="sgr1"> Top Loadings — real</span>
 
-  Variable   Loading
+ <span class="sgr1"> Variable </span> <span class="sgr1"> Loading </span>
 
   Var 4      -0.9194
   Var 1      -0.9022
@@ -320,9 +320,9 @@ Top Loadings — nominal
   Var 2      -0.5004
   Var 3       0.2644
 
-Top Loadings — financial
+<span class="sgr1">Top Loadings — financial</span>
 
-  Variable   Loading
+ <span class="sgr1"> Variable </span> <span class="sgr1"> Loading </span>
 
   Var 13     -0.8501
   Var 12     -0.7421
@@ -335,9 +335,9 @@ Top Loadings — financial
 X20 = X[:, [findfirst(==(v), varnames(fred)) for v in struct_series]]
 
 sdfm20 = estimate_structural_dfm(X20, 2; identification=:cholesky, p=1, H=20)
-report(sdfm20)</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">Structural DFM (q=2, p=1, Cholesky)
+report(sdfm20)</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi"><span class="sgr1">Structural DFM (q=2, p=1, Cholesky)</span>
 
-  Specification
+ <span class="sgr1"> Specification       </span> <span class="sgr1">          </span>
 
   Dynamic factors (q)          2
   Panel variables (N)         20
@@ -348,69 +348,69 @@ report(sdfm20)</code></pre><pre class="documenter-example-output"><code class="n
   Kernel                bartlett
   Bandwidth                    4
 
-         Variance Explained
+<span class="sgr1">         Variance Explained</span>
 
-             Variance   Cumulative
+ <span class="sgr1">          </span> <span class="sgr1"> Variance </span> <span class="sgr1"> Cumulative </span>
 
   Factor 1      57.0%        57.0%
   Factor 2      22.6%        79.6%
 
-        Impact Matrix B0
+<span class="sgr1">        Impact Matrix B0</span>
 
-             Shock 1   Shock 2
+ <span class="sgr1">          </span> <span class="sgr1"> Shock 1 </span> <span class="sgr1"> Shock 2 </span>
 
   Factor 1    0.9221    0.0000
   Factor 2   -0.0603    0.9701</code></pre><pre><code class="language-julia hljs">d = fevd(sdfm20, 20)
-report(d)</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">Forecast Error Variance Decomposition
+report(d)</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi"><span class="sgr1">Forecast Error Variance Decomposition</span>
 
   Variables    2
   Shocks       2
   Horizon     20
 
-              h = 1
+<span class="sgr1">              h = 1</span>
 
-             Factor 1   Factor 2
+ <span class="sgr1">          </span> <span class="sgr1"> Factor 1 </span> <span class="sgr1"> Factor 2 </span>
 
   Factor 1     100.0%       0.0%
   Factor 2       0.4%      99.6%
 
-              h = 4
+<span class="sgr1">              h = 4</span>
 
-             Factor 1   Factor 2
-
-  Factor 1      99.8%       0.2%
-  Factor 2       0.4%      99.6%
-
-              h = 8
-
-             Factor 1   Factor 2
+ <span class="sgr1">          </span> <span class="sgr1"> Factor 1 </span> <span class="sgr1"> Factor 2 </span>
 
   Factor 1      99.8%       0.2%
   Factor 2       0.4%      99.6%
 
-              h = 12
+<span class="sgr1">              h = 8</span>
 
-             Factor 1   Factor 2
+ <span class="sgr1">          </span> <span class="sgr1"> Factor 1 </span> <span class="sgr1"> Factor 2 </span>
 
   Factor 1      99.8%       0.2%
   Factor 2       0.4%      99.6%
 
-              h = 20
+<span class="sgr1">              h = 12</span>
 
-             Factor 1   Factor 2
+ <span class="sgr1">          </span> <span class="sgr1"> Factor 1 </span> <span class="sgr1"> Factor 2 </span>
+
+  Factor 1      99.8%       0.2%
+  Factor 2       0.4%      99.6%
+
+<span class="sgr1">              h = 20</span>
+
+ <span class="sgr1">          </span> <span class="sgr1"> Factor 1 </span> <span class="sgr1"> Factor 2 </span>
 
   Factor 1      99.8%       0.2%
   Factor 2       0.4%      99.6%</code></pre><p>The impact matrix is nearly diagonal — 0.92 on the first factor, 0.97 on the second, with a cross-term of <span>$-0.06$</span> — so the recursive ordering is close to a relabelling here rather than a substantive restriction. The FEVD confirms it: the first structural shock explains 100% of the first factor&#39;s forecast error at impact and 99.8% at <span>$h = 20$</span>, while never accounting for as much as 0.4% of the second factor&#39;s at any horizon. Nearly orthogonal factor innovations are the normal case for GDFM factors, since the frequency-domain eigenvectors are orthonormal by construction.</p><div class="admonition is-info" id="Technical-Note-6507714dc7b560d4"><header class="admonition-header">Technical Note<a class="admonition-anchor" href="#Technical-Note-6507714dc7b560d4" title="Permalink"></a></header><div class="admonition-body"><p>Time-domain loadings are obtained by regression, <span>$\hat\Lambda = \left[(F&#39;F)^{-1}F&#39;X\right]&#39;$</span>, on the <strong>untransformed</strong> panel — not from the spectral loadings. Panel IRFs are therefore in the original units of each series, so responses are not comparable across variables measured on different scales.</p></div></div><pre><code class="language-julia hljs">r20 = irf(sdfm20, 20)
-report(r20)</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">Impulse Response Functions
+report(r20)</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi"><span class="sgr1">Impulse Response Functions</span>
 
   Variables     20
   Shocks         2
   Horizon       20
   CI          None
 
-                           Shock: Shock 1
+<span class="sgr1">                           Shock: Shock 1</span>
 
-               h=1         h=4         h=8        h=12        h=20
+ <span class="sgr1">        </span> <span class="sgr1">     h=1 </span> <span class="sgr1">       h=4 </span> <span class="sgr1">       h=8 </span> <span class="sgr1">      h=12 </span> <span class="sgr1">      h=20 </span>
 
   Var 1     0.0003    1.17e-06    6.37e-10    3.45e-13    1.02e-19
   Var 2     0.0002    7.46e-07    4.05e-10    2.19e-13    6.46e-20
@@ -433,9 +433,9 @@ report(r20)</code></pre><pre class="documenter-example-output"><code class="nohi
   Var 19   -0.1020     -0.0004   -1.97e-07   -1.07e-10   -3.14e-17
   Var 20    0.0199      0.0001    3.84e-08    2.08e-11    6.13e-18
 
-                           Shock: Shock 2
+<span class="sgr1">                           Shock: Shock 2</span>
 
-                h=1         h=4         h=8        h=12        h=20
+ <span class="sgr1">        </span> <span class="sgr1">      h=1 </span> <span class="sgr1">       h=4 </span> <span class="sgr1">       h=8 </span> <span class="sgr1">      h=12 </span> <span class="sgr1">      h=20 </span>
 
   Var 1      0.0005    4.56e-07    2.44e-10    1.32e-13     3.9e-20
   Var 2    2.55e-05    2.85e-07    1.55e-10    8.41e-14    2.48e-20
@@ -472,16 +472,16 @@ round.(sdfm_two.B0, digits=4)</code></pre><pre class="documenter-example-output"
   0.9221  0.0
  -0.0603  0.9701</code></pre><h3 id="Panel-IRFs"><a class="docs-heading-anchor" href="#Panel-IRFs">Panel IRFs</a><a id="Panel-IRFs-1"></a><a class="docs-heading-anchor-permalink" href="#Panel-IRFs" title="Permalink"></a></h3><p><code>sdfm_panel_irf</code> projects factor-space impulse responses onto all <span>$N$</span> observables through <span>$\Lambda$</span>, the structural-DFM counterpart of <a href="../favar/#favar_page"><code>favar_panel_irf</code></a>. Two forms are available:</p><pre><code class="language-julia hljs"># Form 1: convenience — recomputes factor IRFs from the VAR, so any horizon is available
 panel_irf = sdfm_panel_irf(sdfm20, 20)
-report(panel_irf)</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">Impulse Response Functions
+report(panel_irf)</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi"><span class="sgr1">Impulse Response Functions</span>
 
   Variables     20
   Shocks         2
   Horizon       20
   CI          None
 
-                           Shock: Shock 1
+<span class="sgr1">                           Shock: Shock 1</span>
 
-               h=1         h=4         h=8        h=12        h=20
+ <span class="sgr1">        </span> <span class="sgr1">     h=1 </span> <span class="sgr1">       h=4 </span> <span class="sgr1">       h=8 </span> <span class="sgr1">      h=12 </span> <span class="sgr1">      h=20 </span>
 
   Var 1     0.0003    1.17e-06    6.37e-10    3.45e-13    1.02e-19
   Var 2     0.0002    7.46e-07    4.05e-10    2.19e-13    6.46e-20
@@ -504,9 +504,9 @@ report(panel_irf)</code></pre><pre class="documenter-example-output"><code class
   Var 19   -0.1020     -0.0004   -1.97e-07   -1.07e-10   -3.14e-17
   Var 20    0.0199      0.0001    3.84e-08    2.08e-11    6.13e-18
 
-                           Shock: Shock 2
+<span class="sgr1">                           Shock: Shock 2</span>
 
-                h=1         h=4         h=8        h=12        h=20
+ <span class="sgr1">        </span> <span class="sgr1">      h=1 </span> <span class="sgr1">       h=4 </span> <span class="sgr1">       h=8 </span> <span class="sgr1">      h=12 </span> <span class="sgr1">      h=20 </span>
 
   Var 1      0.0005    4.56e-07    2.44e-10    1.32e-13     3.9e-20
   Var 2    2.55e-05    2.85e-07    1.55e-10    8.41e-14    2.48e-20
@@ -534,9 +534,9 @@ size(panel_irf2.values)</code></pre><pre class="documenter-example-output"><code
 ic_full = ic_criteria(X, 10)
 (IC1=ic_full.r_IC1, IC2=ic_full.r_IC2, IC3=ic_full.r_IC3)</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">(IC1 = 4, IC2 = 4, IC3 = 10)</code></pre><pre><code class="language-julia hljs"># Step 2: static factor model at the IC2 choice
 fm_full = estimate_factors(X, ic_full.r_IC2; standardize=true)
-report(fm_full)</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">Static Factor Model (r=4)
+report(fm_full)</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi"><span class="sgr1">Static Factor Model (r=4)</span>
 
-  Specification
+ <span class="sgr1"> Specification </span> <span class="sgr1">     </span>
 
   Factors           4
   Variables       126
@@ -544,18 +544,18 @@ report(fm_full)</code></pre><pre class="documenter-example-output"><code class="
   Standardized    Yes
   Estimation      PCA
 
-         Variance Explained
+<span class="sgr1">         Variance Explained</span>
 
-             Variance   Cumulative
+ <span class="sgr1">          </span> <span class="sgr1"> Variance </span> <span class="sgr1"> Cumulative </span>
 
   Factor 1      17.3%        17.3%
   Factor 2      11.4%        28.7%
   Factor 3       9.0%        37.8%
   Factor 4       7.0%        44.8%
 
-Top Loadings — Factor 1
+<span class="sgr1">Top Loadings — Factor 1</span>
 
-  Variable   Loading
+ <span class="sgr1"> Variable </span> <span class="sgr1"> Loading </span>
 
   Var 90      0.8723
   Var 93      0.8561
@@ -563,9 +563,9 @@ Top Loadings — Factor 1
   Var 92      0.8364
   Var 53      0.8217
 
-Top Loadings — Factor 2
+<span class="sgr1">Top Loadings — Factor 2</span>
 
-  Variable   Loading
+ <span class="sgr1"> Variable </span> <span class="sgr1"> Loading </span>
 
   Var 63     -0.7863
   Var 16      0.7849
@@ -573,9 +573,9 @@ Top Loadings — Factor 2
   Var 6       0.7302
   Var 15      0.7300
 
-Top Loadings — Factor 3
+<span class="sgr1">Top Loadings — Factor 3</span>
 
-  Variable   Loading
+ <span class="sgr1"> Variable </span> <span class="sgr1"> Loading </span>
 
   Var 114    -0.8661
   Var 105    -0.8652
@@ -583,9 +583,9 @@ Top Loadings — Factor 3
   Var 113    -0.8603
   Var 107    -0.8144</code></pre><pre><code class="language-julia hljs"># Step 3: dynamic factor model with VAR(1) factor dynamics
 dfm_full = estimate_dynamic_factors(X, ic_full.r_IC2, 1; method=:twostep, standardize=true)
-report(dfm_full)</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">Dynamic Factor Model (r=4, p=1)
+report(dfm_full)</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi"><span class="sgr1">Dynamic Factor Model (r=4, p=1)</span>
 
-  Specification
+ <span class="sgr1"> Specification  </span> <span class="sgr1">            </span>
 
   Factors                   4
   Lags                      1
@@ -596,9 +596,9 @@ report(dfm_full)</code></pre><pre class="documenter-example-output"><code class=
   Converged               Yes
   Iterations                1
 
-         Variance Explained
+<span class="sgr1">         Variance Explained</span>
 
-             Variance   Cumulative
+ <span class="sgr1">          </span> <span class="sgr1"> Variance </span> <span class="sgr1"> Cumulative </span>
 
   Factor 1      17.3%        17.3%
   Factor 2      11.4%        28.7%
@@ -608,16 +608,16 @@ report(dfm_full)</code></pre><pre class="documenter-example-output"><code class=
  mean_r2_dynamic=round(mean(r2(dfm_full)), digits=3),
  stationary=is_stationary(dfm_full))</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">(mean_r2_static = 0.448, mean_r2_dynamic = 0.448, stationary = true)</code></pre><pre><code class="language-julia hljs"># Step 5: 12-step forecast with theoretical intervals
 fc_full = forecast(dfm_full, 12; ci_method=:theoretical, conf_level=0.95)
-report(fc_full)</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">           Factor Forecast
+report(fc_full)</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi"><span class="sgr1">           Factor Forecast</span>
 
   Horizon                        12
   Factors                         4
   Observables                   126
   CI method     theoretical (95.0%)
 
-   Observable Forecasts (first 8 of 126)
+<span class="sgr1">   Observable Forecasts (first 8 of 126)</span>
 
-            h=1      h=4      h=8     h=12
+ <span class="sgr1">      </span> <span class="sgr1">    h=1 </span> <span class="sgr1">    h=4 </span> <span class="sgr1">    h=8 </span> <span class="sgr1">   h=12 </span>
 
   obs1   0.0018   0.0008   0.0013   0.0014
   obs2   0.0022   0.0020   0.0019   0.0019
@@ -626,4 +626,4 @@ report(fc_full)</code></pre><pre class="documenter-example-output"><code class="
   obs5   0.0055   0.0045   0.0048   0.0049
   obs6   0.0014   0.0008   0.0009   0.0009
   obs7   0.0010   0.0004   0.0004   0.0004
-  obs8   0.0009   0.0003   0.0003   0.0004</code></pre><pre><code class="language-julia hljs">plot_result(fc_full)</code></pre><iframe src="../assets/plots/forecast_factor.html" width="100%" height="400" frameborder="0" style="border:1px solid #ddd;border-radius:4px;"></iframe><p>IC2 selects four factors, one more than the three used in the sections above, and the fourth factor lifts the panel-average <span>$R^2$</span> from 0.378 to 0.448. Static and dynamic estimates share the same PCA factors under <code>:twostep</code>, so their <span>$R^2$</span> values coincide exactly; the dynamic model adds the VAR(1) law of motion that the forecast needs. The factor VAR is stationary, so the 12-step forecast bands widen and then settle at the unconditional standard deviation instead of diverging.</p><hr/><h2 id="Common-Pitfalls"><a class="docs-heading-anchor" href="#Common-Pitfalls">Common Pitfalls</a><a id="Common-Pitfalls-1"></a><a class="docs-heading-anchor-permalink" href="#Common-Pitfalls" title="Permalink"></a></h2><ol><li><p><strong>Choosing <span>$r$</span> from the scree plot alone.</strong> The elbow is subjective and moves with the standardization choice. Run <code>ic_criteria(X, r_max)</code> and check that IC1, IC2, and IC3 agree. When a criterion returns exactly <code>r_max</code>, as IC3 does on the 60-observation panel here, its penalty has failed rather than found ten factors — enlarge <code>r_max</code> and prefer the interior selection.</p></li><li><p><strong>Reading loadings as structural parameters.</strong> Loadings are identified only up to an <span>$r \times r$</span> rotation, so individual signs and magnitudes are not invariant. Use <code>blocks=</code> to label factors by construction, or interpret only rotation-invariant quantities such as <code>r2</code> and the variance shares.</p></li><li><p><strong>Skipping standardization.</strong> With heterogeneous scales — interest rates in percent next to index levels — the high-variance series dominate the principal components entirely. <code>standardize=true</code> is the default; override it only when every series is already comparably scaled.</p></li><li><p><strong>Misspecifying the block structure.</strong> Block-restricted estimation requires exactly <span>$r$</span> blocks, no variable in two blocks, indices within <span>$[1, N]$</span>, and at least 2 variables per block. Each violation raises an <code>ArgumentError</code> naming the offending block.</p></li><li><p><strong>Applying the GDFM to a narrow panel.</strong> The spectral estimator needs <span>$N$</span> and <span>$T$</span> to grow jointly; with fewer than about 20 series the <span>$N \times N$</span> spectral density is too noisy to separate diverging from bounded eigenvalues. Use a two-step or EM DFM instead.</p></li><li><p><strong>Forecasting from non-stationary factor dynamics.</strong> The forecast recursion assumes the factor companion matrix is stable. Check <code>is_stationary(dfm)</code> first; if it fails, either reduce <span>$p$</span> or difference the offending series before extraction, since a unit root in a factor makes every horizon&#39;s interval meaningless.</p></li><li><p><strong>Comparing panel IRF magnitudes across series.</strong> <code>sdfm_panel_irf</code> and <code>irf(::StructuralDFM, H)</code> return responses in each variable&#39;s own units, because the time-domain loadings are regressed on the untransformed panel. Rescale by each series&#39; standard deviation before ranking responses.</p></li></ol><hr/><h2 id="References"><a class="docs-heading-anchor" href="#References">References</a><a id="References-1"></a><a class="docs-heading-anchor-permalink" href="#References" title="Permalink"></a></h2><ul><li><p>Bai, J. (2003). Inferential Theory for Factor Models of Large Dimensions. <em>Econometrica</em>, 71(1), 135-171. <a href="https://doi.org/10.1111/1468-0262.00392">DOI</a></p></li><li><p>Bai, J., &amp; Ng, S. (2002). Determining the Number of Factors in Approximate Factor Models. <em>Econometrica</em>, 70(1), 191-221. <a href="https://doi.org/10.1111/1468-0262.00273">DOI</a></p></li><li><p>Bai, J., &amp; Ng, S. (2006). Confidence Intervals for Diffusion Index Forecasts and Inference for Factor-Augmented Regressions. <em>Econometrica</em>, 74(4), 1133-1150. <a href="https://doi.org/10.1111/j.1468-0262.2006.00696.x">DOI</a></p></li><li><p>Doz, C., Giannone, D., &amp; Reichlin, L. (2011). A Two-Step Estimator for Large Approximate Dynamic Factor Models Based on Kalman Filtering. <em>Journal of Econometrics</em>, 164(1), 188-205. <a href="https://doi.org/10.1016/j.jeconom.2011.02.012">DOI</a></p></li><li><p>Doz, C., Giannone, D., &amp; Reichlin, L. (2012). A Quasi-Maximum Likelihood Approach for Large, Approximate Dynamic Factor Models. <em>Review of Economics and Statistics</em>, 94(4), 1014-1024. <a href="https://doi.org/10.1162/REST_a_00225">DOI</a></p></li><li><p>Forni, M., Giannone, D., Lippi, M., &amp; Reichlin, L. (2009). Opening the Black Box: Structural Factor Models with Large Cross-Sections. <em>Econometric Theory</em>, 25(5), 1319-1347. <a href="https://doi.org/10.1017/S026646660809052X">DOI</a></p></li><li><p>Forni, M., Hallin, M., Lippi, M., &amp; Reichlin, L. (2000). The Generalized Dynamic-Factor Model: Identification and Estimation. <em>Review of Economics and Statistics</em>, 82(4), 540-554. <a href="https://doi.org/10.1162/003465300559037">DOI</a></p></li><li><p>Forni, M., Hallin, M., Lippi, M., &amp; Reichlin, L. (2005). The Generalized Dynamic Factor Model: One-Sided Estimation and Forecasting. <em>Journal of the American Statistical Association</em>, 100(471), 830-840. <a href="https://doi.org/10.1198/016214504000002050">DOI</a></p></li><li><p>Hallin, M., &amp; Liska, R. (2007). Determining the Number of Factors in the General Dynamic Factor Model. <em>Journal of the American Statistical Association</em>, 102(478), 603-617. <a href="https://doi.org/10.1198/016214506000001275">DOI</a></p></li><li><p>McCracken, M. W., &amp; Ng, S. (2016). FRED-MD: A Monthly Database for Macroeconomic Research. <em>Journal of Business &amp; Economic Statistics</em>, 34(4), 574-589. <a href="https://doi.org/10.1080/07350015.2015.1086655">DOI</a></p></li><li><p>Stock, J. H., &amp; Watson, M. W. (2002a). Forecasting Using Principal Components from a Large Number of Predictors. <em>Journal of the American Statistical Association</em>, 97(460), 1167-1179. <a href="https://doi.org/10.1198/016214502388618960">DOI</a></p></li><li><p>Stock, J. H., &amp; Watson, M. W. (2002b). Macroeconomic Forecasting Using Diffusion Indexes. <em>Journal of Business &amp; Economic Statistics</em>, 20(2), 147-162. <a href="https://doi.org/10.1198/073500102317351921">DOI</a></p></li></ul></article><nav class="docs-footer"><a class="docs-footer-prevpage" href="../lp/">« Local Projections</a><a class="docs-footer-nextpage" href="../favar/">FAVAR »</a><div class="flexbox-break"></div><p class="footer-message">Powered by <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> and the <a href="https://julialang.org/">Julia Programming Language</a>.</p></nav></div><div class="modal" id="documenter-settings"><div class="modal-background"></div><div class="modal-card"><header class="modal-card-head"><p class="modal-card-title">Settings</p><button class="delete"></button></header><section class="modal-card-body"><p><label class="label">Theme</label><div class="select"><select id="documenter-themepicker"><option value="auto">Automatic (OS)</option><option value="documenter-light">documenter-light</option><option value="documenter-dark">documenter-dark</option><option value="catppuccin-latte">catppuccin-latte</option><option value="catppuccin-frappe">catppuccin-frappe</option><option value="catppuccin-macchiato">catppuccin-macchiato</option><option value="catppuccin-mocha">catppuccin-mocha</option></select></div></p><hr/><p>This document was generated with <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> version 1.17.0 on <span class="colophon-date" title="Sunday 2 August 2026 22:42">Sunday 2 August 2026</span>. Using Julia version 1.12.6.</p></section><footer class="modal-card-foot"></footer></div></div></div></body></html>
+  obs8   0.0009   0.0003   0.0003   0.0004</code></pre><pre><code class="language-julia hljs">plot_result(fc_full)</code></pre><iframe src="../assets/plots/forecast_factor.html" width="100%" height="400" frameborder="0" style="border:1px solid #ddd;border-radius:4px;"></iframe><p>IC2 selects four factors, one more than the three used in the sections above, and the fourth factor lifts the panel-average <span>$R^2$</span> from 0.378 to 0.448. Static and dynamic estimates share the same PCA factors under <code>:twostep</code>, so their <span>$R^2$</span> values coincide exactly; the dynamic model adds the VAR(1) law of motion that the forecast needs. The factor VAR is stationary, so the 12-step forecast bands widen and then settle at the unconditional standard deviation instead of diverging.</p><hr/><h2 id="Common-Pitfalls"><a class="docs-heading-anchor" href="#Common-Pitfalls">Common Pitfalls</a><a id="Common-Pitfalls-1"></a><a class="docs-heading-anchor-permalink" href="#Common-Pitfalls" title="Permalink"></a></h2><ol><li><p><strong>Choosing <span>$r$</span> from the scree plot alone.</strong> The elbow is subjective and moves with the standardization choice. Run <code>ic_criteria(X, r_max)</code> and check that IC1, IC2, and IC3 agree. When a criterion returns exactly <code>r_max</code>, as IC3 does on the 60-observation panel here, its penalty has failed rather than found ten factors — enlarge <code>r_max</code> and prefer the interior selection.</p></li><li><p><strong>Reading loadings as structural parameters.</strong> Loadings are identified only up to an <span>$r \times r$</span> rotation, so individual signs and magnitudes are not invariant. Use <code>blocks=</code> to label factors by construction, or interpret only rotation-invariant quantities such as <code>r2</code> and the variance shares.</p></li><li><p><strong>Skipping standardization.</strong> With heterogeneous scales — interest rates in percent next to index levels — the high-variance series dominate the principal components entirely. <code>standardize=true</code> is the default; override it only when every series is already comparably scaled.</p></li><li><p><strong>Misspecifying the block structure.</strong> Block-restricted estimation requires exactly <span>$r$</span> blocks, no variable in two blocks, indices within <span>$[1, N]$</span>, and at least 2 variables per block. Each violation raises an <code>ArgumentError</code> naming the offending block.</p></li><li><p><strong>Applying the GDFM to a narrow panel.</strong> The spectral estimator needs <span>$N$</span> and <span>$T$</span> to grow jointly; with fewer than about 20 series the <span>$N \times N$</span> spectral density is too noisy to separate diverging from bounded eigenvalues. Use a two-step or EM DFM instead.</p></li><li><p><strong>Forecasting from non-stationary factor dynamics.</strong> The forecast recursion assumes the factor companion matrix is stable. Check <code>is_stationary(dfm)</code> first; if it fails, either reduce <span>$p$</span> or difference the offending series before extraction, since a unit root in a factor makes every horizon&#39;s interval meaningless.</p></li><li><p><strong>Comparing panel IRF magnitudes across series.</strong> <code>sdfm_panel_irf</code> and <code>irf(::StructuralDFM, H)</code> return responses in each variable&#39;s own units, because the time-domain loadings are regressed on the untransformed panel. Rescale by each series&#39; standard deviation before ranking responses.</p></li></ol><hr/><h2 id="References"><a class="docs-heading-anchor" href="#References">References</a><a id="References-1"></a><a class="docs-heading-anchor-permalink" href="#References" title="Permalink"></a></h2><ul><li><p>Bai, J. (2003). Inferential Theory for Factor Models of Large Dimensions. <em>Econometrica</em>, 71(1), 135-171. <a href="https://doi.org/10.1111/1468-0262.00392">DOI</a></p></li><li><p>Bai, J., &amp; Ng, S. (2002). Determining the Number of Factors in Approximate Factor Models. <em>Econometrica</em>, 70(1), 191-221. <a href="https://doi.org/10.1111/1468-0262.00273">DOI</a></p></li><li><p>Bai, J., &amp; Ng, S. (2006). Confidence Intervals for Diffusion Index Forecasts and Inference for Factor-Augmented Regressions. <em>Econometrica</em>, 74(4), 1133-1150. <a href="https://doi.org/10.1111/j.1468-0262.2006.00696.x">DOI</a></p></li><li><p>Doz, C., Giannone, D., &amp; Reichlin, L. (2011). A Two-Step Estimator for Large Approximate Dynamic Factor Models Based on Kalman Filtering. <em>Journal of Econometrics</em>, 164(1), 188-205. <a href="https://doi.org/10.1016/j.jeconom.2011.02.012">DOI</a></p></li><li><p>Doz, C., Giannone, D., &amp; Reichlin, L. (2012). A Quasi-Maximum Likelihood Approach for Large, Approximate Dynamic Factor Models. <em>Review of Economics and Statistics</em>, 94(4), 1014-1024. <a href="https://doi.org/10.1162/REST_a_00225">DOI</a></p></li><li><p>Forni, M., Giannone, D., Lippi, M., &amp; Reichlin, L. (2009). Opening the Black Box: Structural Factor Models with Large Cross-Sections. <em>Econometric Theory</em>, 25(5), 1319-1347. <a href="https://doi.org/10.1017/S026646660809052X">DOI</a></p></li><li><p>Forni, M., Hallin, M., Lippi, M., &amp; Reichlin, L. (2000). The Generalized Dynamic-Factor Model: Identification and Estimation. <em>Review of Economics and Statistics</em>, 82(4), 540-554. <a href="https://doi.org/10.1162/003465300559037">DOI</a></p></li><li><p>Forni, M., Hallin, M., Lippi, M., &amp; Reichlin, L. (2005). The Generalized Dynamic Factor Model: One-Sided Estimation and Forecasting. <em>Journal of the American Statistical Association</em>, 100(471), 830-840. <a href="https://doi.org/10.1198/016214504000002050">DOI</a></p></li><li><p>Hallin, M., &amp; Liska, R. (2007). Determining the Number of Factors in the General Dynamic Factor Model. <em>Journal of the American Statistical Association</em>, 102(478), 603-617. <a href="https://doi.org/10.1198/016214506000001275">DOI</a></p></li><li><p>McCracken, M. W., &amp; Ng, S. (2016). FRED-MD: A Monthly Database for Macroeconomic Research. <em>Journal of Business &amp; Economic Statistics</em>, 34(4), 574-589. <a href="https://doi.org/10.1080/07350015.2015.1086655">DOI</a></p></li><li><p>Stock, J. H., &amp; Watson, M. W. (2002a). Forecasting Using Principal Components from a Large Number of Predictors. <em>Journal of the American Statistical Association</em>, 97(460), 1167-1179. <a href="https://doi.org/10.1198/016214502388618960">DOI</a></p></li><li><p>Stock, J. H., &amp; Watson, M. W. (2002b). Macroeconomic Forecasting Using Diffusion Indexes. <em>Journal of Business &amp; Economic Statistics</em>, 20(2), 147-162. <a href="https://doi.org/10.1198/073500102317351921">DOI</a></p></li></ul></article><nav class="docs-footer"><a class="docs-footer-prevpage" href="../lp/">« Local Projections</a><a class="docs-footer-nextpage" href="../favar/">FAVAR »</a><div class="flexbox-break"></div><p class="footer-message">Powered by <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> and the <a href="https://julialang.org/">Julia Programming Language</a>.</p></nav></div><div class="modal" id="documenter-settings"><div class="modal-background"></div><div class="modal-card"><header class="modal-card-head"><p class="modal-card-title">Settings</p><button class="delete"></button></header><section class="modal-card-body"><p><label class="label">Theme</label><div class="select"><select id="documenter-themepicker"><option value="auto">Automatic (OS)</option><option value="documenter-light">documenter-light</option><option value="documenter-dark">documenter-dark</option><option value="catppuccin-latte">catppuccin-latte</option><option value="catppuccin-frappe">catppuccin-frappe</option><option value="catppuccin-macchiato">catppuccin-macchiato</option><option value="catppuccin-mocha">catppuccin-mocha</option></select></div></p><hr/><p>This document was generated with <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> version 1.17.0 on <span class="colophon-date" title="Sunday 16 August 2026 12:19">Sunday 16 August 2026</span>. Using Julia version 1.12.6.</p></section><footer class="modal-card-foot"></footer></div></div></div></body></html>

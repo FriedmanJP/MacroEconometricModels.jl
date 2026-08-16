@@ -1,14 +1,14 @@
 <!DOCTYPE html>
-<html lang="en"><head><meta charset="UTF-8"/><meta name="viewport" content="width=device-width, initial-scale=1.0"/><title>Heterogeneous Agents · MacroEconometricModels.jl</title><meta name="title" content="Heterogeneous Agents · MacroEconometricModels.jl"/><meta property="og:title" content="Heterogeneous Agents · MacroEconometricModels.jl"/><meta property="twitter:title" content="Heterogeneous Agents · MacroEconometricModels.jl"/><meta name="description" content="Documentation for MacroEconometricModels.jl."/><meta property="og:description" content="Documentation for MacroEconometricModels.jl."/><meta property="twitter:description" content="Documentation for MacroEconometricModels.jl."/><meta property="og:url" content="https://FriedmanJP.github.io/MacroEconometricModels.jl/dsge_ha/"/><meta property="twitter:url" content="https://FriedmanJP.github.io/MacroEconometricModels.jl/dsge_ha/"/><link rel="canonical" href="https://FriedmanJP.github.io/MacroEconometricModels.jl/dsge_ha/"/><script data-outdated-warner src="../assets/warner.js"></script><link href="https://cdnjs.cloudflare.com/ajax/libs/lato-font/3.0.0/css/lato-font.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/juliamono/0.050/juliamono.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.2/css/fontawesome.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.2/css/solid.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.2/css/brands.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.8/katex.min.css" rel="stylesheet" type="text/css"/><script>documenterBaseURL=".."</script><script src="https://cdnjs.cloudflare.com/ajax/libs/require.js/2.3.6/require.min.js" data-main="../assets/documenter.js"></script><script src="../search_index.js"></script><script src="../siteinfo.js"></script><script src="../../versions.js"></script><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../assets/themes/catppuccin-mocha.css" data-theme-name="catppuccin-mocha"/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../assets/themes/catppuccin-macchiato.css" data-theme-name="catppuccin-macchiato"/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../assets/themes/catppuccin-frappe.css" data-theme-name="catppuccin-frappe"/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../assets/themes/catppuccin-latte.css" data-theme-name="catppuccin-latte"/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../assets/themes/documenter-dark.css" data-theme-name="documenter-dark" data-theme-primary-dark/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../assets/themes/documenter-light.css" data-theme-name="documenter-light" data-theme-primary/><script src="../assets/themeswap.js"></script><link href="../assets/custom.css" rel="stylesheet" type="text/css"/><script src="../assets/theme-toggle.js"></script></head><body><div id="documenter"><nav class="docs-sidebar"><div class="docs-package-name"><span class="docs-autofit"><a href="../">MacroEconometricModels.jl</a></span></div><button class="docs-search-query input is-rounded is-small is-clickable my-2 mx-auto py-1 px-2" id="documenter-search-query">Search docs (Ctrl + /)</button><ul class="docs-menu"><li><a class="tocitem" href="../">Home</a></li><li><span class="tocitem">Getting Started</span><ul><li><a class="tocitem" href="../getting_started/">Installation &amp; First Model</a></li><li><a class="tocitem" href="../method_guide/">Choosing a Method</a></li><li><a class="tocitem" href="../data/">Data Management</a></li></ul></li><li><span class="tocitem">Univariate Models</span><ul><li><a class="tocitem" href="../filters/">Time Series Filters</a></li><li><a class="tocitem" href="../x13/">X-13ARIMA-SEATS</a></li><li><a class="tocitem" href="../spectral/">Spectral Analysis</a></li><li><a class="tocitem" href="../arima/">ARIMA</a></li><li><a class="tocitem" href="../statespace/">State-Space Models</a></li><li><a class="tocitem" href="../volatility/">Volatility Models</a></li><li><a class="tocitem" href="../nonparametric/">Nonparametric Regression &amp; Density</a></li></ul></li><li><span class="tocitem">Multivariate Models</span><ul><li><a class="tocitem" href="../manual/">VAR</a></li><li><a class="tocitem" href="../bayesian/">Bayesian VAR</a></li><li><a class="tocitem" href="../vecm/">VECM</a></li><li><a class="tocitem" href="../ardl/">ARDL &amp; Bounds Test</a></li><li><a class="tocitem" href="../cointreg/">Cointegrating Regression</a></li><li><a class="tocitem" href="../lp/">Local Projections</a></li><li><a class="tocitem" href="../factormodels/">Factor Models</a></li><li><a class="tocitem" href="../favar/">FAVAR</a></li></ul></li><li><span class="tocitem">Nonlinear Time Series</span><ul><li><a class="tocitem" href="../nonlinear/">Threshold &amp; SETAR</a></li></ul></li><li><span class="tocitem">Cross-Section &amp; Panel</span><ul><li><a class="tocitem" href="../regression/">Linear Regression</a></li><li><a class="tocitem" href="../binary_choice/">Binary Choice Models</a></li><li><a class="tocitem" href="../ordered_multinomial/">Ordered &amp; Multinomial</a></li><li><a class="tocitem" href="../panel_reg/">Panel Regression</a></li><li><a class="tocitem" href="../pvar/">Panel VAR</a></li><li><a class="tocitem" href="../did/">Difference-in-Differences</a></li><li><a class="tocitem" href="../event_study/">Event Study LP</a></li></ul></li><li><a class="tocitem" href="../gmm/">GMM &amp; SMM</a></li><li><span class="tocitem">DSGE Models</span><ul><li><a class="tocitem" href="../dsge/">Overview</a></li><li><a class="tocitem" href="../dsge_linear/">Linear Solvers</a></li><li><a class="tocitem" href="../dsge_nonlinear/">Nonlinear Methods</a></li><li><a class="tocitem" href="../dsge_constraints/">Constraints</a></li><li><a class="tocitem" href="../dsge_estimation/">Estimation</a></li><li><a class="tocitem" href="../dsge_hd/">Historical Decomposition</a></li><li><input class="collapse-toggle" id="menuitem-8-7" type="checkbox" checked/><label class="tocitem" for="menuitem-8-7"><span class="docs-label">Heterogeneity &amp; Continuous Time</span><i class="docs-chevron"></i></label><ul class="collapsed"><li><a class="tocitem" href="../dsge_heterogeneity/">Overview</a></li><li class="is-active"><a class="tocitem" href>Heterogeneous Agents</a><ul class="internal"><li><a class="tocitem" href="#Quick-Start"><span>Quick Start</span></a></li><li><a class="tocitem" href="#Individual-Problem"><span>Individual Problem</span></a></li><li><a class="tocitem" href="#ha_grid"><span>The Asset Grid</span></a></li><li><a class="tocitem" href="#ha_labor"><span>Endogenous Labor Supply</span></a></li><li><a class="tocitem" href="#dcegm"><span>Discrete-Continuous Choice: DCEGM</span></a></li><li><a class="tocitem" href="#Income-Discretization"><span>Income Discretization</span></a></li><li><a class="tocitem" href="#Distribution-Tracking"><span>Distribution Tracking</span></a></li><li><a class="tocitem" href="#Steady-State"><span>Steady State</span></a></li><li><a class="tocitem" href="#Sequence-Space-Jacobian"><span>Sequence-Space Jacobian</span></a></li><li><a class="tocitem" href="#Reiter-Method"><span>Reiter Method</span></a></li><li><a class="tocitem" href="#Krusell-Smith-Method"><span>Krusell-Smith Method</span></a></li><li><a class="tocitem" href="#Accuracy:-the-Den-Haan-(2010)-Test"><span>Accuracy: the Den Haan (2010) Test</span></a></li><li><a class="tocitem" href="#Two-Asset-HANK"><span>Two-Asset HANK</span></a></li><li><a class="tocitem" href="#Huggett-(1993):-The-Risk-Free-Rate"><span>Huggett (1993): The Risk-Free Rate</span></a></li><li><a class="tocitem" href="#ssj_blocks"><span>Block Composition and Second-Order SSJ</span></a></li><li><a class="tocitem" href="#ha_winberry"><span>Winberry (2018) Parametric Distributions</span></a></li><li><a class="tocitem" href="#Built-in-Examples"><span>Built-in Examples</span></a></li><li><a class="tocitem" href="#Bayesian-Estimation"><span>Bayesian Estimation</span></a></li><li><a class="tocitem" href="#Complete-Example"><span>Complete Example</span></a></li><li><a class="tocitem" href="#Common-Pitfalls"><span>Common Pitfalls</span></a></li><li><a class="tocitem" href="#References"><span>References</span></a></li></ul></li><li><a class="tocitem" href="../dsge_olg/">Overlapping Generations</a></li><li><a class="tocitem" href="../dsge_continuous/">Continuous Time</a></li></ul></li></ul></li><li><span class="tocitem">Input-Output Analysis</span><ul><li><a class="tocitem" href="../io/">Overview</a></li><li><a class="tocitem" href="../io_classical/">Classical Analysis</a></li><li><a class="tocitem" href="../io_environmental/">Environmental Extensions</a></li><li><a class="tocitem" href="../io_baqaee_farhi/">Baqaee &amp; Farhi (2019)</a></li><li><a class="tocitem" href="../io_download/">Downloading Data</a></li></ul></li><li><span class="tocitem">Structural Analysis</span><ul><li><a class="tocitem" href="../structural_identification/">Structural Identification</a></li><li><input class="collapse-toggle" id="menuitem-10-2" type="checkbox"/><label class="tocitem" for="menuitem-10-2"><span class="docs-label">Statistical Identification</span><i class="docs-chevron"></i></label><ul class="collapsed"><li><a class="tocitem" href="../nongaussian/">Overview</a></li><li><a class="tocitem" href="../id_nongaussian/">Non-Gaussian Methods</a></li><li><a class="tocitem" href="../id_heteroskedastic/">Heteroskedasticity</a></li><li><a class="tocitem" href="../id_testing/">Testing</a></li></ul></li><li><input class="collapse-toggle" id="menuitem-10-3" type="checkbox"/><label class="tocitem" for="menuitem-10-3"><span class="docs-label">Innovation Accounting</span><i class="docs-chevron"></i></label><ul class="collapsed"><li><a class="tocitem" href="../innovation_accounting/">Overview</a></li><li><a class="tocitem" href="../ia_irf/">Impulse Responses</a></li><li><a class="tocitem" href="../ia_fevd/">Variance Decomposition</a></li><li><a class="tocitem" href="../ia_hd/">Historical Decomposition</a></li></ul></li></ul></li><li><span class="tocitem">Nowcasting</span><ul><li><a class="tocitem" href="../nowcast/">Overview</a></li><li><a class="tocitem" href="../nowcast_dfm/">DFM Nowcasting</a></li><li><a class="tocitem" href="../nowcast_bvar/">BVAR Nowcasting</a></li><li><a class="tocitem" href="../nowcast_bridge/">Bridge Equations</a></li><li><a class="tocitem" href="../nowcast_news/">News Decomposition</a></li><li><a class="tocitem" href="../midas/">MIDAS Regression</a></li></ul></li><li><a class="tocitem" href="../forecast_evaluation/">Forecast Evaluation</a></li><li><span class="tocitem">Hypothesis Tests</span><ul><li><a class="tocitem" href="../tests/">Overview</a></li><li><a class="tocitem" href="../tests_unitroot/">Unit Root &amp; Cointegration</a></li><li><a class="tocitem" href="../tests_unitroot_advanced/">Advanced Unit Root</a></li><li><a class="tocitem" href="../tests_cointegration/">Residual-Based Cointegration</a></li><li><a class="tocitem" href="../tests_breaks/">Structural Breaks</a></li><li><a class="tocitem" href="../tests_panel/">Panel Tests</a></li><li><a class="tocitem" href="../tests_diagnostics/">Model Diagnostics</a></li></ul></li><li><a class="tocitem" href="../plotting/">Visualization</a></li><li><span class="tocitem">Project</span><ul><li><a class="tocitem" href="../notation/">Notation</a></li><li><a class="tocitem" href="../bibliography/">Bibliography</a></li><li><a class="tocitem" href="../changelog/">Changelog</a></li><li><a class="tocitem" href="../citation/">How to Cite</a></li></ul></li><li><span class="tocitem">API Reference</span><ul><li><a class="tocitem" href="../api/">Overview</a></li><li><a class="tocitem" href="../api/data/">Data Management</a></li><li><a class="tocitem" href="../api/univariate/">Univariate Models</a></li><li><a class="tocitem" href="../api/multivariate/">Multivariate Models</a></li><li><a class="tocitem" href="../api/cross_section/">Cross-Sectional Models</a></li><li><a class="tocitem" href="../api/panel/">Panel Models</a></li><li><a class="tocitem" href="../api/dsge/">DSGE Models</a></li><li><a class="tocitem" href="../api/structural/">Structural &amp; Statistical Identification</a></li><li><a class="tocitem" href="../api/gmm/">GMM &amp; SMM</a></li><li><a class="tocitem" href="../api/tests/">Hypothesis Tests</a></li><li><a class="tocitem" href="../api/nowcasting/">Nowcasting</a></li><li><a class="tocitem" href="../api/visualization/">Visualization</a></li><li><a class="tocitem" href="../api/utilities/">Utilities &amp; Display</a></li></ul></li></ul><div class="docs-version-selector field has-addons"><div class="control"><span class="docs-label button is-static is-size-7">Version</span></div><div class="docs-selector control is-expanded"><div class="select is-fullwidth is-size-7"><select id="documenter-version-selector"></select></div></div></div></nav><div class="docs-main"><header class="docs-navbar"><a class="docs-sidebar-button docs-navbar-link fa-solid fa-bars is-hidden-desktop" id="documenter-sidebar-button" href="#"></a><nav class="breadcrumb"><ul class="is-hidden-mobile"><li><a class="is-disabled">DSGE Models</a></li><li><a class="is-disabled">Heterogeneity &amp; Continuous Time</a></li><li class="is-active"><a href>Heterogeneous Agents</a></li></ul><ul class="is-hidden-tablet"><li class="is-active"><a href>Heterogeneous Agents</a></li></ul></nav><div class="docs-right"><a class="docs-navbar-link" href="https://github.com/FriedmanJP/MacroEconometricModels.jl" title="View the repository on GitHub"><span class="docs-icon fa-brands"></span><span class="docs-label is-hidden-touch">GitHub</span></a><a class="docs-navbar-link" href="https://github.com/FriedmanJP/MacroEconometricModels.jl/blob/main/docs/src/dsge_ha.md#" title="Edit source on GitHub"><span class="docs-icon fa-solid"></span></a><a class="docs-settings-button docs-navbar-link fa-solid fa-gear" id="documenter-settings-button" href="#" title="Settings"></a><a class="docs-article-toggle-button fa-solid fa-chevron-up" id="documenter-article-toggle-button" href="javascript:;" title="Collapse all docstrings"></a></div></header><article class="content" id="documenter-page"><h1 id="dsge_ha"><a class="docs-heading-anchor" href="#dsge_ha">Heterogeneous Agent DSGE</a><a id="dsge_ha-1"></a><a class="docs-heading-anchor-permalink" href="#dsge_ha" title="Permalink"></a></h1><p>Standard DSGE models assume a <strong>representative agent</strong> whose decisions aggregate to macroeconomic outcomes. In reality, households differ in wealth, income, and consumption –- heterogeneity that shapes aggregate responses to shocks, especially monetary and fiscal policy. MacroEconometricModels.jl provides a complete toolkit for <strong>heterogeneous agent DSGE (HA-DSGE)</strong> models: the <strong>Endogenous Grid Method</strong> (Carroll 2006) and <strong>VFI</strong> for solving individual problems, <strong>Young (2010) histogram</strong> tracking for the wealth distribution, and three aggregate solution methods –- <strong>Sequence-Space Jacobian</strong> (Auclert, Bardóczy, Rognlie &amp; Straub 2021), <strong>Reiter (2009) linearization</strong>, and <strong>Krusell-Smith (1998) simulation</strong>. The module supports one-asset and two-asset HANK models with Bayesian estimation. This page is part of the <a href="../dsge_heterogeneity/#dsge_heterogeneity">Heterogeneity &amp; Continuous Time</a> sub-hub of the <a href="../dsge/#dsge_page">DSGE Models</a> suite; for the continuous-time formulation of the same class of models, see <a href="../dsge_continuous/#dsge_continuous">Continuous Time</a>.</p><ul><li>Individual problem solvers: EGM (one-asset and nested two-asset) and VFI with Howard improvement</li><li>Income discretization: Rouwenhorst (1995) and Tauchen (1986)</li><li>Endogenous labor supply: GHH (no wealth effect) and additively separable</li><li>Distribution: Young (2010) non-stochastic histogram with sparse transition matrices</li><li>Steady state: bisection on the interest rate with EGM + distribution + market clearing</li><li>Three aggregate solution methods: SSJ, Reiter, Krusell-Smith</li><li>Distribution representation: Young (2010) histogram or Winberry (2018) parametric moments</li><li>Built-in models: Krusell-Smith (1998), one-asset HANK, two-asset HANK, Huggett (1993), GHH endogenous labor</li><li>Bayesian estimation via RWMH + Kalman filter on reduced system</li><li>Visualization: wealth distribution, Lorenz curve, policy functions</li></ul><h2 id="Quick-Start"><a class="docs-heading-anchor" href="#Quick-Start">Quick Start</a><a id="Quick-Start-1"></a><a class="docs-heading-anchor-permalink" href="#Quick-Start" title="Permalink"></a></h2><p><strong>Recipe 1: Krusell-Smith steady state</strong></p><pre><code class="language-julia hljs">spec = load_ha_example(:krusell_smith)
+<html lang="en"><head><meta charset="UTF-8"/><meta name="viewport" content="width=device-width, initial-scale=1.0"/><title>Heterogeneous Agents · MacroEconometricModels.jl</title><meta name="title" content="Heterogeneous Agents · MacroEconometricModels.jl"/><meta property="og:title" content="Heterogeneous Agents · MacroEconometricModels.jl"/><meta property="twitter:title" content="Heterogeneous Agents · MacroEconometricModels.jl"/><meta name="description" content="Documentation for MacroEconometricModels.jl."/><meta property="og:description" content="Documentation for MacroEconometricModels.jl."/><meta property="twitter:description" content="Documentation for MacroEconometricModels.jl."/><meta property="og:url" content="https://FriedmanJP.github.io/MacroEconometricModels.jl/dsge_ha/"/><meta property="twitter:url" content="https://FriedmanJP.github.io/MacroEconometricModels.jl/dsge_ha/"/><link rel="canonical" href="https://FriedmanJP.github.io/MacroEconometricModels.jl/dsge_ha/"/><script data-outdated-warner src="../assets/warner.js"></script><link href="https://cdnjs.cloudflare.com/ajax/libs/lato-font/3.0.0/css/lato-font.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/juliamono/0.050/juliamono.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.2/css/fontawesome.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.2/css/solid.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.2/css/brands.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.8/katex.min.css" rel="stylesheet" type="text/css"/><script>documenterBaseURL=".."</script><script src="https://cdnjs.cloudflare.com/ajax/libs/require.js/2.3.6/require.min.js" data-main="../assets/documenter.js"></script><script src="../search_index.js"></script><script src="../siteinfo.js"></script><script src="../../versions.js"></script><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../assets/themes/catppuccin-mocha.css" data-theme-name="catppuccin-mocha"/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../assets/themes/catppuccin-macchiato.css" data-theme-name="catppuccin-macchiato"/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../assets/themes/catppuccin-frappe.css" data-theme-name="catppuccin-frappe"/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../assets/themes/catppuccin-latte.css" data-theme-name="catppuccin-latte"/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../assets/themes/documenter-dark.css" data-theme-name="documenter-dark" data-theme-primary-dark/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../assets/themes/documenter-light.css" data-theme-name="documenter-light" data-theme-primary/><script src="../assets/themeswap.js"></script><link href="../assets/custom.css" rel="stylesheet" type="text/css"/><script src="../assets/theme-toggle.js"></script></head><body><div id="documenter"><nav class="docs-sidebar"><div class="docs-package-name"><span class="docs-autofit"><a href="../">MacroEconometricModels.jl</a></span></div><button class="docs-search-query input is-rounded is-small is-clickable my-2 mx-auto py-1 px-2" id="documenter-search-query">Search docs (Ctrl + /)</button><ul class="docs-menu"><li><a class="tocitem" href="../">Home</a></li><li><span class="tocitem">Getting Started</span><ul><li><a class="tocitem" href="../getting_started/">Installation &amp; First Model</a></li><li><a class="tocitem" href="../method_guide/">Choosing a Method</a></li><li><a class="tocitem" href="../data/">Data Management</a></li></ul></li><li><span class="tocitem">Univariate Models</span><ul><li><a class="tocitem" href="../filters/">Time Series Filters</a></li><li><a class="tocitem" href="../x13/">X-13ARIMA-SEATS</a></li><li><a class="tocitem" href="../spectral/">Spectral Analysis</a></li><li><a class="tocitem" href="../arima/">ARIMA</a></li><li><a class="tocitem" href="../statespace/">State-Space Models</a></li><li><a class="tocitem" href="../volatility/">Volatility Models</a></li><li><a class="tocitem" href="../nonparametric/">Nonparametric Regression &amp; Density</a></li></ul></li><li><span class="tocitem">Multivariate Models</span><ul><li><a class="tocitem" href="../manual/">VAR</a></li><li><a class="tocitem" href="../bayesian/">Bayesian VAR</a></li><li><a class="tocitem" href="../vecm/">VECM</a></li><li><a class="tocitem" href="../ardl/">ARDL &amp; Bounds Test</a></li><li><a class="tocitem" href="../cointreg/">Cointegrating Regression</a></li><li><a class="tocitem" href="../lp/">Local Projections</a></li><li><a class="tocitem" href="../factormodels/">Factor Models</a></li><li><a class="tocitem" href="../favar/">FAVAR</a></li></ul></li><li><span class="tocitem">Nonlinear Time Series</span><ul><li><a class="tocitem" href="../nonlinear/">Threshold &amp; SETAR</a></li></ul></li><li><span class="tocitem">Cross-Section &amp; Panel</span><ul><li><a class="tocitem" href="../regression/">Linear Regression</a></li><li><a class="tocitem" href="../binary_choice/">Binary Choice Models</a></li><li><a class="tocitem" href="../ordered_multinomial/">Ordered &amp; Multinomial</a></li><li><a class="tocitem" href="../panel_reg/">Panel Regression</a></li><li><a class="tocitem" href="../pvar/">Panel VAR</a></li><li><a class="tocitem" href="../did/">Difference-in-Differences</a></li><li><a class="tocitem" href="../event_study/">Event Study LP</a></li></ul></li><li><a class="tocitem" href="../gmm/">GMM &amp; SMM</a></li><li><span class="tocitem">DSGE Models</span><ul><li><a class="tocitem" href="../dsge/">Overview</a></li><li><a class="tocitem" href="../dsge_linear/">Linear Solvers</a></li><li><a class="tocitem" href="../dsge_nonlinear/">Nonlinear Methods</a></li><li><a class="tocitem" href="../dsge_constraints/">Constraints</a></li><li><a class="tocitem" href="../dsge_estimation/">Estimation</a></li><li><a class="tocitem" href="../dsge_hd/">Historical Decomposition</a></li><li><input class="collapse-toggle" id="menuitem-8-7" type="checkbox" checked/><label class="tocitem" for="menuitem-8-7"><span class="docs-label">Heterogeneity &amp; Continuous Time</span><i class="docs-chevron"></i></label><ul class="collapsed"><li><a class="tocitem" href="../dsge_heterogeneity/">Overview</a></li><li class="is-active"><a class="tocitem" href>Heterogeneous Agents</a><ul class="internal"><li><a class="tocitem" href="#Quick-Start"><span>Quick Start</span></a></li><li><a class="tocitem" href="#Individual-Problem"><span>Individual Problem</span></a></li><li><a class="tocitem" href="#ha_grid"><span>The Asset Grid</span></a></li><li><a class="tocitem" href="#ha_labor"><span>Endogenous Labor Supply</span></a></li><li><a class="tocitem" href="#dcegm"><span>Discrete-Continuous Choice: DCEGM</span></a></li><li><a class="tocitem" href="#Income-Discretization"><span>Income Discretization</span></a></li><li><a class="tocitem" href="#Distribution-Tracking"><span>Distribution Tracking</span></a></li><li><a class="tocitem" href="#Steady-State"><span>Steady State</span></a></li><li><a class="tocitem" href="#Sequence-Space-Jacobian"><span>Sequence-Space Jacobian</span></a></li><li><a class="tocitem" href="#Reiter-Method"><span>Reiter Method</span></a></li><li><a class="tocitem" href="#Krusell-Smith-Method"><span>Krusell-Smith Method</span></a></li><li><a class="tocitem" href="#Accuracy:-the-Den-Haan-(2010)-Test"><span>Accuracy: the Den Haan (2010) Test</span></a></li><li><a class="tocitem" href="#Two-Asset-HANK"><span>Two-Asset HANK</span></a></li><li><a class="tocitem" href="#Huggett-(1993):-The-Risk-Free-Rate"><span>Huggett (1993): The Risk-Free Rate</span></a></li><li><a class="tocitem" href="#ssj_blocks"><span>Block Composition and Second-Order SSJ</span></a></li><li><a class="tocitem" href="#ha_winberry"><span>Winberry (2018) Parametric Distributions</span></a></li><li><a class="tocitem" href="#Built-in-Examples"><span>Built-in Examples</span></a></li><li><a class="tocitem" href="#Bayesian-Estimation"><span>Bayesian Estimation</span></a></li><li><a class="tocitem" href="#Complete-Example"><span>Complete Example</span></a></li><li><a class="tocitem" href="#Common-Pitfalls"><span>Common Pitfalls</span></a></li><li><a class="tocitem" href="#References"><span>References</span></a></li></ul></li><li><a class="tocitem" href="../dsge_olg/">Overlapping Generations</a></li><li><a class="tocitem" href="../dsge_continuous/">Continuous Time</a></li></ul></li></ul></li><li><span class="tocitem">Input-Output Analysis</span><ul><li><a class="tocitem" href="../io/">Overview</a></li><li><a class="tocitem" href="../io_classical/">Classical Analysis</a></li><li><a class="tocitem" href="../io_environmental/">Environmental Extensions</a></li><li><a class="tocitem" href="../io_mrio/">MRIO Trade Accounting</a></li><li><a class="tocitem" href="../io_baqaee_farhi/">Baqaee &amp; Farhi (2019)</a></li><li><a class="tocitem" href="../io_download/">Downloading Data</a></li></ul></li><li><span class="tocitem">Policy Counterfactuals</span><ul><li><a class="tocitem" href="../counterfactual/">Overview</a></li><li><a class="tocitem" href="../counterfactual_rules/">Rule Counterfactuals (McKay-Wolf)</a></li><li><a class="tocitem" href="../counterfactual_opp/">Optimal Policy Perturbations (Barnichon-Mesters)</a></li><li><a class="tocitem" href="../counterfactual_bank/">Model Bank &amp; Diagnostics (CMW)</a></li></ul></li><li><span class="tocitem">Structural Analysis</span><ul><li><a class="tocitem" href="../structural_identification/">Structural Identification</a></li><li><input class="collapse-toggle" id="menuitem-11-2" type="checkbox"/><label class="tocitem" for="menuitem-11-2"><span class="docs-label">Statistical Identification</span><i class="docs-chevron"></i></label><ul class="collapsed"><li><a class="tocitem" href="../nongaussian/">Overview</a></li><li><a class="tocitem" href="../id_nongaussian/">Non-Gaussian Methods</a></li><li><a class="tocitem" href="../id_heteroskedastic/">Heteroskedasticity</a></li><li><a class="tocitem" href="../id_testing/">Testing</a></li></ul></li><li><input class="collapse-toggle" id="menuitem-11-3" type="checkbox"/><label class="tocitem" for="menuitem-11-3"><span class="docs-label">Innovation Accounting</span><i class="docs-chevron"></i></label><ul class="collapsed"><li><a class="tocitem" href="../innovation_accounting/">Overview</a></li><li><a class="tocitem" href="../ia_irf/">Impulse Responses</a></li><li><a class="tocitem" href="../ia_fevd/">Variance Decomposition</a></li><li><a class="tocitem" href="../ia_hd/">Historical Decomposition</a></li></ul></li></ul></li><li><span class="tocitem">Nowcasting</span><ul><li><a class="tocitem" href="../nowcast/">Overview</a></li><li><a class="tocitem" href="../nowcast_dfm/">DFM Nowcasting</a></li><li><a class="tocitem" href="../nowcast_bvar/">BVAR Nowcasting</a></li><li><a class="tocitem" href="../nowcast_bridge/">Bridge Equations</a></li><li><a class="tocitem" href="../nowcast_news/">News Decomposition</a></li><li><a class="tocitem" href="../midas/">MIDAS Regression</a></li></ul></li><li><a class="tocitem" href="../forecast_evaluation/">Forecast Evaluation</a></li><li><span class="tocitem">Hypothesis Tests</span><ul><li><a class="tocitem" href="../tests/">Overview</a></li><li><a class="tocitem" href="../tests_unitroot/">Unit Root &amp; Cointegration</a></li><li><a class="tocitem" href="../tests_unitroot_advanced/">Advanced Unit Root</a></li><li><a class="tocitem" href="../tests_cointegration/">Residual-Based Cointegration</a></li><li><a class="tocitem" href="../tests_breaks/">Structural Breaks</a></li><li><a class="tocitem" href="../tests_panel/">Panel Tests</a></li><li><a class="tocitem" href="../tests_diagnostics/">Model Diagnostics</a></li></ul></li><li><a class="tocitem" href="../plotting/">Visualization</a></li><li><span class="tocitem">Project</span><ul><li><a class="tocitem" href="../notation/">Notation</a></li><li><a class="tocitem" href="../bibliography/">Bibliography</a></li><li><a class="tocitem" href="../changelog/">Changelog</a></li><li><a class="tocitem" href="../citation/">How to Cite</a></li></ul></li><li><span class="tocitem">API Reference</span><ul><li><a class="tocitem" href="../api/">Overview</a></li><li><a class="tocitem" href="../api/data/">Data Management</a></li><li><a class="tocitem" href="../api/univariate/">Univariate Models</a></li><li><a class="tocitem" href="../api/multivariate/">Multivariate Models</a></li><li><a class="tocitem" href="../api/cross_section/">Cross-Sectional Models</a></li><li><a class="tocitem" href="../api/panel/">Panel Models</a></li><li><a class="tocitem" href="../api/dsge/">DSGE Models</a></li><li><a class="tocitem" href="../api/structural/">Structural &amp; Statistical Identification</a></li><li><a class="tocitem" href="../api/counterfactual/">Policy Counterfactuals</a></li><li><a class="tocitem" href="../api/gmm/">GMM &amp; SMM</a></li><li><a class="tocitem" href="../api/tests/">Hypothesis Tests</a></li><li><a class="tocitem" href="../api/nowcasting/">Nowcasting</a></li><li><a class="tocitem" href="../api/visualization/">Visualization</a></li><li><a class="tocitem" href="../api/utilities/">Utilities &amp; Display</a></li></ul></li></ul><div class="docs-version-selector field has-addons"><div class="control"><span class="docs-label button is-static is-size-7">Version</span></div><div class="docs-selector control is-expanded"><div class="select is-fullwidth is-size-7"><select id="documenter-version-selector"></select></div></div></div></nav><div class="docs-main"><header class="docs-navbar"><a class="docs-sidebar-button docs-navbar-link fa-solid fa-bars is-hidden-desktop" id="documenter-sidebar-button" href="#"></a><nav class="breadcrumb"><ul class="is-hidden-mobile"><li><a class="is-disabled">DSGE Models</a></li><li><a class="is-disabled">Heterogeneity &amp; Continuous Time</a></li><li class="is-active"><a href>Heterogeneous Agents</a></li></ul><ul class="is-hidden-tablet"><li class="is-active"><a href>Heterogeneous Agents</a></li></ul></nav><div class="docs-right"><a class="docs-navbar-link" href="https://github.com/FriedmanJP/MacroEconometricModels.jl" title="View the repository on GitHub"><span class="docs-icon fa-brands"></span><span class="docs-label is-hidden-touch">GitHub</span></a><a class="docs-navbar-link" href="https://github.com/FriedmanJP/MacroEconometricModels.jl/blob/main/docs/src/dsge_ha.md#" title="Edit source on GitHub"><span class="docs-icon fa-solid"></span></a><a class="docs-settings-button docs-navbar-link fa-solid fa-gear" id="documenter-settings-button" href="#" title="Settings"></a><a class="docs-article-toggle-button fa-solid fa-chevron-up" id="documenter-article-toggle-button" href="javascript:;" title="Collapse all docstrings"></a></div></header><article class="content" id="documenter-page"><h1 id="dsge_ha"><a class="docs-heading-anchor" href="#dsge_ha">Heterogeneous Agent DSGE</a><a id="dsge_ha-1"></a><a class="docs-heading-anchor-permalink" href="#dsge_ha" title="Permalink"></a></h1><p>Standard DSGE models assume a <strong>representative agent</strong> whose decisions aggregate to macroeconomic outcomes. In reality, households differ in wealth, income, and consumption –- heterogeneity that shapes aggregate responses to shocks, especially monetary and fiscal policy. MacroEconometricModels.jl provides a complete toolkit for <strong>heterogeneous agent DSGE (HA-DSGE)</strong> models: the <strong>Endogenous Grid Method</strong> (Carroll 2006) and <strong>VFI</strong> for solving individual problems, <strong>Young (2010) histogram</strong> tracking for the wealth distribution, and three aggregate solution methods –- <strong>Sequence-Space Jacobian</strong> (Auclert, Bardóczy, Rognlie &amp; Straub 2021), <strong>Reiter (2009) linearization</strong>, and <strong>Krusell-Smith (1998) simulation</strong>. The module supports one-asset and two-asset HANK models with Bayesian estimation. This page is part of the <a href="../dsge_heterogeneity/#dsge_heterogeneity">Heterogeneity &amp; Continuous Time</a> sub-hub of the <a href="../dsge/#dsge_page">DSGE Models</a> suite; for the continuous-time formulation of the same class of models, see <a href="../dsge_continuous/#dsge_continuous">Continuous Time</a>.</p><ul><li>Individual problem solvers: EGM (one-asset and nested two-asset) and VFI with Howard improvement</li><li>Income discretization: Rouwenhorst (1995) and Tauchen (1986)</li><li>Endogenous labor supply: GHH (no wealth effect) and additively separable</li><li>Distribution: Young (2010) non-stochastic histogram with sparse transition matrices</li><li>Steady state: bisection on the interest rate with EGM + distribution + market clearing</li><li>Three aggregate solution methods: SSJ, Reiter, Krusell-Smith</li><li>Distribution representation: Young (2010) histogram or Winberry (2018) parametric moments</li><li>Built-in models: Krusell-Smith (1998), one-asset HANK, two-asset HANK, Huggett (1993), GHH endogenous labor</li><li>Bayesian estimation via RWMH + Kalman filter on reduced system</li><li>Visualization: wealth distribution, Lorenz curve, policy functions</li></ul><h2 id="Quick-Start"><a class="docs-heading-anchor" href="#Quick-Start">Quick Start</a><a id="Quick-Start-1"></a><a class="docs-heading-anchor-permalink" href="#Quick-Start" title="Permalink"></a></h2><p><strong>Recipe 1: Krusell-Smith steady state</strong></p><pre><code class="language-julia hljs">spec = load_ha_example(:krusell_smith)
 ss = compute_steady_state(spec; K_init=10.0, r_bounds=(-0.02, 0.04),
                            max_iter=80, tol=1e-4)
-report(ss)</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">Heterogeneous Agent Steady State
+report(ss)</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi"><span class="sgr1">Heterogeneous Agent Steady State</span>
 
 
 
-            Convergence
+<span class="sgr1">            Convergence</span>
 
-                            Value
+ <span class="sgr1">                     </span> <span class="sgr1">     Value </span>
 
   Converged                   Yes
   Iterations                   21
@@ -19,16 +19,16 @@ report(ss)</code></pre><pre class="documenter-example-output"><code class="nohig
     points evaluated         1390
     at grid nodes         -6.0397
 
-        Prices
+<span class="sgr1">        Prices</span>
 
-  Variable      Value
+ <span class="sgr1"> Variable </span> <span class="sgr1">    Value </span>
 
   r          0.007700
   w          2.466984
 
-         Aggregates
+<span class="sgr1">         Aggregates</span>
 
-  Variable           Value
+ <span class="sgr1"> Variable      </span> <span class="sgr1">    Value </span>
 
   A_policy         42.4366
   A_residual      1.42e-13
@@ -37,9 +37,9 @@ report(ss)</code></pre><pre class="documenter-example-output"><code class="nohig
   Y                 3.8547
   excess_demand    2.3e-05
 
-            Grid Adequacy
+<span class="sgr1">            Grid Adequacy</span>
 
-  Statistic                   Value
+ <span class="sgr1"> Statistic             </span> <span class="sgr1">     Value </span>
 
   a_max                   1000.0000
   Mass at ceiling (%)      4.36e-11
@@ -52,9 +52,9 @@ report(ss)</code></pre><pre class="documenter-example-output"><code class="nohig
   Relative residual        3.35e-15
   Verdict                  adequate
 
-      Wealth Distribution
+<span class="sgr1">      Wealth Distribution</span>
 
-  Statistic             Value
+ <span class="sgr1"> Statistic        </span> <span class="sgr1">    Value </span>
 
   Mean wealth         42.4366
   Gini coefficient     0.5624
@@ -64,22 +64,22 @@ report(ss)</code></pre><pre class="documenter-example-output"><code class="nohig
   P75                 60.3086
   P90                104.4411
   P99                207.3482</code></pre><p><strong>Recipe 2: Solve and compute IRFs via SSJ</strong></p><pre><code class="language-julia hljs">sol = solve(spec; method=:ssj, ss=ss, T_horizon=50, n_reduced=15)
-report(sol)</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">HA-DSGE Solution (Linearized)
+report(sol)</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi"><span class="sgr1">HA-DSGE Solution (Linearized)</span>
 
-                       Value
+ <span class="sgr1">                    </span> <span class="sgr1"> Value </span>
 
   Method                 ssj
   Full state dim          50
   Reduced state dim       15
   Explained variance   99.5%
 
-Heterogeneous Agent Steady State
+<span class="sgr1">Heterogeneous Agent Steady State</span>
 
 
 
-            Convergence
+<span class="sgr1">            Convergence</span>
 
-                            Value
+ <span class="sgr1">                     </span> <span class="sgr1">     Value </span>
 
   Converged                   Yes
   Iterations                   21
@@ -90,16 +90,16 @@ Heterogeneous Agent Steady State
     points evaluated         1390
     at grid nodes         -6.0397
 
-        Prices
+<span class="sgr1">        Prices</span>
 
-  Variable      Value
+ <span class="sgr1"> Variable </span> <span class="sgr1">    Value </span>
 
   r          0.007700
   w          2.466984
 
-         Aggregates
+<span class="sgr1">         Aggregates</span>
 
-  Variable           Value
+ <span class="sgr1"> Variable      </span> <span class="sgr1">    Value </span>
 
   A_policy         42.4366
   A_residual      1.42e-13
@@ -108,9 +108,9 @@ Heterogeneous Agent Steady State
   Y                 3.8547
   excess_demand    2.3e-05
 
-            Grid Adequacy
+<span class="sgr1">            Grid Adequacy</span>
 
-  Statistic                   Value
+ <span class="sgr1"> Statistic             </span> <span class="sgr1">     Value </span>
 
   a_max                   1000.0000
   Mass at ceiling (%)      4.36e-11
@@ -123,9 +123,9 @@ Heterogeneous Agent Steady State
   Relative residual        3.35e-15
   Verdict                  adequate
 
-      Wealth Distribution
+<span class="sgr1">      Wealth Distribution</span>
 
-  Statistic             Value
+ <span class="sgr1"> Statistic        </span> <span class="sgr1">    Value </span>
 
   Mean wealth         42.4366
   Gini coefficient     0.5624
@@ -143,27 +143,27 @@ size(panel)</code></pre><pre class="documenter-example-output"><code class="nohi
  p90  = round(ineq[:p90][1], digits=2))</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">(gini = 0.5624, p50 = 25.96, p90 = 104.44)</code></pre><p>Called on a steady state, <code>inequality_irf</code> returns the cross-sectional Gini and wealth percentiles repeated over <code>T_periods</code> –- nothing moves, because the stationary distribution is fixed. The 90th percentile sits several times the median, the right skew that borrowing constraints and precautionary saving produce. Pass an <code>HADSGESolution</code> instead to get genuine dynamics after an aggregate shock.</p><p><strong>Recipe 6: Krusell-Smith simulation method</strong></p><pre><code class="language-julia hljs">ks_result = solve(spec; method=:krusell_smith, ss=ss,
                   T_sim=500, T_burn=100, max_outer=3,
                   rho_z=0.95, sigma_z=0.007)
-report(ks_result)</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">[ Info: Krusell–Smith: solving the PLM fixed point by simulation (T_sim=500, max_outer=3) — this can take several minutes…
-Krusell-Smith Solution
+report(ks_result)</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi"><span class="sgr36"><span class="sgr1">[ Info: </span></span>Krusell–Smith: solving the PLM fixed point by simulation (T_sim=500, max_outer=3) — this can take several minutes…
+<span class="sgr1">Krusell-Smith Solution</span>
 
-               Value
+ <span class="sgr1">            </span> <span class="sgr1"> Value </span>
 
   Converged       No
   Iterations       3
 
-                 Perceived Law of Motion
+<span class="sgr1">                 Perceived Law of Motion</span>
 
-  Variable         b0         b1          b2         R²
+ <span class="sgr1"> Variable </span> <span class="sgr1">       b0 </span> <span class="sgr1">       b1 </span> <span class="sgr1">        b2 </span> <span class="sgr1">       R² </span>
 
   K          0.119510   0.968121   -0.013724   0.999996
 
-Heterogeneous Agent Steady State
+<span class="sgr1">Heterogeneous Agent Steady State</span>
 
 
 
-            Convergence
+<span class="sgr1">            Convergence</span>
 
-                            Value
+ <span class="sgr1">                     </span> <span class="sgr1">     Value </span>
 
   Converged                   Yes
   Iterations                   21
@@ -174,16 +174,16 @@ Heterogeneous Agent Steady State
     points evaluated         1390
     at grid nodes         -6.0397
 
-        Prices
+<span class="sgr1">        Prices</span>
 
-  Variable      Value
+ <span class="sgr1"> Variable </span> <span class="sgr1">    Value </span>
 
   r          0.007700
   w          2.466984
 
-         Aggregates
+<span class="sgr1">         Aggregates</span>
 
-  Variable           Value
+ <span class="sgr1"> Variable      </span> <span class="sgr1">    Value </span>
 
   A_policy         42.4366
   A_residual      1.42e-13
@@ -192,9 +192,9 @@ Heterogeneous Agent Steady State
   Y                 3.8547
   excess_demand    2.3e-05
 
-            Grid Adequacy
+<span class="sgr1">            Grid Adequacy</span>
 
-  Statistic                   Value
+ <span class="sgr1"> Statistic             </span> <span class="sgr1">     Value </span>
 
   a_max                   1000.0000
   Mass at ceiling (%)      4.36e-11
@@ -207,9 +207,9 @@ Heterogeneous Agent Steady State
   Relative residual        3.35e-15
   Verdict                  adequate
 
-      Wealth Distribution
+<span class="sgr1">      Wealth Distribution</span>
 
-  Statistic             Value
+ <span class="sgr1"> Statistic        </span> <span class="sgr1">    Value </span>
 
   Mean wealth         42.4366
   Gini coefficient     0.5624
@@ -221,13 +221,13 @@ Heterogeneous Agent Steady State
   P99                207.3482</code></pre><hr/><h2 id="Individual-Problem"><a class="docs-heading-anchor" href="#Individual-Problem">Individual Problem</a><a id="Individual-Problem-1"></a><a class="docs-heading-anchor-permalink" href="#Individual-Problem" title="Permalink"></a></h2><p>The full model is assembled into an <a href="../api/dsge/#MacroEconometricModels.HADSGESpec"><code>HADSGESpec</code></a> (built by <a href="../api/dsge/#MacroEconometricModels.load_ha_example"><code>load_ha_example</code></a>), which bundles the discretized <a href="../api/dsge/#MacroEconometricModels.IncomeProcess"><code>IncomeProcess</code></a> and the household <a href="../api/dsge/#MacroEconometricModels.IndividualProblem"><code>IndividualProblem</code></a> — the utility, marginal utility, budget, and borrowing-constraint fields the EGM/VFI inner loops consume.</p><p>Households solve a consumption-savings problem with idiosyncratic income risk and a borrowing constraint:</p><p class="math-container">\[V(a, e) = \max_{c, a&#39;} \; u(c) + \beta \, \mathbb{E}\bigl[V(a&#39;, e&#39;) \mid e\bigr]\]</p><p>subject to:</p><p class="math-container">\[c + a&#39; = (1 + r) \, a + w \, e, \qquad a&#39; \geq \underline{a}\]</p><p>where:</p><ul><li><span>$a$</span> is individual asset holdings</li><li><span>$e$</span> is idiosyncratic productivity (Markov chain)</li><li><span>$r, w$</span> are aggregate prices (interest rate, wage)</li><li><span>$\underline{a}$</span> is the borrowing constraint</li><li><span>$\beta$</span> is the discount factor</li></ul><h3 id="Endogenous-Grid-Method"><a class="docs-heading-anchor" href="#Endogenous-Grid-Method">Endogenous Grid Method</a><a id="Endogenous-Grid-Method-1"></a><a class="docs-heading-anchor-permalink" href="#Endogenous-Grid-Method" title="Permalink"></a></h3><p>The <strong>EGM</strong> (Carroll 2006) avoids root-finding by inverting the Euler equation on an endogenous grid:</p><ol><li>Fix end-of-period assets <span>$a&#39;$</span> on the exogenous grid</li><li>Compute expected marginal utility: <span>$\text{EMU}_i = \beta (1+r) \sum_{j&#39;} \pi(j, j&#39;) \, u&#39;(c(a&#39;_i, e_{j&#39;}))$</span></li><li>Invert the Euler equation: <span>$c_i = (u&#39;)^{-1}(\text{EMU}_i)$</span></li><li>Recover beginning-of-period assets (endogenous): <span>$a_i = (c_i + a&#39;_i - w e_j) / (1+r)$</span></li><li>Interpolate back to the exogenous grid</li><li>Apply the borrowing constraint: if <span>$a &lt; a_{\text{endo},1}$</span>, consume all cash-on-hand</li></ol><p>The EGM converges in 200–400 iterations for typical calibrations. The <code>compute_steady_state</code> function calls EGM internally at each bisection step:</p><pre><code class="language-julia hljs">spec_ks = load_ha_example(:krusell_smith)
 ss_egm = compute_steady_state(spec_ks; K_init=10.0, r_bounds=(-0.02, 0.04),
                                max_iter=80, tol=1e-4)
-report(ss_egm)</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">Heterogeneous Agent Steady State
+report(ss_egm)</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi"><span class="sgr1">Heterogeneous Agent Steady State</span>
 
 
 
-            Convergence
+<span class="sgr1">            Convergence</span>
 
-                            Value
+ <span class="sgr1">                     </span> <span class="sgr1">     Value </span>
 
   Converged                   Yes
   Iterations                   21
@@ -238,16 +238,16 @@ report(ss_egm)</code></pre><pre class="documenter-example-output"><code class="n
     points evaluated         1390
     at grid nodes         -6.0397
 
-        Prices
+<span class="sgr1">        Prices</span>
 
-  Variable      Value
+ <span class="sgr1"> Variable </span> <span class="sgr1">    Value </span>
 
   r          0.007700
   w          2.466984
 
-         Aggregates
+<span class="sgr1">         Aggregates</span>
 
-  Variable           Value
+ <span class="sgr1"> Variable      </span> <span class="sgr1">    Value </span>
 
   A_policy         42.4366
   A_residual      1.42e-13
@@ -256,9 +256,9 @@ report(ss_egm)</code></pre><pre class="documenter-example-output"><code class="n
   Y                 3.8547
   excess_demand    2.3e-05
 
-            Grid Adequacy
+<span class="sgr1">            Grid Adequacy</span>
 
-  Statistic                   Value
+ <span class="sgr1"> Statistic             </span> <span class="sgr1">     Value </span>
 
   a_max                   1000.0000
   Mass at ceiling (%)      4.36e-11
@@ -271,9 +271,9 @@ report(ss_egm)</code></pre><pre class="documenter-example-output"><code class="n
   Relative residual        3.35e-15
   Verdict                  adequate
 
-      Wealth Distribution
+<span class="sgr1">      Wealth Distribution</span>
 
-  Statistic             Value
+ <span class="sgr1"> Statistic        </span> <span class="sgr1">    Value </span>
 
   Mean wealth         42.4366
   Gini coefficient     0.5624
@@ -305,9 +305,9 @@ round(J_lab[(:N, :w)][1, 1], digits=6)</code></pre><pre class="documenter-exampl
 v_t(M, j, d) = \max_{c} u(c, d) + \beta\, E_j V_{t+1}\!\left(R(M - c) + y(d, j&#39;),\, j&#39;,\, d\right)\]</p><p>where:</p><ul><li><span>$M$</span> is cash-on-hand and <span>$j$</span> the idiosyncratic income state</li><li><span>$d_-$</span> is last period&#39;s discrete option and <span>$D(d_-)$</span> those still feasible (an <strong>absorbing</strong> option leaves only itself)</li><li><span>$u(c, d)$</span> is flow utility, <span>$R$</span> the gross return, and <span>$y(d, j&#39;)$</span> income received next period</li></ul><p>One EGM sweep per option gives candidate <span>$(M, c, v)$</span> triples; where the continuation value is non-concave the <span>$M$</span> sequence loops back on itself, and the same cash-on-hand appears on two branches. <code>_upper_envelope</code> keeps the branch with the higher value and inserts the <strong>exact</strong> crossing, at which the value function is continuous while consumption jumps.</p><div class="admonition is-info" id="Technical-Note-6d5a5414279ace5c"><header class="admonition-header">Technical Note<a class="admonition-anchor" href="#Technical-Note-6d5a5414279ace5c" title="Permalink"></a></header><div class="admonition-body"><p>Between two adjacent candidate grid points both branches are linear — the grid contains every knot — so the crossing <span>$M^* = M_{lo} + (M_{hi} - M_{lo}) f(M_{lo}) / (f(M_{lo}) - f(M_{hi}))$</span> with <span>$f = v_p - v_q$</span> is exact, not bisected. It is inserted twice, once with each branch&#39;s consumption, because consumption is genuinely discontinuous at a discrete-choice threshold.</p></div></div><p><a href="../api/dsge/#MacroEconometricModels.dcegm_retirement_model"><code>dcegm_retirement_model</code></a> builds the canonical retirement problem: work or retire (absorbing), flow utility <span>$\log c - \delta \mathbb{1}[\text{work}]$</span>, and no income once retired.</p><pre><code class="language-julia hljs">retire = dcegm_retirement_model(; n_periods=6, beta=0.98, R=1.0, wage=20.0,
                                 disutility=1.0, a_max=60.0, n_a=200)
 dc = dcegm_solve(retire)
-report(dc)</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">            DCEGM Solution
+report(dc)</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi"><span class="sgr1">            DCEGM Solution</span>
 
-                               Value
+ <span class="sgr1">                     </span> <span class="sgr1">        Value </span>
 
   Options               retire, work
   Absorbing                   retire
@@ -321,9 +321,9 @@ report(dc)</code></pre><pre class="documenter-example-output"><code class="nohig
   Iterations                       0
   Total kinks                      9
 
-Non-Concave Periods (upper-envelope kinks)
+<span class="sgr1">Non-Concave Periods (upper-envelope kinks)</span>
 
-  Period   Kinks   Options
+ <span class="sgr1"> Period </span> <span class="sgr1"> Kinks </span> <span class="sgr1"> Options </span>
 
        1       3   work
        2       3   work
@@ -349,13 +349,13 @@ b = rouwenhorst(0.966, 0.5, 7; sigma_is=:unconditional)    # sd(y) = 0.500
  aggregate_K = round(ss.aggregates[:K], digits=2))</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">(shape = (200, 7), total_mass = 1.0, aggregate_K = 42.44)</code></pre><p>The distribution is an <span>$N_a \times N_e$</span> matrix whose entries sum to unity. Aggregate capital integrates asset holdings against the distribution, providing the supply side of the capital market clearing condition.</p><hr/><h2 id="Steady-State"><a class="docs-heading-anchor" href="#Steady-State">Steady State</a><a id="Steady-State-1"></a><a class="docs-heading-anchor-permalink" href="#Steady-State" title="Permalink"></a></h2><p>The <strong>stationary equilibrium</strong> requires the individual problem, distribution, and prices to be mutually consistent. <code>compute_steady_state</code> bisects on the interest rate <span>$r$</span>:</p><ol><li>Guess <span>$r_{\text{mid}} = (r_{\text{lo}} + r_{\text{hi}}) / 2$</span></li><li>Compute prices <span>$(r, w)$</span> from the firm&#39;s first-order conditions given <span>$r_{\text{mid}}$</span></li><li>Solve the individual problem via EGM at those prices</li><li>Build the transition matrix and compute the stationary distribution</li><li>Aggregate capital supply: <span>$K_s = \int a \, d\Gamma(a, e)$</span></li><li>Compute capital demand <span>$K_d$</span> from the firm&#39;s FOC</li><li>If <span>$K_s &gt; K_d$</span>, interest rate is too low → <span>$r_{\text{hi}} = r_{\text{mid}}$</span>; otherwise <span>$r_{\text{lo}} = r_{\text{mid}}$</span></li><li>Converge when <span>$|K_s - K_d| &lt; \text{tol}$</span></li></ol><pre><code class="language-julia hljs">spec_hank = load_ha_example(:one_asset_hank)
 ss_hank = compute_steady_state(spec_hank; K_init=10.0, r_bounds=(-0.02, 0.04),
                                 max_iter=80, tol=1e-4)
-report(ss_hank)</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">Heterogeneous Agent Steady State
+report(ss_hank)</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi"><span class="sgr1">Heterogeneous Agent Steady State</span>
 
 
 
-            Convergence
+<span class="sgr1">            Convergence</span>
 
-                            Value
+ <span class="sgr1">                     </span> <span class="sgr1">     Value </span>
 
   Converged                   Yes
   Iterations                   18
@@ -366,16 +366,16 @@ report(ss_hank)</code></pre><pre class="documenter-example-output"><code class="
     points evaluated         1390
     at grid nodes         -6.0555
 
-        Prices
+<span class="sgr1">        Prices</span>
 
-  Variable      Value
+ <span class="sgr1"> Variable </span> <span class="sgr1">    Value </span>
 
   r          0.011523
   w          2.318246
 
-         Aggregates
+<span class="sgr1">         Aggregates</span>
 
-  Variable            Value
+ <span class="sgr1"> Variable      </span> <span class="sgr1">     Value </span>
 
   A_policy          35.7043
   A_residual      -4.97e-14
@@ -384,9 +384,9 @@ report(ss_hank)</code></pre><pre class="documenter-example-output"><code class="
   Y                  3.6223
   excess_demand   -6.13e-06
 
-            Grid Adequacy
+<span class="sgr1">            Grid Adequacy</span>
 
-  Statistic                   Value
+ <span class="sgr1"> Statistic             </span> <span class="sgr1">     Value </span>
 
   a_max                   1000.0000
   Mass at ceiling (%)      6.42e-14
@@ -399,9 +399,9 @@ report(ss_hank)</code></pre><pre class="documenter-example-output"><code class="
   Relative residual       -1.39e-15
   Verdict                  adequate
 
-      Wealth Distribution
+<span class="sgr1">      Wealth Distribution</span>
 
-  Statistic             Value
+ <span class="sgr1"> Statistic        </span> <span class="sgr1">    Value </span>
 
   Mean wealth         35.7043
   Gini coefficient     0.5975
@@ -411,22 +411,22 @@ report(ss_hank)</code></pre><pre class="documenter-example-output"><code class="
   P75                 51.7385
   P90                 91.3372
   P99                182.8220</code></pre><p>The one-asset HANK steady state clears at a <strong>higher</strong> interest rate and a <strong>lower</strong> capital stock than the standard Aiyagari economy (<span>$r = 0.0115$</span> vs <span>$0.0077$</span> per quarter; <span>$K = 35.70$</span> vs <span>$42.44$</span>). The reason is impatience, not the New Keynesian block: this calibration sets <span>$\beta = 0.986$</span> against <span>$0.99$</span> for Krusell–Smith, and that difference in time preference dominates the extra dividend income. The Gini coefficient and wealth percentiles characterize the cross-sectional distribution, with the 90th percentile several times the median –- consistent with empirical wealth data.</p><table><tr><th style="text-align: right">Keyword</th><th style="text-align: right">Type</th><th style="text-align: right">Default</th><th style="text-align: right">Description</th></tr><tr><td style="text-align: right"><code>K_init</code></td><td style="text-align: right"><code>T</code></td><td style="text-align: right"><code>10.0</code></td><td style="text-align: right">Initial guess for aggregate capital</td></tr><tr><td style="text-align: right"><code>r_bounds</code></td><td style="text-align: right"><code>Tuple{T,T}</code></td><td style="text-align: right"><code>nothing</code></td><td style="text-align: right">Bisection bounds; defaults to <code>(-0.01, 0.04)</code>, or <code>(-0.05, 1/β - 1 - 10^{-4})</code> when <code>spec.model === :huggett</code></td></tr><tr><td style="text-align: right"><code>max_iter</code></td><td style="text-align: right"><code>Int</code></td><td style="text-align: right"><code>200</code></td><td style="text-align: right">Maximum bisection iterations</td></tr><tr><td style="text-align: right"><code>tol</code></td><td style="text-align: right"><code>Real</code></td><td style="text-align: right"><span>$10^{-8}$</span></td><td style="text-align: right">Convergence tolerance on excess demand</td></tr><tr><td style="text-align: right"><code>grid_check</code></td><td style="text-align: right"><code>Symbol</code></td><td style="text-align: right"><code>:warn</code></td><td style="text-align: right">Grid-adequacy check: <code>:warn</code>, <code>:error</code>, or <code>:none</code></td></tr><tr><td style="text-align: right"><code>euler_points</code></td><td style="text-align: right"><code>Symbol</code></td><td style="text-align: right"><code>:midpoints</code></td><td style="text-align: right">Where the headline Euler residual is measured (<code>:midpoints</code> or <code>:nodes</code>)</td></tr><tr><td style="text-align: right"><code>verbose</code></td><td style="text-align: right"><code>Bool</code></td><td style="text-align: right"><code>false</code></td><td style="text-align: right">Print iteration progress</td></tr></table><table><tr><th style="text-align: right">Field</th><th style="text-align: right">Type</th><th style="text-align: right">Description</th></tr><tr><td style="text-align: right"><code>converged</code></td><td style="text-align: right"><code>Bool</code></td><td style="text-align: right">Whether bisection converged</td></tr><tr><td style="text-align: right"><code>iterations</code></td><td style="text-align: right"><code>Int</code></td><td style="text-align: right">Number of bisection iterations</td></tr><tr><td style="text-align: right"><code>prices</code></td><td style="text-align: right"><code>Dict{Symbol,T}</code></td><td style="text-align: right">Equilibrium prices (<span>$r$</span>, <span>$w$</span>)</td></tr><tr><td style="text-align: right"><code>aggregates</code></td><td style="text-align: right"><code>Dict{Symbol,T}</code></td><td style="text-align: right">Aggregate quantities (<span>$K$</span>, <span>$Y$</span>, <span>$C$</span>)</td></tr><tr><td style="text-align: right"><code>distribution</code></td><td style="text-align: right"><code>Array{T}</code></td><td style="text-align: right">Stationary distribution; <span>$N_a \times N_e$</span> for one asset, three-dimensional for two</td></tr><tr><td style="text-align: right"><code>policies</code></td><td style="text-align: right"><code>Dict{Symbol,Array{T}}</code></td><td style="text-align: right">Policy functions (<code>:consumption</code>, <code>:savings</code>, and <code>:labor</code> under endogenous hours)</td></tr><tr><td style="text-align: right"><code>value_fn</code></td><td style="text-align: right"><code>Array{T}</code></td><td style="text-align: right">Value function on the same grid as <code>distribution</code></td></tr><tr><td style="text-align: right"><code>income</code></td><td style="text-align: right"><code>IncomeProcess{T}</code></td><td style="text-align: right">Discretized productivity process</td></tr><tr><td style="text-align: right"><code>excess_demand</code></td><td style="text-align: right"><code>T</code></td><td style="text-align: right">Final excess demand for capital</td></tr><tr><td style="text-align: right"><code>euler_error</code></td><td style="text-align: right"><code>T</code></td><td style="text-align: right"><span>$\log_{10}$</span> maximum Euler residual, measured off-node</td></tr><tr><td style="text-align: right"><code>euler</code></td><td style="text-align: right"><code>NamedTuple</code></td><td style="text-align: right"><code>(midpoints=…, nodes=…)</code>, each with <code>max</code>, <code>mean</code>, <code>n_evaluated</code>, <code>n_constrained</code>, <code>n_offgrid</code></td></tr><tr><td style="text-align: right"><code>parametric</code></td><td style="text-align: right"><code>WinberryFamily{T}</code> or <code>nothing</code></td><td style="text-align: right">Fitted parametric family when <code>distribution=:winberry</code></td></tr><tr><td style="text-align: right"><code>grid</code></td><td style="text-align: right"><code>HAGrid{T}</code></td><td style="text-align: right">Asset grid used</td></tr></table><hr/><h2 id="Sequence-Space-Jacobian"><a class="docs-heading-anchor" href="#Sequence-Space-Jacobian">Sequence-Space Jacobian</a><a id="Sequence-Space-Jacobian-1"></a><a class="docs-heading-anchor-permalink" href="#Sequence-Space-Jacobian" title="Permalink"></a></h2><p>The <strong>Sequence-Space Jacobian</strong> method (Auclert, Bardóczy, Rognlie &amp; Straub 2021) computes the <span>$T \times T$</span> Jacobian of aggregate outputs with respect to aggregate input sequences. The key idea: instead of tracking the full distribution as a state variable (as in Reiter), work directly with the impulse response sequences.</p><p>The algorithm computes a <strong>fake news matrix</strong> <span>$\mathcal{F}$</span> via:</p><ol><li><strong>Backward iteration</strong>: perturb a price at time <span>$s$</span>, iterate the EGM backward to capture the expectation channel</li><li><strong>Forward iteration</strong>: propagate the perturbed policies through the distribution forward in time</li><li><strong>Accumulation</strong>: the true Jacobian <span>$\mathcal{J}$</span> is the cumulative sum of <span>$\mathcal{F}$</span></li></ol><p>The resulting <span>$\mathcal{J}$</span> is converted to a minimal state-space realization via the <strong>Ho-Kalman algorithm</strong> (SVD of the Hankel matrix of IRF coefficients), producing a reduced <code>DSGESolution</code> compatible with all existing analysis functions.</p><pre><code class="language-julia hljs">sol_ssj = solve(spec; method=:ssj, ss=ss, T_horizon=50, n_reduced=15)
-report(sol_ssj)</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">HA-DSGE Solution (Linearized)
+report(sol_ssj)</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi"><span class="sgr1">HA-DSGE Solution (Linearized)</span>
 
-                       Value
+ <span class="sgr1">                    </span> <span class="sgr1"> Value </span>
 
   Method                 ssj
   Full state dim          50
   Reduced state dim       15
   Explained variance   99.5%
 
-Heterogeneous Agent Steady State
+<span class="sgr1">Heterogeneous Agent Steady State</span>
 
 
 
-            Convergence
+<span class="sgr1">            Convergence</span>
 
-                            Value
+ <span class="sgr1">                     </span> <span class="sgr1">     Value </span>
 
   Converged                   Yes
   Iterations                   21
@@ -437,16 +437,16 @@ Heterogeneous Agent Steady State
     points evaluated         1390
     at grid nodes         -6.0397
 
-        Prices
+<span class="sgr1">        Prices</span>
 
-  Variable      Value
+ <span class="sgr1"> Variable </span> <span class="sgr1">    Value </span>
 
   r          0.007700
   w          2.466984
 
-         Aggregates
+<span class="sgr1">         Aggregates</span>
 
-  Variable           Value
+ <span class="sgr1"> Variable      </span> <span class="sgr1">    Value </span>
 
   A_policy         42.4366
   A_residual      1.42e-13
@@ -455,9 +455,9 @@ Heterogeneous Agent Steady State
   Y                 3.8547
   excess_demand    2.3e-05
 
-            Grid Adequacy
+<span class="sgr1">            Grid Adequacy</span>
 
-  Statistic                   Value
+ <span class="sgr1"> Statistic             </span> <span class="sgr1">     Value </span>
 
   a_max                   1000.0000
   Mass at ceiling (%)      4.36e-11
@@ -470,9 +470,9 @@ Heterogeneous Agent Steady State
   Relative residual        3.35e-15
   Verdict                  adequate
 
-      Wealth Distribution
+<span class="sgr1">      Wealth Distribution</span>
 
-  Statistic             Value
+ <span class="sgr1"> Statistic        </span> <span class="sgr1">    Value </span>
 
   Mean wealth         42.4366
   Gini coefficient     0.5624
@@ -482,22 +482,22 @@ Heterogeneous Agent Steady State
   P75                 60.3086
   P90                104.4411
   P99                207.3482</code></pre><p>Composing several blocks into a model, and going to second order in the sequence space, are covered in <a href="#ssj_blocks">Block Composition and Second-Order SSJ</a>.</p><p>The SSJ method reduces the full sequence-space representation (dimension <span>$T$</span>) to a compact state-space form with <code>n_reduced</code> states. The explained variance measures the fraction of aggregate dynamics captured by the truncated Ho-Kalman basis –- values above 99.9% confirm the reduction is adequate. The underlying steady state is reported alongside the reduction diagnostics.</p><table><tr><th style="text-align: right">Keyword</th><th style="text-align: right">Type</th><th style="text-align: right">Default</th><th style="text-align: right">Description</th></tr><tr><td style="text-align: right"><code>T_horizon</code></td><td style="text-align: right"><code>Int</code></td><td style="text-align: right"><code>300</code></td><td style="text-align: right">Truncation horizon for sequences</td></tr><tr><td style="text-align: right"><code>n_reduced</code></td><td style="text-align: right"><code>Int</code></td><td style="text-align: right"><code>30</code></td><td style="text-align: right">Reduced state-space dimension (Ho-Kalman)</td></tr></table><table><tr><th style="text-align: right">Field</th><th style="text-align: right">Type</th><th style="text-align: right">Description</th></tr><tr><td style="text-align: right"><code>method</code></td><td style="text-align: right"><code>Symbol</code></td><td style="text-align: right">Solution method (<code>:ssj</code> or <code>:reiter</code>)</td></tr><tr><td style="text-align: right"><code>n_full_states</code></td><td style="text-align: right"><code>Int</code></td><td style="text-align: right">Full state-space dimension before reduction</td></tr><tr><td style="text-align: right"><code>n_reduced</code></td><td style="text-align: right"><code>Int</code></td><td style="text-align: right">Reduced state-space dimension</td></tr><tr><td style="text-align: right"><code>explained_variance</code></td><td style="text-align: right"><code>T</code></td><td style="text-align: right">Fraction of variance captured by truncation</td></tr><tr><td style="text-align: right"><code>linear_solution</code></td><td style="text-align: right"><code>DSGESolution{T}</code></td><td style="text-align: right">Reduced-form state-space representation</td></tr><tr><td style="text-align: right"><code>steady_state</code></td><td style="text-align: right"><code>HASteadyState{T}</code></td><td style="text-align: right">Underlying stationary equilibrium</td></tr></table><hr/><h2 id="Reiter-Method"><a class="docs-heading-anchor" href="#Reiter-Method">Reiter Method</a><a id="Reiter-Method-1"></a><a class="docs-heading-anchor-permalink" href="#Reiter-Method" title="Permalink"></a></h2><p>The <strong>Reiter (2009)</strong> method linearizes the entire system –- Euler equations, distribution evolution, and aggregate equilibrium –- around the stationary equilibrium. The distribution histogram becomes part of the state vector, yielding a large linear system that is reduced via SVD.</p><p>The implementation uses <strong>observability-based SVD</strong>: the reduction basis is built from the observability matrix <span>$[c&#39;, c&#39; \Lambda&#39;, c&#39; (\Lambda&#39;)^2, \ldots]&#39;$</span> where <span>$c$</span> is the capital aggregation vector. This identifies the distribution directions most relevant for aggregate dynamics, achieving <span>$&gt;99.9\%$</span> explained variance with 15–30 reduced states.</p><pre><code class="language-julia hljs">sol_reiter = solve(spec; method=:reiter, ss=ss, n_reduced=15)
-report(sol_reiter)</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi"> HA-DSGE Solution (Linearized)
+report(sol_reiter)</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi"><span class="sgr1"> HA-DSGE Solution (Linearized)</span>
 
-                        Value
+ <span class="sgr1">                    </span> <span class="sgr1">  Value </span>
 
   Method               reiter
   Full state dim         1400
   Reduced state dim        15
   Explained variance   100.0%
 
-Heterogeneous Agent Steady State
+<span class="sgr1">Heterogeneous Agent Steady State</span>
 
 
 
-            Convergence
+<span class="sgr1">            Convergence</span>
 
-                            Value
+ <span class="sgr1">                     </span> <span class="sgr1">     Value </span>
 
   Converged                   Yes
   Iterations                   21
@@ -508,16 +508,16 @@ Heterogeneous Agent Steady State
     points evaluated         1390
     at grid nodes         -6.0397
 
-        Prices
+<span class="sgr1">        Prices</span>
 
-  Variable      Value
+ <span class="sgr1"> Variable </span> <span class="sgr1">    Value </span>
 
   r          0.007700
   w          2.466984
 
-         Aggregates
+<span class="sgr1">         Aggregates</span>
 
-  Variable           Value
+ <span class="sgr1"> Variable      </span> <span class="sgr1">    Value </span>
 
   A_policy         42.4366
   A_residual      1.42e-13
@@ -526,9 +526,9 @@ Heterogeneous Agent Steady State
   Y                 3.8547
   excess_demand    2.3e-05
 
-            Grid Adequacy
+<span class="sgr1">            Grid Adequacy</span>
 
-  Statistic                   Value
+ <span class="sgr1"> Statistic             </span> <span class="sgr1">     Value </span>
 
   a_max                   1000.0000
   Mass at ceiling (%)      4.36e-11
@@ -541,9 +541,9 @@ Heterogeneous Agent Steady State
   Relative residual        3.35e-15
   Verdict                  adequate
 
-      Wealth Distribution
+<span class="sgr1">      Wealth Distribution</span>
 
-  Statistic             Value
+ <span class="sgr1"> Statistic        </span> <span class="sgr1">    Value </span>
 
   Mean wealth         42.4366
   Gini coefficient     0.5624
@@ -556,27 +556,27 @@ Heterogeneous Agent Steady State
 plot_result(sol_reiter; view=:inequality, horizon=16) # Gini and percentile paths</code></pre><iframe src="../assets/plots/ha_distribution_dynamics.html" width="100%" height="460" frameborder="0" style="border:1px solid #ddd;border-radius:4px;"></iframe><iframe src="../assets/plots/ha_inequality.html" width="100%" height="460" frameborder="0" style="border:1px solid #ddd;border-radius:4px;"></iframe><p>Neither view is available from an <code>:ssj</code> solution: the Ho-Kalman realization&#39;s coordinates are abstract minimal-realization states with no map back to the <span>$(a, e)$</span> histogram, so <code>distribution_irf</code> raises an error there and directs you to <code>:reiter</code>.</p><p>The Reiter method produces an equivalent reduced state-space form to SSJ. The explained variance confirms that 15 reduced states capture nearly all aggregate dynamics. The two methods yield identical IRFs up to numerical precision for the same <code>n_reduced</code>, but differ in computational cost: SSJ is faster for models with few aggregate inputs, while Reiter scales better when many prices affect household decisions.</p><table><tr><th style="text-align: right">Keyword</th><th style="text-align: right">Type</th><th style="text-align: right">Default</th><th style="text-align: right">Description</th></tr><tr><td style="text-align: right"><code>n_reduced</code></td><td style="text-align: right"><code>Int</code></td><td style="text-align: right"><code>30</code></td><td style="text-align: right">Maximum reduced dimension</td></tr></table><p>The finite-difference step used to probe the distribution (<span>$10^{-6}$</span>) is fixed by the internal linearizer and is not reachable through <code>solve</code>.</p><hr/><h2 id="Krusell-Smith-Method"><a class="docs-heading-anchor" href="#Krusell-Smith-Method">Krusell-Smith Method</a><a id="Krusell-Smith-Method-1"></a><a class="docs-heading-anchor-permalink" href="#Krusell-Smith-Method" title="Permalink"></a></h2><p>The <strong>Krusell-Smith (1998)</strong> method approximates agents&#39; forecasting rule with a <strong>perceived law of motion</strong> (PLM) for aggregate capital, including the aggregate shock <span>$z$</span>:</p><p class="math-container">\[\log K_{t+1} = b_0 + b_1 \log K_t + b_2 z_t\]</p><p>The fitted PLM coefficients and simulated paths are returned in a <a href="../api/dsge/#MacroEconometricModels.KrusellSmithSolution"><code>KrusellSmithSolution</code></a>.</p><p>The algorithm iterates between simulation (using the PLM to forecast prices) and regression (updating PLM coefficients via OLS). Convergence requires <span>$R^2 &gt; 0.9999$</span>, reflecting the near-sufficiency of the first moment plus the aggregate shock for forecasting. Including <span>$z$</span> is essential for the Den Haan (2010) accuracy test below: a <span>$z$</span>-free PLM produces a degenerate, fluctuation-free simulated path.</p><div class="admonition is-info" id="Technical-Note-ee171fce59296a34"><header class="admonition-header">Technical Note<a class="admonition-anchor" href="#Technical-Note-ee171fce59296a34" title="Permalink"></a></header><div class="admonition-body"><p>The PLM coefficients are updated with damping: <span>$b^{\text{new}} = 0.5 \, b^{\text{OLS}} + 0.5 \, b^{\text{old}}$</span>. This prevents oscillation and ensures monotone convergence.</p></div></div><pre><code class="language-julia hljs">sol_ks = solve(spec; method=:krusell_smith, ss=ss,
                T_sim=500, T_burn=100, max_outer=3,
                rho_z=0.95, sigma_z=0.007)
-report(sol_ks)</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">[ Info: Krusell–Smith: solving the PLM fixed point by simulation (T_sim=500, max_outer=3) — this can take several minutes…
-Krusell-Smith Solution
+report(sol_ks)</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi"><span class="sgr36"><span class="sgr1">[ Info: </span></span>Krusell–Smith: solving the PLM fixed point by simulation (T_sim=500, max_outer=3) — this can take several minutes…
+<span class="sgr1">Krusell-Smith Solution</span>
 
-               Value
+ <span class="sgr1">            </span> <span class="sgr1"> Value </span>
 
   Converged       No
   Iterations       3
 
-                 Perceived Law of Motion
+<span class="sgr1">                 Perceived Law of Motion</span>
 
-  Variable         b0         b1          b2         R²
+ <span class="sgr1"> Variable </span> <span class="sgr1">       b0 </span> <span class="sgr1">       b1 </span> <span class="sgr1">        b2 </span> <span class="sgr1">       R² </span>
 
   K          0.119510   0.968121   -0.013724   0.999996
 
-Heterogeneous Agent Steady State
+<span class="sgr1">Heterogeneous Agent Steady State</span>
 
 
 
-            Convergence
+<span class="sgr1">            Convergence</span>
 
-                            Value
+ <span class="sgr1">                     </span> <span class="sgr1">     Value </span>
 
   Converged                   Yes
   Iterations                   21
@@ -587,16 +587,16 @@ Heterogeneous Agent Steady State
     points evaluated         1390
     at grid nodes         -6.0397
 
-        Prices
+<span class="sgr1">        Prices</span>
 
-  Variable      Value
+ <span class="sgr1"> Variable </span> <span class="sgr1">    Value </span>
 
   r          0.007700
   w          2.466984
 
-         Aggregates
+<span class="sgr1">         Aggregates</span>
 
-  Variable           Value
+ <span class="sgr1"> Variable      </span> <span class="sgr1">    Value </span>
 
   A_policy         42.4366
   A_residual      1.42e-13
@@ -605,9 +605,9 @@ Heterogeneous Agent Steady State
   Y                 3.8547
   excess_demand    2.3e-05
 
-            Grid Adequacy
+<span class="sgr1">            Grid Adequacy</span>
 
-  Statistic                   Value
+ <span class="sgr1"> Statistic             </span> <span class="sgr1">     Value </span>
 
   a_max                   1000.0000
   Mass at ceiling (%)      4.36e-11
@@ -620,9 +620,9 @@ Heterogeneous Agent Steady State
   Relative residual        3.35e-15
   Verdict                  adequate
 
-      Wealth Distribution
+<span class="sgr1">      Wealth Distribution</span>
 
-  Statistic             Value
+ <span class="sgr1"> Statistic        </span> <span class="sgr1">    Value </span>
 
   Mean wealth         42.4366
   Gini coefficient     0.5624
@@ -632,9 +632,9 @@ Heterogeneous Agent Steady State
   P75                 60.3086
   P90                104.4411
   P99                207.3482</code></pre><p>The PLM <span>$R^2$</span> near unity confirms that aggregate capital plus the aggregate shock is approximately sufficient for forecasting prices –- the core insight of Krusell &amp; Smith (1998). The three coefficients (intercept, capital slope, and shock loading) characterize the aggregate law of motion. Unlike SSJ and Reiter, the Krusell-Smith method does not produce a reduced linear state-space form, so it cannot be used directly with <code>irf</code> or <code>fevd</code>.</p><table><tr><th style="text-align: right">Keyword</th><th style="text-align: right">Type</th><th style="text-align: right">Default</th><th style="text-align: right">Description</th></tr><tr><td style="text-align: right"><code>T_sim</code></td><td style="text-align: right"><code>Int</code></td><td style="text-align: right"><code>11000</code></td><td style="text-align: right">Simulation length</td></tr><tr><td style="text-align: right"><code>T_burn</code></td><td style="text-align: right"><code>Int</code></td><td style="text-align: right"><code>1000</code></td><td style="text-align: right">Burn-in periods to discard</td></tr><tr><td style="text-align: right"><code>max_outer</code></td><td style="text-align: right"><code>Int</code></td><td style="text-align: right"><code>20</code></td><td style="text-align: right">Maximum PLM iterations</td></tr><tr><td style="text-align: right"><code>rho_z</code></td><td style="text-align: right"><code>Real</code></td><td style="text-align: right"><code>0.95</code></td><td style="text-align: right">Aggregate shock persistence</td></tr><tr><td style="text-align: right"><code>sigma_z</code></td><td style="text-align: right"><code>Real</code></td><td style="text-align: right"><code>0.007</code></td><td style="text-align: right">Aggregate shock standard deviation</td></tr><tr><td style="text-align: right"><code>rho_e</code></td><td style="text-align: right"><code>Real</code></td><td style="text-align: right"><code>0.9</code></td><td style="text-align: right">Idiosyncratic persistence used in the simulation; falls back to <code>spec.het_params[:rho_e]</code></td></tr><tr><td style="text-align: right"><code>sigma_e</code></td><td style="text-align: right"><code>Real</code></td><td style="text-align: right"><code>0.01</code></td><td style="text-align: right">Idiosyncratic innovation size; falls back to <code>spec.het_params[:sigma_e]</code></td></tr></table><table><tr><th style="text-align: right">Field</th><th style="text-align: right">Type</th><th style="text-align: right">Description</th></tr><tr><td style="text-align: right"><code>converged</code></td><td style="text-align: right"><code>Bool</code></td><td style="text-align: right">Whether PLM coefficients converged</td></tr><tr><td style="text-align: right"><code>iterations</code></td><td style="text-align: right"><code>Int</code></td><td style="text-align: right">Number of outer PLM iterations</td></tr><tr><td style="text-align: right"><code>plm_coefficients</code></td><td style="text-align: right"><code>Dict{Symbol,Vector{T}}</code></td><td style="text-align: right">PLM regression coefficients per variable</td></tr><tr><td style="text-align: right"><code>r_squared</code></td><td style="text-align: right"><code>Dict{Symbol,T}</code></td><td style="text-align: right"><span>$R^2$</span> of PLM regression per variable</td></tr><tr><td style="text-align: right"><code>steady_state</code></td><td style="text-align: right"><code>HASteadyState{T}</code></td><td style="text-align: right">Underlying stationary equilibrium</td></tr><tr><td style="text-align: right"><code>spec</code></td><td style="text-align: right"><code>HADSGESpec{T}</code></td><td style="text-align: right">Model solved, carried for <code>den_haan_test</code></td></tr></table><hr/><h2 id="Accuracy:-the-Den-Haan-(2010)-Test"><a class="docs-heading-anchor" href="#Accuracy:-the-Den-Haan-(2010)-Test">Accuracy: the Den Haan (2010) Test</a><a id="Accuracy:-the-Den-Haan-(2010)-Test-1"></a><a class="docs-heading-anchor-permalink" href="#Accuracy:-the-Den-Haan-(2010)-Test" title="Permalink"></a></h2><p>Den Haan (2010) shows that the regression <span>$R^2$</span> and standard error are <strong>inadequate</strong> accuracy measures for a Krusell-Smith solution: an <span>$R^2$</span> of 0.9999 can coexist with a standard deviation of aggregate capital that is off by double digits. The powerful test compares two simulations under the same shock path –- a <strong>reference</strong> path from the explicit cross-sectional (Young) simulation, and a <strong>PLM-only</strong> path that iterates the aggregate law of motion on its <em>own</em> forecasts without re-anchoring to the simulated cross-section:</p><p class="math-container">\[\varepsilon_t = 100 \cdot \left| \log K_t^{\text{ref}} - \log K_t^{\text{PLM}} \right|\]</p><p>Call <a href="../api/dsge/#MacroEconometricModels.den_haan_test"><code>den_haan_test</code></a> on a <a href="../api/dsge/#MacroEconometricModels.KrusellSmithSolution"><code>KrusellSmithSolution</code></a> to obtain the maximum and mean errors packaged in a <a href="../api/dsge/#MacroEconometricModels.DenHaanAccuracy"><code>DenHaanAccuracy</code></a> result.</p><p>where:</p><ul><li><span>$K_t^{\text{ref}}$</span> is the reference aggregate capital from the explicit distribution simulation</li><li><span>$K_t^{\text{PLM}}$</span> is the PLM-only path, <span>$\log K_{t+1}^{\text{PLM}} = b_0 + b_1 \log K_t^{\text{PLM}} + b_2 z_t$</span></li></ul><p>The maximum and mean of <span>$\varepsilon_t$</span> (post burn-in) are the headline statistics; <code>den_haan_test</code> also reports the standard-deviation comparison.</p><pre><code class="language-julia hljs">acc = den_haan_test(sol_ks; T_sim=300, T_burn=50)
-report(acc)</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">  Den Haan (2010) Accuracy Test
+report(acc)</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi"><span class="sgr1">  Den Haan (2010) Accuracy Test</span>
 
-                           Value
+ <span class="sgr1">                     </span> <span class="sgr1">    Value </span>
 
   Aggregate                    K
   Max error (%)           0.0538
@@ -660,23 +660,23 @@ bond_market = SimpleBlock(x -&gt; [x[1]];                 # bond_mkt = A, clears
                           ss_inputs=Dict(:A =&gt; household.ss_outputs[:A]),
                           name=:bond_market)
 model = combine_blocks(household, bond_market; name=:huggett)
-report(model)</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">            Sequence-Space DAG: huggett
+report(model)</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi"><span class="sgr1">            Sequence-Space DAG: huggett</span>
 
-  #   Block         Type          Inputs → Outputs
+ <span class="sgr1"> # </span> <span class="sgr1"> Block       </span> <span class="sgr1"> Type        </span> <span class="sgr1"> Inputs → Outputs </span>
 
   1   household     HetBlock      r, w → A
   2   bond_market   SimpleBlock   A → bond_mkt
 
-Exogenous Variables (steady state)
+<span class="sgr1">Exogenous Variables (steady state)</span>
 
-  Variable       Level
+ <span class="sgr1"> Variable </span> <span class="sgr1">     Level </span>
 
   r          -0.013078
   w           1.000000</code></pre><p>The DAG report lists the blocks in topological order –- households first, then the market they feed –- together with the variables the model treats as exogenous. Here <span>$r$</span> is the unknown the bond market pins down and <span>$w$</span> is the aggregate endowment shock; both are exogenous to the graph precisely because the equilibrium, not a block, determines them.</p><pre><code class="language-julia hljs">gej = ssj_jacobian(model; unknowns=[:r], targets=[:bond_mkt], shocks=[:w],
                    T_horizon=40, target_tol=1e-3)   # SS was solved to tol=5e-4
-report(gej)</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">Sequence-Space GE Jacobian
+report(gej)</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi"><span class="sgr1">Sequence-Space GE Jacobian</span>
 
-                 Value
+ <span class="sgr1">           </span> <span class="sgr1">    Value </span>
 
   Model        huggett
   Horizon T         40
@@ -686,9 +686,9 @@ report(gej)</code></pre><pre class="documenter-example-output"><code class="nohi
   size(H_U)      40×40
   size(H_Z)      40×40
 
- Target Sensitivities (‖∂target/∂driver‖₁)
+<span class="sgr1"> Target Sensitivities (‖∂target/∂driver‖₁)</span>
 
-  Target     Driver   Kind           Norm
+ <span class="sgr1"> Target   </span> <span class="sgr1"> Driver </span> <span class="sgr1"> Kind    </span> <span class="sgr1">      Norm </span>
 
   bond_mkt   r        unknown   49.922324
   bond_mkt   w        shock      7.858549</code></pre><p><span>$H_U$</span> is the <span>$40 \times 40$</span> derivative of aggregate bond demand with respect to the whole rate path and <span>$H_Z$</span> its derivative with respect to the endowment path. Bond demand is about six times more sensitive to the rate path than to the endowment path (<span>$\|H_U\|_1 \approx 50$</span> against <span>$\|H_Z\|_1 \approx 7.9$</span>), so clearing a 2% endowment shock takes a rate move of only a few tenths of a percentage point. <code>target_tol</code> is relaxed to <span>$10^{-3}$</span> because the steady state was itself computed to <code>tol=5e-4</code>: demanding tighter clearing than the linearization point delivers would fire a warning that reflects the steady-state tolerance, not the DAG.</p><table><tr><th style="text-align: right">Keyword</th><th style="text-align: right">Type</th><th style="text-align: right">Default</th><th style="text-align: right">Description</th></tr><tr><td style="text-align: right"><code>unknowns</code></td><td style="text-align: right"><code>Vector{Symbol}</code></td><td style="text-align: right">–-</td><td style="text-align: right">Aggregates the equilibrium determines; exogenous to the DAG</td></tr><tr><td style="text-align: right"><code>targets</code></td><td style="text-align: right"><code>Vector{Symbol}</code></td><td style="text-align: right">–-</td><td style="text-align: right">Equilibrium residuals, one per unknown; produced by some block</td></tr><tr><td style="text-align: right"><code>shocks</code></td><td style="text-align: right"><code>Vector{Symbol}</code></td><td style="text-align: right">–-</td><td style="text-align: right">Exogenous drivers; exogenous to the DAG</td></tr><tr><td style="text-align: right"><code>T_horizon</code></td><td style="text-align: right"><code>Int</code></td><td style="text-align: right"><code>300</code></td><td style="text-align: right">Truncation horizon <span>$T$</span></td></tr><tr><td style="text-align: right"><code>target_tol</code></td><td style="text-align: right"><code>Real</code></td><td style="text-align: right"><span>$10^{-6}$</span></td><td style="text-align: right">Warn when a target does not vanish in steady state</td></tr></table><table><tr><th style="text-align: right">Field</th><th style="text-align: right">Type</th><th style="text-align: right">Description</th></tr><tr><td style="text-align: right"><code>H_U</code></td><td style="text-align: right"><code>Matrix{T}</code></td><td style="text-align: right"><span>$(n_{targets} T) \times (n_{unknowns} T)$</span> clearing Jacobian</td></tr><tr><td style="text-align: right"><code>H_Z</code></td><td style="text-align: right"><code>Matrix{T}</code></td><td style="text-align: right"><span>$(n_{targets} T) \times (n_{shocks} T)$</span> shock Jacobian</td></tr><tr><td style="text-align: right"><code>curlyJ</code></td><td style="text-align: right"><code>Dict{Symbol,Dict{Symbol,Matrix{T}}}</code></td><td style="text-align: right">Total derivative of every variable w.r.t. every unknown and shock</td></tr><tr><td style="text-align: right"><code>H_U_fact</code></td><td style="text-align: right"><code>Factorization{T}</code></td><td style="text-align: right">Cached LU factorization reused by <code>ssj_irf</code></td></tr></table><h3 id="Second-Order-Impulse-Responses"><a class="docs-heading-anchor" href="#Second-Order-Impulse-Responses">Second-Order Impulse Responses</a><a id="Second-Order-Impulse-Responses-1"></a><a class="docs-heading-anchor-permalink" href="#Second-Order-Impulse-Responses" title="Permalink"></a></h3><p>Expanding <span>$H(U, Z) = 0$</span> to second order in the shock size gives the first-order system above plus</p><p class="math-container">\[H_U \, dU^{(2)} + \tfrac{1}{2} D^2 H[v, v] = 0, \qquad v = (dU^{(1)}, dZ)\]</p><p>where <span>$D^2 H[v, v]$</span> is the second-order sequence-space Jacobian tensor <strong>contracted with the first-order solution path</strong>. <code>ssj_irf(...; order=2)</code> evaluates that contraction from a central difference of two nonlinear DAG passes, so the <span>$T^3$</span> tensors –- <span>$2.7 \times 10^7$</span> entries per input pair at <span>$T = 300$</span> –- are never materialized. Because <span>$dU^{(2)}$</span> scales with the square of the shock size, the second-order solution collapses onto the first-order one as the shock shrinks.</p><pre><code class="language-julia hljs">dw = Dict(:w =&gt; [0.02 * 0.9^(t - 1) for t in 1:40])   # 2% AR(1) endowment shock
@@ -710,22 +710,22 @@ ss_w = compute_steady_state(spec_w; K_init=10.0, r_bounds=(-0.02, 0.04),
  K_parametric = round(ss_w.aggregates[:K_winberry], digits=4),
  distribution_states = length(ss_w.parametric.densities) * ss_w.parametric.n_moments,
  histogram_states = spec_w.grid.total_individual_states)</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">(K_histogram = 42.4366, K_parametric = 41.6796, distribution_states = 21, histogram_states = 1400)</code></pre><p>Three moments per income state reproduce aggregate capital to about 1.8% while carrying 21 distribution states instead of 1400. Feeding that steady state to <code>solve(spec; method=:reiter)</code> builds the linearized system on the moment state, with the same general-equilibrium closure the histogram-based Reiter method uses:</p><pre><code class="language-julia hljs">sol_w = solve(spec_w; method=:reiter, ss=ss_w, n_moments=3)
-report(sol_w)</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi"> HA-DSGE Solution (Linearized)
+report(sol_w)</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi"><span class="sgr1"> HA-DSGE Solution (Linearized)</span>
 
-                        Value
+ <span class="sgr1">                    </span> <span class="sgr1">  Value </span>
 
   Method               reiter
   Full state dim         1400
   Reduced state dim        21
   Explained variance    92.6%
 
-Heterogeneous Agent Steady State
+<span class="sgr1">Heterogeneous Agent Steady State</span>
 
 
 
-            Convergence
+<span class="sgr1">            Convergence</span>
 
-                            Value
+ <span class="sgr1">                     </span> <span class="sgr1">     Value </span>
 
   Converged                   Yes
   Iterations                   21
@@ -736,16 +736,16 @@ Heterogeneous Agent Steady State
     points evaluated         1390
     at grid nodes         -6.0397
 
-        Prices
+<span class="sgr1">        Prices</span>
 
-  Variable      Value
+ <span class="sgr1"> Variable </span> <span class="sgr1">    Value </span>
 
   r          0.007700
   w          2.466984
 
-         Aggregates
+<span class="sgr1">         Aggregates</span>
 
-  Variable           Value
+ <span class="sgr1"> Variable      </span> <span class="sgr1">    Value </span>
 
   A_policy         42.4366
   A_residual      1.42e-13
@@ -755,9 +755,9 @@ Heterogeneous Agent Steady State
   Y                 3.8547
   excess_demand    2.3e-05
 
-   Winberry Parametric Family (7 × 3 = 21 distribution states)
+<span class="sgr1">   Winberry Parametric Family (7 × 3 = 21 distribution states)</span>
 
-  Income state     Mass       Mean   Std. dev.   Moment residual
+ <span class="sgr1"> Income state </span> <span class="sgr1">   Mass </span> <span class="sgr1">     Mean </span> <span class="sgr1"> Std. dev. </span> <span class="sgr1"> Moment residual </span>
 
   1              0.0156    14.4410     29.4761          2.04e-13
   2              0.0938    19.1634     33.2806          6.93e-14
@@ -767,9 +767,9 @@ Heterogeneous Agent Steady State
   6              0.0937    77.1230     54.0828          5.26e-15
   7              0.0156   108.5796     60.9108          3.19e-15
 
-            Grid Adequacy
+<span class="sgr1">            Grid Adequacy</span>
 
-  Statistic                   Value
+ <span class="sgr1"> Statistic             </span> <span class="sgr1">     Value </span>
 
   a_max                   1000.0000
   Mass at ceiling (%)      4.36e-11
@@ -782,9 +782,9 @@ Heterogeneous Agent Steady State
   Relative residual        3.35e-15
   Verdict                  adequate
 
-      Wealth Distribution
+<span class="sgr1">      Wealth Distribution</span>
 
-  Statistic             Value
+ <span class="sgr1"> Statistic        </span> <span class="sgr1">    Value </span>
 
   Mean wealth         42.4366
   Gini coefficient     0.5624
@@ -809,13 +809,13 @@ result = estimate_dsge_bayes(spec, data, [0.36];
     ha_method=:ssj, ha_kwargs=(T_horizon=300, n_reduced=15))</code></pre><div class="admonition is-info" id="Technical-Note-3ccec6348db642c4"><header class="admonition-header">Technical Note<a class="admonition-anchor" href="#Technical-Note-3ccec6348db642c4" title="Permalink"></a></header><div class="admonition-body"><p>The inner loop re-solves the HA steady state at each draw, making estimation computationally intensive. For a one-asset model with 200 grid points, each likelihood evaluation takes approximately 0.5 seconds, yielding a 5000-draw chain in about 40 minutes.</p></div></div><p>The estimation output is a <code>BayesianDSGE</code> object with posterior draws, acceptance rate, and log-likelihood trace. Use <code>report(result)</code> for a formatted summary including posterior means, credible intervals, and convergence diagnostics.</p><table><tr><th style="text-align: right">Keyword</th><th style="text-align: right">Type</th><th style="text-align: right">Default</th><th style="text-align: right">Description</th></tr><tr><td style="text-align: right"><code>priors</code></td><td style="text-align: right"><code>Dict{Symbol,Distribution}</code></td><td style="text-align: right">—</td><td style="text-align: right">Prior distributions keyed by parameter name</td></tr><tr><td style="text-align: right"><code>observables</code></td><td style="text-align: right"><code>Vector{Symbol}</code></td><td style="text-align: right">—</td><td style="text-align: right">Observable variable names matching data columns</td></tr><tr><td style="text-align: right"><code>n_draws</code></td><td style="text-align: right"><code>Int</code></td><td style="text-align: right"><code>5000</code></td><td style="text-align: right">Total RWMH draws</td></tr><tr><td style="text-align: right"><code>burnin</code></td><td style="text-align: right"><code>Int</code></td><td style="text-align: right"><code>1000</code></td><td style="text-align: right">Burn-in draws to discard</td></tr><tr><td style="text-align: right"><code>ha_method</code></td><td style="text-align: right"><code>Symbol</code></td><td style="text-align: right"><code>:ssj</code></td><td style="text-align: right">Aggregate solution method (<code>:ssj</code> or <code>:reiter</code>)</td></tr><tr><td style="text-align: right"><code>ha_kwargs</code></td><td style="text-align: right"><code>NamedTuple</code></td><td style="text-align: right"><code>(T_horizon=300, n_reduced=15)</code></td><td style="text-align: right"><code>solve</code> options. <code>T_horizon</code> sets the SSJ truncation length; too-small values truncate persistent HA Jacobians and bias the likelihood (default follows Auclert et al. 2021)</td></tr></table><hr/><h2 id="Complete-Example"><a class="docs-heading-anchor" href="#Complete-Example">Complete Example</a><a id="Complete-Example-1"></a><a class="docs-heading-anchor-permalink" href="#Complete-Example" title="Permalink"></a></h2><p>A full workflow for a Krusell-Smith (1998) economy: load the model, compute the steady state, examine the wealth distribution, solve for aggregate dynamics, and simulate panel data.</p><pre><code class="language-julia hljs">ks = load_ha_example(:krusell_smith)
 ss_ks = compute_steady_state(ks; K_init=10.0, r_bounds=(-0.02, 0.04),
                               max_iter=80, tol=1e-4)
-report(ss_ks)</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">Heterogeneous Agent Steady State
+report(ss_ks)</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi"><span class="sgr1">Heterogeneous Agent Steady State</span>
 
 
 
-            Convergence
+<span class="sgr1">            Convergence</span>
 
-                            Value
+ <span class="sgr1">                     </span> <span class="sgr1">     Value </span>
 
   Converged                   Yes
   Iterations                   21
@@ -826,16 +826,16 @@ report(ss_ks)</code></pre><pre class="documenter-example-output"><code class="no
     points evaluated         1390
     at grid nodes         -6.0397
 
-        Prices
+<span class="sgr1">        Prices</span>
 
-  Variable      Value
+ <span class="sgr1"> Variable </span> <span class="sgr1">    Value </span>
 
   r          0.007700
   w          2.466984
 
-         Aggregates
+<span class="sgr1">         Aggregates</span>
 
-  Variable           Value
+ <span class="sgr1"> Variable      </span> <span class="sgr1">    Value </span>
 
   A_policy         42.4366
   A_residual      1.42e-13
@@ -844,9 +844,9 @@ report(ss_ks)</code></pre><pre class="documenter-example-output"><code class="no
   Y                 3.8547
   excess_demand    2.3e-05
 
-            Grid Adequacy
+<span class="sgr1">            Grid Adequacy</span>
 
-  Statistic                   Value
+ <span class="sgr1"> Statistic             </span> <span class="sgr1">     Value </span>
 
   a_max                   1000.0000
   Mass at ceiling (%)      4.36e-11
@@ -859,9 +859,9 @@ report(ss_ks)</code></pre><pre class="documenter-example-output"><code class="no
   Relative residual        3.35e-15
   Verdict                  adequate
 
-      Wealth Distribution
+<span class="sgr1">      Wealth Distribution</span>
 
-  Statistic             Value
+ <span class="sgr1"> Statistic        </span> <span class="sgr1">    Value </span>
 
   Mean wealth         42.4366
   Gini coefficient     0.5624
@@ -876,4 +876,4 @@ report(ss_ks)</code></pre><pre class="documenter-example-output"><code class="no
  p90  = round(ineq_ks[:p90][1], digits=2))</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">(gini = 0.5624, p50 = 25.96, p90 = 104.44)</code></pre><p>The Gini coefficient reflects the degree of wealth concentration in the stationary equilibrium. The gap between the median and 90th percentile illustrates the right-skewed nature of the wealth distribution –- a robust feature of heterogeneous agent models with borrowing constraints and precautionary savings.</p><pre><code class="language-julia hljs">panel_ks = simulate_panel(ss_ks; N_agents=1000, T_periods=200)
 size(panel_ks)</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">(1000, 200)</code></pre><p>The simulated panel tracks 1000 agents over 200 periods, providing micro-level data for computing cross-sectional moments, transition matrices, and mobility statistics.</p><pre><code class="language-julia hljs">plot_result(ss_ks)                    # wealth distribution
 plot_result(ss_ks; view=:lorenz)      # Lorenz curve with Gini
-plot_result(ss_ks; view=:policy)      # policy functions by income</code></pre><hr/><h2 id="Common-Pitfalls"><a class="docs-heading-anchor" href="#Common-Pitfalls">Common Pitfalls</a><a id="Common-Pitfalls-1"></a><a class="docs-heading-anchor-permalink" href="#Common-Pitfalls" title="Permalink"></a></h2><ol><li><p><strong>Bisection bounds too narrow.</strong> If <code>compute_steady_state</code> does not converge, widen <code>r_bounds</code>. The equilibrium interest rate can be negative in Aiyagari economies with patient agents.</p></li><li><p><strong>Grid too coarse near the borrowing constraint.</strong> The EGM interpolation is least accurate near the kink in the policy function. Prefer <code>grid_type=:geometric</code>, whose bottom spacing grows only logarithmically in <span>$a_{\max}$</span>; the <code>:double_exp</code> default is a fixed curve rescaled by <span>$a_{\max} - a_{\min}$</span>, so widening the grid coarsens the constraint proportionally. All built-in one-asset examples set <code>:geometric</code> for this reason — see <a href="#ha_grid">The Asset Grid</a>.</p></li><li><p><strong>Rouwenhorst vs Tauchen for persistent income.</strong> For <span>$\rho &gt; 0.95$</span>, Rouwenhorst is significantly more accurate. Tauchen requires very fine grids to match the stationary distribution of highly persistent processes.</p></li><li><p><strong>SSJ truncation horizon too short.</strong> If <code>T_horizon</code> is smaller than the half-life of the aggregate shock, the Jacobian is truncated prematurely. Use <span>$T_{\text{horizon}} \geq 3 / (1 - \rho_z)$</span> as a rule of thumb.</p></li><li><p><strong>Ho-Kalman <code>n_reduced</code> too small.</strong> Check <code>explained_variance</code> in the <code>HADSGESolution</code> –- it should exceed 0.999. If not, increase <code>n_reduced</code>.</p></li><li><p><strong>Two-asset deposit grid resolution.</strong> The nested EGM searches over a discrete deposit grid. With too few points (<code>n_deposit &lt; 20</code>), the optimal deposit choice may be inaccurate near the adjustment cost kink.</p></li><li><p><strong>Targets that do not vanish in steady state.</strong> <code>ssj_jacobian</code> warns when a target&#39;s steady-state level exceeds <code>target_tol</code>, which means the DAG is being linearized around a point that does not clear. The usual cause is an asset grid whose upper bound truncates the savings policy, so mass piles up at <code>a_max</code> and <span>$\int a&#39; d\mu$</span> exceeds <span>$\int a \, d\mu$</span>. Widen the grid rather than raising the tolerance.</p></li><li><p><strong><code>excess_demand</code> cannot see grid truncation.</strong> This is the failure mode that motivated <code>ha_grid_diagnostics</code>, and it is silent by construction. The Young (2010) transition clamps the savings policy into <span>$[a_{\min}, a_{\max}]$</span>. Clamping conserves <em>mass</em> exactly, so the distribution is still a valid probability measure and still exactly stationary –- but it destroys <em>assets</em>. Because <code>excess_demand</code> is measured on the already-clamped aggregate <span>$\int a \, d\mu$</span>, it can read <span>$10^{-7}$</span> while the model fails to clear by percent. For a stationary histogram the wedge is an exact identity:</p><p><code>math  \int a&#39; d\mu - \int a \, d\mu = \int \max(a&#39; - a_{\max}, 0) \, d\mu - \int \max(a_{\min} - a&#39;, 0) \, d\mu</code></p><p>so a non-zero residual <em>is</em> truncation. Read <code>ha_grid_diagnostics(ss)</code> (or the <strong>Grid Adequacy</strong> panel that <code>report(ss)</code> prints) after every solve, and compare <code>aggregates[:K]</code> = <span>$\int a \, d\mu$</span> against <code>aggregates[:A_policy]</code> = <span>$\int a&#39; d\mu$</span>, which is what the sequence-space household block integrates. <code>compute_steady_state</code> warns by default; use <code>grid_check=:error</code> to make it fatal or <code>:none</code> to silence it.</p></li><li><p><strong>A rate with <span>$\beta(1+r) \geq 1$</span> is not an equilibrium candidate.</strong> Aiyagari&#39;s (1994) existence condition requires <span>$\beta(1+r) &lt; 1$</span>; above it, household wealth diverges and <em>no</em> stationary distribution exists, so no finite <code>a_max</code> will help. If <code>compute_steady_state</code> warns about this, the problem is the calibration or the clearing rule, not the grid. The bisection skips such rates outright rather than solving a household problem whose answer would be an artifact of the grid ceiling.</p></li><li><p><strong>Second-order step size.</strong> <code>ssj_irf(...; order=2)</code> differences at the actual shock size (<code>fd_step=1.0</code>). Reduce <code>fd_step</code> when the shock is large enough to push the household problem far from its steady state; raise it when the shock is so small that the <span>$O(\sigma^2)$</span> term is lost in roundoff.</p></li><li><p><strong>DCEGM asset grids must be dense near the credit limit.</strong> A household that saves exactly the credit limit and has no income next period consumes zero forever, so the value there is <span>$-\infty$</span> and the endogenous grid cannot reach below <span>$\bar{a} + c(\bar{a})$</span>. On a uniform grid that unresolved wedge is a full asset step wide; <code>dcegm_retirement_model</code> therefore defaults to <code>curvature=2.0</code>, which shrinks it by a factor of <code>n_a</code>. Give the option a positive income floor (<code>pension</code>) if you need the constrained branch itself.</p></li><li><p><strong>Comparing DCEGM against a grid solver near a kink.</strong> DCEGM locates the switching threshold exactly, so consumption jumps at an arbitrary real number. A value-function-iteration benchmark on a finite grid cannot represent that jump and will disagree sharply at the one or two nodes straddling it, while agreeing to grid accuracy everywhere else. Compare medians and choice indicators, not maxima.</p></li><li><p><strong>Winberry accuracy is limited by the mass at the borrowing constraint, not by the moment order.</strong> An exponential family is a density and cannot represent an atom. On the calibrated Krusell-Smith example 6.3% of households sit exactly at <span>$a = 0$</span>, and aggregate capital from the parametric fixed point is off by 7.2% at two moments, 1.8% at three, and 1.1% at five –- the returns to extra moments flatten out quickly. Use <code>:winberry</code> when the size of the linearized system is the binding constraint, and check <code>aggregates[:K_winberry]</code> against <code>aggregates[:K]</code> before trusting it.</p></li><li><p><strong>High moment orders on coarse grids do not reach the fixed-point tolerance.</strong> The residual floor of the moment map rises with the moment order and falls with grid resolution. On a 200-node grid the fixed point converges to <span>$10^{-9}$</span> through at least five moments; on an 80-node grid it stops converging above four. <code>compute_steady_state</code> warns and leaves <code>converged=false</code> on the family rather than reporting success –- lower <code>n_moments</code> or refine the grid.</p></li></ol><hr/><h2 id="References"><a class="docs-heading-anchor" href="#References">References</a><a id="References-1"></a><a class="docs-heading-anchor-permalink" href="#References" title="Permalink"></a></h2><ul><li><p>Aiyagari, S. Rao. 1994. &quot;Uninsured Idiosyncratic Risk and Aggregate Saving.&quot; <em>Quarterly Journal of Economics</em> 109 (3): 659–684. <a href="https://doi.org/10.2307/2118417">DOI</a></p></li><li><p>Auclert, Adrien, Bence Bardóczy, Matthew Rognlie, and Ludwig Straub. 2021. &quot;Using the Sequence-Space Jacobian to Solve and Estimate Heterogeneous-Agent Models.&quot; <em>Econometrica</em> 89 (5): 2375–2408. <a href="https://doi.org/10.3982/ECTA17434">DOI</a></p></li><li><p>Bhandari, Anmol, Thomas Bourany, David Evans, and Mikhail Golosov. 2023. &quot;A Perturbational Approach for Approximating Heterogeneous-Agent Models.&quot; NBER Working Paper 31744. <a href="https://doi.org/10.3386/w31744">DOI</a></p></li><li><p>de Boor, Carl. 1973. &quot;Good Approximation by Splines with Variable Knots II.&quot; In <em>Conference on the Numerical Solution of Differential Equations</em>, edited by G. A. Watson, 12–20. Lecture Notes in Mathematics 363. Berlin: Springer. <a href="https://doi.org/10.1007/BFb0069121">DOI</a></p></li><li><p>Carroll, Christopher D. 2006. &quot;The Method of Endogenous Gridpoints for Solving Dynamic Stochastic Optimization Problems.&quot; <em>Economics Letters</em> 91 (3): 312–320. <a href="https://doi.org/10.1016/j.econlet.2005.09.013">DOI</a></p></li><li><p>Greenwood, Jeremy, Zvi Hercowitz, and Gregory W. Huffman. 1988. &quot;Investment, Capacity Utilization, and the Real Business Cycle.&quot; <em>American Economic Review</em> 78 (3): 402–417.</p></li><li><p>den Haan, Wouter J. 2010. &quot;Assessing the Accuracy of the Aggregate Law of Motion in Models with Heterogeneous Agents.&quot; <em>Journal of Economic Dynamics and Control</em> 34 (1): 79–99. <a href="https://doi.org/10.1016/j.jedc.2008.12.009">DOI</a></p></li><li><p>Huggett, Mark. 1993. &quot;The Risk-Free Rate in Heterogeneous-Agent Incomplete-Insurance Economies.&quot; <em>Journal of Economic Dynamics and Control</em> 17 (5–6): 953–969. <a href="https://doi.org/10.1016/0165-1889(93)90024-M">DOI</a></p></li><li><p>Iskhakov, Fedor, Thomas H. Jørgensen, John Rust, and Bertel Schjerning. 2017. &quot;The Endogenous Grid Method for Discrete-Continuous Dynamic Choice Models with (or without) Taste Shocks.&quot; <em>Quantitative Economics</em> 8 (2): 317–365. <a href="https://doi.org/10.3982/QE643">DOI</a></p></li><li><p>Kaplan, Greg, Benjamin Moll, and Giovanni L. Violante. 2018. &quot;Monetary Policy According to HANK.&quot; <em>American Economic Review</em> 108 (3): 697–743. <a href="https://doi.org/10.1257/aer.20160042">DOI</a></p></li><li><p>Krusell, Per, and Anthony A. Smith Jr. 1998. &quot;Income and Wealth Heterogeneity in the Macroeconomy.&quot; <em>Journal of Political Economy</em> 106 (5): 867–896. <a href="https://doi.org/10.1086/250034">DOI</a></p></li><li><p>Reiter, Michael. 2009. &quot;Solving Heterogeneous-Agent Models by Projection and Perturbation.&quot; <em>Journal of Economic Dynamics and Control</em> 33 (3): 649–665. <a href="https://doi.org/10.1016/j.jedc.2008.08.010">DOI</a></p></li><li><p>Rouwenhorst, K. Geert. 1995. &quot;Asset Pricing Implications of Equilibrium Business Cycle Models.&quot; In <em>Frontiers of Business Cycle Research</em>, edited by Thomas F. Cooley, 294–330. Princeton: Princeton University Press.</p></li><li><p>Tauchen, George. 1986. &quot;Finite State Markov-Chain Approximations to Univariate and Vector Autoregressions.&quot; <em>Economics Letters</em> 20 (2): 177–181. <a href="https://doi.org/10.1016/0165-1765(86)90168-0">DOI</a></p></li><li><p>Winberry, Thomas. 2018. &quot;A Method for Solving and Estimating Heterogeneous Agent Macro Models.&quot; <em>Quantitative Economics</em> 9 (3): 1123–1151. <a href="https://doi.org/10.3982/QE740">DOI</a></p></li><li><p>Young, Eric R. 2010. &quot;Solving the Incomplete Markets Model with Aggregate Uncertainty Using the Krusell–Smith Algorithm and Non-Stochastic Simulations.&quot; <em>Journal of Economic Dynamics and Control</em> 34 (1): 36–41. <a href="https://doi.org/10.1016/j.jedc.2008.11.010">DOI</a></p></li></ul></article><nav class="docs-footer"><a class="docs-footer-prevpage" href="../dsge_heterogeneity/">« Overview</a><a class="docs-footer-nextpage" href="../dsge_olg/">Overlapping Generations »</a><div class="flexbox-break"></div><p class="footer-message">Powered by <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> and the <a href="https://julialang.org/">Julia Programming Language</a>.</p></nav></div><div class="modal" id="documenter-settings"><div class="modal-background"></div><div class="modal-card"><header class="modal-card-head"><p class="modal-card-title">Settings</p><button class="delete"></button></header><section class="modal-card-body"><p><label class="label">Theme</label><div class="select"><select id="documenter-themepicker"><option value="auto">Automatic (OS)</option><option value="documenter-light">documenter-light</option><option value="documenter-dark">documenter-dark</option><option value="catppuccin-latte">catppuccin-latte</option><option value="catppuccin-frappe">catppuccin-frappe</option><option value="catppuccin-macchiato">catppuccin-macchiato</option><option value="catppuccin-mocha">catppuccin-mocha</option></select></div></p><hr/><p>This document was generated with <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> version 1.17.0 on <span class="colophon-date" title="Sunday 2 August 2026 22:42">Sunday 2 August 2026</span>. Using Julia version 1.12.6.</p></section><footer class="modal-card-foot"></footer></div></div></div></body></html>
+plot_result(ss_ks; view=:policy)      # policy functions by income</code></pre><hr/><h2 id="Common-Pitfalls"><a class="docs-heading-anchor" href="#Common-Pitfalls">Common Pitfalls</a><a id="Common-Pitfalls-1"></a><a class="docs-heading-anchor-permalink" href="#Common-Pitfalls" title="Permalink"></a></h2><ol><li><p><strong>Bisection bounds too narrow.</strong> If <code>compute_steady_state</code> does not converge, widen <code>r_bounds</code>. The equilibrium interest rate can be negative in Aiyagari economies with patient agents.</p></li><li><p><strong>Grid too coarse near the borrowing constraint.</strong> The EGM interpolation is least accurate near the kink in the policy function. Prefer <code>grid_type=:geometric</code>, whose bottom spacing grows only logarithmically in <span>$a_{\max}$</span>; the <code>:double_exp</code> default is a fixed curve rescaled by <span>$a_{\max} - a_{\min}$</span>, so widening the grid coarsens the constraint proportionally. All built-in one-asset examples set <code>:geometric</code> for this reason — see <a href="#ha_grid">The Asset Grid</a>.</p></li><li><p><strong>Rouwenhorst vs Tauchen for persistent income.</strong> For <span>$\rho &gt; 0.95$</span>, Rouwenhorst is significantly more accurate. Tauchen requires very fine grids to match the stationary distribution of highly persistent processes.</p></li><li><p><strong>SSJ truncation horizon too short.</strong> If <code>T_horizon</code> is smaller than the half-life of the aggregate shock, the Jacobian is truncated prematurely. Use <span>$T_{\text{horizon}} \geq 3 / (1 - \rho_z)$</span> as a rule of thumb.</p></li><li><p><strong>Ho-Kalman <code>n_reduced</code> too small.</strong> Check <code>explained_variance</code> in the <code>HADSGESolution</code> –- it should exceed 0.999. If not, increase <code>n_reduced</code>.</p></li><li><p><strong>Two-asset deposit grid resolution.</strong> The nested EGM searches over a discrete deposit grid. With too few points (<code>n_deposit &lt; 20</code>), the optimal deposit choice may be inaccurate near the adjustment cost kink.</p></li><li><p><strong>Targets that do not vanish in steady state.</strong> <code>ssj_jacobian</code> warns when a target&#39;s steady-state level exceeds <code>target_tol</code>, which means the DAG is being linearized around a point that does not clear. The usual cause is an asset grid whose upper bound truncates the savings policy, so mass piles up at <code>a_max</code> and <span>$\int a&#39; d\mu$</span> exceeds <span>$\int a \, d\mu$</span>. Widen the grid rather than raising the tolerance.</p></li><li><p><strong><code>excess_demand</code> cannot see grid truncation.</strong> This is the failure mode that motivated <code>ha_grid_diagnostics</code>, and it is silent by construction. The Young (2010) transition clamps the savings policy into <span>$[a_{\min}, a_{\max}]$</span>. Clamping conserves <em>mass</em> exactly, so the distribution is still a valid probability measure and still exactly stationary –- but it destroys <em>assets</em>. Because <code>excess_demand</code> is measured on the already-clamped aggregate <span>$\int a \, d\mu$</span>, it can read <span>$10^{-7}$</span> while the model fails to clear by percent. For a stationary histogram the wedge is an exact identity:</p><p><code>math  \int a&#39; d\mu - \int a \, d\mu = \int \max(a&#39; - a_{\max}, 0) \, d\mu - \int \max(a_{\min} - a&#39;, 0) \, d\mu</code></p><p>so a non-zero residual <em>is</em> truncation. Read <code>ha_grid_diagnostics(ss)</code> (or the <strong>Grid Adequacy</strong> panel that <code>report(ss)</code> prints) after every solve, and compare <code>aggregates[:K]</code> = <span>$\int a \, d\mu$</span> against <code>aggregates[:A_policy]</code> = <span>$\int a&#39; d\mu$</span>, which is what the sequence-space household block integrates. <code>compute_steady_state</code> warns by default; use <code>grid_check=:error</code> to make it fatal or <code>:none</code> to silence it.</p></li><li><p><strong>A rate with <span>$\beta(1+r) \geq 1$</span> is not an equilibrium candidate.</strong> Aiyagari&#39;s (1994) existence condition requires <span>$\beta(1+r) &lt; 1$</span>; above it, household wealth diverges and <em>no</em> stationary distribution exists, so no finite <code>a_max</code> will help. If <code>compute_steady_state</code> warns about this, the problem is the calibration or the clearing rule, not the grid. The bisection skips such rates outright rather than solving a household problem whose answer would be an artifact of the grid ceiling.</p></li><li><p><strong>Second-order step size.</strong> <code>ssj_irf(...; order=2)</code> differences at the actual shock size (<code>fd_step=1.0</code>). Reduce <code>fd_step</code> when the shock is large enough to push the household problem far from its steady state; raise it when the shock is so small that the <span>$O(\sigma^2)$</span> term is lost in roundoff.</p></li><li><p><strong>DCEGM asset grids must be dense near the credit limit.</strong> A household that saves exactly the credit limit and has no income next period consumes zero forever, so the value there is <span>$-\infty$</span> and the endogenous grid cannot reach below <span>$\bar{a} + c(\bar{a})$</span>. On a uniform grid that unresolved wedge is a full asset step wide; <code>dcegm_retirement_model</code> therefore defaults to <code>curvature=2.0</code>, which shrinks it by a factor of <code>n_a</code>. Give the option a positive income floor (<code>pension</code>) if you need the constrained branch itself.</p></li><li><p><strong>Comparing DCEGM against a grid solver near a kink.</strong> DCEGM locates the switching threshold exactly, so consumption jumps at an arbitrary real number. A value-function-iteration benchmark on a finite grid cannot represent that jump and will disagree sharply at the one or two nodes straddling it, while agreeing to grid accuracy everywhere else. Compare medians and choice indicators, not maxima.</p></li><li><p><strong>Winberry accuracy is limited by the mass at the borrowing constraint, not by the moment order.</strong> An exponential family is a density and cannot represent an atom. On the calibrated Krusell-Smith example 6.3% of households sit exactly at <span>$a = 0$</span>, and aggregate capital from the parametric fixed point is off by 7.2% at two moments, 1.8% at three, and 1.1% at five –- the returns to extra moments flatten out quickly. Use <code>:winberry</code> when the size of the linearized system is the binding constraint, and check <code>aggregates[:K_winberry]</code> against <code>aggregates[:K]</code> before trusting it.</p></li><li><p><strong>High moment orders on coarse grids do not reach the fixed-point tolerance.</strong> The residual floor of the moment map rises with the moment order and falls with grid resolution. On a 200-node grid the fixed point converges to <span>$10^{-9}$</span> through at least five moments; on an 80-node grid it stops converging above four. <code>compute_steady_state</code> warns and leaves <code>converged=false</code> on the family rather than reporting success –- lower <code>n_moments</code> or refine the grid.</p></li></ol><hr/><h2 id="References"><a class="docs-heading-anchor" href="#References">References</a><a id="References-1"></a><a class="docs-heading-anchor-permalink" href="#References" title="Permalink"></a></h2><ul><li><p>Aiyagari, S. Rao. 1994. &quot;Uninsured Idiosyncratic Risk and Aggregate Saving.&quot; <em>Quarterly Journal of Economics</em> 109 (3): 659–684. <a href="https://doi.org/10.2307/2118417">DOI</a></p></li><li><p>Auclert, Adrien, Bence Bardóczy, Matthew Rognlie, and Ludwig Straub. 2021. &quot;Using the Sequence-Space Jacobian to Solve and Estimate Heterogeneous-Agent Models.&quot; <em>Econometrica</em> 89 (5): 2375–2408. <a href="https://doi.org/10.3982/ECTA17434">DOI</a></p></li><li><p>Bhandari, Anmol, Thomas Bourany, David Evans, and Mikhail Golosov. 2023. &quot;A Perturbational Approach for Approximating Heterogeneous-Agent Models.&quot; NBER Working Paper 31744. <a href="https://doi.org/10.3386/w31744">DOI</a></p></li><li><p>de Boor, Carl. 1973. &quot;Good Approximation by Splines with Variable Knots II.&quot; In <em>Conference on the Numerical Solution of Differential Equations</em>, edited by G. A. Watson, 12–20. Lecture Notes in Mathematics 363. Berlin: Springer. <a href="https://doi.org/10.1007/BFb0069121">DOI</a></p></li><li><p>Carroll, Christopher D. 2006. &quot;The Method of Endogenous Gridpoints for Solving Dynamic Stochastic Optimization Problems.&quot; <em>Economics Letters</em> 91 (3): 312–320. <a href="https://doi.org/10.1016/j.econlet.2005.09.013">DOI</a></p></li><li><p>Greenwood, Jeremy, Zvi Hercowitz, and Gregory W. Huffman. 1988. &quot;Investment, Capacity Utilization, and the Real Business Cycle.&quot; <em>American Economic Review</em> 78 (3): 402–417.</p></li><li><p>den Haan, Wouter J. 2010. &quot;Assessing the Accuracy of the Aggregate Law of Motion in Models with Heterogeneous Agents.&quot; <em>Journal of Economic Dynamics and Control</em> 34 (1): 79–99. <a href="https://doi.org/10.1016/j.jedc.2008.12.009">DOI</a></p></li><li><p>Huggett, Mark. 1993. &quot;The Risk-Free Rate in Heterogeneous-Agent Incomplete-Insurance Economies.&quot; <em>Journal of Economic Dynamics and Control</em> 17 (5–6): 953–969. <a href="https://doi.org/10.1016/0165-1889(93)90024-M">DOI</a></p></li><li><p>Iskhakov, Fedor, Thomas H. Jørgensen, John Rust, and Bertel Schjerning. 2017. &quot;The Endogenous Grid Method for Discrete-Continuous Dynamic Choice Models with (or without) Taste Shocks.&quot; <em>Quantitative Economics</em> 8 (2): 317–365. <a href="https://doi.org/10.3982/QE643">DOI</a></p></li><li><p>Kaplan, Greg, Benjamin Moll, and Giovanni L. Violante. 2018. &quot;Monetary Policy According to HANK.&quot; <em>American Economic Review</em> 108 (3): 697–743. <a href="https://doi.org/10.1257/aer.20160042">DOI</a></p></li><li><p>Krusell, Per, and Anthony A. Smith Jr. 1998. &quot;Income and Wealth Heterogeneity in the Macroeconomy.&quot; <em>Journal of Political Economy</em> 106 (5): 867–896. <a href="https://doi.org/10.1086/250034">DOI</a></p></li><li><p>Reiter, Michael. 2009. &quot;Solving Heterogeneous-Agent Models by Projection and Perturbation.&quot; <em>Journal of Economic Dynamics and Control</em> 33 (3): 649–665. <a href="https://doi.org/10.1016/j.jedc.2008.08.010">DOI</a></p></li><li><p>Rouwenhorst, K. Geert. 1995. &quot;Asset Pricing Implications of Equilibrium Business Cycle Models.&quot; In <em>Frontiers of Business Cycle Research</em>, edited by Thomas F. Cooley, 294–330. Princeton: Princeton University Press.</p></li><li><p>Tauchen, George. 1986. &quot;Finite State Markov-Chain Approximations to Univariate and Vector Autoregressions.&quot; <em>Economics Letters</em> 20 (2): 177–181. <a href="https://doi.org/10.1016/0165-1765(86)90168-0">DOI</a></p></li><li><p>Winberry, Thomas. 2018. &quot;A Method for Solving and Estimating Heterogeneous Agent Macro Models.&quot; <em>Quantitative Economics</em> 9 (3): 1123–1151. <a href="https://doi.org/10.3982/QE740">DOI</a></p></li><li><p>Young, Eric R. 2010. &quot;Solving the Incomplete Markets Model with Aggregate Uncertainty Using the Krusell–Smith Algorithm and Non-Stochastic Simulations.&quot; <em>Journal of Economic Dynamics and Control</em> 34 (1): 36–41. <a href="https://doi.org/10.1016/j.jedc.2008.11.010">DOI</a></p></li></ul></article><nav class="docs-footer"><a class="docs-footer-prevpage" href="../dsge_heterogeneity/">« Overview</a><a class="docs-footer-nextpage" href="../dsge_olg/">Overlapping Generations »</a><div class="flexbox-break"></div><p class="footer-message">Powered by <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> and the <a href="https://julialang.org/">Julia Programming Language</a>.</p></nav></div><div class="modal" id="documenter-settings"><div class="modal-background"></div><div class="modal-card"><header class="modal-card-head"><p class="modal-card-title">Settings</p><button class="delete"></button></header><section class="modal-card-body"><p><label class="label">Theme</label><div class="select"><select id="documenter-themepicker"><option value="auto">Automatic (OS)</option><option value="documenter-light">documenter-light</option><option value="documenter-dark">documenter-dark</option><option value="catppuccin-latte">catppuccin-latte</option><option value="catppuccin-frappe">catppuccin-frappe</option><option value="catppuccin-macchiato">catppuccin-macchiato</option><option value="catppuccin-mocha">catppuccin-mocha</option></select></div></p><hr/><p>This document was generated with <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> version 1.17.0 on <span class="colophon-date" title="Sunday 16 August 2026 12:19">Sunday 16 August 2026</span>. Using Julia version 1.12.6.</p></section><footer class="modal-card-foot"></footer></div></div></div></body></html>
