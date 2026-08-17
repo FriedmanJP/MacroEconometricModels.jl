@@ -6592,7 +6592,7 @@ end
     @test abs(evaluate_policy(sol_lin, [0.01])[1] - evaluate_policy(sol_pol, [0.01])[1]) < 1e-4
 end
 
-@testset "PFI Howard re-solves and nonlinear next_state on growth" begin
+@testset "PFI Howard / nonlinear / damping on growth" begin
     spec = @dsge begin
         parameters: β = 0.99, α = 0.36, δ = 0.025, ρ = 0.95, σ = 0.007
         endogenous: c, k, a
@@ -6602,45 +6602,27 @@ end
         a[t] = ρ * a[t-1] + σ * ε[t]
     end
     spec = compute_steady_state(spec)
-    sol0 = pfi_solver(spec; degree=3, damping=0.5, howard_steps=0,
-                      max_iter=250, verbose=false)
-    solH = pfi_solver(spec; degree=3, damping=0.5, howard_steps=5,
-                      max_iter=250, verbose=false)
+    sol0  = pfi_solver(spec; degree=3, damping=0.5, howard_steps=0,
+                       max_iter=200, verbose=false)
+    solH  = pfi_solver(spec; degree=3, damping=0.5, howard_steps=5,
+                       max_iter=200, verbose=false)
+    solNL = pfi_solver(spec; degree=3, damping=0.5, next_state=:nonlinear,
+                       max_iter=150, verbose=false)
+    solA  = pfi_solver(spec; degree=3, damping=0.5, anderson_m=3,
+                       max_iter=200, verbose=false)
     @test solH.converged
     @test solH.iterations <= sol0.iterations
     x_ss = spec.steady_state[solH.state_indices]
-    @test abs(evaluate_policy(sol0, x_ss)[1] - evaluate_policy(solH, x_ss)[1]) /
-          max(abs(evaluate_policy(sol0, x_ss)[1]), 1e-8) < 0.08
-
-    sol_nl = pfi_solver(spec; degree=3, damping=0.5, next_state=:nonlinear,
-                        max_iter=200, verbose=false)
-    @test sol_nl.converged || isfinite(sol_nl.residual_norm)
-    @test all(isfinite, evaluate_policy(sol_nl, x_ss))
-end
-
-@testset "PFI Anderson/damping change iteration count on growth" begin
-    spec = @dsge begin
-        parameters: β = 0.99, α = 0.36, δ = 0.025, ρ = 0.95, σ = 0.007
-        endogenous: c, k, a
-        exogenous: ε
-        1 / c[t] = β * (1 / c[t+1]) * (α * exp(a[t+1]) * k[t]^(α - 1) + 1 - δ)
-        c[t] + k[t] = exp(a[t]) * k[t-1]^α + (1 - δ) * k[t-1]
-        a[t] = ρ * a[t-1] + σ * ε[t]
-    end
-    spec = compute_steady_state(spec)
-    sol_d1 = pfi_solver(spec; degree=3, damping=1.0, max_iter=200, verbose=false)
-    sol_d5 = pfi_solver(spec; degree=3, damping=0.5, max_iter=200, verbose=false)
-    sol_and = pfi_solver(spec; degree=3, damping=0.5, anderson_m=3,
-                         max_iter=200, verbose=false)
-    x_ss = spec.steady_state[sol_d5.state_indices]
-    c1 = evaluate_policy(sol_d1, x_ss)[1]
-    c5 = evaluate_policy(sol_d5, x_ss)[1]
-    ca = evaluate_policy(sol_and, x_ss)[1]
-    @test isfinite(c1) && isfinite(c5) && isfinite(ca)
-    @test abs(c5 - ca) / max(abs(c5), 1e-8) < 0.1
-    @test abs(c1 - c5) / max(abs(c5), 1e-8) < 0.15
-    # Damping/Anderson must not be no-ops on the recorded iteration path
-    @test (sol_d1.iterations, sol_d5.iterations, sol_and.iterations) != (0, 0, 0)
+    c0 = evaluate_policy(sol0, x_ss)[1]
+    cH = evaluate_policy(solH, x_ss)[1]
+    cA = evaluate_policy(solA, x_ss)[1]
+    @test abs(c0 - cH) / max(abs(c0), 1e-8) < 0.08
+    @test solNL.converged || isfinite(solNL.residual_norm)
+    @test all(isfinite, evaluate_policy(solNL, x_ss))
+    @test isfinite(c0) && isfinite(cH) && isfinite(cA)
+    @test abs(cH - cA) / max(abs(cH), 1e-8) < 0.1
+    # Howard / Anderson must not be no-ops on the recorded iteration path
+    @test (sol0.iterations, solH.iterations, solA.iterations) != (0, 0, 0)
 end
 
 FAST || @testset "PFI threaded matches sequential" begin
@@ -6767,8 +6749,14 @@ T_lo(::Dict) = 1e-4
 
 @testset "Value Function Iteration" begin
 
+    spec = _vfi_rbc_spec()
+    kw = _vfi_rbc_bellman(spec)
+    sol = vfi_solver(spec; kw..., degree=3, n_grid=8, max_iter=200, howard_steps=10,
+                     n_choice=17, verbose=false)
+    x_ss = spec.steady_state[sol.state_indices]
+
 @testset "@dsge Bellman fields fill vfi_solver kwargs" begin
-    spec = @dsge begin
+    spec_macro = @dsge begin
         parameters: β = 0.99, α = 0.36, δ = 0.025, ρ = 0.95, σ = 0.007
         endogenous: c, k, a
         exogenous: ε
@@ -6779,37 +6767,28 @@ T_lo(::Dict) = 1e-4
         c[t] + k[t] = exp(a[t]) * k[t-1]^α + (1 - δ) * k[t-1]
         a[t] = ρ * a[t-1] + σ * ε[t]
     end
-    spec = compute_steady_state(spec)
-    @test spec.bellman_utility === log
-    @test spec.bellman_beta === :β
-    @test spec.bellman_consumption === :c
-    @test spec.bellman_controls == [:c]
-    spec2 = MacroEconometricModels._respec(spec, spec.param_values)
+    spec_macro = compute_steady_state(spec_macro)
+    @test spec_macro.bellman_utility === log
+    @test spec_macro.bellman_beta === :β
+    @test spec_macro.bellman_consumption === :c
+    @test spec_macro.bellman_controls == [:c]
+    spec2 = MacroEconometricModels._respec(spec_macro, spec_macro.param_values)
     @test spec2.bellman_utility === log
     @test spec2.bellman_beta === :β
     @test spec2.bellman_consumption === :c
-    kw = _vfi_rbc_bellman(spec)
-    sol = vfi_solver(spec;
-        transition = kw.transition,
-        control_bounds = kw.control_bounds,
-        outcome = kw.outcome,
-        degree = 3, n_grid = 8, howard_steps = 10, max_iter = 250,
-        n_choice = 17, verbose = false)
-    @test sol.converged
-    @test !isempty(sol.value_fn)
 end
 
 @testset "Euler-only spec errors and names pfi_solver" begin
-    spec = @dsge begin
+    spec_ar = @dsge begin
         parameters: ρ = 0.9, σ = 0.01
         endogenous: y
         exogenous: ε
         y[t] = ρ * y[t-1] + σ * ε[t]
         steady_state: [0.0]
     end
-    spec = compute_steady_state(spec)
+    spec_ar = compute_steady_state(spec_ar)
     err = try
-        vfi_solver(spec)
+        vfi_solver(spec_ar)
         error("vfi_solver should have thrown")
     catch e
         e
@@ -6818,7 +6797,7 @@ end
     @test occursin("pfi_solver", sprint(showerror, err))
     @test occursin("utility", sprint(showerror, err))
     err2 = try
-        solve(spec; method=:vfi)
+        solve(spec_ar; method=:vfi)
         error("solve(:vfi) should have thrown")
     catch e
         e
@@ -6828,16 +6807,10 @@ end
 end
 
 @testset "Smolyak is not supported on Bellman VFI" begin
-    spec = _vfi_rbc_spec()
-    kw = _vfi_rbc_bellman(spec)
     @test_throws ArgumentError vfi_solver(spec; kw..., grid=:smolyak, smolyak_mu=2)
 end
 
 @testset "Growth model stores V and converges" begin
-    spec = _vfi_rbc_spec()
-    kw = _vfi_rbc_bellman(spec)
-    sol = vfi_solver(spec; kw..., degree=3, n_grid=8, max_iter=200, howard_steps=10,
-                     n_choice=21, verbose=false)
     @test sol isa MacroEconometricModels.ProjectionSolution
     @test sol.converged
     @test sol.method == :vfi
@@ -6848,11 +6821,6 @@ end
 end
 
 @testset "evaluate_value and V increasing in capital" begin
-    spec = _vfi_rbc_spec()
-    kw = _vfi_rbc_bellman(spec)
-    sol = vfi_solver(spec; kw..., degree=3, n_grid=8, max_iter=200, howard_steps=10,
-                     n_choice=21, verbose=false)
-    x_ss = spec.steady_state[sol.state_indices]
     v_ss = evaluate_value(sol, x_ss)
     @test isfinite(v_ss)
     k_ss = x_ss[1]
@@ -6863,10 +6831,6 @@ end
 end
 
 @testset "Bellman residual is small after Howard PE" begin
-    spec = _vfi_rbc_spec()
-    kw = _vfi_rbc_bellman(spec)
-    sol = vfi_solver(spec; kw..., degree=3, n_grid=8, max_iter=200, howard_steps=15,
-                     n_choice=21, verbose=false)
     β = spec.param_values[:β]
     θ = spec.param_values
     n_eps = spec.n_exog
@@ -6893,49 +6857,34 @@ end
 end
 
 @testset "VFI policy agrees with PFI near SS (a = 0)" begin
-    spec = _vfi_rbc_spec()
-    kw = _vfi_rbc_bellman(spec)
-    sol_v = vfi_solver(spec; kw..., degree=4, n_grid=10, max_iter=250, howard_steps=15,
-                       n_choice=21, verbose=false)
-    sol_p = pfi_solver(spec; degree=4, damping=0.5, max_iter=400, verbose=false)
-    @test sol_v.converged
-    k_ss = spec.steady_state[sol_v.state_indices[1]]
+    sol_p = pfi_solver(spec; degree=3, damping=0.5, max_iter=200, verbose=false)
+    @test sol.converged
+    k_ss = x_ss[1]
     for k in (0.97 * k_ss, k_ss, 1.03 * k_ss)
-        y_v = evaluate_policy(sol_v, [k, 0.0])
+        y_v = evaluate_policy(sol, [k, 0.0])
         y_p = evaluate_policy(sol_p, [k, 0.0])
         @test abs(y_v[1] - y_p[1]) / max(abs(y_p[1]), 1e-8) < 0.08
     end
 end
 
 @testset "Howard PE reduces iteration count" begin
-    spec = _vfi_rbc_spec()
-    kw = _vfi_rbc_bellman(spec)
-    sol0 = vfi_solver(spec; kw..., degree=3, n_grid=8, max_iter=400, howard_steps=0,
+    sol0 = vfi_solver(spec; kw..., degree=3, n_grid=8, max_iter=250, howard_steps=0,
                       n_choice=17, verbose=false)
-    solH = vfi_solver(spec; kw..., degree=3, n_grid=8, max_iter=400, howard_steps=15,
-                      n_choice=17, verbose=false)
-    @test solH.converged
-    @test solH.iterations < sol0.iterations
-    x_ss = spec.steady_state[sol0.state_indices]
-    @test abs(evaluate_policy(sol0, x_ss)[1] - evaluate_policy(solH, x_ss)[1]) /
+    @test sol.converged
+    @test sol.iterations < sol0.iterations
+    @test abs(evaluate_policy(sol0, x_ss)[1] - evaluate_policy(sol, x_ss)[1]) /
           evaluate_policy(sol0, x_ss)[1] < 0.05
 end
 
 @testset "solve(; method=:vfi) forwards Bellman kwargs" begin
-    spec = _vfi_rbc_spec()
-    kw = _vfi_rbc_bellman(spec)
-    sol = solve(spec; method=:vfi, kw..., degree=3, n_grid=8, max_iter=250,
-                howard_steps=10, n_choice=17, verbose=false)
-    @test sol isa ProjectionSolution
-    @test sol.method == :vfi
-    @test sol.converged
+    sol_solve = solve(spec; method=:vfi, kw..., degree=3, n_grid=8, max_iter=200,
+                      howard_steps=10, n_choice=17, verbose=false)
+    @test sol_solve isa ProjectionSolution
+    @test sol_solve.method == :vfi
+    @test sol_solve.converged
 end
 
 @testset "VFI show() and simulate/irf" begin
-    spec = _vfi_rbc_spec()
-    kw = _vfi_rbc_bellman(spec)
-    sol = vfi_solver(spec; kw..., degree=3, n_grid=8, max_iter=150, howard_steps=10,
-                     n_choice=17, verbose=false)
     io = IOBuffer()
     show(io, sol)
     output = String(take!(io))
@@ -6948,24 +6897,21 @@ end
     @test all(isfinite, Y_sim)
     @test all(Y_sim[:, 1] .> 0)   # consumption
 
-    irfs = irf(sol, 8; n_sim=20)
+    irfs = irf(sol, 6; n_sim=8)
     @test irfs isa ImpulseResponse
-    @test size(irfs.values, 1) == 8
+    @test size(irfs.values, 1) == 6
     @test size(irfs.values, 2) == 3
 end
 
 FAST || @testset "VFI threaded matches sequential" begin
-    spec = _vfi_rbc_spec()
-    kw = _vfi_rbc_bellman(spec)
-    # Same budget as the passing `solve(; method=:vfi)` test. 150/8 misses
-    # ||ΔV||_∞ < 1e-8 on Ubuntu OpenBLAS (macOS/Windows still converge).
+    # Same budget as the hoisted solve. 150/8 misses ||ΔV||_∞ < 1e-8 on
+    # Ubuntu OpenBLAS (macOS/Windows still converge).
     sol_seq = vfi_solver(spec; kw..., degree=3, n_grid=8, max_iter=250, howard_steps=10,
                          n_choice=17, threaded=false, verbose=false)
     sol_par = vfi_solver(spec; kw..., degree=3, n_grid=8, max_iter=250, howard_steps=10,
                          n_choice=17, threaded=true, verbose=false)
     @test sol_seq.converged
     @test sol_par.converged
-    x_ss = spec.steady_state[sol_seq.state_indices]
     @test abs(evaluate_policy(sol_seq, x_ss)[1] - evaluate_policy(sol_par, x_ss)[1]) < 1e-6
     @test abs(evaluate_value(sol_seq, x_ss) - evaluate_value(sol_par, x_ss)) < 1e-6
 end

@@ -200,6 +200,9 @@ const TEST_GROUPS = [
     ("HA-DSGE" => [
         "dsge/test_ha_dsge.jl",
     ]),
+    ("HA-DSGE Advanced" => [
+        "dsge/test_ha_dsge_advanced.jl",
+    ]),
     # Group 8: Coverage-A (DSGE — heaviest coverage tests)
     ("Coverage-A" => [
         "coverage/test_dsge_coverage.jl",
@@ -593,6 +596,9 @@ else
         end
         @testset "HA-DSGE" begin
             include("dsge/test_ha_dsge.jl")
+        end
+        @testset "HA-DSGE Advanced" begin
+            include("dsge/test_ha_dsge_advanced.jl")
         end
 
         # Group 8: Coverage-A (DSGE)

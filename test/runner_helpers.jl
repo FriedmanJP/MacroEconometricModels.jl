@@ -12,6 +12,7 @@ using LinearAlgebra
 # Only the ordering matters, not accurate minutes.
 function _expected_rank(name::AbstractString)
     name == "HA-DSGE"             && return 100
+    name == "HA-DSGE Advanced"    && return 95
     name == "DSGE Core"           && return 90
     name == "DSGE Bayesian & HD"  && return 70
     name == "Extensions (JuMP/Ipopt/PATH)"    && return 60   # cold-load: schedule early
@@ -26,9 +27,10 @@ function _expected_rank(name::AbstractString)
     return 40                                     # default medium
 end
 
-# HA-DSGE is the suite ceiling and is a single process/task. Give it 2 OpenBLAS
+# HA-DSGE and HA-DSGE Advanced are the suite ceiling. Give each 2 OpenBLAS
 # threads; every other group stays at 1 so 4-wide dispatch does not oversubscribe.
-_blas_threads_for_group(name::AbstractString) = name == "HA-DSGE" ? 2 : 1
+_blas_threads_for_group(name::AbstractString) =
+    name == "HA-DSGE" || name == "HA-DSGE Advanced" ? 2 : 1
 
 _runner_max_conc(cpu_threads::Integer; cap::Integer=4) = min(Int(cpu_threads), cap)
 
