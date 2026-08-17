@@ -48,6 +48,34 @@ function _with_group_blas(f, group_name::AbstractString)
     end
 end
 
+# Julia 1 Ubuntu coverage cell (`MACRO_NUMERICAL_CI=1`): skip display/plotting/
+# coverage-harness groups so important numerical tests plus coverage processing
+# still fit in 60 minutes. LTS / 1.10 keep the full list.
+const _NUMERICAL_SKIP_GROUPS = Set(["Plotting", "Display", "Coverage-A", "Coverage-B"])
+const _NUMERICAL_SKIP_CORE = Set([
+    "core/test_aqua.jl",
+    "core/test_serialization.jl",
+    "core/test_display_backends.jl",
+])
+
+function _numerical_groups(groups, numerical::Bool)
+    numerical || return groups
+    out = Pair{String, Vector{String}}[]
+    for (name, files) in groups
+        name in _NUMERICAL_SKIP_GROUPS && continue
+        fs = if name == "Coverage-C + IO"
+            filter(f -> startswith(f, "io/"), files)
+        elseif name == "Core & VAR"
+            filter(f -> f ∉ _NUMERICAL_SKIP_CORE, files)
+        else
+            files
+        end
+        isempty(fs) && continue
+        push!(out, String(name) => Vector{String}(fs))
+    end
+    return out
+end
+
 # TEST_GROUPS uses `"name" => files` Pairs, not Tuples. Type the channel from
 # the collected vector so put! cannot MethodError (Windows CI, 2026-08-13).
 function _make_work_queue(groups)

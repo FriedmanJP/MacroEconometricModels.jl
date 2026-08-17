@@ -299,6 +299,17 @@ const MEM_IH = MacroEconometricModels
         @test _expected_rank("HA-DSGE") > _expected_rank("HA-DSGE Advanced")
         @test _expected_rank("HA-DSGE Advanced") > _expected_rank("DSGE Core")
         @test _expected_rank("HA-DSGE") > _expected_rank("DSGE Core")
+
+        dummy = ["Plotting" => ["plotting/test_plot_render.jl"],
+                 "HA-DSGE" => ["dsge/test_ha_dsge.jl"],
+                 "Coverage-C + IO" => ["coverage/test_misc_coverage.jl", "io/test_io_types.jl"],
+                 "Core & VAR" => ["core/test_aqua.jl", "core/test_kalman.jl"]]
+        kept = _numerical_groups(dummy, true)
+        names = first.(kept)
+        @test names == ["HA-DSGE", "Coverage-C + IO", "Core & VAR"]
+        @test last(kept[2]) == ["io/test_io_types.jl"]
+        @test last(kept[3]) == ["core/test_kalman.jl"]
+        @test collect(_numerical_groups(dummy, false)) == collect(dummy)
         @test _expected_rank("DSGE Core") > _expected_rank("Counterfactual")
         @test _expected_rank("Coverage-A") > _expected_rank("Coverage-B")
 

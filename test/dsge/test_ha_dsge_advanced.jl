@@ -14,6 +14,9 @@ using Distributions
 if !@isdefined(FAST)
     const FAST = get(ENV, "MACRO_FAST_TESTS", "") == "1"
 end
+if !@isdefined(NUMERICAL)
+    const NUMERICAL = get(ENV, "MACRO_NUMERICAL_CI", "") == "1"
+end
 
 # Shared Huggett (1993) credit-limit −2 steady state (T209/#308): three testsets
 # (the Table-1 SS loop, SSJ, and Reiter) recompute the identical cl=−2 equilibrium.
@@ -59,9 +62,9 @@ const _HUG_SS_M2 = compute_steady_state(_HUG_SPEC_M2; max_iter=FAST ? 80 : 200, 
     end
 
     # Full KS SS + SSJ + MH is the HA-DSGE ceiling. Windows/macOS smoke (FAST)
-    # keeps the cheap helper above; Ubuntu still runs the rest.
-    FAST && return
-
+    # and Julia 1 numerical CI keep the cheap helper above; LTS still runs the rest.
+    # Do not `return` — inside the wrapping HA-DSGE Types testset that aborts siblings.
+    if !(FAST || NUMERICAL)
     # Compute steady state for generating fake data
     ss = compute_steady_state(spec; K_init=10.0, r_bounds=(-0.02, 0.04), max_iter=50, tol=1e-3)
     K_ss = ss.aggregates[:K]
@@ -241,6 +244,7 @@ const _HUG_SS_M2 = compute_steady_state(_HUG_SPEC_M2; max_iter=FAST ? 80 : 200, 
             spec, [:alpha], reshape([0.36], 1, 1), [0.0], [:K], nothing,
             :badmethod, NamedTuple())
     end
+    end
 end
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -251,14 +255,14 @@ end
     spec = load_ha_example(:krusell_smith)
     @test spec.model == :aiyagari                       # new field defaults correctly
 
-    FAST && return
-
+    if !(FAST || NUMERICAL)
     ss = compute_steady_state(spec; r_bounds=(-0.02, 0.04), max_iter=100, tol=1e-3)
     @test ss.aggregates[:K] > 0
     @test isfinite(ss.prices[:r])
     @test haskey(ss.prices, :w)                         # Cobb-Douglas wage still produced
     @test abs(ss.excess_demand) < 5e-3                  # market essentially clears
     @test -0.01 < ss.prices[:r] < 1 / spec.individual.beta - 1  # r* below time-pref rate
+    end
 end
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -269,7 +273,7 @@ end
     # Six model periods per year (Huggett 1993): annualize the per-period rate.
     annualize(rp) = (1 + rp)^6 - 1
     # Table 1 (σ = 1.5): credit limit => equilibrium annual risk-free rate.
-    targets = FAST ? [(-2.0, -0.071)] :
+    targets = (FAST || NUMERICAL) ? [(-2.0, -0.071)] :
               [(-2.0, -0.071), (-4.0, 0.023), (-6.0, 0.034), (-8.0, 0.040)]
 
     r_annuals = Float64[]
@@ -348,7 +352,7 @@ end
 
 @testset "Den Haan (2010) accuracy" begin
     # --- Aiyagari capital model (z-augmented PLM makes the test meaningful) ---
-    if !FAST
+    if !(FAST || NUMERICAL)
     ks_spec = load_ha_example(:krusell_smith)
     ss_a = compute_steady_state(ks_spec; r_bounds=(-0.02, 0.04), max_iter=80, tol=1e-3)
     ks = solve(ks_spec; method=:krusell_smith, ss=ss_a, T_sim=200, T_burn=100, max_outer=3)
@@ -823,6 +827,8 @@ end
 
     # ── INDEPENDENT ORACLE: dense-grid backward-induction VFI on the same model ──
     # No EGM, no envelope, no Euler equation — just brute-force maximization.
+    # Julia 1 numerical CI / FAST skip this grid; LTS still runs it.
+    if !(FAST || NUMERICAL)
     function _vfi_retirement(; T_end, beta, R, wage, delta, Mmax, nM, nC)
         Mg = collect(range(1e-4, Mmax; length=nM))
         V = fill(-Inf, T_end, nM, 2); C = zeros(T_end, nM, 2); D = zeros(Int, T_end, nM, 2)
@@ -880,9 +886,10 @@ end
         @test isfinite(thr)
         @test abs(thr - Mg[idx]) <= 2 * step
     end
+    @test all(D_vfi[2, i, 2] == 2 for i in 1:length(Mg))   # oracle agrees never-retire
+    end
     # Early in life the worker never retires on this bracket — honestly reported as NaN.
     @test isnan(dcegm_threshold(sol, 2, 2, 1; M_lo=0.5, M_hi=60.0))
-    @test all(D_vfi[2, i, 2] == 2 for i in 1:length(Mg))   # …and the oracle agrees
     # Retirement is absorbing, so there is no two-option choice left to threshold.
     @test_throws ArgumentError dcegm_threshold(sol, 3, 1, 1; M_lo=1.0, M_hi=10.0)
     @test_throws ArgumentError dcegm_threshold(sol, 3, 2, 1; M_lo=10.0, M_hi=1.0)
@@ -1264,10 +1271,9 @@ end
         @test sum(h .* repeat(a, 2)) ≈ sum(mass .* M[:, 1]) rtol=1e-3
     end
 
-    # Remaining testsets solve shipped HA examples (SS + Reiter). Smoke CI
-    # keeps the quadrature / max-entropy oracles above; Ubuntu still runs these.
-    FAST && return
-
+    # Remaining testsets solve shipped HA examples (SS + Reiter). Smoke / numerical
+    # CI keep the quadrature / max-entropy oracles above; LTS still runs these.
+    if !(FAST || NUMERICAL)
     @testset "moment fixed point is genuinely stationary and tracks Young" begin
         spec = _win_small_spec()
         ss = compute_steady_state(spec; grid_check=:none)
@@ -1440,6 +1446,7 @@ end
         end
         @test occursin("Winberry Parametric Family", out)
         @test occursin("K_winberry", out)
+    end
     end
 
 end

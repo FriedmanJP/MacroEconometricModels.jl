@@ -76,9 +76,12 @@ jobs:
       - uses: julia-actions/julia-buildpkg@v1
 
       # Robustness trade-off: windows/macOS run as reduced-sampling (fewer draws/reps)
-      # cross-platform smoke tests; ubuntu stays the full-fidelity reference (full
-      # sampling + coverage). ubuntu must NEVER set FAST or coverage of high-sampling
-      # branches could drop. '0' is equivalent to unset (FAST const treats only "1" as true).
+      # cross-platform smoke tests. Ubuntu LTS / 1.10 stay the full-fidelity reference
+      # (FAST=0, no coverage). Julia 1 Ubuntu is the coverage cell: MACRO_NUMERICAL_CI=1
+      # keeps published-number / solver / Euler / IRF tests and drops display, plotting,
+      # and coverage-harness groups so processcoverage still fits in 60 minutes.
+      # LTS/1.10 must NEVER set FAST. '0' is equivalent to unset (FAST const treats
+      # only "1" as true).
       #
       # Windows uses the threaded single-process runner (package loaded once).
       # Multiprocess on NTFS pays ~6 min per child to load compiled modules; 17
@@ -92,6 +95,7 @@ jobs:
           OPENBLAS_NUM_THREADS: "1"
           MACRO_MULTIPROCESS_TESTS: ${{ matrix.os == 'windows-latest' && '0' || '1' }}
           MACRO_FAST_TESTS: ${{ matrix.os == 'ubuntu-latest' && '0' || '1' }}
+          MACRO_NUMERICAL_CI: ${{ matrix.os == 'ubuntu-latest' && matrix.version == '1' && '1' || '0' }}
           # Restore standard Pkg.test bounds-checking on the full-fidelity ubuntu job only (#126).
           MACRO_CHECK_BOUNDS: ${{ matrix.os == 'ubuntu-latest' && '1' || '0' }}
 

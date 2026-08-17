@@ -9,6 +9,8 @@ using LinearAlgebra
 
 # FAST mode for development iteration (shared across all test files in threaded mode)
 const FAST = get(ENV, "MACRO_FAST_TESTS", "") == "1"
+# Julia 1 Ubuntu coverage cell: important numerical tests only (see _numerical_groups).
+const NUMERICAL = get(ENV, "MACRO_NUMERICAL_CI", "") == "1"
 
 # Shared test data generators (available to all test files)
 include("fixtures.jl")
@@ -310,6 +312,7 @@ function run_test_group(group_name::String, files::Vector{String})
     code = """
     using Test, MacroEconometricModels
     const FAST = get(ENV, "MACRO_FAST_TESTS", "") == "1"
+    const NUMERICAL = get(ENV, "MACRO_NUMERICAL_CI", "") == "1"
     include("$(fixtures_path)")
     @testset "$group_name" begin
         $includes
@@ -353,15 +356,17 @@ if !serial && (multiprocess || (!serial && Threads.nthreads() == 1 && Sys.CPU_TH
     # Triggered by MACRO_MULTIPROCESS_TESTS=1 or as fallback with CPUs >= 2.
     # ─────────────────────────────────────────────────────────────────────
     cov_level = Base.JLOptions().code_coverage
-    println("Running $(length(TEST_GROUPS)) test groups in parallel processes ($(Sys.CPU_THREADS) CPUs)")
+    run_groups = _numerical_groups(TEST_GROUPS, NUMERICAL)
+    println("Running $(length(run_groups)) test groups in parallel processes ($(Sys.CPU_THREADS) CPUs)")
     println("Code coverage level: $cov_level (0=none, 1=user, 2=all)")
     FAST && println("FAST mode enabled (reduced sampling)")
+    NUMERICAL && println("NUMERICAL CI profile (important numerical tests only)")
     println("Set MACRO_SERIAL_TESTS=1 to run sequentially\n")
 
     # Concurrency-capped, longest-first work queue (#124): order groups heaviest-first and
     # launch at most min(CPU_THREADS, 4) at a time, starting the next as each finishes. This
     # cuts context-switch waste and macOS memory pressure vs spawning all groups at once.
-    queue = sort(collect(TEST_GROUPS); by = p -> _expected_rank(first(p)), rev = true)
+    queue = sort(collect(run_groups); by = p -> _expected_rank(first(p)), rev = true)
     max_conc = _runner_max_conc(Sys.CPU_THREADS)
     active = Dict{Base.Process, String}()
     failed_groups = String[]
@@ -394,8 +399,10 @@ elseif !serial && Threads.nthreads() > 1
     # ─────────────────────────────────────────────────────────────────────
     test_dir = replace(string(@__DIR__), '\\' => '/')
 
-    println("Running $(length(TEST_GROUPS)) test groups in $(Threads.nthreads()) threads (single process, max_conc=$(_runner_max_conc(Threads.nthreads())))")
+    run_groups = _numerical_groups(TEST_GROUPS, NUMERICAL)
+    println("Running $(length(run_groups)) test groups in $(Threads.nthreads()) threads (single process, max_conc=$(_runner_max_conc(Threads.nthreads())))")
     FAST && println("FAST mode enabled (reduced sampling)")
+    NUMERICAL && println("NUMERICAL CI profile (important numerical tests only)")
     println("Set MACRO_SERIAL_TESTS=1 to run sequentially\n")
 
     # Load once — all tasks share the compiled code. This is the Windows CI path:
@@ -407,7 +414,7 @@ elseif !serial && Threads.nthreads() > 1
     println("FILETIME\t__runner__\tusing MacroEconometricModels\t", round(t_load; digits=1))
 
     max_conc = _runner_max_conc(Threads.nthreads())
-    work = _make_work_queue(TEST_GROUPS)
+    work = _make_work_queue(run_groups)
     failed_groups = String[]
     failed_lock = ReentrantLock()
     @sync for _ in 1:max_conc
