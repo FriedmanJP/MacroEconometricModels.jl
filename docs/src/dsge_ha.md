@@ -526,7 +526,7 @@ report(sol_ssj)
 
 Composing several blocks into a model, and going to second order in the sequence space, are covered in [Block Composition and Second-Order SSJ](@ref ssj_blocks).
 
-The SSJ method reduces the full sequence-space representation (dimension ``T``) to a compact state-space form with `n_reduced` states. The explained variance measures the fraction of aggregate dynamics captured by the truncated Ho-Kalman basis --- values above 99.9% confirm the reduction is adequate. The underlying steady state is reported alongside the reduction diagnostics.
+The SSJ method reduces the full sequence-space representation (dimension ``T``) to a compact state-space form with `n_reduced` states. The explained variance measures the fraction of aggregate dynamics captured by the truncated Ho-Kalman basis --- values above 99.9% confirm the reduction is adequate. The underlying steady state is reported alongside the reduction diagnostics. `historical_decomposition(sol_ssj, data, [:K])` (or `[:r]` on a Huggett solution) maps the Kalman smoother through `C_obs`, so the reported series is the aggregate, not the reduced state.
 
 | Keyword | Type | Default | Description |
 |---------|------|---------|-------------|

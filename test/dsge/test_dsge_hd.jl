@@ -562,4 +562,21 @@ end
     @test occursin("States", output)
 end
 
+@testset "HA historical decomposition via C_obs (#655)" begin
+    spec = MacroEconometricModels._huggett_example(; credit_limit=-2.0, a_max=8.0, n_a=60)
+    ss = compute_steady_state(spec; max_iter=100, tol=1e-3)
+    sol = solve(spec; method=:ssj, ss=ss, T_horizon=24, n_reduced=8)
+    T_obs = 30
+    sim = simulate(sol, T_obs; rng=Random.MersenneTwister(7))
+    r_ss = sol.steady_state.prices[:r]
+    data = sim .+ r_ss
+    hd = historical_decomposition(sol, data, [:r])
+    @test hd isa HistoricalDecomposition
+    @test hd.variables == ["r"]
+    @test hd.method === :ha_dsge
+    @test size(hd.contributions) == (T_obs, 1, 1)
+    @test verify_decomposition(hd; tol=1e-5)
+    @test all(isfinite, hd.contributions)
+end
+
 end  # outer testset
