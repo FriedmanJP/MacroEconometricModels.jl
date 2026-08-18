@@ -572,7 +572,7 @@ struct BayesianDSGE{T<:AbstractFloat} <: AbstractDSGEModel
     acceptance_rate::T
     ess_history::Vector{T}
     phi_schedule::Vector{T}
-    spec::DSGESpec{T}
+    spec::ModelSpec{T,NoAgents}
     solution::Union{DSGESolution{T}, PerturbationSolution{T}, ProjectionSolution{T}}
     state_space::Union{DSGEStateSpace{T}, NonlinearStateSpace{T}, ProjectionStateSpace{T}}
     n_failed_draws::Int

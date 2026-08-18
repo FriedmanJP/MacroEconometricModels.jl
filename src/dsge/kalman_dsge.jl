@@ -25,7 +25,7 @@ using LinearAlgebra
 # =============================================================================
 
 """
-    _build_observation_equation(spec::DSGESpec{T}, observables::Vector{Symbol},
+    _build_observation_equation(spec::ModelSpec{T}, observables::Vector{Symbol},
                                  measurement_error) where {T}
 
 Build the observation equation matrices (Z, d, H) mapping state variables to observables.
@@ -44,7 +44,7 @@ The observation equation is: `y_t = Z * x_t + d + v_t`, where `v_t ~ N(0, H)`.
 - `d::Vector{T}` — n_obs steady-state intercept at observable indices
 - `H::Matrix{T}` — n_obs x n_obs measurement error covariance
 """
-function _build_observation_equation(spec::DSGESpec{T}, observables::Vector{Symbol},
+function _build_observation_equation(spec::ModelSpec{T}, observables::Vector{Symbol},
                                       measurement_error) where {T<:AbstractFloat}
     n_states = spec.n_endog
     n_obs = length(observables)

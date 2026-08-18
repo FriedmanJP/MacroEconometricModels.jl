@@ -165,7 +165,7 @@ Fields:
 - `C::Vector{T}` — n × 1 constants
 - `Psi::Matrix{T}` — n × n_shocks shock loading
 - `Pi::Matrix{T}` — n × n_expect expectation error selection
-- `spec::DSGESpec{T}` — back-reference to specification
+- `spec::ModelSpec{T,NoAgents}` — back-reference to specification
 """
 struct LinearDSGE{T<:AbstractFloat}
     Gamma0::Matrix{T}
@@ -173,7 +173,7 @@ struct LinearDSGE{T<:AbstractFloat}
     C::Vector{T}
     Psi::Matrix{T}
     Pi::Matrix{T}
-    spec::DSGESpec{T}
+    spec::ModelSpec{T,NoAgents}
 
     function LinearDSGE{T}(Gamma0, Gamma1, C, Psi, Pi, spec) where {T<:AbstractFloat}
         n = spec.n_endog
@@ -217,7 +217,7 @@ Fields:
 - `eu::Vector{Int}` — [existence, uniqueness]: 1=yes, 0=no
 - `method::Symbol` — `:gensys`, `:blanchard_kahn`, or `:klein`
 - `eigenvalues::Vector{ComplexF64}` — eigenvalues of G1 (the state-transition matrix)
-- `spec::DSGESpec{T}` — model specification
+- `spec::ModelSpec{T,NoAgents}` — model specification
 - `linear::LinearDSGE{T}` — linearized form
 """
 struct DSGESolution{T<:AbstractFloat}
@@ -227,7 +227,7 @@ struct DSGESolution{T<:AbstractFloat}
     eu::Vector{Int}
     method::Symbol
     eigenvalues::Vector{ComplexF64}
-    spec::DSGESpec{T}
+    spec::ModelSpec{T,NoAgents}
     linear::LinearDSGE{T}
 end
 
@@ -366,7 +366,7 @@ struct PerturbationSolution{T<:AbstractFloat}
 
     eu::Vector{Int}
     method::Symbol
-    spec::DSGESpec{T}
+    spec::ModelSpec{T,NoAgents}
     linear::LinearDSGE{T}
 end
 
@@ -422,14 +422,14 @@ Fields:
 - `deviations::Matrix{T}` — T_periods × n_endog deviations from SS
 - `converged::Bool` — Newton convergence flag
 - `iterations::Int` — Newton iterations used
-- `spec::DSGESpec{T}` — model specification
+- `spec::ModelSpec{T,NoAgents}` — model specification
 """
 struct PerfectForesightPath{T<:AbstractFloat}
     path::Matrix{T}
     deviations::Matrix{T}
     converged::Bool
     iterations::Int
-    spec::DSGESpec{T}
+    spec::ModelSpec{T,NoAgents}
 end
 
 function Base.show(io::IO, pf::PerfectForesightPath{T}) where {T}
@@ -514,7 +514,7 @@ struct ProjectionSolution{T<:AbstractFloat}
     n_basis::Int
     multi_indices::Matrix{Int}      # n_basis × nx
     quadrature::Symbol              # :gauss_hermite or :monomial
-    spec::DSGESpec{T}
+    spec::ModelSpec{T,NoAgents}
     linear::LinearDSGE{T}
     impact::Matrix{T}               # first-order shock-impact matrix (companion-QZ), cached
     steady_state::Vector{T}
@@ -627,7 +627,7 @@ struct DSGEEstimation{T<:AbstractFloat} <: AbstractDSGEModel
     J_pvalue::T
     solution::Union{DSGESolution{T}, PerturbationSolution{T}, ProjectionSolution{T}}
     converged::Bool
-    spec::DSGESpec{T}
+    spec::ModelSpec{T,NoAgents}
 
     function DSGEEstimation{T}(theta, vcov, param_names, method, J_stat, J_pvalue,
                                 solution, converged, spec) where {T<:AbstractFloat}
@@ -720,7 +720,7 @@ Fields:
 - `regime_history::Matrix{Int}` — T_periods × n_constraints regime indicators (0 = slack, 1+ = binding)
 - `converged::Bool` — convergence flag
 - `iterations::Int` — number of guess-and-verify iterations
-- `spec::DSGESpec{T}` — model specification
+- `spec::ModelSpec{T,NoAgents}` — model specification
 - `varnames::Vector{String}` — variable display names
 - `constraints::Vector{OccBinConstraint{T}}` — constraint(s) used in the solve
 """
@@ -731,7 +731,7 @@ struct OccBinSolution{T<:AbstractFloat}
     regime_history::Matrix{Int}
     converged::Bool
     iterations::Int
-    spec::DSGESpec{T}
+    spec::ModelSpec{T,NoAgents}
     varnames::Vector{String}
     constraints::Vector{OccBinConstraint{T}}
 end

@@ -12,7 +12,7 @@
 # =============================================================================
 
 function _jump_compute_steady_state(
-        spec::DSGESpec{T},
+        spec::ModelSpec{T},
         constraints::Vector;
         initial_guess::Union{Nothing,AbstractVector}=nothing) where {T}
 
@@ -79,7 +79,7 @@ end
 # =============================================================================
 
 function _jump_perfect_foresight(
-        spec::DSGESpec{FT},
+        spec::ModelSpec{FT},
         T_periods::Int,
         shocks::Matrix{FT},
         constraints::Vector) where {FT}

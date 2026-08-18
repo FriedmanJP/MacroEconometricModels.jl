@@ -3528,7 +3528,7 @@ end
 
 @testset "_respec + PF effective-SS offset preserve linear=true (E-07 / #115)" begin
     a, b, c = 0.5, 0.3, 1.0
-    spec = DSGESpec{Float64}(
+    spec = ModelSpec{Float64}(
         [:y], [:eps], [:a, :b, :c], Dict{Symbol,Float64}(:a => a, :b => b, :c => c),
         Expr[:(0 + 0)],
         Function[(yt, yl, yle, eps, th) -> yt[1] - th[:a] * yle[1] - th[:b] * yl[1] - th[:c] - eps[1]],

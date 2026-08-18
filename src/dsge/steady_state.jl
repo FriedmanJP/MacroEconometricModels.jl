@@ -17,7 +17,7 @@ const SS_RESIDUAL_TOL = 1e-6
 Evaluate the steady-state residual `F[i] = f_i(y_ss, y_ss, y_ss, 0, θ)` and return the max-abs
 norm `‖F‖∞` together with the indices of equations whose residual exceeds `SS_RESIDUAL_TOL`.
 """
-function _ss_residual_norm(spec::DSGESpec{T}, y_ss::AbstractVector{T}) where {T<:AbstractFloat}
+function _ss_residual_norm(spec::ModelSpec{T}, y_ss::AbstractVector{T}) where {T<:AbstractFloat}
     θ = spec.param_values
     ε0 = zeros(T, spec.n_exog)
     res = T[abs(T(spec.residual_fns[i](y_ss, y_ss, y_ss, ε0, θ))) for i in eachindex(spec.residual_fns)]
@@ -26,7 +26,7 @@ function _ss_residual_norm(spec::DSGESpec{T}, y_ss::AbstractVector{T}) where {T<
 end
 
 """
-    compute_steady_state(spec::DSGESpec{T}; initial_guess=nothing, method=:auto,
+    compute_steady_state(spec::ModelSpec{T}; initial_guess=nothing, method=:auto,
                           ss_fn=nothing, constraints=DSGEConstraint[],
                           solver=nothing, algorithm=nothing) → DSGESpec{T}
 
@@ -42,7 +42,7 @@ Returns a new `DSGESpec` with the `steady_state` field filled.
 - `solver::Symbol` — `:nonlinearsolve` (default), `:optim` (Fminbox), `:nlopt` (SLSQP), `:ipopt` (NLP), or `:path` (MCP); auto-detected if not specified
 - `algorithm` — NonlinearSolve.jl algorithm (default: `TrustRegion()`); passed through to chosen backend
 """
-function compute_steady_state(spec::DSGESpec{T};
+function compute_steady_state(spec::ModelSpec{T};
         initial_guess::Union{Nothing,AbstractVector}=nothing,
         method::Symbol=:auto,
         ss_fn::Union{Nothing,Function}=nothing,
@@ -148,7 +148,7 @@ Solve the steady-state system f(y, y, y, 0, θ) = 0 using NonlinearSolve.jl.
 
 Default algorithm is `TrustRegion()`. Box bounds are applied when finite.
 """
-function _nonlinearsolve_steady_state(spec::DSGESpec{T}, lower::Vector{T}, upper::Vector{T};
+function _nonlinearsolve_steady_state(spec::ModelSpec{T}, lower::Vector{T}, upper::Vector{T};
         initial_guess::Union{Nothing,AbstractVector}=nothing,
         algorithm=nothing) where {T<:AbstractFloat}
 
@@ -225,7 +225,7 @@ end
 Box-constrained steady state via Optim.jl Fminbox(LBFGS()).
 Minimizes sum-of-squared-residuals subject to variable bounds.
 """
-function _optim_steady_state(spec::DSGESpec{T}, lower::Vector{T}, upper::Vector{T};
+function _optim_steady_state(spec::ModelSpec{T}, lower::Vector{T}, upper::Vector{T};
         initial_guess::Union{Nothing,AbstractVector}=nothing,
         algorithm=nothing) where {T<:AbstractFloat}
 
@@ -282,7 +282,7 @@ end
 Constrained steady state via NLopt LD_SLSQP.
 Handles both VariableBound (box) and NonlinearConstraint (inequality).
 """
-function _nlopt_steady_state(spec::DSGESpec{T}, constraints::Vector;
+function _nlopt_steady_state(spec::ModelSpec{T}, constraints::Vector;
         initial_guess::Union{Nothing,AbstractVector}=nothing,
         algorithm=nothing) where {T<:AbstractFloat}
 
@@ -354,21 +354,7 @@ function _nlopt_steady_state(spec::DSGESpec{T}, constraints::Vector;
     return Vector{T}(min_x)
 end
 
-"""Return a new DSGESpec with updated steady_state field."""
-function _update_steady_state(spec::DSGESpec{T}, y_ss::Vector{T}) where {T}
-    DSGESpec{T}(
-        spec.endog, spec.exog, spec.params, spec.param_values,
-        spec.equations, spec.residual_fns,
-        spec.n_expect, spec.forward_indices, y_ss, spec.ss_fn;
-        original_endog=spec.original_endog,
-        original_equations=spec.original_equations,
-        augmented=spec.augmented,
-        max_lag=spec.max_lag,
-        max_lead=spec.max_lead,
-        linear=spec.linear,
-        bellman_utility=spec.bellman_utility,
-        bellman_beta=spec.bellman_beta,
-        bellman_consumption=spec.bellman_consumption,
-        bellman_controls=copy(spec.bellman_controls),
-    )
+"""Return a new ModelSpec with updated steady_state field."""
+function _update_steady_state(spec::ModelSpec{T}, y_ss::Vector{T}) where {T}
+    _copy_model_spec(spec; steady_state=y_ss)
 end

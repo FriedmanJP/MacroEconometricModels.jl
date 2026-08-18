@@ -42,7 +42,7 @@ effective steady state `(I - G1)⁻¹·C_sol` at the observed variables. Shared 
 and particle-filter paths so both apply the same offset (audit E-07 / #115). Returns `d`
 unchanged for nonlinear models (the `linear` guard short-circuits before touching `sol.C_sol`).
 """
-function _effective_obs_offset(d::AbstractVector{T}, new_spec::DSGESpec{T},
+function _effective_obs_offset(d::AbstractVector{T}, new_spec::ModelSpec{T},
                                sol, observables) where {T<:AbstractFloat}
     if new_spec.linear && !all(iszero, sol.C_sol)
         eff_ss = (I - sol.G1) \ sol.C_sol
@@ -63,7 +63,7 @@ builds a `DSGEStateSpace`, and evaluates the Kalman log-likelihood.
 Returns `-Inf` on any failure (non-convergence, singular matrices, etc.).
 
 # Arguments
-- `spec::DSGESpec{T}` — model specification (template)
+- `spec::ModelSpec{T}` — model specification (template)
 - `param_names::Vector{Symbol}` — which parameters θ maps to
 - `data::Matrix{T}` — n_obs × T_obs data matrix
 - `observables::Vector{Symbol}` — observed endogenous variables
@@ -80,7 +80,7 @@ Returns `-Inf` on any failure (non-convergence, singular matrices, etc.).
 # Returns
 Closure `(θ::Vector{T}) → T` returning log-likelihood or `-Inf`.
 """
-function _build_likelihood_fn(spec::DSGESpec{T}, param_names::Vector{Symbol},
+function _build_likelihood_fn(spec::ModelSpec{T}, param_names::Vector{Symbol},
                                data::AbstractMatrix, observables::Vector{Symbol},
                                measurement_error, solver::Symbol,
                                solver_kwargs::NamedTuple;
@@ -536,7 +536,7 @@ Algorithm (Herbst & Schorfheide 2014):
    f. Stop when `phi = 1`
 
 # Arguments
-- `spec::DSGESpec{T}` — model specification
+- `spec::ModelSpec{T}` — model specification
 - `data::Matrix{T}` — n_obs × T_obs data matrix
 - `param_names::Vector{Symbol}` — parameters to estimate
 - `prior::DSGEPrior{T}` — prior specification
@@ -560,7 +560,7 @@ marginal likelihood estimate.
 - Herbst, E. & Schorfheide, F. (2014). Sequential Monte Carlo Sampling for DSGE Models.
   *Journal of Applied Econometrics*, 29(7), 1073-1098.
 """
-function _smc_sample(spec::DSGESpec{T}, data::AbstractMatrix,
+function _smc_sample(spec::ModelSpec{T}, data::AbstractMatrix,
                       param_names::Vector{Symbol}, prior::DSGEPrior{T},
                       theta0::AbstractVector{T};
                       n_smc::Int=500, n_mh_steps::Int=1,
@@ -749,7 +749,7 @@ validity, Roberts & Rosenthal 2007). The scale is tuned from a **trailing-window
 acceptance rate (over the last `adapt_interval` draws), not the stale cumulative rate.
 
 # Arguments
-- `spec::DSGESpec{T}` — model specification
+- `spec::ModelSpec{T}` — model specification
 - `data::Matrix{T}` — n_obs × T_obs data matrix
 - `param_names::Vector{Symbol}` — parameters to estimate
 - `prior::DSGEPrior{T}` — prior specification
@@ -790,7 +790,7 @@ acceptance rate (over the last `adapt_interval` draws), not the stale cumulative
 - Roberts, G. O. & Rosenthal, J. S. (2007). Coupling and Ergodicity of Adaptive
   Markov Chain Monte Carlo Algorithms. *Journal of Applied Probability*, 44(2), 458-475.
 """
-function _mh_sample(spec::DSGESpec{T}, data::AbstractMatrix,
+function _mh_sample(spec::ModelSpec{T}, data::AbstractMatrix,
                      param_names::Vector{Symbol}, prior::DSGEPrior{T},
                      theta0::AbstractVector{T};
                      n_draws::Int=5000, burnin::Int=1000,
@@ -1016,7 +1016,7 @@ parameter, NOT `var(ll across θ)` — the spread of the likelihood across the
 θ-population, which is large on any diffuse posterior and would trigger spurious
 doubling (E-11 / #135). Returns `0` when fewer than two finite replicates exist.
 """
-function _pf_estimator_variance(spec::DSGESpec{T}, param_names::Vector{Symbol},
+function _pf_estimator_variance(spec::ModelSpec{T}, param_names::Vector{Symbol},
         theta_particles::AbstractMatrix{T}, observables::Vector{Symbol},
         measurement_error, solver::Symbol, solver_kwargs::NamedTuple,
         pool::Vector{PFWorkspace{T}}, data::Matrix{T}, T_obs::Int,
@@ -1050,7 +1050,7 @@ unconditional bootstrap PF for EVERY θ-particle at the new `N_x` (the `pool`
 workspaces must already be resized) and replace the stored `log_likelihoods`, so
 the outer θ-weights are not a mix of estimates computed at two different `N_x`.
 """
-function _exchange_step!(state::SMCState{T}, spec::DSGESpec{T},
+function _exchange_step!(state::SMCState{T}, spec::ModelSpec{T},
         param_names::Vector{Symbol}, observables::Vector{Symbol}, measurement_error,
         solver::Symbol, solver_kwargs::NamedTuple, pool::Vector{PFWorkspace{T}},
         data::Matrix{T}, T_obs::Int, rng::AbstractRNG) where {T<:AbstractFloat}
@@ -1083,7 +1083,7 @@ runs either `_bootstrap_particle_filter!` or `_conditional_smc!`.
 Returns the log-likelihood `T` (or `T(-Inf)` on failure). When
 `return_solution=true`, returns `(ll, solution)` tuple instead.
 """
-function _solve_and_run_pf(spec::DSGESpec{T}, param_names::Vector{Symbol},
+function _solve_and_run_pf(spec::ModelSpec{T}, param_names::Vector{Symbol},
                             theta::AbstractVector{T},
                             observables::Vector{Symbol},
                             measurement_error,
@@ -1168,7 +1168,7 @@ space type (dispatching on `PerturbationSolution`, `ProjectionSolution`, or
 failure.
 
 # Arguments
-- `spec::DSGESpec{T}` — model specification (template)
+- `spec::ModelSpec{T}` — model specification (template)
 - `param_names::Vector{Symbol}` — which parameters θ maps to
 - `data::Matrix{T}` — n_obs × T_obs data matrix
 - `observables::Vector{Symbol}` — observed endogenous variables
@@ -1180,7 +1180,7 @@ failure.
 # Returns
 Closure `(θ::Vector{T}, ws::PFWorkspace{T}, rng::AbstractRNG) → T`.
 """
-function _build_pf_likelihood_fn(spec::DSGESpec{T}, param_names::Vector{Symbol},
+function _build_pf_likelihood_fn(spec::ModelSpec{T}, param_names::Vector{Symbol},
                                    data::AbstractMatrix, observables::Vector{Symbol},
                                    measurement_error, solver::Symbol,
                                    solver_kwargs::NamedTuple,
@@ -1216,7 +1216,7 @@ serial run regardless of thread count**. `pf_ll_fn` and the projection-branch
 `_solve_and_run_pf` share the sampler's failure/eval atomics via `failures`/`evals`.
 """
 function _smc2_init_likelihoods!(log_likelihoods::Vector{T}, solutions::Vector{Any},
-        theta_particles::AbstractMatrix{T}, spec::DSGESpec{T},
+        theta_particles::AbstractMatrix{T}, spec::ModelSpec{T},
         param_names::Vector{Symbol}, observables::Vector{Symbol}, measurement_error,
         solver::Symbol, solver_kwargs::NamedTuple, pf_ll_fn,
         pool::Vector{PFWorkspace{T}}, data::Matrix{T}, T_obs::Int,
@@ -1268,7 +1268,7 @@ Algorithm:
    g. Stop when phi = 1
 
 # Arguments
-- `spec::DSGESpec{T}` — model specification
+- `spec::ModelSpec{T}` — model specification
 - `data::Matrix{T}` — n_obs × T_obs data matrix
 - `param_names::Vector{Symbol}` — parameters to estimate
 - `prior::DSGEPrior{T}` — prior specification
@@ -1303,7 +1303,7 @@ log marginal likelihood estimate.
   approximation. *Journal of Computational and Graphical Statistics*,
   14(4), 795-810.
 """
-function _smc2_sample(spec::DSGESpec{T}, data::AbstractMatrix,
+function _smc2_sample(spec::ModelSpec{T}, data::AbstractMatrix,
                        param_names::Vector{Symbol}, prior::DSGEPrior{T},
                        theta0::AbstractVector{T};
                        n_smc::Int=200, n_particles::Int=100,

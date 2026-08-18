@@ -402,7 +402,7 @@ _has_estimated_terms(::Nothing) = false
 Every parameter symbol used by a trend must be a declared model parameter, so that
 `_respec` carries it and the likelihood can read its current value.
 """
-function _validate_trend_params(tr::ObservationTrends, spec::DSGESpec)
+function _validate_trend_params(tr::ObservationTrends, spec::ModelSpec)
     for s in _trend_param_symbols(tr)
         haskey(spec.param_values, s) || throw(ArgumentError(
             "observation_trends references :$s, which is not a declared model parameter " *
@@ -411,7 +411,7 @@ function _validate_trend_params(tr::ObservationTrends, spec::DSGESpec)
     end
     return nothing
 end
-_validate_trend_params(::Nothing, ::DSGESpec) = nothing
+_validate_trend_params(::Nothing, ::ModelSpec) = nothing
 
 _trend_value(v::Symbol, pv) = pv[v]
 _trend_value(v::Real, pv) = v

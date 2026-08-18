@@ -19,7 +19,7 @@ References:
 # =============================================================================
 
 """
-    parse_constraint(expr::Expr, spec::DSGESpec{T}) → OccBinConstraint{T}
+    parse_constraint(expr::Expr, spec::ModelSpec{T}) → OccBinConstraint{T}
 
 Parse a constraint expression of the form `:(var[t] >= bound)` or `:(var[t] <= bound)`.
 
@@ -34,7 +34,7 @@ An `OccBinConstraint{T}` with extracted variable, bound, and direction.
 - `ArgumentError` if the variable is not found in `spec.endog`
 - `ArgumentError` if the expression is not a valid constraint format
 """
-function parse_constraint(expr::Expr, spec::DSGESpec{T}) where {T<:AbstractFloat}
+function parse_constraint(expr::Expr, spec::ModelSpec{T}) where {T<:AbstractFloat}
     # Parse the constraint expression
     variable, bound_val, direction = _parse_constraint_expr(expr, T)
 
@@ -151,7 +151,7 @@ Index of the equation that DEFINES endogenous variable `var_idx` — the one wit
 |∂f_i/∂y_t[var_idx]| entry — together with the finite-difference Jacobian column. Returns
 `(var_idx, zeros)` when the steady state is not yet computed.
 """
-function _defining_equation_index(spec::DSGESpec{T}, var_idx::Int) where {T}
+function _defining_equation_index(spec::ModelSpec{T}, var_idx::Int) where {T}
     n = spec.n_endog
     y_ss = spec.steady_state
     isempty(y_ss) && return (var_idx, zeros(T, n))
@@ -179,7 +179,7 @@ heuristic `_defining_equation_index`; when `warn_ambiguous` and that pick is not
 decisive (runner-up/top > `decisiveness_tol`), a warning suggests the explicit
 `Dict(variable => equation_index)` overload.
 """
-function _derive_alternative_regime(spec::DSGESpec{T}, constraint::OccBinConstraint{T};
+function _derive_alternative_regime(spec::ModelSpec{T}, constraint::OccBinConstraint{T};
                                     warn_ambiguous::Bool=true, decisiveness_tol::Real=0.9) where {T}
     var_idx = findfirst(==(constraint.variable), spec.endog)
     var_idx === nothing && throw(ArgumentError(
@@ -205,31 +205,25 @@ function _derive_alternative_regime(spec::DSGESpec{T}, constraint::OccBinConstra
     end
 
     # Build new equations vector: replace the defining equation
+    old_eq = spec.equations[eq_idx]
+    bind_fn = (y_t, y_lag, y_lead, epsilon, theta) -> y_t[var_idx] - bound
     new_equations = copy(spec.equations)
-    new_equations[eq_idx] = constraint.bind_expr
+    new_equations[eq_idx] = NamedEquation(old_eq.name, old_eq.defines,
+                                          constraint.bind_expr, bind_fn;
+                                          timing=TimingInfo(),
+                                          regimes=old_eq.regimes)
 
     # Build new residual functions: replace the defining equation's residual
     new_residual_fns = copy(spec.residual_fns)
-    new_residual_fns[eq_idx] = (y_t, y_lag, y_lead, epsilon, theta) -> y_t[var_idx] - bound
+    new_residual_fns[eq_idx] = bind_fn
 
     # Update forward indices: the binding equation is never forward-looking
     # Remove eq_idx from forward_indices if present
     new_forward_indices = filter(!=(eq_idx), spec.forward_indices)
     n_expect_new = length(new_forward_indices)
 
-    DSGESpec{T}(spec.endog, spec.exog, spec.params, spec.param_values,
-                new_equations, new_residual_fns,
-                n_expect_new, new_forward_indices, spec.steady_state, spec.ss_fn;
-                original_endog=spec.original_endog,
-                original_equations=spec.original_equations,
-                augmented=spec.augmented,
-                max_lag=spec.max_lag,
-                max_lead=spec.max_lead,
-                linear=spec.linear,
-                bellman_utility=spec.bellman_utility,
-                bellman_beta=spec.bellman_beta,
-                bellman_consumption=spec.bellman_consumption,
-                bellman_controls=copy(spec.bellman_controls))
+    _copy_model_spec(spec; equations=new_equations, residual_fns=new_residual_fns,
+                     n_expect=n_expect_new, forward_indices=new_forward_indices)
 end
 
 # =============================================================================
@@ -237,7 +231,7 @@ end
 # =============================================================================
 
 """
-    _extract_regime(spec::DSGESpec{T}) → OccBinRegime{T}
+    _extract_regime(spec::ModelSpec{T}) → OccBinRegime{T}
 
 Extract the linearized coefficient matrices (A, B, C, D) from a DSGESpec
 using numerical Jacobians evaluated at the steady state.
@@ -252,7 +246,7 @@ Where:
 
 Note: Uses `_dsge_jacobian` and `_dsge_jacobian_shocks` from linearize.jl.
 """
-function _extract_regime(spec::DSGESpec{T}) where {T}
+function _extract_regime(spec::ModelSpec{T}) where {T}
     isempty(spec.steady_state) &&
         throw(ArgumentError("Must compute steady state first (call compute_steady_state)"))
 
@@ -270,7 +264,7 @@ function _extract_regime(spec::DSGESpec{T}) where {T}
 end
 
 """
-    _regime_constant(spec::DSGESpec{T}) → Vector{T}
+    _regime_constant(spec::ModelSpec{T}) → Vector{T}
 
 Compute the constant (residual) vector at the steady state for a given regime.
 
@@ -281,7 +275,7 @@ bound differs from the steady-state value.
 The full linearized system is: A·ŷ_{t-1} + B·ŷ_t + C·ŷ_{t+1} + D·ε_t + d = 0
 where d = f(y_ss, y_ss, y_ss, 0, θ) is the residual at steady state.
 """
-function _regime_constant(spec::DSGESpec{T}) where {T}
+function _regime_constant(spec::ModelSpec{T}) where {T}
     y_ss = spec.steady_state
     θ = spec.param_values
     ε_zero = zeros(T, spec.n_exog)
@@ -467,7 +461,7 @@ end
 
 """
     _evaluate_constraint(path::Matrix{T}, P::Matrix{T}, Q::Matrix{T},
-                         shock_path::Matrix{T}, spec::DSGESpec{T},
+                         shock_path::Matrix{T}, spec::ModelSpec{T},
                          constraint::OccBinConstraint{T},
                          violvec_current::BitVector) → BitVector
 
@@ -487,7 +481,7 @@ does NOT violate the constraint, the constraint should not bind.
 - `violvec` — BitVector of length nperiods; `true` = constraint should bind
 """
 function _evaluate_constraint(path::Matrix{T}, P::Matrix{T}, Q::Matrix{T},
-                              shock_path::Matrix{T}, spec::DSGESpec{T},
+                              shock_path::Matrix{T}, spec::ModelSpec{T},
                               constraint::OccBinConstraint{T},
                               violvec_current::BitVector) where {T}
     var_idx = findfirst(==(constraint.variable), spec.endog)
@@ -526,7 +520,7 @@ end
 """
     _guess_verify_one(ref::OccBinRegime{T}, alt::OccBinRegime{T},
                       P::Matrix{T}, Q::Matrix{T},
-                      spec::DSGESpec{T}, constraint::OccBinConstraint{T},
+                      spec::ModelSpec{T}, constraint::OccBinConstraint{T},
                       shock_path::Matrix{T}, nperiods::Int;
                       maxiter::Int=100) → (path, regime_history, converged, iterations)
 
@@ -547,7 +541,7 @@ Run the guess-and-verify loop for a single occasionally binding constraint.
 function _guess_verify_one(ref::OccBinRegime{T}, alt::OccBinRegime{T},
                            d_ref::Vector{T}, d_alt::Vector{T},
                            P::Matrix{T}, Q::Matrix{T},
-                           spec::DSGESpec{T}, constraint::OccBinConstraint{T},
+                           spec::ModelSpec{T}, constraint::OccBinConstraint{T},
                            shock_path::Matrix{T}, nperiods::Int;
                            maxiter::Int=100) where {T}
     n = size(P, 1)
@@ -606,7 +600,7 @@ function _guess_verify_one(ref::OccBinRegime{T}, alt::OccBinRegime{T},
 end
 
 """
-    occbin_solve(spec::DSGESpec{T}, constraint::OccBinConstraint{T};
+    occbin_solve(spec::ModelSpec{T}, constraint::OccBinConstraint{T};
                  shock_path::Matrix{T}=zeros(T, 40, spec.n_exog),
                  nperiods::Int=size(shock_path, 1),
                  maxiter::Int=100) → OccBinSolution{T}
@@ -632,7 +626,7 @@ The algorithm:
 # Returns
 An `OccBinSolution{T}` with linear and piecewise-linear paths.
 """
-function occbin_solve(spec::DSGESpec{T}, constraint::OccBinConstraint{T};
+function occbin_solve(spec::ModelSpec{T}, constraint::OccBinConstraint{T};
                       shock_path::Matrix{T}=zeros(T, 40, spec.n_exog),
                       nperiods::Int=size(shock_path, 1),
                       maxiter::Int=100) where {T<:AbstractFloat}
@@ -732,14 +726,14 @@ function occbin_solve(spec::DSGESpec{T}, constraint::OccBinConstraint{T};
 end
 
 """
-    occbin_solve(spec::DSGESpec{T}, constraint::OccBinConstraint{T},
-                 alt_spec::DSGESpec{T}; kwargs...) → OccBinSolution{T}
+    occbin_solve(spec::ModelSpec{T}, constraint::OccBinConstraint{T},
+                 alt_spec::ModelSpec{T}; kwargs...) → OccBinSolution{T}
 
 Variant that accepts an explicit alternative regime specification instead of
 deriving it automatically from the constraint.
 """
-function occbin_solve(spec::DSGESpec{T}, constraint::OccBinConstraint{T},
-                      alt_spec::DSGESpec{T};
+function occbin_solve(spec::ModelSpec{T}, constraint::OccBinConstraint{T},
+                      alt_spec::ModelSpec{T};
                       shock_path::Matrix{T}=zeros(T, 40, spec.n_exog),
                       nperiods::Int=size(shock_path, 1),
                       maxiter::Int=100) where {T<:AbstractFloat}
@@ -971,7 +965,7 @@ function _guess_verify_two(ref::OccBinRegime{T}, alt1::OccBinRegime{T},
                             d_ref::Vector{T}, d_alt1::Vector{T},
                             d_alt2::Vector{T}, d_alt12::Vector{T},
                             P::Matrix{T}, Q::Matrix{T},
-                            spec::DSGESpec{T}, c1::OccBinConstraint{T},
+                            spec::ModelSpec{T}, c1::OccBinConstraint{T},
                             c2::OccBinConstraint{T},
                             shock_path::Matrix{T}, nperiods::Int;
                             maxiter::Int=100, curb_retrench::Bool=false) where {T}
@@ -1059,7 +1053,7 @@ function _guess_verify_two(ref::OccBinRegime{T}, alt1::OccBinRegime{T},
 end
 
 """
-    occbin_solve(spec::DSGESpec{T}, c1::OccBinConstraint{T}, c2::OccBinConstraint{T};
+    occbin_solve(spec::ModelSpec{T}, c1::OccBinConstraint{T}, c2::OccBinConstraint{T};
                  shock_path, nperiods, maxiter, curb_retrench) → OccBinSolution{T}
 
 Solve a DSGE model with two occasionally binding constraints using the
@@ -1086,7 +1080,7 @@ The algorithm generalizes the one-constraint solver to 4 regimes:
 An `OccBinSolution{T}` with linear and piecewise-linear paths and a
 nperiods × 2 regime history matrix.
 """
-function occbin_solve(spec::DSGESpec{T}, c1::OccBinConstraint{T}, c2::OccBinConstraint{T};
+function occbin_solve(spec::ModelSpec{T}, c1::OccBinConstraint{T}, c2::OccBinConstraint{T};
                       shock_path::Matrix{T}=zeros(T, 40, spec.n_exog),
                       nperiods::Int=size(shock_path, 1),
                       maxiter::Int=100,
@@ -1212,7 +1206,7 @@ function occbin_solve(spec::DSGESpec{T}, c1::OccBinConstraint{T}, c2::OccBinCons
 end
 
 """
-    occbin_solve(spec::DSGESpec{T}, c1::OccBinConstraint{T}, c2::OccBinConstraint{T},
+    occbin_solve(spec::ModelSpec{T}, c1::OccBinConstraint{T}, c2::OccBinConstraint{T},
                  alt_specs::Dict; kwargs...) → OccBinSolution{T}
 
 Variant that accepts explicit alternative regime specifications as a Dict mapping
@@ -1221,7 +1215,7 @@ regime indicators to DSGESpec:
 - `(0,1)` → alt2_spec (constraint 2 binding only)
 - `(1,1)` → alt12_spec (both constraints binding)
 """
-function occbin_solve(spec::DSGESpec{T}, c1::OccBinConstraint{T}, c2::OccBinConstraint{T},
+function occbin_solve(spec::ModelSpec{T}, c1::OccBinConstraint{T}, c2::OccBinConstraint{T},
                       alt_specs::Dict;
                       shock_path::Matrix{T}=zeros(T, 40, spec.n_exog),
                       nperiods::Int=size(shock_path, 1),
@@ -1346,7 +1340,7 @@ function occbin_solve(spec::DSGESpec{T}, c1::OccBinConstraint{T}, c2::OccBinCons
 end
 
 """
-    occbin_irf(spec::DSGESpec{T}, constraint::OccBinConstraint{T},
+    occbin_irf(spec::ModelSpec{T}, constraint::OccBinConstraint{T},
                shock_idx::Int, horizon::Int;
                magnitude::Real=one(T), maxiter::Int=100) → OccBinIRF{T}
 
@@ -1364,7 +1358,7 @@ Compares the unconstrained linear IRF with the piecewise-linear OccBin IRF.
 - `magnitude` — size of the shock (default: 1.0)
 - `maxiter` — max guess-and-verify iterations (default: 100)
 """
-function occbin_irf(spec::DSGESpec{T}, constraint::OccBinConstraint{T},
+function occbin_irf(spec::ModelSpec{T}, constraint::OccBinConstraint{T},
                     shock_idx::Int, horizon::Int;
                     magnitude::Real=one(T), maxiter::Int=100) where {T<:AbstractFloat}
     1 <= shock_idx <= spec.n_exog || throw(ArgumentError(
@@ -1382,14 +1376,14 @@ function occbin_irf(spec::DSGESpec{T}, constraint::OccBinConstraint{T},
 end
 
 """
-    occbin_irf(spec::DSGESpec{T}, c1::OccBinConstraint{T}, c2::OccBinConstraint{T},
+    occbin_irf(spec::ModelSpec{T}, c1::OccBinConstraint{T}, c2::OccBinConstraint{T},
                shock_idx::Int, horizon::Int;
                magnitude::Real=one(T), maxiter::Int=100,
                curb_retrench::Bool=false) → OccBinIRF{T}
 
 Two-constraint variant of OccBin IRF.
 """
-function occbin_irf(spec::DSGESpec{T}, c1::OccBinConstraint{T}, c2::OccBinConstraint{T},
+function occbin_irf(spec::ModelSpec{T}, c1::OccBinConstraint{T}, c2::OccBinConstraint{T},
                     shock_idx::Int, horizon::Int;
                     magnitude::Real=one(T), maxiter::Int=100,
                     curb_retrench::Bool=false) where {T<:AbstractFloat}

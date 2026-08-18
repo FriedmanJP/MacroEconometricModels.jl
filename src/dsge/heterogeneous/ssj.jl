@@ -557,7 +557,7 @@ function _wrap_hadsge_solution(spec::HADSGESpec{T}, ss::HASteadyState{T},
     eigenvalues = ComplexF64.(eigenvalues)
     n_red = size(G1, 1)
     endog_names = [Symbol("x_$i") for i in 1:n_red]
-    dummy_spec = DSGESpec{T}(
+    dummy_spec = ModelSpec{T}(
         endog_names, [:epsilon], Symbol[], Dict{Symbol,T}(),
         [:(0 + 0) for _ in 1:n_red],
         [((yt, yl, yle, eps, th) -> zero(T)) for _ in 1:n_red],
@@ -726,7 +726,7 @@ function _ssj_solve(spec::HADSGESpec{T}, ss::HASteadyState{T};
     residual_fns = [((yt, yl, yle, eps, th) -> zero(T)) for _ in 1:n_red]
     steady_state_vec = zeros(T, n_red)
 
-    dummy_spec = DSGESpec{T}(
+    dummy_spec = ModelSpec{T}(
         endog_names, exog_names, param_names, param_values,
         equations, residual_fns,
         0,           # n_expect = 0

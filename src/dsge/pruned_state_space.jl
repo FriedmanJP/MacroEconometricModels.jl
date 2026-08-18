@@ -90,7 +90,7 @@ struct PrunedStateSpace{T<:AbstractFloat}
     hsss::Vector{T}
     gsss::Vector{T}
     steady_state::Vector{T}
-    spec::DSGESpec{T}
+    spec::ModelSpec{T,NoAgents}
 end
 
 _pss_mat(x, ::Type{T}, r::Int, c::Int) where {T} =

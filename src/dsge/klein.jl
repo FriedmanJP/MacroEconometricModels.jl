@@ -55,7 +55,7 @@ function _state_control_indices(ld::LinearDSGE{T}) where {T}
 end
 
 """
-    klein(ld::LinearDSGE{T}, spec::DSGESpec{T}; div=1.0+1e-8) → DSGESolution{T}
+    klein(ld::LinearDSGE{T}, spec::ModelSpec{T}; div=1.0+1e-8) → DSGESolution{T}
 
 Solve the linear RE model represented by `ld`/`spec` via the companion-QZ quadratic
 matrix equation, returning a `DSGESolution{T}`.
@@ -75,7 +75,7 @@ forward-looking, backward-looking, and mixed models).
 # Returns
 `DSGESolution{T}` with `method=:klein`; `eu=[1,1]` signals determinacy.
 """
-function klein(ld::LinearDSGE{T}, spec::DSGESpec{T};
+function klein(ld::LinearDSGE{T}, spec::ModelSpec{T};
                div::Real=1.0 + 1e-8, cluster_tol::Real=1e-6,
         sparse::Union{Bool,Symbol}=:auto) where {T<:AbstractFloat}
     n = spec.n_endog

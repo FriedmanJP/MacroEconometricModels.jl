@@ -7,7 +7,7 @@
 """
     @dsge begin ... end
 
-Parse a DSGE model specification block into a [`DSGESpec{Float64}`](@ref).
+Parse a DSGE model specification block into a [`ModelSpec{Float64,NoAgents}`](@ref).
 
 ## Declaration syntax
 
@@ -23,7 +23,11 @@ end
 ```
 
 Time references: `var[t]` (current), `var[t-1]` (lagged), `var[t+1]` (lead).
-Expectations operator: `E[t](expr)` is stripped under rational expectations.
+A lead `x[t+k]` *is* the rational expectation of `x`. The `E[t](...)` operator
+is rejected.
+
+Equations may be named (`euler: β * C[t+1] / C[t] = 1 / R[t]`). Unlabeled
+`var[t] = ...` uses `var` as both the name and the defining variable.
 
 Optional Bellman declarations for [`vfi_solver`](@ref):
 
@@ -37,12 +41,20 @@ Optional Bellman declarations for [`vfi_solver`](@ref):
 not imply them). `utility` / `beta` / `controls` are read from the spec when the
 corresponding keyword is omitted.
 
-Returns a `DSGESpec{Float64}` with callable residual functions `f(y_t, y_lag, y_lead, ε, θ) → scalar`.
+Returns a `ModelSpec{Float64,NoAgents}` with callable residual functions
+`f(y_t, y_lag, y_lead, ε, θ) → scalar`.
 """
 macro dsge(block)
     block.head == :block || error("@dsge requires a begin...end block")
     _dsge_impl(block)
 end
+
+# Reserved declaration labels. Unknown `name: LHS = RHS` is a named equation.
+const _RESERVED_DSGE_LABELS = (
+    :parameters, :endogenous, :exogenous, :linear, :steady_state,
+    :utility, :beta, :controls, :varnames, :clock, :horizon,
+    :constraint, :discrete, :absorbing,
+)
 
 # =============================================================================
 # Top-level implementation (called at macro-expansion time)
@@ -53,13 +65,17 @@ function _dsge_impl(block::Expr)
     param_defaults = Dict{Symbol,Any}()
     endog = Symbol[]
     exog = Symbol[]
-    raw_equations = Expr[]
+    raw_eq_stmts = Tuple{Union{Nothing,Symbol},Expr}[]
     ss_body = nothing  # steady_state block body (Expr or nothing)
     is_linear = false  # linear: true declaration
     bellman_util_ex = nothing
     bellman_beta_ex = nothing
     bellman_cons_ex = nothing
     bellman_ctrl_ex = Symbol[]
+    user_varnames = nothing
+    clock_val = :discrete
+    horizon_val = :infinite
+    extra_decls = IRDecl[]
 
     stmts = filter(a -> !(a isa LineNumberNode), block.args)
 
@@ -77,17 +93,10 @@ function _dsge_impl(block::Expr)
         elseif label === :exogenous
             append!(exog, _extract_names(stmt))
         elseif label === :linear
-            # linear: true/false declaration
-            # AST: (call : linear true)
-            val = _extract_linear_value(stmt)
-            is_linear = val
+            is_linear = _extract_linear_value(stmt)
         elseif label === :steady_state
-            # Single-line: steady_state: [expr]
-            # AST: (call : steady_state <body_expr>)
-            ss_body = stmt.args[3]  # the expression after the colon
+            ss_body = stmt.args[3]
         elseif label === :utility
-            # utility: log(C)  → u=log, consumption=:C
-            # utility: log     → u=log
             u_rhs = stmt.args[3]
             if u_rhs isa Expr && u_rhs.head == :call && length(u_rhs.args) == 2
                 bellman_util_ex = u_rhs.args[1]
@@ -100,34 +109,80 @@ function _dsge_impl(block::Expr)
             bellman_beta_ex = stmt.args[3]
         elseif label === :controls
             bellman_ctrl_ex = _extract_names(stmt)
-        elseif label === nothing
-            # Check for multi-line: steady_state = begin...end
-            # AST: (= :steady_state (block ...))
-            if stmt isa Expr && stmt.head == :(=) && stmt.args[1] === :steady_state
-                ss_body = stmt.args[2]
-            elseif stmt isa Expr && stmt.head == :(=)
-                push!(raw_equations, stmt)
-            else
-                error("@dsge: unrecognized statement: $stmt")
-            end
+        elseif label === :varnames
+            user_varnames = _extract_varnames(stmt)
+        elseif label === :clock
+            clock_val = _extract_symbol_flag(stmt, :clock)
+        elseif label === :horizon
+            horizon_val = _extract_symbol_flag(stmt, :horizon)
+        elseif label === :constraint || label === :discrete || label === :absorbing
+            push!(extra_decls, IRDecl(label, nothing, stmt))
+        elseif label !== nothing
+            # Unknown `name: LHS = RHS` is a named equation
+            stmt isa Expr && stmt.head == :(=) ||
+                error("@dsge: unrecognized declaration :$label")
+            push!(raw_eq_stmts, (label, stmt))
+        elseif stmt isa Expr && stmt.head == :(=) && stmt.args[1] === :steady_state
+            ss_body = stmt.args[2]
+        elseif stmt isa Expr && stmt.head == :(=)
+            push!(raw_eq_stmts, (nothing, stmt))
+        else
+            error("@dsge: unrecognized statement: $stmt")
         end
     end
 
     isempty(params) && error("@dsge: no parameters declared")
     isempty(endog) && error("@dsge: no endogenous variables declared")
     isempty(exog) && error("@dsge: no exogenous variables declared")
+
+    raw_equations = Expr[]
+    eq_names = Symbol[]
+    eq_defines = Union{Nothing,Symbol}[]
+    used_names = Set{Symbol}()
+    anon = 0
+    for (given_name, stmt) in raw_eq_stmts
+        if given_name === nothing
+            eq = stmt
+            lhs = stmt.args[1]
+            def = _lhs_defines(lhs, endog)
+            name = def === nothing ? (anon += 1; Symbol("eq_", anon)) : def
+            if name in used_names
+                # Second `Y[t] = ...` (market clearing after a production identity)
+                # is not a second definition — give it a generated name.
+                def = nothing
+                anon += 1
+                name = Symbol("eq_", anon)
+            end
+        else
+            lhs = stmt.args[1].args[3]
+            rhs = _unwrap_eq_rhs(stmt.args[2])
+            eq = Expr(:(=), lhs, rhs)
+            def = _lhs_defines(lhs, endog)
+            name = given_name
+            name in used_names && error("@dsge: duplicate equation name :$name")
+        end
+        push!(used_names, name)
+        push!(eq_names, name)
+        push!(eq_defines, def)
+        push!(raw_equations, eq)
+    end
+
     length(raw_equations) != length(endog) &&
         error("@dsge: expected $(length(endog)) equations (one per endogenous variable), got $(length(raw_equations))")
+
+    for eq in raw_equations
+        _reject_expectation_operator(eq)
+    end
 
     # ── Augmentation for deep lags, deep leads, and news shocks (#54) ──
     original_endog = copy(endog)
     original_raw_equations = deepcopy(raw_equations)
+    original_eq_names = copy(eq_names)
+    original_eq_defines = copy(eq_defines)
 
-    # Scan offsets on residual-form equations (so we see all var[t±k] refs)
-    scan_eqs = Expr[_strip_expectation_operator(_equation_to_residual(eq)) for eq in raw_equations]
+    scan_eqs = Expr[_equation_to_residual(eq) for eq in raw_equations]
     offsets = _scan_offsets(scan_eqs, endog, exog)
 
-    # Determine if augmentation is needed
     has_deep_offset = any(v -> v.max_lag > 1 || v.max_lead > 1, values(offsets))
     has_exog_lag = false
     for v in exog
@@ -141,16 +196,20 @@ function _dsge_impl(block::Expr)
     if needs_augmentation
         aux_endog, aux_equations, sub_map = _generate_augmentation(offsets, endog, exog)
 
-        # Apply substitutions to raw user equations
         for i in eachindex(raw_equations)
             raw_equations[i] = _apply_augmentation_subs(raw_equations[i], sub_map)
         end
 
-        # Extend endogenous variables and append auxiliary equations
         append!(endog, aux_endog)
         append!(raw_equations, aux_equations)
+        for aux_eq in aux_equations
+            aux_name = aux_eq.args[1]
+            aux_sym = aux_name isa Expr && aux_name.head == :ref ? aux_name.args[1] : aux_name
+            aux_sym isa Symbol || error("@dsge: augmentation produced unnamed identity")
+            push!(eq_names, aux_sym)
+            push!(eq_defines, aux_sym)
+        end
 
-        # Revalidate counts after augmentation
         length(raw_equations) != length(endog) &&
             error("@dsge: augmentation error — $(length(endog)) endogenous but $(length(raw_equations)) equations")
     end
@@ -161,7 +220,6 @@ function _dsge_impl(block::Expr)
     max_lead_val = maximum((get(offsets, v, (max_lag=0, max_lead=0)).max_lead for v in original_endog); init=1)
     max_lead_val = max(max_lead_val, 1)
 
-    # ── Classify forward-looking equations (on augmented set) ──
     forward_indices = Int[]
     for (i, eq) in enumerate(raw_equations)
         if _has_forward_looking(eq, endog, exog)
@@ -170,93 +228,105 @@ function _dsge_impl(block::Expr)
     end
     n_expect = length(forward_indices)
 
-    # Build residual functions and cleaned equation expressions
     residual_fn_exprs = Expr[]
-    equation_exprs = Expr[]
-    for eq in raw_equations
+    residual_exprs = Expr[]
+    timings = TimingInfo[]
+    for (i, eq) in enumerate(raw_equations)
         residual_ex = _equation_to_residual(eq)
-        # Strip E[t](...) operators
-        residual_ex = _strip_expectation_operator(residual_ex)
-        # Substitute var[t±k] → vector indexing
         subst_ex = _substitute_vars(residual_ex, endog, exog, params)
-        push!(equation_exprs, residual_ex)
-
-        # Build a closure expression:
-        # (y_t, y_lag, y_lead, ε, θ) -> <substituted expression>
+        push!(residual_exprs, residual_ex)
         fn_expr = Expr(:->, Expr(:tuple, :_y_t_, :_y_lag_, :_y_lead_, :_ε_, :_θ_), subst_ex)
         push!(residual_fn_exprs, fn_expr)
+        push!(timings, _equation_timing(residual_ex, endog))
     end
 
-    # ── Build original equations (pre-augmentation residual form) for display ──
-    orig_eq_exprs = Expr[]
-    for eq in original_raw_equations
-        resid = _equation_to_residual(eq)
-        resid = _strip_expectation_operator(resid)
-        push!(orig_eq_exprs, resid)
-    end
+    orig_residual_exprs = Expr[_equation_to_residual(eq) for eq in original_raw_equations]
+    orig_timings = TimingInfo[_equation_timing(ex, original_endog) for ex in orig_residual_exprs]
 
-    # Build the constructor call as a quoted expression
     param_vals_expr = Expr(:call, :Dict,
         [Expr(:call, :(=>), QuoteNode(p), param_defaults[p]) for p in params]...)
 
     endog_expr = Expr(:vect, [QuoteNode(s) for s in endog]...)
     exog_expr = Expr(:vect, [QuoteNode(s) for s in exog]...)
     params_expr = Expr(:vect, [QuoteNode(s) for s in params]...)
-
     fwd_expr = Expr(:vect, forward_indices...)
+    original_endog_expr = Expr(:vect, [QuoteNode(s) for s in original_endog]...)
 
-    # Wrap equation expressions as QuoteNodes so they store as Expr
-    eq_vec_expr = Expr(:ref, :Expr, [QuoteNode(eq) for eq in equation_exprs]...)
+    function _named_eq_expr(name, def, residual_ex, fn_expr, timing)
+        def_ex = def === nothing ? :nothing : QuoteNode(def)
+        :(NamedEquation($(QuoteNode(name)), $def_ex, $(QuoteNode(residual_ex)), $fn_expr;
+                        timing=$(TimingInfo)($(timing.max_lag), $(timing.max_lead), $(timing.has_lead))))
+    end
 
-    # Build the vector of residual functions
+    eq_vec_expr = Expr(:vect, (_named_eq_expr(eq_names[i], eq_defines[i], residual_exprs[i],
+                                             residual_fn_exprs[i], timings[i])
+                               for i in eachindex(raw_equations))...)
+    orig_eq_vec_expr = Expr(:vect, (_named_eq_expr(original_eq_names[i], original_eq_defines[i],
+                                                   orig_residual_exprs[i], :(identity),
+                                                   orig_timings[i])
+                                    for i in eachindex(original_raw_equations))...)
     fn_vec_expr = Expr(:ref, :Function, residual_fn_exprs...)
 
-    # Build original_endog and original_equations expressions
-    original_endog_expr = Expr(:vect, [QuoteNode(s) for s in original_endog]...)
-    orig_eq_vec_expr = Expr(:ref, :Expr, [QuoteNode(eq) for eq in orig_eq_exprs]...)
-
-    # Build ss_fn expression if steady_state block was provided
     ss_fn_expr = if ss_body !== nothing
-        # Build: (_ss_θ_) -> begin <param unpacking>; <ss_body> end
         param_unpack = [:($(p) = _ss_θ_[$(QuoteNode(p))]) for p in params]
         if ss_body isa Expr && ss_body.head == :block
-            # Multi-line: insert param unpacking at the start of the block
             inner = filter(a -> !(a isa LineNumberNode), ss_body.args)
             body = Expr(:block, param_unpack..., inner...)
         else
-            # Single-line: wrap in block with param unpacking
             body = Expr(:block, param_unpack..., ss_body)
         end
         Expr(:->, :_ss_θ_, body)
+    elseif is_linear
+        n_endog_val = length(endog)
+        :((_ss_θ_) -> zeros($n_endog_val))
     else
-        # For linear models without a steady_state block, auto-generate zeros SS
-        if is_linear
-            n_endog_val = length(endog)
-            :((_ss_θ_) -> zeros($n_endog_val))
-        else
-            :nothing
-        end
+        :nothing
     end
 
+    decls = IRDecl[
+        IRDecl(:parameters, nothing, copy(params)),
+        IRDecl(:endogenous, nothing, copy(original_endog)),
+        IRDecl(:exogenous, nothing, copy(exog)),
+    ]
+    append!(decls, extra_decls)
+    ir_eqs = IREquation[IREquation(original_eq_names[i], original_eq_defines[i],
+                                   original_raw_equations[i].args[1],
+                                   _unwrap_eq_rhs(original_raw_equations[i].args[2]))
+                        for i in eachindex(original_raw_equations)]
+    ir = ModelIR(clock_val, horizon_val, decls, ir_eqs)
+
+    vnames = if user_varnames === nothing
+        nothing
+    else
+        extra = [string(s) for s in endog[length(original_endog)+1:end]]
+        vcat(user_varnames, extra)
+    end
+    varnames_expr = vnames === nothing ? :nothing : Expr(:vect, vnames...)
+
     result = quote
-        DSGESpec{Float64}(
-            $endog_expr, $exog_expr, $params_expr,
-            $param_vals_expr,
-            $eq_vec_expr,
-            $fn_vec_expr,
-            $n_expect, $fwd_expr, Float64[], $ss_fn_expr;
-            original_endog=$original_endog_expr,
-            original_equations=$orig_eq_vec_expr,
-            augmented=$aug_flag,
-            max_lag=$max_lag_val,
-            max_lead=$max_lead_val,
-            linear=$is_linear,
-            bellman_utility=$(bellman_util_ex === nothing ? :nothing : bellman_util_ex),
-            bellman_beta=$(bellman_beta_ex === nothing ? :nothing :
-                (bellman_beta_ex isa Symbol ? QuoteNode(bellman_beta_ex) : bellman_beta_ex)),
-            bellman_consumption=$(bellman_cons_ex === nothing ? :nothing : QuoteNode(bellman_cons_ex)),
-            bellman_controls=$(Expr(:vect, (QuoteNode(s) for s in bellman_ctrl_ex)...))
-        )
+        let _eqs = $eq_vec_expr
+            ModelSpec{Float64}(
+                $endog_expr, $exog_expr, $params_expr,
+                $param_vals_expr,
+                _eqs,
+                $fn_vec_expr,
+                $n_expect, $fwd_expr, Float64[], $ss_fn_expr;
+                original_endog=$original_endog_expr,
+                original_equations=$orig_eq_vec_expr,
+                augmented=$aug_flag,
+                max_lag=$max_lag_val,
+                max_lead=$max_lead_val,
+                linear=$is_linear,
+                bellman_utility=$(bellman_util_ex === nothing ? :nothing : bellman_util_ex),
+                bellman_beta=$(bellman_beta_ex === nothing ? :nothing :
+                    (bellman_beta_ex isa Symbol ? QuoteNode(bellman_beta_ex) : bellman_beta_ex)),
+                bellman_consumption=$(bellman_cons_ex === nothing ? :nothing : QuoteNode(bellman_cons_ex)),
+                bellman_controls=$(Expr(:vect, (QuoteNode(s) for s in bellman_ctrl_ex)...)),
+                agents=NamedTuple(),
+                ir=$(ir),
+                varnames=$varnames_expr,
+            )
+        end
     end
 
     return esc(result)
@@ -463,18 +533,11 @@ end
 """
     _has_forward_looking(eq, endog, exog) → Bool
 
-Check if equation `eq` contains any `[t+1]` terms (endogenous forward-looking)
-or `E[t](...)` operator.
+Check if equation `eq` contains any endogenous `[t+k]` lead, `k > 0`.
 """
 function _has_forward_looking(eq::Expr, endog::Vector{Symbol}, exog::Vector{Symbol})
     found = Ref(false)
     _walk_expr(eq) do ex
-        # Check for E[t](...) operator
-        if _is_expectation_operator(ex)
-            found[] = true
-            return
-        end
-        # Check for var[t+1] where var is endogenous
         if _is_time_ref(ex, endog)
             idx = _parse_time_index(ex.args[2])
             if idx > 0
@@ -483,6 +546,103 @@ function _has_forward_looking(eq::Expr, endog::Vector{Symbol}, exog::Vector{Symb
         end
     end
     return found[]
+end
+
+"""
+    _lhs_defines(lhs, endog) → Union{Nothing,Symbol}
+
+If `lhs` is `var[t]` or a bare endogenous `var`, that variable is the defining
+target of the equation.
+"""
+function _lhs_defines(lhs, endog::Vector{Symbol})
+    if lhs isa Expr && lhs.head == :ref && lhs.args[1] isa Symbol
+        v = lhs.args[1]::Symbol
+        v in endog || return nothing
+        try
+            return _parse_time_index(lhs.args[2]) == 0 ? v : nothing
+        catch
+            return nothing
+        end
+    elseif lhs isa Symbol && lhs in endog
+        return lhs
+    end
+    return nothing
+end
+
+_unwrap_eq_rhs(rhs) = rhs
+function _unwrap_eq_rhs(rhs::Expr)
+    if rhs.head == :block
+        inner = filter(a -> !(a isa LineNumberNode), rhs.args)
+        length(inner) == 1 || return rhs
+        return inner[1]
+    end
+    return rhs
+end
+
+function _extract_varnames(stmt::Expr)
+    raw = Any[]
+    if stmt.head == :call && length(stmt.args) >= 3 && stmt.args[1] === :(:)
+        push!(raw, stmt.args[3])
+    elseif stmt.head == :tuple
+        first_call = stmt.args[1]
+        push!(raw, first_call.args[3])
+        for i in 2:length(stmt.args)
+            push!(raw, stmt.args[i])
+        end
+    else
+        error("@dsge: cannot extract varnames from: $stmt")
+    end
+    names = String[]
+    for v in raw
+        if v isa String
+            push!(names, v)
+        elseif v isa Symbol
+            push!(names, string(v))
+        else
+            error("@dsge: varnames entries must be symbols or strings, got $v")
+        end
+    end
+    return names
+end
+
+function _extract_symbol_flag(stmt::Expr, label::Symbol)
+    if stmt.head == :call && length(stmt.args) >= 3 && stmt.args[1] === :(:)
+        val = stmt.args[3]
+        val isa Symbol || error("@dsge: $label declaration must be a symbol, got: $val")
+        return val
+    end
+    error("@dsge: cannot parse $label declaration: $stmt")
+end
+
+function _equation_timing(eq::Expr, endog::Vector{Symbol})
+    max_lag = 0
+    max_lead = 0
+    _walk_expr(eq) do ex
+        if _is_time_ref(ex, endog)
+            idx = _parse_time_index(ex.args[2])
+            if idx < 0
+                max_lag = max(max_lag, -idx)
+            elseif idx > 0
+                max_lead = max(max_lead, idx)
+            end
+        end
+    end
+    TimingInfo(max_lag, max_lead, max_lead > 0)
+end
+
+"""
+    _reject_expectation_operator(ex)
+
+Error if `ex` contains the removed `E[t](...)` call form. A bare endogenous
+`E[t]` (employment, endowment) is a time reference, not this operator.
+"""
+function _reject_expectation_operator(ex)
+    _walk_expr(ex) do node
+        if _is_expectation_operator(node)
+            error("@dsge: E[t](...) was removed; write the lead directly (x[t+1] is E_t x_{t+1})")
+        end
+    end
+    return nothing
 end
 
 """
@@ -519,26 +679,6 @@ function _equation_to_residual(eq::Expr)
         rhs = inner[1]
     end
     return Expr(:call, :(-), lhs, rhs)
-end
-
-"""
-    _strip_expectation_operator(ex) → Expr
-
-Recursively replace `E[t](inner_expr)` with just `inner_expr`.
-Under rational expectations linearization, the expectation operator is stripped.
-"""
-function _strip_expectation_operator(ex)
-    if !(ex isa Expr)
-        return ex
-    end
-    # If this is E[t](arg), return the stripped arg
-    if _is_expectation_operator(ex)
-        # E[t](arg) — the arg is ex.args[2]
-        return _strip_expectation_operator(ex.args[2])
-    end
-    # Recurse into children
-    new_args = [_strip_expectation_operator(a) for a in ex.args]
-    return Expr(ex.head, new_args...)
 end
 
 # =============================================================================

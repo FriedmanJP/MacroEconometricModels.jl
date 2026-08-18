@@ -109,7 +109,7 @@ function gensys(Gamma0::AbstractMatrix{T}, Gamma1::AbstractMatrix{T},
 end
 
 """
-    _solve_undetermined_coefficients(spec::DSGESpec{T}) -> (G1, impact, eigenvalues)
+    _solve_undetermined_coefficients(spec::ModelSpec{T}) -> (G1, impact, eigenvalues)
 
 Solve the first-order DSGE system via iterative undetermined coefficients.
 
@@ -122,7 +122,7 @@ Guessing ŷ_t = G1·ŷ_{t-1} + M·ε_t and matching coefficients:
 The iteration G1_{k+1} = -(f₀ + f_lead·G1_k)⁻¹·f₁ converges to the unique stable
 solution. This method is robust to models with many static variables.
 """
-function _solve_undetermined_coefficients(spec::DSGESpec{T};
+function _solve_undetermined_coefficients(spec::ModelSpec{T};
         maxiter::Int=10000, tol::Real=1e-13,
         f_0::Union{Nothing,AbstractMatrix{T}}=nothing,
         f_1::Union{Nothing,AbstractMatrix{T}}=nothing,
@@ -160,7 +160,7 @@ function _solve_undetermined_coefficients(spec::DSGESpec{T};
 end
 
 """
-    solve(spec::DSGESpec{T}; method=:gensys, kwargs...) -> DSGESolution or PerfectForesightPath or PerturbationSolution
+    solve(spec::ModelSpec{T}; method=:gensys, kwargs...) -> DSGESolution or PerfectForesightPath or PerturbationSolution
 
 Solve a DSGE model.
 
@@ -174,7 +174,7 @@ Solve a DSGE model.
 - `:vfi` -- Euler-equation time iteration (Coleman 1990), equivalent to `:pfi` (the name is historical, not value-function iteration); pass `degree=5`, `howard_steps=0`
 - `:perfect_foresight` -- deterministic Newton solver
 """
-function solve(spec::DSGESpec{T}; method::Symbol=:gensys, kwargs...) where {T<:AbstractFloat}
+function solve(spec::ModelSpec{T}; method::Symbol=:gensys, kwargs...) where {T<:AbstractFloat}
     if isempty(spec.steady_state)
         if spec.linear
             # Linear models: steady state is all zeros (variables are deviations)

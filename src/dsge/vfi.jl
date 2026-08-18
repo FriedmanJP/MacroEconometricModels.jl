@@ -18,7 +18,7 @@ const _VFI_MISSING_MSG =
     "For Euler-equation time iteration use pfi_solver."
 
 """
-    vfi_solver(spec::DSGESpec{T}; utility, beta, transition, control_bounds, kwargs...)
+    vfi_solver(spec::ModelSpec{T}; utility, beta, transition, control_bounds, kwargs...)
         -> ProjectionSolution{T}
 
 Solve a representative-agent DSGE via **value-function iteration**: at each state node
@@ -49,7 +49,7 @@ This is not Euler time iteration; that algorithm is [`pfi_solver`](@ref).
 - `threaded::Bool=false`: multi-thread the per-node maximization
 - `verbose::Bool=false`: print iteration info
 """
-function vfi_solver(spec::DSGESpec{T};
+function vfi_solver(spec::ModelSpec{T};
                     utility=nothing,
                     beta=nothing,
                     transition=nothing,
@@ -283,7 +283,7 @@ function vfi_solver(spec::DSGESpec{T};
     )
 end
 
-function _vfi_resolve_beta(spec::DSGESpec{T}, beta) where {T}
+function _vfi_resolve_beta(spec::ModelSpec{T}, beta) where {T}
     if beta isa Symbol
         haskey(spec.param_values, beta) || throw(ArgumentError(
             "beta = :$beta is not in spec.param_values $(collect(keys(spec.param_values)))"))
@@ -295,7 +295,7 @@ function _vfi_resolve_beta(spec::DSGESpec{T}, beta) where {T}
     return b
 end
 
-function _vfi_init_value(spec::DSGESpec{T}, utility, consumption, β::T) where {T}
+function _vfi_init_value(spec::ModelSpec{T}, utility, consumption, β::T) where {T}
     ss = spec.steady_state
     c0 = if consumption !== nothing
         i = findfirst(==(consumption), spec.endog)
@@ -319,7 +319,7 @@ State box for Bellman VFI.
 deterministic SS. Clamping k′ into that collar makes “consume everything”
 costless. Expand positive-SS states so k can fall to 20% of SS and rise to 2× SS.
 """
-function _vfi_state_bounds(spec::DSGESpec{T}, ld, state_idx, scale) where {T}
+function _vfi_state_bounds(spec::ModelSpec{T}, ld, state_idx, scale) where {T}
     bounds = _compute_state_bounds(spec, ld, state_idx, scale)
     ss = spec.steady_state
     for (i, si) in enumerate(state_idx)
@@ -436,7 +436,7 @@ function _vfi_expected_V(x::AbstractVector{T}, a::AbstractVector{T},
     return ev
 end
 
-function _vfi_reward(x, a, spec::DSGESpec{T}, utility, consumption,
+function _vfi_reward(x, a, spec::ModelSpec{T}, utility, consumption,
                      outcome, ctrl_idx, state_idx, transition, θ,
                      ε::AbstractVector{T}) where {T}
     if consumption !== nothing
@@ -457,7 +457,7 @@ function _vfi_reward(x, a, spec::DSGESpec{T}, utility, consumption,
     return T(utility(y, y_lag, ε, θ))
 end
 
-function _vfi_pack_y(x, a, spec::DSGESpec{T}, outcome, ctrl_idx, state_idx,
+function _vfi_pack_y(x, a, spec::ModelSpec{T}, outcome, ctrl_idx, state_idx,
                      transition, θ, ε::AbstractVector{T}) where {T}
     if outcome !== nothing
         return Vector{T}(outcome(x, a, θ))
@@ -483,7 +483,7 @@ function _vfi_eval_action(x, a, spec, utility, consumption, transition, outcome,
     return u + β * ev
 end
 
-function _vfi_maximize(x, a_guess, spec::DSGESpec{T}, utility, consumption,
+function _vfi_maximize(x, a_guess, spec::ModelSpec{T}, utility, consumption,
                        transition, control_bounds, outcome, ctrl_idx, state_idx,
                        β, θ, ε_zero, V, grids, state_bounds,
                        quad_nodes, quad_weights, n_choice) where {T}

@@ -91,7 +91,7 @@ Sweep one or two parameters of a DSGE model and record the determinacy verdict a
 point.
 
 # Arguments
-- `spec::DSGESpec` — the model. It is re-specified at each grid point through the shared
+- `spec::ModelSpec` — the model. It is re-specified at each grid point through the shared
   `_respec` helper, so `linear=`, augmentation metadata and the steady-state function are
   preserved; the steady state is recomputed per point by `solve`.
 - `θ_base` — parameter values to hold fixed away from the swept dimensions. Defaults to the
@@ -125,7 +125,7 @@ m = determinacy_region(spec; params=:phi_pi, grids=range(0.0, 3.0; length=61))
 report(m)                       # boundary at the Taylor principle
 ```
 """
-function determinacy_region(spec::DSGESpec{T},
+function determinacy_region(spec::ModelSpec{T},
                             theta_base::AbstractDict{Symbol,<:Real}=spec.param_values;
                             params,
                             grids,

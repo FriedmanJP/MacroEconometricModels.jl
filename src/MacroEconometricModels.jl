@@ -310,8 +310,8 @@ include("nowcast/news.jl")
 include("nowcast/forecast.jl")
 
 # DSGE models
-include("dsge/types.jl")
-include("dsge/ir.jl")             # ModelSpec + IR (v0.9.0; DSGESpec remains until HA migrates)
+include("dsge/ir.jl")             # ModelSpec + IR first — solution structs in types.jl hold ModelSpec
+include("dsge/types.jl")          # DSGESpec remains until HA migrates (v0.9.0)
 include("dsge/constraints.jl")
 include("dsge/display.jl")
 include("dsge/parser.jl")

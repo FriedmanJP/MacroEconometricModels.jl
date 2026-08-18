@@ -64,7 +64,7 @@ functions — no re-parsing, no runtime `eval`. Registers are zero in steady
 state; `ss_fn` is wrapped accordingly; all parse flags propagate (the
 `_respec` lesson, audit E-07).
 """
-function _augment_policy_news(spec::DSGESpec{T}, policy_shock::Symbol, max_news::Int;
+function _augment_policy_news(spec::ModelSpec{T}, policy_shock::Symbol, max_news::Int;
                               active::AbstractVector{Int}=1:max_news) where {T<:AbstractFloat}
     pol_idx = findfirst(==(policy_shock), spec.exog)
     pol_idx === nothing && throw(ArgumentError(
@@ -95,13 +95,19 @@ function _augment_policy_news(spec::DSGESpec{T}, policy_shock::Symbol, max_news:
 
     # Display equations: substitute in the old ones, append the registers.
     q1lag = Expr(:ref, q_syms[1], :(t - 1))
-    new_eqs = Expr[_cf_subst_policy_expr(eq, policy_shock, q1lag) for eq in spec.equations]
+    new_eqs = NamedEquation[]
+    for (i, eq) in enumerate(spec.equations)
+        new_expr = _cf_subst_policy_expr(eq.expr, policy_shock, q1lag)
+        push!(new_eqs, NamedEquation(eq.name, eq.defines, new_expr, new_fns[i];
+                                     timing=eq.timing, regimes=eq.regimes))
+    end
     for i in 1:max_news
         parts = Any[]
         i < max_news && push!(parts, Expr(:ref, q_syms[i+1], :(t - 1)))
         haskey(nu_pos, i) && push!(parts, Expr(:ref, Symbol("__cf_news_", policy_shock, "_", i), :t))
         rhs = isempty(parts) ? 0 : (length(parts) == 1 ? parts[1] : Expr(:call, :+, parts...))
-        push!(new_eqs, Expr(:call, :-, Expr(:ref, q_syms[i], :t), rhs))
+        new_expr = Expr(:call, :-, Expr(:ref, q_syms[i], :t), rhs)
+        push!(new_eqs, NamedEquation(q_syms[i], q_syms[i], new_expr, new_fns[n_old + i]))
     end
 
     ss = isempty(spec.steady_state) ? T[] : vcat(spec.steady_state, zeros(T, max_news))
@@ -109,22 +115,14 @@ function _augment_policy_news(spec::DSGESpec{T}, policy_shock::Symbol, max_news:
     new_ss_fn = old_ss_fn === nothing ? nothing :
                 (theta -> vcat(old_ss_fn(theta), zeros(max_news)))
 
-    DSGESpec{T}(new_endog, new_exog, spec.params, spec.param_values, new_eqs, new_fns,
-                spec.n_expect, spec.forward_indices, ss, new_ss_fn;
-                original_endog=(spec.augmented ? spec.original_endog : spec.endog),
-                original_equations=spec.original_equations,
-                augmented=true,
-                max_lag=spec.max_lag,
-                max_lead=spec.max_lead,
-                linear=spec.linear,
-                bellman_utility=spec.bellman_utility,
-                bellman_beta=spec.bellman_beta,
-                bellman_consumption=spec.bellman_consumption,
-                bellman_controls=copy(spec.bellman_controls))
+    _copy_model_spec(spec; endog=new_endog, exog=new_exog, equations=new_eqs,
+                     residual_fns=new_fns, steady_state=ss, ss_fn=new_ss_fn,
+                     original_endog=(spec.augmented ? spec.original_endog : spec.endog),
+                     augmented=true)
 end
 
 """
-    policy_news_matrix(spec::DSGESpec, policy_shock, outcomes, instruments=[];
+    policy_news_matrix(spec::ModelSpec, policy_shock, outcomes, instruments=[];
                        H=100, solver=:gensys, chunk=0) -> PolicyCausalEffects
 
 Assemble the model-implied **square** news menu `Θ_ν` (McKay–Wolf Prop. 1;
@@ -153,7 +151,7 @@ need not be known; it must merely render the system determinate (McKay–Wolf;
 CMW). The cross-rule invariance is asserted end-to-end in the CF-23 oracle
 suite.
 """
-function policy_news_matrix(spec::DSGESpec{T}, policy_shock::Symbol,
+function policy_news_matrix(spec::ModelSpec{T}, policy_shock::Symbol,
                             outcomes::AbstractVector{<:Pair{Symbol,Symbol}},
                             instruments::AbstractVector{<:Pair{Symbol,Symbol}}=Pair{Symbol,Symbol}[];
                             H::Int=100, solver::Symbol=:gensys,

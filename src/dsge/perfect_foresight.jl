@@ -20,7 +20,7 @@ For a model `f(y_t, y_{t-1}, y_{t+1}, ε_t, θ) = 0`:
 using SparseArrays
 
 """
-    perfect_foresight(spec::DSGESpec{FT}; T_periods=100, shock_path=nothing,
+    perfect_foresight(spec::ModelSpec{FT}; T_periods=100, shock_path=nothing,
                        max_iter=100, tol=1e-8, constraints=DSGEConstraint[],
                        solver=nothing, algorithm=nothing) → PerfectForesightPath{FT}
 
@@ -38,7 +38,7 @@ Uses NonlinearSolve.jl as the default Newton solver with block-tridiagonal spars
 - `solver::Symbol` — `:nonlinearsolve` (default), `:nlopt` (SLSQP), `:ipopt` (NLP), or `:path` (MCP); auto-detected
 - `algorithm` — NonlinearSolve.jl algorithm (default: `NewtonRaphson()`); passed through to chosen backend
 """
-function perfect_foresight(spec::DSGESpec{FT};
+function perfect_foresight(spec::ModelSpec{FT};
         T_periods::Int=100,
         shock_path::Union{Nothing,AbstractMatrix}=nothing,
         max_iter::Int=100,
@@ -143,7 +143,7 @@ Solve the stacked perfect foresight system using NonlinearSolve.jl (unconstraine
 Uses the existing `_pf_residual!` and `_pf_jacobian` for the block-tridiagonal
 sparse system. Default algorithm is `NewtonRaphson()`.
 """
-function _nonlinearsolve_perfect_foresight(spec::DSGESpec{FT}, T_periods::Int,
+function _nonlinearsolve_perfect_foresight(spec::ModelSpec{FT}, T_periods::Int,
         shocks::Matrix{FT};
         max_iter::Int=100, tol::Real=1e-8, abstol::Real=tol, algorithm=nothing) where {FT<:AbstractFloat}
 
@@ -235,7 +235,7 @@ with complementarity — a full step `-(J \\ F)` followed by clamping stalls as
 soon as a bound genuinely binds (#556). Preserves the block-tridiagonal
 sparsity of `_pf_jacobian`.
 """
-function _projected_newton_pf(spec::DSGESpec{FT}, T_periods::Int,
+function _projected_newton_pf(spec::ModelSpec{FT}, T_periods::Int,
         shocks::Matrix{FT}, lower::Vector{FT}, upper::Vector{FT};
         max_iter::Int=100, tol::Real=1e-8, abstol::Real=tol) where {FT<:AbstractFloat}
 
@@ -372,7 +372,7 @@ Perfect foresight with nonlinear inequality constraints via NLopt LD_SLSQP.
 Formulates as a feasibility problem with equality constraints (model equations)
 and inequality constraints (NonlinearConstraint). Box bounds from VariableBound.
 """
-function _nlopt_perfect_foresight(spec::DSGESpec{FT}, T_periods::Int,
+function _nlopt_perfect_foresight(spec::ModelSpec{FT}, T_periods::Int,
         shocks::Matrix{FT}, constraints::Vector;
         algorithm=nothing) where {FT<:AbstractFloat}
 
@@ -490,7 +490,7 @@ For each period t = 1, ..., T_periods:
 
 where y_0 = y_ss (initial) and y_{T+1} = y_ss (terminal).
 """
-function _pf_residual!(F::Vector{FT}, x::Vector{FT}, spec::DSGESpec{FT},
+function _pf_residual!(F::Vector{FT}, x::Vector{FT}, spec::ModelSpec{FT},
                        shocks::Matrix{FT}, Tp::Int) where {FT}
     n = spec.n_endog
     n_ε = spec.n_exog
@@ -539,7 +539,7 @@ Each period t contributes three n×n blocks:
 
 Uses central differences for numerical Jacobians.
 """
-function _pf_jacobian(x::Vector{FT}, spec::DSGESpec{FT},
+function _pf_jacobian(x::Vector{FT}, spec::ModelSpec{FT},
                       shocks::Matrix{FT}, Tp::Int) where {FT}
     n = spec.n_endog
     y_ss = spec.steady_state

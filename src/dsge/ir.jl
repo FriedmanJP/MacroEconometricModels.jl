@@ -168,11 +168,27 @@ struct ModelSpec{T<:AbstractFloat, A<:NamedTuple}
     ir::ModelIR
 end
 
+"""Wrap `Vector{Expr}` (programmatic / test constructors) as `NamedEquation`s."""
+function _coerce_named_equations(equations, residual_fns)
+    eqs = collect(equations)
+    isempty(eqs) && return NamedEquation[]
+    first(eqs) isa NamedEquation && return NamedEquation[eqs...]
+    fns = collect(Function, residual_fns)
+    n = length(eqs)
+    out = Vector{NamedEquation}(undef, n)
+    for i in 1:n
+        expr = eqs[i] isa Expr ? eqs[i] : Expr(:call, :+, eqs[i], 0)
+        fn = i <= length(fns) ? fns[i] : identity
+        out[i] = NamedEquation(Symbol("eq_", i), nothing, expr, fn)
+    end
+    return out
+end
+
 function ModelSpec{T}(endog, exog, params, param_values, equations, residual_fns,
                       n_expect, forward_indices, steady_state,
                       ss_fn::Union{Nothing,Function}=nothing;
-                      original_endog::Vector{Symbol}=endog,
-                      original_equations::Vector{NamedEquation}=equations,
+                      original_endog::Vector{Symbol}=Symbol[endog...],
+                      original_equations=nothing,
                       augmented::Bool=false,
                       max_lag::Int=1,
                       max_lead::Int=1,
@@ -187,8 +203,15 @@ function ModelSpec{T}(endog, exog, params, param_values, equations, residual_fns
     endog = collect(Symbol, endog)
     exog = collect(Symbol, exog)
     params = collect(Symbol, params)
-    equations = collect(NamedEquation, equations)
     residual_fns = collect(Function, residual_fns)
+    equations = _coerce_named_equations(equations, residual_fns)
+    if original_equations === nothing
+        original_equations = equations
+    else
+        orig = collect(original_equations)
+        orig_fns = [eq isa NamedEquation ? eq.residual : identity for eq in orig]
+        original_equations = _coerce_named_equations(orig, orig_fns)
+    end
     n_endog = length(endog)
     n_exog = length(exog)
     n_params = length(params)
@@ -221,28 +244,62 @@ end
 Copy the compiled view at a new parameter dictionary. Steady state is cleared.
 Does **not** recompile `spec.ir`.
 """
-function _respec(spec::ModelSpec{T,A}, new_pv) where {T<:AbstractFloat,A}
+function _copy_model_spec(spec::ModelSpec{T};
+                          endog=spec.endog,
+                          exog=spec.exog,
+                          params=spec.params,
+                          param_values=spec.param_values,
+                          equations=spec.equations,
+                          residual_fns=spec.residual_fns,
+                          n_expect=spec.n_expect,
+                          forward_indices=spec.forward_indices,
+                          steady_state=spec.steady_state,
+                          ss_fn=spec.ss_fn,
+                          original_endog=spec.original_endog,
+                          original_equations=spec.original_equations,
+                          augmented=spec.augmented,
+                          max_lag=spec.max_lag,
+                          max_lead=spec.max_lead,
+                          linear=spec.linear,
+                          bellman_utility=spec.bellman_utility,
+                          bellman_beta=spec.bellman_beta,
+                          bellman_consumption=spec.bellman_consumption,
+                          bellman_controls=spec.bellman_controls,
+                          agents=spec.agents,
+                          ir=spec.ir,
+                          varnames=spec.varnames) where {T<:AbstractFloat}
     ModelSpec{T}(
-        spec.endog, spec.exog, spec.params, new_pv,
-        spec.equations, spec.residual_fns,
-        spec.n_expect, spec.forward_indices, T[], spec.ss_fn;
-        original_endog=spec.original_endog,
-        original_equations=spec.original_equations,
-        augmented=spec.augmented,
-        max_lag=spec.max_lag,
-        max_lead=spec.max_lead,
-        linear=spec.linear,
-        bellman_utility=spec.bellman_utility,
-        bellman_beta=spec.bellman_beta,
-        bellman_consumption=spec.bellman_consumption,
-        bellman_controls=copy(spec.bellman_controls),
-        agents=spec.agents,
-        ir=spec.ir,
-        varnames=copy(spec.varnames),
+        endog, exog, params, param_values, equations, residual_fns,
+        n_expect, forward_indices, steady_state, ss_fn;
+        original_endog=original_endog,
+        original_equations=original_equations,
+        augmented=augmented,
+        max_lag=max_lag,
+        max_lead=max_lead,
+        linear=linear,
+        bellman_utility=bellman_utility,
+        bellman_beta=bellman_beta,
+        bellman_consumption=bellman_consumption,
+        bellman_controls=bellman_controls,
+        agents=agents,
+        ir=ir,
+        varnames=varnames === nothing ? nothing : copy(varnames),
     )
 end
 
+function _respec(spec::ModelSpec{T,A}, new_pv) where {T<:AbstractFloat,A}
+    _copy_model_spec(spec; param_values=new_pv, steady_state=T[])
+end
+
 equation_exprs(spec::ModelSpec) = [eq.expr for eq in spec.equations]
+
+_eq_expr(eq::NamedEquation) = eq.expr
+_eq_expr(eq::Expr) = eq
+
+function _original_var_indices(spec::ModelSpec)
+    spec.augmented || return collect(1:spec.n_endog)
+    return [findfirst(==(v), spec.endog) for v in spec.original_endog]
+end
 
 has_agents(spec::ModelSpec) = !isempty(spec.agents)
 

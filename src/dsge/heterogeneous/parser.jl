@@ -622,7 +622,7 @@ function solve(spec::HADSGESpec{T}; method::Symbol=:ssj,
         n_sys = size(G1, 1)
         endog_names = [Symbol("x_$i") for i in 1:n_sys]
         exog_names = [:epsilon]
-        dummy_spec_inner = DSGESpec{T}(
+        dummy_spec_inner = ModelSpec{T}(
             endog_names, exog_names, Symbol[], Dict{Symbol,T}(),
             [:(0 + 0) for _ in 1:n_sys],
             [((yt, yl, yle, eps, th) -> zero(T)) for _ in 1:n_sys],

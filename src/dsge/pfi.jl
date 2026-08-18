@@ -21,7 +21,7 @@ find `y_t` (levels) such that `F(y_t, y_lag, E_y_lead, ε, θ) = 0`.
 `ε` defaults to zero (certainty-equivalent current period).
 """
 function _pfi_euler_step(y_guess::Vector{T}, y_lag::Vector{T},
-                          E_y_lead::Vector{T}, spec::DSGESpec{T};
+                          E_y_lead::Vector{T}, spec::ModelSpec{T};
                           ε::AbstractVector{T}=zeros(T, spec.n_exog),
                           newton_tol::Real=1e-10, newton_max::Int=50) where {T}
     n_eq = spec.n_endog
@@ -93,7 +93,7 @@ Next-period state levels at a grid point under one quadrature shock.
 """
 function _pfi_next_state(y_current::AbstractVector{T}, y_lag::AbstractVector{T},
                          ε::AbstractVector{T}, state_idx::Vector{Int},
-                         spec::DSGESpec{T}, impact::AbstractMatrix{T},
+                         spec::ModelSpec{T}, impact::AbstractMatrix{T},
                          next_state::Symbol) where {T}
     nx = length(state_idx)
     x_next = zeros(T, nx)
@@ -128,7 +128,7 @@ end
 `next_state` selects the map `x'` (see [`_pfi_next_state`](@ref)).
 """
 function _pfi_compute_expectations(coeffs::Matrix{T}, n_vars::Int, n_basis::Int,
-                                    state_idx::Vector{Int}, spec::DSGESpec{T},
+                                    state_idx::Vector{Int}, spec::ModelSpec{T},
                                     quad_nodes::Matrix{T}, quad_weights::Vector{T},
                                     state_bounds::Matrix{T}, multi_indices::Matrix{Int},
                                     steady_state::Vector{T},
@@ -186,7 +186,7 @@ function _pfi_compute_expectations(coeffs::Matrix{T}, n_vars::Int, n_basis::Int,
 end
 
 """
-    pfi_solver(spec::DSGESpec{T}; kwargs...) -> ProjectionSolution{T}
+    pfi_solver(spec::ModelSpec{T}; kwargs...) -> ProjectionSolution{T}
 
 Solve DSGE model via Policy Function Iteration (Time Iteration).
 
@@ -216,7 +216,7 @@ coefficients via least squares.
 - `verbose::Bool=false`: print iteration info
 - `initial_coeffs`: optional `n_vars × n_basis` warm-start coefficients
 """
-function pfi_solver(spec::DSGESpec{T};
+function pfi_solver(spec::ModelSpec{T};
                     degree::Int=5,
                     grid::Symbol=:auto,
                     smolyak_mu::Union{Integer,AbstractVector{<:Integer}}=3,

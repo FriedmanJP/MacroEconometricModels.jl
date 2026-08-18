@@ -2122,7 +2122,7 @@ end
             Y[t] = A[t]
             A[t] = rho * A[t-1] + sigma * eps_A[t]
         end
-        @test spec_std isa DSGESpec{Float64}
+        @test spec_std isa ModelSpec{Float64,NoAgents}
     end
 
     @testset "CRRA curvature and model routing (#239/T140)" begin
@@ -2178,11 +2178,11 @@ end
     spec = load_ha_example(:krusell_smith)
     # Verify method dispatch exists and does not conflict
     @test hasmethod(solve, Tuple{HADSGESpec{Float64}})
-    @test hasmethod(solve, Tuple{DSGESpec{Float64}})
+    @test hasmethod(solve, Tuple{ModelSpec{Float64}})
 
-    # Verify dispatch is distinct: solve(::HADSGESpec) and solve(::DSGESpec) are different methods
+    # Verify dispatch is distinct: solve(::HADSGESpec) and solve(::ModelSpec) are different methods
     m1 = which(solve, Tuple{HADSGESpec{Float64}})
-    m2 = which(solve, Tuple{DSGESpec{Float64}})
+    m2 = which(solve, Tuple{ModelSpec{Float64}})
     @test m1 !== m2
 
     FAST && return

@@ -192,7 +192,7 @@ Bayesian estimation of DSGE model parameters via Sequential Monte Carlo (SMC),
 SMC², or Random-Walk Metropolis-Hastings (RWMH).
 
 # Arguments
-- `spec::DSGESpec{T}` — model specification from `@dsge` macro
+- `spec::ModelSpec{T}` — model specification from `@dsge` macro
 - `data::AbstractMatrix` — observed data in `T×n` (time in rows, variables in columns),
   the package convention; orientation is resolved by matching a dimension to the number
   of observables (an `n×T` matrix is accepted and transposed internally).
@@ -265,7 +265,7 @@ SMC², or Random-Walk Metropolis-Hastings (RWMH).
 - An, S. & Schorfheide, F. (2007). Bayesian Analysis of DSGE Models.
   *Econometric Reviews*, 26(2-4), 113-172.
 """
-function estimate_dsge_bayes(spec::DSGESpec{T}, data::AbstractMatrix,
+function estimate_dsge_bayes(spec::ModelSpec{T}, data::AbstractMatrix,
                               theta0::Union{AbstractVector{<:Real},
                                             AbstractDict{Symbol,<:Real},NamedTuple};
                               priors::Dict{Symbol,<:Distribution},
@@ -476,7 +476,7 @@ finite and positive definite, `laplace_log_ml` is `NaN`, a warning is emitted,
 and `inv_hessian` falls back to a diagonal matrix.
 
 # Arguments
-- `spec::DSGESpec{T}` — model specification from `@dsge`
+- `spec::ModelSpec{T}` — model specification from `@dsge`
 - `data::AbstractMatrix` — observed data in the package `T×n` convention (time in rows).
   Orientation is resolved by matching a dimension to `n_obs`; ambiguous or mismatched
   shapes throw an `ArgumentError` rather than being silently transposed (#142).
@@ -507,7 +507,7 @@ the mode, and the Laplace log marginal likelihood.
 - Roberts, G. O. & Rosenthal, J. S. (2001). Optimal Scaling for Various
   Metropolis-Hastings Algorithms. *Statistical Science*, 16(4), 351-367.
 """
-function posterior_mode(spec::DSGESpec{T}, data::AbstractMatrix,
+function posterior_mode(spec::ModelSpec{T}, data::AbstractMatrix,
                         theta0::Union{AbstractVector{<:Real},AbstractDict{Symbol,<:Real},NamedTuple};
                         priors::Dict{Symbol,<:Distribution},
                         observables::Vector{Symbol}=Symbol[],
@@ -649,7 +649,7 @@ Convert an `SMCState{T}` into a `BayesianDSGE{T}` result container.
 """
 function _smc_state_to_bayesian_dsge(state::SMCState{T}, prior::DSGEPrior{T},
                                        param_names::Vector{Symbol},
-                                       spec::DSGESpec{T}, method_sym::Symbol,
+                                       spec::ModelSpec{T}, method_sym::Symbol,
                                        observables::Vector{Symbol},
                                        measurement_error,
                                        solver::Symbol,
@@ -791,7 +791,7 @@ function _mh_to_bayesian_dsge(draws::Matrix{T}, log_posterior::Vector{T},
                                 acceptance_rate::T,
                                 prior::DSGEPrior{T},
                                 param_names::Vector{Symbol},
-                                spec::DSGESpec{T},
+                                spec::ModelSpec{T},
                                 observables::Vector{Symbol},
                                 measurement_error,
                                 solver::Symbol,
@@ -838,7 +838,7 @@ end
 Build the DSGE solution and state space at a given parameter vector.
 Returns `(solution, state_space)`.
 """
-function _build_solution_at_theta(spec::DSGESpec{T}, param_names::Vector{Symbol},
+function _build_solution_at_theta(spec::ModelSpec{T}, param_names::Vector{Symbol},
                                     theta::Vector{T},
                                     observables::Vector{Symbol},
                                     measurement_error,
@@ -885,7 +885,7 @@ failure — a benign per-θ numeric error (`_benign_solve_error`) OR a returned-
 indeterminate linear solution (an indeterminate model does NOT throw; `solve` returns
 a `DSGESolution` with `is_determined == false`). Non-benign exceptions propagate.
 """
-function _try_build_solution(spec::DSGESpec{T}, param_names::Vector{Symbol},
+function _try_build_solution(spec::ModelSpec{T}, param_names::Vector{Symbol},
                               theta::Vector{T}, observables::Vector{Symbol},
                               measurement_error, solver::Symbol,
                               solver_kwargs::NamedTuple) where {T<:AbstractFloat}
@@ -915,7 +915,7 @@ back to the **highest-posterior draw** — the whole estimation no longer errors
 sampling succeeded. Returns the solution, state space, and a `solved_at` marker
 (`:posterior_mean` or `:highest_posterior_draw`).
 """
-function _build_solution_mean_or_hpd(spec::DSGESpec{T}, param_names::Vector{Symbol},
+function _build_solution_mean_or_hpd(spec::ModelSpec{T}, param_names::Vector{Symbol},
                                       theta_mean::Vector{T}, theta_draws::Matrix{T},
                                       log_posterior::Vector{T}, observables::Vector{Symbol},
                                       measurement_error, solver::Symbol,
@@ -1425,7 +1425,7 @@ Shared loop for predictive simulation: for each parameter draw (row of
 and compute the summary statistics. Failed solves/simulations are **dropped and
 counted**, never zero-filled.
 """
-function _predictive_stats_loop(spec::DSGESpec{T}, thetas::AbstractMatrix{T},
+function _predictive_stats_loop(spec::ModelSpec{T}, thetas::AbstractMatrix{T},
                                 param_names::Vector{Symbol},
                                 observables::Vector{Symbol}, T_periods::Int,
                                 stats_fn, solver::Symbol,
@@ -1496,7 +1496,7 @@ a warning reports the skipped fraction when it exceeds 10%.
   `NamedTuple`; default: mean/variance/AR(1) per observable + cross-correlations
 - `solver`, `solver_kwargs`, `rng` — as in [`estimate_dsge_bayes`](@ref)
 """
-function prior_predictive(spec::DSGESpec{T},
+function prior_predictive(spec::ModelSpec{T},
                           priors::Dict{Symbol,<:Distribution};
                           n_draws::Int=500,
                           T_periods::Int=200,
