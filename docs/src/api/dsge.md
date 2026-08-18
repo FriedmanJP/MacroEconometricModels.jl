@@ -195,6 +195,14 @@ nonlinear_constraint
 
 ```@docs
 HouseholdSystem
+DCEGMSystem
+LifeCycleSystem
+ContinuousHouseholdSystem
+FirmSystem
+IntermediarySystem
+to_spec
+has_kind
+agents_of
 HAGrid
 HAGrid()
 IncomeProcess
@@ -251,6 +259,7 @@ block_jacobian
 ssj_jacobian
 ssj_irf
 ssj_arg_order
+MitBlock
 ```
 
 ```@autodocs
@@ -309,6 +318,8 @@ lifecycle_policies
 lifecycle_distribution
 lifecycle_income
 lifecycle_survival
+LifeCycleTransition
+lifecycle_transition
 ```
 
 ```@autodocs
@@ -367,5 +378,31 @@ BlanchardOLGSolution
 blanchard_steady_state
 blanchard_solve
 blanchard_transition
+blanchard_nk_spec
 report(::IO, ::BlanchardOLGSteadyState{T}) where {T}
+```
+
+---
+
+## Plant Heterogeneity
+
+```@docs
+KhanThomasSteadyState
+KhanThomasTransition
+khan_thomas_example
+khan_thomas_steady_state
+khan_thomas_mit
+```
+
+---
+
+## Heterogeneous Banks
+
+```@docs
+IntermediarySteadyState
+IntermediaryPE
+IntermediaryTransition
+intermediary_pe
+intermediary_steady_state
+intermediary_mit
 ```

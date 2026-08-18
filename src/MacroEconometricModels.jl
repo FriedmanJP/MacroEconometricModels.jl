@@ -756,7 +756,7 @@ export ModelSpec, NamedEquation, NoAgents, AbstractAgentSystem, ModelIR, Househo
 export DCEGMSystem, LifeCycleSystem, ContinuousHouseholdSystem, FirmSystem, IntermediarySystem
 export IntermediarySteadyState, IntermediaryPE, IntermediaryTransition
 export intermediary_pe, intermediary_steady_state, intermediary_mit
-export to_spec
+export to_spec, has_kind, agents_of
 export KhanThomasSteadyState, KhanThomasTransition
 export khan_thomas_example, khan_thomas_steady_state, khan_thomas_mit
 export LinearDSGE, DSGESolution, PerturbationSolution, ProjectionSolution, PerfectForesightPath, DSGEEstimation

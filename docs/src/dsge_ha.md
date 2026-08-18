@@ -77,7 +77,7 @@ report(ks_result)
 
 ## Individual Problem
 
-The full model is assembled into a [`ModelSpec`](@ref) whose `agents` NamedTuple holds a [`HouseholdSystem`](@ref) (built by [`load_ha_example`](@ref) or `@dsge` with a `heterogeneous:` block). The household payload bundles the discretized [`IncomeProcess`](@ref) and the [`IndividualProblem`](@ref) — the utility, marginal utility, budget, and borrowing-constraint fields the EGM/VFI inner loops consume. The population name is free (`household`, `households`, …); `solve` requires exactly one `HouseholdSystem`.
+The full model is assembled into a [`ModelSpec`](@ref) whose `agents` NamedTuple holds one or more [`HouseholdSystem`](@ref) populations (built by [`load_ha_example`](@ref) or `@dsge` with a `heterogeneous:` block). The household payload bundles the discretized [`IncomeProcess`](@ref) and the [`IndividualProblem`](@ref) — the utility, marginal utility, budget, and borrowing-constraint fields the EGM/VFI inner loops consume. The population name is a free key (`household`, `unconstrained`, `htm`, …); `solve` dispatches on the kind, never on the key. A single `HouseholdSystem` is the usual case; two named households clear through `solve(spec; method=:ssj)` after [Multiple Household Populations](@ref ha_multipop).
 
 `@dsge` `heterogeneous:` accepts `n_grid`, `utility` (`log`, `crra`, or `crra(σ)`), `discount`, `borrowing`, `budget`, `model` (`aiyagari` or `huggett`), and `crra`/`sigma_c`. `clock:` and `horizon:` set `ModelIR` flags; `discrete:` and `absorbing:` are stored as declarations. They do not compile [`ContinuousHouseholdSystem`](@ref), [`LifeCycleSystem`](@ref), or [`DCEGMSystem`](@ref) — use `to_spec` on the family constructor.
 
@@ -1016,6 +1016,70 @@ The estimation output is a `BayesianDSGE` object with posterior draws, acceptanc
 
 ---
 
+## [Multiple Household Populations](@id ha_multipop)
+
+`solve` accepts more than one [`HouseholdSystem`](@ref) on `spec.agents`. Names are free; kinds are types — do not key on `:household`. Each population becomes its own [`HetBlock`](@ref) (or [`MitBlock`](@ref) for life-cycle and continuous-time households). Agent first-order conditions never enter Gensys.
+
+```@example dsge_ha
+s1 = load_ha_example(:huggett)
+s2 = load_ha_example(:huggett)
+hh1 = only(values(s1.agents))
+hh2 = only(values(s2.agents))
+two = ModelSpec{Float64}(
+    Symbol[], Symbol[], s1.params, copy(s1.param_values),
+    NamedEquation[], Function[], 0, Int[], Float64[];
+    agents=(unconstrained=hh1, htm=hh2))
+(n_pop = length(two.agents),
+ kinds = (has_kind(two, HouseholdSystem), has_kind(two, FirmSystem)))
+```
+
+Two Huggett bond economies share the same income process and differ only by name. `has_kind` is true for `HouseholdSystem` and false for `FirmSystem`. `solve(two; method=:ssj)` builds the DAG through `combine_blocks` without calling `_hh`.
+
+Life-cycle and continuous-time households enter the same DAG as a [`MitBlock`](@ref) — a finite-difference Jacobian of `lifecycle_transition` or `ct_mit_shock`. Discrete-continuous EGM is MIT-only: constructing `HetBlock` from a [`DCEGMSystem`](@ref) throws because the upper envelope jumps at switching thresholds.
+
+---
+
+## Plant Heterogeneity (Khan–Thomas)
+
+[`FirmSystem`](@ref) is a plant grid with idiosyncratic productivity and a nonconvex fixed cost of investment, not a household budget with another name. Khan and Thomas (2008) is the first paper: establishments face persistent plant-specific and aggregate TFP, and (S,s) inaction. Hopenhayn (1992) is a later entry/exit industry equilibrium with no aggregate shock.
+
+```@example dsge_ha
+plants = khan_thomas_example(; n_k=12, n_eps=3)
+spec_kt = to_spec(plants)
+(kind = has_kind(spec_kt, FirmSystem),
+ n_k = length(plants.k_grid),
+ n_eps = length(plants.productivity.states))
+```
+
+`khan_thomas_steady_state` and `khan_thomas_mit` compute the stationary distribution and a TFP impulse of aggregate output. `solve(spec_kt)` dispatches on `FirmSystem` and does not route through household EGM.
+
+---
+
+## Heterogeneous Banks (Bewley Banks)
+
+[`IntermediarySystem`](@ref) is the Jamilov and Monacelli (2025) incomplete-markets bank: net worth ``n`` on an [`HAGrid`](@ref), transitory return ``\xi``, the Gertler–Karadi incentive constraint ``\lambda \ell \le V``, and convex operating costs that break scale invariance. Gertler and Karadi (2011) is the nested representative special case (``\zeta_1 = 0``, degenerate ``\xi``), not a separate type.
+
+```@example dsge_ha
+banks = IntermediarySystem(; n_min=0.08, n_max=6.0, n_n=21, n_xi=3,
+                           rho_xi=0.55, sigma_xi=0.08, kappa=1.0,
+                           beta=0.99, sigma=0.94, lambda=0.20,
+                           zeta1=0.02, zeta2=2.0, R=1.01, rk=0.05)
+spec_bb = to_spec(banks)
+(kind = has_kind(spec_bb, IntermediarySystem),
+ n_endog = spec_bb.n_endog,
+ xi_states = length(banks.xi.states))
+```
+
+`n_endog = 0` is partial GE. [`intermediary_steady_state`](@ref) clears the credit market; [`intermediary_mit`](@ref) traces aggregate lending after a TFP path. A bank is not a `HouseholdSystem` and has no consumption-savings EGM.
+
+---
+
+## [OccBin on HA Aggregates](@id ha_occbin)
+
+[`occbin_solve`](@ref) is a piecewise-linear algorithm on residual `ModelSpec`s. A `HouseholdSystem` solution is an [`HADSGESolution`](@ref): `G1` lives on `linear_solution`, not on the wrapper, and shipped examples (`load_ha_example(:one_asset_hank)`) have a real rate, not a Taylor ``i``. Calling `occbin_solve` on those specs throws a named `ArgumentError` rather than `getfield` on a missing `G1`. An ELB fixture needs a HANK with a nominal Taylor residual and `n_endog > 0`. Continuous-time state constraints stay in the HJB — they are not OccBin.
+
+---
+
 ## Complete Example
 
 A full workflow for a Krusell-Smith (1998) economy: load the model, compute the steady state, examine the wealth distribution, solve for aggregate dynamics, and simulate panel data.
@@ -1087,6 +1151,10 @@ plot_result(ss_ks; view=:policy)      # policy functions by income
 
 14. **High moment orders on coarse grids do not reach the fixed-point tolerance.** The residual floor of the moment map rises with the moment order and falls with grid resolution. On a 200-node grid the fixed point converges to ``10^{-9}`` through at least five moments; on an 80-node grid it stops converging above four. `compute_steady_state` warns and leaves `converged=false` on the family rather than reporting success --- lower `n_moments` or refine the grid.
 
+15. **Two household populations are not two keys on one `HouseholdSystem`.** `solve` needs two `HouseholdSystem` values in `spec.agents`. Reusing `_hh` (the unique-household accessor) on that spec throws and names `agents_of`.
+
+16. **`occbin_solve` on a shipped HANK is not an ELB.** Real-rate examples and `n_endog = 0` PE specs have no Taylor residual. The call errors by name; it does not linearize the dummy Cobb--Douglas block.
+
 ---
 
 ## References
@@ -1122,3 +1190,9 @@ plot_result(ss_ks; view=:policy)      # policy functions by income
 - Winberry, Thomas. 2018. "A Method for Solving and Estimating Heterogeneous Agent Macro Models." *Quantitative Economics* 9 (3): 1123--1151. [DOI](https://doi.org/10.3982/QE740)
 
 - Young, Eric R. 2010. "Solving the Incomplete Markets Model with Aggregate Uncertainty Using the Krusell--Smith Algorithm and Non-Stochastic Simulations." *Journal of Economic Dynamics and Control* 34 (1): 36--41. [DOI](https://doi.org/10.1016/j.jedc.2008.11.010)
+
+- Gertler, Mark, and Peter Karadi. 2011. "A Model of Unconventional Monetary Policy." *Journal of Monetary Economics* 58 (1): 17--34. [DOI](https://doi.org/10.1016/j.jmoneco.2010.10.004)
+
+- Jamilov, Rustam, and Tommaso Monacelli. 2025. "Bewley Banks." *Review of Economic Studies*. [https://www.restud.com/bewley-banks/](https://www.restud.com/bewley-banks/)
+
+- Khan, Aubhik, and Julia K. Thomas. 2008. "Idiosyncratic Shocks and the Role of Nonconvexities in Plant and Aggregate Investment Dynamics." *Econometrica* 76 (2): 395--436. [DOI](https://doi.org/10.1111/j.1468-0262.2008.00837.x)

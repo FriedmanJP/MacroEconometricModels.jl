@@ -65,6 +65,19 @@ resp = irf(sol_tfp, 20)
 
 `to_spec` wraps the aggregates as a residual-only [`ModelSpec`](@ref) with endogenous ``(k, C, r, w, Z)`` and shock `eps_Z`. `solve` uses Gensys; the unique stable root matches `blanchard_solve`, and `irf` traces a transitory TFP shock through capital.
 
+**Recipe 6: Optional NK block on the same spec**
+
+```@example olg
+nk = blanchard_nk_spec(BlanchardOLG(; gamma=0.98); rho_z=0.9, sigma_z=0.01)
+sol_nk = solve(nk)
+resp_nk = irf(sol_nk, 12)
+(determined = is_determined(sol_nk),
+ endog = nk.endog,
+ pi_impact = round(resp_nk.values[1, 6, 1], digits=5))
+```
+
+[`blanchard_nk_spec`](@ref) appends Phillips, Taylor, and Fisher residuals. Inflation and the policy rate join ``(k, C, r, w, Z)``; capital timing is unchanged, so Gensys stays determinate. This is perpetual-youth plus an NKPC, not the Fujiwara–Teranishi (2008) worker/retiree DNK.
+
 ---
 
 ## Demographics and Annuities

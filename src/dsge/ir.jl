@@ -302,9 +302,21 @@ end
 
 has_agents(spec::ModelSpec) = !isempty(spec.agents)
 
+"""
+    has_kind(spec, S) -> Bool
+
+`true` if `spec.agents` holds at least one value of type `S`
+(an [`AbstractAgentSystem`](@ref) subtype). Dispatch uses the type, never the
+NamedTuple key.
+"""
 has_kind(spec::ModelSpec, ::Type{S}) where {S} =
     any(v -> v isa S, values(spec.agents))
 
+"""
+    agents_of(spec, S)
+
+Iterator over the `spec.agents` values of type `S`.
+"""
 agents_of(spec::ModelSpec, ::Type{S}) where {S} =
     (v for v in values(spec.agents) if v isa S)
 
@@ -312,7 +324,7 @@ agents_of(spec::ModelSpec, ::Type{S}) where {S} =
     to_spec(m) -> ModelSpec
 
 Wrap a family constructor (`BlanchardOLG`, `DCEGMProblem`, `LifeCycleOLG`,
-`CTAiyagari`, `CTTwoAsset`) as a [`ModelSpec`](@ref). `solve(to_spec(m))`
-dispatches on the payload kind.
+`CTAiyagari`, `CTTwoAsset`, `FirmSystem`, `IntermediarySystem`) as a
+[`ModelSpec`](@ref). `solve(to_spec(m))` dispatches on the payload kind.
 """
 function to_spec end
