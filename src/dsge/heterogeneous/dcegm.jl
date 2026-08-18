@@ -252,7 +252,24 @@ Discrete-continuous EGM population. `ModelSpec.agents` holds this payload;
 struct DCEGMSystem{T<:AbstractFloat} <: AbstractAgentSystem{T}
     problem::DCEGMProblem
 end
-DCEGMSystem(prob::DCEGMProblem) = DCEGMSystem{Float64}(prob)
+DCEGMSystem(prob::DCEGMProblem{T}) where {T<:AbstractFloat} = DCEGMSystem{T}(prob)
+
+"""
+    to_spec(prob::DCEGMProblem; agent_name::Symbol=:household) -> ModelSpec
+
+Wrap a [`DCEGMProblem`](@ref) as a [`ModelSpec`](@ref) with a single
+[`DCEGMSystem`](@ref) population and an empty residual system (partial
+equilibrium: `n_endog = 0`). The household solver is still
+[`dcegm_solve`](@ref) on the wrapped problem.
+"""
+function to_spec(prob::DCEGMProblem{T}; agent_name::Symbol=:household) where {T<:AbstractFloat}
+    ModelSpec{T}(
+        Symbol[], Symbol[], Symbol[], Dict{Symbol,T}(),
+        NamedEquation[], Function[],
+        0, Int[], T[], nothing;
+        agents=NamedTuple{(agent_name,)}((DCEGMSystem(prob),)),
+    )
+end
 
 function DCEGMProblem(; beta::Real, R::Real, utility, utility_prime,
                         utility_prime_inv, income,
