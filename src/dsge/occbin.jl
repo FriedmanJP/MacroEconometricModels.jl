@@ -596,6 +596,90 @@ function _guess_verify_one(ref::OccBinRegime{T}, alt::OccBinRegime{T},
     return (path, regime_history, converged, iterations)
 end
 
+# =============================================================================
+# HA / kind guards (#654)
+# =============================================================================
+
+"""Nominal policy-rate names OccBin may constrain on an HA aggregate block."""
+const _OCCBIN_HA_NOMINAL = (:i, :R)
+
+function _occbin_ha_error(msg::AbstractString)
+    throw(ArgumentError(string(msg, " See #654.")))
+end
+
+"""Variable name of a constraint `Expr` or `OccBinConstraint`, if parseable."""
+function _occbin_constraint_var(c, ::Type{T}) where {T}
+    c isa OccBinConstraint && return c.variable
+    c isa Expr && return _parse_constraint_expr(c, T)[1]
+    return nothing
+end
+
+"""
+    _occbin_check_kind!(spec, var)
+
+Reject kinds OccBin cannot treat, and shipped real-HANK / `n_endog==0`.
+
+`HouseholdSystem` remaps `solve(; method=:gensys)` to `:ssj` and returns
+`HADSGESolution`, which has no `.G1` (it lives on `linear_solution`). Dummy CD
+residuals on shipped examples are not an OccBin system. Continuous-time
+state constraints stay in the HJB.
+"""
+function _occbin_check_kind!(spec::ModelSpec, var::Union{Symbol,Nothing})
+    if has_kind(spec, ContinuousHouseholdSystem)
+        _occbin_ha_error("OccBin does not apply to continuous-time households; " *
+            "the state constraint lives in the HJB, not OccBin.")
+    end
+    if has_kind(spec, DCEGMSystem) || has_kind(spec, LifeCycleSystem)
+        _occbin_ha_error("OccBin is not implemented for this agent kind; it " *
+            "applies to HA aggregate equations that include a nominal policy rate.")
+    end
+    has_kind(spec, HouseholdSystem) || return nothing
+    ok = spec.n_endog > 0 && var !== nothing &&
+         var in _OCCBIN_HA_NOMINAL && var in spec.endog
+    ok || _occbin_ha_error(
+        "OccBin on heterogeneous-agent models requires a nominal policy rate " *
+        "(:i or :R) in the aggregate equations (n_endog > 0). Shipped real-HANK " *
+        "examples have real r only, and n_endog == 0 is partial GE.")
+    return nothing
+end
+
+_occbin_check_kind!(spec::ModelSpec, c, ::Type{T}) where {T} =
+    _occbin_check_kind!(spec, _occbin_constraint_var(c, T))
+
+"""Strip `HouseholdSystem` so gensys / SS see only the named aggregate residuals."""
+function _occbin_aggregate_spec(spec::ModelSpec{T}) where {T<:AbstractFloat}
+    has_kind(spec, HouseholdSystem) || return spec
+    return _copy_model_spec(spec; agents=NamedTuple())
+end
+
+function _occbin_prepare_spec(spec::ModelSpec{T}) where {T<:AbstractFloat}
+    work = _occbin_aggregate_spec(spec)
+    isempty(work.steady_state) || return work
+    return compute_steady_state(work)
+end
+
+"""
+G1 / impact of the OccBin reference. Never reads `HADSGESolution.G1` (#654).
+
+For HA, the reference is gensys on the stripped aggregate block (Taylor / NKPC),
+not the SSJ reduced `linear_solution` in synthetic coordinates.
+"""
+function _occbin_transition(sol)
+    if sol isa HADSGESolution
+        _occbin_ha_error(
+            "OccBin on HA must use the aggregate (Taylor / NKPC) block, not " *
+            "HADSGESolution.G1. Shipped real-HANK has real r only.")
+    end
+    return sol.G1, sol.impact
+end
+
+function _occbin_reference_solution(spec::ModelSpec{T}) where {T<:AbstractFloat}
+    work = _occbin_prepare_spec(spec)
+    sol = solve(work; method=:gensys)
+    is_determined(sol) || @warn "Reference model solution is not determined (eu=$(sol.eu))"
+    return work, sol
+end
+
 """
     occbin_solve(spec::ModelSpec{T}, constraint::OccBinConstraint{T};
                  shock_path::Matrix{T}=zeros(T, 40, spec.n_exog),
@@ -626,22 +710,19 @@ An `OccBinSolution{T}` with linear and piecewise-linear paths.
 `constraint` may also be a comparison `Expr` such as `:(i[t] >= 0)`; OccBin
 looks up the defining equation by `defines` (or a `:binding` regime from
 `@dsge constraint:`).
+
+Household-agent specs (`HouseholdSystem`) run OccBin on the named aggregate
+block (Taylor / NKPC) after stripping the household — never via
+`HADSGESolution.G1`. Shipped real-HANK (`n_endog==0` or real `r` only) and
+continuous-time HJB constraints throw `ArgumentError` citing #654.
 """
 function occbin_solve(spec::ModelSpec{T}, constraint::OccBinConstraint{T};
                       shock_path::Matrix{T}=zeros(T, 40, spec.n_exog),
                       nperiods::Int=size(shock_path, 1),
                       maxiter::Int=100) where {T<:AbstractFloat}
-    # Ensure steady state is computed
-    if isempty(spec.steady_state)
-        spec = compute_steady_state(spec)
-    end
-
-    # Solve reference (unconstrained) model
-    sol = solve(spec; method=:gensys)
-    is_determined(sol) || @warn "Reference model solution is not determined (eu=$(sol.eu))"
-
-    P = sol.G1       # n × n state transition
-    Q = sol.impact    # n × n_shocks impact
+    _occbin_check_kind!(spec, constraint.variable)
+    spec, sol = _occbin_reference_solution(spec)
+    P, Q = _occbin_transition(sol)
 
     # Derive alternative regime (constraint binding)
     alt_spec = _derive_alternative_regime(spec, constraint)
@@ -726,10 +807,13 @@ function occbin_solve(spec::ModelSpec{T}, constraint::OccBinConstraint{T};
     end
 end
 
-occbin_solve(spec::ModelSpec{T}, expr::Expr; kwargs...) where {T<:AbstractFloat} =
+function occbin_solve(spec::ModelSpec{T}, expr::Expr; kwargs...) where {T<:AbstractFloat}
+    _occbin_check_kind!(spec, expr, T)
     occbin_solve(spec, parse_constraint(expr, spec); kwargs...)
+end
 
 function occbin_solve(spec::ModelSpec{T}, expr::Expr, alt_spec::ModelSpec{T}; kwargs...) where {T<:AbstractFloat}
+    _occbin_check_kind!(spec, expr, T)
     occbin_solve(spec, parse_constraint(expr, spec), alt_spec; kwargs...)
 end
 
@@ -745,20 +829,10 @@ function occbin_solve(spec::ModelSpec{T}, constraint::OccBinConstraint{T},
                       shock_path::Matrix{T}=zeros(T, 40, spec.n_exog),
                       nperiods::Int=size(shock_path, 1),
                       maxiter::Int=100) where {T<:AbstractFloat}
-    # Ensure steady states are computed
-    if isempty(spec.steady_state)
-        spec = compute_steady_state(spec)
-    end
-    if isempty(alt_spec.steady_state)
-        alt_spec = compute_steady_state(alt_spec)
-    end
-
-    # Solve reference model
-    sol = solve(spec; method=:gensys)
-    is_determined(sol) || @warn "Reference model solution is not determined (eu=$(sol.eu))"
-
-    P = sol.G1
-    Q = sol.impact
+    _occbin_check_kind!(spec, constraint.variable)
+    spec, sol = _occbin_reference_solution(spec)
+    P, Q = _occbin_transition(sol)
+    alt_spec = _occbin_prepare_spec(alt_spec)
 
     # Extract regimes and constants
     ref_regime = _extract_regime(spec)
@@ -1088,25 +1162,21 @@ The algorithm generalizes the one-constraint solver to 4 regimes:
 An `OccBinSolution{T}` with linear and piecewise-linear paths and a
 nperiods × 2 regime history matrix.
 """
-occbin_solve(spec::ModelSpec{T}, e1::Expr, e2::Expr; kwargs...) where {T<:AbstractFloat} =
+function occbin_solve(spec::ModelSpec{T}, e1::Expr, e2::Expr; kwargs...) where {T<:AbstractFloat}
+    _occbin_check_kind!(spec, e1, T)
+    _occbin_check_kind!(spec, e2, T)
     occbin_solve(spec, parse_constraint(e1, spec), parse_constraint(e2, spec); kwargs...)
+end
 
 function occbin_solve(spec::ModelSpec{T}, c1::OccBinConstraint{T}, c2::OccBinConstraint{T};
                       shock_path::Matrix{T}=zeros(T, 40, spec.n_exog),
                       nperiods::Int=size(shock_path, 1),
                       maxiter::Int=100,
                       curb_retrench::Bool=false) where {T<:AbstractFloat}
-    # Ensure steady state is computed
-    if isempty(spec.steady_state)
-        spec = compute_steady_state(spec)
-    end
-
-    # Solve reference (unconstrained) model
-    sol = solve(spec; method=:gensys)
-    is_determined(sol) || @warn "Reference model solution is not determined (eu=$(sol.eu))"
-
-    P = sol.G1       # n × n state transition
-    Q = sol.impact    # n × n_shocks impact
+    _occbin_check_kind!(spec, c1.variable)
+    _occbin_check_kind!(spec, c2.variable)
+    spec, sol = _occbin_reference_solution(spec)
+    P, Q = _occbin_transition(sol)
 
     # Collision: two constraints that replace the same named defining equation cannot be
     # stacked sequentially. Require the explicit Dict overload.
@@ -1225,37 +1295,19 @@ function occbin_solve(spec::ModelSpec{T}, c1::OccBinConstraint{T}, c2::OccBinCon
                       nperiods::Int=size(shock_path, 1),
                       maxiter::Int=100,
                       curb_retrench::Bool=false) where {T<:AbstractFloat}
-    # Ensure steady state is computed
-    if isempty(spec.steady_state)
-        spec = compute_steady_state(spec)
-    end
+    _occbin_check_kind!(spec, c1.variable)
+    _occbin_check_kind!(spec, c2.variable)
+    spec, sol = _occbin_reference_solution(spec)
+    P, Q = _occbin_transition(sol)
 
     # Extract alternative specs from dict
     haskey(alt_specs, (1, 0)) || throw(ArgumentError("alt_specs must contain key (1,0) for constraint 1 binding"))
     haskey(alt_specs, (0, 1)) || throw(ArgumentError("alt_specs must contain key (0,1) for constraint 2 binding"))
     haskey(alt_specs, (1, 1)) || throw(ArgumentError("alt_specs must contain key (1,1) for both constraints binding"))
 
-    alt1_spec = alt_specs[(1, 0)]
-    alt2_spec = alt_specs[(0, 1)]
-    alt12_spec = alt_specs[(1, 1)]
-
-    # Ensure steady states
-    if isempty(alt1_spec.steady_state)
-        alt1_spec = compute_steady_state(alt1_spec)
-    end
-    if isempty(alt2_spec.steady_state)
-        alt2_spec = compute_steady_state(alt2_spec)
-    end
-    if isempty(alt12_spec.steady_state)
-        alt12_spec = compute_steady_state(alt12_spec)
-    end
-
-    # Solve reference model
-    sol = solve(spec; method=:gensys)
-    is_determined(sol) || @warn "Reference model solution is not determined (eu=$(sol.eu))"
-
-    P = sol.G1
-    Q = sol.impact
+    alt1_spec = _occbin_prepare_spec(alt_specs[(1, 0)])
+    alt2_spec = _occbin_prepare_spec(alt_specs[(0, 1)])
+    alt12_spec = _occbin_prepare_spec(alt_specs[(1, 1)])
 
     # Extract regimes and constants
     ref_regime = _extract_regime(spec)
