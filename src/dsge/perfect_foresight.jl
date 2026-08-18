@@ -46,7 +46,10 @@ function perfect_foresight(spec::ModelSpec{FT};
         abstol::Real=tol,
         constraints::Vector=DSGEConstraint[],
         solver::Union{Nothing,Symbol}=nothing,
-        algorithm=nothing) where {FT<:AbstractFloat}
+        algorithm=nothing,
+        sparsity::Symbol=:auto) where {FT<:AbstractFloat}
+    sparsity in (:auto, :dense) || throw(ArgumentError(
+        "perfect_foresight: sparsity must be :auto or :dense, got :$sparsity"))
 
     n = spec.n_endog
     n_ε = spec.n_exog
@@ -77,7 +80,8 @@ function perfect_foresight(spec::ModelSpec{FT};
                     "Use solver=:nlopt (default) or solver=:ipopt for nonlinear inequality constraints."))
             lower, upper = _extract_bounds(spec, constraints)
             pf = _nonlinearsolve_perfect_foresight(spec, T_periods, shocks;
-                        max_iter=max_iter, tol=tol, abstol=abstol, algorithm=algorithm)
+                        max_iter=max_iter, tol=tol, abstol=abstol,
+                        algorithm=algorithm, sparsity=sparsity)
             # Check if bounds are violated in the unconstrained solution
             bounds_ok = true
             for t in 1:T_periods, i in 1:n
@@ -116,7 +120,8 @@ function perfect_foresight(spec::ModelSpec{FT};
 
     # Unconstrained: use NonlinearSolve
     return _nonlinearsolve_perfect_foresight(spec, T_periods, shocks;
-                max_iter=max_iter, tol=tol, abstol=abstol, algorithm=algorithm)
+                max_iter=max_iter, tol=tol, abstol=abstol, algorithm=algorithm,
+                sparsity=sparsity)
 end
 
 """Warn when a perfect-foresight path has not returned to the steady state by the terminal
@@ -147,14 +152,15 @@ assembly and uses that algorithm's linear solver.
 """
 function _nonlinearsolve_perfect_foresight(spec::ModelSpec{FT}, T_periods::Int,
         shocks::Matrix{FT};
-        max_iter::Int=100, tol::Real=1e-8, abstol::Real=tol, algorithm=nothing) where {FT<:AbstractFloat}
+        max_iter::Int=100, tol::Real=1e-8, abstol::Real=tol, algorithm=nothing,
+        sparsity::Symbol=:auto) where {FT<:AbstractFloat}
 
     n = spec.n_endog
     N = T_periods * n  # total unknowns
 
     # Initial guess: all periods at steady state
     x0 = repeat(spec.steady_state, T_periods)
-    cache = _pf_make_cache(spec, T_periods)
+    cache = _pf_make_cache(spec, T_periods; sparsity=sparsity)
 
     function pf_residual!(F, x, p)
         _pf_residual_packed!(F, x, spec, shocks, T_periods)
@@ -182,7 +188,9 @@ function _nonlinearsolve_perfect_foresight(spec::ModelSpec{FT}, T_periods::Int,
 
     converged = NonlinearSolve.SciMLBase.successful_retcode(sol.retcode)
     if !converged
-        @warn "Perfect foresight solver did not converge (retcode = $(sol.retcode))"
+        extra = sparsity === :auto ?
+            "; sparsity detection may have dropped a kinked entry. Retry with sparsity=:dense" : ""
+        @warn "Perfect foresight solver did not converge (retcode = $(sol.retcode))$extra"
     end
 
     # Extract iteration count
@@ -724,6 +732,16 @@ function _pf_detect_sparsity(spec::ModelSpec{T}) where {T}
         y3[i] = y_ss[i] + T(0.07) * (iseven(i) ? one(T) : -one(T)) * (one(T) + abs(y_ss[i]))
     end
     push!(probes, y3)
+    y4 = similar(y_ss)
+    @inbounds for i in 1:n
+        y4[i] = y_ss[i] + T(0.5) * (one(T) + abs(y_ss[i]))
+    end
+    push!(probes, y4)
+    y5 = similar(y_ss)
+    @inbounds for i in 1:n
+        y5[i] = y_ss[i] - T(0.5) * (one(T) + abs(y_ss[i]))
+    end
+    push!(probes, y5)
 
     ε_probes = (zeros(T, n_ε), n_ε == 0 ? zeros(T, 0) : fill(T(0.1), n_ε))
 
@@ -735,23 +753,43 @@ function _pf_detect_sparsity(spec::ModelSpec{T}) where {T}
     y_work = zeros(T, n)
 
     for y_p in probes, ε_p in ε_probes
-        _pf_eval_eqs!(F0, fns, y_p, y_p, y_p, ε_p, θ)
+        try
+            _pf_eval_eqs!(F0, fns, y_p, y_p, y_p, ε_p, θ)
+        catch
+            fill!(pat_t, true)
+            fill!(pat_lag, true)
+            fill!(pat_lead, true)
+            @goto done_probes
+        end
         for j in 1:n
             h = max(T(1e-6), T(1e-4) * (one(T) + abs(y_p[j])))
             copyto!(y_work, y_p)
             y_work[j] += h
-            _pf_eval_eqs!(F1, fns, y_work, y_p, y_p, ε_p, θ)
-            _pf_mark_pattern!(pat_t, F0, F1, j)
+            try
+                _pf_eval_eqs!(F1, fns, y_work, y_p, y_p, ε_p, θ)
+                _pf_mark_pattern!(pat_t, F0, F1, j)
+            catch
+                pat_t[:, j] .= true
+            end
             copyto!(y_work, y_p)
             y_work[j] += h
-            _pf_eval_eqs!(F1, fns, y_p, y_work, y_p, ε_p, θ)
-            _pf_mark_pattern!(pat_lag, F0, F1, j)
+            try
+                _pf_eval_eqs!(F1, fns, y_p, y_work, y_p, ε_p, θ)
+                _pf_mark_pattern!(pat_lag, F0, F1, j)
+            catch
+                pat_lag[:, j] .= true
+            end
             copyto!(y_work, y_p)
             y_work[j] += h
-            _pf_eval_eqs!(F1, fns, y_p, y_p, y_work, ε_p, θ)
-            _pf_mark_pattern!(pat_lead, F0, F1, j)
+            try
+                _pf_eval_eqs!(F1, fns, y_p, y_p, y_work, ε_p, θ)
+                _pf_mark_pattern!(pat_lead, F0, F1, j)
+            catch
+                pat_lead[:, j] .= true
+            end
         end
     end
+    @label done_probes
 
     # Degenerate probe (all-zero pattern): fall back to dense intra-period blocks.
     if !any(pat_t) && !any(pat_lag) && !any(pat_lead)
@@ -800,9 +838,15 @@ function _pf_build_csc_pattern(n::Int, Tp::Int, pat_lag, pat_t, pat_lead, ::Type
     return sparse(rows, cols, ones(T, length(rows)), N, N)
 end
 
-function _pf_make_cache(spec::ModelSpec{T}, Tp::Int) where {T}
+function _pf_make_cache(spec::ModelSpec{T}, Tp::Int; sparsity::Symbol=:auto) where {T}
     n = spec.n_endog
-    pat_lag, pat_t, pat_lead = _pf_detect_sparsity(spec)
+    if sparsity === :dense
+        pat_lag = trues(n, n)
+        pat_t = trues(n, n)
+        pat_lead = trues(n, n)
+    else
+        pat_lag, pat_t, pat_lead = _pf_detect_sparsity(spec)
+    end
     colors_lag = _pf_greedy_color(pat_lag)
     colors_t = _pf_greedy_color(pat_t)
     colors_lead = _pf_greedy_color(pat_lead)

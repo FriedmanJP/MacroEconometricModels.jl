@@ -208,3 +208,39 @@ end
     end
     @test results[1] == results[2]
 end
+
+@testset "PF sparsity: log residual with small SS (MSR-04)" begin
+    fn = (y_t, y_lag, y_lead, ε_t, θ) ->
+        log(y_t[1]) - log(θ[:rss]) - θ[:ρ] * (log(y_lag[1]) - log(θ[:rss])) - ε_t[1]
+    spec = ModelSpec{Float64}(
+        [:r], [:ε], [:ρ, :rss], Dict(:ρ => 0.5, :rss => 0.05),
+        [:(log(r[t]) - log(rss))], [fn], 0, Int[], [0.05])
+    pf = perfect_foresight(spec; T_periods=8)
+    @test all(isfinite, pf.path)
+end
+
+@testset "PF sparsity=:dense matches :auto on a smooth model (MSR-04)" begin
+    spec = @dsge begin
+        parameters: ρ = 0.9, σ = 1.0
+        endogenous: y
+        exogenous: ε
+        y[t] = ρ * y[t-1] + σ * ε[t]
+    end
+    spec = compute_steady_state(spec)
+    Tp = 20
+    shocks = zeros(Tp, 1)
+    shocks[1, 1] = 1.0
+    pf_s = perfect_foresight(spec; T_periods=Tp, shock_path=shocks, sparsity=:auto)
+    pf_d = perfect_foresight(spec; T_periods=Tp, shock_path=shocks, sparsity=:dense)
+    @test maximum(abs, pf_s.path .- pf_d.path) < 1e-8
+end
+
+@testset "PF kink succeeds with sparsity=:dense (MSR-04)" begin
+    fn = (y_t, y_lag, y_lead, ε_t, θ) ->
+        y_t[1] - θ[:ρ] * y_lag[1] - max(y_t[1] - 0.5, 0.0) * 0.1 - ε_t[1]
+    spec = ModelSpec{Float64}(
+        [:y], [:ε], [:ρ], Dict(:ρ => 0.5),
+        [:(y[t] - ρ * y[t-1])], [fn], 0, Int[], [0.0])
+    pf = perfect_foresight(spec; T_periods=10, sparsity=:dense)
+    @test all(isfinite, pf.path)
+end
