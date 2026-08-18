@@ -534,3 +534,19 @@ end
         @test solve(spec; max_iter=1, tol=1.0) isa CTTwoAssetGE
     end
 end
+
+@testset "G-14: CT irf wraps MIT (#648)" begin
+    m = CTAiyagari(; I=50)
+    ss = ct_steady_state(m; tol=1e-5)
+    resp = irf(m, 16; ss=ss, shock_size=0.02, persist=0.6, dt=0.5, max_iter=80, tol=1e-5)
+    @test resp isa ImpulseResponse
+    @test resp.variables == ["K", "r", "w", "C", "Z"]
+    @test resp.shocks == ["Z"]
+    @test size(resp.values) == (16, 5, 1)
+    @test all(isfinite, resp.values)
+    @test resp.values[1, 1, 1] ≈ 0 atol=1e-4          # K_0 pinned
+    @test resp.values[1, 5, 1] ≈ 0.02 * m.Z atol=1e-10
+    fv = MacroEconometricModels._fevd_from_irf(resp)
+    @test fv isa FEVD
+    @test all(isfinite, fv.proportions)
+end

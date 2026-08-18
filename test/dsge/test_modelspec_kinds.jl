@@ -6,6 +6,7 @@
 
 using Test
 using MacroEconometricModels
+using Random
 
 struct DummyAgent{T} <: AbstractAgentSystem{T}
     x::Int
@@ -134,4 +135,23 @@ end
     # Z is the AR(1): impact = σ, then ρ, ρ², …
     @test resp.values[1, 5, 1] ≈ 0.01 atol=1e-8
     @test resp.values[2, 5, 1] ≈ 0.009 atol=1e-8
+end
+
+@testset "G-14: irf/fevd/simulate façade (#648)" begin
+    m = BlanchardOLG(; gamma=0.98, beta=0.96)
+    spec = to_spec(m; rho_z=0.9, sigma_z=0.01)
+    sol = solve(spec)
+    resp = irf(spec, 12)
+    @test resp isa ImpulseResponse
+    @test all(isfinite, resp.values)
+    @test resp.variables == ["k", "C", "r", "w", "Z"]
+    fv = fevd(spec, 12)
+    @test fv isa FEVD
+    @test all(isfinite, fv.proportions)
+    path = simulate(sol, 20; rng=Random.MersenneTwister(1))
+    @test size(path) == (20, 5)
+    @test all(isfinite, path)
+
+    @test_throws ArgumentError irf(to_spec(dcegm_retirement_model(; n_a=20, n_periods=4)), 8)
+    @test_throws ArgumentError irf(to_spec(LifeCycleOLG(; J=20, J_retire=16, n_a=40)), 8)
 end

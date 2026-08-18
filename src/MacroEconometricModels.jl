@@ -584,6 +584,7 @@ include("olg/lifecycle.jl")
 # Continuous-time heterogeneous agents (Achdou et al. 2022)
 include("ct/continuous_aiyagari.jl")
 include("ct/two_asset.jl")
+include("dsge/family_facades.jl")   # G-14 irf/fevd/simulate after family types
 
 # Policy counterfactuals (Barnichon-Mesters OPP, McKay-Wolf, CMW model bank)
 include("counterfactual/types.jl")
