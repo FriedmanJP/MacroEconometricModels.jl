@@ -392,8 +392,11 @@ function _parse_ha_dsge(block::Expr)
 
     # Validate
     isempty(params) && error("@dsge (HA): no parameters declared")
-    isempty(endog) && error("@dsge (HA): no endogenous variables declared")
-    isempty(exog) && error("@dsge (HA): no exogenous variables declared")
+    # G-06: both aggregate lists empty ⇒ partial GE (no residual system).
+    # One empty and the other not is still an error.
+    if isempty(endog) ⊻ isempty(exog)
+        error("@dsge (HA): endogenous and exogenous must both be declared or both omitted")
+    end
     isempty(het_info) && error("@dsge (HA): no heterogeneous block found")
     isempty(idio_info) && error("@dsge (HA): no idiosyncratic shocks declared")
     isempty(agg_info) && error("@dsge (HA): no aggregation rule declared")
@@ -511,6 +514,17 @@ end
 """Build the `ModelSpec` constructor quote for an HA `@dsge` block."""
 function _ha_model_spec_quote(endog, exog, params, raw_equations)
     if isempty(raw_equations)
+        if isempty(endog) && isempty(exog)
+            return quote
+                MacroEconometricModels._wrap_ha_spec(_hh_;
+                    endog=Symbol[],
+                    exog=Symbol[],
+                    params=$(Expr(:vect, (QuoteNode(s) for s in params)...)),
+                    param_values=_pv_,
+                    equations=NamedEquation[],
+                    residual_fns=Function[])
+            end
+        end
         return quote
             MacroEconometricModels._wrap_ha_spec(_hh_;
                 endog=$(Expr(:vect, (QuoteNode(s) for s in (isempty(endog) ? [:Y, :K, :r, :w, :Z] : endog))...)),

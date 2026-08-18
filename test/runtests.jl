@@ -192,6 +192,8 @@ const TEST_GROUPS = [
     ("DSGE Core" => [
         "dsge/test_dsge.jl",
         "dsge/test_perfect_foresight_sparse.jl",
+        "dsge/test_dcegm_plot.jl",
+        "dsge/test_modelspec_kinds.jl",
         "dsge/test_blanchard_olg.jl",
         "dsge/test_lifecycle_olg.jl",
         "dsge/test_continuous_aiyagari.jl",
