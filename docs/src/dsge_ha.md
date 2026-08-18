@@ -1057,7 +1057,7 @@ spec_kt = to_spec(plants)
 
 ## Heterogeneous Banks (Bewley Banks)
 
-[`IntermediarySystem`](@ref) is the Jamilov and Monacelli (2025) incomplete-markets bank: net worth ``n`` on an [`HAGrid`](@ref), transitory return ``\xi``, the Gertler–Karadi incentive constraint ``\lambda \ell \le V``, and convex operating costs that break scale invariance. Gertler and Karadi (2011) is the nested representative special case (``\zeta_1 = 0``, degenerate ``\xi``), not a separate type.
+[`IntermediarySystem`](@ref) is the Jamilov and Monacelli (2026) incomplete-markets bank: net worth ``n`` on an [`HAGrid`](@ref), transitory return ``\xi``, the Gertler–Karadi incentive constraint ``\lambda \ell \le V``, and convex operating costs that break scale invariance. Gertler and Karadi (2011) is the nested representative special case (``\zeta_1 = 0``, degenerate ``\xi``), not a separate type.
 
 ```@example dsge_ha
 banks = IntermediarySystem(; n_min=0.08, n_max=6.0, n_n=21, n_xi=3,
@@ -1193,6 +1193,6 @@ plot_result(ss_ks; view=:policy)      # policy functions by income
 
 - Gertler, Mark, and Peter Karadi. 2011. "A Model of Unconventional Monetary Policy." *Journal of Monetary Economics* 58 (1): 17--34. [DOI](https://doi.org/10.1016/j.jmoneco.2010.10.004)
 
-- Jamilov, Rustam, and Tommaso Monacelli. 2025. "Bewley Banks." *Review of Economic Studies*. [https://www.restud.com/bewley-banks/](https://www.restud.com/bewley-banks/)
+- Jamilov, Rustam, and Tommaso Monacelli. 2026. "Bewley Banks." *Review of Economic Studies* 93 (3): 1889--1925. [DOI](https://doi.org/10.1093/restud/rdaf062)
 
 - Khan, Aubhik, and Julia K. Thomas. 2008. "Idiosyncratic Shocks and the Role of Nonconvexities in Plant and Aggregate Investment Dynamics." *Econometrica* 76 (2): 395--436. [DOI](https://doi.org/10.1111/j.1468-0262.2008.00837.x)

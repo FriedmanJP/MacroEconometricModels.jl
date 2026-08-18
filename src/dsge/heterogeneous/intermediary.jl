@@ -21,8 +21,8 @@ separate type. Deposit market power, countercyclical `ξ`, too-big-to-fail, and
 HANK + banks + firms in one `solve` are out of scope.
 
 # References
-- Jamilov, R., & Monacelli, T. (2025). Bewley Banks. *Review of Economic
-  Studies*. Published version 93(3), 1889–1925 (2026).
+- Jamilov, R., & Monacelli, T. (2026). Bewley Banks. *Review of Economic
+  Studies*, 93(3), 1889–1925. https://doi.org/10.1093/restud/rdaf062
 - Gertler, M., & Karadi, P. (2011). A model of unconventional monetary policy.
   *Journal of Monetary Economics*, 58(1), 17–34.
 - Gertler, M., & Kiyotaki, N. (2010). Financial intermediation and credit
@@ -40,7 +40,7 @@ HANK + banks + firms in one `solve` are out of scope.
 """
     IntermediarySystem{T} <: AbstractAgentSystem{T}
 
-Bewley-bank population (Jamilov–Monacelli, *REStud* 2025 / 93(3) 2026).
+Bewley-bank population (Jamilov–Monacelli, *REStud* 93(3), 2026).
 The `ModelSpec.agents` NamedTuple key is the population name (`:banks`,
 `:dealers`, …); this type is the problem kind.
 

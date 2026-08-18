@@ -71,6 +71,6 @@ Discrete and continuous time are alternative formulations of the same incomplete
 
 - Gertler, Mark, and Peter Karadi. 2011. "A Model of Unconventional Monetary Policy." *Journal of Monetary Economics* 58 (1): 17--34. [DOI](https://doi.org/10.1016/j.jmoneco.2010.10.004)
 
-- Jamilov, Rustam, and Tommaso Monacelli. 2025. "Bewley Banks." *Review of Economic Studies*. [https://www.restud.com/bewley-banks/](https://www.restud.com/bewley-banks/)
+- Jamilov, Rustam, and Tommaso Monacelli. 2026. "Bewley Banks." *Review of Economic Studies* 93 (3): 1889--1925. [DOI](https://doi.org/10.1093/restud/rdaf062)
 
 - Khan, Aubhik, and Julia K. Thomas. 2008. "Idiosyncratic Shocks and the Role of Nonconvexities in Plant and Aggregate Investment Dynamics." *Econometrica* 76 (2): 395--436. [DOI](https://doi.org/10.1111/j.1468-0262.2008.00837.x)
