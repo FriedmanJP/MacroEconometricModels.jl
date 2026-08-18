@@ -46,15 +46,16 @@ jobs:
             os: macos-latest
             arch: arm64
             suite: empirical
-          # Numerical suite + Optim v1 dual-major compat (T153/#252): Julia 1.10
-          # (== lts) as a distinct matrix string so it pins Optim@1 and runs
-          # MACRO_NUMERICAL_CI (solver / Euler / IRF / published-number tests only).
-          - version: '1.10'
+          # Numerical suite + Optim v1 dual-major compat (T153/#252 / MSR-13):
+          # current stable Julia (`1`, not LTS) as a distinct matrix string so
+          # it pins Optim@1 and runs MACRO_NUMERICAL_CI (solver / Euler / IRF /
+          # published-number tests only). Restores a stable-Julia CI cell.
+          - version: '1'
             os: ubuntu-latest
             arch: x64
             optim_v1: true
             suite: dsge
-          - version: '1.10'
+          - version: '1'
             os: ubuntu-latest
             arch: x64
             optim_v1: true
@@ -87,10 +88,10 @@ jobs:
       - uses: julia-actions/julia-buildpkg@v1
 
       # Cell roles:
-      #   ubuntu LTS  — full suite, split dsge | empirical; BOTH parts upload Codecov
-      #   ubuntu 1.10 — numerical profile, split dsge | empirical; Optim v1 pin
-      #   macos LTS   — FAST=1 smoke, split dsge | empirical
-      #   windows LTS — FAST=1 smoke, threaded, split dsge | empirical
+      #   ubuntu LTS    — full suite, split dsge | empirical; BOTH parts upload Codecov
+      #   ubuntu stable — numerical profile, split dsge | empirical; Optim v1 pin
+      #   macos LTS     — FAST=1 smoke, split dsge | empirical
+      #   windows LTS   — FAST=1 smoke, threaded, split dsge | empirical
       #
       # Windows uses the threaded single-process runner (package loaded once).
       # Multiprocess on NTFS pays ~6 min per child to load compiled modules; 17
@@ -104,7 +105,7 @@ jobs:
           OPENBLAS_NUM_THREADS: "1"
           MACRO_MULTIPROCESS_TESTS: ${{ matrix.os == 'windows-latest' && '0' || '1' }}
           MACRO_FAST_TESTS: ${{ matrix.os == 'ubuntu-latest' && '0' || '1' }}
-          MACRO_NUMERICAL_CI: ${{ matrix.os == 'ubuntu-latest' && matrix.version == '1.10' && '1' || '0' }}
+          MACRO_NUMERICAL_CI: ${{ matrix.os == 'ubuntu-latest' && matrix.version == '1' && '1' || '0' }}
           MACRO_CHECK_BOUNDS: ${{ matrix.os == 'ubuntu-latest' && '1' || '0' }}
           MACRO_CI_SUITE: ${{ matrix.suite }}
 
