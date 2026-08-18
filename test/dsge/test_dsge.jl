@@ -6938,6 +6938,57 @@ end
     @test size(irfs.values, 2) == 3
 end
 
+@testset "VFI infers transition and bounds from ModelSpec (#658)" begin
+    spec_inf = @dsge begin
+        parameters: β = 0.99, α = 0.36, δ = 0.025, ρ = 0.95, σ = 0.007
+        endogenous: c, k, a
+        exogenous: ε
+        utility: log(c)
+        beta: β
+        controls: c
+        euler: 1 / c[t] = β * (1 / c[t+1]) * (α * exp(a[t+1]) * k[t]^(α - 1) + 1 - δ)
+        c[t] + k[t] = exp(a[t]) * k[t-1]^α + (1 - δ) * k[t-1]
+        a[t] = ρ * a[t-1] + σ * ε[t]
+    end
+    spec_inf = compute_steady_state(spec_inf)
+    sol_def = solve(spec_inf; method=:vfi, degree=3, n_grid=8, max_iter=80,
+                    howard_steps=5, n_choice=17, verbose=false)
+    @test sol_def isa ProjectionSolution
+    @test sol_def.method == :vfi
+
+    sol_res = vfi_solver(spec_inf; next_state=:residual, degree=3, n_grid=8,
+                         max_iter=200, howard_steps=10, n_choice=17, verbose=false)
+    @test sol_res.converged
+    @test sol_res.method == :vfi
+    x_ss_i = spec_inf.steady_state[sol_res.state_indices]
+    c_res = evaluate_policy(sol_res, x_ss_i)[1]
+    c_exp = evaluate_policy(sol, x_ss)[1]
+    @test abs(c_res - c_exp) / max(abs(c_exp), 1e-8) < 0.15
+end
+
+@testset "VFI :residual without defines throws (#658)" begin
+    spec_nd = @dsge begin
+        parameters: β = 0.99, α = 0.36, δ = 0.025, ρ = 0.95, σ = 0.007
+        endogenous: c, k, a
+        exogenous: ε
+        utility: log(c)
+        beta: β
+        controls: c
+        1 / c[t] = β * (1 / c[t+1]) * (α * exp(a[t+1]) * k[t]^(α - 1) + 1 - δ)
+        c[t] + k[t] = exp(a[t]) * k[t-1]^α + (1 - δ) * k[t-1]
+        a[t] = ρ * a[t-1] + σ * ε[t]
+    end
+    spec_nd = compute_steady_state(spec_nd)
+    err = try
+        vfi_solver(spec_nd; next_state=:residual, degree=3, n_grid=6, max_iter=2)
+        error("vfi_solver should have thrown")
+    catch e
+        e
+    end
+    @test err isa ArgumentError
+    @test occursin("defines", sprint(showerror, err))
+end
+
 FAST || @testset "VFI threaded matches sequential" begin
     # Same budget as the hoisted solve. 150/8 misses ||ΔV||_∞ < 1e-8 on
     # Ubuntu OpenBLAS (macOS/Windows still converge).

@@ -14,24 +14,29 @@
 
 const _VFI_MISSING_MSG =
     "vfi_solver performs Bellman value-function iteration and requires " *
-    "`utility`, `beta`, `transition`, and `control_bounds`. " *
+    "`utility` and `beta` (from `@dsge utility:` / `beta:` or as keywords). " *
     "For Euler-equation time iteration use pfi_solver."
 
 """
-    vfi_solver(spec::ModelSpec{T}; utility, beta, transition, control_bounds, kwargs...)
-        -> ProjectionSolution{T}
+    vfi_solver(spec::ModelSpec{T}; utility, beta, kwargs...) -> ProjectionSolution{T}
 
 Solve a representative-agent DSGE via **value-function iteration**: at each state node
 maximize ``u + \\beta E[V]``, then apply Howard (1960) policy evaluation of ``V``.
 This is not Euler time iteration; that algorithm is [`pfi_solver`](@ref).
 
-# Required keyword arguments
+# Required (spec or keywords)
 - `utility`: `u(c)` if `consumption` is set, otherwise `u(y, y_lag, ε, θ)`
 - `beta`: discount factor as a `Real` or a `Symbol` in `spec.param_values`
-- `transition`: `(x, a, ε, θ) → x′` next-period state
-- `control_bounds`: `(x, θ) → (a_lo, a_hi)` box on the choice (vectors of length 1 in v1)
 
 # Optional keyword arguments
+- `transition`: `(x, a, ε, θ) → x′`. When omitted, inferred from `next_state`
+- `control_bounds`: `(x, θ) → (a_lo, a_hi)`. When omitted, inferred from
+  `constraints` / `variable_bound` or an SS collar of width `scale`
+- `next_state::Symbol=:linear`: how to infer `transition` when it is omitted
+  (`:linear` = `G1`/`impact` after packing `y[states]=x`, `y[controls]=a`;
+  `:residual` = drop residuals with `defines ∈ controls` — or a named `euler:` —
+  and Newton-solve the leftover)
+- `constraints`: `VariableBound`s used when inferring `control_bounds`
 - `consumption::Union{Nothing,Symbol}=nothing`: if set, `utility` is `u(c::Real)`
 - `controls`: choice-variable names; default is the non-state endogenous variables
 - `outcome`: `(x, a, θ) → y` full endogenous vector; default fills states + controls
@@ -54,6 +59,8 @@ function vfi_solver(spec::ModelSpec{T};
                     beta=nothing,
                     transition=nothing,
                     control_bounds=nothing,
+                    next_state::Symbol=:linear,
+                    constraints::Vector=Any[],
                     consumption::Union{Nothing,Symbol}=nothing,
                     controls::Union{Nothing,AbstractVector{Symbol}}=nothing,
                     outcome=nothing,
@@ -82,9 +89,10 @@ function vfi_solver(spec::ModelSpec{T};
     controls === nothing && !isempty(spec.bellman_controls) &&
         (controls = spec.bellman_controls)
 
-    (utility === nothing || beta === nothing ||
-     transition === nothing || control_bounds === nothing) &&
+    (utility === nothing || beta === nothing) &&
         throw(ArgumentError(_VFI_MISSING_MSG))
+    next_state in (:linear, :residual) || throw(ArgumentError(
+        "next_state must be :linear or :residual, got :$next_state"))
 
     n_choice >= 3 || throw(ArgumentError("n_choice must be ≥ 3, got $n_choice"))
     n_grid >= 3 || throw(ArgumentError("n_grid must be ≥ 3, got $n_grid"))
@@ -160,6 +168,14 @@ function vfi_solver(spec::ModelSpec{T};
     result_1st = _gensys_qz(spec, ld)
     G1 = result_1st.G
     impact = result_1st.impact
+
+    if transition === nothing
+        transition = _vfi_infer_transition(spec, state_idx, ctrl_idx, G1, impact, next_state)
+    end
+    if control_bounds === nothing
+        control_bounds = _vfi_infer_control_bounds(spec, ctrl_idx, scale, constraints,
+                                                   G1, impact)
+    end
 
     V = fill(_vfi_init_value(spec, utility, consumption, β), V_shape)
     V_new = similar(V)
@@ -563,3 +579,181 @@ end
 
 _vfi_bound_scalar(x::Number) = x
 _vfi_bound_scalar(x::AbstractArray) = x[1]
+
+# =============================================================================
+# Infer transition / control_bounds from ModelSpec (#658)
+# =============================================================================
+
+"""Indices of FOC residuals to drop for `next_state=:residual`."""
+function _vfi_foc_indices(spec::ModelSpec, ctrl_names::Vector{Symbol})
+    foc = Int[]
+    missing = Symbol[]
+    for c in ctrl_names
+        idxs = findall(eq -> eq.defines === c, spec.equations)
+        if length(idxs) == 1
+            push!(foc, idxs[1])
+        elseif length(idxs) > 1
+            throw(ArgumentError(
+                "next_state=:residual: multiple equations define control :$c"))
+        else
+            push!(missing, c)
+        end
+    end
+    if !isempty(missing)
+        euler_idxs = findall(eq -> eq.name === :euler, spec.equations)
+        if length(missing) == 1 && length(euler_idxs) == 1 && !(euler_idxs[1] in foc)
+            push!(foc, euler_idxs[1])
+        else
+            throw(ArgumentError(
+                "next_state=:residual requires a defining equation for each " *
+                "control (defines ∈ $ctrl_names) or a named euler:; missing $missing"))
+        end
+    end
+    return sort!(unique!(foc))
+end
+
+"""
+Newton-solve leftover residuals, holding `y[fixed]` and updating `y[free]`.
+`y_lead` is the current `y` (certainty-equivalent, same as PFI `:nonlinear`).
+"""
+function _vfi_newton_keep(y::Vector{T}, y_lag::Vector{T}, spec::ModelSpec{T},
+                          ε::AbstractVector{T}, keep::Vector{Int},
+                          free::Vector{Int};
+                          newton_tol::Real=1e-10, newton_max::Int=50) where {T}
+    θ = spec.param_values
+    n_k = length(keep)
+    n_f = length(free)
+    h = max(T(1e-7), sqrt(eps(T)))
+    y = copy(y)
+    R = zeros(T, n_k)
+    J = zeros(T, n_k, n_f)
+    for _ in 1:newton_max
+        for (i, ieq) in enumerate(keep)
+            try
+                R[i] = spec.residual_fns[ieq](y, y_lag, y, ε, θ)
+            catch e
+                (e isa DomainError || e isa InexactError) || rethrow(e)
+                R[i] = T(1e10)
+            end
+        end
+        maximum(abs, R) < newton_tol && return y
+        @inbounds for j in 1:n_f
+            yj = y[free[j]]
+            y[free[j]] = yj + h
+            for (i, ieq) in enumerate(keep)
+                try
+                    R_plus = spec.residual_fns[ieq](y, y_lag, y, ε, θ)
+                    J[i, j] = (R_plus - R[i]) / h
+                catch e
+                    (e isa DomainError || e isa InexactError) || rethrow(e)
+                    J[i, j] = T(1e10)
+                end
+            end
+            y[free[j]] = yj
+        end
+        if n_f == 1
+            abs(J[1, 1]) > eps(T) || break
+            y[free[1]] -= R[1] / J[1, 1]
+        else
+            y[free] .+= -(robust_inv(J) * R)
+        end
+    end
+    return y
+end
+
+function _vfi_infer_transition(spec::ModelSpec{T}, state_idx::Vector{Int},
+                               ctrl_idx::Vector{Int}, G1::AbstractMatrix{T},
+                               impact::AbstractMatrix{T},
+                               next_state::Symbol) where {T}
+    ss = spec.steady_state
+    nx = length(state_idx)
+    if next_state === :linear
+        return function (x, a, ε, _)
+            y = copy(ss)
+            @inbounds for (i, si) in enumerate(state_idx)
+                i <= length(x) && (y[si] = x[i])
+            end
+            @inbounds for (i, ci) in enumerate(ctrl_idx)
+                i <= length(a) && (y[ci] = a[i])
+            end
+            x′ = zeros(T, nx)
+            @inbounds for (i, si) in enumerate(state_idx)
+                val = ss[si]
+                for j in eachindex(y)
+                    val += G1[si, j] * (y[j] - ss[j])
+                end
+                for k in eachindex(ε)
+                    val += impact[si, k] * ε[k]
+                end
+                x′[i] = val
+            end
+            return x′
+        end
+    elseif next_state === :residual
+        ctrl_names = spec.endog[ctrl_idx]
+        foc = _vfi_foc_indices(spec, collect(Symbol, ctrl_names))
+        keep = setdiff(collect(1:spec.n_endog), foc)
+        free = setdiff(collect(1:spec.n_endog), ctrl_idx)
+        length(keep) == length(free) || throw(ArgumentError(
+            "next_state=:residual: leftover residuals ($(length(keep))) ≠ " *
+            "free variables ($(length(free))) after dropping control FOCs"))
+        ε_buf_n = spec.n_exog
+        return function (x, a, ε, _)
+            y_lag = copy(ss)
+            y = copy(ss)
+            @inbounds for (i, si) in enumerate(state_idx)
+                if i <= length(x)
+                    y_lag[si] = x[i]
+                    y[si] = x[i]
+                end
+            end
+            @inbounds for (i, ci) in enumerate(ctrl_idx)
+                i <= length(a) && (y[ci] = a[i])
+            end
+            ε_use = length(ε) == ε_buf_n ? Vector{T}(ε) : T[ε...; zeros(T, ε_buf_n - length(ε))]
+            y = _vfi_newton_keep(y, y_lag, spec, ε_use, keep, free)
+            return T[y[si] for si in state_idx]
+        end
+    else
+        throw(ArgumentError("next_state must be :linear or :residual, got :$next_state"))
+    end
+end
+
+"""
+Infer a box on the single VFI control: `variable_bound` / `constraints` when
+present, otherwise an SS collar of half-width `scale × σ` (Lyapunov, with floor).
+"""
+function _vfi_infer_control_bounds(spec::ModelSpec{T}, ctrl_idx::Vector{Int},
+                                   scale::Real, constraints::Vector,
+                                   G1::AbstractMatrix{T},
+                                   impact::AbstractMatrix{T}) where {T}
+    ci = ctrl_idx[1]
+    ss_c = spec.steady_state[ci]
+    lo = T(-Inf)
+    hi = T(Inf)
+    cname = spec.endog[ci]
+    for c in constraints
+        if c isa VariableBound && c.var_name === cname
+            c.lower !== nothing && (lo = T(c.lower))
+            c.upper !== nothing && (hi = T(c.upper))
+        end
+    end
+    Var_y = try
+        solve_lyapunov(G1, impact)
+    catch
+        zeros(T, spec.n_endog, spec.n_endog)
+    end
+    sigma_c = sqrt(max(Var_y[ci, ci], zero(T)))
+    half = max(T(scale) * sigma_c, T(0.5) * abs(ss_c), T(0.1))
+    if !isfinite(lo)
+        lo = ss_c > zero(T) ? max(T(1e-8), ss_c - half) : ss_c - half
+    end
+    if !isfinite(hi)
+        hi = ss_c + half
+        ss_c > zero(T) && (hi = max(hi, T(2) * ss_c))
+    end
+    hi <= lo && (hi = lo + T(1e-8))
+    lo_v = T[lo]
+    hi_v = T[hi]
+    return (x, θ) -> (lo_v, hi_v)
+end
