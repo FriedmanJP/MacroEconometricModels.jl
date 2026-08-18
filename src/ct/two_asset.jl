@@ -1255,3 +1255,10 @@ Wrap `m` as a [`ModelSpec`](@ref) whose `agents` NamedTuple holds a
 to_spec(m::CTTwoAsset{T}; agent_name::Symbol=:household) where {T<:AbstractFloat} =
     _ct_to_spec(m, T; agent_name)
 
+function MitBlock(::ModelSpec, ::CTTwoAssetGE; kwargs...)
+    throw(ArgumentError(
+        "MitBlock: two-asset continuous-time models are out of scope (#650)"))
+end
+
+HetBlock(spec::ModelSpec, ss::CTTwoAssetGE; kwargs...) = MitBlock(spec, ss; kwargs...)
+

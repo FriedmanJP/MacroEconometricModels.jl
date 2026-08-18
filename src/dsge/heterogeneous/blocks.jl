@@ -10,9 +10,10 @@ Sequence-space block composition (DAG) and second-order sequence-space Jacobians
 The first-order household Jacobian (`_ssj_jacobian`, the fake-news algorithm of
 Auclert, Bardóczy, Rognlie & Straub 2021) prices *one* heterogeneous-agent block.
 The value of the sequence-space method, though, is **composition**: a model is a
-directed acyclic graph (DAG) of blocks — heterogeneous-agent blocks (`HetBlock`)
-and equation blocks (`SimpleBlock`) — whose general-equilibrium Jacobian follows
-from the implicit function theorem applied along a topological ordering.
+directed acyclic graph (DAG) of blocks — heterogeneous-agent blocks (`HetBlock`,
+`MitBlock`) and equation blocks (`SimpleBlock`) — whose general-equilibrium
+Jacobian follows from the implicit function theorem applied along a topological
+ordering.
 
 This file provides
 
@@ -51,7 +52,7 @@ first-order sequence-space Jacobians `∂O_t/∂I_s`, and (iii) a *nonlinear*
 evaluation along a full input path (used for the second-order solution and for
 market-clearing residual diagnostics).
 
-Concrete subtypes: [`SimpleBlock`](@ref), [`HetBlock`](@ref).
+Concrete subtypes: [`SimpleBlock`](@ref), [`HetBlock`](@ref), [`MitBlock`](@ref).
 """
 abstract type AbstractSSJBlock end
 
@@ -200,6 +201,10 @@ of the Young (2010) histogram from the initial stationary distribution.
     HetBlock(spec::ModelSpec, ss::HASteadyState; inputs, outputs, name=:household, dx=1e-4)
     HetBlock(ss::HASteadyState, individual, grid, income; inputs, outputs, name=:household, dx=1e-4)
 
+Non-household populations (`LifeCycleSystem`, `ContinuousHouseholdSystem`)
+construct a [`MitBlock`](@ref) from the same `HetBlock(spec, ss)` call.
+`DCEGMSystem` is rejected (G-11: discrete-choice kinks).
+
 - `inputs::Vector{Symbol}` — prices the household responds to; each must be a key
   of `ss.prices` (default `[:r, :w]`).
 - `outputs::Vector{Symbol}` — aggregates the block produces. Asset aggregates
@@ -283,6 +288,101 @@ function HetBlock(spec::ModelSpec{T}, ss::HASteadyState{T};
                     inputs=inputs, outputs=outputs, name=name, dx=dx)
 end
 
+"""
+    MitBlock{T,E} <: AbstractSSJBlock
+
+Sequence-space block for a non-household [`AbstractAgentSystem`](@ref)
+(life-cycle OLG or one-asset continuous time). Maps aggregate price sequences
+to aggregate outcomes by a **partial-equilibrium** MIT path (backward policy
+sweep, forward histogram / KFE) rather than the fake-news algorithm.
+
+The first-order Jacobian is a one-sided finite difference of that PE path.
+`DCEGMSystem` is not accepted — discrete-choice kinks make a sequence-space
+Jacobian ill-defined (G-11); use [`dcegm_mit`](@ref).
+
+# Constructors
+
+    MitBlock(spec::ModelSpec, ss::LifeCycleSteadyState; inputs, outputs, name, dx)
+    MitBlock(spec::ModelSpec, ss::CTSteadyState; inputs, outputs, name, dx, dt)
+    HetBlock(spec, ss)   # same, when `ss` is a life-cycle or CT steady state
+
+`inputs` default to `[:r, :w]`. `outputs` are the same asset / consumption
+names as [`HetBlock`](@ref) (`:A`/`:K`/`:C`, …). Labor aggregates are not
+produced (both families have exogenous labor).
+"""
+struct MitBlock{T<:AbstractFloat,E} <: AbstractSSJBlock
+    name::Symbol
+    inputs::Vector{Symbol}
+    outputs::Vector{Symbol}
+    dx::T
+    ss_inputs::Dict{Symbol,T}
+    ss_outputs::Dict{Symbol,T}
+    evaluate::E
+end
+
+export MitBlock
+
+function MitBlock(evaluate, ::Type{T};
+                  inputs::AbstractVector{Symbol},
+                  outputs::AbstractVector{Symbol},
+                  ss_inputs::AbstractDict{Symbol,T},
+                  ss_outputs::Union{Nothing,AbstractDict{Symbol,T}}=nothing,
+                  name::Symbol=:mit,
+                  dx::Real=T(1e-4)) where {T<:AbstractFloat}
+    inputs = collect(Symbol, inputs)
+    outputs = collect(Symbol, outputs)
+    isempty(inputs) && throw(ArgumentError("MitBlock :$name has no inputs"))
+    isempty(outputs) && throw(ArgumentError("MitBlock :$name has no outputs"))
+    for i in inputs
+        haskey(ss_inputs, i) || throw(ArgumentError(
+            "MitBlock :$name is missing the steady-state level of input :$i"))
+        i in (:r, :w) || throw(ArgumentError(
+            "MitBlock :$name input :$i is not a supported price (use :r and/or :w)"))
+    end
+    for o in outputs
+        kind = get(_HETBLOCK_OUTPUT_KIND, o, nothing)
+        kind === nothing && throw(ArgumentError(
+            "MitBlock :$name output :$o is not a recognized aggregate. " *
+            "Use an asset aggregate (:A, :K, :B, :assets, :a, :savings) or a " *
+            "consumption aggregate (:C, :c, :consumption)."))
+        kind === :labor && throw(ArgumentError(
+            "MitBlock :$name does not produce labor aggregates (exogenous labor)"))
+    end
+    ss_in = Dict{Symbol,T}(ss_inputs)
+    ss_out = if ss_outputs === nothing
+        Th0 = 2
+        flat = Dict{Symbol,Vector{T}}(i => fill(ss_in[i], Th0) for i in inputs)
+        y0 = evaluate(flat, Th0)
+        Dict{Symbol,T}(o => T(y0[o][1]) for o in outputs)
+    else
+        so = Dict{Symbol,T}(ss_outputs)
+        for o in outputs
+            haskey(so, o) || throw(ArgumentError(
+                "MitBlock :$name is missing the steady-state level of output :$o"))
+        end
+        so
+    end
+    return MitBlock{T,typeof(evaluate)}(name, inputs, outputs, T(dx), ss_in, ss_out, evaluate)
+end
+
+"`HetBlock` / `MitBlock` fallback: only HA / life-cycle / one-asset CT compose."
+function HetBlock(spec::ModelSpec, ss; kwargs...)
+    throw(ArgumentError(
+        "HetBlock(spec, ss) supports HouseholdSystem+HASteadyState, " *
+        "LifeCycleSystem+LifeCycleSteadyState, and " *
+        "ContinuousHouseholdSystem+CTSteadyState. " *
+        "DCEGM is MIT-only (G-11): discrete-choice kinks make fake-news SSJ " *
+        "ill-defined; use dcegm_mit."))
+end
+
+function MitBlock(spec::ModelSpec, ss; kwargs...)
+    throw(ArgumentError(
+        "MitBlock(spec, ss) supports LifeCycleSystem+LifeCycleSteadyState and " *
+        "ContinuousHouseholdSystem+CTSteadyState. " *
+        "DCEGM is MIT-only (G-11): discrete-choice kinks make a sequence-space " *
+        "Jacobian ill-defined; use dcegm_mit."))
+end
+
 "Stationary distribution of `ss` as a normalized `N`-vector (column-major, income slowest)."
 function _normalized_distribution(ss::HASteadyState{T}) where {T<:AbstractFloat}
     D = vec(copy(ss.distribution))
@@ -319,6 +419,7 @@ end
 
 _block_eltype(::SimpleBlock{T}) where {T} = T
 _block_eltype(::HetBlock{T}) where {T} = T
+_block_eltype(::MitBlock{T}) where {T} = T
 
 """
     combine_blocks(blocks...; name=:ssj_model, ss_tol=1e-6) -> SSJModel
@@ -451,7 +552,8 @@ First-order sequence-space Jacobians of one block: `d[(output, input)][t, s]` is
 For a [`SimpleBlock`](@ref) the derivatives are constants obtained by
 `ForwardDiff` at the steady state and laid on the corresponding lead/lag
 diagonals. For a [`HetBlock`](@ref) each pair is the fake-news Jacobian
-(`_ssj_jacobian`).
+(`_ssj_jacobian`). For a [`MitBlock`](@ref) each pair is a one-sided finite
+difference of the partial-equilibrium MIT path.
 """
 function block_jacobian(b::SimpleBlock{T}, T_horizon::Int) where {T<:AbstractFloat}
     Th = T_horizon
@@ -478,6 +580,28 @@ function block_jacobian(b::HetBlock{T}, T_horizon::Int) where {T<:AbstractFloat}
     for o in b.outputs, i in b.inputs
         out[(o, i)] = _ssj_jacobian(b.steady_state, b.individual, b.grid, b.income,
                                     i, o; T_horizon=T_horizon, dx=b.dx)
+    end
+    return out
+end
+
+function block_jacobian(b::MitBlock{T}, T_horizon::Int) where {T<:AbstractFloat}
+    Th = T_horizon
+    base_paths = Dict{Symbol,Vector{T}}(i => fill(b.ss_inputs[i], Th) for i in b.inputs)
+    base = b.evaluate(base_paths, Th)
+    out = Dict{Tuple{Symbol,Symbol},Matrix{T}}()
+    for o in b.outputs, i in b.inputs
+        out[(o, i)] = zeros(T, Th, Th)
+    end
+    invdx = one(T) / b.dx
+    for i in b.inputs, s in 1:Th
+        paths = Dict{Symbol,Vector{T}}(j => copy(base_paths[j]) for j in b.inputs)
+        paths[i][s] += b.dx
+        yp = b.evaluate(paths, Th)
+        for o in b.outputs
+            @inbounds for t in 1:Th
+                out[(o, i)][t, s] = (yp[o][t] - base[o][t]) * invdx
+            end
+        end
     end
     return out
 end
@@ -571,6 +695,11 @@ function _block_evaluate(b::HetBlock{T}, input_paths::Dict{Symbol,Vector{T}},
         end
     end
     return out
+end
+
+function _block_evaluate(b::MitBlock{T}, input_paths::Dict{Symbol,Vector{T}},
+                         T_horizon::Int) where {T<:AbstractFloat}
+    return b.evaluate(input_paths, T_horizon)
 end
 
 """
@@ -1002,6 +1131,11 @@ function Base.show(io::IO, b::HetBlock)
           " → ", join(string.(b.outputs), ", "))
 end
 
+function Base.show(io::IO, b::MitBlock)
+    print(io, "MitBlock(:", b.name, "): ", join(string.(b.inputs), ", "),
+          " → ", join(string.(b.outputs), ", "))
+end
+
 function Base.show(io::IO, m::SSJModel)
     print(io, "SSJModel(:", m.name, "): ", length(m.blocks), " blocks, ",
           length(m.exogenous), " exogenous, ", length(m.endogenous), " endogenous")
@@ -1030,7 +1164,8 @@ function report(model::SSJModel{T}) where {T}
     for (i, b) in enumerate(model.blocks)
         data[i, 1] = i
         data[i, 2] = string(b.name)
-        data[i, 3] = b isa HetBlock ? "HetBlock" : "SimpleBlock"
+        data[i, 3] = b isa HetBlock ? "HetBlock" :
+                     b isa MitBlock ? "MitBlock" : "SimpleBlock"
         data[i, 4] = join(string.(b.inputs), ", ") * " → " * join(string.(b.outputs), ", ")
     end
     _pretty_table(io, data;

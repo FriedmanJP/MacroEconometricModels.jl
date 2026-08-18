@@ -457,6 +457,109 @@ function Base.show(io::IO, tr::CTTransition{T}) where {T}
               "$(round(tr.K[end]; digits=4)), converged=$(tr.converged)")
 end
 
+# =============================================================================
+# Sequence-space PE block (G-16 / #650)
+# =============================================================================
+
+"""
+    _ct_pe_path(m, ss, rpath, wpath; dt) -> (A, C)
+
+Partial-equilibrium MIT path of a one-asset continuous-time household:
+implicit HJB backward from `ss.v`, KFE forward from `ss.g`. `A[t]` is
+end-of-step aggregate wealth, `C[t]` aggregate consumption.
+"""
+function _ct_pe_path(m::CTAiyagari{T}, ss::CTSteadyState{T},
+                     rpath::AbstractVector{T}, wpath::AbstractVector{T};
+                     dt::T=T(0.25)) where {T<:AbstractFloat}
+    Th = length(rpath)
+    length(wpath) == Th || throw(ArgumentError(
+        "_ct_pe_path: r and w paths must have the same length"))
+    I = m.I
+    a = ss.a
+    da = a[2] - a[1]
+    Aswitch = _ct_aswitch(m)
+    avec = vcat(a, a)
+    Avec = Vector{SparseMatrixCSC{T,Int}}(undef, Th)
+    cmat = Vector{Matrix{T}}(undef, Th)
+    V = vec(copy(ss.v))
+    for t in Th:-1:1
+        Vmat = reshape(V, I, 2)
+        c, _, A = _ct_policy_and_generator(m, Vmat, rpath[t], wpath[t], a, da, Aswitch)
+        Avec[t] = A
+        cmat[t] = c
+        if t > 1
+            u_vec = vec([_ct_u(c[i, j], m.sigma) for i in 1:I, j in 1:2])
+            B = (one(T) / dt + m.rho) * LinearAlgebra.I - A
+            V = B \ (u_vec + V / dt)
+        end
+    end
+    Aout = zeros(T, Th)
+    Cout = zeros(T, Th)
+    gcur = vec(copy(ss.g))
+    for t in 1:Th
+        gmat = reshape(gcur, I, 2)
+        Cout[t] = sum(cmat[t] .* gmat) * da
+        B = LinearAlgebra.I - dt * copy(transpose(Avec[t]))
+        gnext = B \ gcur
+        gnext = max.(gnext, zero(T))
+        gnext ./= (sum(gnext) * da)
+        Aout[t] = sum(avec .* gnext) * da
+        gcur = gnext
+    end
+    return Aout, Cout
+end
+
+function _ct_block_eval(m::CTAiyagari{T}, ss::CTSteadyState{T},
+                        outputs::Vector{Symbol}, dt::T,
+                        input_paths::Dict{Symbol,Vector{T}},
+                        Th::Int) where {T<:AbstractFloat}
+    rpath = haskey(input_paths, :r) ? input_paths[:r] : fill(ss.r, Th)
+    wpath = haskey(input_paths, :w) ? input_paths[:w] : fill(ss.w, Th)
+    A, C = _ct_pe_path(m, ss, rpath, wpath; dt=dt)
+    out = Dict{Symbol,Vector{T}}()
+    for o in outputs
+        kind = get(_HETBLOCK_OUTPUT_KIND, o, nothing)
+        out[o] = kind === :consumption ? C : copy(A)
+    end
+    return out
+end
+
+"""
+    MitBlock(spec, ss::CTSteadyState; inputs, outputs, name, dx, dt)
+    HetBlock(spec, ss::CTSteadyState; ...)
+
+One-asset continuous-time household as a sequence-space block (G-16).
+"""
+function MitBlock(spec::ModelSpec{T}, ss::CTSteadyState{T};
+                  inputs::AbstractVector{Symbol}=Symbol[:r, :w],
+                  outputs::AbstractVector{Symbol}=Symbol[:A],
+                  name::Symbol=:household,
+                  dx::Real=T(1e-4),
+                  dt::Real=T(0.25)) where {T<:AbstractFloat}
+    has_kind(spec, ContinuousHouseholdSystem) || throw(ArgumentError(
+        "MitBlock: spec has no ContinuousHouseholdSystem (agents = $(keys(spec.agents)))"))
+    m = only(agents_of(spec, ContinuousHouseholdSystem)).model
+    m isa CTAiyagari || throw(ArgumentError(
+        "MitBlock: two-asset continuous-time models are out of scope (#650)"))
+    outs = collect(Symbol, outputs)
+    dtT = T(dt)
+    eval_fn = (paths, Th) -> _ct_block_eval(m, ss, outs, dtT, paths, Th)
+    da = ss.a[2] - ss.a[1]
+    A_ss = ss.K
+    C_ss = sum(ss.c .* ss.g) * da
+    ss_out = Dict{Symbol,T}()
+    for o in outs
+        kind = get(_HETBLOCK_OUTPUT_KIND, o, nothing)
+        ss_out[o] = kind === :consumption ? C_ss : A_ss
+    end
+    ss_in = Dict{Symbol,T}(:r => ss.r, :w => ss.w)
+    return MitBlock(eval_fn, T; inputs=inputs, outputs=outs, ss_inputs=ss_in,
+                    ss_outputs=ss_out, name=name, dx=dx)
+end
+
+HetBlock(spec::ModelSpec{T}, ss::CTSteadyState{T}; kwargs...) where {T<:AbstractFloat} =
+    MitBlock(spec, ss; kwargs...)
+
 """
     report(ss::CTSteadyState)
 

@@ -1224,3 +1224,95 @@ function report(ss::LifeCycleSteadyState{T}) where {T}
         alignment=[:r, :l, :r, :r, :r])
     return nothing
 end
+
+# =============================================================================
+# Sequence-space PE block (G-16 / #650)
+# =============================================================================
+
+"""
+    _lifecycle_pe_path(m, ss, rpath, wpath) -> (A, C)
+
+Partial-equilibrium MIT path of a life-cycle population: backward age-EGM at
+the given price sequences, then a Young push of the stationary histogram.
+Fiscal instruments stay at their steady-state values. `A[t]` is end-of-period
+asset supply, `C[t]` aggregate consumption.
+"""
+function _lifecycle_pe_path(m::LifeCycleOLG{T}, ss::LifeCycleSteadyState{T},
+                            rpath::AbstractVector{T},
+                            wpath::AbstractVector{T}) where {T<:AbstractFloat}
+    Th = length(rpath)
+    length(wpath) == Th || throw(ArgumentError(
+        "_lifecycle_pe_path: r and w paths must have the same length"))
+    a_grid = m.grid.grids[1]
+    n_a = length(a_grid)
+    n_e = length(m.income.states)
+    c_pol = zeros(T, n_a, n_e, m.J, Th)
+    a_pol = zeros(T, n_a, n_e, m.J, Th)
+    _lc_policies_at_date!(view(c_pol, :, :, :, Th), view(a_pol, :, :, :, Th),
+                          m, rpath[Th], ss.r, wpath[Th],
+                          ss.tau, ss.pension, ss.transfer, ss.c_policy)
+    for t in (Th - 1):-1:1
+        _lc_policies_at_date!(view(c_pol, :, :, :, t), view(a_pol, :, :, :, t),
+                              m, rpath[t], rpath[t+1], wpath[t],
+                              ss.tau, ss.pension, ss.transfer,
+                              view(c_pol, :, :, :, t + 1))
+    end
+    A = zeros(T, Th)
+    C = zeros(T, Th)
+    dist = copy(ss.dist)
+    for t in 1:Th
+        A[t] = _lc_aggregate_X(view(a_pol, :, :, :, t), dist)
+        C[t] = _lc_aggregate_X(view(c_pol, :, :, :, t), dist)
+        if t < Th
+            dist = _lc_forward_dist(m, dist, view(a_pol, :, :, :, t))
+        end
+    end
+    return A, C
+end
+
+function _lifecycle_block_eval(m::LifeCycleOLG{T}, ss::LifeCycleSteadyState{T},
+                               outputs::Vector{Symbol},
+                               input_paths::Dict{Symbol,Vector{T}},
+                               Th::Int) where {T<:AbstractFloat}
+    rpath = haskey(input_paths, :r) ? input_paths[:r] : fill(ss.r, Th)
+    wpath = haskey(input_paths, :w) ? input_paths[:w] : fill(ss.w, Th)
+    A, C = _lifecycle_pe_path(m, ss, rpath, wpath)
+    out = Dict{Symbol,Vector{T}}()
+    for o in outputs
+        kind = get(_HETBLOCK_OUTPUT_KIND, o, nothing)
+        out[o] = kind === :consumption ? C : copy(A)
+    end
+    return out
+end
+
+"""
+    MitBlock(spec, ss::LifeCycleSteadyState; inputs, outputs, name, dx)
+    HetBlock(spec, ss::LifeCycleSteadyState; ...)
+
+Life-cycle population as a sequence-space block (G-16). Combines with a
+Cobb-Douglas [`SimpleBlock`](@ref) via [`combine_blocks`](@ref).
+"""
+function MitBlock(spec::ModelSpec{T}, ss::LifeCycleSteadyState{T};
+                  inputs::AbstractVector{Symbol}=Symbol[:r, :w],
+                  outputs::AbstractVector{Symbol}=Symbol[:A],
+                  name::Symbol=:households,
+                  dx::Real=T(1e-4)) where {T<:AbstractFloat}
+    has_kind(spec, LifeCycleSystem) || throw(ArgumentError(
+        "MitBlock: spec has no LifeCycleSystem (agents = $(keys(spec.agents)))"))
+    m = only(agents_of(spec, LifeCycleSystem)).model
+    outs = collect(Symbol, outputs)
+    eval_fn = (paths, Th) -> _lifecycle_block_eval(m, ss, outs, paths, Th)
+    A_ss = _lc_aggregate_X(ss.a_policy, ss.dist)
+    C_ss = _lc_aggregate_X(ss.c_policy, ss.dist)
+    ss_out = Dict{Symbol,T}()
+    for o in outs
+        kind = get(_HETBLOCK_OUTPUT_KIND, o, nothing)
+        ss_out[o] = kind === :consumption ? C_ss : A_ss
+    end
+    ss_in = Dict{Symbol,T}(:r => ss.r, :w => ss.w)
+    return MitBlock(eval_fn, T; inputs=inputs, outputs=outs, ss_inputs=ss_in,
+                    ss_outputs=ss_out, name=name, dx=dx)
+end
+
+HetBlock(spec::ModelSpec{T}, ss::LifeCycleSteadyState{T}; kwargs...) where {T<:AbstractFloat} =
+    MitBlock(spec, ss; kwargs...)

@@ -1533,3 +1533,18 @@ end
 
 export DCEGMFirm, DCEGMEquilibrium, DCEGMTransition
 export dcegm_steady_state, dcegm_capital_demand, dcegm_firm_wage, dcegm_mit
+
+# G-16 / #650 — discrete-choice kinks make fake-news SSJ ill-defined (G-11).
+function _dcegm_hetblock_g11()
+    throw(ArgumentError(
+        "HetBlock/MitBlock: DCEGM is MIT-only (G-11); discrete-choice kinks make " *
+        "the fake-news sequence-space Jacobian ill-defined. Use dcegm_mit."))
+end
+
+function HetBlock(::ModelSpec, ::Union{DCEGMEquilibrium,DCEGMSolution,DCEGMProblem}; kwargs...)
+    _dcegm_hetblock_g11()
+end
+
+function MitBlock(::ModelSpec, ::Union{DCEGMEquilibrium,DCEGMSolution,DCEGMProblem}; kwargs...)
+    _dcegm_hetblock_g11()
+end
