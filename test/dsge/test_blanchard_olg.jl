@@ -229,6 +229,22 @@ using LinearAlgebra
             @test all(isfinite, resp_m.values)
             @test maximum(abs, resp_m.values[:, :, 2]) > 0   # eps_i moves i (and rr)
         end
+
+        @testset "Blanchard forward_indices are lead-containing equations (MSR-11)" begin
+            function lead_eqs(spec)
+                Set(i for (i, eq) in enumerate(spec.equations)
+                    if eq.expr isa Expr &&
+                       MacroEconometricModels._has_forward_looking(eq.expr, spec.endog, spec.exog))
+            end
+            m = BlanchardOLG()
+            spec = to_spec(m)
+            @test Set(spec.forward_indices) == lead_eqs(spec)
+            @test spec.n_expect == length(spec.forward_indices)
+
+            nk = blanchard_nk_spec(m)
+            @test Set(nk.forward_indices) == lead_eqs(nk) == Set([1, 6, 8])
+            @test nk.n_expect == 3
+        end
     end
 
 end

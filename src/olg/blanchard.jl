@@ -519,10 +519,10 @@ function blanchard_nk_spec(spec::ModelSpec{T};
     ]
     ir = ModelIR(:discrete, :perpetual_youth, decls, ir_eqs)
 
-    # C and π appear as leads (Euler, Phillips, Fisher). k and Z do not.
+    # Equation indices of lead-containing residuals: 1=euler, 6=phillips, 8=fisher.
     return ModelSpec{T}(
         endog, exog, params, param_values, equations, residual_fns,
-        2, [2, 6], T[], ss_fn;
+        3, [1, 6, 8], T[], ss_fn;
         max_lag=1, max_lead=1,
         agents=NamedTuple(),
         ir=ir,

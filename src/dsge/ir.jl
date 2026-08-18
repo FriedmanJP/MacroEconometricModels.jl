@@ -226,6 +226,10 @@ function ModelSpec{T}(endog, exog, params, param_values, equations, residual_fns
     end
     length(forward_indices) == n_expect || throw(ArgumentError(
         "ModelSpec: forward_indices length $(length(forward_indices)) ≠ n_expect $n_expect"))
+    for i in forward_indices
+        1 <= i <= length(equations) || throw(ArgumentError(
+            "ModelSpec: forward_indices entry $i is outside 1:$(length(equations))"))
+    end
     vnames = varnames === nothing ? [string(s) for s in endog] : copy(varnames)
     return ModelSpec{T,A}(
         endog, exog, params, param_values, n_endog, n_exog, n_params,
