@@ -311,6 +311,7 @@ include("nowcast/forecast.jl")
 
 # DSGE models
 include("dsge/types.jl")
+include("dsge/ir.jl")             # ModelSpec + IR (v0.9.0; DSGESpec remains until HA migrates)
 include("dsge/constraints.jl")
 include("dsge/display.jl")
 include("dsge/parser.jl")
@@ -747,7 +748,8 @@ export balance_panel
 export AbstractDSGEModel
 
 # Types
-export DSGESpec, LinearDSGE, DSGESolution, PerturbationSolution, ProjectionSolution, PerfectForesightPath, DSGEEstimation
+export DSGESpec, ModelSpec, NamedEquation, NoAgents, AbstractAgentSystem, ModelIR
+export LinearDSGE, DSGESolution, PerturbationSolution, ProjectionSolution, PerfectForesightPath, DSGEEstimation
 export DeterminacyMap, PrunedStateSpace
 
 # Bayesian DSGE
