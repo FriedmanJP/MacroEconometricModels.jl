@@ -312,7 +312,7 @@ const TEST_GROUPS = [
 
 # Flags every multiprocess child must share so they reuse one compile cache.
 # Coverage follows the parent (Pkg.test / julia-runtest). check-bounds is
-# restored only on the Ubuntu LTS cell (MACRO_CHECK_BOUNDS=1); macOS/Windows
+# only the Ubuntu 1.10 Optim-v1 cell (MACRO_CHECK_BOUNDS=1); 1.12 cells
 # keep the faster default (~10-20%, #127 P1.4).
 function _child_julia_cmd(code::String; group_name::String="_warmup")
     test_dir = replace(string(@__DIR__), '\\' => '/')
