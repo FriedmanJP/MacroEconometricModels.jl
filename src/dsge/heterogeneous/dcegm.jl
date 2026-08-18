@@ -25,7 +25,9 @@ This file provides
    (infinite horizon) with per-option EGM plus the upper envelope, optionally
    smoothed by extreme-value taste shocks,
 4. `dcegm_simulate` — a Young (2010) histogram whose transition respects the
-   discrete choice.
+   discrete choice,
+5. `dcegm_steady_state` — bisection on `r` so household asset supply `A`
+   equals Cobb-Douglas firm demand `K^d(r)` (G-10).
 
 # References
 - Iskhakov, F., Jørgensen, T. H., Rust, J., & Schjerning, B. (2017). The
@@ -260,7 +262,8 @@ DCEGMSystem(prob::DCEGMProblem{T}) where {T<:AbstractFloat} = DCEGMSystem{T}(pro
 Wrap a [`DCEGMProblem`](@ref) as a [`ModelSpec`](@ref) with a single
 [`DCEGMSystem`](@ref) population and an empty residual system (partial
 equilibrium: `n_endog = 0`). The household solver is still
-[`dcegm_solve`](@ref) on the wrapped problem.
+[`dcegm_solve`](@ref) on the wrapped problem. Capital-market clearing
+(`A = K^d(r)`) is [`dcegm_steady_state`](@ref), not `solve`.
 """
 function to_spec(prob::DCEGMProblem{T}; agent_name::Symbol=:household) where {T<:AbstractFloat}
     ModelSpec{T}(
@@ -948,6 +951,337 @@ function _log_normal_quadrature(sigma::Float64, n::Int)
 end
 
 # =============================================================================
+# General equilibrium — Cobb-Douglas firm and market-clearing r
+# =============================================================================
+
+"""
+    DCEGMFirm{T}
+
+Optional Cobb-Douglas firm used to close a DCEGM capital market:
+
+```math
+Y = Z K^{\\alpha} L^{1-\\alpha}, \\qquad
+r = \\alpha Z (K/L)^{\\alpha-1} - \\delta, \\qquad
+w = (1-\\alpha) Z (K/L)^{\\alpha}.
+```
+
+Inverting the rental FOC gives capital demand at a trial rate,
+
+```math
+K^d(r) = \\left(\\frac{\\alpha Z}{r+\\delta}\\right)^{1/(1-\\alpha)} L.
+```
+
+`L` is an exogenous firm input (Aiyagari inelastic labor). Pass
+`labor=:measured` to [`dcegm_steady_state`](@ref) to replace it with the
+histogram's work-option efficiency units.
+
+# Constructor
+
+    DCEGMFirm(; alpha=0.36, delta=0.08, Z=1.0, L=1.0)
+"""
+struct DCEGMFirm{T<:AbstractFloat}
+    alpha::T
+    delta::T
+    Z::T
+    L::T
+end
+
+function DCEGMFirm(; alpha::Real=0.36, delta::Real=0.08, Z::Real=1.0, L::Real=1.0)
+    T = Float64
+    a = T(alpha); d = T(delta); z = T(Z); ell = T(L)
+    0 < a < 1 || throw(ArgumentError("DCEGMFirm: `alpha` must lie in (0, 1), got $alpha"))
+    d >= 0 || throw(ArgumentError("DCEGMFirm: `delta` must be non-negative, got $delta"))
+    z > 0 || throw(ArgumentError("DCEGMFirm: `Z` must be positive, got $Z"))
+    ell > 0 || throw(ArgumentError("DCEGMFirm: `L` must be positive, got $L"))
+    return DCEGMFirm{T}(a, d, z, ell)
+end
+
+DCEGMFirm{T}(f::DCEGMFirm) where {T<:AbstractFloat} =
+    DCEGMFirm{T}(T(f.alpha), T(f.delta), T(f.Z), T(f.L))
+
+"""
+    dcegm_capital_demand(firm, r, L=firm.L) -> K^d
+
+Cobb-Douglas capital demand at net return `r`. Returns `Inf` when
+`r + δ ≤ 0`, so a bisection that lands there raises the trial rate.
+"""
+function dcegm_capital_demand(firm::DCEGMFirm{T}, r::Real, L::Real=firm.L) where {T<:AbstractFloat}
+    r_eff = T(r) + firm.delta
+    r_eff <= zero(T) && return T(Inf)
+    ell = T(L)
+    ell <= zero(T) && return zero(T)
+    kl = (firm.alpha * firm.Z / r_eff)^(one(T) / (one(T) - firm.alpha))
+    return kl * ell
+end
+
+"""
+    dcegm_firm_wage(firm, r) -> w
+
+Competitive wage implied by the Cobb-Douglas FOC at net return `r`.
+Zero when `r + δ ≤ 0`.
+"""
+function dcegm_firm_wage(firm::DCEGMFirm{T}, r::Real) where {T<:AbstractFloat}
+    r_eff = T(r) + firm.delta
+    r_eff <= zero(T) && return zero(T)
+    kl = (firm.alpha * firm.Z / r_eff)^(one(T) / (one(T) - firm.alpha))
+    return (one(T) - firm.alpha) * firm.Z * kl^firm.alpha
+end
+
+"""
+    DCEGMEquilibrium{T}
+
+Stationary general equilibrium of a DCEGM economy: household asset supply
+equals firm capital demand.
+
+| Field | Type | Description |
+|---|---|---|
+| `r`, `w` | `T` | Clearing net return and the firm's competitive wage |
+| `K` | `T` | Household asset supply `A` (the capital the report prints) |
+| `L` | `T` | Labor used in `K^d` (firm `L`, or measured work-option efficiency) |
+| `Y` | `T` | Output `Z K^α L^{1-α}` at household `K` |
+| `K_demand` | `T` | Firm demand `K^d(r)` |
+| `excess_demand` | `T` | Final `A − K^d` |
+| `solution` | `DCEGMSolution{T}` | Household policy at the clearing `R = 1+r` |
+| `distribution` | `DCEGMDistribution{T}` | Histogram used to form `A` |
+| `firm` | `DCEGMFirm{T}` | Firm that priced capital |
+| `converged` | `Bool` | Whether `|A − K^d|` met `tol` |
+| `iterations` | `Int` | Bisection iterations used |
+"""
+struct DCEGMEquilibrium{T<:AbstractFloat}
+    r::T
+    w::T
+    K::T
+    L::T
+    Y::T
+    K_demand::T
+    excess_demand::T
+    solution::DCEGMSolution{T}
+    distribution::DCEGMDistribution{T}
+    firm::DCEGMFirm{T}
+    converged::Bool
+    iterations::Int
+end
+
+"""
+    dcegm_steady_state(source, firm=DCEGMFirm(); kwargs...) -> DCEGMEquilibrium
+
+Clear the capital market of a DCEGM economy by bisection on the net return
+`r`. At each trial rate the household is solved at `R = 1+r`, a Young
+histogram supplies aggregate assets `A`, and the optional Cobb-Douglas
+[`DCEGMFirm`](@ref) supplies `K^d(r)`. Excess supply `A − K^d` is increasing
+in `r` (households save more, firms demand less), so the root is unique on
+a sign-changing bracket.
+
+`source` is a [`DCEGMProblem`](@ref), a `ModelSpec` that carries a
+[`DCEGMSystem`](@ref), or a factory `(R, w) -> DCEGMProblem`. A finite-horizon
+problem is read as a stationary overlapping-generations cross-section
+(equal cohort weights); an infinite-horizon problem is simulated for
+`n_sim` periods and the last period is treated as the ergodic snapshot.
+
+# Arguments
+| Keyword | Type | Default | Description |
+|---|---|---|---|
+| `r_bounds` | `Tuple` | `(0.001, 0.20)` | Net-return bracket; the lower end must exceed `−δ` |
+| `labor` | `Symbol` | `:exogenous` | `:exogenous` uses `firm.L`; `:measured` uses work-option efficiency units from the histogram |
+| `reprice_wage` | `Bool` | `false` | If `true` and `source` is a problem, work-option income becomes `w · η_j` at the firm wage. A factory always receives `(R, w)` and decides for itself |
+| `work_option` | `Symbol` | `:work` | Discrete option treated as work (labor and, if requested, wage feedback) |
+| `grid` | `AbstractVector` | asset grid | Cash-on-hand histogram grid |
+| `init` | `Symbol` or matrix | `:newborn` | `:newborn` puts age-1 mass at cash-on-hand = work income (zero assets); `:default` is [`dcegm_simulate`](@ref)'s median start; a matrix is passed through |
+| `n_sim` | `Int` | `40` | Periods simulated for an infinite-horizon problem |
+| `tol` | `Real` | ``10^{-4}`` | Absolute tolerance on `|A − K^d|` |
+| `max_iter` | `Int` | `40` | Bisection cap |
+| `hh_max_iter`, `hh_tol` | | `200`, ``10^{-8}`` | Forwarded to [`dcegm_solve`](@ref) (infinite horizon) |
+| `verbose` | `Bool` | `false` | Print bisection diagnostics |
+
+Non-convergence is reported in `converged` / `excess_demand`, never silently
+accepted. `R` remains a primitive on [`DCEGMProblem`](@ref); this helper is
+what makes it an equilibrium object.
+
+# Returns
+[`DCEGMEquilibrium{T}`](@ref). [`report`](@ref) prints `r` and `K`.
+
+# References
+- Aiyagari, S. R. (1994). Uninsured idiosyncratic risk and aggregate saving.
+  *Quarterly Journal of Economics*, 109(3), 659–684.
+"""
+function dcegm_steady_state(source::Union{DCEGMProblem,Function,ModelSpec},
+                            firm::DCEGMFirm=DCEGMFirm();
+                            r_bounds::Tuple{<:Real,<:Real}=(0.001, 0.20),
+                            labor::Symbol=:exogenous,
+                            reprice_wage::Bool=false,
+                            work_option::Symbol=:work,
+                            grid::Union{Nothing,AbstractVector{<:Real}}=nothing,
+                            init::Union{Symbol,AbstractMatrix{<:Real}}=:newborn,
+                            n_sim::Int=40,
+                            tol::Real=1e-4,
+                            max_iter::Int=40,
+                            hh_max_iter::Int=200,
+                            hh_tol::Real=1e-8,
+                            verbose::Bool=false)
+    labor in (:exogenous, :measured) || throw(ArgumentError(
+        "dcegm_steady_state: `labor` must be :exogenous or :measured, got :$labor"))
+    (init isa AbstractMatrix || init in (:newborn, :default)) || throw(ArgumentError(
+        "dcegm_steady_state: `init` must be :newborn, :default, or an (n_m × n_e) matrix"))
+    r_lo, r_hi = float(r_bounds[1]), float(r_bounds[2])
+    r_lo < r_hi || throw(ArgumentError(
+        "dcegm_steady_state: `r_bounds` must be increasing, got $r_bounds"))
+    n_sim >= 1 || throw(ArgumentError("dcegm_steady_state: `n_sim` must be at least 1"))
+
+    probe = _dcegm_source_problem(source, one(r_lo) + r_lo, one(r_lo); reprice_wage, work_option)
+    FT = typeof(probe.beta)
+    firmT = DCEGMFirm{FT}(firm)
+    (FT(r_lo) + firmT.delta) > zero(FT) || throw(ArgumentError(
+        "dcegm_steady_state: `r_bounds[1]` must exceed −delta = $(-firmT.delta) " *
+        "for a finite capital-labor ratio"))
+
+    work_d = findfirst(==(work_option), probe.options)
+    if work_d === nothing && (reprice_wage || labor === :measured)
+        throw(ArgumentError(
+            "dcegm_steady_state: work_option :$work_option is not one of $(probe.options)"))
+    end
+
+    function evaluate(rv)
+        w = dcegm_firm_wage(firmT, rv)
+        R = one(FT) + rv
+        prob = _dcegm_source_problem(source, R, w; reprice_wage, work_option)
+        sol = dcegm_solve(prob; max_iter=hh_max_iter, tol=hh_tol, verbose=false)
+        g = grid === nothing ? copy(prob.asset_grid) : collect(FT, grid)
+        init_mat, init_opt = _dcegm_ge_init(prob, g, init, work_d)
+        nper = prob.n_periods > 0 ? sol.n_periods : n_sim
+        dist = dcegm_simulate(sol, g; init=init_mat, init_option=init_opt, n_periods=nper)
+        A = _dcegm_mean_assets(dist, prob.n_periods == 0)
+        ell = labor === :measured ?
+            _dcegm_measured_labor(dist, work_d, prob.income_process.states, prob.n_periods == 0) :
+            firmT.L
+        Kd = dcegm_capital_demand(firmT, rv, ell)
+        return (r=rv, w=w, A=A, L=ell, Kd=Kd, excess=A - Kd, sol=sol, dist=dist)
+    end
+
+    res_lo = evaluate(FT(r_lo))
+    res_hi = evaluate(FT(r_hi))
+    f_lo, f_hi = res_lo.excess, res_hi.excess
+    best = abs(f_lo) <= abs(f_hi) ? res_lo : res_hi
+    iters = 0
+    converged = false
+
+    if f_lo * f_hi <= zero(FT)
+        a, b = FT(r_lo), FT(r_hi)
+        fa = f_lo
+        for it in 1:max_iter
+            iters = it
+            mid = (a + b) / 2
+            res = evaluate(mid)
+            fm = res.excess
+            if abs(fm) < abs(best.excess)
+                best = res
+            end
+            verbose && println("DCEGM GE $it: r = $mid, A = $(res.A), K^d = $(res.Kd), excess = $fm")
+            if abs(fm) < FT(tol)
+                converged = true
+                best = res
+                break
+            end
+            if fa * fm <= zero(FT)
+                b = mid
+            else
+                a = mid; fa = fm
+            end
+        end
+    else
+        @warn "dcegm_steady_state: excess capital supply does not change sign on the " *
+              "requested bracket; returning the closest endpoint" r_bounds=r_bounds excess_lo=f_lo excess_hi=f_hi
+    end
+
+    K = best.A
+    Y = firmT.Z * K^firmT.alpha * best.L^(one(FT) - firmT.alpha)
+    return DCEGMEquilibrium{FT}(best.r, best.w, K, best.L, Y, best.Kd, best.excess,
+                               best.sol, best.dist, firmT, converged, iters)
+end
+
+"Problem at trial prices: factory `(R, w)`, `ModelSpec`, or a repriced `DCEGMProblem`."
+function _dcegm_source_problem(source::Function, R, w; reprice_wage, work_option)
+    prob = source(R, w)
+    prob isa DCEGMProblem || throw(ArgumentError(
+        "dcegm_steady_state: factory must return a DCEGMProblem, got $(typeof(prob))"))
+    return prob
+end
+
+function _dcegm_source_problem(source::ModelSpec, R, w; reprice_wage, work_option)
+    has_kind(source, DCEGMSystem) || throw(ArgumentError(
+        "dcegm_steady_state: spec has no DCEGMSystem population"))
+    return _dcegm_source_problem(only(agents_of(source, DCEGMSystem)).problem, R, w;
+                                 reprice_wage, work_option)
+end
+
+function _dcegm_source_problem(prob::DCEGMProblem{T}, R, w;
+                               reprice_wage, work_option) where {T<:AbstractFloat}
+    y = prob.income
+    if reprice_wage
+        work_d = findfirst(==(work_option), prob.options)
+        work_d === nothing && throw(ArgumentError(
+            "dcegm_steady_state: work_option :$work_option is not one of $(prob.options)"))
+        states = prob.income_process.states
+        y = (d, j) -> d == work_d ? T(w) * states[j] : prob.income(d, j)
+    end
+    return _dcegm_with_R(prob, T(R), y)
+end
+
+"Copy a [`DCEGMProblem`](@ref) at a new gross return, optionally replacing `income`."
+function _dcegm_with_R(prob::DCEGMProblem{T,FU,FUP,FUPI}, R::T, income) where {T,FU,FUP,FUPI}
+    return DCEGMProblem{T,FU,FUP,FUPI,typeof(income)}(
+        prob.beta, R, prob.utility, prob.utility_prime, prob.utility_prime_inv, income,
+        prob.options, prob.absorbing, prob.asset_grid, prob.income_process,
+        prob.n_periods, prob.taste_shock_scale, prob.credit_limit)
+end
+
+function _dcegm_ge_init(prob::DCEGMProblem{T}, grid::Vector{T}, init, work_d) where {T<:AbstractFloat}
+    if init isa AbstractMatrix
+        return (init, work_d === nothing ? nothing : prob.options[work_d])
+    elseif init === :default
+        return (nothing, work_d === nothing ? nothing : prob.options[work_d])
+    end
+    # :newborn — zero assets, cash-on-hand = this period's work income.
+    d0 = work_d === nothing ? (findfirst(!, prob.absorbing) === nothing ? 1 :
+                               findfirst(!, prob.absorbing)) : work_d
+    n_m = length(grid)
+    n_e = length(prob.income_process.states)
+    mat = zeros(T, n_m, n_e)
+    for j in 1:n_e
+        M0 = clamp(T(prob.income(d0, j)), grid[1], grid[end])
+        pe = T(prob.income_process.stationary_dist[j])
+        if M0 <= grid[1]
+            mat[1, j] = pe
+        elseif M0 >= grid[end]
+            mat[n_m, j] = pe
+        else
+            k = clamp(searchsortedfirst(grid, M0) - 1, 1, n_m - 1)
+            dx = grid[k + 1] - grid[k]
+            wt = dx > zero(T) ? (M0 - grid[k]) / dx : zero(T)
+            mat[k, j] += pe * (one(T) - wt)
+            mat[k + 1, j] += pe * wt
+        end
+    end
+    return (mat, prob.options[d0])
+end
+
+_dcegm_mean_assets(dist::DCEGMDistribution{T}, last_only::Bool) where {T<:AbstractFloat} =
+    last_only ? dist.assets[end] : sum(dist.assets) / T(length(dist.assets))
+
+function _dcegm_measured_labor(dist::DCEGMDistribution{T}, work_d,
+                               states::AbstractVector, last_only::Bool) where {T<:AbstractFloat}
+    work_d === nothing && return zero(T)
+    n_d = size(dist.shares, 2)
+    (1 <= work_d <= n_d) || return zero(T)
+    # `shares` is the period-t choice, not the lagged option stored in `dist`.
+    share = last_only ? dist.shares[end, work_d] :
+            sum(@view dist.shares[:, work_d]) / T(size(dist.shares, 1))
+    n_e = length(states)
+    n_e == 0 && return share
+    mean_e = sum(T, states) / T(n_e)
+    return share * mean_e
+end
+
+# =============================================================================
 # Display
 # =============================================================================
 
@@ -966,6 +1300,16 @@ end
 function Base.show(io::IO, d::DCEGMDistribution{T}) where {T}
     print(io, "DCEGMDistribution{$T}: ", d.n_periods, " periods, ",
           length(d.grid), " grid points")
+end
+
+function Base.show(io::IO, f::DCEGMFirm{T}) where {T}
+    print(io, "DCEGMFirm{$T}: α=", f.alpha, ", δ=", f.delta, ", Z=", f.Z, ", L=", f.L)
+end
+
+function Base.show(io::IO, eq::DCEGMEquilibrium{T}) where {T}
+    print(io, "DCEGMEquilibrium{$T}: r=", round(eq.r; digits=5),
+          ", K=", round(eq.K; digits=4),
+          ", converged=", eq.converged)
 end
 
 """
@@ -1042,3 +1386,37 @@ function report(d::DCEGMDistribution{T}) where {T}
         alignment=vcat([:r], fill(:r, n_d + 2)))
     return nothing
 end
+
+"""
+    report(eq::DCEGMEquilibrium)
+
+Print the market-clearing rate, capital, and firm aggregates. `r` and `K`
+are the two numbers the capital-market residual is defined on.
+"""
+report(eq::DCEGMEquilibrium) = report(stdout, eq)
+
+function report(io::IO, eq::DCEGMEquilibrium{T}) where {T}
+    head = Any[
+        "Converged"              eq.converged ? "Yes" : "No";
+        "Bisection iterations"   eq.iterations;
+        "Excess capital supply"  _fmt(eq.excess_demand; digits=8);
+        "Interest rate r"        _fmt(eq.r; digits=6);
+        "Gross return R"         _fmt(one(T) + eq.r; digits=6);
+        "Wage w"                 _fmt(eq.w; digits=6);
+        "Capital K"              _fmt(eq.K; digits=6);
+        "Capital demand K^d"     _fmt(eq.K_demand; digits=6);
+        "Labor L"                _fmt(eq.L; digits=6);
+        "Output Y"               _fmt(eq.Y; digits=6);
+        "K/Y"                    eq.Y > zero(T) ? _fmt(eq.K / eq.Y; digits=6) : "—";
+        "Firm α, δ, Z"           string(_fmt(eq.firm.alpha; digits=4), ", ",
+                                        _fmt(eq.firm.delta; digits=4), ", ",
+                                        _fmt(eq.firm.Z; digits=4))
+    ]
+    _pretty_table(io, head;
+        title="DCEGM General Equilibrium",
+        column_labels=["", "Value"],
+        alignment=[:l, :r])
+    return nothing
+end
+
+export DCEGMFirm, DCEGMEquilibrium, dcegm_steady_state, dcegm_capital_demand, dcegm_firm_wage
