@@ -816,6 +816,8 @@ export combine_blocks, block_jacobian, ssj_jacobian, ssj_irf, ssj_arg_order
 export DCEGMProblem, DCEGMSolution, DCEGMDistribution
 export dcegm_solve, dcegm_policy, dcegm_choice_probabilities, dcegm_threshold
 export dcegm_simulate, dcegm_retirement_model
+export DCEGMFirm, DCEGMEquilibrium, DCEGMTransition
+export dcegm_steady_state, dcegm_capital_demand, dcegm_firm_wage, dcegm_mit
 # Winberry (2018) parametric distribution dynamics
 export ParametricDensity, WinberryFamily
 export fit_parametric_density, parametric_density, parametric_moments
@@ -828,6 +830,7 @@ export blanchard_steady_state, blanchard_solve, blanchard_transition
 export LifeCycleOLG, LifeCycleSteadyState
 export lifecycle_steady_state, lifecycle_policies, lifecycle_distribution
 export lifecycle_income, lifecycle_survival
+export LifeCycleTransition, lifecycle_transition
 
 # Continuous-time heterogeneous agents (Achdou et al. 2022)
 export CTAiyagari, CTPoissonIncome, CTSteadyState, CTTransition

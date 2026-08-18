@@ -1282,8 +1282,120 @@ function _dcegm_measured_labor(dist::DCEGMDistribution{T}, work_d,
 end
 
 # =============================================================================
+# MIT / temporary-equilibrium path (G-11 / #645)
+# =============================================================================
+
+"""
+    DCEGMTransition{T}
+
+Myopic MIT path of a DCEGM economy after a deterministic TFP sequence.
+Discrete-choice kinks make a sequence-space Jacobian ill-defined (the upper
+envelope jumps), so aggregate dynamics are `method = :mit`, not fake-news SSJ.
+
+`K` is predetermined: `r_t` is the firm FOC at `(K_t, Z_t)`, households re-solve
+at `R_t = 1 + r_t`, and `K_{t+1} = A_t`.
+"""
+struct DCEGMTransition{T<:AbstractFloat}
+    Z::Vector{T}
+    K::Vector{T}
+    r::Vector{T}
+    w::Vector{T}
+    A::Vector{T}
+    Y::Vector{T}
+    equilibrium::DCEGMEquilibrium{T}
+    method::Symbol
+    converged::Bool
+end
+
+"""
+    dcegm_mit(eq, Z_path; kwargs...) -> DCEGMTransition
+
+Deterministic TFP path around a [`DCEGMEquilibrium`](@ref). This is
+`method=:mit`: each date households take current `r_t` as given (myopic /
+temporary equilibrium). SSJ / fake-news is not offered — the discrete-choice
+upper envelope is non-differentiable at switching thresholds.
+
+`Z_path` must have at least 2 points. `K_1` is pinned at `eq.K`. Extra keywords
+match [`dcegm_steady_state`](@ref) (`labor`, `reprice_wage`, `work_option`,
+`grid`, `init`, `n_sim`, `hh_max_iter`, `hh_tol`).
+"""
+function dcegm_mit(eq::DCEGMEquilibrium{T}, Z_path::AbstractVector;
+                   source::Union{DCEGMProblem,Function,ModelSpec}=eq.solution.prob,
+                   labor::Symbol=:exogenous,
+                   reprice_wage::Bool=false,
+                   work_option::Symbol=:work,
+                   grid::Union{Nothing,AbstractVector{<:Real}}=nothing,
+                   init::Union{Symbol,AbstractMatrix{<:Real}}=:newborn,
+                   n_sim::Int=40,
+                   hh_max_iter::Int=200,
+                   hh_tol::Real=1e-8) where {T<:AbstractFloat}
+    labor in (:exogenous, :measured) || throw(ArgumentError(
+        "dcegm_mit: `labor` must be :exogenous or :measured, got :$labor"))
+    Z = collect(T, Z_path)
+    length(Z) >= 2 || throw(ArgumentError("dcegm_mit: Z_path needs at least 2 points"))
+    all(>(zero(T)), Z) || throw(ArgumentError("dcegm_mit: every TFP value must be positive"))
+    eq.K > zero(T) || throw(ArgumentError("dcegm_mit: equilibrium capital must be positive"))
+
+    firm = eq.firm
+    L0 = labor === :measured ? eq.L : firm.L
+    L0 = max(L0, T(1e-12))
+    probe = _dcegm_source_problem(source, one(T) + eq.r, eq.w; reprice_wage, work_option)
+    work_d = findfirst(==(work_option), probe.options)
+
+    Np1 = length(Z)
+    K = zeros(T, Np1)
+    r = zeros(T, Np1)
+    w = zeros(T, Np1)
+    A = zeros(T, Np1)
+    Y = zeros(T, Np1)
+    K[1] = eq.K
+
+    for t in 1:Np1
+        Kt = max(K[t], T(1e-10))
+        Zt = Z[t]
+        r[t] = firm.alpha * Zt * (Kt / L0)^(firm.alpha - one(T)) - firm.delta
+        w[t] = (one(T) - firm.alpha) * Zt * (Kt / L0)^firm.alpha
+        snap = _dcegm_household_snapshot(source, one(T) + r[t], w[t];
+                                         reprice_wage, work_option, grid, init,
+                                         n_sim, hh_max_iter, hh_tol, work_d)
+        A[t] = snap.A
+        if labor === :measured
+            L0 = max(_dcegm_measured_labor(snap.dist, work_d,
+                                           snap.prob.income_process.states,
+                                           snap.prob.n_periods == 0), T(1e-12))
+        end
+        Y[t] = Zt * Kt^firm.alpha * L0^(one(T) - firm.alpha)
+        if t < Np1
+            K[t + 1] = max(A[t], T(1e-10))
+        end
+    end
+    ok = all(isfinite, K) && all(isfinite, r) && all(isfinite, A)
+    return DCEGMTransition{T}(Z, K, r, w, A, Y, eq, :mit, ok)
+end
+
+function _dcegm_household_snapshot(source, R, w; reprice_wage, work_option, grid, init,
+                                   n_sim, hh_max_iter, hh_tol, work_d)
+    prob = _dcegm_source_problem(source, R, w; reprice_wage, work_option)
+    sol = dcegm_solve(prob; max_iter=hh_max_iter, tol=hh_tol, verbose=false)
+    FT = typeof(prob.beta)
+    g = grid === nothing ? copy(prob.asset_grid) : collect(FT, grid)
+    init_mat, init_opt = _dcegm_ge_init(prob, g, init, work_d)
+    nper = prob.n_periods > 0 ? sol.n_periods : n_sim
+    dist = dcegm_simulate(sol, g; init=init_mat, init_option=init_opt, n_periods=nper)
+    A = _dcegm_mean_assets(dist, prob.n_periods == 0)
+    return (sol=sol, dist=dist, A=A, prob=prob)
+end
+
+function Base.show(io::IO, tr::DCEGMTransition{T}) where {T}
+    print(io, "DCEGMTransition{$T}: ", length(tr.Z), " periods, method=:", tr.method,
+          ", K: ", round(tr.K[1]; digits=4), " → ", round(tr.K[end]; digits=4),
+          ", converged=", tr.converged)
+end
+
+# =============================================================================
 # Display
 # =============================================================================
+
 
 function Base.show(io::IO, p::DCEGMProblem{T}) where {T}
     horizon = p.n_periods > 0 ? "T=$(p.n_periods)" : "infinite horizon"
@@ -1419,4 +1531,5 @@ function report(io::IO, eq::DCEGMEquilibrium{T}) where {T}
     return nothing
 end
 
-export DCEGMFirm, DCEGMEquilibrium, dcegm_steady_state, dcegm_capital_demand, dcegm_firm_wage
+export DCEGMFirm, DCEGMEquilibrium, DCEGMTransition
+export dcegm_steady_state, dcegm_capital_demand, dcegm_firm_wage, dcegm_mit

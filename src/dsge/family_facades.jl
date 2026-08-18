@@ -101,46 +101,94 @@ function simulate(m::CTTwoAsset{T}, T_periods::Int;
     return hcat(tr.K, tr.r_a, tr.r_b, tr.w, tr.B, tr.Z)
 end
 
+"""
+    irf(eq::DCEGMEquilibrium, horizon; shock_size=0.01, persist=0, kwargs...)
+
+MIT impulse response of a DCEGM stationary GE (`method=:mit`). `K` is
+predetermined on impact. Extra keywords go to [`dcegm_mit`](@ref).
+"""
+function irf(eq::DCEGMEquilibrium{T}, horizon::Int;
+             shock_size::Real=T(0.01), persist::Real=zero(T),
+             kwargs...) where {T<:AbstractFloat}
+    Zbar = eq.firm.Z
+    tr = dcegm_mit(eq, _ct_z_path(Zbar, horizon, shock_size, persist); kwargs...)
+    vals = hcat(tr.K .- eq.K, tr.r .- eq.r, tr.w .- eq.w, tr.Y .- eq.Y, tr.Z .- Zbar)
+    return _path_to_irf(vals, ("K", "r", "w", "Y", "Z"), "Z")
+end
+
+fevd(eq::DCEGMEquilibrium, horizon::Int; kwargs...) =
+    _fevd_from_irf(irf(eq, horizon; kwargs...))
+
+function simulate(eq::DCEGMEquilibrium{T}, T_periods::Int;
+                  shock_size::Real=zero(T), persist::Real=zero(T),
+                  kwargs...) where {T<:AbstractFloat}
+    tr = dcegm_mit(eq, _ct_z_path(eq.firm.Z, T_periods, shock_size, persist); kwargs...)
+    return hcat(tr.K, tr.r, tr.w, tr.Y, tr.Z)
+end
+
 function irf(::DCEGMSolution, ::Int; kwargs...)
     throw(ArgumentError(
-        "irf(::DCEGMSolution) is not implemented yet (needs G-11 DCEGM aggregate dynamics, #645)"))
+        "irf(::DCEGMSolution) needs a DCEGMEquilibrium; use irf(dcegm_steady_state(prob, firm), H) " *
+        "or irf(to_spec(prob), H; firm=...) (method=:mit, #645)"))
 end
 function fevd(::DCEGMSolution, ::Int; kwargs...)
     throw(ArgumentError(
-        "fevd(::DCEGMSolution) is not implemented yet (needs G-11 DCEGM aggregate dynamics, #645)"))
+        "fevd(::DCEGMSolution) needs a DCEGMEquilibrium; use fevd(dcegm_steady_state(prob, firm), H)"))
 end
 function simulate(::DCEGMSolution, ::Int; kwargs...)
     throw(ArgumentError(
-        "simulate(::DCEGMSolution) is not implemented yet (needs G-11 DCEGM aggregate dynamics, #645)"))
+        "simulate(::DCEGMSolution) needs a DCEGMEquilibrium; use simulate(dcegm_steady_state(prob, firm), T)"))
 end
 
-function irf(::LifeCycleSteadyState, ::Int; kwargs...)
-    throw(ArgumentError(
-        "irf(::LifeCycleSteadyState) is not implemented yet (needs G-12 life-cycle transition, #646)"))
+function irf(ss::LifeCycleSteadyState{T}, horizon::Int;
+             shock_size::Real=T(0.01), persist::Real=zero(T),
+             kwargs...) where {T<:AbstractFloat}
+    m = ss.spec
+    tr = lifecycle_transition(m, _ct_z_path(m.Z, max(horizon, 3), shock_size, persist);
+                              ss=ss, k0=ss.K, kwargs...)
+    n = min(horizon, length(tr.K))
+    vals = hcat(tr.K[1:n] .- ss.K, tr.r[1:n] .- ss.r, tr.w[1:n] .- ss.w,
+                tr.Y[1:n] .- ss.Y, tr.Z[1:n] .- m.Z)
+    return _path_to_irf(vals, ("K", "r", "w", "Y", "Z"), "Z")
 end
-function fevd(::LifeCycleSteadyState, ::Int; kwargs...)
-    throw(ArgumentError(
-        "fevd(::LifeCycleSteadyState) is not implemented yet (needs G-12 life-cycle transition, #646)"))
-end
-function simulate(::LifeCycleSteadyState, ::Int; kwargs...)
-    throw(ArgumentError(
-        "simulate(::LifeCycleSteadyState) is not implemented yet (needs G-12 life-cycle transition, #646)"))
+
+fevd(ss::LifeCycleSteadyState, horizon::Int; kwargs...) =
+    _fevd_from_irf(irf(ss, horizon; kwargs...))
+
+function simulate(ss::LifeCycleSteadyState{T}, T_periods::Int;
+                  shock_size::Real=zero(T), persist::Real=zero(T),
+                  kwargs...) where {T<:AbstractFloat}
+    m = ss.spec
+    tr = lifecycle_transition(m, _ct_z_path(m.Z, max(T_periods, 3), shock_size, persist);
+                              ss=ss, k0=ss.K, kwargs...)
+    n = min(T_periods, length(tr.K))
+    return hcat(tr.K[1:n], tr.r[1:n], tr.w[1:n], tr.Y[1:n], tr.Z[1:n])
 end
 
 """
     irf(spec::ModelSpec, horizon; kwargs...)
 
 Kind-dispatching façade. Blanchard / RA residuals go through `solve` then the
-linear IRF. Continuous-time households wrap the MIT path. DCEGM and life-cycle
-throw until G-11 / G-12.
+linear IRF. Continuous-time households wrap the MIT path. DCEGM uses
+`dcegm_mit` (`method=:mit`); life-cycle uses `lifecycle_transition`.
 """
 function irf(spec::ModelSpec, horizon::Int; kwargs...)
     if has_kind(spec, DCEGMSystem)
-        throw(ArgumentError(
-            "irf for DCEGMSystem is not implemented yet (needs G-11 DCEGM aggregate dynamics, #645)"))
+        eq = get(kwargs, :ss, nothing)
+        if eq === nothing
+            firm = get(kwargs, :firm, DCEGMFirm())
+            eq = dcegm_steady_state(spec, firm)
+        end
+        kw = Dict{Symbol,Any}(kwargs)
+        delete!(kw, :ss); delete!(kw, :firm)
+        return irf(eq, horizon; kw...)
     elseif has_kind(spec, LifeCycleSystem)
-        throw(ArgumentError(
-            "irf for LifeCycleSystem is not implemented yet (needs G-12 life-cycle transition, #646)"))
+        m = only(agents_of(spec, LifeCycleSystem)).model
+        ss = get(kwargs, :ss, nothing)
+        ss === nothing && (ss = lifecycle_steady_state(m))
+        kw = Dict{Symbol,Any}(kwargs)
+        delete!(kw, :ss)
+        return irf(ss, horizon; kw...)
     elseif has_kind(spec, ContinuousHouseholdSystem)
         return irf(only(agents_of(spec, ContinuousHouseholdSystem)).model, horizon; kwargs...)
     else
@@ -149,12 +197,8 @@ function irf(spec::ModelSpec, horizon::Int; kwargs...)
 end
 
 function fevd(spec::ModelSpec, horizon::Int; kwargs...)
-    if has_kind(spec, DCEGMSystem)
-        throw(ArgumentError(
-            "fevd for DCEGMSystem is not implemented yet (needs G-11 DCEGM aggregate dynamics, #645)"))
-    elseif has_kind(spec, LifeCycleSystem)
-        throw(ArgumentError(
-            "fevd for LifeCycleSystem is not implemented yet (needs G-12 life-cycle transition, #646)"))
+    if has_kind(spec, DCEGMSystem) || has_kind(spec, LifeCycleSystem)
+        return _fevd_from_irf(irf(spec, horizon; kwargs...))
     elseif has_kind(spec, ContinuousHouseholdSystem)
         return fevd(only(agents_of(spec, ContinuousHouseholdSystem)).model, horizon; kwargs...)
     else
@@ -164,11 +208,21 @@ end
 
 function simulate(spec::ModelSpec, T_periods::Int; kwargs...)
     if has_kind(spec, DCEGMSystem)
-        throw(ArgumentError(
-            "simulate for DCEGMSystem is not implemented yet (needs G-11 DCEGM aggregate dynamics, #645)"))
+        eq = get(kwargs, :ss, nothing)
+        if eq === nothing
+            firm = get(kwargs, :firm, DCEGMFirm())
+            eq = dcegm_steady_state(spec, firm)
+        end
+        kw = Dict{Symbol,Any}(kwargs)
+        delete!(kw, :ss); delete!(kw, :firm)
+        return simulate(eq, T_periods; kw...)
     elseif has_kind(spec, LifeCycleSystem)
-        throw(ArgumentError(
-            "simulate for LifeCycleSystem is not implemented yet (needs G-12 life-cycle transition, #646)"))
+        m = only(agents_of(spec, LifeCycleSystem)).model
+        ss = get(kwargs, :ss, nothing)
+        ss === nothing && (ss = lifecycle_steady_state(m))
+        kw = Dict{Symbol,Any}(kwargs)
+        delete!(kw, :ss)
+        return simulate(ss, T_periods; kw...)
     elseif has_kind(spec, ContinuousHouseholdSystem)
         return simulate(only(agents_of(spec, ContinuousHouseholdSystem)).model, T_periods; kwargs...)
     else

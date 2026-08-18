@@ -123,3 +123,33 @@ end
     @test_throws ArgumentError dcegm_steady_state(prob, firm; reprice_wage=true,
                                                   work_option=:farm)
 end
+
+@testset "G-11: DCEGM MIT dynamics (#645)" begin
+    firm = DCEGMFirm(; alpha=0.36, delta=0.08, Z=1.0, L=1.0)
+    prob = dcegm_retirement_model(; n_periods=6, n_a=30, a_max=40.0, beta=0.96,
+                                    wage=20.0, pension=2.0, disutility=0.5)
+    eq = dcegm_steady_state(prob, firm; r_bounds=(0.06, 0.14), tol=1e-3, max_iter=30)
+    @test eq.converged
+
+    Z0 = fill(firm.Z, 6)
+    tr0 = dcegm_mit(eq, Z0)
+    @test tr0 isa DCEGMTransition
+    @test tr0.method === :mit
+    @test tr0.converged
+    @test tr0.K[1] ≈ eq.K atol=1e-12
+    @test maximum(abs.(tr0.K .- eq.K)) < 5e-2
+    @test all(isfinite, tr0.r) && all(isfinite, tr0.A)
+
+    Z = [firm.Z * (1 + 0.03 * 0.6^(n - 1)) for n in 1:8]
+    tr = dcegm_mit(eq, Z)
+    @test tr.K[1] ≈ eq.K atol=1e-12
+    @test all(isfinite, tr.K) && all(isfinite, tr.r)
+    @test tr.r[1] != eq.r                         # TFP moves MPK on impact
+    resp = irf(eq, 8; shock_size=0.03, persist=0.6)
+    @test resp isa ImpulseResponse
+    @test resp.variables == ["K", "r", "w", "Y", "Z"]
+    @test all(isfinite, resp.values)
+    @test resp.values[1, 1, 1] ≈ 0 atol=1e-10     # K predetermined
+    @test maximum(abs, resp.values[:, 2, 1]) > 0  # r IRF finite and nonzero
+    @test_throws ArgumentError dcegm_mit(eq, [firm.Z])
+end

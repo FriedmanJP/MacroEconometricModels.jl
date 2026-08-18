@@ -152,6 +152,6 @@ end
     @test size(path) == (20, 5)
     @test all(isfinite, path)
 
-    @test_throws ArgumentError irf(to_spec(dcegm_retirement_model(; n_a=20, n_periods=4)), 8)
-    @test_throws ArgumentError irf(to_spec(LifeCycleOLG(; J=20, J_retire=16, n_a=40)), 8)
+    pe = dcegm_solve(dcegm_retirement_model(; n_a=20, n_periods=4))
+    @test_throws ArgumentError irf(pe, 8)
 end
