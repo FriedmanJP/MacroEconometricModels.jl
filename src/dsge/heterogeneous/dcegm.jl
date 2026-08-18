@@ -846,6 +846,66 @@ function _young_push!(col::AbstractVector{T}, g::Vector{T}, x::T, mass::T) where
     return col
 end
 
+"""Young transition on flattened `(m, j, d)` for an infinite-horizon DCEGM policy."""
+function _dcegm_transition(sol::DCEGMSolution{T}, grid::AbstractVector{<:Real}) where {T<:AbstractFloat}
+    prob = sol.prob
+    g = collect(T, grid)
+    n_m = length(g)
+    n_d = length(prob.options)
+    n_e = length(prob.income_process.states)
+    N = n_m * n_e * n_d
+    Pi = prob.income_process.transition
+    idx(i, j, d) = i + (j - 1) * n_m + (d - 1) * n_m * n_e
+    rows = Int[]; cols = Int[]; vals = T[]
+    buf = zeros(T, n_m)
+    for d0 in 1:n_d, j0 in 1:n_e, i0 in 1:n_m
+        col = idx(i0, j0, d0)
+        m = g[i0]
+        p = dcegm_choice_probabilities(sol, 1, d0, j0, m)
+        for d in 1:n_d
+            w = p[d]
+            w <= T(1e-16) && continue
+            cval, _ = dcegm_policy(sol, 1, d, j0, m)
+            a = max(m - cval, prob.credit_limit)
+            for jp in 1:n_e
+                wj = w * Pi[j0, jp]
+                wj <= T(1e-16) && continue
+                mp = prob.R * a + T(prob.income(d, jp))
+                fill!(buf, zero(T))
+                _young_push!(buf, g, mp, wj)
+                @inbounds for i in 1:n_m
+                    buf[i] <= T(1e-16) && continue
+                    push!(rows, idx(i, jp, d))
+                    push!(cols, col)
+                    push!(vals, buf[i])
+                end
+            end
+        end
+    end
+    return sparse(rows, cols, vals, N, N)
+end
+
+function _dcegm_stationary_assets(sol::DCEGMSolution{T}, grid::AbstractVector{<:Real};
+                                  tol_dist::Real=1e-9, max_iter::Int=10_000) where {T<:AbstractFloat}
+    g = collect(T, grid)
+    Λ = _dcegm_transition(sol, g)
+    distv, ok = _stationary_dist_young(Λ; max_iter=max_iter, tol=T(tol_dist))
+    ok || @warn "dcegm_steady_state: distribution iteration did not reach " *
+                "‖Δ‖∞ < $tol_dist; increase the iteration cap."
+    n_m = length(g)
+    n_d = length(sol.prob.options)
+    n_e = length(sol.prob.income_process.states)
+    A = zero(T)
+    @inbounds for od in 1:n_d, j in 1:n_e, i in 1:n_m
+        mass = distv[i + (j - 1) * n_m + (od - 1) * n_m * n_e]
+        mass <= zero(T) && continue
+        cval, _ = dcegm_policy(sol, 1, od, j, g[i])
+        a = max(g[i] - cval, sol.prob.credit_limit)
+        A += mass * a
+    end
+    return A, ok
+end
+
 # =============================================================================
 # Canonical example — Iskhakov et al. (2017) retirement model
 # =============================================================================
@@ -1147,9 +1207,14 @@ function dcegm_steady_state(source::Union{DCEGMProblem,Function,ModelSpec},
         sol = dcegm_solve(prob; max_iter=hh_max_iter, tol=hh_tol, verbose=false)
         g = grid === nothing ? copy(prob.asset_grid) : collect(FT, grid)
         init_mat, init_opt = _dcegm_ge_init(prob, g, init, work_d)
-        nper = prob.n_periods > 0 ? sol.n_periods : n_sim
-        dist = dcegm_simulate(sol, g; init=init_mat, init_option=init_opt, n_periods=nper)
-        A = _dcegm_mean_assets(dist, prob.n_periods == 0)
+        if prob.n_periods == 0
+            A, _ = _dcegm_stationary_assets(sol, g)
+            dist = dcegm_simulate(sol, g; init=init_mat, init_option=init_opt, n_periods=2)
+        else
+            nper = sol.n_periods
+            dist = dcegm_simulate(sol, g; init=init_mat, init_option=init_opt, n_periods=nper)
+            A = _dcegm_mean_assets(dist, false)
+        end
         ell = labor === :measured ?
             _dcegm_measured_labor(dist, work_d, prob.income_process.states, prob.n_periods == 0) :
             firmT.L

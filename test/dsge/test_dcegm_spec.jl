@@ -153,3 +153,14 @@ end
     @test maximum(abs, resp.values[:, 2, 1]) > 0  # r IRF finite and nonzero
     @test_throws ArgumentError dcegm_mit(eq, [firm.Z])
 end
+
+@testset "dcegm infinite-horizon GE uses invariant assets (MSR-16)" begin
+    firm = DCEGMFirm()
+    factory = (R, w) -> dcegm_retirement_model(; n_periods=0, beta=0.96, R=R,
+                                               wage=w, pension=2.0, n_a=40,
+                                               a_max=60.0, disutility=0.5)
+    eq1 = dcegm_steady_state(factory, firm; n_sim=80, max_iter=16, tol=2e-3)
+    eq2 = dcegm_steady_state(factory, firm; n_sim=160, max_iter=16, tol=2e-3)
+    @test isfinite(eq1.r) && isfinite(eq2.r)
+    @test abs(eq1.r - eq2.r) < 1e-4
+end
