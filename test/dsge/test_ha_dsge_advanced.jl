@@ -1569,3 +1569,19 @@ end # @testset "HA-DSGE Types"
         @test occursin("at grid nodes", s)
     end
 end
+
+if !(FAST || NUMERICAL)
+    @testset "Two-asset compute_steady_state clears both markets (MSR-14)" begin
+        spec = MacroEconometricModels._two_asset_hank_example(;
+            n_liquid=8, n_illiquid=6, n_e=2, B_supply=2.0)
+        ss = compute_steady_state(spec; max_iter=60, tol=1e-4, grid_check=:none)
+        # measured on 2026-08-19 default closer; bound = 5× headroom after normalize
+        @test isfinite(ss.aggregates[:resid_liquid])
+        @test isfinite(ss.aggregates[:resid_illiquid])
+        @test abs(ss.aggregates[:resid_liquid]) /
+              max(abs(ss.aggregates[:B_supply]), 1e-8) < 0.25
+        @test abs(ss.aggregates[:resid_illiquid]) /
+              max(abs(ss.aggregates[:K]), 1e-8) < 0.25
+        @test ss.prices[:r_a] > ss.prices[:r_b]
+    end
+end
