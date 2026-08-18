@@ -198,6 +198,57 @@ function _empty_residual_bayes_msg(spec::ModelSpec)
            "life-cycle shooting do not define a state-space likelihood. See #649."
 end
 
+"""
+    _require_estimable_spec(fn, spec)
+
+Family guard for ModelSpec estimation entry points. Empty-residual families
+(DCEGM / life-cycle / CT) and Firm/Intermediary systems have no RA Kalman /
+GMM likelihood. HouseholdSystem is allowed only on `estimate_dsge_bayes`.
+"""
+function _require_estimable_spec(fn::Symbol, spec::ModelSpec)
+    if has_kind(spec, FirmSystem)
+        throw(ArgumentError(
+            "$fn has no estimation support for agent kind FirmSystem. " *
+            "Build the aggregate spec without the agent payload, or use " *
+            "khan_thomas_* for calibration."))
+    end
+    if has_kind(spec, IntermediarySystem)
+        throw(ArgumentError(
+            "$fn has no estimation support for agent kind IntermediarySystem. " *
+            "Build the aggregate spec without the agent payload, or use " *
+            "intermediary_* for calibration."))
+    end
+    if has_kind(spec, DCEGMSystem) || has_kind(spec, LifeCycleSystem) ||
+       has_kind(spec, ContinuousHouseholdSystem) ||
+       (spec.n_endog == 0 && !has_kind(spec, HouseholdSystem))
+        if fn === :estimate_dsge_bayes
+            throw(ArgumentError(_empty_residual_bayes_msg(spec)))
+        end
+        families = String[]
+        has_kind(spec, DCEGMSystem) && push!(families, "DCEGM")
+        has_kind(spec, LifeCycleSystem) && push!(families, "life-cycle OLG")
+        has_kind(spec, ContinuousHouseholdSystem) && push!(families, "continuous-time HA")
+        fam = isempty(families) ? "empty-residual (n_endog == 0)" : join(families, "/")
+        throw(ArgumentError(
+            "$fn has no residual / state-space likelihood for $fam models " *
+            "(n_endog=$(spec.n_endog)). See #649."))
+    end
+    if has_kind(spec, HouseholdSystem) && fn !== :estimate_dsge_bayes
+        throw(ArgumentError(
+            "HA $fn is out of scope (#649); use estimate_dsge_bayes " *
+            "for HouseholdSystem specs."))
+    end
+    return nothing
+end
+
+"""Resolve omitted Bayes draw counts: RA (10000, 5000, 5000) vs HA (5000, 1000, 500)."""
+function _resolve_bayes_defaults(is_ha::Bool, n_draws, burnin, n_smc)
+    d = n_draws === nothing ? (is_ha ? 5000 : 10000) : Int(n_draws)
+    b = burnin === nothing ? (is_ha ? 1000 : 5000) : Int(burnin)
+    s = n_smc === nothing ? (is_ha ? 500 : 5000) : Int(n_smc)
+    return (n_draws=d, burnin=b, n_smc=s)
+end
+
 # =============================================================================
 # Main public API
 # =============================================================================
@@ -226,11 +277,15 @@ SMC², or Random-Walk Metropolis-Hastings (RWMH).
   pass `method=:smc` explicitly to run HA SMC. `:smc2` is not implemented for HA.
 - `observables::Vector{Symbol}=Symbol[]` — which endogenous variables are observed
   (default: all `spec.endog`)
-- `n_smc::Int=5000` — number of SMC particles (for `:smc` and `:smc2`)
+- `n_smc` — SMC particles (for `:smc` and `:smc2`). Default `5000` for
+  representative-agent specs and `500` for `HouseholdSystem` (HA SMC is a
+  full HA solve per particle).
 - `n_particles::Int=500` — number of PF particles (for `:smc2` only)
 - `n_mh_steps::Int=1` — MH mutation steps per SMC stage
-- `n_draws::Int=10000` — total draws for `:mh` (including burnin)
-- `burnin::Int=5000` — burn-in draws discarded from `:mh` output; the posterior uses `n_draws - burnin`
+- `n_draws` — total draws for `:mh` (including burnin). Default `10000` for
+  representative-agent specs and `5000` for `HouseholdSystem`.
+- `burnin` — burn-in draws discarded from `:mh` output; the posterior uses
+  `n_draws - burnin`. Default `5000` (RA) / `1000` (HA).
 - `keep_burnin::Bool=false` — if true, retain the full `:mh` chain (e.g. for trace plots)
 - `ess_target::Float64=0.5` — target ESS fraction for adaptive tempering
 - `measurement_error::Union{Nothing,Symbol,Vector{<:Real}}=nothing` — measurement error SDs;
@@ -291,11 +346,11 @@ function estimate_dsge_bayes(spec::ModelSpec{T}, data::AbstractMatrix,
                               priors::Dict{Symbol,<:Distribution},
                               method::Union{Symbol,Nothing}=nothing,
                               observables::Vector{Symbol}=Symbol[],
-                              n_smc::Int=5000,
+                              n_smc::Union{Nothing,Int}=nothing,
                               n_particles::Int=500,
                               n_mh_steps::Int=1,
-                              n_draws::Int=10000,
-                              burnin::Int=5000,
+                              n_draws::Union{Nothing,Int}=nothing,
+                              burnin::Union{Nothing,Int}=nothing,
                               keep_burnin::Bool=false,
                               ess_target::Float64=0.5,
                               measurement_error::Union{Nothing,Symbol,Vector{<:Real}}=nothing,
@@ -313,24 +368,48 @@ function estimate_dsge_bayes(spec::ModelSpec{T}, data::AbstractMatrix,
                               transform::Bool=true,
                               rng::AbstractRNG=Random.default_rng(),
                               kwargs...) where {T<:AbstractFloat}
-    # Empty-residual families (DCEGM / life-cycle / CT) have no gensys state
-    # space; falling through to the RA Kalman path is a silent wrong likelihood.
-    if has_kind(spec, DCEGMSystem) || has_kind(spec, LifeCycleSystem) ||
-       has_kind(spec, ContinuousHouseholdSystem) ||
-       (spec.n_endog == 0 && !has_kind(spec, HouseholdSystem))
-        throw(ArgumentError(_empty_residual_bayes_msg(spec)))
-    end
+    # Empty-residual / non-RA families have no gensys state space; falling
+    # through to the RA Kalman path is a silent wrong likelihood (#649 / MSR-07).
+    _require_estimable_spec(:estimate_dsge_bayes, spec)
 
     if has_kind(spec, HouseholdSystem)
         # `method === nothing` is the omitted-keyword case: keep historical HA
         # RWMH. An explicit `method=:smc` requests HA SMC (#649).
         ha_method_est = method === nothing ? :mh : method
+        defs = _resolve_bayes_defaults(true, n_draws, burnin, n_smc)
+        prefilter === :none || throw(ArgumentError(
+            "estimate_dsge_bayes: `prefilter` is not supported for HA specs " *
+            "(HA likelihood is built on the reduced SS; filter the data first)."))
+        observation_trends === nothing || throw(ArgumentError(
+            "estimate_dsge_bayes: `observation_trends` is not supported for HA specs."))
+        keep_burnin && throw(ArgumentError(
+            "estimate_dsge_bayes: `keep_burnin` is not supported for HA specs."))
+        solver === :gensys || throw(ArgumentError(
+            "estimate_dsge_bayes: `solver` is not supported for HA specs."))
+        isempty(solver_kwargs) || throw(ArgumentError(
+            "estimate_dsge_bayes: `solver_kwargs` is not supported for HA specs."))
+        likelihood === :auto || throw(ArgumentError(
+            "estimate_dsge_bayes: `likelihood` is not supported for HA specs."))
+        delayed_acceptance && throw(ArgumentError(
+            "estimate_dsge_bayes: `delayed_acceptance` is not supported for HA specs."))
+        proposal === :adaptive || throw(ArgumentError(
+            "estimate_dsge_bayes: `proposal` is not supported for HA specs."))
+        transform || throw(ArgumentError(
+            "estimate_dsge_bayes: `transform=false` is not supported for HA specs."))
         return _ha_estimate_dsge_bayes(spec, data, theta0;
             priors=priors, method=ha_method_est, observables=observables,
-            n_draws=n_draws, burnin=burnin, n_smc=n_smc, n_mh_steps=n_mh_steps,
+            n_draws=defs.n_draws, burnin=defs.burnin, n_smc=defs.n_smc,
+            n_mh_steps=n_mh_steps,
             ess_target=ess_target, measurement_error=measurement_error,
             max_stages=max_stages, min_dphi=min_dphi, rng=rng, kwargs...)
     end
+
+    isempty(kwargs) || throw(ArgumentError(
+        "estimate_dsge_bayes: unsupported keyword(s) for RA specs: $(join(keys(kwargs), ", "))"))
+    defs = _resolve_bayes_defaults(false, n_draws, burnin, n_smc)
+    n_draws = defs.n_draws
+    burnin = defs.burnin
+    n_smc = defs.n_smc
 
     method = method === nothing ? :smc : method
 
@@ -560,6 +639,7 @@ function posterior_mode(spec::ModelSpec{T}, data::AbstractMatrix,
                         optimizer=Optim.LBFGS(),
                         f_reltol::Real=1e-8,
                         max_iter::Int=500) where {T<:AbstractFloat}
+    _require_estimable_spec(:posterior_mode, spec)
     prior = _build_bayes_prior(priors)
     param_names = prior.param_names
     d = length(param_names)
@@ -1481,6 +1561,7 @@ function _predictive_stats_loop(spec::ModelSpec{T}, thetas::AbstractMatrix{T},
     n = size(thetas, 1)
     stat_names = String[]
     rows = Vector{Vector{Float64}}()
+    last_err = nothing
     for s in 1:n
         theta = Vector{T}(thetas[s, :])
         try
@@ -1503,12 +1584,18 @@ function _predictive_stats_loop(spec::ModelSpec{T}, thetas::AbstractMatrix{T},
             end
             length(vals) == length(stat_names) || continue
             push!(rows, vals)
-        catch
+        catch e
+            (e isa LinearAlgebra.SingularException || e isa DomainError ||
+             e isa ArgumentError || e isa ErrorException) || rethrow(e)
+            last_err = e
             continue
         end
     end
 
     n_eff = length(rows)
+    n_eff == 0 && throw(ArgumentError(
+        "0/$(n) prior-predictive draws succeeded; last error: " *
+        (last_err === nothing ? "(none captured)" : sprint(showerror, last_err))))
     stats_mat = n_eff == 0 ? zeros(T, 0, length(stat_names)) :
                 Matrix{T}(reduce(vcat, (permutedims(r) for r in rows)))
     return stat_names, stats_mat, n_eff
@@ -1546,6 +1633,7 @@ function prior_predictive(spec::ModelSpec{T},
                           solver::Symbol=:gensys,
                           solver_kwargs::NamedTuple=NamedTuple(),
                           rng::AbstractRNG=Random.default_rng()) where {T<:AbstractFloat}
+    _require_estimable_spec(:prior_predictive, spec)
     prior = _build_bayes_prior(priors)
     param_names = prior.param_names
     d = length(param_names)

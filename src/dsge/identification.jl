@@ -154,6 +154,7 @@ function identification_diagnostics(spec::ModelSpec{T}, param_names::Vector{Symb
                                     tol_rel::Real=sqrt(eps(Float64)),
                                     solver::Symbol=:gensys,
                                     solver_kwargs::NamedTuple=NamedTuple()) where {T<:AbstractFloat}
+    _require_estimable_spec(:identification_diagnostics, spec)
     d = length(param_names)
     d > 0 || throw(ArgumentError("param_names must be non-empty"))
     theta_v = theta === nothing ? T[spec.param_values[p] for p in param_names] : T.(theta)

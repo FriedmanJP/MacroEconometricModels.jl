@@ -63,6 +63,7 @@ function estimate_dsge(spec::ModelSpec{T}, data::AbstractMatrix,
                         solve_order::Int=1,
                         auto_lags::Vector{Int}=[1],
                         observable_indices::Union{Nothing,Vector{Int}}=nothing) where {T<:AbstractFloat}
+    _require_estimable_spec(:estimate_dsge, spec)
     data_T = Matrix{T}(data)
 
     # `weighting=nothing` means "method default": :two_step for the sample-moment

@@ -4968,3 +4968,99 @@ end
     @test r_smc.phi_schedule[end] ≈ 1.0
     @test r_smc.param_names == [:rho_z]
 end
+
+@testset "estimator family guards (MSR-07)" begin
+    ha = load_ha_example(:krusell_smith)
+    dc = to_spec(dcegm_retirement_model(; n_periods=4, n_a=20))
+    firm = to_spec(khan_thomas_example(; n_k=8, n_eps=2))
+    Y = randn(20, 1)
+
+    err = try
+        estimate_dsge(ha, Y, [:alpha]; method=:euler_gmm)
+        error("no throw")
+    catch e
+        e
+    end
+    @test err isa ArgumentError
+    @test occursin("estimate_dsge_bayes", sprint(showerror, err))
+
+    err = try
+        prior_predictive(ha, Dict(:alpha => Normal(0.3, 0.01)); n_draws=2)
+        error("no throw")
+    catch e
+        e
+    end
+    @test err isa ArgumentError
+    @test occursin("prior_predictive", sprint(showerror, err)) ||
+          occursin("estimate_dsge_bayes", sprint(showerror, err))
+
+    err = try
+        posterior_mode(dc, Y, Dict(:beta => 0.96); priors=Dict(:beta => Beta(2, 2)))
+        error("no throw")
+    catch e
+        e
+    end
+    @test err isa ArgumentError
+    @test occursin("DCEGM", sprint(showerror, err)) ||
+          occursin("empty-residual", sprint(showerror, err))
+
+    err = try
+        identification_diagnostics(firm, [:alpha])
+        error("no throw")
+    catch e
+        e
+    end
+    @test err isa ArgumentError
+    @test occursin("FirmSystem", sprint(showerror, err)) ||
+          occursin("khan_thomas", sprint(showerror, err))
+
+    # All draws skipped → error, not an empty result.
+    ra = @dsge begin
+        parameters: ρ = 0.5
+        endogenous: y
+        exogenous: ε
+        linear: true
+        y[t] = ρ * y[t-1] + ε[t]
+    end
+    err = try
+        prior_predictive(ra, Dict(:ρ => Normal(0.5, 0.1)); n_draws=2,
+                         T_periods=8, solver=:not_a_solver)
+        error("no throw")
+    catch e
+        e
+    end
+    @test err isa ArgumentError
+    @test occursin("0/2", sprint(showerror, err))
+end
+
+@testset "_resolve_bayes_defaults (MSR-06)" begin
+    r = MacroEconometricModels._resolve_bayes_defaults(false, nothing, nothing, nothing)
+    @test r == (n_draws=10000, burnin=5000, n_smc=5000)
+    h = MacroEconometricModels._resolve_bayes_defaults(true, nothing, nothing, nothing)
+    @test h == (n_draws=5000, burnin=1000, n_smc=500)
+    @test MacroEconometricModels._resolve_bayes_defaults(true, 12, nothing, 7) ==
+          (n_draws=12, burnin=1000, n_smc=7)
+    @test MacroEconometricModels._resolve_bayes_defaults(false, 3, 1, nothing) ==
+          (n_draws=3, burnin=1, n_smc=5000)
+end
+
+@testset "estimate_dsge_bayes kwarg validation (MSR-06)" begin
+    ra = @dsge begin
+        parameters: ρ = 0.5
+        endogenous: y
+        exogenous: ε
+        linear: true
+        y[t] = ρ * y[t-1] + ε[t]
+    end
+    ha = load_ha_example(:krusell_smith)
+    Y = randn(12, 1)
+    priors_ra = Dict(:ρ => Uniform(0.1, 0.9))
+    θ0 = Dict(:ρ => 0.5)
+    @test_throws ArgumentError estimate_dsge_bayes(ra, Y, θ0;
+        priors=priors_ra, n_drawss=10)
+    @test_throws ArgumentError estimate_dsge_bayes(ra, Y, θ0;
+        priors=priors_ra, ha_method=:reiter)
+    @test_throws ArgumentError estimate_dsge_bayes(ha, Y, Dict(:alpha => 0.36);
+        priors=Dict(:alpha => Normal(0.36, 0.01)), prefilter=:hp,
+        n_draws=2, burnin=0)
+end
