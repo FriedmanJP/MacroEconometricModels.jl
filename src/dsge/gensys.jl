@@ -175,6 +175,10 @@ Solve a DSGE model.
 - `:perfect_foresight` -- deterministic Newton solver
 """
 function solve(spec::ModelSpec{T}; method::Symbol=:gensys, kwargs...) where {T<:AbstractFloat}
+    if has_kind(spec, HouseholdSystem)
+        ha_method = method === :gensys ? :ssj : method
+        return _ha_solve(spec; method=ha_method, kwargs...)
+    end
     if isempty(spec.steady_state)
         if spec.linear
             # Linear models: steady state is all zeros (variables are deviations)

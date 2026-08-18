@@ -446,7 +446,7 @@ end
 
 function _plot_lc_distribution(ss::LifeCycleSteadyState{T}; title::String) where {T}
     J = ss.spec.J
-    a_grid = ss.spec.grid.grids[1]
+    a_grid = _hh(ss.spec).grid.grids[1]
     lo = zeros(Float64, J); hi = zeros(Float64, J); med = zeros(Float64, J)
     for j in 1:J
         marg = vec(sum(@view(ss.dist[:, :, j]); dims=2))
@@ -481,7 +481,7 @@ end
 
 function _plot_lc_policy(ss::LifeCycleSteadyState{T}; title::String) where {T}
     J = ss.spec.J
-    a_grid = ss.spec.grid.grids[1]
+    a_grid = _hh(ss.spec).grid.grids[1]
     n_a = length(a_grid)
     step = max(1, div(n_a, 150))
     idxs = collect(1:step:n_a)
@@ -490,7 +490,7 @@ function _plot_lc_policy(ss::LifeCycleSteadyState{T}; title::String) where {T}
     # Young, just-before-retirement, and old — where the policy differs most.
     sel = unique(clamp.([max(1, div(J, 6)), max(1, ss.spec.J_retire - 1),
                          max(1, J - 1)], 1, J))
-    e_mid = cld(length(ss.spec.income.states), 2)
+    e_mid = cld(length(_hh(ss.spec).income.states), 2)
     labels = ["Age $(j)" for j in sel]
     rows = Vector{Pair{String,String}}[]
     for i in idxs

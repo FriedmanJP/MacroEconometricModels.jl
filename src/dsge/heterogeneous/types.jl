@@ -585,32 +585,19 @@ struct IndividualProblem{T<:AbstractFloat, FU, FUP, FUPI, FB, FA}
 end
 
 # =============================================================================
-# HADSGESpec — HA-DSGE specification
+# HouseholdSystem — one heterogeneous household population
 # =============================================================================
 
 """
-    HADSGESpec{T}
+    HouseholdSystem{T} <: AbstractAgentSystem{T}
 
-Heterogeneous Agent DSGE model specification. Wraps a representative-agent
-`DSGESpec{T}` with individual-level components.
+Consumption-savings (optionally labor) population. The `ModelSpec.agents`
+NamedTuple key is the population name; this type is the problem kind.
 
-Fields:
-- `aggregate_spec::DSGESpec{T}` — aggregate block (equations, params, steady state)
-- `individual::IndividualProblem{T}` — household problem
-- `income::IncomeProcess{T}` — idiosyncratic income process
-- `grid::HAGrid{T}` — individual state space grid
-- `aggregation::Vector{Pair{Symbol,Function}}` — maps distribution → aggregate variables
-- `het_params::Dict{Symbol,T}` — heterogeneous-agent-specific parameters
-- `n_assets::Int` — number of asset dimensions
-- `n_income::Int` — number of income states
-- `model::Symbol` — model family for clearing/dynamics dispatch (`:aiyagari` default,
-  `:huggett` for zero-net-supply pure exchange)
-- `distribution::Symbol` — distribution representation: `:young` (default, the
-  Young 2010 histogram) or `:winberry` (Winberry 2018 parametric moment family;
-  see [`WinberryFamily`](@ref))
+Fields match the payload previously stored on `HADSGESpec` (minus the
+aggregate residual block, which lives on `ModelSpec`).
 """
-struct HADSGESpec{T<:AbstractFloat}
-    aggregate_spec::DSGESpec{T}
+struct HouseholdSystem{T<:AbstractFloat} <: AbstractAgentSystem{T}
     individual::IndividualProblem{T}
     income::IncomeProcess{T}
     grid::HAGrid{T}
@@ -621,43 +608,114 @@ struct HADSGESpec{T<:AbstractFloat}
     model::Symbol
     distribution::Symbol
 
-    function HADSGESpec{T}(aggregate_spec, individual, income, grid,
-                            aggregation, het_params;
-                            model::Symbol=:aiyagari,
-                            distribution::Symbol=:young) where {T<:AbstractFloat}
+    function HouseholdSystem{T}(individual, income, grid, aggregation, het_params;
+                                 model::Symbol=:aiyagari,
+                                 distribution::Symbol=:young) where {T<:AbstractFloat}
         distribution in (:young, :winberry) || throw(ArgumentError(
-            "HADSGESpec: distribution must be :young or :winberry, got :$distribution."))
+            "HouseholdSystem: distribution must be :young or :winberry, got :$distribution."))
         n_assets = grid.n_dims
         n_income = grid.n_income
-        @assert individual.n_asset_dims == n_assets "Individual problem asset dims must match grid"
-        @assert length(income.states) == n_income "Income states must match grid n_income"
-
-        # The borrowing constraint must coincide with the grid floor. The Young
-        # (2010) transition clamps the savings policy into the grid, so a
-        # constraint BELOW the floor silently creates assets out of nothing every
-        # period — the model would violate its own budget constraint. A
-        # constraint above the floor is merely wasteful (unreachable nodes).
+        individual.n_asset_dims == n_assets || throw(ArgumentError(
+            "HouseholdSystem: individual problem asset dims must match grid"))
+        length(income.states) == n_income || throw(ArgumentError(
+            "HouseholdSystem: income states must match grid n_income"))
         for d in 1:grid.n_dims
             lo = grid.bounds[d][1]
             bc = individual.borrowing_constraint[d]
             scale = max(one(T), abs(lo))
             if bc < lo - sqrt(eps(T)) * scale
                 throw(ArgumentError(
-                    "HADSGESpec: borrowing_constraint[$d] = $bc lies below the grid " *
+                    "HouseholdSystem: borrowing_constraint[$d] = $bc lies below the grid " *
                     "lower bound $lo on dimension :$(grid.labels[d]). The Young (2010) " *
                     "transition clamps the savings policy up to the grid floor, so such " *
                     "a model silently creates assets out of nothing every period. Set " *
                     "the grid lower bound equal to the borrowing constraint."))
             elseif bc > lo + sqrt(eps(T)) * scale
-                @warn "HADSGESpec: borrowing_constraint[$d] = $bc lies above the grid " *
+                @warn "HouseholdSystem: borrowing_constraint[$d] = $bc lies above the grid " *
                       "lower bound $lo on dimension :$(grid.labels[d]); grid nodes below " *
                       "the constraint are unreachable (wasted resolution)." maxlog = 1
             end
         end
-
-        new{T}(aggregate_spec, individual, income, grid,
-               aggregation, het_params, n_assets, n_income, model, distribution)
+        new{T}(individual, income, grid, aggregation, het_params,
+               n_assets, n_income, model, distribution)
     end
+end
+
+grid(s::HouseholdSystem) = s.grid
+idiosyncratic(s::HouseholdSystem) = s.income
+aggregation(s::HouseholdSystem) = s.aggregation
+distribution(s::HouseholdSystem) = s.distribution
+het_params(s::HouseholdSystem) = s.het_params
+ssj_inputs(::HouseholdSystem) = [:r, :w]
+ssj_outputs(s::HouseholdSystem) = first.(s.aggregation)
+
+"""The unique `HouseholdSystem` on a HA `ModelSpec`."""
+function _hh(spec::ModelSpec)
+    has_kind(spec, HouseholdSystem) || throw(ArgumentError(
+        "ModelSpec has no HouseholdSystem (agents = $(keys(spec.agents)))"))
+    hs = collect(agents_of(spec, HouseholdSystem))
+    length(hs) == 1 || throw(ArgumentError(
+        "expected exactly one HouseholdSystem, got $(length(hs))"))
+    return only(hs)
+end
+
+function _replace_household(spec::ModelSpec{T};
+                            individual=_hh(spec).individual,
+                            income=_hh(spec).income,
+                            grid=_hh(spec).grid,
+                            aggregation=_hh(spec).aggregation,
+                            het_params=_hh(spec).het_params,
+                            model=_hh(spec).model,
+                            distribution=_hh(spec).distribution) where {T<:AbstractFloat}
+    hh = HouseholdSystem{T}(individual, income, grid, aggregation, het_params;
+                            model=model, distribution=distribution)
+    key = only(keys(spec.agents))
+    _copy_model_spec(spec; agents=NamedTuple{(key,)}((hh,)))
+end
+
+"""Wrap a household population and aggregate residual block as `ModelSpec`."""
+function _wrap_ha_spec(hh::HouseholdSystem{T};
+                       endog::Vector{Symbol}=[:Y, :K, :r, :w, :Z],
+                       exog::Vector{Symbol}=[:eps_Z],
+                       params::Vector{Symbol}=Symbol[],
+                       param_values::Dict{Symbol,T}=Dict{Symbol,T}(),
+                       equations=nothing,
+                       residual_fns=nothing,
+                       n_expect::Int=0,
+                       forward_indices::Vector{Int}=Int[],
+                       agent_name::Symbol=:household) where {T<:AbstractFloat}
+    if equations === nothing || residual_fns === nothing
+        equations, residual_fns = _default_cd_agg_equations(T)
+    end
+    ModelSpec{T}(
+        endog, exog, params, param_values,
+        equations, residual_fns,
+        n_expect, forward_indices, T[], nothing;
+        agents=NamedTuple{(agent_name,)}((hh,)),
+    )
+end
+
+function _default_cd_agg_equations(::Type{T}) where {T<:AbstractFloat}
+    fns = Function[
+        (yt, yl, yle, e, θ) -> yt[1] - yt[5] * yl[2]^get(θ, :alpha, T(0.36)),
+        (yt, yl, yle, e, θ) -> yt[3] - get(θ, :alpha, T(0.36)) * yt[5] *
+            yl[2]^(get(θ, :alpha, T(0.36)) - one(T)) + get(θ, :delta, T(0.025)),
+        (yt, yl, yle, e, θ) -> yt[4] - (one(T) - get(θ, :alpha, T(0.36))) * yt[5] *
+            yl[2]^get(θ, :alpha, T(0.36)),
+        (yt, yl, yle, e, θ) -> yt[2] - yl[2],
+        (yt, yl, yle, e, θ) -> yt[5] - get(θ, :rho_z, T(0.95)) * yl[5] -
+            get(θ, :sigma_z, T(0.007)) * (isempty(e) ? zero(T) : e[1]),
+    ]
+    exprs = Expr[
+        :(Y[t] - Z[t] * K[t-1]^alpha),
+        :(r[t] - alpha * Z[t] * K[t-1]^(alpha - 1) + delta),
+        :(w[t] - (1 - alpha) * Z[t] * K[t-1]^alpha),
+        :(K[t] - K[t-1]),
+        :(Z[t] - rho_z * Z[t-1] - sigma_z * eps_Z[t]),
+    ]
+    names = (:Y, :r, :w, :K, :Z)
+    eqs = NamedEquation[NamedEquation(names[i], names[i], exprs[i], fns[i]) for i in 1:5]
+    return eqs, fns
 end
 
 # =============================================================================
@@ -818,7 +876,7 @@ struct HADSGESolution{T<:AbstractFloat}
     steady_state::HASteadyState{T}
     linear_solution::DSGESolution{T}
     method::Symbol
-    spec::HADSGESpec{T}
+    spec::ModelSpec{T}
     reduction_basis::Matrix{T}
     n_full_states::Int
     n_reduced::Int
@@ -856,7 +914,7 @@ struct KrusellSmithSolution{T<:AbstractFloat}
     steady_state::HASteadyState{T}
     plm_coefficients::Dict{Symbol,Vector{T}}
     r_squared::Dict{Symbol,T}
-    spec::HADSGESpec{T}
+    spec::ModelSpec{T}
     converged::Bool
     iterations::Int
 end

@@ -48,7 +48,11 @@ function compute_steady_state(spec::ModelSpec{T};
         ss_fn::Union{Nothing,Function}=nothing,
         constraints::Vector=DSGEConstraint[],
         solver::Union{Nothing,Symbol}=nothing,
-        algorithm=nothing) where {T<:AbstractFloat}
+        algorithm=nothing,
+        kwargs...) where {T<:AbstractFloat}
+    if has_kind(spec, HouseholdSystem)
+        return _ha_compute_steady_state(spec; kwargs...)
+    end
 
     n = spec.n_endog
 

@@ -611,17 +611,6 @@ function Base.show(io::IO, spec::ModelSpec{T}) where {T}
     end
 end
 
-function Base.show(io::IO, spec::DSGESpec{T}) where {T}
-    backend = get_display_backend()
-    if backend == :latex
-        _show_dsge_latex(io, spec)
-    elseif backend == :html
-        _show_dsge_html(io, spec)
-    else
-        _show_dsge_text(io, spec)
-    end
-end
-
 # =============================================================================
 # Text renderer
 # =============================================================================

@@ -33,7 +33,7 @@ using Random
 function _ha_obs_names(sol::HADSGESolution)
     n_out = size(sol.C_obs, 1)
     if sol.method === :ssj
-        name = sol.spec.model === :huggett ? "r" : "K"
+        name = _hh(sol.spec).model === :huggett ? "r" : "K"
         return n_out == 1 ? [name] : ["obs_$i" for i in 1:n_out]
     else
         endog = sol.linear_solution.spec.endog

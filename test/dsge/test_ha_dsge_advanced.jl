@@ -6,6 +6,7 @@
 
 using Test
 using MacroEconometricModels
+const _hh = MacroEconometricModels._hh
 using LinearAlgebra
 using SparseArrays
 using Random
@@ -49,16 +50,16 @@ const _HUG_SS_M2 = compute_steady_state(_HUG_SPEC_M2; max_iter=FAST ? 80 : 200, 
         param_names = [:alpha]
         theta = [0.30]
         new_spec = MacroEconometricModels._update_ha_params(spec, param_names, theta)
-        @test new_spec isa HADSGESpec{Float64}
-        @test new_spec.aggregate_spec.param_values[:alpha] ≈ 0.30
-        @test new_spec.het_params[:alpha] ≈ 0.36  # het_params has its own copy
-        @test new_spec.individual.beta ≈ 0.99  # unchanged
+        @test new_spec isa ModelSpec
+        @test new_spec.param_values[:alpha] ≈ 0.30
+        @test _hh(new_spec).het_params[:alpha] ≈ 0.36  # het_params has its own copy
+        @test _hh(new_spec).individual.beta ≈ 0.99  # unchanged
 
         # Update beta
         param_names2 = [:beta]
         theta2 = [0.98]
         new_spec2 = MacroEconometricModels._update_ha_params(spec, param_names2, theta2)
-        @test new_spec2.individual.beta ≈ 0.98
+        @test _hh(new_spec2).individual.beta ≈ 0.98
     end
 
     # Full KS SS + SSJ + MH is the HA-DSGE ceiling. Windows smoke (FAST) and the
@@ -254,7 +255,7 @@ end
 
 @testset "Clearing closure (Aiyagari regression)" begin
     spec = load_ha_example(:krusell_smith)
-    @test spec.model == :aiyagari                       # new field defaults correctly
+    @test _hh(spec).model == :aiyagari                       # new field defaults correctly
 
     if !(FAST || NUMERICAL)
     ss = compute_steady_state(spec; r_bounds=(-0.02, 0.04), max_iter=100, tol=1e-3)
@@ -262,7 +263,7 @@ end
     @test isfinite(ss.prices[:r])
     @test haskey(ss.prices, :w)                         # Cobb-Douglas wage still produced
     @test abs(ss.excess_demand) < 5e-3                  # market essentially clears
-    @test -0.01 < ss.prices[:r] < 1 / spec.individual.beta - 1  # r* below time-pref rate
+    @test -0.01 < ss.prices[:r] < 1 / _hh(spec).individual.beta - 1  # r* below time-pref rate
     end
 end
 
@@ -287,7 +288,7 @@ end
             spec = MacroEconometricModels._huggett_example(; credit_limit=cl, a_max=a_max, n_a=200)
             ss = compute_steady_state(spec; max_iter=200, tol=5e-4)
         end
-        @test spec.model == :huggett
+        @test _hh(spec).model == :huggett
         @test ss.converged
         @test abs(ss.excess_demand) < 3e-3                 # bond market clears (∫a' ≈ 0)
         r_ann = annualize(ss.prices[:r])
@@ -295,7 +296,7 @@ end
         # Reproduces Huggett (1993) Table 1 within method/grid tolerance (~1.5pp)
         @test isapprox(r_ann, r_target; atol=0.015)
         # Precautionary saving keeps r* below the time-preference rate (1/β − 1)
-        @test r_ann < annualize((1 - spec.individual.beta) / spec.individual.beta)
+        @test r_ann < annualize((1 - _hh(spec).individual.beta) / _hh(spec).individual.beta)
     end
 
     # Huggett's comparative static: r* rises as the credit limit loosens.
@@ -303,9 +304,9 @@ end
 
     # load_ha_example(:huggett) is the default (credit limit −2) economy.
     spec0 = load_ha_example(:huggett)
-    @test spec0.model == :huggett
-    @test spec0.individual.borrowing_constraint[1] == -2.0
-    @test spec0.income.states == [1.0, 0.1]
+    @test _hh(spec0).model == :huggett
+    @test _hh(spec0).individual.borrowing_constraint[1] == -2.0
+    @test _hh(spec0).income.states == [1.0, 0.1]
 end
 
 @testset "Huggett SSJ" begin
@@ -371,7 +372,7 @@ end
     end
 
     # --- Huggett: rate accuracy test is intentionally unsupported (errors clearly) ---
-    # Reuse the shared cl=−2 SS — no extra solve (the guard fires on spec.model).
+    # Reuse the shared cl=−2 SS — no extra solve (the guard fires on _hh(spec).model).
     ks_h = KrusellSmithSolution{Float64}(
         _HUG_SS_M2, Dict(:r => [_HUG_SS_M2.prices[:r], 0.0]), Dict(:r => 1.0),
         _HUG_SPEC_M2, false, 0)
@@ -501,7 +502,7 @@ end
     Jb = block_jacobian(hh, Th)
     @test Set(keys(Jb)) == Set([(:A, :r), (:A, :w), (:C, :r), (:C, :w)])
     @test Jb[(:A, :r)] == MacroEconometricModels._ssj_jacobian(
-        ss, spec.individual, spec.grid, spec.income, :r, :A; T_horizon=Th, dx=hh.dx)
+        ss, _hh(spec).individual, _hh(spec).grid, _hh(spec).income, :r, :A; T_horizon=Th, dx=hh.dx)
 
     # Nonlinear path evaluation reproduces the steady state on a flat input path.
     flat = Dict(:r => fill(ss.prices[:r], Th), :w => fill(ss.prices[:w], Th))
@@ -526,8 +527,8 @@ end
     @test any(abs(J_fine[t, s]) > 1e-8 for t in 1:Th for s in (t+1):Th)   # anticipation
 
     # ── Three-block DAG: firm (lagged capital) → household → asset market ────
-    alpha = spec.aggregate_spec.param_values[:alpha]
-    delta = spec.aggregate_spec.param_values[:delta]
+    alpha = spec.param_values[:alpha]
+    delta = spec.param_values[:delta]
     K_ss = ss.aggregates[:K]
     firm = SimpleBlock(
         x -> [alpha * x[2] * x[1]^(alpha - 1) - delta,
@@ -597,10 +598,10 @@ end
                        T_horizon=Th, target_tol=1e-2)
 
     # The two-block DAG reproduces the hard-wired GE close of `_ssj_solve` exactly.
-    J_ref_U = MacroEconometricModels._ssj_jacobian(ss, spec.individual, spec.grid,
-                                                   spec.income, :r, :A; T_horizon=Th)
-    J_ref_Z = MacroEconometricModels._ssj_jacobian(ss, spec.individual, spec.grid,
-                                                   spec.income, :w, :A; T_horizon=Th)
+    J_ref_U = MacroEconometricModels._ssj_jacobian(ss, _hh(spec).individual, _hh(spec).grid,
+                                                   _hh(spec).income, :r, :A; T_horizon=Th)
+    J_ref_Z = MacroEconometricModels._ssj_jacobian(ss, _hh(spec).individual, _hh(spec).grid,
+                                                   _hh(spec).income, :w, :A; T_horizon=Th)
     @test gej.H_U == J_ref_U
     @test gej.H_Z == J_ref_Z
     dw = [0.9^(t - 1) for t in 1:Th]
@@ -1045,11 +1046,15 @@ function _win_small_spec(; distribution::Symbol=:young, n_a::Int=80, n_e::Int=3)
     ip = IndividualProblem{Float64}(u, up, upi, 0.99,
                                     MacroEconometricModels._ks_budget,
                                     [0.0], nothing, 1)
-    agg = MacroEconometricModels._minimal_agg_spec(; alpha=0.36, delta=0.025)
     aggregation = Pair{Symbol,Function}[:K => MacroEconometricModels._agg_var1]
-    het = Dict{Symbol,Float64}(:alpha => 0.36, :delta => 0.025, :Z => 1.0, :L => 1.0)
-    return HADSGESpec{Float64}(agg, ip, income, grid, aggregation, het;
-                                distribution=distribution)
+    het = Dict{Symbol,Float64}(:alpha => 0.36, :delta => 0.025, :Z => 1.0, :L => 1.0,
+                               :rho_z => 0.95, :sigma_z => 0.007)
+    hh = HouseholdSystem{Float64}(ip, income, grid, aggregation, het;
+                                  distribution=distribution)
+    return MacroEconometricModels._wrap_ha_spec(hh;
+        params=[:alpha, :delta, :rho_z, :sigma_z],
+        param_values=Dict{Symbol,Float64}(:alpha => 0.36, :delta => 0.025,
+                                          :rho_z => 0.95, :sigma_z => 0.007))
 end
 
 @testset "Winberry parametric density (#356/T257)" begin
@@ -1222,10 +1227,10 @@ end
         nodes, wts = MacroEconometricModels._composite_quadrature([0.0, 4.0], 5)
         @test_throws ArgumentError MacroEconometricModels._fit_parametric_density(
             [1.0, 1.0], nodes, wts; lambda_init=[0.0, 0.0, 0.0])
-        @test_throws ArgumentError HADSGESpec{Float64}(
-            _win_small_spec().aggregate_spec, _win_small_spec().individual,
-            _win_small_spec().income, _win_small_spec().grid,
-            _win_small_spec().aggregation, _win_small_spec().het_params;
+        ws = _win_small_spec()
+        @test_throws ArgumentError HouseholdSystem{Float64}(
+            _hh(ws).individual, _hh(ws).income, _hh(ws).grid,
+            _hh(ws).aggregation, _hh(ws).het_params;
             distribution=:histogram)
     end
 
@@ -1315,8 +1320,8 @@ end
     @testset "steady state with distribution=:winberry" begin
         spec_y = _win_small_spec()
         spec_w = _win_small_spec(; distribution=:winberry)
-        @test spec_y.distribution === :young
-        @test spec_w.distribution === :winberry
+        @test _hh(spec_y).distribution === :young
+        @test _hh(spec_w).distribution === :winberry
         ss_y = compute_steady_state(spec_y; grid_check=:none)
         ss_w = compute_steady_state(spec_w; grid_check=:none)
 
@@ -1362,12 +1367,12 @@ end
         sol_y = solve(spec_y; method=:reiter, ss=ss_y)
         sol_w = solve(spec_w; method=:reiter, ss=ss_w)
 
-        n_e = spec_w.grid.n_income
+        n_e = _hh(spec_w).grid.n_income
         # The distribution state is n_income × n_moments — far fewer than the
         # histogram's n_a × n_income, and fewer than the SVD reduction as well.
         @test sol_w.n_reduced == n_e * 3
         @test sol_w.n_reduced < sol_y.n_reduced
-        @test sol_w.n_reduced < spec_w.grid.total_individual_states
+        @test sol_w.n_reduced < _hh(spec_w).grid.total_individual_states
         @test sol_w.method === :reiter
         @test is_determined(sol_w)
         @test maximum(abs, eigvals(sol_w.linear_solution.G1)) < 1.0
@@ -1375,11 +1380,11 @@ end
 
         # The reduction basis maps moment deviations back to the full histogram, so
         # distribution IRFs work unchanged — and every column is mass-preserving.
-        @test size(sol_w.reduction_basis) == (spec_w.grid.total_individual_states,
+        @test size(sol_w.reduction_basis) == (_hh(spec_w).grid.total_individual_states,
                                               sol_w.n_reduced)
         @test maximum(abs, vec(sum(sol_w.reduction_basis; dims=1))) < 1e-8
         di = distribution_irf(sol_w, 6)
-        @test size(di) == (spec_w.grid.n_points[1], n_e, 6)
+        @test size(di) == (_hh(spec_w).grid.n_points[1], n_e, 6)
         @test maximum(abs, di) > 0
         @test abs(sum(di[:, :, 1])) < 1e-8
 
@@ -1413,16 +1418,16 @@ end
 
     @testset "Huggett closure and the built-in examples" begin
         spec = load_ha_example(:huggett; distribution=:winberry)
-        @test spec.distribution === :winberry
-        @test load_ha_example(:huggett).distribution === :young
-        @test load_ha_example(:krusell_smith; distribution=:winberry).distribution === :winberry
+        @test _hh(spec).distribution === :winberry
+        @test _hh(load_ha_example(:huggett)).distribution === :young
+        @test _hh(load_ha_example(:krusell_smith; distribution=:winberry)).distribution === :winberry
         ss = compute_steady_state(spec; grid_check=:none)
         @test ss.parametric isa WinberryFamily{Float64}
         # Huggett is zero net supply: the parametric family's own aggregate must
         # also be (nearly) zero, without ever having been told so.
         @test abs(ss.aggregates[:K_winberry]) < 1e-2
         sol = solve(spec; method=:reiter, ss=ss)
-        @test sol.n_reduced == spec.grid.n_income * 3
+        @test sol.n_reduced == _hh(spec).grid.n_income * 3
         @test is_determined(sol)
         @test maximum(abs, eigvals(sol.linear_solution.G1)) < 1.0
     end
@@ -1541,9 +1546,8 @@ end # @testset "HA-DSGE Types"
         raw = rouwenhorst(0.966, 0.5, 7)
         e = exp.(raw.states); e ./= dot(raw.stationary_dist, e)
         old_inc = IncomeProcess{Float64}(raw.transition, e, raw.stationary_dist, :income)
-        old = HADSGESpec{Float64}(base.aggregate_spec, base.individual, old_inc,
-                                  HAGrid(; assets=(0.0, 200.0, 200), income_states=7),
-                                  base.aggregation, base.het_params; model=base.model)
+        old = MacroEconometricModels._replace_household(base; income=old_inc,
+            grid=HAGrid(; assets=(0.0, 200.0, 200), income_states=7))
         ss_bad = compute_steady_state(old; grid_check=:none)
         ss_good = compute_steady_state(base)
 

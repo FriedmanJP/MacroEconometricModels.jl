@@ -6,6 +6,7 @@
 
 using Test
 using MacroEconometricModels
+const _hh = MacroEconometricModels._hh
 using LinearAlgebra
 using SparseArrays
 using Random
@@ -481,7 +482,7 @@ end
     na = 30
     grid = HAGrid(assets=(0.0, 80.0, na), income_states=3)
     inc = MacroEconometricModels._unit_mean_lognormal_income(0.9, 0.2, 3)
-    ip = spec.individual
+    ip = _hh(spec).individual
     prices = Dict(:r => 0.01, :w => 1.0)
     V, c_v, a_v, conv = MacroEconometricModels._vfi_solve(ip, grid, inc, prices;
                                                           max_iter=60,
@@ -501,7 +502,7 @@ end
     na = 30
     grid = HAGrid(assets=(0.0, 80.0, na), income_states=3)
     inc = MacroEconometricModels._unit_mean_lognormal_income(0.9, 0.2, 3)
-    ip = spec.individual
+    ip = _hh(spec).individual
     prices = Dict(:r => 0.01, :w => 1.0)
     V, c_v, a_v, conv = MacroEconometricModels._vfi_solve(ip, grid, inc, prices;
                                                           max_iter=60,
@@ -547,7 +548,7 @@ end
     @test haskey(ss.prices, :r_b)
     @test haskey(ss.aggregates, :A)
     @test haskey(ss.aggregates, :B)
-    @test size(ss.distribution) == (spec.grid.n_points[1], spec.grid.n_points[2], 2)
+    @test size(ss.distribution) == (_hh(spec).grid.n_points[1], _hh(spec).grid.n_points[2], 2)
     @test all(ss.policies[:consumption] .> 0)
     @test isfinite(ss.euler_error)
     @test ss.aggregates[:B_supply] == 2.0
@@ -566,8 +567,8 @@ end
     sol_s = solve(spec; method=:ssj, ss=ss, T_horizon=8, n_reduced=3)
     @test sol_s.method === :ssj
     @test isfinite(sol_s.explained_variance)
-    J = MacroEconometricModels._ssj_jacobian(ss, spec.individual, spec.grid,
-                                             spec.income, :r_b, :B; T_horizon=6)
+    J = MacroEconometricModels._ssj_jacobian(ss, _hh(spec).individual, _hh(spec).grid,
+                                             _hh(spec).income, :r_b, :B; T_horizon=6)
     @test size(J) == (6, 6)
     @test all(isfinite, J)
     sol_r = solve(spec; method=:reiter, ss=ss, n_reduced=3)
@@ -834,11 +835,11 @@ end
     spec = load_ha_example(:one_asset_hank)
     for prices in (Dict(:r => 0.01, :w => 1.0, :div => 0.30),   # was |Δc| ≈ 2.6e-1
                    Dict(:r => 0.01, :w => 1.0))                 # plain-budget control
-        c, a, _ = MacroEconometricModels._egm_solve(spec.individual, spec.grid,
-                                                    spec.income, prices;
+        c, a, _ = MacroEconometricModels._egm_solve(_hh(spec).individual, _hh(spec).grid,
+                                                    _hh(spec).income, prices;
                                                     max_iter=2000, tol=1e-12)
-        c1, a1 = MacroEconometricModels._egm_backward_step(spec.individual, spec.grid,
-                                                           spec.income, prices, c)
+        c1, a1 = MacroEconometricModels._egm_backward_step(_hh(spec).individual, _hh(spec).grid,
+                                                           _hh(spec).income, prices, c)
         @test maximum(abs, c1 .- c) < 1e-9
         @test maximum(abs, a1 .- a) < 1e-9
     end
@@ -1212,7 +1213,7 @@ end
 @testset "distribution IRF reduction basis (#233)" begin
     spec = load_ha_example(:krusell_smith)
     ss = compute_steady_state(spec; r_bounds=(-0.02, 0.04), max_iter=60, tol=1e-3)
-    n_a = spec.grid.n_points[1]; n_e = spec.grid.n_income
+    n_a = _hh(spec).grid.n_points[1]; n_e = _hh(spec).grid.n_income
     reiter_sol = solve(spec; method=:reiter, ss=ss, n_reduced=12)
 
     # (c) reduction_basis is the REAL U_k: N × n_red with orthonormal columns
@@ -1247,54 +1248,53 @@ end
 @testset "Built-in examples" begin
     @testset "Krusell-Smith" begin
         spec = load_ha_example(:krusell_smith)
-        @test spec isa HADSGESpec{Float64}
-        @test spec.grid.n_dims == 1
-        @test spec.grid.n_income == 7
-        @test spec.individual.beta ≈ 0.99
-        @test length(spec.income.states) == 7
-        @test spec.individual.borrowing_constraint[1] ≈ 0.0
-        @test spec.grid.n_points == [200]
-        @test spec.grid.bounds[1] == (0.0, 1000.0)
-        @test spec.het_params[:alpha] ≈ 0.36
-        @test spec.het_params[:delta] ≈ 0.025
-        @test spec.n_assets == 1
-        @test spec.n_income == 7
+        @test spec isa ModelSpec
+        @test _hh(spec).grid.n_dims == 1
+        @test _hh(spec).grid.n_income == 7
+        @test _hh(spec).individual.beta ≈ 0.99
+        @test length(_hh(spec).income.states) == 7
+        @test _hh(spec).individual.borrowing_constraint[1] ≈ 0.0
+        @test _hh(spec).grid.n_points == [200]
+        @test _hh(spec).grid.bounds[1] == (0.0, 1000.0)
+        @test _hh(spec).het_params[:alpha] ≈ 0.36
+        @test _hh(spec).het_params[:delta] ≈ 0.025
+        @test _hh(spec).n_assets == 1
+        @test _hh(spec).n_income == 7
         # Aggregate spec is a valid DSGESpec
-        @test spec.aggregate_spec isa DSGESpec{Float64}
-        @test :Y in spec.aggregate_spec.endog
-        @test :K in spec.aggregate_spec.endog
+        @test :Y in spec.endog
+        @test :K in spec.endog
     end
 
     @testset "One-asset HANK" begin
         spec = load_ha_example(:one_asset_hank)
-        @test spec isa HADSGESpec{Float64}
-        @test spec.grid.n_dims == 1
-        @test spec.individual.borrowing_constraint[1] ≈ -2.0
-        @test spec.individual.beta ≈ 0.986
-        @test spec.grid.bounds[1][1] ≈ -2.0
-        @test spec.grid.bounds[1][2] ≈ 1000.0
-        @test spec.grid.n_points == [200]
-        @test spec.grid.n_income == 7
-        @test spec.het_params[:sigma_c] ≈ 1.0
-        @test spec.n_assets == 1
+        @test spec isa ModelSpec
+        @test _hh(spec).grid.n_dims == 1
+        @test _hh(spec).individual.borrowing_constraint[1] ≈ -2.0
+        @test _hh(spec).individual.beta ≈ 0.986
+        @test _hh(spec).grid.bounds[1][1] ≈ -2.0
+        @test _hh(spec).grid.bounds[1][2] ≈ 1000.0
+        @test _hh(spec).grid.n_points == [200]
+        @test _hh(spec).grid.n_income == 7
+        @test _hh(spec).het_params[:sigma_c] ≈ 1.0
+        @test _hh(spec).n_assets == 1
     end
 
     @testset "Two-asset HANK" begin
         spec = load_ha_example(:two_asset_hank)
-        @test spec isa HADSGESpec{Float64}
-        @test spec.grid.n_dims == 2
-        @test spec.individual.adjustment_cost !== nothing
-        @test spec.individual.n_asset_dims == 2
-        @test spec.individual.borrowing_constraint[1] ≈ -2.0
-        @test spec.individual.borrowing_constraint[2] ≈ 0.0
-        @test spec.grid.labels == [:liquid, :illiquid]
-        @test spec.grid.n_points == [50, 50]
-        @test spec.grid.bounds[1] == (-2.0, 50.0)
-        @test spec.grid.bounds[2] == (0.0, 100.0)
-        @test spec.n_assets == 2
-        @test spec.n_income == 7
+        @test spec isa ModelSpec
+        @test _hh(spec).grid.n_dims == 2
+        @test _hh(spec).individual.adjustment_cost !== nothing
+        @test _hh(spec).individual.n_asset_dims == 2
+        @test _hh(spec).individual.borrowing_constraint[1] ≈ -2.0
+        @test _hh(spec).individual.borrowing_constraint[2] ≈ 0.0
+        @test _hh(spec).grid.labels == [:liquid, :illiquid]
+        @test _hh(spec).grid.n_points == [50, 50]
+        @test _hh(spec).grid.bounds[1] == (-2.0, 50.0)
+        @test _hh(spec).grid.bounds[2] == (0.0, 100.0)
+        @test _hh(spec).n_assets == 2
+        @test _hh(spec).n_income == 7
         # Adjustment cost should return a positive value for nonzero deposit
-        chi = spec.individual.adjustment_cost(1.0, 10.0)
+        chi = _hh(spec).individual.adjustment_cost(1.0, 10.0)
         @test chi > 0.0
         @test isfinite(chi)
     end
@@ -1308,18 +1308,18 @@ end
         # (the raw log grid gives half the states negative labor income).
         for name in (:krusell_smith, :one_asset_hank, :two_asset_hank, :huggett)
             spec = load_ha_example(name)
-            @test all(spec.income.states .> 0)
+            @test all(_hh(spec).income.states .> 0)
         end
 
         # The three Rouwenhorst examples must have unit-mean income E[e] = 1.
         for name in (:krusell_smith, :one_asset_hank, :two_asset_hank)
             spec = load_ha_example(name)
-            @test dot(spec.income.stationary_dist, spec.income.states) ≈ 1.0 atol=1e-10
+            @test dot(_hh(spec).income.stationary_dist, _hh(spec).income.states) ≈ 1.0 atol=1e-10
         end
 
         # Huggett keeps its bespoke {1.0, 0.1} endowment (mean ≈ 0.8826), NOT normalized.
         spec_h = load_ha_example(:huggett)
-        @test dot(spec_h.income.stationary_dist, spec_h.income.states) ≈ 0.8826 atol=1e-3
+        @test dot(_hh(spec_h).income.stationary_dist, _hh(spec_h).income.states) ≈ 0.8826 atol=1e-3
 
         # rouwenhorst/tauchen direct calls must still return the symmetric log grid.
         inc = rouwenhorst(0.966, 0.5, 7)
@@ -1339,15 +1339,15 @@ end
         # logs, 15× in variance — which pinned 5.6% of KS mass on the grid ceiling.
         for name in (:krusell_smith, :one_asset_hank, :two_asset_hank)
             spec = load_ha_example(name)
-            p = spec.income.stationary_dist
-            z = log.(spec.income.states)
+            p = _hh(spec).income.stationary_dist
+            z = log.(_hh(spec).income.states)
             mu = dot(p, z)
             var_z = dot(p, (z .- mu) .^ 2)
             @test sqrt(var_z) ≈ 0.5 atol=1e-8
             # first autocorrelation of the discretized chain == ρ exactly
-            @test (dot(p .* z, spec.income.transition * z) - mu^2) / var_z ≈ 0.966 atol=1e-10
+            @test (dot(p .* z, _hh(spec).income.transition * z) - mu^2) / var_z ≈ 0.966 atol=1e-10
             # top/bottom ratio = exp(2ψ) with ψ = √6 · 0.5
-            @test maximum(spec.income.states) / minimum(spec.income.states) ≈
+            @test maximum(_hh(spec).income.states) / minimum(_hh(spec).income.states) ≈
                   exp(2 * sqrt(6) * 0.5) rtol=1e-10
         end
     end
@@ -1452,7 +1452,7 @@ end
         # with excess = -13.2 (converged=false) while (-0.01, 0.04) returned the
         # true r = 0.011523. Raising a_max amplified it: the artifact K_s is a_max.
         spec = load_ha_example(:one_asset_hank)
-        beta = spec.individual.beta
+        beta = _hh(spec).individual.beta
         sss = [compute_steady_state(spec; r_bounds=rb)
                for rb in ((-0.01, 0.04), (-0.02, 0.04), (-0.005, 0.05))]
         rs = [ss.prices[:r] for ss in sss]
@@ -1473,7 +1473,7 @@ end
         # stationary histogram. Tested on synthetic policies, so no solver is
         # involved and the identity is checked in isolation.
         base = load_ha_example(:krusell_smith)
-        ev = base.income.states
+        ev = _hh(base).income.states
         for (amax, n, gt) in ((5.0, 60, :geometric), (20.0, 80, :geometric),
                               (200.0, 200, :double_exp), (50.0, 100, :linear))
             g = HAGrid(; assets=(0.0, amax, n), income_states=7, grid_type=gt)
@@ -1481,7 +1481,7 @@ end
             # affine policy with fixed point a*_j = 1.5·a_max·e_j ⇒ states truncate
             # differentially (e spans ≈0.3–3.0)
             apol = [max(0.0, 0.15 * amax * ev[j] + 0.9 * ag[i]) for i in 1:n, j in 1:7]
-            L = MacroEconometricModels._build_transition_matrix(apol, g, base.income)
+            L = MacroEconometricModels._build_transition_matrix(apol, g, _hh(base).income)
             dist, _ = MacroEconometricModels._stationary_dist_young(L; max_iter=100_000,
                                                                     tol=1e-14)
             d = MacroEconometricModels._ha_grid_diagnostics(apol, dist, g)
@@ -1501,9 +1501,8 @@ end
         raw = rouwenhorst(0.966, 0.5, 7)                       # old (buggy) convention
         e = exp.(raw.states); e ./= dot(raw.stationary_dist, e)
         old_inc = IncomeProcess{Float64}(raw.transition, e, raw.stationary_dist, :income)
-        old = HADSGESpec{Float64}(base.aggregate_spec, base.individual, old_inc,
-                                  HAGrid(; assets=(0.0, 200.0, 200), income_states=7),
-                                  base.aggregation, base.het_params; model=base.model)
+        old = MacroEconometricModels._replace_household(base; income=old_inc,
+            grid=HAGrid(; assets=(0.0, 200.0, 200), income_states=7))
         ss_old = compute_steady_state(old; grid_check=:none)
         d = ha_grid_diagnostics(ss_old)
         @test !d.adequate
@@ -1565,22 +1564,22 @@ end
 
     @testset "spec validation: borrowing constraint vs grid floor" begin
         base = load_ha_example(:krusell_smith)
-        ip = base.individual
+        ip = _hh(base).individual
         mk(bc) = IndividualProblem{Float64}(ip.utility, ip.utility_prime,
             ip.utility_prime_inv, ip.beta, ip.budget_fn, [bc], nothing, 1)
         g = HAGrid(; assets=(0.0, 200.0, 50), income_states=7)
         # Below the floor: the Young clamp would create assets out of nothing.
-        @test_throws ArgumentError HADSGESpec{Float64}(base.aggregate_spec, mk(-1.0),
-            base.income, g, base.aggregation, base.het_params)
+        @test_throws ArgumentError HouseholdSystem{Float64}(mk(-1.0),
+            _hh(base).income, g, _hh(base).aggregation, _hh(base).het_params)
         # Above the floor: merely wasteful, so warn.
         logs, _ = Test.collect_test_logs() do
-            HADSGESpec{Float64}(base.aggregate_spec, mk(5.0), base.income, g,
-                                base.aggregation, base.het_params)
+            HouseholdSystem{Float64}(mk(5.0), _hh(base).income, g,
+                                     _hh(base).aggregation, _hh(base).het_params)
         end
         @test any(l -> occursin("unreachable", string(l.message)), logs)
         # All shipped examples satisfy the check.
         for name in (:krusell_smith, :one_asset_hank, :two_asset_hank, :huggett)
-            @test load_ha_example(name) isa HADSGESpec{Float64}
+            @test load_ha_example(name) isa ModelSpec
         end
     end
 
@@ -1621,7 +1620,7 @@ end
     end
 
     @testset "Huggett is refused with an informative message" begin
-        # Build the solution struct directly: the guard fires on `spec.model`, so running
+        # Build the solution struct directly: the guard fires on `_hh(spec).model`, so running
         # the (expensive) Krusell-Smith PLM fixed point just to reach it wastes ~4 minutes.
         ks_h = M.KrusellSmithSolution{Float64}(
             _VFI_HUG_SS, Dict(:K => [0.0, 0.95, 0.0]), Dict(:K => 0.99),
@@ -1750,39 +1749,39 @@ end
     @testset "adapt_ha_grid preserves the grid contract" begin
         spec = _VFI_HUG_SPEC
         ss = _VFI_HUG_SS
-        g_new = adapt_ha_grid(spec.grid, ss.distribution)
+        g_new = adapt_ha_grid(_hh(spec).grid, ss.distribution)
         @test g_new isa MacroEconometricModels.HAGrid{Float64}
-        @test g_new.n_dims == spec.grid.n_dims
-        @test g_new.n_income == spec.grid.n_income
-        @test g_new.n_points == spec.grid.n_points
-        @test g_new.bounds == spec.grid.bounds
-        @test g_new.labels == spec.grid.labels
-        @test g_new.grids[1][1] == spec.grid.grids[1][1]        # borrowing constraint intact
-        @test g_new.grids[1][end] == spec.grid.grids[1][end]
+        @test g_new.n_dims == _hh(spec).grid.n_dims
+        @test g_new.n_income == _hh(spec).grid.n_income
+        @test g_new.n_points == _hh(spec).grid.n_points
+        @test g_new.bounds == _hh(spec).grid.bounds
+        @test g_new.labels == _hh(spec).grid.labels
+        @test g_new.grids[1][1] == _hh(spec).grid.grids[1][1]        # borrowing constraint intact
+        @test g_new.grids[1][end] == _hh(spec).grid.grids[1][end]
         @test all(diff(g_new.grids[1]) .> 0)
-        @test g_new.grids[1] != spec.grid.grids[1]              # nodes actually moved
+        @test g_new.grids[1] != _hh(spec).grid.grids[1]              # nodes actually moved
 
         # curvature=0 reproduces a uniform grid through the wrapper too
-        g_uni = adapt_ha_grid(spec.grid, ss.distribution; curvature=0.0)
-        lo, hi = spec.grid.bounds[1]
-        @test g_uni.grids[1] ≈ collect(range(lo, hi; length=spec.grid.n_points[1])) atol = 1e-10
+        g_uni = adapt_ha_grid(_hh(spec).grid, ss.distribution; curvature=0.0)
+        lo, hi = _hh(spec).grid.bounds[1]
+        @test g_uni.grids[1] ≈ collect(range(lo, hi; length=_hh(spec).grid.n_points[1])) atol = 1e-10
 
         # a coarser grid is allowed
-        g_small = adapt_ha_grid(spec.grid, ss.distribution; n_points=[50])
+        g_small = adapt_ha_grid(_hh(spec).grid, ss.distribution; n_points=[50])
         @test g_small.n_points == [50]
         @test length(g_small.grids[1]) == 50
-        @test g_small.total_individual_states == 50 * spec.grid.n_income
+        @test g_small.total_individual_states == 50 * _hh(spec).grid.n_income
 
-        @test_throws ArgumentError adapt_ha_grid(spec.grid, ss.distribution; n_points=[50, 50])
-        @test_throws ArgumentError adapt_ha_grid(spec.grid, ss.distribution[1:10])
-        @test_throws ArgumentError adapt_ha_grid(spec.grid, zeros(size(ss.distribution)))
+        @test_throws ArgumentError adapt_ha_grid(_hh(spec).grid, ss.distribution; n_points=[50, 50])
+        @test_throws ArgumentError adapt_ha_grid(_hh(spec).grid, ss.distribution[1:10])
+        @test_throws ArgumentError adapt_ha_grid(_hh(spec).grid, zeros(size(ss.distribution)))
 
         # spec method returns a solvable specification
         spec2 = adapt_ha_grid(spec, ss)
-        @test spec2 isa MacroEconometricModels.HADSGESpec{Float64}
-        @test spec2.model == spec.model
-        @test spec2.distribution == spec.distribution
-        @test spec2.grid.grids[1] == g_new.grids[1]
+        @test spec2 isa ModelSpec
+        @test _hh(spec2).model == _hh(spec).model
+        @test _hh(spec2).distribution == _hh(spec).distribution
+        @test _hh(spec2).grid.grids[1] == g_new.grids[1]
         ss2 = compute_steady_state(spec2; max_iter=200, tol=5e-4)
         @test isfinite(ss2.prices[:r])
         @test isapprox(ss2.prices[:r], ss.prices[:r]; atol=2e-3)
@@ -1835,9 +1834,9 @@ end
 
 @testset "Endogenous labor supply" begin
     _ha_ip(base, ls) = IndividualProblem{Float64}(
-        base.individual.utility, base.individual.utility_prime,
-        base.individual.utility_prime_inv, base.individual.beta,
-        base.individual.budget_fn, base.individual.borrowing_constraint,
+        _hh(base).individual.utility, _hh(base).individual.utility_prime,
+        _hh(base).individual.utility_prime_inv, _hh(base).individual.beta,
+        _hh(base).individual.budget_fn, _hh(base).individual.borrowing_constraint,
         nothing, 1; labor=ls)
 
     @testset "LaborSupply construction" begin
@@ -1862,17 +1861,17 @@ end
         # Endogenous labor is one-asset only.
         base = load_ha_example(:krusell_smith)
         @test_throws ArgumentError IndividualProblem{Float64}(
-            base.individual.utility, base.individual.utility_prime,
-            base.individual.utility_prime_inv, base.individual.beta,
-            base.individual.budget_fn, [0.0, 0.0], nothing, 2; labor=LaborSupply())
+            _hh(base).individual.utility, _hh(base).individual.utility_prime,
+            _hh(base).individual.utility_prime_inv, _hh(base).individual.beta,
+            _hh(base).individual.budget_fn, [0.0, 0.0], nothing, 2; labor=LaborSupply())
     end
 
     FAST || @testset "exogenous-labor paths are untouched" begin
         base = load_ha_example(:krusell_smith)
-        @test base.individual.labor === nothing
+        @test _hh(base).individual.labor === nothing
         # `labor_policy` returns ones, so ∫e·n dμ reduces to ∫e dμ.
         ss = compute_steady_state(base)
-        n = labor_policy(base.individual, base.grid, base.income, ss.prices,
+        n = labor_policy(_hh(base).individual, _hh(base).grid, _hh(base).income, ss.prices,
                          ss.policies[:consumption])
         @test all(==(1.0), n)
         @test !haskey(ss.policies, :labor)
@@ -1898,14 +1897,14 @@ end
         for kind in (:ghh, :separable)
             ls = LaborSupply(; kind=kind, psi=1.5, frisch=0.5)
             ip = _ha_ip(base, ls)
-            c, a, conv = MacroEconometricModels._egm_solve(ip, base.grid, base.income,
+            c, a, conv = MacroEconometricModels._egm_solve(ip, _hh(base).grid, _hh(base).income,
                                                             prices; max_iter=3000, tol=1e-12)
             @test conv
-            n = labor_policy(ip, base.grid, base.income, prices, c)
-            ag = base.grid.grids[1]
+            n = labor_policy(ip, _hh(base).grid, _hh(base).income, prices, c)
+            ag = _hh(base).grid.grids[1]
             foc_err = 0.0; budget_err = 0.0
-            for j in eachindex(base.income.states), i in eachindex(ag)
-                we = prices[:w] * base.income.states[j]
+            for j in eachindex(_hh(base).income.states), i in eachindex(ag)
+                we = prices[:w] * _hh(base).income.states[j]
                 rhs = kind === :ghh ? we : we * ip.utility_prime(c[i, j])
                 foc_err = max(foc_err, abs(ls.psi * n[i, j]^(1 / ls.frisch) - rhs))
                 # budget identity: c + a' = (1+r)a + w·e·n
@@ -1919,7 +1918,7 @@ end
             # separable hours must actually vary with assets, or the wealth effect
             # this preference class exists to deliver would be missing.
             spread = maximum(j -> maximum(n[:, j]) - minimum(n[:, j]),
-                             eachindex(base.income.states))
+                             eachindex(_hh(base).income.states))
             kind === :ghh ? (@test spread < 1e-12) : (@test spread > 1e-3)
         end
     end
@@ -1933,7 +1932,7 @@ end
         for (kind, psi) in ((:ghh, 3.0), (:separable, 1.0))
             spec = MacroEconometricModels._endogenous_labor_example(; kind=kind, psi=psi)
             ss = compute_steady_state(spec)
-            al = spec.het_params[:alpha]; de = spec.het_params[:delta]
+            al = _hh(spec).het_params[:alpha]; de = _hh(spec).het_params[:delta]
             k_foc = (al / (ss.prices[:r] + de))^(1 / (1 - al))
             # rtol is set by the bisection's own clearing tolerance, not by the
             # identity: K_d = k·L holds exactly, but the solver stops once
@@ -1946,7 +1945,7 @@ end
             # Both labor aggregates are reported and are distinct concepts.
             @test haskey(ss.policies, :labor)
             @test ss.aggregates[:L] ≈ dot(vec(ss.policies[:labor] .*
-                    reshape(spec.income.states, 1, :)), vec(ss.distribution)) rtol=1e-12
+                    reshape(_hh(spec).income.states, 1, :)), vec(ss.distribution)) rtol=1e-12
             @test ss.aggregates[:N] ≈ dot(vec(ss.policies[:labor]),
                                           vec(ss.distribution)) rtol=1e-12
             @test ss.aggregates[:L] != ss.aggregates[:N]
@@ -1954,7 +1953,7 @@ end
             @test ss.aggregates[:Y] ≈ ss.aggregates[:K]^al *
                                       ss.aggregates[:L]^(1 - al) rtol=1e-6
             # Aiyagari existence still holds at the equilibrium.
-            @test spec.individual.beta * (1 + ss.prices[:r]) < 1
+            @test _hh(spec).individual.beta * (1 + ss.prices[:r]) < 1
         end
     end
 
@@ -1973,7 +1972,7 @@ end
 
         Th = 10
         J = block_jacobian(hh, Th)
-        ls = spec.individual.labor
+        ls = _hh(spec).individual.labor
         dN_dw = ls.frisch * ss.aggregates[:N] / ss.prices[:w]
         @test J[(:N, :w)][1, 1] ≈ dN_dw rtol=1e-4          # correct sign AND magnitude
         @test J[(:N, :w)][1, 1] > 0                        # hours rise with the wage
@@ -1985,11 +1984,11 @@ end
 
     @testset "built-in :endogenous_labor example" begin
         spec = load_ha_example(:endogenous_labor)
-        @test spec isa HADSGESpec{Float64}
-        @test spec.individual.labor isa LaborSupply{Float64}
-        @test spec.individual.labor.kind === :ghh
-        @test spec.grid.bounds[1] == (0.0, 2000.0)
-        @test spec.n_assets == 1
+        @test spec isa ModelSpec
+        @test _hh(spec).individual.labor isa LaborSupply{Float64}
+        @test _hh(spec).individual.labor.kind === :ghh
+        @test _hh(spec).grid.bounds[1] == (0.0, 2000.0)
+        @test _hh(spec).n_assets == 1
         @test_throws ErrorException load_ha_example(:not_a_model)
         # ψ = 3 is calibrated so efficiency units land on the L = 1 normalization
         # the exogenous-labor examples impose, making the two comparable.
@@ -2070,22 +2069,21 @@ end
             Z[t] = rho_z * Z[t-1] + sigma_z * eps_Z[t]
         end
 
-        @test spec isa HADSGESpec{Float64}
-        @test spec.grid.n_dims == 1
-        @test spec.grid.n_points == [100]
-        @test spec.grid.bounds[1] == (0.0, 200.0)
-        @test spec.n_income == 5
-        @test spec.individual.beta ≈ 0.99
-        @test spec.individual.borrowing_constraint[1] ≈ 0.0
-        @test spec.individual.n_asset_dims == 1
-        @test spec.n_assets == 1
-        @test spec.het_params[:alpha] ≈ 0.36
-        @test spec.het_params[:delta] ≈ 0.025
-        @test spec.aggregate_spec isa DSGESpec{Float64}
-        @test :Y in spec.aggregate_spec.endog
-        @test :K in spec.aggregate_spec.endog
-        @test length(spec.income.states) == 5
-        @test size(spec.income.transition) == (5, 5)
+        @test spec isa ModelSpec
+        @test _hh(spec).grid.n_dims == 1
+        @test _hh(spec).grid.n_points == [100]
+        @test _hh(spec).grid.bounds[1] == (0.0, 200.0)
+        @test _hh(spec).n_income == 5
+        @test _hh(spec).individual.beta ≈ 0.99
+        @test _hh(spec).individual.borrowing_constraint[1] ≈ 0.0
+        @test _hh(spec).individual.n_asset_dims == 1
+        @test _hh(spec).n_assets == 1
+        @test _hh(spec).het_params[:alpha] ≈ 0.36
+        @test _hh(spec).het_params[:delta] ≈ 0.025
+        @test :Y in spec.endog
+        @test :K in spec.endog
+        @test length(_hh(spec).income.states) == 5
+        @test size(_hh(spec).income.transition) == (5, 5)
     end
 
     @testset "Tauchen parser" begin
@@ -2106,11 +2104,11 @@ end
             Z[t] = rho_z * Z[t-1] + sigma_z * eps_Z[t]
         end
 
-        @test spec isa HADSGESpec{Float64}
-        @test spec.grid.n_points == [80]
-        @test spec.grid.bounds[1] == (0.0, 150.0)
-        @test spec.n_income == 7
-        @test length(spec.income.states) == 7
+        @test spec isa ModelSpec
+        @test _hh(spec).grid.n_points == [80]
+        @test _hh(spec).grid.bounds[1] == (0.0, 150.0)
+        @test _hh(spec).n_income == 7
+        @test length(_hh(spec).income.states) == 7
     end
 
     @testset "Standard @dsge unaffected" begin
@@ -2139,9 +2137,9 @@ end
             w[t] = (1 - alpha) * Z[t] * K[t-1]^alpha
             Z[t] = rho_z * Z[t-1] + sigma_z * eps_Z[t]
         end
-        @test spec.individual.utility_prime(2.0) ≈ 2.0^(-1.5)
-        @test spec.individual.utility(2.0) ≈ 2.0^(1 - 1.5) / (1 - 1.5)
-        @test spec.model == :aiyagari    # default model field
+        @test _hh(spec).individual.utility_prime(2.0) ≈ 2.0^(-1.5)
+        @test _hh(spec).individual.utility(2.0) ≈ 2.0^(1 - 1.5) / (1 - 1.5)
+        @test _hh(spec).model == :aiyagari    # default model field
 
         # model = huggett routes into the ctor; macro-controlled fields match
         spec_h = @dsge begin
@@ -2156,11 +2154,11 @@ end
             w[t] = (1 - alpha) * Z[t] * K[t-1]^alpha
             Z[t] = rho_z * Z[t-1] + sigma_z * eps_Z[t]
         end
-        @test spec_h.model == :huggett
-        @test spec_h.grid.bounds[1] == (-2.0, 4.0)
-        @test spec_h.individual.borrowing_constraint[1] ≈ -2.0
-        @test spec_h.individual.beta ≈ 0.99322
-        @test spec_h.individual.utility_prime(2.0) ≈ 2.0^(-1.5)
+        @test _hh(spec_h).model == :huggett
+        @test _hh(spec_h).grid.bounds[1] == (-2.0, 4.0)
+        @test _hh(spec_h).individual.borrowing_constraint[1] ≈ -2.0
+        @test _hh(spec_h).individual.beta ≈ 0.99322
+        @test _hh(spec_h).individual.utility_prime(2.0) ≈ 2.0^(-1.5)
 
         # the built Huggett spec solves
         ss = compute_steady_state(spec_h; max_iter=80, tol=1e-3)
@@ -2177,20 +2175,15 @@ end
 @testset "solve dispatch" begin
     spec = load_ha_example(:krusell_smith)
     # Verify method dispatch exists and does not conflict
-    @test hasmethod(solve, Tuple{HADSGESpec{Float64}})
     @test hasmethod(solve, Tuple{ModelSpec{Float64}})
-
-    # Verify dispatch is distinct: solve(::HADSGESpec) and solve(::ModelSpec) are different methods
-    m1 = which(solve, Tuple{HADSGESpec{Float64}})
-    m2 = which(solve, Tuple{ModelSpec{Float64}})
-    @test m1 !== m2
+    @test MacroEconometricModels.has_kind(spec, HouseholdSystem)
 
     FAST && return
 
     # Verify unknown method raises error
     ss = MacroEconometricModels._ha_steady_state(
-        spec.individual, spec.grid, spec.income,
-        MacroEconometricModels._default_cobb_douglas_price_fn, spec.het_params;
+        _hh(spec).individual, _hh(spec).grid, _hh(spec).income,
+        MacroEconometricModels._default_cobb_douglas_price_fn, _hh(spec).het_params;
         K_init=10.0, r_bounds=(-0.02, 0.04), max_iter=30, tol=1e-2
     )
     @test_throws ErrorException solve(spec; method=:nonexistent, ss=ss)

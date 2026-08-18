@@ -695,14 +695,14 @@ The gap between the two is the Den Haan statistic. Den Haan (2010) shows an `R²
 can coexist with a double-digit error in the implied `σ(K)`, which is why the multi-step
 comparison — rather than the regression fit — is the informative test.
 """
-function _den_haan_core(spec::HADSGESpec{T}, ss::HASteadyState{T}, b::Vector{T},
+function _den_haan_core(spec::ModelSpec{T}, ss::HASteadyState{T}, b::Vector{T},
                         T_sim::Int, T_burn::Int, rho_z::T, sigma_z::T,
                         rng, source::Symbol, z_channel::Symbol) where {T<:AbstractFloat}
-    ip = spec.individual
-    grid = spec.grid
-    income = spec.income
+    ip = _hh(spec).individual
+    grid = _hh(spec).grid
+    income = _hh(spec).income
 
-    params = copy(spec.het_params)
+    params = copy(_hh(spec).het_params)
     for (k, v) in (:alpha => T(0.36), :delta => T(0.025), :Z => one(T), :L => one(T))
         haskey(params, k) || (params[k] = T(v))
     end
@@ -768,7 +768,7 @@ The aggregate is capital `K` and errors are in percent. The PLM must include the
 aggregate shock (`log K' = b₁ + b₂ log K + b₃ z`); otherwise the PLM-only path is
 degenerate.
 
-Covers the capital models (`spec.model == :aiyagari`) — both `:krusell_smith` and
+Covers the capital models (`_hh(spec).model == :aiyagari`) — both `:krusell_smith` and
 `:one_asset_hank`, the setting of Den Haan (2010). For a Huggett solution the cleared
 aggregate is the risk-free rate (the bond is in zero net supply), which is driven by the
 wealth distribution rather than the shock alone; a robust rate-accuracy test there requires
@@ -795,8 +795,8 @@ function den_haan_test(ks::KrusellSmithSolution{T};
 end
 
 # Shared model guard for both methods.
-function _den_haan_check_model(spec::HADSGESpec)
-    if spec.model === :huggett
+function _den_haan_check_model(spec::ModelSpec)
+    if _hh(spec).model === :huggett
         error("den_haan_test is implemented for the capital models (:aiyagari — " *
               ":krusell_smith and :one_asset_hank). The Huggett clearing rate is driven by " *
               "the wealth distribution, not the aggregate shock alone, so a meaningful " *

@@ -238,7 +238,7 @@ end
 """
     adapt_ha_grid(grid::HAGrid{T}, distribution; n_points=grid.n_points,
                   curvature=0.9, monitor_cap=3.0, smoothing=2) → HAGrid{T}
-    adapt_ha_grid(spec::HADSGESpec{T}, ss::HASteadyState{T}; kwargs...) → HADSGESpec{T}
+    adapt_ha_grid(spec::ModelSpec{T}, ss::HASteadyState{T}; kwargs...) → HADSGESpec{T}
 
 Rebuild an HA grid with nodes equidistributed by the curvature of the stationary density.
 
@@ -289,9 +289,7 @@ function adapt_ha_grid(grid::HAGrid{T}, distribution::AbstractArray;
     return HAGrid{T}(new_grids, np, grid.n_dims, grid.n_income, grid.bounds, grid.labels)
 end
 
-function adapt_ha_grid(spec::HADSGESpec{T}, ss::HASteadyState{T}; kwargs...) where {T<:AbstractFloat}
-    new_grid = adapt_ha_grid(spec.grid, ss.distribution; kwargs...)
-    return HADSGESpec{T}(spec.aggregate_spec, spec.individual, spec.income, new_grid,
-                         spec.aggregation, spec.het_params;
-                         model=spec.model, distribution=spec.distribution)
+function adapt_ha_grid(spec::ModelSpec{T}, ss::HASteadyState{T}; kwargs...) where {T<:AbstractFloat}
+    new_grid = adapt_ha_grid(_hh(spec).grid, ss.distribution; kwargs...)
+    return _replace_household(spec; grid=new_grid)
 end

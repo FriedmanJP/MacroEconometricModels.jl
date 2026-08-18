@@ -197,7 +197,7 @@ of the Young (2010) histogram from the initial stationary distribution.
 
 # Constructors
 
-    HetBlock(spec::HADSGESpec, ss::HASteadyState; inputs, outputs, name=:household, dx=1e-4)
+    HetBlock(spec::ModelSpec, ss::HASteadyState; inputs, outputs, name=:household, dx=1e-4)
     HetBlock(ss::HASteadyState, individual, grid, income; inputs, outputs, name=:household, dx=1e-4)
 
 - `inputs::Vector{Symbol}` — prices the household responds to; each must be a key
@@ -272,12 +272,12 @@ function HetBlock(ss::HASteadyState{T}, individual::IndividualProblem{T},
                        T(dx), ss_in, ss_out)
 end
 
-function HetBlock(spec::HADSGESpec{T}, ss::HASteadyState{T};
+function HetBlock(spec::ModelSpec{T}, ss::HASteadyState{T};
                   inputs::AbstractVector{Symbol}=Symbol[:r, :w],
                   outputs::AbstractVector{Symbol}=Symbol[:A],
                   name::Symbol=:household,
                   dx::Real=T(1e-4)) where {T<:AbstractFloat}
-    return HetBlock(ss, spec.individual, spec.grid, spec.income;
+    return HetBlock(ss, _hh(spec).individual, _hh(spec).grid, _hh(spec).income;
                     inputs=inputs, outputs=outputs, name=name, dx=dx)
 end
 

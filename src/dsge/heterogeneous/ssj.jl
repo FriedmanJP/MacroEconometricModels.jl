@@ -547,7 +547,7 @@ Ho-Kalman observation map `(C_obs, D_obs)` into the `DSGESolution`/`HADSGESoluti
 types so the standard `irf`/`fevd`/`simulate` dispatch reports aggregate outputs.
 Used by the Huggett SSJ general-equilibrium path.
 """
-function _wrap_hadsge_solution(spec::HADSGESpec{T}, ss::HASteadyState{T},
+function _wrap_hadsge_solution(spec::ModelSpec{T}, ss::HASteadyState{T},
                                G1::Matrix{T}, impact::Matrix{T}, C_sol::Vector{T},
                                eu::Vector{Int}, eigenvalues::AbstractVector,
                                C_obs::Matrix{T}, D_obs::Matrix{T},
@@ -590,7 +590,7 @@ Full Sequence-Space Jacobian solution.
 5. Return `HADSGESolution` wrapping the result.
 
 # Arguments
-- `spec::HADSGESpec{T}` — HA-DSGE specification
+- `spec::ModelSpec{T}` — HA-DSGE specification
 - `ss::HASteadyState{T}` — pre-computed steady state
 - `T_horizon::Int` — Jacobian sequence length (default 300)
 - `n_reduced::Int` — number of reduced states in Ho-Kalman (default 30)
@@ -600,15 +600,15 @@ Full Sequence-Space Jacobian solution.
   sequence-space Jacobian to solve and estimate heterogeneous-agent models.
   *Econometrica*, 89(5), 2375–2408.
 """
-function _ssj_solve(spec::HADSGESpec{T}, ss::HASteadyState{T};
+function _ssj_solve(spec::ModelSpec{T}, ss::HASteadyState{T};
                      T_horizon::Int=300,
                      n_reduced::Int=30) where {T<:AbstractFloat}
     # Step 1: Compute HA block Jacobians
     jacobians = Dict{Symbol, Matrix{T}}()
 
-    if spec.grid.n_dims == 2
+    if _hh(spec).grid.n_dims == 2
         in_var = haskey(ss.prices, :r_a) ? :r_a : :r
-        J_r_A = _ssj_jacobian(ss, spec.individual, spec.grid, spec.income,
+        J_r_A = _ssj_jacobian(ss, _hh(spec).individual, _hh(spec).grid, _hh(spec).income,
                               in_var, :A; T_horizon=T_horizon)
         @inbounds for i in eachindex(J_r_A)
             isfinite(J_r_A[i]) || (J_r_A[i] = zero(T))
@@ -653,7 +653,7 @@ function _ssj_solve(spec::HADSGESpec{T}, ss::HASteadyState{T};
     # hard-wired close below is now a special case of `combine_blocks` +
     # `ssj_jacobian` + `ssj_irf`. H_U = ∂A/∂r-path, H_Z = ∂A/∂w-path.
     # Ho-Kalman realizes the rate IRF.
-    if spec.model === :huggett
+    if _hh(spec).model === :huggett
         household = HetBlock(spec, ss; inputs=[:r, :w], outputs=[:A],
                              name=:household)
         bond_market = SimpleBlock(x -> [x[1]];
@@ -671,7 +671,7 @@ function _ssj_solve(spec::HADSGESpec{T}, ss::HASteadyState{T};
         jacobians[:H_U] = H_U
         jacobians[:H_Z] = H_Z
 
-        rho = T(get(spec.het_params, :rho_e, 0.9))
+        rho = T(get(_hh(spec).het_params, :rho_e, 0.9))
         dw = T[rho^(t - 1) for t in 1:T_horizon]          # endowment-shock impulse path
         dr = ssj_irf(gej, Dict(:w => dw); residual=false).paths[:r]  # clearing rate path
 
@@ -691,13 +691,13 @@ function _ssj_solve(spec::HADSGESpec{T}, ss::HASteadyState{T};
     end
 
     # Primary Jacobian: r → K
-    J_r_K = _ssj_jacobian(ss, spec.individual, spec.grid, spec.income,
+    J_r_K = _ssj_jacobian(ss, _hh(spec).individual, _hh(spec).grid, _hh(spec).income,
                            :r, :K; T_horizon=T_horizon)
     jacobians[:J_r_K] = J_r_K
 
     # Also compute w → K if wage exists in prices
     if haskey(ss.prices, :w)
-        J_w_K = _ssj_jacobian(ss, spec.individual, spec.grid, spec.income,
+        J_w_K = _ssj_jacobian(ss, _hh(spec).individual, _hh(spec).grid, _hh(spec).income,
                                :w, :K; T_horizon=T_horizon)
         jacobians[:J_w_K] = J_w_K
     end

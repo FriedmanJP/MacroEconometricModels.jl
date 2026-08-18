@@ -16,8 +16,9 @@ const CF08_SS = compute_steady_state(CF08_SPEC)
         J = sequence_jacobian(CF08_SPEC, CF08_SS, :r, :C; T_horizon=Th)
         @test size(J) == (Th, Th)
         # behavior-preserving: identical to the internal fake-news Jacobian
-        J_ref = MEM._ssj_jacobian(CF08_SS, CF08_SPEC.individual, CF08_SPEC.grid,
-                                  CF08_SPEC.income, :r, :C; T_horizon=Th)
+        J_ref = MEM._ssj_jacobian(CF08_SS, MEM._hh(CF08_SPEC).individual,
+                                  MEM._hh(CF08_SPEC).grid, MEM._hh(CF08_SPEC).income,
+                                  :r, :C; T_horizon=Th)
         @test J == J_ref
         # anticipation entries above the diagonal (t < s) are nonzero
         @test maximum(abs, J[1:5, 10]) > 0

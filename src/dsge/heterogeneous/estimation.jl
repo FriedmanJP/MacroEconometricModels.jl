@@ -8,7 +8,7 @@
 Bayesian estimation dispatch for Heterogeneous Agent DSGE models.
 
 Provides:
-- `estimate_dsge_bayes(::HADSGESpec, ...)` — Bayesian estimation via Random-Walk MH
+- `estimate_dsge_bayes(::ModelSpec, ...)` — Bayesian estimation via Random-Walk MH
 - `_build_ha_likelihood_fn` — HA-specific likelihood closure (Kalman on reduced system)
 - `_update_ha_params` — update parameters across aggregate and heterogeneous blocks
 - `_build_ha_observation_equation` — map observables to the reduced state space
@@ -37,16 +37,16 @@ using Distributions
     _update_ha_params(spec, param_names, theta) → HADSGESpec{T}
 
 Create a new `HADSGESpec` with updated parameter values. Parameters may live in:
-- `spec.aggregate_spec.param_values` (aggregate model params like alpha, rho_z)
-- `spec.het_params` (HA-specific params)
-- `spec.individual.beta` (discount factor, matched by `:beta` or `:beta_hh`)
+- `spec.param_values` (aggregate model params like alpha, rho_z)
+- `_hh(spec).het_params` (HA-specific params)
+- `_hh(spec).individual.beta` (discount factor, matched by `:beta` or `:beta_hh`)
 """
-function _update_ha_params(spec::HADSGESpec{T}, param_names::Vector{Symbol},
+function _update_ha_params(spec::ModelSpec{T}, param_names::Vector{Symbol},
                             theta::Vector{T}) where {T<:AbstractFloat}
     # Copy mutable containers
-    new_agg_pv = copy(spec.aggregate_spec.param_values)
-    new_het_pv = copy(spec.het_params)
-    new_beta = spec.individual.beta
+    new_agg_pv = copy(spec.param_values)
+    new_het_pv = copy(_hh(spec).het_params)
+    new_beta = _hh(spec).individual.beta
 
     for (i, pn) in enumerate(param_names)
         if pn === :beta || pn === :beta_hh
@@ -58,31 +58,14 @@ function _update_ha_params(spec::HADSGESpec{T}, param_names::Vector{Symbol},
         end
     end
 
-    # Rebuild aggregate spec with new param values
-    agg = spec.aggregate_spec
-    new_agg = DSGESpec{T}(
-        agg.endog, agg.exog, agg.params, new_agg_pv,
-        agg.equations, agg.residual_fns,
-        agg.n_expect, agg.forward_indices, T[], agg.ss_fn;
-        original_endog=agg.original_endog,
-        original_equations=agg.original_equations,
-        augmented=agg.augmented,
-        max_lag=agg.max_lag,
-        max_lead=agg.max_lead,
-        linear=agg.linear
-    )
-
-    # Rebuild individual problem with updated beta
-    ip = spec.individual
+    ip = _hh(spec).individual
     new_ip = IndividualProblem{T}(
         ip.utility, ip.utility_prime, ip.utility_prime_inv,
         new_beta, ip.budget_fn, ip.borrowing_constraint,
         ip.adjustment_cost, ip.n_asset_dims; labor=ip.labor
     )
-
-    return HADSGESpec{T}(new_agg, new_ip, spec.income, spec.grid,
-                          spec.aggregation, new_het_pv; model=spec.model,
-                          distribution=spec.distribution)
+    spec2 = _replace_household(spec; individual=new_ip, het_params=new_het_pv)
+    return _respec(spec2, new_agg_pv)
 end
 
 # =============================================================================
@@ -191,7 +174,7 @@ For each parameter vector:
 
 Returns `-Inf` on any failure (non-convergence, singular matrices, etc.).
 """
-function _build_ha_likelihood_fn(spec::HADSGESpec{T}, param_names::Vector{Symbol},
+function _build_ha_likelihood_fn(spec::ModelSpec{T}, param_names::Vector{Symbol},
                                   data::AbstractMatrix, observables::Vector{Symbol},
                                   measurement_error, ha_method::Symbol,
                                   ha_kwargs::NamedTuple;
@@ -263,7 +246,7 @@ solution is not newly demoted to the fallback; it also rejects a NaN-filled solu
 returned without throwing. Errors loudly if neither candidate solves. Aligns the
 `solved_at` convention with the aggregate fallback ([T044]/#143).
 """
-function _build_ha_result_solution(spec::HADSGESpec{T}, param_names::Vector{Symbol},
+function _build_ha_result_solution(spec::ModelSpec{T}, param_names::Vector{Symbol},
         post_draws::AbstractMatrix{<:Real}, post_log_posterior::AbstractVector{<:Real},
         observables::Vector{Symbol}, measurement_error, ha_method::Symbol,
         ha_kwargs::NamedTuple) where {T<:AbstractFloat}
@@ -300,7 +283,7 @@ function _build_ha_result_solution(spec::HADSGESpec{T}, param_names::Vector{Symb
 end
 
 # =============================================================================
-# estimate_dsge_bayes(::HADSGESpec, ...) — main entry point
+# estimate_dsge_bayes(::ModelSpec, ...) — main entry point
 # =============================================================================
 
 # Default sequence-space (SSJ) truncation length for HA Bayesian estimation. Auclert,
@@ -309,7 +292,7 @@ end
 const _HA_DEFAULT_T_HORIZON = 300
 
 """
-    estimate_dsge_bayes(spec::HADSGESpec{T}, data, θ0; priors, kwargs...) → BayesianDSGE{T}
+    estimate_dsge_bayes(spec::ModelSpec{T}, data, θ0; priors, kwargs...) → BayesianDSGE{T}
 
 Bayesian estimation of heterogeneous agent DSGE model parameters via
 Random-Walk Metropolis-Hastings.
@@ -319,7 +302,7 @@ and the Kalman filter is evaluated on the reduced linear system. This is the
 "offline" approach — computationally intensive but exact.
 
 # Arguments
-- `spec::HADSGESpec{T}` — HA-DSGE model specification
+- `spec::ModelSpec{T}` — HA-DSGE model specification
 - `data::AbstractMatrix` — observed aggregate data in `T×n` (time in rows); orientation is
   resolved by matching a dimension to the number of observables (`n×T` transposed internally).
 - `θ0` — initial parameter guess. Preferred: a `Dict{Symbol}`/`NamedTuple` keyed by parameter
@@ -359,7 +342,7 @@ the posterior-mean HA solution.
 - Herbst, E. & Schorfheide, F. (2014). Sequential Monte Carlo Sampling for DSGE Models.
   *Journal of Applied Econometrics*, 29(7), 1073-1098.
 """
-function estimate_dsge_bayes(spec::HADSGESpec{T}, data::AbstractMatrix,
+function _ha_estimate_dsge_bayes(spec::ModelSpec{T}, data::AbstractMatrix,
                               theta0::Union{AbstractVector{<:Real},
                                             AbstractDict{Symbol,<:Real},NamedTuple};
                               priors::Dict{Symbol,<:Distribution},
@@ -387,7 +370,7 @@ function estimate_dsge_bayes(spec::HADSGESpec{T}, data::AbstractMatrix,
     # ── 2. Handle observables ────────────────────────────────────────────
     if isempty(observables)
         # Default: use first few aggregate endogenous variables
-        observables = spec.aggregate_spec.endog[1:min(3, length(spec.aggregate_spec.endog))]
+        observables = spec.endog[1:min(3, length(spec.endog))]
     end
     n_obs = length(observables)
 

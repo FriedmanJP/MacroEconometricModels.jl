@@ -484,15 +484,6 @@ function _parse_ha_dsge(block::Expr)
             [Float64($borrowing_lb)], nothing, 1
         )
 
-        # Aggregate spec (lightweight placeholder)
-        local _agg_param_vals_ = Dict{Symbol,Float64}($(param_pairs...))
-        local _alpha_ = get(_agg_param_vals_, :alpha, 0.36)
-        local _delta_ = get(_agg_param_vals_, :delta, 0.025)
-        local _rho_z_ = get(_agg_param_vals_, :rho_z, 0.95)
-        local _sigma_z_ = get(_agg_param_vals_, :sigma_z, 0.007)
-        local _agg_spec_ = MacroEconometricModels._minimal_agg_spec(;
-            alpha=_alpha_, delta=_delta_, rho_z=_rho_z_, sigma_z=_sigma_z_)
-
         # Aggregation mapping
         local _aggregation_ = Pair{Symbol,Function}[
             $(QuoteNode(agg_target)) => MacroEconometricModels._agg_var1
@@ -507,20 +498,81 @@ function _parse_ha_dsge(block::Expr)
             _het_params_[:L] = 1.0
         end
 
-        HADSGESpec{Float64}(_agg_spec_, _individual_, _income_, _grid_,
-                             _aggregation_, _het_params_;
-                             model=$(QuoteNode(model_choice)))
+        local _hh_ = HouseholdSystem{Float64}(_individual_, _income_, _grid_,
+                                              _aggregation_, _het_params_;
+                                              model=$(QuoteNode(model_choice)))
+        local _pv_ = Dict{Symbol,Float64}($(param_pairs...))
+        $( _ha_model_spec_quote(endog, exog, params, raw_equations) )
     end
 
     return esc(result)
 end
 
+"""Build the `ModelSpec` constructor quote for an HA `@dsge` block."""
+function _ha_model_spec_quote(endog, exog, params, raw_equations)
+    if isempty(raw_equations)
+        return quote
+            MacroEconometricModels._wrap_ha_spec(_hh_;
+                endog=$(Expr(:vect, (QuoteNode(s) for s in (isempty(endog) ? [:Y, :K, :r, :w, :Z] : endog))...)),
+                exog=$(Expr(:vect, (QuoteNode(s) for s in (isempty(exog) ? [:eps_Z] : exog))...)),
+                params=$(Expr(:vect, (QuoteNode(s) for s in params)...)),
+                param_values=_pv_)
+        end
+    end
+    eq_names = Symbol[]
+    eq_defines = Union{Nothing,Symbol}[]
+    used = Set{Symbol}()
+    anon = 0
+    eqs = Expr[]
+    for stmt in raw_equations
+        lhs = stmt.args[1]
+        def = _lhs_defines(lhs, endog)
+        name = def === nothing ? (anon += 1; Symbol("eq_", anon)) : def
+        if name in used
+            def = nothing
+            anon += 1
+            name = Symbol("eq_", anon)
+        end
+        push!(used, name)
+        push!(eq_names, name)
+        push!(eq_defines, def)
+        push!(eqs, stmt)
+    end
+    residual_exprs = Expr[]
+    fn_exprs = Expr[]
+    fwd = Int[]
+    for (i, eq) in enumerate(eqs)
+        resid = _equation_to_residual(eq)
+        subst = _substitute_vars(resid, endog, exog, params)
+        push!(residual_exprs, resid)
+        push!(fn_exprs, Expr(:->, Expr(:tuple, :_y_t_, :_y_lag_, :_y_lead_, :_ε_, :_θ_), subst))
+        _has_forward_looking(eq, endog, exog) && push!(fwd, i)
+    end
+    named = Expr(:vect, (:(NamedEquation($(QuoteNode(eq_names[i])),
+                                         $(eq_defines[i] === nothing ? :nothing : QuoteNode(eq_defines[i])),
+                                         $(QuoteNode(residual_exprs[i])),
+                                         $(fn_exprs[i]))) for i in eachindex(eqs))...)
+    return quote
+        let _eqs = $named
+            MacroEconometricModels._wrap_ha_spec(_hh_;
+                endog=$(Expr(:vect, (QuoteNode(s) for s in endog)...)),
+                exog=$(Expr(:vect, (QuoteNode(s) for s in exog)...)),
+                params=$(Expr(:vect, (QuoteNode(s) for s in params)...)),
+                param_values=_pv_,
+                equations=_eqs,
+                residual_fns=Function[eq.residual for eq in _eqs],
+                n_expect=$(length(fwd)),
+                forward_indices=Int[$(fwd...)])
+        end
+    end
+end
+
 # =============================================================================
-# solve(::HADSGESpec) — dispatch for HA-DSGE models
+# solve(::ModelSpec) — dispatch for HA-DSGE models
 # =============================================================================
 
 """
-    solve(spec::HADSGESpec{T}; method=:ssj, ss=nothing, kwargs...) → HADSGESolution{T} | KrusellSmithSolution{T}
+    solve(spec::ModelSpec{T}; method=:ssj, ss=nothing, kwargs...) → HADSGESolution{T} | KrusellSmithSolution{T}
 
 Solve a heterogeneous agent DSGE model.
 
@@ -536,7 +588,7 @@ chosen solution method.
 - `:krusell_smith` — Krusell & Smith (1998) simulation with PLM regression.
 
 # Arguments
-- `spec::HADSGESpec{T}` — model specification
+- `spec::ModelSpec{T}` — model specification
 - `method::Symbol` — solution method (default `:ssj`)
 - `ss::Union{Nothing,HASteadyState{T}}` — precomputed steady state; if `nothing`, computed automatically
 
@@ -563,9 +615,9 @@ chosen solution method.
 - Krusell, P., & Smith, A. A. (1998). Income and wealth heterogeneity in the
   macroeconomy. *Journal of Political Economy*, 106(5), 867–896.
 """
-function solve(spec::HADSGESpec{T}; method::Symbol=:ssj,
-               ss::Union{Nothing,HASteadyState{T}}=nothing,
-               kwargs...) where {T<:AbstractFloat}
+function _ha_solve(spec::ModelSpec{T}; method::Symbol=:ssj,
+                   ss::Union{Nothing,HASteadyState{T}}=nothing,
+                   kwargs...) where {T<:AbstractFloat}
     # Compute steady state if not supplied
     if get(kwargs, :hh_solver, :egm) === :vfi && method === :krusell_smith
         throw(ArgumentError(
@@ -599,22 +651,22 @@ function solve(spec::HADSGESpec{T}; method::Symbol=:ssj,
         # @dsge models store them in het_params; merge so the Aiyagari linearizer sees
         # them either way, with het_params taking precedence (#236).
         reiter_params = merge(
-            Dict{Symbol,T}(k => T(v) for (k, v) in spec.aggregate_spec.param_values),
-            spec.het_params)
-        G1, impact, n_red, explained, U_k = if spec.distribution === :winberry
+            Dict{Symbol,T}(k => T(v) for (k, v) in spec.param_values),
+            _hh(spec).het_params)
+        G1, impact, n_red, explained, U_k = if _hh(spec).distribution === :winberry
             # Winberry (2018): identical GE closure, but the distribution state is
             # the n_income × n_moments moment vector instead of the SVD-compressed
             # histogram (#356/T257).
             _winberry_linearize(
-                ss, spec.individual, spec.grid, spec.income;
+                ss, _hh(spec).individual, _hh(spec).grid, _hh(spec).income;
                 n_moments=get(kwargs, :n_moments, 3),
                 n_quad=get(kwargs, :n_quad, 4),
-                model=spec.model, het_params=reiter_params,
+                model=_hh(spec).model, het_params=reiter_params,
                 hh_solver=get(kwargs, :hh_solver, :egm))
         else
             _reiter_linearize(
-                ss, spec.individual, spec.grid, spec.income; n_reduced=n_reduced,
-                model=spec.model, het_params=reiter_params,
+                ss, _hh(spec).individual, _hh(spec).grid, _hh(spec).income; n_reduced=n_reduced,
+                model=_hh(spec).model, het_params=reiter_params,
                 hh_solver=get(kwargs, :hh_solver, :egm))
         end
 
@@ -654,7 +706,7 @@ function solve(spec::HADSGESpec{T}; method::Symbol=:ssj,
         C_obs = Matrix{T}(I, n_sys, n_sys)
         D_obs = zeros(T, n_sys, size(impact, 2))
         return HADSGESolution{T}(ss, dsge_sol, :reiter, spec, reduction_basis,
-                                  spec.grid.total_individual_states, n_red,
+                                  _hh(spec).grid.total_individual_states, n_red,
                                   explained, nothing, C_obs, D_obs)
 
     elseif method === :krusell_smith
@@ -664,18 +716,18 @@ function solve(spec::HADSGESpec{T}; method::Symbol=:ssj,
         max_outer = get(kwargs, :max_outer, 20)
         rho_z = get(kwargs, :rho_z, 0.95)
         sigma_z = get(kwargs, :sigma_z, 0.007)
-        rho_e = get(kwargs, :rho_e, get(spec.het_params, :rho_e, 0.9))
-        sigma_e = get(kwargs, :sigma_e, get(spec.het_params, :sigma_e, 0.01))
+        rho_e = get(kwargs, :rho_e, get(_hh(spec).het_params, :rho_e, 0.9))
+        sigma_e = get(kwargs, :sigma_e, get(_hh(spec).het_params, :sigma_e, 0.01))
 
         @info "Krusell–Smith: solving the PLM fixed point by simulation " *
               "(T_sim=$T_sim, max_outer=$max_outer) — this can take several minutes…"  # (KS/T174)
-        raw = _krusell_smith_solve(ss, spec.individual, spec.grid, spec.income,
+        raw = _krusell_smith_solve(ss, _hh(spec).individual, _hh(spec).grid, _hh(spec).income,
                                     _default_cobb_douglas_price_fn,
-                                    spec.het_params;
+                                    _hh(spec).het_params;
                                     T_sim=T_sim, T_burn=T_burn,
                                     max_outer=max_outer,
                                     rho_z=rho_z, sigma_z=sigma_z,
-                                    model=spec.model, rho_e=rho_e, sigma_e=sigma_e)
+                                    model=_hh(spec).model, rho_e=rho_e, sigma_e=sigma_e)
         return KrusellSmithSolution{T}(ss, raw.plm_coefficients, raw.r_squared,
                                         spec, raw.converged, raw.iterations)
     else

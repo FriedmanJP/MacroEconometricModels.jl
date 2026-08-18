@@ -311,7 +311,7 @@ include("nowcast/forecast.jl")
 
 # DSGE models
 include("dsge/ir.jl")             # ModelSpec + IR first — solution structs in types.jl hold ModelSpec
-include("dsge/types.jl")          # DSGESpec remains until HA migrates (v0.9.0)
+include("dsge/types.jl")          # solution structs; ModelSpec lives in dsge/ir.jl
 include("dsge/constraints.jl")
 include("dsge/display.jl")
 include("dsge/parser.jl")
@@ -748,7 +748,7 @@ export balance_panel
 export AbstractDSGEModel
 
 # Types
-export DSGESpec, ModelSpec, NamedEquation, NoAgents, AbstractAgentSystem, ModelIR
+export ModelSpec, NamedEquation, NoAgents, AbstractAgentSystem, ModelIR, HouseholdSystem
 export LinearDSGE, DSGESolution, PerturbationSolution, ProjectionSolution, PerfectForesightPath, DSGEEstimation
 export DeterminacyMap, PrunedStateSpace
 
@@ -796,7 +796,7 @@ export KalmanSmootherResult
 export dsge_smoother, dsge_particle_smoother
 
 # Heterogeneous Agent DSGE types
-export HADSGESpec, HAGrid, IncomeProcess, IndividualProblem
+export HAGrid, IncomeProcess, IndividualProblem
 export HASteadyState, HADSGESolution, KrusellSmithSolution, DenHaanAccuracy
 export HAGridDiagnostics, ha_grid_diagnostics
 export adaptive_asset_grid, adapt_ha_grid

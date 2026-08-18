@@ -291,7 +291,13 @@ function estimate_dsge_bayes(spec::ModelSpec{T}, data::AbstractMatrix,
                               max_stages::Int=500, min_dphi::Real=1e-10,
                               proposal::Symbol=:adaptive,
                               transform::Bool=true,
-                              rng::AbstractRNG=Random.default_rng()) where {T<:AbstractFloat}
+                              rng::AbstractRNG=Random.default_rng(),
+                              kwargs...) where {T<:AbstractFloat}
+    if has_kind(spec, HouseholdSystem)
+        return _ha_estimate_dsge_bayes(spec, data, theta0;
+            priors=priors, observables=observables, n_draws=n_draws,
+            burnin=burnin, measurement_error=measurement_error, kwargs...)
+    end
 
     # ── 1. Build DSGEPrior from priors dict (bounds inferred from support) ─
     prior = _build_bayes_prior(priors)

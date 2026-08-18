@@ -636,7 +636,7 @@ end
 # =============================================================================
 
 """
-    compute_steady_state(spec::HADSGESpec{T}; kwargs...) → HASteadyState{T}
+    compute_steady_state(spec::ModelSpec{T}; kwargs...) → HASteadyState{T}
 
 Compute the stationary equilibrium of a heterogeneous agent DSGE model.
 
@@ -662,7 +662,7 @@ does not provide one, and delegates to `_ha_steady_state`.
   `ss.value_fn`. Two-asset specs use a damped `(K, r_b)` closer. Reiter
   finite-difference kernels honor `hh_solver`; SSJ fake-news stays on EGM.
 - `price_fn::Function` — custom price function; if not supplied, uses Cobb-Douglas
-- `distribution::Symbol` — override `spec.distribution`: `:young` (default, the
+- `distribution::Symbol` — override `_hh(spec).distribution`: `:young` (default, the
   Young 2010 histogram) or `:winberry` (Winberry 2018 parametric moment family).
   Under `:winberry` the equilibrium is still cleared on the histogram, and the
   parametric family is fitted afterwards at the equilibrium policy as the fixed
@@ -682,7 +682,7 @@ which is what the sequence-space household block reports. They are equal iff the
 asset grid never truncates the policy; `aggregates[:A_residual]` is the
 difference. See [`ha_grid_diagnostics`](@ref).
 """
-function compute_steady_state(spec::HADSGESpec{T};
+function _ha_compute_steady_state(spec::ModelSpec{T};
                           K_init::T=T(10),
                           r_bounds::Union{Nothing,Tuple{T,T}}=nothing,
                           max_iter::Int=200,
@@ -703,16 +703,16 @@ function compute_steady_state(spec::HADSGESpec{T};
                           hh_solver::Symbol=:egm) where {T<:AbstractFloat}
     hh_solver in (:egm, :vfi) || throw(ArgumentError(
         "compute_steady_state: hh_solver must be :egm or :vfi, got :$hh_solver"))
-    if spec.grid.n_dims == 2
-        dist_sym = isnothing(distribution) ? spec.distribution : distribution
-        p2 = copy(spec.het_params)
+    if _hh(spec).grid.n_dims == 2
+        dist_sym = isnothing(distribution) ? _hh(spec).distribution : distribution
+        p2 = copy(_hh(spec).het_params)
         haskey(p2, :alpha) || (p2[:alpha] = T(0.36))
         haskey(p2, :delta) || (p2[:delta] = T(0.025))
         haskey(p2, :Z) || (p2[:Z] = one(T))
         haskey(p2, :L) || (p2[:L] = one(T))
         haskey(p2, :B_supply) || (p2[:B_supply] = one(T))
         return _ha_two_asset_steady_state(
-            spec.individual, spec.grid, spec.income, p2;
+            _hh(spec).individual, _hh(spec).grid, _hh(spec).income, p2;
             K_init=K_init, max_iter=max_iter, tol=T(tol),
             hh_solver=hh_solver, grid_check=grid_check,
             ceiling_mass_tol=ceiling_mass_tol, residual_tol=residual_tol,
@@ -722,7 +722,7 @@ function compute_steady_state(spec::HADSGESpec{T};
     pfn = isnothing(price_fn) ? _default_cobb_douglas_price_fn : price_fn
 
     # Extract parameters: merge het_params with aggregate steady-state params
-    params = copy(spec.het_params)
+    params = copy(_hh(spec).het_params)
 
     # Ensure essential parameters exist with sensible defaults
     if !haskey(params, :alpha)
@@ -740,23 +740,23 @@ function compute_steady_state(spec::HADSGESpec{T};
 
     # Select the market-clearing closure: explicit override > model family > Aiyagari.
     clr = !isnothing(clearing) ? clearing :
-          spec.model === :huggett ? _huggett_clearing() :
+          _hh(spec).model === :huggett ? _huggett_clearing() :
           _aiyagari_clearing(pfn)
 
     # Select bisection bounds: explicit override > model-appropriate default.
     # Huggett's risk-free rate lies below the per-period time-preference rate 1/β − 1.
     rb = !isnothing(r_bounds) ? r_bounds :
-         spec.model === :huggett ?
-            (T(-0.05), one(T) / spec.individual.beta - one(T) - T(1e-4)) :
+         _hh(spec).model === :huggett ?
+            (T(-0.05), one(T) / _hh(spec).individual.beta - one(T) - T(1e-4)) :
             (T(-0.01), T(0.04))
 
     return _ha_steady_state(
-        spec.individual, spec.grid, spec.income, pfn, params;
+        _hh(spec).individual, _hh(spec).grid, _hh(spec).income, pfn, params;
         K_init=K_init, r_bounds=rb, max_iter=max_iter,
         tol=tol, rtol=rtol, r_atol=r_atol, grid_check=grid_check,
         ceiling_mass_tol=ceiling_mass_tol, residual_tol=residual_tol,
         verbose=verbose, clearing_fn=clr,
-        distribution=isnothing(distribution) ? spec.distribution : distribution,
+        distribution=isnothing(distribution) ? _hh(spec).distribution : distribution,
         n_moments=n_moments, n_quad=n_quad, winberry_tol=winberry_tol,
         euler_points=euler_points, hh_solver=hh_solver
     )
