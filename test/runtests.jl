@@ -191,6 +191,7 @@ const TEST_GROUPS = [
     # the heavy test_ha_dsge.jl (~65% of the old group) runs alone.
     ("DSGE Core" => [
         "dsge/test_dsge.jl",
+        "dsge/test_perfect_foresight_sparse.jl",
         "dsge/test_blanchard_olg.jl",
         "dsge/test_lifecycle_olg.jl",
         "dsge/test_continuous_aiyagari.jl",
