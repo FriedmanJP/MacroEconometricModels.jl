@@ -307,3 +307,11 @@ has_kind(spec::ModelSpec, ::Type{S}) where {S} =
 
 agents_of(spec::ModelSpec, ::Type{S}) where {S} =
     (v for v in values(spec.agents) if v isa S)
+
+"""
+    to_spec(m) -> ModelSpec
+
+Wrap a family constructor (`BlanchardOLG`, `DCEGMProblem`, `LifeCycleOLG`,
+`CTAiyagari`, `CTTwoAsset`) as a [`ModelSpec`](@ref). Methods land in G-01–G-04.
+"""
+function to_spec end
