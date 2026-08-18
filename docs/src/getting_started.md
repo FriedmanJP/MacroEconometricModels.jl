@@ -88,6 +88,38 @@ plot_result(result)
 
 ---
 
+## [Google Colab (precompiled)](@id getting_started_colab)
+
+Colab runtimes wipe `~/.julia` on every new session, so a plain `Pkg.add` repeats a multi-minute cold precompile of Optim, NonlinearSolve, JuMP/Ipopt, and DataFrames. Releases that claim Colab assets attach a **linux-x86_64 depot tarball** (and, when PackageCompiler succeeds, a sysimage) built for Colab's native Julia pin — **1.12.6** on the 2026.07 runtime. This channel is Google Colab only. macOS, Windows, aarch64, and any other Julia patch keep using `Pkg.add` plus the in-package `PrecompileTools` workload.
+
+The depot is the supported path: interactive kernels rarely expose `--sysimage`. `DEPOT_PATH` is fixed when Julia starts, so a running Colab kernel must mutate `DEPOT_PATH` rather than set `ENV["JULIA_DEPOT_PATH"]` after launch. Full cells, Drive caching, SHA256, and the maintenance contract live in [`environments/colab/README.md`](https://github.com/FriedmanJP/MacroEconometricModels.jl/blob/dev/environments/colab/README.md); `environments/colab/colab_setup.ipynb` is the one-cell notebook.
+
+```julia
+using Downloads
+import Pkg
+const PKG_VERSION = "0.8.3"
+const JULIA_PIN = "1.12.6"
+const ASSET = "mem-colab-depot-v$(PKG_VERSION)-julia$(JULIA_PIN)-linux-x86_64.tar.zst"
+const URL = "https://github.com/FriedmanJP/MacroEconometricModels.jl/releases/download/v$(PKG_VERSION)/$(ASSET)"
+const DEST = "/content/mem-colab"
+
+if !isdir(joinpath(DEST, "depot"))
+    run(`apt-get install -y -qq zstd`)
+    Downloads.download(URL, "/tmp/$(ASSET)")
+    run(`tar -I zstd -xf /tmp/$(ASSET) -C /content`)
+end
+
+empty!(DEPOT_PATH)
+push!(DEPOT_PATH, joinpath(DEST, "depot"))
+Pkg.activate(joinpath(DEST, "env"))
+using MacroEconometricModels
+estimate_var(randn(60, 3), 2)
+```
+
+A missing sysimage on the Release is not a failure. A missing depot is: use ordinary `Pkg.add` and wait out precompile, or wait for the next tag that ships the tarball. `Pkg.update` inside the notebook voids the instant path.
+
+---
+
 ## [Where to Go Next](@id getting_started_next)
 
 - [Choosing a Method](@ref method_guide_page) — decision tables mapping a research question to the right estimator and page
@@ -97,6 +129,7 @@ plot_result(result)
 - [Innovation Accounting](@ref innovation_accounting_page) — IRF, FEVD, and historical decomposition workflows
 - [Hypothesis Tests](@ref tests_page) — unit-root, cointegration, break, and diagnostic tests
 - [Notation](@ref notation) — the symbol dictionary used throughout the documentation
+- [Google Colab (precompiled)](@ref getting_started_colab) — depot tarball for Colab's native Julia pin
 
 ---
 
@@ -128,7 +161,7 @@ Each row gives the share of one variable's ``h``-step forecast error variance at
 
 1. **Julia below 1.10.** Check with `VERSION` at the REPL. `Pkg.add` refuses to install the package on older releases, and the resolver reports an unsatisfiable `julia` compatibility bound rather than a missing package.
 
-2. **The first `using` is slow.** Precompilation runs once per package version and takes on the order of a minute. Every subsequent session loads in a few seconds. Do not interrupt the first load.
+2. **The first `using` is slow.** Precompilation runs once per package version and takes on the order of a minute. Every subsequent session loads in a few seconds. Do not interrupt the first load. On Google Colab the session depot is ephemeral — use the [precompiled depot](@ref getting_started_colab) rather than paying that cost on every runtime reset.
 
 3. **Data must be ``T \times n``.** Rows are time periods, columns are variables. A transposed matrix estimates a different model or throws a dimension error. Passing a `TimeSeriesData` removes the ambiguity entirely.
 

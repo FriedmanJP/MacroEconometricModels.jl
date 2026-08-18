@@ -44,6 +44,7 @@ const TEST_GROUPS = [
         "core/test_error_paths.jl",
         "core/test_display_backends.jl",
         "core/test_coverage_gaps.jl",
+        "core/test_colab_env.jl",
     ]),
     # Group 2: Bayesian & SVAR (heavy sampling + multi-start optimization)
     ("Bayesian & SVAR" => [
@@ -473,6 +474,7 @@ else
         @testset "Error Paths" begin include("core/test_error_paths.jl") end
         @testset "Display Backend Switching" begin include("core/test_display_backends.jl") end
         @testset "Coverage Gaps" begin include("core/test_coverage_gaps.jl") end
+        @testset "Colab precompiled env" begin include("core/test_colab_env.jl") end
 
         # Group 2: Bayesian & SVAR
         @testset "Bayesian Estimation" begin include("bvar/test_bayesian.jl") end
