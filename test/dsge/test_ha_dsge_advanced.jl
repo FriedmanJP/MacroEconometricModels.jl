@@ -61,8 +61,9 @@ const _HUG_SS_M2 = compute_steady_state(_HUG_SPEC_M2; max_iter=FAST ? 80 : 200, 
         @test new_spec2.individual.beta ≈ 0.98
     end
 
-    # Full KS SS + SSJ + MH is the HA-DSGE ceiling. Windows/macOS smoke (FAST)
-    # and Julia 1 numerical CI keep the cheap helper above; LTS still runs the rest.
+    # Full KS SS + SSJ + MH is the HA-DSGE ceiling. Windows smoke (FAST) and the
+    # Ubuntu 1.10 numerical cell keep the cheap helper above; macos/ubuntu LTS
+    # still run the rest.
     # Do not `return` — inside the wrapping HA-DSGE Types testset that aborts siblings.
     if !(FAST || NUMERICAL)
     # Compute steady state for generating fake data

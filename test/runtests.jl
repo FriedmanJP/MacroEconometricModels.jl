@@ -9,7 +9,7 @@ using LinearAlgebra
 
 # FAST mode for development iteration (shared across all test files in threaded mode)
 const FAST = get(ENV, "MACRO_FAST_TESTS", "") == "1"
-# Julia 1 Ubuntu coverage cell: important numerical tests only (see _numerical_groups).
+# Julia 1.10 Ubuntu numerical cell: important numerical tests only (see _numerical_groups).
 const NUMERICAL = get(ENV, "MACRO_NUMERICAL_CI", "") == "1"
 
 # Shared test data generators (available to all test files)
