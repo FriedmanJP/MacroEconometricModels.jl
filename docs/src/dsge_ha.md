@@ -134,10 +134,18 @@ The steady state report displays convergence diagnostics, equilibrium prices, ag
 
 ### VFI with Howard Improvement
 
-When EGM is not applicable (non-separable utility, complex constraints), **Value Function Iteration** with **Howard improvement steps** provides a robust alternative. Each VFI iteration consists of one policy maximization step followed by ``K`` policy-evaluation steps (default ``K = 20``), which are cheap linear operations that dramatically accelerate convergence.
+When EGM is not applicable (non-separable utility, complex constraints), **Value Function Iteration** with **Howard improvement steps** provides a robust alternative. Each VFI iteration consists of one policy maximization step followed by ``K`` policy-evaluation steps (default ``K = 20``), which are cheap linear operations that dramatically accelerate convergence. Pass `hh_solver=:vfi` to `compute_steady_state` (and to `solve`, which forwards the flag into the stationary problem) to use `_vfi_solve` instead of EGM. The default remains `:egm`. `hh_solver=:vfi` writes the Bellman value into `ss.value_fn`. The default EGM path now recovers `value_fn` afterwards by Howard policy evaluation of the equilibrium policy. One-asset VFI includes GHH and separable labor. Two-asset household VFI (`_two_asset_vfi_solve`) is the inner kernel when `hh_solver=:vfi` on a two-asset spec. `solve(...; method=:reiter, hh_solver=:vfi)` finite-differences the VFI policy. SSJ fake-news stays on EGM. `method=:krusell_smith` with `:vfi` throws (one-asset 4-D and two-asset per-period PE both use EGM).
+
+```@example dsge_ha
+spec_vfi = MacroEconometricModels._huggett_example(; n_a=40)
+ss_vfi = compute_steady_state(spec_vfi; hh_solver=:vfi, max_iter=80,
+                              tol=5e-3, grid_check=:none)
+(isfinite_r = isfinite(ss_vfi.prices[:r]),
+ V_increasing = ss_vfi.value_fn[end, 1] > ss_vfi.value_fn[1, 1])
+```
 
 !!! note "Two-asset steady states"
-    `compute_steady_state` bisects on a single interest rate and therefore supports **one-asset models only**. Clearing a two-asset model requires a two-dimensional market-clearing solve, which is not implemented; calling `compute_steady_state(load_ha_example(:two_asset_hank))` raises an `ArgumentError` saying so. The two-asset individual problem itself (nested EGM, adjustment costs) is fully available --- it is the general-equilibrium close that is missing.
+    One-asset models still bisect a single rate. Two-asset models use a damped `(K, r_b)` closer (the discrete-time analogue of `ct_two_asset_ge`): illiquid wealth clears against firm capital and liquid wealth against `B_supply`, with `τ = r_b B_supply`. The default `load_ha_example(:two_asset_hank)` grid is 50 × 50 × 7; shrink it for interactive work. `distribution=:winberry` on a two-asset spec still errors.
 
 ---
 
@@ -702,14 +710,18 @@ The cost is quadratic in the deposit rate and therefore smooth at ``d = 0``. The
 The individual problem is solved via **nested EGM**: an outer loop over deposit choices with an inner EGM on the liquid dimension.
 
 ```@example dsge_ha
-spec_2a = load_ha_example(:two_asset_hank)
+spec_2a = MacroEconometricModels._two_asset_hank_example(;
+    n_liquid=8, n_illiquid=6, n_e=2, B_supply=1.0)
+ss_2a = compute_steady_state(spec_2a; max_iter=12, tol=5e-2, grid_check=:none)
 (n_dims = spec_2a.grid.n_dims,
- grid_points = spec_2a.grid.n_points,
- labels = spec_2a.grid.labels,
- has_adjustment_cost = spec_2a.individual.adjustment_cost !== nothing)
+ has_r_b = haskey(ss_2a.prices, :r_b),
+ has_A = haskey(ss_2a.aggregates, :A),
+ has_B = haskey(ss_2a.aggregates, :B))
 ```
 
-The two-asset model uses a two-dimensional grid (liquid ``\times`` illiquid) of 50 × 50 = 2500 points, and the individual problem carries the adjustment cost. Because that cost is quadratic and therefore differentiable at ``d = 0``, its marginal cost passes smoothly through zero: every household whose marginal valuations differ rebalances, by an amount that shrinks continuously to zero as ``V_a/V_b \to 1``. There is no inaction band here — generating one requires a cost with a kink at the origin, which is the `cost=:kinked` specification documented under [Continuous Time](@ref dsge_continuous).
+The shipped `load_ha_example(:two_asset_hank)` grid is 50 × 50 × 7. The example above uses a coarse grid so the closer finishes in the docs build. Because the adjustment cost is quadratic and therefore differentiable at ``d = 0``, its marginal cost passes smoothly through zero: every household whose marginal valuations differ rebalances, by an amount that shrinks continuously to zero as ``V_a/V_b \to 1``. There is no inaction band here — generating one requires a cost with a kink at the origin, which is the `cost=:kinked` specification documented under [Continuous Time](@ref dsge_continuous).
+
+`solve(spec_2a; method=:ssj, ss=ss_2a)` and `method=:reiter` linearize around that stationary point. `method=:krusell_smith` re-solves the two-asset household each period and fits a PLM for ``K``.
 
 ---
 

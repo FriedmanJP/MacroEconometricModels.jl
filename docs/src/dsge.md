@@ -1,6 +1,6 @@
 # [DSGE Models](@id dsge_page)
 
-Dynamic Stochastic General Equilibrium (DSGE) models describe an economy as the equilibrium outcome of optimizing agents facing stochastic shocks. **MacroEconometricModels.jl** covers the full workflow: the `@dsge` macro parses equilibrium conditions written with time-indexed variables, `compute_steady_state` locates the deterministic steady state, `linearize` produces the Sims (2002) canonical form, and `solve` dispatches to one of seven solution algorithms. Impulse responses, variance decompositions, simulation, historical decomposition, and structural estimation all operate on the resulting solution object.
+Dynamic Stochastic General Equilibrium (DSGE) models describe an economy as the equilibrium outcome of optimizing agents facing stochastic shocks. **MacroEconometricModels.jl** covers the full workflow: the `@dsge` macro parses equilibrium conditions written with time-indexed variables, `compute_steady_state` locates the deterministic steady state, `linearize` produces the Sims (2002) canonical form, and `solve` dispatches to one of eight solution algorithms. Impulse responses, variance decompositions, simulation, historical decomposition, and structural estimation all operate on the resulting solution object.
 
 This page owns the three stages every representative-agent model shares --- specification, steady state, and linearization --- and routes to the child page that owns each solution and estimation method. Those children divide by solution class: linear first-order solvers, higher-order and global methods, and occasionally binding constraints. Models that abandon the representative agent altogether --- heterogeneous-agent, overlapping-generations, and continuous-time --- bypass this pipeline entirely and are grouped under the [Heterogeneity & Continuous Time](@ref dsge_heterogeneity) sub-hub. A 24-model replication suite validates every stage against Dynare 6.5+.
 
@@ -80,16 +80,17 @@ The economic question determines the solution class, and the solution class dete
 | `:perturbation` | Higher-order | Schmitt-Grohe & Uribe (2004), orders 1--3 with pruning | [Nonlinear Methods](@ref dsge_nonlinear) |
 | `:projection` | Global | Chebyshev collocation (Judd 1998) | [Nonlinear Methods](@ref dsge_nonlinear) |
 | `:pfi` | Global | Policy function iteration / Euler-equation time iteration (Coleman 1990) | [Nonlinear Methods](@ref dsge_nonlinear) |
+| `:vfi` | Global | Bellman value-function iteration (Stokey–Lucas–Prescott / Howard) | [Nonlinear Methods](@ref dsge_nonlinear) |
 | `:perfect_foresight` | Deterministic | Newton solver for perfect-foresight paths | [Constraints](@ref dsge_constraints) |
 
-The symbol `:vfi` is accepted as a historical alias of `:pfi` (Euler-equation time iteration, Coleman 1990) --- despite the name it does **not** perform value function iteration. The families under [Heterogeneity & Continuous Time](@ref dsge_heterogeneity) use their own entry points instead: `solve(spec; method=:ssj)`, `blanchard_steady_state`, and `ct_steady_state` respectively.
+`solve(spec; method=:vfi)` requires the same Bellman keywords as `vfi_solver` (`utility`, `beta`, `transition`, `control_bounds`). Euler-only specs must use `:pfi`. The families under [Heterogeneity & Continuous Time](@ref dsge_heterogeneity) use their own entry points instead: `solve(spec; method=:ssj)`, `blanchard_steady_state`, and `ct_steady_state` respectively.
 
 ---
 
 ## Child Pages
 
 - [Linear Solvers](@ref dsge_linear) --- Gensys, Blanchard-Kahn, and Klein first-order solutions, determinacy conditions, simulation, IRFs, FEVD, and unconditional moments
-- [Nonlinear Methods](@ref dsge_nonlinear) --- second- and third-order perturbation with pruning, generalized IRFs, Chebyshev collocation, policy function iteration, and analytical moments
+- [Nonlinear Methods](@ref dsge_nonlinear) --- second- and third-order perturbation with pruning, generalized IRFs, Chebyshev collocation, policy function iteration, value-function iteration, and analytical moments
 - [Constraints](@ref dsge_constraints) --- perfect-foresight paths, constrained steady states, and OccBin occasionally binding constraints (Guerrieri & Iacoviello 2015)
 - [Estimation](@ref dsge_estimation) --- GMM IRF matching (one-step, two-step, iterative, CU) and Bayesian estimation via SMC, SMC``^2``, and Random-Walk Metropolis-Hastings
 - [Historical Decomposition](@ref dsge_hd_page) --- Kalman-smoother shock attribution for linear models, FFBSi particle smoother for nonlinear models, and posterior bands

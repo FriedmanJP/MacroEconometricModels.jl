@@ -563,6 +563,7 @@ include("dsge/heterogeneous/individual_vfi.jl")
 include("dsge/heterogeneous/distribution.jl")
 include("dsge/heterogeneous/grid_check.jl")
 include("dsge/heterogeneous/steady_state.jl")
+include("dsge/heterogeneous/two_asset_ge.jl")
 include("dsge/heterogeneous/krusell_smith.jl")
 include("dsge/heterogeneous/ssj.jl")
 include("dsge/heterogeneous/blocks.jl")
@@ -775,7 +776,7 @@ export simulate, estimate_dsge
 export solve_lyapunov, analytical_moments
 export determinacy_region, determinacy_boundary, determinacy_label, DETERMINACY_CODES
 export pruned_state_space
-export evaluate_policy, max_euler_error, vfi_solver
+export evaluate_policy, evaluate_value, max_euler_error, vfi_solver
 
 # Accessors
 export nshocks, is_determined, is_stable

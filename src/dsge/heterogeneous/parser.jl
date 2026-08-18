@@ -541,7 +541,9 @@ chosen solution method.
 - `ss::Union{Nothing,HASteadyState{T}}` — precomputed steady state; if `nothing`, computed automatically
 
 # Keyword Arguments (passed to steady state and solver)
-- `K_init`, `r_bounds`, `max_iter`, `tol`, `verbose` — steady-state kwargs
+- `K_init`, `r_bounds`, `max_iter`, `tol`, `verbose`, `hh_solver` — steady-state kwargs
+  (`hh_solver=:vfi` selects Bellman VFI for the stationary household problem only;
+  it is an error with `method=:krusell_smith`)
 - `T_horizon`, `n_reduced` — SSJ/Reiter kwargs
 - `n_moments`, `n_quad` — Winberry kwargs (`method=:reiter` with `distribution=:winberry`)
 - `T_sim`, `T_burn`, `max_outer`, `rho_z`, `sigma_z` — Krusell-Smith kwargs
@@ -565,10 +567,17 @@ function solve(spec::HADSGESpec{T}; method::Symbol=:ssj,
                ss::Union{Nothing,HASteadyState{T}}=nothing,
                kwargs...) where {T<:AbstractFloat}
     # Compute steady state if not supplied
+    if get(kwargs, :hh_solver, :egm) === :vfi && method === :krusell_smith
+        throw(ArgumentError(
+            "solve: hh_solver=:vfi is not implemented for method=:krusell_smith " *
+            "(the KS household problem has aggregate (K, z) in the state). " *
+            "Use hh_solver=:egm, or solve the stationary problem with " *
+            "compute_steady_state(...; hh_solver=:vfi) separately."))
+    end
     if ss === nothing
         # Extract steady-state relevant kwargs
         ss_keys = (:K_init, :r_bounds, :max_iter, :tol, :verbose, :price_fn,
-                   :n_moments, :n_quad, :grid_check, :winberry_tol)
+                   :n_moments, :n_quad, :grid_check, :winberry_tol, :hh_solver)
         ss_kwargs = Dict{Symbol,Any}()
         for k in ss_keys
             if haskey(kwargs, k)
@@ -600,11 +609,13 @@ function solve(spec::HADSGESpec{T}; method::Symbol=:ssj,
                 ss, spec.individual, spec.grid, spec.income;
                 n_moments=get(kwargs, :n_moments, 3),
                 n_quad=get(kwargs, :n_quad, 4),
-                model=spec.model, het_params=reiter_params)
+                model=spec.model, het_params=reiter_params,
+                hh_solver=get(kwargs, :hh_solver, :egm))
         else
             _reiter_linearize(
                 ss, spec.individual, spec.grid, spec.income; n_reduced=n_reduced,
-                model=spec.model, het_params=reiter_params)
+                model=spec.model, het_params=reiter_params,
+                hh_solver=get(kwargs, :hh_solver, :egm))
         end
 
         # Build a minimal DSGESolution and HADSGESolution from Reiter output

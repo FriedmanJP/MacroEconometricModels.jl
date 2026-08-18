@@ -12,20 +12,21 @@
 #   Heer & Maussner (2009), Dynamic General Equilibrium Modeling
 
 """
-    _pfi_euler_step(y_guess, y_lag, E_y_lead, spec) -> Vector{T}
+    _pfi_euler_step(y_guess, y_lag, E_y_lead, spec; ε) -> Vector{T}
 
 Solve the Euler equation at one grid point via Newton iteration.
 
 Given lagged state `y_lag` (levels) and expected next-period variables `E_y_lead` (levels),
-find `y_t` (levels) such that `F(y_t, y_lag, E_y_lead, 0, θ) = 0`.
+find `y_t` (levels) such that `F(y_t, y_lag, E_y_lead, ε, θ) = 0`.
+`ε` defaults to zero (certainty-equivalent current period).
 """
 function _pfi_euler_step(y_guess::Vector{T}, y_lag::Vector{T},
                           E_y_lead::Vector{T}, spec::DSGESpec{T};
+                          ε::AbstractVector{T}=zeros(T, spec.n_exog),
                           newton_tol::Real=1e-10, newton_max::Int=50) where {T}
     n_eq = spec.n_endog
-    n_eps = spec.n_exog
     θ = spec.param_values
-    ε_zero = zeros(T, n_eps)
+    ε_use = Vector{T}(ε)
 
     y = copy(y_guess)
     h = max(T(1e-7), sqrt(eps(T)))
@@ -35,7 +36,7 @@ function _pfi_euler_step(y_guess::Vector{T}, y_lag::Vector{T},
         R = zeros(T, n_eq)
         for i in 1:n_eq
             try
-                R[i] = spec.residual_fns[i](y, y_lag, E_y_lead, ε_zero, θ)
+                R[i] = spec.residual_fns[i](y, y_lag, E_y_lead, ε_use, θ)
             catch e
                 if e isa DomainError || e isa InexactError
                     R[i] = T(1e10)
@@ -56,7 +57,7 @@ function _pfi_euler_step(y_guess::Vector{T}, y_lag::Vector{T},
             y_plus[j] += h
             for i in 1:n_eq
                 try
-                    R_plus = spec.residual_fns[i](y_plus, y_lag, E_y_lead, ε_zero, θ)
+                    R_plus = spec.residual_fns[i](y_plus, y_lag, E_y_lead, ε_use, θ)
                     J[i, j] = (R_plus - R[i]) / h
                 catch e
                     if e isa DomainError || e isa InexactError
@@ -82,16 +83,49 @@ function _pfi_euler_step(y_guess::Vector{T}, y_lag::Vector{T},
 end
 
 """
-    _pfi_compute_expectations(coeffs, n_vars, n_basis, state_idx, spec,
-                               quad_nodes, quad_weights, state_bounds,
-                               multi_indices, steady_state, y_current_nodes, impact)
+    _pfi_next_state(y_current, y_lag, ε, state_idx, spec, impact, next_state) -> Vector
 
-Compute E[y_{t+1}] at all grid points using quadrature.
+Next-period state levels at a grid point under one quadrature shock.
 
-For each grid point j, expected next-period values are:
-`E[y'] = Σ_i w_i · policy(x'(x_j, ε_i))`
+- `:linear` — current policy states plus first-order `impact * ε` (default)
+- `:policy` — current policy states only (no linearized shock)
+- `:nonlinear` — Newton-solve `F(y, y_lag, y_current, ε, θ) = 0` and take `y[state]`
+"""
+function _pfi_next_state(y_current::AbstractVector{T}, y_lag::AbstractVector{T},
+                         ε::AbstractVector{T}, state_idx::Vector{Int},
+                         spec::DSGESpec{T}, impact::AbstractMatrix{T},
+                         next_state::Symbol) where {T}
+    nx = length(state_idx)
+    x_next = zeros(T, nx)
+    if next_state === :nonlinear
+        y_sh = _pfi_euler_step(Vector{T}(y_current), Vector{T}(y_lag),
+                               Vector{T}(y_current), spec; ε=ε)
+        for (ii, si) in enumerate(state_idx)
+            x_next[ii] = y_sh[si]
+        end
+    else
+        for (ii, si) in enumerate(state_idx)
+            x_next[ii] = y_current[si]
+        end
+        if next_state === :linear
+            n_eps = length(ε)
+            for (ii, si) in enumerate(state_idx)
+                for k in 1:n_eps
+                    x_next[ii] += impact[si, k] * ε[k]
+                end
+            end
+        elseif next_state !== :policy
+            throw(ArgumentError("next_state must be :linear, :policy, or :nonlinear, got :$next_state"))
+        end
+    end
+    return x_next
+end
 
-where `x'` are next-period states derived from current policy + shock.
+"""
+    _pfi_compute_expectations(...) -> Matrix
+
+`E[y'] = Σ_q w_q · policy(x'(x_j, ε_q))` at every grid point.
+`next_state` selects the map `x'` (see [`_pfi_next_state`](@ref)).
 """
 function _pfi_compute_expectations(coeffs::Matrix{T}, n_vars::Int, n_basis::Int,
                                     state_idx::Vector{Int}, spec::DSGESpec{T},
@@ -99,7 +133,10 @@ function _pfi_compute_expectations(coeffs::Matrix{T}, n_vars::Int, n_basis::Int,
                                     state_bounds::Matrix{T}, multi_indices::Matrix{Int},
                                     steady_state::Vector{T},
                                     y_current_nodes::Matrix{T},
-                                    impact::Matrix{T}) where {T}
+                                    impact::Matrix{T},
+                                    nodes_phys::Matrix{T};
+                                    next_state::Symbol=:linear,
+                                    threaded::Bool=false) where {T}
     n_nodes = size(y_current_nodes, 1)
     n_eq = spec.n_endog
     n_eps = spec.n_exog
@@ -107,39 +144,41 @@ function _pfi_compute_expectations(coeffs::Matrix{T}, n_vars::Int, n_basis::Int,
     n_quad = length(quad_weights)
 
     E_y_lead = zeros(T, n_nodes, n_eq)
+    ss = steady_state
 
-    @inbounds for j in 1:n_nodes
-        for q in 1:n_quad
-            iszero(quad_weights[q]) && continue   # center node contributes 0 (S-19 / #224)
-            # Next-period states from current policy
-            x_next_level = zeros(T, nx)
-            for (ii, si) in enumerate(state_idx)
-                x_next_level[ii] = y_current_nodes[j, si]
-            end
-
-            # Add shock effect via linear impact matrix
-            for (ii, si) in enumerate(state_idx)
-                for k in 1:n_eps
-                    x_next_level[ii] += impact[si, k] * quad_nodes[q, k]
-                end
-            end
-
-            # Clamp to bounds
+    function one_node!(j::Int)
+        y_lag = copy(ss)
+        for (ii, si) in enumerate(state_idx)
+            y_lag[si] = nodes_phys[j, ii]
+        end
+        acc = zeros(T, n_eq)
+        @inbounds for q in 1:n_quad
+            iszero(quad_weights[q]) && continue
+            ε = n_eps == 0 ? T[] : vec(@view quad_nodes[q, :])
+            x_next_level = _pfi_next_state(view(y_current_nodes, j, :), y_lag, ε,
+                                           state_idx, spec, impact, next_state)
             for d in 1:nx
                 x_next_level[d] = clamp(x_next_level[d], state_bounds[d, 1], state_bounds[d, 2])
             end
-
-            # Evaluate policy at next-period states
             z_next = _scale_to_unit(x_next_level, state_bounds)
             z_next = clamp.(z_next, T(-1), T(1))
             B_next = _chebyshev_basis_multi(reshape(z_next, 1, nx), multi_indices)
-
-            y_next = zeros(T, n_eq)
             for v in 1:n_vars
-                y_next[v] = dot(@view(B_next[1, :]), @view(coeffs[v, :])) + steady_state[v]
+                acc[v] += quad_weights[q] *
+                    (dot(@view(B_next[1, :]), @view(coeffs[v, :])) + steady_state[v])
             end
+        end
+        E_y_lead[j, :] = acc
+        return nothing
+    end
 
-            E_y_lead[j, :] .+= quad_weights[q] .* y_next
+    if threaded && Threads.nthreads() > 1
+        Threads.@threads for j in 1:n_nodes
+            one_node!(j)
+        end
+    else
+        for j in 1:n_nodes
+            one_node!(j)
         end
     end
 
@@ -167,8 +206,15 @@ coefficients via least squares.
 - `max_iter::Int=500`: maximum PFI iterations
 - `damping::Real=1.0`: policy mixing factor (1.0 = no damping)
 - `anderson_m::Int=0`: Anderson acceleration depth (0 = disabled)
-- `threaded::Bool=false`: enable multi-threaded grid evaluation
+- `howard_steps::Int=0`: extra Euler re-solves per iteration with the policy held
+  (Coleman time-iteration analogue of Howard; 0 = one Euler pass per outer step)
+- `next_state::Symbol=:linear`: map from current policy + shock to `x'`
+  (`:linear` = policy states + gensys `impact`; `:policy` = policy states only;
+  `:nonlinear` = Newton-solve the residuals at the quadrature shock)
+- `threaded::Bool=false`: multi-thread the per-node Euler solve **and** the
+  expectation quadrature
 - `verbose::Bool=false`: print iteration info
+- `initial_coeffs`: optional `n_vars × n_basis` warm-start coefficients
 """
 function pfi_solver(spec::DSGESpec{T};
                     degree::Int=5,
@@ -181,9 +227,14 @@ function pfi_solver(spec::DSGESpec{T};
                     max_iter::Int=500,
                     damping::Real=1.0,
                     anderson_m::Int=0,
+                    howard_steps::Int=0,
+                    next_state::Symbol=:linear,
                     threaded::Bool=false,
                     verbose::Bool=false,
                     initial_coeffs::Union{Nothing,AbstractMatrix{<:Real}}=nothing) where {T<:AbstractFloat}
+    next_state in (:linear, :policy, :nonlinear) || throw(ArgumentError(
+        "next_state must be :linear, :policy, or :nonlinear, got :$next_state"))
+    howard_steps >= 0 || throw(ArgumentError("howard_steps must be ≥ 0"))
 
     n_eq = spec.n_endog
     n_eps = spec.n_exog
@@ -297,7 +348,10 @@ function pfi_solver(spec::DSGESpec{T};
                                               state_idx, spec,
                                               quad_nodes, quad_weights,
                                               state_bounds_T, multi_indices, ss,
-                                              y_current_nodes, impact)
+                                              y_current_nodes, impact,
+                                              nodes_phys_T;
+                                              next_state=next_state,
+                                              threaded=threaded)
 
         # (c) Solve Euler equation at each grid point
         if threaded && Threads.nthreads() > 1
@@ -330,6 +384,45 @@ function pfi_solver(spec::DSGESpec{T};
         # (e) Apply damping
         if damping < one(T)
             coeffs_new .= (one(T) - T(damping)) .* coeffs .+ T(damping) .* coeffs_new
+        end
+
+        # Extra Euler re-solves with the policy held (time-iteration Howard)
+        for _h in 1:howard_steps
+            for j in 1:n_nodes
+                for v in 1:n_vars
+                    y_current_nodes[j, v] = dot(@view(basis_matrix[j, :]), @view(coeffs_new[v, :])) + ss[v]
+                end
+            end
+            E_h = _pfi_compute_expectations(coeffs_new, n_vars, n_basis,
+                                            state_idx, spec,
+                                            quad_nodes, quad_weights,
+                                            state_bounds_T, multi_indices, ss,
+                                            y_current_nodes, impact,
+                                            nodes_phys_T;
+                                            next_state=next_state,
+                                            threaded=threaded)
+            if threaded && Threads.nthreads() > 1
+                Threads.@threads for j in 1:n_nodes
+                    y_lag = copy(ss)
+                    for (ii, si) in enumerate(state_idx)
+                        y_lag[si] = nodes_phys_T[j, ii]
+                    end
+                    y_new_nodes[j, :] = _pfi_euler_step(y_current_nodes[j, :], y_lag,
+                                                        E_h[j, :], spec)
+                end
+            else
+                for j in 1:n_nodes
+                    y_lag = copy(ss)
+                    for (ii, si) in enumerate(state_idx)
+                        y_lag[si] = nodes_phys_T[j, ii]
+                    end
+                    y_new_nodes[j, :] = _pfi_euler_step(y_current_nodes[j, :], y_lag,
+                                                        E_h[j, :], spec)
+                end
+            end
+            for v in 1:n_vars
+                coeffs_new[v, :] = basis_matrix \ (y_new_nodes[:, v] .- ss[v])
+            end
         end
 
         # Anderson acceleration

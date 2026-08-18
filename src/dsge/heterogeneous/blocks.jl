@@ -239,10 +239,10 @@ function HetBlock(ss::HASteadyState{T}, individual::IndividualProblem{T},
                   dx::Real=T(1e-4)) where {T<:AbstractFloat}
     inputs = collect(Symbol, inputs)
     outputs = collect(Symbol, outputs)
-    grid.n_dims == 1 || throw(ArgumentError(
-        "HetBlock :$name requires a one-asset grid (got n_dims=$(grid.n_dims))"))
-    individual.n_asset_dims == 1 || throw(ArgumentError(
-        "HetBlock :$name requires a one-asset individual problem"))
+    grid.n_dims in (1, 2) || throw(ArgumentError(
+        "HetBlock :$name requires a one- or two-asset grid (got n_dims=$(grid.n_dims))"))
+    individual.n_asset_dims == grid.n_dims || throw(ArgumentError(
+        "HetBlock :$name: individual n_asset_dims must match the grid"))
     isempty(inputs) && throw(ArgumentError("HetBlock :$name has no inputs"))
     isempty(outputs) && throw(ArgumentError("HetBlock :$name has no outputs"))
     for i in inputs

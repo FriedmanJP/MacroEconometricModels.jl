@@ -290,12 +290,39 @@ const MEM_IH = MacroEconometricModels
 
     @testset "CI runner helpers" begin
         @test _blas_threads_for_group("HA-DSGE") == 2
+        @test _blas_threads_for_group("HA-DSGE Advanced") == 2
         @test _blas_threads_for_group("DSGE Core") == 1
         @test _blas_threads_for_group("Plotting") == 1
         @test _runner_max_conc(8) == 4
         @test _runner_max_conc(2) == 2
         @test _runner_max_conc(4) == 4
+        @test _expected_rank("HA-DSGE") > _expected_rank("HA-DSGE Advanced")
+        @test _expected_rank("HA-DSGE Advanced") > _expected_rank("DSGE Core")
         @test _expected_rank("HA-DSGE") > _expected_rank("DSGE Core")
+
+        dummy = ["Plotting" => ["plotting/test_plot_render.jl"],
+                 "HA-DSGE" => ["dsge/test_ha_dsge.jl"],
+                 "Coverage-C + IO" => ["coverage/test_misc_coverage.jl", "io/test_io_types.jl"],
+                 "Core & VAR" => ["core/test_aqua.jl", "core/test_kalman.jl"]]
+        kept = _numerical_groups(dummy, true)
+        names = first.(kept)
+        @test names == ["HA-DSGE", "Coverage-C + IO", "Core & VAR"]
+        @test last(kept[2]) == ["io/test_io_types.jl"]
+        @test last(kept[3]) == ["core/test_kalman.jl"]
+        @test collect(_numerical_groups(dummy, false)) == collect(dummy)
+
+        dummy2 = ["HA-DSGE" => ["dsge/test_ha_dsge.jl"],
+                  "DSGE Core" => ["dsge/test_dsge.jl"],
+                  "Coverage-A" => ["coverage/test_dsge_coverage.jl"],
+                  "Core & VAR" => ["core/test_kalman.jl"],
+                  "Plotting" => ["plotting/test_plot_render.jl"]]
+        @test first.(_ci_suite_groups(dummy2, "dsge")) ==
+              ["HA-DSGE", "DSGE Core", "Coverage-A"]
+        @test first.(_ci_suite_groups(dummy2, "empirical")) ==
+              ["Core & VAR", "Plotting"]
+        @test collect(_ci_suite_groups(dummy2, "")) == collect(dummy2)
+        @test_throws ArgumentError _ci_suite_groups(dummy2, "bogus")
+
         @test _expected_rank("DSGE Core") > _expected_rank("Counterfactual")
         @test _expected_rank("Coverage-A") > _expected_rank("Coverage-B")
 

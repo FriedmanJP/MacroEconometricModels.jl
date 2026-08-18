@@ -1144,7 +1144,8 @@ function _winberry_linearize(ss::HASteadyState{T}, ip::IndividualProblem{T},
                               het_params::Dict{Symbol,T}=Dict{Symbol,T}(),
                               dm_step::Real=1e-4, dr_step::Real=1e-5,
                               dw_step::Real=1e-5, n_sim::Int=200,
-                              rng::Union{Nothing,AbstractRNG}=nothing) where {T<:AbstractFloat}
+                              rng::Union{Nothing,AbstractRNG}=nothing,
+                              hh_solver::Symbol=:egm) where {T<:AbstractFloat}
     grid.n_dims == 1 || throw(ArgumentError(
         "Winberry linearization requires a one-asset grid (got n_dims = $(grid.n_dims))."))
     ip.n_asset_dims == 1 || throw(ArgumentError(
@@ -1206,12 +1207,14 @@ function _winberry_linearize(ss::HASteadyState{T}, ip::IndividualProblem{T},
 
     # ── Step 3: ∂M′/∂prices via re-solved policies ───────────────────────────
     prices_r = copy(ss.prices); prices_r[:r] = ss.prices[:r] + T(dr_step)
-    _, a_pol_r = _egm_solve(ip, grid, income, prices_r; max_iter=1000, tol=T(1e-10))
+    a_pol_r = _hh_a_policy(ip, grid, income, prices_r; hh_solver=hh_solver,
+                           max_iter=1000, tol=T(1e-10))
     M_r, _, _ = _winberry_forward(M_ss, mass, a_pol_r, grid, income, nodes, weights;
                                    lambda_warm=lam_ss)
 
     prices_w = copy(ss.prices); prices_w[:w] = ss.prices[:w] + T(dw_step)
-    _, a_pol_w = _egm_solve(ip, grid, income, prices_w; max_iter=1000, tol=T(1e-10))
+    a_pol_w = _hh_a_policy(ip, grid, income, prices_w; hh_solver=hh_solver,
+                           max_iter=1000, tol=T(1e-10))
     M_w, _, _ = _winberry_forward(M_ss, mass, a_pol_w, grid, income, nodes, weights;
                                    lambda_warm=lam_ss)
 

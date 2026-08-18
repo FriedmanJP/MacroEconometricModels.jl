@@ -1,10 +1,31 @@
 # [Nonlinear Solution Methods](@id dsge_nonlinear)
 
-First-order linear solutions impose **certainty equivalence** --- agents behave as if shocks have zero variance. This rules out risk premia, precautionary savings, welfare costs of uncertainty, and asymmetric dynamics. Nonlinear methods capture all of these by retaining higher-order terms in the Taylor expansion of the policy function or by solving the functional equation globally. MacroEconometricModels.jl provides four families: **higher-order perturbation** (local, Schmitt-Grohe & Uribe 2004; Andreasen, Fernandez-Villaverde & Rubio-Ramirez 2018), **Chebyshev projection** (global polynomial, Judd 1992, 1998), **policy function iteration** (global iterative, Coleman 1990), and `vfi_solver` (a historically-named **Euler time-iteration** solver, algorithmically equivalent to policy function iteration --- not genuine value-function iteration; see the warning under [Value Function Iteration](@ref)). All three global solvers support multi-threading, and the two iterative ones support Anderson acceleration (Walker & Ni 2011). For model specification and linearization, see [DSGE Models](@ref dsge_page). For first-order solvers, see [Linear Solvers](@ref dsge_linear).
+First-order linear solutions impose **certainty equivalence** --- agents behave as if shocks have zero variance. This rules out risk premia, precautionary savings, welfare costs of uncertainty, and asymmetric dynamics. Nonlinear methods capture all of these by retaining higher-order terms in the Taylor expansion of the policy function or by solving the functional equation globally. MacroEconometricModels.jl provides four families: **higher-order perturbation** (local, Schmitt-Grohe & Uribe 2004; Andreasen, Fernandez-Villaverde & Rubio-Ramirez 2018), **Chebyshev projection** (global polynomial, Judd 1992, 1998), **policy function iteration** (global iterative, Coleman 1990), and **value-function iteration** (Bellman / Howard, Stokey, Lucas & Prescott 1989). Collocation and PFI support multi-threading; PFI also supports Anderson acceleration (Walker & Ni 2011). `vfi_solver` maximizes ``u + \beta E[V]`` and requires a reward and a state transition --- Euler time iteration is [`pfi_solver`](@ref). For model specification and linearization, see [DSGE Models](@ref dsge_page). For first-order solvers, see [Linear Solvers](@ref dsge_linear).
 
 ```@setup dsge_nonlinear
 using MacroEconometricModels, Random, LinearAlgebra, Statistics
 Random.seed!(42)
+
+# Bellman primitives for the stochastic-growth spec (state = [K, A]).
+_doc_vfi_transition(x, a, ε, θ) = begin
+    K, A = x[1], x[2]
+    C = a[1]
+    Kp = A * K^θ[:α] + (1 - θ[:δ]) * K - C
+    Ap = A^θ[:ρ] * exp(θ[:σ] * ε[1])
+    [Kp, Ap]
+end
+_doc_vfi_bounds(x, θ) = begin
+    K, A = x[1], x[2]
+    y = A * K^θ[:α] + (1 - θ[:δ]) * K
+    lo = max(y * 1e-4, 1e-8)
+    ([lo], [max(y - 1e-8, lo + 1e-8)])
+end
+_doc_vfi_outcome(x, a, θ) = begin
+    K, A = x[1], x[2]
+    C = a[1]
+    Y = A * K^θ[:α]
+    [Y, C, Y + (1 - θ[:δ]) * K - C, A]
+end
 ```
 
 ## Quick Start
@@ -63,14 +84,20 @@ err = max_euler_error(proj; n_test=1000, rng=MersenneTwister(42))
 
 Gauss-Newton drives the collocation residual to zero in 6 iterations on a 36-node tensor grid, and the resulting policy has a maximum Euler error of ``4.9 \times 10^{-4}`` — ``\log_{10}`` of ``-3.3``, "good" on the usual accuracy scale. Note that the residual at the nodes and the Euler error away from them are different quantities; the second is the one that measures accuracy.
 
-**Recipe 4: `vfi_solver` (Euler time iteration) with Howard-style re-solves and Anderson acceleration**
+**Recipe 4: Bellman `vfi_solver` with Howard policy evaluation**
 
 ```@example dsge_nonlinear
-vfi = vfi_solver(spec; degree=5, howard_steps=5, anderson_m=3, max_iter=500)
-report(vfi)
+vfi = vfi_solver(spec;
+    utility = log, beta = :β, consumption = :C, controls = [:C],
+    transition = _doc_vfi_transition,
+    control_bounds = _doc_vfi_bounds,
+    outcome = _doc_vfi_outcome,
+    degree = 3, n_grid = 8, howard_steps = 10, max_iter = 200)
+(converged = vfi.converged, iterations = vfi.iterations,
+ V_ss = evaluate_value(vfi, spec.steady_state[vfi.state_indices]))
 ```
 
-Howard re-solves and Anderson mixing together cut the iteration count to 23, against 161 for plain time iteration. Each acceleration helps on its own — Anderson alone needs 126 iterations, `howard_steps=5` alone 34 — and the two compose: `howard_steps=10` with the same Anderson depth finishes in 14.
+`vfi_solver` requires a period reward, a discount factor, and a state transition. It stores a value function: `evaluate_value(vfi, x)` is ``V(K, A)`` at that state. Euler-equation time iteration without a reward is [`pfi_solver`](@ref).
 
 ---
 
@@ -568,14 +595,16 @@ PFI reaches the ``10^{-8}`` sup-norm target in 223 iterations here — roughly f
 | `scale` | `Real` | `3.0` | State bounds as multiples of unconditional std |
 | `damping` | `Real` | `1.0` | Damping factor (0.5 for slow convergence, 1.0 for no damping) |
 | `anderson_m` | `Int` | `0` | Anderson acceleration depth (0 = disabled; see [Anderson Acceleration](@ref anderson_accel)) |
-| `threaded` | `Bool` | `false` | Multi-threaded grid-point Euler evaluation |
+| `howard_steps` | `Int` | `0` | Extra Euler re-solves per outer iteration (0 = one pass) |
+| `next_state` | `Symbol` | `:linear` | `:linear` (policy + gensys impact), `:policy` (policy states only), or `:nonlinear` (Newton residual at the quadrature shock) |
+| `threaded` | `Bool` | `false` | Multi-threaded Euler solve and expectation quadrature |
 | `verbose` | `Bool` | `false` | Print per-iteration residuals |
 | `tol` | `Real` | ``10^{-8}`` | Sup-norm convergence tolerance |
 | `max_iter` | `Int` | `500` | Maximum iterations |
-| `initial_coeffs` | `Union{Nothing, Matrix}` | `nothing` | Warm-start from previous solve |
+| `initial_coeffs` | `Union{Nothing, Matrix}` | `nothing` | Warm-start Chebyshev coefficients (`n_vars × n_basis`) |
 
 !!! note "Technical Note"
-    PFI, Chebyshev collocation, and `vfi_solver` all return the same `ProjectionSolution{T}` type. All three support `evaluate_policy`, `simulate`, `irf` (a generalized IRF), and `max_euler_error`. The `method` field distinguishes them: `:projection` for collocation, `:pfi` for policy function iteration, `:vfi` for the Euler time-iteration solver (historical name; see the warning under [Value Function Iteration](@ref)).
+    PFI, Chebyshev collocation, and `vfi_solver` all return the same `ProjectionSolution{T}` type. All three support `evaluate_policy`, `simulate`, `irf` (a generalized IRF), and `max_euler_error`. The `method` field distinguishes them: `:projection` for collocation, `:pfi` for policy function iteration, `:vfi` for Bellman value-function iteration. `vfi_solver` additionally stores `value_fn` and supports [`evaluate_value`](@ref).
 
 ### Return Value (`ProjectionSolution{T}`)
 
@@ -607,78 +636,96 @@ PFI reaches the ``10^{-8}`` sup-norm target in 223 iterations here — roughly f
 
 ## Value Function Iteration
 
-!!! warning "Historical name --- this is Euler time iteration, not value-function iteration"
-    Despite its name, `vfi_solver` does **not** perform value-function iteration: it holds no value function and evaluates no Bellman maximum. It performs **Euler-equation time iteration** (Coleman 1990) and is algorithmically identical to [`pfi_solver`](@ref) --- the four steps below are the PFI steps, and `howard_steps` are extra Euler re-solves, not Howard value-improvement steps. A genuine value-function iteration would need a separate reward/Bellman formulation that `DSGESpec` does not expose. The exported name and `:vfi` method tag are kept for backward compatibility.
+`vfi_solver` iterates the Bellman operator on a tensor state grid. At each node it maximizes ``u(c) + \beta E[V(x')]`` over a one-dimensional control box, then applies Howard (1960) policy evaluation: hold the policy fixed and iterate ``V = u + \beta P_\pi V``. Convergence is on ``\|V_{\text{new}} - V\|_\infty``. The exported policy is a Chebyshev fit of that grid policy, so `evaluate_policy`, `simulate`, and `irf` keep working.
 
-At each iteration the solver evaluates the Euler equation residuals at all grid points, updates the policy coefficients, and checks the policy sup-norm for convergence. Two acceleration techniques reduce the iteration count: extra Euler re-solves (`howard_steps`, after Howard 1960) and **Anderson acceleration** (Walker & Ni 2011).
+`DSGESpec` still exposes only Euler residuals. The reward can be declared on the spec (`utility: log(C)`, `beta: β`, `controls: C` in `@dsge`) and is then picked up automatically. `transition` and `control_bounds` remain required keywords. Calling `vfi_solver(spec)` with no Bellman data at all throws `ArgumentError` and points at [`pfi_solver`](@ref).
 
-The algorithm proceeds in four steps:
+```math
+V(x) = \max_{a \in \mathcal{A}(x)} \Bigl\{ u(x, a) + \beta \sum_q w_q \, V\bigl(g(x, a, \varepsilon_q)\bigr) \Bigr\}
+```
 
-1. **Setup**: Linearize the model, compute state bounds, build the Chebyshev grid and basis matrix (identical to PFI/collocation)
-2. **Euler evaluation**: At each grid point ``x_j``, compute expectations via quadrature and solve ``F(y_t, x_j, E[y_{t+1}], 0, \theta) = 0`` for ``y_t`` via Newton's method
-3. **Update**: Project updated policy values onto the Chebyshev basis, apply damping and optional Howard/Anderson steps
-4. **Convergence**: Check sup-norm of policy change; iterate until ``\|y_{\text{new}} - y_{\text{old}}\|_\infty < \text{tol}``
+where
+
+- ``x`` is the state (here capital and productivity)
+- ``a`` is the control (consumption)
+- ``u`` is the period reward
+- ``g`` is the state transition
+- ``(w_q, \varepsilon_q)`` are the shock quadrature nodes
 
 ```@example dsge_nonlinear
-vfi_plain = vfi_solver(spec; degree=5, max_iter=500)
+vfi_plain = vfi_solver(spec;
+    utility = log, beta = :β, consumption = :C, controls = [:C],
+    transition = _doc_vfi_transition,
+    control_bounds = _doc_vfi_bounds,
+    outcome = _doc_vfi_outcome,
+    degree = 3, n_grid = 8, howard_steps = 0, max_iter = 400)
 (converged = vfi_plain.converged, iterations = vfi_plain.iterations,
  residual_norm = vfi_plain.residual_norm)
 ```
 
-Unaccelerated time iteration converges, but it takes 161 passes over the grid to do it, and every pass solves a nonlinear system at each of the 36 nodes. The accelerations below cut that by an order of magnitude at no cost in accuracy.
+Without Howard steps the contraction is essentially ``\beta = 0.99`` per sweep, so hundreds of iterations are typical. The stored ``V`` is still the object that converged: `evaluate_value(vfi_plain, x)` returns it off the grid by multilinear interpolation.
 
 | Keyword | Type | Default | Description |
 |---------|------|---------|-------------|
-| `degree` | `Int` | `5` | Chebyshev polynomial degree |
-| `grid` | `Symbol` | `:auto` | `:tensor`, `:smolyak`, or `:auto` |
-| `smolyak_mu` | `Int` or `Vector{Int}` | `3` | Smolyak approximation level (scalar isotropic, vector anisotropic) |
+| `utility` | `Function` | required | `u(c)` if `consumption` is set, else `u(y, y_lag, ε, θ)` |
+| `beta` | `Real` or `Symbol` | required | Discount factor, or a name in `param_values` |
+| `transition` | `Function` | required | `(x, a, ε, θ) → x′` |
+| `control_bounds` | `Function` | required | `(x, θ) → (a_lo, a_hi)` |
+| `consumption` | `Symbol` | `nothing` | If set, `utility` is `u(c)` |
+| `controls` | `Vector{Symbol}` | non-state endog | Choice variables (one continuous control in v1) |
+| `outcome` | `Function` | fill states + controls | `(x, a, θ) → y` full endogenous vector |
+| `degree` | `Int` | `5` | Chebyshev degree of the exported policy |
+| `n_grid` | `Int` | `12` | Uniform tensor nodes per state for the Bellman grid |
 | `quadrature` | `Symbol` | `:auto` | `:gauss_hermite` or `:monomial` |
-| `n_quad` | `Int` | `5` | Quadrature nodes per dimension |
-| `scale` | `Real` | `3.0` | State bounds as multiples of unconditional std |
-| `damping` | `Real` | `1.0` | Coefficient mixing factor (1.0 = no damping) |
-| `howard_steps` | `Int` | `0` | Extra Euler re-solves per iteration (0 = plain time iteration) |
-| `anderson_m` | `Int` | `0` | Anderson acceleration depth (0 = disabled; see [Anderson Acceleration](@ref anderson_accel)) |
-| `threaded` | `Bool` | `false` | Multi-threaded grid-point evaluation |
-| `verbose` | `Bool` | `false` | Print per-iteration residuals |
-| `tol` | `Real` | ``10^{-8}`` | Policy sup-norm convergence tolerance |
-| `max_iter` | `Int` | `1000` | Maximum time-iteration steps |
-| `initial_coeffs` | `Union{Nothing, Matrix}` | `nothing` | Warm-start coefficients from previous solve |
+| `n_quad` | `Int` | `5` | Quadrature nodes per shock dimension |
+| `n_choice` | `Int` | `41` | Line-search points on the control box |
+| `howard_steps` | `Int` | `20` | Howard policy-evaluation steps per iteration |
+| `tol` | `Real` | ``10^{-8}`` | Sup-norm tolerance on ``V`` |
+| `max_iter` | `Int` | `500` | Maximum VFI iterations |
+| `threaded` | `Bool` | `false` | Multi-threaded per-node maximization |
 
-### Howard Improvement Steps
+### Howard Policy Evaluation
 
-Pure time iteration updates the policy at every iteration, and each update solves a nonlinear system at every grid point. **Howard improvement steps** (Howard 1960; Santos & Rust 2003) amortize the cost: after each policy update, hold the policy fixed and re-solve the Euler equation `howard_steps` more times, refreshing only the Chebyshev coefficients. Because the re-solve is cheaper than a fresh policy step, the total iteration count falls.
+After each maximization sweep, **Howard policy evaluation** (Howard 1960; Santos & Rust 2003) freezes the policy and iterates the linear map ``V \mapsto u_\pi + \beta P_\pi V``. Those steps do not re-optimize; they only refresh ``V`` under the current policy. The next maximization then sees a much more accurate continuation value.
 
 ```@example dsge_nonlinear
-vfi_howard = vfi_solver(spec; degree=5, howard_steps=5, max_iter=500)
-(converged = vfi_howard.converged, iterations = vfi_howard.iterations)
+vfi_howard = vfi_solver(spec;
+    utility = log, beta = :β, consumption = :C, controls = [:C],
+    transition = _doc_vfi_transition,
+    control_bounds = _doc_vfi_bounds,
+    outcome = _doc_vfi_outcome,
+    degree = 3, n_grid = 8, howard_steps = 15, max_iter = 200)
+(converged = vfi_howard.converged, iterations = vfi_howard.iterations,
+ V_ss = evaluate_value(vfi_howard, spec.steady_state[vfi_howard.state_indices]))
 ```
 
-Five Howard steps cut the plain solve from 161 iterations to 34. Adding `anderson_m=3` on top brings it to 23, and `howard_steps=10` with the same Anderson depth reaches 14 — the two accelerations are complementary, and neither substitutes for the other.
+Fifteen Howard steps cut the iteration count from the unaccelerated run above to a few dozen sweeps. The value at the deterministic steady state is about ``u(C_{ss})/(1-\beta) = \log(C_{ss})/0.01``, the infinite-horizon payoff of staying at the steady state forever.
 
 ### VFI vs PFI vs Collocation
 
-All three global solvers return `ProjectionSolution{T}` and share the same post-solution API (`evaluate_policy`, `simulate`, `irf`, `max_euler_error`). They differ in how they get to the fixed point:
+All three global solvers return `ProjectionSolution{T}` and share `evaluate_policy`, `simulate`, `irf`, and `max_euler_error`. They are not the same algorithm:
 
-- **Collocation** (Gauss-Newton on the residual vector): fastest for smooth problems, but can stall at local minima
-- **PFI** (fixed point on the Euler equation): more robust in the presence of kinks, but needs a good initialization
-- **`vfi_solver`** (the same fixed point, plus Howard and Anderson acceleration): the cheapest of the two iterative routes
+- **Collocation** solves the Euler residual by Gauss-Newton on Chebyshev coefficients
+- **PFI** is Coleman time iteration on the Euler equation (no value function)
+- **VFI** maximizes the Bellman operator and stores ``V``
 
-Run on the same degree-5 grid, all three converge, and they converge to the same policy:
+On a smooth concave problem the three policies agree near the steady state. They need not share an Euler error to six digits: VFI's exported policy is a Chebyshev fit of a grid maximizer, so `max_euler_error` scores that fit, not the native Bellman residual.
 
 ```@example dsge_nonlinear
-sol_vfi  = vfi_solver(spec; degree=5, howard_steps=5, anderson_m=3, max_iter=500)
-sol_pfi  = pfi_solver(spec; degree=5, damping=0.5, max_iter=500)
-sol_proj = collocation_solver(spec; degree=5, max_iter=200)
-
-[(m = s.method, converged = s.converged,
-  euler = max_euler_error(s; n_test=1000, rng=MersenneTwister(42)))
- for s in (sol_proj, sol_pfi, sol_vfi)]
+sol_vfi  = vfi
+sol_pfi  = pfi_solver(spec; degree=3, damping=0.5, max_iter=400)
+sol_proj = collocation_solver(spec; degree=3, max_iter=200)
+x_ss = spec.steady_state[sol_vfi.state_indices]
+(c_vfi = evaluate_policy(sol_vfi, x_ss)[2],
+ c_pfi = evaluate_policy(sol_pfi, x_ss)[2],
+ c_proj = evaluate_policy(sol_proj, x_ss)[2],
+ V_ss = evaluate_value(sol_vfi, x_ss))
 ```
 
-All three land on a maximum Euler error of ``4.93 \times 10^{-4}``, agreeing to six significant figures while their iteration counts differ by a factor of fifty (6 for collocation, 295 for PFI, 23 for accelerated time iteration). That is the useful lesson: on a smooth problem the **basis sets the accuracy and the solver sets the cost**. Raising `degree` from 5 to 7 moves all three to ``2.00 \times 10^{-4}``, again agreeing to six figures; switching solver at fixed degree changes nothing but the runtime. Three independent routes agreeing to six digits is also the strongest available evidence that the policy is right — but agreement is a cross-check, not an accuracy measure. `converged` reports that the coefficient update fell below `tol`, which is a statement about the iteration; `max_euler_error` is what scores a policy against the equilibrium conditions themselves.
+Consumption at the deterministic steady state agrees across the three solvers to a few percent at this coarse grid. Raise `n_grid` and `degree` together when the object of interest is the Euler error rather than the value function. `evaluate_value` is defined only on a VFI solution.
 
 !!! warning "`max_iter` is part of the comparison"
-    PFI needs 295 iterations here at `damping=0.5`. Left at the `max_iter=200` a casual benchmark might use, it stops early and reports `converged=false` with a sup-norm of ``1.2 \times 10^{-7}`` — close enough to look usable, far enough to be a different policy. Give every solver the budget it needs before comparing them, and check `converged` on each.
+    PFI at `damping=0.5` can need several hundred iterations. Left at a casual `max_iter=200` it may stop with `converged=false`. Give every solver the budget it needs, and check `converged` before comparing policies.
 
 ---
 
@@ -692,15 +739,11 @@ All three land on a maximum Euler error of ``4.93 \times 10^{-4}``, agreeing to 
 
 and returns the mixed iterate ``x_{\text{new}} = \sum_{i} \alpha_i (x_i + r_i)``. The depth parameter ``m`` controls how many previous iterates are used. Larger ``m`` captures more history but increases the linear algebra cost. In practice, ``m = 3``--``5`` works well.
 
-Anderson acceleration is available for both PFI (`anderson_m` kwarg) and VFI (`anderson_m` kwarg). It operates on the vectorized Chebyshev coefficient matrix, treating the coefficient update as a fixed-point iteration.
+Anderson acceleration is available on PFI (`anderson_m` kwarg). It operates on the vectorized Chebyshev coefficient matrix, treating the coefficient update as a fixed-point iteration. Bellman `vfi_solver` does not take `anderson_m`: it accelerates with Howard policy evaluation of ``V``.
 
 ```@example dsge_nonlinear
-# PFI with Anderson acceleration
 pfi_anderson = pfi_solver(spec; degree=5, damping=0.5, anderson_m=3, max_iter=200)
-
-# VFI with Anderson acceleration
-vfi_anderson = vfi_solver(spec; degree=5, anderson_m=3, max_iter=500)
-nothing # hide
+(converged = pfi_anderson.converged, iterations = pfi_anderson.iterations)
 ```
 
 ---
@@ -709,18 +752,29 @@ nothing # hide
 
 The three global solvers (collocation, PFI, VFI) support opt-in multi-threading via the `threaded=true` keyword. When enabled:
 
-- **VFI / PFI**: Grid-point Euler equation evaluations run in parallel via `Threads.@threads`
+- **PFI**: Grid-point Euler Newton solves run in parallel via `Threads.@threads`
+- **VFI**: Per-node Bellman maximizations run in parallel
 - **Collocation**: Jacobian column computation runs in parallel
 
 Threading requires Julia to be started with multiple threads (e.g., `julia -t 4`). On single-threaded Julia, `threaded=true` has no effect. The solutions are numerically identical regardless of the `threaded` setting.
 
 ```@example dsge_nonlinear
-# Sequential (default)
-sol_seq = vfi_solver(spec; degree=5, threaded=false, max_iter=500)
-
-# Threaded (requires julia -t N)
-sol_par = vfi_solver(spec; degree=5, threaded=true, max_iter=500)
-nothing # hide
+sol_seq = vfi_solver(spec;
+    utility = log, beta = :β, consumption = :C, controls = [:C],
+    transition = _doc_vfi_transition,
+    control_bounds = _doc_vfi_bounds,
+    outcome = _doc_vfi_outcome,
+    degree = 3, n_grid = 8, howard_steps = 10, max_iter = 200,
+    threaded = false)
+sol_par = vfi_solver(spec;
+    utility = log, beta = :β, consumption = :C, controls = [:C],
+    transition = _doc_vfi_transition,
+    control_bounds = _doc_vfi_bounds,
+    outcome = _doc_vfi_outcome,
+    degree = 3, n_grid = 8, howard_steps = 10, max_iter = 200,
+    threaded = true)
+abs(evaluate_value(sol_seq, spec.steady_state[sol_seq.state_indices]) -
+    evaluate_value(sol_par, spec.steady_state[sol_par.state_indices]))
 ```
 
 ---
@@ -846,14 +900,13 @@ The three ergodic means are sample averages over 10,000 draws from the global RN
 # Euler equation accuracy, with a fixed RNG so the numbers are reproducible
 err = max_euler_error(proj; n_test=1000, rng=MersenneTwister(42))
 
-# Accelerated time iteration for comparison
-vfi = vfi_solver(spec; degree=5, howard_steps=5, anderson_m=3, max_iter=500)
-err_vfi = max_euler_error(vfi; n_test=1000, rng=MersenneTwister(42))
+# Bellman VFI for comparison (reuses the Recipe 4 solution)
+err_vfi = max_euler_error(vfi; n_test=200, rng=MersenneTwister(42))
 
 # Analytical moments for estimation targets
 m = analytical_moments(sol1; lags=2)
 
-(collocation = (proj.converged, err), time_iteration = (vfi.converged, err_vfi),
+(collocation = (proj.converged, err), vfi = (vfi.converged, err_vfi),
  n_moments = length(m))
 ```
 
@@ -865,7 +918,7 @@ plot_result(girf)
 <iframe src="../assets/plots/dsge_girf.html" width="100%" height="500" frameborder="0" style="border:1px solid #ddd;border-radius:4px;"></iframe>
 ```
 
-The second-order variance correction shifts the stochastic steady state of capital up by ``+0.0175`` and consumption down by the same amount: risk-averse agents over-accumulate capital as a buffer against productivity shocks, and pay for it with lower average consumption. Third-order perturbation adds the ``f_{\sigma\sigma v}`` term, which makes that precautionary wedge state-dependent — stronger when capital is scarce than when it is abundant. Collocation and accelerated time iteration both converge and both reach a maximum Euler error of ``4.93 \times 10^{-4}``: on a problem this smooth the two routes find the same degree-5 policy, and the choice between them is a choice about cost, not accuracy.
+The second-order variance correction shifts the stochastic steady state of capital up by ``+0.0175`` and consumption down by the same amount: risk-averse agents over-accumulate capital as a buffer against productivity shocks, and pay for it with lower average consumption. Third-order perturbation adds the ``f_{\sigma\sigma v}`` term, which makes that precautionary wedge state-dependent — stronger when capital is scarce than when it is abundant. Collocation scores the Euler residual of a degree-5 Chebyshev policy; VFI scores the Chebyshev export of a grid maximizer. They are not required to match to six digits. Use VFI when the object of interest is ``V`` itself (welfare, Howard PE); use collocation or PFI when the object is a low Euler error on a smooth residual system.
 
 ---
 
@@ -885,7 +938,7 @@ The second-order variance correction shifts the stochastic steady state of capit
 
 7. **Lyapunov equation instability**: `solve_lyapunov` throws an error if the first-order solution has eigenvalues on or outside the unit circle. Check determinacy with `is_determined(sol)` before computing moments.
 
-8. **Expecting one acceleration to be enough**: `howard_steps` and `anderson_m` are complementary. On the RBC model plain time iteration takes 161 passes, `anderson_m=3` alone 126, and `howard_steps=5` alone 34; together (`howard_steps=5, anderson_m=3`) they finish in 23, and `howard_steps=10` with the same depth in 14.
+8. **Calling `vfi_solver` without a Bellman specification**: `vfi_solver` / `method=:vfi` require `utility`, `beta`, `transition`, and `control_bounds`. An Euler-only `DSGESpec` throws `ArgumentError` and names `pfi_solver`. Howard steps on VFI are policy evaluation of ``V``, not extra Euler Newton solves; Anderson acceleration remains a PFI keyword.
 
 9. **Unseeded Monte Carlo**: `max_euler_error`, `irf(...; irf_type=:girf)` and `simulate` all draw from the global RNG by default. Pass `rng=MersenneTwister(...)` or `shock_draws` whenever a reported number must be reproducible.
 

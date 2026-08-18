@@ -72,6 +72,7 @@ max_euler_error
 
 ```@docs
 vfi_solver
+evaluate_value
 ```
 
 ---

@@ -16,7 +16,7 @@ concurrency:
 
 jobs:
   test:
-    name: Julia ${{ matrix.version }} - ${{ matrix.os }} - ${{ matrix.arch }}
+    name: Julia ${{ matrix.version }} - ${{ matrix.os }} - ${{ matrix.suite }}
     runs-on: ${{ matrix.os }}
     timeout-minutes: 60
     env:
@@ -34,24 +34,31 @@ jobs:
           - windows-latest
         arch:
           - x64
+        suite:
+          - dsge
+          - empirical
         include:
           - version: 'lts'
             os: macos-latest
             arch: arm64
-          # Coverage cell (T007): current stable Julia owns coverage + Codecov upload.
-          # 1.12's coverage machinery is cheaper than 1.10's and keeps coverage off the
-          # LTS critical path (one extra free parallel runner). LTS (1.10) still tested on
-          # all three OSes for dual-major Optim = "1, 2" compatibility.
-          - version: '1'
-            os: ubuntu-latest
-            arch: x64
-          # Optim v1 dual-major compat cell (T153/#252): the declared Optim = "1, 2" compat is
-          # otherwise never exercised on the v1 major (default cells resolve v2). Runs Julia 1.10
-          # (== lts) but as a distinct matrix string, so it is a separate cell that pins Optim@1.
+            suite: dsge
+          - version: 'lts'
+            os: macos-latest
+            arch: arm64
+            suite: empirical
+          # Numerical suite + Optim v1 dual-major compat (T153/#252): Julia 1.10
+          # (== lts) as a distinct matrix string so it pins Optim@1 and runs
+          # MACRO_NUMERICAL_CI (solver / Euler / IRF / published-number tests only).
           - version: '1.10'
             os: ubuntu-latest
             arch: x64
             optim_v1: true
+            suite: dsge
+          - version: '1.10'
+            os: ubuntu-latest
+            arch: x64
+            optim_v1: true
+            suite: empirical
 
     steps:
       - uses: actions/checkout@v7
@@ -75,10 +82,11 @@ jobs:
 
       - uses: julia-actions/julia-buildpkg@v1
 
-      # Robustness trade-off: windows/macOS run as reduced-sampling (fewer draws/reps)
-      # cross-platform smoke tests; ubuntu stays the full-fidelity reference (full
-      # sampling + coverage). ubuntu must NEVER set FAST or coverage of high-sampling
-      # branches could drop. '0' is equivalent to unset (FAST const treats only "1" as true).
+      # Cell roles:
+      #   ubuntu LTS  — full suite, split dsge | empirical; BOTH parts upload Codecov
+      #   ubuntu 1.10 — numerical profile, split dsge | empirical; Optim v1 pin
+      #   macos LTS   — FAST=1 smoke, split dsge | empirical
+      #   windows LTS — FAST=1 smoke, threaded, split dsge | empirical
       #
       # Windows uses the threaded single-process runner (package loaded once).
       # Multiprocess on NTFS pays ~6 min per child to load compiled modules; 17
@@ -86,24 +94,26 @@ jobs:
       # the runner; every other group stays at 1.
       - uses: julia-actions/julia-runtest@v1
         with:
-          coverage: ${{ matrix.os == 'ubuntu-latest' && matrix.version == '1' }}
+          coverage: ${{ matrix.os == 'ubuntu-latest' && matrix.version == 'lts' }}
         env:
           JULIA_NUM_THREADS: ${{ matrix.os == 'windows-latest' && 'auto' || '1' }}
           OPENBLAS_NUM_THREADS: "1"
           MACRO_MULTIPROCESS_TESTS: ${{ matrix.os == 'windows-latest' && '0' || '1' }}
           MACRO_FAST_TESTS: ${{ matrix.os == 'ubuntu-latest' && '0' || '1' }}
-          # Restore standard Pkg.test bounds-checking on the full-fidelity ubuntu job only (#126).
+          MACRO_NUMERICAL_CI: ${{ matrix.os == 'ubuntu-latest' && matrix.version == '1.10' && '1' || '0' }}
           MACRO_CHECK_BOUNDS: ${{ matrix.os == 'ubuntu-latest' && '1' || '0' }}
+          MACRO_CI_SUITE: ${{ matrix.suite }}
 
       - uses: julia-actions/julia-processcoverage@v1
-        if: matrix.os == 'ubuntu-latest' && matrix.version == '1'
+        if: matrix.os == 'ubuntu-latest' && matrix.version == 'lts'
 
       - uses: codecov/codecov-action@v7
-        if: matrix.os == 'ubuntu-latest' && matrix.version == '1'
+        if: matrix.os == 'ubuntu-latest' && matrix.version == 'lts'
         with:
           files: lcov.info
           slug: FriedmanJP/MacroEconometricModels.jl
           fail_ci_if_error: false
+          flags: ${{ matrix.suite }}
         env:
           CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
 

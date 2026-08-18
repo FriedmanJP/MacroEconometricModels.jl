@@ -19,6 +19,30 @@ while preserving total mass.
   *Journal of Economic Dynamics and Control*, 34(1), 36–41.
 """
 
+"""
+    _ha_state_index(ib, ia, je, n_b, n_a) → Int
+
+Column-major flat index for the joint `(b, a, e)` histogram: liquid fastest,
+then illiquid, then income. Matches `reshape(d, n_b, n_a, n_e)`.
+"""
+@inline _ha_state_index(ib::Int, ia::Int, je::Int, n_b::Int, n_a::Int) =
+    (je - 1) * n_b * n_a + (ia - 1) * n_b + ib
+
+"""
+    _young_bracket(grid, x) → (k, w_lo, w_hi)
+
+Young (2010) two-point bracket of `x` on a sorted 1-D `grid`. `k` is the lower
+node; mass `w_lo` goes to `grid[k]` and `w_hi` to `grid[k+1]`.
+"""
+function _young_bracket(grid::AbstractVector{T}, x::T) where {T<:AbstractFloat}
+    n = length(grid)
+    xc = clamp(x, grid[1], grid[end])
+    k = clamp(searchsortedfirst(grid, xc) - 1, 1, n - 1)
+    denom = grid[k + 1] - grid[k]
+    w_lo = denom < T(1e-15) ? one(T) : clamp((grid[k + 1] - xc) / denom, zero(T), one(T))
+    return k, w_lo, one(T) - w_lo
+end
+
 # =============================================================================
 # _build_transition_matrix — Young (2010) lottery on the asset grid
 # =============================================================================
@@ -114,6 +138,66 @@ function _build_transition_matrix(a_policy::Matrix{T}, grid::HAGrid{T},
 
     Lambda = sparse(rows, cols, vals, N, N)
     return Lambda
+end
+
+"""
+    _build_transition_matrix(b_policy, a_policy, grid, income) → SparseMatrixCSC{T}
+
+Young (2010) product lottery on a two-asset policy. Continuous `b'` is split
+between adjacent liquid nodes; `a'` is split between adjacent illiquid nodes
+(a Dirac when `a'` sits on the grid, which is the nested-EGM/VFI case).
+Income transitions by `Π`.
+
+`Λ` is `N×N` with `N = n_b n_a n_e`. Index convention:
+`_ha_state_index(ib, ia, je, n_b, n_a)`. Columns sum to 1.
+"""
+function _build_transition_matrix(b_policy::AbstractArray{T,3},
+                                   a_policy::AbstractArray{T,3},
+                                   grid::HAGrid{T},
+                                   income::IncomeProcess{T}) where {T<:AbstractFloat}
+    grid.n_dims == 2 || throw(ArgumentError(
+        "_build_transition_matrix: 3-D policies require a two-asset grid"))
+    b_grid = grid.grids[1]
+    a_grid = grid.grids[2]
+    n_b = length(b_grid)
+    n_a = length(a_grid)
+    n_e = length(income.states)
+    size(b_policy) == (n_b, n_a, n_e) || throw(DimensionMismatch(
+        "_build_transition_matrix: liquid policy is $(size(b_policy)), expected ($n_b, $n_a, $n_e)"))
+    size(a_policy) == (n_b, n_a, n_e) || throw(DimensionMismatch(
+        "_build_transition_matrix: illiquid policy is $(size(a_policy)), expected ($n_b, $n_a, $n_e)"))
+    N = n_b * n_a * n_e
+    Pi = income.transition
+
+    max_nnz = 4 * n_e * N
+    rows = Vector{Int}(undef, max_nnz)
+    cols = Vector{Int}(undef, max_nnz)
+    vals = Vector{T}(undef, max_nnz)
+    count = 0
+
+    @inbounds for je in 1:n_e, ia in 1:n_a, ib in 1:n_b
+        col_idx = _ha_state_index(ib, ia, je, n_b, n_a)
+        kb, wb_lo, wb_hi = _young_bracket(b_grid, b_policy[ib, ia, je])
+        ka, wa_lo, wa_hi = _young_bracket(a_grid, a_policy[ib, ia, je])
+        for jep in 1:n_e
+            p = Pi[je, jep]
+            p < T(1e-20) && continue
+            for (kbp, wb) in ((kb, wb_lo), (kb + 1, wb_hi))
+                wb < T(1e-20) && continue
+                for (kap, wa) in ((ka, wa_lo), (ka + 1, wa_hi))
+                    wa < T(1e-20) && continue
+                    count += 1
+                    rows[count] = _ha_state_index(kbp, kap, jep, n_b, n_a)
+                    cols[count] = col_idx
+                    vals[count] = wb * wa * p
+                end
+            end
+        end
+    end
+    resize!(rows, count)
+    resize!(cols, count)
+    resize!(vals, count)
+    return sparse(rows, cols, vals, N, N)
 end
 
 # =============================================================================
@@ -268,17 +352,33 @@ distribution `d`:
 """
 function _aggregate(d::Vector{T}, grid::HAGrid{T};
                      var_index::Int=1) where {T<:AbstractFloat}
-    a_grid = grid.grids[var_index]
-    n_a = length(a_grid)
-    N = length(d)
-    n_e = div(N, n_a)
+    if grid.n_dims == 1
+        a_grid = grid.grids[var_index]
+        n_a = length(a_grid)
+        N = length(d)
+        n_e = div(N, n_a)
 
-    agg = zero(T)
-    @inbounds for j in 1:n_e
-        offset = (j - 1) * n_a
-        for i in 1:n_a
-            agg += a_grid[i] * d[offset + i]
+        agg = zero(T)
+        @inbounds for j in 1:n_e
+            offset = (j - 1) * n_a
+            for i in 1:n_a
+                agg += a_grid[i] * d[offset + i]
+            end
         end
+        return agg
+    end
+    n_b = grid.n_points[1]
+    n_a = grid.n_points[2]
+    n_e = grid.n_income
+    length(d) == n_b * n_a * n_e || throw(DimensionMismatch(
+        "_aggregate: distribution length $(length(d)) ≠ $n_b×$n_a×$n_e"))
+    (1 <= var_index <= 2) || throw(ArgumentError(
+        "_aggregate: var_index must be 1 (liquid) or 2 (illiquid), got $var_index"))
+    g = grid.grids[var_index]
+    agg = zero(T)
+    @inbounds for je in 1:n_e, ia in 1:n_a, ib in 1:n_b
+        x = var_index == 1 ? g[ib] : g[ia]
+        agg += x * d[_ha_state_index(ib, ia, je, n_b, n_a)]
     end
     return agg
 end

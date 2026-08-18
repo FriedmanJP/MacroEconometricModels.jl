@@ -12,6 +12,7 @@ using LinearAlgebra
 # Only the ordering matters, not accurate minutes.
 function _expected_rank(name::AbstractString)
     name == "HA-DSGE"             && return 100
+    name == "HA-DSGE Advanced"    && return 95
     name == "DSGE Core"           && return 90
     name == "DSGE Bayesian & HD"  && return 70
     name == "Extensions (JuMP/Ipopt/PATH)"    && return 60   # cold-load: schedule early
@@ -26,9 +27,10 @@ function _expected_rank(name::AbstractString)
     return 40                                     # default medium
 end
 
-# HA-DSGE is the suite ceiling and is a single process/task. Give it 2 OpenBLAS
+# HA-DSGE and HA-DSGE Advanced are the suite ceiling. Give each 2 OpenBLAS
 # threads; every other group stays at 1 so 4-wide dispatch does not oversubscribe.
-_blas_threads_for_group(name::AbstractString) = name == "HA-DSGE" ? 2 : 1
+_blas_threads_for_group(name::AbstractString) =
+    name == "HA-DSGE" || name == "HA-DSGE Advanced" ? 2 : 1
 
 _runner_max_conc(cpu_threads::Integer; cap::Integer=4) = min(Int(cpu_threads), cap)
 
@@ -44,6 +46,56 @@ function _with_group_blas(f, group_name::AbstractString)
     finally
         n != old && BLAS.set_num_threads(old)
     end
+end
+
+# Julia 1.10 Ubuntu numerical cell (`MACRO_NUMERICAL_CI=1`): skip display/
+# plotting/coverage-harness groups. ubuntu LTS keeps the full list.
+const _NUMERICAL_SKIP_GROUPS = Set(["Plotting", "Display", "Coverage-A", "Coverage-B"])
+const _NUMERICAL_SKIP_CORE = Set([
+    "core/test_aqua.jl",
+    "core/test_serialization.jl",
+    "core/test_display_backends.jl",
+])
+
+function _numerical_groups(groups, numerical::Bool)
+    numerical || return groups
+    out = Pair{String, Vector{String}}[]
+    for (name, files) in groups
+        name in _NUMERICAL_SKIP_GROUPS && continue
+        fs = if name == "Coverage-C + IO"
+            filter(f -> startswith(f, "io/"), files)
+        elseif name == "Core & VAR"
+            filter(f -> f ∉ _NUMERICAL_SKIP_CORE, files)
+        else
+            files
+        end
+        isempty(fs) && continue
+        push!(out, String(name) => Vector{String}(fs))
+    end
+    return out
+end
+
+# CI job split (`MACRO_CI_SUITE=dsge|empirical`): DSGE/HA vs the empirical rest.
+const _DSGE_SUITE_GROUPS = Set([
+    "DSGE Core",
+    "DSGE Bayesian & HD",
+    "HA-DSGE",
+    "HA-DSGE Advanced",
+    "Coverage-A",
+    "Extensions (JuMP/Ipopt/PATH)",
+])
+
+function _ci_suite_groups(groups, suite::AbstractString)
+    isempty(suite) && return groups
+    suite == "dsge" || suite == "empirical" || throw(ArgumentError(
+        "MACRO_CI_SUITE must be \"dsge\", \"empirical\", or empty; got $(repr(suite))"))
+    want_dsge = suite == "dsge"
+    out = Pair{String, Vector{String}}[]
+    for (name, files) in groups
+        (name in _DSGE_SUITE_GROUPS) == want_dsge || continue
+        push!(out, String(name) => Vector{String}(files))
+    end
+    return out
 end
 
 # TEST_GROUPS uses `"name" => files` Pairs, not Tuples. Type the channel from
