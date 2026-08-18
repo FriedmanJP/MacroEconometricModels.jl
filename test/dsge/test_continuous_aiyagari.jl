@@ -476,3 +476,56 @@ end
         @test s2.A < 1e-6
     end
 end
+
+@testset "G-04: to_spec ContinuousHouseholdSystem (#641)" begin
+    @testset "CTAiyagari" begin
+        m = CTAiyagari(; I=50)
+        spec = to_spec(m)
+        @test spec isa ModelSpec
+        @test spec.n_endog == 0 && spec.n_exog == 0
+        @test isempty(spec.equations) && isempty(spec.residual_fns)
+        @test spec.ir.clock === :continuous
+        @test only(keys(spec.agents)) === :household
+        hh = only(values(spec.agents))
+        @test hh isa ContinuousHouseholdSystem
+        @test hh.model === m
+        @test MacroEconometricModels.has_kind(spec, ContinuousHouseholdSystem)
+
+        spec_named = to_spec(m; agent_name=:hh)
+        @test only(keys(spec_named.agents)) === :hh
+        @test only(values(spec_named.agents)).model === m
+
+        ss = ct_steady_state(hh.model; tol=1e-5)
+        ss_direct = ct_steady_state(m; tol=1e-5)
+        @test ss.r ≈ ss_direct.r
+        @test ss.K ≈ ss_direct.K
+        @test ss.w ≈ ss_direct.w
+    end
+
+    @testset "CTTwoAsset" begin
+        # Coarse grid; same household payload as the family constructor so
+        # `ct_two_asset_ge` on the wrapped model matches the direct call (G-05).
+        m = CTTwoAsset(; Ib=20, Ia=20, a_max=6.0, b_max=5.0, rho=0.06, sigma=2.0,
+                       z=[0.6, 1.4], lambda=[0.4, 0.4], alpha=0.36, delta=0.05,
+                       Z=1.0, B_supply=0.69, chi=2.0, a_power=0.5, b_power=0.5)
+        spec = to_spec(m)
+        @test spec isa ModelSpec
+        @test spec.n_endog == 0 && spec.n_exog == 0
+        @test isempty(spec.equations)
+        @test spec.ir.clock === :continuous
+        hh = only(values(spec.agents))
+        @test hh isa ContinuousHouseholdSystem
+        @test hh.model === m
+        @test hh.model.Ib == m.Ib && hh.model.Ia == m.Ia
+        @test hh.model.a_max == m.a_max && hh.model.b_max == m.b_max
+        @test hh.model.a_power == m.a_power && hh.model.b_power == m.b_power
+
+        # One GE pass on the wrapped payload: grid nodes and K are those of
+        # `ct_two_asset_ge(m)` (same object). Identity wrap ⇒ no second solve.
+        ge = ct_two_asset_ge(hh.model; max_iter=120, tol=1e-3, relax_K=0.3, relax_rb=0.05)
+        @test length(ge.solution.a) == m.Ia && length(ge.solution.b) == m.Ib
+        @test ge.solution.a[end] ≈ m.a_max && ge.solution.b[end] ≈ m.b_max
+        @test isapprox(ge.K, ge.solution.A; atol=1e-3)
+        @test ge.K > 0
+    end
+end

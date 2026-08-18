@@ -75,6 +75,9 @@ Adjustment cost: `cost = :quadratic` uses `chi`; `cost = :kinked` uses the KMV
 General-equilibrium block (used only by [`ct_two_asset_ge`](@ref) and
 [`ct_two_asset_mit`](@ref)): capital share `alpha`, depreciation `delta`, TFP `Z`, and the
 net supply of liquid government bonds `B_supply`.
+
+Wrap with [`to_spec`](@ref) to attach a [`ContinuousHouseholdSystem`](@ref) to a
+[`ModelSpec`](@ref) (partial GE; empty residual system).
 """
 struct CTTwoAsset{T<:AbstractFloat}
     sigma::T
@@ -1201,7 +1204,8 @@ report(ge::CTTwoAssetGE) = report(stdout, ge)
     ContinuousHouseholdSystem{T} <: AbstractAgentSystem{T}
 
 Continuous-time household population. Wraps [`CTAiyagari`](@ref) or
-[`CTTwoAsset`](@ref). `to_spec` / `@dsge clock: continuous` land in G-04.
+[`CTTwoAsset`](@ref). [`to_spec`](@ref) attaches this payload to a
+[`ModelSpec`](@ref); `@dsge clock: continuous` compile is parser-side (not here).
 """
 struct ContinuousHouseholdSystem{T<:AbstractFloat} <: AbstractAgentSystem{T}
     model::Union{CTAiyagari{T},CTTwoAsset{T}}
@@ -1210,4 +1214,44 @@ ContinuousHouseholdSystem(m::CTAiyagari{T}) where {T<:AbstractFloat} =
     ContinuousHouseholdSystem{T}(m)
 ContinuousHouseholdSystem(m::CTTwoAsset{T}) where {T<:AbstractFloat} =
     ContinuousHouseholdSystem{T}(m)
+
+# =============================================================================
+# to_spec — programmatic ModelSpec adapter (G-04 / #641)
+# =============================================================================
+
+"""
+    _ct_to_spec(m, ::Type{T}; agent_name=:household) → ModelSpec{T}
+
+Shared empty-residual `ModelSpec` for a continuous-time household payload.
+`clock` is `:continuous`. G-05 calls [`ct_steady_state`](@ref) /
+[`ct_two_asset_ge`](@ref) on `agents[agent_name].model`.
+"""
+function _ct_to_spec(m, ::Type{T}; agent_name::Symbol=:household) where {T<:AbstractFloat}
+    agents = NamedTuple{(agent_name,)}((ContinuousHouseholdSystem(m),))
+    ir = ModelIR(:continuous, :infinite, IRDecl[], IREquation[])
+    return ModelSpec{T}(
+        Symbol[], Symbol[], Symbol[], Dict{Symbol,T}(),
+        NamedEquation[], Function[],
+        0, Int[], T[], nothing;
+        agents=agents, ir=ir, max_lag=0, max_lead=0,
+    )
+end
+
+"""
+    to_spec(m::CTAiyagari; agent_name::Symbol=:household) → ModelSpec
+
+Wrap `m` as a [`ModelSpec`](@ref) whose `agents` NamedTuple holds a
+[`ContinuousHouseholdSystem`](@ref). The residual system is empty (partial GE).
+"""
+to_spec(m::CTAiyagari{T}; agent_name::Symbol=:household) where {T<:AbstractFloat} =
+    _ct_to_spec(m, T; agent_name)
+
+"""
+    to_spec(m::CTTwoAsset; agent_name::Symbol=:household) → ModelSpec
+
+Wrap `m` as a [`ModelSpec`](@ref) whose `agents` NamedTuple holds a
+[`ContinuousHouseholdSystem`](@ref). The residual system is empty (partial GE).
+"""
+to_spec(m::CTTwoAsset{T}; agent_name::Symbol=:household) where {T<:AbstractFloat} =
+    _ct_to_spec(m, T; agent_name)
 

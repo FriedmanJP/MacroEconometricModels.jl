@@ -51,6 +51,9 @@ end
 Continuous-time Aiyagari model parameters: capital share `alpha`, discount rate `rho`,
 CRRA `sigma`, depreciation `delta`, TFP `Z`, the income process, and the wealth grid
 `[a_min, a_max]` with `I` points.
+
+Wrap with [`to_spec`](@ref) to attach a [`ContinuousHouseholdSystem`](@ref) to a
+[`ModelSpec`](@ref) (partial GE; empty residual system).
 """
 struct CTAiyagari{T<:AbstractFloat}
     alpha::T
