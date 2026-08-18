@@ -96,6 +96,11 @@ jobs:
       - uses: julia-actions/julia-runtest@v1
         with:
           coverage: false
+          # Pkg.test / julia-runtest default is --check-bounds=yes, which
+          # re-precompiles the depot vs julia-buildpkg and honors no @inbounds.
+          # Windows: auto (REPL default) so NTFS does not pay that wave.
+          # 1.10 Optim-v1 cell: yes (MACRO_CHECK_BOUNDS also forces children).
+          check_bounds: ${{ matrix.os == 'windows-latest' && 'auto' || 'yes' }}
         env:
           JULIA_NUM_THREADS: ${{ matrix.version == '1.10' && '1' || 'auto' }}
           OPENBLAS_NUM_THREADS: "1"
