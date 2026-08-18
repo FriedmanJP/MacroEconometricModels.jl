@@ -49,7 +49,7 @@ function _with_group_blas(f, group_name::AbstractString)
 end
 
 # Julia 1.10 Ubuntu numerical cell (`MACRO_NUMERICAL_CI=1`): skip display/
-# plotting/coverage-harness groups. macos LTS and ubuntu LTS keep the full list.
+# plotting/coverage-harness groups. ubuntu LTS keeps the full list.
 const _NUMERICAL_SKIP_GROUPS = Set(["Plotting", "Display", "Coverage-A", "Coverage-B"])
 const _NUMERICAL_SKIP_CORE = Set([
     "core/test_aqua.jl",

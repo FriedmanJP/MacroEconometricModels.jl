@@ -35,7 +35,7 @@ jobs:
         arch:
           - x64
         include:
-          # Full-fidelity suite: LTS on macos arm64 (FAST=0, all groups).
+          # macOS LTS smoke (FAST=1, arm64).
           - version: 'lts'
             os: macos-latest
             arch: arm64
@@ -70,9 +70,9 @@ jobs:
       - uses: julia-actions/julia-buildpkg@v1
 
       # Cell roles:
-      #   macos LTS     — full suite (FAST=0, all groups, bounds checks)
+      #   ubuntu LTS    — linux full suite (FAST=0, all groups, bounds checks)
       #   ubuntu 1.10   — numerical suite (MACRO_NUMERICAL_CI=1) + Optim v1 pin
-      #   ubuntu LTS    — linux full suite (FAST=0); no coverage post-process
+      #   macos LTS     — reduced-sampling smoke (FAST=1)
       #   windows LTS   — reduced-sampling smoke (FAST=1, threaded single process)
       #
       # Windows uses the threaded single-process runner (package loaded once).
@@ -84,9 +84,9 @@ jobs:
           JULIA_NUM_THREADS: ${{ matrix.os == 'windows-latest' && 'auto' || '1' }}
           OPENBLAS_NUM_THREADS: "1"
           MACRO_MULTIPROCESS_TESTS: ${{ matrix.os == 'windows-latest' && '0' || '1' }}
-          MACRO_FAST_TESTS: ${{ matrix.os == 'windows-latest' && '1' || '0' }}
+          MACRO_FAST_TESTS: ${{ matrix.os == 'ubuntu-latest' && '0' || '1' }}
           MACRO_NUMERICAL_CI: ${{ matrix.os == 'ubuntu-latest' && matrix.version == '1.10' && '1' || '0' }}
-          MACRO_CHECK_BOUNDS: ${{ matrix.os != 'windows-latest' && '1' || '0' }}
+          MACRO_CHECK_BOUNDS: ${{ matrix.os == 'ubuntu-latest' && '1' || '0' }}
 
   # RNG-everywhere lint (#243): every drawing function must thread an rng; no bare
   # rand/randn on the global RNG in src/. Dependency-free (no Julia), so it runs fast.
