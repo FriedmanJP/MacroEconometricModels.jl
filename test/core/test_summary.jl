@@ -25,13 +25,12 @@ using Statistics
     @testset "report(VARModel) uses varnames" begin
         Y = randn(100, 3)
         model = estimate_var(Y, 2; varnames=["GDP", "INF", "FFR"])
-        old_stdout = stdout
-        rd, wr = redirect_stdout()
-        report(model)
-        redirect_stdout(old_stdout)
-        close(wr)
-        output = read(rd, String)
-        close(rd)
+        # IOBuffer, not redirect_stdout(): Windows threaded CI races the global
+        # stdout pipe and captured "" (occursin("GDP", "")). Same reason
+        # test/display/display_helpers.jl avoids redirect_stdout.
+        io = IOBuffer()
+        report(io, model)
+        output = String(take!(io))
         @test occursin("GDP", output)
         @test occursin("INF", output)
         @test occursin("FFR", output)
@@ -44,13 +43,9 @@ using Statistics
     @testset "report(VECMModel) uses varnames" begin
         Y = randn(200, 3)
         vecm = estimate_vecm(Y, 2; varnames=["GDP", "INF", "FFR"])
-        old_stdout = stdout
-        rd, wr = redirect_stdout()
-        report(vecm)
-        redirect_stdout(old_stdout)
-        close(wr)
-        output = read(rd, String)
-        close(rd)
+        io = IOBuffer()
+        report(io, vecm)
+        output = String(take!(io))
         @test occursin("GDP", output)
         @test occursin("INF", output)
         @test occursin("FFR", output)

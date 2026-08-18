@@ -310,6 +310,19 @@ const MEM_IH = MacroEconometricModels
         @test last(kept[2]) == ["io/test_io_types.jl"]
         @test last(kept[3]) == ["core/test_kalman.jl"]
         @test collect(_numerical_groups(dummy, false)) == collect(dummy)
+
+        dummy2 = ["HA-DSGE" => ["dsge/test_ha_dsge.jl"],
+                  "DSGE Core" => ["dsge/test_dsge.jl"],
+                  "Coverage-A" => ["coverage/test_dsge_coverage.jl"],
+                  "Core & VAR" => ["core/test_kalman.jl"],
+                  "Plotting" => ["plotting/test_plot_render.jl"]]
+        @test first.(_ci_suite_groups(dummy2, "dsge")) ==
+              ["HA-DSGE", "DSGE Core", "Coverage-A"]
+        @test first.(_ci_suite_groups(dummy2, "empirical")) ==
+              ["Core & VAR", "Plotting"]
+        @test collect(_ci_suite_groups(dummy2, "")) == collect(dummy2)
+        @test_throws ArgumentError _ci_suite_groups(dummy2, "bogus")
+
         @test _expected_rank("DSGE Core") > _expected_rank("Counterfactual")
         @test _expected_rank("Coverage-A") > _expected_rank("Coverage-B")
 

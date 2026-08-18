@@ -11,6 +11,8 @@ using LinearAlgebra
 const FAST = get(ENV, "MACRO_FAST_TESTS", "") == "1"
 # Julia 1.10 Ubuntu numerical cell: important numerical tests only (see _numerical_groups).
 const NUMERICAL = get(ENV, "MACRO_NUMERICAL_CI", "") == "1"
+# CI job split: "dsge" | "empirical" | "" (local full suite).
+const SUITE = get(ENV, "MACRO_CI_SUITE", "")
 
 # Shared test data generators (available to all test files)
 include("fixtures.jl")
@@ -365,11 +367,12 @@ if !serial && (multiprocess || (!serial && Threads.nthreads() == 1 && Sys.CPU_TH
     # Triggered by MACRO_MULTIPROCESS_TESTS=1 or as fallback with CPUs >= 2.
     # ─────────────────────────────────────────────────────────────────────
     cov_level = Base.JLOptions().code_coverage
-    run_groups = _numerical_groups(TEST_GROUPS, NUMERICAL)
+    run_groups = _ci_suite_groups(_numerical_groups(TEST_GROUPS, NUMERICAL), SUITE)
     println("Running $(length(run_groups)) test groups in parallel processes ($(Sys.CPU_THREADS) CPUs)")
     println("Code coverage level: $cov_level (0=none, 1=user, 2=all)")
     FAST && println("FAST mode enabled (reduced sampling)")
     NUMERICAL && println("NUMERICAL CI profile (important numerical tests only)")
+    !isempty(SUITE) && println("CI suite part: $SUITE")
     println("Set MACRO_SERIAL_TESTS=1 to run sequentially\n")
 
     # Concurrency-capped, longest-first work queue (#124): order groups heaviest-first and
@@ -408,10 +411,11 @@ elseif !serial && Threads.nthreads() > 1
     # ─────────────────────────────────────────────────────────────────────
     test_dir = replace(string(@__DIR__), '\\' => '/')
 
-    run_groups = _numerical_groups(TEST_GROUPS, NUMERICAL)
+    run_groups = _ci_suite_groups(_numerical_groups(TEST_GROUPS, NUMERICAL), SUITE)
     println("Running $(length(run_groups)) test groups in $(Threads.nthreads()) threads (single process, max_conc=$(_runner_max_conc(Threads.nthreads())))")
     FAST && println("FAST mode enabled (reduced sampling)")
     NUMERICAL && println("NUMERICAL CI profile (important numerical tests only)")
+    !isempty(SUITE) && println("CI suite part: $SUITE")
     println("Set MACRO_SERIAL_TESTS=1 to run sequentially\n")
 
     # Load once — all tasks share the compiled code. This is the Windows CI path:

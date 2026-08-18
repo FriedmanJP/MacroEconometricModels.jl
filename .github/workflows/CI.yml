@@ -16,7 +16,7 @@ concurrency:
 
 jobs:
   test:
-    name: Julia ${{ matrix.version }} - ${{ matrix.os }} - ${{ matrix.arch }}
+    name: Julia ${{ matrix.version }} - ${{ matrix.os }} - ${{ matrix.suite }}
     runs-on: ${{ matrix.os }}
     timeout-minutes: 60
     env:
@@ -34,11 +34,18 @@ jobs:
           - windows-latest
         arch:
           - x64
+        suite:
+          - dsge
+          - empirical
         include:
-          # Full-fidelity suite: LTS on macos arm64 (FAST=0, all groups).
           - version: 'lts'
             os: macos-latest
             arch: arm64
+            suite: dsge
+          - version: 'lts'
+            os: macos-latest
+            arch: arm64
+            suite: empirical
           # Numerical suite + Optim v1 dual-major compat (T153/#252): Julia 1.10
           # (== lts) as a distinct matrix string so it pins Optim@1 and runs
           # MACRO_NUMERICAL_CI (solver / Euler / IRF / published-number tests only).
@@ -46,6 +53,12 @@ jobs:
             os: ubuntu-latest
             arch: x64
             optim_v1: true
+            suite: dsge
+          - version: '1.10'
+            os: ubuntu-latest
+            arch: x64
+            optim_v1: true
+            suite: empirical
 
     steps:
       - uses: actions/checkout@v7
@@ -70,23 +83,39 @@ jobs:
       - uses: julia-actions/julia-buildpkg@v1
 
       # Cell roles:
-      #   macos LTS     — full suite (FAST=0, all groups, bounds checks)
-      #   ubuntu 1.10   — numerical suite (MACRO_NUMERICAL_CI=1) + Optim v1 pin
-      #   ubuntu LTS    — linux full suite (FAST=0); no coverage post-process
-      #   windows LTS   — reduced-sampling smoke (FAST=1, threaded single process)
+      #   ubuntu LTS  — full suite, split dsge | empirical; BOTH parts upload Codecov
+      #   ubuntu 1.10 — numerical profile, split dsge | empirical; Optim v1 pin
+      #   macos LTS   — FAST=1 smoke, split dsge | empirical
+      #   windows LTS — FAST=1 smoke, threaded, split dsge | empirical
       #
       # Windows uses the threaded single-process runner (package loaded once).
       # Multiprocess on NTFS pays ~6 min per child to load compiled modules; 17
       # children made that the job. HA-DSGE still gets 2 OpenBLAS threads via
       # the runner; every other group stays at 1.
       - uses: julia-actions/julia-runtest@v1
+        with:
+          coverage: ${{ matrix.os == 'ubuntu-latest' && matrix.version == 'lts' }}
         env:
           JULIA_NUM_THREADS: ${{ matrix.os == 'windows-latest' && 'auto' || '1' }}
           OPENBLAS_NUM_THREADS: "1"
           MACRO_MULTIPROCESS_TESTS: ${{ matrix.os == 'windows-latest' && '0' || '1' }}
-          MACRO_FAST_TESTS: ${{ matrix.os == 'windows-latest' && '1' || '0' }}
+          MACRO_FAST_TESTS: ${{ matrix.os == 'ubuntu-latest' && '0' || '1' }}
           MACRO_NUMERICAL_CI: ${{ matrix.os == 'ubuntu-latest' && matrix.version == '1.10' && '1' || '0' }}
-          MACRO_CHECK_BOUNDS: ${{ matrix.os != 'windows-latest' && '1' || '0' }}
+          MACRO_CHECK_BOUNDS: ${{ matrix.os == 'ubuntu-latest' && '1' || '0' }}
+          MACRO_CI_SUITE: ${{ matrix.suite }}
+
+      - uses: julia-actions/julia-processcoverage@v1
+        if: matrix.os == 'ubuntu-latest' && matrix.version == 'lts'
+
+      - uses: codecov/codecov-action@v7
+        if: matrix.os == 'ubuntu-latest' && matrix.version == 'lts'
+        with:
+          files: lcov.info
+          slug: FriedmanJP/MacroEconometricModels.jl
+          fail_ci_if_error: false
+          flags: ${{ matrix.suite }}
+        env:
+          CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
 
   # RNG-everywhere lint (#243): every drawing function must thread an rng; no bare
   # rand/randn on the global RNG in src/. Dependency-free (no Julia), so it runs fast.
