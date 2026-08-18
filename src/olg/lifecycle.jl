@@ -304,12 +304,13 @@ end
 # Prices, taxes, demographics
 # =============================================================================
 
-"Competitive factor prices at capital-labor ratio `K/L`."
-function _lc_prices(m::LifeCycleOLG{T}, KL::T) where {T<:AbstractFloat}
-    r = m.alpha * m.Z * KL^(m.alpha - one(T)) - m.delta
-    w = (one(T) - m.alpha) * m.Z * KL^m.alpha
+"Competitive factor prices at capital-labor ratio `K/L` (and optional TFP `Z`)."
+function _lc_prices(m::LifeCycleOLG{T}, KL::T, Z::T) where {T<:AbstractFloat}
+    r = m.alpha * Z * KL^(m.alpha - one(T)) - m.delta
+    w = (one(T) - m.alpha) * Z * KL^m.alpha
     return (r, w)
 end
+_lc_prices(m::LifeCycleOLG{T}, KL::T) where {T<:AbstractFloat} = _lc_prices(m, KL, m.Z)
 
 """
     _lc_cohort_mass(m) -> Vector{T}
@@ -714,8 +715,440 @@ function lifecycle_steady_state(m::LifeCycleOLG{T};
 end
 
 # =============================================================================
-# Display
+# Perfect-foresight transition (G-12 / #646)
 # =============================================================================
+
+"""
+    LifeCycleTransition{T}
+
+Deterministic perfect-foresight path of a [`LifeCycleOLG`](@ref) economy.
+
+All series have length `H+1` (dates `t = 0, …, H`). `K[1]` is the predetermined
+initial capital; `K[end]` is household supply after `H` periods and, when the
+horizon is long enough, sits at the stationary [`LifeCycleSteadyState`](@ref).
+"""
+struct LifeCycleTransition{T<:AbstractFloat}
+    K::Vector{T}
+    r::Vector{T}
+    w::Vector{T}
+    Y::Vector{T}
+    C::Vector{T}
+    Z::Vector{T}
+    pension::Vector{T}
+    transfer::Vector{T}
+    tau::T
+    converged::Bool
+    iterations::Int
+    ss::LifeCycleSteadyState{T}
+end
+
+export LifeCycleTransition, lifecycle_transition
+
+"Beginning-of-period aggregate capital from a `(a, e, age)` histogram."
+function _lc_aggregate_K(a_grid::AbstractVector{T}, dist::Array{T,3}) where {T<:AbstractFloat}
+    n_a, n_e, J = size(dist)
+    K = zero(T)
+    @inbounds for j in 1:J, ie in 1:n_e, i in 1:n_a
+        K += dist[i, ie, j] * a_grid[i]
+    end
+    return K
+end
+
+"Cross-sectional mean of a policy `x` against a `(a, e, age)` histogram."
+function _lc_aggregate_X(x::AbstractArray{T,3}, dist::Array{T,3}) where {T<:AbstractFloat}
+    n_a, n_e, J = size(dist)
+    acc = zero(T)
+    @inbounds for j in 1:J, ie in 1:n_e, i in 1:n_a
+        acc += dist[i, ie, j] * x[i, ie, j]
+    end
+    return acc
+end
+
+"""
+    _lc_rescale_dist(m, dist, lambda) -> Array{T,3}
+
+Young-lottery remesh of `dist` after every household's assets are scaled by
+`lambda`. Cohort and productivity masses are preserved; nodes that would leave
+the grid are clamped.
+"""
+function _lc_rescale_dist(m::LifeCycleOLG{T}, dist::Array{T,3},
+                          lambda::T) where {T<:AbstractFloat}
+    isapprox(lambda, one(T)) && return copy(dist)
+    a_grid = m.grid.grids[1]
+    n_a, n_e, J = size(dist)
+    out = zeros(T, n_a, n_e, J)
+    @inbounds for j in 1:J, ie in 1:n_e, i in 1:n_a
+        wgt = dist[i, ie, j]
+        wgt == zero(T) && continue
+        a_new = clamp(lambda * a_grid[i], a_grid[1], a_grid[end])
+        k = clamp(searchsortedfirst(a_grid, a_new) - 1, 1, n_a - 1)
+        dx = a_grid[k+1] - a_grid[k]
+        ω = dx > zero(T) ? (a_new - a_grid[k]) / dx : zero(T)
+        out[k, ie, j] += wgt * (one(T) - ω)
+        out[k+1, ie, j] += wgt * ω
+    end
+    return out
+end
+
+"""
+    _lc_forward_dist(m, dist, a_pol) -> Array{T,3}
+
+One-period Young push of a life-cycle histogram. Newborns enter at age 1 with
+zero assets and the stationary productivity law; each later age is the previous
+age's within-cohort distribution pushed through that age's savings policy and
+reweighted by the stationary cohort mass. Demographics stay at
+[`_lc_cohort_mass`](@ref) — this is a price/TFP transition, not a demographic one.
+"""
+function _lc_forward_dist(m::LifeCycleOLG{T}, dist::Array{T,3},
+                          a_pol::AbstractArray{T,3}) where {T<:AbstractFloat}
+    a_grid = m.grid.grids[1]
+    n_a = length(a_grid)
+    n_e = length(m.income.states)
+    Pi = m.income.transition
+    mu = _lc_cohort_mass(m)
+    new_dist = zeros(T, n_a, n_e, m.J)
+
+    # Age-1: newborns, zero assets × stationary productivity.
+    a0 = clamp(zero(T), a_grid[1], a_grid[end])
+    k0 = clamp(searchsortedfirst(a_grid, a0) - 1, 1, n_a - 1)
+    dx0 = a_grid[k0+1] - a_grid[k0]
+    ω0 = dx0 > zero(T) ? (a0 - a_grid[k0]) / dx0 : zero(T)
+    for ie in 1:n_e
+        pe = T(m.income.stationary_dist[ie]) * mu[1]
+        new_dist[k0, ie, 1] += pe * (one(T) - ω0)
+        new_dist[k0+1, ie, 1] += pe * ω0
+    end
+
+    tmp = zeros(T, n_a, n_e)
+    @inbounds for j in 1:(m.J - 1)
+        fill!(tmp, zero(T))
+        for ie in 1:n_e, i in 1:n_a
+            wgt = dist[i, ie, j]
+            wgt == zero(T) && continue
+            ap = clamp(a_pol[i, ie, j], a_grid[1], a_grid[end])
+            k = clamp(searchsortedfirst(a_grid, ap) - 1, 1, n_a - 1)
+            dx = a_grid[k+1] - a_grid[k]
+            ω = dx > zero(T) ? (ap - a_grid[k]) / dx : zero(T)
+            for je in 1:n_e
+                p = Pi[ie, je]
+                p == zero(T) && continue
+                tmp[k, je] += wgt * (one(T) - ω) * p
+                tmp[k+1, je] += wgt * ω * p
+            end
+        end
+        s = sum(tmp)
+        scale = (s > zero(T) && mu[j+1] > zero(T)) ? mu[j+1] / s : zero(T)
+        for ie in 1:n_e, i in 1:n_a
+            new_dist[i, ie, j+1] = tmp[i, ie] * scale
+        end
+    end
+    return new_dist
+end
+
+"""
+    _lc_policies_at_date!(c_pol, a_pol, m, r_now, r_next, w, tau, pension, transfer, c_next)
+
+Age-EGM sweep at one date of a perfect-foresight path. Continuation marginal
+utilities come from next period's consumption policy `c_next` (age `j+1`); the
+return on assets brought into the date uses `r_now`, the return on `a'` uses
+`r_next`.
+"""
+function _lc_policies_at_date!(c_pol::AbstractArray{T,3}, a_pol::AbstractArray{T,3},
+                               m::LifeCycleOLG{T}, r_now::T, r_next::T, w::T,
+                               tau::T, pension::T, transfer::T,
+                               c_next::AbstractArray{T,3}) where {T<:AbstractFloat}
+    a_grid = m.grid.grids[1]
+    n_a = length(a_grid)
+    e_vals = m.income.states
+    n_e = length(e_vals)
+    Pi = m.income.transition
+    a_min = m.credit_limit
+    sigma = m.sigma
+    R_now = one(T) + r_now
+    R_next = one(T) + r_next
+
+    inc(j, ie) = j < m.J_retire ? (one(T) - tau) * w * m.earnings[j] * e_vals[ie] : pension
+
+    a_term = max(a_min, zero(T))
+    for ie in 1:n_e, i in 1:n_a
+        gross = m.annuities ? _lc_gross_return(m, r_now, m.J - 1) : R_now
+        coh = gross * a_grid[i] + inc(m.J, ie) + transfer
+        c_pol[i, ie, m.J] = max(coh - a_term, T(1e-12))
+        a_pol[i, ie, m.J] = a_term
+    end
+
+    emu = zeros(T, n_a)
+    c_endo = zeros(T, n_a)
+    a_endo = zeros(T, n_a)
+
+    for j in (m.J - 1):-1:1
+        gross_next = m.annuities ? _lc_gross_return(m, r_next, j) : R_next
+        gross_now = m.annuities ? _lc_gross_return(m, r_now, j - 1) : R_now
+        for ie in 1:n_e
+            fill!(emu, zero(T))
+            for je in 1:n_e
+                p = Pi[ie, je]
+                p == zero(T) && continue
+                for i in 1:n_a
+                    emu[i] += p * _lc_uprime(c_next[i, je, j+1], sigma)
+                end
+            end
+            for i in 1:n_a
+                rhs = m.beta * m.survival[j] * gross_next * emu[i]
+                c_endo[i] = _lc_uprime_inv(rhs, sigma)
+                a_endo[i] = (c_endo[i] + a_grid[i] - inc(j, ie) - transfer) / gross_now
+            end
+            for i in 1:n_a
+                a_val = a_grid[i]
+                coh = gross_now * a_val + inc(j, ie) + transfer
+                if a_val <= a_endo[1]
+                    c_pol[i, ie, j] = max(coh - a_min, T(1e-12))
+                    a_pol[i, ie, j] = a_min
+                else
+                    cj = _lc_interp(a_endo, c_endo, a_val)
+                    cj = clamp(cj, T(1e-12), coh - a_min)
+                    c_pol[i, ie, j] = cj
+                    a_pol[i, ie, j] = clamp(coh - cj, a_min, a_grid[end])
+                end
+            end
+        end
+    end
+    return c_pol, a_pol
+end
+
+"Pay-as-you-go tax rate (independent of the wage) and the benefit at wage `w`."
+function _lc_ss_budget(m::LifeCycleOLG{T}, w::T, L::T, mu::Vector{T}) where {T<:AbstractFloat}
+    mass_ret = sum(@view mu[min(m.J_retire, m.J + 1):end])
+    mass_work = sum(@view mu[1:min(m.J_retire - 1, m.J)])
+    if m.replacement > zero(T) && mass_ret > zero(T) && mass_work > zero(T) && L > zero(T)
+        pension = m.replacement * w * (L / mass_work)
+        tau = pension * mass_ret / (w * L)
+        return tau, pension
+    end
+    return zero(T), zero(T)
+end
+
+"Accidental-bequest rebate implied by `(dist, a_pol)` at the current interest rate."
+function _lc_bequest(m::LifeCycleOLG{T}, dist::Array{T,3}, a_pol::AbstractArray{T,3},
+                     r::T) where {T<:AbstractFloat}
+    beq = zero(T)
+    n_a, n_e, J = size(dist)
+    @inbounds for j in 1:J
+        (one(T) - m.survival[j]) == zero(T) && continue
+        acc = zero(T)
+        for ie in 1:n_e, i in 1:n_a
+            acc += dist[i, ie, j] * a_pol[i, ie, j]
+        end
+        beq += (one(T) - m.survival[j]) * (one(T) + r) * acc
+    end
+    return beq / (one(T) + m.n_pop)
+end
+
+"""
+    lifecycle_transition(m, k0; H=80, Z_path=nothing, ss=nothing, tol=1e-5,
+                         max_iter=80, relax=0.5, verbose=false) -> LifeCycleTransition
+    lifecycle_transition(m, Z_path; k0=nothing, ss=nothing, ...) -> LifeCycleTransition
+
+Perfect-foresight transition of a life-cycle OLG economy.
+
+The first form starts from a displaced aggregate capital `k0` (the stationary
+age–productivity histogram, assets scaled by `k0 / K*`) and a constant TFP
+path `Z_t = m.Z`, unless `Z_path` is supplied. The second form starts from the
+stationary distribution (`k0 = K*` unless overridden) and a deterministic TFP
+path that should return to `m.Z`.
+
+The algorithm shoots on `{K_t}` (Auerbach–Kotlikoff / MIT):
+
+1. Given `{K_t, Z_t}`, set `r_t = α Z_t (K_t/L)^{α−1} − δ` and
+   `w_t = (1−α) Z_t (K_t/L)^α`.
+2. Solve the household problem **backward** from the terminal stationary
+   policy, one age-EGM sweep per date.
+3. Push the initial histogram **forward** through those policies.
+4. Relax `K_t` toward household asset supply until the path converges.
+
+`K_0` is pinned by the initial distribution. `relax ∈ (0, 1]` is the damping
+on the capital-path update. Non-convergence is reported in `converged`, never
+silently accepted.
+
+# Keyword Arguments
+| Keyword | Default | Description |
+|---|---|---|
+| `H` | `80` | Horizon (`H+1` dates). Ignored when `Z_path` is given (`H = length(Z_path) − 1`) |
+| `Z_path` | `nothing` | Optional TFP path of length `H+1` |
+| `ss` | `nothing` | Precomputed [`LifeCycleSteadyState`](@ref); computed if omitted |
+| `tol` | ``10^{-5}`` | Absolute tolerance on ``\\max_t |K_t^{\\mathrm{new}} − K_t|`` |
+| `max_iter` | `80` | Shooting iterations |
+| `relax` | `0.5` | Damping on the capital (and bequest) update |
+| `verbose` | `false` | Print shooting diagnostics |
+"""
+function lifecycle_transition(m::LifeCycleOLG{T}, k0::Real;
+                              Z_path::Union{Nothing,AbstractVector}=nothing,
+                              H::Int=80,
+                              ss::Union{Nothing,LifeCycleSteadyState{T}}=nothing,
+                              tol::Real=1e-5, max_iter::Int=80,
+                              relax::Real=0.5,
+                              verbose::Bool=false) where {T<:AbstractFloat}
+    ss0 = ss === nothing ? lifecycle_steady_state(m) : ss
+    Z = if Z_path === nothing
+        H >= 2 || throw(ArgumentError("`H` must be at least 2, got $H"))
+        fill(m.Z, H + 1)
+    else
+        length(Z_path) >= 3 || throw(ArgumentError(
+            "`Z_path` must have at least 3 points (got $(length(Z_path)))"))
+        collect(T, Z_path)
+    end
+    return _lifecycle_transition(m, ss0, T(k0), Z; tol=tol, max_iter=max_iter,
+                                 relax=relax, verbose=verbose)
+end
+
+function lifecycle_transition(m::LifeCycleOLG{T}, Z_path::AbstractVector;
+                              k0::Union{Nothing,Real}=nothing,
+                              ss::Union{Nothing,LifeCycleSteadyState{T}}=nothing,
+                              tol::Real=1e-5, max_iter::Int=80,
+                              relax::Real=0.5,
+                              verbose::Bool=false) where {T<:AbstractFloat}
+    ss0 = ss === nothing ? lifecycle_steady_state(m) : ss
+    k = k0 === nothing ? ss0.K : T(k0)
+    length(Z_path) >= 3 || throw(ArgumentError(
+        "`Z_path` must have at least 3 points (got $(length(Z_path)))"))
+    return _lifecycle_transition(m, ss0, k, collect(T, Z_path);
+                                 tol=tol, max_iter=max_iter,
+                                 relax=relax, verbose=verbose)
+end
+
+function _lifecycle_transition(m::LifeCycleOLG{T}, ss::LifeCycleSteadyState{T},
+                               k0::T, Z::Vector{T};
+                               tol::Real=1e-5, max_iter::Int=80,
+                               relax::Real=0.5,
+                               verbose::Bool=false) where {T<:AbstractFloat}
+    k0 > zero(T) || throw(ArgumentError("`k0` must be positive, got $k0"))
+    all(>(zero(T)), Z) || throw(ArgumentError("every TFP value must be strictly positive"))
+    0 < relax <= 1 || throw(ArgumentError("`relax` must lie in (0, 1], got $relax"))
+    max_iter >= 1 || throw(ArgumentError("`max_iter` must be at least 1"))
+    ss.K > zero(T) || throw(ArgumentError("steady-state capital must be positive"))
+
+    Np1 = length(Z)
+    H = Np1 - 1
+    a_grid = m.grid.grids[1]
+    n_a = length(a_grid)
+    n_e = length(m.income.states)
+    mu = _lc_cohort_mass(m)
+    L = _lc_labor(m, mu)
+    L = max(L, T(1e-12))
+    relax_T = T(relax)
+    tol_T = T(tol)
+
+    lambda = k0 / ss.K
+    dist0 = _lc_rescale_dist(m, ss.dist, lambda)
+    K0 = _lc_aggregate_K(a_grid, dist0)
+
+    # Initial guess: linear bridge from K0 to the stationary capital.
+    K = [K0 + (ss.K - K0) * T(t - 1) / T(H) for t in 1:Np1]
+    K[1] = K0
+    transfer = fill(ss.transfer, Np1)
+
+    c_pol = zeros(T, n_a, n_e, m.J, Np1)
+    a_pol = zeros(T, n_a, n_e, m.J, Np1)
+    # Terminal continuation is the stationary policy.
+    c_pol[:, :, :, Np1] .= ss.c_policy
+    a_pol[:, :, :, Np1] .= ss.a_policy
+
+    tau0, _ = _lc_ss_budget(m, ss.w, L, mu)
+
+    function prices_at(t)
+        Kt = max(K[t], T(1e-10))
+        return _lc_prices(m, Kt / L, Z[t])
+    end
+
+    converged = false
+    iters = 0
+    dists = Vector{Array{T,3}}(undef, Np1)
+
+    for outer in 1:max_iter
+        iters = outer
+        rpath = Vector{T}(undef, Np1)
+        wpath = Vector{T}(undef, Np1)
+        ppath = Vector{T}(undef, Np1)
+        for t in 1:Np1
+            rpath[t], wpath[t] = prices_at(t)
+            _, ppath[t] = _lc_ss_budget(m, wpath[t], L, mu)
+        end
+
+        # Backward age-EGM from the terminal stationary policy.
+        for t in (Np1 - 1):-1:1
+            r_next = rpath[t+1]
+            _lc_policies_at_date!(view(c_pol, :, :, :, t), view(a_pol, :, :, :, t),
+                                  m, rpath[t], r_next, wpath[t], tau0, ppath[t],
+                                  transfer[t], view(c_pol, :, :, :, t+1))
+        end
+
+        # Forward histogram from the displaced initial distribution.
+        dists[1] = dist0
+        for t in 1:H
+            dists[t+1] = _lc_forward_dist(m, dists[t], view(a_pol, :, :, :, t))
+        end
+
+        K_new = [_lc_aggregate_K(a_grid, dists[t]) for t in 1:Np1]
+        K_new[1] = K0
+        transfer_new = if m.annuities
+            transfer
+        else
+            [_lc_bequest(m, dists[t], view(a_pol, :, :, :, t), rpath[t]) for t in 1:Np1]
+        end
+
+        diffK = maximum(abs.(K_new .- K))
+        diffB = m.annuities ? zero(T) : maximum(abs.(transfer_new .- transfer))
+        verbose && println("lifecycle transition $outer: max|ΔK| = $diffK, max|Δbeq| = $diffB")
+
+        if diffK < tol_T && diffB < tol_T
+            K .= K_new
+            transfer = transfer_new
+            converged = true
+            break
+        end
+        for t in 2:Np1
+            K[t] = relax_T * K_new[t] + (one(T) - relax_T) * K[t]
+        end
+        if !m.annuities
+            for t in 1:Np1
+                transfer[t] = relax_T * transfer_new[t] + (one(T) - relax_T) * transfer[t]
+            end
+        end
+    end
+
+    # Final aggregates on the (possibly last-iterate) capital path.
+    rpath = Vector{T}(undef, Np1)
+    wpath = Vector{T}(undef, Np1)
+    ppath = Vector{T}(undef, Np1)
+    Ypath = Vector{T}(undef, Np1)
+    Cpath = Vector{T}(undef, Np1)
+    for t in 1:Np1
+        rpath[t], wpath[t] = prices_at(t)
+        _, ppath[t] = _lc_ss_budget(m, wpath[t], L, mu)
+        Ypath[t] = Z[t] * max(K[t], T(1e-10))^m.alpha * L^(one(T) - m.alpha)
+    end
+    for t in (Np1 - 1):-1:1
+        _lc_policies_at_date!(view(c_pol, :, :, :, t), view(a_pol, :, :, :, t),
+                              m, rpath[t], rpath[t+1], wpath[t], tau0, ppath[t],
+                              transfer[t], view(c_pol, :, :, :, t+1))
+    end
+    dists[1] = dist0
+    Cpath[1] = _lc_aggregate_X(view(c_pol, :, :, :, 1), dists[1])
+    for t in 1:H
+        dists[t+1] = _lc_forward_dist(m, dists[t], view(a_pol, :, :, :, t))
+        Cpath[t+1] = _lc_aggregate_X(view(c_pol, :, :, :, t+1), dists[t+1])
+    end
+    if !m.annuities
+        transfer = [_lc_bequest(m, dists[t], view(a_pol, :, :, :, t), rpath[t]) for t in 1:Np1]
+    end
+
+    if !converged
+        @warn "lifecycle_transition did not converge in $iters shooting iterations" maxlog=1
+    end
+
+    return LifeCycleTransition{T}(copy(K), rpath, wpath, Ypath, Cpath, copy(Z),
+                                  ppath, copy(transfer), tau0, converged, iters, ss)
+end
 
 function Base.show(io::IO, m::LifeCycleOLG{T}) where {T}
     print(io, "LifeCycleOLG{$T}: J=", m.J, ", retire at ", m.J_retire,
@@ -727,6 +1160,12 @@ function Base.show(io::IO, ss::LifeCycleSteadyState{T}) where {T}
     print(io, "LifeCycleSteadyState{$T}: r=", round(ss.r; digits=5),
           ", K/Y=", round(ss.K / ss.Y; digits=3),
           ", converged=", ss.converged)
+end
+
+function Base.show(io::IO, tr::LifeCycleTransition{T}) where {T}
+    print(io, "LifeCycleTransition{$T}: ", length(tr.K), " periods, K: ",
+          round(tr.K[1]; digits=4), " → ", round(tr.K[end]; digits=4),
+          ", converged=", tr.converged)
 end
 
 """
