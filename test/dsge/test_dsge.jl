@@ -6940,7 +6940,9 @@ T_lo(::Dict) = 1e-4
 end
 
 @testset "@dsge compound utility: CRRA (MSR-12)" begin
-    spec = @dsge begin
+    # @testset is a soft local scope: `sol =` / `spec =` would clobber the
+    # hoisted log-utility solve used by the rest of this file.
+    spec_crra = @dsge begin
         parameters: β = 0.99, α = 0.36, δ = 0.025, ρ = 0.95, σ = 0.007, γ = 1.01
         endogenous: c, k, a
         exogenous: ε
@@ -6951,14 +6953,14 @@ end
         c[t] + k[t] = exp(a[t]) * k[t-1]^α + (1 - δ) * k[t-1]
         a[t] = ρ * a[t-1] + σ * ε[t]
     end
-    @test spec.bellman_utility isa Expr
-    @test spec.bellman_consumption === :c
-    spec = compute_steady_state(spec)
-    sol = solve(spec; method=:vfi, next_state=:residual, degree=3, n_grid=8,
-                max_iter=200, howard_steps=10, n_choice=17, verbose=false)
-    @test sol.converged
-    x_ss = spec.steady_state[sol.state_indices]
-    @test isfinite(evaluate_policy(sol, x_ss)[1])
+    @test spec_crra.bellman_utility isa Expr
+    @test spec_crra.bellman_consumption === :c
+    spec_crra = compute_steady_state(spec_crra)
+    sol_crra = solve(spec_crra; method=:vfi, next_state=:residual, degree=3, n_grid=8,
+                     max_iter=200, howard_steps=10, n_choice=17, verbose=false)
+    @test sol_crra.converged
+    x_ss_crra = spec_crra.steady_state[sol_crra.state_indices]
+    @test isfinite(evaluate_policy(sol_crra, x_ss_crra)[1])
 end
 
 @testset "@dsge utility: unknown symbol (MSR-12)" begin
@@ -7142,7 +7144,7 @@ end
 end
 
 @testset "VFI :linear throws when G1 ignores controls (MSR-01)" begin
-    spec = @dsge begin
+    spec_lin = @dsge begin
         parameters: β = 0.99, α = 0.36, δ = 0.025, ρ = 0.95, σ = 0.007
         endogenous: c, k, a
         exogenous: ε
@@ -7153,9 +7155,9 @@ end
         c[t] + k[t] = exp(a[t]) * k[t-1]^α + (1 - δ) * k[t-1]
         a[t] = ρ * a[t-1] + σ * ε[t]
     end
-    spec = compute_steady_state(spec)
+    spec_lin = compute_steady_state(spec_lin)
     err = try
-        vfi_solver(spec; next_state=:linear, degree=3, n_grid=6, max_iter=2)
+        vfi_solver(spec_lin; next_state=:linear, degree=3, n_grid=6, max_iter=2)
         error("should have thrown")
     catch e
         e
@@ -7166,11 +7168,11 @@ end
 end
 
 @testset "VFI NaN value cannot converge (MSR-15)" begin
-    spec = _vfi_rbc_spec()
-    kw = _vfi_rbc_bellman(spec)
-    sol = vfi_solver(spec; kw..., utility = c -> NaN, degree=3, n_grid=6,
-                     max_iter=3, howard_steps=0, n_choice=5, verbose=false)
-    @test sol.converged == false
+    spec_nan = _vfi_rbc_spec()
+    kw_nan = _vfi_rbc_bellman(spec_nan)
+    sol_nan = vfi_solver(spec_nan; kw_nan..., utility = c -> NaN, degree=3, n_grid=6,
+                         max_iter=3, howard_steps=0, n_choice=5, verbose=false)
+    @test sol_nan.converged == false
 end
 
 @testset "VFI :residual without defines throws (#658)" begin

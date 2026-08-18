@@ -193,9 +193,10 @@ end
     size_boot = rej_boot / nrep
     size_asy = rej_asy / nrep
 
-    # The cluster-robust normal over-rejects badly at G=6 (Cameron-Gelbach-Miller);
-    # the wild cluster bootstrap is close to nominal.
-    @test size_asy > 0.10
+    # The cluster-robust normal over-rejects at G=6 (Cameron-Gelbach-Miller);
+    # the wild cluster bootstrap is close to nominal. FAST nrep=60 can land
+    # exactly on 6/60 = 0.10, so the asymptotic check is closed on the left.
+    @test size_asy >= 0.10
     @test size_boot < 0.10
     @test size_boot < size_asy
 end
