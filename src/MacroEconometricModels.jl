@@ -750,6 +750,8 @@ export AbstractDSGEModel
 
 # Types
 export ModelSpec, NamedEquation, NoAgents, AbstractAgentSystem, ModelIR, HouseholdSystem
+export DCEGMSystem, LifeCycleSystem, ContinuousHouseholdSystem
+export to_spec
 export LinearDSGE, DSGESolution, PerturbationSolution, ProjectionSolution, PerfectForesightPath, DSGEEstimation
 export DeterminacyMap, PrunedStateSpace
 

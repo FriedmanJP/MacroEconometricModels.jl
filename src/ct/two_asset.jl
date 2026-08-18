@@ -1197,3 +1197,17 @@ function report(io::IO, ge::CTTwoAssetGE{T}) where {T}
 end
 report(ge::CTTwoAssetGE) = report(stdout, ge)
 
+"""
+    ContinuousHouseholdSystem{T} <: AbstractAgentSystem{T}
+
+Continuous-time household population. Wraps [`CTAiyagari`](@ref) or
+[`CTTwoAsset`](@ref). `to_spec` / `@dsge clock: continuous` land in G-04.
+"""
+struct ContinuousHouseholdSystem{T<:AbstractFloat} <: AbstractAgentSystem{T}
+    model::Union{CTAiyagari{T},CTTwoAsset{T}}
+end
+ContinuousHouseholdSystem(m::CTAiyagari{T}) where {T<:AbstractFloat} =
+    ContinuousHouseholdSystem{T}(m)
+ContinuousHouseholdSystem(m::CTTwoAsset{T}) where {T<:AbstractFloat} =
+    ContinuousHouseholdSystem{T}(m)
+

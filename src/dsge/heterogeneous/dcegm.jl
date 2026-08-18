@@ -243,6 +243,17 @@ struct DCEGMProblem{T<:AbstractFloat,FU,FUP,FUPI,FY}
     credit_limit::T
 end
 
+"""
+    DCEGMSystem{T} <: AbstractAgentSystem{T}
+
+Discrete-continuous EGM population. `ModelSpec.agents` holds this payload;
+`to_spec` / `@dsge discrete:` (G-02) wrap a [`DCEGMProblem`](@ref).
+"""
+struct DCEGMSystem{T<:AbstractFloat} <: AbstractAgentSystem{T}
+    problem::DCEGMProblem
+end
+DCEGMSystem(prob::DCEGMProblem) = DCEGMSystem{Float64}(prob)
+
 function DCEGMProblem(; beta::Real, R::Real, utility, utility_prime,
                         utility_prime_inv, income,
                         options::AbstractVector{Symbol},

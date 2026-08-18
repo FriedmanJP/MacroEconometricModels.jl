@@ -99,6 +99,16 @@ struct LifeCycleOLG{T<:AbstractFloat}
 end
 
 """
+    LifeCycleSystem{T} <: AbstractAgentSystem{T}
+
+Finite-horizon life-cycle OLG population. `to_spec` / `@dsge horizon: ages`
+(G-03) wrap a [`LifeCycleOLG`](@ref).
+"""
+struct LifeCycleSystem{T<:AbstractFloat} <: AbstractAgentSystem{T}
+    model::LifeCycleOLG{T}
+end
+
+"""
     _lifecycle_earnings(J, J_retire) -> Vector{Float64}
 
 Default deterministic age-earnings profile: a quadratic hump in experience,
