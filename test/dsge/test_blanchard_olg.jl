@@ -117,4 +117,51 @@ using LinearAlgebra
         report(ss)                                                # smoke test
     end
 
+    @testset "to_spec → ModelSpec (#638 G-01)" begin
+        @testset "γ=1 Ramsey" begin
+            m = BlanchardOLG(; gamma=1.0, beta=0.96, alpha=0.36, delta=0.08, Z=1.0)
+            spec = to_spec(m)
+            @test spec isa ModelSpec{Float64,NoAgents}
+            @test typeof(spec.agents) === typeof(NamedTuple())
+            @test spec.endog == [:k, :C, :r, :w, :Z]
+            @test spec.exog == [:eps_Z]
+            ss_ref = blanchard_steady_state(m)
+            ss_spec = compute_steady_state(spec)
+            y = ss_spec.steady_state
+            @test isapprox(y[3], 1 / 0.96 - 1; atol=1e-8)          # r = 1/β − 1
+            @test isapprox(y[1], ss_ref.k; atol=1e-8)
+            @test isapprox(y[2], ss_ref.C; atol=1e-8)
+            @test isapprox(y[3], ss_ref.r; atol=1e-8)
+            @test isapprox(y[4], ss_ref.w; atol=1e-8)
+            shock0 = zeros(eltype(y), spec.n_exog)
+            for f in spec.residual_fns
+                @test abs(f(y, y, y, shock0, spec.param_values)) < 1e-8
+            end
+        end
+
+        @testset "γ<1 matches blanchard_steady_state" begin
+            m = BlanchardOLG(; gamma=0.98, beta=0.96)
+            spec = to_spec(m)
+            @test spec isa ModelSpec{Float64,NoAgents}
+            ss_ref = blanchard_steady_state(m)
+            y = compute_steady_state(spec).steady_state
+            @test isapprox(y[1], ss_ref.k; atol=1e-8)
+            @test isapprox(y[2], ss_ref.C; atol=1e-8)
+            @test isapprox(y[3], ss_ref.r; atol=1e-8)
+            @test isapprox(y[4], ss_ref.w; atol=1e-8)
+            shock0 = zeros(eltype(y), spec.n_exog)
+            for f in spec.residual_fns
+                @test abs(f(y, y, y, shock0, spec.param_values)) < 1e-8
+            end
+        end
+
+        @testset "b>0 crowds out k" begin
+            m0 = BlanchardOLG(; gamma=0.98, beta=0.96, b=0.0)
+            m1 = BlanchardOLG(; gamma=0.98, beta=0.96, b=0.10)
+            y0 = compute_steady_state(to_spec(m0)).steady_state
+            y1 = compute_steady_state(to_spec(m1)).steady_state
+            @test y1[1] < y0[1]
+        end
+    end
+
 end

@@ -282,6 +282,103 @@ function blanchard_transition(m::BlanchardOLG{T}, sol::BlanchardOLGSolution{T}, 
 end
 
 # =============================================================================
+# ModelSpec adapter (G-01 / #638)
+# =============================================================================
+
+"""
+    to_spec(m::BlanchardOLG; rho_z=0, sigma_z=0) → ModelSpec{T,NoAgents}
+
+Wrap a [`BlanchardOLG`](@ref) as a residual-only [`ModelSpec`](@ref) with
+endogenous `(k, C, r, w, Z)` and shock `eps_Z`. `ss_fn` delegates to
+[`blanchard_steady_state`](@ref) so `compute_steady_state` matches the family
+solver. `λ = (1 − βγ)(1 − γ)/γ` (zero when `γ = 1`).
+"""
+function to_spec(m::BlanchardOLG{T}; rho_z=T(0), sigma_z=T(0)) where {T}
+    ρz = T(rho_z)
+    σz = T(sigma_z)
+
+    endog = [:k, :C, :r, :w, :Z]
+    exog  = [:eps_Z]
+    params = [:alpha, :beta, :delta, :gamma, :Z, :b, :rho_z, :sigma_z]
+    param_values = Dict{Symbol,T}(
+        :alpha => m.alpha, :beta => m.beta, :delta => m.delta,
+        :gamma => m.gamma, :Z => m.Z, :b => m.b,
+        :rho_z => ρz, :sigma_z => σz,
+    )
+
+    # Residuals close over indices, not parameter values.
+    i_k, i_C, i_r, i_w, i_Z = 1, 2, 3, 4, 5
+
+    f_euler = function (y_t, y_lag, y_lead, shock, θ)
+        γ = θ[:gamma]
+        λ = γ >= one(γ) ? zero(γ) : (one(γ) - θ[:beta] * γ) * (one(γ) - γ) / γ
+        return y_lead[i_C] - (one(T) + y_lead[i_r]) *
+            (θ[:beta] * y_t[i_C] - λ * (y_lead[i_k] + θ[:b]))
+    end
+    f_budget = function (y_t, y_lag, y_lead, shock, θ)
+        return y_lead[i_k] - ((one(T) + y_t[i_r]) * y_t[i_k] + y_t[i_w] - y_t[i_C])
+    end
+    f_mpk = function (y_t, y_lag, y_lead, shock, θ)
+        return y_t[i_r] - (θ[:alpha] * y_t[i_Z] * y_t[i_k]^(θ[:alpha] - one(T)) - θ[:delta])
+    end
+    f_mpw = function (y_t, y_lag, y_lead, shock, θ)
+        return y_t[i_w] - ((one(T) - θ[:alpha]) * y_t[i_Z] * y_t[i_k]^θ[:alpha])
+    end
+    f_z = function (y_t, y_lag, y_lead, shock, θ)
+        return y_t[i_Z] - ((one(T) - θ[:rho_z]) * θ[:Z] +
+            θ[:rho_z] * y_lag[i_Z] + θ[:sigma_z] * shock[1])
+    end
+    residual_fns = Function[f_euler, f_budget, f_mpk, f_mpw, f_z]
+
+    equations = NamedEquation[
+        NamedEquation(:euler, :C,
+            :(C[t+1] - (1 + r[t+1]) * (β * C[t] - λ * (k[t+1] + b))),
+            f_euler; timing=TimingInfo(0, 1, true)),
+        NamedEquation(:budget, :k,
+            :(k[t+1] - ((1 + r[t]) * k[t] + w[t] - C[t])),
+            f_budget; timing=TimingInfo(0, 1, true)),
+        NamedEquation(:mpk, :r,
+            :(r[t] - (α * Z[t] * k[t]^(α - 1) - δ)),
+            f_mpk; timing=TimingInfo(0, 0, false)),
+        NamedEquation(:mpw, :w,
+            :(w[t] - ((1 - α) * Z[t] * k[t]^α)),
+            f_mpw; timing=TimingInfo(0, 0, false)),
+        NamedEquation(:z_proc, :Z,
+            :(Z[t] - ((1 - rho_z) * Z + rho_z * Z[t-1] + sigma_z * eps_Z[t])),
+            f_z; timing=TimingInfo(1, 0, false)),
+    ]
+
+    ss_fn = function (θ)
+        mm = BlanchardOLG{T}(T(θ[:alpha]), T(θ[:beta]), T(θ[:delta]),
+                             T(θ[:gamma]), T(θ[:Z]), T(θ[:b]))
+        ss = blanchard_steady_state(mm)
+        return T[ss.k, ss.C, ss.r, ss.w, T(θ[:Z])]
+    end
+
+    decls = IRDecl[
+        IRDecl(:parameters, nothing, copy(params)),
+        IRDecl(:endogenous, nothing, copy(endog)),
+        IRDecl(:exogenous, nothing, copy(exog)),
+    ]
+    ir_eqs = IREquation[
+        IREquation(:euler, :C, :(C[t+1]), :((1 + r[t+1]) * (β * C[t] - λ * (k[t+1] + b)))),
+        IREquation(:budget, :k, :(k[t+1]), :((1 + r[t]) * k[t] + w[t] - C[t])),
+        IREquation(:mpk, :r, :(r[t]), :(α * Z[t] * k[t]^(α - 1) - δ)),
+        IREquation(:mpw, :w, :(w[t]), :((1 - α) * Z[t] * k[t]^α)),
+        IREquation(:z_proc, :Z, :(Z[t]), :((1 - rho_z) * Z + rho_z * Z[t-1] + sigma_z * eps_Z[t])),
+    ]
+    ir = ModelIR(:discrete, :perpetual_youth, decls, ir_eqs)
+
+    return ModelSpec{T}(
+        endog, exog, params, param_values, equations, residual_fns,
+        2, [1, 2], T[], ss_fn;
+        max_lag=1, max_lead=1,
+        agents=NamedTuple(),
+        ir=ir,
+    )
+end
+
+# =============================================================================
 # Display
 # =============================================================================
 
