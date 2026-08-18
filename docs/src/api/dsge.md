@@ -9,6 +9,7 @@ Specify, solve, simulate, and estimate Dynamic Stochastic General Equilibrium mo
 ```@docs
 AbstractDSGEModel
 ModelSpec
+ModelIR
 NamedEquation
 NoAgents
 AbstractAgentSystem
@@ -275,12 +276,19 @@ Filter  = f -> f === MacroEconometricModels.report
 DCEGMProblem
 DCEGMSolution
 DCEGMDistribution
+DCEGMFirm
+DCEGMEquilibrium
+DCEGMTransition
 dcegm_solve
 dcegm_policy
 dcegm_choice_probabilities
 dcegm_threshold
 dcegm_simulate
 dcegm_retirement_model
+dcegm_steady_state
+dcegm_capital_demand
+dcegm_firm_wage
+dcegm_mit
 ```
 
 ```@autodocs
