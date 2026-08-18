@@ -276,4 +276,38 @@ end
     @test abs(ss_bad.excess_demand) > 1e-8
 end
 
+# ─────────────────────────────────────────────────────────────────────────────
+# Section 7: to_spec → ModelSpec with LifeCycleSystem (#640 / G-03)
+# ─────────────────────────────────────────────────────────────────────────────
+
+@testset "to_spec wraps LifeCycleSystem (#640)" begin
+    m0 = LifeCycleOLG()
+    spec0 = to_spec(m0)
+    @test spec0 isa ModelSpec
+    @test spec0.n_endog == 0 && spec0.n_exog == 0
+    @test isempty(spec0.equations) && isempty(spec0.residual_fns)
+    @test only(keys(spec0.agents)) === :households
+    @test only(values(spec0.agents)) isa LifeCycleSystem
+    @test only(values(spec0.agents)).model === m0
+    @test spec0.ir.horizon === :ages
+
+    m = LifeCycleOLG(; J=40, J_retire=31, survival=0.995,
+                     income=lifecycle_income(0.95, 0.2, 3), a_max=50.0, n_a=120,
+                     beta=0.97, sigma=2.0, replacement=0.4)
+    spec = to_spec(m)
+    @test only(values(spec.agents)) isa LifeCycleSystem
+    @test only(values(spec.agents)).model === m
+    @test MacroEconometricModels.has_kind(spec, LifeCycleSystem)
+
+    spec_named = to_spec(m; agent_name=:cohorts)
+    @test only(keys(spec_named.agents)) === :cohorts
+    @test only(values(spec_named.agents)).model === m
+
+    ss_m = lifecycle_steady_state(m; r_bounds=(-0.01, 0.10), tol=1e-6, max_iter=45)
+    ss_w = lifecycle_steady_state(only(values(spec.agents)).model;
+                                  r_bounds=(-0.01, 0.10), tol=1e-6, max_iter=45)
+    @test ss_m.converged && ss_w.converged
+    @test ss_w.r ≈ ss_m.r atol=1e-6
+end
+
 end # @testset "Life-Cycle OLG"

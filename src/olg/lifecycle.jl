@@ -108,6 +108,41 @@ struct LifeCycleSystem{T<:AbstractFloat} <: AbstractAgentSystem{T}
     model::LifeCycleOLG{T}
 end
 
+# Plot helpers rewritten in #634 call `_hh(ss.spec).grid` / `.income`.
+# `LifeCycleSteadyState.spec` is the `LifeCycleOLG` payload itself.
+_hh(m::LifeCycleOLG) = m
+
+"""
+    to_spec(m::LifeCycleOLG; agent_name::Symbol=:households) -> ModelSpec
+
+Wrap a [`LifeCycleOLG`](@ref) as a [`ModelSpec`](@ref) whose `agents`
+NamedTuple holds a [`LifeCycleSystem`](@ref) keyed by `agent_name`.
+
+The aggregate residual system is empty (partial GE). Stationary equilibrium
+is [`lifecycle_steady_state`](@ref) of the wrapped payload — `compute_steady_state`
+/ `solve` dispatch on this kind lands in G-05.
+"""
+function to_spec(m::LifeCycleOLG{T}; agent_name::Symbol=:households) where {T}
+    params = [:beta, :sigma, :alpha, :delta, :Z, :n_pop, :replacement, :credit_limit]
+    param_values = Dict{Symbol,T}(
+        :beta => m.beta,
+        :sigma => m.sigma,
+        :alpha => m.alpha,
+        :delta => m.delta,
+        :Z => m.Z,
+        :n_pop => m.n_pop,
+        :replacement => m.replacement,
+        :credit_limit => m.credit_limit,
+    )
+    return ModelSpec{T}(
+        Symbol[], Symbol[], params, param_values,
+        NamedEquation[], Function[],
+        0, Int[], T[];
+        agents=NamedTuple{(agent_name,)}((LifeCycleSystem{T}(m),)),
+        ir=ModelIR(:discrete, :ages, IRDecl[], IREquation[]),
+    )
+end
+
 """
     _lifecycle_earnings(J, J_retire) -> Vector{Float64}
 
