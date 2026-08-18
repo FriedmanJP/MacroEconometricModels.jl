@@ -35,6 +35,7 @@ using MacroEconometricModels
 
     sol1 = dcegm_solve(prob)
     sol2 = dcegm_solve(wrapped)
+    sol3 = solve(spec)
     @test sol1.n_periods == sol2.n_periods
     @test sol1.converged && sol2.converged
     for t in (1, 3, 6), d in 1:2, M in (5.0, 20.0, 40.0)
@@ -42,5 +43,9 @@ using MacroEconometricModels
         c2, v2 = dcegm_policy(sol2, t, d, 1, M)
         @test c1 ≈ c2 atol=0 rtol=0
         @test v1 ≈ v2 atol=0 rtol=0
+        c3, v3 = dcegm_policy(sol3, t, d, 1, M)
+        @test c1 ≈ c3 atol=0 rtol=0
+        @test v1 ≈ v3 atol=0 rtol=0
     end
+    @test sol3 isa DCEGMSolution
 end

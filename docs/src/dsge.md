@@ -83,7 +83,7 @@ The economic question determines the solution class, and the solution class dete
 | `:vfi` | Global | Bellman value-function iteration (Stokey–Lucas–Prescott / Howard) | [Nonlinear Methods](@ref dsge_nonlinear) |
 | `:perfect_foresight` | Deterministic | Newton solver for perfect-foresight paths | [Constraints](@ref dsge_constraints) |
 
-`solve(spec; method=:vfi)` requires the same Bellman keywords as `vfi_solver` (`utility`, `beta`, `transition`, `control_bounds`). Euler-only specs must use `:pfi`. The families under [Heterogeneity & Continuous Time](@ref dsge_heterogeneity) use their own entry points instead: `solve(spec; method=:ssj)`, `blanchard_steady_state`, and `ct_steady_state` respectively.
+`solve(spec; method=:vfi)` requires the same Bellman keywords as `vfi_solver` (`utility`, `beta`, `transition`, `control_bounds`). Euler-only specs must use `:pfi`. Specs that carry an agent kind dispatch on the type, never on the key name: `HouseholdSystem` uses `method=:ssj` by default, and `to_spec` wrappers for DCEGM, life-cycle OLG, and continuous-time households call the matching family solver. Blanchard perpetual-youth residuals are `NoAgents` and use `:gensys` like any other representative-agent system.
 
 ---
 

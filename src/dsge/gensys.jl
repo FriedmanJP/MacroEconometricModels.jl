@@ -160,9 +160,42 @@ function _solve_undetermined_coefficients(spec::ModelSpec{T};
 end
 
 """
+    _solve_by_agent_kind(spec; kwargs...)
+
+Route `solve` / `compute_steady_state` to a family solver when `spec` carries a
+known non-HA [`AbstractAgentSystem`](@ref). Returns `nothing` for `NoAgents`
+(RA / Blanchard residuals) and for a single [`HouseholdSystem`](@ref) (the
+caller uses `_ha_solve` / `_ha_compute_steady_state`). Multiple populations
+error until G-17; an unknown kind errors naming the type.
+"""
+function _solve_by_agent_kind(spec::ModelSpec; kwargs...)
+    n_agents = length(spec.agents)
+    n_agents > 1 && throw(ArgumentError(
+        "solve: multiple agent populations (" *
+        join(string.(keys(spec.agents)), ", ") *
+        ") are not supported yet"))
+    n_agents == 0 && return nothing
+    has_kind(spec, HouseholdSystem) && return nothing
+    if has_kind(spec, DCEGMSystem)
+        return dcegm_solve(only(agents_of(spec, DCEGMSystem)).problem; kwargs...)
+    elseif has_kind(spec, LifeCycleSystem)
+        return lifecycle_steady_state(only(agents_of(spec, LifeCycleSystem)).model; kwargs...)
+    elseif has_kind(spec, ContinuousHouseholdSystem)
+        m = only(agents_of(spec, ContinuousHouseholdSystem)).model
+        return m isa CTTwoAsset ? ct_two_asset_ge(m; kwargs...) : ct_steady_state(m; kwargs...)
+    end
+    kind = typeof(only(values(spec.agents)))
+    throw(ArgumentError("solve: no solver for agent kind $kind"))
+end
+
+"""
     solve(spec::ModelSpec{T}; method=:gensys, kwargs...) -> DSGESolution or PerfectForesightPath or PerturbationSolution
 
-Solve a DSGE model.
+Solve a DSGE model. Dispatch is by `has_kind`, never by the agent key
+name: `HouseholdSystem` → `_ha_solve`, `DCEGMSystem` → `dcegm_solve`,
+`LifeCycleSystem` → `lifecycle_steady_state`, `ContinuousHouseholdSystem` →
+`ct_steady_state` / `ct_two_asset_ge`. `NoAgents` (including Blanchard
+residuals from [`to_spec`](@ref)) uses the linear / global methods below.
 
 # Methods
 - `:gensys` -- Sims (2002) QZ decomposition (default)
@@ -176,9 +209,15 @@ Solve a DSGE model.
 """
 function solve(spec::ModelSpec{T}; method::Symbol=:gensys, kwargs...) where {T<:AbstractFloat}
     if has_kind(spec, HouseholdSystem)
+        length(spec.agents) > 1 && throw(ArgumentError(
+            "solve: multiple agent populations (" *
+            join(string.(keys(spec.agents)), ", ") *
+            ") are not supported yet"))
         ha_method = method === :gensys ? :ssj : method
         return _ha_solve(spec; method=ha_method, kwargs...)
     end
+    kind_sol = _solve_by_agent_kind(spec; kwargs...)
+    kind_sol !== nothing && return kind_sol
     if isempty(spec.steady_state)
         if spec.linear
             # Linear models: steady state is all zeros (variables are deviations)

@@ -308,6 +308,10 @@ end
                                   r_bounds=(-0.01, 0.10), tol=1e-6, max_iter=45)
     @test ss_m.converged && ss_w.converged
     @test ss_w.r ≈ ss_m.r atol=1e-6
+    ss_solve = solve(spec; r_bounds=(-0.01, 0.10), tol=1e-6, max_iter=45)
+    @test ss_solve isa LifeCycleSteadyState
+    @test ss_solve.converged
+    @test ss_solve.r ≈ ss_m.r atol=1e-6
 end
 
 end # @testset "Life-Cycle OLG"

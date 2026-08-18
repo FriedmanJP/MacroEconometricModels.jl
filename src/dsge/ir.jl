@@ -312,6 +312,7 @@ agents_of(spec::ModelSpec, ::Type{S}) where {S} =
     to_spec(m) -> ModelSpec
 
 Wrap a family constructor (`BlanchardOLG`, `DCEGMProblem`, `LifeCycleOLG`,
-`CTAiyagari`, `CTTwoAsset`) as a [`ModelSpec`](@ref). Methods land in G-01–G-04.
+`CTAiyagari`, `CTTwoAsset`) as a [`ModelSpec`](@ref). `solve(to_spec(m))`
+dispatches on the payload kind.
 """
 function to_spec end

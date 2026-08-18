@@ -19,6 +19,8 @@ ss = ct_steady_state(m; tol=1e-5)
 report(ss)
 ```
 
+`solve(to_spec(m))` is the same stationary equilibrium: `to_spec` wraps the household as a [`ContinuousHouseholdSystem`](@ref) and `solve` dispatches to [`ct_steady_state`](@ref) (or [`ct_two_asset_ge`](@ref) for [`CTTwoAsset`](@ref)).
+
 **Recipe 2: Incomplete markets depress the interest rate**
 
 ```@example ct

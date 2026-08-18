@@ -51,6 +51,20 @@ sol = blanchard_solve(m, ss)
 
 Exactly one eigenvalue lies inside the unit circle, so the saddle path is locally unique. Capital converges at 0.8838 per period — a half-life of about six periods — and consumption rises 0.163 for every unit of capital along the path.
 
+**Recipe 5: `to_spec` and a TFP impulse response**
+
+```@example olg
+m_tfp = BlanchardOLG(; gamma=0.98, beta=0.96)
+spec = to_spec(m_tfp; rho_z=0.9, sigma_z=0.01)
+sol_tfp = solve(spec)
+resp = irf(sol_tfp, 20)
+(determined = is_determined(sol_tfp),
+ z_impact = round(resp.values[1, 5, 1], digits=4),
+ k_peak = round(maximum(resp.values[:, 1, 1]), digits=4))
+```
+
+`to_spec` wraps the aggregates as a residual-only [`ModelSpec`](@ref) with endogenous ``(k, C, r, w, Z)`` and shock `eps_Z`. `solve` uses Gensys; the unique stable root matches `blanchard_solve`, and `irf` traces a transitory TFP shock through capital.
+
 ---
 
 ## Demographics and Annuities
@@ -227,7 +241,7 @@ where:
 - ``R_j`` is the gross return on savings: ``(1+r)/s_j`` under actuarially fair annuities, ``1+r`` otherwise
 - ``\underline{a}`` is the credit limit; households may borrow during life but cannot die in debt
 
-The household problem is solved by **backward induction over age** — one endogenous-grid sweep per age, from ``J`` down to 1. This is a *finite sweep*, not a fixed point: age ``J`` is known because assets are exhausted, and every earlier age follows from the next. The only fixed point in the model is the market-clearing interest rate.
+The household problem is solved by **backward induction over age** — one endogenous-grid sweep per age, from ``J`` down to 1. This is a *finite sweep*, not a fixed point: age ``J`` is known because assets are exhausted, and every earlier age follows from the next. The only fixed point in the model is the market-clearing interest rate. `solve(to_spec(lc))` dispatches to [`lifecycle_steady_state`](@ref) on the wrapped [`LifeCycleSystem`](@ref).
 
 !!! warning "Income processes must be in levels"
     [`rouwenhorst`](@ref) and [`tauchen`](@ref) return the productivity grid in **logs**, symmetric about zero, so its mean is zero rather than one. Passing one straight in would zero out aggregate efficiency labor and every factor price. Use [`lifecycle_income`](@ref), which exponentiates and normalizes to unit mean; the constructor rejects any process with non-positive states.

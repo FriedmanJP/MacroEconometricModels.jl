@@ -500,6 +500,10 @@ end
         @test ss.r ≈ ss_direct.r
         @test ss.K ≈ ss_direct.K
         @test ss.w ≈ ss_direct.w
+        ss_solve = solve(spec; tol=1e-5)
+        @test ss_solve isa CTSteadyState
+        @test ss_solve.r ≈ ss_direct.r
+        @test ss_solve.K ≈ ss_direct.K
     end
 
     @testset "CTTwoAsset" begin
@@ -527,5 +531,6 @@ end
         @test ge.solution.a[end] ≈ m.a_max && ge.solution.b[end] ≈ m.b_max
         @test isapprox(ge.K, ge.solution.A; atol=1e-3)
         @test ge.K > 0
+        @test solve(spec; max_iter=1, tol=1.0) isa CTTwoAssetGE
     end
 end

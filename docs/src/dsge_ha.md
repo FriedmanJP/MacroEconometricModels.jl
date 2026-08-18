@@ -307,7 +307,7 @@ One EGM sweep per option gives candidate ``(M, c, v)`` triples; where the contin
 !!! note "Technical Note"
     Between two adjacent candidate grid points both branches are linear — the grid contains every knot — so the crossing ``M^* = M_{lo} + (M_{hi} - M_{lo}) f(M_{lo}) / (f(M_{lo}) - f(M_{hi}))`` with ``f = v_p - v_q`` is exact, not bisected. It is inserted twice, once with each branch's consumption, because consumption is genuinely discontinuous at a discrete-choice threshold.
 
-[`dcegm_retirement_model`](@ref) builds the canonical retirement problem: work or retire (absorbing), flow utility ``\log c - \delta \mathbb{1}[\text{work}]``, and no income once retired.
+[`dcegm_retirement_model`](@ref) builds the canonical retirement problem: work or retire (absorbing), flow utility ``\log c - \delta \mathbb{1}[\text{work}]``, and no income once retired. `solve(to_spec(retire))` dispatches to [`dcegm_solve`](@ref) on the wrapped [`DCEGMSystem`](@ref).
 
 ```@example dsge_ha
 retire = dcegm_retirement_model(; n_periods=6, beta=0.98, R=1.0, wage=20.0,

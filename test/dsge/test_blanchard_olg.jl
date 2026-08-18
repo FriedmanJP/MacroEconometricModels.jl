@@ -162,6 +162,16 @@ using LinearAlgebra
             y1 = compute_steady_state(to_spec(m1)).steady_state
             @test y1[1] < y0[1]
         end
+
+        @testset "solve + irf for Z shock (#642 / #647a)" begin
+            m = BlanchardOLG(; gamma=0.98, beta=0.96)
+            sol = solve(to_spec(m; rho_z=0.9, sigma_z=0.01))
+            @test sol isa DSGESolution
+            @test is_determined(sol)
+            resp = irf(sol, 12)
+            @test all(isfinite, resp.values)
+            @test maximum(abs, resp.values) > 0
+        end
     end
 
 end

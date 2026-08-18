@@ -28,11 +28,14 @@ end
 """
     compute_steady_state(spec::ModelSpec{T}; initial_guess=nothing, method=:auto,
                           ss_fn=nothing, constraints=DSGEConstraint[],
-                          solver=nothing, algorithm=nothing) → DSGESpec{T}
+                          solver=nothing, algorithm=nothing)
 
 Compute the deterministic steady state: f(y_ss, y_ss, y_ss, 0, θ) = 0.
 
-Returns a new `DSGESpec` with the `steady_state` field filled.
+Returns a new [`ModelSpec`](@ref) with the `steady_state` field filled for
+representative-agent residuals. Specs with a known agent kind dispatch to the
+family stationary solver (`HASteadyState`, `DCEGMSolution`,
+`LifeCycleSteadyState`, `CTSteadyState` / `CTTwoAssetGE`).
 
 # Keywords
 - `initial_guess::Vector{T}` — starting point (default: ones)
@@ -51,8 +54,14 @@ function compute_steady_state(spec::ModelSpec{T};
         algorithm=nothing,
         kwargs...) where {T<:AbstractFloat}
     if has_kind(spec, HouseholdSystem)
+        length(spec.agents) > 1 && throw(ArgumentError(
+            "solve: multiple agent populations (" *
+            join(string.(keys(spec.agents)), ", ") *
+            ") are not supported yet"))
         return _ha_compute_steady_state(spec; kwargs...)
     end
+    kind_sol = _solve_by_agent_kind(spec; kwargs...)
+    kind_sol !== nothing && return kind_sol
 
     n = spec.n_endog
 

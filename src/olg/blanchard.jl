@@ -307,16 +307,23 @@ function to_spec(m::BlanchardOLG{T}; rho_z=T(0), sigma_z=T(0)) where {T}
     )
 
     # Residuals close over indices, not parameter values.
+    # Timing matches the RBC convention: k and Z are predetermined (appear as
+    # [t-1]), C is the only lead. k[t+1] and E_t r[t+1] are substituted from the
+    # budget and the firm FOC so gensys does not treat capital as a jump.
     i_k, i_C, i_r, i_w, i_Z = 1, 2, 3, 4, 5
 
     f_euler = function (y_t, y_lag, y_lead, shock, θ)
         γ = θ[:gamma]
         λ = γ >= one(γ) ? zero(γ) : (one(γ) - θ[:beta] * γ) * (one(γ) - γ) / γ
-        return y_lead[i_C] - (one(T) + y_lead[i_r]) *
-            (θ[:beta] * y_t[i_C] - λ * (y_lead[i_k] + θ[:b]))
+        k_next = (one(T) + y_t[i_r]) * y_t[i_k] + y_t[i_w] - y_t[i_C]
+        Z_next = (one(T) - θ[:rho_z]) * θ[:Z] + θ[:rho_z] * y_t[i_Z]
+        r_next = θ[:alpha] * Z_next * k_next^(θ[:alpha] - one(T)) - θ[:delta]
+        return y_lead[i_C] - (one(T) + r_next) *
+            (θ[:beta] * y_t[i_C] - λ * (k_next + θ[:b]))
     end
     f_budget = function (y_t, y_lag, y_lead, shock, θ)
-        return y_lead[i_k] - ((one(T) + y_t[i_r]) * y_t[i_k] + y_t[i_w] - y_t[i_C])
+        return y_t[i_k] - ((one(T) + y_lag[i_r]) * y_lag[i_k] +
+            y_lag[i_w] - y_lag[i_C])
     end
     f_mpk = function (y_t, y_lag, y_lead, shock, θ)
         return y_t[i_r] - (θ[:alpha] * y_t[i_Z] * y_t[i_k]^(θ[:alpha] - one(T)) - θ[:delta])
@@ -335,8 +342,8 @@ function to_spec(m::BlanchardOLG{T}; rho_z=T(0), sigma_z=T(0)) where {T}
             :(C[t+1] - (1 + r[t+1]) * (β * C[t] - λ * (k[t+1] + b))),
             f_euler; timing=TimingInfo(0, 1, true)),
         NamedEquation(:budget, :k,
-            :(k[t+1] - ((1 + r[t]) * k[t] + w[t] - C[t])),
-            f_budget; timing=TimingInfo(0, 1, true)),
+            :(k[t] - ((1 + r[t-1]) * k[t-1] + w[t-1] - C[t-1])),
+            f_budget; timing=TimingInfo(1, 0, false)),
         NamedEquation(:mpk, :r,
             :(r[t] - (α * Z[t] * k[t]^(α - 1) - δ)),
             f_mpk; timing=TimingInfo(0, 0, false)),
@@ -362,7 +369,7 @@ function to_spec(m::BlanchardOLG{T}; rho_z=T(0), sigma_z=T(0)) where {T}
     ]
     ir_eqs = IREquation[
         IREquation(:euler, :C, :(C[t+1]), :((1 + r[t+1]) * (β * C[t] - λ * (k[t+1] + b)))),
-        IREquation(:budget, :k, :(k[t+1]), :((1 + r[t]) * k[t] + w[t] - C[t])),
+        IREquation(:budget, :k, :(k[t]), :((1 + r[t-1]) * k[t-1] + w[t-1] - C[t-1])),
         IREquation(:mpk, :r, :(r[t]), :(α * Z[t] * k[t]^(α - 1) - δ)),
         IREquation(:mpw, :w, :(w[t]), :((1 - α) * Z[t] * k[t]^α)),
         IREquation(:z_proc, :Z, :(Z[t]), :((1 - rho_z) * Z + rho_z * Z[t-1] + sigma_z * eps_Z[t])),
@@ -371,7 +378,7 @@ function to_spec(m::BlanchardOLG{T}; rho_z=T(0), sigma_z=T(0)) where {T}
 
     return ModelSpec{T}(
         endog, exog, params, param_values, equations, residual_fns,
-        2, [1, 2], T[], ss_fn;
+        1, [1], T[], ss_fn;
         max_lag=1, max_lead=1,
         agents=NamedTuple(),
         ir=ir,
