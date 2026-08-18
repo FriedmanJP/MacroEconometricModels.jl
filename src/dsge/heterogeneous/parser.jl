@@ -640,6 +640,21 @@ function _ha_solve(spec::ModelSpec{T}; method::Symbol=:ssj,
             "Use hh_solver=:egm, or solve the stationary problem with " *
             "compute_steady_state(...; hh_solver=:vfi) separately."))
     end
+    n_hh = count(a -> a isa HouseholdSystem, values(spec.agents))
+    if n_hh > 0 && n_hh != length(spec.agents)
+        throw(ArgumentError(
+            "solve: mixed agent kinds (" *
+            join(string.(keys(spec.agents)), ", ") *
+            ") are not supported yet (#651). " *
+            "Use agents_of(spec, HouseholdSystem) to address household populations."))
+    end
+    if n_hh > 1
+        method === :ssj || throw(ArgumentError(
+            "solve: multiple HouseholdSystems only support method=:ssj (#651). " *
+            "Use agents_of(spec, HouseholdSystem) for each population; " *
+            "Reiter / Krusell-Smith are not retargeted."))
+        return _ssj_solve_multipop(spec; kwargs...)
+    end
     if ss === nothing
         # Extract steady-state relevant kwargs
         ss_keys = (:K_init, :r_bounds, :max_iter, :tol, :verbose, :price_fn,

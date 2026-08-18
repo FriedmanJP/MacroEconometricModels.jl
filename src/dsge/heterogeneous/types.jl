@@ -649,14 +649,23 @@ het_params(s::HouseholdSystem) = s.het_params
 ssj_inputs(::HouseholdSystem) = [:r, :w]
 ssj_outputs(s::HouseholdSystem) = first.(s.aggregation)
 
-"""The unique `HouseholdSystem` on a HA `ModelSpec`."""
+"""
+    _hh(spec) -> HouseholdSystem
+
+The unique [`HouseholdSystem`](@ref) on `spec`. Multiple household
+populations are addressed with [`agents_of`](@ref)`(spec, HouseholdSystem)`
+(#651); this helper is only for callers that still assume one household.
+"""
 function _hh(spec::ModelSpec)
     has_kind(spec, HouseholdSystem) || throw(ArgumentError(
         "ModelSpec has no HouseholdSystem (agents = $(keys(spec.agents)))"))
     hs = collect(agents_of(spec, HouseholdSystem))
-    length(hs) == 1 || throw(ArgumentError(
-        "expected exactly one HouseholdSystem, got $(length(hs))"))
-    return only(hs)
+    length(hs) == 1 && return only(hs)
+    keys_hh = (string(k) for (k, v) in pairs(spec.agents) if v isa HouseholdSystem)
+    throw(ArgumentError(
+        "_hh: expected a unique HouseholdSystem, got $(length(hs)) " *
+        "(keys = $(join(keys_hh, ", "))). " *
+        "Use agents_of(spec, HouseholdSystem) to iterate populations (#651)."))
 end
 
 function _replace_household(spec::ModelSpec{T};
