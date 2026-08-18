@@ -4828,3 +4828,143 @@ end  # @testset "Bayesian DSGE"
     s = simulate(b, 20; n_draws=4)
     @test s !== nothing
 end
+
+# =============================================================================
+# G-15 / #649 — estimation beyond RA and HA-RWMH
+# =============================================================================
+
+@testset "Blanchard Bayes recovers rho_z (#649)" begin
+    _suppress_warnings() do
+        m = BlanchardOLG(; gamma=0.98, beta=0.96, alpha=0.36, delta=0.08, Z=1.0)
+        rho_true = 0.80
+        spec_dgp = compute_steady_state(to_spec(m; rho_z=rho_true, sigma_z=0.02))
+        sol = solve(spec_dgp; method=:gensys)
+        @test is_determined(sol)
+        sim = simulate(sol, 180; rng=Random.MersenneTwister(64901))
+        # Z is the last endogenous (k, C, r, w, Z)
+        z_idx = findfirst(==(:Z), spec_dgp.endog)
+        data = reshape(sim[:, z_idx], :, 1)
+
+        spec_est = compute_steady_state(to_spec(m; rho_z=0.50, sigma_z=0.02))
+        priors = Dict(:rho_z => Beta(2, 2))
+        theta0 = Dict(:rho_z => 0.50)
+
+        r_smc = estimate_dsge_bayes(spec_est, data, theta0;
+            priors=priors, method=:smc, observables=[:Z],
+            n_smc=80, n_mh_steps=1,
+            rng=Random.MersenneTwister(64902))
+        @test r_smc isa BayesianDSGE{Float64}
+        @test r_smc.method === :smc
+        @test r_smc.param_names == [:rho_z]
+        @test r_smc.phi_schedule[end] ≈ 1.0
+        rho_smc = mean(r_smc.theta_draws[:, 1])
+        @test isfinite(rho_smc)
+        @test abs(rho_smc - rho_true) < abs(rho_smc - 0.50) || abs(rho_smc - rho_true) < 0.25
+
+        r_mh = estimate_dsge_bayes(spec_est, data, theta0;
+            priors=priors, method=:mh, observables=[:Z],
+            n_draws=400, burnin=120,
+            rng=Random.MersenneTwister(64903))
+        @test r_mh isa BayesianDSGE{Float64}
+        @test r_mh.method === :rwmh
+        rho_mh = mean(r_mh.theta_draws[:, 1])
+        @test isfinite(rho_mh)
+        @test abs(rho_mh - rho_true) < 0.30
+    end
+end
+
+@testset "empty-residual families error (#649)" begin
+    dummy = reshape([0.1, 0.2, 0.3], :, 1)
+    priors = Dict(:beta => Beta(2, 2))
+    theta0 = Dict(:beta => 0.96)
+
+    dcegm_spec = to_spec(dcegm_retirement_model(; n_a=20, n_periods=4))
+    @test dcegm_spec.n_endog == 0
+    err_d = try
+        estimate_dsge_bayes(dcegm_spec, dummy, theta0; priors=priors)
+        nothing
+    catch e
+        e
+    end
+    @test err_d isa ArgumentError
+    @test occursin("#649", sprint(showerror, err_d))
+    @test occursin("DCEGM", sprint(showerror, err_d))
+
+    lc_spec = to_spec(LifeCycleOLG(; J=8, J_retire=6, n_a=12, a_max=10.0,
+                                   income=lifecycle_income(0.9, 0.2, 3)))
+    @test lc_spec.n_endog == 0
+    err_lc = try
+        estimate_dsge_bayes(lc_spec, dummy, theta0; priors=priors)
+        nothing
+    catch e
+        e
+    end
+    @test err_lc isa ArgumentError
+    @test occursin("#649", sprint(showerror, err_lc))
+    @test occursin("life-cycle", sprint(showerror, err_lc))
+
+    ct_spec = to_spec(CTAiyagari(; I=20))
+    @test ct_spec.n_endog == 0
+    err_ct = try
+        estimate_dsge_bayes(ct_spec, dummy, theta0; priors=priors)
+        nothing
+    catch e
+        e
+    end
+    @test err_ct isa ArgumentError
+    @test occursin("#649", sprint(showerror, err_ct))
+    @test occursin("continuous-time", sprint(showerror, err_ct))
+end
+
+@testset "HA method=:smc and unsupported methods (#649)" begin
+    spec = MacroEconometricModels._huggett_example(; n_a=40, a_max=4.0)
+    dummy = reshape(ones(12), :, 1)
+    priors = Dict(:rho_z => Beta(2, 2))
+
+    err_smc2 = try
+        estimate_dsge_bayes(spec, dummy, Dict(:rho_z => 0.9);
+            priors=priors, method=:smc2, observables=[:r], n_smc=4)
+        nothing
+    catch e
+        e
+    end
+    @test err_smc2 isa ArgumentError
+    msg2 = sprint(showerror, err_smc2)
+    @test occursin(":mh", msg2)
+    @test occursin(":smc", msg2)
+    @test occursin("#649", msg2)
+
+    err_bad = try
+        estimate_dsge_bayes(spec, dummy, Dict(:rho_z => 0.9);
+            priors=priors, method=:gmm, observables=[:r])
+        nothing
+    catch e
+        e
+    end
+    @test err_bad isa ArgumentError
+    @test occursin(":mh", sprint(showerror, err_bad))
+
+    # Omitted method keeps historical HA RWMH (does not inherit the RA :smc default).
+    r_default = _suppress_warnings() do
+        estimate_dsge_bayes(spec, dummy, Dict(:rho_z => 0.9);
+            priors=priors, observables=[:r], n_draws=6, burnin=2,
+            ha_method=:ssj, ha_kwargs=(T_horizon=20, n_reduced=8),
+            proposal_scale=0.001, adapt_interval=50,
+            rng=Random.MersenneTwister(64910))
+    end
+    @test r_default.method === :rwmh
+
+    r_smc = _suppress_warnings() do
+        estimate_dsge_bayes(spec, dummy, Dict(:rho_z => 0.9);
+            priors=priors, method=:smc, observables=[:r],
+            n_smc=6, n_mh_steps=1,
+            ha_method=:ssj, ha_kwargs=(T_horizon=20, n_reduced=8),
+            rng=Random.MersenneTwister(64911))
+    end
+    @test r_smc isa BayesianDSGE{Float64}
+    @test r_smc.method === :smc
+    @test size(r_smc.theta_draws, 2) == 1
+    @test size(r_smc.theta_draws, 1) == 6
+    @test r_smc.phi_schedule[end] ≈ 1.0
+    @test r_smc.param_names == [:rho_z]
+end

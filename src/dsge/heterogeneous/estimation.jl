@@ -283,6 +283,140 @@ function _build_ha_result_solution(spec::ModelSpec{T}, param_names::Vector{Symbo
 end
 
 # =============================================================================
+# HA Sequential Monte Carlo (Herbst & Schorfheide 2014) — #649
+# =============================================================================
+
+"""
+    _smc_from_likelihood(ll_fn, param_names, prior, θ0; kwargs...) → SMCState
+
+Generic Herbst–Schorfheide SMC loop driven by an arbitrary `θ → log p(Y|θ)`
+closure. Shared by HA `method=:smc` so the RA `_smc_sample` path (which builds
+a gensys Kalman likelihood) is not reused on a reduced HA system.
+"""
+function _smc_from_likelihood(ll_fn, param_names::Vector{Symbol},
+                              prior::DSGEPrior{T}, _theta0::AbstractVector{T};
+                              n_smc::Int=500, n_mh_steps::Int=1,
+                              ess_target::Real=0.5,
+                              max_stages::Int=500, min_dphi::Real=1e-10,
+                              rng::AbstractRNG=Random.default_rng()) where {T<:AbstractFloat}
+    n_params = length(param_names)
+    N = n_smc
+
+    theta_particles = zeros(T, n_params, N)
+    log_priors = zeros(T, N)
+    for j in 1:N
+        for i in 1:n_params
+            for attempt in 1:100
+                draw = T(rand(rng, prior.distributions[i]))
+                if draw >= prior.lower[i] && draw <= prior.upper[i]
+                    theta_particles[i, j] = draw
+                    break
+                end
+                if attempt == 100
+                    throw(ArgumentError(
+                        "SMC prior initialization failed: parameter `$(param_names[i])` " *
+                        "(prior $(prior.distributions[i]), support bounds " *
+                        "[$(prior.lower[i]), $(prior.upper[i])]) produced 100 consecutive " *
+                        "out-of-bounds draws. Check the prior support and model determinacy " *
+                        "in that region."))
+                end
+            end
+        end
+        log_priors[j] = _log_prior(theta_particles[:, j], prior)
+    end
+
+    log_weights = fill(-log(T(N)), N)
+    log_likelihoods = fill(T(-Inf), N)
+    Threads.@threads for j in 1:N
+        log_likelihoods[j] = ll_fn(theta_particles[:, j])
+    end
+
+    state = SMCState{T}(
+        theta_particles, log_weights, log_likelihoods, log_priors,
+        T[zero(T)], T[], T[], zero(T),
+        PFWorkspace{T}[], Matrix{T}(I, n_params, n_params)
+    )
+
+    weights_normalized = fill(one(T) / N, N)
+    ancestors = collect(1:N)
+    cumweights = zeros(T, N)
+
+    phi = zero(T)
+    stage = 0
+    min_step = T(min_dphi)
+    while phi < one(T)
+        stage += 1
+        valid_lls = copy(state.log_likelihoods)
+        for j in 1:N
+            if !isfinite(valid_lls[j])
+                valid_lls[j] = T(-1e10)
+            end
+        end
+        phi_new = _adaptive_tempering(valid_lls, state.log_weights, phi, ess_target, N)
+        _check_tempering_progress(stage, max_stages, phi, phi_new, min_step)
+        delta_phi = phi_new - phi
+
+        inc_log_w = delta_phi .* state.log_likelihoods
+        for j in 1:N
+            if !isfinite(inc_log_w[j])
+                inc_log_w[j] = T(-1e10)
+            end
+        end
+        state.log_marginal_likelihood +=
+            _logsumexp(state.log_weights .+ inc_log_w) - _logsumexp(state.log_weights)
+        state.log_weights .+= inc_log_w
+        _normalize_log_weights!(weights_normalized, state.log_weights)
+
+        ess = one(T) / sum(abs2, weights_normalized)
+        push!(state.ess_history, ess)
+        push!(state.phi_schedule, phi_new)
+
+        if ess < T(ess_target) * N
+            _systematic_resample!(ancestors, weights_normalized, cumweights, N, rng)
+            theta_new = similar(state.theta_particles)
+            ll_new = similar(state.log_likelihoods)
+            lp_new = similar(state.log_priors)
+            @inbounds for j in 1:N
+                a = ancestors[j]
+                theta_new[:, j] = state.theta_particles[:, a]
+                ll_new[j] = state.log_likelihoods[a]
+                lp_new[j] = state.log_priors[a]
+            end
+            state.theta_particles .= theta_new
+            state.log_likelihoods .= ll_new
+            state.log_priors .= lp_new
+            fill!(state.log_weights, -log(T(N)))
+        end
+
+        _update_proposal_cov!(state)
+        _smc_mutation!(state, phi_new, ll_fn, prior, n_mh_steps, rng)
+        phi = phi_new
+    end
+
+    _terminal_resample!(state, N, rng)
+    return state
+end
+
+function _ha_smc_to_bayesian_dsge(state::SMCState{T}, spec::ModelSpec{T},
+        param_names::Vector{Symbol}, prior::DSGEPrior{T},
+        post_draws::AbstractMatrix{T}, post_log_posterior::AbstractVector{T},
+        observables::Vector{Symbol}, measurement_error,
+        ha_method::Symbol, ha_kwargs::NamedTuple,
+        n_failed::Int, n_evals::Int) where {T<:AbstractFloat}
+    acceptance_rate = isempty(state.acceptance_rates) ? zero(T) : last(state.acceptance_rates)
+    linear_sol, ss_result, solved_at, _theta_used = _build_ha_result_solution(
+        spec, param_names, post_draws, post_log_posterior,
+        observables, measurement_error, ha_method, ha_kwargs)
+    return BayesianDSGE{T}(
+        post_draws, post_log_posterior, param_names, prior,
+        state.log_marginal_likelihood, :smc, acceptance_rate,
+        state.ess_history, state.phi_schedule,
+        linear_sol.spec, linear_sol, ss_result,
+        n_failed, n_evals, solved_at
+    )
+end
+
+# =============================================================================
 # estimate_dsge_bayes(::ModelSpec, ...) — main entry point
 # =============================================================================
 
@@ -295,7 +429,8 @@ const _HA_DEFAULT_T_HORIZON = 300
     estimate_dsge_bayes(spec::ModelSpec{T}, data, θ0; priors, kwargs...) → BayesianDSGE{T}
 
 Bayesian estimation of heterogeneous agent DSGE model parameters via
-Random-Walk Metropolis-Hastings.
+Random-Walk Metropolis-Hastings (`method=:mh`, default) or Sequential Monte
+Carlo (`method=:smc`; Herbst & Schorfheide 2014) on the reduced linear system.
 
 At each MCMC step, the full HA model is re-solved (steady state + linearization)
 and the Kalman filter is evaluated on the reduced linear system. This is the
@@ -311,9 +446,14 @@ and the Kalman filter is evaluated on the reduced linear system. This is the
 
 # Keywords
 - `priors::Dict{Symbol,<:Distribution}` — prior distributions keyed by parameter name
+- `method::Symbol=:mh` — `:mh` (RWMH) or `:smc`. `:smc2` is not implemented for HA (#649)
 - `observables::Vector{Symbol}` — which aggregate variables are observed (e.g., `[:K]`)
 - `n_draws::Int=5000` — total MH draws (including burnin)
 - `burnin::Int=1000` — number of burnin draws to discard
+- `n_smc::Int=500` — SMC particles (`method=:smc`)
+- `n_mh_steps::Int=1` — MH mutation steps per SMC stage
+- `ess_target::Float64=0.5` — target ESS fraction for adaptive tempering
+- `max_stages::Int=500` / `min_dphi` — SMC tempering guards (see [`estimate_dsge_bayes`](@ref))
 - `measurement_error::Union{Nothing,Symbol,Vector{<:Real}}=nothing` — measurement error SDs;
   `nothing` means zero ME (requires `n_obs ≤ n_shocks`, else a `StochasticSingularityError`
   is thrown on the first likelihood evaluation); `:auto` adds per-observable ME at 10% of
@@ -346,15 +486,25 @@ function _ha_estimate_dsge_bayes(spec::ModelSpec{T}, data::AbstractMatrix,
                               theta0::Union{AbstractVector{<:Real},
                                             AbstractDict{Symbol,<:Real},NamedTuple};
                               priors::Dict{Symbol,<:Distribution},
+                              method::Symbol=:mh,
                               observables::Vector{Symbol}=Symbol[],
                               n_draws::Int=5000,
                               burnin::Int=1000,
+                              n_smc::Int=500,
+                              n_mh_steps::Int=1,
+                              ess_target::Float64=0.5,
+                              max_stages::Int=500, min_dphi::Real=1e-10,
                               measurement_error::Union{Nothing,Symbol,Vector{<:Real}}=nothing,
                               ha_method::Symbol=:ssj,
                               ha_kwargs::NamedTuple=(T_horizon=_HA_DEFAULT_T_HORIZON, n_reduced=15),
                               proposal_scale::Float64=0.01,
                               adapt_interval::Int=100,
                               rng::AbstractRNG=Random.default_rng()) where {T<:AbstractFloat}
+    if method ∉ (:mh, :smc)
+        throw(ArgumentError(
+            "HA Bayesian estimation supports only method=:mh (RWMH) and method=:smc; " *
+            "got :$method. SMC², HA GMM/SMM, and CT Bayes are out of scope (#649)."))
+    end
 
     # ── 1. Build DSGEPrior from priors dict ──────────────────────────────
     lower_dict = Dict{Symbol,Float64}()
@@ -398,6 +548,22 @@ function _ha_estimate_dsge_bayes(spec::ModelSpec{T}, data::AbstractMatrix,
     ll_fn = _build_ha_likelihood_fn(spec, param_names, data_mat, observables,
                                      measurement_error, ha_method, ha_kwargs;
                                      failures=lik_failures, evals=lik_evals)
+
+    if method === :smc
+        state = _smc_from_likelihood(ll_fn, param_names, prior, theta0_sorted;
+                                     n_smc=n_smc, n_mh_steps=n_mh_steps,
+                                     ess_target=ess_target, max_stages=max_stages,
+                                     min_dphi=min_dphi, rng=rng)
+        state.n_lik_failures = lik_failures[]
+        state.n_lik_evals = lik_evals[]
+        theta_draws = Matrix{T}(state.theta_particles')
+        log_posterior = state.log_likelihoods .+ state.log_priors
+        return _ha_smc_to_bayesian_dsge(state, spec, param_names, prior,
+                                        theta_draws, log_posterior,
+                                        observables, measurement_error,
+                                        ha_method, ha_kwargs,
+                                        lik_failures[], lik_evals[])
+    end
 
     # ── 6. Random-Walk Metropolis-Hastings ───────────────────────────────
     # Initialize

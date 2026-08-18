@@ -181,6 +181,23 @@ function _resolve_measurement_error(measurement_error, data_mat::AbstractMatrix{
     return Vector{T}(measurement_error)
 end
 
+"""
+    _empty_residual_bayes_msg(spec) -> String
+
+Named `#649` error for families with no residual / Kalman observation equation
+(DCEGM MIT, life-cycle shooting, continuous-time HA).
+"""
+function _empty_residual_bayes_msg(spec::ModelSpec)
+    families = String[]
+    has_kind(spec, DCEGMSystem) && push!(families, "DCEGM")
+    has_kind(spec, LifeCycleSystem) && push!(families, "life-cycle OLG")
+    has_kind(spec, ContinuousHouseholdSystem) && push!(families, "continuous-time HA")
+    fam = isempty(families) ? "empty-residual (n_endog == 0)" : join(families, "/")
+    return "estimate_dsge_bayes has no Kalman / particle-filter likelihood for " *
+           "$fam models (n_endog=$(spec.n_endog)). DCEGM MIT shocks and " *
+           "life-cycle shooting do not define a state-space likelihood. See #649."
+end
+
 # =============================================================================
 # Main public API
 # =============================================================================
@@ -203,7 +220,10 @@ SMC², or Random-Walk Metropolis-Hastings (RWMH).
 
 # Keywords
 - `priors::Dict{Symbol,<:Distribution}` — prior distributions keyed by parameter name
-- `method::Symbol=:smc` — estimation method: `:smc`, `:smc2`, or `:mh`
+- `method::Symbol=:smc` — estimation method: `:smc`, `:smc2`, or `:mh`.
+  Representative-agent default is `:smc`. `HouseholdSystem` defaults to `:mh`
+  (RWMH) when `method` is omitted, so existing HA callers keep their sampler;
+  pass `method=:smc` explicitly to run HA SMC. `:smc2` is not implemented for HA.
 - `observables::Vector{Symbol}=Symbol[]` — which endogenous variables are observed
   (default: all `spec.endog`)
 - `n_smc::Int=5000` — number of SMC particles (for `:smc` and `:smc2`)
@@ -269,7 +289,7 @@ function estimate_dsge_bayes(spec::ModelSpec{T}, data::AbstractMatrix,
                               theta0::Union{AbstractVector{<:Real},
                                             AbstractDict{Symbol,<:Real},NamedTuple};
                               priors::Dict{Symbol,<:Distribution},
-                              method::Symbol=:smc,
+                              method::Union{Symbol,Nothing}=nothing,
                               observables::Vector{Symbol}=Symbol[],
                               n_smc::Int=5000,
                               n_particles::Int=500,
@@ -293,11 +313,26 @@ function estimate_dsge_bayes(spec::ModelSpec{T}, data::AbstractMatrix,
                               transform::Bool=true,
                               rng::AbstractRNG=Random.default_rng(),
                               kwargs...) where {T<:AbstractFloat}
-    if has_kind(spec, HouseholdSystem)
-        return _ha_estimate_dsge_bayes(spec, data, theta0;
-            priors=priors, observables=observables, n_draws=n_draws,
-            burnin=burnin, measurement_error=measurement_error, kwargs...)
+    # Empty-residual families (DCEGM / life-cycle / CT) have no gensys state
+    # space; falling through to the RA Kalman path is a silent wrong likelihood.
+    if has_kind(spec, DCEGMSystem) || has_kind(spec, LifeCycleSystem) ||
+       has_kind(spec, ContinuousHouseholdSystem) ||
+       (spec.n_endog == 0 && !has_kind(spec, HouseholdSystem))
+        throw(ArgumentError(_empty_residual_bayes_msg(spec)))
     end
+
+    if has_kind(spec, HouseholdSystem)
+        # `method === nothing` is the omitted-keyword case: keep historical HA
+        # RWMH. An explicit `method=:smc` requests HA SMC (#649).
+        ha_method_est = method === nothing ? :mh : method
+        return _ha_estimate_dsge_bayes(spec, data, theta0;
+            priors=priors, method=ha_method_est, observables=observables,
+            n_draws=n_draws, burnin=burnin, n_smc=n_smc, n_mh_steps=n_mh_steps,
+            ess_target=ess_target, measurement_error=measurement_error,
+            max_stages=max_stages, min_dphi=min_dphi, rng=rng, kwargs...)
+    end
+
+    method = method === nothing ? :smc : method
 
     # ── 1. Build DSGEPrior from priors dict (bounds inferred from support) ─
     prior = _build_bayes_prior(priors)
