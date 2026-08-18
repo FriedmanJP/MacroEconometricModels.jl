@@ -2187,6 +2187,13 @@ end
         K_init=10.0, r_bounds=(-0.02, 0.04), max_iter=30, tol=1e-2
     )
     @test_throws ErrorException solve(spec; method=:nonexistent, ss=ss)
+
+    # KS / one-asset production GE goes through combine_blocks (#636)
+    sol = solve(spec; method=:ssj, ss=ss, T_horizon=16, n_reduced=6)
+    @test sol.method === :ssj
+    @test haskey(sol.jacobians, :H_U)
+    @test haskey(sol.jacobians, :H_Z)
+    @test size(sol.jacobians[:H_U], 1) == 16
 end
 
 end # @testset "HA-DSGE Types"

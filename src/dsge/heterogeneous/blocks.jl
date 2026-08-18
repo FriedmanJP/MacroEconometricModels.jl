@@ -216,7 +216,9 @@ of the Young (2010) histogram from the initial stationary distribution.
 
 # Restrictions
 
-One asset dimension (`grid.n_dims == 1`), matching `_ssj_jacobian`.
+One- or two-asset grids. The GE close in `_ssj_solve` uses a one-unknown
+capital DAG; two-asset models keep the `_ssj_jacobian` helper rather than
+silently dropping `:two_asset_hank`.
 """
 struct HetBlock{T<:AbstractFloat} <: AbstractSSJBlock
     name::Symbol
