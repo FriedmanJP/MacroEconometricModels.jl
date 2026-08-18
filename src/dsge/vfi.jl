@@ -17,6 +17,66 @@ const _VFI_MISSING_MSG =
     "`utility` and `beta` (from `@dsge utility:` / `beta:` or as keywords). " *
     "For Euler-equation time iteration use pfi_solver."
 
+function _vfi_replace_symbol(ex, old::Symbol, new::Symbol)
+    if ex === old
+        return new
+    elseif ex isa Expr
+        return Expr(ex.head, Any[_vfi_replace_symbol(a, old, new) for a in ex.args]...)
+    else
+        return ex
+    end
+end
+
+const _VFI_UTIL_OPS = Set{Symbol}((:+, :-, :*, :/, :^, :log, :exp, :sqrt, :min, :max,
+                                   :abs, :inv, :one, :zero))
+
+function _vfi_utility_unknowns(ex, allowed::Set{Symbol})
+    unknown = Symbol[]
+    if ex isa Symbol
+        if !(ex in allowed) && !(ex in _VFI_UTIL_OPS)
+            push!(unknown, ex)
+        end
+        return unknown
+    end
+    _walk_expr(ex) do node
+        node.head === :call || return
+        for a in node.args[2:end]
+            if a isa Symbol && !(a in allowed) && !(a in _VFI_UTIL_OPS)
+                push!(unknown, a)
+            end
+        end
+    end
+    return unique!(unknown)
+end
+
+"""Compile a `@dsge utility:` payload into `u(c)` (or leave a Function as-is)."""
+function _vfi_compile_utility(spec::ModelSpec{T}, utility, consumption) where {T}
+    if utility isa Function
+        return utility, consumption
+    elseif utility isa Symbol
+        isdefined(Base, utility) || throw(ArgumentError(
+            "vfi_solver: utility :$utility is not a Base function"))
+        return getfield(Base, utility), consumption
+    elseif utility isa Expr
+        cons = consumption
+        cons === nothing && throw(ArgumentError(
+            "vfi_solver: compound utility expression requires a consumption variable"))
+        allowed = Set{Symbol}(vcat(spec.params, [cons]))
+        unknown = _vfi_utility_unknowns(utility, allowed)
+        isempty(unknown) || throw(ArgumentError(
+            "vfi_solver: utility expression references unknown symbol(s) $unknown; " *
+            "in scope: consumption :$cons and parameters $(spec.params)"))
+        subst = _substitute_vars(utility, Symbol[], Symbol[], spec.params)
+        subst = _vfi_replace_symbol(subst, cons, :_c_)
+        fn = Core.eval(@__MODULE__, Expr(:->, Expr(:tuple, :_c_, :_θ_), subst))
+        θ = spec.param_values
+        return (c -> T(Base.invokelatest(fn, c, θ))), cons
+    else
+        throw(ArgumentError(
+            "vfi_solver: utility must be a Function or a compiled @dsge expression, got $(typeof(utility))"))
+    end
+end
+
 """
     vfi_solver(spec::ModelSpec{T}; utility, beta, kwargs...) -> ProjectionSolution{T}
 
@@ -32,10 +92,12 @@ This is not Euler time iteration; that algorithm is [`pfi_solver`](@ref).
 - `transition`: `(x, a, ε, θ) → x′`. When omitted, inferred from `next_state`
 - `control_bounds`: `(x, θ) → (a_lo, a_hi)`. When omitted, inferred from
   `constraints` / `variable_bound` or an SS collar of width `scale`
-- `next_state::Symbol=:linear`: how to infer `transition` when it is omitted
-  (`:linear` = `G1`/`impact` after packing `y[states]=x`, `y[controls]=a`;
-  `:residual` = drop residuals with `defines ∈ controls` — or a named `euler:` —
-  and Newton-solve the leftover)
+- `next_state::Symbol=:auto`: how to infer `transition` when it is omitted.
+  `:auto` uses `:residual` when control FOCs can be dropped (square leftover
+  system), otherwise `:linear`. `:linear` = `G1`/`impact` after packing
+  `y[states]=x`, `y[controls]=a` — this is rejected when those `G1` columns
+  are numerically zero. `:residual` = drop residuals with `defines ∈ controls`
+  — or a named `euler:` — and Newton-solve the leftover.
 - `constraints`: `VariableBound`s used when inferring `control_bounds`
 - `consumption::Union{Nothing,Symbol}=nothing`: if set, `utility` is `u(c::Real)`
 - `controls`: choice-variable names; default is the non-state endogenous variables
@@ -59,7 +121,7 @@ function vfi_solver(spec::ModelSpec{T};
                     beta=nothing,
                     transition=nothing,
                     control_bounds=nothing,
-                    next_state::Symbol=:linear,
+                    next_state::Symbol=:auto,
                     constraints::Vector=Any[],
                     consumption::Union{Nothing,Symbol}=nothing,
                     controls::Union{Nothing,AbstractVector{Symbol}}=nothing,
@@ -91,8 +153,9 @@ function vfi_solver(spec::ModelSpec{T};
 
     (utility === nothing || beta === nothing) &&
         throw(ArgumentError(_VFI_MISSING_MSG))
-    next_state in (:linear, :residual) || throw(ArgumentError(
-        "next_state must be :linear or :residual, got :$next_state"))
+    utility, consumption = _vfi_compile_utility(spec, utility, consumption)
+    next_state in (:auto, :linear, :residual) || throw(ArgumentError(
+        "next_state must be :auto, :linear, or :residual, got :$next_state"))
 
     n_choice >= 3 || throw(ArgumentError("n_choice must be ≥ 3, got $n_choice"))
     n_grid >= 3 || throw(ArgumentError("n_grid must be ≥ 3, got $n_grid"))
@@ -169,6 +232,25 @@ function vfi_solver(spec::ModelSpec{T};
     G1 = result_1st.G
     impact = result_1st.impact
 
+    if next_state === :auto
+        next_state = try
+            foc = _vfi_foc_indices(spec, collect(Symbol, ctrl_names))
+            keep = setdiff(collect(1:spec.n_endog), foc)
+            free = setdiff(collect(1:spec.n_endog), ctrl_idx)
+            length(keep) == length(free) ? :residual : :linear
+        catch e
+            e isa ArgumentError || rethrow(e)
+            :linear
+        end
+    end
+    if next_state === :linear && transition === nothing &&
+       _vfi_linear_is_blind(G1, state_idx, ctrl_idx)
+        throw(ArgumentError(
+            "vfi_solver: next_state=:linear is meaningless here — G1 columns for " *
+            "controls $ctrl_names are numerically zero, so the Bellman transition " *
+            "ignores the control. Pass transition= explicitly or next_state=:residual."))
+    end
+
     if transition === nothing
         transition = _vfi_infer_transition(spec, state_idx, ctrl_idx, G1, impact, next_state)
     end
@@ -231,7 +313,10 @@ function vfi_solver(spec::ModelSpec{T};
         sup_norm = zero(T)
         @inbounds for i in eachindex(V)
             d = abs(V_new[i] - V[i])
-            if isfinite(d) && d > sup_norm
+            if !isfinite(d)
+                sup_norm = T(Inf)
+                break
+            elseif d > sup_norm
                 sup_norm = d
             end
         end
@@ -243,14 +328,14 @@ function vfi_solver(spec::ModelSpec{T};
             @debug "VFI iteration $k: ||ΔV||_∞ = $sup_norm"
         end
 
-        if sup_norm < tol_T
+        if isfinite(sup_norm) && sup_norm < tol_T
             converged = true
             break
         end
     end
 
-    if !converged && verbose
-        @warn "VFI solver did not converge after $max_iter iterations (||ΔV||_∞ = $sup_norm)"
+    if !converged
+        @warn "VFI solver did not converge after $max_iter iterations (||ΔV||_∞ = $sup_norm, tol = $tol)"
     end
 
     # Export a Chebyshev policy (and a Chebyshev copy of V) on the degree-grid
@@ -659,6 +744,13 @@ function _vfi_newton_keep(y::Vector{T}, y_lag::Vector{T}, spec::ModelSpec{T},
         end
     end
     return y
+end
+
+function _vfi_linear_is_blind(G1::AbstractMatrix{T}, state_idx, ctrl_idx) where {T}
+    isempty(ctrl_idx) && return false
+    nrm = norm(G1)
+    nrmc = norm(view(G1, state_idx, ctrl_idx))
+    return nrmc < T(1e-10) * max(nrm, eps(T))
 end
 
 function _vfi_infer_transition(spec::ModelSpec{T}, state_idx::Vector{Int},

@@ -342,18 +342,25 @@ function _vfi_solve(ip::IndividualProblem{T}, grid::HAGrid{T},
         for j in 1:n_e
             for i in 1:n_a
                 diff = abs(V_new[i, j] - V[i, j])
-                if isfinite(diff) && diff > max_diff
+                if !isfinite(diff)
+                    max_diff = T(Inf)
+                    break
+                elseif diff > max_diff
                     max_diff = diff
                 end
             end
+            max_diff == T(Inf) && break
         end
 
         copyto!(V, V_new)
 
-        if max_diff < tol
+        if isfinite(max_diff) && max_diff < tol
             converged = true
             break
         end
+    end
+    if !converged
+        @warn "individual VFI did not converge after $max_iter iterations (tol = $tol)"
     end
 
     # ── Extract policies ──────────────────────────────────────────────────
@@ -404,7 +411,9 @@ function _policy_value_fn(c_pol::AbstractMatrix{T}, a_pol::AbstractMatrix{T},
                 end
                 V_new[i, j] = u(max(c_pol[i, j], T(1e-10))) + beta * ev
                 d = abs(V_new[i, j] - V[i, j])
-                if isfinite(d) && d > max_diff
+                if !isfinite(d)
+                    max_diff = T(Inf)
+                elseif d > max_diff
                     max_diff = d
                 end
             end
@@ -550,15 +559,21 @@ function _two_asset_vfi_solve(ip::IndividualProblem{T}, grid::HAGrid{T},
         max_diff = zero(T)
         @inbounds for i in eachindex(V)
             d = abs(V_new[i] - V[i])
-            if isfinite(d) && d > max_diff
+            if !isfinite(d)
+                max_diff = T(Inf)
+                break
+            elseif d > max_diff
                 max_diff = d
             end
         end
         copyto!(V, V_new)
-        if max_diff < tol
+        if isfinite(max_diff) && max_diff < tol
             converged = true
             break
         end
+    end
+    if !converged
+        @warn "two-asset VFI did not converge after $max_iter iterations (tol = $tol)"
     end
 
     d_opt = zeros(T, n_b, n_a, n_e)

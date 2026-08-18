@@ -211,7 +211,7 @@ the linear / global methods below.
 - `:perturbation` -- Higher-order perturbation (Schmitt-Grohe & Uribe 2004); pass `order=2` for second-order
 - `:projection` -- Chebyshev collocation (Judd 1998); pass `degree=5` for polynomial degree
 - `:pfi` -- Policy Function Iteration / Time Iteration (Coleman 1990); pass `degree=5`, `damping=1.0`
-- `:vfi` -- Euler-equation time iteration (Coleman 1990), equivalent to `:pfi` (the name is historical, not value-function iteration); pass `degree=5`, `howard_steps=0`
+- `:vfi` -- Bellman value-function iteration (Howard 1960); requires `utility` and `beta` (from `@dsge` or keywords). `transition` / `control_bounds` are inferred when omitted.
 - `:perfect_foresight` -- deterministic Newton solver
 """
 function solve(spec::ModelSpec{T}; method::Symbol=:gensys, kwargs...) where {T<:AbstractFloat}

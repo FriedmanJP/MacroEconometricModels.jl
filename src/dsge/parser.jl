@@ -47,9 +47,11 @@ Optional Bellman declarations for [`vfi_solver`](@ref):
     controls: C
 ```
 
-`vfi_solver` still needs `transition` and `control_bounds` (the residual spec does
-not imply them). `utility` / `beta` / `controls` are read from the spec when the
-corresponding keyword is omitted.
+`transition` and `control_bounds` are inferred when omitted (`next_state=:residual`
+when control FOCs can be dropped). Compound rewards such as
+`utility: C^(1-σ)/(1-σ)` are stored as expressions and compiled by
+[`vfi_solver`](@ref). `utility` / `beta` / `controls` are read from the spec
+when the corresponding keyword is omitted.
 
 `clock:` (`discrete` / `continuous`) and `horizon:` (`infinite` / `finite` /
 `ages` / `perpetual_youth`) set [`ModelIR`](@ref) flags. Extra keys on
@@ -125,10 +127,12 @@ function _dsge_impl(block::Expr)
             ss_body = stmt.args[3]
         elseif label === :utility
             u_rhs = stmt.args[3]
-            if u_rhs isa Expr && u_rhs.head == :call && length(u_rhs.args) == 2
-                bellman_util_ex = u_rhs.args[1]
-                arg = u_rhs.args[2]
-                arg isa Symbol && (bellman_cons_ex = arg)
+            if u_rhs isa Expr && u_rhs.head == :call && length(u_rhs.args) == 2 &&
+               u_rhs.args[1] isa Symbol && u_rhs.args[2] isa Symbol
+                bellman_util_ex = u_rhs.args[1]          # log(C) → :log
+                bellman_cons_ex = u_rhs.args[2]
+            elseif u_rhs isa Expr
+                bellman_util_ex = QuoteNode(u_rhs)
             else
                 bellman_util_ex = u_rhs
             end
@@ -166,6 +170,30 @@ function _dsge_impl(block::Expr)
     isempty(params) && error("@dsge: no parameters declared")
     isempty(endog) && error("@dsge: no endogenous variables declared")
     isempty(exog) && error("@dsge: no exogenous variables declared")
+
+    if bellman_util_ex isa QuoteNode && bellman_util_ex.value isa Expr &&
+       bellman_cons_ex === nothing
+        candidates = Symbol[]
+        _walk_expr(bellman_util_ex.value) do node
+            for a in node.args
+                if a isa Symbol && (a in endog || a in bellman_ctrl_ex)
+                    push!(candidates, a)
+                end
+            end
+        end
+        unique!(candidates)
+        if length(candidates) == 1
+            bellman_cons_ex = candidates[1]
+        else
+            error("@dsge: utility: expression references $(candidates) — " *
+                  "need exactly one consumption symbol (or write utility: log(C))")
+        end
+    end
+    if bellman_cons_ex !== nothing &&
+       !(bellman_cons_ex in endog) && !(bellman_cons_ex in bellman_ctrl_ex)
+        error("@dsge: utility: consumption :$bellman_cons_ex is not an " *
+              "endogenous or control variable (endog = $endog)")
+    end
 
     raw_equations = Expr[]
     eq_names = Symbol[]

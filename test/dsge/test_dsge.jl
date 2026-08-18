@@ -6939,6 +6939,47 @@ T_lo(::Dict) = 1e-4
     @test spec2.bellman_consumption === :c
 end
 
+@testset "@dsge compound utility: CRRA (MSR-12)" begin
+    spec = @dsge begin
+        parameters: β = 0.99, α = 0.36, δ = 0.025, ρ = 0.95, σ = 0.007, γ = 1.01
+        endogenous: c, k, a
+        exogenous: ε
+        utility: c^(1 - γ) / (1 - γ)
+        beta: β
+        controls: c
+        euler: 1 / c[t]^γ = β * (1 / c[t+1]^γ) * (α * exp(a[t+1]) * k[t]^(α - 1) + 1 - δ)
+        c[t] + k[t] = exp(a[t]) * k[t-1]^α + (1 - δ) * k[t-1]
+        a[t] = ρ * a[t-1] + σ * ε[t]
+    end
+    @test spec.bellman_utility isa Expr
+    @test spec.bellman_consumption === :c
+    spec = compute_steady_state(spec)
+    sol = solve(spec; method=:vfi, next_state=:residual, degree=3, n_grid=8,
+                max_iter=200, howard_steps=10, n_choice=17, verbose=false)
+    @test sol.converged
+    x_ss = spec.steady_state[sol.state_indices]
+    @test isfinite(evaluate_policy(sol, x_ss)[1])
+end
+
+@testset "@dsge utility: unknown symbol (MSR-12)" begin
+    err = try
+        @eval @dsge begin
+            parameters: β = 0.99
+            endogenous: c, k
+            exogenous: ε
+            utility: log(Q)
+            beta: β
+            controls: c
+            c[t] + k[t] = k[t-1]
+            k[t] = 0.9 * k[t-1]
+        end
+        error("should have thrown")
+    catch e
+        e
+    end
+    @test occursin("Q", sprint(showerror, err))
+end
+
 @testset "Euler-only spec errors and names pfi_solver" begin
     spec_ar = @dsge begin
         parameters: ρ = 0.9, σ = 0.01
@@ -7077,10 +7118,11 @@ end
         a[t] = ρ * a[t-1] + σ * ε[t]
     end
     spec_inf = compute_steady_state(spec_inf)
-    sol_def = solve(spec_inf; method=:vfi, degree=3, n_grid=8, max_iter=80,
-                    howard_steps=5, n_choice=17, verbose=false)
+    sol_def = solve(spec_inf; method=:vfi, degree=3, n_grid=8, max_iter=200,
+                    howard_steps=10, n_choice=17, verbose=false)
     @test sol_def isa ProjectionSolution
     @test sol_def.method == :vfi
+    @test sol_def.converged
 
     sol_res = vfi_solver(spec_inf; next_state=:residual, degree=3, n_grid=8,
                          max_iter=200, howard_steps=10, n_choice=17, verbose=false)
@@ -7088,8 +7130,47 @@ end
     @test sol_res.method == :vfi
     x_ss_i = spec_inf.steady_state[sol_res.state_indices]
     c_res = evaluate_policy(sol_res, x_ss_i)[1]
+    c_def = evaluate_policy(sol_def, x_ss_i)[1]
+    c_pfi = evaluate_policy(pfi_solver(spec_inf; degree=3, max_iter=80, verbose=false),
+                            spec_inf.steady_state[sol_def.state_indices])[1]
+    @test abs(c_def - c_pfi) / max(abs(c_pfi), 1e-8) < 0.05
     c_exp = evaluate_policy(sol, x_ss)[1]
     @test abs(c_res - c_exp) / max(abs(c_exp), 1e-8) < 0.15
+    x_hi = copy(x_ss_i); x_hi[1] *= 1.1
+    @test abs(evaluate_policy(sol_def, x_hi)[1] - evaluate_policy(sol_res, x_hi)[1]) /
+          max(abs(evaluate_policy(sol_res, x_hi)[1]), 1e-8) < 0.10
+end
+
+@testset "VFI :linear throws when G1 ignores controls (MSR-01)" begin
+    spec = @dsge begin
+        parameters: β = 0.99, α = 0.36, δ = 0.025, ρ = 0.95, σ = 0.007
+        endogenous: c, k, a
+        exogenous: ε
+        utility: log(c)
+        beta: β
+        controls: c
+        euler: 1 / c[t] = β * (1 / c[t+1]) * (α * exp(a[t+1]) * k[t]^(α - 1) + 1 - δ)
+        c[t] + k[t] = exp(a[t]) * k[t-1]^α + (1 - δ) * k[t-1]
+        a[t] = ρ * a[t-1] + σ * ε[t]
+    end
+    spec = compute_steady_state(spec)
+    err = try
+        vfi_solver(spec; next_state=:linear, degree=3, n_grid=6, max_iter=2)
+        error("should have thrown")
+    catch e
+        e
+    end
+    @test err isa ArgumentError
+    @test occursin(":residual", sprint(showerror, err)) ||
+          occursin("transition=", sprint(showerror, err))
+end
+
+@testset "VFI NaN value cannot converge (MSR-15)" begin
+    spec = _vfi_rbc_spec()
+    kw = _vfi_rbc_bellman(spec)
+    sol = vfi_solver(spec; kw..., utility = c -> NaN, degree=3, n_grid=6,
+                     max_iter=3, howard_steps=0, n_choice=5, verbose=false)
+    @test sol.converged == false
 end
 
 @testset "VFI :residual without defines throws (#658)" begin
