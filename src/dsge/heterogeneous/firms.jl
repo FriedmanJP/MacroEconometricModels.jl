@@ -434,15 +434,21 @@ function _kt_plant_vfi(fs::FirmSystem{T}, w::T, z::T;
         max_diff = zero(T)
         @inbounds for idx in eachindex(V)
             d = abs(V_new[idx] - V[idx])
-            if isfinite(d) && d > max_diff
+            if !isfinite(d)
+                max_diff = T(Inf)
+                break
+            elseif d > max_diff
                 max_diff = d
             end
         end
         copyto!(V, V_new)
-        if max_diff < tol
+        if isfinite(max_diff) && max_diff < tol
             converged = true
             break
         end
+    end
+    if !converged && max_iter > 1
+        @warn "_kt_plant_vfi did not converge after $max_iter iterations (tol = $tol)"
     end
 
     return (value=V, k_star=k_star, k_constrained=k_con, adj_prob=adj_prob,
@@ -498,12 +504,13 @@ function _kt_stationary(Λ::AbstractMatrix{T}; max_iter::Int=20_000,
         s = sum(μ_new)
         s > zero(T) && (μ_new ./= s)
         if maximum(abs.(μ_new .- μ)) < tol
-            return μ_new
+            return μ_new, true
         end
         μ = μ_new
     end
     μ ./= sum(μ)
-    return μ
+    @warn "_kt_stationary did not converge after $max_iter iterations (tol = $tol)"
+    return μ, false
 end
 
 """
@@ -562,10 +569,8 @@ end
 """
     KhanThomasSteadyState{T}
 
-Stationary equilibrium of a [`FirmSystem`](@ref). Prices `(w, p)` clear the
-representative household FOC `w = φ C` at `p = 1`. `method` records how
-aggregate dynamics were (or will be) computed — `:mit` for the sequence-space
-perfect-foresight IRF.
+Stationary equilibrium of a [`FirmSystem`](@ref). Prices `(w, p)` iterate the
+representative household FOC `w = φ C` at `p = 1`. `method === :steady_state`.
 """
 struct KhanThomasSteadyState{T<:AbstractFloat}
     firm::FirmSystem{T}
@@ -606,6 +611,21 @@ struct KhanThomasTransition{T<:AbstractFloat}
     converged::Bool
 end
 
+function _kt_eval_wage(fs::FirmSystem{T}, w::T, z::T, p::T;
+                       vfi_tol::T=T(1e-6), vfi_max_iter::Int=200,
+                       howard_steps::Int=15,
+                       init_value=nothing) where {T<:AbstractFloat}
+    pol = _kt_plant_vfi(fs, w, z; p=p, max_iter=vfi_max_iter, tol=vfi_tol,
+                        howard_steps=howard_steps, init_value=init_value)
+    Λ = _kt_transition(fs, pol.k_star, pol.k_constrained, pol.adj_prob)
+    μ, dist_ok = _kt_stationary(Λ)
+    agg = _kt_aggregates(fs, μ, pol, w, z)
+    C = agg.C
+    resid = isfinite(C) && C > zero(T) ? w - fs.phi * C : w
+    pol = merge(pol, (; converged=pol.converged && dist_ok))
+    return pol, μ, agg, resid
+end
+
 """
     khan_thomas_steady_state(fs::FirmSystem; kwargs...) → KhanThomasSteadyState
     khan_thomas_steady_state(spec::ModelSpec; kwargs...) → KhanThomasSteadyState
@@ -622,20 +642,6 @@ representative household. Does **not** call [`_hh`](@ref) or any
 - `dampen` — relaxation on the wage update
 - `hh_solver` — ignored (accepted so household kwargs cannot silently reroute)
 """
-function _kt_eval_wage(fs::FirmSystem{T}, w::T, z::T, p::T;
-                       vfi_tol::T=T(1e-6), vfi_max_iter::Int=200,
-                       howard_steps::Int=15,
-                       init_value=nothing) where {T<:AbstractFloat}
-    pol = _kt_plant_vfi(fs, w, z; p=p, max_iter=vfi_max_iter, tol=vfi_tol,
-                        howard_steps=howard_steps, init_value=init_value)
-    Λ = _kt_transition(fs, pol.k_star, pol.k_constrained, pol.adj_prob)
-    μ = _kt_stationary(Λ)
-    agg = _kt_aggregates(fs, μ, pol, w, z)
-    C = agg.C
-    resid = isfinite(C) && C > zero(T) ? w - fs.phi * C : w
-    return pol, μ, agg, resid
-end
-
 function khan_thomas_steady_state(fs::FirmSystem{T};
                                   w0::Union{Nothing,Real}=nothing,
                                   p::Real=1,
@@ -653,24 +659,47 @@ function khan_thomas_steady_state(fs::FirmSystem{T};
         "(got hh_solver=:$hh_solver)"))
     z_ss = z === nothing ? fs.Z : T(z)
     p_ss = T(p)
-    # Prices from the nested frictionless economy (Khan–Thomas 2008 Appendix B /
-    # Table 1): φ and (α, ν, δ, β, γ) are chosen so a representative household
-    # plus frictionless plants clear w = φ C. Lumpy plants are then solved at
-    # those prices. Coarse-grid k* is too elastic for a reliable lumpy wage
-    # fixed point; aggregates stay close (paper Table 4).
-    _ = (tol, max_iter, dampen)
+    # Start at the nested frictionless wage (Khan–Thomas 2008 Appendix B /
+    # Table 1), then iterate the lumpy w = φ C fixed point.
     w = w0 === nothing ? first(_kt_frictionless_wage(fs; z=z_ss)) : T(w0)
     w = max(w, T(1e-6))
-    pol, μ, agg, _ = _kt_eval_wage(fs, w, z_ss, p_ss;
-                                   vfi_tol=T(vfi_tol), vfi_max_iter=vfi_max_iter,
-                                   howard_steps=howard_steps)
+    pol, μ, agg, resid = _kt_eval_wage(fs, w, z_ss, p_ss;
+        vfi_tol=T(vfi_tol), vfi_max_iter=vfi_max_iter, howard_steps=howard_steps)
+    best_w, best_pol, best_μ, best_agg, best_resid = w, pol, μ, agg, resid
+    it = 1
+    ok_outer = abs(resid) < T(tol)
+    if !ok_outer
+        for k in 2:max_iter
+            it = k
+            C = agg.C
+            isfinite(C) && C > zero(T) || break
+            w_tgt = fs.phi * C
+            Δ = T(dampen) * (w_tgt - w)
+            cap = T(0.25) * max(abs(w), one(T))
+            w = max(w + clamp(Δ, -cap, cap), T(1e-6))
+            pol, μ, agg, resid = _kt_eval_wage(fs, w, z_ss, p_ss;
+                vfi_tol=T(vfi_tol), vfi_max_iter=vfi_max_iter,
+                howard_steps=howard_steps, init_value=pol.value)
+            if abs(resid) < abs(best_resid)
+                best_w, best_pol, best_μ, best_agg, best_resid = w, pol, μ, agg, resid
+            end
+            if abs(resid) < T(tol)
+                ok_outer = true
+                break
+            end
+        end
+        w, pol, μ, agg, resid = best_w, best_pol, best_μ, best_agg, best_resid
+    end
+    ok_outer || @warn "khan_thomas_steady_state: wage fixed point did not reach " *
+                      "|w − φ C| < $tol (resid = $resid) after $it iterations; " *
+                      "returning the closest evaluated point."
     n_k = length(fs.k_grid)
     n_e = length(fs.productivity.states)
     D = reshape(copy(μ), n_k, n_e)
     return KhanThomasSteadyState{T}(
         fs, w, p_ss, agg.K, agg.N, agg.Y, agg.I, agg.C, agg.inaction,
         D, pol.value, pol.k_star, pol.k_constrained, pol.adj_prob, pol.labor,
-        pol.converged, 1, :mit)
+        ok_outer && pol.converged, it, :steady_state)
 end
 
 function khan_thomas_steady_state(spec::ModelSpec{T}; kwargs...) where {T<:AbstractFloat}
@@ -686,16 +715,20 @@ end
 """
     khan_thomas_mit(ss, Z_path; prices=:ss) → KhanThomasTransition
 
-Perfect-foresight MIT transition (`method = :mit`). `K` is predetermined.
-`prices = :ss` holds `(w, p)` at the stationary equilibrium (partial-equilibrium
-MIT around the GE steady state). `prices = :ge` updates `w_t = φ C_t` once
-along the path.
+Perfect-foresight MIT transition (`method = :mit`). Each date applies the
+Bellman operator once with ``V_{t+1}`` as continuation (`max_iter=1`,
+`howard_steps=0`). `K` is predetermined.
+`prices = :ss` holds `(w, p)` at the stationary equilibrium.
+`prices = :ge` iterates the wage path until `w_t ≈ φ C_t`.
 """
 function khan_thomas_mit(ss::KhanThomasSteadyState{T}, Z_path::AbstractVector;
                          prices::Symbol=:ss,
                          vfi_tol::Real=1e-6,
-                         vfi_max_iter::Int=200,
-                         howard_steps::Int=12) where {T<:AbstractFloat}
+                         vfi_max_iter::Int=1,
+                         howard_steps::Int=0,
+                         max_iter::Int=16,
+                         tol::Real=1e-4,
+                         dampen::Real=0.5) where {T<:AbstractFloat}
     prices in (:ss, :ge) || throw(ArgumentError(
         "khan_thomas_mit: prices must be :ss or :ge, got :$prices"))
     Z = collect(T, Z_path)
@@ -707,42 +740,51 @@ function khan_thomas_mit(ss::KhanThomasSteadyState{T}, Z_path::AbstractVector;
     n_e = length(fs.productivity.states)
     p = ss.p
 
-    # Backward plant values along the TFP path; V_{H+1} = V_ss.
-    V_next = copy(ss.value)
-    pols = Vector{NamedTuple}(undef, H)
-    w_path = fill(ss.w, H)
-    for t in H:-1:1
-        pol = _kt_plant_vfi(fs, w_path[t], Z[t]; p=p, max_iter=vfi_max_iter,
-                            tol=T(vfi_tol), howard_steps=howard_steps,
-                            init_value=V_next)
-        pols[t] = pol
-        V_next = pol.value
-    end
-
-    μ = vec(ss.distribution)
-    Y = zeros(T, H)
-    I = zeros(T, H)
-    K = zeros(T, H)
-    N = zeros(T, H)
-    C = zeros(T, H)
-    ok = true
-    for t in 1:H
-        agg = _kt_aggregates(fs, μ, pols[t], w_path[t], Z[t])
-        Y[t] = agg.Y
-        I[t] = agg.I
-        K[t] = agg.K
-        N[t] = agg.N
-        C[t] = agg.C
-        ok = ok && all(isfinite, (agg.Y, agg.I, agg.K, agg.N, agg.C))
-        if prices === :ge && isfinite(agg.C) && agg.C > zero(T)
-            w_path[t] = fs.phi * agg.C
+    function _pf_pass!(w_path)
+        V_next = copy(ss.value)
+        pols = Vector{NamedTuple}(undef, H)
+        for t in H:-1:1
+            # One Bellman application; Howard would re-solve a stationary VFI.
+            pol = _kt_plant_vfi(fs, w_path[t], Z[t]; p=p, max_iter=1,
+                                tol=T(vfi_tol), howard_steps=0,
+                                init_value=V_next)
+            pols[t] = pol
+            V_next = pol.value
         end
-        if t < H
-            Λ = _kt_transition(fs, pols[t].k_star, pols[t].k_constrained,
-                               pols[t].adj_prob)
-            μ = Λ * μ
-            s = sum(μ)
-            s > zero(T) && (μ ./= s)
+        μ = vec(ss.distribution)
+        Y = zeros(T, H); I = zeros(T, H); K = zeros(T, H)
+        N = zeros(T, H); C = zeros(T, H)
+        ok = true
+        for t in 1:H
+            agg = _kt_aggregates(fs, μ, pols[t], w_path[t], Z[t])
+            Y[t] = agg.Y; I[t] = agg.I; K[t] = agg.K
+            N[t] = agg.N; C[t] = agg.C
+            ok = ok && all(isfinite, (agg.Y, agg.I, agg.K, agg.N, agg.C))
+            if t < H
+                Λ = _kt_transition(fs, pols[t].k_star, pols[t].k_constrained,
+                                   pols[t].adj_prob)
+                μ = Λ * μ
+                s = sum(μ)
+                s > zero(T) && (μ ./= s)
+            end
+        end
+        return Y, I, K, N, C, ok
+    end
+    _ = (vfi_max_iter, howard_steps)
+    w_path = fill(ss.w, H)
+    Y, I, K, N, C, ok = _pf_pass!(w_path)
+    if prices === :ge
+        for _ in 1:max_iter
+            w_imp = [isfinite(C[t]) && C[t] > zero(T) ? fs.phi * C[t] : w_path[t] for t in 1:H]
+            if maximum(abs.(w_imp .- w_path)) < T(tol)
+                w_path = w_imp
+                Y, I, K, N, C, ok = _pf_pass!(w_path)
+                break
+            end
+            @inbounds for t in 1:H
+                w_path[t] = (one(T) - T(dampen)) * w_path[t] + T(dampen) * w_imp[t]
+            end
+            Y, I, K, N, C, ok = _pf_pass!(w_path)
         end
     end
     return KhanThomasTransition{T}(Z, Y, I, K, N, C, w_path, ss, :mit, ok)
@@ -850,7 +892,8 @@ end
 
 function report(io::IO, ss::KhanThomasSteadyState{T}) where {T}
     println(io, "Khan–Thomas (2008) Plant Economy — Steady State")
-    println(io, "  method               :mit")
+    println(io, "  method               :", ss.method)
+    println(io, "  Converged            ", ss.converged)
     println(io, "  Capital K            ", ss.K)
     println(io, "  Output Y             ", ss.Y)
     println(io, "  Investment I         ", ss.I)

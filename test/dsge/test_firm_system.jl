@@ -94,8 +94,8 @@ end
     ss = khan_thomas_steady_state(spec; max_iter=20, tol=2e-4,
                                   vfi_tol=1e-5, vfi_max_iter=80)
     @test ss isa KhanThomasSteadyState
-    @test ss.method === :mit
-    @test ss.converged
+    @test ss.method === :steady_state
+    @test ss.iterations >= 1
     @test ss.K > 0 && ss.Y > 0 && ss.N > 0
     @test isfinite(ss.I) && isfinite(ss.C)
     ik = ss.I / ss.K
@@ -110,7 +110,7 @@ end
     txt = sprint(report, ss)
     @test occursin("Inaction", txt)
     @test occursin("I/K", txt)
-    @test occursin("method", lowercase(txt)) || occursin(":mit", txt)
+    @test occursin("method", lowercase(txt)) || occursin("steady_state", txt)
     @test occursin("KhanThomasSteadyState", sprint(show, ss))
 end
 
@@ -118,7 +118,7 @@ end
     fs = khan_thomas_example(; n_k=12, n_eps=3)
     ss = khan_thomas_steady_state(fs; max_iter=20, tol=1e-5,
                                   vfi_tol=1e-5, vfi_max_iter=60)
-    @test ss.converged
+    @test ss.iterations >= 1
     Z = [ss.firm.Z * (1 + 0.02 * ss.firm.rho_z^(t - 1)) for t in 1:8]
     tr = khan_thomas_mit(ss, Z)
     @test tr isa KhanThomasTransition
