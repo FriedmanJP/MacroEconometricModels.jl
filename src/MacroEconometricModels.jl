@@ -586,6 +586,7 @@ include("olg/lifecycle.jl")
 include("ct/continuous_aiyagari.jl")
 include("ct/two_asset.jl")
 include("dsge/family_facades.jl")   # G-14 irf/fevd/simulate after family types
+include("dsge/heterogeneous/intermediary.jl")  # G-19 Bewley Banks (after _path_to_irf)
 
 # Policy counterfactuals (Barnichon-Mesters OPP, McKay-Wolf, CMW model bank)
 include("counterfactual/types.jl")
@@ -752,7 +753,9 @@ export AbstractDSGEModel
 
 # Types
 export ModelSpec, NamedEquation, NoAgents, AbstractAgentSystem, ModelIR, HouseholdSystem
-export DCEGMSystem, LifeCycleSystem, ContinuousHouseholdSystem, FirmSystem
+export DCEGMSystem, LifeCycleSystem, ContinuousHouseholdSystem, FirmSystem, IntermediarySystem
+export IntermediarySteadyState, IntermediaryPE, IntermediaryTransition
+export intermediary_pe, intermediary_steady_state, intermediary_mit
 export to_spec
 export KhanThomasSteadyState, KhanThomasTransition
 export khan_thomas_example, khan_thomas_steady_state, khan_thomas_mit
