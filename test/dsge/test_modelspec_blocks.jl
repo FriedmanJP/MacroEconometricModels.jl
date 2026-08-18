@@ -133,3 +133,22 @@ end
     @test occursin("G-11", sprint(showerror, err2))
     @test_throws ArgumentError HetBlock(spec, prob)
 end
+
+# Aqua LTS empirical: MitBlock(evaluate, ::Type{T}) overlapped
+# MitBlock(spec::ModelSpec, ss) on (ModelSpec, Type{<:AbstractFloat}).
+@testset "MitBlock(spec, Type) is not ambiguous" begin
+    spec = @dsge begin
+        parameters: ρ = 0.9
+        endogenous: y
+        exogenous: ε
+        y[t] = ρ * y[t-1] + ε[t]
+    end
+    err = try
+        MitBlock(spec, Float64)
+        ErrorException("expected MitBlock(spec, Float64) to throw")
+    catch e
+        e
+    end
+    @test err isa ArgumentError
+    @test occursin("MitBlock(spec, ss)", sprint(showerror, err))
+end

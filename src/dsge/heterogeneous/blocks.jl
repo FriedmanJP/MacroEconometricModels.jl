@@ -383,6 +383,13 @@ function MitBlock(spec::ModelSpec, ss; kwargs...)
         "Jacobian ill-defined; use dcegm_mit."))
 end
 
+# Disambiguate MitBlock(evaluate, ::Type{T}) vs MitBlock(spec, ss).
+# Without this, MitBlock(::ModelSpec, ::Type{<:AbstractFloat}) is ambiguous
+# and Aqua.test_ambiguities fails on the LTS empirical job.
+function MitBlock(spec::ModelSpec, ::Type{T}; kwargs...) where {T<:AbstractFloat}
+    MitBlock(spec, nothing; kwargs...)
+end
+
 "Stationary distribution of `ss` as a normalized `N`-vector (column-major, income slowest)."
 function _normalized_distribution(ss::HASteadyState{T}) where {T<:AbstractFloat}
     D = vec(copy(ss.distribution))

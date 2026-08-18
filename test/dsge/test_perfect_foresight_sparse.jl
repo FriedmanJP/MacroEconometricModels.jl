@@ -178,3 +178,33 @@ end
     @test pf.converged
     @test pf.deviations[1, 1] ≈ 1.0 atol=1e-8
 end
+
+# Windows CI is a single process with JULIA_NUM_THREADS=auto and @spawn
+# workers. @threads :static cannot run concurrently, so two residual /
+# Jacobian fills from different tasks must not throw.
+@testset "PF residual is safe under concurrent callers" begin
+    spec = @dsge begin
+        parameters: ρ = 0.9, σ = 1.0
+        endogenous: y
+        exogenous: ε
+        y[t] = ρ * y[t-1] + σ * ε[t]
+    end
+    spec = compute_steady_state(spec)
+    Tp = 20
+    shocks = zeros(Tp, 1)
+    n = spec.n_endog
+    function _one()
+        x = repeat(spec.steady_state, Tp)
+        F = zeros(n * Tp)
+        _MEM._pf_residual_packed!(F, x, spec, shocks, Tp)
+        cache = _MEM._pf_make_cache(spec, Tp)
+        _MEM._pf_compute_blocks!(cache, x, spec, shocks, Tp)
+        return F
+    end
+    results = Vector{Vector{Float64}}(undef, 2)
+    @sync begin
+        Threads.@spawn (results[1] = _one())
+        Threads.@spawn (results[2] = _one())
+    end
+    @test results[1] == results[2]
+end

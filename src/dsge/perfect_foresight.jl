@@ -522,7 +522,10 @@ function _pf_residual_packed!(F::AbstractVector, x::AbstractVector, spec::ModelS
     θ = spec.param_values
     fns = spec.residual_fns
     if _pf_use_threads(Tp)
-        Threads.@threads :static for t in 1:Tp
+        # :dynamic: :static cannot nest or run concurrently (Windows CI
+        # is one process with @spawn workers; NonlinearSolve may also
+        # evaluate f from a worker).
+        Threads.@threads :dynamic for t in 1:Tp
             _pf_residual_at!(F, x, t, n, Tp, y_ss, θ, fns, shocks)
         end
     else
@@ -888,11 +891,12 @@ end
 
 function _pf_compute_blocks!(cache::_PFJacCache{T}, x::AbstractVector, spec::ModelSpec{T},
                              shocks::AbstractMatrix, Tp::Int) where {T}
-    nws = length(cache.workspaces)
     if _pf_use_threads(Tp)
-        Threads.@threads :static for t in 1:Tp
-            tid = min(max(Threads.threadid(), 1), nws)
-            _pf_period_blocks!(cache, x, t, spec, shocks, cache.workspaces[tid])
+        # Private workspace per period: threadid() is not 1:nthreads() on
+        # Julia 1.11+ (interactive pool), so a shared workspaces[tid] races.
+        Threads.@threads :dynamic for t in 1:Tp
+            ws = _pf_thread_ws(cache.n, T)
+            _pf_period_blocks!(cache, x, t, spec, shocks, ws)
         end
     else
         ws = cache.workspaces[1]
