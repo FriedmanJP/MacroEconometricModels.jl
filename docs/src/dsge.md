@@ -100,7 +100,7 @@ The economic question determines the solution class, and the solution class dete
 
 ## Model Specification
 
-The `@dsge` macro provides a domain-specific language for specifying DSGE models. It parses the model block into a `DSGESpec{T}` object containing equations, parameters, and variable declarations.
+The `@dsge` macro provides a domain-specific language for specifying DSGE models. It parses the model block into a `ModelSpec{T,NoAgents}` object containing named equations, parameters, and variable declarations. Unlabeled `var[t] = ...` sets both the equation name and `defines` to `var`. A lead `x[t+1]` *is* the rational expectation of `x`.
 
 ### Syntax
 
@@ -286,7 +286,7 @@ The matrix pair ``(\Gamma_0, \Gamma_1)`` defines a generalized eigenvalue proble
 | `C` | `Vector{T}` | ``n \times 1`` constants |
 | `Psi` | `Matrix{T}` | ``n \times n_{shocks}`` shock loading |
 | `Pi` | `Matrix{T}` | ``n \times n_{expect}`` expectation error selection |
-| `spec` | `DSGESpec{T}` | Back-reference to specification |
+| `spec` | `ModelSpec{T}` | Back-reference to specification |
 
 ---
 
@@ -294,7 +294,7 @@ The matrix pair ``(\Gamma_0, \Gamma_1)`` defines a generalized eigenvalue proble
 
 The package includes a 24-model replication suite that validates solutions against [Dynare](https://www.dynare.org/) 6.5+ reference values. The reference `.mod` files come from [Johannes Pfeifer's DSGE\_mod collection](https://github.com/JohannesPfeifer/DSGE_mod), a widely-used repository of Dynare model files for textbook and published DSGE models.
 
-Each replication script specifies the model using `@dsge` (or programmatic `DSGESpec` construction for large models), solves it, and compares the results against Dynare's `.mat` output for:
+Each replication script specifies the model using `@dsge` (or programmatic `ModelSpec` construction for large models), solves it, and compares the results against Dynare's `.mat` output for:
 
 - **Steady state** — variable-by-variable comparison (typical tolerance: ``10^{-6}``)
 - **Impulse response functions** — horizon-by-horizon comparison (typical tolerance: ``10^{-4}``)

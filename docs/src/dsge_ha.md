@@ -77,7 +77,7 @@ report(ks_result)
 
 ## Individual Problem
 
-The full model is assembled into an [`HADSGESpec`](@ref) (built by [`load_ha_example`](@ref)), which bundles the discretized [`IncomeProcess`](@ref) and the household [`IndividualProblem`](@ref) — the utility, marginal utility, budget, and borrowing-constraint fields the EGM/VFI inner loops consume.
+The full model is assembled into a [`ModelSpec`](@ref) whose `agents` NamedTuple holds a [`HouseholdSystem`](@ref) (built by [`load_ha_example`](@ref) or `@dsge` with a `heterogeneous:` block). The household payload bundles the discretized [`IncomeProcess`](@ref) and the [`IndividualProblem`](@ref) — the utility, marginal utility, budget, and borrowing-constraint fields the EGM/VFI inner loops consume. The population name is free (`household`, `households`, …); `solve` requires exactly one `HouseholdSystem`.
 
 Households solve a consumption-savings problem with idiosyncratic income risk and a borrowing constraint:
 
@@ -187,8 +187,8 @@ and the new nodes sit at equal increments of ``\int M``. Both components integra
 ```@example dsge_ha
 spec_adapted = adapt_ha_grid(spec, ss)
 
-a_old = spec.grid.grids[1]
-a_new = spec_adapted.grid.grids[1]
+a_old = only(values(spec.agents)).grid.grids[1]
+a_new = only(values(spec_adapted.agents)).grid.grids[1]
 cutoff = a_old[findfirst(>=(0.99), cumsum(vec(sum(ss.distribution; dims=2))))]
 
 (mass_99_below = round(cutoff; digits=1),
@@ -483,7 +483,7 @@ The one-asset HANK steady state clears at a **higher** interest rate and a **low
 | Keyword | Type | Default | Description |
 |---------|------|---------|-------------|
 | `K_init` | `T` | `10.0` | Initial guess for aggregate capital |
-| `r_bounds` | `Tuple{T,T}` | `nothing` | Bisection bounds; defaults to `(-0.01, 0.04)`, or `(-0.05, 1/β - 1 - 10^{-4})` when `spec.model === :huggett` |
+| `r_bounds` | `Tuple{T,T}` | `nothing` | Bisection bounds; defaults to `(-0.01, 0.04)`, or `(-0.05, 1/β - 1 - 10^{-4})` when the household `model === :huggett` |
 | `max_iter` | `Int` | `200` | Maximum bisection iterations |
 | `tol` | `Real` | ``10^{-8}`` | Convergence tolerance on excess demand |
 | `grid_check` | `Symbol` | `:warn` | Grid-adequacy check: `:warn`, `:error`, or `:none` |
@@ -613,8 +613,8 @@ The PLM ``R^2`` near unity confirms that aggregate capital plus the aggregate sh
 | `max_outer` | `Int` | `20` | Maximum PLM iterations |
 | `rho_z` | `Real` | `0.95` | Aggregate shock persistence |
 | `sigma_z` | `Real` | `0.007` | Aggregate shock standard deviation |
-| `rho_e` | `Real` | `0.9` | Idiosyncratic persistence used in the simulation; falls back to `spec.het_params[:rho_e]` |
-| `sigma_e` | `Real` | `0.01` | Idiosyncratic innovation size; falls back to `spec.het_params[:sigma_e]` |
+| `rho_e` | `Real` | `0.9` | Idiosyncratic persistence used in the simulation; falls back to the household `het_params[:rho_e]` |
+| `sigma_e` | `Real` | `0.01` | Idiosyncratic innovation size; falls back to the household `het_params[:sigma_e]` |
 
 | Field | Type | Description |
 |-------|------|-------------|
@@ -623,7 +623,7 @@ The PLM ``R^2`` near unity confirms that aggregate capital plus the aggregate sh
 | `plm_coefficients` | `Dict{Symbol,Vector{T}}` | PLM regression coefficients per variable |
 | `r_squared` | `Dict{Symbol,T}` | ``R^2`` of PLM regression per variable |
 | `steady_state` | `HASteadyState{T}` | Underlying stationary equilibrium |
-| `spec` | `HADSGESpec{T}` | Model solved, carried for `den_haan_test` |
+| `spec` | `ModelSpec{T}` | Model solved, carried for `den_haan_test` |
 
 ---
 
@@ -713,7 +713,7 @@ The individual problem is solved via **nested EGM**: an outer loop over deposit 
 spec_2a = MacroEconometricModels._two_asset_hank_example(;
     n_liquid=8, n_illiquid=6, n_e=2, B_supply=1.0)
 ss_2a = compute_steady_state(spec_2a; max_iter=12, tol=5e-2, grid_check=:none)
-(n_dims = spec_2a.grid.n_dims,
+(n_dims = only(values(spec_2a.agents)).grid.n_dims,
  has_r_b = haskey(ss_2a.prices, :r_b),
  has_A = haskey(ss_2a.aggregates, :A),
  has_B = haskey(ss_2a.aggregates, :B))
@@ -739,7 +739,7 @@ where:
 - ``r`` is the per-period risk-free rate that clears the bond market in zero net supply
 - ``\underline{a}`` is the credit limit; the `:huggett` example defaults to ``\underline{a} = -2``
 
-The model is selected by `spec.model == :huggett`, which routes `compute_steady_state` to the zero-net-supply clearing rule (no firm FOC). Calibration follows Huggett (1993): CRRA utility (``\sigma = 1.5``), ``\beta = 0.99322``, and six model periods per year.
+The model is selected by the household `model == :huggett` field, which routes `compute_steady_state` to the zero-net-supply clearing rule (no firm FOC). Calibration follows Huggett (1993): CRRA utility (``\sigma = 1.5``), ``\beta = 0.99322``, and six model periods per year.
 
 ```@example dsge_ha
 hug = load_ha_example(:huggett)               # default credit limit ā = -2
@@ -923,7 +923,7 @@ ss_w = compute_steady_state(spec_w; K_init=10.0, r_bounds=(-0.02, 0.04),
 (K_histogram = round(ss_w.aggregates[:K], digits=4),
  K_parametric = round(ss_w.aggregates[:K_winberry], digits=4),
  distribution_states = length(ss_w.parametric.densities) * ss_w.parametric.n_moments,
- histogram_states = spec_w.grid.total_individual_states)
+ histogram_states = only(values(spec_w.agents)).grid.total_individual_states)
 ```
 
 Three moments per income state reproduce aggregate capital to about 1.8% while carrying 21 distribution states instead of 1400. Feeding that steady state to `solve(spec; method=:reiter)` builds the linearized system on the moment state, with the same general-equilibrium closure the histogram-based Reiter method uses:
@@ -960,8 +960,9 @@ Five canonical models are available via `load_ha_example`:
 
 ```@example dsge_ha
 [let s = load_ha_example(name)
-    (model = name, assets = s.grid.n_dims, beta = s.individual.beta,
-     grid = join(s.grid.n_points, "×"))
+    hh = only(values(s.agents))
+    (model = name, assets = hh.grid.n_dims, beta = hh.individual.beta,
+     grid = join(hh.grid.n_points, "×"))
  end for name in [:krusell_smith, :one_asset_hank, :two_asset_hank, :huggett,
                   :endogenous_labor]]
 ```

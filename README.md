@@ -216,7 +216,7 @@ Pkg.add("MacroEconometricModels")
 - **Constrained solvers** - Built-in projected Newton (box-constrained PF), Optim.jl Fminbox (box-constrained SS), NLopt.jl SLSQP (nonlinear inequalities), and JuMP+Ipopt (NLP); optional PATH (MCP) backend
 - **Perfect foresight** - Newton solver on stacked system with block-tridiagonal Jacobian; built-in box and nonlinear constraint support
 - **OccBin** - Occasionally binding constraints via piecewise-linear regime switching (Guerrieri & Iacoviello 2015)
-- **Pre-linearized models** - `model(linear)` support via `DSGESpec(... ; linear=true)` for Dynare-style pre-linearized models (e.g., Smets-Wouters 2007); automatic zero steady state, gensys constant handling in Kalman filter
+- **Pre-linearized models** - `model(linear)` support via `ModelSpec(... ; linear=true)` for Dynare-style pre-linearized models (e.g., Smets-Wouters 2007); automatic zero steady state, gensys constant handling in Kalman filter
 - **Simulation & IRF** - `simulate`, `irf`, `fevd` for linear, pruned higher-order, and projection solutions; `fevd(sol, H; unconditional=true)` for order≥2 asymptotic FEVD via Andreasen et al. (2018) augmented Lyapunov with per-shock variance decomposition; Bayesian posterior credible bands (dual 68%/90%) via `irf(::BayesianDSGE)`, `fevd(::BayesianDSGE)`, `simulate(::BayesianDSGE)`
 - **Historical decomposition** - `historical_decomposition(sol, data, observables)` for linear (Kalman/RTS smoother), nonlinear (FFBSi particle smoother + counterfactual), and Bayesian (posterior draws) DSGE models; standalone `dsge_smoother` and `dsge_particle_smoother`
 - **Analytical moments** - Order 1: Lyapunov equation for unconditional covariance; Order ≥2: Andreasen et al. (2018) augmented state-space Lyapunov for means, variances, and autocovariances; `analytical_moments` for both
@@ -243,7 +243,7 @@ Pkg.add("MacroEconometricModels")
   - Sequence-Space Jacobian (Auclert, Bardóczy, Rognlie & Straub 2021) with fake news algorithm and Ho-Kalman state-space reduction
   - Reiter (2009) linearization with observability-based SVD dimensionality reduction
   - Krusell-Smith (1998) bounded rationality via perceived law of motion simulation
-- **Bayesian estimation** - `estimate_dsge_bayes(spec::HADSGESpec, ...)` with adaptive RWMH; re-solves HA steady state + linearizes at each draw; Kalman filter on reduced system
+- **Bayesian estimation** - `estimate_dsge_bayes(spec::ModelSpec, ...)` with adaptive RWMH; re-solves HA steady state + linearizes at each draw; Kalman filter on reduced system
 - **Continuous-time methods** - Continuous-time Aiyagari solved by implicit upwind finite-difference HJB (`ct_hjb`) with a Kolmogorov-Forward stationary distribution (`ct_kfe`), steady state (`ct_steady_state`), and MIT-shock transition dynamics (`ct_mit_shock`); a two-asset HANK household block with convex deposit-adjustment costs (`ct_two_asset_solve`) (Achdou et al. 2022; Kaplan, Moll & Violante 2018)
 - **Overlapping generations** - Blanchard (1985) perpetual-youth OLG: steady state (`blanchard_steady_state`), full solution (`blanchard_solve`), and transition-path dynamics (`blanchard_transition`)
 - **Analysis** - `irf`, `fevd`, `simulate` dispatch via embedded `DSGESolution`; `distribution_irf` for wealth distribution dynamics; `inequality_irf` for Gini/percentile responses; `simulate_panel` for individual-level data

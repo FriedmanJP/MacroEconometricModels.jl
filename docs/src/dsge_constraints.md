@@ -153,7 +153,7 @@ Both routes return the identical path — `solve(spec; method=:perfect_foresight
 | `deviations` | `Matrix{T}` | ``T \times n`` deviations from steady state |
 | `converged` | `Bool` | Newton convergence flag |
 | `iterations` | `Int` | Newton iterations used |
-| `spec` | `DSGESpec{T}` | Back-reference to model specification |
+| `spec` | `ModelSpec{T}` | Back-reference to model specification |
 
 ---
 
@@ -339,7 +339,7 @@ occ_sol = occbin_solve(spec, zlb, borrow; shock_path=shocks)
 The `regime_history` matrix has two columns --- one per constraint --- recording which regimes are active in each period. An optional `curb_retrench=true` keyword limits constraint relaxation to one period per iteration, which helps prevent oscillation in difficult two-constraint problems.
 
 !!! note "Defining-equation assignment"
-    Each constrained variable's binding regime replaces its *defining equation*, picked heuristically as the equation whose Jacobian column is most sensitive to that variable. When the runner-up is within 90% of the winner the pick is not decisive and OccBin warns — as it does on the borrowing model above, where the savings rule and the budget constraint are equally sensitive to ``b``. To override the heuristic for a single constraint, build the binding-regime specification yourself and pass it positionally: `occbin_solve(spec, constraint, alt_spec; …)`. For two constraints that map to the same defining equation the solver cannot separate them and raises an `ArgumentError`; supply all three binding regimes through the `Dict` overload, keyed by regime tuple, `Dict((1,0) => alt1, (0,1) => alt2, (1,1) => alt12)`.
+    Each constrained variable's binding regime replaces the equation whose `defines` is that variable — unlabeled `i[t] = ...` or a named `taylor: i[t] = ...`. Declare the constraint on the spec with `constraint: i[t] >= 0` to attach a `:binding` regime at parse time. If no equation (or several) define the variable, write `constraint: taylor = i[t] >= 0` or pass an explicit alternative-regime `ModelSpec` positionally: `occbin_solve(spec, constraint, alt_spec; …)`. Two constraints that replace the same named equation raise an `ArgumentError`; supply all three binding regimes through the `Dict` overload, keyed by regime tuple, `Dict((1,0) => alt1, (0,1) => alt2, (1,1) => alt12)`. `occbin_solve` also accepts a comparison `Expr` such as `:(i[t] >= 0)`.
 
 ### OccBin IRFs
 
@@ -383,7 +383,7 @@ Both `occbin_irf` and this `irf` method accept `maxiter` (default `100`) to boun
 | `regime_history` | `Matrix{Int}` | ``T \times n_c`` regime indicators (0 = slack, 1 and above = binding) |
 | `converged` | `Bool` | Regime convergence flag |
 | `iterations` | `Int` | Regime iterations used |
-| `spec` | `DSGESpec{T}` | Back-reference to model specification |
+| `spec` | `ModelSpec{T}` | Back-reference to model specification |
 | `varnames` | `Vector{String}` | Variable display labels |
 | `constraints` | `Vector{OccBinConstraint{T}}` | The constraint(s) used in the solve |
 

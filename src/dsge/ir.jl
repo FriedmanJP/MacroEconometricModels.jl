@@ -7,8 +7,7 @@
 """
 Shared DSGE intermediate representation and `ModelSpec`.
 
-`DSGESpec` / `HADSGESpec` still exist during the v0.9.0 migration. New `@dsge`
-RA models and solvers move onto `ModelSpec{T,A}`. See issues #630 / #632.
+Unified `ModelSpec{T,A}` IR. See issues #630–#637.
 """
 
 # =============================================================================

@@ -251,7 +251,7 @@ A large J-statistic (low p-value) indicates model misspecification --- the model
 | `J_pvalue` | `T` | p-value of the J-test |
 | `solution` | Union type | Model solution at estimated parameters |
 | `converged` | `Bool` | Optimizer convergence flag |
-| `spec` | `DSGESpec{T}` | Back-reference to model specification |
+| `spec` | `ModelSpec{T}` | Back-reference to model specification |
 
 `J_stat` and `J_pvalue` are both `NaN` for IRF matching whenever the weighting is not efficient (`:diagonal`, `:cee`, `:identity`, or the identity fallback taken when no bootstrap draws are available); `J_pvalue` alone is `NaN` for the other methods under identity weighting.
 
@@ -673,7 +673,7 @@ The OLS slope recovers the drift, but `trending` is `false`: the HAC t-statistic
     With `transform=true` (the default for `method=:mh`), the random walk runs on ``y = T(\theta)`` — ``\log`` for positive supports, logit for bounded intervals, inferred from each prior's support — and the acceptance ratio uses ``\log p(\theta(y)|Y) + \log|J(y)|``, the correct pushforward density (Stan reference manual). A walk on a persistence near 1 or a shock standard deviation near 0 then never wastes proposals outside the support; draws are back-transformed to ``\theta`` before storage, so results are directly comparable to `transform=false`.
 
 !!! note "Pre-Linearized Models"
-    For `DSGESpec` with `linear=true` (e.g., Smets & Wouters 2007), `spec.steady_state` is all zeros, so the observation-equation offset is instead the effective steady state ``d = (I - G_1)^{-1} C_{\text{sol}}``, where ``C_{\text{sol}}`` carries the constant terms from the solver. This handles observation equations with trend growth, steady-state inflation, or other constant offsets absent from the zero steady state. The substitution fires whenever `spec.linear` is set and ``C_{\text{sol}}`` is non-zero, and the Kalman and particle-filter paths share it, so `estimate_dsge_bayes`, `posterior_mode`, and `identification_diagnostics` all see the same measurement equation. No user intervention is required.
+    For `ModelSpec` with `linear=true` (e.g., Smets & Wouters 2007), `spec.steady_state` is all zeros, so the observation-equation offset is instead the effective steady state ``d = (I - G_1)^{-1} C_{\text{sol}}``, where ``C_{\text{sol}}`` carries the constant terms from the solver. This handles observation equations with trend growth, steady-state inflation, or other constant offsets absent from the zero steady state. The substitution fires whenever `spec.linear` is set and ``C_{\text{sol}}`` is non-zero, and the Kalman and particle-filter paths share it, so `estimate_dsge_bayes`, `posterior_mode`, and `identification_diagnostics` all see the same measurement equation. No user intervention is required.
 
 ---
 
@@ -953,7 +953,7 @@ The result is a `BayesianDSGESimulation{T}` containing the pointwise median, qua
 | `acceptance_rate` | `T` | MH/CSMC acceptance rate |
 | `ess_history` | `Vector{T}` | ESS at each tempering stage (empty for RWMH) |
 | `phi_schedule` | `Vector{T}` | Tempering schedule ``\phi_0, \ldots, \phi_S`` (empty for RWMH) |
-| `spec` | `DSGESpec{T}` | Back-reference to model specification |
+| `spec` | `ModelSpec{T}` | Back-reference to model specification |
 | `solution` | Union type | Model solution at the point named by `solved_at` |
 | `state_space` | Union type | State-space representation at the same point |
 | `n_failed_draws` | `Int` | Likelihood evaluations that failed to solve |

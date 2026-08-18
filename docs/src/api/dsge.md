@@ -8,7 +8,10 @@ Specify, solve, simulate, and estimate Dynamic Stochastic General Equilibrium mo
 
 ```@docs
 AbstractDSGEModel
-DSGESpec
+ModelSpec
+NamedEquation
+NoAgents
+AbstractAgentSystem
 LinearDSGE
 DSGESolution
 nshocks(::DSGESolution)
@@ -191,7 +194,7 @@ nonlinear_constraint
 ## Heterogeneous-Agent DSGE
 
 ```@docs
-HADSGESpec
+HouseholdSystem
 HAGrid
 HAGrid()
 IncomeProcess

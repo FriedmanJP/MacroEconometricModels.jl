@@ -575,8 +575,8 @@ Heterogeneous-agent (Reiter/SSJ/Krusell-Smith), continuous-time (HJB/KFE), and O
 | Function | Description |
 |----------|-------------|
 | `load_ha_example(:krusell_smith)` | Built-in HA-DSGE model specs (see [Heterogeneous Agents](@ref dsge_ha)) |
-| `compute_steady_state(spec::HADSGESpec)` | HA stationary equilibrium (EGM + distribution + market clearing) |
-| `solve(spec::HADSGESpec; method=:ssj)` | HA-DSGE solution (SSJ/Reiter/Krusell-Smith) |
+| `compute_steady_state(spec::ModelSpec)` | HA stationary equilibrium (EGM + distribution + market clearing) |
+| `solve(spec::ModelSpec; method=:ssj)` | HA-DSGE solution (SSJ/Reiter/Krusell-Smith via `combine_blocks`) |
 | `rouwenhorst(ρ, σ, n)` / `tauchen(ρ, σ, n)` | Income process discretization (`σ` = **innovation** sd; pass `sigma_is=:unconditional` for sd(y)) |
 | `distribution_irf(sol, H)` / `inequality_irf(sol, H)` | Distribution dynamics / Gini response |
 | `simulate_panel(ss; N_agents, T_periods)` | Simulate individual-level panel from HA steady state |

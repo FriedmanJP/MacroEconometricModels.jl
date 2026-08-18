@@ -212,7 +212,7 @@ The third-order computation extends the second-order procedure with six addition
 | `control_indices` | `Vector{Int}` | Indices of control variables |
 | `eu` | `Vector{Int}` | Existence/uniqueness from first-order |
 | `method` | `Symbol` | Always `:perturbation` |
-| `spec` | `DSGESpec{T}` | Back-reference to specification |
+| `spec` | `ModelSpec{T}` | Back-reference to specification |
 | `linear` | `LinearDSGE{T}` | Linearized system |
 
 ---
@@ -621,7 +621,7 @@ PFI reaches the ``10^{-8}`` sup-norm target in 223 iterations here — roughly f
 | `quadrature` | `Symbol` | `:gauss_hermite` or `:monomial` |
 | `converged` | `Bool` | Newton convergence flag |
 | `iterations` | `Int` | Iterations until convergence |
-| `spec` | `DSGESpec{T}` | Back-reference to model specification |
+| `spec` | `ModelSpec{T}` | Back-reference to model specification |
 | `linear` | `LinearDSGE{T}` | Linearized system |
 | `impact` | `Matrix{T}` | Cached first-order shock-impact matrix used by `irf`/`simulate` |
 | `steady_state` | `Vector{T}` | Cached steady-state vector |
@@ -638,7 +638,7 @@ PFI reaches the ``10^{-8}`` sup-norm target in 223 iterations here — roughly f
 
 `vfi_solver` iterates the Bellman operator on a tensor state grid. At each node it maximizes ``u(c) + \beta E[V(x')]`` over a one-dimensional control box, then applies Howard (1960) policy evaluation: hold the policy fixed and iterate ``V = u + \beta P_\pi V``. Convergence is on ``\|V_{\text{new}} - V\|_\infty``. The exported policy is a Chebyshev fit of that grid policy, so `evaluate_policy`, `simulate`, and `irf` keep working.
 
-`DSGESpec` still exposes only Euler residuals. The reward can be declared on the spec (`utility: log(C)`, `beta: β`, `controls: C` in `@dsge`) and is then picked up automatically. `transition` and `control_bounds` remain required keywords. Calling `vfi_solver(spec)` with no Bellman data at all throws `ArgumentError` and points at [`pfi_solver`](@ref).
+`ModelSpec` still stores Euler residuals. The reward can be declared on the spec (`utility: log(C)`, `beta: β`, `controls: C` in `@dsge`) and is then picked up automatically. When `transition` is omitted, `vfi_solver` infers it from the linearized law of motion (`next_state=:linear`) or from the leftover residuals after dropping control equations (`next_state=:residual`). When `control_bounds` is omitted, it is inferred from `constraint:` / `variable_bound` or an SS collar. Calling `vfi_solver(spec)` with no `utility`/`beta` throws `ArgumentError` and points at [`pfi_solver`](@ref).
 
 ```math
 V(x) = \max_{a \in \mathcal{A}(x)} \Bigl\{ u(x, a) + \beta \sum_q w_q \, V\bigl(g(x, a, \varepsilon_q)\bigr) \Bigr\}
@@ -938,7 +938,7 @@ The second-order variance correction shifts the stochastic steady state of capit
 
 7. **Lyapunov equation instability**: `solve_lyapunov` throws an error if the first-order solution has eigenvalues on or outside the unit circle. Check determinacy with `is_determined(sol)` before computing moments.
 
-8. **Calling `vfi_solver` without a Bellman specification**: `vfi_solver` / `method=:vfi` require `utility`, `beta`, `transition`, and `control_bounds`. An Euler-only `DSGESpec` throws `ArgumentError` and names `pfi_solver`. Howard steps on VFI are policy evaluation of ``V``, not extra Euler Newton solves; Anderson acceleration remains a PFI keyword.
+8. **Calling `vfi_solver` without a Bellman specification**: `vfi_solver` / `method=:vfi` require `utility` and `beta` (from `@dsge` or keywords). `transition` and `control_bounds` are inferred when omitted. An Euler-only `ModelSpec` with no reward throws `ArgumentError` and names `pfi_solver`. Howard steps on VFI are policy evaluation of ``V``, not extra Euler Newton solves; Anderson acceleration remains a PFI keyword.
 
 9. **Unseeded Monte Carlo**: `max_euler_error`, `irf(...; irf_type=:girf)` and `simulate` all draw from the global RNG by default. Pass `rng=MersenneTwister(...)` or `shock_draws` whenever a reported number must be reproducible.
 

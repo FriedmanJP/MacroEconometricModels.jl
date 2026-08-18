@@ -354,7 +354,7 @@ All three linear solvers return a `DSGESolution{T}` with the following fields:
 | `eu` | `Vector{Int}` | ``[\text{existence}, \text{uniqueness}]``: 1 = yes, 0 = no. Sims (2002) rank conditions, not a root count |
 | `method` | `Symbol` | Solver used (`:gensys`, `:blanchard_kahn`, `:klein`) |
 | `eigenvalues` | `Vector{ComplexF64}` | Eigenvalues of ``G_1`` — the *solved* transition matrix, not the model pencil |
-| `spec` | `DSGESpec{T}` | Back-reference to model specification |
+| `spec` | `ModelSpec{T}` | Back-reference to model specification |
 | `linear` | `LinearDSGE{T}` | Linearized system (``\Gamma_0, \Gamma_1, C, \Psi, \Pi``) |
 
 Accessor functions:
@@ -371,7 +371,7 @@ Accessor functions:
 Some medium- and large-scale DSGE models (e.g., Smets & Wouters 2007) ship with **pre-linearized equations** where all variables represent log-deviations from a balanced growth path. The `linear` keyword skips the automatic linearization step and passes the equations directly to the solver:
 
 ```@example dsge_linear
-spec_lin = MacroEconometricModels.DSGESpec{Float64}(
+spec_lin = MacroEconometricModels.ModelSpec{Float64}(
     [:y, :r], [:eps],
     [:rho_p, :phi_p],
     Dict(:rho_p => 0.8, :phi_p => 1.5),
