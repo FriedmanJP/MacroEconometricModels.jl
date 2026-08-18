@@ -572,6 +572,7 @@ include("dsge/heterogeneous/dcegm.jl")
 include("dsge/heterogeneous/reiter.jl")
 include("dsge/heterogeneous/winberry.jl")
 include("dsge/heterogeneous/examples.jl")
+include("dsge/heterogeneous/firms.jl")
 include("dsge/heterogeneous/parser.jl")
 include("dsge/heterogeneous/display.jl")
 include("dsge/heterogeneous/analysis.jl")
@@ -751,8 +752,10 @@ export AbstractDSGEModel
 
 # Types
 export ModelSpec, NamedEquation, NoAgents, AbstractAgentSystem, ModelIR, HouseholdSystem
-export DCEGMSystem, LifeCycleSystem, ContinuousHouseholdSystem
+export DCEGMSystem, LifeCycleSystem, ContinuousHouseholdSystem, FirmSystem
 export to_spec
+export KhanThomasSteadyState, KhanThomasTransition
+export khan_thomas_example, khan_thomas_steady_state, khan_thomas_mit
 export LinearDSGE, DSGESolution, PerturbationSolution, ProjectionSolution, PerfectForesightPath, DSGEEstimation
 export DeterminacyMap, PrunedStateSpace
 
