@@ -125,3 +125,37 @@ end
     # With ζ₁ = 0 the IC binds: λ l ≈ V (scale-invariant GK nest).
     @test maximum(abs.(sys.lambda .* pe.l_policy .- pe.V)) < 1e-5
 end
+
+@testset "intermediary_steady_state no-sign-change is not converged (MSR-09)" begin
+    sys = _bb_sys()
+    ss = @test_logs (:warn, r"no sign change") match_mode=:any begin
+        intermediary_steady_state(sys; r_bounds=(5.0, 6.0), max_iter=4,
+                                  pe_max_iter=20, pe_tol=1e-3)
+    end
+    @test ss.converged == false
+    buf = IOBuffer()
+    report(buf, ss)
+    out = lowercase(String(take!(buf)))
+    @test occursin("no", out) || occursin("false", out)
+end
+
+@testset "intermediary default mass goes to entry (MSR-10)" begin
+    sys = IntermediarySystem(;
+        n_min=0.08, n_max=6.0, n_n=11, n_enter=1.0,
+        n_xi=3, rho_xi=0.1, sigma_xi=0.4,
+        kappa=1.0, beta=0.99, sigma=0.94, lambda=0.20,
+        zeta1=0.5, zeta2=3.0,
+        R=1.05, rk=0.02, Z=0.25, alpha=0.33)
+    n_grid = sys.grid.grids[1]
+    n_n = length(n_grid)
+    n_e = length(sys.xi.states)
+    # Large lending so n' is negative for a bad ξ'
+    l_pol = fill(8.0, n_n, n_e)
+    Λ = MacroEconometricModels._intermediary_transition(l_pol, sys, sys.R, sys.rk)
+    @test all(abs.(vec(sum(Λ; dims=1)) .- 1) .< 1e-12)
+    ke, _, _ = MacroEconometricModels._young_bracket(n_grid, sys.n_enter)
+    @test ke > 1
+    entry_mass = sum(Λ[ke, :]) + (ke < n_n ? sum(Λ[ke + 1, :]) : 0.0)
+    floor_mass = sum(Λ[1, :])
+    @test entry_mass > floor_mass
+end

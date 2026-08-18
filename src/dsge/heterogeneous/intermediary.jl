@@ -385,13 +385,21 @@ function intermediary_pe(sys::IntermediarySystem{T};
         max_diff = zero(T)
         @inbounds for j in 1:n_e, i in 1:n_n
             δ = abs(V_new[i, j] - V[i, j])
-            isfinite(δ) && δ > max_diff && (max_diff = δ)
+            if !isfinite(δ)
+                max_diff = T(Inf)
+                break
+            elseif δ > max_diff
+                max_diff = δ
+            end
         end
         copyto!(V, V_new)
-        if max_diff < T(tol)
+        if isfinite(max_diff) && max_diff < T(tol)
             converged = true
             break
         end
+    end
+    if !converged
+        @warn "intermediary VFI did not converge after $max_iter iterations (||ΔV||_∞ = $max_diff, tol = $tol)"
     end
 
     b_pol = l_pol .- n_grid
@@ -442,23 +450,28 @@ function _intermediary_transition(l_pol::AbstractMatrix{T},
         col = (j - 1) * n_n + i
         n = n_grid[i]
         l = l_pol[i, j]
+        default_mass = zero(T)
         for jp in 1:n_e
             p = Pi[j, jp]
             p < T(1e-20) && continue
             np = _bank_nprime(n, l, sys.xi.states[jp], kappa, rk, R, zeta1, zeta2)
+            if np <= zero(T)
+                default_mass += p
+                continue
+            end
             np = clamp(np, n_grid[1], n_grid[end])
             k, w_lo, w_hi = _young_bracket(n_grid, np)
             wσ = sigma * p
             _push!((jp - 1) * n_n + k, col, wσ * w_lo)
             _push!((jp - 1) * n_n + k + 1, col, wσ * w_hi)
         end
-        if sigma < one(T)
-            resid = one(T) - sigma
+        entry_w = (one(T) - sigma) + sigma * default_mass
+        if entry_w > T(1e-20)
             for jp in 1:n_e
                 ps = pi_stat[jp]
                 ps < T(1e-20) && continue
-                _push!((jp - 1) * n_n + ke, col, resid * ps * we_lo)
-                _push!((jp - 1) * n_n + ke + 1, col, resid * ps * we_hi)
+                _push!((jp - 1) * n_n + ke, col, entry_w * ps * we_lo)
+                _push!((jp - 1) * n_n + ke + 1, col, entry_w * ps * we_hi)
             end
         end
     end
@@ -602,12 +615,15 @@ function intermediary_steady_state(sys::IntermediarySystem{T};
         it = expand
         if abs(flo) < abs(fhi)
             rk = lo
-            excess = _eval(rk)
+            excess = flo
         else
             rk = hi
-            excess = _eval(rk)
+            excess = fhi
         end
-        ok = isfinite(L_last[])
+        ok = false
+        @warn "intermediary_steady_state: no sign change in the r^k bracket " *
+              "[$(lo), $(hi)]; credit market residual at returned point = $(excess). " *
+              "Widen r_bounds or check the calibration."
     end
 
     pe = pe_last[]
@@ -740,6 +756,16 @@ function Base.show(io::IO, ss::IntermediarySteadyState{T}) where {T}
           ", rᵏ = ", round(ss.prices[:rk]; digits=4),
           ", converged = ", ss.converged)
 end
+
+function report(io::IO, ss::IntermediarySteadyState{T}) where {T}
+    println(io, "IntermediarySteadyState{$T}")
+    println(io, "  Converged            ", ss.converged ? "Yes" : "No")
+    println(io, "  Iterations           ", ss.iterations)
+    println(io, "  r^k                  ", ss.prices[:rk])
+    println(io, "  L                    ", ss.aggregates[:L])
+    println(io, "  Excess demand        ", ss.excess_demand)
+end
+report(ss::IntermediarySteadyState) = report(stdout, ss)
 
 function Base.show(io::IO, tr::IntermediaryTransition{T}) where {T}
     print(io, "IntermediaryTransition{$T}: ", length(tr.Z), " periods, method=:",
