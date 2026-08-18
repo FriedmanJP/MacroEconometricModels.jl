@@ -665,6 +665,7 @@ include("plotting/svar_statid.jl")     # PLT-32 (#494): non-Gaussian/heteroskeda
 include("plotting/dsge_extra.jl")      # PLT-33 (#495): PF path / smoother / DSGE-GMM / Bayes sim
 include("plotting/ha_dynamics.jl")     # PLT-34 (#496): distribution/inequality IRF, KS PLM, Den Haan
 include("plotting/ct_olg.jl")          # PLT-35 (#497): CT Aiyagari / two-asset / Blanchard OLG
+include("plotting/dcegm.jl")           # G-22 (#656): DCEGMSolution policy / threshold
 include("plotting/micro_coef.jl")      # PLT-36 (#498): panel/LDV coef & marginal-effect plots
 include("plotting/gmm.jl")             # PLT-37 (#499): GMM/SMM moment fit + news-impact
 include("plotting/fceval.jl")          # PLT-38 (#500): forecast-eval + LP extras
