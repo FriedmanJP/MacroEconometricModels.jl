@@ -127,6 +127,10 @@ end
 | `exogenous:` | `shock1, shock2, ...` | Exogenous shock names |
 | `steady_state` | `= begin ... [y_ss] end` | Optional analytical steady-state function (must return vector) |
 | `varnames:` | `["Label 1", "Label 2", ...]` | Optional display labels for variables |
+| `constraint:` | `var[t] >= bound` | Occasionally binding regime on the defining equation |
+| `clock:` | `discrete` or `continuous` | Sets `spec.ir.clock`. Continuous-time households use `to_spec` on [`CTAiyagari`](@ref) |
+| `horizon:` | `infinite`, `finite`, `ages`, or `perpetual_youth` | Sets `spec.ir.horizon`. Extra `J=`, `retire=`, `survival=`, `earnings=` keys are stored; life-cycle models use `to_spec` on [`LifeCycleOLG`](@ref) |
+| `discrete:` / `absorbing:` | option names | Stored as IR declarations. Discrete-continuous choice uses [`dcegm_retirement_model`](@ref) |
 
 ### Time Subscripts
 

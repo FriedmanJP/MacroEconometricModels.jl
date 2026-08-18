@@ -51,6 +51,13 @@ Optional Bellman declarations for [`vfi_solver`](@ref):
 not imply them). `utility` / `beta` / `controls` are read from the spec when the
 corresponding keyword is omitted.
 
+`clock:` (`discrete` / `continuous`) and `horizon:` (`infinite` / `finite` /
+`ages` / `perpetual_youth`) set [`ModelIR`](@ref) flags. Extra keys on
+`horizon:` (`J=`, `retire=`, `survival=`, `earnings=`, …) and the
+`discrete:` / `absorbing:` option lists are stored as IR declarations; they
+do not compile [`ContinuousHouseholdSystem`](@ref), [`LifeCycleSystem`](@ref),
+or [`DCEGMSystem`](@ref). Use `to_spec` on the family constructor.
+
 Returns a `ModelSpec{Float64,NoAgents}` with callable residual functions
 `f(y_t, y_lag, y_lead, ε, θ) → scalar`.
 """
@@ -132,9 +139,11 @@ function _dsge_impl(block::Expr)
         elseif label === :varnames
             user_varnames = _extract_varnames(stmt)
         elseif label === :clock
-            clock_val = _extract_symbol_flag(stmt, :clock)
+            clock_val = _extract_clock_horizon_flag(stmt, :clock)
+            push!(extra_decls, IRDecl(:clock, nothing, stmt))
         elseif label === :horizon
-            horizon_val = _extract_symbol_flag(stmt, :horizon)
+            horizon_val = _extract_clock_horizon_flag(stmt, :horizon)
+            push!(extra_decls, IRDecl(:horizon, nothing, stmt))
         elseif label === :constraint
             append!(constraint_decls, _extract_constraint_decls(stmt))
             push!(extra_decls, IRDecl(:constraint, nothing, stmt))
@@ -386,6 +395,16 @@ function _detect_declaration(stmt)
            stmt.args[1].head == :call && length(stmt.args[1].args) >= 3 &&
            stmt.args[1].args[1] === :(:)
             return stmt.args[1].args[2]
+        end
+
+        # Case 1b: `horizon: ages, J = 60, retire = 45`
+        # Parsed as (= (tuple (call : horizon ages) J) ...)
+        if stmt.head == :(=) && stmt.args[1] isa Expr && stmt.args[1].head == :tuple
+            first = stmt.args[1].args[1]
+            if first isa Expr && first.head == :call && length(first.args) >= 3 &&
+               first.args[1] === :(:) && first.args[2] in (:clock, :horizon)
+                return first.args[2]
+            end
         end
 
         # Case 2: `label: name` (single, no value)
@@ -780,11 +799,38 @@ function _extract_varnames(stmt::Expr)
     return names
 end
 
-function _extract_symbol_flag(stmt::Expr, label::Symbol)
+const _VALID_CLOCK = (:discrete, :continuous)
+const _VALID_HORIZON = (:infinite, :finite, :ages, :perpetual_youth)
+
+function _validate_clock_horizon(label::Symbol, val::Symbol)
+    allowed = label === :clock ? _VALID_CLOCK : _VALID_HORIZON
+    val in allowed || error("@dsge: $label must be $(join(allowed, ", ")), got :$val")
+    return val
+end
+
+"""
+    _extract_clock_horizon_flag(stmt, label) → Symbol
+
+`clock: continuous` / `horizon: ages` set the [`ModelIR`](@ref) flag.
+Compound `horizon: ages, J = 60, retire = 45` (and `survival=` /
+`earnings=`) still returns only the flag; the raw statement is stored as
+an `IRDecl` for a later compile.
+"""
+function _extract_clock_horizon_flag(stmt::Expr, label::Symbol)
     if stmt.head == :call && length(stmt.args) >= 3 && stmt.args[1] === :(:)
         val = stmt.args[3]
         val isa Symbol || error("@dsge: $label declaration must be a symbol, got: $val")
-        return val
+        return _validate_clock_horizon(label, val)
+    end
+    # `horizon: ages, J = 60, retire = 45` → (= (tuple (call : horizon ages) J) ...)
+    if stmt.head == :(=) && stmt.args[1] isa Expr && stmt.args[1].head == :tuple
+        first = stmt.args[1].args[1]
+        if first isa Expr && first.head == :call && length(first.args) >= 3 &&
+           first.args[1] === :(:) && first.args[2] === label
+            val = first.args[3]
+            val isa Symbol || error("@dsge: $label declaration must be a symbol, got: $val")
+            return _validate_clock_horizon(label, val)
+        end
     end
     error("@dsge: cannot parse $label declaration: $stmt")
 end

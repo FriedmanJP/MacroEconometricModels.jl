@@ -79,6 +79,14 @@ report(ks_result)
 
 The full model is assembled into a [`ModelSpec`](@ref) whose `agents` NamedTuple holds a [`HouseholdSystem`](@ref) (built by [`load_ha_example`](@ref) or `@dsge` with a `heterogeneous:` block). The household payload bundles the discretized [`IncomeProcess`](@ref) and the [`IndividualProblem`](@ref) — the utility, marginal utility, budget, and borrowing-constraint fields the EGM/VFI inner loops consume. The population name is free (`household`, `households`, …); `solve` requires exactly one `HouseholdSystem`.
 
+`@dsge` `heterogeneous:` accepts `n_grid`, `utility` (`log`, `crra`, or `crra(σ)`), `discount`, `borrowing`, `budget`, `model` (`aiyagari` or `huggett`), and `crra`/`sigma_c`. `clock:` and `horizon:` set `ModelIR` flags; `discrete:` and `absorbing:` are stored as declarations. They do not compile [`ContinuousHouseholdSystem`](@ref), [`LifeCycleSystem`](@ref), or [`DCEGMSystem`](@ref) — use `to_spec` on the family constructor.
+
+| Key | Status | Use instead |
+|-----|--------|-------------|
+| `liquid=` / `illiquid=` | deferred | [`HAGrid`](@ref) or [`load_ha_example`](@ref)`(:two_asset_hank)` |
+| `labor = ghh` / `separable` | deferred | [`LaborSupply`](@ref) or [`load_ha_example`](@ref)`(:endogenous_labor)` |
+| option-specific ``u(c, d)`` | deferred | [`DCEGMProblem`](@ref) / [`dcegm_retirement_model`](@ref) |
+
 Households solve a consumption-savings problem with idiosyncratic income risk and a borrowing constraint:
 
 ```math

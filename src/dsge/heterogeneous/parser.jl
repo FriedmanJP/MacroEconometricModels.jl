@@ -8,8 +8,8 @@
 Parser extensions for heterogeneous agent DSGE models.
 
 Detects `heterogeneous:`, `idiosyncratic:`, and `aggregation:` declarations
-within a `@dsge begin...end` block and constructs an `HADSGESpec{Float64}`
-instead of a `DSGESpec{Float64}`.
+within a `@dsge begin...end` block and constructs a `ModelSpec` carrying a
+`HouseholdSystem` instead of a residual-only `ModelSpec{T,NoAgents}`.
 
 # Supported syntax
 
@@ -191,7 +191,11 @@ function _parse_heterogeneous!(stmt::Expr, het_info::Dict{Symbol,Any})
         elseif k === :budget
             het_info[:budget] = v isa Symbol ? v : Symbol(v)
         elseif k === :model
-            het_info[:model] = v isa Symbol ? v : Symbol(v)
+            m = v isa Symbol ? v : Symbol(v)
+            (m === :aiyagari || m === :huggett) ||
+                error("@dsge heterogeneous: unknown model '$m' " *
+                      "(use `aiyagari` or `huggett`)")
+            het_info[:model] = m
         else
             error("@dsge heterogeneous: unknown key '$k'")
         end
@@ -328,16 +332,18 @@ end
     _parse_ha_dsge(block) → Expr
 
 Parse a `@dsge begin...end` block containing heterogeneous agent declarations
-and return a quoted expression that constructs an `HADSGESpec{Float64}`.
+and return a quoted expression that constructs a `ModelSpec` with a
+`HouseholdSystem`.
 
 Separates the block into:
 1. Standard declarations (parameters, endogenous, exogenous) and equations
 2. HA-specific declarations (heterogeneous, idiosyncratic, aggregation)
+3. Leftover keys (`clock:`, `horizon:`, `discrete:`, `absorbing:`) stored on
+   [`ModelIR`](@ref) — they do not compile `DCEGMSystem` / `LifeCycleSystem` /
+   `ContinuousHouseholdSystem`
 
-Constructs the aggregate `DSGESpec` via `_minimal_agg_spec` (since the
-individual household problem is specified declaratively, not as full residual
-functions), then builds the `HADSGESpec` with the appropriate grid, income
-process, individual problem, and aggregation.
+Constructs the household payload from the HA declarations, then wraps it with
+the aggregate residual block via `_wrap_ha_spec`.
 """
 function _parse_ha_dsge(block::Expr)
     stmts = filter(a -> !(a isa LineNumberNode), block.args)
@@ -349,6 +355,9 @@ function _parse_ha_dsge(block::Expr)
     exog = Symbol[]
     raw_equations = Expr[]
     ss_body = nothing
+    clock_val = :discrete
+    horizon_val = :infinite
+    extra_decls = IRDecl[]
 
     # Collect HA declarations
     het_info = Dict{Symbol,Any}()
@@ -379,6 +388,14 @@ function _parse_ha_dsge(block::Expr)
             append!(exog, _extract_names(stmt))
         elseif label === :steady_state
             ss_body = stmt.args[3]
+        elseif label === :clock
+            clock_val = _extract_clock_horizon_flag(stmt, :clock)
+            push!(extra_decls, IRDecl(:clock, nothing, stmt))
+        elseif label === :horizon
+            horizon_val = _extract_clock_horizon_flag(stmt, :horizon)
+            push!(extra_decls, IRDecl(:horizon, nothing, stmt))
+        elseif label === :discrete || label === :absorbing
+            push!(extra_decls, IRDecl(label, nothing, stmt))
         elseif label === nothing
             if stmt isa Expr && stmt.head == :(=) && stmt.args[1] === :steady_state
                 ss_body = stmt.args[2]
@@ -505,17 +522,41 @@ function _parse_ha_dsge(block::Expr)
                                               _aggregation_, _het_params_;
                                               model=$(QuoteNode(model_choice)))
         local _pv_ = Dict{Symbol,Float64}($(param_pairs...))
-        $( _ha_model_spec_quote(endog, exog, params, raw_equations) )
+        $( _ha_model_spec_quote(endog, exog, params, raw_equations,
+                                _ha_build_ir(clock_val, horizon_val, extra_decls,
+                                             endog, exog, params, raw_equations)) )
     end
 
     return esc(result)
 end
 
+"""Build a [`ModelIR`](@ref) for an HA `@dsge` block (flags + stored leftovers)."""
+function _ha_build_ir(clock_val::Symbol, horizon_val::Symbol,
+                      extra_decls::Vector{IRDecl},
+                      endog, exog, params, raw_equations)
+    decls = IRDecl[
+        IRDecl(:parameters, nothing, copy(params)),
+        IRDecl(:endogenous, nothing, copy(endog)),
+        IRDecl(:exogenous, nothing, copy(exog)),
+    ]
+    append!(decls, extra_decls)
+    ir_eqs = IREquation[]
+    for stmt in raw_equations
+        lhs = stmt.args[1]
+        rhs = _unwrap_eq_rhs(stmt.args[2])
+        def = _lhs_defines(lhs, endog)
+        name = def === nothing ? :eq : def
+        push!(ir_eqs, IREquation(name, def, lhs, rhs))
+    end
+    return ModelIR(clock_val, horizon_val, decls, ir_eqs)
+end
+
 """Build the `ModelSpec` constructor quote for an HA `@dsge` block."""
-function _ha_model_spec_quote(endog, exog, params, raw_equations)
-    if isempty(raw_equations)
+function _ha_model_spec_quote(endog, exog, params, raw_equations,
+                              ir::ModelIR=ModelIR())
+    body = if isempty(raw_equations)
         if isempty(endog) && isempty(exog)
-            return quote
+            quote
                 MacroEconometricModels._wrap_ha_spec(_hh_;
                     endog=Symbol[],
                     exog=Symbol[],
@@ -524,60 +565,65 @@ function _ha_model_spec_quote(endog, exog, params, raw_equations)
                     equations=NamedEquation[],
                     residual_fns=Function[])
             end
+        else
+            quote
+                MacroEconometricModels._wrap_ha_spec(_hh_;
+                    endog=$(Expr(:vect, (QuoteNode(s) for s in (isempty(endog) ? [:Y, :K, :r, :w, :Z] : endog))...)),
+                    exog=$(Expr(:vect, (QuoteNode(s) for s in (isempty(exog) ? [:eps_Z] : exog))...)),
+                    params=$(Expr(:vect, (QuoteNode(s) for s in params)...)),
+                    param_values=_pv_)
+            end
         end
-        return quote
-            MacroEconometricModels._wrap_ha_spec(_hh_;
-                endog=$(Expr(:vect, (QuoteNode(s) for s in (isempty(endog) ? [:Y, :K, :r, :w, :Z] : endog))...)),
-                exog=$(Expr(:vect, (QuoteNode(s) for s in (isempty(exog) ? [:eps_Z] : exog))...)),
-                params=$(Expr(:vect, (QuoteNode(s) for s in params)...)),
-                param_values=_pv_)
+    else
+        eq_names = Symbol[]
+        eq_defines = Union{Nothing,Symbol}[]
+        used = Set{Symbol}()
+        anon = 0
+        eqs = Expr[]
+        for stmt in raw_equations
+            lhs = stmt.args[1]
+            def = _lhs_defines(lhs, endog)
+            name = def === nothing ? (anon += 1; Symbol("eq_", anon)) : def
+            if name in used
+                def = nothing
+                anon += 1
+                name = Symbol("eq_", anon)
+            end
+            push!(used, name)
+            push!(eq_names, name)
+            push!(eq_defines, def)
+            push!(eqs, stmt)
+        end
+        residual_exprs = Expr[]
+        fn_exprs = Expr[]
+        fwd = Int[]
+        for (i, eq) in enumerate(eqs)
+            resid = _equation_to_residual(eq)
+            subst = _substitute_vars(resid, endog, exog, params)
+            push!(residual_exprs, resid)
+            push!(fn_exprs, Expr(:->, Expr(:tuple, :_y_t_, :_y_lag_, :_y_lead_, :_ε_, :_θ_), subst))
+            _has_forward_looking(eq, endog, exog) && push!(fwd, i)
+        end
+        named = Expr(:vect, (:(NamedEquation($(QuoteNode(eq_names[i])),
+                                             $(eq_defines[i] === nothing ? :nothing : QuoteNode(eq_defines[i])),
+                                             $(QuoteNode(residual_exprs[i])),
+                                             $(fn_exprs[i]))) for i in eachindex(eqs))...)
+        quote
+            let _eqs = $named
+                MacroEconometricModels._wrap_ha_spec(_hh_;
+                    endog=$(Expr(:vect, (QuoteNode(s) for s in endog)...)),
+                    exog=$(Expr(:vect, (QuoteNode(s) for s in exog)...)),
+                    params=$(Expr(:vect, (QuoteNode(s) for s in params)...)),
+                    param_values=_pv_,
+                    equations=_eqs,
+                    residual_fns=Function[eq.residual for eq in _eqs],
+                    n_expect=$(length(fwd)),
+                    forward_indices=Int[$(fwd...)])
+            end
         end
     end
-    eq_names = Symbol[]
-    eq_defines = Union{Nothing,Symbol}[]
-    used = Set{Symbol}()
-    anon = 0
-    eqs = Expr[]
-    for stmt in raw_equations
-        lhs = stmt.args[1]
-        def = _lhs_defines(lhs, endog)
-        name = def === nothing ? (anon += 1; Symbol("eq_", anon)) : def
-        if name in used
-            def = nothing
-            anon += 1
-            name = Symbol("eq_", anon)
-        end
-        push!(used, name)
-        push!(eq_names, name)
-        push!(eq_defines, def)
-        push!(eqs, stmt)
-    end
-    residual_exprs = Expr[]
-    fn_exprs = Expr[]
-    fwd = Int[]
-    for (i, eq) in enumerate(eqs)
-        resid = _equation_to_residual(eq)
-        subst = _substitute_vars(resid, endog, exog, params)
-        push!(residual_exprs, resid)
-        push!(fn_exprs, Expr(:->, Expr(:tuple, :_y_t_, :_y_lag_, :_y_lead_, :_ε_, :_θ_), subst))
-        _has_forward_looking(eq, endog, exog) && push!(fwd, i)
-    end
-    named = Expr(:vect, (:(NamedEquation($(QuoteNode(eq_names[i])),
-                                         $(eq_defines[i] === nothing ? :nothing : QuoteNode(eq_defines[i])),
-                                         $(QuoteNode(residual_exprs[i])),
-                                         $(fn_exprs[i]))) for i in eachindex(eqs))...)
     return quote
-        let _eqs = $named
-            MacroEconometricModels._wrap_ha_spec(_hh_;
-                endog=$(Expr(:vect, (QuoteNode(s) for s in endog)...)),
-                exog=$(Expr(:vect, (QuoteNode(s) for s in exog)...)),
-                params=$(Expr(:vect, (QuoteNode(s) for s in params)...)),
-                param_values=_pv_,
-                equations=_eqs,
-                residual_fns=Function[eq.residual for eq in _eqs],
-                n_expect=$(length(fwd)),
-                forward_indices=Int[$(fwd...)])
-        end
+        MacroEconometricModels._copy_model_spec($body; ir=$(ir))
     end
 end
 

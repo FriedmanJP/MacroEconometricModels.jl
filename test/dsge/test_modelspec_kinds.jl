@@ -155,3 +155,121 @@ end
     pe = dcegm_solve(dcegm_retirement_model(; n_a=20, n_periods=4))
     @test_throws ArgumentError irf(pe, 8)
 end
+
+@testset "G-23 leftover @dsge keys (#657)" begin
+    @testset "clock:/horizon: set ModelIR flags only" begin
+        spec = @dsge begin
+            clock: continuous
+            horizon: ages
+            parameters: ρ = 0.9, σ = 0.01
+            endogenous: y, a
+            exogenous: ε
+            y[t] = a[t]
+            a[t] = ρ * a[t-1] + σ * ε[t]
+        end
+        @test spec isa ModelSpec{Float64,NoAgents}
+        @test spec.ir.clock === :continuous
+        @test spec.ir.horizon === :ages
+        @test !MacroEconometricModels.has_kind(spec, ContinuousHouseholdSystem)
+        @test !MacroEconometricModels.has_kind(spec, LifeCycleSystem)
+        kinds = [d.kind for d in spec.ir.declarations]
+        @test :clock in kinds
+        @test :horizon in kinds
+    end
+
+    @testset "horizon: compound keys stored, not compiled" begin
+        spec = @dsge begin
+            horizon: ages, J = 60, retire = 45, survival = 0.995
+            parameters: ρ = 0.9, σ = 0.01
+            endogenous: y, a
+            exogenous: ε
+            y[t] = a[t]
+            a[t] = ρ * a[t-1] + σ * ε[t]
+        end
+        @test spec.ir.horizon === :ages
+        @test spec isa ModelSpec{Float64,NoAgents}
+        @test !MacroEconometricModels.has_kind(spec, LifeCycleSystem)
+        hor = only(d for d in spec.ir.declarations if d.kind === :horizon)
+        @test hor.payload isa Expr
+    end
+
+    @testset "discrete:/absorbing: extra_decls only" begin
+        spec = @dsge begin
+            parameters: ρ = 0.9, σ = 0.01
+            endogenous: y, a
+            exogenous: ε
+            discrete: work, retire
+            absorbing: retire
+            y[t] = a[t]
+            a[t] = ρ * a[t-1] + σ * ε[t]
+        end
+        @test spec isa ModelSpec{Float64,NoAgents}
+        @test !MacroEconometricModels.has_kind(spec, DCEGMSystem)
+        kinds = [d.kind for d in spec.ir.declarations]
+        @test :discrete in kinds
+        @test :absorbing in kinds
+    end
+
+    @testset "invalid clock/horizon rejected" begin
+        @test_throws LoadError eval(:(@dsge begin
+            clock: monthly
+            parameters: ρ = 0.9
+            endogenous: y
+            exogenous: ε
+            y[t] = ρ * y[t-1] + ε[t]
+        end))
+        @test_throws LoadError eval(:(@dsge begin
+            horizon: overlapping
+            parameters: ρ = 0.9
+            endogenous: y
+            exogenous: ε
+            y[t] = ρ * y[t-1] + ε[t]
+        end))
+    end
+
+    @testset "HA leftover keys stored; still HouseholdSystem" begin
+        spec = @dsge begin
+            parameters: beta_hh = 0.99
+            clock: continuous
+            horizon: ages, J = 40, survival = 0.995
+            heterogeneous: a in [0.0, 10.0], n_grid = 20, utility = log, discount = beta_hh, borrowing = 0.0
+            idiosyncratic: e ~ Rouwenhorst(0.9, 0.1, 3)
+            aggregation: K = sum(a)
+            discrete: work, retire
+            absorbing: retire
+        end
+        @test spec isa ModelSpec
+        @test MacroEconometricModels.has_kind(spec, HouseholdSystem)
+        @test !MacroEconometricModels.has_kind(spec, DCEGMSystem)
+        @test !MacroEconometricModels.has_kind(spec, LifeCycleSystem)
+        @test !MacroEconometricModels.has_kind(spec, ContinuousHouseholdSystem)
+        @test spec.ir.clock === :continuous
+        @test spec.ir.horizon === :ages
+        kinds = [d.kind for d in spec.ir.declarations]
+        @test :discrete in kinds
+        @test :absorbing in kinds
+        @test :horizon in kinds
+        @test :clock in kinds
+    end
+
+    @testset "HA heterogeneous whitelist" begin
+        @test_throws LoadError eval(:(@dsge begin
+            parameters: beta_hh = 0.99
+            heterogeneous: a in [0.0, 10.0], n_grid = 20, utility = log, discount = beta_hh, liquid = 5.0
+            idiosyncratic: e ~ Rouwenhorst(0.9, 0.1, 3)
+            aggregation: K = sum(a)
+        end))
+        @test_throws LoadError eval(:(@dsge begin
+            parameters: beta_hh = 0.99
+            heterogeneous: a in [0.0, 10.0], n_grid = 20, utility = log, discount = beta_hh, labor = ghh
+            idiosyncratic: e ~ Rouwenhorst(0.9, 0.1, 3)
+            aggregation: K = sum(a)
+        end))
+        @test_throws LoadError eval(:(@dsge begin
+            parameters: beta_hh = 0.99
+            heterogeneous: a in [0.0, 10.0], n_grid = 20, utility = log, discount = beta_hh, model = khan_thomas
+            idiosyncratic: e ~ Rouwenhorst(0.9, 0.1, 3)
+            aggregation: K = sum(a)
+        end))
+    end
+end
