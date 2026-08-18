@@ -73,6 +73,10 @@ jobs:
           # Windows depot artifacts are ~1.5 GB (3× Linux) and dominate the
           # 4-minute cache upload. compiled/ is what Pkg.test reuse needs.
           cache-artifacts: ${{ matrix.os != 'windows-latest' }}
+          # include-matrix (default true) puts matrix.suite in the key, so the
+          # dsge and empirical jobs do not restore/save one shared compiled/.
+          # Intra-job pidfile races are handled by _warm_compile_cache in
+          # test/runtests.jl, not by splitting this cache further.
 
       # Optim v1 dual-major compat cell (T153/#252): pin Optim to the v1 major before
       # instantiate/precompile so the suite runs against Optim v1 (default cells resolve v2).

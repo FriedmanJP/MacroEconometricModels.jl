@@ -310,6 +310,31 @@ const TEST_GROUPS = [
     ]),
 ]
 
+# Flags every multiprocess child must share so they reuse one compile cache.
+# Coverage follows the parent (Pkg.test / julia-runtest). check-bounds is
+# restored only on the Ubuntu LTS cell (MACRO_CHECK_BOUNDS=1); macOS/Windows
+# keep the faster default (~10-20%, #127 P1.4).
+function _child_julia_cmd(code::String; group_name::String="_warmup")
+    test_dir = replace(string(@__DIR__), '\\' => '/')
+    cov_flag = Base.JLOptions().code_coverage != 0 ? `--code-coverage=user` : ``
+    checkbounds_flag = get(ENV, "MACRO_CHECK_BOUNDS", "") == "1" ? `--check-bounds=yes` : ``
+    julia_exe = joinpath(Sys.BINDIR, Base.julia_exename())
+    addenv(`$julia_exe $cov_flag $checkbounds_flag --startup-file=no --project=$(dirname(test_dir)) -e $code`,
+           "JULIA_NUM_THREADS" => "1",
+           "OPENBLAS_NUM_THREADS" => string(_blas_threads_for_group(group_name)))
+end
+
+# Write compiled/*.ji once before the parallel children start. Four children
+# `using MacroEconometricModels` at once race on LinearSolve/PureKLU pidfiles
+# (macOS empirical: invalid checksum, LinearSolveForwardDiffExt
+# `__precompile__(false)`). The dsge/empirical matrix already has distinct
+# julia-actions/cache keys (`include-matrix`); this is the intra-job race.
+function _warm_compile_cache()
+    t = @elapsed run(pipeline(_child_julia_cmd("using MacroEconometricModels");
+                              stdout=stdout, stderr=stderr))
+    println("FILETIME\t__runner__\tusing MacroEconometricModels\t", round(t; digits=1))
+end
+
 # Multi-process runner (fallback when threads unavailable)
 function run_test_group(group_name::String, files::Vector{String})
     test_dir = replace(string(@__DIR__), '\\' => '/')  # forward slashes for Windows compat
@@ -329,22 +354,8 @@ function run_test_group(group_name::String, files::Vector{String})
         $includes
     end
     """
-    # Propagate --code-coverage flag to child processes (needed for CI coverage)
-    # Values: 0=none, 1=user, 2=all, 3=tracefile (Julia 1.12+)
-    cov_opt = Base.JLOptions().code_coverage
-    cov_flag = cov_opt != 0 ? `--code-coverage=user` : ``
-    # Child-process hygiene (#127): spawn via the current interpreter (not PATH `julia`),
-    # skip startup.jl, and — decision P1.4 — restore standard Pkg.test check-bounds semantics
-    # on the full-fidelity Ubuntu job only (MACRO_CHECK_BOUNDS=1 there; ~10-20% slower but net
-    # time still falls due to the other savings; off on windows/macOS).
-    julia_exe = joinpath(Sys.BINDIR, Base.julia_exename())
-    checkbounds_flag = get(ENV, "MACRO_CHECK_BOUNDS", "") == "1" ? `--check-bounds=yes` : ``
-    # Single Julia thread per child. OpenBLAS stays at 1 except HA-DSGE, which is
-    # the suite ceiling and gets 2 BLAS threads (see _blas_threads_for_group).
-    cmd = addenv(`$julia_exe $cov_flag $checkbounds_flag --startup-file=no --project=$(dirname(test_dir)) -e $code`,
-                 "JULIA_NUM_THREADS" => "1",
-                 "OPENBLAS_NUM_THREADS" => string(_blas_threads_for_group(group_name)))
-    proc = run(pipeline(cmd; stdout=stdout, stderr=stderr); wait=false)
+    proc = run(pipeline(_child_julia_cmd(code; group_name=group_name);
+                        stdout=stdout, stderr=stderr); wait=false)
     return proc
 end
 
@@ -374,6 +385,8 @@ if !serial && (multiprocess || (!serial && Threads.nthreads() == 1 && Sys.CPU_TH
     NUMERICAL && println("NUMERICAL CI profile (important numerical tests only)")
     !isempty(SUITE) && println("CI suite part: $SUITE")
     println("Set MACRO_SERIAL_TESTS=1 to run sequentially\n")
+
+    _warm_compile_cache()
 
     # Concurrency-capped, longest-first work queue (#124): order groups heaviest-first and
     # launch at most min(CPU_THREADS, 4) at a time, starting the next as each finishes. This
