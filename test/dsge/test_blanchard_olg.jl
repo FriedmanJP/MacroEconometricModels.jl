@@ -172,6 +172,63 @@ using LinearAlgebra
             @test all(isfinite, resp.values)
             @test maximum(abs, resp.values) > 0
         end
+
+        @testset "NK Phillips-Taylor-Fisher block (#647 G-13b)" begin
+            m = BlanchardOLG(; gamma=0.98, beta=0.96)
+            real_spec = to_spec(m; rho_z=0.9, sigma_z=0.01)
+            spec = blanchard_nk_spec(real_spec; kappa=0.1, phi_pi=1.5, phi_y=0.125)
+            @test spec isa ModelSpec{Float64,NoAgents}
+            @test typeof(spec.agents) === typeof(NamedTuple())
+            @test spec.endog == [:k, :C, :r, :w, :Z, :pi, :i, :rr]
+            @test spec.exog == [:eps_Z, :eps_i]
+            @test Set(eq.name for eq in spec.equations) ==
+                Set([:euler, :budget, :mpk, :mpw, :z_proc, :phillips, :taylor, :fisher])
+            # Real Blanchard residuals stay first; NK block is appended.
+            @test [eq.name for eq in spec.equations[1:5]] ==
+                [:euler, :budget, :mpk, :mpw, :z_proc]
+            @test spec.equations[1].defines === :C
+            @test spec.equations[2].defines === :k
+            @test spec.equations[5].defines === :Z
+
+            y = compute_steady_state(spec).steady_state
+            ss_ref = blanchard_steady_state(m)
+            @test isapprox(y[1], ss_ref.k; atol=1e-8)
+            @test isapprox(y[2], ss_ref.C; atol=1e-8)
+            @test isapprox(y[3], ss_ref.r; atol=1e-8)
+            @test isapprox(y[4], ss_ref.w; atol=1e-8)
+            @test isapprox(y[6], 0.0; atol=1e-12)          # π* = 0
+            @test isapprox(y[7], ss_ref.r; atol=1e-8)       # i* = r*
+            @test isapprox(y[8], ss_ref.r; atol=1e-8)       # rr* = r*
+            shock0 = zeros(eltype(y), spec.n_exog)
+            for f in spec.residual_fns
+                @test abs(f(y, y, y, shock0, spec.param_values)) < 1e-8
+            end
+
+            sol = solve(spec)
+            @test sol isa DSGESolution
+            @test sol.eu == [1, 1]
+            @test is_determined(sol)
+
+            resp = irf(sol, 12)
+            @test all(isfinite, resp.values)
+            @test resp.variables == ["k", "C", "r", "w", "Z", "pi", "i", "rr"]
+            @test resp.shocks == ["eps_Z", "eps_i"]
+            i_C = findfirst(==("C"), resp.variables)
+            i_pi = findfirst(==("pi"), resp.variables)
+            @test all(isfinite, resp.values[:, i_C, 1])
+            @test all(isfinite, resp.values[:, i_pi, 1])
+            @test maximum(abs, resp.values[:, i_C, 1]) > 0
+            @test maximum(abs, resp.values[:, i_pi, 1]) > 0
+
+            # Convenience ctor from BlanchardOLG; monetary shock IRF is finite.
+            spec_m = blanchard_nk_spec(m; rho_z=0.9, sigma_z=0.0,
+                                       sigma_i=0.01, phi_pi=1.5)
+            sol_m = solve(spec_m)
+            @test sol_m.eu == [1, 1]
+            resp_m = irf(sol_m, 12)
+            @test all(isfinite, resp_m.values)
+            @test maximum(abs, resp_m.values[:, :, 2]) > 0   # eps_i moves i (and rr)
+        end
     end
 
 end

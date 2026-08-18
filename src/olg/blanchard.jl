@@ -291,7 +291,8 @@ end
 Wrap a [`BlanchardOLG`](@ref) as a residual-only [`ModelSpec`](@ref) with
 endogenous `(k, C, r, w, Z)` and shock `eps_Z`. `ss_fn` delegates to
 [`blanchard_steady_state`](@ref) so `compute_steady_state` matches the family
-solver. `λ = (1 − βγ)(1 − γ)/γ` (zero when `γ = 1`).
+solver. `λ = (1 − βγ)(1 − γ)/γ` (zero when `γ = 1`). Optional NK residuals
+(Phillips, Taylor, Fisher) are added by [`blanchard_nk_spec`](@ref).
 """
 function to_spec(m::BlanchardOLG{T}; rho_z=T(0), sigma_z=T(0)) where {T}
     ρz = T(rho_z)
@@ -379,6 +380,149 @@ function to_spec(m::BlanchardOLG{T}; rho_z=T(0), sigma_z=T(0)) where {T}
     return ModelSpec{T}(
         endog, exog, params, param_values, equations, residual_fns,
         1, [1], T[], ss_fn;
+        max_lag=1, max_lead=1,
+        agents=NamedTuple(),
+        ir=ir,
+    )
+end
+
+# =============================================================================
+# Optional NK block (G-13b / #647)
+# =============================================================================
+
+export blanchard_nk_spec
+
+"""
+    blanchard_nk_spec(m::BlanchardOLG; rho_z=0, sigma_z=0, kappa=0.1, phi_pi=1.5,
+                      phi_y=0.125, rho_i=0, sigma_i=0, omega=0) → ModelSpec{T,NoAgents}
+    blanchard_nk_spec(spec::ModelSpec; ...) → ModelSpec{T,NoAgents}
+
+Append a New Keynesian block — Phillips, Taylor, Fisher — as named residuals
+on the same residual-only [`ModelSpec`](@ref) produced by
+[`to_spec`](@ref)`(::BlanchardOLG)`. Not the Fujiwara–Teranishi (2008)
+worker/retiree DNK.
+
+The real Blanchard residuals (Euler with `λ = (1−βγ)(1−γ)/γ`, budget, MPK,
+MPW, `Z` process) are unchanged, and `k` / `Z` stay predetermined. New
+endogenous variables are `(π, i, rr)`:
+
+- Phillips (pure-forward when `omega=0`, hybrid otherwise):
+  `π[t] = ω π[t-1] + (1−ω) β π[t+1] + κ (C[t]/C̄ − 1)`
+- Taylor: `i[t] = ρᵢ i[t-1] + (1−ρᵢ)(r̄ + φπ π[t] + φy (C[t]/C̄ − 1)) + σᵢ εᵢ[t]`
+- Fisher: `(1 + rr[t]) (1 + π[t+1]) = 1 + i[t]`
+  (`rr` is the ex-ante real rate `i − Eπ`; the Blanchard MPK `r` is untouched)
+"""
+function blanchard_nk_spec(m::BlanchardOLG{T}; rho_z=T(0), sigma_z=T(0),
+                            kappa=T(0.1), phi_pi=T(1.5), phi_y=T(0.125),
+                            rho_i=T(0), sigma_i=T(0),
+                            omega=T(0)) where {T}
+    return blanchard_nk_spec(to_spec(m; rho_z=rho_z, sigma_z=sigma_z);
+                             kappa=kappa, phi_pi=phi_pi, phi_y=phi_y,
+                             rho_i=rho_i, sigma_i=sigma_i, omega=omega)
+end
+
+function blanchard_nk_spec(spec::ModelSpec{T};
+                            kappa=T(0.1), phi_pi=T(1.5), phi_y=T(0.125),
+                            rho_i=T(0), sigma_i=T(0),
+                            omega=T(0)) where {T}
+    spec.endog == [:k, :C, :r, :w, :Z] || throw(ArgumentError(
+        "blanchard_nk_spec: expected to_spec(::BlanchardOLG) endog " *
+        "[:k, :C, :r, :w, :Z], got $(spec.endog)"))
+    :pi in spec.endog && throw(ArgumentError(
+        "blanchard_nk_spec: spec already has an NK block"))
+    spec.ss_fn === nothing && throw(ArgumentError(
+        "blanchard_nk_spec: spec must carry ss_fn from to_spec(::BlanchardOLG)"))
+
+    κ = T(kappa); φπ = T(phi_pi); φy = T(phi_y)
+    ρi = T(rho_i); σi = T(sigma_i); ω = T(omega)
+    (0 <= ω <= 1) || throw(ArgumentError("omega must be in [0, 1], got $ω"))
+    (0 <= ρi < 1) || throw(ArgumentError("rho_i must be in [0, 1), got $ρi"))
+
+    y0 = spec.ss_fn(spec.param_values)
+    C̄ = y0[2]
+    r̄ = y0[3]
+
+    endog = Symbol[:k, :C, :r, :w, :Z, :pi, :i, :rr]
+    exog = Symbol[spec.exog; :eps_i]
+    nk_params = [:kappa, :phi_pi, :phi_y, :rho_i, :sigma_i, :omega, :C_bar, :r_bar]
+    params = Symbol[spec.params; nk_params]
+    param_values = copy(spec.param_values)
+    param_values[:kappa] = κ
+    param_values[:phi_pi] = φπ
+    param_values[:phi_y] = φy
+    param_values[:rho_i] = ρi
+    param_values[:sigma_i] = σi
+    param_values[:omega] = ω
+    param_values[:C_bar] = C̄
+    param_values[:r_bar] = r̄
+
+    # Existing residuals close over indices 1:5; appending (π, i, rr) leaves
+    # those indices valid. Do not put k or Z on a lead (G-13a timing).
+    i_C, i_pi, i_i, i_rr = 2, 6, 7, 8
+    i_eps_i = length(spec.exog) + 1
+
+    f_phillips = function (y_t, y_lag, y_lead, shock, θ)
+        ygap = y_t[i_C] / θ[:C_bar] - one(T)
+        return y_t[i_pi] - (θ[:omega] * y_lag[i_pi] +
+            (one(T) - θ[:omega]) * θ[:beta] * y_lead[i_pi] +
+            θ[:kappa] * ygap)
+    end
+    f_taylor = function (y_t, y_lag, y_lead, shock, θ)
+        ygap = y_t[i_C] / θ[:C_bar] - one(T)
+        i_tgt = θ[:r_bar] + θ[:phi_pi] * y_t[i_pi] + θ[:phi_y] * ygap
+        return y_t[i_i] - (θ[:rho_i] * y_lag[i_i] +
+            (one(T) - θ[:rho_i]) * i_tgt +
+            θ[:sigma_i] * shock[i_eps_i])
+    end
+    f_fisher = function (y_t, y_lag, y_lead, shock, θ)
+        return (one(T) + y_t[i_rr]) * (one(T) + y_lead[i_pi]) - (one(T) + y_t[i_i])
+    end
+
+    residual_fns = Function[spec.residual_fns; f_phillips; f_taylor; f_fisher]
+    equations = NamedEquation[
+        spec.equations;
+        NamedEquation(:phillips, :pi,
+            :(pi[t] - (omega * pi[t-1] + (1 - omega) * β * pi[t+1] +
+                κ * (C[t] / C_bar - 1))),
+            f_phillips; timing=TimingInfo(1, 1, true));
+        NamedEquation(:taylor, :i,
+            :(i[t] - (rho_i * i[t-1] + (1 - rho_i) *
+                (r_bar + φ_π * pi[t] + φ_y * (C[t] / C_bar - 1)) +
+                sigma_i * eps_i[t])),
+            f_taylor; timing=TimingInfo(1, 0, false));
+        NamedEquation(:fisher, :rr,
+            :((1 + rr[t]) * (1 + pi[t+1]) - (1 + i[t])),
+            f_fisher; timing=TimingInfo(0, 1, true));
+    ]
+
+    old_ss = spec.ss_fn
+    ss_fn = function (θ)
+        y = old_ss(θ)
+        r = y[3]
+        return T[y[1], y[2], y[3], y[4], y[5], zero(T), r, r]
+    end
+
+    decls = IRDecl[
+        IRDecl(:parameters, nothing, copy(params)),
+        IRDecl(:endogenous, nothing, copy(endog)),
+        IRDecl(:exogenous, nothing, copy(exog)),
+    ]
+    ir_eqs = IREquation[
+        spec.ir.equations;
+        IREquation(:phillips, :pi, :(pi[t]),
+            :(omega * pi[t-1] + (1 - omega) * β * pi[t+1] + κ * (C[t] / C_bar - 1)));
+        IREquation(:taylor, :i, :(i[t]),
+            :(rho_i * i[t-1] + (1 - rho_i) *
+                (r_bar + φ_π * pi[t] + φ_y * (C[t] / C_bar - 1)) +
+                sigma_i * eps_i[t]));
+        IREquation(:fisher, :rr, :((1 + rr[t]) * (1 + pi[t+1])), :(1 + i[t]));
+    ]
+    ir = ModelIR(:discrete, :perpetual_youth, decls, ir_eqs)
+
+    # C and π appear as leads (Euler, Phillips, Fisher). k and Z do not.
+    return ModelSpec{T}(
+        endog, exog, params, param_values, equations, residual_fns,
+        2, [2, 6], T[], ss_fn;
         max_lag=1, max_lead=1,
         agents=NamedTuple(),
         ir=ir,
