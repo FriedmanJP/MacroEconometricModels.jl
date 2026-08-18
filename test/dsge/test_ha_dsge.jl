@@ -538,7 +538,7 @@ end
           max(egm[:consumption][ib, ia, je], 1e-8) < 0.35
 end
 
-@testset "Two-asset compute_steady_state closes both markets" begin
+@testset "Two-asset compute_steady_state smoke (coarse, may not clear)" begin
     spec = MacroEconometricModels._two_asset_hank_example(;
         n_liquid=8, n_illiquid=6, n_e=2, B_supply=2.0)
     ss = compute_steady_state(spec; max_iter=15, tol=5e-2,
@@ -564,9 +564,15 @@ end
         n_liquid=6, n_illiquid=5, n_e=2, B_supply=1.0)
     ss = compute_steady_state(spec; max_iter=8, tol=5e-2,
                               grid_check=:none)
-    sol_s = solve(spec; method=:ssj, ss=ss, T_horizon=8, n_reduced=3)
-    @test sol_s.method === :ssj
-    @test isfinite(sol_s.explained_variance)
+    err_s = try
+        solve(spec; method=:ssj, ss=ss, T_horizon=8, n_reduced=3)
+        nothing
+    catch e
+        e
+    end
+    # Coarse SS often has a zero J_r_A column; refuse fabricated dynamics (MSR-05).
+    @test err_s isa ArgumentError
+    @test occursin("J_r_A", sprint(showerror, err_s))
     J = MacroEconometricModels._ssj_jacobian(ss, _hh(spec).individual, _hh(spec).grid,
                                              _hh(spec).income, :r_b, :B; T_horizon=6)
     @test size(J) == (6, 6)
@@ -579,6 +585,28 @@ end
     @test sol_k isa KrusellSmithSolution
     @test haskey(sol_k.plm_coefficients, :K)
     @test isfinite(sol_k.r_squared[:K])
+    @test 0 <= sol_r.explained_variance <= 1
+end
+
+@testset "two-asset KS PLM is live (MSR-03)" begin
+    spec = MacroEconometricModels._two_asset_hank_example(;
+        n_liquid=6, n_illiquid=5, n_e=2, B_supply=1.0)
+    ss = compute_steady_state(spec; max_iter=8, tol=5e-2, grid_check=:none)
+    sol1 = solve(spec; method=:krusell_smith, ss=ss, T_sim=20, T_burn=4, max_outer=1)
+    sol2 = solve(spec; method=:krusell_smith, ss=ss, T_sim=20, T_burn=4, max_outer=2)
+    @test sol2.plm_coefficients[:K] != sol1.plm_coefficients[:K]
+end
+
+@testset "two-asset SSJ refuses a zero Jacobian (MSR-05)" begin
+    J = zeros(8, 8)
+    err = try
+        MacroEconometricModels._ssj_require_jrA_column(J)
+        error("no throw")
+    catch e
+        e
+    end
+    @test err isa ArgumentError
+    @test occursin("J_r_A", sprint(showerror, err))
 end
 
 @testset "Reiter honors hh_solver=:vfi" begin

@@ -627,14 +627,16 @@ function _ssj_solve_two_asset(spec::ModelSpec{T}, ss::HASteadyState{T};
     in_var = haskey(ss.prices, :r_a) ? :r_a : :r
     J_r_A = _ssj_jacobian(ss, _hh(spec).individual, _hh(spec).grid, _hh(spec).income,
                           in_var, :A; T_horizon=T_horizon)
+    n_bad = 0
     @inbounds for i in eachindex(J_r_A)
-        isfinite(J_r_A[i]) || (J_r_A[i] = zero(T))
+        if !isfinite(J_r_A[i])
+            J_r_A[i] = zero(T)
+            n_bad += 1
+        end
     end
+    n_bad > 0 && @warn "two-asset SSJ: zeroed $n_bad non-finite J_r_A entries"
     jacobians[:J_r_A] = J_r_A
-    col1 = [J_r_A[t, 1] for t in 1:T_horizon]
-    if maximum(abs, col1) < T(1e-16)
-        col1[1] = T(1e-8)
-    end
+    col1 = _ssj_require_jrA_column(J_r_A)
     irf_seq = [reshape([col1[t]], 1, 1) for t in 1:T_horizon]
     k = max(min(n_reduced, div(T_horizon, 2) - 1), 1)
     local G1, impact, C_sol, eu, eig, C_mat, D
@@ -643,22 +645,31 @@ function _ssj_solve_two_asset(spec::ModelSpec{T}, ss::HASteadyState{T};
         all(isfinite, G1) || throw(ArgumentError("non-finite Ho-Kalman G1"))
         max_eig = maximum(abs.(eig))
         if max_eig > one(T)
-            G1 .*= T(0.999) / max_eig
-            eig = ComplexF64.(eigvals(ComplexF64.(G1)))
+            @warn "two-asset SSJ: Ho-Kalman spectral radius $(max_eig) > 1; " *
+                  "returning the unscaled realization"
+            eig = ComplexF64.(eig)
         else
             eig = ComplexF64.(eig)
         end
-    catch
-        G1 = fill(T(0.9), 1, 1)
-        impact = ones(T, 1, 1)
-        C_sol = zeros(T, 1)
-        eu = [1, 1]
-        eig = ComplexF64[T(0.9)]
-        C_mat = ones(T, 1, 1)
-        D = zeros(T, 1, 1)
+    catch err
+        throw(ArgumentError(
+            "two-asset SSJ: Ho-Kalman realization failed: $(sprint(showerror, err)). " *
+            "Check that J_r_A decays before T_horizon and that the SS cleared."))
     end
+    ev = _ssj_explained_variance(J_r_A, k)
     return _wrap_hadsge_solution(spec, ss, G1, impact, C_sol, eu, eig,
-                                 C_mat, D, jacobians, T_horizon, :ssj)
+                                 C_mat, D, jacobians, T_horizon, :ssj;
+                                 explained_variance=ev)
+end
+
+function _ssj_require_jrA_column(J::AbstractMatrix{T}) where {T<:AbstractFloat}
+    col1 = [J[t, 1] for t in 1:size(J, 1)]
+    if maximum(abs, col1) < T(1e-16)
+        throw(ArgumentError(
+            "two-asset SSJ: first column of J_r_A is numerically zero — " *
+            "the household block does not respond to r. Check the steady state and grids."))
+    end
+    return col1
 end
 
 function _ssj_solve_huggett(spec::ModelSpec{T}, ss::HASteadyState{T};
