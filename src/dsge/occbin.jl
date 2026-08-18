@@ -145,80 +145,77 @@ end
 # =============================================================================
 
 """
-    _defining_equation_index(spec, var_idx) -> (eq_idx, jac_col)
+    _defining_equation_index(spec, var) → Int
 
-Index of the equation that DEFINES endogenous variable `var_idx` — the one with the largest
-|∂f_i/∂y_t[var_idx]| entry — together with the finite-difference Jacobian column. Returns
-`(var_idx, zeros)` when the steady state is not yet computed.
+Index of the equation that defines endogenous `var`: an attached `:binding`
+regime from `@dsge constraint:`, otherwise the unique `defines === var` equation.
+
+# Throws
+- `ArgumentError` if zero or several equations define `var` and no `:binding`
+  regime disambiguates.
 """
-function _defining_equation_index(spec::ModelSpec{T}, var_idx::Int) where {T}
-    n = spec.n_endog
-    y_ss = spec.steady_state
-    isempty(y_ss) && return (var_idx, zeros(T, n))
-    jac_col = zeros(T, n)
-    θ = spec.param_values
-    ε_zero = zeros(T, spec.n_exog)
-    h = max(T(1e-6), sqrt(eps(T)))
-    for i in 1:n
-        y_plus = copy(y_ss); y_plus[var_idx] += h
-        y_minus = copy(y_ss); y_minus[var_idx] -= h
-        f_plus = spec.residual_fns[i](y_plus, y_ss, y_ss, ε_zero, θ)
-        f_minus = spec.residual_fns[i](y_minus, y_ss, y_ss, ε_zero, θ)
-        jac_col[i] = (f_plus - f_minus) / (2h)
+function _defining_equation_index(spec::ModelSpec, var::Symbol)
+    bind_idxs = findall(spec.equations) do eq
+        haskey(eq.regimes, :binding) &&
+            (eq.defines === var || eq.regimes[:binding].defines === var)
     end
-    (argmax(abs.(jac_col)), jac_col)
+    if length(bind_idxs) == 1
+        return bind_idxs[1]
+    elseif length(bind_idxs) > 1
+        names = [spec.equations[i].name for i in bind_idxs]
+        throw(ArgumentError(
+            "OccBin: multiple :binding regimes for :$var on $(join(names, ", "))."))
+    end
+    idxs = findall(eq -> eq.defines === var, spec.equations)
+    if length(idxs) == 1
+        return idxs[1]
+    elseif isempty(idxs)
+        throw(ArgumentError(
+            "OccBin: no equation defines :$var. Name the defining equation " *
+            "(e.g. `taylor: $var[t] = ...`) or write `constraint: <eqname> = $var[t] >= bound`."))
+    else
+        names = [spec.equations[i].name for i in idxs]
+        throw(ArgumentError(
+            "OccBin: $(length(idxs)) equations define :$var ($(join(names, ", "))). " *
+            "Disambiguate with `constraint: <eqname> = $var[t] >= bound`."))
+    end
 end
 
 """
-    _derive_alternative_regime(spec, constraint; warn_ambiguous=true, decisiveness_tol=0.9) → DSGESpec{T}
+    _derive_alternative_regime(spec, constraint) → ModelSpec{T}
 
-Construct the alternative (binding) regime specification by replacing the constrained
-variable's defining equation with `var[t] = bound` (residual `y_t[var_idx] - bound`) and
-dropping it from the forward-looking set. The defining equation is picked by the sensitivity
-heuristic `_defining_equation_index`; when `warn_ambiguous` and that pick is not
-decisive (runner-up/top > `decisiveness_tol`), a warning suggests the explicit
-`Dict(variable => equation_index)` overload.
+Construct the alternative (binding) regime by replacing the constrained
+variable's defining equation with `var[t] = bound` (residual `y_t[var_idx] - bound`)
+and dropping it from the forward-looking set. The defining equation is the one
+with `defines === constraint.variable`, or the equation that already carries a
+`:binding` regime from `@dsge constraint:`.
 """
-function _derive_alternative_regime(spec::ModelSpec{T}, constraint::OccBinConstraint{T};
-                                    warn_ambiguous::Bool=true, decisiveness_tol::Real=0.9) where {T}
+function _derive_alternative_regime(spec::ModelSpec{T}, constraint::OccBinConstraint{T}) where {T}
     var_idx = findfirst(==(constraint.variable), spec.endog)
     var_idx === nothing && throw(ArgumentError(
         "Variable :$(constraint.variable) not found in endogenous variables"))
 
     bound = constraint.bound
+    eq_idx = _defining_equation_index(spec, constraint.variable)
 
-    # Defining equation for the constrained variable (heuristic: largest sensitivity column).
-    eq_idx, jac_col = _defining_equation_index(spec, var_idx)
-    # Decisiveness: if the runner-up equation is nearly as sensitive, the heuristic pick is
-    # ambiguous — steer to the explicit Dict(variable => equation) overload. Emitted only from
-    # this heuristic path (#219).
-    if warn_ambiguous && spec.n_endog > 1 && !isempty(spec.steady_state)
-        mags = abs.(jac_col)
-        top = maximum(mags)
-        runner = partialsort(mags, 2; rev=true)
-        top > zero(T) && runner / top > T(decisiveness_tol) && @warn "OccBin: the defining " *
-            "equation for :$(constraint.variable) is ambiguous (runner-up/top = " *
-            "$(round(runner / top; digits=3)) > $decisiveness_tol). Disambiguate by " *
-            "passing an explicit alternative-regime DSGESpec as the third argument: " *
-            "occbin_solve(spec, constraint, alt_spec; ...). For two constraints, pass a " *
-            "regime-tuple Dict with keys (1,0), (0,1), (1,1) mapping to alt DSGESpecs."
-    end
-
-    # Build new equations vector: replace the defining equation
     old_eq = spec.equations[eq_idx]
-    bind_fn = (y_t, y_lag, y_lead, epsilon, theta) -> y_t[var_idx] - bound
+    if haskey(old_eq.regimes, :binding)
+        bind_eq = old_eq.regimes[:binding]
+        bind_fn = bind_eq.residual
+        bind_expr = bind_eq.expr
+    else
+        bind_fn = (y_t, y_lag, y_lead, epsilon, theta) -> y_t[var_idx] - bound
+        bind_expr = constraint.bind_expr
+    end
     new_equations = copy(spec.equations)
     new_equations[eq_idx] = NamedEquation(old_eq.name, old_eq.defines,
-                                          constraint.bind_expr, bind_fn;
+                                          bind_expr, bind_fn;
                                           timing=TimingInfo(),
                                           regimes=old_eq.regimes)
 
-    # Build new residual functions: replace the defining equation's residual
     new_residual_fns = copy(spec.residual_fns)
     new_residual_fns[eq_idx] = bind_fn
 
-    # Update forward indices: the binding equation is never forward-looking
-    # Remove eq_idx from forward_indices if present
     new_forward_indices = filter(!=(eq_idx), spec.forward_indices)
     n_expect_new = length(new_forward_indices)
 
@@ -625,6 +622,10 @@ The algorithm:
 
 # Returns
 An `OccBinSolution{T}` with linear and piecewise-linear paths.
+
+`constraint` may also be a comparison `Expr` such as `:(i[t] >= 0)`; OccBin
+looks up the defining equation by `defines` (or a `:binding` regime from
+`@dsge constraint:`).
 """
 function occbin_solve(spec::ModelSpec{T}, constraint::OccBinConstraint{T};
                       shock_path::Matrix{T}=zeros(T, 40, spec.n_exog),
@@ -723,6 +724,13 @@ function occbin_solve(spec::ModelSpec{T}, constraint::OccBinConstraint{T};
             spec, spec.varnames, [constraint]
         )
     end
+end
+
+occbin_solve(spec::ModelSpec{T}, expr::Expr; kwargs...) where {T<:AbstractFloat} =
+    occbin_solve(spec, parse_constraint(expr, spec); kwargs...)
+
+function occbin_solve(spec::ModelSpec{T}, expr::Expr, alt_spec::ModelSpec{T}; kwargs...) where {T<:AbstractFloat}
+    occbin_solve(spec, parse_constraint(expr, spec), alt_spec; kwargs...)
 end
 
 """
@@ -1080,6 +1088,9 @@ The algorithm generalizes the one-constraint solver to 4 regimes:
 An `OccBinSolution{T}` with linear and piecewise-linear paths and a
 nperiods × 2 regime history matrix.
 """
+occbin_solve(spec::ModelSpec{T}, e1::Expr, e2::Expr; kwargs...) where {T<:AbstractFloat} =
+    occbin_solve(spec, parse_constraint(e1, spec), parse_constraint(e2, spec); kwargs...)
+
 function occbin_solve(spec::ModelSpec{T}, c1::OccBinConstraint{T}, c2::OccBinConstraint{T};
                       shock_path::Matrix{T}=zeros(T, 40, spec.n_exog),
                       nperiods::Int=size(shock_path, 1),
@@ -1097,21 +1108,14 @@ function occbin_solve(spec::ModelSpec{T}, c1::OccBinConstraint{T}, c2::OccBinCon
     P = sol.G1       # n × n state transition
     Q = sol.impact    # n × n_shocks impact
 
-    # Collision guard on the ORIGINAL spec: if both constraints define the SAME equation, the
-    # sequential alt12 build (c1 then c2, deriving c2 on the already-modified alt1_spec) silently
-    # mis-assigns c2's binding — the check must run on `spec`, not `alt1_spec` where c2's row has
-    # zero sensitivity and the collision can never fire. Require the explicit Dict overload. #219
-    var_c1 = findfirst(==(c1.variable), spec.endog)
-    var_c2 = findfirst(==(c2.variable), spec.endog)
-    if var_c1 !== nothing && var_c2 !== nothing && !isempty(spec.steady_state)
-        eq1 = _defining_equation_index(spec, var_c1)[1]
-        eq2 = _defining_equation_index(spec, var_c2)[1]
-        eq1 == eq2 && throw(ArgumentError(
-            "OccBin: constraints on :$(c1.variable) and :$(c2.variable) map to the same defining " *
-            "equation ($eq1); the two-constraint heuristic cannot separate them. Pass explicit " *
-            "alternative regimes via the Dict overload: " *
-            "occbin_solve(spec, c1, c2, Dict((1,0)=>alt1, (0,1)=>alt2, (1,1)=>alt12); ...)."))
-    end
+    # Collision: two constraints that replace the same named defining equation cannot be
+    # stacked sequentially. Require the explicit Dict overload.
+    eq1 = _defining_equation_index(spec, c1.variable)
+    eq2 = _defining_equation_index(spec, c2.variable)
+    eq1 == eq2 && throw(ArgumentError(
+        "OccBin: constraints on :$(c1.variable) and :$(c2.variable) replace the same defining " *
+        "equation ($(spec.equations[eq1].name)). Pass explicit alternative regimes via the " *
+        "Dict overload: occbin_solve(spec, c1, c2, Dict((1,0)=>alt1, (0,1)=>alt2, (1,1)=>alt12); ...)."))
 
     # Derive 3 alternative regime specifications
     alt1_spec = _derive_alternative_regime(spec, c1)      # only c1 binding

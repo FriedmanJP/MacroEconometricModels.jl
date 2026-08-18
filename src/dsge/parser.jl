@@ -29,6 +29,16 @@ is rejected.
 Equations may be named (`euler: β * C[t+1] / C[t] = 1 / R[t]`). Unlabeled
 `var[t] = ...` uses `var` as both the name and the defining variable.
 
+Occasionally binding constraints attach a `:binding` regime to the equation
+whose `defines` is the constrained variable:
+
+```julia
+    constraint: i[t] >= 0
+    taylor:     i[t] = φπ * π[t]
+```
+
+If no equation (or several) define `i`, write `constraint: taylor = i[t] >= 0`.
+
 Optional Bellman declarations for [`vfi_solver`](@ref):
 
 ```julia
@@ -56,6 +66,15 @@ const _RESERVED_DSGE_LABELS = (
     :constraint, :discrete, :absorbing,
 )
 
+"""One `@dsge constraint:` line, resolved onto a defining equation after the scan."""
+struct _ConstraintDecl
+    variable::Symbol
+    bound::Float64
+    direction::Symbol
+    expr::Expr
+    on::Union{Nothing,Symbol}
+end
+
 # =============================================================================
 # Top-level implementation (called at macro-expansion time)
 # =============================================================================
@@ -76,6 +95,7 @@ function _dsge_impl(block::Expr)
     clock_val = :discrete
     horizon_val = :infinite
     extra_decls = IRDecl[]
+    constraint_decls = _ConstraintDecl[]
 
     stmts = filter(a -> !(a isa LineNumberNode), block.args)
 
@@ -115,7 +135,10 @@ function _dsge_impl(block::Expr)
             clock_val = _extract_symbol_flag(stmt, :clock)
         elseif label === :horizon
             horizon_val = _extract_symbol_flag(stmt, :horizon)
-        elseif label === :constraint || label === :discrete || label === :absorbing
+        elseif label === :constraint
+            append!(constraint_decls, _extract_constraint_decls(stmt))
+            push!(extra_decls, IRDecl(:constraint, nothing, stmt))
+        elseif label === :discrete || label === :absorbing
             push!(extra_decls, IRDecl(label, nothing, stmt))
         elseif label !== nothing
             # Unknown `name: LHS = RHS` is a named equation
@@ -252,18 +275,28 @@ function _dsge_impl(block::Expr)
     fwd_expr = Expr(:vect, forward_indices...)
     original_endog_expr = Expr(:vect, [QuoteNode(s) for s in original_endog]...)
 
-    function _named_eq_expr(name, def, residual_ex, fn_expr, timing)
+    binding_regimes = _constraint_binding_exprs(constraint_decls, eq_names, eq_defines, endog)
+
+    function _named_eq_expr(name, def, residual_ex, fn_expr, timing, binding_ex=nothing)
         def_ex = def === nothing ? :nothing : QuoteNode(def)
-        :(NamedEquation($(QuoteNode(name)), $def_ex, $(QuoteNode(residual_ex)), $fn_expr;
-                        timing=$(TimingInfo)($(timing.max_lag), $(timing.max_lead), $(timing.has_lead))))
+        timing_ex = :($(TimingInfo)($(timing.max_lag), $(timing.max_lead), $(timing.has_lead)))
+        if binding_ex === nothing
+            :(NamedEquation($(QuoteNode(name)), $def_ex, $(QuoteNode(residual_ex)), $fn_expr;
+                            timing=$timing_ex))
+        else
+            :(NamedEquation($(QuoteNode(name)), $def_ex, $(QuoteNode(residual_ex)), $fn_expr;
+                            timing=$timing_ex,
+                            regimes=Dict{Symbol,NamedEquation}(:binding => $binding_ex)))
+        end
     end
 
     eq_vec_expr = Expr(:vect, (_named_eq_expr(eq_names[i], eq_defines[i], residual_exprs[i],
-                                             residual_fn_exprs[i], timings[i])
+                                             residual_fn_exprs[i], timings[i], binding_regimes[i])
                                for i in eachindex(raw_equations))...)
     orig_eq_vec_expr = Expr(:vect, (_named_eq_expr(original_eq_names[i], original_eq_defines[i],
                                                    orig_residual_exprs[i], :(identity),
-                                                   orig_timings[i])
+                                                   orig_timings[i],
+                                                   i <= length(binding_regimes) ? binding_regimes[i] : nothing)
                                     for i in eachindex(original_raw_equations))...)
     fn_vec_expr = Expr(:ref, :Function, residual_fn_exprs...)
 
@@ -368,8 +401,150 @@ function _detect_declaration(stmt)
            length(stmt.args[1].args) >= 3 && stmt.args[1].args[1] === :(:)
             return stmt.args[1].args[2]
         end
+
+        # Case 4: `constraint: var[t] >= bound` — comparison binds tighter than `:`,
+        # so this is `(>= (constraint: var[t]) bound)`, not `(constraint: (>= var[t] bound))`.
+        if _is_constraint_comparison(stmt)
+            return :constraint
+        end
+        if stmt.head == :tuple && length(stmt.args) >= 1 && _is_constraint_comparison(stmt.args[1])
+            return :constraint
+        end
     end
     return nothing
+end
+
+"""
+    _is_constraint_comparison(stmt) → Bool
+
+`constraint: var[t] >= bound` parses as `(>= (constraint: var[t]) bound)`.
+"""
+function _is_constraint_comparison(stmt)
+    stmt isa Expr && stmt.head == :call && length(stmt.args) == 3 || return false
+    (stmt.args[1] === :(>=) || stmt.args[1] === :(<=)) || return false
+    lhs = stmt.args[2]
+    return lhs isa Expr && lhs.head == :call && length(lhs.args) >= 3 &&
+           lhs.args[1] === :(:) && lhs.args[2] === :constraint
+end
+
+"""
+    _extract_constraint_decls(stmt) → Vector{_ConstraintDecl}
+
+Parse `constraint: i[t] >= 0`, `constraint: i[t] >= 0, c[t] >= 0`, or
+`constraint: taylor = i[t] >= 0` (explicit equation name).
+"""
+function _extract_constraint_decls(stmt::Expr)
+    out = _ConstraintDecl[]
+    if _is_constraint_comparison(stmt)
+        push!(out, _constraint_from_labeled_cmp(stmt, nothing))
+    elseif stmt.head == :tuple
+        first = true
+        for arg in stmt.args
+            if first && _is_constraint_comparison(arg)
+                push!(out, _constraint_from_labeled_cmp(arg, nothing))
+            elseif arg isa Expr && arg.head == :call && length(arg.args) == 3 &&
+                   (arg.args[1] === :(>=) || arg.args[1] === :(<=))
+                push!(out, _constraint_from_cmp(arg, nothing))
+            else
+                error("@dsge: cannot parse constraint in list: $arg")
+            end
+            first = false
+        end
+    elseif stmt.head == :(=)
+        on = stmt.args[1]
+        on isa Expr && on.head == :call && length(on.args) >= 3 &&
+            on.args[1] === :(:) && on.args[2] === :constraint ||
+            error("@dsge: cannot parse constraint declaration: $stmt")
+        eqname = on.args[3]
+        eqname isa Symbol || error("@dsge: `constraint: <eqname> = var[t] >= bound` " *
+                                   "needs an equation name, got $eqname. " *
+                                   "For the default mapping write `constraint: var[t] >= bound`.")
+        rhs = _unwrap_eq_rhs(stmt.args[2])
+        rhs isa Expr && rhs.head == :call && length(rhs.args) == 3 &&
+            (rhs.args[1] === :(>=) || rhs.args[1] === :(<=)) ||
+            error("@dsge: `constraint: $eqname = ...` must be `var[t] >= bound` or `var[t] <= bound`")
+        push!(out, _constraint_from_cmp(rhs, eqname))
+    else
+        error("@dsge: cannot parse constraint declaration: $stmt")
+    end
+    return out
+end
+
+function _constraint_from_labeled_cmp(stmt::Expr, on::Union{Nothing,Symbol})
+    op = stmt.args[1]
+    lhs_inner = stmt.args[2].args[3]
+    rhs = stmt.args[3]
+    cmp = Expr(:call, op, lhs_inner, rhs)
+    return _constraint_from_cmp(cmp, on)
+end
+
+function _constraint_from_cmp(cmp::Expr, on::Union{Nothing,Symbol})
+    op = cmp.args[1]
+    var = _constraint_lhs_var(cmp.args[2])
+    bound = Float64(_eval_bound(cmp.args[3], Float64))
+    dir = op === :(>=) ? :geq : :leq
+    return _ConstraintDecl(var, bound, dir, cmp, on)
+end
+
+function _constraint_lhs_var(lhs)
+    if lhs isa Expr && lhs.head == :ref && length(lhs.args) == 2 &&
+       lhs.args[1] isa Symbol && lhs.args[2] === :t
+        return lhs.args[1]::Symbol
+    end
+    error("@dsge: constraint LHS must be var[t], got: $lhs")
+end
+
+"""
+    _resolve_constraint_equation(var, on, eq_names, eq_defines) → Int
+
+Index of the equation that a `constraint:` replaces. `on` is the explicit
+equation name from `constraint: taylor = i[t] >= 0`.
+"""
+function _resolve_constraint_equation(var::Symbol, on::Union{Nothing,Symbol},
+                                      eq_names::Vector{Symbol},
+                                      eq_defines::Vector{<:Union{Nothing,Symbol}})
+    if on !== nothing
+        idx = findfirst(==(on), eq_names)
+        idx === nothing && error("@dsge: constraint on :$on: no equation named :$on. " *
+                                 "Write `constraint: $on = $var[t] >= bound` with a declared name.")
+        return idx
+    end
+    idxs = findall(d -> d === var, eq_defines)
+    if length(idxs) == 1
+        return idxs[1]
+    elseif isempty(idxs)
+        error("@dsge: no equation defines :$var. Name the defining equation " *
+              "(e.g. `taylor: $var[t] = ...`) or write `constraint: <eqname> = $var[t] >= bound`.")
+    else
+        names = eq_names[idxs]
+        error("@dsge: $(length(idxs)) equations define :$var ($(join(names, ", "))). " *
+              "Disambiguate with `constraint: <eqname> = $var[t] >= bound`.")
+    end
+end
+
+"""Quoted `:binding` NamedEquation per compiled equation, or `nothing`."""
+function _constraint_binding_exprs(constraint_decls::Vector{_ConstraintDecl},
+                                   eq_names::Vector{Symbol},
+                                   eq_defines::Vector{<:Union{Nothing,Symbol}},
+                                   endog::Vector{Symbol})
+    binding = Vector{Union{Nothing,Expr}}(nothing, length(eq_names))
+    used = Dict{Int,Symbol}()
+    for c in constraint_decls
+        idx = _resolve_constraint_equation(c.variable, c.on, eq_names, eq_defines)
+        if haskey(used, idx)
+            error("@dsge: constraints on :$(used[idx]) and :$(c.variable) both replace " *
+                  "equation :$(eq_names[idx])")
+        end
+        used[idx] = c.variable
+        var_idx = findfirst(==(c.variable), endog)
+        var_idx === nothing && error("@dsge: constraint variable :$(c.variable) is not endogenous")
+        bind_fn = :((y_t, y_lag, y_lead, epsilon, theta) -> y_t[$var_idx] - $(c.bound))
+        bind_expr = Expr(:(=), Expr(:ref, c.variable, :t), c.bound)
+        binding[idx] = :(NamedEquation($(QuoteNode(eq_names[idx])), $(QuoteNode(c.variable)),
+                                       $(QuoteNode(bind_expr)), $bind_fn;
+                                       timing=$(TimingInfo)()))
+    end
+    return binding
 end
 
 """
