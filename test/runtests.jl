@@ -193,6 +193,7 @@ const TEST_GROUPS = [
         "dsge/test_dsge.jl",
         "dsge/test_perfect_foresight_sparse.jl",
         "dsge/test_dcegm_plot.jl",
+        "dsge/test_dcegm_spec.jl",
         "dsge/test_modelspec_kinds.jl",
         "dsge/test_blanchard_olg.jl",
         "dsge/test_lifecycle_olg.jl",
@@ -596,6 +597,7 @@ else
         # Group 7 split into three (#123)
         @testset "DSGE Core" begin
             include("dsge/test_dsge.jl")
+            include("dsge/test_dcegm_spec.jl")
             include("dsge/test_blanchard_olg.jl")
             include("dsge/test_lifecycle_olg.jl")
             include("dsge/test_continuous_aiyagari.jl")
