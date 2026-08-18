@@ -208,6 +208,11 @@ const TEST_GROUPS = [
     ]),
     ("HA-DSGE Advanced" => [
         "dsge/test_ha_dsge_advanced.jl",
+        "dsge/test_modelspec_blocks.jl",
+        "dsge/test_modelspec_multipop.jl",
+        "dsge/test_firm_system.jl",
+        "dsge/test_intermediary_system.jl",
+        "dsge/test_ha_occbin.jl",
     ]),
     # Group 8: Coverage-A (DSGE — heaviest coverage tests)
     ("Coverage-A" => [
@@ -611,6 +616,11 @@ else
         end
         @testset "HA-DSGE Advanced" begin
             include("dsge/test_ha_dsge_advanced.jl")
+            include("dsge/test_modelspec_blocks.jl")
+            include("dsge/test_modelspec_multipop.jl")
+            include("dsge/test_firm_system.jl")
+            include("dsge/test_intermediary_system.jl")
+            include("dsge/test_ha_occbin.jl")
         end
 
         # Group 8: Coverage-A (DSGE)
