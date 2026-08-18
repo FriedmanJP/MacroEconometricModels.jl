@@ -75,6 +75,29 @@ function _numerical_groups(groups, numerical::Bool)
     return out
 end
 
+# CI job split (`MACRO_CI_SUITE=dsge|empirical`): DSGE/HA vs the empirical rest.
+const _DSGE_SUITE_GROUPS = Set([
+    "DSGE Core",
+    "DSGE Bayesian & HD",
+    "HA-DSGE",
+    "HA-DSGE Advanced",
+    "Coverage-A",
+    "Extensions (JuMP/Ipopt/PATH)",
+])
+
+function _ci_suite_groups(groups, suite::AbstractString)
+    isempty(suite) && return groups
+    suite == "dsge" || suite == "empirical" || throw(ArgumentError(
+        "MACRO_CI_SUITE must be \"dsge\", \"empirical\", or empty; got $(repr(suite))"))
+    want_dsge = suite == "dsge"
+    out = Pair{String, Vector{String}}[]
+    for (name, files) in groups
+        (name in _DSGE_SUITE_GROUPS) == want_dsge || continue
+        push!(out, String(name) => Vector{String}(files))
+    end
+    return out
+end
+
 # TEST_GROUPS uses `"name" => files` Pairs, not Tuples. Type the channel from
 # the collected vector so put! cannot MethodError (Windows CI, 2026-08-13).
 function _make_work_queue(groups)
