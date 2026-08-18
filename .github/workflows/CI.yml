@@ -16,7 +16,7 @@ concurrency:
 
 jobs:
   test:
-    name: Julia ${{ matrix.version }} - ${{ matrix.os }} - ${{ matrix.suite }}
+    name: Julia ${{ matrix.version }} - ${{ matrix.os }} - ${{ matrix.suite || 'all' }}
     runs-on: ${{ matrix.os }}
     timeout-minutes: 60
     env:
@@ -28,7 +28,7 @@ jobs:
       fail-fast: false
       matrix:
         version:
-          - 'lts'    # Long-term support (1.10)
+          - '1'      # current Julia 1.x stable; default cells resolve Optim v2
         os:
           - ubuntu-latest
           - windows-latest
@@ -38,28 +38,21 @@ jobs:
           - dsge
           - empirical
         include:
-          - version: 'lts'
+          - version: '1'
             os: macos-latest
             arch: arm64
             suite: dsge
-          - version: 'lts'
+          - version: '1'
             os: macos-latest
             arch: arm64
             suite: empirical
-          # Numerical suite + Optim v1 dual-major compat (T153/#252 / MSR-13):
-          # current stable Julia (`1`, not LTS) as a distinct matrix string so
-          # it pins Optim@1 and runs MACRO_NUMERICAL_CI (solver / Euler / IRF /
-          # published-number tests only). Restores a stable-Julia CI cell.
-          - version: '1'
+          # Dual-major Optim compat (T153/#252): the only Julia 1.10 cell.
+          # Pins Optim@1 and runs MACRO_NUMERICAL_CI (solver / Euler / IRF /
+          # published-number tests). No suite split — one ubuntu job.
+          - version: '1.10'
             os: ubuntu-latest
             arch: x64
             optim_v1: true
-            suite: dsge
-          - version: '1'
-            os: ubuntu-latest
-            arch: x64
-            optim_v1: true
-            suite: empirical
 
     steps:
       - uses: actions/checkout@v7
@@ -88,10 +81,10 @@ jobs:
       - uses: julia-actions/julia-buildpkg@v1
 
       # Cell roles:
-      #   ubuntu LTS    — full suite, split dsge | empirical; BOTH parts upload Codecov
-      #   ubuntu stable — numerical profile, split dsge | empirical; Optim v1 pin
-      #   macos LTS     — FAST=1 smoke, split dsge | empirical
-      #   windows LTS   — FAST=1 smoke, threaded, split dsge | empirical
+      #   ubuntu stable  — full suite, split dsge | empirical; Optim v2; BOTH upload Codecov
+      #   ubuntu 1.10    — numerical profile, one job, Optim v1 pin (dual-major #252)
+      #   macos stable   — FAST=1 smoke, split dsge | empirical
+      #   windows stable — FAST=1 smoke, threaded, split dsge | empirical
       #
       # Windows uses the threaded single-process runner (package loaded once).
       # Multiprocess on NTFS pays ~6 min per child to load compiled modules; 17
@@ -99,21 +92,21 @@ jobs:
       # the runner; every other group stays at 1.
       - uses: julia-actions/julia-runtest@v1
         with:
-          coverage: ${{ matrix.os == 'ubuntu-latest' && matrix.version == 'lts' }}
+          coverage: ${{ matrix.os == 'ubuntu-latest' && matrix.version == '1' }}
         env:
           JULIA_NUM_THREADS: ${{ matrix.os == 'windows-latest' && 'auto' || '1' }}
           OPENBLAS_NUM_THREADS: "1"
           MACRO_MULTIPROCESS_TESTS: ${{ matrix.os == 'windows-latest' && '0' || '1' }}
           MACRO_FAST_TESTS: ${{ matrix.os == 'ubuntu-latest' && '0' || '1' }}
-          MACRO_NUMERICAL_CI: ${{ matrix.os == 'ubuntu-latest' && matrix.version == '1' && '1' || '0' }}
+          MACRO_NUMERICAL_CI: ${{ matrix.optim_v1 && '1' || '0' }}
           MACRO_CHECK_BOUNDS: ${{ matrix.os == 'ubuntu-latest' && '1' || '0' }}
           MACRO_CI_SUITE: ${{ matrix.suite }}
 
       - uses: julia-actions/julia-processcoverage@v1
-        if: matrix.os == 'ubuntu-latest' && matrix.version == 'lts'
+        if: matrix.os == 'ubuntu-latest' && matrix.version == '1'
 
       - uses: codecov/codecov-action@v7
-        if: matrix.os == 'ubuntu-latest' && matrix.version == 'lts'
+        if: matrix.os == 'ubuntu-latest' && matrix.version == '1'
         with:
           files: lcov.info
           slug: FriedmanJP/MacroEconometricModels.jl

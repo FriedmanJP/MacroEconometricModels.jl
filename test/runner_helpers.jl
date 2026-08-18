@@ -48,7 +48,7 @@ function _with_group_blas(f, group_name::AbstractString)
     end
 end
 
-# Ubuntu stable numerical cell (`MACRO_NUMERICAL_CI=1`): skip display/
+# Ubuntu 1.10 Optim-v1 cell (`MACRO_NUMERICAL_CI=1`): skip display/
 # plotting/coverage-harness groups. ubuntu LTS keeps the full list.
 const _NUMERICAL_SKIP_GROUPS = Set(["Plotting", "Display", "Coverage-A", "Coverage-B"])
 const _NUMERICAL_SKIP_CORE = Set([

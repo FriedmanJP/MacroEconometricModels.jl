@@ -9,7 +9,7 @@ using LinearAlgebra
 
 # FAST mode for development iteration (shared across all test files in threaded mode)
 const FAST = get(ENV, "MACRO_FAST_TESTS", "") == "1"
-# Ubuntu stable numerical cell: important numerical tests only (see _numerical_groups).
+# Ubuntu 1.10 Optim-v1 cell: important numerical tests only (see _numerical_groups).
 const NUMERICAL = get(ENV, "MACRO_NUMERICAL_CI", "") == "1"
 # CI job split: "dsge" | "empirical" | "" (local full suite).
 const SUITE = get(ENV, "MACRO_CI_SUITE", "")
