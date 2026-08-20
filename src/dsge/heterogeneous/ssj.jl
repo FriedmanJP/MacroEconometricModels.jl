@@ -1065,10 +1065,26 @@ function _ssj_multipop_market(aliases::Vector{Symbol}, masses::Vector{T},
                        ss_inputs=ss_in, name=:asset_market)
 end
 
+# Named aggregate equations close a production-economy firm only when they
+# define :r (households price off r). Y-only or empty-of-r leftovers throw so
+# Huggett specs and incomplete firm blocks do not silently drop the equations.
+function _ssj_multipop_firm_outputs(spec::ModelSpec)
+    return Symbol[v for v in (:r, :w, :Y) if any(eq -> eq.defines === v, spec.equations)]
+end
+
+function _ssj_multipop_require_firm_or_empty(spec::ModelSpec)
+    outs = _ssj_multipop_firm_outputs(spec)
+    (:r in outs || isempty(spec.equations)) && return outs
+    throw(ArgumentError(
+        "solve: multi-population SSJ found named aggregate equations that do not " *
+        "define :r/:w; write those definitions or omit the equations to use the " *
+        "built-in Cobb–Douglas firm (#651)."))
+end
+
 function _ssj_multipop_firm(named, spec::ModelSpec{T}, ss::HASteadyState{T},
                             K_ss::T) where {T<:AbstractFloat}
-    firm_outputs = Symbol[v for v in (:r, :w, :Y) if any(eq -> eq.defines === v, spec.equations)]
-    if !isempty(firm_outputs)
+    firm_outputs = _ssj_multipop_require_firm_or_empty(spec)
+    if :r in firm_outputs
         firm_inputs = Symbol[:K]
         :Z in spec.endog && push!(firm_inputs, :Z)
         Z_ss = haskey(ss.aggregates, :Z) ? ss.aggregates[:Z] :
@@ -1079,10 +1095,6 @@ function _ssj_multipop_firm(named, spec::ModelSpec{T}, ss::HASteadyState{T},
                                             lags=Dict(:K => [1]),
                                             ss_inputs=ss_in, name=:firm)
     end
-    isempty(spec.equations) || throw(ArgumentError(
-        "solve: multi-population SSJ found named aggregate equations that do not " *
-        "define :r/:w; write those definitions or omit the equations to use the " *
-        "built-in Cobb–Douglas firm (#651)."))
     p = named[1][2].het_params
     alpha = T(get(p, :alpha, get(spec.param_values, :alpha, T(0.36))))
     delta = T(get(p, :delta, get(spec.param_values, :delta, T(0.025))))
@@ -1125,6 +1137,7 @@ function _ssj_solve_multipop(spec::ModelSpec{T};
     # ss_tol/target_tol are Inf because non-pivot populations are partial
     # equilibrium: their market residuals do not hold until the pivot clears.
     if huggett
+        _ssj_multipop_require_firm_or_empty(spec)
         mkt = _ssj_multipop_market(aliases, masses, ss_in_A, zero(T), true)
         dag = combine_blocks(het_blocks..., mkt; name=:multipop, ss_tol=T(Inf))
         gej = ssj_jacobian(dag; unknowns=[:r], targets=[:bond_mkt], shocks=[:w],

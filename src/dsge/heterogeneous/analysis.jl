@@ -156,8 +156,13 @@ function historical_decomposition(sol::HADSGESolution{T}, data::AbstractMatrix,
     rows = Vector{Int}(undef, length(observables))
     for (i, obs) in enumerate(observables)
         row = findfirst(==(string(obs)), agg)
-        row === nothing && throw(ArgumentError(
-            "observable :$obs has no match in the reduced HA outputs $agg"))
+        if row === nothing
+            agg_keys = sort!(collect(keys(sol.steady_state.aggregates)))
+            price_keys = sort!(collect(keys(sol.steady_state.prices)))
+            throw(ArgumentError(
+                "observable :$obs has no match in the reduced HA outputs $agg " *
+                "(aggregates $agg_keys or prices $price_keys)"))
+        end
         rows[i] = row
     end
 
