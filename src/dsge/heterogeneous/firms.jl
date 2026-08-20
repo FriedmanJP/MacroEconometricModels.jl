@@ -633,7 +633,7 @@ end
     khan_thomas_steady_state(spec::ModelSpec; kwargs...) → KhanThomasSteadyState
 
 Compute the stationary GE of a Khan–Thomas plant population plus a
-representative household. Does **not** call [`_hh`](@ref) or any
+representative household. Does **not** call `_hh` or any
 [`HouseholdSystem`](@ref) solver.
 
 # Keywords

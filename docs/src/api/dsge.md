@@ -94,6 +94,7 @@ Order   = [:function]
 ```@docs
 irf(::OccBinSolution{T}, ::Int) where {T<:AbstractFloat}
 irf(::BayesianDSGE{T}, ::Int) where {T<:AbstractFloat}
+irf(::ModelSpec, ::Int)
 fevd(::BayesianDSGE{T}, ::Int) where {T<:AbstractFloat}
 ```
 
@@ -289,6 +290,7 @@ dcegm_steady_state
 dcegm_capital_demand
 dcegm_firm_wage
 dcegm_mit
+irf(::DCEGMEquilibrium{T}, ::Int) where {T<:AbstractFloat}
 ```
 
 ```@autodocs
@@ -365,6 +367,8 @@ ct_two_asset_mit
 hand_to_mouth
 ceiling_mass
 ct_two_asset_stationarity
+irf(::CTAiyagari{T}, ::Int) where {T<:AbstractFloat}
+irf(::CTTwoAsset{T}, ::Int) where {T<:AbstractFloat}
 report(::IO, ::CTSteadyState{T}) where {T}
 report(::IO, ::CTTwoAssetSolution{T}) where {T}
 report(::IO, ::CTTwoAssetGE{T}) where {T}
@@ -400,6 +404,7 @@ KhanThomasTransition
 khan_thomas_example
 khan_thomas_steady_state
 khan_thomas_mit
+irf(::KhanThomasSteadyState{T}, ::Int) where {T<:AbstractFloat}
 ```
 
 ---
@@ -413,4 +418,5 @@ IntermediaryTransition
 intermediary_pe
 intermediary_steady_state
 intermediary_mit
+irf(::IntermediarySteadyState{T}, ::Int) where {T<:AbstractFloat}
 ```

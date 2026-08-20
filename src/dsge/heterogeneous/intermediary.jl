@@ -737,7 +737,7 @@ end
 
 One-pass MIT shock. Capital is predetermined (`K₁ = L_ss`, `K_{t+1} = L_t`);
 `rᵏ_t = α Z_t K_t^{α-1}`; banks reoptimize franchise value at each `t` (warm
-started) and the Young histogram is stepped with [`_forward_iterate`](@ref).
+started) and the Young histogram is stepped with `_forward_iterate`.
 
 `n_try` and `l_cap_mult` are forwarded to [`intermediary_pe`](@ref) (scan
 density and `l ≤ l_cap_mult · n_max` cap).
