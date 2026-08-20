@@ -5,6 +5,7 @@
 [![CI](https://github.com/FriedmanJP/MacroEconometricModels.jl/actions/workflows/CI.yml/badge.svg)](https://github.com/FriedmanJP/MacroEconometricModels.jl/actions/workflows/CI.yml)
 [![codecov](https://codecov.io/gh/FriedmanJP/MacroEconometricModels.jl/graph/badge.svg)](https://codecov.io/gh/FriedmanJP/MacroEconometricModels.jl)
 [![](https://img.shields.io/badge/docs-stable-blue.svg)](https://FriedmanJP.github.io/MacroEconometricModels.jl/stable/)
+[![](https://img.shields.io/badge/docs-dev-blue.svg)](https://FriedmanJP.github.io/MacroEconometricModels.jl/dev/)
 [![Aqua QA](https://raw.githubusercontent.com/JuliaTesting/Aqua.jl/master/badge.svg)](https://github.com/JuliaTesting/Aqua.jl)
 [![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.18439170.svg)](https://doi.org/10.5281/zenodo.18439170)
 
@@ -18,11 +19,11 @@ A comprehensive Julia package for macroeconometric research and analysis.
 
 **Panel:** Panel VAR (FD-GMM, System GMM, FE-OLS), Panel Regression (FE/RE/FD/Between/CRE/AB/BB + PCSE/Prais-Winsten), Panel IV (FE-IV/RE-IV/FD-IV/Hausman-Taylor), Panel Logit/Probit, Panel ARDL (PMG/MG/DFE), panel cointegrating regression (FMOLS/DOLS), Difference-in-Differences (TWFE, Callaway-Sant'Anna, Sun-Abraham, BJS, dCDH, HonestDiD), Event Study LP, LP-DiD (Dube et al. 2025)
 
-**DSGE:** 7 solvers (Gensys, Blanchard-Kahn, Klein, 2nd/3rd-order perturbation with pruning, Chebyshev projection, PFI, VFI), model(linear) for pre-linearized models, built-in constrained solvers (Optim.jl, NLopt.jl, projected Newton, JuMP+Ipopt) with optional PATH (MCP), OccBin, GMM/SMM estimation, Bayesian estimation (SMC/SMC²/MH) with posterior mode + Laplace/bridge-sampling marginal likelihood, MCMC & identification diagnostics, prior/posterior predictive checks, order≥2 unconditional FEVD (Andreasen et al. 2018), 24-model Dynare replication suite
+**DSGE:** one public `ModelSpec` (`@dsge`, named equations, RE leads as `x[t+1]`); 8 solvers (Gensys, Blanchard-Kahn, Klein, 2nd/3rd-order perturbation with pruning, Chebyshev projection, PFI, VFI, perfect foresight); `linear=true` for pre-linearized models; built-in constrained solvers (Optim.jl, NLopt.jl, projected Newton, JuMP+Ipopt) with optional PATH (MCP); OccBin; GMM/SMM; Bayesian estimation (SMC/SMC²/MH) with posterior mode + Laplace/bridge-sampling marginal likelihood; MCMC & identification diagnostics; prior/posterior predictive checks; order≥2 unconditional FEVD (Andreasen et al. 2018); 24-model Dynare replication suite
 
-**Heterogeneous Agent DSGE:** Reiter, Sequence-Space Jacobian, Krusell-Smith; one-asset and two-asset HANK; continuous-time Aiyagari & two-asset HANK (HJB / Kolmogorov-Forward, Achdou et al. 2022); Blanchard (1985) perpetual-youth OLG; EGM/VFI individual solvers; Bayesian estimation
+**Heterogeneous Agent DSGE:** `ModelSpec` + `HouseholdSystem` (free agent names, `solve` by `has_kind`); Reiter, Sequence-Space Jacobian, Krusell-Smith; one-asset and two-asset HANK; DCEGM; Khan–Thomas plants (`FirmSystem`); Bewley Banks (`IntermediarySystem`); continuous-time Aiyagari & two-asset HANK (HJB / Kolmogorov-Forward, Achdou et al. 2022); Blanchard (1985) perpetual-youth and life-cycle OLG; EGM/VFI; Bayesian estimation
 
-**Input-Output:** IOData container, Leontief/Ghosh models, output/income/employment multipliers, backward/forward linkages (Rasmussen) & key sectors, structural decomposition analysis, hypothetical extraction, environmental satellite accounts, Baqaee-Farhi (2019), pymrio-style MRIO downloaders (OECD/WIOD/Exiobase3/Eora26/GLORIA)
+**Input-Output:** `IOData` container, Leontief/Ghosh, multipliers, Rasmussen linkages, SDA, RAS/GRAS, hypothetical extraction, environmental satellites, Baqaee–Farhi (2019) `production_network` / `bf_equilibrium` / wedges / misallocation, KWW export decomposition, pymrio-style MRIO downloaders (OECD/WIOD/Exiobase3/Eora26/GLORIA)
 
 **Policy Counterfactuals:** sufficient-statistics policy analysis — McKay-Wolf (2023) rule counterfactuals and optimal-policy projections (peg/Taylor/NGDP/AIT templates, second-moment counterfactuals), Barnichon-Mesters (2023) OPP with two-source 60/75/90% inference, ZLB/pre-commitment constraints (SLSQP) and decision-date sequences with time-consistency decomposition, Caravello-McKay-Wolf (2025) model bank (limited-information IRF matching, Geweke marginal likelihoods, model averaging), DSGE news menus + one-asset HANK sequence-space menus + Gabaix/sticky-expectations behavioral operators, historical counterfactuals from forecast revisions, spanning & forecast-sufficiency diagnostics, `load_example(:mp_shocks)` US monetary panel; validated by a ten-identity theorem-level oracle suite
 
@@ -42,6 +43,44 @@ A comprehensive Julia package for macroeconometric research and analysis.
 using Pkg
 Pkg.add("MacroEconometricModels")
 ```
+
+Requires Julia 1.10+. v0.9 is a breaking `ModelSpec` unification: `DSGESpec` / `HADSGESpec` and `E[t](...)` are gone.
+
+## Quick Start
+
+```julia
+using MacroEconometricModels
+
+# VAR on FRED-MD
+d = fix(apply_tcode(load_example(:fred_md)[:, ["INDPRO", "CPIAUCSL", "FEDFUNDS"]]))
+m = estimate_var(d, 4)
+report(m)
+ir = irf(m, 20; method=:cholesky)
+
+# DSGE: one ModelSpec, RE leads written as x[t+1]
+spec = @dsge begin
+    parameters: β = 0.99, α = 0.36, δ = 0.025, ρ = 0.9, σ = 0.01
+    endogenous: Y, C, K, A
+    exogenous: ε_A
+
+    Y[t] = A[t] * K[t-1]^α
+    C[t] + K[t] = Y[t] + (1 - δ) * K[t-1]
+    1 = β * (C[t] / C[t+1]) * (α * A[t+1] * K[t]^(α - 1) + 1 - δ)
+    A[t] = A[t-1]^ρ * exp(σ * ε_A[t])
+
+    steady_state = begin
+        A_ss = 1.0
+        K_ss = (α * β / (1 - β * (1 - δ)))^(1 / (1 - α))
+        Y_ss = K_ss^α
+        C_ss = Y_ss - δ * K_ss
+        [Y_ss, C_ss, K_ss, A_ss]
+    end
+end
+sol = solve(spec)
+report(sol)
+```
+
+HA models use the same type: `load_ha_example(:krusell_smith)` returns a `ModelSpec` with a `HouseholdSystem` on `agents`. `solve(spec; method=:ssj)` is the default HA path.
 
 ## Features
 
@@ -207,16 +246,17 @@ Pkg.add("MacroEconometricModels")
 - **Panel Cointegrating Regression** - Panel FMOLS/DOLS with group-mean (between) or pooled (within) dimensions (`estimate_xtcointreg`; Pedroni 2000, 2001; Kao & Chiang 2000)
 
 ### DSGE
-- **Model specification** - `@dsge` macro with declarative syntax for parameters, variables, shocks, and equilibrium equations
+- **Model specification** - One public type, `ModelSpec`. `@dsge` writes named residual equations with time-indexed variables; leads are rational expectations (`x[t+1]`, not `E[t](...)`). Agent keys are free names; `solve` dispatches on `has_kind`, never on the key
 - **Steady state** - Numerical solver (Newton's method) or analytical closed-form; built-in constrained solvers (Optim.jl box constraints, NLopt.jl nonlinear inequalities, JuMP+Ipopt NLP) with an optional PATH backend
 - **Linear solvers** - Gensys (Sims 2002), Blanchard-Kahn (1980), Klein (2000) via unified `solve(spec; method=...)` interface
 - **Higher-order perturbation** - 2nd-order (Schmitt-Grohe & Uribe 2004) and 3rd-order with Andreasen, Fernandez-Villaverde & Rubio-Ramirez (2018) pruned simulation; Kim et al. (2008) 2nd-order pruning
 - **Global methods** - Chebyshev collocation (tensor/Smolyak grids, Gauss-Hermite quadrature; Judd 1998); Policy Function Iteration (Coleman 1990, Rendahl 2017); Value Function Iteration (Stokey, Lucas & Prescott 1989) with Howard improvement steps and Anderson acceleration (Walker & Ni 2011)
+  - `solve(spec; method=:vfi)` infers `transition` and `control_bounds` when omitted
   - Opt-in multi-threading for VFI, PFI, and collocation grid evaluation
 - **Constrained solvers** - Built-in projected Newton (box-constrained PF), Optim.jl Fminbox (box-constrained SS), NLopt.jl SLSQP (nonlinear inequalities), and JuMP+Ipopt (NLP); optional PATH (MCP) backend
-- **Perfect foresight** - Newton solver on stacked system with block-tridiagonal Jacobian; built-in box and nonlinear constraint support
-- **OccBin** - Occasionally binding constraints via piecewise-linear regime switching (Guerrieri & Iacoviello 2015)
-- **Pre-linearized models** - `model(linear)` support via `ModelSpec(... ; linear=true)` for Dynare-style pre-linearized models (e.g., Smets-Wouters 2007); automatic zero steady state, gensys constant handling in Kalman filter
+- **Perfect foresight** - Newton solver on a stacked residual with a sparse colored Jacobian and block-tridiagonal default solve; built-in box and nonlinear constraint support
+- **OccBin** - Occasionally binding constraints via piecewise-linear regime switching (Guerrieri & Iacoviello 2015); the constrained equation is the named defining equation
+- **Pre-linearized models** - `ModelSpec(... ; linear=true)` for Dynare-style pre-linearized models (e.g., Smets-Wouters 2007); automatic zero steady state, gensys constant handling in Kalman filter
 - **Simulation & IRF** - `simulate`, `irf`, `fevd` for linear, pruned higher-order, and projection solutions; `fevd(sol, H; unconditional=true)` for order≥2 asymptotic FEVD via Andreasen et al. (2018) augmented Lyapunov with per-shock variance decomposition; Bayesian posterior credible bands (dual 68%/90%) via `irf(::BayesianDSGE)`, `fevd(::BayesianDSGE)`, `simulate(::BayesianDSGE)`
 - **Historical decomposition** - `historical_decomposition(sol, data, observables)` for linear (Kalman/RTS smoother), nonlinear (FFBSi particle smoother + counterfactual), and Bayesian (posterior draws) DSGE models; standalone `dsge_smoother` and `dsge_particle_smoother`
 - **Analytical moments** - Order 1: Lyapunov equation for unconditional covariance; Order ≥2: Andreasen et al. (2018) augmented state-space Lyapunov for means, variances, and autocovariances; `analytical_moments` for both
@@ -230,35 +270,38 @@ Pkg.add("MacroEconometricModels")
 - **Dynare replication** - 24-model replication suite (`test/dynare_replication/`) with automated steady-state, IRF, variance decomposition, and theoretical moment comparison against Dynare 6.5+ reference values; includes Smets-Wouters (2007) full estimation pipeline
 
 ### Heterogeneous Agent DSGE
-- **Model specification** - `@dsge` macro with `heterogeneous:`, `idiosyncratic:`, `aggregation:` blocks for declaring individual state space, income process, and market clearing conditions
-- **Built-in examples** - `load_ha_example(:krusell_smith)`, `load_ha_example(:one_asset_hank)`, `load_ha_example(:two_asset_hank)` with published calibrations
+- **Model specification** - Same `ModelSpec` as RA. A `HouseholdSystem` (or other `AbstractAgentSystem`) lives on `agents` under a free name. `solve` / `compute_steady_state` dispatch on `has_kind`, not on the key. `to_spec` wraps family constructors (DCEGM, life-cycle, continuous-time, Khan–Thomas, Bewley Banks)
+- **Built-in examples** - `load_ha_example(:krusell_smith)`, `:one_asset_hank`, `:two_asset_hank`, `:huggett`, `:endogenous_labor`; published calibrations
 - **Individual solvers**:
   - Endogenous Grid Method (Carroll 2006) for one-asset models with borrowing constraints
   - Nested EGM for two-asset HANK (Kaplan, Moll & Violante 2018) with portfolio adjustment costs
   - Value Function Iteration with Howard (1960) improvement steps as fallback
+  - Discrete-continuous EGM (`DCEGMSystem` / `dcegm_solve`) for mixed discrete-continuous choice (Iskhakov, Jørgensen, Rust & Schjerning 2017)
 - **Distribution tracking** - Young (2010) non-stochastic histogram method with sparse transition matrices and power iteration for stationary distribution
 - **Income discretization** - Rouwenhorst (1995) and Tauchen (1986) methods for AR(1) processes
 - **Steady state** - Bisection on the interest rate iterating EGM + distribution + market clearing until capital supply equals demand
 - **Solution methods**:
-  - Sequence-Space Jacobian (Auclert, Bardóczy, Rognlie & Straub 2021) with fake news algorithm and Ho-Kalman state-space reduction
+  - Sequence-Space Jacobian (Auclert, Bardóczy, Rognlie & Straub 2021) with fake news algorithm, `combine_blocks` / `HetBlock`, and Ho-Kalman state-space reduction; multi-population `solve` when two or more `HouseholdSystem`s share `agents`
   - Reiter (2009) linearization with observability-based SVD dimensionality reduction
   - Krusell-Smith (1998) bounded rationality via perceived law of motion simulation
-- **Bayesian estimation** - `estimate_dsge_bayes(spec::ModelSpec, ...)` with adaptive RWMH; re-solves HA steady state + linearizes at each draw; Kalman filter on reduced system
+- **Plants and banks** - `FirmSystem` is Khan–Thomas (2008) lumpy plant investment (`khan_thomas_steady_state` / `khan_thomas_mit`); `IntermediarySystem` is Jamilov–Monacelli Bewley Banks
+- **Bayesian estimation** - `estimate_dsge_bayes(spec::ModelSpec, ...)` with adaptive RWMH; re-solves HA steady state + linearizes at each draw; Kalman filter on reduced system; family-kind guards on RA-only estimators
 - **Continuous-time methods** - Continuous-time Aiyagari solved by implicit upwind finite-difference HJB (`ct_hjb`) with a Kolmogorov-Forward stationary distribution (`ct_kfe`), steady state (`ct_steady_state`), and MIT-shock transition dynamics (`ct_mit_shock`); a two-asset HANK household block with convex deposit-adjustment costs (`ct_two_asset_solve`) (Achdou et al. 2022; Kaplan, Moll & Violante 2018)
-- **Overlapping generations** - Blanchard (1985) perpetual-youth OLG: steady state (`blanchard_steady_state`), full solution (`blanchard_solve`), and transition-path dynamics (`blanchard_transition`)
-- **Analysis** - `irf`, `fevd`, `simulate` dispatch via embedded `DSGESolution`; `distribution_irf` for wealth distribution dynamics; `inequality_irf` for Gini/percentile responses; `simulate_panel` for individual-level data
-- **Visualization** - `plot_result(ss; view=:distribution)` (wealth histogram), `:lorenz` (Lorenz curve with Gini), `:policy` (consumption and savings functions by income state)
+- **Overlapping generations** - Blanchard (1985) perpetual-youth OLG: `blanchard_steady_state`, `blanchard_solve`, `blanchard_transition`, `to_spec(::BlanchardOLG)`, optional `blanchard_nk_spec`; Auerbach–Kotlikoff life-cycle via `LifeCycleSystem` and `lifecycle_transition`
+- **Analysis** - `irf` / `fevd` / `simulate` on `HADSGESolution` and the `ModelSpec` family façades; HA historical decomposition through the reduced observation map; `distribution_irf` for wealth distribution dynamics; `inequality_irf` for Gini/percentile responses; `simulate_panel` for individual-level data
+- **Visualization** - `plot_result(ss; view=:distribution)` (wealth histogram), `:lorenz` (Lorenz curve with Gini), `:policy` (consumption and savings functions by income state); `plot_result(::DCEGMSolution)` for discrete-continuous policies
 
 ### Input-Output Analysis
 - **`IOData` container** - Symmetric input-output tables (intermediate flows, final demand, value added); `load_example(:wiot)` loads the Miller & Blair 2-sector table
 - **Leontief & Ghosh models** - Technical coefficients `A` and Leontief inverse `L` (demand-driven); allocation coefficients `B` and Ghosh inverse `G` (supply-driven)
 - **Multipliers** - Output, income, and employment multipliers (Type I and Type II with household endogenization)
 - **Linkages** - Backward and forward linkages, Rasmussen (1956) power/sensitivity-of-dispersion indices, key-sector classification
-- **Structural decomposition analysis (SDA)** - Additive two-polar and multiplicative decomposition of output change between two periods
-- **Hypothetical extraction** - Backward/forward/total linkage extraction quantifying a sector's importance
+- **Structural decomposition analysis (SDA)** - Additive n-factor two-polar and multiplicative decomposition of output change (including emission SDA)
+- **Hypothetical extraction** - Dietzenbacher–Lahr complete/backward/forward/partial extraction quantifying a sector's importance
 - **Environmental extensions** - Satellite accounts via `add_extension!`; direct/total intensities, emission multipliers, and consumption-based footprints
-- **Baqaee & Farhi (2019)** - Nonlinear production-network model: Domar weights (Hulten first-order), second-order Hessian term, Cobb-Douglas (θ=σ=1) special case
-- **MRIO downloaders** - pymrio-style `download_io(:oecd/:wiod/:exiobase3/:eora26/:gloria)` on the `Downloads` stdlib + URL registry; `parse_io` reads CSV/TSV in-core and `.zip`/`.xlsx` via `ZipFile`/`XLSX` package extensions; `parse_icio` / `parse_wiod` labeled MRIO recipes
+- **Baqaee & Farhi (2019)** - `production_network` → `bf_equilibrium` / `baqaee_farhi(net)` (2019 multi-factor H_A), `bf_wedge_decomp` (Theorem 1), `bf_misallocation` (Prop 5 H_μ); legacy `baqaee_farhi(io)` remains the frozen intermediate-only Hessian
+- **MRIO** - `aggregate`, KWW 2014 `export_decomposition` (DVA/RDV/FVA/PDC), regional footprints; pymrio-style `download_io(:oecd/:wiod/:exiobase3/:eora26/:gloria)`; `parse_io` reads CSV/TSV in-core and `.zip`/`.xlsx` via `ZipFile`/`XLSX` extensions; `parse_icio` / `parse_wiod` labeled recipes
+- **Balancing** - `ras` / `gras` / `balance` biproportional updates
 
 ### GMM
 - **Generalized Method of Moments** - One-step, two-step, and iterated; Hansen J-test
@@ -334,7 +377,7 @@ Pkg.add("MacroEconometricModels")
 
 ### Visualization
 - **Interactive D3.js plots** - `plot_result()` renders self-contained HTML with inline D3.js v7 (no additional dependencies)
-  - 78 dispatch methods covering IRF, FEVD, historical decomposition, filters, forecasts, volatility models (incl. multivariate GARCH), factor models, data containers, nowcasting, regression, nonlinear time series, nonparametric fits, MIDAS/ARDL, input-output, and difference-in-differences
+  - 168 dispatch methods covering IRF, FEVD, historical decomposition, filters, forecasts, volatility models (incl. multivariate GARCH), factor models, data containers, nowcasting, regression, nonlinear time series, nonparametric fits, MIDAS/ARDL, DSGE/HA/DCEGM, input-output, and difference-in-differences
   - Four chart types: line (with confidence bands), stacked area, bar, and heatmap
   - Interactive tooltips, responsive layout, multi-panel grid figures
   - Nowcast views: `view=:default` (+ DFM factor panels), `:heatmap` (z-score ragged edge), `:contributions` (group stacked bar); news views: `:releases`, `:groups`, `:individual`
@@ -349,7 +392,7 @@ Pkg.add("MacroEconometricModels")
 
 ### Data Management
 - **Typed containers** - `TimeSeriesData`, `PanelData`, `CrossSectionData` with variable names, frequency, transformation codes, and descriptions
-- **Built-in datasets** - FRED-MD (126 monthly variables), FRED-QD (245 quarterly variables), Penn World Table (38 OECD countries, 1950–2023), DDCG democracy-GDP (184 countries, 1960–2010; Acemoglu et al. 2019), mpdta minimum wage panel (500 US counties, 2003–2007; Callaway & Sant'Anna 2021), Grunfeld (1958) investment panel, Mroz (1987) labor-supply cross-section, the Nile flow series, and the WIOT input-output table (`load_example(:wiot)`)
+- **Built-in datasets** - 13 named examples via `load_example`: FRED-MD (126 monthly), FRED-QD (245 quarterly), Penn World Table (38 OECD countries, 1950–2023), DDCG democracy-GDP (Acemoglu et al. 2019), mpdta minimum-wage panel (Callaway & Sant'Anna 2021), Grunfeld (1958) investment panel, Mroz (1987) labor-supply cross-section, Nile flow, Hamilton (1989) GNP growth, Brownlee (1965) stack loss, Johansen–Juselius Danish money demand, US monetary-policy shocks (`:mp_shocks`), and the WIOT input-output table (`:wiot`)
 - **Data diagnostics** - `diagnose()` scans for NaN/Inf/constant columns; `fix()` cleans via listwise deletion, interpolation, or mean imputation
 - **FRED transformations** - `apply_tcode()` / `inverse_tcode()` for all 7 FRED transformation codes
 - **Filtering** - `apply_filter()` applies HP, Hamilton, BN, BK, or boosted HP per-variable to `TimeSeriesData` and `PanelData`
@@ -474,6 +517,8 @@ All documentation code examples execute during the build — `report()` output, 
 - Kaplan, Greg, Benjamin Moll, and Giovanni L. Violante. 2018. "Monetary Policy According to HANK." *American Economic Review* 108 (3): 697–743. [https://doi.org/10.1257/aer.20160042](https://doi.org/10.1257/aer.20160042)
 - Krusell, Per, and Anthony A. Smith Jr. 1998. "Income and Wealth Heterogeneity in the Macroeconomy." *Journal of Political Economy* 106 (5): 867–896. [https://doi.org/10.1086/250034](https://doi.org/10.1086/250034)
 - Reiter, Michael. 2009. "Solving Heterogeneous-Agent Models by Projection and Perturbation." *Journal of Economic Dynamics and Control* 33 (3): 649–665. [https://doi.org/10.1016/j.jedc.2008.08.010](https://doi.org/10.1016/j.jedc.2008.08.010)
+- Iskhakov, Fedor, Thomas H. Jørgensen, John Rust, and Bertel Schjerning. 2017. "The Endogenous Grid Method for Discrete-Continuous Dynamic Choice Models with (or without) Taste Shocks." *Quantitative Economics* 8 (2): 317–365. [https://doi.org/10.3982/QE643](https://doi.org/10.3982/QE643)
+- Khan, Aubhik, and Julia K. Thomas. 2008. "Idiosyncratic Shocks and the Role of Nonconvexities in Plant and Aggregate Investment Dynamics." *Econometrica* 76 (2): 395–436. [https://doi.org/10.1111/j.1468-0262.2008.00836.x](https://doi.org/10.1111/j.1468-0262.2008.00836.x)
 - Young, Eric R. 2010. "Solving the Incomplete Markets Model with Aggregate Uncertainty Using the Krusell–Smith Algorithm and Non-Stochastic Simulations." *Journal of Economic Dynamics and Control* 34 (1): 36–41. [https://doi.org/10.1016/j.jedc.2008.11.010](https://doi.org/10.1016/j.jedc.2008.11.010)
 
 ### Input-Output Analysis
