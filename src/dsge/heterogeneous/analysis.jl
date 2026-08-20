@@ -33,7 +33,7 @@ using Random
 function _ha_obs_names(sol::HADSGESolution)
     n_out = size(sol.C_obs, 1)
     if sol.method === :ssj
-        name = sol.spec.model === :huggett ? "r" : "K"
+        name = _hh(sol.spec).model === :huggett ? "r" : "K"
         return n_out == 1 ? [name] : ["obs_$i" for i in 1:n_out]
     else
         endog = sol.linear_solution.spec.endog
@@ -96,22 +96,7 @@ observation-mapped `irf`).
 """
 function fevd(sol::HADSGESolution{T}, horizon::Int; kwargs...) where {T<:AbstractFloat}
     ir = irf(sol, horizon)
-    n_vars = length(ir.variables)
-    n_e = length(ir.shocks)
-
-    decomp = zeros(T, n_vars, n_e, horizon)
-    props  = zeros(T, n_vars, n_e, horizon)
-    @inbounds for h in 1:horizon
-        for i in 1:n_vars
-            total = zero(T)
-            for j in 1:n_e
-                prev = h == 1 ? zero(T) : decomp[i, j, h-1]
-                decomp[i, j, h] = prev + ir.values[h, i, j]^2
-                total += decomp[i, j, h]
-            end
-            total > 0 && (props[i, :, h] = decomp[i, :, h] ./ total)
-        end
-    end
+    decomp, props = _fevd_accumulate(ir)
     return FEVD{T}(decomp, props, ir.variables, ir.shocks)
 end
 
@@ -149,6 +134,138 @@ function simulate(sol::HADSGESolution{T}, T_periods::Int;
         x = G1 * x .+ B * e_t                  # x_{t+1} = A·x_t + B·ε_t
     end
     return out
+end
+
+"""
+    historical_decomposition(sol::HADSGESolution, data, observables; kwargs...)
+        → HistoricalDecomposition
+
+Decompose aggregate HA series through the Ho-Kalman / Reiter observation map
+`(C_obs, D_obs)`, so the reported variables are `K` (Aiyagari / KS) or `r`
+(Huggett), not the reduced state `x_1..x_n`.
+
+`data` is `T_obs × n_obs` (columns in `observables` order) or `T_obs × n_out`
+(all aggregate outputs) **in levels**. The state is augmented so contemporaneous
+feed-through `D_obs` enters the Kalman observation equation.
+"""
+function historical_decomposition(sol::HADSGESolution{T}, data::AbstractMatrix,
+                                   observables::Vector{Symbol};
+                                   measurement_error=nothing) where {T<:AbstractFloat}
+    isempty(observables) && throw(ArgumentError("observables must be non-empty"))
+    agg = _ha_obs_names(sol)
+    rows = Vector{Int}(undef, length(observables))
+    for (i, obs) in enumerate(observables)
+        row = findfirst(==(string(obs)), agg)
+        if row === nothing
+            agg_keys = sort!(collect(keys(sol.steady_state.aggregates)))
+            price_keys = sort!(collect(keys(sol.steady_state.prices)))
+            throw(ArgumentError(
+                "observable :$obs has no match in the reduced HA outputs $agg " *
+                "(aggregates $agg_keys or prices $price_keys)"))
+        end
+        rows[i] = row
+    end
+
+    T_obs, n_col = size(data)
+    n_obs = length(observables)
+    n_out = length(agg)
+    if n_col == n_obs
+        data_obs = data
+    elseif n_col == n_out
+        data_obs = data[:, rows]
+    else
+        throw(ArgumentError(
+            "data must be T×$n_obs (observables) or T×$n_out (all aggregates), got $(size(data))"))
+    end
+
+    C = sol.C_obs
+    D = sol.D_obs
+    A = sol.linear_solution.G1
+    B = sol.linear_solution.impact
+    n_x = size(A, 1)
+    n_e = size(B, 2)
+    C_sel = C[rows, :]
+    D_sel = D[rows, :]
+
+    # ξ_t = [x_t; ε_t], ξ_{t+1} = [A B; 0 0] ξ_t + [0; I] ε_{t+1}
+    # y_t = [C D] ξ_t  ⇒  Θ_0 = D, Θ_s = C A^{s-1} B  (same as irf(::HADSGESolution))
+    G_aug = [A B; zeros(T, n_e, n_x) zeros(T, n_e, n_e)]
+    impact_aug = [zeros(T, n_x, n_e); Matrix{T}(I, n_e, n_e)]
+    Z = [C_sel D_sel]
+    d = zeros(T, n_obs)
+
+    if measurement_error === nothing
+        n_obs > n_e && throw(StochasticSingularityError(
+            "$n_obs observables exceed $n_e aggregate structural shock(s) in the " *
+            "reduced HA system; add measurement_error or drop observables."))
+        H = zeros(T, n_obs, n_obs)
+    else
+        me = Vector{T}(measurement_error)
+        length(me) == n_obs || throw(ArgumentError(
+            "measurement_error length ($(length(me))) must match observables ($n_obs)"))
+        H = diagm(me .^ 2)
+    end
+
+    Q = Matrix{T}(I, n_e, n_e)
+    kss = DSGEStateSpace{T}(G_aug, impact_aug, Z, d, H, Q)
+
+    ss_level = Vector{T}(undef, n_obs)
+    for (i, obs) in enumerate(observables)
+        s = obs
+        if haskey(sol.steady_state.aggregates, s)
+            ss_level[i] = sol.steady_state.aggregates[s]
+        elseif haskey(sol.steady_state.prices, s)
+            ss_level[i] = sol.steady_state.prices[s]
+        else
+            agg_keys = sort!(collect(keys(sol.steady_state.aggregates)))
+            price_keys = sort!(collect(keys(sol.steady_state.prices)))
+            throw(ArgumentError(
+                "historical_decomposition: observable :$s has no steady-state " *
+                "level in aggregates $(agg_keys) or prices $(price_keys). " *
+                "Data are in levels; pass an observable that the HA SS reports."))
+        end
+    end
+    data_dev = zeros(T, n_obs, T_obs)
+    for i in 1:n_obs, t in 1:T_obs
+        data_dev[i, t] = T(data_obs[t, i]) - ss_level[i]
+    end
+
+    smoother_result = dsge_smoother(kss, data_dev)
+    shocks_mat = Matrix{T}(smoother_result.smoothed_shocks')  # T_obs × n_e
+
+    Theta = Vector{Matrix{T}}(undef, T_obs)
+    Theta[1] = copy(D_sel)
+    if T_obs >= 2
+        Gpow = Matrix{T}(I, n_x, n_x)
+        for s in 2:T_obs
+            Theta[s] = C_sel * (Gpow * B)
+            Gpow = Gpow * A
+        end
+    end
+
+    contributions = zeros(T, T_obs, n_obs, n_e)
+    @inbounds for t in 1:T_obs
+        for i in 1:n_obs
+            for j in 1:n_e
+                val = zero(T)
+                for s in 0:(t - 1)
+                    val += Theta[s + 1][i, j] * shocks_mat[t - s, j]
+                end
+                contributions[t, i, j] = val
+            end
+        end
+    end
+
+    actual = Matrix{T}(data_dev')
+    initial_conditions = _compute_initial_conditions(actual, contributions)
+    shock_names = [string(s) for s in sol.linear_solution.spec.exog]
+    length(shock_names) == n_e || (shock_names = ["shock_$j" for j in 1:n_e])
+    var_names = [string(s) for s in observables]
+
+    return HistoricalDecomposition{T}(
+        contributions, initial_conditions, actual, shocks_mat, T_obs,
+        var_names, shock_names, :ha_dsge
+    )
 end
 
 # =============================================================================

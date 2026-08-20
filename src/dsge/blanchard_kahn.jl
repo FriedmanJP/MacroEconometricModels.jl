@@ -22,7 +22,7 @@ Difference Models under Rational Expectations." Econometrica 48 (5): 1305-1311.
 """
 
 """
-    blanchard_kahn(ld::LinearDSGE{T}, spec::DSGESpec{T}; div=1.0+1e-8) → DSGESolution{T}
+    blanchard_kahn(ld::LinearDSGE{T}, spec::ModelSpec{T}; div=1.0+1e-8) → DSGESolution{T}
 
 Solve the linearized DSGE model via the Blanchard-Kahn method.
 
@@ -32,7 +32,7 @@ forward-looking roots). `eu=[1,1]` signals existence and uniqueness (determinacy
 
 # Arguments
 - `ld`   — `LinearDSGE{T}` from `linearize(spec)`
-- `spec` — `DSGESpec{T}` (must have `steady_state` set)
+- `spec` — `ModelSpec{T}` (must have `steady_state` set)
 
 # Keywords
 - `div::Real=1.0+1e-8` — stable/unstable boundary for eigenvalue sorting
@@ -40,7 +40,7 @@ forward-looking roots). `eu=[1,1]` signals existence and uniqueness (determinacy
 # Returns
 `DSGESolution{T}` with `method=:blanchard_kahn`; `eu=[1,1]` signals determinacy.
 """
-function blanchard_kahn(ld::LinearDSGE{T}, spec::DSGESpec{T};
+function blanchard_kahn(ld::LinearDSGE{T}, spec::ModelSpec{T};
                         div::Real=1.0 + 1e-8, cluster_tol::Real=1e-6,
         sparse::Union{Bool,Symbol}=:auto) where {T<:AbstractFloat}
     n = spec.n_endog

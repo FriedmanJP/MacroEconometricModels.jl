@@ -7,7 +7,7 @@
 """
 Display methods for DSGE model specifications.
 
-Provides text, LaTeX, and HTML renderers for `DSGESpec{T}`, with recursive
+Provides text, LaTeX, and HTML renderers for `ModelSpec{T}`, with recursive
 expression converters that handle time-indexed variables, expectation operators,
 Greek letter mapping, and operator precedence.
 """
@@ -259,6 +259,9 @@ end
 Convert a Julia `Expr` (DSGE equation) to a human-readable text string.
 Handles arithmetic operators, time-indexed variables, and operator precedence.
 """
+_expr_to_text(ex::NamedEquation, endog::Vector{Symbol}, exog::Vector{Symbol}, params::Vector{Symbol}) =
+    _expr_to_text(ex.expr, endog, exog, params)
+
 function _expr_to_text(ex, endog::Vector{Symbol}, exog::Vector{Symbol}, params::Vector{Symbol})
     str, _ = _expr_to_text_impl(ex, endog, exog, params)
     return str
@@ -396,6 +399,9 @@ Convert a Julia `Expr` (DSGE equation) to a LaTeX math string.
 Handles arithmetic operators, time-indexed variables, Greek letters,
 fractions, and operator precedence.
 """
+_expr_to_latex(ex::NamedEquation, endog::Vector{Symbol}, exog::Vector{Symbol}, params::Vector{Symbol}) =
+    _expr_to_latex(ex.expr, endog, exog, params)
+
 function _expr_to_latex(ex, endog::Vector{Symbol}, exog::Vector{Symbol}, params::Vector{Symbol})
     str, _ = _expr_to_latex_impl(ex, endog, exog, params)
     return str
@@ -534,6 +540,9 @@ Convert a stored residual equation (LHS - RHS form) back to `LHS = RHS` display.
 If the top-level expression is a binary `-` (i.e., `call(:-, A, B)`), it is displayed
 as `A = B`. Otherwise, the full expression is shown as `expr = 0`.
 """
+_equation_to_display(eq::NamedEquation, endog, exog, params; mode::Symbol=:text) =
+    _equation_to_display(eq.expr, endog, exog, params; mode=mode)
+
 function _equation_to_display(eq::Expr, endog::Vector{Symbol}, exog::Vector{Symbol},
                                params::Vector{Symbol}; mode::Symbol=:text)
     converter = mode == :latex ? _expr_to_latex : _expr_to_text
@@ -588,10 +597,10 @@ function _steady_state_latex(endog::Vector{Symbol}, ss::AbstractVector)
 end
 
 # =============================================================================
-# Base.show dispatcher for DSGESpec
+# Base.show dispatcher for ModelSpec
 # =============================================================================
 
-function Base.show(io::IO, spec::DSGESpec{T}) where {T}
+function Base.show(io::IO, spec::ModelSpec{T}) where {T}
     backend = get_display_backend()
     if backend == :latex
         _show_dsge_latex(io, spec)
@@ -609,10 +618,10 @@ end
 """
     _show_dsge_text(io, spec)
 
-Text-mode display for `DSGESpec`: header, calibration, numbered equations,
+Text-mode display for `ModelSpec`: header, calibration, numbered equations,
 and steady state (if computed).
 """
-function _show_dsge_text(io::IO, spec::DSGESpec{T}) where {T}
+function _show_dsge_text(io::IO, spec)
     # --- Header ---
     println(io, "DSGE Model Specification")
     disp_endog = spec.augmented ? spec.original_endog : spec.endog
@@ -669,10 +678,10 @@ end
 """
     _show_dsge_latex(io, spec)
 
-LaTeX-mode display for `DSGESpec`: model equations in `align` environment,
+LaTeX-mode display for `ModelSpec`: model equations in `align` environment,
 calibration in `tabular`, and steady state with `\\bar{}` notation.
 """
-function _show_dsge_latex(io::IO, spec::DSGESpec{T}) where {T}
+function _show_dsge_latex(io::IO, spec)
     disp_endog = spec.augmented ? spec.original_endog : spec.endog
     disp_eq = spec.augmented ? spec.original_equations : spec.equations
 
@@ -732,10 +741,10 @@ end
 """
     _show_dsge_html(io, spec)
 
-HTML-mode display for `DSGESpec`: MathJax-rendered equations, HTML table
+HTML-mode display for `ModelSpec`: MathJax-rendered equations, HTML table,
 for calibration, and steady state values.
 """
-function _show_dsge_html(io::IO, spec::DSGESpec{T}) where {T}
+function _show_dsge_html(io::IO, spec)
     disp_endog = spec.augmented ? spec.original_endog : spec.endog
     disp_eq = spec.augmented ? spec.original_equations : spec.equations
 

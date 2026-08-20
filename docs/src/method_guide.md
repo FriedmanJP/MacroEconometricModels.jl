@@ -131,7 +131,7 @@ Structural equilibrium models specified with the `@dsge` macro. The solution met
 | Impose a zero lower bound | `occbin_solve`, `perfect_foresight` | Occasionally binding constraints | [Constraints](@ref dsge_constraints) |
 | Estimate structural parameters | `estimate_dsge`, `estimate_dsge_bayes` | GMM/SMM and SMC/MH posteriors | [Estimation](@ref dsge_estimation) |
 | Attribute observed data to shocks | `historical_decomposition` | Smoothed structural shock contributions | [Historical Decomposition](@ref dsge_hd_page) |
-| Model household heterogeneity | `solve` on a `HADSGESpec` | Krusell-Smith and HANK distributions | [Heterogeneous Agents](@ref dsge_ha) |
+| Model household heterogeneity | `solve` on a `ModelSpec` with a `HouseholdSystem` | Krusell-Smith, HANK, multi-pop, plants, banks | [Heterogeneous Agents](@ref dsge_ha) |
 | Model finite lifetimes or cohorts | `blanchard_solve` | Life-cycle and generational effects | [Overlapping Generations](@ref dsge_olg) |
 | Work in continuous time | `ct_steady_state`, `ct_two_asset_solve`, `ct_hjb`, `ct_kfe` | HJB and Kolmogorov forward equations | [Continuous Time](@ref dsge_continuous) |
 

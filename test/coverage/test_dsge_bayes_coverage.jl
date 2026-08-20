@@ -42,7 +42,7 @@ function _make_fwd_spec()
         parameters: beta = 0.99, rho = 0.9
         endogenous: c, k
         exogenous: e
-        c[t] = beta * E[t](c[t+1]) + e[t]
+        c[t] = beta * c[t+1] + e[t]
         k[t] = rho * k[t-1] + c[t]
     end
     compute_steady_state(spec)

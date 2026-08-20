@@ -411,7 +411,7 @@ end
 Compute ergodic state bounds: SS_i +/- scale * sigma_i using first-order solution.
 Returns nx x 2 matrix with [lower upper] per state.
 """
-function _compute_state_bounds(spec::DSGESpec{T}, linear::LinearDSGE{T},
+function _compute_state_bounds(spec::ModelSpec{T}, linear::LinearDSGE{T},
                                 state_idx::Vector{Int}, scale::Real) where {T}
     nx = length(state_idx)
     result = _gensys_qz(spec, linear)
@@ -463,7 +463,7 @@ function _collocation_residual(coeffs_vec::AbstractVector{T},
                                 nodes_phys::Matrix{T},
                                 state_idx::Vector{Int},
                                 control_idx::Vector{Int},
-                                spec::DSGESpec{T},
+                                spec::ModelSpec{T},
                                 quad_nodes::Matrix{T},
                                 quad_weights::Vector{T},
                                 state_bounds::Matrix{T},
@@ -569,7 +569,7 @@ end
 function _collocation_newton(coeffs_vec::Vector{T}, n_vars::Int, n_basis::Int,
                              basis_matrix::Matrix{T}, nodes_phys::Matrix{T},
                              state_idx::Vector{Int}, control_idx::Vector{Int},
-                             spec::DSGESpec{T}, quad_nodes::Matrix{T},
+                             spec::ModelSpec{T}, quad_nodes::Matrix{T},
                              quad_weights::Vector{T}, state_bounds::Matrix{T},
                              multi_indices::Matrix{Int}, ss::Vector{T},
                              impact_mat::Matrix{T};
@@ -697,7 +697,7 @@ function _pad_coefficients(old_coeffs::Matrix{T}, old_mi::Matrix{Int},
 end
 
 """
-    collocation_solver(spec::DSGESpec{T}; kwargs...) -> ProjectionSolution{T}
+    collocation_solver(spec::ModelSpec{T}; kwargs...) -> ProjectionSolution{T}
 
 Solve DSGE model via Chebyshev collocation (projection method).
 
@@ -732,7 +732,7 @@ Euler error falls below `euler_tol`, when the node budget would be exceeded, or 
 `max_refinements` rounds. The achieved accuracy is reported in `sol.euler_error` and the
 final level set in `sol.smolyak_levels`.
 """
-function collocation_solver(spec::DSGESpec{T};
+function collocation_solver(spec::ModelSpec{T};
                             degree::Int=5,
                             grid::Symbol=:auto,
                             smolyak_mu::Union{Integer,AbstractVector{<:Integer}}=3,
@@ -1030,7 +1030,7 @@ end
 # #120): the first-order impact matrix moves the next-period state at every quadrature node.
 # Shared by `max_euler_error` (random test points) and by the adaptive-refinement error
 # indicator (candidate nodes), so refinement is driven by exactly the metric that is reported.
-function _euler_residuals_at(spec::DSGESpec{T}, coeffs::Matrix{T},
+function _euler_residuals_at(spec::ModelSpec{T}, coeffs::Matrix{T},
                              multi_indices::Matrix{Int}, state_bounds::Matrix{T},
                              state_idx::Vector{Int}, steady_state::Vector{T},
                              quad_nodes::Matrix{T}, quad_weights::Vector{T},
@@ -1082,7 +1082,7 @@ end
 
 # Maximum absolute Euler residual over a supplied set of physical test points
 # (`points` is n_points × nx).
-function _max_euler_error_at(spec::DSGESpec{T}, coeffs::Matrix{T},
+function _max_euler_error_at(spec::ModelSpec{T}, coeffs::Matrix{T},
                              multi_indices::Matrix{Int}, state_bounds::Matrix{T},
                              state_idx::Vector{Int}, steady_state::Vector{T},
                              quad_nodes::Matrix{T}, quad_weights::Vector{T},

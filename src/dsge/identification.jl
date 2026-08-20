@@ -66,7 +66,7 @@ the contemporaneous covariance, and the full autocovariance matrices at lags
 `1..n_lags` of the observables, computed from the first-order solution via the
 discrete Lyapunov equation. Returns `nothing` when the model fails to solve.
 """
-function _identification_moments(spec::DSGESpec{T}, param_names::Vector{Symbol},
+function _identification_moments(spec::ModelSpec{T}, param_names::Vector{Symbol},
                                  theta::AbstractVector{T},
                                  observables::Vector{Symbol}, n_lags::Int,
                                  solver::Symbol,
@@ -134,7 +134,7 @@ Increase `n_lags` until `n_moments ≥ n_params` with slack; Iskrev recommends
 checking several lag horizons.
 
 # Arguments
-- `spec::DSGESpec` — model specification
+- `spec::ModelSpec` — model specification
 - `param_names::Vector{Symbol}` — parameters to check
 
 # Keywords
@@ -147,13 +147,14 @@ checking several lag horizons.
 # References
 - Iskrev, N. (2010). Local Identification in DSGE Models. *JME*, 57(2).
 """
-function identification_diagnostics(spec::DSGESpec{T}, param_names::Vector{Symbol};
+function identification_diagnostics(spec::ModelSpec{T}, param_names::Vector{Symbol};
                                     theta::Union{Nothing,AbstractVector{<:Real}}=nothing,
                                     observables::Vector{Symbol}=Symbol[],
                                     n_lags::Int=2,
                                     tol_rel::Real=sqrt(eps(Float64)),
                                     solver::Symbol=:gensys,
                                     solver_kwargs::NamedTuple=NamedTuple()) where {T<:AbstractFloat}
+    _require_estimable_spec(:identification_diagnostics, spec)
     d = length(param_names)
     d > 0 || throw(ArgumentError("param_names must be non-empty"))
     theta_v = theta === nothing ? T[spec.param_values[p] for p in param_names] : T.(theta)

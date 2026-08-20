@@ -14,7 +14,7 @@ import MacroEconometricModels: _build_ss_residual_i, _build_pf_equation, _extrac
 # =============================================================================
 
 function MacroEconometricModels._path_compute_steady_state(
-        spec::MacroEconometricModels.DSGESpec{T},
+        spec::MacroEconometricModels.ModelSpec{T},
         constraints::Vector;
         initial_guess::Union{Nothing,AbstractVector}=nothing) where {T}
 
@@ -64,7 +64,7 @@ end
 # =============================================================================
 
 function MacroEconometricModels._path_perfect_foresight(
-        spec::MacroEconometricModels.DSGESpec{FT},
+        spec::MacroEconometricModels.ModelSpec{FT},
         T_periods::Int,
         shocks::Matrix{FT},
         constraints::Vector) where {FT}

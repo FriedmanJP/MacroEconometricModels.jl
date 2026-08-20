@@ -3,15 +3,20 @@ coverage:
   round: down
   range: "70...100"
 
+  # Uploads only happen on a Project.toml version bump on main (see CI.yml
+  # `codecov` job). PR commits send no report; keep GitHub checks
+  # informational so a missing upload cannot block a PR.
   status:
     project:
       default:
         target: auto
         threshold: 1%
+        informational: true
     patch:
       default:
         target: auto
         threshold: 1%
+        informational: true
 
 comment:
   layout: "reach,diff,flags,tree"

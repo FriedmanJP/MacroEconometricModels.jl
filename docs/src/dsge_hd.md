@@ -3,6 +3,7 @@
 Historical decomposition for DSGE models decomposes observed variable movements into contributions from individual structural shocks plus initial conditions. The package provides three methods spanning linear, nonlinear, and Bayesian DSGE models. This page is part of the [DSGE Models](@ref dsge_page) suite; for the VAR-based counterpart, see [Historical Decomposition](@ref ia_hd_page).
 
 - **Linear DSGE**: Exact additive decomposition via the Kalman smoother (Rauch, Tung & Striebel 1965) and structural MA coefficients
+- **Heterogeneous-agent DSGE**: The same identity on the Ho-Kalman / Reiter observation map, so the reported series are the aggregates (`K` or `r`) rather than the reduced state
 - **Nonlinear DSGE**: Counterfactual simulation using the FFBSi particle smoother (Godsill, Doucet & West 2004) for higher-order perturbation solutions
 - **Bayesian DSGE**: Posterior credible bands by re-solving at each posterior draw (Herbst & Schorfheide 2015)
 
@@ -71,7 +72,7 @@ plot_result(hd)
 
 ## Linear DSGE HD
 
-Historical decomposition for linear DSGE models derives from the structural moving average (VMA) representation of the state-space solution. The Kalman smoother (Rauch, Tung & Striebel 1965) extracts smoothed structural shocks from the data, and the structural MA coefficients attribute each variable's movement to individual shocks.
+Historical decomposition for linear DSGE models derives from the structural moving average (VMA) representation of the state-space solution. The Kalman smoother (Rauch, Tung & Striebel 1965) extracts smoothed structural shocks from the data, and the structural MA coefficients attribute each variable's movement to individual shocks. `historical_decomposition(sol::HADSGESolution, data, [:K])` (or `[:r]` for Huggett) applies the same smoother to the reduced HA state and maps contributions through `C_obs` and `D_obs`, so the identity holds for the aggregate the SSJ / Reiter system reports.
 
 ```math
 y_{i,t} = \sum_{j=1}^{n_{shocks}} \sum_{s=0}^{t-1} (\Theta_s)_{ij} \, \varepsilon_j(t-s) + \text{initial}_i(t)

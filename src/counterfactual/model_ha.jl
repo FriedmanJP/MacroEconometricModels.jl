@@ -14,14 +14,14 @@
 # Wedge sign convention (fixed here, tested): `+m` ADDS to the rate households
 # face — a positive wedge is a rate HIKE (contractionary); expansionary = −m.
 
-function _cf_require_one_asset(spec::HADSGESpec)
-    (spec.grid.n_dims == 1 && spec.individual.n_asset_dims == 1) || throw(ArgumentError(
-        "one-asset heterogeneous-agent models only (got a $(spec.grid.n_dims)-dimensional asset grid); two-asset models are out of scope — refusing to approximate"))
+function _cf_require_one_asset(spec::ModelSpec)
+    (_hh(spec).grid.n_dims == 1 && _hh(spec).individual.n_asset_dims == 1) || throw(ArgumentError(
+        "one-asset heterogeneous-agent models only (got a $(_hh(spec).grid.n_dims)-dimensional asset grid); two-asset models are out of scope — refusing to approximate"))
     return nothing
 end
 
 """
-    sequence_jacobian(spec::HADSGESpec, ss::HASteadyState, input, output;
+    sequence_jacobian(spec::ModelSpec, ss::HASteadyState, input, output;
                       T_horizon=300, dx=1e-4) -> Matrix
 
 Public sequence-space (fake-news) Jacobian of the heterogeneous household
@@ -40,7 +40,7 @@ date `t` to a unit change of `input` announced at date 1 and occurring at date
 Thin wrapper over the block machinery (`HetBlock` + `block_jacobian`), so it
 is behavior-identical to the internal `_ssj_jacobian`.
 """
-function sequence_jacobian(spec::HADSGESpec{T}, ss::HASteadyState{T},
+function sequence_jacobian(spec::ModelSpec{T}, ss::HASteadyState{T},
                            input::Symbol, output::Symbol;
                            T_horizon::Int=300, dx::Real=1e-4) where {T<:AbstractFloat}
     _cf_require_one_asset(spec)
@@ -52,7 +52,7 @@ function sequence_jacobian(spec::HADSGESpec{T}, ss::HASteadyState{T},
 end
 
 """
-    policy_causal_effects(spec::HADSGESpec, ss::HASteadyState; outcomes,
+    policy_causal_effects(spec::ModelSpec, ss::HASteadyState; outcomes,
                           instruments=[:rate => :r], H=100, T_horizon=300,
                           rule_closure=:administered, dx=1e-4)
         -> PolicyCausalEffects
@@ -79,7 +79,7 @@ Two closures (`rule_closure`):
 `T_horizon ≥ H + 50` to avoid truncation-edge bias (warned otherwise; same
 tradeoff as SSJ estimation, T049).
 """
-function policy_causal_effects(spec::HADSGESpec{T}, ss::HASteadyState{T};
+function policy_causal_effects(spec::ModelSpec{T}, ss::HASteadyState{T};
                                outcomes::AbstractVector{<:Pair{Symbol,Symbol}},
                                instruments::AbstractVector{<:Pair{Symbol,Symbol}}=[:rate => :r],
                                H::Int=100, T_horizon::Int=300,
@@ -88,7 +88,7 @@ function policy_causal_effects(spec::HADSGESpec{T}, ss::HASteadyState{T};
     _cf_require_one_asset(spec)
     rule_closure in (:administered, :market) || throw(ArgumentError(
         "rule_closure: expected :administered or :market, got :$rule_closure"))
-    rule_closure == :market && spec.model !== :huggett && throw(ArgumentError(
+    rule_closure == :market && _hh(spec).model !== :huggett && throw(ArgumentError(
         ":market closure is GE-closed only for the :huggett class (the v0.7.x SSJ path ships no production-side clearing); use rule_closure = :administered"))
     H >= 1 || throw(ArgumentError("H: expected H >= 1, got $H"))
     T_horizon >= H || throw(ArgumentError(

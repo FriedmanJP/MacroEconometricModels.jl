@@ -67,6 +67,8 @@ The economic question determines the solution class, and the solution class dete
 | Wealth distribution and MPC heterogeneity | [Heterogeneous Agents](@ref dsge_ha) | Distribution is a state variable |
 | Life-cycle and demographic structure | [Overlapping Generations](@ref dsge_olg) | Finite horizons break Ricardian equivalence |
 | HJB and Kolmogorov-Forward formulation | [Continuous Time](@ref dsge_continuous) | Sparse finite differences, no simulation |
+| Lumpy plant investment | [Heterogeneous Agents](@ref dsge_ha) | Khan–Thomas (2008) `FirmSystem` |
+| Bank net-worth distribution | [Heterogeneous Agents](@ref dsge_ha) | Bewley Banks `IntermediarySystem` |
 
 ### `solve` Methods
 
@@ -83,7 +85,7 @@ The economic question determines the solution class, and the solution class dete
 | `:vfi` | Global | Bellman value-function iteration (Stokey–Lucas–Prescott / Howard) | [Nonlinear Methods](@ref dsge_nonlinear) |
 | `:perfect_foresight` | Deterministic | Newton solver for perfect-foresight paths | [Constraints](@ref dsge_constraints) |
 
-`solve(spec; method=:vfi)` requires the same Bellman keywords as `vfi_solver` (`utility`, `beta`, `transition`, `control_bounds`). Euler-only specs must use `:pfi`. The families under [Heterogeneity & Continuous Time](@ref dsge_heterogeneity) use their own entry points instead: `solve(spec; method=:ssj)`, `blanchard_steady_state`, and `ct_steady_state` respectively.
+`solve(spec; method=:vfi)` requires `utility` and `beta` (from `@dsge` or keywords); `transition` and `control_bounds` are inferred when omitted. Euler-only specs must use `:pfi`. Specs that carry an agent kind dispatch on the type, never on the key name: `HouseholdSystem` uses `method=:ssj` by default (one or more named populations); `to_spec` wrappers for DCEGM, life-cycle OLG, continuous-time households, Khan–Thomas plants, and Bewley Banks call the matching family solver. Blanchard perpetual-youth residuals are `NoAgents` and use `:gensys` like any other representative-agent system.
 
 ---
 
@@ -100,7 +102,7 @@ The economic question determines the solution class, and the solution class dete
 
 ## Model Specification
 
-The `@dsge` macro provides a domain-specific language for specifying DSGE models. It parses the model block into a `DSGESpec{T}` object containing equations, parameters, and variable declarations.
+The `@dsge` macro provides a domain-specific language for specifying DSGE models. It parses the model block into a `ModelSpec{T,NoAgents}` object containing named equations, parameters, and variable declarations. Unlabeled `var[t] = ...` sets both the equation name and `defines` to `var`. A lead `x[t+1]` *is* the rational expectation of `x`.
 
 ### Syntax
 
@@ -127,6 +129,10 @@ end
 | `exogenous:` | `shock1, shock2, ...` | Exogenous shock names |
 | `steady_state` | `= begin ... [y_ss] end` | Optional analytical steady-state function (must return vector) |
 | `varnames:` | `["Label 1", "Label 2", ...]` | Optional display labels for variables |
+| `constraint:` | `var[t] >= bound` | Occasionally binding regime on the defining equation |
+| `clock:` | `discrete` or `continuous` | Sets `spec.ir.clock`. Continuous-time households use `to_spec` on [`CTAiyagari`](@ref) |
+| `horizon:` | `infinite`, `finite`, `ages`, or `perpetual_youth` | Sets `spec.ir.horizon`. Extra `J=`, `retire=`, `survival=`, `earnings=` keys are stored; life-cycle models use `to_spec` on [`LifeCycleOLG`](@ref) |
+| `discrete:` / `absorbing:` | option names | Stored as IR declarations. Discrete-continuous choice uses [`dcegm_retirement_model`](@ref) |
 
 ### Time Subscripts
 
@@ -286,7 +292,7 @@ The matrix pair ``(\Gamma_0, \Gamma_1)`` defines a generalized eigenvalue proble
 | `C` | `Vector{T}` | ``n \times 1`` constants |
 | `Psi` | `Matrix{T}` | ``n \times n_{shocks}`` shock loading |
 | `Pi` | `Matrix{T}` | ``n \times n_{expect}`` expectation error selection |
-| `spec` | `DSGESpec{T}` | Back-reference to specification |
+| `spec` | `ModelSpec{T}` | Back-reference to specification |
 
 ---
 
@@ -294,7 +300,7 @@ The matrix pair ``(\Gamma_0, \Gamma_1)`` defines a generalized eigenvalue proble
 
 The package includes a 24-model replication suite that validates solutions against [Dynare](https://www.dynare.org/) 6.5+ reference values. The reference `.mod` files come from [Johannes Pfeifer's DSGE\_mod collection](https://github.com/JohannesPfeifer/DSGE_mod), a widely-used repository of Dynare model files for textbook and published DSGE models.
 
-Each replication script specifies the model using `@dsge` (or programmatic `DSGESpec` construction for large models), solves it, and compares the results against Dynare's `.mat` output for:
+Each replication script specifies the model using `@dsge` (or programmatic `ModelSpec` construction for large models), solves it, and compares the results against Dynare's `.mat` output for:
 
 - **Steady state** — variable-by-variable comparison (typical tolerance: ``10^{-6}``)
 - **Impulse response functions** — horizon-by-horizon comparison (typical tolerance: ``10^{-4}``)

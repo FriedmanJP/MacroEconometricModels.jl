@@ -31,7 +31,7 @@ References:
 # =============================================================================
 
 """
-    perturbation_solver(spec::DSGESpec{T}; order::Int=2, method::Symbol=:gensys) → PerturbationSolution{T}
+    perturbation_solver(spec::ModelSpec{T}; order::Int=2, method::Symbol=:gensys) → PerturbationSolution{T}
 
 Compute a perturbation approximation to the policy functions of a DSGE model.
 
@@ -69,7 +69,7 @@ A `PerturbationSolution{T}` containing the policy function coefficients:
 - Schmitt-Grohe & Uribe (2004), JEDC 28(4), 755-775.
 - Kim, Kim, Schaumburg & Sims (2008), JEDC 32(11), 3397-3414.
 """
-function perturbation_solver(spec::DSGESpec{T};
+function perturbation_solver(spec::ModelSpec{T};
                               order::Int=2,
                               method::Symbol=:gensys,
                               gmres_tol::T=T(1e-8),
@@ -687,14 +687,14 @@ end
 # =============================================================================
 
 """
-    _compute_all_third_derivatives(spec::DSGESpec{T}, y_ss::Vector{T})
+    _compute_all_third_derivatives(spec::ModelSpec{T}, y_ss::Vector{T})
         → Dict{Tuple{Symbol,Symbol,Symbol}, Array{T,4}}
 
 Compute all 20 unique third-derivative tensors for the 4 argument slots
 {current, lag, lead, shock}. Only canonical orderings (a ≤ b ≤ c) are computed;
 other orderings can be obtained by axis permutation via `_lookup_third_derivative`.
 """
-function _compute_all_third_derivatives(spec::DSGESpec{T}, y_ss::Vector{T}) where {T}
+function _compute_all_third_derivatives(spec::ModelSpec{T}, y_ss::Vector{T}) where {T}
     D3full = _full_third(spec, y_ss)           # build the full tensor ONCE, slice all blocks
     slots = [:current, :lag, :lead, :shock]
     result = Dict{Tuple{Symbol,Symbol,Symbol}, Array{T,4}}()

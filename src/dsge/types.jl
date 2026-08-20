@@ -11,144 +11,9 @@ Type definitions for DSGE models — specification, linearized form, solution, a
 using LinearAlgebra
 
 # =============================================================================
-# DSGESpec — parsed model specification from @dsge macro
+# ModelSpec (IR + compiled residuals) lives in dsge/ir.jl.
+# DSGESpec / HADSGESpec were removed in the v0.9.0 ModelSpec overhaul (#634).
 # =============================================================================
-
-"""
-    DSGESpec{T}
-
-Parsed DSGE model specification. Created by the `@dsge` macro.
-
-Fields:
-- `endog::Vector{Symbol}` — endogenous variable names (possibly augmented)
-- `exog::Vector{Symbol}` — exogenous shock names
-- `params::Vector{Symbol}` — parameter names
-- `param_values::Dict{Symbol,T}` — calibrated parameter values
-- `equations::Vector{Expr}` — raw Julia equation expressions (possibly augmented)
-- `residual_fns::Vector{Function}` — callable `f(y_t, y_lag, y_lead, ε, θ) → scalar`
-- `n_endog::Int` — number of endogenous variables (including auxiliaries)
-- `n_exog::Int` — number of exogenous shocks
-- `n_params::Int` — number of parameters
-- `n_expect::Int` — number of forward-looking *equations* (expectation errors η); this is the
-  count of forward equations, which need not equal the number of distinct lead variables that
-  form the Π columns (see `linearize`) — #223
-- `forward_indices::Vector{Int}` — indices of equations with `[t+1]` terms
-- `steady_state::Vector{T}` — steady state values
-- `varnames::Vector{String}` — display names
-- `ss_fn::Union{Nothing, Function}` — optional analytical steady-state function `θ → y_ss`
-- `original_endog::Vector{Symbol}` — pre-augmentation endogenous variable names
-- `original_equations::Vector{Expr}` — pre-augmentation equation expressions
-- `n_original_endog::Int` — number of original endogenous variables
-- `n_original_eq::Int` — number of original equations
-- `augmented::Bool` — whether model was augmented with auxiliary variables
-- `max_lag::Int` — maximum lag order in the model (1 for standard, >1 if augmented)
-- `max_lead::Int` — maximum lead order in the model (1 for standard, >1 if augmented)
-- `linear::Bool` — whether the model is pre-linearized (variables are deviations from SS)
-- `bellman_utility` — optional period reward for `vfi_solver` (from `@dsge utility:`)
-- `bellman_beta` — optional discount (`Symbol` or value) for `vfi_solver`
-- `bellman_consumption` — optional consumption symbol when `utility` is `u(c)`
-- `bellman_controls` — optional choice-variable names for `vfi_solver`
-"""
-struct DSGESpec{T<:AbstractFloat}
-    endog::Vector{Symbol}
-    exog::Vector{Symbol}
-    params::Vector{Symbol}
-    param_values::Dict{Symbol,T}
-    equations::Vector{Expr}
-    residual_fns::Vector{Function}
-    n_endog::Int
-    n_exog::Int
-    n_params::Int
-    n_expect::Int
-    forward_indices::Vector{Int}
-    steady_state::Vector{T}
-    varnames::Vector{String}
-    ss_fn::Union{Nothing, Function}
-    original_endog::Vector{Symbol}
-    original_equations::Vector{Expr}
-    n_original_endog::Int
-    n_original_eq::Int
-    augmented::Bool
-    max_lag::Int
-    max_lead::Int
-    linear::Bool
-    bellman_utility::Any
-    bellman_beta::Any
-    bellman_consumption::Union{Nothing,Symbol}
-    bellman_controls::Vector{Symbol}
-
-    function DSGESpec{T}(endog, exog, params, param_values, equations, residual_fns,
-                         n_expect, forward_indices, steady_state,
-                         ss_fn::Union{Nothing, Function}=nothing;
-                         original_endog::Vector{Symbol}=endog,
-                         original_equations::Vector{Expr}=equations,
-                         augmented::Bool=false,
-                         max_lag::Int=1,
-                         max_lead::Int=1,
-                         linear::Bool=false,
-                         bellman_utility=nothing,
-                         bellman_beta=nothing,
-                         bellman_consumption::Union{Nothing,Symbol}=nothing,
-                         bellman_controls::AbstractVector=Symbol[]) where {T<:AbstractFloat}
-        n_endog = length(endog)
-        n_exog = length(exog)
-        n_params = length(params)
-        n_original_endog = length(original_endog)
-        n_original_eq = length(original_equations)
-        @assert length(equations) == n_endog "Need as many equations as endogenous variables"
-        @assert length(residual_fns) == n_endog
-        @assert length(forward_indices) == n_expect
-        varnames = [string(s) for s in endog]
-        new{T}(endog, exog, params, param_values, equations, residual_fns,
-               n_endog, n_exog, n_params, n_expect, forward_indices, steady_state,
-               varnames, ss_fn, original_endog, original_equations,
-               n_original_endog, n_original_eq, augmented, max_lag, max_lead, linear,
-               bellman_utility, bellman_beta, bellman_consumption,
-               Symbol[bellman_controls...])
-    end
-end
-
-"""
-    _respec(spec::DSGESpec{T}, new_pv) -> DSGESpec{T}
-
-Rebuild `spec` at a new parameter dictionary `new_pv`, propagating EVERY flag that affects
-parsing and steady-state resolution: `original_endog`/`original_equations`, `augmented`,
-`max_lag`/`max_lead`, and crucially `linear`. Estimation loops that rebuilt the spec by hand
-and dropped these flags silently mis-specified augmented / pre-linearized (`linear=true`)
-models — the rebuilt spec was re-parsed as a plain nonlinear model (audit E-07 / #115).
-Steady state is left unset (`T[]`); callers run `compute_steady_state` when needed.
-"""
-function _respec(spec::DSGESpec{T}, new_pv) where {T<:AbstractFloat}
-    DSGESpec{T}(
-        spec.endog, spec.exog, spec.params, new_pv,
-        spec.equations, spec.residual_fns,
-        spec.n_expect, spec.forward_indices, T[], spec.ss_fn;
-        original_endog=spec.original_endog,
-        original_equations=spec.original_equations,
-        augmented=spec.augmented,
-        max_lag=spec.max_lag,
-        max_lead=spec.max_lead,
-        linear=spec.linear,
-        bellman_utility=spec.bellman_utility,
-        bellman_beta=spec.bellman_beta,
-        bellman_consumption=spec.bellman_consumption,
-        bellman_controls=copy(spec.bellman_controls),
-    )
-end
-
-"""
-    _original_var_indices(spec::DSGESpec) → Vector{Int}
-
-Return indices of original endogenous variables in the (possibly augmented) state vector.
-"""
-function _original_var_indices(spec::DSGESpec)
-    if !spec.augmented
-        return collect(1:spec.n_endog)
-    end
-    return [findfirst(==(v), spec.endog) for v in spec.original_endog]
-end
-
-# show(io, DSGESpec) is defined in dsge/display.jl
 
 # =============================================================================
 # LinearDSGE — canonical form Γ₀·y_t = Γ₁·y_{t-1} + C + Ψ·ε_t + Π·η_t
@@ -165,7 +30,7 @@ Fields:
 - `C::Vector{T}` — n × 1 constants
 - `Psi::Matrix{T}` — n × n_shocks shock loading
 - `Pi::Matrix{T}` — n × n_expect expectation error selection
-- `spec::DSGESpec{T}` — back-reference to specification
+- `spec::ModelSpec{T,NoAgents}` — back-reference to specification
 """
 struct LinearDSGE{T<:AbstractFloat}
     Gamma0::Matrix{T}
@@ -173,7 +38,7 @@ struct LinearDSGE{T<:AbstractFloat}
     C::Vector{T}
     Psi::Matrix{T}
     Pi::Matrix{T}
-    spec::DSGESpec{T}
+    spec::ModelSpec{T,NoAgents}
 
     function LinearDSGE{T}(Gamma0, Gamma1, C, Psi, Pi, spec) where {T<:AbstractFloat}
         n = spec.n_endog
@@ -217,7 +82,7 @@ Fields:
 - `eu::Vector{Int}` — [existence, uniqueness]: 1=yes, 0=no
 - `method::Symbol` — `:gensys`, `:blanchard_kahn`, or `:klein`
 - `eigenvalues::Vector{ComplexF64}` — eigenvalues of G1 (the state-transition matrix)
-- `spec::DSGESpec{T}` — model specification
+- `spec::ModelSpec{T,NoAgents}` — model specification
 - `linear::LinearDSGE{T}` — linearized form
 """
 struct DSGESolution{T<:AbstractFloat}
@@ -227,7 +92,7 @@ struct DSGESolution{T<:AbstractFloat}
     eu::Vector{Int}
     method::Symbol
     eigenvalues::Vector{ComplexF64}
-    spec::DSGESpec{T}
+    spec::ModelSpec{T,NoAgents}
     linear::LinearDSGE{T}
 end
 
@@ -366,7 +231,7 @@ struct PerturbationSolution{T<:AbstractFloat}
 
     eu::Vector{Int}
     method::Symbol
-    spec::DSGESpec{T}
+    spec::ModelSpec{T,NoAgents}
     linear::LinearDSGE{T}
 end
 
@@ -422,14 +287,14 @@ Fields:
 - `deviations::Matrix{T}` — T_periods × n_endog deviations from SS
 - `converged::Bool` — Newton convergence flag
 - `iterations::Int` — Newton iterations used
-- `spec::DSGESpec{T}` — model specification
+- `spec::ModelSpec{T,NoAgents}` — model specification
 """
 struct PerfectForesightPath{T<:AbstractFloat}
     path::Matrix{T}
     deviations::Matrix{T}
     converged::Bool
     iterations::Int
-    spec::DSGESpec{T}
+    spec::ModelSpec{T,NoAgents}
 end
 
 function Base.show(io::IO, pf::PerfectForesightPath{T}) where {T}
@@ -514,7 +379,7 @@ struct ProjectionSolution{T<:AbstractFloat}
     n_basis::Int
     multi_indices::Matrix{Int}      # n_basis × nx
     quadrature::Symbol              # :gauss_hermite or :monomial
-    spec::DSGESpec{T}
+    spec::ModelSpec{T,NoAgents}
     linear::LinearDSGE{T}
     impact::Matrix{T}               # first-order shock-impact matrix (companion-QZ), cached
     steady_state::Vector{T}
@@ -616,7 +481,7 @@ Fields:
 - `J_pvalue::T` — J-test p-value
 - `solution::Union{DSGESolution{T}, PerturbationSolution{T}}` — solution at estimated parameters
 - `converged::Bool` — optimization convergence
-- `spec::DSGESpec{T}` — model specification
+- `spec::ModelSpec{T,NoAgents}` — model specification
 """
 struct DSGEEstimation{T<:AbstractFloat} <: AbstractDSGEModel
     theta::Vector{T}
@@ -627,7 +492,7 @@ struct DSGEEstimation{T<:AbstractFloat} <: AbstractDSGEModel
     J_pvalue::T
     solution::Union{DSGESolution{T}, PerturbationSolution{T}, ProjectionSolution{T}}
     converged::Bool
-    spec::DSGESpec{T}
+    spec::ModelSpec{T,NoAgents}
 
     function DSGEEstimation{T}(theta, vcov, param_names, method, J_stat, J_pvalue,
                                 solution, converged, spec) where {T<:AbstractFloat}
@@ -720,7 +585,7 @@ Fields:
 - `regime_history::Matrix{Int}` — T_periods × n_constraints regime indicators (0 = slack, 1+ = binding)
 - `converged::Bool` — convergence flag
 - `iterations::Int` — number of guess-and-verify iterations
-- `spec::DSGESpec{T}` — model specification
+- `spec::ModelSpec{T,NoAgents}` — model specification
 - `varnames::Vector{String}` — variable display names
 - `constraints::Vector{OccBinConstraint{T}}` — constraint(s) used in the solve
 """
@@ -731,7 +596,7 @@ struct OccBinSolution{T<:AbstractFloat}
     regime_history::Matrix{Int}
     converged::Bool
     iterations::Int
-    spec::DSGESpec{T}
+    spec::ModelSpec{T,NoAgents}
     varnames::Vector{String}
     constraints::Vector{OccBinConstraint{T}}
 end

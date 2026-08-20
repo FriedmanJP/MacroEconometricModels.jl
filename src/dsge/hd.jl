@@ -35,7 +35,7 @@ Resolve `measurement_error=:auto` against the observable columns of `data`
 `historical_decomposition` methods accept the same `:auto` convention as
 `estimate_dsge_bayes`. `nothing` and explicit vectors pass through unchanged.
 """
-function _resolve_me_hd(measurement_error, spec::DSGESpec{T}, data::AbstractMatrix,
+function _resolve_me_hd(measurement_error, spec::ModelSpec{T}, data::AbstractMatrix,
                          observables::Vector{Symbol}) where {T<:AbstractFloat}
     measurement_error isa Symbol || return measurement_error
     obs_indices = [findfirst(==(obs), spec.endog) for obs in observables]

@@ -310,7 +310,8 @@ include("nowcast/news.jl")
 include("nowcast/forecast.jl")
 
 # DSGE models
-include("dsge/types.jl")
+include("dsge/ir.jl")             # ModelSpec + IR first — solution structs in types.jl hold ModelSpec
+include("dsge/types.jl")          # solution structs; ModelSpec lives in dsge/ir.jl
 include("dsge/constraints.jl")
 include("dsge/display.jl")
 include("dsge/parser.jl")
@@ -542,7 +543,7 @@ include("dsge/pruning.jl")
 # DSGE estimation (after estimate_var, irf, estimate_gmm)
 include("dsge/estimation.jl")
 
-# DSGE Bayesian estimation (after estimation.jl, needs DSGESpec, solve, ParameterTransform)
+# DSGE Bayesian estimation (after estimation.jl, needs ModelSpec, solve, ParameterTransform)
 include("dsge/prefilter.jl")
 include("dsge/bayes_types.jl")
 include("dsge/priors.jl")
@@ -571,6 +572,7 @@ include("dsge/heterogeneous/dcegm.jl")
 include("dsge/heterogeneous/reiter.jl")
 include("dsge/heterogeneous/winberry.jl")
 include("dsge/heterogeneous/examples.jl")
+include("dsge/heterogeneous/firms.jl")
 include("dsge/heterogeneous/parser.jl")
 include("dsge/heterogeneous/display.jl")
 include("dsge/heterogeneous/analysis.jl")
@@ -583,6 +585,8 @@ include("olg/lifecycle.jl")
 # Continuous-time heterogeneous agents (Achdou et al. 2022)
 include("ct/continuous_aiyagari.jl")
 include("ct/two_asset.jl")
+include("dsge/family_facades.jl")   # G-14 irf/fevd/simulate after family types
+include("dsge/heterogeneous/intermediary.jl")  # G-19 Bewley Banks (after _path_to_irf)
 
 # Policy counterfactuals (Barnichon-Mesters OPP, McKay-Wolf, CMW model bank)
 include("counterfactual/types.jl")
@@ -664,6 +668,7 @@ include("plotting/svar_statid.jl")     # PLT-32 (#494): non-Gaussian/heteroskeda
 include("plotting/dsge_extra.jl")      # PLT-33 (#495): PF path / smoother / DSGE-GMM / Bayes sim
 include("plotting/ha_dynamics.jl")     # PLT-34 (#496): distribution/inequality IRF, KS PLM, Den Haan
 include("plotting/ct_olg.jl")          # PLT-35 (#497): CT Aiyagari / two-asset / Blanchard OLG
+include("plotting/dcegm.jl")           # G-22 (#656): DCEGMSolution policy / threshold
 include("plotting/micro_coef.jl")      # PLT-36 (#498): panel/LDV coef & marginal-effect plots
 include("plotting/gmm.jl")             # PLT-37 (#499): GMM/SMM moment fit + news-impact
 include("plotting/fceval.jl")          # PLT-38 (#500): forecast-eval + LP extras
@@ -747,7 +752,14 @@ export balance_panel
 export AbstractDSGEModel
 
 # Types
-export DSGESpec, LinearDSGE, DSGESolution, PerturbationSolution, ProjectionSolution, PerfectForesightPath, DSGEEstimation
+export ModelSpec, NamedEquation, NoAgents, AbstractAgentSystem, ModelIR, HouseholdSystem
+export DCEGMSystem, LifeCycleSystem, ContinuousHouseholdSystem, FirmSystem, IntermediarySystem
+export IntermediarySteadyState, IntermediaryPE, IntermediaryTransition
+export intermediary_pe, intermediary_steady_state, intermediary_mit
+export to_spec, has_kind, agents_of
+export KhanThomasSteadyState, KhanThomasTransition
+export khan_thomas_example, khan_thomas_steady_state, khan_thomas_mit
+export LinearDSGE, DSGESolution, PerturbationSolution, ProjectionSolution, PerfectForesightPath, DSGEEstimation
 export DeterminacyMap, PrunedStateSpace
 
 # Bayesian DSGE
@@ -794,7 +806,7 @@ export KalmanSmootherResult
 export dsge_smoother, dsge_particle_smoother
 
 # Heterogeneous Agent DSGE types
-export HADSGESpec, HAGrid, IncomeProcess, IndividualProblem
+export HAGrid, IncomeProcess, IndividualProblem
 export HASteadyState, HADSGESolution, KrusellSmithSolution, DenHaanAccuracy
 export HAGridDiagnostics, ha_grid_diagnostics
 export adaptive_asset_grid, adapt_ha_grid
@@ -810,6 +822,8 @@ export combine_blocks, block_jacobian, ssj_jacobian, ssj_irf, ssj_arg_order
 export DCEGMProblem, DCEGMSolution, DCEGMDistribution
 export dcegm_solve, dcegm_policy, dcegm_choice_probabilities, dcegm_threshold
 export dcegm_simulate, dcegm_retirement_model
+export DCEGMFirm, DCEGMEquilibrium, DCEGMTransition
+export dcegm_steady_state, dcegm_capital_demand, dcegm_firm_wage, dcegm_mit
 # Winberry (2018) parametric distribution dynamics
 export ParametricDensity, WinberryFamily
 export fit_parametric_density, parametric_density, parametric_moments
@@ -822,6 +836,7 @@ export blanchard_steady_state, blanchard_solve, blanchard_transition
 export LifeCycleOLG, LifeCycleSteadyState
 export lifecycle_steady_state, lifecycle_policies, lifecycle_distribution
 export lifecycle_income, lifecycle_survival
+export LifeCycleTransition, lifecycle_transition
 
 # Continuous-time heterogeneous agents (Achdou et al. 2022)
 export CTAiyagari, CTPoissonIncome, CTSteadyState, CTTransition

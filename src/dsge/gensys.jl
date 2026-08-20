@@ -109,7 +109,7 @@ function gensys(Gamma0::AbstractMatrix{T}, Gamma1::AbstractMatrix{T},
 end
 
 """
-    _solve_undetermined_coefficients(spec::DSGESpec{T}) -> (G1, impact, eigenvalues)
+    _solve_undetermined_coefficients(spec::ModelSpec{T}) -> (G1, impact, eigenvalues)
 
 Solve the first-order DSGE system via iterative undetermined coefficients.
 
@@ -122,7 +122,7 @@ Guessing ŷ_t = G1·ŷ_{t-1} + M·ε_t and matching coefficients:
 The iteration G1_{k+1} = -(f₀ + f_lead·G1_k)⁻¹·f₁ converges to the unique stable
 solution. This method is robust to models with many static variables.
 """
-function _solve_undetermined_coefficients(spec::DSGESpec{T};
+function _solve_undetermined_coefficients(spec::ModelSpec{T};
         maxiter::Int=10000, tol::Real=1e-13,
         f_0::Union{Nothing,AbstractMatrix{T}}=nothing,
         f_1::Union{Nothing,AbstractMatrix{T}}=nothing,
@@ -160,9 +160,49 @@ function _solve_undetermined_coefficients(spec::DSGESpec{T};
 end
 
 """
-    solve(spec::DSGESpec{T}; method=:gensys, kwargs...) -> DSGESolution or PerfectForesightPath or PerturbationSolution
+    _solve_by_agent_kind(spec; kwargs...)
 
-Solve a DSGE model.
+Route `solve` / `compute_steady_state` to a family solver when `spec` carries a
+known non-HA [`AbstractAgentSystem`](@ref). Returns `nothing` for `NoAgents`
+(RA / Blanchard residuals) and for any [`HouseholdSystem`](@ref) (the caller
+uses `_ha_solve` / `_ha_compute_steady_state`, including several households).
+Several non-household populations error naming `#651` and [`agents_of`](@ref);
+an unknown kind errors naming the type.
+"""
+function _solve_by_agent_kind(spec::ModelSpec; kwargs...)
+    n_agents = length(spec.agents)
+    n_agents == 0 && return nothing
+    # Household GE (one or many) is `_ha_solve`, never this dispatcher.
+    has_kind(spec, HouseholdSystem) && return nothing
+    if n_agents > 1
+        throw(ArgumentError(
+            "solve: multiple agent populations (" *
+            join(string.(keys(spec.agents)), ", ") *
+            ") are not supported yet (#651). " *
+            "Use agents_of(spec, S) to address each kind."))
+    end
+    if has_kind(spec, DCEGMSystem)
+        return dcegm_solve(only(agents_of(spec, DCEGMSystem)).problem; kwargs...)
+    elseif has_kind(spec, LifeCycleSystem)
+        return lifecycle_steady_state(only(agents_of(spec, LifeCycleSystem)).model; kwargs...)
+    elseif has_kind(spec, ContinuousHouseholdSystem)
+        m = only(agents_of(spec, ContinuousHouseholdSystem)).model
+        return m isa CTTwoAsset ? ct_two_asset_ge(m; kwargs...) : ct_steady_state(m; kwargs...)
+    end
+    kind = typeof(only(values(spec.agents)))
+    throw(ArgumentError("solve: no solver for agent kind $kind"))
+end
+
+"""
+    solve(spec::ModelSpec{T}; method=:gensys, kwargs...) -> DSGESolution or PerfectForesightPath or PerturbationSolution
+
+Solve a DSGE model. Dispatch is by `has_kind`, never by the agent key
+name: one or more `HouseholdSystem`s → `_ha_solve` (SSJ DAG via
+[`combine_blocks`](@ref); agent FOCs never enter gensys),
+`DCEGMSystem` → `dcegm_solve`, `LifeCycleSystem` → `lifecycle_steady_state`,
+`ContinuousHouseholdSystem` → `ct_steady_state` / `ct_two_asset_ge`.
+`NoAgents` (including Blanchard residuals from [`to_spec`](@ref)) uses
+the linear / global methods below.
 
 # Methods
 - `:gensys` -- Sims (2002) QZ decomposition (default)
@@ -171,10 +211,24 @@ Solve a DSGE model.
 - `:perturbation` -- Higher-order perturbation (Schmitt-Grohe & Uribe 2004); pass `order=2` for second-order
 - `:projection` -- Chebyshev collocation (Judd 1998); pass `degree=5` for polynomial degree
 - `:pfi` -- Policy Function Iteration / Time Iteration (Coleman 1990); pass `degree=5`, `damping=1.0`
-- `:vfi` -- Euler-equation time iteration (Coleman 1990), equivalent to `:pfi` (the name is historical, not value-function iteration); pass `degree=5`, `howard_steps=0`
+- `:vfi` -- Bellman value-function iteration (Howard 1960); requires `utility` and `beta` (from `@dsge` or keywords). `transition` / `control_bounds` are inferred when omitted.
 - `:perfect_foresight` -- deterministic Newton solver
 """
-function solve(spec::DSGESpec{T}; method::Symbol=:gensys, kwargs...) where {T<:AbstractFloat}
+function solve(spec::ModelSpec{T}; method::Symbol=:gensys, kwargs...) where {T<:AbstractFloat}
+    if has_kind(spec, HouseholdSystem)
+        if any(a -> !(a isa HouseholdSystem), values(spec.agents))
+            throw(ArgumentError(
+                "solve: mixed agent kinds (" *
+                join(string.(keys(spec.agents)), ", ") *
+                ") are not supported yet (#651). " *
+                "Use agents_of(spec, HouseholdSystem) to address household " *
+                "populations; agent FOCs never enter gensys."))
+        end
+        ha_method = method === :gensys ? :ssj : method
+        return _ha_solve(spec; method=ha_method, kwargs...)
+    end
+    kind_sol = _solve_by_agent_kind(spec; kwargs...)
+    kind_sol !== nothing && return kind_sol
     if isempty(spec.steady_state)
         if spec.linear
             # Linear models: steady state is all zeros (variables are deviations)

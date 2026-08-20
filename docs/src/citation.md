@@ -10,7 +10,7 @@ version.
 
 Plain-text (AEA style):
 
-> Chung, Wookyung. 2026. *MacroEconometricModels.jl*, version 0.8.2. Zenodo.
+> Chung, Wookyung. 2026. *MacroEconometricModels.jl*, version 0.9.0. Zenodo.
 > [https://doi.org/10.5281/zenodo.18439170](https://doi.org/10.5281/zenodo.18439170).
 
 BibTeX:
@@ -57,7 +57,7 @@ See [Utilities & Display API](@ref api_utilities) for the full `refs` signature.
 | Field | Value |
 |-------|-------|
 | Author | Wookyung Chung (`chung@friedman.jp`) |
-| Version | 0.8.2 |
+| Version | 0.9.0 |
 | Repository | [github.com/FriedmanJP/MacroEconometricModels.jl](https://github.com/FriedmanJP/MacroEconometricModels.jl) |
 | License | GPL-3.0-or-later |
 | Software DOI | [10.5281/zenodo.18439170](https://doi.org/10.5281/zenodo.18439170) |

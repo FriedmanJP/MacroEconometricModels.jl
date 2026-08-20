@@ -73,7 +73,7 @@ _laneD_ml() = _MEM.NonGaussianMLResult([1.0 0.2; 0.3 1.0], Matrix(1.0I, 2, 2),
 function _laneD_spec(varnames::Vector{Symbol}, ss::Vector{Float64})
     n = length(varnames)
     eqs = Expr[:($(v)[t] = $(v)[t]) for v in varnames]
-    _MEM.DSGESpec{Float64}(varnames, [:e], Symbol[], Dict{Symbol,Float64}(),
+    _MEM.ModelSpec{Float64}(varnames, [:e], Symbol[], Dict{Symbol,Float64}(),
         eqs, Function[identity for _ in 1:n], 0, Int[], ss)
 end
 

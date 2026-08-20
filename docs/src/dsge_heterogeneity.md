@@ -1,6 +1,6 @@
 # [Heterogeneity & Continuous Time](@id dsge_heterogeneity)
 
-The representative-agent models of the [DSGE Models](@ref dsge_page) suite collapse the cross-section of households into a single decision-maker. That assumption is what makes the Sims (2002) canonical form possible, and it is exactly what fails when the question involves who holds the wealth, who bears the risk, or how long anyone lives. The three families on this page each break the representative agent in a different way, and each therefore carries its own solver rather than routing through `linearize` and `solve`.
+The representative-agent models of the [DSGE Models](@ref dsge_page) suite collapse the cross-section of households into a single decision-maker. That assumption is what makes the Sims (2002) canonical form possible, and it is exactly what fails when the question involves who holds the wealth, who bears the risk, or how long anyone lives. The three families on this page each break the representative agent in a different way. `solve` still dispatches on the agent **kind** (`HouseholdSystem`, `DCEGMSystem`, `LifeCycleSystem`, `ContinuousHouseholdSystem`, `FirmSystem`, `IntermediarySystem`); only Blanchard perpetual-youth residuals stay on the representative-agent Gensys path, because they are `NoAgents` aggregate identities.
 
 **Heterogeneous-agent models** keep the wealth distribution itself as a state variable: households face uninsurable idiosyncratic income risk and a borrowing constraint, so their marginal propensities to consume differ and aggregate dynamics depend on who receives a shock. **Overlapping-generations models** replace the infinitely-lived household with cohorts that die and are replaced, so finite horizons drive a wedge between the interest rate and the discount rate and government debt becomes net wealth. **Continuous-time models** solve the same incomplete-markets problem as a pair of partial differential equations on a sparse grid, which buys accuracy on fine wealth grids that discrete-time simulation cannot match.
 
@@ -38,6 +38,8 @@ The economic mechanism that matters selects the family, and the family selects t
 | Accuracy on fine wealth grids | [Continuous Time](@ref dsge_continuous) | Implicit upwind scheme, no simulation |
 | Stationary distribution from a sparse operator | [Continuous Time](@ref dsge_continuous) | One generator drives HJB and KFE |
 | Liquid/illiquid portfolio choice | [Continuous Time](@ref dsge_continuous) | Kaplan-Moll-Violante two-asset machinery |
+| Lumpy plant investment | [Heterogeneous Agents](@ref dsge_ha) | Khan–Thomas (2008) `FirmSystem` |
+| Bank net-worth distribution | [Heterogeneous Agents](@ref dsge_ha) | Bewley Banks `IntermediarySystem` |
 
 Discrete and continuous time are alternative formulations of the same incomplete-markets economy, not competing models. Choose continuous time when the wealth grid must be fine or the stationary distribution is the object of interest, and discrete time when the model must be estimated or embedded in a sequence-space general-equilibrium block.
 
@@ -45,7 +47,7 @@ Discrete and continuous time are alternative formulations of the same incomplete
 
 ## Child Pages
 
-- [Heterogeneous Agents](@ref dsge_ha) --- EGM and VFI individual problems, Young (2010) distribution tracking, sequence-space Jacobian, Reiter, and Krusell-Smith aggregate solvers, Winberry parametric distributions, two-asset HANK, and Bayesian estimation
+- [Heterogeneous Agents](@ref dsge_ha) --- EGM and VFI individual problems, Young (2010) distribution tracking, sequence-space Jacobian, Reiter, and Krusell-Smith aggregate solvers, Winberry parametric distributions, two-asset HANK, multi-population `solve`, Khan–Thomas plants, Bewley Banks, and Bayesian estimation
 - [Overlapping Generations](@ref dsge_olg) --- Blanchard (1985) perpetual-youth steady state and saddle-path dynamics, annuity markets, non-Ricardian government debt, and age-dependent life-cycle EGM
 - [Continuous Time](@ref dsge_continuous) --- Achdou et al. (2022) HJB and Kolmogorov-Forward finite differences, MIT-shock transitions, and two-asset Kaplan-Moll-Violante HANK
 
@@ -66,3 +68,9 @@ Discrete and continuous time are alternative formulations of the same incomplete
 - Krusell, Per, and Anthony A. Smith Jr. 1998. "Income and Wealth Heterogeneity in the Macroeconomy." *Journal of Political Economy* 106 (5): 867--896. [DOI](https://doi.org/10.1086/250034)
 
 - Young, Eric R. 2010. "Solving the Incomplete Markets Model with Aggregate Uncertainty Using the Krusell--Smith Algorithm and Non-Stochastic Simulations." *Journal of Economic Dynamics and Control* 34 (1): 36--41. [DOI](https://doi.org/10.1016/j.jedc.2008.11.010)
+
+- Gertler, Mark, and Peter Karadi. 2011. "A Model of Unconventional Monetary Policy." *Journal of Monetary Economics* 58 (1): 17--34. [DOI](https://doi.org/10.1016/j.jmoneco.2010.10.004)
+
+- Jamilov, Rustam, and Tommaso Monacelli. 2026. "Bewley Banks." *Review of Economic Studies* 93 (3): 1889--1925. [DOI](https://doi.org/10.1093/restud/rdaf062)
+
+- Khan, Aubhik, and Julia K. Thomas. 2008. "Idiosyncratic Shocks and the Role of Nonconvexities in Plant and Aggregate Investment Dynamics." *Econometrica* 76 (2): 395--436. [DOI](https://doi.org/10.1111/j.1468-0262.2008.00837.x)

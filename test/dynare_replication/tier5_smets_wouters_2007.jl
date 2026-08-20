@@ -435,7 +435,7 @@ println("  Indices: $forward_indices")
 equations = Expr[:(0 + 0) for _ in 1:n]
 
 # Build spec
-spec = MacroEconometricModels.DSGESpec{Float64}(
+spec = MacroEconometricModels.ModelSpec{Float64}(
     endog, exog, param_names, param_values,
     equations, residual_fns,
     n_expect, forward_indices, Float64[], nothing;

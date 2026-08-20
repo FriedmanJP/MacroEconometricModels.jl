@@ -51,7 +51,7 @@ end
 end
 
 @testset "DSGESpec construction" begin
-    spec = DSGESpec{Float64}(
+    spec = ModelSpec{Float64}(
         [:C, :K], [:ε_A], [:α, :β],
         Dict(:α => 0.33, :β => 0.99),
         [:(C[t] + K[t]), :(K[t] - C[t])], [identity, identity],
@@ -72,14 +72,14 @@ end
 
 @testset "DSGESpec validation" begin
     # Too few equations for endog count
-    @test_throws AssertionError DSGESpec{Float64}(
+    @test_throws ArgumentError ModelSpec{Float64}(
         [:C, :K], [:ε_A], [:α],
         Dict(:α => 0.33),
         [:(C[t])], [identity],  # only 1 equation for 2 endog
         0, Int[], Float64[]
     )
     # Mismatched residual_fns count
-    @test_throws AssertionError DSGESpec{Float64}(
+    @test_throws ArgumentError ModelSpec{Float64}(
         [:C], [:ε_A], [:α],
         Dict(:α => 0.33),
         [:(C[t])], [identity, identity],  # 2 fns for 1 equation
@@ -88,7 +88,7 @@ end
 end
 
 @testset "DSGESpec show" begin
-    spec = DSGESpec{Float64}(
+    spec = ModelSpec{Float64}(
         [:C, :K], [:ε_A], [:α, :β],
         Dict(:α => 0.33, :β => 0.99),
         [:(C[t] + K[t]), :(K[t] - C[t])], [identity, identity],
@@ -104,7 +104,7 @@ end
 end
 
 @testset "DSGESpec with forward-looking variables" begin
-    spec = DSGESpec{Float64}(
+    spec = ModelSpec{Float64}(
         [:C, :K, :R], [:ε_A], [:α, :β, :δ],
         Dict(:α => 0.33, :β => 0.99, :δ => 0.025),
         [:(C[t]), :(K[t]), :(R[t])], [identity, identity, identity],
@@ -116,7 +116,7 @@ end
 end
 
 @testset "LinearDSGE construction" begin
-    spec = DSGESpec{Float64}(
+    spec = ModelSpec{Float64}(
         [:y1, :y2], [:ε], [:ρ],
         Dict(:ρ => 0.9),
         [:(y1[t]), :(y2[t])], [identity, identity],
@@ -135,7 +135,7 @@ end
 end
 
 @testset "LinearDSGE validation" begin
-    spec = DSGESpec{Float64}(
+    spec = ModelSpec{Float64}(
         [:y1, :y2], [:ε], [:ρ],
         Dict(:ρ => 0.9),
         [:(y1[t]), :(y2[t])], [identity, identity],
@@ -154,7 +154,7 @@ end
 end
 
 @testset "LinearDSGE show" begin
-    spec = DSGESpec{Float64}(
+    spec = ModelSpec{Float64}(
         [:y1, :y2], [:ε], [:ρ],
         Dict(:ρ => 0.9),
         [:(y1[t]), :(y2[t])], [identity, identity],
@@ -173,7 +173,7 @@ end
 end
 
 @testset "DSGESolution construction and accessors" begin
-    spec = DSGESpec{Float64}(
+    spec = ModelSpec{Float64}(
         [:y1, :y2], [:ε], [:ρ],
         Dict(:ρ => 0.9),
         [:(y1[t]), :(y2[t])], [identity, identity],
@@ -209,7 +209,7 @@ end
 end
 
 @testset "DSGESolution show" begin
-    spec = DSGESpec{Float64}(
+    spec = ModelSpec{Float64}(
         [:y1, :y2], [:ε], [:ρ],
         Dict(:ρ => 0.9),
         [:(y1[t]), :(y2[t])], [identity, identity],
@@ -234,7 +234,7 @@ end
 end
 
 @testset "PerfectForesightPath construction" begin
-    spec = DSGESpec{Float64}(
+    spec = ModelSpec{Float64}(
         [:C, :K], [:ε_A], [:α],
         Dict(:α => 0.33),
         [:(C[t]), :(K[t])], [identity, identity],
@@ -250,7 +250,7 @@ end
 end
 
 @testset "PerfectForesightPath show" begin
-    spec = DSGESpec{Float64}(
+    spec = ModelSpec{Float64}(
         [:C, :K], [:ε_A], [:α],
         Dict(:α => 0.33),
         [:(C[t]), :(K[t])], [identity, identity],
@@ -266,7 +266,7 @@ end
 end
 
 @testset "DSGEEstimation construction" begin
-    spec = DSGESpec{Float64}(
+    spec = ModelSpec{Float64}(
         [:y1, :y2], [:ε], [:ρ, :σ],
         Dict(:ρ => 0.9, :σ => 0.01),
         [:(y1[t]), :(y2[t])], [identity, identity],
@@ -296,7 +296,7 @@ end
 end
 
 @testset "DSGEEstimation validation" begin
-    spec = DSGESpec{Float64}(
+    spec = ModelSpec{Float64}(
         [:y1], [:ε], [:ρ],
         Dict(:ρ => 0.9),
         [:(y1[t])], [identity],
@@ -322,7 +322,7 @@ end
 end
 
 @testset "DSGEEstimation show" begin
-    spec = DSGESpec{Float64}(
+    spec = ModelSpec{Float64}(
         [:y1, :y2], [:ε], [:ρ, :σ],
         Dict(:ρ => 0.9, :σ => 0.01),
         [:(y1[t]), :(y2[t])], [identity, identity],
@@ -352,7 +352,7 @@ end
 end
 
 @testset "DSGEEstimation report" begin
-    spec = DSGESpec{Float64}(
+    spec = ModelSpec{Float64}(
         [:y1, :y2], [:ε], [:ρ, :σ],
         Dict(:ρ => 0.9, :σ => 0.01),
         [:(y1[t]), :(y2[t])], [identity, identity],
@@ -387,7 +387,7 @@ end
         exogenous: ε
         y[t] = ρ * y[t-1] + σ * ε[t]
     end
-    @test spec isa DSGESpec{Float64}
+    @test spec isa ModelSpec{Float64,NoAgents}
     @test spec.endog == [:y]
     @test spec.exog == [:ε]
     @test spec.params == [:ρ, :σ]
@@ -412,17 +412,119 @@ end
     @test spec.n_params == 2
 end
 
-@testset "Parser: forward-looking / E[t]" begin
-    spec = @dsge begin
+@testset "Parser: E[t] is rejected" begin
+    @test_throws LoadError eval(:(@dsge begin
         parameters: β = 0.5
         endogenous: x
         exogenous: ε
         x[t] = β * E[t](x[t+1]) + ε[t]
-    end
-    @test spec.n_expect == 1  # one forward-looking variable
+    end))
 end
 
-@testset "Parser: implicit forward (no E[t])" begin
+@testset "Parser: endogenous E is a variable" begin
+    spec = @dsge begin
+        parameters: ρ = 0.9
+        endogenous: E
+        exogenous: ε
+        E[t] = ρ * E[t-1] + ε[t]
+    end
+    @test spec isa ModelSpec{Float64,NoAgents}
+    @test spec.endog == [:E]
+    @test spec.equations[1].name === :E
+    @test spec.equations[1].defines === :E
+end
+
+@testset "Parser: named equation" begin
+    spec = @dsge begin
+        parameters: β = 0.5
+        endogenous: x
+        exogenous: ε
+        euler: x[t] = β * x[t+1] + ε[t]
+    end
+    @test spec.equations[1].name === :euler
+    @test spec.equations[1].defines === :x
+    @test spec.n_expect == 1
+end
+
+@testset "Parser: varnames" begin
+    spec = @dsge begin
+        parameters: ρ = 0.9
+        endogenous: y
+        exogenous: ε
+        varnames: Output
+        y[t] = ρ * y[t-1] + ε[t]
+    end
+    @test spec.varnames == ["Output"]
+end
+
+@testset "Parser: constraint: attaches :binding (#635)" begin
+    spec = @dsge begin
+        parameters: rho = 0.5, phi = 1.5
+        endogenous: y, i
+        exogenous: e
+        constraint: i[t] >= 0
+        y[t] = rho * y[t-1] + e[t]
+        i[t] = phi * y[t]
+    end
+    @test spec.equations[1].defines === :y
+    @test spec.equations[2].defines === :i
+    @test !haskey(spec.equations[1].regimes, :binding)
+    @test haskey(spec.equations[2].regimes, :binding)
+    bind = spec.equations[2].regimes[:binding]
+    @test bind.defines === :i
+    y_ss = [0.0, 0.0]
+    @test bind.residual(y_ss, y_ss, y_ss, [0.0], Dict(:rho => 0.5, :phi => 1.5)) ≈ 0.0
+end
+
+@testset "Parser: constraint: named equation" begin
+    spec = @dsge begin
+        parameters: rho = 0.5, phi = 1.5
+        endogenous: y, i
+        exogenous: e
+        constraint: taylor = i[t] >= 0
+        y[t] = rho * y[t-1] + e[t]
+        taylor: i[t] = phi * y[t]
+    end
+    @test spec.equations[2].name === :taylor
+    @test haskey(spec.equations[2].regimes, :binding)
+    @test spec.equations[2].regimes[:binding].defines === :i
+end
+
+@testset "Parser: constraint: no defining equation" begin
+    @test_throws LoadError eval(:(@dsge begin
+        parameters: rho = 0.5, phi = 1.5
+        endogenous: y, i
+        exogenous: e
+        constraint: i[t] >= 0
+        y[t] = rho * y[t-1] + e[t]
+        0 = i[t] - phi * y[t]
+    end))
+end
+
+@testset "Parser: constraint: several defining equations" begin
+    @test_throws LoadError eval(:(@dsge begin
+        parameters: rho = 0.5, phi = 1.5
+        endogenous: y, i
+        exogenous: e
+        constraint: i[t] >= 0
+        taylor: i[t] = phi * y[t]
+        shadow: i[t] = 0.5 * y[t]
+    end))
+end
+
+@testset "Parser: constraint: two constraints one equation" begin
+    @test_throws LoadError eval(:(@dsge begin
+        parameters: rho = 0.5, phi = 1.5
+        endogenous: y, i
+        exogenous: e
+        constraint: taylor = y[t] >= -10.0
+        constraint: taylor = i[t] >= 0.0
+        y[t] = rho * y[t-1] + e[t]
+        taylor: i[t] = phi * y[t]
+    end))
+end
+
+@testset "Parser: implicit forward (lead is RE)" begin
     spec = @dsge begin
         parameters: β = 0.5
         endogenous: x
@@ -461,7 +563,7 @@ end
         y[t] = ρ * y[t-1] + σ * ε[t]
         steady_state: [0.0]
     end
-    @test spec isa DSGESpec{Float64}
+    @test spec isa ModelSpec{Float64,NoAgents}
     @test spec.ss_fn !== nothing
     @test spec.ss_fn(spec.param_values) == [0.0]
     @test spec.n_endog == 1
@@ -516,7 +618,7 @@ end
 @testset "Steady state: AR(1)" begin
     spec = AR1_SPEC_SIGMA_LOW
     spec2 = compute_steady_state(spec)
-    @test spec2 isa DSGESpec
+    @test spec2 isa ModelSpec
     @test length(spec2.steady_state) == 1
     @test spec2.steady_state[1] ≈ 0.0 atol=1e-6  # AR(1) SS = 0
 end
@@ -552,7 +654,7 @@ end
 
 @testset "Steady state: ss_fn field on DSGESpec" begin
     # DSGESpec with ss_fn=nothing (backward compat)
-    spec = DSGESpec{Float64}(
+    spec = ModelSpec{Float64}(
         [:y], [:ε], [:ρ],
         Dict(:ρ => 0.9),
         [:(y[t])], [identity],
@@ -562,7 +664,7 @@ end
 
     # DSGESpec with explicit ss_fn
     my_ss = (θ) -> [0.0]
-    spec2 = DSGESpec{Float64}(
+    spec2 = ModelSpec{Float64}(
         [:y], [:ε], [:ρ],
         Dict(:ρ => 0.9),
         [:(y[t])], [identity],
@@ -573,7 +675,7 @@ end
 end
 
 @testset "Steady state: auto-detect ss_fn on spec" begin
-    spec = DSGESpec{Float64}(
+    spec = ModelSpec{Float64}(
         [:y], [:ε], [:ρ],
         Dict(:ρ => 0.9),
         [:(y[t])], [identity],
@@ -633,7 +735,7 @@ end
         parameters: β = 0.5
         endogenous: x
         exogenous: ε
-        x[t] = β * E[t](x[t+1]) + ε[t]
+        x[t] = β * x[t+1] + ε[t]
     end
     spec = compute_steady_state(spec)
     ld = linearize(spec)
@@ -683,7 +785,7 @@ end
         parameters: β = 0.5
         endogenous: x
         exogenous: ε
-        x[t] = β * E[t](x[t+1]) + ε[t]
+        x[t] = β * x[t+1] + ε[t]
     end
     spec = compute_steady_state(spec)
     sol = solve(spec; method=:gensys)
@@ -2293,7 +2395,7 @@ end
         parameters: β = 0.5
         endogenous: x
         exogenous: ε
-        x[t] = β * E[t](x[t+1]) + ε[t]
+        x[t] = β * x[t+1] + ε[t]
     end
     spec = compute_steady_state(spec)
     sg = solve(spec; method=:gensys)
@@ -2306,7 +2408,7 @@ end
         parameters: ρ = 0.7, β = 0.3
         endogenous: y
         exogenous: e
-        y[t] = ρ * y[t-1] + β * E[t](y[t+1]) + e[t]
+        y[t] = ρ * y[t-1] + β * y[t+1] + e[t]
     end
     spec2 = compute_steady_state(spec2)
     @test solve(spec2; method=:perturbation).eu == solve(spec2; method=:gensys).eu == [1, 1]
@@ -2848,7 +2950,7 @@ end
         parameters: β = 0.5, σ = 1.0
         endogenous: x
         exogenous: ε
-        x[t] = β * E[t](x[t+1]) + σ * ε[t]
+        x[t] = β * x[t+1] + σ * ε[t]
     end
 
     # Solve with both methods
@@ -3535,7 +3637,7 @@ end
     end
 end
 
-@testset "OccBin defining-equation collision (#219)" begin
+@testset "OccBin defining equation by name (#635)" begin
     spec = @dsge begin
         parameters: rho = 0.5, phi = 1.5
         endogenous: y, i
@@ -3545,13 +3647,73 @@ end
     end
     spec = compute_steady_state(spec)
     M = MacroEconometricModels
-    # under the sensitivity heuristic BOTH y and i map to equation 2 (i = phi·y)
-    @test M._defining_equation_index(spec, 1)[1] == 2
-    @test M._defining_equation_index(spec, 2)[1] == 2
-    # the two-constraint default must refuse (collision detected on the ORIGINAL spec)
+    @test M._defining_equation_index(spec, :y) == 1
+    @test M._defining_equation_index(spec, :i) == 2
+    # uniquely defined y and i no longer collide (the Jacobian heuristic is gone)
     c_y = parse_constraint(:(y[t] >= -10.0), spec)
     c_i = parse_constraint(:(i[t] >= 0.0), spec)
-    @test_throws ArgumentError occbin_solve(spec, c_y, c_i; shock_path=zeros(10, 1), nperiods=10)
+    sol = occbin_solve(spec, c_y, c_i; shock_path=zeros(10, 1), nperiods=10)
+    @test sol isa OccBinSolution{Float64}
+end
+
+@testset "OccBin same defining equation collision (#635)" begin
+    spec = @dsge begin
+        parameters: rho = 0.5, phi = 1.5
+        endogenous: y, i
+        exogenous: e
+        y[t] = rho * y[t-1] + e[t]
+        i[t] = phi * y[t]
+    end
+    spec = compute_steady_state(spec)
+    c1 = parse_constraint(:(i[t] >= 0.0), spec)
+    c2 = parse_constraint(:(i[t] <= 1.0), spec)
+    @test_throws ArgumentError occbin_solve(spec, c1, c2; shock_path=zeros(10, 1), nperiods=10)
+end
+
+@testset "OccBin no defining equation throws (#635)" begin
+    spec = @dsge begin
+        parameters: rho = 0.5, phi = 1.5
+        endogenous: y, i
+        exogenous: e
+        y[t] = rho * y[t-1] + e[t]
+        0 = i[t] - phi * y[t]
+    end
+    spec = compute_steady_state(spec)
+    c = parse_constraint(:(i[t] >= 0), spec)
+    @test_throws ArgumentError occbin_solve(spec, c; shock_path=zeros(10, 1), nperiods=10)
+end
+
+@testset "OccBin several defining equations throws (#635)" begin
+    spec = @dsge begin
+        parameters: rho = 0.5, phi = 1.5
+        endogenous: y, i
+        exogenous: e
+        taylor: i[t] = phi * y[t]
+        shadow: i[t] = 0.5 * y[t]
+    end
+    spec = compute_steady_state(spec)
+    c = parse_constraint(:(i[t] >= 0), spec)
+    @test_throws ArgumentError occbin_solve(spec, c; shock_path=zeros(10, 1), nperiods=10)
+end
+
+@testset "OccBin: Expr constraint and @dsge constraint: (#635)" begin
+    _suppress_warnings() do
+    spec = @dsge begin
+        parameters: rho = 0.9, phi = 1.5
+        endogenous: y, i
+        exogenous: e
+        constraint: i[t] >= 0
+        y[t] = rho * y[t-1] + e[t]
+        taylor: i[t] = phi * y[t]
+    end
+    spec = compute_steady_state(spec)
+    shock_path = zeros(40, 1)
+    shock_path[1, 1] = -2.0
+    sol = occbin_solve(spec, :(i[t] >= 0); shock_path=shock_path, nperiods=40)
+    @test sol.converged
+    @test minimum(sol.piecewise_path[:, 2]) >= -1e-8
+    @test haskey(spec.equations[2].regimes, :binding)
+    end
 end
 
 @testset "OccBin: two-constraint no-binding" begin
@@ -3968,15 +4130,14 @@ end
     nk_swap = compute_steady_state(nk_swap)
     nk_std = compute_steady_state(nk_std)
 
-    c_swap = parse_constraint(:(R[t] >= 0), nk_swap)
-    c_std = parse_constraint(:(R[t] >= 0), nk_std)
-
-    shocks = zeros(40, 1)
-    shocks[1, 1] = -1.0
-    sol_swap = occbin_solve(nk_swap, c_swap; shock_path=shocks)
-    sol_std = occbin_solve(nk_std, c_std; shock_path=shocks)
-
-    @test sol_swap.piecewise_path ≈ sol_std.piecewise_path atol=1e-4
+    M = MacroEconometricModels
+    # Taylor is the unique `defines === :R` equation even when it is not row 3.
+    # (This NK has SS R=0, so a full OccBin path with R[t]>=0 is singular;
+    #  path equality is covered by the simple ZLB specs above.)
+    @test M._defining_equation_index(nk_swap, :R) == 2
+    @test M._defining_equation_index(nk_std, :R) == 3
+    @test nk_swap.equations[2].defines === :R
+    @test nk_std.equations[3].defines === :R
 end
 
 @testset "OccBin divergence detection" begin
@@ -4603,7 +4764,7 @@ end
         ld = linearize(spec)
         @test MacroEconometricModels._count_predetermined(ld) == 1
 
-        # Purely forward-looking: x[t] = β*E[t](x[t+1]) + ε[t] — 0 predetermined
+        # Purely forward-looking: x[t] = β*x[t+1] + ε[t] — 0 predetermined
         spec2 = @dsge begin
             parameters: β = 0.5, σ = 1.0
             endogenous: x
@@ -6778,6 +6939,49 @@ T_lo(::Dict) = 1e-4
     @test spec2.bellman_consumption === :c
 end
 
+@testset "@dsge compound utility: CRRA (MSR-12)" begin
+    # @testset is a soft local scope: `sol =` / `spec =` would clobber the
+    # hoisted log-utility solve used by the rest of this file.
+    spec_crra = @dsge begin
+        parameters: β = 0.99, α = 0.36, δ = 0.025, ρ = 0.95, σ = 0.007, γ = 1.01
+        endogenous: c, k, a
+        exogenous: ε
+        utility: c^(1 - γ) / (1 - γ)
+        beta: β
+        controls: c
+        euler: 1 / c[t]^γ = β * (1 / c[t+1]^γ) * (α * exp(a[t+1]) * k[t]^(α - 1) + 1 - δ)
+        c[t] + k[t] = exp(a[t]) * k[t-1]^α + (1 - δ) * k[t-1]
+        a[t] = ρ * a[t-1] + σ * ε[t]
+    end
+    @test spec_crra.bellman_utility isa Expr
+    @test spec_crra.bellman_consumption === :c
+    spec_crra = compute_steady_state(spec_crra)
+    sol_crra = solve(spec_crra; method=:vfi, next_state=:residual, degree=3, n_grid=8,
+                     max_iter=200, howard_steps=10, n_choice=17, verbose=false)
+    @test sol_crra.converged
+    x_ss_crra = spec_crra.steady_state[sol_crra.state_indices]
+    @test isfinite(evaluate_policy(sol_crra, x_ss_crra)[1])
+end
+
+@testset "@dsge utility: unknown symbol (MSR-12)" begin
+    err = try
+        @eval @dsge begin
+            parameters: β = 0.99
+            endogenous: c, k
+            exogenous: ε
+            utility: log(Q)
+            beta: β
+            controls: c
+            c[t] + k[t] = k[t-1]
+            k[t] = 0.9 * k[t-1]
+        end
+        error("should have thrown")
+    catch e
+        e
+    end
+    @test occursin("Q", sprint(showerror, err))
+end
+
 @testset "Euler-only spec errors and names pfi_solver" begin
     spec_ar = @dsge begin
         parameters: ρ = 0.9, σ = 0.01
@@ -6901,6 +7105,97 @@ end
     @test irfs isa ImpulseResponse
     @test size(irfs.values, 1) == 6
     @test size(irfs.values, 2) == 3
+end
+
+@testset "VFI infers transition and bounds from ModelSpec (#658)" begin
+    spec_inf = @dsge begin
+        parameters: β = 0.99, α = 0.36, δ = 0.025, ρ = 0.95, σ = 0.007
+        endogenous: c, k, a
+        exogenous: ε
+        utility: log(c)
+        beta: β
+        controls: c
+        euler: 1 / c[t] = β * (1 / c[t+1]) * (α * exp(a[t+1]) * k[t]^(α - 1) + 1 - δ)
+        c[t] + k[t] = exp(a[t]) * k[t-1]^α + (1 - δ) * k[t-1]
+        a[t] = ρ * a[t-1] + σ * ε[t]
+    end
+    spec_inf = compute_steady_state(spec_inf)
+    sol_def = solve(spec_inf; method=:vfi, degree=3, n_grid=8, max_iter=200,
+                    howard_steps=10, n_choice=17, verbose=false)
+    @test sol_def isa ProjectionSolution
+    @test sol_def.method == :vfi
+    @test sol_def.converged
+
+    sol_res = vfi_solver(spec_inf; next_state=:residual, degree=3, n_grid=8,
+                         max_iter=200, howard_steps=10, n_choice=17, verbose=false)
+    @test sol_res.converged
+    @test sol_res.method == :vfi
+    x_ss_i = spec_inf.steady_state[sol_res.state_indices]
+    c_res = evaluate_policy(sol_res, x_ss_i)[1]
+    c_def = evaluate_policy(sol_def, x_ss_i)[1]
+    c_pfi = evaluate_policy(pfi_solver(spec_inf; degree=3, max_iter=80, verbose=false),
+                            spec_inf.steady_state[sol_def.state_indices])[1]
+    @test abs(c_def - c_pfi) / max(abs(c_pfi), 1e-8) < 0.05
+    c_exp = evaluate_policy(sol, x_ss)[1]
+    @test abs(c_res - c_exp) / max(abs(c_exp), 1e-8) < 0.15
+    x_hi = copy(x_ss_i); x_hi[1] *= 1.1
+    @test abs(evaluate_policy(sol_def, x_hi)[1] - evaluate_policy(sol_res, x_hi)[1]) /
+          max(abs(evaluate_policy(sol_res, x_hi)[1]), 1e-8) < 0.10
+end
+
+@testset "VFI :linear throws when G1 ignores controls (MSR-01)" begin
+    spec_lin = @dsge begin
+        parameters: β = 0.99, α = 0.36, δ = 0.025, ρ = 0.95, σ = 0.007
+        endogenous: c, k, a
+        exogenous: ε
+        utility: log(c)
+        beta: β
+        controls: c
+        euler: 1 / c[t] = β * (1 / c[t+1]) * (α * exp(a[t+1]) * k[t]^(α - 1) + 1 - δ)
+        c[t] + k[t] = exp(a[t]) * k[t-1]^α + (1 - δ) * k[t-1]
+        a[t] = ρ * a[t-1] + σ * ε[t]
+    end
+    spec_lin = compute_steady_state(spec_lin)
+    err = try
+        vfi_solver(spec_lin; next_state=:linear, degree=3, n_grid=6, max_iter=2)
+        error("should have thrown")
+    catch e
+        e
+    end
+    @test err isa ArgumentError
+    @test occursin(":residual", sprint(showerror, err)) ||
+          occursin("transition=", sprint(showerror, err))
+end
+
+@testset "VFI NaN value cannot converge (MSR-15)" begin
+    spec_nan = _vfi_rbc_spec()
+    kw_nan = _vfi_rbc_bellman(spec_nan)
+    sol_nan = vfi_solver(spec_nan; kw_nan..., utility = c -> NaN, degree=3, n_grid=6,
+                         max_iter=3, howard_steps=0, n_choice=5, verbose=false)
+    @test sol_nan.converged == false
+end
+
+@testset "VFI :residual without defines throws (#658)" begin
+    spec_nd = @dsge begin
+        parameters: β = 0.99, α = 0.36, δ = 0.025, ρ = 0.95, σ = 0.007
+        endogenous: c, k, a
+        exogenous: ε
+        utility: log(c)
+        beta: β
+        controls: c
+        1 / c[t] = β * (1 / c[t+1]) * (α * exp(a[t+1]) * k[t]^(α - 1) + 1 - δ)
+        c[t] + k[t] = exp(a[t]) * k[t-1]^α + (1 - δ) * k[t-1]
+        a[t] = ρ * a[t-1] + σ * ε[t]
+    end
+    spec_nd = compute_steady_state(spec_nd)
+    err = try
+        vfi_solver(spec_nd; next_state=:residual, degree=3, n_grid=6, max_iter=2)
+        error("vfi_solver should have thrown")
+    catch e
+        e
+    end
+    @test err isa ArgumentError
+    @test occursin("defines", sprint(showerror, err))
 end
 
 FAST || @testset "VFI threaded matches sequential" begin
@@ -7130,7 +7425,7 @@ end
     spec = compute_steady_state(spec)
     constraints = [variable_bound(:y, lower=0.0)]
     # These should error if JuMP is not loaded (in CI they may be loaded)
-    if !hasmethod(MacroEconometricModels._jump_compute_steady_state, Tuple{DSGESpec, Vector})
+    if !hasmethod(MacroEconometricModels._jump_compute_steady_state, Tuple{ModelSpec, Vector})
         @test_throws ArgumentError compute_steady_state(spec;
             constraints=constraints, solver=:ipopt)
     end
@@ -7234,7 +7529,7 @@ end
     forward_idx = Int[]
     n_exp = 0
 
-    spec_obs = DSGESpec{Float64}(
+    spec_obs = ModelSpec{Float64}(
         endog_v, exog_v, params_v, pv,
         eqs, fns, n_exp, forward_idx, Float64[], nothing;
         linear=true
@@ -7259,7 +7554,7 @@ end
     #   y_t = a·E[y_{t+1}] + b·y_{t-1} + c + eps  ⇒  SS: (1-a-b)·y = c.
     # Dropping f_lead gives the wrong SS c/(1-b); the correct SS is c/(1-a-b).
     a, b, c = 0.5, 0.3, 1.0
-    spec_fwd = DSGESpec{Float64}(
+    spec_fwd = ModelSpec{Float64}(
         [:y], [:eps], [:a, :b, :c],
         Dict{Symbol,Float64}(:a => a, :b => b, :c => c),
         Expr[:(0 + 0)],

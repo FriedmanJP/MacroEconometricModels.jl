@@ -89,7 +89,7 @@ end
         parameters: beta = 0.99, rho = 0.9
         endogenous: c, k
         exogenous: e
-        c[t] = beta * E[t](c[t+1]) + e[t]
+        c[t] = beta * c[t+1] + e[t]
         k[t] = rho * k[t-1] + c[t]
     end
     spec_fwd = compute_steady_state(spec_fwd)
@@ -318,7 +318,7 @@ end
 @testset "blanchard_kahn.jl: indeterminate (more unstable than forward)" begin
     _suppress() do
         # Construct a case where n_unstable > n_forward => eu = [0,0]
-        spec = DSGESpec{Float64}(
+        spec = ModelSpec{Float64}(
             [:y1, :y2], [:e], [:rho],
             Dict(:rho => 0.5),
             [:(y1[t]), :(y2[t])],
@@ -344,8 +344,8 @@ end
             parameters: rho = 0.5
             endogenous: y1, y2
             exogenous: e
-            y1[t] = rho * y1[t-1] + 0.01 * E[t](y1[t+1]) + 0.01 * E[t](y2[t+1]) + e[t]
-            y2[t] = rho * y2[t-1] + 0.01 * E[t](y1[t+1]) + 0.01 * E[t](y2[t+1])
+            y1[t] = rho * y1[t-1] + 0.01 * y1[t+1] + 0.01 * y2[t+1] + e[t]
+            y2[t] = rho * y2[t-1] + 0.01 * y1[t+1] + 0.01 * y2[t+1]
         end
         spec_fwd = compute_steady_state(spec_fwd)
         ld = linearize(spec_fwd)
@@ -409,7 +409,7 @@ end
         parameters: rho = 0.9, beta = 0.99
         endogenous: c, k
         exogenous: e
-        c[t] = beta * E[t](c[t+1]) + e[t]
+        c[t] = beta * c[t+1] + e[t]
         k[t] = rho * k[t-1] + c[t]
     end
     spec = compute_steady_state(spec)
@@ -954,7 +954,7 @@ end
             parameters: rho = 0.9, beta = 0.5
             endogenous: c, k
             exogenous: e
-            c[t] = beta * E[t](c[t+1]) + e[t]
+            c[t] = beta * c[t+1] + e[t]
             k[t] = rho * k[t-1] + c[t]
         end
         spec = compute_steady_state(spec)
@@ -972,7 +972,7 @@ end
             parameters: rho = 0.9, beta = 0.5
             endogenous: c, k
             exogenous: e
-            c[t] = beta * E[t](c[t+1]) + e[t]
+            c[t] = beta * c[t+1] + e[t]
             k[t] = rho * k[t-1] + c[t]
         end
         spec = compute_steady_state(spec)
@@ -992,7 +992,7 @@ end
         parameters: rho = 0.9, beta = 0.5
         endogenous: c, k
         exogenous: e
-        c[t] = beta * E[t](c[t+1]) + e[t]
+        c[t] = beta * c[t+1] + e[t]
         k[t] = rho * k[t-1] + c[t]
     end
     spec = compute_steady_state(spec)
@@ -1011,7 +1011,7 @@ end
         parameters: rho = 0.9, beta = 0.5
         endogenous: c, k
         exogenous: e
-        c[t] = beta * E[t](c[t+1]) + e[t]
+        c[t] = beta * c[t+1] + e[t]
         k[t] = rho * k[t-1] + c[t]
     end
     spec = compute_steady_state(spec)
@@ -1079,7 +1079,7 @@ end
 @testset "constraints.jl: _check_jump_loaded" begin
     # Behavior depends on whether JuMP extension is loaded
     if hasmethod(MacroEconometricModels._jump_compute_steady_state,
-                 Tuple{MacroEconometricModels.DSGESpec, Vector})
+                 Tuple{MacroEconometricModels.ModelSpec, Vector})
         # JuMP extension loaded (e.g., Pkg.test() environment) — should not throw
         @test MacroEconometricModels._check_jump_loaded() === nothing
     else
@@ -1182,7 +1182,7 @@ function _asset_pricing_spec()
         parameters: r = 0.05, rho = 0.8
         endogenous: p, d
         exogenous: e
-        p[t] = (1.0 / (1.0 + r)) * E[t](p[t+1]) + (r / (1.0 + r)) * d[t]
+        p[t] = (1.0 / (1.0 + r)) * p[t+1] + (r / (1.0 + r)) * d[t]
         d[t] = rho * d[t-1] + e[t]
     end
     compute_steady_state(spec)

@@ -196,7 +196,7 @@ nowcast_bridge(d::TimeSeriesData, nM::Int, nQ::Int; kwargs...) =
 # Bayesian DSGE dispatch wrapper (TimeSeriesData → Matrix)
 # =============================================================================
 
-estimate_dsge_bayes(spec::DSGESpec, d::TimeSeriesData, θ0::Vector; kwargs...) =
+estimate_dsge_bayes(spec::ModelSpec, d::TimeSeriesData, θ0::Vector; kwargs...) =
     estimate_dsge_bayes(spec, to_matrix(d), θ0; kwargs...)
 
 # =============================================================================

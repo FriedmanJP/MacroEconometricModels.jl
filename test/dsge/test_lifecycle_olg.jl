@@ -276,4 +276,93 @@ end
     @test abs(ss_bad.excess_demand) > 1e-8
 end
 
+# ─────────────────────────────────────────────────────────────────────────────
+# Section 7: to_spec → ModelSpec with LifeCycleSystem (#640 / G-03)
+# ─────────────────────────────────────────────────────────────────────────────
+
+@testset "to_spec wraps LifeCycleSystem (#640)" begin
+    m0 = LifeCycleOLG()
+    spec0 = to_spec(m0)
+    @test spec0 isa ModelSpec
+    @test spec0.n_endog == 0 && spec0.n_exog == 0
+    @test isempty(spec0.equations) && isempty(spec0.residual_fns)
+    @test only(keys(spec0.agents)) === :households
+    @test only(values(spec0.agents)) isa LifeCycleSystem
+    @test only(values(spec0.agents)).model === m0
+    @test spec0.ir.horizon === :ages
+
+    m = LifeCycleOLG(; J=40, J_retire=31, survival=0.995,
+                     income=lifecycle_income(0.95, 0.2, 3), a_max=50.0, n_a=120,
+                     beta=0.97, sigma=2.0, replacement=0.4)
+    spec = to_spec(m)
+    @test only(values(spec.agents)) isa LifeCycleSystem
+    @test only(values(spec.agents)).model === m
+    @test MacroEconometricModels.has_kind(spec, LifeCycleSystem)
+
+    spec_named = to_spec(m; agent_name=:cohorts)
+    @test only(keys(spec_named.agents)) === :cohorts
+    @test only(values(spec_named.agents)).model === m
+
+    ss_m = lifecycle_steady_state(m; r_bounds=(-0.01, 0.10), tol=1e-6, max_iter=45)
+    ss_w = lifecycle_steady_state(only(values(spec.agents)).model;
+                                  r_bounds=(-0.01, 0.10), tol=1e-6, max_iter=45)
+    @test ss_m.converged && ss_w.converged
+    @test ss_w.r ≈ ss_m.r atol=1e-6
+    ss_solve = solve(spec; r_bounds=(-0.01, 0.10), tol=1e-6, max_iter=45)
+    @test ss_solve isa LifeCycleSteadyState
+    @test ss_solve.converged
+    @test ss_solve.r ≈ ss_m.r atol=1e-6
+end
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Section 8: perfect-foresight transition from displaced K (#646 / G-12)
+# ─────────────────────────────────────────────────────────────────────────────
+
+@testset "life-cycle transition path (#646)" begin
+    m = LifeCycleOLG(; J=20, J_retire=15, survival=0.995,
+                     income=_lc_det_income(), a_max=40.0, n_a=60,
+                     beta=0.97, sigma=2.0, replacement=0.0, n_pop=0.0)
+    ss = lifecycle_steady_state(m; r_bounds=(-0.01, 0.15), tol=1e-5, max_iter=40)
+    @test ss.converged
+    @test ss.K > 0
+
+    # Starting AT the stationary capital, the path stays there: the SS histogram
+    # is a fixed point of the date-t Young push at SS policies.
+    tr0 = lifecycle_transition(m, ss.K; H=8, ss=ss, tol=1e-6, max_iter=20)
+    @test tr0 isa LifeCycleTransition
+    @test tr0.converged
+    @test all(k -> abs(k - ss.K) / ss.K < 1e-4, tr0.K)
+    @test occursin("LifeCycleTransition", sprint(show, tr0))
+
+    # Displaced k0: capital must walk back toward the stationary SS.
+    k0 = 0.85 * ss.K
+    tr = lifecycle_transition(m, k0; H=30, ss=ss, tol=1e-4, max_iter=50)
+    @test tr.converged
+    @test tr.K[1] ≈ k0 rtol=1e-4
+    @test length(tr.K) == 31
+    @test abs(tr.K[end] - ss.K) < 0.25 * abs(tr.K[1] - ss.K)   # ≥75% of the gap closed
+    @test abs(tr.K[end] - ss.K) / ss.K < 0.05
+    @test tr.K[1] < ss.K
+    @test tr.K[end] > tr.K[1]
+    @test all(>(0), tr.Y) && all(>(0), tr.C)
+    @test all(tr.Z .== m.Z)
+    @test tr.ss === ss
+
+    # Temporary TFP boom that returns to m.Z: capital rises then settles at SS K.
+    H = 24
+    Zpath = [m.Z * (one(eltype(m.Z)) + 0.04 * 0.75^(t - 1)) for t in 1:(H + 1)]
+    Zpath[end] = m.Z
+    trZ = lifecycle_transition(m, Zpath; ss=ss, tol=1e-4, max_iter=50)
+    @test trZ.converged
+    @test trZ.K[1] ≈ ss.K rtol=1e-4          # start from the stationary histogram
+    @test maximum(trZ.K) > ss.K              # boom raises capital
+    @test abs(trZ.K[end] - ss.K) / ss.K < 0.05
+    @test trZ.Z == Zpath
+
+    @test_throws ArgumentError lifecycle_transition(m, -1.0; ss=ss)
+    @test_throws ArgumentError lifecycle_transition(m, k0; H=1, ss=ss)
+    @test_throws ArgumentError lifecycle_transition(m, [m.Z, m.Z]; ss=ss)
+    @test_throws ArgumentError lifecycle_transition(m, k0; ss=ss, relax=0.0)
+end
+
 end # @testset "Life-Cycle OLG"

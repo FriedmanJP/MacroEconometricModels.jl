@@ -578,7 +578,9 @@ function _krusell_smith_two_asset(ss::HASteadyState{T}, ip::IndividualProblem{T}
     end
     z_real = T[z_grid[z_idx[t]] for t in 1:T_sim]
 
-    b_plm = T[log(max(K_ss, T(1e-6))), T(0.95), zero(T)]
+    b1 = T(0.95)
+    logKss = log(max(K_ss, T(1e-6)))
+    b_plm = T[(one(T) - b1) * logKss, b1, zero(T)]
     V_warm = ss.value_fn
     d = vec(ss.distribution)
     converged = false
@@ -589,7 +591,6 @@ function _krusell_smith_two_asset(ss::HASteadyState{T}, ip::IndividualProblem{T}
     for outer in 1:max_outer
         final_iter = outer
         d = vec(ss.distribution)
-        V_warm = ss.value_fn
         K = K_ss
         for t in 1:T_sim
             z = z_real[t]
@@ -600,9 +601,21 @@ function _krusell_smith_two_asset(ss::HASteadyState{T}, ip::IndividualProblem{T}
             prices[:r_b] = get(ss.prices, :r_b, r_here / 2)
             prices[:tau] = get(ss.prices, :tau, zero(T))
             prices[:w] = get(prices, :w, get(ss.prices, :w, one(T)))
+            Kp = exp(b_plm[1] + b_plm[2] * log(max(K, T(1e-6))) + b_plm[3] * z)
+            prices_next = copy(_ks_prices(price_fn, max(Kp, T(1e-6)), z, params, :effective_capital))
+            r_next = haskey(prices_next, :r) ? prices_next[:r] : r_here
+            prices_next[:r_a] = r_next
+            prices_next[:r] = r_next
+            prices_next[:r_b] = get(ss.prices, :r_b, r_next / 2)
+            prices_next[:tau] = get(ss.prices, :tau, zero(T))
+            prices_next[:w] = get(prices_next, :w, prices[:w])
+            # Continuation at PLM-forecast prices, then one step at date-t prices.
+            _, _, _, _, V_next = _two_asset_hh_solve(
+                ip, grid, income, prices_next; hh_solver=:egm,
+                max_iter=8, tol=T(1e-5), howard_steps=2, init_value=V_warm)
             _, b_pol, a_pol, _, V_warm = _two_asset_hh_solve(
                 ip, grid, income, prices; hh_solver=:egm,
-                max_iter=15, tol=T(1e-5), howard_steps=4, init_value=V_warm)
+                max_iter=1, tol=T(1e-5), howard_steps=0, init_value=V_next)
             Lambda = _build_transition_matrix(b_pol, a_pol, grid, income)
             d = _forward_iterate(Lambda, d)
             K = max(_aggregate(d, grid; var_index=2), T(1e-6))
@@ -695,14 +708,14 @@ The gap between the two is the Den Haan statistic. Den Haan (2010) shows an `R²
 can coexist with a double-digit error in the implied `σ(K)`, which is why the multi-step
 comparison — rather than the regression fit — is the informative test.
 """
-function _den_haan_core(spec::HADSGESpec{T}, ss::HASteadyState{T}, b::Vector{T},
+function _den_haan_core(spec::ModelSpec{T}, ss::HASteadyState{T}, b::Vector{T},
                         T_sim::Int, T_burn::Int, rho_z::T, sigma_z::T,
                         rng, source::Symbol, z_channel::Symbol) where {T<:AbstractFloat}
-    ip = spec.individual
-    grid = spec.grid
-    income = spec.income
+    ip = _hh(spec).individual
+    grid = _hh(spec).grid
+    income = _hh(spec).income
 
-    params = copy(spec.het_params)
+    params = copy(_hh(spec).het_params)
     for (k, v) in (:alpha => T(0.36), :delta => T(0.025), :Z => one(T), :L => one(T))
         haskey(params, k) || (params[k] = T(v))
     end
@@ -768,7 +781,7 @@ The aggregate is capital `K` and errors are in percent. The PLM must include the
 aggregate shock (`log K' = b₁ + b₂ log K + b₃ z`); otherwise the PLM-only path is
 degenerate.
 
-Covers the capital models (`spec.model == :aiyagari`) — both `:krusell_smith` and
+Covers the capital models (`_hh(spec).model == :aiyagari`) — both `:krusell_smith` and
 `:one_asset_hank`, the setting of Den Haan (2010). For a Huggett solution the cleared
 aggregate is the risk-free rate (the bond is in zero net supply), which is driven by the
 wealth distribution rather than the shock alone; a robust rate-accuracy test there requires
@@ -795,8 +808,8 @@ function den_haan_test(ks::KrusellSmithSolution{T};
 end
 
 # Shared model guard for both methods.
-function _den_haan_check_model(spec::HADSGESpec)
-    if spec.model === :huggett
+function _den_haan_check_model(spec::ModelSpec)
+    if _hh(spec).model === :huggett
         error("den_haan_test is implemented for the capital models (:aiyagari — " *
               ":krusell_smith and :one_asset_hank). The Huggett clearing rate is driven by " *
               "the wealth distribution, not the aggregate shock alone, so a meaningful " *

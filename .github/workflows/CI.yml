@@ -16,7 +16,7 @@ concurrency:
 
 jobs:
   test:
-    name: Julia ${{ matrix.version }} - ${{ matrix.os }} - ${{ matrix.suite }}
+    name: Julia ${{ matrix.version }} - ${{ matrix.os }} - ${{ matrix.suite || 'all' }}
     runs-on: ${{ matrix.os }}
     timeout-minutes: 60
     env:
@@ -28,37 +28,35 @@ jobs:
       fail-fast: false
       matrix:
         version:
-          - 'lts'    # Long-term support (1.10)
+          - '1'      # current Julia 1.x stable; default cells resolve Optim v2
         os:
           - ubuntu-latest
-          - windows-latest
         arch:
           - x64
         suite:
           - dsge
           - empirical
         include:
-          - version: 'lts'
+          - version: '1'
             os: macos-latest
             arch: arm64
             suite: dsge
-          - version: 'lts'
+          - version: '1'
             os: macos-latest
             arch: arm64
             suite: empirical
-          # Numerical suite + Optim v1 dual-major compat (T153/#252): Julia 1.10
-          # (== lts) as a distinct matrix string so it pins Optim@1 and runs
-          # MACRO_NUMERICAL_CI (solver / Euler / IRF / published-number tests only).
+          # One Windows FAST cell for both suites. Windows precompile is
+          # still the slowest cell even with a per-CPU native cache (#708).
+          - version: '1'
+            os: windows-latest
+            arch: x64
+          # Dual-major Optim compat (T153/#252): the only Julia 1.10 cell.
+          # Pins Optim@1 and runs MACRO_NUMERICAL_CI. Drops Plotting/Display/
+          # Coverage-A/B only — nearly the full suite at full sampling.
           - version: '1.10'
             os: ubuntu-latest
             arch: x64
             optim_v1: true
-            suite: dsge
-          - version: '1.10'
-            os: ubuntu-latest
-            arch: x64
-            optim_v1: true
-            suite: empirical
 
     steps:
       - uses: actions/checkout@v7
@@ -68,11 +66,32 @@ jobs:
           version: ${{ matrix.version }}
           arch: ${{ matrix.arch }}
 
+      # Native pkgimages (#708): do not set JULIA_CPU_TARGET. GitHub-hosted
+      # SKUs differ (westus vs eastus vs northcentralus), so a cache from
+      # one CPU is rejected on another. Key compiled/ by Sys.CPU_NAME so
+      # each SKU keeps its own native cache instead of a fat multi-target
+      # compile. First hit per SKU is a cold miss; later hits are native.
+      - name: Detect Julia CPU name
+        id: cpu
+        shell: bash
+        run: |
+          cpu=$(julia --startup-file=no -e 'print(Sys.CPU_NAME)')
+          cpu=${cpu:-unknown}
+          cpu=${cpu//[^-a-zA-Z0-9_.]/_}
+          echo "name=${cpu}" >> "$GITHUB_OUTPUT"
+          echo "Julia CPU_NAME=${cpu}"
+
       - uses: julia-actions/cache@v3
         with:
           # Windows depot artifacts are ~1.5 GB (3× Linux) and dominate the
           # 4-minute cache upload. compiled/ is what Pkg.test reuse needs.
           cache-artifacts: ${{ matrix.os != 'windows-latest' }}
+          # include-matrix (default true) puts matrix.suite in the key, so the
+          # dsge and empirical jobs do not restore/save one shared compiled/.
+          # Intra-job pidfile races are handled by _warm_compile_cache in
+          # test/runtests.jl, not by splitting this cache further.
+          # cpu= splits native pkgimages across GitHub-hosted CPU SKUs.
+          cache-name: julia-cache;workflow=${{ github.workflow }};job=${{ github.job }};cpu=${{ steps.cpu.outputs.name }}
 
       # Optim v1 dual-major compat cell (T153/#252): pin Optim to the v1 major before
       # instantiate/precompile so the suite runs against Optim v1 (default cells resolve v2).
@@ -83,39 +102,35 @@ jobs:
       - uses: julia-actions/julia-buildpkg@v1
 
       # Cell roles:
-      #   ubuntu LTS  — full suite, split dsge | empirical; BOTH parts upload Codecov
-      #   ubuntu 1.10 — numerical profile, split dsge | empirical; Optim v1 pin
-      #   macos LTS   — FAST=1 smoke, split dsge | empirical
-      #   windows LTS — FAST=1 smoke, threaded, split dsge | empirical
+      #   ubuntu stable  — full suite, split dsge | empirical; Optim v2; no coverage
+      #   ubuntu 1.10    — numerical profile, one job, Optim v1 pin, --check-bounds=yes
+      #   macos          — FAST=1 smoke, split dsge | empirical
+      #   windows        — FAST=1 smoke, both suites, one job (#708)
       #
-      # Windows uses the threaded single-process runner (package loaded once).
-      # Multiprocess on NTFS pays ~6 min per child to load compiled modules; 17
-      # children made that the job. HA-DSGE still gets 2 OpenBLAS threads via
-      # the runner; every other group stays at 1.
+      # Default cells use the threaded single-process runner (package loaded
+      # once). Julia 1.12 compile is 2–3× 1.10; multiprocess paid that per
+      # child. HA-DSGE still gets 2 OpenBLAS threads via the runner; every
+      # other group stays at 1. The 1.10 numerical cell stays multiprocess
+      # (smaller set, cheaper compile).
+      #
+      # Codecov is not this job. See the `codecov` job: full-suite upload
+      # only when Project.toml version changes on main.
       - uses: julia-actions/julia-runtest@v1
         with:
-          coverage: ${{ matrix.os == 'ubuntu-latest' && matrix.version == 'lts' }}
+          coverage: false
+          # Pkg.test / julia-runtest default is --check-bounds=yes, which
+          # re-precompiles the depot vs julia-buildpkg and honors no @inbounds.
+          # Windows: auto (REPL default) so NTFS does not pay that wave.
+          # 1.10 Optim-v1 cell: yes (MACRO_CHECK_BOUNDS also forces children).
+          check_bounds: ${{ matrix.os == 'windows-latest' && 'auto' || 'yes' }}
         env:
-          JULIA_NUM_THREADS: ${{ matrix.os == 'windows-latest' && 'auto' || '1' }}
+          JULIA_NUM_THREADS: ${{ matrix.version == '1.10' && '1' || 'auto' }}
           OPENBLAS_NUM_THREADS: "1"
-          MACRO_MULTIPROCESS_TESTS: ${{ matrix.os == 'windows-latest' && '0' || '1' }}
+          MACRO_MULTIPROCESS_TESTS: ${{ matrix.version == '1.10' && '1' || '0' }}
           MACRO_FAST_TESTS: ${{ matrix.os == 'ubuntu-latest' && '0' || '1' }}
-          MACRO_NUMERICAL_CI: ${{ matrix.os == 'ubuntu-latest' && matrix.version == '1.10' && '1' || '0' }}
-          MACRO_CHECK_BOUNDS: ${{ matrix.os == 'ubuntu-latest' && '1' || '0' }}
+          MACRO_NUMERICAL_CI: ${{ matrix.optim_v1 && '1' || '0' }}
+          MACRO_CHECK_BOUNDS: ${{ matrix.optim_v1 && '1' || '0' }}
           MACRO_CI_SUITE: ${{ matrix.suite }}
-
-      - uses: julia-actions/julia-processcoverage@v1
-        if: matrix.os == 'ubuntu-latest' && matrix.version == 'lts'
-
-      - uses: codecov/codecov-action@v7
-        if: matrix.os == 'ubuntu-latest' && matrix.version == 'lts'
-        with:
-          files: lcov.info
-          slug: FriedmanJP/MacroEconometricModels.jl
-          fail_ci_if_error: false
-          flags: ${{ matrix.suite }}
-        env:
-          CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
 
   # RNG-everywhere lint (#243): every drawing function must thread an rng; no bare
   # rand/randn on the global RNG in src/. Dependency-free (no Julia), so it runs fast.
@@ -153,3 +168,93 @@ jobs:
             exit 1
           fi
           echo "rng-lint OK — no bare rand/randn in src/"
+
+  # Codecov only on a version bump that landed on main (the release commit
+  # that changes `version =` in Project.toml). PRs, ordinary main pushes,
+  # and tags do not upload. TagBot tagging after Registrator is a no-op here.
+  version-bump:
+    name: Detect Project.toml version bump
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    outputs:
+      bumped: ${{ steps.chk.outputs.bumped }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 2
+      - id: chk
+        name: Compare version to HEAD^
+        run: |
+          curr=$(sed -n 's/^version = "\(.*\)"/\1/p' Project.toml | head -1)
+          prev=$(git show HEAD^:Project.toml 2>/dev/null | sed -n 's/^version = "\(.*\)"/\1/p' | head -1)
+          echo "Project.toml version: '${prev}' -> '${curr}'"
+          if [ -n "$curr" ] && [ -n "$prev" ] && [ "$prev" != "$curr" ]; then
+            echo "bumped=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "bumped=false" >> "$GITHUB_OUTPUT"
+          fi
+
+  codecov:
+    name: Codecov ${{ matrix.suite }} (release)
+    needs: version-bump
+    if: needs.version-bump.outputs.bumped == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    env:
+      FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+    permissions:
+      contents: read
+    strategy:
+      fail-fast: false
+      matrix:
+        suite:
+          - dsge
+          - empirical
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: julia-actions/setup-julia@v3
+        with:
+          version: '1'
+          arch: x64
+
+      - name: Detect Julia CPU name
+        id: cpu
+        shell: bash
+        run: |
+          cpu=$(julia --startup-file=no -e 'print(Sys.CPU_NAME)')
+          cpu=${cpu:-unknown}
+          cpu=${cpu//[^-a-zA-Z0-9_.]/_}
+          echo "name=${cpu}" >> "$GITHUB_OUTPUT"
+          echo "Julia CPU_NAME=${cpu}"
+
+      - uses: julia-actions/cache@v3
+        with:
+          cache-name: julia-cache;workflow=${{ github.workflow }};job=${{ github.job }};cpu=${{ steps.cpu.outputs.name }}
+
+      - uses: julia-actions/julia-buildpkg@v1
+
+      # Full suite, Julia stable, Optim v2, single-process, no check-bounds.
+      # Split dsge | empirical so one coverage cell stays under 90 min.
+      - uses: julia-actions/julia-runtest@v1
+        with:
+          coverage: true
+        env:
+          JULIA_NUM_THREADS: auto
+          OPENBLAS_NUM_THREADS: "1"
+          MACRO_MULTIPROCESS_TESTS: "0"
+          MACRO_FAST_TESTS: "0"
+          MACRO_NUMERICAL_CI: "0"
+          MACRO_CHECK_BOUNDS: "0"
+          MACRO_CI_SUITE: ${{ matrix.suite }}
+
+      - uses: julia-actions/julia-processcoverage@v1
+
+      - uses: codecov/codecov-action@v7
+        with:
+          files: lcov.info
+          slug: FriedmanJP/MacroEconometricModels.jl
+          fail_ci_if_error: false
+          flags: ${{ matrix.suite }}
+        env:
+          CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}

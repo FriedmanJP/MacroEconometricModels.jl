@@ -6,6 +6,29 @@ output, not just documentation.
 
 ---
 
+## v0.9.0
+
+Breaking feature release: **unified `ModelSpec`** (`#630`, `#631`). One public spec type replaces `DSGESpec` / `HADSGESpec`. Leads are rational expectations (`E[t](...)` is gone). Agent keys are free names; kinds are `AbstractAgentSystem` subtypes. `solve` dispatches on `has_kind`.
+
+This is a **0.x minor bump** and is breaking under Julia SemVer: `[compat] MacroEconometricModels = "0.8"` does **not** resolve to 0.9. Dependents must move the bound to `"0.9"`.
+
+**New**
+
+- **`ModelSpec{T,A}`**, `NamedEquation`, `NoAgents`, `HouseholdSystem`, `to_spec`.
+- **Family kinds**: `DCEGMSystem`, `LifeCycleSystem`, `ContinuousHouseholdSystem`, `FirmSystem` (Khan–Thomas 2008), `IntermediarySystem` (Jamilov–Monacelli Bewley Banks).
+- **HA**: `combine_blocks` / `HetBlock` / `MitBlock`; multi-population `solve`; OccBin errors by name on shipped real-rate HANKs.
+- **OLG**: `to_spec(::BlanchardOLG)` TFP IRF; `blanchard_nk_spec` Phillips–Taylor on the same `NoAgents` residuals; `lifecycle_transition`.
+- **DCEGM**: `dcegm_steady_state`, `dcegm_mit` (`method=:mit`).
+- **Solvers**: sparse colored perfect-foresight Jacobian and block-tridiagonal solve; VFI infers `transition` / `control_bounds`.
+
+**Breaking**
+
+- Delete `DSGESpec` / `HADSGESpec` (no aliases).
+- Drop `E[t](...)`; write `x[t+1]`.
+- `@dsge discrete:` / `clock:` / `horizon:` set `ModelIR` flags; they do not compile family kinds — use `to_spec`.
+
+---
+
 ## v0.8.2
 
 Patch release: restore CI on Julia 1.10. `XLSX` 0.12.2 fails to precompile against

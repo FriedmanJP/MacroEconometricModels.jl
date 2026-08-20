@@ -490,7 +490,23 @@ function _reiter_linearize_two_asset(ss::HASteadyState{T}, ip::IndividualProblem
     impact_vec[n_red + 2, 1] = one(T)
     impact_vec[1:n_red, 1] .= channel_Z
     impact_vec[n_red + 1, 1] = dot(K_loading, channel_Z)
-    explained = one(T)
+    rng_actual = rng === nothing ? Random.default_rng() : rng
+    n_test = min(n_sim, 100)
+    var_full = zero(T)
+    var_resid = zero(T)
+    dx_T = T(dx)
+    for _ in 1:n_test
+        noise = randn(rng_actual, T, N)
+        noise .-= mean(noise)
+        delta_test = dx_T .* noise
+        dK_full = dot(a_vec, Lambda_ss * delta_test)
+        d_tilde = U_k' * delta_test
+        dK_red = dot(K_loading, G1_dist * d_tilde)
+        var_full += dK_full^2
+        var_resid += (dK_full - dK_red)^2
+    end
+    explained = var_full > zero(T) ? one(T) - var_resid / var_full : one(T)
+    explained = clamp(explained, zero(T), one(T))
     _reiter_warn_unstable(G1, "two-asset")
     return G1, impact_vec, n_red, explained, U_k
 end

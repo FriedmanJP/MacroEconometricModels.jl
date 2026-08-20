@@ -28,11 +28,11 @@ the coverage tests; they are no longer used by the derivative computation itself
 # =============================================================================
 
 """
-    _slot_dim(spec::DSGESpec, which::Symbol) → Int
+    _slot_dim(spec::ModelSpec, which::Symbol) → Int
 
 Return the dimension of the given argument slot.
 """
-function _slot_dim(spec::DSGESpec{T}, which::Symbol) where {T}
+function _slot_dim(spec::ModelSpec{T}, which::Symbol) where {T}
     if which == :shock
         return spec.n_exog
     else
@@ -45,7 +45,7 @@ end
 
 Offset of the given argument slot within the stacked vector `v = [y_t; y_lag; y_lead; ε]`.
 """
-function _slot_offset(spec::DSGESpec, which::Symbol)
+function _slot_offset(spec::ModelSpec, which::Symbol)
     n = spec.n_endog
     which === :current ? 0 :
     which === :lag     ? n :
@@ -58,7 +58,7 @@ end
 Stacked residual map `R(v) = [f_i(y_t, y_lag, y_lead, ε, θ)]` with `v = [y_t; y_lag; y_lead; ε]`,
 generic in `eltype(v)` so it can be differentiated by (nested) ForwardDiff.
 """
-function _stacked_residual(spec::DSGESpec{T}) where {T}
+function _stacked_residual(spec::ModelSpec{T}) where {T}
     n = spec.n_endog
     n_ε = spec.n_exog
     θ = spec.param_values
@@ -77,7 +77,7 @@ end
 
 Exact second-derivative tensor `∂²R_i/∂v_a ∂v_b` of the stacked residual via nested ForwardDiff.
 """
-function _full_hessian(spec::DSGESpec{T}, y_ss::AbstractVector{T}) where {T}
+function _full_hessian(spec::ModelSpec{T}, y_ss::AbstractVector{T}) where {T}
     n = spec.n_endog
     N = 3n + spec.n_exog
     R = _stacked_residual(spec)
@@ -91,7 +91,7 @@ end
 
 Exact third-derivative tensor `∂³R_i/∂v_a ∂v_b ∂v_c` via triply-nested ForwardDiff.
 """
-function _full_third(spec::DSGESpec{T}, y_ss::AbstractVector{T}) where {T}
+function _full_third(spec::ModelSpec{T}, y_ss::AbstractVector{T}) where {T}
     n = spec.n_endog
     N = 3n + spec.n_exog
     R = _stacked_residual(spec)
@@ -226,7 +226,7 @@ end
 # =============================================================================
 
 """
-    _compute_hessian(spec::DSGESpec{T}, y_ss::Vector{T}, which1::Symbol, which2::Symbol)
+    _compute_hessian(spec::ModelSpec{T}, y_ss::Vector{T}, which1::Symbol, which2::Symbol)
         → Array{T, 3}   # n × dim1 × dim2
 
 Compute the Hessian ∂²f_i / ∂a_j ∂b_k for all residual equations i, using the
@@ -237,7 +237,7 @@ Compute the Hessian ∂²f_i / ∂a_j ∂b_k for all residual equations i, using
 Arguments:
 - `which1`, `which2` — argument slots (`:current`, `:lag`, `:lead`, `:shock`)
 """
-function _compute_hessian(spec::DSGESpec{T}, y_ss::Vector{T},
+function _compute_hessian(spec::ModelSpec{T}, y_ss::Vector{T},
                           which1::Symbol, which2::Symbol) where {T}
     Hfull = _full_hessian(spec, y_ss)
     o1 = _slot_offset(spec, which1)
@@ -248,7 +248,7 @@ function _compute_hessian(spec::DSGESpec{T}, y_ss::Vector{T},
 end
 
 """
-    _compute_all_hessians(spec::DSGESpec{T}, y_ss::Vector{T})
+    _compute_all_hessians(spec::ModelSpec{T}, y_ss::Vector{T})
         → Dict{Tuple{Symbol,Symbol}, Array{T,3}}
 
 Compute all 10 unique Hessian blocks for the 4 argument slots
@@ -257,7 +257,7 @@ canonical ordering) are computed; transpose can be obtained by permuting axes 2�
 
 Returns a dictionary mapping `(which1, which2) => H` where `H` is `n × dim1 × dim2`.
 """
-function _compute_all_hessians(spec::DSGESpec{T}, y_ss::Vector{T}) where {T}
+function _compute_all_hessians(spec::ModelSpec{T}, y_ss::Vector{T}) where {T}
     Hfull = _full_hessian(spec, y_ss)          # build the full tensor ONCE, slice all blocks
     slots = [:current, :lag, :lead, :shock]
     result = Dict{Tuple{Symbol,Symbol}, Array{T,3}}()
@@ -281,7 +281,7 @@ end
 # =============================================================================
 
 """
-    _third_derivative(spec::DSGESpec{T}, y_ss::Vector{T},
+    _third_derivative(spec::ModelSpec{T}, y_ss::Vector{T},
                       w1::Symbol, w2::Symbol, w3::Symbol)
         → Array{T, 4}   # n × dim1 × dim2 × dim3
 
@@ -292,7 +292,7 @@ Compute the third derivative ∂³f_i / ∂a_j ∂b_k ∂c_l using the 8-point s
 Arguments:
 - `w1`, `w2`, `w3` — argument slots (`:current`, `:lag`, `:lead`, `:shock`)
 """
-function _third_derivative(spec::DSGESpec{T}, y_ss::Vector{T},
+function _third_derivative(spec::ModelSpec{T}, y_ss::Vector{T},
                            w1::Symbol, w2::Symbol, w3::Symbol) where {T}
     D3full = _full_third(spec, y_ss)
     o1 = _slot_offset(spec, w1)

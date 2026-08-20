@@ -11,7 +11,7 @@ Produces the Sims canonical form: Γ₀·y_t = Γ₁·y_{t-1} + C + Ψ·ε_t + �
 """
 
 """
-    linearize(spec::DSGESpec{T}) → LinearDSGE{T}
+    linearize(spec::ModelSpec{T}) → LinearDSGE{T}
 
 Linearize a DSGE model around its steady state using numerical Jacobians.
 
@@ -20,7 +20,7 @@ Rearranging into Sims form: `Γ₀·y_t = Γ₁·y_{t-1} + C + Ψ·ε_t + Π·η
 
 Requires `compute_steady_state` to have been called first.
 """
-function linearize(spec::DSGESpec{T}) where {T<:AbstractFloat}
+function linearize(spec::ModelSpec{T}) where {T<:AbstractFloat}
     isempty(spec.steady_state) &&
         throw(ArgumentError("Must compute steady state first (call compute_steady_state)"))
 
@@ -76,7 +76,7 @@ function linearize(spec::DSGESpec{T}) where {T<:AbstractFloat}
 end
 
 """Compute Jacobian of residual vector w.r.t. y_t, y_{t-1}, or y_{t+1}."""
-function _dsge_jacobian(spec::DSGESpec{T}, y_ss::Vector{T}, which::Symbol) where {T}
+function _dsge_jacobian(spec::ModelSpec{T}, y_ss::Vector{T}, which::Symbol) where {T}
     n = spec.n_endog
     θ = spec.param_values
     ε_zero = zeros(T, spec.n_exog)
@@ -108,7 +108,7 @@ function _dsge_jacobian(spec::DSGESpec{T}, y_ss::Vector{T}, which::Symbol) where
 end
 
 """Compute Jacobian of residual vector w.r.t. shocks ε."""
-function _dsge_jacobian_shocks(spec::DSGESpec{T}, y_ss::Vector{T}) where {T}
+function _dsge_jacobian_shocks(spec::ModelSpec{T}, y_ss::Vector{T}) where {T}
     n = spec.n_endog
     n_ε = spec.n_exog
     θ = spec.param_values
@@ -133,7 +133,7 @@ function _dsge_jacobian_shocks(spec::DSGESpec{T}, y_ss::Vector{T}) where {T}
 end
 
 """Find indices of endogenous variables that appear with [t+1] in any equation."""
-function _forward_variable_indices(spec::DSGESpec{T}) where {T}
+function _forward_variable_indices(spec::ModelSpec{T}) where {T}
     fwd_vars = Set{Int}()
     n = spec.n_endog
     y_ss = spec.steady_state

@@ -290,7 +290,7 @@ const MEM_IH = MacroEconometricModels
 
     @testset "CI runner helpers" begin
         @test _blas_threads_for_group("HA-DSGE") == 2
-        @test _blas_threads_for_group("HA-DSGE Advanced") == 2
+        @test _blas_threads_for_group("HA-DSGE Advanced") == 1
         @test _blas_threads_for_group("DSGE Core") == 1
         @test _blas_threads_for_group("Plotting") == 1
         @test _runner_max_conc(8) == 4
@@ -322,6 +322,13 @@ const MEM_IH = MacroEconometricModels
               ["Core & VAR", "Plotting"]
         @test collect(_ci_suite_groups(dummy2, "")) == collect(dummy2)
         @test_throws ArgumentError _ci_suite_groups(dummy2, "bogus")
+
+        if @isdefined(TEST_GROUPS)
+            serial_files = Set(f for (_, fs) in TEST_GROUPS for f in fs)
+            @test "dsge/test_perfect_foresight_sparse.jl" in serial_files
+            @test "dsge/test_dcegm_plot.jl" in serial_files
+            @test "dsge/test_modelspec_kinds.jl" in serial_files
+        end
 
         @test _expected_rank("DSGE Core") > _expected_rank("Counterfactual")
         @test _expected_rank("Coverage-A") > _expected_rank("Coverage-B")

@@ -7,7 +7,7 @@
 """
 Built-in example configurations for heterogeneous agent DSGE models.
 
-Provides pre-calibrated `HADSGESpec` specifications for canonical models:
+Provides pre-calibrated `ModelSpec` specifications for canonical models:
 - `:krusell_smith` — Krusell & Smith (1998) incomplete markets
 - `:one_asset_hank` — one-asset HANK (Kaplan-Moll-Violante style)
 - `:two_asset_hank` — two-asset HANK with portfolio adjustment costs
@@ -19,50 +19,6 @@ Provides pre-calibrated `HADSGESpec` specifications for canonical models:
 - Kaplan, G., Moll, B., & Violante, G. L. (2018). Monetary policy according to
   HANK. *American Economic Review*, 108(3), 697–743.
 """
-
-# =============================================================================
-# _minimal_agg_spec — lightweight DSGESpec placeholder for aggregate block
-# =============================================================================
-
-"""
-    _minimal_agg_spec(; alpha, delta, rho_z, sigma_z) -> DSGESpec{Float64}
-
-Construct a minimal DSGESpec representing a Cobb-Douglas aggregate block.
-
-The individual-level steady state solver (`compute_steady_state`) does not evaluate
-the aggregate DSGESpec equations directly -- it uses the price function instead.
-This helper creates a lightweight placeholder that records parameter values and
-variable names for the aggregate block.
-"""
-function _minimal_agg_spec(; alpha::Float64=0.36, delta::Float64=0.025,
-                             rho_z::Float64=0.95, sigma_z::Float64=0.007)
-    endog = [:Y, :K, :r, :w, :Z]
-    exog = [:eps_Z]
-    params = [:alpha, :delta, :rho_z, :sigma_z]
-    param_values = Dict{Symbol,Float64}(:alpha => alpha, :delta => delta,
-                                         :rho_z => rho_z, :sigma_z => sigma_z)
-
-    # Placeholder equations (stored as Expr for metadata only)
-    equations = [
-        :(Y[t] - Z[t] * K[t-1]^alpha),
-        :(r[t] - alpha * Z[t] * K[t-1]^(alpha-1) + delta),
-        :(w[t] - (1 - alpha) * Z[t] * K[t-1]^alpha),
-        :(K[t] - K[t-1]),
-        :(Z[t] - rho_z * Z[t-1] - sigma_z * eps_Z[t])
-    ]
-
-    # Identity residual functions (not called during steady-state computation)
-    dummy_fn = (y_t, y_lag, y_lead, eps, theta) -> 0.0
-    residual_fns = [dummy_fn for _ in 1:5]
-
-    n_expect = 0
-    forward_indices = Int[]
-    steady_state = ones(Float64, 5)  # placeholder
-
-    return DSGESpec{Float64}(endog, exog, params, param_values, equations,
-                              residual_fns, n_expect, forward_indices,
-                              steady_state, nothing)
-end
 
 # =============================================================================
 # _crra_utility — CRRA utility function and its derivatives
@@ -183,22 +139,16 @@ function _ks_example()
                                             nothing,  # no adjustment cost
                                             1)        # one asset dimension
 
-    # Aggregate block
-    agg_spec = _minimal_agg_spec(; alpha=alpha, delta=delta)
-
-    # Aggregation: capital = integral of assets over distribution
-    aggregation = Pair{Symbol,Function}[
-        :K => _agg_var1
-    ]
-
-    # HA-specific parameters
+    aggregation = Pair{Symbol,Function}[:K => _agg_var1]
     het_params = Dict{Symbol,Float64}(
         :alpha => alpha, :delta => delta,
-        :Z => 1.0, :L => 1.0
+        :Z => 1.0, :L => 1.0, :rho_z => 0.95, :sigma_z => 0.007
     )
-
-    return HADSGESpec{Float64}(agg_spec, individual, income, grid,
-                                aggregation, het_params)
+    hh = HouseholdSystem{Float64}(individual, income, grid, aggregation, het_params)
+    return _wrap_ha_spec(hh;
+        params=[:alpha, :delta, :rho_z, :sigma_z],
+        param_values=Dict{Symbol,Float64}(:alpha => alpha, :delta => delta,
+                                          :rho_z => 0.95, :sigma_z => 0.007))
 end
 
 # =============================================================================
@@ -232,22 +182,16 @@ function _one_asset_hank_example()
                                             nothing,  # no adjustment cost
                                             1)        # one asset dimension
 
-    # Aggregate block
-    agg_spec = _minimal_agg_spec(; alpha=alpha, delta=delta)
-
-    # Aggregation
-    aggregation = Pair{Symbol,Function}[
-        :K => _agg_var1
-    ]
-
-    # HA-specific parameters
+    aggregation = Pair{Symbol,Function}[:K => _agg_var1]
     het_params = Dict{Symbol,Float64}(
         :alpha => alpha, :delta => delta, :sigma_c => sigma_c,
-        :Z => 1.0, :L => 1.0
+        :Z => 1.0, :L => 1.0, :rho_z => 0.95, :sigma_z => 0.007
     )
-
-    return HADSGESpec{Float64}(agg_spec, individual, income, grid,
-                                aggregation, het_params)
+    hh = HouseholdSystem{Float64}(individual, income, grid, aggregation, het_params)
+    return _wrap_ha_spec(hh;
+        params=[:alpha, :delta, :rho_z, :sigma_z],
+        param_values=Dict{Symbol,Float64}(:alpha => alpha, :delta => delta,
+                                          :rho_z => 0.95, :sigma_z => 0.007))
 end
 
 # =============================================================================
@@ -280,25 +224,21 @@ function _two_asset_hank_example(; n_liquid::Int=50, n_illiquid::Int=50,
                                             _hank2_adjustment_cost, # portfolio adjustment cost
                                             2)                     # two asset dimensions
 
-    # Aggregate block
-    agg_spec = _minimal_agg_spec(; alpha=alpha, delta=delta)
-
-    # Aggregation: liquid and illiquid separately
     aggregation = Pair{Symbol,Function}[
         :B => _agg_var1,
         :A => _agg_var2
     ]
-
-    # HA-specific parameters. B_supply is the net supply of liquid bonds;
-    # τ = r_b · B_supply enters `_hank2_budget`.
     het_params = Dict{Symbol,Float64}(
         :alpha => alpha, :delta => delta, :sigma_c => sigma_c,
         :Z => 1.0, :L => 1.0, :B_supply => Float64(B_supply),
-        :rho_z => 0.95
+        :rho_z => 0.95, :sigma_z => 0.007
     )
-
-    return HADSGESpec{Float64}(agg_spec, individual, income, grid,
-                                aggregation, het_params; model=:two_asset)
+    hh = HouseholdSystem{Float64}(individual, income, grid, aggregation, het_params;
+                                  model=:two_asset)
+    return _wrap_ha_spec(hh;
+        params=[:alpha, :delta, :rho_z, :sigma_z],
+        param_values=Dict{Symbol,Float64}(:alpha => alpha, :delta => delta,
+                                          :rho_z => 0.95, :sigma_z => 0.007))
 end
 
 # =============================================================================
@@ -324,7 +264,7 @@ end
 
 """
     _huggett_example(; credit_limit=-2.0, a_max=4.0, n_a=300, sigma=1.5,
-                       beta=0.99322, rho_e=0.90, sigma_e=0.01) -> HADSGESpec{Float64}
+                       beta=0.99322, rho_e=0.90, sigma_e=0.01) -> ModelSpec{Float64}
 
 Huggett (1993) pure-exchange, risk-free-bond economy. Agents trade a one-period bond in
 **zero net supply** (`∫a' dμ = 0`) subject to a credit limit `ā = credit_limit < 0`.
@@ -350,19 +290,18 @@ function _huggett_example(; credit_limit::Float64=-2.0, a_max::Float64=4.0,
                                             [credit_limit],  # borrowing/credit limit ā
                                             nothing, 1)
 
-    # Minimal aggregate block: endowment-level AR(1) metadata for the dynamic solvers
-    agg_spec = _minimal_agg_spec(; rho_z=rho_e, sigma_z=sigma_e)
-
-    # Aggregation: net bond position A = ∫ a dμ (clears at 0)
     aggregation = Pair{Symbol,Function}[:A => _agg_var1]
-
     het_params = Dict{Symbol,Float64}(
         :sigma_c => sigma, :beta_hh => beta, :credit_limit => credit_limit,
-        :rho_e => rho_e, :sigma_e => sigma_e, :Z => 1.0, :L => 1.0
+        :rho_e => rho_e, :sigma_e => sigma_e, :Z => 1.0, :L => 1.0,
+        :rho_z => rho_e, :sigma_z => sigma_e
     )
-
-    return HADSGESpec{Float64}(agg_spec, individual, income, grid,
-                                aggregation, het_params; model=:huggett)
+    hh = HouseholdSystem{Float64}(individual, income, grid, aggregation, het_params;
+                                  model=:huggett)
+    return _wrap_ha_spec(hh;
+        params=[:rho_z, :sigma_z],
+        param_values=Dict{Symbol,Float64}(:rho_z => rho_e, :sigma_z => sigma_e,
+                                          :alpha => 0.36, :delta => 0.025))
 end
 
 # =============================================================================
@@ -370,9 +309,9 @@ end
 # =============================================================================
 
 """
-    load_ha_example(name::Symbol; distribution=:young) -> HADSGESpec{Float64}
+    load_ha_example(name::Symbol; distribution=:young) -> ModelSpec{Float64}
 
-Return a pre-calibrated `HADSGESpec` for a canonical heterogeneous agent model.
+Return a pre-calibrated HA `ModelSpec` (one `HouseholdSystem`) for a canonical model.
 
 Pass `distribution=:winberry` to represent the cross-sectional distribution by
 the Winberry (2018) parametric moment family instead of the Young (2010)
@@ -420,9 +359,7 @@ function load_ha_example(name::Symbol; distribution::Symbol=:young)
               ":one_asset_hank, :two_asset_hank, :huggett, :endogenous_labor")
     end
     distribution === :young && return spec
-    return HADSGESpec{Float64}(spec.aggregate_spec, spec.individual, spec.income,
-                                spec.grid, spec.aggregation, spec.het_params;
-                                model=spec.model, distribution=distribution)
+    return _replace_household(spec; distribution=distribution)
 end
 
 # =============================================================================
@@ -463,13 +400,15 @@ function _endogenous_labor_example(; kind::Symbol=:ghh, psi::Real=3.0,
     individual = IndividualProblem{Float64}(u, up, upi, beta, _ks_budget,
                                             [0.0], nothing, 1; labor=labor)
 
-    agg_spec = _minimal_agg_spec(; alpha=alpha, delta=delta)
     aggregation = Pair{Symbol,Function}[:K => _agg_var1]
     het_params = Dict{Symbol,Float64}(
         :alpha => alpha, :delta => delta, :Z => 1.0, :L => 1.0,
-        :psi => Float64(psi), :frisch => Float64(frisch)
+        :psi => Float64(psi), :frisch => Float64(frisch),
+        :rho_z => 0.95, :sigma_z => 0.007
     )
-
-    return HADSGESpec{Float64}(agg_spec, individual, income, grid,
-                                aggregation, het_params)
+    hh = HouseholdSystem{Float64}(individual, income, grid, aggregation, het_params)
+    return _wrap_ha_spec(hh;
+        params=[:alpha, :delta, :rho_z, :sigma_z],
+        param_values=Dict{Symbol,Float64}(:alpha => alpha, :delta => delta,
+                                          :rho_z => 0.95, :sigma_z => 0.007))
 end

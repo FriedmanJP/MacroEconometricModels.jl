@@ -8,7 +8,11 @@ Specify, solve, simulate, and estimate Dynamic Stochastic General Equilibrium mo
 
 ```@docs
 AbstractDSGEModel
-DSGESpec
+ModelSpec
+ModelIR
+NamedEquation
+NoAgents
+AbstractAgentSystem
 LinearDSGE
 DSGESolution
 nshocks(::DSGESolution)
@@ -191,7 +195,15 @@ nonlinear_constraint
 ## Heterogeneous-Agent DSGE
 
 ```@docs
-HADSGESpec
+HouseholdSystem
+DCEGMSystem
+LifeCycleSystem
+ContinuousHouseholdSystem
+FirmSystem
+IntermediarySystem
+to_spec
+has_kind
+agents_of
 HAGrid
 HAGrid()
 IncomeProcess
@@ -248,6 +260,7 @@ block_jacobian
 ssj_jacobian
 ssj_irf
 ssj_arg_order
+MitBlock
 ```
 
 ```@autodocs
@@ -263,12 +276,19 @@ Filter  = f -> f === MacroEconometricModels.report
 DCEGMProblem
 DCEGMSolution
 DCEGMDistribution
+DCEGMFirm
+DCEGMEquilibrium
+DCEGMTransition
 dcegm_solve
 dcegm_policy
 dcegm_choice_probabilities
 dcegm_threshold
 dcegm_simulate
 dcegm_retirement_model
+dcegm_steady_state
+dcegm_capital_demand
+dcegm_firm_wage
+dcegm_mit
 ```
 
 ```@autodocs
@@ -306,6 +326,8 @@ lifecycle_policies
 lifecycle_distribution
 lifecycle_income
 lifecycle_survival
+LifeCycleTransition
+lifecycle_transition
 ```
 
 ```@autodocs
@@ -364,5 +386,31 @@ BlanchardOLGSolution
 blanchard_steady_state
 blanchard_solve
 blanchard_transition
+blanchard_nk_spec
 report(::IO, ::BlanchardOLGSteadyState{T}) where {T}
+```
+
+---
+
+## Plant Heterogeneity
+
+```@docs
+KhanThomasSteadyState
+KhanThomasTransition
+khan_thomas_example
+khan_thomas_steady_state
+khan_thomas_mit
+```
+
+---
+
+## Heterogeneous Banks
+
+```@docs
+IntermediarySteadyState
+IntermediaryPE
+IntermediaryTransition
+intermediary_pe
+intermediary_steady_state
+intermediary_mit
 ```

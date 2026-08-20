@@ -29,8 +29,9 @@ end
 
 # HA-DSGE and HA-DSGE Advanced are the suite ceiling. Give each 2 OpenBLAS
 # threads; every other group stays at 1 so 4-wide dispatch does not oversubscribe.
+# Only one 2-thread group so HA-DSGE + Advanced cannot oversubscribe (MSR-28).
 _blas_threads_for_group(name::AbstractString) =
-    name == "HA-DSGE" || name == "HA-DSGE Advanced" ? 2 : 1
+    name == "HA-DSGE" ? 2 : 1
 
 _runner_max_conc(cpu_threads::Integer; cap::Integer=4) = min(Int(cpu_threads), cap)
 
@@ -48,7 +49,7 @@ function _with_group_blas(f, group_name::AbstractString)
     end
 end
 
-# Julia 1.10 Ubuntu numerical cell (`MACRO_NUMERICAL_CI=1`): skip display/
+# Ubuntu 1.10 Optim-v1 cell (`MACRO_NUMERICAL_CI=1`): skip display/
 # plotting/coverage-harness groups. ubuntu LTS keeps the full list.
 const _NUMERICAL_SKIP_GROUPS = Set(["Plotting", "Display", "Coverage-A", "Coverage-B"])
 const _NUMERICAL_SKIP_CORE = Set([
@@ -76,6 +77,10 @@ function _numerical_groups(groups, numerical::Bool)
 end
 
 # CI job split (`MACRO_CI_SUITE=dsge|empirical`): DSGE/HA vs the empirical rest.
+# julia-actions/cache@v3 already keys on the full matrix (include-matrix), so
+# the two suite jobs do not share a compiled/ depot. The pidfile/checksum
+# storm on macOS empirical was intra-job: multiprocess children racing
+# `using` before a warm cache existed (see `_warm_compile_cache`).
 const _DSGE_SUITE_GROUPS = Set([
     "DSGE Core",
     "DSGE Bayesian & HD",

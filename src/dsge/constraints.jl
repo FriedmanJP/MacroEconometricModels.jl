@@ -122,7 +122,7 @@ function _path_perfect_foresight end
 
 # JuMP + Ipopt are hard deps, so this always passes; kept for backward compatibility.
 function _check_jump_loaded()
-    if !hasmethod(_jump_compute_steady_state, Tuple{DSGESpec, Vector})
+    if !hasmethod(_jump_compute_steady_state, Tuple{ModelSpec, Vector})
         throw(ArgumentError(_JUMP_INSTALL_MSG))
     end
     return nothing
@@ -130,7 +130,7 @@ end
 
 """Check if PATHSolver is loaded (extension adds method to `_path_compute_steady_state`)."""
 function _path_available()
-    return hasmethod(_path_compute_steady_state, Tuple{DSGESpec, Vector})
+    return hasmethod(_path_compute_steady_state, Tuple{ModelSpec, Vector})
 end
 
 """Throw an informative error if the optional PATHSolver extension is not loaded."""
@@ -159,7 +159,7 @@ function _select_solver(constraints::Vector, solver_override::Union{Nothing,Symb
     has_nlcon = any(c -> c isa NonlinearConstraint, constraints)
     if has_nlcon
         # Prefer Ipopt when JuMP extension is loaded (more robust for large NLP)
-        if hasmethod(_jump_compute_steady_state, Tuple{DSGESpec, Vector})
+        if hasmethod(_jump_compute_steady_state, Tuple{ModelSpec, Vector})
             return :ipopt
         end
         return :nlopt
@@ -172,7 +172,7 @@ end
 
 Check that all variable names in constraints exist in `spec.endog`.
 """
-function _validate_constraints(spec::DSGESpec{T}, constraints::Vector) where {T}
+function _validate_constraints(spec::ModelSpec{T}, constraints::Vector) where {T}
     for c in constraints
         if c isa VariableBound
             idx = findfirst(==(c.var_name), spec.endog)
@@ -294,7 +294,7 @@ function _build_pf_nlcon(cfn, n, n_ε, θ)
 end
 
 """Extract variable bounds from constraints as lower/upper vectors."""
-function _extract_bounds(spec::DSGESpec{T}, constraints::Vector) where {T}
+function _extract_bounds(spec::ModelSpec{T}, constraints::Vector) where {T}
     n = spec.n_endog
     FT = isempty(spec.steady_state) ? Float64 : eltype(spec.steady_state)
     lower = fill(FT(-Inf), n)

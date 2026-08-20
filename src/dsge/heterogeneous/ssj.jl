@@ -547,7 +547,7 @@ Ho-Kalman observation map `(C_obs, D_obs)` into the `DSGESolution`/`HADSGESoluti
 types so the standard `irf`/`fevd`/`simulate` dispatch reports aggregate outputs.
 Used by the Huggett SSJ general-equilibrium path.
 """
-function _wrap_hadsge_solution(spec::HADSGESpec{T}, ss::HASteadyState{T},
+function _wrap_hadsge_solution(spec::ModelSpec{T}, ss::HASteadyState{T},
                                G1::Matrix{T}, impact::Matrix{T}, C_sol::Vector{T},
                                eu::Vector{Int}, eigenvalues::AbstractVector,
                                C_obs::Matrix{T}, D_obs::Matrix{T},
@@ -557,7 +557,7 @@ function _wrap_hadsge_solution(spec::HADSGESpec{T}, ss::HASteadyState{T},
     eigenvalues = ComplexF64.(eigenvalues)
     n_red = size(G1, 1)
     endog_names = [Symbol("x_$i") for i in 1:n_red]
-    dummy_spec = DSGESpec{T}(
+    dummy_spec = ModelSpec{T}(
         endog_names, [:epsilon], Symbol[], Dict{Symbol,T}(),
         [:(0 + 0) for _ in 1:n_red],
         [((yt, yl, yle, eps, th) -> zero(T)) for _ in 1:n_red],
@@ -581,16 +581,19 @@ end
 """
     _ssj_solve(spec, ss; T_horizon=300, n_reduced=30) → HADSGESolution{T}
 
-Full Sequence-Space Jacobian solution.
+Full Sequence-Space Jacobian solution. One-asset GE closes go through
+[`combine_blocks`](@ref): each `HouseholdSystem` is a [`HetBlock`](@ref)
+named by its agent key (several households: `#651`); aggregate
+`NamedEquation`s that define `:r`/`:w`/`:Y` become a firm [`SimpleBlock`](@ref);
+market clearing is a residual `SimpleBlock`. Huggett is the household + bond
+market special case.
 
-1. Compute HA block Jacobians for key (input, output) pairs.
-2. Extract the aggregate impulse response from the primary Jacobian (r → K).
-3. Convert to state-space via Ho-Kalman realization.
-4. Build a `DSGESolution` from the reduced state-space representation.
-5. Return `HADSGESolution` wrapping the result.
+Two-asset models keep the `_ssj_jacobian` helper — a one-unknown capital DAG
+cannot close two asset markets. That is an explicit restriction, not a silent
+drop of `:two_asset_hank`.
 
 # Arguments
-- `spec::HADSGESpec{T}` — HA-DSGE specification
+- `spec::ModelSpec{T}` — HA-DSGE specification
 - `ss::HASteadyState{T}` — pre-computed steady state
 - `T_horizon::Int` — Jacobian sequence length (default 300)
 - `n_reduced::Int` — number of reduced states in Ho-Kalman (default 30)
@@ -600,177 +603,572 @@ Full Sequence-Space Jacobian solution.
   sequence-space Jacobian to solve and estimate heterogeneous-agent models.
   *Econometrica*, 89(5), 2375–2408.
 """
-function _ssj_solve(spec::HADSGESpec{T}, ss::HASteadyState{T};
+function _ssj_solve(spec::ModelSpec{T}, ss::HASteadyState{T};
                      T_horizon::Int=300,
                      n_reduced::Int=30) where {T<:AbstractFloat}
-    # Step 1: Compute HA block Jacobians
-    jacobians = Dict{Symbol, Matrix{T}}()
-
-    if spec.grid.n_dims == 2
-        in_var = haskey(ss.prices, :r_a) ? :r_a : :r
-        J_r_A = _ssj_jacobian(ss, spec.individual, spec.grid, spec.income,
-                              in_var, :A; T_horizon=T_horizon)
-        @inbounds for i in eachindex(J_r_A)
-            isfinite(J_r_A[i]) || (J_r_A[i] = zero(T))
-        end
-        jacobians[:J_r_A] = J_r_A
-        col1 = [J_r_A[t, 1] for t in 1:T_horizon]
-        if maximum(abs, col1) < T(1e-16)
-            col1[1] = T(1e-8)
-        end
-        irf_seq = [reshape([col1[t]], 1, 1) for t in 1:T_horizon]
-        k = max(min(n_reduced, div(T_horizon, 2) - 1), 1)
-        local G1, impact, C_sol, eu, eig, C_mat, D
-        try
-            G1, impact, C_sol, eu, eig, C_mat, D = _ho_kalman(irf_seq, 1, 1, k)
-            all(isfinite, G1) || throw(ArgumentError("non-finite Ho-Kalman G1"))
-            max_eig = maximum(abs.(eig))
-            if max_eig > one(T)
-                G1 .*= T(0.999) / max_eig
-                eig = ComplexF64.(eigvals(ComplexF64.(G1)))
-            else
-                eig = ComplexF64.(eig)
-            end
-        catch
-            G1 = fill(T(0.9), 1, 1)
-            impact = ones(T, 1, 1)
-            C_sol = zeros(T, 1)
-            eu = [1, 1]
-            eig = ComplexF64[T(0.9)]
-            C_mat = ones(T, 1, 1)
-            D = zeros(T, 1, 1)
-        end
-        return _wrap_hadsge_solution(spec, ss, G1, impact, C_sol, eu, eig,
-                                     C_mat, D, jacobians, T_horizon, :ssj)
+    if count(a -> a isa HouseholdSystem, values(spec.agents)) > 1
+        return _ssj_solve_multipop(spec; ss=ss, T_horizon=T_horizon, n_reduced=n_reduced)
     end
+    hh = _hh(spec)
+    if hh.grid.n_dims == 2
+        return _ssj_solve_two_asset(spec, ss; T_horizon=T_horizon, n_reduced=n_reduced)
+    elseif hh.model === :huggett
+        return _ssj_solve_huggett(spec, ss; T_horizon=T_horizon, n_reduced=n_reduced)
+    else
+        return _ssj_solve_production(spec, ss; T_horizon=T_horizon, n_reduced=n_reduced)
+    end
+end
 
-    # ── Huggett (zero net supply): general-equilibrium close ──────────────────
-    # The bond clears in zero net supply (A_t = 0 ∀t). With an aggregate endowment
-    # shock w_t (AR(1)), solve for the market-clearing rate path:
-    #   H_U · dr + H_Z · dw = 0  ⟹  dr = -H_U \ (H_Z · dw).
-    # This is assembled as a two-block DAG (#352/T253) — a `HetBlock` household
-    # (r, w → A) feeding a `SimpleBlock` bond market (A → bond_mkt) — so the
-    # hard-wired close below is now a special case of `combine_blocks` +
-    # `ssj_jacobian` + `ssj_irf`. H_U = ∂A/∂r-path, H_Z = ∂A/∂w-path.
-    # Ho-Kalman realizes the rate IRF.
-    if spec.model === :huggett
-        household = HetBlock(spec, ss; inputs=[:r, :w], outputs=[:A],
-                             name=:household)
-        bond_market = SimpleBlock(x -> [x[1]];
-                                  inputs=[:A], outputs=[:bond_mkt],
-                                  ss_inputs=Dict(:A => household.ss_outputs[:A]),
-                                  name=:bond_market)
-        dag = combine_blocks(household, bond_market; name=:huggett)
-        # `target_tol=Inf`: for the zero-net-supply close the target level IS
-        # `ss.excess_demand`, which `report(ss)` already reports, so the DAG guard
-        # would only duplicate it on every solve. Hand-built DAGs keep the default.
-        gej = ssj_jacobian(dag; unknowns=[:r], targets=[:bond_mkt], shocks=[:w],
-                           T_horizon=T_horizon, target_tol=Inf)
-        H_U = gej.curlyJ[:bond_mkt][:r]
-        H_Z = gej.curlyJ[:bond_mkt][:w]
-        jacobians[:H_U] = H_U
-        jacobians[:H_Z] = H_Z
-
-        rho = T(get(spec.het_params, :rho_e, 0.9))
-        dw = T[rho^(t - 1) for t in 1:T_horizon]          # endowment-shock impulse path
-        dr = ssj_irf(gej, Dict(:w => dw); residual=false).paths[:r]  # clearing rate path
-
-        irf_seq = [reshape([dr[t]], 1, 1) for t in 1:T_horizon]
-        k = max(min(n_reduced, div(T_horizon, 2) - 1), 1)
+function _ssj_solve_two_asset(spec::ModelSpec{T}, ss::HASteadyState{T};
+                              T_horizon::Int, n_reduced::Int) where {T<:AbstractFloat}
+    # Two-asset GE needs two unknowns (r_a, r_b). HetBlock + a one-unknown
+    # capital DAG cannot close both markets; keep the fake-news helper.
+    jacobians = Dict{Symbol,Matrix{T}}()
+    in_var = haskey(ss.prices, :r_a) ? :r_a : :r
+    J_r_A = _ssj_jacobian(ss, _hh(spec).individual, _hh(spec).grid, _hh(spec).income,
+                          in_var, :A; T_horizon=T_horizon)
+    n_bad = 0
+    @inbounds for i in eachindex(J_r_A)
+        if !isfinite(J_r_A[i])
+            J_r_A[i] = zero(T)
+            n_bad += 1
+        end
+    end
+    n_bad > 0 && @warn "two-asset SSJ: zeroed $n_bad non-finite J_r_A entries"
+    jacobians[:J_r_A] = J_r_A
+    col1 = _ssj_require_jrA_column(J_r_A)
+    irf_seq = [reshape([col1[t]], 1, 1) for t in 1:T_horizon]
+    k = max(min(n_reduced, div(T_horizon, 2) - 1), 1)
+    local G1, impact, C_sol, eu, eig, C_mat, D
+    try
         G1, impact, C_sol, eu, eig, C_mat, D = _ho_kalman(irf_seq, 1, 1, k)
-        # Ho-Kalman realizations can land marginally outside the unit circle;
-        # contract onto it (mirrors the Reiter stabilization) since the rate IRF
-        # is genuinely stable (decays at the shock persistence ρ).
+        all(isfinite, G1) || throw(ArgumentError("non-finite Ho-Kalman G1"))
         max_eig = maximum(abs.(eig))
         if max_eig > one(T)
-            G1 .*= T(0.999) / max_eig
-            eig = ComplexF64.(eigvals(ComplexF64.(G1)))
+            @warn "two-asset SSJ: Ho-Kalman spectral radius $(max_eig) > 1; " *
+                  "returning the unscaled realization"
+            eig = ComplexF64.(eig)
+        else
+            eig = ComplexF64.(eig)
         end
-        return _wrap_hadsge_solution(spec, ss, G1, impact, C_sol, eu, eig,
-                                     C_mat, D, jacobians, T_horizon, :ssj)
+    catch err
+        throw(ArgumentError(
+            "two-asset SSJ: Ho-Kalman realization failed: $(sprint(showerror, err)). " *
+            "Check that J_r_A decays before T_horizon and that the SS cleared."))
     end
+    ev = _ssj_explained_variance(J_r_A, k)
+    return _wrap_hadsge_solution(spec, ss, G1, impact, C_sol, eu, eig,
+                                 C_mat, D, jacobians, T_horizon, :ssj;
+                                 explained_variance=ev)
+end
 
-    # Primary Jacobian: r → K
-    J_r_K = _ssj_jacobian(ss, spec.individual, spec.grid, spec.income,
-                           :r, :K; T_horizon=T_horizon)
-    jacobians[:J_r_K] = J_r_K
-
-    # Also compute w → K if wage exists in prices
-    if haskey(ss.prices, :w)
-        J_w_K = _ssj_jacobian(ss, spec.individual, spec.grid, spec.income,
-                               :w, :K; T_horizon=T_horizon)
-        jacobians[:J_w_K] = J_w_K
+function _ssj_require_jrA_column(J::AbstractMatrix{T}) where {T<:AbstractFloat}
+    col1 = [J[t, 1] for t in 1:size(J, 1)]
+    if maximum(abs, col1) < T(1e-16)
+        throw(ArgumentError(
+            "two-asset SSJ: first column of J_r_A is numerically zero — " *
+            "the household block does not respond to r. Check the steady state and grids."))
     end
+    return col1
+end
 
-    # Step 2: Extract IRF sequence from the first column of J_r_K
-    # J_r_K[:, 1] gives the response of K at each time t to a one-unit permanent
-    # change in r at time 1. This is the aggregate impulse response.
-    n_vars = 1
-    n_shocks = 1
-    irf_seq = [reshape([J_r_K[t, 1]], 1, 1) for t in 1:T_horizon]
-
-    # Step 3: Ho-Kalman realization
-    k = min(n_reduced, div(T_horizon, 2) - 1)
-    k = max(k, 1)
-    G1, impact, C_sol, eu, eigenvalues, C_mat, D = _ho_kalman(irf_seq, n_vars, n_shocks, k)
-
-    # Step 4: Build dummy DSGESpec and LinearDSGE for the reduced system
-    n_red = size(G1, 1)
-
-    # Create minimal DSGESpec for the reduced system
-    endog_names = [Symbol("x_$i") for i in 1:n_red]
-    exog_names = [:epsilon_r]
-    param_names = Symbol[]
-    param_values = Dict{Symbol,T}()
-    equations = [:(0 + 0) for _ in 1:n_red]
-    residual_fns = [((yt, yl, yle, eps, th) -> zero(T)) for _ in 1:n_red]
-    steady_state_vec = zeros(T, n_red)
-
-    dummy_spec = DSGESpec{T}(
-        endog_names, exog_names, param_names, param_values,
-        equations, residual_fns,
-        0,           # n_expect = 0
-        Int[],       # forward_indices
-        steady_state_vec,
-        nothing      # ss_fn
+function _ssj_solve_huggett(spec::ModelSpec{T}, ss::HASteadyState{T};
+                            T_horizon::Int, n_reduced::Int) where {T<:AbstractFloat}
+    hh_name = only(keys(spec.agents))
+    household = HetBlock(spec, ss; inputs=[:r, :w], outputs=[:A], name=hh_name)
+    bond_market = SimpleBlock(x -> [x[1]];
+                              inputs=[:A], outputs=[:bond_mkt],
+                              ss_inputs=Dict(:A => household.ss_outputs[:A]),
+                              name=:bond_market)
+    dag = combine_blocks(household, bond_market; name=:huggett)
+    gej = ssj_jacobian(dag; unknowns=[:r], targets=[:bond_mkt], shocks=[:w],
+                       T_horizon=T_horizon, target_tol=Inf)
+    jacobians = Dict{Symbol,Matrix{T}}(
+        :H_U => gej.curlyJ[:bond_mkt][:r],
+        :H_Z => gej.curlyJ[:bond_mkt][:w],
     )
+    rho = T(get(_hh(spec).het_params, :rho_e, 0.9))
+    dw = T[rho^(t - 1) for t in 1:T_horizon]
+    dr = ssj_irf(gej, Dict(:w => dw); residual=false).paths[:r]
+    return _ssj_realize(spec, ss, dr, jacobians, T_horizon, n_reduced)
+end
 
-    # Create minimal LinearDSGE
-    Gamma0 = Matrix{T}(I, n_red, n_red)
-    Gamma1 = copy(G1)
-    C_lin = zeros(T, n_red)
-    Psi = copy(impact)
-    Pi = zeros(T, n_red, 0)
-
-    linear = LinearDSGE{T}(Gamma0, Gamma1, C_lin, Psi, Pi, dummy_spec)
-
-    # Build DSGESolution
-    dsge_sol = DSGESolution{T}(G1, impact, C_sol, eu, :ssj, eigenvalues,
-                                dummy_spec, linear)
-
-    # Step 5: Build reduction basis from Ho-Kalman SVD
-    # Use identity as the basis since the reduced system is already in its own
-    # coordinate system
-    reduction_basis = Matrix{T}(I, n_red, n_red)
-
-    # Explained variance: ratio of retained singular values to total
-    # (computed from the Jacobian's first column as a proxy)
-    F_jac = svd(J_r_K)
-    total_var = sum(F_jac.S .^ 2)
-    explained = sum(F_jac.S[1:min(n_red, length(F_jac.S))] .^ 2)
-    explained_variance = total_var > zero(T) ? explained / total_var : one(T)
-
-    return HADSGESolution{T}(
-        ss,
-        dsge_sol,
-        :ssj,
-        spec,
-        reduction_basis,
-        T_horizon,         # n_full_states
-        n_red,             # n_reduced
-        explained_variance,
-        jacobians,
-        C_mat,             # C_obs: reduced-state → aggregate K
-        D                  # D_obs: direct shock feed-through (h[0])
+function _ssj_solve_production(spec::ModelSpec{T}, ss::HASteadyState{T};
+                               T_horizon::Int, n_reduced::Int) where {T<:AbstractFloat}
+    household, firm, mkt = _ssj_production_blocks(spec, ss)
+    # Household prices are the SS prices; firm residuals are evaluated at the
+    # same K_ss. Estimation at off-equilibrium θ can leave a wedge — do not
+    # warn on every likelihood call (hand-built DAGs keep the default ss_tol).
+    dag = combine_blocks(firm, household, mkt; name=:production, ss_tol=T(Inf))
+    gej = ssj_jacobian(dag; unknowns=[:K], targets=[:asset_mkt], shocks=[:Z],
+                       T_horizon=T_horizon, target_tol=Inf)
+    jacobians = Dict{Symbol,Matrix{T}}(
+        :H_U => gej.H_U,
+        :H_Z => gej.H_Z,
     )
+    rho = T(get(spec.param_values, :rho_z, get(_hh(spec).het_params, :rho_z, 0.95)))
+    dZ = T[rho^(t - 1) for t in 1:T_horizon]
+    dK = ssj_irf(gej, Dict(:Z => dZ); residual=false).paths[:K]
+    ev = _ssj_explained_variance(gej.H_U, n_reduced)
+    return _ssj_realize(spec, ss, dK, jacobians, T_horizon, n_reduced;
+                        explained_variance=ev)
+end
+
+function _ssj_realize(spec::ModelSpec{T}, ss::HASteadyState{T},
+                      irf_col::AbstractVector{T},
+                      jacobians::Dict{Symbol,Matrix{T}},
+                      T_horizon::Int, n_reduced::Int;
+                      explained_variance::T=one(T)) where {T<:AbstractFloat}
+    irf_seq = [reshape([irf_col[t]], 1, 1) for t in 1:T_horizon]
+    k = max(min(n_reduced, div(T_horizon, 2) - 1), 1)
+    G1, impact, C_sol, eu, eig, C_mat, D = _ho_kalman(irf_seq, 1, 1, k)
+    max_eig = maximum(abs.(eig))
+    if max_eig > one(T)
+        G1 .*= T(0.999) / max_eig
+        eig = ComplexF64.(eigvals(ComplexF64.(G1)))
+    end
+    return _wrap_hadsge_solution(spec, ss, G1, impact, C_sol, eu, eig,
+                                 C_mat, D, jacobians, T_horizon, :ssj;
+                                 explained_variance=explained_variance)
+end
+
+function _ssj_explained_variance(J::AbstractMatrix{T}, n_red::Int) where {T<:AbstractFloat}
+    F = svd(J)
+    total = sum(F.S .^ 2)
+    kept = sum(F.S[1:min(n_red, length(F.S))] .^ 2)
+    return total > zero(T) ? T(kept / total) : one(T)
+end
+
+"""Pack HA steady-state levels into the residual `y` order `spec.endog`."""
+function _ha_level_vector(spec::ModelSpec{T}, ss::HASteadyState{T}) where {T<:AbstractFloat}
+    y = zeros(T, spec.n_endog)
+    hp = _hh(spec).het_params
+    for (i, v) in enumerate(spec.endog)
+        if haskey(ss.aggregates, v)
+            y[i] = ss.aggregates[v]
+        elseif haskey(ss.prices, v)
+            y[i] = ss.prices[v]
+        elseif haskey(hp, v)
+            y[i] = hp[v]
+        elseif v === :Z
+            y[i] = one(T)
+        end
+    end
+    return y
+end
+
+"""Firm / identity `SimpleBlock` from residuals whose `defines` are `outputs`."""
+function _simple_block_from_equations(spec::ModelSpec{T}, ss::HASteadyState{T},
+                                      outputs::Vector{Symbol},
+                                      inputs::Vector{Symbol};
+                                      lags::Dict{Symbol,Vector{Int}}=Dict{Symbol,Vector{Int}}(),
+                                      ss_inputs::Dict{Symbol,T},
+                                      name::Symbol) where {T<:AbstractFloat}
+    eqs = NamedEquation[]
+    out_idx = Int[]
+    for o in outputs
+        j = findfirst(eq -> eq.defines === o, spec.equations)
+        j === nothing && throw(ArgumentError(
+            "SSJ: no aggregate equation defines :$o. Name it " *
+            "(`$o[t] = ...`) so the firm SimpleBlock can be built."))
+        push!(eqs, spec.equations[j])
+        push!(out_idx, findfirst(==(o), spec.endog))
+    end
+    in_idx = Dict{Symbol,Int}(i => findfirst(==(i), spec.endog) for i in inputs)
+    y0 = _ha_level_vector(spec, ss)
+    θ = spec.param_values
+    ε0 = zeros(T, spec.n_exog)
+    lag_map = Dict{Symbol,Vector{Int}}()
+    arg_order = Tuple{Symbol,Int}[]
+    for i in inputs
+        li = sort(unique(collect(Int, get(lags, i, Int[0]))))
+        lag_map[i] = li
+        for l in li
+            push!(arg_order, (i, l))
+        end
+    end
+    f = function (x)
+        S = eltype(x)
+        y_t = S.(y0)
+        y_lag = S.(y0)
+        @inbounds for (k, (var, l)) in enumerate(arg_order)
+            idx = in_idx[var]
+            if l > 0
+                y_lag[idx] = x[k]
+            else
+                y_t[idx] = x[k]
+            end
+        end
+        S[y_t[out_idx[j]] - eqs[j].residual(y_t, y_lag, y_t, ε0, θ)
+          for j in eachindex(outputs)]
+    end
+    return SimpleBlock(f; inputs=inputs, outputs=outputs, lags=lags,
+                       ss_inputs=ss_inputs, name=name)
+end
+
+function _ssj_production_blocks(spec::ModelSpec{T}, ss::HASteadyState{T}) where {T<:AbstractFloat}
+    hh_name = only(keys(spec.agents))
+    hh_inputs = Symbol[v for v in (:r, :w) if haskey(ss.prices, v)]
+    isempty(hh_inputs) && throw(ArgumentError(
+        "SSJ: household HetBlock needs a :r or :w price in the steady state"))
+    hh_outputs = Symbol[:A]
+    _hh(spec).individual.labor !== nothing && push!(hh_outputs, :L)
+    household = HetBlock(spec, ss; inputs=hh_inputs, outputs=hh_outputs, name=hh_name)
+
+    firm_outputs = Symbol[v for v in (:r, :w, :Y) if any(eq -> eq.defines === v, spec.equations)]
+    isempty(firm_outputs) && throw(ArgumentError(
+        "SSJ: expected aggregate equations defining :r and :w (and optionally :Y). " *
+        "Write e.g. `r[t] = α * Z[t] * K[t-1]^(α-1) - δ`."))
+    firm_inputs = Symbol[:K]
+    :Z in spec.endog && push!(firm_inputs, :Z)
+    K_ss = ss.aggregates[:K]
+    Z_ss = haskey(ss.aggregates, :Z) ? ss.aggregates[:Z] :
+           T(get(_hh(spec).het_params, :Z, one(T)))
+    ss_in = Dict{Symbol,T}(:K => K_ss)
+    :Z in firm_inputs && (ss_in[:Z] = Z_ss)
+    firm = _simple_block_from_equations(spec, ss, firm_outputs, firm_inputs;
+                                        lags=Dict(:K => [1]),
+                                        ss_inputs=ss_in, name=:firm)
+
+    mkt = SimpleBlock(x -> [x[1] - x[2]];
+                      inputs=[:A, :K], outputs=[:asset_mkt],
+                      ss_inputs=Dict(:A => household.ss_outputs[:A], :K => K_ss),
+                      name=:asset_market)
+    return household, firm, mkt
+end
+
+# =============================================================================
+# Multi-population HouseholdSystem SSJ (#651)
+# =============================================================================
+
+# Distinct HetBlock output aliases (G-16 closed set). Assigned in agent-key order.
+const _MULTIPOP_ASSET_ALIASES = (:A, :B, :assets, :a, :savings, :K)
+
+function _named_households(spec::ModelSpec)
+    out = Tuple{Symbol,HouseholdSystem}[]
+    for (k, v) in pairs(spec.agents)
+        v isa HouseholdSystem && push!(out, (k, v))
+    end
+    return out
+end
+
+function _multipop_named_households(spec::ModelSpec)
+    named = _named_households(spec)
+    n = length(named)
+    n == 0 && throw(ArgumentError(
+        "solve: no HouseholdSystem on spec (agents = $(keys(spec.agents)))"))
+    if n != length(spec.agents)
+        throw(ArgumentError(
+            "solve: mixed agent kinds (" *
+            join(string.(keys(spec.agents)), ", ") *
+            ") are not supported yet (#651). " *
+            "Use agents_of(spec, HouseholdSystem) to address household populations."))
+    end
+    n > length(_MULTIPOP_ASSET_ALIASES) && throw(ArgumentError(
+        "solve: at most $(length(_MULTIPOP_ASSET_ALIASES)) HouseholdSystems " *
+        "can share one SSJ DAG (#651); got $n."))
+    for (k, hh) in named
+        hh.grid.n_dims == 1 || throw(ArgumentError(
+            "solve: multiple HouseholdSystems require one-asset grids (#651); " *
+            "population :$k has n_dims=$(hh.grid.n_dims)."))
+    end
+    models = unique(hh.model for (_, hh) in named)
+    if length(models) > 1 && (:huggett in models)
+        throw(ArgumentError(
+            "solve: mixed :huggett and production HouseholdSystems (#651). " *
+            "Use agents_of(spec, HouseholdSystem) per population."))
+    end
+    return named
+end
+
+_household_mass(hh::HouseholdSystem{T}) where {T<:AbstractFloat} =
+    T(get(hh.het_params, :mass, one(T)))
+
+function _household_asset_supply(hh::HouseholdSystem{T}, prices::Dict{Symbol,T};
+                                 init_policy=nothing,
+                                 hh_solver::Symbol=:egm) where {T<:AbstractFloat}
+    ip, grid, income = hh.individual, hh.grid, hh.income
+    if hh_solver === :vfi
+        _, c_pol, a_pol, _ = _vfi_solve(ip, grid, income, prices;
+                                        max_iter=1000, tol=T(1e-8), howard_steps=20,
+                                        init_policy=init_policy)
+    else
+        c_pol, a_pol, _ = _egm_solve(ip, grid, income, prices;
+                                     max_iter=1000, tol=T(1e-10),
+                                     init_policy=init_policy)
+    end
+    Lambda = _build_transition_matrix(a_pol, grid, income)
+    dist, _ = _stationary_dist_young(Lambda; max_iter=10_000, tol=T(1e-12))
+    A = _aggregate(dist, grid; var_index=1)
+    return (c_pol=c_pol, a_pol=a_pol, dist=dist, A=_household_mass(hh) * A)
+end
+
+function _household_ss_from_pe(hh::HouseholdSystem{T}, prices::Dict{Symbol,T},
+                               pe) where {T<:AbstractFloat}
+    n_a = hh.grid.n_points[1]
+    n_e = hh.grid.n_income
+    dist_r = reshape(copy(pe.dist), n_a, n_e)
+    policies = Dict{Symbol,Array{T}}(:savings => pe.a_pol, :consumption => pe.c_pol)
+    gdiag = _ha_grid_diagnostics(pe.a_pol, pe.dist, hh.grid)
+    euler_mid = _euler_error_stats(pe.c_pol, pe.a_pol, hh.individual, hh.grid,
+                                   hh.income, prices)
+    inc_marg = vec(sum(dist_r, dims=1))
+    Y_val = sum(inc_marg .* hh.income.states) * get(prices, :w, one(T))
+    aggregates = Dict{Symbol,T}(
+        :K => pe.A / _household_mass(hh),
+        :A => pe.A / _household_mass(hh),
+        :Y => Y_val,
+        :excess_demand => zero(T),
+        :A_policy => gdiag.assets_desired,
+        :A_residual => gdiag.clearing_residual,
+    )
+    value_fn = _policy_value_fn(pe.c_pol, pe.a_pol, hh.individual, hh.grid, hh.income)
+    return HASteadyState{T}(
+        policies, dist_r, value_fn, copy(prices), aggregates,
+        hh.grid, hh.income, true, 0, euler_mid.max, zero(T);
+        euler=(midpoints=euler_mid, nodes=euler_mid))
+end
+
+function _multipop_is_huggett(named)
+    return all(hh.model === :huggett for (_, hh) in named)
+end
+
+function _multipop_clearing(others, huggett::Bool, hh_solver::Symbol)
+    base = huggett ? _huggett_clearing() : _aiyagari_clearing(_default_cobb_douglas_price_fn)
+    warm = Dict{Symbol,Any}()
+    return function (r, params)
+        K_d0, prices = base(r, params)
+        isfinite(K_d0) || return (K_d0, prices)
+        extra = zero(typeof(r))
+        for (k, hh) in others
+            pe = _household_asset_supply(hh, prices;
+                                         init_policy=get(warm, k, nothing),
+                                         hh_solver=hh_solver)
+            warm[k] = pe.c_pol
+            extra += pe.A
+        end
+        return (K_d0 - extra, prices)
+    end
+end
+
+function _multipop_steady_states(spec::ModelSpec{T}, named;
+                                 ss=nothing,
+                                 hh_solver::Symbol=:egm,
+                                 r_bounds=nothing,
+                                 max_iter::Int=200,
+                                 tol::Real=T(1e-8),
+                                 kwargs...) where {T<:AbstractFloat}
+    huggett = _multipop_is_huggett(named)
+    if ss isa HASteadyState{T}
+        pivot_idx = argmax(i -> named[i][2].individual.beta, eachindex(named))
+        pivot_key = named[pivot_idx][1]
+        ss_map = Dict{Symbol,HASteadyState{T}}(pivot_key => ss)
+        for i in eachindex(named)
+            i == pivot_idx && continue
+            k, hh = named[i]
+            pe = _household_asset_supply(hh, ss.prices; hh_solver=hh_solver)
+            ss_map[k] = _household_ss_from_pe(hh, ss.prices, pe)
+        end
+        return ss_map, ss, huggett
+    elseif ss isa AbstractDict
+        pivot_idx = argmax(i -> named[i][2].individual.beta, eachindex(named))
+        return ss, ss[named[pivot_idx][1]], huggett
+    end
+    # Bisect on the most patient household so `_ha_steady_state` caps r below
+    # every population's 1/β − 1 existence bound.
+    pivot_idx = argmax(i -> named[i][2].individual.beta, eachindex(named))
+    pivot_key, pivot = named[pivot_idx]
+    others = Tuple{Symbol,HouseholdSystem}[named[i] for i in eachindex(named) if i != pivot_idx]
+    βmax = pivot.individual.beta
+    rb = r_bounds === nothing ?
+         (huggett ? (T(-0.05), one(T) / βmax - one(T) - T(1e-4)) : (T(-0.01), T(0.04))) :
+         r_bounds
+    params = copy(pivot.het_params)
+    haskey(params, :alpha) || (params[:alpha] = T(0.36))
+    haskey(params, :delta) || (params[:delta] = T(0.025))
+    haskey(params, :Z) || (params[:Z] = one(T))
+    haskey(params, :L) || (params[:L] = one(T))
+    m1 = _household_mass(pivot)
+    raw_clr = _multipop_clearing(others, huggett, hh_solver)
+    clr = if m1 == one(T)
+        raw_clr
+    else
+        function (r, p)
+            K_d, prices = raw_clr(r, p)
+            isfinite(K_d) || return (K_d, prices)
+            return (K_d / m1, prices)
+        end
+    end
+    ss_kwargs = Dict{Symbol,Any}()
+    for k in (:K_init, :rtol, :r_atol, :grid_check, :verbose)
+        haskey(kwargs, k) && (ss_kwargs[k] = kwargs[k])
+    end
+    ss_pivot = _ha_steady_state(
+        pivot.individual, pivot.grid, pivot.income,
+        _default_cobb_douglas_price_fn, params;
+        r_bounds=rb, max_iter=max_iter, tol=tol, hh_solver=hh_solver,
+        clearing_fn=clr, ss_kwargs...)
+    ss_map = Dict{Symbol,HASteadyState{T}}(pivot_key => ss_pivot)
+    for (k, hh) in others
+        pe = _household_asset_supply(hh, ss_pivot.prices; hh_solver=hh_solver)
+        ss_map[k] = _household_ss_from_pe(hh, ss_pivot.prices, pe)
+    end
+    return ss_map, ss_pivot, huggett
+end
+
+function _ssj_multipop_hetblocks(named, ss_map::Dict{Symbol,HASteadyState{T}}) where {T<:AbstractFloat}
+    blocks = HetBlock{T}[]
+    aliases = Symbol[]
+    masses = T[]
+    for (i, (k, hh)) in enumerate(named)
+        ss = ss_map[k]
+        o = _MULTIPOP_ASSET_ALIASES[i]
+        inputs = Symbol[v for v in (:r, :w) if haskey(ss.prices, v)]
+        isempty(inputs) && throw(ArgumentError(
+            "solve: HouseholdSystem :$k has no :r/:w in its steady-state prices (#651)"))
+        hb = HetBlock(ss, hh.individual, hh.grid, hh.income;
+                      inputs=inputs, outputs=[o], name=k)
+        push!(blocks, hb)
+        push!(aliases, o)
+        push!(masses, _household_mass(hh))
+    end
+    return blocks, aliases, masses
+end
+
+function _ssj_multipop_market(aliases::Vector{Symbol}, masses::Vector{T},
+                              ss_in_A::Dict{Symbol,T}, K_ss::T,
+                              huggett::Bool) where {T<:AbstractFloat}
+    n = length(aliases)
+    if huggett
+        f = function (x)
+            s = zero(eltype(x))
+            @inbounds for i in 1:n
+                s += masses[i] * x[i]
+            end
+            return [s]
+        end
+        return SimpleBlock(f; inputs=aliases, outputs=[:bond_mkt],
+                           ss_inputs=ss_in_A, name=:bond_market)
+    end
+    f = function (x)
+        s = -x[n + 1]
+        @inbounds for i in 1:n
+            s += masses[i] * x[i]
+        end
+        return [s]
+    end
+    ins = copy(aliases)
+    push!(ins, :K)
+    ss_in = copy(ss_in_A)
+    ss_in[:K] = K_ss
+    return SimpleBlock(f; inputs=ins, outputs=[:asset_mkt],
+                       ss_inputs=ss_in, name=:asset_market)
+end
+
+# Named aggregate equations close a production-economy firm only when they
+# define :r (households price off r). Y-only or empty-of-r leftovers throw so
+# Huggett specs and incomplete firm blocks do not silently drop the equations.
+function _ssj_multipop_firm_outputs(spec::ModelSpec)
+    return Symbol[v for v in (:r, :w, :Y) if any(eq -> eq.defines === v, spec.equations)]
+end
+
+function _ssj_multipop_require_firm_or_empty(spec::ModelSpec)
+    outs = _ssj_multipop_firm_outputs(spec)
+    (:r in outs || isempty(spec.equations)) && return outs
+    throw(ArgumentError(
+        "solve: multi-population SSJ found named aggregate equations that do not " *
+        "define :r/:w; write those definitions or omit the equations to use the " *
+        "built-in Cobb–Douglas firm (#651)."))
+end
+
+function _ssj_multipop_firm(named, spec::ModelSpec{T}, ss::HASteadyState{T},
+                            K_ss::T) where {T<:AbstractFloat}
+    firm_outputs = _ssj_multipop_require_firm_or_empty(spec)
+    if :r in firm_outputs
+        firm_inputs = Symbol[:K]
+        :Z in spec.endog && push!(firm_inputs, :Z)
+        Z_ss = haskey(ss.aggregates, :Z) ? ss.aggregates[:Z] :
+               T(get(named[1][2].het_params, :Z, one(T)))
+        ss_in = Dict{Symbol,T}(:K => K_ss)
+        :Z in firm_inputs && (ss_in[:Z] = Z_ss)
+        return _simple_block_from_equations(spec, ss, firm_outputs, firm_inputs;
+                                            lags=Dict(:K => [1]),
+                                            ss_inputs=ss_in, name=:firm)
+    end
+    p = named[1][2].het_params
+    alpha = T(get(p, :alpha, get(spec.param_values, :alpha, T(0.36))))
+    delta = T(get(p, :delta, get(spec.param_values, :delta, T(0.025))))
+    Z = T(get(p, :Z, one(T)))
+    L = T(get(p, :L, one(T)))
+    return SimpleBlock(
+        x -> begin
+            Klag, Zt = x[1], x[2]
+            kl = Klag / L
+            r = alpha * Zt * kl^(alpha - one(eltype(x))) - delta
+            w = (one(eltype(x)) - alpha) * Zt * kl^alpha
+            Y = Zt * Klag^alpha * L^(one(eltype(x)) - alpha)
+            [r, w, Y]
+        end;
+        inputs=[:K, :Z], outputs=[:r, :w, :Y],
+        lags=Dict(:K => [1]),
+        ss_inputs=Dict(:K => K_ss, :Z => Z),
+        name=:firm)
+end
+
+"""
+    _ssj_solve_multipop(spec; T_horizon, n_reduced, kwargs...) → HADSGESolution
+
+Sequence-space GE for two or more named [`HouseholdSystem`](@ref)s. Each
+population is a [`HetBlock`](@ref) named by its agent key (free names; not
+`:household`). Market clearing is a [`SimpleBlock`](@ref); the DAG is assembled
+by [`combine_blocks`](@ref). Agent FOCs never enter gensys.
+"""
+function _ssj_solve_multipop(spec::ModelSpec{T};
+                             T_horizon::Int=300,
+                             n_reduced::Int=30,
+                             ss=nothing,
+                             method::Symbol=:ssj,
+                             kwargs...) where {T<:AbstractFloat}
+    named = _multipop_named_households(spec)
+    ss_map, ss_rep, huggett = _multipop_steady_states(spec, named; ss=ss, kwargs...)
+    het_blocks, aliases, masses = _ssj_multipop_hetblocks(named, ss_map)
+    ss_in_A = Dict{Symbol,T}(aliases[i] => het_blocks[i].ss_outputs[aliases[i]]
+                             for i in eachindex(aliases))
+    # ss_tol/target_tol are Inf because non-pivot populations are partial
+    # equilibrium: their market residuals do not hold until the pivot clears.
+    if huggett
+        _ssj_multipop_require_firm_or_empty(spec)
+        mkt = _ssj_multipop_market(aliases, masses, ss_in_A, zero(T), true)
+        dag = combine_blocks(het_blocks..., mkt; name=:multipop, ss_tol=T(Inf))
+        gej = ssj_jacobian(dag; unknowns=[:r], targets=[:bond_mkt], shocks=[:w],
+                           T_horizon=T_horizon, target_tol=Inf)
+        rho = T(get(named[1][2].het_params, :rho_e,
+                    get(spec.param_values, :rho_z, 0.9)))
+        dw = T[rho^(t - 1) for t in 1:T_horizon]
+        path = ssj_irf(gej, Dict(:w => dw); residual=false).paths[:r]
+        resid = sum(masses[i] * het_blocks[i].ss_outputs[aliases[i]]
+                    for i in eachindex(aliases))
+        @info "multipop SSJ: bond-market residual $(resid) after pivot clear (#651)"
+    else
+        K_ss = zero(T)
+        for i in eachindex(named)
+            K_ss += masses[i] * ss_map[named[i][1]].aggregates[:K]
+        end
+        firm = _ssj_multipop_firm(named, spec, ss_rep, K_ss)
+        mkt = _ssj_multipop_market(aliases, masses, ss_in_A, K_ss, false)
+        dag = combine_blocks(firm, het_blocks..., mkt; name=:multipop, ss_tol=T(Inf))
+        gej = ssj_jacobian(dag; unknowns=[:K], targets=[:asset_mkt], shocks=[:Z],
+                           T_horizon=T_horizon, target_tol=Inf)
+        rho = T(get(spec.param_values, :rho_z,
+                    get(named[1][2].het_params, :rho_z, 0.95)))
+        dZ = T[rho^(t - 1) for t in 1:T_horizon]
+        path = ssj_irf(gej, Dict(:Z => dZ); residual=false).paths[:K]
+        A_ss = sum(masses[i] * het_blocks[i].ss_outputs[aliases[i]]
+                   for i in eachindex(aliases))
+        @info "multipop SSJ: asset-market residual $(A_ss - K_ss) after pivot clear (#651)"
+    end
+    jacobians = Dict{Symbol,Matrix{T}}(:H_U => gej.H_U, :H_Z => gej.H_Z)
+    ev = _ssj_explained_variance(gej.H_U, n_reduced)
+    return _ssj_realize(spec, ss_rep, path, jacobians, T_horizon, n_reduced;
+                        explained_variance=ev)
 end

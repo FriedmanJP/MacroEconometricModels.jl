@@ -128,7 +128,7 @@ The `PerfectForesightPath{T}` result contains both the level path and deviations
 Both routes return the identical path — `solve(spec; method=:perfect_foresight, …)` forwards straight to `perfect_foresight`. Levels and deviations coincide here because this model's steady state is the origin; in a model with a non-zero steady state `path` is the series a user plots and `deviations` the one that feeds impulse-response arithmetic.
 
 !!! note "Technical Note"
-    The solver exploits the block-tridiagonal structure of the Jacobian via sparse LU factorization. Each Newton step solves ``J \Delta x = -F(x)`` where ``J`` is ``nT \times nT`` but has only ``3n^2 T`` non-zeros (vs ``n^2 T^2`` for dense). Numerical Jacobians use central differences with adaptive step sizes. The `algorithm` keyword accepts any NonlinearSolve.jl algorithm (e.g., `NonlinearSolve.TrustRegion()`).
+    The stacked Jacobian is block-tridiagonal in time: period ``t`` contributes the three ``n \times n`` blocks ``\partial F_t/\partial y_{t-1}``, ``\partial F_t/\partial y_t``, and ``\partial F_t/\partial y_{t+1}``. The solver probes those intra-period patterns at several points around the steady state, greedy-colors each pattern, and assembles the Jacobian by colored central differences into a cached CSC. The default `NewtonRaphson` step solves ``J \Delta x = -F(x)`` with the block Thomas algorithm in ``O(T n^3)``. If a diagonal block is singular, the same CSC is factored by sparse LU instead. Pass `sparsity=:dense` to keep every intra-period block dense (the time structure stays block-tridiagonal); use it when a kinked residual is invisible at the probes and `:auto` drops the entry. The `algorithm` keyword accepts any NonlinearSolve.jl algorithm (e.g. `NonlinearSolve.TrustRegion()`).
 
 ### Keywords
 
@@ -142,6 +142,7 @@ Both routes return the identical path — `solve(spec; method=:perfect_foresight
 | `constraints` | `Vector` | `DSGEConstraint[]` | Variable bounds and nonlinear constraints |
 | `solver` | `Union{Nothing, Symbol}` | `nothing` | `:nonlinearsolve`, `:nlopt`, `:ipopt`, or `:path`; auto-detected when `nothing` |
 | `algorithm` | `Any` | `nothing` → `NewtonRaphson()` | Algorithm for the chosen backend (e.g. `NonlinearSolve.TrustRegion()`) |
+| `sparsity` | `Symbol` | `:auto` | Intra-period Jacobian pattern (`:auto` probes and colors; `:dense` fills every block) |
 
 ### Return Value
 
@@ -153,7 +154,7 @@ Both routes return the identical path — `solve(spec; method=:perfect_foresight
 | `deviations` | `Matrix{T}` | ``T \times n`` deviations from steady state |
 | `converged` | `Bool` | Newton convergence flag |
 | `iterations` | `Int` | Newton iterations used |
-| `spec` | `DSGESpec{T}` | Back-reference to model specification |
+| `spec` | `ModelSpec{T}` | Back-reference to model specification |
 
 ---
 
@@ -339,7 +340,7 @@ occ_sol = occbin_solve(spec, zlb, borrow; shock_path=shocks)
 The `regime_history` matrix has two columns --- one per constraint --- recording which regimes are active in each period. An optional `curb_retrench=true` keyword limits constraint relaxation to one period per iteration, which helps prevent oscillation in difficult two-constraint problems.
 
 !!! note "Defining-equation assignment"
-    Each constrained variable's binding regime replaces its *defining equation*, picked heuristically as the equation whose Jacobian column is most sensitive to that variable. When the runner-up is within 90% of the winner the pick is not decisive and OccBin warns — as it does on the borrowing model above, where the savings rule and the budget constraint are equally sensitive to ``b``. To override the heuristic for a single constraint, build the binding-regime specification yourself and pass it positionally: `occbin_solve(spec, constraint, alt_spec; …)`. For two constraints that map to the same defining equation the solver cannot separate them and raises an `ArgumentError`; supply all three binding regimes through the `Dict` overload, keyed by regime tuple, `Dict((1,0) => alt1, (0,1) => alt2, (1,1) => alt12)`.
+    Each constrained variable's binding regime replaces the equation whose `defines` is that variable — unlabeled `i[t] = ...` or a named `taylor: i[t] = ...`. Declare the constraint on the spec with `constraint: i[t] >= 0` to attach a `:binding` regime at parse time. If no equation (or several) define the variable, write `constraint: taylor = i[t] >= 0` or pass an explicit alternative-regime `ModelSpec` positionally: `occbin_solve(spec, constraint, alt_spec; …)`. Two constraints that replace the same named equation raise an `ArgumentError`; supply all three binding regimes through the `Dict` overload, keyed by regime tuple, `Dict((1,0) => alt1, (0,1) => alt2, (1,1) => alt12)`. `occbin_solve` also accepts a comparison `Expr` such as `:(i[t] >= 0)`. A `HouseholdSystem` solution is an [`HADSGESolution`](@ref): there is no `.G1` on the wrapper, and shipped real-rate HANKs have no Taylor ``i``. Those calls throw a named `ArgumentError` rather than `getfield`. An ELB fixture needs a nominal aggregate residual; see [OccBin on HA Aggregates](@ref ha_occbin).
 
 ### OccBin IRFs
 
@@ -383,7 +384,7 @@ Both `occbin_irf` and this `irf` method accept `maxiter` (default `100`) to boun
 | `regime_history` | `Matrix{Int}` | ``T \times n_c`` regime indicators (0 = slack, 1 and above = binding) |
 | `converged` | `Bool` | Regime convergence flag |
 | `iterations` | `Int` | Regime iterations used |
-| `spec` | `DSGESpec{T}` | Back-reference to model specification |
+| `spec` | `ModelSpec{T}` | Back-reference to model specification |
 | `varnames` | `Vector{String}` | Variable display labels |
 | `constraints` | `Vector{OccBinConstraint{T}}` | The constraint(s) used in the solve |
 

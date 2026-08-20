@@ -542,7 +542,7 @@ Fields:
 - `acceptance_rate::T` — MCMC acceptance rate
 - `ess_history::Vector{T}` — ESS history (SMC) or empty (MCMC)
 - `phi_schedule::Vector{T}` — tempering schedule (SMC) or empty (MCMC)
-- `spec::DSGESpec{T}` — model specification
+- `spec::ModelSpec{T,NoAgents}` — model specification
 - `solution::Union{DSGESolution{T}, PerturbationSolution{T}}` — solution at posterior mode
 - `state_space::Union{DSGEStateSpace{T}, NonlinearStateSpace{T}}` — state space at posterior mode
 - `n_failed_draws::Int` — number of likelihood evaluations that failed during sampling
@@ -572,7 +572,7 @@ struct BayesianDSGE{T<:AbstractFloat} <: AbstractDSGEModel
     acceptance_rate::T
     ess_history::Vector{T}
     phi_schedule::Vector{T}
-    spec::DSGESpec{T}
+    spec::ModelSpec{T,NoAgents}
     solution::Union{DSGESolution{T}, PerturbationSolution{T}, ProjectionSolution{T}}
     state_space::Union{DSGEStateSpace{T}, NonlinearStateSpace{T}, ProjectionStateSpace{T}}
     n_failed_draws::Int

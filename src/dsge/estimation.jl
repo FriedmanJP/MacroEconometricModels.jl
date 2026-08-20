@@ -18,7 +18,7 @@ Supports two methods:
 Estimate DSGE deep parameters via GMM.
 
 # Arguments
-- `spec::DSGESpec{T}` -- model specification (initial param values as starting point)
+- `spec::ModelSpec{T}` -- model specification (initial param values as starting point)
 - `data::AbstractMatrix` -- T_obs x n_vars data matrix
 - `param_names::Vector{Symbol}` -- which parameters to estimate
 
@@ -36,7 +36,7 @@ Estimate DSGE deep parameters via GMM.
 - Hansen, L. P. & Singleton, K. J. (1982). "Generalized Instrumental Variables Estimation
   of Nonlinear Rational Expectations Models." *Econometrica*, 50(5), 1269-1286.
 """
-function estimate_dsge(spec::DSGESpec{T}, data::AbstractMatrix,
+function estimate_dsge(spec::ModelSpec{T}, data::AbstractMatrix,
                         param_names::Vector{Symbol};
                         method::Symbol=:irf_matching,
                         target_irfs::Union{Nothing,ImpulseResponse}=nothing,
@@ -63,6 +63,7 @@ function estimate_dsge(spec::DSGESpec{T}, data::AbstractMatrix,
                         solve_order::Int=1,
                         auto_lags::Vector{Int}=[1],
                         observable_indices::Union{Nothing,Vector{Int}}=nothing) where {T<:AbstractFloat}
+    _require_estimable_spec(:estimate_dsge, spec)
     data_T = Matrix{T}(data)
 
     # `weighting=nothing` means "method default": :two_step for the sample-moment
@@ -111,10 +112,10 @@ function estimate_dsge(spec::DSGESpec{T}, data::AbstractMatrix,
 end
 
 # Convenience method for Float64 data
-function estimate_dsge(spec::DSGESpec{T}, data::AbstractMatrix{T},
+function estimate_dsge(spec::ModelSpec{T}, data::AbstractMatrix{T},
                         param_names::Vector{Symbol};
                         kwargs...) where {T<:AbstractFloat}
-    invoke(estimate_dsge, Tuple{DSGESpec{T}, AbstractMatrix, Vector{Symbol}},
+    invoke(estimate_dsge, Tuple{ModelSpec{T}, AbstractMatrix, Vector{Symbol}},
            spec, data, param_names; kwargs...)
 end
 
@@ -150,7 +151,7 @@ Shock units: both the model IRF (whose impact matrix embeds the structural-shock
 standard deviations via the σ parameters) and the VAR Cholesky target use 1-s.d.
 shock scaling, so for well-scaled models they align.
 """
-function _estimate_irf_matching(spec::DSGESpec{T}, data::Matrix{T},
+function _estimate_irf_matching(spec::ModelSpec{T}, data::Matrix{T},
                                  param_names::Vector{Symbol};
                                  target_irfs=nothing, var_lags=4,
                                  irf_horizon=20, weighting=:two_step,
@@ -340,7 +341,7 @@ Internal: Euler equation GMM estimation.
 Uses the structural Euler equations as moment conditions with lagged
 variables as instruments.
 """
-function _estimate_euler_gmm(spec::DSGESpec{T}, data::Matrix{T},
+function _estimate_euler_gmm(spec::ModelSpec{T}, data::Matrix{T},
                               param_names::Vector{Symbol};
                               n_lags=4, weighting=:two_step) where {T}
     T_obs, n_vars = size(data)
@@ -418,7 +419,7 @@ Internal: SMM estimation of DSGE parameters.
 Builds a simulator from the DSGE spec: for each candidate θ, updates spec
 parameters, solves the model, and simulates data.
 """
-function _estimate_dsge_smm(spec::DSGESpec{T}, data::Matrix{T},
+function _estimate_dsge_smm(spec::ModelSpec{T}, data::Matrix{T},
                               param_names::Vector{Symbol};
                               sim_ratio=5, burn=100, weighting=:two_step,
                               moments_fn=d -> autocovariance_moments(d; lags=1),
@@ -548,7 +549,7 @@ autocovariances.
 - `auto_lags=[1]` — autocovariance lags for GMM format
 - `observable_indices=nothing` — which data columns to match
 """
-function _estimate_dsge_analytical_gmm(spec::DSGESpec{T}, data::Matrix{T},
+function _estimate_dsge_analytical_gmm(spec::ModelSpec{T}, data::Matrix{T},
                                          param_names::Vector{Symbol};
                                          lags=1, weighting=:identity,
                                          bounds=nothing,
