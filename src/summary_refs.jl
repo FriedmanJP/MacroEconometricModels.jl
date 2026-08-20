@@ -2097,7 +2097,6 @@ const _TYPE_REFS = Dict{Symbol, Vector{Symbol}}(
     :DSGESolution => [:sims2002, :blanchard_kahn1980],
     :DSGEEstimation => [:sims2002, :christiano_eichenbaum_evans2005, :hansen_singleton1982, :smets_wouters2007],
     :PerfectForesightPath => [:sims2002],
-    :DSGESpec => [:sims2002, :fernandez_villaverde_rubio_schorfheide2016],
     :ModelSpec => [:sims2002, :fernandez_villaverde_rubio_schorfheide2016],
     :gensys => [:sims2002],
     :blanchard_kahn => [:blanchard_kahn1980],

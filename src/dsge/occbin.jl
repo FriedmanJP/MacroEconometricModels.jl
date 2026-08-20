@@ -230,7 +230,7 @@ end
 """
     _extract_regime(spec::ModelSpec{T}) → OccBinRegime{T}
 
-Extract the linearized coefficient matrices (A, B, C, D) from a DSGESpec
+Extract the linearized coefficient matrices (A, B, C, D) from a `ModelSpec`
 using numerical Jacobians evaluated at the steady state.
 
 The linearized system is: `B * y_t = C * y_{t-1} + A * y_{t+1} + D * epsilon_t`
@@ -1284,7 +1284,7 @@ end
                  alt_specs::Dict; kwargs...) → OccBinSolution{T}
 
 Variant that accepts explicit alternative regime specifications as a Dict mapping
-regime indicators to DSGESpec:
+regime indicators to `ModelSpec`:
 - `(1,0)` → alt1_spec (constraint 1 binding only)
 - `(0,1)` → alt2_spec (constraint 2 binding only)
 - `(1,1)` → alt12_spec (both constraints binding)

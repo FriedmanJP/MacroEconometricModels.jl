@@ -180,6 +180,7 @@ const TEST_GROUPS = [
         "plotting/test_plot_wave2_laneD.jl",
         "plotting/test_plot_wave2_laneE.jl",
         "plotting/test_plot_wave2_laneF.jl",
+        "dsge/test_dcegm_plot.jl",
     ]),
     # Nonlinear time series (EV-05 threshold/SETAR; EV-06 STAR & EV-07 Markov
     # switching join this group).
@@ -194,7 +195,6 @@ const TEST_GROUPS = [
     ("DSGE Core" => [
         "dsge/test_dsge.jl",
         "dsge/test_perfect_foresight_sparse.jl",
-        "dsge/test_dcegm_plot.jl",
         "dsge/test_dcegm_spec.jl",
         "dsge/test_modelspec_kinds.jl",
         "dsge/test_blanchard_olg.jl",
@@ -474,231 +474,15 @@ elseif !serial && Threads.nthreads() > 1
     isempty(failed_groups) || error("Test groups failed: $(join(failed_groups, ", "))")
 
 else
-    # Sequential fallback (serial mode or single-thread single-CPU)
+    # Sequential fallback (serial mode or single-thread single-CPU).
+    # File list is TEST_GROUPS — do not maintain a second copy (MSR-28).
     @testset "MacroEconometricModels Package Tests" begin
-        # Group 1: Core & VAR
-        @testset "Aqua" begin include("core/test_aqua.jl") end
-        @testset "Core Kalman" begin include("core/test_kalman.jl") end
-        @testset "Core Quadrature" begin include("core/test_quadrature.jl") end
-        @testset "Core VAR" begin include("var/test_core_var.jl") end
-        @testset "StatsAPI Compatibility" begin include("var/test_statsapi.jl") end
-        @testset "Summary Tables" begin include("core/test_summary.jl") end
-        @testset "Tables Interface" begin include("core/test_tables.jl") end
-        @testset "Structured Logging" begin include("core/test_logging.jl") end
-        @testset "Reproducibility" begin include("core/test_repro.jl") end
-        @testset "Serialization" begin include("core/test_serialization.jl") end
-        @testset "Utility Functions" begin include("core/test_utils.jl") end
-        @testset "Edge Cases" begin include("core/test_edge_cases.jl") end
-        @testset "Documentation Examples" begin include("core/test_examples.jl") end
-        @testset "Covariance Estimators" begin include("core/test_covariance.jl") end
-        @testset "Internal Helpers" begin include("core/test_internal_helpers.jl") end
-        @testset "Error Paths" begin include("core/test_error_paths.jl") end
-        @testset "Display Backend Switching" begin include("core/test_display_backends.jl") end
-        @testset "Coverage Gaps" begin include("core/test_coverage_gaps.jl") end
-
-        # Group 2: Bayesian & SVAR
-        @testset "Bayesian Estimation" begin include("bvar/test_bayesian.jl") end
-        @testset "Bayesian Samplers" begin include("bvar/test_samplers.jl") end
-        @testset "Bayesian Utils" begin include("bvar/test_bayesian_utils.jl") end
-        @testset "Minnesota Prior" begin include("bvar/test_minnesota.jl") end
-        @testset "BGR Optimization" begin include("bvar/test_bgr.jl") end
-        @testset "Issue fixes #523-#564" begin include("bvar/test_issues_523_564.jl") end
-        @testset "Arias et al. (2018) SVAR Identification" begin include("var/test_arias2018.jl") end
-        @testset "Mountford-Uhlig (2009) SVAR Identification" begin include("var/test_uhlig.jl") end
-
-        # Group 3: IRF & VECM
-        @testset "Impulse Response Functions" begin include("var/test_irf.jl") end
-        @testset "IRF Confidence Intervals" begin include("var/test_irf_ci.jl") end
-        @testset "FEVD" begin include("var/test_fevd.jl") end
-        @testset "Historical Decomposition" begin include("var/test_hd.jl") end
-        @testset "VECM" begin include("vecm/test_vecm.jl") end
-        @testset "VECM Restriction Tests" begin include("vecm/test_vecm_restrictions.jl") end
-
-        # Group 4: LP & Factor & Nowcast
-        @testset "Local Projections" begin include("lp/test_lp.jl") end
-        @testset "Structural LP" begin include("lp/test_lp_structural.jl") end
-        @testset "LP Forecasting" begin include("lp/test_lp_forecast.jl") end
-        @testset "LP-FEVD (Gorodnichenko & Lee 2019)" begin include("lp/test_lp_fevd.jl") end
-        @testset "Factor Model" begin include("factor/test_factormodel.jl") end
-        @testset "Dynamic Factor Model" begin include("factor/test_dynamicfactormodel.jl") end
-        @testset "Generalized Dynamic Factor Model" begin include("factor/test_gdfm.jl") end
-        @testset "Factor Model Forecasting" begin include("factor/test_factor_forecast.jl") end
-        @testset "Restricted Factor Models" begin include("factor/test_restricted.jl") end
-        @testset "FAVAR" begin include("factor/test_favar.jl") end
-        @testset "Structural DFM" begin include("factor/test_structural_dfm.jl") end
-        @testset "Nowcasting" begin include("nowcast/test_nowcast.jl") end
-        @testset "Difference-in-Differences" begin include("did/test_did.jl") end
-        @testset "LP-DiD" begin include("did/test_lpdid.jl") end
-
-        # Group 5: ARIMA & Tests & Data
-        @testset "Unit Root Tests" begin include("teststat/test_unitroot.jl") end
-        @testset "Structural Break & Panel Unit Root" begin include("teststat/test_structural_break.jl") end
-        @testset "Fourier Unit Root Tests" begin include("teststat/test_fourier.jl") end
-        @testset "DF-GLS Unit Root Test" begin include("teststat/test_dfgls.jl") end
-        @testset "HEGY Seasonal Unit Root + ERS Test" begin include("teststat/test_hegy.jl") end   # EV-29 (#437)
-        @testset "LM Unit Root Test" begin include("teststat/test_lm_unitroot.jl") end
-        @testset "Two-Break ADF Test" begin include("teststat/test_adf_2break.jl") end
-        @testset "Gregory-Hansen Cointegration Test" begin include("teststat/test_gregory_hansen.jl") end
-        @testset "First-Gen Panel Unit Root Tests" begin include("teststat/test_panel_unitroot_firstgen.jl") end
-        @testset "Panel Cointegration Tests" begin include("teststat/test_panel_cointegration.jl") end
-        @testset "ARIMA Models" begin include("arima/test_arima.jl") end
-        @testset "ARIMA Coverage" begin include("arima/test_arima_coverage.jl") end
-        @testset "ARFIMA (long memory)" begin include("arima/test_arfima.jl") end
-        @testset "SARIMA (seasonal)" begin include("arima/test_sarima.jl") end
-        @testset "State-Space Module" begin include("statespace/test_statespace.jl") end   # EV-37 (#445)
-        @testset "Granger Causality Tests" begin include("teststat/test_granger.jl") end
-        @testset "Equality & Rank Correlation Tests" begin include("teststat/test_equality.jl") end   # EV-34 (#442)
-        @testset "Model Comparison Tests" begin include("teststat/test_model_comparison.jl") end
-        @testset "Multivariate Normality Tests" begin include("teststat/test_normality.jl") end
-        @testset "EDF Goodness-of-Fit Battery" begin include("teststat/test_edf.jl") end  # EV-26 (#434)
-        @testset "BDS Independence Test" begin include("teststat/test_bds.jl") end  # EV-28 (#436)
-        @testset "SADF/GSADF Bubble Detection" begin include("teststat/test_bubble.jl") end  # EV-30 (#438)
-        @testset "GMM Estimation" begin include("gmm/test_gmm.jl") end
-        @testset "SMM Estimation" begin include("gmm/test_smm.jl") end
-        @testset "Data Module" begin include("data/test_data.jl") end
-        @testset "Panel VAR" begin include("pvar/test_pvar.jl") end
-        @testset "Cross-Sectional Models" begin include("reg/test_reg.jl") end
-        @testset "SUR & 3SLS" begin include("system/test_system.jl") end
-        @testset "Reg Diagnostics" begin include("reg/test_reg_diagnostics.jl") end
-        @testset "Reg Stability" begin include("reg/test_stability.jl") end
-        @testset "Ordered Models" begin include("reg/test_ordered.jl") end
-        @testset "Multinomial Models" begin include("reg/test_multinomial.jl") end
-        @testset "MIDAS Regression" begin include("midas/test_midas.jl") end
-        @testset "ARDL & Bounds Test" begin include("ardl/test_ardl.jl") end
-        @testset "NARDL" begin include("ardl/test_nardl.jl") end
-        @testset "Panel ARDL (PMG/MG/DFE)" begin include("ardl/test_pmg.jl") end
-        @testset "Forecast Evaluation" begin include("fceval/test_fceval.jl") end
-        @testset "Residual-Based Cointegration Tests" begin include("teststat/test_cointegration_resid.jl") end
-        @testset "Variance-Ratio Tests" begin include("teststat/test_variance_ratio.jl") end   # EV-27 (#435): Lo-MacKinlay/Chow-Denning/Wright/Kim
-        @testset "Panel Regression" begin include("preg/test_panel_reg.jl") end
-        @testset "PCSE + Prais-Winsten" begin include("preg/test_pcse_prais.jl") end   # EV-25 (#433)
-        @testset "Panel Specification Tests" begin include("preg/test_panel_tests.jl") end
-        @testset "Panel IV" begin include("preg/test_panel_iv.jl") end
-        @testset "Panel Nonlinear" begin include("preg/test_panel_nonlinear.jl") end
-
-        # Group 6: Volatility & Filters
-        @testset "Volatility Models (ARCH/GARCH/SV)" begin include("volatility/test_volatility.jl") end
-        @testset "Volatility Coverage" begin include("volatility/test_volatility_coverage.jl") end
-        @testset "GARCH-MIDAS" begin include("volatility/test_garch_midas.jl") end
-        @testset "FIGARCH/FIEGARCH" begin include("volatility/test_figarch.jl") end
-        @testset "GARCH Family (IGARCH/CGARCH/APARCH)" begin include("volatility/test_garch_family.jl") end
-        @testset "Multivariate GARCH (CCC/DCC/BEKK)" begin include("mgarch/test_mgarch.jl") end
-        @testset "Non-Gaussian SVAR Identification" begin include("nongaussian/test_nongaussian_svar.jl") end
-        @testset "Non-Gaussian Internals" begin include("nongaussian/test_nongaussian_internals.jl") end
-        # Plotting — consolidated plot_result harness (PLT-39). Per-domain lanes +
-        # Wave-2 dispatch lanes + renderer-option tests, all sharing the structural-
-        # assertion helper plot_test_helpers.jl (each file self-bootstraps it).
-        @testset "Plotting" begin
-            include("plotting/test_plot_render.jl")
-            include("plotting/test_plot_irf_fevd_hd.jl")
-            include("plotting/test_plot_forecast_filters.jl")
-            include("plotting/test_plot_models.jl")
-            include("plotting/test_plot_reg_micro.jl")
-            include("plotting/test_plot_nowcast.jl")
-            include("plotting/test_plot_wave2_laneA.jl")
-            include("plotting/test_plot_wave2_laneB.jl")
-            include("plotting/test_plot_wave2_laneC.jl")
-            include("plotting/test_plot_wave2_laneD.jl")
-            include("plotting/test_plot_wave2_laneE.jl")
-            include("plotting/test_plot_wave2_laneF.jl")
-        end
-        @testset "Time Series Filters" begin include("filters/test_filters.jl") end
-        @testset "X-13ARIMA-SEATS" begin include("filters/test_x13.jl") end
-        @testset "X-13 Coverage" begin include("filters/test_x13_coverage.jl") end
-        @testset "Spectral Analysis" begin include("spectral/test_spectral.jl") end
-
-        # Nonlinear time series (EV-05 threshold/SETAR)
-        @testset "Nonlinear (Threshold/SETAR)" begin include("nonlinear/test_threshold.jl") end
-        # Smooth-transition autoregression (EV-06 STAR)
-        @testset "Nonlinear (STAR)" begin include("nonlinear/test_star.jl") end
-        # Markov-switching regression / MS-AR (EV-07)
-        @testset "Nonlinear (Markov-Switching)" begin include("nonlinear/test_markov_switching.jl") end
-        # Nonparametric regression & density (EV-33, #441)
-        @testset "Nonparametric" begin include("nonparametric/test_nonparametric.jl") end
-
-        # Group 7 split into three (#123)
-        @testset "DSGE Core" begin
-            include("dsge/test_dsge.jl")
-            include("dsge/test_dcegm_spec.jl")
-            include("dsge/test_blanchard_olg.jl")
-            include("dsge/test_lifecycle_olg.jl")
-            include("dsge/test_continuous_aiyagari.jl")
-        end
-        @testset "DSGE Bayesian & HD" begin
-            include("dsge/test_bayesian_dsge.jl")
-            include("dsge/test_dsge_hd.jl")
-        end
-        @testset "HA-DSGE" begin
-            include("dsge/test_ha_dsge.jl")
-        end
-        @testset "HA-DSGE Advanced" begin
-            include("dsge/test_ha_dsge_advanced.jl")
-            include("dsge/test_modelspec_blocks.jl")
-            include("dsge/test_modelspec_multipop.jl")
-            include("dsge/test_firm_system.jl")
-            include("dsge/test_intermediary_system.jl")
-            include("dsge/test_ha_occbin.jl")
-        end
-
-        # Group 8: Coverage-A (DSGE)
-        @testset "DSGE Coverage" begin include("coverage/test_dsge_coverage.jl") end
-        @testset "DSGE Bayesian Coverage" begin include("coverage/test_dsge_bayes_coverage.jl") end
-
-        # Extensions: JuMP/Ipopt/PATH weakdep testsets (#309)
-        @testset "Constrained Extensions (JuMP/Ipopt/PATH)" begin include("ext/test_constrained_ext.jl") end
-
-        # Group 9: Coverage-B (medium-weight)
-        @testset "Data Types Coverage" begin include("coverage/test_data_types_coverage.jl") end
-        @testset "Structural Break & Panel Coverage" begin include("coverage/test_teststat_break_panel_coverage.jl") end
-        @testset "Display & Plotting Coverage" begin include("coverage/test_display_coverage.jl") end
-        @testset "GMM & Extension Coverage" begin include("coverage/test_gmm_ext_coverage.jl") end
-
-        # Group 10: Coverage-C (lightweight)
-        @testset "PVAR & Non-Gaussian Coverage" begin include("coverage/test_pvar_nongaussian_coverage.jl") end
-        @testset "Nowcast Coverage" begin include("coverage/test_nowcast_coverage.jl") end
-        @testset "VECM & Teststat Coverage" begin include("coverage/test_vecm_teststat_coverage.jl") end
-        @testset "Misc Coverage" begin include("coverage/test_misc_coverage.jl") end
-
-        # IO Analysis (folds into "Coverage-C + IO" for the parallel runner; also restores the
-        # serial-fallback includes the io branch omitted — #127).
-        @testset "IO Analysis" begin
-            include("io/test_io_smoke.jl")
-            include("io/test_io_types.jl")
-            include("io/test_io_coefficients.jl")
-            include("io/test_io_example.jl")
-            include("io/test_io_multipliers.jl")
-            include("io/test_io_linkages.jl")
-            include("io/test_io_sda.jl")
-            include("io/test_io_ras.jl")
-            include("io/test_io_extraction.jl")
-            include("io/test_io_price.jl")
-            include("io/test_io_impact.jl")
-            include("io/test_io_network.jl")
-            include("io/test_io_environmental.jl")
-            include("io/test_io_mrio.jl")
-            include("io/test_io_bf_first.jl")
-            include("io/test_io_bf_second.jl")
-            include("io/test_io_bf_network.jl")
-            include("io/test_io_bf_equilibrium.jl")
-            include("io/test_io_bf_hessian.jl")
-            include("io/test_io_bf_wedges.jl")
-            include("io/test_io_bf_misalloc.jl")
-            include("io/test_io_fetch.jl")
-            include("io/test_io_registry.jl")
-            include("io/test_io_sources.jl")
-            include("io/test_io_parse.jl")
-            include("io/test_io_ext_parse.jl")
-            include("io/test_io_source_parse.jl")
-            include("io/test_io_show.jl")
-            include("io/test_io_plotting.jl")
-            include("io/test_io_refs.jl")
-            include("io/test_io_coverage.jl")
-        end
-
-        # Group 11: Display regression harness (T176/#275)
-        @testset "Display" begin
-            include("display/test_display_invariants.jl")
-            include("display/test_display_goldens.jl")
+        for (gname, files) in TEST_GROUPS
+            @testset "$gname" begin
+                for f in files
+                    include(f)
+                end
+            end
         end
     end
 end

@@ -7,7 +7,7 @@
 """
 Built-in example configurations for heterogeneous agent DSGE models.
 
-Provides pre-calibrated `HADSGESpec` specifications for canonical models:
+Provides pre-calibrated `ModelSpec` specifications for canonical models:
 - `:krusell_smith` — Krusell & Smith (1998) incomplete markets
 - `:one_asset_hank` — one-asset HANK (Kaplan-Moll-Violante style)
 - `:two_asset_hank` — two-asset HANK with portfolio adjustment costs
@@ -264,7 +264,7 @@ end
 
 """
     _huggett_example(; credit_limit=-2.0, a_max=4.0, n_a=300, sigma=1.5,
-                       beta=0.99322, rho_e=0.90, sigma_e=0.01) -> HADSGESpec{Float64}
+                       beta=0.99322, rho_e=0.90, sigma_e=0.01) -> ModelSpec{Float64}
 
 Huggett (1993) pure-exchange, risk-free-bond economy. Agents trade a one-period bond in
 **zero net supply** (`∫a' dμ = 0`) subject to a credit limit `ā = credit_limit < 0`.

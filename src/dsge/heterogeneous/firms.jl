@@ -86,9 +86,11 @@ end
 
 grid(s::FirmSystem) = s.k_grid
 idiosyncratic(s::FirmSystem) = s.productivity
-aggregation(::FirmSystem) = [:K, :N, :Y]
-ssj_inputs(::FirmSystem) = [:w, :Z]
-ssj_outputs(::FirmSystem) = [:K, :N, :Y, :I]
+aggregation(::FirmSystem) = Pair{Symbol,Function}[
+    :K => (μ, x) -> sum(μ .* x),
+    :N => (μ, x) -> sum(μ .* x),
+    :Y => (μ, x) -> sum(μ .* x),
+]
 
 # =============================================================================
 # Khan–Thomas 2008 calibration (Econometrica 76(2), Table 1)
@@ -819,49 +821,14 @@ end
 """
     to_spec(fs::FirmSystem; agent_name=:firms) → ModelSpec
 
-Wrap a [`FirmSystem`](@ref) as a [`ModelSpec`](@ref). The residual block is the
-representative-household / goods / TFP identity (Cobb–Douglas stand-in for the
-aggregates). Plant-level `K, N, Y` come from [`khan_thomas_steady_state`](@ref),
-not from [`_hh`](@ref).
+Wrap a [`FirmSystem`](@ref) as a [`ModelSpec`](@ref). The residual block is
+empty: Khan–Thomas GE is [`khan_thomas_steady_state`](@ref) /
+[`khan_thomas_mit`](@ref), not `solve(spec)`.
 """
 function to_spec(fs::FirmSystem{T}; agent_name::Symbol=:firms) where {T<:AbstractFloat}
-    endog = [:Y, :K, :I, :C, :w, :Z]
-    exog = [:eps_Z]
-    params = [:alpha, :nu, :delta, :beta, :gamma, :phi, :rho_z, :sigma_z, :N]
-    param_values = Dict{Symbol,T}(
-        :alpha => fs.alpha, :nu => fs.nu, :delta => fs.delta,
-        :beta => fs.beta, :gamma => fs.gamma, :phi => fs.phi,
-        :rho_z => fs.rho_z, :sigma_z => fs.sigma_z, :N => T(1) / T(3),
-    )
-
-    # Residual closures close over indices, not the FirmSystem payload.
-    iY, iK, iI, iC, iw, iZ = 1, 2, 3, 4, 5, 6
-    f_goods = (yt, yl, yle, shock, θ) -> yt[iY] - yt[iC] - yt[iI]
-    f_hh = (yt, yl, yle, shock, θ) -> yt[iw] - θ[:phi] * yt[iC]
-    f_inv = (yt, yl, yle, shock, θ) -> yt[iI] -
-        (θ[:gamma] * yt[iK] - (one(T) - θ[:delta]) * yl[iK])
-    f_k = (yt, yl, yle, shock, θ) -> yt[iK] - yl[iK]
-    f_cd = (yt, yl, yle, shock, θ) -> yt[iY] -
-        yt[iZ] * yl[iK]^θ[:alpha] * θ[:N]^θ[:nu]
-    f_z = (yt, yl, yle, shock, θ) -> yt[iZ] - (
-        (one(T) - θ[:rho_z]) * one(T) + θ[:rho_z] * yl[iZ] +
-        θ[:sigma_z] * (isempty(shock) ? zero(T) : shock[1]))
-    residual_fns = Function[f_goods, f_hh, f_inv, f_k, f_cd, f_z]
-    equations = NamedEquation[
-        NamedEquation(:goods, :C, :(Y[t] - C[t] - I[t]), f_goods),
-        NamedEquation(:household, :w, :(w[t] - phi * C[t]), f_hh),
-        NamedEquation(:investment, :I,
-            :(I[t] - (gamma * K[t] - (1 - delta) * K[t-1])), f_inv),
-        NamedEquation(:capital, :K, :(K[t] - K[t-1]), f_k),
-        NamedEquation(:production, :Y,
-            :(Y[t] - Z[t] * K[t-1]^alpha * N^nu), f_cd),
-        NamedEquation(:z_proc, :Z,
-            :(Z[t] - ((1 - rho_z) + rho_z * Z[t-1] + sigma_z * eps_Z[t])), f_z),
-    ]
     return ModelSpec{T}(
-        endog, exog, params, param_values, equations, residual_fns,
-        0, Int[], T[];
-        max_lag=1, max_lead=0,
+        Symbol[], Symbol[], Symbol[], Dict{Symbol,T}(),
+        NamedEquation[], Function[], 0, Int[], T[];
         agents=NamedTuple{(agent_name,)}((fs,)),
     )
 end

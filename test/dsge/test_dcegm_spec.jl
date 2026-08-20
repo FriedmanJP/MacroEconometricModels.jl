@@ -16,7 +16,7 @@ using MacroEconometricModels
     @test spec.n_exog == 0
     @test isempty(spec.equations)
     @test isempty(spec.residual_fns)
-    @test MacroEconometricModels.has_agents(spec)
+    @test MacroEconometricModels._has_agents(spec)
     @test MacroEconometricModels.has_kind(spec, DCEGMSystem)
     @test keys(spec.agents) == (:household,)
     @test only(values(spec.agents)) isa DCEGMSystem
@@ -109,13 +109,18 @@ end
     @test eq_fn.converged
     @test abs(eq_fn.K - eq_fn.K_demand) < 5e-3
 
-    # Measured labor uses the work-option share, not firm.L.
+    # Measured labor is participation × unconditional mean efficiency (not selection).
     eq_m = dcegm_steady_state(prob, DCEGMFirm(; alpha=0.36, delta=0.08, Z=1.0, L=1.0);
                               labor=:measured, r_bounds=(0.06, 0.14),
                               tol=2e-3, max_iter=30)
     @test eq_m.converged
     @test 0 < eq_m.L < 1                        # last-period retirement cuts the work share
     @test abs(eq_m.K - eq_m.K_demand) < 1e-2
+    work_d = findfirst(==(:work), eq_m.solution.prob.options)
+    states = eq_m.solution.prob.income_process.states
+    share = sum(@view eq_m.distribution.shares[:, work_d]) /
+            size(eq_m.distribution.shares, 1)
+    @test eq_m.L ≈ share * (sum(states) / length(states)) atol=1e-12
 
     @test_throws ArgumentError dcegm_steady_state(prob, firm; r_bounds=(0.1, 0.05))
     @test_throws ArgumentError dcegm_steady_state(prob, firm; r_bounds=(-0.09, 0.05))

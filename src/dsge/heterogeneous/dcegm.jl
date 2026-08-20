@@ -1032,8 +1032,10 @@ K^d(r) = \\left(\\frac{\\alpha Z}{r+\\delta}\\right)^{1/(1-\\alpha)} L.
 ```
 
 `L` is an exogenous firm input (Aiyagari inelastic labor). Pass
-`labor=:measured` to [`dcegm_steady_state`](@ref) to replace it with the
-histogram's work-option efficiency units.
+`labor=:measured` to [`dcegm_steady_state`](@ref) to replace it with
+participation-weighted unconditional efficiency units (work-option
+share times the unweighted mean of income-state levels — not
+income-state-conditional selection).
 
 # Constructor
 
@@ -1097,7 +1099,7 @@ equals firm capital demand.
 |---|---|---|
 | `r`, `w` | `T` | Clearing net return and the firm's competitive wage |
 | `K` | `T` | Household asset supply `A` (the capital the report prints) |
-| `L` | `T` | Labor used in `K^d` (firm `L`, or measured work-option efficiency) |
+| `L` | `T` | Labor used in `K^d` (firm `L`, or participation-weighted unconditional efficiency units under `labor=:measured`) |
 | `Y` | `T` | Output `Z K^α L^{1-α}` at household `K` |
 | `K_demand` | `T` | Firm demand `K^d(r)` |
 | `excess_demand` | `T` | Final `A − K^d` |
@@ -1142,7 +1144,7 @@ problem is read as a stationary overlapping-generations cross-section
 | Keyword | Type | Default | Description |
 |---|---|---|---|
 | `r_bounds` | `Tuple` | `(0.001, 0.20)` | Net-return bracket; the lower end must exceed `−δ` |
-| `labor` | `Symbol` | `:exogenous` | `:exogenous` uses `firm.L`; `:measured` uses work-option efficiency units from the histogram |
+| `labor` | `Symbol` | `:exogenous` | `:exogenous` uses `firm.L`; `:measured` uses participation-weighted unconditional efficiency units (work share × unweighted mean of income states). This is **not** ``\\int e\\,\\mathbf{1}[\\mathrm{work}]\\,d\\mu`` |
 | `reprice_wage` | `Bool` | `false` | If `true` and `source` is a problem, work-option income becomes `w · η_j` at the firm wage. A factory always receives `(R, w)` and decides for itself |
 | `work_option` | `Symbol` | `:work` | Discrete option treated as work (labor and, if requested, wage feedback) |
 | `grid` | `AbstractVector` | asset grid | Cash-on-hand histogram grid |
@@ -1332,6 +1334,21 @@ end
 _dcegm_mean_assets(dist::DCEGMDistribution{T}, last_only::Bool) where {T<:AbstractFloat} =
     last_only ? dist.assets[end] : sum(dist.assets) / T(length(dist.assets))
 
+"""
+    _dcegm_measured_labor(dist, work_d, states, last_only) → T
+
+Participation-weighted unconditional efficiency units.
+
+Returns the work-option share (last period if `last_only`, otherwise the
+equal-weighted mean across periods) times the **unconditional unweighted**
+mean of `states`. `shares` is the period-`t` choice, not the lagged option
+stored in `dist`.
+
+This is **not** a selection-adjusted labor aggregate: participation is not
+computed conditional on the income state, so the result is not
+``\\int e\\,\\mathbf{1}[\\mathrm{work}]\\,d\\mu``. `DCEGMEquilibrium.L`
+under `labor=:measured` stores this quantity.
+"""
 function _dcegm_measured_labor(dist::DCEGMDistribution{T}, work_d,
                                states::AbstractVector, last_only::Bool) where {T<:AbstractFloat}
     work_d === nothing && return zero(T)

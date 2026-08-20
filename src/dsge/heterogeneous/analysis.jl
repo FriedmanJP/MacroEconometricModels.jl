@@ -96,22 +96,7 @@ observation-mapped `irf`).
 """
 function fevd(sol::HADSGESolution{T}, horizon::Int; kwargs...) where {T<:AbstractFloat}
     ir = irf(sol, horizon)
-    n_vars = length(ir.variables)
-    n_e = length(ir.shocks)
-
-    decomp = zeros(T, n_vars, n_e, horizon)
-    props  = zeros(T, n_vars, n_e, horizon)
-    @inbounds for h in 1:horizon
-        for i in 1:n_vars
-            total = zero(T)
-            for j in 1:n_e
-                prev = h == 1 ? zero(T) : decomp[i, j, h-1]
-                decomp[i, j, h] = prev + ir.values[h, i, j]^2
-                total += decomp[i, j, h]
-            end
-            total > 0 && (props[i, :, h] = decomp[i, :, h] ./ total)
-        end
-    end
+    decomp, props = _fevd_accumulate(ir)
     return FEVD{T}(decomp, props, ir.variables, ir.shocks)
 end
 
@@ -227,7 +212,12 @@ function historical_decomposition(sol::HADSGESolution{T}, data::AbstractMatrix,
         elseif haskey(sol.steady_state.prices, s)
             ss_level[i] = sol.steady_state.prices[s]
         else
-            ss_level[i] = zero(T)
+            agg_keys = sort!(collect(keys(sol.steady_state.aggregates)))
+            price_keys = sort!(collect(keys(sol.steady_state.prices)))
+            throw(ArgumentError(
+                "historical_decomposition: observable :$s has no steady-state " *
+                "level in aggregates $(agg_keys) or prices $(price_keys). " *
+                "Data are in levels; pass an observable that the HA SS reports."))
         end
     end
     data_dev = zeros(T, n_obs, T_obs)

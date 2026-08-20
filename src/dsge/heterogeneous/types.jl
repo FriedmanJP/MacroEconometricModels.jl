@@ -594,8 +594,8 @@ end
 Consumption-savings (optionally labor) population. The `ModelSpec.agents`
 NamedTuple key is the population name; this type is the problem kind.
 
-Fields match the payload previously stored on `HADSGESpec` (minus the
-aggregate residual block, which lives on `ModelSpec`).
+Fields hold the household problem (individual, income, grid, aggregation,
+`het_params`); the aggregate residual block lives on `ModelSpec`.
 """
 struct HouseholdSystem{T<:AbstractFloat} <: AbstractAgentSystem{T}
     individual::IndividualProblem{T}
@@ -694,6 +694,11 @@ function _wrap_ha_spec(hh::HouseholdSystem{T};
                        forward_indices::Vector{Int}=Int[],
                        agent_name::Symbol=:household) where {T<:AbstractFloat}
     if equations === nothing || residual_fns === nothing
+        (endog == [:Y, :K, :r, :w, :Z] && exog == [:eps_Z]) || throw(ArgumentError(
+            "HA @dsge: aggregate endogenous variables were declared but no " *
+            "aggregate equations were written. Either write the equations, " *
+            "or use the default naming Y, K, r, w, Z (in that order) to get " *
+            "the built-in Cobb–Douglas block."))
         equations, residual_fns = _default_cd_agg_equations(T)
     end
     ModelSpec{T}(
@@ -872,7 +877,7 @@ Fields:
 - `steady_state::HASteadyState{T}` — stationary equilibrium
 - `linear_solution::DSGESolution{T}` — RE solution of the reduced system
 - `method::Symbol` — solution method (e.g., `:reiter`, `:boppart_krusell_mitman`)
-- `spec::HADSGESpec{T}` — model specification
+- `spec::ModelSpec{T}` — model specification
 - `reduction_basis::Matrix{T}` — basis for distribution reduction (e.g., from SVD)
 - `n_full_states::Int` — full state dimension before reduction
 - `n_reduced::Int` — reduced state dimension
@@ -915,7 +920,7 @@ Fields:
 - `steady_state::HASteadyState{T}` — stationary equilibrium
 - `plm_coefficients::Dict{Symbol,Vector{T}}` — PLM regression coefficients per aggregate
 - `r_squared::Dict{Symbol,T}` — PLM R² values (accuracy measure)
-- `spec::HADSGESpec{T}` — model specification
+- `spec::ModelSpec{T}` — model specification
 - `converged::Bool` — whether PLM iteration converged
 - `iterations::Int` — number of KS outer loop iterations
 """

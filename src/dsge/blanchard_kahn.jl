@@ -32,7 +32,7 @@ forward-looking roots). `eu=[1,1]` signals existence and uniqueness (determinacy
 
 # Arguments
 - `ld`   — `LinearDSGE{T}` from `linearize(spec)`
-- `spec` — `DSGESpec{T}` (must have `steady_state` set)
+- `spec` — `ModelSpec{T}` (must have `steady_state` set)
 
 # Keywords
 - `div::Real=1.0+1e-8` — stable/unstable boundary for eigenvalue sorting

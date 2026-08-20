@@ -543,7 +543,7 @@ include("dsge/pruning.jl")
 # DSGE estimation (after estimate_var, irf, estimate_gmm)
 include("dsge/estimation.jl")
 
-# DSGE Bayesian estimation (after estimation.jl, needs DSGESpec, solve, ParameterTransform)
+# DSGE Bayesian estimation (after estimation.jl, needs ModelSpec, solve, ParameterTransform)
 include("dsge/prefilter.jl")
 include("dsge/bayes_types.jl")
 include("dsge/priors.jl")

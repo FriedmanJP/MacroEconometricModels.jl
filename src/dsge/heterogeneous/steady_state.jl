@@ -632,7 +632,7 @@ function _huggett_clearing()
 end
 
 # =============================================================================
-# compute_steady_state — public API (dispatch on HADSGESpec)
+# compute_steady_state — public API (dispatch on ModelSpec)
 # =============================================================================
 
 """

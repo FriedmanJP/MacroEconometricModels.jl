@@ -607,7 +607,7 @@ function _ssj_solve(spec::ModelSpec{T}, ss::HASteadyState{T};
                      T_horizon::Int=300,
                      n_reduced::Int=30) where {T<:AbstractFloat}
     if count(a -> a isa HouseholdSystem, values(spec.agents)) > 1
-        return _ssj_solve_multipop(spec; T_horizon=T_horizon, n_reduced=n_reduced)
+        return _ssj_solve_multipop(spec; ss=ss, T_horizon=T_horizon, n_reduced=n_reduced)
     end
     hh = _hh(spec)
     if hh.grid.n_dims == 2
@@ -952,12 +952,28 @@ function _multipop_clearing(others, huggett::Bool, hh_solver::Symbol)
 end
 
 function _multipop_steady_states(spec::ModelSpec{T}, named;
+                                 ss=nothing,
                                  hh_solver::Symbol=:egm,
                                  r_bounds=nothing,
                                  max_iter::Int=200,
                                  tol::Real=T(1e-8),
                                  kwargs...) where {T<:AbstractFloat}
     huggett = _multipop_is_huggett(named)
+    if ss isa HASteadyState{T}
+        pivot_idx = argmax(i -> named[i][2].individual.beta, eachindex(named))
+        pivot_key = named[pivot_idx][1]
+        ss_map = Dict{Symbol,HASteadyState{T}}(pivot_key => ss)
+        for i in eachindex(named)
+            i == pivot_idx && continue
+            k, hh = named[i]
+            pe = _household_asset_supply(hh, ss.prices; hh_solver=hh_solver)
+            ss_map[k] = _household_ss_from_pe(hh, ss.prices, pe)
+        end
+        return ss_map, ss, huggett
+    elseif ss isa AbstractDict
+        pivot_idx = argmax(i -> named[i][2].individual.beta, eachindex(named))
+        return ss, ss[named[pivot_idx][1]], huggett
+    end
     # Bisect on the most patient household so `_ha_steady_state` caps r below
     # every population's 1/β − 1 existence bound.
     pivot_idx = argmax(i -> named[i][2].individual.beta, eachindex(named))
@@ -1049,7 +1065,24 @@ function _ssj_multipop_market(aliases::Vector{Symbol}, masses::Vector{T},
                        ss_inputs=ss_in, name=:asset_market)
 end
 
-function _ssj_multipop_firm(named, spec::ModelSpec{T}, K_ss::T) where {T<:AbstractFloat}
+function _ssj_multipop_firm(named, spec::ModelSpec{T}, ss::HASteadyState{T},
+                            K_ss::T) where {T<:AbstractFloat}
+    firm_outputs = Symbol[v for v in (:r, :w, :Y) if any(eq -> eq.defines === v, spec.equations)]
+    if !isempty(firm_outputs)
+        firm_inputs = Symbol[:K]
+        :Z in spec.endog && push!(firm_inputs, :Z)
+        Z_ss = haskey(ss.aggregates, :Z) ? ss.aggregates[:Z] :
+               T(get(named[1][2].het_params, :Z, one(T)))
+        ss_in = Dict{Symbol,T}(:K => K_ss)
+        :Z in firm_inputs && (ss_in[:Z] = Z_ss)
+        return _simple_block_from_equations(spec, ss, firm_outputs, firm_inputs;
+                                            lags=Dict(:K => [1]),
+                                            ss_inputs=ss_in, name=:firm)
+    end
+    isempty(spec.equations) || throw(ArgumentError(
+        "solve: multi-population SSJ found named aggregate equations that do not " *
+        "define :r/:w; write those definitions or omit the equations to use the " *
+        "built-in Cobb–Douglas firm (#651)."))
     p = named[1][2].het_params
     alpha = T(get(p, :alpha, get(spec.param_values, :alpha, T(0.36))))
     delta = T(get(p, :delta, get(spec.param_values, :delta, T(0.025))))
@@ -1085,10 +1118,12 @@ function _ssj_solve_multipop(spec::ModelSpec{T};
                              method::Symbol=:ssj,
                              kwargs...) where {T<:AbstractFloat}
     named = _multipop_named_households(spec)
-    ss_map, ss_rep, huggett = _multipop_steady_states(spec, named; kwargs...)
+    ss_map, ss_rep, huggett = _multipop_steady_states(spec, named; ss=ss, kwargs...)
     het_blocks, aliases, masses = _ssj_multipop_hetblocks(named, ss_map)
     ss_in_A = Dict{Symbol,T}(aliases[i] => het_blocks[i].ss_outputs[aliases[i]]
                              for i in eachindex(aliases))
+    # ss_tol/target_tol are Inf because non-pivot populations are partial
+    # equilibrium: their market residuals do not hold until the pivot clears.
     if huggett
         mkt = _ssj_multipop_market(aliases, masses, ss_in_A, zero(T), true)
         dag = combine_blocks(het_blocks..., mkt; name=:multipop, ss_tol=T(Inf))
@@ -1098,12 +1133,15 @@ function _ssj_solve_multipop(spec::ModelSpec{T};
                     get(spec.param_values, :rho_z, 0.9)))
         dw = T[rho^(t - 1) for t in 1:T_horizon]
         path = ssj_irf(gej, Dict(:w => dw); residual=false).paths[:r]
+        resid = sum(masses[i] * het_blocks[i].ss_outputs[aliases[i]]
+                    for i in eachindex(aliases))
+        @info "multipop SSJ: bond-market residual $(resid) after pivot clear (#651)"
     else
         K_ss = zero(T)
         for i in eachindex(named)
             K_ss += masses[i] * ss_map[named[i][1]].aggregates[:K]
         end
-        firm = _ssj_multipop_firm(named, spec, K_ss)
+        firm = _ssj_multipop_firm(named, spec, ss_rep, K_ss)
         mkt = _ssj_multipop_market(aliases, masses, ss_in_A, K_ss, false)
         dag = combine_blocks(firm, het_blocks..., mkt; name=:multipop, ss_tol=T(Inf))
         gej = ssj_jacobian(dag; unknowns=[:K], targets=[:asset_mkt], shocks=[:Z],
@@ -1112,6 +1150,9 @@ function _ssj_solve_multipop(spec::ModelSpec{T};
                     get(named[1][2].het_params, :rho_z, 0.95)))
         dZ = T[rho^(t - 1) for t in 1:T_horizon]
         path = ssj_irf(gej, Dict(:Z => dZ); residual=false).paths[:K]
+        A_ss = sum(masses[i] * het_blocks[i].ss_outputs[aliases[i]]
+                   for i in eachindex(aliases))
+        @info "multipop SSJ: asset-market residual $(A_ss - K_ss) after pivot clear (#651)"
     end
     jacobians = Dict{Symbol,Matrix{T}}(:H_U => gej.H_U, :H_Z => gej.H_Z)
     ev = _ssj_explained_variance(gej.H_U, n_reduced)

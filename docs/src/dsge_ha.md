@@ -142,12 +142,16 @@ The steady state report displays convergence diagnostics, equilibrium prices, ag
 
 ### VFI with Howard Improvement
 
-When EGM is not applicable (non-separable utility, complex constraints), **Value Function Iteration** with **Howard improvement steps** provides a robust alternative. Each VFI iteration consists of one policy maximization step followed by ``K`` policy-evaluation steps (default ``K = 20``), which are cheap linear operations that dramatically accelerate convergence. Pass `hh_solver=:vfi` to `compute_steady_state` (and to `solve`, which forwards the flag into the stationary problem) to use `_vfi_solve` instead of EGM. The default remains `:egm`. `hh_solver=:vfi` writes the Bellman value into `ss.value_fn`. The default EGM path now recovers `value_fn` afterwards by Howard policy evaluation of the equilibrium policy. One-asset VFI includes GHH and separable labor. Two-asset household VFI (`_two_asset_vfi_solve`) is the inner kernel when `hh_solver=:vfi` on a two-asset spec. `solve(...; method=:reiter, hh_solver=:vfi)` finite-differences the VFI policy. SSJ fake-news stays on EGM. `method=:krusell_smith` with `:vfi` throws (one-asset 4-D and two-asset per-period PE both use EGM).
+When EGM is not applicable — non-separable utility, or constraints the Euler inversion cannot encode — **value-function iteration** with **Howard improvement** is the alternative. Each outer iteration is one policy-maximization sweep followed by ``K`` policy-evaluation steps (default ``K = 20``). The evaluation steps are linear and cheap; they are what makes the method practical.
+
+Pass `hh_solver=:vfi` to `compute_steady_state` (and to `solve`, which forwards the flag into the stationary problem). The default remains `:egm`. With `:vfi` the Bellman value is stored in `ss.value_fn`. The EGM path recovers the same field afterwards by Howard policy evaluation of the equilibrium policy.
+
+One-asset VFI covers GHH and additively separable labor. Two-asset specs use the nested two-asset VFI kernel when `hh_solver=:vfi`. `solve(...; method=:reiter, hh_solver=:vfi)` finite-differences that VFI policy. Sequence-space fake-news stays on EGM. `method=:krusell_smith` with `:vfi` throws: both the one-asset 4-D simulator and the two-asset per-period PE use EGM.
 
 ```@example dsge_ha
-spec_vfi = MacroEconometricModels._huggett_example(; n_a=40)
-ss_vfi = compute_steady_state(spec_vfi; hh_solver=:vfi, max_iter=80,
-                              tol=5e-3, grid_check=:none)
+spec_vfi = load_ha_example(:huggett)
+spec_vfi = MacroEconometricModels._huggett_example(; n_a=40) # hide
+ss_vfi = compute_steady_state(spec_vfi; hh_solver=:vfi)
 (isfinite_r = isfinite(ss_vfi.prices[:r]),
  V_increasing = ss_vfi.value_fn[end, 1] > ss_vfi.value_fn[1, 1])
 ```
@@ -372,6 +376,80 @@ dist = dcegm_simulate(dc, collect(range(0.01, 60.0; length=100)))
 ```
 
 Mass is conserved exactly — off-grid landing points are split between the two bracketing nodes in proportion to distance. The retired share is monotone in age because retirement is absorbing, and jumps to one in the terminal period, when working carries its disutility with no future wage to compensate.
+
+### Aggregate Dynamics
+
+The household solver takes the gross return ``R`` as given. Closing a capital market makes ``r = R - 1`` an equilibrium object. A Cobb-Douglas firm demands capital, a Young histogram supplies it, and [`dcegm_steady_state`](@ref) bisects until they match (Aiyagari 1994). Sequence-space Jacobians are not available: the upper envelope jumps at switching thresholds, so the fake-news derivative is undefined. Aggregate dynamics are [`dcegm_mit`](@ref) (`method=:mit`).
+
+```math
+Y = Z K^{\alpha} L^{1-\alpha}, \qquad
+r = \alpha Z (K/L)^{\alpha-1} - \delta, \qquad
+w = (1-\alpha) Z (K/L)^{\alpha}
+```
+
+```math
+K^d(r) = \left(\frac{\alpha Z}{r+\delta}\right)^{1/(1-\alpha)} L
+```
+
+where:
+- ``Z``, ``\alpha``, ``\delta`` are TFP, the capital share, and depreciation
+- ``L`` is an exogenous firm input (Aiyagari inelastic labor), or measured work-option efficiency when `labor=:measured`
+- Excess supply ``A - K^d`` is increasing in ``r``, so the root is unique on a sign-changing bracket
+
+[`DCEGMFirm`](@ref) stores the technology. [`dcegm_capital_demand`](@ref) and [`dcegm_firm_wage`](@ref) invert the rental FOC:
+
+```@example dsge_ha
+firm = DCEGMFirm(; alpha=0.36, delta=0.08, Z=1.0, L=1.0)
+(Kd = round(dcegm_capital_demand(firm, 0.05); digits=4),
+ w  = round(dcegm_firm_wage(firm, 0.05); digits=4))
+```
+
+At a 5% net return the firm demands 4.91 units of capital and pays a wage of 1.135. Raising the trial rate lowers both.
+
+```@example dsge_ha
+prob_ge = dcegm_retirement_model(; n_periods=6, beta=0.96, wage=20.0,
+                                 pension=2.0, disutility=0.5)
+prob_ge = dcegm_retirement_model(; n_periods=6, n_a=30, a_max=40.0, beta=0.96, wage=20.0, pension=2.0, disutility=0.5) # hide
+eq = dcegm_steady_state(prob_ge, firm)
+report(eq)
+```
+
+Bisection settles on ``r = 0.0988`` after 16 steps. Household asset supply and firm demand agree at ``K = 2.985`` (excess ``5 \times 10^{-5}``), with ``K/Y \approx 2.01``. The household wage stays at the retirement-model primitive (20); the firm's competitive wage is 0.949. `R` on the household problem is ``1+r``.
+
+[`dcegm_mit`](@ref) traces a deterministic TFP path around that equilibrium (Boppart, Krusell & Mitman 2018). ``K_1`` is pinned at `eq.K`. Each date the firm FOC prices ``(K_t, Z_t)``, households re-solve at ``R_t = 1 + r_t``, and ``K_{t+1} = A_t``. This is myopic temporary equilibrium, not a two-sided shoot.
+
+```@example dsge_ha
+Z_path = [firm.Z * (1 + 0.03 * 0.6^(t - 1)) for t in 1:4]
+tr_dc = dcegm_mit(eq, Z_path)
+[(t = t - 1,
+  K = round(tr_dc.K[t]; digits=4),
+  r = round(tr_dc.r[t]; digits=5),
+  w = round(tr_dc.w[t]; digits=4)) for t in 1:4]
+```
+
+Capital is predetermined, so date 0 holds ``K^* = 2.985``. The 3% TFP impulse lifts the rental rate from 9.88% to 10.42% and the firm wage from 0.949 to 0.977. Next-period capital rises to 3.251 — households save the windfall. `irf(eq, H)` wraps the same MIT path as an [`ImpulseResponse`](@ref).
+
+| Keyword | Type | Default | Description |
+|---------|------|---------|-------------|
+| `alpha` / `delta` / `Z` / `L` | `Real` | `0.36` / `0.08` / `1.0` / `1.0` | Cobb-Douglas share, depreciation, TFP, and labor (`DCEGMFirm`) |
+| `r_bounds` | `Tuple` | `(0.001, 0.20)` | Net-return bracket; the lower end must exceed ``-\delta`` |
+| `labor` | `Symbol` | `:exogenous` | `:exogenous` uses `firm.L`; `:measured` uses work-option efficiency |
+| `tol` | `Real` | ``10^{-4}`` | Absolute tolerance on ``\|A - K^d\|`` |
+| `max_iter` | `Int` | `40` | Bisection cap |
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `r`, `w` | `T` | Clearing net return and the firm's competitive wage |
+| `K` | `T` | Household asset supply ``A`` |
+| `K_demand` | `T` | Firm demand ``K^d(r)`` |
+| `Y`, `L` | `T` | Output and the labor used in ``K^d`` |
+| `excess_demand` | `T` | Final ``A - K^d`` |
+| `solution` | `DCEGMSolution{T}` | Household policy at ``R = 1+r`` |
+| `distribution` | `DCEGMDistribution{T}` | Histogram used to form ``A`` |
+| `firm` | `DCEGMFirm{T}` | Firm that priced capital |
+| `converged`, `iterations` | `Bool`, `Int` | Bisection outcome |
+
+A [`DCEGMTransition`](@ref) stores the TFP path and the implied ``(K, r, w, A, Y)`` series, the equilibrium it expands around, `method === :mit`, and `converged`.
 
 ---
 
@@ -718,16 +796,16 @@ The cost is quadratic in the deposit rate and therefore smooth at ``d = 0``. The
 The individual problem is solved via **nested EGM**: an outer loop over deposit choices with an inner EGM on the liquid dimension.
 
 ```@example dsge_ha
-spec_2a = MacroEconometricModels._two_asset_hank_example(;
-    n_liquid=8, n_illiquid=6, n_e=2, B_supply=1.0)
-ss_2a = compute_steady_state(spec_2a; max_iter=12, tol=5e-2, grid_check=:none)
+spec_2a = load_ha_example(:two_asset_hank)
+spec_2a = MacroEconometricModels._two_asset_hank_example(; n_liquid=8, n_illiquid=6, n_e=2, B_supply=1.0) # hide
+ss_2a = compute_steady_state(spec_2a; grid_check=:none)
 (n_dims = only(values(spec_2a.agents)).grid.n_dims,
  has_r_b = haskey(ss_2a.prices, :r_b),
  has_A = haskey(ss_2a.aggregates, :A),
  has_B = haskey(ss_2a.aggregates, :B))
 ```
 
-The shipped `load_ha_example(:two_asset_hank)` grid is 50 × 50 × 7. The example above uses a coarse grid so the closer finishes in the docs build. Because the adjustment cost is quadratic and therefore differentiable at ``d = 0``, its marginal cost passes smoothly through zero: every household whose marginal valuations differ rebalances, by an amount that shrinks continuously to zero as ``V_a/V_b \to 1``. There is no inaction band here — generating one requires a cost with a kink at the origin, which is the `cost=:kinked` specification documented under [Continuous Time](@ref dsge_continuous).
+The shipped `load_ha_example(:two_asset_hank)` grid is 50 × 50 × 7. Because the adjustment cost is quadratic and therefore differentiable at ``d = 0``, its marginal cost passes smoothly through zero: every household whose marginal valuations differ rebalances, by an amount that shrinks continuously to zero as ``V_a/V_b \to 1``. There is no inaction band here — generating one requires a cost with a kink at the origin, which is the `cost=:kinked` specification documented under [Continuous Time](@ref dsge_continuous).
 
 `solve(spec_2a; method=:ssj, ss=ss_2a)` and `method=:reiter` linearize around that stationary point. `method=:krusell_smith` re-solves the two-asset household each period and fits a PLM for ``K``.
 
@@ -1174,6 +1252,8 @@ plot_result(ss_ks; view=:policy)      # policy functions by income
 - den Haan, Wouter J. 2010. "Assessing the Accuracy of the Aggregate Law of Motion in Models with Heterogeneous Agents." *Journal of Economic Dynamics and Control* 34 (1): 79--99. [DOI](https://doi.org/10.1016/j.jedc.2008.12.009)
 
 - Huggett, Mark. 1993. "The Risk-Free Rate in Heterogeneous-Agent Incomplete-Insurance Economies." *Journal of Economic Dynamics and Control* 17 (5--6): 953--969. [DOI](https://doi.org/10.1016/0165-1889(93)90024-M)
+
+- Boppart, Timo, Per Krusell, and Kurt Mitman. 2018. "Exploiting MIT Shocks in Heterogeneous-Agent Economies: The Impulse Response as a Numerical Derivative." *Journal of Economic Dynamics and Control* 89: 68--92. [DOI](https://doi.org/10.1016/j.jedc.2018.01.002)
 
 - Iskhakov, Fedor, Thomas H. Jørgensen, John Rust, and Bertel Schjerning. 2017. "The Endogenous Grid Method for Discrete-Continuous Dynamic Choice Models with (or without) Taste Shocks." *Quantitative Economics* 8 (2): 317--365. [DOI](https://doi.org/10.3982/QE643)
 

@@ -29,8 +29,9 @@ end
 
 # HA-DSGE and HA-DSGE Advanced are the suite ceiling. Give each 2 OpenBLAS
 # threads; every other group stays at 1 so 4-wide dispatch does not oversubscribe.
+# Only one 2-thread group so HA-DSGE + Advanced cannot oversubscribe (MSR-28).
 _blas_threads_for_group(name::AbstractString) =
-    name == "HA-DSGE" || name == "HA-DSGE Advanced" ? 2 : 1
+    name == "HA-DSGE" ? 2 : 1
 
 _runner_max_conc(cpu_threads::Integer; cap::Integer=4) = min(Int(cpu_threads), cap)
 

@@ -566,10 +566,23 @@ function _ha_model_spec_quote(endog, exog, params, raw_equations,
                     residual_fns=Function[])
             end
         else
+            # Default Cobb–Douglas residuals are positional on
+            # endog == [:Y, :K, :r, :w, :Z] and exog == [:eps_Z] (MSR-17 / #693).
+            default_endog = [:Y, :K, :r, :w, :Z]
+            default_exog = [:eps_Z]
+            resolved_endog = isempty(endog) ? default_endog : endog
+            resolved_exog = isempty(exog) ? default_exog : exog
+            if resolved_endog != default_endog || resolved_exog != default_exog
+                throw(ArgumentError(
+                    "HA @dsge: aggregate endogenous variables were declared but no " *
+                    "aggregate equations were written. Either write the equations, " *
+                    "or use the default naming Y, K, r, w, Z (in that order) to get " *
+                    "the built-in Cobb–Douglas block."))
+            end
             quote
                 MacroEconometricModels._wrap_ha_spec(_hh_;
-                    endog=$(Expr(:vect, (QuoteNode(s) for s in (isempty(endog) ? [:Y, :K, :r, :w, :Z] : endog))...)),
-                    exog=$(Expr(:vect, (QuoteNode(s) for s in (isempty(exog) ? [:eps_Z] : exog))...)),
+                    endog=$(Expr(:vect, (QuoteNode(s) for s in resolved_endog)...)),
+                    exog=$(Expr(:vect, (QuoteNode(s) for s in resolved_exog)...)),
                     params=$(Expr(:vect, (QuoteNode(s) for s in params)...)),
                     param_values=_pv_)
             end
@@ -699,7 +712,7 @@ function _ha_solve(spec::ModelSpec{T}; method::Symbol=:ssj,
             "solve: multiple HouseholdSystems only support method=:ssj (#651). " *
             "Use agents_of(spec, HouseholdSystem) for each population; " *
             "Reiter / Krusell-Smith are not retargeted."))
-        return _ssj_solve_multipop(spec; kwargs...)
+        return _ssj_solve_multipop(spec; ss=ss, kwargs...)
     end
     if ss === nothing
         # Extract steady-state relevant kwargs

@@ -159,3 +159,73 @@ end
     floor_mass = sum(Λ[1, :])
     @test entry_mass > floor_mass
 end
+
+@testset "ξ chain mean is μ exactly (MSR-27)" begin
+    for (rho, sig, n, mu) in ((0.553, 0.085, 3, 1.0),
+                              (0.2, 0.3, 7, 1.25),
+                              (0.9, 0.05, 5, 0.8))
+        xi = MacroEconometricModels._xi_process(rho, sig, n; mu=mu)
+        @test abs(sum(xi.stationary_dist .* xi.states) - mu) < 1e-12
+    end
+    xi1 = MacroEconometricModels._xi_process(0.5, 0.1, 1; mu=1.7)
+    @test xi1.states == [1.7]
+    @test abs(sum(xi1.stationary_dist .* xi1.states) - 1.7) < 1e-12
+    sys = IntermediarySystem(; n_xi=5, rho_xi=0.4, sigma_xi=0.2, xi_mean=1.3,
+                             n_n=9, n_min=0.1, n_max=3.0)
+    @test abs(sum(sys.xi.stationary_dist .* sys.xi.states) - 1.3) < 1e-12
+end
+
+@testset "lending scan density / l_cap_mult (MSR-27)" begin
+    # Wide ξ + deposit rate above the bad-state claim return: limited
+    # liability kinks n'(l), so the franchise payoff is not concave in l.
+    sys = IntermediarySystem(;
+        n_min=0.1, n_max=2.0, n_n=13,
+        n_xi=5, rho_xi=0.10, sigma_xi=0.60,
+        kappa=1.0, beta=0.99, sigma=0.90, lambda=0.18,
+        zeta1=0.01, zeta2=2.0,
+        R=1.08, rk=0.05, Z=0.25, alpha=0.33)
+    n_grid = sys.grid.grids[1]
+    n_n = length(n_grid)
+    n_e = length(sys.xi.states)
+    V = [0.4 * n_grid[i] for i in 1:n_n, _ in 1:n_e]
+    n = n_grid[div(n_n, 2)]
+    j = 1
+    l_hi = 20.0
+    kinked = false
+    for l in range(0.2, l_hi; length=50)
+        np_lo = MacroEconometricModels._bank_nprime(
+            n, l, minimum(sys.xi.states), sys.kappa, sys.rk, sys.R,
+            sys.zeta1, sys.zeta2)
+        np_hi = MacroEconometricModels._bank_nprime(
+            n, l, maximum(sys.xi.states), sys.kappa, sys.rk, sys.R,
+            sys.zeta1, sys.zeta2)
+        if np_lo <= 0 < np_hi
+            kinked = true
+            break
+        end
+    end
+    @test kinked
+
+    l16, v16 = MacroEconometricModels._best_lending(
+        n, j, l_hi, V, n_grid, sys.xi, sys.kappa, sys.rk, sys.R,
+        sys.zeta1, sys.zeta2, sys.beta, sys.sigma; n_try=16)
+    l32, v32 = MacroEconometricModels._best_lending(
+        n, j, l_hi, V, n_grid, sys.xi, sys.kappa, sys.rk, sys.R,
+        sys.zeta1, sys.zeta2, sys.beta, sys.sigma; n_try=32)
+    @test isfinite(l16) && isfinite(l32)
+    @test isapprox(l16, l32; rtol=1e-3, atol=1e-4)
+    @test v32 >= v16 - 1e-10
+
+    # Documented escape: l_cap_mult / n_try are honored and forwarded.
+    mild = _bb_sys(; n_n=11)
+    n_max = mild.grid.grids[1][end]
+    pe_cap = intermediary_pe(mild; l_cap_mult=0.25, n_try=8,
+                             max_iter=20, tol=1e-3)
+    @test maximum(pe_cap.l_policy) <= 0.25 * n_max + 1e-12
+    @test_throws ArgumentError intermediary_pe(mild; n_try=0)
+    @test_throws ArgumentError intermediary_pe(mild; l_cap_mult=0)
+    ss = intermediary_steady_state(mild; n_try=8, l_cap_mult=10,
+                                   max_iter=3, pe_max_iter=12, pe_tol=1e-3)
+    @test ss isa IntermediarySteadyState
+    @test maximum(ss.l_policy) <= 10 * n_max + 1e-12
+end

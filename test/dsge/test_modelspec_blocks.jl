@@ -152,3 +152,34 @@ end
     @test err isa ArgumentError
     @test occursin("MitBlock(spec, ss)", sprint(showerror, err))
 end
+
+@testset "HA @dsge default CD injection requires canonical names (MSR-17)" begin
+    spec = @dsge begin
+        parameters: alpha = 0.36, beta_hh = 0.99, delta = 0.025, rho_z = 0.95, sigma_z = 0.007
+        endogenous: Y, K, r, w, Z
+        exogenous: eps_Z
+        heterogeneous: a in [0.0, 50.0], n_grid = 20, utility = log, discount = beta_hh, borrowing = 0.0
+        idiosyncratic: e ~ Rouwenhorst(0.9, 0.3, 3)
+        aggregation: K = sum(a)
+    end
+    @test spec isa ModelSpec
+    @test spec.endog == [:Y, :K, :r, :w, :Z]
+    @test length(spec.equations) == 5
+
+    err = try
+        @eval @dsge begin
+            parameters: alpha = 0.36, beta_hh = 0.99
+            endogenous: K, Y, r, w, Z
+            exogenous: eps_Z
+            heterogeneous: a in [0.0, 50.0], n_grid = 20, utility = log, discount = beta_hh, borrowing = 0.0
+            idiosyncratic: e ~ Rouwenhorst(0.9, 0.3, 3)
+            aggregation: K = sum(a)
+        end
+        error("should have thrown")
+    catch e
+        e
+    end
+    inner = err isa LoadError ? err.error : err
+    @test inner isa ArgumentError
+    @test occursin("Y, K, r, w, Z", sprint(showerror, inner))
+end

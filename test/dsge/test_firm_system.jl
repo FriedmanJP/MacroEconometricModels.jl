@@ -19,7 +19,8 @@ const _MFFS = MacroEconometricModels
     @test length(fs.k_grid) == 12
     @test length(fs.productivity.states) == 3
     @test all(>(0), fs.productivity.states)
-    @test _MFFS.aggregation(fs) == [:K, :N, :Y]
+    @test first.(_MFFS.aggregation(fs)) == [:K, :N, :Y]
+    @test _MFFS.aggregation(fs) isa Vector{<:Pair}
     @test _MFFS.idiosyncratic(fs) === fs.productivity
     @test issorted(fs.k_grid)
 

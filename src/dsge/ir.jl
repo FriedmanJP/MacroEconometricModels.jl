@@ -224,6 +224,10 @@ function ModelSpec{T}(endog, exog, params, param_values, equations, residual_fns
         length(residual_fns) == n_endog || throw(ArgumentError(
             "ModelSpec: residual_fns length $(length(residual_fns)) ≠ n_endog $n_endog"))
     end
+    if varnames !== nothing && length(varnames) != n_endog
+        throw(ArgumentError(
+            "varnames length $(length(varnames)) ≠ n_endog $n_endog"))
+    end
     length(forward_indices) == n_expect || throw(ArgumentError(
         "ModelSpec: forward_indices length $(length(forward_indices)) ≠ n_expect $n_expect"))
     for i in forward_indices
@@ -242,10 +246,10 @@ function ModelSpec{T}(endog, exog, params, param_values, equations, residual_fns
 end
 
 """
-    _respec(spec::ModelSpec, new_pv) -> ModelSpec
+    _copy_model_spec(spec::ModelSpec; kwargs...) -> ModelSpec
 
-Copy the compiled view at a new parameter dictionary. Steady state is cleared.
-Does **not** recompile `spec.ir`.
+Copy a compiled `ModelSpec`, overriding any supplied fields. Does **not**
+recompile `spec.ir`.
 """
 function _copy_model_spec(spec::ModelSpec{T};
                           endog=spec.endog,
@@ -271,6 +275,12 @@ function _copy_model_spec(spec::ModelSpec{T};
                           agents=spec.agents,
                           ir=spec.ir,
                           varnames=spec.varnames) where {T<:AbstractFloat}
+    # News-pipeline copies grow `endog` while inheriting the original display
+    # names; pad with the new symbols so the constructor check still holds.
+    n = length(endog)
+    if varnames !== nothing && length(varnames) < n
+        varnames = vcat(varnames, [string(s) for s in endog[length(varnames)+1:end]])
+    end
     ModelSpec{T}(
         endog, exog, params, param_values, equations, residual_fns,
         n_expect, forward_indices, steady_state, ss_fn;
@@ -290,21 +300,22 @@ function _copy_model_spec(spec::ModelSpec{T};
     )
 end
 
+"""
+    _respec(spec::ModelSpec, new_pv) -> ModelSpec
+
+Copy the compiled view at a new parameter dictionary. Steady state is cleared.
+Does **not** recompile `spec.ir`.
+"""
 function _respec(spec::ModelSpec{T,A}, new_pv) where {T<:AbstractFloat,A}
     _copy_model_spec(spec; param_values=new_pv, steady_state=T[])
 end
-
-equation_exprs(spec::ModelSpec) = [eq.expr for eq in spec.equations]
-
-_eq_expr(eq::NamedEquation) = eq.expr
-_eq_expr(eq::Expr) = eq
 
 function _original_var_indices(spec::ModelSpec)
     spec.augmented || return collect(1:spec.n_endog)
     return [findfirst(==(v), spec.endog) for v in spec.original_endog]
 end
 
-has_agents(spec::ModelSpec) = !isempty(spec.agents)
+_has_agents(spec::ModelSpec) = !isempty(spec.agents)
 
 """
     has_kind(spec, S) -> Bool

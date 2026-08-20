@@ -273,3 +273,49 @@ end
         end))
     end
 end
+
+@testset "agent-kind aggregation interface (MSR-20)" begin
+    hh = only(values(MacroEconometricModels._huggett_example(; n_a=20).agents))
+    @test MacroEconometricModels.aggregation(hh) isa Vector{<:Pair}
+    fs = khan_thomas_example()
+    @test MacroEconometricModels.aggregation(fs) isa Vector{<:Pair}
+    @test !hasmethod(MacroEconometricModels.ssj_inputs, Tuple{typeof(fs)})
+end
+
+@testset "family façade kwarg contract (MSR-21)" begin
+    spec = @dsge begin
+        parameters: ρ = 0.8, σ = 0.01
+        endogenous: y
+        exogenous: ε
+        y[t] = ρ * y[t-1] + σ * ε[t]
+        steady_state: [0.0]
+    end
+    spec = compute_steady_state(spec)
+    ir = irf(spec, 4; method=:klein)
+    @test ir isa ImpulseResponse
+    @test_throws Exception fevd(spec, 4; bogus=1)
+    ha = MacroEconometricModels._huggett_example(; n_a=20)
+    err = try
+        compute_steady_state(ha; initial_guess=[0.0])
+        error("should have thrown")
+    catch e
+        e
+    end
+    @test err isa ArgumentError
+    @test occursin("initial_guess", sprint(showerror, err))
+end
+
+@testset "@dsge reserved label cannot name an equation (MSR-23)" begin
+    err = try
+        @eval @dsge begin
+            parameters: ρ = 0.9
+            endogenous: y
+            exogenous: ε
+            beta: y[t] = ρ * y[t-1] + ε[t]
+        end
+        error("should have thrown")
+    catch e
+        e
+    end
+    @test occursin("reserved", sprint(showerror, err))
+end

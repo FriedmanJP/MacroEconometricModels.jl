@@ -331,6 +331,36 @@ SMC², or Random-Walk Metropolis-Hastings (RWMH).
   natural-space walk.
 - `rng::AbstractRNG=Random.default_rng()` — random number generator
 
+# HA specs
+`HouseholdSystem` models re-solve the HA steady state and linearize at each draw,
+then evaluate the Kalman filter on the reduced system (Auclert et al. 2021).
+Estimation requires exactly one `HouseholdSystem` and no other agent systems;
+multi-population estimation is out of scope (#651). Additional keywords (accepted
+only for HA specs; RA specs reject them):
+
+- `ha_method::Symbol=:ssj` — HA solution method (`:ssj` or `:reiter`). Stored on
+  the result as `solver` (the effective solver; the RA `solver` keyword is rejected).
+- `ha_kwargs::NamedTuple=(T_horizon=300, n_reduced=15)` — forwarded to `solve`.
+  `T_horizon` is the sequence-space (SSJ) truncation length: HA Jacobians must
+  decay before this horizon or the model-implied autocovariances (and hence the
+  Kalman likelihood) are biased. The default of 300 follows Auclert, Bardóczy,
+  Rognlie & Straub (2021); too-small values (e.g. 50) truncate persistent HA
+  dynamics, while larger horizons cost more (Jacobian construction scales with
+  the horizon). User-overridable.
+- `proposal_scale::Float64=0.01` — initial RWMH proposal scale (σ² for the
+  proposal covariance)
+- `adapt_interval::Int=100` — adapt the RWMH proposal covariance every N draws
+  (during burn-in only)
+
+Measurement error (`measurement_error`) keeps the same meanings as for
+representative-agent specs: `nothing` is zero ME, `:auto` adds per-observable ME
+at 10% of each series' variance (with a warning), and a vector supplies SDs.
+The HA difference is timing: zero ME with `n_obs > n_shocks` raises
+`StochasticSingularityError` on the **first likelihood evaluation** rather than
+eagerly at entry (HA has no cheap pre-solve shock count). HA does not support
+`prefilter`, `observation_trends`, `keep_burnin`, `solver`, `solver_kwargs`,
+`likelihood`, `delayed_acceptance`, `proposal`, or `transform=false`.
+
 # Returns
 `BayesianDSGE{T}` containing posterior draws, log posterior, marginal likelihood, etc.
 
@@ -339,6 +369,9 @@ SMC², or Random-Walk Metropolis-Hastings (RWMH).
   *Journal of Applied Econometrics*, 29(7), 1073-1098.
 - An, S. & Schorfheide, F. (2007). Bayesian Analysis of DSGE Models.
   *Econometric Reviews*, 26(2-4), 113-172.
+- Auclert, A., Bardóczy, B., Rognlie, M., & Straub, L. (2021). Using the
+  sequence-space Jacobian to solve and estimate heterogeneous-agent models.
+  *Econometrica*, 89(5), 2375-2408.
 """
 function estimate_dsge_bayes(spec::ModelSpec{T}, data::AbstractMatrix,
                               theta0::Union{AbstractVector{<:Real},
@@ -373,6 +406,11 @@ function estimate_dsge_bayes(spec::ModelSpec{T}, data::AbstractMatrix,
     _require_estimable_spec(:estimate_dsge_bayes, spec)
 
     if has_kind(spec, HouseholdSystem)
+        (count(v -> v isa HouseholdSystem, values(spec.agents)) == 1 &&
+         length(spec.agents) == 1) || throw(ArgumentError(
+            "estimate_dsge_bayes: estimation supports exactly one household population; " *
+            "this spec has $(length(spec.agents)) agent systems. Multi-population " *
+            "estimation is out of scope (#651)."))
         # `method === nothing` is the omitted-keyword case: keep historical HA
         # RWMH. An explicit `method=:smc` requests HA SMC (#649).
         ha_method_est = method === nothing ? :mh : method

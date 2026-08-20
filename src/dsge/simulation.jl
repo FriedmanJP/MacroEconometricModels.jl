@@ -112,6 +112,40 @@ function irf(sol::DSGESolution{T}, horizon::Int;
 end
 
 """
+    _fevd_accumulate(ir) -> (decomp, props)
+
+Cumulative IRF-based forecast-error variance decomposition.
+`decomp[i,j,h]` is the contribution of shock `j` to variable `i` through
+horizon `h`; `props` is the row-normalized share.
+
+A single-shock row whose total contribution is zero (identically-zero IRF)
+is assigned proportion 1.0 so the shares still sum to one.
+"""
+function _fevd_accumulate(ir::ImpulseResponse{T}) where {T<:AbstractFloat}
+    n_vars = length(ir.variables)
+    n_e = length(ir.shocks)
+    H = ir.horizon
+    decomp = zeros(T, n_vars, n_e, H)
+    props  = zeros(T, n_vars, n_e, H)
+    @inbounds for h in 1:H
+        for i in 1:n_vars
+            total = zero(T)
+            for j in 1:n_e
+                prev = h == 1 ? zero(T) : decomp[i, j, h-1]
+                decomp[i, j, h] = prev + ir.values[h, i, j]^2
+                total += decomp[i, j, h]
+            end
+            if total > 0
+                props[i, :, h] = decomp[i, :, h] ./ total
+            elseif n_e == 1
+                props[i, 1, h] = one(T)
+            end
+        end
+    end
+    return decomp, props
+end
+
+"""
     fevd(sol::DSGESolution{T}, horizon::Int) -> FEVD{T}
 
 Compute forecast error variance decomposition from a solved DSGE model.

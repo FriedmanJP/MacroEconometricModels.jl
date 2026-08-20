@@ -115,6 +115,15 @@ function _dsge_impl(block::Expr)
 
     for stmt in stmts
         label = _detect_declaration(stmt)
+        if label !== nothing && label in _RESERVED_DSGE_LABELS &&
+           stmt isa Expr && stmt.head == :(=) &&
+           stmt.args[1] isa Expr && stmt.args[1].head == :call &&
+           length(stmt.args[1].args) >= 3
+            third = stmt.args[1].args[3]
+            if third isa Expr && (third.head === :ref || third.head === :call)
+                error("@dsge: '$label' is a reserved declaration label and cannot name an equation; rename the equation.")
+            end
+        end
         if label === :parameters
             _extract_parameters!(stmt, params, param_defaults)
         elseif label === :endogenous
@@ -207,9 +216,7 @@ function _dsge_impl(block::Expr)
             def = _lhs_defines(lhs, endog)
             name = def === nothing ? (anon += 1; Symbol("eq_", anon)) : def
             if name in used_names
-                # Second `Y[t] = ...` (market clearing after a production identity)
-                # is not a second definition — give it a generated name.
-                def = nothing
+                # Keep `defines` so constraint: can report the ambiguity (MSR-23).
                 anon += 1
                 name = Symbol("eq_", anon)
             end

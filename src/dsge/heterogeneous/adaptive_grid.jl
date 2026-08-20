@@ -238,14 +238,14 @@ end
 """
     adapt_ha_grid(grid::HAGrid{T}, distribution; n_points=grid.n_points,
                   curvature=0.9, monitor_cap=3.0, smoothing=2) → HAGrid{T}
-    adapt_ha_grid(spec::ModelSpec{T}, ss::HASteadyState{T}; kwargs...) → HADSGESpec{T}
+    adapt_ha_grid(spec::ModelSpec{T}, ss::HASteadyState{T}; kwargs...) → ModelSpec{T}
 
 Rebuild an HA grid with nodes equidistributed by the curvature of the stationary density.
 
 The bounds, labels and number of income states are preserved, so the borrowing constraint and
 the aggregation functions carry over unchanged. Only the *placement* of the asset nodes moves.
 
-The two-argument `HADSGESpec`/`HASteadyState` method returns a new specification carrying the
+The two-argument `ModelSpec`/`HASteadyState` method returns a new specification carrying the
 adapted grid; re-run [`compute_steady_state`](@ref) on it to solve the model on the new grid.
 
 Measured on `load_ha_example(:krusell_smith)` at `n_a = 200` against an `n_a = 1600`

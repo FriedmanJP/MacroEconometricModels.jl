@@ -577,6 +577,16 @@ end
     @test size(hd.contributions) == (T_obs, 1, 1)
     @test verify_decomposition(hd; tol=1e-5)
     @test all(isfinite, hd.contributions)
+    err = try
+        historical_decomposition(sol, data, [:not_a_price])
+        error("should have thrown")
+    catch e
+        e
+    end
+    @test err isa ArgumentError
+    msg = sprint(showerror, err)
+    @test occursin("not_a_price", msg)
+    @test occursin("aggregates", msg) || occursin("prices", msg)
 end
 
 end  # outer testset

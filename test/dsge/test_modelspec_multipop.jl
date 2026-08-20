@@ -8,6 +8,7 @@
 
 using Test
 using MacroEconometricModels
+using Distributions
 
 const _MEM = MacroEconometricModels
 
@@ -138,4 +139,56 @@ end
     mixmsg = sprint(showerror, err_mix)
     @test occursin("#651", mixmsg)
     @test occursin("agents_of", mixmsg)
+end
+
+@testset "multipop SSJ reuses caller SS and named equations (MSR-18)" begin
+    spec = _two_huggett_spec()
+    sol1 = solve(spec; method=:ssj, T_horizon=8, n_reduced=4, max_iter=40, tol=1e-4)
+    ss = sol1.steady_state
+    sol2 = solve(spec; method=:ssj, ss=ss, T_horizon=8, n_reduced=4)
+    @test sol2.steady_state === ss
+
+    err_ss = try
+        compute_steady_state(spec)
+        error("should have thrown")
+    catch e
+        e
+    end
+    @test err_ss isa ArgumentError
+    msg_ss = sprint(showerror, err_ss)
+    @test occursin("compute_steady_state", msg_ss)
+    @test occursin("method=:ssj", msg_ss)
+
+    hh_u = spec.agents.unconstrained
+    hh_h = spec.agents.htm
+    bogus = NamedEquation(:bogus, :Y, :(Y[t] - 0), (yt, yl, yle, e, θ) -> yt[1])
+    spec_eq = ModelSpec{Float64}(
+        [:Y], Symbol[], spec.params, copy(spec.param_values),
+        [bogus], Function[bogus.residual], 0, Int[], Float64[];
+        agents=(unconstrained=hh_u, htm=hh_h))
+    err_eq = try
+        solve(spec_eq; method=:ssj, T_horizon=8, n_reduced=4, max_iter=20, tol=1e-3)
+        error("should have thrown")
+    catch e
+        e
+    end
+    @test err_eq isa ArgumentError
+    @test occursin("Cobb–Douglas", sprint(showerror, err_eq)) ||
+          occursin("r", sprint(showerror, err_eq))
+end
+
+@testset "HA estimate_dsge_bayes rejects multi-population (#701 / MSR-25)" begin
+    spec = _two_huggett_spec()
+    err = try
+        estimate_dsge_bayes(spec, randn(10, 1), Dict(:beta => 0.96);
+            priors=Dict(:beta => Normal(0.96, 0.01)), n_draws=2, burnin=0)
+        ErrorException("expected estimate_dsge_bayes to throw")
+    catch e
+        e
+    end
+    @test err isa ArgumentError
+    msg = sprint(showerror, err)
+    @test occursin("exactly one household population", msg)
+    @test occursin("#651", msg)
+    @test occursin("2 agent systems", msg)
 end

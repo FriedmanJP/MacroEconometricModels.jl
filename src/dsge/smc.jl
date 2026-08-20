@@ -14,7 +14,8 @@ Implements:
 - `_adaptive_tempering` — bisection for ESS-targeted tempering schedule
 - `_update_proposal_cov!` — weighted covariance for RWMH proposals
 - `_smc_mutation!` — parallel RWMH mutation of SMC particles
-- `_smc_sample` — full SMC algorithm (Herbst & Schorfheide 2014)
+- `_smc_from_likelihood` — generic Herbst–Schorfheide tempering loop given a likelihood closure
+- `_smc_sample` — RA SMC: builds a gensys/Kalman likelihood and delegates to `_smc_from_likelihood`
 - `_mh_sample` — adaptive RWMH with Roberts & Rosenthal (2001) tuning
 
 References:
@@ -516,13 +517,15 @@ function _smc_mutation!(state::SMCState{T}, phi::T, ll_fn, prior::DSGEPrior{T},
 end
 
 # =============================================================================
-# Full SMC algorithm (Herbst & Schorfheide 2014)
+# Generic SMC algorithm (Herbst & Schorfheide 2014)
 # =============================================================================
 
 """
-    _smc_sample(spec, data, param_names, prior, θ0; kwargs...) → SMCState
+    _smc_from_likelihood(ll_fn, param_names, prior, θ0; kwargs...) → SMCState
 
-Full Sequential Monte Carlo sampler for Bayesian DSGE estimation.
+Generic Herbst–Schorfheide SMC loop driven by an arbitrary `θ → log p(Y|θ)`
+closure. Shared by RA `_smc_sample` (Kalman/gensys likelihood) and HA
+`method=:smc` (reduced-system likelihood). Mutation is `_smc_mutation!`.
 
 Algorithm (Herbst & Schorfheide 2014):
 1. Initialize `N_smc` particles from prior distributions
@@ -534,55 +537,15 @@ Algorithm (Herbst & Schorfheide 2014):
    d. Update proposal covariance via `_update_proposal_cov!`
    e. Mutate particles via `_smc_mutation!`
    f. Stop when `phi = 1`
-
-# Arguments
-- `spec::ModelSpec{T}` — model specification
-- `data::Matrix{T}` — n_obs × T_obs data matrix
-- `param_names::Vector{Symbol}` — parameters to estimate
-- `prior::DSGEPrior{T}` — prior specification
-- `θ0::Vector{T}` — initial parameter guess (used for fallback)
-
-# Keywords
-- `n_smc::Int=500` — number of SMC particles
-- `n_mh_steps::Int=1` — MH steps per mutation stage
-- `ess_target::Real=0.5` — target ESS fraction
-- `observables::Vector{Symbol}` — observed variables
-- `measurement_error` — measurement error SDs or `nothing`
-- `solver::Symbol=:gensys` — DSGE solver method
-- `solver_kwargs::NamedTuple` — additional solver kwargs
-- `rng::AbstractRNG` — random number generator
-
-# Returns
-`SMCState{T}` with posterior particles, weights, tempering schedule, and log
-marginal likelihood estimate.
-
-# References
-- Herbst, E. & Schorfheide, F. (2014). Sequential Monte Carlo Sampling for DSGE Models.
-  *Journal of Applied Econometrics*, 29(7), 1073-1098.
 """
-function _smc_sample(spec::ModelSpec{T}, data::AbstractMatrix,
-                      param_names::Vector{Symbol}, prior::DSGEPrior{T},
-                      theta0::AbstractVector{T};
-                      n_smc::Int=500, n_mh_steps::Int=1,
-                      ess_target::Real=0.5,
-                      observables::Vector{Symbol}=spec.endog,
-                      measurement_error=nothing,
-                      solver::Symbol=:gensys,
-                      solver_kwargs::NamedTuple=NamedTuple(),
-                      trends::Union{Nothing,ObservationTrends{T}}=nothing,
-                      max_stages::Int=500, min_dphi::Real=1e-10,
-                      rng::AbstractRNG=Random.default_rng()) where {T<:AbstractFloat}
-    data = Matrix{T}(data)  # convert Adjoint/SubArray to concrete Matrix
+function _smc_from_likelihood(ll_fn, param_names::Vector{Symbol},
+                              prior::DSGEPrior{T}, _theta0::AbstractVector{T};
+                              n_smc::Int=500, n_mh_steps::Int=1,
+                              ess_target::Real=0.5,
+                              max_stages::Int=500, min_dphi::Real=1e-10,
+                              rng::AbstractRNG=Random.default_rng()) where {T<:AbstractFloat}
     n_params = length(param_names)
     N = n_smc
-
-    # Build likelihood function (tracking failed/total likelihood evaluations)
-    lik_failures = Threads.Atomic{Int}(0)
-    lik_evals = Threads.Atomic{Int}(0)
-    ll_fn = _build_likelihood_fn(spec, param_names, data, observables,
-                                  measurement_error, solver, solver_kwargs;
-                                  trends=trends,
-                                  failures=lik_failures, evals=lik_evals)
 
     # Initialize particles from prior
     theta_particles = zeros(T, n_params, N)
@@ -632,7 +595,7 @@ function _smc_sample(spec::ModelSpec{T}, data::AbstractMatrix,
         T[],                  # ess_history
         T[],                  # acceptance_rates
         zero(T),              # log_marginal_likelihood
-        PFWorkspace{T}[],     # pf_workspace_pool (unused for Kalman)
+        PFWorkspace{T}[],     # pf_workspace_pool (unused on this path)
         Matrix{T}(I, n_params, n_params)  # proposal_cov
     )
 
@@ -727,6 +690,68 @@ function _smc_sample(spec::ModelSpec{T}, data::AbstractMatrix,
     # Terminal resample so the stored draws are equal-weighted (E-09 / #132).
     _terminal_resample!(state, N, rng)
 
+    return state
+end
+
+"""
+    _smc_sample(spec, data, param_names, prior, θ0; kwargs...) → SMCState
+
+Full Sequential Monte Carlo sampler for Bayesian DSGE estimation.
+
+Builds a gensys/Kalman `θ → log p(Y|θ)` closure and delegates the tempering
+loop to `_smc_from_likelihood`. Mutation is `_smc_mutation!`.
+
+# Arguments
+- `spec::ModelSpec{T}` — model specification
+- `data::Matrix{T}` — n_obs × T_obs data matrix
+- `param_names::Vector{Symbol}` — parameters to estimate
+- `prior::DSGEPrior{T}` — prior specification
+- `θ0::Vector{T}` — initial parameter guess (used for fallback)
+
+# Keywords
+- `n_smc::Int=500` — number of SMC particles
+- `n_mh_steps::Int=1` — MH steps per mutation stage
+- `ess_target::Real=0.5` — target ESS fraction
+- `observables::Vector{Symbol}` — observed variables
+- `measurement_error` — measurement error SDs or `nothing`
+- `solver::Symbol=:gensys` — DSGE solver method
+- `solver_kwargs::NamedTuple` — additional solver kwargs
+- `rng::AbstractRNG` — random number generator
+
+# Returns
+`SMCState{T}` with posterior particles, weights, tempering schedule, and log
+marginal likelihood estimate.
+
+# References
+- Herbst, E. & Schorfheide, F. (2014). Sequential Monte Carlo Sampling for DSGE Models.
+  *Journal of Applied Econometrics*, 29(7), 1073-1098.
+"""
+function _smc_sample(spec::ModelSpec{T}, data::AbstractMatrix,
+                      param_names::Vector{Symbol}, prior::DSGEPrior{T},
+                      theta0::AbstractVector{T};
+                      n_smc::Int=500, n_mh_steps::Int=1,
+                      ess_target::Real=0.5,
+                      observables::Vector{Symbol}=spec.endog,
+                      measurement_error=nothing,
+                      solver::Symbol=:gensys,
+                      solver_kwargs::NamedTuple=NamedTuple(),
+                      trends::Union{Nothing,ObservationTrends{T}}=nothing,
+                      max_stages::Int=500, min_dphi::Real=1e-10,
+                      rng::AbstractRNG=Random.default_rng()) where {T<:AbstractFloat}
+    data = Matrix{T}(data)  # convert Adjoint/SubArray to concrete Matrix
+
+    # Build likelihood function (tracking failed/total likelihood evaluations)
+    lik_failures = Threads.Atomic{Int}(0)
+    lik_evals = Threads.Atomic{Int}(0)
+    ll_fn = _build_likelihood_fn(spec, param_names, data, observables,
+                                  measurement_error, solver, solver_kwargs;
+                                  trends=trends,
+                                  failures=lik_failures, evals=lik_evals)
+
+    state = _smc_from_likelihood(ll_fn, param_names, prior, theta0;
+                                 n_smc=n_smc, n_mh_steps=n_mh_steps,
+                                 ess_target=ess_target, max_stages=max_stages,
+                                 min_dphi=min_dphi, rng=rng)
     state.n_lik_failures = lik_failures[]
     state.n_lik_evals = lik_evals[]
     return state
@@ -1076,7 +1101,7 @@ end
 
 Shared helper: update parameters → solve → dispatch state space → run PF/CSMC.
 
-Creates a new `DSGESpec` with updated parameters, computes steady state, solves
+Creates a new `ModelSpec` with updated parameters, computes steady state, solves
 the model, builds the correct state space type based on solution dispatch, and
 runs either `_bootstrap_particle_filter!` or `_conditional_smc!`.
 

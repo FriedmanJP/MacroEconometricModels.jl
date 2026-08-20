@@ -5,27 +5,6 @@ First-order linear solutions impose **certainty equivalence** --- agents behave 
 ```@setup dsge_nonlinear
 using MacroEconometricModels, Random, LinearAlgebra, Statistics
 Random.seed!(42)
-
-# Bellman primitives for the stochastic-growth spec (state = [K, A]).
-_doc_vfi_transition(x, a, ε, θ) = begin
-    K, A = x[1], x[2]
-    C = a[1]
-    Kp = A * K^θ[:α] + (1 - θ[:δ]) * K - C
-    Ap = A^θ[:ρ] * exp(θ[:σ] * ε[1])
-    [Kp, Ap]
-end
-_doc_vfi_bounds(x, θ) = begin
-    K, A = x[1], x[2]
-    y = A * K^θ[:α] + (1 - θ[:δ]) * K
-    lo = max(y * 1e-4, 1e-8)
-    ([lo], [max(y - 1e-8, lo + 1e-8)])
-end
-_doc_vfi_outcome(x, a, θ) = begin
-    K, A = x[1], x[2]
-    C = a[1]
-    Y = A * K^θ[:α]
-    [Y, C, Y + (1 - θ[:δ]) * K - C, A]
-end
 ```
 
 ## Quick Start
@@ -86,12 +65,34 @@ Gauss-Newton drives the collocation residual to zero in 6 iterations on a 36-nod
 
 **Recipe 4: Bellman `vfi_solver` with Howard policy evaluation**
 
+The Bellman operator needs a state transition, a control box, and a map from ``(x, a)`` back to the full endogenous vector. For this spec the state is ``(K, A)`` and the control is consumption:
+
 ```@example dsge_nonlinear
+function growth_transition(x, a, ε, θ)
+    K, A = x[1], x[2]
+    C = a[1]
+    Kp = A * K^θ[:α] + (1 - θ[:δ]) * K - C
+    Ap = A^θ[:ρ] * exp(θ[:σ] * ε[1])
+    [Kp, Ap]
+end
+function growth_bounds(x, θ)
+    K, A = x[1], x[2]
+    y = A * K^θ[:α] + (1 - θ[:δ]) * K
+    lo = max(y * 1e-4, 1e-8)
+    ([lo], [max(y - 1e-8, lo + 1e-8)])
+end
+function growth_outcome(x, a, θ)
+    K, A = x[1], x[2]
+    C = a[1]
+    Y = A * K^θ[:α]
+    [Y, C, Y + (1 - θ[:δ]) * K - C, A]
+end
+
 vfi = vfi_solver(spec;
     utility = log, beta = :β, consumption = :C, controls = [:C],
-    transition = _doc_vfi_transition,
-    control_bounds = _doc_vfi_bounds,
-    outcome = _doc_vfi_outcome,
+    transition = growth_transition,
+    control_bounds = growth_bounds,
+    outcome = growth_outcome,
     degree = 3, n_grid = 8, howard_steps = 10, max_iter = 200)
 (converged = vfi.converged, iterations = vfi.iterations,
  V_ss = evaluate_value(vfi, spec.steady_state[vfi.state_indices]))
@@ -655,26 +656,26 @@ where
 ```@example dsge_nonlinear
 vfi_plain = vfi_solver(spec;
     utility = log, beta = :β, consumption = :C, controls = [:C],
-    transition = _doc_vfi_transition,
-    control_bounds = _doc_vfi_bounds,
-    outcome = _doc_vfi_outcome,
+    transition = growth_transition,
+    control_bounds = growth_bounds,
+    outcome = growth_outcome,
     degree = 3, n_grid = 8, howard_steps = 0, max_iter = 400)
 (converged = vfi_plain.converged, iterations = vfi_plain.iterations,
  residual_norm = vfi_plain.residual_norm)
 ```
 
-Without Howard steps the contraction is essentially ``\beta = 0.99`` per sweep, so hundreds of iterations are typical. The stored ``V`` is still the object that converged: `evaluate_value(vfi_plain, x)` returns it off the grid by multilinear interpolation.
+Without Howard steps the contraction is essentially ``\beta = 0.99`` per sweep. After 400 iterations ``\|V_{\mathrm{new}} - V\|_\infty = 1.77 \times 10^{-3}`` and `converged` is `false`. The stored ``V`` is the last iterate, not a fixed point: `evaluate_value(vfi_plain, x)` returns that incomplete object off the grid by multilinear interpolation.
 
 | Keyword | Type | Default | Description |
 |---------|------|---------|-------------|
 | `utility` | `Function` | required | `u(c)` if `consumption` is set, else `u(y, y_lag, ε, θ)` |
 | `beta` | `Real` or `Symbol` | required | Discount factor, or a name in `param_values` |
-| `transition` | `Function` | inferred | `(x, a, ε, θ) → x′`; omitted → `next_state` |
-| `control_bounds` | `Function` | inferred | `(x, θ) → (a_lo, a_hi)` |
+| `transition` | `Function` | inferred | `(x, a, ε, θ) → x′`; `growth_transition` above is the RBC case; omitted → `next_state` |
+| `control_bounds` | `Function` | inferred | `(x, θ) → (a_lo, a_hi)`; `growth_bounds` above is the resource-feasible box |
 | `next_state` | `Symbol` | `:auto` | `:auto` → `:residual` when FOCs drop cleanly; `:linear` throws if `G1` ignores controls |
 | `consumption` | `Symbol` | `nothing` | If set, `utility` is `u(c)` |
 | `controls` | `Vector{Symbol}` | non-state endog | Choice variables (one continuous control in v1) |
-| `outcome` | `Function` | fill states + controls | `(x, a, θ) → y` full endogenous vector |
+| `outcome` | `Function` | fill states + controls | `(x, a, θ) → y` full endogenous vector; `growth_outcome` above returns ``(Y, C, K', A)`` |
 | `degree` | `Int` | `5` | Chebyshev degree of the exported policy |
 | `n_grid` | `Int` | `12` | Uniform tensor nodes per state for the Bellman grid |
 | `quadrature` | `Symbol` | `:auto` | `:gauss_hermite` or `:monomial` |
@@ -692,15 +693,15 @@ After each maximization sweep, **Howard policy evaluation** (Howard 1960; Santos
 ```@example dsge_nonlinear
 vfi_howard = vfi_solver(spec;
     utility = log, beta = :β, consumption = :C, controls = [:C],
-    transition = _doc_vfi_transition,
-    control_bounds = _doc_vfi_bounds,
-    outcome = _doc_vfi_outcome,
+    transition = growth_transition,
+    control_bounds = growth_bounds,
+    outcome = growth_outcome,
     degree = 3, n_grid = 8, howard_steps = 15, max_iter = 200)
 (converged = vfi_howard.converged, iterations = vfi_howard.iterations,
  V_ss = evaluate_value(vfi_howard, spec.steady_state[vfi_howard.state_indices]))
 ```
 
-Fifteen Howard steps cut the iteration count from the unaccelerated run above to a few dozen sweeps. The value at the deterministic steady state is about ``u(C_{ss})/(1-\beta) = \log(C_{ss})/0.01``, the infinite-horizon payoff of staying at the steady state forever.
+Fifteen Howard steps cut the iteration count from the unconverged 400-sweep run above to 109, and ``\|V_{\mathrm{new}} - V\|_\infty`` meets ``10^{-8}``. The value at the deterministic steady state is 99.62, against the infinite-horizon payoff of staying there forever, ``u(C_{ss})/(1-\beta) = \log(C_{ss})/0.01 = 101.32``. The 1.7-unit gap is the cost of the coarse ``8 \times 8`` Bellman grid, not a discounting error.
 
 ### VFI vs PFI vs Collocation
 
@@ -723,10 +724,10 @@ x_ss = spec.steady_state[sol_vfi.state_indices]
  V_ss = evaluate_value(sol_vfi, x_ss))
 ```
 
-Consumption at the deterministic steady state agrees across the three solvers to a few percent at this coarse grid. Raise `n_grid` and `degree` together when the object of interest is the Euler error rather than the value function. `evaluate_value` is defined only on a VFI solution.
+Consumption at the deterministic steady state is 2.754 from both PFI and collocation, matching ``C_{ss}`` to four decimals. VFI's exported Chebyshev fit of the grid maximizer returns 2.603 — 5.5% below — because `n_grid = 8` and `degree = 3` undersample the policy. Raise `n_grid` and `degree` together when the object of interest is the Euler error rather than the value function. `evaluate_value` is defined only on a VFI solution.
 
 !!! warning "`max_iter` is part of the comparison"
-    PFI at `damping=0.5` can need several hundred iterations. Left at a casual `max_iter=200` it may stop with `converged=false`. Give every solver the budget it needs, and check `converged` before comparing policies.
+    PFI at `damping=0.5` reaches the ``10^{-8}`` target in 295 iterations. Capped at `max_iter=200` it stops with `converged=false` and a sup-norm of ``1.2 \times 10^{-7}``. Give every solver the budget it needs, and check `converged` before comparing policies.
 
 ---
 
@@ -762,16 +763,16 @@ Threading requires Julia to be started with multiple threads (e.g., `julia -t 4`
 ```@example dsge_nonlinear
 sol_seq = vfi_solver(spec;
     utility = log, beta = :β, consumption = :C, controls = [:C],
-    transition = _doc_vfi_transition,
-    control_bounds = _doc_vfi_bounds,
-    outcome = _doc_vfi_outcome,
+    transition = growth_transition,
+    control_bounds = growth_bounds,
+    outcome = growth_outcome,
     degree = 3, n_grid = 8, howard_steps = 10, max_iter = 200,
     threaded = false)
 sol_par = vfi_solver(spec;
     utility = log, beta = :β, consumption = :C, controls = [:C],
-    transition = _doc_vfi_transition,
-    control_bounds = _doc_vfi_bounds,
-    outcome = _doc_vfi_outcome,
+    transition = growth_transition,
+    control_bounds = growth_bounds,
+    outcome = growth_outcome,
     degree = 3, n_grid = 8, howard_steps = 10, max_iter = 200,
     threaded = true)
 abs(evaluate_value(sol_seq, spec.steady_state[sol_seq.state_indices]) -

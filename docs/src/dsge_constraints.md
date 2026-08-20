@@ -128,7 +128,7 @@ The `PerfectForesightPath{T}` result contains both the level path and deviations
 Both routes return the identical path — `solve(spec; method=:perfect_foresight, …)` forwards straight to `perfect_foresight`. Levels and deviations coincide here because this model's steady state is the origin; in a model with a non-zero steady state `path` is the series a user plots and `deviations` the one that feeds impulse-response arithmetic.
 
 !!! note "Technical Note"
-    The solver exploits the block-tridiagonal structure of the Jacobian via sparse LU factorization. Each Newton step solves ``J \Delta x = -F(x)`` where ``J`` is ``nT \times nT`` but has only ``3n^2 T`` non-zeros (vs ``n^2 T^2`` for dense). Numerical Jacobians use central differences with adaptive step sizes. The `algorithm` keyword accepts any NonlinearSolve.jl algorithm (e.g., `NonlinearSolve.TrustRegion()`).
+    The stacked Jacobian is block-tridiagonal in time: period ``t`` contributes the three ``n \times n`` blocks ``\partial F_t/\partial y_{t-1}``, ``\partial F_t/\partial y_t``, and ``\partial F_t/\partial y_{t+1}``. The solver probes those intra-period patterns at several points around the steady state, greedy-colors each pattern, and assembles the Jacobian by colored central differences into a cached CSC. The default `NewtonRaphson` step solves ``J \Delta x = -F(x)`` with the block Thomas algorithm in ``O(T n^3)``. If a diagonal block is singular, the same CSC is factored by sparse LU instead. Pass `sparsity=:dense` to keep every intra-period block dense (the time structure stays block-tridiagonal); use it when a kinked residual is invisible at the probes and `:auto` drops the entry. The `algorithm` keyword accepts any NonlinearSolve.jl algorithm (e.g. `NonlinearSolve.TrustRegion()`).
 
 ### Keywords
 
@@ -142,6 +142,7 @@ Both routes return the identical path — `solve(spec; method=:perfect_foresight
 | `constraints` | `Vector` | `DSGEConstraint[]` | Variable bounds and nonlinear constraints |
 | `solver` | `Union{Nothing, Symbol}` | `nothing` | `:nonlinearsolve`, `:nlopt`, `:ipopt`, or `:path`; auto-detected when `nothing` |
 | `algorithm` | `Any` | `nothing` → `NewtonRaphson()` | Algorithm for the chosen backend (e.g. `NonlinearSolve.TrustRegion()`) |
+| `sparsity` | `Symbol` | `:auto` | Intra-period Jacobian pattern (`:auto` probes and colors; `:dense` fills every block) |
 
 ### Return Value
 

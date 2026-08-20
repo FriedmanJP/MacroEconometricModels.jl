@@ -481,7 +481,7 @@ Fields:
 - `J_pvalue::T` — J-test p-value
 - `solution::Union{DSGESolution{T}, PerturbationSolution{T}}` — solution at estimated parameters
 - `converged::Bool` — optimization convergence
-- `spec::DSGESpec{T}` — model specification
+- `spec::ModelSpec{T,NoAgents}` — model specification
 """
 struct DSGEEstimation{T<:AbstractFloat} <: AbstractDSGEModel
     theta::Vector{T}

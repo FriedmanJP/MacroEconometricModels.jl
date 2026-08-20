@@ -56,7 +56,7 @@ function _cf_subst_policy_expr(ex, policy_shock::Symbol, addend::Expr)
 end
 
 """
-    _augment_policy_news(spec, policy_shock, max_news; active=1:max_news) -> DSGESpec
+    _augment_policy_news(spec, policy_shock, max_news; active=1:max_news) -> ModelSpec
 
 Append the shared news pipeline (`max_news` registers, one news shock per
 horizon in `active`) to `spec`, composing the existing compiled residual

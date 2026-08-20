@@ -12,22 +12,7 @@ Returns the same `ImpulseResponse` / `FEVD` types the RA path uses.
 """
 
 function _fevd_from_irf(ir::ImpulseResponse{T}) where {T<:AbstractFloat}
-    n_vars = length(ir.variables)
-    n_e = length(ir.shocks)
-    H = ir.horizon
-    decomp = zeros(T, n_vars, n_e, H)
-    props  = zeros(T, n_vars, n_e, H)
-    @inbounds for h in 1:H
-        for i in 1:n_vars
-            total = zero(T)
-            for j in 1:n_e
-                prev = h == 1 ? zero(T) : decomp[i, j, h-1]
-                decomp[i, j, h] = prev + ir.values[h, i, j]^2
-                total += decomp[i, j, h]
-            end
-            total > 0 && (props[i, :, h] = decomp[i, :, h] ./ total)
-        end
-    end
+    decomp, props = _fevd_accumulate(ir)
     return FEVD{T}(decomp, props, ir.variables, ir.shocks)
 end
 
@@ -39,9 +24,35 @@ function _path_to_irf(values::AbstractMatrix{T}, var_names,
                               H, collect(String, var_names), [String(shock_name)], :none)
 end
 
+const _MIT_TAIL_TOL = 0.01
+
+function _warn_mit_terminal(persist, horizon)
+    p = float(persist)
+    (p > 0 && p < 1 && horizon >= 2) || return
+    tail = p^(horizon - 1)
+    tail > _MIT_TAIL_TOL || return
+    hmin = ceil(Int, log(_MIT_TAIL_TOL) / log(p)) + 1
+    @warn "MIT terminal condition assumes the shock has decayed; persist^($(horizon-1)) = $(round(tail; sigdigits=2)). Use horizon ≥ $hmin for an unbiased tail."
+end
+
 function _ct_z_path(Zbar::T, horizon::Int, shock_size, persist) where {T<:AbstractFloat}
     horizon >= 2 || throw(ArgumentError("irf/simulate: horizon must be ≥ 2 (MIT path length)"))
+    _warn_mit_terminal(persist, horizon)
     return [Zbar * (one(T) + T(shock_size) * T(persist)^(n - 1)) for n in 1:horizon]
+end
+
+const _SOLVE_FACADE_KW = (:method, :solver, :solver_kwargs, :ss, :algorithm,
+                          :initial_guess, :T_horizon, :n_reduced, :hh_solver,
+                          :max_iter, :tol, :verbose, :K_init, :r_bounds,
+                          :grid_check, :n_moments, :n_quad, :price_fn)
+
+function _split_solve_kwargs(kwargs)
+    solve_kw = Dict{Symbol,Any}()
+    rest = Dict{Symbol,Any}()
+    for (k, v) in pairs(kwargs)
+        (k in _SOLVE_FACADE_KW ? solve_kw : rest)[k] = v
+    end
+    return solve_kw, rest
 end
 
 """
@@ -192,7 +203,8 @@ function irf(spec::ModelSpec, horizon::Int; kwargs...)
     elseif has_kind(spec, ContinuousHouseholdSystem)
         return irf(only(agents_of(spec, ContinuousHouseholdSystem)).model, horizon; kwargs...)
     else
-        return irf(solve(spec), horizon; kwargs...)
+        sk, rest = _split_solve_kwargs(kwargs)
+        return irf(solve(spec; sk...), horizon; rest...)
     end
 end
 
@@ -202,7 +214,8 @@ function fevd(spec::ModelSpec, horizon::Int; kwargs...)
     elseif has_kind(spec, ContinuousHouseholdSystem)
         return fevd(only(agents_of(spec, ContinuousHouseholdSystem)).model, horizon; kwargs...)
     else
-        return fevd(solve(spec), horizon)
+        sk, rest = _split_solve_kwargs(kwargs)
+        return fevd(solve(spec; sk...), horizon; rest...)
     end
 end
 
@@ -226,6 +239,7 @@ function simulate(spec::ModelSpec, T_periods::Int; kwargs...)
     elseif has_kind(spec, ContinuousHouseholdSystem)
         return simulate(only(agents_of(spec, ContinuousHouseholdSystem)).model, T_periods; kwargs...)
     else
-        return simulate(solve(spec), T_periods; kwargs...)
+        sk, rest = _split_solve_kwargs(kwargs)
+        return simulate(solve(spec; sk...), T_periods; rest...)
     end
 end

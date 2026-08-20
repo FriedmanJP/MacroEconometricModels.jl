@@ -353,6 +353,71 @@ plot_result(ss_lc; view=:policy)          # consumption policy at three ages
 
 ---
 
+## Perfect-Foresight Transitions
+
+`lifecycle_steady_state` is a stationary equilibrium. Pension reform, a demographic shift, and a TFP impulse are **transitions**: the age–productivity histogram is a state, capital is predetermined, and prices must clear the capital market at every date. [`lifecycle_transition`](@ref) computes that path by Auerbach–Kotlikoff shooting and returns a [`LifeCycleTransition`](@ref).
+
+```math
+\begin{aligned}
+r_t &= \alpha Z_t (K_t / L)^{\alpha-1} - \delta, \qquad
+w_t = (1-\alpha) Z_t (K_t / L)^{\alpha} \\
+\{c_{j,t}, a'_{j,t}\} &= \text{age-EGM at } (r_t, r_{t+1}, w_t) \\
+K_{t+1} &= \int a' \, d\mu_t, \qquad
+\mu_{t+1} = \Lambda_t \, \mu_t
+\end{aligned}
+```
+
+where:
+- ``Z_t`` is the deterministic TFP path (constant ``Z_t = Z`` when the impulse is a displaced ``K_0``)
+- ``L`` is efficiency labor from the stationary cohort masses — this is a price/TFP transition, not a demographic one
+- ``\Lambda_t`` is the date-``t`` Young lottery through that date's savings policy
+- ``K_0`` is pinned by the initial histogram (the stationary distribution, assets scaled by ``K_0 / K^*``)
+
+The algorithm guesses ``\{K_t\}``, prices the path, solves the household problem **backward** from the terminal stationary policy, pushes the initial histogram **forward**, and relaxes ``K_t`` toward household asset supply until ``\max_t |K_t^{\mathrm{new}} - K_t|`` meets `tol`. Non-convergence is reported in `converged`; it is never silently accepted.
+
+The first method starts from a displaced capital stock. The second starts from the stationary histogram and a TFP path that returns to ``Z``:
+
+```@example olg
+Z_path = [lc.Z * (1 + 0.03 * 0.8^(t - 1)) for t in 1:21]
+Z_path[end] = lc.Z
+tr = lifecycle_transition(lc, Z_path; ss=ss_lc)
+(converged = tr.converged,
+ K0 = round(tr.K[1]; digits=4),
+ K_peak = round(maximum(tr.K); digits=4),
+ peak_date = argmax(tr.K) - 1,
+ K_end = round(tr.K[end]; digits=4),
+ K_ss = round(ss_lc.K; digits=4))
+```
+
+A 3% TFP impulse that decays at 0.8 per period lifts the interest rate on impact from 5.54% to 5.89% and the wage from 1.213 to 1.250. Capital is predetermined at ``K^* = 4.553``; it then climbs to 4.643 at date 7 and is still 0.050 above the stationary stock at date 20. The rate undershoots ``r^*`` on the way back — extra capital from the boom is still being run down.
+
+```@example olg
+[(t = t - 1,
+  K = round(tr.K[t]; digits=4),
+  r = round(tr.r[t]; digits=5),
+  w = round(tr.w[t]; digits=4)) for t in (1, 2, 6, 8, 21)]
+```
+
+| Keyword | Type | Default | Description |
+|---------|------|---------|-------------|
+| `H` | `Int` | `80` | Horizon (``H+1`` dates); ignored when the TFP-path method is used |
+| `Z_path` | `AbstractVector` or `nothing` | `nothing` | TFP path of length ``H+1``; must have at least 3 points |
+| `ss` | `LifeCycleSteadyState` or `nothing` | `nothing` | Precomputed stationary equilibrium; computed if omitted |
+| `tol` | `Real` | ``10^{-5}`` | Absolute tolerance on ``\max_t \|K_t^{\mathrm{new}} - K_t\|`` |
+| `max_iter` | `Int` | `80` | Shooting iterations |
+| `relax` | `Real` | `0.5` | Damping on the capital (and bequest) update, in ``(0, 1]`` |
+| `verbose` | `Bool` | `false` | Print shooting diagnostics |
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `K`, `r`, `w`, `Y`, `C`, `Z` | `Vector{T}` | Capital, rate, wage, output, consumption, and TFP; length ``H+1`` |
+| `pension`, `transfer` | `Vector{T}` | Pay-as-you-go benefit and accidental-bequest rebate |
+| `tau` | `T` | Payroll tax (constant along the path) |
+| `converged`, `iterations` | `Bool`, `Int` | Shooting outcome |
+| `ss` | `LifeCycleSteadyState{T}` | Stationary equilibrium the path is built around |
+
+---
+
 ## Common Pitfalls
 
 1. **`γ = 1` is the representative-agent limit.** With certain survival the Blanchard correction vanishes, the interest rate equals ``1/\beta-1``, and Ricardian equivalence holds. Use ``\gamma < 1`` for genuine OLG effects.
@@ -366,6 +431,8 @@ plot_result(ss_lc; view=:policy)          # consumption policy at three ages
 5. **No hump under annuities.** With actuarially fair annuities survival cancels out of the Euler equation exactly, so consumption cannot turn over no matter how steep mortality is. Set `annuities=false` (and use a realistic mortality profile such as [`lifecycle_survival`](@ref)) to generate a life-cycle consumption hump.
 
 6. **Bracket the equilibrium rate.** `lifecycle_steady_state` bisects on the capital-labor ratio and reports `converged=false` with a warning when excess capital supply does not change sign on `r_bounds`. Accidental bequests raise the equilibrium rate, so the annuity calibration's bracket is often too narrow for `annuities=false` — widen `r_bounds` rather than raising `tol`.
+
+7. **A short TFP path is not a failed shoot.** `lifecycle_transition` requires at least three dates and a strictly positive `k0`. `K[1]` is predetermined; a terminal gap of a few percent after a 20-period impulse is a short horizon, not a loose `tol`. Raise the length of `Z_path` (and keep the last date at `m.Z`) until `K[end]` has returned to `ss.K`.
 
 ---
 

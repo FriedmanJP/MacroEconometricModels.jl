@@ -618,10 +618,16 @@ end
 Base.size(A::_PFStackedJac) = size(A.J)
 Base.getindex(A::_PFStackedJac, i::Integer, j::Integer) = A.J[i, j]
 Base.eltype(::Type{_PFStackedJac{T}}) where {T} = T
+# similar/zero share the cache (NonlinearSolve calls similar at init).
+# copy is refused: two wrappers would alias the same block arrays (MSR-30).
 Base.similar(A::_PFStackedJac{T}) where {T} = _PFStackedJac{T}(similar(A.J), A.cache)
 Base.similar(A::_PFStackedJac, ::Type{S}) where {S} = _PFStackedJac{S}(similar(A.J, S), A.cache)
 Base.zero(A::_PFStackedJac{T}) where {T} = _PFStackedJac{T}(zero(A.J), A.cache)
-Base.copy(A::_PFStackedJac{T}) where {T} = _PFStackedJac{T}(copy(A.J), A.cache)
+function Base.copy(A::_PFStackedJac)
+    throw(ArgumentError(
+        "PFStackedJac does not support algorithm-side copies; pass algorithm= " *
+        "to use the plain sparse matrix path"))
+end
 function Base.fill!(A::_PFStackedJac, x)
     fill!(A.J, x)
     return A

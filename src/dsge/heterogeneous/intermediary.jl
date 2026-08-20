@@ -93,8 +93,9 @@ ssj_outputs(s::IntermediarySystem) = first.(s.aggregation)
     _xi_process(rho, sigma, n; mu=1) → IncomeProcess
 
 Rouwenhorst chain for transitory bank return risk. States are **levels**
-`μ · exp(y)` of an AR(1) in logs, so `ξ > 0` and `E[ξ] ≈ μ`. A single state
-is the degenerate chain `ξ = μ` (Gertler–Karadi nest, `ξ` off).
+`μ · exp(y)` of an AR(1) in logs, renormalized so `E[ξ] = μ` exactly on
+the discrete chain. A single state is the degenerate chain `ξ = μ`
+(Gertler–Karadi nest, `ξ` off).
 """
 function _xi_process(rho::Real, sigma::Real, n::Int; mu::Real=1.0)
     T = Float64
@@ -109,6 +110,8 @@ function _xi_process(rho::Real, sigma::Real, n::Int; mu::Real=1.0)
         "IntermediarySystem: sigma_xi must be positive when n_xi > 1 (got $sigma)"))
     proc = rouwenhorst(T(rho), sigma_T, n)
     levels = mu_T .* exp.(proc.states)
+    m = dot(proc.stationary_dist, levels)
+    levels .*= mu_T / m
     return IncomeProcess{T}(proc.transition, levels, proc.stationary_dist, :xi)
 end
 
@@ -262,32 +265,79 @@ function _bank_payoff(l::T, n::T, j::Int, V::AbstractMatrix{T},
     return beta * acc
 end
 
-"""Best lending on `[0, l_hi]` by a coarse scan plus golden-section refine."""
+"""
+    _best_lending(n, j, l_hi, V, n_grid, xi, …; n_try=16) → (l*, v*)
+
+Best lending on `[0, l_hi]` by a uniform `n_try`-point scan plus
+golden-section refine of the two highest local-max brackets.
+
+The franchise payoff is **not concave** in `l`. Limited liability zeros
+the continuation when `n' ≤ 0`, so each `ξ'` default threshold is a kink
+and a single-bracket refine can land on a local optimum. Raise `n_try`
+to densify the scan; callers expose the same keyword.
+"""
 function _best_lending(n::T, j::Int, l_hi::T, V::AbstractMatrix{T},
                        n_grid::AbstractVector{T}, xi::IncomeProcess{T},
                        kappa::T, rk::T, R::T, zeta1::T, zeta2::T,
                        beta::T, sigma::T; n_try::Int=16) where {T<:AbstractFloat}
+    n_try >= 1 || throw(ArgumentError("_best_lending: n_try must be ≥ 1"))
     l_hi = max(l_hi, zero(T))
     pay = l -> _bank_payoff(l, n, j, V, n_grid, xi, kappa, rk, R,
                             zeta1, zeta2, beta, sigma)
     best_l = zero(T)
     best_v = pay(zero(T))
-    if l_hi > zero(T)
-        @inbounds for k in 1:n_try
-            l = l_hi * T(k) / T(n_try)
-            v = pay(l)
-            if v > best_v
-                best_v = v
-                best_l = l
+    l_hi <= zero(T) && return best_l, best_v
+
+    # Two highest local-max scan indices (k = 0 is l = 0). The payoff can
+    # have several peaks; refining only the raw argmax misses a better kink.
+    v0 = best_v
+    k1 = -1
+    k2 = -1
+    v1 = typemin(T)
+    v2 = typemin(T)
+    v_im2 = v0
+    v_im1 = v0
+    @inbounds for k in 1:n_try
+        v = pay(l_hi * T(k) / T(n_try))
+        if v > best_v
+            best_v = v
+            best_l = l_hi * T(k) / T(n_try)
+        end
+        if v_im1 >= v_im2 && v_im1 >= v
+            km = k - 1
+            if v_im1 > v1
+                k2 = k1; v2 = v1
+                k1 = km; v1 = v_im1
+            elseif v_im1 > v2
+                k2 = km; v2 = v_im1
             end
         end
-        step = l_hi / T(n_try)
-        lo = max(zero(T), best_l - step)
-        hi = min(l_hi, best_l + step)
+        v_im2 = v_im1
+        v_im1 = v
+    end
+    if v_im1 >= v_im2
+        if v_im1 > v1
+            k2 = k1; v2 = v1
+            k1 = n_try; v1 = v_im1
+        elseif v_im1 > v2
+            k2 = n_try; v2 = v_im1
+        end
+    end
+    if k1 < 0
+        k1 = best_l == zero(T) ? 0 : n_try
+    end
+
+    step = l_hi / T(n_try)
+    for k in (k1, k2)
+        k < 0 && continue
+        lmid = l_hi * T(k) / T(n_try)
+        lo = max(zero(T), lmid - step)
+        hi = min(l_hi, lmid + step)
         if hi > lo + T(1e-14)
             l_r, v_r = _golden_argmax(pay, lo, hi)
             if isfinite(v_r) && v_r >= best_v
-                return l_r, v_r
+                best_v = v_r
+                best_l = l_r
             end
         end
     end
@@ -314,11 +364,20 @@ end
 
 """
     intermediary_pe(sys; R=sys.R, rk=sys.rk, max_iter=250, tol=1e-6,
-                    howard_steps=8, init_value=nothing) → IntermediaryPE
+                    howard_steps=8, init_value=nothing, n_try=16,
+                    l_cap_mult=20) → IntermediaryPE
 
 Solve `V(n, ξ)` by franchise-value VFI (Howard-accelerated) at given prices.
 The incentive constraint is `l ≤ V/λ` using the previous iterate of `V`.
 Does **not** use household EGM / [`IndividualProblem`](@ref).
+
+# Keywords
+- `n_try` — coarse-scan density on `[0, l_hi]` before golden-section refine
+  (default `16`). The franchise payoff is not concave in `l` (limited-liability
+  kink at each `ξ'` default threshold), so a coarse scan can hit a local
+  optimum; raise `n_try` to densify.
+- `l_cap_mult` — lending search upper bound is `l_cap_mult * n_max`
+  (default `20`), intersected with the incentive-constraint cap `V/λ`.
 """
 function intermediary_pe(sys::IntermediarySystem{T};
                          R::Real=sys.R,
@@ -327,13 +386,17 @@ function intermediary_pe(sys::IntermediarySystem{T};
                          tol::Real=T(1e-6),
                          howard_steps::Int=8,
                          init_value::Union{Nothing,AbstractMatrix{T}}=nothing,
-                         n_try::Int=16) where {T<:AbstractFloat}
+                         n_try::Int=16,
+                         l_cap_mult::Real=20) where {T<:AbstractFloat}
     n_grid = sys.grid.grids[1]
     n_n = length(n_grid)
     n_e = length(sys.xi.states)
     R_T = T(R)
     rk_T = T(rk)
     R_T > zero(T) || throw(ArgumentError("intermediary_pe: R must be positive"))
+    n_try >= 1 || throw(ArgumentError("intermediary_pe: n_try must be ≥ 1"))
+    T(l_cap_mult) > zero(T) || throw(ArgumentError(
+        "intermediary_pe: l_cap_mult must be positive, got $l_cap_mult"))
     kappa, zeta1, zeta2 = sys.kappa, sys.zeta1, sys.zeta2
     beta, sigma, λ = sys.beta, sys.sigma, sys.lambda
 
@@ -351,7 +414,7 @@ function intermediary_pe(sys::IntermediarySystem{T};
     V_new = similar(V)
     converged = false
     final_iter = 0
-    l_cap = T(20) * n_grid[end]
+    l_cap = T(l_cap_mult) * n_grid[end]
 
     for iter in 1:max_iter
         final_iter = iter
@@ -537,6 +600,14 @@ end
 
 Bisection on `rᵏ` so bank lending `L = ∫ l(n, ξ) dΓ` equals firm capital
 demand `Kᵈ(rᵏ)`. `R` is held at `sys.R` (no deposit-market power).
+
+# Keywords
+- `n_try` — forwarded to [`intermediary_pe`](@ref) (coarse lending-scan
+  density; default `16`). The payoff is not concave in `l` — see that
+  docstring.
+- `l_cap_mult` — forwarded to [`intermediary_pe`](@ref); lending search
+  cap is `l_cap_mult * n_max` (default `20`).
+- `pe_max_iter`, `pe_tol`, `howard_steps` — PE VFI controls
 """
 function intermediary_steady_state(sys::IntermediarySystem{T};
                                    r_bounds::Union{Nothing,Tuple{<:Real,<:Real}}=nothing,
@@ -544,7 +615,9 @@ function intermediary_steady_state(sys::IntermediarySystem{T};
                                    max_iter::Int=24,
                                    pe_max_iter::Int=200,
                                    pe_tol::Real=T(1e-6),
-                                   howard_steps::Int=8) where {T<:AbstractFloat}
+                                   howard_steps::Int=8,
+                                   n_try::Int=16,
+                                   l_cap_mult::Real=20) where {T<:AbstractFloat}
     R = sys.R
     lo = r_bounds === nothing ? max(R - one(T) + T(0.002), T(0.005)) : T(r_bounds[1])
     hi = r_bounds === nothing ? T(0.60) : T(r_bounds[2])
@@ -560,7 +633,8 @@ function intermediary_steady_state(sys::IntermediarySystem{T};
 
     function _eval(rk::T)
         pe = intermediary_pe(sys; R=R, rk=rk, max_iter=pe_max_iter, tol=pe_tol,
-                             howard_steps=howard_steps, init_value=V_warm[])
+                             howard_steps=howard_steps, init_value=V_warm[],
+                             n_try=n_try, l_cap_mult=l_cap_mult)
         V_warm[] = pe.V
         pe_last[] = pe
         Λ = _intermediary_transition(pe.l_policy, sys, R, rk)
@@ -658,16 +732,22 @@ struct IntermediaryTransition{T<:AbstractFloat}
 end
 
 """
-    intermediary_mit(ss, Z_path; pe_max_iter=80, pe_tol=1e-5) → IntermediaryTransition
+    intermediary_mit(ss, Z_path; pe_max_iter=80, pe_tol=1e-5,
+                     n_try=16, l_cap_mult=20) → IntermediaryTransition
 
 One-pass MIT shock. Capital is predetermined (`K₁ = L_ss`, `K_{t+1} = L_t`);
 `rᵏ_t = α Z_t K_t^{α-1}`; banks reoptimize franchise value at each `t` (warm
 started) and the Young histogram is stepped with [`_forward_iterate`](@ref).
+
+`n_try` and `l_cap_mult` are forwarded to [`intermediary_pe`](@ref) (scan
+density and `l ≤ l_cap_mult · n_max` cap).
 """
 function intermediary_mit(ss::IntermediarySteadyState{T}, Z_path::AbstractVector;
                           pe_max_iter::Int=80,
                           pe_tol::Real=T(1e-5),
-                          howard_steps::Int=6) where {T<:AbstractFloat}
+                          howard_steps::Int=6,
+                          n_try::Int=16,
+                          l_cap_mult::Real=20) where {T<:AbstractFloat}
     Z = collect(T, Z_path)
     length(Z) >= 2 || throw(ArgumentError("intermediary_mit: Z_path needs at least 2 points"))
     all(>(zero(T)), Z) || throw(ArgumentError("intermediary_mit: every TFP value must be positive"))
@@ -686,7 +766,8 @@ function intermediary_mit(ss::IntermediarySteadyState{T}, Z_path::AbstractVector
         Kt = max(K[t], T(1e-8))
         rk[t] = sys.alpha * Z[t] * Kt^(sys.alpha - one(T))
         pe = intermediary_pe(sys; R=R, rk=rk[t], max_iter=pe_max_iter,
-                             tol=pe_tol, howard_steps=howard_steps, init_value=V)
+                             tol=pe_tol, howard_steps=howard_steps, init_value=V,
+                             n_try=n_try, l_cap_mult=l_cap_mult)
         V = pe.V
         L[t] = _agg_from_policy(pe.l_policy, n_grid, d, Z[t], sys.alpha)[:L]
         Y[t] = Z[t] * Kt^sys.alpha

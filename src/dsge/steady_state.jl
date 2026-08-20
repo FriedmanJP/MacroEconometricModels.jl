@@ -54,10 +54,22 @@ function compute_steady_state(spec::ModelSpec{T};
         algorithm=nothing,
         kwargs...) where {T<:AbstractFloat}
     if has_kind(spec, HouseholdSystem)
+        initial_guess !== nothing && throw(ArgumentError(
+            "compute_steady_state: initial_guess is for residual-based RA models, not household-agent specs"))
+        ss_fn !== nothing && throw(ArgumentError(
+            "compute_steady_state: ss_fn is for residual-based RA models, not household-agent specs"))
+        !isempty(constraints) && throw(ArgumentError(
+            "compute_steady_state: constraints are for residual-based RA models, not household-agent specs"))
+        solver !== nothing && throw(ArgumentError(
+            "compute_steady_state: solver is for residual-based RA models, not household-agent specs"))
+        algorithm !== nothing && throw(ArgumentError(
+            "compute_steady_state: algorithm is for residual-based RA models, not household-agent specs"))
         length(spec.agents) > 1 && throw(ArgumentError(
-            "solve: multiple agent populations (" *
+            "compute_steady_state: multiple agent populations (" *
             join(string.(keys(spec.agents)), ", ") *
-            ") are not supported yet"))
+            ") are not supported. Use solve(spec; method=:ssj) for " *
+            "multi-population sequence-space GE (#651), or " *
+            "agents_of(spec, HouseholdSystem) to address each population."))
         return _ha_compute_steady_state(spec; kwargs...)
     end
     kind_sol = _solve_by_agent_kind(spec; kwargs...)

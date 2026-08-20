@@ -7,7 +7,7 @@
 """
 Display methods for DSGE model specifications.
 
-Provides text, LaTeX, and HTML renderers for `DSGESpec{T}`, with recursive
+Provides text, LaTeX, and HTML renderers for `ModelSpec{T}`, with recursive
 expression converters that handle time-indexed variables, expectation operators,
 Greek letter mapping, and operator precedence.
 """
@@ -597,7 +597,7 @@ function _steady_state_latex(endog::Vector{Symbol}, ss::AbstractVector)
 end
 
 # =============================================================================
-# Base.show dispatcher for DSGESpec
+# Base.show dispatcher for ModelSpec
 # =============================================================================
 
 function Base.show(io::IO, spec::ModelSpec{T}) where {T}
@@ -618,7 +618,7 @@ end
 """
     _show_dsge_text(io, spec)
 
-Text-mode display for `DSGESpec`: header, calibration, numbered equations,
+Text-mode display for `ModelSpec`: header, calibration, numbered equations,
 and steady state (if computed).
 """
 function _show_dsge_text(io::IO, spec)
@@ -678,7 +678,7 @@ end
 """
     _show_dsge_latex(io, spec)
 
-LaTeX-mode display for `DSGESpec`: model equations in `align` environment,
+LaTeX-mode display for `ModelSpec`: model equations in `align` environment,
 calibration in `tabular`, and steady state with `\\bar{}` notation.
 """
 function _show_dsge_latex(io::IO, spec)
@@ -741,7 +741,7 @@ end
 """
     _show_dsge_html(io, spec)
 
-HTML-mode display for `DSGESpec`: MathJax-rendered equations, HTML table
+HTML-mode display for `ModelSpec`: MathJax-rendered equations, HTML table,
 for calibration, and steady state values.
 """
 function _show_dsge_html(io::IO, spec)

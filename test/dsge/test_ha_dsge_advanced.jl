@@ -169,6 +169,14 @@ const _HUG_SS_M2 = compute_steady_state(_HUG_SPEC_M2; max_iter=FAST ? 80 : 200, 
         @test result.acceptance_rate <= 1.0
         @test length(result.param_names) == 1
         @test result.param_names[1] === :alpha
+        # #701 / MSR-25: HA results store estimation provenance (data / observables / solver)
+        @test !isempty(result.data)
+        @test !isempty(result.observables)
+        @test result.observables == [:K]
+        @test size(result.data, 1) == 1
+        @test size(result.data, 2) == T_data
+        @test result.solver === :ssj
+        @test result.solver_kwargs == (T_horizon=30, n_reduced=10)
 
         # Posterior summary should work
         ps = posterior_summary(result)
