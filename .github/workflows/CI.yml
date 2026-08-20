@@ -21,6 +21,11 @@ jobs:
     timeout-minutes: 60
     env:
       FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+      # #708: pkgimages portable across GitHub-hosted CPU SKUs. Official
+      # binary multi-target; without this, cached .ji from westus are
+      # rejected on eastus/northcentralus (Windows every run, Ubuntu
+      # sporadically). Must be set for julia-buildpkg AND julia-runtest.
+      JULIA_CPU_TARGET: ${{ matrix.arch == 'arm64' && 'generic;armv8.2-a,crypto,fullfp16,lse,rdm' || 'generic;sandybridge,-xsaveopt,clone_all;haswell,-rdrnd,base(1)' }}
     permissions:
       actions: write
       contents: read
@@ -31,7 +36,6 @@ jobs:
           - '1'      # current Julia 1.x stable; default cells resolve Optim v2
         os:
           - ubuntu-latest
-          - windows-latest
         arch:
           - x64
         suite:
@@ -46,9 +50,14 @@ jobs:
             os: macos-latest
             arch: arm64
             suite: empirical
+          # #708: one Windows FAST cell for both suites. Two cells each paid
+          # a ~10 min pkgimage rebuild on every hardware SKU change.
+          - version: '1'
+            os: windows-latest
+            arch: x64
           # Dual-major Optim compat (T153/#252): the only Julia 1.10 cell.
-          # Pins Optim@1 and runs MACRO_NUMERICAL_CI (solver / Euler / IRF /
-          # published-number tests). No suite split — one ubuntu job.
+          # Pins Optim@1 and runs MACRO_NUMERICAL_CI. Drops Plotting/Display/
+          # Coverage-A/B only — nearly the full suite at full sampling.
           - version: '1.10'
             os: ubuntu-latest
             arch: x64
@@ -83,7 +92,8 @@ jobs:
       # Cell roles:
       #   ubuntu stable  — full suite, split dsge | empirical; Optim v2; no coverage
       #   ubuntu 1.10    — numerical profile, one job, Optim v1 pin, --check-bounds=yes
-      #   macos/windows  — FAST=1 smoke, split dsge | empirical
+      #   macos          — FAST=1 smoke, split dsge | empirical
+      #   windows        — FAST=1 smoke, both suites, one job (#708)
       #
       # Default cells use the threaded single-process runner (package loaded
       # once). Julia 1.12 compile is 2–3× 1.10; multiprocess paid that per
@@ -180,6 +190,7 @@ jobs:
     timeout-minutes: 90
     env:
       FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+      JULIA_CPU_TARGET: 'generic;sandybridge,-xsaveopt,clone_all;haswell,-rdrnd,base(1)'
     permissions:
       contents: read
     strategy:
