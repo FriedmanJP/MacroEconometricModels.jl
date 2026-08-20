@@ -21,11 +21,6 @@ jobs:
     timeout-minutes: 60
     env:
       FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
-      # #708: pkgimages portable across GitHub-hosted CPU SKUs. Official
-      # binary multi-target; without this, cached .ji from westus are
-      # rejected on eastus/northcentralus (Windows every run, Ubuntu
-      # sporadically). Must be set for julia-buildpkg AND julia-runtest.
-      JULIA_CPU_TARGET: ${{ matrix.arch == 'arm64' && 'generic;armv8.2-a,crypto,fullfp16,lse,rdm' || 'generic;sandybridge,-xsaveopt,clone_all;haswell,-rdrnd,base(1)' }}
     permissions:
       actions: write
       contents: read
@@ -50,8 +45,8 @@ jobs:
             os: macos-latest
             arch: arm64
             suite: empirical
-          # #708: one Windows FAST cell for both suites. Two cells each paid
-          # a ~10 min pkgimage rebuild on every hardware SKU change.
+          # One Windows FAST cell for both suites. Windows precompile is
+          # still the slowest cell even with a per-CPU native cache (#708).
           - version: '1'
             os: windows-latest
             arch: x64
@@ -71,6 +66,21 @@ jobs:
           version: ${{ matrix.version }}
           arch: ${{ matrix.arch }}
 
+      # Native pkgimages (#708): do not set JULIA_CPU_TARGET. GitHub-hosted
+      # SKUs differ (westus vs eastus vs northcentralus), so a cache from
+      # one CPU is rejected on another. Key compiled/ by Sys.CPU_NAME so
+      # each SKU keeps its own native cache instead of a fat multi-target
+      # compile. First hit per SKU is a cold miss; later hits are native.
+      - name: Detect Julia CPU name
+        id: cpu
+        shell: bash
+        run: |
+          cpu=$(julia --startup-file=no -e 'print(Sys.CPU_NAME)')
+          cpu=${cpu:-unknown}
+          cpu=${cpu//[^-a-zA-Z0-9_.]/_}
+          echo "name=${cpu}" >> "$GITHUB_OUTPUT"
+          echo "Julia CPU_NAME=${cpu}"
+
       - uses: julia-actions/cache@v3
         with:
           # Windows depot artifacts are ~1.5 GB (3× Linux) and dominate the
@@ -80,6 +90,8 @@ jobs:
           # dsge and empirical jobs do not restore/save one shared compiled/.
           # Intra-job pidfile races are handled by _warm_compile_cache in
           # test/runtests.jl, not by splitting this cache further.
+          # cpu= splits native pkgimages across GitHub-hosted CPU SKUs.
+          cache-name: julia-cache;workflow=${{ github.workflow }};job=${{ github.job }};cpu=${{ steps.cpu.outputs.name }}
 
       # Optim v1 dual-major compat cell (T153/#252): pin Optim to the v1 major before
       # instantiate/precompile so the suite runs against Optim v1 (default cells resolve v2).
@@ -190,7 +202,6 @@ jobs:
     timeout-minutes: 90
     env:
       FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
-      JULIA_CPU_TARGET: 'generic;sandybridge,-xsaveopt,clone_all;haswell,-rdrnd,base(1)'
     permissions:
       contents: read
     strategy:
@@ -207,7 +218,19 @@ jobs:
           version: '1'
           arch: x64
 
+      - name: Detect Julia CPU name
+        id: cpu
+        shell: bash
+        run: |
+          cpu=$(julia --startup-file=no -e 'print(Sys.CPU_NAME)')
+          cpu=${cpu:-unknown}
+          cpu=${cpu//[^-a-zA-Z0-9_.]/_}
+          echo "name=${cpu}" >> "$GITHUB_OUTPUT"
+          echo "Julia CPU_NAME=${cpu}"
+
       - uses: julia-actions/cache@v3
+        with:
+          cache-name: julia-cache;workflow=${{ github.workflow }};job=${{ github.job }};cpu=${{ steps.cpu.outputs.name }}
 
       - uses: julia-actions/julia-buildpkg@v1
 
