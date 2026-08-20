@@ -104,7 +104,7 @@ jobs:
       # Cell roles:
       #   ubuntu stable  — full suite, split dsge | empirical; Optim v2; no coverage
       #   ubuntu 1.10    — numerical profile, one job, Optim v1 pin, --check-bounds=yes
-      #   macos          — FAST=1 smoke, split dsge | empirical
+      #   macos          — FAST=1 smoke, split dsge | empirical; Codecov every run
       #   windows        — FAST=1 smoke, both suites, one job (#708)
       #
       # Default cells use the threaded single-process runner (package loaded
@@ -112,12 +112,9 @@ jobs:
       # child. HA-DSGE still gets 2 OpenBLAS threads via the runner; every
       # other group stays at 1. The 1.10 numerical cell stays multiprocess
       # (smaller set, cheaper compile).
-      #
-      # Codecov is not this job. See the `codecov` job: full-suite upload
-      # only when Project.toml version changes on main.
       - uses: julia-actions/julia-runtest@v1
         with:
-          coverage: false
+          coverage: ${{ matrix.os == 'macos-latest' }}
           # Pkg.test / julia-runtest default is --check-bounds=yes, which
           # re-precompiles the depot vs julia-buildpkg and honors no @inbounds.
           # Windows: auto (REPL default) so NTFS does not pay that wave.
@@ -131,6 +128,19 @@ jobs:
           MACRO_NUMERICAL_CI: ${{ matrix.optim_v1 && '1' || '0' }}
           MACRO_CHECK_BOUNDS: ${{ matrix.optim_v1 && '1' || '0' }}
           MACRO_CI_SUITE: ${{ matrix.suite }}
+
+      - uses: julia-actions/julia-processcoverage@v1
+        if: matrix.os == 'macos-latest'
+
+      - uses: codecov/codecov-action@v7
+        if: matrix.os == 'macos-latest'
+        with:
+          files: lcov.info
+          slug: FriedmanJP/MacroEconometricModels.jl
+          fail_ci_if_error: false
+          flags: ${{ matrix.suite }}
+        env:
+          CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
 
   # RNG-everywhere lint (#243): every drawing function must thread an rng; no bare
   # rand/randn on the global RNG in src/. Dependency-free (no Julia), so it runs fast.
@@ -168,93 +178,3 @@ jobs:
             exit 1
           fi
           echo "rng-lint OK — no bare rand/randn in src/"
-
-  # Codecov only on a version bump that landed on main (the release commit
-  # that changes `version =` in Project.toml). PRs, ordinary main pushes,
-  # and tags do not upload. TagBot tagging after Registrator is a no-op here.
-  version-bump:
-    name: Detect Project.toml version bump
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
-    runs-on: ubuntu-latest
-    outputs:
-      bumped: ${{ steps.chk.outputs.bumped }}
-    steps:
-      - uses: actions/checkout@v7
-        with:
-          fetch-depth: 2
-      - id: chk
-        name: Compare version to HEAD^
-        run: |
-          curr=$(sed -n 's/^version = "\(.*\)"/\1/p' Project.toml | head -1)
-          prev=$(git show HEAD^:Project.toml 2>/dev/null | sed -n 's/^version = "\(.*\)"/\1/p' | head -1)
-          echo "Project.toml version: '${prev}' -> '${curr}'"
-          if [ -n "$curr" ] && [ -n "$prev" ] && [ "$prev" != "$curr" ]; then
-            echo "bumped=true" >> "$GITHUB_OUTPUT"
-          else
-            echo "bumped=false" >> "$GITHUB_OUTPUT"
-          fi
-
-  codecov:
-    name: Codecov ${{ matrix.suite }} (release)
-    needs: version-bump
-    if: needs.version-bump.outputs.bumped == 'true'
-    runs-on: ubuntu-latest
-    timeout-minutes: 90
-    env:
-      FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
-    permissions:
-      contents: read
-    strategy:
-      fail-fast: false
-      matrix:
-        suite:
-          - dsge
-          - empirical
-    steps:
-      - uses: actions/checkout@v7
-
-      - uses: julia-actions/setup-julia@v3
-        with:
-          version: '1'
-          arch: x64
-
-      - name: Detect Julia CPU name
-        id: cpu
-        shell: bash
-        run: |
-          cpu=$(julia --startup-file=no -e 'print(Sys.CPU_NAME)')
-          cpu=${cpu:-unknown}
-          cpu=${cpu//[^-a-zA-Z0-9_.]/_}
-          echo "name=${cpu}" >> "$GITHUB_OUTPUT"
-          echo "Julia CPU_NAME=${cpu}"
-
-      - uses: julia-actions/cache@v3
-        with:
-          cache-name: julia-cache;workflow=${{ github.workflow }};job=${{ github.job }};cpu=${{ steps.cpu.outputs.name }}
-
-      - uses: julia-actions/julia-buildpkg@v1
-
-      # Full suite, Julia stable, Optim v2, single-process, no check-bounds.
-      # Split dsge | empirical so one coverage cell stays under 90 min.
-      - uses: julia-actions/julia-runtest@v1
-        with:
-          coverage: true
-        env:
-          JULIA_NUM_THREADS: auto
-          OPENBLAS_NUM_THREADS: "1"
-          MACRO_MULTIPROCESS_TESTS: "0"
-          MACRO_FAST_TESTS: "0"
-          MACRO_NUMERICAL_CI: "0"
-          MACRO_CHECK_BOUNDS: "0"
-          MACRO_CI_SUITE: ${{ matrix.suite }}
-
-      - uses: julia-actions/julia-processcoverage@v1
-
-      - uses: codecov/codecov-action@v7
-        with:
-          files: lcov.info
-          slug: FriedmanJP/MacroEconometricModels.jl
-          fail_ci_if_error: false
-          flags: ${{ matrix.suite }}
-        env:
-          CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
