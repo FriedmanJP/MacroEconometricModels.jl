@@ -44,44 +44,6 @@ using Pkg
 Pkg.add("MacroEconometricModels")
 ```
 
-Requires Julia 1.10+. v0.9 is a breaking `ModelSpec` unification: `DSGESpec` / `HADSGESpec` and `E[t](...)` are gone.
-
-## Quick Start
-
-```julia
-using MacroEconometricModels
-
-# VAR on FRED-MD
-d = fix(apply_tcode(load_example(:fred_md)[:, ["INDPRO", "CPIAUCSL", "FEDFUNDS"]]))
-m = estimate_var(d, 4)
-report(m)
-ir = irf(m, 20; method=:cholesky)
-
-# DSGE: one ModelSpec, RE leads written as x[t+1]
-spec = @dsge begin
-    parameters: β = 0.99, α = 0.36, δ = 0.025, ρ = 0.9, σ = 0.01
-    endogenous: Y, C, K, A
-    exogenous: ε_A
-
-    Y[t] = A[t] * K[t-1]^α
-    C[t] + K[t] = Y[t] + (1 - δ) * K[t-1]
-    1 = β * (C[t] / C[t+1]) * (α * A[t+1] * K[t]^(α - 1) + 1 - δ)
-    A[t] = A[t-1]^ρ * exp(σ * ε_A[t])
-
-    steady_state = begin
-        A_ss = 1.0
-        K_ss = (α * β / (1 - β * (1 - δ)))^(1 / (1 - α))
-        Y_ss = K_ss^α
-        C_ss = Y_ss - δ * K_ss
-        [Y_ss, C_ss, K_ss, A_ss]
-    end
-end
-sol = solve(spec)
-report(sol)
-```
-
-HA models use the same type: `load_ha_example(:krusell_smith)` returns a `ModelSpec` with a `HouseholdSystem` on `agents`. `solve(spec; method=:ssj)` is the default HA path.
-
 ## Features
 
 ### Univariate Models
