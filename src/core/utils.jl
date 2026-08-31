@@ -318,3 +318,27 @@ function _effective_sample_size(weights::AbstractVector{T}) where {T<:Real}
     (s1 <= 0 || s2 <= 0) && return zero(float(T))
     float(s1)^2 / float(s2)
 end
+
+"""Weighted quantile via linear interpolation on the cumulative weight."""
+function _weighted_quantile(vals::AbstractVector{T}, weights::AbstractVector{S}, q::Real) where {T,S}
+    perm = sortperm(vals)
+    sv, sw = vals[perm], weights[perm]
+    cw = cumsum(sw)
+    cw ./= cw[end]
+    idx = searchsortedfirst(cw, q)
+    idx == 1 && return sv[1]
+    idx > length(sv) && return sv[end]
+    t = (q - cw[idx-1]) / (cw[idx] - cw[idx-1] + eps(T))
+    (1 - t) * sv[idx-1] + t * sv[idx]
+end
+
+"""True when every weight equals the first (including the empty / singleton case)."""
+function _weights_are_uniform(w::AbstractVector)
+    n = length(w)
+    n <= 1 && return true
+    w1 = w[1]
+    @inbounds for i in 2:n
+        w[i] == w1 || return false
+    end
+    true
+end

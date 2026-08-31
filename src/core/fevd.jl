@@ -284,6 +284,70 @@ function fevd(r::BayesianSetIdentifiedSVAR{T}; quantiles::Vector{<:Real}=[0.16, 
                     n_req, n_acc, r.n_unidentified)
 end
 
+"""FEVD of stored identified-set rotations (weighted median of per-draw `_compute_fevd`)."""
+function _fevd_from_irf_draws(irf_draws::Array{T,4}, weights::AbstractVector, H::Int,
+                              varnames::Vector{String}, shock_names::Vector{String},
+                              n_requested::Int, n_failed::Int;
+                              quantiles::Vector{<:Real}=[0.16, 0.5, 0.84],
+                              uniform_unweighted::Bool=true) where {T<:AbstractFloat}
+    n_acc = size(irf_draws, 1)
+    n = size(irf_draws, 3)
+    props_draws = zeros(T, n_acc, n, n, H)
+    Threads.@threads for i in 1:n_acc
+        _, p = _compute_fevd(irf_draws[i, :, :, :], n, H)
+        props_draws[i, :, :, :] = p
+    end
+    q_vec = T.(quantiles)
+    nq = length(q_vec)
+    fevd_q = zeros(T, n, n, H, nq)
+    fevd_m = zeros(T, n, n, H)
+    @inbounds for v in 1:n, sh in 1:n, h in 1:H
+        vals = @view props_draws[:, v, sh, h]
+        for (qi, q) in enumerate(q_vec)
+            fevd_q[v, sh, h, qi] = _setid_quantile(vals, weights, q; uniform_unweighted=uniform_unweighted)
+        end
+        fevd_m[v, sh, h] = _setid_quantile(vals, weights, T(0.5); uniform_unweighted=uniform_unweighted)
+    end
+    BayesianFEVD{T}(fevd_q, fevd_m, H, varnames, shock_names, q_vec,
+                    n_requested, n_acc, n_failed)
+end
+
+"""
+    fevd(model, s::SignIdentifiedSet, H; quantiles=[0.16, 0.5, 0.84]) -> BayesianFEVD
+
+FEVD of each stored rotation, summarised by weighted quantiles. The reported
+point estimate is the (weighted) pointwise median of `_compute_fevd` over draws.
+Each draw's shares sum to 1.
+"""
+function fevd(model::VARModel{T}, s::SignIdentifiedSet{T}, H::Int;
+              quantiles::Vector{<:Real}=[0.16, 0.5, 0.84],
+              shock_names::Union{Nothing,Vector{String}}=nothing) where {T<:AbstractFloat}
+    draws = _setid_irfs_at_horizon(model, s.Q_draws, s.irf_draws, H)
+    snames = isnothing(shock_names) ? s.shocks : shock_names
+    _fevd_from_irf_draws(draws, s.weights, H, s.variables, snames,
+                         s.n_total, max(0, s.n_total - s.n_accepted);
+                         quantiles=quantiles, uniform_unweighted=true)
+end
+
+function fevd(model::VARModel{T}, s::AriasSVARResult{T}, H::Int;
+              quantiles::Vector{<:Real}=[0.16, 0.5, 0.84],
+              shock_names::Union{Nothing,Vector{String}}=nothing) where {T<:AbstractFloat}
+    draws = _setid_irfs_at_horizon(model, s.Q_draws, s.irf_draws, H)
+    n_acc = length(s.Q_draws)
+    snames = isnothing(shock_names) ? s.varnames : shock_names
+    _fevd_from_irf_draws(draws, s.weights, H, s.varnames, snames,
+                         n_acc, 0; quantiles=quantiles, uniform_unweighted=false)
+end
+
+function fevd(model::VARModel{T}, r::UhligSVARResult{T}, H::Int;
+              shock_names::Union{Nothing,Vector{String}}=nothing) where {T<:AbstractFloat}
+    irf_vals = (H == size(r.irf, 1)) ? r.irf : compute_irf(model, r.Q, H)
+    n = nvars(model)
+    decomp, props = _compute_fevd(irf_vals, n, H)
+    snames = isnothing(shock_names) ? r.varnames : shock_names
+    FEVD{T}(decomp, props, r.varnames, snames)
+end
+
 # =============================================================================
 # Generalized FEVD — Pesaran & Shin (1998)
 # =============================================================================

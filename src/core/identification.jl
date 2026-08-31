@@ -507,22 +507,74 @@ function identify_sign(model::VARModel{T}, horizon::Int, check_func::Function;
                          model.varnames, snames)
 end
 
+"""Pointwise IRF quantiles from a draw stack. Uniform weights use `quantile` so
+the result matches the pre-SID-17 unweighted identified set; otherwise Kish-weighted."""
+function _irf_percentiles_from_draws(irf_draws::Array{T,4}, weights::AbstractVector,
+                                     quantiles::AbstractVector;
+                                     uniform_unweighted::Bool=true) where {T<:AbstractFloat}
+    n_draws, H, nv, ns = size(irf_draws)
+    length(weights) == n_draws || throw(ArgumentError(
+        "weights length ($(length(weights))) must match n_draws ($n_draws)"))
+    pct = zeros(T, H, nv, ns, length(quantiles))
+    use_unw = uniform_unweighted && _weights_are_uniform(weights)
+    @inbounds for h in 1:H, i in 1:nv, j in 1:ns
+        vals = @view irf_draws[:, h, i, j]
+        for (pi, p) in enumerate(quantiles)
+            pct[h, i, j, pi] = use_unw ? quantile(vals, T(p)) : _weighted_quantile(vals, weights, p)
+        end
+    end
+    pct
+end
+
+"""Cell quantile of an identified-set draw vector (unweighted `quantile` if weights are uniform)."""
+function _setid_quantile(vals::AbstractVector{T}, weights::AbstractVector, q::Real;
+                         uniform_unweighted::Bool=true) where {T<:AbstractFloat}
+    (uniform_unweighted && _weights_are_uniform(weights)) ? quantile(vals, T(q)) :
+        _weighted_quantile(vals, weights, q)
+end
+
+"""Identified-set standard deviation per cell. Uniform weights use `Statistics.std`."""
+function _setid_std(vals::AbstractVector{T}, weights::AbstractVector;
+                    uniform_unweighted::Bool=true) where {T<:AbstractFloat}
+    n = length(vals)
+    n <= 1 && return zero(T)
+    if uniform_unweighted && _weights_are_uniform(weights)
+        return std(vals)
+    end
+    s = sum(weights)
+    s <= 0 && return zero(T)
+    μ = zero(T)
+    @inbounds for i in eachindex(vals)
+        μ += T(weights[i]) * vals[i]
+    end
+    μ /= T(s)
+    v = zero(T)
+    @inbounds for i in eachindex(vals)
+        δ = vals[i] - μ
+        v += T(weights[i]) * δ * δ
+    end
+    sqrt(v / T(s))
+end
+
+"""
+    irf_percentiles(s::SignIdentifiedSet; quantiles=[0.16, 0.5, 0.84]) -> Array{T,4}
+
+Pointwise IRF quantiles over the identified set (horizon × n × n × nq).
+Uniform weights reproduce `Statistics.quantile`; non-uniform weights use
+the shared weighted-quantile helper.
+"""
+function irf_percentiles(s::SignIdentifiedSet{T}; quantiles::Vector{Float64}=[0.16, 0.5, 0.84]) where {T}
+    _irf_percentiles_from_draws(s.irf_draws, s.weights, quantiles; uniform_unweighted=true)
+end
+
 """
     irf_bounds(s::SignIdentifiedSet{T}; quantiles=[0.16, 0.84]) -> (lower, upper)
 
 Compute pointwise bounds (or quantile bands) over the identified set.
 """
 function irf_bounds(s::SignIdentifiedSet{T}; quantiles=[0.16, 0.84]) where {T}
-    q = T.(quantiles)
-    H, n_var, n_shock = size(s.irf_draws, 2), size(s.irf_draws, 3), size(s.irf_draws, 4)
-    lower = zeros(T, H, n_var, n_shock)
-    upper = zeros(T, H, n_var, n_shock)
-    for h in 1:H, i in 1:n_var, j in 1:n_shock
-        d = @view s.irf_draws[:, h, i, j]
-        lower[h, i, j] = quantile(d, q[1])
-        upper[h, i, j] = quantile(d, q[2])
-    end
-    (lower, upper)
+    pct = irf_percentiles(s; quantiles=Float64[quantiles[1], quantiles[2]])
+    (pct[:, :, :, 1], pct[:, :, :, 2])
 end
 
 """
@@ -531,13 +583,7 @@ end
 Compute pointwise median IRF over the identified set.
 """
 function irf_median(s::SignIdentifiedSet{T}) where {T}
-    H, n_var, n_shock = size(s.irf_draws, 2), size(s.irf_draws, 3), size(s.irf_draws, 4)
-    med = zeros(T, H, n_var, n_shock)
-    for h in 1:H, i in 1:n_var, j in 1:n_shock
-        d = @view s.irf_draws[:, h, i, j]
-        med[h, i, j] = quantile(d, T(0.5))
-    end
-    med
+    irf_percentiles(s; quantiles=[0.5])[:, :, :, 1]
 end
 
 # =============================================================================
@@ -929,3 +975,277 @@ _register_builtin_identification!()
 
 # Arias et al. (2018) identification — extracted to arias.jl
 include("arias.jl")
+
+# =============================================================================
+# Set-identification summaries (Fry–Pagan / Inoue–Kilian; SID-17)
+# =============================================================================
+
+const _SetIdentifiedSVAR{T} = Union{SignIdentifiedSet{T}, AriasSVARResult{T}}
+
+function _setid_uniform_unweighted(::SignIdentifiedSet)
+    true
+end
+_setid_uniform_unweighted(::AriasSVARResult) = false
+
+function _median_irf(s::_SetIdentifiedSVAR{T}) where {T<:AbstractFloat}
+    _irf_percentiles_from_draws(s.irf_draws, s.weights, [0.5];
+                                uniform_unweighted=_setid_uniform_unweighted(s))[:, :, :, 1]
+end
+
+"""Fry–Pagan (2011) standardised L2 distance of each draw to the pointwise median."""
+function _median_target_distances(irf_draws::Array{T,4}, med::Array{T,3}, σ::Array{T,3}) where {T<:AbstractFloat}
+    n_d = size(irf_draws, 1)
+    H, nv, ns = size(med)
+    dists = zeros(T, n_d)
+    Threads.@threads for d in 1:n_d
+        acc = zero(T)
+        @inbounds for h in 1:H, i in 1:nv, j in 1:ns
+            s = σ[h, i, j]
+            δ = irf_draws[d, h, i, j] - med[h, i, j]
+            acc += s > 0 ? (δ / s)^2 : δ * δ
+        end
+        dists[d] = acc
+    end
+    dists
+end
+
+"""
+    median_target(s) -> (Q, irf, index)
+
+Fry–Pagan (2011) median-target rotation: the single admissible `Q` in `s.Q_draws`
+whose IRF is closest to the pointwise median in standardised Euclidean distance
+across `(h, i, j)`. Location and scale are weighted when `s.weights` are
+non-uniform.
+"""
+function median_target(s::_SetIdentifiedSVAR{T}) where {T<:AbstractFloat}
+    n_d = size(s.irf_draws, 1)
+    n_d == 0 && throw(ArgumentError("identified set has no draws"))
+    uw = _setid_uniform_unweighted(s)
+    med = _median_irf(s)
+    n_d == 1 && return (Q=s.Q_draws[1], irf=s.irf_draws[1, :, :, :], index=1)
+    H, nv, ns = size(med)
+    σ = similar(med)
+    @inbounds for h in 1:H, i in 1:nv, j in 1:ns
+        σ[h, i, j] = _setid_std(view(s.irf_draws, :, h, i, j), s.weights; uniform_unweighted=uw)
+    end
+    idx = argmin(_median_target_distances(s.irf_draws, med, σ))
+    (Q=s.Q_draws[idx], irf=s.irf_draws[idx, :, :, :], index=idx)
+end
+
+function _default_kde_bandwidth(X::AbstractMatrix{T}) where {T<:AbstractFloat}
+    n = size(X, 1)
+    n <= 1 && return one(T)
+    n_s = min(n, 32)
+    acc = zero(T)
+    cnt = 0
+    @inbounds for i in 1:(n_s - 1), j in (i + 1):n_s
+        d2 = zero(T)
+        for p in axes(X, 2)
+            δ = X[i, p] - X[j, p]
+            d2 += δ * δ
+        end
+        acc += sqrt(d2)
+        cnt += 1
+    end
+    med = cnt > 0 ? acc / T(cnt) : one(T)
+    med > 0 ? med : one(T)
+end
+
+"""Inoue–Kilian kernel density evaluated at each draw (Gaussian kernel, weighted)."""
+function _kde_at_draws(X::AbstractMatrix{T}, weights::AbstractVector, h::T) where {T<:AbstractFloat}
+    n = size(X, 1)
+    dens = zeros(T, n)
+    inv2h2 = one(T) / (T(2) * h * h)
+    Threads.@threads for i in 1:n
+        s = zero(T)
+        @inbounds for j in 1:n
+            d2 = zero(T)
+            for p in axes(X, 2)
+                δ = X[i, p] - X[j, p]
+                d2 += δ * δ
+            end
+            s += T(weights[j]) * exp(-d2 * inv2h2)
+        end
+        dens[i] = s
+    end
+    dens
+end
+
+"""
+    modal_model(s; bandwidth=nothing) -> (Q, irf, index)
+
+Inoue–Kilian (2013) modal model: the stored draw at which a Gaussian KDE over
+vectorised, cell-standardised IRFs attains its maximum (weighted by `s.weights`).
+Default `bandwidth` is the mean pairwise Euclidean distance on a 32-draw subsample.
+"""
+function modal_model(s::_SetIdentifiedSVAR{T}; bandwidth::Union{Nothing,Real}=nothing) where {T<:AbstractFloat}
+    n_d = size(s.irf_draws, 1)
+    n_d == 0 && throw(ArgumentError("identified set has no draws"))
+    n_d == 1 && return (Q=s.Q_draws[1], irf=s.irf_draws[1, :, :, :], index=1)
+    H, nv, ns = size(s.irf_draws, 2), size(s.irf_draws, 3), size(s.irf_draws, 4)
+    k = H * nv * ns
+    X = Matrix{T}(undef, n_d, k)
+    @inbounds for d in 1:n_d
+        X[d, :] = vec(s.irf_draws[d, :, :, :])
+    end
+    uw = _setid_uniform_unweighted(s)
+    @inbounds for p in 1:k
+        σp = _setid_std(view(X, :, p), s.weights; uniform_unweighted=uw)
+        if σp > 0
+            X[:, p] ./= σp
+        end
+    end
+    h = bandwidth === nothing ? _default_kde_bandwidth(X) : T(bandwidth)
+    h > 0 || throw(ArgumentError("bandwidth must be positive, got $h"))
+    idx = argmax(_kde_at_draws(X, s.weights, h))
+    (Q=s.Q_draws[idx], irf=s.irf_draws[idx, :, :, :], index=idx)
+end
+
+"""
+    joint_band(s; level=0.68, loss=:absolute) -> (lower, upper)
+
+Inoue–Kilian (2022) joint credible set: the componentwise envelope of the
+lowest-loss draws whose weights sum to at least `level`, always including the
+median-target IRF. A draw is inside the band iff every `(h, i, j)` entry lies
+in `[lower, upper]`. `loss=:absolute` is the L1 distance to the pointwise median.
+"""
+function joint_band(s::_SetIdentifiedSVAR{T}; level::Real=0.68,
+                    loss::Symbol=:absolute) where {T<:AbstractFloat}
+    loss === :absolute || throw(ArgumentError("loss must be :absolute, got :$loss"))
+    (0 < level < 1) || throw(ArgumentError("level must be in (0, 1), got $level"))
+    n_d = size(s.irf_draws, 1)
+    n_d == 0 && throw(ArgumentError("identified set has no draws"))
+    med = _median_irf(s)
+    H, nv, ns = size(med)
+    n_d == 1 && return (s.irf_draws[1, :, :, :], s.irf_draws[1, :, :, :])
+    losses = zeros(T, n_d)
+    Threads.@threads for d in 1:n_d
+        acc = zero(T)
+        @inbounds for h in 1:H, i in 1:nv, j in 1:ns
+            acc += abs(s.irf_draws[d, h, i, j] - med[h, i, j])
+        end
+        losses[d] = acc
+    end
+    mt = median_target(s)
+    order = sortperm(losses)
+    wsum = sum(s.weights)
+    target = T(level) * T(wsum)
+    kept = falses(n_d)
+    cum = zero(T)
+    @inbounds for idx in order
+        kept[idx] && continue
+        kept[idx] = true
+        cum += T(s.weights[idx])
+        cum >= target && break
+    end
+    kept[mt.index] = true
+    lower = fill(T(Inf), H, nv, ns)
+    upper = fill(T(-Inf), H, nv, ns)
+    @inbounds for d in 1:n_d
+        kept[d] || continue
+        for h in 1:H, i in 1:nv, j in 1:ns
+            v = s.irf_draws[d, h, i, j]
+            lower[h, i, j] = min(lower[h, i, j], v)
+            upper[h, i, j] = max(upper[h, i, j], v)
+        end
+    end
+    (lower, upper)
+end
+
+"""
+    sup_t_band(s; level=0.68) -> (lower, upper)
+
+Montiel Olea–Plagborg-Møller (2019) sup-t simultaneous band for the identified
+set: `median ± c · σ`, where `c` is the `level` quantile of
+`max_{h,i,j} |IRF − median| / σ` across draws.
+"""
+function sup_t_band(s::_SetIdentifiedSVAR{T}; level::Real=0.68) where {T<:AbstractFloat}
+    (0 < level < 1) || throw(ArgumentError("level must be in (0, 1), got $level"))
+    n_d = size(s.irf_draws, 1)
+    n_d == 0 && throw(ArgumentError("identified set has no draws"))
+    med = _median_irf(s)
+    n_d == 1 && return (s.irf_draws[1, :, :, :], s.irf_draws[1, :, :, :])
+    uw = _setid_uniform_unweighted(s)
+    H, nv, ns = size(med)
+    σ = similar(med)
+    @inbounds for h in 1:H, i in 1:nv, j in 1:ns
+        σ[h, i, j] = _setid_std(view(s.irf_draws, :, h, i, j), s.weights; uniform_unweighted=uw)
+    end
+    supt = zeros(T, n_d)
+    Threads.@threads for d in 1:n_d
+        m = zero(T)
+        @inbounds for h in 1:H, i in 1:nv, j in 1:ns
+            s_ij = σ[h, i, j]
+            t = s_ij > 0 ? abs(s.irf_draws[d, h, i, j] - med[h, i, j]) / s_ij : zero(T)
+            m = max(m, t)
+        end
+        supt[d] = m
+    end
+    c = _setid_quantile(supt, s.weights, level; uniform_unweighted=uw)
+    (med .- c .* σ, med .+ c .* σ)
+end
+
+function _setid_irfs_at_horizon(model::VARModel{T}, Q_draws, irf_draws::Array{T,4},
+                                H::Int) where {T<:AbstractFloat}
+    H >= 1 || throw(ArgumentError("horizon must be ≥ 1, got $H"))
+    H_stored = size(irf_draws, 2)
+    n_acc = length(Q_draws)
+    n = nvars(model)
+    if H == H_stored && size(irf_draws, 1) == n_acc && size(irf_draws, 3) == n
+        return irf_draws
+    elseif H < H_stored && size(irf_draws, 1) == n_acc && size(irf_draws, 3) == n
+        return irf_draws[:, 1:H, :, :]
+    end
+    draws = zeros(T, n_acc, H, n, n)
+    Threads.@threads for i in 1:n_acc
+        draws[i, :, :, :] = compute_irf(model, Q_draws[i], H)
+    end
+    draws
+end
+
+"""Weighted-quantile summary of structural shocks across identified-set draws."""
+function _structural_shocks_from_Qs(model::VARModel{T}, Q_draws, weights;
+                                    quantiles::Vector{Float64}=[0.16, 0.5, 0.84],
+                                    uniform_unweighted::Bool=true) where {T<:AbstractFloat}
+    n_d = length(Q_draws)
+    n_d == 0 && throw(ArgumentError("identified set has no draws"))
+    s1 = compute_structural_shocks(model, Q_draws[1])
+    T_eff, n = size(s1)
+    all_shocks = zeros(T, n_d, T_eff, n)
+    all_shocks[1, :, :] = s1
+    Threads.@threads for i in 2:n_d
+        all_shocks[i, :, :] = compute_structural_shocks(model, Q_draws[i])
+    end
+    qv = T.(quantiles)
+    nq = length(qv)
+    qarr = zeros(T, T_eff, n, nq)
+    @inbounds for t in 1:T_eff, j in 1:n
+        vals = @view all_shocks[:, t, j]
+        for (qi, q) in enumerate(qv)
+            qarr[t, j, qi] = _setid_quantile(vals, weights, q; uniform_unweighted=uniform_unweighted)
+        end
+    end
+    imid = findfirst(q -> q == T(0.5) || q == 0.5, qv)
+    med = imid === nothing ? [_setid_quantile(view(all_shocks, :, t, j), weights, T(0.5);
+                                              uniform_unweighted=uniform_unweighted)
+                              for t in 1:T_eff, j in 1:n] : qarr[:, :, imid]
+    (median=med, lower=qarr[:, :, 1], upper=qarr[:, :, nq], quantiles=qarr)
+end
+
+"""
+    structural_shocks(model, s::SignIdentifiedSet; quantiles=[0.16, 0.5, 0.84])
+
+Weighted-quantile summary of structural shocks recovered at each stored rotation.
+Returns `(median, lower, upper, quantiles)`.
+"""
+function structural_shocks(model::VARModel{T}, s::SignIdentifiedSet{T};
+                           quantiles::Vector{Float64}=[0.16, 0.5, 0.84]) where {T<:AbstractFloat}
+    _structural_shocks_from_Qs(model, s.Q_draws, s.weights; quantiles=quantiles,
+                               uniform_unweighted=true)
+end
+
+function structural_shocks(model::VARModel{T}, s::AriasSVARResult{T};
+                           quantiles::Vector{Float64}=[0.16, 0.5, 0.84]) where {T<:AbstractFloat}
+    _structural_shocks_from_Qs(model, s.Q_draws, s.weights; quantiles=quantiles,
+                               uniform_unweighted=false)
+end

@@ -475,3 +475,11 @@ function identify_uhlig(model::VARModel{T}, restrictions::SVARRestrictions, hori
     UhligSVARResult{T}(Q, irf, best_val, shock_penalties, restrictions, converged,
                        copy(model.varnames), id_status)
 end
+
+# SID-17: a penalty-optimal rotation is a one-draw set. No fake bands.
+median_target(r::UhligSVARResult) = (Q=r.Q, irf=r.irf, index=1)
+modal_model(r::UhligSVARResult; bandwidth::Union{Nothing,Real}=nothing) = (Q=r.Q, irf=r.irf, index=1)
+joint_band(::UhligSVARResult; kwargs...) = throw(ArgumentError(
+    "UhligSVARResult is a single penalty rotation; joint bands are not defined"))
+sup_t_band(::UhligSVARResult; kwargs...) = throw(ArgumentError(
+    "UhligSVARResult is a single penalty rotation; sup-t bands are not defined"))

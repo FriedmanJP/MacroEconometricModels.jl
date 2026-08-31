@@ -644,6 +644,96 @@ function historical_decomposition(model::VARModel{T}, restrictions::SVARRestrict
     )
 end
 
+"""Bayesian HD from stored rotations (no re-sampling)."""
+function _bayesian_hd_from_Qs(model::VARModel{T}, Qs, weights, horizon::Int,
+                              varnames::Vector{String}, shock_names::Vector{String},
+                              method::Symbol, n_requested::Int, n_failed::Int;
+                              quantiles::Vector{<:Real}=[0.16, 0.5, 0.84],
+                              uniform_unweighted::Bool=false) where {T<:AbstractFloat}
+    n = nvars(model)
+    T_eff = effective_nobs(model)
+    horizon = min(horizon, T_eff)
+    actual = model.Y[(model.p + 1):end, :]
+    n_acc = length(Qs)
+    all_contributions = zeros(T, n_acc, T_eff, n, n)
+    all_initial = zeros(T, n_acc, T_eff, n)
+    all_shocks = zeros(T, n_acc, T_eff, n)
+    Threads.@threads for idx in 1:n_acc
+        contrib, init, shk = _hd_from_Q(model, Qs[idx], horizon, actual)
+        all_contributions[idx, :, :, :] = contrib
+        all_initial[idx, :, :] = init
+        all_shocks[idx, :, :] = shk
+    end
+    q_vec = T.(quantiles)
+    nq = length(quantiles)
+    contrib_q = zeros(T, T_eff, n, n, nq)
+    contrib_m = zeros(T, T_eff, n, n)
+    initial_q = zeros(T, T_eff, n, nq)
+    initial_m = zeros(T, T_eff, n)
+    shocks_m = zeros(T, T_eff, n)
+    @inbounds for t in 1:T_eff, i in 1:n
+        d_init = @view all_initial[:, t, i]
+        initial_m[t, i] = _setid_quantile(d_init, weights, T(0.5); uniform_unweighted=uniform_unweighted)
+        for (qi, q) in enumerate(q_vec)
+            initial_q[t, i, qi] = _setid_quantile(d_init, weights, q; uniform_unweighted=uniform_unweighted)
+        end
+        d_shock = @view all_shocks[:, t, i]
+        shocks_m[t, i] = _setid_quantile(d_shock, weights, T(0.5); uniform_unweighted=uniform_unweighted)
+        for j in 1:n
+            d = @view all_contributions[:, t, i, j]
+            contrib_m[t, i, j] = _setid_quantile(d, weights, T(0.5); uniform_unweighted=uniform_unweighted)
+            for (qi, q) in enumerate(q_vec)
+                contrib_q[t, i, j, qi] = _setid_quantile(d, weights, q; uniform_unweighted=uniform_unweighted)
+            end
+        end
+    end
+    BayesianHistoricalDecomposition{T}(
+        contrib_q, contrib_m, initial_q, initial_m, shocks_m, actual, T_eff,
+        varnames, shock_names, q_vec, method,
+        n_requested, n_acc, n_failed
+    )
+end
+
+"""
+    historical_decomposition(model, s::SignIdentifiedSet, horizon=effective_nobs(model))
+
+Historical decomposition of each stored rotation, summarised by weighted quantiles.
+Consumes `s.Q_draws` rather than re-sampling.
+"""
+function historical_decomposition(model::VARModel{T}, s::SignIdentifiedSet{T},
+                                  horizon::Int=effective_nobs(model);
+                                  quantiles::Vector{<:Real}=[0.16, 0.5, 0.84],
+                                  shock_names::Union{Nothing,Vector{String}}=nothing) where {T<:AbstractFloat}
+    snames = isnothing(shock_names) ? s.shocks : shock_names
+    _bayesian_hd_from_Qs(model, s.Q_draws, s.weights, horizon, s.variables, snames, :sign,
+                         s.n_total, max(0, s.n_total - s.n_accepted);
+                         quantiles=quantiles, uniform_unweighted=true)
+end
+
+function historical_decomposition(model::VARModel{T}, s::AriasSVARResult{T},
+                                  horizon::Int=effective_nobs(model);
+                                  quantiles::Vector{<:Real}=[0.16, 0.5, 0.84],
+                                  shock_names::Union{Nothing,Vector{String}}=nothing) where {T<:AbstractFloat}
+    n_acc = length(s.Q_draws)
+    snames = isnothing(shock_names) ? s.varnames : shock_names
+    _bayesian_hd_from_Qs(model, s.Q_draws, s.weights, horizon, s.varnames, snames, :arias,
+                         n_acc, 0; quantiles=quantiles, uniform_unweighted=false)
+end
+
+function historical_decomposition(model::VARModel{T}, r::UhligSVARResult{T},
+                                  horizon::Int=effective_nobs(model);
+                                  shock_names::Union{Nothing,Vector{String}}=nothing) where {T<:AbstractFloat}
+    T_eff = effective_nobs(model)
+    horizon = min(horizon, T_eff)
+    actual = model.Y[(model.p + 1):end, :]
+    contributions, initial_conditions, shocks = _hd_from_Q(model, r.Q, horizon, actual)
+    snames = isnothing(shock_names) ? r.varnames : shock_names
+    HistoricalDecomposition{T}(
+        contributions, initial_conditions, actual, shocks, T_eff,
+        r.varnames, snames, :uhlig
+    )
+end
+
 # =============================================================================
 # Accessor Functions
 # =============================================================================

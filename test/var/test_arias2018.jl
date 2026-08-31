@@ -2204,5 +2204,44 @@ end
     end
 end
 
+@testset "SID-17 Arias set summaries" begin
+    Random.seed!(7461)
+    Y = randn(MersenneTwister(7461), 100, 2)
+    model = estimate_var(Y, 1)
+    r = SVARRestrictions(2; signs=[sign_restriction(1, 1, :positive)])
+    a = identify_arias(model, r, 5; n_draws=FAST ? 12 : 24, n_rotations=FAST ? 80 : 200,
+                       rng=MersenneTwister(7461))
+    mt = median_target(a)
+    @test any(Q -> Q === mt.Q, a.Q_draws)
+    @test mt.irf ≈ a.irf_draws[mt.index, :, :, :]
+    lo, hi = joint_band(a; level=0.68)
+    @test all(lo .<= mt.irf .<= hi)
+    mm = modal_model(a)
+    @test any(Q -> Q === mm.Q, a.Q_draws)
+    slo, shi = sup_t_band(a; level=0.68)
+    @test all(slo .<= shi)
+    H = 5
+    fv = fevd(model, a, H)
+    @test fv isa BayesianFEVD
+    n = 2
+    n_d = length(a.Q_draws)
+    props = Array{Float64}(undef, n_d, n, n, H)
+    for i in 1:n_d
+        _, p = MacroEconometricModels._compute_fevd(a.irf_draws[i, :, :, :], n, H)
+        props[i, :, :, :] = p
+        for h in 1:H, v in 1:n
+            @test sum(p[v, :, h]) ≈ 1 atol=1e-10
+        end
+    end
+    for v in 1:n, sh in 1:n, h in 1:H
+        @test fv.point_estimate[v, sh, h] ≈
+              MacroEconometricModels._weighted_quantile(view(props, :, v, sh, h), a.weights, 0.5)
+    end
+    hd = historical_decomposition(model, a)
+    @test hd isa BayesianHistoricalDecomposition
+    shk = structural_shocks(model, a)
+    @test size(shk.median, 2) == n
+end
+
 _tprint("Arias et al. (2018) tests completed.")
 

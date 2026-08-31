@@ -473,3 +473,131 @@ end
     @test ir_wide.quantiles != ar.irf_quantiles
     @test ir_wide.quantiles != ir_def.quantiles
 end
+
+# =============================================================================
+# SID-17 (#746): Fry–Pagan / Inoue–Kilian set-ID summaries
+# =============================================================================
+@testset "SID-17 set-ID summaries" begin
+    Random.seed!(746)
+    m = estimate_var(randn(120, 2), 1)
+    chk(irf) = irf[1, 1, 1] > 0
+    s = identify_sign(m, 6, chk; store_all=true, max_draws=80, rng=MersenneTwister(746))
+
+    @testset "SignIdentifiedSet weights back-compat" begin
+        @test hasfield(typeof(s), :weights)
+        @test length(s.weights) == s.n_accepted
+        @test s.weights ≈ fill(1 / s.n_accepted, s.n_accepted)
+        @test s.ess ≈ s.n_accepted
+        @test s.ess_fraction ≈ 1
+        @test s.restrictions === nothing
+        s7 = SignIdentifiedSet{Float64}(s.Q_draws, s.irf_draws, s.n_accepted, s.n_total,
+                                        s.acceptance_rate, s.variables, s.shocks)
+        @test s7.weights ≈ fill(1 / s.n_accepted, s.n_accepted)
+        @test s7.ess ≈ Float64(s.n_accepted)
+        @test s7.ess_fraction ≈ 1.0
+        @test s7.restrictions === nothing
+        med = irf_median(s)
+        for h in axes(s.irf_draws, 2), i in axes(s.irf_draws, 3), j in axes(s.irf_draws, 4)
+            @test med[h, i, j] ≈ quantile(view(s.irf_draws, :, h, i, j), 0.5)
+        end
+    end
+
+    @testset "median_target is an admissible Q closest to irf_median" begin
+        mt = median_target(s)
+        @test mt.Q === s.Q_draws[mt.index]
+        @test any(Q -> Q === mt.Q, s.Q_draws)
+        @test mt.irf ≈ s.irf_draws[mt.index, :, :, :]
+        med = irf_median(s)
+        n_d = s.n_accepted
+        H, nv, ns = size(med)
+        σ = [std(view(s.irf_draws, :, h, i, j)) for h in 1:H, i in 1:nv, j in 1:ns]
+        dist(d) = sum(((s.irf_draws[d, h, i, j] - med[h, i, j]) /
+                       (σ[h, i, j] > 0 ? σ[h, i, j] : 1.0))^2
+                      for h in 1:H, i in 1:nv, j in 1:ns)
+        d_star = dist(mt.index)
+        @test all(d -> dist(d) >= d_star - 1e-12, 1:n_d)
+    end
+
+    @testset "joint_band contains median-target and covers level jointly" begin
+        nd, H, n = 5, 2, 2
+        Qs = [Matrix{Float64}(I, n, n) for _ in 1:nd]
+        draws = zeros(nd, H, n, n)
+        for i in 1:nd
+            draws[i, :, :, :] .= Float64(i)
+        end
+        tiny = SignIdentifiedSet{Float64}(Qs, draws, nd, nd, 1.0, ["y1", "y2"], ["e1", "e2"])
+        mt = median_target(tiny)
+        @test mt.index == 3
+        lo, hi = joint_band(tiny; level=0.6, loss=:absolute)
+        @test size(lo) == (H, n, n) && size(hi) == (H, n, n)
+        @test all(lo .<= mt.irf .<= hi)
+        inside(d) = all(lo[h, i, j] <= tiny.irf_draws[d, h, i, j] <= hi[h, i, j]
+                        for h in 1:H, i in 1:n, j in 1:n)
+        @test count(inside, 1:nd) / nd >= 0.6 - 1e-12
+        @test_throws ArgumentError joint_band(tiny; loss=:quadratic)
+    end
+
+    @testset "modal_model and sup_t_band" begin
+        mm = modal_model(s)
+        @test mm.Q === s.Q_draws[mm.index]
+        @test mm.irf ≈ s.irf_draws[mm.index, :, :, :]
+        mm2 = modal_model(s; bandwidth=1.0)
+        @test mm2.index isa Int
+        lo, hi = sup_t_band(s; level=0.68)
+        @test size(lo) == size(irf_median(s))
+        @test all(lo .<= hi)
+        mt = median_target(s)
+        # sup-t is simultaneous around the pointwise median; median-target need not
+        # sit inside, but the band is nonempty and finite.
+        @test all(isfinite, lo) && all(isfinite, hi)
+    end
+
+    @testset "fevd(model, s, H) weighted median and adding-up" begin
+        H = 6
+        fv = fevd(m, s, H)
+        @test fv isa BayesianFEVD
+        n = nvars(m)
+        n_d = s.n_accepted
+        props = Array{Float64}(undef, n_d, n, n, H)
+        for i in 1:n_d
+            _, p = MacroEconometricModels._compute_fevd(s.irf_draws[i, :, :, :], n, H)
+            props[i, :, :, :] = p
+            for h in 1:H, v in 1:n
+                @test sum(p[v, :, h]) ≈ 1 atol=1e-10
+            end
+        end
+        for v in 1:n, sh in 1:n, h in 1:H
+            @test fv.point_estimate[v, sh, h] ≈ quantile(view(props, :, v, sh, h), 0.5)
+        end
+    end
+
+    @testset "historical_decomposition and structural_shocks on the set" begin
+        hd = historical_decomposition(m, s)
+        @test hd isa BayesianHistoricalDecomposition
+        @test hd.n_effective == s.n_accepted
+        @test size(hd.point_estimate, 1) == effective_nobs(m)
+        sh = structural_shocks(m, s)
+        @test size(sh.median) == (effective_nobs(m), nvars(m))
+        @test size(sh.lower) == size(sh.median)
+        @test size(sh.upper) == size(sh.median)
+        @test all(sh.lower .<= sh.median .<= sh.upper)
+    end
+
+    @testset "Uhlig is a one-draw set" begin
+        r = SVARRestrictions(2; signs=[sign_restriction(1, 1, :positive)])
+        u = identify_uhlig(m, r, 4; n_starts=3, n_refine=1,
+                           max_iter_coarse=40, max_iter_fine=80, rng=MersenneTwister(746))
+        mt = median_target(u)
+        @test mt.Q === u.Q
+        @test mt.irf ≈ u.irf
+        @test mt.index == 1
+        mm = modal_model(u)
+        @test mm.Q === u.Q
+        @test_throws ArgumentError joint_band(u)
+        @test_throws ArgumentError sup_t_band(u)
+        fv = fevd(m, u, 4)
+        @test fv isa FEVD
+        hd = historical_decomposition(m, u)
+        @test hd isa HistoricalDecomposition
+    end
+end

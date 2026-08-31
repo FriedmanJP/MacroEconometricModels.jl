@@ -1645,18 +1645,7 @@ function _arias_from_bvar_posterior(post::BVARPosterior, restrictions, horizon;
         compute_weights=compute_weights, rng=rng, n_narrative_sims=n_narrative_sims)
 end
 
-"""Weighted quantile via linear interpolation."""
-function _weighted_quantile(vals::AbstractVector{T}, weights::AbstractVector{S}, q::Real) where {T,S}
-    perm = sortperm(vals)
-    sv, sw = vals[perm], weights[perm]
-    cw = cumsum(sw)
-    cw ./= cw[end]
-    idx = searchsortedfirst(cw, q)
-    idx == 1 && return sv[1]
-    idx > length(sv) && return sv[end]
-    t = (q - cw[idx-1]) / (cw[idx] - cw[idx-1] + eps(T))
-    (1 - t) * sv[idx-1] + t * sv[idx]
-end
+# `_weighted_quantile` lives in `src/core/utils.jl` (shared with SignIdentifiedSet summaries).
 
 # --- Convenience Functions ---
 
@@ -1814,14 +1803,7 @@ end
 
 """Compute weighted IRF percentiles from AriasSVARResult."""
 function irf_percentiles(result::AriasSVARResult{T}; quantiles::Vector{Float64}=[0.16, 0.5, 0.84]) where {T}
-    n_draws, horizon, n_vars, n_shocks = size(result.irf_draws)
-    pct = zeros(T, horizon, n_vars, n_shocks, length(quantiles))
-    for h in 1:horizon, i in 1:n_vars, j in 1:n_shocks
-        for (pi, p) in enumerate(quantiles)
-            pct[h, i, j, pi] = _weighted_quantile(result.irf_draws[:, h, i, j], result.weights, p)
-        end
-    end
-    pct
+    _irf_percentiles_from_draws(result.irf_draws, result.weights, quantiles; uniform_unweighted=false)
 end
 
 """Compute weighted mean IRF from AriasSVARResult."""

@@ -12,6 +12,7 @@
 # =============================================================================
 
 using Test, Random, DataFrames, LinearAlgebra
+using MacroEconometricModels
 
 # Self-bootstrap the shared helpers when run standalone.
 if !isdefined(@__MODULE__, :check_plot)
@@ -299,6 +300,19 @@ end
             sis1 = SignIdentifiedSet{Float64}([randn(n, n)], d1, 1, 10, 0.1,
                                               ["a", "b"], ["c", "d"])
             check_plot(plot_result(sis1))
+        end
+
+        @testset "SID-17 view=:joint and view=:median_target" begin
+            p0 = plot_result(sis; view=:default)
+            check_plot(p0)
+            pj = plot_result(sis; view=:joint)
+            check_plot(pj); assert_all_json_valid(pj)
+            @test occursin("joint", lowercase(pj.html))
+            pmt = plot_result(sis; view=:median_target)
+            check_plot(pmt); assert_all_json_valid(pmt)
+            @test occursin("Median-target", pmt.html) || occursin("median-target", lowercase(pmt.html))
+            @test !occursin("\"lo_key\"", pmt.html)
+            @test_throws ArgumentError plot_result(sis; view=:nope)
         end
     end
 end

@@ -75,20 +75,29 @@ end
 
 """
     plot_result(s::SignIdentifiedSet; var=nothing, shock=nothing,
-                quantiles=[0.16, 0.5, 0.84], ncols=0, title="", save_path=nothing)
+                quantiles=[0.16, 0.5, 0.84], ncols=0, title="", save_path=nothing,
+                view=:default)
 
-Draw the sign-/zero-restriction identified set as a quantile fan per (response ←
-shock): the pointwise median IRF line plus nested pointwise-quantile envelope bands,
-with a zero reference line and integer horizon ticks (x from 0). `var`/`shock` select
-one response/shock by `Int` or name (`s.variables`/`s.shocks`); the accepted-draw
-count is stated in the figure title (plotrule C7).
+Draw the sign-/zero-restriction identified set. `view=:default` is the pointwise
+quantile fan (median line + nested envelope). `view=:joint` is the Inoue–Kilian
+joint band around the median-target IRF. `view=:median_target` is the Fry–Pagan
+median-target rotation as a single line (no band). `var`/`shock` select one
+response/shock by `Int` or name; the accepted-draw count is in the title (C7).
 """
 function plot_result(s::SignIdentifiedSet{T};
                      var::Union{Int,String,Nothing}=nothing,
                      shock::Union{Int,String,Nothing}=nothing,
                      quantiles::Vector{Float64}=[0.16, 0.5, 0.84],
                      ncols::Int=0, title::String="",
-                     save_path::Union{String,Nothing}=nothing) where {T}
+                     save_path::Union{String,Nothing}=nothing,
+                     view::Symbol=:default) where {T}
+    view === :joint && return _plot_signset_joint(s; var=var, shock=shock, ncols=ncols,
+                                                  title=title, save_path=save_path)
+    view === :median_target && return _plot_signset_median_target(s; var=var, shock=shock,
+                                                                  ncols=ncols, title=title,
+                                                                  save_path=save_path)
+    view === :default || throw(ArgumentError(
+        "view must be :default, :joint, or :median_target; got :$view"))
     n_draws, horizon, n_vars, n_shocks = size(s.irf_draws)
     vars_to_plot = var === nothing ? (1:n_vars) : [_resolve_var(var, s.variables)]
     shocks_to_plot = shock === nothing ? (1:n_shocks) : [_resolve_var(shock, s.shocks)]
@@ -98,7 +107,7 @@ function plot_result(s::SignIdentifiedSet{T};
         for vi in vars_to_plot
             id = _next_plot_id("signset")
             draws_ij = s.irf_draws[:, :, vi, sj]                      # n_draws × horizon
-            central = Float64[_pw_quantile(view(draws_ij, :, h), 0.5) for h in 1:horizon]
+            central = Float64[_pw_quantile(Base.view(draws_ij, :, h), 0.5) for h in 1:horizon]
             data_json = _setid_quantile_json(draws_ij, quantiles, central; xstart=0)
             ptitle = "$(s.variables[vi]) ← $(s.shocks[sj])"
             push!(panels, _setid_fan_panel(id, data_json, quantiles, "Median", ptitle))
@@ -107,6 +116,68 @@ function plot_result(s::SignIdentifiedSet{T};
 
     if isempty(title)
         title = "Sign-Identified IRF set ($(_setid_band_pct(quantiles))% band, $(s.n_accepted) draws)"
+    end
+    ncols <= 0 && (ncols = length(shocks_to_plot))
+    p = _make_plot(panels; title=title, ncols=ncols)
+    save_path !== nothing && save_plot(p, save_path)
+    p
+end
+
+function _plot_signset_joint(s::SignIdentifiedSet{T};
+                             var=nothing, shock=nothing, ncols::Int=0,
+                             title::String="", save_path=nothing) where {T}
+    _, horizon, n_vars, n_shocks = size(s.irf_draws)
+    vars_to_plot = var === nothing ? (1:n_vars) : [_resolve_var(var, s.variables)]
+    shocks_to_plot = shock === nothing ? (1:n_shocks) : [_resolve_var(shock, s.shocks)]
+    lo, hi = joint_band(s)
+    mt = median_target(s)
+    qlevels = [0.16, 0.5, 0.84]
+    panels = _PanelSpec[]
+    for sj in shocks_to_plot
+        for vi in vars_to_plot
+            id = _next_plot_id("signsetj")
+            Q = hcat(lo[:, vi, sj], mt.irf[:, vi, sj], hi[:, vi, sj])
+            central = mt.irf[:, vi, sj]
+            data_json = _fan_data_json(Q, qlevels, central; xvals=collect(0:(horizon - 1)))
+            ptitle = "$(s.variables[vi]) ← $(s.shocks[sj])"
+            push!(panels, _setid_fan_panel(id, data_json, qlevels, "Median-target", ptitle))
+        end
+    end
+    if isempty(title)
+        title = "Sign-Identified IRF joint band ($(s.n_accepted) draws)"
+    end
+    ncols <= 0 && (ncols = length(shocks_to_plot))
+    p = _make_plot(panels; title=title, ncols=ncols)
+    save_path !== nothing && save_plot(p, save_path)
+    p
+end
+
+function _plot_signset_median_target(s::SignIdentifiedSet{T};
+                                     var=nothing, shock=nothing, ncols::Int=0,
+                                     title::String="", save_path=nothing) where {T}
+    horizon, n_vars, n_shocks = size(s.irf_draws, 2), size(s.irf_draws, 3), size(s.irf_draws, 4)
+    vars_to_plot = var === nothing ? (1:n_vars) : [_resolve_var(var, s.variables)]
+    shocks_to_plot = shock === nothing ? (1:n_shocks) : [_resolve_var(shock, s.shocks)]
+    mt = median_target(s)
+    refs = "[{\"value\":0,\"axis\":\"y\",\"color\":$(_json(_PLOT_ALERT)),\"dash\":\"4,3\"}]"
+    panels = _PanelSpec[]
+    for sj in shocks_to_plot
+        for vi in vars_to_plot
+            id = _next_plot_id("signsetmt")
+            rows = Vector{Pair{String,String}}[]
+            for h in 1:horizon
+                push!(rows, ["x" => _json(h - 1), "val" => _json(mt.irf[h, vi, sj])])
+            end
+            data_json = _json_array_of_objects(rows)
+            s_json = _series_json(["Median-target"], [_PLOT_SERIES[1]]; keys=["val"])
+            js = _render_line_js(id, data_json, s_json; ref_lines_json=refs, integer_x=true,
+                                 xlabel="Horizon", ylabel="Response")
+            ptitle = "$(s.variables[vi]) ← $(s.shocks[sj])"
+            push!(panels, _PanelSpec(id, ptitle, js))
+        end
+    end
+    if isempty(title)
+        title = "Median-target IRF (Fry–Pagan, $(s.n_accepted) draws)"
     end
     ncols <= 0 && (ncols = length(shocks_to_plot))
     p = _make_plot(panels; title=title, ncols=ncols)

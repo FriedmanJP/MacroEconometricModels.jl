@@ -332,6 +332,10 @@ Fields:
 - `acceptance_rate::T` — fraction accepted
 - `variables::Vector{String}` — variable names
 - `shocks::Vector{String}` — shock names
+- `weights::Vector{T}` — importance weights (uniform `1/n` for pure sign draws)
+- `ess::T` — Kish effective sample size
+- `ess_fraction::T` — `ess / n_accepted`
+- `restrictions` — `nothing` or the `SVARRestrictions` that generated the set
 """
 struct SignIdentifiedSet{T<:AbstractFloat} <: AbstractAnalysisResult
     Q_draws::Vector{Matrix{T}}
@@ -341,6 +345,19 @@ struct SignIdentifiedSet{T<:AbstractFloat} <: AbstractAnalysisResult
     acceptance_rate::T
     variables::Vector{String}
     shocks::Vector{String}
+    weights::Vector{T}
+    ess::T
+    ess_fraction::T
+    restrictions::Any
+end
+
+# 7-arg construction sites (pre-SID-17): uniform weights, ess = n_accepted.
+function SignIdentifiedSet{T}(Q_draws, irf_draws, n_accepted::Integer, n_total::Integer,
+                              acceptance_rate, variables, shocks) where {T<:AbstractFloat}
+    n = length(Q_draws)
+    w = n > 0 ? fill(one(T) / T(n), n) : T[]
+    SignIdentifiedSet{T}(Q_draws, irf_draws, Int(n_accepted), Int(n_total), T(acceptance_rate),
+                         variables, shocks, w, T(n_accepted), one(T), nothing)
 end
 
 function Base.show(io::IO, s::SignIdentifiedSet{T}) where {T}
