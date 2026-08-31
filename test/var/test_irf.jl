@@ -426,7 +426,10 @@ end
     @test !MacroEconometricModels._is_set_identified(:uhlig)
     @test !MacroEconometricModels._is_partial(:cholesky)
     @test_throws ArgumentError MacroEconometricModels._needs_residuals(:not_a_method)
-    @test !haskey(MacroEconometricModels.IDENTIFICATION_REGISTRY, :proxy)
+    @test haskey(MacroEconometricModels.IDENTIFICATION_REGISTRY, :proxy)
+    @test MacroEconometricModels._needs_residuals(:proxy)
+    @test !MacroEconometricModels._is_set_identified(:proxy)
+    @test MacroEconometricModels._is_partial(:proxy)
 
     r = SVARRestrictions(2; signs=[sign_restriction(1, 1, :positive)])
     ra = irf(m, 5; method=:arias, restrictions=r, max_draws=30, seed=1)

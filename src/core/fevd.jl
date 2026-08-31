@@ -20,13 +20,14 @@ using LinearAlgebra, Statistics
 Compute FEVD showing proportion of h-step forecast error variance attributable to each shock.
 
 # Methods
-`:cholesky`, `:sign`, `:narrative`, `:long_run`,
+`:cholesky`, `:sign`, `:narrative`, `:long_run`, `:proxy`,
 `:fastica`, `:jade`, `:sobi`, `:dcov`, `:hsic`,
 `:student_t`, `:mixture_normal`, `:pml`, `:skew_normal`, `:nongaussian_ml`,
 `:markov_switching`, `:garch`, `:smooth_transition`, `:external_volatility`
 
 Note: `:smooth_transition` requires `transition_var` kwarg.
       `:external_volatility` requires `regime_indicator` kwarg.
+      `:proxy` requires `instruments` and is partial when `k < n`.
 
 For `:sign`/`:narrative`, each accepted rotation gets its own FEVD; the reported
 decomposition and proportions are the pointwise median. `n_effective` is the
@@ -92,6 +93,9 @@ function fevd(model::VARModel{T}, horizon::Int;
                      restrictions=restrictions, rng=rng, max_draws=max_draws, kwargs...)
     # The impact matrix P = IRF[1,:,:] = chol(Σ)·Q; the squared-IRF FEVD accumulation is a
     # proper variance decomposition only when P is Σ-orthonormal (P*P' = Σ ⇔ Q*Q' = I).
+    if _is_partial(method)
+        @warn "fevd: method=:$method is partially identified; FEVD shares of unidentified shocks are not identified." maxlog = 1
+    end
     _check_fevd_orthogonality(@view(irf_result.values[1, :, :]), model.Sigma; method=method)
     decomp, props = _compute_fevd(irf_result.values, nvars(model), horizon)
     FEVD{T}(decomp, props, model.varnames, snames)

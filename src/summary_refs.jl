@@ -244,6 +244,21 @@ const _REFERENCES = Dict{Symbol, _RefEntry}(
         title="Identification and Estimation of Dynamic Causal Effects in Macroeconomics Using External Instruments",
         journal="Economic Journal", volume="128", issue="610", pages="917--948",
         doi="10.1111/ecoj.12593", isbn="", publisher="", entry_type=:article),
+    :mertens_ravn2013 => (key=:mertens_ravn2013,
+        authors="Mertens, Karel and Ravn, Morten O.", year=2013,
+        title="The Dynamic Effects of Personal and Corporate Income Tax Changes in the United States",
+        journal="American Economic Review", volume="103", issue="4", pages="1212--1247",
+        doi="10.1257/aer.103.4.1212", isbn="", publisher="", entry_type=:article),
+    :jentsch_lunsford2019 => (key=:jentsch_lunsford2019,
+        authors="Jentsch, Carsten and Lunsford, Kurt G.", year=2019,
+        title="The Dynamic Effects of Personal and Corporate Income Tax Changes in the United States: Comment",
+        journal="American Economic Review", volume="109", issue="7", pages="2655--2678",
+        doi="10.1257/aer.20162011", isbn="", publisher="", entry_type=:article),
+    :montiel_olea_stock_watson2021 => (key=:montiel_olea_stock_watson2021,
+        authors="Montiel Olea, Jos\\'e L. and Stock, James H. and Watson, Mark W.", year=2021,
+        title="Inference in Structural Vector Autoregressions Identified with an External Instrument",
+        journal="Journal of Econometrics", volume="225", issue="1", pages="74--87",
+        doi="10.1016/j.jeconom.2020.05.014", isbn="", publisher="", entry_type=:article),
     :barnichon_brownlees2019 => (key=:barnichon_brownlees2019,
         authors="Barnichon, Regis and Brownlees, Christian", year=2019,
         title="Impulse Response Estimation by Smooth Local Projections",
@@ -1924,6 +1939,8 @@ const _TYPE_REFS = Dict{Symbol, Vector{Symbol}}(
     :AriasSVARResult => [:arias_rubio_ramirez_waggoner2018],
     :BayesianSetIdentifiedSVAR => [:arias_rubio_ramirez_waggoner2018],
     :UhligSVARResult => [:mountford_uhlig2009, :uhlig2005],
+    :ProxySVARResult => [:mertens_ravn2013, :stock_watson2018, :jentsch_lunsford2019, :montiel_olea_stock_watson2021],
+    :proxy => [:mertens_ravn2013, :stock_watson2018, :jentsch_lunsford2019, :montiel_olea_stock_watson2021],
     :SVARRestrictions => [:arias_rubio_ramirez_waggoner2018],
     :IdentificationStatus => [:rubio_ramirez2010, :arias_rubio_ramirez_waggoner2018],
     :ConditionalForecast => [:waggoner_zha1999, :antolin_diaz_petrella_rubio_ramirez2021],
@@ -2558,6 +2575,7 @@ refs(io::IO, ::BayesianHistoricalDecomposition; kw...) = refs(io, _TYPE_REFS[:Ba
 refs(io::IO, ::AriasSVARResult; kw...) = refs(io, _TYPE_REFS[:AriasSVARResult]; kw...)
 refs(io::IO, ::BayesianSetIdentifiedSVAR; kw...) = refs(io, _TYPE_REFS[:BayesianSetIdentifiedSVAR]; kw...)
 refs(io::IO, ::UhligSVARResult; kw...) = refs(io, _TYPE_REFS[:UhligSVARResult]; kw...)
+refs(io::IO, ::ProxySVARResult; kw...) = refs(io, _TYPE_REFS[:ProxySVARResult]; kw...)
 refs(io::IO, ::SVARRestrictions; kw...) = refs(io, _TYPE_REFS[:SVARRestrictions]; kw...)
 refs(io::IO, ::IdentificationStatus; kw...) = refs(io, _TYPE_REFS[:IdentificationStatus]; kw...)
 refs(io::IO, ::SignIdentifiedSet; kw...) = refs(io, _TYPE_REFS[:SignIdentifiedSet]; kw...)

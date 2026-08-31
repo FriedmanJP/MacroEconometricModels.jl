@@ -1015,7 +1015,7 @@ export identify_cholesky, cholesky_factor
 export identify_sign
 export identify_narrative
 export identify_long_run
-export identify_proxy
+export identify_proxy, ProxySVARResult, proxy_ar_band
 export generate_Q, haar_orthogonal
 export compute_irf, compute_structural_shocks
 export IdentificationMethod, register_identification!

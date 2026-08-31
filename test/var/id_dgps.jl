@@ -56,3 +56,19 @@ function simulate_two_regime(B0, A, Λ; Tobs=500, split=0.5, rng=Random.default_
     Y2, _ = simulate_svar(B2, A; Tobs=Tobs - T1, rng=rng)
     vcat(Y1, Y2), vcat(fill(1, T1), fill(2, Tobs - T1))
 end
+
+"""Proxy SVAR DGP: `z_t = ρ ε_{1:k,t} + √(1-ρ²) v_t` with `Corr(z_j, ε_j) = ρ`."""
+function simulate_proxy_svar(B0::AbstractMatrix{T}, A::AbstractVector{<:AbstractMatrix};
+                             Tobs::Int=200, ρ::Real=0.6, k::Int=1,
+                             rng=Random.default_rng()) where {T<:AbstractFloat}
+    (0 < k <= size(B0, 1)) || throw(ArgumentError("k must be in 1:n"))
+    abs(ρ) <= 1 || throw(ArgumentError("ρ must be in [-1, 1]"))
+    Y, ε = simulate_svar(B0, A; Tobs=Tobs, rng=rng)
+    nobs = size(ε, 1)
+    σv = sqrt(max(zero(T), one(T) - T(ρ)^2))
+    Z = Matrix{T}(undef, nobs, k)
+    for j in 1:k
+        Z[:, j] = T(ρ) .* ε[:, j] .+ σv .* randn(rng, T, nobs)
+    end
+    return Y, ε, k == 1 ? vec(Z) : Z
+end

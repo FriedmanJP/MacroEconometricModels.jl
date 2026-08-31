@@ -253,6 +253,9 @@ function historical_decomposition(model::VARModel{T}, horizon::Int=effective_nob
 
     actual = model.Y[(model.p + 1):end, :]
     snames = isnothing(shock_names) ? model.varnames : shock_names
+    if _is_partial(method)
+        @warn "historical_decomposition: method=:$method is partially identified; contributions of unidentified shocks are not identified." maxlog = 1
+    end
 
     # SID-05/19: HD of each accepted rotation, then pointwise median. The adding-up
     # identity of the median HD is not required (Fry–Pagan; SID-17).

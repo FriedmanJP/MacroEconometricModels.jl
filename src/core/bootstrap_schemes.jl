@@ -125,6 +125,31 @@ function _resample_residuals_with_z(U::AbstractMatrix{T}, z::AbstractVector,
     throw(ArgumentError("bootstrap must be :iid, :wild, or :block; got :$scheme"))
 end
 
+"""Jointly resample residuals and instruments via `_resample_residuals` on `hcat(U, Z)`."""
+function _resample_uz(U::AbstractMatrix{T}, Z::AbstractMatrix, scheme::Symbol, rng::AbstractRNG;
+                      block_length::Int=0,
+                      wild_dist::Symbol=:rademacher) where {T<:AbstractFloat}
+    size(Z, 1) == size(U, 1) || throw(ArgumentError(
+        "instrument rows $(size(Z, 1)) must match residual sample $(size(U, 1))"))
+    UZb = _resample_residuals(hcat(U, Matrix{T}(Z)), scheme, rng;
+                              block_length=block_length, wild_dist=wild_dist)
+    n = size(U, 2)
+    UZb[:, 1:n], UZb[:, (n + 1):end]
+end
+
+"""Resample `U` (and proxy instruments when `Z_eff !== nothing`); return `(U_boot, kwargs)`."""
+function _resample_for_method(U::AbstractMatrix{T}, Z_eff, scheme::Symbol, rng::AbstractRNG,
+                              kwargs; block_length::Int=0,
+                              wild_dist::Symbol=:rademacher) where {T<:AbstractFloat}
+    if Z_eff === nothing
+        return _resample_residuals(U, scheme, rng; block_length=block_length, wild_dist=wild_dist), kwargs
+    end
+    U_boot, Z_boot = _resample_uz(U, Z_eff, scheme, rng; block_length=block_length, wild_dist=wild_dist)
+    kw = Dict{Symbol,Any}(pairs(kwargs))
+    kw[:instruments] = Z_boot
+    return U_boot, kw
+end
+
 """
     _kilian_bias_correction(B, Psi, n, p) → (B_corrected, delta)
 

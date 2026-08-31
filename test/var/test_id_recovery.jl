@@ -118,3 +118,33 @@ end
     @test ir_ica.manifest !== nothing
     @test haskey(ir_ica.manifest.settings, "relabeled_fraction")
 end
+
+@testset "SID-11 proxy SVAR recovery" begin
+    B_true = [1.0 0.3 0.2; 0.5 1.0 0.1; 0.4 0.2 1.0]
+    A = [0.5 * Matrix{Float64}(I, 3, 3)]
+    Tobs = 5000
+
+    @testset "k=1 recovers B0[:,1] within 5%" begin
+        rng = MersenneTwister(4)
+        Y, ε, z = simulate_proxy_svar(B_true, A; Tobs=Tobs, ρ=0.6, k=1, rng=rng)
+        m = estimate_var(Y, 1)
+        r = identify_proxy(m, reshape(z, :, 1); normalize=:unit_variance)
+        @test r isa ProxySVARResult
+        b_est = r.B0[:, 1]
+        b_true = B_true[:, 1]
+        b_est = sign(dot(b_est, b_true)) * b_est
+        @test norm(b_est - b_true) / norm(b_true) < 0.05
+    end
+
+    @testset "k=2 recovers the instrumented span (Procrustes)" begin
+        rng = MersenneTwister(741)
+        Y, ε, Z = simulate_proxy_svar(B_true, A; Tobs=Tobs, ρ=0.6, k=2, rng=rng)
+        m = estimate_var(Y, 1)
+        r = identify_proxy(m, Z; normalize=:unit_variance)
+        Ahat = r.B0[:, 1:2]
+        Atrue = B_true[:, 1:2]
+        U, _, V = svd(Ahat' * Atrue)
+        R = U * V'
+        @test norm(Ahat * R - Atrue) / norm(Atrue) < 0.10
+    end
+end

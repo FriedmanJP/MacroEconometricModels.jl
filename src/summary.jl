@@ -50,6 +50,7 @@ uncertainty_bounds(r::AbstractAnalysisResult) = nothing
 # --- ImpulseResponse implementations ---
 
 point_estimate(r::ImpulseResponse) = r.values
+point_estimate(r::ProxySVARResult) = r.B0
 has_uncertainty(r::ImpulseResponse) = r.ci_type != :none
 function uncertainty_bounds(r::ImpulseResponse)
     r.ci_type == :none && return nothing
@@ -533,6 +534,8 @@ report(x::MinnesotaHyperparameters) = show(stdout, x)
 report(x::AriasSVARResult) = show(stdout, x)
 report(x::BayesianSetIdentifiedSVAR) = show(stdout, x)
 report(x::UhligSVARResult) = show(stdout, x)
+report(x::ProxySVARResult) = report(stdout, x)
+report(io::IO, r::ProxySVARResult) = (show(io, r); nothing)
 report(x::SVARRestrictions) = show(stdout, x)
 report(x::IdentificationStatus) = show(stdout, x)
 report(s::SignIdentifiedSet) = report(stdout, s)

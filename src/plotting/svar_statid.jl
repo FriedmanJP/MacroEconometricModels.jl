@@ -18,6 +18,7 @@ plot_result methods for the statistical-identification SVAR family (PLT-32):
 - `ICASVARResult` — `view=:mixing` (`B0` heatmap) / `:unmixing` (`W` heatmap) /
   `:shocks` (recovered structural-shock lines).
 - `NonGaussianMLResult` — `B0` heatmap with a likelihood-ratio annotation.
+- `ProxySVARResult` — `view=:B0` (impact heatmap) / `:impact` (identified columns).
 
 All rendering reuses the frozen renderers (A1); matrix views go through the shared
 heatmap renderer with a color-scale legend and a sign-appropriate scale (PLT-15):
@@ -326,6 +327,48 @@ function plot_result(r::NonGaussianMLResult{T};
     ptitle = "Impact Matrix (B₀) — non-Gaussian MLE ($(r.distribution)); LR vs Gaussian = $(_fmt(lr; digits=3))"
     panel = _PanelSpec(id, ptitle, js)
     ftitle = isempty(title) ? "Non-Gaussian ML SVAR — impact matrix" : title
+    p = _make_plot([panel]; title=ftitle, ncols=1)
+    save_path !== nothing && save_plot(p, save_path)
+    p
+end
+
+# =============================================================================
+# ProxySVARResult
+# =============================================================================
+
+"""
+    plot_result(r::ProxySVARResult; view=:B0, title="", save_path=nothing)
+
+Proxy-SVAR diagnostics. Views:
+
+- `:B0` (default) — structural impact matrix as a diverging heatmap.
+- `:impact` — identified columns of `B₀` as a diverging heatmap.
+
+Unknown `view` throws an `ArgumentError`.
+"""
+function plot_result(r::ProxySVARResult{T};
+                     view::Symbol=:B0, title::String="",
+                     save_path::Union{String,Nothing}=nothing) where {T}
+    if view === :B0
+        id = _next_plot_id("proxy_b0")
+        js = _statid_heatmap_panel(id, r.B0, r.varnames, r.shock_names;
+                                   scale=:diverging, xlabel="Shock", ylabel="Variable",
+                                   tip_label="")
+        panel = _PanelSpec(id, "Impact Matrix (B₀)", js)
+        ftitle = isempty(title) ? "Proxy SVAR — impact matrix" : title
+    elseif view === :impact
+        idx = [i for (i, s) in enumerate(r.shock_names) if occursin("Proxy", s)]
+        isempty(idx) && (idx = collect(1:r.k))
+        cols = r.B0[:, idx]
+        id = _next_plot_id("proxy_imp")
+        js = _statid_heatmap_panel(id, cols, r.varnames, r.shock_names[idx];
+                                   scale=:diverging, xlabel="Identified shock", ylabel="Variable",
+                                   tip_label="")
+        panel = _PanelSpec(id, "Identified Impact Columns", js)
+        ftitle = isempty(title) ? "Proxy SVAR — identified impacts" : title
+    else
+        throw(ArgumentError("Unknown view :$view. Valid views: :B0, :impact"))
+    end
     p = _make_plot([panel]; title=ftitle, ncols=1)
     save_path !== nothing && save_plot(p, save_path)
     p

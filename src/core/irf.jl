@@ -283,6 +283,16 @@ function _simulate_irfs(model::VARModel{T}, method::Symbol, horizon::Int,
     if ci_type == :bootstrap
         U, T_eff = model.U, size(model.U, 1)
         Y_init = model.Y[1:p, :]
+        Z_eff = nothing
+        if method === :proxy
+            inst = get(kwargs, :instruments, nothing)
+            inst === nothing && throw(ArgumentError(":proxy requires instruments"))
+            Z_eff = inst isa AbstractVector ?
+                reshape(collect(_align_instrument(inst, size(model.Y, 1), p, T_eff)), :, 1) :
+                Matrix{T}(_align_instrument(inst, size(model.Y, 1), p, T_eff))
+            Z_eff = Matrix{T}(Z_eff)
+            bootstrap === :iid && (bootstrap = :block)
+        end
 
         # Kilian (1998) bootstrap-after-bootstrap: estimate the bias once, re-centre the DGP
         # at the corrected coefficients, and correct every outer draw by the same Ψ.
@@ -312,8 +322,8 @@ function _simulate_irfs(model::VARModel{T}, method::Symbol, horizon::Int,
             Threads.@threads for it in 1:max_iter
                 local_rng = Random.MersenneTwister(seeds[it])
                 _suppress_warnings() do
-                    U_boot = _resample_residuals(U, bootstrap, local_rng;
-                                                 block_length=block_length, wild_dist=wild_dist)
+                    U_boot, kw_boot = _resample_for_method(U, Z_eff, bootstrap, local_rng, kwargs;
+                                                           block_length=block_length, wild_dist=wild_dist)
                     Y_boot = _simulate_var(Y_init, B_dgp, U_boot, T_eff + p)
                     m = estimate_var(Y_boot, p; check_stability=false)
                     m = _apply_boot_bias_correction(m, Psi, n, p, bias_correct)
@@ -322,7 +332,7 @@ function _simulate_irfs(model::VARModel{T}, method::Symbol, horizon::Int,
                     Q = compute_Q(m, method; horizon=horizon, check_func=check_func,
                                   narrative_check=narrative_check, restrictions=restrictions,
                                   max_draws=max_draws, transition_var=transition_var,
-                                  regime_indicator=regime_indicator, rng=local_rng, kwargs...)
+                                  regime_indicator=regime_indicator, rng=local_rng, kw_boot...)
                     Q, was_relabeled = _maybe_match_Q(Q, m, P_ref)
                     staging[it, :, :, :] = compute_irf(m, Q, horizon)
                     relabeled[it] = was_relabeled
@@ -345,15 +355,15 @@ function _simulate_irfs(model::VARModel{T}, method::Symbol, horizon::Int,
             Threads.@threads for r in 1:reps
                 local_rng = Random.MersenneTwister(seeds[r])
                 _suppress_warnings() do
-                    U_boot = _resample_residuals(U, bootstrap, local_rng;
-                                                 block_length=block_length, wild_dist=wild_dist)
+                    U_boot, kw_boot = _resample_for_method(U, Z_eff, bootstrap, local_rng, kwargs;
+                                                           block_length=block_length, wild_dist=wild_dist)
                     Y_boot = _simulate_var(Y_init, B_dgp, U_boot, T_eff + p)
                     m = estimate_var(Y_boot, p; check_stability=false)
                     m = _apply_boot_bias_correction(m, Psi, n, p, bias_correct)
                     Q = compute_Q(m, method; horizon=horizon, check_func=check_func,
                                   narrative_check=narrative_check, restrictions=restrictions,
                                   max_draws=max_draws, transition_var=transition_var,
-                                  regime_indicator=regime_indicator, rng=local_rng, kwargs...)
+                                  regime_indicator=regime_indicator, rng=local_rng, kw_boot...)
                     Q, was_relabeled = _maybe_match_Q(Q, m, P_ref)
                     sim_irfs[r, :, :, :] = compute_irf(m, Q, horizon)
                     relabeled[r] = was_relabeled

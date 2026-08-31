@@ -5,7 +5,7 @@
 # Licensed under GPL-3.0-or-later. See LICENSE for details.
 
 """
-Structural identification: Cholesky, sign restrictions, narrative, long-run, Arias et al. (2018).
+Structural identification: Cholesky, sign restrictions, narrative, long-run, proxy, Arias et al. (2018).
 """
 
 using LinearAlgebra, Random, Statistics
@@ -25,6 +25,50 @@ cholesky_factor(model::VARModel{T}) where {T<:AbstractFloat} = safe_cholesky(mod
 # =============================================================================
 # External-instrument (proxy) identification
 # =============================================================================
+
+"""
+    ProxySVARResult{T} <: AbstractAnalysisResult
+
+Proxy / external-instrument SVAR identification (Mertens & Ravn 2013; Stock &
+Watson 2018). The first `k` columns of `Q` (after `shocks` placement) are
+identified; remaining columns are an orthogonal complement (`is_partial=true`
+when `k < n`).
+"""
+struct ProxySVARResult{T<:AbstractFloat} <: AbstractAnalysisResult
+    Q::Matrix{T}
+    B0::Matrix{T}
+    k::Int
+    first_stage_F::T
+    reliability::T
+    instruments_names::Vector{String}
+    varnames::Vector{String}
+    shock_names::Vector{String}
+    is_partial::Bool
+end
+
+function Base.show(io::IO, r::ProxySVARResult{T}) where {T}
+    n = size(r.B0, 1)
+    spec = Any[
+        "Variables"        n;
+        "Instruments (k)"  r.k;
+        "Partial"          r.is_partial ? "Yes" : "No";
+        "First-stage F"    _fmt(r.first_stage_F; digits=2);
+        "Reliability"      _fmt(r.reliability; digits=3);
+        "Instruments"      join(r.instruments_names, ", ")
+    ]
+    _pretty_table(io, spec;
+        title = "Proxy SVAR Identification Result",
+        column_labels = ["", ""],
+        alignment = [:l, :r],
+    )
+    _matrix_table(io, r.B0, "Structural Impact Matrix (B₀)";
+        row_labels=r.varnames,
+        col_labels=r.shock_names)
+    r.first_stage_F < T(10) && println(io,
+        "Weak instrument: first-stage F < 10 (Montiel Olea, Stock & Watson 2021).")
+    r.is_partial && println(io,
+        "Partial identification: FEVD/HD of unidentified shocks are not identified.")
+end
 
 """
     identify_proxy(model::VARModel, z; normalize=1, normalize_value=1) -> NamedTuple
@@ -72,12 +116,215 @@ function identify_proxy(model::VARModel{T}, z::AbstractVector;
     (Q=Q, b1=Vector{T}(b1), first_stage_F=T(Fstat), z_eff=Vector{T}(z_eff))
 end
 
+"""
+    identify_proxy(model::VARModel, Z::AbstractMatrix; shocks=1:k,
+                   normalize=:unit_effect, align=true) -> ProxySVARResult
+
+Proxy SVAR with `k = size(Z, 2)` instruments for `k` shocks (Mertens & Ravn 2013,
+Appendix A). `k = 1` is the closed form; `k > 1` identifies the column space of
+the instrumented impacts up to a `k × k` rotation. Missing/`NaN` rows are dropped
+pairwise when `align=true`.
+
+`normalize = :unit_effect` scales identified column `j` so variable
+`normalize_var` (k=1) or variable `j` (k>1) responds by one on impact.
+`:unit_variance` returns an orthogonal `Q` with `B₀ = chol(Σ) Q`.
+"""
+function identify_proxy(model::VARModel{T}, Z::AbstractMatrix;
+                        shocks=1:size(Z, 2),
+                        normalize::Symbol=:unit_effect,
+                        align::Bool=true,
+                        normalize_var::Int=1,
+                        instrument_names::Union{Nothing,Vector{String}}=nothing,
+                        shock_names::Union{Nothing,Vector{String}}=nothing,
+                        kwargs...) where {T<:AbstractFloat}
+    n = nvars(model)
+    k = size(Z, 2)
+    k < 1 && throw(ArgumentError("need at least one instrument"))
+    k > n && throw(ArgumentError("k=$k instruments exceeds n=$n variables"))
+    normalize in (:unit_effect, :unit_variance) || throw(ArgumentError(
+        "normalize must be :unit_effect or :unit_variance, got :$normalize"))
+    sh = collect(Int, shocks)
+    length(sh) == k || throw(ArgumentError("shocks must have length k=$k"))
+    allunique(sh) || throw(ArgumentError("shocks must be unique"))
+    all(1 .<= sh .<= n) || throw(ArgumentError("shocks must be in 1:$n"))
+    (1 <= normalize_var <= n) || throw(ArgumentError("normalize_var must be in 1:$n"))
+
+    Uu, ZZ, _, nobs = _proxy_complete_cases(model, Z; align=align)
+    Suz = Matrix{T}((Uu' * ZZ) / T(nobs))
+    Sigmaz = Matrix{T}((ZZ' * ZZ) / T(nobs))
+    P = safe_cholesky(model.Sigma)
+
+    if normalize === :unit_variance
+        Qid = _complete_proxy_Q(P, Suz, n, T)
+    elseif k == 1
+        denom = Suz[normalize_var, 1]
+        abs(denom) < T(1e-12) && throw(ArgumentError(
+            "instrument is uncorrelated with residual $normalize_var; cannot normalise"))
+        b1 = vec(Suz) ./ denom
+        Qid = _complete_proxy_Q(P, b1, n, T)
+    else
+        S1 = Suz[1:k, :]
+        S1inv = Matrix{T}(robust_inv(S1))
+        srel = Suz[(k + 1):n, :] * S1inv
+        R = vcat(Matrix{T}(I, k, k), srel)
+        Qid = _complete_proxy_Q(P, R, n, T)
+    end
+
+    Btmp = P * Qid
+    if normalize === :unit_effect
+        for j in 1:k
+            i = k == 1 ? normalize_var : j
+            sc = Btmp[i, j]
+            abs(sc) < T(1e-12) && throw(ArgumentError(
+                "proxy impact on the normalising variable is zero"))
+            Qid[:, j] .*= one(T) / sc
+        end
+    else
+        for j in 1:k
+            i = k == 1 ? normalize_var : j
+            Btmp[i, j] < 0 && (Qid[:, j] .*= -one(T))
+        end
+    end
+
+    Q = _place_proxy_columns(Qid, sh, n, k)
+    B0 = P * Q
+
+    iF = k == 1 ? normalize_var : 1
+    Fstat = _proxy_first_stage_F(Uu, ZZ, iF)
+    if Fstat < T(10)
+        @warn "Weak instrument: first-stage F = $(round(Fstat, digits=2)) < 10 (Montiel Olea, Stock & Watson 2021)"
+    end
+    rel = _proxy_reliability(Suz, model.Sigma, Sigmaz)
+
+    inames = something(instrument_names, ["z$i" for i in 1:k])
+    length(inames) == k || throw(ArgumentError("instrument_names must have length k=$k"))
+    snames = something(shock_names, _default_proxy_shock_names(n, k, sh))
+    length(snames) == n || throw(ArgumentError("shock_names must have length n=$n"))
+
+    ProxySVARResult{T}(Matrix{T}(Q), Matrix{T}(B0), k, T(Fstat), T(rel),
+                       Vector{String}(inames), copy(model.varnames),
+                       Vector{String}(snames), k < n)
+end
+
+function _default_proxy_shock_names(n::Int, k::Int, sh::Vector{Int})
+    sn = Vector{String}(undef, n)
+    fill!(sn, "")
+    for j in 1:k
+        sn[sh[j]] = k == 1 ? "Proxy" : "Proxy $j"
+    end
+    u = 1
+    for i in 1:n
+        if isempty(sn[i])
+            sn[i] = "Unidentified $u"
+            u += 1
+        end
+    end
+    sn
+end
+
+function _proxy_complete_cases(model::VARModel{T}, Z::AbstractMatrix;
+                               align::Bool=true) where {T<:AbstractFloat}
+    U = model.U
+    T_eff = size(U, 1)
+    T_obs = size(model.Y, 1)
+    p = model.p
+    Z_eff = if align
+        _align_instrument(Z, T_obs, p, T_eff)
+    else
+        size(Z, 1) == T_eff || throw(ArgumentError(
+            "align=false requires instruments with $T_eff rows (residual sample); got $(size(Z, 1))"))
+        float.(Z)
+    end
+    Z_eff = Matrix{T}(Z_eff)
+    mask = [all(isfinite, @view Z_eff[t, :]) && all(isfinite, @view U[t, :]) for t in 1:T_eff]
+    count(mask) < 8 && throw(ArgumentError("instrument has too few finite observations"))
+    Uu = U[mask, :]
+    ZZ = Z_eff[mask, :]
+    # Match Sigma = U'U / T_eff: no extra demeaning of U, divide by nobs.
+    Uu, ZZ, Z_eff, size(ZZ, 1)
+end
+
+function _proxy_first_stage_F(Uc::AbstractMatrix{T}, Zc::AbstractMatrix{T},
+                              i_norm::Int) where {T<:AbstractFloat}
+    y = Vector{T}(@view Uc[:, i_norm])
+    controls = Matrix{T}(undef, length(y), 0)
+    first_stage_regression(y, Zc, controls).F_stat
+end
+
+function _proxy_reliability(Suz::AbstractMatrix{T}, Sigma::AbstractMatrix{T},
+                            Sigmaz::AbstractMatrix{T}) where {T<:AbstractFloat}
+    Sinv = Matrix{T}(robust_inv(Hermitian(Matrix{T}(Sigma))))
+    G = Suz' * Sinv * Suz
+    Zinv = Matrix{T}(robust_inv(Hermitian(Matrix{T}(Sigmaz))))
+    Rmat = G * Zinv
+    k = size(Rmat, 1)
+    val = tr(Rmat) / T(k)
+    T(clamp(real(val), zero(T), one(T)))
+end
+
+function _place_proxy_columns(Q::AbstractMatrix{T}, shocks::Vector{Int},
+                              n::Int, k::Int) where {T}
+    shocks == collect(1:k) && return Q
+    Qout = similar(Q)
+    used = falses(n)
+    for j in 1:k
+        Qout[:, shocks[j]] = Q[:, j]
+        used[shocks[j]] = true
+    end
+    c = k + 1
+    for i in 1:n
+        if !used[i]
+            Qout[:, i] = Q[:, c]
+            c += 1
+        end
+    end
+    Qout
+end
+
 function _align_instrument(z::AbstractVector, T_obs::Int, p::Int, T_eff::Int)
     n = length(z)
     n == T_eff && return float.(z)
     n == T_obs && return float.(z[(p + 1):end])
     throw(ArgumentError(
         "instrument length $n must equal residual sample $T_eff or full sample $T_obs"))
+end
+
+function _align_instrument(Z::AbstractMatrix, T_obs::Int, p::Int, T_eff::Int)
+    nrows = size(Z, 1)
+    nrows == T_eff && return float.(Z)
+    nrows == T_obs && return float.(Z[(p + 1):end, :])
+    throw(ArgumentError(
+        "instrument rows $nrows must equal residual sample $T_eff or full sample $T_obs"))
+end
+
+"""
+    proxy_ar_band(model, z; horizon=0, normalize_var=1, level=0.95, ...) -> LPIVARBand
+
+Weak-instrument-robust Anderson–Rubin bands for a `k = 1` proxy SVAR (Montiel
+Olea, Stock & Watson 2021). Builds the observationally equivalent LP-IV
+(Plagborg-Møller & Wolf 2021) with the VAR lag length as controls and reuses
+[`lp_iv_ar_band`](@ref).
+"""
+function proxy_ar_band(model::VARModel{T}, z;
+                       horizon::Int=0, normalize_var::Int=1, level::Real=0.95,
+                       n_grid::Int=401, span::Real=20, bandwidth::Int=0,
+                       responses=nothing) where {T<:AbstractFloat}
+    Z = z isa AbstractVector ? reshape(collect(float.(z)), :, 1) : Matrix{T}(float.(z))
+    size(Z, 2) == 1 || throw(ArgumentError("Anderson-Rubin bands require k=1 instrument"))
+    Y = model.Y
+    if size(Z, 1) == size(Y, 1) - model.p
+        Z = vcat(fill(T(NaN), model.p, 1), Z)
+    end
+    size(Z, 1) == size(Y, 1) || throw(ArgumentError(
+        "instrument length $(size(Z, 1)) must equal residual sample $(size(Y, 1) - model.p) or full sample $(size(Y, 1))"))
+    any(!isfinite, Z) && throw(ArgumentError(
+        "proxy_ar_band requires a fully observed instrument; drop missing rows first"))
+    any(!isfinite, Y) && throw(ArgumentError("proxy_ar_band requires fully observed Y"))
+    (1 <= normalize_var <= nvars(model)) || throw(ArgumentError(
+        "normalize_var must be in 1:$(nvars(model))"))
+    lp = estimate_lp_iv(Y, normalize_var, Z, horizon; lags=model.p, varnames=model.varnames)
+    lp_iv_ar_band(lp; level=level, n_grid=n_grid, span=span, bandwidth=bandwidth,
+                  responses=responses)
 end
 
 function _ols_first_stage_F(y::AbstractVector{T}, zc::AbstractVector{T}) where {T<:AbstractFloat}
@@ -100,6 +347,23 @@ function _complete_proxy_Q(P::AbstractMatrix{T}, b1::AbstractVector{T}, n::Int, 
     nrm < T(1e-12) && throw(ArgumentError("proxy impact column is numerically zero"))
     M = Matrix{T}(I, n, n)
     M[:, 1] = q1 ./ nrm
+    Fq = qr(M)
+    Q = Matrix{T}(Fq.Q)
+    s = [Fq.R[i, i] < zero(T) ? -one(T) : one(T) for i in 1:n]
+    Q * Diagonal(s)
+end
+
+function _complete_proxy_Q(P::AbstractMatrix{T}, Bcols::AbstractMatrix{T}, n::Int, ::Type{T}) where {T}
+    k = size(Bcols, 2)
+    k == 1 && return _complete_proxy_Q(P, vec(Bcols), n, T)
+    size(Bcols, 1) == n || throw(ArgumentError("proxy impact has incompatible size"))
+    (1 <= k <= n) || throw(ArgumentError("proxy impact has incompatible size"))
+    Qk = P \ Bcols
+    Fk = qr(Qk)
+    Qon = Matrix{T}(Fk.Q)
+    sk = [i <= k && Fk.R[i, i] < zero(T) ? -one(T) : one(T) for i in 1:k]
+    M = Matrix{T}(I, n, n)
+    M[:, 1:k] = Qon[:, 1:k] * Diagonal(sk)
     Fq = qr(M)
     Q = Matrix{T}(Fq.Q)
     s = [Fq.R[i, i] < zero(T) ? -one(T) : one(T) for i in 1:n]
@@ -488,6 +752,7 @@ Compute identification matrix Q for structural VAR analysis.
 - `:garch` — GARCH-based heteroskedasticity (Normandin & Phaneuf 2004)
 - `:smooth_transition` — Smooth-transition heteroskedasticity (requires `transition_var`)
 - `:external_volatility` — External volatility regimes (requires `regime_indicator`)
+- `:proxy` — External instruments (requires `instruments`)
 
 # Keyword Arguments
 - `horizon::Int=1`: IRF horizon for sign/narrative/Arias/Uhlig
@@ -495,6 +760,7 @@ Compute identification matrix Q for structural VAR analysis.
 - `max_draws::Int=1000`: Maximum draws for sign/narrative/Arias
 - `transition_var`: Transition variable for `:smooth_transition`
 - `regime_indicator`: Regime indicator for `:external_volatility`
+- `instruments`: Instrument vector/matrix for `:proxy`
 """
 function compute_Q(model::VARModel{T}, method::Symbol;
                    horizon::Int=1, restrictions=nothing, check_func=nothing,
@@ -560,6 +826,11 @@ function compute_Q(model::VARModel{T}, method::Symbol;
         isnothing(regime_indicator) &&
             throw(ArgumentError("external_volatility requires regime_indicator kwarg"))
         identify_external_volatility(model, regime_indicator).Q
+    elseif method == :proxy
+        isnothing(instruments) &&
+            throw(ArgumentError("proxy requires instruments"))
+        Z = instruments isa AbstractVector ? reshape(instruments, :, 1) : instruments
+        identify_proxy(model, Z; kwargs...).Q
     else
         throw(ArgumentError("Unknown method: $method"))
     end
@@ -593,6 +864,7 @@ function _register_builtin_identification!()
         (:external_volatility, true, false, false),
         (:arias, false, true, false),
         (:uhlig, false, false, false),
+        (:proxy, true, false, true),
     )
     for (name, needs_resid, set_id, partial) in specs
         register_identification!(IdentificationMethod(name, needs_resid, set_id, partial))
