@@ -173,16 +173,10 @@ const _suppress_warnings = MacroEconometricModels._suppress_warnings
     end
 
     @testset "Sign restrictions - Theoretical CI" begin
-        _suppress_warnings() do
-            Random.seed!(12353)
-            check_fn = irf_vals -> irf_vals[1, 1, 1] > 0
-
-            irf_sign_theo = irf(model, H; method=:sign, ci_type=:theoretical, reps=(FAST ? 50 : 100),
-                                conf_level=0.90, check_func=check_fn)
-
-            @test irf_sign_theo isa ImpulseResponse
-            @test all(irf_sign_theo.ci_lower .<= irf_sign_theo.ci_upper)
-        end
+        check_fn = irf_vals -> irf_vals[1, 1, 1] > 0
+        @test_throws ArgumentError irf(model, H; method=:sign, ci_type=:theoretical,
+                                       reps=(FAST ? 50 : 100), conf_level=0.90,
+                                       check_func=check_fn)
     end
 
     # =========================================================================
