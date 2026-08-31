@@ -1023,6 +1023,7 @@ export IdentificationMethod, register_identification!
 # Arias et al. (2018) SVAR identification
 export AbstractSVARRestriction, is_linear_zero, sign_check
 export ZeroRestriction, SignRestriction, SVARRestrictions, AriasSVARResult
+export check_identification, IdentificationStatus
 export LongRunZeroRestriction, A0ZeroRestriction, AplusZeroRestriction
 export A0SignRestriction, AplusSignRestriction
 export ElasticityBound, MagnitudeBound, FEVDShareRestriction, CumulativeRestriction

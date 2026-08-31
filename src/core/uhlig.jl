@@ -290,6 +290,11 @@ end
 
 Identify SVAR using Mountford & Uhlig (2009) penalty function approach.
 
+Calls [`check_identification`](@ref) first; `:under` throws
+[`IdentificationError`](@ref). A `:set` pattern still returns a point (the
+penalty minimizer); [`report`](@ref) notes that the rotation is one point in
+the identified set.
+
 Uses Nelder-Mead optimization over spherical coordinates to find the rotation
 matrix ``Q`` that best satisfies sign restrictions, with zero restrictions
 enforced as hard constraints via null-space projection.
@@ -348,6 +353,7 @@ function identify_uhlig(model::VARModel{T}, restrictions::SVARRestrictions, hori
     any(s -> s isa SignRestriction, restrictions.signs) || throw(ArgumentError(
         "identify_uhlig requires at least one sign restriction"))
     _uhlig_assert_sign_only_rejections(restrictions)
+    _assert_rwz_identified(restrictions, model; rng=rng)
 
     # Determine required horizon for restrictions
     max_h = max(horizon,

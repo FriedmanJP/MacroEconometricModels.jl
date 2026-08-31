@@ -1611,7 +1611,8 @@ end
         irf6 = compute_irf(m, Q, 6)
         @test irf6[6, 1, 1] > 0
     end
-    r0 = SVARRestrictions(3; zeros=[zero_restriction(2, 1; horizon=4)])
+    r0 = SVARRestrictions(3; zeros=[zero_restriction(2, 1; horizon=4)],
+                          signs=[sign_restriction(1, 1, :positive)])
     a0 = identify_arias(m, r0, 2; n_draws=3, n_rotations=400, rng=MersenneTwister(7311))
     for Q in a0.Q_draws
         @test abs(compute_irf(m, Q, 5)[5, 2, 1]) < 1e-8
@@ -1829,6 +1830,119 @@ end
         r = SVARRestrictions(2; zeros=[zero_restriction(1, 1; horizon=:long_run)])
         @test_throws IdentificationError identify_arias(to_var(vecm), r, 4;
                                                        n_draws=1, n_rotations=5)
+    end
+end
+
+@testset "SID-23 RWZ rank/order checker" begin
+    Random.seed!(752)
+    recursive_zeros(n) = [zero_restriction(i, j) for j in 1:n-1 for i in (j + 1):n]
+
+    @testset "recursive zeros → :exact with rank(M_j)=n-j" begin
+        n, p = 3, 1
+        model = estimate_var(randn(180, n), p)
+        r = SVARRestrictions(n; zeros=recursive_zeros(n))
+        st = check_identification(r, model; n_points=8, rng=MersenneTwister(752))
+        @test st isa IdentificationStatus
+        @test st.status === :exact
+        @test st.ranks == [n - j for j in 1:n]
+        @test st.orders == [n - j for j in 1:n]
+        @test st.n_overidentifying == 0
+        st_o = check_identification(r, n)
+        @test st_o.status === :exact
+        @test st_o.orders == st.orders
+        @test st_o.n_overidentifying == 0
+        result = identify_arias(model, r, 4; n_draws=FAST ? 2 : 4, n_rotations=50,
+                                rng=MersenneTwister(7521))
+        @test length(result.Q_draws) >= 1
+    end
+
+    @testset "all zeros on shock 1 → :under and IdentificationError" begin
+        n, p = 3, 1
+        model = estimate_var(randn(180, n), p)
+        # n(n-1)/2 impact zeros, all loaded on shock 1
+        r = SVARRestrictions(n; zeros=[zero_restriction(i, 1) for i in 1:n])
+        st = check_identification(r, model; n_points=6, rng=MersenneTwister(7522))
+        @test st.status === :under
+        @test st.orders[1] == n
+        @test all(st.orders[j] == 0 for j in 2:n)
+        @test st.ranks[2] < n - 2 || st.ranks[3] < n - 3 || st.orders[2] < n - 2
+        st_o = check_identification(r, n)
+        @test st_o.status === :under
+        @test st_o.orders == [n, 0, 0]
+        @test_throws IdentificationError identify_arias(model, r, 4; n_draws=1, n_rotations=5,
+                                                       rng=MersenneTwister(7523))
+        err = try
+            identify_arias(model, r, 4; n_draws=1, n_rotations=5)
+            nothing
+        catch e
+            e
+        end
+        @test err isa IdentificationError
+        @test occursin("under", lowercase(err.msg))
+    end
+
+    @testset "sign-only container → :set" begin
+        n = 3
+        model = estimate_var(randn(120, n), 1)
+        r = SVARRestrictions(n; signs=[sign_restriction(1, 1, :positive),
+                                       sign_restriction(2, 1, :negative)])
+        st = check_identification(r, model; rng=MersenneTwister(7524))
+        @test st.status === :set
+        @test st.orders == zeros(Int, n)
+        @test st.ranks == zeros(Int, n)
+        @test st.n_overidentifying == 0
+        @test check_identification(r, n).status === :set
+        result = identify_arias(model, r, 4; n_draws=FAST ? 3 : 6, n_rotations=80,
+                                rng=MersenneTwister(7525))
+        @test length(result.Q_draws) >= 1
+    end
+
+    @testset "Impact zero + linearly dependent long-run zero" begin
+        n, p = 3, 1
+        model = estimate_var(randn(150, n), p)
+        # Order count for shock 1 is n-1, but the two ZF rows are the same
+        # restriction twice (impact copied), and a long-run zero on the same
+        # (variable, shock) is the same row whenever C(1)=I.
+        r = SVARRestrictions(n; zeros=[
+            zero_restriction(2, 1),
+            zero_restriction(2, 1),
+            zero_restriction(3, 2),
+        ])
+        st_o = check_identification(r, n)
+        @test st_o.orders == [2, 1, 0]
+        @test st_o.status === :exact   # count passes
+        st = check_identification(r, model; n_points=8, rng=MersenneTwister(7526))
+        @test st.orders == [2, 1, 0]
+        @test st.ranks[1] < n - 1
+        @test st.status === :under
+
+        B0 = copy(model.B)
+        B0[2:end, :] .= 0
+        model0 = VARModel(model.Y, p, B0, model.U, Matrix(model.Sigma),
+                          model.aic, model.bic, model.hqic, model.varnames)
+        r_lr = SVARRestrictions(n; zeros=[
+            zero_restriction(2, 1),
+            zero_restriction(2, 1; horizon=:long_run),
+            zero_restriction(3, 2),
+        ])
+        Phi = MacroEconometricModels.ma_coefficients(model0, 2)
+        L = safe_cholesky(model0.Sigma)
+        C1 = MacroEconometricModels._C1_from_B(model0.B, n, p)
+        Z1 = MacroEconometricModels._compute_ZF(r_lr, Phi, L, 1; B=model0.B, C1=C1)
+        @test size(Z1, 1) == 2
+        @test Z1[1, :] ≈ Z1[2, :] atol=1e-10
+        @test rank(Z1) == 1
+        st_lr = check_identification(r_lr, n)
+        @test st_lr.orders[1] == 2
+        @test st_lr.status === :exact
+    end
+
+    @testset "show / order-condition dimension check" begin
+        r = SVARRestrictions(2; signs=[sign_restriction(1, 1, :positive)])
+        st = check_identification(r, 2)
+        shown = sprint(show, st)
+        @test occursin("set", shown)
+        @test_throws ArgumentError check_identification(r, 3)
     end
 end
 

@@ -24,6 +24,7 @@ CumulativeRestriction
 NarrativeShockRestriction
 NarrativeContributionRestriction
 SVARRestrictions
+IdentificationStatus
 SignIdentifiedSet
 AriasSVARResult
 UhligSVARResult
@@ -63,6 +64,7 @@ Private = false
 ```@docs
 identify_arias
 identify_arias_bayesian
+check_identification
 is_linear_zero
 check
 sign_check

@@ -702,6 +702,193 @@ function _compute_ZF(restrictions::SVARRestrictions, Phi::Vector{<:AbstractMatri
     isempty(rows) ? zeros(T, 0, n) : reduce(vcat, [rw' for rw in rows])
 end
 
+# =============================================================================
+# RWZ rank / order condition (Rubio-Ramírez, Waggoner & Zha 2010, Theorem 1)
+# =============================================================================
+
+"""
+    IdentificationStatus
+
+Rubio-Ramírez, Waggoner & Zha (2010) rank/order diagnostic for linear zero
+restrictions. `status` is `:exact`, `:over`, `:under`, or `:set`.
+
+# Fields
+- `status::Symbol`: classification of the restriction pattern
+- `ranks::Vector{Int}`: ``\\mathrm{rank}(M_j)`` for shock ``j = 1:n``, where
+  ``M_j`` stacks the linear zero-restriction rows of shock ``j``
+- `orders::Vector{Int}`: number of linear zeros on shock ``j``
+- `n_overidentifying::Int`: ``\\sum_j \\max(\\mathrm{rank}_j - (n-j), 0)``
+"""
+struct IdentificationStatus
+    status::Symbol
+    ranks::Vector{Int}
+    orders::Vector{Int}
+    n_overidentifying::Int
+    function IdentificationStatus(status::Symbol, ranks::Vector{Int},
+                                  orders::Vector{Int}, n_overidentifying::Int)
+        status in (:exact, :over, :under, :set) || throw(ArgumentError(
+            "status must be :exact, :over, :under, or :set, got :$status"))
+        length(ranks) == length(orders) ||
+            throw(ArgumentError("ranks and orders must have the same length"))
+        n_overidentifying >= 0 || throw(ArgumentError("n_overidentifying must be ≥ 0"))
+        new(status, ranks, orders, n_overidentifying)
+    end
+end
+
+function _zeros_per_shock(restrictions::SVARRestrictions, n::Int)
+    orders = zeros(Int, n)
+    for zr in restrictions.zeros
+        (1 <= zr.shock <= n) && (orders[zr.shock] += 1)
+    end
+    orders
+end
+
+function _matrix_rank(A::AbstractMatrix{T}) where {T<:AbstractFloat}
+    (size(A, 1) == 0 || size(A, 2) == 0) && return 0
+    svals = svdvals(A)
+    isempty(svals) && return 0
+    tol = max(size(A)...) * Base.eps(T) * maximum(svals)
+    count(>(tol), svals)
+end
+
+function _rwz_phi_length(restrictions::SVARRestrictions)
+    h = 0
+    for zr in restrictions.zeros
+        h = max(h, _restriction_horizon(zr))
+    end
+    h + 1
+end
+
+function _rwz_classify(ranks::Vector{Int}, orders::Vector{Int}, n::Int, has_signs::Bool)
+    short = false
+    extra = false
+    n_over = 0
+    @inbounds for j in 1:n
+        need = n - j
+        ranks[j] < need && (short = true)
+        ranks[j] > need && (extra = true)
+        n_over += max(ranks[j] - need, 0)
+    end
+    status = if !short && !extra
+        :exact
+    elseif !short && extra
+        :over
+    else
+        drawable = true
+        @inbounds for j in 1:n
+            if orders[j] > n - j
+                drawable = false
+                break
+            end
+        end
+        (has_signs && drawable) ? :set : :under
+    end
+    (status, n_over)
+end
+
+function _draw_generic_structural(n::Int, m::Int, ::Type{T};
+                                  rng::AbstractRNG) where {T<:AbstractFloat}
+    A0 = randn(rng, T, n, n)
+    @inbounds for i in 1:n
+        A0[i, i] += T(2n)
+    end
+    Aplus = randn(rng, T, m, n)
+    (A0, Aplus)
+end
+
+function _accumulate_zf_ranks!(ranks::Vector{Int}, restrictions::SVARRestrictions,
+                               B::AbstractMatrix{T}, Sigma::AbstractMatrix{T},
+                               n::Int, p::Int, phi_len::Int) where {T<:AbstractFloat}
+    L = safe_cholesky(Matrix{T}(Sigma))
+    Phi = ma_coefficients(Matrix{T}(B), n, p, phi_len)
+    C1 = any(z -> z isa LongRunZeroRestriction, restrictions.zeros) ?
+         _C1_from_B(B, n, p) : nothing
+    for j in 1:n
+        ZF = _compute_ZF(restrictions, Phi, L, j; B=B, C1=C1)
+        ranks[j] = max(ranks[j], _matrix_rank(ZF))
+    end
+    nothing
+end
+
+"""
+    check_identification(restrictions::SVARRestrictions, model::VARModel;
+                         n_points=10, rng) -> IdentificationStatus
+    check_identification(restrictions::SVARRestrictions, n::Int) -> IdentificationStatus
+
+Rubio-Ramírez, Waggoner & Zha (2010) Theorem 1: with zeros ordered so shock
+``j`` has ``q_j`` linear restrictions, the SVAR is globally identified almost
+everywhere if and only if ``\\mathrm{rank}(M_j(f(A_0, A_+))) = n - j`` for
+``j = 1,\\ldots,n`` at a generic point. ``M_j`` is the stack of SID-14
+zero-restriction rows for shock ``j``.
+
+The `model` method evaluates those ranks at the estimated reduced form and at
+`n_points` random ``(A_0, A_+)``, taking the maximum (generic rank). The `n`
+method checks the order condition only, treating the zeros as independent.
+
+Sign (rejection) restrictions do not enter the rank: a shortfall of zeros with
+a drawable null space and at least one sign is classified `:set`. `:under`
+means the equalities cannot identify the rotation.
+
+# Returns
+[`IdentificationStatus`](@ref) with `status ∈ (:exact, :over, :under, :set)`.
+"""
+function check_identification(restrictions::SVARRestrictions, model::VARModel{T};
+                              n_points::Int=10,
+                              rng::AbstractRNG=Random.default_rng()) where {T<:AbstractFloat}
+    n = nvars(model)
+    n_points >= 1 || throw(ArgumentError("n_points must be ≥ 1, got $n_points"))
+    restrictions.n_vars == n || throw(ArgumentError(
+        "Restriction dimension ($(restrictions.n_vars)) must match model ($n)"))
+    orders = _zeros_per_shock(restrictions, n)
+    ranks = zeros(Int, n)
+    phi_len = _rwz_phi_length(restrictions)
+    p = model.p
+    mrow = size(model.B, 1)
+    try
+        _accumulate_zf_ranks!(ranks, restrictions, model.B, model.Sigma, n, p, phi_len)
+    catch err
+        _is_rejectable_draw_error(err) || rethrow(err)
+    end
+    _suppress_warnings() do
+        for _ in 1:n_points
+            try
+                A0, Aplus = _draw_generic_structural(n, mrow, T; rng=rng)
+                B_rf, Sigma_rf = _struct_to_rf(A0, Aplus)
+                _accumulate_zf_ranks!(ranks, restrictions, B_rf, Sigma_rf, n, p, phi_len)
+            catch err
+                _is_rejectable_draw_error(err) || rethrow(err)
+                continue
+            end
+        end
+    end
+    status, n_over = _rwz_classify(ranks, orders, n, !isempty(restrictions.signs))
+    IdentificationStatus(status, ranks, orders, n_over)
+end
+
+function check_identification(restrictions::SVARRestrictions, n::Int)
+    n >= 1 || throw(ArgumentError("n must be positive"))
+    restrictions.n_vars == n || throw(ArgumentError(
+        "Restriction dimension ($(restrictions.n_vars)) must match n=$n"))
+    orders = _zeros_per_shock(restrictions, n)
+    ranks = copy(orders)
+    status, n_over = _rwz_classify(ranks, orders, n, !isempty(restrictions.signs))
+    IdentificationStatus(status, ranks, orders, n_over)
+end
+
+function _assert_rwz_identified(restrictions::SVARRestrictions, model::VARModel;
+                                rng::AbstractRNG=Random.default_rng())
+    st = check_identification(restrictions, model; rng=rng)
+    if st.status === :under
+        n = nvars(model)
+        needed = [n - j for j in 1:n]
+        throw(IdentificationError(
+            "SVAR is underidentified by the RWZ rank/order condition " *
+            "(status=:under; ranks=$(st.ranks), orders=$(st.orders), " *
+            "need rank(M_j)=$needed)."))
+    end
+    st
+end
+
 """
 Compute QR sign patterns for each shock's M_j matrix.
 Returns Vector{Vector{Int}} where signs[j][col] is +1 or -1.
@@ -980,6 +1167,9 @@ Identify SVAR using Arias et al. (2018) with zero and sign restrictions.
 Uses importance sampling with draw-dependent weights (Proposition 4) for zero+sign restriction
 combinations. For pure sign restrictions, draws uniformly from O(n) with unit weights.
 
+Calls [`check_identification`](@ref) first. An `:under` RWZ rank/order diagnosis
+throws [`IdentificationError`](@ref). Sign-only patterns are `:set` and sampled as usual.
+
 The result reports Kish's **effective sample size** of those weights (`ess`,
 `ess_fraction`). Uneven weights mean the weighted IRF summaries rest on fewer
 effective draws than `n_draws`; below 10% of the nominal count the sampler is
@@ -1003,6 +1193,7 @@ function identify_arias(model::VARModel{T}, restrictions::SVARRestrictions, hori
                         rng::AbstractRNG=Random.default_rng()) where {T<:AbstractFloat}
     n = nvars(model)
     @assert restrictions.n_vars == n "Restriction dimension must match model"
+    _assert_rwz_identified(restrictions, model; rng=rng)
 
     max_h = max(horizon,
         isempty(restrictions.zeros) ? 0 : maximum(_restriction_horizon(zr) for zr in restrictions.zeros) + 1,

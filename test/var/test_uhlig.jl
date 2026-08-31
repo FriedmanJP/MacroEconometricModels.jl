@@ -709,4 +709,29 @@ end
     @test ru.values ≈ u.irf
 end
 
+@testset "SID-23 Uhlig RWZ checker" begin
+    Random.seed!(752)
+    n = 3
+    m = estimate_var(randn(120, n), 1)
+
+    @testset "sign-only is :set and report notes the set" begin
+        r = SVARRestrictions(n; signs=[sign_restriction(1, 1, :positive)])
+        @test check_identification(r, n).status === :set
+        u = identify_uhlig(m, r, 4; n_starts=(FAST ? 3 : 6), n_refine=1,
+                           max_iter_coarse=(FAST ? 40 : 80), max_iter_fine=(FAST ? 80 : 160),
+                           rng=MersenneTwister(7527))
+        shown = sprint(show, u)
+        @test occursin("set", lowercase(shown))
+        @test occursin("point", lowercase(shown))
+    end
+
+    @testset "zeros all on shock 1 → IdentificationError" begin
+        r = SVARRestrictions(n;
+            zeros=[zero_restriction(i, 1) for i in 1:n],
+            signs=[sign_restriction(1, 2, :positive)])
+        @test check_identification(r, n).status === :under
+        @test_throws IdentificationError identify_uhlig(m, r, 4; n_starts=1, n_refine=1)
+    end
+end
+
 _tprint("Mountford-Uhlig (2009) tests completed.")

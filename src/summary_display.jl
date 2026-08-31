@@ -913,6 +913,10 @@ function Base.show(io::IO, r::UhligSVARResult)
          "Penalty" => _fmt(r.penalty; digits=4),
          "Converged" => (r.converged ? "Yes" : "No")])
     _show_note(io, "Lower penalty is better.")
+    id = check_identification(r.restrictions, n)
+    if id.status === :set
+        _show_note(io, "Note: sign restrictions identify a set; the reported Q is one point in that set (Uhlig penalty minimizer).")
+    end
 
     # Per-shock penalty breakdown
     shock_data = Matrix{Any}(undef, n, 3)
@@ -1019,6 +1023,11 @@ _restriction_words(r::NarrativeShockRestriction) =
 _restriction_words(r::NarrativeContributionRestriction) =
     "Narrative contribution: shock $(r.shock) is the leading contributor to variable $(r.variable) over $(r.window)"
 _restriction_words(r::AbstractSVARRestriction) = string(typeof(r))
+
+function Base.show(io::IO, s::IdentificationStatus)
+    print(io, "IdentificationStatus(:$(s.status), ranks=$(s.ranks), orders=$(s.orders), ",
+          "n_overidentifying=$(s.n_overidentifying))")
+end
 
 function Base.show(io::IO, r::SVARRestrictions)
     println(io, "SVAR Restrictions ($(r.n_vars) variables, $(r.n_shocks) shocks)")

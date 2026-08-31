@@ -1925,6 +1925,7 @@ const _TYPE_REFS = Dict{Symbol, Vector{Symbol}}(
     :BayesianSetIdentifiedSVAR => [:arias_rubio_ramirez_waggoner2018],
     :UhligSVARResult => [:mountford_uhlig2009, :uhlig2005],
     :SVARRestrictions => [:arias_rubio_ramirez_waggoner2018],
+    :IdentificationStatus => [:rubio_ramirez2010, :arias_rubio_ramirez_waggoner2018],
     :ConditionalForecast => [:waggoner_zha1999, :antolin_diaz_petrella_rubio_ramirez2021],
     :SignIdentifiedSet => [:rubio_ramirez2010, :baumeister_hamilton2015],
     # Bayesian VAR
@@ -2558,6 +2559,7 @@ refs(io::IO, ::AriasSVARResult; kw...) = refs(io, _TYPE_REFS[:AriasSVARResult]; 
 refs(io::IO, ::BayesianSetIdentifiedSVAR; kw...) = refs(io, _TYPE_REFS[:BayesianSetIdentifiedSVAR]; kw...)
 refs(io::IO, ::UhligSVARResult; kw...) = refs(io, _TYPE_REFS[:UhligSVARResult]; kw...)
 refs(io::IO, ::SVARRestrictions; kw...) = refs(io, _TYPE_REFS[:SVARRestrictions]; kw...)
+refs(io::IO, ::IdentificationStatus; kw...) = refs(io, _TYPE_REFS[:IdentificationStatus]; kw...)
 refs(io::IO, ::SignIdentifiedSet; kw...) = refs(io, _TYPE_REFS[:SignIdentifiedSet]; kw...)
 refs(io::IO, ::ConditionalForecast; kw...) = refs(io, _TYPE_REFS[:ConditionalForecast]; kw...)
 refs(io::IO, ::MinnesotaHyperparameters; kw...) = refs(io, _TYPE_REFS[:MinnesotaHyperparameters]; kw...)

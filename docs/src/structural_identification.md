@@ -375,6 +375,42 @@ The sampler accepts 200 draws from 975 attempts (``20.5\%``) and the impact resp
 | `ess` | `T` | Kish effective sample size of the importance weights |
 | `ess_fraction` | `T` | ``\mathrm{ESS} / n_{\text{draws}}`` |
 
+### Rank and order conditions
+
+Linear zeros identify the rotation almost everywhere when they satisfy the
+Rubio-Ramírez, Waggoner & Zha (2010) rank condition. Order the zeros so shock
+``j`` carries ``q_j`` of them. Global identification holds at a generic
+``(A_0, A_+)`` if and only if
+
+```math
+\mathrm{rank}\bigl(M_j(f(A_0, A_+))\bigr) = n - j, \qquad j = 1,\ldots,n
+```
+
+where:
+- ``M_j`` stacks the linear zero-restriction rows for shock ``j`` (finite-horizon IRF, long-run, ``A_0``, and ``A_+``)
+- ``n - j`` is the number of free directions remaining after ``j-1`` orthogonality constraints
+- the **order condition** ``q_j \ge n - j`` is necessary but not sufficient: linearly dependent rows (a repeated impact zero, or an impact zero stacked with a long-run zero when ``C(1) = I``) drop the rank below the count
+
+`check_identification` returns an `IdentificationStatus` with `status ∈ (:exact, :over, :under, :set)`. `:under` throws `IdentificationError` from `identify_arias` and `identify_uhlig`. Sign restrictions do not enter the rank; a drawable shortfall of zeros with at least one sign is `:set`. Uhlig still returns a point from that set, and `report` says so.
+
+```@example sid
+rec = SVARRestrictions(3; zeros=[zero_restriction(2, 1), zero_restriction(3, 1),
+                                 zero_restriction(3, 2)])
+st_rec = check_identification(rec, model)
+st_sign = check_identification(SVARRestrictions(3; signs=[sign_restriction(1, 1, :positive)]), 3)
+(recursive = (st_rec.status, st_rec.ranks),
+ sign_only = st_sign.status)
+```
+
+The three recursive impact zeros recover Cholesky: ``\mathrm{rank}(M_j) = (2, 1, 0) = n - j`` and the status is `:exact`. The sign-only container has no linear zeros, so the rank condition fails and the status is `:set` --- Arias samples the identified set; Uhlig reports one penalty-optimal rotation from it.
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `status` | `Symbol` | `:exact`, `:over`, `:under`, or `:set` |
+| `ranks` | `Vector{Int}` | ``\mathrm{rank}(M_j)`` for shock ``j`` (generic point) |
+| `orders` | `Vector{Int}` | Number of linear zeros on shock ``j`` |
+| `n_overidentifying` | `Int` | ``\sum_j \max(\mathrm{rank}_j - (n-j), 0)`` |
+
 ### Effective Sample Size
 
 Uneven importance weights mean the weighted IRF summaries rest on fewer draws than the nominal count. The result reports Kish's (1965) **effective sample size**
@@ -525,13 +561,15 @@ With the interest rate ordered last, the Cholesky scheme forces the contemporane
 
 5. **Reading `identify_arias` draw counts at face value.** The acceptance rate says how many draws survived the restrictions; `ess_fraction` says how many of them actually count. With zero restrictions the two diverge --- check `ess_fraction` before trusting the width of a credible band.
 
-6. **Zero restrictions on late-ordered shocks over-constrain the draw.** Shock ``j`` admits at most ``n - j`` zero restrictions in both `identify_arias` and `identify_uhlig`. Reorder the system so the heavily restricted shock comes first.
+6. **Zero restrictions on late-ordered shocks over-constrain the draw.** Shock ``j`` admits at most ``n - j`` zero restrictions in both `identify_arias` and `identify_uhlig`. Reorder the system so the heavily restricted shock comes first. `check_identification` reports `:under` when the RWZ rank or order condition fails, and both routines throw `IdentificationError` before sampling.
 
 7. **Uhlig may not converge.** If `result.converged == false`, increase `n_starts` or relax the sign restrictions. The optimizer found a local minimum where some sign conditions are violated.
 
 8. **Uhlig only penalizes `SignRestriction`.** Elasticity, magnitude, FEVD, cumulative, and ``A_0``/``A_+`` signs throw `ArgumentError` from `identify_uhlig`; use `identify_arias`. ``A_0``/``A_+`` and long-run *zeros* remain null-space rows. `A0[eq, shock]` is the RWZ ``y'A_0`` entry ``(L^{-T} Q)[\mathrm{eq},\mathrm{shock}]``, not the impact ``(LQ)[\mathrm{eq},\mathrm{shock}]``.
 
 9. **Long-run identification requires stationarity.** If the VAR has a near-unit root, ``(I - A(1))`` is nearly singular and the long-run matrix ``C(1)`` explodes; `identify_long_run` warns when the condition number crosses ``1/\sqrt{\varepsilon}``. Use a VECM specification for cointegrated systems.
+
+10. **The order condition is not the rank condition.** Loading ``n(n-1)/2`` zeros on shock 1 satisfies the *count* for that shock and starves shocks ``2,\ldots,n``. An impact zero stacked with a long-run zero on the same entry can also pass the count while ``\mathrm{rank}(M_j) < n - j``. Read `IdentificationStatus.ranks`, not just `orders`.
 
 ---
 

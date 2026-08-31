@@ -534,6 +534,7 @@ report(x::AriasSVARResult) = show(stdout, x)
 report(x::BayesianSetIdentifiedSVAR) = show(stdout, x)
 report(x::UhligSVARResult) = show(stdout, x)
 report(x::SVARRestrictions) = show(stdout, x)
+report(x::IdentificationStatus) = show(stdout, x)
 report(s::SignIdentifiedSet) = report(stdout, s)
 function report(io::IO, s::SignIdentifiedSet{T}) where {T}
     n = length(s.variables)
