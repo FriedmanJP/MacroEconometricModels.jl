@@ -181,4 +181,24 @@ end
     @test f.n_effective == s.n_accepted
     @test size(f.proportions) == (2, 2, 5)
     @test all(f.proportions .>= -1e-12)
+    @test s.n_accepted > 1
+    n, H = 2, 5
+    acc = Array{Float64,4}(undef, s.n_accepted, n, n, H)
+    for (i, Q) in enumerate(s.Q_draws)
+        _, p = MacroEconometricModels._compute_fevd(compute_irf(m, Q, H), n, H)
+        acc[i, :, :, :] = p
+    end
+    med = similar(f.proportions)
+    for v in 1:n, sh in 1:n, h in 1:H
+        med[v, sh, h] = quantile(@view(acc[:, v, sh, h]), 0.5)
+    end
+    @test f.proportions ≈ med
+    _, p1 = MacroEconometricModels._compute_fevd(compute_irf(m, s.Q_draws[1], H), n, H)
+    @test f.proportions ≉ p1
+    irf_med = similar(s.irf_draws[1, :, :, :])
+    for h in 1:H, i in 1:n, j in 1:n
+        irf_med[h, i, j] = quantile(@view(s.irf_draws[:, h, i, j]), 0.5)
+    end
+    _, p_med_irf = MacroEconometricModels._compute_fevd(irf_med, n, H)
+    @test f.proportions ≉ p_med_irf
 end
