@@ -668,8 +668,10 @@ _is_set_identified(method::Symbol) = _identification_method(method).is_set_ident
 _is_partial(method::Symbol) = _identification_method(method).is_partial
 
 # Statistical-ID Q is identified only up to signed permutation. Match bootstrap /
-# posterior columns to a point-estimate impact. Skip recursive/long-run and set-ID.
-_should_match_columns(method::Symbol) = _needs_residuals(method) && !_is_set_identified(method)
+# posterior columns to a point-estimate impact. Skip recursive/long-run, set-ID,
+# and :proxy (identified columns are already labeled by `shocks` / first k).
+_should_match_columns(method::Symbol) =
+    _needs_residuals(method) && !_is_set_identified(method) && method !== :proxy
 
 """
     _match_columns(P_ref, P_b) -> (perm, signs)

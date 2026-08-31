@@ -95,6 +95,8 @@ const MEM = MacroEconometricModels
         @test MEM._needs_residuals(:proxy)
         @test !MEM._is_set_identified(:proxy)
         @test MEM._is_partial(:proxy)
+        @test !MEM._should_match_columns(:proxy)
+        @test MEM._should_match_columns(:fastica)
         rng = MersenneTwister(7406)
         Y, _, z = simulate_proxy_svar(B_true, A; Tobs=300, ρ=0.8, rng=rng)
         m = estimate_var(Y, 1)
@@ -243,6 +245,19 @@ const MEM = MacroEconometricModels
         ir = irf(m, 2; method=:proxy, instruments=reshape(z, :, 1),
                  ci_type=:bootstrap, bootstrap=:iid, reps=8, seed=7415)
         @test ir.manifest.settings["bootstrap"] == "block"
+    end
+
+    @testset "unit-effect proxy bootstrap keeps identified impact" begin
+        rng = MersenneTwister(7416)
+        Y, _, z = simulate_proxy_svar(B_true, A; Tobs=200, ρ=0.8, rng=rng)
+        m = estimate_var(Y, 1)
+        nv, nval = 2, 1.0
+        ir = irf(m, 1; method=:proxy, instruments=reshape(z, :, 1),
+                 normalize=:unit_effect, normalize_var=nv,
+                 ci_type=:bootstrap, bootstrap=:block, reps=12, seed=7416)
+        @test ir.values[1, nv, 1] ≈ nval atol = 1e-8
+        @test ir._draws !== nothing
+        @test all(x -> isapprox(x, nval; atol=1e-6), ir._draws[:, 1, nv, 1])
     end
 
     if !FAST

@@ -87,7 +87,7 @@ function process_posterior_samples(post::BVARPosterior, compute_func::Function;
     T = eltype(use_data)
 
     # Match statistical-ID columns to the posterior-mean impact (SID-04). Set-ID
-    # methods (:sign, :narrative) and recursive/long-run ID are left unmatched.
+    # methods (:sign, :narrative), recursive/long-run, and :proxy are left unmatched.
     # If the mean model is unidentified, warn and fall back to the first
     # successfully identified draw as P_ref (re-matching that draw is a no-op).
     match_columns = _should_match_columns(method)
