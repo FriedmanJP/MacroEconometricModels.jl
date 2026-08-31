@@ -45,7 +45,7 @@ end
 # =============================================================================
 
 """Convert n(n-1)/2 Givens angles to n × n orthogonal matrix."""
-function _givens_to_orthogonal(angles::AbstractVector{T}, n::Int) where {T<:AbstractFloat}
+function _givens_to_orthogonal(angles::AbstractVector{T}, n::Int) where {T<:Real}
     Q = Matrix{T}(I, n, n)
     idx = 1
     for i in 1:n-1

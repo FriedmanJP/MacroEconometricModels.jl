@@ -23,6 +23,7 @@ References:
 
 using LinearAlgebra, Statistics, Distributions
 import Optim
+import ForwardDiff
 
 # =============================================================================
 # Result Types
@@ -151,6 +152,8 @@ Fields:
 - `loglik::T`
 - `converged::Bool`
 - `iterations::Int`
+- `se::Union{Nothing,Vector{T}}` — parameter SEs (nothing until SID-10)
+- `vcov::Union{Nothing,Matrix{T}}` — parameter covariance (nothing until SID-10)
 """
 struct SmoothTransitionSVARResult{T<:AbstractFloat} <: AbstractNonGaussianSVAR
     B0::Matrix{T}
@@ -164,14 +167,38 @@ struct SmoothTransitionSVARResult{T<:AbstractFloat} <: AbstractNonGaussianSVAR
     loglik::T
     converged::Bool
     iterations::Int
+    se::Union{Nothing,Vector{T}}
+    vcov::Union{Nothing,Matrix{T}}
+end
+
+# Back-compat: 11-arg positional calls default se/vcov to nothing until SID-10.
+function SmoothTransitionSVARResult{T}(B0, Q, Sigma_regimes, Lambda, gamma, threshold,
+                                       transition_var, G_values, loglik, converged,
+                                       iterations) where {T<:AbstractFloat}
+    SmoothTransitionSVARResult{T}(B0, Q, Sigma_regimes, Lambda, gamma, threshold,
+                                  transition_var, G_values, loglik, converged,
+                                  iterations, nothing, nothing)
+end
+
+function SmoothTransitionSVARResult(B0, Q, Sigma_regimes, Lambda, gamma, threshold,
+                                    transition_var, G_values, loglik, converged,
+                                    iterations)
+    T = eltype(B0)
+    SmoothTransitionSVARResult{T}(B0, Q, Sigma_regimes, Lambda, gamma, threshold,
+                                  transition_var, G_values, loglik, converged,
+                                  iterations, nothing, nothing)
 end
 
 function Base.show(io::IO, r::SmoothTransitionSVARResult{T}) where {T}
     n = size(r.B0, 1)
+    se_γ = r.se === nothing ? "—" : _fmt(r.se[1]; digits=2)
+    se_c = r.se === nothing ? "—" : _fmt(r.se[2]; digits=4)
     spec = Any[
         "Variables"      n;
         "γ (speed)"      _fmt(r.gamma; digits=2);
+        "γ SE"           se_γ;
         "Threshold"      _fmt(r.threshold; digits=4);
+        "Threshold SE"   se_c;
         "Log-likelihood" _fmt(r.loglik; digits=4);
         "Converged"      r.converged ? "Yes" : "No";
         "Iterations"     r.iterations
@@ -617,9 +644,115 @@ end
 # Smooth Transition
 # =============================================================================
 
-"""Logistic transition function: G(s) = 1 / (1 + exp(-γ(s - c)))."""
-function _logistic_transition(s::T, gamma::T, c::T) where {T<:AbstractFloat}
-    one(T) / (one(T) + exp(-gamma * (s - c)))
+"""Logistic transition: G(s) = 1 / (1 + exp(-γ(s - c)/σs)). Dual-friendly (no AbstractFloat bound)."""
+_logistic_transition(s, gamma, c) = _logistic_transition(s, gamma, c, one(gamma))
+function _logistic_transition(s, gamma, c, sigma_s)
+    z = gamma * (s - c) / sigma_s
+    one(z) / (one(z) + exp(-z))
+end
+
+"""Pack lower-triangular L as `[log diag(L); strictly-lower column-major]`."""
+function _st_pack_L(L::AbstractMatrix{T}) where {T<:AbstractFloat}
+    n = size(L, 1)
+    v = Vector{T}(undef, n * (n + 1) ÷ 2)
+    k = 1
+    for i in 1:n
+        v[k] = log(max(L[i, i], T(1e-12)))
+        k += 1
+    end
+    for j in 1:(n - 1)
+        for i in (j + 1):n
+            v[k] = L[i, j]
+            k += 1
+        end
+    end
+    v
+end
+
+"""Unpack a free Cholesky factor. Dual-friendly."""
+function _st_unpack_L(v, n::Int)
+    Tθ = eltype(v)
+    L = zeros(Tθ, n, n)
+    k = 1
+    for i in 1:n
+        L[i, i] = exp(v[k])
+        k += 1
+    end
+    for j in 1:(n - 1)
+        for i in (j + 1):n
+            L[i, j] = v[k]
+            k += 1
+        end
+    end
+    L
+end
+
+"""Forward substitution Lz = u for lower-triangular L. Dual-friendly."""
+function _st_forward_sub(L, u)
+    n = length(u)
+    Tθ = promote_type(eltype(L), eltype(u))
+    z = Vector{Tθ}(undef, n)
+    @inbounds for i in 1:n
+        acc = Tθ(u[i])
+        for j in 1:(i - 1)
+            acc -= L[i, j] * z[j]
+        end
+        z[i] = acc / L[i, i]
+    end
+    z
+end
+
+"""Negative Gaussian log-likelihood of the smooth-transition SVAR. Dual-friendly."""
+function _smooth_transition_nll(params, U::AbstractMatrix, s::AbstractVector,
+                                sigma_s, n::Int, logγ_lo, logγ_hi)
+    n_L = n * (n + 1) ÷ 2
+    n_angles = n * (n - 1) ÷ 2
+    L = _st_unpack_L(view(params, 1:n_L), n)
+    θ = view(params, (n_L + 1):(n_L + n_angles))
+    logΛ = view(params, (n_L + n_angles + 1):(n_L + n_angles + n))
+    xγ = params[n_L + n_angles + n + 1]
+    cc = params[n_L + n_angles + n + 2]
+    Q = _givens_to_orthogonal(θ, n)
+    Tθ = eltype(params)
+    half = Tθ(0.5)
+    log2π = log(Tθ(2) * Tθ(π))
+    floor_d = Tθ(1e-12)
+    logdetL = zero(Tθ)
+    for i in 1:n
+        logdetL += log(L[i, i])
+    end
+    γ = _st_gamma_from_x(xγ, logγ_lo, logγ_hi)
+    nll = zero(Tθ)
+    T_obs = size(U, 1)
+    for t in 1:T_obs
+        G_t = _logistic_transition(s[t], γ, cc, sigma_s)
+        z = _st_forward_sub(L, view(U, t, :))
+        acc = zero(Tθ)
+        for j in 1:n
+            λj = exp(logΛ[j])
+            d_j = max(one(Tθ) + G_t * (λj - one(Tθ)), floor_d)
+            εj = zero(Tθ)
+            for i in 1:n
+                εj += Q[i, j] * z[i]
+            end
+            acc += log(d_j) + εj^2 / d_j
+        end
+        nll += half * (Tθ(n) * log2π + Tθ(2) * logdetL + acc)
+    end
+    nll
+end
+
+"""Map the unbounded γ-score to a bounded γ ∈ [γ_lo, γ_hi]."""
+function _st_gamma_from_x(xγ, logγ_lo, logγ_hi)
+    logγ = logγ_lo + (logγ_hi - logγ_lo) / (one(xγ) + exp(-xγ))
+    exp(logγ)
+end
+
+function _st_x_from_gamma(γ, logγ_lo, logγ_hi)
+    logγ = log(γ)
+    p = (logγ - logγ_lo) / (logγ_hi - logγ_lo)
+    p = clamp(p, oftype(p, 1e-8), oftype(p, 1 - 1e-8))
+    log(p / (one(p) - p))
 end
 
 """
@@ -628,11 +761,14 @@ end
 
 Identify SVAR via smooth-transition heteroskedasticity (Lütkepohl & Netšunajev 2017).
 
-The covariance matrix varies smoothly between two regimes:
+Joint ML over `(θ_Givens, Λ, γ, c)` with
 ```math
-\\Sigma_t = B_0 [I + G(s_t)(\\Lambda - I)] B_0'
+\\Sigma_t = B_0 [I + G(s_t)(\\Lambda - I)] B_0', \\qquad B_0 = L Q(\\theta)
 ```
-where G(s_t) = 1/(1 + exp(-γ(s_t - c))) is the logistic transition function.
+where ``G(s_t) = 1/(1 + \\exp(-\\gamma(s_t - c)/\\mathrm{std}(s)))``. `L` is
+initialized from the median-split G=0 Cholesky and estimated jointly with
+`(θ, Λ, γ, c)` so `B₀B₀'` is the G=0 pole, not the unconditional covariance.
+`log γ` is bounded so `γ ∈ [10^{-3}, 20]/std(s)`.
 
 Arguments:
 - `transition_var` — the transition variable s_t (e.g., a lagged endogenous variable)
@@ -645,59 +781,80 @@ function identify_smooth_transition(model::VARModel{T}, transition_var::Abstract
     n = nvars(model)
     T_obs = size(model.U, 1)
     s = Vector{T}(transition_var[1:T_obs])
+    sigma_s = std(s)
+    sigma_s > zero(T) || throw(ArgumentError(
+        "transition variable has zero variance; cannot scale γ."))
 
-    # Initialize
-    gamma_init = T(1.0) / std(s)
+    # Split kernel: starting point, not the estimator.
+    gamma_init = one(T) / sigma_s
     c_init = median(s)
-
-    G_vals = [_logistic_transition(s[t], gamma_init, c_init) for t in 1:T_obs]
-
-    # Split into low-G and high-G periods for initial covariances
+    G_vals = [_logistic_transition(s[t], gamma_init, c_init, sigma_s) for t in 1:T_obs]
     low_idx = findall(g -> g < T(0.5), G_vals)
     high_idx = findall(g -> g >= T(0.5), G_vals)
-
     Sigma1 = isempty(low_idx) ? cov(model.U) : cov(model.U[low_idx, :])
     Sigma2 = isempty(high_idx) ? cov(model.U) : cov(model.U[high_idx, :])
-    Sigma1 += eps(T) * I
-    Sigma2 += eps(T) * I
+    Sigma1 = Matrix{T}(Symmetric(Sigma1 + eps(T) * I))
+    Sigma2 = Matrix{T}(Symmetric(Sigma2 + eps(T) * I))
 
-    # Identify B₀
-    B0, Q, Lambda_raw = _eigendecomposition_id(Sigma1, Sigma2)
-    Lambda = max.(Lambda_raw, eps(T))
+    B0_split, Q_split, Lambda_raw = _eigendecomposition_id(Sigma1, Sigma2)
+    Lambda_init = max.(Lambda_raw, T(1e-8))
 
-    # Optimize gamma and c
-    function st_loglik(params::Vector{T2}) where {T2}
-        gam = exp(params[1])
-        cc = params[2]
-
-        ll = zero(T2)
-        for t in 1:T_obs
-            G_t = _logistic_transition(s[t], gam, cc)
-            D_t = Diagonal(ones(T2, n) .+ G_t .* (Lambda .- one(T2)))
-            Sigma_t = B0 * D_t * B0'
-            Sigma_t = Symmetric(Sigma_t)
-
-            ld = logdet_safe(Sigma_t)
-            u = @view model.U[t, :]
-            Sigma_t_inv = robust_inv(Matrix(Sigma_t))
-            ll -= T2(0.5) * (n * log(T2(2π)) + ld + dot(u, Sigma_t_inv * u))
-        end
-        -ll
+    # B₀ = L Q(θ). L starts at chol(Σ_{G=0}) from the split kernel and is
+    # estimated jointly so the G=0 pole is not frozen at the split/unconditional Σ.
+    L_init = Matrix{T}(safe_cholesky(Sigma1))
+    Q_init = Q_split
+    if det(Q_init) < 0
+        Q_init = copy(Q_init)
+        Q_init[:, n] .*= -one(T)
     end
+    θ_init = _orthogonal_to_givens(Q_init, n)
 
-    params0 = [log(gamma_init), c_init]
-    result = Optim.optimize(st_loglik, params0, Optim.NelderMead(),
-                            Optim.Options(iterations=max_iter))
+    γ_lo = T(1e-3) / sigma_s
+    γ_hi = T(20) / sigma_s
+    logγ_lo = log(γ_lo)
+    logγ_hi = log(γ_hi)
+    xγ_init = _st_x_from_gamma(gamma_init, logγ_lo, logγ_hi)
+
+    n_L = n * (n + 1) ÷ 2
+    n_angles = n * (n - 1) ÷ 2
+    params0 = vcat(_st_pack_L(L_init), θ_init, log.(Lambda_init), xγ_init, c_init)
+
+    obj = p -> _smooth_transition_nll(p, model.U, s, sigma_s, n, logγ_lo, logγ_hi)
+    g! = (G, x) -> ForwardDiff.gradient!(G, obj, x)
+    result = Optim.optimize(obj, g!, params0, Optim.LBFGS(),
+                            Optim.Options(iterations=max_iter, g_tol=min(tol, T(1e-8)),
+                                          f_reltol=T(1e-12), allow_f_increases=true))
 
     p_opt = Optim.minimizer(result)
-    gamma_opt = exp(p_opt[1])
-    c_opt = p_opt[2]
-    G_final = [_logistic_transition(s[t], gamma_opt, c_opt) for t in 1:T_obs]
-    loglik_final = -Optim.minimum(result)
+    L_mat = Matrix{T}(_st_unpack_L(view(p_opt, 1:n_L), n))
+    θ_opt = p_opt[(n_L + 1):(n_L + n_angles)]
+    Λ_opt = exp.(p_opt[(n_L + n_angles + 1):(n_L + n_angles + n)])
+    gamma_opt = _st_gamma_from_x(p_opt[n_L + n_angles + n + 1], logγ_lo, logγ_hi)
+    c_opt = p_opt[n_L + n_angles + n + 2]
+    Q = _givens_to_orthogonal(θ_opt, n)
+    B0 = L_mat * Q
 
-    SmoothTransitionSVARResult{T}(B0, Q, [Sigma1, Sigma2], [ones(T, n), Lambda],
-                                   gamma_opt, c_opt, s, G_final, loglik_final,
-                                   Optim.converged(result), Optim.iterations(result))
+    idx = sortperm(Λ_opt)
+    Λ_opt = Λ_opt[idx]
+    Q = Q[:, idx]
+    B0 = B0[:, idx]
+    for j in 1:n
+        if B0[j, j] < 0
+            B0[:, j] .*= -one(T)
+            Q[:, j] .*= -one(T)
+        end
+    end
+
+    Sigma_G0 = B0 * B0'
+    Sigma_G1 = B0 * Diagonal(Λ_opt) * B0'
+    G_final = [_logistic_transition(s[t], gamma_opt, c_opt, sigma_s) for t in 1:T_obs]
+    loglik_final = -obj(p_opt)
+
+    SmoothTransitionSVARResult{T}(B0, Q, [Matrix{T}(Sigma_G0), Matrix{T}(Sigma_G1)],
+                                   [ones(T, n), Vector{T}(Λ_opt)],
+                                   T(gamma_opt), T(c_opt), s, G_final, T(loglik_final),
+                                   Optim.converged(result), Optim.iterations(result),
+                                   nothing, nothing)
 end
 
 # =============================================================================
@@ -717,6 +874,9 @@ Arguments:
 - `regime_indicator` — integer vector of regime labels (1, 2, ..., K)
 - `regimes` — number of distinct regimes (default: 2)
 
+A regime with fewer than `n + 1` observations throws `ArgumentError`. Until SID-10
+only the first two regimes enter the kernel (`K ≥ 3` warns).
+
 **Reference**: Rigobon (2003)
 """
 function identify_external_volatility(model::VARModel{T},
@@ -727,6 +887,10 @@ function identify_external_volatility(model::VARModel{T},
     K = regimes
 
     @assert length(regime_indicator) >= T_obs "regime_indicator must have length ≥ T_obs"
+    K >= 2 || throw(ArgumentError("regimes must be ≥ 2, got $K"))
+    if K >= 3
+        @warn "identify_external_volatility uses only two regimes for identification until SID-10; K-regime joint ML is not yet applied"
+    end
 
     # Split sample by regime
     regime_indices = [findall(regime_indicator[1:T_obs] .== k) for k in 1:K]
@@ -735,10 +899,10 @@ function identify_external_volatility(model::VARModel{T},
     for k in 1:K
         idx = regime_indices[k]
         if length(idx) < n + 1
-            Sigma_regimes[k] = cov(model.U) + eps(T) * I
-        else
-            Sigma_regimes[k] = cov(model.U[idx, :]) + eps(T) * I
+            throw(ArgumentError(
+                "regime $k has $(length(idx)) observations; need at least $(n + 1)"))
         end
+        Sigma_regimes[k] = cov(model.U[idx, :]) + eps(T) * I
     end
 
     # Identify from regime 1 and 2

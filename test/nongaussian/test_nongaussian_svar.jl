@@ -224,6 +224,8 @@ end
                 @test result.gamma > 0
                 @test length(result.G_values) == n_obs - 2
                 @test all(0 .<= result.G_values .<= 1)  # logistic in [0,1]
+                @test result.se === nothing
+                @test result.vcov === nothing
 
                 buf = IOBuffer()
                 show(buf, result)
@@ -460,11 +462,25 @@ end
 
     @testset "External volatility with small regime" begin
         _suppress_warnings() do
-            # Regime 3 has very few observations (fallback to overall cov)
+            # Regime 3 has fewer than n+1 residual observations
             regime_small = vcat(fill(1, 148), fill(2, 148), fill(3, 4))
-            result = identify_external_volatility(model, regime_small; regimes=3)
-            @test result isa ExternalVolatilitySVARResult{Float64}
+            @test_throws ArgumentError identify_external_volatility(model, regime_small; regimes=3)
         end
+    end
+
+    @testset "SID-09 smooth-transition joint ML" begin
+        Random.seed!(738)
+        m = estimate_var(randn(80, 2), 1)
+        @test_throws ArgumentError identify_external_volatility(m, vcat(fill(1, 78), fill(2, 2)))
+        m3 = estimate_var(randn(120, 2), 1)
+        ri3 = vcat(fill(1, 40), fill(2, 40), fill(3, 40))
+        @test_logs (:warn, r"only two regimes") identify_external_volatility(m3, ri3; regimes=3)
+        st = identify_smooth_transition(m, randn(size(m.U, 1)))
+        @test st.se === nothing
+        @test st.vcov === nothing
+        B0_reid, _, _ = MacroEconometricModels._eigendecomposition_id(
+            Matrix(st.Sigma_regimes[1]), Matrix(st.Sigma_regimes[2]))
+        @test norm(st.B0 - B0_reid) < 1e-6
     end
 
     @testset "Smooth transition edge cases" begin
