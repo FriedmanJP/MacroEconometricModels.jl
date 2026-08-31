@@ -99,8 +99,10 @@ end
             sign_restriction(1, 1, :positive),
             sign_restriction(2, 1, :positive),
         ])
+        nrot = FAST ? 15 : 30
+        rng0 = MersenneTwister(747)
         res = identify_robust_bayes(post, r, 3; level=0.68, solver=:optimize,
-                                    n_rotations=FAST ? 15 : 30, rng=MersenneTwister(747))
+                                    n_rotations=nrot, rng=copy(rng0))
         @test res isa RobustBayesResult
         @test res isa AbstractAnalysisResult
         @test size(res.lower) == (3, 2, 2)
@@ -114,9 +116,33 @@ end
         @test 0 <= res.informativeness <= 1
         @test all(res.lower .<= res.upper)
         @test all(res.robust_lower .<= res.robust_upper)
-        # Robust region contains the single-prior interval (no post-hoc widening).
-        @test all(res.robust_lower .<= res.single_prior_lower .+ 1e-10)
-        @test all(res.robust_upper .>= res.single_prior_upper .- 1e-10)
+        @test all(res.single_prior_lower .<= res.single_prior_upper)
+        # Single-prior interval is identify_arias_bayesian (all nonempty draws,
+        # pooled weights, equal-tailed). GK guarantees Haar coverage of the CR,
+        # not that the equal-tailed Haar interval ⊂ CR.
+        rand(rng0, UInt64, post.n_draws)
+        q_lo = (1 - 0.68) / 2
+        arias = identify_arias_bayesian(post, r, 3; n_rotations=nrot,
+                                        quantiles=[q_lo, 0.5, 1 - q_lo],
+                                        compute_weights=true, rng=rng0)
+        @test res.single_prior_lower ≈ arias.irf_quantiles[:, :, :, 1]
+        @test res.single_prior_upper ≈ arias.irf_quantiles[:, :, :, end]
+        w = arias.weights
+        n_acc = size(arias.irf_draws, 1)
+        H, n, _ = size(res.robust_lower)
+        for h in 1:H, i in 1:n, j in 1:n
+            cl = res.robust_lower[h, i, j]
+            cu = res.robust_upper[h, i, j]
+            (isfinite(cl) && isfinite(cu)) || continue
+            mass = zero(eltype(w))
+            for s in 1:n_acc
+                η = arias.irf_draws[s, h, i, j]
+                if cl - 1e-10 <= η <= cu + 1e-10
+                    mass += w[s]
+                end
+            end
+            @test mass >= res.level - 1e-12
+        end
         @test has_uncertainty(res)
         @test point_estimate(res) ≈ (res.lower .+ res.upper) ./ 2
         rb = uncertainty_bounds(res)

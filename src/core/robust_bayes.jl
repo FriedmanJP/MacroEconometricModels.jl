@@ -21,12 +21,12 @@ the interval `[ℓ(B,Σ), u(B,Σ)]` over admissible rotations `Q`. Arrays are
 # Fields
 - `lower`, `upper`: posterior means of the identified-set bounds (set of posterior means)
 - `robust_lower`, `robust_upper`: smallest interval containing `level` of the
-  draws' *sets* (robust credible region).
+  draws' *sets* (robust credible region). Not post-hoc expanded to nest the
+  Haar interval: GK guarantees `Π_Haar(η ∈ CR) ≥ level`, not quantile-interval
+  nesting.
 - `single_prior_lower`, `single_prior_upper`: Haar / uniform-on-`O(n)` equal-tailed
-  interval from Arias/Uhlig rotations ([`identify_arias`](@ref)) on the reduced-form
-  draws whose identified sets lie in the robust region. Containment in the robust
-  region is then a property of the objects (each Haar IRF sits in its identified
-  set).
+  credible interval from [`identify_arias_bayesian`](@ref) (all nonempty posterior
+  draws, `compute_weights=true`, pooled importance weights).
 - `informativeness`: Giacomini–Kitagawa (2021, §2.6) diagnostic
   `κ = 1 − |C_single| / |C_robust|`, averaged over IRF entries with positive
   robust width and clipped to `[0, 1]`. `κ = 0` when the rotation prior is
@@ -732,9 +732,9 @@ Giacomini–Kitagawa (2021) robust Bayes for a set-identified SVAR.
 
 Computes identified-set bounds at each posterior draw of `(B, Σ)`, the set of
 posterior means, a robust credible region (smallest interval containing `level`
-of the draws' sets), the Haar single-prior interval (Arias/Uhlig rotations on
-the reduced-form draws covered by that region), the prior-informativeness
-diagnostic, and `Π(∅)`.
+of the draws' sets), the Haar single-prior interval from
+[`identify_arias_bayesian`](@ref), the prior-informativeness diagnostic, and
+`Π(∅)`.
 """
 function identify_robust_bayes(post::BVARPosterior, restrictions::SVARRestrictions, horizon::Int;
                                level::Real=0.68, solver::Symbol=:optimize,
@@ -756,12 +756,9 @@ function identify_robust_bayes(post::BVARPosterior, restrictions::SVARRestrictio
 
     lo_store = fill(T(NaN), n_samples, horizon, n, n)
     hi_store = fill(T(NaN), n_samples, horizon, n, n)
-    haar_store = fill(T(NaN), n_samples, horizon, n, n)
-    haar_ok = fill(false, n_samples)
     empty = fill(true, n_samples)
     seeds = rand(rng, UInt64, n_samples)
     threaded = solver === :optimize && n == 2 && _gk_linear_in_Q(restrictions)
-    setup = !isempty(restrictions.zeros) ? _AriasSVARSetup(restrictions, n, T; rng=rng) : nothing
 
     process_draw = function (s::Int)
         local_rng = Random.MersenneTwister(seeds[s])
@@ -780,16 +777,6 @@ function identify_robust_bayes(post::BVARPosterior, restrictions::SVARRestrictio
                 return
             end
             rethrow(err)
-        end
-        try
-            ar = identify_arias(m, restrictions, horizon;
-                                n_draws=1, n_rotations=n_rotations,
-                                compute_weights=false, normalize_weights=false,
-                                setup=setup, rng=local_rng, check_id=false)
-            haar_store[s, :, :, :] = ar.irf_draws[1, :, :, :]
-            haar_ok[s] = true
-        catch err
-            (err isa IdentificationError || _is_rejectable_draw_error(err)) || rethrow(err)
         end
         nothing
     end
@@ -836,27 +823,16 @@ function identify_robust_bayes(post::BVARPosterior, restrictions::SVARRestrictio
     sp_hi = fill(T(NaN), horizon, n, n)
     q_lo = (1 - Float64(level)) / 2
     q_hi = 1 - q_lo
-    # Haar equal-tailed interval on the reduced-form draws whose identified sets
-    # the robust CR covers. Each such Haar IRF lies in its [ℓ, u] ⊆ CR.
-    if n_ok > 0
-        @inbounds for h in 1:horizon, i in 1:n, j in 1:n
-            cl = rob_lo[h, i, j]
-            cu = rob_hi[h, i, j]
-            (isfinite(cl) && isfinite(cu)) || continue
-            ηs = T[]
-            for s in 1:n_samples
-                empty[s] && continue
-                haar_ok[s] || continue
-                if lo_store[s, h, i, j] >= cl - 100 * eps(T) &&
-                   hi_store[s, h, i, j] <= cu + 100 * eps(T)
-                    push!(ηs, haar_store[s, h, i, j])
-                end
-            end
-            isempty(ηs) && continue
-            w = fill(one(T) / T(length(ηs)), length(ηs))
-            sp_lo[h, i, j] = _weighted_quantile(ηs, w, q_lo)
-            sp_hi[h, i, j] = _weighted_quantile(ηs, w, q_hi)
-        end
+    try
+        arias = identify_arias_bayesian(post, restrictions, horizon;
+                                        data=use_data, n_rotations=n_rotations,
+                                        quantiles=[q_lo, 0.5, q_hi],
+                                        compute_weights=true, rng=rng)
+        nq = size(arias.irf_quantiles, 4)
+        sp_lo .= arias.irf_quantiles[:, :, :, 1]
+        sp_hi .= arias.irf_quantiles[:, :, :, nq]
+    catch err
+        err isa IdentificationError || rethrow(err)
     end
 
     κ = _gk_informativeness(sp_lo, sp_hi, rob_lo, rob_hi)
