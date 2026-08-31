@@ -48,6 +48,7 @@ Fields:
 - `se::Matrix{T}` — delta-method SEs of B₀
 - `vcov::Matrix{T}` — parameter-space covariance (θ_Givens, log Λ₂…K)
 - `classification_quality::T` — mean of max smoothed regime probability
+- `shocks::Matrix{T}` — structural shocks ``ε_t = B_0^{-1} u_t``
 - `shock_names::Vector{String}` — labels for the n structural shocks
 """
 struct MarkovSwitchingSVARResult{T<:AbstractFloat} <: AbstractNonGaussianSVAR
@@ -64,7 +65,19 @@ struct MarkovSwitchingSVARResult{T<:AbstractFloat} <: AbstractNonGaussianSVAR
     se::Matrix{T}
     vcov::Matrix{T}
     classification_quality::T
+    shocks::Matrix{T}
     shock_names::Vector{String}
+end
+
+function MarkovSwitchingSVARResult{T}(B0, Q, Sigma_regimes, Lambda, regime_probs,
+                                       transition_matrix, loglik, converged,
+                                       iterations, n_regimes, se, vcov,
+                                       classification_quality, shocks) where {T<:AbstractFloat}
+    n = size(B0, 1)
+    MarkovSwitchingSVARResult{T}(B0, Q, Sigma_regimes, Lambda, regime_probs,
+                                  transition_matrix, loglik, converged, iterations,
+                                  n_regimes, se, vcov, classification_quality, shocks,
+                                  _default_shock_names(n))
 end
 
 function MarkovSwitchingSVARResult{T}(B0, Q, Sigma_regimes, Lambda, regime_probs,
@@ -75,7 +88,7 @@ function MarkovSwitchingSVARResult{T}(B0, Q, Sigma_regimes, Lambda, regime_probs
     MarkovSwitchingSVARResult{T}(B0, Q, Sigma_regimes, Lambda, regime_probs,
                                   transition_matrix, loglik, converged, iterations,
                                   n_regimes, se, vcov, classification_quality,
-                                  _default_shock_names(n))
+                                  zeros(T, 0, 0), _default_shock_names(n))
 end
 
 function MarkovSwitchingSVARResult{T}(B0, Q, Sigma_regimes, Lambda, regime_probs,
@@ -309,6 +322,7 @@ Fields:
 - `loglik::T`
 - `se::Matrix{T}` — delta-method SEs of B₀
 - `vcov::Matrix{T}` — parameter-space covariance (θ_Givens, log Λ₂…K)
+- `shocks::Matrix{T}` — structural shocks ``ε_t = B_0^{-1} u_t``
 - `shock_names::Vector{String}` — labels for the n structural shocks
 """
 struct ExternalVolatilitySVARResult{T<:AbstractFloat} <: AbstractNonGaussianSVAR
@@ -320,7 +334,16 @@ struct ExternalVolatilitySVARResult{T<:AbstractFloat} <: AbstractNonGaussianSVAR
     loglik::T
     se::Matrix{T}
     vcov::Matrix{T}
+    shocks::Matrix{T}
     shock_names::Vector{String}
+end
+
+function ExternalVolatilitySVARResult{T}(B0, Q, Sigma_regimes, Lambda,
+                                          regime_indices, loglik, se,
+                                          vcov, shocks) where {T<:AbstractFloat}
+    n = size(B0, 1)
+    ExternalVolatilitySVARResult{T}(B0, Q, Sigma_regimes, Lambda, regime_indices,
+                                     loglik, se, vcov, shocks, _default_shock_names(n))
 end
 
 function ExternalVolatilitySVARResult{T}(B0, Q, Sigma_regimes, Lambda,
@@ -328,7 +351,8 @@ function ExternalVolatilitySVARResult{T}(B0, Q, Sigma_regimes, Lambda,
                                           vcov) where {T<:AbstractFloat}
     n = size(B0, 1)
     ExternalVolatilitySVARResult{T}(B0, Q, Sigma_regimes, Lambda, regime_indices,
-                                     loglik, se, vcov, _default_shock_names(n))
+                                     loglik, se, vcov, zeros(T, 0, 0),
+                                     _default_shock_names(n))
 end
 
 function ExternalVolatilitySVARResult{T}(B0, Q, Sigma_regimes, Lambda,
@@ -1077,8 +1101,10 @@ function identify_markov_switching(model::VARModel{T}; n_regimes::Int=2,
         V = zeros(T, 0, 0)
     end
 
+    shocks = Matrix{T}((robust_inv(B0) * model.U')')
     MarkovSwitchingSVARResult{T}(B0, Q, st.Sigma, Lambdas, smoothed, st.P,
-                                  loglik, st.converged, st.iter, K, se, V, T(cq))
+                                  loglik, st.converged, st.iter, K, se, V, T(cq),
+                                  shocks)
 end
 
 # =============================================================================
@@ -1636,6 +1662,7 @@ function identify_external_volatility(model::VARModel{T},
         V = zeros(T, 0, 0)
     end
 
+    shocks = Matrix{T}((robust_inv(B0) * model.U')')
     ExternalVolatilitySVARResult{T}(B0, Q, Sigma_regimes, Lambda_vecs, regime_indices,
-                                     loglik, se, V)
+                                     loglik, se, V, shocks)
 end

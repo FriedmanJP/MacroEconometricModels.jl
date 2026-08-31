@@ -565,3 +565,26 @@ end
     @test MEM._hsic_objective(angles, Z, 2; sigma=1.0) ==
           MEM._hsic_objective(angles, Z, 2, bufs..., Hbuf; sigma=1.0)
 end
+
+@testset "SID-22 Holm adjustment and shock helpers" begin
+    p = [0.01, 0.04, 0.03]
+    h = MEM._holm_adjust(p)
+    # Sorted p: 0.01, 0.03, 0.04. Holm: 3·0.01=0.03; max(0.03, 2·0.03)=0.06;
+    # max(0.06, 1·0.04)=0.06.
+    @test h[1] ≈ 0.03
+    @test h[3] ≈ 0.06
+    @test h[2] ≈ 0.06
+    @test all(0 .<= h .<= 1)
+
+    B = [1.0 0.25; 0.4 1.2]
+    perm, signs = MEM._match_columns(B, B)
+    @test perm == [1, 2]
+    @test all(==(1), signs)
+
+    shocks = randn(MersenneTwister(75190), 40, 2)
+    dummy = ICASVARResult{Float64}(B, Matrix{Float64}(I, 2, 2),
+                                   Matrix{Float64}(I, 2, 2), shocks,
+                                   :fastica, true, 1, 0.0)
+    @test MEM._result_shocks(dummy) == shocks
+    @test MEM._result_method(dummy) == :fastica
+end

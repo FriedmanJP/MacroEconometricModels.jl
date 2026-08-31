@@ -48,22 +48,56 @@ struct IdentifiabilityTestResult{T<:AbstractFloat}
 end
 
 function Base.show(io::IO, r::IdentifiabilityTestResult{T}) where {T}
-    stars = _significance_stars(r.pvalue)
-    status_str = r.identified ? "Identified" : "Not identified"
+    no_pval = isnan(r.pvalue)
+    stars = no_pval ? "" : _significance_stars(r.pvalue)
+    is_label = r.test_name === :label_stability ||
+               get(r.details, :fallback, nothing) === :label_stability
+    status_str = if is_label
+        r.identified ? "Labels stable" : "Labels unstable"
+    else
+        r.identified ? "Identified" : "Not identified"
+    end
+    h0 = if is_label
+        "Shock column labels are unstable under resampling"
+    elseif r.test_name === :overidentification
+        "Overidentifying restrictions hold"
+    else
+        "Structural shocks are not identified"
+    end
+    h1 = if is_label
+        "Shock column labels match the identity permutation"
+    elseif r.test_name === :overidentification
+        "Overidentifying restrictions are violated"
+    else
+        "Structural shocks are identified"
+    end
+    stat_label = is_label ? "Match fraction" : "Test Statistic"
     data = Any[
-        "H₀"            "Structural shocks are not identified";
-        "H₁"            "Structural shocks are identified";
-        "Test Statistic" string(_fmt(r.statistic), " ", stars);
-        "P-value"        _format_pvalue(r.pvalue);
+        "H₀"            h0;
+        "H₁"            h1;
+        stat_label      string(_fmt(r.statistic), stars == "" ? "" : " $stars");
+        "P-value"        no_pval ? "— (not a test)" : _format_pvalue(r.pvalue);
         "Status"         status_str
     ]
+    title = if get(r.details, :fallback, nothing) === :label_stability
+        "Identifiability Test: $(r.test_name) (ICA fallback: label-stability)"
+    else
+        "Identifiability Test: $(r.test_name)"
+    end
     _pretty_table(io, data;
-        title = "Identifiability Test: $(r.test_name)",
+        title = title,
         column_labels = ["", ""],
         alignment = [:l, :r],
     )
-    conc_data = Any["Conclusion" (r.identified ? "Evidence supports identification" : "Identification conditions may not hold");
-                    "Note" "*** p<0.01, ** p<0.05, * p<0.10"]
+    conc = if is_label
+        r.identified ? "Column assignment is stable across residual-bootstrap VAR re-estimates" :
+                       "Column assignment is unstable; labels should not be treated as identified"
+    else
+        r.identified ? "Evidence supports identification" : "Identification conditions may not hold"
+    end
+    note = no_pval ? "Label-stability reports a match fraction; it has no p-value" :
+                     "*** p<0.01, ** p<0.05, * p<0.10"
+    conc_data = Any["Conclusion" conc; "Note" note]
     _pretty_table(io, conc_data; column_labels=["",""], alignment=[:l,:l])
 end
 
@@ -177,131 +211,93 @@ function _dcov_independence_test(shocks::Matrix{T};
 end
 
 # =============================================================================
-# Public API: Test Identification Strength
+# Internal helpers: shocks, Holm, method dispatch
 # =============================================================================
 
-"""
-    test_identification_strength(model::VARModel; method=:fastica,
-                                 n_bootstrap=999) -> IdentifiabilityTestResult
-
-Test the strength of non-Gaussian identification via bootstrap.
-
-Resamples residuals with replacement, re-estimates B₀, and computes the Procrustes
-distance between bootstrap and original B₀. Small distances indicate strong identification.
-
-Returns: test statistic = median Procrustes distance, p-value from distribution.
-"""
-function test_identification_strength(model::VARModel{T}; method::Symbol=:fastica,
-                                       n_bootstrap::Int=999,
-                                       rng::AbstractRNG=Random.default_rng()) where {T<:AbstractFloat}
-    n = nvars(model)
-    T_obs = size(model.U, 1)
-
-    # Get reference B₀
-    ref_result = if method == :fastica
-        identify_fastica(model; rng=rng)
-    elseif method == :jade
-        identify_jade(model)
-    elseif method == :sobi
-        identify_sobi(model)
-    else
-        identify_fastica(model; rng=rng)
+"""Holm (1979) adjusted p-values: ``\\tilde p_{(k)} = \\max_{j\\le k}\\min(1,(m-j+1)p_{(j)})``."""
+function _holm_adjust(pvals::AbstractVector{T}) where {T<:AbstractFloat}
+    m = length(pvals)
+    adj = similar(pvals)
+    m == 0 && return adj
+    order = sortperm(pvals)
+    running = zero(T)
+    @inbounds for k in 1:m
+        idx = order[k]
+        raw = T(m - k + 1) * pvals[idx]
+        running = max(running, min(one(T), raw))
+        adj[idx] = running
     end
-    B0_ref = ref_result.B0
+    adj
+end
 
-    # Bootstrap
-    distances = T[]
-    for _ in 1:n_bootstrap
-        idx = rand(rng, 1:T_obs, T_obs)
-        U_boot = model.U[idx, :]
-        Sigma_boot = cov(U_boot)
+function _result_method(r::ICASVARResult)
+    r.method
+end
+_result_method(r::NonGaussianMLResult) = r.distribution
+_result_method(::NonGaussianGMMResult) = :gmm_moments
+_result_method(::GARCHSVARResult) = :garch
+_result_method(::MarkovSwitchingSVARResult) = :markov_switching
+_result_method(::SmoothTransitionSVARResult) = :smooth_transition
+_result_method(::ExternalVolatilitySVARResult) = :external_volatility
+_result_method(::AbstractNonGaussianSVAR) = :unknown
 
-        # Create bootstrap model
-        boot_model = VARModel(model.Y, model.p, model.B, U_boot, Sigma_boot,
-                              model.aic, model.bic, model.hqic)
-
-        try
-            boot_result = if method == :fastica
-                identify_fastica(boot_model; rng=rng)
-            elseif method == :jade
-                identify_jade(boot_model)
-            elseif method == :sobi
-                identify_sobi(boot_model)
-            else
-                identify_fastica(boot_model; rng=rng)
-            end
-            push!(distances, _procrustes_distance(boot_result.B0, B0_ref))
-        catch
-            continue
+function _result_shocks(r)
+    if hasfield(typeof(r), :shocks)
+        s = getfield(r, :shocks)
+        if s isa AbstractMatrix && size(s, 1) > 0
+            return s
         end
     end
-
-    if isempty(distances)
-        return IdentifiabilityTestResult{T}(:identification_strength, T(NaN), T(NaN), false,
-                                             Dict{Symbol, Any}(:method => method, :n_bootstrap => 0))
+    if hasfield(typeof(r), :residuals)
+        U = getfield(r, :residuals)
+        if U isa AbstractMatrix && size(U, 1) > 0
+            return (robust_inv(r.B0) * U')'
+        end
     end
-
-    med_dist = median(distances)
-    # Identification is "strong" if median distance is small relative to ||B₀||
-    normalized_dist = med_dist / norm(B0_ref)
-    identified = normalized_dist < T(0.5)
-
-    # p-value: fraction of bootstrap distances exceeding threshold
-    threshold = T(0.5) * norm(B0_ref)
-    pval = mean(distances .> threshold)
-
-    IdentifiabilityTestResult{T}(:identification_strength, med_dist, T(pval), identified,
-                                  Dict{Symbol, Any}(:method => method,
-                                                     :n_bootstrap => length(distances),
-                                                     :normalized_distance => normalized_dist,
-                                                     :distances => distances))
+    throw(ArgumentError(
+        "$(typeof(r).name.name) does not store shocks; pass a result from the current identifier"))
 end
 
-# =============================================================================
-# Public API: Test Shock Gaussianity
-# =============================================================================
+const _ICA_METHODS = (:fastica, :jade, :sobi, :dcov, :hsic)
+const _HETEROSKEDASTIC_METHODS = (:markov_switching, :garch, :smooth_transition,
+                                  :external_volatility)
 
-"""
-    test_shock_gaussianity(result::ICASVARResult) -> IdentifiabilityTestResult
-    test_shock_gaussianity(result::NonGaussianMLResult) -> IdentifiabilityTestResult
-
-Test whether recovered structural shocks are non-Gaussian using univariate JB tests.
-
-Non-Gaussian identification requires at most one shock to be Gaussian. This test
-checks each shock individually and reports the joint result.
-
-At most one Gaussian shock → identification holds.
-"""
-function test_shock_gaussianity(result::ICASVARResult{T}) where {T<:AbstractFloat}
-    _test_shock_gaussianity_impl(result.shocks, result.method)
+function _identify_for_method(model::VARModel, method::Symbol;
+                              rng::AbstractRNG=Random.default_rng(),
+                              transition_var=nothing,
+                              regime_indicator=nothing)
+    method === :fastica && return identify_fastica(model; rng=rng)
+    method === :jade && return identify_jade(model)
+    method === :sobi && return identify_sobi(model)
+    method === :dcov && return identify_dcov(model)
+    method === :hsic && return identify_hsic(model)
+    method === :student_t && return identify_student_t(model)
+    method === :mixture_normal && return identify_mixture_normal(model)
+    method === :pml && return identify_pml(model)
+    method === :skew_normal && return identify_skew_normal(model)
+    method === :nongaussian_ml && return identify_nongaussian_ml(model)
+    method === :gmm_moments && return identify_gmm_moments(model)
+    method === :markov_switching && return identify_markov_switching(model; rng=rng)
+    method === :garch && return identify_garch(model)
+    if method === :smooth_transition
+        transition_var === nothing && throw(ArgumentError(
+            "method=:smooth_transition requires transition_var"))
+        return identify_smooth_transition(model, transition_var)
+    end
+    if method === :external_volatility
+        regime_indicator === nothing && throw(ArgumentError(
+            "method=:external_volatility requires regime_indicator"))
+        return identify_external_volatility(model, regime_indicator)
+    end
+    throw(ArgumentError("unknown identification method :$method"))
 end
 
-function test_shock_gaussianity(result::NonGaussianMLResult{T}) where {T<:AbstractFloat}
-    _test_shock_gaussianity_impl(result.shocks, result.distribution)
-end
-
-# =============================================================================
-# Public API: Gaussian-shock count (Keweloh 2021; LMS 2017)
-# =============================================================================
-
-"""
-    test_gaussian_shock_count(result::NonGaussianGMMResult; alpha=0.05) -> IdentifiabilityTestResult
-
-Sequential count of Gaussian structural shocks (Keweloh 2021; Lanne, Meitz &
-Saikkonen 2017). Each recovered shock is tested for zero third and fourth
-cumulants (Jarque–Bera). Identification of ``B₀`` requires at most one Gaussian
-shock; two or more failures to reject Gaussianity at `alpha` flag
-non-identification.
-
-`details` stores `:n_gaussian`, `:jb_stats`, `:jb_pvals`, and `:alpha`.
-"""
-function test_gaussian_shock_count(result::NonGaussianGMMResult{T};
-                                   alpha::Real=0.05) where {T<:AbstractFloat}
-    α = T(alpha)
-    shocks = result.shocks
+function _jb_kurtosis_from_shocks(shocks::Matrix{T}) where {T<:AbstractFloat}
     T_obs, n = size(shocks)
     jb_stats = Vector{T}(undef, n)
     jb_pvals = Vector{T}(undef, n)
+    kurt_stats = Vector{T}(undef, n)
+    kurt_pvals = Vector{T}(undef, n)
     for j in 1:n
         s = @view shocks[:, j]
         σ = std(s)
@@ -312,47 +308,218 @@ function test_gaussian_shock_count(result::NonGaussianGMMResult{T};
         jb = T_obs * (skew^2 / T(6) + kurt^2 / T(24))
         jb_stats[j] = jb
         jb_pvals[j] = T(1) - T(cdf(Chisq(2), jb))
+        se_k = sqrt(T(24) / T(T_obs))
+        z_k = kurt / se_k
+        kurt_stats[j] = z_k
+        kurt_pvals[j] = T(2) * (T(1) - T(cdf(Normal(), abs(z_k))))
     end
-    n_gaussian = count(p -> p >= α, jb_pvals)
+    (jb_stats, jb_pvals, kurt_stats, kurt_pvals)
+end
+
+# =============================================================================
+# Public API: Label-stability bootstrap
+# =============================================================================
+
+"""
+    test_label_stability(model::VARModel; method=:fastica, n_bootstrap=999,
+                         rng) -> IdentifiabilityTestResult
+
+Residual-bootstrap diagnostic of shock **label stability**.
+
+Each replication resamples residuals, rebuilds a pseudo-sample from the estimated
+VAR, re-estimates the VAR, re-identifies ``B_0``, and matches columns to the
+original estimate with [`_match_columns`](@ref). The statistic is the fraction of
+replications whose signed permutation is the **identity** (column order unchanged).
+There is **no p-value**: this is a descriptive match-fraction, not a hypothesis test.
+
+`identified` is `true` when the match fraction is at least 1/2.
+"""
+function test_label_stability(model::VARModel{T}; method::Symbol=:fastica,
+                              n_bootstrap::Int=999,
+                              rng::AbstractRNG=Random.default_rng(),
+                              transition_var=nothing,
+                              regime_indicator=nothing) where {T<:AbstractFloat}
+    n = nvars(model)
+    p = model.p
+    T_eff = size(model.U, 1)
+    ref = _identify_for_method(model, method; rng=rng, transition_var=transition_var,
+                               regime_indicator=regime_indicator)
+    B0_ref = Matrix{T}(ref.B0)
+    n_id = 0
+    n_ok = 0
+    Y_init = model.Y[1:p, :]
+    for _ in 1:n_bootstrap
+        try
+            U_boot = _resample_residuals(model.U, :iid, rng)
+            Y_boot = _simulate_var(Y_init, model.B, U_boot, T_eff + p)
+            m_star = estimate_var(Y_boot, p; check_stability=false)
+            boot = _identify_for_method(m_star, method; rng=rng,
+                                        transition_var=transition_var,
+                                        regime_indicator=regime_indicator)
+            perm, _ = _match_columns(B0_ref, Matrix{T}(boot.B0))
+            n_ok += 1
+            perm == 1:n && (n_id += 1)
+        catch
+            continue
+        end
+    end
+    n_ok == 0 && return IdentifiabilityTestResult{T}(
+        :label_stability, T(NaN), T(NaN), false,
+        Dict{Symbol, Any}(:method => method, :n_bootstrap => 0, :n_identity => 0,
+                          :match_fraction => T(NaN)))
+    frac = T(n_id) / T(n_ok)
+    IdentifiabilityTestResult{T}(:label_stability, frac, T(NaN), frac >= T(0.5),
+                                  Dict{Symbol, Any}(:method => method,
+                                                     :n_bootstrap => n_ok,
+                                                     :n_identity => n_id,
+                                                     :match_fraction => frac))
+end
+
+# =============================================================================
+# Public API: Test Identification Strength (deprecated wrapper)
+# =============================================================================
+
+const _STRENGTH_DEPWARN =
+    "test_identification_strength is deprecated; use test_lambda_distinct " *
+    "for heteroskedastic identification, test_gaussian_shock_count for " *
+    "non-Gaussian identification, or test_label_stability for column-label stability"
+
+"""
+    test_identification_strength(model::VARModel; method=:fastica, n_bootstrap=999)
+    test_identification_strength(result)
+
+Deprecated wrapper (one release) around the principled diagnostics:
+
+- heteroskedastic results → [`test_lambda_distinct`](@ref)
+- non-Gaussian results → [`test_gaussian_shock_count`](@ref) (per-shock JB/kurtosis, Holm)
+- `VARModel` with an ICA `method` → [`test_label_stability`](@ref) (match fraction, **no p-value**)
+"""
+function test_identification_strength(model::VARModel{T}; method::Symbol=:fastica,
+                                       n_bootstrap::Int=999,
+                                       rng::AbstractRNG=Random.default_rng(),
+                                       transition_var=nothing,
+                                       regime_indicator=nothing) where {T<:AbstractFloat}
+    Base.depwarn(_STRENGTH_DEPWARN, :test_identification_strength)
+    if method in _ICA_METHODS
+        return test_label_stability(model; method=method, n_bootstrap=n_bootstrap, rng=rng)
+    elseif method in _HETEROSKEDASTIC_METHODS
+        r = _identify_for_method(model, method; rng=rng, transition_var=transition_var,
+                                 regime_indicator=regime_indicator)
+        return _wrap_lambda_distinct(r)
+    else
+        r = _identify_for_method(model, method; rng=rng, transition_var=transition_var,
+                                 regime_indicator=regime_indicator)
+        return test_gaussian_shock_count(r)
+    end
+end
+
+function test_identification_strength(result::Union{MarkovSwitchingSVARResult,
+                                                     GARCHSVARResult,
+                                                     SmoothTransitionSVARResult,
+                                                     ExternalVolatilitySVARResult};
+                                       kwargs...)
+    Base.depwarn(_STRENGTH_DEPWARN, :test_identification_strength)
+    _wrap_lambda_distinct(result; kwargs...)
+end
+
+function test_identification_strength(result::Union{ICASVARResult,
+                                                     NonGaussianMLResult,
+                                                     NonGaussianGMMResult};
+                                       kwargs...)
+    Base.depwarn(_STRENGTH_DEPWARN, :test_identification_strength)
+    test_gaussian_shock_count(result; kwargs...)
+end
+
+function _wrap_lambda_distinct(result; pairs=:all)
+    w = test_lambda_distinct(result; pairs=pairs)
+    Tλ = eltype(w.statistic)
+    finite_p = Tλ[p for p in w.pvalue_bonferroni if isfinite(p)]
+    identified = !isempty(finite_p) && all(<(Tλ(0.05)), finite_p)
+    finite_stats = Tλ[x for x in w.statistic if isfinite(x)]
+    stat = isempty(finite_stats) ? Tλ(NaN) : maximum(finite_stats)
+    pval = isempty(finite_p) ? Tλ(NaN) : minimum(finite_p)
+    IdentifiabilityTestResult{Tλ}(:lambda_distinct, stat, pval, identified,
+                                  Dict{Symbol, Any}(:pairs => w.pairs,
+                                                     :pvalue_bonferroni => w.pvalue_bonferroni,
+                                                     :statistics => w.statistic,
+                                                     :pvalues => w.pvalue))
+end
+
+# =============================================================================
+# Public API: Test Shock Gaussianity
+# =============================================================================
+
+"""
+    test_shock_gaussianity(result) -> IdentifiabilityTestResult
+
+Test whether recovered structural shocks are non-Gaussian using univariate JB
+tests. Dispatches on every identification result that stores (or can form)
+shocks.
+
+Non-Gaussian identification requires at most one shock to be Gaussian. The
+`identified` flag is `true` when at most one shock fails to reject Gaussianity
+at 5% after Holm adjustment of the per-shock JB p-values.
+"""
+function test_shock_gaussianity(result)
+    s = _result_shocks(result)
+    _test_shock_gaussianity_impl(Matrix{eltype(s)}(s), _result_method(result))
+end
+
+# =============================================================================
+# Public API: Gaussian-shock count (Keweloh 2021; LMS 2017)
+# =============================================================================
+
+"""
+    test_gaussian_shock_count(result; alpha=0.05) -> IdentifiabilityTestResult
+
+Sequential count of Gaussian structural shocks (Keweloh 2021; Lanne, Meitz &
+Saikkonen 2017). Each recovered shock is tested for zero third and fourth
+cumulants (Jarque–Bera) and for excess kurtosis. Per-shock p-values are
+Holm-adjusted. Identification of ``B₀`` requires at most one Gaussian shock;
+two or more failures to reject Gaussianity at `alpha` flag non-identification.
+
+`details` stores `:n_gaussian`, `:jb_stats`, `:jb_pvals`, `:jb_pvals_holm`,
+`:kurt_stats`, `:kurt_pvals`, `:kurt_pvals_holm`, and `:alpha`.
+"""
+function test_gaussian_shock_count(result; alpha::Real=0.05)
+    s = _result_shocks(result)
+    Tsh = eltype(s)
+    α = Tsh(alpha)
+    jb_stats, jb_pvals, kurt_stats, kurt_pvals = _jb_kurtosis_from_shocks(Matrix{Tsh}(s))
+    jb_holm = _holm_adjust(jb_pvals)
+    kurt_holm = _holm_adjust(kurt_pvals)
+    n = length(jb_pvals)
+    n_gaussian = count(p -> p >= α, jb_holm)
     identified = n_gaussian <= 1
     jb_sorted = sort(jb_stats)
     stat = n >= 2 ? jb_sorted[2] : jb_sorted[1]
-    pval = T(1) - T(cdf(Chisq(2), stat))
-    IdentifiabilityTestResult{T}(:gaussian_shock_count, stat, pval, identified,
-                                  Dict{Symbol, Any}(:jb_stats => jb_stats,
-                                                     :jb_pvals => jb_pvals,
-                                                     :n_gaussian => n_gaussian,
-                                                     :alpha => α,
-                                                     :moments => result.moments))
+    pval = Tsh(1) - Tsh(cdf(Chisq(2), stat))
+    details = Dict{Symbol, Any}(:jb_stats => jb_stats,
+                                :jb_pvals => jb_pvals,
+                                :jb_pvals_holm => jb_holm,
+                                :kurt_stats => kurt_stats,
+                                :kurt_pvals => kurt_pvals,
+                                :kurt_pvals_holm => kurt_holm,
+                                :n_gaussian => n_gaussian,
+                                :alpha => α)
+    hasfield(typeof(result), :moments) && (details[:moments] = getfield(result, :moments))
+    IdentifiabilityTestResult{Tsh}(:gaussian_shock_count, stat, pval, identified, details)
 end
 
 function _test_shock_gaussianity_impl(shocks::Matrix{T}, method::Symbol) where {T<:AbstractFloat}
-    T_obs, n = size(shocks)
-    jb_stats = T[]
-    jb_pvals = T[]
-
-    for j in 1:n
-        s = @view shocks[:, j]
-        s_std = (s .- mean(s)) / std(s)
-        skew = mean(s_std .^ 3)
-        kurt = mean(s_std .^ 4) - T(3)
-        jb = T_obs * (skew^2 / T(6) + kurt^2 / T(24))
-        pval = 1.0 - cdf(Chisq(2), jb)
-        push!(jb_stats, jb)
-        push!(jb_pvals, T(pval))
-    end
-
-    # Count how many shocks fail to reject Gaussianity at 5%
-    n_gaussian = sum(jb_pvals .>= T(0.05))
-    identified = n_gaussian <= 1  # At most one Gaussian is OK
-
-    # Joint statistic
+    jb_stats, jb_pvals, kurt_stats, kurt_pvals = _jb_kurtosis_from_shocks(shocks)
+    n = length(jb_stats)
+    jb_holm = _holm_adjust(jb_pvals)
+    n_gaussian = count(p -> p >= T(0.05), jb_holm)
+    identified = n_gaussian <= 1
     joint_stat = sum(jb_stats)
-    joint_pval = 1.0 - cdf(Chisq(2n), joint_stat)
-
-    IdentifiabilityTestResult{T}(:shock_gaussianity, joint_stat, T(joint_pval), identified,
+    joint_pval = T(1) - T(cdf(Chisq(2n), joint_stat))
+    IdentifiabilityTestResult{T}(:shock_gaussianity, joint_stat, joint_pval, identified,
                                   Dict{Symbol, Any}(:jb_stats => jb_stats,
                                                      :jb_pvals => jb_pvals,
+                                                     :jb_pvals_holm => jb_holm,
+                                                     :kurt_stats => kurt_stats,
+                                                     :kurt_pvals => kurt_pvals,
                                                      :n_gaussian => n_gaussian,
                                                      :method => method))
 end
@@ -392,22 +559,19 @@ end
 # =============================================================================
 
 """
-    test_shock_independence(result::ICASVARResult; max_lag=10) -> IdentifiabilityTestResult
-    test_shock_independence(result::NonGaussianMLResult; max_lag=10) -> IdentifiabilityTestResult
+    test_shock_independence(result; max_lag=10) -> IdentifiabilityTestResult
 
 Test independence of recovered structural shocks.
 
 Uses both cross-correlation (portmanteau) and distance covariance tests.
-Independence is a necessary condition for valid identification.
+Independence is a necessary condition for valid identification. Dispatches on
+every result that stores (or can form) shocks, including Markov-switching and
+external-volatility identification.
 """
-function test_shock_independence(result::ICASVARResult{T}; max_lag::Int=10,
-                                  rng::AbstractRNG=Random.default_rng()) where {T<:AbstractFloat}
-    _test_independence_impl(result.shocks, max_lag; rng=rng)
-end
-
-function test_shock_independence(result::NonGaussianMLResult{T}; max_lag::Int=10,
-                                  rng::AbstractRNG=Random.default_rng()) where {T<:AbstractFloat}
-    _test_independence_impl(result.shocks, max_lag; rng=rng)
+function test_shock_independence(result; max_lag::Int=10,
+                                  rng::AbstractRNG=Random.default_rng())
+    s = _result_shocks(result)
+    _test_independence_impl(Matrix{eltype(s)}(s), max_lag; rng=rng)
 end
 
 function _test_independence_impl(shocks::Matrix{T}, max_lag::Int;
@@ -445,102 +609,288 @@ end
 # Public API: Overidentification Test
 # =============================================================================
 
-"""
-    test_overidentification(model::VARModel, result::AbstractNonGaussianSVAR;
-                            restrictions=nothing, n_bootstrap=499) -> IdentifiabilityTestResult
+function _just_id_overid(::Type{T}; note::AbstractString="") where {T<:AbstractFloat}
+    IdentifiabilityTestResult{T}(:overidentification, zero(T), one(T), true,
+                                  Dict{Symbol, Any}(:just_identified => true,
+                                                     :method => :just_identified,
+                                                     :note => note))
+end
 
-Test overidentifying restrictions for non-Gaussian SVAR.
+function _overid_from_lr(lr; extra=Dict{Symbol,Any}())
+    Tlr = typeof(lr.statistic)
+    details = Dict{Symbol, Any}(:method => :lr, :df => lr.df, :just_identified => false)
+    merge!(details, extra)
+    IdentifiabilityTestResult{Tlr}(:overidentification, lr.statistic, lr.pvalue,
+                                    lr.pvalue >= Tlr(0.05), details)
+end
 
-When additional restrictions beyond non-Gaussianity are imposed (e.g., zero restrictions
-on B₀), this test checks whether those restrictions are consistent with the data.
+"""Diagonal Wald of zero restrictions on ``B_0`` using the stored SEs."""
+function _wald_B0_zeros(B0::AbstractMatrix{T}, se, mask::BitMatrix) where {T<:AbstractFloat}
+    (se isa AbstractMatrix && size(se) == size(B0)) || return nothing
+    n_r = count(mask)
+    n_r == 0 && return nothing
+    W = zero(T)
+    @inbounds for i in 1:size(B0, 1), j in 1:size(B0, 2)
+        mask[i, j] || continue
+        s = se[i, j]
+        (isfinite(s) && s > zero(T)) || return nothing
+        W += (B0[i, j] / s)^2
+    end
+    pval = T(1) - T(cdf(Chisq(n_r), W))
+    (statistic=W, pvalue=pval, df=n_r)
+end
 
-Uses a bootstrap approach: compares the restricted log-likelihood to bootstrap distribution.
-"""
-function test_overidentification(model::VARModel{T}, result::AbstractNonGaussianSVAR;
-                                  restrictions::Union{Nothing, Function}=nothing,
-                                  n_bootstrap::Int=499,
-                                  rng::AbstractRNG=Random.default_rng()) where {T<:AbstractFloat}
+function _ml_dist_init(result::NonGaussianMLResult{T}, perm::Vector{Int}) where {T<:AbstractFloat}
+    n = size(result.B0, 1)
+    d = result.distribution
+    dp = result.dist_params
+    if d === :student_t
+        ν = dp[:nu][perm]
+        return T[log(max(ν[j] - T(2.01), T(1e-8))) for j in 1:n]
+    elseif d === :skew_normal
+        return Vector{T}(dp[:alpha][perm])
+    elseif d === :mixture_normal
+        p_mix = dp[:p_mix][perm]
+        σ1 = dp[:sigma1][perm]
+        out = Vector{T}(undef, 2n)
+        @inbounds for j in 1:n
+            pj = clamp(p_mix[j], T(1e-6), T(1) - T(1e-6))
+            out[2j - 1] = log(pj / (1 - pj))
+            # invert σ₁² = (1/p) * sigmoid(raw)  ⇒  sigmoid(raw) = p σ₁²
+            s2 = σ1[j]^2
+            sig = clamp(pj * s2, T(1e-8), T(1) - T(1e-8))
+            out[2j] = log(sig / (1 - sig))
+        end
+        return out
+    elseif d === :pml
+        κ = dp[:kappa][perm]
+        m = dp[:nu][perm]
+        out = Vector{T}(undef, 2n)
+        @inbounds for j in 1:n
+            out[2j - 1] = κ[j]
+            out[2j] = log(max(m[j] - T(2.05), T(1e-8)))
+        end
+        return out
+    end
+    zeros(T, _n_dist_params(d) * n)
+end
+
+"""Restricted non-Gaussian ML log-likelihood: Givens + large penalty on masked B₀ zeros."""
+function _nongaussian_restricted_lr(model::VARModel{T}, result::NonGaussianMLResult{T},
+                                    mask::BitMatrix) where {T<:AbstractFloat}
     n = nvars(model)
+    L = safe_cholesky(model.Sigma)
     T_obs = size(model.U, 1)
-
-    B0 = result.B0
-    Q = result.Q
-
-    # Compute residual from Σ = B₀ B₀'
-    Sigma_model = B0 * B0'
-    discrepancy = norm(Sigma_model - model.Sigma) / norm(model.Sigma)
-
-    # Check orthogonality of Q
-    orth_err = norm(Q' * Q - I)
-
-    # Optional user restrictions (e.g. zero pattern on B₀). When absent the
-    # test reduces to a pure covariance-fit + orthogonality check, which is
-    # exactly zero for any just-identified B₀ = L·Q with Q orthogonal.
-    restr_err = zero(T)
-    if restrictions !== nothing
-        restr_err = T(restrictions(B0, Q))
+    perm, signs = _align_to_zeros(result.B0, mask)
+    Q_al = result.Q[:, perm] .* signs'
+    if det(Q_al) < 0
+        Q_al = copy(Q_al)
+        Q_al[:, n] .*= -one(T)
     end
-
-    # Common statistic used for both the sample and the bootstrap.
-    _oid_stat(disc, orth, rerr) = disc + orth + rerr
-    stat = _oid_stat(discrepancy, orth_err, restr_err)
-
-    # Just-identified B₀ with no extra restrictions: the statistic is
-    # machine-epsilon by construction and the test has no content.
-    just_id = restrictions === nothing && discrepancy < T(1e-10) && orth_err < T(1e-10)
-    if just_id
-        @warn "test_overidentification: B₀ is just-identified (Σ ≈ B₀B₀', Q orthogonal) " *
-              "with no extra restrictions; the test has no power. " *
-              "Pass `restrictions=f` that returns a non-negative discrepancy, " *
-              "or use an overidentified estimator."
-        return IdentifiabilityTestResult{T}(:overidentification, stat, one(T), true,
-                                            Dict{Symbol, Any}(:discrepancy => discrepancy,
-                                                               :orthogonality_error => orth_err,
-                                                               :restriction_error => restr_err,
-                                                               :n_bootstrap => 0,
-                                                               :just_identified => true))
+    θ0 = n == 1 ? T[] : _orthogonal_to_givens(Q_al, n)
+    dp0 = _ml_dist_init(result, perm)
+    p0 = vcat(θ0, dp0)
+    λpen = T(T_obs) * T(1e6)
+    dist = result.distribution
+    obj = p -> begin
+        angles, dp = _unpack_nongaussian_params(p, n, dist)
+        nll = -_nongaussian_loglik(angles, dp, model.U, L, n; distribution=dist)
+        Q = _givens_to_orthogonal(angles, n)
+        B0 = Matrix(L) * Q
+        nll + λpen * sum(abs2, B0[mask])
     end
+    res = Optim.optimize(obj, p0, Optim.NelderMead(),
+                         Optim.Options(iterations=400, g_tol=T(1e-8),
+                                       allow_f_increases=true))
+    pstar = Vector{T}(Optim.minimizer(res))
+    angles, dp = _unpack_nongaussian_params(pstar, n, dist)
+    ℓ_r = _nongaussian_loglik(angles, dp, model.U, L, n; distribution=dist)
+    _restriction_lr(result.loglik, ℓ_r, count(mask))
+end
 
-    # Bootstrap the SAME statistic under residual resampling with fixed Q.
-    boot_stats = Vector{T}(undef, n_bootstrap)
-    rerr_boots = Vector{T}(undef, n_bootstrap)
-    for b in 1:n_bootstrap
-        idx = rand(rng, 1:T_obs, T_obs)
-        U_boot = model.U[idx, :]
-        Sigma_boot = cov(U_boot; corrected=true)
-        # Symmetrize / regularize
-        Sigma_boot = (Sigma_boot + Sigma_boot') / 2 + T(1e-12) * I
+"""
+    test_overidentification(model, result; restrictions=nothing, n_bootstrap=999,
+                            rng) -> IdentifiabilityTestResult
 
-        L_boot = safe_cholesky(Sigma_boot)
-        B0_boot = Matrix(L_boot) * Q
-        Sigma_model_boot = B0_boot * B0_boot'
-        disc_boot = norm(Sigma_model_boot - Sigma_boot) / max(norm(Sigma_boot), eps(T))
-        orth_boot = norm(Q' * Q - I)  # Q fixed ⇒ same orth_err
-        rerr_boots[b] = restrictions !== nothing ? T(restrictions(B0_boot, Q)) : zero(T)
-        boot_stats[b] = _oid_stat(disc_boot, orth_boot, rerr_boots[b])
+Overidentification test for statistical and parametric SVARs.
+
+- **Parametric ML** (`NonGaussianMLResult`): likelihood-ratio test of extra zeros
+  on ``B_0`` (Givens parameterization with a quadratic penalty). A Wald statistic
+  that uses the stored SEs of ``B_0`` is reported in `details`.
+- **AB-model** (`SVARModel`): the stored concentrated LR
+  ``T(\\log|\\hat\\Sigma_r| - \\log|\\hat\\Sigma|)``.
+- **SVEC** (`SVECResult`): LR via the AB B-model when `restrictions` is a zero
+  mask; just-identified KPSW otherwise.
+- **Heteroskedastic ML**: [`test_restrictions`](@ref) LR, plus a Wald on ``B_0``.
+- **GMM**: Hansen ``J`` when no extra zeros are supplied.
+- **ICA**: there is no parametric likelihood. The test **falls back to
+  label-stability** and records `details[:fallback] = :label_stability`.
+
+With no extra restrictions a just-identified parametric fit returns p-value 1.
+"""
+function test_overidentification(model::VARModel{T}, result::ICASVARResult{T};
+                                  restrictions=nothing,
+                                  n_bootstrap::Int=999,
+                                  rng::AbstractRNG=Random.default_rng()) where {T<:AbstractFloat}
+    stab = test_label_stability(model; method=result.method, n_bootstrap=n_bootstrap, rng=rng)
+    details = Dict{Symbol, Any}(stab.details)
+    details[:fallback] = :label_stability
+    details[:just_identified] = false
+    details[:note] = "ICA has no parametric overidentification statistic; " *
+                     "falling back to label-stability (match fraction, no p-value)"
+    IdentifiabilityTestResult{T}(:overidentification, stab.statistic, T(NaN),
+                                  stab.identified, details)
+end
+
+function test_overidentification(model::VARModel{T}, result::NonGaussianMLResult{T};
+                                  restrictions=nothing,
+                                  n_bootstrap::Int=999,
+                                  rng::AbstractRNG=Random.default_rng()) where {T<:AbstractFloat}
+    if restrictions === nothing
+        return _just_id_overid(T; note="Non-Gaussian ML B₀ = LQ is just-identified " *
+                                       "without extra zeros on B₀")
     end
-
-    # p-value (#568). With Q held at the sample estimate the bootstrap draws are
-    # centred on the SAMPLE restriction value, so the uncentred `boot ≥ stat`
-    # returned p ≈ 0.5 no matter how badly the restriction was violated. When a
-    # restriction is supplied, test ONLY its component, centred at the sample
-    # value (under H₀ the restriction discrepancy is 0): the disc/orth terms
-    # have no bootstrap analogue — `L_boot·Q` reconstructs `Σ_boot` exactly, so
-    # their bootstrap counterparts are degenerate at 0 and including them makes
-    # the comparison mechanical, not statistical.
-    pval = if restrictions === nothing
-        mean(boot_stats .>= stat)
-    else
-        mean(abs.(rerr_boots .- restr_err) .>= restr_err)
+    n = size(result.B0, 1)
+    mask = _zero_mask(restrictions, n)
+    lr = _nongaussian_restricted_lr(model, result, mask)
+    perm, signs = _align_to_zeros(result.B0, mask)
+    B_al = result.B0[:, perm] .* signs'
+    se_al = (result.se isa AbstractMatrix && size(result.se) == size(result.B0)) ?
+            result.se[:, perm] : result.se
+    wald = _wald_B0_zeros(B_al, se_al, mask)
+    extra = Dict{Symbol,Any}()
+    if wald !== nothing
+        extra[:wald_statistic] = wald.statistic
+        extra[:wald_pvalue] = wald.pvalue
+        extra[:wald_df] = wald.df
     end
-    identified = pval >= T(0.05)  # fail to reject → restrictions OK
+    _overid_from_lr(lr; extra=extra)
+end
 
-    IdentifiabilityTestResult{T}(:overidentification, stat, T(pval), identified,
-                                  Dict{Symbol, Any}(:discrepancy => discrepancy,
-                                                     :orthogonality_error => orth_err,
-                                                     :restriction_error => restr_err,
-                                                     :n_bootstrap => n_bootstrap,
+function test_overidentification(model::VARModel{T}, result::NonGaussianGMMResult{T};
+                                  restrictions=nothing,
+                                  n_bootstrap::Int=999,
+                                  rng::AbstractRNG=Random.default_rng()) where {T<:AbstractFloat}
+    if restrictions === nothing
+        identified = isnan(result.J_pvalue) ? true : result.J_pvalue >= T(0.05)
+        return IdentifiabilityTestResult{T}(:overidentification, result.J, result.J_pvalue,
+                                            identified,
+                                            Dict{Symbol, Any}(:method => :hansen_j,
+                                                               :moments => result.moments,
+                                                               :just_identified => false))
+    end
+    n = size(result.B0, 1)
+    mask = _zero_mask(restrictions, n)
+    perm, signs = _align_to_zeros(result.B0, mask)
+    B_al = result.B0[:, perm] .* signs'
+    se_al = (result.se isa AbstractMatrix && size(result.se) == size(result.B0)) ?
+            result.se[:, perm] : result.se
+    wald = _wald_B0_zeros(B_al, se_al, mask)
+    wald === nothing && return _just_id_overid(T; note="GMM result has no usable SEs for a Wald test of B₀")
+    IdentifiabilityTestResult{T}(:overidentification, wald.statistic, wald.pvalue,
+                                  wald.pvalue >= T(0.05),
+                                  Dict{Symbol, Any}(:method => :wald, :df => wald.df,
                                                      :just_identified => false))
+end
+
+function test_overidentification(model::VARModel{T},
+                                  result::Union{MarkovSwitchingSVARResult{T},
+                                                GARCHSVARResult{T},
+                                                SmoothTransitionSVARResult{T},
+                                                ExternalVolatilitySVARResult{T}};
+                                  restrictions=nothing,
+                                  n_bootstrap::Int=999,
+                                  rng::AbstractRNG=Random.default_rng()) where {T<:AbstractFloat}
+    if restrictions === nothing
+        return _just_id_overid(T; note="Heteroskedastic B₀ is just-identified without extra zeros")
+    end
+    n = size(result.B0, 1)
+    mask = _zero_mask(restrictions, n)
+    lr = test_restrictions(result, restrictions)
+    perm, signs = _align_to_zeros(result.B0, mask)
+    B_al = result.B0[:, perm] .* signs'
+    se_al = (result.se isa AbstractMatrix && size(result.se) == size(result.B0)) ?
+            result.se[:, perm] : result.se
+    wald = _wald_B0_zeros(B_al, se_al, mask)
+    extra = Dict{Symbol,Any}()
+    if wald !== nothing
+        extra[:wald_statistic] = wald.statistic
+        extra[:wald_pvalue] = wald.pvalue
+        extra[:wald_df] = wald.df
+    end
+    _overid_from_lr(lr; extra=extra)
+end
+
+function test_overidentification(model::VARModel{T}, result::SVARModel{T};
+                                  restrictions=nothing,
+                                  n_bootstrap::Int=999,
+                                  rng::AbstractRNG=Random.default_rng()) where {T<:AbstractFloat}
+    extra = Dict{Symbol,Any}(:lr_df => result.lr_df)
+    if restrictions !== nothing
+        n = size(result.B, 1)
+        mask = _zero_mask(restrictions, n)
+        B0 = result.A \ result.B
+        seB = result.se === nothing ? nothing : result.se[:, (n + 1):(2n)]
+        wald = _wald_B0_zeros(B0, seB, mask)
+        if wald !== nothing
+            extra[:wald_statistic] = wald.statistic
+            extra[:wald_pvalue] = wald.pvalue
+            extra[:wald_df] = wald.df
+        end
+    end
+    _overid_from_lr((statistic=result.lr_stat, pvalue=result.lr_pvalue, df=result.lr_df);
+                    extra=extra)
+end
+
+function test_overidentification(model::VARModel{T}, result::SVECResult{T};
+                                  restrictions=nothing,
+                                  n_bootstrap::Int=999,
+                                  rng::AbstractRNG=Random.default_rng()) where {T<:AbstractFloat}
+    if restrictions === nothing
+        df = result.identification.n_overidentifying
+        df == 0 && return _just_id_overid(T; note="Default KPSW SVEC is just-identified")
+        return IdentifiabilityTestResult{T}(:overidentification, T(NaN), T(NaN), df == 0,
+                                            Dict{Symbol, Any}(:method => :svec,
+                                                               :df => df,
+                                                               :just_identified => false,
+                                                               :note => "SVECResult does not store the AB LR; pass restrictions to re-estimate"))
+    end
+    n = size(result.B0, 1)
+    mask = _zero_mask(restrictions, n)
+    Bpat = fill(T(NaN), n, n)
+    Bpat[mask] .= zero(T)
+    svar = estimate_svar(to_var(result.vecm), b_model_pattern(Bpat);
+                         rng=rng, long_run_matrix=result.Xi)
+    extra = Dict{Symbol,Any}()
+    wald = _wald_B0_zeros(svar.B, svar.se === nothing ? nothing : svar.se[:, (n + 1):(2n)], mask)
+    if wald !== nothing
+        extra[:wald_statistic] = wald.statistic
+        extra[:wald_pvalue] = wald.pvalue
+        extra[:wald_df] = wald.df
+    end
+    _overid_from_lr((statistic=svar.lr_stat, pvalue=svar.lr_pvalue, df=svar.lr_df);
+                    extra=extra)
+end
+
+function test_overidentification(result::SVARModel{T};
+                                  restrictions=nothing,
+                                  n_bootstrap::Int=999,
+                                  rng::AbstractRNG=Random.default_rng()) where {T<:AbstractFloat}
+    extra = Dict{Symbol,Any}(:lr_df => result.lr_df)
+    if restrictions !== nothing
+        n = size(result.B, 1)
+        mask = _zero_mask(restrictions, n)
+        B0 = result.A \ result.B
+        seB = result.se === nothing ? nothing : result.se[:, (n + 1):(2n)]
+        wald = _wald_B0_zeros(B0, seB, mask)
+        if wald !== nothing
+            extra[:wald_statistic] = wald.statistic
+            extra[:wald_pvalue] = wald.pvalue
+            extra[:wald_df] = wald.df
+        end
+    end
+    _overid_from_lr((statistic=result.lr_stat, pvalue=result.lr_pvalue, df=result.lr_df);
+                    extra=extra)
 end
 
 # =============================================================================

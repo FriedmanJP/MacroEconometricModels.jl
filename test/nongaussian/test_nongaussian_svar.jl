@@ -321,23 +321,27 @@ end
             end
 
             @testset "Overidentification" begin
-                # Just-identified B₀ has no content: expect warn + p=1 identified=true (#568)
-                result = test_overidentification(model, ica; n_bootstrap=(FAST ? 49 : 99))
+                # ICA is just-identified; overid falls back to label-stability (no p-value)
+                result = test_overidentification(model, ica; n_bootstrap=(FAST ? 9 : 19),
+                                                 rng=MersenneTwister(75101))
                 @test result isa IdentifiabilityTestResult{Float64}
                 @test result.test_name == :overidentification
                 @test result.statistic >= 0
-                @test result.identified == true
-                @test get(result.details, :just_identified, false) == true
-                @test 0 <= result.pvalue <= 1
+                @test isnan(result.pvalue)
+                @test get(result.details, :fallback, nothing) == :label_stability
+                @test haskey(result.details, :match_fraction)
             end
 
             @testset "Identification strength" begin
-                result = test_identification_strength(model; method=:fastica, n_bootstrap=(FAST ? 19 : 49))
+                result = test_identification_strength(model; method=:fastica,
+                                                      n_bootstrap=(FAST ? 9 : 19),
+                                                      rng=MersenneTwister(75102))
                 @test result isa IdentifiabilityTestResult{Float64}
-                @test result.test_name == :identification_strength
-                @test result.statistic >= 0
-                @test 0 <= result.pvalue <= 1
+                @test result.test_name == :label_stability
+                @test 0 <= result.statistic <= 1
+                @test isnan(result.pvalue)
                 @test haskey(result.details, :n_bootstrap)
+                @test haskey(result.details, :match_fraction)
             end
         end
     end
@@ -444,9 +448,12 @@ end
     @testset "Identification strength with jade and sobi" begin
         _suppress_warnings() do
             for method in [:jade, :sobi]
-                result = test_identification_strength(model; method=method, n_bootstrap=(FAST ? 9 : 19))
+                result = test_identification_strength(model; method=method,
+                                                      n_bootstrap=(FAST ? 5 : 9),
+                                                      rng=MersenneTwister(75103))
                 @test result isa IdentifiabilityTestResult{Float64}
-                @test result.test_name == :identification_strength
+                @test result.test_name == :label_stability
+                @test isnan(result.pvalue)
             end
         end
     end
@@ -1009,6 +1016,204 @@ end
             @test norm(lab_d.B0 - B_dgp) < 0.1
             lab_m = label_shocks(ica_d; by=:max_impact)
             @test norm(lab_m.B0 - B_dgp) < 0.1
+        end
+    end
+
+    @testset "SID-22 principled identification and overidentification tests" begin
+        _suppress_warnings() do
+            Random.seed!(751)
+
+            @testset "label-stability reports match fraction and no p-value" begin
+                Y2 = randn(MersenneTwister(75110), 180, 2)
+                m2 = estimate_var(Y2, 1)
+                stab = test_label_stability(m2; method=:fastica, n_bootstrap=(FAST ? 7 : 15),
+                                            rng=MersenneTwister(75111))
+                @test stab isa IdentifiabilityTestResult{Float64}
+                @test stab.test_name == :label_stability
+                @test 0 <= stab.statistic <= 1
+                @test isnan(stab.pvalue)
+                @test stab.details[:match_fraction] == stab.statistic
+                @test stab.details[:n_bootstrap] > 0
+                @test 0 <= stab.details[:n_identity] <= stab.details[:n_bootstrap]
+                buf = IOBuffer()
+                show(buf, stab)
+                txt = String(take!(buf))
+                @test occursin("label_stability", txt)
+                @test occursin("Match fraction", txt)
+                @test !occursin("***", txt)  # no significance stars without a p-value
+            end
+
+            @testset "identity permutation is the match criterion" begin
+                B = [1.2 0.3; 0.4 1.1]
+                perm_id, _ = MacroEconometricModels._match_columns(B, B)
+                @test perm_id == [1, 2]
+                Bswap = B[:, [2, 1]]
+                perm_sw, _ = MacroEconometricModels._match_columns(B, Bswap)
+                @test perm_sw == [2, 1]
+            end
+
+            @testset "deprecated strength wrapper: ICA → label-stability" begin
+                Y2 = randn(MersenneTwister(75120), 160, 2)
+                m2 = estimate_var(Y2, 1)
+                r = test_identification_strength(m2; method=:fastica, n_bootstrap=5,
+                                                 rng=MersenneTwister(75121))
+                @test r.test_name == :label_stability
+                @test isnan(r.pvalue)
+            end
+
+            @testset "deprecated strength wrapper: hetero → λ-distinct" begin
+                Yh, rh = simulate_two_regime([1.0 0.0; 0.4 1.0],
+                                             [0.4 * Matrix{Float64}(I, 2, 2)],
+                                             [0.5, 3.0]; Tobs=400, split=0.5,
+                                             rng=MersenneTwister(75130))
+                mh = estimate_var(Yh, 1)
+                ev = identify_external_volatility(mh, rh[2:end]; regimes=2)
+                r = test_identification_strength(ev)
+                @test r.test_name == :lambda_distinct
+                @test r isa IdentifiabilityTestResult{Float64}
+                @test haskey(r.details, :pvalue_bonferroni)
+            end
+
+            @testset "deprecated strength wrapper: non-Gaussian → Gaussian count + Holm" begin
+                shocks_t = rand(MersenneTwister(75140), TDist(5.0), FAST ? 400 : 800, 3)
+                shocks_t .*= sqrt(3 / 5)
+                dummy = NonGaussianGMMResult{Float64}(
+                    Matrix{Float64}(I, 3, 3), Matrix{Float64}(I, 3, 3),
+                    zeros(3), Matrix{Float64}(I, 3, 3), zeros(3, 3),
+                    0.0, 1.0, :cokurtosis, :two_step, shocks_t,
+                    ["y$i" for i in 1:3], ["Shock $j" for j in 1:3])
+                r = test_identification_strength(dummy)
+                @test r.test_name == :gaussian_shock_count
+                @test r.identified == true
+                @test haskey(r.details, :jb_pvals_holm)
+                @test haskey(r.details, :kurt_pvals)
+                @test r.details[:n_gaussian] <= 1
+            end
+
+            @testset "shock independence/gaussianity dispatch including MS" begin
+                Ym = randn(MersenneTwister(75150), 220, 2)
+                mm = estimate_var(Ym, 1)
+                ms = identify_markov_switching(mm; n_regimes=2, n_starts=1,
+                                               rng=MersenneTwister(75151),
+                                               max_iter=(FAST ? 15 : 40))
+                @test size(ms.shocks, 2) == 2
+                @test size(ms.shocks, 1) == size(mm.U, 1)
+                indep_ms = test_shock_independence(ms; max_lag=3,
+                                                   rng=MersenneTwister(75152))
+                @test indep_ms isa IdentifiabilityTestResult{Float64}
+                @test indep_ms.test_name == :shock_independence
+                @test 0 <= indep_ms.pvalue <= 1
+                gauss_ms = test_shock_gaussianity(ms)
+                @test gauss_ms.test_name == :shock_gaussianity
+
+                garch = identify_garch(mm; max_iter=(FAST ? 5 : 20))
+                @test test_shock_independence(garch; max_lag=2,
+                                              rng=MersenneTwister(75153)).test_name ==
+                      :shock_independence
+                @test test_shock_gaussianity(garch).test_name == :shock_gaussianity
+
+                st = identify_smooth_transition(mm, mm.U[:, 1])
+                @test test_shock_gaussianity(st).test_name == :shock_gaussianity
+
+                ev = identify_external_volatility(mm, vcat(fill(1, 110), fill(2, size(mm.U, 1) - 110)))
+                @test size(ev.shocks, 1) == size(mm.U, 1)
+                @test test_shock_independence(ev; max_lag=2,
+                                              rng=MersenneTwister(75154)).test_name ==
+                      :shock_independence
+            end
+
+            @testset "overidentification: ML just-identified and AB LR" begin
+                Y2 = randn(MersenneTwister(75160), 200, 2)
+                m2 = estimate_var(Y2, 1)
+                ml = identify_student_t(m2)
+                oid_ml = test_overidentification(m2, ml)
+                @test oid_ml.test_name == :overidentification
+                @test get(oid_ml.details, :just_identified, false) == true
+                @test oid_ml.pvalue == 1.0
+
+                svar = estimate_svar(m2, recursive_pattern(2); rng=MersenneTwister(75161))
+                oid_ab = test_overidentification(m2, svar)
+                @test oid_ab.test_name == :overidentification
+                @test get(oid_ab.details, :method, nothing) == :lr
+                @test oid_ab.details[:df] == svar.lr_df
+                @test oid_ab.statistic ≈ svar.lr_stat
+                @test oid_ab.pvalue ≈ svar.lr_pvalue
+            end
+
+            @testset "overidentification: hetero LR + Wald on a true zero" begin
+                Yh, rh = simulate_two_regime([1.0 0.0; 0.45 1.0],
+                                             [0.4 * Matrix{Float64}(I, 2, 2)],
+                                             [0.4, 3.0]; Tobs=500, split=0.5,
+                                             rng=MersenneTwister(75170))
+                mh = estimate_var(Yh, 1)
+                ev = identify_external_volatility(mh, rh[2:end]; regimes=2)
+                mask_true = [NaN 0.0; NaN NaN]
+                oid = test_overidentification(mh, ev; restrictions=mask_true)
+                @test oid.test_name == :overidentification
+                @test get(oid.details, :method, nothing) == :lr
+                @test haskey(oid.details, :wald_statistic)
+                @test oid.pvalue > 0.01
+            end
+
+            @testset "ICA overidentification says it falls back to label-stability" begin
+                Y2 = randn(MersenneTwister(75180), 150, 2)
+                m2 = estimate_var(Y2, 1)
+                ica2 = identify_fastica(m2; rng=MersenneTwister(75181))
+                oid = test_overidentification(m2, ica2; n_bootstrap=5,
+                                              rng=MersenneTwister(75182))
+                @test oid.details[:fallback] == :label_stability
+                @test isnan(oid.pvalue)
+                buf = IOBuffer()
+                show(buf, oid)
+                txt = String(take!(buf))
+                @test occursin("label-stability", txt) || occursin("label_stability", txt)
+            end
+
+            if !FAST
+                # Size/power: LR overid of a true recursive restriction under Student-t
+                n_reps = 200
+                Tobs_lr = 500
+                B_rec = [1.0 0.0; 0.45 1.0]
+                A_lr = [0.4 * Matrix{Float64}(I, 2, 2)]
+                mask_true = [NaN 0.0; NaN NaN]
+                mask_false = [NaN NaN; 0.0 NaN]
+                n_rej_size = 0
+                n_ok_size = 0
+                n_rej_pow = 0
+                n_ok_pow = 0
+                for r in 1:n_reps
+                    rng_r = MersenneTwister(75100 + r)
+                    Ys, _ = simulate_svar(B_rec, A_lr; Tobs=Tobs_lr, shocks=:t, rng=rng_r)
+                    m_s = estimate_var(Ys, 1)
+                    try
+                        ml_s = identify_student_t(m_s)
+                        ot = test_overidentification(m_s, ml_s; restrictions=mask_true)
+                        n_ok_size += 1
+                        n_rej_size += Int(ot.pvalue < 0.05)
+                    catch
+                        continue
+                    end
+                end
+                @test n_ok_size >= 100
+                size_est = n_rej_size / n_ok_size
+                @test 0.01 <= size_est <= 0.12
+
+                for r in 1:100
+                    rng_r = MersenneTwister(75300 + r)
+                    Yp, _ = simulate_svar(B_rec, A_lr; Tobs=Tobs_lr, shocks=:t, rng=rng_r)
+                    m_p = estimate_var(Yp, 1)
+                    try
+                        ml_p = identify_student_t(m_p)
+                        op = test_overidentification(m_p, ml_p; restrictions=mask_false)
+                        n_ok_pow += 1
+                        n_rej_pow += Int(op.pvalue < 0.05)
+                    catch
+                        continue
+                    end
+                end
+                @test n_ok_pow >= 50
+                @test n_rej_pow / n_ok_pow > 0.80
+            end
         end
     end
 end

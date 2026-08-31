@@ -416,9 +416,9 @@ end
         @testset "jade method" begin
             result = test_identification_strength(model; method=:jade, n_bootstrap=(FAST ? 5 : 15))
             @test result isa MEM.IdentifiabilityTestResult{Float64}
-            @test result.test_name == :identification_strength
-            @test result.statistic >= 0
-            @test 0 <= result.pvalue <= 1
+            @test result.test_name == :label_stability
+            @test 0 <= result.statistic <= 1
+            @test isnan(result.pvalue)
             @test result.details[:method] == :jade
             @test result.details[:n_bootstrap] > 0
         end
@@ -426,7 +426,8 @@ end
         @testset "sobi method" begin
             result = test_identification_strength(model; method=:sobi, n_bootstrap=(FAST ? 5 : 15))
             @test result isa MEM.IdentifiabilityTestResult{Float64}
-            @test result.test_name == :identification_strength
+            @test result.test_name == :label_stability
+            @test isnan(result.pvalue)
             @test result.details[:method] == :sobi
         end
     end
@@ -519,14 +520,10 @@ end
             @test result isa MEM.IdentifiabilityTestResult{Float64}
             @test result.test_name == :overidentification
             @test result.statistic >= 0
-            @test 0 <= result.pvalue <= 1
-            @test haskey(result.details, :discrepancy)
-            @test haskey(result.details, :orthogonality_error)
+            @test isnan(result.pvalue)
+            @test result.details[:fallback] == :label_stability
+            @test haskey(result.details, :match_fraction)
             @test haskey(result.details, :n_bootstrap)
-            # FastICA's Q sits at machine-precision orthogonality on some platform/Julia
-            # combos, tripping the just-identified early return (n_bootstrap = 0); on
-            # others it misses the 1e-10 cutoff and the bootstrap runs. Both are correct.
-            @test result.details[:n_bootstrap] == (result.details[:just_identified] ? 0 : nb)
         end
 
         @testset "with ML result" begin
