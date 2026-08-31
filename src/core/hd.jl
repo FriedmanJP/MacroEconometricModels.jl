@@ -319,6 +319,7 @@ Compute Bayesian historical decomposition from posterior draws with posterior qu
 - `quantiles::Vector{<:Real}=[0.16, 0.5, 0.84]`: Posterior quantile levels
 - `check_func=nothing`: Sign restriction check function
 - `narrative_check=nothing`: Narrative restriction check function
+- `max_draws::Int=1000`: Maximum draws for sign/narrative identification
 - `transition_var=nothing`: Transition variable (for method=:smooth_transition)
 - `regime_indicator=nothing`: Regime indicator (for method=:external_volatility)
 
@@ -345,6 +346,7 @@ function historical_decomposition(post::BVARPosterior, horizon::Int=0;
     quantiles::Vector{<:Real}=[0.16, 0.5, 0.84], point_estimate::Symbol=:mean,
     check_func=nothing, narrative_check=nothing,
     shock_names::Union{Nothing,Vector{String}}=nothing,
+    max_draws::Int=1000,
     transition_var::Union{Nothing,AbstractVector}=nothing,
     regime_indicator::Union{Nothing,AbstractVector{Int}}=nothing
 )
@@ -368,26 +370,37 @@ function historical_decomposition(post::BVARPosterior, horizon::Int=0;
     b_vecs, sigmas = extract_chain_parameters(post)
 
     valid_count = 0
+    n_unidentified = 0
+    n_nonstationary = 0
     for s in 1:samples
         m = parameters_to_model(b_vecs[s, :], sigmas[s, :], p, n, use_data)
         if !is_stationary(m).is_stationary
+            n_nonstationary += 1
             continue
         end
-        valid_count += 1
-        Q = compute_Q(m, method, horizon, check_func, narrative_check;
-                      max_draws=100, transition_var=transition_var, regime_indicator=regime_indicator)
+        try
+            Q = compute_Q(m, method, horizon, check_func, narrative_check;
+                          max_draws=max_draws, transition_var=transition_var,
+                          regime_indicator=regime_indicator)
+            shocks = compute_structural_shocks(m, Q)
+            Theta = _compute_structural_ma_coefficients(m, Q, horizon)
+            contributions = _compute_hd_contributions(shocks, Theta)
+            initial_cond = _compute_initial_conditions(actual, contributions)
 
-        shocks = compute_structural_shocks(m, Q)
-        Theta = _compute_structural_ma_coefficients(m, Q, horizon)
-        contributions = _compute_hd_contributions(shocks, Theta)
-        initial_cond = _compute_initial_conditions(actual, contributions)
-
-        all_contributions[valid_count, :, :, :] = contributions
-        all_initial[valid_count, :, :] = initial_cond
-        all_shocks[valid_count, :, :] = shocks
+            valid_count += 1
+            all_contributions[valid_count, :, :, :] = contributions
+            all_initial[valid_count, :, :] = initial_cond
+            all_shocks[valid_count, :, :] = shocks
+        catch e
+            e isa IdentificationError && (n_unidentified += 1; continue)
+            rethrow(e)
+        end
     end
-    valid_count == 0 && error("All posterior draws are non-stationary; cannot compute historical decomposition")
-    valid_count < samples ÷ 2 && @warn "$(samples - valid_count)/$samples posterior draws non-stationary, skipped"
+    valid_count == 0 && throw(IdentificationError(
+        "All posterior draws failed identification or were non-stationary " *
+        "(unidentified=$n_unidentified, non-stationary=$n_nonstationary)"))
+    frac_u = ET(n_unidentified) / ET(samples)
+    frac_u > ET(0.5) && @warn "$n_unidentified/$samples posterior draws unidentified ($n_nonstationary non-stationary)"
 
     # Compute quantiles and means
     q_vec = ET.(quantiles)
@@ -420,7 +433,7 @@ function historical_decomposition(post::BVARPosterior, horizon::Int=0;
     end
 
     snames = isnothing(shock_names) ? post.varnames : shock_names
-    # MC honesty (#244): non-stationary posterior draws are skipped (valid_count usable).
+    # MC honesty (#244): non-stationary / unidentified posterior draws are skipped (valid_count usable).
     BayesianHistoricalDecomposition{ET}(
         contrib_q, contrib_m, initial_q, initial_m, shocks_m, actual, T_eff,
         post.varnames, snames, q_vec, method,

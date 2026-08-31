@@ -636,6 +636,7 @@ end
     post = estimate_bvar(Y, 1; n_draws=FAST ? 20 : 40, burnin=10)
     impossible(irf) = irf[1, 1, 1] > 1e6
     @test_throws IdentificationError irf(post, 5; method=:sign, check_func=impossible, max_draws=3)
+    @test_throws IdentificationError historical_decomposition(post; method=:sign, check_func=impossible, max_draws=3)
     pos(irf) = irf[1, 1, 1] > 0
     r = irf(post, 5; method=:sign, check_func=pos, max_draws=20)
     @test r isa BayesianImpulseResponse
@@ -646,4 +647,7 @@ end
     r1 = irf(post, 5; method=:sign, check_func=pos, max_draws=1)
     @test r1 isa BayesianImpulseResponse
     @test r1.n_failed == r1.n_requested - r1.n_effective
+    hd1 = historical_decomposition(post; method=:sign, check_func=pos, max_draws=1)
+    @test hd1 isa BayesianHistoricalDecomposition
+    @test hd1.n_failed == hd1.n_requested - hd1.n_effective
 end
