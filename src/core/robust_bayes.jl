@@ -21,9 +21,12 @@ the interval `[ℓ(B,Σ), u(B,Σ)]` over admissible rotations `Q`. Arrays are
 # Fields
 - `lower`, `upper`: posterior means of the identified-set bounds (set of posterior means)
 - `robust_lower`, `robust_upper`: smallest interval containing `level` of the
-  draws' *sets* (robust credible region). Contains the single-prior interval.
-- `single_prior_lower`, `single_prior_upper`: Haar / uniform-on-`O(n)` credible
-  interval from [`identify_arias_bayesian`](@ref)
+  draws' *sets* (robust credible region).
+- `single_prior_lower`, `single_prior_upper`: Haar / uniform-on-`O(n)` equal-tailed
+  interval from Arias/Uhlig rotations ([`identify_arias`](@ref)) on the reduced-form
+  draws whose identified sets lie in the robust region. Containment in the robust
+  region is then a property of the objects (each Haar IRF sits in its identified
+  set).
 - `informativeness`: Giacomini–Kitagawa (2021, §2.6) diagnostic
   `κ = 1 − |C_single| / |C_robust|`, averaged over IRF entries with positive
   robust width and clipped to `[0, 1]`. `κ = 0` when the rotation prior is
@@ -477,6 +480,54 @@ function _normalize_sphere_blocks(z::AbstractVector{T}, dims::Vector{Int}) where
     w
 end
 
+# Continuous IRF slacks g(Q) ≤ 0 for NLopt (signed distance to the restriction).
+_gk_n_ineq(::SignRestriction) = 1
+_gk_n_ineq(::A0SignRestriction) = 1
+_gk_n_ineq(::AplusSignRestriction) = 1
+_gk_n_ineq(::CumulativeRestriction) = 1
+_gk_n_ineq(::MagnitudeBound) = 2
+_gk_n_ineq(::ElasticityBound) = 2
+_gk_n_ineq(::FEVDShareRestriction) = 2
+_gk_n_ineq(::AbstractSVARRestriction) = 0
+
+_gk_sign_slack(val::Float64, sign::Int) = sign > 0 ? -val : val
+
+function _gk_ineq_slack(sr::SignRestriction, k::Int, irf, A0, Aplus, fevd)
+    _gk_sign_slack(Float64(irf[sr.horizon + 1, sr.variable, sr.shock]), sr.sign)
+end
+function _gk_ineq_slack(sr::A0SignRestriction, k::Int, irf, A0, Aplus, fevd)
+    A0 === nothing && return 1.0
+    _gk_sign_slack(Float64(A0[sr.variable, sr.shock]), sr.sign)
+end
+function _gk_ineq_slack(sr::AplusSignRestriction, k::Int, irf, A0, Aplus, fevd)
+    Aplus === nothing && return 1.0
+    _gk_sign_slack(Float64(Aplus[_aplus_row(sr, size(Aplus, 2)), sr.shock]), sr.sign)
+end
+function _gk_ineq_slack(sr::CumulativeRestriction, k::Int, irf, A0, Aplus, fevd)
+    s = 0.0
+    @inbounds for h in sr.horizons
+        s += Float64(irf[h + 1, sr.variable, sr.shock])
+    end
+    _gk_sign_slack(s, sr.sign)
+end
+function _gk_ineq_slack(sr::MagnitudeBound, k::Int, irf, A0, Aplus, fevd)
+    val = Float64(irf[sr.horizon + 1, sr.variable, sr.shock])
+    k == 1 ? Float64(sr.lower) - val : val - Float64(sr.upper)
+end
+function _gk_ineq_slack(sr::ElasticityBound, k::Int, irf, A0, Aplus, fevd)
+    num = Float64(irf[sr.horizon + 1, sr.numerator_var, sr.shock])
+    den = Float64(irf[sr.horizon + 1, sr.denominator_var, sr.shock])
+    abs(den) <= eps(Float64) && return 1.0
+    e = num / den
+    k == 1 ? Float64(sr.lower) - e : e - Float64(sr.upper)
+end
+function _gk_ineq_slack(sr::FEVDShareRestriction, k::Int, irf, A0, Aplus, fevd)
+    fevd === nothing && return 1.0
+    share = Float64(fevd[sr.variable, sr.shock, sr.horizon + 1])
+    k == 1 ? Float64(sr.lower) - share : share - Float64(sr.upper)
+end
+_gk_ineq_slack(::AbstractSVARRestriction, k::Int, irf, A0, Aplus, fevd) = 1.0
+
 function _nlopt_identified_set_bounds(model::VARModel{T}, restrictions::SVARRestrictions,
                                       horizon::Int; rng::AbstractRNG, n_starts::Int,
                                       n_rotations::Int) where {T<:AbstractFloat}
@@ -486,14 +537,17 @@ function _nlopt_identified_set_bounds(model::VARModel{T}, restrictions::SVARRest
     L = safe_cholesky(model.Sigma)
     C1 = any(z -> z isa LongRunZeroRestriction, restrictions.zeros) ?
          _C1_from_B(model.B, n, model.p) : nothing
+
+    # Haar envelope first (same generator as :draws) so :optimize is an expansion
+    # of the same-seed draw envelope. `_AriasSVARSetup` consumes RNG for W and
+    # must not run before this call.
+    n_haar = max(n_starts, n_rotations, 32)
+    lower, upper = _draws_identified_set_bounds(model, restrictions, horizon;
+                                                n_draws=n_haar, rng=rng, threaded=false)
+
     setup = _AriasSVARSetup(restrictions, n, T; rng=rng)
     dim = setup.dim
     dim < 1 && throw(IdentificationError("Zero restrictions over-constrain Q"))
-
-    # Feasible Haar starts (also the inner envelope if NLopt does not improve).
-    lower, upper = _draws_identified_set_bounds(model, restrictions, horizon;
-                                                n_draws=max(n_starts, n_rotations, 32),
-                                                rng=rng, threaded=false)
 
     function Q_from_z(z::AbstractVector)
         w = _normalize_sphere_blocks(T.(z), setup.sphere_dims)
@@ -506,44 +560,81 @@ function _nlopt_identified_set_bounds(model::VARModel{T}, restrictions::SVARRest
         end
     end
 
-    function irf_from_z(z)
-        Q = Q_from_z(z)
-        Q === nothing && return nothing
-        _gk_check_Q(model, Q, restrictions, Phi, L, max_h)
-    end
+    needs_struct = any(s -> s isa Union{A0SignRestriction, AplusSignRestriction}, restrictions.signs)
+    has_fevd = any(s -> s isa FEVDShareRestriction, restrictions.signs)
 
-    ineq_rest = AbstractSVARRestriction[sr for sr in restrictions.signs if !_is_narrative(sr)]
+    # Seed from Haar-feasible accepted `_spheres_to_Q` points, not unconstrained `_draw_w`.
     z0_pool = Vector{Vector{Float64}}()
-    for _ in 1:n_starts
+    n_want = max(n_starts, 1)
+    n_try = max(n_haar, n_want * 20)
+    for _ in 1:n_try
+        length(z0_pool) >= n_want && break
         w = _draw_w(setup; rng=rng)
+        Q = Q_from_z(w)
+        Q === nothing && continue
+        irf = _gk_check_Q(model, Q, restrictions, Phi, L, max_h)
+        irf === nothing && continue
         push!(z0_pool, Float64.(w))
+        @inbounds for hh in 1:horizon, ii in 1:n, jj in 1:n
+            v = T(irf[hh, ii, jj])
+            lower[hh, ii, jj] = min(lower[hh, ii, jj], v)
+            upper[hh, ii, jj] = max(upper[hh, ii, jj], v)
+        end
     end
+    isempty(z0_pool) && return (lower, upper)
+
+    ineq_rest = AbstractSVARRestriction[sr for sr in restrictions.signs
+                                        if !_is_narrative(sr) && _gk_n_ineq(sr) > 0]
 
     for h in 1:horizon, i in 1:n, j in 1:n, sense in (1.0, -1.0)
         opt = NLopt.Opt(:LN_COBYLA, dim)
+        packed = let last_z = fill(NaN, dim),
+                     last_irf = Ref{Any}(nothing),
+                     last_A0 = Ref{Any}(nothing),
+                     last_Aplus = Ref{Any}(nothing),
+                     last_fevd = Ref{Any}(nothing)
+            function (z)
+                same = length(last_z) == length(z)
+                if same
+                    @inbounds for t in eachindex(z)
+                        z[t] == last_z[t] || (same = false; break)
+                    end
+                end
+                same && return (last_irf[], last_A0[], last_Aplus[], last_fevd[])
+                copyto!(last_z, z)
+                Q = Q_from_z(z)
+                if Q === nothing
+                    last_irf[] = last_A0[] = last_Aplus[] = last_fevd[] = nothing
+                    return (nothing, nothing, nothing, nothing)
+                end
+                # Continuous objective: IRF at Q even if signs are slightly violated;
+                # inequality slacks restore feasibility.
+                irf = _compute_irf_for_Q(model, Q, Phi, L, max_h)
+                last_irf[] = irf
+                if needs_struct
+                    last_A0[], last_Aplus[] = _rf_to_struct(model.B, L, Q)
+                else
+                    last_A0[] = last_Aplus[] = nothing
+                end
+                last_fevd[] = has_fevd ? _compute_fevd(irf, n, size(irf, 1))[2] : nothing
+                (last_irf[], last_A0[], last_Aplus[], last_fevd[])
+            end
+        end
         NLopt.min_objective!(opt, (z, g) -> begin
-            irf = irf_from_z(z)
+            irf, _, _, _ = packed(z)
             irf === nothing && return 1e20
             Float64(sense * irf[h, i, j])
         end)
         for sr in ineq_rest
-            let sr = sr
-                NLopt.inequality_constraint!(opt, (z, g) -> begin
-                    irf = irf_from_z(z)
-                    irf === nothing && return 1.0
-                    A0 = Aplus = fevd_props = nothing
-                    # Reconstruct structural matrices only when the restriction needs them.
-                    if sr isa Union{A0SignRestriction, AplusSignRestriction}
-                        Q = Q_from_z(z)
-                        Q === nothing && return 1.0
-                        A0, Aplus = _rf_to_struct(model.B, L, Q)
-                    end
-                    if sr isa FEVDShareRestriction
+            nsl = _gk_n_ineq(sr)
+            for k in 1:nsl
+                let sr = sr, k = k
+                    NLopt.inequality_constraint!(opt, (z, g) -> begin
+                        irf, A0, Aplus, fevd = packed(z)
                         irf === nothing && return 1.0
-                        fevd_props = _compute_fevd(irf, n, size(irf, 1))[2]
-                    end
-                    check(sr, irf, A0, Aplus, fevd_props) ? -1.0 : 1.0
-                end, 1e-8)
+                        _gk_ineq_slack(sr, k, irf, A0, Aplus, fevd)
+                    end, 1e-8)
+                end
             end
         end
         NLopt.maxeval!(opt, 400)
@@ -551,14 +642,27 @@ function _nlopt_identified_set_bounds(model::VARModel{T}, restrictions::SVARRest
         NLopt.ftol_rel!(opt, 1e-10)
         for z0 in z0_pool
             try
-                (fval, zopt, ret) = NLopt.optimize(opt, copy(z0))
-                irf = irf_from_z(zopt)
+                (_, zopt, _) = NLopt.optimize(opt, copy(z0))
+                irf, A0, Aplus, fevd = packed(zopt)
                 irf === nothing && continue
+                feasible = true
+                for sr in ineq_rest
+                    for k in 1:_gk_n_ineq(sr)
+                        if _gk_ineq_slack(sr, k, irf, A0, Aplus, fevd) > 1e-6
+                            feasible = false
+                            break
+                        end
+                    end
+                    feasible || break
+                end
+                feasible || continue
                 v = T(irf[h, i, j])
                 lower[h, i, j] = min(lower[h, i, j], v)
                 upper[h, i, j] = max(upper[h, i, j], v)
-            catch
-                continue
+            catch err
+                inner = err isa Base.CapturedException ? err.ex : err
+                (inner isa IdentificationError || _is_rejectable_draw_error(inner)) && continue
+                rethrow(err)
             end
         end
     end
@@ -628,9 +732,9 @@ Giacomini–Kitagawa (2021) robust Bayes for a set-identified SVAR.
 
 Computes identified-set bounds at each posterior draw of `(B, Σ)`, the set of
 posterior means, a robust credible region (smallest interval containing `level`
-of the draws' sets), the Haar single-prior interval from
-[`identify_arias_bayesian`](@ref), the prior-informativeness diagnostic, and
-`Π(∅)`.
+of the draws' sets), the Haar single-prior interval (Arias/Uhlig rotations on
+the reduced-form draws covered by that region), the prior-informativeness
+diagnostic, and `Π(∅)`.
 """
 function identify_robust_bayes(post::BVARPosterior, restrictions::SVARRestrictions, horizon::Int;
                                level::Real=0.68, solver::Symbol=:optimize,
@@ -652,9 +756,12 @@ function identify_robust_bayes(post::BVARPosterior, restrictions::SVARRestrictio
 
     lo_store = fill(T(NaN), n_samples, horizon, n, n)
     hi_store = fill(T(NaN), n_samples, horizon, n, n)
+    haar_store = fill(T(NaN), n_samples, horizon, n, n)
+    haar_ok = fill(false, n_samples)
     empty = fill(true, n_samples)
     seeds = rand(rng, UInt64, n_samples)
     threaded = solver === :optimize && n == 2 && _gk_linear_in_Q(restrictions)
+    setup = !isempty(restrictions.zeros) ? _AriasSVARSetup(restrictions, n, T; rng=rng) : nothing
 
     process_draw = function (s::Int)
         local_rng = Random.MersenneTwister(seeds[s])
@@ -669,10 +776,20 @@ function identify_robust_bayes(post::BVARPosterior, restrictions::SVARRestrictio
             hi_store[s, :, :, :] = hi
             empty[s] = false
         catch err
-            if err isa IdentificationError
+            if err isa IdentificationError || _is_rejectable_draw_error(err)
                 return
             end
-            _is_rejectable_draw_error(err) || rethrow(err)
+            rethrow(err)
+        end
+        try
+            ar = identify_arias(m, restrictions, horizon;
+                                n_draws=1, n_rotations=n_rotations,
+                                compute_weights=false, normalize_weights=false,
+                                setup=setup, rng=local_rng, check_id=false)
+            haar_store[s, :, :, :] = ar.irf_draws[1, :, :, :]
+            haar_ok[s] = true
+        catch err
+            (err isa IdentificationError || _is_rejectable_draw_error(err)) || rethrow(err)
         end
         nothing
     end
@@ -719,24 +836,26 @@ function identify_robust_bayes(post::BVARPosterior, restrictions::SVARRestrictio
     sp_hi = fill(T(NaN), horizon, n, n)
     q_lo = (1 - Float64(level)) / 2
     q_hi = 1 - q_lo
-    try
-        arias = identify_arias_bayesian(post, restrictions, horizon;
-                                        data=use_data, n_rotations=n_rotations,
-                                        quantiles=[q_lo, 0.5, q_hi], rng=rng)
-        nq = size(arias.irf_quantiles, 4)
-        sp_lo .= arias.irf_quantiles[:, :, :, 1]
-        sp_hi .= arias.irf_quantiles[:, :, :, nq]
-    catch err
-        err isa IdentificationError || rethrow(err)
-    end
-
-    # Robust region must contain the single-prior interval.
-    @inbounds for i in eachindex(rob_lo)
-        if isfinite(sp_lo[i])
-            rob_lo[i] = min(rob_lo[i], sp_lo[i])
-        end
-        if isfinite(sp_hi[i])
-            rob_hi[i] = max(rob_hi[i], sp_hi[i])
+    # Haar equal-tailed interval on the reduced-form draws whose identified sets
+    # the robust CR covers. Each such Haar IRF lies in its [ℓ, u] ⊆ CR.
+    if n_ok > 0
+        @inbounds for h in 1:horizon, i in 1:n, j in 1:n
+            cl = rob_lo[h, i, j]
+            cu = rob_hi[h, i, j]
+            (isfinite(cl) && isfinite(cu)) || continue
+            ηs = T[]
+            for s in 1:n_samples
+                empty[s] && continue
+                haar_ok[s] || continue
+                if lo_store[s, h, i, j] >= cl - 100 * eps(T) &&
+                   hi_store[s, h, i, j] <= cu + 100 * eps(T)
+                    push!(ηs, haar_store[s, h, i, j])
+                end
+            end
+            isempty(ηs) && continue
+            w = fill(one(T) / T(length(ηs)), length(ηs))
+            sp_lo[h, i, j] = _weighted_quantile(ηs, w, q_lo)
+            sp_hi[h, i, j] = _weighted_quantile(ηs, w, q_hi)
         end
     end
 

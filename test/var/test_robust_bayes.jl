@@ -114,7 +114,7 @@ end
         @test 0 <= res.informativeness <= 1
         @test all(res.lower .<= res.upper)
         @test all(res.robust_lower .<= res.robust_upper)
-        # Robust region contains the single-prior interval.
+        # Robust region contains the single-prior interval (no post-hoc widening).
         @test all(res.robust_lower .<= res.single_prior_lower .+ 1e-10)
         @test all(res.robust_upper .>= res.single_prior_upper .- 1e-10)
         @test has_uncertainty(res)
@@ -176,5 +176,42 @@ end
         post = estimate_bvar(Y, 1; n_draws=4, burnin=1, seed=1)
         @test_throws ArgumentError identify_robust_bayes(post, r, 2; level=1.5)
         @test_throws ArgumentError identify_robust_bayes(post, r, 2; level=0)
+    end
+
+    @testset "smallest covering interval" begin
+        lows = [0.0, 0.1, 0.0, 5.0, 0.2]
+        highs = [1.0, 1.1, 1.2, 20.0, 0.9]
+        cl, cu = MacroEconometricModels._smallest_covering_interval(lows, highs, 0.68)
+        # 68% of 5 → k=4: drop the [5, 20] outlier; cover [0, 1.2].
+        @test cl ≈ 0.0
+        @test cu ≈ 1.2
+        # A Haar-like inner point of the covered sets sits inside the CR.
+        @test cl <= 0.5 <= cu
+    end
+
+    @testset "n>2 optimize vs draws envelope" begin
+        n, p = 3, 1
+        Sigma = [1.0 0.3 0.1; 0.3 1.0 0.2; 0.1 0.2 1.0]
+        B = zeros(1 + n * p, n)
+        B[2, 1] = 0.25
+        B[3, 2] = 0.15
+        B[4, 3] = 0.30
+        Y = zeros(15, n)
+        U = zeros(14, n)
+        m = VARModel(Y, p, B, U, Matrix{Float64}(Sigma), 0.0, 0.0, 0.0,
+                     ["y1", "y2", "y3"])
+        r = SVARRestrictions(3; signs=[
+            sign_restriction(1, 1, :positive),
+            sign_restriction(2, 1, :positive),
+        ])
+        n_env = FAST ? 16 : 32
+        seed = 747
+        lo_d, hi_d = identified_set_bounds(m, r, 1; solver=:draws, n_draws=n_env,
+                                           rng=MersenneTwister(seed), threaded=false)
+        lo_o, hi_o = identified_set_bounds(m, r, 1; solver=:optimize, n_rotations=n_env,
+                                           n_starts=2, rng=MersenneTwister(seed))
+        @test all(lo_o .<= hi_o)
+        @test all(lo_o .<= lo_d .+ 1e-8)
+        @test all(hi_o .>= hi_d .- 1e-8)
     end
 end
