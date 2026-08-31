@@ -10,6 +10,10 @@ using LinearAlgebra
 using Statistics
 using Random
 
+if !@isdefined(FAST)
+    const FAST = get(ENV, "MACRO_FAST_TESTS", "") == "1"
+end
+
 Random.seed!(42)
 
 @testset "IRF Tests with Theoretical Verification" begin
@@ -343,4 +347,17 @@ end
     sg1 = irf(model, 8; ci_type=:bootstrap, method=:sign, check_func=check, reps=20, rng=mkrng())
     sg2 = irf(model, 8; ci_type=:bootstrap, method=:sign, check_func=check, reps=20, rng=mkrng())
     @test sg1.ci_lower == sg2.ci_lower
+end
+
+@testset "SID-06 theoretical CI vs residual-based ID" begin
+    Random.seed!(735)
+    m = estimate_var(randn(120, 2), 1)
+    chk(irf) = irf[1, 1, 1] > 0
+    @test_throws ArgumentError irf(m, 5; method=:fastica, ci_type=:theoretical)
+    @test_throws ArgumentError irf(m, 5; method=:student_t, ci_type=:theoretical)
+    @test_throws ArgumentError irf(m, 5; method=:markov_switching, ci_type=:theoretical)
+    @test_throws ArgumentError irf(m, 5; method=:narrative, ci_type=:theoretical,
+                                   check_func=chk, narrative_check=_ -> true)
+    r = irf(m, 5; method=:cholesky, ci_type=:theoretical, reps=FAST ? 10 : 30)
+    @test r.ci_type === :theoretical
 end

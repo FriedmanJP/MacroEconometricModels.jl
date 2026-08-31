@@ -68,6 +68,11 @@ function irf(model::VARModel{T}, horizon::Int;
     # Reproducibility (T246/#345): a `seed` owns the RNG so bootstrap bands can be
     # reproduced bit-for-bit (the per-replication sub-seeding is thread-invariant).
     rng = _resolve_repro_rng(rng, seed)
+    if ci_type === :theoretical && _needs_residuals(method)
+        throw(ArgumentError(
+            "ci_type=:theoretical draws only the VAR coefficients; method=:$method " *
+            "identifies from residuals — use ci_type=:bootstrap"))
+    end
     _validate_data(model.Sigma, "Sigma")
     _validate_data(model.B, "B")
     # Kilian bias correction needs the bootstrap machinery to estimate Psi; with

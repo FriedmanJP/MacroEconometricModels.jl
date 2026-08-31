@@ -300,6 +300,12 @@ function identify_long_run(model::VARModel{T}) where {T<:AbstractFloat}
     safe_cholesky(model.Sigma) \ P     # L⁻¹P via triangular backsolve
 end
 
+# Residual-free methods identify from Σ (and B for long-run/sign), not U.
+# Theoretical CIs draw B* with empty residuals; residual-based methods must
+# reject ci_type=:theoretical. SID-19 replaces this set with a registry lookup.
+const _RESIDUAL_FREE_METHODS = (:cholesky, :long_run, :sign)
+_needs_residuals(method::Symbol) = method ∉ _RESIDUAL_FREE_METHODS
+
 # =============================================================================
 # Unified Interface
 # =============================================================================

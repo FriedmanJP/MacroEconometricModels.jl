@@ -10,6 +10,10 @@ using Random
 using LinearAlgebra
 using Statistics
 
+if !@isdefined(FAST)
+    const FAST = get(ENV, "MACRO_FAST_TESTS", "") == "1"
+end
+
 const _suppress_warnings = MacroEconometricModels._suppress_warnings
 
 @testset "IRF Confidence Intervals" begin
@@ -194,29 +198,8 @@ const _suppress_warnings = MacroEconometricModels._suppress_warnings
         end
     end
 
-    @testset "FastICA - Theoretical CI symmetry" begin
-        _suppress_warnings() do
-            Random.seed!(12355)
-            # FastICA + theoretical CI can fail on perturbed matrices (NaN in whiten/eigen)
-            try
-                irf_ica_theo = irf(model, H; method=:fastica, ci_type=:theoretical, reps=(FAST ? 100 : 300), conf_level=0.90)
-
-                @test irf_ica_theo isa ImpulseResponse
-                @test all(irf_ica_theo.ci_lower .<= irf_ica_theo.ci_upper)
-
-                # Symmetricity test
-                width_lower = irf_ica_theo.values .- irf_ica_theo.ci_lower
-                width_upper = irf_ica_theo.ci_upper .- irf_ica_theo.values
-                @test all(width_lower .>= -1e-10)
-                @test all(width_upper .>= -1e-10)
-                max_width = max.(width_lower, width_upper, 1e-15)
-                asymmetry = abs.(width_lower .- width_upper) ./ max_width
-                @test mean(asymmetry) < 0.3
-            catch e
-                # FastICA can fail due to numerical sensitivity — skip silently
-                @test_skip "FastICA theoretical CI skipped due to numerical instability"
-            end
-        end
+    @testset "FastICA - Theoretical CI rejected (SID-06)" begin
+        @test_throws ArgumentError irf(model, H; method=:fastica, ci_type=:theoretical, reps=10)
     end
 
     # =========================================================================
@@ -342,4 +325,17 @@ const _suppress_warnings = MacroEconometricModels._suppress_warnings
             end
         end
     end
+end
+
+@testset "SID-06 theoretical CI vs residual-based ID" begin
+    Random.seed!(735)
+    m = estimate_var(randn(120, 2), 1)
+    chk(irf) = irf[1, 1, 1] > 0
+    @test_throws ArgumentError irf(m, 5; method=:fastica, ci_type=:theoretical)
+    @test_throws ArgumentError irf(m, 5; method=:student_t, ci_type=:theoretical)
+    @test_throws ArgumentError irf(m, 5; method=:markov_switching, ci_type=:theoretical)
+    @test_throws ArgumentError irf(m, 5; method=:narrative, ci_type=:theoretical,
+                                   check_func=chk, narrative_check=_ -> true)
+    r = irf(m, 5; method=:cholesky, ci_type=:theoretical, reps=FAST ? 10 : 30)
+    @test r.ci_type === :theoretical
 end
