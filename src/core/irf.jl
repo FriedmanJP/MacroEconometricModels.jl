@@ -160,8 +160,8 @@ function irf(model::VARModel{T}, horizon::Int;
             snames = isnothing(shock_names) ? model.varnames : shock_names
             if method === :arias
                 isnothing(restrictions) && throw(ArgumentError("arias requires restrictions"))
-                s = identify_arias(model, restrictions, horizon; n_draws=max_draws,
-                                   n_rotations=max_draws, rng=rng, kwargs...)
+                s = identify_arias(model, restrictions, horizon;
+                                   _arias_freq_kwargs(max_draws; rng=rng, kwargs...)...)
                 alpha = (1 - T(conf_level)) / 2
                 pct = irf_percentiles(s; quantiles=Float64[alpha, 0.5, 1 - alpha])
                 med = pct[:, :, :, 2]

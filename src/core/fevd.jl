@@ -50,8 +50,8 @@ function fevd(model::VARModel{T}, horizon::Int;
     if _is_set_identified(method)
         irf_draws, n_acc, wts = if method === :arias
             isnothing(restrictions) && throw(ArgumentError("arias requires restrictions"))
-            s = identify_arias(model, restrictions, horizon; n_draws=max_draws,
-                               n_rotations=max_draws, rng=rng, kwargs...)
+            s = identify_arias(model, restrictions, horizon;
+                               _arias_freq_kwargs(max_draws; rng=rng, kwargs...)...)
             s.irf_draws, length(s.Q_draws), s.weights
         else
             isnothing(check_func) && throw(ArgumentError(

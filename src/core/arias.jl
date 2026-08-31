@@ -797,6 +797,16 @@ function _arias_posterior_kwargs(max_draws::Int; rng::AbstractRNG=Random.default
     (rng, Int(something(n_rotations, max_draws)), compute_weights)
 end
 
+"""Peel `n_draws`/`n_rotations` before splatting into `identify_arias` (frequentist `irf`/`fevd`/`hd`)."""
+function _arias_freq_kwargs(max_draws::Int; rng::AbstractRNG=Random.default_rng(),
+                            n_rotations::Union{Nothing,Integer}=nothing,
+                            n_draws::Union{Nothing,Integer}=nothing,
+                            kwargs...)
+    (; n_draws=Int(something(n_draws, max_draws)),
+       n_rotations=Int(something(n_rotations, max_draws)),
+       rng, kwargs...)
+end
+
 """Weighted Arias identified-set from a BVAR posterior (`irf`/`fevd` `method=:arias`)."""
 function _arias_from_bvar_posterior(post::BVARPosterior, restrictions, horizon;
                                     data=nothing, n_rotations::Int=100,

@@ -259,8 +259,8 @@ function historical_decomposition(model::VARModel{T}, horizon::Int=effective_nob
     if _is_set_identified(method)
         Qs, n_acc, wts = if method === :arias
             isnothing(restrictions) && throw(ArgumentError("arias requires restrictions"))
-            s = identify_arias(model, restrictions, horizon; n_draws=max_draws,
-                               n_rotations=max_draws, rng=rng, kwargs...)
+            s = identify_arias(model, restrictions, horizon;
+                               _arias_freq_kwargs(max_draws; rng=rng, kwargs...)...)
             s.Q_draws, length(s.Q_draws), s.weights
         else
             isnothing(check_func) && throw(ArgumentError(

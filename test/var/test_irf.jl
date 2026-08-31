@@ -433,6 +433,10 @@ end
     @test ra.ci_type === :identified_set
     @test ra.values[1, 1, 1] > 0
     @test size(ra.values) == (5, n, n)
+    # n_rotations used to collide with n_rotations=max_draws (repeated-keyword MethodError).
+    ra_nr = irf(m, 5; method=:arias, restrictions=r, n_rotations=20, max_draws=10, seed=1)
+    @test ra_nr isa ImpulseResponse
+    @test ra_nr.ci_type === :identified_set
 
     rng_u = MersenneTwister(748)
     uhlig_kw = (n_starts=FAST ? 3 : 8, n_refine=1, max_iter_coarse=80, max_iter_fine=200)
