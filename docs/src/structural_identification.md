@@ -100,7 +100,7 @@ Four of the six economic schemes are reachable through the `method=` keyword sha
 |--------|------------------|-----------------|
 | Cholesky | `irf(m, H; method=:cholesky)` | none |
 | Sign | `irf(m, H; method=:sign, check_func=f)` or `identify_sign` | `check_func`, `max_draws` |
-| Narrative | `irf(m, H; method=:narrative, check_func=f, narrative_check=g)` or `identify_narrative` | `check_func`, `narrative_check` |
+| Narrative | `irf(m, H; method=:narrative, check_func=f, narrative_check=g)` or `identify_narrative` | `check_func`, `narrative_check`, `max_draws`, `store_all` |
 | Long-run | `irf(m, H; method=:long_run)` | none |
 | Zero + sign | `identify_arias(m, restrictions, H)` | `SVARRestrictions` |
 | Penalty function | `identify_uhlig(m, restrictions, H)` | `SVARRestrictions` |
@@ -108,7 +108,7 @@ Four of the six economic schemes are reachable through the `method=` keyword sha
 Counting the fourteen statistical schemes documented on [Statistical Identification](@ref nongaussian_page), the `method=` keyword accepts eighteen symbols in total. Every one of them returns the same `ImpulseResponse` object, so switching identification never changes the downstream code.
 
 !!! note "Technical Note"
-    `irf(m, H; method=:sign)` returns the **pointwise median** of the identified set. Bands are identified-set quantiles (`ci_type = :identified_set`); `max_draws` defaults to 1000.
+    `irf(m, H; method=:sign)` and `irf(m, H; method=:narrative)` return the **pointwise median** of the identified set. Bands are identified-set quantiles (`ci_type = :identified_set`); `max_draws` defaults to 1000.
 
 ---
 
@@ -233,40 +233,38 @@ plot_result(id_set)
 1. **Shock sign narrative**: at date ``t^*``, structural shock ``j`` was positive (or negative)
 2. **Shock contribution narrative**: at date ``t^*``, shock ``j`` was the dominant driver of variable ``i``
 
-`identify_narrative` filters first for sign-satisfying rotations, then evaluates a second predicate on the recovered structural shocks ``\varepsilon = B_0^{-1} u``. The narrative predicate receives the ``T_{\text{eff}} \times n`` shock matrix, indexed `[period, shock]`.
+`identify_narrative` filters first for sign-satisfying rotations, then evaluates a second predicate on the recovered structural shocks ``\varepsilon = B_0^{-1} u``. The narrative predicate receives the ``T_{\text{eff}} \times n`` shock matrix, indexed `[period, shock]`. With `store_all=true`, `identify_narrative` returns a `SignIdentifiedSet` of every rotation that clears both filters. `irf(; method=:narrative, check_func, narrative_check)` is set-aware: it returns the pointwise median with identified-set quantile bands, the same as `method=:sign`.
 
 ```@example sid
 sign_check = resp -> resp[1, 3, 3] > 0 && resp[1, 1, 3] < 0
 narrative_check = shocks -> shocks[20, 3] > 0   # tightening episode in period 20
 
-Q, irfs, shocks = identify_narrative(model, 20, sign_check, narrative_check;
-                                     max_draws=5000, rng=MersenneTwister(4))
-(shock_20 = round(shocks[20, 3], digits=4),
- impact = round.(irfs[1, :, 3], digits=4))
+result_nar = irf(model, 20; method=:narrative, check_func=sign_check,
+                 narrative_check=narrative_check, rng=MersenneTwister(4))
+(impact = round.(result_nar.values[1, :, 3], digits=4),
+ ci_type = result_nar.ci_type,
+ impact_95 = round.((result_nar.ci_lower[1, 1, 3], result_nar.ci_upper[1, 1, 3]), digits=4))
 ```
 
-The returned rotation delivers a period-20 monetary shock of ``2.88`` standard deviations, with an impact response of ``-0.0038`` log points for industrial production against ``0.0163`` percentage points on the funds rate. To see how much the narrative constraint sharpens the set, apply it to the rotations that already satisfy the sign conditions:
+The reported path is the pointwise median of the narrative-identified set (`ci_type = :identified_set`): industrial production falls ``0.0036`` log points on impact against a ``0.0521`` percentage-point rise in the funds rate, with a 95% identified-set band of ``[-0.0063, -0.0002]``. `max_draws` defaults to 1000. The pointwise median is a set summary, not an IRF (Fry & Pagan 2011).
+
+With `store_all=true`, `identify_narrative` returns a `SignIdentifiedSet`. Comparing that set to the sign-only set on the same draws shows how much the historical constraint shrinks identification:
 
 ```@example sid
+nar_set = identify_narrative(model, 20, sign_check, narrative_check;
+                             max_draws=2000, store_all=true, rng=MersenneTwister(4))
 sign_admissible = identify_sign(model, 20, sign_check; max_draws=2000,
                                 store_all=true, rng=MersenneTwister(4))
-n_narrative = count(Q -> narrative_check(compute_structural_shocks(model, Q)),
-                    sign_admissible.Q_draws)
-(sign_only = sign_admissible.n_accepted, sign_and_narrative = n_narrative)
+(sign_only = sign_admissible.n_accepted, sign_and_narrative = nar_set.n_accepted)
 ```
 
-Of 2000 random rotations, 412 satisfy the two sign conditions and 215 of those also place a positive monetary shock in period 20 --- the narrative constraint discards roughly half of the sign-admissible set, and it does so using information the sign restrictions cannot express. Because `identify_narrative` returns the first admissible draw rather than the set, build the set with `identify_sign` and filter it, as above, when credible bands are needed.
+Of 2000 random rotations, 412 satisfy the two sign conditions and 215 of those also place a positive monetary shock in period 20 --- the narrative constraint discards roughly half of the sign-admissible set, and it does so using information the sign restrictions cannot express.
 
 | Keyword | Type | Default | Description |
 |---------|------|---------|-------------|
 | `max_draws` | `Int` | `1000` | Maximum rotation draws |
+| `store_all` | `Bool` | `false` | Return a `SignIdentifiedSet` with all accepted draws |
 | `rng` | `AbstractRNG` | `Random.default_rng()` | Random number generator |
-
-| Return | Type | Description |
-|--------|------|-------------|
-| `Q` | `Matrix{T}` | Accepted rotation |
-| `irf` | `Array{T,3}` | ``H \times n \times n`` impulse responses |
-| `shocks` | `Matrix{T}` | ``T_{\text{eff}} \times n`` structural shocks |
 
 ---
 
@@ -500,7 +498,7 @@ With the interest rate ordered last, the Cholesky scheme forces the contemporane
 
 2. **Sign restrictions are set-identified.** The median response across admissible rotations is a summary statistic, not a point estimate. Report the full credible set to avoid overstating precision (Uhlig 2005).
 
-3. **The pointwise median is not an IRF.** `irf(; method=:sign)` reports the pointwise median of the identified set; that path need not correspond to any single admissible rotation (Fry & Pagan 2011). SID-17 will add `median_target`. With tight restrictions that exhaust `max_draws` (default 1000), raise `max_draws` on `irf` itself.
+3. **The pointwise median is not an IRF.** `irf(; method=:sign)` and `method=:narrative` report the pointwise median of the identified set; that path need not correspond to any single admissible rotation (Fry & Pagan 2011). SID-17 will add `median_target`. With tight restrictions that exhaust `max_draws` (default 1000), raise `max_draws` on `irf` itself.
 
 4. **Low acceptance rates.** If `identify_sign` or `identify_arias` produces acceptance rates below 1%, the restrictions may be nearly contradictory. Relax the restrictions or increase `max_draws`.
 

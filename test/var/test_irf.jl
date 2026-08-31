@@ -388,6 +388,7 @@ end
     @test r.ci_type === :identified_set
     @test r.values ≈ irf_median(s)
     @test_throws ArgumentError irf(m, 5; method=:sign, check_func=chk, ci_type=:bootstrap)
+    @test_throws ArgumentError irf(m, 5; method=:sign, check_func=chk, ci_type=:theoretical)
     r2 = irf(m, 5; method=:sign, check_func=chk, max_draws=500, seed=2)
     @test r2.manifest.settings["max_draws"] == 500
 end

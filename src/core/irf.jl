@@ -35,7 +35,10 @@ Note: `:smooth_transition` requires `transition_var` kwarg.
   `stationary_only=true`, draws whose companion matrix has `|λmax| ≥ 1` are rejected and
   redrawn. For `:sign`/`:narrative` this mixes Haar rotations with sampling uncertainty
   and throws unless `set_inference=:bootstrap_x_rotations`.
-- `:theoretical` --- asymptotic (delta-method) confidence intervals.
+- `:theoretical` --- asymptotic (delta-method) confidence intervals. Throws for
+  `:sign`/`:narrative`: identified-set methods do not have theoretical residual-free
+  coefficient bands; use the default identified-set bands or
+  `set_inference=:bootstrap_x_rotations`.
 - `:identified_set` --- returned automatically for `:sign`/`:narrative`: pointwise median
   over accepted Haar rotations, with quantile bands over that set.
 
@@ -78,11 +81,6 @@ function irf(model::VARModel{T}, horizon::Int;
     # Reproducibility (T246/#345): a `seed` owns the RNG so bootstrap bands can be
     # reproduced bit-for-bit (the per-replication sub-seeding is thread-invariant).
     rng = _resolve_repro_rng(rng, seed)
-    if ci_type === :theoretical && _needs_residuals(method)
-        throw(ArgumentError(
-            "ci_type=:theoretical draws only the VAR coefficients; method=:$method " *
-            "identifies from residuals — use ci_type=:bootstrap"))
-    end
     _validate_data(model.Sigma, "Sigma")
     _validate_data(model.B, "B")
     # Kilian bias correction needs the bootstrap machinery to estimate Psi; with
@@ -96,10 +94,15 @@ function irf(model::VARModel{T}, horizon::Int;
     # SID-05: sign/narrative identify a set. Default is the pointwise median IRF
     # with identified-set bands. Bootstrap×rotations requires an explicit opt-in
     # (otherwise each replicate mixes a new Haar draw with sampling uncertainty).
+    # Theoretical residual-free coefficient bands are not defined for set-ID.
     if method === :sign || method === :narrative
         ci_type === :bootstrap && set_inference !== :bootstrap_x_rotations &&
             throw(ArgumentError("ci_type=:bootstrap with method=:$method mixes rotations; " *
                                 "pass set_inference=:bootstrap_x_rotations to opt in"))
+        ci_type === :theoretical &&
+            throw(ArgumentError("ci_type=:theoretical with method=:$method: identified-set methods " *
+                                "do not have theoretical residual-free coefficient bands; " *
+                                "use the default identified-set bands or set_inference=:bootstrap_x_rotations"))
         if ci_type !== :bootstrap
             isnothing(check_func) && throw(ArgumentError(
                 method === :narrative ? "Need check_func and narrative_check for narrative" :
@@ -118,6 +121,11 @@ function irf(model::VARModel{T}, horizon::Int;
                                           "method" => String(method), "ci_type" => "identified_set",
                                           "max_draws" => max_draws, "acceptance_rate" => s.acceptance_rate)))
         end
+    end
+    if ci_type === :theoretical && _needs_residuals(method)
+        throw(ArgumentError(
+            "ci_type=:theoretical draws only the VAR coefficients; method=:$method " *
+            "identifies from residuals — use ci_type=:bootstrap"))
     end
     n = nvars(model)
     p = model.p
