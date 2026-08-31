@@ -496,3 +496,205 @@ function test_overidentification(model::VARModel{T}, result::AbstractNonGaussian
                                                      :n_bootstrap => n_bootstrap,
                                                      :just_identified => false))
 end
+
+# =============================================================================
+# Heteroskedastic identification: λ-distinctness and B₀ restriction tests
+# =============================================================================
+
+function _zero_mask(restrictions, n::Int)
+    size(restrictions) == (n, n) || throw(ArgumentError(
+        "restrictions must be $n×$n, got $(size(restrictions))"))
+    if eltype(restrictions) <: Bool
+        return BitMatrix(restrictions)
+    end
+    mask = falses(n, n)
+    @inbounds for i in 1:n, j in 1:n
+        v = restrictions[i, j]
+        if v isa Number && iszero(v) && !isnan(v)
+            mask[i, j] = true
+        end
+    end
+    mask
+end
+
+function _align_to_zeros(B::AbstractMatrix{T}, mask::BitMatrix) where {T<:AbstractFloat}
+    n = size(B, 1)
+    best = T(Inf)
+    best_perm = collect(1:n)
+    best_signs = ones(T, n)
+    for perm in _permutations(n)
+        for signs in Iterators.product(ntuple(_ -> (-one(T), one(T)), n)...)
+            B2 = B[:, perm] .* collect(signs)'
+            s = zero(T)
+            @inbounds for i in 1:n, j in 1:n
+                mask[i, j] && (s += B2[i, j]^2)
+            end
+            if s < best
+                best = s
+                best_perm = copy(perm)
+                best_signs = collect(T, signs)
+            end
+        end
+    end
+    best_perm, best_signs
+end
+
+function _lambda_and_vcov(r::Union{MarkovSwitchingSVARResult{T},
+                                    ExternalVolatilitySVARResult{T}}) where {T<:AbstractFloat}
+    n = size(r.B0, 1)
+    nB = n * n
+    length(r.Lambda) >= 2 || throw(ArgumentError("result has no relative-variance vector"))
+    size(r.vcov, 1) >= nB + n || throw(ArgumentError(
+        "result has no parameter covariance; re-estimate with current identify_*"))
+    λ = Vector{T}(r.Lambda[2])
+    i1 = nB + 1
+    i2 = nB + n
+    Vα = Matrix{T}(r.vcov[i1:i2, i1:i2])
+    D = Diagonal(λ)
+    λ, Matrix{T}(D * Vα * D)
+end
+
+function _lambda_and_vcov(r::SmoothTransitionSVARResult{T}) where {T<:AbstractFloat}
+    n = size(r.B0, 1)
+    n_L = n * (n + 1) ÷ 2
+    n_angles = n * (n - 1) ÷ 2
+    i1 = n_L + n_angles + 1
+    i2 = n_L + n_angles + n
+    size(r.vcov, 1) >= i2 || throw(ArgumentError(
+        "result has no parameter covariance; re-estimate with current identify_smooth_transition"))
+    λ = Vector{T}(r.Lambda[2])
+    Vα = Matrix{T}(r.vcov[i1:i2, i1:i2])
+    D = Diagonal(λ)
+    λ, Matrix{T}(D * Vα * D)
+end
+
+function _lambda_and_vcov(r::GARCHSVARResult{T}) where {T<:AbstractFloat}
+    h = r.cond_var
+    Tobs, n = size(h)
+    μ = vec(mean(h; dims=1))
+    λ = μ ./ μ[1]
+    Hc = h .- μ'
+    Ω = (Hc' * Hc) / T(Tobs)
+    Vμ = Ω / T(Tobs)
+    J = zeros(T, n, n)
+    @inbounds for j in 1:n
+        J[j, j] = one(T) / μ[1]
+        J[j, 1] -= μ[j] / μ[1]^2
+    end
+    λ, Matrix{T}(J * Vμ * J')
+end
+
+"""
+    test_lambda_distinct(result; pairs=:all) -> NamedTuple
+
+Wald test of `H₀: λ_i = λ_j` for relative shock variances (LLM 2010).
+
+`pairs=:all` tests every pair `i < j`. Bonferroni-adjusted p-values are
+returned alongside the raw Wald statistics.
+"""
+function test_lambda_distinct(result; pairs=:all)
+    λ, Vλ = _lambda_and_vcov(result)
+    Tλ = eltype(λ)
+    n = length(λ)
+    pair_list = pairs === :all ?
+                [(i, j) for i in 1:(n - 1) for j in (i + 1):n] :
+                collect(pairs)
+    n_pairs = length(pair_list)
+    n_pairs >= 1 || throw(ArgumentError("pairs must be non-empty"))
+    stats = Vector{Tλ}(undef, n_pairs)
+    pvals = Vector{Tλ}(undef, n_pairs)
+    pbonf = Vector{Tλ}(undef, n_pairs)
+    for (idx, pr) in enumerate(pair_list)
+        i, j = pr
+        d = λ[i] - λ[j]
+        v = Vλ[i, i] + Vλ[j, j] - 2 * Vλ[i, j]
+        v = max(v, eps(Tλ))
+        W = d^2 / v
+        stats[idx] = W
+        pvals[idx] = Tλ(1) - Tλ(cdf(Chisq(1), W))
+        pbonf[idx] = min(one(Tλ), Tλ(n_pairs) * pvals[idx])
+    end
+    (statistic=stats, pvalue=pvals, pvalue_bonferroni=pbonf, pairs=pair_list)
+end
+
+function _restriction_lr(ℓ_u::T, ℓ_r::T, df::Int) where {T<:AbstractFloat}
+    LR = max(zero(T), T(2) * (ℓ_u - ℓ_r))
+    df_eff = max(df, 1)
+    pval = T(1) - T(cdf(Chisq(df_eff), LR))
+    (statistic=LR, pvalue=pval, df=df)
+end
+
+function _aligned_B_Lambda(B0, Lambda, mask)
+    perm, signs = _align_to_zeros(B0, mask)
+    B_al = B0[:, perm] .* signs'
+    Λ_al = [λ[perm] for λ in Lambda]
+    B_al, Λ_al
+end
+
+"""
+    test_restrictions(result, restrictions) -> NamedTuple
+
+LR test of zero restrictions on `B₀`. `restrictions` is an n×n mask:
+`0` = restricted to zero, `NaN`/missing = free. A `BitMatrix` treats `true`
+as restricted. Columns are aligned by signed permutation before re-estimation.
+"""
+function test_restrictions(result::Union{MarkovSwitchingSVARResult{T},
+                                          ExternalVolatilitySVARResult{T}},
+                            restrictions) where {T<:AbstractFloat}
+    n = size(result.B0, 1)
+    mask = _zero_mask(restrictions, n)
+    Tks = if result isa ExternalVolatilitySVARResult
+        T[T(length(idx)) for idx in result.regime_indices]
+    else
+        vec(sum(result.regime_probs; dims=1))
+    end
+    B_al, Λ_al = _aligned_B_Lambda(result.B0, result.Lambda, mask)
+    ℓ_u = _k_regime_conc_ll(result.B0, result.Lambda, Tks, result.Sigma_regimes)
+    ℓ_r, _ = _k_regime_restricted_ml(B_al, Λ_al, mask, result.Sigma_regimes, Tks)
+    _restriction_lr(ℓ_u, ℓ_r, count(mask))
+end
+
+function test_restrictions(result::SmoothTransitionSVARResult{T},
+                            restrictions) where {T<:AbstractFloat}
+    n = size(result.B0, 1)
+    U = result.residuals
+    size(U, 1) >= n || throw(ArgumentError(
+        "result has no residuals; re-estimate with current identify_smooth_transition"))
+    mask = _zero_mask(restrictions, n)
+    free = .!mask
+    n_free = count(free)
+    B_al, Λ_al = _aligned_B_Lambda(result.B0, result.Lambda, mask)
+    B_al[mask] .= zero(T)
+    s = result.transition_var
+    sigma_s = std(s)
+    logγ_lo = log(T(1e-3) / sigma_s)
+    logγ_hi = log(T(20) / sigma_s)
+    xγ = _st_x_from_gamma(result.gamma, logγ_lo, logγ_hi)
+    p0 = vcat(B_al[free], log.(max.(Λ_al[2], T(1e-8))), xγ, result.threshold)
+    obj = p -> _st_restricted_nll(p, U, s, sigma_s, n, logγ_lo, logγ_hi, free, n_free)
+    g! = (G, x) -> ForwardDiff.gradient!(G, obj, x)
+    res = Optim.optimize(obj, g!, p0, Optim.LBFGS(),
+                         Optim.Options(iterations=200, g_tol=T(1e-8),
+                                       allow_f_increases=true))
+    ℓ_r = -T(Optim.minimum(res))
+    _restriction_lr(result.loglik, ℓ_r, n_free == 0 ? n * n : count(mask))
+end
+
+function test_restrictions(result::GARCHSVARResult{T}, restrictions) where {T<:AbstractFloat}
+    n = size(result.B0, 1)
+    U = result.shocks * result.B0'
+    mask = _zero_mask(restrictions, n)
+    free = .!mask
+    n_free = count(free)
+    perm, signs = _align_to_zeros(result.B0, mask)
+    B_al = result.B0[:, perm] .* signs'
+    B_al[mask] .= zero(T)
+    p0 = B_al[free]
+    obj = p -> _garch_restricted_nll(p, U, result.cond_var, free, n_free, n)
+    g! = (G, x) -> ForwardDiff.gradient!(G, obj, x)
+    res = Optim.optimize(obj, g!, p0, Optim.LBFGS(),
+                         Optim.Options(iterations=200, g_tol=T(1e-8),
+                                       allow_f_increases=true))
+    ℓ_r = -T(Optim.minimum(res))
+    _restriction_lr(result.loglik, ℓ_r, count(mask))
+end

@@ -91,6 +91,30 @@ end
     end
 end
 
+@testset "SID-10 K-regime joint ML recovery" begin
+    if !FAST
+        rng = MersenneTwister(13)
+        B_true = [1.0 0.4 0.1; 0.0 1.0 0.2; 0.0 0.0 1.0]
+        Λ2 = [0.5, 2.0, 5.0]
+        Λ3 = [2.0, 0.4, 3.0]
+        A = [0.3 * Matrix{Float64}(I, 3, 3)]
+        Y, regime = simulate_k_regime(B_true, A, [Λ2, Λ3]; Tobs=3000, rng=rng)
+        model = estimate_var(Y, 1)
+        p = 1
+        ri = regime[(p + 1):end]
+        ev = identify_external_volatility(model, ri; regimes=3)
+        d_joint = MacroEconometricModels._procrustes_distance(ev.B0, B_true)
+        @test d_joint < 0.05
+        idx1 = findall(==(1), ri)
+        idx2 = findall(==(2), ri)
+        Σ1 = cov(model.U[idx1, :])
+        Σ2 = cov(model.U[idx2, :])
+        B_two, _, _ = MacroEconometricModels._eigendecomposition_id(Matrix(Σ1), Matrix(Σ2))
+        d_two = MacroEconometricModels._procrustes_distance(B_two, B_true)
+        @test d_joint < d_two
+    end
+end
+
 @testset "SID-04 FastICA bootstrap column matching" begin
     Random.seed!(733)
     n, p, Tobs, H = 2, 1, FAST ? 200 : 300, 6

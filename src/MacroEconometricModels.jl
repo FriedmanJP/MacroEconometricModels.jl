@@ -1295,6 +1295,7 @@ export identify_smooth_transition, identify_external_volatility
 export test_identification_strength, test_shock_gaussianity
 export test_gaussian_vs_nongaussian, test_shock_independence
 export test_overidentification
+export test_lambda_distinct, test_restrictions
 
 # =============================================================================
 # Exports - Volatility Models (ARCH/GARCH/SV)

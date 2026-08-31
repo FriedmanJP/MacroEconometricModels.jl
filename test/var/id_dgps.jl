@@ -57,6 +57,43 @@ function simulate_two_regime(B0, A, Λ; Tobs=500, split=0.5, rng=Random.default_
     vcat(Y1, Y2), vcat(fill(1, T1), fill(2, Tobs - T1))
 end
 
+"""K-regime heteroskedastic DGP: `Σ_k = B0 Λ_k B0'` with `Λ_1 = I`.
+
+`Lambdas` is a vector of relative-variance vectors (`Λ₂, …, Λ_K`). One
+continuous VAR path with known regime labels (equal-length blocks).
+"""
+function simulate_k_regime(B0, A, Lambdas; Tobs=3000, rng=Random.default_rng())
+    n = size(B0, 1)
+    K = length(Lambdas) + 1
+    p = length(A)
+    Tk = fill(Tobs ÷ K, K)
+    Tk[end] += Tobs - sum(Tk)
+    Λs = [ones(eltype(B0), n), Lambdas...]
+    regimes = Int[]
+    for k in 1:K
+        append!(regimes, fill(k, Tk[k]))
+    end
+    T = float(eltype(B0))
+    burn = 50
+    ntot = Tobs + p + burn
+    ε = randn(rng, T, ntot, n)
+    u = zeros(T, ntot, n)
+    t0 = ntot - Tobs
+    @inbounds for t in 1:ntot
+        k = t <= t0 ? 1 : regimes[t - t0]
+        u[t, :] = B0 * (sqrt.(Λs[k]) .* ε[t, :])
+    end
+    Y = zeros(T, ntot, n)
+    for t in (p + 1):ntot
+        yt = u[t, :]
+        for lag in 1:p
+            yt = yt + A[lag] * Y[t - lag, :]
+        end
+        Y[t, :] = yt
+    end
+    return Y[(end - Tobs + 1):end, :], regimes
+end
+
 """Proxy SVAR DGP: `z_t = ρ ε_{1:k,t} + √(1-ρ²) v_t` with `Corr(z_j, ε_j) = ρ`."""
 function simulate_proxy_svar(B0::AbstractMatrix{T}, A::AbstractVector{<:AbstractMatrix};
                              Tobs::Int=200, ρ::Real=0.6, k::Int=1,

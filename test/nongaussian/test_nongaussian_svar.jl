@@ -16,6 +16,9 @@ const _suppress_warnings = MacroEconometricModels._suppress_warnings
 if !@isdefined(FAST)
     const FAST = get(ENV, "MACRO_FAST_TESTS", "") == "1"
 end
+if !@isdefined(simulate_two_regime)
+    include(joinpath(@__DIR__, "..", "var", "id_dgps.jl"))
+end
 
 @testset "Non-Gaussian SVAR Identification" begin
     Random.seed!(54321)
@@ -182,10 +185,16 @@ end
                 # Transition matrix rows sum to 1
                 @test all(isapprox.(sum(result.transition_matrix, dims=2), 1.0, atol=1e-6))
 
+                @test size(result.se) == (n, n)
+                @test all(result.se .>= 0)
+                @test 0 < result.classification_quality <= 1
+
                 # Show method
                 buf = IOBuffer()
                 show(buf, result)
-                @test occursin("Markov-Switching", String(take!(buf)))
+                txt = String(take!(buf))
+                @test occursin("Markov-Switching", txt)
+                @test occursin("Std.Err.", txt)
             end
 
             @testset "GARCH" begin
@@ -209,9 +218,14 @@ end
                 # Q should be orthogonal
                 @test norm(result.Q' * result.Q - I) < 1e-10
 
+                @test size(result.se) == (n, n)
+                @test all(result.se .>= 0)
+
                 buf = IOBuffer()
                 show(buf, result)
-                @test occursin("GARCH-SVAR", String(take!(buf)))
+                txt = String(take!(buf))
+                @test occursin("GARCH-SVAR", txt)
+                @test occursin("Std.Err.", txt)
             end
 
             @testset "Smooth transition" begin
@@ -224,12 +238,15 @@ end
                 @test result.gamma > 0
                 @test length(result.G_values) == n_obs - 2
                 @test all(0 .<= result.G_values .<= 1)  # logistic in [0,1]
-                @test result.se === nothing
-                @test result.vcov === nothing
+                @test size(result.se) == (n, n)
+                @test size(result.vcov, 1) == size(result.vcov, 2)
+                @test all(result.se .>= 0)
 
                 buf = IOBuffer()
                 show(buf, result)
-                @test occursin("Smooth-Transition", String(take!(buf)))
+                txt = String(take!(buf))
+                @test occursin("Smooth-Transition", txt)
+                @test occursin("Std.Err.", txt)
             end
 
             @testset "External volatility" begin
@@ -242,9 +259,14 @@ end
                 @test length(result.regime_indices) == 2
                 @test result.loglik > -Inf
 
+                @test size(result.se) == (n, n)
+                @test all(result.se .>= 0)
+
                 buf = IOBuffer()
                 show(buf, result)
-                @test occursin("External Volatility", String(take!(buf)))
+                txt = String(take!(buf))
+                @test occursin("External Volatility", txt)
+                @test occursin("Std.Err.", txt)
             end
         end
     end
@@ -474,13 +496,103 @@ end
         @test_throws ArgumentError identify_external_volatility(m, vcat(fill(1, 78), fill(2, 2)))
         m3 = estimate_var(randn(120, 2), 1)
         ri3 = vcat(fill(1, 40), fill(2, 40), fill(3, 40))
-        @test_logs (:warn, r"only two regimes") identify_external_volatility(m3, ri3; regimes=3)
+        ev3 = identify_external_volatility(m3, ri3; regimes=3)
+        @test length(ev3.Lambda) == 3
+        @test size(ev3.se) == (2, 2)
         st = identify_smooth_transition(m, randn(size(m.U, 1)))
-        @test st.se === nothing
-        @test st.vcov === nothing
+        @test size(st.se) == (2, 2)
+        @test st.vcov isa AbstractMatrix
         B0_reid, _, _ = MacroEconometricModels._eigendecomposition_id(
             Matrix(st.Sigma_regimes[1]), Matrix(st.Sigma_regimes[2]))
         @test norm(st.B0 - B0_reid) < 1e-6
+    end
+
+    @testset "SID-10 K-regime ML, SEs, and tests" begin
+        Random.seed!(739)
+        n_sid = 2
+        B_rec = [1.0 0.0; 0.5 1.0]
+        Λ = [0.4, 3.0]
+        A = [0.4 * Matrix{Float64}(I, n_sid, n_sid)]
+        Ysid, regime = simulate_two_regime(B_rec, A, Λ; Tobs=800, split=0.5,
+                                           rng=MersenneTwister(739))
+        modelsid = estimate_var(Ysid, 1)
+        ri = regime[2:end]
+        ev = identify_external_volatility(modelsid, ri; regimes=2)
+        @test size(ev.se) == (n_sid, n_sid)
+        @test all(isfinite, ev.se)
+        @test all(ev.se .>= 0)
+
+        w = test_lambda_distinct(ev; pairs=:all)
+        @test w isa NamedTuple
+        @test haskey(w, :statistic) && haskey(w, :pvalue_bonferroni)
+        @test all(w.pvalue_bonferroni .>= 0)
+        @test all(w.pvalue_bonferroni .<= 1)
+
+        mask_true = [NaN 0.0; NaN NaN]
+        mask_false = [NaN NaN; 0.0 NaN]
+        lr_true = test_restrictions(ev, mask_true)
+        lr_false = test_restrictions(ev, mask_false)
+        @test lr_true.pvalue > 0.05
+        @test lr_false.pvalue < 0.05
+
+        ms = identify_markov_switching(modelsid; n_regimes=2, n_starts=2,
+                                       rng=MersenneTwister(739), max_iter=(FAST ? 20 : 80))
+        @test ms.classification_quality > 0
+        ms2 = identify_markov_switching(modelsid; n_regimes=2, n_starts=2,
+                                        rng=MersenneTwister(739), max_iter=(FAST ? 20 : 80))
+        @test ms.B0 ≈ ms2.B0 atol=1e-8
+
+        st = identify_smooth_transition(modelsid, modelsid.U[:, 1])
+        garch = identify_garch(modelsid; max_iter=(FAST ? 5 : 30))
+        for r in (ev, ms, st, garch)
+            buf = IOBuffer()
+            show(buf, r)
+            @test occursin("Std.Err.", String(take!(buf)))
+        end
+
+        if !FAST
+            n_reps = 200
+            Tobs_w = 500
+            # Size: two components with equal relative variances
+            n_rej_size = 0
+            n_ok_size = 0
+            for r in 1:n_reps
+                rng_r = MersenneTwister(73900 + r)
+                Ys, regs = simulate_two_regime(B_rec, A, [1.5, 1.5]; Tobs=Tobs_w,
+                                               split=0.5, rng=rng_r)
+                m_s = estimate_var(Ys, 1)  # size/power draws; does not clobber `model`
+                try
+                    ev_s = identify_external_volatility(m_s, regs[2:end]; regimes=2)
+                    wt = test_lambda_distinct(ev_s; pairs=[(1, 2)])
+                    n_ok_size += 1
+                    n_rej_size += Int(wt.pvalue[1] < 0.05)
+                catch
+                    continue
+                end
+            end
+            @test n_ok_size >= 100
+            size_est = n_rej_size / n_ok_size
+            @test 0.01 <= size_est <= 0.12
+
+            n_rej_pow = 0
+            n_ok_pow = 0
+            for r in 1:100
+                rng_r = MersenneTwister(73950 + r)
+                Yp, regp = simulate_two_regime(B_rec, A, [1.0, 2.0]; Tobs=Tobs_w,
+                                               split=0.5, rng=rng_r)
+                m_p = estimate_var(Yp, 1)
+                try
+                    ev_p = identify_external_volatility(m_p, regp[2:end]; regimes=2)
+                    wt = test_lambda_distinct(ev_p; pairs=[(1, 2)])
+                    n_ok_pow += 1
+                    n_rej_pow += Int(wt.pvalue[1] < 0.05)
+                catch
+                    continue
+                end
+            end
+            @test n_ok_pow >= 50
+            @test n_rej_pow / n_ok_pow > 0.80
+        end
     end
 
     @testset "Smooth transition edge cases" begin
