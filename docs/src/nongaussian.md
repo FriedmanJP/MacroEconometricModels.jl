@@ -2,7 +2,7 @@
 
 Statistical identification recovers the structural impact matrix ``B_0`` from higher-moment information --- time-varying variances (heteroskedasticity) or non-Gaussian shock distributions --- without imposing recursive orderings, sign restrictions, or zero restrictions. The classification follows Lewis (2025), the definitive survey of higher-moment identification in macroeconometrics.
 
-Fifteen estimators and six diagnostic tests divide across three child pages: eleven methods exploit non-Gaussianity (five ICA, four maximum likelihood, the adaptive `:nongaussian_ml` dispatcher, and moment-based GMM), four exploit heteroskedasticity, and the testing page covers the diagnostics that decide whether either source of identification is present. Every method produces a rotation ``Q`` consumed by `irf()`, `fevd()`, and `historical_decomposition()`. `label_shocks` assigns economic names to those statistically recovered columns.
+Fifteen estimators and seven diagnostic tests divide across three child pages: eleven methods exploit non-Gaussianity (five ICA, four maximum likelihood, the adaptive `:nongaussian_ml` dispatcher, and moment-based GMM), four exploit heteroskedasticity, and the testing page covers the diagnostics that decide whether either source of identification is present. Every method produces a rotation ``Q`` consumed by `irf()`, `fevd()`, and `historical_decomposition()`. `label_shocks` assigns economic names to those statistically recovered columns.
 
 ```@setup id_overview
 using MacroEconometricModels, Random
@@ -52,7 +52,7 @@ All 15 methods return a rotation matrix ``Q`` and structural impact matrix ``B_0
 
 - [Non-Gaussian Methods](@ref id_nongaussian_page) --- ICA (FastICA, JADE, SOBI, distance covariance, HSIC), ML (Student-t, mixture normal, PML, skew-normal), GMM (coskewness / cokurtosis), `label_shocks`, Darmois-Skitovich theorem, contrast functions, unified dispatcher
 - [Heteroskedasticity](@ref id_heteroskedastic_page) --- generalized eigenproblem, K-regime joint ML, Markov-switching, GARCH, smooth transition, external volatility instruments, delta-method SEs
-- [Testing](@ref id_testing_page) --- normality suite (7 tests), shock Gaussianity, LR test, independence, distinct-``\lambda`` Wald, label-stability, overidentification
+- [Testing](@ref id_testing_page) --- normality suite (7 tests), shock Gaussianity, Gaussian-shock count, LR test, independence, distinct-``\lambda`` Wald, label-stability, overidentification
 
 ---
 

@@ -512,6 +512,10 @@ Weights are pooled across posterior draws on the raw volume-element scale and no
 
 The same restriction object drives historical decompositions: `historical_decomposition(model, restrictions, horizon)` runs `identify_arias` internally and returns weighted posterior quantiles of the shock contributions.
 
+---
+
+## Robust Bayesian inference
+
 Haar / uniform-on-``O(n)`` Bayesian inference is a **single-prior** procedure: the rotation prior is unrevisable given ``(B, \Sigma)``. Giacomini & Kitagawa (2021) drop that prior. `identify_robust_bayes` reports, for every IRF entry,
 
 - the **set of posterior means** of the identified-set bounds ``[\ell(B,\Sigma), u(B,\Sigma)]``
