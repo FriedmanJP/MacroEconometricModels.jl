@@ -334,9 +334,9 @@ The match fraction is ``0.44``, below one half, so the diagnostic classifies the
 
 ## Overidentification Test
 
-Extra zeros on ``B_0`` overidentify a statistically identified SVAR. The test is a likelihood ratio for every parametric likelihood (non-Gaussian ML, the Amisano–Giannini AB model, SVEC via the AB B-model, and heteroskedastic ML) and a Wald statistic that uses the stored SEs of ``B_0``. ICA has no likelihood: `test_overidentification` falls back to label-stability and records `details[:fallback] = :label_stability`.
+Extra zeros on ``B_0`` overidentify a statistically identified SVAR. The test is a nested likelihood ratio for every parametric likelihood (non-Gaussian ML, the Amisano–Giannini AB model, SVEC via the AB B-model, and heteroskedastic ML). ICA has no likelihood: `test_overidentification` falls back to label-stability and records `details[:fallback] = :label_stability`.
 
-The LR statistic is
+The LR statistic is the constrained MLE comparison
 
 ```math
 \mathrm{LR} = 2(\ell_u - \ell_r) \sim \chi^2(q)
@@ -344,18 +344,23 @@ The LR statistic is
 
 where:
 - ``\ell_u`` is the unrestricted log-likelihood (Givens rotation plus distribution parameters, or the concentrated AB likelihood)
-- ``\ell_r`` is the restricted log-likelihood with ``q`` zeros imposed on ``B_0``
+- ``\ell_r`` is the restricted log-likelihood with ``q`` zeros **imposed** on ``B_0``: the corresponding Givens angles are dropped (``Q`` is solved so ``(LQ)_{ij}=0``) and the remaining parameters are re-optimized
 - ``q`` is the number of zeros in the restriction mask (`0` = restricted, `NaN` = free)
 
-The companion Wald uses the stored standard errors after the same signed-permutation alignment as `test_restrictions`:
+For an AB `SVARModel`, omitting `restrictions` reports the stored pattern's concentrated LR. A supplied mask is re-estimated as an AB B-model; the `SVARModel`-only method throws `ArgumentError` rather than silently recycling the stored pattern.
+
+When a covariance ``V`` of ``\mathrm{vec}(B_0)`` is stored, the companion statistic is the Wald quadratic form after the same signed-permutation alignment as `test_restrictions`:
 
 ```math
-W = \sum_{(i,j) \in \mathcal{R}} \left(\frac{\hat B_{0,ij}}{\widehat{\mathrm{se}}_{ij}}\right)^2 \sim \chi^2(q)
+W = \bigl(R\,\mathrm{vec}(\hat B_0)\bigr)'\bigl(RVR'\bigr)^{-1}\bigl(R\,\mathrm{vec}(\hat B_0)\bigr) \sim \chi^2(q)
 ```
 
 where:
-- ``\mathcal{R}`` is the set of restricted entries
-- ``\widehat{\mathrm{se}}_{ij}`` is the delta-method standard error of ``B_{0,ij}``
+- ``R`` selects the restricted entries
+- ``V`` is the delta-method covariance of ``\mathrm{vec}(B_0)``
+- `details[:wald_approximation] = :rvr`
+
+If only diagonal SEs exist, the package reports the sum of squared ``t``-ratios as an **independence approximation** (`details[:wald_approximation] = :independence`). That figure is not a Wald ``\chi^2``.
 
 Failing to reject (``p \ge 0.05``) supports the extra zeros, so `identified` is `true` when the p-value is **large**. A just-identified fit with no extra zeros returns p-value 1 and `details[:just_identified] = true`.
 
@@ -373,7 +378,7 @@ report(overid_ml)
         round(overid_ml.details[:wald_statistic], digits=2) : missing)
 ```
 
-The recursive upper-triangle zeros are extra relative to Student-t identification. The LR statistic is ``32.32`` on 3 degrees of freedom and rejects at any conventional level: the statistically identified rotation does not sit on that triangle, so those zeros are not a restriction this sample will bear. When SEs of ``B_0`` are available the same mask is also reported as a Wald in `details[:wald_statistic]`.
+The recursive upper-triangle zeros are extra relative to Student-t identification. The nested LR statistic is ``34.44`` on 3 degrees of freedom and rejects at any conventional level: the statistically identified rotation does not sit on that triangle, so those zeros are not a restriction this sample will bear. When a covariance of ``\mathrm{vec}(B_0)`` is stored the same mask is also reported as an ``RVR'`` Wald in `details[:wald_statistic]`; check `details[:wald_approximation]`.
 
 ICA cannot run that comparison. The call records the fallback and reports the label-stability match fraction with no p-value:
 
@@ -475,7 +480,7 @@ The residual and shock checks pass: the residuals are non-normal on all seven te
 
 5. **Multiple testing.** Seven normality tests on one sample inflate the family-wise error rate. Look for consistent rejection across tests rather than the smallest p-value. Per-shock JB p-values are Holm-adjusted inside `test_gaussian_shock_count`.
 
-6. **Overidentification needs something to overidentify.** A just-identified ML, GARCH, or AB fit with `restrictions=nothing` returns p-value 1. ICA has no likelihood: `test_overidentification` falls back to label-stability and says so. Pass a zero mask on ``B_0`` for the LR / Wald.
+6. **Overidentification needs something to overidentify.** A just-identified ML, GARCH, or AB fit with `restrictions=nothing` returns p-value 1. ICA has no likelihood: `test_overidentification` falls back to label-stability and says so. Pass a zero mask on ``B_0`` for the nested LR; an AB mask is re-estimated rather than tested against the stored pattern. The companion Wald is ``RVR'`` when ``V`` is stored and an independence approximation of diagonal SEs otherwise --- do not quote the latter as a Wald ``\chi^2``.
 
 ---
 

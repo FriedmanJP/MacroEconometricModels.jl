@@ -395,8 +395,9 @@ Diagnostic tests for non-Gaussian SVAR identification validity. See [Statistical
 | `test_shock_gaussianity(result)` | Test non-Gaussianity of recovered shocks |
 | `test_gaussian_vs_nongaussian(model; ...)` | LR test: Gaussian vs non-Gaussian |
 | `test_shock_independence(result; ...)` | Test independence of recovered shocks |
-| `test_identification_strength(model; ...)` | Bootstrap identification strength test |
-| `test_overidentification(model, result; ...)` | Overidentification test |
+| `test_label_stability(model; ...)` | Column-label match fraction (no p-value) |
+| `test_identification_strength(model; ...)` | Deprecated wrapper; see `test_label_stability` / `test_lambda_distinct` / `test_gaussian_shock_count` |
+| `test_overidentification(model, result; ...)` | Nested LR / ``RVR'`` Wald overidentification test |
 
 ARCH, GARCH, EGARCH, GJR-GARCH, and Stochastic Volatility estimation, forecasting, and diagnostics. See [Volatility Models](@ref volatility_page).
 

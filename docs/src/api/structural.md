@@ -191,6 +191,7 @@ system. See [Identification Testing](@ref id_testing_page) for how to read them.
 
 ```@docs
 test_identification_strength
+test_label_stability
 test_shock_gaussianity
 test_gaussian_vs_nongaussian
 test_shock_independence

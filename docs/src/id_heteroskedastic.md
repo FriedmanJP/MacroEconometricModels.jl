@@ -336,13 +336,13 @@ decomp = fevd(model, 20; method=:markov_switching)
 report(decomp)
 ```
 
-Step 2 matches each Markov-switching column to its closest external-volatility column: two agree to within ``0.01`` in angular distance (``0.002`` and ``0.009``), while the middle column is ``0.19`` away. That middle mismatch is the external-volatility ratio near 1 from the sample-split step --- a shock whose variance barely changes across the midpoint split is not the same object as the Hamilton filter's middle shock. Agreement on the well-separated columns is the evidence a heteroskedasticity-based identification can report; quantify the weak column with `test_identification_strength` before drawing economic conclusions.
+Step 2 matches each Markov-switching column to its closest external-volatility column: two agree to within ``0.01`` in angular distance (``0.002`` and ``0.009``), while the middle column is ``0.19`` away. That middle mismatch is the external-volatility ratio near 1 from the sample-split step --- a shock whose variance barely changes across the midpoint split is not the same object as the Hamilton filter's middle shock. Agreement on the well-separated columns is the evidence a heteroskedasticity-based identification can report; quantify the weak column with `test_lambda_distinct` from [Identification Testing](@ref id_testing_page) before drawing economic conclusions.
 
 ---
 
 ## Common Pitfalls
 
-1. **Indistinct eigenvalues.** If two shocks experience the same proportional variance change, their columns in ``B_0`` are not separately identified. Check that the `Lambda` vectors show clearly distinct values --- ``0.05`` against ``0.13``, the closest pair in the Markov-switching fit above, is usable but not generous. Quantify it with `test_identification_strength` from the [Identification Testing](@ref id_testing_page) page.
+1. **Indistinct eigenvalues.** If two shocks experience the same proportional variance change, their columns in ``B_0`` are not separately identified. Check that the `Lambda` vectors show clearly distinct values --- ``0.05`` against ``0.13``, the closest pair in the Markov-switching fit above, is usable but not generous. Quantify it with `test_lambda_distinct` from the [Identification Testing](@ref id_testing_page) page.
 
 2. **A variance ratio near 1 identifies nothing.** A shock whose variance is unchanged across regimes contributes no identifying equation. Watch for entries of `Lambda[2]` close to 1, such as the ``1.046`` in the external-volatility fit.
 

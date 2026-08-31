@@ -107,13 +107,13 @@ Supported symbols: `:fastica`, `:jade`, `:sobi`, `:dcov`, `:hsic`, `:student_t`,
 
 ## The Labeling Problem
 
-Statistical identification recovers ``B_0`` only up to **column permutation and sign**. The data alone cannot determine which column corresponds to which economic shock --- economic information is still required to label shocks. The package normalizes ``B_0`` to have a positive diagonal (sign convention). The `test_identification_strength` bootstrap measures column-assignment stability across replications via Procrustes distance. See Lewis (2025, Section 6.4) for a thorough discussion.
+Statistical identification recovers ``B_0`` only up to **column permutation and sign**. The data alone cannot determine which column corresponds to which economic shock --- economic information is still required to label shocks. The package normalizes ``B_0`` to have a positive diagonal (sign convention). Column-assignment stability is the match-fraction from `test_label_stability` (no p-value); `test_identification_strength` is a deprecated wrapper. See [Identification Testing](@ref id_testing_page) and Lewis (2025, Section 6.4).
 
 ---
 
 ## Common Pitfalls
 
-1. **Weak identification is common in practice.** When variance changes are small or deviations from Gaussianity are mild, Wald tests have poor size properties (Lewis 2022). Run `test_identification_strength` as a diagnostic before interpreting any structural result.
+1. **Weak identification is common in practice.** When variance changes are small or deviations from Gaussianity are mild, Wald tests have poor size properties (Lewis 2022). Run `test_lambda_distinct` (heteroskedastic) or `test_gaussian_shock_count` / `test_label_stability` (non-Gaussian) before interpreting any structural result; see [Identification Testing](@ref id_testing_page).
 
 2. **Smooth transition needs an external variable.** Unlike Markov-switching and GARCH, `identify_smooth_transition` requires a transition variable `s` of the same length as the residuals (e.g., a lagged endogenous variable).
 

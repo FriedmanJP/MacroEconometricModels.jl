@@ -1138,6 +1138,14 @@ end
                 @test oid_ab.details[:df] == svar.lr_df
                 @test oid_ab.statistic ≈ svar.lr_stat
                 @test oid_ab.pvalue ≈ svar.lr_pvalue
+                @test get(oid_ab.details, :pattern, nothing) == :stored
+
+                mask_b = [NaN 0.0; NaN NaN]
+                oid_ab_mask = test_overidentification(m2, svar; restrictions=mask_b,
+                                                      rng=MersenneTwister(75162))
+                @test get(oid_ab_mask.details, :pattern, nothing) == :reestimated
+                @test oid_ab_mask.test_name == :overidentification
+                @test_throws ArgumentError test_overidentification(svar; restrictions=mask_b)
             end
 
             @testset "overidentification: hetero LR + Wald on a true zero" begin

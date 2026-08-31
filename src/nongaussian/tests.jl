@@ -624,20 +624,201 @@ function _overid_from_lr(lr; extra=Dict{Symbol,Any}())
                                     lr.pvalue >= Tlr(0.05), details)
 end
 
-"""Diagonal Wald of zero restrictions on ``B_0`` using the stored SEs."""
-function _wald_B0_zeros(B0::AbstractMatrix{T}, se, mask::BitMatrix) where {T<:AbstractFloat}
-    (se isa AbstractMatrix && size(se) == size(B0)) || return nothing
-    n_r = count(mask)
+"""Wald of ``R\\mathrm{vec}(B_0)=0``: ``RVR'`` when `vcov_B` is stored, else independence."""
+function _wald_B0_zeros(B0::AbstractMatrix{T}, se, mask::BitMatrix;
+                        vcov_B=nothing) where {T<:AbstractFloat}
+    n = size(B0, 1)
+    idx = Int[]
+    @inbounds for j in 1:n, i in 1:n
+        mask[i, j] && push!(idx, i + (j - 1) * n)
+    end
+    n_r = length(idx)
     n_r == 0 && return nothing
+    b = vec(Matrix{T}(B0))[idx]
+    if vcov_B isa AbstractMatrix && size(vcov_B) == (n * n, n * n)
+        w = _wald_rvr(b, Matrix{T}(vcov_B[idx, idx]))
+        w !== nothing && return merge(w, (approximation=:rvr,))
+    end
+    (se isa AbstractMatrix && size(se) == size(B0)) || return nothing
     W = zero(T)
-    @inbounds for i in 1:size(B0, 1), j in 1:size(B0, 2)
+    @inbounds for i in 1:n, j in 1:n
         mask[i, j] || continue
         s = se[i, j]
         (isfinite(s) && s > zero(T)) || return nothing
         W += (B0[i, j] / s)^2
     end
     pval = T(1) - T(cdf(Chisq(n_r), W))
-    (statistic=W, pvalue=pval, df=n_r)
+    (statistic=W, pvalue=pval, df=n_r, approximation=:independence)
+end
+
+function _wald_rvr(b::AbstractVector{T}, V::AbstractMatrix{T}) where {T<:AbstractFloat}
+    n = length(b)
+    (size(V, 1) == n && size(V, 2) == n) || return nothing
+    _vcov_wald_ok(V) || return nothing
+    W = try
+        T(dot(b, Matrix{T}(robust_inv(Hermitian(V); silent=true)) * b))
+    catch
+        return nothing
+    end
+    isfinite(W) || return nothing
+    W = max(W, zero(T))
+    pval = T(1) - T(cdf(Chisq(n), W))
+    (statistic=W, pvalue=pval, df=n)
+end
+
+function _with_wald!(extra::Dict{Symbol,Any}, wald)
+    wald === nothing && return extra
+    extra[:wald_statistic] = wald.statistic
+    extra[:wald_pvalue] = wald.pvalue
+    extra[:wald_df] = wald.df
+    extra[:wald_approximation] = wald.approximation
+    extra
+end
+
+function _align_vec_B0_vcov(V, perm::AbstractVector, signs, n::Int)
+    V isa AbstractMatrix && size(V) == (n * n, n * n) || return nothing
+    T = eltype(V)
+    P = zeros(T, n * n, n * n)
+    @inbounds for k in 1:n
+        j = perm[k]
+        s = T(signs[k])
+        for i in 1:n
+            P[i + (k - 1) * n, i + (j - 1) * n] = s
+        end
+    end
+    Matrix{T}(P * V * P')
+end
+
+function _Q_givens_angles(Q::AbstractMatrix{T}, n::Int) where {T<:AbstractFloat}
+    n <= 1 && return T[]
+    Qp = Matrix{T}(Q)
+    if det(Qp) < 0
+        Qp[:, n] .*= -one(T)
+    end
+    _orthogonal_to_givens(Qp, n)
+end
+
+function _givens_vec_B0_vcov(θ::Vector{T}, Vθ::AbstractMatrix{T}, Lmat::AbstractMatrix{T},
+                             n::Int) where {T<:AbstractFloat}
+    n_angles = length(θ)
+    n_angles == 0 && return nothing
+    size(Vθ) == (n_angles, n_angles) || return nothing
+    _vcov_wald_ok(Vθ) || return nothing
+    VB = try
+        _, VBm = _delta_B0_se(θ, Vθ, ϑ -> Lmat * _givens_to_orthogonal(ϑ, n), n)
+        VBm
+    catch
+        return nothing
+    end
+    size(VB) == (n * n, n * n) && _vcov_wald_ok(VB) ? Matrix{T}(VB) : nothing
+end
+
+function _vec_B0_vcov(result::NonGaussianMLResult{T},
+                      model::VARModel{T}) where {T<:AbstractFloat}
+    n = size(result.B0, 1)
+    n_angles = n * (n - 1) ÷ 2
+    V = result.vcov
+    (V isa AbstractMatrix && size(V, 1) >= n_angles && size(V, 2) >= n_angles) ||
+        return nothing
+    n_angles == 0 && return nothing
+    Vθ = Matrix{T}(V[1:n_angles, 1:n_angles])
+    Lmat = Matrix{T}(safe_cholesky(model.Sigma))
+    _givens_vec_B0_vcov(_Q_givens_angles(result.Q, n), Vθ, Lmat, n)
+end
+
+function _vec_B0_vcov(result::NonGaussianGMMResult{T},
+                      model::VARModel{T}) where {T<:AbstractFloat}
+    n = size(result.B0, 1)
+    Lmat = Matrix{T}(safe_cholesky(model.Sigma))
+    _givens_vec_B0_vcov(Vector{T}(result.theta), Matrix{T}(result.vcov), Lmat, n)
+end
+
+function _vec_B0_vcov(result::Union{MarkovSwitchingSVARResult{T},
+                                    ExternalVolatilitySVARResult{T}},
+                      ::Any) where {T<:AbstractFloat}
+    n = size(result.B0, 1)
+    nn = n * n
+    V = result.vcov
+    (V isa AbstractMatrix && size(V, 1) >= nn && size(V, 2) >= nn) || return nothing
+    VB = Matrix{T}(V[1:nn, 1:nn])
+    _vcov_wald_ok(VB) ? VB : nothing
+end
+
+function _vec_B0_vcov(result::GARCHSVARResult{T},
+                      model::VARModel{T}) where {T<:AbstractFloat}
+    n = size(result.B0, 1)
+    n_angles = n * (n - 1) ÷ 2
+    V = result.vcov
+    (V isa AbstractMatrix && size(V, 1) >= n_angles && size(V, 2) >= n_angles) ||
+        return nothing
+    n_angles == 0 && return nothing
+    Vθ = Matrix{T}(V[1:n_angles, 1:n_angles])
+    Lmat = Matrix{T}(safe_cholesky(model.Sigma))
+    _givens_vec_B0_vcov(_Q_givens_angles(result.Q, n), Vθ, Lmat, n)
+end
+
+function _vec_B0_vcov(result::SmoothTransitionSVARResult{T}, ::Any) where {T<:AbstractFloat}
+    n = size(result.B0, 1)
+    V = result.vcov
+    _vcov_wald_ok(V) || return nothing
+    n_L = n * (n + 1) ÷ 2
+    n_angles = n * (n - 1) ÷ 2
+    size(V, 1) == n_L + n_angles + n + 2 || return nothing
+    L_mat = Matrix{T}(result.B0 * result.Q')
+    θ = _Q_givens_angles(result.Q, n)
+    s = result.transition_var
+    length(s) >= 2 || return nothing
+    sigma_s = std(s)
+    sigma_s > zero(T) || return nothing
+    logγ_lo = log(T(1e-3) / sigma_s)
+    logγ_hi = log(T(20) / sigma_s)
+    xγ = _st_x_from_gamma(result.gamma, logγ_lo, logγ_hi)
+    p = vcat(_st_pack_L(L_mat), θ, log.(max.(result.Lambda[2], T(1e-12))), xγ,
+             result.threshold)
+    length(p) == size(V, 1) || return nothing
+    B0_fn = z -> begin
+        Lp = _st_unpack_L(view(z, 1:n_L), n)
+        Qp = n_angles == 0 ? Matrix{eltype(z)}(I, n, n) :
+             _givens_to_orthogonal(z[(n_L + 1):(n_L + n_angles)], n)
+        Lp * Qp
+    end
+    VB = try
+        _, VBm = _delta_B0_se(p, Matrix{T}(V), B0_fn, n)
+        VBm
+    catch
+        return nothing
+    end
+    size(VB) == (n * n, n * n) && _vcov_wald_ok(VB) ? Matrix{T}(VB) : nothing
+end
+
+function _vec_B0_vcov(result::SVARModel{T}, ::Any) where {T<:AbstractFloat}
+    result.vcov === nothing && return nothing
+    n = size(result.B, 1)
+    θ = _ab_pack(result.A, result.B, result.pattern)
+    isempty(θ) && return nothing
+    size(result.vcov) == (length(θ), length(θ)) || return nothing
+    _vcov_wald_ok(result.vcov) || return nothing
+    B0_fn = p -> begin
+        A, B = _ab_unpack(p, result.pattern)
+        A \ B
+    end
+    VB = try
+        _, VBm = _delta_B0_se(θ, result.vcov, B0_fn, n)
+        VBm
+    catch
+        return nothing
+    end
+    size(VB) == (n * n, n * n) && _vcov_wald_ok(VB) ? Matrix{T}(VB) : nothing
+end
+
+function _aligned_overid_wald(result, model, B0, se, mask)
+    perm, signs = _align_to_zeros(B0, mask)
+    B_al = B0[:, perm] .* signs'
+    se_al = (se isa AbstractMatrix && size(se) == size(B0)) ? se[:, perm] : se
+    n = size(B0, 1)
+    VB_al = _align_vec_B0_vcov(_vec_B0_vcov(result, model), perm, signs, n)
+    wald = _wald_B0_zeros(B_al, se_al, mask; vcov_B=VB_al)
+    (wald, perm, signs, B_al, se_al)
 end
 
 function _ml_dist_init(result::NonGaussianMLResult{T}, perm::Vector{Int}) where {T<:AbstractFloat}
@@ -675,12 +856,112 @@ function _ml_dist_init(result::NonGaussianMLResult{T}, perm::Vector{Int}) where 
     zeros(T, _n_dist_params(d) * n)
 end
 
-"""Restricted non-Gaussian ML log-likelihood: Givens + large penalty on masked B₀ zeros."""
+"""Solve Givens angles so ``(LQ)[\\mathrm{mask}]\\approx 0`` (drop those rotations)."""
+function _solve_givens_for_zeros(Lmat::AbstractMatrix{T}, mask::BitMatrix,
+                                 θ0::Vector{T}) where {T<:AbstractFloat}
+    n = size(Lmat, 1)
+    n_angles = n * (n - 1) ÷ 2
+    n_angles == 0 && return (T[], zero(T))
+    obj = θ -> begin
+        Tθ = eltype(θ)
+        B0 = Lmat * _givens_to_orthogonal(θ, n)
+        s = zero(Tθ)
+        @inbounds for i in 1:n, j in 1:n
+            mask[i, j] && (s += abs2(B0[i, j]))
+        end
+        s
+    end
+    best_θ = Vector{T}(θ0)
+    best_f = T(obj(θ0))
+    for start in (copy(θ0), zeros(T, n_angles))
+        r = try
+            g! = (G, x) -> ForwardDiff.gradient!(G, obj, x)
+            Optim.optimize(obj, g!, start, Optim.LBFGS(),
+                           Optim.Options(iterations=200, g_tol=T(1e-12),
+                                         allow_f_increases=true))
+        catch
+            Optim.optimize(obj, start, Optim.NelderMead(),
+                           Optim.Options(iterations=400, g_tol=T(1e-12)))
+        end
+        f = T(Optim.minimum(r))
+        if f < best_f
+            best_f = f
+            best_θ = Vector{T}(Optim.minimizer(r))
+        end
+    end
+    (best_θ, best_f)
+end
+
+"""Constrained non-Gaussian ML: Givens + dist with ``(LQ)[\\mathrm{mask}]=0`` (NLopt SLSQP)."""
+function _nongaussian_slsqp_zeros(U::Matrix{T}, Lchol, Lmat::Matrix{T}, n::Int,
+                                  dist::Symbol, mask::BitMatrix,
+                                  θ0::Vector{T}, dp0::Vector{T}) where {T<:AbstractFloat}
+    n_angles = length(θ0)
+    n_dp = length(dp0)
+    n_p = n_angles + n_dp
+    n_p == 0 && return T(-Inf)
+    zeros_ij = Tuple{Int,Int}[(i, j) for j in 1:n for i in 1:n if mask[i, j]]
+    p0 = Float64.(vcat(θ0, dp0))
+    L64 = Matrix{Float64}(Lmat)
+    nll64 = function (x::Vector{Float64})
+        p = T.(x)
+        ang = n_angles == 0 ? T[] : Vector{T}(p[1:n_angles])
+        dp = Vector{T}(p[(n_angles + 1):end])
+        Float64(-_nongaussian_loglik(ang, dp, U, Lchol, n; distribution=dist))
+    end
+    opt = NLopt.Opt(:LD_SLSQP, n_p)
+    NLopt.min_objective!(opt, (x, g) -> begin
+        val = nll64(x)
+        if length(g) > 0
+            ε = 1e-6
+            @inbounds for i in 1:n_p
+                xi = x[i]
+                x[i] = xi + ε
+                g[i] = (nll64(x) - val) / ε
+                x[i] = xi
+            end
+        end
+        val
+    end)
+    for (i, j) in zeros_ij
+        let i = i, j = j
+            NLopt.equality_constraint!(opt, (x, g) -> begin
+                ang = n_angles == 0 ? Float64[] : x[1:n_angles]
+                Q = n_angles == 0 ? Matrix{Float64}(I, n, n) :
+                    _givens_to_orthogonal(ang, n)
+                val = (L64 * Q)[i, j]
+                if length(g) > 0
+                    fill!(g, 0.0)
+                    if n_angles > 0
+                        gj = ForwardDiff.gradient(
+                            θ -> (L64 * _givens_to_orthogonal(θ, n))[i, j], ang)
+                        copyto!(view(g, 1:n_angles), gj)
+                    end
+                end
+                val
+            end, 1e-8)
+        end
+    end
+    NLopt.xtol_rel!(opt, 1e-10)
+    NLopt.maxeval!(opt, 400)
+    minx = try
+        _, xopt, _ = NLopt.optimize(opt, p0)
+        Vector{Float64}(xopt)
+    catch
+        return T(-Inf)
+    end
+    pstar = T.(minx)
+    θs = n_angles == 0 ? T[] : Vector{T}(pstar[1:n_angles])
+    dps = Vector{T}(pstar[(n_angles + 1):end])
+    _nongaussian_loglik(θs, dps, U, Lchol, n; distribution=dist)
+end
+
+"""Restricted non-Gaussian ML: nested LR with zeros imposed on ``B_0 = LQ``."""
 function _nongaussian_restricted_lr(model::VARModel{T}, result::NonGaussianMLResult{T},
                                     mask::BitMatrix) where {T<:AbstractFloat}
     n = nvars(model)
-    L = safe_cholesky(model.Sigma)
-    T_obs = size(model.U, 1)
+    Lchol = safe_cholesky(model.Sigma)
+    Lmat = Matrix{T}(Lchol)
     perm, signs = _align_to_zeros(result.B0, mask)
     Q_al = result.Q[:, perm] .* signs'
     if det(Q_al) < 0
@@ -689,23 +970,29 @@ function _nongaussian_restricted_lr(model::VARModel{T}, result::NonGaussianMLRes
     end
     θ0 = n == 1 ? T[] : _orthogonal_to_givens(Q_al, n)
     dp0 = _ml_dist_init(result, perm)
-    p0 = vcat(θ0, dp0)
-    λpen = T(T_obs) * T(1e6)
     dist = result.distribution
-    obj = p -> begin
-        angles, dp = _unpack_nongaussian_params(p, n, dist)
-        nll = -_nongaussian_loglik(angles, dp, model.U, L, n; distribution=dist)
-        Q = _givens_to_orthogonal(angles, n)
-        B0 = Matrix(L) * Q
-        nll + λpen * sum(abs2, B0[mask])
+    n_angles = n * (n - 1) ÷ 2
+    q = count(mask)
+    θ_star, resid = _solve_givens_for_zeros(Lmat, mask, θ0)
+    pinned = resid <= T(1e-12) && n_angles <= q
+    ℓ_r = T(-Inf)
+    if pinned || n_angles == 0
+        obj = dp -> -_nongaussian_loglik(θ_star, dp, model.U, Lchol, n;
+                                         distribution=dist)
+        res = Optim.optimize(obj, dp0, Optim.NelderMead(),
+                             Optim.Options(iterations=400, g_tol=T(1e-8),
+                                           allow_f_increases=true))
+        dp_star = Vector{T}(Optim.minimizer(res))
+        ℓ_r = _nongaussian_loglik(θ_star, dp_star, model.U, Lchol, n;
+                                  distribution=dist)
     end
-    res = Optim.optimize(obj, p0, Optim.NelderMead(),
-                         Optim.Options(iterations=400, g_tol=T(1e-8),
-                                       allow_f_increases=true))
-    pstar = Vector{T}(Optim.minimizer(res))
-    angles, dp = _unpack_nongaussian_params(pstar, n, dist)
-    ℓ_r = _nongaussian_loglik(angles, dp, model.U, L, n; distribution=dist)
-    _restriction_lr(result.loglik, ℓ_r, count(mask))
+    if !pinned && n_angles > 0
+        ℓ_s = _nongaussian_slsqp_zeros(model.U, Lchol, Lmat, n, dist, mask,
+                                       θ_star, dp0)
+        ℓ_r = max(ℓ_r, ℓ_s)
+    end
+    lr = _restriction_lr(result.loglik, ℓ_r, q)
+    merge(lr, (zero_residual=resid, givens_dropped=min(q, n_angles)))
 end
 
 """
@@ -714,11 +1001,15 @@ end
 
 Overidentification test for statistical and parametric SVARs.
 
-- **Parametric ML** (`NonGaussianMLResult`): likelihood-ratio test of extra zeros
-  on ``B_0`` (Givens parameterization with a quadratic penalty). A Wald statistic
-  that uses the stored SEs of ``B_0`` is reported in `details`.
-- **AB-model** (`SVARModel`): the stored concentrated LR
-  ``T(\\log|\\hat\\Sigma_r| - \\log|\\hat\\Sigma|)``.
+- **Parametric ML** (`NonGaussianMLResult`): nested LR of extra zeros on ``B_0``.
+  Those zeros are imposed by dropping the corresponding Givens rotations
+  (``Q`` is solved so ``(LQ)[\\mathrm{mask}]=0``) and re-optimizing the remaining
+  parameters, so ``\\mathrm{LR}\\sim\\chi^2(q)`` is a constrained MLE. A companion
+  Wald uses ``RVR'`` from the stored ``\\mathrm{vec}(B_0)`` covariance when that
+  matrix is available; otherwise `details[:wald_approximation] = :independence`.
+- **AB-model** (`SVARModel`): the stored concentrated LR when `restrictions` is
+  omitted. A supplied mask is **re-estimated** as an AB B-model; calling the
+  `SVARModel`-only method with a mask throws `ArgumentError`.
 - **SVEC** (`SVECResult`): LR via the AB B-model when `restrictions` is a zero
   mask; just-identified KPSW otherwise.
 - **Heteroskedastic ML**: [`test_restrictions`](@ref) LR, plus a Wald on ``B_0``.
@@ -753,17 +1044,10 @@ function test_overidentification(model::VARModel{T}, result::NonGaussianMLResult
     n = size(result.B0, 1)
     mask = _zero_mask(restrictions, n)
     lr = _nongaussian_restricted_lr(model, result, mask)
-    perm, signs = _align_to_zeros(result.B0, mask)
-    B_al = result.B0[:, perm] .* signs'
-    se_al = (result.se isa AbstractMatrix && size(result.se) == size(result.B0)) ?
-            result.se[:, perm] : result.se
-    wald = _wald_B0_zeros(B_al, se_al, mask)
-    extra = Dict{Symbol,Any}()
-    if wald !== nothing
-        extra[:wald_statistic] = wald.statistic
-        extra[:wald_pvalue] = wald.pvalue
-        extra[:wald_df] = wald.df
-    end
+    extra = Dict{Symbol,Any}(:zero_residual => lr.zero_residual,
+                             :givens_dropped => lr.givens_dropped)
+    wald, _, _, _, _ = _aligned_overid_wald(result, model, result.B0, result.se, mask)
+    _with_wald!(extra, wald)
     _overid_from_lr(lr; extra=extra)
 end
 
@@ -781,16 +1065,12 @@ function test_overidentification(model::VARModel{T}, result::NonGaussianGMMResul
     end
     n = size(result.B0, 1)
     mask = _zero_mask(restrictions, n)
-    perm, signs = _align_to_zeros(result.B0, mask)
-    B_al = result.B0[:, perm] .* signs'
-    se_al = (result.se isa AbstractMatrix && size(result.se) == size(result.B0)) ?
-            result.se[:, perm] : result.se
-    wald = _wald_B0_zeros(B_al, se_al, mask)
-    wald === nothing && return _just_id_overid(T; note="GMM result has no usable SEs for a Wald test of B₀")
+    wald, _, _, _, _ = _aligned_overid_wald(result, model, result.B0, result.se, mask)
+    wald === nothing && return _just_id_overid(T; note="GMM result has no usable SEs or vcov for a Wald test of B₀")
+    extra = Dict{Symbol, Any}(:method => :wald, :df => wald.df, :just_identified => false)
+    _with_wald!(extra, wald)
     IdentifiabilityTestResult{T}(:overidentification, wald.statistic, wald.pvalue,
-                                  wald.pvalue >= T(0.05),
-                                  Dict{Symbol, Any}(:method => :wald, :df => wald.df,
-                                                     :just_identified => false))
+                                  wald.pvalue >= T(0.05), extra)
 end
 
 function test_overidentification(model::VARModel{T},
@@ -807,17 +1087,9 @@ function test_overidentification(model::VARModel{T},
     n = size(result.B0, 1)
     mask = _zero_mask(restrictions, n)
     lr = test_restrictions(result, restrictions)
-    perm, signs = _align_to_zeros(result.B0, mask)
-    B_al = result.B0[:, perm] .* signs'
-    se_al = (result.se isa AbstractMatrix && size(result.se) == size(result.B0)) ?
-            result.se[:, perm] : result.se
-    wald = _wald_B0_zeros(B_al, se_al, mask)
     extra = Dict{Symbol,Any}()
-    if wald !== nothing
-        extra[:wald_statistic] = wald.statistic
-        extra[:wald_pvalue] = wald.pvalue
-        extra[:wald_df] = wald.df
-    end
+    wald, _, _, _, _ = _aligned_overid_wald(result, model, result.B0, result.se, mask)
+    _with_wald!(extra, wald)
     _overid_from_lr(lr; extra=extra)
 end
 
@@ -825,21 +1097,7 @@ function test_overidentification(model::VARModel{T}, result::SVARModel{T};
                                   restrictions=nothing,
                                   n_bootstrap::Int=999,
                                   rng::AbstractRNG=Random.default_rng()) where {T<:AbstractFloat}
-    extra = Dict{Symbol,Any}(:lr_df => result.lr_df)
-    if restrictions !== nothing
-        n = size(result.B, 1)
-        mask = _zero_mask(restrictions, n)
-        B0 = result.A \ result.B
-        seB = result.se === nothing ? nothing : result.se[:, (n + 1):(2n)]
-        wald = _wald_B0_zeros(B0, seB, mask)
-        if wald !== nothing
-            extra[:wald_statistic] = wald.statistic
-            extra[:wald_pvalue] = wald.pvalue
-            extra[:wald_df] = wald.df
-        end
-    end
-    _overid_from_lr((statistic=result.lr_stat, pvalue=result.lr_pvalue, df=result.lr_df);
-                    extra=extra)
+    _ab_overidentification(model, result; restrictions=restrictions, rng=rng)
 end
 
 function test_overidentification(model::VARModel{T}, result::SVECResult{T};
@@ -862,12 +1120,9 @@ function test_overidentification(model::VARModel{T}, result::SVECResult{T};
     svar = estimate_svar(to_var(result.vecm), b_model_pattern(Bpat);
                          rng=rng, long_run_matrix=result.Xi)
     extra = Dict{Symbol,Any}()
-    wald = _wald_B0_zeros(svar.B, svar.se === nothing ? nothing : svar.se[:, (n + 1):(2n)], mask)
-    if wald !== nothing
-        extra[:wald_statistic] = wald.statistic
-        extra[:wald_pvalue] = wald.pvalue
-        extra[:wald_df] = wald.df
-    end
+    seB = svar.se === nothing ? nothing : svar.se[:, (n + 1):(2n)]
+    wald = _wald_B0_zeros(svar.B, seB, mask; vcov_B=_vec_B0_vcov(svar, nothing))
+    _with_wald!(extra, wald)
     _overid_from_lr((statistic=svar.lr_stat, pvalue=svar.lr_pvalue, df=svar.lr_df);
                     extra=extra)
 end
@@ -876,20 +1131,32 @@ function test_overidentification(result::SVARModel{T};
                                   restrictions=nothing,
                                   n_bootstrap::Int=999,
                                   rng::AbstractRNG=Random.default_rng()) where {T<:AbstractFloat}
-    extra = Dict{Symbol,Any}(:lr_df => result.lr_df)
-    if restrictions !== nothing
-        n = size(result.B, 1)
-        mask = _zero_mask(restrictions, n)
-        B0 = result.A \ result.B
-        seB = result.se === nothing ? nothing : result.se[:, (n + 1):(2n)]
-        wald = _wald_B0_zeros(B0, seB, mask)
-        if wald !== nothing
-            extra[:wald_statistic] = wald.statistic
-            extra[:wald_pvalue] = wald.pvalue
-            extra[:wald_df] = wald.df
-        end
+    _ab_overidentification(nothing, result; restrictions=restrictions, rng=rng)
+end
+
+function _ab_overidentification(model, result::SVARModel{T};
+                                restrictions=nothing,
+                                rng::AbstractRNG=Random.default_rng()) where {T<:AbstractFloat}
+    if restrictions === nothing
+        extra = Dict{Symbol,Any}(:lr_df => result.lr_df, :pattern => :stored)
+        return _overid_from_lr((statistic=result.lr_stat, pvalue=result.lr_pvalue,
+                                df=result.lr_df); extra=extra)
     end
-    _overid_from_lr((statistic=result.lr_stat, pvalue=result.lr_pvalue, df=result.lr_df);
+    model === nothing && throw(ArgumentError(
+        "AB overidentification of a supplied mask requires the VAR model so the " *
+        "pattern can be re-estimated; call test_overidentification(model, svar; " *
+        "restrictions=mask), or omit restrictions to use the stored pattern's LR"))
+    n = size(result.B, 1)
+    mask = _zero_mask(restrictions, n)
+    Bpat = fill(T(NaN), n, n)
+    Bpat[mask] .= zero(T)
+    svar = estimate_svar(model, b_model_pattern(Bpat); rng=rng)
+    extra = Dict{Symbol,Any}(:lr_df => svar.lr_df, :pattern => :reestimated)
+    B0 = result.A \ result.B
+    seB = result.se === nothing ? nothing : result.se[:, (n + 1):(2n)]
+    wald, _, _, _, _ = _aligned_overid_wald(result, model, B0, seB, mask)
+    _with_wald!(extra, wald)
+    _overid_from_lr((statistic=svar.lr_stat, pvalue=svar.lr_pvalue, df=svar.lr_df);
                     extra=extra)
 end
 

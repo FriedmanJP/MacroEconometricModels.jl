@@ -587,4 +587,24 @@ end
                                    :fastica, true, 1, 0.0)
     @test MEM._result_shocks(dummy) == shocks
     @test MEM._result_method(dummy) == :fastica
+
+    B0 = [1.0 0.2; 0.3 1.1]
+    se = [0.1 0.05; 0.08 0.12]
+    mask = BitMatrix([false true; true false])
+    V = zeros(4, 4)
+    for j in 1:2, i in 1:2
+        V[i + (j - 1) * 2, i + (j - 1) * 2] = se[i, j]^2
+    end
+    w_diag = MEM._wald_B0_zeros(B0, se, mask)
+    w_rvr = MEM._wald_B0_zeros(B0, se, mask; vcov_B=V)
+    @test w_diag.approximation == :independence
+    @test w_rvr.approximation == :rvr
+    @test w_rvr.statistic ≈ w_diag.statistic atol=1e-10
+    V2 = copy(V)
+    i12 = 1 + 1 * 2
+    i21 = 2 + 0 * 2
+    V2[i12, i21] = V2[i21, i12] = 0.3 * se[1, 2] * se[2, 1]
+    w_c = MEM._wald_B0_zeros(B0, se, mask; vcov_B=V2)
+    @test w_c.approximation == :rvr
+    @test !isapprox(w_c.statistic, w_diag.statistic; rtol=1e-3)
 end
