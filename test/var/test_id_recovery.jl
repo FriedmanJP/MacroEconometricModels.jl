@@ -271,36 +271,29 @@ end
         end
 
         @testset "sandwich SEs cover free angles" begin
+            # Cokurtosis sandwich needs 8th moments (invalid for t(5)). Score the
+            # third-moment free angle vs the DGP Givens rotation (signed-permutation
+            # alignment). Non-finite SEs count as non-coverage.
             B_rec = [1.0 0.0; 0.4 1.0]
+            L_dgp = Matrix(MacroEconometricModels.safe_cholesky(B_rec * B_rec'))
+            F = svd(L_dgp \ B_rec)
+            θtrue = MacroEconometricModels._orthogonal_to_givens(F.U * F.Vt, 2)[1]
             n_reps = 200
             Tobs = 2000
             n_cover = 0
-            n_ok = 0
             zcrit = 1.96
             for r in 1:n_reps
                 rng_r = MersenneTwister(75000 + r)
-                Y, _ = simulate_svar(B_rec, A; Tobs=Tobs, shocks=:t, rng=rng_r)
+                Y, _ = simulate_svar(B_rec, A; Tobs=Tobs, shocks=:skewnormal, rng=rng_r)
                 m = estimate_var(Y, 1)
-                try
-                    g = identify_gmm_moments(m; moments=:cokurtosis, weighting=:two_step)
-                    seθ = sqrt(max(g.vcov[1, 1], 0.0))
-                    isfinite(seθ) && seθ > 0 || continue
-                    MacroEconometricModels._procrustes_distance(g.B0, B_rec) < 0.2 || continue
-                    # Sample-conditional true angle: polar(L̂⁻¹ B₀) (L̂ from Σ̂).
-                    # Sign pair (det-preserving) is θ → θ + kπ.
-                    L = Matrix(MacroEconometricModels.safe_cholesky(m.Sigma))
-                    F = svd(L \ B_rec)
-                    θtrue = MacroEconometricModels._orthogonal_to_givens(F.U * F.Vt, 2)[1]
-                    dθ = minimum(abs(g.theta[1] + k * π - θtrue) for k in -2:2)
-                    n_ok += 1
-                    n_cover += Int(dθ <= zcrit * seθ)
-                catch
-                    continue
-                end
+                g = identify_gmm_moments(m; moments=:coskewness, weighting=:two_step, hac=true)
+                seθ = sqrt(max(g.vcov[1, 1], 0.0))
+                dθ = minimum(abs(g.theta[1] + k * π / 2 - θtrue) for k in -4:4)
+                n_cover += Int(isfinite(seθ) && seθ > 0 && dθ <= zcrit * seθ)
             end
-            @test n_ok >= 150
-            # Fourth-moment GMM SEs undercover in finite samples (~0.75–0.85 at T=2000).
-            @test 0.70 <= n_cover / n_ok <= 1.0
+            cover = n_cover / n_reps
+            @info "SID-21 Givens-angle 95% coverage" cover n_cover n_reps
+            @test 0.88 <= cover <= 1.0
         end
     end
 end
