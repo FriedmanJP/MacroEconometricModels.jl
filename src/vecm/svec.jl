@@ -184,11 +184,38 @@ function _svec_default_status(n::Int, n_perm::Int)
     IdentificationStatus(:exact, copy(orders), orders, 0)
 end
 
+"""Zero the transitory columns of ``Ξ B_0`` (KPSW: those shocks have no long-run impact)."""
+function _svec_force_transitory_zeros!(lr::AbstractMatrix{T}, n_perm::Int) where {T}
+    n = size(lr, 1)
+    @inbounds for j in (n_perm + 1):n, i in 1:n
+        lr[i, j] = zero(T)
+    end
+    lr
+end
+
+function _svec_has_transitory_zeros(lr, n_perm::Int)
+    lr === nothing && return false
+    n = size(lr, 1)
+    @inbounds for j in (n_perm + 1):n, i in 1:n
+        v = lr[i, j]
+        (isnan(v) || !iszero(v)) && return false
+    end
+    true
+end
+
 function _svec_resolve_pattern(n::Int, n_perm::Int, pattern,
                                long_run_zeros, short_run_zeros, ::Type{T}) where {T}
     if pattern !== nothing
         pattern isa SVARPattern || throw(ArgumentError("pattern must be an SVARPattern"))
-        return _ab_promote(pattern, T)
+        pat = _ab_promote(pattern, T)
+        # A complete pattern that already encodes the transitory-zero columns
+        # of ΞB₀ is left unchanged; otherwise merge those KPSW PT zeros in.
+        if _svec_has_transitory_zeros(pat.long_run, n_perm)
+            return pat
+        end
+        lr = pat.long_run === nothing ? fill(T(NaN), n, n) : copy(pat.long_run)
+        _svec_force_transitory_zeros!(lr, n_perm)
+        return SVARPattern(pat.A, pat.B; long_run=lr)
     end
     pat0 = _svec_kpsw_pattern(n, n_perm, T)
     A = copy(pat0.A)
@@ -202,7 +229,16 @@ function _svec_resolve_pattern(n::Int, n_perm::Int, pattern,
     if long_run_zeros !== nothing
         size(long_run_zeros) == (n, n) || throw(ArgumentError(
             "long_run_zeros must be $n×$n, got $(size(long_run_zeros))"))
-        lr = Matrix{T}(long_run_zeros)
+        user = Matrix{T}(long_run_zeros)
+        # Overlay user zeros onto a long-run matrix that already has the
+        # transitory columns of ΞB₀ at zero (do not drop the PT restrictions).
+        lr = fill(T(NaN), n, n)
+        _svec_force_transitory_zeros!(lr, n_perm)
+        @inbounds for j in 1:n, i in 1:n
+            v = user[i, j]
+            isnan(v) || (lr[i, j] = v)
+        end
+        _svec_force_transitory_zeros!(lr, n_perm)
     end
     SVARPattern(A, B; long_run=lr)
 end
@@ -225,19 +261,23 @@ Identify a structural VECM (King, Plosser, Stock and Watson 1991; Lütkepohl
 
 so ``Ξ B_0`` has rank ``n-r`` and ``r`` columns that are identically zero.
 
-The default is the just-identified KPSW scheme: lower-triangular ``Ξ B_0`` on
-the permanent block and a Cholesky factorisation of the transitory block.
-Custom zeros are imposed by `long_run_zeros` / `short_run_zeros` (`NaN` = free,
-a finite number = fixed) or by a full [`SVARPattern`](@ref), estimated by
-[`estimate_svar`](@ref) with long-run rows ``Ξ B_0``.
+The default is the Gonzalo–Ng closed form ``G = [α_⊥'; β']``,
+``B_0 = G^{-1} \\mathrm{chol}(G Σ G')``, with a QR rotation of the permanent
+block so that ``Ξ B_0`` is lower triangular (just-identified KPSW). Custom
+zeros are imposed by `long_run_zeros` / `short_run_zeros` (`NaN` = free, a
+finite number = fixed) or by a full [`SVARPattern`](@ref) and estimated by
+[`estimate_svar`](@ref) as Lütkepohl's B-model (``A = I``, zeros on ``B_0``
+and ``Ξ B_0``). The two numerical routes need not match. User zeros are merged
+with the KPSW transitory-zero columns of ``Ξ B_0``; a complete `pattern` that
+already encodes those columns is left unchanged.
 """
 function identify_svec(vecm::VECMModel{T};
                        long_run_zeros=nothing,
                        short_run_zeros=nothing,
                        pattern=nothing,
                        n_starts::Int=5,
-                       rng::AbstractRNG=Random.default_rng(),
-                       kwargs...) where {T<:AbstractFloat}
+                       max_iter::Int=400,
+                       rng::AbstractRNG=Random.default_rng()) where {T<:AbstractFloat}
     n = nvars(vecm)
     r = vecm.rank
     n_perm = n - r
@@ -258,8 +298,8 @@ function identify_svec(vecm::VECMModel{T};
     pat = _svec_resolve_pattern(n, n_perm, pattern, long_run_zeros,
                                 short_run_zeros, T)
     var = to_var(vecm)
-    svar = estimate_svar(var, pat; n_starts=n_starts, rng=rng,
-                         long_run_matrix=Xi, kwargs...)
+    svar = estimate_svar(var, pat; n_starts=n_starts, max_iter=max_iter,
+                         rng=rng, long_run_matrix=Xi)
     B0 = svar.A \ svar.B
     SVECResult{T}(Matrix{T}(B0), Matrix{T}(svar.Q), Matrix{T}(Xi),
                   n_perm, vecm, svar.identification)

@@ -522,10 +522,13 @@ where:
 - ``β_⊥`` and ``α_⊥`` are orthogonal complements of the cointegrating vectors and adjustment coefficients
 - ``u_t = B_0 \varepsilon_t`` maps orthogonal structural shocks into the reduced form
 
-With rank ``r``, ``Ξ B_0`` has ``r`` zero columns (the transitory shocks) by construction. The just-identified **KPSW** default adds a lower-triangular structure on the permanent block of ``Ξ B_0`` and a Cholesky factorisation of the transitory block — ``(n-r)(n-r-1)/2`` extra long-run zeros plus ``r(r-1)/2`` contemporaneous zeros (Lütkepohl 2005, eq. 9.2.10). Custom zeros are passed as `long_run_zeros` / `short_run_zeros` (`NaN` free, a finite number fixed) or as a full [`SVARPattern`](@ref), and are estimated by [`estimate_svar`](@ref) with long-run rows ``Ξ B_0``.
+With rank ``r``, ``Ξ B_0`` has ``r`` zero columns (the transitory shocks) by construction. The just-identified **KPSW** default adds a lower-triangular structure on the permanent block of ``Ξ B_0`` and a Cholesky factorisation of the transitory block — ``(n-r)(n-r-1)/2`` extra long-run zeros plus ``r(r-1)/2`` contemporaneous zeros (Lütkepohl 2005, eq. 9.2.10). Custom zeros are passed as `long_run_zeros` / `short_run_zeros` (`NaN` free, a finite number fixed) or as a full [`SVARPattern`](@ref), and are merged with those transitory-zero columns of ``Ξ B_0`` rather than replacing them. A complete `pattern` that already encodes the transitory columns is left unchanged.
 
 !!! note "Technical Note"
     `irf(vecm; method=:long_run)` on a `VECMModel` is an alias of `method=:svec`. Calling [`identify_long_run`](@ref) on `to_var(vecm)` still throws [`IdentificationError`](@ref): the levels companion has unit roots, so ``C(1)`` is singular and the Blanchard–Quah rotation is not orthogonal (SID-08).
+
+!!! note "Technical Note"
+    The default `identify_svec` path is the Gonzalo–Ng closed form ``G = [\alpha_⊥'; \beta']``, ``B_0 = G^{-1} \mathrm{chol}(G \Sigma G')``, with a QR rotation of the permanent block so that ``Ξ B_0`` is lower triangular. Custom `long_run_zeros` / `short_run_zeros` / `pattern` go through [`estimate_svar`](@ref) as Lütkepohl's B-model (``A = I``, zeros on ``B_0`` and ``Ξ B_0``). The two numerical routes need not match even when the zero pattern is the KPSW just-identified scheme: Gonzalo–Ng uses ``β'`` to span the transitory space, while the B-model Cholesky factorises the transitory block of ``B_0``.
 
 The KPSW three-variable system on [`load_example(:fred_qd)`](@ref) is log real GDP, consumption, and investment. Balanced-growth theory predicts two cointegrating relations and one common trend, so ``r = 2`` and a single permanent shock.
 
@@ -539,9 +542,9 @@ The long-run matrix ``Ξ B_0`` has two numerical-zero transitory columns and a p
 
 | Keyword | Type | Default | Description |
 |---------|------|---------|-------------|
-| `long_run_zeros` | `AbstractMatrix` or `nothing` | `nothing` | Pattern on ``Ξ B_0`` (`NaN` = free) |
+| `long_run_zeros` | `AbstractMatrix` or `nothing` | `nothing` | Pattern on ``Ξ B_0`` (`NaN` = free); merged with KPSW transitory-zero columns |
 | `short_run_zeros` | `AbstractMatrix` or `nothing` | `nothing` | Pattern on ``B_0`` (`NaN` = free) |
-| `pattern` | `SVARPattern` or `nothing` | `nothing` | Full AB-model pattern; overrides the two zero matrices |
+| `pattern` | `SVARPattern` or `nothing` | `nothing` | Full AB-model (Lütkepohl B-model) pattern; transitory-zero columns of ``Ξ B_0`` are merged in unless already encoded |
 
 | Field | Type | Description |
 |-------|------|-------------|
@@ -566,7 +569,7 @@ The reconstruction error is on the order of ``10^{-15}``. Pass `method=:kpsw` fo
 
 ### Impulse responses and FEVD
 
-Levels IRFs of the permanent shock converge to the corresponding column of ``Ξ B_0``. `method=:long_run` on the VECM is the same rotation.
+Levels IRFs of the permanent shock converge to the corresponding column of ``Ξ B_0``. `method=:long_run` on the VECM is the same rotation. Point IRFs (`ci_type=:none`) are the supported output; `ci_type=:bootstrap` and `ci_type=:theoretical` throw `ArgumentError` because the levels-VAR resampler would inject a frozen SVEC rotation into every draw rather than re-estimating the VECM.
 
 ```@example vecm
 ir_svec = irf(vecm_svec, 40; method=:svec)
@@ -644,6 +647,8 @@ The Johansen test rejects ``r_0 = 0`` and ``r_0 = 1`` but not ``r_0 = 2``, so th
 6. **Forgetting VAR conversion for structural analysis**: `irf`, `fevd`, and `historical_decomposition` dispatch through `to_var()` automatically for Cholesky, sign, narrative, and statistical methods, so passing a `VECMModel` directly works. For permanent/transitory identification use `method=:svec` (or `method=:long_run`) on the VECM; do not call `identify_long_run(to_var(vecm))`.
 
 7. **Blanchard–Quah on a cointegrated VAR**: The levels companion of a VECM has unit roots, so ``C(1)`` is singular and the Blanchard–Quah rotation is not orthogonal. The package throws `IdentificationError` from `identify_long_run` on that VAR. Use [`identify_svec`](@ref).
+
+8. **Bootstrap or theoretical bands on SVEC IRFs**: `irf(vecm; method=:svec, ci_type=:bootstrap)` throws. The converted levels VAR is resampled, but the KPSW rotation is computed once from the point VECM and injected into every draw. Until a VECM-aware bootstrap exists, request point IRFs only (`ci_type=:none`). The Gonzalo–Ng closed form and the Lütkepohl B-model `pattern` path need not agree numerically; do not treat a gap between them as a bug.
 
 ---
 

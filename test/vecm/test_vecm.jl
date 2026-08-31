@@ -642,4 +642,32 @@ end
         @test all(fv.proportions[:, 2, end] .< 0.15)
         @test all(fv.proportions[:, 3, end] .< 0.15)
     end
+
+    @testset "reject frozen-Q CIs; merge PT zeros; peel IRF kwargs" begin
+        rng = MersenneTwister(7451)
+        Y, _, _, _ = simulate_common_trend_svec(; Tobs=250, rng=rng)
+        vecm = estimate_vecm(Y, 1; rank=2, deterministic=:none)
+
+        @test_throws ArgumentError irf(vecm, 4; method=:svec, ci_type=:bootstrap)
+        @test_throws ArgumentError irf(vecm, 4; method=:svec, ci_type=:theoretical)
+        @test_throws ArgumentError irf(vecm, 4; method=:long_run, ci_type=:bootstrap)
+        @test_throws ArgumentError irf(vecm, 4; method=:long_run, ci_type=:theoretical)
+        r = irf(vecm, 4; method=:svec, reps=10, conf_level=0.9)
+        @test r.ci_type === :none
+
+        n, n_perm = 3, 1
+        lrz = fill(NaN, n, n)
+        pat = MacroEconometricModels._svec_resolve_pattern(n, n_perm, nothing, lrz, nothing, Float64)
+        @test all(iszero, pat.long_run[:, 2])
+        @test all(iszero, pat.long_run[:, 3])
+
+        Bz = fill(NaN, n, n)
+        Bz[2, 3] = 0.0
+        custom = SVARPattern(Matrix{Float64}(I, n, n), Bz)
+        @test custom.long_run === nothing
+        svec = identify_svec(vecm; pattern=custom, n_starts=1, rng=MersenneTwister(2))
+        lr = svec.Xi * svec.B0
+        @test maximum(abs, lr[:, 2]) < 1e-5
+        @test maximum(abs, lr[:, 3]) < 1e-5
+    end
 end

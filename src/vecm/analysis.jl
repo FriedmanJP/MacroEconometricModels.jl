@@ -12,8 +12,26 @@ Cholesky, sign, narrative, and statistical methods route through `to_var()`.
 (KPSW permanent/transitory identification).
 """
 
+const _SVEC_IDENT_KW = (:long_run_zeros, :short_run_zeros, :pattern,
+                        :n_starts, :max_iter, :rng)
+
+function _vecm_svec_ident_kwargs(kwargs)
+    Pair{Symbol,Any}[k => kwargs[k] for k in _SVEC_IDENT_KW if haskey(kwargs, k)]
+end
+
 function _vecm_svec_Q(vecm::VECMModel{T}; kwargs...) where {T}
-    identify_svec(vecm; kwargs...).Q
+    identify_svec(vecm; _vecm_svec_ident_kwargs(kwargs)...).Q
+end
+
+function _vecm_reject_svec_ci(kwargs, method::Symbol)
+    ci = get(kwargs, :ci_type, :none)
+    if ci === :bootstrap || ci === :theoretical
+        throw(ArgumentError(
+            "ci_type=:$ci is not supported for VECM method=:$method: " *
+            "bands would reuse a frozen SVEC rotation rather than re-identifying " *
+            "each draw. Point IRFs with ci_type=:none remain available."))
+    end
+    nothing
 end
 
 """
@@ -22,10 +40,13 @@ end
 Compute IRFs for a VECM. Cholesky, sign, narrative, and statistical methods
 convert to the levels VAR. `method=:svec` and `method=:long_run` use
 [`identify_svec`](@ref); levels IRFs of permanent shocks converge to the
-corresponding column of ``Ξ B_0``.
+corresponding column of ``Ξ B_0``. `ci_type=:bootstrap` and
+`ci_type=:theoretical` throw `ArgumentError` on those methods: the levels-VAR
+resampler would inject a frozen SVEC rotation into every draw.
 """
 function irf(vecm::VECMModel{T}, horizon::Int; method::Symbol=:cholesky, kwargs...) where {T}
     if method === :svec || method === :long_run
+        _vecm_reject_svec_ci(kwargs, method)
         Q = _vecm_svec_Q(vecm; kwargs...)
         return irf(to_var(vecm), horizon; method=:svec, _svec_Q=Q, kwargs...)
     end
