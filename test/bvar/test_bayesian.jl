@@ -666,6 +666,26 @@ end
     restr_imp = SVARRestrictions(2; signs=[sign_restriction(1, 1, :positive),
                                            sign_restriction(1, 1, :negative)])
     @test_throws IdentificationError identify_arias_bayesian(post, restr_imp, 5; n_rotations=3)
+
+    # SID-19: irf/fevd(post; method=:arias) is identify_arias_bayesian, not compute_Q.
+    rng_a = MersenneTwister(748)
+    ir_arias = irf(post, 5; method=:arias, restrictions=restr, max_draws=1, rng=copy(rng_a))
+    ar_ref = identify_arias_bayesian(post, restr, 5; n_rotations=1, rng=copy(rng_a))
+    @test ir_arias isa BayesianImpulseResponse
+    @test ir_arias.quantiles ≈ irf(ar_ref).quantiles
+    rng_f = MersenneTwister(749)
+    fv_arias = fevd(post, 5; method=:arias, restrictions=restr, max_draws=1, rng=copy(rng_f))
+    ar_f = identify_arias_bayesian(post, restr, 5; n_rotations=1, rng=copy(rng_f))
+    @test fv_arias isa BayesianFEVD
+    @test fv_arias.quantiles ≈ fevd(ar_f).quantiles
+    err = try
+        historical_decomposition(post; method=:arias, restrictions=restr)
+        nothing
+    catch e
+        e
+    end
+    @test err isa ArgumentError
+    @test occursin("identify_arias_bayesian", err.msg)
 end
 
 @testset "SID-04 fallback P_ref when posterior-mean Q unidentified" begin

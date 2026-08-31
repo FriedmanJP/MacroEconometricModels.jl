@@ -423,6 +423,10 @@ function historical_decomposition(post::BVARPosterior, horizon::Int=0;
     use_data = isempty(data) ? post.data : data
     isempty(use_data) && throw(ArgumentError("Data required for historical decomposition"))
     _validate_narrative_data(method, use_data)
+    method === :arias && throw(ArgumentError(
+        "historical_decomposition(BVARPosterior; method=:arias) uses a single unweighted " *
+        "rotation per draw; call identify_arias_bayesian(post, restrictions, horizon) " *
+        "for the weighted posterior identified-set summary"))
 
     p, n = post.p, post.n
     horizon = horizon <= 0 ? size(use_data, 1) - p : horizon

@@ -480,6 +480,20 @@ function irf(post::BVARPosterior, horizon::Int;
     n = post.n
     ET = eltype(use_data)
 
+    # Weighted identified-set summary; do not fall through to compute_Q (n_draws=1, unweighted).
+    if method === :arias
+        rng, n_rot, cw = _arias_posterior_kwargs(max_draws; kwargs...)
+        use_data_a = isempty(data) ? nothing : data
+        rset = _arias_from_bvar_posterior(post, restrictions, horizon;
+            data=use_data_a, n_rotations=n_rot, quantiles=quantiles,
+            rng=rng, compute_weights=cw)
+        bir = irf(rset; quantiles=collect(quantiles))
+        shock_names === nothing && return bir
+        return BayesianImpulseResponse{ET}(bir.quantiles, bir.point_estimate, bir.horizon,
+            bir.variables, shock_names, bir.quantile_levels, bir._draws,
+            bir.n_requested, bir.n_effective, bir.n_failed)
+    end
+
     # Process posterior samples using shared utility
     results, samples = process_posterior_samples(post,
         (m, Q, h) -> compute_irf(m, Q, h);
@@ -510,21 +524,25 @@ function irf(post::BVARPosterior, p::Int, n::Int, horizon::Int; kwargs...)
     irf(post, horizon; kwargs...)
 end
 
-"""IRF view of a [`BayesianSetIdentifiedSVAR`](@ref)."""
+"""IRF view of a [`BayesianSetIdentifiedSVAR`](@ref).
+
+Quantiles are always recomputed from draws and importance weights (same as
+[`fevd`](@ref)), so requested levels are honored even when they differ from the
+stored `irf_quantiles` (default `[0.16, 0.5, 0.84]`).
+"""
 function irf(r::BayesianSetIdentifiedSVAR{T}; quantiles::Vector{<:Real}=[0.16, 0.5, 0.84]) where {T<:AbstractFloat}
     H = size(r.irf_draws, 2)
     n_acc = size(r.irf_draws, 1)
     q_vec = T.(quantiles)
-    qarr, mean_irf = r.irf_quantiles, r.irf_mean
-    if size(qarr, 4) != length(quantiles)
-        qarr = zeros(T, H, size(r.irf_draws, 3), size(r.irf_draws, 4), length(quantiles))
-        mean_irf = zeros(T, H, size(r.irf_draws, 3), size(r.irf_draws, 4))
-        for h in 1:H, i in axes(r.irf_draws, 3), j in axes(r.irf_draws, 4)
-            vals = r.irf_draws[:, h, i, j]
-            mean_irf[h, i, j] = sum(r.weights .* vals)
-            for (qi, q) in enumerate(quantiles)
-                qarr[h, i, j, qi] = _weighted_quantile(vals, r.weights, q)
-            end
+    n1, n2 = size(r.irf_draws, 3), size(r.irf_draws, 4)
+    qarr = zeros(T, H, n1, n2, length(q_vec))
+    mean_irf = zeros(T, H, n1, n2)
+    w = r.weights
+    for h in 1:H, i in axes(r.irf_draws, 3), j in axes(r.irf_draws, 4)
+        vals = @view r.irf_draws[:, h, i, j]
+        mean_irf[h, i, j] = sum(w .* vals)
+        for (qi, q) in enumerate(q_vec)
+            qarr[h, i, j, qi] = _weighted_quantile(vals, w, q)
         end
     end
     n_req = n_acc + r.n_unidentified

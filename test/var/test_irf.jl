@@ -440,4 +440,14 @@ end
     ru = irf(m, 5; method=:uhlig, restrictions=r, rng=copy(rng_u), uhlig_kw...)
     @test ru.values ≈ u.irf
     @test ru.values[1, 1, 1] > 0
+
+    # Same-count quantile levels must be recomputed, not reused from stored 16/50/84.
+    post = estimate_bvar(randn(80, 2), 1; n_draws=FAST ? 16 : 30, burnin=5)
+    ar = identify_arias_bayesian(post, r, 4; n_rotations=FAST ? 20 : 40,
+                                 rng=MersenneTwister(748))
+    ir_def = irf(ar)
+    ir_wide = irf(ar; quantiles=[0.05, 0.5, 0.95])
+    @test ir_wide.quantile_levels ≈ [0.05, 0.5, 0.95]
+    @test ir_wide.quantiles != ar.irf_quantiles
+    @test ir_wide.quantiles != ir_def.quantiles
 end

@@ -198,6 +198,20 @@ function fevd(post::BVARPosterior, horizon::Int;
     n = post.n
     ET = eltype(use_data)
 
+    # Weighted identified-set summary; do not fall through to compute_Q (n_draws=1, unweighted).
+    if method === :arias
+        rng, n_rot, cw = _arias_posterior_kwargs(max_draws; kwargs...)
+        use_data_a = isempty(data) ? nothing : data
+        rset = _arias_from_bvar_posterior(post, restrictions, horizon;
+            data=use_data_a, n_rotations=n_rot, quantiles=quantiles,
+            rng=rng, compute_weights=cw)
+        fv = fevd(rset; quantiles=collect(quantiles))
+        shock_names === nothing && return fv
+        return BayesianFEVD{ET}(fv.quantiles, fv.point_estimate, fv.horizon,
+            fv.variables, shock_names, fv.quantile_levels,
+            fv.n_requested, fv.n_effective, fv.n_failed)
+    end
+
     # Process posterior samples - compute FEVD proportions for each
     results, samples = process_posterior_samples(post,
         (m, Q, h) -> begin

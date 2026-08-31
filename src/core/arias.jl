@@ -790,6 +790,27 @@ function identify_arias_bayesian(post::BVARPosterior, p::Int, n::Int, restrictio
     identify_arias_bayesian(post, restrictions, horizon; kwargs...)
 end
 
+"""Parse Arias kwargs from `irf`/`fevd` on `BVARPosterior` (extra keys ignored)."""
+function _arias_posterior_kwargs(max_draws::Int; rng::AbstractRNG=Random.default_rng(),
+                                 n_rotations::Union{Nothing,Integer}=nothing,
+                                 compute_weights::Bool=true, kwargs...)
+    (rng, Int(something(n_rotations, max_draws)), compute_weights)
+end
+
+"""Weighted Arias identified-set from a BVAR posterior (`irf`/`fevd` `method=:arias`)."""
+function _arias_from_bvar_posterior(post::BVARPosterior, restrictions, horizon;
+                                    data=nothing, n_rotations::Int=100,
+                                    quantiles::AbstractVector=[0.16, 0.5, 0.84],
+                                    rng::AbstractRNG=Random.default_rng(),
+                                    compute_weights::Bool=true)
+    isnothing(restrictions) && throw(ArgumentError("arias requires restrictions"))
+    restrictions isa SVARRestrictions || throw(ArgumentError(
+        ":arias requires restrictions::SVARRestrictions"))
+    identify_arias_bayesian(post, restrictions, horizon;
+        data=data, n_rotations=n_rotations, quantiles=collect(Float64.(quantiles)),
+        compute_weights=compute_weights, rng=rng)
+end
+
 """Weighted quantile via linear interpolation."""
 function _weighted_quantile(vals::AbstractVector{T}, weights::AbstractVector{S}, q::Real) where {T,S}
     perm = sortperm(vals)
