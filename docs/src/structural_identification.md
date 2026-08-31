@@ -99,7 +99,7 @@ Four of the six economic schemes are reachable through the `method=` keyword sha
 | Scheme | Public interface | Extra arguments |
 |--------|------------------|-----------------|
 | Cholesky | `irf(m, H; method=:cholesky)` | none |
-| Sign | `irf(m, H; method=:sign, check_func=f)` or `identify_sign` | `check_func` |
+| Sign | `irf(m, H; method=:sign, check_func=f)` or `identify_sign` | `check_func`, `max_draws` |
 | Narrative | `irf(m, H; method=:narrative, check_func=f, narrative_check=g)` or `identify_narrative` | `check_func`, `narrative_check` |
 | Long-run | `irf(m, H; method=:long_run)` | none |
 | Zero + sign | `identify_arias(m, restrictions, H)` | `SVARRestrictions` |
@@ -108,7 +108,7 @@ Four of the six economic schemes are reachable through the `method=` keyword sha
 Counting the fourteen statistical schemes documented on [Statistical Identification](@ref nongaussian_page), the `method=` keyword accepts eighteen symbols in total. Every one of them returns the same `ImpulseResponse` object, so switching identification never changes the downstream code.
 
 !!! note "Technical Note"
-    `irf(m, H; method=:sign)` returns the **first** rotation that satisfies `check_func`, drawn from at most 100 candidates, and the draw budget is not exposed through `irf`. Use `identify_sign` when the full identified set --- or a larger `max_draws` --- is required.
+    `irf(m, H; method=:sign)` returns the **pointwise median** of the identified set. Bands are identified-set quantiles (`ci_type = :identified_set`); `max_draws` defaults to 1000.
 
 ---
 
@@ -173,7 +173,9 @@ The check function receives the full ``H \times n \times n`` IRF array, indexed 
 check = resp -> resp[1, 3, 3] > 0 && resp[1, 1, 3] < 0 && resp[1, 2, 3] < 0
 
 result_sign = irf(model, 20; method=:sign, check_func=check, rng=MersenneTwister(3))
-round.(result_sign.values[1, :, 3], digits=4)
+(impact = round.(result_sign.values[1, :, 3], digits=4),
+ ci_type = result_sign.ci_type,
+ impact_95 = round.((result_sign.ci_lower[1, 1, 3], result_sign.ci_upper[1, 1, 3]), digits=4))
 ```
 
 ```julia
@@ -184,7 +186,7 @@ plot_result(result_sign)
 <iframe src="../assets/plots/irf_sign.html" width="100%" height="500" frameborder="0" style="border:1px solid #ddd;border-radius:4px;"></iframe>
 ```
 
-The single accepted rotation puts the impact response of industrial production at ``-0.0069`` log points against a ``0.0105`` percentage-point rise in the funds rate. That draw is one admissible point in the identified set, not an estimate: a different seed returns a different admissible rotation. Inference requires the whole set.
+The reported path is the pointwise median of the identified set (`ci_type = :identified_set`): industrial production falls ``0.0037`` log points on impact against a ``0.0346`` percentage-point rise in the funds rate, with a 95% identified-set band of ``[-0.0066, -0.0003]``. `max_draws` defaults to 1000. The pointwise median is a set summary, not an IRF (Fry & Pagan 2011).
 
 With `store_all=true`, `identify_sign` returns a `SignIdentifiedSet` holding every accepted rotation and its IRFs:
 
@@ -498,7 +500,7 @@ With the interest rate ordered last, the Cholesky scheme forces the contemporane
 
 2. **Sign restrictions are set-identified.** The median response across admissible rotations is a summary statistic, not a point estimate. Report the full credible set to avoid overstating precision (Uhlig 2005).
 
-3. **`irf(m, H; method=:sign)` draws only 100 candidates.** The keyword route returns the first admissible rotation and does not expose `max_draws`. With tight restrictions it raises an `IdentificationError`; switch to `identify_sign` and raise `max_draws`.
+3. **The pointwise median is not an IRF.** `irf(; method=:sign)` reports the pointwise median of the identified set; that path need not correspond to any single admissible rotation (Fry & Pagan 2011). SID-17 will add `median_target`. With tight restrictions that exhaust `max_draws` (default 1000), raise `max_draws` on `irf` itself.
 
 4. **Low acceptance rates.** If `identify_sign` or `identify_arias` produces acceptance rates below 1%, the restrictions may be nearly contradictory. Relax the restrictions or increase `max_draws`.
 
@@ -528,6 +530,9 @@ With the interest rate ordered last, the Cholesky scheme forces the contemporane
 
 - Christiano, L. J., Eichenbaum, M., & Evans, C. L. (1999). Monetary Policy Shocks: What Have We Learned and to What End?
   In *Handbook of Macroeconomics*, Vol. 1A, 65--148. [DOI](https://doi.org/10.1016/S1574-0048(99)01005-8)
+
+- Fry, R., & Pagan, A. (2011). Sign Restrictions in Structural Vector Autoregressions: A Critical Review.
+  *Journal of Economic Literature*, 49(4), 938--960. [DOI](https://doi.org/10.1257/jel.49.4.938)
 
 - Kilian, L., & Lütkepohl, H. (2017). *Structural Vector Autoregressive Analysis*.
   Cambridge University Press. [DOI](https://doi.org/10.1017/9781108164818)
