@@ -1681,6 +1681,7 @@ end
         @test_throws ArgumentError fevd_share_restriction(1, 1; lower=0.0, upper=1.5)
         @test_throws ArgumentError SVARRestrictions(2; zeros=[zero_restriction(3, 1; horizon=:long_run)])
         @test_throws ArgumentError SVARRestrictions(2; signs=[elasticity_bound(1, 2, 1; lower=2.0, upper=1.0)])
+        @test_throws ArgumentError aplus_zero_restriction(2, 1; lag=0)
     end
 
     @testset "sign_check matches _check_sign_restrictions for pure signs" begin
@@ -1700,6 +1701,8 @@ end
         irf[1, 1, 1] = -0.1
         @test chk(irf) == MacroEconometricModels._check_sign_restrictions(irf, r)
         @test !chk(irf)
+        @test_throws ArgumentError sign_check(
+            SVARRestrictions(2; signs=[a0_sign_restriction(1, 1, :positive)]))
     end
 
     @testset "Blanchard-Quah as n(n-1)/2 long-run zeros + impact signs" begin

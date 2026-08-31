@@ -212,7 +212,7 @@ end
 function _validate_restriction(r::AplusZeroRestriction, n_vars::Int)
     _check_index(r.variable, n_vars, "variable")
     _check_index(r.shock, n_vars, "shock")
-    r.lag >= 0 || throw(ArgumentError("A+ lag must be ≥ 0"))
+    _check_aplus_lag_equation(r.lag, r.variable)
 end
 function _validate_restriction(r::SignRestriction, n_vars::Int)
     _check_index(r.variable, n_vars, "variable")
@@ -228,7 +228,7 @@ end
 function _validate_restriction(r::AplusSignRestriction, n_vars::Int)
     _check_index(r.variable, n_vars, "variable")
     _check_index(r.shock, n_vars, "shock")
-    r.lag >= 0 || throw(ArgumentError("A+ lag must be ≥ 0"))
+    _check_aplus_lag_equation(r.lag, r.variable)
     r.sign in (-1, 1) || throw(ArgumentError("sign must be -1 or +1"))
 end
 function _validate_restriction(r::ElasticityBound, n_vars::Int)
@@ -278,6 +278,15 @@ _restriction_horizon(r::MagnitudeBound) = r.horizon
 _restriction_horizon(r::FEVDShareRestriction) = r.horizon
 _restriction_horizon(r::CumulativeRestriction) = last(r.horizons)
 _restriction_horizon(::AbstractSVARRestriction) = 0
+
+function _check_aplus_lag_equation(lag::Int, equation::Int)
+    lag >= 0 || throw(ArgumentError("A+ lag must be ≥ 0"))
+    if lag == 0 && equation != 1
+        throw(ArgumentError(
+            "A+ intercept (lag=0) is the first row of B; equation must be 1, got $equation"))
+    end
+    nothing
+end
 
 _aplus_row(lag::Int, variable::Int, n::Int) = lag <= 0 ? 1 : 1 + (lag - 1) * n + variable
 _aplus_row(r::AplusZeroRestriction, n::Int) = _aplus_row(r.lag, r.variable, n)
@@ -484,10 +493,19 @@ _check_rejections(r::SVARRestrictions, irf, A0, Aplus, fevd) =
     sign_check(r::SVARRestrictions) -> Function
 
 Return `irf -> Bool` for `identify_sign`, SDFM, and counterfactuals. Computes FEVD
-only when an FEVD-share restriction is present. A0/A+ sign checks need structural
-matrices and are evaluated in `identify_arias`.
+only when an FEVD-share restriction is present.
+
+Throws `ArgumentError` if `r` contains [`A0SignRestriction`](@ref) or
+[`AplusSignRestriction`](@ref): those `check` methods need the structural
+matrices `A0`/`A₊`, which this IRF-only closure does not have. Use
+[`identify_arias`](@ref) instead.
 """
 function sign_check(r::SVARRestrictions)
+    if any(s -> s isa Union{A0SignRestriction, AplusSignRestriction}, r.signs)
+        throw(ArgumentError(
+            "sign_check cannot evaluate A0/A+ sign restrictions (needs A0/A₊); " *
+            "use identify_arias"))
+    end
     has_fevd = any(s -> s isa FEVDShareRestriction, r.signs)
     function (irf)
         fevd = nothing
@@ -1281,15 +1299,25 @@ as [`a0_zero_restriction`](@ref) (`A_0 = L^{-T} Q`, not ``A_0^{-1} = L Q``).
 a0_sign_restriction(equation::Int, shock::Int, sign::Symbol) =
     A0SignRestriction(equation, shock, _parse_sign(sign))
 
-"""Zero restriction on the `lag`-th block of ``A_+`` (`lag=0` is the intercept)."""
+"""
+    aplus_zero_restriction(equation, shock; lag=1)
+
+Zero restriction on the `lag`-th block of ``A_+ = B A_0``. `lag=0` is the
+intercept row of `B` (a single row); `equation` must be 1.
+"""
 function aplus_zero_restriction(equation::Int, shock::Int; lag::Int=1)
-    lag >= 0 || throw(ArgumentError("A+ lag must be ≥ 0"))
+    _check_aplus_lag_equation(lag, equation)
     AplusZeroRestriction(equation, shock, lag)
 end
 
-"""Sign restriction on the `lag`-th block of ``A_+``."""
+"""
+    aplus_sign_restriction(equation, shock, sign; lag=1)
+
+Sign restriction on the `lag`-th block of ``A_+``. `lag=0` is the intercept
+row of `B`; `equation` must be 1.
+"""
 function aplus_sign_restriction(equation::Int, shock::Int, sign::Symbol; lag::Int=1)
-    lag >= 0 || throw(ArgumentError("A+ lag must be ≥ 0"))
+    _check_aplus_lag_equation(lag, equation)
     AplusSignRestriction(equation, shock, lag, _parse_sign(sign))
 end
 
