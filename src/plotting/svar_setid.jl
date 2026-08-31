@@ -234,8 +234,9 @@ end
 """
     plot_result(r::RobustBayesResult; var=nothing, shock=nothing, ncols=0, title="", save_path=nothing)
 
-Giacomini–Kitagawa robust band (outer) versus the Haar single-prior band (inner),
-with the midpoint of the set of posterior means as the central line.
+Giacomini–Kitagawa robust band versus the Haar single-prior comparison band
+(not necessarily nested inside the robust region), with the midpoint of the
+set of posterior means as the central line.
 """
 function plot_result(r::RobustBayesResult{T};
                      var::Union{Int,String,Nothing}=nothing,
