@@ -335,7 +335,7 @@ end
         signs = [sign_restriction(1, 2, :positive)]
         restrictions = SVARRestrictions(n; zeros=zeros_r, signs=signs)
 
-        @test_throws ErrorException identify_uhlig(model, restrictions, 5)
+        @test_throws IdentificationError identify_uhlig(model, restrictions, 5)
     end
 
     # ==========================================================================
@@ -731,6 +731,32 @@ end
             signs=[sign_restriction(1, 2, :positive)])
         @test check_identification(r, n).status === :under
         @test_throws IdentificationError identify_uhlig(m, r, 4; n_starts=1, n_refine=1)
+    end
+
+    @testset "extra independent zeros → :over IdentificationError" begin
+        m2 = estimate_var(randn(80, 2), 1)
+        r = SVARRestrictions(2;
+            zeros=[zero_restriction(1, 1), zero_restriction(2, 1)],
+            signs=[sign_restriction(1, 2, :positive)])
+        @test check_identification(r, 2).status === :over
+        @test_throws IdentificationError identify_uhlig(m2, r, 4; n_starts=1, n_refine=1)
+    end
+
+    @testset "report uses stored rank status, not order-only checker" begin
+        r = SVARRestrictions(n; zeros=[
+            zero_restriction(2, 1),
+            zero_restriction(2, 1),
+            zero_restriction(3, 2),
+        ], signs=[sign_restriction(1, 1, :positive)])
+        @test check_identification(r, n).status === :exact
+        st = check_identification(r, m; n_points=8, rng=MersenneTwister(7531))
+        @test st.status === :set
+        uh = UhligSVARResult{Float64}(Matrix{Float64}(I, n, n), randn(4, n, n), -1.0,
+                                      zeros(n), r, true, ["v$i" for i in 1:n], st)
+        @test uh.id_status.status === :set
+        shown = sprint(show, uh)
+        @test occursin("set", lowercase(shown))
+        @test occursin("point", lowercase(shown))
     end
 end
 

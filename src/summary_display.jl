@@ -913,8 +913,7 @@ function Base.show(io::IO, r::UhligSVARResult)
          "Penalty" => _fmt(r.penalty; digits=4),
          "Converged" => (r.converged ? "Yes" : "No")])
     _show_note(io, "Lower penalty is better.")
-    id = check_identification(r.restrictions, n)
-    if id.status === :set
+    if r.id_status.status === :set
         _show_note(io, "Note: sign restrictions identify a set; the reported Q is one point in that set (Uhlig penalty minimizer).")
     end
 

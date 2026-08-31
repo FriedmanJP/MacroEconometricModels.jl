@@ -34,6 +34,8 @@ Result from Mountford-Uhlig (2009) penalty function identification.
 - `shock_penalties::Vector{T}`: Per-shock penalty values
 - `restrictions::SVARRestrictions`: The imposed restrictions
 - `converged::Bool`: Whether all sign restrictions are satisfied
+- `varnames::Vector{String}`: Variable names
+- `id_status::IdentificationStatus`: RWZ rank/order diagnosis used at identification
 """
 struct UhligSVARResult{T<:AbstractFloat}
     Q::Matrix{T}
@@ -43,14 +45,22 @@ struct UhligSVARResult{T<:AbstractFloat}
     restrictions::SVARRestrictions
     converged::Bool
     varnames::Vector{String}
+    id_status::IdentificationStatus
 end
 
-# Back-compatible arity without varnames
+# Back-compatible arity without varnames / id_status
 function UhligSVARResult{T}(Q, irf, penalty, shock_penalties, restrictions,
                             converged) where {T<:AbstractFloat}
     nv = restrictions.n_vars
     UhligSVARResult{T}(Q, irf, penalty, shock_penalties, restrictions, converged,
                        ["var$i" for i in 1:nv])
+end
+
+function UhligSVARResult{T}(Q, irf, penalty, shock_penalties, restrictions,
+                            converged, varnames) where {T<:AbstractFloat}
+    n = restrictions.n_vars
+    UhligSVARResult{T}(Q, irf, penalty, shock_penalties, restrictions, converged,
+                       varnames, check_identification(restrictions, n))
 end
 
 # =============================================================================
@@ -109,8 +119,9 @@ function _uhlig_build_q_column(theta_j::AbstractVector{T}, j::Int, Q_prev::Matri
     n_constraints = length(constraint_rows)
     free_dim = n - n_constraints
 
-    # Over-constrained check
-    free_dim <= 0 && error("Zero restrictions over-constrain shock $j (n=$n, constraints=$n_constraints)")
+    # Over-constrained check (count, then SVD null space)
+    free_dim <= 0 && throw(IdentificationError(
+        "Zero restrictions over-constrain shock $j (n=$n, constraints=$n_constraints)"))
 
     # Find null space basis
     if n_constraints == 0
@@ -123,6 +134,8 @@ function _uhlig_build_q_column(theta_j::AbstractVector{T}, j::Int, Q_prev::Matri
         tol = max(size(C)...) * eps(T) * (isempty(svd_result.S) ? one(T) : maximum(svd_result.S))
         rank_C = sum(svd_result.S .> tol)
         N = V[:, (rank_C + 1):n]
+        size(N, 2) == 0 && throw(IdentificationError(
+            "Zero restrictions over-constrain shock $j (empty null space)"))
     end
 
     # Convert spherical coordinates to unit vector in free_dim space
@@ -154,7 +167,7 @@ function _uhlig_build_Q(theta_all::AbstractVector{T}, restrictions::SVARRestrict
         n_zeros_j = count(zr -> zr.shock == j, restrictions.zeros)
         n_constraints = (j - 1) + n_zeros_j
         free_dim = n - n_constraints
-        free_dim <= 0 && error("Zero restrictions over-constrain shock $j")
+        free_dim <= 0 && throw(IdentificationError("Zero restrictions over-constrain shock $j"))
 
         n_angles = max(free_dim - 1, 0)
         theta_j = theta_all[offset+1:offset+n_angles]
@@ -174,7 +187,7 @@ function _uhlig_n_params(n::Int, restrictions::SVARRestrictions)
     for j in 1:n
         n_zeros_j = count(zr -> zr.shock == j, restrictions.zeros)
         free_dim = n - (j - 1) - n_zeros_j
-        free_dim <= 0 && error("Zero restrictions over-constrain shock $j")
+        free_dim <= 0 && throw(IdentificationError("Zero restrictions over-constrain shock $j"))
         total += max(free_dim - 1, 0)
     end
     total
@@ -290,10 +303,11 @@ end
 
 Identify SVAR using Mountford & Uhlig (2009) penalty function approach.
 
-Calls [`check_identification`](@ref) first; `:under` throws
-[`IdentificationError`](@ref). A `:set` pattern still returns a point (the
-penalty minimizer); [`report`](@ref) notes that the rotation is one point in
-the identified set.
+Calls [`check_identification`](@ref) first; `:under` and non-drawable `:over`
+throw [`IdentificationError`](@ref). A `:set` pattern still returns a point
+(the penalty minimizer); [`report`](@ref) notes that the rotation is one
+point in the identified set. The RWZ status is stored on the result so
+`report` does not re-run the order-only checker.
 
 Uses Nelder-Mead optimization over spherical coordinates to find the rotation
 matrix ``Q`` that best satisfies sign restrictions, with zero restrictions
@@ -353,7 +367,7 @@ function identify_uhlig(model::VARModel{T}, restrictions::SVARRestrictions, hori
     any(s -> s isa SignRestriction, restrictions.signs) || throw(ArgumentError(
         "identify_uhlig requires at least one sign restriction"))
     _uhlig_assert_sign_only_rejections(restrictions)
-    _assert_rwz_identified(restrictions, model; rng=rng)
+    id_status = _assert_rwz_identified(restrictions, model; rng=rng)
 
     # Determine required horizon for restrictions
     max_h = max(horizon,
@@ -459,5 +473,5 @@ function identify_uhlig(model::VARModel{T}, restrictions::SVARRestrictions, hori
                                              penalty_weight=pw)
 
     UhligSVARResult{T}(Q, irf, best_val, shock_penalties, restrictions, converged,
-                       copy(model.varnames))
+                       copy(model.varnames), id_status)
 end

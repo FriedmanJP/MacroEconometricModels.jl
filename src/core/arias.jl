@@ -536,7 +536,7 @@ function _draw_null_space_vector(constraints::Vector{Vector{T}}, n::Int; rng::Ab
     tol = max(size(F)...) * eps(T) * (isempty(svd_result.S) ? one(T) : maximum(svd_result.S))
     rank_F = sum(svd_result.S .> tol)
     null_dim = n - rank_F
-    null_dim <= 0 && error("Zero restrictions over-constrain shock")
+    null_dim <= 0 && throw(IdentificationError("Zero restrictions over-constrain shock"))
 
     N = V[:, (rank_F + 1):n]
     z = randn(rng, T, null_dim)
@@ -827,7 +827,10 @@ method checks the order condition only, treating the zeros as independent.
 
 Sign (rejection) restrictions do not enter the rank: a shortfall of zeros with
 a drawable null space and at least one sign is classified `:set`. `:under`
-means the equalities cannot identify the rotation.
+means the equalities cannot identify the rotation. `:over` means some shock
+has more independent zeros than the null space admits; `identify_arias` and
+`identify_uhlig` throw [`IdentificationError`](@ref) for both `:under` and
+`:over`.
 
 # Returns
 [`IdentificationStatus`](@ref) with `status ∈ (:exact, :over, :under, :set)`.
@@ -877,13 +880,15 @@ end
 
 function _assert_rwz_identified(restrictions::SVARRestrictions, model::VARModel;
                                 rng::AbstractRNG=Random.default_rng())
-    st = check_identification(restrictions, model; rng=rng)
-    if st.status === :under
+    # Copy so generic (A₀, A₊) probes do not advance the caller's Q-draw stream.
+    st = check_identification(restrictions, model; rng=copy(rng))
+    if st.status === :under || st.status === :over
         n = nvars(model)
         needed = [n - j for j in 1:n]
+        kind = st.status === :over ? "overidentified" : "underidentified"
         throw(IdentificationError(
-            "SVAR is underidentified by the RWZ rank/order condition " *
-            "(status=:under; ranks=$(st.ranks), orders=$(st.orders), " *
+            "SVAR is $kind by the RWZ rank/order condition " *
+            "(status=:$(st.status); ranks=$(st.ranks), orders=$(st.orders), " *
             "need rank(M_j)=$needed)."))
     end
     st
@@ -978,7 +983,7 @@ function _spheres_to_Q(w::AbstractVector{T}, setup::_AriasSVARSetup, restriction
     for j in 1:n
         s_j = setup.sphere_dims[j]
         if s_j <= 0
-            error("Zero restrictions over-constrain shock $j")
+            throw(IdentificationError("Zero restrictions over-constrain shock $j"))
         end
 
         w_j = w[offset+1:offset+s_j]
@@ -1167,8 +1172,9 @@ Identify SVAR using Arias et al. (2018) with zero and sign restrictions.
 Uses importance sampling with draw-dependent weights (Proposition 4) for zero+sign restriction
 combinations. For pure sign restrictions, draws uniformly from O(n) with unit weights.
 
-Calls [`check_identification`](@ref) first. An `:under` RWZ rank/order diagnosis
-throws [`IdentificationError`](@ref). Sign-only patterns are `:set` and sampled as usual.
+Calls [`check_identification`](@ref) first. An `:under` or non-drawable `:over`
+RWZ rank/order diagnosis throws [`IdentificationError`](@ref). Sign-only
+patterns are `:set` and sampled as usual.
 
 The result reports Kish's **effective sample size** of those weights (`ess`,
 `ess_fraction`). Uneven weights mean the weighted IRF summaries rest on fewer
@@ -1190,10 +1196,11 @@ function identify_arias(model::VARModel{T}, restrictions::SVARRestrictions, hori
                         compute_weights::Bool=true,
                         normalize_weights::Bool=true,
                         setup::Union{Nothing,_AriasSVARSetup}=nothing,
-                        rng::AbstractRNG=Random.default_rng()) where {T<:AbstractFloat}
+                        rng::AbstractRNG=Random.default_rng(),
+                        check_id::Bool=true) where {T<:AbstractFloat}
     n = nvars(model)
     @assert restrictions.n_vars == n "Restriction dimension must match model"
-    _assert_rwz_identified(restrictions, model; rng=rng)
+    check_id && _assert_rwz_identified(restrictions, model; rng=rng)
 
     max_h = max(horizon,
         isempty(restrictions.zeros) ? 0 : maximum(_restriction_horizon(zr) for zr in restrictions.zeros) + 1,
@@ -1289,6 +1296,7 @@ end
 Apply Arias identification to each posterior draw.
 
 Creates the `_AriasSVARSetup` once (W matrices fixed across all posterior draws) for consistency.
+The RWZ restriction-pattern check also runs once on the first posterior draw.
 
 Importance weights are pooled across posterior draws on the **raw volume-element
 scale** and normalized once at the end. Each per-draw call accepts a single
@@ -1320,6 +1328,12 @@ function identify_arias_bayesian(post::BVARPosterior, restrictions::SVARRestrict
     has_zeros = !isempty(restrictions.zeros)
     setup = has_zeros ? _AriasSVARSetup(restrictions, n, T; rng=rng) : nothing
 
+    # Restriction-pattern diagnosis is a property of the zeros, not of each
+    # posterior reduced form. Probe once on the first draw; inner identify_arias
+    # calls skip the generic-rank RNG consumption.
+    n_samples >= 1 && _assert_rwz_identified(restrictions,
+        parameters_to_model(b_vecs[1, :], sigmas[1, :], p, n, use_data); rng=rng)
+
     for s in 1:n_samples
         m = parameters_to_model(b_vecs[s,:], sigmas[s,:], p, n, use_data)
         try
@@ -1329,7 +1343,7 @@ function identify_arias_bayesian(post::BVARPosterior, restrictions::SVARRestrict
             # below, across all posterior draws on the common volume-element scale.
             result = identify_arias(m, restrictions, horizon;
                 n_draws=1, n_rotations=n_rotations, compute_weights=compute_weights,
-                normalize_weights=false, setup=setup, rng=rng)
+                normalize_weights=false, setup=setup, rng=rng, check_id=false)
             n_degenerate += result.n_degenerate_weights
             for (i, w) in enumerate(result.weights)
                 push!(all_irfs, result.irf_draws[i, :, :, :])

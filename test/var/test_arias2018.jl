@@ -1944,6 +1944,43 @@ end
         @test occursin("set", shown)
         @test_throws ArgumentError check_identification(r, 3)
     end
+
+    @testset "independent extra zeros → :over and IdentificationError" begin
+        n = 2
+        model = estimate_var(randn(120, n), 1)
+        r = SVARRestrictions(n; zeros=[zero_restriction(1, 1), zero_restriction(2, 1)])
+        st = check_identification(r, model; n_points=6, rng=MersenneTwister(7528))
+        @test st.status === :over
+        @test st.n_overidentifying >= 1
+        @test check_identification(r, n).status === :over
+        err = try
+            identify_arias(model, r, 4; n_draws=1, n_rotations=5, rng=MersenneTwister(7529))
+            nothing
+        catch e
+            e
+        end
+        @test err isa IdentificationError
+        @test occursin("over", lowercase(err.msg))
+    end
+
+    @testset "RWZ probe does not consume caller rng" begin
+        n = 2
+        model = estimate_var(randn(80, n), 1)
+        r = SVARRestrictions(n; signs=[sign_restriction(1, 1, :positive)])
+        rng_a = MersenneTwister(7530)
+        MacroEconometricModels._assert_rwz_identified(r, model; rng=rng_a)
+        x_a = rand(rng_a)
+        rng_b = MersenneTwister(7530)
+        x_b = rand(rng_b)
+        @test x_a == x_b
+        rng_c = MersenneTwister(7532)
+        identify_arias(model, r, 3; n_draws=1, n_rotations=5, rng=rng_c)
+        y_c = rand(rng_c)
+        rng_d = MersenneTwister(7532)
+        identify_arias(model, r, 3; n_draws=1, n_rotations=5, rng=rng_d, check_id=false)
+        y_d = rand(rng_d)
+        @test y_c == y_d
+    end
 end
 
 _tprint("Arias et al. (2018) tests completed.")

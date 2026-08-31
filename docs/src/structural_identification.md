@@ -335,7 +335,7 @@ id_typed = identify_sign(model, 20, sign_check(r_h); max_draws=2000, store_all=t
 `horizons=0:2` expands each sign to three restrictions (impact through two months). `sign_check(r_h)` is the predicate `identify_sign` consumes; the same container feeds `identify_arias`.
 
 !!! warning "Zero restrictions must go on early-ordered shocks"
-    Column ``j`` of ``Q`` is drawn from the null space of ``j-1`` orthogonality constraints plus its own zero restrictions, so shock ``j`` admits at most ``n - j`` zeros. Loading a zero restriction onto the last shock of an ``n``-variable system over-constrains the draw and raises an error. Order the restricted shock first.
+    Column ``j`` of ``Q`` is drawn from the null space of ``j-1`` orthogonality constraints plus its own zero restrictions, so shock ``j`` admits at most ``n - j`` zeros. Loading a zero restriction onto the last shock of an ``n``-variable system over-constrains the draw and raises `IdentificationError`. Order the restricted shock first.
 
 ```@example sid
 restrictions = SVARRestrictions(3;
@@ -391,7 +391,7 @@ where:
 - ``n - j`` is the number of free directions remaining after ``j-1`` orthogonality constraints
 - the **order condition** ``q_j \ge n - j`` is necessary but not sufficient: linearly dependent rows (a repeated impact zero, or an impact zero stacked with a long-run zero when ``C(1) = I``) drop the rank below the count
 
-`check_identification` returns an `IdentificationStatus` with `status ∈ (:exact, :over, :under, :set)`. `:under` throws `IdentificationError` from `identify_arias` and `identify_uhlig`. Sign restrictions do not enter the rank; a drawable shortfall of zeros with at least one sign is `:set`. Uhlig still returns a point from that set, and `report` says so.
+`check_identification` returns an `IdentificationStatus` with `status ∈ (:exact, :over, :under, :set)`. `:under` and `:over` throw `IdentificationError` from `identify_arias` and `identify_uhlig`. Sign restrictions do not enter the rank; a drawable shortfall of zeros with at least one sign is `:set`. Uhlig still returns a point from that set, stores the RWZ status on the result, and `report` says so.
 
 ```@example sid
 rec = SVARRestrictions(3; zeros=[zero_restriction(2, 1), zero_restriction(3, 1),
@@ -561,7 +561,7 @@ With the interest rate ordered last, the Cholesky scheme forces the contemporane
 
 5. **Reading `identify_arias` draw counts at face value.** The acceptance rate says how many draws survived the restrictions; `ess_fraction` says how many of them actually count. With zero restrictions the two diverge --- check `ess_fraction` before trusting the width of a credible band.
 
-6. **Zero restrictions on late-ordered shocks over-constrain the draw.** Shock ``j`` admits at most ``n - j`` zero restrictions in both `identify_arias` and `identify_uhlig`. Reorder the system so the heavily restricted shock comes first. `check_identification` reports `:under` when the RWZ rank or order condition fails, and both routines throw `IdentificationError` before sampling.
+6. **Zero restrictions on late-ordered shocks over-constrain the draw.** Shock ``j`` admits at most ``n - j`` zero restrictions in both `identify_arias` and `identify_uhlig`. Reorder the system so the heavily restricted shock comes first. `check_identification` reports `:under` when the RWZ rank or order condition fails and `:over` when extra independent zeros empty the null space; both routines throw `IdentificationError` before sampling.
 
 7. **Uhlig may not converge.** If `result.converged == false`, increase `n_starts` or relax the sign restrictions. The optimizer found a local minimum where some sign conditions are violated.
 
