@@ -314,7 +314,7 @@ The algorithm constructs ``Q`` column by column via QR decomposition in the null
 | Long-run zero | `zero_restriction(var, shock; horizon=:long_run)` | Linear: ``e_v' C(1) L q_s = 0`` with ``C(1)=(I-\sum A_i)^{-1}`` |
 | Sign | `sign_restriction(var, shock, :positive; horizon=0)` | Rejection: response has the required sign at `horizon` |
 | Sign (range) | `sign_restriction(var, shock, :positive; horizons=0:K)` | Expands to ``K+1`` sign restrictions |
-| ``A_0`` / ``A_+`` zero | `a0_zero_restriction(eq, shock)`, `aplus_zero_restriction(eq, shock; lag=1)` | Linear in ``Q`` given ``(B,\Sigma)`` (Arias, Caldara & Rubio-Ramírez 2019) |
+| ``A_0`` / ``A_+`` zero | `a0_zero_restriction(eq, shock)`, `aplus_zero_restriction(eq, shock; lag=1)` | Linear in ``Q``: zeros ``A_0[\mathrm{eq},\mathrm{shock}]`` in the RWZ form ``A_0 = L^{-T} Q`` (``y'A_0``), not the column-convention impact ``(LQ)[\mathrm{eq},\mathrm{shock}]`` (Arias, Caldara & Rubio-Ramírez 2019) |
 | Elasticity | `elasticity_bound(num, den, shock; lower, upper)` | Rejection: ``\Theta_{\mathrm{num}}/\Theta_{\mathrm{den}}`` in ``[\mathrm{lower},\mathrm{upper}]`` (Kilian & Murphy 2012) |
 | Magnitude | `magnitude_bound(var, shock; lower, upper)` | Rejection: IRF entry in a closed interval |
 | FEVD share | `fevd_share_restriction(var, shock; horizon, lower, upper)` | Rejection on the shock's forecast-error variance share |
@@ -421,7 +421,7 @@ The same restriction object drives historical decompositions: `historical_decomp
 
 ## Mountford-Uhlig (2009) Penalty Function
 
-When a single best rotation is preferred over a distribution of draws, Mountford & Uhlig (2009) provide a **penalty function** approach. Zero restrictions are enforced exactly via null-space projection; sign restrictions are encouraged through a penalty minimized with two-phase Nelder-Mead optimization.
+When a single best rotation is preferred over a distribution of draws, Mountford & Uhlig (2009) provide a **penalty function** approach. Zero restrictions of every linear type (finite IRF, long-run, ``A_0``, ``A_+``) are enforced exactly via null-space projection; `SignRestriction`s are encouraged through a penalty minimized with two-phase Nelder-Mead. Elasticity, magnitude, FEVD, cumulative, and ``A_0``/``A_+`` *sign* restrictions are not in the penalty --- `identify_uhlig` throws `ArgumentError` on those mixed containers; use `identify_arias`.
 
 ```math
 \text{penalty} = -\sum_{s \in \mathcal{S}} w_s \cdot \text{sign}_s \cdot \frac{\text{IRF}_s}{\sigma_s}
@@ -529,7 +529,9 @@ With the interest rate ordered last, the Cholesky scheme forces the contemporane
 
 7. **Uhlig may not converge.** If `result.converged == false`, increase `n_starts` or relax the sign restrictions. The optimizer found a local minimum where some sign conditions are violated.
 
-8. **Long-run identification requires stationarity.** If the VAR has a near-unit root, ``(I - A(1))`` is nearly singular and the long-run matrix ``C(1)`` explodes; `identify_long_run` warns when the condition number crosses ``1/\sqrt{\varepsilon}``. Use a VECM specification for cointegrated systems.
+8. **Uhlig only penalizes `SignRestriction`.** Elasticity, magnitude, FEVD, cumulative, and ``A_0``/``A_+`` signs throw `ArgumentError` from `identify_uhlig`; use `identify_arias`. ``A_0``/``A_+`` and long-run *zeros* remain null-space rows. `A0[eq, shock]` is the RWZ ``y'A_0`` entry ``(L^{-T} Q)[\mathrm{eq},\mathrm{shock}]``, not the impact ``(LQ)[\mathrm{eq},\mathrm{shock}]``.
+
+9. **Long-run identification requires stationarity.** If the VAR has a near-unit root, ``(I - A(1))`` is nearly singular and the long-run matrix ``C(1)`` explodes; `identify_long_run` warns when the condition number crosses ``1/\sqrt{\varepsilon}``. Use a VECM specification for cointegrated systems.
 
 ---
 

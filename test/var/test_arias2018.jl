@@ -1786,6 +1786,8 @@ end
         for Q in a0res.Q_draws
             A0, _ = MacroEconometricModels._rf_to_struct(m.B, L, Q)
             @test abs(A0[2, 1]) < 1e-8
+            # RWZ y'A0 form A0 = L^{-T} Q, not the column-convention impact LQ
+            @test A0 ≈ Matrix(L') \ Q atol=1e-10
         end
 
         irf = zeros(5, 2, 2)

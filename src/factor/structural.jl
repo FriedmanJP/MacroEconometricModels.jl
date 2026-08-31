@@ -188,7 +188,7 @@ legacy two-sided GDFM-factor VAR.
 - `order::Union{Nothing,Vector{Int}}=nothing`: Observable indices for Cholesky (`:fglr`; default `1:q`)
 - `units::Symbol=:raw`: `:raw` (original units) or `:standardized`
 - `sign_check::Union{Nothing,Function}=nothing`: Predicate on the IRF array (`H×N×q` panel under `restriction_space=:panel`, `H×r×q` factors under `:factor`)
-- `sign_restrictions=nothing`: Declarative restrictions — `SVARRestrictions` or a vector of `(variable, shock, horizons, sign)` tuples (`variable` is a name or index; `sign` is `:positive`/`:negative`)
+- `sign_restrictions=nothing`: Declarative restrictions — `SVARRestrictions` or a vector of `(variable, shock, horizons, sign)` tuples (`variable` is a name or index; `sign` is `:positive`/`:negative`). `SVARRestrictions` keep only `SignRestriction`s and treat `horizon` as 0-based (impact = 0 → IRF row 1); tuple `horizons` are 1-based IRF indices.
 - `restriction_space::Symbol=:panel`: `:panel` (observables) or `:factor` (static / GDFM factors)
 - `store_all::Bool=false`: Keep the full accepted set as `identified_set` (`SignIdentifiedSet`)
 - `max_draws::Int=1000`: Maximum draws for sign restriction search
@@ -336,7 +336,7 @@ Estimate a Structural DFM from an existing GDFM estimation.
 - `method::Symbol=:fglr`: `:fglr` or `:gdfm_var`
 - `order`: Observable indices for Cholesky under `:fglr`
 - `sign_check::Union{Nothing,Function}=nothing`: Predicate on the IRF array (`H×N×q` under `:panel`, `H×r×q` under `:factor`)
-- `sign_restrictions=nothing`: Declarative restrictions (`SVARRestrictions` or `(variable, shock, horizons, sign)` tuples)
+- `sign_restrictions=nothing`: Declarative restrictions (`SVARRestrictions` or `(variable, shock, horizons, sign)` tuples). `SVARRestrictions` keep only `SignRestriction`s with 0-based `horizon`; tuples use 1-based IRF indices.
 - `restriction_space::Symbol=:panel`: `:panel` or `:factor`
 - `store_all::Bool=false`: Keep the accepted set as `identified_set`
 - `max_draws::Int=1000`: Maximum draws for sign restriction search
@@ -711,7 +711,12 @@ function _sdfm_resolve_var(var, names::Vector{String}, n::Int)
     i, s
 end
 
-"""Parse `SVARRestrictions` or `(variable, shock, horizons, sign)` tuples into rules."""
+"""Parse `SVARRestrictions` or `(variable, shock, horizons, sign)` tuples into rules.
+
+`SignRestriction.horizon` is 0-based (impact = 0 → IRF row 1), matching the rest
+of the package. Tuple `horizons` remain 1-based IRF indices. Non-sign entries of
+an `SVARRestrictions` container are skipped (`:arias`/`:uhlig` enforce them).
+"""
 function _sdfm_parse_sign_rules(spec, names::Vector{String}, n::Int, q::Int, H::Int)
     spec === nothing && return NamedTuple{(:variable, :shock, :horizons, :sign, :name),
         Tuple{Int,Int,UnitRange{Int},Int,String}}[]
@@ -719,13 +724,15 @@ function _sdfm_parse_sign_rules(spec, names::Vector{String}, n::Int, q::Int, H::
         Tuple{Int,Int,UnitRange{Int},Int,String}}[]
     if spec isa SVARRestrictions
         for z in spec.signs
-            hz = z.horizon
-            (1 <= hz <= H) || throw(ArgumentError("restriction horizon $hz not in 1:$H"))
+            z isa SignRestriction || continue
+            h_idx = z.horizon + 1
+            (1 <= h_idx <= H) || throw(ArgumentError(
+                "restriction horizon $(z.horizon) (0-based) maps to IRF row $h_idx, not in 1:$H"))
             (1 <= z.variable <= n) || throw(ArgumentError(
                 "restriction variable $(z.variable) not in 1:$n"))
             (1 <= z.shock <= q) || throw(ArgumentError(
                 "restriction shock $(z.shock) not in 1:$q"))
-            push!(rules, (variable=z.variable, shock=z.shock, horizons=hz:hz,
+            push!(rules, (variable=z.variable, shock=z.shock, horizons=h_idx:h_idx,
                           sign=Int(z.sign), name=names[z.variable]))
         end
         return rules

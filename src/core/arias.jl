@@ -39,7 +39,7 @@ struct LongRunZeroRestriction <: AbstractSVARRestriction
 end
 is_linear_zero(::LongRunZeroRestriction) = true
 
-"""Zero restriction on an entry of ``A_0 = L^{-T} Q`` (Arias, Caldara & Rubio-Ramírez 2019)."""
+"""Zero on ``A_0[\\mathrm{equation},\\mathrm{shock}]`` in the RWZ form ``A_0 = L^{-T} Q`` (``y'A_0``)."""
 struct A0ZeroRestriction <: AbstractSVARRestriction
     variable::Int
     shock::Int
@@ -62,7 +62,7 @@ struct SignRestriction <: AbstractSVARRestriction
     sign::Int  # +1 or -1
 end
 
-"""Sign restriction on an entry of ``A_0``."""
+"""Sign on ``A_0[\\mathrm{equation},\\mathrm{shock}]`` in the RWZ form ``A_0 = L^{-T} Q`` (``y'A_0``)."""
 struct A0SignRestriction <: AbstractSVARRestriction
     variable::Int
     shock::Int
@@ -627,9 +627,13 @@ function _struct_to_rf(A0::Matrix{T}, Aplus::Matrix{T}) where {T}
     (B, Sigma)
 end
 
-"""Reduced-form → structural: (B, L, Q) → (A0, Aplus)."""
+"""Reduced-form → structural: (B, L, Q) → (A0, Aplus).
+
+RWZ row convention ``y_t' A_0``: ``A_0 = L^{-T} Q``. The column-convention
+impact matrix is ``A_0^{-1} = L Q``, the transpose-inverse of this `A0`.
+"""
 function _rf_to_struct(B::Matrix{T}, L::LowerTriangular{T,Matrix{T}}, Q::Matrix{T}) where {T}
-    A0 = Matrix{T}(L') \ Q   # A0 = inv(L') * Q
+    A0 = Matrix{T}(L') \ Q   # A0 = inv(L') * Q  (y'A0, not A0^{-1}=LQ)
     Aplus = B * A0
     (A0, Aplus)
 end
@@ -1253,10 +1257,27 @@ function sign_restriction(variable::Int, shock::Int, sign::Symbol;
     SignRestriction(variable, shock, horizon, s)
 end
 
-"""Zero restriction on ``A_0[equation, shock]``."""
+"""
+    a0_zero_restriction(equation, shock)
+
+Zero restriction on `A0[equation, shock]` in the Rubio-Ramírez–Waggoner–Zha
+row convention ``y_t' A_0 = \\ldots``, where the identified matrix is
+``A_0 = L^{-T} Q``.
+
+`equation` is the row (the variable entering that structural equation) and
+`shock` is the column. This is **not** an entry of the column-convention
+impact matrix ``A_0^{-1} = L Q``: `a0_zero_restriction(i, j)` zeros
+`(L^{-T} Q)[i, j]`, not `(L Q)[i, j]`.
+"""
 a0_zero_restriction(equation::Int, shock::Int) = A0ZeroRestriction(equation, shock)
 
-"""Sign restriction on ``A_0[equation, shock]``."""
+"""
+    a0_sign_restriction(equation, shock, sign)
+
+Sign restriction on `A0[equation, shock]` in the same RWZ ``y'A_0`` convention
+as [`a0_zero_restriction`](@ref) (`A_0 = L^{-T} Q`, not ``A_0^{-1} = L Q``).
+`sign` is `:positive` or `:negative`.
+"""
 a0_sign_restriction(equation::Int, shock::Int, sign::Symbol) =
     A0SignRestriction(equation, shock, _parse_sign(sign))
 

@@ -180,6 +180,16 @@ function _uhlig_n_params(n::Int, restrictions::SVARRestrictions)
     total
 end
 
+"""Uhlig's penalty is defined only for IRF sign restrictions."""
+function _uhlig_assert_sign_only_rejections(restrictions::SVARRestrictions)
+    bad = unique(typeof(s) for s in restrictions.signs if !(s isa SignRestriction))
+    isempty(bad) && return nothing
+    throw(ArgumentError(
+        "identify_uhlig only evaluates SignRestriction; got $(join(string.(bad), ", ")). " *
+        "Use identify_arias for elasticity, magnitude, FEVD, cumulative, and A₀/A₊ sign " *
+        "restrictions. A₀/A₊ and long-run zeros remain valid null-space constraints."))
+end
+
 # =============================================================================
 # Penalty Function
 # =============================================================================
@@ -287,6 +297,12 @@ enforced as hard constraints via null-space projection.
 The penalty is Uhlig (2005): `x = -normalized`, then `x` if satisfied and
 `penalty_weight * x` if violated. Lower `penalty` is better.
 
+Rejection restrictions other than [`SignRestriction`](@ref) are not part of
+the penalty or the `converged` flag; mixed containers throw `ArgumentError`.
+Use [`identify_arias`](@ref) for elasticity, magnitude, FEVD, cumulative, and
+``A_0``/``A_+`` signs. Linear zeros (finite IRF, long-run, ``A_0``, ``A_+``)
+remain null-space constraints.
+
 # Algorithm
 1. Precompute MA coefficients and Cholesky factor ``L``
 2. **Phase 1** (coarse): `n_starts` Nelder-Mead runs from random ``\\theta_0 \\in [0, 2\\pi]``
@@ -331,6 +347,7 @@ function identify_uhlig(model::VARModel{T}, restrictions::SVARRestrictions, hori
     # Need sign restrictions for penalty function
     any(s -> s isa SignRestriction, restrictions.signs) || throw(ArgumentError(
         "identify_uhlig requires at least one sign restriction"))
+    _uhlig_assert_sign_only_rejections(restrictions)
 
     # Determine required horizon for restrictions
     max_h = max(horizon,

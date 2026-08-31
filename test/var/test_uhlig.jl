@@ -664,6 +664,40 @@ end
     @test occursin("lower", lowercase(String(take!(io))))
 end
 
+@testset "SID-14 Uhlig rejects non-sign rejection types" begin
+    Random.seed!(743)
+    m = estimate_var(randn(80, 2), 1)
+    s1 = sign_restriction(1, 1, :positive)
+    mixed = [
+        SVARRestrictions(2; signs=[s1, elasticity_bound(1, 2, 1; lower=0.0, upper=1.0)]),
+        SVARRestrictions(2; signs=[s1, magnitude_bound(1, 1; lower=-1.0, upper=1.0)]),
+        SVARRestrictions(2; signs=[s1, fevd_share_restriction(1, 1; horizon=0, lower=0.2, upper=1.0)]),
+        SVARRestrictions(2; signs=[s1, cumulative_restriction(1, 1, :positive; horizons=0:2)]),
+        SVARRestrictions(2; signs=[s1, a0_sign_restriction(1, 1, :positive)]),
+    ]
+    for r in mixed
+        err = try
+            identify_uhlig(m, r, 4; n_starts=1, n_refine=1)
+            nothing
+        catch e
+            e
+        end
+        @test err isa ArgumentError
+        @test occursin("SignRestriction", sprint(showerror, err))
+    end
+    # Linear A0 zeros still go through the null space
+    r_a0z = SVARRestrictions(2;
+        zeros=[a0_zero_restriction(2, 1)],
+        signs=[sign_restriction(1, 1, :positive)])
+    u = identify_uhlig(m, r_a0z, 4; n_starts=(FAST ? 3 : 8), n_refine=1,
+                       max_iter_coarse=(FAST ? 50 : 100), max_iter_fine=(FAST ? 100 : 200),
+                       rng=MersenneTwister(743))
+    L = MacroEconometricModels.safe_cholesky(m.Sigma)
+    A0, _ = MacroEconometricModels._rf_to_struct(m.B, L, u.Q)
+    @test abs(A0[2, 1]) < 1e-8
+    @test A0 ≈ Matrix(L') \ u.Q atol=1e-10
+end
+
 @testset "SID-19 irf method=:uhlig" begin
     Random.seed!(748)
     m = estimate_var(randn(80, 2), 1)

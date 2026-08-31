@@ -1080,6 +1080,38 @@ using MacroEconometricModels
         @test sdfm_e.max_eigenvalue_modulus >= 1
     end
 
+    @testset "SID-14 SDFM sign parser 0-based horizon and mixed types" begin
+        names = ["x1", "x2", "x3"]
+        r0 = SVARRestrictions(3; signs=[sign_restriction(1, 1, :positive)])
+        rules0 = MacroEconometricModels._sdfm_parse_sign_rules(r0, names, 3, 2, 8)
+        @test length(rules0) == 1
+        @test rules0[1].horizons == 1:1
+        @test rules0[1].variable == 1
+        @test rules0[1].sign == 1
+
+        rmix = SVARRestrictions(3; signs=[
+            sign_restriction(2, 1, :negative; horizon=0),
+            elasticity_bound(1, 2, 1; lower=0.0, upper=2.0),
+            a0_sign_restriction(1, 1, :positive),
+        ])
+        rulesm = MacroEconometricModels._sdfm_parse_sign_rules(rmix, names, 3, 2, 8)
+        @test length(rulesm) == 1
+        @test rulesm[1].variable == 2
+        @test rulesm[1].horizons == 1:1
+        @test rulesm[1].sign == -1
+
+        r2 = SVARRestrictions(3; signs=[sign_restriction(1, 1, :positive; horizon=2)])
+        rules2 = MacroEconometricModels._sdfm_parse_sign_rules(r2, names, 3, 2, 8)
+        @test rules2[1].horizons == 3:3
+
+        rbad = SVARRestrictions(3; signs=[sign_restriction(1, 1, :positive; horizon=8)])
+        @test_throws ArgumentError MacroEconometricModels._sdfm_parse_sign_rules(rbad, names, 3, 2, 8)
+
+        rulet = MacroEconometricModels._sdfm_parse_sign_rules(
+            [("x1", 1, 1:2, :positive)], names, 3, 2, 8)
+        @test rulet[1].horizons == 1:2
+    end
+
     include(joinpath(@__DIR__, "test_sdfm_recovery.jl"))
 
 end
