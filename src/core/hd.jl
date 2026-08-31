@@ -399,7 +399,7 @@ function historical_decomposition(post::BVARPosterior, horizon::Int=0;
     valid_count == 0 && throw(IdentificationError(
         "All posterior draws failed identification or were non-stationary " *
         "(unidentified=$n_unidentified, non-stationary=$n_nonstationary)"))
-    valid_count < samples ÷ 2 && @warn "$(samples - valid_count)/$samples posterior draws non-stationary, skipped"
+    n_nonstationary > samples ÷ 2 && @warn "$n_nonstationary/$samples posterior draws non-stationary, skipped"
     frac_u = ET(n_unidentified) / ET(samples)
     frac_u > ET(0.5) && @warn "$n_unidentified/$samples posterior draws unidentified ($n_nonstationary non-stationary)"
 
