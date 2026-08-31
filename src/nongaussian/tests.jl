@@ -539,19 +539,49 @@ function _align_to_zeros(B::AbstractMatrix{T}, mask::BitMatrix) where {T<:Abstra
     best_perm, best_signs
 end
 
+"""True if `V` can support a Wald contrast (nonempty, not all-zero, some positive var)."""
+function _vcov_wald_ok(V::AbstractMatrix{T}) where {T<:AbstractFloat}
+    n = size(V, 1)
+    (n > 0 && size(V, 2) == n) || return false
+    any(x -> isfinite(x) && abs(x) > zero(T), V) || return false
+    any(d -> isfinite(d) && d > T(1e-14), diag(V)) || return false
+end
+
+"""Delta-method vcov of `λ = exp(α)` from the log-λ block of `V`, or `nothing`."""
+function _loglambda_delta_vcov(V::AbstractMatrix, λ::AbstractVector{T},
+                                i1::Int, i2::Int) where {T<:AbstractFloat}
+    nλ = length(λ)
+    (i1 >= 1 && i2 == i1 + nλ - 1 && size(V, 1) >= i2 && size(V, 2) >= i2) || return nothing
+    Vα = Matrix{T}(V[i1:i2, i1:i2])
+    _vcov_wald_ok(Vα) || return nothing
+    D = Diagonal(λ)
+    Vλ = Matrix{T}(D * Vα * D)
+    _vcov_wald_ok(Vλ) ? Vλ : nothing
+end
+
+function _push_lambda_block!(blocks, λ::AbstractVector{T}, Vλ) where {T<:AbstractFloat}
+    Vλ === nothing && return
+    push!(blocks, (Vector{T}(λ), Vλ))
+    nothing
+end
+
+"""Return usable `(λ, Vλ)` blocks across regimes k=2…K (or the GARCH/ST analogue)."""
 function _lambda_and_vcov(r::Union{MarkovSwitchingSVARResult{T},
                                     ExternalVolatilitySVARResult{T}}) where {T<:AbstractFloat}
     n = size(r.B0, 1)
     nB = n * n
-    length(r.Lambda) >= 2 || throw(ArgumentError("result has no relative-variance vector"))
-    size(r.vcov, 1) >= nB + n || throw(ArgumentError(
-        "result has no parameter covariance; re-estimate with current identify_*"))
-    λ = Vector{T}(r.Lambda[2])
-    i1 = nB + 1
-    i2 = nB + n
-    Vα = Matrix{T}(r.vcov[i1:i2, i1:i2])
-    D = Diagonal(λ)
-    λ, Matrix{T}(D * Vα * D)
+    K = length(r.Lambda)
+    K >= 2 || throw(ArgumentError("result has no relative-variance vector"))
+    blocks = Tuple{Vector{T}, Matrix{T}}[]
+    for k in 2:K
+        λ = Vector{T}(r.Lambda[k])
+        i1 = nB + (k - 2) * n + 1
+        i2 = nB + (k - 1) * n
+        _push_lambda_block!(blocks, λ, _loglambda_delta_vcov(r.vcov, λ, i1, i2))
+    end
+    isempty(blocks) && throw(ArgumentError(
+        "result has no parameter covariance usable for a Wald test of λ"))
+    blocks
 end
 
 function _lambda_and_vcov(r::SmoothTransitionSVARResult{T}) where {T<:AbstractFloat}
@@ -560,17 +590,18 @@ function _lambda_and_vcov(r::SmoothTransitionSVARResult{T}) where {T<:AbstractFl
     n_angles = n * (n - 1) ÷ 2
     i1 = n_L + n_angles + 1
     i2 = n_L + n_angles + n
-    size(r.vcov, 1) >= i2 || throw(ArgumentError(
-        "result has no parameter covariance; re-estimate with current identify_smooth_transition"))
+    length(r.Lambda) >= 2 || throw(ArgumentError("result has no relative-variance vector"))
     λ = Vector{T}(r.Lambda[2])
-    Vα = Matrix{T}(r.vcov[i1:i2, i1:i2])
-    D = Diagonal(λ)
-    λ, Matrix{T}(D * Vα * D)
+    Vλ = _loglambda_delta_vcov(r.vcov, λ, i1, i2)
+    Vλ === nothing && throw(ArgumentError(
+        "result has no parameter covariance usable for a Wald test of λ"))
+    [(λ, Vλ)]
 end
 
 function _lambda_and_vcov(r::GARCHSVARResult{T}) where {T<:AbstractFloat}
     h = r.cond_var
     Tobs, n = size(h)
+    Tobs >= 2 || throw(ArgumentError("result has no conditional variances for a Wald test of λ"))
     μ = vec(mean(h; dims=1))
     λ = μ ./ μ[1]
     Hc = h .- μ'
@@ -581,7 +612,10 @@ function _lambda_and_vcov(r::GARCHSVARResult{T}) where {T<:AbstractFloat}
         J[j, j] = one(T) / μ[1]
         J[j, 1] -= μ[j] / μ[1]^2
     end
-    λ, Matrix{T}(J * Vμ * J')
+    Vλ = Matrix{T}(J * Vμ * J')
+    _vcov_wald_ok(Vλ) || throw(ArgumentError(
+        "result has no parameter covariance usable for a Wald test of λ"))
+    [(λ, Vλ)]
 end
 
 """
@@ -589,13 +623,16 @@ end
 
 Wald test of `H₀: λ_i = λ_j` for relative shock variances (LLM 2010).
 
-`pairs=:all` tests every pair `i < j`. Bonferroni-adjusted p-values are
-returned alongside the raw Wald statistics.
+`pairs=:all` tests every pair `i < j`. For K>2 discrete-regime results each pair
+uses the most separating regime `k=2…K`. Bonferroni-adjusted p-values are
+returned alongside the raw Wald statistics. Empty, all-zero, or not-SPD vcov
+throws `ArgumentError` (or yields `NaN` stats if a contrast variance is not
+positive).
 """
 function test_lambda_distinct(result; pairs=:all)
-    λ, Vλ = _lambda_and_vcov(result)
-    Tλ = eltype(λ)
-    n = length(λ)
+    blocks = _lambda_and_vcov(result)
+    Tλ = eltype(blocks[1][1])
+    n = length(blocks[1][1])
     pair_list = pairs === :all ?
                 [(i, j) for i in 1:(n - 1) for j in (i + 1):n] :
                 collect(pairs)
@@ -606,13 +643,27 @@ function test_lambda_distinct(result; pairs=:all)
     pbonf = Vector{Tλ}(undef, n_pairs)
     for (idx, pr) in enumerate(pair_list)
         i, j = pr
-        d = λ[i] - λ[j]
-        v = Vλ[i, i] + Vλ[j, j] - 2 * Vλ[i, j]
-        v = max(v, eps(Tλ))
-        W = d^2 / v
-        stats[idx] = W
-        pvals[idx] = Tλ(1) - Tλ(cdf(Chisq(1), W))
-        pbonf[idx] = min(one(Tλ), Tλ(n_pairs) * pvals[idx])
+        (1 <= i <= n && 1 <= j <= n && i != j) || throw(ArgumentError(
+            "pair ($i, $j) is not a valid shock pair in 1:$n"))
+        best_W = Tλ(NaN)
+        for (λ, Vλ) in blocks
+            d = λ[i] - λ[j]
+            v = Vλ[i, i] + Vλ[j, j] - 2 * Vλ[i, j]
+            (isfinite(v) && v > zero(Tλ)) || continue
+            W = d^2 / v
+            isfinite(W) || continue
+            if !isfinite(best_W) || W > best_W
+                best_W = W
+            end
+        end
+        stats[idx] = best_W
+        if !isfinite(best_W)
+            pvals[idx] = Tλ(NaN)
+            pbonf[idx] = Tλ(NaN)
+        else
+            pvals[idx] = Tλ(1) - Tλ(cdf(Chisq(1), best_W))
+            pbonf[idx] = min(one(Tλ), Tλ(n_pairs) * pvals[idx])
+        end
     end
     (statistic=stats, pvalue=pvals, pvalue_bonferroni=pbonf, pairs=pair_list)
 end
@@ -690,7 +741,8 @@ function test_restrictions(result::GARCHSVARResult{T}, restrictions) where {T<:A
     B_al = result.B0[:, perm] .* signs'
     B_al[mask] .= zero(T)
     p0 = B_al[free]
-    obj = p -> _garch_restricted_nll(p, U, result.cond_var, free, n_free, n)
+    h_al = result.cond_var[:, perm]
+    obj = p -> _garch_restricted_nll(p, U, h_al, free, n_free, n)
     g! = (G, x) -> ForwardDiff.gradient!(G, obj, x)
     res = Optim.optimize(obj, g!, p0, Optim.LBFGS(),
                          Optim.Options(iterations=200, g_tol=T(1e-8),

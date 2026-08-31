@@ -186,7 +186,7 @@ end
                 @test all(isapprox.(sum(result.transition_matrix, dims=2), 1.0, atol=1e-6))
 
                 @test size(result.se) == (n, n)
-                @test all(result.se .>= 0)
+                @test all(s -> isnan(s) || s >= 0, result.se)
                 @test 0 < result.classification_quality <= 1
 
                 # Show method
@@ -219,7 +219,7 @@ end
                 @test norm(result.Q' * result.Q - I) < 1e-10
 
                 @test size(result.se) == (n, n)
-                @test all(result.se .>= 0)
+                @test all(s -> isnan(s) || s >= 0, result.se)
 
                 buf = IOBuffer()
                 show(buf, result)
@@ -240,7 +240,7 @@ end
                 @test all(0 .<= result.G_values .<= 1)  # logistic in [0,1]
                 @test size(result.se) == (n, n)
                 @test size(result.vcov, 1) == size(result.vcov, 2)
-                @test all(result.se .>= 0)
+                @test all(s -> isnan(s) || s >= 0, result.se)
 
                 buf = IOBuffer()
                 show(buf, result)
@@ -260,7 +260,7 @@ end
                 @test result.loglik > -Inf
 
                 @test size(result.se) == (n, n)
-                @test all(result.se .>= 0)
+                @test all(s -> isnan(s) || s >= 0, result.se)
 
                 buf = IOBuffer()
                 show(buf, result)
@@ -549,6 +549,52 @@ end
             show(buf, r)
             @test occursin("Std.Err.", String(take!(buf)))
         end
+
+        # Empty / all-zero vcov must not produce a confident Wald
+        nB2 = n_sid * n_sid
+        pdim2 = nB2 + n_sid
+        ev_empty = ExternalVolatilitySVARResult{Float64}(
+            ev.B0, ev.Q, ev.Sigma_regimes, ev.Lambda, ev.regime_indices,
+            ev.loglik, fill(NaN, n_sid, n_sid), zeros(Float64, 0, 0))
+        ev_zero = ExternalVolatilitySVARResult{Float64}(
+            ev.B0, ev.Q, ev.Sigma_regimes, ev.Lambda, ev.regime_indices,
+            ev.loglik, fill(NaN, n_sid, n_sid), zeros(Float64, pdim2, pdim2))
+        for rbad in (ev_empty, ev_zero)
+            try
+                wbad = test_lambda_distinct(rbad; pairs=:all)
+                @test all(isnan, wbad.statistic)
+                @test all(p -> isnan(p) || ismissing(p), wbad.pvalue)
+            catch e
+                @test e isa ArgumentError
+            end
+        end
+
+        # K=3: Λ₂ tied, Λ₃ separates — must not report failure from Λ₂ alone
+        B_k3 = [1.0 0.0; 0.3 1.0]
+        Λ_k3 = [[1.0, 1.0], [2.0, 2.0], [0.5, 4.0]]
+        Σ_k3 = [B_k3 * Diagonal(λ) * B_k3' for λ in Λ_k3]
+        pdim3 = n_sid * n_sid + n_sid * (length(Λ_k3) - 1)
+        V_k3 = Matrix{Float64}(I, pdim3, pdim3) * 0.01
+        ev_k3 = ExternalVolatilitySVARResult{Float64}(
+            B_k3, Matrix{Float64}(I, n_sid, n_sid), Σ_k3, Λ_k3,
+            [collect(1:3) for _ in 1:3], -10.0, fill(NaN, n_sid, n_sid), V_k3)
+        w_k3 = test_lambda_distinct(ev_k3; pairs=[(1, 2)])
+        @test isfinite(w_k3.pvalue[1])
+        @test w_k3.pvalue[1] < 0.05
+
+        # GARCH LR uses cond_var columns matching the signed permutation of B₀
+        n_g = size(garch.B0, 1)
+        perm_g = collect(n_g:-1:1)
+        g_perm = GARCHSVARResult{Float64}(
+            garch.B0[:, perm_g], garch.Q[:, perm_g],
+            garch.garch_params[perm_g, :], garch.cond_var[:, perm_g],
+            garch.shocks[:, perm_g], garch.loglik, garch.converged,
+            garch.iterations)
+        mask_g = fill(NaN, n_g, n_g)
+        mask_g[1, n_g] = 0.0
+        lr_g0 = test_restrictions(garch, mask_g)
+        lr_gp = test_restrictions(g_perm, mask_g)
+        @test lr_g0.statistic ≈ lr_gp.statistic rtol=1e-6 atol=1e-8
 
         if !FAST
             n_reps = 200

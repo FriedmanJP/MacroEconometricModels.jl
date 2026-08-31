@@ -364,7 +364,7 @@ end
 function _finite_se!(se::AbstractMatrix{T}) where {T<:AbstractFloat}
     @inbounds for i in eachindex(se)
         v = se[i]
-        se[i] = isfinite(v) && v >= zero(T) ? v : zero(T)
+        se[i] = isfinite(v) && v >= zero(T) ? v : T(NaN)
     end
     se
 end
@@ -387,6 +387,9 @@ function _spd_inv(H::AbstractMatrix{T}) where {T<:AbstractFloat}
 end
 
 function _delta_B0_se(params::Vector{T}, V::AbstractMatrix{T}, B0_fn, n::Int) where {T<:AbstractFloat}
+    if size(V, 1) == 0 || size(V, 2) == 0 || all(x -> !isfinite(x) || iszero(x), V)
+        return fill(T(NaN), n, n), zeros(T, 0, 0)
+    end
     J = ForwardDiff.jacobian(p -> vec(B0_fn(p)), params)
     VB = J * V * J'
     se = reshape(sqrt.(max.(diag(VB), zero(T))), n, n)
@@ -1026,8 +1029,8 @@ function identify_markov_switching(model::VARModel{T}; n_regimes::Int=2,
         V = _spd_inv(Matrix{T}(ForwardDiff.hessian(nll, p)))
         se, _ = _delta_B0_se(p, V, θ -> _k_regime_B0(θ, n), n)
     catch
-        se = zeros(T, n, n)
-        V = zeros(T, length(p), length(p))
+        se = fill(T(NaN), n, n)
+        V = zeros(T, 0, 0)
     end
 
     MarkovSwitchingSVARResult{T}(B0, Q, st.Sigma, Lambdas, smoothed, st.P,
@@ -1276,8 +1279,8 @@ function identify_garch(model::VARModel{T}; max_iter::Int=500,
             L_mat * Qθ
         end, n)
     catch
-        se = zeros(T, n, n)
-        V = zeros(T, length(p_garch), length(p_garch))
+        se = fill(T(NaN), n, n)
+        V = zeros(T, 0, 0)
     end
 
     GARCHSVARResult{T}(B0, Q, garch_params, cond_var, shocks, loglik_old, converged, iter,
@@ -1518,8 +1521,8 @@ function identify_smooth_transition(model::VARModel{T}, transition_var::Abstract
         end
         se, _ = _delta_B0_se(p_canon, V, B0_fn, n)
     catch
-        se = zeros(T, n, n)
-        V = zeros(T, length(p_canon), length(p_canon))
+        se = fill(T(NaN), n, n)
+        V = zeros(T, 0, 0)
     end
 
     SmoothTransitionSVARResult{T}(B0, Q, [Matrix{T}(Sigma_G0), Matrix{T}(Sigma_G1)],
@@ -1585,8 +1588,8 @@ function identify_external_volatility(model::VARModel{T},
         V = _external_vcov(p, model.U, regimes, n, K)
         se, _ = _delta_B0_se(p, V, θ -> _k_regime_B0(θ, n), n)
     catch
-        se = zeros(T, n, n)
-        V = zeros(T, length(p), length(p))
+        se = fill(T(NaN), n, n)
+        V = zeros(T, 0, 0)
     end
 
     ExternalVolatilitySVARResult{T}(B0, Q, Sigma_regimes, Lambda_vecs, regime_indices,
