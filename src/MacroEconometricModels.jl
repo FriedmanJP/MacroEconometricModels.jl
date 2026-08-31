@@ -1021,7 +1021,7 @@ export compute_irf, compute_structural_shocks
 export IdentificationMethod, register_identification!
 
 # Arias et al. (2018) SVAR identification
-export AbstractSVARRestriction, is_linear_zero, check, sign_check
+export AbstractSVARRestriction, is_linear_zero, sign_check
 export ZeroRestriction, SignRestriction, SVARRestrictions, AriasSVARResult
 export LongRunZeroRestriction, A0ZeroRestriction, AplusZeroRestriction
 export A0SignRestriction, AplusSignRestriction

@@ -661,7 +661,7 @@ end
 """Compute zero-restriction constraint rows for shock j.
 
 Finite-horizon zeros use ``e_v' Φ_h L``. Long-run zeros use ``e_v' C(1) L``
-with ``C(1) = (I - \\sum A_i)^{-1}``. ``A_0`` zeros use ``e_v' L^{-1}``
+with ``C(1) = (I - \\sum A_i)^{-1}``. ``A_0`` zeros use ``e_v' L^{-T}``
 (``A_0 = L^{-T} Q``). ``A_+`` zeros use the corresponding row of ``B L^{-T}``.
 """
 function _compute_ZF(restrictions::SVARRestrictions, Phi::Vector{<:AbstractMatrix},
