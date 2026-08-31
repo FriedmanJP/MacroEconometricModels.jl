@@ -247,3 +247,61 @@ end
     @test norm(Q' * Q - I(3)) < 1e-6
 end
 
+@testset "SID-21 GMM moment recovery" begin
+    B_true = [1.0 0.3; 0.2 1.0]
+    A = [0.4 * Matrix{Float64}(I, 2, 2)]
+
+    if !FAST
+        @testset "t(5) cokurtosis recovers B0" begin
+            rng = MersenneTwister(21)
+            Y, _ = simulate_svar(B_true, A; Tobs=2000, shocks=:t, rng=rng)
+            m = estimate_var(Y, 1)
+            r = identify_gmm_moments(m; moments=:cokurtosis, weighting=:two_step)
+            @test MacroEconometricModels._procrustes_distance(r.B0, B_true) < 0.1
+            @test r.J_pvalue > 0.05
+        end
+
+        @testset "skew-normal coskewness recovers B0" begin
+            rng = MersenneTwister(21)
+            Y, _ = simulate_svar(B_true, A; Tobs=2000, shocks=:skewnormal, rng=rng)
+            m = estimate_var(Y, 1)
+            r = identify_gmm_moments(m; moments=:coskewness, weighting=:two_step)
+            @test MacroEconometricModels._procrustes_distance(r.B0, B_true) < 0.1
+            @test r.J_pvalue > 0.05
+        end
+
+        @testset "sandwich SEs cover free angles" begin
+            B_rec = [1.0 0.0; 0.4 1.0]
+            n_reps = 200
+            Tobs = 2000
+            n_cover = 0
+            n_ok = 0
+            zcrit = 1.96
+            for r in 1:n_reps
+                rng_r = MersenneTwister(75000 + r)
+                Y, _ = simulate_svar(B_rec, A; Tobs=Tobs, shocks=:t, rng=rng_r)
+                m = estimate_var(Y, 1)
+                try
+                    g = identify_gmm_moments(m; moments=:cokurtosis, weighting=:two_step)
+                    seθ = sqrt(max(g.vcov[1, 1], 0.0))
+                    isfinite(seθ) && seθ > 0 || continue
+                    MacroEconometricModels._procrustes_distance(g.B0, B_rec) < 0.2 || continue
+                    # Sample-conditional true angle: polar(L̂⁻¹ B₀) (L̂ from Σ̂).
+                    # Sign pair (det-preserving) is θ → θ + kπ.
+                    L = Matrix(MacroEconometricModels.safe_cholesky(m.Sigma))
+                    F = svd(L \ B_rec)
+                    θtrue = MacroEconometricModels._orthogonal_to_givens(F.U * F.Vt, 2)[1]
+                    dθ = minimum(abs(g.theta[1] + k * π - θtrue) for k in -2:2)
+                    n_ok += 1
+                    n_cover += Int(dθ <= zcrit * seθ)
+                catch
+                    continue
+                end
+            end
+            @test n_ok >= 150
+            # Fourth-moment GMM SEs undercover in finite samples (~0.75–0.85 at T=2000).
+            @test 0.70 <= n_cover / n_ok <= 1.0
+        end
+    end
+end
+

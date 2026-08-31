@@ -2127,9 +2127,11 @@ const _TYPE_REFS = Dict{Symbol, Vector{Symbol}}(
     :pml => [:lanne_meitz_saikkonen2017, :lewis2025],
     :skew_normal => [:lanne_meitz_saikkonen2017, :lewis2025],
     :nongaussian_ml => [:lanne_meitz_saikkonen2017, :lewis2025],
+    :gmm_moments => [:keweloh2021, :lanne_luoto2021, :lewis2025],
     # Non-Gaussian result types
     :ICASVARResult => [:lewis2025],
     :NonGaussianMLResult => [:lanne_meitz_saikkonen2017, :lewis2025],
+    :NonGaussianGMMResult => [:keweloh2021, :lanne_luoto2021, :lewis2025],
     # Heteroskedastic identification
     :MarkovSwitchingSVARResult => [:rigobon2003, :lanne_lutkepohl2008, :lewis2025],
     :GARCHSVARResult => [:rigobon2003, :normandin_phaneuf2004, :lewis2025],
@@ -2789,6 +2791,11 @@ function refs(io::IO, r::NonGaussianMLResult; format::Symbol=get_display_backend
     base = _TYPE_REFS[:NonGaussianMLResult]
     extra = get(_ML_DIST_REFS, r.distribution, Symbol[])
     refs(io, unique(vcat(base, extra)); format=format)
+end
+
+function refs(io::IO, r::NonGaussianGMMResult; format::Symbol=get_display_backend())
+    base = _TYPE_REFS[:NonGaussianGMMResult]
+    refs(io, base; format=format)
 end
 
 # Heteroskedastic types (concrete type dispatch, no method field)

@@ -18,6 +18,7 @@ plot_result methods for the statistical-identification SVAR family (PLT-32):
 - `ICASVARResult` — `view=:mixing` (`B0` heatmap) / `:unmixing` (`W` heatmap) /
   `:shocks` (recovered structural-shock lines).
 - `NonGaussianMLResult` — `B0` heatmap with a likelihood-ratio annotation.
+- `NonGaussianGMMResult` — `view=:mixing` (`B0` heatmap; same panel helper as ICA).
 - `ProxySVARResult` — `view=:B0` (impact heatmap) / `:impact` (identified columns).
 - `MaxShareResult` — `view=:Q` (rotation heatmap) / `:eigvals` (criterion eigenvalues).
 
@@ -328,6 +329,34 @@ function plot_result(r::NonGaussianMLResult{T};
     ptitle = "Impact Matrix (B₀) — non-Gaussian MLE ($(r.distribution)); LR vs Gaussian = $(_fmt(lr; digits=3))"
     panel = _PanelSpec(id, ptitle, js)
     ftitle = isempty(title) ? "Non-Gaussian ML SVAR — impact matrix" : title
+    p = _make_plot([panel]; title=ftitle, ncols=1)
+    save_path !== nothing && save_plot(p, save_path)
+    p
+end
+
+# =============================================================================
+# NonGaussianGMMResult
+# =============================================================================
+
+"""
+    plot_result(r::NonGaussianGMMResult; view=:mixing, title="", save_path=nothing)
+
+Moment-based GMM SVAR diagnostics. `view=:mixing` (default) draws the structural
+impact / mixing matrix `B₀` as a diverging heatmap, reusing the ICA mixing-matrix
+panel helper. Unknown `view` throws an `ArgumentError`.
+"""
+function plot_result(r::NonGaussianGMMResult{T};
+                     view::Symbol=:mixing, title::String="",
+                     save_path::Union{String,Nothing}=nothing) where {T}
+    view === :mixing || throw(ArgumentError("Unknown view :$view. Valid views: :mixing"))
+    id = _next_plot_id("gmm_b0")
+    js = _statid_heatmap_panel(id, r.B0, r.varnames, r.shock_names;
+                               scale=:diverging, xlabel="Shock", ylabel="Variable",
+                               tip_label="")
+    panel = _PanelSpec(id, "Mixing Matrix (B₀)", js)
+    ftitle = isempty(title) ?
+             "Moment-based GMM SVAR — mixing matrix ($(r.moments), $(r.weighting))" :
+             title
     p = _make_plot([panel]; title=ftitle, ncols=1)
     save_path !== nothing && save_plot(p, save_path)
     p

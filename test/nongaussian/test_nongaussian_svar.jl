@@ -793,4 +793,116 @@ end
             end
         end
     end
+
+    @testset "SID-21 GMM moments" begin
+        _suppress_warnings() do
+            Random.seed!(750)
+            Y2 = randn(250, 2)
+            model2 = estimate_var(Y2, 1)
+            n2 = 2
+            n_angles = n2 * (n2 - 1) ÷ 2
+
+            @testset "API and result fields" begin
+                result = identify_gmm_moments(model2; moments=:cokurtosis, weighting=:two_step)
+                @test result isa NonGaussianGMMResult{Float64}
+                @test result isa AbstractNonGaussianSVAR
+                @test size(result.B0) == (n2, n2)
+                @test size(result.Q) == (n2, n2)
+                @test length(result.theta) == n_angles
+                @test size(result.vcov) == (n_angles, n_angles)
+                @test size(result.se) == (n2, n2)
+                @test all(s -> isnan(s) || s >= 0, result.se)
+                @test size(result.shocks) == (size(model2.U, 1), n2)
+                @test result.moments == :cokurtosis
+                @test result.weighting == :two_step
+                @test result.J >= 0
+                @test isnan(result.J_pvalue) || (0 <= result.J_pvalue <= 1)
+                @test length(result.varnames) == n2
+                @test length(result.shock_names) == n2
+                @test norm(result.Q' * result.Q - I) < 1e-8
+                L = MacroEconometricModels.safe_cholesky(model2.Sigma)
+                @test norm(result.B0 * result.B0' - model2.Sigma) / norm(model2.Sigma) < 1e-6
+            end
+
+            @testset "moment and weighting variants" begin
+                for mom in (:coskewness, :cokurtosis, :both)
+                    r = identify_gmm_moments(model2; moments=mom)
+                    @test r.moments == mom
+                    @test r isa NonGaussianGMMResult
+                end
+                r_cue = identify_gmm_moments(model2; moments=:cokurtosis, weighting=:cue)
+                @test r_cue.weighting == :cue
+                @test r_cue isa NonGaussianGMMResult
+            end
+
+            @testset "invalid kwargs" begin
+                @test_throws ArgumentError identify_gmm_moments(model2; moments=:skewness)
+                @test_throws ArgumentError identify_gmm_moments(model2; weighting=:identity)
+                @test_throws ArgumentError identify_gmm_moments(model2; se=:bootstrap)
+            end
+
+            @testset "show / report prints J and SEs" begin
+                result = identify_gmm_moments(model2; moments=:both, weighting=:two_step)
+                buf = IOBuffer()
+                show(buf, result)
+                txt = String(take!(buf))
+                @test occursin("GMM", txt)
+                @test occursin("J", txt)
+                @test occursin("both", txt)
+                @test occursin("two_step", txt)
+                @test occursin("Std.Err.", txt)
+            end
+
+            @testset "registry and compute_Q" begin
+                @test haskey(MacroEconometricModels.IDENTIFICATION_REGISTRY, :gmm_moments)
+                @test MacroEconometricModels._needs_residuals(:gmm_moments)
+                @test !MacroEconometricModels._is_set_identified(:gmm_moments)
+                @test !MacroEconometricModels._is_partial(:gmm_moments)
+                @test MacroEconometricModels._should_match_columns(:gmm_moments)
+                Q = MacroEconometricModels.compute_Q(model2, :gmm_moments)
+                @test size(Q) == (n2, n2)
+                @test norm(Q' * Q - I) < 1e-6
+                ir = irf(model2, 8; method=:gmm_moments)
+                @test size(ir.values) == (8, n2, n2)
+            end
+
+            @testset "plot_result mixing heatmap" begin
+                result = identify_gmm_moments(model2; moments=:cokurtosis)
+                p = plot_result(result)
+                @test occursin("Mixing Matrix", p.html)
+                @test_throws ArgumentError plot_result(result; view=:shocks)
+            end
+
+            @testset "test_gaussian_shock_count" begin
+                Tobs = FAST ? 400 : 2000
+                rng = MersenneTwister(75021)
+                n = 3
+                # Two Gaussian shocks + one t(5): identification fails
+                shocks_two = randn(rng, Tobs, n)
+                ν = 5.0
+                shocks_two[:, 3] = rand(rng, TDist(ν), Tobs) .* sqrt((ν - 2) / ν)
+                dummy_two = NonGaussianGMMResult{Float64}(
+                    Matrix{Float64}(I, n, n), Matrix{Float64}(I, n, n),
+                    zeros(3), Matrix{Float64}(I, 3, 3), zeros(n, n),
+                    0.0, 1.0, :both, :two_step, shocks_two,
+                    ["y$i" for i in 1:n], ["Shock $j" for j in 1:n])
+                cnt_two = test_gaussian_shock_count(dummy_two)
+                @test cnt_two isa IdentifiabilityTestResult{Float64}
+                @test cnt_two.test_name == :gaussian_shock_count
+                @test cnt_two.identified == false
+                @test cnt_two.details[:n_gaussian] >= 2
+
+                # All t(5): at most one Gaussian → identification holds
+                shocks_t = rand(rng, TDist(ν), Tobs, n) .* sqrt((ν - 2) / ν)
+                dummy_t = NonGaussianGMMResult{Float64}(
+                    Matrix{Float64}(I, n, n), Matrix{Float64}(I, n, n),
+                    zeros(3), Matrix{Float64}(I, 3, 3), zeros(n, n),
+                    0.0, 1.0, :cokurtosis, :two_step, shocks_t,
+                    ["y$i" for i in 1:n], ["Shock $j" for j in 1:n])
+                cnt_t = test_gaussian_shock_count(dummy_t)
+                @test cnt_t.identified == true
+                @test cnt_t.details[:n_gaussian] <= 1
+            end
+        end
+    end
 end

@@ -20,7 +20,9 @@ function _draw_structural_shocks(n::Int, nobs::Int, shocks::Symbol, rng)
     elseif shocks === :skewnormal
         α = 5.0
         δ = α / sqrt(1 + α^2)
-        return δ .* abs.(randn(rng, nobs, n)) .+ sqrt(1 - δ^2) .* randn(rng, nobs, n)
+        x = δ .* abs.(randn(rng, nobs, n)) .+ sqrt(1 - δ^2) .* randn(rng, nobs, n)
+        x .-= mean(x, dims=1)
+        return x ./ std(x, dims=1)
     elseif shocks === :mixture
         p_mix = 0.8
         σ_wide = 3.0

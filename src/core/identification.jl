@@ -849,6 +849,8 @@ function compute_Q(model::VARModel{T}, method::Symbol;
         identify_skew_normal(model).Q
     elseif method == :nongaussian_ml
         identify_nongaussian_ml(model).Q
+    elseif method == :gmm_moments
+        identify_gmm_moments(model; kwargs...).Q
     # Heteroskedasticity methods (defined in heteroskedastic_id.jl)
     elseif method == :markov_switching
         identify_markov_switching(model).Q
@@ -905,6 +907,7 @@ function _register_builtin_identification!()
         (:pml, true, false, false),
         (:skew_normal, true, false, false),
         (:nongaussian_ml, true, false, false),
+        (:gmm_moments, true, false, false),
         (:markov_switching, true, false, false),
         (:garch, true, false, false),
         (:smooth_transition, true, false, false),

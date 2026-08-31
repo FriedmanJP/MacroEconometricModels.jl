@@ -280,6 +280,52 @@ function test_shock_gaussianity(result::NonGaussianMLResult{T}) where {T<:Abstra
     _test_shock_gaussianity_impl(result.shocks, result.distribution)
 end
 
+# =============================================================================
+# Public API: Gaussian-shock count (Keweloh 2021; LMS 2017)
+# =============================================================================
+
+"""
+    test_gaussian_shock_count(result::NonGaussianGMMResult; alpha=0.05) -> IdentifiabilityTestResult
+
+Sequential count of Gaussian structural shocks (Keweloh 2021; Lanne, Meitz &
+Saikkonen 2017). Each recovered shock is tested for zero third and fourth
+cumulants (Jarque–Bera). Identification of ``B₀`` requires at most one Gaussian
+shock; two or more failures to reject Gaussianity at `alpha` flag
+non-identification.
+
+`details` stores `:n_gaussian`, `:jb_stats`, `:jb_pvals`, and `:alpha`.
+"""
+function test_gaussian_shock_count(result::NonGaussianGMMResult{T};
+                                   alpha::Real=0.05) where {T<:AbstractFloat}
+    α = T(alpha)
+    shocks = result.shocks
+    T_obs, n = size(shocks)
+    jb_stats = Vector{T}(undef, n)
+    jb_pvals = Vector{T}(undef, n)
+    for j in 1:n
+        s = @view shocks[:, j]
+        σ = std(s)
+        σ > zero(T) || throw(ArgumentError("shock $j has zero variance"))
+        s_std = (s .- mean(s)) / σ
+        skew = mean(s_std .^ 3)
+        kurt = mean(s_std .^ 4) - T(3)
+        jb = T_obs * (skew^2 / T(6) + kurt^2 / T(24))
+        jb_stats[j] = jb
+        jb_pvals[j] = T(1) - T(cdf(Chisq(2), jb))
+    end
+    n_gaussian = count(p -> p >= α, jb_pvals)
+    identified = n_gaussian <= 1
+    jb_sorted = sort(jb_stats)
+    stat = n >= 2 ? jb_sorted[2] : jb_sorted[1]
+    pval = T(1) - T(cdf(Chisq(2), stat))
+    IdentifiabilityTestResult{T}(:gaussian_shock_count, stat, pval, identified,
+                                  Dict{Symbol, Any}(:jb_stats => jb_stats,
+                                                     :jb_pvals => jb_pvals,
+                                                     :n_gaussian => n_gaussian,
+                                                     :alpha => α,
+                                                     :moments => result.moments))
+end
+
 function _test_shock_gaussianity_impl(shocks::Matrix{T}, method::Symbol) where {T<:AbstractFloat}
     T_obs, n = size(shocks)
     jb_stats = T[]

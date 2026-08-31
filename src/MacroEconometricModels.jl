@@ -238,6 +238,7 @@ include("nongaussian/shared.jl")
 include("nongaussian/ica.jl")
 include("nongaussian/ml.jl")
 include("nongaussian/heteroskedastic.jl")
+include("nongaussian/gmm.jl")
 include("nongaussian/tests.jl")
 
 # Bayesian utilities (after bayesian + identification)
@@ -1270,7 +1271,7 @@ export AbstractNormalityTest, AbstractNonGaussianSVAR
 
 # Result types
 export NormalityTestResult, NormalityTestSuite
-export ICASVARResult, NonGaussianMLResult
+export ICASVARResult, NonGaussianMLResult, NonGaussianGMMResult
 export MarkovSwitchingSVARResult, GARCHSVARResult
 export SmoothTransitionSVARResult, ExternalVolatilitySVARResult
 export IdentifiabilityTestResult
@@ -1287,6 +1288,9 @@ export identify_dcov, identify_hsic
 export identify_student_t, identify_mixture_normal
 export identify_pml, identify_skew_normal, identify_nongaussian_ml
 
+# Moment-based GMM SVAR
+export identify_gmm_moments
+
 # Heteroskedasticity identification
 export identify_markov_switching, identify_garch
 export identify_smooth_transition, identify_external_volatility
@@ -1296,6 +1300,7 @@ export test_identification_strength, test_shock_gaussianity
 export test_gaussian_vs_nongaussian, test_shock_independence
 export test_overidentification
 export test_lambda_distinct, test_restrictions
+export test_gaussian_shock_count
 
 # =============================================================================
 # Exports - Volatility Models (ARCH/GARCH/SV)
