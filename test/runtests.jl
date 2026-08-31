@@ -67,6 +67,7 @@ const TEST_GROUPS = [
         "var/test_irf_ci.jl",
         "var/test_fevd.jl",
         "var/test_hd.jl",
+        "var/test_id_recovery.jl",        # SID-01 (#730): heteroskedastic kernel recovery
         "vecm/test_vecm.jl",
         "vecm/test_vecm_restrictions.jl", # EV-38 (#446)
         "preg/test_panel_iv.jl",          # moved from the ceiling ARIMA group to rebalance (#127)

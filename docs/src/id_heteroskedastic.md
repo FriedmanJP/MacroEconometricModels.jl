@@ -77,21 +77,22 @@ where:
 - ``B_0`` is the ``n \times n`` structural impact matrix (constant across regimes)
 - ``\Lambda_k = \text{diag}(\lambda_{1k}, \ldots, \lambda_{nk})`` holds the regime-specific shock variances
 
-Given two regime covariance matrices, the eigendecomposition of ``\Sigma_1^{-1}\Sigma_2`` recovers the structural parameters:
+Given two regime covariance matrices, the symmetric generalized eigenproblem recovers the structural parameters:
 
 ```math
-\Sigma_1^{-1}\Sigma_2 = V D V^{-1}
+L_1^{-1} \Sigma_2 L_1^{-\top} = W \Lambda W'
 ```
 
 where:
-- ``V`` contains the eigenvectors identifying the columns of ``B_0`` up to scaling
-- ``D = \text{diag}(d_1, \ldots, d_n)`` contains the relative variance ratios ``d_j = \lambda_{j2} / \lambda_{j1}``
-- ``B_0 = \Sigma_1^{1/2} V`` after normalization
+- ``L_1`` is the Cholesky factor of ``\Sigma_1``
+- ``W`` is orthogonal, with columns the eigenvectors of the whitened second-regime covariance
+- ``\Lambda = \text{diag}(\lambda_1, \ldots, \lambda_n)`` contains the relative variance ratios ``\lambda_j = \lambda_{j2} / \lambda_{j1}``, ordered ascending
+- ``B_0 = L_1 W``
 
-**Identification condition**: the eigenvalues ``d_j`` must be distinct. With ``K \geq 2`` regimes producing distinct eigenvalues, ``B_0`` is identified up to column permutation and sign. All four estimators on this page route through this same kernel; they differ only in how the regime covariances are obtained.
+**Identification condition**: the eigenvalues ``\lambda_j`` must be distinct. With ``K \geq 2`` regimes producing distinct eigenvalues, ``B_0`` is identified up to column permutation and sign. All four estimators on this page route through this same kernel; they differ only in how the regime covariances are obtained.
 
 !!! note "Technical Note"
-    The implementation orders the eigenvalues ascending, uses `safe_cholesky` for ``\Sigma_1^{1/2}``, and applies a polar decomposition (via the SVD of ``L^{-1} B_0``) to enforce exact orthogonality of the rotation ``Q``. A positive-diagonal sign convention normalizes the result, and `Lambda` is recomputed per regime as ``\text{diag}(B_0^{-1} \Sigma_k B_0^{-\prime})``, so regime 1 always reports a vector of ones.
+    The implementation solves ``L_1^{-1}\Sigma_2 L_1^{-\top} = W\Lambda W'`` and sets ``B_0 = L_1 W``. Eigenvalues are ordered ascending. A positive-diagonal sign convention normalizes the result, and `Lambda` is recomputed per regime as ``\text{diag}(B_0^{-1} \Sigma_k B_0^{-\prime})``, so regime 1 always reports a vector of ones.
 
 ---
 
@@ -134,7 +135,7 @@ plot_result(ms; view=:regimes)
 <iframe src="../assets/plots/ms_regime_probs.html" width="100%" height="440" frameborder="0" style="border:1px solid #ddd;border-radius:4px;"></iframe>
 ```
 
-The EM algorithm converges in 15 iterations to two persistent regimes: staying probabilities of ``0.838`` and ``0.915`` imply expected durations of about 6 and 12 months. Relative to regime 1, all three shock variances are *lower* in regime 2 --- ``\Lambda_2 = (0.115, 0.129, 0.582)`` --- so regime 1 is the turbulent state and regime 2 the calm one. Identification rests on those three numbers being distinct, and the first two are close: a variance ratio of 0.115 against 0.129 separates the first two columns of ``B_0`` only weakly, while the third column, whose variance falls by far less, is sharply identified. Persistent regimes with well-separated ratios strengthen identification; `ms.regime_probs` shows when each state prevailed.
+The EM algorithm converges in 15 iterations to two persistent regimes: staying probabilities of ``0.838`` and ``0.915`` imply expected durations of about 6 and 12 months. Relative to regime 1, all three shock variances are *lower* in regime 2 --- ``\Lambda_2 = (0.05, 0.13, 0.647)`` --- so regime 1 is the turbulent state and regime 2 the calm one. Identification rests on those three numbers being distinct. The closest pair is ``0.05`` against ``0.13`` (a factor of about 2.6); the third ratio, ``0.647``, is farther from both, so that column is the most sharply identified. Persistent regimes with well-separated ratios strengthen identification; `ms.regime_probs` shows when each state prevailed.
 
 | Keyword | Type | Default | Description |
 |---------|------|---------|-------------|
@@ -244,7 +245,7 @@ report(st)
  n_transitional = count(g -> 0.01 < g < 0.99, st.G_values))
 ```
 
-The estimated transition speed of ``5741.9`` around a threshold of ``-0.00013`` in monthly industrial-production growth is effectively a discrete switch: only 12 of the 118 observations have ``G(s_t)`` strictly between 0.01 and 0.99, and 57.6% of the sample sits in the high-``G`` regime. A ``\gamma`` this large means the data prefer an abrupt variance break to a gradual one, which is a substantive result --- the smooth-transition specification nests the sample-split estimator, and here it collapses onto it. Read a large ``\gamma`` as a recommendation to check `identify_external_volatility` with an explicitly dated regime indicator.
+The estimated transition speed of ``5312.6`` around a threshold of ``0.00006`` in monthly industrial-production growth is effectively a discrete switch: only 14 of the 118 observations have ``G(s_t)`` strictly between 0.01 and 0.99, and 56.8% of the sample sits in the high-``G`` regime. A ``\gamma`` this large means the data prefer an abrupt variance break to a gradual one, which is a substantive result --- the smooth-transition specification nests the sample-split estimator, and here it collapses onto it. Read a large ``\gamma`` as a recommendation to check `identify_external_volatility` with an explicitly dated regime indicator.
 
 | Keyword | Type | Default | Description |
 |---------|------|---------|-------------|
@@ -285,7 +286,7 @@ report(ev)
  sizes = length.(ev.regime_indices))
 ```
 
-The two halves of the sample carry 59 residuals each. The second-half variance ratios ``(0.512, 0.967, 1.489)`` are distinct and straddle 1, so the shocks are separately identified: the first shock is half as volatile in the second half, the third half again as volatile, and the middle shock barely moves. That middle ratio is the weak link --- a ratio of ``0.967`` is nearly the no-change value of 1, so the corresponding column of ``B_0`` is identified only weakly. Compare the resulting ``B_0`` against the Markov-switching solution, which chooses its own regime dates.
+The two halves of the sample carry 59 residuals each. The second-half variance ratios ``(0.406, 1.046, 1.517)`` are distinct and straddle 1, so the shocks are separately identified: the first shock is about 40% as volatile in the second half, the third about half again as volatile, and the middle shock barely moves. That middle ratio is the weak link --- a ratio of ``1.046`` is nearly the no-change value of 1, so the corresponding column of ``B_0`` is identified only weakly. Compare the resulting ``B_0`` against the Markov-switching solution, which chooses its own regime dates.
 
 | Keyword | Type | Default | Description |
 |---------|------|---------|-------------|
@@ -335,15 +336,15 @@ decomp = fevd(model, 20; method=:markov_switching)
 report(decomp)
 ```
 
-Step 2 matches each Markov-switching column to its closest external-volatility column: all three agree to within ``0.005`` in angular distance. Two very different regime-dating schemes --- one estimated from the data by the Hamilton filter, one imposed mechanically at the sample midpoint --- therefore recover the same three structural directions. That robustness is the evidence a heteroskedasticity-based identification needs before its IRFs and variance decompositions are worth reporting; the near-equal variance ratios of step 1 warn that it may not survive a third dating scheme, so quantify it with `test_identification_strength` before drawing economic conclusions.
+Step 2 matches each Markov-switching column to its closest external-volatility column: two agree to within ``0.01`` in angular distance (``0.002`` and ``0.009``), while the middle column is ``0.19`` away. That middle mismatch is the external-volatility ratio near 1 from the sample-split step --- a shock whose variance barely changes across the midpoint split is not the same object as the Hamilton filter's middle shock. Agreement on the well-separated columns is the evidence a heteroskedasticity-based identification can report; quantify the weak column with `test_identification_strength` before drawing economic conclusions.
 
 ---
 
 ## Common Pitfalls
 
-1. **Indistinct eigenvalues.** If two shocks experience the same proportional variance change, their columns in ``B_0`` are not separately identified. Check that the `Lambda` vectors show clearly distinct values --- ``0.115`` against ``0.129``, as in the Markov-switching fit above, is not enough separation. Quantify it with `test_identification_strength` from the [Identification Testing](@ref id_testing_page) page.
+1. **Indistinct eigenvalues.** If two shocks experience the same proportional variance change, their columns in ``B_0`` are not separately identified. Check that the `Lambda` vectors show clearly distinct values --- ``0.05`` against ``0.13``, the closest pair in the Markov-switching fit above, is usable but not generous. Quantify it with `test_identification_strength` from the [Identification Testing](@ref id_testing_page) page.
 
-2. **A variance ratio near 1 identifies nothing.** A shock whose variance is unchanged across regimes contributes no identifying equation. Watch for entries of `Lambda[2]` close to 1, such as the ``0.967`` in the external-volatility fit.
+2. **A variance ratio near 1 identifies nothing.** A shock whose variance is unchanged across regimes contributes no identifying equation. Watch for entries of `Lambda[2]` close to 1, such as the ``1.046`` in the external-volatility fit.
 
 3. **EM converges to local optima.** The Markov-switching EM algorithm is initialized by splitting the sample into ``K`` equal blocks, so it is sensitive to where the volatility actually shifts. If `ms.converged == false`, raise `max_iter`; if the regimes look implausible, compare against `identify_external_volatility` with dated regimes.
 
