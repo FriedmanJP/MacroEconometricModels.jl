@@ -59,9 +59,18 @@ function _setid_band_pct(quantiles::AbstractVector)
 end
 
 # Shared fan panel: zero reference line + nested bands + central line.
+# `band_label` replaces the pointwise percent-pair legend (e.g. "16–84%") when
+# the envelope is not a quantile fan — used by the Inoue–Kilian joint view.
 function _setid_fan_panel(id::String, data_json::String, quantiles::Vector{Float64},
-                          central_label::String, ptitle::String)
-    fan_json = _fan_bands_json(quantiles; color=_PLOT_SERIES[1])
+                          central_label::String, ptitle::String;
+                          band_label::Union{Nothing,String}=nothing)
+    if band_label === nothing
+        fan_json = _fan_bands_json(quantiles; color=_PLOT_SERIES[1])
+    else
+        k = length(quantiles)
+        fan_json = "[{\"lo_key\":\"q1\",\"hi_key\":\"q$k\"," *
+            "\"label\":$(_json(band_label)),\"alpha\":0.35,\"color\":$(_json(_PLOT_SERIES[1]))}]"
+    end
     refs = "[{\"value\":0,\"axis\":\"y\",\"color\":$(_json(_PLOT_ALERT)),\"dash\":\"4,3\"}]"
     js = _render_fan_js(id, data_json, fan_json; median_key="med",
                         central_label=central_label, ref_lines_json=refs,
@@ -76,13 +85,15 @@ end
 """
     plot_result(s::SignIdentifiedSet; var=nothing, shock=nothing,
                 quantiles=[0.16, 0.5, 0.84], ncols=0, title="", save_path=nothing,
-                view=:default)
+                view=:default, level=0.68)
 
 Draw the sign-/zero-restriction identified set. `view=:default` is the pointwise
 quantile fan (median line + nested envelope). `view=:joint` is the Inoue–Kilian
-joint band around the median-target IRF. `view=:median_target` is the Fry–Pagan
-median-target rotation as a single line (no band). `var`/`shock` select one
-response/shock by `Int` or name; the accepted-draw count is in the title (C7).
+joint band around the median-target IRF at credibility `level` (default 0.68;
+legend/title say e.g. "68% joint", not a pointwise 16–84% fan).
+`view=:median_target` is the Fry–Pagan median-target rotation as a single line
+(no band). `var`/`shock` select one response/shock by `Int` or name; the
+accepted-draw count is in the title (C7).
 """
 function plot_result(s::SignIdentifiedSet{T};
                      var::Union{Int,String,Nothing}=nothing,
@@ -90,9 +101,11 @@ function plot_result(s::SignIdentifiedSet{T};
                      quantiles::Vector{Float64}=[0.16, 0.5, 0.84],
                      ncols::Int=0, title::String="",
                      save_path::Union{String,Nothing}=nothing,
-                     view::Symbol=:default) where {T}
+                     view::Symbol=:default,
+                     level::Real=0.68) where {T}
     view === :joint && return _plot_signset_joint(s; var=var, shock=shock, ncols=ncols,
-                                                  title=title, save_path=save_path)
+                                                  title=title, save_path=save_path,
+                                                  level=level)
     view === :median_target && return _plot_signset_median_target(s; var=var, shock=shock,
                                                                   ncols=ncols, title=title,
                                                                   save_path=save_path)
@@ -125,26 +138,32 @@ end
 
 function _plot_signset_joint(s::SignIdentifiedSet{T};
                              var=nothing, shock=nothing, ncols::Int=0,
-                             title::String="", save_path=nothing) where {T}
+                             title::String="", save_path=nothing,
+                             level::Real=0.68) where {T}
     _, horizon, n_vars, n_shocks = size(s.irf_draws)
     vars_to_plot = var === nothing ? (1:n_vars) : [_resolve_var(var, s.variables)]
     shocks_to_plot = shock === nothing ? (1:n_shocks) : [_resolve_var(shock, s.shocks)]
-    lo, hi = joint_band(s)
+    lo, hi = joint_band(s; level=level)
     mt = median_target(s)
-    qlevels = [0.16, 0.5, 0.84]
+    pct = round(Int, level * 100)
+    band_label = "$(pct)% joint"
+    # Envelope columns only (lower, upper); dummy levels are column keys, not
+    # a pointwise quantile pair — the legend uses `band_label`.
+    col_levels = [0.0, 1.0]
     panels = _PanelSpec[]
     for sj in shocks_to_plot
         for vi in vars_to_plot
             id = _next_plot_id("signsetj")
-            Q = hcat(lo[:, vi, sj], mt.irf[:, vi, sj], hi[:, vi, sj])
+            Q = hcat(lo[:, vi, sj], hi[:, vi, sj])
             central = mt.irf[:, vi, sj]
-            data_json = _fan_data_json(Q, qlevels, central; xvals=collect(0:(horizon - 1)))
+            data_json = _fan_data_json(Q, col_levels, central; xvals=collect(0:(horizon - 1)))
             ptitle = "$(s.variables[vi]) ← $(s.shocks[sj])"
-            push!(panels, _setid_fan_panel(id, data_json, qlevels, "Median-target", ptitle))
+            push!(panels, _setid_fan_panel(id, data_json, col_levels, "Median-target", ptitle;
+                                           band_label=band_label))
         end
     end
     if isempty(title)
-        title = "Sign-Identified IRF joint band ($(s.n_accepted) draws)"
+        title = "Sign-Identified IRF $(pct)% joint band ($(s.n_accepted) draws)"
     end
     ncols <= 0 && (ncols = length(shocks_to_plot))
     p = _make_plot(panels; title=title, ncols=ncols)

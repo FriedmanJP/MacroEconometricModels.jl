@@ -483,3 +483,22 @@ joint_band(::UhligSVARResult; kwargs...) = throw(ArgumentError(
     "UhligSVARResult is a single penalty rotation; joint bands are not defined"))
 sup_t_band(::UhligSVARResult; kwargs...) = throw(ArgumentError(
     "UhligSVARResult is a single penalty rotation; sup-t bands are not defined"))
+
+"""
+    structural_shocks(model, u::UhligSVARResult; quantiles=[0.16, 0.5, 0.84])
+
+Point structural shocks of the penalty-optimal rotation, in the same NamedTuple
+shape as the set-identified methods: `median`, `lower`, `upper`, and `quantiles`
+are the unique path `compute_structural_shocks(model, u.Q)`.
+"""
+function structural_shocks(model::VARModel{T}, u::UhligSVARResult{T};
+                          quantiles::Vector{Float64}=[0.16, 0.5, 0.84]) where {T<:AbstractFloat}
+    shocks = compute_structural_shocks(model, u.Q)
+    T_eff, n = size(shocks)
+    nq = length(quantiles)
+    qarr = Array{T}(undef, T_eff, n, nq)
+    @inbounds for qi in 1:nq
+        qarr[:, :, qi] = shocks
+    end
+    (median=shocks, lower=shocks, upper=shocks, quantiles=qarr)
+end

@@ -1105,9 +1105,11 @@ end
     joint_band(s; level=0.68, loss=:absolute) -> (lower, upper)
 
 Inoue–Kilian (2022) joint credible set: the componentwise envelope of the
-lowest-loss draws whose weights sum to at least `level`, always including the
-median-target IRF. A draw is inside the band iff every `(h, i, j)` entry lies
-in `[lower, upper]`. `loss=:absolute` is the L1 distance to the pointwise median.
+lowest-loss draws whose (positive) weights sum to at least `level`, always
+including the median-target IRF. Draws with non-positive weight are skipped
+when accumulating the HPD set. A draw is inside the band iff every `(h, i, j)`
+entry lies in `[lower, upper]`. `loss=:absolute` is the L1 distance to the
+pointwise median.
 """
 function joint_band(s::_SetIdentifiedSVAR{T}; level::Real=0.68,
                     loss::Symbol=:absolute) where {T<:AbstractFloat}
@@ -1134,8 +1136,10 @@ function joint_band(s::_SetIdentifiedSVAR{T}; level::Real=0.68,
     cum = zero(T)
     @inbounds for idx in order
         kept[idx] && continue
+        w = T(s.weights[idx])
+        w <= 0 && continue
         kept[idx] = true
-        cum += T(s.weights[idx])
+        cum += w
         cum >= target && break
     end
     kept[mt.index] = true

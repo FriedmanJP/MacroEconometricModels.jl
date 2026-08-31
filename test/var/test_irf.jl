@@ -537,6 +537,41 @@ end
         @test_throws ArgumentError joint_band(tiny; loss=:quadratic)
     end
 
+    @testset "joint_band skips zero-weight L1 outliers" begin
+        nd, H, n = 4, 2, 2
+        Qs = [Matrix{Float64}(I, n, n) for _ in 1:nd]
+        draws = zeros(nd, H, n, n)
+        draws[1, :, :, :] .= 1.0
+        draws[2, :, :, :] .= 2.0
+        draws[3, :, :, :] .= 3.0
+        draws[4, :, :, :] .= 100.0   # L1 outlier
+        w = [0.4, 0.3, 0.3, 0.0]
+        tiny = SignIdentifiedSet{Float64}(Qs, draws, nd, nd, 1.0, ["y1", "y2"], ["e1", "e2"],
+                                          w, 3.0, 0.75, nothing)
+        lo, hi = joint_band(tiny; level=0.68)
+        @test all(hi .< 50)
+        @test all(lo .> 0.5)
+        # Same mass without the zero-weight draw → identical envelope
+        tiny3 = SignIdentifiedSet{Float64}(Qs[1:3], draws[1:3, :, :, :], 3, 3, 1.0,
+                                           ["y1", "y2"], ["e1", "e2"],
+                                           w[1:3], 3.0, 1.0, nothing)
+        lo3, hi3 = joint_band(tiny3; level=0.68)
+        @test lo ≈ lo3
+        @test hi ≈ hi3
+        # Zero-weight far-side draw visited before HPD mass is reached (tied L1
+        # with the opposite-side member) must still not widen the envelope.
+        Qs2 = [Matrix{Float64}(I, 1, 1) for _ in 1:3]
+        d2 = zeros(3, 1, 1, 1)
+        d2[1, 1, 1, 1] = 0.0
+        d2[2, 1, 1, 1] = 2.0
+        d2[3, 1, 1, 1] = 4.0
+        s2 = SignIdentifiedSet{Float64}(Qs2, d2, 3, 3, 1.0, ["y"], ["e"],
+                                        [0.0, 0.5, 0.5], 2.0, 2 / 3, nothing)
+        lo2, hi2 = joint_band(s2; level=0.68)
+        @test lo2[1, 1, 1] ≈ 2.0
+        @test hi2[1, 1, 1] ≈ 4.0
+    end
+
     @testset "modal_model and sup_t_band" begin
         mm = modal_model(s)
         @test mm.Q === s.Q_draws[mm.index]
@@ -599,5 +634,11 @@ end
         @test fv isa FEVD
         hd = historical_decomposition(m, u)
         @test hd isa HistoricalDecomposition
+        sh = structural_shocks(m, u)
+        point = MacroEconometricModels.compute_structural_shocks(m, u.Q)
+        @test sh.median == sh.lower == sh.upper
+        @test sh.median ≈ point
+        @test size(sh.quantiles, 3) == 3
+        @test sh.quantiles[:, :, 1] == sh.median
     end
 end
