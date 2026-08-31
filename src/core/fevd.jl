@@ -27,23 +27,59 @@ Compute FEVD showing proportion of h-step forecast error variance attributable t
 
 Note: `:smooth_transition` requires `transition_var` kwarg.
       `:external_volatility` requires `regime_indicator` kwarg.
+
+For `:sign`/`:narrative`, each accepted rotation gets its own FEVD; the reported
+decomposition and proportions are the pointwise median. `n_effective` is the
+number of accepted rotations.
 """
 function fevd(model::VARModel{T}, horizon::Int;
     method::Symbol=:cholesky, check_func=nothing, narrative_check=nothing,
     shock_names::Union{Nothing,Vector{String}}=nothing,
     transition_var::Union{Nothing,AbstractVector}=nothing,
     regime_indicator::Union{Nothing,AbstractVector{Int}}=nothing,
+    max_draws::Int=1000,
     rng::AbstractRNG=Random.default_rng()
 ) where {T<:AbstractFloat}
     _validate_data(model.Sigma, "Sigma")
     _validate_data(model.B, "B")
+    snames = isnothing(shock_names) ? model.varnames : shock_names
+    # SID-05: FEVD of each accepted rotation, then pointwise median. The median
+    # IRF is not Σ-orthonormal, so this is not FEVD-of-the-median-IRF.
+    if method === :sign || method === :narrative
+        isnothing(check_func) && throw(ArgumentError(
+            method === :narrative ? "Need check_func and narrative_check for narrative" :
+                                    "Need check_func for sign"))
+        method === :narrative && isnothing(narrative_check) &&
+            throw(ArgumentError("Need check_func and narrative_check for narrative"))
+        s = method === :sign ?
+            identify_sign(model, horizon, check_func; max_draws=max_draws, store_all=true, rng=rng) :
+            identify_narrative(model, horizon, check_func, narrative_check;
+                               max_draws=max_draws, store_all=true, rng=rng)
+        n = nvars(model)
+        n_acc = s.n_accepted
+        _check_fevd_orthogonality(@view(s.irf_draws[1, 1, :, :]), model.Sigma; method=method)
+        decomp_draws = zeros(T, n_acc, n, n, horizon)
+        props_draws = zeros(T, n_acc, n, n, horizon)
+        for i in 1:n_acc
+            d, p = _compute_fevd(s.irf_draws[i, :, :, :], n, horizon)
+            decomp_draws[i, :, :, :] = d
+            props_draws[i, :, :, :] = p
+        end
+        decomp = zeros(T, n, n, horizon)
+        props = zeros(T, n, n, horizon)
+        @inbounds for v in 1:n, sh in 1:n, h in 1:horizon
+            decomp[v, sh, h] = quantile(@view(decomp_draws[:, v, sh, h]), T(0.5))
+            props[v, sh, h] = quantile(@view(props_draws[:, v, sh, h]), T(0.5))
+        end
+        return FEVD{T}(decomp, props, model.varnames, snames, n_acc)
+    end
     irf_result = irf(model, horizon; method, check_func, narrative_check,
-                     transition_var=transition_var, regime_indicator=regime_indicator, rng=rng)
+                     transition_var=transition_var, regime_indicator=regime_indicator,
+                     rng=rng, max_draws=max_draws)
     # The impact matrix P = IRF[1,:,:] = chol(Σ)·Q; the squared-IRF FEVD accumulation is a
     # proper variance decomposition only when P is Σ-orthonormal (P*P' = Σ ⇔ Q*Q' = I).
     _check_fevd_orthogonality(@view(irf_result.values[1, :, :]), model.Sigma; method=method)
     decomp, props = _compute_fevd(irf_result.values, nvars(model), horizon)
-    snames = isnothing(shock_names) ? model.varnames : shock_names
     FEVD{T}(decomp, props, model.varnames, snames)
 end
 

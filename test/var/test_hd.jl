@@ -124,6 +124,11 @@ using Random
         hd_sign = historical_decomposition(model, horizon; method=:sign, check_func=check_func)
         @test hd_sign.method == :sign
         @test verify_decomposition(hd_sign)
+
+        hd_sign_md = historical_decomposition(model, horizon; method=:sign, check_func=check_func,
+                                              max_draws=200, rng=MersenneTwister(734))
+        @test hd_sign_md.method == :sign
+        @test verify_decomposition(hd_sign_md)
     end
 
     @testset "Theoretical DGP Verification" begin

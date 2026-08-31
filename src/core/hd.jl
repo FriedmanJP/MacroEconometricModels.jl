@@ -225,7 +225,9 @@ function historical_decomposition(model::VARModel{T}, horizon::Int=effective_nob
     # Ensure horizon doesn't exceed T_eff
     horizon = min(horizon, T_eff)
 
-    # Get identification matrix Q
+    # Get identification matrix Q. `:sign`/`:narrative` still use the first
+    # accepted rotation here so the HD adding-up identity is exact; set summaries
+    # (median IRF / FEVD) live in `irf` / `fevd` (SID-05).
     Q = compute_Q(model, method, horizon, check_func, narrative_check;
                   max_draws=max_draws, transition_var=transition_var, regime_indicator=regime_indicator, rng=rng)
 

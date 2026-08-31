@@ -220,7 +220,7 @@ end
 
 Compute pointwise bounds (or quantile bands) over the identified set.
 """
-function irf_bounds(s::SignIdentifiedSet{T}; quantiles::Vector{<:Real}=T[0.16, 0.84]) where {T}
+function irf_bounds(s::SignIdentifiedSet{T}; quantiles=[0.16, 0.84]) where {T}
     q = T.(quantiles)
     H, n_var, n_shock = size(s.irf_draws, 2), size(s.irf_draws, 3), size(s.irf_draws, 4)
     lower = zeros(T, H, n_var, n_shock)
@@ -253,23 +253,59 @@ end
 # =============================================================================
 
 """
-    identify_narrative(model, horizon, sign_check, narrative_check; max_draws=1000)
+    identify_narrative(model, horizon, sign_check, narrative_check; max_draws=1000, store_all=false)
 
-Combine sign and narrative restrictions. Returns (Q, irf, shocks).
+Combine sign and narrative restrictions.
+
+With `store_all=false` (default), returns `(Q, irf, shocks)` — the first valid rotation.
+With `store_all=true`, returns a `SignIdentifiedSet` of every accepted rotation (same shape
+as [`identify_sign`](@ref)).
 """
 function identify_narrative(model::VARModel{T}, horizon::Int, sign_check::Function,
                             narrative_check::Function; max_draws::Int=1000,
+                            store_all::Bool=false,
+                            shock_names::Union{Nothing,Vector{String}}=nothing,
                             rng::AbstractRNG=Random.default_rng()) where {T<:AbstractFloat}
     n = nvars(model)
+
+    if !store_all
+        for _ in 1:max_draws
+            Q = generate_Q(n, T; rng=rng)
+            irf_result = compute_irf(model, Q, horizon)
+            if sign_check(irf_result)
+                shocks = compute_structural_shocks(model, Q)
+                narrative_check(shocks) && return Q, irf_result, shocks
+            end
+        end
+        throw(IdentificationError("No valid Q found after $max_draws draws"))
+    end
+
+    accepted_Q = Matrix{T}[]
+    accepted_irf_list = Array{T,3}[]
     for _ in 1:max_draws
         Q = generate_Q(n, T; rng=rng)
-        irf = compute_irf(model, Q, horizon)
-        if sign_check(irf)
+        irf_result = compute_irf(model, Q, horizon)
+        if sign_check(irf_result)
             shocks = compute_structural_shocks(model, Q)
-            narrative_check(shocks) && return Q, irf, shocks
+            if narrative_check(shocks)
+                push!(accepted_Q, Q)
+                push!(accepted_irf_list, irf_result)
+            end
         end
     end
-    throw(IdentificationError("No valid Q found after $max_draws draws"))
+
+    n_accepted = length(accepted_Q)
+    n_accepted == 0 && throw(IdentificationError("No valid Q found after $max_draws draws"))
+
+    irf_draws = zeros(T, n_accepted, horizon, n, n)
+    for (i, irf_i) in enumerate(accepted_irf_list)
+        irf_draws[i, :, :, :] = irf_i
+    end
+
+    acceptance_rate = T(n_accepted) / T(max_draws)
+    snames = isnothing(shock_names) ? model.varnames : shock_names
+    SignIdentifiedSet{T}(accepted_Q, irf_draws, n_accepted, max_draws, acceptance_rate,
+                         model.varnames, snames)
 end
 
 # =============================================================================
@@ -396,7 +432,7 @@ end
 
 """
     compute_Q(model, method, horizon, check_func, narrative_check;
-              max_draws=100, transition_var=nothing, regime_indicator=nothing)
+              max_draws=1000, transition_var=nothing, regime_indicator=nothing)
 
 Compute identification matrix Q for structural VAR analysis.
 
@@ -421,12 +457,12 @@ Compute identification matrix Q for structural VAR analysis.
 - `:external_volatility` — External volatility regimes (requires `regime_indicator`)
 
 # Keyword Arguments
-- `max_draws::Int=100`: Maximum draws for sign/narrative identification
+- `max_draws::Int=1000`: Maximum draws for sign/narrative identification
 - `transition_var::Union{Nothing,AbstractVector}=nothing`: Transition variable for `:smooth_transition`
 - `regime_indicator::Union{Nothing,AbstractVector{Int}}=nothing`: Regime indicator for `:external_volatility`
 """
 function compute_Q(model::VARModel{T}, method::Symbol, horizon::Int, check_func, narrative_check;
-                   max_draws::Int=100,
+                   max_draws::Int=1000,
                    transition_var::Union{Nothing,AbstractVector}=nothing,
                    regime_indicator::Union{Nothing,AbstractVector{Int}}=nothing,
                    rng::AbstractRNG=Random.default_rng()) where {T<:AbstractFloat}

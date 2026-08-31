@@ -171,3 +171,14 @@ end
         end
     end
 end
+
+@testset "SID-05 set-aware sign FEVD" begin
+    Random.seed!(734)
+    m = estimate_var(randn(150, 2), 1)
+    chk(irf) = irf[1, 1, 1] > 0
+    s = identify_sign(m, 5, chk; store_all=true, rng=MersenneTwister(1), max_draws=200)
+    f = fevd(m, 5; method=:sign, check_func=chk, rng=MersenneTwister(1), max_draws=200)
+    @test f.n_effective == s.n_accepted
+    @test size(f.proportions) == (2, 2, 5)
+    @test all(f.proportions .>= -1e-12)
+end

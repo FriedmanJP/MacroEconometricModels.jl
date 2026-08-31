@@ -163,7 +163,8 @@ const _suppress_warnings = MacroEconometricModels._suppress_warnings
             check_fn = irf_vals -> irf_vals[1, 1, 1] > 0
 
             irf_sign = irf(model, H; method=:sign, ci_type=:bootstrap, reps=(FAST ? 20 : 50),
-                           conf_level=0.90, check_func=check_fn)
+                           conf_level=0.90, check_func=check_fn,
+                           set_inference=:bootstrap_x_rotations)
 
             @test irf_sign isa ImpulseResponse
             @test size(irf_sign.values) == (H, n, n)

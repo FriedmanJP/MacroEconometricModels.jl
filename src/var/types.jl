@@ -231,13 +231,22 @@ BayesianImpulseResponse{T}(quantiles, point_estimate, horizon, variables, shocks
 # FEVD
 # =============================================================================
 
-"""FEVD results: decomposition (n×n×H), proportions, variable/shock names."""
+"""FEVD results: decomposition (n×n×H), proportions, variable/shock names.
+
+`n_effective` is the number of accepted rotations used for a set-ID summary
+(`method=:sign`/`:narrative`); `0` means untracked (point-ID).
+"""
 struct FEVD{T<:AbstractFloat} <: AbstractFEVD
     decomposition::Array{T,3}
     proportions::Array{T,3}
     variables::Vector{String}
     shocks::Vector{String}
+    n_effective::Int
 end
+
+# Backward-compatible constructor (pre-SID-05, no accepted-rotation count).
+FEVD{T}(decomposition, proportions, variables, shocks) where {T} =
+    FEVD{T}(decomposition, proportions, variables, shocks, 0)
 
 """
 Bayesian FEVD with posterior quantiles.

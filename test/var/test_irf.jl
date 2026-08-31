@@ -344,8 +344,10 @@ end
     # :sign identification now threads rng through compute_Q -> identify_sign -> generate_Q
     # (previously the rotation draw leaked to the global RNG, so sign CIs were non-reproducible)
     check = ir -> ir[1, 1, 1] > 0
-    sg1 = irf(model, 8; ci_type=:bootstrap, method=:sign, check_func=check, reps=20, rng=mkrng())
-    sg2 = irf(model, 8; ci_type=:bootstrap, method=:sign, check_func=check, reps=20, rng=mkrng())
+    sg1 = irf(model, 8; ci_type=:bootstrap, method=:sign, check_func=check, reps=20, rng=mkrng(),
+              set_inference=:bootstrap_x_rotations)
+    sg2 = irf(model, 8; ci_type=:bootstrap, method=:sign, check_func=check, reps=20, rng=mkrng(),
+              set_inference=:bootstrap_x_rotations)
     @test sg1.ci_lower == sg2.ci_lower
 end
 
@@ -374,4 +376,31 @@ end
     ms = estimate_var(Ys, 1)
     Q = identify_long_run(ms)
     @test norm(Q' * Q - I(2)) < 1e-8
+end
+
+@testset "SID-05 set-aware sign IRFs" begin
+    Random.seed!(734)
+    m = estimate_var(randn(150, 2), 1)
+    chk(irf) = irf[1, 1, 1] > 0
+    rng = MersenneTwister(1)
+    s = identify_sign(m, 5, chk; store_all=true, rng=MersenneTwister(1), max_draws=200)
+    r = irf(m, 5; method=:sign, check_func=chk, seed=1, max_draws=200)
+    @test r.ci_type === :identified_set
+    @test r.values ≈ irf_median(s)
+    @test_throws ArgumentError irf(m, 5; method=:sign, check_func=chk, ci_type=:bootstrap)
+    r2 = irf(m, 5; method=:sign, check_func=chk, max_draws=500, seed=2)
+    @test r2.manifest.settings["max_draws"] == 500
+end
+
+@testset "SID-05 identify_narrative store_all" begin
+    Random.seed!(734)
+    m = estimate_var(randn(150, 2), 1)
+    chk(irf) = irf[1, 1, 1] > 0
+    s = identify_narrative(m, 5, chk, _ -> true; store_all=true, max_draws=80, rng=MersenneTwister(3))
+    @test s isa SignIdentifiedSet
+    r = irf(m, 5; method=:narrative, check_func=chk, narrative_check=_ -> true, seed=3, max_draws=80)
+    @test r.ci_type === :identified_set
+    @test r.values ≈ irf_median(s)
+    @test_throws ArgumentError irf(m, 5; method=:narrative, check_func=chk,
+                                   narrative_check=_ -> true, ci_type=:bootstrap)
 end
