@@ -510,8 +510,8 @@ function compute_Q(model::VARModel{T}, method::Symbol;
         identify_long_run(model)
     elseif method == :arias
         isnothing(restrictions) && throw(ArgumentError("arias requires restrictions"))
-        identify_arias(model, restrictions, horizon; n_draws=1, n_rotations=max_draws,
-                       rng=rng, kwargs...).Q_draws[1]
+        identify_arias(model, restrictions, horizon;
+                       _arias_freq_kwargs(max_draws; default_n_draws=1, rng=rng, kwargs...)...).Q_draws[1]
     elseif method == :uhlig
         isnothing(restrictions) && throw(ArgumentError("uhlig requires restrictions"))
         identify_uhlig(model, restrictions, horizon; rng=rng, kwargs...).Q

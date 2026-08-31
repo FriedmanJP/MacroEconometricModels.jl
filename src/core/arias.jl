@@ -797,12 +797,16 @@ function _arias_posterior_kwargs(max_draws::Int; rng::AbstractRNG=Random.default
     (rng, Int(something(n_rotations, max_draws)), compute_weights)
 end
 
-"""Peel `n_draws`/`n_rotations` before splatting into `identify_arias` (frequentist `irf`/`fevd`/`hd`)."""
+"""Peel `n_draws`/`n_rotations` before splatting into `identify_arias` (frequentist `irf`/`fevd`/`hd`/`compute_Q`).
+
+`default_n_draws` is used when the caller does not pass `n_draws` (`compute_Q` wants 1).
+"""
 function _arias_freq_kwargs(max_draws::Int; rng::AbstractRNG=Random.default_rng(),
                             n_rotations::Union{Nothing,Integer}=nothing,
                             n_draws::Union{Nothing,Integer}=nothing,
+                            default_n_draws::Integer=max_draws,
                             kwargs...)
-    (; n_draws=Int(something(n_draws, max_draws)),
+    (; n_draws=Int(something(n_draws, default_n_draws)),
        n_rotations=Int(something(n_rotations, max_draws)),
        rng, kwargs...)
 end
