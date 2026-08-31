@@ -629,3 +629,21 @@ end
     @test occursin("70/100", sh) && occursin("30 dropped", sh)
     @test !occursin("Effective draws", sprint(show, hd))
 end
+
+@testset "SID-07 IdentificationError in posterior loops" begin
+    Random.seed!(736)
+    Y = randn(80, 2)
+    post = estimate_bvar(Y, 1; n_draws=FAST ? 20 : 40, burnin=10)
+    impossible(irf) = irf[1, 1, 1] > 1e6
+    @test_throws IdentificationError irf(post, 5; method=:sign, check_func=impossible, max_draws=3)
+    pos(irf) = irf[1, 1, 1] > 0
+    r = irf(post, 5; method=:sign, check_func=pos, max_draws=20)
+    @test r isa BayesianImpulseResponse
+    # n_failed = unidentified + non-stationary (SID-07). Both counts appear in the warning
+    # and, after SID-19, on BayesianSetIdentifiedSVAR.n_unidentified.
+    @test r.n_failed == r.n_requested - r.n_effective
+    # Minority identification failures must skip the draw, not abort the posterior loop.
+    r1 = irf(post, 5; method=:sign, check_func=pos, max_draws=1)
+    @test r1 isa BayesianImpulseResponse
+    @test r1.n_failed == r1.n_requested - r1.n_effective
+end

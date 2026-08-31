@@ -682,8 +682,9 @@ weighted summaries to unweighted ones.
 
 # Returns
 A `NamedTuple` with `irf_quantiles`, `irf_mean`, `acceptance_rates`,
-`total_accepted`, `weights` (normalized), and the importance-sampling
-diagnostics `ess` / `ess_fraction` (Kish's effective sample size).
+`total_accepted`, `weights` (normalized), the importance-sampling
+diagnostics `ess` / `ess_fraction` (Kish's effective sample size), and
+`n_unidentified` (posterior draws skipped after [`IdentificationError`](@ref)).
 """
 function identify_arias_bayesian(post::BVARPosterior, restrictions::SVARRestrictions, horizon::Int;
     data::Union{Nothing,AbstractMatrix}=nothing, n_rotations::Int=100,
@@ -696,6 +697,7 @@ function identify_arias_bayesian(post::BVARPosterior, restrictions::SVARRestrict
     n_samples = size(b_vecs, 1)
     all_irfs, all_weights = Vector{Array{Float64,3}}(), Float64[]
     acc_rates = zeros(n_samples)
+    n_unidentified = 0
 
     for s in 1:n_samples
         m = parameters_to_model(b_vecs[s,:], sigmas[s,:], p, n, use_data)
@@ -713,12 +715,21 @@ function identify_arias_bayesian(post::BVARPosterior, restrictions::SVARRestrict
             end
             acc_rates[s] = result.acceptance_rate
         catch err
+            if err isa IdentificationError
+                n_unidentified += 1
+                acc_rates[s] = 0.0
+                continue
+            end
             _is_rejectable_draw_error(err) || rethrow(err)
             acc_rates[s] = 0.0
         end
     end
 
-    isempty(all_irfs) && throw(IdentificationError("No valid identifications across posterior"))
+    isempty(all_irfs) && throw(IdentificationError(
+        "No valid identifications across posterior " *
+        "(unidentified=$n_unidentified, n_samples=$n_samples)"))
+    frac_u = n_unidentified / n_samples
+    frac_u > 0.5 && @warn "$n_unidentified/$n_samples posterior draws unidentified"
 
     n_acc = length(all_irfs)
     irf_array = zeros(n_acc, horizon, n, n)
@@ -741,7 +752,7 @@ function identify_arias_bayesian(post::BVARPosterior, restrictions::SVARRestrict
     end
 
     (irf_quantiles=irf_q, irf_mean=irf_m, acceptance_rates=acc_rates, total_accepted=n_acc,
-     weights=w_norm, ess=ess, ess_fraction=ess_frac)
+     weights=w_norm, ess=ess, ess_fraction=ess_frac, n_unidentified=n_unidentified)
 end
 
 # Deprecated wrapper for old (chain, p, n, ...) signature

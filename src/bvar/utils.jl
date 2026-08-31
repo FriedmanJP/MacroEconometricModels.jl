@@ -32,8 +32,10 @@ Generic framework for processing posterior samples from BVARPosterior.
 # Process
 1. Extract chain parameters using `extract_chain_parameters`
 2. Loop over samples, reconstructing VARModel for each
-3. Compute identification matrix Q using specified method
-4. Apply `compute_func(model, Q, horizon)` to get result for each sample
+3. Skip non-stationary draws (counted separately from identification failures)
+4. Compute identification matrix Q using specified method
+5. Apply `compute_func(model, Q, horizon)` to get result for each sample
+6. Catch [`IdentificationError`](@ref) per draw (skip + count); throw only if every draw fails
 
 # Arguments
 - `post::BVARPosterior`: Posterior draws from `estimate_bvar`
@@ -50,9 +52,11 @@ Generic framework for processing posterior samples from BVARPosterior.
 - `regime_indicator`: Regime indicator (for method=:external_volatility)
 
 # Returns
-- `results::Vector`: Vector of results from `compute_func` for each sample; the element type is
+- `results::Vector`: Vector of results from `compute_func` for each valid sample; the element type is
   the concrete type returned by `compute_func` (inferred from the first valid draw, not `Any`)
-- `n_samples::Int`: Number of samples processed
+- `n_samples::Int`: Number of valid samples (`n_requested - n_unidentified - n_nonstationary`).
+  `n_failed` on IRF/FEVD/HD is this gap — unidentified and non-stationary are counted separately
+  in the all-fail error and in the unidentified-fraction warning.
 
 # Example
 ```julia
@@ -78,6 +82,7 @@ function process_posterior_samples(post::BVARPosterior, compute_func::Function;
     samples = post.n_draws
     p, n = post.p, post.n
     b_vecs, sigmas = extract_chain_parameters(post)
+    T = eltype(use_data)
 
     # Concrete-typed result container: `compute_func` returns the same concrete type for every
     # draw (e.g. `Array{T,3}` from core/irf.jl and core/fevd.jl, consumed by
@@ -85,27 +90,34 @@ function process_posterior_samples(post::BVARPosterior, compute_func::Function;
     # of boxing everything into a `Vector{Any}`. (#210 box A)
     local results
     valid_count = 0
+    n_unidentified = 0
+    n_nonstationary = 0
 
     for s in 1:samples
         m = parameters_to_model(b_vecs[s, :], sigmas[s, :], p, n, use_data)
         if !is_stationary(m).is_stationary
+            n_nonstationary += 1
             continue
         end
         try
             Q = compute_Q(m, method, horizon, check_func, narrative_check;
-                          max_draws=max_draws, transition_var=transition_var, regime_indicator=regime_indicator)
+                          max_draws=max_draws, transition_var=transition_var,
+                          regime_indicator=regime_indicator)
             res = compute_func(m, Q, horizon)
             valid_count += 1
             valid_count == 1 && (results = Vector{typeof(res)}(undef, samples))
             results[valid_count] = res
         catch e
-            # Skip draws where identification fails (e.g., no valid Q found for sign restrictions)
-            e isa ErrorException && contains(e.msg, "No valid Q found") && continue
-            rethrow(e)
+            e isa IdentificationError || rethrow(e)
+            n_unidentified += 1
+            continue
         end
     end
-    valid_count == 0 && error("All posterior draws are non-stationary; cannot process posterior samples")
-    valid_count < samples ÷ 2 && @warn "$(samples - valid_count)/$samples posterior draws non-stationary, skipped"
+    valid_count == 0 && throw(IdentificationError(
+        "All posterior draws failed identification or were non-stationary " *
+        "(unidentified=$n_unidentified, non-stationary=$n_nonstationary)"))
+    frac_u = T(n_unidentified) / T(samples)
+    frac_u > T(0.5) && @warn "$n_unidentified/$samples posterior draws unidentified ($n_nonstationary non-stationary)"
 
     results[1:valid_count], valid_count
 end
