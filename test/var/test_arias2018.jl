@@ -162,8 +162,9 @@ end
         @test 0 < res.acceptance_rate ≤ 1
 
         # (3) a genuine bug (out-of-range restriction index → BoundsError) now propagates
-        #     instead of being swallowed into "No valid identification after N attempts"
-        bogus = SVARRestrictions(3; signs=[SignRestriction(999, 1, 0, 1)])
+        #     instead of being swallowed into "No valid identification after N attempts".
+        #     Bypass the public constructor, which now rejects out-of-range indices.
+        bogus = SVARRestrictions(ZeroRestriction[], [SignRestriction(999, 1, 0, 1)], 3, 3)
         @test_throws BoundsError identify_arias(model, bogus, 8; n_draws=5, n_rotations=100)
     end
 
@@ -1597,6 +1598,25 @@ end
         @test 1 <= rb.ess <= rb.total_accepted
         @test rb.ess < rb.total_accepted                            # weighting is live
     end
+end
+
+@testset "SID-02 restriction horizon ≥ IRF horizon" begin
+    Random.seed!(731)
+    m = estimate_var(randn(150, 3), 2)
+    r5 = SVARRestrictions(3; signs=[sign_restriction(1, 1, :positive; horizon=5)])
+    a = identify_arias(m, r5, 3; n_draws=5, n_rotations=200, rng=MersenneTwister(731))
+    @test size(a.irf_draws, 2) == 3
+    for Q in a.Q_draws
+        irf6 = compute_irf(m, Q, 6)
+        @test irf6[6, 1, 1] > 0
+    end
+    r0 = SVARRestrictions(3; zeros=[zero_restriction(2, 1; horizon=4)])
+    a0 = identify_arias(m, r0, 2; n_draws=3, n_rotations=400, rng=MersenneTwister(7311))
+    for Q in a0.Q_draws
+        @test abs(compute_irf(m, Q, 5)[5, 2, 1]) < 1e-8
+    end
+    @test_throws ArgumentError SVARRestrictions(3; signs=[SignRestriction(4, 1, 0, 1)])
+    @test_throws ArgumentError sign_restriction(1, 1, :positive; horizon=-1)
 end
 
 _tprint("Arias et al. (2018) tests completed.")

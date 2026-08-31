@@ -577,4 +577,22 @@ end
 
 end
 
+@testset "SID-02 restriction horizon ≥ IRF horizon" begin
+    Random.seed!(731)
+    m = estimate_var(randn(150, 3), 2)
+    r5 = SVARRestrictions(3; signs=[sign_restriction(1, 1, :positive; horizon=5)])
+    u = identify_uhlig(m, r5, 3; n_starts=10, n_refine=2,
+                       max_iter_coarse=100, max_iter_fine=300, rng=MersenneTwister(731))
+    @test size(u.irf, 1) == 3
+    irf6 = compute_irf(m, u.Q, 6)
+    @test irf6[6, 1, 1] > 0
+    r0 = SVARRestrictions(3; zeros=[zero_restriction(2, 1; horizon=4)],
+                          signs=[sign_restriction(1, 1, :positive)])
+    u0 = identify_uhlig(m, r0, 2; n_starts=10, n_refine=2,
+                        max_iter_coarse=100, max_iter_fine=300, rng=MersenneTwister(7311))
+    @test abs(compute_irf(m, u0.Q, 5)[5, 2, 1]) < 1e-8
+    @test_throws ArgumentError SVARRestrictions(3; signs=[SignRestriction(4, 1, 0, 1)])
+    @test_throws ArgumentError sign_restriction(1, 1, :positive; horizon=-1)
+end
+
 _tprint("Mountford-Uhlig (2009) tests completed.")

@@ -41,8 +41,21 @@ struct SVARRestrictions
     n_shocks::Int
 end
 
-SVARRestrictions(n_vars::Int; zeros=ZeroRestriction[], signs=SignRestriction[]) =
+function SVARRestrictions(n_vars::Int; zeros=ZeroRestriction[], signs=SignRestriction[])
+    n_vars > 0 || throw(ArgumentError("n_vars must be positive"))
+    for zr in zeros
+        (1 <= zr.variable <= n_vars && 1 <= zr.shock <= n_vars) ||
+            throw(ArgumentError("zero restriction (var=$(zr.variable), shock=$(zr.shock)) out of 1:$n_vars"))
+        zr.horizon >= 0 || throw(ArgumentError("restriction horizon must be ≥ 0"))
+    end
+    for sr in signs
+        (1 <= sr.variable <= n_vars && 1 <= sr.shock <= n_vars) ||
+            throw(ArgumentError("sign restriction (var=$(sr.variable), shock=$(sr.shock)) out of 1:$n_vars"))
+        sr.horizon >= 0 || throw(ArgumentError("restriction horizon must be ≥ 0"))
+        sr.sign in (-1, 1) || throw(ArgumentError("sign must be -1 or +1"))
+    end
     SVARRestrictions(zeros, signs, n_vars, n_vars)
+end
 
 """
 Result from Arias et al. (2018) identification.
@@ -613,10 +626,10 @@ function identify_arias(model::VARModel{T}, restrictions::SVARRestrictions, hori
             else
                 Q = _draw_uniform_orthogonal(n, T; rng=rng)
             end
-            irf = _compute_irf_for_Q(model, Q, Phi, L, horizon)
-
-            (has_zeros && !_check_zero_restrictions(irf, restrictions)) && continue
-            !_check_sign_restrictions(irf, restrictions) && continue
+            irf_full = _compute_irf_for_Q(model, Q, Phi, L, max_h)
+            (has_zeros && !_check_zero_restrictions(irf_full, restrictions)) && continue
+            !_check_sign_restrictions(irf_full, restrictions) && continue
+            irf = irf_full[1:horizon, :, :]
 
             push!(Q_draws, Q)
             push!(irf_draws, irf)
@@ -752,11 +765,18 @@ end
 # --- Convenience Functions ---
 
 """Create zero restriction: variable doesn't respond to shock at horizon."""
-zero_restriction(variable::Int, shock::Int; horizon::Int=0) = ZeroRestriction(variable, shock, horizon)
+function zero_restriction(variable::Int, shock::Int; horizon::Int=0)
+    horizon >= 0 || throw(ArgumentError("restriction horizon must be ≥ 0"))
+    ZeroRestriction(variable, shock, horizon)
+end
 
 """Create sign restriction: variable response has given sign (:positive/:negative) at horizon."""
-sign_restriction(variable::Int, shock::Int, sign::Symbol; horizon::Int=0) =
-    SignRestriction(variable, shock, horizon, sign == :positive ? 1 : -1)
+function sign_restriction(variable::Int, shock::Int, sign::Symbol; horizon::Int=0)
+    horizon >= 0 || throw(ArgumentError("restriction horizon must be ≥ 0"))
+    s = sign === :positive ? 1 : sign === :negative ? -1 :
+        throw(ArgumentError("sign must be :positive or :negative"))
+    SignRestriction(variable, shock, horizon, s)
+end
 
 """Compute weighted IRF percentiles from AriasSVARResult."""
 function irf_percentiles(result::AriasSVARResult{T}; quantiles::Vector{Float64}=[0.16, 0.5, 0.84]) where {T}

@@ -220,8 +220,6 @@ function _uhlig_penalty(theta_all::AbstractVector{T}, restrictions::SVARRestrict
     total_penalty = zero(T)
     for sr in restrictions.signs
         h_idx = sr.horizon + 1
-        h_idx > horizon && continue
-
         response = irf[h_idx, sr.variable, sr.shock]
         sigma_v = sigma[sr.variable]
 
@@ -253,8 +251,6 @@ function _uhlig_shock_penalties(Q::Matrix{T}, restrictions::SVARRestrictions,
     shock_penalties = zeros(T, n)
     for sr in restrictions.signs
         h_idx = sr.horizon + 1
-        h_idx > horizon && continue
-
         response = irf[h_idx, sr.variable, sr.shock]
         normalized = sr.sign * response / sigma[sr.variable]
         weight = normalized >= zero(T) ? T(100) : one(T)
@@ -411,10 +407,11 @@ function identify_uhlig(model::VARModel{T}, restrictions::SVARRestrictions, hori
     # Build final result
     # =========================================================================
     Q = _uhlig_build_Q(best_theta, restrictions, Phi, L, n)
-    irf = _compute_irf_for_Q(model, Q, Phi, L, horizon)
+    irf_full = _compute_irf_for_Q(model, Q, Phi, L, max_h)
 
     # Check convergence: all sign restrictions satisfied?
-    converged = _check_sign_restrictions(irf, restrictions)
+    converged = _check_sign_restrictions(irf_full, restrictions)
+    irf = irf_full[1:horizon, :, :]
 
     # Per-shock penalty diagnostics
     shock_penalties = _uhlig_shock_penalties(Q, restrictions, Phi, L, model, max_h)
