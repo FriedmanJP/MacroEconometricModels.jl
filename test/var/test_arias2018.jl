@@ -513,8 +513,8 @@ end
         result_arias = identify_arias(model, restrictions, 10; n_draws=(FAST ? 5 : 10), n_rotations=(FAST ? 20 : 100))
 
         # Get Cholesky IRF
-        L = identify_cholesky(model)
-        Q_chol = Matrix{Float64}(I, n, n)
+        L = cholesky_factor(model)
+        Q_chol = identify_cholesky(model)
         irf_chol = MacroEconometricModels.compute_irf(model, Q_chol, 10)
 
         # Impact responses from Arias should match Cholesky structure
@@ -860,11 +860,11 @@ end
         end
     end
 
-    @testset "_draw_uniform_orthogonal" begin
+    @testset "haar_orthogonal" begin
         Random.seed!(88888)
 
         for n in [2, 3, 4, 5]
-            Q = MacroEconometricModels._draw_uniform_orthogonal(n, Float64)
+            Q = MacroEconometricModels.haar_orthogonal(n, Float64)
 
             # Should be orthogonal
             @test size(Q) == (n, n)
@@ -876,6 +876,7 @@ end
                 @test abs(norm(Q[:, j]) - 1.0) < 1e-10
             end
         end
+        @test MacroEconometricModels.haar_orthogonal === MacroEconometricModels.generate_Q
     end
 
     @testset "_check_zero_restrictions" begin
@@ -975,7 +976,7 @@ end
 
         Phi = MacroEconometricModels._compute_ma_coefficients(model, 5)
         L = safe_cholesky(model.Sigma)
-        Q = MacroEconometricModels._draw_uniform_orthogonal(n, Float64)
+        Q = MacroEconometricModels.haar_orthogonal(n, Float64)
 
         # No zero restrictions - backward-compatible 4-arg form should return 1
         restrictions_no_zeros = SVARRestrictions(ZeroRestriction[], SignRestriction[], n, n)
@@ -1027,7 +1028,7 @@ end
         horizon = 5
         Phi = MacroEconometricModels._compute_ma_coefficients(model, horizon)
         L = safe_cholesky(model.Sigma)
-        Q = MacroEconometricModels._draw_uniform_orthogonal(n, Float64)
+        Q = MacroEconometricModels.haar_orthogonal(n, Float64)
 
         irf = MacroEconometricModels._compute_irf_for_Q(model, Q, Phi, L, horizon)
 
@@ -1133,7 +1134,7 @@ end
         model = estimate_var(Y, p)
 
         L = safe_cholesky(model.Sigma)
-        Q = MacroEconometricModels._draw_uniform_orthogonal(n, Float64)
+        Q = MacroEconometricModels.haar_orthogonal(n, Float64)
 
         # Forward: (B, L, Q) → (A0, Aplus)
         A0, Aplus = MacroEconometricModels._rf_to_struct(model.B, L, Q)
@@ -1617,6 +1618,27 @@ end
     end
     @test_throws ArgumentError SVARRestrictions(3; signs=[SignRestriction(4, 1, 0, 1)])
     @test_throws ArgumentError sign_restriction(1, 1, :positive; horizon=-1)
+end
+
+@testset "SID-19 BayesianSetIdentifiedSVAR" begin
+    Random.seed!(748)
+    Y = randn(80, 2)
+    post = estimate_bvar(Y, 1; n_draws=FAST ? 12 : 20, burnin=5)
+    r = SVARRestrictions(2; signs=[sign_restriction(1, 1, :positive)])
+    res = identify_arias_bayesian(post, r, 4; n_rotations=FAST ? 20 : 50,
+                                  rng=MersenneTwister(748))
+    @test res isa BayesianSetIdentifiedSVAR
+    @test res.n_unidentified >= 0
+    @test res.n_degenerate_weights >= 0
+    @test res.total_accepted == size(res.irf_draws, 1)
+    @test length(res.weights) == res.total_accepted
+    @test hasproperty(res, :ess)
+    fv = fevd(res)
+    @test fv isa BayesianFEVD
+    ir = irf(res)
+    @test ir isa BayesianImpulseResponse
+    p = plot_result(res)
+    @test p isa PlotOutput
 end
 
 _tprint("Arias et al. (2018) tests completed.")

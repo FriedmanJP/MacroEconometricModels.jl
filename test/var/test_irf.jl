@@ -405,3 +405,39 @@ end
     @test_throws ArgumentError irf(m, 5; method=:narrative, check_func=chk,
                                    narrative_check=_ -> true, ci_type=:bootstrap)
 end
+
+@testset "SID-19 one identification API" begin
+    Random.seed!(748)
+    m = estimate_var(randn(80, 2), 1)
+    n = nvars(m)
+    @test identify_cholesky(m) ≈ Matrix{Float64}(I, n, n)
+    L = cholesky_factor(m)
+    @test istriu(L')
+    @test L * L' ≈ m.Sigma atol=1e-8
+
+    Qkw = MacroEconometricModels.compute_Q(m, :cholesky; horizon=5)
+    @test Qkw ≈ I(n)
+    Qpos = @test_deprecated MacroEconometricModels.compute_Q(m, :cholesky, 5, nothing, nothing)
+    @test Qpos ≈ I(n)
+
+    @test MacroEconometricModels._needs_residuals(:cholesky) == false
+    @test MacroEconometricModels._needs_residuals(:fastica) == true
+    @test MacroEconometricModels._is_set_identified(:arias)
+    @test !MacroEconometricModels._is_set_identified(:uhlig)
+    @test !MacroEconometricModels._is_partial(:cholesky)
+    @test_throws ArgumentError MacroEconometricModels._needs_residuals(:not_a_method)
+    @test !haskey(MacroEconometricModels.IDENTIFICATION_REGISTRY, :proxy)
+
+    r = SVARRestrictions(2; signs=[sign_restriction(1, 1, :positive)])
+    ra = irf(m, 5; method=:arias, restrictions=r, max_draws=30, seed=1)
+    @test ra.ci_type === :identified_set
+    @test ra.values[1, 1, 1] > 0
+    @test size(ra.values) == (5, n, n)
+
+    rng_u = MersenneTwister(748)
+    uhlig_kw = (n_starts=FAST ? 3 : 8, n_refine=1, max_iter_coarse=80, max_iter_fine=200)
+    u = identify_uhlig(m, r, 5; rng=copy(rng_u), uhlig_kw...)
+    ru = irf(m, 5; method=:uhlig, restrictions=r, rng=copy(rng_u), uhlig_kw...)
+    @test ru.values ≈ u.irf
+    @test ru.values[1, 1, 1] > 0
+end

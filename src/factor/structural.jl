@@ -521,7 +521,7 @@ function _fglr_identify_H(Lambda::AbstractMatrix{T}, K::AbstractMatrix{T},
     end
 
     if identification === :sign
-        Psi = _reduced_form_ma(factor_var, H_irf)
+        Psi = _ma_array(factor_var, H_irf)
         scale = (standardize && units === :raw && X !== nothing) ?
             max.(vec(std(X; dims=1)), T(1e-10)) : nothing
         n_check = restriction_space === :panel ? N : r
@@ -562,9 +562,9 @@ function _fglr_identify_H(Lambda::AbstractMatrix{T}, K::AbstractMatrix{T},
 
     identification in _SDFM_COMPUTE_Q_METHODS || throw(ArgumentError(
         "identification must be one of $(_SDFM_ID_METHODS), got :$identification"))
-    Q = compute_Q(factor_var, identification, H_irf, sign_check, narrative_check;
-                  max_draws=max_draws, transition_var=transition_var,
-                  regime_indicator=regime_indicator, rng=rng)
+    Q = compute_Q(factor_var, identification; horizon=H_irf, check_func=sign_check,
+                  narrative_check=narrative_check, max_draws=max_draws,
+                  transition_var=transition_var, regime_indicator=regime_indicator, rng=rng)
     return Matrix{T}(Q), nothing, one(T), true, nothing, nanF
 end
 
@@ -828,21 +828,7 @@ function _sdfm_sign_search(irf_from_Q, q::Int, H::Int, n_var::Int, ::Type{T},
     first_Q, idset, rate
 end
 
-"""Reduced-form MA coefficients Ψ_h of a VAR (Ψ_1 = I)."""
-function _reduced_form_ma(model::VARModel{T}, horizon::Int) where {T<:AbstractFloat}
-    n, p = nvars(model), model.p
-    A = extract_ar_coefficients(model.B, n, p)
-    Phi = zeros(T, horizon, n, n)
-    Phi[1, :, :] .= I(n)
-    @inbounds for h in 2:horizon
-        acc = zeros(T, n, n)
-        for j in 1:min(p, h - 1)
-            acc .+= A[j] * @view(Phi[h - j, :, :])
-        end
-        Phi[h, :, :] = acc
-    end
-    Phi
-end
+
 
 """Panel IRFs Λ Ψ_h B0, optionally rescaled to original units."""
 function _fglr_panel_irf(factor_var::VARModel{T}, Lambda::AbstractMatrix{T},
@@ -851,7 +837,7 @@ function _fglr_panel_irf(factor_var::VARModel{T}, Lambda::AbstractMatrix{T},
 
     r, q = size(B0)
     N = size(Lambda, 1)
-    Psi = _reduced_form_ma(factor_var, H)
+    Psi = _ma_array(factor_var, H)
     panel = zeros(T, H, N, q)
     @inbounds for h in 1:H
         fac = @view(Psi[h, :, :]) * B0     # r × q
@@ -932,9 +918,9 @@ function _estimate_sdfm_gdfm_var(gdfm::GeneralizedDynamicFactorModel{T}, q::Int,
         rest isa SVARRestrictions || throw(ArgumentError(":uhlig requires restrictions::SVARRestrictions"))
         Q = identify_uhlig(factor_var, rest, H; rng=rng).Q
     else
-        Q = compute_Q(factor_var, identification, H, sign_check, narrative_check;
-                      max_draws=max_draws, transition_var=transition_var,
-                      regime_indicator=regime_indicator, rng=rng)
+        Q = compute_Q(factor_var, identification; horizon=H, check_func=sign_check,
+                      narrative_check=narrative_check, max_draws=max_draws,
+                      transition_var=transition_var, regime_indicator=regime_indicator, rng=rng)
     end
 
     factor_irf = compute_irf(factor_var, Q, H)

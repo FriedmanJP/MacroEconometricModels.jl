@@ -215,7 +215,7 @@ function _uhlig_penalty(theta_all::AbstractVector{T}, restrictions::SVARRestrict
     end
 
     # Compute IRF
-    irf = _compute_irf_for_Q(model, Q, Phi, L, horizon)
+    irf = structural_irf(Phi, L, Q, horizon)
 
     # Compute standard deviations for normalization
     sigma = zeros(T, n)
@@ -248,7 +248,7 @@ function _uhlig_shock_penalties(Q::Matrix{T}, restrictions::SVARRestrictions,
                                  penalty_weight::Real=100) where {T<:AbstractFloat}
     pw = T(penalty_weight)
     n = size(Q, 1)
-    irf = _compute_irf_for_Q(model, Q, Phi, L, horizon)
+    irf = structural_irf(Phi, L, Q, horizon)
 
     sigma = zeros(T, n)
     for i in 1:n
@@ -336,7 +336,7 @@ function identify_uhlig(model::VARModel{T}, restrictions::SVARRestrictions, hori
         isempty(restrictions.signs) ? 0 : maximum(sr.horizon for sr in restrictions.signs) + 1)
 
     # Precompute MA coefficients and Cholesky factor
-    Phi = _compute_ma_coefficients(model, max_h)
+    Phi = ma_coefficients(model, max_h + 1)
     L = safe_cholesky(model.Sigma)
 
     # Count free parameters
@@ -421,7 +421,7 @@ function identify_uhlig(model::VARModel{T}, restrictions::SVARRestrictions, hori
     # Build final result
     # =========================================================================
     Q = _uhlig_build_Q(best_theta, restrictions, Phi, L, n)
-    irf_full = _compute_irf_for_Q(model, Q, Phi, L, max_h)
+    irf_full = structural_irf(Phi, L, Q, max_h)
 
     # Check convergence: all sign restrictions satisfied?
     converged = _check_sign_restrictions(irf_full, restrictions)

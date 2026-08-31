@@ -15,8 +15,12 @@ using Distributions: loggamma
 # Cholesky Identification
 # =============================================================================
 
-"""Identify via Cholesky decomposition (recursive ordering). Returns L where Σ = LL'."""
-identify_cholesky(model::VARModel{T}) where {T<:AbstractFloat} = safe_cholesky(model.Sigma)
+"""Identify via Cholesky decomposition (recursive ordering). Returns Q = I."""
+identify_cholesky(model::VARModel{T}) where {T<:AbstractFloat} =
+    Matrix{T}(I, nvars(model), nvars(model))
+
+"""Lower-triangular Cholesky factor L of `model.Sigma` (Σ = LL')."""
+cholesky_factor(model::VARModel{T}) where {T<:AbstractFloat} = safe_cholesky(model.Sigma)
 
 # =============================================================================
 # External-instrument (proxy) identification
@@ -115,6 +119,9 @@ function generate_Q(n::Int, ::Type{T}=Float64; rng::AbstractRNG=Random.default_r
     d = [r < zero(T) ? -one(T) : one(T) for r in diag(R)]
     Matrix(Q) * Diagonal(d)
 end
+
+"""Haar-uniform draw from O(n); alias of [`generate_Q`](@ref)."""
+const haar_orthogonal = generate_Q
 
 # =============================================================================
 # IRF Computation
@@ -345,16 +352,31 @@ function identify_long_run(model::VARModel{T}) where {T<:AbstractFloat}
     Q
 end
 
-# Residual-free methods identify from Σ (and B for long-run/sign), not U.
-# Theoretical CIs draw B* with empty residuals; residual-based methods must
-# reject ci_type=:theoretical. SID-19 replaces this set with a registry lookup.
-const _RESIDUAL_FREE_METHODS = (:cholesky, :long_run, :sign)
-_needs_residuals(method::Symbol) = method ∉ _RESIDUAL_FREE_METHODS
+# Identification registry (SID-19). Flags used by SID-04/05/06 and FEVD.
+struct IdentificationMethod
+    name::Symbol
+    needs_residuals::Bool
+    is_set_identified::Bool
+    is_partial::Bool
+end
+
+const IDENTIFICATION_REGISTRY = Dict{Symbol,IdentificationMethod}()
+
+register_identification!(m::IdentificationMethod) = (IDENTIFICATION_REGISTRY[m.name] = m)
+
+function _identification_method(method::Symbol)
+    get(IDENTIFICATION_REGISTRY, method) do
+        throw(ArgumentError("Unknown method: $method"))
+    end
+end
+
+_needs_residuals(method::Symbol) = _identification_method(method).needs_residuals
+_is_set_identified(method::Symbol) = _identification_method(method).is_set_identified
+_is_partial(method::Symbol) = _identification_method(method).is_partial
 
 # Statistical-ID Q is identified only up to signed permutation. Match bootstrap /
-# posterior columns to a point-estimate impact. Skip Cholesky, long-run, and
-# set-ID methods (SID-05). :sign is residual-free but still skipped here.
-_should_match_columns(method::Symbol) = _needs_residuals(method) && method !== :narrative
+# posterior columns to a point-estimate impact. Skip recursive/long-run and set-ID.
+_should_match_columns(method::Symbol) = _needs_residuals(method) && !_is_set_identified(method)
 
 """
     _match_columns(P_ref, P_b) -> (perm, signs)
@@ -423,6 +445,7 @@ end
 # =============================================================================
 
 function _assert_orthogonal(Q::AbstractMatrix, method::Symbol)
+    _is_partial(method) && return Q
     n = size(Q, 1)
     size(Q, 2) == n || return Q
     d = norm(Q' * Q - I(n))
@@ -431,16 +454,18 @@ function _assert_orthogonal(Q::AbstractMatrix, method::Symbol)
 end
 
 """
-    compute_Q(model, method, horizon, check_func, narrative_check;
-              max_draws=1000, transition_var=nothing, regime_indicator=nothing)
+    compute_Q(model, method; horizon=1, restrictions=nothing, check_func=nothing,
+              narrative_check=nothing, max_draws=1000, rng, ...)
 
 Compute identification matrix Q for structural VAR analysis.
 
 # Methods
-- `:cholesky` — Cholesky decomposition (recursive ordering)
+- `:cholesky` — recursive ordering (`Q = I`; impact is `cholesky_factor(model)`)
 - `:sign` — Sign restrictions (requires `check_func`)
 - `:narrative` — Narrative restrictions (requires `check_func` and `narrative_check`)
 - `:long_run` — Long-run restrictions (Blanchard-Quah)
+- `:arias` — Arias, Rubio-Ramírez & Waggoner (2018) (requires `restrictions`)
+- `:uhlig` — Mountford & Uhlig (2009) penalty function (requires `restrictions`)
 - `:fastica` — FastICA (Hyvärinen 1999)
 - `:jade` — JADE (Cardoso & Souloumiac 1993)
 - `:sobi` — SOBI (Belouchrani et al. 1997)
@@ -457,18 +482,23 @@ Compute identification matrix Q for structural VAR analysis.
 - `:external_volatility` — External volatility regimes (requires `regime_indicator`)
 
 # Keyword Arguments
-- `max_draws::Int=1000`: Maximum draws for sign/narrative identification
-- `transition_var::Union{Nothing,AbstractVector}=nothing`: Transition variable for `:smooth_transition`
-- `regime_indicator::Union{Nothing,AbstractVector{Int}}=nothing`: Regime indicator for `:external_volatility`
+- `horizon::Int=1`: IRF horizon for sign/narrative/Arias/Uhlig
+- `restrictions`: `SVARRestrictions` for `:arias` / `:uhlig`
+- `max_draws::Int=1000`: Maximum draws for sign/narrative/Arias
+- `transition_var`: Transition variable for `:smooth_transition`
+- `regime_indicator`: Regime indicator for `:external_volatility`
 """
-function compute_Q(model::VARModel{T}, method::Symbol, horizon::Int, check_func, narrative_check;
-                   max_draws::Int=1000,
-                   transition_var::Union{Nothing,AbstractVector}=nothing,
-                   regime_indicator::Union{Nothing,AbstractVector{Int}}=nothing,
-                   rng::AbstractRNG=Random.default_rng()) where {T<:AbstractFloat}
+function compute_Q(model::VARModel{T}, method::Symbol;
+                   horizon::Int=1, restrictions=nothing, check_func=nothing,
+                   narrative_check=nothing, instruments=nothing, pattern=nothing,
+                   target=nothing, max_draws::Int=1000,
+                   transition_var=nothing, regime_indicator=nothing,
+                   rng::AbstractRNG=Random.default_rng(),
+                   kwargs...) where {T<:AbstractFloat}
+    haskey(IDENTIFICATION_REGISTRY, method) || throw(ArgumentError("Unknown method: $method"))
     n = nvars(model)
     Q = if method == :cholesky
-        Matrix{T}(I, n, n)
+        identify_cholesky(model)
     elseif method == :sign
         isnothing(check_func) && throw(ArgumentError("Need check_func for sign"))
         identify_sign(model, horizon, check_func; max_draws, rng)[1]
@@ -478,6 +508,13 @@ function compute_Q(model::VARModel{T}, method::Symbol, horizon::Int, check_func,
         identify_narrative(model, horizon, check_func, narrative_check; max_draws, rng)[1]
     elseif method == :long_run
         identify_long_run(model)
+    elseif method == :arias
+        isnothing(restrictions) && throw(ArgumentError("arias requires restrictions"))
+        identify_arias(model, restrictions, horizon; n_draws=1, n_rotations=max_draws,
+                       rng=rng, kwargs...).Q_draws[1]
+    elseif method == :uhlig
+        isnothing(restrictions) && throw(ArgumentError("uhlig requires restrictions"))
+        identify_uhlig(model, restrictions, horizon; rng=rng, kwargs...).Q
     # Non-Gaussian ICA methods (defined in nongaussian_ica.jl, loaded after this file)
     # :fastica is the only statistical-identification method that draws (random init);
     # jade/sobi/dcov/hsic + all ML/heteroskedastic methods are deterministic (#243).
@@ -520,6 +557,41 @@ function compute_Q(model::VARModel{T}, method::Symbol, horizon::Int, check_func,
     end
     _assert_orthogonal(Q, method)
 end
+
+function compute_Q(model, method, horizon, check_func, narrative_check; kwargs...)
+    Base.depwarn("positional compute_Q(model, method, horizon, check_func, narrative_check) is deprecated; use keyword form", :compute_Q)
+    compute_Q(model, method; horizon, check_func, narrative_check, kwargs...)
+end
+
+function _register_builtin_identification!()
+    specs = (
+        (:cholesky, false, false, false),
+        (:long_run, false, false, false),
+        (:sign, false, true, false),
+        (:narrative, true, true, false),
+        (:fastica, true, false, false),
+        (:jade, true, false, false),
+        (:sobi, true, false, false),
+        (:dcov, true, false, false),
+        (:hsic, true, false, false),
+        (:student_t, true, false, false),
+        (:mixture_normal, true, false, false),
+        (:pml, true, false, false),
+        (:skew_normal, true, false, false),
+        (:nongaussian_ml, true, false, false),
+        (:markov_switching, true, false, false),
+        (:garch, true, false, false),
+        (:smooth_transition, true, false, false),
+        (:external_volatility, true, false, false),
+        (:arias, false, true, false),
+        (:uhlig, false, false, false),
+    )
+    for (name, needs_resid, set_id, partial) in specs
+        register_identification!(IdentificationMethod(name, needs_resid, set_id, partial))
+    end
+    nothing
+end
+_register_builtin_identification!()
 
 
 # Arias et al. (2018) identification — extracted to arias.jl

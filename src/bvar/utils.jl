@@ -73,7 +73,9 @@ function process_posterior_samples(post::BVARPosterior, compute_func::Function;
     method::Symbol=:cholesky, horizon::Int=20,
     check_func=nothing, narrative_check=nothing, max_draws::Int=5000,
     transition_var::Union{Nothing,AbstractVector}=nothing,
-    regime_indicator::Union{Nothing,AbstractVector{Int}}=nothing
+    regime_indicator::Union{Nothing,AbstractVector{Int}}=nothing,
+    restrictions=nothing,
+    kwargs...
 )
     use_data = isempty(data) ? post.data : data
     method == :narrative && isempty(use_data) &&
@@ -93,9 +95,10 @@ function process_posterior_samples(post::BVARPosterior, compute_func::Function;
     if match_columns
         m_mean = posterior_mean_model(post; data=use_data)
         try
-            Q_mean = compute_Q(m_mean, method, horizon, check_func, narrative_check;
+            Q_mean = compute_Q(m_mean, method; horizon=horizon, check_func=check_func,
+                               narrative_check=narrative_check, restrictions=restrictions,
                                max_draws=max_draws, transition_var=transition_var,
-                               regime_indicator=regime_indicator)
+                               regime_indicator=regime_indicator, kwargs...)
             P_ref = Matrix{T}(safe_cholesky(m_mean.Sigma) * Q_mean)
         catch e
             e isa IdentificationError || rethrow(e)
@@ -119,9 +122,10 @@ function process_posterior_samples(post::BVARPosterior, compute_func::Function;
             continue
         end
         try
-            Q = compute_Q(m, method, horizon, check_func, narrative_check;
+            Q = compute_Q(m, method; horizon=horizon, check_func=check_func,
+                          narrative_check=narrative_check, restrictions=restrictions,
                           max_draws=max_draws, transition_var=transition_var,
-                          regime_indicator=regime_indicator)
+                          regime_indicator=regime_indicator, kwargs...)
             if P_ref === nothing && match_columns
                 P_ref = Matrix{T}(safe_cholesky(m.Sigma) * Q)
             end

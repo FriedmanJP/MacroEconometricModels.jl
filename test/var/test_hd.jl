@@ -10,6 +10,10 @@ using LinearAlgebra
 using Statistics
 using Random
 
+if !@isdefined(FAST)
+    const FAST = get(ENV, "MACRO_FAST_TESTS", "") == "1"
+end
+
 @testset "Historical Decomposition Tests" begin
 
     @testset "Basic Frequentist HD" begin
@@ -497,6 +501,22 @@ using Random
         @test hd.contributions ≈ med
         contrib1, _, _ = MacroEconometricModels._hd_from_Q(m, s.Q_draws[1], T_eff, actual)
         @test hd.contributions ≉ contrib1
+    end
+
+    @testset "SID-19 arias/uhlig HD" begin
+        Random.seed!(748)
+        m = estimate_var(randn(80, 2), 1)
+        r = SVARRestrictions(2; signs=[sign_restriction(1, 1, :positive)])
+        hda = historical_decomposition(m; method=:arias, restrictions=r,
+                                       max_draws=20, rng=MersenneTwister(1))
+        @test hda isa HistoricalDecomposition
+        @test size(hda.contributions, 2) == 2
+        hdu = historical_decomposition(m; method=:uhlig, restrictions=r,
+                                       rng=MersenneTwister(2),
+                                       n_starts=FAST ? 3 : 8, n_refine=1,
+                                       max_iter_coarse=80, max_iter_fine=200)
+        @test hdu isa HistoricalDecomposition
+        @test verify_decomposition(hdu)
     end
 
 end

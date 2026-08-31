@@ -35,7 +35,9 @@ using Random
     model = estimate_var(Y, p)
 
     # 6. Identification (Cholesky)
-    L = identify_cholesky(model)
+    Q_chol_id = identify_cholesky(model)
+    @test Q_chol_id ≈ I(n)
+    L = cholesky_factor(model)
     @test istriu(L')
 
     # 7. Sign Restrictions
@@ -77,7 +79,7 @@ using Random
         A_sum += B[start_row:end_row, :]'
     end
     inv_lag = inv(I(n) - A_sum)
-    L_chol = identify_cholesky(model)
+    L_chol = cholesky_factor(model)
     P = L_chol * Q_lr
     LR_Matrix = inv_lag * P
 
@@ -378,7 +380,9 @@ using Random
         Y = randn(200, 3)
         model = estimate_var(Y, 1)
 
-        L = identify_cholesky(model)
+        Q = identify_cholesky(model)
+        @test Q ≈ I(3)
+        L = cholesky_factor(model)
         @test size(L) == (3, 3)
 
         # L should be lower triangular
@@ -592,7 +596,7 @@ end
     H = 12
 
     @testset "reduced-form MA recursion" begin
-        Phi = M._reduced_form_ma(m.B, 3, 2, 5)
+        Phi = M.ma_coefficients(m.B, 3, 2, 5)
         @test length(Phi) == 5
         @test Phi[1] ≈ I(3)                       # Phi_0 = I
         Acoef = M.extract_ar_coefficients(m.B, 3, 2)

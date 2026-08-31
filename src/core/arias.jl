@@ -75,9 +75,10 @@ struct AriasSVARResult{T<:AbstractFloat}
     ess::T
     ess_fraction::T
     varnames::Vector{String}
+    n_degenerate_weights::Int
 end
 
-# Back-compatible arities: pre-ESS / pre-varnames construction sites omit trailing fields.
+# Back-compatible arities: pre-ESS / pre-varnames / pre-degenerate construction sites.
 function AriasSVARResult{T}(Q_draws, irf_draws, weights, acceptance_rate,
                             restrictions) where {T<:AbstractFloat}
     ess = T(_effective_sample_size(weights))
@@ -85,15 +86,55 @@ function AriasSVARResult{T}(Q_draws, irf_draws, weights, acceptance_rate,
     nv = restrictions.n_vars
     AriasSVARResult{T}(Q_draws, irf_draws, weights, acceptance_rate, restrictions,
                        ess, n > 0 ? ess / T(n) : zero(T),
-                       ["var$i" for i in 1:nv])
+                       ["var$i" for i in 1:nv], 0)
 end
 
 function AriasSVARResult{T}(Q_draws, irf_draws, weights, acceptance_rate,
                             restrictions, ess, ess_fraction) where {T<:AbstractFloat}
     nv = restrictions.n_vars
     AriasSVARResult{T}(Q_draws, irf_draws, weights, acceptance_rate, restrictions,
-                       ess, ess_fraction, ["var$i" for i in 1:nv])
+                       ess, ess_fraction, ["var$i" for i in 1:nv], 0)
 end
+
+function AriasSVARResult{T}(Q_draws, irf_draws, weights, acceptance_rate,
+                            restrictions, ess, ess_fraction, varnames) where {T<:AbstractFloat}
+    AriasSVARResult{T}(Q_draws, irf_draws, weights, acceptance_rate, restrictions,
+                       ess, ess_fraction, varnames, 0)
+end
+
+"""
+Bayesian set-identified SVAR (Arias et al. 2018 applied to posterior draws).
+
+`total_accepted` is `size(irf_draws, 1)`. `n_degenerate_weights` counts draws
+skipped because the importance log-weight was non-finite.
+"""
+struct BayesianSetIdentifiedSVAR{T<:AbstractFloat}
+    Q_draws::Vector{Matrix{T}}
+    irf_draws::Array{T,4}
+    weights::Vector{T}
+    ess::T
+    restrictions::SVARRestrictions
+    varnames::Vector{String}
+    n_unidentified::Int
+    n_degenerate_weights::Int
+    irf_quantiles::Array{T,4}
+    irf_mean::Array{T,3}
+    acceptance_rates::Vector{T}
+    ess_fraction::T
+end
+
+function Base.getproperty(r::BayesianSetIdentifiedSVAR, s::Symbol)
+    s === :total_accepted && return size(getfield(r, :irf_draws), 1)
+    getfield(r, s)
+end
+
+function Base.propertynames(::BayesianSetIdentifiedSVAR, private::Bool=false)
+    (fieldnames(BayesianSetIdentifiedSVAR)..., :total_accepted)
+end
+
+Base.haskey(::BayesianSetIdentifiedSVAR, s::Symbol) =
+    s === :total_accepted || hasfield(BayesianSetIdentifiedSVAR, s)
+Base.getindex(r::BayesianSetIdentifiedSVAR, s::Symbol) = getproperty(r, s)
 
 """
 Fraction of the nominal draw count below which importance weights are reported
@@ -118,42 +159,17 @@ function _warn_low_ess(ess::Real, ess_fraction::Real, n::Integer, label::Abstrac
     nothing
 end
 
-# --- MA Coefficients ---
+# --- MA Coefficients (wrappers around the shared kernels in irf.jl) ---
 
-"""Compute MA coefficients Φ_0, ..., Φ_horizon."""
+"""Compute MA coefficients Φ_0, ..., Φ_horizon (length horizon+1)."""
 function _compute_ma_coefficients(model::VARModel{T}, horizon::Int) where {T<:AbstractFloat}
-    n, p = nvars(model), model.p
-    A = extract_ar_coefficients(model.B, n, p)
-    Phi = Vector{Matrix{T}}(undef, horizon + 1)
-    Phi[1] = Matrix{T}(I, n, n)
-    for h in 1:horizon
-        Phi[h + 1] = sum(A[j] * Phi[h - j + 1] for j in 1:min(p, h); init=zeros(T, n, n))
-    end
-    Phi
-end
-
-"""Draw uniformly from O(n) via QR decomposition."""
-function _draw_uniform_orthogonal(n::Int, ::Type{T}=Float64; rng::AbstractRNG=Random.default_rng()) where {T<:AbstractFloat}
-    X = randn(rng, T, n, n)
-    F = qr(X)
-    Q = Matrix(F.Q)
-    R_diag = diag(F.R)
-    for j in 1:n
-        R_diag[j] < 0 && (Q[:, j] = -Q[:, j])
-    end
-    Q
+    ma_coefficients(model.B, nvars(model), model.p, horizon + 1)
 end
 
 """Compute structural IRF for rotation Q."""
 function _compute_irf_for_Q(model::VARModel{T}, Q::Matrix{T}, Phi::Vector{Matrix{T}},
                             L::LowerTriangular{T,Matrix{T}}, horizon::Int) where {T<:AbstractFloat}
-    n = nvars(model)
-    A0_inv = L * Q
-    irf = zeros(T, horizon, n, n)
-    for h in 1:horizon
-        irf[h, :, :] = Phi[h] * A0_inv
-    end
-    irf
+    structural_irf(Phi, L, Q, horizon)
 end
 
 # --- Restriction Checking ---
@@ -439,17 +455,6 @@ end
 
 # --- Volume Element Closures ---
 
-"""Compute MA coefficients from coefficient matrix B (non-VARModel version)."""
-function _compute_ma_from_B(B::Matrix{T}, n::Int, p::Int, max_h::Int) where {T}
-    A = extract_ar_coefficients(B, n, p)
-    Phi = Vector{Matrix{T}}(undef, max_h + 1)
-    Phi[1] = Matrix{T}(I, n, n)
-    for h in 1:max_h
-        Phi[h + 1] = sum(A[j] * Phi[h - j + 1] for j in 1:min(p, h); init=zeros(T, n, n))
-    end
-    Phi
-end
-
 """
 Build closure ff_h: structural_vec → (B, Σ, w) for volume element computation.
 Maps structural parameters to reduced-form parameters + sphere coordinates.
@@ -471,7 +476,7 @@ function _build_ff_h(setup::_AriasSVARSetup{T}, restrictions::SVARRestrictions,
         L_rf = safe_cholesky(Sigma_rf)
         Q_rf = Matrix{T}(L_rf') * A0
 
-        Phi_rf = _compute_ma_from_B(Matrix{T}(B_rf), n, p, max_h)
+        Phi_rf = ma_coefficients(Matrix{T}(B_rf), n, p, max_h + 1)
 
         if first_call[]
             # Record the sign pattern at the reference point
@@ -509,7 +514,7 @@ function _build_zero_restrictions_fn(restrictions::SVARRestrictions, n::Int, m::
         A0_inv = robust_inv(Matrix{T}(A0))
         B_rf = Matrix{T}(Aplus) * A0_inv
 
-        Phi = _compute_ma_from_B(B_rf, n, p, max_h)
+        Phi = ma_coefficients(B_rf, n, p, max_h + 1)
 
         vals = Vector{T}(undef, length(restrictions.zeros))
         for (idx, zr) in enumerate(restrictions.zeros)
@@ -556,9 +561,10 @@ function _compute_importance_weight(Q::Matrix{T}, model::VARModel{T},
     zero_fn = _build_zero_restrictions_fn(restrictions, n, m, p, max_h, T)
     log_ve_gfhZ = _log_volume_element(ff_h, structpara, zero_fn)
 
-    # Guard against numerical issues
+    # Guard against numerical issues: caller skips non-finite log-weights
+    # (do not substitute unit weight — SID-19).
     log_w = log_ve_fh - log_ve_gfhZ
-    isfinite(log_w) || return one(T)  # fallback for degenerate cases
+    isfinite(log_w) || return T(NaN)
 
     exp(log_w)
 end
@@ -601,6 +607,7 @@ function identify_arias(model::VARModel{T}, restrictions::SVARRestrictions, hori
                         n_draws::Int=1000, n_rotations::Int=1000,
                         compute_weights::Bool=true,
                         normalize_weights::Bool=true,
+                        setup::Union{Nothing,_AriasSVARSetup}=nothing,
                         rng::AbstractRNG=Random.default_rng()) where {T<:AbstractFloat}
     n = nvars(model)
     @assert restrictions.n_vars == n "Restriction dimension must match model"
@@ -613,10 +620,14 @@ function identify_arias(model::VARModel{T}, restrictions::SVARRestrictions, hori
     Q_draws, irf_draws, weights = Matrix{T}[], Array{T,3}[], T[]
     has_zeros = !isempty(restrictions.zeros)
     n_attempts = 0
+    n_degenerate = 0
     last_err = nothing
 
-    # Create setup once for zero restrictions (W matrices fixed for all draws)
-    setup = has_zeros ? _AriasSVARSetup(restrictions, n, T; rng=rng) : nothing
+    # Create setup once for zero restrictions (W matrices fixed for all draws),
+    # or reuse a caller-supplied setup (Bayesian pooling).
+    if has_zeros && setup === nothing
+        setup = _AriasSVARSetup(restrictions, n, T; rng=rng)
+    end
 
     while length(Q_draws) < n_draws && n_attempts < n_draws * n_rotations
         n_attempts += 1
@@ -624,20 +635,26 @@ function identify_arias(model::VARModel{T}, restrictions::SVARRestrictions, hori
             if has_zeros
                 Q = _draw_Q_with_zero_restrictions(restrictions, Phi, L; rng=rng)
             else
-                Q = _draw_uniform_orthogonal(n, T; rng=rng)
+                Q = haar_orthogonal(n, T; rng=rng)
             end
             irf_full = _compute_irf_for_Q(model, Q, Phi, L, max_h)
             (has_zeros && !_check_zero_restrictions(irf_full, restrictions)) && continue
             !_check_sign_restrictions(irf_full, restrictions) && continue
             irf = irf_full[1:horizon, :, :]
 
+            w = if has_zeros && compute_weights
+                _compute_importance_weight(Q, model, setup, restrictions, Phi, L)
+            else
+                one(T)
+            end
+            if !isfinite(w)
+                n_degenerate += 1
+                continue
+            end
+
             push!(Q_draws, Q)
             push!(irf_draws, irf)
-            if has_zeros && compute_weights
-                push!(weights, _compute_importance_weight(Q, model, setup, restrictions, Phi, L))
-            else
-                push!(weights, one(T))
-            end
+            push!(weights, w)
         catch err
             _is_rejectable_draw_error(err) || rethrow(err)
             last_err = err
@@ -655,6 +672,8 @@ function identify_arias(model::VARModel{T}, restrictions::SVARRestrictions, hori
         irf_array[i, :, :, :] = irf
     end
 
+    n_degenerate > 0 && @warn "identify_arias: $n_degenerate draw(s) skipped because the importance log-weight was non-finite"
+
     # ESS is scale-invariant, so it is identical before and after normalization.
     ess = T(_effective_sample_size(weights))
     ess_frac = ess / T(n_acc)
@@ -663,7 +682,7 @@ function identify_arias(model::VARModel{T}, restrictions::SVARRestrictions, hori
     w_out = normalize_weights ? weights ./ sum(weights) : weights
     vnames = copy(model.varnames)
     AriasSVARResult{T}(Q_draws, irf_array, w_out, T(n_acc / n_attempts), restrictions,
-                       ess, ess_frac, vnames)
+                       ess, ess_frac, vnames, n_degenerate)
 end
 
 # --- Bayesian Integration ---
@@ -671,7 +690,7 @@ end
 """
     identify_arias_bayesian(post::BVARPosterior, restrictions, horizon; data=nothing, n_rotations=100, quantiles=[0.16,0.5,0.84], compute_weights=true)
 
-Apply Arias identification to each posterior draw. Returns IRF quantiles, mean, acceptance rates.
+Apply Arias identification to each posterior draw.
 
 Creates the `_AriasSVARSetup` once (W matrices fixed across all posterior draws) for consistency.
 
@@ -681,10 +700,10 @@ rotation, so normalizing there would force every weight to 1 and reduce the
 weighted summaries to unweighted ones.
 
 # Returns
-A `NamedTuple` with `irf_quantiles`, `irf_mean`, `acceptance_rates`,
-`total_accepted`, `weights` (normalized), the importance-sampling
-diagnostics `ess` / `ess_fraction` (Kish's effective sample size), and
-`n_unidentified` (posterior draws skipped after [`IdentificationError`](@ref)).
+[`BayesianSetIdentifiedSVAR`](@ref) with draws, weights, ESS, `n_unidentified`,
+and `n_degenerate_weights`. Property `total_accepted` is `size(irf_draws, 1)`.
+`irf_quantiles` / `irf_mean` / `acceptance_rates` are stored for back-compat
+with the previous NamedTuple return.
 """
 function identify_arias_bayesian(post::BVARPosterior, restrictions::SVARRestrictions, horizon::Int;
     data::Union{Nothing,AbstractMatrix}=nothing, n_rotations::Int=100,
@@ -693,11 +712,17 @@ function identify_arias_bayesian(post::BVARPosterior, restrictions::SVARRestrict
 
     use_data = isnothing(data) ? (isempty(post.data) ? nothing : post.data) : data
     p, n = post.p, post.n
+    T = eltype(post.Sigma_draws)
     b_vecs, sigmas = extract_chain_parameters(post)
     n_samples = size(b_vecs, 1)
-    all_irfs, all_weights = Vector{Array{Float64,3}}(), Float64[]
-    acc_rates = zeros(n_samples)
+    all_irfs, all_weights = Vector{Array{T,3}}(), T[]
+    all_Qs = Matrix{T}[]
+    acc_rates = zeros(T, n_samples)
     n_unidentified = 0
+    n_degenerate = 0
+
+    has_zeros = !isempty(restrictions.zeros)
+    setup = has_zeros ? _AriasSVARSetup(restrictions, n, T; rng=rng) : nothing
 
     for s in 1:n_samples
         m = parameters_to_model(b_vecs[s,:], sigmas[s,:], p, n, use_data)
@@ -708,20 +733,22 @@ function identify_arias_bayesian(post::BVARPosterior, restrictions::SVARRestrict
             # below, across all posterior draws on the common volume-element scale.
             result = identify_arias(m, restrictions, horizon;
                 n_draws=1, n_rotations=n_rotations, compute_weights=compute_weights,
-                normalize_weights=false, rng=rng)
+                normalize_weights=false, setup=setup, rng=rng)
+            n_degenerate += result.n_degenerate_weights
             for (i, w) in enumerate(result.weights)
                 push!(all_irfs, result.irf_draws[i, :, :, :])
                 push!(all_weights, w)
+                push!(all_Qs, result.Q_draws[i])
             end
             acc_rates[s] = result.acceptance_rate
         catch err
             if err isa IdentificationError
                 n_unidentified += 1
-                acc_rates[s] = 0.0
+                acc_rates[s] = 0
                 continue
             end
             _is_rejectable_draw_error(err) || rethrow(err)
-            acc_rates[s] = 0.0
+            acc_rates[s] = 0
         end
     end
 
@@ -730,19 +757,20 @@ function identify_arias_bayesian(post::BVARPosterior, restrictions::SVARRestrict
         "(unidentified=$n_unidentified, n_samples=$n_samples)"))
     frac_u = n_unidentified / n_samples
     frac_u > 0.5 && @warn "$n_unidentified/$n_samples posterior draws unidentified"
+    n_degenerate > 0 && @warn "identify_arias_bayesian: $n_degenerate draw(s) skipped because the importance log-weight was non-finite"
 
     n_acc = length(all_irfs)
-    irf_array = zeros(n_acc, horizon, n, n)
+    irf_array = zeros(T, n_acc, horizon, n, n)
     for (i, irf) in enumerate(all_irfs)
         irf_array[i, :, :, :] = irf
     end
-    ess = _effective_sample_size(all_weights)
-    ess_frac = ess / n_acc
+    ess = T(_effective_sample_size(all_weights))
+    ess_frac = ess / T(n_acc)
     _warn_low_ess(ess, ess_frac, n_acc, "identify_arias_bayesian")
     w_norm = all_weights ./ sum(all_weights)
 
-    irf_q = zeros(horizon, n, n, length(quantiles))
-    irf_m = zeros(horizon, n, n)
+    irf_q = zeros(T, horizon, n, n, length(quantiles))
+    irf_m = zeros(T, horizon, n, n)
     for h in 1:horizon, i in 1:n, j in 1:n
         vals = irf_array[:, h, i, j]
         irf_m[h, i, j] = sum(w_norm .* vals)
@@ -751,8 +779,10 @@ function identify_arias_bayesian(post::BVARPosterior, restrictions::SVARRestrict
         end
     end
 
-    (irf_quantiles=irf_q, irf_mean=irf_m, acceptance_rates=acc_rates, total_accepted=n_acc,
-     weights=w_norm, ess=ess, ess_fraction=ess_frac, n_unidentified=n_unidentified)
+    vnames = copy(post.varnames)
+    BayesianSetIdentifiedSVAR{T}(all_Qs, irf_array, Vector{T}(w_norm), ess, restrictions,
+                                 vnames, n_unidentified, n_degenerate,
+                                 irf_q, irf_m, acc_rates, ess_frac)
 end
 
 # Deprecated wrapper for old (chain, p, n, ...) signature

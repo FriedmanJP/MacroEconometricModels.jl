@@ -793,7 +793,7 @@ end
 
 """Structural MA Θ_s = Ψ_s B0 (r × q) for s = 1..horizon (Ψ_1 = I)."""
 function _sdfm_structural_ma(sdfm::StructuralDFM{T}, horizon::Int) where {T<:AbstractFloat}
-    Psi = _reduced_form_ma(sdfm.factor_var, horizon)
+    Psi = _ma_array(sdfm.factor_var, horizon)
     B0 = sdfm.B0
     [Matrix{T}(@view(Psi[s, :, :]) * B0) for s in 1:horizon]
 end
@@ -959,7 +959,7 @@ end
 """Factor-space structural IRFs: `H × r × q` (FGLR) or `H × q × q` (legacy)."""
 function _sdfm_factor_structural_irf(sdfm::StructuralDFM{T}, horizon::Int) where {T}
     if sdfm.method === :fglr
-        Psi = _reduced_form_ma(sdfm.factor_var, horizon)
+        Psi = _ma_array(sdfm.factor_var, horizon)
         r, q = size(sdfm.B0)
         irf = zeros(T, horizon, r, q)
         @inbounds for h in 1:horizon

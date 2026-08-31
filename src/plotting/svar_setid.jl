@@ -130,6 +130,17 @@ The result carries no names, so `Var i`/`Shock j` are synthesized from
 `r.restrictions`; pass `variables=`/`shocks=` to override. `var`/`shock` select one
 response/shock by `Int` or (resolved) name; the draw count is in the title (C7).
 """
+function plot_result(r::BayesianSetIdentifiedSVAR{T};
+                     var::Union{Int,String,Nothing}=nothing,
+                     shock::Union{Int,String,Nothing}=nothing,
+                     quantiles::Vector{Float64}=[0.16, 0.5, 0.84],
+                     ncols::Int=0, title::String="",
+                     save_path::Union{String,Nothing}=nothing) where {T}
+    plot_result(irf(r; quantiles=quantiles); var=var, shock=shock, ncols=ncols,
+                title=isempty(title) ? "Bayesian Set-Identified IRF" : title,
+                save_path=save_path)
+end
+
 function plot_result(r::AriasSVARResult{T};
                      var::Union{Int,String,Nothing}=nothing,
                      shock::Union{Int,String,Nothing}=nothing,

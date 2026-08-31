@@ -861,6 +861,25 @@ function Base.show(io::IO, h::MinnesotaHyperparameters)
         left_label="Parameter", right_label="Value")
 end
 
+function Base.show(io::IO, r::BayesianSetIdentifiedSVAR)
+    n_acc = r.total_accepted
+    _show_spec_table(io, "Bayesian Set-Identified SVAR",
+        ["Accepted draws" => n_acc,
+         "Unidentified" => r.n_unidentified,
+         "Degenerate weights" => r.n_degenerate_weights,
+         "Effective sample" => string(_fmt(r.ess; digits=1), " (",
+                                      round(r.ess_fraction * 100, digits=1), "%)"),
+         "Zero restrictions" => length(r.restrictions.zeros),
+         "Sign restrictions" => length(r.restrictions.signs)])
+    if n_acc > 0
+        nv = r.restrictions.n_vars
+        var_labels = length(r.varnames) == nv ? r.varnames : ["var$i" for i in 1:nv]
+        for s in 1:size(r.irf_mean, 3)
+            _irf_points_table(io, r.irf_mean[:, :, s], var_labels, "Posterior-mean IRF to Shock $s")
+        end
+    end
+end
+
 function Base.show(io::IO, r::AriasSVARResult)
     n_draws = length(r.Q_draws)
     acc_pct = round(r.acceptance_rate * 100, digits=2)

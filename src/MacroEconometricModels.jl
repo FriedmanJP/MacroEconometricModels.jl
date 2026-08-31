@@ -1011,16 +1011,18 @@ export optimize_hyperparameters_full
 # Exports - Structural Identification
 # =============================================================================
 
-export identify_cholesky
+export identify_cholesky, cholesky_factor
 export identify_sign
 export identify_narrative
 export identify_long_run
 export identify_proxy
-export generate_Q
+export generate_Q, haar_orthogonal
 export compute_irf, compute_structural_shocks
+export IdentificationMethod, register_identification!
 
 # Arias et al. (2018) SVAR identification
 export ZeroRestriction, SignRestriction, SVARRestrictions, AriasSVARResult
+export BayesianSetIdentifiedSVAR
 export identify_arias, identify_arias_bayesian
 export zero_restriction, sign_restriction
 export irf_percentiles, irf_mean

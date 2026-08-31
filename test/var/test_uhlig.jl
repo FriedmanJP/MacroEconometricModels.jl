@@ -664,4 +664,15 @@ end
     @test occursin("lower", lowercase(String(take!(io))))
 end
 
+@testset "SID-19 irf method=:uhlig" begin
+    Random.seed!(748)
+    m = estimate_var(randn(80, 2), 1)
+    r = SVARRestrictions(2; signs=[sign_restriction(1, 1, :positive)])
+    rng = MersenneTwister(748)
+    uhlig_kw = (n_starts=FAST ? 3 : 8, n_refine=1, max_iter_coarse=80, max_iter_fine=200)
+    u = identify_uhlig(m, r, 5; rng=copy(rng), uhlig_kw...)
+    ru = irf(m, 5; method=:uhlig, restrictions=r, rng=copy(rng), uhlig_kw...)
+    @test ru.values ≈ u.irf
+end
+
 _tprint("Mountford-Uhlig (2009) tests completed.")

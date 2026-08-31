@@ -659,10 +659,10 @@ end
     # identify_arias_bayesian: skip unidentified posterior draws; throw only if all fail.
     restr = SVARRestrictions(2; signs=[sign_restriction(1, 1, :positive)])
     ar1 = identify_arias_bayesian(post, restr, 5; n_rotations=1)
-    @test ar1 isa NamedTuple
-    @test haskey(ar1, :n_unidentified)
+    @test ar1 isa BayesianSetIdentifiedSVAR
     @test ar1.n_unidentified > 0
     @test ar1.total_accepted > 0
+    @test ar1.n_degenerate_weights >= 0
     restr_imp = SVARRestrictions(2; signs=[sign_restriction(1, 1, :positive),
                                            sign_restriction(1, 1, :negative)])
     @test_throws IdentificationError identify_arias_bayesian(post, restr_imp, 5; n_rotations=3)

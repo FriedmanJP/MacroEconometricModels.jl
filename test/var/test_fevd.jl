@@ -10,6 +10,10 @@ using LinearAlgebra
 using Statistics
 using Random
 
+if !@isdefined(FAST)
+    const FAST = get(ENV, "MACRO_FAST_TESTS", "") == "1"
+end
+
 @testset "FEVD Tests with Theoretical Verification" begin
     _tprint("Generating Data for FEVD Verification...")
     # FEVD Verification DGP:
@@ -201,4 +205,17 @@ end
     end
     _, p_med_irf = MacroEconometricModels._compute_fevd(irf_med, n, H)
     @test f.proportions ≉ p_med_irf
+end
+
+@testset "SID-19 arias/uhlig FEVD" begin
+    Random.seed!(748)
+    m = estimate_var(randn(80, 2), 1)
+    r = SVARRestrictions(2; signs=[sign_restriction(1, 1, :positive)])
+    fa = fevd(m, 5; method=:arias, restrictions=r, max_draws=20, rng=MersenneTwister(1))
+    @test fa isa FEVD
+    @test size(fa.proportions) == (2, 2, 5)
+    fu = fevd(m, 5; method=:uhlig, restrictions=r, rng=MersenneTwister(2),
+              n_starts=FAST ? 3 : 8, n_refine=1, max_iter_coarse=80, max_iter_fine=200)
+    @test fu isa FEVD
+    @test size(fu.proportions) == (2, 2, 5)
 end

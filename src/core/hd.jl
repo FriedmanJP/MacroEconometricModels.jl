@@ -238,7 +238,9 @@ function historical_decomposition(model::VARModel{T}, horizon::Int=effective_nob
     shock_names::Union{Nothing,Vector{String}}=nothing,
     transition_var::Union{Nothing,AbstractVector}=nothing,
     regime_indicator::Union{Nothing,AbstractVector{Int}}=nothing,
-    rng::AbstractRNG=Random.default_rng()
+    restrictions=nothing,
+    rng::AbstractRNG=Random.default_rng(),
+    kwargs...
 ) where {T<:AbstractFloat}
 
     _validate_data(model.Sigma, "Sigma")
@@ -252,24 +254,31 @@ function historical_decomposition(model::VARModel{T}, horizon::Int=effective_nob
     actual = model.Y[(model.p + 1):end, :]
     snames = isnothing(shock_names) ? model.varnames : shock_names
 
-    # SID-05: HD of each accepted rotation, then pointwise median. The adding-up
+    # SID-05/19: HD of each accepted rotation, then pointwise median. The adding-up
     # identity of the median HD is not required (Fry–Pagan; SID-17).
-    if method === :sign || method === :narrative
-        isnothing(check_func) && throw(ArgumentError(
-            method === :narrative ? "Need check_func and narrative_check for narrative" :
-                                    "Need check_func for sign"))
-        method === :narrative && isnothing(narrative_check) &&
-            throw(ArgumentError("Need check_func and narrative_check for narrative"))
-        s = method === :sign ?
-            identify_sign(model, horizon, check_func; max_draws=max_draws, store_all=true, rng=rng) :
-            identify_narrative(model, horizon, check_func, narrative_check;
-                               max_draws=max_draws, store_all=true, rng=rng)
-        n_acc = s.n_accepted
+    if _is_set_identified(method)
+        Qs, n_acc, wts = if method === :arias
+            isnothing(restrictions) && throw(ArgumentError("arias requires restrictions"))
+            s = identify_arias(model, restrictions, horizon; n_draws=max_draws,
+                               n_rotations=max_draws, rng=rng, kwargs...)
+            s.Q_draws, length(s.Q_draws), s.weights
+        else
+            isnothing(check_func) && throw(ArgumentError(
+                method === :narrative ? "Need check_func and narrative_check for narrative" :
+                                        "Need check_func for sign"))
+            method === :narrative && isnothing(narrative_check) &&
+                throw(ArgumentError("Need check_func and narrative_check for narrative"))
+            s = method === :sign ?
+                identify_sign(model, horizon, check_func; max_draws=max_draws, store_all=true, rng=rng) :
+                identify_narrative(model, horizon, check_func, narrative_check;
+                                   max_draws=max_draws, store_all=true, rng=rng)
+            s.Q_draws, s.n_accepted, nothing
+        end
         all_contrib = zeros(T, n_acc, T_eff, n, n)
         all_init = zeros(T, n_acc, T_eff, n)
         all_shocks = zeros(T, n_acc, T_eff, n)
         for i in 1:n_acc
-            contrib, init, shk = _hd_from_Q(model, s.Q_draws[i], horizon, actual)
+            contrib, init, shk = _hd_from_Q(model, Qs[i], horizon, actual)
             all_contrib[i, :, :, :] = contrib
             all_init[i, :, :] = init
             all_shocks[i, :, :] = shk
@@ -278,10 +287,18 @@ function historical_decomposition(model::VARModel{T}, horizon::Int=effective_nob
         initial_conditions = zeros(T, T_eff, n)
         shocks = zeros(T, T_eff, n)
         @inbounds for t in 1:T_eff, i in 1:n
-            initial_conditions[t, i] = quantile(@view(all_init[:, t, i]), T(0.5))
-            shocks[t, i] = quantile(@view(all_shocks[:, t, i]), T(0.5))
-            for j in 1:n
-                contributions[t, i, j] = quantile(@view(all_contrib[:, t, i, j]), T(0.5))
+            if wts === nothing
+                initial_conditions[t, i] = quantile(@view(all_init[:, t, i]), T(0.5))
+                shocks[t, i] = quantile(@view(all_shocks[:, t, i]), T(0.5))
+                for j in 1:n
+                    contributions[t, i, j] = quantile(@view(all_contrib[:, t, i, j]), T(0.5))
+                end
+            else
+                initial_conditions[t, i] = _weighted_quantile(all_init[:, t, i], wts, T(0.5))
+                shocks[t, i] = _weighted_quantile(all_shocks[:, t, i], wts, T(0.5))
+                for j in 1:n
+                    contributions[t, i, j] = _weighted_quantile(all_contrib[:, t, i, j], wts, T(0.5))
+                end
             end
         end
         return HistoricalDecomposition{T}(
@@ -290,8 +307,10 @@ function historical_decomposition(model::VARModel{T}, horizon::Int=effective_nob
         )
     end
 
-    Q = compute_Q(model, method, horizon, check_func, narrative_check;
-                  max_draws=max_draws, transition_var=transition_var, regime_indicator=regime_indicator, rng=rng)
+    Q = compute_Q(model, method; horizon=horizon, check_func=check_func,
+                  narrative_check=narrative_check, restrictions=restrictions,
+                  max_draws=max_draws, transition_var=transition_var,
+                  regime_indicator=regime_indicator, rng=rng, kwargs...)
     contributions, initial_conditions, shocks = _hd_from_Q(model, Q, horizon, actual)
 
     HistoricalDecomposition{T}(
@@ -397,7 +416,9 @@ function historical_decomposition(post::BVARPosterior, horizon::Int=0;
     shock_names::Union{Nothing,Vector{String}}=nothing,
     max_draws::Int=1000,
     transition_var::Union{Nothing,AbstractVector}=nothing,
-    regime_indicator::Union{Nothing,AbstractVector{Int}}=nothing
+    regime_indicator::Union{Nothing,AbstractVector{Int}}=nothing,
+    restrictions=nothing,
+    kwargs...
 )
     use_data = isempty(data) ? post.data : data
     isempty(use_data) && throw(ArgumentError("Data required for historical decomposition"))
@@ -428,9 +449,10 @@ function historical_decomposition(post::BVARPosterior, horizon::Int=0;
             continue
         end
         try
-            Q = compute_Q(m, method, horizon, check_func, narrative_check;
+            Q = compute_Q(m, method; horizon=horizon, check_func=check_func,
+                          narrative_check=narrative_check, restrictions=restrictions,
                           max_draws=max_draws, transition_var=transition_var,
-                          regime_indicator=regime_indicator)
+                          regime_indicator=regime_indicator, kwargs...)
             shocks = compute_structural_shocks(m, Q)
             Theta = _compute_structural_ma_coefficients(m, Q, horizon)
             contributions = _compute_hd_contributions(shocks, Theta)
