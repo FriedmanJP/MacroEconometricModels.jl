@@ -994,6 +994,16 @@ const _REFERENCES = Dict{Symbol, _RefEntry}(
         title="Sign Restrictions, Structural Vector Autoregressions, and Useful Prior Information",
         journal="Econometrica", volume="83", issue="5", pages="1963--1999",
         doi="10.3982/ECTA12356", isbn="", publisher="", entry_type=:article),
+    :giacomini_kitagawa2021 => (key=:giacomini_kitagawa2021,
+        authors="Giacomini, Raffaella and Kitagawa, Toru", year=2021,
+        title="Robust Bayesian Inference for Set-Identified Models",
+        journal="Econometrica", volume="89", issue="4", pages="1519--1556",
+        doi="10.3982/ECTA16773", isbn="", publisher="", entry_type=:article),
+    :gafarov_meier_montiel_olea2018 => (key=:gafarov_meier_montiel_olea2018,
+        authors="Gafarov, Bulat and Meier, Matthias and Montiel Olea, Jos\\'e L.", year=2018,
+        title="Delta-Method Inference for a Class of Set-Identified SVARs",
+        journal="Journal of Econometrics", volume="203", issue="2", pages="316--327",
+        doi="10.1016/j.jeconom.2017.12.004", isbn="", publisher="", entry_type=:article),
     :fry_pagan2011 => (key=:fry_pagan2011,
         authors="Fry, Ren\\'ee and Pagan, Adrian", year=2011,
         title="Sign Restrictions in Structural Vector Autoregressions: A Critical Review",
@@ -2005,6 +2015,7 @@ const _TYPE_REFS = Dict{Symbol, Vector{Symbol}}(
     :BayesianHistoricalDecomposition => [:kilian_lutkepohl2017],
     :AriasSVARResult => [:arias_rubio_ramirez_waggoner2018],
     :BayesianSetIdentifiedSVAR => [:arias_rubio_ramirez_waggoner2018],
+    :RobustBayesResult => [:giacomini_kitagawa2021, :gafarov_meier_montiel_olea2018, :baumeister_hamilton2015],
     :UhligSVARResult => [:mountford_uhlig2009, :uhlig2005],
     :ProxySVARResult => [:mertens_ravn2013, :stock_watson2018, :jentsch_lunsford2019, :montiel_olea_stock_watson2021],
     :proxy => [:mertens_ravn2013, :stock_watson2018, :jentsch_lunsford2019, :montiel_olea_stock_watson2021],
@@ -2650,6 +2661,7 @@ refs(io::IO, ::HistoricalDecomposition; kw...) = refs(io, _TYPE_REFS[:Historical
 refs(io::IO, ::BayesianHistoricalDecomposition; kw...) = refs(io, _TYPE_REFS[:BayesianHistoricalDecomposition]; kw...)
 refs(io::IO, ::AriasSVARResult; kw...) = refs(io, _TYPE_REFS[:AriasSVARResult]; kw...)
 refs(io::IO, ::BayesianSetIdentifiedSVAR; kw...) = refs(io, _TYPE_REFS[:BayesianSetIdentifiedSVAR]; kw...)
+refs(io::IO, ::RobustBayesResult; kw...) = refs(io, _TYPE_REFS[:RobustBayesResult]; kw...)
 refs(io::IO, ::UhligSVARResult; kw...) = refs(io, _TYPE_REFS[:UhligSVARResult]; kw...)
 refs(io::IO, ::ProxySVARResult; kw...) = refs(io, _TYPE_REFS[:ProxySVARResult]; kw...)
 refs(io::IO, ::SVARModel; kw...) = refs(io, _TYPE_REFS[:SVARModel]; kw...)

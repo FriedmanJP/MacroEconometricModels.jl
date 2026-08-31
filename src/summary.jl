@@ -67,6 +67,10 @@ function uncertainty_bounds(r::BayesianImpulseResponse)
     (r.quantiles[:,:,:,1], r.quantiles[:,:,:,nq])
 end
 
+point_estimate(r::RobustBayesResult) = (r.lower .+ r.upper) ./ 2
+has_uncertainty(::RobustBayesResult) = true
+uncertainty_bounds(r::RobustBayesResult) = (r.robust_lower, r.robust_upper)
+
 # --- FEVD implementations ---
 
 point_estimate(r::FEVD) = r.proportions
@@ -536,6 +540,7 @@ report(x::PropensityScoreConfig) = show(stdout, x)
 report(x::MinnesotaHyperparameters) = show(stdout, x)
 report(x::AriasSVARResult) = show(stdout, x)
 report(x::BayesianSetIdentifiedSVAR) = show(stdout, x)
+report(x::RobustBayesResult) = show(stdout, x)
 report(x::UhligSVARResult) = show(stdout, x)
 report(x::ProxySVARResult) = report(stdout, x)
 report(io::IO, r::ProxySVARResult) = (show(io, r); nothing)

@@ -975,6 +975,7 @@ _register_builtin_identification!()
 
 # Arias et al. (2018) identification — extracted to arias.jl
 include("arias.jl")
+include("robust_bayes.jl")   # SID-18 Giacomini–Kitagawa robust Bayes
 
 # =============================================================================
 # Set-identification summaries (Fry–Pagan / Inoue–Kilian; SID-17)

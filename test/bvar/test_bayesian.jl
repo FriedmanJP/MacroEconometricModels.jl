@@ -721,3 +721,18 @@ end
     @test length(results) == ns
     @test all(r -> size(r) == (4, n, n) && all(isfinite, r), results)
 end
+
+@testset "SID-18 identify_robust_bayes on BVARPosterior" begin
+    Random.seed!(747)
+    Y = randn(50, 2)
+    post = estimate_bvar(Y, 1; n_draws=FAST ? 6 : 10, burnin=3, seed=747)
+    r = SVARRestrictions(2; signs=[sign_restriction(1, 1, :positive),
+                                   sign_restriction(2, 1, :positive)])
+    res = identify_robust_bayes(post, r, 2; level=0.68, solver=:optimize,
+                                n_rotations=FAST ? 8 : 16, rng=MersenneTwister(747))
+    @test res isa RobustBayesResult
+    @test res.empty_set_prob == 0
+    @test 0 <= res.informativeness <= 1
+    @test all(res.robust_lower .<= res.single_prior_lower .+ 1e-10)
+    @test all(res.robust_upper .>= res.single_prior_upper .- 1e-10)
+end

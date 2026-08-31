@@ -231,6 +231,63 @@ function plot_result(r::BayesianSetIdentifiedSVAR{T};
                 save_path=save_path)
 end
 
+"""
+    plot_result(r::RobustBayesResult; var=nothing, shock=nothing, ncols=0, title="", save_path=nothing)
+
+Giacomini–Kitagawa robust band (outer) versus the Haar single-prior band (inner),
+with the midpoint of the set of posterior means as the central line.
+"""
+function plot_result(r::RobustBayesResult{T};
+                     var::Union{Int,String,Nothing}=nothing,
+                     shock::Union{Int,String,Nothing}=nothing,
+                     variables::Union{Vector{String},Nothing}=nothing,
+                     shocks::Union{Vector{String},Nothing}=nothing,
+                     ncols::Int=0, title::String="",
+                     save_path::Union{String,Nothing}=nothing) where {T}
+    horizon, n_vars, n_shocks = size(r.lower)
+    varnames = variables === nothing ? _synth_names("Var", n_vars) : variables
+    shocknames = shocks === nothing ? _synth_names("Shock", n_shocks) : shocks
+    length(varnames) == n_vars || throw(ArgumentError(
+        "variables length ($(length(varnames))) must match n_vars ($n_vars)"))
+    length(shocknames) == n_shocks || throw(ArgumentError(
+        "shocks length ($(length(shocknames))) must match n_shocks ($n_shocks)"))
+
+    vars_to_plot = var === nothing ? (1:n_vars) : [_resolve_var(var, varnames)]
+    shocks_to_plot = shock === nothing ? (1:n_shocks) : [_resolve_var(shock, shocknames)]
+    pct = round(Int, r.level * 100)
+    col_levels = [0.0, 0.25, 0.75, 1.0]
+    fan_json = "[" *
+        "{\"lo_key\":\"q1\",\"hi_key\":\"q4\",\"label\":$(_json("Robust $(pct)%"))," *
+        "\"alpha\":0.20,\"color\":$(_json(_PLOT_SERIES[1]))}," *
+        "{\"lo_key\":\"q2\",\"hi_key\":\"q3\",\"label\":$(_json("Single-prior $(pct)%"))," *
+        "\"alpha\":0.40,\"color\":$(_json(_PLOT_SERIES[2]))}]"
+    refs = "[{\"value\":0,\"axis\":\"y\",\"color\":$(_json(_PLOT_ALERT)),\"dash\":\"4,3\"}]"
+
+    panels = _PanelSpec[]
+    for sj in shocks_to_plot
+        for vi in vars_to_plot
+            id = _next_plot_id("gkbayes")
+            Q = hcat(r.robust_lower[:, vi, sj], r.single_prior_lower[:, vi, sj],
+                     r.single_prior_upper[:, vi, sj], r.robust_upper[:, vi, sj])
+            central = (r.lower[:, vi, sj] .+ r.upper[:, vi, sj]) ./ 2
+            data_json = _fan_data_json(Q, col_levels, central; xvals=collect(0:(horizon - 1)))
+            ptitle = "$(varnames[vi]) ← $(shocknames[sj])"
+            js = _render_fan_js(id, data_json, fan_json; median_key="med",
+                                central_label="Set of posterior means",
+                                ref_lines_json=refs, xlabel="Horizon", ylabel="Response")
+            push!(panels, _PanelSpec(id, ptitle, js))
+        end
+    end
+
+    if isempty(title)
+        title = "Giacomini–Kitagawa robust Bayes ($(pct)% region)"
+    end
+    ncols <= 0 && (ncols = length(shocks_to_plot))
+    p = _make_plot(panels; title=title, ncols=ncols)
+    save_path !== nothing && save_plot(p, save_path)
+    p
+end
+
 function plot_result(r::AriasSVARResult{T};
                      var::Union{Int,String,Nothing}=nothing,
                      shock::Union{Int,String,Nothing}=nothing,

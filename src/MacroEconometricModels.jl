@@ -1038,6 +1038,7 @@ export ElasticityBound, MagnitudeBound, FEVDShareRestriction, CumulativeRestrict
 export NarrativeShockRestriction, NarrativeContributionRestriction
 export BayesianSetIdentifiedSVAR
 export identify_arias, identify_arias_bayesian
+export RobustBayesResult, identified_set_bounds, identify_robust_bayes
 export zero_restriction, sign_restriction
 export a0_zero_restriction, a0_sign_restriction, aplus_zero_restriction, aplus_sign_restriction
 export elasticity_bound, magnitude_bound, fevd_share_restriction, cumulative_restriction
