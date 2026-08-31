@@ -288,7 +288,6 @@ function identify_long_run(model::VARModel{T}) where {T<:AbstractFloat}
     A_sum = sum(extract_ar_coefficients(model.B, n, p))
     M = Matrix{T}(I(n) - A_sum)
     cM = cond(M)
-    cM > one(T) / sqrt(eps(T)) && @warn "identify_long_run: (I − ΣAᵢ) is near-singular (cond ≈ $(cM)); the VAR is near a unit root, so the long-run impact matrix is numerically unstable." maxlog = 1
     inv_lag = robust_inv(M; silent=true)
     V_LR = inv_lag * model.Sigma * inv_lag'
     D = Matrix(safe_cholesky(V_LR))   # lower-triangular; D == long-run cumulative impact matrix
@@ -297,7 +296,17 @@ function identify_long_run(model::VARModel{T}) where {T<:AbstractFloat}
         D[j, j] < zero(T) && (@views D[:, j] .*= -one(T))
     end
     P = M * D
-    safe_cholesky(model.Sigma) \ P     # L⁻¹P via triangular backsolve
+    Q = Matrix(safe_cholesky(model.Sigma) \ P)  # L⁻¹P via triangular backsolve
+    ortho = norm(Q' * Q - I(n))
+    # Warn (not throw) when cond(I−ΣAᵢ) is large but Q remains orthogonal.
+    if ortho >= T(1e-8)
+        throw(IdentificationError(
+            "identify_long_run: (I − ΣAᵢ) is singular or Q is not orthogonal " *
+            "(cond=$(cM), ‖Q'Q−I‖=$ortho). Use a structural VECM (identify_svec) " *
+            "or difference the data."))
+    end
+    cM > one(T) / sqrt(eps(T)) && @warn "identify_long_run: (I − ΣAᵢ) is near-singular (cond ≈ $(cM)); the VAR is near a unit root, so the long-run impact matrix is numerically unstable." maxlog = 1
+    Q
 end
 
 # Residual-free methods identify from Σ (and B for long-run/sign), not U.
@@ -309,6 +318,14 @@ _needs_residuals(method::Symbol) = method ∉ _RESIDUAL_FREE_METHODS
 # =============================================================================
 # Unified Interface
 # =============================================================================
+
+function _assert_orthogonal(Q::AbstractMatrix, method::Symbol)
+    n = size(Q, 1)
+    size(Q, 2) == n || return Q
+    d = norm(Q' * Q - I(n))
+    d < 1e-6 || throw(IdentificationError("compute_Q(:$method) returned non-orthogonal Q (‖Q'Q−I‖=$d)"))
+    Q
+end
 
 """
     compute_Q(model, method, horizon, check_func, narrative_check;
@@ -347,41 +364,58 @@ function compute_Q(model::VARModel{T}, method::Symbol, horizon::Int, check_func,
                    regime_indicator::Union{Nothing,AbstractVector{Int}}=nothing,
                    rng::AbstractRNG=Random.default_rng()) where {T<:AbstractFloat}
     n = nvars(model)
-    method == :cholesky && return Matrix{T}(I, n, n)
-    method == :sign && (isnothing(check_func) && throw(ArgumentError("Need check_func for sign"));
-                        return identify_sign(model, horizon, check_func; max_draws, rng)[1])
-    method == :narrative && (isnothing(check_func) || isnothing(narrative_check)) &&
-        throw(ArgumentError("Need check_func and narrative_check for narrative"))
-    method == :narrative && return identify_narrative(model, horizon, check_func, narrative_check; max_draws, rng)[1]
-    method == :long_run && return identify_long_run(model)
-
+    Q = if method == :cholesky
+        Matrix{T}(I, n, n)
+    elseif method == :sign
+        isnothing(check_func) && throw(ArgumentError("Need check_func for sign"))
+        identify_sign(model, horizon, check_func; max_draws, rng)[1]
+    elseif method == :narrative
+        (isnothing(check_func) || isnothing(narrative_check)) &&
+            throw(ArgumentError("Need check_func and narrative_check for narrative"))
+        identify_narrative(model, horizon, check_func, narrative_check; max_draws, rng)[1]
+    elseif method == :long_run
+        identify_long_run(model)
     # Non-Gaussian ICA methods (defined in nongaussian_ica.jl, loaded after this file)
     # :fastica is the only statistical-identification method that draws (random init);
     # jade/sobi/dcov/hsic + all ML/heteroskedastic methods are deterministic (#243).
-    method == :fastica       && return identify_fastica(model; rng=rng).Q
-    method == :jade          && return identify_jade(model).Q
-    method == :sobi          && return identify_sobi(model).Q
-    method == :dcov          && return identify_dcov(model).Q
-    method == :hsic          && return identify_hsic(model).Q
-
+    elseif method == :fastica
+        identify_fastica(model; rng=rng).Q
+    elseif method == :jade
+        identify_jade(model).Q
+    elseif method == :sobi
+        identify_sobi(model).Q
+    elseif method == :dcov
+        identify_dcov(model).Q
+    elseif method == :hsic
+        identify_hsic(model).Q
     # Non-Gaussian ML methods (defined in nongaussian_ml.jl)
-    method == :student_t      && return identify_student_t(model).Q
-    method == :mixture_normal && return identify_mixture_normal(model).Q
-    method == :pml            && return identify_pml(model).Q
-    method == :skew_normal    && return identify_skew_normal(model).Q
-    method == :nongaussian_ml && return identify_nongaussian_ml(model).Q
-
+    elseif method == :student_t
+        identify_student_t(model).Q
+    elseif method == :mixture_normal
+        identify_mixture_normal(model).Q
+    elseif method == :pml
+        identify_pml(model).Q
+    elseif method == :skew_normal
+        identify_skew_normal(model).Q
+    elseif method == :nongaussian_ml
+        identify_nongaussian_ml(model).Q
     # Heteroskedasticity methods (defined in heteroskedastic_id.jl)
-    method == :markov_switching && return identify_markov_switching(model).Q
-    method == :garch            && return identify_garch(model).Q
-    method == :smooth_transition && (isnothing(transition_var) &&
-        throw(ArgumentError("smooth_transition requires transition_var kwarg"));
-        return identify_smooth_transition(model, transition_var).Q)
-    method == :external_volatility && (isnothing(regime_indicator) &&
-        throw(ArgumentError("external_volatility requires regime_indicator kwarg"));
-        return identify_external_volatility(model, regime_indicator).Q)
-
-    throw(ArgumentError("Unknown method: $method"))
+    elseif method == :markov_switching
+        identify_markov_switching(model).Q
+    elseif method == :garch
+        identify_garch(model).Q
+    elseif method == :smooth_transition
+        isnothing(transition_var) &&
+            throw(ArgumentError("smooth_transition requires transition_var kwarg"))
+        identify_smooth_transition(model, transition_var).Q
+    elseif method == :external_volatility
+        isnothing(regime_indicator) &&
+            throw(ArgumentError("external_volatility requires regime_indicator kwarg"))
+        identify_external_volatility(model, regime_indicator).Q
+    else
+        throw(ArgumentError("Unknown method: $method"))
+    end
+    _assert_orthogonal(Q, method)
 end
 
 

@@ -7,35 +7,49 @@
 """
 IRF, FEVD, and Historical Decomposition dispatch for VECM via VAR conversion.
 
-All structural analysis methods work automatically through `to_var()`.
+Cholesky, sign, narrative, and statistical methods route through `to_var()`.
+`method=:long_run` is not identified on the levels VAR of a cointegrated
+system; use the structural VECM route (`identify_svec`).
 """
 
 """
-    irf(vecm::VECMModel, horizon; kwargs...) -> ImpulseResponse
+    irf(vecm::VECMModel, horizon; method=:cholesky, kwargs...) -> ImpulseResponse
 
 Compute IRFs for a VECM by converting to VAR representation.
-All identification methods (Cholesky, sign, narrative, etc.) are supported.
+All identification methods except `:long_run` (Cholesky, sign, narrative, statistical) are supported.
 """
-function irf(vecm::VECMModel{T}, horizon::Int; kwargs...) where {T}
-    irf(to_var(vecm), horizon; kwargs...)
+function irf(vecm::VECMModel{T}, horizon::Int; method::Symbol=:cholesky, kwargs...) where {T}
+    method === :long_run && throw(ArgumentError(
+        "long-run identification of a VECM requires the structural VECM route; " *
+        "see identify_svec. to_var(vecm) supports Cholesky, sign, narrative, and statistical methods."))
+    irf(to_var(vecm), horizon; method=method, kwargs...)
 end
 
 """
-    fevd(vecm::VECMModel, horizon; kwargs...) -> FEVD
+    fevd(vecm::VECMModel, horizon; method=:cholesky, kwargs...) -> FEVD
 
 Compute FEVD for a VECM by converting to VAR representation.
+`method=:long_run` is rejected until the structural VECM route is available.
 """
-function fevd(vecm::VECMModel{T}, horizon::Int; kwargs...) where {T}
-    fevd(to_var(vecm), horizon; kwargs...)
+function fevd(vecm::VECMModel{T}, horizon::Int; method::Symbol=:cholesky, kwargs...) where {T}
+    method === :long_run && throw(ArgumentError(
+        "long-run identification of a VECM requires the structural VECM route; " *
+        "see identify_svec. to_var(vecm) supports Cholesky, sign, narrative, and statistical methods."))
+    fevd(to_var(vecm), horizon; method=method, kwargs...)
 end
 
 """
-    historical_decomposition(vecm::VECMModel, horizon; kwargs...) -> HistoricalDecomposition
+    historical_decomposition(vecm::VECMModel, horizon; method=:cholesky, kwargs...) -> HistoricalDecomposition
 
 Compute historical decomposition for a VECM by converting to VAR representation.
+`method=:long_run` is rejected until the structural VECM route is available.
 """
-function historical_decomposition(vecm::VECMModel{T}, horizon::Int=effective_nobs(vecm); kwargs...) where {T}
-    historical_decomposition(to_var(vecm), horizon; kwargs...)
+function historical_decomposition(vecm::VECMModel{T}, horizon::Int=effective_nobs(vecm);
+                                  method::Symbol=:cholesky, kwargs...) where {T}
+    method === :long_run && throw(ArgumentError(
+        "long-run identification of a VECM requires the structural VECM route; " *
+        "see identify_svec. to_var(vecm) supports Cholesky, sign, narrative, and statistical methods."))
+    historical_decomposition(to_var(vecm), horizon; method=method, kwargs...)
 end
 
 # =============================================================================

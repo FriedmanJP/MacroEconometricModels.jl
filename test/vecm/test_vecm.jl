@@ -584,3 +584,17 @@ end
     @test effective_nobs(m) == size(m.U, 1)
     @test ncoefs(m) > 0
 end
+
+@testset "SID-08 long-run on cointegrated systems" begin
+    Random.seed!(737)
+    Tlen, n = 200, 2
+    trend = cumsum(randn(Tlen))
+    Yc = [trend .+ 0.3 .* randn(Tlen)  trend .+ 0.3 .* randn(Tlen)]
+    vecm = estimate_vecm(Yc, 2; rank=1)
+    @test_throws IdentificationError identify_long_run(to_var(vecm))
+    @test_throws ArgumentError irf(vecm, 10; method=:long_run)
+    Ys = randn(200, 2)
+    ms = estimate_var(Ys, 1)
+    Q = identify_long_run(ms)
+    @test norm(Q' * Q - I(2)) < 1e-8
+end
