@@ -159,7 +159,7 @@ Recipe 4 zeros ``A_{31}`` on top of the recursive pattern. That cell is free in 
 
 ## Blanchard–Quah Long-Run Restrictions
 
-[`blanchard_quah_pattern`](@ref) is the supported long-run case: ``A = I``, ``B`` free, and ``C(1)B`` lower triangular. [`estimate_svar`](@ref) uses the closed form and reproduces [`identify_long_run`](@ref). Mixed short- and long-run zeros (Galí 1992) are a quadratic penalty, not a likelihood constraint, and throw `ArgumentError`; structural VECM long-run restrictions are SID-16.
+[`blanchard_quah_pattern`](@ref) is the supported long-run case: ``A = I``, ``B`` free, and ``C(1)B`` lower triangular. [`estimate_svar`](@ref) uses the closed form and reproduces [`identify_long_run`](@ref). Mixed short- and long-run zeros (Galí 1992) are a quadratic penalty, not a likelihood constraint, and throw `ArgumentError`; cointegrated long-run restrictions use [`identify_svec`](@ref) on a [VECM](@ref vecm_page).
 
 ```@example ab
 (lr_df_bq = svar_bq.lr_df,
@@ -167,7 +167,7 @@ Recipe 4 zeros ``A_{31}`` on top of the recursive pattern. That cell is free in 
  Q_agree = svar_bq.Q ≈ Q_lr)
 ```
 
-On a stationary VAR the AB long-run MLE and [`identify_long_run`](@ref) return the same rotation. Near a unit root ``C(1)`` is ill-conditioned; difference the data or move to a structural VECM.
+On a stationary VAR the AB long-run MLE and [`identify_long_run`](@ref) return the same rotation. Near a unit root ``C(1)`` is ill-conditioned; difference the data or move to [`identify_svec`](@ref).
 
 ---
 

@@ -203,3 +203,23 @@ end
     end
 end
 
+@testset "SID-16 SVEC recovery" begin
+    rng = MersenneTwister(74516)
+    Tobs = FAST ? 800 : 1000
+    Y, _, B0_true, Xi_true = simulate_common_trend_svec(; Tobs=Tobs, rng=rng)
+    lr_true = Xi_true * B0_true
+    vecm = estimate_vecm(Y, 1; rank=2, deterministic=:none)
+    svec = identify_svec(vecm)
+    @test svec isa SVECResult
+    @test svec.n_permanent == 1
+    lr = svec.Xi * svec.B0
+    @test maximum(abs, lr[:, 2]) < 1e-8
+    @test maximum(abs, lr[:, 3]) < 1e-8
+    perm = lr[:, 1]
+    truth = lr_true[:, 1]
+    perm = sign(dot(perm, truth)) * perm
+    @test norm(perm - truth) / norm(truth) < 0.10
+    Q = svec.Q
+    @test norm(Q' * Q - I(3)) < 1e-6
+end
+

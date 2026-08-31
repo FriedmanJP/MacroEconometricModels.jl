@@ -9,7 +9,7 @@ Structural identification recovers the mapping from reduced-form VAR residuals t
 - **Zero + sign restrictions** --- exact zero restrictions with sign constraints and importance-weighted inference (Arias, Rubio-Ramírez & Waggoner 2018)
 - **Penalty function (Mountford-Uhlig)** --- point-identified rotation via constrained optimization (Mountford & Uhlig 2009)
 
-For identification from an external instrument (high-frequency surprises, narrative shocks) see [Proxy SVAR](@ref id_proxy_page). For AB-model maximum likelihood with patterns on ``A`` and ``B`` see [AB-Model SVAR](@ref id_ab_page). For the shock that maximises a target variable's forecast-error variance or spectral share see [Max-Share Identification](@ref id_maxshare_page). For statistical identification via non-Gaussianity or heteroskedasticity --- 14 further schemes reachable through the same `method=` keyword --- see [Statistical Identification](@ref nongaussian_page). Once ``B_0`` is identified, the impact matrix feeds the impulse responses, variance decompositions, and historical decompositions of [Innovation Accounting](@ref innovation_accounting_page).
+For identification from an external instrument (high-frequency surprises, narrative shocks) see [Proxy SVAR](@ref id_proxy_page). For AB-model maximum likelihood with patterns on ``A`` and ``B`` see [AB-Model SVAR](@ref id_ab_page). For the shock that maximises a target variable's forecast-error variance or spectral share see [Max-Share Identification](@ref id_maxshare_page). Cointegrated systems use the structural VECM route on [Vector Error Correction Models](@ref vecm_page) (`identify_svec`, `method=:svec`). For statistical identification via non-Gaussianity or heteroskedasticity --- 14 further schemes reachable through the same `method=` keyword --- see [Statistical Identification](@ref nongaussian_page). Once ``B_0`` is identified, the impact matrix feeds the impulse responses, variance decompositions, and historical decompositions of [Innovation Accounting](@ref innovation_accounting_page).
 
 ```@setup sid
 using MacroEconometricModels, Random
@@ -102,6 +102,7 @@ Four of the six economic schemes are reachable through the `method=` keyword sha
 | Sign | `irf(m, H; method=:sign, check_func=f)` or `identify_sign` | `check_func`, `max_draws` |
 | Narrative | `irf(m, H; method=:narrative, check_func=f, narrative_check=g)` or `identify_narrative` | `check_func`, `narrative_check`, `max_draws`, `store_all` |
 | Long-run | `irf(m, H; method=:long_run)` | none |
+| Structural VECM | `irf(vecm, H; method=:svec)` | `VECMModel`; `method=:long_run` is an alias |
 | Zero + sign | `identify_arias(m, restrictions, H)` | `SVARRestrictions` |
 | Penalty function | `identify_uhlig(m, restrictions, H)` | `SVARRestrictions` |
 
@@ -320,7 +321,7 @@ The algorithm constructs ``Q`` column by column via QR decomposition in the null
 | FEVD share | `fevd_share_restriction(var, shock; horizon, lower, upper)` | Rejection on the shock's forecast-error variance share |
 | Cumulative | `cumulative_restriction(var, shock, :positive; horizons=0:H)` | Rejection on the cumulated IRF |
 
-`SVARRestrictions` stores linear zeros and rejection restrictions in two lists. `sign_check(r)` returns an `irf -> Bool` closure for `identify_sign`, structural DFM, and counterfactuals; a handwritten predicate remains an escape hatch. Imposing all ``n(n-1)/2`` long-run zeros (on early-ordered shocks) recovers Blanchard–Quah as a just-identified special case, unique up to column sign. Cointegrated systems throw `IdentificationError` --- difference the data or use a structural VECM.
+`SVARRestrictions` stores linear zeros and rejection restrictions in two lists. `sign_check(r)` returns an `irf -> Bool` closure for `identify_sign`, structural DFM, and counterfactuals; a handwritten predicate remains an escape hatch. Imposing all ``n(n-1)/2`` long-run zeros (on early-ordered shocks) recovers Blanchard–Quah as a just-identified special case, unique up to column sign. Cointegrated systems throw `IdentificationError` --- difference the data or use [`identify_svec`](@ref) on the VECM ([Vector Error Correction Models](@ref vecm_page)).
 
 ```@example sid
 r_h = SVARRestrictions(3;

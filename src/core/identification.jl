@@ -743,7 +743,7 @@ end
 function _assert_orthogonal(Q::AbstractMatrix, method::Symbol)
     # Overidentified AB-models have Σ_r ≠ Σ, so Q = L^{-1} A^{-1} B need not
     # be orthogonal. IRFs still use B₀ = L Q = A^{-1} B.
-    (_is_partial(method) || method === :ab) && return Q
+    (_is_partial(method) || method === :ab || method === :svec) && return Q
     n = size(Q, 1)
     size(Q, 2) == n || return Q
     d = norm(Q' * Q - I(n))
@@ -781,6 +781,7 @@ Compute identification matrix Q for structural VAR analysis.
 - `:proxy` — External instruments (requires `instruments`)
 - `:ab` — AB-model ML (requires `pattern::SVARPattern`)
 - `:max_share` — Max-share / news-shock (requires `target`; `horizons` or `band`)
+- `:svec` — structural VECM (KPSW); pass `_svec_Q` or call `irf(vecm; method=:svec)`
 
 # Keyword Arguments
 - `horizon::Int=1`: IRF horizon for sign/narrative/Arias/Uhlig
@@ -869,6 +870,11 @@ function compute_Q(model::VARModel{T}, method::Symbol;
     elseif method == :max_share
         isnothing(target) && throw(ArgumentError("max_share requires target"))
         identify_max_share(model; target=target, kwargs...).Q
+    elseif method == :svec
+        Qs = get(kwargs, :_svec_Q, nothing)
+        Qs === nothing && throw(ArgumentError(
+            "method=:svec requires a VECMModel; use irf(vecm; method=:svec) or identify_svec"))
+        Matrix{T}(Qs)
     else
         throw(ArgumentError("Unknown method: $method"))
     end
@@ -905,6 +911,7 @@ function _register_builtin_identification!()
         (:proxy, true, false, true),
         (:ab, false, false, false),
         (:max_share, false, false, true),
+        (:svec, false, false, false),
     )
     for (name, needs_resid, set_id, partial) in specs
         register_identification!(IdentificationMethod(name, needs_resid, set_id, partial))

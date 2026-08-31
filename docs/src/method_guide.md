@@ -77,6 +77,7 @@ Reduced-form residuals are correlated across equations and carry no economic int
 | Restrict the sign of responses | `identify_sign`, `identify_arias`, `identify_uhlig` | Weak, credible economic restrictions | [Structural Identification](@ref structural_identification_page) |
 | Use documented historical episodes | `identify_narrative` | Event evidence sharpens the set | [Structural Identification](@ref structural_identification_page) |
 | Restrict long-run effects to zero | `identify_long_run` | Blanchard-Quah supply-demand split | [Structural Identification](@ref structural_identification_page) |
+| Permanent vs transitory shocks in a VECM | `identify_svec`, `irf(vecm; method=:svec)` | KPSW common trends | [VECM](@ref vecm_page) |
 | Identify with an external instrument | `identify_proxy`, `irf(m, H; method=:proxy, instruments=Z)` | High-frequency or narrative proxy for one (or k) shock | [Proxy SVAR](@ref id_proxy_page) |
 | Impose non-recursive short-run zeros | `estimate_svar`, `irf(m, H; method=:ab, pattern=…)` | Amisano–Giannini AB-model ML with LR over-ID test | [AB-Model SVAR](@ref id_ab_page) |
 | Identify the shock that dominates a target | `identify_max_share`, `irf(m, H; method=:max_share, target=…)` | News shocks and main business-cycle shocks | [Max-Share Identification](@ref id_maxshare_page) |

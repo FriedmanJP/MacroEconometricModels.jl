@@ -72,3 +72,39 @@ function simulate_proxy_svar(B0::AbstractMatrix{T}, A::AbstractVector{<:Abstract
     end
     return Y, ε, k == 1 ? vec(Z) : Z
 end
+
+"""Common-trend SVEC DGP: `n=3`, cointegrating rank `r=2` (one permanent shock).
+
+The VECM is `Δy_t = α β' y_{t-1} + u_t` with `u_t = B₀ ε_t`. Gonzalo–Ng
+orthogonalisation of `(α, β, Σ)` yields a just-identified KPSW rotation:
+`Ξ B₀` has two exact zero (transitory) columns.
+
+Returns `(Y, ε, B0, Xi)`.
+"""
+function simulate_common_trend_svec(; Tobs::Int=1000, rng=Random.default_rng())
+    T = Float64
+    n = 3
+    beta = T[1.0 1.0; -1.0 0.0; 0.0 -1.0]
+    alpha = T[-0.30 -0.10; 0.20 0.00; 0.05 0.25]
+    Sigma = T[1.0 0.2 0.1; 0.2 1.2 0.15; 0.1 0.15 0.8]
+    Psi = Matrix{T}(I, n, n)
+    aperp = nullspace(Matrix{T}(alpha'))
+    bperp = nullspace(Matrix{T}(beta'))
+    Xi = bperp * ((aperp' * Psi * bperp) \ aperp')
+    G = vcat(aperp', beta')
+    P = cholesky(Symmetric(G * Sigma * G')).L
+    B0 = G \ Matrix{T}(P)
+    lr = Xi * B0
+    if lr[1, 1] < 0
+        B0[:, 1] .*= -1
+    end
+    burn = 100
+    ntot = Tobs + burn
+    ε = randn(rng, T, ntot, n)
+    u = ε * B0'
+    Y = zeros(T, ntot, n)
+    @inbounds for t in 2:ntot
+        Y[t, :] = Y[t-1, :] .+ alpha * (beta' * Y[t-1, :]) .+ u[t, :]
+    end
+    return Y[(end - Tobs + 1):end, :], ε[(end - Tobs + 1):end, :], B0, Xi
+end

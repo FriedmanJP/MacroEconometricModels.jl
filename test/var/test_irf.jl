@@ -371,7 +371,6 @@ end
     Yc = [trend .+ 0.3 .* randn(Tlen)  trend .+ 0.3 .* randn(Tlen)]
     vecm = estimate_vecm(Yc, 2; rank=1)
     @test_throws IdentificationError identify_long_run(to_var(vecm))
-    @test_throws ArgumentError irf(vecm, 10; method=:long_run)
     Ys = randn(200, 2)
     ms = estimate_var(Ys, 1)
     Q = identify_long_run(ms)
@@ -439,6 +438,10 @@ end
     @test !MacroEconometricModels._is_set_identified(:max_share)
     @test MacroEconometricModels._is_partial(:max_share)
     @test !MacroEconometricModels._should_match_columns(:max_share)
+    @test haskey(MacroEconometricModels.IDENTIFICATION_REGISTRY, :svec)
+    @test !MacroEconometricModels._needs_residuals(:svec)
+    @test !MacroEconometricModels._is_set_identified(:svec)
+    @test !MacroEconometricModels._is_partial(:svec)
 
     r = SVARRestrictions(2; signs=[sign_restriction(1, 1, :positive)])
     ra = irf(m, 5; method=:arias, restrictions=r, max_draws=30, seed=1)

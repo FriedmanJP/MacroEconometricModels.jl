@@ -181,6 +181,22 @@ const _REFERENCES = Dict{Symbol, _RefEntry}(
         title="New Introduction to Multiple Time Series Analysis", journal="",
         volume="", issue="", pages="", doi="",
         isbn="978-3-540-40172-8", publisher="Springer", entry_type=:book),
+    :king_plosser_stock_watson1991 => (key=:king_plosser_stock_watson1991,
+        authors="King, Robert G. and Plosser, Charles I. and Stock, James H. and Watson, Mark W.",
+        year=1991, title="Stochastic Trends and Economic Fluctuations",
+        journal="American Economic Review", volume="81", issue="4", pages="819--840",
+        doi="10.2307/2006644", isbn="", publisher="", entry_type=:article),
+    :gonzalo_ng2001 => (key=:gonzalo_ng2001,
+        authors="Gonzalo, Jes\\'us and Ng, Serena", year=2001,
+        title="A Systematic Framework for Analyzing the Dynamic Effects of Permanent and Transitory Shocks",
+        journal="Journal of Economic Dynamics and Control", volume="25", issue="10",
+        pages="1527--1546", doi="10.1016/S0165-1889(99)00062-7", isbn="",
+        publisher="", entry_type=:article),
+    :warne1993 => (key=:warne1993, authors="Warne, Anders", year=1993,
+        title="A Common Trends Model: Identification, Estimation and Inference",
+        journal="IIES Seminar Paper", volume="555", issue="", pages="",
+        doi="", isbn="", publisher="Institute for International Economic Studies, Stockholm University",
+        entry_type=:techreport),
     :amisano_giannini1997 => (key=:amisano_giannini1997,
         authors="Amisano, Gianni and Giannini, Carlo", year=1997,
         title="Topics in Structural VAR Econometrics", journal="",
@@ -1977,6 +1993,8 @@ const _TYPE_REFS = Dict{Symbol, Vector{Symbol}}(
     :ab => [:amisano_giannini1997, :lutkepohl2005, :sims1986],
     :MaxShareResult => [:francis_owyang_roush_dicecio2014, :barsky_sims2011, :angeletos_collard_dellas2020, :uhlig2004gnp],
     :max_share => [:francis_owyang_roush_dicecio2014, :barsky_sims2011, :angeletos_collard_dellas2020, :uhlig2004gnp],
+    :SVECResult => [:king_plosser_stock_watson1991, :gonzalo_ng2001, :lutkepohl2005, :warne1993],
+    :svec => [:king_plosser_stock_watson1991, :gonzalo_ng2001, :lutkepohl2005, :warne1993],
     :SVARRestrictions => [:arias_rubio_ramirez_waggoner2018],
     :IdentificationStatus => [:rubio_ramirez2010, :arias_rubio_ramirez_waggoner2018],
     :ConditionalForecast => [:waggoner_zha1999, :antolin_diaz_petrella_rubio_ramirez2021],
@@ -2036,7 +2054,7 @@ const _TYPE_REFS = Dict{Symbol, Vector{Symbol}}(
     :ngperron => [:ng_perron2001],
     :johansen => [:johansen1991],
     # VECM
-    :VECMModel => [:johansen1991, :engle_granger1987, :lutkepohl2005],
+    :VECMModel => [:johansen1991, :engle_granger1987, :lutkepohl2005, :king_plosser_stock_watson1991],
     :VECMForecast => [:johansen1991, :lutkepohl2005],
     :VECMGrangerResult => [:johansen1991, :lutkepohl2005],
     :vecm => [:johansen1991, :engle_granger1987, :lutkepohl2005],
@@ -2614,6 +2632,7 @@ refs(io::IO, ::UhligSVARResult; kw...) = refs(io, _TYPE_REFS[:UhligSVARResult]; 
 refs(io::IO, ::ProxySVARResult; kw...) = refs(io, _TYPE_REFS[:ProxySVARResult]; kw...)
 refs(io::IO, ::SVARModel; kw...) = refs(io, _TYPE_REFS[:SVARModel]; kw...)
 refs(io::IO, ::MaxShareResult; kw...) = refs(io, _TYPE_REFS[:MaxShareResult]; kw...)
+refs(io::IO, ::SVECResult; kw...) = refs(io, _TYPE_REFS[:SVECResult]; kw...)
 refs(io::IO, ::SVARPattern; kw...) = refs(io, _TYPE_REFS[:SVARPattern]; kw...)
 refs(io::IO, ::SVARRestrictions; kw...) = refs(io, _TYPE_REFS[:SVARRestrictions]; kw...)
 refs(io::IO, ::IdentificationStatus; kw...) = refs(io, _TYPE_REFS[:IdentificationStatus]; kw...)

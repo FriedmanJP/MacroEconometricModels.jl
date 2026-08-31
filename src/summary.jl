@@ -53,6 +53,7 @@ point_estimate(r::ImpulseResponse) = r.values
 point_estimate(r::ProxySVARResult) = r.B0
 point_estimate(r::SVARModel) = r.A \ r.B
 point_estimate(r::MaxShareResult) = r.Q
+point_estimate(r::SVECResult) = r.B0
 has_uncertainty(r::ImpulseResponse) = r.ci_type != :none
 function uncertainty_bounds(r::ImpulseResponse)
     r.ci_type == :none && return nothing
@@ -542,6 +543,8 @@ report(x::SVARModel) = report(stdout, x)
 report(io::IO, r::SVARModel) = (show(io, r); nothing)
 report(x::MaxShareResult) = report(stdout, x)
 report(io::IO, r::MaxShareResult) = (show(io, r); nothing)
+report(x::SVECResult) = report(stdout, x)
+report(io::IO, r::SVECResult) = (show(io, r); nothing)
 report(x::SVARRestrictions) = show(stdout, x)
 report(x::IdentificationStatus) = show(stdout, x)
 report(s::SignIdentifiedSet) = report(stdout, s)

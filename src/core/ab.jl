@@ -460,18 +460,25 @@ end
 
 function check_identification(pattern::SVARPattern, model::VARModel{T};
                               n_points::Int=10,
-                              rng::AbstractRNG=Random.default_rng()) where {T<:AbstractFloat}
+                              rng::AbstractRNG=Random.default_rng(),
+                              long_run_matrix=nothing) where {T<:AbstractFloat}
     n = nvars(model)
     n_points >= 1 || throw(ArgumentError("n_points must be ≥ 1, got $n_points"))
     pattern = _ab_promote(pattern, T)
     size(pattern.A, 1) == n || throw(ArgumentError(
         "Pattern dimension ($(size(pattern.A, 1))) must match model ($n)"))
-    _ab_require_bq_long_run(pattern)
+    long_run_matrix === nothing && _ab_require_bq_long_run(pattern)
     n_free = _ab_n_free(pattern)
     n_lr = _ab_n_lr(pattern)
     n_cov = n * (n + 1) ÷ 2
     orders = _ab_orders(pattern)
-    C1 = pattern.long_run === nothing ? nothing : _C1_from_B(model.B, n, model.p)
+    C1 = if long_run_matrix !== nothing
+        Matrix{T}(long_run_matrix)
+    elseif pattern.long_run === nothing
+        nothing
+    else
+        _C1_from_B(model.B, n, model.p)
+    end
     rank_J = 0
     if n_free > 0 && n_free <= n_cov + n_lr
         try
@@ -602,14 +609,16 @@ function estimate_svar(model::VARModel{T}, pattern::SVARPattern;
                        n_starts::Int=5,
                        max_iter::Int=400,
                        rng::AbstractRNG=Random.default_rng(),
+                       long_run_matrix=nothing,
                        kwargs...) where {T<:AbstractFloat}
     n = nvars(model)
     n_starts >= 1 || throw(ArgumentError("n_starts must be ≥ 1, got $n_starts"))
     pattern = _ab_promote(pattern, T)
     size(pattern.A, 1) == n || throw(ArgumentError(
         "Pattern dimension ($(size(pattern.A, 1))) must match model ($n)"))
-    _ab_require_bq_long_run(pattern)
-    st = check_identification(pattern, model; rng=copy(rng))
+    long_run_matrix === nothing && _ab_require_bq_long_run(pattern)
+    st = check_identification(pattern, model; rng=copy(rng),
+                              long_run_matrix=long_run_matrix)
     if st.status === :under
         throw(IdentificationError(
             "SVAR is underidentified by the AB rank/order condition " *
@@ -619,7 +628,13 @@ function estimate_svar(model::VARModel{T}, pattern::SVARPattern;
 
     Sigma = Matrix{T}(model.Sigma)
     Tobs = T(_ab_nobs(model))
-    C1 = pattern.long_run === nothing ? nothing : _C1_from_B(model.B, n, model.p)
+    C1 = if long_run_matrix !== nothing
+        Matrix{T}(long_run_matrix)
+    elseif pattern.long_run === nothing
+        nothing
+    else
+        _C1_from_B(model.B, n, model.p)
+    end
     penalty = Tobs * T(1e6)
 
     A = Matrix{T}(undef, n, n)

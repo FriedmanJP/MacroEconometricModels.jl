@@ -229,6 +229,7 @@ include("teststat/portmanteau.jl")
 # Structural identification
 include("core/identification.jl")
 include("core/ab.jl")   # SID-13 AB-model ML; after identification.jl (check_identification)
+include("vecm/svec.jl")  # SID-16 SVEC; after VECM types + estimate_svar
 include("core/maxshare.jl")  # SID-12 max-share; after identification.jl (compute_Q, cholesky)
 include("core/uhlig.jl")
 
@@ -984,6 +985,7 @@ export select_lag_order
 
 export estimate_vecm, to_var, select_vecm_rank
 export cointegrating_rank, granger_causality_vecm
+export identify_svec, SVECResult, permanent_transitory
 # EV-38 (#446): Johansen LR restriction tests on the cointegrating structure
 export test_beta_restriction, test_alpha_restriction, test_weak_exogeneity
 export test_known_beta, test_joint_restriction
