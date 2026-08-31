@@ -19,8 +19,9 @@ with ``ε_t \\sim (0, I)``, estimated by concentrated ML on a zero/fixed pattern
 Zero/fixed pattern for the AB-model ``A u_t = B ε_t``.
 
 Entries of `A` and `B` are `NaN` (free) or a finite number (fixed). Optional
-`long_run` imposes the same convention on the long-run impact ``C(1) A^{-1} B``
-(Galí 1992; Blanchard–Quah 1989).
+`long_run` is accepted only for the Blanchard–Quah closed form (upper-triangular
+zeros on ``C(1)B`` with ``A = I`` and ``B`` free). Mixed short- and long-run
+patterns throw `ArgumentError` (SID-16 SVEC).
 
 # Fields
 - `A::Matrix{T}`: contemporaneous left-hand matrix
@@ -299,6 +300,23 @@ function _is_bq_pattern(pattern::SVARPattern)
     true
 end
 
+function _ab_require_bq_long_run(pattern::SVARPattern)
+    pattern.long_run === nothing && return nothing
+    _is_bq_pattern(pattern) && return nothing
+    throw(ArgumentError(
+        "Only Blanchard–Quah long-run identification is supported as a closed form " *
+        "(use blanchard_quah_pattern). Mixed short- and long-run restrictions are a " *
+        "quadratic penalty, not a constraint; structural VECM long-run is SID-16."))
+end
+
+# Empty U (theoretical CI shells) is not a zero sample; use reduced-form nobs.
+function _ab_nobs(model::VARModel)
+    nu = size(model.U, 1)
+    nu > 0 && return nu
+    ne = effective_nobs(model)
+    ne > 0 ? ne : 1
+end
+
 # =============================================================================
 # Likelihood
 # =============================================================================
@@ -431,6 +449,7 @@ function check_identification(pattern::SVARPattern, n::Int)
     n >= 1 || throw(ArgumentError("n must be positive"))
     size(pattern.A, 1) == n || throw(ArgumentError(
         "Pattern dimension ($(size(pattern.A, 1))) must match n=$n"))
+    _ab_require_bq_long_run(pattern)
     n_free = _ab_n_free(pattern)
     n_lr = _ab_n_lr(pattern)
     n_cov = n * (n + 1) ÷ 2
@@ -447,6 +466,7 @@ function check_identification(pattern::SVARPattern, model::VARModel{T};
     pattern = _ab_promote(pattern, T)
     size(pattern.A, 1) == n || throw(ArgumentError(
         "Pattern dimension ($(size(pattern.A, 1))) must match model ($n)"))
+    _ab_require_bq_long_run(pattern)
     n_free = _ab_n_free(pattern)
     n_lr = _ab_n_lr(pattern)
     n_cov = n * (n + 1) ÷ 2
@@ -569,10 +589,11 @@ Maximum-likelihood estimation of the AB-model ``A u_t = B ε_t``
 [`check_identification`](@ref) is called first; `:under` throws
 [`IdentificationError`](@ref). Just-identified recursive and Blanchard–Quah
 patterns use the Cholesky / long-run closed form (reproducing
-[`identify_cholesky`](@ref) and [`identify_long_run`](@ref)). General patterns
-are maximised with `Optim.LBFGS` and `ForwardDiff.gradient` from `n_starts`
-starting values. Column signs are normalised so the impact (or long-run impact)
-diagonal is positive.
+[`identify_cholesky`](@ref) and [`identify_long_run`](@ref)). Non-BQ `long_run`
+patterns throw `ArgumentError`. General contemporaneous patterns are maximised
+with `Optim.LBFGS` and `ForwardDiff.gradient` from `n_starts` starting values.
+Column signs are normalised so the impact (or long-run impact) diagonal is
+positive.
 
 The overidentification statistic is
 ``\\mathrm{LR} = T(\\log|\\hat\\Sigma_r| - \\log|\\hat\\Sigma|) \\sim \\chi^2(n_{\\mathrm{over}})``.
@@ -587,6 +608,7 @@ function estimate_svar(model::VARModel{T}, pattern::SVARPattern;
     pattern = _ab_promote(pattern, T)
     size(pattern.A, 1) == n || throw(ArgumentError(
         "Pattern dimension ($(size(pattern.A, 1))) must match model ($n)"))
+    _ab_require_bq_long_run(pattern)
     st = check_identification(pattern, model; rng=copy(rng))
     if st.status === :under
         throw(IdentificationError(
@@ -596,7 +618,7 @@ function estimate_svar(model::VARModel{T}, pattern::SVARPattern;
     end
 
     Sigma = Matrix{T}(model.Sigma)
-    Tobs = T(size(model.U, 1))
+    Tobs = T(_ab_nobs(model))
     C1 = pattern.long_run === nothing ? nothing : _C1_from_B(model.B, n, model.p)
     penalty = Tobs * T(1e6)
 

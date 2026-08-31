@@ -427,7 +427,8 @@ function _simulate_irfs(model::VARModel{T}, method::Symbol, horizon::Int,
                     B_star = model.B + L_V * randn(local_rng, T, k, n) * L_S'
                     F = companion_matrix(B_star, n, p)
                     maximum(abs.(eigvals(F))) >= one(T) && return  # reject non-stationary draw
-                    m = VARModel(zeros(T, 0, n), p, B_star, zeros(T, 0, n), model.Sigma, zero(T), zero(T), zero(T))
+                    # Keep Y so residual-free ID (e.g. :ab) can recover effective_nobs; U stays empty.
+                    m = VARModel(model.Y, p, B_star, zeros(T, 0, n), model.Sigma, zero(T), zero(T), zero(T))
                     Q = compute_Q(m, method; horizon=horizon, check_func=check_func,
                                   narrative_check=narrative_check, restrictions=restrictions,
                                   max_draws=max_draws, transition_var=transition_var,
@@ -455,7 +456,8 @@ function _simulate_irfs(model::VARModel{T}, method::Symbol, horizon::Int,
                 local_rng = Random.MersenneTwister(seeds[r])
                 _suppress_warnings() do
                     B_star = model.B + L_V * randn(local_rng, T, k, n) * L_S'
-                    m = VARModel(zeros(T, 0, n), p, B_star, zeros(T, 0, n), model.Sigma, zero(T), zero(T), zero(T))
+                    # Keep Y so residual-free ID (e.g. :ab) can recover effective_nobs; U stays empty.
+                    m = VARModel(model.Y, p, B_star, zeros(T, 0, n), model.Sigma, zero(T), zero(T), zero(T))
                     Q = compute_Q(m, method; horizon=horizon, check_func=check_func,
                                   narrative_check=narrative_check, restrictions=restrictions,
                                   max_draws=max_draws, transition_var=transition_var,

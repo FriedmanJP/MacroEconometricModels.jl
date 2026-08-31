@@ -1,6 +1,6 @@
 # [AB-Model SVAR](@id id_ab_page)
 
-The AB-model writes the structural relation among VAR residuals as ``A u_t = B \varepsilon_t`` with ``\varepsilon_t \sim (0, I)`` (Amisano and Giannini 1997; Lütkepohl 2005, ch. 9). Zero and fixed-value patterns on ``A`` and ``B`` encode non-recursive contemporaneous restrictions (Sims 1986) and, with a long-run pattern on ``C(1)A^{-1}B``, mixed short- and long-run schemes (Galí 1992). This is the default SVAR tool in EViews, Stata, and JMulTi. Restriction-based alternatives live on [Structural Identification](@ref structural_identification_page); external-instrument identification is [Proxy SVAR](@ref id_proxy_page).
+The AB-model writes the structural relation among VAR residuals as ``A u_t = B \varepsilon_t`` with ``\varepsilon_t \sim (0, I)`` (Amisano and Giannini 1997; Lütkepohl 2005, ch. 9). Zero and fixed-value patterns on ``A`` and ``B`` encode non-recursive contemporaneous restrictions (Sims 1986). The just-identified Blanchard–Quah long-run pattern reproduces [`identify_long_run`](@ref); mixed short- and long-run zeros throw `ArgumentError`. This is the default SVAR tool in EViews, Stata, and JMulTi. Restriction-based alternatives live on [Structural Identification](@ref structural_identification_page); external-instrument identification is [Proxy SVAR](@ref id_proxy_page).
 
 - **A-model / B-model / AB-model** patterns with `NaN` free and numbers fixed
 - **Recursive pattern** that reproduces Cholesky (``Q \approx I``, LR df = 0)
@@ -157,9 +157,9 @@ Recipe 4 zeros ``A_{31}`` on top of the recursive pattern. That cell is free in 
 
 ---
 
-## Mixed Short- and Long-Run Restrictions
+## Blanchard–Quah Long-Run Restrictions
 
-Zeros on ``B`` restrict impact responses. Zeros on ``C(1)A^{-1}B``, stored in `SVARPattern(..., long_run=…)`, restrict cumulative long-run responses (Galí 1992). [`blanchard_quah_pattern`](@ref) is the just-identified case: ``A = I``, ``B`` free, and ``C(1)B`` lower triangular.
+[`blanchard_quah_pattern`](@ref) is the supported long-run case: ``A = I``, ``B`` free, and ``C(1)B`` lower triangular. [`estimate_svar`](@ref) uses the closed form and reproduces [`identify_long_run`](@ref). Mixed short- and long-run zeros (Galí 1992) are a quadratic penalty, not a likelihood constraint, and throw `ArgumentError`; structural VECM long-run restrictions are SID-16.
 
 ```@example ab
 (lr_df_bq = svar_bq.lr_df,
@@ -204,9 +204,11 @@ refs(svar_rec)
 
 4. **Sign normalisation flips columns.** The estimator enforces a positive impact (or long-run) diagonal. Comparing ``A`` entries across samples requires the same sign convention.
 
-5. **Long-run patterns need stationarity.** ``C(1) = (I - \sum A_i)^{-1}`` explodes at a unit root, the same caveat as [`identify_long_run`](@ref).
+5. **Only Blanchard–Quah long-run is supported.** A `long_run` pattern that is not `blanchard_quah_pattern` throws `ArgumentError`. Mixed short- and long-run zeros are not a concentrated-ML constraint.
 
-6. **Multiple starts.** The concentrated likelihood is not globally concave. Raise `n_starts` if `loglik` jumps across seeds on an overidentified pattern.
+6. **Long-run patterns need stationarity.** ``C(1) = (I - \sum A_i)^{-1}`` explodes at a unit root, the same caveat as [`identify_long_run`](@ref).
+
+7. **Multiple starts.** The concentrated likelihood is not globally concave. Raise `n_starts` if `loglik` jumps across seeds on an overidentified pattern.
 
 ---
 

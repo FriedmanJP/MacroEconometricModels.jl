@@ -185,6 +185,66 @@ const MEM = MacroEconometricModels
         end
     end
 
+    @testset "theoretical CI uses residual sample size" begin
+        rng = MersenneTwister(7428)
+        Y, _ = simulate_svar([1.0 0.35; 0.4 1.0], [0.5 * Matrix{Float64}(I, 2, 2)];
+                             Tobs=220, rng=rng)
+        model = estimate_var(Y, 1)
+        A_pat = Matrix{Float64}(I, 2, 2)
+        B_pat = fill(0.0, 2, 2)
+        B_pat[1, 1] = B_pat[2, 2] = NaN
+        pat = SVARPattern(A_pat, B_pat)
+        @test check_identification(pat, 2).status === :over
+        @test MEM._ab_nobs(model) == size(model.U, 1)
+        T = eltype(model.Sigma)
+        n = nvars(model)
+        m_emptyU = VARModel(model.Y, model.p, model.B, zeros(T, 0, n),
+                            model.Sigma, model.aic, model.bic, model.hqic,
+                            model.varnames)
+        @test MEM._ab_nobs(m_emptyU) == size(model.Y, 1) - model.p
+        @test MEM._ab_nobs(m_emptyU) == effective_nobs(model)
+        svar_full = estimate_svar(model, pat; n_starts=2, rng=MersenneTwister(74281))
+        svar_empty = estimate_svar(m_emptyU, pat; n_starts=2, rng=MersenneTwister(74281))
+        @test svar_empty.Q ≈ svar_full.Q atol = 1e-5
+        L = cholesky_factor(model)
+        B0 = svar_full.A \ svar_full.B
+        @test B0 ≉ L atol = 1e-3
+        ir = irf(model, 4; method=:ab, pattern=pat, ci_type=:theoretical,
+                 reps=FAST ? 8 : 16, n_starts=1, rng=MersenneTwister(74282))
+        @test ir.ci_type === :theoretical
+        @test ir.values[1, :, :] ≉ L atol = 1e-3
+        @test all(ir.ci_lower .<= ir.values .+ sqrt(eps(T)))
+        @test all(ir.values .<= ir.ci_upper .+ sqrt(eps(T)))
+    end
+
+    @testset "non-BQ long-run throws ArgumentError" begin
+        rng = MersenneTwister(7429)
+        Y, _ = simulate_svar([1.0 0.2; 0.3 1.0], [0.4 * Matrix{Float64}(I, 2, 2)];
+                             Tobs=180, rng=rng)
+        model = estimate_var(Y, 1)
+        A_mix = [1.0 0.0; NaN 1.0]
+        B_mix = fill(0.0, 2, 2)
+        B_mix[1, 1] = B_mix[2, 2] = NaN
+        lr_mix = fill(NaN, 2, 2)
+        lr_mix[1, 2] = 0.0
+        pat_mix = SVARPattern(A_mix, B_mix; long_run=lr_mix)
+        err = nothing
+        try
+            check_identification(pat_mix, 2)
+        catch e
+            err = e
+        end
+        @test err isa ArgumentError
+        @test occursin("Blanchard", sprint(showerror, err))
+        @test_throws ArgumentError check_identification(pat_mix, model)
+        @test_throws ArgumentError estimate_svar(model, pat_mix; rng=MersenneTwister(1))
+        @test_throws ArgumentError irf(model, 4; method=:ab, pattern=pat_mix)
+        svar_bq = estimate_svar(model, blanchard_quah_pattern(2);
+                                rng=MersenneTwister(74291), n_starts=2)
+        @test svar_bq.identification.status === :exact
+        @test svar_bq.Q ≈ identify_long_run(model) atol = 1e-4
+    end
+
     if !FAST
         @testset "overidentified A-model size (gated FAST)" begin
             n = 3
