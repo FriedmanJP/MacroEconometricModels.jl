@@ -60,11 +60,11 @@ using Random
         X = common_true + 0.1 * randn(T_obs, N)
         # q = N: the projector L·Lᴴ = I, so the common component reconstructs X exactly (the old
         # raw rank-1 periodogram Wiener filter did not).
-        m_full = estimate_gdfm(X, N; standardize=false)
+        m_full = estimate_gdfm(X, N; standardize=false, spectral=:smoothed_periodogram)
         @test maximum(abs.(m_full.common_component - X)) < 1e-6
         # low-rank q = 2: a genuine projection (variance ≤ X per series) that recovers the common
         # structure (high correlation with the true common component).
-        m2 = estimate_gdfm(X, 2; standardize=false)
+        m2 = estimate_gdfm(X, 2; standardize=false, spectral=:smoothed_periodogram)
         @test all(var(m2.common_component[:, i]) <= 1.1 * var(X[:, i]) + 1e-8 for i in 1:N)
         @test mean([abs(cor(m2.common_component[:, i], common_true[:, i])) for i in 1:N]) > 0.9
     end
@@ -306,6 +306,8 @@ using Random
         # Selected q should be in valid range
         @test 1 <= ic.q_ratio <= max_q
         @test 1 <= ic.q_variance <= max_q
+        @test ic.boundary isa Bool
+        @test ic.boundary == (ic.q_variance == max_q && ic.cumulative_variance[end] < 0.9 - 1e-14)
     end
 
     @testset "Factor Selection with Known Structure" begin
@@ -364,9 +366,12 @@ using Random
         fc_ar = forecast(model, h; method=:ar)
         @test size(fc_ar.observables) == (h, N)
 
-        # Spectral method
-        fc_spectral = forecast(model, h; method=:spectral)
+        # Spectral method is the FHLR (2005) projection, not an AR(1) alias
+        fc_spectral = forecast(model, h; method=:spectral, ci_method=:none)
+        fc_os = forecast(model, h; method=:one_sided, ci_method=:none)
         @test size(fc_spectral.observables) == (h, N)
+        @test fc_spectral.observables ≈ fc_os.observables atol=1e-10
+        @test !(fc_ar.observables ≈ fc_spectral.observables)
     end
 
     @testset "Forecast with Dynamic Factors" begin
@@ -701,6 +706,282 @@ using Random
 
         # Variance explained should remain reasonable regardless of N
         @test all(variance_explained_list .> 0.2)
+    end
+
+    @testset "TimeSeriesData varnames and NaN validation" begin
+        Random.seed!(42)
+        T_obs, N, q = 80, 8, 2
+        X = randn(T_obs, N)
+        names = ["x$i" for i in 1:N]
+        ts = TimeSeriesData(X; varnames=names)
+        m = estimate_gdfm(ts, q)
+        @test m.varnames == names
+        @test length(m.varnames) == N
+
+        Xnan = copy(X)
+        Xnan[3, 2] = NaN
+        err = try
+            estimate_gdfm(Xnan, q)
+            error("expected ArgumentError")
+        catch e
+            e
+        end
+        @test err isa ArgumentError
+        @test occursin("NaN", err.msg) || occursin("Inf", err.msg)
+
+        # In-memory serialization round-trip of the new varnames field
+        m2 = MacroEconometricModels._reconstruct_from_container(
+            MacroEconometricModels._build_container(m))
+        @test m2.varnames == names
+        @test m2.q == m.q
+        @test m2.spectral === m.spectral
+        @test size(m2.Z) == size(m.Z)
+        @test m2.factors_onesided ≈ m.factors_onesided atol=1e-10
+    end
+
+    @testset "both spectral estimators on a dynamic-factor panel" begin
+        rng = Random.MersenneTwister(11)
+        T_obs, N, q = 120, 15, 2
+        F = zeros(T_obs, q)
+        F[1, :] = randn(rng, q)
+        for t in 2:T_obs
+            F[t, :] = 0.5 .* F[t - 1, :] .+ randn(rng, q)
+        end
+        Λ = randn(rng, N, q)
+        common_true = F * Λ'
+        X = common_true .+ 0.3 .* randn(rng, T_obs, N)
+        for spec in (:lag_window, :smoothed_periodogram)
+            m = estimate_gdfm(X, q; spectral=spec, standardize=false)
+            @test m.spectral === spec
+            @test size(m.factors) == (T_obs, q)
+            @test size(m.common_component) == (T_obs, N)
+            recon = m.common_component + m.idiosyncratic
+            @test maximum(abs.(recon - X)) < 1e-8
+            @test mean([abs(cor(m.common_component[:, i], common_true[:, i])) for i in 1:N]) > 0.7
+        end
+    end
+
+    @testset "lag-window spectrum has full rank; smoothed periodogram does not" begin
+        rng = Random.MersenneTwister(720)
+        T_obs, N = 300, 40
+        X = randn(rng, T_obs, N)
+        bw = 5
+        lw = estimate_gdfm(X, 2; spectral=:lag_window, bandwidth=20, standardize=false)
+        sp = estimate_gdfm(X, 2; spectral=:smoothed_periodogram, bandwidth=bw, standardize=false)
+        S_lw = lw.spectral_density_X[:, :, max(1, div(size(lw.spectral_density_X, 3), 2))]
+        S_sp = sp.spectral_density_X[:, :, max(1, div(size(sp.spectral_density_X, 3), 2))]
+        evals_lw = eigvals(Hermitian(S_lw))
+        evals_sp = eigvals(Hermitian(S_sp))
+        rank_lw = count(>(1e-8) ∘ abs, evals_lw)
+        rank_sp = count(>(1e-8) ∘ abs, evals_sp)
+        @test rank_lw == N
+        @test rank_sp <= 2 * bw + 1
+    end
+
+    @testset "lag-window estimator matches AR(1) spectrum (closed-form check)" begin
+        # Oracle for `_estimate_spectral_density_lagwindow`, not a GDFM fit: a univariate
+        # AR(1) is the unique simple process whose spectral density is known in closed form.
+        rng = Random.MersenneTwister(721)
+        T_obs, M, φ, σ2 = 2000, 25, 0.5, 1.0
+        y = zeros(T_obs)
+        y[1] = sqrt(σ2 / (1 - φ^2)) * randn(rng)
+        for t in 2:T_obs
+            y[t] = φ * y[t - 1] + sqrt(σ2) * randn(rng)
+        end
+        X = reshape(y, :, 1)
+        θ, S = MacroEconometricModels._estimate_spectral_density_lagwindow(X, M, :bartlett)
+        fhat = real.(S[1, 1, :])
+        fth = [σ2 / (2π * abs2(1 - φ * cis(-θh))) for θh in θ]
+        rel_rmse = sqrt(mean(abs2, fhat .- fth)) / sqrt(mean(abs2, fth))
+        @test rel_rmse < 0.15
+    end
+
+    @testset "GDFM historical decomposition by dynamic PC" begin
+        rng = Random.MersenneTwister(7291)
+        T_obs, N, q = 400, 30, 2
+        F = zeros(T_obs, q)
+        F[1, :] = randn(rng, q)
+        Φ = [0.8 0.0; 0.0 -0.5]
+        for t in 2:T_obs
+            F[t, :] = Φ * F[t-1, :] .+ randn(rng, q)
+        end
+        Λ = zeros(N, q)
+        Λ[1:15, 1] .= 1
+        Λ[16:30, 2] .= 1
+        Λ .+= 0.05 .* randn(rng, N, q)
+        X = F * Λ' .+ 0.15 .* randn(rng, T_obs, N)
+        gdfm = estimate_gdfm(X, q; standardize=false, spectral=:lag_window)
+        hd = historical_decomposition(gdfm)
+        @test verify_decomposition(hd; tol=1e-8)
+        chi_hat = dropdims(sum(hd.contributions[:, :, 1:q]; dims=3); dims=3)
+        @test chi_hat ≈ gdfm.common_component atol=1e-8
+        @test hd.contributions[:, :, q + 1] ≈ gdfm.idiosyncratic atol=1e-8
+        for i in 1:N
+            c1 = hd.contributions[:, i, 1]
+            c2 = hd.contributions[:, i, 2]
+            if std(c1) > 1e-8 && std(c2) > 1e-8
+                @test abs(cor(c1, c2)) < 0.1
+            end
+            vχ = var(chi_hat[:, i])
+            vsum = var(c1) + var(c2)
+            vχ > 1e-8 && @test abs(vχ - vsum) / vχ < 0.10
+        end
+        @test plot_result(hd) isa MacroEconometricModels.PlotOutput
+    end
+
+    @testset "GDFM HD reconstructs common_component under default standardize" begin
+        rng = Random.MersenneTwister(7293)
+        T_obs, N, q = 120, 12, 2
+        F = randn(rng, T_obs, q)
+        X = F * randn(rng, N, q)' .+ 0.2 .* randn(rng, T_obs, N) .+ 5
+        gdfm = estimate_gdfm(X, q)   # default standardize=true
+        @test gdfm.standardized
+        hd = historical_decomposition(gdfm)
+        chi_hat = dropdims(sum(hd.contributions[:, :, 1:q]; dims=3); dims=3)
+        @test chi_hat ≈ gdfm.common_component atol=1e-8
+        @test hd.contributions[:, :, q + 1] ≈ gdfm.idiosyncratic atol=1e-8
+        @test verify_decomposition(hd; tol=1e-8)
+        @test maximum(abs, hd.initial_conditions) < 1e-12
+    end
+
+    # ==========================================================================
+    # Hallin–Liška / Bai–Ng 2007 / Amengual–Watson (SDFM-10)
+    # ==========================================================================
+
+    @testset "ic_criteria_gdfm warns on 90% boundary" begin
+        rng = Random.MersenneTwister(71901)
+        X = randn(rng, 80, 12)
+        ic = @test_logs (:warn, r"q_variance") ic_criteria_gdfm(X, 2)
+        @test ic.boundary
+        @test ic.q_variance == 2
+        @test haskey(ic, :q_ratio)
+        @test haskey(ic, :q_variance)
+        @test haskey(ic, :eigenvalue_ratios)
+        @test haskey(ic, :cumulative_variance)
+        @test haskey(ic, :avg_eigenvalues)
+    end
+
+    @testset "Hallin–Liška and Bai–Ng recover q=2 in ≥8/10 replications" begin
+        n_rep, T_obs, N, q_true = 10, 500, 100, 2
+        n_hl = 0
+        n_bn = 0
+        for i in 1:n_rep
+            rng = Random.MersenneTwister(71900 + i)
+            u = randn(rng, T_obs, q_true)
+            for t in 2:T_obs
+                u[t, :] .+= 0.4 .* u[t-1, :]
+            end
+            Λ0 = randn(rng, N, q_true)
+            Λ1 = randn(rng, N, q_true)
+            X = u * Λ0'
+            X[2:end, :] .+= u[1:end-1, :] * Λ1'
+            X .+= 0.5 .* randn(rng, T_obs, N)
+            hl = hallin_liska(X, 8)
+            @test hl isa HallinLiskaResult
+            n_hl += (hl.q == q_true)
+            bn = bai_ng_q(X, 4; p=1)
+            @test bn isa BaiNgQResult
+            n_bn += (bn.q_D1 == q_true)
+        end
+        @test n_hl >= 8
+        @test n_bn >= 8
+        rng = Random.MersenneTwister(71999)
+        u = randn(rng, T_obs, q_true)
+        X = u * randn(rng, N, q_true)'
+        X[2:end, :] .+= u[1:end-1, :] * randn(rng, N, q_true)'
+        X .+= 0.5 .* randn(rng, T_obs, N)
+        aw = amengual_watson_q(X, 4, 1)
+        @test aw isa AmengualWatsonResult
+        @test aw.q >= 1
+        @test sprint(show, hallin_liska(X[:, 1:20], 3; subpanels=2, c_grid=range(0, 2; length=20))) isa String
+    end
+
+    @testset "spectrum inverts to asymmetric lag-1 covariance (not the even part)" begin
+        rng = Random.MersenneTwister(72101)
+        T_obs, N = 2000, 16
+        u = randn(rng, T_obs)
+        X = zeros(T_obs, N)
+        X[1, 1:8] .= u[1]
+        for t in 2:T_obs
+            X[t, 1:8] .= u[t]
+            X[t, 9:16] .= u[t - 1]
+        end
+        X .+= 0.05 .* randn(rng, T_obs, N)
+        m = estimate_gdfm(X, 1; standardize=false, spectral=:lag_window)
+        Γ1 = MacroEconometricModels._gamma_from_spectrum(m.spectral_density_X, m.frequencies, 1)
+        Xc = X .- mean(X; dims=1)
+        # E[X_t X_{t-1}']: same /T lag-window convention as estimate_gdfm
+        sample = (Xc[2:T_obs, :]' * Xc[1:(T_obs - 1), :]) / T_obs
+        @test size(Γ1) == (N, N)
+        @test norm(Γ1 - transpose(Γ1)) > 0.2 * norm(Γ1)
+        w = 1 - 1 / max(m.bandwidth, 1)
+        @test Γ1 ≈ w .* sample rtol=0.08
+        @test norm(Γ1 - w .* sample) < norm(Γ1 - w .* ((sample + sample') / 2))
+    end
+
+    @testset "one-sided FHLR factors: contemporaneous identity and two-sided wrap" begin
+        rng = Random.MersenneTwister(721)
+        T_obs, N, q = 500, 30, 2
+        F = zeros(T_obs, q)
+        F[1, :] = randn(rng, q)
+        for t in 2:T_obs
+            F[t, :] = 0.7 .* F[t-1, :] .+ randn(rng, q)
+        end
+        X = F * randn(rng, N, q)' .+ 0.3 .* randn(rng, T_obs, N)
+        m = estimate_gdfm(X, q; standardize=false)
+        @test size(m.Z) == (N, q)
+        @test size(m.factors_onesided) == (T_obs, q)
+        @test m.factors_onesided ≈ X * m.Z atol=1e-8
+        cors = [abs(cor(m.factors_onesided[:, j], m.factors[:, j])) for j in 1:q]
+        @test all(>(0.9), cors)
+        # Drop last 10: contemporaneous filter is unchanged on the common sample
+        # (the defining one-sided property). Re-estimating Z from the truncated
+        # sample is O(1/T); two-sided IFFT factors move because they wrap.
+        @test m.factors_onesided[1:end-10, :] ≈ X[1:end-10, :] * m.Z atol=1e-8
+        mt = estimate_gdfm(X[1:end-10, :], q; standardize=false)
+        @test mt.factors_onesided ≈ X[1:end-10, :] * mt.Z atol=1e-8
+        F_os = copy(m.factors_onesided[1:end-10, :])
+        F_os_t = copy(mt.factors_onesided)
+        F_2s = copy(m.factors[1:end-10, :])
+        F_2s_t = copy(mt.factors)
+        for j in 1:q
+            dot(F_os[:, j], F_os_t[:, j]) < 0 && (F_os_t[:, j] .*= -1)
+            dot(F_2s[:, j], F_2s_t[:, j]) < 0 && (F_2s_t[:, j] .*= -1)
+        end
+        @test maximum(abs, F_2s - F_2s_t) > 1e-3
+        @test maximum(abs, F_2s - F_2s_t) > maximum(abs, F_os - F_os_t)
+        os_corr = mean(abs.([cor(F_os[:, j], F_os_t[:, j]) for j in 1:q]))
+        @test os_corr > 0.99
+    end
+
+    @testset "FHLR h=1 projection RMSE beats AR(1) on two-sided factors" begin
+        rng = Random.MersenneTwister(7211)
+        T_obs, N, q = 500, 30, 2
+        u = randn(rng, T_obs, q)
+        for t in 2:T_obs
+            u[t, :] .+= 0.5 .* u[t-1, :]
+        end
+        Λ0 = randn(rng, N, q)
+        Λ1 = randn(rng, N, q)
+        X = u * Λ0'
+        X[2:end, :] .+= u[1:end-1, :] * Λ1'
+        X .+= 0.3 .* randn(rng, T_obs, N)
+        n_origin = 8
+        sse_ar = 0.0
+        sse_os = 0.0
+        for t in (T_obs - n_origin):(T_obs - 1)
+            m = estimate_gdfm(X[1:t, :], q; standardize=false)
+            fc_ar = forecast(m, 1; method=:ar, ci_method=:none)
+            fc_os = forecast(m, 1; method=:one_sided, ci_method=:none)
+            sse_ar += sum(abs2, fc_ar.observables[1, :] .- X[t + 1, :])
+            sse_os += sum(abs2, fc_os.observables[1, :] .- X[t + 1, :])
+        end
+        @test sse_os < sse_ar
+        m = estimate_gdfm(X, q; standardize=false)
+        @test_throws ArgumentError forecast(m, 1; method=:invalid)
+        fc_sp = forecast(m, 2; method=:spectral, ci_method=:none)
+        fc_os = forecast(m, 2; method=:one_sided, ci_method=:none)
+        @test fc_sp.observables ≈ fc_os.observables atol=1e-10
     end
 
 end

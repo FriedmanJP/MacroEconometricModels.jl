@@ -654,8 +654,12 @@ function main()
     # -------------------------------------------------------------------
     begin
         sdfm = estimate_structural_dfm(X20, 3; p=1, H=20)
-        r_sdfm = irf(sdfm, 20)
+        r_sdfm = irf(sdfm, 20; ci_type=:bootstrap, reps=40, rng=Random.MersenneTwister(20))
         save("sdfm_irf.html", plot_result(r_sdfm))
+        save("sdfm_impact.html", plot_result(sdfm; view=:impact))
+        save("sdfm_fevd.html", plot_result(sdfm; view=:fevd, var=1))
+        gdfm_plot = estimate_gdfm(X20, 3; standardize=true)
+        save("gdfm_eigenvalues.html", plot_result(gdfm_plot; view=:eigenvalues))
     end
 
     # -------------------------------------------------------------------

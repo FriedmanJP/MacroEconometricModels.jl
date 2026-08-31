@@ -16,6 +16,7 @@ Octave can't run.
 - `fixtures.jl` — `load_fixture(name)` reads the same `_data/*.csv` into Julia.
 - `compare.jl` — `read_ref(name)` + `compare(label, ours, theirs; rtol, atol)`.
 - `checks_*.jl` — per-module Julia comparison drivers (run our code, compare to `_out/`).
+- `sdfm_ref/` — committed FGLR Cholesky fixture (`X`, `K`, `B0`, 12-step IRF). `checks_sdfm.jl` compares `estimate_structural_dfm` within `1e-6`. Octave `ref_sdfm.m` documents the algebra; tests do not require Octave.
 - `_data/`, `_out/` — generated, gitignored.
 
 ## How to run

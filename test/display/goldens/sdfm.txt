@@ -1,0 +1,43 @@
+Structural DFM (q=N, r=N, p=N, Cholesky)
+
+Specification
+
+Dynamic factors (q) N
+Static factors (r) N
+Panel variables (N) N
+Observations (T) N
+VAR lags (p) N
+IRF horizon (H) N
+Method fglr
+Identification cholesky
+Kernel bartlett
+Bandwidth N
+
+Variance Explained
+
+Variance Cumulative
+
+Factor N N% N%
+Factor N N% N%
+
+Factor VAR
+
+Lags (p) N
+Lag criterion fixed
+Variables N
+AIC N
+BIC N
+Max eigenvalue modulus N
+
+Identification
+
+Method Cholesky
+Shocks demand, supply
+Shock share N%
+
+Impact Matrix BN
+
+demand supply
+
+Static factor N N N
+Static factor N N N

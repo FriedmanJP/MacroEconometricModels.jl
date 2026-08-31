@@ -361,6 +361,12 @@ Private = false
 
 ### Generalized Dynamic Factor Model
 
+```@docs
+HallinLiskaResult
+BaiNgQResult
+AmengualWatsonResult
+```
+
 ```@autodocs
 Modules = [MacroEconometricModels]
 Pages   = ["factor/generalized.jl"]
@@ -387,6 +393,8 @@ irf(::StructuralDFM{T}, ::Int) where {T}
 fevd(::FAVARModel{T}, ::Int) where {T}
 fevd(::BayesianFAVAR{T}, ::Int) where {T}
 fevd(::StructuralDFM{T}, ::Int) where {T}
+historical_decomposition(::StructuralDFM{T}) where {T}
+historical_decomposition(::GeneralizedDynamicFactorModel{T}) where {T}
 forecast(::FAVARModel{T}, ::Int) where {T}
 ```
 
@@ -397,6 +405,13 @@ forecast(::FAVARModel{T}, ::Int) where {T}
 ```@docs
 estimate_structural_dfm
 sdfm_panel_irf
+varindex
+structural_shocks
+forecast(::StructuralDFM{T}, ::Int) where {T<:AbstractFloat}
+is_stable(::StructuralDFM)
+MacroEconometricModels.StatsAPI.predict(::StructuralDFM)
+MacroEconometricModels.StatsAPI.residuals(::StructuralDFM)
+MacroEconometricModels.StatsAPI.coef(::StructuralDFM)
 ```
 
 ---

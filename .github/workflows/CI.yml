@@ -50,6 +50,7 @@ jobs:
           - version: '1'
             os: windows-latest
             arch: x64
+            fast: true
           # Dual-major Optim compat (T153/#252): the only Julia 1.10 cell.
           # Pins Optim@1 and runs MACRO_NUMERICAL_CI. Drops Plotting/Display/
           # Coverage-A/B only — nearly the full suite at full sampling.
@@ -124,7 +125,8 @@ jobs:
           JULIA_NUM_THREADS: ${{ matrix.version == '1.10' && '1' || 'auto' }}
           OPENBLAS_NUM_THREADS: "1"
           MACRO_MULTIPROCESS_TESTS: ${{ matrix.version == '1.10' && '1' || '0' }}
-          MACRO_FAST_TESTS: ${{ matrix.os == 'ubuntu-latest' && '0' || '1' }}
+          # Windows (`fast: true`) and macOS: reduced-sampling smoke. Ubuntu: full.
+          MACRO_FAST_TESTS: ${{ (matrix.fast || matrix.os == 'macos-latest') && '1' || '0' }}
           MACRO_NUMERICAL_CI: ${{ matrix.optim_v1 && '1' || '0' }}
           MACRO_CHECK_BOUNDS: ${{ matrix.optim_v1 && '1' || '0' }}
           MACRO_CI_SUITE: ${{ matrix.suite }}

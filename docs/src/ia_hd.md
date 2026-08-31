@@ -235,6 +235,19 @@ The LP decomposition spreads the same data across shocks far more evenly than th
 
 Passing a `VARModel` together with an `SVARRestrictions` object runs the Arias, Rubio-Ramírez & Waggoner (2018) zero-and-sign algorithm and returns a `BayesianHistoricalDecomposition` whose bands are importance-weighted across accepted rotations; `historical_decomposition(vecm)` routes a `VECMModel` through `to_var`. See [Structural Identification](@ref structural_identification_page) and [Vector Error Correction Models](@ref vecm_page) respectively.
 
+A [generalized dynamic factor model](@ref factor_page) decomposes by **dynamic principal component** (FHLR 2000), not by a VAR rotation. A [structural DFM](@ref factor_page) uses the identification stored at estimation (`Q` / `B0`) and maps factor contributions through ``\Lambda``, with an `"Idiosyncratic"` column so the identity holds on the panel:
+
+```@example ia_hd
+gdfm_hd = estimate_gdfm(Y, 1; standardize=true)
+hd_g = historical_decomposition(gdfm_hd)
+sdfm_hd = estimate_structural_dfm(Y, 1; identification=:cholesky, p=1, H=12,
+    varnames=["INDPRO", "CPIAUCSL", "FEDFUNDS"])
+hd_s = historical_decomposition(sdfm_hd)
+(gdfm_ok=verify_decomposition(hd_g),
+ sdfm_ok=verify_decomposition(hd_s),
+ sdfm_shocks=hd_s.shock_names)
+```
+
 ---
 
 ## Complete Example

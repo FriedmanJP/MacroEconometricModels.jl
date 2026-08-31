@@ -1015,6 +1015,7 @@ export identify_cholesky
 export identify_sign
 export identify_narrative
 export identify_long_run
+export identify_proxy
 export generate_Q
 export compute_irf, compute_structural_shocks
 
@@ -1080,11 +1081,14 @@ export is_stationary
 # Generalized Dynamic Factor Model functions
 export estimate_gdfm
 export ic_criteria_gdfm
+export hallin_liska, HallinLiskaResult
+export bai_ng_q, BaiNgQResult
+export amengual_watson_q, AmengualWatsonResult
 export common_variance_share
 export spectral_eigenvalue_plot_data
 
 # Structural DFM types and estimation
-export StructuralDFM, estimate_structural_dfm
+export StructuralDFM, estimate_structural_dfm, varindex, structural_shocks
 
 # FAVAR types and estimation
 export FAVARModel, BayesianFAVAR

@@ -451,7 +451,8 @@ report(hd::BayesianHistoricalDecomposition) = show(stdout, hd)
 
 # --- Models via abstract dispatch ---
 report(x::AbstractARIMAModel) = show(stdout, x)
-report(x::AbstractFactorModel) = show(stdout, x)
+report(x::AbstractFactorModel) = report(stdout, x)
+report(io::IO, x::AbstractFactorModel) = (show(io, x); nothing)
 report(x::AbstractVolatilityModel) = show(stdout, x)
 report(x::AbstractMGARCHModel) = show(stdout, x)   # EV-16 (#424): CCC/DCC/BEKK
 report(x::AbstractLPModel) = show(stdout, x)
@@ -503,7 +504,8 @@ report(x::CorTestResult) = show(stdout, x)
 # --- Types without abstract parents ---
 report(x::ARIMAForecast) = show(stdout, x)
 report(x::ARIMAOrderSelection) = show(stdout, x)
-report(x::FactorForecast) = show(stdout, x)
+report(x::FactorForecast) = report(stdout, x)
+report(io::IO, x::FactorForecast) = (show(io, x); nothing)
 report(x::VolatilityForecast) = show(stdout, x)
 report(x::WildClusterBootstrap) = show(stdout, x)
 report(x::AndersonRubinTest) = show(stdout, x)

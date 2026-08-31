@@ -4,6 +4,8 @@
 # This file is part of MacroEconometricModels.jl.
 # Licensed under GPL-3.0-or-later. See LICENSE for details.
 
+using Test
+using MacroEconometricModels
 using Random, Statistics, LinearAlgebra
 if !@isdefined(FAST)
     const FAST = get(ENV, "MACRO_FAST_TESTS", "") == "1"
@@ -337,7 +339,12 @@ end
     Random.seed!(77733)
     X = randn(100, 10)
     gdfm = estimate_gdfm(X, 2)
-    fc_ar = forecast(gdfm, 5; method=:ar)
+    fc_ar = forecast(gdfm, 5; method=:ar, ci_method=:none)
+    fc_sp = forecast(gdfm, 5; method=:spectral, ci_method=:none)
+    fc_os = forecast(gdfm, 5; method=:one_sided, ci_method=:none)
     @test size(fc_ar.factors) == (5, 2)
     @test all(isfinite, fc_ar.factors)
+    @test all(isfinite, fc_sp.observables)
+    @test fc_sp.observables ≈ fc_os.observables atol=1e-10
+    @test !(fc_ar.observables ≈ fc_sp.observables)
 end

@@ -93,6 +93,38 @@ function _resample_residuals(U::AbstractMatrix{T}, scheme::Symbol, rng::Abstract
     throw(ArgumentError("bootstrap must be :iid, :wild, or :block; got :$scheme"))
 end
 
+"""Resample residuals and a contemporaneous instrument with the same draws."""
+function _resample_residuals_with_z(U::AbstractMatrix{T}, z::AbstractVector,
+    scheme::Symbol, rng::AbstractRNG; block_length::Int=0,
+    wild_dist::Symbol=:rademacher) where {T<:AbstractFloat}
+    T_eff = size(U, 1)
+    length(z) == T_eff || throw(ArgumentError(
+        "instrument length $(length(z)) must match residual sample $T_eff"))
+    zT = T.(z)
+    T_eff == 0 && return copy(U), copy(zT)
+    if scheme === :iid
+        idx = rand(rng, 1:T_eff, T_eff)
+        return U[idx, :], zT[idx]
+    elseif scheme === :wild
+        w = _wild_weights(rng, T_eff, wild_dist, T)
+        return U .* w, zT .* w
+    elseif scheme === :block
+        ell = block_length > 0 ? min(block_length, T_eff) : _default_block_length(T_eff)
+        n_blocks = cld(T_eff, ell)
+        last_start = T_eff - ell + 1
+        outU = Matrix{T}(undef, n_blocks * ell, size(U, 2))
+        outz = Vector{T}(undef, n_blocks * ell)
+        @inbounds for b in 1:n_blocks
+            s = rand(rng, 1:last_start)
+            sl = s:(s + ell - 1)
+            outU[((b - 1) * ell + 1):(b * ell), :] = U[sl, :]
+            outz[((b - 1) * ell + 1):(b * ell)] = zT[sl]
+        end
+        return outU[1:T_eff, :], outz[1:T_eff]
+    end
+    throw(ArgumentError("bootstrap must be :iid, :wild, or :block; got :$scheme"))
+end
+
 """
     _kilian_bias_correction(B, Psi, n, p) → (B_corrected, delta)
 

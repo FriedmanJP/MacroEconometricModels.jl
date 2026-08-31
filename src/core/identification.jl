@@ -19,6 +19,90 @@ using Distributions: loggamma
 identify_cholesky(model::VARModel{T}) where {T<:AbstractFloat} = safe_cholesky(model.Sigma)
 
 # =============================================================================
+# External-instrument (proxy) identification
+# =============================================================================
+
+"""
+    identify_proxy(model::VARModel, z; normalize=1, normalize_value=1) -> NamedTuple
+
+External-instrument identification of the first structural shock (Stock & Watson
+2012; Mertens & Ravn 2013). `z` is aligned to the VAR residual sample (`T_eff`
+rows, or the full `T` with the first `p` observations dropped). Missing/`NaN`
+rows are dropped pairwise.
+
+Returns `(Q, b1, first_stage_F, z_eff)` where `Q` is an orthogonal rotation with
+the first column identified, `b1` is the impact column (`Σ û z` normalised so
+variable `normalize` responds by `normalize_value`), and `first_stage_F` is the
+OLS F-statistic of the residual projection on `z`. Warns when that F is below 10.
+"""
+function identify_proxy(model::VARModel{T}, z::AbstractVector;
+                        normalize::Int=1, normalize_value::Real=one(T)) where {T<:AbstractFloat}
+    n = nvars(model)
+    (1 <= normalize <= n) || throw(ArgumentError("normalize must be in 1:$n"))
+    U = model.U
+    T_eff = size(U, 1)
+    z_eff = _align_instrument(z, size(model.Y, 1), model.p, T_eff)
+    mask = [isfinite(z_eff[t]) && all(isfinite, @view U[t, :]) for t in 1:T_eff]
+    count(mask) < 8 && throw(ArgumentError("instrument has too few finite observations"))
+    Uu = U[mask, :]
+    zz = z_eff[mask]
+    zc = zz .- mean(zz)
+    Uc = Uu .- mean(Uu; dims=1)
+    nobs = length(zz)
+    Suz = vec(Uc' * zc) / T(nobs - 1)
+    P = safe_cholesky(model.Sigma)
+    denom = Suz[normalize]
+    abs(denom) < T(1e-12) && throw(ArgumentError(
+        "instrument is uncorrelated with residual $normalize; cannot normalise"))
+    b1 = Suz ./ denom .* T(normalize_value)
+    Q = _complete_proxy_Q(P, b1, n, T)
+    B0 = P * Q
+    scale = B0[normalize, 1]
+    abs(scale) < T(1e-12) && throw(ArgumentError("proxy impact on the normalising variable is zero"))
+    Q[:, 1] .*= T(normalize_value) / scale
+    y = Uc * (Suz ./ (norm(Suz) + T(1e-12)))
+    Fstat = _ols_first_stage_F(y, zc)
+    if Fstat < T(10)
+        @warn "Weak instrument: first-stage F = $(round(Fstat, digits=2)) < 10 (Montiel Olea, Stock & Watson 2021)"
+    end
+    (Q=Q, b1=Vector{T}(b1), first_stage_F=T(Fstat), z_eff=Vector{T}(z_eff))
+end
+
+function _align_instrument(z::AbstractVector, T_obs::Int, p::Int, T_eff::Int)
+    n = length(z)
+    n == T_eff && return float.(z)
+    n == T_obs && return float.(z[(p + 1):end])
+    throw(ArgumentError(
+        "instrument length $n must equal residual sample $T_eff or full sample $T_obs"))
+end
+
+function _ols_first_stage_F(y::AbstractVector{T}, zc::AbstractVector{T}) where {T<:AbstractFloat}
+    n = length(y)
+    n < 3 && return zero(T)
+    denom = dot(zc, zc)
+    denom <= zero(T) && return zero(T)
+    b = dot(zc, y) / denom
+    fitted = b .* zc
+    yc = y .- mean(y)
+    sse = dot(yc - fitted, yc - fitted)
+    ssr = dot(fitted, fitted)
+    sse <= zero(T) && return T(Inf)
+    T((ssr / 1) / (sse / (n - 2)))
+end
+
+function _complete_proxy_Q(P::AbstractMatrix{T}, b1::AbstractVector{T}, n::Int, ::Type{T}) where {T}
+    q1 = P \ b1
+    nrm = norm(q1)
+    nrm < T(1e-12) && throw(ArgumentError("proxy impact column is numerically zero"))
+    M = Matrix{T}(I, n, n)
+    M[:, 1] = q1 ./ nrm
+    Fq = qr(M)
+    Q = Matrix{T}(Fq.Q)
+    s = [Fq.R[i, i] < zero(T) ? -one(T) : one(T) for i in 1:n]
+    Q * Diagonal(s)
+end
+
+# =============================================================================
 # Random Orthogonal Matrix
 # =============================================================================
 
@@ -138,10 +222,10 @@ Compute pointwise bounds (or quantile bands) over the identified set.
 """
 function irf_bounds(s::SignIdentifiedSet{T}; quantiles::Vector{<:Real}=T[0.16, 0.84]) where {T}
     q = T.(quantiles)
-    H, n = size(s.irf_draws, 2), size(s.irf_draws, 3)
-    lower = zeros(T, H, n, n)
-    upper = zeros(T, H, n, n)
-    for h in 1:H, i in 1:n, j in 1:n
+    H, n_var, n_shock = size(s.irf_draws, 2), size(s.irf_draws, 3), size(s.irf_draws, 4)
+    lower = zeros(T, H, n_var, n_shock)
+    upper = zeros(T, H, n_var, n_shock)
+    for h in 1:H, i in 1:n_var, j in 1:n_shock
         d = @view s.irf_draws[:, h, i, j]
         lower[h, i, j] = quantile(d, q[1])
         upper[h, i, j] = quantile(d, q[2])
@@ -155,9 +239,9 @@ end
 Compute pointwise median IRF over the identified set.
 """
 function irf_median(s::SignIdentifiedSet{T}) where {T}
-    H, n = size(s.irf_draws, 2), size(s.irf_draws, 3)
-    med = zeros(T, H, n, n)
-    for h in 1:H, i in 1:n, j in 1:n
+    H, n_var, n_shock = size(s.irf_draws, 2), size(s.irf_draws, 3), size(s.irf_draws, 4)
+    med = zeros(T, H, n_var, n_shock)
+    for h in 1:H, i in 1:n_var, j in 1:n_shock
         d = @view s.irf_draws[:, h, i, j]
         med[h, i, j] = quantile(d, T(0.5))
     end

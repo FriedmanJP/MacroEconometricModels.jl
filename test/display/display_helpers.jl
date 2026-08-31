@@ -282,6 +282,19 @@ function _gmm_fixture()
     estimate_gmm(mom, [0.0, 0.0], d; weighting = :two_step)
 end
 
+function _sdfm_fixture()
+    rng = MersenneTwister(101)
+    T_obs, N, q = 80, 8, 2
+    F = zeros(T_obs, q)
+    F[1, :] = randn(rng, q)
+    for t in 2:T_obs
+        F[t, :] = 0.5 .* F[t-1, :] .+ randn(rng, q)
+    end
+    X = F * randn(rng, N, q)' .+ 0.3 .* randn(rng, T_obs, N)
+    estimate_structural_dfm(X, q; identification=:cholesky, p=1, H=10,
+                            shock_names=["demand", "supply"])
+end
+
 function _dsge_est_fixture()
     rng = MersenneTwister(81)
     T_obs = 300
@@ -348,6 +361,7 @@ function build_display_fixtures()
     # canonicalizer cannot mask). A decisive fixture keeps every decision stable everywhere.
     push!(fx, (name = "normality",  obj = normality_test_suite(randexp(MersenneTwister(94), 200, 3)),        stars = false, ref = false))
     push!(fx, (name = "dsge_est",   obj = _dsge_est_fixture(),                                                stars = false, ref = false))
+    push!(fx, (name = "sdfm",       obj = _sdfm_fixture(),                                                    stars = false, ref = false))
     return fx
 end
 

@@ -3,10 +3,10 @@
 Factor models compress a panel of hundreds of macroeconomic indicators into a handful of latent common factors, turning a cross-section that no VAR can hold into a system small enough to estimate. This page covers the four estimators the package provides — static principal components, dynamic factor models with explicit VAR dynamics, the generalized dynamic factor model estimated in the frequency domain, and structural identification of the common shocks.
 
 - **Static factor model**: principal components (Stock & Watson 2002a) with automatic panel orientation, standardization, and block-restricted EM estimation
-- **Information criteria**: Bai & Ng (2002) IC1--IC3 for the number of static factors, AIC/BIC grid search for the dynamic specification, and eigenvalue criteria for the number of dynamic factors
+- **Information criteria**: Bai & Ng (2002) IC1--IC3 for the number of static factors; Hallin–Liška (2007), Bai–Ng (2007), and Amengual–Watson (2007) for the number of dynamic factors ``q``; AIC/BIC for the dynamic-factor VAR
 - **Dynamic factor model**: two-step (PCA + VAR) or EM (Kalman smoother) estimation with four confidence-interval methods for forecasting (Doz, Giannone & Reichlin 2011, 2012)
-- **Generalized dynamic factor model**: spectral estimation via the kernel-smoothed periodogram with frequency-by-frequency eigenanalysis (Forni, Hallin, Lippi & Reichlin 2000, 2005)
-- **Structural DFM**: Cholesky or sign-restriction identification on the common factors, with panel-wide structural impulse responses (Forni, Giannone, Lippi & Reichlin 2009)
+- **Generalized dynamic factor model**: lag-window spectral estimation with frequency-by-frequency eigenanalysis (Forni, Hallin, Lippi & Reichlin 2000, 2005); the smoothed periodogram is kept as `spectral=:smoothed_periodogram`
+- **Structural DFM**: FGLR (2009) with ``r \ge q`` static factors, rank-``q`` shocks, Cholesky or **observable** sign restrictions, and panel-wide structural impulse responses
 - **Block-restricted estimation**: EM with masked loadings for theory-guided factor structures
 
 Factors alone summarize a panel; putting them inside a VAR alongside observed policy variables is the [Factor-Augmented VAR](@ref favar_page). For a factor model built to handle ragged real-time data, see [DFM Nowcasting](@ref nowcast_dfm_page).
@@ -436,12 +436,12 @@ where:
 In the frequency domain the spectral density splits as ``\Sigma_X(\omega) = \Sigma_\chi(\omega) + \Sigma_\xi(\omega)``. Common factors produce eigenvalues that **diverge** with ``N`` while idiosyncratic components produce **bounded** ones, and that separation identifies the factor space without any finite-order restriction on factor dynamics.
 
 !!! note "Technical Note"
-    Estimation proceeds in four steps: kernel-smooth the periodogram to get ``\hat{\Sigma}_X(\omega)``; take the Hermitian eigendecomposition at each Fourier frequency; keep the leading ``q`` eigenvectors as dynamic principal components; and reconstruct ``\chi_t`` by applying the projector ``L L^H`` to the Fourier transform of ``X`` and inverting it. The bandwidth defaults to ``\max(3, \lfloor T^{1/3} \rceil)``, which is 4 for the 60-observation panel used here.
+    The default estimator is the FHLR lag-window spectrum ``\hat\Sigma_X(\theta)=(1/2\pi)\sum_{k=-M}^{M} w(k/M)\hat\Gamma_k e^{-ik\theta}``, evaluated on ``\theta_h=\pi h/M``. The Hermitian eigendecomposition at each grid point supplies the leading-``q`` dynamic principal components; those loadings are interpolated onto the Fourier ordinates so the time-domain projector ``L L^H`` can reconstruct ``\chi_t``. Pass `spectral=:smoothed_periodogram` for the older kernel-smoothed periodogram. Under `:lag_window`, `bandwidth=0` selects ``M=\max(3,\mathrm{round}(\tfrac12\sqrt{T}))``, which is 4 for the 60-observation panel used here.
 
 ```@example factor
 gdfm = estimate_gdfm(X, 2;
     standardize=true,
-    bandwidth=0,          # 0 selects T^(1/3)
+    bandwidth=0,          # 0 selects ½√T under :lag_window
     kernel=:bartlett      # :bartlett, :parzen, or :tukey
 )
 report(gdfm)
@@ -457,12 +457,13 @@ shares = common_variance_share(gdfm)
  mean_r2=round(mean(r2(gdfm)), digits=3))
 ```
 
-Two dynamic factors carry 45.5% and 18.7% of the average spectral mass, and the reconstructed common component accounts for a median 82.7% of the variance of an individual series — far above the 37.8% that three *static* factors deliver on the same panel. The gap is the point of the GDFM: because ``\chi_{it}`` is a two-sided filter of the common shocks, a series that responds to the aggregate cycle with a lead or a lag is still classified as common, whereas static PCA can only match contemporaneous co-movement.
+Two dynamic factors carry 28.7% and 15.0% of the average spectral mass (43.8% cumulative). The reconstructed common component accounts for a median 26.9% of the variance of an individual series (mean 31.3%). Three *static* factors deliver 37.8% of contemporaneous co-movement on the same panel. With ``T=60`` and ``M=4`` the lag-window common component is more conservative than static PCA: a short lag truncation on a wide panel does not automatically recover more variance than three contemporaneous factors.
 
 | Keyword | Type | Default | Description |
 |---------|------|---------|-------------|
 | `standardize` | `Bool` | `true` | Standardize data before estimation |
-| `bandwidth` | `Int` | `0` | Kernel bandwidth, `0` selects ``\max(3, T^{1/3})`` |
+| `bandwidth` | `Int` | `0` | Lag-window ``M`` (default ``\max(3,\mathrm{round}(\tfrac12\sqrt{T}))``); periodogram bandwidth if `spectral=:smoothed_periodogram` |
+| `spectral` | `Symbol` | `:lag_window` | `:lag_window` or `:smoothed_periodogram` |
 | `kernel` | `Symbol` | `:bartlett` | Spectral kernel: `:bartlett`, `:parzen`, or `:tukey` |
 | `r` | `Int` | `0` | Number of static factors, `0` sets ``r = q``; must satisfy ``r \geq q`` |
 
@@ -479,29 +480,49 @@ Two dynamic factors carry 45.5% and 18.7% of the average spectral mass, and the 
 | `frequencies` | `Vector{T}` | Frequency grid from 0 to ``\pi`` |
 | `q` | `Int` | Number of dynamic factors |
 | `r` | `Int` | Number of static factors |
-| `bandwidth` | `Int` | Kernel smoothing bandwidth actually used |
+| `bandwidth` | `Int` | Lag-window ``M`` or periodogram bandwidth actually used |
 | `kernel` | `Symbol` | Kernel type |
+| `spectral` | `Symbol` | `:lag_window` or `:smoothed_periodogram` |
 | `standardized` | `Bool` | Whether the data was standardized |
 | `variance_explained` | `Vector{T}` | Average spectral variance share of each dynamic factor |
+| `Z` | `Matrix{T}` | ``N \times r`` FHLR (2005) one-sided weights (generalized eigenvectors of ``(\\Gamma_\\chi(0), \\Gamma_\\xi(0))``) |
+| `factors_onesided` | `Matrix{T}` | ``T \times r`` contemporaneous factors ``F_t = Z' X_t`` |
+| `common_component_onesided` | `Matrix{T}` | ``T \times N`` one-sided common component |
+
+`factors` and `common_component` are the **two-sided** FHLR (2000) reconstruction (inverse FFT over the sample). They use future observations and wrap at the sample ends, so they are for in-sample decomposition and historical decomposition. `Z` and `factors_onesided` are the **one-sided** FHLR (2005) filter: ``F_t`` depends on ``X_t`` only, given ``Z``.
 
 ### Selecting the Number of Dynamic Factors
 
-The GDFM uses eigenvalue criteria rather than information criteria. `ic_criteria_gdfm` returns the ratio criterion — the ``q`` that maximizes ``\bar\lambda_q / \bar\lambda_{q+1}`` in the frequency-averaged eigenvalues — and the smallest ``q`` reaching 90% cumulative variance.
+`ic_criteria_gdfm` is a heuristic: the ``q`` that maximizes ``\bar\lambda_q / \bar\lambda_{q+1}`` in the frequency-averaged eigenvalues, and the smallest ``q`` reaching 90% cumulative variance. Neither is a consistent estimator of ``q``.
 
 !!! warning "max_q is bounded by the cross-section"
-    `ic_criteria_gdfm(X, max_q)` requires ``1 \leq \texttt{max\_q} \leq N``. The spectral density matrix is ``N \times N``, so there is no ``(N+1)``-th eigenvalue to rank; a larger `max_q` raises an `ArgumentError`.
+    `ic_criteria_gdfm(X, max_q)` requires ``1 \leq \texttt{max\_q} \leq N``. The spectral density matrix is ``N \times N``, so there is no ``(N+1)``-th eigenvalue to rank; a larger `max_q` raises an `ArgumentError`. When the 90% threshold is never reached, `q_variance == max_q` and `boundary=true`, and the function warns.
 
 ```@example factor
 ic_gdfm = ic_criteria_gdfm(X, 5; kernel=:bartlett)
 
-(q_ratio=ic_gdfm.q_ratio, q_variance=ic_gdfm.q_variance,
+(q_ratio=ic_gdfm.q_ratio, q_variance=ic_gdfm.q_variance, boundary=ic_gdfm.boundary,
  ratios=round.(ic_gdfm.eigenvalue_ratios, digits=2),
  cumvar=round.(ic_gdfm.cumulative_variance, digits=3))
 ```
 
-The eigenvalue ratios are 2.44, 1.62, 1.35, 1.47, 1.39, so the ratio criterion picks a single dynamic factor: the drop from the first to the second frequency-averaged eigenvalue is much the largest, and the sequence is flat afterwards. The variance criterion reports 5, but read the cumulative column before believing it — the series reaches 0.899 at ``q = 5`` and never crosses the 0.9 threshold, so `q_variance` is returning `max_q` as a fallback rather than a genuine crossing. Raise `max_q` when `q_variance == max_q`. The two criteria bracket the honest answer: one shock dominates the spectrum, but reconstructing 90% of the variance takes more than five.
+The eigenvalue ratios are 1.91, 1.83, 1.23, 1.15, 1.15, so the ratio criterion still picks a single dynamic factor, but the first two ratios are close: the lag-window spectrum on this short panel does not separate ``q = 1`` from ``q = 2`` as sharply as the old smoothed periodogram did. The variance criterion reports 5, and the cumulative column shows why — 0.287, 0.438, 0.520, 0.587, 0.645, never crossing 0.9 — so `q_variance` is returning `max_q` as a fallback (`boundary=true`). Raise `max_q` when that happens, or use a consistent criterion.
 
-Hallin & Liska (2007) give the formal information criterion for this problem, with a tuning-constant stability check that neither of these two diagnostics provides.
+Hallin–Liška (2007) minimises ``IC(q; c) = \log\bigl((1/N)\sum_{j>q}\bar\lambda_j\bigr) + q\cdot c\cdot p(N,T)`` on a grid of ``c``, then reads ``S_c``, the standard deviation of ``\hat q_j(c)`` across nested sub-panels ``(N_j, T_j)``. The first ``S_c = 0`` plateau near ``c = 0`` is ``q_{\max}`` (no penalty) and is discarded; the estimate is the longest remaining constant-``q`` plateau.
+
+```@example factor
+hl = hallin_liska(X, 5; c_grid=range(0, 3; length=40), subpanels=3)
+(q=hl.q, interval=(round(hl.stability_interval[1]; digits=2),
+                   round(hl.stability_interval[2]; digits=2)))
+```
+
+Bai–Ng (2007) fits a VAR on ``r`` static PCA factors and reads rank statistics ``D_{1,k}``, ``D_{2,k}`` on the residual-covariance eigenvalues. Amengual–Watson (2007) applies Bai–Ng (2002) IC to the residuals of ``X_t`` after projection on lagged static factors. `estimate_structural_dfm(X, :auto; q_method=:hallin_liska)` (or `:bai_ng`, `:amengual_watson`) selects ``q`` and then estimates.
+
+```@example factor
+bn = bai_ng_q(X, 4; p=1)
+aw = amengual_watson_q(X, 4, 1)
+(q_D1=bn.q_D1, q_D2=bn.q_D2, q_AW=aw.q)
+```
 
 | Field | Type | Description |
 |-------|------|-------------|
@@ -510,6 +531,24 @@ Hallin & Liska (2007) give the formal information criterion for this problem, wi
 | `avg_eigenvalues` | `Vector{T}` | Frequency-averaged eigenvalues, first `max_q` |
 | `q_ratio` | `Int` | ``q`` maximizing the eigenvalue ratio |
 | `q_variance` | `Int` | Smallest ``q`` with cumulative variance ``\geq 0.9`` |
+| `boundary` | `Bool` | `true` when the 90% threshold was not reached |
+
+### One-sided estimation and forecasting
+
+The two-sided projector cannot be used for forecasting: it looks into the future. FHLR (2005) invert the stored common and idiosyncratic spectra to lag covariances ``\hat\Gamma_\chi(k)``, ``\hat\Gamma_\xi(k)``, take the ``r`` generalized eigenvectors ``Z`` of the pencil ``(\hat\Gamma_\chi(0), \hat\Gamma_\xi(0))``, and form contemporaneous factors ``\hat F_t = Z' X_t``. The common-component forecast is the projection
+
+```math
+\hat\chi_{T+h|T} = \hat\Gamma_\chi(h)\, Z\, (Z'\hat\Gamma_X(0) Z)^{-1} Z' X_T.
+```
+
+`forecast(gdfm, h; method=:one_sided)` (or `method=:spectral`) implements that path. `method=:ar` is the older AR(1) recursion on the two-sided factors. `:spectral` is no longer a silent alias for `:ar`.
+
+```@example factor
+fc_fhlr = forecast(gdfm, 4; method=:one_sided, ci_method=:none)
+fc_ar = forecast(gdfm, 4; method=:ar, ci_method=:none)
+(size_os=size(fc_fhlr.observables), size_ar=size(fc_ar.observables),
+ maxabs_diff=round(maximum(abs, fc_fhlr.observables - fc_ar.observables); digits=3))
+```
 
 ### DFM vs GDFM
 
@@ -517,10 +556,11 @@ Hallin & Liska (2007) give the formal information criterion for this problem, wi
 |--------|---------------------|-----------------|
 | **Domain** | Time domain, PCA plus VAR | Frequency domain, spectral |
 | **Factor dynamics** | Explicit finite VAR(``p``) | Implicit, two-sided filters |
-| **Estimation** | Two-step or EM | Kernel-smoothed periodogram |
+| **Estimation** | Two-step or EM | Lag-window spectral density |
 | **Cost** | Moderate | Higher, eigendecomposition per frequency |
 | **Asymptotics** | ``T \to \infty`` for fixed ``r`` | ``N, T \to \infty`` jointly |
 | **Likelihood available** | Yes | No |
+| **Forecast** | Kalman / VAR on factors | FHLR (2005) one-sided projection (`method=:one_sided`) |
 | **Best for** | Moderate ``N``, forecasting | Large ``N``, structural decomposition |
 
 ---
@@ -565,30 +605,22 @@ Every loading outside its block is exactly zero — 30 of the 45 entries of ``\L
 
 ## Structural Dynamic Factor Model
 
-The structural DFM (Forni, Giannone, Lippi & Reichlin 2009) identifies structural shocks in a large panel by applying SVAR identification to the common factors. It fits a VAR on the time-domain GDFM factors, identifies that small system, and maps the identified responses out to all ``N`` panel variables through the loading matrix.
+The structural DFM (Forni, Giannone, Lippi & Reichlin 2009) identifies ``q`` common shocks in a large panel from ``r \ge q`` static factors. The default `method=:fglr` estimates static principal components, fits a VAR on those ``r`` series, reduces the residual covariance to rank ``q``, and identifies the shocks on selected observables. Pass `method=:gdfm_var` for the legacy two-sided GDFM-factor VAR. Identification methods besides Cholesky and signs route through `compute_Q` on the factor VAR (`:long_run` is formed in **panel** space on `target_vars`).
 
 ```math
-F_t = c + \sum_{l=1}^p A_l F_{t-l} + B_0 \varepsilon_t
+X_t = \Lambda F_t + \xi_t, \qquad A(L) F_t = K \varepsilon_t, \qquad C(L) = \Lambda A(L)^{-1} K H
 ```
 
 where:
-- ``F_t`` is the ``q \times 1`` vector of common factors from the GDFM
-- ``A_l`` are ``q \times q`` autoregressive coefficient matrices
-- ``B_0`` is the ``q \times q`` impact matrix
-- ``\varepsilon_t`` are the structural shocks
+- ``F_t`` is the ``r \times 1`` vector of static factors (``r \ge q``)
+- ``\Lambda`` is the ``N \times r`` loading matrix
+- ``K`` is ``r \times q``, from the leading ``q`` eigenvectors of the factor-VAR residual covariance
+- ``H`` is the ``q \times q`` identification rotation (Cholesky on `order`, or sign restrictions)
+- ``\varepsilon_t`` are the ``q`` orthonormal common shocks
 
-Panel-wide structural IRFs map factor responses to every observable:
+Panel IRFs are ``\Lambda \Psi_h K H``, with ``\Psi_h`` the reduced-form MA of the factor VAR. `r` vs `q`: ``q`` is the number of primitive shocks; ``r`` stacks those shocks and their lags so variables that load on ``F_{t-1}`` are not misspecified. The two-sided `method=:gdfm_var` path uses the ``q`` GDFM factors directly and is kept for reproducibility.
 
-```math
-\text{IRF}_i(h, j) = \sum_{k=1}^q \Lambda_{ik} \cdot \left[\Phi_h B_0\right]_{kj}
-```
-
-where:
-- ``\Lambda_{ik}`` is the time-domain loading of variable ``i`` on factor ``k``
-- ``\Phi_h`` is the ``h``-step reduced-form IRF matrix of the factor VAR
-- ``j`` indexes the structural shock
-
-Cholesky and sign restrictions are both available.
+Cholesky (on `order`, default the first ``q`` observables) and sign restrictions are both available.
 
 ```@example factor
 struct_series = ["INDPRO", "IPFINAL", "IPMANSICS", "CUMFNS", "PAYEMS", "MANEMP", "UNRATE",
@@ -597,7 +629,8 @@ struct_series = ["INDPRO", "IPFINAL", "IPMANSICS", "CUMFNS", "PAYEMS", "MANEMP",
                  "FEDFUNDS", "TB3MS", "GS10", "BAA", "S&P 500"]
 X20 = X[:, [findfirst(==(v), varnames(fred)) for v in struct_series]]
 
-sdfm20 = estimate_structural_dfm(X20, 2; identification=:cholesky, p=1, H=20)
+sdfm20 = estimate_structural_dfm(X20, 2; identification=:cholesky, p=1, H=20,
+                                 varnames=struct_series)
 report(sdfm20)
 ```
 
@@ -606,10 +639,17 @@ d = fevd(sdfm20, 20)
 report(d)
 ```
 
-The impact matrix is nearly diagonal — 0.92 on the first factor, 0.97 on the second, with a cross-term of ``-0.06`` — so the recursive ordering is close to a relabelling here rather than a substantive restriction. The FEVD confirms it: the first structural shock explains 100% of the first factor's forecast error at impact and 99.8% at ``h = 20``, while never accounting for as much as 0.4% of the second factor's at any horizon. Nearly orthogonal factor innovations are the normal case for GDFM factors, since the frequency-domain eigenvectors are orthonormal by construction.
+```@example factor
+d_panel = fevd(sdfm20, 20; space=:panel, include_idiosyncratic=true)
+(variables=d_panel.variables[1:3],
+ shocks=d_panel.shocks,
+ INDPRO_idio_h1=round(d_panel.proportions[1, end, 1]; digits=3))
+```
+
+The impact on the two static factors is nearly diagonal — 0.9847 and 0.9488 on the diagonal, off-diagonal ``-0.0027`` and 0.0352 — so Cholesky on the first two observables is close to a relabelling of the PCA factors rather than a substantive restriction. The FEVD confirms it: the first structural shock explains 100% of static factor 1's forecast error at impact and 99.4% at ``h = 20``, and 0.1% of static factor 2 at impact, rising to 9.9% by ``h = 4`` and staying there through ``h = 20``. These are innovations of the static-factor VAR after rank-``q`` reduction, not the frequency-domain GDFM eigenvectors. The observable FEVD (`space=:panel`) answers the applied question: with idiosyncratic included, `INDPRO`'s one-step error is mostly idiosyncratic (the common shocks' shares plus that remainder sum to 1). Factor-space FEVD remains the default.
 
 !!! note "Technical Note"
-    Time-domain loadings are obtained by regression, ``\hat\Lambda = \left[(F'F)^{-1}F'X\right]'``, on the **untransformed** panel — not from the spectral loadings. Panel IRFs are therefore in the original units of each series, so responses are not comparable across variables measured on different scales.
+    Under `:fglr`, ``\Lambda`` is the static PCA loading matrix. With `standardize=true` and `units=:raw` (the default), panel IRFs are rescaled by each series' standard deviation so responses are in original units. Under `:gdfm_var`, loadings are OLS of the untransformed panel on the two-sided GDFM factors.
 
 ```@example factor
 r20 = irf(sdfm20, 20)
@@ -624,47 +664,93 @@ plot_result(r20)
 <iframe src="../assets/plots/sdfm_irf.html" width="100%" height="500" frameborder="0" style="border:1px solid #ddd;border-radius:4px;"></iframe>
 ```
 
-The first structural shock moves `UNRATE` by ``-0.024`` and `FEDFUNDS` by ``-0.068`` on impact, against ``3.3 \times 10^{-4}`` for `INDPRO` — the scale differences are units, not economics, since `INDPRO` enters as a monthly log difference and `FEDFUNDS` as a level difference in percentage points. Responses decay by roughly a factor of seven per month and are numerically negligible past ``h = 4``: the factor VAR coefficients are small, so with 60 observations of monthly growth rates the extracted factors are close to serially uncorrelated and essentially all of the action is at impact.
+The first structural shock moves `UNRATE` by ``-0.0481`` and `FEDFUNDS` by ``-0.0046`` on impact, against ``0.0069`` for `INDPRO` — the scale differences are units, not economics, since `INDPRO` enters as a monthly log difference and `FEDFUNDS` as a level difference in percentage points. `UNRATE`'s response is already ``-0.0001`` by ``h = 4`` and numerically negligible past that: with 60 observations of monthly growth rates the extracted static factors are close to serially uncorrelated and essentially all of the action is at impact.
 
 | Field | Type | Description |
 |-------|------|-------------|
 | `gdfm` | `GeneralizedDynamicFactorModel{T}` | Underlying GDFM estimate |
-| `factor_var` | `VARModel{T}` | VAR(``p``) fitted on the ``q`` common factors |
-| `B0` | `Matrix{T}` | ``q \times q`` impact matrix, ``B_0 = \text{chol}(\Sigma) Q`` |
-| `Q` | `Matrix{T}` | ``q \times q`` rotation matrix (identity under `:cholesky`) |
-| `identification` | `Symbol` | `:cholesky` or `:sign` |
+| `factor_var` | `VARModel{T}` | VAR(``p``) on the ``r`` static factors (`:fglr`) or ``q`` GDFM factors (`:gdfm_var`) |
+| `B0` | `Matrix{T}` | ``r \times q`` impact ``K H`` (`:fglr`) or ``q \times q`` (`:gdfm_var`) |
+| `Q` | `Matrix{T}` | ``q \times q`` identification rotation ``H`` (first accepted draw under `:sign`) |
+| `K` | `Matrix{T}` | ``r \times q`` rank-``q`` loading of factor-VAR residuals |
+| `r` | `Int` | Number of static factors |
+| `method` | `Symbol` | `:fglr` (default) or `:gdfm_var` |
+| `identification` | `Symbol` | `:cholesky`, `:sign`, `:long_run`, or a `compute_Q` method |
 | `structural_irf` | `Array{T,3}` | ``H \times N \times q`` panel-wide structural IRFs |
-| `loadings_td` | `Matrix{T}` | ``N \times q`` time-domain loadings |
+| `loadings_td` | `Matrix{T}` | ``N \times r`` (`:fglr`) or ``N \times q`` (`:gdfm_var`) loadings |
+| `loadings_static` | `Matrix{T}` | ``N \times r`` static PCA loadings (`:fglr`) |
+| `static_factors` | `Matrix{T}` | ``T \times r`` static PCA factors |
 | `p_var` | `Int` | VAR lag order on the factors |
 | `shock_names` | `Vector{String}` | Labels for the ``q`` structural shocks |
+| `varnames` | `Vector{String}` | Panel variable names (length ``N``) |
+| `units` | `Symbol` | `:raw` or `:standardized` IRF units |
+| `identified_set` | `SignIdentifiedSet` or `nothing` | Accepted panel IRFs when `store_all=true` |
+| `acceptance_rate` | `T` | Fraction of Haar draws accepted under `:sign` |
 
 | Keyword | Type | Default | Description |
 |---------|------|---------|-------------|
-| `identification` | `Symbol` | `:cholesky` | `:cholesky` or `:sign` |
-| `p` | `Int` | `1` | VAR lag order on the factors |
+| `identification` | `Symbol` | `:cholesky` | `:cholesky`, `:sign`, `:long_run`, `:proxy`, `:narrative`, ICA/ML/heteroskedastic `compute_Q` methods, `:arias`/`:uhlig` |
+| `target_vars` | `Vector` | `1:q` | Observables whose long-run responses are lower-triangular (`:long_run`) |
+| `method` | `Symbol` | `:fglr` | `:fglr` (FGLR 2009) or `:gdfm_var` (legacy two-sided) |
+| `r` | `Int` | `q` | Static factors; must satisfy ``r \ge q`` |
+| `order` | `Vector{Int}` | `1:q` | Observable indices for Cholesky under `:fglr` |
+| `p` | `Int` or `Symbol` | `1` | VAR lag order, or `:aic`/`:bic`/`:hq` over `1:p_max` |
+| `p_max` | `Int` | `8` | Grid upper bound when `p` is a criterion |
+| `check_stability` | `Bool` | `true` | Warn when the factor-VAR companion modulus is ``\ge 1`` |
 | `H` | `Int` | `40` | IRF horizon stored in `structural_irf` |
-| `sign_check` | `Function` | `nothing` | Sign restriction predicate, required for `:sign` |
+| `sign_check` | `Function` | `nothing` | Predicate on the IRF array (`H×N×q` under `:panel`) |
+| `sign_restrictions` | `Vector` / `SVARRestrictions` | `nothing` | Declarative `(variable, shock, horizons, sign)` tuples |
+| `restriction_space` | `Symbol` | `:panel` | `:panel` (observables) or `:factor` (static factors) |
+| `store_all` | `Bool` | `false` | Keep the accepted set as `identified_set` |
 | `max_draws` | `Int` | `1000` | Rotation draws searched under `:sign` |
-| `standardize` | `Bool` | `true` | Passed to the internal `estimate_gdfm` call |
-| `bandwidth` | `Int` | `0` | Passed to the internal `estimate_gdfm` call |
-| `kernel` | `Symbol` | `:bartlett` | Passed to the internal `estimate_gdfm` call |
+| `rng` | `AbstractRNG` | `default_rng()` | Pins the Haar search |
+| `varnames` | `Vector{String}` | `nothing` | Panel names (forwarded from `TimeSeriesData`) |
+| `shock_names` | `Vector{String}` | `Shock 1, …` | Labels for the ``q`` shocks |
+| `standardize` | `Bool` | `true` | Standardize for PCA / GDFM |
+| `bandwidth` | `Int` | `0` | GDFM lag-window ``M`` or periodogram bandwidth |
+| `kernel` | `Symbol` | `:bartlett` | Spectral kernel |
+| `spectral` | `Symbol` | `:lag_window` | `:lag_window` or `:smoothed_periodogram` |
+| `instrument` | `AbstractVector` | `nothing` | External instrument for `identification=:proxy` (length ``T`` or ``T_{\mathrm{eff}}``; `NaN` dropped pairwise) |
+| `normalize` | `Tuple` | `(1, 1.0)` | Unit-effect pair `(variable, value)` on an observable |
 
 ### Sign Restrictions
 
-The predicate receives the **factor-space** IRF array, dimensioned ``H \times q \times q`` — the responses of the ``q`` factors, not of the ``N`` panel variables — and is indexed `[horizon, factor, shock]`:
+Applied structural DFMs restrict **observables** — output, the unemployment rate, the policy rate — not the arbitrarily rotated PCA factors (Forni & Gambetti 2010). Default `restriction_space=:panel` hands the predicate the ``H \times N \times q`` panel IRF ``\Lambda \Psi_h K H``, indexed `[horizon, variable, shock]`. Declarative tuples resolve names through `varindex`:
 
 ```@example factor
-# Shock 1 raises factor 1 on impact; shock 2 lowers it
-sign_fn(irf_matrix) = irf_matrix[1, 1, 1] > 0 && irf_matrix[1, 1, 2] < 0
-
-Random.seed!(42)   # the rotation search is random and takes no rng keyword
 sdfm_sign = estimate_structural_dfm(X20, 2;
-    identification=:sign, sign_check=sign_fn, max_draws=1000, H=20)
+    identification=:sign,
+    sign_restrictions=[("INDPRO", 1, 1:2, :positive),
+                       ("UNRATE", 1, 1:2, :negative)],
+    varnames=struct_series, max_draws=1000, H=20, p=1,
+    rng=MersenneTwister(42))
 
-round.(sdfm_sign.Q, digits=4)
+(Q11=round(sdfm_sign.Q[1, 1]; digits=4),
+ acceptance=round(sdfm_sign.acceptance_rate; digits=3),
+ INDPRO=round(irf(sdfm_sign, 20).values[1, varindex(sdfm_sign, "INDPRO"), 1]; digits=4),
+ UNRATE=round(irf(sdfm_sign, 20).values[1, varindex(sdfm_sign, "UNRATE"), 1]; digits=4))
 ```
 
-The accepted rotation is a plane rotation of roughly ``48^\circ``. The restriction moves factor 1 in opposite directions under the two shocks, yet `INDPRO` falls on impact under both — ``-1.31 \times 10^{-4}`` and ``-5.62 \times 10^{-4}``. Nothing is wrong: a panel response is ``\Lambda`` applied to a *combination* of both factors, not a copy of the restricted one, so a restriction imposed in factor space fixes nothing about any individual observable until the loadings are applied. Sign restrictions identify a set rather than a point, and `estimate_structural_dfm` returns the first rotation that passes, so the seed is part of the result. It takes no `rng` keyword, which is why the example reseeds immediately beforehand.
+Shock 1 is required to raise `INDPRO` and lower `UNRATE` at horizons 1 and 2. The first accepted rotation has (1,1) entry ``-0.5537`` (acceptance rate 33.3%). On impact `INDPRO` moves ``0.0016`` and `UNRATE` ``-0.0517``, so both restricted cells hold on the returned **panel** IRFs — that is the economically meaningful object, not the factor-space array. A closure `sign_check` on the same ``H \times N \times q`` array is equivalent; pass `restriction_space=:factor` only if you deliberately want the old factor-space contract. An unsatisfiable restriction throws `IdentificationError` naming the variable with the lowest pass rate.
+
+Sign restrictions identify a **set**. `store_all=true` keeps every accepted Haar draw in `identified_set` (`SignIdentifiedSet`); `irf` then returns the pointwise median with 16/84 bands (`ci_type = :sign_set`). Pass `point=:first` to recover the first-accepted path stored in `Q`:
+
+```@example factor
+sdfm_set = estimate_structural_dfm(X20, 2;
+    identification=:sign,
+    sign_restrictions=[("INDPRO", 1, 1:1, :positive)],
+    varnames=struct_series, store_all=true, max_draws=400, H=12, p=1,
+    rng=MersenneTwister(42))
+rset = irf(sdfm_set, 12)
+i_ip = varindex(sdfm_set, "INDPRO")
+(n_accepted=sdfm_set.identified_set.n_accepted,
+ ci_type=rset.ci_type,
+ median=round(rset.values[1, i_ip, 1]; digits=4),
+ lo=round(rset.ci_lower[1, i_ip, 1]; digits=4),
+ hi=round(rset.ci_upper[1, i_ip, 1]; digits=4))
+```
+
+Of 400 draws, 200 pass the single `INDPRO` restriction. The impact median for `INDPRO` is ``0.0046``, inside the 16/84 band ``[0.0017, 0.0066]``. The band is a set-identification statement, not sampling uncertainty (Baumeister & Hamilton 2015): tightening the restriction shrinks the set, not a confidence interval.
 
 ### Two-Step Estimation
 
@@ -675,6 +761,15 @@ gdfm_pre = estimate_gdfm(X20, 2)
 sdfm_two = estimate_structural_dfm(gdfm_pre; identification=:cholesky, p=1, H=20)
 
 round.(sdfm_two.B0, digits=4)
+```
+
+```@example factor
+sdfm_lr = estimate_structural_dfm(X20, 2; identification=:long_run,
+    target_vars=["INDPRO", "IPFINAL"], varnames=struct_series, p=1, H=20)
+hd20 = historical_decomposition(sdfm20)
+(lr=sdfm_lr.identification,
+ hd_ok=verify_decomposition(hd20),
+ hd_shocks=hd20.shock_names)
 ```
 
 ### Panel IRFs
@@ -702,7 +797,47 @@ plot_result(panel_irf)
 <iframe src="../assets/plots/sdfm_panel_irf.html" width="100%" height="500" frameborder="0" style="border:1px solid #ddd;border-radius:4px;"></iframe>
 ```
 
-The first form recomputes the factor IRFs from the stored VAR coefficients and rotation, so horizons beyond the ``H`` used at estimation time are available. The second accepts any factor-space `ImpulseResponse` — from a custom identification, for instance — validates that it has exactly ``q`` variables and ``q`` shocks, and applies the same ``\Lambda`` projection. Both return an `ImpulseResponse` with `ci_type = :none`: the projection carries no interval, because the loadings are treated as known. `StructuralDFM` stores no panel variable names, so rows are labelled `Var 1 … Var N` in column order of the matrix passed to `estimate_structural_dfm` — keep the name vector used to build that matrix alongside the result.
+The first form recomputes the factor IRFs from the stored VAR coefficients and rotation, so horizons beyond the ``H`` used at estimation time are available. The second accepts any factor-space `ImpulseResponse` — from a custom identification, for instance — validates that it has exactly ``q`` variables and ``q`` shocks, and applies the same ``\Lambda`` projection. Point IRFs have `ci_type = :none`. Pass `ci_type=:bootstrap` to resample factor-VAR residuals (`:iid`, `:wild`, or `:block`), re-estimate the VAR and the rank-``q`` reduction, re-apply the stored identification, and take pointwise quantiles of the **panel** draws — never mapped interval endpoints. `sdfm_panel_irf(sdfm, irf(sdfm.factor_var, H; ci_type=:bootstrap))` pushes those factor draws through ``\Lambda`` and keeps `ci_type = :bootstrap`. Row labels come from `sdfm.varnames`, which defaults to `Var 1 … Var N` in column order of the matrix passed to `estimate_structural_dfm` when names are not supplied.
+
+```@example factor
+ir_boot = irf(sdfm20, 8; ci_type=:bootstrap, reps=40, rng=MersenneTwister(20))
+(ci_type=ir_boot.ci_type, n_draws=size(ir_boot._draws, 1),
+ lo=round(ir_boot.ci_lower[1, 1, 1]; digits=4),
+ hi=round(ir_boot.ci_upper[1, 1, 1]; digits=4))
+```
+
+### Historical decomposition and forecasting
+
+`structural_shocks(sdfm)` returns the ``T_{\mathrm{eff}} \times q`` series ``\hat\varepsilon_t = B_0^+ \hat u_t`` from the stored rotation. `forecast(sdfm, h)` maps the factor-VAR forecast through ``\Lambda``; bootstrap bands, when requested, are quantiles of those mapped draws.
+
+```@example factor
+εhat = structural_shocks(sdfm20)
+fc20 = forecast(sdfm20, 4; ci_method=:none)
+(shock_cov=round.(cov(εhat); digits=2),
+ fc_size=size(fc20.observables),
+ p_bic=estimate_structural_dfm(X20, 2; p=:bic, p_max=4, H=8).p_var)
+```
+
+Lag order ``p`` can be an integer or `:aic`/`:bic`/`:hq`. `show` prints the companion-matrix max-eigenvalue modulus; `is_stable(sdfm)` is true when that modulus is strictly less than one.
+
+### External-instrument identification
+
+Stock & Watson (2012, 2016) identify one common shock at a time with an instrument ``z_t`` that is correlated with ``\varepsilon_{1t}`` and orthogonal to the others. The first impact column is proportional to ``\mathrm{Cov}(\hat u_t, z_t)``, then scaled so a chosen observable moves by one unit. The shipped `:mp_shocks` panel already aligns high-frequency monetary surprises (`mp1`) with the quarterly FRED-style macro block; a monthly FRED-MD exercise uses the same pairwise-missing convention after mapping each surprise to its FOMC month.
+
+```@example factor
+mp = load_example(:mp_shocks)
+Ymp = to_matrix(mp[:, ["ygap", "infl", "ffr"]])
+zmp = vec(to_matrix(mp[:, ["mp1"]]))
+keep = [all(isfinite, Ymp[t, :]) for t in 1:size(Ymp, 1)]
+Ymp, zmp = Ymp[keep, :], zmp[keep]
+sdfm_iv = estimate_structural_dfm(Ymp, 1; r=1, p=1, H=8, standardize=true,
+    identification=:proxy, instrument=zmp, normalize=("ygap", 1.0),
+    varnames=["ygap", "infl", "ffr"])
+(F=round(sdfm_iv.first_stage_F; digits=1),
+ impact_ygap=round(irf(sdfm_iv, 1).values[1, 1, 1]; digits=3))
+```
+
+A first-stage F below 10 emits a weak-instrument warning (Montiel Olea, Stock & Watson 2021). Bootstrap IRFs resample the instrument jointly with the factor-VAR residuals.
 
 ---
 
@@ -822,7 +957,17 @@ IC2 selects four factors, one more than the three used in the sections above, an
 
 6. **Forecasting from non-stationary factor dynamics.** The forecast recursion assumes the factor companion matrix is stable. Check `is_stationary(dfm)` first; if it fails, either reduce ``p`` or difference the offending series before extraction, since a unit root in a factor makes every horizon's interval meaningless.
 
-7. **Comparing panel IRF magnitudes across series.** `sdfm_panel_irf` and `irf(::StructuralDFM, H)` return responses in each variable's own units, because the time-domain loadings are regressed on the untransformed panel. Rescale by each series' standard deviation before ranking responses.
+7. **Comparing panel IRF magnitudes across series.** `sdfm_panel_irf` and `irf(::StructuralDFM, H)` return responses in each variable's own units. Rescale by each series' standard deviation before ranking responses.
+
+8. **Restricting factors instead of observables.** Default `restriction_space=:panel`. A predicate on PCA factor 1 does not constrain `INDPRO` or `FEDFUNDS`. Use `sign_restrictions` with variable names, or `varindex(sdfm, "INDPRO")` inside `sign_check`.
+
+9. **Treating a sign-identified IRF as a point.** With `store_all=true`, `irf` returns a median and 16/84 set bands (`ci_type = :sign_set`). The first accepted `Q` is one draw from that set. Pass `rng=` to pin the search; do not interpret a single draw as the unique structural response.
+
+10. **Setting ``r < q``.** FGLR requires at least as many static factors as shocks. `r < q` throws `ArgumentError`. Two-sided GDFM factors (`method=:gdfm_var`) are non-fundamental: they are two-sided projections and are not valid for real-time forecasting (FHLR 2005). Use `factors_onesided` or `forecast(gdfm, h; method=:one_sided)`.
+
+11. **Treating `ic_criteria_gdfm` as a consistent selector.** The eigenvalue-ratio and 90% rules are heuristics. When `boundary=true`, the 90% threshold was never reached. Use `hallin_liska`, `bai_ng_q`, or `amengual_watson_q`.
+
+12. **Expecting `forecast(gdfm; method=:spectral)` to equal `:ar`.** `:spectral` is the FHLR (2005) projection, not an AR(1) alias. Pass `method=:ar` for the two-sided factor recursion.
 
 ---
 
@@ -843,6 +988,12 @@ IC2 selects four factors, one more than the three used in the sections above, an
 - Doz, C., Giannone, D., & Reichlin, L. (2012). A Quasi-Maximum Likelihood Approach for Large, Approximate Dynamic Factor Models.
   *Review of Economics and Statistics*, 94(4), 1014-1024. [DOI](https://doi.org/10.1162/REST_a_00225)
 
+- Baumeister, C., & Hamilton, J. D. (2015). Sign Restrictions, Structural Vector Autoregressions, and Useful Prior Information.
+  *Econometrica*, 83(5), 1963-1999. [DOI](https://doi.org/10.3982/ECTA12356)
+
+- Forni, M., & Gambetti, L. (2010). The Dynamic Effects of Monetary Policy: A Structural Factor Model Approach.
+  *Journal of Monetary Economics*, 57(2), 203-216. [DOI](https://doi.org/10.1016/j.jmoneco.2009.11.009)
+
 - Forni, M., Giannone, D., Lippi, M., & Reichlin, L. (2009). Opening the Black Box: Structural Factor Models with Large Cross-Sections.
   *Econometric Theory*, 25(5), 1319-1347. [DOI](https://doi.org/10.1017/S026646660809052X)
 
@@ -854,6 +1005,12 @@ IC2 selects four factors, one more than the three used in the sections above, an
 
 - Hallin, M., & Liska, R. (2007). Determining the Number of Factors in the General Dynamic Factor Model.
   *Journal of the American Statistical Association*, 102(478), 603-617. [DOI](https://doi.org/10.1198/016214506000001275)
+
+- Bai, J., & Ng, S. (2007). Determining the Number of Primitive Shocks in Factor Models.
+  *Journal of Business & Economic Statistics*, 25(1), 52-60. [DOI](https://doi.org/10.1198/073500106000000413)
+
+- Amengual, D., & Watson, M. W. (2007). Consistent Estimation of the Number of Dynamic Factors in a Large N and T Panel.
+  *Journal of Business & Economic Statistics*, 25(1), 91-96. [DOI](https://doi.org/10.1198/073500106000000613)
 
 - McCracken, M. W., & Ng, S. (2016). FRED-MD: A Monthly Database for Macroeconomic Research.
   *Journal of Business & Economic Statistics*, 34(4), 574-589. [DOI](https://doi.org/10.1080/07350015.2015.1086655)
