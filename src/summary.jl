@@ -504,7 +504,8 @@ end
 # --- Hypothesis test results ---
 report(x::AbstractUnitRootTest) = show(stdout, x)
 report(x::AbstractNormalityTest) = show(stdout, x)
-report(x::AbstractNonGaussianSVAR) = show(stdout, x)
+report(x::AbstractNonGaussianSVAR) = report(stdout, x)
+report(io::IO, x::AbstractNonGaussianSVAR) = (show(io, x); nothing)
 # Equality-of-distribution + rank-correlation battery (EV-34, #442)
 report(x::EqualityTestResult) = show(stdout, x)
 report(x::CorTestResult) = show(stdout, x)

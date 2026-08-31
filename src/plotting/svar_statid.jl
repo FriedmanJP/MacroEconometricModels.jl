@@ -21,6 +21,8 @@ plot_result methods for the statistical-identification SVAR family (PLT-32):
 - `NonGaussianGMMResult` — `view=:mixing` (`B0` heatmap; same panel helper as ICA).
 - `ProxySVARResult` — `view=:B0` (impact heatmap) / `:impact` (identified columns).
 - `MaxShareResult` — `view=:Q` (rotation heatmap) / `:eigvals` (criterion eigenvalues).
+- `SVARModel` — `view=:B0` (impact ``A^{-1}B`` heatmap).
+- `SVECResult` — `view=:B0` (permanent/transitory impact heatmap).
 
 All rendering reuses the frozen renderers (A1); matrix views go through the shared
 heatmap renderer with a color-scale legend and a sign-appropriate scale (PLT-15):
@@ -444,6 +446,62 @@ function plot_result(r::MaxShareResult{T};
     else
         throw(ArgumentError("Unknown view :$view. Valid views: :Q, :eigvals"))
     end
+    p = _make_plot([panel]; title=ftitle, ncols=1)
+    save_path !== nothing && save_plot(p, save_path)
+    p
+end
+
+# =============================================================================
+# SVARModel (AB-model ML)
+# =============================================================================
+
+"""
+    plot_result(r::SVARModel; view=:B0, title="", save_path=nothing)
+
+AB-model SVAR. `view=:B0` (default) plots the impact ``A^{-1} B`` as a diverging
+heatmap. Unknown `view` throws an `ArgumentError`.
+"""
+function plot_result(r::SVARModel{T};
+                     view::Symbol=:B0, title::String="",
+                     save_path::Union{String,Nothing}=nothing) where {T}
+    n = size(r.A, 1)
+    view === :B0 || throw(ArgumentError("Unknown view :$view. Valid views: :B0"))
+    B0 = r.A \ r.B
+    id = _next_plot_id("svar_b0")
+    js = _statid_heatmap_panel(id, B0, r.varnames, _statid_shock_names(n);
+                               scale=:diverging, xlabel="Shock", ylabel="Variable",
+                               tip_label="")
+    panel = _PanelSpec(id, "Impact Matrix (B₀)", js)
+    ftitle = isempty(title) ? "AB-model SVAR — impact matrix" : title
+    p = _make_plot([panel]; title=ftitle, ncols=1)
+    save_path !== nothing && save_plot(p, save_path)
+    p
+end
+
+# =============================================================================
+# SVECResult
+# =============================================================================
+
+"""
+    plot_result(r::SVECResult; view=:B0, title="", save_path=nothing)
+
+Structural VECM. `view=:B0` (default) plots the contemporaneous impact with
+permanent (`P*`) then transitory (`T*`) shock columns. Unknown `view` throws
+an `ArgumentError`.
+"""
+function plot_result(r::SVECResult{T};
+                     view::Symbol=:B0, title::String="",
+                     save_path::Union{String,Nothing}=nothing) where {T}
+    n = size(r.B0, 1)
+    view === :B0 || throw(ArgumentError("Unknown view :$view. Valid views: :B0"))
+    snames = vcat(["P$i" for i in 1:r.n_permanent],
+                  ["T$i" for i in 1:(n - r.n_permanent)])
+    id = _next_plot_id("svec_b0")
+    js = _statid_heatmap_panel(id, r.B0, r.vecm.varnames, snames;
+                               scale=:diverging, xlabel="Shock", ylabel="Variable",
+                               tip_label="")
+    panel = _PanelSpec(id, "Impact Matrix (B₀)", js)
+    ftitle = isempty(title) ? "SVEC — impact matrix" : title
     p = _make_plot([panel]; title=ftitle, ncols=1)
     save_path !== nothing && save_plot(p, save_path)
     p

@@ -144,6 +144,23 @@ const _SERIALIZABLE_TYPES = Dict{String,Type}(
     "ThresholdModel"                => ThresholdModel,
     "MidasModel"                    => MidasModel,
     "StateSpaceModel"               => StateSpaceModel,
+    # ── SVAR identification results (SID-24 / #753) ──────────────────────────
+    "ProxySVARResult"               => ProxySVARResult,
+    "SVARModel"                     => SVARModel,
+    "MaxShareResult"                => MaxShareResult,
+    "SVECResult"                    => SVECResult,
+    "ICASVARResult"                 => ICASVARResult,
+    "NonGaussianMLResult"           => NonGaussianMLResult,
+    "NonGaussianGMMResult"          => NonGaussianGMMResult,
+    "MarkovSwitchingSVARResult"     => MarkovSwitchingSVARResult,
+    "GARCHSVARResult"               => GARCHSVARResult,
+    "SmoothTransitionSVARResult"    => SmoothTransitionSVARResult,
+    "ExternalVolatilitySVARResult"  => ExternalVolatilitySVARResult,
+    "AriasSVARResult"               => AriasSVARResult,
+    "UhligSVARResult"               => UhligSVARResult,
+    "BayesianSetIdentifiedSVAR"     => BayesianSetIdentifiedSVAR,
+    "SignIdentifiedSet"             => SignIdentifiedSet,
+    "RobustBayesResult"             => RobustBayesResult,
 )
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -383,6 +400,19 @@ function _from_serializable(::Type{StateTransition}, p::AbstractDict, ::Int)
     StateTransition(p["state_var"], p["gamma"], p["threshold"], _as_symbol(p["method"]))
 end
 
+# `SVARPattern` only exposes a keyword inner constructor (`long_run`).
+function _from_serializable(::Type{SVARPattern}, p::AbstractDict, ::Int)
+    SVARPattern(p["A"], p["B"]; long_run=_deser_field(p["long_run"]))
+end
+
+# Inner constructor validates `:exact/:over/:under/:set`; coerce a stored string.
+function _from_serializable(::Type{IdentificationStatus}, p::AbstractDict, ::Int)
+    IdentificationStatus(_as_symbol(p["status"]),
+                         Vector{Int}(p["ranks"]),
+                         Vector{Int}(p["orders"]),
+                         Int(p["n_overidentifying"]))
+end
+
 # ─────────────────────────────────────────────────────────────────────────────
 # Container assembly + validation
 # ─────────────────────────────────────────────────────────────────────────────
@@ -439,9 +469,9 @@ _read_model_container(path) =
 
 Persist a fitted `model` — or a data container — to `path` in a versioned,
 self-describing container. Coverage spans every VAR/regression/panel/volatility/
-factor/ARIMA/local-projection/GMM model and the data containers
-(`TimeSeriesData`, `PanelData`, `CrossSectionData`, `IOData`); the full set is
-`MacroEconometricModels._SERIALIZABLE_TYPES`. The file records the
+factor/ARIMA/local-projection/GMM model, SVAR identification results, and the
+data containers (`TimeSeriesData`, `PanelData`, `CrossSectionData`, `IOData`);
+the full set is `MacroEconometricModels._SERIALIZABLE_TYPES`. The file records the
 [`SERIALIZATION_FORMAT_VERSION`](@ref), the package and Julia versions, a
 timestamp, and — for a randomized result — its reproducibility manifest. Only
 public fields are stored; cached factorizations are recomputed on load, and

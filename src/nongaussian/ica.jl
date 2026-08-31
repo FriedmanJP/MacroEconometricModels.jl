@@ -83,9 +83,7 @@ function Base.show(io::IO, r::ICASVARResult{T}) where {T}
         column_labels = ["", ""],
         alignment = [:l, :r],
     )
-    _matrix_table(io, r.B0, "Structural Impact Matrix (B₀)";
-        row_labels=["Var $i" for i in 1:n],
-        col_labels=r.shock_names)
+    _show_B0_ses(io, r.B0, fill(T(NaN), n, n))
 end
 
 # =============================================================================
