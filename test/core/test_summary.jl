@@ -8,6 +8,7 @@ using MacroEconometricModels
 using Test
 using LinearAlgebra
 using Statistics
+using Random
 
 @testset "Summary Tables Tests" begin
 
@@ -1164,6 +1165,22 @@ using Statistics
             report(did)
         end
         @test true
+    end
+
+    @testset "SID-24 refs and SignIdentifiedSet report" begin
+        Random.seed!(753)
+        m = estimate_var(randn(150, 2), 1)
+        chk(irf) = irf[1, 1, 1] > 0
+        buf = IOBuffer()
+        report(buf, identify_sign(m, 5, chk; store_all=true, max_draws=200, rng=MersenneTwister(753)))
+        txt = String(take!(buf))
+        @test occursin("Accepted", txt) || occursin("sign", lowercase(txt))
+        rfast = sprint(io -> refs(io, identify_fastica(m); format=:plain))
+        @test occursin("Hyvärinen", rfast) || occursin("Hyvarinen", rfast)
+        @test !occursin("Lanne, Meitz", rfast)
+        rjade = sprint(io -> refs(io, identify_jade(m); format=:plain))
+        @test occursin("Cardoso", rjade)
+        @test !isempty(sprint(io -> refs(io, :garch; format=:plain)))
     end
 
 end

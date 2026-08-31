@@ -519,6 +519,16 @@ const _REFERENCES = Dict{Symbol, _RefEntry}(
         title="Identification and Estimation of Non-Gaussian Structural Vector Autoregressions",
         journal="Journal of Econometrics", volume="196", issue="2", pages="288--304",
         doi="10.1016/j.jeconom.2016.06.002", isbn="", publisher="", entry_type=:article),
+    :lanne_lutkepohl2010 => (key=:lanne_lutkepohl2010,
+        authors="Lanne, Markku and L\\\"utkepohl, Helmut", year=2010,
+        title="Structural Vector Autoregressions With Nonnormal Residuals",
+        journal="Journal of Business \\& Economic Statistics", volume="28", issue="1", pages="159--168",
+        doi="10.1198/jbes.2009.06003", isbn="", publisher="", entry_type=:article),
+    :azzalini1985 => (key=:azzalini1985,
+        authors="Azzalini, Adelchi", year=1985,
+        title="A Class of Distributions Which Includes the Normal Ones",
+        journal="Scandinavian Journal of Statistics", volume="12", issue="2", pages="171--178",
+        doi="10.2307/4615982", isbn="", publisher="", entry_type=:article),
     # --- Non-Gaussian SVAR — Heteroskedasticity ---
     :rigobon2003 => (key=:rigobon2003, authors="Rigobon, Roberto", year=2003,
         title="Identification Through Heteroskedasticity",
@@ -2045,7 +2055,7 @@ const _TYPE_REFS = Dict{Symbol, Vector{Symbol}}(
     :skew_normal => [:lanne_meitz_saikkonen2017, :lewis2025],
     :nongaussian_ml => [:lanne_meitz_saikkonen2017, :lewis2025],
     # Non-Gaussian result types
-    :ICASVARResult => [:lanne_meitz_saikkonen2017, :lewis2025],
+    :ICASVARResult => [:lewis2025],
     :NonGaussianMLResult => [:lanne_meitz_saikkonen2017, :lewis2025],
     # Heteroskedastic identification
     :MarkovSwitchingSVARResult => [:rigobon2003, :lanne_lutkepohl2008, :lewis2025],
@@ -2368,9 +2378,9 @@ const _ICA_METHOD_REFS = Dict{Symbol, Vector{Symbol}}(
 # ML distribution → additional ref keys
 const _ML_DIST_REFS = Dict{Symbol, Vector{Symbol}}(
     :student_t => Symbol[],
-    :mixture_normal => Symbol[],
-    :pml => Symbol[],
-    :skew_normal => Symbol[],
+    :mixture_normal => [:lanne_lutkepohl2010],
+    :pml => [:gourieroux_monfort_renne2017],
+    :skew_normal => [:azzalini1985],
 )
 
 # =============================================================================
@@ -2472,7 +2482,7 @@ function _format_ref_html(io::IO, r::_RefEntry)
 end
 
 function _format_ref(io::IO, r::_RefEntry, format::Symbol)
-    if format == :text || format == :apa
+    if format == :text || format == :apa || format == :plain
         _format_ref_text(io, r)
     elseif format == :latex
         _format_ref_latex(io, r)

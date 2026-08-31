@@ -533,6 +533,22 @@ report(x::MinnesotaHyperparameters) = show(stdout, x)
 report(x::AriasSVARResult) = show(stdout, x)
 report(x::UhligSVARResult) = show(stdout, x)
 report(x::SVARRestrictions) = show(stdout, x)
+report(s::SignIdentifiedSet) = report(stdout, s)
+function report(io::IO, s::SignIdentifiedSet{T}) where {T}
+    n = length(s.variables)
+    H = s.n_accepted > 0 ? size(s.irf_draws, 2) : 0
+    _show_spec_table(io, "Sign-Identified Set",
+        ["Accepted draws" => "$(s.n_accepted) / $(s.n_total)",
+         "Acceptance rate" => _fmt_pct(s.acceptance_rate; digits=1),
+         "Variables" => n,
+         "IRF horizon" => H])
+    if s.n_accepted > 0
+        med = irf_median(s)
+        _matrix_table(io, med[1, :, :], "Pointwise median impact";
+                      row_labels=s.variables, col_labels=s.shocks)
+    end
+    return nothing
+end
 
 # DSGE
 report(x::DSGESolution) = show(stdout, x)
