@@ -2015,7 +2015,7 @@ end
     n_dr = FAST ? 24 : 60
     n_rot = FAST ? 150 : 400
 
-    @testset "check evaluates shock-sign and Type B contribution" begin
+    @testset "check evaluates shock-sign and Type A/B/least contribution" begin
         Q_I = identify_cholesky(model)
         irf_I = compute_irf(model, Q_I, 6)
         ε_I = compute_structural_shocks(model, Q_I)
@@ -2035,6 +2035,15 @@ end
                                                   kind=:overwhelming)
         @test MacroEconometricModels.check(r_ov, irf_I, nothing, nothing, nothing,
                                            ε_I, nothing)
+        r_least = narrative_contribution_restriction(1, 1, dates[1]:dates[1];
+                                                     kind=:least_important)
+        @test r_least.kind === :least_important
+        @test !MacroEconometricModels.check(r_least, irf_I, nothing, nothing, nothing,
+                                            ε_I, nothing)
+        r_least2 = narrative_contribution_restriction(1, 2, dates[1]:dates[1];
+                                                      kind=:least_important)
+        @test MacroEconometricModels.check(r_least2, irf_I, nothing, nothing, nothing,
+                                           ε_I, nothing)
         Q_mix = [0.0 -1.0; 1.0 0.0]
         irf_mix = compute_irf(model, Q_mix, 6)
         ε_mix = compute_structural_shocks(model, Q_mix)
@@ -2042,6 +2051,14 @@ end
                                             ε_mix, nothing)
         @test !MacroEconometricModels.check(r_ov, irf_mix, nothing, nothing, nothing,
                                             ε_mix, nothing)
+        H_A = [3.0, 2.0, 1.5]   # Type A but not Type B
+        H_B = [5.0, 1.0, 1.2]   # Type A and Type B
+        @test MacroEconometricModels._is_leading_contributor(H_A, 1, :most_important)
+        @test !MacroEconometricModels._is_leading_contributor(H_A, 1, :overwhelming)
+        @test MacroEconometricModels._is_leading_contributor(H_B, 1, :most_important)
+        @test MacroEconometricModels._is_leading_contributor(H_B, 1, :overwhelming)
+        @test MacroEconometricModels._is_leading_contributor(H_B, 2, :least_important)
+        @test !MacroEconometricModels._is_leading_contributor(H_B, 3, :least_important)
         @test_throws ArgumentError narrative_contribution_restriction(1, 1, 2:4;
                                                                       kind=:other)
         @test_throws ArgumentError narrative_shock_restriction(1, Int[], :positive)
@@ -2125,6 +2142,47 @@ end
         @test hd.n_effective >= 1
         @test hd.point_estimate[end, 1, 1] + hd.point_estimate[end, 1, 2] +
               hd.initial_point_estimate[end, 1] ≈ hd.actual[end, 1] atol=1e-6
+    end
+
+    @testset "contribution restriction through identify_arias" begin
+        Q_I = identify_cholesky(model)
+        irf_I = compute_irf(model, Q_I, 6)
+        ε_I = compute_structural_shocks(model, Q_I)
+        win = dates[1]:dates[1]
+        r_c = narrative_contribution_restriction(1, 1, win)
+        @test MacroEconometricModels.check(r_c, irf_I, nothing, nothing, nothing,
+                                           ε_I, nothing)
+        r_sign = SVARRestrictions(2; signs=[sign_restriction(1, 1, :positive)])
+        r_contrib = SVARRestrictions(2; signs=[
+            sign_restriction(1, 1, :positive), r_c])
+        n_csims = FAST ? 80 : 200
+        n_cdr = FAST ? 16 : 40
+        a_sign = identify_arias(model, r_sign, 6; n_draws=n_cdr, n_rotations=n_rot,
+                                rng=MersenneTwister(7451))
+        a_c = identify_arias(model, r_contrib, 6; n_draws=n_cdr, n_rotations=n_rot,
+                             n_narrative_sims=n_csims, rng=MersenneTwister(7451))
+        @test a_c.n_narrative_sims == n_csims
+        @test a_sign.ess_fraction ≈ 1.0 atol=1e-12
+        @test a_c.ess_fraction < a_sign.ess_fraction - 0.04
+        keep = [MacroEconometricModels._narrative_restrictions_hold(
+                    r_contrib, a_sign.irf_draws[i, :, :, :],
+                    compute_structural_shocks(model, a_sign.Q_draws[i]))
+                for i in 1:length(a_sign.Q_draws)]
+        @test any(keep)
+        @test count(keep) < length(keep)
+        rng_ω = MersenneTwister(7452)
+        ω_I = MacroEconometricModels._omega_hat(r_contrib, irf_I, 2, Float64;
+                                                n_sims=n_csims, rng=rng_ω)
+        Q_mix = [0.0 -1.0; 1.0 0.0]
+        irf_mix = compute_irf(model, Q_mix, 6)
+        ω_mix = MacroEconometricModels._omega_hat(r_contrib, irf_mix, 2, Float64;
+                                                  n_sims=n_csims, rng=MersenneTwister(7453))
+        @test ω_I > ω_mix + 0.15
+        lo, hi = irf_bounds(a_c)
+        @test all(lo .<= hi)
+        pct = irf_percentiles(a_c; quantiles=[0.16, 0.84])
+        @test lo ≈ pct[:, :, :, 1]
+        @test hi ≈ pct[:, :, :, 2]
     end
 
     @testset "identify_arias_bayesian reports n_narrative_sims" begin

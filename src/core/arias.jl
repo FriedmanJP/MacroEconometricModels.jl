@@ -120,7 +120,13 @@ struct NarrativeShockRestriction <: AbstractSVARRestriction
     sign::Int
 end
 
-"""Narrative contribution restriction (ADRR Type B: most important / overwhelming)."""
+"""
+Narrative contribution restriction.
+
+ADRR Type A (`kind=:most_important`): ``|H_j| > \\max_{k \\neq j}|H_k|``.
+Type B (`kind=:overwhelming`): ``|H_j| > \\sum_{k \\neq j}|H_k|``.
+`kind=:least_important`: ``|H_j| < \\min_{k \\neq j}|H_k|``.
+"""
 struct NarrativeContributionRestriction <: AbstractSVARRestriction
     variable::Int
     shock::Int
@@ -129,6 +135,14 @@ struct NarrativeContributionRestriction <: AbstractSVARRestriction
 end
 NarrativeContributionRestriction(variable::Int, shock::Int, window::AbstractUnitRange{<:Integer}) =
     NarrativeContributionRestriction(variable, shock, UnitRange{Int}(window), :most_important)
+
+const _NARRATIVE_CONTRIBUTION_KINDS = (:most_important, :overwhelming, :least_important)
+
+function _check_contribution_kind(kind::Symbol)
+    kind in _NARRATIVE_CONTRIBUTION_KINDS || throw(ArgumentError(
+        "kind must be :most_important (Type A), :overwhelming (Type B), or :least_important"))
+    nothing
+end
 
 """
     SVARRestrictions(n_vars; zeros=[], signs=[])
@@ -272,8 +286,7 @@ function _validate_restriction(r::NarrativeContributionRestriction, n_vars::Int)
     _check_index(r.shock, n_vars, "shock")
     isempty(r.window) && throw(ArgumentError("narrative contribution window must be nonempty"))
     first(r.window) >= 1 || throw(ArgumentError("narrative dates must be ≥ 1"))
-    r.kind in (:most_important, :overwhelming) ||
-        throw(ArgumentError("kind must be :most_important or :overwhelming"))
+    _check_contribution_kind(r.kind)
 end
 _validate_restriction(::AbstractSVARRestriction, ::Int) = nothing
 
@@ -564,6 +577,12 @@ function _is_leading_contributor(H::AbstractVector{T}, shock::Int, kind::Symbol)
             others += abs(H[k])
         end
         return abs_j > others
+    elseif kind === :least_important
+        @inbounds for k in eachindex(H)
+            k == shock && continue
+            abs(H[k]) <= abs_j && return false
+        end
+        return true
     end
     @inbounds for k in eachindex(H)
         k == shock && continue
@@ -1760,15 +1779,16 @@ end
 """
     narrative_contribution_restriction(variable, shock, window; kind=:most_important)
 
-ADRR historical-decomposition restriction. `kind=:most_important` requires
-``|H_j| > \\max_{k \\neq j} |H_k|`` over `window`; `kind=:overwhelming` requires
-``|H_j| > \\sum_{k \\neq j} |H_k|``.
+ADRR historical-decomposition restriction over `window`.
+
+- `kind=:most_important` (Type A, default): ``|H_j| > \\max_{k \\neq j}|H_k|``
+- `kind=:overwhelming` (Type B): ``|H_j| > \\sum_{k \\neq j}|H_k|``
+- `kind=:least_important`: ``|H_j| < \\min_{k \\neq j}|H_k|``
 """
 function narrative_contribution_restriction(variable::Int, shock::Int,
                                             window::AbstractUnitRange{<:Integer};
                                             kind::Symbol=:most_important)
-    kind in (:most_important, :overwhelming) ||
-        throw(ArgumentError("kind must be :most_important or :overwhelming"))
+    _check_contribution_kind(kind)
     w = UnitRange{Int}(window)
     isempty(w) && throw(ArgumentError("narrative contribution window must be nonempty"))
     first(w) >= 1 || throw(ArgumentError("narrative dates must be ≥ 1"))

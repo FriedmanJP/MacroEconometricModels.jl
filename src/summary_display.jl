@@ -994,7 +994,7 @@ function Base.show(io::IO, r::NarrativeShockRestriction)
 end
 
 function Base.show(io::IO, r::NarrativeContributionRestriction)
-    print(io, "NarrativeContributionRestriction(var=$(r.variable), shock=$(r.shock), window=$(r.window))")
+    print(io, "NarrativeContributionRestriction(var=$(r.variable), shock=$(r.shock), window=$(r.window), kind=$(r.kind))")
 end
 
 _restriction_words(r::ZeroRestriction) =
@@ -1021,8 +1021,12 @@ _restriction_words(r::CumulativeRestriction) =
     "Cumulative: variable $(r.variable) responds $(r.sign > 0 ? "positively" : "negatively") to shock $(r.shock) over horizons $(r.horizons)"
 _restriction_words(r::NarrativeShockRestriction) =
     "Narrative shock: shock $(r.shock) is $(r.sign > 0 ? "positive" : "negative") at dates $(r.dates)"
-_restriction_words(r::NarrativeContributionRestriction) =
-    "Narrative contribution: shock $(r.shock) is the $(r.kind === :overwhelming ? "overwhelming" : "leading") contributor to variable $(r.variable) over $(r.window)"
+function _restriction_words(r::NarrativeContributionRestriction)
+    role = r.kind === :overwhelming ? "overwhelming (Type B)" :
+           r.kind === :least_important ? "least important" :
+           "most important (Type A)"
+    "Narrative contribution: shock $(r.shock) is the $role contributor to variable $(r.variable) over $(r.window)"
+end
 _restriction_words(r::AbstractSVARRestriction) = string(typeof(r))
 
 function Base.show(io::IO, s::IdentificationStatus)

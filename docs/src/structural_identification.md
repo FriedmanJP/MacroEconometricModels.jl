@@ -234,7 +234,10 @@ plot_result(id_set)
 Two typed constraints are supported:
 
 1. **Shock sign**: at residual-sample dates ``t^*``, structural shock ``j`` was positive (or negative)
-2. **Contribution (Type B)**: over a window, shock ``j`` was the most important contributor to variable ``i`` (``|H_{i,j}| > \max_{k \neq j} |H_{i,k}|``); pass `kind=:overwhelming` for ``|H_{i,j}| > \sum_{k \neq j} |H_{i,k}|``
+2. **Contribution**: over a window, shock ``j``'s historical-decomposition contribution to variable ``i`` satisfies one of
+   - Type A (`kind=:most_important`, default): ``|H_{i,j}| > \max_{k \neq j} |H_{i,k}|``
+   - Type B (`kind=:overwhelming`): ``|H_{i,j}| > \sum_{k \neq j} |H_{i,k}|``
+   - least important (`kind=:least_important`): ``|H_{i,j}| < \min_{k \neq j} |H_{i,k}|``
 
 The contribution of shock ``j`` to the unexpected change in variable ``i`` between dates ``t`` and ``t+h`` is
 
@@ -332,7 +335,7 @@ The algorithm constructs ``Q`` column by column via QR decomposition in the null
 | FEVD share | `fevd_share_restriction(var, shock; horizon, lower, upper)` | Rejection on the shock's forecast-error variance share |
 | Cumulative | `cumulative_restriction(var, shock, :positive; horizons=0:H)` | Rejection on the cumulated IRF |
 | Narrative shock | `narrative_shock_restriction(shock, dates, :positive)` | Rejection: ``ε_{j,t}`` has the given sign at residual-sample dates |
-| Narrative contribution | `narrative_contribution_restriction(var, shock, window)` | Rejection: shock `j` is the most important (or `kind=:overwhelming`) contributor to variable `i` over `window` |
+| Narrative contribution | `narrative_contribution_restriction(var, shock, window; kind=:most_important)` | Rejection: Type A most important (``|H_j| > \max_{k\neq j}|H_k|``); `kind=:overwhelming` is Type B, `:least_important` is ``|H_j| < \min_{k\neq j}|H_k|`` |
 
 `SVARRestrictions` stores linear zeros and rejection restrictions in two lists. `sign_check(r)` returns an `irf -> Bool` closure for `identify_sign`, structural DFM, and counterfactuals; a handwritten predicate remains an escape hatch. Imposing all ``n(n-1)/2`` long-run zeros (on early-ordered shocks) recovers Blanchard–Quah as a just-identified special case, unique up to column sign. Cointegrated systems throw `IdentificationError` --- difference the data or use [`identify_svec`](@ref) on the VECM ([Vector Error Correction Models](@ref vecm_page)).
 
