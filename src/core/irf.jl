@@ -73,13 +73,17 @@ end
 Compute IRFs with optional confidence intervals.
 
 # Methods
-`:cholesky`, `:sign`, `:narrative`, `:long_run`,
+`:cholesky`, `:sign`, `:narrative`, `:long_run`, `:proxy`,
 `:fastica`, `:jade`, `:sobi`, `:dcov`, `:hsic`,
 `:student_t`, `:mixture_normal`, `:pml`, `:skew_normal`, `:nongaussian_ml`,
 `:markov_switching`, `:garch`, `:smooth_transition`, `:external_volatility`
 
 Note: `:smooth_transition` requires `transition_var` kwarg.
       `:external_volatility` requires `regime_indicator` kwarg.
+      `:proxy` requires `instruments` (length `T` or `T_eff`) and is partial
+      when `k < n`. Default `normalize=:unit_effect`. With `ci_type=:bootstrap`,
+      jointly resamples `(u_t, z_t)` and rewrites `bootstrap=:iid` to `:block`
+      (Jentsch & Lunsford 2019); the reproducibility manifest records `:block`.
 
 # CI types
 - `:none`
@@ -201,6 +205,12 @@ function irf(model::VARModel{T}, horizon::Int;
                   max_draws=max_draws, transition_var=transition_var,
                   regime_indicator=regime_indicator, rng=rng, kwargs...)
 
+    # Jentsch & Lunsford (2019): i.i.d. residual bootstrap is invalid for proxy SVARs.
+    # Rewrite before bands *and* the manifest so recorded `bootstrap` is `:block`.
+    if method === :proxy && ci_type === :bootstrap && bootstrap === :iid
+        bootstrap = :block
+    end
+
     # Kilian (1998) bias-corrects the coefficient estimate itself, so the reported
     # point IRF must also use the bias-corrected B when bias_correct=true (#564).
     # Psi is estimated once here and reused for the outer bootstrap DGP/corrections.
@@ -251,6 +261,13 @@ function irf(model::VARModel{T}, horizon::Int;
             "bias_reps" => bias_reps, "relabeled_fraction" => relabeled_frac))
     ImpulseResponse{T}(point_irf, ci_lower, ci_upper, horizon,
                        model.varnames, snames, ci_type, sim_irfs, cl; manifest=manifest)
+end
+
+"""Skip a proxy bootstrap draw on identification failure, not genuine bugs."""
+function _is_skippable_proxy_boot_error(e::Exception)
+    e isa IdentificationError && return true
+    e isa ArgumentError && return occursin("too few finite observations", sprint(showerror, e))
+    false
 end
 
 """Simulate IRFs for confidence intervals (bootstrap or asymptotic).
@@ -329,14 +346,19 @@ function _simulate_irfs(model::VARModel{T}, method::Symbol, horizon::Int,
                     m = _apply_boot_bias_correction(m, Psi, n, p, bias_correct)
                     F = companion_matrix(m.B, n, p)
                     maximum(abs.(eigvals(F))) >= one(T) && return  # reject non-stationary draw
-                    Q = compute_Q(m, method; horizon=horizon, check_func=check_func,
-                                  narrative_check=narrative_check, restrictions=restrictions,
-                                  max_draws=max_draws, transition_var=transition_var,
-                                  regime_indicator=regime_indicator, rng=local_rng, kw_boot...)
-                    Q, was_relabeled = _maybe_match_Q(Q, m, P_ref)
-                    staging[it, :, :, :] = compute_irf(m, Q, horizon)
-                    relabeled[it] = was_relabeled
-                    passed[it] = true
+                    try
+                        Q = compute_Q(m, method; horizon=horizon, check_func=check_func,
+                                      narrative_check=narrative_check, restrictions=restrictions,
+                                      max_draws=max_draws, transition_var=transition_var,
+                                      regime_indicator=regime_indicator, rng=local_rng, kw_boot...)
+                        Q, was_relabeled = _maybe_match_Q(Q, m, P_ref)
+                        staging[it, :, :, :] = compute_irf(m, Q, horizon)
+                        relabeled[it] = was_relabeled
+                        passed[it] = true
+                    catch e
+                        method === :proxy && _is_skippable_proxy_boot_error(e) && return
+                        rethrow()
+                    end
                 end
             end
             kept = findall(passed)
@@ -351,6 +373,7 @@ function _simulate_irfs(model::VARModel{T}, method::Symbol, horizon::Int,
         else
             sim_irfs = zeros(T, reps, horizon, n, n)
             relabeled = fill(false, reps)
+            passed = method === :proxy ? fill(false, reps) : nothing
             seeds = rand(rng, UInt64, reps)
             Threads.@threads for r in 1:reps
                 local_rng = Random.MersenneTwister(seeds[r])
@@ -360,14 +383,29 @@ function _simulate_irfs(model::VARModel{T}, method::Symbol, horizon::Int,
                     Y_boot = _simulate_var(Y_init, B_dgp, U_boot, T_eff + p)
                     m = estimate_var(Y_boot, p; check_stability=false)
                     m = _apply_boot_bias_correction(m, Psi, n, p, bias_correct)
-                    Q = compute_Q(m, method; horizon=horizon, check_func=check_func,
-                                  narrative_check=narrative_check, restrictions=restrictions,
-                                  max_draws=max_draws, transition_var=transition_var,
-                                  regime_indicator=regime_indicator, rng=local_rng, kw_boot...)
-                    Q, was_relabeled = _maybe_match_Q(Q, m, P_ref)
-                    sim_irfs[r, :, :, :] = compute_irf(m, Q, horizon)
-                    relabeled[r] = was_relabeled
+                    try
+                        Q = compute_Q(m, method; horizon=horizon, check_func=check_func,
+                                      narrative_check=narrative_check, restrictions=restrictions,
+                                      max_draws=max_draws, transition_var=transition_var,
+                                      regime_indicator=regime_indicator, rng=local_rng, kw_boot...)
+                        Q, was_relabeled = _maybe_match_Q(Q, m, P_ref)
+                        sim_irfs[r, :, :, :] = compute_irf(m, Q, horizon)
+                        relabeled[r] = was_relabeled
+                        passed !== nothing && (passed[r] = true)
+                    catch e
+                        method === :proxy && _is_skippable_proxy_boot_error(e) && return
+                        rethrow()
+                    end
                 end
+            end
+            if passed !== nothing
+                kept = findall(passed)
+                n_valid = length(kept)
+                n_valid == 0 && throw(IdentificationError(
+                    "All $reps proxy bootstrap draws failed identification"))
+                n_valid < reps && @warn "Only $n_valid/$reps proxy bootstrap draws obtained"
+                sim_irfs = sim_irfs[kept, :, :, :]
+                return sim_irfs, T(count(relabeled[k] for k in kept)) / T(n_valid)
             end
             return sim_irfs, T(count(relabeled)) / T(reps)
         end
@@ -463,13 +501,14 @@ Compute Bayesian IRFs from posterior draws with posterior quantiles.
 Uses posterior mean as central tendency by default (pass `point_estimate=:median` for median).
 
 # Methods
-`:cholesky`, `:sign`, `:narrative`, `:long_run`,
+`:cholesky`, `:sign`, `:narrative`, `:long_run`, `:proxy`,
 `:fastica`, `:jade`, `:sobi`, `:dcov`, `:hsic`,
 `:student_t`, `:mixture_normal`, `:pml`, `:skew_normal`, `:nongaussian_ml`,
 `:markov_switching`, `:garch`, `:smooth_transition`, `:external_volatility`
 
 Note: `:smooth_transition` requires `transition_var` kwarg.
       `:external_volatility` requires `regime_indicator` kwarg.
+      `:proxy` requires `instruments` and is partial when `k < n`.
 
 Uses `process_posterior_samples` and `compute_posterior_quantiles` from bayesian_utils.jl.
 """

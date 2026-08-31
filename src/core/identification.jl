@@ -150,8 +150,11 @@ function identify_proxy(model::VARModel{T}, Z::AbstractMatrix;
     (1 <= normalize_var <= n) || throw(ArgumentError("normalize_var must be in 1:$n"))
 
     Uu, ZZ, _, nobs = _proxy_complete_cases(model, Z; align=align)
-    Suz = Matrix{T}((Uu' * ZZ) / T(nobs))
-    Sigmaz = Matrix{T}((ZZ' * ZZ) / T(nobs))
+    Uc = Uu .- mean(Uu; dims=1)
+    Zc = ZZ .- mean(ZZ; dims=1)
+    df = T(nobs - 1)
+    Suz = Matrix{T}((Uc' * Zc) / df)
+    Sigmaz = Matrix{T}((Zc' * Zc) / df)
     P = safe_cholesky(model.Sigma)
 
     if normalize === :unit_variance
@@ -240,7 +243,6 @@ function _proxy_complete_cases(model::VARModel{T}, Z::AbstractMatrix;
     count(mask) < 8 && throw(ArgumentError("instrument has too few finite observations"))
     Uu = U[mask, :]
     ZZ = Z_eff[mask, :]
-    # Match Sigma = U'U / T_eff: no extra demeaning of U, divide by nobs.
     Uu, ZZ, Z_eff, size(ZZ, 1)
 end
 
@@ -312,17 +314,17 @@ function proxy_ar_band(model::VARModel{T}, z;
     Z = z isa AbstractVector ? reshape(collect(float.(z)), :, 1) : Matrix{T}(float.(z))
     size(Z, 2) == 1 || throw(ArgumentError("Anderson-Rubin bands require k=1 instrument"))
     Y = model.Y
-    if size(Z, 1) == size(Y, 1) - model.p
-        Z = vcat(fill(T(NaN), model.p, 1), Z)
-    end
-    size(Z, 1) == size(Y, 1) || throw(ArgumentError(
-        "instrument length $(size(Z, 1)) must equal residual sample $(size(Y, 1) - model.p) or full sample $(size(Y, 1))"))
-    any(!isfinite, Z) && throw(ArgumentError(
+    T_obs = size(Y, 1)
+    T_eff = T_obs - model.p
+    Z_eff = _align_instrument(Z, T_obs, model.p, T_eff)
+    any(!isfinite, Z_eff) && throw(ArgumentError(
         "proxy_ar_band requires a fully observed instrument; drop missing rows first"))
     any(!isfinite, Y) && throw(ArgumentError("proxy_ar_band requires fully observed Y"))
     (1 <= normalize_var <= nvars(model)) || throw(ArgumentError(
         "normalize_var must be in 1:$(nvars(model))"))
-    lp = estimate_lp_iv(Y, normalize_var, Z, horizon; lags=model.p, varnames=model.varnames)
+    # LP-IV needs length T; leading p rows are unused (`t_start = lags + 1`).
+    Z_full = vcat(fill(T(NaN), model.p, 1), Matrix{T}(Z_eff))
+    lp = estimate_lp_iv(Y, normalize_var, Z_full, horizon; lags=model.p, varnames=model.varnames)
     lp_iv_ar_band(lp; level=level, n_grid=n_grid, span=span, bandwidth=bandwidth,
                   responses=responses)
 end
@@ -422,10 +424,29 @@ function compute_irf(model::VARModel{T}, Q::AbstractMatrix{T}, horizon::Int) whe
     IRF
 end
 
-"""Compute structural shocks: εₜ = Q'L⁻¹uₜ."""
+"""
+    compute_structural_shocks(model, Q) -> Matrix
+
+Recover structural shocks from reduced-form residuals `u`. When `Q` is orthogonal
+(`Q'Q = I`; Cholesky, sign, Arias) this is `ε = Q' L⁻¹ u` via a triangular
+backsolve. When `Q` is not orthogonal (proxy unit-effect scaling of identified
+columns) it is `ε = (L Q)⁻¹ u`, i.e. `B₀ \\ u`.
+"""
 function compute_structural_shocks(model::VARModel{T}, Q::AbstractMatrix{T}) where {T<:AbstractFloat}
-    L = safe_cholesky(model.Sigma)          # lower-triangular Cholesky factor
-    (Q' * (L \ model.U'))'                    # L \ U' = L⁻¹U' via triangular backsolve
+    L = safe_cholesky(model.Sigma)
+    U = model.U
+    if _q_is_orthogonal(Q)
+        (Q' * (L \ U'))'                      # orthogonal: Q' L⁻¹ u
+    else
+        ((L * Q) \ U')'                       # B₀ \ u (unit-effect proxy)
+    end
+end
+
+"""True when `Q` is square and `‖Q'Q − I‖ < 1e-6` (same tolerance as `_assert_orthogonal`)."""
+function _q_is_orthogonal(Q::AbstractMatrix{T}) where {T<:AbstractFloat}
+    n = size(Q, 1)
+    size(Q, 2) == n || return false
+    norm(Q' * Q - I(n)) < T(1e-6)
 end
 
 # =============================================================================

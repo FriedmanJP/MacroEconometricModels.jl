@@ -202,15 +202,19 @@ Decomposes observed data into contributions from each structural shock plus init
 - `max_draws::Int=1000`: Maximum draws for sign/narrative identification
 - `transition_var=nothing`: Transition variable (for method=:smooth_transition)
 - `regime_indicator=nothing`: Regime indicator (for method=:external_volatility)
+- `instruments`: Instrument vector/matrix for `method=:proxy` (length `T` or `T_eff`)
 
 # Methods
-`:cholesky`, `:sign`, `:narrative`, `:long_run`,
+`:cholesky`, `:sign`, `:narrative`, `:long_run`, `:proxy`,
 `:fastica`, `:jade`, `:sobi`, `:dcov`, `:hsic`,
 `:student_t`, `:mixture_normal`, `:pml`, `:skew_normal`, `:nongaussian_ml`,
 `:markov_switching`, `:garch`, `:smooth_transition`, `:external_volatility`
 
 Note: `:smooth_transition` requires `transition_var` kwarg.
       `:external_volatility` requires `regime_indicator` kwarg.
+      `:proxy` requires `instruments` and is partial when `k < n`.
+      Default `normalize=:unit_effect`; structural shocks are recovered as
+      `B₀ \\ u` when `Q` is not orthogonal.
 
 For `:sign`/`:narrative`, each accepted rotation gets its own HD; the reported
 contributions, initial conditions, and shocks are the pointwise median.
@@ -393,15 +397,17 @@ Compute Bayesian historical decomposition from posterior draws with posterior qu
 - `max_draws::Int=1000`: Maximum draws for sign/narrative identification
 - `transition_var=nothing`: Transition variable (for method=:smooth_transition)
 - `regime_indicator=nothing`: Regime indicator (for method=:external_volatility)
+- `instruments`: Instrument vector/matrix for `method=:proxy`
 
 # Methods
-`:cholesky`, `:sign`, `:narrative`, `:long_run`,
+`:cholesky`, `:sign`, `:narrative`, `:long_run`, `:proxy`,
 `:fastica`, `:jade`, `:sobi`, `:dcov`, `:hsic`,
 `:student_t`, `:mixture_normal`, `:pml`, `:skew_normal`, `:nongaussian_ml`,
 `:markov_switching`, `:garch`, `:smooth_transition`, `:external_volatility`
 
 Note: `:smooth_transition` requires `transition_var` kwarg.
       `:external_volatility` requires `regime_indicator` kwarg.
+      `:proxy` requires `instruments` and is partial when `k < n`.
 
 # Returns
 `BayesianHistoricalDecomposition` with posterior quantiles and means.

@@ -164,6 +164,10 @@ const MEM = MacroEconometricModels
         @test band isa LPIVARBand
         @test size(band.point, 1) == 3
         @test all(isfinite, band.point)
+        z_eff = z[(m.p + 1):end]
+        @test length(z_eff) == size(m.U, 1)
+        band_eff = proxy_ar_band(m, z_eff; horizon=2, normalize_var=1, n_grid=81, span=8)
+        @test band_eff.point ≈ band.point atol = 1e-10
     end
 
     @testset "LP-IV and proxy impact agree on :mp_shocks" begin
@@ -181,11 +185,64 @@ const MEM = MacroEconometricModels
         lp = estimate_lp_iv(Y, 3, reshape(z, :, 1), 0; lags=p, varnames=["ygap", "infl", "ffr"])
         lir = lp_iv_irf(lp)
         b = r.B0[:, 1]
-        # unit-effect on ffr: relative impacts should match LP-IV h=0
+        # unit-effect on ffr: relative impacts should match LP-IV h=0 (PMW 2021)
         @test abs(b[3] - 1) < 1e-8
-        @test b[1] ≈ lir.values[1, 1] atol = 0.15
-        @test b[2] ≈ lir.values[1, 2] atol = 0.15
-        @test b[3] ≈ lir.values[1, 3] atol = 0.15
+        @test b ≈ lir.values[1, :] atol = 1e-8
+    end
+
+    @testset "unit-effect proxy HD uses B0\\u" begin
+        rng = MersenneTwister(7412)
+        Y, _, z = simulate_proxy_svar(B_true, A; Tobs=300, ρ=0.8, rng=rng)
+        m = estimate_var(Y, 1)
+        Z = reshape(z, :, 1)
+        r = identify_proxy(m, Z)  # default normalize=:unit_effect
+        @test !MEM._q_is_orthogonal(r.Q)
+        hd = historical_decomposition(m; method=:proxy, instruments=Z)
+        eps_B0 = (r.B0 \ m.U')'
+        L = MEM.safe_cholesky(m.Sigma)
+        eps_orth = (r.Q' * (L \ m.U'))'
+        @test hd.shocks[:, 1] ≈ eps_B0[:, 1] atol = 1e-8
+        @test !isapprox(hd.shocks[:, 1], eps_orth[:, 1]; atol=1e-6, rtol=0)
+        ir = irf(m, 1; method=:proxy, instruments=Z)
+        @test hd.contributions[1, :, 1] ≈ ir.values[1, :, 1] .* hd.shocks[1, 1] atol = 1e-8
+        @test m.U ≈ hd.shocks * r.B0' atol = 1e-8
+    end
+
+    @testset "reliability is invariant to instrument location" begin
+        rng = MersenneTwister(7413)
+        Y, _, z = simulate_proxy_svar(B_true, A; Tobs=400, ρ=0.8, rng=rng)
+        m = estimate_var(Y, 1)
+        r0 = identify_proxy(m, reshape(z, :, 1); normalize=:unit_variance)
+        r1 = identify_proxy(m, reshape(z .+ 5, :, 1); normalize=:unit_variance)
+        @test r0.reliability ≈ r1.reliability atol = 1e-8
+        @test r0.Q ≈ r1.Q atol = 1e-8
+    end
+
+    @testset "NaN-heavy proxy bootstrap skips failed draws" begin
+        @test MEM._is_skippable_proxy_boot_error(
+            ArgumentError("instrument has too few finite observations"))
+        @test MEM._is_skippable_proxy_boot_error(IdentificationError("unidentified"))
+        @test !MEM._is_skippable_proxy_boot_error(ArgumentError("proxy requires instruments"))
+        rng = MersenneTwister(7414)
+        Y, _, z = simulate_proxy_svar(B_true, A; Tobs=100, ρ=0.8, rng=rng)
+        z[21:end] .= NaN
+        m = estimate_var(Y, 1)
+        ir = irf(m, 2; method=:proxy, instruments=reshape(z, :, 1),
+                 ci_type=:bootstrap, bootstrap=:block, block_length=20,
+                 reps=40, seed=7414)
+        @test ir isa ImpulseResponse
+        @test all(isfinite, ir.values)
+        @test ir._draws !== nothing
+        @test 1 <= size(ir._draws, 1) <= 40
+    end
+
+    @testset "proxy iid bootstrap is recorded as block" begin
+        rng = MersenneTwister(7415)
+        Y, _, z = simulate_proxy_svar(B_true, A; Tobs=150, ρ=0.8, rng=rng)
+        m = estimate_var(Y, 1)
+        ir = irf(m, 2; method=:proxy, instruments=reshape(z, :, 1),
+                 ci_type=:bootstrap, bootstrap=:iid, reps=8, seed=7415)
+        @test ir.manifest.settings["bootstrap"] == "block"
     end
 
     if !FAST
