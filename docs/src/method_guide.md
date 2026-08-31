@@ -78,6 +78,7 @@ Reduced-form residuals are correlated across equations and carry no economic int
 | Use documented historical episodes | `identify_narrative` | Event evidence sharpens the set | [Structural Identification](@ref structural_identification_page) |
 | Restrict long-run effects to zero | `identify_long_run` | Blanchard-Quah supply-demand split | [Structural Identification](@ref structural_identification_page) |
 | Identify with an external instrument | `identify_proxy`, `irf(m, H; method=:proxy, instruments=Z)` | High-frequency or narrative proxy for one (or k) shock | [Proxy SVAR](@ref id_proxy_page) |
+| Impose non-recursive short-run zeros | `estimate_svar`, `irf(m, H; method=:ab, pattern=…)` | Amisano–Giannini AB-model ML with LR over-ID test | [AB-Model SVAR](@ref id_ab_page) |
 | Identify from non-Gaussian residuals | `identify_fastica`, `identify_jade`, `identify_sobi`, `identify_student_t` | Statistical identification, no restrictions | [Non-Gaussian Methods](@ref id_nongaussian_page) |
 | Identify from changing volatility | `identify_markov_switching`, `identify_garch`, `identify_smooth_transition`, `identify_external_volatility` | Regime variance shifts identify shocks | [Heteroskedasticity](@ref id_heteroskedastic_page) |
 | Compare the statistical schemes | `irf(m, H; method=...)` | Eighteen `method=` symbols, one call | [Statistical Identification](@ref nongaussian_page) |

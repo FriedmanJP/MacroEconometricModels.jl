@@ -1,6 +1,6 @@
 # [Structural Identification](@id structural_identification_page)
 
-Structural identification recovers the mapping from reduced-form VAR residuals to economically interpretable structural shocks. The reduced-form covariance ``\Sigma = B_0 B_0'`` provides ``n(n+1)/2`` equations for ``n^2`` unknowns in the impact matrix ``B_0``, leaving ``n(n-1)/2`` free parameters. Additional restrictions --- economic, statistical, or a combination --- pin down the remaining degrees of freedom. This page documents the six schemes that impose *economic* restrictions:
+Structural identification recovers the mapping from reduced-form VAR residuals to economically interpretable structural shocks. The reduced-form covariance ``\Sigma = B_0 B_0'`` provides ``n(n+1)/2`` equations for ``n^2`` unknowns in the impact matrix ``B_0``, leaving ``n(n-1)/2`` free parameters. Additional restrictions --- economic, statistical, or a combination --- pin down the remaining degrees of freedom. This page documents the six schemes that impose *economic* restrictions on a rotation of the Cholesky factor. Non-recursive contemporaneous (and mixed short-/long-run) zeros estimated by ML live on [AB-Model SVAR](@ref id_ab_page).
 
 - **Cholesky (recursive)** --- lower-triangular ``B_0`` via Cholesky decomposition (Christiano, Eichenbaum & Evans 1999)
 - **Sign restrictions** --- set identification via random rotations satisfying inequality constraints (Rubio-Ramírez, Waggoner & Zha 2010)
@@ -9,7 +9,7 @@ Structural identification recovers the mapping from reduced-form VAR residuals t
 - **Zero + sign restrictions** --- exact zero restrictions with sign constraints and importance-weighted inference (Arias, Rubio-Ramírez & Waggoner 2018)
 - **Penalty function (Mountford-Uhlig)** --- point-identified rotation via constrained optimization (Mountford & Uhlig 2009)
 
-For identification from an external instrument (high-frequency surprises, narrative shocks) see [Proxy SVAR](@ref id_proxy_page). For statistical identification via non-Gaussianity or heteroskedasticity --- 14 further schemes reachable through the same `method=` keyword --- see [Statistical Identification](@ref nongaussian_page). Once ``B_0`` is identified, the impact matrix feeds the impulse responses, variance decompositions, and historical decompositions of [Innovation Accounting](@ref innovation_accounting_page).
+For identification from an external instrument (high-frequency surprises, narrative shocks) see [Proxy SVAR](@ref id_proxy_page). For AB-model maximum likelihood with patterns on ``A`` and ``B`` see [AB-Model SVAR](@ref id_ab_page). For statistical identification via non-Gaussianity or heteroskedasticity --- 14 further schemes reachable through the same `method=` keyword --- see [Statistical Identification](@ref nongaussian_page). Once ``B_0`` is identified, the impact matrix feeds the impulse responses, variance decompositions, and historical decompositions of [Innovation Accounting](@ref innovation_accounting_page).
 
 ```@setup sid
 using MacroEconometricModels, Random

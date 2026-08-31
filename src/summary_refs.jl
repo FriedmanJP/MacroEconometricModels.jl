@@ -181,6 +181,16 @@ const _REFERENCES = Dict{Symbol, _RefEntry}(
         title="New Introduction to Multiple Time Series Analysis", journal="",
         volume="", issue="", pages="", doi="",
         isbn="978-3-540-40172-8", publisher="Springer", entry_type=:book),
+    :amisano_giannini1997 => (key=:amisano_giannini1997,
+        authors="Amisano, Gianni and Giannini, Carlo", year=1997,
+        title="Topics in Structural VAR Econometrics", journal="",
+        volume="", issue="", pages="", doi="10.1007/978-3-642-60623-6",
+        isbn="978-3-540-61942-0", publisher="Springer", entry_type=:book),
+    :sims1986 => (key=:sims1986, authors="Sims, Christopher A.", year=1986,
+        title="Are Forecasting Models Usable for Policy Analysis?",
+        journal="Federal Reserve Bank of Minneapolis Quarterly Review",
+        volume="10", issue="1", pages="2--16", doi="",
+        isbn="", publisher="", entry_type=:article),
     :blanchard_quah1989 => (key=:blanchard_quah1989, authors="Blanchard, Olivier Jean and Quah, Danny", year=1989,
         title="The Dynamic Effects of Aggregate Demand and Supply Disturbances",
         journal="American Economic Review", volume="79", issue="4", pages="655--673",
@@ -1941,6 +1951,9 @@ const _TYPE_REFS = Dict{Symbol, Vector{Symbol}}(
     :UhligSVARResult => [:mountford_uhlig2009, :uhlig2005],
     :ProxySVARResult => [:mertens_ravn2013, :stock_watson2018, :jentsch_lunsford2019, :montiel_olea_stock_watson2021],
     :proxy => [:mertens_ravn2013, :stock_watson2018, :jentsch_lunsford2019, :montiel_olea_stock_watson2021],
+    :SVARModel => [:amisano_giannini1997, :lutkepohl2005, :sims1986],
+    :SVARPattern => [:amisano_giannini1997, :lutkepohl2005, :sims1986],
+    :ab => [:amisano_giannini1997, :lutkepohl2005, :sims1986],
     :SVARRestrictions => [:arias_rubio_ramirez_waggoner2018],
     :IdentificationStatus => [:rubio_ramirez2010, :arias_rubio_ramirez_waggoner2018],
     :ConditionalForecast => [:waggoner_zha1999, :antolin_diaz_petrella_rubio_ramirez2021],
@@ -2576,6 +2589,8 @@ refs(io::IO, ::AriasSVARResult; kw...) = refs(io, _TYPE_REFS[:AriasSVARResult]; 
 refs(io::IO, ::BayesianSetIdentifiedSVAR; kw...) = refs(io, _TYPE_REFS[:BayesianSetIdentifiedSVAR]; kw...)
 refs(io::IO, ::UhligSVARResult; kw...) = refs(io, _TYPE_REFS[:UhligSVARResult]; kw...)
 refs(io::IO, ::ProxySVARResult; kw...) = refs(io, _TYPE_REFS[:ProxySVARResult]; kw...)
+refs(io::IO, ::SVARModel; kw...) = refs(io, _TYPE_REFS[:SVARModel]; kw...)
+refs(io::IO, ::SVARPattern; kw...) = refs(io, _TYPE_REFS[:SVARPattern]; kw...)
 refs(io::IO, ::SVARRestrictions; kw...) = refs(io, _TYPE_REFS[:SVARRestrictions]; kw...)
 refs(io::IO, ::IdentificationStatus; kw...) = refs(io, _TYPE_REFS[:IdentificationStatus]; kw...)
 refs(io::IO, ::SignIdentifiedSet; kw...) = refs(io, _TYPE_REFS[:SignIdentifiedSet]; kw...)

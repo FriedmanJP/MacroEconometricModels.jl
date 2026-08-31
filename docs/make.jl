@@ -91,6 +91,7 @@ makedocs(;
         "Structural Analysis" => [
             "Structural Identification" => "structural_identification.md",
             "Proxy SVAR" => "id_proxy.md",
+            "AB-Model SVAR" => "id_ab.md",
             "Statistical Identification" => [
                 "Overview" => "nongaussian.md",
                 "Non-Gaussian Methods" => "id_nongaussian.md",

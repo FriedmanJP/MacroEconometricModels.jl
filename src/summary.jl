@@ -51,6 +51,7 @@ uncertainty_bounds(r::AbstractAnalysisResult) = nothing
 
 point_estimate(r::ImpulseResponse) = r.values
 point_estimate(r::ProxySVARResult) = r.B0
+point_estimate(r::SVARModel) = r.A \ r.B
 has_uncertainty(r::ImpulseResponse) = r.ci_type != :none
 function uncertainty_bounds(r::ImpulseResponse)
     r.ci_type == :none && return nothing
@@ -536,6 +537,8 @@ report(x::BayesianSetIdentifiedSVAR) = show(stdout, x)
 report(x::UhligSVARResult) = show(stdout, x)
 report(x::ProxySVARResult) = report(stdout, x)
 report(io::IO, r::ProxySVARResult) = (show(io, r); nothing)
+report(x::SVARModel) = report(stdout, x)
+report(io::IO, r::SVARModel) = (show(io, r); nothing)
 report(x::SVARRestrictions) = show(stdout, x)
 report(x::IdentificationStatus) = show(stdout, x)
 report(s::SignIdentifiedSet) = report(stdout, s)

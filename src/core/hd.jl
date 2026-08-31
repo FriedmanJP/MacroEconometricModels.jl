@@ -203,9 +203,10 @@ Decomposes observed data into contributions from each structural shock plus init
 - `transition_var=nothing`: Transition variable (for method=:smooth_transition)
 - `regime_indicator=nothing`: Regime indicator (for method=:external_volatility)
 - `instruments`: Instrument vector/matrix for `method=:proxy` (length `T` or `T_eff`)
+- `pattern`: `SVARPattern` for `method=:ab`
 
 # Methods
-`:cholesky`, `:sign`, `:narrative`, `:long_run`, `:proxy`,
+`:cholesky`, `:sign`, `:narrative`, `:long_run`, `:proxy`, `:ab`,
 `:fastica`, `:jade`, `:sobi`, `:dcov`, `:hsic`,
 `:student_t`, `:mixture_normal`, `:pml`, `:skew_normal`, `:nongaussian_ml`,
 `:markov_switching`, `:garch`, `:smooth_transition`, `:external_volatility`
@@ -213,6 +214,7 @@ Decomposes observed data into contributions from each structural shock plus init
 Note: `:smooth_transition` requires `transition_var` kwarg.
       `:external_volatility` requires `regime_indicator` kwarg.
       `:proxy` requires `instruments` and is partial when `k < n`.
+      `:ab` requires `pattern::SVARPattern`.
       Default `normalize=:unit_effect`; structural shocks are recovered as
       `B₀ \\ u` when `Q` is not orthogonal.
 
@@ -400,7 +402,7 @@ Compute Bayesian historical decomposition from posterior draws with posterior qu
 - `instruments`: Instrument vector/matrix for `method=:proxy`
 
 # Methods
-`:cholesky`, `:sign`, `:narrative`, `:long_run`, `:proxy`,
+`:cholesky`, `:sign`, `:narrative`, `:long_run`, `:proxy`, `:ab`,
 `:fastica`, `:jade`, `:sobi`, `:dcov`, `:hsic`,
 `:student_t`, `:mixture_normal`, `:pml`, `:skew_normal`, `:nongaussian_ml`,
 `:markov_switching`, `:garch`, `:smooth_transition`, `:external_volatility`

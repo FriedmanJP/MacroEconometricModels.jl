@@ -430,6 +430,10 @@ end
     @test MacroEconometricModels._needs_residuals(:proxy)
     @test !MacroEconometricModels._is_set_identified(:proxy)
     @test MacroEconometricModels._is_partial(:proxy)
+    @test haskey(MacroEconometricModels.IDENTIFICATION_REGISTRY, :ab)
+    @test !MacroEconometricModels._needs_residuals(:ab)
+    @test !MacroEconometricModels._is_set_identified(:ab)
+    @test !MacroEconometricModels._is_partial(:ab)
 
     r = SVARRestrictions(2; signs=[sign_restriction(1, 1, :positive)])
     ra = irf(m, 5; method=:arias, restrictions=r, max_draws=30, seed=1)

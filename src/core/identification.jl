@@ -740,7 +740,9 @@ end
 # =============================================================================
 
 function _assert_orthogonal(Q::AbstractMatrix, method::Symbol)
-    _is_partial(method) && return Q
+    # Overidentified AB-models have Σ_r ≠ Σ, so Q = L^{-1} A^{-1} B need not
+    # be orthogonal. IRFs still use B₀ = L Q = A^{-1} B.
+    (_is_partial(method) || method === :ab) && return Q
     n = size(Q, 1)
     size(Q, 2) == n || return Q
     d = norm(Q' * Q - I(n))
@@ -776,6 +778,7 @@ Compute identification matrix Q for structural VAR analysis.
 - `:smooth_transition` — Smooth-transition heteroskedasticity (requires `transition_var`)
 - `:external_volatility` — External volatility regimes (requires `regime_indicator`)
 - `:proxy` — External instruments (requires `instruments`)
+- `:ab` — AB-model ML (requires `pattern::SVARPattern`)
 
 # Keyword Arguments
 - `horizon::Int=1`: IRF horizon for sign/narrative/Arias/Uhlig
@@ -784,6 +787,7 @@ Compute identification matrix Q for structural VAR analysis.
 - `transition_var`: Transition variable for `:smooth_transition`
 - `regime_indicator`: Regime indicator for `:external_volatility`
 - `instruments`: Instrument vector/matrix for `:proxy`
+- `pattern`: `SVARPattern` for `:ab`
 """
 function compute_Q(model::VARModel{T}, method::Symbol;
                    horizon::Int=1, restrictions=nothing, check_func=nothing,
@@ -854,6 +858,9 @@ function compute_Q(model::VARModel{T}, method::Symbol;
             throw(ArgumentError("proxy requires instruments"))
         Z = instruments isa AbstractVector ? reshape(instruments, :, 1) : instruments
         identify_proxy(model, Z; kwargs...).Q
+    elseif method == :ab
+        isnothing(pattern) && throw(ArgumentError("ab requires pattern"))
+        estimate_svar(model, pattern; rng=rng, kwargs...).Q
     else
         throw(ArgumentError("Unknown method: $method"))
     end
@@ -888,6 +895,7 @@ function _register_builtin_identification!()
         (:arias, false, true, false),
         (:uhlig, false, false, false),
         (:proxy, true, false, true),
+        (:ab, false, false, false),
     )
     for (name, needs_resid, set_id, partial) in specs
         register_identification!(IdentificationMethod(name, needs_resid, set_id, partial))

@@ -1,6 +1,6 @@
 # [Structural & Statistical Identification API](@id api_structural)
 
-Six restriction-based identification schemes (Cholesky, sign, long-run, narrative, Arias, Uhlig), proxy / external-instrument identification, and 14 statistical identification methods that exploit non-Gaussianity or heteroskedasticity instead of restrictions. See [Structural Identification](@ref structural_identification_page), [Proxy SVAR](@ref id_proxy_page), and [Statistical Identification](@ref nongaussian_page) for theory and examples.
+Six restriction-based identification schemes (Cholesky, sign, long-run, narrative, Arias, Uhlig), AB-model ML, proxy / external-instrument identification, and 14 statistical identification methods that exploit non-Gaussianity or heteroskedasticity instead of restrictions. See [Structural Identification](@ref structural_identification_page), [AB-Model SVAR](@ref id_ab_page), [Proxy SVAR](@ref id_proxy_page), and [Statistical Identification](@ref nongaussian_page) for theory and examples.
 
 In applied use these are reached through `irf(model, H; method=...)` rather than called directly; the entries below document the identification routines themselves.
 
@@ -29,6 +29,8 @@ SignIdentifiedSet
 AriasSVARResult
 UhligSVARResult
 ProxySVARResult
+SVARPattern
+SVARModel
 ```
 
 ---
@@ -98,6 +100,17 @@ irf_percentiles
 
 ```@docs
 identify_uhlig
+```
+
+### AB-Model ML (Amisano–Giannini)
+
+```@docs
+estimate_svar
+recursive_pattern
+blanchard_quah_pattern
+a_model_pattern
+b_model_pattern
+ab_model_pattern
 ```
 
 ---

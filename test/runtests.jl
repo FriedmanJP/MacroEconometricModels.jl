@@ -58,6 +58,7 @@ const TEST_GROUPS = [
         "bvar/test_issues_523_564.jl",   # PR #597 regression tests (BVAR/FAVAR/IRF fixes)
         "var/test_arias2018.jl",
         "var/test_uhlig.jl",
+        "var/test_ab.jl",                 # SID-13 (#742): AB-model ML
         "var/test_conditional_forecast.jl",   # T241 (#340): Waggoner-Zha conditional forecasts
         "preg/test_panel_nonlinear.jl",   # moved from the ceiling ARIMA group to rebalance (#127)
     ]),

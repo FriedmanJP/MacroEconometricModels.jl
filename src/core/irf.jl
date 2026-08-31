@@ -73,7 +73,7 @@ end
 Compute IRFs with optional confidence intervals.
 
 # Methods
-`:cholesky`, `:sign`, `:narrative`, `:long_run`, `:proxy`,
+`:cholesky`, `:sign`, `:narrative`, `:long_run`, `:proxy`, `:ab`,
 `:fastica`, `:jade`, `:sobi`, `:dcov`, `:hsic`,
 `:student_t`, `:mixture_normal`, `:pml`, `:skew_normal`, `:nongaussian_ml`,
 `:markov_switching`, `:garch`, `:smooth_transition`, `:external_volatility`
@@ -84,6 +84,7 @@ Note: `:smooth_transition` requires `transition_var` kwarg.
       when `k < n`. Default `normalize=:unit_effect`. With `ci_type=:bootstrap`,
       jointly resamples `(u_t, z_t)` and rewrites `bootstrap=:iid` to `:block`
       (Jentsch & Lunsford 2019); the reproducibility manifest records `:block`.
+      `:ab` requires `pattern::SVARPattern` (Amisano–Giannini AB-model ML).
 
 # CI types
 - `:none`
@@ -501,7 +502,7 @@ Compute Bayesian IRFs from posterior draws with posterior quantiles.
 Uses posterior mean as central tendency by default (pass `point_estimate=:median` for median).
 
 # Methods
-`:cholesky`, `:sign`, `:narrative`, `:long_run`, `:proxy`,
+`:cholesky`, `:sign`, `:narrative`, `:long_run`, `:proxy`, `:ab`,
 `:fastica`, `:jade`, `:sobi`, `:dcov`, `:hsic`,
 `:student_t`, `:mixture_normal`, `:pml`, `:skew_normal`, `:nongaussian_ml`,
 `:markov_switching`, `:garch`, `:smooth_transition`, `:external_volatility`
