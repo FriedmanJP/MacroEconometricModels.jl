@@ -893,6 +893,7 @@ function Base.show(io::IO, r::UhligSVARResult)
          "Zero restrictions" => n_zeros, "Sign restrictions" => n_signs,
          "Penalty" => _fmt(r.penalty; digits=4),
          "Converged" => (r.converged ? "Yes" : "No")])
+    _show_note(io, "Lower penalty is better.")
 
     # Per-shock penalty breakdown
     shock_data = Matrix{Any}(undef, n, 3)

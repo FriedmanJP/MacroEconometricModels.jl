@@ -30,7 +30,7 @@ Result from Mountford-Uhlig (2009) penalty function identification.
 # Fields
 - `Q::Matrix{T}`: Optimal rotation matrix
 - `irf::Array{T,3}`: Impulse responses (horizon × n × n)
-- `penalty::T`: Total penalty at optimum (negative = better)
+- `penalty::T`: Total penalty at optimum (lower is better)
 - `shock_penalties::Vector{T}`: Per-shock penalty values
 - `restrictions::SVARRestrictions`: The imposed restrictions
 - `converged::Bool`: Whether all sign restrictions are satisfied
@@ -185,18 +185,25 @@ end
 # =============================================================================
 
 """
-Uhlig (2009) penalty function.
+Uhlig (2005) penalty function.
 
-For each sign restriction, computes the normalized impulse response and assigns:
-- Weight 100 if the sign is satisfied (reward)
-- Weight 1 if violated (penalty)
+For each sign restriction, let `normalized` be the IRF in the required-sign
+direction divided by the residual standard deviation, and `x = -normalized`
+(so `x > 0` ⇔ the restriction is violated). Then
 
-The function returns the negative of the total weighted response, so minimization
-yields the Q that best satisfies sign restrictions.
+- weight 1 if satisfied (`x ≤ 0`): add `x` (small reward)
+- weight `penalty_weight` (default 100) if violated (`x > 0`): add `penalty_weight * x`
+
+Lower penalty is better. Minimization therefore makes violations prohibitively
+expensive rather than rewarding large satisfied responses.
+
+Reference: Uhlig (2005, JME 52, §3.3); Mountford & Uhlig (2009, JAE 24, §3).
 """
 function _uhlig_penalty(theta_all::AbstractVector{T}, restrictions::SVARRestrictions,
                          Phi::Vector{Matrix{T}}, L::LowerTriangular{T,Matrix{T}},
-                         model::VARModel{T}, horizon::Int, n::Int) where {T<:AbstractFloat}
+                         model::VARModel{T}, horizon::Int, n::Int;
+                         penalty_weight::Real=100) where {T<:AbstractFloat}
+    pw = T(penalty_weight)
     # Guard: return large penalty for degenerate inputs
     any(isnan, theta_all) && return T(1e10)
 
@@ -216,19 +223,14 @@ function _uhlig_penalty(theta_all::AbstractVector{T}, restrictions::SVARRestrict
         sigma[i] = sqrt(max(model.Sigma[i, i], eps(T)))
     end
 
-    # Penalty computation: Uhlig (2009) Eq. (6)
+    # Penalty computation: Uhlig (2005) §3.3
     total_penalty = zero(T)
     for sr in restrictions.signs
         h_idx = sr.horizon + 1
         response = irf[h_idx, sr.variable, sr.shock]
-        sigma_v = sigma[sr.variable]
-
-        # Normalized response in direction of required sign
-        normalized = sr.sign * response / sigma_v
-
-        # Weight: 100 if satisfied, 1 if violated
-        weight = normalized >= zero(T) ? T(100) : one(T)
-        total_penalty -= weight * normalized
+        normalized = sr.sign * response / sigma[sr.variable]
+        x = -normalized                    # >0 ⇔ violated
+        total_penalty += x <= zero(T) ? x : pw * x
     end
 
     total_penalty
@@ -236,10 +238,15 @@ end
 
 """
 Compute per-shock penalty diagnostics.
+
+Same `f(x)` as `_uhlig_penalty`: weight 1 if satisfied, `penalty_weight` if
+violated. Lower is better.
 """
 function _uhlig_shock_penalties(Q::Matrix{T}, restrictions::SVARRestrictions,
                                  Phi::Vector{Matrix{T}}, L::LowerTriangular{T,Matrix{T}},
-                                 model::VARModel{T}, horizon::Int) where {T<:AbstractFloat}
+                                 model::VARModel{T}, horizon::Int;
+                                 penalty_weight::Real=100) where {T<:AbstractFloat}
+    pw = T(penalty_weight)
     n = size(Q, 1)
     irf = _compute_irf_for_Q(model, Q, Phi, L, horizon)
 
@@ -253,8 +260,8 @@ function _uhlig_shock_penalties(Q::Matrix{T}, restrictions::SVARRestrictions,
         h_idx = sr.horizon + 1
         response = irf[h_idx, sr.variable, sr.shock]
         normalized = sr.sign * response / sigma[sr.variable]
-        weight = normalized >= zero(T) ? T(100) : one(T)
-        shock_penalties[sr.shock] -= weight * normalized
+        x = -normalized
+        shock_penalties[sr.shock] += x <= zero(T) ? x : pw * x
     end
 
     shock_penalties
@@ -267,13 +274,16 @@ end
 """
     identify_uhlig(model::VARModel{T}, restrictions::SVARRestrictions, horizon::Int;
         n_starts=50, n_refine=10, max_iter_coarse=500, max_iter_fine=2000,
-        tol_coarse=1e-4, tol_fine=1e-8) -> UhligSVARResult{T}
+        tol_coarse=1e-4, tol_fine=1e-8, penalty_weight=100) -> UhligSVARResult{T}
 
 Identify SVAR using Mountford & Uhlig (2009) penalty function approach.
 
 Uses Nelder-Mead optimization over spherical coordinates to find the rotation
 matrix ``Q`` that best satisfies sign restrictions, with zero restrictions
 enforced as hard constraints via null-space projection.
+
+The penalty is Uhlig (2005): `x = -normalized`, then `x` if satisfied and
+`penalty_weight * x` if violated. Lower `penalty` is better.
 
 # Algorithm
 1. Precompute MA coefficients and Cholesky factor ``L``
@@ -288,6 +298,7 @@ enforced as hard constraints via null-space projection.
 - `max_iter_fine::Int=2000`: Max iterations per Phase 2 run
 - `tol_coarse::T=1e-4`: Convergence tolerance for Phase 1
 - `tol_fine::T=1e-8`: Convergence tolerance for Phase 2
+- `penalty_weight::T=T(100)`: Multiplier on violated sign restrictions (Uhlig 2005)
 
 # Returns
 `UhligSVARResult{T}` with optimal rotation matrix, IRFs, penalty values,
@@ -310,6 +321,7 @@ function identify_uhlig(model::VARModel{T}, restrictions::SVARRestrictions, hori
                          n_starts::Int=50, n_refine::Int=10,
                          max_iter_coarse::Int=500, max_iter_fine::Int=2000,
                          tol_coarse::T=T(1e-4), tol_fine::T=T(1e-8),
+                         penalty_weight::Real=100,
                          rng::AbstractRNG=Random.default_rng()) where {T<:AbstractFloat}
     n = nvars(model)
     @assert restrictions.n_vars == n "Restriction dimension ($( restrictions.n_vars)) must match model ($n)"
@@ -330,8 +342,10 @@ function identify_uhlig(model::VARModel{T}, restrictions::SVARRestrictions, hori
     # Count free parameters
     n_params = _uhlig_n_params(n, restrictions)
 
+    pw = T(penalty_weight)
     # Objective closure
-    obj = theta -> _uhlig_penalty(theta, restrictions, Phi, L, model, max_h, n)
+    obj = theta -> _uhlig_penalty(theta, restrictions, Phi, L, model, max_h, n;
+                                  penalty_weight=pw)
 
     # =========================================================================
     # Phase 1: Coarse search from random starting points (multi-threaded)
@@ -414,7 +428,8 @@ function identify_uhlig(model::VARModel{T}, restrictions::SVARRestrictions, hori
     irf = irf_full[1:horizon, :, :]
 
     # Per-shock penalty diagnostics
-    shock_penalties = _uhlig_shock_penalties(Q, restrictions, Phi, L, model, max_h)
+    shock_penalties = _uhlig_shock_penalties(Q, restrictions, Phi, L, model, max_h;
+                                             penalty_weight=pw)
 
     UhligSVARResult{T}(Q, irf, best_val, shock_penalties, restrictions, converged,
                        copy(model.varnames))

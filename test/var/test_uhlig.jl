@@ -595,4 +595,73 @@ end
     @test_throws ArgumentError sign_restriction(1, 1, :positive; horizon=-1)
 end
 
+@testset "SID-03 Uhlig penalty weights" begin
+    # Two :positive restrictions, normalised responses (1.00, 0.01) vs (1.05, -0.05)
+    # Satisfied candidate must have the lower (better) penalty.
+    # Construct via a tiny helper that injects responses — or call _uhlig_penalty
+    # on hand-built Qs once a VAR is estimated.
+    Random.seed!(732)
+    n = 2
+    Y = randn(200, n)
+    m = estimate_var(Y, 1)
+    r = SVARRestrictions(n; signs=[
+        sign_restriction(1, 1, :positive),
+        sign_restriction(2, 1, :positive),
+    ])
+    # Direct f(x) table
+    f(x; w=100) = x <= 0 ? x : w * x
+    # candidate A: both satisfied, normalized = (1.00, 0.01) → x = -normalized
+    penA = f(-1.00) + f(-0.01)
+    penB = f(-1.05) + f(0.05)
+    @test penA < penB
+    @test penA ≈ -1.01
+    @test penB ≈ 3.95
+
+    # If _uhlig_penalty still uses inverted weights, a violating rotation can score better.
+    # After the fix, the satisfied Q has the lower penalty.
+    # Negative residual correlation: θ≈0 maximises the first response but violates
+    # the second sign; a modest rotation satisfies both with a smaller first response.
+    ρ = -0.5
+    Sigma = [1.0 ρ; ρ 1.0]
+    B = zeros(1 + n * 1, n)
+    U = randn(199, n)
+    m_corr = VARModel(Y, 1, B, U, Sigma, 0.0, 0.0, 0.0)
+    horizon = 1
+    Phi = MacroEconometricModels._compute_ma_coefficients(m_corr, horizon)
+    L = MacroEconometricModels.safe_cholesky(m_corr.Sigma)
+    θA = [π / 6 + 0.05]          # both signs satisfied
+    θB = [0.0]                   # var 2 on impact is negative
+    penA_fn = MacroEconometricModels._uhlig_penalty(θA, r, Phi, L, m_corr, horizon, n)
+    penB_fn = MacroEconometricModels._uhlig_penalty(θB, r, Phi, L, m_corr, horizon, n)
+    QA = MacroEconometricModels._uhlig_build_Q(θA, r, Phi, L, n)
+    QB = MacroEconometricModels._uhlig_build_Q(θB, r, Phi, L, n)
+    @test QA[1, 1] > 0 && (MacroEconometricModels.safe_cholesky(m_corr.Sigma) * QA)[2, 1] > 0
+    @test QB[1, 1] > 0 && (MacroEconometricModels.safe_cholesky(m_corr.Sigma) * QB)[2, 1] < 0
+    @test penA_fn < penB_fn
+    penB_heavy = MacroEconometricModels._uhlig_penalty(θB, r, Phi, L, m_corr, horizon, n;
+                                                      penalty_weight=1000)
+    @test penB_heavy > penB_fn
+    spA = MacroEconometricModels._uhlig_shock_penalties(QA, r, Phi, L, m_corr, horizon)
+    spB = MacroEconometricModels._uhlig_shock_penalties(QB, r, Phi, L, m_corr, horizon)
+    @test spA[1] < spB[1]
+
+    # Unique admissible rotation: zero on (2,1) plus a positive impact sign on (1,1)
+    # is Cholesky up to the sign, which the restriction pins.
+    r_uniq = SVARRestrictions(n;
+        zeros=[zero_restriction(2, 1)],
+        signs=[sign_restriction(1, 1, :positive)])
+    u = identify_uhlig(m, r_uniq, 5; n_starts=(FAST ? 3 : 10), n_refine=(FAST ? 1 : 2),
+                       max_iter_coarse=(FAST ? 50 : 100), max_iter_fine=(FAST ? 100 : 300),
+                       rng=MersenneTwister(732))
+    @test u.converged == true
+    @test u.irf[1, 1, 1] > 0
+    @test abs(u.irf[1, 2, 1]) < 1e-8
+    @test all(sr -> sr.sign * u.irf[sr.horizon + 1, sr.variable, sr.shock] > 0,
+              r_uniq.signs)
+
+    io = IOBuffer()
+    show(io, u)
+    @test occursin("lower", lowercase(String(take!(io))))
+end
+
 _tprint("Mountford-Uhlig (2009) tests completed.")
