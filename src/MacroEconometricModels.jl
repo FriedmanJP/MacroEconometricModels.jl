@@ -1021,10 +1021,18 @@ export compute_irf, compute_structural_shocks
 export IdentificationMethod, register_identification!
 
 # Arias et al. (2018) SVAR identification
+export AbstractSVARRestriction, is_linear_zero, check, sign_check
 export ZeroRestriction, SignRestriction, SVARRestrictions, AriasSVARResult
+export LongRunZeroRestriction, A0ZeroRestriction, AplusZeroRestriction
+export A0SignRestriction, AplusSignRestriction
+export ElasticityBound, MagnitudeBound, FEVDShareRestriction, CumulativeRestriction
+export NarrativeShockRestriction, NarrativeContributionRestriction
 export BayesianSetIdentifiedSVAR
 export identify_arias, identify_arias_bayesian
 export zero_restriction, sign_restriction
+export a0_zero_restriction, a0_sign_restriction, aplus_zero_restriction, aplus_sign_restriction
+export elasticity_bound, magnitude_bound, fevd_share_restriction, cumulative_restriction
+export narrative_shock_restriction, narrative_contribution_restriction
 export irf_percentiles, irf_mean
 
 # Sign restriction identified set (Baumeister & Hamilton 2015)

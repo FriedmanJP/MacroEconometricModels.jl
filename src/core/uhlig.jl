@@ -91,7 +91,7 @@ function _uhlig_build_q_column(theta_j::AbstractVector{T}, j::Int, Q_prev::Matri
                                 restrictions::SVARRestrictions,
                                 Phi::Vector{Matrix{T}},
                                 L::LowerTriangular{T,Matrix{T}},
-                                n::Int) where {T<:AbstractFloat}
+                                n::Int; B=nothing, C1=nothing) where {T<:AbstractFloat}
     # Build constraint matrix: orthogonality to previous columns + zero restrictions
     constraint_rows = Vector{Vector{T}}()
 
@@ -100,10 +100,10 @@ function _uhlig_build_q_column(theta_j::AbstractVector{T}, j::Int, Q_prev::Matri
         push!(constraint_rows, Q_prev[:, k])
     end
 
-    # Zero restriction constraints for shock j
-    for zr in restrictions.zeros
-        zr.shock == j || continue
-        push!(constraint_rows, Vector{T}((Phi[zr.horizon + 1] * L)[zr.variable, :]))
+    # Zero restriction constraints for shock j (finite, long-run, A0, A+)
+    ZF = _compute_ZF(restrictions, Phi, L, j; B=B, C1=C1)
+    for i in axes(ZF, 1)
+        push!(constraint_rows, Vector{T}(ZF[i, :]))
     end
 
     n_constraints = length(constraint_rows)
@@ -145,7 +145,7 @@ Returns an n×n orthogonal matrix satisfying all zero restrictions.
 """
 function _uhlig_build_Q(theta_all::AbstractVector{T}, restrictions::SVARRestrictions,
                          Phi::Vector{Matrix{T}}, L::LowerTriangular{T,Matrix{T}},
-                         n::Int) where {T<:AbstractFloat}
+                         n::Int; B=nothing, C1=nothing) where {T<:AbstractFloat}
     Q = zeros(T, n, n)
     offset = 0
 
@@ -160,7 +160,7 @@ function _uhlig_build_Q(theta_all::AbstractVector{T}, restrictions::SVARRestrict
         theta_j = theta_all[offset+1:offset+n_angles]
         offset += n_angles
 
-        Q[:, j] = _uhlig_build_q_column(theta_j, j, Q, restrictions, Phi, L, n)
+        Q[:, j] = _uhlig_build_q_column(theta_j, j, Q, restrictions, Phi, L, n; B=B, C1=C1)
     end
 
     Q
@@ -202,13 +202,13 @@ Reference: Uhlig (2005, JME 52, §3.3); Mountford & Uhlig (2009, JAE 24, §3).
 function _uhlig_penalty(theta_all::AbstractVector{T}, restrictions::SVARRestrictions,
                          Phi::Vector{Matrix{T}}, L::LowerTriangular{T,Matrix{T}},
                          model::VARModel{T}, horizon::Int, n::Int;
-                         penalty_weight::Real=100) where {T<:AbstractFloat}
+                         penalty_weight::Real=100, C1=nothing) where {T<:AbstractFloat}
     pw = T(penalty_weight)
     # Guard: return large penalty for degenerate inputs
     any(isnan, theta_all) && return T(1e10)
 
     Q = try
-        _uhlig_build_Q(theta_all, restrictions, Phi, L, n)
+        _uhlig_build_Q(theta_all, restrictions, Phi, L, n; B=model.B, C1=C1)
     catch err
         _is_rejectable_draw_error(err) || rethrow(err)
         return T(1e10)
@@ -226,6 +226,7 @@ function _uhlig_penalty(theta_all::AbstractVector{T}, restrictions::SVARRestrict
     # Penalty computation: Uhlig (2005) §3.3
     total_penalty = zero(T)
     for sr in restrictions.signs
+        sr isa SignRestriction || continue
         h_idx = sr.horizon + 1
         response = irf[h_idx, sr.variable, sr.shock]
         normalized = sr.sign * response / sigma[sr.variable]
@@ -257,6 +258,7 @@ function _uhlig_shock_penalties(Q::Matrix{T}, restrictions::SVARRestrictions,
 
     shock_penalties = zeros(T, n)
     for sr in restrictions.signs
+        sr isa SignRestriction || continue
         h_idx = sr.horizon + 1
         response = irf[h_idx, sr.variable, sr.shock]
         normalized = sr.sign * response / sigma[sr.variable]
@@ -327,13 +329,15 @@ function identify_uhlig(model::VARModel{T}, restrictions::SVARRestrictions, hori
     @assert restrictions.n_vars == n "Restriction dimension ($( restrictions.n_vars)) must match model ($n)"
 
     # Need sign restrictions for penalty function
-    isempty(restrictions.signs) && throw(ArgumentError(
+    any(s -> s isa SignRestriction, restrictions.signs) || throw(ArgumentError(
         "identify_uhlig requires at least one sign restriction"))
 
     # Determine required horizon for restrictions
     max_h = max(horizon,
-        isempty(restrictions.zeros) ? 0 : maximum(zr.horizon for zr in restrictions.zeros) + 1,
-        isempty(restrictions.signs) ? 0 : maximum(sr.horizon for sr in restrictions.signs) + 1)
+        isempty(restrictions.zeros) ? 0 : maximum(_restriction_horizon(zr) for zr in restrictions.zeros) + 1,
+        isempty(restrictions.signs) ? 0 : maximum(_restriction_horizon(sr) for sr in restrictions.signs) + 1)
+    C1 = any(z -> z isa LongRunZeroRestriction, restrictions.zeros) ?
+         first(_long_run_multiplier(model.B, model.Sigma, n, model.p)) : nothing
 
     # Precompute MA coefficients and Cholesky factor
     Phi = ma_coefficients(model, max_h + 1)
@@ -345,7 +349,7 @@ function identify_uhlig(model::VARModel{T}, restrictions::SVARRestrictions, hori
     pw = T(penalty_weight)
     # Objective closure
     obj = theta -> _uhlig_penalty(theta, restrictions, Phi, L, model, max_h, n;
-                                  penalty_weight=pw)
+                                  penalty_weight=pw, C1=C1)
 
     # =========================================================================
     # Phase 1: Coarse search from random starting points (multi-threaded)
@@ -420,7 +424,7 @@ function identify_uhlig(model::VARModel{T}, restrictions::SVARRestrictions, hori
     # =========================================================================
     # Build final result
     # =========================================================================
-    Q = _uhlig_build_Q(best_theta, restrictions, Phi, L, n)
+    Q = _uhlig_build_Q(best_theta, restrictions, Phi, L, n; B=model.B, C1=C1)
     irf_full = structural_irf(Phi, L, Q, max_h)
 
     # Check convergence: all sign restrictions satisfied?

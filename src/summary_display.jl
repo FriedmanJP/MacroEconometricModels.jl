@@ -939,15 +939,101 @@ function Base.show(io::IO, r::ZeroRestriction)
     print(io, "ZeroRestriction(var=$(r.variable), shock=$(r.shock), horizon=$(r.horizon))")
 end
 
+function Base.show(io::IO, r::LongRunZeroRestriction)
+    print(io, "LongRunZeroRestriction(var=$(r.variable), shock=$(r.shock))")
+end
+
+function Base.show(io::IO, r::A0ZeroRestriction)
+    print(io, "A0ZeroRestriction(eq=$(r.variable), shock=$(r.shock))")
+end
+
+function Base.show(io::IO, r::AplusZeroRestriction)
+    print(io, "AplusZeroRestriction(eq=$(r.variable), shock=$(r.shock), lag=$(r.lag))")
+end
+
 function Base.show(io::IO, r::SignRestriction)
     sign_str = r.sign > 0 ? "+" : "-"
     print(io, "SignRestriction(var=$(r.variable), shock=$(r.shock), horizon=$(r.horizon), sign=$(sign_str))")
 end
 
+function Base.show(io::IO, r::A0SignRestriction)
+    sign_str = r.sign > 0 ? "+" : "-"
+    print(io, "A0SignRestriction(eq=$(r.variable), shock=$(r.shock), sign=$(sign_str))")
+end
+
+function Base.show(io::IO, r::AplusSignRestriction)
+    sign_str = r.sign > 0 ? "+" : "-"
+    print(io, "AplusSignRestriction(eq=$(r.variable), shock=$(r.shock), lag=$(r.lag), sign=$(sign_str))")
+end
+
+function Base.show(io::IO, r::ElasticityBound)
+    print(io, "ElasticityBound(num=$(r.numerator_var), den=$(r.denominator_var), shock=$(r.shock), horizon=$(r.horizon), [$(r.lower), $(r.upper)])")
+end
+
+function Base.show(io::IO, r::MagnitudeBound)
+    print(io, "MagnitudeBound(var=$(r.variable), shock=$(r.shock), horizon=$(r.horizon), [$(r.lower), $(r.upper)])")
+end
+
+function Base.show(io::IO, r::FEVDShareRestriction)
+    print(io, "FEVDShareRestriction(var=$(r.variable), shock=$(r.shock), horizon=$(r.horizon), [$(r.lower), $(r.upper)])")
+end
+
+function Base.show(io::IO, r::CumulativeRestriction)
+    sign_str = r.sign > 0 ? "+" : "-"
+    print(io, "CumulativeRestriction(var=$(r.variable), shock=$(r.shock), horizons=$(r.horizons), sign=$(sign_str))")
+end
+
+function Base.show(io::IO, r::NarrativeShockRestriction)
+    sign_str = r.sign > 0 ? "+" : "-"
+    print(io, "NarrativeShockRestriction(shock=$(r.shock), dates=$(r.dates), sign=$(sign_str))")
+end
+
+function Base.show(io::IO, r::NarrativeContributionRestriction)
+    print(io, "NarrativeContributionRestriction(var=$(r.variable), shock=$(r.shock), window=$(r.window))")
+end
+
+_restriction_words(r::ZeroRestriction) =
+    "Zero: variable $(r.variable) does not respond to shock $(r.shock) at horizon $(r.horizon)"
+_restriction_words(r::LongRunZeroRestriction) =
+    "Long-run zero: variable $(r.variable) does not respond to shock $(r.shock) in the long run"
+_restriction_words(r::A0ZeroRestriction) =
+    "A₀ zero: equation $(r.variable) of shock $(r.shock) is zero"
+_restriction_words(r::AplusZeroRestriction) =
+    "A₊ zero: equation $(r.variable), lag $(r.lag), of shock $(r.shock) is zero"
+_restriction_words(r::SignRestriction) =
+    "Sign: variable $(r.variable) responds $(r.sign > 0 ? "positively" : "negatively") to shock $(r.shock) at horizon $(r.horizon)"
+_restriction_words(r::A0SignRestriction) =
+    "A₀ sign: equation $(r.variable) of shock $(r.shock) is $(r.sign > 0 ? "positive" : "negative")"
+_restriction_words(r::AplusSignRestriction) =
+    "A₊ sign: equation $(r.variable), lag $(r.lag), of shock $(r.shock) is $(r.sign > 0 ? "positive" : "negative")"
+_restriction_words(r::ElasticityBound) =
+    "Elasticity: IRF(var $(r.numerator_var))/IRF(var $(r.denominator_var)) of shock $(r.shock) at horizon $(r.horizon) in [$(r.lower), $(r.upper)]"
+_restriction_words(r::MagnitudeBound) =
+    "Magnitude: IRF of variable $(r.variable) to shock $(r.shock) at horizon $(r.horizon) in [$(r.lower), $(r.upper)]"
+_restriction_words(r::FEVDShareRestriction) =
+    "FEVD share: shock $(r.shock) accounts for [$(r.lower), $(r.upper)] of variable $(r.variable) at horizon $(r.horizon)"
+_restriction_words(r::CumulativeRestriction) =
+    "Cumulative: variable $(r.variable) responds $(r.sign > 0 ? "positively" : "negatively") to shock $(r.shock) over horizons $(r.horizons)"
+_restriction_words(r::NarrativeShockRestriction) =
+    "Narrative shock: shock $(r.shock) is $(r.sign > 0 ? "positive" : "negative") at dates $(r.dates)"
+_restriction_words(r::NarrativeContributionRestriction) =
+    "Narrative contribution: shock $(r.shock) is the leading contributor to variable $(r.variable) over $(r.window)"
+_restriction_words(r::AbstractSVARRestriction) = string(typeof(r))
+
 function Base.show(io::IO, r::SVARRestrictions)
-    _show_spec_table(io, "SVAR Restrictions",
-        ["Zero restrictions" => length(r.zeros), "Sign restrictions" => length(r.signs),
-         "Variables" => r.n_vars, "Shocks" => r.n_shocks])
+    println(io, "SVAR Restrictions ($(r.n_vars) variables, $(r.n_shocks) shocks)")
+    items = AbstractSVARRestriction[r.zeros...; r.signs...]
+    if isempty(items)
+        print(io, "  (none)")
+        return
+    end
+    for (i, item) in enumerate(items)
+        if i == length(items)
+            print(io, "  ", _restriction_words(item))
+        else
+            println(io, "  ", _restriction_words(item))
+        end
+    end
 end
 
 # =============================================================================

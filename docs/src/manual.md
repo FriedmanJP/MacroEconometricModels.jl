@@ -488,7 +488,9 @@ The algorithm constructs ``Q`` column-by-column via QR decomposition in the null
 | Type | Function | Description |
 |------|----------|-------------|
 | Zero | `zero_restriction(var, shock; horizon=0)` | Variable `var` does not respond to `shock` at `horizon` |
+| Long-run zero | `zero_restriction(var, shock; horizon=:long_run)` | ``e_v' C(1) L q_s = 0`` |
 | Sign | `sign_restriction(var, shock, :positive; horizon=0)` | Response has required sign at `horizon` |
+| Sign (range) | `sign_restriction(var, shock, :positive; horizons=0:K)` | Expands to ``K+1`` sign restrictions |
 
 ```@example var
 model_short = estimate_var(Y, 2)

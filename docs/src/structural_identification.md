@@ -236,10 +236,10 @@ plot_result(id_set)
 `identify_narrative` filters first for sign-satisfying rotations, then evaluates a second predicate on the recovered structural shocks ``\varepsilon = B_0^{-1} u``. The narrative predicate receives the ``T_{\text{eff}} \times n`` shock matrix, indexed `[period, shock]`. With `store_all=true`, `identify_narrative` returns a `SignIdentifiedSet` of every rotation that clears both filters. `irf(; method=:narrative, check_func, narrative_check)` is set-aware: it returns the pointwise median with identified-set quantile bands, the same as `method=:sign`.
 
 ```@example sid
-sign_check = resp -> resp[1, 3, 3] > 0 && resp[1, 1, 3] < 0
+sign_pred = resp -> resp[1, 3, 3] > 0 && resp[1, 1, 3] < 0
 narrative_check = shocks -> shocks[20, 3] > 0   # tightening episode in period 20
 
-result_nar = irf(model, 20; method=:narrative, check_func=sign_check,
+result_nar = irf(model, 20; method=:narrative, check_func=sign_pred,
                  narrative_check=narrative_check, rng=MersenneTwister(4))
 (impact = round.(result_nar.values[1, :, 3], digits=4),
  ci_type = result_nar.ci_type,
@@ -251,9 +251,9 @@ The reported path is the pointwise median of the narrative-identified set (`ci_t
 With `store_all=true`, `identify_narrative` returns a `SignIdentifiedSet`. Comparing that set to the sign-only set on the same draws shows how much the historical constraint shrinks identification:
 
 ```@example sid
-nar_set = identify_narrative(model, 20, sign_check, narrative_check;
+nar_set = identify_narrative(model, 20, sign_pred, narrative_check;
                              max_draws=2000, store_all=true, rng=MersenneTwister(4))
-sign_admissible = identify_sign(model, 20, sign_check; max_draws=2000,
+sign_admissible = identify_sign(model, 20, sign_pred; max_draws=2000,
                                 store_all=true, rng=MersenneTwister(4))
 (sign_only = sign_admissible.n_accepted, sign_and_narrative = nar_set.n_accepted)
 ```
@@ -308,10 +308,31 @@ When sign restrictions alone are insufficient, **zero restrictions** on specific
 
 The algorithm constructs ``Q`` column by column via QR decomposition in the null space of the zero-restriction matrix, then checks the sign restrictions on the candidate IRF ``\Theta_h = \Phi_h \, L \, Q``.
 
-| Type | Constructor | Description |
-|------|-------------|-------------|
-| Zero | `zero_restriction(var, shock; horizon=0)` | Variable `var` does not respond to `shock` at `horizon` |
-| Sign | `sign_restriction(var, shock, :positive; horizon=0)` | Response has the required sign at `horizon` |
+| Type | Constructor | Role |
+|------|-------------|------|
+| Zero | `zero_restriction(var, shock; horizon=0)` | Linear: variable `var` does not respond to `shock` at `horizon` |
+| Long-run zero | `zero_restriction(var, shock; horizon=:long_run)` | Linear: ``e_v' C(1) L q_s = 0`` with ``C(1)=(I-\sum A_i)^{-1}`` |
+| Sign | `sign_restriction(var, shock, :positive; horizon=0)` | Rejection: response has the required sign at `horizon` |
+| Sign (range) | `sign_restriction(var, shock, :positive; horizons=0:K)` | Expands to ``K+1`` sign restrictions |
+| ``A_0`` / ``A_+`` zero | `a0_zero_restriction(eq, shock)`, `aplus_zero_restriction(eq, shock; lag=1)` | Linear in ``Q`` given ``(B,\Sigma)`` (Arias, Caldara & Rubio-Ramírez 2019) |
+| Elasticity | `elasticity_bound(num, den, shock; lower, upper)` | Rejection: ``\Theta_{\mathrm{num}}/\Theta_{\mathrm{den}}`` in ``[\mathrm{lower},\mathrm{upper}]`` (Kilian & Murphy 2012) |
+| Magnitude | `magnitude_bound(var, shock; lower, upper)` | Rejection: IRF entry in a closed interval |
+| FEVD share | `fevd_share_restriction(var, shock; horizon, lower, upper)` | Rejection on the shock's forecast-error variance share |
+| Cumulative | `cumulative_restriction(var, shock, :positive; horizons=0:H)` | Rejection on the cumulated IRF |
+
+`SVARRestrictions` stores linear zeros and rejection restrictions in two lists. `sign_check(r)` returns an `irf -> Bool` closure for `identify_sign`, structural DFM, and counterfactuals; a handwritten predicate remains an escape hatch. Imposing all ``n(n-1)/2`` long-run zeros (on early-ordered shocks) recovers Blanchard–Quah as a just-identified special case, unique up to column sign. Cointegrated systems throw `IdentificationError` --- difference the data or use a structural VECM.
+
+```@example sid
+r_h = SVARRestrictions(3;
+    signs = [sign_restriction(3, 1, :positive; horizons=0:2),
+             sign_restriction(2, 1, :negative; horizons=0:2)])
+id_typed = identify_sign(model, 20, sign_check(r_h); max_draws=2000, store_all=true,
+                         rng=MersenneTwister(21))
+(n_accepted = id_typed.n_accepted,
+ rate = round(id_typed.acceptance_rate; digits=3))
+```
+
+`horizons=0:2` expands each sign to three restrictions (impact through two months). `sign_check(r_h)` is the predicate `identify_sign` consumes; the same container feeds `identify_arias`.
 
 !!! warning "Zero restrictions must go on early-ordered shocks"
     Column ``j`` of ``Q`` is drawn from the null space of ``j-1`` orthogonality constraints plus its own zero restrictions, so shock ``j`` admits at most ``n - j`` zeros. Loading a zero restriction onto the last shock of an ``n``-variable system over-constrains the draw and raises an error. Order the restricted shock first.
@@ -517,6 +538,9 @@ With the interest rate ordered last, the Cholesky scheme forces the contemporane
 - Antolín-Díaz, J., & Rubio-Ramírez, J. F. (2018). Narrative Sign Restrictions for SVARs.
   *American Economic Review*, 108(10), 2802--2829. [DOI](https://doi.org/10.1257/aer.20161852)
 
+- Arias, J. E., Caldara, D., & Rubio-Ramírez, J. F. (2019). The Systematic Component of Monetary Policy in SVARs: An Agnostic Identification Procedure.
+  *Journal of Monetary Economics*, 101, 1--13. [DOI](https://doi.org/10.1016/j.jmoneco.2018.07.010)
+
 - Arias, J. E., Rubio-Ramírez, J. F., & Waggoner, D. F. (2018). Inference Based on Structural Vector Autoregressions Identified with Sign and Zero Restrictions: Theory and Applications.
   *Econometrica*, 86(2), 685--720. [DOI](https://doi.org/10.3982/ECTA14468)
 
@@ -534,6 +558,9 @@ With the interest rate ordered last, the Cholesky scheme forces the contemporane
 
 - Kilian, L., & Lütkepohl, H. (2017). *Structural Vector Autoregressive Analysis*.
   Cambridge University Press. [DOI](https://doi.org/10.1017/9781108164818)
+
+- Kilian, L., & Murphy, D. P. (2012). Why Agnostic Sign Restrictions Are Not Enough: Understanding the Dynamics of Oil Market VAR Models.
+  *Journal of the European Economic Association*, 10(5), 1166--1188. [DOI](https://doi.org/10.1111/j.1542-4774.2012.01080.x)
 
 - Kish, L. (1965). *Survey Sampling*. Wiley. ISBN 978-0-471-48900-9.
 

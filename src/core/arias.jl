@@ -18,43 +18,274 @@ _is_rejectable_draw_error(err) =
     err isa LinearAlgebra.LAPACKException ||
     err isa DomainError
 
-"""Zero restriction: variable doesn't respond to shock at horizon."""
-struct ZeroRestriction
+"""Abstract super-type of every SVAR restriction (linear zero or rejection)."""
+abstract type AbstractSVARRestriction end
+
+"""True when `r` is a linear equality on a column of `Q` (null-space row)."""
+is_linear_zero(::AbstractSVARRestriction) = false
+
+"""Zero restriction: variable does not respond to shock at a finite horizon."""
+struct ZeroRestriction <: AbstractSVARRestriction
     variable::Int
     shock::Int
     horizon::Int
 end
+is_linear_zero(::ZeroRestriction) = true
+
+"""Long-run zero: ``e_v' C(1) L q_s = 0`` with ``C(1) = (I - \\sum A_i)^{-1}``."""
+struct LongRunZeroRestriction <: AbstractSVARRestriction
+    variable::Int
+    shock::Int
+end
+is_linear_zero(::LongRunZeroRestriction) = true
+
+"""Zero restriction on an entry of ``A_0 = L^{-T} Q`` (Arias, Caldara & Rubio-Ramírez 2019)."""
+struct A0ZeroRestriction <: AbstractSVARRestriction
+    variable::Int
+    shock::Int
+end
+is_linear_zero(::A0ZeroRestriction) = true
+
+"""Zero restriction on an entry of ``A_+ = B A_0`` (lag `0` is the intercept row)."""
+struct AplusZeroRestriction <: AbstractSVARRestriction
+    variable::Int
+    shock::Int
+    lag::Int
+end
+is_linear_zero(::AplusZeroRestriction) = true
 
 """Sign restriction: variable response to shock has required sign at horizon."""
-struct SignRestriction
+struct SignRestriction <: AbstractSVARRestriction
     variable::Int
     shock::Int
     horizon::Int
     sign::Int  # +1 or -1
 end
 
-"""Container for SVAR restrictions."""
+"""Sign restriction on an entry of ``A_0``."""
+struct A0SignRestriction <: AbstractSVARRestriction
+    variable::Int
+    shock::Int
+    sign::Int
+end
+
+"""Sign restriction on an entry of ``A_+``."""
+struct AplusSignRestriction <: AbstractSVARRestriction
+    variable::Int
+    shock::Int
+    lag::Int
+    sign::Int
+end
+
+"""Kilian–Murphy elasticity bound: ``\\mathrm{IRF}_{\\mathrm{num}} / \\mathrm{IRF}_{\\mathrm{den}} \\in [\\mathrm{lower}, \\mathrm{upper}]``."""
+struct ElasticityBound <: AbstractSVARRestriction
+    numerator_var::Int
+    denominator_var::Int
+    shock::Int
+    horizon::Int
+    lower::Float64
+    upper::Float64
+end
+
+"""Magnitude bound on an IRF entry."""
+struct MagnitudeBound <: AbstractSVARRestriction
+    variable::Int
+    shock::Int
+    horizon::Int
+    lower::Float64
+    upper::Float64
+end
+
+"""FEVD-share restriction (Ben Zeev / Volpicella): shock's share of MSE in ``[\\mathrm{lower}, \\mathrm{upper}]``."""
+struct FEVDShareRestriction <: AbstractSVARRestriction
+    variable::Int
+    shock::Int
+    horizon::Int
+    lower::Float64
+    upper::Float64
+end
+
+"""Cumulative-IRF sign restriction on ``\\sum_{h \\in \\mathrm{horizons}} \\Theta_h``."""
+struct CumulativeRestriction <: AbstractSVARRestriction
+    variable::Int
+    shock::Int
+    horizons::UnitRange{Int}
+    sign::Int
+end
+
+"""Narrative shock-sign restriction (SID-15 hook; ADRR weights are not applied here)."""
+struct NarrativeShockRestriction <: AbstractSVARRestriction
+    shock::Int
+    dates::Vector{Int}
+    sign::Int
+end
+
+"""Narrative contribution restriction (SID-15 hook; ADRR weights are not applied here)."""
+struct NarrativeContributionRestriction <: AbstractSVARRestriction
+    variable::Int
+    shock::Int
+    window::UnitRange{Int}
+end
+
+"""
+    SVARRestrictions(n_vars; zeros=[], signs=[])
+
+Typed restriction container. `zeros` holds linear equalities (null-space rows of
+`Q`); `signs` holds rejection restrictions. Nested vectors from
+`sign_restriction(...; horizons=0:K)` are flattened. FEVD is computed only when
+an [`FEVDShareRestriction`](@ref) is present.
+"""
 struct SVARRestrictions
-    zeros::Vector{ZeroRestriction}
-    signs::Vector{SignRestriction}
+    zeros::Vector{AbstractSVARRestriction}
+    signs::Vector{AbstractSVARRestriction}
     n_vars::Int
     n_shocks::Int
+    function SVARRestrictions(zeros, signs, n_vars::Int, n_shocks::Int)
+        all_r = AbstractSVARRestriction[]
+        append!(all_r, _flatten_restrictions(zeros))
+        append!(all_r, _flatten_restrictions(signs))
+        z = AbstractSVARRestriction[r for r in all_r if is_linear_zero(r)]
+        s = AbstractSVARRestriction[r for r in all_r if !is_linear_zero(r)]
+        new(z, s, n_vars, n_shocks)
+    end
+end
+
+function _flatten_restrictions(rs)
+    out = AbstractSVARRestriction[]
+    if rs isa AbstractSVARRestriction
+        push!(out, rs)
+        return out
+    end
+    for item in rs
+        if item isa AbstractVector
+            append!(out, _flatten_restrictions(item))
+        else
+            push!(out, item)
+        end
+    end
+    out
 end
 
 function SVARRestrictions(n_vars::Int; zeros=ZeroRestriction[], signs=SignRestriction[])
     n_vars > 0 || throw(ArgumentError("n_vars must be positive"))
-    for zr in zeros
-        (1 <= zr.variable <= n_vars && 1 <= zr.shock <= n_vars) ||
-            throw(ArgumentError("zero restriction (var=$(zr.variable), shock=$(zr.shock)) out of 1:$n_vars"))
-        zr.horizon >= 0 || throw(ArgumentError("restriction horizon must be ≥ 0"))
+    z = _flatten_restrictions(zeros)
+    s = _flatten_restrictions(signs)
+    for r in Iterators.flatten((z, s))
+        _validate_restriction(r, n_vars)
     end
-    for sr in signs
-        (1 <= sr.variable <= n_vars && 1 <= sr.shock <= n_vars) ||
-            throw(ArgumentError("sign restriction (var=$(sr.variable), shock=$(sr.shock)) out of 1:$n_vars"))
-        sr.horizon >= 0 || throw(ArgumentError("restriction horizon must be ≥ 0"))
-        sr.sign in (-1, 1) || throw(ArgumentError("sign must be -1 or +1"))
-    end
-    SVARRestrictions(zeros, signs, n_vars, n_vars)
+    SVARRestrictions(z, s, n_vars, n_vars)
+end
+
+_parse_sign(sign::Symbol) =
+    sign === :positive ? 1 : sign === :negative ? -1 :
+        throw(ArgumentError("sign must be :positive or :negative"))
+
+function _check_index(i::Int, n::Int, label::AbstractString)
+    (1 <= i <= n) || throw(ArgumentError("$label $i out of 1:$n"))
+end
+
+function _check_finite_bounds(lower, upper)
+    (isfinite(lower) && isfinite(upper)) ||
+        throw(ArgumentError("bounds must be finite"))
+    lower < upper || throw(ArgumentError("lower bound must be < upper bound"))
+    nothing
+end
+
+function _check_horizon_range(horizons::AbstractUnitRange{<:Integer})
+    first(horizons) >= 0 || throw(ArgumentError("restriction horizon must be ≥ 0"))
+    nothing
+end
+
+function _validate_restriction(r::ZeroRestriction, n_vars::Int)
+    _check_index(r.variable, n_vars, "variable")
+    _check_index(r.shock, n_vars, "shock")
+    r.horizon >= 0 || throw(ArgumentError("restriction horizon must be ≥ 0"))
+end
+function _validate_restriction(r::LongRunZeroRestriction, n_vars::Int)
+    _check_index(r.variable, n_vars, "variable")
+    _check_index(r.shock, n_vars, "shock")
+end
+function _validate_restriction(r::A0ZeroRestriction, n_vars::Int)
+    _check_index(r.variable, n_vars, "variable")
+    _check_index(r.shock, n_vars, "shock")
+end
+function _validate_restriction(r::AplusZeroRestriction, n_vars::Int)
+    _check_index(r.variable, n_vars, "variable")
+    _check_index(r.shock, n_vars, "shock")
+    r.lag >= 0 || throw(ArgumentError("A+ lag must be ≥ 0"))
+end
+function _validate_restriction(r::SignRestriction, n_vars::Int)
+    _check_index(r.variable, n_vars, "variable")
+    _check_index(r.shock, n_vars, "shock")
+    r.horizon >= 0 || throw(ArgumentError("restriction horizon must be ≥ 0"))
+    r.sign in (-1, 1) || throw(ArgumentError("sign must be -1 or +1"))
+end
+function _validate_restriction(r::A0SignRestriction, n_vars::Int)
+    _check_index(r.variable, n_vars, "variable")
+    _check_index(r.shock, n_vars, "shock")
+    r.sign in (-1, 1) || throw(ArgumentError("sign must be -1 or +1"))
+end
+function _validate_restriction(r::AplusSignRestriction, n_vars::Int)
+    _check_index(r.variable, n_vars, "variable")
+    _check_index(r.shock, n_vars, "shock")
+    r.lag >= 0 || throw(ArgumentError("A+ lag must be ≥ 0"))
+    r.sign in (-1, 1) || throw(ArgumentError("sign must be -1 or +1"))
+end
+function _validate_restriction(r::ElasticityBound, n_vars::Int)
+    _check_index(r.numerator_var, n_vars, "numerator variable")
+    _check_index(r.denominator_var, n_vars, "denominator variable")
+    _check_index(r.shock, n_vars, "shock")
+    r.horizon >= 0 || throw(ArgumentError("restriction horizon must be ≥ 0"))
+    _check_finite_bounds(r.lower, r.upper)
+end
+function _validate_restriction(r::MagnitudeBound, n_vars::Int)
+    _check_index(r.variable, n_vars, "variable")
+    _check_index(r.shock, n_vars, "shock")
+    r.horizon >= 0 || throw(ArgumentError("restriction horizon must be ≥ 0"))
+    _check_finite_bounds(r.lower, r.upper)
+end
+function _validate_restriction(r::FEVDShareRestriction, n_vars::Int)
+    _check_index(r.variable, n_vars, "variable")
+    _check_index(r.shock, n_vars, "shock")
+    r.horizon >= 0 || throw(ArgumentError("restriction horizon must be ≥ 0"))
+    _check_finite_bounds(r.lower, r.upper)
+    (0 <= r.lower && r.upper <= 1) ||
+        throw(ArgumentError("FEVD share bounds must lie in [0, 1]"))
+end
+function _validate_restriction(r::CumulativeRestriction, n_vars::Int)
+    _check_index(r.variable, n_vars, "variable")
+    _check_index(r.shock, n_vars, "shock")
+    _check_horizon_range(r.horizons)
+    r.sign in (-1, 1) || throw(ArgumentError("sign must be -1 or +1"))
+end
+function _validate_restriction(r::NarrativeShockRestriction, n_vars::Int)
+    _check_index(r.shock, n_vars, "shock")
+    r.sign in (-1, 1) || throw(ArgumentError("sign must be -1 or +1"))
+end
+function _validate_restriction(r::NarrativeContributionRestriction, n_vars::Int)
+    _check_index(r.variable, n_vars, "variable")
+    _check_index(r.shock, n_vars, "shock")
+end
+_validate_restriction(::AbstractSVARRestriction, ::Int) = nothing
+
+_restriction_horizon(r::ZeroRestriction) = r.horizon
+_restriction_horizon(::LongRunZeroRestriction) = 0
+_restriction_horizon(::A0ZeroRestriction) = 0
+_restriction_horizon(::AplusZeroRestriction) = 0
+_restriction_horizon(r::SignRestriction) = r.horizon
+_restriction_horizon(r::ElasticityBound) = r.horizon
+_restriction_horizon(r::MagnitudeBound) = r.horizon
+_restriction_horizon(r::FEVDShareRestriction) = r.horizon
+_restriction_horizon(r::CumulativeRestriction) = last(r.horizons)
+_restriction_horizon(::AbstractSVARRestriction) = 0
+
+_aplus_row(lag::Int, variable::Int, n::Int) = lag <= 0 ? 1 : 1 + (lag - 1) * n + variable
+_aplus_row(r::AplusZeroRestriction, n::Int) = _aplus_row(r.lag, r.variable, n)
+_aplus_row(r::AplusSignRestriction, n::Int) = _aplus_row(r.lag, r.variable, n)
+
+function _C1_from_B(B::AbstractMatrix{T}, n::Int, p::Int) where {T<:AbstractFloat}
+    A_sum = sum(extract_ar_coefficients(B, n, p))
+    robust_inv(Matrix{T}(I(n) - A_sum); silent=true)
 end
 
 """
@@ -174,21 +405,108 @@ end
 
 # --- Restriction Checking ---
 
-"""Check if all zero restrictions are satisfied."""
-_check_zero_restrictions(irf::Array{T,3}, r::SVARRestrictions; tol::T=T(1e-10)) where {T} =
-    all(abs(irf[zr.horizon + 1, zr.variable, zr.shock]) <= tol for zr in r.zeros)
+"""
+    check(r, irf, A0, Aplus, fevd) -> Bool
 
-"""Check if all sign restrictions are satisfied."""
+Rejection test for restriction `r`. Linear zeros are enforced as null-space rows
+on `Q` rather than here. Narrative types are SID-15 hooks and currently return
+`true`.
+"""
+check(::AbstractSVARRestriction, irf, A0, Aplus, fevd) = true
+
+function check(r::SignRestriction, irf, A0, Aplus, fevd)
+    val = irf[r.horizon + 1, r.variable, r.shock]
+    r.sign > 0 ? val > 0 : val < 0
+end
+
+function check(r::A0SignRestriction, irf, A0, Aplus, fevd)
+    A0 === nothing && return false
+    val = A0[r.variable, r.shock]
+    r.sign > 0 ? val > 0 : val < 0
+end
+
+function check(r::AplusSignRestriction, irf, A0, Aplus, fevd)
+    Aplus === nothing && return false
+    n = size(Aplus, 2)
+    val = Aplus[_aplus_row(r, n), r.shock]
+    r.sign > 0 ? val > 0 : val < 0
+end
+
+function check(r::ElasticityBound, irf, A0, Aplus, fevd)
+    T = eltype(irf)
+    num = irf[r.horizon + 1, r.numerator_var, r.shock]
+    den = irf[r.horizon + 1, r.denominator_var, r.shock]
+    abs(den) <= eps(T) && return false
+    e = num / den
+    T(r.lower) <= e <= T(r.upper)
+end
+
+function check(r::MagnitudeBound, irf, A0, Aplus, fevd)
+    T = eltype(irf)
+    val = irf[r.horizon + 1, r.variable, r.shock]
+    T(r.lower) <= val <= T(r.upper)
+end
+
+function check(r::FEVDShareRestriction, irf, A0, Aplus, fevd)
+    fevd === nothing && return false
+    T = eltype(irf)
+    share = fevd[r.variable, r.shock, r.horizon + 1]
+    T(r.lower) <= share <= T(r.upper)
+end
+
+function check(r::CumulativeRestriction, irf, A0, Aplus, fevd)
+    s = zero(eltype(irf))
+    @inbounds for h in r.horizons
+        s += irf[h + 1, r.variable, r.shock]
+    end
+    r.sign > 0 ? s > 0 : s < 0
+end
+
+"""Check finite-horizon IRF zeros (long-run / A0 / A+ zeros are enforced in the null space)."""
+_check_zero_restrictions(irf::Array{T,3}, r::SVARRestrictions; tol::T=T(1e-10)) where {T} =
+    all(r.zeros) do zr
+        zr isa ZeroRestriction || return true
+        abs(irf[zr.horizon + 1, zr.variable, zr.shock]) <= tol
+    end
+
+"""Check IRF sign restrictions only (pure-sign containers)."""
 _check_sign_restrictions(irf::Array{T,3}, r::SVARRestrictions) where {T} =
-    all(sr.sign > 0 ? irf[sr.horizon + 1, sr.variable, sr.shock] > 0 :
-                      irf[sr.horizon + 1, sr.variable, sr.shock] < 0 for sr in r.signs)
+    all(r.signs) do sr
+        sr isa SignRestriction || return true
+        sr.sign > 0 ? irf[sr.horizon + 1, sr.variable, sr.shock] > 0 :
+                      irf[sr.horizon + 1, sr.variable, sr.shock] < 0
+    end
+
+_check_rejections(r::SVARRestrictions, irf, A0, Aplus, fevd) =
+    all(sr -> check(sr, irf, A0, Aplus, fevd), r.signs)
+
+"""
+    sign_check(r::SVARRestrictions) -> Function
+
+Return `irf -> Bool` for `identify_sign`, SDFM, and counterfactuals. Computes FEVD
+only when an FEVD-share restriction is present. A0/A+ sign checks need structural
+matrices and are evaluated in `identify_arias`.
+"""
+function sign_check(r::SVARRestrictions)
+    has_fevd = any(s -> s isa FEVDShareRestriction, r.signs)
+    function (irf)
+        fevd = nothing
+        if has_fevd
+            fevd = _compute_fevd(irf, size(irf, 2), size(irf, 1))[2]
+        end
+        _check_rejections(r, irf, nothing, nothing, fevd)
+    end
+end
 
 # --- Zero Restriction Algorithm ---
 
 """Build constraint matrix for zero restrictions on shock j."""
-_build_zero_constraint_matrix(r::SVARRestrictions, shock::Int, Phi::Vector{Matrix{T}},
-                               L::LowerTriangular{T,Matrix{T}}) where {T} =
-    [Vector{T}((Phi[zr.horizon + 1] * L)[zr.variable, :]) for zr in r.zeros if zr.shock == shock]
+function _build_zero_constraint_matrix(r::SVARRestrictions, shock::Int, Phi::Vector{Matrix{T}},
+                                       L::LowerTriangular{T,Matrix{T}};
+                                       B=nothing, C1=nothing) where {T<:AbstractFloat}
+    ZF = _compute_ZF(r, Phi, L, shock; B=B, C1=C1)
+    [Vector{T}(ZF[i, :]) for i in axes(ZF, 1)]
+end
 
 """Draw unit vector from null space of constraints."""
 function _draw_null_space_vector(constraints::Vector{Vector{T}}, n::Int; rng::AbstractRNG=Random.default_rng()) where {T<:AbstractFloat}
@@ -211,11 +529,12 @@ end
 """Draw orthogonal Q satisfying zero restrictions (Algorithm 2, Arias et al. 2018)."""
 function _draw_Q_with_zero_restrictions(r::SVARRestrictions, Phi::Vector{Matrix{T}},
                                          L::LowerTriangular{T,Matrix{T}};
-                                         rng::AbstractRNG=Random.default_rng()) where {T<:AbstractFloat}
+                                         rng::AbstractRNG=Random.default_rng(),
+                                         B=nothing, C1=nothing) where {T<:AbstractFloat}
     n = r.n_vars
     Q = zeros(T, n, n)
     for j in 1:n
-        zero_constraints = _build_zero_constraint_matrix(r, j, Phi, L)
+        zero_constraints = _build_zero_constraint_matrix(r, j, Phi, L; B=B, C1=C1)
         ortho_constraints = [Vector{T}(Q[:, k]) for k in 1:j-1]
         Q[:, j] = _draw_null_space_vector(vcat(zero_constraints, ortho_constraints), n; rng=rng)
     end
@@ -317,16 +636,48 @@ end
 
 # --- Sphere Coordinate Mappings ---
 
-"""Compute zero-restriction constraint rows for shock j."""
+"""Compute zero-restriction constraint rows for shock j.
+
+Finite-horizon zeros use ``e_v' Φ_h L``. Long-run zeros use ``e_v' C(1) L``
+with ``C(1) = (I - \\sum A_i)^{-1}``. ``A_0`` zeros use ``e_v' L^{-1}``
+(``A_0 = L^{-T} Q``). ``A_+`` zeros use the corresponding row of ``B L^{-T}``.
+"""
 function _compute_ZF(restrictions::SVARRestrictions, Phi::Vector{<:AbstractMatrix},
-                     L::LowerTriangular, shock_j::Int)
+                     L::LowerTriangular, shock_j::Int;
+                     B::Union{Nothing,AbstractMatrix}=nothing,
+                     C1::Union{Nothing,AbstractMatrix}=nothing)
     T = eltype(L)
+    n = size(L, 1)
     rows = Vector{Vector{T}}()
+    C1_local = C1
+    LinvT = nothing
     for zr in restrictions.zeros
         zr.shock == shock_j || continue
-        push!(rows, Vector{T}((Phi[zr.horizon + 1] * L)[zr.variable, :]))
+        if zr isa ZeroRestriction
+            push!(rows, Vector{T}((Phi[zr.horizon + 1] * L)[zr.variable, :]))
+        elseif zr isa LongRunZeroRestriction
+            if C1_local === nothing
+                B === nothing && error("long-run zero restrictions require the reduced-form B")
+                p = (size(B, 1) - 1) ÷ n
+                C1_local = _C1_from_B(B, n, p)
+            end
+            push!(rows, Vector{T}((C1_local * L)[zr.variable, :]))
+        elseif zr isa A0ZeroRestriction
+            e = zeros(T, n)
+            e[zr.variable] = one(T)
+            push!(rows, Vector{T}(L \ e))
+        elseif zr isa AplusZeroRestriction
+            B === nothing && error("A+ zero restrictions require the reduced-form B")
+            if LinvT === nothing
+                LinvT = Matrix{T}(L' \ I(n))
+            end
+            row_idx = _aplus_row(zr, n)
+            (1 <= row_idx <= size(B, 1)) || throw(ArgumentError(
+                "A+ restriction lag=$(zr.lag) equation=$(zr.variable) is outside B ($(size(B, 1)) rows)"))
+            push!(rows, Vector{T}((B * LinvT)[row_idx, :]))
+        end
     end
-    isempty(rows) ? zeros(T, 0, size(L, 1)) : reduce(vcat, [r' for r in rows])
+    isempty(rows) ? zeros(T, 0, n) : reduce(vcat, [rw' for rw in rows])
 end
 
 """
@@ -336,14 +687,15 @@ Used to fix the sign convention across finite-difference perturbations.
 """
 function _compute_qr_signs(Q::AbstractMatrix{T}, setup::_AriasSVARSetup,
                            restrictions::SVARRestrictions,
-                           Phi::Vector{<:AbstractMatrix}, L::LowerTriangular) where {T}
+                           Phi::Vector{<:AbstractMatrix}, L::LowerTriangular;
+                           B=nothing, C1=nothing) where {T}
     n = size(Q, 1)
     signs = Vector{Vector{Int}}(undef, n)
 
     for j in 1:n
         parts = Matrix{T}[]
         j > 1 && push!(parts, Matrix{T}(Q[:, 1:j-1]'))
-        ZF_j = _compute_ZF(restrictions, Phi, L, j)
+        ZF_j = _compute_ZF(restrictions, Phi, L, j; B=B, C1=C1)
         size(ZF_j, 1) > 0 && push!(parts, Matrix{T}(ZF_j))
         push!(parts, Matrix{T}(setup.W[j]))
 
@@ -364,7 +716,8 @@ QR sign correction that cause unreliable finite-difference Jacobians.
 """
 function _Q_to_spheres(Q::AbstractMatrix, setup::_AriasSVARSetup, restrictions::SVARRestrictions,
                        Phi::Vector{<:AbstractMatrix}, L::LowerTriangular;
-                       ref_signs::Union{Nothing, Vector{Vector{Int}}}=nothing)
+                       ref_signs::Union{Nothing, Vector{Vector{Int}}}=nothing,
+                       B=nothing, C1=nothing)
     T = eltype(Q)
     n = size(Q, 1)
     w_parts = Vector{Vector{T}}()
@@ -376,7 +729,7 @@ function _Q_to_spheres(Q::AbstractMatrix, setup::_AriasSVARSetup, restrictions::
         # Build M_j: stack [Q[:,1:j-1]'; ZF_j; W_j]
         parts = Matrix{T}[]
         j > 1 && push!(parts, Matrix{T}(Q[:, 1:j-1]'))
-        ZF_j = _compute_ZF(restrictions, Phi, L, j)
+        ZF_j = _compute_ZF(restrictions, Phi, L, j; B=B, C1=C1)
         size(ZF_j, 1) > 0 && push!(parts, Matrix{T}(ZF_j))
         push!(parts, Matrix{T}(setup.W[j]))
 
@@ -407,7 +760,8 @@ end
 
 """Convert sphere coordinates w back to orthogonal matrix Q."""
 function _spheres_to_Q(w::AbstractVector{T}, setup::_AriasSVARSetup, restrictions::SVARRestrictions,
-                       Phi::Vector{<:AbstractMatrix}, L::LowerTriangular) where {T}
+                       Phi::Vector{<:AbstractMatrix}, L::LowerTriangular;
+                       B=nothing, C1=nothing) where {T}
     n = length(setup.sphere_dims)
     Q = zeros(T, n, n)
     offset = 0
@@ -424,7 +778,7 @@ function _spheres_to_Q(w::AbstractVector{T}, setup::_AriasSVARSetup, restriction
         # Build same M_j as in _Q_to_spheres
         parts = Matrix{T}[]
         j > 1 && push!(parts, Matrix{T}(Q[:, 1:j-1]'))
-        ZF_j = _compute_ZF(restrictions, Phi, L, j)
+        ZF_j = _compute_ZF(restrictions, Phi, L, j; B=B, C1=C1)
         size(ZF_j, 1) > 0 && push!(parts, Matrix{T}(ZF_j))
         push!(parts, Matrix{T}(setup.W[j]))
 
@@ -480,12 +834,12 @@ function _build_ff_h(setup::_AriasSVARSetup{T}, restrictions::SVARRestrictions,
 
         if first_call[]
             # Record the sign pattern at the reference point
-            ref_signs_storage[] = _compute_qr_signs(Q_rf, setup, restrictions, Phi_rf, L_rf)
+            ref_signs_storage[] = _compute_qr_signs(Q_rf, setup, restrictions, Phi_rf, L_rf; B=B_rf)
             first_call[] = false
         end
 
         w_rf = _Q_to_spheres(Q_rf, setup, restrictions, Phi_rf, L_rf;
-                              ref_signs=ref_signs_storage[])
+                              ref_signs=ref_signs_storage[], B=B_rf)
 
         vcat(vec(B_rf), _vech(Sigma_rf), w_rf)
     end
@@ -511,19 +865,35 @@ function _build_zero_restrictions_fn(restrictions::SVARRestrictions, n::Int, m::
 
     function zero_fn(x::AbstractVector)
         A0, Aplus = _unpack_structural(x, n, m)
-        A0_inv = robust_inv(Matrix{T}(A0))
-        B_rf = Matrix{T}(Aplus) * A0_inv
+        A0m = Matrix{T}(A0)
+        Aplusm = Matrix{T}(Aplus)
+        A0_inv = robust_inv(A0m)
+        B_rf = Aplusm * A0_inv
 
-        Phi = ma_coefficients(B_rf, n, p, max_h + 1)
+        Phi = ma_coefficients(B_rf, n, p, max(max_h + 1, 1))
 
         vals = Vector{T}(undef, length(restrictions.zeros))
         for (idx, zr) in enumerate(restrictions.zeros)
-            vals[idx] = (Phi[zr.horizon + 1] * A0_inv)[zr.variable, zr.shock]
+            vals[idx] = _zero_residual(zr, Phi, A0m, Aplusm, A0_inv, B_rf, n, p)
         end
         vals
     end
     zero_fn
 end
+
+_zero_residual(zr::ZeroRestriction, Phi, A0, Aplus, A0_inv, B_rf, n, p) =
+    (Phi[zr.horizon + 1] * A0_inv)[zr.variable, zr.shock]
+
+function _zero_residual(zr::LongRunZeroRestriction, Phi, A0, Aplus, A0_inv, B_rf, n, p)
+    C1 = _C1_from_B(B_rf, n, p)
+    (C1 * A0_inv)[zr.variable, zr.shock]
+end
+
+_zero_residual(zr::A0ZeroRestriction, Phi, A0, Aplus, A0_inv, B_rf, n, p) =
+    A0[zr.variable, zr.shock]
+
+_zero_residual(zr::AplusZeroRestriction, Phi, A0, Aplus, A0_inv, B_rf, n, p) =
+    Aplus[_aplus_row(zr, n), zr.shock]
 
 # --- Importance Weights (Proposition 4, Arias et al. 2018) ---
 
@@ -550,7 +920,7 @@ function _compute_importance_weight(Q::Matrix{T}, model::VARModel{T},
     A0, Aplus = _rf_to_struct(model.B, L, Q)
     structpara = _pack_structural(A0, Aplus)
 
-    max_h = isempty(restrictions.zeros) ? 0 : maximum(zr.horizon for zr in restrictions.zeros)
+    max_h = isempty(restrictions.zeros) ? 0 : maximum(_restriction_horizon(zr) for zr in restrictions.zeros)
 
     # Analytical numerator: log|v_e(f_h)|
     # From Proposition 4: n(n+1)/2 * log(2) - (2n + m + 1) * log|det(A0)|
@@ -613,12 +983,16 @@ function identify_arias(model::VARModel{T}, restrictions::SVARRestrictions, hori
     @assert restrictions.n_vars == n "Restriction dimension must match model"
 
     max_h = max(horizon,
-        isempty(restrictions.zeros) ? 0 : maximum(zr.horizon for zr in restrictions.zeros) + 1,
-        isempty(restrictions.signs) ? 0 : maximum(sr.horizon for sr in restrictions.signs) + 1)
+        isempty(restrictions.zeros) ? 0 : maximum(_restriction_horizon(zr) for zr in restrictions.zeros) + 1,
+        isempty(restrictions.signs) ? 0 : maximum(_restriction_horizon(sr) for sr in restrictions.signs) + 1)
 
     Phi, L = _compute_ma_coefficients(model, max_h), safe_cholesky(model.Sigma)
     Q_draws, irf_draws, weights = Matrix{T}[], Array{T,3}[], T[]
     has_zeros = !isempty(restrictions.zeros)
+    has_fevd = any(s -> s isa FEVDShareRestriction, restrictions.signs)
+    needs_struct = any(s -> s isa Union{A0SignRestriction, AplusSignRestriction}, restrictions.signs)
+    C1 = any(z -> z isa LongRunZeroRestriction, restrictions.zeros) ?
+         first(_long_run_multiplier(model.B, model.Sigma, n, model.p)) : nothing
     n_attempts = 0
     n_degenerate = 0
     last_err = nothing
@@ -633,13 +1007,22 @@ function identify_arias(model::VARModel{T}, restrictions::SVARRestrictions, hori
         n_attempts += 1
         try
             if has_zeros
-                Q = _draw_Q_with_zero_restrictions(restrictions, Phi, L; rng=rng)
+                Q = _draw_Q_with_zero_restrictions(restrictions, Phi, L; rng=rng,
+                                                   B=model.B, C1=C1)
             else
                 Q = haar_orthogonal(n, T; rng=rng)
             end
             irf_full = _compute_irf_for_Q(model, Q, Phi, L, max_h)
+            A0 = Aplus = nothing
+            fevd_props = nothing
+            if needs_struct
+                A0, Aplus = _rf_to_struct(model.B, L, Q)
+            end
+            if has_fevd
+                fevd_props = _compute_fevd(irf_full, n, size(irf_full, 1))[2]
+            end
             (has_zeros && !_check_zero_restrictions(irf_full, restrictions)) && continue
-            !_check_sign_restrictions(irf_full, restrictions) && continue
+            !_check_rejections(restrictions, irf_full, A0, Aplus, fevd_props) && continue
             irf = irf_full[1:horizon, :, :]
 
             w = if has_zeros && compute_weights
@@ -840,19 +1223,94 @@ end
 
 # --- Convenience Functions ---
 
-"""Create zero restriction: variable doesn't respond to shock at horizon."""
-function zero_restriction(variable::Int, shock::Int; horizon::Int=0)
-    horizon >= 0 || throw(ArgumentError("restriction horizon must be ≥ 0"))
-    ZeroRestriction(variable, shock, horizon)
+"""Create zero restriction: variable doesn't respond to shock at horizon.
+
+Pass `horizon=:long_run` for a Blanchard–Quah long-run zero (``e_v' C(1) L q_s = 0``).
+"""
+function zero_restriction(variable::Int, shock::Int; horizon::Union{Int,Symbol}=0)
+    if horizon === :long_run
+        return LongRunZeroRestriction(variable, shock)
+    end
+    horizon isa Integer || throw(ArgumentError("horizon must be ≥ 0 or :long_run"))
+    h = Int(horizon)
+    h >= 0 || throw(ArgumentError("restriction horizon must be ≥ 0"))
+    ZeroRestriction(variable, shock, h)
 end
 
-"""Create sign restriction: variable response has given sign (:positive/:negative) at horizon."""
-function sign_restriction(variable::Int, shock::Int, sign::Symbol; horizon::Int=0)
+"""Create sign restriction: variable response has given sign (`:positive`/`:negative`).
+
+`horizons::UnitRange` expands to `length(horizons)` `SignRestriction`s.
+"""
+function sign_restriction(variable::Int, shock::Int, sign::Symbol;
+                          horizon::Int=0,
+                          horizons::Union{Nothing,AbstractUnitRange{<:Integer}}=nothing)
+    s = _parse_sign(sign)
+    if horizons !== nothing
+        _check_horizon_range(horizons)
+        return [SignRestriction(variable, shock, Int(h), s) for h in horizons]
+    end
     horizon >= 0 || throw(ArgumentError("restriction horizon must be ≥ 0"))
-    s = sign === :positive ? 1 : sign === :negative ? -1 :
-        throw(ArgumentError("sign must be :positive or :negative"))
     SignRestriction(variable, shock, horizon, s)
 end
+
+"""Zero restriction on ``A_0[equation, shock]``."""
+a0_zero_restriction(equation::Int, shock::Int) = A0ZeroRestriction(equation, shock)
+
+"""Sign restriction on ``A_0[equation, shock]``."""
+a0_sign_restriction(equation::Int, shock::Int, sign::Symbol) =
+    A0SignRestriction(equation, shock, _parse_sign(sign))
+
+"""Zero restriction on the `lag`-th block of ``A_+`` (`lag=0` is the intercept)."""
+function aplus_zero_restriction(equation::Int, shock::Int; lag::Int=1)
+    lag >= 0 || throw(ArgumentError("A+ lag must be ≥ 0"))
+    AplusZeroRestriction(equation, shock, lag)
+end
+
+"""Sign restriction on the `lag`-th block of ``A_+``."""
+function aplus_sign_restriction(equation::Int, shock::Int, sign::Symbol; lag::Int=1)
+    lag >= 0 || throw(ArgumentError("A+ lag must be ≥ 0"))
+    AplusSignRestriction(equation, shock, lag, _parse_sign(sign))
+end
+
+"""Kilian–Murphy elasticity bound ``\\mathrm{IRF}_{num}/\\mathrm{IRF}_{den} \\in [\\mathrm{lower}, \\mathrm{upper}]``."""
+function elasticity_bound(numerator_var::Int, denominator_var::Int, shock::Int;
+                          horizon::Int=0, lower::Real, upper::Real)
+    horizon >= 0 || throw(ArgumentError("restriction horizon must be ≥ 0"))
+    _check_finite_bounds(lower, upper)
+    ElasticityBound(numerator_var, denominator_var, shock, horizon, Float64(lower), Float64(upper))
+end
+
+"""Magnitude bound on an IRF entry."""
+function magnitude_bound(variable::Int, shock::Int; horizon::Int=0, lower::Real, upper::Real)
+    horizon >= 0 || throw(ArgumentError("restriction horizon must be ≥ 0"))
+    _check_finite_bounds(lower, upper)
+    MagnitudeBound(variable, shock, horizon, Float64(lower), Float64(upper))
+end
+
+"""FEVD-share restriction: shock's contribution to MSE of `variable` at `horizon`."""
+function fevd_share_restriction(variable::Int, shock::Int;
+                                horizon::Int=0, lower::Real, upper::Real)
+    horizon >= 0 || throw(ArgumentError("restriction horizon must be ≥ 0"))
+    _check_finite_bounds(lower, upper)
+    (0 <= lower && upper <= 1) ||
+        throw(ArgumentError("FEVD share bounds must lie in [0, 1]"))
+    FEVDShareRestriction(variable, shock, horizon, Float64(lower), Float64(upper))
+end
+
+"""Cumulative IRF sign restriction over `horizons`."""
+function cumulative_restriction(variable::Int, shock::Int, sign::Symbol;
+                                horizons::AbstractUnitRange{<:Integer})
+    _check_horizon_range(horizons)
+    CumulativeRestriction(variable, shock, UnitRange{Int}(horizons), _parse_sign(sign))
+end
+
+"""Narrative shock-sign restriction (SID-15 hook)."""
+narrative_shock_restriction(shock::Int, dates, sign::Symbol) =
+    NarrativeShockRestriction(shock, collect(Int, dates), _parse_sign(sign))
+
+"""Narrative contribution restriction (SID-15 hook)."""
+narrative_contribution_restriction(variable::Int, shock::Int, window::AbstractUnitRange{<:Integer}) =
+    NarrativeContributionRestriction(variable, shock, UnitRange{Int}(window))
 
 """Compute weighted IRF percentiles from AriasSVARResult."""
 function irf_percentiles(result::AriasSVARResult{T}; quantiles::Vector{Float64}=[0.16, 0.5, 0.84]) where {T}

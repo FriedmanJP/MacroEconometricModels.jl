@@ -1641,4 +1641,190 @@ end
     @test p isa PlotOutput
 end
 
+@testset "SID-14 typed restriction language" begin
+    Random.seed!(743)
+
+    @testset "horizons expansion and constructors" begin
+        srs = sign_restriction(1, 2, :positive; horizons=0:3)
+        @test srs isa Vector
+        @test length(srs) == 4
+        @test all(s -> s isa SignRestriction, srs)
+        @test [s.horizon for s in srs] == collect(0:3)
+        @test all(s -> s.variable == 1 && s.shock == 2 && s.sign == 1, srs)
+
+        r = SVARRestrictions(3; signs=[sign_restriction(1, 1, :negative; horizons=0:2)])
+        @test length(r.signs) == 3
+        @test all(s -> s isa SignRestriction && s.sign == -1, r.signs)
+
+        zr = zero_restriction(1, 2; horizon=:long_run)
+        @test zr isa LongRunZeroRestriction
+        @test zr.variable == 1 && zr.shock == 2
+        @test is_linear_zero(zr)
+        @test is_linear_zero(zero_restriction(1, 1))
+        @test !is_linear_zero(sign_restriction(1, 1, :positive))
+
+        @test a0_zero_restriction(2, 1) isa A0ZeroRestriction
+        @test is_linear_zero(a0_zero_restriction(2, 1))
+        @test is_linear_zero(aplus_zero_restriction(1, 1; lag=1))
+        @test !is_linear_zero(elasticity_bound(1, 2, 1; lower=0.0, upper=1.0))
+        @test !is_linear_zero(magnitude_bound(1, 1; lower=-1.0, upper=1.0))
+        @test !is_linear_zero(fevd_share_restriction(1, 1; horizon=4, lower=0.2, upper=1.0))
+        @test !is_linear_zero(cumulative_restriction(1, 1, :positive; horizons=0:4))
+        @test !is_linear_zero(narrative_shock_restriction(1, [2, 5], :negative))
+        @test !is_linear_zero(narrative_contribution_restriction(1, 1, 2:4))
+
+        @test_throws ArgumentError sign_restriction(1, 1, :positive; horizons=-1:2)
+        @test_throws ArgumentError elasticity_bound(1, 2, 1; lower=1.0, upper=0.5)
+        @test_throws ArgumentError elasticity_bound(1, 2, 1; lower=NaN, upper=1.0)
+        @test_throws ArgumentError magnitude_bound(1, 1; lower=-Inf, upper=1.0)
+        @test_throws ArgumentError fevd_share_restriction(1, 1; lower=-0.1, upper=0.5)
+        @test_throws ArgumentError fevd_share_restriction(1, 1; lower=0.0, upper=1.5)
+        @test_throws ArgumentError SVARRestrictions(2; zeros=[zero_restriction(3, 1; horizon=:long_run)])
+        @test_throws ArgumentError SVARRestrictions(2; signs=[elasticity_bound(1, 2, 1; lower=2.0, upper=1.0)])
+    end
+
+    @testset "sign_check matches _check_sign_restrictions for pure signs" begin
+        n, H = 2, 6
+        irf = zeros(H, n, n)
+        irf[1, 1, 1] = 1.2
+        irf[1, 2, 1] = -0.4
+        irf[2, 1, 1] = 0.8
+        r = SVARRestrictions(n; signs=[
+            sign_restriction(1, 1, :positive),
+            sign_restriction(2, 1, :negative),
+            sign_restriction(1, 1, :positive; horizon=1),
+        ])
+        chk = sign_check(r)
+        @test chk(irf) == MacroEconometricModels._check_sign_restrictions(irf, r)
+        @test chk(irf)
+        irf[1, 1, 1] = -0.1
+        @test chk(irf) == MacroEconometricModels._check_sign_restrictions(irf, r)
+        @test !chk(irf)
+    end
+
+    @testset "Blanchard-Quah as n(n-1)/2 long-run zeros + impact signs" begin
+        T_obs, n, p = 250, 2, 1
+        Y = zeros(T_obs, n)
+        for t in 2:T_obs
+            Y[t, :] = 0.4 .* Y[t-1, :] + randn(n)
+        end
+        model = estimate_var(Y, p)
+        # Arias-feasible BQ: shock 1 is transitory for variable 1 (n(n-1)/2 = 1 zero).
+        r = SVARRestrictions(n;
+            zeros=[zero_restriction(1, 1; horizon=:long_run)],
+            signs=[sign_restriction(1, 1, :positive),
+                   sign_restriction(2, 2, :positive)])
+        result = identify_arias(model, r, 8; n_draws=FAST ? 8 : 20, n_rotations=200,
+                                rng=MersenneTwister(743))
+        @test length(result.Q_draws) >= 1
+        Q0 = result.Q_draws[1]
+        for Q in result.Q_draws
+            @test norm(Q' * Q - I(n)) < 1e-8
+            for j in 1:n
+                @test Q[:, j] ≈ Q0[:, j] atol=1e-8
+            end
+        end
+        L = MacroEconometricModels.safe_cholesky(model.Sigma)
+        C1 = MacroEconometricModels._long_run_multiplier(model.B, model.Sigma, n, p)[1]
+        C1Q = C1 * L * Q0
+        @test abs(C1Q[1, 1]) < 1e-6
+        Q_bq = identify_long_run(model)
+        C1_bq = C1 * L * Q_bq
+        @test abs(C1_bq[1, 2]) < 1e-6
+        # Same triangular long-run structure up to column permutation / sign.
+        matched = false
+        for perm in ([1, 2], [2, 1])
+            Qp = Q0[:, perm]
+            for s1 in (1.0, -1.0), s2 in (1.0, -1.0)
+                Qs = hcat(s1 * Qp[:, 1], s2 * Qp[:, 2])
+                if Qs ≈ Q_bq atol=1e-5
+                    matched = true
+                end
+            end
+        end
+        @test matched
+    end
+
+    @testset "elasticity bound shrinks irf_bounds vs signs alone" begin
+        Y = randn(MersenneTwister(7432), 180, 2)
+        m = estimate_var(Y, 1)
+        r_s = SVARRestrictions(2; signs=[
+            sign_restriction(1, 1, :positive),
+            sign_restriction(2, 1, :positive)])
+        s_s = identify_sign(m, 6, sign_check(r_s); store_all=true,
+                            max_draws=FAST ? 250 : 600, rng=MersenneTwister(7433))
+        @test s_s.n_accepted > 8
+        elas = [s_s.irf_draws[i, 1, 1, 1] / s_s.irf_draws[i, 1, 2, 1] for i in 1:s_s.n_accepted]
+        mid = median(elas)
+        lo_e, hi_e = mid - 0.15, mid + 0.15
+        r_e = SVARRestrictions(2; signs=[
+            sign_restriction(1, 1, :positive),
+            sign_restriction(2, 1, :positive),
+            elasticity_bound(1, 2, 1; horizon=0, lower=lo_e, upper=hi_e)])
+        keep = [sign_check(r_e)(s_s.irf_draws[i, :, :, :]) for i in 1:s_s.n_accepted]
+        n_keep = count(keep)
+        @test 0 < n_keep < s_s.n_accepted
+        idx = findall(keep)
+        irf_e = s_s.irf_draws[idx, :, :, :]
+        s_e = SignIdentifiedSet{Float64}(s_s.Q_draws[idx], irf_e, n_keep, s_s.n_total,
+                                         n_keep / s_s.n_total, s_s.variables, s_s.shocks)
+        lo_s, hi_s = irf_bounds(s_s)
+        lo_b, hi_b = irf_bounds(s_e)
+        @test all((hi_b .- lo_b) .<= (hi_s .- lo_s) .+ 1e-12)
+        @test any((hi_b .- lo_b) .< (hi_s .- lo_s) .- 1e-8)
+    end
+
+    @testset "A0 zeros, FEVD/cumulative/magnitude rejection, show" begin
+        Y = randn(MersenneTwister(7434), 160, 2)
+        m = estimate_var(Y, 1)
+        r_a0 = SVARRestrictions(2;
+            zeros=[a0_zero_restriction(2, 1)],
+            signs=[sign_restriction(1, 1, :positive)])
+        a0res = identify_arias(m, r_a0, 4; n_draws=FAST ? 4 : 8, n_rotations=300,
+                               rng=MersenneTwister(7434))
+        L = MacroEconometricModels.safe_cholesky(m.Sigma)
+        for Q in a0res.Q_draws
+            A0, _ = MacroEconometricModels._rf_to_struct(m.B, L, Q)
+            @test abs(A0[2, 1]) < 1e-8
+        end
+
+        irf = zeros(5, 2, 2)
+        irf[1, 1, 1] = 0.4
+        irf[1, 2, 1] = 0.2
+        irf[2, 1, 1] = 0.3
+        irf[3, 1, 1] = 0.1
+        @test MacroEconometricModels.check(magnitude_bound(1, 1; lower=0.0, upper=0.5),
+                                           irf, nothing, nothing, nothing)
+        @test !MacroEconometricModels.check(magnitude_bound(1, 1; lower=0.0, upper=0.2),
+                                            irf, nothing, nothing, nothing)
+        @test MacroEconometricModels.check(cumulative_restriction(1, 1, :positive; horizons=0:2),
+                                           irf, nothing, nothing, nothing)
+        fevd = MacroEconometricModels._compute_fevd(irf, 2, 5)[2]
+        @test MacroEconometricModels.check(fevd_share_restriction(1, 1; horizon=0, lower=0.5, upper=1.0),
+                                           irf, nothing, nothing, fevd)
+        @test MacroEconometricModels.check(narrative_shock_restriction(1, [1], :positive),
+                                           irf, nothing, nothing, nothing)
+
+        rshow = SVARRestrictions(2;
+            zeros=[zero_restriction(1, 2; horizon=:long_run), a0_zero_restriction(2, 1)],
+            signs=[sign_restriction(1, 1, :positive; horizons=0:1),
+                   elasticity_bound(1, 2, 1; lower=0.1, upper=2.0)])
+        shown = sprint(show, rshow)
+        @test occursin("SVAR Restrictions", shown)
+        @test occursin("long run", lowercase(shown))
+        @test occursin("positively", lowercase(shown))
+        @test occursin("elasticity", lowercase(shown))
+    end
+
+    @testset "SID-08 guard on long-run zeros" begin
+        Random.seed!(7435)
+        trend = cumsum(randn(200))
+        Yc = [trend .+ 0.3 .* randn(200)  trend .+ 0.3 .* randn(200)]
+        vecm = estimate_vecm(Yc, 2; rank=1)
+        r = SVARRestrictions(2; zeros=[zero_restriction(1, 1; horizon=:long_run)])
+        @test_throws IdentificationError identify_arias(to_var(vecm), r, 4;
+                                                       n_draws=1, n_rotations=5)
+    end
+end
+
 _tprint("Arias et al. (2018) tests completed.")

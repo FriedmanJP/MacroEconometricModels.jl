@@ -319,6 +319,34 @@ end
 # Long-Run Restrictions (Blanchard-Quah)
 # =============================================================================
 
+"""Long-run multiplier ``C(1) = (I - \\sum A_i)^{-1}`` and the BQ rotation `Q`.
+
+Throws [`IdentificationError`](@ref) when ``Q`` would be non-orthogonal (SID-08).
+"""
+function _long_run_multiplier(B::AbstractMatrix{T}, Sigma::AbstractMatrix{T},
+                              n::Int, p::Int) where {T<:AbstractFloat}
+    A_sum = sum(extract_ar_coefficients(B, n, p))
+    M = Matrix{T}(I(n) - A_sum)
+    cM = cond(M)
+    C1 = robust_inv(M; silent=true)
+    V_LR = C1 * Sigma * C1'
+    D = Matrix(safe_cholesky(V_LR))
+    @inbounds for j in 1:n
+        D[j, j] < zero(T) && (@views D[:, j] .*= -one(T))
+    end
+    P = M * D
+    Q = Matrix(safe_cholesky(Sigma) \ P)
+    ortho = norm(Q' * Q - I(n))
+    if ortho >= T(1e-8)
+        throw(IdentificationError(
+            "identify_long_run: (I − ΣAᵢ) is singular or Q is not orthogonal " *
+            "(cond=$(cM), ‖Q'Q−I‖=$ortho). Use a structural VECM (identify_svec) " *
+            "or difference the data."))
+    end
+    cM > one(T) / sqrt(eps(T)) && @warn "identify_long_run: (I − ΣAᵢ) is near-singular (cond ≈ $(cM)); the VAR is near a unit root, so the long-run impact matrix is numerically unstable." maxlog = 1
+    C1, Q
+end
+
 """
 Identify via long-run restrictions (Blanchard–Quah): the long-run cumulative impact matrix is
 lower triangular. Shocks are sign-normalized so each permanent shock has a non-negative long-run
@@ -328,27 +356,7 @@ reference `iresponse_longrun.m` normalizes only the impact sign of the first sho
 """
 function identify_long_run(model::VARModel{T}) where {T<:AbstractFloat}
     n, p = nvars(model), model.p
-    A_sum = sum(extract_ar_coefficients(model.B, n, p))
-    M = Matrix{T}(I(n) - A_sum)
-    cM = cond(M)
-    inv_lag = robust_inv(M; silent=true)
-    V_LR = inv_lag * model.Sigma * inv_lag'
-    D = Matrix(safe_cholesky(V_LR))   # lower-triangular; D == long-run cumulative impact matrix
-    # Sign-normalize: long-run own-effect (diag of D) non-negative for every shock.
-    @inbounds for j in 1:n
-        D[j, j] < zero(T) && (@views D[:, j] .*= -one(T))
-    end
-    P = M * D
-    Q = Matrix(safe_cholesky(model.Sigma) \ P)  # L⁻¹P via triangular backsolve
-    ortho = norm(Q' * Q - I(n))
-    # Warn (not throw) when cond(I−ΣAᵢ) is large but Q remains orthogonal.
-    if ortho >= T(1e-8)
-        throw(IdentificationError(
-            "identify_long_run: (I − ΣAᵢ) is singular or Q is not orthogonal " *
-            "(cond=$(cM), ‖Q'Q−I‖=$ortho). Use a structural VECM (identify_svec) " *
-            "or difference the data."))
-    end
-    cM > one(T) / sqrt(eps(T)) && @warn "identify_long_run: (I − ΣAᵢ) is near-singular (cond ≈ $(cM)); the VAR is near a unit root, so the long-run impact matrix is numerically unstable." maxlog = 1
+    _, Q = _long_run_multiplier(model.B, model.Sigma, n, p)
     Q
 end
 

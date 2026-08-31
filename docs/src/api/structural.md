@@ -9,8 +9,20 @@ In applied use these are reached through `irf(model, H; method=...)` rather than
 ## SVAR Identification Types
 
 ```@docs
+AbstractSVARRestriction
 ZeroRestriction
+LongRunZeroRestriction
+A0ZeroRestriction
+AplusZeroRestriction
 SignRestriction
+A0SignRestriction
+AplusSignRestriction
+ElasticityBound
+MagnitudeBound
+FEVDShareRestriction
+CumulativeRestriction
+NarrativeShockRestriction
+NarrativeContributionRestriction
 SVARRestrictions
 SignIdentifiedSet
 AriasSVARResult
@@ -51,8 +63,21 @@ Private = false
 ```@docs
 identify_arias
 identify_arias_bayesian
+is_linear_zero
+check
+sign_check
 zero_restriction
 sign_restriction
+a0_zero_restriction
+a0_sign_restriction
+aplus_zero_restriction
+aplus_sign_restriction
+elasticity_bound
+magnitude_bound
+fevd_share_restriction
+cumulative_restriction
+narrative_shock_restriction
+narrative_contribution_restriction
 ```
 
 ### Posterior Summaries of an Identified Set
