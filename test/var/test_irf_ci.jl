@@ -9,6 +9,7 @@ using Test
 using Random
 using LinearAlgebra
 using Statistics
+using Distributions
 
 if !@isdefined(FAST)
     const FAST = get(ENV, "MACRO_FAST_TESTS", "") == "1"
@@ -338,4 +339,36 @@ end
                                    check_func=chk, narrative_check=_ -> true)
     r = irf(m, 5; method=:cholesky, ci_type=:theoretical, reps=FAST ? 10 : 30)
     @test r.ci_type === :theoretical
+end
+
+@testset "SID-04 column matching" begin
+    Random.seed!(733)
+    P = [1.0 0.2; 0.1 1.0]
+    P_b = [-P[:, 2] P[:, 1]]          # permutation + sign flip
+    perm, signs = MacroEconometricModels._match_columns(P, P_b)
+    Q = P_b[:, perm] .* signs'
+    @test all(diag(P' * Q) .> 0)
+    @test MacroEconometricModels._procrustes_distance(Q, P) < 1e-12
+end
+
+@testset "SID-04 FastICA bootstrap bands after matching" begin
+    _suppress_warnings() do
+        Random.seed!(733)
+        n, p, Tobs, H = 2, 1, FAST ? 200 : 300, 6
+        true_A = [0.5 0.1; 0.0 0.4]
+        B0 = [1.0 0.3; 0.2 1.0]
+        Y = zeros(Tobs, n)
+        for t in 2:Tobs
+            Y[t, :] = true_A * Y[t-1, :] + B0 * rand(TDist(3), n)
+        end
+        m = estimate_var(Y, p)
+        reps = FAST ? 20 : 100
+        ir_ica = irf(m, H; method=:fastica, ci_type=:bootstrap, reps=reps, seed=733)
+        ir_chol = irf(m, H; method=:cholesky, ci_type=:bootstrap, reps=reps, seed=733)
+        w_ica = mean(ir_ica.ci_upper[1, :, :] .- ir_ica.ci_lower[1, :, :])
+        w_chol = mean(ir_chol.ci_upper[1, :, :] .- ir_chol.ci_lower[1, :, :])
+        @test w_ica < 2 * w_chol
+        @test ir_ica.manifest !== nothing
+        @test haskey(ir_ica.manifest.settings, "relabeled_fraction")
+    end
 end

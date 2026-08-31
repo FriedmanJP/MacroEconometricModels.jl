@@ -8,6 +8,8 @@ using Test
 using MacroEconometricModels
 using LinearAlgebra
 using Random
+using Statistics
+using Distributions
 
 if !@isdefined(FAST)
     const FAST = get(ENV, "MACRO_FAST_TESTS", "") == "1"
@@ -87,4 +89,32 @@ end
             @test norm(st.B0 - B0_reid) < 1e-6
         end
     end
+end
+
+@testset "SID-04 FastICA bootstrap column matching" begin
+    Random.seed!(733)
+    n, p, Tobs, H = 2, 1, FAST ? 200 : 300, 6
+    B0 = [1.0 0.3; 0.2 1.0]
+    A = [0.4 * Matrix{Float64}(I, n, n)]
+    rng = MersenneTwister(733)
+    ε = rand(rng, TDist(3.0), Tobs + p + 50, n)
+    u = ε * B0'
+    Yfull = zeros(Tobs + p + 50, n)
+    for t in (p + 1):size(Yfull, 1)
+        yt = u[t, :]
+        for lag in 1:p
+            yt = yt + A[lag] * Yfull[t - lag, :]
+        end
+        Yfull[t, :] = yt
+    end
+    Y = Yfull[(end - Tobs + 1):end, :]
+    m = estimate_var(Y, p)
+    reps = FAST ? 20 : 100
+    ir_ica = irf(m, H; method=:fastica, ci_type=:bootstrap, reps=reps, seed=733)
+    ir_chol = irf(m, H; method=:cholesky, ci_type=:bootstrap, reps=reps, seed=733)
+    w_ica = mean(ir_ica.ci_upper[1, :, :] .- ir_ica.ci_lower[1, :, :])
+    w_chol = mean(ir_chol.ci_upper[1, :, :] .- ir_chol.ci_lower[1, :, :])
+    @test w_ica < 2 * w_chol
+    @test ir_ica.manifest !== nothing
+    @test haskey(ir_ica.manifest.settings, "relabeled_fraction")
 end

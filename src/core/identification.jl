@@ -315,6 +315,73 @@ end
 const _RESIDUAL_FREE_METHODS = (:cholesky, :long_run, :sign)
 _needs_residuals(method::Symbol) = method ∉ _RESIDUAL_FREE_METHODS
 
+# Statistical-ID Q is identified only up to signed permutation. Match bootstrap /
+# posterior columns to a point-estimate impact. Skip Cholesky, long-run, and
+# set-ID methods (SID-05). :sign is residual-free but still skipped here.
+_should_match_columns(method::Symbol) = _needs_residuals(method) && method !== :narrative
+
+"""
+    _match_columns(P_ref, P_b) -> (perm, signs)
+
+Signed permutation aligning impact columns of `P_b` to `P_ref`. Exhaustive for
+`n ≤ 8` (maximising `Σᵢ |corr(P_ref[:,i], P_b[:,perm[i]])|`); greedy otherwise.
+Signs are `sign.(diag(P_ref' P_b[:, perm]))` with zeros mapped to `+1`.
+"""
+function _match_columns(P_ref::AbstractMatrix{T}, P_b::AbstractMatrix{T}) where {T<:AbstractFloat}
+    n = size(P_ref, 2)
+    size(P_b, 2) == n || throw(ArgumentError("_match_columns: column counts differ"))
+    # |corr| = |⟨ref_i, b_k⟩| / (‖ref_i‖ ‖b_k‖). Copy norms first so row/col
+    # scaling does not compound (the naive in-place loop would double-divide).
+    ref_norms = [norm(view(P_ref, :, j)) + eps(T) for j in 1:n]
+    b_norms   = [norm(view(P_b, :, j)) + eps(T) for j in 1:n]
+    S = abs.(P_ref' * P_b)
+    @inbounds for k in 1:n
+        S[:, k] ./= b_norms[k]
+    end
+    @inbounds for i in 1:n
+        S[i, :] ./= ref_norms[i]
+    end
+    best_perm = collect(1:n)
+    best_score = -T(Inf)
+    if n <= 8
+        for perm in _permutations(n)
+            sc = zero(T)
+            @inbounds for i in 1:n
+                sc += S[i, perm[i]]
+            end
+            if sc > best_score
+                best_score = sc
+                best_perm = collect(perm)
+            end
+        end
+    else
+        used = falses(n)
+        best_perm = zeros(Int, n)
+        for i in 1:n
+            k = argmax(j -> used[j] ? -T(Inf) : S[i, j], 1:n)
+            best_perm[i] = k
+            used[k] = true
+        end
+    end
+    aligned = P_b[:, best_perm]
+    signs = [dot(view(P_ref, :, i), view(aligned, :, i)) >= 0 ? 1 : -1 for i in 1:n]
+    (best_perm, signs)
+end
+
+"""Apply `_match_columns` to a rotation `Q`. Returns `(Q_aligned, relabeled)`."""
+function _maybe_match_Q(Q::AbstractMatrix{T}, m::VARModel{T},
+                        P_ref::Union{Nothing,AbstractMatrix{T}}) where {T<:AbstractFloat}
+    P_ref === nothing && return Q, false
+    P_b = safe_cholesky(m.Sigma) * Q
+    perm, signs = _match_columns(P_ref, P_b)
+    Qm = Q[:, perm]
+    n = size(Qm, 2)
+    @inbounds for j in 1:n
+        Qm[:, j] .*= signs[j]
+    end
+    Qm, !(perm == 1:n && all(==(1), signs))
+end
+
 # =============================================================================
 # Unified Interface
 # =============================================================================

@@ -109,12 +109,12 @@ function irf(model::VARModel{T}, horizon::Int;
     ci_lower, ci_upper = zeros(T, horizon, n, n), zeros(T, horizon, n, n)
     sim_irfs = nothing
     if ci_type != :none
-        sim_irfs = _simulate_irfs(model, method, horizon, check_func, narrative_check, ci_type, reps;
+        sim_irfs, relabeled_frac = _simulate_irfs(model, method, horizon, check_func, narrative_check, ci_type, reps;
                                   stationary_only=stationary_only,
                                   transition_var=transition_var, regime_indicator=regime_indicator,
                                   rng=rng, bootstrap=bootstrap, block_length=block_length,
                                   wild_dist=wild_dist, bias_correct=bias_correct,
-                                  bias_reps=bias_reps, Psi_precomputed=Psi_point)
+                                  bias_reps=bias_reps, Psi_precomputed=Psi_point, Q_ref=Q)
         alpha = (1 - T(conf_level)) / 2
         @inbounds for h in 1:horizon, v in 1:n, s in 1:n
             d = @view sim_irfs[:, h, v, s]
@@ -131,7 +131,7 @@ function irf(model::VARModel{T}, horizon::Int;
             "reps" => reps, "stationary_only" => stationary_only,
             "bootstrap" => String(bootstrap), "block_length" => block_length,
             "wild_dist" => String(wild_dist), "bias_correct" => bias_correct,
-            "bias_reps" => bias_reps))
+            "bias_reps" => bias_reps, "relabeled_fraction" => relabeled_frac))
     ImpulseResponse{T}(point_irf, ci_lower, ci_upper, horizon,
                        model.varnames, snames, ci_type, sim_irfs, cl; manifest=manifest)
 end
@@ -140,6 +140,8 @@ end
 
 `Psi_precomputed` optionally supplies a bias matrix already estimated by the caller
 (so the point IRF and bands share the same Ψ under `bias_correct=true`; #564).
+`Q_ref` is the point-estimate rotation; statistical-ID columns are matched to
+`chol(Σ) * Q_ref` before `compute_irf` (SID-04). Returns `(sim_irfs, relabeled_fraction)`.
 """
 function _simulate_irfs(model::VARModel{T}, method::Symbol, horizon::Int,
     check_func, narrative_check, ci_type::Symbol, reps::Int;
@@ -149,11 +151,14 @@ function _simulate_irfs(model::VARModel{T}, method::Symbol, horizon::Int,
     rng::AbstractRNG=Random.default_rng(),
     bootstrap::Symbol=:iid, block_length::Int=0, wild_dist::Symbol=:rademacher,
     bias_correct::Bool=false, bias_reps::Int=0,
-    Psi_precomputed::Union{Nothing,AbstractMatrix}=nothing
+    Psi_precomputed::Union{Nothing,AbstractMatrix}=nothing,
+    Q_ref::Union{Nothing,AbstractMatrix}=nothing
 ) where {T<:AbstractFloat}
     n, p = nvars(model), model.p
     bootstrap in (:iid, :wild, :block) || throw(ArgumentError(
         "bootstrap must be :iid, :wild, or :block; got :$bootstrap"))
+    P_ref = (Q_ref !== nothing && _should_match_columns(method)) ?
+        Matrix{T}(safe_cholesky(model.Sigma) * Q_ref) : nothing
 
     if ci_type == :bootstrap
         U, T_eff = model.U, size(model.U, 1)
@@ -182,6 +187,7 @@ function _simulate_irfs(model::VARModel{T}, method::Symbol, horizon::Int,
             max_iter = 10 * reps
             staging = zeros(T, max_iter, horizon, n, n)
             passed = fill(false, max_iter)
+            relabeled = fill(false, max_iter)
             seeds = rand(rng, UInt64, max_iter)
             Threads.@threads for it in 1:max_iter
                 local_rng = Random.MersenneTwister(seeds[it])
@@ -195,7 +201,9 @@ function _simulate_irfs(model::VARModel{T}, method::Symbol, horizon::Int,
                     maximum(abs.(eigvals(F))) >= one(T) && return  # reject non-stationary draw
                     Q = compute_Q(m, method, horizon, check_func, narrative_check;
                                   transition_var=transition_var, regime_indicator=regime_indicator, rng=local_rng)
+                    Q, was_relabeled = _maybe_match_Q(Q, m, P_ref)
                     staging[it, :, :, :] = compute_irf(m, Q, horizon)
+                    relabeled[it] = was_relabeled
                     passed[it] = true
                 end
             end
@@ -206,9 +214,11 @@ function _simulate_irfs(model::VARModel{T}, method::Symbol, horizon::Int,
             @inbounds for j in 1:n_valid
                 sim_irfs[j, :, :, :] = staging[kept[j], :, :, :]
             end
-            return sim_irfs
+            frac = n_valid == 0 ? zero(T) : T(count(j -> relabeled[kept[j]], 1:n_valid)) / T(n_valid)
+            return sim_irfs, frac
         else
             sim_irfs = zeros(T, reps, horizon, n, n)
+            relabeled = fill(false, reps)
             seeds = rand(rng, UInt64, reps)
             Threads.@threads for r in 1:reps
                 local_rng = Random.MersenneTwister(seeds[r])
@@ -220,10 +230,12 @@ function _simulate_irfs(model::VARModel{T}, method::Symbol, horizon::Int,
                     m = _apply_boot_bias_correction(m, Psi, n, p, bias_correct)
                     Q = compute_Q(m, method, horizon, check_func, narrative_check;
                                   transition_var=transition_var, regime_indicator=regime_indicator, rng=local_rng)
+                    Q, was_relabeled = _maybe_match_Q(Q, m, P_ref)
                     sim_irfs[r, :, :, :] = compute_irf(m, Q, horizon)
+                    relabeled[r] = was_relabeled
                 end
             end
-            return sim_irfs
+            return sim_irfs, T(count(relabeled)) / T(reps)
         end
     elseif ci_type == :theoretical
         _, X = construct_var_matrices(model.Y, p)
@@ -234,6 +246,7 @@ function _simulate_irfs(model::VARModel{T}, method::Symbol, horizon::Int,
             max_iter = 10 * reps
             staging = zeros(T, max_iter, horizon, n, n)
             passed = fill(false, max_iter)
+            relabeled = fill(false, max_iter)
             seeds = rand(rng, UInt64, max_iter)
             Threads.@threads for it in 1:max_iter
                 local_rng = Random.MersenneTwister(seeds[it])
@@ -244,7 +257,9 @@ function _simulate_irfs(model::VARModel{T}, method::Symbol, horizon::Int,
                     m = VARModel(zeros(T, 0, n), p, B_star, zeros(T, 0, n), model.Sigma, zero(T), zero(T), zero(T))
                     Q = compute_Q(m, method, horizon, check_func, narrative_check;
                                   transition_var=transition_var, regime_indicator=regime_indicator, rng=local_rng)
+                    Q, was_relabeled = _maybe_match_Q(Q, m, P_ref)
                     staging[it, :, :, :] = compute_irf(m, Q, horizon)
+                    relabeled[it] = was_relabeled
                     passed[it] = true
                 end
             end
@@ -255,9 +270,11 @@ function _simulate_irfs(model::VARModel{T}, method::Symbol, horizon::Int,
             @inbounds for j in 1:n_valid
                 sim_irfs[j, :, :, :] = staging[kept[j], :, :, :]
             end
-            return sim_irfs
+            frac = n_valid == 0 ? zero(T) : T(count(j -> relabeled[kept[j]], 1:n_valid)) / T(n_valid)
+            return sim_irfs, frac
         else
             sim_irfs = zeros(T, reps, horizon, n, n)
+            relabeled = fill(false, reps)
             seeds = rand(rng, UInt64, reps)
             Threads.@threads for r in 1:reps
                 local_rng = Random.MersenneTwister(seeds[r])
@@ -266,13 +283,15 @@ function _simulate_irfs(model::VARModel{T}, method::Symbol, horizon::Int,
                     m = VARModel(zeros(T, 0, n), p, B_star, zeros(T, 0, n), model.Sigma, zero(T), zero(T), zero(T))
                     Q = compute_Q(m, method, horizon, check_func, narrative_check;
                                   transition_var=transition_var, regime_indicator=regime_indicator, rng=local_rng)
+                    Q, was_relabeled = _maybe_match_Q(Q, m, P_ref)
                     sim_irfs[r, :, :, :] = compute_irf(m, Q, horizon)
+                    relabeled[r] = was_relabeled
                 end
             end
-            return sim_irfs
+            return sim_irfs, T(count(relabeled)) / T(reps)
         end
     end
-    zeros(T, reps, horizon, n, n)
+    zeros(T, reps, horizon, n, n), zero(T)
 end
 
 """Simulate VAR data from initial conditions and innovations."""

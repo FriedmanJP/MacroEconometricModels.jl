@@ -84,6 +84,21 @@ function process_posterior_samples(post::BVARPosterior, compute_func::Function;
     b_vecs, sigmas = extract_chain_parameters(post)
     T = eltype(use_data)
 
+    # Match statistical-ID columns to the posterior-mean impact (SID-04). Set-ID
+    # methods (:sign, :narrative) and recursive/long-run ID are left unmatched.
+    P_ref = nothing
+    if _should_match_columns(method)
+        m_mean = posterior_mean_model(post; data=use_data)
+        try
+            Q_mean = compute_Q(m_mean, method, horizon, check_func, narrative_check;
+                               max_draws=max_draws, transition_var=transition_var,
+                               regime_indicator=regime_indicator)
+            P_ref = Matrix{T}(safe_cholesky(m_mean.Sigma) * Q_mean)
+        catch e
+            e isa IdentificationError || rethrow(e)
+        end
+    end
+
     # Concrete-typed result container: `compute_func` returns the same concrete type for every
     # draw (e.g. `Array{T,3}` from core/irf.jl and core/fevd.jl, consumed by
     # `stack_posterior_results`), so infer the element type from the first valid result instead
@@ -103,6 +118,7 @@ function process_posterior_samples(post::BVARPosterior, compute_func::Function;
             Q = compute_Q(m, method, horizon, check_func, narrative_check;
                           max_draws=max_draws, transition_var=transition_var,
                           regime_indicator=regime_indicator)
+            Q, _ = _maybe_match_Q(Q, m, P_ref)
             res = compute_func(m, Q, horizon)
             valid_count += 1
             valid_count == 1 && (results = Vector{typeof(res)}(undef, samples))
