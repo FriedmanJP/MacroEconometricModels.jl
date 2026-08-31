@@ -669,9 +669,10 @@ _is_partial(method::Symbol) = _identification_method(method).is_partial
 
 # Statistical-ID Q is identified only up to signed permutation. Match bootstrap /
 # posterior columns to a point-estimate impact. Skip recursive/long-run, set-ID,
-# and :proxy (identified columns are already labeled by `shocks` / first k).
+# :proxy, and :max_share (identified columns are already labeled).
 _should_match_columns(method::Symbol) =
-    _needs_residuals(method) && !_is_set_identified(method) && method !== :proxy
+    _needs_residuals(method) && !_is_set_identified(method) &&
+    method !== :proxy && method !== :max_share
 
 """
     _match_columns(P_ref, P_b) -> (perm, signs)
@@ -779,6 +780,7 @@ Compute identification matrix Q for structural VAR analysis.
 - `:external_volatility` — External volatility regimes (requires `regime_indicator`)
 - `:proxy` — External instruments (requires `instruments`)
 - `:ab` — AB-model ML (requires `pattern::SVARPattern`)
+- `:max_share` — Max-share / news-shock (requires `target`; `horizons` or `band`)
 
 # Keyword Arguments
 - `horizon::Int=1`: IRF horizon for sign/narrative/Arias/Uhlig
@@ -788,6 +790,9 @@ Compute identification matrix Q for structural VAR analysis.
 - `regime_indicator`: Regime indicator for `:external_volatility`
 - `instruments`: Instrument vector/matrix for `:proxy`
 - `pattern`: `SVARPattern` for `:ab`
+- `target`: Variable index or name for `:max_share`
+- `horizons`: Time-domain window for `:max_share` (default `0:20`)
+- `band`: Frequency band `(ω₁, ω₂)` for `:max_share`
 """
 function compute_Q(model::VARModel{T}, method::Symbol;
                    horizon::Int=1, restrictions=nothing, check_func=nothing,
@@ -861,6 +866,9 @@ function compute_Q(model::VARModel{T}, method::Symbol;
     elseif method == :ab
         isnothing(pattern) && throw(ArgumentError("ab requires pattern"))
         estimate_svar(model, pattern; rng=rng, kwargs...).Q
+    elseif method == :max_share
+        isnothing(target) && throw(ArgumentError("max_share requires target"))
+        identify_max_share(model; target=target, kwargs...).Q
     else
         throw(ArgumentError("Unknown method: $method"))
     end
@@ -896,6 +904,7 @@ function _register_builtin_identification!()
         (:uhlig, false, false, false),
         (:proxy, true, false, true),
         (:ab, false, false, false),
+        (:max_share, false, false, true),
     )
     for (name, needs_resid, set_id, partial) in specs
         register_identification!(IdentificationMethod(name, needs_resid, set_id, partial))

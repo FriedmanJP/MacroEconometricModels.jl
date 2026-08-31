@@ -20,7 +20,7 @@ using LinearAlgebra, Statistics
 Compute FEVD showing proportion of h-step forecast error variance attributable to each shock.
 
 # Methods
-`:cholesky`, `:sign`, `:narrative`, `:long_run`, `:proxy`, `:ab`,
+`:cholesky`, `:sign`, `:narrative`, `:long_run`, `:proxy`, `:ab`, `:max_share`,
 `:fastica`, `:jade`, `:sobi`, `:dcov`, `:hsic`,
 `:student_t`, `:mixture_normal`, `:pml`, `:skew_normal`, `:nongaussian_ml`,
 `:markov_switching`, `:garch`, `:smooth_transition`, `:external_volatility`
@@ -29,6 +29,7 @@ Note: `:smooth_transition` requires `transition_var` kwarg.
       `:external_volatility` requires `regime_indicator` kwarg.
       `:proxy` requires `instruments` and is partial when `k < n`.
       `:ab` requires `pattern::SVARPattern`.
+      `:max_share` requires `target` and is partial; pass `horizons` or `band`.
 
 For `:sign`/`:narrative`, each accepted rotation gets its own FEVD; the reported
 decomposition and proportions are the pointwise median. `n_effective` is the

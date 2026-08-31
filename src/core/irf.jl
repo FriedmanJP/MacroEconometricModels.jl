@@ -73,7 +73,7 @@ end
 Compute IRFs with optional confidence intervals.
 
 # Methods
-`:cholesky`, `:sign`, `:narrative`, `:long_run`, `:proxy`, `:ab`,
+`:cholesky`, `:sign`, `:narrative`, `:long_run`, `:proxy`, `:ab`, `:max_share`,
 `:fastica`, `:jade`, `:sobi`, `:dcov`, `:hsic`,
 `:student_t`, `:mixture_normal`, `:pml`, `:skew_normal`, `:nongaussian_ml`,
 `:markov_switching`, `:garch`, `:smooth_transition`, `:external_volatility`
@@ -85,6 +85,8 @@ Note: `:smooth_transition` requires `transition_var` kwarg.
       jointly resamples `(u_t, z_t)` and rewrites `bootstrap=:iid` to `:block`
       (Jentsch & Lunsford 2019); the reproducibility manifest records `:block`.
       `:ab` requires `pattern::SVARPattern` (Amisano–Giannini AB-model ML).
+      `:max_share` requires `target` (variable index or name) and is partial;
+      pass `horizons` (time domain, default `0:20`) or `band=(ω₁, ω₂)`.
 
 # CI types
 - `:none`

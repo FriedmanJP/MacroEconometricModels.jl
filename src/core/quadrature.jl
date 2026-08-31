@@ -114,3 +114,53 @@ end
 function _adaptive_gauss_hermite(g, mu_hat::Real, sigma_hat::Real, n::Int)
     return _adaptive_gauss_hermite(g, Float64(mu_hat), Float64(sigma_hat), n)
 end
+
+# =============================================================================
+# Gauss-Legendre (SID-12 frequency-domain max-share)
+# =============================================================================
+
+"""
+    _gauss_legendre_nodes_weights(n::Int) -> (nodes, weights)
+
+Gauss–Legendre nodes and weights for ∫_{-1}^{1} f(x) dx.
+
+Golub–Welsch: eigenvalues of the Jacobi matrix with off-diagonal
+`i / √(4i² − 1)` are the nodes; weights are `2 v_{1j}²`.
+"""
+function _gauss_legendre_nodes_weights(n::Int)
+    n >= 1 || throw(ArgumentError("n must be ≥ 1"))
+    if n == 1
+        return [0.0], [2.0]
+    end
+    J = zeros(n, n)
+    @inbounds for i in 1:(n - 1)
+        beta = i / sqrt(4 * i * i - 1)
+        J[i, i + 1] = beta
+        J[i + 1, i] = beta
+    end
+    F = eigen(Symmetric(J))
+    nodes = F.values
+    weights = 2 .* (F.vectors[1, :] .^ 2)
+    perm = sortperm(nodes)
+    return nodes[perm], weights[perm]
+end
+
+"""
+    _gauss_legendre_interval(n, a, b) -> (nodes, weights)
+
+Map `_gauss_legendre_nodes_weights(n)` from [-1, 1] onto `[a, b]`.
+"""
+function _gauss_legendre_interval(n::Int, a::T, b::T) where {T<:AbstractFloat}
+    b > a || throw(ArgumentError("Gauss-Legendre interval requires b > a, got [$a, $b]"))
+    nodes, weights = _gauss_legendre_nodes_weights(n)
+    half = (b - a) / T(2)
+    mid = (a + b) / T(2)
+    x = Vector{T}(undef, n)
+    w = Vector{T}(undef, n)
+    @inbounds for i in 1:n
+        x[i] = half * T(nodes[i]) + mid
+        w[i] = half * T(weights[i])
+    end
+    return x, w
+end
+

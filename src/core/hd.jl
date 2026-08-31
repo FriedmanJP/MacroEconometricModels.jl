@@ -204,9 +204,11 @@ Decomposes observed data into contributions from each structural shock plus init
 - `regime_indicator=nothing`: Regime indicator (for method=:external_volatility)
 - `instruments`: Instrument vector/matrix for `method=:proxy` (length `T` or `T_eff`)
 - `pattern`: `SVARPattern` for `method=:ab`
+- `target`: Variable index or name for `method=:max_share`
+- `horizons` / `band`: Time- or frequency-domain window for `:max_share`
 
 # Methods
-`:cholesky`, `:sign`, `:narrative`, `:long_run`, `:proxy`, `:ab`,
+`:cholesky`, `:sign`, `:narrative`, `:long_run`, `:proxy`, `:ab`, `:max_share`,
 `:fastica`, `:jade`, `:sobi`, `:dcov`, `:hsic`,
 `:student_t`, `:mixture_normal`, `:pml`, `:skew_normal`, `:nongaussian_ml`,
 `:markov_switching`, `:garch`, `:smooth_transition`, `:external_volatility`
@@ -215,6 +217,7 @@ Note: `:smooth_transition` requires `transition_var` kwarg.
       `:external_volatility` requires `regime_indicator` kwarg.
       `:proxy` requires `instruments` and is partial when `k < n`.
       `:ab` requires `pattern::SVARPattern`.
+      `:max_share` requires `target` and is partial; pass `horizons` or `band`.
       Default `normalize=:unit_effect`; structural shocks are recovered as
       `B₀ \\ u` when `Q` is not orthogonal.
 

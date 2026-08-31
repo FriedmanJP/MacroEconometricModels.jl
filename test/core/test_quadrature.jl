@@ -78,4 +78,25 @@ using LinearAlgebra
         @test result3 ≈ 3.0 atol=1e-10
     end
 
+    @testset "Gauss-Legendre nodes and weights" begin
+        nodes1, weights1 = MacroEconometricModels._gauss_legendre_nodes_weights(1)
+        @test nodes1[1] ≈ 0.0 atol=1e-14
+        @test weights1[1] ≈ 2.0 atol=1e-14
+
+        nodes2, weights2 = MacroEconometricModels._gauss_legendre_nodes_weights(2)
+        @test nodes2[1] ≈ -1 / sqrt(3) atol=1e-12
+        @test nodes2[2] ≈  1 / sqrt(3) atol=1e-12
+        @test weights2[1] ≈ 1.0 atol=1e-12
+        @test weights2[2] ≈ 1.0 atol=1e-12
+        @test sum(weights2) ≈ 2.0 atol=1e-12
+
+        nodes3, weights3 = MacroEconometricModels._gauss_legendre_nodes_weights(3)
+        @test sum(weights3 .* nodes3.^2) ≈ 2 / 3 atol=1e-12
+
+        x, w = MacroEconometricModels._gauss_legendre_interval(8, 0.0, Float64(π))
+        @test sum(w .* sin.(x)) ≈ 2.0 atol=1e-12
+        @test_throws ArgumentError MacroEconometricModels._gauss_legendre_nodes_weights(0)
+        @test_throws ArgumentError MacroEconometricModels._gauss_legendre_interval(4, 1.0, 1.0)
+    end
+
 end

@@ -199,6 +199,27 @@ const _REFERENCES = Dict{Symbol, _RefEntry}(
         title="What Are the Effects of Monetary Policy on Output? Results from an Agnostic Identification Procedure",
         journal="Journal of Monetary Economics", volume="52", issue="2", pages="381--419",
         doi="10.1016/j.jmoneco.2004.05.007", isbn="", publisher="", entry_type=:article),
+    :uhlig2004gnp => (key=:uhlig2004gnp, authors="Uhlig, Harald", year=2004,
+        title="Do Technology Shocks Lead to a Fall in Total Hours Worked?",
+        journal="Journal of the European Economic Association", volume="2", issue="2-3",
+        pages="361--371", doi="10.1162/154247604323068041", isbn="", publisher="",
+        entry_type=:article),
+    :francis_owyang_roush_dicecio2014 => (key=:francis_owyang_roush_dicecio2014,
+        authors="Francis, Neville and Owyang, Michael T. and Roush, Jennifer E. and DiCecio, Riccardo",
+        year=2014,
+        title="A Flexible Finite-Horizon Alternative to Long-Run Restrictions with an Application to Technology Shocks",
+        journal="Journal of Money, Credit and Banking", volume="46", issue="2-3",
+        pages="343--370", doi="10.1111/jmcb.12105", isbn="", publisher="",
+        entry_type=:article),
+    :barsky_sims2011 => (key=:barsky_sims2011, authors="Barsky, Robert B. and Sims, Eric R.",
+        year=2011, title="News Shocks and Business Cycles",
+        journal="Journal of Monetary Economics", volume="58", issue="3", pages="273--289",
+        doi="10.1016/j.jmoneco.2011.03.001", isbn="", publisher="", entry_type=:article),
+    :angeletos_collard_dellas2020 => (key=:angeletos_collard_dellas2020,
+        authors="Angeletos, George-Marios and Collard, Fabrice and Dellas, Harris", year=2020,
+        title="Business-Cycle Anatomy",
+        journal="American Economic Review", volume="110", issue="10", pages="3030--3070",
+        doi="10.1257/aer.20181080", isbn="", publisher="", entry_type=:article),
     :antolin_diaz_rubio_ramirez2018 => (key=:antolin_diaz_rubio_ramirez2018,
         authors="Antol{\\'\\i}n-D{\\'\\i}az, Juan and Rubio-Ram{\\'\\i}rez, Juan F.", year=2018,
         title="Narrative Sign Restrictions for SVARs",
@@ -1954,6 +1975,8 @@ const _TYPE_REFS = Dict{Symbol, Vector{Symbol}}(
     :SVARModel => [:amisano_giannini1997, :lutkepohl2005, :sims1986],
     :SVARPattern => [:amisano_giannini1997, :lutkepohl2005, :sims1986],
     :ab => [:amisano_giannini1997, :lutkepohl2005, :sims1986],
+    :MaxShareResult => [:francis_owyang_roush_dicecio2014, :barsky_sims2011, :angeletos_collard_dellas2020, :uhlig2004gnp],
+    :max_share => [:francis_owyang_roush_dicecio2014, :barsky_sims2011, :angeletos_collard_dellas2020, :uhlig2004gnp],
     :SVARRestrictions => [:arias_rubio_ramirez_waggoner2018],
     :IdentificationStatus => [:rubio_ramirez2010, :arias_rubio_ramirez_waggoner2018],
     :ConditionalForecast => [:waggoner_zha1999, :antolin_diaz_petrella_rubio_ramirez2021],
@@ -2590,6 +2613,7 @@ refs(io::IO, ::BayesianSetIdentifiedSVAR; kw...) = refs(io, _TYPE_REFS[:Bayesian
 refs(io::IO, ::UhligSVARResult; kw...) = refs(io, _TYPE_REFS[:UhligSVARResult]; kw...)
 refs(io::IO, ::ProxySVARResult; kw...) = refs(io, _TYPE_REFS[:ProxySVARResult]; kw...)
 refs(io::IO, ::SVARModel; kw...) = refs(io, _TYPE_REFS[:SVARModel]; kw...)
+refs(io::IO, ::MaxShareResult; kw...) = refs(io, _TYPE_REFS[:MaxShareResult]; kw...)
 refs(io::IO, ::SVARPattern; kw...) = refs(io, _TYPE_REFS[:SVARPattern]; kw...)
 refs(io::IO, ::SVARRestrictions; kw...) = refs(io, _TYPE_REFS[:SVARRestrictions]; kw...)
 refs(io::IO, ::IdentificationStatus; kw...) = refs(io, _TYPE_REFS[:IdentificationStatus]; kw...)

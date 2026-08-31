@@ -434,6 +434,11 @@ end
     @test !MacroEconometricModels._needs_residuals(:ab)
     @test !MacroEconometricModels._is_set_identified(:ab)
     @test !MacroEconometricModels._is_partial(:ab)
+    @test haskey(MacroEconometricModels.IDENTIFICATION_REGISTRY, :max_share)
+    @test !MacroEconometricModels._needs_residuals(:max_share)
+    @test !MacroEconometricModels._is_set_identified(:max_share)
+    @test MacroEconometricModels._is_partial(:max_share)
+    @test !MacroEconometricModels._should_match_columns(:max_share)
 
     r = SVARRestrictions(2; signs=[sign_restriction(1, 1, :positive)])
     ra = irf(m, 5; method=:arias, restrictions=r, max_draws=30, seed=1)

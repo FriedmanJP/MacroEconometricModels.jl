@@ -229,6 +229,7 @@ include("teststat/portmanteau.jl")
 # Structural identification
 include("core/identification.jl")
 include("core/ab.jl")   # SID-13 AB-model ML; after identification.jl (check_identification)
+include("core/maxshare.jl")  # SID-12 max-share; after identification.jl (compute_Q, cholesky)
 include("core/uhlig.jl")
 
 # Non-Gaussian identification (shared helpers first)
@@ -1018,6 +1019,7 @@ export identify_narrative
 export identify_long_run
 export identify_proxy, ProxySVARResult, proxy_ar_band
 export estimate_svar, SVARPattern, SVARModel, recursive_pattern
+export identify_max_share, MaxShareResult
 export a_model_pattern, b_model_pattern, ab_model_pattern, blanchard_quah_pattern
 export generate_Q, haar_orthogonal
 export compute_irf, compute_structural_shocks

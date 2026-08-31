@@ -148,3 +148,58 @@ end
         @test norm(Ahat * R - Atrue) / norm(Atrue) < 0.10
     end
 end
+
+@testset "SID-12 max-share recovery" begin
+    n = 3
+    B_true = Matrix{Float64}(I, n, n)
+    A = [Diagonal([0.85, 0.30, 0.15])]
+    q_true = [1.0, 0.0, 0.0]
+
+    @testset "population |q′q_true| > 0.99" begin
+        Tobs = 40
+        Y = zeros(Tobs, n)
+        B = zeros(1 + n, n)
+        B[2:(1 + n), :] = A[1]'
+        U = zeros(Tobs - 1, n)
+        model = VARModel(Y, 1, B, U, Matrix{Float64}(I, n, n), 0.0, 0.0, 0.0)
+        r = identify_max_share(model; target=1, horizons=0:20)
+        @test abs(dot(r.q, q_true)) > 0.99
+    end
+
+    @testset "large-T estimate recovers the target shock" begin
+        rng = MersenneTwister(74112)
+        Y, _ = simulate_svar(B_true, A; Tobs=FAST ? 800 : 2000, rng=rng)
+        m = estimate_var(Y, 1)
+        r = identify_max_share(m; target=1, horizons=0:20)
+        @test abs(dot(r.q, q_true)) > 0.99
+    end
+
+    @testset "frequency band recovers the same shock as a long horizon" begin
+        Tobs = 40
+        Y = zeros(Tobs, n)
+        B = zeros(1 + n, n)
+        B[2:(1 + n), :] = A[1]'
+        U = zeros(Tobs - 1, n)
+        model = VARModel(Y, 1, B, U, Matrix{Float64}(I, n, n), 0.0, 0.0, 0.0)
+        r_time = identify_max_share(model; target=1, horizons=0:200)
+        r_freq = identify_max_share(model; target=1, band=(0.0, Float64(π)))
+        @test abs(dot(r_time.q, r_freq.q)) > 0.99
+        @test abs(dot(r_freq.q, q_true)) > 0.99
+    end
+
+    @testset "FEVD share of shock 1 on variable 1 equals λ_max / tr(S)" begin
+        Tobs = 40
+        Y = zeros(Tobs, n)
+        Bcoef = zeros(1 + n, n)
+        Bcoef[2:(1 + n), :] = A[1]'
+        U = zeros(Tobs - 1, n)
+        model = VARModel(Y, 1, Bcoef, U, Matrix{Float64}(I, n, n), 0.0, 0.0, 0.0)
+        Hwin = 0:16
+        r = identify_max_share(model; target=1, horizons=Hwin)
+        H = last(Hwin) + 1
+        fv = fevd(model, H; method=:max_share, target=1, horizons=Hwin)
+        @test r.share ≈ r.eigvals[1] / sum(r.eigvals) atol = 1e-10
+        @test fv.proportions[1, 1, H] ≈ r.share atol = 1e-8
+    end
+end
+

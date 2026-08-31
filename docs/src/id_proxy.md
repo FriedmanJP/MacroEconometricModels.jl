@@ -1,6 +1,6 @@
 # [Proxy SVAR](@id id_proxy_page)
 
-Proxy (external-instrument) identification recovers one or more structural shocks from a series ``z_t`` that is correlated with the target shock and orthogonal to the others (Stock & Watson 2018; Mertens & Ravn 2013). High-frequency monetary surprises and narrative tax changes are the leading applications. This page documents the VAR implementation; the local-projection counterpart is [Local Projections](@ref lp_page). Restriction-based schemes live on [Structural Identification](@ref structural_identification_page).
+Proxy (external-instrument) identification recovers one or more structural shocks from a series ``z_t`` that is correlated with the target shock and orthogonal to the others (Stock & Watson 2018; Mertens & Ravn 2013). High-frequency monetary surprises and narrative tax changes are the leading applications. This page documents the VAR implementation; the local-projection counterpart is [Local Projections](@ref lp_page). Restriction-based schemes live on [Structural Identification](@ref structural_identification_page); news and main-business-cycle shocks are [Max-Share Identification](@ref id_maxshare_page).
 
 - **One instrument**: closed-form impact column ``b_1 \propto \mathrm{Cov}(\hat u_t, z_t)``
 - **``k`` instruments**: Mertens–Ravn (2013, Appendix A) column-space identification

@@ -19,6 +19,7 @@ plot_result methods for the statistical-identification SVAR family (PLT-32):
   `:shocks` (recovered structural-shock lines).
 - `NonGaussianMLResult` — `B0` heatmap with a likelihood-ratio annotation.
 - `ProxySVARResult` — `view=:B0` (impact heatmap) / `:impact` (identified columns).
+- `MaxShareResult` — `view=:Q` (rotation heatmap) / `:eigvals` (criterion eigenvalues).
 
 All rendering reuses the frozen renderers (A1); matrix views go through the shared
 heatmap renderer with a color-scale legend and a sign-appropriate scale (PLT-15):
@@ -373,3 +374,46 @@ function plot_result(r::ProxySVARResult{T};
     save_path !== nothing && save_plot(p, save_path)
     p
 end
+
+# =============================================================================
+# MaxShareResult
+# =============================================================================
+
+"""
+    plot_result(r::MaxShareResult; view=:Q, title="", save_path=nothing)
+
+Max-share diagnostics. Views:
+
+- `:Q` (default) — rotation matrix as a diverging heatmap.
+- `:eigvals` — criterion eigenvalues as a one-column heatmap.
+
+Unknown `view` throws an `ArgumentError`.
+"""
+function plot_result(r::MaxShareResult{T};
+                     view::Symbol=:Q, title::String="",
+                     save_path::Union{String,Nothing}=nothing) where {T}
+    if view === :Q
+        id = _next_plot_id("maxshare_q")
+        js = _statid_heatmap_panel(id, r.Q, r.varnames, r.shock_names;
+                                   scale=:diverging, xlabel="Shock", ylabel="Variable",
+                                   tip_label="")
+        panel = _PanelSpec(id, "Rotation (Q)", js)
+        ftitle = isempty(title) ? "Max-share — rotation" : title
+    elseif view === :eigvals
+        id = _next_plot_id("maxshare_eig")
+        n = length(r.eigvals)
+        labels = ["λ$j" for j in 1:n]
+        M = reshape(r.eigvals, :, 1)
+        js = _statid_heatmap_panel(id, M, labels, ["eigenvalue"];
+                                   scale=:sequential, xlabel="", ylabel="Eigenvalue",
+                                   tip_label="λ")
+        panel = _PanelSpec(id, "Criterion eigenvalues", js)
+        ftitle = isempty(title) ? "Max-share — eigenvalues" : title
+    else
+        throw(ArgumentError("Unknown view :$view. Valid views: :Q, :eigvals"))
+    end
+    p = _make_plot([panel]; title=ftitle, ncols=1)
+    save_path !== nothing && save_plot(p, save_path)
+    p
+end
+

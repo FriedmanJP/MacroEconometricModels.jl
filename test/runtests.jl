@@ -70,6 +70,7 @@ const TEST_GROUPS = [
         "var/test_hd.jl",
         "var/test_id_recovery.jl",        # SID-01 (#730): heteroskedastic kernel recovery
         "var/test_proxy.jl",              # SID-11 (#740): proxy SVAR / external instruments
+        "var/test_maxshare.jl",           # SID-12 (#741): max-share identification
         "vecm/test_vecm.jl",
         "vecm/test_vecm_restrictions.jl", # EV-38 (#446)
         "preg/test_panel_iv.jl",          # moved from the ceiling ARIMA group to rebalance (#127)
