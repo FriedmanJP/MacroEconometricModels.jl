@@ -328,7 +328,7 @@ Residual-bootstrap diagnostic of shock **label stability**.
 
 Each replication resamples residuals, rebuilds a pseudo-sample from the estimated
 VAR, re-estimates the VAR, re-identifies ``B_0``, and matches columns to the
-original estimate with [`_match_columns`](@ref). The statistic is the fraction of
+original estimate by signed column matching. The statistic is the fraction of
 replications whose signed permutation is the **identity** (column order unchanged).
 There is **no p-value**: this is a descriptive match-fraction, not a hypothesis test.
 

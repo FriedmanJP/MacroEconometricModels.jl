@@ -101,8 +101,8 @@ Identified-set envelope `[ℓ, u]` of each IRF entry over admissible `Q ∈ O(n)
 `solver=:draws` is the accepted-draw envelope (inner approximation, consistent
 as `n_draws → ∞`). `solver=:optimize` maximises/minimises each entry subject to
 the restrictions: one-shock `n = 2` uses the Gafarov–Meier–Montiel Olea (2018)
-closed form (no NLopt); larger systems use NLopt on [`_spheres_to_Q`](@ref)
-coordinates (Giacomini–Kitagawa 2021, Algorithm 1).
+closed form (no NLopt); larger systems use NLopt on sphere coordinates
+(Giacomini–Kitagawa 2021, Algorithm 1).
 
 Returns `(lower, upper)` arrays of size `(H, n, n)`. Throws
 [`IdentificationError`](@ref) when the identified set is empty.

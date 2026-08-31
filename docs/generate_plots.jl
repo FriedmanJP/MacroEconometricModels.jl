@@ -737,6 +737,40 @@ function main()
         plot_result(sis)
     end
 
+    try_save("svar_median_target.html") do
+        H = 20; n = 2; nd = 300
+        draws = randn(MersenneTwister(3), nd, H, n, n) .* 0.35
+        for a in 1:nd, hh in 1:H
+            draws[a, hh, :, :] .+= 0.9 * exp(-0.14 * (hh - 1))
+        end
+        sis = MEM.SignIdentifiedSet{Float64}([randn(n, n) for _ in 1:nd], draws, nd,
+                600, nd / 600, ["output", "inflation"], ["demand", "supply"])
+        plot_result(sis; view=:median_target)
+    end
+
+    try_save("svar_robust_bayes.html") do
+        H = 20; n = 2
+        t = collect(0:(H - 1))
+        decay = 0.85 .^ t
+        lower = zeros(H, n, n)
+        upper = zeros(H, n, n)
+        rlo = zeros(H, n, n)
+        rhi = zeros(H, n, n)
+        slo = zeros(H, n, n)
+        shi = zeros(H, n, n)
+        for j in 1:n, i in 1:n
+            mid = (i == j ? 0.8 : -0.3) .* decay
+            lower[:, i, j] = mid .- 0.25
+            upper[:, i, j] = mid .+ 0.25
+            rlo[:, i, j] = mid .- 0.45
+            rhi[:, i, j] = mid .+ 0.45
+            slo[:, i, j] = mid .- 0.18
+            shi[:, i, j] = mid .+ 0.18
+        end
+        rb = MEM.RobustBayesResult(lower, upper, rlo, rhi, slo, shi, 0.35, 0.0, 0.68)
+        plot_result(rb; variables=["output", "inflation"], shocks=["demand", "supply"])
+    end
+
     # 56. Markov-switching SVAR — smoothed regime probabilities (stacked area)
     try_save("ms_regime_probs.html") do
         Tt = 140; K = 2

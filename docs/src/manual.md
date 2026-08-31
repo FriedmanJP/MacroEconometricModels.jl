@@ -4,7 +4,7 @@
 
 - **Estimation**: OLS estimation of reduced-form VAR(p) with automatic information criteria (AIC, BIC, HQIC) and stability checking
 - **Lag Selection**: Data-driven lag order selection via AIC, BIC, or HQIC minimization
-- **Structural Identification**: Six methods --- Cholesky (recursive), sign restrictions, narrative restrictions, long-run (Blanchard-Quah), Arias et al. (2018) zero + sign, and Mountford-Uhlig (2009) penalty function
+- **Structural Identification**: Restriction-based schemes (Cholesky, sign, narrative, long-run, Arias, Uhlig), plus proxy, AB-model, max-share, and SVEC; statistical schemes live on [Statistical Identification](@ref nongaussian_page)
 - **Robust Inference**: Newey-West HAC, White heteroscedasticity-robust (HC0), and Driscoll-Kraay panel-robust covariance estimators
 - **Innovation Accounting**: IRF, FEVD, and historical decomposition with bootstrap or asymptotic confidence intervals; see [Innovation Accounting](@ref innovation_accounting_page)
 - **Forecasting**: Multi-step ahead point forecasts, bootstrap prediction intervals, and Waggoner-Zha conditional forecasts
@@ -542,13 +542,15 @@ When a single best rotation is preferred over a distribution of draws, Mountford
 The penalty for each sign restriction ``s`` is:
 
 ```math
-\text{penalty} = -\sum_{s} w_s \cdot \text{sign}_s \cdot \frac{\text{IRF}_s}{\sigma_s}
+x_s = -\mathrm{sign}_s \cdot \frac{\mathrm{IRF}_s}{\sigma_s}, \qquad
+f(x) = \begin{cases} x & x \le 0 \\ 100\, x & x > 0 \end{cases}, \qquad
+\mathrm{penalty} = \sum_s f(x_s)
 ```
 
 where:
-- ``w_s = 100`` if the sign restriction is satisfied, ``w_s = 1`` if violated
-- ``\text{sign}_s \in \{+1, -1\}`` is the required sign direction
-- ``\text{IRF}_s`` is the impulse response value at the restricted horizon
+- ``x_s > 0`` if and only if the restriction is violated (weight 1 if satisfied, 100 if violated)
+- ``\mathrm{sign}_s \in \{+1, -1\}`` is the required sign direction
+- ``\mathrm{IRF}_s`` is the impulse response value at the restricted horizon
 - ``\sigma_s`` is the standard deviation of the response variable (normalization)
 
 !!! note "When to use Uhlig vs Arias"
@@ -567,7 +569,7 @@ result = identify_uhlig(model_short, restrictions, 20)
 report(result)
 ```
 
-The optimizer converges with a total penalty of ``-199.24``, split as ``[-99.62, 0, -99.62]`` across the three shocks: shocks 1 and 3 each carry a restriction and each attains the satisfied-restriction weight ``w_s = 100``, while shock 2 is unrestricted and contributes nothing. At that rotation output rises 0.71 percent to its own shock and the funds rate rises 0.108 percentage points to the policy shock, both with the required sign. The `converged` field is `true` only when every sign restriction holds at the optimum; a `false` value means the optimizer settled in a local minimum that violates some condition, and increasing `n_starts` or relaxing restrictions is the remedy.
+The optimizer converges with a negative penalty carried by shocks 1 and 3 --- the restricted columns --- at weight 1 per satisfied sign; shock 2 is unrestricted and contributes nothing. At that rotation output and the funds rate both move in the required direction on impact. The `converged` field is `true` only when every sign restriction holds at the optimum; a `false` value means the optimizer settled in a local minimum that violates some condition, and increasing `n_starts` or relaxing restrictions is the remedy. See [Structural Identification](@ref structural_identification_page) for the full Uhlig interface.
 
 | Keyword | Type | Default | Description |
 |---------|------|---------|-------------|

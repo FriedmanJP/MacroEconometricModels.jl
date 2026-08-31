@@ -264,7 +264,7 @@ round(is_stationary(var_model).max_modulus, digits=4)
 
 The converted VAR has a largest companion eigenvalue modulus of exactly 1.0, so `is_stationary` returns `false` --- as it must. A cointegrated system with ``r < n`` has ``n - r`` unit roots by construction, and the conversion preserves them. That is not a diagnostic failure here; it is the reason the model was specified as a VECM in the first place. The consequence is that the level VAR must not be used for anything requiring stationarity, such as unconditional-moment calculations or the stationarity-filtered bootstrap.
 
-The conversion matters because it makes all 18 identification methods (Cholesky, sign restrictions, ICA, narrative, and the rest) available to VECM models. `irf`, `fevd`, and `historical_decomposition` call `to_var()` internally, so `VECMModel` objects can be passed to them directly. The statistical (non-Gaussian) schemes are documented on the [Statistical Identification](@ref nongaussian_page) hub and its [Non-Gaussian Methods](@ref id_nongaussian_page) child.
+The conversion matters because it makes the twenty-five `method=` identification schemes (Cholesky, sign restrictions, ICA, narrative, proxy, max-share, and the rest) available to VECM models. `irf`, `fevd`, and `historical_decomposition` call `to_var()` internally, so `VECMModel` objects can be passed to them directly. Permanent versus transitory identification uses `method=:svec` on the VECM itself, not Blanchard–Quah on the converted VAR. The statistical (non-Gaussian) schemes are documented on the [Statistical Identification](@ref nongaussian_page) hub and its [Non-Gaussian Methods](@ref id_nongaussian_page) child.
 
 ---
 

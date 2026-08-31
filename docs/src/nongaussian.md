@@ -2,7 +2,7 @@
 
 Statistical identification recovers the structural impact matrix ``B_0`` from higher-moment information --- time-varying variances (heteroskedasticity) or non-Gaussian shock distributions --- without imposing recursive orderings, sign restrictions, or zero restrictions. The classification follows Lewis (2025), the definitive survey of higher-moment identification in macroeconometrics.
 
-Fourteen estimators and six diagnostic tests divide across three child pages: ten methods exploit non-Gaussianity (five ICA, five maximum likelihood, counting the adaptive `:nongaussian_ml` dispatcher), four exploit heteroskedasticity, and the testing page covers the diagnostics that decide whether either source of identification is present. Every method produces a rotation ``Q`` consumed by `irf()`, `fevd()`, and `historical_decomposition()`.
+Fifteen estimators and six diagnostic tests divide across three child pages: eleven methods exploit non-Gaussianity (five ICA, four maximum likelihood, the adaptive `:nongaussian_ml` dispatcher, and moment-based GMM), four exploit heteroskedasticity, and the testing page covers the diagnostics that decide whether either source of identification is present. Every method produces a rotation ``Q`` consumed by `irf()`, `fevd()`, and `historical_decomposition()`. `label_shocks` assigns economic names to those statistically recovered columns.
 
 ```@setup id_overview
 using MacroEconometricModels, Random
@@ -27,7 +27,7 @@ report(ica)
 
 ## Choosing a Method
 
-All 14 methods return a rotation matrix ``Q`` and structural impact matrix ``B_0 = P Q`` where ``P = \text{chol}(\Sigma)``. The shape of the data --- fat tails, bimodality, skewness, regime shifts, volatility clustering --- selects the estimator:
+All 15 methods return a rotation matrix ``Q`` and structural impact matrix ``B_0 = P Q`` where ``P = \text{chol}(\Sigma)``. The shape of the data --- fat tails, bimodality, skewness, regime shifts, volatility clustering --- selects the estimator:
 
 | Feature needed | Recommended | Why |
 |----------------|-------------|-----|
@@ -39,6 +39,7 @@ All 14 methods return a rotation matrix ``Q`` and structural impact matrix ``B_0
 | Bimodal shocks | `identify_mixture_normal` | Two-component Gaussian mixture |
 | Skewness and kurtosis jointly | `identify_pml` | Pearson Type IV ML on both moments |
 | Asymmetric shocks | `identify_skew_normal` | Azzalini skew-normal likelihood |
+| Independence via higher moments | `identify_gmm_moments` | Coskewness / cokurtosis GMM |
 | Discrete volatility regimes | `identify_markov_switching` | EM over latent regimes |
 | Volatility clustering | `identify_garch` | Conditional variance dynamics |
 | Gradual variance shifts | `identify_smooth_transition` | Logistic transition variable |
@@ -49,9 +50,9 @@ All 14 methods return a rotation matrix ``Q`` and structural impact matrix ``B_0
 
 ## Child Pages
 
-- [Non-Gaussian Methods](@ref id_nongaussian_page) --- ICA (FastICA, JADE, SOBI, distance covariance, HSIC), ML (Student-t, mixture normal, PML, skew-normal), Darmois-Skitovich theorem, contrast functions, unified dispatcher
-- [Heteroskedasticity](@ref id_heteroskedastic_page) --- eigendecomposition identification, Markov-switching, GARCH, smooth transition, external volatility instruments, result field tables
-- [Testing](@ref id_testing_page) --- normality suite (7 tests), shock Gaussianity, LR test, independence, identification strength, overidentification, weak identification diagnostics
+- [Non-Gaussian Methods](@ref id_nongaussian_page) --- ICA (FastICA, JADE, SOBI, distance covariance, HSIC), ML (Student-t, mixture normal, PML, skew-normal), GMM (coskewness / cokurtosis), `label_shocks`, Darmois-Skitovich theorem, contrast functions, unified dispatcher
+- [Heteroskedasticity](@ref id_heteroskedastic_page) --- generalized eigenproblem, K-regime joint ML, Markov-switching, GARCH, smooth transition, external volatility instruments, delta-method SEs
+- [Testing](@ref id_testing_page) --- normality suite (7 tests), shock Gaussianity, LR test, independence, distinct-``\lambda`` Wald, label-stability, overidentification
 
 ---
 
@@ -77,7 +78,7 @@ The covariance ``\Sigma = B_0 B_0'`` provides ``n(n+1)/2`` equations for ``n^2``
 
 ## IRF Pipeline Integration
 
-All 14 methods plug into `irf()`, `fevd()`, and `historical_decomposition()` through the same internal rotation interface. Pass the method name as a symbol:
+All 15 methods plug into `irf()`, `fevd()`, and `historical_decomposition()` through the same internal rotation interface. Pass the method name as a symbol:
 
 ```@example id_overview
 irfs = irf(model, 20; method=:fastica)
@@ -101,13 +102,22 @@ decomp  = fevd(model, 20; method=:jade)
 nothing # hide
 ```
 
-Supported symbols: `:fastica`, `:jade`, `:sobi`, `:dcov`, `:hsic`, `:student_t`, `:mixture_normal`, `:pml`, `:skew_normal`, `:markov_switching`, `:garch`, and `:nongaussian_ml`. The heteroskedasticity schemes `:smooth_transition` and `:external_volatility` are also accepted but require an additional keyword argument (`transition_var` and `regime_indicator`, respectively).
+Supported symbols: `:fastica`, `:jade`, `:sobi`, `:dcov`, `:hsic`, `:student_t`, `:mixture_normal`, `:pml`, `:skew_normal`, `:nongaussian_ml`, `:gmm_moments`, `:markov_switching`, and `:garch`. The heteroskedasticity schemes `:smooth_transition` and `:external_volatility` are also accepted but require an additional keyword argument (`transition_var` and `regime_indicator`, respectively).
 
 ---
 
 ## The Labeling Problem
 
-Statistical identification recovers ``B_0`` only up to **column permutation and sign**. The data alone cannot determine which column corresponds to which economic shock --- economic information is still required to label shocks. The package normalizes ``B_0`` to have a positive diagonal (sign convention). Column-assignment stability is the match-fraction from `test_label_stability` (no p-value); `test_identification_strength` is a deprecated wrapper. See [Identification Testing](@ref id_testing_page) and Lewis (2025, Section 6.4).
+Statistical identification recovers ``B_0`` only up to **column permutation and sign**. The data alone cannot determine which column corresponds to which economic shock --- economic information is still required to label shocks. The package normalizes ``B_0`` to have a positive diagonal (sign convention). `label_shocks` applies a signed permutation: `by=:max_impact` assigns each column to the variable it moves most, `by=:restrictions` maximises satisfied impact-sign restrictions, and `by=:reference` matches a reference impact via `_match_columns`. Column-assignment *stability* is the match-fraction from `test_label_stability` (no p-value); `test_identification_strength` is a deprecated wrapper that is not a Procrustes strength test. See [Non-Gaussian Methods](@ref id_nongaussian_page), [Identification Testing](@ref id_testing_page), and Lewis (2025, Section 6.4).
+
+```@example id_overview
+ica_lab = identify_fastica(model; rng=MersenneTwister(11))
+labeled = label_shocks(ica_lab; by=:max_impact, variables=1:3,
+                       shock_names=["output", "price", "mp"])
+labeled.shock_names
+```
+
+`label_shocks` permutes the columns so the named shocks line up with the variables they move most. The rotation is the same ``B_0`` up to that signed permutation; only the labels change.
 
 ---
 

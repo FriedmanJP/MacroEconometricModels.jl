@@ -695,6 +695,13 @@ function identify_long_run(model::VARModel{T}) where {T<:AbstractFloat}
 end
 
 # Identification registry (SID-19). Flags used by SID-04/05/06 and FEVD.
+"""
+    IdentificationMethod(name, needs_residuals, is_set_identified, is_partial)
+
+Registry entry for a `compute_Q` / `irf` identification scheme. `needs_residuals`
+is true when the kernel reads `model.U`; `is_set_identified` marks sign / narrative
+/ Arias; `is_partial` marks proxy and max-share (some columns unidentified).
+"""
 struct IdentificationMethod
     name::Symbol
     needs_residuals::Bool
@@ -704,6 +711,12 @@ end
 
 const IDENTIFICATION_REGISTRY = Dict{Symbol,IdentificationMethod}()
 
+"""
+    register_identification!(m::IdentificationMethod)
+
+Insert `m` into `IDENTIFICATION_REGISTRY`. Built-in schemes are registered at
+load time; user schemes use the same hook.
+"""
 register_identification!(m::IdentificationMethod) = (IDENTIFICATION_REGISTRY[m.name] = m)
 
 function _identification_method(method::Symbol)

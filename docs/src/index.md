@@ -71,13 +71,14 @@ New users start at [Installation & First Model](@ref getting_started_page); read
 
 **Structural Identification**
 
-- Six schemes impose economic restrictions: Cholesky, sign restrictions, long-run (Blanchard-Quah), narrative restrictions, Arias et al. (2018) sign-and-zero, and the Mountford-Uhlig (2009) penalty function
-- Max-share identification recovers the shock that dominates a target variable's forecast-error variance or spectral band (news shocks; Francis et al. 2014)
-- Fourteen further schemes exploit statistical structure instead, so the `method=` keyword accepts eighteen symbols in total, every one of them returning the same result object
+- Six schemes impose economic restrictions: Cholesky, sign restrictions, long-run (Blanchard-Quah), narrative restrictions (ADRR), Arias et al. (2018) sign-and-zero, and the Mountford-Uhlig (2009) penalty function
+- Proxy SVAR, AB-model ML, max-share / news-shock identification, and structural VECM (KPSW)
+- Fifteen further schemes exploit statistical structure instead, so the `method=` keyword accepts twenty-five symbols in total, every one of them returning the same result object
 - Non-Gaussian ICA: FastICA, JADE, SOBI, dCov, HSIC
-- Non-Gaussian ML: Student-t, mixture-normal, PML, skew-normal, plus the `:nongaussian_ml` dispatcher that selects the distribution at runtime
-- Heteroskedasticity-based: Markov-switching, GARCH, smooth-transition, external volatility
-- Identifiability diagnostics: gaussianity tests, independence tests, bootstrap strength tests
+- Non-Gaussian ML: Student-t, mixture-normal, PML, skew-normal, plus the `:nongaussian_ml` dispatcher; GMM from coskewness / cokurtosis
+- Heteroskedasticity-based: Markov-switching, GARCH, smooth-transition, external volatility (K-regime joint ML)
+- Set-identified summaries (`median_target`, `modal_model`, `joint_band`) and Giacomini–Kitagawa robust Bayes
+- Identifiability diagnostics: gaussianity tests, independence tests, distinct-``\lambda`` Wald, label-stability
 
 **Nowcasting**
 

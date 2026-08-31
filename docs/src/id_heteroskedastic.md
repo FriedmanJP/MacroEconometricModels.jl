@@ -89,10 +89,23 @@ where:
 - ``\Lambda = \text{diag}(\lambda_1, \ldots, \lambda_n)`` contains the relative variance ratios ``\lambda_j = \lambda_{j2} / \lambda_{j1}``, ordered ascending
 - ``B_0 = L_1 W``
 
-**Identification condition**: the eigenvalues ``\lambda_j`` must be distinct. With ``K \geq 2`` regimes producing distinct eigenvalues, ``B_0`` is identified up to column permutation and sign. All four estimators on this page route through this same kernel; they differ only in how the regime covariances are obtained.
+**Identification condition**: the eigenvalues ``\lambda_j`` must be distinct. With ``K \geq 2`` regimes producing distinct eigenvalues, ``B_0`` is identified up to column permutation and sign.
+
+For ``K \ge 2`` the estimators then refine that start by **joint maximum likelihood** (Lanne, Lütkepohl & Maciejowska 2010). The structural covariances are
+
+```math
+\Sigma_k = B_0 \Lambda_k B_0', \qquad \Lambda_1 = I, \qquad k = 1,\ldots,K
+```
+
+where:
+- ``B_0`` is free (equivalently a Cholesky factor times Givens angles)
+- ``\Lambda_k = \mathrm{diag}(\lambda_{1k},\ldots,\lambda_{nk})`` for ``k \ge 2``
+- every regime covariance enters the concentrated Gaussian likelihood, not just the first pair
+
+Delta-method standard errors of ``B_0`` come from the observed information of that concentrated criterion and are stored as `se` and `vcov`.
 
 !!! note "Technical Note"
-    The implementation solves ``L_1^{-1}\Sigma_2 L_1^{-\top} = W\Lambda W'`` and sets ``B_0 = L_1 W``. Eigenvalues are ordered ascending. A positive-diagonal sign convention normalizes the result, and `Lambda` is recomputed per regime as ``\text{diag}(B_0^{-1} \Sigma_k B_0^{-\prime})``, so regime 1 always reports a vector of ones.
+    The two-regime start solves ``L_1^{-1}\Sigma_2 L_1^{-\top} = W\Lambda W'`` and sets ``B_0 = L_1 W``. Eigenvalues are ordered ascending. A positive-diagonal sign convention normalizes the result, and `Lambda` is recomputed per regime as ``\text{diag}(B_0^{-1} \Sigma_k B_0^{-\prime})``, so regime 1 always reports a vector of ones. There is no polar projection onto the orthogonal group.
 
 ---
 
@@ -112,6 +125,7 @@ The EM algorithm iterates:
 
 1. **E-step**: the Hamilton (1989) forward filter computes filtered probabilities ``\xi_{t|t}(k)``; the Kim (1994) backward smoother produces smoothed probabilities ``\xi_{t|T}(k)``.
 2. **M-step**: regime covariances are updated as smoothed-probability-weighted sample covariances, and the transition matrix from the Kim (1994) joint smoothed probabilities ``\xi_{t,t-1|T}(i,j)``.
+3. **Identification**: joint ML for a common ``B_0`` and ``\Lambda_2,\ldots,\Lambda_K`` (``\Lambda_1 = I``) using all ``K`` covariances (Lanne, Lütkepohl & Maciejowska 2010). `n_starts` Dirichlet-random EM starts keep the filter off a single local mode; the start with the highest likelihood is returned.
 
 !!! note "Kim (1994) Joint Smoother"
     The transition-matrix update uses ``\xi_{t,t-1|T}(i,j) = \xi_{t|T}(j) \cdot P_{ij} \cdot \xi_{t-1|t-1}(i) / \xi_{t|t-1}(j)`` rather than the naive product of marginal smoothed probabilities. This accounts for serial dependence in the regime assignments and produces unbiased transition-matrix estimates.
@@ -142,6 +156,8 @@ The EM algorithm converges in 15 iterations to two persistent regimes: staying p
 | `n_regimes` | `Int` | `2` | Number of volatility regimes |
 | `max_iter` | `Int` | `500` | Maximum EM iterations |
 | `tol` | `Real` | ``10^{-6}`` | Relative convergence tolerance on the log-likelihood |
+| `n_starts` | `Int` | `5` | Dirichlet-random EM starts (first start is a chunk split) |
+| `rng` | `AbstractRNG` | `Random.default_rng()` | Random number generator for the extra starts |
 
 **Return value** (`MarkovSwitchingSVARResult`):
 
@@ -157,9 +173,13 @@ The EM algorithm converges in 15 iterations to two persistent regimes: staying p
 | `converged` | `Bool` | Convergence status |
 | `iterations` | `Int` | EM iterations used |
 | `n_regimes` | `Int` | Number of regimes |
+| `se` | `Matrix{T}` | Delta-method standard errors of ``B_0`` |
+| `vcov` | `Matrix{T}` | Parameter-space covariance (Givens angles and ``\log\Lambda_{2:K}``) |
+| `classification_quality` | `T` | Mean of the max smoothed regime probability |
+| `shocks` | `Matrix{T}` | Structural shocks ``\varepsilon_t = B_0^{-1} u_t`` |
 
-!!! warning "Only the first two regimes identify B₀"
-    With `n_regimes > 2` the EM step estimates all ``K`` covariance matrices, but the eigendecomposition that delivers ``B_0`` uses ``\Sigma_1`` and ``\Sigma_2`` alone. The remaining regimes enter only through the filter and through their reported `Lambda` vectors.
+!!! note "Every regime identifies B₀"
+    With `n_regimes > 2` the EM step estimates all ``K`` covariance matrices and the joint ML step uses all of them. The two-regime generalized eigenproblem is only the starting value. Check `se` and `test_lambda_distinct` before treating extra regimes as free identifying information.
 
 ---
 
@@ -193,7 +213,7 @@ report(garch)
  iterations = garch.iterations)
 ```
 
-The outer loop stops after 8 iterations. The ARCH and GARCH coefficients are identical across the three shocks and their sum is ``1.122``, which violates the stationarity requirement ``\alpha + \beta < 1`` --- the inner GARCH fit has not moved off its starting values, so these parameters carry no information about the data. Always compute this persistence sum before interpreting a GARCH-identified ``B_0``: when it exceeds 1, the conditional variances are not a valid weighting scheme and the identification reduces to an arbitrary rotation. On this sample, prefer the Markov-switching or external-volatility route.
+The outer loop stops after 18 iterations. Persistence ``\alpha_j+\beta_j`` is ``(0.894, 0.274, 0.970)``: all three sums sit below 1, so the GARCH(1,1) weights are a valid scheme. Shock 3 is nearly integrated (``\beta_3 \approx 0.97``), shock 2 is almost pure ARCH, and shock 1 is a standard covariance-stationary GARCH. Distinct persistence profiles are what identify the columns --- if every shock had the same ``(\alpha,\beta)``, the rotation would not be pinned down. Always compute this sum before interpreting a GARCH-identified ``B_0``.
 
 | Keyword | Type | Default | Description |
 |---------|------|---------|-------------|
@@ -212,6 +232,8 @@ The outer loop stops after 8 iterations. The ARCH and GARCH coefficients are ide
 | `loglik` | `T` | Log-likelihood |
 | `converged` | `Bool` | Convergence status |
 | `iterations` | `Int` | Outer iterations used |
+| `se` | `Matrix{T}` | Delta-method standard errors of ``B_0`` |
+| `vcov` | `Matrix{T}` | Parameter-space covariance (Givens angles and GARCH parameters) |
 
 ---
 
@@ -224,13 +246,13 @@ Smooth-transition identification (Lütkepohl & Netšunajev 2017) allows gradual 
 ```
 
 where:
-- ``G(s_t) = 1 / (1 + \exp(-\gamma(s_t - c)))`` is the logistic transition function
+- ``G(s_t) = 1 / (1 + \exp(-\gamma(s_t - c)/\mathrm{std}(s)))`` is the logistic transition function
 - ``s_t`` is an observable transition variable
 - ``\gamma > 0`` controls the transition speed (large ``\gamma`` approximates a discrete switch)
 - ``c`` is the threshold location
 - ``\Lambda = \text{diag}(\lambda_1, \ldots, \lambda_n)`` holds the relative variances in the second regime
 
-When ``G = 0`` the covariance equals ``B_0 B_0'``; when ``G = 1`` it equals ``B_0 \Lambda B_0'``. The estimator first splits the sample at ``G = 0.5`` to obtain the two extreme-regime covariances and the eigendecomposition identification, then optimizes ``(\gamma, c)`` by maximum likelihood with ``B_0`` and ``\Lambda`` held fixed.
+When ``G = 0`` the covariance equals ``B_0 B_0'``; when ``G = 1`` it equals ``B_0 \Lambda B_0'``. A median split of ``G(s_t)`` supplies the starting value ``(L, Q, \Lambda)``. Joint ML then estimates ``(\mathrm{vech}\, L, \theta, \log\Lambda, \gamma, c)`` together, so the ``G = 0`` pole is ``B_0 B_0'`` rather than a frozen split (or unconditional) covariance. ``\log\gamma`` is bounded so ``\gamma \in [10^{-3}, 20]/\mathrm{std}(s)``.
 
 ```@example id_het
 s = Y[2:end, 1]
@@ -245,11 +267,11 @@ report(st)
  n_transitional = count(g -> 0.01 < g < 0.99, st.G_values))
 ```
 
-The estimated transition speed of ``5312.6`` around a threshold of ``0.00006`` in monthly industrial-production growth is effectively a discrete switch: only 14 of the 118 observations have ``G(s_t)`` strictly between 0.01 and 0.99, and 56.8% of the sample sits in the high-``G`` regime. A ``\gamma`` this large means the data prefer an abrupt variance break to a gradual one, which is a substantive result --- the smooth-transition specification nests the sample-split estimator, and here it collapses onto it. Read a large ``\gamma`` as a recommendation to check `identify_external_volatility` with an explicitly dated regime indicator.
+The estimated transition speed is on the order of 30 around a threshold near zero in monthly industrial-production growth, with tens of observations in the transitional region ``0.01 < G(s_t) < 0.99``. That is a genuine smooth transition, not a collapsed sample split: a frozen-split estimator that holds ``B_0`` fixed after the ``G = 0.5`` cut produces ``\gamma`` in the thousands and almost no transitional observations. Joint ML does not. If ``\gamma`` saturates the upper bound ``20/\mathrm{std}(s)``, check `identify_external_volatility` with an explicitly dated regime indicator. If `converged` is `false`, raise `max_iter`.
 
 | Keyword | Type | Default | Description |
 |---------|------|---------|-------------|
-| `max_iter` | `Int` | `500` | Maximum Nelder-Mead iterations for ``(\gamma, c)`` |
+| `max_iter` | `Int` | `500` | Maximum L-BFGS iterations for the joint criterion |
 | `tol` | `Real` | ``10^{-6}`` | Convergence tolerance |
 
 **Return value** (`SmoothTransitionSVARResult`):
@@ -266,13 +288,15 @@ The estimated transition speed of ``5312.6`` around a threshold of ``0.00006`` i
 | `G_values` | `Vector{T}` | Evaluated transition function ``G(s_t)`` |
 | `loglik` | `T` | Log-likelihood |
 | `converged` | `Bool` | Convergence status |
-| `iterations` | `Int` | Nelder-Mead iterations used |
+| `iterations` | `Int` | Optimizer iterations used |
+| `se` | `Matrix{T}` | Delta-method standard errors of ``B_0`` |
+| `vcov` | `Matrix{T}` | Parameter-space covariance (``\mathrm{vech}\, L``, Givens angles, ``\log\Lambda``, ``\gamma``, ``c``) |
 
 ---
 
 ## External Volatility Instruments
 
-When the volatility regimes are known a priori --- NBER recessions, financial crises, policy regime changes --- external volatility identification (Rigobon 2003) splits the sample and estimates regime-specific covariance matrices directly. This is the simplest heteroskedasticity method: no latent state, no iterative optimization, and the regime dates are an assumption the reader can check.
+When the volatility regimes are known a priori --- NBER recessions, financial crises, policy regime changes --- external volatility identification (Rigobon 2003) splits the sample, estimates regime-specific covariance matrices, and jointly estimates ``B_0`` and ``\Lambda_2,\ldots,\Lambda_K`` from all ``K`` of them (Lanne, Lütkepohl & Maciejowska 2010). This is the simplest heteroskedasticity method: no latent state, and the regime dates are an assumption the reader can check. A regime with fewer than ``n+1`` observations throws `ArgumentError`.
 
 ```@example id_het
 T_obs = size(model.U, 1)
@@ -302,6 +326,8 @@ The two halves of the sample carry 59 residuals each. The second-half variance r
 | `Lambda` | `Vector{Vector{T}}` | Relative variances per regime (regime 1 is normalized to ones) |
 | `regime_indices` | `Vector{Vector{Int}}` | Observation indices per regime |
 | `loglik` | `T` | Log-likelihood |
+| `se` | `Matrix{T}` | Delta-method standard errors of ``B_0`` |
+| `vcov` | `Matrix{T}` | Parameter-space covariance (Givens angles and ``\log\Lambda_{2:K}``) |
 
 ---
 
@@ -348,7 +374,7 @@ Step 2 matches each Markov-switching column to its closest external-volatility c
 
 3. **EM converges to local optima.** The Markov-switching EM algorithm is initialized by splitting the sample into ``K`` equal blocks, so it is sensitive to where the volatility actually shifts. If `ms.converged == false`, raise `max_iter`; if the regimes look implausible, compare against `identify_external_volatility` with dated regimes.
 
-4. **Short regimes.** Regime-specific covariance estimation needs at least ``n + 1`` observations per regime. `identify_external_volatility` silently falls back to the full-sample covariance for any undersized regime, which destroys the identification while still returning a result --- check `length.(ev.regime_indices)`.
+4. **Short regimes.** Regime-specific covariance estimation needs at least ``n + 1`` observations per regime. `identify_external_volatility` throws `ArgumentError` on any undersized regime rather than silently substituting the full-sample covariance. Check `length.(ev.regime_indices)` before shrinking a dated split.
 
 5. **GARCH stationarity.** Verify ``\alpha_j + \beta_j < 1`` in `garch.garch_params` before interpreting a GARCH-identified ``B_0``. Values summing above 1, or identical across shocks, mean the inner GARCH optimizer never left its starting point and the conditional variances are meaningless.
 
@@ -365,6 +391,8 @@ Step 2 matches each Markov-switching column to its closest external-volatility c
 - Lanne, Markku, and Helmut Lütkepohl. 2008. "Identifying Monetary Policy Shocks via Changes in Volatility." *Journal of Money, Credit and Banking* 40 (6): 1131--1149. [DOI](https://doi.org/10.1111/j.1538-4616.2008.00151.x)
 
 - Lewis, Daniel J. 2021. "Identifying Shocks via Time-Varying Volatility." *Review of Economic Studies* 88 (6): 3086--3124. [DOI](https://doi.org/10.1093/restud/rdab009)
+
+- Lanne, Markku, Helmut Lütkepohl, and Katarzyna Maciejowska. 2010. "Structural Vector Autoregressions with Markov Switching." *Journal of Economic Dynamics and Control* 34 (2): 121--131. [DOI](https://doi.org/10.1016/j.jedc.2009.08.002)
 
 - Lütkepohl, Helmut, and Aleksei Netšunajev. 2017. "Structural Vector Autoregressions with Smooth Transition in Variances." *Journal of Economic Dynamics and Control* 84: 43--57. [DOI](https://doi.org/10.1016/j.jedc.2017.09.001)
 

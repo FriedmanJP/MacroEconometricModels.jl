@@ -216,7 +216,7 @@ hsic = identify_hsic(model; sigma=1.0)
 report(hsic)
 ```
 
-The criterion falls to ``7.4 \times 10^{-4}`` after 19 iterations. HSIC and dCov target the same null --- full independence, not merely zero correlation --- and the HSIC solution reproduces the FastICA directions up to a column permutation, with a maximum angular discrepancy of ``0.013``. Agreement across criteria with different objective functions is the practical substitute for the standard errors that nonparametric ICA does not provide.
+The criterion falls to ``7.4 \times 10^{-4}`` after 19 iterations. HSIC and dCov target the same null --- full independence, not merely zero correlation --- and the HSIC solution reproduces the FastICA directions up to a column permutation, with a maximum angular discrepancy of ``0.013``. Agreement across criteria with different objective functions is the practical substitute for the standard errors that nonparametric ICA does not provide; GMM and the ML estimators below do supply sandwich or information-matrix SEs.
 
 | Keyword | Type | Default | Description |
 |---------|------|---------|-------------|
@@ -457,6 +457,24 @@ Cokurtosis is the relevant block here: the Student-t ML fit already showed that 
 
 ---
 
+## Labelling Shocks
+
+Statistical identification recovers columns up to signed permutation. [`label_shocks`](@ref) applies an economic labelling: `by=:max_impact` assigns column ``j`` to the shock with the largest ``|B_0[v_j,\cdot]|`` (divided by the column norm), `by=:restrictions` maximises satisfied impact-sign restrictions, and `by=:reference` matches a reference impact. This is a labelling, not a test of identification strength --- use `test_label_stability` for that (see [Identification Testing](@ref id_testing_page)).
+
+```@example id_ng
+labeled = label_shocks(ica; by=:max_impact, variables=1:3,
+                       shock_names=["output", "price", "mp"])
+report(labeled)
+```
+
+```@example id_ng
+labeled.shock_names
+```
+
+`by=:max_impact` assigns each named shock to the column with the largest normalised impact on that variable. ICA results do not store variable names, so `variables` is a vector of column indices; pass a sign matrix or `SVARRestrictions` with `by=:restrictions` when the labelling comes from impact signs rather than from which variable moves most.
+
+---
+
 ## Complete Example
 
 This workflow identifies the same monetary VAR nonparametrically and parametrically, selects a distribution by information criterion, and pushes the preferred identification through the IRF pipeline.
@@ -504,7 +522,7 @@ Step 3 reports, for each FastICA column, the smallest angular distance to any St
 
 1. **Gaussian shocks defeat identification.** Non-Gaussian methods require at most one Gaussian shock. Run `normality_test_suite` on the residuals and `test_shock_gaussianity` on the recovered shocks before interpreting anything. If the residuals are multivariate normal, use heteroskedasticity-based methods instead.
 
-2. **Column ordering is not structural.** Statistical identification recovers ``B_0`` up to column permutation and sign. The package normalizes signs to a positive diagonal, but economic labelling of the shocks still requires outside information --- see Lewis (2025, Section 6.4) on the labelling problem. In the example above the funds-rate column is second, not third.
+2. **Column ordering is not structural.** Statistical identification recovers ``B_0`` up to column permutation and sign. The package normalizes signs to a positive diagonal; `label_shocks` then applies the economic labelling. `test_label_stability` is a match-fraction, not a Procrustes strength test --- see Lewis (2025, Section 6.4). In the FastICA example above the funds-rate column is second, not third, until `label_shocks` moves it.
 
 3. **Check `converged` before reading parameters.** `identify_mixture_normal` needs roughly 1300 Nelder-Mead iterations on this sample and stops short at the default `max_iter=500`. `identify_jade` and `identify_sobi` end on their iteration cap and report `converged = false`; cross-check their ``B_0`` against FastICA rather than treating it as final.
 
