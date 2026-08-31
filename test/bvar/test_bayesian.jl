@@ -667,3 +667,37 @@ end
                                            sign_restriction(1, 1, :negative)])
     @test_throws IdentificationError identify_arias_bayesian(post, restr_imp, 5; n_rotations=3)
 end
+
+@testset "SID-04 fallback P_ref when posterior-mean Q unidentified" begin
+    # Noiseless VAR so the posterior-mean B fits U ≈ 0. External-volatility ID
+    # then sees identical regime covariances and throws IdentificationError on
+    # the mean model; perturbed draws remain identified and become P_ref.
+    n, p, Tobs = 2, 1, 80
+    A = [0.5 0.0; 0.0 0.5]
+    Y = zeros(Tobs, n)
+    Y[1, :] = [2.0, -1.5]
+    for t in 2:Tobs
+        Y[t, :] = A * Y[t-1, :]
+    end
+    B_true = [0.0 0.0; 0.5 0.0; 0.0 0.5]
+    Δ = [0.0 0.0; 0.0 0.15; 0.15 0.0]
+    B_draws = zeros(3, 3, 2)
+    B_draws[1, :, :] = B_true
+    B_draws[2, :, :] = B_true + Δ
+    B_draws[3, :, :] = B_true - Δ
+    Sigma_draws = zeros(3, 2, 2)
+    for s in 1:3
+        Sigma_draws[s, :, :] .= Matrix(1.0I, 2, 2)
+    end
+    post = BVARPosterior{Float64}(B_draws, Sigma_draws, 3, p, n, Y, :normal, :direct, ["y1", "y2"])
+    regimes = ones(Int, Tobs)
+    regimes[(Tobs ÷ 2 + 1):end] .= 2
+    results, ns = @test_logs (:warn, r"reference Q could not be identified") match_mode = :any begin
+        MacroEconometricModels.process_posterior_samples(post,
+            (m, Q, h) -> MacroEconometricModels.compute_irf(m, Q, h);
+            method=:external_volatility, horizon=4, regime_indicator=regimes)
+    end
+    @test ns >= 2
+    @test length(results) == ns
+    @test all(r -> size(r) == (4, n, n) && all(isfinite, r), results)
+end

@@ -86,8 +86,11 @@ function process_posterior_samples(post::BVARPosterior, compute_func::Function;
 
     # Match statistical-ID columns to the posterior-mean impact (SID-04). Set-ID
     # methods (:sign, :narrative) and recursive/long-run ID are left unmatched.
+    # If the mean model is unidentified, warn and fall back to the first
+    # successfully identified draw as P_ref (re-matching that draw is a no-op).
+    match_columns = _should_match_columns(method)
     P_ref = nothing
-    if _should_match_columns(method)
+    if match_columns
         m_mean = posterior_mean_model(post; data=use_data)
         try
             Q_mean = compute_Q(m_mean, method, horizon, check_func, narrative_check;
@@ -96,6 +99,7 @@ function process_posterior_samples(post::BVARPosterior, compute_func::Function;
             P_ref = Matrix{T}(safe_cholesky(m_mean.Sigma) * Q_mean)
         catch e
             e isa IdentificationError || rethrow(e)
+            @warn "Column matching skipped because the reference Q could not be identified from the posterior-mean model; using first identified draw as P_ref"
         end
     end
 
@@ -118,6 +122,9 @@ function process_posterior_samples(post::BVARPosterior, compute_func::Function;
             Q = compute_Q(m, method, horizon, check_func, narrative_check;
                           max_draws=max_draws, transition_var=transition_var,
                           regime_indicator=regime_indicator)
+            if P_ref === nothing && match_columns
+                P_ref = Matrix{T}(safe_cholesky(m.Sigma) * Q)
+            end
             Q, _ = _maybe_match_Q(Q, m, P_ref)
             res = compute_func(m, Q, horizon)
             valid_count += 1
