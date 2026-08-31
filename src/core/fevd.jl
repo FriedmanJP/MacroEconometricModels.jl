@@ -197,6 +197,8 @@ function fevd(post::BVARPosterior, horizon::Int;
     transition_var::Union{Nothing,AbstractVector}=nothing,
     regime_indicator::Union{Nothing,AbstractVector{Int}}=nothing,
     restrictions=nothing,
+    normalize::Union{Nothing,Symbol}=nothing,
+    shock_size::Union{Nothing,Pair}=nothing,
     kwargs...
 )
     use_data = isempty(data) ? post.data : data

@@ -696,4 +696,13 @@ end
     sh_q = structural_shocks(m, Q)
     @test sh_q ≈ MacroEconometricModels.compute_structural_shocks(m, Q)
     @test size(sh_q) == (size(m.U, 1), n)
+
+    post = estimate_bvar(Y, 1; n_draws=FAST ? 12 : 24, burnin=4)
+    bir = irf(post, 4; method=:cholesky, normalize=:unit_effect,
+              shock_size=(1 => 0.25))
+    @test bir isa BayesianImpulseResponse
+    @test any(j -> isapprox(bir.point_estimate[1, 1, j], 0.25; atol=1e-8), 1:n)
+    hd_b = historical_decomposition(post, 4; method=:cholesky,
+                                    normalize=:unit_effect, shock_size=(1 => 0.25))
+    @test hd_b isa BayesianHistoricalDecomposition
 end

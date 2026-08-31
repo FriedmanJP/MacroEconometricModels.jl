@@ -574,10 +574,13 @@ function irf(post::BVARPosterior, horizon::Int;
     transition_var::Union{Nothing,AbstractVector}=nothing,
     regime_indicator::Union{Nothing,AbstractVector{Int}}=nothing,
     restrictions=nothing,
+    normalize::Union{Nothing,Symbol}=nothing,
+    shock_size::Union{Nothing,Pair}=nothing,
     kwargs...
 )
     use_data = isempty(data) ? post.data : data
     _validate_narrative_data(method, use_data)
+    apply_ue = _unit_effect_requested(normalize)
 
     n = post.n
     ET = eltype(use_data)
@@ -608,6 +611,11 @@ function irf(post::BVARPosterior, horizon::Int;
 
     # Stack results into single array
     all_irfs = stack_posterior_results(results, (horizon, n, n), ET)
+    if apply_ue
+        irf_ref = dropdims(mean(all_irfs; dims=1), dims=1)
+        specs = _unit_effect_specs_from_irf(irf_ref, post.varnames, shock_size)
+        _scale_irf_draws!(all_irfs, specs)
+    end
 
     # Compute quantiles using shared utility (threaded for large arrays)
     q_vec = ET.(quantiles)

@@ -932,6 +932,17 @@ end
         lab_ref = label_shocks(ica_shuf; by=:reference, B_ref=B_true)
         @test lab_ref.B0 ≈ B_true atol = 1e-12
 
+        # `:reference` keeps `_match_columns` signs (negative own-effect stays).
+        B_neg = copy(B_true)
+        B_neg[:, 2] .*= -1
+        @test B_neg[2, 2] < 0
+        B_shuf_neg = B_neg[:, perm0] .* signs0'
+        ica_neg = ICASVARResult{Float64}(B_shuf_neg, W_shuf, Q_shuf, shocks_shuf,
+                                         :fastica, true, 1, 0.0)
+        lab_neg = label_shocks(ica_neg; by=:reference, B_ref=B_neg)
+        @test lab_neg.B0[2, 2] < 0
+        @test lab_neg.B0 ≈ B_neg atol = 1e-12
+
         named = label_shocks(ica_shuf; by=:max_impact,
                              shock_names=["Demand", "Supply", "MP"])
         @test named.shock_names == ["Demand", "Supply", "MP"]
@@ -956,6 +967,26 @@ end
         @test lab_sv.B0 ≈ B_true atol = 1e-12
 
         @test structural_shocks(named) == named.shocks
+
+        # Det-reversing signed permutation: Q stays L\B0; Givens theta is not
+        # overwritten with SO(n) angles that reconstruct a different rotation.
+        n2 = 2
+        L2 = [1.2 0.0; 0.4 1.1]
+        Q2 = Matrix{Float64}(I, n2, n2)
+        B2 = L2 * Q2
+        theta0 = zeros(1)
+        gmm0 = NonGaussianGMMResult{Float64}(
+            B2, Q2, copy(theta0), Matrix{Float64}(I, 1, 1), zeros(n2, n2),
+            0.0, 1.0, :cokurtosis, :two_step, randn(12, n2),
+            ["y1", "y2"], ["Shock 1", "Shock 2"])
+        B_swap = B2[:, [2, 1]]
+        lab_g = @test_logs (:warn, r"det\(Q\)") match_mode = :any begin
+            label_shocks(gmm0; by=:reference, B_ref=B_swap)
+        end
+        @test det(lab_g.Q) < 0
+        @test lab_g.Q ≈ L2 \ lab_g.B0 atol = 1e-12
+        @test lab_g.B0 ≈ B_swap atol = 1e-12
+        @test all(isnan, lab_g.theta)
 
         ml_old = NonGaussianMLResult{Float64}(
             B_true, Matrix{Float64}(I, n3, n3), randn(12, n3), :student_t,

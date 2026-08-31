@@ -75,6 +75,7 @@ function process_posterior_samples(post::BVARPosterior, compute_func::Function;
     transition_var::Union{Nothing,AbstractVector}=nothing,
     regime_indicator::Union{Nothing,AbstractVector{Int}}=nothing,
     restrictions=nothing,
+    normalize=nothing, shock_size=nothing,  # peeled: never forwarded to compute_Q
     kwargs...
 )
     use_data = isempty(data) ? post.data : data

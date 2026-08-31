@@ -1305,6 +1305,7 @@ of `B₀` (and of `Q`, stored shocks, and column-tied `Λ`).
 `sign_convention=:positive_diagonal` (default) makes `B₀[j,j] > 0`;
 `:unit_effect` makes the impact on `variables[j]` (or variable `j`) positive.
 Restriction labelling keeps the signs that maximise the score.
+`by=:reference` keeps `_match_columns` signs (the convention is not applied).
 """
 function label_shocks(result::AbstractNonGaussianSVAR;
                       by::Symbol=:restrictions,
@@ -1318,8 +1319,8 @@ function label_shocks(result::AbstractNonGaussianSVAR;
     size(B0, 1) == n || throw(ArgumentError("label_shocks: B₀ must be square"))
     by in (:restrictions, :max_impact, :reference) || throw(ArgumentError(
         "by must be :restrictions, :max_impact, or :reference, got :$by"))
-    sign_convention in (:positive_diagonal, :unit_effect) || throw(ArgumentError(
-        "sign_convention must be :positive_diagonal or :unit_effect, got :$sign_convention"))
+    sign_convention in (:positive_diagonal, :unit_effect, :none) || throw(ArgumentError(
+        "sign_convention must be :positive_diagonal, :unit_effect, or :none, got :$sign_convention"))
 
     vars = _label_variables(variables, result, n)
     perm, signs = if by === :restrictions
@@ -1334,7 +1335,9 @@ function label_shocks(result::AbstractNonGaussianSVAR;
         _match_columns(Matrix{eltype(B0)}(B_ref), Matrix{eltype(B0)}(B0))
     end
 
-    if by !== :restrictions
+    # `:reference` signs come from `_match_columns`; do not overwrite a negative
+    # own-effect that the reference impact itself carries.
+    if by === :max_impact && sign_convention !== :none
         signs = _apply_sign_convention(B0, perm, signs, sign_convention, vars)
     end
 
@@ -1585,7 +1588,7 @@ function _permute_dist_params(d::Dict, perm::Vector{Int}, signs::Vector{Int}, n:
 end
 
 function _permute_statid_field(f::Symbol, v, perm::Vector{Int}, signs::Vector{Int},
-                                n::Int, shock_names, Q_new)
+                                n::Int, shock_names, Q_new, theta_from_q::Bool)
     f === :B0 && return _col_signed(v, perm, signs)
     f === :Q && return Q_new === nothing ? _col_signed(v, perm, signs) : Q_new
     f === :W && return _row_signed(v, perm, signs)
@@ -1599,7 +1602,12 @@ function _permute_statid_field(f::Symbol, v, perm::Vector{Int}, signs::Vector{In
         return [λ isa AbstractVector && length(λ) == n ? λ[perm] : λ for λ in v]
     end
     f === :shock_names && return shock_names
-    f === :theta && return Q_new === nothing ? v : _orthogonal_to_givens(Q_new, n)
+    if f === :theta
+        Q_new === nothing && return v
+        theta_from_q && return _orthogonal_to_givens(Q_new, n)
+        # Givens angles parameterize SO(n); an improper rotation is not reconstructed.
+        return fill(eltype(v)(NaN), length(v))
+    end
     f === :dist_params && return v isa Dict ? _permute_dist_params(v, perm, signs, n) : v
     v
 end
@@ -1608,6 +1616,11 @@ function _signed_perm_result(result::R, perm::Vector{Int}, signs::Vector{Int};
                              shock_names::Union{Nothing,Vector{String}}=nothing) where {R}
     n = size(result.B0, 2)
     Q_new = hasfield(R, :Q) ? _col_signed(getfield(result, :Q), perm, signs) : nothing
+    theta_from_q = Q_new !== nothing && det(Q_new) > 0
+    if hasfield(R, :theta) && Q_new !== nothing && !theta_from_q
+        @warn "label_shocks: det(Q) < 0 after signed permutation; Givens angles (theta) " *
+              "parameterize SO(n) and are set to NaN. Use Q as the source of truth."
+    end
     names_new = if shock_names !== nothing
         Vector{String}(shock_names)
     elseif hasfield(R, :shock_names)
@@ -1618,7 +1631,7 @@ function _signed_perm_result(result::R, perm::Vector{Int}, signs::Vector{Int};
     vals = ntuple(fieldcount(R)) do i
         f = fieldname(R, i)
         v = getfield(result, f)
-        _permute_statid_field(f, v, perm, signs, n, names_new, Q_new)
+        _permute_statid_field(f, v, perm, signs, n, names_new, Q_new, theta_from_q)
     end
     R(vals...)
 end
@@ -1681,7 +1694,14 @@ function _scale_irf_draws!(draws::AbstractArray{T,4}, specs) where {T<:AbstractF
     draws
 end
 
-function _unit_effect_specs_from_irf(irfvals::AbstractArray{T,3}, model::VARModel{T},
+function _unit_effect_requested(normalize)
+    eff = normalize === nothing ? :unit_variance : normalize
+    eff in (:unit_variance, :unit_effect) || throw(ArgumentError(
+        "normalize must be :unit_variance or :unit_effect, got :$eff"))
+    eff === :unit_effect
+end
+
+function _unit_effect_specs_from_irf(irfvals::AbstractArray{T,3}, varnames::Vector{String},
                                      shock_size) where {T<:AbstractFloat}
     n = size(irfvals, 3)
     if shock_size === nothing
@@ -1689,11 +1709,14 @@ function _unit_effect_specs_from_irf(irfvals::AbstractArray{T,3}, model::VARMode
     end
     shock_size isa Pair || throw(ArgumentError(
         "shock_size must be a Pair (variable => value), got $(typeof(shock_size))"))
-    k = _resolve_var_index(shock_size.first, model.varnames, n)
+    k = _resolve_var_index(shock_size.first, varnames, n)
     value = T(shock_size.second)
     j = Int(argmax(abs.(view(irfvals, 1, k, :))))
     Tuple{Int,Int,T}[(k, j, value)]
 end
+_unit_effect_specs_from_irf(irfvals::AbstractArray{T,3}, model::VARModel{T},
+                            shock_size) where {T<:AbstractFloat} =
+    _unit_effect_specs_from_irf(irfvals, model.varnames, shock_size)
 
 function _scale_setid_irf(med, lo, hi, draws, specs)
     specs === nothing && return med, lo, hi, draws

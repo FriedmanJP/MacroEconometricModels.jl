@@ -447,6 +447,8 @@ function historical_decomposition(post::BVARPosterior, horizon::Int=0;
     transition_var::Union{Nothing,AbstractVector}=nothing,
     regime_indicator::Union{Nothing,AbstractVector{Int}}=nothing,
     restrictions=nothing,
+    normalize::Union{Nothing,Symbol}=nothing,
+    shock_size::Union{Nothing,Pair}=nothing,
     kwargs...
 )
     use_data = isempty(data) ? post.data : data
@@ -471,12 +473,14 @@ function historical_decomposition(post::BVARPosterior, horizon::Int=0;
     all_shocks = zeros(ET, samples, T_eff, n)
 
     b_vecs, sigmas = extract_chain_parameters(post)
+    apply_ue = _unit_effect_requested(normalize)
 
     valid_count = 0
     n_unidentified = 0
     n_nonstationary = 0
     for s in 1:samples
-        m = parameters_to_model(b_vecs[s, :], sigmas[s, :], p, n, use_data)
+        m = parameters_to_model(b_vecs[s, :], sigmas[s, :], p, n, use_data;
+                                varnames=post.varnames)
         if !is_stationary(m).is_stationary
             n_nonstationary += 1
             continue
@@ -486,6 +490,9 @@ function historical_decomposition(post::BVARPosterior, horizon::Int=0;
                           narrative_check=narrative_check, restrictions=restrictions,
                           max_draws=max_draws, transition_var=transition_var,
                           regime_indicator=regime_indicator, kwargs...)
+            if apply_ue
+                Q = _apply_irf_scale(Q, m, _unit_effect_specs(Q, m, shock_size))
+            end
             shocks = compute_structural_shocks(m, Q)
             Theta = _compute_structural_ma_coefficients(m, Q, horizon)
             contributions = _compute_hd_contributions(shocks, Theta)
