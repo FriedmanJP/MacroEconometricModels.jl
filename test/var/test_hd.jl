@@ -119,16 +119,16 @@ using Random
         @test hd_lr.method == :long_run
         @test verify_decomposition(hd_lr)
 
-        # Sign restrictions
+        # Sign restrictions — set-aware median (SID-05); adding-up identity not required
         check_func = irf -> irf[1, 1, 1] > 0  # Require positive impact
         hd_sign = historical_decomposition(model, horizon; method=:sign, check_func=check_func)
         @test hd_sign.method == :sign
-        @test verify_decomposition(hd_sign)
+        @test hd_sign.n_effective > 0
 
         hd_sign_md = historical_decomposition(model, horizon; method=:sign, check_func=check_func,
                                               max_draws=200, rng=MersenneTwister(734))
         @test hd_sign_md.method == :sign
-        @test verify_decomposition(hd_sign_md)
+        @test hd_sign_md.n_effective > 0
     end
 
     @testset "Theoretical DGP Verification" begin
@@ -472,6 +472,31 @@ using Random
         hd2 = historical_decomposition(model, 50)
         @test hd2.T_eff == T_eff
         @test verify_decomposition(hd2)
+    end
+
+    @testset "SID-05 set-aware sign HD" begin
+        Random.seed!(734)
+        m = estimate_var(randn(150, 2), 1)
+        chk(irf) = irf[1, 1, 1] > 0
+        s = identify_sign(m, effective_nobs(m), chk; store_all=true, rng=MersenneTwister(1), max_draws=200)
+        hd = historical_decomposition(m; method=:sign, check_func=chk, rng=MersenneTwister(1), max_draws=200)
+        @test hd.n_effective == s.n_accepted
+        @test s.n_accepted > 1
+        T_eff = effective_nobs(m)
+        actual = m.Y[(m.p + 1):end, :]
+        n = 2
+        acc = Array{Float64,4}(undef, s.n_accepted, T_eff, n, n)
+        for (i, Q) in enumerate(s.Q_draws)
+            contrib, _, _ = MacroEconometricModels._hd_from_Q(m, Q, T_eff, actual)
+            acc[i, :, :, :] = contrib
+        end
+        med = similar(hd.contributions)
+        for t in 1:T_eff, i in 1:n, j in 1:n
+            med[t, i, j] = quantile(@view(acc[:, t, i, j]), 0.5)
+        end
+        @test hd.contributions ≈ med
+        contrib1, _, _ = MacroEconometricModels._hd_from_Q(m, s.Q_draws[1], T_eff, actual)
+        @test hd.contributions ≉ contrib1
     end
 
 end

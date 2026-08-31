@@ -39,6 +39,7 @@ Fields:
 - `variables`: Variable names
 - `shock_names`: Shock names
 - `method`: Identification method used
+- `n_effective`: Accepted rotations used for a set-ID summary (`method=:sign`/`:narrative`); `0` means untracked (point-ID)
 """
 struct HistoricalDecomposition{T<:AbstractFloat} <: AbstractHistoricalDecomposition
     contributions::Array{T,3}      # T_eff × n_vars × n_shocks
@@ -49,7 +50,14 @@ struct HistoricalDecomposition{T<:AbstractFloat} <: AbstractHistoricalDecomposit
     variables::Vector{String}
     shock_names::Vector{String}
     method::Symbol
+    n_effective::Int
 end
+
+# Backward-compatible constructor (pre-SID-05, no accepted-rotation count).
+HistoricalDecomposition{T}(contributions, initial_conditions, actual, shocks, T_eff,
+        variables, shock_names, method) where {T} =
+    HistoricalDecomposition{T}(contributions, initial_conditions, actual, shocks, T_eff,
+        variables, shock_names, method, 0)
 
 """
     BayesianHistoricalDecomposition{T} <: AbstractHistoricalDecomposition
@@ -162,6 +170,16 @@ function _compute_initial_conditions(actual::Matrix{T},
     initial
 end
 
+"""Per-Q historical decomposition: contributions, initial conditions, and structural shocks."""
+function _hd_from_Q(model::VARModel{T}, Q::AbstractMatrix{T}, horizon::Int,
+                    actual::Matrix{T}) where {T<:AbstractFloat}
+    shocks = compute_structural_shocks(model, Q)
+    Theta = _compute_structural_ma_coefficients(model, Q, horizon)
+    contributions = _compute_hd_contributions(shocks, Theta)
+    initial_conditions = _compute_initial_conditions(actual, contributions)
+    contributions, initial_conditions, shocks
+end
+
 # =============================================================================
 # Frequentist Historical Decomposition
 # =============================================================================
@@ -194,12 +212,18 @@ Decomposes observed data into contributions from each structural shock plus init
 Note: `:smooth_transition` requires `transition_var` kwarg.
       `:external_volatility` requires `regime_indicator` kwarg.
 
+For `:sign`/`:narrative`, each accepted rotation gets its own HD; the reported
+contributions, initial conditions, and shocks are the pointwise median.
+`n_effective` is the number of accepted rotations. The adding-up identity of
+the pointwise-median HD is not required (Fry & Pagan 2011).
+
 # Returns
 `HistoricalDecomposition` containing:
 - `contributions`: Shock contributions (T_eff × n_vars × n_shocks)
 - `initial_conditions`: Initial condition effects (T_eff × n_vars)
 - `actual`: Actual data values
 - `shocks`: Structural shocks
+- `n_effective`: Accepted rotations for `:sign`/`:narrative` (0 otherwise)
 
 # Example
 ```julia
@@ -225,28 +249,51 @@ function historical_decomposition(model::VARModel{T}, horizon::Int=effective_nob
     # Ensure horizon doesn't exceed T_eff
     horizon = min(horizon, T_eff)
 
-    # Get identification matrix Q. `:sign`/`:narrative` still use the first
-    # accepted rotation here so the HD adding-up identity is exact; set summaries
-    # (median IRF / FEVD) live in `irf` / `fevd` (SID-05).
+    actual = model.Y[(model.p + 1):end, :]
+    snames = isnothing(shock_names) ? model.varnames : shock_names
+
+    # SID-05: HD of each accepted rotation, then pointwise median. The adding-up
+    # identity of the median HD is not required (Fry–Pagan; SID-17).
+    if method === :sign || method === :narrative
+        isnothing(check_func) && throw(ArgumentError(
+            method === :narrative ? "Need check_func and narrative_check for narrative" :
+                                    "Need check_func for sign"))
+        method === :narrative && isnothing(narrative_check) &&
+            throw(ArgumentError("Need check_func and narrative_check for narrative"))
+        s = method === :sign ?
+            identify_sign(model, horizon, check_func; max_draws=max_draws, store_all=true, rng=rng) :
+            identify_narrative(model, horizon, check_func, narrative_check;
+                               max_draws=max_draws, store_all=true, rng=rng)
+        n_acc = s.n_accepted
+        all_contrib = zeros(T, n_acc, T_eff, n, n)
+        all_init = zeros(T, n_acc, T_eff, n)
+        all_shocks = zeros(T, n_acc, T_eff, n)
+        for i in 1:n_acc
+            contrib, init, shk = _hd_from_Q(model, s.Q_draws[i], horizon, actual)
+            all_contrib[i, :, :, :] = contrib
+            all_init[i, :, :] = init
+            all_shocks[i, :, :] = shk
+        end
+        contributions = zeros(T, T_eff, n, n)
+        initial_conditions = zeros(T, T_eff, n)
+        shocks = zeros(T, T_eff, n)
+        @inbounds for t in 1:T_eff, i in 1:n
+            initial_conditions[t, i] = quantile(@view(all_init[:, t, i]), T(0.5))
+            shocks[t, i] = quantile(@view(all_shocks[:, t, i]), T(0.5))
+            for j in 1:n
+                contributions[t, i, j] = quantile(@view(all_contrib[:, t, i, j]), T(0.5))
+            end
+        end
+        return HistoricalDecomposition{T}(
+            contributions, initial_conditions, actual, shocks, T_eff,
+            model.varnames, snames, method, n_acc
+        )
+    end
+
     Q = compute_Q(model, method, horizon, check_func, narrative_check;
                   max_draws=max_draws, transition_var=transition_var, regime_indicator=regime_indicator, rng=rng)
+    contributions, initial_conditions, shocks = _hd_from_Q(model, Q, horizon, actual)
 
-    # Compute structural shocks: ε_t = Q' L^{-1} u_t
-    shocks = compute_structural_shocks(model, Q)
-
-    # Get actual data (effective sample)
-    actual = model.Y[(model.p + 1):end, :]
-
-    # Compute structural MA coefficients
-    Theta = _compute_structural_ma_coefficients(model, Q, horizon)
-
-    # Compute contributions
-    contributions = _compute_hd_contributions(shocks, Theta)
-
-    # Compute initial conditions
-    initial_conditions = _compute_initial_conditions(actual, contributions)
-
-    snames = isnothing(shock_names) ? model.varnames : shock_names
     HistoricalDecomposition{T}(
         contributions, initial_conditions, actual, shocks, T_eff,
         model.varnames, snames, method
@@ -705,6 +752,7 @@ function Base.show(io::IO, hd::HistoricalDecomposition{T}) where {T}
         "Shocks" n_shocks;
         "Time periods" hd.T_eff
     ]
+    hd.n_effective > 0 && (spec_data = vcat(spec_data, ["Accepted rotations" hd.n_effective]))
     _pretty_table(io, spec_data;
         title = "Historical Decomposition",
         column_labels = ["Specification", ""],
@@ -728,9 +776,12 @@ function Base.show(io::IO, hd::HistoricalDecomposition{T}) where {T}
         alignment = vcat([:l], fill(:r, n_shocks + 1)),
     )
 
-    # Verification status
-    verified = verify_decomposition(hd)
-    status = verified ? "Passed" : "FAILED"
+    # Verification status. Pointwise-median set-ID HD need not add up (Fry–Pagan).
+    status = if hd.n_effective > 0
+        "Not required (pointwise median)"
+    else
+        verify_decomposition(hd) ? "Passed" : "FAILED"
+    end
     conc_data = Any["Decomposition identity" status]
     _pretty_table(io, conc_data;
         column_labels = ["", ""],
