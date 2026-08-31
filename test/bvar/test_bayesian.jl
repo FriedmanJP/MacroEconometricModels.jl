@@ -644,10 +644,26 @@ end
     # and, after SID-19, on BayesianSetIdentifiedSVAR.n_unidentified.
     @test r.n_failed == r.n_requested - r.n_effective
     # Minority identification failures must skip the draw, not abort the posterior loop.
+    # n_failed > 0 is the SID-07 contract; n_failed == n_requested - n_effective is constructor arithmetic.
     r1 = irf(post, 5; method=:sign, check_func=pos, max_draws=1)
     @test r1 isa BayesianImpulseResponse
     @test r1.n_failed == r1.n_requested - r1.n_effective
+    @test r1.n_failed > 0
+    @test r1.n_effective > 0
     hd1 = historical_decomposition(post; method=:sign, check_func=pos, max_draws=1)
     @test hd1 isa BayesianHistoricalDecomposition
     @test hd1.n_failed == hd1.n_requested - hd1.n_effective
+    @test hd1.n_failed > 0
+    @test hd1.n_effective > 0
+
+    # identify_arias_bayesian: skip unidentified posterior draws; throw only if all fail.
+    restr = SVARRestrictions(2; signs=[sign_restriction(1, 1, :positive)])
+    ar1 = identify_arias_bayesian(post, restr, 5; n_rotations=1)
+    @test ar1 isa NamedTuple
+    @test haskey(ar1, :n_unidentified)
+    @test ar1.n_unidentified > 0
+    @test ar1.total_accepted > 0
+    restr_imp = SVARRestrictions(2; signs=[sign_restriction(1, 1, :positive),
+                                           sign_restriction(1, 1, :negative)])
+    @test_throws IdentificationError identify_arias_bayesian(post, restr_imp, 5; n_rotations=3)
 end

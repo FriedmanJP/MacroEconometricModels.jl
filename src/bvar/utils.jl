@@ -116,6 +116,7 @@ function process_posterior_samples(post::BVARPosterior, compute_func::Function;
     valid_count == 0 && throw(IdentificationError(
         "All posterior draws failed identification or were non-stationary " *
         "(unidentified=$n_unidentified, non-stationary=$n_nonstationary)"))
+    valid_count < samples ÷ 2 && @warn "$(samples - valid_count)/$samples posterior draws non-stationary, skipped"
     frac_u = T(n_unidentified) / T(samples)
     frac_u > T(0.5) && @warn "$n_unidentified/$samples posterior draws unidentified ($n_nonstationary non-stationary)"
 
