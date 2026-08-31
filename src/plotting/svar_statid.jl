@@ -92,6 +92,9 @@ end
 
 _statid_var_names(n::Int) = String["Var $i" for i in 1:n]
 _statid_shock_names(n::Int) = String["Shock $j" for j in 1:n]
+_statid_shock_names(r::AbstractNonGaussianSVAR) = r.shock_names
+_statid_var_names(r::AbstractNonGaussianSVAR) =
+    hasfield(typeof(r), :varnames) ? getfield(r, :varnames) : _statid_var_names(size(r.B0, 1))
 
 # =============================================================================
 # MarkovSwitchingSVARResult
@@ -128,7 +131,7 @@ function plot_result(r::MarkovSwitchingSVARResult{T};
         ftitle = isempty(title) ? "Markov-Switching SVAR — regime probabilities" : title
     elseif view === :B0
         id = _next_plot_id("ms_b0")
-        js = _statid_heatmap_panel(id, r.B0, _statid_var_names(n), _statid_shock_names(n);
+        js = _statid_heatmap_panel(id, r.B0, _statid_var_names(r), _statid_shock_names(r);
                                    scale=:diverging, xlabel="Shock", ylabel="Variable",
                                    tip_label="")
         panel = _PanelSpec(id, "Structural Impact Matrix (B₀)", js)
@@ -165,7 +168,7 @@ function plot_result(r::GARCHSVARResult{T};
                      view::Symbol=:variance, title::String="",
                      save_path::Union{String,Nothing}=nothing) where {T}
     n = size(r.B0, 1)
-    names = _statid_shock_names(n)
+    names = _statid_shock_names(r)
     if view === :variance
         id = _next_plot_id("garch_var")
         js = _statid_line_panel(id, r.cond_var, names; ylabel="Conditional variance")
@@ -281,21 +284,21 @@ function plot_result(r::ICASVARResult{T};
     n = size(r.B0, 1)
     if view === :mixing
         id = _next_plot_id("ica_b0")
-        js = _statid_heatmap_panel(id, r.B0, _statid_var_names(n), _statid_shock_names(n);
+        js = _statid_heatmap_panel(id, r.B0, _statid_var_names(r), _statid_shock_names(r);
                                    scale=:diverging, xlabel="Shock", ylabel="Variable",
                                    tip_label="")
         panel = _PanelSpec(id, "Mixing Matrix (B₀)", js)
         ftitle = isempty(title) ? "ICA-SVAR — mixing matrix ($(r.method))" : title
     elseif view === :unmixing
         id = _next_plot_id("ica_w")
-        js = _statid_heatmap_panel(id, r.W, _statid_shock_names(n), _statid_var_names(n);
+        js = _statid_heatmap_panel(id, r.W, _statid_shock_names(r), _statid_var_names(r);
                                    scale=:diverging, xlabel="Variable", ylabel="Shock",
                                    tip_label="")
         panel = _PanelSpec(id, "Unmixing Matrix (W)", js)
         ftitle = isempty(title) ? "ICA-SVAR — unmixing matrix ($(r.method))" : title
     elseif view === :shocks
         id = _next_plot_id("ica_shk")
-        js = _statid_line_panel(id, r.shocks, _statid_shock_names(n); ylabel="Structural shock")
+        js = _statid_line_panel(id, r.shocks, _statid_shock_names(r); ylabel="Structural shock")
         panel = _PanelSpec(id, "Recovered Structural Shocks", js)
         ftitle = isempty(title) ? "ICA-SVAR — structural shocks ($(r.method))" : title
     else
@@ -322,7 +325,7 @@ function plot_result(r::NonGaussianMLResult{T};
                      title::String="", save_path::Union{String,Nothing}=nothing) where {T}
     n = size(r.B0, 1)
     id = _next_plot_id("ml_b0")
-    js = _statid_heatmap_panel(id, r.B0, _statid_var_names(n), _statid_shock_names(n);
+    js = _statid_heatmap_panel(id, r.B0, _statid_var_names(r), _statid_shock_names(r);
                                scale=:diverging, xlabel="Shock", ylabel="Variable",
                                tip_label="")
     lr = max(2 * (r.loglik - r.loglik_gaussian), zero(T))

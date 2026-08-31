@@ -47,6 +47,7 @@ Fields:
 - `iterations::Int`
 - `aic::T`
 - `bic::T`
+- `shock_names::Vector{String}` — labels for the n structural shocks
 """
 struct NonGaussianMLResult{T<:AbstractFloat} <: AbstractNonGaussianSVAR
     B0::Matrix{T}
@@ -62,6 +63,23 @@ struct NonGaussianMLResult{T<:AbstractFloat} <: AbstractNonGaussianSVAR
     iterations::Int
     aic::T
     bic::T
+    shock_names::Vector{String}
+end
+
+function NonGaussianMLResult{T}(B0, Q, shocks, distribution, loglik, loglik_gaussian,
+                                 dist_params, vcov, se, converged, iterations,
+                                 aic, bic) where {T<:AbstractFloat}
+    n = size(B0, 2)
+    NonGaussianMLResult{T}(B0, Q, shocks, distribution, loglik, loglik_gaussian,
+                            dist_params, vcov, se, converged, iterations, aic, bic,
+                            _default_shock_names(n))
+end
+
+function NonGaussianMLResult(B0, Q, shocks, distribution, loglik, loglik_gaussian,
+                              dist_params, vcov, se, converged, iterations, aic, bic)
+    T = eltype(B0)
+    NonGaussianMLResult{T}(B0, Q, shocks, distribution, loglik, loglik_gaussian,
+                            dist_params, vcov, se, converged, iterations, aic, bic)
 end
 
 function Base.show(io::IO, r::NonGaussianMLResult{T}) where {T}
@@ -106,7 +124,7 @@ function Base.show(io::IO, r::NonGaussianMLResult{T}) where {T}
     )
     _matrix_table(io, r.B0, "Structural Impact Matrix (B₀)";
         row_labels=["Var $i" for i in 1:n],
-        col_labels=["Shock $j" for j in 1:n])
+        col_labels=r.shock_names)
 end
 
 # =============================================================================

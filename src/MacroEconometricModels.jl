@@ -1048,7 +1048,7 @@ export irf_percentiles, irf_mean
 # Sign restriction identified set (Baumeister & Hamilton 2015)
 export SignIdentifiedSet, irf_bounds, irf_median
 export median_target, modal_model, joint_band, sup_t_band
-export structural_shocks
+export structural_shocks, label_shocks
 
 # Mountford & Uhlig (2009) penalty function identification
 export UhligSVARResult, identify_uhlig

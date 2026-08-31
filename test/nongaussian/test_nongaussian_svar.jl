@@ -905,4 +905,79 @@ end
             end
         end
     end
+
+    @testset "SID-20 shock labels and structural_shocks" begin
+        B_true = [1.2 0.35 -0.25; 0.20 1.05 0.40; -0.30 0.25 1.10]
+        n3 = 3
+        perm0 = [2, 3, 1]
+        signs0 = [1, -1, 1]
+        B_shuf = B_true[:, perm0] .* signs0'
+        Q_shuf = Matrix{Float64}(I, n3, n3)[:, perm0] .* signs0'
+        W_shuf = Matrix{Float64}(I, n3, n3)
+        shocks_shuf = randn(20, n3)
+        ica_shuf = ICASVARResult{Float64}(B_shuf, W_shuf, Q_shuf, shocks_shuf,
+                                          :fastica, true, 1, 0.0)
+        @test length(ica_shuf.shock_names) == n3
+        @test ica_shuf.shock_names == ["Shock $j" for j in 1:n3]
+
+        S = Int.(sign.(B_true))
+        lab = label_shocks(ica_shuf; by=:restrictions, restrictions=S)
+        @test lab isa ICASVARResult{Float64}
+        @test lab.B0 ≈ B_true atol = 1e-12
+        @test lab.Q ≈ Matrix{Float64}(I, n3, n3) atol = 1e-12
+
+        lab_imp = label_shocks(ica_shuf; by=:max_impact)
+        @test lab_imp.B0 ≈ B_true atol = 1e-12
+
+        lab_ref = label_shocks(ica_shuf; by=:reference, B_ref=B_true)
+        @test lab_ref.B0 ≈ B_true atol = 1e-12
+
+        named = label_shocks(ica_shuf; by=:max_impact,
+                             shock_names=["Demand", "Supply", "MP"])
+        @test named.shock_names == ["Demand", "Supply", "MP"]
+        buf = IOBuffer()
+        show(buf, named)
+        @test occursin("Demand", String(take!(buf)))
+        p = plot_result(named)
+        @test occursin("Demand", p.html)
+
+        rs = SVARRestrictions(n3; signs=[
+            sign_restriction(1, 1, :positive),
+            sign_restriction(1, 2, :positive),
+            sign_restriction(1, 3, :negative),
+            sign_restriction(2, 1, :positive),
+            sign_restriction(2, 2, :positive),
+            sign_restriction(2, 3, :positive),
+            sign_restriction(3, 1, :negative),
+            sign_restriction(3, 2, :positive),
+            sign_restriction(3, 3, :positive),
+        ])
+        lab_sv = label_shocks(ica_shuf; by=:restrictions, restrictions=rs)
+        @test lab_sv.B0 ≈ B_true atol = 1e-12
+
+        @test structural_shocks(named) == named.shocks
+
+        ml_old = NonGaussianMLResult{Float64}(
+            B_true, Matrix{Float64}(I, n3, n3), randn(12, n3), :student_t,
+            -1.0, -2.0, Dict{Symbol,Any}(), zeros(n3, n3), zeros(n3, n3),
+            true, 1, 1.0, 2.0)
+        @test length(ml_old.shock_names) == n3
+        @test structural_shocks(ml_old) == ml_old.shocks
+
+        # DGP recovery: FastICA + sign-pattern labelling restores column order
+        # without a further Procrustes search (SID-20 acceptance).
+        if !FAST
+            B_dgp = [1.0 0.35; -0.40 1.15]
+            A = [0.4 * Matrix{Float64}(I, 2, 2)]
+            rng_d = MersenneTwister(74920)
+            Yd, _ = simulate_svar(B_dgp, A; Tobs=2000, shocks=:t, rng=rng_d)
+            md = estimate_var(Yd, 1)
+            ica_d = identify_fastica(md; rng=MersenneTwister(74921))
+            Sd = Int.(sign.(B_dgp))
+            lab_d = label_shocks(ica_d; by=:restrictions, restrictions=Sd)
+            @test norm(lab_d.B0 - B_dgp) < 0.1
+            lab_m = label_shocks(ica_d; by=:max_impact)
+            @test norm(lab_m.B0 - B_dgp) < 0.1
+        end
+    end
 end

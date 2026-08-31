@@ -249,6 +249,8 @@ function historical_decomposition(model::VARModel{T}, horizon::Int=effective_nob
     regime_indicator::Union{Nothing,AbstractVector{Int}}=nothing,
     restrictions=nothing,
     rng::AbstractRNG=Random.default_rng(),
+    normalize::Union{Nothing,Symbol}=nothing,
+    shock_size::Union{Nothing,Pair}=nothing,
     kwargs...
 ) where {T<:AbstractFloat}
 
@@ -319,10 +321,23 @@ function historical_decomposition(model::VARModel{T}, horizon::Int=effective_nob
         )
     end
 
-    Q = compute_Q(model, method; horizon=horizon, check_func=check_func,
+    Q = if method === :proxy && normalize !== nothing
+        compute_Q(model, method; horizon=horizon, check_func=check_func,
+                  narrative_check=narrative_check, restrictions=restrictions,
+                  max_draws=max_draws, transition_var=transition_var,
+                  regime_indicator=regime_indicator, rng=rng, kwargs...,
+                  normalize=normalize)
+    else
+        compute_Q(model, method; horizon=horizon, check_func=check_func,
                   narrative_check=narrative_check, restrictions=restrictions,
                   max_draws=max_draws, transition_var=transition_var,
                   regime_indicator=regime_indicator, rng=rng, kwargs...)
+    end
+    eff_norm = normalize === nothing ? :unit_variance : normalize
+    apply_ue = (eff_norm === :unit_effect) && (method !== :proxy || shock_size !== nothing)
+    if apply_ue
+        Q = _apply_irf_scale(Q, model, _unit_effect_specs(Q, model, shock_size))
+    end
     contributions, initial_conditions, shocks = _hd_from_Q(model, Q, horizon, actual)
 
     HistoricalDecomposition{T}(

@@ -642,3 +642,58 @@ end
         @test sh.quantiles[:, :, 1] == sh.median
     end
 end
+
+@testset "SID-20 unit-effect IRF and structural_shocks(model, Q)" begin
+    Random.seed!(749)
+    Tobs = FAST ? 250 : 400
+    n = 3
+    Y = zeros(Tobs, n)
+    A = 0.4 * Matrix{Float64}(I, n, n)
+    for t in 2:Tobs
+        Y[t, :] = A * Y[t-1, :] + randn(n)
+    end
+    m = estimate_var(Y, 1; varnames=["GDP", "CPI", "FEDFUNDS"])
+    k = findfirst(==("FEDFUNDS"), m.varnames)
+    @test k == 3
+
+    ir_uv = irf(m, 6; method=:cholesky)
+    @test ir_uv.values[1, 1, 1] != 0.25
+
+    ir_ue = irf(m, 6; method=:cholesky, normalize=:unit_effect,
+                shock_size=("FEDFUNDS" => 0.25))
+    hits = [j for j in 1:n if isapprox(ir_ue.values[1, k, j], 0.25; atol=1e-10)]
+    @test !isempty(hits)
+    jstar = hits[1]
+    @test ir_ue.values[1, k, jstar] ≈ 0.25 atol = 1e-10
+
+    ir_idx = irf(m, 4; method=:cholesky, normalize=:unit_effect,
+                 shock_size=(k => 0.25))
+    @test ir_idx.values[1, k, jstar] ≈ 0.25 atol = 1e-10
+
+    ir_fast = irf(m, 6; method=:fastica, normalize=:unit_effect,
+                  shock_size=("FEDFUNDS" => 0.25), seed=749)
+    @test any(j -> isapprox(ir_fast.values[1, k, j], 0.25; atol=1e-10), 1:n)
+
+    ir_band = irf(m, 4; method=:cholesky, normalize=:unit_effect,
+                  shock_size=("FEDFUNDS" => 0.25), ci_type=:bootstrap, reps=8,
+                  seed=750)
+    @test ir_band.values[1, k, jstar] ≈ 0.25 atol = 1e-10
+    @test ir_band.ci_lower[1, k, jstar] ≈ 0.25 atol = 1e-8
+    @test ir_band.ci_upper[1, k, jstar] ≈ 0.25 atol = 1e-8
+    @test any(ir_band.ci_lower .!= ir_band.ci_upper)
+
+    fv = MacroEconometricModels._suppress_warnings() do
+        fevd(m, 4; method=:cholesky, normalize=:unit_effect,
+             shock_size=("FEDFUNDS" => 0.25))
+    end
+    @test fv isa FEVD
+    @test size(fv.proportions, 1) == n
+
+    cum = cumulative_irf(ir_ue)
+    @test cum.values[1, k, jstar] ≈ 0.25 atol = 1e-10
+
+    Q = identify_cholesky(m)
+    sh_q = structural_shocks(m, Q)
+    @test sh_q ≈ MacroEconometricModels.compute_structural_shocks(m, Q)
+    @test size(sh_q) == (size(m.U, 1), n)
+end

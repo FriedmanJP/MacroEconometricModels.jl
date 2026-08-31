@@ -89,6 +89,10 @@ Note: `:smooth_transition` requires `transition_var` kwarg.
       pass `horizons` (time domain, default `0:20`) or `band=(ω₁, ω₂)`.
       `:svec` is the structural-VECM route (`identify_svec`); call it on a
       `VECMModel` via `irf(vecm; method=:svec)` or `method=:long_run`.
+      `normalize=:unit_variance` (default) leaves the identified rotation
+      unchanged. `normalize=:unit_effect` scales the shock so the impact on
+      `shock_size = (variable => value)` equals `value` (`variable` is an index
+      or name). Bands and FEVD that share `Q` are rescaled the same way.
 
 # CI types
 - `:none`
@@ -139,6 +143,8 @@ function irf(model::VARModel{T}, horizon::Int;
     set_inference::Symbol=:none,
     seed::Union{Integer,Nothing}=nothing,
     rng::AbstractRNG=Random.default_rng(),
+    normalize::Union{Nothing,Symbol}=nothing,
+    shock_size::Union{Nothing,Pair}=nothing,
     kwargs...
 ) where {T<:AbstractFloat}
 
@@ -147,6 +153,12 @@ function irf(model::VARModel{T}, horizon::Int;
     rng = _resolve_repro_rng(rng, seed)
     _validate_data(model.Sigma, "Sigma")
     _validate_data(model.B, "B")
+    user_norm = normalize
+    eff_norm = user_norm === nothing ? :unit_variance : user_norm
+    eff_norm in (:unit_variance, :unit_effect) || throw(ArgumentError(
+        "normalize must be :unit_variance or :unit_effect, got :$eff_norm"))
+    apply_unit_effect = (eff_norm === :unit_effect) &&
+                        (method !== :proxy || shock_size !== nothing)
     # Kilian bias correction needs the bootstrap machinery to estimate Psi; with
     # any other ci_type it used to be silently ignored, returning the uncorrected
     # point under a kwarg that promised correction (#564).
@@ -175,8 +187,13 @@ function irf(model::VARModel{T}, horizon::Int;
                 pct = irf_percentiles(s; quantiles=Float64[alpha, 0.5, 1 - alpha])
                 med = pct[:, :, :, 2]
                 lo, hi = pct[:, :, :, 1], pct[:, :, :, 3]
+                draws = s.irf_draws
+                if apply_unit_effect
+                    specs = _unit_effect_specs_from_irf(med, model, shock_size)
+                    med, lo, hi, draws = _scale_setid_irf(med, lo, hi, draws, specs)
+                end
                 return ImpulseResponse{T}(med, lo, hi, horizon, model.varnames, snames,
-                                          :identified_set, s.irf_draws, T(conf_level);
+                                          :identified_set, draws, T(conf_level);
                                           manifest=capture_manifest(; seed=seed, settings=Dict{String,Any}(
                                               "method" => String(method), "ci_type" => "identified_set",
                                               "max_draws" => max_draws, "acceptance_rate" => s.acceptance_rate)))
@@ -191,8 +208,13 @@ function irf(model::VARModel{T}, horizon::Int;
                 identify_narrative(model, horizon, check_func, narrative_check; max_draws=max_draws, store_all=true, rng=rng)
             med = irf_median(s)
             lo, hi = irf_bounds(s; quantiles=((1 - conf_level)/2, 1 - (1 - conf_level)/2))
+            draws = s.irf_draws
+            if apply_unit_effect
+                specs = _unit_effect_specs_from_irf(med, model, shock_size)
+                med, lo, hi, draws = _scale_setid_irf(med, lo, hi, draws, specs)
+            end
             return ImpulseResponse{T}(med, lo, hi, horizon, model.varnames, snames,
-                                      :identified_set, s.irf_draws, T(conf_level);
+                                      :identified_set, draws, T(conf_level);
                                       manifest=capture_manifest(; seed=seed, settings=Dict{String,Any}(
                                           "method" => String(method), "ci_type" => "identified_set",
                                           "max_draws" => max_draws, "acceptance_rate" => s.acceptance_rate)))
@@ -205,10 +227,18 @@ function irf(model::VARModel{T}, horizon::Int;
     end
     n = nvars(model)
     p = model.p
-    Q = compute_Q(model, method; horizon=horizon, check_func=check_func,
+    Q = if method === :proxy && user_norm !== nothing
+        compute_Q(model, method; horizon=horizon, check_func=check_func,
+                  narrative_check=narrative_check, restrictions=restrictions,
+                  max_draws=max_draws, transition_var=transition_var,
+                  regime_indicator=regime_indicator, rng=rng, kwargs...,
+                  normalize=user_norm)
+    else
+        compute_Q(model, method; horizon=horizon, check_func=check_func,
                   narrative_check=narrative_check, restrictions=restrictions,
                   max_draws=max_draws, transition_var=transition_var,
                   regime_indicator=regime_indicator, rng=rng, kwargs...)
+    end
 
     # Jentsch & Lunsford (2019): i.i.d. residual bootstrap is invalid for proxy SVARs.
     # Rewrite before bands *and* the manifest so recorded `bootstrap` is `:block`.
@@ -229,11 +259,22 @@ function irf(model::VARModel{T}, horizon::Int;
         model_point = VARModel(model.Y, p, B_bc, model.U, model.Sigma,
                                model.aic, model.bic, model.hqic, model.varnames)
         # Re-identify at the bias-corrected coefficients so the point Q matches.
-        Q = compute_Q(model_point, method; horizon=horizon, check_func=check_func,
+        Q = if method === :proxy && user_norm !== nothing
+            compute_Q(model_point, method; horizon=horizon, check_func=check_func,
+                      narrative_check=narrative_check, restrictions=restrictions,
+                      max_draws=max_draws, transition_var=transition_var,
+                      regime_indicator=regime_indicator, rng=rng, kwargs...,
+                      normalize=user_norm)
+        else
+            compute_Q(model_point, method; horizon=horizon, check_func=check_func,
                       narrative_check=narrative_check, restrictions=restrictions,
                       max_draws=max_draws, transition_var=transition_var,
                       regime_indicator=regime_indicator, rng=rng, kwargs...)
+        end
     end
+    Q_match = Q
+    scale_specs = apply_unit_effect ? _unit_effect_specs(Q, model_point, shock_size) : nothing
+    Q = _apply_irf_scale(Q, model_point, scale_specs)
     point_irf = compute_irf(model_point, Q, horizon)
 
     ci_lower, ci_upper = zeros(T, horizon, n, n), zeros(T, horizon, n, n)
@@ -245,8 +286,8 @@ function irf(model::VARModel{T}, horizon::Int;
                                   restrictions=restrictions,
                                   rng=rng, bootstrap=bootstrap, block_length=block_length,
                                   wild_dist=wild_dist, bias_correct=bias_correct,
-                                  bias_reps=bias_reps, Psi_precomputed=Psi_point, Q_ref=Q,
-                                  max_draws=max_draws, kwargs...)
+                                  bias_reps=bias_reps, Psi_precomputed=Psi_point, Q_ref=Q_match,
+                                  max_draws=max_draws, irf_scale=scale_specs, kwargs...)
         alpha = (1 - T(conf_level)) / 2
         @inbounds for h in 1:horizon, v in 1:n, s in 1:n
             d = @view sim_irfs[:, h, v, s]
@@ -294,6 +335,7 @@ function _simulate_irfs(model::VARModel{T}, method::Symbol, horizon::Int,
     Psi_precomputed::Union{Nothing,AbstractMatrix}=nothing,
     Q_ref::Union{Nothing,AbstractMatrix}=nothing,
     max_draws::Int=1000,
+    irf_scale=nothing,
     kwargs...
 ) where {T<:AbstractFloat}
     n, p = nvars(model), model.p
@@ -357,6 +399,7 @@ function _simulate_irfs(model::VARModel{T}, method::Symbol, horizon::Int,
                                       max_draws=max_draws, transition_var=transition_var,
                                       regime_indicator=regime_indicator, rng=local_rng, kw_boot...)
                         Q, was_relabeled = _maybe_match_Q(Q, m, P_ref)
+                        Q = _apply_irf_scale(Q, m, irf_scale)
                         staging[it, :, :, :] = compute_irf(m, Q, horizon)
                         relabeled[it] = was_relabeled
                         passed[it] = true
@@ -394,6 +437,7 @@ function _simulate_irfs(model::VARModel{T}, method::Symbol, horizon::Int,
                                       max_draws=max_draws, transition_var=transition_var,
                                       regime_indicator=regime_indicator, rng=local_rng, kw_boot...)
                         Q, was_relabeled = _maybe_match_Q(Q, m, P_ref)
+                        Q = _apply_irf_scale(Q, m, irf_scale)
                         sim_irfs[r, :, :, :] = compute_irf(m, Q, horizon)
                         relabeled[r] = was_relabeled
                         passed !== nothing && (passed[r] = true)
@@ -438,6 +482,7 @@ function _simulate_irfs(model::VARModel{T}, method::Symbol, horizon::Int,
                                   max_draws=max_draws, transition_var=transition_var,
                                   regime_indicator=regime_indicator, rng=local_rng, kwargs...)
                     Q, was_relabeled = _maybe_match_Q(Q, m, P_ref)
+                    Q = _apply_irf_scale(Q, m, irf_scale)
                     staging[it, :, :, :] = compute_irf(m, Q, horizon)
                     relabeled[it] = was_relabeled
                     passed[it] = true
@@ -467,6 +512,7 @@ function _simulate_irfs(model::VARModel{T}, method::Symbol, horizon::Int,
                                   max_draws=max_draws, transition_var=transition_var,
                                   regime_indicator=regime_indicator, rng=local_rng, kwargs...)
                     Q, was_relabeled = _maybe_match_Q(Q, m, P_ref)
+                    Q = _apply_irf_scale(Q, m, irf_scale)
                     sim_irfs[r, :, :, :] = compute_irf(m, Q, horizon)
                     relabeled[r] = was_relabeled
                 end

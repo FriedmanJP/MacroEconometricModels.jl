@@ -1254,3 +1254,467 @@ function structural_shocks(model::VARModel{T}, s::AriasSVARResult{T};
     _structural_shocks_from_Qs(model, s.Q_draws, s.weights; quantiles=quantiles,
                                uniform_unweighted=false)
 end
+
+"""Point structural shocks `ε = B₀ \\ u` from a rotation `Q` (`B₀ = L Q`)."""
+structural_shocks(model::VARModel, Q::AbstractMatrix) = compute_structural_shocks(model, Q)
+
+"""
+    structural_shocks(result)
+
+Stored structural shocks of a statistical identification result. Types without a
+`shocks` series (Markov-switching, external volatility) throw; recover them with
+`structural_shocks(model, result.Q)`.
+"""
+function structural_shocks(result::AbstractNonGaussianSVAR)
+    if hasfield(typeof(result), :shocks)
+        sh = getfield(result, :shocks)
+        !isempty(sh) && return sh
+    end
+    if hasfield(typeof(result), :residuals)
+        U = getfield(result, :residuals)
+        if !isempty(U)
+            return (result.B0 \ U')'
+        end
+    end
+    throw(ArgumentError(
+        "structural_shocks(result): $(typeof(result).name.name) does not store shocks; " *
+        "use structural_shocks(model, result.Q)"))
+end
+
+_default_shock_names(n::Int) = ["Shock $j" for j in 1:n]
+
+# =============================================================================
+# SID-20: shock labels (signed permutation of B₀)
+# =============================================================================
+
+"""
+    label_shocks(result; by=:restrictions, restrictions=nothing, B_ref=nothing,
+                 variables=nothing, shock_names=nothing,
+                 sign_convention=:positive_diagonal) -> typeof(result)
+
+Relabel statistically identified shocks by a signed permutation of the columns
+of `B₀` (and of `Q`, stored shocks, and column-tied `Λ`).
+
+- `by=:restrictions` — maximise satisfied impact-sign restrictions (`n ≤ 8`
+  exhaustive; greedy otherwise). `restrictions` is a sign matrix (`±1`/`0`),
+  `SVARRestrictions`, or a vector of `SignRestriction`s (horizon 0).
+- `by=:max_impact` — column `j` gets the shock with largest `|B₀[var_j, ·]|`
+  divided by the column norm. `variables` defaults to `1:n`.
+- `by=:reference` — `_match_columns(B_ref, result.B0)`.
+
+`sign_convention=:positive_diagonal` (default) makes `B₀[j,j] > 0`;
+`:unit_effect` makes the impact on `variables[j]` (or variable `j`) positive.
+Restriction labelling keeps the signs that maximise the score.
+"""
+function label_shocks(result::AbstractNonGaussianSVAR;
+                      by::Symbol=:restrictions,
+                      restrictions=nothing,
+                      B_ref=nothing,
+                      variables=nothing,
+                      shock_names::Union{Nothing,Vector{String}}=nothing,
+                      sign_convention::Symbol=:positive_diagonal)
+    B0 = result.B0
+    n = size(B0, 2)
+    size(B0, 1) == n || throw(ArgumentError("label_shocks: B₀ must be square"))
+    by in (:restrictions, :max_impact, :reference) || throw(ArgumentError(
+        "by must be :restrictions, :max_impact, or :reference, got :$by"))
+    sign_convention in (:positive_diagonal, :unit_effect) || throw(ArgumentError(
+        "sign_convention must be :positive_diagonal or :unit_effect, got :$sign_convention"))
+
+    vars = _label_variables(variables, result, n)
+    perm, signs = if by === :restrictions
+        restrictions === nothing && throw(ArgumentError(
+            "by=:restrictions requires restrictions (sign matrix or SVARRestrictions)"))
+        _label_by_restrictions(B0, restrictions)
+    elseif by === :max_impact
+        _label_by_max_impact(B0, vars)
+    else
+        B_ref === nothing && throw(ArgumentError("by=:reference requires B_ref"))
+        size(B_ref) == size(B0) || throw(ArgumentError("B_ref size must match B₀"))
+        _match_columns(Matrix{eltype(B0)}(B_ref), Matrix{eltype(B0)}(B0))
+    end
+
+    if by !== :restrictions
+        signs = _apply_sign_convention(B0, perm, signs, sign_convention, vars)
+    end
+
+    names = if shock_names !== nothing
+        length(shock_names) == n || throw(ArgumentError(
+            "shock_names must have length $n, got $(length(shock_names))"))
+        Vector{String}(shock_names)
+    elseif by === :max_impact && variables isa AbstractVector &&
+           !isempty(variables) && variables[1] isa AbstractString
+        String[String(v) for v in variables]
+    else
+        nothing
+    end
+    _signed_perm_result(result, perm, signs; shock_names=names)
+end
+
+function _label_variables(variables, result, n::Int)
+    variables === nothing && return collect(1:n)
+    length(variables) == n || throw(ArgumentError(
+        "variables must have length $n, got $(length(variables))"))
+    if eltype(variables) <: Integer
+        v = Int[Int(i) for i in variables]
+        all(1 .<= v .<= n) || throw(ArgumentError("variables must be in 1:$n"))
+        return v
+    end
+    names = hasfield(typeof(result), :varnames) ? getfield(result, :varnames) :
+            String["Var $i" for i in 1:n]
+    [_resolve_var_index(v, names, n) for v in variables]
+end
+
+function _resolve_var_index(var, names::Vector{String}, n::Int)
+    if var isa Integer
+        (1 <= Int(var) <= n) || throw(ArgumentError("variable index $var not in 1:$n"))
+        return Int(var)
+    elseif var isa AbstractString || var isa Symbol
+        s = String(var)
+        idx = findfirst(==(s), names)
+        idx === nothing && throw(ArgumentError("variable \"$s\" not in $names"))
+        return idx
+    end
+    throw(ArgumentError("variable must be an index or name, got $(typeof(var))"))
+end
+
+function _restriction_sign_matrix(restrictions::AbstractMatrix, n::Int)
+    size(restrictions) == (n, n) || throw(ArgumentError(
+        "restriction matrix must be $n × $n, got $(size(restrictions))"))
+    Int.(sign.(restrictions))
+end
+
+function _restriction_sign_matrix(restrictions::SVARRestrictions, n::Int)
+    n == restrictions.n_vars || throw(ArgumentError(
+        "SVARRestrictions.n_vars=$(restrictions.n_vars) does not match n=$n"))
+    S = zeros(Int, n, n)
+    for r in restrictions.signs
+        if r isa SignRestriction && r.horizon == 0
+            S[r.variable, r.shock] = r.sign
+        end
+    end
+    S
+end
+
+function _restriction_sign_matrix(restrictions, n::Int)
+    S = zeros(Int, n, n)
+    rs = restrictions isa AbstractSVARRestriction ? (restrictions,) : restrictions
+    for item in rs
+        r = item
+        if r isa AbstractVector
+            for rr in r
+                if rr isa SignRestriction && rr.horizon == 0
+                    S[rr.variable, rr.shock] = rr.sign
+                end
+            end
+        elseif r isa SignRestriction && r.horizon == 0
+            S[r.variable, r.shock] = r.sign
+        end
+    end
+    S
+end
+
+function _col_restriction_score(Bcol::AbstractVector, j::Int, S::AbstractMatrix)
+    sc = 0
+    @inbounds for i in eachindex(Bcol)
+        sij = S[i, j]
+        sij == 0 && continue
+        sc += Int(sign(Bcol[i]) == sij)
+    end
+    sc
+end
+
+function _label_by_restrictions(B0::AbstractMatrix{T}, restrictions) where {T<:AbstractFloat}
+    n = size(B0, 2)
+    S = _restriction_sign_matrix(restrictions, n)
+    n_restr = count(!iszero, S)
+    n_restr == 0 && throw(ArgumentError("restrictions contain no horizon-0 sign restrictions"))
+    best_perm = collect(1:n)
+    best_signs = ones(Int, n)
+    best_score = -1
+    n_ties = 0
+    if n <= 8
+        for perm in _permutations(n)
+            signs = ones(Int, n)
+            sc = 0
+            @inbounds for j in 1:n
+                col = view(B0, :, perm[j])
+                s_plus = _col_restriction_score(col, j, S)
+                s_minus = _col_restriction_score(-col, j, S)
+                if s_minus > s_plus
+                    signs[j] = -1
+                    sc += s_minus
+                else
+                    signs[j] = 1
+                    sc += s_plus
+                end
+            end
+            if sc > best_score
+                best_score = sc
+                best_perm = collect(perm)
+                best_signs = signs
+                n_ties = 1
+            elseif sc == best_score
+                n_ties += 1
+            end
+        end
+    else
+        used = falses(n)
+        best_perm = zeros(Int, n)
+        best_signs = ones(Int, n)
+        best_score = 0
+        for j in 1:n
+            bk, bs, bsc = 0, 1, -1
+            for k in 1:n
+                used[k] && continue
+                col = view(B0, :, k)
+                s_plus = _col_restriction_score(col, j, S)
+                s_minus = _col_restriction_score(-col, j, S)
+                if s_minus > s_plus && s_minus > bsc
+                    bk, bs, bsc = k, -1, s_minus
+                elseif s_plus >= bsc
+                    bk, bs, bsc = k, 1, s_plus
+                end
+            end
+            best_perm[j] = bk
+            best_signs[j] = bs
+            used[bk] = true
+            best_score += bsc
+        end
+        n_ties = 1
+    end
+    if best_score < n_restr
+        @warn "label_shocks: $(n_restr - best_score) of $n_restr sign restrictions remain unsatisfied"
+    end
+    n_ties > 1 && @warn "label_shocks: $n_ties signed permutations attain the same restriction score; labels are ambiguous"
+    (best_perm, best_signs)
+end
+
+function _label_by_max_impact(B0::AbstractMatrix{T}, variables::Vector{Int}) where {T<:AbstractFloat}
+    n = size(B0, 2)
+    coln = [norm(view(B0, :, k)) + eps(T) for k in 1:n]
+    S = Matrix{T}(undef, n, n)
+    @inbounds for j in 1:n, k in 1:n
+        S[j, k] = abs(B0[variables[j], k]) / coln[k]
+    end
+    best_perm = collect(1:n)
+    best_score = -T(Inf)
+    n_ties = 0
+    if n <= 8
+        for perm in _permutations(n)
+            sc = zero(T)
+            @inbounds for j in 1:n
+                sc += S[j, perm[j]]
+            end
+            if sc > best_score + T(10) * eps(T)
+                best_score = sc
+                best_perm = collect(perm)
+                n_ties = 1
+            elseif abs(sc - best_score) <= T(10) * eps(T)
+                n_ties += 1
+            end
+        end
+    else
+        used = falses(n)
+        best_perm = zeros(Int, n)
+        for j in 1:n
+            k = argmax(i -> used[i] ? -T(Inf) : S[j, i], 1:n)
+            best_perm[j] = k
+            used[k] = true
+        end
+        n_ties = 1
+    end
+    n_ties > 1 && @warn "label_shocks: max-impact assignment is ambiguous"
+    signs = ones(Int, n)
+    (best_perm, signs)
+end
+
+function _apply_sign_convention(B0::AbstractMatrix{T}, perm::Vector{Int}, signs::Vector{Int},
+                                 convention::Symbol, variables::Vector{Int}) where {T<:AbstractFloat}
+    n = length(perm)
+    out = copy(signs)
+    @inbounds for j in 1:n
+        col = view(B0, :, perm[j])
+        i = convention === :unit_effect ? variables[j] : j
+        s = out[j]
+        impact = s * col[i]
+        if impact < 0
+            out[j] = -s
+        end
+    end
+    out
+end
+
+function _col_signed(M::AbstractMatrix{T}, perm::Vector{Int}, signs::Vector{Int}) where {T}
+    out = Matrix{T}(M[:, perm])
+    @inbounds for j in eachindex(perm)
+        signs[j] < 0 && (out[:, j] .*= -one(T))
+    end
+    out
+end
+
+function _row_signed(M::AbstractMatrix{T}, perm::Vector{Int}, signs::Vector{Int}) where {T}
+    out = Matrix{T}(M[perm, :])
+    @inbounds for j in eachindex(perm)
+        signs[j] < 0 && (out[j, :] .*= -one(T))
+    end
+    out
+end
+
+function _permute_dist_params(d::Dict, perm::Vector{Int}, signs::Vector{Int}, n::Int)
+    out = Dict{Symbol,Any}()
+    for (k, v) in d
+        if v isa AbstractVector && length(v) == n
+            vv = v[perm]
+            if k === :alpha || k === :kappa
+                vv = copy(vv)
+                @inbounds for j in 1:n
+                    signs[j] < 0 && (vv[j] = -vv[j])
+                end
+            end
+            out[k] = vv
+        elseif k === :all_params && v isa AbstractVector && !isempty(v) && length(v) % n == 0
+            nblk = length(v) ÷ n
+            parts = [v[((b - 1) * n + 1):(b * n)][perm] for b in 1:nblk]
+            out[k] = vcat(parts...)
+        else
+            out[k] = v
+        end
+    end
+    out
+end
+
+function _permute_statid_field(f::Symbol, v, perm::Vector{Int}, signs::Vector{Int},
+                                n::Int, shock_names, Q_new)
+    f === :B0 && return _col_signed(v, perm, signs)
+    f === :Q && return Q_new === nothing ? _col_signed(v, perm, signs) : Q_new
+    f === :W && return _row_signed(v, perm, signs)
+    f === :se && return (v isa AbstractMatrix && size(v) == (n, n)) ?
+        _col_signed(v, perm, ones(Int, n)) : v
+    f === :shocks && return (v isa AbstractMatrix && size(v, 2) == n) ?
+        _col_signed(v, perm, signs) : v
+    f === :cond_var && return (v isa AbstractMatrix && size(v, 2) == n) ? v[:, perm] : v
+    f === :garch_params && return (v isa AbstractMatrix && size(v, 1) == n) ? v[perm, :] : v
+    if f === :Lambda && v isa AbstractVector
+        return [λ isa AbstractVector && length(λ) == n ? λ[perm] : λ for λ in v]
+    end
+    f === :shock_names && return shock_names
+    f === :theta && return Q_new === nothing ? v : _orthogonal_to_givens(Q_new, n)
+    f === :dist_params && return v isa Dict ? _permute_dist_params(v, perm, signs, n) : v
+    v
+end
+
+function _signed_perm_result(result::R, perm::Vector{Int}, signs::Vector{Int};
+                             shock_names::Union{Nothing,Vector{String}}=nothing) where {R}
+    n = size(result.B0, 2)
+    Q_new = hasfield(R, :Q) ? _col_signed(getfield(result, :Q), perm, signs) : nothing
+    names_new = if shock_names !== nothing
+        Vector{String}(shock_names)
+    elseif hasfield(R, :shock_names)
+        getfield(result, :shock_names)[perm]
+    else
+        _default_shock_names(n)
+    end
+    vals = ntuple(fieldcount(R)) do i
+        f = fieldname(R, i)
+        v = getfield(result, f)
+        _permute_statid_field(f, v, perm, signs, n, names_new, Q_new)
+    end
+    R(vals...)
+end
+
+# =============================================================================
+# SID-20: unit-effect IRF scaling of Q
+# =============================================================================
+
+"""Scale rotation columns so selected impact entries equal `value`."""
+function _unit_effect_specs(Q::AbstractMatrix{T}, model::VARModel{T},
+                            shock_size) where {T<:AbstractFloat}
+    n = size(Q, 2)
+    L = safe_cholesky(model.Sigma)
+    B0 = Matrix{T}(L * Q)
+    if shock_size === nothing
+        return Tuple{Int,Int,T}[(j, j, one(T)) for j in 1:n]
+    end
+    shock_size isa Pair || throw(ArgumentError(
+        "shock_size must be a Pair (variable => value), got $(typeof(shock_size))"))
+    k = _resolve_var_index(shock_size.first, model.varnames, n)
+    value = T(shock_size.second)
+    j = Int(argmax(abs.(view(B0, k, :))))
+    Tuple{Int,Int,T}[(k, j, value)]
+end
+
+function _apply_irf_scale(Q::AbstractMatrix{T}, model::VARModel{T},
+                          specs) where {T<:AbstractFloat}
+    specs === nothing && return Q
+    Qs = Matrix{T}(Q)
+    L = safe_cholesky(model.Sigma)
+    for (k, j, value) in specs
+        b = (L * Qs)[k, j]
+        abs(b) < T(100) * eps(T) && throw(ArgumentError(
+            "unit-effect normalisation: impact of shock $j on variable $k is zero"))
+        Qs[:, j] .*= value / b
+    end
+    Qs
+end
+
+function _scale_irf_values!(vals::AbstractArray{T,3}, specs) where {T<:AbstractFloat}
+    specs === nothing && return vals
+    for (k, j, value) in specs
+        b = vals[1, k, j]
+        abs(b) < T(100) * eps(T) && continue
+        vals[:, :, j] .*= value / b
+    end
+    vals
+end
+
+function _scale_irf_draws!(draws::AbstractArray{T,4}, specs) where {T<:AbstractFloat}
+    specs === nothing && return draws
+    n_acc = size(draws, 1)
+    @inbounds for i in 1:n_acc
+        for (k, j, value) in specs
+            b = draws[i, 1, k, j]
+            abs(b) < T(100) * eps(T) && continue
+            draws[i, :, :, j] .*= value / b
+        end
+    end
+    draws
+end
+
+function _unit_effect_specs_from_irf(irfvals::AbstractArray{T,3}, model::VARModel{T},
+                                     shock_size) where {T<:AbstractFloat}
+    n = size(irfvals, 3)
+    if shock_size === nothing
+        return Tuple{Int,Int,T}[(j, j, one(T)) for j in 1:n]
+    end
+    shock_size isa Pair || throw(ArgumentError(
+        "shock_size must be a Pair (variable => value), got $(typeof(shock_size))"))
+    k = _resolve_var_index(shock_size.first, model.varnames, n)
+    value = T(shock_size.second)
+    j = Int(argmax(abs.(view(irfvals, 1, k, :))))
+    Tuple{Int,Int,T}[(k, j, value)]
+end
+
+function _scale_setid_irf(med, lo, hi, draws, specs)
+    specs === nothing && return med, lo, hi, draws
+    medc = copy(med)
+    loc = copy(lo)
+    hic = copy(hi)
+    dc = draws === nothing ? nothing : copy(draws)
+    T = eltype(medc)
+    for (k, j, value) in specs
+        b = medc[1, k, j]
+        abs(b) < T(100) * eps(T) && continue
+        sc = value / b
+        medc[:, :, j] .*= sc
+        loc[:, :, j] .*= sc
+        hic[:, :, j] .*= sc
+        if sc < 0
+            tmp = copy(loc[:, :, j])
+            loc[:, :, j] = hic[:, :, j]
+            hic[:, :, j] = tmp
+        end
+        dc !== nothing && (dc[:, :, :, j] .*= sc)
+    end
+    medc, loc, hic, dc
+end

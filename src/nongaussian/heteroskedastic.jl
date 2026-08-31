@@ -48,6 +48,7 @@ Fields:
 - `se::Matrix{T}` — delta-method SEs of B₀
 - `vcov::Matrix{T}` — parameter-space covariance (θ_Givens, log Λ₂…K)
 - `classification_quality::T` — mean of max smoothed regime probability
+- `shock_names::Vector{String}` — labels for the n structural shocks
 """
 struct MarkovSwitchingSVARResult{T<:AbstractFloat} <: AbstractNonGaussianSVAR
     B0::Matrix{T}
@@ -63,6 +64,18 @@ struct MarkovSwitchingSVARResult{T<:AbstractFloat} <: AbstractNonGaussianSVAR
     se::Matrix{T}
     vcov::Matrix{T}
     classification_quality::T
+    shock_names::Vector{String}
+end
+
+function MarkovSwitchingSVARResult{T}(B0, Q, Sigma_regimes, Lambda, regime_probs,
+                                       transition_matrix, loglik, converged,
+                                       iterations, n_regimes, se, vcov,
+                                       classification_quality) where {T<:AbstractFloat}
+    n = size(B0, 1)
+    MarkovSwitchingSVARResult{T}(B0, Q, Sigma_regimes, Lambda, regime_probs,
+                                  transition_matrix, loglik, converged, iterations,
+                                  n_regimes, se, vcov, classification_quality,
+                                  _default_shock_names(n))
 end
 
 function MarkovSwitchingSVARResult{T}(B0, Q, Sigma_regimes, Lambda, regime_probs,
@@ -117,6 +130,7 @@ Fields:
 - `iterations::Int`
 - `se::Matrix{T}` — delta-method SEs of B₀
 - `vcov::Matrix{T}` — parameter-space covariance (θ_Givens, GARCH)
+- `shock_names::Vector{String}` — labels for the n structural shocks
 """
 struct GARCHSVARResult{T<:AbstractFloat} <: AbstractNonGaussianSVAR
     B0::Matrix{T}
@@ -129,6 +143,14 @@ struct GARCHSVARResult{T<:AbstractFloat} <: AbstractNonGaussianSVAR
     iterations::Int
     se::Matrix{T}
     vcov::Matrix{T}
+    shock_names::Vector{String}
+end
+
+function GARCHSVARResult{T}(B0, Q, garch_params, cond_var, shocks, loglik,
+                             converged, iterations, se, vcov) where {T<:AbstractFloat}
+    n = size(B0, 1)
+    GARCHSVARResult{T}(B0, Q, garch_params, cond_var, shocks, loglik, converged,
+                        iterations, se, vcov, _default_shock_names(n))
 end
 
 function GARCHSVARResult{T}(B0, Q, garch_params, cond_var, shocks, loglik,
@@ -193,6 +215,7 @@ Fields:
 - `se::Matrix{T}` — delta-method SEs of B₀
 - `vcov::Matrix{T}` — parameter-space covariance (vech L, θ, log Λ, xγ, c)
 - `residuals::Matrix{T}` — VAR residuals used in the likelihood
+- `shock_names::Vector{String}` — labels for the n structural shocks
 """
 struct SmoothTransitionSVARResult{T<:AbstractFloat} <: AbstractNonGaussianSVAR
     B0::Matrix{T}
@@ -209,6 +232,17 @@ struct SmoothTransitionSVARResult{T<:AbstractFloat} <: AbstractNonGaussianSVAR
     se::Matrix{T}
     vcov::Matrix{T}
     residuals::Matrix{T}
+    shock_names::Vector{String}
+end
+
+function SmoothTransitionSVARResult{T}(B0, Q, Sigma_regimes, Lambda, gamma, threshold,
+                                       transition_var, G_values, loglik, converged,
+                                       iterations, se, vcov, residuals) where {T<:AbstractFloat}
+    n = size(B0, 1)
+    SmoothTransitionSVARResult{T}(B0, Q, Sigma_regimes, Lambda, gamma, threshold,
+                                  transition_var, G_values, loglik, converged,
+                                  iterations, se, vcov, residuals,
+                                  _default_shock_names(n))
 end
 
 function SmoothTransitionSVARResult{T}(B0, Q, Sigma_regimes, Lambda, gamma, threshold,
@@ -275,6 +309,7 @@ Fields:
 - `loglik::T`
 - `se::Matrix{T}` — delta-method SEs of B₀
 - `vcov::Matrix{T}` — parameter-space covariance (θ_Givens, log Λ₂…K)
+- `shock_names::Vector{String}` — labels for the n structural shocks
 """
 struct ExternalVolatilitySVARResult{T<:AbstractFloat} <: AbstractNonGaussianSVAR
     B0::Matrix{T}
@@ -285,6 +320,15 @@ struct ExternalVolatilitySVARResult{T<:AbstractFloat} <: AbstractNonGaussianSVAR
     loglik::T
     se::Matrix{T}
     vcov::Matrix{T}
+    shock_names::Vector{String}
+end
+
+function ExternalVolatilitySVARResult{T}(B0, Q, Sigma_regimes, Lambda,
+                                          regime_indices, loglik, se,
+                                          vcov) where {T<:AbstractFloat}
+    n = size(B0, 1)
+    ExternalVolatilitySVARResult{T}(B0, Q, Sigma_regimes, Lambda, regime_indices,
+                                     loglik, se, vcov, _default_shock_names(n))
 end
 
 function ExternalVolatilitySVARResult{T}(B0, Q, Sigma_regimes, Lambda,
