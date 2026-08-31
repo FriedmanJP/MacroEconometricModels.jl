@@ -870,7 +870,8 @@ function Base.show(io::IO, r::BayesianSetIdentifiedSVAR)
          "Effective sample" => string(_fmt(r.ess; digits=1), " (",
                                       round(r.ess_fraction * 100, digits=1), "%)"),
          "Zero restrictions" => length(r.restrictions.zeros),
-         "Sign restrictions" => length(r.restrictions.signs)])
+         "Sign restrictions" => length(r.restrictions.signs),
+         "Narrative sims" => r.n_narrative_sims])
     if n_acc > 0
         nv = r.restrictions.n_vars
         var_labels = length(r.varnames) == nv ? r.varnames : ["var$i" for i in 1:nv]
@@ -890,6 +891,7 @@ function Base.show(io::IO, r::AriasSVARResult)
          "Effective sample" => string(_fmt(r.ess; digits=1), " (",
                                       round(r.ess_fraction * 100, digits=1), "%)"),
          "Zero restrictions" => n_zeros, "Sign restrictions" => n_signs,
+         "Narrative sims" => r.n_narrative_sims,
          "Variables" => r.restrictions.n_vars, "Shocks" => r.restrictions.n_shocks])
     # Posterior-mean IRF summary — was restrictions/penalties only. (S4/T168)
     if n_draws > 0
@@ -1020,7 +1022,7 @@ _restriction_words(r::CumulativeRestriction) =
 _restriction_words(r::NarrativeShockRestriction) =
     "Narrative shock: shock $(r.shock) is $(r.sign > 0 ? "positive" : "negative") at dates $(r.dates)"
 _restriction_words(r::NarrativeContributionRestriction) =
-    "Narrative contribution: shock $(r.shock) is the leading contributor to variable $(r.variable) over $(r.window)"
+    "Narrative contribution: shock $(r.shock) is the $(r.kind === :overwhelming ? "overwhelming" : "leading") contributor to variable $(r.variable) over $(r.window)"
 _restriction_words(r::AbstractSVARRestriction) = string(typeof(r))
 
 function Base.show(io::IO, s::IdentificationStatus)

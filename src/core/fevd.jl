@@ -207,11 +207,11 @@ function fevd(post::BVARPosterior, horizon::Int;
 
     # Weighted identified-set summary; do not fall through to compute_Q (n_draws=1, unweighted).
     if method === :arias
-        rng, n_rot, cw = _arias_posterior_kwargs(max_draws; kwargs...)
+        rng, n_rot, cw, n_nar = _arias_posterior_kwargs(max_draws; kwargs...)
         use_data_a = isempty(data) ? nothing : data
         rset = _arias_from_bvar_posterior(post, restrictions, horizon;
             data=use_data_a, n_rotations=n_rot, quantiles=quantiles,
-            rng=rng, compute_weights=cw)
+            rng=rng, compute_weights=cw, n_narrative_sims=n_nar)
         fv = fevd(rset; quantiles=collect(quantiles))
         shock_names === nothing && return fv
         return BayesianFEVD{ET}(fv.quantiles, fv.point_estimate, fv.horizon,

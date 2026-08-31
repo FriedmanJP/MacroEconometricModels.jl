@@ -113,19 +113,22 @@ struct CumulativeRestriction <: AbstractSVARRestriction
     sign::Int
 end
 
-"""Narrative shock-sign restriction (SID-15 hook; ADRR weights are not applied here)."""
+"""Narrative shock-sign restriction: structural `ε[date, shock]` has the given sign."""
 struct NarrativeShockRestriction <: AbstractSVARRestriction
     shock::Int
     dates::Vector{Int}
     sign::Int
 end
 
-"""Narrative contribution restriction (SID-15 hook; ADRR weights are not applied here)."""
+"""Narrative contribution restriction (ADRR Type B: most important / overwhelming)."""
 struct NarrativeContributionRestriction <: AbstractSVARRestriction
     variable::Int
     shock::Int
     window::UnitRange{Int}
+    kind::Symbol
 end
+NarrativeContributionRestriction(variable::Int, shock::Int, window::AbstractUnitRange{<:Integer}) =
+    NarrativeContributionRestriction(variable, shock, UnitRange{Int}(window), :most_important)
 
 """
     SVARRestrictions(n_vars; zeros=[], signs=[])
@@ -261,10 +264,16 @@ end
 function _validate_restriction(r::NarrativeShockRestriction, n_vars::Int)
     _check_index(r.shock, n_vars, "shock")
     r.sign in (-1, 1) || throw(ArgumentError("sign must be -1 or +1"))
+    isempty(r.dates) && throw(ArgumentError("narrative dates must be nonempty"))
+    all(d -> d >= 1, r.dates) || throw(ArgumentError("narrative dates must be ≥ 1"))
 end
 function _validate_restriction(r::NarrativeContributionRestriction, n_vars::Int)
     _check_index(r.variable, n_vars, "variable")
     _check_index(r.shock, n_vars, "shock")
+    isempty(r.window) && throw(ArgumentError("narrative contribution window must be nonempty"))
+    first(r.window) >= 1 || throw(ArgumentError("narrative dates must be ≥ 1"))
+    r.kind in (:most_important, :overwhelming) ||
+        throw(ArgumentError("kind must be :most_important or :overwhelming"))
 end
 _validate_restriction(::AbstractSVARRestriction, ::Int) = nothing
 
@@ -277,6 +286,7 @@ _restriction_horizon(r::ElasticityBound) = r.horizon
 _restriction_horizon(r::MagnitudeBound) = r.horizon
 _restriction_horizon(r::FEVDShareRestriction) = r.horizon
 _restriction_horizon(r::CumulativeRestriction) = last(r.horizons)
+_restriction_horizon(r::NarrativeContributionRestriction) = max(0, last(r.window) - first(r.window))
 _restriction_horizon(::AbstractSVARRestriction) = 0
 
 function _check_aplus_lag_equation(lag::Int, equation::Int)
@@ -302,9 +312,11 @@ Result from Arias et al. (2018) identification.
 
 `ess` is Kish's effective sample size of the importance weights and
 `ess_fraction` is `ess / length(weights)`. Under pure sign restrictions the
-weights are uniform and `ess_fraction == 1`; with zero restrictions a fraction
-far below 1 means a handful of draws carry most of the posterior mass and the
-weighted summaries rest on far fewer effective draws than `n_draws` suggests.
+weights are uniform and `ess_fraction == 1`; with zero or narrative restrictions
+a fraction far below 1 means a handful of draws carry most of the posterior mass
+and the weighted summaries rest on far fewer effective draws than `n_draws`
+suggests. `n_narrative_sims` is the Monte Carlo size used for ADRR ``ω̂``
+(0 when no narrative restriction is present).
 """
 struct AriasSVARResult{T<:AbstractFloat}
     Q_draws::Vector{Matrix{T}}
@@ -316,6 +328,7 @@ struct AriasSVARResult{T<:AbstractFloat}
     ess_fraction::T
     varnames::Vector{String}
     n_degenerate_weights::Int
+    n_narrative_sims::Int
 end
 
 # Back-compatible arities: pre-ESS / pre-varnames / pre-degenerate construction sites.
@@ -339,14 +352,22 @@ end
 function AriasSVARResult{T}(Q_draws, irf_draws, weights, acceptance_rate,
                             restrictions, ess, ess_fraction, varnames) where {T<:AbstractFloat}
     AriasSVARResult{T}(Q_draws, irf_draws, weights, acceptance_rate, restrictions,
-                       ess, ess_fraction, varnames, 0)
+                       ess, ess_fraction, varnames, 0, 0)
+end
+
+function AriasSVARResult{T}(Q_draws, irf_draws, weights, acceptance_rate,
+                            restrictions, ess, ess_fraction, varnames,
+                            n_degenerate_weights::Int) where {T<:AbstractFloat}
+    AriasSVARResult{T}(Q_draws, irf_draws, weights, acceptance_rate, restrictions,
+                       ess, ess_fraction, varnames, n_degenerate_weights, 0)
 end
 
 """
 Bayesian set-identified SVAR (Arias et al. 2018 applied to posterior draws).
 
 `total_accepted` is `size(irf_draws, 1)`. `n_degenerate_weights` counts draws
-skipped because the importance log-weight was non-finite.
+skipped because the importance log-weight was non-finite. `n_narrative_sims`
+is the ADRR ``ω̂`` Monte Carlo size (0 when narrative restrictions are absent).
 """
 struct BayesianSetIdentifiedSVAR{T<:AbstractFloat}
     Q_draws::Vector{Matrix{T}}
@@ -361,6 +382,15 @@ struct BayesianSetIdentifiedSVAR{T<:AbstractFloat}
     irf_mean::Array{T,3}
     acceptance_rates::Vector{T}
     ess_fraction::T
+    n_narrative_sims::Int
+end
+
+function BayesianSetIdentifiedSVAR{T}(Q_draws, irf_draws, weights, ess, restrictions,
+        varnames, n_unidentified, n_degenerate_weights, irf_quantiles, irf_mean,
+        acceptance_rates, ess_fraction) where {T<:AbstractFloat}
+    BayesianSetIdentifiedSVAR{T}(Q_draws, irf_draws, weights, ess, restrictions,
+        varnames, n_unidentified, n_degenerate_weights, irf_quantiles, irf_mean,
+        acceptance_rates, ess_fraction, 0)
 end
 
 function Base.getproperty(r::BayesianSetIdentifiedSVAR, s::Symbol)
@@ -395,7 +425,7 @@ function _warn_low_ess(ess::Real, ess_fraction::Real, n::Integer, label::Abstrac
           "($(round(100 * ess_fraction; digits=1))% < " *
           "$(round(Int, 100 * _ARIAS_ESS_WARN_FRACTION))%). A few draws carry almost all " *
           "the posterior mass, so weighted IRF summaries are far less precise than the " *
-          "draw count suggests. Consider loosening the zero/sign restrictions or raising n_draws."
+          "draw count suggests. Consider loosening the zero/sign/narrative restrictions or raising n_draws."
     nothing
 end
 
@@ -415,13 +445,15 @@ end
 # --- Restriction Checking ---
 
 """
-    check(r, irf, A0, Aplus, fevd) -> Bool
+    check(r, irf, A0, Aplus, fevd, shocks=nothing, hd=nothing) -> Bool
 
 Rejection test for restriction `r`. Linear zeros are enforced as null-space rows
-on `Q` rather than here. Narrative types are SID-15 hooks and currently return
-`true`.
+on `Q` rather than here. Narrative types evaluate on structural shocks ``ε``
+and historical-decomposition contributions over the restricted dates.
 """
 check(::AbstractSVARRestriction, irf, A0, Aplus, fevd) = true
+check(r::AbstractSVARRestriction, irf, A0, Aplus, fevd, shocks, hd=nothing) =
+    check(r, irf, A0, Aplus, fevd)
 
 function check(r::SignRestriction, irf, A0, Aplus, fevd)
     val = irf[r.horizon + 1, r.variable, r.shock]
@@ -471,6 +503,128 @@ function check(r::CumulativeRestriction, irf, A0, Aplus, fevd)
     r.sign > 0 ? s > 0 : s < 0
 end
 
+check(::NarrativeShockRestriction, irf, A0, Aplus, fevd) = false
+check(::NarrativeContributionRestriction, irf, A0, Aplus, fevd) = false
+
+function check(r::NarrativeShockRestriction, irf, A0, Aplus, fevd, shocks, hd=nothing)
+    shocks === nothing && return false
+    T_eff, n = size(shocks)
+    (1 <= r.shock <= n) || return false
+    @inbounds for d in r.dates
+        (1 <= d <= T_eff) || return false
+        val = shocks[d, r.shock]
+        r.sign > 0 ? (val > 0 || return false) : (val < 0 || return false)
+    end
+    true
+end
+
+function check(r::NarrativeContributionRestriction, irf, A0, Aplus, fevd, shocks, hd=nothing)
+    H = if hd isa AbstractVector
+        hd
+    elseif irf !== nothing && shocks !== nothing
+        _narrative_window_contributions(irf, shocks, r.variable, r.window)
+    else
+        return false
+    end
+    H === nothing && return false
+    (1 <= r.shock <= length(H)) || return false
+    _is_leading_contributor(H, r.shock, r.kind)
+end
+
+_is_narrative(::NarrativeShockRestriction) = true
+_is_narrative(::NarrativeContributionRestriction) = true
+_is_narrative(::AbstractSVARRestriction) = false
+_has_narrative(r::SVARRestrictions) = any(_is_narrative, r.signs)
+
+"""ADRR contribution of each shock to variable `i` over `window` (eq. 6–8)."""
+function _narrative_window_contributions(irf::AbstractArray{T,3}, shocks::AbstractMatrix,
+                                         variable::Int, window::UnitRange{Int}) where {T}
+    t0, t1 = first(window), last(window)
+    h = t1 - t0
+    n = size(irf, 3)
+    (1 <= t0 && t1 <= size(shocks, 1) && 0 <= h < size(irf, 1) &&
+     1 <= variable <= size(irf, 2)) || return nothing
+    H = zeros(T, n)
+    @inbounds for j in 1:n
+        s = zero(T)
+        for ℓ in 0:h
+            s += irf[ℓ + 1, variable, j] * shocks[t1 - ℓ, j]
+        end
+        H[j] = s
+    end
+    H
+end
+
+function _is_leading_contributor(H::AbstractVector{T}, shock::Int, kind::Symbol) where {T}
+    abs_j = abs(H[shock])
+    if kind === :overwhelming
+        others = zero(T)
+        @inbounds for k in eachindex(H)
+            k == shock && continue
+            others += abs(H[k])
+        end
+        return abs_j > others
+    end
+    @inbounds for k in eachindex(H)
+        k == shock && continue
+        abs(H[k]) >= abs_j && return false
+    end
+    true
+end
+
+function _narrative_dates(restrictions::SVARRestrictions)
+    dates = Int[]
+    for r in restrictions.signs
+        if r isa NarrativeShockRestriction
+            append!(dates, r.dates)
+        elseif r isa NarrativeContributionRestriction
+            append!(dates, collect(r.window))
+        end
+    end
+    unique!(sort!(dates))
+end
+
+function _narrative_restrictions_hold(restrictions::SVARRestrictions, irf, shocks)
+    all(restrictions.signs) do r
+        _is_narrative(r) || return true
+        check(r, irf, nothing, nothing, nothing, shocks, nothing)
+    end
+end
+
+"""Monte Carlo estimate of ADRR ``ω̂``: fraction of ``ε* ~ N(0,I)`` paths that satisfy the narrative restrictions."""
+function _omega_hat(restrictions::SVARRestrictions, irf::AbstractArray{T,3}, n::Int, ::Type{T};
+                    n_sims::Int, rng::AbstractRNG) where {T<:AbstractFloat}
+    dates = _narrative_dates(restrictions)
+    isempty(dates) && return one(T)
+    tmax = last(dates)
+    ε = zeros(T, tmax, n)
+    n_ok = 0
+    @inbounds for _ in 1:n_sims
+        for t in dates, j in 1:n
+            ε[t, j] = randn(rng, T)
+        end
+        _narrative_restrictions_hold(restrictions, irf, ε) && (n_ok += 1)
+    end
+    T(n_ok) / T(n_sims)
+end
+
+function _validate_narrative_sample(restrictions::SVARRestrictions, T_eff::Int)
+    T_eff >= 1 || throw(ArgumentError("narrative restrictions require VAR residuals"))
+    for r in restrictions.signs
+        if r isa NarrativeShockRestriction
+            for d in r.dates
+                (1 <= d <= T_eff) || throw(ArgumentError(
+                    "narrative date $d out of residual sample 1:$T_eff"))
+            end
+        elseif r isa NarrativeContributionRestriction
+            w = r.window
+            (1 <= first(w) && last(w) <= T_eff) || throw(ArgumentError(
+                "narrative window $w out of residual sample 1:$T_eff"))
+        end
+    end
+    nothing
+end
+
 """Check finite-horizon IRF zeros (long-run / A0 / A+ zeros are enforced in the null space)."""
 _check_zero_restrictions(irf::Array{T,3}, r::SVARRestrictions; tol::T=T(1e-10)) where {T} =
     all(r.zeros) do zr
@@ -487,7 +641,10 @@ _check_sign_restrictions(irf::Array{T,3}, r::SVARRestrictions) where {T} =
     end
 
 _check_rejections(r::SVARRestrictions, irf, A0, Aplus, fevd) =
-    all(sr -> check(sr, irf, A0, Aplus, fevd), r.signs)
+    all(r.signs) do sr
+        _is_narrative(sr) && return true
+        check(sr, irf, A0, Aplus, fevd)
+    end
 
 """
     sign_check(r::SVARRestrictions) -> Function
@@ -504,6 +661,11 @@ function sign_check(r::SVARRestrictions)
     if any(s -> s isa Union{A0SignRestriction, AplusSignRestriction}, r.signs)
         throw(ArgumentError(
             "sign_check cannot evaluate A0/A+ sign restrictions (needs A0/A₊); " *
+            "use identify_arias"))
+    end
+    if any(_is_narrative, r.signs)
+        throw(ArgumentError(
+            "sign_check cannot evaluate narrative restrictions (needs shocks); " *
             "use identify_arias"))
     end
     has_fevd = any(s -> s isa FEVDShareRestriction, r.signs)
@@ -1190,6 +1352,9 @@ reported as degenerate and a warning is emitted.
   across draws of `(B, Σ)` — see [`identify_arias_bayesian`](@ref). `ess` is
   scale-invariant and unaffected either way.
 - `rng::AbstractRNG`: Random number generator (thread through for reproducible `ess`)
+- `n_narrative_sims::Int=1000`: Monte Carlo draws of ``ε* ~ N(0,I)`` used to
+  estimate ADRR ``ω̂`` when narrative restrictions are present. The importance
+  weight is multiplied by ``1/ω̂``. Unused (and stored as 0) when they are absent.
 """
 function identify_arias(model::VARModel{T}, restrictions::SVARRestrictions, horizon::Int;
                         n_draws::Int=1000, n_rotations::Int=1000,
@@ -1197,10 +1362,19 @@ function identify_arias(model::VARModel{T}, restrictions::SVARRestrictions, hori
                         normalize_weights::Bool=true,
                         setup::Union{Nothing,_AriasSVARSetup}=nothing,
                         rng::AbstractRNG=Random.default_rng(),
-                        check_id::Bool=true) where {T<:AbstractFloat}
+                        check_id::Bool=true,
+                        n_narrative_sims::Int=1000) where {T<:AbstractFloat}
     n = nvars(model)
     @assert restrictions.n_vars == n "Restriction dimension must match model"
     check_id && _assert_rwz_identified(restrictions, model; rng=rng)
+
+    has_narrative = _has_narrative(restrictions)
+    n_nar_sims = 0
+    if has_narrative
+        n_narrative_sims >= 1 || throw(ArgumentError("n_narrative_sims must be ≥ 1"))
+        _validate_narrative_sample(restrictions, size(model.U, 1))
+        n_nar_sims = n_narrative_sims
+    end
 
     max_h = max(horizon,
         isempty(restrictions.zeros) ? 0 : maximum(_restriction_horizon(zr) for zr in restrictions.zeros) + 1,
@@ -1243,12 +1417,24 @@ function identify_arias(model::VARModel{T}, restrictions::SVARRestrictions, hori
             end
             (has_zeros && !_check_zero_restrictions(irf_full, restrictions)) && continue
             !_check_rejections(restrictions, irf_full, A0, Aplus, fevd_props) && continue
+            if has_narrative
+                shocks = compute_structural_shocks(model, Q)
+                !_narrative_restrictions_hold(restrictions, irf_full, shocks) && continue
+            end
             irf = irf_full[1:horizon, :, :]
 
             w = if has_zeros && compute_weights
                 _compute_importance_weight(Q, model, setup, restrictions, Phi, L)
             else
                 one(T)
+            end
+            if has_narrative
+                ω = _omega_hat(restrictions, irf_full, n, T; n_sims=n_nar_sims, rng=rng)
+                if !(ω > 0) || !isfinite(ω)
+                    n_degenerate += 1
+                    continue
+                end
+                w *= 1 / ω
             end
             if !isfinite(w)
                 n_degenerate += 1
@@ -1285,13 +1471,13 @@ function identify_arias(model::VARModel{T}, restrictions::SVARRestrictions, hori
     w_out = normalize_weights ? weights ./ sum(weights) : weights
     vnames = copy(model.varnames)
     AriasSVARResult{T}(Q_draws, irf_array, w_out, T(n_acc / n_attempts), restrictions,
-                       ess, ess_frac, vnames, n_degenerate)
+                       ess, ess_frac, vnames, n_degenerate, n_nar_sims)
 end
 
 # --- Bayesian Integration ---
 
 """
-    identify_arias_bayesian(post::BVARPosterior, restrictions, horizon; data=nothing, n_rotations=100, quantiles=[0.16,0.5,0.84], compute_weights=true)
+    identify_arias_bayesian(post::BVARPosterior, restrictions, horizon; data=nothing, n_rotations=100, quantiles=[0.16,0.5,0.84], compute_weights=true, n_narrative_sims=1000)
 
 Apply Arias identification to each posterior draw.
 
@@ -1305,14 +1491,15 @@ weighted summaries to unweighted ones.
 
 # Returns
 [`BayesianSetIdentifiedSVAR`](@ref) with draws, weights, ESS, `n_unidentified`,
-and `n_degenerate_weights`. Property `total_accepted` is `size(irf_draws, 1)`.
-`irf_quantiles` / `irf_mean` / `acceptance_rates` are stored for back-compat
-with the previous NamedTuple return.
+`n_degenerate_weights`, and `n_narrative_sims`. Property `total_accepted` is
+`size(irf_draws, 1)`. `irf_quantiles` / `irf_mean` / `acceptance_rates` are stored
+for back-compat with the previous NamedTuple return.
 """
 function identify_arias_bayesian(post::BVARPosterior, restrictions::SVARRestrictions, horizon::Int;
     data::Union{Nothing,AbstractMatrix}=nothing, n_rotations::Int=100,
     quantiles::Vector{Float64}=[0.16, 0.5, 0.84], compute_weights::Bool=true,
-    rng::AbstractRNG=Random.default_rng())
+    rng::AbstractRNG=Random.default_rng(),
+    n_narrative_sims::Int=1000)
 
     use_data = isnothing(data) ? (isempty(post.data) ? nothing : post.data) : data
     p, n = post.p, post.n
@@ -1343,7 +1530,8 @@ function identify_arias_bayesian(post::BVARPosterior, restrictions::SVARRestrict
             # below, across all posterior draws on the common volume-element scale.
             result = identify_arias(m, restrictions, horizon;
                 n_draws=1, n_rotations=n_rotations, compute_weights=compute_weights,
-                normalize_weights=false, setup=setup, rng=rng, check_id=false)
+                normalize_weights=false, setup=setup, rng=rng, check_id=false,
+                n_narrative_sims=n_narrative_sims)
             n_degenerate += result.n_degenerate_weights
             for (i, w) in enumerate(result.weights)
                 push!(all_irfs, result.irf_draws[i, :, :, :])
@@ -1390,9 +1578,10 @@ function identify_arias_bayesian(post::BVARPosterior, restrictions::SVARRestrict
     end
 
     vnames = copy(post.varnames)
+    n_nar = _has_narrative(restrictions) ? n_narrative_sims : 0
     BayesianSetIdentifiedSVAR{T}(all_Qs, irf_array, Vector{T}(w_norm), ess, restrictions,
                                  vnames, n_unidentified, n_degenerate,
-                                 irf_q, irf_m, acc_rates, ess_frac)
+                                 irf_q, irf_m, acc_rates, ess_frac, n_nar)
 end
 
 # Deprecated wrapper for old (chain, p, n, ...) signature
@@ -1403,8 +1592,9 @@ end
 """Parse Arias kwargs from `irf`/`fevd` on `BVARPosterior` (extra keys ignored)."""
 function _arias_posterior_kwargs(max_draws::Int; rng::AbstractRNG=Random.default_rng(),
                                  n_rotations::Union{Nothing,Integer}=nothing,
-                                 compute_weights::Bool=true, kwargs...)
-    (rng, Int(something(n_rotations, max_draws)), compute_weights)
+                                 compute_weights::Bool=true,
+                                 n_narrative_sims::Int=1000, kwargs...)
+    (rng, Int(something(n_rotations, max_draws)), compute_weights, Int(n_narrative_sims))
 end
 
 """Peel `n_draws`/`n_rotations` before splatting into `identify_arias` (frequentist `irf`/`fevd`/`hd`/`compute_Q`).
@@ -1426,13 +1616,14 @@ function _arias_from_bvar_posterior(post::BVARPosterior, restrictions, horizon;
                                     data=nothing, n_rotations::Int=100,
                                     quantiles::AbstractVector=[0.16, 0.5, 0.84],
                                     rng::AbstractRNG=Random.default_rng(),
-                                    compute_weights::Bool=true)
+                                    compute_weights::Bool=true,
+                                    n_narrative_sims::Int=1000)
     isnothing(restrictions) && throw(ArgumentError("arias requires restrictions"))
     restrictions isa SVARRestrictions || throw(ArgumentError(
         ":arias requires restrictions::SVARRestrictions"))
     identify_arias_bayesian(post, restrictions, horizon;
         data=data, n_rotations=n_rotations, quantiles=collect(Float64.(quantiles)),
-        compute_weights=compute_weights, rng=rng)
+        compute_weights=compute_weights, rng=rng, n_narrative_sims=n_narrative_sims)
 end
 
 """Weighted quantile via linear interpolation."""
@@ -1558,13 +1749,48 @@ function cumulative_restriction(variable::Int, shock::Int, sign::Symbol;
     CumulativeRestriction(variable, shock, UnitRange{Int}(horizons), _parse_sign(sign))
 end
 
-"""Narrative shock-sign restriction (SID-15 hook)."""
-narrative_shock_restriction(shock::Int, dates, sign::Symbol) =
-    NarrativeShockRestriction(shock, collect(Int, dates), _parse_sign(sign))
+"""Narrative shock-sign restriction: structural shock `shock` has `sign` at `dates`."""
+function narrative_shock_restriction(shock::Int, dates, sign::Symbol)
+    ds = collect(Int, dates)
+    isempty(ds) && throw(ArgumentError("narrative dates must be nonempty"))
+    all(d -> d >= 1, ds) || throw(ArgumentError("narrative dates must be ≥ 1"))
+    NarrativeShockRestriction(shock, ds, _parse_sign(sign))
+end
 
-"""Narrative contribution restriction (SID-15 hook)."""
-narrative_contribution_restriction(variable::Int, shock::Int, window::AbstractUnitRange{<:Integer}) =
-    NarrativeContributionRestriction(variable, shock, UnitRange{Int}(window))
+"""
+    narrative_contribution_restriction(variable, shock, window; kind=:most_important)
+
+ADRR historical-decomposition restriction. `kind=:most_important` requires
+``|H_j| > \\max_{k \\neq j} |H_k|`` over `window`; `kind=:overwhelming` requires
+``|H_j| > \\sum_{k \\neq j} |H_k|``.
+"""
+function narrative_contribution_restriction(variable::Int, shock::Int,
+                                            window::AbstractUnitRange{<:Integer};
+                                            kind::Symbol=:most_important)
+    kind in (:most_important, :overwhelming) ||
+        throw(ArgumentError("kind must be :most_important or :overwhelming"))
+    w = UnitRange{Int}(window)
+    isempty(w) && throw(ArgumentError("narrative contribution window must be nonempty"))
+    first(w) >= 1 || throw(ArgumentError("narrative dates must be ≥ 1"))
+    NarrativeContributionRestriction(variable, shock, w, kind)
+end
+
+"""
+    identify_narrative(model, restrictions::SVARRestrictions, horizon; kwargs...)
+
+Thin wrapper around [`identify_arias`](@ref) for ADRR narrative restrictions.
+Closure-based `identify_narrative(model, horizon, sign_check, narrative_check)`
+remains the set-aware path used by `compute_Q(:narrative)`.
+"""
+identify_narrative(model::VARModel, restrictions::SVARRestrictions, horizon::Int; kwargs...) =
+    identify_arias(model, restrictions, horizon; kwargs...)
+
+"""Weighted identified-set bounds from an `AriasSVARResult` (Kish-weighted quantiles)."""
+function irf_bounds(r::AriasSVARResult{T}; quantiles=[0.16, 0.84]) where {T<:AbstractFloat}
+    qv = Float64[quantiles[1], quantiles[2]]
+    pct = irf_percentiles(r; quantiles=qv)
+    (pct[:, :, :, 1], pct[:, :, :, 2])
+end
 
 """Compute weighted IRF percentiles from AriasSVARResult."""
 function irf_percentiles(result::AriasSVARResult{T}; quantiles::Vector{Float64}=[0.16, 0.5, 0.84]) where {T}

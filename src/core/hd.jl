@@ -568,7 +568,8 @@ function historical_decomposition(model::VARModel{T}, restrictions::SVARRestrict
     n_draws::Int=1000, n_rotations::Int=1000,
     quantiles::Vector{<:Real}=[0.16, 0.5, 0.84],
     shock_names::Union{Nothing,Vector{String}}=nothing,
-    rng::AbstractRNG=Random.default_rng()
+    rng::AbstractRNG=Random.default_rng(),
+    n_narrative_sims::Int=1000
 ) where {T<:AbstractFloat}
 
     n = nvars(model)
@@ -579,7 +580,8 @@ function historical_decomposition(model::VARModel{T}, restrictions::SVARRestrict
     actual = model.Y[(model.p + 1):end, :]
 
     # Use identify_arias to get valid Q draws with weights
-    arias_result = identify_arias(model, restrictions, horizon; n_draws=n_draws, n_rotations=n_rotations, rng=rng)
+    arias_result = identify_arias(model, restrictions, horizon; n_draws=n_draws, n_rotations=n_rotations,
+                                 rng=rng, n_narrative_sims=n_narrative_sims)
 
     n_acc = length(arias_result.Q_draws)
     weights = arias_result.weights

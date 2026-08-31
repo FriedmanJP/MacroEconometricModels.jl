@@ -100,7 +100,7 @@ Four of the six economic schemes are reachable through the `method=` keyword sha
 |--------|------------------|-----------------|
 | Cholesky | `irf(m, H; method=:cholesky)` | none |
 | Sign | `irf(m, H; method=:sign, check_func=f)` or `identify_sign` | `check_func`, `max_draws` |
-| Narrative | `irf(m, H; method=:narrative, check_func=f, narrative_check=g)` or `identify_narrative` | `check_func`, `narrative_check`, `max_draws`, `store_all` |
+| Narrative (ADRR) | `identify_arias(m, r, H)` with `narrative_shock_restriction` / `narrative_contribution_restriction` | `n_narrative_sims`, `n_draws` |
 | Long-run | `irf(m, H; method=:long_run)` | none |
 | Structural VECM | `irf(vecm, H; method=:svec)` | `VECMModel`; `method=:long_run` is an alias |
 | Zero + sign | `identify_arias(m, restrictions, H)` | `SVARRestrictions` |
@@ -229,43 +229,54 @@ plot_result(id_set)
 
 ## Narrative Restrictions
 
-**Narrative restrictions** augment sign restrictions with historical information about specific shocks at particular dates (Antolín-Díaz & Rubio-Ramírez 2018). Two types of narrative constraint appear in the literature:
+**Narrative restrictions** constrain structural shocks and historical decompositions at documented dates (Antolín-Díaz & Rubio-Ramírez 2018). They sit on the same `SVARRestrictions` object as traditional signs and zeros; `identify_arias` accepts a rotation only if it also matches the narrative, then reweights the draw by ``1/\hat\omega``.
 
-1. **Shock sign narrative**: at date ``t^*``, structural shock ``j`` was positive (or negative)
-2. **Shock contribution narrative**: at date ``t^*``, shock ``j`` was the dominant driver of variable ``i``
+Two typed constraints are supported:
 
-`identify_narrative` filters first for sign-satisfying rotations, then evaluates a second predicate on the recovered structural shocks ``\varepsilon = B_0^{-1} u``. The narrative predicate receives the ``T_{\text{eff}} \times n`` shock matrix, indexed `[period, shock]`. With `store_all=true`, `identify_narrative` returns a `SignIdentifiedSet` of every rotation that clears both filters. `irf(; method=:narrative, check_func, narrative_check)` is set-aware: it returns the pointwise median with identified-set quantile bands, the same as `method=:sign`.
+1. **Shock sign**: at residual-sample dates ``t^*``, structural shock ``j`` was positive (or negative)
+2. **Contribution (Type B)**: over a window, shock ``j`` was the most important contributor to variable ``i`` (``|H_{i,j}| > \max_{k \neq j} |H_{i,k}|``); pass `kind=:overwhelming` for ``|H_{i,j}| > \sum_{k \neq j} |H_{i,k}|``
 
-```@example sid
-sign_pred = resp -> resp[1, 3, 3] > 0 && resp[1, 1, 3] < 0
-narrative_check = shocks -> shocks[20, 3] > 0   # tightening episode in period 20
+The contribution of shock ``j`` to the unexpected change in variable ``i`` between dates ``t`` and ``t+h`` is
 
-result_nar = irf(model, 20; method=:narrative, check_func=sign_pred,
-                 narrative_check=narrative_check, rng=MersenneTwister(4))
-(impact = round.(result_nar.values[1, :, 3], digits=4),
- ci_type = result_nar.ci_type,
- impact_95 = round.((result_nar.ci_lower[1, 1, 3], result_nar.ci_upper[1, 1, 3]), digits=4))
+```math
+H_{i,j,t,t+h} = \sum_{\ell=0}^{h} \Theta_\ell[i,j] \, \varepsilon_{j,t+h-\ell}
 ```
 
-The reported path is the pointwise median of the narrative-identified set (`ci_type = :identified_set`): industrial production falls ``0.0036`` log points on impact against a ``0.0521`` percentage-point rise in the funds rate, with a 95% identified-set band of ``[-0.0063, -0.0002]``. `max_draws` defaults to 1000. The pointwise median is a set summary, not an IRF (Fry & Pagan 2011).
+where:
+- ``\Theta_\ell`` is the structural IRF at horizon ``\ell``
+- ``\varepsilon_{j,s}`` is structural shock ``j`` at date ``s`` (residual-sample index)
 
-With `store_all=true`, `identify_narrative` returns a `SignIdentifiedSet`. Comparing that set to the sign-only set on the same draws shows how much the historical constraint shrinks identification:
+Traditional sign restrictions truncate the prior on ``Q``. Narrative restrictions truncate the likelihood, so discarding the rotations that fail the narrative is not enough: draws that are more likely to satisfy it would otherwise be over-weighted. After a draw clears the sign/zero and narrative filters, ``\hat\omega`` is the fraction of `n_narrative_sims` independent paths ``\varepsilon^* \sim N(0,I)`` over the restricted dates that also satisfy the narrative. The Arias importance weight is multiplied by ``1/\hat\omega``. Consequently `ess_fraction < 1` whenever narrative restrictions are present, even with no zeros.
 
 ```@example sid
-nar_set = identify_narrative(model, 20, sign_pred, narrative_check;
-                             max_draws=2000, store_all=true, rng=MersenneTwister(4))
-sign_admissible = identify_sign(model, 20, sign_pred; max_draws=2000,
-                                store_all=true, rng=MersenneTwister(4))
-(sign_only = sign_admissible.n_accepted, sign_and_narrative = nar_set.n_accepted)
+r_nar = SVARRestrictions(3;
+    signs = [sign_restriction(3, 3, :positive),
+             sign_restriction(1, 3, :negative),
+             narrative_shock_restriction(3, [20], :positive)])
+arias_nar = identify_arias(model, r_nar, 20; n_draws=200, n_narrative_sims=400,
+                           rng=MersenneTwister(4))
+pct_nar = irf_percentiles(arias_nar; quantiles=[0.16, 0.5, 0.84])
+(impact_median = round.(pct_nar[1, :, 3, 2], digits=4),
+ ess_fraction = round(arias_nar.ess_fraction, digits=3),
+ n_narrative_sims = arias_nar.n_narrative_sims)
 ```
 
-Of 2000 random rotations, 412 satisfy the two sign conditions and 215 of those also place a positive monetary shock in period 20 --- the narrative constraint discards roughly half of the sign-admissible set, and it does so using information the sign restrictions cannot express.
+The weighted median impact of the monetary shock is a ``0.0036`` log-point drop in industrial production against a ``0.0573`` percentage-point rise in the funds rate, with a 68% band of ``[-0.0057, -0.0012]`` for output. `ess_fraction = 0.998` of 200 draws: a single shock-sign date has ``\hat\omega \approx 1/2`` for every rotation, so the ``1/\hat\omega`` correction is almost uniform and Kish's ESS barely moves. Contribution restrictions and many dates make ``\hat\omega`` depend on ``Q`` and pull `ess_fraction` well below 1. `historical_decomposition(model, r_nar, H)` uses the same weighted draws.
+
+`identify_narrative(model, r_nar, H)` is a thin wrapper around `identify_arias`. The closure form `identify_narrative(model, H, sign_check, narrative_check)` remains the set-aware path for `irf(; method=:narrative)` and `compute_Q(:narrative)`.
 
 | Keyword | Type | Default | Description |
 |---------|------|---------|-------------|
-| `max_draws` | `Int` | `1000` | Maximum rotation draws |
-| `store_all` | `Bool` | `false` | Return a `SignIdentifiedSet` with all accepted draws |
+| `n_draws` | `Int` | `1000` | Target number of accepted rotations |
+| `n_rotations` | `Int` | `1000` | Maximum attempts per accepted draw |
+| `n_narrative_sims` | `Int` | `1000` | Monte Carlo draws of ``ε*`` used to estimate ``\hat\omega`` |
 | `rng` | `AbstractRNG` | `Random.default_rng()` | Random number generator |
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `ess_fraction` | `T` | Kish ESS over accepted draws; ``< 1`` with narrative restrictions |
+| `n_narrative_sims` | `Int` | ``M`` used for ``\hat\omega``; `0` when no narrative restriction is present |
+| `weights` | `Vector{T}` | Normalized importance weights (Arias volume element times ``1/\hat\omega``) |
 
 ---
 
@@ -320,6 +331,8 @@ The algorithm constructs ``Q`` column by column via QR decomposition in the null
 | Magnitude | `magnitude_bound(var, shock; lower, upper)` | Rejection: IRF entry in a closed interval |
 | FEVD share | `fevd_share_restriction(var, shock; horizon, lower, upper)` | Rejection on the shock's forecast-error variance share |
 | Cumulative | `cumulative_restriction(var, shock, :positive; horizons=0:H)` | Rejection on the cumulated IRF |
+| Narrative shock | `narrative_shock_restriction(shock, dates, :positive)` | Rejection: ``ε_{j,t}`` has the given sign at residual-sample dates |
+| Narrative contribution | `narrative_contribution_restriction(var, shock, window)` | Rejection: shock `j` is the most important (or `kind=:overwhelming`) contributor to variable `i` over `window` |
 
 `SVARRestrictions` stores linear zeros and rejection restrictions in two lists. `sign_check(r)` returns an `irf -> Bool` closure for `identify_sign`, structural DFM, and counterfactuals; a handwritten predicate remains an escape hatch. Imposing all ``n(n-1)/2`` long-run zeros (on early-ordered shocks) recovers Blanchard–Quah as a just-identified special case, unique up to column sign. Cointegrated systems throw `IdentificationError` --- difference the data or use [`identify_svec`](@ref) on the VECM ([Vector Error Correction Models](@ref vecm_page)).
 
@@ -560,7 +573,7 @@ With the interest rate ordered last, the Cholesky scheme forces the contemporane
 
 4. **Low acceptance rates.** If `identify_sign` or `identify_arias` produces acceptance rates below 1%, the restrictions may be nearly contradictory. Relax the restrictions or increase `max_draws`.
 
-5. **Reading `identify_arias` draw counts at face value.** The acceptance rate says how many draws survived the restrictions; `ess_fraction` says how many of them actually count. With zero restrictions the two diverge --- check `ess_fraction` before trusting the width of a credible band.
+5. **Reading `identify_arias` draw counts at face value.** The acceptance rate says how many draws survived the restrictions; `ess_fraction` says how many of them actually count. With zero or narrative restrictions the two diverge --- check `ess_fraction` before trusting the width of a credible band. Narrative restrictions reweight by ``1/\hat\omega``; simply dropping the rotations that fail the historical constraint overstates the posterior of those more likely to match the episode (Antolín-Díaz & Rubio-Ramírez 2018).
 
 6. **Zero restrictions on late-ordered shocks over-constrain the draw.** Shock ``j`` admits at most ``n - j`` zero restrictions in both `identify_arias` and `identify_uhlig`. Reorder the system so the heavily restricted shock comes first. `check_identification` reports `:under` when the RWZ rank or order condition fails and `:over` when extra independent zeros empty the null space; both routines throw `IdentificationError` before sampling.
 

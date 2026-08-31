@@ -547,11 +547,14 @@ end
 """
     identify_narrative(model, horizon, sign_check, narrative_check; max_draws=1000, store_all=false)
 
-Combine sign and narrative restrictions.
+Combine sign and narrative restrictions via closures (set-aware `compute_Q(:narrative)`).
 
 With `store_all=false` (default), returns `(Q, irf, shocks)` — the first valid rotation.
 With `store_all=true`, returns a `SignIdentifiedSet` of every accepted rotation (same shape
 as [`identify_sign`](@ref)).
+
+Typed ADRR restrictions belong on [`identify_arias`](@ref) / the
+`identify_narrative(model, restrictions::SVARRestrictions, horizon)` wrapper.
 """
 function identify_narrative(model::VARModel{T}, horizon::Int, sign_check::Function,
                             narrative_check::Function; max_draws::Int=1000,
