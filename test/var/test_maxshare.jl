@@ -83,6 +83,15 @@ end
         fv = fevd(model, H; method=:max_share, target=1, horizons=Hwin)
         @test fv.proportions[1, 1, H] ≈ r.share atol = 1e-8
         @test r.share ≈ r.eigvals[1] / sum(r.eigvals) atol = 1e-10
+        # Diagonal A ⇒ own-share ≡ 1. Non-diagonal Aoff makes the share interior
+        # so FEVD indexing H = last(horizons)+1 is actually checked.
+        Aoff = [0.5 0.35 0.0; 0.25 0.5 0.1; 0.0 0.15 0.4]
+        moff = _known_var(Aoff, Sigma; varnames=["prod", "gdp", "hours"])
+        roff = identify_max_share(moff; target=1, horizons=Hwin)
+        fvoff = fevd(moff, H; method=:max_share, target=1, horizons=Hwin)
+        @test 0 < roff.share < 1
+        @test fvoff.proportions[1, 1, H] ≈ roff.share atol = 1e-8
+        @test roff.share ≈ roff.eigvals[1] / sum(roff.eigvals) atol = 1e-10
     end
 
     @testset "frequency band recovers the same shock" begin
