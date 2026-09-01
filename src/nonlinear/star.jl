@@ -462,7 +462,9 @@ external transition variable would require its future path. Returns a
 central `level` percentile bands.
 """
 function forecast(m::STARModel{T}, h::Int; reps::Int=1000, level::Real=0.90,
+                  seed::Union{Integer,Nothing}=nothing,
                   rng::Random.AbstractRNG=Random.default_rng()) where {T<:AbstractFloat}
+    rng = _resolve_repro_rng(rng, seed)
     startswith(m.sname, "y[t-") || throw(ArgumentError(
         "forecast is only defined for self-exciting STAR models (sₜ = y_{t-d})."))
     h >= 1 || throw(ArgumentError("horizon h must be ≥ 1."))
@@ -498,5 +500,8 @@ function forecast(m::STARModel{T}, h::Int; reps::Int=1000, level::Real=0.90,
     fse = vec(std(paths; dims=1))
     lo = T[Statistics.quantile(view(paths, :, s), alpha) for s in 1:h]
     hi = T[Statistics.quantile(view(paths, :, s), 1 - alpha) for s in 1:h]
-    return STARForecast{T}(fmean, lo, hi, fse, h, T(level), reps)
+    result = STARForecast{T}(fmean, lo, hi, fse, h, T(level), reps)
+    return _with_manifest(result, capture_manifest(; seed=seed,
+        settings=Dict{String,Any}("reps" => reps, "level" => Float64(level),
+                                  "h" => h, "model" => m)))
 end

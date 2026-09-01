@@ -91,7 +91,9 @@ function estimate_favar(X::AbstractMatrix{T}, Y_key::AbstractMatrix{T}, r::Int, 
     panel_varnames::Union{Nothing, Vector{String}}=nothing,
     n_draws::Int=5000,
     burnin::Int=1000,
+    seed::Union{Integer,Nothing}=nothing,
     rng::AbstractRNG=Random.default_rng()) where {T<:AbstractFloat}
+    rng = _resolve_repro_rng(rng, seed)
 
     # --- Validate inputs ---
     _validate_data(X, "X")
@@ -132,8 +134,11 @@ function estimate_favar(X::AbstractMatrix{T}, Y_key::AbstractMatrix{T}, r::Int, 
     aug_varnames = vcat(factor_names, key_names)
 
     if method == :bayesian
-        return _estimate_favar_bayesian(Matrix{T}(X), Matrix{T}(Y_key), r, p,
+        result = _estimate_favar_bayesian(Matrix{T}(X), Matrix{T}(Y_key), r, p,
             n_draws, burnin, pvn, Y_key_indices, aug_varnames, rng)
+        return _with_manifest(result, capture_manifest(; seed=seed,
+            settings=Dict{String,Any}("n_draws" => n_draws, "burnin" => burnin,
+                                      "method" => "bayesian")))
     end
 
     # --- Two-Step Estimation ---
@@ -220,7 +225,8 @@ function estimate_favar(X::AbstractMatrix{T}, key_indices::Vector{Int}, r::Int, 
             result.n,
             result.p,
             result.data,
-            result.varnames
+            result.varnames;
+            manifest=result.manifest
         )
     end
 

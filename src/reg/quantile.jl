@@ -185,7 +185,14 @@ struct QuantileRegModel{T<:AbstractFloat} <: StatsAPI.RegressionModel
     se_type::Symbol
     n_obs::Int
     converged::Vector{Bool}
+    manifest::Union{ReproManifest,Nothing}
 end
+
+QuantileRegModel{T}(y, X, taus, beta, vcov_mats, stderr, residuals, fitted, objective,
+                    pseudo_r2, varnames, se_type, n_obs, converged;
+                    manifest=nothing) where {T<:AbstractFloat} =
+    QuantileRegModel{T}(y, X, taus, beta, vcov_mats, stderr, residuals, fitted, objective,
+                        pseudo_r2, varnames, se_type, n_obs, converged, manifest)
 
 # =============================================================================
 # Estimation
@@ -241,8 +248,10 @@ function estimate_qreg(y::AbstractVector{T}, X::AbstractMatrix{T},
                        se::Symbol=:iid,
                        varnames::Union{Nothing,Vector{String}}=nothing,
                        n_boot::Int=500,
+                       seed::Union{Integer,Nothing}=nothing,
                        rng=Random.default_rng(),
                        alpha::Real=0.05) where {T<:AbstractFloat}
+    rng = _resolve_repro_rng(rng, seed)
     _validate_data(y, "y")
     _validate_data(X, "X")
     n = length(y)
@@ -299,8 +308,11 @@ function estimate_qreg(y::AbstractVector{T}, X::AbstractMatrix{T},
     names = varnames === nothing ? ["x$i" for i in 1:k] : varnames
     length(names) == k || throw(ArgumentError("varnames must have length $k"))
 
-    return QuantileRegModel{T}(yv, Xm, taus, beta, vcovs, stderr, resid, fit,
-                               obj, pr2, names, se, n, conv)
+    result = QuantileRegModel{T}(yv, Xm, taus, beta, vcovs, stderr, resid, fit,
+                                 obj, pr2, names, se, n, conv)
+    return _with_manifest(result, capture_manifest(; seed=seed,
+        settings=Dict{String,Any}("n_boot" => n_boot, "se" => String(se),
+                                  "alpha" => Float64(alpha))))
 end
 
 function estimate_qreg(y::AbstractVector, X::AbstractMatrix,

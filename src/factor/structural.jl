@@ -81,7 +81,19 @@ struct StructuralDFM{T<:AbstractFloat} <: AbstractFactorModel
     max_eigenvalue_modulus::T
     instrument::Union{Nothing,Vector{T}}
     first_stage_F::T
+    manifest::Union{ReproManifest,Nothing}
 end
+
+StructuralDFM{T}(gdfm, factor_var, B0, Q, identification, structural_irf, loadings_td,
+                 p_var, shock_names, varnames, K, r, method, static_factors,
+                 loadings_static, shock_variance_share, units, identified_set,
+                 acceptance_rate, id_order, lag_criterion, max_eigenvalue_modulus,
+                 instrument, first_stage_F; manifest=nothing) where {T} =
+    StructuralDFM{T}(gdfm, factor_var, B0, Q, identification, structural_irf, loadings_td,
+                     p_var, shock_names, varnames, K, r, method, static_factors,
+                     loadings_static, shock_variance_share, units, identified_set,
+                     acceptance_rate, id_order, lag_criterion, max_eigenvalue_modulus,
+                     instrument, first_stage_F, manifest)
 
 # Backward-compatible constructor (pre-SDFM-18, no proxy fields)
 StructuralDFM{T}(gdfm, factor_var, B0, Q, identification, structural_irf, loadings_td,
@@ -242,9 +254,11 @@ function estimate_structural_dfm(X::AbstractMatrix{T}, q::Int;
     varnames::Union{Nothing,Vector{String}}=nothing,
     shock_names::Union{Nothing,Vector{String}}=nothing,
     rng::AbstractRNG=Random.default_rng(),
+    seed::Union{Integer,Nothing}=nothing,
     instrument::Union{Nothing,AbstractVector}=nothing,
     normalize::Union{Nothing,Tuple}=nothing,
 ) where {T<:AbstractFloat}
+    rng = _resolve_repro_rng(rng, seed)
 
     _validate_data(X, "X")
     r_use = r <= 0 ? q : r
@@ -367,10 +381,12 @@ function estimate_structural_dfm(gdfm::GeneralizedDynamicFactorModel{T};
     varnames::Union{Nothing,Vector{String}}=nothing,
     shock_names::Union{Nothing,Vector{String}}=nothing,
     rng::AbstractRNG=Random.default_rng(),
+    seed::Union{Integer,Nothing}=nothing,
     standardize::Bool=true,
     instrument::Union{Nothing,AbstractVector}=nothing,
     normalize::Union{Nothing,Tuple}=nothing,
 ) where {T<:AbstractFloat}
+    rng = _resolve_repro_rng(rng, seed)
 
     identification in _SDFM_ID_METHODS || throw(ArgumentError(
         "identification must be one of $(_SDFM_ID_METHODS), got :$identification"))
@@ -470,10 +486,13 @@ function _estimate_sdfm_fglr(gdfm::GeneralizedDynamicFactorModel{T}, q::Int, r::
     if check_stability && modu >= one(T)
         @warn "Estimated factor VAR is non-stationary (max eigenvalue modulus = $(round(modu, digits=4))); IRFs may be explosive. Pass check_stability=false to silence."
     end
-    StructuralDFM{T}(gdfm, factor_var, B0, H_id, identification,
+    result = StructuralDFM{T}(gdfm, factor_var, B0, H_id, identification,
         structural_irf, Lambda, p_use, sn, vn,
         K, r, :fglr, F, Lambda, share, units, idset, rate,
         collect(Int, ord), lag_crit, T(modu), z_store, Fstat)
+    return _with_manifest(result, capture_manifest(; seed=seed,
+        settings=Dict{String,Any}("identification" => String(identification),
+                                  "max_draws" => max_draws, "H" => H)))
 end
 
 """Leading-q eigendecomposition of Σ̂_u: K = V_q Λ_q^{1/2} (`r×q`)."""
@@ -950,7 +969,7 @@ function _estimate_sdfm_gdfm_var(gdfm::GeneralizedDynamicFactorModel{T}, q::Int,
         structural_irf, Lambda, p_use, sn, vn,
         K, q, :gdfm_var, F, Lambda, one(T), :raw, idset, rate,
         collect(1:q), lag_crit, T(modu), z_store, Fstat)
-end
+end  # caller attaches the reproducibility manifest
 
 # =============================================================================
 # StatsAPI Interface

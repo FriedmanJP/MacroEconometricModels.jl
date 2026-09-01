@@ -102,7 +102,27 @@ struct PVARModel{T<:AbstractFloat} <: StatsAPI.RegressionModel
 
     # Full per-equation GMM/FE coefficient covariance (K×K each); empty ⇒ diagonal fallback
     coef_vcov::Vector{Matrix{T}}
+    # Bootstrap IRF bands (populated by `pvar_bootstrap_irf`; `nothing` otherwise)
+    boot_irf::Union{Nothing,Array{T,3}}
+    boot_lower::Union{Nothing,Array{T,3}}
+    boot_upper::Union{Nothing,Array{T,3}}
+    boot_draws::Union{Nothing,Array{T,4}}
+    manifest::Union{ReproManifest,Nothing}
 end
+
+PVARModel{T}(Phi, Sigma, se, pvalues, m, p, n_predet, n_exog, varnames, predet_names,
+             exog_names, method, transformation, steps, system_constant, min_lag_endo,
+             max_lag_endo, collapse, pca_instruments, pca_max_components, n_groups,
+             n_periods, n_obs, obs_per_group, instruments, residuals_transformed,
+             weighting_matrix, n_instruments, data, coef_vcov;
+             boot_irf=nothing, boot_lower=nothing, boot_upper=nothing, boot_draws=nothing,
+             manifest=nothing) where {T<:AbstractFloat} =
+    PVARModel{T}(Phi, Sigma, se, pvalues, m, p, n_predet, n_exog, varnames, predet_names,
+                 exog_names, method, transformation, steps, system_constant, min_lag_endo,
+                 max_lag_endo, collapse, pca_instruments, pca_max_components, n_groups,
+                 n_periods, n_obs, obs_per_group, instruments, residuals_transformed,
+                 weighting_matrix, n_instruments, data, coef_vcov,
+                 boot_irf, boot_lower, boot_upper, boot_draws, manifest)
 
 # StatsAPI interface
 StatsAPI.coef(m::PVARModel) = vec(m.Phi)

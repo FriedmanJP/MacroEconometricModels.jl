@@ -621,6 +621,9 @@ include("summary.jl")
 # Tables.jl source interface + tidy exports (after all result types are defined)
 include("core/tables.jl")
 
+# Per-type reproduce() methods (RSER-13 / #786): after every result type.
+include("core/repro_methods.jl")
+
 # Versioned result serialization (#347): dispatches on every result type, so it
 # loads after they are all defined.
 include("core/serial.jl")

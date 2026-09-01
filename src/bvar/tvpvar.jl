@@ -83,7 +83,13 @@ struct TVPVARPosterior{T<:AbstractFloat}
     tvp::Bool
     sv::Bool
     varnames::Vector{String}
+    manifest::Union{ReproManifest,Nothing}
 end
+
+TVPVARPosterior{T}(B_draws, A_draws, H_draws, Q_draws, S_draws, W_draws, Y, p, n,
+                   T_eff, n_train, tvp, sv, varnames; manifest=nothing) where {T<:AbstractFloat} =
+    TVPVARPosterior{T}(B_draws, A_draws, H_draws, Q_draws, S_draws, W_draws, Y, p, n,
+                       T_eff, n_train, tvp, sv, varnames, manifest)
 
 n_draws(post::TVPVARPosterior) = size(post.B_draws, 1)
 
@@ -477,7 +483,9 @@ function estimate_tvpvar(Y::AbstractMatrix{T}, p::Int;
                          n_train::Int=0,
                          k_Q::Real=0.01, k_S::Real=0.1, k_W::Real=0.01,
                          varnames::Vector{String}=String[],
+                         seed::Union{Integer,Nothing}=nothing,
                          rng::AbstractRNG=Random.default_rng()) where {T<:AbstractFloat}
+    rng = _resolve_repro_rng(rng, seed)
     _validate_data(Y, "Y")
     p >= 1 || throw(ArgumentError("p must be at least 1, got $p"))
     n_draws >= 1 || throw(ArgumentError("n_draws must be positive"))
@@ -666,8 +674,13 @@ function estimate_tvpvar(Y::AbstractMatrix{T}, p::Int;
     kept == n_keep || throw(ErrorException(
         "TVP-VAR Gibbs retained $kept of $n_keep draws — increase n_draws or reduce thin"))
 
-    return TVPVARPosterior{T}(B_out, A_out, H_out, Q_out, S_out, W_out,
-                              Ym, p, n, T_eff, ntr, tvp, sv, vn)
+    result = TVPVARPosterior{T}(B_out, A_out, H_out, Q_out, S_out, W_out,
+                               Ym, p, n, T_eff, ntr, tvp, sv, vn)
+    return _with_manifest(result, capture_manifest(; seed=seed,
+        settings=Dict{String,Any}("n_draws" => n_draws, "n_burn" => n_burn, "thin" => thin,
+                                  "n_train" => ntr, "tvp" => tvp, "sv" => sv,
+                                  "k_Q" => Float64(k_Q), "k_S" => Float64(k_S),
+                                  "k_W" => Float64(k_W))))
 end
 
 estimate_tvpvar(Y::AbstractMatrix, p::Int; kwargs...) =

@@ -72,7 +72,9 @@ function opp_sequence(forecasts::AbstractVector, ce::PolicyCausalEffects{T},
                       n_sim::Int=0,
                       levels::Union{Tuple,AbstractVector}=(0.6, 0.75, 0.9),
                       independent::Bool=true,
+                      seed::Union{Integer,Nothing}=nothing,
                       rng::AbstractRNG=Random.default_rng()) where {T<:AbstractFloat}
+    rng = _resolve_repro_rng(rng, seed)
     n_d = length(forecasts)
     n_d >= 1 || throw(ArgumentError("forecasts: expected at least one date"))
     dts = dates === nothing ? [string("t", t) for t in 1:n_d] : String.(collect(dates))
@@ -153,8 +155,10 @@ function opp_sequence(forecasts::AbstractVector, ce::PolicyCausalEffects{T},
     end
     delta_tc = delta .- pref
 
-    OPPSequence{T}(dts, delta, delta_tc, news, pref, aging, bands, reject,
-                   copy(ce.shock_labels), loss.name)
+    result = OPPSequence{T}(dts, delta, delta_tc, news, pref, aging, bands, reject,
+                            copy(ce.shock_labels), loss.name)
+    return _with_manifest(result, capture_manifest(; seed=seed,
+        settings=Dict{String,Any}("n_sim" => n_sim, "independent" => independent)))
 end
 
 """

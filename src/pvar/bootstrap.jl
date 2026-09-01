@@ -46,7 +46,9 @@ function pvar_bootstrap_irf(model::PVARModel{T}, H::Int;
                              irf_type::Symbol=:oirf,
                              n_draws::Int=500,
                              ci::Real=0.95,
+                             seed::Union{Integer,Nothing}=nothing,
                              rng::AbstractRNG=Random.default_rng()) where {T}
+    rng = _resolve_repro_rng(rng, seed)
     H < 0 && throw(ArgumentError("Horizon H must be non-negative"))
     irf_type ∈ (:oirf, :girf) || throw(ArgumentError("irf_type must be :oirf or :girf"))
     0 < ci < 1 || throw(ArgumentError("ci must be in (0, 1)"))
@@ -139,5 +141,19 @@ function pvar_bootstrap_irf(model::PVARModel{T}, H::Int;
         upper[h, i, j] = quantile(vals, 1 - alpha / 2)
     end
 
-    (irf=irf_point, lower=lower, upper=upper, draws=draws)
+    manifest = capture_manifest(; seed=seed, settings=Dict{String,Any}(
+        "H" => H, "irf_type" => String(irf_type), "n_draws" => n_draws, "ci" => Float64(ci)))
+    updated = PVARModel{T}(
+        model.Phi, model.Sigma, model.se, model.pvalues,
+        model.m, model.p, model.n_predet, model.n_exog,
+        model.varnames, model.predet_names, model.exog_names,
+        model.method, model.transformation, model.steps, model.system_constant,
+        model.min_lag_endo, model.max_lag_endo, model.collapse,
+        model.pca_instruments, model.pca_max_components,
+        model.n_groups, model.n_periods, model.n_obs, model.obs_per_group,
+        model.instruments, model.residuals_transformed, model.weighting_matrix,
+        model.n_instruments, model.data, model.coef_vcov;
+        boot_irf=irf_point, boot_lower=lower, boot_upper=upper, boot_draws=draws,
+        manifest=manifest)
+    (irf=irf_point, lower=lower, upper=upper, draws=draws, model=updated, manifest=manifest)
 end

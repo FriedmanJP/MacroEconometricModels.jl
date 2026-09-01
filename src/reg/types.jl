@@ -173,7 +173,14 @@ struct RobustRegModel{T<:AbstractFloat} <: StatsAPI.RegressionModel
     varnames::Vector{String}
     converged::Bool
     iterations::Int
+    manifest::Union{ReproManifest,Nothing}
 end
+
+RobustRegModel{T}(y, X, beta, vcov_mat, scale, weights, residuals, fitted, psi, method,
+                  tuning, robust_r2, varnames, converged, iterations;
+                  manifest=nothing) where {T<:AbstractFloat} =
+    RobustRegModel{T}(y, X, beta, vcov_mat, scale, weights, residuals, fitted, psi, method,
+                      tuning, robust_r2, varnames, converged, iterations, manifest)
 
 StatsAPI.coef(m::RobustRegModel) = m.beta
 StatsAPI.vcov(m::RobustRegModel) = m.vcov_mat

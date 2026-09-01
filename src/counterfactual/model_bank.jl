@@ -96,7 +96,9 @@ function irf_match(menu_builder::Function, target::NamedTuple,
                    init::Union{Nothing,AbstractVector{<:Real}}=nothing,
                    proposal_scale::Real=0.36,
                    T_store::Int=0,
+                   seed::Union{Integer,Nothing}=nothing,
                    rng::AbstractRNG=Random.default_rng())
+    rng = _resolve_repro_rng(rng, seed)
     n_p = length(priors)
     n_p == length(param_names) || throw(ArgumentError(
         "priors/param_names length mismatch: $(n_p) vs $(length(param_names))"))
@@ -205,9 +207,12 @@ function irf_match(menu_builder::Function, target::NamedTuple,
         menus[i] = T_store > 0 && T_store < ce_i.H ? _bank_truncate(ce_i, T_store) : ce_i
     end
 
-    ModelBankMember{T}(String(name), collect(Symbol, param_names),
-                       theta_draws[1:kept, :], log_post[1:kept], T(lml),
-                       menus, acc, H_news)
+    result = ModelBankMember{T}(String(name), collect(Symbol, param_names),
+                                theta_draws[1:kept, :], log_post[1:kept], T(lml),
+                                menus, acc, H_news)
+    return _with_manifest(result, capture_manifest(; seed=seed,
+        settings=Dict{String,Any}("n_keep" => n_keep, "thin" => thin,
+                                  "n_adapt" => n_adapt, "n_burn" => n_burn)))
 end
 
 # Truncate a square menu container to a T_store×T_store horizon.
@@ -256,7 +261,9 @@ function model_average(members::AbstractVector{<:ModelBankMember},
                        probs::AbstractVector{<:Real};
                        n_pool::Int=1000,
                        subset::Union{Nothing,AbstractVector{Int}}=nothing,
+                       seed::Union{Integer,Nothing}=nothing,
                        rng::AbstractRNG=Random.default_rng())
+    rng = _resolve_repro_rng(rng, seed)
     n = length(members)
     length(probs) == n || throw(ArgumentError(
         "probs: expected $n probabilities, got $(length(probs))"))

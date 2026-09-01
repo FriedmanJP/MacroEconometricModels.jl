@@ -214,7 +214,9 @@ function policy_causal_effects(slp::StructuralLP{T}, shocks::AbstractVector,
                                instruments::AbstractVector{<:Pair}=Pair{Symbol,Int}[];
                                H::Int=slp.irf.horizon, normalize::Symbol=:none,
                                n_draws::Int=500,
+                               seed::Union{Integer,Nothing}=nothing,
                                rng::AbstractRNG=Random.default_rng()) where {T<:AbstractFloat}
+    rng = _resolve_repro_rng(rng, seed)
     ir = slp.irf
     draws4 = _lp_normal_draws(ir.values, slp.se, n_draws, rng)
     _pce_build(ir.values, draws4, ir.variables, ir.shocks,
@@ -253,7 +255,9 @@ function policy_causal_effects(lpr::LPImpulseResponse{T},
                                instruments::AbstractVector{<:Pair}=Pair{Symbol,Int}[];
                                H::Int=size(lpr.values, 1), normalize::Symbol=:none,
                                n_draws::Int=500,
+                               seed::Union{Integer,Nothing}=nothing,
                                rng::AbstractRNG=Random.default_rng()) where {T<:AbstractFloat}
+    rng = _resolve_repro_rng(rng, seed)
     # (H+1) × n_resp single-shock layout -> (h, var, shock) with n_s = 1
     Hh, nv = size(lpr.values)
     values = reshape(lpr.values, Hh, nv, 1)

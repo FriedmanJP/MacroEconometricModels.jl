@@ -44,7 +44,20 @@ struct SVModel{T<:AbstractFloat} <: AbstractVolatilityModel
     dist::Symbol
     leverage::Bool
     n_samples::Int
+    manifest::Union{ReproManifest,Nothing}
 end
+
+SVModel{T}(y, h_draws, mu_post, phi_post, sigma_eta_post, volatility_mean,
+           volatility_quantiles, quantile_levels, dist, leverage, n_samples;
+           manifest=nothing) where {T<:AbstractFloat} =
+    SVModel{T}(y, h_draws, mu_post, phi_post, sigma_eta_post, volatility_mean,
+               volatility_quantiles, quantile_levels, dist, leverage, n_samples, manifest)
+SVModel(y, h_draws, mu_post, phi_post, sigma_eta_post, volatility_mean,
+        volatility_quantiles, quantile_levels, dist, leverage, n_samples;
+        manifest=nothing) =
+    SVModel{eltype(y)}(y, h_draws, mu_post, phi_post, sigma_eta_post, volatility_mean,
+                       volatility_quantiles, quantile_levels, dist, leverage, n_samples;
+                       manifest=manifest)
 
 # Accessors needed by _show_volatility_model
 # SVModel doesn't have omega/alpha/beta, so we define mu/omega for display compatibility

@@ -86,6 +86,19 @@ struct DIDResult{T<:AbstractFloat} <: AbstractFrequentistResult
     conf_level::T
     att_vcov::Union{Matrix{T}, Nothing}
     base_period::Symbol
+    manifest::Union{ReproManifest,Nothing}
+end
+
+function DIDResult{T}(att, se, ci_lower, ci_upper, event_times, reference_period,
+                      group_time_att, cohorts, overall_att, overall_se, n_obs,
+                      n_groups, n_treated, n_control, method, outcome_var,
+                      treatment_var, control_group, cluster, conf_level,
+                      att_vcov, base_period; manifest=nothing) where {T<:AbstractFloat}
+    DIDResult{T}(att, se, ci_lower, ci_upper, event_times, reference_period,
+                 group_time_att, cohorts, overall_att, overall_se, n_obs,
+                 n_groups, n_treated, n_control, method, outcome_var,
+                 treatment_var, control_group, cluster, conf_level, att_vcov,
+                 base_period, manifest)
 end
 
 # Back-compat outer constructors: legacy 20-arg positional calls (through `conf_level`)

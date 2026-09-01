@@ -775,7 +775,9 @@ f.regime_prob       # 8 x 2 predicted regime probabilities
 - Krolzig, H.-M. (1997). *Markov-Switching Vector Autoregressions*. Springer.
 """
 function forecast(m::MSRegModel{T}, h::Int; reps::Int=1000, level::Real=0.90,
+                  seed::Union{Integer,Nothing}=nothing,
                   rng::Random.AbstractRNG=Random.default_rng()) where {T<:AbstractFloat}
+    rng = _resolve_repro_rng(rng, seed)
     m.model_type === :ms_ar || throw(ArgumentError(
         "forecast(m, h) is defined for :ms_ar models. A switching REGRESSION needs future " *
         "regressors — call forecast(m, X_new) with an h x k matrix instead."))
@@ -825,12 +827,17 @@ function forecast(m::MSRegModel{T}, h::Int; reps::Int=1000, level::Real=0.90,
         end
     end
 
-    _ms_bands(fmean, paths, xi_h, h, level, reps)
+    fc = _ms_bands(fmean, paths, xi_h, h, level, reps)
+    return _with_manifest(fc, capture_manifest(; seed=seed,
+        settings=Dict{String,Any}("reps" => reps, "level" => Float64(level),
+                                  "h" => h, "model" => m)))
 end
 
 function forecast(m::MSRegModel{T}, X_new::AbstractMatrix; reps::Int=1000,
                   level::Real=0.90,
+                  seed::Union{Integer,Nothing}=nothing,
                   rng::Random.AbstractRNG=Random.default_rng()) where {T<:AbstractFloat}
+    rng = _resolve_repro_rng(rng, seed)
     m.model_type === :regression || throw(ArgumentError(
         "forecast(m, X_new) is defined for switching REGRESSIONS. An :ms_ar model " *
         "projects itself — call forecast(m, h)."))
@@ -865,7 +872,10 @@ function forecast(m::MSRegModel{T}, X_new::AbstractMatrix; reps::Int=1000,
         end
     end
 
-    _ms_bands(fmean, paths, xi_h, h, level, reps)
+    fc = _ms_bands(fmean, paths, xi_h, h, level, reps)
+    return _with_manifest(fc, capture_manifest(; seed=seed,
+        settings=Dict{String,Any}("reps" => reps, "level" => Float64(level),
+                                  "X_new" => Matrix{T}(Xf), "model" => m)))
 end
 
 # Draw a categorical index from a probability vector.

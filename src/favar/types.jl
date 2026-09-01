@@ -119,7 +119,15 @@ struct BayesianFAVAR{T<:AbstractFloat}
     p::Int
     data::Matrix{T}
     varnames::Vector{String}
+    manifest::Union{ReproManifest,Nothing}
 end
+
+BayesianFAVAR{T}(B_draws, Sigma_draws, factor_draws, loadings_draws, lambda_y_draws,
+                 X_panel, panel_varnames, Y_key_indices, n_factors, n_key, n, p, data,
+                 varnames; manifest=nothing) where {T<:AbstractFloat} =
+    BayesianFAVAR{T}(B_draws, Sigma_draws, factor_draws, loadings_draws, lambda_y_draws,
+                     X_panel, panel_varnames, Y_key_indices, n_factors, n_key, n, p, data,
+                     varnames, manifest)
 
 # =============================================================================
 # Accessors

@@ -96,10 +96,12 @@ function constrained_opp(fc::PolicyForecast{T}, ce::PolicyCausalEffects{T},
                          method::Symbol=:auto,
                          delta0::Union{Nothing,AbstractVector{<:Real}}=nothing,
                          multistart::Int=1,
+                         seed::Union{Integer,Nothing}=nothing,
                          rng::AbstractRNG=Random.default_rng(),
                          n_sim::Int=0,
                          levels::Union{Tuple,AbstractVector}=(0.6, 0.75, 0.9),
                          independent::Bool=true) where {T<:AbstractFloat}
+    rng = _resolve_repro_rng(rng, seed)
     method in (:auto, :slsqp, :projection) || throw(ArgumentError(
         "method: expected :auto, :slsqp or :projection, got :$method"))
     isempty(constraints) && throw(ArgumentError(

@@ -76,7 +76,17 @@ struct WildClusterBootstrap{T<:AbstractFloat}
     weighttype::Symbol
     imposenull::Bool
     enumerated::Bool
+    manifest::Union{ReproManifest,Nothing}
 end
+
+WildClusterBootstrap{T}(coefname, coefindex, estimate, null_value, t_stat, p_value,
+                        p_value_equaltail, p_value_asymptotic, ci_lower, ci_upper, level,
+                        t_boot, n_boot, n_clusters, weighttype, imposenull, enumerated;
+                        manifest=nothing) where {T<:AbstractFloat} =
+    WildClusterBootstrap{T}(coefname, coefindex, estimate, null_value, t_stat, p_value,
+                            p_value_equaltail, p_value_asymptotic, ci_lower, ci_upper, level,
+                            t_boot, n_boot, n_clusters, weighttype, imposenull, enumerated,
+                            manifest)
 
 function Base.show(io::IO, b::WildClusterBootstrap{T}) where {T}
     spec = Any[
@@ -464,7 +474,9 @@ function _wild_cluster_bootstrap(y::Vector{T}, X::Matrix{T}, varnames::Vector{St
                                  level::Real=0.95,
                                  ci_gridpoints::Int=25,
                                  enumerate::Union{Nothing,Bool}=nothing,
+                                 seed::Union{Integer,Nothing}=nothing,
                                  rng::AbstractRNG=Random.default_rng()) where {T<:AbstractFloat}
+    rng = _resolve_repro_rng(rng, seed)
     n, k = size(X)
     length(y) == n || throw(ArgumentError("y and X must have the same number of rows"))
     length(clusters) == n || throw(ArgumentError(
@@ -502,7 +514,10 @@ function _wild_cluster_bootstrap(y::Vector{T}, X::Matrix{T}, varnames::Vector{St
         (T(NaN), T(NaN))
     end
 
-    return WildClusterBootstrap{T}(varnames[j], j, beta[j], null_value, t_obs,
-                                   p_sym, p_et, T(p_asy), lo, hi, T(level),
-                                   t_boot, size(V, 2), G, weights, imposenull, enumerated)
+    result = WildClusterBootstrap{T}(varnames[j], j, beta[j], null_value, t_obs,
+                                     p_sym, p_et, T(p_asy), lo, hi, T(level),
+                                     t_boot, size(V, 2), G, weights, imposenull, enumerated)
+    return _with_manifest(result, capture_manifest(; seed=seed,
+        settings=Dict{String,Any}("n_boot" => n_boot, "weights" => String(weights),
+                                  "imposenull" => imposenull)))
 end

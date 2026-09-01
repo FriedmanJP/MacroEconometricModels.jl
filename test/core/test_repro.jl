@@ -192,3 +192,213 @@ const _MEM = MacroEconometricModels
         @test occursin("ReproReport", sprint(show, reproduce(post)))
     end
 end
+
+# =============================================================================
+# RSER-13 / #786 — seed=/manifest/reproduce for rng-only estimators
+# =============================================================================
+
+function _rser13_did_panel(; n_units=12, n_periods=10, seed=42)
+    rng = MersenneTwister(seed)
+    n_cohorts = 2
+    units_per = n_units ÷ (n_cohorts + 1)
+    treat_times = zeros(Int, n_units)
+    for c in 1:n_cohorts
+        for u in ((c - 1) * units_per + 1):(c * units_per)
+            treat_times[u] = 4 + 2 * (c - 1)
+        end
+    end
+    N_obs = n_units * n_periods
+    data = Matrix{Float64}(undef, N_obs, 2)
+    group_id = Vector{Int}(undef, N_obs)
+    time_id = Vector{Int}(undef, N_obs)
+    row = 1
+    for i in 1:n_units
+        a = randn(rng)
+        for t in 1:n_periods
+            te = (treat_times[i] > 0 && t >= treat_times[i]) ? 1.5 : 0.0
+            data[row, 1] = a + 0.1 * t + te + 0.4 * randn(rng)
+            data[row, 2] = Float64(treat_times[i])
+            group_id[row] = i
+            time_id[row] = t
+            row += 1
+        end
+    end
+    PanelData{Float64}(data, ["outcome", "treat_time"], Quarterly, [1, 1],
+                       group_id, time_id, nothing, ["u$i" for i in 1:n_units],
+                       n_units, 2, N_obs, true, String[], Dict{String,String}(), Symbol[])
+end
+
+function _rser13_pvar(; N=8, T_total=14, m=2, seed=11)
+    rng = MersenneTwister(seed)
+    data_mat = zeros(N * T_total, m)
+    for i in 1:N
+        mu = randn(rng, m)
+        off = (i - 1) * T_total
+        data_mat[off + 1, :] = mu + 0.1 * randn(rng, m)
+        for t in 2:T_total
+            data_mat[off + t, :] = mu + 0.3 * data_mat[off + t - 1, :] + 0.1 * randn(rng, m)
+        end
+    end
+    pd = PanelData{Float64}(data_mat, ["y1", "y2"], Quarterly, [1, 1],
+                            repeat(1:N, inner=T_total), repeat(1:T_total, outer=N),
+                            nothing, ["g$i" for i in 1:N],
+                            N, 2, N * T_total, true, ["pvar test panel"], Dict{String,String}(), Symbol[])
+    estimate_pvar_feols(pd, 1; dependent_vars=["y1", "y2"])
+end
+
+@testset "RSER-13 seed=/manifest/reproduce (#786)" begin
+
+    @testset "listed result types carry a trailing manifest field" begin
+        types = (SVModel{Float64}, TVPVARPosterior{Float64}, MFVARPosterior{Float64},
+                 BayesianFAVAR{Float64}, StructuralDFM{Float64}, PVARModel{Float64},
+                 SMMModel{Float64}, QuantileRegModel{Float64}, RobustRegModel{Float64},
+                 ThresholdModel{Float64}, STARModel{Float64}, MSForecast{Float64},
+                 STARForecast{Float64}, ThresholdForecast{Float64},
+                 WildClusterBootstrap{Float64}, DIDResult{Float64}, StructuralLP{Float64},
+                 ConditionalForecast{Float64}, BayesianHistoricalDecomposition{Float64},
+                 OPPResult{Float64}, OPPSequence{Float64}, PolicyCausalEffects{Float64},
+                 PolicyForecast{Float64}, SpanningDiagnostic{Float64},
+                 ModelBankMember{Float64}, NARDLMultipliers{Float64},
+                 HansenLinearityTest{Float64})
+        for Tw in types
+            @test :manifest in fieldnames(Tw)
+            @test fieldnames(Tw)[end] === :manifest
+        end
+        # Identification helpers do not grow a manifest field (SID-19 coordination).
+        @test !(:manifest in fieldnames(SignIdentifiedSet{Float64}))
+        @test !(:manifest in fieldnames(UhligSVARResult{Float64}))
+        @test !(:manifest in fieldnames(AriasSVARResult{Float64}))
+        @test !(:manifest in fieldnames(ICASVARResult{Float64}))
+    end
+
+    @testset "seed= identity; rng= still works (identification helpers)" begin
+        Q1 = generate_Q(3; seed=17)
+        Q2 = generate_Q(3; seed=17)
+        @test Q1 == Q2
+        Q3 = generate_Q(3; seed=18)
+        @test Q1 != Q3
+        Qr = generate_Q(3; rng=MersenneTwister(17))
+        @test Qr isa Matrix
+        # seed wins when both are passed
+        @test generate_Q(3; rng=MersenneTwister(99), seed=17) == Q1
+    end
+
+    @testset "estimate_sv: seed, manifest, reproduce, round-trip" begin
+        y = randn(MersenneTwister(3), 40)
+        m = estimate_sv(y; n_samples=12, burnin=6, seed=20260717)
+        @test m.manifest isa ReproManifest
+        @test m.manifest.seed == 20260717
+        @test estimate_sv(y; n_samples=12, burnin=6, seed=20260717).h_draws == m.h_draws
+        @test estimate_sv(y; n_samples=12, burnin=6, seed=9).h_draws != m.h_draws
+        @test reproduce(m).matched === true
+        m2 = _MEM._reconstruct_from_container(_MEM._build_container(m))
+        @test m2.manifest.seed == 20260717
+        @test reproduce(m2).matched === true
+        m_ns = estimate_sv(y; n_samples=8, burnin=4)
+        @test m_ns.manifest isa ReproManifest
+        @test m_ns.manifest.seed === nothing
+        @test reproduce(m_ns).matched === missing
+        # rng= still works
+        @test estimate_sv(y; n_samples=8, burnin=4, rng=MersenneTwister(1)) isa SVModel
+    end
+
+    @testset "estimate_tvpvar: seed, manifest, reproduce, round-trip" begin
+        Y = randn(MersenneTwister(4), 40, 2)
+        post = estimate_tvpvar(Y, 1; tvp=true, sv=true, n_draws=6, n_burn=6,
+                               n_train=8, seed=314)
+        @test post.manifest isa ReproManifest
+        @test post.manifest.seed == 314
+        @test reproduce(post).matched === true
+        post2 = _MEM._reconstruct_from_container(_MEM._build_container(post))
+        @test reproduce(post2).matched === true
+        @test estimate_tvpvar(Y, 1; n_draws=6, n_burn=6, n_train=8,
+                              rng=MersenneTwister(1)) isa TVPVARPosterior
+    end
+
+    @testset "pvar_bootstrap_irf: seed, manifest, reproduce, round-trip" begin
+        model = _rser13_pvar()
+        boot = pvar_bootstrap_irf(model, 3; n_draws=6, seed=42)
+        @test boot.manifest isa ReproManifest
+        @test boot.manifest.seed == 42
+        @test boot.model isa PVARModel
+        @test boot.model.boot_draws == boot.draws
+        boot2 = pvar_bootstrap_irf(model, 3; n_draws=6, seed=42)
+        @test boot.draws == boot2.draws
+        @test reproduce(boot.model).matched === true
+        loaded = _MEM._reconstruct_from_container(_MEM._build_container(boot.model))
+        @test reproduce(loaded).matched === true
+        @test pvar_bootstrap_irf(model, 3; n_draws=4,
+                                 rng=MersenneTwister(1)).draws isa Array
+    end
+
+    @testset "estimate_did bootstrap SEs: seed, manifest, reproduce, round-trip" begin
+        pd = _rser13_did_panel()
+        r = estimate_did(pd, :outcome, :treat_time; method=:did_multiplegt,
+                         leads=1, horizon=2, n_boot=8, seed=1234)
+        @test r.manifest isa ReproManifest
+        @test r.manifest.seed == 1234
+        r_same = estimate_did(pd, :outcome, :treat_time; method=:did_multiplegt,
+                              leads=1, horizon=2, n_boot=8, seed=1234)
+        @test r.att == r_same.att
+        @test r.se == r_same.se
+        @test reproduce(r).matched === true
+        r2 = _MEM._reconstruct_from_container(_MEM._build_container(r))
+        @test reproduce(r2).matched === true
+        @test estimate_did(pd, :outcome, :treat_time; method=:did_multiplegt,
+                           leads=1, horizon=2, n_boot=6,
+                           rng=MersenneTwister(1)) isa DIDResult
+    end
+
+    @testset "forecast(::MSRegModel): seed, manifest, reproduce, round-trip" begin
+        rng = MersenneTwister(510)
+        n = 120
+        y = zeros(n)
+        s = 1
+        P = [0.9 0.1; 0.2 0.8]
+        mu = (-0.5, 1.0)
+        for t in 1:n
+            s = rand(rng) < P[s, 1] ? 1 : 2
+            y[t] = mu[s] + 0.4 * (t == 1 ? 0.0 : y[t-1]) + 0.3 * randn(rng)
+        end
+        ms = estimate_ms_ar(y, 1; k_regimes=2)
+        fc = forecast(ms, 4; reps=30, seed=77)
+        @test fc isa MSForecast
+        @test fc.manifest isa ReproManifest
+        @test fc.manifest.seed == 77
+        @test forecast(ms, 4; reps=30, seed=77).forecast == fc.forecast
+        @test reproduce(fc).matched === true
+        fc2 = _MEM._reconstruct_from_container(_MEM._build_container(fc))
+        @test reproduce(fc2).matched === true
+        @test forecast(ms, 3; reps=10, rng=MersenneTwister(2)) isa MSForecast
+    end
+
+    @testset "estimate_opp: seed, manifest, reproduce, round-trip" begin
+        H, n_s = 6, 2
+        Tx0 = randn(MersenneTwister(8), H, n_s)
+        v0 = randn(MersenneTwister(9), H)
+        noises = 0.05 .* randn(MersenneTwister(2), 12)
+        D = cat((Tx0 .* (1 + e) for e in noises)...; dims=3)
+        ce = PolicyCausalEffects(outcomes=[:u], Theta_x=[Tx0], Theta_x_draws=[D])
+        d = [hcat((v0 .* (1 + e) for e in noises)...)]
+        fc = PolicyForecast{Float64}([:u], [v0], d, H, "t")
+        loss = policy_loss([:u], H; lambda=[1.0])
+        r = estimate_opp(fc, ce, loss; n_sim=24, seed=5)
+        @test r.manifest isa ReproManifest
+        @test r.manifest.seed == 5
+        @test estimate_opp(fc, ce, loss; n_sim=24, seed=5).delta_draws == r.delta_draws
+        @test reproduce(r).matched === true
+        r2 = _MEM._reconstruct_from_container(_MEM._build_container(r))
+        @test reproduce(r2).matched === true
+        @test estimate_opp(fc, ce, loss; n_sim=16,
+                           rng=MersenneTwister(3)) isa OPPResult
+    end
+
+    @testset "two-arg reproduce(ir, model) is unchanged" begin
+        Y = randn(MersenneTwister(3), 80, 2)
+        model = estimate_var(Y, 2)
+        ir = irf(model, 8; ci_type=:bootstrap, reps=40, seed=123)
+        @test reproduce(ir, model).matched === true
+        @test reproduce(ir).matched === missing
+    end
+end
+

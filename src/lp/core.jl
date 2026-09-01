@@ -424,7 +424,9 @@ function structural_lp(Y::AbstractMatrix{T}, horizon::Int;
                        regime_indicator::Union{Nothing,AbstractVector{Int}}=nothing,
                        varnames::Vector{String}=["y$i" for i in 1:size(Y, 2)],
                        shock_names::Union{Nothing,Vector{String}}=nothing,
+                       seed::Union{Integer,Nothing}=nothing,
                        rng::AbstractRNG=Random.default_rng()) where {T<:AbstractFloat}
+    rng = _resolve_repro_rng(rng, seed)
     T_obs, n = size(Y)
     p = isnothing(var_lags) ? lags : var_lags
 
@@ -487,8 +489,11 @@ function structural_lp(Y::AbstractMatrix{T}, horizon::Int;
     irf_result = ImpulseResponse{ET}(irfs, ci_lower, ci_upper, horizon,
                                       var_model.varnames, snames, ci_sym)
 
-    StructuralLP{ET}(irf_result, Matrix{ET}(eps), var_model, Matrix{ET}(Q), method,
-                     lags, cov_type, se_arr, lp_models, n_req, n_req - n_fail, n_fail)
+    result = StructuralLP{ET}(irf_result, Matrix{ET}(eps), var_model, Matrix{ET}(Q), method,
+                              lags, cov_type, se_arr, lp_models, n_req, n_req - n_fail, n_fail)
+    return _with_manifest(result, capture_manifest(; seed=seed,
+        settings=Dict{String,Any}("method" => String(method), "lags" => lags,
+                                  "ci_type" => String(ci_type), "reps" => reps)))
 end
 
 # Float fallback

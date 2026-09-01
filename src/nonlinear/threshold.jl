@@ -120,9 +120,11 @@ function estimate_threshold(y::AbstractVector, X::AbstractMatrix, q::AbstractVec
                             trim::Real=0.15, linearity::Bool=true, reps::Int=1000,
                             ci_level::Real=0.95, het::Bool=false,
                             rng::Random.AbstractRNG=Random.default_rng(),
+                            seed::Union{Integer,Nothing}=nothing,
                             xnames::Union{Nothing,Vector{String}}=nothing,
                             qname::String="q",
                             p::Int=0, d::Int=0, is_setar::Bool=false)
+    rng = _resolve_repro_rng(rng, seed)
     T = float(promote_type(eltype(y), eltype(X), eltype(q)))
     yv = Vector{T}(y)
     Xm = Matrix{T}(X)
@@ -186,9 +188,12 @@ function estimate_threshold(y::AbstractVector, X::AbstractMatrix, q::AbstractVec
 
     xn = xnames === nothing ? ["x$i" for i in 1:k] : xnames
 
-    return ThresholdModel{T}(yv, Xm, qv, best_gamma, gamma_ci, T(ci_level),
+    result = ThresholdModel{T}(yv, Xm, qv, best_gamma, gamma_ci, T(ci_level),
         beta1, beta2, se1, se2, mask1, ssr1, ssr2, ssr, sigma2, resid,
         n, k, n1, n2, p, d, is_setar, aic, bic, xn, qname, T(trim), lin)
+    return _with_manifest(result, capture_manifest(; seed=seed,
+        settings=Dict{String,Any}("reps" => reps, "trim" => Float64(trim),
+                                  "ci_level" => Float64(ci_level), "het" => het)))
 end
 
 # =============================================================================
@@ -215,7 +220,9 @@ Returns a [`ThresholdModel`](@ref) with `is_setar = true`.
 function estimate_setar(y::AbstractVector, p::Int, d=1;
                         trim::Real=0.15, linearity::Bool=true, reps::Int=1000,
                         ci_level::Real=0.95, het::Bool=false,
+                        seed::Union{Integer,Nothing}=nothing,
                         rng::Random.AbstractRNG=Random.default_rng())
+    rng = _resolve_repro_rng(rng, seed)
     p >= 1 || throw(ArgumentError("SETAR order p must be ≥ 1; got $p."))
     Tf = float(eltype(y))
     yv = Vector{Tf}(y)
@@ -262,7 +269,7 @@ function estimate_setar(y::AbstractVector, p::Int, d=1;
     yy, XX, qq = _setar_design(yv, p, best_d, m0)
     xn = vcat("const", ["y[t-$i]" for i in 1:p])
     return estimate_threshold(yy, XX, qq; trim=trim, linearity=linearity, reps=reps,
-                              ci_level=ci_level, het=het, rng=rng,
+                              ci_level=ci_level, het=het, rng=rng, seed=seed,
                               xnames=xn, qname="y[t-$best_d]",
                               p=p, d=best_d, is_setar=true)
 end
@@ -314,7 +321,9 @@ Returns a [`HansenLinearityTest`](@ref).
 """
 function hansen_linearity_test(y::AbstractVector, X::AbstractMatrix, q::AbstractVector;
                                trim::Real=0.15, reps::Int=1000,
+                               seed::Union{Integer,Nothing}=nothing,
                                rng::Random.AbstractRNG=Random.default_rng())
+    rng = _resolve_repro_rng(rng, seed)
     T = float(promote_type(eltype(y), eltype(X), eltype(q)))
     yv = Vector{T}(y)
     Xm = Matrix{T}(X)
@@ -399,8 +408,11 @@ function hansen_linearity_test(y::AbstractVector, X::AbstractMatrix, q::Abstract
 
     pval_lm = T(exceed_lm) / T(reps)
     pval_wald = T(exceed_wald) / T(reps)
-    return HansenLinearityTest{T}(sup_lm, sup_wald, pval_lm, pval_wald, gamma_sup,
-                                  reps, T(trim), count(valid))
+    result = HansenLinearityTest{T}(sup_lm, sup_wald, pval_lm, pval_wald, gamma_sup,
+                                    reps, T(trim), count(valid))
+    return _with_manifest(result, capture_manifest(; seed=seed,
+        settings=Dict{String,Any}("reps" => reps, "trim" => Float64(trim),
+                                  "y" => yv, "X" => Xm, "q" => qv)))
 end
 
 # =============================================================================
@@ -496,7 +508,9 @@ standard deviations, and central `level` percentile bands. Only SETAR models are
 supported (a generic threshold model would require future exogenous `X`/`q`).
 """
 function forecast(m::ThresholdModel{T}, h::Int; reps::Int=1000, level::Real=0.90,
+                  seed::Union{Integer,Nothing}=nothing,
                   rng::Random.AbstractRNG=Random.default_rng()) where {T<:AbstractFloat}
+    rng = _resolve_repro_rng(rng, seed)
     m.is_setar || throw(ArgumentError(
         "forecast is only defined for SETAR models (from estimate_setar)."))
     h >= 1 || throw(ArgumentError("horizon h must be ≥ 1."))
@@ -538,5 +552,8 @@ function forecast(m::ThresholdModel{T}, h::Int; reps::Int=1000, level::Real=0.90
     fse = vec(std(paths; dims=1))
     lo = T[Statistics.quantile(view(paths, :, s), alpha) for s in 1:h]
     hi = T[Statistics.quantile(view(paths, :, s), 1 - alpha) for s in 1:h]
-    return ThresholdForecast{T}(fmean, lo, hi, fse, h, T(level), reps)
+    result = ThresholdForecast{T}(fmean, lo, hi, fse, h, T(level), reps)
+    return _with_manifest(result, capture_manifest(; seed=seed,
+        settings=Dict{String,Any}("reps" => reps, "level" => Float64(level),
+                                  "h" => h, "model" => m)))
 end

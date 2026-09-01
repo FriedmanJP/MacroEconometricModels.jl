@@ -70,10 +70,11 @@ struct PolicyCausalEffects{T<:AbstractFloat} <: AbstractCounterfactual
     H::Int
     shock_labels::Vector{String}
     source::Symbol
+    manifest::Union{ReproManifest,Nothing}
 
     function PolicyCausalEffects{T}(outcomes, instruments, Theta_x, Theta_z,
                                     Theta_x_draws, Theta_z_draws, H, shock_labels,
-                                    source) where {T<:AbstractFloat}
+                                    source, manifest::Union{ReproManifest,Nothing}=nothing) where {T<:AbstractFloat}
         isempty(outcomes) && throw(ArgumentError(
             "outcomes: expected at least 1 outcome, got 0"))
         length(Theta_x) == length(outcomes) || throw(ArgumentError(
@@ -120,7 +121,7 @@ struct PolicyCausalEffects{T<:AbstractFloat} <: AbstractCounterfactual
             end
         end
         new{T}(outcomes, instruments, Theta_x, Theta_z, Theta_x_draws, Theta_z_draws,
-               H, shock_labels, source)
+               H, shock_labels, source, manifest)
     end
 end
 
@@ -407,8 +408,10 @@ struct PolicyForecast{T<:AbstractFloat} <: AbstractCounterfactual
     draws::Union{Nothing,Vector{Matrix{T}}}
     H::Int
     origin::String
+    manifest::Union{ReproManifest,Nothing}
 
-    function PolicyForecast{T}(outcomes, values, draws, H, origin) where {T<:AbstractFloat}
+    function PolicyForecast{T}(outcomes, values, draws, H, origin,
+                               manifest::Union{ReproManifest,Nothing}=nothing) where {T<:AbstractFloat}
         isempty(outcomes) && throw(ArgumentError(
             "outcomes: expected at least 1 outcome, got 0"))
         length(values) == length(outcomes) || throw(ArgumentError(
@@ -427,7 +430,7 @@ struct PolicyForecast{T<:AbstractFloat} <: AbstractCounterfactual
                     "draws[$i]: expected size (H, n_draws) = ($H, $nd), got $(size(D))"))
             end
         end
-        new{T}(outcomes, values, draws, H, origin)
+        new{T}(outcomes, values, draws, H, origin, manifest)
     end
 end
 
@@ -619,7 +622,15 @@ struct OPPResult{T<:AbstractFloat} <: AbstractCounterfactual
     bands::Union{Nothing,Dict{T,Matrix{T}}}
     reject::Union{Nothing,Dict{T,Vector{Bool}}}
     n_failed::Int
+    manifest::Union{ReproManifest,Nothing}
 end
+
+OPPResult{T}(delta, delta_plugin, shock_labels, gradient, loss_base, loss_opp, Y_base,
+             Y_opp, P_base, P_opp, outcomes, instruments, H, origin, delta_draws, bands,
+             reject, n_failed; manifest=nothing) where {T<:AbstractFloat} =
+    OPPResult{T}(delta, delta_plugin, shock_labels, gradient, loss_base, loss_opp, Y_base,
+                 Y_opp, P_base, P_opp, outcomes, instruments, H, origin, delta_draws, bands,
+                 reject, n_failed, manifest)
 
 """
     OPPSequence{T<:AbstractFloat} <: AbstractCounterfactual
@@ -652,7 +663,13 @@ struct OPPSequence{T<:AbstractFloat} <: AbstractCounterfactual
     reject::Union{Nothing,Dict{T,Matrix{Bool}}}
     shock_labels::Vector{String}
     loss_name::String
+    manifest::Union{ReproManifest,Nothing}
 end
+
+OPPSequence{T}(dates, delta, delta_tc, news_part, pref_part, aging_part, bands, reject,
+               shock_labels, loss_name; manifest=nothing) where {T<:AbstractFloat} =
+    OPPSequence{T}(dates, delta, delta_tc, news_part, pref_part, aging_part, bands, reject,
+                   shock_labels, loss_name, manifest)
 
 """
     ModelBankMember{T<:AbstractFloat} <: AbstractCounterfactual
@@ -679,7 +696,13 @@ struct ModelBankMember{T<:AbstractFloat} <: AbstractCounterfactual
     menu_draws::Vector{PolicyCausalEffects{T}}
     acceptance_rate::T
     H_news::Int
+    manifest::Union{ReproManifest,Nothing}
 end
+
+ModelBankMember{T}(name, param_names, theta_draws, log_post, log_marglik, menu_draws,
+                   acceptance_rate, H_news; manifest=nothing) where {T<:AbstractFloat} =
+    ModelBankMember{T}(name, param_names, theta_draws, log_post, log_marglik, menu_draws,
+                       acceptance_rate, H_news, manifest)
 
 """
     CounterfactualHistory{T<:AbstractFloat} <: AbstractCounterfactual
@@ -743,7 +766,13 @@ struct SpanningDiagnostic{T<:AbstractFloat} <: AbstractCounterfactual
     x_cf_emp::Vector{Vector{T}}
     x_cf_full::Vector{Vector{T}}
     bands_gap::Union{Nothing,Vector{Matrix{T}}}
+    manifest::Union{ReproManifest,Nothing}
 end
+
+SpanningDiagnostic{T}(gap, gap_rel, loading_inside, rel_residual_emp, spanned, outcomes,
+                      x_cf_emp, x_cf_full, bands_gap; manifest=nothing) where {T<:AbstractFloat} =
+    SpanningDiagnostic{T}(gap, gap_rel, loading_inside, rel_residual_emp, spanned, outcomes,
+                          x_cf_emp, x_cf_full, bands_gap, manifest)
 
 """
     ForecastSufficiency{T<:AbstractFloat} <: AbstractCounterfactual

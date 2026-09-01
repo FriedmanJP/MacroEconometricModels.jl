@@ -268,8 +268,10 @@ function estimate_robust(y::AbstractVector{T}, X::AbstractMatrix{T};
                          tol::Real=1e-6,
                          scale_update::Symbol=:mad,
                          rng::Random.AbstractRNG=Random.default_rng(),
+                         seed::Union{Integer,Nothing}=nothing,
                          n_resample::Int=500,
                          varnames::Union{Nothing,Vector{String}}=nothing) where {T<:AbstractFloat}
+    rng = _resolve_repro_rng(rng, seed)
     _validate_data(y, "y")
     _validate_data(X, "X")
     n = length(y)
@@ -377,9 +379,12 @@ function estimate_robust(y::AbstractVector{T}, X::AbstractMatrix{T};
     den = sum(rho_used((yi - ymed) / scale) for yi in yv)
     robust_r2 = den > zero(T) ? one(T) - num / den : zero(T)
 
-    RobustRegModel{T}(yv, Xm, Vector{T}(beta), vcov_mat, T(scale), Vector{T}(weights),
-                      Vector{T}(resid), Vector{T}(fitted), psi, method, T(tuning),
-                      T(robust_r2), vn, converged, iters)
+    result = RobustRegModel{T}(yv, Xm, Vector{T}(beta), vcov_mat, T(scale), Vector{T}(weights),
+                               Vector{T}(resid), Vector{T}(fitted), psi, method, T(tuning),
+                               T(robust_r2), vn, converged, iters)
+    return _with_manifest(result, capture_manifest(; seed=seed,
+        settings=Dict{String,Any}("n_resample" => n_resample, "psi" => String(psi),
+                                  "method" => String(method))))
 end
 
 # Convenience: estimate directly from a CrossSectionData response/regressor selection.

@@ -222,7 +222,9 @@ Arguments:
 function identify_fastica(model::VARModel{T}; contrast::Symbol=:logcosh,
                           approach::Symbol=:deflation, max_iter::Int=200,
                           tol::T=T(1e-6),
+                          seed::Union{Integer,Nothing}=nothing,
                           rng::AbstractRNG=Random.default_rng()) where {T<:AbstractFloat}
+    rng = _resolve_repro_rng(rng, seed)
     n = nvars(model)
     Z, W_white, dewhiten = _whiten(model.U)
 
@@ -608,7 +610,9 @@ HSIC with a characteristic kernel (Gaussian) is zero iff variables are independe
 function identify_hsic(model::VARModel{T}; kernel::Symbol=:gaussian,
                         sigma::T=T(1.0), max_iter::Int=200,
                         tol::T=T(1e-6),
+                        seed::Union{Integer,Nothing}=nothing,
                         rng::AbstractRNG=Random.default_rng()) where {T<:AbstractFloat}
+    rng = _resolve_repro_rng(rng, seed)
     n = nvars(model)
     Z, W_white, dewhiten = _whiten(model.U)
 

@@ -377,7 +377,9 @@ end
 # =============================================================================
 
 """Generate random orthogonal matrix via QR decomposition (Haar measure)."""
-function generate_Q(n::Int, ::Type{T}=Float64; rng::AbstractRNG=Random.default_rng()) where {T<:AbstractFloat}
+function generate_Q(n::Int, ::Type{T}=Float64; rng::AbstractRNG=Random.default_rng(),
+                    seed::Union{Integer,Nothing}=nothing) where {T<:AbstractFloat}
+    rng = _resolve_repro_rng(rng, seed)
     X = randn(rng, T, n, n)
     Q, R = qr(X)
     # Sign-normalize columns by the QR pivots. Use an explicit ±1 map (not `sign`, whose
@@ -465,7 +467,9 @@ rotations and their IRFs (Baumeister & Hamilton, 2015).
 function identify_sign(model::VARModel{T}, horizon::Int, check_func::Function;
                        max_draws::Int=1000, store_all::Bool=false,
                        shock_names::Union{Nothing,Vector{String}}=nothing,
+                       seed::Union{Integer,Nothing}=nothing,
                        rng::AbstractRNG=Random.default_rng()) where {T<:AbstractFloat}
+    rng = _resolve_repro_rng(rng, seed)
     n = nvars(model)
 
     if !store_all
@@ -606,7 +610,9 @@ function identify_narrative(model::VARModel{T}, horizon::Int, sign_check::Functi
                             narrative_check::Function; max_draws::Int=1000,
                             store_all::Bool=false,
                             shock_names::Union{Nothing,Vector{String}}=nothing,
+                            seed::Union{Integer,Nothing}=nothing,
                             rng::AbstractRNG=Random.default_rng()) where {T<:AbstractFloat}
+    rng = _resolve_repro_rng(rng, seed)
     n = nvars(model)
 
     if !store_all
