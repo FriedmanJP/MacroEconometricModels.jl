@@ -170,10 +170,11 @@ end
     end
 
     @testset "report() does not error" begin
-        # report(VARModel) writes to stdout; backend switching already tested via show(buf, m)
-        @test (redirect_stdout(devnull) do
-            report(m)
-        end; true)
+        # IOBuffer, not redirect_stdout: Windows multiprocess CI races stdout
+        # (`dup: Bad file descriptor` on Julia 1.12). Same as test_summary.jl.
+        io = IOBuffer()
+        report(io, m)
+        @test length(String(take!(io))) > 0
     end
 
     @testset "ARIMA show in all backends" begin
@@ -299,9 +300,9 @@ end
         # Unknown format throws
         @test_throws ArgumentError refs(IOBuffer(), model; format=:pdf)
 
-        # Convenience stdout form does not error
-        @test (redirect_stdout(devnull) do; refs(model); end; true)
-        @test (redirect_stdout(devnull) do; refs(:johansen); end; true)
+        # Convenience form: write to an IOBuffer (not redirect_stdout; Windows CI).
+        io = IOBuffer(); refs(io, model); @test length(String(take!(io))) > 0
+        io = IOBuffer(); refs(io, :johansen); @test length(String(take!(io))) > 0
     end
 end
 
