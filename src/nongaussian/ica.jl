@@ -74,6 +74,7 @@ function Base.show(io::IO, r::ICASVARResult{T}) where {T}
     spec = Any[
         "Method"     string(r.method);
         "Variables"  n;
+        "Shocks"     join(r.shock_names, ", ");
         "Converged"  r.converged ? "Yes" : "No";
         "Iterations" r.iterations;
         "Objective"  _fmt(r.objective)

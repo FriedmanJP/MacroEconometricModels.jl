@@ -689,9 +689,11 @@ end
 end
 
 @testset "SID-04 fallback P_ref when posterior-mean Q unidentified" begin
-    # Noiseless VAR so the posterior-mean B fits U ≈ 0. External-volatility ID
-    # then sees identical regime covariances and throws IdentificationError on
-    # the mean model; perturbed draws remain identified and become P_ref.
+    # Noiseless VAR so the posterior-mean B fits U ≈ 0. Smooth-transition ID
+    # calls `_eigendecomposition_id` on the split covariances (no λ-gap
+    # fallback), so identical ~eps I regimes throw IdentificationError on the
+    # mean; perturbed draws remain identified and become P_ref.
+    # (`:external_volatility` swallows the λ-gap error in `_two_regime_start`.)
     n, p, Tobs = 2, 1, 80
     A = [0.5 0.0; 0.0 0.5]
     Y = zeros(Tobs, n)
@@ -710,12 +712,11 @@ end
         Sigma_draws[s, :, :] .= Matrix(1.0I, 2, 2)
     end
     post = BVARPosterior{Float64}(B_draws, Sigma_draws, 3, p, n, Y, :normal, :direct, ["y1", "y2"])
-    regimes = ones(Int, Tobs)
-    regimes[(Tobs ÷ 2 + 1):end] .= 2
+    s = collect(range(-2.0, 2.0; length=Tobs))
     results, ns = @test_logs (:warn, r"reference Q could not be identified") match_mode = :any begin
         MacroEconometricModels.process_posterior_samples(post,
             (m, Q, h) -> MacroEconometricModels.compute_irf(m, Q, h);
-            method=:external_volatility, horizon=4, regime_indicator=regimes)
+            method=:smooth_transition, horizon=4, transition_var=s)
     end
     @test ns >= 2
     @test length(results) == ns
