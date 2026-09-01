@@ -77,7 +77,9 @@ combination), nowcast models (DFM/BVAR/bridge) and news decompositions,
 cross-section/micro results (robust/penalized/Heckman/Tobit/count/quantile/RDD,
 selection, marginal effects, diagnostics, Anderson–Rubin, wild cluster bootstrap,
 panel tests), DiD results (TWFE/CS/SA/BJS/dCDH, event-study LP, LP-DiD, Bacon,
-pre-trend, negative weights, HonestDiD), Johansen/GPH/local-Whittle companions, and the data containers
+pre-trend, negative weights, HonestDiD), filter/spectral/nonparametric results
+(HP/Hamilton/BN/BK/boosted-HP/X-13, ACF/periodogram/cross-spectrum, kernel
+density/regression/LOWESS, data summary/diagnostics), Johansen/GPH/local-Whittle companions, and the data containers
 (`TimeSeriesData`, `PanelData`, `CrossSectionData`, `IOData`); the full set is
 `MacroEconometricModels._SERIALIZABLE_TYPES`. Exported
 concrete structs that are not saveable are listed in `_SERIALIZATION_EXCLUDED`
