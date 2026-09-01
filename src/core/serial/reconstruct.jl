@@ -22,9 +22,9 @@ _deser_struct(d::AbstractDict) =
     _from_serializable(_resolve_ser_type(String(d["__struct__"])), d, SERIALIZATION_FORMAT_VERSION)
 
 # Infer a `T<:AbstractFloat` type parameter from the reconstructed field values
-# (the first float scalar/array wins). Recurses into nested arrays, tuples, and
-# dict values. Returns `nothing` for non-float or non-parametric types, in which
-# case the un-parameterized constructor is used.
+# (the first float scalar/array wins). Recurses into nested arrays, tuples,
+# NamedTuples, and dict values. Returns `nothing` for non-float or non-parametric
+# types, in which case the un-parameterized constructor is used.
 function _infer_float_param(args)
     for a in args
         P = _infer_float_param_value(a)
@@ -48,6 +48,13 @@ function _infer_float_param_value(a)
     if a isa Tuple    # e.g. PropensityScoreConfig.trimming::Tuple{T,T}
         for t in a
             P = _infer_float_param_value(t)
+            P !== nothing && return P
+        end
+        return nothing
+    end
+    if a isa NamedTuple    # e.g. DispersionTest.nb2::NamedTuple{…,NTuple{4,T}}
+        for v in values(a)
+            P = _infer_float_param_value(v)
             P !== nothing && return P
         end
         return nothing
