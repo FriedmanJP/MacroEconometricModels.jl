@@ -75,27 +75,38 @@ end
     save_model(model, path; compress::Bool=false) -> path
 
 Persist a fitted `model` — or a data container — to `path` in a versioned,
-self-describing container. Coverage spans every VAR/regression/panel/volatility/
-factor/ARIMA/local-projection/GMM model, SVAR identification results, DSGE
-`ModelSpec` and representative-agent solutions (`DSGESolution`, perturbation,
-projection, OccBin, …), Bayesian DSGE results (`BayesianDSGE`, priors,
-state-space types), HA results (`HASteadyState`, `HADSGESolution`,
-`KrusellSmithSolution`, …), sequence-space blocks (`SSJModel`, `SimpleBlock`,
-`HetBlock`, `MitBlock`, `SSJGEJacobian`, `SSJImpulseResponse`), DCEGM / firm /
-intermediary results, and the data containers (`TimeSeriesData`, `PanelData`,
-`CrossSectionData`, `IOData`); the full set is
-`MacroEconometricModels._SERIALIZABLE_TYPES`. The file records the
-[`SERIALIZATION_FORMAT_VERSION`](@ref), the package and Julia versions, a
+self-describing container. JLD2 is a package dependency; no extra `using JLD2`
+is required.
+
+Coverage spans every VAR/regression/panel/volatility/factor/ARIMA/local-projection/GMM
+model, SVAR identification results, DSGE `ModelSpec` and representative-agent
+solutions (`DSGESolution`, perturbation, projection, OccBin, …), Bayesian DSGE
+results (`BayesianDSGE`, priors, state-space types), HA results (`HASteadyState`,
+`HADSGESolution`, `KrusellSmithSolution`, …), sequence-space blocks (`SSJModel`,
+`SimpleBlock`, `HetBlock`, `MitBlock`, `SSJGEJacobian`, `SSJImpulseResponse`),
+DCEGM / firm / intermediary results, OLG and continuous-time families, and the
+data containers (`TimeSeriesData`, `PanelData`, `CrossSectionData`, `IOData`);
+the full set is `MacroEconometricModels._SERIALIZABLE_TYPES`. The file records
+the [`SERIALIZATION_FORMAT_VERSION`](@ref), the package and Julia versions, a
 timestamp, and — for a randomized result — its reproducibility manifest. Only
 public fields are stored; cached factorizations and state-space `H_inv` /
-`log_det_H` are dropped and recomputed on load, and DSGE `ModelSpec` residuals
-are recompiled from stored equations on load.
+`log_det_H` are dropped and recomputed on load. DSGE `ModelSpec` residuals and
+`ss_fn` are recompiled from stored equations on load.
+
+Household utilities, SSJ block functions (`SimpleBlock.f`, `MitBlock.evaluate`),
+and programmatic `ModelSpec` residuals / `ss_fn` must be **named functions** or
+callable structs ([`CRRAUtility`](@ref) and friends). Anonymous closures raise
+[`SerializationError`](@ref) at save.
 
 `compress=true` forwards to `JLD2.jldopen(...; compress=true)` (CodecZlib).
 The default (`false`) writes an uncompressed file, byte-identical to previous
-releases. `load_model` reads both transparently. Posterior draws, simulation
-paths, and dense Jacobians typically shrink; a size table for DSGE objects
-lives in the persistence docs.
+releases. `load_model` reads both transparently. Posterior draws and dense
+Jacobians typically shrink; a size table lives in the
+[Data Management](@ref data_page) persistence section.
+
+A loaded DSGE file recompiles stored equation expressions through `Core.eval`
+behind an AST allowlist. This is the same class of risk as
+`Serialization.deserialize`: only load files you trust.
 
 ```julia
 m = estimate_var(Y, 2)
@@ -117,6 +128,11 @@ Reconstruct a model saved by [`save_model`](@ref). Validates the stored
 `format_version` and type tag; raises a [`SerializationError`](@ref) naming the
 expected-versus-found version on an unrecognized format, rather than returning a
 corrupted object.
+
+A DSGE / HA file's equations are recompiled at load with an AST allowlist, but
+as with `Serialization.deserialize`, only load files you trust. Named functions
+stored in the payload must be defined in `Main` or `MacroEconometricModels` in
+the loading session; [`CRRAUtility`](@ref) callables reconstruct without that.
 """
 function load_model(path::AbstractString)
     isfile(path) || throw(SerializationError("no such model file: $path"))

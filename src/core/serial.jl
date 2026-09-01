@@ -39,6 +39,12 @@
 # call (`_generic_construct`), overridden explicitly only where a type takes a
 # keyword-defaulted field (e.g. `BVARPosterior`'s `manifest`).
 #
+# A loaded DSGE file is executed code: `_sanitize_residual_ast` runs before
+# `Core.eval`. Only load files you trust (same class as `Serialization.deserialize`).
+# Closures must be named functions or callable structs (`CRRAUtility`); anonymous
+# lambdas raise `SerializationError` at save. Named functions resolve from
+# `MacroEconometricModels`, `Base`, or `Main` at load.
+#
 # `ModelSpec` is registered: `residual_fns` are rebuilt from stored
 # `NamedEquation.expr` (AST allowlist + `Core.eval` + `invokelatest`). `ss_fn`
 # is rebuilt from a stored `:steady_state` IR declaration, or a `linear` zeros

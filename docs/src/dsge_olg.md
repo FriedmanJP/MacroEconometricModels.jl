@@ -418,6 +418,19 @@ A 3% TFP impulse that decays at 0.8 per period lifts the interest rate on impact
 
 ---
 
+## Saving and Reloading
+
+Persist the [`BlanchardOLG`](@ref) calibration itself, not the `to_spec` wrapper: those residual closures are hand-written and are **not** IR expressions, so DSER recompile does not recover them. After `load_model`, rebuild with `to_spec`. [`LifeCycleOLG`](@ref) and [`LifeCycleSteadyState`](@ref) round-trip as a family. See [Data Management](@ref data_page) for the executed-code caveat.
+
+```@example olg
+olg_path = joinpath(mktempdir(), "blanchard.jld2")
+save_model(m, olg_path)
+m_loaded = load_model(olg_path)
+round(blanchard_steady_state(m_loaded).r; digits=5)
+```
+
+---
+
 ## Common Pitfalls
 
 1. **`γ = 1` is the representative-agent limit.** With certain survival the Blanchard correction vanishes, the interest rate equals ``1/\beta-1``, and Ricardian equivalence holds. Use ``\gamma < 1`` for genuine OLG effects.
@@ -433,6 +446,8 @@ A 3% TFP impulse that decays at 0.8 per period lifts the interest rate on impact
 6. **Bracket the equilibrium rate.** `lifecycle_steady_state` bisects on the capital-labor ratio and reports `converged=false` with a warning when excess capital supply does not change sign on `r_bounds`. Accidental bequests raise the equilibrium rate, so the annuity calibration's bracket is often too narrow for `annuities=false` — widen `r_bounds` rather than raising `tol`.
 
 7. **A short TFP path is not a failed shoot.** `lifecycle_transition` requires at least three dates and a strictly positive `k0`. `K[1]` is predetermined; a terminal gap of a few percent after a 20-period impulse is a short horizon, not a loose `tol`. Raise the length of `Z_path` (and keep the last date at `m.Z`) until `K[end]` has returned to `ss.K`.
+
+8. **Do not persist `to_spec(::BlanchardOLG)`.** The wrapped `ModelSpec` carries hand-written residual closures with documentation-only `expr`. `save_model` the [`BlanchardOLG`](@ref) and call `to_spec` after load.
 
 ---
 

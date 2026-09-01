@@ -293,6 +293,8 @@ nothing # hide
 | `Normal(mu, sigma)` | ``(-\infty, \infty)`` | Unbounded parameters |
 | `Uniform(a, b)` | ``[a, b]`` | Weakly informative, bounded |
 
+`save_model` round-trips the prior codec for `Normal`, `Gamma`, `Beta`, `InverseGamma`, [`InverseGamma1`](@ref), `Uniform`, affine (`LocationScale`) wrappers, and `truncated(...)`. `LogNormal`, `Exponential`, `TDist`, and `Cauchy` also round-trip. A `MixtureModel` or a user-defined `<: Distribution` raises `SerializationError` at save.
+
 ### Porting Dynare Priors
 
 Published priors are almost always declared in Dynare's **(mean, std)** convention. `dynare_prior` converts them into correctly parameterized `Distributions` objects — solving the moment-matching equations and, crucially, handling the inverse-gamma convention mismatch:
@@ -1044,6 +1046,27 @@ The SMM point estimate and the SMC posterior mean both sit near the data-generat
 
 ---
 
+## Saving and Reloading
+
+`save_model` persists a `DSGEEstimation` or `BayesianDSGE` result, including the nested `ModelSpec`, the solution, priors, and posterior draws. Pass `seed=N` to `estimate_dsge_bayes` (and to `posterior_predictive` / `prior_predictive` / `simulate`) so the result carries a `ReproManifest`; `reproduce` on the reloaded object re-runs from that seed. `seed` wins when both `seed` and `rng` are passed. See [Data Management](@ref data_page) for the executed-code caveat and the compression size table --- 20k MH draws shrink about fourfold with `compress=true`.
+
+```@example dsge_estimation
+bayes_path = joinpath(mktempdir(), "bayes.jld2")
+save_model(fit_smc, bayes_path)
+fit_loaded = load_model(bayes_path)
+size(fit_loaded.theta_draws)
+```
+
+```julia
+fit = estimate_dsge_bayes(spec, y_obs, [0.9];
+    priors=Dict(:rho => Beta(5, 2)),
+    method=:smc, observables=[:y], n_smc=50, seed=20260901)
+save_model(fit, "bayes.jld2"; compress=true)
+reproduce(load_model("bayes.jld2"))
+```
+
+---
+
 ## Common Pitfalls
 
 1. **Wrong steady state**: If the steady state is incorrect, all estimation methods fail silently --- the model solves to a nonsensical equilibrium, and the optimizer converges to economically meaningless parameter values. Always verify `compute_steady_state` and check that the solution satisfies `is_determined(sol)` before estimation.
@@ -1063,6 +1086,8 @@ The SMM point estimate and the SMC posterior mean both sit near the data-generat
 8. **Reading a J p-value that is `NaN`**: The ``\chi^2`` limit requires efficient weighting. `:analytical_gmm` always uses identity weighting, and IRF matching under `:diagonal`/`:cee`/`:identity` reports no statistic at all. A `NaN` there is a signal to re-estimate under `:two_step`, not a numerical failure.
 
 9. **Interpreting a short chain**: `posterior_summary` on an RWMH result warns when bulk ESS falls under `min_ess`, and `mcmc_diagnostics` reports ``\hat{R}`` and ESS explicitly. Credible intervals from a chain with ``\hat{R} > 1.01`` or ESS well below 400 are not usable, however tight they look.
+
+10. **Mixture or user-defined priors are not saveable.** The prior codec covers `Normal` / `Gamma` / `Beta` / `InverseGamma` / `InverseGamma1` / `Uniform` plus affine and truncated wrappers. A `MixtureModel` or a custom `<: Distribution` raises `SerializationError` at `save_model`.
 
 ---
 

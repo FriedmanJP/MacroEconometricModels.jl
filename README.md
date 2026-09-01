@@ -348,7 +348,7 @@ Pkg.add("MacroEconometricModels")
 
 ### Reproducibility & Interoperability
 - **Reproducibility manifests** - `capture_manifest` records the RNG seed, thread count, Julia/package/dependency versions, OS, UTC timestamp, and package git SHA + dirty flag; bootstrap IRFs and BVAR posteriors carry a `ReproManifest`, and `reproduce()` re-runs from the stored seed and reports a bit-for-bit `ReproReport` (with a thread-count caveat)
-- **Versioned serialization** - `save_model` / `load_model` write a self-describing, version-tagged container (via an optional JLD2 backend) that survives package upgrades; `load_model` raises a typed `SerializationError` on a format/type mismatch
+- **Versioned serialization** - `save_model` / `load_model` write a self-describing, version-tagged container (JLD2 is a package dependency) covering fitted models, data containers, and DSGE / HA / OLG / continuous-time results; `load_model` raises a typed `SerializationError` on a format/type mismatch. A loaded DSGE file recompiles stored equations --- only load files you trust.
 - **Tables.jl integration** - Coefficient-bearing result types are Tables.jl column sources, so `DataFrame(result)` works with no hard DataFrames dependency; `long_table` gives tidy views of array-valued results (IRF/FEVD/forecasts) and `write_csv` exports via stdlib
 - **Structured logging** - Library diagnostics route through the `Logging` stdlib (quiet by default); `set_log_level` and `with_min_level` control verbosity
 

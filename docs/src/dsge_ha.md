@@ -77,7 +77,7 @@ report(ks_result)
 
 ## Individual Problem
 
-The full model is assembled into a [`ModelSpec`](@ref) whose `agents` NamedTuple holds one or more [`HouseholdSystem`](@ref) populations (built by [`load_ha_example`](@ref) or `@dsge` with a `heterogeneous:` block). The household payload bundles the discretized [`IncomeProcess`](@ref) and the [`IndividualProblem`](@ref) — the utility, marginal utility, budget, and borrowing-constraint fields the EGM/VFI inner loops consume. The population name is a free key (`household`, `unconstrained`, `htm`, …); `solve` dispatches on the kind, never on the key. A single `HouseholdSystem` is the usual case; two named households clear through `solve(spec; method=:ssj)` after [Multiple Household Populations](@ref ha_multipop).
+The full model is assembled into a [`ModelSpec`](@ref) whose `agents` NamedTuple holds one or more [`HouseholdSystem`](@ref) populations (built by [`load_ha_example`](@ref) or `@dsge` with a `heterogeneous:` block). The household payload bundles the discretized [`IncomeProcess`](@ref) and the [`IndividualProblem`](@ref) — the utility, marginal utility, budget, and borrowing-constraint fields the EGM/VFI inner loops consume. Write those callables as [`CRRAUtility`](@ref) / [`CRRAMarginalUtility`](@ref) / [`CRRAInverseMarginalUtility`](@ref) (or any named function): anonymous `c -> …` closures still solve, but `save_model` raises `SerializationError`. The population name is a free key (`household`, `unconstrained`, `htm`, …); `solve` dispatches on the kind, never on the key. A single `HouseholdSystem` is the usual case; two named households clear through `solve(spec; method=:ssj)` after [Multiple Household Populations](@ref ha_multipop).
 
 `@dsge` `heterogeneous:` accepts `n_grid`, `utility` (`log`, `crra`, or `crra(σ)`), `discount`, `borrowing`, `budget`, `model` (`aiyagari` or `huggett`), and `crra`/`sigma_c`. `clock:` and `horizon:` set `ModelIR` flags; `discrete:` and `absorbing:` are stored as declarations. They do not compile [`ContinuousHouseholdSystem`](@ref), [`LifeCycleSystem`](@ref), or [`DCEGMSystem`](@ref) — use `to_spec` on the family constructor.
 
@@ -872,7 +872,8 @@ The Huggett economy is a two-block DAG: households map ``(r, w)`` to aggregate b
 
 ```@example dsge_ha
 household = HetBlock(hug, ss_hug; inputs=[:r, :w], outputs=[:A], name=:household)
-bond_market = SimpleBlock(x -> [x[1]];                 # bond_mkt = A, clears at zero
+bond_mkt_clearing(x) = [x[1]]                          # named: saveable; x -> [x[1]] is not
+bond_market = SimpleBlock(bond_mkt_clearing;
                           inputs=[:A], outputs=[:bond_mkt],
                           ss_inputs=Dict(:A => household.ss_outputs[:A]),
                           name=:bond_market)
@@ -1193,6 +1194,24 @@ plot_result(ss_ks; view=:policy)      # policy functions by income
 
 ---
 
+## Saving and Reloading
+
+`save_model` persists the household problem, the Young histogram, and the SSJ / Reiter / Krusell-Smith solution. Built-in examples already use [`CRRAUtility`](@ref) and named budget functions (`_ks_budget`), so `load_ha_example` results round-trip. See [Data Management](@ref data_page) for the executed-code caveat and the compression size table.
+
+[`DCEGMProblem`](@ref) callables must be named functions or structs ([`DCEGMUtility`](@ref), [`DCEGMIncome`](@ref), [`CRRAUtility`](@ref)). [`IntermediarySystem`](@ref) aggregation functions must be named. A `SimpleBlock` / `MitBlock` whose `f` / `evaluate` is an anonymous closure raises `SerializationError` at save --- that is why the Huggett DAG above uses `bond_mkt_clearing` rather than `x -> [x[1]]`. Define the named function at top level (not inside a `do` / `let`); at load it must exist in `Main` or `MacroEconometricModels`.
+
+```@example dsge_ha
+ha_path = joinpath(mktempdir(), "ha_ss.jld2")
+save_model(ss, ha_path)
+ss_reloaded = load_model(ha_path)
+(round(ss_reloaded.excess_demand; sigdigits=3),
+ round(ss_reloaded.aggregates[:K]; digits=2))
+```
+
+The reloaded steady state keeps the market-clearing residual and the aggregate capital stock. Persist `sol` (SSJ) or `ks_result` the same way; `irf` on a reloaded `HADSGESolution` matches the original.
+
+---
+
 ## Common Pitfalls
 
 1. **Bisection bounds too narrow.** If `compute_steady_state` does not converge, widen `r_bounds`. The equilibrium interest rate can be negative in Aiyagari economies with patient agents.
@@ -1232,6 +1251,8 @@ plot_result(ss_ks; view=:policy)      # policy functions by income
 15. **Two household populations are not two keys on one `HouseholdSystem`.** `solve` needs two `HouseholdSystem` values in `spec.agents`. Reusing `_hh` (the unique-household accessor) on that spec throws and names `agents_of`.
 
 16. **`occbin_solve` on a shipped HANK is not an ELB.** Real-rate examples and `n_endog = 0` PE specs have no Taylor residual. The call errors by name; it does not linearize the dummy Cobb--Douglas block.
+
+17. **Anonymous household or block functions are not saveable.** `save_model` on an `IndividualProblem` whose `utility` is `c -> log(c)`, or a `SimpleBlock` whose `f` is `x -> [x[1]]`, raises `SerializationError`. Use [`CRRAUtility`](@ref) and a top-level named block function.
 
 ---
 

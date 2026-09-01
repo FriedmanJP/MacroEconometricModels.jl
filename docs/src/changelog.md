@@ -6,6 +6,24 @@ output, not just documentation.
 
 ---
 
+## v0.9.3
+
+Patch on the `0.9` series: DSGE / HA / OLG / continuous-time `save_model` / `load_model` (DSER series, `#759`--`#773`). JLD2 is a hard dependency. `SERIALIZATION_FORMAT_VERSION` stays `1`. Downstream `[compat]` of `MacroEconometricModels = "0.9"` still resolves.
+
+**New**
+
+- `save_model` / `load_model` cover `ModelSpec`, representative-agent solutions, Bayesian DSGE results, HA steady states and SSJ objects, DCEGM / firm / intermediary, OLG, and continuous-time families (`#759`--`#768`).
+- `CRRAUtility` / `CRRAMarginalUtility` / `CRRAInverseMarginalUtility` callable structs replace anonymous household utilities (`#764`).
+- `seed=` / `manifest` / `reproduce` for `BayesianDSGE` and `KrusellSmithSolution` (`#769`).
+- `save_model(...; compress=true)` forwards CodecZlib compression to JLD2 (`#772`).
+
+**Also**
+
+- Persistence documentation, the executed-code caveat, and the named-function / `CRRAUtility` requirement (`#771`).
+- Dynare/HA solve-equality serialization suite and committed v1 fixtures (`#770`).
+
+---
+
 ## v0.9.2
 
 Patch on the `0.9` series: SVAR identification completion (SID series, `#730`--`#756`). Downstream `[compat]` of `MacroEconometricModels = "0.9"` still resolves. **Changed numerical output** for heteroskedastic ``B_0``, the Uhlig penalty, and `irf(; method=:sign/:narrative)`.
