@@ -51,6 +51,7 @@ const _RSER11_GMM = ("GMMWeighting", "ParameterTransform")
         w2 = _assert_roundtrip(m.weighting)
         @test w2.method === :identity
         m2 = _assert_roundtrip(m)
+        _assert_consumers(m, m2)
         @test m2.weighting isa GMMWeighting{Float64}
         @test m2.weighting.method === m.weighting.method
         @test m2.theta == m.theta

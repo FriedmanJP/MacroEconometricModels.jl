@@ -29,7 +29,7 @@ end
         bf = estimate_favar(X, [1, 2], 1, 1; method=:bayesian, n_draws=12, burnin=5)
         bf2 = _assert_roundtrip(bf)
         _assert_report_equal(bf, bf2)
-        @test plot_result(bf2) isa PlotOutput
+        _assert_plot_equal(bf, bf2)
         r1, r2 = irf(bf, 4), irf(bf2, 4)
         @test _deep_equal(r1.point_estimate, r2.point_estimate)
         @test sprint(io -> refs(io, bf)) == sprint(io -> refs(io, bf2))

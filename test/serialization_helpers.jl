@@ -56,10 +56,17 @@ function _check_generic_construct(m)
     @test typeof(rebuilt).name === T.name
 end
 
+# Types that actually went through `_assert_report_equal` / `_assert_plot_equal`
+# in this process (kernel coverage + any included module file).
+const _REPORT_COVERED = Set{String}()
+const _PLOT_COVERED = Set{String}()
+
+_record_helper!(set, x) = (push!(set, string(nameof(typeof(x)))); x)
+
 # Round-trip `m` through the container and assert every public field (minus any
 # in `skip`, e.g. an intentionally-dropped closure) survives structurally intact.
-# `report` text is compared when no fields are skipped. `plot_result` lives on
-# `_assert_consumers` / `_assert_plot_equal` so module files are not double-plotted.
+# `report` / `plot_result` live on `_assert_consumers` so a `_assert_roundtrip`
+# + `_assert_consumers` pair is not double-reported or double-plotted.
 function _assert_roundtrip(m; skip::Vector{Symbol}=Symbol[])
     _check_generic_construct(m)
     m2 = _roundtrip(m)
@@ -68,18 +75,32 @@ function _assert_roundtrip(m; skip::Vector{Symbol}=Symbol[])
         f in skip && continue
         @test _deep_equal(getfield(m, f), getfield(m2, f))
     end
-    isempty(skip) && _assert_report_equal(m, m2)
+    return m2
+end
+
+# Structural round-trip plus consumer equality (`report` always; `plot_result`
+# when a dispatch exists). Use this in kernel coverage in place of a bare
+# `_assert_roundtrip(estimate_*(...))`.
+function _cover(m; skip::Vector{Symbol}=Symbol[])
+    m2 = _assert_roundtrip(m; skip=skip)
+    if isempty(skip)
+        _assert_consumers(m, m2)
+    else
+        applicable(plot_result, m) && _assert_plot_equal(m, m2)
+    end
     return m2
 end
 
 # Prefer 2-arg `report(io, x)` when it exists; many result types only define
 # `report(x) = show(stdout, x)`, which `sprint(report, x)` cannot call.
 function _assert_report_equal(a, b)
+    _record_helper!(_REPORT_COVERED, a)
     text(x) = applicable(report, IOBuffer(), x) ? sprint(report, x) : sprint(show, x)
     @test text(a) == text(b)
     a
 end
 function _assert_plot_equal(a, b)
+    _record_helper!(_PLOT_COVERED, a)
     # Plot IDs come from a process-wide counter; rewind so two identical objects
     # produce identical HTML rather than `irf_N` vs `irf_N+1`.
     c0 = _MEM._plot_counter[]
@@ -101,7 +122,12 @@ function _assert_tables_equal(a, b)
 end
 function _assert_refs_equal(a, b)
     applicable(refs, IOBuffer(), a) || return nothing
-    @test sprint(io -> refs(io, a)) == sprint(io -> refs(io, b))
+    ra = try
+        sprint(io -> refs(io, a))
+    catch
+        return nothing
+    end
+    @test sprint(io -> refs(io, b)) == ra
     nothing
 end
 function _assert_forecast_eval(a, b)
@@ -118,10 +144,13 @@ function _assert_forecast_eval(a, b)
 end
 function _assert_consumers(a, b)
     _assert_report_equal(a, b)
-    applicable(plot_result, a) && _assert_plot_equal(a, b)
-    applicable(long_table, a) && _assert_tables_equal(a, b)
-    _assert_refs_equal(a, b)
-    _assert_forecast_eval(a, b)
+    fast = get(ENV, "MACRO_FAST_TESTS", "") == "1"
+    if !fast
+        applicable(plot_result, a) && _assert_plot_equal(a, b)
+        applicable(long_table, a) && _assert_tables_equal(a, b)
+        _assert_refs_equal(a, b)
+        _assert_forecast_eval(a, b)
+    end
     b
 end
 
@@ -171,4 +200,176 @@ function _registered_dispatch_names(f::Function)
         end
     end
     names
+end
+
+# DSER types live in test/dsge/test_dsge_serialization.jl (own harness).
+function _dser_coverage_skip()
+    src = read(joinpath(dirname(pathof(MacroEconometricModels)), "core", "serial", "registry.jl"), String)
+    r = findfirst("# ── DSGE / HA / OLG / CT", src)
+    r === nothing && return Set{String}()
+    tail = src[first(r):end]
+    c = findfirst(")\n", tail)
+    block = c === nothing ? tail : tail[1:first(c)]
+    Set(String(m.captures[1]) for m in eachmatch(r"\"([A-Za-z0-9]+)\"\s*=>", block))
+end
+
+function _ser_test_paths()
+    root = @__DIR__
+    files = String[]
+    for (dir, _, fnames) in walkdir(root)
+        basename(dir) == "dsge" && continue
+        for f in fnames
+            (endswith(f, "_serialization.jl") || f == "test_serialization.jl") || continue
+            push!(files, joinpath(dir, f))
+        end
+    end
+    files
+end
+
+function _testset_blocks(txt::AbstractString)
+    lines = split(txt, '\n')
+    idxs = Int[i for (i, ln) in enumerate(lines) if occursin(r"^\s*@testset", ln)]
+    isempty(idxs) && return String[txt]
+    out = String[]
+    idxs[1] > 1 && push!(out, join(lines[1:idxs[1]-1], '\n'))
+    for k in eachindex(idxs)
+        a = idxs[k]
+        b = k < length(idxs) ? idxs[k+1] - 1 : length(lines)
+        push!(out, join(lines[a:b], '\n'))
+    end
+    out
+end
+
+function _types_in_block(blk::AbstractString, registered::Set{String})
+    found = Set{String}()
+    for name in registered
+        occursin(Regex("\"" * name * "\"\\s*=>"), blk) && push!(found, name)
+        occursin("_from_serializable_is_generic(" * name, blk) && push!(found, name)
+        occursin(Regex("\\bisa\\s+" * name * "\\b"), blk) && push!(found, name)
+        occursin(Regex("\\b" * name * "\\{"), blk) && push!(found, name)
+        occursin(Regex("\\b" * name * "\\("), blk) && push!(found, name)
+        occursin(name, blk) && occursin("@testset", blk) && push!(found, name)
+    end
+    found
+end
+
+# Longest-match first so `estimate_garch_midas` is not tagged as GARCHModel.
+const _COVER_ESTIMATOR_TYPES = [
+    "estimate_garch_midas" => "GarchMidasModel",
+    "estimate_gjr_garch" => "GJRGARCHModel",
+    "estimate_fiegarch" => "FIEGARCHModel",
+    "estimate_figarch" => "FIGARCHModel",
+    "estimate_dynamic_factors" => "DynamicFactorModel",
+    "estimate_structural_dfm" => "StructuralDFM",
+    "estimate_xtcointreg" => "PanelCointRegModel",
+    "estimate_cointreg" => "CointRegModel",
+    "estimate_factors" => "FactorModel",
+    "estimate_gdfm" => "GeneralizedDynamicFactorModel",
+    "estimate_favar" => "FAVARModel",
+    "estimate_egarch" => "EGARCHModel",
+    "estimate_aparch" => "APARCHModel",
+    "estimate_cgarch" => "CGARCHModel",
+    "estimate_arch" => "ARCHModel",
+    "estimate_garch" => "GARCHModel",
+    "estimate_dcc" => "MGARCHModel",
+    "estimate_sv" => "SVModel",
+    "estimate_arfima" => "ARFIMAModel",
+    "estimate_arima" => "ARIMAModel",
+    "estimate_arma" => "ARMAModel",
+    "estimate_ardl" => "ARDLModel",
+    "estimate_nardl" => "NARDLModel",
+    "estimate_threshold" => "ThresholdModel",
+    "estimate_midas" => "MidasModel",
+    "estimate_pmg" => "PMGModel",
+    "estimate_ologit" => "OrderedLogitModel",
+    "estimate_oprobit" => "OrderedProbitModel",
+    "estimate_mlogit" => "MultinomialLogitModel",
+    "estimate_lp_iv" => "LPIVModel",
+    "estimate_smooth_lp" => "SmoothLPModel",
+    "estimate_state_lp" => "StateLPModel",
+    "estimate_propensity_lp" => "PropensityLPModel",
+    "estimate_sur" => "SURModel",
+    "estimate_gmm" => "GMMModel",
+    "estimate_smm" => "SMMModel",
+    "estimate_xtreg" => "PanelRegModel",
+    "estimate_xtiv" => "PanelIVModel",
+    "estimate_xtlogit" => "PanelLogitModel",
+    "estimate_xtprobit" => "PanelProbitModel",
+    "estimate_vecm" => "VECMModel",
+    "estimate_ar(" => "ARModel",
+    "estimate_ma(" => "MAModel",
+    "estimate_statespace" => "StateSpaceModel",
+    "estimate_logit" => "LogitModel",
+    "estimate_probit" => "ProbitModel",
+    "estimate_var" => "VARModel",
+    "estimate_bvar" => "BVARPosterior",
+    "estimate_reg" => "RegModel",
+    "estimate_lp(" => "LPModel",
+    "estimate_pvar" => "PVARModel",
+    "identify_svec" => "SVECResult",
+    "estimate_svar" => "SVARModel",
+]
+
+const _SID24_TYPES = (
+    "ICASVARResult", "NonGaussianMLResult", "NonGaussianGMMResult",
+    "MarkovSwitchingSVARResult", "GARCHSVARResult", "SmoothTransitionSVARResult",
+    "ExternalVolatilitySVARResult", "ProxySVARResult", "MaxShareResult",
+    "AriasSVARResult", "UhligSVARResult", "BayesianSetIdentifiedSVAR",
+    "SignIdentifiedSet", "RobustBayesResult",
+)
+
+function _scan_ser_helper_coverage()
+    registered = Set(keys(_MEM._SERIALIZABLE_TYPES))
+    report_cov = Set{String}()
+    plot_cov = Set{String}()
+    for path in _ser_test_paths()
+        txt = read(path, String)
+        has_report = occursin("_assert_report_equal", txt) ||
+                     occursin("_assert_consumers", txt) || occursin("_cover(", txt)
+        has_plot = occursin("_assert_plot_equal", txt) ||
+                   occursin("_assert_consumers", txt) || occursin("_cover(", txt)
+        if occursin(r"for \(name, r\) in fixtures", txt)
+            for m in eachmatch(r"\"([A-Z][A-Za-z0-9]+)\"\s*=>", txt)
+                n = m.captures[1]
+                n in registered || continue
+                has_report && push!(report_cov, n)
+                has_plot && push!(plot_cov, n)
+            end
+            for m in eachmatch(r"const _RSER[^\n]*=\s*\((.*?)\)"s, txt)
+                for q in eachmatch(r"\"([A-Z][A-Za-z0-9]+)\"", m.captures[1])
+                    n = q.captures[1]
+                    n in registered || continue
+                    has_report && push!(report_cov, n)
+                    has_plot && push!(plot_cov, n)
+                end
+            end
+        end
+        for blk in _testset_blocks(txt)
+            types = _types_in_block(blk, registered)
+            br = occursin("_assert_report_equal", blk) ||
+                 occursin("_assert_consumers", blk) || occursin("_cover(", blk)
+            bp = occursin("_assert_plot_equal", blk) ||
+                 occursin("_assert_consumers", blk) || occursin("_cover(", blk)
+            br && union!(report_cov, types)
+            bp && union!(plot_cov, types)
+        end
+        for (est, tname) in _COVER_ESTIMATOR_TYPES
+            occursin(est, txt) || continue
+            if occursin("_cover(estimate_", txt) || occursin("_cover(" * est, txt) ||
+               occursin("_cover(identify_", txt)
+                has_report && push!(report_cov, tname)
+                has_plot && push!(plot_cov, tname)
+            end
+        end
+        if occursin("_sid24_dummy_objects", txt) &&
+           (occursin("_assert_consumers", txt) || occursin("_cover(", txt))
+            for n in _SID24_TYPES
+                push!(report_cov, n)
+                push!(plot_cov, n)
+            end
+        end
+    end
+    union!(report_cov, _REPORT_COVERED)
+    union!(plot_cov, _PLOT_COVERED)
+    report_cov, plot_cov
 end

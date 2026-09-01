@@ -28,6 +28,6 @@ end
     @test m2.betas isa Vector{Vector{Float64}}
     @test eltype(eltype(m2.betas)) === Float64
     _assert_report_equal(m, m2)
-    @test plot_result(m2) isa PlotOutput
+    _assert_plot_equal(m, m2)
     @test sprint(io -> refs(io, m)) == sprint(io -> refs(io, m2))
 end

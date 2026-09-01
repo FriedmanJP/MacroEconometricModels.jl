@@ -13,7 +13,7 @@ end
     jr = johansen_test(Yci, 2)
     jr2 = _assert_roundtrip(jr)
     _assert_report_equal(jr, jr2)
-    @test plot_result(jr2) isa PlotOutput
+    _assert_plot_equal(jr, jr2)
     @test sprint(io -> refs(io, jr)) == sprint(io -> refs(io, jr2))
 end
 

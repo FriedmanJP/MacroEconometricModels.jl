@@ -16,7 +16,7 @@ end
         m = estimate_sarima(ya, 1, 0, 1, 0, 0, 0, 4; method=:css)
         m2 = _assert_roundtrip(m)
         _assert_report_equal(m, m2)
-        @test plot_result(m2) isa PlotOutput
+        _assert_plot_equal(m, m2)
         @test coef(m2) == coef(m)
         @test stderror(m2) == stderror(m)
         @test vcov(m2) == vcov(m)
@@ -37,7 +37,7 @@ end
         sel = select_arima_order(ya, 1, 1; d=0, method=:css)
         sel2 = _assert_roundtrip(sel)
         _assert_report_equal(sel, sel2)
-        @test plot_result(sel2) isa PlotOutput
+        _assert_plot_equal(sel, sel2)
         @test sel2.best_model_aic isa typeof(sel.best_model_aic)
         @test sel2.best_model_bic isa typeof(sel.best_model_bic)
         @test sel2.best_model_aic isa AbstractARIMAModel
@@ -92,7 +92,7 @@ end
         mm = dynamic_multipliers(nm, 6; bootstrap=false)
         mm2 = _assert_roundtrip(mm)
         _assert_report_equal(mm, mm2)
-        @test plot_result(mm2) isa PlotOutput
+        _assert_plot_equal(mm, mm2)
 
         nm2 = _roundtrip(nm)
         @test _deep_equal(symmetry_test(nm2), st)

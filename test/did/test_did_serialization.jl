@@ -8,8 +8,14 @@ if !@isdefined(_assert_roundtrip)
     include(joinpath(@__DIR__, "..", "serialization_helpers.jl"))
 end
 
+if !@isdefined(FAST)
+    const FAST = get(ENV, "MACRO_FAST_TESTS", "") == "1"
+end
+
 const _RSER07 = ("DIDResult", "EventStudyLP", "LPDiDResult", "BaconDecomposition",
                  "PretrendTestResult", "NegativeWeightResult", "HonestDiDResult")
+const _RSER07_LEADS = 2
+const _RSER07_H = FAST ? 2 : 3
 
 # Staggered panel built through `xtset` so cohort_id / time metadata are real
 # xtset output (not a hand-built PanelData). Timing column `treat_time` feeds
@@ -85,14 +91,16 @@ end
         @test !any(v == "pending RSER-07" for v in values(_MEM._SERIALIZATION_EXCLUDED))
     end
 
-    pd = _rser07_panel()
+    pd = _rser07_panel(; n_units=FAST ? 15 : 36, n_periods=FAST ? 10 : 16)
     @test pd.cohort_id !== nothing
     @test pd.frequency == Quarterly
 
     @testset "DIDResult estimator variants" begin
         @test _from_serializable_is_generic(DIDResult)
-        for method in (:twfe, :callaway_santanna, :sun_abraham, :bjs)
-            did = estimate_did(pd, :y, :treat_time; method=method, leads=2, horizon=3)
+        methods = FAST ? (:twfe,) : (:twfe, :callaway_santanna, :sun_abraham, :bjs)
+        for method in methods
+            did = estimate_did(pd, :y, :treat_time; method=method,
+                               leads=_RSER07_LEADS, horizon=_RSER07_H)
             @test did isa DIDResult{Float64}
             @test did.method == method
             did2 = _assert_roundtrip(did)
@@ -100,18 +108,21 @@ end
             @test isequal(DataFrame(did), DataFrame(did2))
             @test pretrend_test(did2).statistic == pretrend_test(did).statistic
         end
-        did_dcdh = estimate_did(pd, :y, :treat_time; method=:did_multiplegt,
-                                leads=2, horizon=3, n_boot=10,
-                                rng=MersenneTwister(7801))
-        @test did_dcdh isa DIDResult{Float64}
-        d2 = _assert_roundtrip(did_dcdh)
-        _assert_consumers(did_dcdh, d2)
-        @test isequal(DataFrame(did_dcdh), DataFrame(d2))
+        if !FAST
+            did_dcdh = estimate_did(pd, :y, :treat_time; method=:did_multiplegt,
+                                    leads=2, horizon=3, n_boot=10,
+                                    rng=MersenneTwister(7801))
+            @test did_dcdh isa DIDResult{Float64}
+            d2 = _assert_roundtrip(did_dcdh)
+            _assert_consumers(did_dcdh, d2)
+            @test isequal(DataFrame(did_dcdh), DataFrame(d2))
+        end
     end
 
     @testset "EventStudyLP nested PanelData + Vector{Matrix{T}}" begin
         @test _from_serializable_is_generic(EventStudyLP)
-        es = estimate_event_study_lp(pd, :y, :treat_time, 3; leads=2, lags=1)
+        es = estimate_event_study_lp(pd, :y, :treat_time, _RSER07_H;
+                                     leads=_RSER07_LEADS, lags=1)
         @test es isa EventStudyLP{Float64}
         @test es.data isa PanelData{Float64}
         @test es.data.cohort_id !== nothing
@@ -135,23 +146,25 @@ end
         pt = pretrend_test(es)
         pt2 = pretrend_test(es2)
         @test _deep_equal(pt, pt2)
-        _assert_plot_style_equal(es, es2; style=:ribbon)
-        let path = joinpath(mktempdir(), "event_study_lp.jld2")
-            save_model(es, path)
-            es3 = load_model(path)
-            @test es3 isa EventStudyLP{Float64}
-            @test es3.data isa PanelData{Float64}
-            _assert_panel_meta(es.data, es3.data)
-            _assert_report_equal(es, es3)
-            _assert_plot_equal(es, es3)
-            @test _deep_equal(pretrend_test(es), pretrend_test(es3))
+        if !FAST
+            _assert_plot_style_equal(es, es2; style=:ribbon)
+            let path = joinpath(mktempdir(), "event_study_lp.jld2")
+                save_model(es, path)
+                es3 = load_model(path)
+                @test es3 isa EventStudyLP{Float64}
+                @test es3.data isa PanelData{Float64}
+                _assert_panel_meta(es.data, es3.data)
+                _assert_report_equal(es, es3)
+                _assert_plot_equal(es, es3)
+                @test _deep_equal(pretrend_test(es), pretrend_test(es3))
+            end
         end
     end
 
     @testset "LPDiDResult NamedTuple codec + nested PanelData" begin
         @test _from_serializable_is_generic(LPDiDResult)
-        r = estimate_lp_did(pd, :y, :treat, 3; pre_window=2, ylags=1,
-                            post_pooled=(0, 2), pre_pooled=(1, 2))
+        r = estimate_lp_did(pd, :y, :treat, _RSER07_H; pre_window=_RSER07_LEADS, ylags=1,
+                            post_pooled=(0, _RSER07_H), pre_pooled=(1, _RSER07_LEADS))
         @test r isa LPDiDResult{Float64}
         @test r.pooled_post !== nothing
         @test r.pooled_pre !== nothing
@@ -185,16 +198,20 @@ end
 
     @testset "PretrendTestResult" begin
         @test _from_serializable_is_generic(PretrendTestResult)
-        did = estimate_did(pd, :y, :treat_time; method=:twfe, leads=2, horizon=3)
+        did = estimate_did(pd, :y, :treat_time; method=:twfe,
+                           leads=_RSER07_LEADS, horizon=_RSER07_H)
         pt = pretrend_test(did)
         @test pt isa PretrendTestResult{Float64}
         pt2 = _assert_roundtrip(pt)
         _assert_consumers(pt, pt2)
-        es = estimate_event_study_lp(pd, :y, :treat_time, 3; leads=2, lags=1)
+        es = estimate_event_study_lp(pd, :y, :treat_time, _RSER07_H;
+                                     leads=_RSER07_LEADS, lags=1)
         pte = pretrend_test(es)
         pte2 = _assert_roundtrip(pte)
         _assert_consumers(pte, pte2)
-        @test _deep_equal(pte2, pretrend_test(_roundtrip(es)))
+        if !FAST
+            @test _deep_equal(pte2, pretrend_test(_roundtrip(es)))
+        end
     end
 
     @testset "NegativeWeightResult Vector{Tuple}" begin
@@ -208,20 +225,25 @@ end
         @test nw2.cohort_time_pairs == nw.cohort_time_pairs
     end
 
+    FAST && return
     @testset "HonestDiDResult disk" begin
         @test _from_serializable_is_generic(HonestDiDResult)
-        did = estimate_did(pd, :y, :treat_time; method=:callaway_santanna,
-                           leads=2, horizon=3, base_period=:universal)
+        did = estimate_did(pd, :y, :treat_time;
+                           method=FAST ? :twfe : :callaway_santanna,
+                           leads=_RSER07_LEADS, horizon=_RSER07_H,
+                           base_period=FAST ? :varying : :universal)
         hd = honest_did(did; Mbar=1.0)
         @test hd isa HonestDiDResult{Float64}
         hd2 = _assert_roundtrip(hd)
         _assert_consumers(hd, hd2)
-        let path = joinpath(mktempdir(), "honest_did.jld2")
-            save_model(hd, path)
-            hd3 = load_model(path)
-            @test hd3 isa HonestDiDResult{Float64}
-            _assert_report_equal(hd, hd3)
-            _assert_plot_equal(hd, hd3)
+        if !FAST
+            let path = joinpath(mktempdir(), "honest_did.jld2")
+                save_model(hd, path)
+                hd3 = load_model(path)
+                @test hd3 isa HonestDiDResult{Float64}
+                _assert_report_equal(hd, hd3)
+                _assert_plot_equal(hd, hd3)
+            end
         end
     end
 end

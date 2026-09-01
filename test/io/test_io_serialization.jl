@@ -82,3 +82,33 @@ const _RSER11_IO = ("FootprintResult", "IOExtension", "IOMultipliers", "LinkageR
         @test load_model(joinpath(dir, "om.jld2")).values == om.values
     end
 end
+
+@testset "RSER-14 IO classical/B&F report-plot coverage (#787)" begin
+    io = load_example(:wiot)
+    n = length(io.x)
+    net = production_network(io)
+    loc = baqaee_farhi(net)
+    fixtures = Pair{String,Any}[
+        "ExtractionResult" => hypothetical_extraction(io, 1),
+        "PriceModelResult" => price_model(io; dva=fill(0.01, n)),
+        "ImpactResult" => impact(io, [1.0, 0.0]),
+        "NetworkStatsResult" => network_stats(io),
+        "VerticalSpecialization" => vertical_specialization(io),
+        "ExportDecomposition" => export_decomposition(io),
+        "RegionalFootprintResult" => footprint(io, "CO2"; by=:region),
+        "BaqaeeFarhiResult" => baqaee_farhi(io),
+        "SDAResult" => sda(io, io),
+        "RASResult" => ras(Matrix(io.Z), vec(sum(io.Z; dims=2)), vec(sum(io.Z; dims=1))),
+        "ProductionNetwork" => net,
+        "BFElasticities" => loc.elasticities,
+        "BFLocal" => loc,
+        "BFShockCurve" => bf_shock_curve(net, 1; points=3),
+        "BFEquilibrium" => bf_equilibrium(net),
+        "BFWedgeDecomp" => bf_wedge_decomp(net),
+        "BFMisallocation" => bf_misallocation(net),
+    ]
+    @testset "$name" for (name, r) in fixtures
+        @test string(nameof(typeof(r))) == name
+        _assert_consumers(r, _assert_roundtrip(r))
+    end
+end

@@ -13,7 +13,7 @@ end
     m = estimate_igarch(yv, 1, 1)
     m2 = _assert_roundtrip(m)
     _assert_report_equal(m, m2)
-    @test plot_result(m2) isa PlotOutput
+    _assert_plot_equal(m, m2)
     @test coef(m2) == coef(m)
     @test stderror(m2) == stderror(m)
     f1 = forecast(m, 5; n_sim=40, rng=MersenneTwister(3))

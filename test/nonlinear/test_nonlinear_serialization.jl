@@ -26,7 +26,7 @@ end
         @test m.sel_pvalues isa NTuple{3,Float64}
         m2 = _assert_roundtrip(m)
         _assert_report_equal(m, m2)
-        @test plot_result(m2) isa PlotOutput
+        _assert_plot_equal(m, m2)
         @test m2.sel_pvalues isa NTuple{3,Float64}
         @test coef(m2) == coef(m)
         f1 = forecast(m, 4; reps=30, rng=MersenneTwister(9))
@@ -45,7 +45,7 @@ end
         m = estimate_ms_ar(y, 1; k_regimes=2)
         m2 = _assert_roundtrip(m)
         _assert_report_equal(m, m2)
-        @test plot_result(m2) isa PlotOutput
+        _assert_plot_equal(m, m2)
         @test coef(m2) == coef(m)
         @test fitted(m2) == fitted(m)
         f1 = forecast(m, 4; reps=30, rng=MersenneTwister(10))
