@@ -28,7 +28,9 @@ function _draw_structural_shocks(n::Int, nobs::Int, shocks::Symbol, rng)
         σ_wide = 3.0
         Z = randn(rng, nobs, n)
         mask = rand(rng, nobs, n) .< p_mix
-        return ifelse.(mask, Z, σ_wide .* Z)
+        x = ifelse.(mask, Z, σ_wide .* Z)
+        x .-= mean(x, dims=1)
+        return x ./ std(x, dims=1)
     else
         throw(ArgumentError("unknown shock distribution: $shocks"))
     end

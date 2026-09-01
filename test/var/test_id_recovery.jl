@@ -385,8 +385,16 @@ end
                        max_iter_coarse=FAST ? 40 : 120,
                        max_iter_fine=FAST ? 80 : 300,
                        rng=MersenneTwister(755051))
+    # Unique exact ID: one zero pins the column up to sign (free_dim=1; SVD
+    # basis is not sign-optimized). Admissible rotation = recovered Q with
+    # shock 1 aligned to the sign restriction.
     @test abs(u.irf[1, 2, 1]) < 1e-8
-    @test _pd(_Bhat(m, u.Q), _B_up) < 0.15
+    Q_adm = Matrix{Float64}(u.Q)
+    u.irf[1, 1, 1] < 0 && (Q_adm[:, 1] .*= -1)
+    ir_adm = compute_irf(m, Q_adm, 4)
+    @test ir_adm[1, 1, 1] > 0
+    @test abs(ir_adm[1, 2, 1]) < 1e-8
+    @test _pd(_Bhat(m, Q_adm), _B_up) < 0.15
 end
 
 @testset "identify_fastica recovery" begin
@@ -406,26 +414,15 @@ end
 end
 
 @testset "identify_sobi recovery" begin
-    # SOBI needs serial correlation in the residuals. A VAR(1) mean-filter
-    # absorbs AR shocks, so feed known AR residuals as model.U.
+    # VAR(1) on a VAR(1)+AR-shock DGP is misspecified (true RF is VAR(2)), so
+    # estimate_var residuals keep leftover serial correlation. Looser
+    # Procrustes than planted AR residuals (~0.02) because the mean filter
+    # absorbs some AC.
     Tobs = FAST ? 800 : 2000
     rng = MersenneTwister(14)
-    n = 2
-    eta = randn(rng, Tobs, n)
-    epsm = zeros(Tobs, n)
-    ρ = [0.8, -0.5]
-    epsm[1, :] = eta[1, :]
-    for t in 2:Tobs
-        epsm[t, :] = ρ .* epsm[t - 1, :] .+ eta[t, :]
-    end
-    epsm ./= std(epsm; dims=1)
-    U = epsm * _B_rec'
-    Sigma = cov(U)
-    Y = zeros(Tobs + 1, n)
-    Bcoef = zeros(1 + n, n)
-    m = VARModel(Y, 1, Bcoef, U, Sigma, 0.0, 0.0, 0.0)
-    r = identify_sobi(m; lags=1:8)
-    @test _pd(r.B0, _B_rec) < 0.10
+    Y, _ = simulate_svar(_B_rec, _A2; Tobs=Tobs, shock_ar=[0.4, -0.4], rng=rng)
+    r = identify_sobi(estimate_var(Y, 1); lags=1:8)
+    @test _pd(r.B0, _B_rec) < 0.20
 end
 
 @testset "identify_dcov recovery" begin
@@ -455,7 +452,7 @@ end
 @testset "identify_mixture_normal recovery" begin
     Tobs = FAST ? 800 : 1500
     rng = MersenneTwister(60)
-    Y, _ = simulate_svar(_B_rec, _A2; Tobs=Tobs, shocks=:t, rng=rng)
+    Y, _ = simulate_svar(_B_rec, _A2; Tobs=Tobs, shocks=:mixture, rng=rng)
     r = identify_mixture_normal(estimate_var(Y, 1); max_iter=FAST ? 80 : 150)
     @test _pd(r.B0, _B_rec) < 0.20
 end

@@ -67,8 +67,10 @@ MACRO_ORACLE_TESTS=1 "$JULIA" --project=. test/oracle/checks_ha_ssj.jl
 
 ## Identification (`checks_identification.jl`)
 
-Cross-checks public SVAR identification against three external stacks. Numerical
-compare is skipped when the binary or fixture is absent (never required in CI).
+Cross-checks public SVAR identification against BVAR_ committed CSVs. Uhlig MATLAB
+and CRAN `vars::SVAR` are documented recipes only — no automated dump in this
+harness. Numerical compare of the BVAR_ fixtures is skipped when those CSVs are
+absent (never required in CI).
 
 **BVAR_ (Ferroni & Canova, Octave 11.1.0 / MATLAB R2023b fallback).** Path:
 `/Users/chung/Downloads/BVAR_-master-2` (`bvartools/iresponse_proxy.m`,
@@ -91,16 +93,15 @@ octave --no-gui test/oracle/octave/ref_identification.m
 "$JULIA" --project=. test/oracle/checks_identification.jl
 ```
 
-**Uhlig MATLAB penalty (Mountford & Uhlig 2009).** Point identification when the
-admissible set is a singleton. No toolbox is bundled. Set `UHLIG_MATLAB` to the
-replication `.m` (the `penaltyfunction` driver from the JAE 2009 supplement) to
-enable a live dump; otherwise the harness prints SKIP. MATLAB is never required
-in CI.
+**Uhlig MATLAB penalty (Mountford & Uhlig 2009).** Recipe only, no automated dump
+in this harness. Point identification when the admissible set is a singleton. No
+toolbox is bundled. The replication `.m` is the `penaltyfunction` driver from the
+JAE 2009 supplement (run by hand if you have it). MATLAB is never required in CI.
 
-**R `vars::SVAR` (Pfaff) AB-model.** Just-identified recursive pattern should
-match `estimate_svar(model, recursive_pattern(n))` / Cholesky `A \ B`. Needs
-`Rscript` and CRAN `vars`. The harness skips when `requireNamespace("vars")`
-is false.
+**R `vars::SVAR` (Pfaff) AB-model.** Recipe only, no automated dump in this
+harness. Just-identified recursive pattern should match
+`estimate_svar(model, recursive_pattern(n))` / Cholesky `A \ B`. Needs `Rscript`
+and CRAN `vars` if you run it by hand.
 
 ```bash
 "$JULIA" --project=. test/oracle/checks_identification.jl
