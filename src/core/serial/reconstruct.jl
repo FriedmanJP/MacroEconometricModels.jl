@@ -101,9 +101,15 @@ function _from_serializable(::Type{T}, p::AbstractDict, ::Int) where {T}
         key = String(f)
         # A field added to the struct after the file was written must surface as
         # the format's typed error, not a raw KeyError (#538). Trailing `manifest`
-        # is the RSER-13 exception: older files default it to `nothing`.
+        # is the RSER-13 exception: older files default it to `nothing`. PVAR
+        # bootstrap IRF fields were added in the same change without a format
+        # bump; a v1 payload without them also defaults to `nothing`.
         if !haskey(p, key)
-            f === :manifest && (push!(args, nothing); continue)
+            if f === :manifest || f === :boot_irf || f === :boot_lower ||
+               f === :boot_upper || f === :boot_draws
+                push!(args, nothing)
+                continue
+            end
             throw(SerializationError(
                 "field '$key' of $(nameof(T)) is missing from the payload — the file " *
                 "was saved by an older package version, before this field existed. " *

@@ -331,6 +331,44 @@ end
                                  rng=MersenneTwister(1)).draws isa Array
     end
 
+    @testset "PVARModel v1 payload without boot_* keys still loads" begin
+        @test SERIALIZATION_FORMAT_VERSION == 1
+        model = _rser13_pvar()
+        c = _MEM._build_container(model)
+        @test c["format_version"] == 1
+        payload = c["payload"]
+        for k in ("boot_irf", "boot_lower", "boot_upper", "boot_draws", "manifest")
+            @test haskey(payload, k)
+            delete!(payload, k)
+        end
+        loaded = _MEM._reconstruct_from_container(c)
+        @test loaded isa PVARModel
+        @test loaded.boot_irf === nothing
+        @test loaded.boot_lower === nothing
+        @test loaded.boot_upper === nothing
+        @test loaded.boot_draws === nothing
+        @test loaded.manifest === nothing
+        @test loaded.Phi == model.Phi
+    end
+
+    @testset "estimate_structural_dfm: seed, manifest on both methods" begin
+        X = randn(MersenneTwister(1), 80, 8)
+        sdfm = estimate_structural_dfm(X, 2; r=2, p=1, H=4, seed=1)
+        @test sdfm.manifest isa ReproManifest
+        @test sdfm.manifest.seed == 1
+        @test sdfm.manifest.settings["method"] == "fglr"
+        sdfm_g = estimate_structural_dfm(X, 2; r=2, p=1, H=4, method=:gdfm_var, seed=7)
+        @test sdfm_g.manifest isa ReproManifest
+        @test sdfm_g.manifest.seed == 7
+        @test sdfm_g.manifest.settings["method"] == "gdfm_var"
+        gdfm = estimate_gdfm(X, 2)
+        sdfm2 = estimate_structural_dfm(gdfm; r=2, p=1, H=4, seed=3)
+        @test sdfm2.manifest.seed == 3
+        sdfm_ns = estimate_structural_dfm(X, 2; r=2, p=1, H=4)
+        @test sdfm_ns.manifest isa ReproManifest
+        @test sdfm_ns.manifest.seed === nothing
+    end
+
     @testset "estimate_did bootstrap SEs: seed, manifest, reproduce, round-trip" begin
         pd = _rser13_did_panel()
         r = estimate_did(pd, :outcome, :treat_time; method=:did_multiplegt,

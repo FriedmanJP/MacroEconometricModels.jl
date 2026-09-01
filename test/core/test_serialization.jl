@@ -290,7 +290,21 @@ end
                         z1=randn(MersenneTwister(54), N), z2=randn(MersenneTwister(55), N),
                         yb=Float64.(rand(MersenneTwister(56), N) .> 0.5))
         pdP = xtset(dfP, :g, :t)
-        _assert_roundtrip(estimate_pvar(pdP, 1))
+        pv = estimate_pvar(pdP, 1)
+        _assert_roundtrip(pv)
+        # v1 payloads written before boot_* / manifest fields still reconstruct
+        let c = _MEM._build_container(pv)
+            @test c["format_version"] == SERIALIZATION_FORMAT_VERSION == 1
+            for k in ("boot_irf", "boot_lower", "boot_upper", "boot_draws", "manifest")
+                delete!(c["payload"], k)
+            end
+            old = _MEM._reconstruct_from_container(c)
+            @test old isa PVARModel
+            @test old.boot_irf === nothing && old.boot_lower === nothing
+            @test old.boot_upper === nothing && old.boot_draws === nothing
+            @test old.manifest === nothing
+            @test old.Phi == pv.Phi
+        end
         _assert_roundtrip(estimate_xtreg(pdP, :y, [:x1, :x2]; model=:fe))
         # HDFE fit (T272, #371): carries a NamedTuple `hdfe` field
         m_hdfe = estimate_xtreg(pdP, :y, [:x1, :x2]; absorb=[:entity, :time])

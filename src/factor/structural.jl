@@ -276,7 +276,8 @@ function estimate_structural_dfm(X::AbstractMatrix{T}, q::Int;
         max_draws=max_draws, narrative_check=narrative_check,
         target_vars=target_vars, restrictions=restrictions,
         transition_var=transition_var, regime_indicator=regime_indicator,
-        varnames=varnames, shock_names=shock_names, rng=rng, standardize=standardize)
+        varnames=varnames, shock_names=shock_names, rng=rng, seed=seed,
+        standardize=standardize)
 end
 
 @float_fallback estimate_structural_dfm X
@@ -427,17 +428,22 @@ function estimate_structural_dfm(gdfm::GeneralizedDynamicFactorModel{T};
     length(sn) == q || throw(ArgumentError(
         "shock_names has $(length(sn)) entries but q=$q"))
 
-    if method === :fglr
-        return _estimate_sdfm_fglr(gdfm, q, r_use, p, p_max, check_stability, H, identification, order, units,
+    result = if method === :fglr
+        _estimate_sdfm_fglr(gdfm, q, r_use, p, p_max, check_stability, H, identification, order, units,
             sign_check, sign_restrictions, restriction_space, store_all,
             max_draws, narrative_check, target_vars, restrictions,
             transition_var, regime_indicator, vn, sn, rng, standardize,
             instrument, normalize)
+    else
+        _estimate_sdfm_gdfm_var(gdfm, q, p, p_max, check_stability, H, identification, sign_check, sign_restrictions,
+            restriction_space, store_all, max_draws, narrative_check, target_vars,
+            restrictions, transition_var, regime_indicator, vn, sn, rng,
+            instrument, normalize)
     end
-    _estimate_sdfm_gdfm_var(gdfm, q, p, p_max, check_stability, H, identification, sign_check, sign_restrictions,
-        restriction_space, store_all, max_draws, narrative_check, target_vars,
-        restrictions, transition_var, regime_indicator, vn, sn, rng,
-        instrument, normalize)
+    return _with_manifest(result, capture_manifest(; seed=seed,
+        settings=Dict{String,Any}("identification" => String(identification),
+                                  "max_draws" => max_draws, "H" => H,
+                                  "method" => String(method))))
 end
 
 # =============================================================================
@@ -486,13 +492,10 @@ function _estimate_sdfm_fglr(gdfm::GeneralizedDynamicFactorModel{T}, q::Int, r::
     if check_stability && modu >= one(T)
         @warn "Estimated factor VAR is non-stationary (max eigenvalue modulus = $(round(modu, digits=4))); IRFs may be explosive. Pass check_stability=false to silence."
     end
-    result = StructuralDFM{T}(gdfm, factor_var, B0, H_id, identification,
+    StructuralDFM{T}(gdfm, factor_var, B0, H_id, identification,
         structural_irf, Lambda, p_use, sn, vn,
         K, r, :fglr, F, Lambda, share, units, idset, rate,
         collect(Int, ord), lag_crit, T(modu), z_store, Fstat)
-    return _with_manifest(result, capture_manifest(; seed=seed,
-        settings=Dict{String,Any}("identification" => String(identification),
-                                  "max_draws" => max_draws, "H" => H)))
 end
 
 """Leading-q eigendecomposition of Σ̂_u: K = V_q Λ_q^{1/2} (`r×q`)."""
