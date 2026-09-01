@@ -943,6 +943,19 @@ IC2 selects four factors, one more than the three used in the sections above, an
 
 ---
 
+## Saving Results
+
+[`save_model`](@ref) persists the fitted result to a versioned JLD2 file; [`load_model`](@ref) reconstructs it. JLD2 is a package dependency --- no extra `using` is required. Every exported result type on this page is saveable; the living catalog is the [API Reference](@ref api_page) Persistence table. See [Data Management](@ref data_page) for bundles, `note=`, `model_info`, compression, and the reproducibility manifest.
+
+```@example factor
+path = joinpath(mktempdir(), "factor.jld2")
+save_model(fm, path)
+fm2 = load_model(path)
+typeof(fm2)
+```
+
+---
+
 ## Common Pitfalls
 
 1. **Choosing ``r`` from the scree plot alone.** The elbow is subjective and moves with the standardization choice. Run `ic_criteria(X, r_max)` and check that IC1, IC2, and IC3 agree. When a criterion returns exactly `r_max`, as IC3 does on the 60-observation panel here, its penalty has failed rather than found ten factors — enlarge `r_max` and prefer the interior selection.

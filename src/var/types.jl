@@ -167,6 +167,8 @@ IRF results with optional confidence intervals.
 
 Fields: values (H×n×n), ci_lower, ci_upper, horizon, variables, shocks, ci_type.
 Internal: _draws (raw bootstrap/simulation draws for correct cumulative IRF), _conf_level.
+`manifest::Union{ReproManifest,Nothing}` is set by the bootstrap path when `seed=`
+is passed; `reproduce(ir, model)` re-runs from that seed. Deterministic IRFs store `nothing`.
 """
 struct ImpulseResponse{T<:AbstractFloat} <: AbstractImpulseResponse
     values::Array{T,3}

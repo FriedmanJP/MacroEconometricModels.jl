@@ -488,6 +488,19 @@ The baseline specification estimates the causal effect of democratic transitions
 
 ---
 
+## Saving Results
+
+[`save_model`](@ref) persists the fitted result to a versioned JLD2 file; [`load_model`](@ref) reconstructs it. JLD2 is a package dependency --- no extra `using` is required. Every exported result type on this page is saveable; the living catalog is the [API Reference](@ref api_page) Persistence table. See [Data Management](@ref data_page) for bundles, `note=`, `model_info`, compression, and the reproducibility manifest.
+
+```@example event
+path = joinpath(mktempdir(), "event_study.jld2")
+save_model(eslp, path)
+eslp2 = load_model(path)
+typeof(eslp2)
+```
+
+---
+
 ## Common Pitfalls
 
 1. **Leaving the CCS absorbing when treatment reverses**: `:absorbing` is the default and is silently wrong for reversible treatments such as democratic status, because it treats reverted units as permanently treated. Check whether the indicator ever falls from 1 to 0 and pass `nonabsorbing=L` when it does.

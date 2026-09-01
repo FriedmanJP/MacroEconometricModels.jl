@@ -632,6 +632,19 @@ The Johansen test rejects ``r_0 = 0`` and ``r_0 = 1`` but not ``r_0 = 2``, so th
 
 ---
 
+## Saving Results
+
+[`save_model`](@ref) persists the fitted result to a versioned JLD2 file; [`load_model`](@ref) reconstructs it. JLD2 is a package dependency --- no extra `using` is required. Every exported result type on this page is saveable; the living catalog is the [API Reference](@ref api_page) Persistence table. See [Data Management](@ref data_page) for bundles, `note=`, `model_info`, compression, and the reproducibility manifest.
+
+```@example vecm
+path = joinpath(mktempdir(), "vecm.jld2")
+save_model(vecm, path)
+vecm2 = load_model(path)
+typeof(vecm2)
+```
+
+---
+
 ## Common Pitfalls
 
 1. **Incorrect cointegrating rank**: Specifying ``r`` too high introduces near-unit-root stationary components that contaminate the short-run dynamics. Specifying ``r`` too low discards genuine equilibrium relationships. Always run `johansen_test` first and examine both the trace and maximum eigenvalue statistics before fixing ``r`` manually.

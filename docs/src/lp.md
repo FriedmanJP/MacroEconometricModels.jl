@@ -1200,6 +1200,19 @@ The `estimate_lp` call fits 21 horizon-specific OLS regressions (``h = 0, \ldots
 
 ---
 
+## Saving Results
+
+[`save_model`](@ref) persists the fitted result to a versioned JLD2 file; [`load_model`](@ref) reconstructs it. JLD2 is a package dependency --- no extra `using` is required. Every exported result type on this page is saveable; the living catalog is the [API Reference](@ref api_page) Persistence table. See [Data Management](@ref data_page) for bundles, `note=`, `model_info`, compression, and the reproducibility manifest.
+
+```@example lp
+path = joinpath(mktempdir(), "lp.jld2")
+save_model(lp, path)
+lp2 = load_model(path)
+typeof(lp2)
+```
+
+---
+
 ## Common Pitfalls
 
 1. **Wider confidence intervals than VAR**: LP confidence bands are wider than VAR-based bands by construction. This reflects the efficiency cost of not imposing dynamic restrictions, not a deficiency. If LP and VAR point estimates agree but LP CIs are much wider, the VAR specification is likely correct and the VAR-based inference is more powerful.

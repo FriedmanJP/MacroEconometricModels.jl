@@ -31,6 +31,7 @@ Stochastic Volatility model (Taylor 1986), estimated via Kim-Shephard-Chib (1998
 - `dist::Symbol`: Error distribution (:normal or :studentt)
 - `leverage::Bool`: Whether leverage effect was estimated
 - `n_samples::Int`: Number of posterior samples
+- `manifest::Union{ReproManifest,Nothing}`: Provenance record when `estimate_sv` was called with `seed=`; `reproduce(m)` re-runs from that seed
 """
 struct SVModel{T<:AbstractFloat} <: AbstractVolatilityModel
     y::Vector{T}

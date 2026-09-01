@@ -59,6 +59,19 @@ All twenty-five schemes integrate with `irf()`, `fevd()`, and `historical_decomp
 
 ---
 
+## Saving Results
+
+[`save_model`](@ref) persists the fitted result to a versioned JLD2 file; [`load_model`](@ref) reconstructs it. JLD2 is a package dependency --- no extra `using` is required. Every exported result type on this page is saveable; the living catalog is the [API Reference](@ref api_page) Persistence table. See [Data Management](@ref data_page) for bundles, `note=`, `model_info`, compression, and the reproducibility manifest.
+
+```@example ia
+path = joinpath(mktempdir(), "irf.jld2")
+save_model(irfs, path)
+irfs2 = load_model(path)
+typeof(irfs2)
+```
+
+---
+
 ## Common Pitfalls
 
 1. **Confidence bands require explicit activation.** The `ci_lower` and `ci_upper` fields contain zeros unless `ci_type=:bootstrap` is set (frequentist) or a Bayesian posterior is passed. Always check `irfs.ci_type` before interpreting bands.

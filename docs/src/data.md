@@ -762,7 +762,7 @@ reproduce(post)
 
 The report compares every stored draw array against a fresh run from the recorded seed and settings, and states the thread count under which each was produced. A seed cannot be recovered from an `AbstractRNG` after the fact, so the estimator has to own it: pass `seed=N` and it seeds a fresh generator, records `N`, and reproduces exactly, independently of thread count. Without a seed the manifest still captures the environment but marks the result as not seed-reproducible. A bootstrap IRF carries a manifest too, reproduced with `reproduce(ir, model)` because the source model is not retained on the IRF.
 
-`save_model` and `load_model` persist a fitted model --- or a data container --- to a versioned, self-describing file. **JLD2 is a package dependency**; `using MacroEconometricModels` is enough. Coverage spans the VAR, regression, panel, volatility, factor, ARIMA, local-projection, and GMM families, SVAR identification results, DSGE / HA / OLG / continuous-time specifications and solutions, and the data containers `TimeSeriesData`, `PanelData`, `CrossSectionData`, and `IOData`. The file records its format version, the package and Julia versions, and any reproducibility manifest; a file whose `format_version` the running build does not recognize is rejected with a `SerializationError` naming the expected version rather than silently misread. Only public fields are stored, so cached factorizations recompute on load and a state-space `builder` closure returns as `nothing`. DSGE `ModelSpec` residuals and `ss_fn` recompile from stored equations.
+`save_model` and `load_model` persist a fitted model --- or a data container --- to a versioned, self-describing file. **JLD2 is a package dependency**; `using MacroEconometricModels` is enough. Coverage is every exported result type except those listed in `_SERIALIZATION_EXCLUDED` (workspaces, rendered HTML, nested-only configs); the living catalog is the [API Reference](@ref api_page) Persistence table, generated from `_SERIALIZABLE_TYPES`. The file records its format version, the package and Julia versions, an optional `note`, and any reproducibility manifest; a file whose `format_version` the running build does not recognize is rejected with a `SerializationError` naming the expected version rather than silently misread. Only public fields are stored, so cached factorizations recompute on load and a state-space `builder` closure returns as `nothing`. DSGE `ModelSpec` residuals and `ss_fn` recompile from stored equations.
 
 !!! warning "A loaded DSGE file is executed code"
     Equations are recompiled at load through `Core.eval` behind an AST allowlist that rejects `eval`, `ccall`, `include`, and similar constructs. The allowlist is defence in depth, not a sandbox: treat a `.jld2` model file as you would `Serialization.deserialize` and load only files you trust.
@@ -772,9 +772,32 @@ The report compares every stored draw array against a fresh run from the recorde
 
 ```@example data
 bvar_path = joinpath(mktempdir(), "bvar_posterior.jld2")
-save_model(post, bvar_path)
+save_model(post, bvar_path; note="FRED-MD BVAR")
 post_reloaded = load_model(bvar_path)
 reproduce(post_reloaded)                         # still reproduces from the persisted seed
+```
+
+A `Dict` of named objects, or a `Vector`, is a **bundle**: one file, several results. `load_model` returns a `Dict{String,Any}` (vector bundles are keyed `"1"`, `"2"`, …). `model_info` reads the header --- versions, `note`, type tags, per-entry manifests --- without reconstructing payloads.
+
+```@example data
+session_path = joinpath(mktempdir(), "session.jld2")
+save_model(Dict("var" => model, "bvar" => post), session_path; note="FRED-MD vintage")
+info = model_info(session_path)
+(info["bundle"], info["note"], sort(collect(keys(info["entries"]))))
+```
+
+```@example data
+loaded = load_model(session_path)
+typeof(loaded["var"])
+```
+
+A bootstrap IRF carries its own `ReproManifest`. Pass `seed=N` so `reproduce` can re-run after reload; the source VAR is an argument because the IRF does not store it.
+
+```@example data
+ir = irf(model, 12; ci_type=:bootstrap, reps=50, seed=20260802)
+ir_path = joinpath(mktempdir(), "irf.jld2")
+save_model(ir, ir_path)
+reproduce(load_model(ir_path), model)
 ```
 
 The same path persists a solved DSGE. `irf` on the reloaded solution matches the original because residuals recompile from the stored `NamedEquation.expr`:
@@ -816,8 +839,9 @@ size(irf(rbc_loaded, 20).values)
 |----------|-------------|
 | `capture_manifest(; seed)` | Capture the current environment as a `ReproManifest` |
 | `reproduce(result)` | Re-run from the recorded seed and return a `ReproReport` (`matched` true/false/`missing`) |
-| `save_model(model, path; compress=false)` | Persist to a versioned container (JLD2 is a package dependency) |
-| `load_model(path)` | Reconstruct a saved model, validating `format_version` |
+| `save_model(model, path; note="", compress=false)` | Persist a model, container, or named bundle (JLD2 is a package dependency) |
+| `load_model(path)` | Reconstruct a saved model or a `Dict` of bundle entries, validating `format_version` |
+| `model_info(path)` | Read the file header (`note`, versions, type tags) without reconstructing the payload |
 
 ---
 

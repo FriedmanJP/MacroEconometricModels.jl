@@ -623,6 +623,19 @@ The five steps tell one story. The correlogram finds significant dependence conc
 
 ---
 
+## Saving Results
+
+[`save_model`](@ref) persists the fitted result to a versioned JLD2 file; [`load_model`](@ref) reconstructs it. JLD2 is a package dependency --- no extra `using` is required. Every exported result type on this page is saveable; the living catalog is the [API Reference](@ref api_page) Persistence table. See [Data Management](@ref data_page) for bundles, `note=`, `model_info`, compression, and the reproducibility manifest.
+
+```@example spectral
+path = joinpath(mktempdir(), "acf.jld2")
+save_model(result, path)
+result2 = load_model(path)
+typeof(result2)
+```
+
+---
+
 ## Common Pitfalls
 
 1. **Non-stationary input.** Spectral density estimation assumes stationarity. Apply `diff()` or a filter to trending series before computing the periodogram; the ACF of a non-stationary series decays slowly, producing a spectral density concentrated near ``\omega = 0``.

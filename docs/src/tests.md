@@ -154,6 +154,19 @@ For tests with multiple statistics (Ng-Perron returns four, Moon-Perron returns 
 
 ---
 
+## Saving Results
+
+[`save_model`](@ref) persists the fitted result to a versioned JLD2 file; [`load_model`](@ref) reconstructs it. JLD2 is a package dependency --- no extra `using` is required. Every exported result type on this page is saveable; the living catalog is the [API Reference](@ref api_page) Persistence table. See [Data Management](@ref data_page) for bundles, `note=`, `model_info`, compression, and the reproducibility manifest.
+
+```@example tests_overview
+path = joinpath(mktempdir(), "adf.jld2")
+save_model(result, path)
+result2 = load_model(path)
+typeof(result2)
+```
+
+---
+
 ## Common Pitfalls
 
 1. **Applying time-series unit root tests to panels.** Standard ADF, KPSS, and PP tests assume independent observations and produce invalid inference under cross-sectional dependence. For panel data, use `panic_test`, `pesaran_cips_test`, or `moon_perron_test`, which explicitly account for common factor structures.

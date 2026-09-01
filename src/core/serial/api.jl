@@ -112,7 +112,8 @@ sequence-space blocks (`SSJModel`, `SimpleBlock`, `HetBlock`, `MitBlock`,
 `SSJGEJacobian`, `SSJImpulseResponse`), DCEGM / firm / intermediary results,
 OLG and continuous-time families, and the data containers
 (`TimeSeriesData`, `PanelData`, `CrossSectionData`, `IOData`); the full set is
-`MacroEconometricModels._SERIALIZABLE_TYPES`. Exported
+`MacroEconometricModels._SERIALIZABLE_TYPES`, tabulated on the
+[API Reference](@ref api_page) Persistence section. Exported
 concrete structs that are not saveable are listed in `_SERIALIZATION_EXCLUDED`
 with a permanent reason (rendered HTML, workspaces, transient `reproduce`
 reports, inline covariance-estimator configs, nested-only sentinels). The file records the

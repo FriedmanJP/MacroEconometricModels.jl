@@ -85,6 +85,8 @@ ReproReport
 
 ### Serialization
 
+JLD2 is a package dependency. The living catalog of saveable types is the Persistence table on the [API Reference](@ref api_page); narrative coverage (bundles, `note=`, `model_info`, compression, the executed-code caveat) lives on [Data Management](@ref data_page).
+
 ```@docs
 save_model
 load_model

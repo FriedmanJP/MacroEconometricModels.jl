@@ -508,6 +508,19 @@ Linearity is rejected, so a threshold model is warranted. The two regimes carry 
 
 ---
 
+## Saving Results
+
+[`save_model`](@ref) persists the fitted result to a versioned JLD2 file; [`load_model`](@ref) reconstructs it. JLD2 is a package dependency --- no extra `using` is required. Every exported result type on this page is saveable; the living catalog is the [API Reference](@ref api_page) Persistence table. See [Data Management](@ref data_page) for bundles, `note=`, `model_info`, compression, and the reproducibility manifest.
+
+```@example nonlinear
+path = joinpath(mktempdir(), "threshold.jld2")
+save_model(m, path)
+m2 = load_model(path)
+typeof(m2)
+```
+
+---
+
 ## Common Pitfalls
 
 1. **Trusting χ² p-values for linearity.** The threshold is unidentified under the null; only the fixed-regressor bootstrap p-values from `hansen_linearity_test` are valid.

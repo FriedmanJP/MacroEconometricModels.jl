@@ -392,6 +392,19 @@ rate, so it re-weights the sample towards quarters that RMSE treats as ordinary.
 
 ---
 
+## Saving Results
+
+[`save_model`](@ref) persists the fitted result to a versioned JLD2 file; [`load_model`](@ref) reconstructs it. JLD2 is a package dependency --- no extra `using` is required. Every exported result type on this page is saveable; the living catalog is the [API Reference](@ref api_page) Persistence table. See [Data Management](@ref data_page) for bundles, `note=`, `model_info`, compression, and the reproducibility manifest.
+
+```@example fceval
+path = joinpath(mktempdir(), "fceval.jld2")
+save_model(ev_all, path)
+ev2 = load_model(path)
+typeof(ev2)
+```
+
+---
+
 ## Common Pitfalls
 
 1. **Passing forecasts where errors are expected.** [`diebold_mariano`](@ref) and
