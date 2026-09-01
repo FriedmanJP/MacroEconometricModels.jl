@@ -765,6 +765,34 @@ function _den_haan_core(spec::ModelSpec{T}, ss::HASteadyState{T}, b::Vector{T},
 end
 
 """
+    reproduce(ks::KrusellSmithSolution) -> ReproReport
+
+Re-run `solve(spec; method=:krusell_smith, seed=…)` from the recorded seed and
+compare `plm_coefficients` bit-for-bit. Requires `seed=` on the original solve.
+"""
+function reproduce(ks::KrusellSmithSolution)
+    m = ks.manifest
+    m === nothing && return _no_manifest_report("KrusellSmithSolution")
+    m.seed === nothing && return _no_seed_report(m, "solve(spec; method=:krusell_smith, seed=N)")
+    s = m.settings
+    fresh = solve(ks.spec; method=:krusell_smith, ss=ks.steady_state,
+                  seed=m.seed,
+                  T_sim=Int(get(s, "T_sim", 11000)),
+                  T_burn=Int(get(s, "T_burn", 1000)),
+                  max_outer=Int(get(s, "max_outer", 20)),
+                  rho_z=get(s, "rho_z", 0.95),
+                  sigma_z=get(s, "sigma_z", 0.007))
+    diffs = ReproFieldDiff[]
+    keys_u = sort(collect(union(keys(ks.plm_coefficients), keys(fresh.plm_coefficients))))
+    for k in keys_u
+        a = get(ks.plm_coefficients, k, eltype(ks.steady_state.distribution)[])
+        b = get(fresh.plm_coefficients, k, eltype(fresh.steady_state.distribution)[])
+        push!(diffs, _repro_field_diff("plm_coefficients.$k", a, b))
+    end
+    return _finalize_repro(diffs, m)
+end
+
+"""
     den_haan_test(ks::KrusellSmithSolution; T_sim=10000, T_burn=1000,
                   rho_z=0.95, sigma_z=0.007, seed=98765) → DenHaanAccuracy
 

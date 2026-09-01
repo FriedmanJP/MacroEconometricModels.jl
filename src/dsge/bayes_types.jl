@@ -561,6 +561,8 @@ Fields:
   to map filtered forecasts back to the observed scale
 - `trends::Union{Nothing,ObservationTrends{T}}` — deterministic trends carried in the
   measurement equation (`nothing` when none were specified)
+- `manifest::Union{Nothing,ReproManifest}` — seed and environment recorded when
+  `estimate_dsge_bayes` was called with `seed=`; `nothing` unless a seed was owned
 """
 struct BayesianDSGE{T<:AbstractFloat} <: AbstractDSGEModel
     theta_draws::Matrix{T}
@@ -585,6 +587,7 @@ struct BayesianDSGE{T<:AbstractFloat} <: AbstractDSGEModel
     solver_kwargs::NamedTuple
     prefilter::Union{Nothing,PrefilterSpec{T}}
     trends::Union{Nothing,ObservationTrends{T}}
+    manifest::Union{Nothing,ReproManifest}
 
     function BayesianDSGE{T}(theta_draws, log_posterior, param_names, priors,
                               log_marginal_likelihood, method, acceptance_rate,
@@ -594,7 +597,8 @@ struct BayesianDSGE{T<:AbstractFloat} <: AbstractDSGEModel
                               data=zeros(T, 0, 0), observables=Symbol[],
                               measurement_error=nothing, solver=:gensys,
                               solver_kwargs=NamedTuple(),
-                              prefilter=nothing, trends=nothing) where {T<:AbstractFloat}
+                              prefilter=nothing, trends=nothing;
+                              manifest=nothing) where {T<:AbstractFloat}
         n_draws, n_params = size(theta_draws)
         @assert length(log_posterior) == n_draws "log_posterior length must match n_draws"
         @assert length(param_names) == n_params "param_names length must match n_params"
@@ -606,7 +610,7 @@ struct BayesianDSGE{T<:AbstractFloat} <: AbstractDSGEModel
                ess_history, phi_schedule, spec, solution, state_space,
                n_failed_draws, n_lik_evals, solved_at,
                Matrix{T}(data), Vector{Symbol}(observables), me,
-               solver, solver_kwargs, prefilter, trends)
+               solver, solver_kwargs, prefilter, trends, manifest)
     end
 end
 
@@ -637,6 +641,8 @@ Fields:
 - `variables::Vector{String}` — variable names
 - `quantile_levels::Vector{T}` — quantile levels (e.g. [0.05, 0.16, 0.84, 0.95])
 - `all_paths::Array{T,3}` — n_draws x T_periods x n_vars (raw draws)
+- `manifest::Union{Nothing,ReproManifest}` — seed and environment recorded when
+  `simulate` was called with `seed=`; `nothing` otherwise
 """
 struct BayesianDSGESimulation{T<:AbstractFloat}
     quantiles::Array{T,3}
@@ -645,7 +651,14 @@ struct BayesianDSGESimulation{T<:AbstractFloat}
     variables::Vector{String}
     quantile_levels::Vector{T}
     all_paths::Array{T,3}
+    manifest::Union{Nothing,ReproManifest}
 end
+
+# Backward-compatible 6-arg constructor; `manifest` is keyword-defaulted.
+BayesianDSGESimulation{T}(quantiles, point_estimate, T_periods, variables,
+                          quantile_levels, all_paths; manifest=nothing) where {T<:AbstractFloat} =
+    BayesianDSGESimulation{T}(quantiles, point_estimate, T_periods, variables,
+                              quantile_levels, all_paths, manifest)
 
 # =============================================================================
 # PosteriorMode — posterior mode + Laplace approximation result

@@ -8,6 +8,7 @@ using MacroEconometricModels
 using Test
 using Random
 using LinearAlgebra
+using Distributions
 
 const _MEM = MacroEconometricModels
 
@@ -190,5 +191,54 @@ const _MEM = MacroEconometricModels
         @test m.git_sha isa AbstractString
 
         @test occursin("ReproReport", sprint(show, reproduce(post)))
+    end
+
+    @testset "DSER-11 Bayesian DSGE seed=/manifest/reproduce" begin
+        spec = @dsge begin
+            parameters: ρ = 0.9, σ = 0.01
+            endogenous: y
+            exogenous: ε
+            y[t] = ρ * y[t-1] + σ * ε[t]
+            steady_state: [0.0]
+        end
+        sol = solve(spec)
+        @test simulate(sol, 20; seed=3) == simulate(sol, 20; seed=3)
+        @test simulate(sol, 20; seed=3) != simulate(sol, 20; seed=4)
+        rng_path = simulate(sol, 20; rng=MersenneTwister(9))
+        @test simulate(sol, 20; rng=MersenneTwister(9)) == rng_path
+
+        spec_ss = compute_steady_state(spec)
+        psol = perturbation_solver(spec_ss; order=2)
+        @test simulate(psol, 16; seed=5) == simulate(psol, 16; seed=5)
+
+        data = simulate(sol, 40; seed=1)
+        priors = Dict(:ρ => Beta(2, 2))
+        b = _MEM._suppress_warnings() do
+            estimate_dsge_bayes(spec, data, [0.5];
+                priors=priors, method=:smc, observables=[:y],
+                n_smc=20, n_mh_steps=1, ess_target=0.5,
+                measurement_error=[0.01], seed=7)
+        end
+        @test b.manifest isa ReproManifest
+        @test b.manifest.seed == 7
+        @test b.manifest.settings["method"] == "smc"
+        @test b.manifest.settings["n_smc"] == 20
+        c = _MEM._build_container(b)
+        @test c["manifest"] isa AbstractDict
+        @test c["manifest"]["seed"] == 7
+        b2 = _MEM._reconstruct_from_container(c)
+        @test b2.manifest.seed == 7
+        @test b2.manifest.settings["n_smc"] == 20
+        rep = reproduce(b2)
+        @test rep isa ReproReport
+        @test rep.matched === true
+
+        pp1 = posterior_predictive(b, 8; T_periods=10, seed=2)
+        pp2 = posterior_predictive(b, 8; T_periods=10, seed=2)
+        @test pp1 == pp2
+        bsim = simulate(b, 12; n_draws=5, seed=11)
+        @test bsim isa BayesianDSGESimulation
+        @test bsim.manifest isa ReproManifest
+        @test bsim.manifest.seed == 11
     end
 end

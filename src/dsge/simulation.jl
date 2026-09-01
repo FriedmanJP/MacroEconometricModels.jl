@@ -12,7 +12,7 @@ using Random
 
 """
     simulate(sol::DSGESolution{T}, T_periods::Int;
-             shock_draws=nothing, rng=Random.default_rng()) -> Matrix{T}
+             shock_draws=nothing, seed=nothing, rng=Random.default_rng()) -> Matrix{T}
 
 Simulate the solved DSGE model: `y_t = G1 * y_{t-1} + impact * e_t + C_sol`.
 
@@ -24,11 +24,14 @@ Returns `T_periods x n_endog` matrix of levels (steady state + deviations).
 
 # Keyword Arguments
 - `shock_draws`: `T_periods x n_shocks` matrix of pre-drawn shocks (default: `nothing`, draws from N(0,1))
+- `seed`: if given, owns the RNG (a fresh `MersenneTwister(seed)`); wins over `rng`
 - `rng`: random number generator (default: `Random.default_rng()`)
 """
 function simulate(sol::DSGESolution{T}, T_periods::Int;
                   shock_draws::Union{Nothing,AbstractMatrix}=nothing,
+                  seed::Union{Nothing,Integer}=nothing,
                   rng=Random.default_rng()) where {T<:AbstractFloat}
+    rng = _resolve_repro_rng(rng, seed)
     n = nvars(sol)
     n_e = nshocks(sol)
     y_ss = sol.spec.steady_state
@@ -202,7 +205,9 @@ Returns `T_periods x n_vars` matrix of levels.
 """
 function simulate(sol::ProjectionSolution{T}, T_periods::Int;
                   shock_draws::Union{Nothing,AbstractMatrix}=nothing,
+                  seed::Union{Nothing,Integer}=nothing,
                   rng=Random.default_rng()) where {T<:AbstractFloat}
+    rng = _resolve_repro_rng(rng, seed)
     n = nvars(sol)
     n_eps = nshocks(sol)
     nx = nstates(sol)

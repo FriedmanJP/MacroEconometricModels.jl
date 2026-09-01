@@ -48,8 +48,10 @@ second-order decision rules.
 """
 function simulate(sol::PerturbationSolution{T}, T_periods::Int;
                   shock_draws::Union{Nothing,AbstractMatrix}=nothing,
+                  seed::Union{Nothing,Integer}=nothing,
                   rng=Random.default_rng(),
                   antithetic::Bool=false) where {T<:AbstractFloat}
+    rng = _resolve_repro_rng(rng, seed)
     n_eps = nshocks(sol)
 
     # Draw or use provided shocks

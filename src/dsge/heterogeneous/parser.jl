@@ -675,7 +675,8 @@ chosen solution method.
   it is an error with `method=:krusell_smith`)
 - `T_horizon`, `n_reduced` — SSJ/Reiter kwargs
 - `n_moments`, `n_quad` — Winberry kwargs (`method=:reiter` with `distribution=:winberry`)
-- `T_sim`, `T_burn`, `max_outer`, `rho_z`, `sigma_z` — Krusell-Smith kwargs
+- `T_sim`, `T_burn`, `max_outer`, `rho_z`, `sigma_z`, `seed` — Krusell-Smith kwargs
+  (`seed` owns the PLM simulation RNG and is recorded on `KrusellSmithSolution.manifest`)
 
 # Returns
 - `HADSGESolution{T}` for `:ssj` and `:reiter`
@@ -810,6 +811,7 @@ function _ha_solve(spec::ModelSpec{T}; method::Symbol=:ssj,
         sigma_z = get(kwargs, :sigma_z, 0.007)
         rho_e = get(kwargs, :rho_e, get(_hh(spec).het_params, :rho_e, 0.9))
         sigma_e = get(kwargs, :sigma_e, get(_hh(spec).het_params, :sigma_e, 0.01))
+        seed = get(kwargs, :seed, 1234)
 
         @info "Krusell–Smith: solving the PLM fixed point by simulation " *
               "(T_sim=$T_sim, max_outer=$max_outer) — this can take several minutes…"  # (KS/T174)
@@ -819,9 +821,15 @@ function _ha_solve(spec::ModelSpec{T}; method::Symbol=:ssj,
                                     T_sim=T_sim, T_burn=T_burn,
                                     max_outer=max_outer,
                                     rho_z=rho_z, sigma_z=sigma_z,
-                                    model=_hh(spec).model, rho_e=rho_e, sigma_e=sigma_e)
+                                    model=_hh(spec).model, rho_e=rho_e, sigma_e=sigma_e,
+                                    seed=Int(seed))
+        ks_manifest = capture_manifest(; seed=Int(seed), settings=Dict{String,Any}(
+            "method" => "krusell_smith", "T_sim" => Int(T_sim), "T_burn" => Int(T_burn),
+            "max_outer" => Int(max_outer), "rho_z" => Float64(rho_z),
+            "sigma_z" => Float64(sigma_z)))
         return KrusellSmithSolution{T}(ss, raw.plm_coefficients, raw.r_squared,
-                                        spec, raw.converged, raw.iterations)
+                                        spec, raw.converged, raw.iterations;
+                                        manifest=ks_manifest)
     else
         error("Unknown HA-DSGE method: :$method. Use :ssj, :reiter, or :krusell_smith.")
     end

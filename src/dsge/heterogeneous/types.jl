@@ -989,6 +989,8 @@ Fields:
 - `spec::ModelSpec{T}` — model specification
 - `converged::Bool` — whether PLM iteration converged
 - `iterations::Int` — number of KS outer loop iterations
+- `manifest::Union{Nothing,ReproManifest}` — seed and environment of the PLM
+  simulation; populated by `solve(...; method=:krusell_smith, seed=N)`
 """
 struct KrusellSmithSolution{T<:AbstractFloat}
     steady_state::HASteadyState{T}
@@ -997,4 +999,11 @@ struct KrusellSmithSolution{T<:AbstractFloat}
     spec::ModelSpec{T}
     converged::Bool
     iterations::Int
+    manifest::Union{Nothing,ReproManifest}
 end
+
+# Backward-compatible 6-arg constructor; `manifest` is keyword-defaulted.
+KrusellSmithSolution{T}(steady_state, plm_coefficients, r_squared, spec,
+                        converged, iterations; manifest=nothing) where {T<:AbstractFloat} =
+    KrusellSmithSolution{T}(steady_state, plm_coefficients, r_squared, spec,
+                            converged, iterations, manifest)

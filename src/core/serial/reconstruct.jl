@@ -388,6 +388,7 @@ function _from_serializable(::Type{BayesianDSGE}, p::AbstractDict, ::Int)
     T = eltype(theta)
     T <: AbstractFloat || (T = Float64)
     me = _deser_field(p["measurement_error"])
+    mani = _deser_field(get(p, "manifest", nothing))
     BayesianDSGE{T}(
         Matrix{T}(theta),
         Vector{T}(_deser_field(p["log_posterior"])),
@@ -410,7 +411,24 @@ function _from_serializable(::Type{BayesianDSGE}, p::AbstractDict, ::Int)
         _as_symbol(p["solver"]),
         _deser_field(p["solver_kwargs"]),
         _deser_field(p["prefilter"]),
-        _deser_field(p["trends"]),
+        _deser_field(p["trends"]);
+        manifest=mani,
+    )
+end
+
+function _from_serializable(::Type{BayesianDSGESimulation}, p::AbstractDict, ::Int)
+    q = _deser_field(p["quantiles"])
+    T = eltype(q)
+    T <: AbstractFloat || (T = Float64)
+    mani = _deser_field(get(p, "manifest", nothing))
+    BayesianDSGESimulation{T}(
+        Array{T,3}(q),
+        Matrix{T}(_deser_field(p["point_estimate"])),
+        Int(p["T_periods"]),
+        String[string(s) for s in _deser_field(p["variables"])],
+        Vector{T}(_deser_field(p["quantile_levels"])),
+        Array{T,3}(_deser_field(p["all_paths"]));
+        manifest=mani,
     )
 end
 
@@ -540,13 +558,15 @@ function _from_serializable(::Type{KrusellSmithSolution}, p::AbstractDict, ::Int
     ss = _deser_field(p["steady_state"])
     T = eltype(ss.distribution)
     T <: AbstractFloat || (T = Float64)
+    mani = _deser_field(get(p, "manifest", nothing))
     KrusellSmithSolution{T}(
         ss,
         _ha_symbol_vec_dict(T, _deser_field(p["plm_coefficients"])),
         _ha_symbol_t_dict(T, _deser_field(p["r_squared"])),
         _deser_field(p["spec"]),
         Bool(p["converged"]),
-        Int(p["iterations"]),
+        Int(p["iterations"]);
+        manifest=mani,
     )
 end
 

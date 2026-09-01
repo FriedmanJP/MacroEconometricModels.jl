@@ -293,7 +293,7 @@ function _ha_smc_to_bayesian_dsge(state::SMCState{T}, spec::ModelSpec{T},
         observables::Vector{Symbol}, measurement_error,
         ha_method::Symbol, ha_kwargs::NamedTuple,
         n_failed::Int, n_evals::Int,
-        data::AbstractMatrix{T}) where {T<:AbstractFloat}
+        data::AbstractMatrix{T}; manifest=nothing) where {T<:AbstractFloat}
     acceptance_rate = isempty(state.acceptance_rates) ? zero(T) : last(state.acceptance_rates)
     linear_sol, ss_result, solved_at, _theta_used = _build_ha_result_solution(
         spec, param_names, post_draws, post_log_posterior,
@@ -304,7 +304,8 @@ function _ha_smc_to_bayesian_dsge(state::SMCState{T}, spec::ModelSpec{T},
         state.ess_history, state.phi_schedule,
         linear_sol.spec, linear_sol, ss_result,
         n_failed, n_evals, solved_at,
-        data, observables, measurement_error, ha_method, ha_kwargs
+        data, observables, measurement_error, ha_method, ha_kwargs;
+        manifest=manifest
     )
 end
 
@@ -342,6 +343,7 @@ function _ha_estimate_dsge_bayes(spec::ModelSpec{T}, data::AbstractMatrix,
                               ha_kwargs::NamedTuple=(T_horizon=_HA_DEFAULT_T_HORIZON, n_reduced=15),
                               proposal_scale::Float64=0.01,
                               adapt_interval::Int=100,
+                              seed::Union{Nothing,Integer}=nothing,
                               rng::AbstractRNG=Random.default_rng()) where {T<:AbstractFloat}
     if method ∉ (:mh, :smc)
         throw(ArgumentError(
@@ -384,6 +386,12 @@ function _ha_estimate_dsge_bayes(spec::ModelSpec{T}, data::AbstractMatrix,
     # comment claimed a reordering that never happened — it only cast T.(theta0).)
     n_params = length(param_names)
     theta0_sorted = _resolve_theta0(theta0, param_names, T)
+    manifest = _dsge_bayes_manifest(; seed=seed, method=method,
+        n_particles=0, n_draws=n_draws, n_smc=n_smc, n_mh_steps=n_mh_steps,
+        burnin=burnin, ess_target=ess_target, solver=ha_method,
+        solver_kwargs=ha_kwargs, theta0=theta0_sorted,
+        extra=Dict{String,Any}("ha_method" => String(ha_method),
+                               "ha_kwargs" => _plain_nt_settings(ha_kwargs)))
 
     # ── 5. Build HA likelihood function (tracking failed/total likelihood evals) ──
     lik_failures = Threads.Atomic{Int}(0)
@@ -406,7 +414,7 @@ function _ha_estimate_dsge_bayes(spec::ModelSpec{T}, data::AbstractMatrix,
                                         observables, measurement_error,
                                         ha_method, ha_kwargs,
                                         lik_failures[], lik_evals[],
-                                        data_mat)
+                                        data_mat; manifest=manifest)
     end
 
     # ── 6. Random-Walk Metropolis-Hastings ───────────────────────────────
@@ -540,6 +548,7 @@ function _ha_estimate_dsge_bayes(spec::ModelSpec{T}, data::AbstractMatrix,
         T[], T[],  # no ESS history or phi schedule for MH
         linear_sol.spec, linear_sol, ss_result,
         lik_failures[], lik_evals[], solved_at,
-        data_mat, observables, measurement_error, ha_method, ha_kwargs
+        data_mat, observables, measurement_error, ha_method, ha_kwargs;
+        manifest=manifest
     )
 end

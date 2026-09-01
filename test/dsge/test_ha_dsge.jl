@@ -591,6 +591,18 @@ end
     @test 0 <= sol_r.explained_variance <= 1
 end
 
+@testset "DSER-11 KS seed= records a manifest and is bit-for-bit" begin
+    spec = _VFI_HUG_SPEC
+    ss = _VFI_HUG_SS
+    ks1 = solve(spec; method=:krusell_smith, ss=ss, T_sim=40, T_burn=8, max_outer=1, seed=1)
+    ks2 = solve(spec; method=:krusell_smith, ss=ss, T_sim=40, T_burn=8, max_outer=1, seed=1)
+    @test ks1 isa KrusellSmithSolution
+    @test ks1.manifest isa ReproManifest
+    @test ks1.manifest.seed == 1
+    @test ks1.plm_coefficients == ks2.plm_coefficients
+    @test ks1.r_squared == ks2.r_squared
+end
+
 @testset "two-asset KS PLM is live (MSR-03)" begin
     spec = MacroEconometricModels._two_asset_hank_example(;
         n_liquid=6, n_illiquid=5, n_e=2, B_supply=1.0)
