@@ -87,7 +87,10 @@ density/regression/LOWESS, data summary/diagnostics), test-statistic results
 (unit-root/panel/cointegration/breaks/diagnostics, including Bai–Perron,
 panel-unit-root summaries, and SADF/GSADF bubble tests), counterfactual/OPP
 results (policy causal effects, rules/loss, OPP, model bank, path-floor and
-named-function constraints), Johansen/GPH/local-Whittle companions, and the data containers
+named-function constraints), IO leftovers (`FootprintResult`, `IOMultipliers`,
+`LinkageResult`, `IOExtension`), LP leftovers (Montiel Olea–Pflueger F, LP-IV AR
+bands, B-spline basis, propensity-score config), GMM weighting/parameter
+transforms, Johansen/GPH/local-Whittle companions, and the data containers
 (`TimeSeriesData`, `PanelData`, `CrossSectionData`, `IOData`); the full set is
 `MacroEconometricModels._SERIALIZABLE_TYPES`. Exported
 concrete structs that are not saveable are listed in `_SERIALIZATION_EXCLUDED`

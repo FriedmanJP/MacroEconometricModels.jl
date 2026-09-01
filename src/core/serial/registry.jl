@@ -295,6 +295,17 @@ const _SERIALIZABLE_TYPES = Dict{String,Type}(
     "ForecastSufficiency"               => ForecastSufficiency,
     "PathFloorConstraint"               => PathFloorConstraint,
     "FunctionConstraint"                => FunctionConstraint,
+    # ── IO / LP / GMM leftovers (RSER-11 / #784) ─────────────────────────────
+    "FootprintResult"                   => FootprintResult,
+    "IOMultipliers"                     => IOMultipliers,
+    "LinkageResult"                     => LinkageResult,
+    "IOExtension"                       => IOExtension,
+    "MontielOleaPfluegerF"              => MontielOleaPfluegerF,
+    "LPIVARBand"                        => LPIVARBand,
+    "BSplineBasis"                      => BSplineBasis,
+    "PropensityScoreConfig"             => PropensityScoreConfig,
+    "GMMWeighting"                      => GMMWeighting,
+    "ParameterTransform"                => ParameterTransform,
 )
 
 # Exported concrete structs that are not top-level `save_model` targets, with a
@@ -313,6 +324,8 @@ const _SERIALIZATION_EXCLUDED = Dict{String,String}(
     "IOSourceTable" => "download registry, not a result",
     "LeontiefModel" => "internal IO coefficient wrapper",
     "GhoshModel" => "internal IO coefficient wrapper",
+    # `_X13*` internals (unexported, underscore-prefixed) are skipped by the
+    # completeness walk and are neither registered nor excluded (RSER-08).
     # pending DSER-02
     "ModelIR" => "pending DSER-02",
     "ModelSpec" => "pending DSER-02",
@@ -400,32 +413,24 @@ const _SERIALIZATION_EXCLUDED = Dict{String,String}(
     "IntermediaryTransition" => "pending DSER-10",
     "KhanThomasSteadyState" => "pending DSER-10",
     "KhanThomasTransition" => "pending DSER-10",
-    # pending RSER-11
+    # pending RSER-11 (restriction / ident / factor-IC leftovers; not this issue)
     "A0SignRestriction" => "pending RSER-11",
     "A0ZeroRestriction" => "pending RSER-11",
     "AmengualWatsonResult" => "pending RSER-11",
     "AplusSignRestriction" => "pending RSER-11",
     "AplusZeroRestriction" => "pending RSER-11",
-    "BSplineBasis" => "pending RSER-11",
     "BaiNgQResult" => "pending RSER-11",
     "CumulativeRestriction" => "pending RSER-11",
     "ElasticityBound" => "pending RSER-11",
     "FEVDShareRestriction" => "pending RSER-11",
-    "FootprintResult" => "pending RSER-11",
-    "GMMWeighting" => "pending RSER-11",
     "HallinLiskaResult" => "pending RSER-11",
-    "IOExtension" => "pending RSER-11",
     "IdentifiabilityTestResult" => "pending RSER-11",
     "IdentificationMethod" => "pending RSER-11",
     "IdentificationStatus" => "pending RSER-11",
-    "LPIVARBand" => "pending RSER-11",
     "LongRunZeroRestriction" => "pending RSER-11",
     "MagnitudeBound" => "pending RSER-11",
-    "MontielOleaPfluegerF" => "pending RSER-11",
     "NarrativeContributionRestriction" => "pending RSER-11",
     "NarrativeShockRestriction" => "pending RSER-11",
-    "ParameterTransform" => "pending RSER-11",
-    "PropensityScoreConfig" => "pending RSER-11",
     "ReproManifest" => "pending RSER-11",
     "SVARPattern" => "pending RSER-11",
     "SVARRestrictions" => "pending RSER-11",

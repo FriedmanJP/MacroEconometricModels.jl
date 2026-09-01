@@ -128,6 +128,7 @@ const TEST_GROUPS = [
         "teststat/test_bubble.jl",   # EV-30 (#438): SADF/GSADF explosive-bubble detection
 
         "gmm/test_gmm.jl",
+        "gmm/test_gmm_serialization.jl",
         "gmm/test_smm.jl",
         "data/test_data.jl",
         "pvar/test_pvar.jl",

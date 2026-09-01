@@ -686,7 +686,7 @@ include("plotting/counterfactual.jl")  # CF-22 (#402): policy-counterfactual res
 # Input-Output analysis
 export IOData, IOExtension, IOMetaData
 export technical_coefficients, leontief_inverse, allocation_coefficients, ghosh_inverse
-export leontief, ghosh, multipliers, linkages, rasmussen, key_sectors
+export leontief, ghosh, multipliers, IOMultipliers, linkages, LinkageResult, rasmussen, key_sectors
 export sda, SDAResult, hypothetical_extraction
 export ras, gras, balance, RASResult
 export price_model, PriceModelResult

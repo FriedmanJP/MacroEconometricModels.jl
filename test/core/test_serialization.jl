@@ -392,6 +392,16 @@ end
     vt = deser_ser_roundtrip([(1.0, 2.0)])
     @test vt isa Vector && vt[1] isa Tuple
 
+    # LPIVARBand.sets :: Matrix{Vector{Tuple{T,T}}} — RSER-01 narrowing (#784)
+    sets = Matrix{Vector{Tuple{Float64,Float64}}}(undef, 2, 1)
+    sets[1, 1] = [(1.0, 2.0)]
+    sets[2, 1] = [(3.0, 4.0), (5.0, 6.0)]
+    sets2 = deser_ser_roundtrip(sets)
+    @test sets2 isa Matrix{Vector{Tuple{Float64,Float64}}}
+    @test eltype(sets2) === Vector{Tuple{Float64,Float64}}
+    @test eltype(eltype(sets2)) === Tuple{Float64,Float64}
+    @test sets2 == sets
+
     # Keyword-constructor detector: every registered type reconstructs from
     # positional field values, or has an explicit `_from_serializable` override.
     Y = randn(MersenneTwister(774), 40, 2)
