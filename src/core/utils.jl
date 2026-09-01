@@ -97,7 +97,13 @@ Usage: `@float_fallback estimate_var Y`
 macro float_fallback(func_name, arg_name)
     quote
         function $(esc(func_name))($(esc(arg_name))::AbstractMatrix, args...; kwargs...)
-            $(esc(func_name))(Float64.($(esc(arg_name))), args...; kwargs...)
+            if eltype($(esc(arg_name))) === Float64
+                throw(MethodError($(esc(func_name)), ($(esc(arg_name)), args...)))
+            end
+            Yf = Float64.($(esc(arg_name)))
+            hasmethod($(esc(func_name)), Tuple{typeof(Yf), typeof.(args)...}) ||
+                throw(MethodError($(esc(func_name)), ($(esc(arg_name)), args...)))
+            $(esc(func_name))(Yf, args...; kwargs...)
         end
     end
 end
