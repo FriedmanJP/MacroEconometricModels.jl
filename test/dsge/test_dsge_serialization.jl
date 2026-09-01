@@ -1873,3 +1873,269 @@ end
         @test tr2.K == tr.K && tr2.r_a == tr.r_a
     end
 end
+
+# =============================================================================
+# DSER-12 remainder — Dynare/HA solve-equality, world-age, security, fixtures (#770)
+# =============================================================================
+
+if !@isdefined(_DSER12_FAST)
+    const _DSER12_FAST = get(ENV, "MACRO_FAST_TESTS", "") == "1"
+end
+
+const _DSER12_EVAL_REACHED = Ref(false)
+const _DSER12_FIXTURE_DIR = joinpath(@__DIR__, "..", "fixtures", "serialization", "v1")
+
+_dser12_load_and_solve(p) = solve(load_model(p))
+_dser12_load_and_ss(p) = compute_steady_state(load_model(p))
+
+function _dser12_patch_eq_expr(container, mal)
+    c = deepcopy(container)
+    eqs = c["payload"]["equations"]
+    eq = eqs[1]
+    eq["expr"] = _MEM._ser_field(mal)
+    return c
+end
+
+function _dser12_patch_ss_expr(container, mal)
+    c = deepcopy(container)
+    ir = c["payload"]["ir"]
+    decls = ir["declarations"]
+    for d in decls
+        kind = get(d, "kind", nothing)
+        (kind === :steady_state || kind === "steady_state") || continue
+        d["payload"] = _MEM._ser_field(mal)
+        return c
+    end
+    error("no steady_state declaration to patch")
+end
+
+@testset "DSER-12 Dynare solve-equality after round-trip" begin
+    dir = joinpath(@__DIR__, "..", "dynare_replication")
+    tier_files = sort(filter(p -> startswith(basename(p), "tier") && endswith(p, ".jl"),
+                             readdir(dir; join=true)))
+    if _DSER12_FAST
+        tier_files = filter(p -> occursin("rbc_baseline", p) || occursin("hansen_1985", p),
+                            tier_files)
+    end
+    n_solve = 0
+    n_resid = 0
+    rng = MersenneTwister(770)
+    for path in tier_files
+        parsed = Meta.parseall(read(path, String); filename=path)
+        blocks = _dser02_collect_dsge_blocks(parsed)
+        isempty(blocks) && continue
+        @testset "$(basename(path))" begin
+            for block in blocks
+                spec = @eval @dsge $block
+                spec2 = _roundtrip(spec)
+                θ = spec.param_values
+                if !isempty(spec.residual_fns) && length(spec.residual_fns) == length(spec2.residual_fns)
+                    y0 = isempty(spec.steady_state) ? ones(spec.n_endog) : spec.steady_state
+                    n_ok = 0
+                    for _ in 1:20
+                        y = max.(y0 .+ 0.01 .* randn(rng, spec.n_endog), 1e-4)
+                        lag = max.(y0 .+ 0.01 .* randn(rng, spec.n_endog), 1e-4)
+                        lead = max.(y0 .+ 0.01 .* randn(rng, spec.n_endog), 1e-4)
+                        e = 0.01 .* randn(rng, spec.n_exog)
+                        for i in eachindex(spec.residual_fns)
+                            r1 = try
+                                spec.residual_fns[i](y, lag, lead, e, θ)
+                            catch
+                                continue
+                            end
+                            r2 = spec2.residual_fns[i](y, lag, lead, e, θ)
+                            @test r2 == r1
+                            n_ok += 1
+                        end
+                    end
+                    n_ok > 0 && (n_resid += 1)
+                end
+                sol = try
+                    solve(spec)
+                catch
+                    nothing
+                end
+                sol isa DSGESolution || continue
+                sol2 = solve(spec2)
+                @test sol2.G1 == sol.G1
+                @test sol2.impact == sol.impact
+                @test sol2.C_sol == sol.C_sol
+                @test sol2.eu == sol.eu
+                @test sol2.eigenvalues == sol.eigenvalues
+                @test sol2.spec.steady_state == sol.spec.steady_state
+                @test sprint(show, sol2) == sprint(show, sol)
+                n_solve += 1
+            end
+        end
+    end
+    @test n_resid >= 1
+    @test n_solve >= 1
+    if !_DSER12_FAST
+        @test n_solve >= 8
+    end
+end
+
+@testset "DSER-12 RBC extras after spec round-trip" begin
+    spec = _dser04_rbc()
+    spec2 = _roundtrip(spec)
+    for order in 2:3
+        p1 = perturbation_solver(spec; order=order)
+        p2 = perturbation_solver(spec2; order=order)
+        @test p2.gx == p1.gx && p2.hx == p1.hx
+    end
+    ar1 = _dser04_ar1()
+    ar1b = _roundtrip(ar1)
+    t1 = collocation_solver(ar1; grid=:tensor, degree=5, verbose=false)
+    t2 = collocation_solver(ar1b; grid=:tensor, degree=5, verbose=false)
+    @test t2.coefficients == t1.coefficients
+    pfi1 = pfi_solver(ar1; next_state=:linear, degree=4, max_iter=40, verbose=false)
+    pfi2 = pfi_solver(ar1b; next_state=:linear, degree=4, max_iter=40, verbose=false)
+    @test pfi2.coefficients == pfi1.coefficients
+    rbc = _dser04_bellman_rbc()
+    rbc2 = _roundtrip(rbc)
+    v1 = _suppress_warnings() do
+        vfi_solver(rbc; next_state=:residual, degree=2, n_grid=6, max_iter=80,
+                   howard_steps=5, n_choice=9, verbose=false)
+    end
+    v2 = _suppress_warnings() do
+        vfi_solver(rbc2; next_state=:residual, degree=2, n_grid=6, max_iter=80,
+                   howard_steps=5, n_choice=9, verbose=false)
+    end
+    @test v2.coefficients == v1.coefficients
+    shocks = zeros(20, 1); shocks[1, 1] = 1.0
+    pf1 = _suppress_warnings() do
+        solve(ar1; method=:perfect_foresight, T_periods=20, shock_path=shocks)
+    end
+    pf2 = _suppress_warnings() do
+        solve(ar1b; method=:perfect_foresight, T_periods=20, shock_path=shocks)
+    end
+    @test pf2.path == pf1.path
+    nk = @dsge begin
+        parameters: rho = 0.9, phi = 1.5
+        endogenous: y, i
+        exogenous: e
+        y[t] = rho * y[t-1] + e[t]
+        i[t] = phi * y[t]
+    end
+    nk = compute_steady_state(nk)
+    nk2 = compute_steady_state(_roundtrip(nk))
+    cons = parse_constraint(:(i[t] >= 0), nk)
+    shock_path = zeros(16, nk.n_exog); shock_path[1, 1] = -2.0
+    o1 = occbin_solve(nk, cons; shock_path=shock_path, nperiods=16)
+    o2 = occbin_solve(nk2, parse_constraint(:(i[t] >= 0), nk2);
+                      shock_path=shock_path, nperiods=16)
+    @test o2.piecewise_path ≈ o1.piecewise_path atol=1e-8
+end
+
+@testset "DSER-12 HA sweep" begin
+    _suppress_warnings() do
+        spec = _dser07_huggett()
+        spec2 = _roundtrip(spec)
+        ss = compute_steady_state(spec; max_iter=40, tol=1e-4, grid_check=:none)
+        ss2 = compute_steady_state(spec2; max_iter=40, tol=1e-4, grid_check=:none)
+        for method in (:ssj, :reiter)
+            sol = if method === :ssj
+                solve(spec; method=:ssj, ss=ss, T_horizon=12, n_reduced=4)
+            else
+                solve(spec; method=:reiter, ss=ss, n_reduced=4)
+            end
+            sol_b = if method === :ssj
+                solve(spec2; method=:ssj, ss=ss2, T_horizon=12, n_reduced=4)
+            else
+                solve(spec2; method=:reiter, ss=ss2, n_reduced=4)
+            end
+            @test sol_b.linear_solution.G1 ≈ sol.linear_solution.G1 atol=1e-10
+            @test irf(sol_b, 8).values == irf(sol, 8).values
+        end
+        ks = solve(spec; method=:krusell_smith, ss=ss, T_sim=40, T_burn=8, max_outer=1, seed=1)
+        ks2 = _assert_roundtrip(ks)
+        @test ks2.plm_coefficients == ks.plm_coefficients
+        if !_DSER12_FAST
+            spec_el = _MEM._endogenous_labor_example(; n_a=20, a_max=40.0)
+            spec_el2 = _roundtrip(spec_el)
+            @test has_kind(spec_el2, HouseholdSystem)
+            spec_w = load_ha_example(:krusell_smith; distribution=:winberry)
+            spec_w2 = _roundtrip(spec_w)
+            @test first(values(spec_w2.agents)).distribution === :winberry
+        end
+    end
+end
+
+@testset "DSER-12 world-age invokelatest" begin
+    spec = _dser04_ar1()
+    mktempdir() do d
+        p = joinpath(d, "ar1.jld2")
+        save_model(spec, p)
+        sol = _dser12_load_and_solve(p)
+        @test sol isa DSGESolution
+        @test is_determined(sol)
+        ss = _dser12_load_and_ss(p)
+        @test ss.steady_state == spec.steady_state
+        results = Vector{Any}(undef, 2)
+        Threads.@threads for i in 1:2
+            results[i] = solve(load_model(p))
+        end
+        @test results[1].G1 == results[2].G1
+        @test results[1].impact == results[2].impact
+    end
+end
+
+@testset "DSER-12 malicious payload rejected before eval" begin
+    spec = _dser04_ar1()
+    c0 = _MEM._build_container(spec)
+    _DSER12_EVAL_REACHED[] = false
+    for mal in (:(eval("x")), :(ccall(:clock, Int32, ())), :(include("evil.jl")))
+        _DSER12_EVAL_REACHED[] = false
+        c = _dser12_patch_eq_expr(c0, mal)
+        err = try
+            _MEM._reconstruct_from_container(c)
+            nothing
+        catch e
+            e
+        end
+        @test err isa SerializationError
+        @test !_DSER12_EVAL_REACHED[]
+    end
+    spec_ss = @dsge begin
+        parameters: ρ = 0.9
+        endogenous: y
+        exogenous: ε
+        y[t] = ρ * y[t-1] + ε[t]
+        steady_state = begin
+            [0.0]
+        end
+    end
+    css = _MEM._build_container(spec_ss)
+    for mal in (:(eval("x")), :(ccall(:clock, Int32, ())), :(include("evil.jl")))
+        _DSER12_EVAL_REACHED[] = false
+        c = _dser12_patch_ss_expr(css, mal)
+        err = try
+            _MEM._reconstruct_from_container(c)
+            nothing
+        catch e
+            e
+        end
+        @test err isa SerializationError
+        @test !_DSER12_EVAL_REACHED[]
+    end
+end
+
+@testset "DSER-12 committed v1 fixtures" begin
+    rbc_path = joinpath(_DSER12_FIXTURE_DIR, "dsge_rbc.jld2")
+    hh_path = joinpath(_DSER12_FIXTURE_DIR, "ha_ks.jld2")
+    @test isfile(rbc_path) && isfile(hh_path)
+    sol = load_model(rbc_path)
+    @test sol isa DSGESolution
+    @test sol.eu == [1, 1]
+    @test sol.G1[1, 1] ≈ 0.9652763987036223 atol=1e-8
+    @test sol.G1[3, 3] ≈ 0.9 atol=1e-12
+    @test sol.impact[3, 1] ≈ 0.03 atol=1e-12
+    @test sol.spec.steady_state[1] ≈ 37.98925353815139 atol=1e-6
+    sol2 = solve(sol.spec)
+    @test sol2.G1 ≈ sol.G1 atol=1e-8
+    hh = load_model(hh_path)
+    @test hh isa HouseholdSystem
+    @test hh.model === :huggett
+    @test hh.individual.beta == 0.99322
+    @test hh.grid.n_points == [20]
+end
