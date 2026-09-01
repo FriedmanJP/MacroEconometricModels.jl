@@ -49,8 +49,17 @@ end
 # ─────────────────────────────────────────────────────────────────────────────
 
 function _write_model_container(path::AbstractString, container; compress::Bool=false)
-    JLD2.jldopen(path, "w"; compress=compress) do f
-        f["container"] = container
+    try
+        JLD2.jldopen(path, "w"; compress=compress) do f
+            f["container"] = container
+        end
+    catch e
+        compress || rethrow()
+        msg = sprint(showerror, e)
+        occursin(r"compress|CodecZlib|Filter"i, msg) || rethrow()
+        throw(SerializationError(
+            "save_model(...; compress=true) failed ($msg). JLD2 compress= uses CodecZlib; " *
+            "check that a JLD2 0.4–0.6 build with CodecZlib is loaded."))
     end
     return path
 end
@@ -63,7 +72,7 @@ function _read_model_container(path::AbstractString)
 end
 
 """
-    save_model(model, path) -> path
+    save_model(model, path; compress::Bool=false) -> path
 
 Persist a fitted `model` — or a data container — to `path` in a versioned,
 self-describing container. Coverage spans every VAR/regression/panel/volatility/
@@ -82,15 +91,22 @@ public fields are stored; cached factorizations and state-space `H_inv` /
 `log_det_H` are dropped and recomputed on load, and DSGE `ModelSpec` residuals
 are recompiled from stored equations on load.
 
+`compress=true` forwards to `JLD2.jldopen(...; compress=true)` (CodecZlib).
+The default (`false`) writes an uncompressed file, byte-identical to previous
+releases. `load_model` reads both transparently. Posterior draws, simulation
+paths, and dense Jacobians typically shrink; a size table for DSGE objects
+lives in the persistence docs.
+
 ```julia
 m = estimate_var(Y, 2)
 save_model(m, "model.jld2")
+save_model(m, "model_z.jld2"; compress=true)
 m2 = load_model("model.jld2")   # identical public fields
 ```
 """
-function save_model(model, path::AbstractString)
+function save_model(model, path::AbstractString; compress::Bool=false)
     container = _build_container(model)
-    _write_model_container(String(path), container)
+    _write_model_container(String(path), container; compress=compress)
     return path
 end
 
