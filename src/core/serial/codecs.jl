@@ -125,8 +125,10 @@ end
 
 # A nested struct is captured like the top-level payload, plus a `__struct__`
 # tag so `_deser_field` can resolve its concrete type on the way back in.
+# Route through `_to_serializable` so type-specific extras (e.g. ModelSpec's
+# `had_ss_fn`) survive when the spec is nested in a solution.
 function _struct_to_dict(m)
-    d = _capture_fields(m)
+    d = _to_serializable(m)
     d["__struct__"] = String(nameof(typeof(m)))
     return d
 end
@@ -161,6 +163,18 @@ end
 
 # Inverse of `_ser_field`: rebuild manifests / covariance estimators / nested
 # structs from their tagged dicts; recurse into arrays/dicts of them.
+# JLD2 often returns `Vector{Any}` of a common concrete eltype; narrow so
+# typed fields (`Vector{OccBinConstraint{T}}`, `Vector{Vector{T}}`) construct.
+function _narrow_concrete(a::AbstractVector)
+    isempty(a) && return a
+    T0 = typeof(first(a))
+    T0 === Any && return a
+    for x in a
+        typeof(x) === T0 || return a
+    end
+    return Vector{T0}(a)
+end
+
 function _deser_field(x)
     if x isa AbstractDict
         haskey(x, "__expr__")        && return _deser_expr(x)
@@ -179,7 +193,8 @@ function _deser_field(x)
     end
     if x isa AbstractArray
         _is_plain_eltype(eltype(x)) && return x
-        return map(_deser_field, x)
+        mapped = map(_deser_field, x)
+        return mapped isa AbstractVector ? _narrow_concrete(mapped) : mapped
     end
     x isa Tuple && return map(_deser_field, x)
     return x

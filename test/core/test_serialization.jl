@@ -379,13 +379,14 @@ end
         @test length(_MEM._SERIALIZABLE_TYPES) >= 50
     end
 
-    @testset "DSGE-family carve-out: compiled-equation models are not yet supported" begin
-        # These transitively hold a DSGESpec whose residual_fns are compiled
-        # closures; they are deliberately absent from the registry (follow-up).
-        for name in ("DSGESolution", "BayesianDSGE", "HADSGESolution",
-                     "KrusellSmithSolution", "DSGEEstimation")
+    @testset "DSGE-family carve-out: Bayesian / HA results are not yet supported" begin
+        # RA solutions are registered (DSER-04). Bayesian DSGE, HA, and KS still
+        # hold distributions / household callables (DSER-05+).
+        for name in ("BayesianDSGE", "HADSGESolution", "KrusellSmithSolution")
             @test !haskey(_MEM._SERIALIZABLE_TYPES, name)
         end
+        @test haskey(_MEM._SERIALIZABLE_TYPES, "DSGESolution")
+        @test haskey(_MEM._SERIALIZABLE_TYPES, "DSGEEstimation")
     end
 end
 

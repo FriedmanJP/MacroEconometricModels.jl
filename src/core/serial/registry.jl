@@ -126,4 +126,18 @@ const _SERIALIZABLE_TYPES = Dict{String,Type}(
     "IREquation"                    => IREquation,
     "IRDecl"                        => IRDecl,
     "TimingInfo"                    => TimingInfo,
+    # ── DSER-04 representative-agent solutions ───────────────────────────────
+    "LinearDSGE"                    => LinearDSGE,
+    "DSGESolution"                  => DSGESolution,
+    "PerturbationSolution"          => PerturbationSolution,
+    "ProjectionSolution"            => ProjectionSolution,
+    "PerfectForesightPath"          => PerfectForesightPath,
+    "PrunedStateSpace"              => PrunedStateSpace,
+    "DeterminacyMap"                => DeterminacyMap,
+    "KalmanSmootherResult"          => KalmanSmootherResult,
+    "DSGEEstimation"                => DSGEEstimation,
+    "OccBinConstraint"              => OccBinConstraint,
+    "OccBinRegime"                  => OccBinRegime,
+    "OccBinSolution"                => OccBinSolution,
+    "OccBinIRF"                     => OccBinIRF,
 )

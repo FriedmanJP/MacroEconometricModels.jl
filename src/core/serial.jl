@@ -40,9 +40,11 @@
 # `ModelSpec` is registered: `residual_fns` are rebuilt from stored
 # `NamedEquation.expr` (AST allowlist + `Core.eval` + `invokelatest`). `ss_fn`
 # is rebuilt from a stored `:steady_state` IR declaration, or a `linear` zeros
-# closure; a programmatic closure warns once and drops. The rest of the DSGE /
-# HA / OLG / CT solution family (`DSGESolution`, `BayesianDSGE`,
-# `HADSGESolution`, …) is still follow-up.
+# closure; a programmatic closure warns once and drops. Representative-agent
+# solutions (`LinearDSGE`, `DSGESolution`, perturbation / projection / OccBin,
+# …) round-trip through the registry; cached `Factorization`s drop to `nothing`.
+# Bayesian / HA / OLG / CT results (`BayesianDSGE`, `HADSGESolution`, …) are
+# still follow-up.
 
 include("serial/registry.jl")
 include("serial/codecs.jl")

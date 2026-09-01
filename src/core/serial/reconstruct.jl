@@ -22,21 +22,38 @@ _deser_struct(d::AbstractDict) =
     _from_serializable(_resolve_ser_type(String(d["__struct__"])), d, SERIALIZATION_FORMAT_VERSION)
 
 # Infer a `T<:AbstractFloat` type parameter from the reconstructed field values
-# (the first float scalar/array wins). Returns `nothing` for non-float or
-# non-parametric types, in which case the un-parameterized constructor is used.
+# (the first float scalar/array wins). Recurses one-or-more levels into nested
+# arrays, tuples, and dict values so `DeterminacyMap.axes::Vector{Vector{T}}`
+# still yields `T`. Returns `nothing` for non-float or non-parametric types, in
+# which case the un-parameterized constructor is used.
+function _infer_float_from_value(a)
+    a isa AbstractFloat && return typeof(a)
+    if a isa AbstractArray
+        E = eltype(a)
+        E <: AbstractFloat && return E
+        E <: Complex{<:AbstractFloat} && return real(E)
+        for x in a
+            t = _infer_float_from_value(x)
+            t !== nothing && return t
+        end
+    elseif a isa Tuple    # e.g. PropensityScoreConfig.trimming::Tuple{T,T}
+        for t in a
+            r = _infer_float_from_value(t)
+            r !== nothing && return r
+        end
+    elseif a isa AbstractDict
+        for v in values(a)
+            r = _infer_float_from_value(v)
+            r !== nothing && return r
+        end
+    end
+    return nothing
+end
+
 function _infer_float_param(args)
     for a in args
-        a isa AbstractFloat && return typeof(a)
-        if a isa AbstractArray
-            E = eltype(a)
-            E <: AbstractFloat && return E
-            E <: Complex{<:AbstractFloat} && return real(E)
-        end
-        if a isa Tuple    # e.g. PropensityScoreConfig.trimming::Tuple{T,T}
-            for t in a
-                t isa AbstractFloat && return typeof(t)
-            end
-        end
+        t = _infer_float_from_value(a)
+        t !== nothing && return t
     end
     return nothing
 end
@@ -172,6 +189,39 @@ function _from_serializable(::Type{ModelSpec}, p::AbstractDict, ver::Int)
 end
 function _from_serializable(::Type{<:ModelSpec}, p::AbstractDict, ver::Int)
     _from_serializable_modelspec(p, ver)
+end
+
+# 18 positionals + keyword accuracy / value-function fields. A generic
+# 23-positional call misses the inner constructor.
+function _from_serializable(::Type{ProjectionSolution}, p::AbstractDict, ::Int)
+    coef = _deser_field(p["coefficients"])
+    T = eltype(coef)
+    T <: AbstractFloat || (T = Float64)
+    ProjectionSolution{T}(
+        coef,
+        _deser_field(p["state_bounds"]),
+        _as_symbol(p["grid_type"]),
+        Int(p["degree"]),
+        _deser_field(p["collocation_nodes"]),
+        T(p["residual_norm"]),
+        Int(p["n_basis"]),
+        Matrix{Int}(_deser_field(p["multi_indices"])),
+        _as_symbol(p["quadrature"]),
+        _deser_field(p["spec"]),
+        _deser_field(p["linear"]),
+        _deser_field(p["impact"]),
+        _deser_field(p["steady_state"]),
+        Vector{Int}(_deser_field(p["state_indices"])),
+        Vector{Int}(_deser_field(p["control_indices"])),
+        Bool(p["converged"]),
+        Int(p["iterations"]),
+        _as_symbol(p["method"]);
+        euler_error=T(p["euler_error"]),
+        smolyak_levels=Matrix{Int}(_deser_field(p["smolyak_levels"])),
+        refinements=Int(p["refinements"]),
+        value_fn=_deser_field(p["value_fn"]),
+        value_coefficients=_deser_field(p["value_coefficients"]),
+    )
 end
 
 function _to_serializable(m::ModelSpec)
