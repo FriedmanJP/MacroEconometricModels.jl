@@ -433,6 +433,8 @@ The sampler accepts 200 draws from 975 attempts (``20.5\%``) and the impact resp
 | `restrictions` | `SVARRestrictions` | Imposed restrictions |
 | `ess` | `T` | Kish effective sample size of the importance weights |
 | `ess_fraction` | `T` | ``\mathrm{ESS} / n_{\text{draws}}`` |
+| `elapsed` | `T` | Wall-clock seconds of the accept/weight loop |
+| `weights_elapsed` | `T` | Summed seconds spent on the volume-element weight |
 
 ### Rank and order conditions
 

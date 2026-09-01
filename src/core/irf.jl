@@ -19,7 +19,7 @@ using LinearAlgebra, Statistics
 
 Reduced-form moving-average coefficients `Φ_0 = I, Φ_1, …, Φ_{H-1}` of a VAR(p).
 """
-function ma_coefficients(B::AbstractMatrix{T}, n::Int, p::Int, H::Int) where {T<:AbstractFloat}
+function ma_coefficients(B::AbstractMatrix{T}, n::Int, p::Int, H::Int) where {T}
     H >= 1 || throw(ArgumentError("H must be positive, got $H"))
     A = extract_ar_coefficients(B, n, p)
     Phi = [zeros(T, n, n) for _ in 1:H]

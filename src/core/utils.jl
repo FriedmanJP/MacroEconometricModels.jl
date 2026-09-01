@@ -141,6 +141,21 @@ function robust_inv(A::AbstractMatrix{T}; silent::Bool=false,
 end
 robust_inv(A::AbstractMatrix; kwargs...) = robust_inv(float.(A); kwargs...)
 
+# ForwardDiff.Dual is not AbstractFloat; `float.(Dual)` would strip partials.
+function robust_inv(A::AbstractMatrix{D}; silent::Bool=false,
+                    kwargs...) where {D<:ForwardDiff.Dual}
+    try
+        return inv(A)
+    catch e
+        if e isa LinearAlgebra.SingularException || e isa LinearAlgebra.LAPACKException
+            silent || @warn "Matrix singular. Using pseudo-inverse." maxlog=3
+            return pinv(A)
+        else
+            rethrow(e)
+        end
+    end
+end
+
 """
     safe_cholesky_jitter(A; rel_jitter=1e-10, silent=false) -> (L, applied_jitter)
 
@@ -182,6 +197,11 @@ to suppress the warning."""
 function safe_cholesky(A::AbstractMatrix{T}; jitter::T=T(1e-10), silent::Bool=false) where {T<:AbstractFloat}
     L, _ = safe_cholesky_jitter(A; rel_jitter=jitter, silent=silent)
     return L
+end
+
+function safe_cholesky(A::AbstractMatrix{D}; jitter=nothing,
+                       silent::Bool=false, kwargs...) where {D<:ForwardDiff.Dual}
+    cholesky(Symmetric(A)).L
 end
 
 """Log determinant with eigenvalue fallback for numerical issues."""

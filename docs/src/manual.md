@@ -532,6 +532,8 @@ The acceptance rate is 26.2%: roughly one draw in four satisfies both sign condi
 | `restrictions` | `SVARRestrictions` | The imposed restrictions |
 | `ess` | `T` | Kish effective sample size of the importance weights |
 | `ess_fraction` | `T` | ``\mathrm{ESS} / n_{\text{draws}}`` |
+| `elapsed` | `T` | Wall-clock seconds of the accept/weight loop |
+| `weights_elapsed` | `T` | Summed seconds spent on the volume-element weight |
 
 `ess_fraction` is exactly 1 under pure sign restrictions (uniform weights) and falls below 1 once zero restrictions make the weights uneven. A value near zero means a handful of draws carry the posterior, so the credible bands rest on far fewer effective draws than `n_draws` implies; see [Structural Identification](@ref structural_identification_page).
 

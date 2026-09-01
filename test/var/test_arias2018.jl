@@ -22,6 +22,7 @@ using LinearAlgebra
 using Statistics
 using Random
 using Logging
+using ForwardDiff
 using MacroEconometricModels
 
 if !@isdefined(FAST)
@@ -1368,7 +1369,7 @@ end
         ff_h = MacroEconometricModels._build_ff_h(setup, restrictions, n, m_size, p, max_h)
 
         # Jacobian should be finite and well-conditioned
-        J = MacroEconometricModels._numerical_jacobian(ff_h, structpara)
+        J = ForwardDiff.jacobian(ff_h, structpara)
         @test all(isfinite, J)
         @test !any(isnan, J)
 
@@ -1977,10 +1978,10 @@ end
         x_b = rand(rng_b)
         @test x_a == x_b
         rng_c = MersenneTwister(7532)
-        identify_arias(model, r, 3; n_draws=1, n_rotations=5, rng=rng_c)
+        identify_arias(model, r, 3; n_draws=1, n_rotations=50, rng=rng_c)
         y_c = rand(rng_c)
         rng_d = MersenneTwister(7532)
-        identify_arias(model, r, 3; n_draws=1, n_rotations=5, rng=rng_d, check_id=false)
+        identify_arias(model, r, 3; n_draws=1, n_rotations=50, rng=rng_d, check_id=false)
         y_d = rand(rng_d)
         @test y_c == y_d
     end
@@ -2241,6 +2242,108 @@ end
     @test hd isa BayesianHistoricalDecomposition
     shk = structural_shocks(model, a)
     @test size(shk.median, 2) == n
+end
+
+# ==========================================================================
+# SID-27: parallel draws + ForwardDiff volume (#756)
+# ==========================================================================
+
+@testset "SID-27 parallel Arias + ForwardDiff volume" begin
+    MEM = MacroEconometricModels
+
+    @testset "FD vs AD weights 1e-6 relative (pinned freeze-FD)" begin
+        Random.seed!(756)
+        Y = randn(150, 3)
+        model = estimate_var(Y, 1)
+        restrictions = SVARRestrictions(3;
+            zeros=[zero_restriction(2, 1), zero_restriction(3, 1)],
+            signs=[sign_restriction(1, 1, :positive)])
+        rng = MersenneTwister(75601)
+        Phi = MEM._compute_ma_coefficients(model, 10)
+        L = safe_cholesky(model.Sigma)
+        setup = MEM._AriasSVARSetup(restrictions, 3, Float64; rng=MersenneTwister(75602))
+        expected = [5.625826471818652, 6.295853309302748, 5.65500156044205]
+        ws_ad = Float64[]
+        ws_fd = Float64[]
+        for _ in 1:8
+            Q = MEM._draw_Q_with_zero_restrictions(restrictions, Phi, L; rng=rng, B=model.B)
+            irf = MEM._compute_irf_for_Q(model, Q, Phi, L, 10)
+            irf[1, 1, 1] > 0 || continue
+            abs(irf[1, 2, 1]) < 1e-8 || continue
+            abs(irf[1, 3, 1]) < 1e-8 || continue
+            w_ad = MEM._compute_importance_weight(Q, model, setup, restrictions, Phi, L)
+            w_fd = MEM._compute_importance_weight_fd(Q, model, setup, restrictions, Phi, L)
+            push!(ws_ad, w_ad)
+            push!(ws_fd, w_fd)
+            length(ws_ad) >= 3 && break
+        end
+        @test length(ws_ad) == 3
+        @test length(ws_fd) == 3
+        for i in 1:3
+            @test isapprox(ws_ad[i], expected[i]; rtol=1e-6)
+            @test isapprox(ws_fd[i], expected[i]; rtol=1e-6)
+            @test isapprox(ws_ad[i], ws_fd[i]; rtol=1e-6)
+        end
+        ess_ad = MEM._effective_sample_size(ws_ad)
+        ess_fd = MEM._effective_sample_size(ws_fd)
+        @test isapprox(ess_ad, ess_fd; rtol=1e-6)
+    end
+
+    @testset "pre-seed slots are thread-count invariant" begin
+        Random.seed!(75611)
+        Y = randn(120, 3)
+        model = estimate_var(Y, 1)
+        restrictions = SVARRestrictions(3;
+            zeros=[zero_restriction(2, 1)],
+            signs=[sign_restriction(1, 1, :positive)])
+        r1 = identify_arias(model, restrictions, 5; n_draws=8, n_rotations=40,
+                            rng=MersenneTwister(75611))
+        r2 = identify_arias(model, restrictions, 5; n_draws=8, n_rotations=40,
+                            rng=MersenneTwister(75611))
+        @test length(r1.Q_draws) == length(r2.Q_draws)
+        @test length(r1.Q_draws) >= 1
+        @test r1.weights ≈ r2.weights
+        @test r1.irf_draws ≈ r2.irf_draws
+        @test r1.acceptance_rate ≈ r2.acceptance_rate
+        for (Q1, Q2) in zip(r1.Q_draws, r2.Q_draws)
+            @test Q1 ≈ Q2
+        end
+        # Same seed across JULIA_NUM_THREADS=1 and 4 (both process runs assert this).
+        @test length(r1.Q_draws) == 8
+        @test r1.weights ≈ [0.15369157799459005, 0.14247141590604046,
+                            0.08240690589136107, 0.1431603957439471,
+                            0.05807894473782229, 0.273090941426279,
+                            0.08970632473744966, 0.0573934935625104]
+        @test r1.acceptance_rate ≈ 0.5714285714285714
+        @test r1.Q_draws[1][1, :] ≈ [0.45633379356648396, 0.8531138425505317, 0.2528957107146899]
+        @test r1.elapsed >= 0
+        @test r1.weights_elapsed >= 0
+        @test r1.weights_elapsed > 0  # zeros → volume-element weight
+    end
+
+    @testset "elapsed fields and back-compat constructors" begin
+        restr = SVARRestrictions(2)
+        ad = AriasSVARResult{Float64}([randn(2, 2) for _ in 1:4], randn(4, 3, 2, 2),
+                                      fill(0.25, 4), 0.5, restr)
+        @test ad.elapsed == 0
+        @test ad.weights_elapsed == 0
+        ad2 = AriasSVARResult{Float64}([randn(2, 2)], randn(1, 3, 2, 2), [1.0], 1.0, restr,
+                                       1.0, 1.0, ["y1", "y2"], 0, 0)
+        @test ad2.elapsed == 0
+        @test ad2.weights_elapsed == 0
+        ad3 = AriasSVARResult{Float64}([randn(2, 2)], randn(1, 3, 2, 2), [1.0], 1.0, restr,
+                                       1.0, 1.0, ["y1", "y2"], 0, 0, 0.12, 0.04)
+        @test ad3.elapsed ≈ 0.12
+        @test ad3.weights_elapsed ≈ 0.04
+
+        signs = SVARRestrictions(2; signs=[sign_restriction(1, 1, :positive)])
+        Y = randn(MersenneTwister(75612), 80, 2)
+        model = estimate_var(Y, 1)
+        rsign = identify_arias(model, signs, 4; n_draws=4, n_rotations=20,
+                               rng=MersenneTwister(75612))
+        @test rsign.elapsed >= 0
+        @test rsign.weights_elapsed == 0  # pure signs skip the volume element
+    end
 end
 
 _tprint("Arias et al. (2018) tests completed.")

@@ -315,7 +315,7 @@ _aplus_row(lag::Int, variable::Int, n::Int) = lag <= 0 ? 1 : 1 + (lag - 1) * n +
 _aplus_row(r::AplusZeroRestriction, n::Int) = _aplus_row(r.lag, r.variable, n)
 _aplus_row(r::AplusSignRestriction, n::Int) = _aplus_row(r.lag, r.variable, n)
 
-function _C1_from_B(B::AbstractMatrix{T}, n::Int, p::Int) where {T<:AbstractFloat}
+function _C1_from_B(B::AbstractMatrix{T}, n::Int, p::Int) where {T}
     A_sum = sum(extract_ar_coefficients(B, n, p))
     robust_inv(Matrix{T}(I(n) - A_sum); silent=true)
 end
@@ -329,7 +329,9 @@ weights are uniform and `ess_fraction == 1`; with zero or narrative restrictions
 a fraction far below 1 means a handful of draws carry most of the posterior mass
 and the weighted summaries rest on far fewer effective draws than `n_draws`
 suggests. `n_narrative_sims` is the Monte Carlo size used for ADRR ``ω̂``
-(0 when no narrative restriction is present).
+(0 when no narrative restriction is present). `elapsed` is wall-clock seconds of
+the accept/weight loop; `weights_elapsed` is the summed time in the volume
+element (zero when `compute_weights=false` or there are no zeros).
 """
 struct AriasSVARResult{T<:AbstractFloat}
     Q_draws::Vector{Matrix{T}}
@@ -342,6 +344,8 @@ struct AriasSVARResult{T<:AbstractFloat}
     varnames::Vector{String}
     n_degenerate_weights::Int
     n_narrative_sims::Int
+    elapsed::T
+    weights_elapsed::T
 end
 
 # Back-compatible arities: pre-ESS / pre-varnames / pre-degenerate construction sites.
@@ -373,6 +377,14 @@ function AriasSVARResult{T}(Q_draws, irf_draws, weights, acceptance_rate,
                             n_degenerate_weights::Int) where {T<:AbstractFloat}
     AriasSVARResult{T}(Q_draws, irf_draws, weights, acceptance_rate, restrictions,
                        ess, ess_fraction, varnames, n_degenerate_weights, 0)
+end
+
+function AriasSVARResult{T}(Q_draws, irf_draws, weights, acceptance_rate,
+                            restrictions, ess, ess_fraction, varnames,
+                            n_degenerate_weights::Int, n_narrative_sims::Int) where {T<:AbstractFloat}
+    AriasSVARResult{T}(Q_draws, irf_draws, weights, acceptance_rate, restrictions,
+                       ess, ess_fraction, varnames, n_degenerate_weights, n_narrative_sims,
+                       zero(T), zero(T))
 end
 
 """
@@ -792,18 +804,25 @@ end
 Log volume element of f restricted to manifold {h(x)=0}.
 Computes 0.5 * log|det(N'*N)| where N = Df * nullspace(Dh).
 """
-function _log_volume_element(f, x::AbstractVector{T}, h) where {T}
-    Df = _numerical_jacobian(f, x)
-    Dh = _numerical_jacobian(h, x)
-
-    # Null space of Dh (tangent space of constraint manifold)
+function _volume_from_jacobians(Df::AbstractMatrix, Dh::AbstractMatrix, ::Type{T}) where {T}
     Ns = nullspace(Dh)
     size(Ns, 2) == 0 && return T(-Inf)
-
-    # Project Jacobian onto tangent space
-    N = Df * Ns
-    G = N' * N
+    Nproj = Df * Ns
+    G = Nproj' * Nproj
     T(0.5) * _log_abs_det(G)
+end
+
+function _log_volume_element(f, x::AbstractVector{T}, h) where {T}
+    Df = ForwardDiff.jacobian(f, x)
+    Dh = ForwardDiff.jacobian(h, x)
+    _volume_from_jacobians(Df, Dh, T)
+end
+
+"""Central-difference volume element (FD pin / SID-27 comparison)."""
+function _log_volume_element_fd(f, x::AbstractVector{T}, h) where {T}
+    Df = _numerical_jacobian(f, x)
+    Dh = _numerical_jacobian(h, x)
+    _volume_from_jacobians(Df, Dh, T)
 end
 
 """Pack (A0, Aplus) into a single vector."""
@@ -819,8 +838,9 @@ end
 # --- Structural ↔ Reduced-Form Mappings ---
 
 """Structural → reduced-form: (A0, Aplus) → (B, Σ)."""
-function _struct_to_rf(A0::Matrix{T}, Aplus::Matrix{T}) where {T}
-    A0_inv = robust_inv(A0)
+function _struct_to_rf(A0::AbstractMatrix, Aplus::AbstractMatrix)
+    A0m = A0 isa Matrix ? A0 : Matrix(A0)
+    A0_inv = robust_inv(A0m)
     B = Aplus * A0_inv
     Sigma = A0_inv * A0_inv'
     (B, Sigma)
@@ -1208,34 +1228,48 @@ end
 Build closure ff_h: structural_vec → (B, Σ, w) for volume element computation.
 Maps structural parameters to reduced-form parameters + sphere coordinates.
 
-Captures reference QR sign patterns on first evaluation to ensure the function
-is smooth for numerical differentiation. Without this, the QR sign correction
-`R_diag[col] < 0 → flip` creates discontinuities that make finite-difference
-Jacobians unreliable (Issue #37).
+QR column signs use `R_diag < 0` on the current input. For `ForwardDiff.Dual`
+that comparison is on the primal value, so the sign pattern is frozen at the
+seed point (the Issue #37 FD discontinuity does not arise under AD). The
+closure is stateless and thread-safe.
 """
-function _build_ff_h(setup::_AriasSVARSetup{T}, restrictions::SVARRestrictions,
-                     n::Int, m::Int, p::Int, max_h::Int) where {T}
+function _build_ff_h(setup::_AriasSVARSetup, restrictions::SVARRestrictions,
+                     n::Int, m::Int, p::Int, max_h::Int)
+    function ff_h(x::AbstractVector)
+        A0, Aplus = _unpack_structural(x, n, m)
+        A0m = A0 isa Matrix ? A0 : Matrix(A0)
+        Aplusm = Aplus isa Matrix ? Aplus : Matrix(Aplus)
+        B_rf, Sigma_rf = _struct_to_rf(A0m, Aplusm)
+
+        L_rf = safe_cholesky(Sigma_rf)
+        Q_rf = Matrix(L_rf') * A0m
+
+        Phi_rf = ma_coefficients(B_rf isa Matrix ? B_rf : Matrix(B_rf), n, p, max_h + 1)
+
+        w_rf = _Q_to_spheres(Q_rf, setup, restrictions, Phi_rf, L_rf; B=B_rf)
+
+        vcat(vec(B_rf), _vech(Sigma_rf), w_rf)
+    end
+    ff_h
+end
+
+"""FD companion of `_build_ff_h` with QR signs frozen at the first (primal) call."""
+function _build_ff_h_fd(setup::_AriasSVARSetup{T}, restrictions::SVARRestrictions,
+                        n::Int, m::Int, p::Int, max_h::Int) where {T}
     ref_signs_storage = Ref{Union{Nothing, Vector{Vector{Int}}}}(nothing)
     first_call = Ref(true)
-
     function ff_h(x::AbstractVector)
         A0, Aplus = _unpack_structural(x, n, m)
         B_rf, Sigma_rf = _struct_to_rf(Matrix{T}(A0), Matrix{T}(Aplus))
-
         L_rf = safe_cholesky(Sigma_rf)
         Q_rf = Matrix{T}(L_rf') * A0
-
         Phi_rf = ma_coefficients(Matrix{T}(B_rf), n, p, max_h + 1)
-
         if first_call[]
-            # Record the sign pattern at the reference point
             ref_signs_storage[] = _compute_qr_signs(Q_rf, setup, restrictions, Phi_rf, L_rf; B=B_rf)
             first_call[] = false
         end
-
         w_rf = _Q_to_spheres(Q_rf, setup, restrictions, Phi_rf, L_rf;
                               ref_signs=ref_signs_storage[], B=B_rf)
-
         vcat(vec(B_rf), _vech(Sigma_rf), w_rf)
     end
     ff_h
@@ -1259,15 +1293,16 @@ function _build_zero_restrictions_fn(restrictions::SVARRestrictions, n::Int, m::
     isempty(restrictions.zeros) && return x -> T[]
 
     function zero_fn(x::AbstractVector)
+        Tx = eltype(x)
         A0, Aplus = _unpack_structural(x, n, m)
-        A0m = Matrix{T}(A0)
-        Aplusm = Matrix{T}(Aplus)
+        A0m = A0 isa Matrix ? A0 : Matrix(A0)
+        Aplusm = Aplus isa Matrix ? Aplus : Matrix(Aplus)
         A0_inv = robust_inv(A0m)
         B_rf = Aplusm * A0_inv
 
         Phi = ma_coefficients(B_rf, n, p, max(max_h + 1, 1))
 
-        vals = Vector{T}(undef, length(restrictions.zeros))
+        vals = Vector{Tx}(undef, length(restrictions.zeros))
         for (idx, zr) in enumerate(restrictions.zeros)
             vals[idx] = _zero_residual(zr, Phi, A0m, Aplusm, A0_inv, B_rf, n, p)
         end
@@ -1304,26 +1339,20 @@ where f_h is the structural-to-reduced-form map and ff_h includes sphere coordin
 """
 function _compute_importance_weight(Q::Matrix{T}, model::VARModel{T},
                                      setup::_AriasSVARSetup{T}, restrictions::SVARRestrictions,
-                                     Phi::Vector{Matrix{T}}, L::LowerTriangular{T,Matrix{T}}) where {T}
+                                     Phi::Vector{Matrix{T}}, L::LowerTriangular{T,Matrix{T}},
+                                     ff_h, zero_fn) where {T}
     isempty(restrictions.zeros) && return one(T)
 
     n = nvars(model)
-    p = model.p
     m = size(model.B, 1)  # 1 + n*p
 
-    # Structural params for this Q
     A0, Aplus = _rf_to_struct(model.B, L, Q)
     structpara = _pack_structural(A0, Aplus)
-
-    max_h = isempty(restrictions.zeros) ? 0 : maximum(_restriction_horizon(zr) for zr in restrictions.zeros)
 
     # Analytical numerator: log|v_e(f_h)|
     # From Proposition 4: n(n+1)/2 * log(2) - (2n + m + 1) * log|det(A0)|
     log_ve_fh = T(n * (n + 1)) / 2 * log(T(2)) - T(2n + m + 1) * _log_abs_det(A0)
 
-    # Numerical denominator: log|v_e(ff_h | Z=0)|
-    ff_h = _build_ff_h(setup, restrictions, n, m, p, max_h)
-    zero_fn = _build_zero_restrictions_fn(restrictions, n, m, p, max_h, T)
     log_ve_gfhZ = _log_volume_element(ff_h, structpara, zero_fn)
 
     # Guard against numerical issues: caller skips non-finite log-weights
@@ -1331,6 +1360,39 @@ function _compute_importance_weight(Q::Matrix{T}, model::VARModel{T},
     log_w = log_ve_fh - log_ve_gfhZ
     isfinite(log_w) || return T(NaN)
 
+    exp(log_w)
+end
+
+function _compute_importance_weight(Q::Matrix{T}, model::VARModel{T},
+                                     setup::_AriasSVARSetup{T}, restrictions::SVARRestrictions,
+                                     Phi::Vector{Matrix{T}}, L::LowerTriangular{T,Matrix{T}}) where {T}
+    isempty(restrictions.zeros) && return one(T)
+    n = nvars(model)
+    p = model.p
+    m = size(model.B, 1)
+    max_h = maximum(_restriction_horizon(zr) for zr in restrictions.zeros)
+    ff_h = _build_ff_h(setup, restrictions, n, m, p, max_h)
+    zero_fn = _build_zero_restrictions_fn(restrictions, n, m, p, max_h, T)
+    _compute_importance_weight(Q, model, setup, restrictions, Phi, L, ff_h, zero_fn)
+end
+
+"""FD importance weight (SID-27 pin): freeze-QR finite differences, new closures."""
+function _compute_importance_weight_fd(Q::Matrix{T}, model::VARModel{T},
+                                       setup::_AriasSVARSetup{T}, restrictions::SVARRestrictions,
+                                       Phi::Vector{Matrix{T}}, L::LowerTriangular{T,Matrix{T}}) where {T}
+    isempty(restrictions.zeros) && return one(T)
+    n = nvars(model)
+    p = model.p
+    m = size(model.B, 1)
+    max_h = maximum(_restriction_horizon(zr) for zr in restrictions.zeros)
+    A0, Aplus = _rf_to_struct(model.B, L, Q)
+    structpara = _pack_structural(A0, Aplus)
+    log_ve_fh = T(n * (n + 1)) / 2 * log(T(2)) - T(2n + m + 1) * _log_abs_det(A0)
+    ff_h = _build_ff_h_fd(setup, restrictions, n, m, p, max_h)
+    zero_fn = _build_zero_restrictions_fn(restrictions, n, m, p, max_h, T)
+    log_ve_gfhZ = _log_volume_element_fd(ff_h, structpara, zero_fn)
+    log_w = log_ve_fh - log_ve_gfhZ
+    isfinite(log_w) || return T(NaN)
     exp(log_w)
 end
 
@@ -1374,6 +1436,12 @@ reported as degenerate and a warning is emitted.
 - `n_narrative_sims::Int=1000`: Monte Carlo draws of ``ε* ~ N(0,I)`` used to
   estimate ADRR ``ω̂`` when narrative restrictions are present. The importance
   weight is multiplied by ``1/ω̂``. Unused (and stored as 0) when they are absent.
+
+Draws are assigned to pre-seeded slots (`seeds = rand(rng, UInt64, n_draws)`,
+per-slot `MersenneTwister`) and filled with `Threads.@threads`, so the accepted
+rotations are invariant to `JULIA_NUM_THREADS`. The result stores wall-clock
+`elapsed` for the accept loop and `weights_elapsed` as the summed time spent
+in the volume-element weight.
 """
 function identify_arias(model::VARModel{T}, restrictions::SVARRestrictions, horizon::Int;
                         n_draws::Int=1000, n_rotations::Int=1000,
@@ -1400,15 +1468,11 @@ function identify_arias(model::VARModel{T}, restrictions::SVARRestrictions, hori
         isempty(restrictions.signs) ? 0 : maximum(_restriction_horizon(sr) for sr in restrictions.signs) + 1)
 
     Phi, L = _compute_ma_coefficients(model, max_h), safe_cholesky(model.Sigma)
-    Q_draws, irf_draws, weights = Matrix{T}[], Array{T,3}[], T[]
     has_zeros = !isempty(restrictions.zeros)
     has_fevd = any(s -> s isa FEVDShareRestriction, restrictions.signs)
     needs_struct = any(s -> s isa Union{A0SignRestriction, AplusSignRestriction}, restrictions.signs)
     C1 = any(z -> z isa LongRunZeroRestriction, restrictions.zeros) ?
          first(_long_run_multiplier(model.B, model.Sigma, n, model.p)) : nothing
-    n_attempts = 0
-    n_degenerate = 0
-    last_err = nothing
 
     # Create setup once for zero restrictions (W matrices fixed for all draws),
     # or reuse a caller-supplied setup (Bayesian pooling).
@@ -1416,68 +1480,119 @@ function identify_arias(model::VARModel{T}, restrictions::SVARRestrictions, hori
         setup = _AriasSVARSetup(restrictions, n, T; rng=rng)
     end
 
-    while length(Q_draws) < n_draws && n_attempts < n_draws * n_rotations
-        n_attempts += 1
-        try
-            if has_zeros
-                Q = _draw_Q_with_zero_restrictions(restrictions, Phi, L; rng=rng,
-                                                   B=model.B, C1=C1)
-            else
-                Q = haar_orthogonal(n, T; rng=rng)
-            end
-            irf_full = _compute_irf_for_Q(model, Q, Phi, L, max_h)
-            A0 = Aplus = nothing
-            fevd_props = nothing
-            if needs_struct
-                A0, Aplus = _rf_to_struct(model.B, L, Q)
-            end
-            if has_fevd
-                fevd_props = _compute_fevd(irf_full, n, size(irf_full, 1))[2]
-            end
-            (has_zeros && !_check_zero_restrictions(irf_full, restrictions)) && continue
-            !_check_rejections(restrictions, irf_full, A0, Aplus, fevd_props) && continue
-            if has_narrative
-                shocks = compute_structural_shocks(model, Q)
-                !_narrative_restrictions_hold(restrictions, irf_full, shocks) && continue
-            end
-            irf = irf_full[1:horizon, :, :]
+    max_h_zeros = isempty(restrictions.zeros) ? 0 :
+                  maximum(_restriction_horizon(zr) for zr in restrictions.zeros)
+    mrow = size(model.B, 1)
+    ff_h = has_zeros && compute_weights ?
+           _build_ff_h(setup, restrictions, n, mrow, model.p, max_h_zeros) : nothing
+    zero_fn = has_zeros && compute_weights ?
+              _build_zero_restrictions_fn(restrictions, n, mrow, model.p, max_h_zeros, T) : nothing
 
-            w = if has_zeros && compute_weights
-                _compute_importance_weight(Q, model, setup, restrictions, Phi, L)
-            else
-                one(T)
-            end
-            if has_narrative
-                ω = _omega_hat(restrictions, irf_full, n, T; n_sims=n_nar_sims, rng=rng)
-                if !(ω > 0) || !isfinite(ω)
-                    n_degenerate += 1
+    seeds = rand(rng, UInt64, n_draws)
+    Q_store = Vector{Matrix{T}}(undef, n_draws)
+    irf_store = Vector{Array{T,3}}(undef, n_draws)
+    w_store = fill(T(NaN), n_draws)
+    accepted = fill(false, n_draws)
+    n_att_slot = zeros(Int, n_draws)
+    n_degen_slot = zeros(Int, n_draws)
+    last_err_slot = Vector{Any}(nothing, n_draws)
+    fatal_slot = Vector{Any}(nothing, n_draws)
+    wtime_slot = zeros(Float64, n_draws)
+
+    t0 = time()
+    Threads.@threads for d in 1:n_draws
+        local_rng = Random.MersenneTwister(seeds[d])
+        try
+            for _rot in 1:n_rotations
+                n_att_slot[d] += 1
+                try
+                    Q = if has_zeros
+                        _draw_Q_with_zero_restrictions(restrictions, Phi, L; rng=local_rng,
+                                                       B=model.B, C1=C1)
+                    else
+                        haar_orthogonal(n, T; rng=local_rng)
+                    end
+                    irf_full = _compute_irf_for_Q(model, Q, Phi, L, max_h)
+                    A0 = Aplus = nothing
+                    fevd_props = nothing
+                    if needs_struct
+                        A0, Aplus = _rf_to_struct(model.B, L, Q)
+                    end
+                    if has_fevd
+                        fevd_props = _compute_fevd(irf_full, n, size(irf_full, 1))[2]
+                    end
+                    (has_zeros && !_check_zero_restrictions(irf_full, restrictions)) && continue
+                    !_check_rejections(restrictions, irf_full, A0, Aplus, fevd_props) && continue
+                    if has_narrative
+                        shocks = compute_structural_shocks(model, Q)
+                        !_narrative_restrictions_hold(restrictions, irf_full, shocks) && continue
+                    end
+                    irf = irf_full[1:horizon, :, :]
+
+                    w = one(T)
+                    if has_zeros && compute_weights
+                        tw = time()
+                        w = _compute_importance_weight(Q, model, setup, restrictions, Phi, L,
+                                                       ff_h, zero_fn)
+                        wtime_slot[d] += time() - tw
+                    end
+                    if has_narrative
+                        ω = _omega_hat(restrictions, irf_full, n, T; n_sims=n_nar_sims, rng=local_rng)
+                        if !(ω > 0) || !isfinite(ω)
+                            n_degen_slot[d] += 1
+                            continue
+                        end
+                        w *= 1 / ω
+                    end
+                    if !isfinite(w)
+                        n_degen_slot[d] += 1
+                        continue
+                    end
+
+                    Q_store[d] = Q
+                    irf_store[d] = irf
+                    w_store[d] = w
+                    accepted[d] = true
+                    break
+                catch err
+                    _is_rejectable_draw_error(err) || rethrow(err)
+                    last_err_slot[d] = err
                     continue
                 end
-                w *= 1 / ω
             end
-            if !isfinite(w)
-                n_degenerate += 1
-                continue
-            end
-
-            push!(Q_draws, Q)
-            push!(irf_draws, irf)
-            push!(weights, w)
         catch err
-            _is_rejectable_draw_error(err) || rethrow(err)
-            last_err = err
-            continue
+            fatal_slot[d] = err
+        end
+    end
+    elapsed = T(time() - t0)
+    weights_elapsed = T(sum(wtime_slot))
+
+    for d in 1:n_draws
+        fatal_slot[d] === nothing && continue
+        throw(fatal_slot[d])
+    end
+
+    kept = findall(accepted)
+    n_attempts = sum(n_att_slot)
+    n_degenerate = sum(n_degen_slot)
+    last_err = nothing
+    for d in n_draws:-1:1
+        if last_err_slot[d] !== nothing
+            last_err = last_err_slot[d]
+            break
         end
     end
 
-    isempty(Q_draws) && throw(IdentificationError("No valid identification after $n_attempts attempts" *
+    isempty(kept) && throw(IdentificationError("No valid identification after $n_attempts attempts" *
         (last_err === nothing ? "" :
          "; last rejectable failure: $(typeof(last_err)): $(sprint(showerror, last_err))")))
 
-    n_acc = length(Q_draws)
+    n_acc = length(kept)
+    Q_draws = Q_store[kept]
+    weights = w_store[kept]
     irf_array = zeros(T, n_acc, horizon, n, n)
-    for (i, irf) in enumerate(irf_draws)
-        irf_array[i, :, :, :] = irf
+    for (i, idx) in enumerate(kept)
+        irf_array[i, :, :, :] = irf_store[idx]
     end
 
     n_degenerate > 0 && @warn "identify_arias: $n_degenerate draw(s) skipped because the importance log-weight was non-finite"
@@ -1490,7 +1605,8 @@ function identify_arias(model::VARModel{T}, restrictions::SVARRestrictions, hori
     w_out = normalize_weights ? weights ./ sum(weights) : weights
     vnames = copy(model.varnames)
     AriasSVARResult{T}(Q_draws, irf_array, w_out, T(n_acc / n_attempts), restrictions,
-                       ess, ess_frac, vnames, n_degenerate, n_nar_sims)
+                       ess, ess_frac, vnames, n_degenerate, n_nar_sims,
+                       elapsed, weights_elapsed)
 end
 
 # --- Bayesian Integration ---
