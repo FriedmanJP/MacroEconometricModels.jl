@@ -17,6 +17,7 @@ Octave can't run.
 - `compare.jl` — `read_ref(name)` + `compare(label, ours, theirs; rtol, atol)`.
 - `checks_*.jl` — per-module Julia comparison drivers (run our code, compare to `_out/`).
 - `sdfm_ref/` — committed FGLR Cholesky fixture (`X`, `K`, `B0`, 12-step IRF). `checks_sdfm.jl` compares `estimate_structural_dfm` within `1e-6`. Octave `ref_sdfm.m` documents the algebra; tests do not require Octave.
+- `identification_ref/` — committed BVAR_ identification fixtures (`Y`, `z`, proxy `b1`, long-run impact, sign-set 16/84 bounds). `checks_identification.jl` compares without requiring Octave.
 - `_data/`, `_out/` — generated, gitignored.
 
 ## How to run
@@ -62,4 +63,45 @@ harness — guarded by `MACRO_ORACLE_TESTS` and NOT wired into `runtests.jl`.
 
 ```bash
 MACRO_ORACLE_TESTS=1 "$JULIA" --project=. test/oracle/checks_ha_ssj.jl
+```
+
+## Identification (`checks_identification.jl`)
+
+Cross-checks public SVAR identification against three external stacks. Numerical
+compare is skipped when the binary or fixture is absent (never required in CI).
+
+**BVAR_ (Ferroni & Canova, Octave 11.1.0 / MATLAB R2023b fallback).** Path:
+`/Users/chung/Downloads/BVAR_-master-2` (`bvartools/iresponse_proxy.m`,
+`iresponse_longrun.m`, `iresponse_sign.m`). Committed fixtures live in
+`identification_ref/` (`Y`, `z`, `proxy_b1`, `long_run_Q`, sign-set 16/84
+impact bounds). Tests compare Julia to those CSVs; Octave is not required at
+test time.
+
+- Proxy point estimates (`identify_proxy` `normalize=:unit_variance` vs
+  `iresponse_proxy` `b1`): `rtol=1e-6`.
+- Blanchard-Quah long-run impact (`chol(Σ) * identify_long_run` vs
+  `iresponse_longrun` `Q`): `rtol=1e-6` after column sign alignment.
+- Sign-set 16/84 impact bounds for shock 1: MC tolerance (`rtol=0.25`,
+  `atol=0.20`) because Haar draws differ across RNGs.
+
+Regenerate fixtures from the repository root:
+
+```bash
+octave --no-gui test/oracle/octave/ref_identification.m
+"$JULIA" --project=. test/oracle/checks_identification.jl
+```
+
+**Uhlig MATLAB penalty (Mountford & Uhlig 2009).** Point identification when the
+admissible set is a singleton. No toolbox is bundled. Set `UHLIG_MATLAB` to the
+replication `.m` (the `penaltyfunction` driver from the JAE 2009 supplement) to
+enable a live dump; otherwise the harness prints SKIP. MATLAB is never required
+in CI.
+
+**R `vars::SVAR` (Pfaff) AB-model.** Just-identified recursive pattern should
+match `estimate_svar(model, recursive_pattern(n))` / Cholesky `A \ B`. Needs
+`Rscript` and CRAN `vars`. The harness skips when `requireNamespace("vars")`
+is false.
+
+```bash
+"$JULIA" --project=. test/oracle/checks_identification.jl
 ```

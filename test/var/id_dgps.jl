@@ -35,13 +35,25 @@ function _draw_structural_shocks(n::Int, nobs::Int, shocks::Symbol, rng)
 end
 
 function simulate_svar(B0::AbstractMatrix{T}, A::AbstractVector{<:AbstractMatrix};
-                       Tobs::Int=200, shocks=:gaussian, rng=Random.default_rng()) where {T<:AbstractFloat}
+                       Tobs::Int=200, shocks=:gaussian, shock_ar=nothing,
+                       rng=Random.default_rng()) where {T<:AbstractFloat}
     n = size(B0, 1)
     p = length(A)
-    ε = Matrix{T}(_draw_structural_shocks(n, Tobs + p + 50, shocks, rng))
+    ntot = Tobs + p + 50
+    ε = Matrix{T}(_draw_structural_shocks(n, ntot, shocks, rng))
+    if shock_ar !== nothing
+        ρ = Vector{T}(shock_ar)
+        length(ρ) == n || throw(ArgumentError("shock_ar must have length n=$n"))
+        η = copy(ε)
+        ε[1, :] = η[1, :]
+        for t in 2:ntot
+            ε[t, :] = ρ .* ε[t - 1, :] .+ η[t, :]
+        end
+        ε ./= std(ε; dims=1)
+    end
     u = ε * B0'
-    Y = zeros(T, Tobs + p + 50, n)
-    for t in (p + 1):(size(Y, 1))
+    Y = zeros(T, ntot, n)
+    for t in (p + 1):ntot
         yt = u[t, :]
         for lag in 1:p
             yt = yt + A[lag] * Y[t - lag, :]
@@ -146,4 +158,58 @@ function simulate_common_trend_svec(; Tobs::Int=1000, rng=Random.default_rng())
         Y[t, :] = Y[t-1, :] .+ alpha * (beta' * Y[t-1, :]) .+ u[t, :]
     end
     return Y[(end - Tobs + 1):end, :], ε[(end - Tobs + 1):end, :], B0, Xi
+end
+
+"""GARCH(1,1) structural shocks with shock-specific (ω, α, β).
+
+Default parameters give distinct persistence so Normandin–Phaneuf identification
+has a unique rotation. Returns `(Y, ε)`.
+"""
+function simulate_garch_svar(B0::AbstractMatrix{T}, A::AbstractVector{<:AbstractMatrix};
+                             Tobs::Int=1500,
+                             omega::AbstractVector=T[0.05, 0.10],
+                             alpha::AbstractVector=T[0.10, 0.20],
+                             beta::AbstractVector=T[0.85, 0.70],
+                             rng=Random.default_rng()) where {T<:AbstractFloat}
+    n = size(B0, 1)
+    length(omega) == n && length(alpha) == n && length(beta) == n ||
+        throw(ArgumentError("GARCH parameter vectors must have length n=$n"))
+    p = length(A)
+    burn = 100
+    ntot = Tobs + p + burn
+    h = ones(T, ntot, n)
+    z = randn(rng, T, ntot, n)
+    ε = zeros(T, ntot, n)
+    ω = Vector{T}(omega)
+    α = Vector{T}(alpha)
+    β = Vector{T}(beta)
+    @inbounds for t in 2:ntot
+        for j in 1:n
+            h[t, j] = ω[j] + α[j] * ε[t - 1, j]^2 + β[j] * h[t - 1, j]
+            ε[t, j] = sqrt(h[t, j]) * z[t, j]
+        end
+    end
+    u = ε * B0'
+    Y = zeros(T, ntot, n)
+    for t in (p + 1):ntot
+        yt = u[t, :]
+        for lag in 1:p
+            yt = yt + A[lag] * Y[t - lag, :]
+        end
+        Y[t, :] = yt
+    end
+    return Y[(end - Tobs + 1):end, :], ε[(end - Tobs + 1):end, :]
+end
+
+"""News-shock / max-share DGP: shock 1 is highly persistent.
+
+`identify_max_share` on variable 1 over a long horizon recovers `q ≈ e₁`.
+Returns `(Y, ε, B0, q_true)`.
+"""
+function simulate_news_maxshare(; Tobs::Int=2000, rng=Random.default_rng())
+    n = 3
+    B0 = Matrix{Float64}(I, n, n)
+    A = [Diagonal([0.85, 0.30, 0.15])]
+    Y, ε = simulate_svar(B0, A; Tobs=Tobs, rng=rng)
+    return Y, ε, B0, [1.0, 0.0, 0.0]
 end

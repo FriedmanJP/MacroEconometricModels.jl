@@ -192,9 +192,10 @@ end
 
     @testset "large-T estimate recovers the target shock" begin
         rng = MersenneTwister(74112)
-        Y, _ = simulate_svar(B_true, A; Tobs=FAST ? 800 : 2000, rng=rng)
+        Y, _, _, q_news = simulate_news_maxshare(; Tobs=FAST ? 800 : 2000, rng=rng)
         m = estimate_var(Y, 1)
         r = identify_max_share(m; target=1, horizons=0:20)
+        @test abs(dot(r.q, q_news)) > 0.99
         @test abs(dot(r.q, q_true)) > 0.99
     end
 
@@ -296,5 +297,211 @@ end
             @test 0.88 <= cover <= 1.0
         end
     end
+end
+
+# =============================================================================
+# SID-26 remaining entry points (#755)
+# =============================================================================
+
+if !@isdefined(_pd)
+    _pd(Bhat, Btrue) = MacroEconometricModels._procrustes_distance(Matrix{Float64}(Bhat),
+                                                                  Matrix{Float64}(Btrue))
+    _Bhat(model, Q) = Matrix(cholesky_factor(model)) * Q
+end
+if !@isdefined(_B_rec)
+    const _B_rec = [1.0 0.0; 0.4 1.0]
+    const _B_up = [1.0 0.4; 0.0 1.0]
+    const _B_pos = [1.0 0.3; 0.5 1.0]
+    const _A2 = [0.5 * Matrix{Float64}(I, 2, 2)]
+end
+
+@testset "identify_cholesky recovery" begin
+    Tobs = FAST ? 400 : 2000
+    rng = MersenneTwister(75501)
+    Y, _ = simulate_svar(_B_rec, _A2; Tobs=Tobs, rng=rng)
+    m = estimate_var(Y, 1)
+    Q = identify_cholesky(m)
+    @test Q ≈ I(2) atol = 1e-12
+    @test _pd(_Bhat(m, Q), _B_rec) < 0.15
+    @test MacroEconometricModels.compute_Q(m, :cholesky) ≈ Q
+end
+
+@testset "identify_long_run recovery" begin
+    Tobs = FAST ? 400 : 2000
+    rng = MersenneTwister(2)
+    Y, _ = simulate_svar(_B_rec, _A2; Tobs=Tobs, rng=rng)
+    m = estimate_var(Y, 1)
+    Q = identify_long_run(m)
+    @test _pd(_Bhat(m, Q), _B_rec) < 0.15
+    @test MacroEconometricModels.compute_Q(m, :long_run) ≈ Q
+end
+
+@testset "identify_sign recovery" begin
+    Tobs = FAST ? 250 : 800
+    draws = FAST ? 300 : 1500
+    rng = MersenneTwister(75503)
+    Y, _ = simulate_svar(_B_pos, _A2; Tobs=Tobs, rng=rng)
+    m = estimate_var(Y, 1)
+    chk = irf -> irf[1, 1, 1] > 0 && irf[1, 2, 1] > 0
+    s = identify_sign(m, 4, chk; max_draws=draws, store_all=true, rng=copy(rng))
+    @test s.n_accepted > 0
+    dmin = minimum(_pd(_Bhat(m, Q), _B_pos) for Q in s.Q_draws)
+    @test dmin < 0.20
+    for Q in s.Q_draws
+        ir = compute_irf(m, Q, 4)
+        @test ir[1, 1, 1] > 0 && ir[1, 2, 1] > 0
+    end
+end
+
+@testset "identify_arias recovery" begin
+    Tobs = FAST ? 300 : 800
+    rng = MersenneTwister(75504)
+    Y, _ = simulate_svar(_B_up, _A2; Tobs=Tobs, rng=rng)
+    m = estimate_var(Y, 1)
+    restr = SVARRestrictions(2;
+        zeros=[zero_restriction(2, 1)],
+        signs=[sign_restriction(1, 1, :positive)])
+    ar = identify_arias(m, restr, 4;
+                        n_draws=FAST ? 20 : 80,
+                        n_rotations=FAST ? 40 : 120,
+                        rng=MersenneTwister(755041))
+    @test length(ar.Q_draws) > 0
+    mt = median_target(ar)
+    @test _pd(_Bhat(m, mt.Q), _B_up) < 0.12
+    @test abs(compute_irf(m, mt.Q, 2)[1, 2, 1]) < 1e-8
+end
+
+@testset "identify_uhlig recovery" begin
+    Tobs = FAST ? 300 : 800
+    rng = MersenneTwister(75505)
+    Y, _ = simulate_svar(_B_up, _A2; Tobs=Tobs, rng=rng)
+    m = estimate_var(Y, 1)
+    restr = SVARRestrictions(2;
+        zeros=[zero_restriction(2, 1)],
+        signs=[sign_restriction(1, 1, :positive)])
+    u = identify_uhlig(m, restr, 4;
+                       n_starts=FAST ? 4 : 12,
+                       n_refine=FAST ? 1 : 3,
+                       max_iter_coarse=FAST ? 40 : 120,
+                       max_iter_fine=FAST ? 80 : 300,
+                       rng=MersenneTwister(755051))
+    @test abs(u.irf[1, 2, 1]) < 1e-8
+    @test _pd(_Bhat(m, u.Q), _B_up) < 0.15
+end
+
+@testset "identify_fastica recovery" begin
+    Tobs = FAST ? 400 : 1500
+    rng = MersenneTwister(4)
+    Y, _ = simulate_svar(_B_rec, _A2; Tobs=Tobs, shocks=:t, rng=rng)
+    r = identify_fastica(estimate_var(Y, 1); rng=MersenneTwister(4))
+    @test _pd(r.B0, _B_rec) < 0.20
+end
+
+@testset "identify_jade recovery" begin
+    Tobs = FAST ? 2000 : 3000
+    rng = MersenneTwister(13)
+    Y, _ = simulate_svar(_B_rec, _A2; Tobs=Tobs, shocks=:t, rng=rng)
+    r = identify_jade(estimate_var(Y, 1))
+    @test _pd(r.B0, _B_rec) < 0.20
+end
+
+@testset "identify_sobi recovery" begin
+    # SOBI needs serial correlation in the residuals. A VAR(1) mean-filter
+    # absorbs AR shocks, so feed known AR residuals as model.U.
+    Tobs = FAST ? 800 : 2000
+    rng = MersenneTwister(14)
+    n = 2
+    eta = randn(rng, Tobs, n)
+    epsm = zeros(Tobs, n)
+    ρ = [0.8, -0.5]
+    epsm[1, :] = eta[1, :]
+    for t in 2:Tobs
+        epsm[t, :] = ρ .* epsm[t - 1, :] .+ eta[t, :]
+    end
+    epsm ./= std(epsm; dims=1)
+    U = epsm * _B_rec'
+    Sigma = cov(U)
+    Y = zeros(Tobs + 1, n)
+    Bcoef = zeros(1 + n, n)
+    m = VARModel(Y, 1, Bcoef, U, Sigma, 0.0, 0.0, 0.0)
+    r = identify_sobi(m; lags=1:8)
+    @test _pd(r.B0, _B_rec) < 0.10
+end
+
+@testset "identify_dcov recovery" begin
+    Tobs = 500
+    rng = MersenneTwister(21)
+    Y, _ = simulate_svar(_B_rec, _A2; Tobs=Tobs, shocks=:t, rng=rng)
+    r = identify_dcov(estimate_var(Y, 1); max_iter=FAST ? 40 : 80)
+    @test _pd(r.B0, _B_rec) < 0.25
+end
+
+@testset "identify_hsic recovery" begin
+    Tobs = 300
+    rng = MersenneTwister(16)
+    Y, _ = simulate_svar(_B_rec, _A2; Tobs=Tobs, shocks=:t, rng=rng)
+    r = identify_hsic(estimate_var(Y, 1); max_iter=FAST ? 60 : 120, rng=MersenneTwister(16))
+    @test _pd(r.B0, _B_rec) < 0.30
+end
+
+@testset "identify_student_t recovery" begin
+    Tobs = FAST ? 600 : 1500
+    rng = MersenneTwister(6)
+    Y, _ = simulate_svar(_B_rec, _A2; Tobs=Tobs, shocks=:t, rng=rng)
+    r = identify_student_t(estimate_var(Y, 1); max_iter=FAST ? 80 : 200)
+    @test _pd(r.B0, _B_rec) < 0.20
+end
+
+@testset "identify_mixture_normal recovery" begin
+    Tobs = FAST ? 800 : 1500
+    rng = MersenneTwister(60)
+    Y, _ = simulate_svar(_B_rec, _A2; Tobs=Tobs, shocks=:t, rng=rng)
+    r = identify_mixture_normal(estimate_var(Y, 1); max_iter=FAST ? 80 : 150)
+    @test _pd(r.B0, _B_rec) < 0.20
+end
+
+@testset "identify_pml recovery" begin
+    Tobs = FAST ? 600 : 1500
+    rng = MersenneTwister(30)
+    Y, _ = simulate_svar(_B_rec, _A2; Tobs=Tobs, shocks=:t, rng=rng)
+    r = identify_pml(estimate_var(Y, 1); max_iter=FAST ? 80 : 200)
+    @test _pd(r.B0, _B_rec) < 0.20
+end
+
+@testset "identify_skew_normal recovery" begin
+    Tobs = FAST ? 600 : 1500
+    rng = MersenneTwister(30)
+    Y, _ = simulate_svar(_B_rec, _A2; Tobs=Tobs, shocks=:skewnormal, rng=rng)
+    r = identify_skew_normal(estimate_var(Y, 1); max_iter=FAST ? 80 : 200)
+    @test _pd(r.B0, _B_rec) < 0.20
+end
+
+@testset "identify_markov_switching recovery" begin
+    if !FAST
+        rng = MersenneTwister(53)
+        Y, _ = simulate_two_regime(_B_rec, _A2, [0.4, 4.0]; Tobs=1500, split=0.5, rng=rng)
+        r = identify_markov_switching(estimate_var(Y, 1); n_regimes=2, n_starts=3,
+                                      max_iter=40, rng=MersenneTwister(53))
+        @test _pd(r.B0, _B_rec) < 0.15
+    end
+end
+
+@testset "identify_garch recovery" begin
+    if !FAST
+        rng = MersenneTwister(50)
+        Y, _ = simulate_garch_svar(_B_rec, _A2; Tobs=1500, rng=rng)
+        r = identify_garch(estimate_var(Y, 1); max_iter=80)
+        @test _pd(r.B0, _B_rec) < 0.15
+    end
+end
+
+@testset "estimate_svar recovery" begin
+    Tobs = FAST ? 300 : 1500
+    rng = MersenneTwister(75517)
+    Y, _ = simulate_svar(_B_rec, _A2; Tobs=Tobs, rng=rng)
+    m = estimate_var(Y, 1)
+    s = estimate_svar(m, recursive_pattern(2); rng=MersenneTwister(755171))
+    @test _pd(s.A \ s.B, _B_rec) < 0.15
+    @test s.Q ≈ identify_cholesky(m) atol = 1e-6
 end
 
