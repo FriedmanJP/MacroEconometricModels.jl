@@ -175,6 +175,13 @@ const _SERIALIZABLE_TYPES = Dict{String,Type}(
     "MincerZarnowitzResult"             => MincerZarnowitzResult,
     "ForecastEncompassingResult"        => ForecastEncompassingResult,
     "ForecastCombination"               => ForecastCombination,
+    # ── nowcast models / news (RSER-05 / #778) ───────────────────────────────
+    "NowcastDFM"                        => NowcastDFM,
+    "NowcastBVAR"                       => NowcastBVAR,
+    "NowcastBridge"                     => NowcastBridge,
+    "NowcastResult"                     => NowcastResult,
+    "NowcastNews"                       => NowcastNews,
+    "NowcastForecast"                   => NowcastForecast,
 )
 
 # Exported concrete structs that are not top-level `save_model` targets, with a
@@ -280,13 +287,6 @@ const _SERIALIZATION_EXCLUDED = Dict{String,String}(
     "IntermediaryTransition" => "pending DSER-10",
     "KhanThomasSteadyState" => "pending DSER-10",
     "KhanThomasTransition" => "pending DSER-10",
-    # pending RSER-05
-    "NowcastBVAR" => "pending RSER-05",
-    "NowcastBridge" => "pending RSER-05",
-    "NowcastDFM" => "pending RSER-05",
-    "NowcastForecast" => "pending RSER-05",
-    "NowcastNews" => "pending RSER-05",
-    "NowcastResult" => "pending RSER-05",
     # pending RSER-06
     "AndersonRubinCI" => "pending RSER-06",
     "AndersonRubinTest" => "pending RSER-06",

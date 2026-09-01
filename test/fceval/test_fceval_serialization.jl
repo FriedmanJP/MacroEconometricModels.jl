@@ -23,9 +23,6 @@ const _RSER04 = ("VARForecast", "BVARForecast", "VECMForecast", "ARIMAForecast",
             @test !haskey(_MEM._SERIALIZATION_EXCLUDED, name)
         end
         @test !any(v == "pending RSER-04" for v in values(_MEM._SERIALIZATION_EXCLUDED))
-        @test haskey(_MEM._SERIALIZATION_EXCLUDED, "NowcastForecast")
-        @test _MEM._SERIALIZATION_EXCLUDED["NowcastForecast"] == "pending RSER-05"
-        @test !haskey(_MEM._SERIALIZABLE_TYPES, "NowcastForecast")
     end
 
     t = collect(1.0:40.0)
