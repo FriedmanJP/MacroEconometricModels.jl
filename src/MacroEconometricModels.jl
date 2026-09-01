@@ -76,6 +76,7 @@ import ForwardDiff
 import NLopt
 import NonlinearSolve
 import Optim
+import JLD2
 import JuMP
 import Ipopt
 using Logging
@@ -621,8 +622,8 @@ include("summary.jl")
 include("core/tables.jl")
 
 # Versioned result serialization (#347): dispatches on every result type, so it
-# loads after they are all defined (JLD2 disk backend is a weak-dep extension).
-include("core/serialization.jl")
+# loads after they are all defined.
+include("core/serial.jl")
 
 # Data conversion and estimation dispatch wrappers (after all estimation functions)
 include("data/convert.jl")

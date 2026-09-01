@@ -6,7 +6,7 @@
 
 using MacroEconometricModels
 using Test
-using JLD2                # exercises the weak-dependency disk backend
+using JLD2                # exercises the JLD2 disk backend
 using Random
 using LinearAlgebra
 using DataFrames
@@ -387,6 +387,34 @@ end
             @test !haskey(_MEM._SERIALIZABLE_TYPES, name)
         end
     end
+end
+
+@testset "DSER-01 leaf codecs" begin
+    ser, deser = _MEM._ser_field, _MEM._deser_field
+
+    ex = :(a + log(b) ^ 2)
+    @test deser(ser(ex)) == Base.remove_linenums!(ex)
+    qn = Expr(:call, :+, QuoteNode(:x), 1)
+    @test deser(ser(qn)) == qn
+    nt = (midpoints=(points=:a, max=1.5), n=3)
+    @test deser(ser(nt)) == nt
+    pr = :K => identity
+    pr2 = deser(ser(pr))
+    @test pr2 isa Pair && pr2.first === :K
+
+    @test deser(ser(_MEM._ks_budget)) === _MEM._ks_budget
+    @test ser(x -> x) === nothing   # anonymous; owning type decides (DSER-06)
+
+    using SparseArrays
+    S = sprand(MersenneTwister(759), 8, 8, 0.3)
+    S2 = deser(ser(S))
+    @test S2 isa SparseMatrixCSC && Array(S2) == Array(S)
+
+    F = lu(randn(MersenneTwister(760), 4, 4))
+    @test ser(F) === nothing
+
+    d = _MEM._build_container(estimate_var(randn(MersenneTwister(1), 40, 2), 1))
+    _MEM._assert_plain_payload(d)
 end
 
 # =============================================================================
