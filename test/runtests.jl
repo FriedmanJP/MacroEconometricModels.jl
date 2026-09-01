@@ -11,7 +11,7 @@ using LinearAlgebra
 const FAST = get(ENV, "MACRO_FAST_TESTS", "") == "1"
 # Ubuntu 1.10 Optim-v1 cell: important numerical tests only (see _numerical_groups).
 const NUMERICAL = get(ENV, "MACRO_NUMERICAL_CI", "") == "1"
-# CI job split: "dsge" | "empirical" | "" (local full suite).
+# CI job split: "dsge" | "empirical" | "serialization" | "" (local full suite).
 const SUITE = get(ENV, "MACRO_CI_SUITE", "")
 
 # Shared test data generators (available to all test files)
@@ -34,7 +34,6 @@ const TEST_GROUPS = [
         "core/test_tables.jl",
         "core/test_logging.jl",
         "core/test_repro.jl",
-        "core/test_serialization.jl",
         "core/test_utils.jl",
         "core/test_edge_cases.jl",
         "core/test_examples.jl",
@@ -312,6 +311,12 @@ const TEST_GROUPS = [
         "counterfactual/test_show.jl",
         "counterfactual/test_plotting.jl",
         "counterfactual/test_oracles.jl",
+    ]),
+    # Serialization suite (`MACRO_CI_SUITE=serialization`): round-trip files
+    # pulled out of the empirical groups so they do not share a process with
+    # display-backend tests or sit on the 60 min job timeout.
+    ("Serialization" => [
+        "core/test_serialization.jl",
     ]),
 ]
 
