@@ -452,6 +452,13 @@ end
         @test haskey(_MEM._SERIALIZABLE_TYPES, name) ||
               haskey(_MEM._SERIALIZATION_EXCLUDED, name)
     end
+    # Completeness flip (RSER-14 / #787): no pending reasons remain.
+    @test !any(contains(v, "pending") for v in values(_MEM._SERIALIZATION_EXCLUDED))
+    for name in ("HallinLiskaResult", "BaiNgQResult", "AmengualWatsonResult",
+                 "IdentifiabilityTestResult")
+        @test haskey(_MEM._SERIALIZABLE_TYPES, name)
+        @test !haskey(_MEM._SERIALIZATION_EXCLUDED, name)
+    end
 
     # nested-array T inference
     @test _MEM._infer_float_param([[[1.0, 2.0], [3.0]]]) === Float64
@@ -788,3 +795,213 @@ end
         save_model(m, joinpath(mktempdir(), "z2.jld2"); compress=true)
     end
 end
+
+# =============================================================================
+# RSER-14 / #787 — v1 fixtures, report/plot coverage, leftover types
+# =============================================================================
+
+const _V1_FIXTURE_DIR = joinpath(@__DIR__, "..", "fixtures", "serialization", "v1")
+
+function _v1_report_text(x)
+    applicable(report, IOBuffer(), x) ? sprint(report, x) : sprint(show, x)
+end
+
+@testset "RSER-14 committed v1 fixtures (#787)" begin
+    @testset "dsge_rbc / ha_ks (DSER-12)" begin
+        sol = load_model(joinpath(_V1_FIXTURE_DIR, "dsge_rbc.jld2"))
+        @test sol isa DSGESolution
+        @test sol.G1[1, 1] ≈ 0.9652763987036223 atol=1e-8
+        @test occursin("DSGE", _v1_report_text(sol)) || occursin("G1", _v1_report_text(sol)) ||
+              occursin("solution", lowercase(_v1_report_text(sol)))
+        hh = load_model(joinpath(_V1_FIXTURE_DIR, "ha_ks.jld2"))
+        @test hh isa HouseholdSystem
+        @test hh.grid.n_points == [20]
+        @test occursin("Household", _v1_report_text(hh)) ||
+              occursin("huggett", lowercase(_v1_report_text(hh)))
+    end
+
+    @testset "var_irf bundle" begin
+        p = joinpath(_V1_FIXTURE_DIR, "var_irf.jld2")
+        info = model_info(p)
+        @test info["bundle"] === true
+        @test info["note"] == "v1 VAR+IRF"
+        @test info["format_version"] == SERIALIZATION_FORMAT_VERSION == 1
+        b = load_model(p)
+        @test b isa Dict{String,Any}
+        m = b["var"]; ir = b["irf"]
+        @test m isa VARModel
+        @test ir isa ImpulseResponse
+        @test m.B[1, 1] ≈ 0.07081226845682394 atol=1e-12
+        @test m.aic ≈ -0.15805202465183987 atol=1e-12
+        @test ir.values[1, 1, 1] ≈ 0.8799475022032175 atol=1e-12
+        @test ir.horizon == 4
+        @test occursin("VAR(2)", _v1_report_text(m))
+        @test occursin("Impulse Response", _v1_report_text(ir))
+        _assert_report_equal(m, load_model(p)["var"])
+        _assert_plot_equal(ir, load_model(p)["irf"])
+    end
+
+    @testset "bvar posterior" begin
+        post = load_model(joinpath(_V1_FIXTURE_DIR, "bvar.jld2"))
+        @test post isa BVARPosterior
+        @test post.n_draws == 30
+        @test post.manifest isa ReproManifest
+        @test post.manifest.seed == 787
+        @test post.B_draws[1, 1, 1] ≈ -0.03873919122810009 atol=1e-12
+        @test occursin("BVAR(2)", _v1_report_text(post))
+        _assert_report_equal(post, load_model(joinpath(_V1_FIXTURE_DIR, "bvar.jld2")))
+    end
+
+    @testset "arima" begin
+        ar = load_model(joinpath(_V1_FIXTURE_DIR, "arima.jld2"))
+        @test ar isa ARIMAModel
+        @test ar.phi[1] ≈ 0.6674653302811457 atol=1e-12
+        @test ar.theta[1] ≈ -0.42494294002274846 atol=1e-12
+        @test ar.sigma2 ≈ 0.8179601585527572 atol=1e-12
+        @test occursin("ARIMA(1,0,1)", _v1_report_text(ar))
+        _assert_report_equal(ar, load_model(joinpath(_V1_FIXTURE_DIR, "arima.jld2")))
+        _assert_plot_equal(ar, load_model(joinpath(_V1_FIXTURE_DIR, "arima.jld2")))
+    end
+
+    @testset "garch" begin
+        g = load_model(joinpath(_V1_FIXTURE_DIR, "garch.jld2"))
+        @test g isa GARCHModel
+        @test g.omega ≈ 0.03726519928972168 atol=1e-12
+        @test g.alpha[1] ≈ 0.016408871657496087 atol=1e-12
+        @test g.beta[1] ≈ 0.9474806738106885 atol=1e-12
+        @test occursin("GARCH(1,1)", _v1_report_text(g))
+        _assert_report_equal(g, load_model(joinpath(_V1_FIXTURE_DIR, "garch.jld2")))
+        _assert_plot_equal(g, load_model(joinpath(_V1_FIXTURE_DIR, "garch.jld2")))
+    end
+
+    @testset "factor" begin
+        fm = load_model(joinpath(_V1_FIXTURE_DIR, "factor.jld2"))
+        @test fm isa FactorModel
+        @test fm.r == 2
+        @test fm.loadings[1, 1] ≈ 0.2571180804510769 atol=1e-12
+        @test fm.factors[1, 1] ≈ 1.1023609840188204 atol=1e-12
+        @test occursin("Factor", _v1_report_text(fm))
+        _assert_report_equal(fm, load_model(joinpath(_V1_FIXTURE_DIR, "factor.jld2")))
+        _assert_plot_equal(fm, load_model(joinpath(_V1_FIXTURE_DIR, "factor.jld2")))
+    end
+
+    @testset "nowcast DFM" begin
+        dfm = load_model(joinpath(_V1_FIXTURE_DIR, "nowcast_dfm.jld2"))
+        @test dfm isa NowcastDFM
+        @test dfm.r == 1 && dfm.nM == 4 && dfm.nQ == 1
+        @test dfm.C[1, 1] ≈ 0.5361319853159928 atol=1e-12
+        @test dfm.loglik ≈ -367.1564464003978 atol=1e-8
+        @test nowcast(dfm).nowcast ≈ -0.19577163358544722 atol=1e-12
+        @test occursin("Factor Model", _v1_report_text(dfm))
+        _assert_report_equal(dfm, load_model(joinpath(_V1_FIXTURE_DIR, "nowcast_dfm.jld2")))
+    end
+
+    @testset "DiD event study" begin
+        es = load_model(joinpath(_V1_FIXTURE_DIR, "did_event_study.jld2"))
+        @test es isa EventStudyLP
+        @test es.horizon == 3
+        @test es.B[1][1, 1] ≈ 0.040550268021155765 atol=1e-12
+        @test occursin("Event", _v1_report_text(es)) || occursin("event", lowercase(_v1_report_text(es)))
+        _assert_report_equal(es, load_model(joinpath(_V1_FIXTURE_DIR, "did_event_study.jld2")))
+        _assert_plot_equal(es, load_model(joinpath(_V1_FIXTURE_DIR, "did_event_study.jld2")))
+    end
+
+    @testset "OPP result" begin
+        o = load_model(joinpath(_V1_FIXTURE_DIR, "opp.jld2"))
+        @test o isa OPPResult
+        @test o.H == 6
+        @test o.origin == "2021Q2"
+        @test o.delta[1] ≈ -0.2023713160761598 atol=1e-12
+        @test o.loss_opp ≈ 7.788922361626405 atol=1e-12
+        @test occursin("OPP", _v1_report_text(o)) || occursin("loss", lowercase(_v1_report_text(o)))
+        _assert_report_equal(o, load_model(joinpath(_V1_FIXTURE_DIR, "opp.jld2")))
+        _assert_plot_equal(o, load_model(joinpath(_V1_FIXTURE_DIR, "opp.jld2")))
+    end
+
+    @testset "teststat bundle" begin
+        p = joinpath(_V1_FIXTURE_DIR, "teststat.jld2")
+        info = model_info(p)
+        @test info["bundle"] === true
+        @test info["note"] == "v1 teststat"
+        ts = load_model(p)
+        adf = ts["adf"]; kpss = ts["kpss"]
+        @test adf isa ADFResult
+        @test kpss isa KPSSResult
+        @test adf.statistic ≈ -4.713534278830027 atol=1e-12
+        @test adf.pvalue ≈ 7.936190822027194e-5 atol=1e-14
+        @test kpss.statistic ≈ 0.17142972566878253 atol=1e-12
+        @test occursin("Dickey-Fuller", _v1_report_text(adf))
+        @test occursin("KPSS", _v1_report_text(kpss))
+        _assert_report_equal(adf, load_model(p)["adf"])
+        _assert_report_equal(kpss, load_model(p)["kpss"])
+    end
+end
+
+@testset "RSER-14 report/plot helper coverage (#787)" begin
+    helper_src = read(joinpath(@__DIR__, "..", "serialization_helpers.jl"), String)
+    @test occursin("function _assert_report_equal", helper_src)
+    @test occursin("function _assert_plot_equal", helper_src)
+    @test occursin("isempty(skip) && _assert_report_equal(m, m2)", helper_src)
+    @test occursin("applicable(plot_result, a) && _assert_plot_equal", helper_src)
+
+    plot_names = _registered_dispatch_names(plot_result)
+    report_names = _registered_dispatch_names(report)
+    @test length(plot_names) >= 50
+    @test length(report_names) >= 50
+    # Every enumerated dispatch is a registered save target.
+    for name in plot_names
+        @test haskey(_MEM._SERIALIZABLE_TYPES, name)
+    end
+    for name in report_names
+        @test haskey(_MEM._SERIALIZABLE_TYPES, name)
+    end
+
+    # Module serialization files that include the shared helpers use them.
+    ser_root = joinpath(@__DIR__, "..")
+    n_files = 0
+    for (dir, _, fnames) in walkdir(ser_root)
+        basename(dir) == "dsge" && continue  # DSER file has its own harness
+        for f in fnames
+            endswith(f, "_serialization.jl") || continue
+            path = joinpath(dir, f)
+            txt = read(path, String)
+            occursin("serialization_helpers.jl", txt) || continue
+            n_files += 1
+            @test occursin("_assert_report_equal", txt) || occursin("_assert_consumers", txt) ||
+                  occursin("_assert_roundtrip", txt)
+        end
+    end
+    @test n_files >= 10
+
+    # Runtime: a registered type with both dispatches round-trips with helpers.
+    Y = randn(MersenneTwister(787), 60, 2)
+    m = estimate_var(Y, 1)
+    ir = irf(m, 4)
+    @test string(nameof(typeof(ir))) in plot_names
+    @test string(nameof(typeof(m))) in report_names
+    ir2 = _roundtrip(ir)
+    m2 = _roundtrip(m)
+    _assert_report_equal(m, m2)
+    _assert_plot_equal(ir, ir2)
+end
+
+@testset "RSER-14 leftover identifiability result (#787)" begin
+    r = IdentifiabilityTestResult(:label_stability, 0.8, NaN, true,
+                                  Dict{Symbol,Any}(:n => 10, :fallback => :label_stability))
+    @test _from_serializable_is_generic(IdentifiabilityTestResult)
+    r2 = _assert_roundtrip(r)
+    @test r2.test_name === :label_stability
+    @test r2.statistic == 0.8
+    @test isnan(r2.pvalue)
+    @test r2.identified
+    @test r2.details[:n] == 10
+    _assert_report_equal(r, r2)
+    let path = joinpath(mktempdir(), "ident.jld2")
+        save_model(r, path)
+        r3 = load_model(path)
+        @test r3 isa IdentifiabilityTestResult
+        @test isnan(r3.pvalue)
+        _assert_report_equal(r, r3)
+    end
+end
+

@@ -102,7 +102,9 @@ results (policy causal effects, rules/loss, OPP, model bank, path-floor and
 named-function constraints), IO leftovers (`FootprintResult`, `IOMultipliers`,
 `LinkageResult`, `IOExtension`), LP leftovers (Montiel Olea–Pflueger F, LP-IV AR
 bands, B-spline basis, propensity-score config), GMM weighting/parameter
-transforms, Johansen/GPH/local-Whittle companions, DSGE `ModelSpec` and
+transforms, factor IC results (`HallinLiskaResult`, `BaiNgQResult`,
+`AmengualWatsonResult`) and `IdentifiabilityTestResult`, Johansen/GPH/local-Whittle
+companions, DSGE `ModelSpec` and
 representative-agent solutions (`DSGESolution`, perturbation, projection,
 OccBin, …), Bayesian DSGE results (`BayesianDSGE`, priors, state-space types),
 HA results (`HASteadyState`, `HADSGESolution`, `KrusellSmithSolution`, …),
@@ -112,9 +114,8 @@ OLG and continuous-time families, and the data containers
 (`TimeSeriesData`, `PanelData`, `CrossSectionData`, `IOData`); the full set is
 `MacroEconometricModels._SERIALIZABLE_TYPES`. Exported
 concrete structs that are not saveable are listed in `_SERIALIZATION_EXCLUDED`
-with a reason — permanent exclusions (rendered HTML, workspaces, transient
-`reproduce` reports, inline covariance-estimator configs) and pending
-`DSER`/`RSER` registrations. The file records the
+with a permanent reason (rendered HTML, workspaces, transient `reproduce`
+reports, inline covariance-estimator configs, nested-only sentinels). The file records the
 [`SERIALIZATION_FORMAT_VERSION`](@ref), the package and Julia versions, a
 timestamp, an optional `note`, and — for a randomized result — its
 reproducibility manifest. Only public fields are stored; cached factorizations

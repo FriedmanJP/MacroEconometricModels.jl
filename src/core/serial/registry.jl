@@ -306,6 +306,11 @@ const _SERIALIZABLE_TYPES = Dict{String,Type}(
     "PropensityScoreConfig"             => PropensityScoreConfig,
     "GMMWeighting"                      => GMMWeighting,
     "ParameterTransform"                => ParameterTransform,
+    # ── factor IC / identifiability leftovers (RSER-14 / #787) ───────────────
+    "HallinLiskaResult"                 => HallinLiskaResult,
+    "BaiNgQResult"                      => BaiNgQResult,
+    "AmengualWatsonResult"              => AmengualWatsonResult,
+    "IdentifiabilityTestResult"         => IdentifiabilityTestResult,
     # ── DSGE / HA / OLG / CT ─────────────────────────────────────────────────
     "ModelSpec"                     => ModelSpec,
     "NamedEquation"                 => NamedEquation,
@@ -397,8 +402,9 @@ const _SERIALIZABLE_TYPES = Dict{String,Type}(
 )
 
 # Exported concrete structs that are not top-level `save_model` targets, with a
-# reason. Permanent keys are never saveable; `"pending DSER-NN"` / `"pending
-# RSER-NN"` entries are deleted by the issue that registers those types.
+# permanent reason. Nested structs still round-trip inside a registered parent
+# via `__struct__` / `_resolve_ser_type`; they are not independent `save_model`
+# targets.
 const _SERIALIZATION_EXCLUDED = Dict{String,String}(
     "PlotOutput" => "rendered HTML, not a result",
     "ReproReport" => "transient reproduce() output",
@@ -414,45 +420,37 @@ const _SERIALIZATION_EXCLUDED = Dict{String,String}(
     "GhoshModel" => "internal IO coefficient wrapper",
     # `_X13*` internals (unexported, underscore-prefixed) are skipped by the
     # completeness walk and are neither registered nor excluded (RSER-08).
-    # pending DSER-02
-    "NoAgents" => "pending DSER-02",
-    # pending DSER-04
-    "NonlinearConstraint" => "pending DSER-04",
-    "VariableBound" => "pending DSER-04",
-    # pending DSER-05
-    "InverseGamma1" => "pending DSER-05",
-    # pending DSER-06
-    "LaborSupply" => "pending DSER-06",
-    # pending DSER-07
-    "ParametricDensity" => "pending DSER-07",
+    "NoAgents" => "sentinel empty-agent NamedTuple, not a result",
+    "NonlinearConstraint" => "callable nested in ModelSpec, not a top-level save_model target",
+    "VariableBound" => "nested in ModelSpec, not a top-level save_model target",
+    "InverseGamma1" => "flattened by Distribution codec, not a top-level save_model target",
+    "LaborSupply" => "nested in IndividualProblem, not a top-level save_model target",
+    "ParametricDensity" => "nested in WinberryFamily, not a top-level save_model target",
     # callable structs nested in HA / DCEGM problems (not top-level save_model targets)
     "CRRAUtility" => "callable nested in IndividualProblem, not a top-level save_model target",
     "CRRAMarginalUtility" => "callable nested in IndividualProblem, not a top-level save_model target",
     "CRRAInverseMarginalUtility" => "callable nested in IndividualProblem, not a top-level save_model target",
     "DCEGMUtility" => "callable nested in DCEGMProblem, not a top-level save_model target",
     "DCEGMIncome" => "callable nested in DCEGMProblem, not a top-level save_model target",
-    # pending RSER-11 (restriction / ident / factor-IC leftovers; not this issue)
-    "A0SignRestriction" => "pending RSER-11",
-    "A0ZeroRestriction" => "pending RSER-11",
-    "AmengualWatsonResult" => "pending RSER-11",
-    "AplusSignRestriction" => "pending RSER-11",
-    "AplusZeroRestriction" => "pending RSER-11",
-    "BaiNgQResult" => "pending RSER-11",
-    "CumulativeRestriction" => "pending RSER-11",
-    "ElasticityBound" => "pending RSER-11",
-    "FEVDShareRestriction" => "pending RSER-11",
-    "HallinLiskaResult" => "pending RSER-11",
-    "IdentifiabilityTestResult" => "pending RSER-11",
-    "IdentificationMethod" => "pending RSER-11",
-    "IdentificationStatus" => "pending RSER-11",
-    "LongRunZeroRestriction" => "pending RSER-11",
-    "MagnitudeBound" => "pending RSER-11",
-    "NarrativeContributionRestriction" => "pending RSER-11",
-    "NarrativeShockRestriction" => "pending RSER-11",
-    "ReproManifest" => "pending RSER-11",
-    "SVARPattern" => "pending RSER-11",
-    "SVARRestrictions" => "pending RSER-11",
-    "SignRestriction" => "pending RSER-11",
-    "StateTransition" => "pending RSER-11",
-    "ZeroRestriction" => "pending RSER-11",
+    # nested SVAR restriction / identification config (SID-24 serializes them
+    # inside identification results; not independent save_model targets)
+    "A0SignRestriction" => "nested SVAR restriction, not a top-level save_model target",
+    "A0ZeroRestriction" => "nested SVAR restriction, not a top-level save_model target",
+    "AplusSignRestriction" => "nested SVAR restriction, not a top-level save_model target",
+    "AplusZeroRestriction" => "nested SVAR restriction, not a top-level save_model target",
+    "CumulativeRestriction" => "nested SVAR restriction, not a top-level save_model target",
+    "ElasticityBound" => "nested SVAR restriction, not a top-level save_model target",
+    "FEVDShareRestriction" => "nested SVAR restriction, not a top-level save_model target",
+    "LongRunZeroRestriction" => "nested SVAR restriction, not a top-level save_model target",
+    "MagnitudeBound" => "nested SVAR restriction, not a top-level save_model target",
+    "NarrativeContributionRestriction" => "nested SVAR restriction, not a top-level save_model target",
+    "NarrativeShockRestriction" => "nested SVAR restriction, not a top-level save_model target",
+    "SignRestriction" => "nested SVAR restriction, not a top-level save_model target",
+    "ZeroRestriction" => "nested SVAR restriction, not a top-level save_model target",
+    "SVARRestrictions" => "nested in identification results, not a top-level save_model target",
+    "SVARPattern" => "nested in SVARModel, not a top-level save_model target",
+    "IdentificationStatus" => "nested in identification results, not a top-level save_model target",
+    "IdentificationMethod" => "identification registry metadata, not a result",
+    "StateTransition" => "nested in StateLPModel, not a top-level save_model target",
+    "ReproManifest" => "nested in randomized results, not a top-level save_model target",
 )

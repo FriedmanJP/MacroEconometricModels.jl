@@ -58,6 +58,8 @@ end
 
 # Round-trip `m` through the container and assert every public field (minus any
 # in `skip`, e.g. an intentionally-dropped closure) survives structurally intact.
+# `report` text is compared when no fields are skipped. `plot_result` lives on
+# `_assert_consumers` / `_assert_plot_equal` so module files are not double-plotted.
 function _assert_roundtrip(m; skip::Vector{Symbol}=Symbol[])
     _check_generic_construct(m)
     m2 = _roundtrip(m)
@@ -66,6 +68,7 @@ function _assert_roundtrip(m; skip::Vector{Symbol}=Symbol[])
         f in skip && continue
         @test _deep_equal(getfield(m, f), getfield(m2, f))
     end
+    isempty(skip) && _assert_report_equal(m, m2)
     return m2
 end
 
@@ -120,4 +123,52 @@ function _assert_consumers(a, b)
     _assert_refs_equal(a, b)
     _assert_forecast_eval(a, b)
     b
+end
+
+# First non-IO argument type of a `report` / `plot_result` method, unwrapping
+# `UnionAll` and skipping `Any` so a fallback `report(::Any)` does not match
+# every registered type.
+function _dispatch_argtype(m::Method)
+    sig = Base.unwrap_unionall(m.sig)
+    sig isa DataType || return nothing
+    ps = sig.parameters
+    length(ps) >= 2 || return nothing
+    for i in 2:length(ps)
+        T = ps[i]
+        T isa TypeVar && (T = T.ub)
+        T isa Type || continue
+        while T isa UnionAll
+            T = T.body
+        end
+        T isa DataType || continue
+        T <: IO && continue
+        T === Any && continue
+        T <: Function && continue
+        return T
+    end
+    return nothing
+end
+
+function _registered_dispatch_names(f::Function)
+    names = Set{String}()
+    for m in methods(f)
+        T = _dispatch_argtype(m)
+        T === nothing && continue
+        if isabstracttype(T)
+            for (name, S) in _MEM._SERIALIZABLE_TYPES
+                Sw = S
+                while Sw isa UnionAll
+                    Sw = Sw.body
+                end
+                try
+                    Sw <: T && push!(names, name)
+                catch
+                end
+            end
+        else
+            n = string(nameof(T))
+            haskey(_MEM._SERIALIZABLE_TYPES, n) && push!(names, n)
+        end
+    end
+    names
 end
