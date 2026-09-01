@@ -145,3 +145,100 @@ function _from_serializable(::Type{IdentificationStatus}, p::AbstractDict, ::Int
                          Vector{Int}(p["orders"]),
                          Int(p["n_overidentifying"]))
 end
+
+# Nested `NamedEquation.residual` is ignored — recompiled from `expr` once the
+# owning `ModelSpec` has `endog` / `exog` / `params`. Standalone load uses a
+# placeholder; `ModelSpec` reconstruction replaces it.
+function _from_serializable(::Type{NamedEquation}, p::AbstractDict, ::Int)
+    name = _as_symbol(p["name"])
+    defines = p["defines"] === nothing ? nothing : _as_symbol(_deser_field(p["defines"]))
+    expr = _deser_field(p["expr"])
+    expr isa Expr || throw(SerializationError("NamedEquation.expr is not an Expr"))
+    timing = _deser_field(p["timing"])
+    timing isa TimingInfo || throw(SerializationError("NamedEquation.timing is not a TimingInfo"))
+    regimes_raw = _deser_field(get(p, "regimes", Dict{Symbol,NamedEquation}()))
+    regimes = Dict{Symbol,NamedEquation}()
+    if regimes_raw isa AbstractDict
+        for (k, v) in regimes_raw
+            v isa NamedEquation || continue
+            regimes[_as_symbol(k)] = v
+        end
+    end
+    NamedEquation(name, defines, expr, identity; timing=timing, regimes=regimes)
+end
+
+function _from_serializable(::Type{ModelSpec}, p::AbstractDict, ver::Int)
+    _from_serializable_modelspec(p, ver)
+end
+function _from_serializable(::Type{<:ModelSpec}, p::AbstractDict, ver::Int)
+    _from_serializable_modelspec(p, ver)
+end
+
+function _from_serializable_modelspec(p::AbstractDict, ver::Int)
+    T = Float64
+    ss_raw = p["steady_state"]
+    if ss_raw isa AbstractArray && eltype(ss_raw) <: AbstractFloat
+        T = eltype(ss_raw)
+    else
+        pv0 = p["param_values"]
+        if pv0 isa AbstractDict
+            for v in values(pv0)
+                if v isa AbstractFloat
+                    T = typeof(v)
+                    break
+                end
+            end
+        end
+    end
+
+    endog = Symbol[_as_symbol(s) for s in _deser_field(p["endog"])]
+    exog = Symbol[_as_symbol(s) for s in _deser_field(p["exog"])]
+    params = Symbol[_as_symbol(s) for s in _deser_field(p["params"])]
+    pv = _deser_field(p["param_values"])
+    param_values = Dict{Symbol,T}(_as_symbol(k) => convert(T, v) for (k, v) in pv)
+
+    function _as_named_eq(eq)
+        eq isa NamedEquation && return eq
+        eq isa AbstractDict && return _from_serializable(NamedEquation, eq, ver)
+        throw(SerializationError("ModelSpec equation payload is not a NamedEquation"))
+    end
+
+    equations = NamedEquation[_recompile_named_equation(_as_named_eq(eq), endog, exog, params)
+                              for eq in _deser_field(p["equations"])]
+    residual_fns = Function[eq.residual for eq in equations]
+
+    original_endog = Symbol[_as_symbol(s) for s in _deser_field(p["original_endog"])]
+    original_equations = NamedEquation[_recompile_named_equation(_as_named_eq(eq), original_endog, exog, params)
+                                       for eq in _deser_field(p["original_equations"])]
+
+    ss_fn = _deser_field(p["ss_fn"])
+    ss_fn isa Function || (ss_fn = nothing)
+
+    n_expect = Int(p["n_expect"])
+    forward_indices = Int[Int(i) for i in _deser_field(p["forward_indices"])]
+    ss_vec = _deser_field(p["steady_state"])
+    steady_state = isempty(ss_vec) ? T[] : T[convert(T, x) for x in ss_vec]
+    varnames = String[string(s) for s in _deser_field(p["varnames"])]
+    bellman_controls = Symbol[_as_symbol(s) for s in _deser_field(p["bellman_controls"])]
+    bellman_consumption = let c = _deser_field(p["bellman_consumption"])
+        c === nothing ? nothing : _as_symbol(c)
+    end
+
+    return ModelSpec{T}(
+        endog, exog, params, param_values, equations, residual_fns,
+        n_expect, forward_indices, steady_state, ss_fn;
+        original_endog=original_endog,
+        original_equations=original_equations,
+        augmented=Bool(p["augmented"]),
+        max_lag=Int(p["max_lag"]),
+        max_lead=Int(p["max_lead"]),
+        linear=Bool(p["linear"]),
+        bellman_utility=_deser_field(p["bellman_utility"]),
+        bellman_beta=_deser_field(p["bellman_beta"]),
+        bellman_consumption=bellman_consumption,
+        bellman_controls=bellman_controls,
+        agents=_deser_field(p["agents"]),
+        ir=_deser_field(p["ir"]),
+        varnames=varnames,
+    )
+end

@@ -119,4 +119,11 @@ const _SERIALIZABLE_TYPES = Dict{String,Type}(
     "BayesianSetIdentifiedSVAR"     => BayesianSetIdentifiedSVAR,
     "SignIdentifiedSet"             => SignIdentifiedSet,
     "RobustBayesResult"             => RobustBayesResult,
+    # ── DSGE / HA / OLG / CT ─────────────────────────────────────────────────
+    "ModelSpec"                     => ModelSpec,
+    "NamedEquation"                 => NamedEquation,
+    "ModelIR"                       => ModelIR,
+    "IREquation"                    => IREquation,
+    "IRDecl"                        => IRDecl,
+    "TimingInfo"                    => TimingInfo,
 )

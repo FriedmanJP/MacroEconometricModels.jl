@@ -73,7 +73,7 @@ the full set is `MacroEconometricModels._SERIALIZABLE_TYPES`. The file records t
 [`SERIALIZATION_FORMAT_VERSION`](@ref), the package and Julia versions, a
 timestamp, and — for a randomized result — its reproducibility manifest. Only
 public fields are stored; cached factorizations are recomputed on load, and
-compiled equation functions (DSGE) are not yet serializable.
+DSGE `ModelSpec` residuals are recompiled from stored equations on load.
 
 ```julia
 m = estimate_var(Y, 2)

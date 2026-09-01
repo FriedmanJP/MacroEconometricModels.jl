@@ -205,6 +205,7 @@ const TEST_GROUPS = [
         "dsge/test_blanchard_olg.jl",
         "dsge/test_lifecycle_olg.jl",
         "dsge/test_continuous_aiyagari.jl",
+        "dsge/test_dsge_serialization.jl",
     ]),
     ("DSGE Bayesian & HD" => [
         "dsge/test_bayesian_dsge.jl",

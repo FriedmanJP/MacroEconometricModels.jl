@@ -343,3 +343,170 @@ Wrap a family constructor (`BlanchardOLG`, `DCEGMProblem`, `LifeCycleOLG`,
 [`ModelSpec`](@ref). `solve(to_spec(m))` dispatches on the payload kind.
 """
 function to_spec end
+
+# =============================================================================
+# Shared equation transform / substitution (used by @dsge and load-time recompile)
+# =============================================================================
+
+"""
+    _parse_time_index(ex) → Int
+
+Parse time index from a `ref` subscript expression.
+- `t` → 0
+- `(call + t 1)` → 1
+- `(call - t 1)` → -1
+"""
+function _parse_time_index(ex)
+    if ex === :t
+        return 0
+    elseif ex isa Expr && ex.head == :call && length(ex.args) == 3 && ex.args[2] === :t
+        op = ex.args[1]
+        offset = ex.args[3]
+        if op === :(+)
+            return Int(offset)
+        elseif op === :(-)
+            return -Int(offset)
+        end
+    end
+    error("@dsge: unrecognized time index expression: $ex")
+end
+
+"""
+    _equation_to_residual(eq) → Expr
+
+Transform `LHS = RHS` to `LHS - (RHS)`, creating a residual expression.
+"""
+function _equation_to_residual(eq::Expr)
+    eq.head == :(=) || error("@dsge: equation must be LHS = RHS, got: $eq")
+    lhs = eq.args[1]
+    rhs = eq.args[2]
+    # Unwrap block wrapper if present
+    if rhs isa Expr && rhs.head == :block
+        inner = filter(a -> !(a isa LineNumberNode), rhs.args)
+        length(inner) == 1 || error("@dsge: malformed equation RHS")
+        rhs = inner[1]
+    end
+    return Expr(:call, :(-), lhs, rhs)
+end
+
+"""
+    _substitute_vars(ex, endog, exog, params) → Expr
+
+Recursively replace:
+- `var[t]` → `_y_t_[i]` where `i` = index of `var` in `endog`
+- `var[t-1]` → `_y_lag_[i]`
+- `var[t+1]` → `_y_lead_[i]`
+- `shock[t]` → `_ε_[j]` where `j` = index of `shock` in `exog`
+- bare parameter symbols → `_θ_[QuoteNode(name)]`
+"""
+function _substitute_vars(ex, endog::Vector{Symbol}, exog::Vector{Symbol}, params::Vector{Symbol})
+    if ex isa Expr
+        # Time-indexed endogenous variable: var[t±k]
+        if ex.head == :ref && length(ex.args) == 2 && ex.args[1] isa Symbol
+            varname = ex.args[1]::Symbol
+            if varname ∈ endog
+                idx = findfirst(==(varname), endog)
+                offset = _parse_time_index(ex.args[2])
+                if offset == 0
+                    return Expr(:ref, :_y_t_, idx)
+                elseif offset < 0
+                    return Expr(:ref, :_y_lag_, idx)
+                else  # offset > 0
+                    return Expr(:ref, :_y_lead_, idx)
+                end
+            elseif varname ∈ exog
+                jdx = findfirst(==(varname), exog)
+                # Shocks should only be [t]
+                offset = _parse_time_index(ex.args[2])
+                offset == 0 || error("@dsge: exogenous shock $varname can only be indexed at [t], got offset $offset")
+                return Expr(:ref, :_ε_, jdx)
+            end
+            # Not a known variable — could be some other indexing; leave as is
+        end
+
+        # Recurse into children
+        new_args = Any[]
+        for a in ex.args
+            push!(new_args, _substitute_vars(a, endog, exog, params))
+        end
+        return Expr(ex.head, new_args...)
+
+    elseif ex isa Symbol
+        # Bare parameter symbol → θ[:name]
+        if ex ∈ params
+            return Expr(:ref, :_θ_, QuoteNode(ex))
+        end
+        # Other symbols (operators like +, -, *, ^, numeric constants, etc.) pass through
+        return ex
+    else
+        # Literal values (numbers, etc.)
+        return ex
+    end
+end
+
+# =============================================================================
+# Residual AST allowlist + load-time recompile (DSER-02 / #760)
+# =============================================================================
+
+const _RESIDUAL_AST_ALLOW = Set{Symbol}([
+    :+, :-, :*, :/, :^, :exp, :log, :sqrt, :abs, :max, :min,
+    :tanh, :sinh, :cosh, :atan, :sin, :cos, :tan, :erf, :erfc,
+    :sign, :floor, :ceil, :round, :mod, :rem, :hypot, :log1p, :expm1,
+    :inv, :cbrt, :clamp, :(==), :<, :>, :<=, :>=, :!, :&, :|,
+])
+
+"""
+    _sanitize_residual_ast(ex, eqname) → ex
+
+Walk `ex` and reject any call / head not on the residual allowlist. A loaded
+`ModelSpec` file is executed code: this runs before `Core.eval`.
+"""
+function _sanitize_residual_ast(ex, eqname::Symbol)
+    _sanitize_residual_ast!(ex, eqname)
+    ex
+end
+function _sanitize_residual_ast!(ex::Expr, eqname::Symbol)
+    if ex.head === :call
+        f = ex.args[1]
+        f isa Symbol || throw(SerializationError("ModelSpec equation $eqname: call is not a Symbol"))
+        f in _RESIDUAL_AST_ALLOW || throw(SerializationError(
+            "ModelSpec equation $eqname: function `$f` is not on the residual AST allowlist"))
+        foreach(a -> _sanitize_residual_ast!(a, eqname), ex.args[2:end])
+    elseif ex.head in (:ref, :tuple, :vect, :vcat, :hcat, :row, :if, :&&, :||, :comparison, :block)
+        foreach(a -> _sanitize_residual_ast!(a, eqname), ex.args)
+    elseif ex.head === :(=)
+        foreach(a -> _sanitize_residual_ast!(a, eqname), ex.args)
+    else
+        throw(SerializationError("ModelSpec equation $eqname: Expr head $(ex.head) is not allowed"))
+    end
+    ex
+end
+_sanitize_residual_ast!(::Any, ::Symbol) = nothing
+
+"""
+    _compile_residual(expr, endog, exog, params) → Function
+
+Rebuild `f(y_t, y_lag, y_lead, ε, θ) → scalar` from a stored residual (or
+`LHS = RHS`) expression. Sanitizes the substituted AST, `Core.eval`s in this
+module, and wraps with `invokelatest` so the caller is world-age safe.
+"""
+function _compile_residual(expr::Expr, endog, exog, params)
+    endog = Symbol[endog...]
+    exog = Symbol[exog...]
+    params = Symbol[params...]
+    body = expr.head === :(=) ? _equation_to_residual(expr) : expr
+    subst = _substitute_vars(body, endog, exog, params)
+    _sanitize_residual_ast(subst, :residual)
+    fn = Core.eval(MacroEconometricModels,
+                   Expr(:->, Expr(:tuple, :_y_t_, :_y_lag_, :_y_lead_, :_ε_, :_θ_), subst))
+    (a, b, c, e, θ) -> Base.invokelatest(fn, a, b, c, e, θ)
+end
+
+function _recompile_named_equation(eq::NamedEquation, endog, exog, params)
+    residual = _compile_residual(eq.expr, endog, exog, params)
+    regimes = Dict{Symbol,NamedEquation}()
+    for (k, v) in eq.regimes
+        regimes[k isa Symbol ? k : Symbol(k)] = _recompile_named_equation(v, endog, exog, params)
+    end
+    NamedEquation(eq.name, eq.defines, eq.expr, residual; timing=eq.timing, regimes=regimes)
+end

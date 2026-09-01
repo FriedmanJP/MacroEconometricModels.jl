@@ -607,6 +607,8 @@ function _ha_model_spec_quote(endog, exog, params, raw_equations,
             push!(eq_defines, def)
             push!(eqs, stmt)
         end
+        # `_substitute_vars` / `_equation_to_residual` are the shared ir.jl helpers;
+        # this macro still emits closures inline (no eval at expansion).
         residual_exprs = Expr[]
         fn_exprs = Expr[]
         fwd = Int[]
