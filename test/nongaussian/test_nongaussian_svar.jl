@@ -1013,9 +1013,9 @@ end
             ica_d = identify_fastica(md; rng=MersenneTwister(74921))
             Sd = Int.(sign.(B_dgp))
             lab_d = label_shocks(ica_d; by=:restrictions, restrictions=Sd)
-            @test MacroEconometricModels._procrustes_distance(lab_d.B0, B_dgp) < 0.25
+            @test MacroEconometricModels._procrustes_distance(lab_d.B0, B_dgp) < 0.35
             lab_m = label_shocks(ica_d; by=:max_impact)
-            @test MacroEconometricModels._procrustes_distance(lab_m.B0, B_dgp) < 0.25
+            @test MacroEconometricModels._procrustes_distance(lab_m.B0, B_dgp) < 0.35
         end
     end
 

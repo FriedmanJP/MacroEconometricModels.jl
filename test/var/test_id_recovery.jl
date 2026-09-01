@@ -480,6 +480,18 @@ end
         r = identify_markov_switching(estimate_var(Y, 1); n_regimes=2, n_starts=3,
                                       max_iter=40, rng=MersenneTwister(53))
         @test _pd(r.B0, _B_rec) < 0.30
+        # Joint ML must not raise nll above the two-regime eigen start — Optim v1
+        # LBFGS (Julia 1.10 numerical cell) previously walked off that start.
+        Σ1 = _B_rec * _B_rec'
+        Σ2 = _B_rec * Diagonal([0.4, 4.0]) * _B_rec'
+        Tks = [750.0, 750.0]
+        Bml, _, _, pml, _, _, _, _ = MacroEconometricModels._k_regime_ml([Σ1, Σ2], Tks)
+        n = size(_B_rec, 1)
+        nll(p) = MacroEconometricModels._k_regime_nll(p, n, 2, Tks, [Σ1, Σ2])
+        B0s, _, λs = MacroEconometricModels._two_regime_start(Σ1, Σ2)
+        p0 = MacroEconometricModels._k_regime_pack(B0s, [ones(n), max.(λs, 1e-8)], n, 2)
+        @test nll(pml) <= nll(p0) + 1e-8
+        @test _pd(Bml, _B_rec) < 0.05
     end
 end
 

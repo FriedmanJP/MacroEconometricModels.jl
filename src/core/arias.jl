@@ -1501,7 +1501,7 @@ function identify_arias(model::VARModel{T}, restrictions::SVARRestrictions, hori
     fatal_slot = Vector{Any}(nothing, n_draws)
     wtime_slot = zeros(Float64, n_draws)
 
-    t0 = time()
+    t0 = time_ns()
     Threads.@threads for d in 1:n_draws
         local_rng = Random.MersenneTwister(seeds[d])
         try
@@ -1533,10 +1533,10 @@ function identify_arias(model::VARModel{T}, restrictions::SVARRestrictions, hori
 
                     w = one(T)
                     if has_zeros && compute_weights
-                        tw = time()
+                        tw = time_ns()
                         w = _compute_importance_weight(Q, model, setup, restrictions, Phi, L,
                                                        ff_h, zero_fn)
-                        wtime_slot[d] += time() - tw
+                        wtime_slot[d] += (time_ns() - tw) / 1e9
                     end
                     if has_narrative
                         ω = _omega_hat(restrictions, irf_full, n, T; n_sims=n_nar_sims, rng=local_rng)
@@ -1566,7 +1566,7 @@ function identify_arias(model::VARModel{T}, restrictions::SVARRestrictions, hori
             fatal_slot[d] = err
         end
     end
-    elapsed = T(time() - t0)
+    elapsed = T((time_ns() - t0) / 1e9)
     weights_elapsed = T(sum(wtime_slot))
 
     for d in 1:n_draws

@@ -608,10 +608,14 @@ function _k_regime_ml(Sigma_hats::Vector{Matrix{T}}, Tks::AbstractVector;
         isfinite(v) ? v : T(1e20)
     end
     g! = (G, x) -> ForwardDiff.gradient!(G, obj, x)
+    nll0 = obj(params0)
     result = Optim.optimize(obj, g!, params0, Optim.LBFGS(),
                             Optim.Options(iterations=max_iter, g_tol=tol,
-                                          f_reltol=T(1e-12), allow_f_increases=true))
-    p = Vector{T}(Optim.minimizer(result))
+                                          f_reltol=T(1e-12)))
+    p_opt = Vector{T}(Optim.minimizer(result))
+    # Keep the eigendecomposition start when LBFGS does not improve nll.
+    # Optim v1 (Julia 1.10 numerical cell) can walk off a good start.
+    p = obj(p_opt) <= nll0 ? p_opt : params0
     B, Q, Lambdas = _k_regime_unpack(p, n, K)
     B, Q, Lambdas, idx = _k_regime_normalize(B, Q, Lambdas, n, K)
     Lfac = Matrix{T}(safe_cholesky(B * B'; silent=true))
