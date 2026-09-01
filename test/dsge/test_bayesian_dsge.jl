@@ -3027,9 +3027,16 @@ end
         ws.particles[1, k] = states_before[k]
     end
     allocs = @allocated MacroEconometricModels._pf_transition_projection!(ws, pss)
-    # `@allocated` is bytes. The kernel is written zero-alloc; Julia 1.12
-    # Linux x64 still reports a ~1 KiB sliver after warmup (tiny GEMM).
-    @test allocs <= 2048
+    # `@allocated` uses process-wide `gc_bytes()`. The kernel is written
+    # zero-alloc; Julia 1.12 still reports a tiny GEMM sliver on one thread.
+    # The threaded CI runner (Ubuntu Julia 1) inflates the count with sibling
+    # groups (7648 vs 2048, run 33538397252). Keep a tight bound only when
+    # this task owns the GC counter.
+    if Threads.nthreads() == 1
+        @test allocs <= 2048
+    else
+        @test allocs < 64 * 1024
+    end
     end
 end
 
