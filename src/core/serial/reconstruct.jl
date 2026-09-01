@@ -569,6 +569,155 @@ function _from_serializable(::Type{DenHaanAccuracy}, p::AbstractDict, ::Int)
     )
 end
 
+# ── DSER-08 SSJ blocks ───────────────────────────────────────────────────────
+
+function _ssj_curlyJ(::Type{T}, raw) where {T}
+    out = Dict{Symbol,Dict{Symbol,Matrix{T}}}()
+    for (k, inner) in raw
+        d = Dict{Symbol,Matrix{T}}()
+        for (ik, M) in inner
+            d[_as_symbol(ik)] = Matrix{T}(M)
+        end
+        out[_as_symbol(k)] = d
+    end
+    return out
+end
+
+function _ssj_float_from_dict(raw, default::Type=Float64)
+    for v in values(raw)
+        v isa AbstractFloat && return typeof(v)
+        if v isa AbstractArray && eltype(v) <: AbstractFloat
+            return eltype(v)
+        end
+    end
+    return default
+end
+
+function _assert_ssj_callable_loaded(val, kind::AbstractString, name::Symbol, field::AbstractString)
+    val === nothing && throw(SerializationError(
+        "$kind :$name has an anonymous $field; define it as a named function or a callable struct to make the model saveable"))
+    _assert_ssj_callable(val, kind, name, field)
+end
+
+function _from_serializable_simpleblock(p::AbstractDict, ::Int)
+    name = _as_symbol(p["name"])
+    f = _deser_field(p["f"])
+    _assert_ssj_callable_loaded(f, "SimpleBlock", name, "f")
+    ss_in_raw = _deser_field(p["ss_inputs"])
+    T = _ssj_float_from_dict(ss_in_raw)
+    lags_raw = _deser_field(p["lags"])
+    lags = Dict{Symbol,Vector{Int}}(_as_symbol(k) => Vector{Int}(v) for (k, v) in lags_raw)
+    SimpleBlock(f;
+        inputs=Symbol[_as_symbol(s) for s in _deser_field(p["inputs"])],
+        outputs=Symbol[_as_symbol(s) for s in _deser_field(p["outputs"])],
+        ss_inputs=_ha_symbol_t_dict(T, ss_in_raw),
+        lags=lags,
+        name=name)
+end
+_from_serializable(::Type{SimpleBlock}, p::AbstractDict, ver::Int) =
+    _from_serializable_simpleblock(p, ver)
+_from_serializable(::Type{<:SimpleBlock}, p::AbstractDict, ver::Int) =
+    _from_serializable_simpleblock(p, ver)
+
+function _from_serializable_hetblock(p::AbstractDict, ::Int)
+    ss = _deser_field(p["steady_state"])
+    T = eltype(ss.distribution)
+    T <: AbstractFloat || (T = Float64)
+    HetBlock(ss, _deser_field(p["individual"]), _deser_field(p["grid"]),
+             _deser_field(p["income"]);
+             inputs=Symbol[_as_symbol(s) for s in _deser_field(p["inputs"])],
+             outputs=Symbol[_as_symbol(s) for s in _deser_field(p["outputs"])],
+             name=_as_symbol(p["name"]),
+             dx=T(p["dx"]))
+end
+_from_serializable(::Type{HetBlock}, p::AbstractDict, ver::Int) =
+    _from_serializable_hetblock(p, ver)
+_from_serializable(::Type{<:HetBlock}, p::AbstractDict, ver::Int) =
+    _from_serializable_hetblock(p, ver)
+
+function _from_serializable_mitblock(p::AbstractDict, ::Int)
+    name = _as_symbol(p["name"])
+    ev = _deser_field(p["evaluate"])
+    _assert_ssj_callable_loaded(ev, "MitBlock", name, "evaluate")
+    ss_in_raw = _deser_field(p["ss_inputs"])
+    T = _ssj_float_from_dict(ss_in_raw)
+    MitBlock(ev, T;
+        inputs=Symbol[_as_symbol(s) for s in _deser_field(p["inputs"])],
+        outputs=Symbol[_as_symbol(s) for s in _deser_field(p["outputs"])],
+        ss_inputs=_ha_symbol_t_dict(T, ss_in_raw),
+        ss_outputs=_ha_symbol_t_dict(T, _deser_field(p["ss_outputs"])),
+        name=name,
+        dx=T(p["dx"]))
+end
+_from_serializable(::Type{MitBlock}, p::AbstractDict, ver::Int) =
+    _from_serializable_mitblock(p, ver)
+_from_serializable(::Type{<:MitBlock}, p::AbstractDict, ver::Int) =
+    _from_serializable_mitblock(p, ver)
+
+function _from_serializable_ssjmodel(p::AbstractDict, ::Int)
+    blocks_raw = _deser_field(p["blocks"])
+    blocks = AbstractSSJBlock[b for b in blocks_raw]
+    ss_raw = _deser_field(p["ss_values"])
+    T = _ssj_float_from_dict(ss_raw)
+    SSJModel{T}(
+        _as_symbol(p["name"]),
+        blocks,
+        Symbol[_as_symbol(s) for s in _deser_field(p["exogenous"])],
+        Symbol[_as_symbol(s) for s in _deser_field(p["endogenous"])],
+        _ha_symbol_t_dict(T, ss_raw),
+    )
+end
+_from_serializable(::Type{SSJModel}, p::AbstractDict, ver::Int) =
+    _from_serializable_ssjmodel(p, ver)
+_from_serializable(::Type{<:SSJModel}, p::AbstractDict, ver::Int) =
+    _from_serializable_ssjmodel(p, ver)
+
+function _from_serializable_ssjgejacobian(p::AbstractDict, ::Int)
+    H_U_raw = _deser_field(p["H_U"])
+    T = eltype(H_U_raw)
+    T <: AbstractFloat || (T = Float64)
+    H_U = Matrix{T}(H_U_raw)
+    H_Z = Matrix{T}(_deser_field(p["H_Z"]))
+    curlyJ = _ssj_curlyJ(T, _deser_field(p["curlyJ"]))
+    fact = lu(H_U; check=false)
+    issuccess(fact) || error(
+        "ssj_jacobian: the clearing Jacobian H_U is singular. Check that every " *
+        "target actually responds to the unknowns (targets=$(p["targets"]), unknowns=$(p["unknowns"])) and " *
+        "that the DAG closes the model.")
+    SSJGEJacobian{T}(
+        _deser_field(p["model"]),
+        Symbol[_as_symbol(s) for s in _deser_field(p["unknowns"])],
+        Symbol[_as_symbol(s) for s in _deser_field(p["targets"])],
+        Symbol[_as_symbol(s) for s in _deser_field(p["shocks"])],
+        Int(p["T_horizon"]),
+        H_U, H_Z, curlyJ, fact,
+    )
+end
+_from_serializable(::Type{SSJGEJacobian}, p::AbstractDict, ver::Int) =
+    _from_serializable_ssjgejacobian(p, ver)
+_from_serializable(::Type{<:SSJGEJacobian}, p::AbstractDict, ver::Int) =
+    _from_serializable_ssjgejacobian(p, ver)
+
+function _from_serializable_ssjir(p::AbstractDict, ::Int)
+    paths = _deser_field(p["paths"])
+    T = _ssj_float_from_dict(paths)
+    SSJImpulseResponse{T}(
+        _ha_symbol_vec_dict(T, paths),
+        _ha_symbol_vec_dict(T, _deser_field(p["first_order"])),
+        _ha_symbol_vec_dict(T, _deser_field(p["correction"])),
+        _ha_symbol_vec_dict(T, _deser_field(p["shocks"])),
+        Symbol[_as_symbol(s) for s in _deser_field(p["unknowns"])],
+        Symbol[_as_symbol(s) for s in _deser_field(p["targets"])],
+        Int(p["order"]),
+        Int(p["T_horizon"]),
+        _ha_symbol_t_dict(T, _deser_field(p["target_residual"])),
+    )
+end
+_from_serializable(::Type{SSJImpulseResponse}, p::AbstractDict, ver::Int) =
+    _from_serializable_ssjir(p, ver)
+_from_serializable(::Type{<:SSJImpulseResponse}, p::AbstractDict, ver::Int) =
+    _from_serializable_ssjir(p, ver)
+
 function _from_serializable(::Type{ObservationTrends}, p::AbstractDict, ::Int)
     function _trend_term(x, ::Type{S}) where {S}
         x isa Symbol && return x

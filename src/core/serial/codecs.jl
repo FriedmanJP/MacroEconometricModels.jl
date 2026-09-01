@@ -99,6 +99,27 @@ function _ser_field(ip::IndividualProblem)
     _assert_serializable_ip_callables(ip)
     return _struct_to_dict(ip)
 end
+
+function _assert_ssj_callable(val, kind::AbstractString, name::Symbol, field::AbstractString)
+    if val isa Function
+        _is_named_function(val) && return nothing
+        throw(SerializationError(
+            "$kind :$name has an anonymous $field; define it as a named function or a callable struct to make the model saveable"))
+    end
+    _is_mem_struct(val) && return nothing
+    throw(SerializationError(
+        "$kind :$name has an anonymous $field; define it as a named function or a callable struct to make the model saveable"))
+end
+
+function _to_serializable(b::SimpleBlock)
+    _assert_ssj_callable(b.f, "SimpleBlock", b.name, "f")
+    return _capture_fields(b)
+end
+
+function _to_serializable(b::MitBlock)
+    _assert_ssj_callable(b.evaluate, "MitBlock", b.name, "evaluate")
+    return _capture_fields(b)
+end
 const _FUNCTION_MODULES = (MacroEconometricModels, Base, Main)
 function _deser_function(d::AbstractDict)
     modname = Symbol(d["module"]); fname = Symbol(d["__function__"])

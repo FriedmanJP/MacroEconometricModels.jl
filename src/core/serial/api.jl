@@ -71,7 +71,8 @@ factor/ARIMA/local-projection/GMM model, SVAR identification results, DSGE
 `ModelSpec` and representative-agent solutions (`DSGESolution`, perturbation,
 projection, OccBin, …), Bayesian DSGE results (`BayesianDSGE`, priors,
 state-space types), HA results (`HASteadyState`, `HADSGESolution`,
-`KrusellSmithSolution`, …), and the data containers (`TimeSeriesData`, `PanelData`,
+`KrusellSmithSolution`, …), sequence-space blocks (`SSJModel`, `SimpleBlock`,
+`HetBlock`, `MitBlock`, `SSJGEJacobian`, `SSJImpulseResponse`), and the data containers (`TimeSeriesData`, `PanelData`,
 `CrossSectionData`, `IOData`); the full set is
 `MacroEconometricModels._SERIALIZABLE_TYPES`. The file records the
 [`SERIALIZATION_FORMAT_VERSION`](@ref), the package and Julia versions, a

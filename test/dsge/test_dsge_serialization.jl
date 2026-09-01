@@ -1318,3 +1318,159 @@ end
         report(ks2)
     end
 end
+
+# =============================================================================
+# DSER-08 — SSJ block objects (#766)
+# =============================================================================
+
+const _DSER08_TYPES = (
+    "SSJModel", "SimpleBlock", "HetBlock", "MitBlock",
+    "SSJGEJacobian", "SSJImpulseResponse",
+)
+
+# Named Main callables so SimpleBlock / MitBlock round-trip (Function codec).
+_dser08_identity(x) = [x[1]]
+_dser08_asset_mkt(x) = [x[1] - x[2]]
+function _dser08_ks_firm(x)
+    α, δ = 0.36, 0.025
+    K, Z = x[1], x[2]
+    [α * Z * K^(α - 1) - δ, (1 - α) * Z * K^α, Z * K^α]
+end
+function _dser08_mit_eval(paths, Th)
+    r = paths[:r]
+    Dict(:A => copy(r), :C => 0.5 .* r)
+end
+
+_dser08_report_text(obj) = sprint(report, obj)
+
+function _dser08_plot_ir(r::SSJImpulseResponse)
+    vars = sort(collect(keys(r.paths)); by=string)
+    H = r.T_horizon
+    n = length(vars)
+    T = eltype(first(values(r.paths)))
+    vals = Array{T}(undef, H, n, 1)
+    for (j, v) in enumerate(vars)
+        vals[:, j, 1] = r.paths[v]
+    end
+    shock = isempty(r.shocks) ? "shock" : string(first(sort(collect(keys(r.shocks)); by=string)))
+    ir = ImpulseResponse{T}(vals, zeros(T, H, n, 1), zeros(T, H, n, 1),
+                            H, string.(vars), [shock], :none)
+    return plot_result(ir)
+end
+
+@testset "DSER-08 SSJ types registered" begin
+    for name in _DSER08_TYPES
+        @test haskey(_MEM._SERIALIZABLE_TYPES, name)
+        @test string(nameof(_MEM._SERIALIZABLE_TYPES[name])) == name
+    end
+    if isdefined(_MEM, :_SERIALIZATION_EXCLUDED)
+        for name in _DSER08_TYPES
+            @test !haskey(_MEM._SERIALIZATION_EXCLUDED, name)
+        end
+    end
+end
+
+@testset "DSER-08 lambda SimpleBlock is a SerializationError" begin
+    blk = SimpleBlock(x -> [x[1]]; inputs=[:a], outputs=[:b],
+                      ss_inputs=Dict(:a => 1.0), name=:firm)
+    err = try
+        _MEM._ser_field(blk)
+        nothing
+    catch e
+        e
+    end
+    @test err isa SerializationError
+    msg = sprint(showerror, err)
+    @test occursin("SimpleBlock :firm", msg)
+    @test occursin("anonymous", msg)
+end
+
+@testset "DSER-08 SimpleBlock / MitBlock named functions" begin
+    sb = SimpleBlock(_dser08_identity; inputs=[:a], outputs=[:b],
+                     ss_inputs=Dict(:a => 1.5), name=:id)
+    sb2 = _assert_roundtrip(sb)
+    @test sb2 isa SimpleBlock
+    @test sb2.f === _dser08_identity
+    @test sb2.ss_outputs[:b] == sb.ss_outputs[:b]
+    @test sb2.arg_order == sb.arg_order
+    @test sb2.f([2.0]) == sb.f([2.0])
+
+    mb = MitBlock(_dser08_mit_eval, Float64;
+                  inputs=[:r, :w], outputs=[:A, :C],
+                  ss_inputs=Dict(:r => 0.02, :w => 1.0),
+                  ss_outputs=Dict(:A => 0.02, :C => 0.01),
+                  name=:lc)
+    mb2 = _assert_roundtrip(mb)
+    @test mb2 isa MitBlock
+    @test mb2.evaluate === _dser08_mit_eval
+    @test mb2.ss_outputs[:A] == mb.ss_outputs[:A]
+    Th = 3
+    paths = Dict(:r => fill(0.02, Th), :w => fill(1.0, Th))
+    @test mb2.evaluate(paths, Th)[:A] == mb.evaluate(paths, Th)[:A]
+end
+
+@testset "DSER-08 SSJModel / Jacobian / IRF named DAG" begin
+    _suppress_warnings() do
+        b1 = SimpleBlock(_dser08_identity; inputs=[:u], outputs=[:y],
+                         ss_inputs=Dict(:u => 1.0), name=:one)
+        b2 = SimpleBlock(_dser08_asset_mkt; inputs=[:y, :z], outputs=[:q],
+                         ss_inputs=Dict(:y => 1.0, :z => 1.0), name=:two)
+        model = combine_blocks(b1, b2; name=:toy)
+        @test model.blocks isa Vector{AbstractSSJBlock}
+        model2 = _assert_roundtrip(model)
+        @test model2.blocks isa Vector{AbstractSSJBlock}
+        @test eltype(model2.blocks) === AbstractSSJBlock
+        @test [b.name for b in model2.blocks] == [b.name for b in model.blocks]
+        @test _dser08_report_text(model2) == _dser08_report_text(model)
+
+        gej = ssj_jacobian(model; unknowns=[:u], targets=[:q], shocks=[:z],
+                           T_horizon=8)
+        gej2 = _assert_roundtrip(gej; skip=[:H_U_fact])
+        @test gej2.H_U == gej.H_U
+        @test gej2.H_Z == gej.H_Z
+        @test typeof(gej2.curlyJ) === typeof(gej.curlyJ)
+        rng = MersenneTwister(766)
+        v = randn(rng, size(gej.H_U, 1))
+        @test gej2.H_U_fact \ v ≈ gej.H_U_fact \ v atol=1e-12
+
+        dz = Dict(:z => [0.01 * 0.9^(t - 1) for t in 1:8])
+        ir = ssj_irf(gej, dz; residual=false)
+        ir_from2 = ssj_irf(gej2, dz; residual=false)
+        @test ir_from2.paths[:u] ≈ ir.paths[:u] atol=1e-12
+        @test ir_from2.paths[:y] ≈ ir.paths[:y] atol=1e-12
+        ir2 = _assert_roundtrip(ir)
+        @test ir2.paths[:u] == ir.paths[:u]
+        @test ir2.order == ir.order
+        @test _dser08_plot_ir(ir2) isa PlotOutput
+    end
+end
+
+@testset "DSER-08 Huggett HetBlock DAG (named bond market)" begin
+    _suppress_warnings() do
+        spec = _dser07_huggett()
+        ss = compute_steady_state(spec; max_iter=40, tol=1e-4, grid_check=:none)
+        hh = HetBlock(spec, ss; inputs=[:r, :w], outputs=[:A], name=:household)
+        hh2 = _assert_roundtrip(hh)
+        @test hh2 isa HetBlock
+        @test hh2.ss_outputs[:A] ≈ hh.ss_outputs[:A] atol=1e-12
+
+        bond = SimpleBlock(_dser08_identity;
+                           inputs=[:A], outputs=[:bond_mkt],
+                           ss_inputs=Dict(:A => hh.ss_outputs[:A]),
+                           name=:bond_market)
+        model = combine_blocks(hh, bond; name=:huggett)
+        gej = ssj_jacobian(model; unknowns=[:r], targets=[:bond_mkt], shocks=[:w],
+                           T_horizon=12, target_tol=1e-2)
+        gej2 = _assert_roundtrip(gej; skip=[:H_U_fact])
+        @test gej2.model.blocks isa Vector{AbstractSSJBlock}
+        @test gej2.H_U ≈ gej.H_U atol=1e-12
+        rng = MersenneTwister(7661)
+        v = randn(rng, size(gej.H_U, 1))
+        @test gej2.H_U_fact \ v ≈ gej.H_U_fact \ v atol=1e-10
+        dw = Dict(:w => [0.02 * 0.9^(t - 1) for t in 1:12])
+        ir = ssj_irf(gej, dw; residual=false)
+        ir2 = ssj_irf(gej2, dw; residual=false)
+        @test ir2.paths[:r] ≈ ir.paths[:r] atol=1e-10
+        @test _dser08_report_text(model) == _dser08_report_text(_roundtrip(model))
+    end
+end

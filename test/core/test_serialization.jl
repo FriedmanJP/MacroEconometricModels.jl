@@ -395,6 +395,13 @@ end
         @test haskey(_MEM._SERIALIZABLE_TYPES, "BayesianDSGE")
         @test haskey(_MEM._SERIALIZABLE_TYPES, "DSGEPrior")
     end
+
+    @testset "DSGE-family: SSJ blocks are registered (DSER-08)" begin
+        for name in ("SSJModel", "SimpleBlock", "HetBlock", "MitBlock",
+                     "SSJGEJacobian", "SSJImpulseResponse")
+            @test haskey(_MEM._SERIALIZABLE_TYPES, name)
+        end
+    end
 end
 
 @testset "DSER-01 leaf codecs" begin

@@ -51,7 +51,10 @@
 # problems (`IndividualProblem`, `HouseholdSystem`) round-trip via
 # `CRRAUtility` / named budget functions. HA results (`HASteadyState`,
 # `HADSGESolution`, `KrusellSmithSolution`, Winberry / Den Haan / grid
-# diagnostics) round-trip; OLG / CT results are still follow-up.
+# diagnostics) round-trip. Sequence-space blocks (`SimpleBlock` / `HetBlock` /
+# `MitBlock`, `SSJModel`, `SSJGEJacobian`, `SSJImpulseResponse`) round-trip
+# when `f` / `evaluate` are named functions or callable structs; `H_U_fact`
+# is recomputed. OLG / CT results are still follow-up.
 
 include("serial/registry.jl")
 include("serial/codecs.jl")

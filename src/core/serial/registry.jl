@@ -168,4 +168,11 @@ const _SERIALIZABLE_TYPES = Dict{String,Type}(
     "WinberryFamily"                => WinberryFamily,
     "DenHaanAccuracy"               => DenHaanAccuracy,
     "HAGridDiagnostics"             => HAGridDiagnostics,
+    # ── DSER-08 SSJ blocks ───────────────────────────────────────────────────
+    "SimpleBlock"                   => SimpleBlock,
+    "HetBlock"                      => HetBlock,
+    "MitBlock"                      => MitBlock,
+    "SSJModel"                      => SSJModel,
+    "SSJGEJacobian"                 => SSJGEJacobian,
+    "SSJImpulseResponse"            => SSJImpulseResponse,
 )
