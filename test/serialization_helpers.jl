@@ -74,7 +74,12 @@ function _assert_report_equal(a, b)
     a
 end
 function _assert_plot_equal(a, b)
-    pa, pb = plot_result(a), plot_result(b)
+    # Plot IDs come from a process-wide counter; rewind so two identical objects
+    # produce identical HTML rather than `irf_N` vs `irf_N+1`.
+    c0 = _MEM._plot_counter[]
+    pa = plot_result(a)
+    _MEM._plot_counter[] = c0
+    pb = plot_result(b)
     @test typeof(pa) === typeof(pb)
     for f in fieldnames(typeof(pa))
         @test _deep_equal(getfield(pa, f), getfield(pb, f))
@@ -82,5 +87,21 @@ function _assert_plot_equal(a, b)
     pa
 end
 function _assert_tables_equal(a, b)
-    @test DataFrame(a) == DataFrame(b)
+    if applicable(long_table, a)
+        @test long_table(a) == long_table(b)
+    else
+        @test DataFrame(a) == DataFrame(b)
+    end
+end
+function _assert_refs_equal(a, b)
+    applicable(refs, IOBuffer(), a) || return nothing
+    @test sprint(io -> refs(io, a)) == sprint(io -> refs(io, b))
+    nothing
+end
+function _assert_consumers(a, b)
+    _assert_report_equal(a, b)
+    applicable(plot_result, a) && _assert_plot_equal(a, b)
+    applicable(long_table, a) && _assert_tables_equal(a, b)
+    _assert_refs_equal(a, b)
+    b
 end

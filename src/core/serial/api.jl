@@ -69,9 +69,11 @@ Persist a fitted `model` — or a data container — to `path` in a versioned,
 self-describing container. Coverage spans every VAR/BVAR (including mixed-frequency
 and TVP), regression/3SLS, panel, volatility (including IGARCH), factor/Bayesian
 FAVAR, ARIMA/SARIMA, ARDL/NARDL, STAR/Markov-switching, local-projection, and GMM
-model, plus SVAR identification results, Johansen/GPH/local-Whittle companions,
-and the data containers (`TimeSeriesData`, `PanelData`, `CrossSectionData`,
-`IOData`); the full set is `MacroEconometricModels._SERIALIZABLE_TYPES`. Exported
+model, plus SVAR identification results, innovation-accounting objects (IRF,
+FEVD, historical decomposition, LP-IRF/FEVD, Granger/stationarity/PVAR
+diagnostics), Johansen/GPH/local-Whittle companions, and the data containers
+(`TimeSeriesData`, `PanelData`, `CrossSectionData`, `IOData`); the full set is
+`MacroEconometricModels._SERIALIZABLE_TYPES`. Exported
 concrete structs that are not saveable are listed in `_SERIALIZATION_EXCLUDED`
 with a reason — permanent exclusions (rendered HTML, workspaces, transient
 `reproduce` reports, inline covariance-estimator configs) and pending
