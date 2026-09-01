@@ -479,6 +479,8 @@ end
         Y, _ = simulate_two_regime(_B_rec, _A2, [0.4, 4.0]; Tobs=1500, split=0.5, rng=rng)
         r = identify_markov_switching(estimate_var(Y, 1); n_regimes=2, n_starts=3,
                                       max_iter=40, rng=MersenneTwister(53))
+        # Quiet-state numeraire: a high-vol Σ₁ rescales columns (pd ≈ 1.08).
+        @test issorted(tr.(r.Sigma_regimes))
         @test _pd(r.B0, _B_rec) < 0.30
         # Joint ML must not raise nll above the two-regime eigen start — Optim v1
         # LBFGS (Julia 1.10 numerical cell) previously walked off that start.

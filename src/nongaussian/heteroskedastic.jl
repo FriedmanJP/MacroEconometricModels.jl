@@ -1055,6 +1055,19 @@ function _ms_em_run(U::Matrix{T}, K::Int, max_iter::Int, tol::T,
      converged=converged, iter=iter)
 end
 
+"""Permute MS states so regime 1 has the smallest `tr(Σ)`.
+
+EM labels are arbitrary. `B₀` is unit-variance in regime 1, so a quiet/loud
+swap rescales columns — Procrustes vs the DGP `B₀` is ≈1.08 on the two-regime
+recovery DGP (Julia 1.10 CI). Ties keep the original order.
+"""
+function _ms_order_regimes(Sigma::Vector{Matrix{T}}, P::Matrix{T},
+                           smoothed::Matrix{T}) where {T<:AbstractFloat}
+    idx = sortperm([tr(S) for S in Sigma])
+    idx == eachindex(Sigma) && return Sigma, P, smoothed
+    (Sigma[idx], P[idx, idx], smoothed[:, idx])
+end
+
 """
     identify_markov_switching(model::VARModel; n_regimes=2, max_iter=500, tol=1e-6,
                               n_starts=5, rng=Random.default_rng()) -> MarkovSwitchingSVARResult
@@ -1063,8 +1076,10 @@ Identify SVAR via Markov-switching heteroskedasticity (Lanne & Lütkepohl 2008;
 Lanne–Lütkepohl–Maciejowska 2010).
 
 Estimates regime-specific covariances by EM, then identifies a common `B₀` and
-`Λ₂…K` by joint ML (`Σ_k = B Λ_k B'`, `Λ₁ = I`). Multiple Dirichlet starts
-(`n_starts`, default 5); the start with the highest likelihood is returned.
+`Λ₂…K` by joint ML (`Σ_k = B Λ_k B'`, `Λ₁ = I`). States are ordered so regime 1
+is the lowest-trace (quiet) covariance; `B₀` is unit-variance in that regime.
+Multiple Dirichlet starts (`n_starts`, default 5); the start with the highest
+likelihood is returned.
 
 **Reference**: Lanne & Lütkepohl (2008), LLM (2010), Rigobon (2003)
 """
@@ -1094,11 +1109,12 @@ function identify_markov_switching(model::VARModel{T}; n_regimes::Int=2,
         end
     end
     st = packed[best]
-    Tks = vec(sum(st.smoothed, dims=1))
-    B0, Q, Lambdas, p, _, _, _, _ = _k_regime_ml(st.Sigma, Tks)
+    Sigma, P, smoothed0 = _ms_order_regimes(st.Sigma, st.P, st.smoothed)
+    Tks = vec(sum(smoothed0, dims=1))
+    B0, Q, Lambdas, p, _, _, _, _ = _k_regime_ml(Sigma, Tks)
     Sigma_struct = [B0 * Diagonal(Lambdas[k]) * B0' + eps(T) * I for k in 1:K]
-    filtered, predicted, loglik = _hamilton_filter(model.U, Sigma_struct, st.P)
-    smoothed = _hamilton_smoother(filtered, predicted, st.P)
+    filtered, predicted, loglik = _hamilton_filter(model.U, Sigma_struct, P)
+    smoothed = _hamilton_smoother(filtered, predicted, P)
     cq = mean(maximum(smoothed, dims=2))
 
     se = fill(T(NaN), n, n)
@@ -1113,7 +1129,7 @@ function identify_markov_switching(model::VARModel{T}; n_regimes::Int=2,
     end
 
     shocks = Matrix{T}((robust_inv(B0) * model.U')')
-    MarkovSwitchingSVARResult{T}(B0, Q, st.Sigma, Lambdas, smoothed, st.P,
+    MarkovSwitchingSVARResult{T}(B0, Q, Sigma, Lambdas, smoothed, P,
                                   loglik, st.converged, st.iter, K, se, V, T(cq),
                                   shocks)
 end

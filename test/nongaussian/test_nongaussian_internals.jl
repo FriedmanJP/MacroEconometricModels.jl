@@ -401,6 +401,20 @@ const MEM = MacroEconometricModels
         @test all(isapprox.(sum(P_new, dims=2), 1.0, atol=1e-10))
     end
 
+    @testset "MS regime order is increasing trace" begin
+        Σq = [1.0 0.2; 0.2 1.0]
+        Σl = [4.0 0.5; 0.5 5.0]
+        P = [0.8 0.2; 0.3 0.7]
+        sm = [0.1 0.9; 0.2 0.8; 0.15 0.85]
+        Σo, Po, smo = MEM._ms_order_regimes([Σl, Σq], P, sm)
+        @test tr(Σo[1]) < tr(Σo[2])
+        @test Σo[1] == Σq && Σo[2] == Σl
+        @test Po == [0.7 0.3; 0.2 0.8]
+        @test smo == sm[:, [2, 1]]
+        Σs, _, _ = MEM._ms_order_regimes([Σq, Σl], P, sm)
+        @test Σs[1] === Σq
+    end
+
     @testset "GARCH(1,1) filter" begin
         Random.seed!(7034)
         eps_sq = abs2.(randn(100))
