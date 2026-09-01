@@ -96,6 +96,9 @@ _deser_sparse(d::AbstractDict) = SparseMatrixCSC(Int(d["m"]), Int(d["n"]),
 
 _ser_field(::Factorization) = nothing
 
+_ser_field(r::UnitRange) = Dict{String,Any}("__unitrange__" => true, "start" => r.start, "stop" => r.stop)
+_deser_unitrange(d::AbstractDict) = (d["start"]):(d["stop"])
+
 function _ser_field(x)
     x === nothing && return nothing
     x isa Missing && return missing
@@ -159,6 +162,20 @@ end
 # Field-value reconstruction (plain values → struct)
 # ─────────────────────────────────────────────────────────────────────────────
 
+# After mapping `_deser_field` over an array, the result is often `Array{Any}`
+# because `_deser_field` is untyped. If every element shares a concrete type
+# `E`, narrow to the matching array type (`Vector{E}`, `Matrix{E}`, …).
+function _narrow_decoded_array(vals::AbstractArray)
+    isempty(vals) && return vals
+    E = typeof(first(vals))
+    isconcretetype(E) || return vals
+    all(v -> typeof(v) === E, vals) || return vals
+    eltype(vals) === E && return vals
+    out = similar(vals, E)
+    copyto!(out, vals)
+    return out
+end
+
 # Inverse of `_ser_field`: rebuild manifests / covariance estimators / nested
 # structs from their tagged dicts; recurse into arrays/dicts of them.
 function _deser_field(x)
@@ -171,6 +188,7 @@ function _deser_field(x)
         haskey(x, "__pair__")        && return _deser_pair(x)
         haskey(x, "__function__")    && return _deser_function(x)
         haskey(x, "__sparse__")      && return _deser_sparse(x)
+        haskey(x, "__unitrange__")   && return _deser_unitrange(x)
         haskey(x, "__manifest__")    && return _manifest_from_dict(x)
         haskey(x, "__estimator__")   && return _cov_from_dict(x)
         haskey(x, "__struct__")      && return _deser_struct(x)
@@ -179,7 +197,7 @@ function _deser_field(x)
     end
     if x isa AbstractArray
         _is_plain_eltype(eltype(x)) && return x
-        return map(_deser_field, x)
+        return _narrow_decoded_array(map(_deser_field, x))
     end
     x isa Tuple && return map(_deser_field, x)
     return x

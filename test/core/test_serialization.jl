@@ -45,9 +45,30 @@ function _deep_equal(a, b)
     return isequal(a, b)
 end
 
+# In-memory leaf round-trip (no container / no disk).
+deser_ser_roundtrip(x) = _MEM._deser_field(_MEM._ser_field(x))
+
+# True when `_from_serializable` for `T` is the generic `where {T}` method,
+# not an explicit override (those bind `Type{Concrete}` and are not UnionAll).
+_from_serializable_is_generic(::Type{T}) where {T} =
+    which(_MEM._from_serializable, Tuple{Type{T}, AbstractDict, Int}).sig isa UnionAll
+
+# Keyword-constructor detector: a registered type with only the generic
+# `_from_serializable` must rebuild from positional field values.
+function _check_generic_construct(m)
+    T = typeof(m)
+    Tw = Base.typename(T).wrapper
+    haskey(_MEM._SERIALIZABLE_TYPES, string(nameof(T))) || return
+    _from_serializable_is_generic(Tw) || return
+    args = Any[getfield(m, i) for i in 1:nfields(m)]
+    rebuilt = _MEM._generic_construct(Tw, args)
+    @test typeof(rebuilt).name === T.name
+end
+
 # Round-trip `m` through the container and assert every public field (minus any
 # in `skip`, e.g. an intentionally-dropped closure) survives structurally intact.
 function _assert_roundtrip(m; skip::Vector{Symbol}=Symbol[])
+    _check_generic_construct(m)
     m2 = _roundtrip(m)
     @test typeof(m2).name === typeof(m).name
     for f in fieldnames(typeof(m))
@@ -379,14 +400,9 @@ end
         @test length(_MEM._SERIALIZABLE_TYPES) >= 50
     end
 
-    @testset "DSGE-family carve-out: compiled-equation models are not yet supported" begin
-        # These transitively hold a DSGESpec whose residual_fns are compiled
-        # closures; they are deliberately absent from the registry (follow-up).
-        for name in ("DSGESolution", "BayesianDSGE", "HADSGESolution",
-                     "KrusellSmithSolution", "DSGEEstimation")
-            @test !haskey(_MEM._SERIALIZABLE_TYPES, name)
-        end
-    end
+    # DSGE-family carve-out retired: completeness + `_SERIALIZATION_EXCLUDED`
+    # pending reasons (RSER-01) own that list (`DSGESolution`, `BayesianDSGE`,
+    # `HADSGESolution`, `KrusellSmithSolution`, `DSGEEstimation`, …).
 end
 
 @testset "DSER-01 leaf codecs" begin
@@ -415,6 +431,57 @@ end
 
     d = _MEM._build_container(estimate_var(randn(MersenneTwister(1), 40, 2), 1))
     _MEM._assert_plain_payload(d)
+end
+
+@testset "RSER-01 completeness + generic hardening" begin
+    exported_names = String[]
+    for n in names(MacroEconometricModels)
+        T = getfield(MacroEconometricModels, n)
+        T isa Type || continue
+        while T isa UnionAll
+            T = T.body
+        end
+        T isa DataType || continue
+        isstructtype(T) || continue
+        T <: Exception && continue
+        startswith(string(n), "_") && continue
+        push!(exported_names, string(n))
+    end
+    for name in exported_names
+        @test haskey(_MEM._SERIALIZABLE_TYPES, name) ||
+              haskey(_MEM._SERIALIZATION_EXCLUDED, name)
+    end
+
+    # nested-array T inference
+    @test _MEM._infer_float_param([[[1.0, 2.0], [3.0]]]) === Float64
+
+    ut = deser_ser_roundtrip(1:3)          # helper below
+    @test ut isa UnitRange{Int} && ut == 1:3
+    vt = deser_ser_roundtrip([(1.0, 2.0)])
+    @test vt isa Vector && vt[1] isa Tuple
+
+    # Keyword-constructor detector: every registered type reconstructs from
+    # positional field values, or has an explicit `_from_serializable` override.
+    Y = randn(MersenneTwister(774), 40, 2)
+    samples = Any[
+        estimate_var(Y, 1),
+        estimate_factors(randn(MersenneTwister(775), 50, 6), 1),
+        TimeSeriesData(Y; varnames=["a", "b"]),
+    ]
+    for m in samples
+        T = typeof(m)
+        Tw = Base.typename(T).wrapper
+        if _from_serializable_is_generic(Tw)
+            args = Any[getfield(m, i) for i in 1:nfields(m)]
+            @test _MEM._generic_construct(Tw, args) isa T
+        else
+            @test which(_MEM._from_serializable, Tuple{Type{Tw}, AbstractDict, Int}).sig isa DataType
+        end
+    end
+    for (name, T) in _MEM._SERIALIZABLE_TYPES
+        m = which(_MEM._from_serializable, Tuple{Type{T}, AbstractDict, Int})
+        @test (m.sig isa UnionAll) || (m.sig isa DataType)
+    end
 end
 
 # =============================================================================

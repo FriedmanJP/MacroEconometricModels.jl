@@ -22,21 +22,42 @@ _deser_struct(d::AbstractDict) =
     _from_serializable(_resolve_ser_type(String(d["__struct__"])), d, SERIALIZATION_FORMAT_VERSION)
 
 # Infer a `T<:AbstractFloat` type parameter from the reconstructed field values
-# (the first float scalar/array wins). Returns `nothing` for non-float or
-# non-parametric types, in which case the un-parameterized constructor is used.
+# (the first float scalar/array wins). Recurses into nested arrays, tuples, and
+# dict values. Returns `nothing` for non-float or non-parametric types, in which
+# case the un-parameterized constructor is used.
 function _infer_float_param(args)
     for a in args
-        a isa AbstractFloat && return typeof(a)
-        if a isa AbstractArray
-            E = eltype(a)
-            E <: AbstractFloat && return E
-            E <: Complex{<:AbstractFloat} && return real(E)
+        P = _infer_float_param_value(a)
+        P !== nothing && return P
+    end
+    return nothing
+end
+
+function _infer_float_param_value(a)
+    a isa AbstractFloat && return typeof(a)
+    if a isa AbstractArray
+        E = eltype(a)
+        E <: AbstractFloat && return E
+        E <: Complex{<:AbstractFloat} && return real(E)
+        for x in a
+            P = _infer_float_param_value(x)
+            P !== nothing && return P
         end
-        if a isa Tuple    # e.g. PropensityScoreConfig.trimming::Tuple{T,T}
-            for t in a
-                t isa AbstractFloat && return typeof(t)
-            end
+        return nothing
+    end
+    if a isa Tuple    # e.g. PropensityScoreConfig.trimming::Tuple{T,T}
+        for t in a
+            P = _infer_float_param_value(t)
+            P !== nothing && return P
         end
+        return nothing
+    end
+    if a isa AbstractDict
+        for v in values(a)
+            P = _infer_float_param_value(v)
+            P !== nothing && return P
+        end
+        return nothing
     end
     return nothing
 end
