@@ -88,9 +88,9 @@ function _assert_plot_equal(a, b)
 end
 function _assert_tables_equal(a, b)
     if applicable(long_table, a)
-        @test long_table(a) == long_table(b)
+        @test isequal(long_table(a), long_table(b))
     else
-        @test DataFrame(a) == DataFrame(b)
+        @test isequal(DataFrame(a), DataFrame(b))
     end
 end
 function _assert_refs_equal(a, b)
@@ -98,10 +98,23 @@ function _assert_refs_equal(a, b)
     @test sprint(io -> refs(io, a)) == sprint(io -> refs(io, b))
     nothing
 end
+function _assert_forecast_eval(a, b)
+    applicable(point_forecast, a) || return nothing
+    pf_a = point_forecast(a)
+    pf_b = point_forecast(b)
+    col_a = pf_a isa AbstractMatrix ? pf_a[:, 1] : collect(vec(pf_a))
+    col_b = pf_b isa AbstractMatrix ? pf_b[:, 1] : collect(vec(pf_b))
+    length(col_a) < 2 && return nothing
+    actual = col_a .+ 0.1
+    @test isequal(forecast_evaluate(actual, col_a).values,
+                  forecast_evaluate(actual, col_b).values)
+    nothing
+end
 function _assert_consumers(a, b)
     _assert_report_equal(a, b)
     applicable(plot_result, a) && _assert_plot_equal(a, b)
     applicable(long_table, a) && _assert_tables_equal(a, b)
     _assert_refs_equal(a, b)
+    _assert_forecast_eval(a, b)
     b
 end

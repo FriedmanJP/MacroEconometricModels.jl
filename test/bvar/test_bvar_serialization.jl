@@ -75,3 +75,26 @@ end
         end
     end
 end
+
+@testset "RSER-04 BVARForecast serialization (#777)" begin
+    Y = randn(MersenneTwister(777), 60, 2)
+    post = estimate_bvar(Y, 1; n_draws=24, seed=2)
+    fc = forecast(post, 4; store_draws=true, rng=MersenneTwister(1))
+    @test fc._draws isa Array{Float64,3}
+    payload = _MEM._capture_fields(fc)
+    @test haskey(payload, "_draws")
+    @test payload["_draws"] !== nothing
+    @test _from_serializable_is_generic(BVARForecast)
+    fc2 = _assert_roundtrip(fc)
+    _assert_consumers(fc, fc2)
+    @test fc2._draws == fc._draws
+    @test long_table(fc2) isa DataFrame
+    let path = joinpath(mktempdir(), "bvar_fc.jld2")
+        save_model(fc, path)
+        fc3 = load_model(path)
+        @test fc3 isa BVARForecast{Float64}
+        @test fc3._draws == fc._draws
+        _assert_report_equal(fc, fc3)
+        _assert_plot_equal(fc, fc3)
+    end
+end

@@ -74,6 +74,7 @@ const TEST_GROUPS = [
         "var/test_proxy.jl",              # SID-11 (#740): proxy SVAR / external instruments
         "var/test_maxshare.jl",           # SID-12 (#741): max-share identification
         "vecm/test_vecm.jl",
+        "vecm/test_vecm_serialization.jl",
         "vecm/test_vecm_restrictions.jl", # EV-38 (#446)
         "preg/test_panel_iv.jl",          # moved from the ceiling ARIMA group to rebalance (#127)
         "var/test_var_serialization.jl",
@@ -89,6 +90,7 @@ const TEST_GROUPS = [
         "factor/test_dynamicfactormodel.jl",
         "factor/test_gdfm.jl",
         "factor/test_factor_forecast.jl",
+        "factor/test_factor_serialization.jl",
         "factor/test_restricted.jl",
         "factor/test_favar.jl",
         "factor/test_structural_dfm.jl",
@@ -145,10 +147,12 @@ const TEST_GROUPS = [
         "reg/test_ordered.jl",
         "reg/test_multinomial.jl",
         "midas/test_midas.jl",
+        "midas/test_midas_serialization.jl",
         "ardl/test_ardl.jl",   # EV-08 (#416): ARDL + PSS bounds test
         "ardl/test_nardl.jl",  # EV-09 (#417): nonlinear ARDL (NARDL) + dynamic multipliers
         "ardl/test_pmg.jl",    # EV-23 (#431): panel ARDL — PMG / MG / DFE + Hausman
         "fceval/test_fceval.jl",   # EV-39 (#447): forecast eval metrics + DM/CW/MZ/encompassing + combination
+        "fceval/test_fceval_serialization.jl",
         "cointreg/test_cointreg.jl",   # EV-10 (#418): FMOLS/CCR/DOLS cointegrating regression
         "teststat/test_cointegration_resid.jl",   # EV-11 (#419): Engle-Granger/Phillips-Ouliaris/Hansen-Lc/Park
         "teststat/test_variance_ratio.jl",   # EV-27 (#435): Lo-MacKinlay/Chow-Denning/Wright/Kim variance-ratio tests

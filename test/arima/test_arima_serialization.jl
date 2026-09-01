@@ -100,3 +100,14 @@ end
         @test _deep_equal(bounds_test(nm2), bounds_test(nm))
     end
 end
+
+@testset "RSER-04 ARIMAForecast serialization (#777)" begin
+    ya = randn(MersenneTwister(11), 80)
+    m = estimate_ar(ya, 1; method=:ols)
+    fc = forecast(m, 6)
+    @test _from_serializable_is_generic(ARIMAForecast)
+    fc2 = _assert_roundtrip(fc)
+    _assert_consumers(fc, fc2)
+    @test long_table(fc2) isa DataFrame
+    @test fc2.horizon == 6
+end

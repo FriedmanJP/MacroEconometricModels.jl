@@ -21,3 +21,14 @@ end
     @test f1.forecast == f2.forecast
     @test sprint(io -> refs(io, m)) == sprint(io -> refs(io, m2))
 end
+
+@testset "RSER-04 VolatilityForecast serialization (#777)" begin
+    yv = randn(MersenneTwister(423), 200)
+    m = estimate_garch(yv, 1, 1)
+    fc = forecast(m, 5; n_sim=40, rng=MersenneTwister(3))
+    @test _from_serializable_is_generic(VolatilityForecast)
+    fc2 = _assert_roundtrip(fc)
+    _assert_consumers(fc, fc2)
+    @test long_table(fc2) isa DataFrame
+    @test fc2.model_type === fc.model_type
+end

@@ -33,6 +33,10 @@ end
         f2 = forecast(m2, 4; reps=30, rng=MersenneTwister(9))
         @test f1.forecast == f2.forecast
         @test sprint(io -> refs(io, m)) == sprint(io -> refs(io, m2))
+        @test _from_serializable_is_generic(STARForecast)
+        f1b = _assert_roundtrip(f1)
+        _assert_consumers(f1, f1b)
+        @test f1b.reps == f1.reps
     end
 
     @testset "MSRegModel" begin
@@ -55,5 +59,24 @@ end
             @test sprint(show, m3) == sprint(show, m)
             @test forecast(m3, 4; reps=30, rng=MersenneTwister(10)).forecast == f1.forecast
         end
+        @test _from_serializable_is_generic(MSForecast)
+        f1b = _assert_roundtrip(f1)
+        _assert_consumers(f1, f1b)
+        @test f1b.regime_prob == f1.regime_prob
     end
+end
+
+@testset "RSER-04 ThresholdForecast serialization (#777)" begin
+    rng = MersenneTwister(5)
+    y = zeros(120)
+    for t in 2:120
+        y[t] = (y[t-1] <= 0 ? 0.3 : 0.7) * y[t-1] + 0.4 * randn(rng)
+    end
+    m = estimate_setar(y, 1, 1; linearity=false)
+    fc = forecast(m, 4; reps=20, rng=MersenneTwister(6))
+    @test _from_serializable_is_generic(ThresholdForecast)
+    fc2 = _assert_roundtrip(fc)
+    _assert_consumers(fc, fc2)
+    @test fc2.reps == fc.reps
+    @test long_table(fc2) isa DataFrame
 end

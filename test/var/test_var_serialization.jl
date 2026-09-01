@@ -158,3 +158,39 @@ end
         @test j.test_name == "Hansen J-test"
     end
 end
+
+@testset "RSER-04 VAR / conditional forecast serialization (#777)" begin
+    Y = randn(MersenneTwister(777), 80, 2)
+    m = estimate_var(Y, 1)
+
+    @testset "VARForecast" begin
+        fc = forecast(m, 6; ci_method=:bootstrap, reps=20, rng=MersenneTwister(1))
+        @test fc._draws isa Array{Float64,3}
+        payload = _MEM._capture_fields(fc)
+        @test haskey(payload, "_draws")
+        @test payload["_draws"] !== nothing
+        @test _from_serializable_is_generic(VARForecast)
+        fc2 = _assert_roundtrip(fc)
+        _assert_consumers(fc, fc2)
+        @test long_table(fc2) isa DataFrame
+        @test fc2._draws == fc._draws
+    end
+
+    @testset "ForecastCondition / ConditionalForecast" begin
+        cond = forecast_condition(1, 1, 0.5)
+        @test _from_serializable_is_generic(ForecastCondition)
+        cond2 = _assert_roundtrip(cond)
+        _assert_report_equal(cond, cond2)
+        @test cond2.variable == 1 && cond2.horizon == 1 && cond2.value == 0.5
+
+        cf = conditional_forecast(m, [cond], 4; reps=20, rng=MersenneTwister(2))
+        @test _from_serializable_is_generic(ConditionalForecast)
+        cf2 = _assert_roundtrip(cf)
+        _assert_consumers(cf, cf2)
+        @test cf2.conditions isa Vector{<:ForecastCondition}
+        @test length(cf2.conditions) == 1
+        @test cf2.conditions[1].horizon == 1
+        @test cf2.conditions[1].value == cf.conditions[1].value
+        @test cf2.identification === cf.identification
+    end
+end

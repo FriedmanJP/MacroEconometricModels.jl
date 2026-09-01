@@ -44,3 +44,15 @@ end
         @test lf2.bias_correction == lf.bias_correction
     end
 end
+
+@testset "RSER-04 LPForecast serialization (#777)" begin
+    Y = randn(MersenneTwister(777), 80, 2)
+    lp = estimate_lp(Y, 1, 6; lags=1)
+    fc = forecast(lp, ones(6); ci_method=:analytical)
+    @test _from_serializable_is_generic(LPForecast)
+    fc2 = _assert_roundtrip(fc)
+    _assert_consumers(fc, fc2)
+    @test fc2.ci_method === :analytical
+    @test fc2.shock_path == fc.shock_path
+    @test long_table(fc2) isa DataFrame
+end
