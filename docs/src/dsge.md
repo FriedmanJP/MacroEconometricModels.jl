@@ -163,6 +163,21 @@ Variables with `[t+1]` subscripts generate expectation errors in the Sims (2002)
 | `steady_state` | `Vector{T}` | Steady-state values |
 | `varnames` | `Vector{String}` | Display names |
 
+### Saving and Reloading
+
+`save_model` persists the specification --- equations, IR, numeric steady state, and parameters --- and `load_model` recompiles `residual_fns` from stored `NamedEquation.expr`. An analytical `ss_fn` recompiles from the `steady_state` block in the IR; a programmatic closure is dropped with a warning. See [Data Management](@ref data_page) for the security caveat (a loaded file is executed code) and the named-function rule.
+
+A `DSGESolution` stores both `spec` and `linear.spec`. The file holds two copies, and after reload `sol.spec !== sol.linear.spec`: each reconstructs independently, so mutating one does not update the other.
+
+```@example dsge_overview
+rbc_path = joinpath(mktempdir(), "rbc.jld2")
+save_model(sol, rbc_path)
+sol_reloaded = load_model(rbc_path)
+size(irf(sol_reloaded, 40).values)
+```
+
+The reloaded solution produces the same IRF array as `result` above. Persist `ModelSpec` itself the same way when you want to re-solve later with a different algorithm.
+
 ---
 
 ## Steady State
@@ -353,6 +368,8 @@ The estimation pipeline is validated separately in `test/dynare_replication/esti
 4. **Numerical steady state converges to wrong equilibrium**: For models with multiple equilibria, the default initial guess (vector of ones) may converge to an economically irrelevant solution. Provide `initial_guess` close to the desired equilibrium, or use the analytical `steady_state` block.
 
 5. **Constrained steady state**: Box constraints (variable bounds) are handled by NonlinearSolve.jl. Nonlinear inequality constraints use the built-in JuMP + Ipopt backend (`solver=:ipopt`). PATH MCP requires the optional PATHSolver package (`import PATHSolver`).
+
+6. **Programmatic closures cannot be saved.** A `ModelSpec` whose residuals were written as Julia functions without `NamedEquation.expr` raises `SerializationError` at `save_model`. Use `@dsge` (or keep the expressions) so the loader can recompile. `to_spec(::BlanchardOLG)` is the same trap --- persist the [`BlanchardOLG`](@ref) and rebuild the spec after load.
 
 ---
 

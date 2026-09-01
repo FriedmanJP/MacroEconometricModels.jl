@@ -382,6 +382,19 @@ tr = ct_two_asset_mit(CTTwoAsset(; Ib=25, Ia=25, a_max=6.0, b_max=5.0, rho=0.06,
 
 ---
 
+## Saving and Reloading
+
+[`CTAiyagari`](@ref), [`CTTwoAsset`](@ref), and their solutions round-trip through `save_model` / `load_model`. Sparse infinitesimal generators use the `__sparse__` codec; `CTTwoAssetSolution` reconstructs through its keyword inner constructor. See [Data Management](@ref data_page) for the executed-code caveat.
+
+```@example ct
+ct_path = joinpath(mktempdir(), "aiyagari.jld2")
+save_model(ss, ct_path)
+ss_loaded = load_model(ct_path)
+round(ss_loaded.r; digits=5)
+```
+
+---
+
 ## Complete Example
 
 This example solves a one-asset continuous-time Aiyagari economy end to end: it builds the model, computes the stationary equilibrium, and reads off the equilibrium interest rate, aggregate capital, and the mass of households at the borrowing constraint.

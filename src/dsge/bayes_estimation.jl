@@ -249,6 +249,29 @@ function _resolve_bayes_defaults(is_ha::Bool, n_draws, burnin, n_smc)
     return (n_draws=d, burnin=b, n_smc=s)
 end
 
+function _dsge_bayes_manifest(; seed, method, n_particles, n_draws, n_smc, n_mh_steps,
+                               burnin, ess_target, solver, solver_kwargs, theta0,
+                               keep_burnin=false, transform=true, proposal=:adaptive,
+                               extra=Dict{String,Any}())
+    settings = Dict{String,Any}(
+        "method"         => String(method),
+        "n_particles"    => Int(n_particles),
+        "n_draws"        => Int(n_draws),
+        "n_smc"          => Int(n_smc),
+        "n_mh_steps"     => Int(n_mh_steps),
+        "burnin"         => Int(burnin),
+        "ess_target"     => Float64(ess_target),
+        "solver"         => String(solver),
+        "solver_kwargs"  => _plain_nt_settings(solver_kwargs),
+        "theta0"         => Vector{Float64}(theta0),
+        "keep_burnin"    => keep_burnin,
+        "transform"      => transform,
+        "proposal"       => String(proposal),
+    )
+    merge!(settings, extra)
+    return capture_manifest(; seed=seed, settings=settings)
+end
+
 # =============================================================================
 # Main public API
 # =============================================================================
@@ -330,6 +353,10 @@ SMC², or Random-Walk Metropolis-Hastings (RWMH).
   is ever wasted outside the parameter support. `transform=false` restores the
   natural-space walk.
 - `rng::AbstractRNG=Random.default_rng()` — random number generator
+- `seed::Union{Nothing,Integer}=nothing` — if given, owns the RNG (a fresh
+  `MersenneTwister(seed)`) and records it on `result.manifest` so
+  [`reproduce`](@ref) can re-run bit-for-bit. `seed` wins when both `seed` and
+  `rng` are passed.
 
 # HA specs
 `HouseholdSystem` models re-solve the HA steady state and linearize at each draw,
@@ -399,11 +426,13 @@ function estimate_dsge_bayes(spec::ModelSpec{T}, data::AbstractMatrix,
                               max_stages::Int=500, min_dphi::Real=1e-10,
                               proposal::Symbol=:adaptive,
                               transform::Bool=true,
+                              seed::Union{Nothing,Integer}=nothing,
                               rng::AbstractRNG=Random.default_rng(),
                               kwargs...) where {T<:AbstractFloat}
     # Empty-residual / non-RA families have no gensys state space; falling
     # through to the RA Kalman path is a silent wrong likelihood (#649 / MSR-07).
     _require_estimable_spec(:estimate_dsge_bayes, spec)
+    rng = _resolve_repro_rng(rng, seed)
 
     if has_kind(spec, HouseholdSystem)
         (count(v -> v isa HouseholdSystem, values(spec.agents)) == 1 &&
@@ -439,7 +468,7 @@ function estimate_dsge_bayes(spec::ModelSpec{T}, data::AbstractMatrix,
             n_draws=defs.n_draws, burnin=defs.burnin, n_smc=defs.n_smc,
             n_mh_steps=n_mh_steps,
             ess_target=ess_target, measurement_error=measurement_error,
-            max_stages=max_stages, min_dphi=min_dphi, rng=rng, kwargs...)
+            max_stages=max_stages, min_dphi=min_dphi, rng=rng, seed=seed, kwargs...)
     end
 
     isempty(kwargs) || throw(ArgumentError(
@@ -528,6 +557,12 @@ function estimate_dsge_bayes(spec::ModelSpec{T}, data::AbstractMatrix,
     end
 
     # ── 6. Dispatch to sampler ───────────────────────────────────────────
+    manifest = _dsge_bayes_manifest(; seed=seed, method=method,
+        n_particles=n_particles, n_draws=n_draws, n_smc=n_smc,
+        n_mh_steps=n_mh_steps, burnin=burnin, ess_target=ess_target,
+        solver=solver, solver_kwargs=solver_kwargs, theta0=theta0_sorted,
+        keep_burnin=keep_burnin, transform=transform, proposal=proposal)
+
     if method == :smc
         state = _smc_sample(spec, data_mat, param_names, prior, theta0_sorted;
                              n_smc=n_smc, n_mh_steps=n_mh_steps,
@@ -539,7 +574,8 @@ function estimate_dsge_bayes(spec::ModelSpec{T}, data::AbstractMatrix,
         return _smc_state_to_bayesian_dsge(state, prior, param_names, spec, :smc,
                                             observables, measurement_error,
                                             solver, solver_kwargs, data_mat,
-                                            prefilter_spec, trends_record)
+                                            prefilter_spec, trends_record;
+                                            manifest=manifest)
 
     elseif method == :smc2
         state = _smc2_sample(spec, data_mat, param_names, prior, theta0_sorted;
@@ -554,7 +590,8 @@ function estimate_dsge_bayes(spec::ModelSpec{T}, data::AbstractMatrix,
         return _smc_state_to_bayesian_dsge(state, prior, param_names, spec, :smc2,
                                             observables, measurement_error,
                                             solver, solver_kwargs, data_mat,
-                                            prefilter_spec, trends_record)
+                                            prefilter_spec, trends_record;
+                                            manifest=manifest)
 
     else  # :mh
         theta_init = theta0_sorted
@@ -599,7 +636,8 @@ function estimate_dsge_bayes(spec::ModelSpec{T}, data::AbstractMatrix,
                                      observables, measurement_error,
                                      solver, solver_kwargs,
                                      _mh_diag.n_failed, _mh_diag.n_evals, data_mat,
-                                     prefilter_spec, trends_record)
+                                     prefilter_spec, trends_record;
+                                     manifest=manifest)
     end
 end
 
@@ -815,7 +853,8 @@ function _smc_state_to_bayesian_dsge(state::SMCState{T}, prior::DSGEPrior{T},
                                        solver_kwargs::NamedTuple,
                                        data::Matrix{T}=zeros(T, 0, 0),
                                        prefilter=nothing,
-                                       trends=nothing) where {T<:AbstractFloat}
+                                       trends=nothing;
+                                       manifest=nothing) where {T<:AbstractFloat}
     # theta_draws: transpose from n_params × N_smc to N_smc × n_params
     theta_draws = Matrix{T}(state.theta_particles')
 
@@ -850,7 +889,7 @@ function _smc_state_to_bayesian_dsge(state::SMCState{T}, prior::DSGEPrior{T},
         spec, sol, ss,
         state.n_lik_failures, state.n_lik_evals, solved_at,
         data, observables, measurement_error, solver, solver_kwargs,
-        prefilter, trends
+        prefilter, trends; manifest=manifest
     )
 end
 
@@ -959,7 +998,8 @@ function _mh_to_bayesian_dsge(draws::Matrix{T}, log_posterior::Vector{T},
                                 n_evals::Int=0,
                                 data::Matrix{T}=zeros(T, 0, 0),
                                 prefilter=nothing,
-                                trends=nothing) where {T<:AbstractFloat}
+                                trends=nothing;
+                                manifest=nothing) where {T<:AbstractFloat}
     # Posterior mean from draws
     theta_mean = vec(mean(draws; dims=1))
 
@@ -982,7 +1022,7 @@ function _mh_to_bayesian_dsge(draws::Matrix{T}, log_posterior::Vector{T},
         spec, sol, ss,
         n_failed, n_evals, solved_at,
         data, observables, measurement_error, solver, solver_kwargs,
-        prefilter, trends
+        prefilter, trends; manifest=manifest
     )
 end
 
@@ -1430,13 +1470,16 @@ parameter values and simulates forward `T_periods` periods.
 # Keywords
 - `T_periods::Int=100` — number of periods per simulation
 - `rng::AbstractRNG` — random number generator
+- `seed::Union{Nothing,Integer}=nothing` — owns the RNG when given (`seed` wins over `rng`)
 
 # Returns
 `n_sim × T_periods × n_vars` array of simulated paths.
 """
 function posterior_predictive(result::BayesianDSGE{T}, n_sim::Int;
                                T_periods::Int=100,
+                               seed::Union{Nothing,Integer}=nothing,
                                rng::AbstractRNG=Random.default_rng()) where {T<:AbstractFloat}
+    rng = _resolve_repro_rng(rng, seed)
     n_draws_total = size(result.theta_draws, 1)
     n_params = length(result.param_names)
     spec = result.spec
@@ -1661,6 +1704,7 @@ a warning reports the skipped fraction when it exceeds 10%.
 - `stats=nothing` — statistic function `Y::Matrix → (names, values)` or
   `NamedTuple`; default: mean/variance/AR(1) per observable + cross-correlations
 - `solver`, `solver_kwargs`, `rng` — as in [`estimate_dsge_bayes`](@ref)
+- `seed::Union{Nothing,Integer}=nothing` — owns the RNG when given (`seed` wins over `rng`)
 """
 function prior_predictive(spec::ModelSpec{T},
                           priors::Dict{Symbol,<:Distribution};
@@ -1670,7 +1714,9 @@ function prior_predictive(spec::ModelSpec{T},
                           stats=nothing,
                           solver::Symbol=:gensys,
                           solver_kwargs::NamedTuple=NamedTuple(),
+                          seed::Union{Nothing,Integer}=nothing,
                           rng::AbstractRNG=Random.default_rng()) where {T<:AbstractFloat}
+    rng = _resolve_repro_rng(rng, seed)
     _require_estimable_spec(:prior_predictive, spec)
     prior = _build_bayes_prior(priors)
     param_names = prior.param_names
@@ -1734,12 +1780,15 @@ draws are dropped and counted (`n_effective`), never zero-filled.
 - `n_draws::Int=200` — posterior draws to replicate
 - `stats=nothing` — statistic function (same contract as [`prior_predictive`](@ref))
 - `rng::AbstractRNG` — random number generator
+- `seed::Union{Nothing,Integer}=nothing` — owns the RNG when given (`seed` wins over `rng`)
 """
 function posterior_predictive_check(result::BayesianDSGE{T};
                                     data::Union{Nothing,AbstractMatrix}=nothing,
                                     n_draws::Int=200,
                                     stats=nothing,
+                                    seed::Union{Nothing,Integer}=nothing,
                                     rng::AbstractRNG=Random.default_rng()) where {T<:AbstractFloat}
+    rng = _resolve_repro_rng(rng, seed)
     observables = isempty(result.observables) ?
         (result.spec.augmented ? copy(result.spec.original_endog) : copy(result.spec.endog)) :
         result.observables
@@ -2026,13 +2075,16 @@ the DSGE model and simulates `T_periods` forward. Reports pointwise posterior
 median and quantile bands.
 
 Default quantiles give dual 68% (16th–84th) and 90% (5th–95th) credible bands.
+`seed` owns the RNG when given (wins over `rng`) and is recorded on `result.manifest`.
 """
 function simulate(result::BayesianDSGE{T}, T_periods::Int;
                    n_draws::Int=200,
                    quantiles::Vector{<:Real}=T[0.05, 0.16, 0.84, 0.95],
                    solver::Symbol=:gensys,
                    solver_kwargs::NamedTuple=NamedTuple(),
+                   seed::Union{Nothing,Integer}=nothing,
                    rng::AbstractRNG=Random.default_rng()) where {T<:AbstractFloat}
+    rng = _resolve_repro_rng(rng, seed)
     spec = result.spec
     n_draws_total = size(result.theta_draws, 1)
     n_sim = min(n_draws, n_draws_total)
@@ -2080,7 +2132,11 @@ function simulate(result::BayesianDSGE{T}, T_periods::Int;
     q_vec = T.(quantiles)
     sim_q, sim_m = compute_posterior_quantiles(stacked, q_vec)
 
-    BayesianDSGESimulation{T}(sim_q, sim_m, T_periods, var_names, q_vec, stacked)
+    sim_manifest = capture_manifest(; seed=seed, settings=Dict{String,Any}(
+        "T_periods" => T_periods, "n_draws" => n_sim, "solver" => String(solver),
+        "solver_kwargs" => _plain_nt_settings(solver_kwargs)))
+    BayesianDSGESimulation{T}(sim_q, sim_m, T_periods, var_names, q_vec, stacked;
+                              manifest=sim_manifest)
 end
 
 # =============================================================================
@@ -2159,6 +2215,7 @@ function Base.show(io::IO, result::BayesianDSGE{T}) where {T}
                           "Post Mean", "Post Std", "2.5%", "97.5%"],
             alignment=[:l, :l, :r, :r, :r, :r, :r, :r])
     end
+    _manifest_footer(io, result.manifest)
 end
 
 function Base.show(io::IO, result::BayesianDSGESimulation{T}) where {T}
@@ -2167,4 +2224,59 @@ function Base.show(io::IO, result::BayesianDSGESimulation{T}) where {T}
     println(io, "  Variables:  $(length(result.variables))")
     println(io, "  Draws:      $(size(result.all_paths, 1))")
     println(io, "  Quantiles:  $(result.quantile_levels)")
+    _manifest_footer(io, result.manifest)
+end
+
+"""
+    reproduce(result::BayesianDSGE) -> ReproReport
+
+Re-run [`estimate_dsge_bayes`](@ref) from the recorded seed and settings and
+compare `theta_draws` / `log_marginal_likelihood` bit-for-bit. Requires
+`estimate_dsge_bayes(...; seed=N)`; without a recorded seed `matched` is
+`missing`. A changed thread count is reported as the legitimate mismatch it is.
+"""
+function reproduce(result::BayesianDSGE)
+    m = result.manifest
+    m === nothing && return _no_manifest_report("BayesianDSGE")
+    m.seed === nothing && return _no_seed_report(m, "estimate_dsge_bayes(...; seed=N)")
+    s = m.settings
+    method_raw = Symbol(get(s, "method", String(result.method)))
+    est_method = method_raw === :rwmh ? :mh : method_raw
+    T = eltype(result.theta_draws)
+    theta0 = Vector{T}(get(s, "theta0", vec(mean(result.theta_draws; dims=1))))
+    priors = Dict{Symbol,Distribution}(
+        result.priors.param_names[i] => result.priors.distributions[i]
+        for i in eachindex(result.priors.param_names))
+    n_smc = Int(get(s, "n_smc", 500))
+    n_mh_steps = Int(get(s, "n_mh_steps", 1))
+    n_draws = Int(get(s, "n_draws", size(result.theta_draws, 1)))
+    n_particles = Int(get(s, "n_particles", 500))
+    burnin = Int(get(s, "burnin", 0))
+    ess_target = Float64(get(s, "ess_target", 0.5))
+    keep_burnin = Bool(get(s, "keep_burnin", false))
+    transform = Bool(get(s, "transform", true))
+    proposal = Symbol(get(s, "proposal", "adaptive"))
+    fresh = if has_kind(result.spec, HouseholdSystem)
+        estimate_dsge_bayes(result.spec, result.data, theta0;
+            priors=priors, method=est_method, observables=result.observables,
+            measurement_error=result.measurement_error, seed=m.seed,
+            n_smc=n_smc, n_mh_steps=n_mh_steps, n_draws=n_draws,
+            n_particles=n_particles, burnin=burnin, ess_target=ess_target,
+            ha_method=result.solver, ha_kwargs=result.solver_kwargs)
+    else
+        estimate_dsge_bayes(result.spec, result.data, theta0;
+            priors=priors, method=est_method, observables=result.observables,
+            measurement_error=result.measurement_error, seed=m.seed,
+            n_smc=n_smc, n_mh_steps=n_mh_steps, n_draws=n_draws,
+            n_particles=n_particles, burnin=burnin, ess_target=ess_target,
+            keep_burnin=keep_burnin, transform=transform, proposal=proposal,
+            solver=result.solver, solver_kwargs=result.solver_kwargs,
+            prefilter=:none, observation_trends=result.trends, warn_trends=false)
+    end
+    diffs = [
+        _repro_field_diff("theta_draws", result.theta_draws, fresh.theta_draws),
+        _repro_field_diff("log_marginal_likelihood",
+                          [result.log_marginal_likelihood], [fresh.log_marginal_likelihood]),
+    ]
+    return _finalize_repro(diffs, m)
 end

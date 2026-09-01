@@ -508,8 +508,8 @@ Publication-quality tables, display backend switching, and bibliographic referen
 | `with_min_level(f, level)` | Run `f()` with a scoped minimum log level |
 | `capture_manifest(; seed)` | Capture a reproducibility manifest (seed, threads, versions, git) |
 | `reproduce(result)` | Re-run a randomized result from its seed; returns a `ReproReport` |
-| `save_model(model, path)` | Persist a fitted model, data container, or named bundle to a versioned container |
-| `load_model(path)` | Reconstruct a saved model (or a `Dict` of objects for a bundle) |
+| `save_model(model, path; note="", compress=false)` | Persist a fitted model, DSGE/HA/OLG result, data container, or named bundle (JLD2 is a dependency) |
+| `load_model(path)` | Reconstruct a saved model (or a `Dict` of objects for a bundle). Treat a DSGE file as executed code |
 | `model_info(path)` | Read the file header (`note`, versions, type tags) without reconstructing the payload |
 | `refs(model; format=...)` | Bibliographic references |
 | `refs(io, :method; format=...)` | References by method name |

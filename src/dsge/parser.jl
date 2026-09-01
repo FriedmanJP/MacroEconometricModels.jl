@@ -295,6 +295,8 @@ function _dsge_impl(block::Expr)
     end
     n_expect = length(forward_indices)
 
+    # `_substitute_vars` / `_equation_to_residual` live in ir.jl (shared with
+    # load-time recompile). The macro still emits closures inline — no eval here.
     residual_fn_exprs = Expr[]
     residual_exprs = Expr[]
     timings = TimingInfo[]
@@ -344,27 +346,24 @@ function _dsge_impl(block::Expr)
                                     for i in eachindex(original_raw_equations))...)
     fn_vec_expr = Expr(:ref, :Function, residual_fn_exprs...)
 
-    ss_fn_expr = if ss_body !== nothing
-        param_unpack = [:($(p) = _ss_θ_[$(QuoteNode(p))]) for p in params]
-        if ss_body isa Expr && ss_body.head == :block
-            inner = filter(a -> !(a isa LineNumberNode), ss_body.args)
-            body = Expr(:block, param_unpack..., inner...)
-        else
-            body = Expr(:block, param_unpack..., ss_body)
-        end
-        Expr(:->, :_ss_θ_, body)
-    elseif is_linear
-        n_endog_val = length(endog)
-        :((_ss_θ_) -> zeros($n_endog_val))
-    else
-        :nothing
-    end
+    ss_fn_expr = _ss_fn_expr(ss_body, params, length(endog), is_linear)
 
     decls = IRDecl[
         IRDecl(:parameters, nothing, copy(params)),
         IRDecl(:endogenous, nothing, copy(original_endog)),
         IRDecl(:exogenous, nothing, copy(exog)),
     ]
+    ss_body !== nothing && push!(decls, IRDecl(:steady_state, nothing, ss_body))
+    is_linear && push!(decls, IRDecl(:linear, nothing, true))
+    if user_varnames !== nothing
+        push!(decls, IRDecl(:varnames, nothing, copy(user_varnames)))
+    end
+    if bellman_util_ex !== nothing
+        util = bellman_util_ex isa QuoteNode ? bellman_util_ex.value : bellman_util_ex
+        push!(decls, IRDecl(:utility, nothing, util))
+    end
+    bellman_beta_ex !== nothing && push!(decls, IRDecl(:beta, nothing, bellman_beta_ex))
+    !isempty(bellman_ctrl_ex) && push!(decls, IRDecl(:controls, nothing, copy(bellman_ctrl_ex)))
     append!(decls, extra_decls)
     ir_eqs = IREquation[IREquation(original_eq_names[i], original_eq_defines[i],
                                    original_raw_equations[i].args[1],
@@ -709,29 +708,7 @@ end
 # =============================================================================
 # Time-index parsing
 # =============================================================================
-
-"""
-    _parse_time_index(ex) → Int
-
-Parse time index from a `ref` subscript expression.
-- `t` → 0
-- `(call + t 1)` → 1
-- `(call - t 1)` → -1
-"""
-function _parse_time_index(ex)
-    if ex === :t
-        return 0
-    elseif ex isa Expr && ex.head == :call && length(ex.args) == 3 && ex.args[2] === :t
-        op = ex.args[1]
-        offset = ex.args[3]
-        if op === :(+)
-            return Int(offset)
-        elseif op === :(-)
-            return -Int(offset)
-        end
-    end
-    error("@dsge: unrecognized time index expression: $ex")
-end
+# `_parse_time_index` lives in ir.jl (shared with `_substitute_vars` / recompile).
 
 """
     _is_time_ref(ex, varset) → Bool
@@ -915,86 +892,9 @@ function _walk_expr(f::Function, ex)
     end
 end
 
-# =============================================================================
-# Equation transformation
-# =============================================================================
-
-"""
-    _equation_to_residual(eq) → Expr
-
-Transform `LHS = RHS` to `LHS - (RHS)`, creating a residual expression.
-"""
-function _equation_to_residual(eq::Expr)
-    eq.head == :(=) || error("@dsge: equation must be LHS = RHS, got: $eq")
-    lhs = eq.args[1]
-    rhs = eq.args[2]
-    # Unwrap block wrapper if present
-    if rhs isa Expr && rhs.head == :block
-        inner = filter(a -> !(a isa LineNumberNode), rhs.args)
-        length(inner) == 1 || error("@dsge: malformed equation RHS")
-        rhs = inner[1]
-    end
-    return Expr(:call, :(-), lhs, rhs)
-end
-
-# =============================================================================
-# Variable substitution
-# =============================================================================
-
-"""
-    _substitute_vars(ex, endog, exog, params) → Expr
-
-Recursively replace:
-- `var[t]` → `_y_t_[i]` where `i` = index of `var` in `endog`
-- `var[t-1]` → `_y_lag_[i]`
-- `var[t+1]` → `_y_lead_[i]`
-- `shock[t]` → `_ε_[j]` where `j` = index of `shock` in `exog`
-- bare parameter symbols → `_θ_[QuoteNode(name)]`
-"""
-function _substitute_vars(ex, endog::Vector{Symbol}, exog::Vector{Symbol}, params::Vector{Symbol})
-    if ex isa Expr
-        # Time-indexed endogenous variable: var[t±k]
-        if ex.head == :ref && length(ex.args) == 2 && ex.args[1] isa Symbol
-            varname = ex.args[1]::Symbol
-            if varname ∈ endog
-                idx = findfirst(==(varname), endog)
-                offset = _parse_time_index(ex.args[2])
-                if offset == 0
-                    return Expr(:ref, :_y_t_, idx)
-                elseif offset < 0
-                    return Expr(:ref, :_y_lag_, idx)
-                else  # offset > 0
-                    return Expr(:ref, :_y_lead_, idx)
-                end
-            elseif varname ∈ exog
-                jdx = findfirst(==(varname), exog)
-                # Shocks should only be [t]
-                offset = _parse_time_index(ex.args[2])
-                offset == 0 || error("@dsge: exogenous shock $varname can only be indexed at [t], got offset $offset")
-                return Expr(:ref, :_ε_, jdx)
-            end
-            # Not a known variable — could be some other indexing; leave as is
-        end
-
-        # Recurse into children
-        new_args = Any[]
-        for a in ex.args
-            push!(new_args, _substitute_vars(a, endog, exog, params))
-        end
-        return Expr(ex.head, new_args...)
-
-    elseif ex isa Symbol
-        # Bare parameter symbol → θ[:name]
-        if ex ∈ params
-            return Expr(:ref, :_θ_, QuoteNode(ex))
-        end
-        # Other symbols (operators like +, -, *, ^, numeric constants, etc.) pass through
-        return ex
-    else
-        # Literal values (numbers, etc.)
-        return ex
-    end
-end
+# `_equation_to_residual` and `_substitute_vars` live in ir.jl so `@dsge` and
+# ModelSpec load-time recompile share one substitution. The macro still emits
+# closures inline (no `eval` at expansion).
 
 # =============================================================================
 # Augmentation functions for deep lags, deep leads, and news shocks (#54)

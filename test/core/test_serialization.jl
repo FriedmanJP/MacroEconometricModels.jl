@@ -323,6 +323,24 @@ end
         _assert_roundtrip(estimate_xtprobit(pdP, :yb, [:x1, :x2]))
     end
 
+    @testset "DSER-14 save_model compress= shrinks a VARModel and reloads" begin
+        Y = randn(MersenneTwister(772), 400, 4)
+        m = estimate_var(Y, 3)
+        mktempdir() do d
+            p_raw = joinpath(d, "var.jld2")
+            p_z = joinpath(d, "var_z.jld2")
+            save_model(m, p_raw)
+            save_model(m, p_z; compress=true)
+            @test filesize(p_z) < filesize(p_raw)
+            m_z = load_model(p_z)
+            @test m_z isa VARModel
+            @test _deep_equal(m_z.B, m.B) && _deep_equal(m_z.Sigma, m.Sigma)
+            @test _deep_equal(m_z.Y, m.Y)
+            m_raw = load_model(p_raw)
+            @test _deep_equal(m_raw.B, m.B)
+        end
+    end
+
     @testset "disk round-trip via JLD2 for a non-VAR model + data container" begin
         Y = randn(MersenneTwister(70), 120, 2)
         vecm = estimate_vecm(cumsum(Y; dims=1), 2; rank=1)
@@ -346,9 +364,46 @@ end
         @test length(_MEM._SERIALIZABLE_TYPES) >= 50
     end
 
-    # DSGE-family carve-out retired: completeness + `_SERIALIZATION_EXCLUDED`
-    # pending reasons (RSER-01) own that list (`DSGESolution`, `BayesianDSGE`,
-    # `HADSGESolution`, `KrusellSmithSolution`, `DSGEEstimation`, …).
+    @testset "DSGE-family: HA results are registered (DSER-07)" begin
+        for name in ("HASteadyState", "HADSGESolution", "KrusellSmithSolution",
+                     "WinberryFamily", "DenHaanAccuracy", "HAGridDiagnostics",
+                     "HAGrid", "IncomeProcess", "HouseholdSystem", "IndividualProblem")
+            @test haskey(_MEM._SERIALIZABLE_TYPES, name)
+        end
+        @test haskey(_MEM._SERIALIZABLE_TYPES, "DSGESolution")
+        @test haskey(_MEM._SERIALIZABLE_TYPES, "DSGEEstimation")
+        @test haskey(_MEM._SERIALIZABLE_TYPES, "BayesianDSGE")
+        @test haskey(_MEM._SERIALIZABLE_TYPES, "DSGEPrior")
+    end
+
+    @testset "DSGE-family: SSJ blocks are registered (DSER-08)" begin
+        for name in ("SSJModel", "SimpleBlock", "HetBlock", "MitBlock",
+                     "SSJGEJacobian", "SSJImpulseResponse")
+            @test haskey(_MEM._SERIALIZABLE_TYPES, name)
+        end
+    end
+
+    @testset "DSGE-family: DCEGM / firms / intermediary (DSER-10)" begin
+        for name in ("DCEGMProblem", "DCEGMSolution", "DCEGMEquilibrium",
+                     "DCEGMTransition", "FirmSystem", "KhanThomasSteadyState",
+                     "KhanThomasTransition", "IntermediarySystem",
+                     "IntermediaryPE", "IntermediarySteadyState",
+                     "IntermediaryTransition")
+            @test haskey(_MEM._SERIALIZABLE_TYPES, name)
+        end
+    end
+
+    @testset "DSGE-family: OLG / CT (DSER-09)" begin
+        for name in ("BlanchardOLG", "BlanchardOLGSteadyState", "BlanchardOLGSolution",
+                     "LifeCycleOLG", "LifeCycleSystem", "LifeCycleSteadyState",
+                     "LifeCycleTransition", "CTPoissonIncome", "CTAiyagari",
+                     "CTSteadyState", "CTTransition", "CTTwoAsset",
+                     "CTTwoAssetSolution", "CTTwoAssetGE", "CTTwoAssetTransition",
+                     "ContinuousHouseholdSystem")
+            @test haskey(_MEM._SERIALIZABLE_TYPES, name)
+        end
+    end
+
 end
 
 @testset "DSER-01 leaf codecs" begin

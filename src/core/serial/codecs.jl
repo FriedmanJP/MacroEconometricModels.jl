@@ -13,11 +13,12 @@
 _is_plain_eltype(::Type{S}) where {S} = S <: Union{Number,AbstractString,Symbol,Char,Bool,Enum}
 
 # Is `x` a MacroEconometricModels struct we should flatten recursively? Types
-# from Base / LinearAlgebra / Distributions (parentmodule ≠ this package) fall
-# through to JLD2's own storage; the manifest and covariance estimators have
-# their own tagged-dict methods below and never reach here. Functions are
-# singleton structs whose parentmodule is this package for named helpers;
-# they are handled by the Function codec, not as MEM structs.
+# from Base / LinearAlgebra (parentmodule ≠ this package) fall through; named
+# `Distributions.jl` objects use the `__distribution__` codec below and never
+# reach JLD2's internal layout. The manifest and covariance estimators have
+# their own tagged-dict methods and never reach here. Functions are singleton
+# structs whose parentmodule is this package for named helpers; they are
+# handled by the Function codec, not as MEM structs.
 function _is_mem_struct(x)
     x isa Function && return false
     T = typeof(x)
@@ -87,6 +88,82 @@ function _ser_field(c::FunctionConstraint)
     _assert_named_function_constraint(c)
     return _struct_to_dict(c)
 end
+function _assert_serializable_ip_callables(ip::IndividualProblem)
+    for (val, name) in (
+        (ip.utility, "utility"),
+        (ip.utility_prime, "utility_prime"),
+        (ip.utility_prime_inv, "utility_prime_inv"),
+        (ip.budget_fn, "budget_fn"),
+        (ip.adjustment_cost, "adjustment_cost"),
+    )
+        if val isa Function && !_is_named_function(val)
+            throw(SerializationError(
+                "IndividualProblem.$name is an anonymous function; save_model needs a named function or a callable struct (see CRRAUtility)"))
+        end
+    end
+    return nothing
+end
+
+function _ser_field(ip::IndividualProblem)
+    _assert_serializable_ip_callables(ip)
+    return _struct_to_dict(ip)
+end
+
+function _assert_ssj_callable(val, kind::AbstractString, name::Symbol, field::AbstractString)
+    if val isa Function
+        _is_named_function(val) && return nothing
+        throw(SerializationError(
+            "$kind :$name has an anonymous $field; define it as a named function or a callable struct to make the model saveable"))
+    end
+    _is_mem_struct(val) && return nothing
+    throw(SerializationError(
+        "$kind :$name has an anonymous $field; define it as a named function or a callable struct to make the model saveable"))
+end
+
+function _to_serializable(b::SimpleBlock)
+    _assert_ssj_callable(b.f, "SimpleBlock", b.name, "f")
+    return _capture_fields(b)
+end
+
+function _to_serializable(b::MitBlock)
+    _assert_ssj_callable(b.evaluate, "MitBlock", b.name, "evaluate")
+    return _capture_fields(b)
+end
+
+function _assert_serializable_dcegm_callables(prob::DCEGMProblem)
+    for (val, name) in (
+        (prob.utility, "utility"),
+        (prob.utility_prime, "utility_prime"),
+        (prob.utility_prime_inv, "utility_prime_inv"),
+        (prob.income, "income"),
+    )
+        if val isa Function && !_is_named_function(val)
+            throw(SerializationError(
+                "DCEGMProblem.$name is an anonymous function; save_model needs a named function or a callable struct (see CRRAUtility)"))
+        end
+    end
+    return nothing
+end
+
+function _to_serializable(prob::DCEGMProblem)
+    _assert_serializable_dcegm_callables(prob)
+    return _capture_fields(prob)
+end
+function _ser_field(prob::DCEGMProblem)
+    _assert_serializable_dcegm_callables(prob)
+    return _struct_to_dict(prob)
+end
+
+function _to_serializable(s::IntermediarySystem)
+    for pr in s.aggregation
+        if pr.second isa Function && !_is_named_function(pr.second)
+            throw(SerializationError(
+                "IntermediarySystem.aggregation[:$(pr.first)] is an anonymous function; save_model needs a named function or a callable struct"))
+        end
+    end
+    return _capture_fields(s)
+end
+
 const _FUNCTION_MODULES = (MacroEconometricModels, Base, Main)
 function _deser_function(d::AbstractDict)
     modname = Symbol(d["module"]); fname = Symbol(d["__function__"])
@@ -108,6 +185,63 @@ _ser_field(::Factorization) = nothing
 
 _ser_field(r::UnitRange) = Dict{String,Any}("__unitrange__" => true, "start" => r.start, "stop" => r.stop)
 _deser_unitrange(d::AbstractDict) = (d["start"]):(d["stop"])
+
+# Closed set of named Distributions.jl types with plain `params`. InverseGamma1
+# (package type), affine LocationScale/AffineDistribution, and Truncated are
+# special-cased; anything else — MixtureModel, user-defined `<: Distribution` —
+# is a SerializationError so JLD2 never stores Distributions internals.
+const _DISTRIBUTION_CTORS = Dict{String,Function}(
+    "Normal"        => (ps) -> Normal(ps...),
+    "Gamma"         => (ps) -> Gamma(ps...),
+    "Beta"          => (ps) -> Beta(ps...),
+    "InverseGamma"  => (ps) -> InverseGamma(ps...),
+    "Uniform"       => (ps) -> Uniform(ps...),
+    "LogNormal"     => (ps) -> LogNormal(ps...),
+    "Exponential"   => (ps) -> Exponential(ps...),
+    "TDist"         => (ps) -> TDist(ps...),
+    "Cauchy"        => (ps) -> Cauchy(ps...),
+)
+
+function _ser_field(d::Distribution)
+    if d isa InverseGamma1
+        return Dict{String,Any}("__distribution__" => "InverseGamma1",
+                                "s" => d.s, "nu" => d.nu)
+    elseif d isa LocationScale
+        return Dict{String,Any}("__distribution__" => "Affine",
+                                "mu" => d.μ, "sigma" => d.σ,
+                                "base" => _ser_field(d.ρ))
+    elseif d isa Truncated
+        return Dict{String,Any}("__distribution__" => "Truncated",
+                                "lower" => d.lower, "upper" => d.upper,
+                                "base" => _ser_field(d.untruncated))
+    end
+    name = string(nameof(typeof(d)))
+    if haskey(_DISTRIBUTION_CTORS, name)
+        return Dict{String,Any}("__distribution__" => name,
+                                "params" => collect(Distributions.params(d)))
+    end
+    throw(SerializationError(
+        "Distribution subtype $(typeof(d)) cannot be serialized; only named " *
+        "Distributions.jl types with plain fields (plus InverseGamma1, affine, " *
+        "and truncated wrappers) are supported"))
+end
+
+function _deser_distribution(d::AbstractDict)
+    name = String(d["__distribution__"])
+    if name == "InverseGamma1"
+        return InverseGamma1(d["s"], d["nu"])
+    elseif name == "Affine"
+        base = _deser_field(d["base"])
+        return d["mu"] + d["sigma"] * base
+    elseif name == "Truncated"
+        base = _deser_field(d["base"])
+        return truncated(base, d["lower"], d["upper"])
+    elseif haskey(_DISTRIBUTION_CTORS, name)
+        ps = _deser_field(d["params"])
+        return _DISTRIBUTION_CTORS[name](ps)
+    end
+    throw(SerializationError("unknown distribution '$name' in serialized payload"))
+end
 
 function _ser_field(x)
     x === nothing && return nothing
@@ -138,8 +272,10 @@ end
 
 # A nested struct is captured like the top-level payload, plus a `__struct__`
 # tag so `_deser_field` can resolve its concrete type on the way back in.
+# Route through `_to_serializable` so type-specific extras (e.g. ModelSpec's
+# `had_ss_fn`) survive when the spec is nested in a solution.
 function _struct_to_dict(m)
-    d = _capture_fields(m)
+    d = _to_serializable(m)
     d["__struct__"] = String(nameof(typeof(m)))
     return d
 end
@@ -186,6 +322,8 @@ function _narrow_decoded_array(vals::AbstractArray)
     return out
 end
 
+_narrow_concrete(a::AbstractArray) = _narrow_decoded_array(a)
+
 # Inverse of `_ser_field`: rebuild manifests / covariance estimators / nested
 # structs from their tagged dicts; recurse into arrays/dicts of them.
 function _deser_field(x)
@@ -199,6 +337,7 @@ function _deser_field(x)
         haskey(x, "__function__")    && return _deser_function(x)
         haskey(x, "__sparse__")      && return _deser_sparse(x)
         haskey(x, "__unitrange__")   && return _deser_unitrange(x)
+        haskey(x, "__distribution__") && return _deser_distribution(x)
         haskey(x, "__manifest__")    && return _manifest_from_dict(x)
         haskey(x, "__estimator__")   && return _cov_from_dict(x)
         haskey(x, "__struct__")      && return _deser_struct(x)
@@ -207,7 +346,8 @@ function _deser_field(x)
     end
     if x isa AbstractArray
         _is_plain_eltype(eltype(x)) && return x
-        return _narrow_decoded_array(map(_deser_field, x))
+        mapped = map(_deser_field, x)
+        return mapped isa AbstractArray ? _narrow_decoded_array(mapped) : mapped
     end
     x isa Tuple && return map(_deser_field, x)
     return x

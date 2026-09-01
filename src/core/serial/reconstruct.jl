@@ -201,3 +201,774 @@ function _from_serializable(::Type{MSRegModel}, p::AbstractDict, ::Int)
         fitted_filtered=p["fitted_filtered"],
     )
 end
+
+# Nested `NamedEquation.residual` is ignored — recompiled from `expr` once the
+# owning `ModelSpec` has `endog` / `exog` / `params`. Standalone load uses a
+# placeholder; `ModelSpec` reconstruction replaces it.
+function _from_serializable(::Type{NamedEquation}, p::AbstractDict, ::Int)
+    name = _as_symbol(p["name"])
+    defines = p["defines"] === nothing ? nothing : _as_symbol(_deser_field(p["defines"]))
+    expr = _deser_field(p["expr"])
+    expr isa Expr || throw(SerializationError("NamedEquation.expr is not an Expr"))
+    timing = _deser_field(p["timing"])
+    timing isa TimingInfo || throw(SerializationError("NamedEquation.timing is not a TimingInfo"))
+    regimes_raw = _deser_field(get(p, "regimes", Dict{Symbol,NamedEquation}()))
+    regimes = Dict{Symbol,NamedEquation}()
+    if regimes_raw isa AbstractDict
+        for (k, v) in regimes_raw
+            v isa NamedEquation || continue
+            regimes[_as_symbol(k)] = v
+        end
+    end
+    NamedEquation(name, defines, expr, identity; timing=timing, regimes=regimes)
+end
+
+function _from_serializable(::Type{ModelSpec}, p::AbstractDict, ver::Int)
+    _from_serializable_modelspec(p, ver)
+end
+function _from_serializable(::Type{<:ModelSpec}, p::AbstractDict, ver::Int)
+    _from_serializable_modelspec(p, ver)
+end
+
+# 18 positionals + keyword accuracy / value-function fields. A generic
+# 23-positional call misses the inner constructor.
+function _from_serializable(::Type{ProjectionSolution}, p::AbstractDict, ::Int)
+    coef = _deser_field(p["coefficients"])
+    T = eltype(coef)
+    T <: AbstractFloat || (T = Float64)
+    ProjectionSolution{T}(
+        coef,
+        _deser_field(p["state_bounds"]),
+        _as_symbol(p["grid_type"]),
+        Int(p["degree"]),
+        _deser_field(p["collocation_nodes"]),
+        T(p["residual_norm"]),
+        Int(p["n_basis"]),
+        Matrix{Int}(_deser_field(p["multi_indices"])),
+        _as_symbol(p["quadrature"]),
+        _deser_field(p["spec"]),
+        _deser_field(p["linear"]),
+        _deser_field(p["impact"]),
+        _deser_field(p["steady_state"]),
+        Vector{Int}(_deser_field(p["state_indices"])),
+        Vector{Int}(_deser_field(p["control_indices"])),
+        Bool(p["converged"]),
+        Int(p["iterations"]),
+        _as_symbol(p["method"]);
+        euler_error=T(p["euler_error"]),
+        smolyak_levels=Matrix{Int}(_deser_field(p["smolyak_levels"])),
+        refinements=Int(p["refinements"]),
+        value_fn=_deser_field(p["value_fn"]),
+        value_coefficients=_deser_field(p["value_coefficients"]),
+    )
+end
+
+function _to_serializable(m::ModelSpec)
+    d = _capture_fields(m)
+    d["had_ss_fn"] = m.ss_fn !== nothing
+    return d
+end
+
+function _from_serializable_modelspec(p::AbstractDict, ver::Int)
+    T = Float64
+    ss_raw = p["steady_state"]
+    if ss_raw isa AbstractArray && eltype(ss_raw) <: AbstractFloat
+        T = eltype(ss_raw)
+    else
+        pv0 = p["param_values"]
+        if pv0 isa AbstractDict
+            for v in values(pv0)
+                if v isa AbstractFloat
+                    T = typeof(v)
+                    break
+                end
+            end
+        end
+    end
+
+    endog = Symbol[_as_symbol(s) for s in _deser_field(p["endog"])]
+    exog = Symbol[_as_symbol(s) for s in _deser_field(p["exog"])]
+    params = Symbol[_as_symbol(s) for s in _deser_field(p["params"])]
+    pv = _deser_field(p["param_values"])
+    param_values = Dict{Symbol,T}(_as_symbol(k) => convert(T, v) for (k, v) in pv)
+
+    function _as_named_eq(eq)
+        eq isa NamedEquation && return eq
+        eq isa AbstractDict && return _from_serializable(NamedEquation, eq, ver)
+        throw(SerializationError("ModelSpec equation payload is not a NamedEquation"))
+    end
+
+    equations = NamedEquation[_recompile_named_equation(_as_named_eq(eq), endog, exog, params)
+                              for eq in _deser_field(p["equations"])]
+    residual_fns = Function[eq.residual for eq in equations]
+
+    original_endog = Symbol[_as_symbol(s) for s in _deser_field(p["original_endog"])]
+    # Parser stores `identity` residuals on `original_equations` (pre-augmentation
+    # AST, including deep exog news lags). Display uses `.expr`, not `.residual`.
+    original_equations = NamedEquation[_as_named_eq(eq)
+                                       for eq in _deser_field(p["original_equations"])]
+
+    n_expect = Int(p["n_expect"])
+    forward_indices = Int[Int(i) for i in _deser_field(p["forward_indices"])]
+    ss_vec = _deser_field(p["steady_state"])
+    steady_state = isempty(ss_vec) ? T[] : T[convert(T, x) for x in ss_vec]
+    varnames = String[string(s) for s in _deser_field(p["varnames"])]
+    bellman_controls = Symbol[_as_symbol(s) for s in _deser_field(p["bellman_controls"])]
+    bellman_consumption = let c = _deser_field(p["bellman_consumption"])
+        c === nothing ? nothing : _as_symbol(c)
+    end
+    ir = _deser_field(p["ir"])
+    ir isa ModelIR || throw(SerializationError("ModelSpec.ir is not a ModelIR"))
+    linear = Bool(p["linear"])
+    had_ss_fn = Bool(get(p, "had_ss_fn", false))
+    ss_fn = _recompile_ss_fn_from_ir(ir, params, length(endog), linear, had_ss_fn)
+    agents = _deser_field(p["agents"])
+    agents isa NamedTuple || throw(SerializationError("ModelSpec.agents is not a NamedTuple"))
+
+    return ModelSpec{T}(
+        endog, exog, params, param_values, equations, residual_fns,
+        n_expect, forward_indices, steady_state, ss_fn;
+        original_endog=original_endog,
+        original_equations=original_equations,
+        augmented=Bool(p["augmented"]),
+        max_lag=Int(p["max_lag"]),
+        max_lead=Int(p["max_lead"]),
+        linear=linear,
+        bellman_utility=_deser_field(p["bellman_utility"]),
+        bellman_beta=_deser_field(p["bellman_beta"]),
+        bellman_consumption=bellman_consumption,
+        bellman_controls=bellman_controls,
+        agents=agents,
+        ir=ir,
+        varnames=varnames,
+    )
+end
+
+# ── DSER-05 Bayesian DSGE ────────────────────────────────────────────────────
+
+function _from_serializable(::Type{DSGEPrior}, p::AbstractDict, ::Int)
+    names = Symbol[_as_symbol(s) for s in _deser_field(p["param_names"])]
+    dists_raw = _deser_field(p["distributions"])
+    dists = Distribution[d for d in dists_raw]
+    lower = _deser_field(p["lower"])
+    T = eltype(lower)
+    T <: AbstractFloat || (T = Float64)
+    DSGEPrior{T}(names, dists, Vector{T}(lower), Vector{T}(_deser_field(p["upper"])))
+end
+
+# Inner ctors take the raw observation matrices and recompute H_inv / log_det_H.
+function _from_serializable(::Type{DSGEStateSpace}, p::AbstractDict, ::Int)
+    G1 = _deser_field(p["G1"])
+    T = eltype(G1)
+    T <: AbstractFloat || (T = Float64)
+    DSGEStateSpace{T}(
+        Matrix{T}(G1),
+        Matrix{T}(_deser_field(p["impact"])),
+        Matrix{T}(_deser_field(p["Z"])),
+        Vector{T}(_deser_field(p["d"])),
+        Matrix{T}(_deser_field(p["H"])),
+        Matrix{T}(_deser_field(p["Q"])),
+    )
+end
+
+function _from_serializable(::Type{NonlinearStateSpace}, p::AbstractDict, ::Int)
+    hx = _deser_field(p["hx"])
+    T = eltype(hx)
+    T <: AbstractFloat || (T = Float64)
+    _matT(x) = x === nothing ? nothing : Matrix{T}(x)
+    _vecT(x) = x === nothing ? nothing : Vector{T}(x)
+    NonlinearStateSpace{T}(
+        Matrix{T}(hx),
+        Matrix{T}(_deser_field(p["gx"])),
+        Matrix{T}(_deser_field(p["eta"])),
+        Vector{T}(_deser_field(p["steady_state"])),
+        Vector{Int}(_deser_field(p["state_indices"])),
+        Vector{Int}(_deser_field(p["control_indices"])),
+        Int(p["order"]),
+        _matT(_deser_field(p["hxx"])),
+        _matT(_deser_field(p["gxx"])),
+        _vecT(_deser_field(p["hsigmasigma"])),
+        _vecT(_deser_field(p["gsigmasigma"])),
+        _matT(_deser_field(p["hxxx"])),
+        _matT(_deser_field(p["gxxx"])),
+        _matT(_deser_field(p["hsigmax"])),
+        _matT(_deser_field(p["gsigmax"])),
+        _vecT(_deser_field(p["hsigmasigmasigma"])),
+        _vecT(_deser_field(p["gsigmasigmasigma"])),
+        Matrix{T}(_deser_field(p["Z"])),
+        Vector{T}(_deser_field(p["d"])),
+        Matrix{T}(_deser_field(p["H"])),
+    )
+end
+
+function _from_serializable(::Type{ProjectionStateSpace}, p::AbstractDict, ::Int)
+    coef = _deser_field(p["coefficients"])
+    T = eltype(coef)
+    T <: AbstractFloat || (T = Float64)
+    ProjectionStateSpace{T}(
+        Matrix{T}(coef),
+        Matrix{Int}(_deser_field(p["multi_indices"])),
+        Int(p["max_degree"]),
+        Vector{T}(_deser_field(p["steady_state"])),
+        Vector{Int}(_deser_field(p["state_indices"])),
+        Vector{Int}(_deser_field(p["control_indices"])),
+        Matrix{T}(_deser_field(p["impact"])),
+        Matrix{T}(_deser_field(p["state_bounds"])),
+        Vector{T}(_deser_field(p["scale"])),
+        Vector{T}(_deser_field(p["shift"])),
+        Matrix{T}(_deser_field(p["Z"])),
+        Vector{T}(_deser_field(p["d"])),
+        Matrix{T}(_deser_field(p["H"])),
+    )
+end
+
+function _from_serializable(::Type{BayesianDSGE}, p::AbstractDict, ::Int)
+    theta = _deser_field(p["theta_draws"])
+    T = eltype(theta)
+    T <: AbstractFloat || (T = Float64)
+    me = _deser_field(p["measurement_error"])
+    mani = _deser_field(get(p, "manifest", nothing))
+    BayesianDSGE{T}(
+        Matrix{T}(theta),
+        Vector{T}(_deser_field(p["log_posterior"])),
+        Symbol[_as_symbol(s) for s in _deser_field(p["param_names"])],
+        _deser_field(p["priors"]),
+        T(p["log_marginal_likelihood"]),
+        _as_symbol(p["method"]),
+        T(p["acceptance_rate"]),
+        Vector{T}(_deser_field(p["ess_history"])),
+        Vector{T}(_deser_field(p["phi_schedule"])),
+        _deser_field(p["spec"]),
+        _deser_field(p["solution"]),
+        _deser_field(p["state_space"]),
+        Int(p["n_failed_draws"]),
+        Int(p["n_lik_evals"]),
+        _as_symbol(p["solved_at"]),
+        Matrix{T}(_deser_field(p["data"])),
+        Symbol[_as_symbol(s) for s in _deser_field(p["observables"])],
+        me === nothing ? nothing : Vector{T}(me),
+        _as_symbol(p["solver"]),
+        _deser_field(p["solver_kwargs"]),
+        _deser_field(p["prefilter"]),
+        _deser_field(p["trends"]);
+        manifest=mani,
+    )
+end
+
+function _from_serializable(::Type{BayesianDSGESimulation}, p::AbstractDict, ::Int)
+    q = _deser_field(p["quantiles"])
+    T = eltype(q)
+    T <: AbstractFloat || (T = Float64)
+    mani = _deser_field(get(p, "manifest", nothing))
+    BayesianDSGESimulation{T}(
+        Array{T,3}(q),
+        Matrix{T}(_deser_field(p["point_estimate"])),
+        Int(p["T_periods"]),
+        String[string(s) for s in _deser_field(p["variables"])],
+        Vector{T}(_deser_field(p["quantile_levels"])),
+        Array{T,3}(_deser_field(p["all_paths"]));
+        manifest=mani,
+    )
+end
+
+function _from_serializable(::Type{PrefilterSpec}, p::AbstractDict, ::Int)
+    intercepts = _deser_field(p["intercepts"])
+    T = eltype(intercepts)
+    T <: AbstractFloat || (T = Float64)
+    PrefilterSpec{T}(
+        _as_symbol(p["transform"]),
+        Symbol[_as_symbol(s) for s in _deser_field(p["observables"])],
+        Vector{T}(intercepts),
+        Vector{T}(_deser_field(p["slopes"])),
+        Vector{T}(_deser_field(p["initial_levels"])),
+        Vector{T}(_deser_field(p["final_levels"])),
+        Matrix{T}(_deser_field(p["removed"])),
+        T(p["lambda"]),
+        Int(p["n_dropped"]),
+    )
+end
+
+function _to_serializable(ip::IndividualProblem)
+    _assert_serializable_ip_callables(ip)
+    return _capture_fields(ip)
+end
+
+function _from_serializable(::Type{IndividualProblem}, p::AbstractDict, ::Int)
+    beta = _deser_field(p["beta"])
+    T = typeof(beta)
+    T <: AbstractFloat || (T = Float64)
+    labor = _deser_field(get(p, "labor", nothing))
+    IndividualProblem{T}(
+        _deser_field(p["utility"]),
+        _deser_field(p["utility_prime"]),
+        _deser_field(p["utility_prime_inv"]),
+        T(beta),
+        _deser_field(p["budget_fn"]),
+        Vector{T}(_deser_field(p["borrowing_constraint"])),
+        _deser_field(p["adjustment_cost"]),
+        Int(p["n_asset_dims"]);
+        labor=labor,
+    )
+end
+
+function _from_serializable(::Type{HouseholdSystem}, p::AbstractDict, ::Int)
+    individual = _deser_field(p["individual"])
+    individual isa IndividualProblem || throw(SerializationError(
+        "HouseholdSystem.individual is not an IndividualProblem"))
+    T = typeof(individual.beta)
+    T <: AbstractFloat || (T = Float64)
+    agg_raw = _deser_field(p["aggregation"])
+    aggregation = Pair{Symbol,Function}[
+        _as_symbol(pr.first) => pr.second for pr in agg_raw
+    ]
+    het = _deser_field(p["het_params"])
+    het_params = Dict{Symbol,T}(_as_symbol(k) => convert(T, v) for (k, v) in het)
+    HouseholdSystem{T}(
+        individual,
+        _deser_field(p["income"]),
+        _deser_field(p["grid"]),
+        aggregation,
+        het_params;
+        model=_as_symbol(p["model"]),
+        distribution=_as_symbol(p["distribution"]),
+    )
+end
+
+# ── DSER-07 HA results ───────────────────────────────────────────────────────
+
+function _ha_symbol_array_dict(::Type{T}, raw) where {T}
+    Dict{Symbol,Array{T}}(_as_symbol(k) => T.(v) for (k, v) in raw)
+end
+function _ha_symbol_t_dict(::Type{T}, raw) where {T}
+    Dict{Symbol,T}(_as_symbol(k) => convert(T, v) for (k, v) in raw)
+end
+function _ha_symbol_vec_dict(::Type{T}, raw) where {T}
+    Dict{Symbol,Vector{T}}(_as_symbol(k) => Vector{T}(v) for (k, v) in raw)
+end
+function _ha_symbol_mat_dict(::Type{T}, raw) where {T}
+    Dict{Symbol,Matrix{T}}(_as_symbol(k) => Matrix{T}(v) for (k, v) in raw)
+end
+
+# 11 positionals + parametric= / euler=. Policies / prices / aggregates must
+# re-enter as the declared Dict{Symbol,…} types, not Dict{Any,Any}.
+function _from_serializable(::Type{HASteadyState}, p::AbstractDict, ::Int)
+    dist = _deser_field(p["distribution"])
+    T = eltype(dist)
+    T <: AbstractFloat || (T = Float64)
+    HASteadyState{T}(
+        _ha_symbol_array_dict(T, _deser_field(p["policies"])),
+        T.(dist),
+        T.(_deser_field(p["value_fn"])),
+        _ha_symbol_t_dict(T, _deser_field(p["prices"])),
+        _ha_symbol_t_dict(T, _deser_field(p["aggregates"])),
+        _deser_field(p["grid"]),
+        _deser_field(p["income"]),
+        Bool(p["converged"]),
+        Int(p["iterations"]),
+        T(p["euler_error"]),
+        T(p["excess_demand"]);
+        parametric=_deser_field(p["parametric"]),
+        euler=_deser_field(p["euler"]),
+    )
+end
+
+function _from_serializable(::Type{HADSGESolution}, p::AbstractDict, ::Int)
+    ss = _deser_field(p["steady_state"])
+    T = eltype(ss.distribution)
+    T <: AbstractFloat || (T = Float64)
+    jac_raw = _deser_field(p["jacobians"])
+    jacobians = jac_raw === nothing ? nothing : _ha_symbol_mat_dict(T, jac_raw)
+    HADSGESolution{T}(
+        ss,
+        _deser_field(p["linear_solution"]),
+        _as_symbol(p["method"]),
+        _deser_field(p["spec"]),
+        Matrix{T}(_deser_field(p["reduction_basis"])),
+        Int(p["n_full_states"]),
+        Int(p["n_reduced"]),
+        T(p["explained_variance"]),
+        jacobians,
+        Matrix{T}(_deser_field(p["C_obs"])),
+        Matrix{T}(_deser_field(p["D_obs"])),
+    )
+end
+
+function _from_serializable(::Type{KrusellSmithSolution}, p::AbstractDict, ::Int)
+    ss = _deser_field(p["steady_state"])
+    T = eltype(ss.distribution)
+    T <: AbstractFloat || (T = Float64)
+    mani = _deser_field(get(p, "manifest", nothing))
+    KrusellSmithSolution{T}(
+        ss,
+        _ha_symbol_vec_dict(T, _deser_field(p["plm_coefficients"])),
+        _ha_symbol_t_dict(T, _deser_field(p["r_squared"])),
+        _deser_field(p["spec"]),
+        Bool(p["converged"]),
+        Int(p["iterations"]);
+        manifest=mani,
+    )
+end
+
+# 9 positionals + source= keyword.
+function _from_serializable(::Type{DenHaanAccuracy}, p::AbstractDict, ::Int)
+    ref = _deser_field(p["ref_path"])
+    T = eltype(ref)
+    T <: AbstractFloat || (T = Float64)
+    DenHaanAccuracy{T}(
+        _as_symbol(p["aggregate"]),
+        T(p["dh_max"]),
+        T(p["dh_mean"]),
+        T(p["sigma_ref"]),
+        T(p["sigma_plm"]),
+        Vector{T}(ref),
+        Vector{T}(_deser_field(p["plm_path"])),
+        Int(p["T_sim"]),
+        Int(p["T_burn"]);
+        source=_as_symbol(p["source"]),
+    )
+end
+
+# ── DSER-08 SSJ blocks ───────────────────────────────────────────────────────
+
+function _ssj_curlyJ(::Type{T}, raw) where {T}
+    out = Dict{Symbol,Dict{Symbol,Matrix{T}}}()
+    for (k, inner) in raw
+        d = Dict{Symbol,Matrix{T}}()
+        for (ik, M) in inner
+            d[_as_symbol(ik)] = Matrix{T}(M)
+        end
+        out[_as_symbol(k)] = d
+    end
+    return out
+end
+
+function _ssj_float_from_dict(raw, default::Type=Float64)
+    for v in values(raw)
+        v isa AbstractFloat && return typeof(v)
+        if v isa AbstractArray && eltype(v) <: AbstractFloat
+            return eltype(v)
+        end
+    end
+    return default
+end
+
+function _assert_ssj_callable_loaded(val, kind::AbstractString, name::Symbol, field::AbstractString)
+    val === nothing && throw(SerializationError(
+        "$kind :$name has an anonymous $field; define it as a named function or a callable struct to make the model saveable"))
+    _assert_ssj_callable(val, kind, name, field)
+end
+
+function _from_serializable_simpleblock(p::AbstractDict, ::Int)
+    name = _as_symbol(p["name"])
+    f = _deser_field(p["f"])
+    _assert_ssj_callable_loaded(f, "SimpleBlock", name, "f")
+    ss_in_raw = _deser_field(p["ss_inputs"])
+    T = _ssj_float_from_dict(ss_in_raw)
+    lags_raw = _deser_field(p["lags"])
+    lags = Dict{Symbol,Vector{Int}}(_as_symbol(k) => Vector{Int}(v) for (k, v) in lags_raw)
+    SimpleBlock(f;
+        inputs=Symbol[_as_symbol(s) for s in _deser_field(p["inputs"])],
+        outputs=Symbol[_as_symbol(s) for s in _deser_field(p["outputs"])],
+        ss_inputs=_ha_symbol_t_dict(T, ss_in_raw),
+        lags=lags,
+        name=name)
+end
+_from_serializable(::Type{SimpleBlock}, p::AbstractDict, ver::Int) =
+    _from_serializable_simpleblock(p, ver)
+_from_serializable(::Type{<:SimpleBlock}, p::AbstractDict, ver::Int) =
+    _from_serializable_simpleblock(p, ver)
+
+function _from_serializable_hetblock(p::AbstractDict, ::Int)
+    ss = _deser_field(p["steady_state"])
+    T = eltype(ss.distribution)
+    T <: AbstractFloat || (T = Float64)
+    HetBlock(ss, _deser_field(p["individual"]), _deser_field(p["grid"]),
+             _deser_field(p["income"]);
+             inputs=Symbol[_as_symbol(s) for s in _deser_field(p["inputs"])],
+             outputs=Symbol[_as_symbol(s) for s in _deser_field(p["outputs"])],
+             name=_as_symbol(p["name"]),
+             dx=T(p["dx"]))
+end
+_from_serializable(::Type{HetBlock}, p::AbstractDict, ver::Int) =
+    _from_serializable_hetblock(p, ver)
+_from_serializable(::Type{<:HetBlock}, p::AbstractDict, ver::Int) =
+    _from_serializable_hetblock(p, ver)
+
+function _from_serializable_mitblock(p::AbstractDict, ::Int)
+    name = _as_symbol(p["name"])
+    ev = _deser_field(p["evaluate"])
+    _assert_ssj_callable_loaded(ev, "MitBlock", name, "evaluate")
+    ss_in_raw = _deser_field(p["ss_inputs"])
+    T = _ssj_float_from_dict(ss_in_raw)
+    MitBlock(ev, T;
+        inputs=Symbol[_as_symbol(s) for s in _deser_field(p["inputs"])],
+        outputs=Symbol[_as_symbol(s) for s in _deser_field(p["outputs"])],
+        ss_inputs=_ha_symbol_t_dict(T, ss_in_raw),
+        ss_outputs=_ha_symbol_t_dict(T, _deser_field(p["ss_outputs"])),
+        name=name,
+        dx=T(p["dx"]))
+end
+_from_serializable(::Type{MitBlock}, p::AbstractDict, ver::Int) =
+    _from_serializable_mitblock(p, ver)
+_from_serializable(::Type{<:MitBlock}, p::AbstractDict, ver::Int) =
+    _from_serializable_mitblock(p, ver)
+
+function _from_serializable_ssjmodel(p::AbstractDict, ::Int)
+    blocks_raw = _deser_field(p["blocks"])
+    blocks = AbstractSSJBlock[b for b in blocks_raw]
+    ss_raw = _deser_field(p["ss_values"])
+    T = _ssj_float_from_dict(ss_raw)
+    SSJModel{T}(
+        _as_symbol(p["name"]),
+        blocks,
+        Symbol[_as_symbol(s) for s in _deser_field(p["exogenous"])],
+        Symbol[_as_symbol(s) for s in _deser_field(p["endogenous"])],
+        _ha_symbol_t_dict(T, ss_raw),
+    )
+end
+_from_serializable(::Type{SSJModel}, p::AbstractDict, ver::Int) =
+    _from_serializable_ssjmodel(p, ver)
+_from_serializable(::Type{<:SSJModel}, p::AbstractDict, ver::Int) =
+    _from_serializable_ssjmodel(p, ver)
+
+function _from_serializable_ssjgejacobian(p::AbstractDict, ::Int)
+    H_U_raw = _deser_field(p["H_U"])
+    T = eltype(H_U_raw)
+    T <: AbstractFloat || (T = Float64)
+    H_U = Matrix{T}(H_U_raw)
+    H_Z = Matrix{T}(_deser_field(p["H_Z"]))
+    curlyJ = _ssj_curlyJ(T, _deser_field(p["curlyJ"]))
+    fact = lu(H_U; check=false)
+    issuccess(fact) || error(
+        "ssj_jacobian: the clearing Jacobian H_U is singular. Check that every " *
+        "target actually responds to the unknowns (targets=$(p["targets"]), unknowns=$(p["unknowns"])) and " *
+        "that the DAG closes the model.")
+    SSJGEJacobian{T}(
+        _deser_field(p["model"]),
+        Symbol[_as_symbol(s) for s in _deser_field(p["unknowns"])],
+        Symbol[_as_symbol(s) for s in _deser_field(p["targets"])],
+        Symbol[_as_symbol(s) for s in _deser_field(p["shocks"])],
+        Int(p["T_horizon"]),
+        H_U, H_Z, curlyJ, fact,
+    )
+end
+_from_serializable(::Type{SSJGEJacobian}, p::AbstractDict, ver::Int) =
+    _from_serializable_ssjgejacobian(p, ver)
+_from_serializable(::Type{<:SSJGEJacobian}, p::AbstractDict, ver::Int) =
+    _from_serializable_ssjgejacobian(p, ver)
+
+function _from_serializable_ssjir(p::AbstractDict, ::Int)
+    paths = _deser_field(p["paths"])
+    T = _ssj_float_from_dict(paths)
+    SSJImpulseResponse{T}(
+        _ha_symbol_vec_dict(T, paths),
+        _ha_symbol_vec_dict(T, _deser_field(p["first_order"])),
+        _ha_symbol_vec_dict(T, _deser_field(p["correction"])),
+        _ha_symbol_vec_dict(T, _deser_field(p["shocks"])),
+        Symbol[_as_symbol(s) for s in _deser_field(p["unknowns"])],
+        Symbol[_as_symbol(s) for s in _deser_field(p["targets"])],
+        Int(p["order"]),
+        Int(p["T_horizon"]),
+        _ha_symbol_t_dict(T, _deser_field(p["target_residual"])),
+    )
+end
+_from_serializable(::Type{SSJImpulseResponse}, p::AbstractDict, ver::Int) =
+    _from_serializable_ssjir(p, ver)
+_from_serializable(::Type{<:SSJImpulseResponse}, p::AbstractDict, ver::Int) =
+    _from_serializable_ssjir(p, ver)
+
+# ── DSER-10 DCEGM / firms / intermediary ─────────────────────────────────────
+
+function _dcegm_vecarray3(::Type{T}, raw) where {T}
+    out = Array{Vector{T},3}(undef, size(raw)...)
+    @inbounds for i in eachindex(raw)
+        out[i] = Vector{T}(raw[i])
+    end
+    return out
+end
+
+function _from_serializable_dcegmproblem(p::AbstractDict, ::Int)
+    inc = _deser_field(p["income_process"])
+    T = eltype(inc.states)
+    T <: AbstractFloat || (T = Float64)
+    prob = DCEGMProblem(;
+        beta=T(p["beta"]),
+        R=T(p["R"]),
+        utility=_deser_field(p["utility"]),
+        utility_prime=_deser_field(p["utility_prime"]),
+        utility_prime_inv=_deser_field(p["utility_prime_inv"]),
+        income=_deser_field(p["income"]),
+        options=Symbol[_as_symbol(s) for s in _deser_field(p["options"])],
+        absorbing=Bool[Bool(x) for x in _deser_field(p["absorbing"])],
+        asset_grid=Vector{T}(_deser_field(p["asset_grid"])),
+        income_process=inc,
+        n_periods=Int(p["n_periods"]),
+        taste_shock_scale=T(p["taste_shock_scale"]),
+        credit_limit=T(p["credit_limit"]),
+    )
+    _assert_serializable_dcegm_callables(prob)
+    return prob
+end
+_from_serializable(::Type{DCEGMProblem}, p::AbstractDict, ver::Int) =
+    _from_serializable_dcegmproblem(p, ver)
+_from_serializable(::Type{<:DCEGMProblem}, p::AbstractDict, ver::Int) =
+    _from_serializable_dcegmproblem(p, ver)
+
+function _from_serializable(::Type{DCEGMSystem}, p::AbstractDict, ::Int)
+    DCEGMSystem(_deser_field(p["problem"]))
+end
+_from_serializable(::Type{<:DCEGMSystem}, p::AbstractDict, ver::Int) =
+    _from_serializable(DCEGMSystem, p, ver)
+
+function _from_serializable_dcegmsolution(p::AbstractDict, ::Int)
+    M_raw = _deser_field(p["M"])
+    T = Float64
+    if !isempty(M_raw)
+        el = eltype(first(M_raw))
+        el <: AbstractFloat && (T = el)
+    end
+    DCEGMSolution{T}(
+        _dcegm_vecarray3(T, M_raw),
+        _dcegm_vecarray3(T, _deser_field(p["c"])),
+        _dcegm_vecarray3(T, _deser_field(p["v"])),
+        Array{T,3}(_deser_field(p["ev_constrained"])),
+        Array{Int,3}(_deser_field(p["n_kinks"])),
+        _deser_field(p["prob"]),
+        Int(p["n_periods"]),
+        Bool(p["converged"]),
+        Int(p["iterations"]),
+        T(p["sup_diff"]),
+    )
+end
+_from_serializable(::Type{DCEGMSolution}, p::AbstractDict, ver::Int) =
+    _from_serializable_dcegmsolution(p, ver)
+_from_serializable(::Type{<:DCEGMSolution}, p::AbstractDict, ver::Int) =
+    _from_serializable_dcegmsolution(p, ver)
+
+function _from_serializable(::Type{DCEGMFirm}, p::AbstractDict, ::Int)
+    DCEGMFirm(; alpha=p["alpha"], delta=p["delta"], Z=p["Z"], L=p["L"])
+end
+_from_serializable(::Type{<:DCEGMFirm}, p::AbstractDict, ver::Int) =
+    _from_serializable(DCEGMFirm, p, ver)
+
+function _from_serializable_intermediarysystem(p::AbstractDict, ::Int)
+    grid = _deser_field(p["grid"])
+    T = eltype(grid.grids[1])
+    T <: AbstractFloat || (T = Float64)
+    agg_raw = _deser_field(p["aggregation"])
+    aggregation = Pair{Symbol,Function}[
+        _as_symbol(pr.first) => pr.second for pr in agg_raw
+    ]
+    het = _deser_field(p["het_params"])
+    het_params = Dict{Symbol,T}(_as_symbol(k) => convert(T, v) for (k, v) in het)
+    IntermediarySystem{T}(
+        grid,
+        _deser_field(p["xi"]),
+        T(p["kappa"]), T(p["beta"]), T(p["sigma"]), T(p["lambda"]),
+        T(p["zeta1"]), T(p["zeta2"]), T(p["R"]), T(p["rk"]),
+        T(p["Z"]), T(p["alpha"]), T(p["n_enter"]),
+        het_params, aggregation,
+        _as_symbol(p["model"]), _as_symbol(p["distribution"]),
+    )
+end
+_from_serializable(::Type{IntermediarySystem}, p::AbstractDict, ver::Int) =
+    _from_serializable_intermediarysystem(p, ver)
+_from_serializable(::Type{<:IntermediarySystem}, p::AbstractDict, ver::Int) =
+    _from_serializable_intermediarysystem(p, ver)
+
+function _from_serializable_intermediarype(p::AbstractDict, ::Int)
+    V = _deser_field(p["V"])
+    T = eltype(V)
+    T <: AbstractFloat || (T = Float64)
+    IntermediaryPE{T}(
+        Matrix{T}(V),
+        Matrix{T}(_deser_field(p["l_policy"])),
+        Matrix{T}(_deser_field(p["b_policy"])),
+        _ha_symbol_t_dict(T, _deser_field(p["prices"])),
+        Bool(p["converged"]),
+        Int(p["iterations"]),
+    )
+end
+_from_serializable(::Type{IntermediaryPE}, p::AbstractDict, ver::Int) =
+    _from_serializable_intermediarype(p, ver)
+_from_serializable(::Type{<:IntermediaryPE}, p::AbstractDict, ver::Int) =
+    _from_serializable_intermediarype(p, ver)
+
+function _from_serializable_intermediaryss(p::AbstractDict, ::Int)
+    dist = _deser_field(p["distribution"])
+    T = eltype(dist)
+    T <: AbstractFloat || (T = Float64)
+    IntermediarySteadyState{T}(
+        _deser_field(p["system"]),
+        Matrix{T}(_deser_field(p["V"])),
+        Matrix{T}(_deser_field(p["l_policy"])),
+        Matrix{T}(_deser_field(p["b_policy"])),
+        Matrix{T}(dist),
+        _ha_symbol_t_dict(T, _deser_field(p["prices"])),
+        _ha_symbol_t_dict(T, _deser_field(p["aggregates"])),
+        _deser_field(p["grid"]),
+        _deser_field(p["xi"]),
+        Bool(p["converged"]),
+        Int(p["iterations"]),
+        T(p["excess_demand"]),
+    )
+end
+_from_serializable(::Type{IntermediarySteadyState}, p::AbstractDict, ver::Int) =
+    _from_serializable_intermediaryss(p, ver)
+_from_serializable(::Type{<:IntermediarySteadyState}, p::AbstractDict, ver::Int) =
+    _from_serializable_intermediaryss(p, ver)
+
+# ── DSER-09 OLG / continuous-time ────────────────────────────────────────────
+# CTTwoAssetSolution has a 12-positional keyword inner constructor; the
+# trailing diagnostics (kfe_residual, hjb_iterations, bdelta, adelta) are
+# keywords, so the generic 16-field positional call misses it.
+
+function _from_serializable_cttwoassetsolution(p::AbstractDict, ::Int)
+    b = Vector(_deser_field(p["b"]))
+    T = eltype(b)
+    T <: AbstractFloat || (T = Float64)
+    b = Vector{T}(b)
+    a = Vector{T}(_deser_field(p["a"]))
+    V = Array{T,3}(_deser_field(p["V"]))
+    c = Array{T,3}(_deser_field(p["c"]))
+    d = Array{T,3}(_deser_field(p["d"]))
+    sb = Array{T,3}(_deser_field(p["sb"]))
+    sa = Array{T,3}(_deser_field(p["sa"]))
+    g = Array{T,3}(_deser_field(p["g"]))
+    gen = _deser_field(p["gen"])
+    gen isa SparseMatrixCSC || throw(SerializationError(
+        "CTTwoAssetSolution.gen is not a SparseMatrixCSC"))
+    CTTwoAssetSolution{T}(
+        b, a, V, c, d, sb, sa, g, T(p["B"]), T(p["A"]), gen, Bool(p["hjb_converged"]);
+        kfe_residual=T(p["kfe_residual"]),
+        hjb_iterations=Int(p["hjb_iterations"]),
+        bdelta=Vector{T}(_deser_field(p["bdelta"])),
+        adelta=Vector{T}(_deser_field(p["adelta"])),
+    )
+end
+_from_serializable(::Type{CTTwoAssetSolution}, p::AbstractDict, ver::Int) =
+    _from_serializable_cttwoassetsolution(p, ver)
+_from_serializable(::Type{<:CTTwoAssetSolution}, p::AbstractDict, ver::Int) =
+    _from_serializable_cttwoassetsolution(p, ver)
+
+function _from_serializable(::Type{ObservationTrends}, p::AbstractDict, ::Int)
+    function _trend_term(x, ::Type{S}) where {S}
+        x isa Symbol && return x
+        x isa AbstractString && return Symbol(x)
+        return S(x)
+    end
+    constants = _deser_field(p["constants"])
+    T = Float64
+    for v in constants
+        if v isa AbstractFloat
+            T = typeof(v)
+            break
+        end
+    end
+    ObservationTrends{T}(
+        Symbol[_as_symbol(s) for s in _deser_field(p["observables"])],
+        Union{T,Symbol}[_trend_term(x, T) for x in constants],
+        Union{T,Symbol}[_trend_term(x, T) for x in _deser_field(p["linears"])],
+        Union{T,Symbol}[_trend_term(x, T) for x in _deser_field(p["quadratics"])],
+    )
+end

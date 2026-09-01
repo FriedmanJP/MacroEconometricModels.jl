@@ -53,8 +53,17 @@ end
 # ─────────────────────────────────────────────────────────────────────────────
 
 function _write_model_container(path::AbstractString, container; compress::Bool=false)
-    JLD2.jldopen(path, "w"; compress=compress) do f
-        f["container"] = container
+    try
+        JLD2.jldopen(path, "w"; compress=compress) do f
+            f["container"] = container
+        end
+    catch e
+        compress || rethrow()
+        msg = sprint(showerror, e)
+        occursin(r"compress|CodecZlib|Filter"i, msg) || rethrow()
+        throw(SerializationError(
+            "save_model(...; compress=true) failed ($msg). JLD2 compress= uses CodecZlib; " *
+            "check that a JLD2 0.4–0.6 build with CodecZlib is loaded."))
     end
     return path
 end
@@ -72,7 +81,8 @@ end
     save_model(objs::AbstractVector, path; note="", compress=false) -> path
 
 Persist a fitted `model` — or a data container — to `path` in a versioned,
-self-describing container. Coverage spans every VAR/BVAR (including mixed-frequency
+self-describing container. JLD2 is a package dependency; no extra `using JLD2`
+is required. Coverage spans every VAR/BVAR (including mixed-frequency
 and TVP), regression/3SLS, panel, volatility (including IGARCH), factor/Bayesian
 FAVAR, ARIMA/SARIMA, ARDL/NARDL, STAR/Markov-switching, local-projection, and GMM
 model, plus SVAR identification results, innovation-accounting objects (IRF,
@@ -92,7 +102,13 @@ results (policy causal effects, rules/loss, OPP, model bank, path-floor and
 named-function constraints), IO leftovers (`FootprintResult`, `IOMultipliers`,
 `LinkageResult`, `IOExtension`), LP leftovers (Montiel Olea–Pflueger F, LP-IV AR
 bands, B-spline basis, propensity-score config), GMM weighting/parameter
-transforms, Johansen/GPH/local-Whittle companions, and the data containers
+transforms, Johansen/GPH/local-Whittle companions, DSGE `ModelSpec` and
+representative-agent solutions (`DSGESolution`, perturbation, projection,
+OccBin, …), Bayesian DSGE results (`BayesianDSGE`, priors, state-space types),
+HA results (`HASteadyState`, `HADSGESolution`, `KrusellSmithSolution`, …),
+sequence-space blocks (`SSJModel`, `SimpleBlock`, `HetBlock`, `MitBlock`,
+`SSJGEJacobian`, `SSJImpulseResponse`), DCEGM / firm / intermediary results,
+OLG and continuous-time families, and the data containers
 (`TimeSeriesData`, `PanelData`, `CrossSectionData`, `IOData`); the full set is
 `MacroEconometricModels._SERIALIZABLE_TYPES`. Exported
 concrete structs that are not saveable are listed in `_SERIALIZATION_EXCLUDED`
@@ -102,12 +118,16 @@ with a reason — permanent exclusions (rendered HTML, workspaces, transient
 [`SERIALIZATION_FORMAT_VERSION`](@ref), the package and Julia versions, a
 timestamp, an optional `note`, and — for a randomized result — its
 reproducibility manifest. Only public fields are stored; cached factorizations
-are recomputed on load, and compiled equation functions (DSGE) are not yet
-serializable.
+and state-space `H_inv` / `log_det_H` are dropped and recomputed on load.
+DSGE `ModelSpec` residuals and `ss_fn` are recompiled from stored equations
+on load.
 
 `note=` is free-form header metadata (a label, a data vintage); read it back
 with [`model_info`](@ref) — it is not reconstructed onto the model. Old files
-without a `note` key still load. `compress=true` enables JLD2 compression.
+without a `note` key still load. `compress=true` forwards to
+`JLD2.jldopen(...; compress=true)` (CodecZlib). The default (`false`) writes
+an uncompressed file. Posterior draws and dense Jacobians typically shrink;
+a size table lives in the [Data Management](@ref data_page) persistence section.
 
 A `Dict{String,<:Any}` of named objects, or a `Vector` of objects, is written
 as a **bundle**: one file whose `"bundle" => true` header holds an `entries`
@@ -115,9 +135,19 @@ dict of per-object containers. [`load_model`](@ref) returns a `Dict{String,Any}`
 (vector bundles are keyed `"1"`, `"2"`, …). An unregistered object raises
 [`SerializationError`](@ref) naming the key before anything is written.
 
+Household utilities, SSJ block functions (`SimpleBlock.f`, `MitBlock.evaluate`),
+and programmatic `ModelSpec` residuals / `ss_fn` must be **named functions** or
+callable structs ([`CRRAUtility`](@ref) and friends). Anonymous closures raise
+[`SerializationError`](@ref) at save.
+
+A loaded DSGE file recompiles stored equation expressions through `Core.eval`
+behind an AST allowlist. This is the same class of risk as
+`Serialization.deserialize`: only load files you trust.
+
 ```julia
 m = estimate_var(Y, 2)
 save_model(m, "model.jld2")
+save_model(m, "model_z.jld2"; compress=true)
 m2 = load_model("model.jld2")   # identical public fields
 
 save_model(Dict("var" => m, "irf" => irf(m, 8)), "session.jld2"; note="vintage")
@@ -141,6 +171,11 @@ expected-versus-found version on an unrecognized format, rather than returning a
 corrupted object. A bundle file (`"bundle" => true`) returns a `Dict{String,Any}`
 of reconstructed objects. Inspect the header without reconstructing with
 [`model_info`](@ref).
+
+A DSGE / HA file's equations are recompiled at load with an AST allowlist, but
+as with `Serialization.deserialize`, only load files you trust. Named functions
+stored in the payload must be defined in `Main` or `MacroEconometricModels` in
+the loading session; [`CRRAUtility`](@ref) callables reconstruct without that.
 """
 function load_model(path::AbstractString)
     isfile(path) || throw(SerializationError("no such model file: $path"))

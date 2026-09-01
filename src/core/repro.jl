@@ -192,6 +192,22 @@ function _with_manifest(x, m::Union{ReproManifest,Nothing})
     return typeof(x)(args..., m)
 end
 
+# Flatten a NamedTuple (solver_kwargs, ha_kwargs) to a plain Dict so a
+# ReproManifest payload stays numbers/strings/bools.
+function _plain_nt_settings(nt::NamedTuple)
+    d = Dict{String,Any}()
+    for (k, v) in pairs(nt)
+        d[String(k)] = v isa Symbol ? String(v) : v
+    end
+    return d
+end
+function _nt_from_settings(d::AbstractDict)
+    isempty(d) && return NamedTuple()
+    ks = Symbol[Symbol(k) for k in keys(d)]
+    vs = Tuple(d[string(k)] for k in ks)
+    return NamedTuple{Tuple(ks)}(vs)
+end
+
 # ─────────────────────────────────────────────────────────────────────────────
 # Manifest ↔ Dict (plain primitives only — for versioned serialization, #347)
 # ─────────────────────────────────────────────────────────────────────────────
@@ -327,17 +343,18 @@ Re-run the randomized computation that produced `result` from its stored
 reproducibility manifest (same seed) and check the output matches bit-for-bit.
 This is the "did my published number actually come from this code" check.
 
-Supported: [`BVARPosterior`](@ref) (self-contained), a bootstrap
-[`ImpulseResponse`](@ref) via the two-argument `reproduce(ir, model)` (the source
-`VARModel` is not retained on the IRF result), and the randomized estimators that
-store a [`ReproManifest`](@ref) (SV, TVP-VAR, PVAR bootstrap, DiD bootstrap SEs,
-MS/STAR/threshold forecasts, OPP, …). Returns a [`ReproReport`](@ref);
-`matched` is `missing` when reproduction cannot be attempted.
+Supported: [`BVARPosterior`](@ref) (self-contained), [`BayesianDSGE`](@ref),
+[`KrusellSmithSolution`](@ref), a bootstrap [`ImpulseResponse`](@ref) via the
+two-argument `reproduce(ir, model)` (the source `VARModel` is not retained on
+the IRF result), and the randomized estimators that store a [`ReproManifest`](@ref)
+(SV, TVP-VAR, PVAR bootstrap, DiD bootstrap SEs, MS/STAR/threshold forecasts,
+OPP, …). Returns a [`ReproReport`](@ref); `matched` is `missing` when
+reproduction cannot be attempted.
 """
 reproduce(x) = ReproReport(missing, ReproFieldDiff[], nothing, 0, Threads.nthreads(),
     "reproduce() is not implemented for $(typeof(x)); supported: BVARPosterior, " *
-    "bootstrap ImpulseResponse (reproduce(ir, model)), and randomized estimators " *
-    "that record a ReproManifest.")
+    "BayesianDSGE, KrusellSmithSolution, bootstrap ImpulseResponse (reproduce(ir, model)), " *
+    "and randomized estimators that record a ReproManifest.")
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Display

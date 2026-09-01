@@ -815,6 +815,7 @@ export dsge_smoother, dsge_particle_smoother
 
 # Heterogeneous Agent DSGE types
 export HAGrid, IncomeProcess, IndividualProblem
+export CRRAUtility, CRRAMarginalUtility, CRRAInverseMarginalUtility
 export HASteadyState, HADSGESolution, KrusellSmithSolution, DenHaanAccuracy
 export HAGridDiagnostics, ha_grid_diagnostics
 export adaptive_asset_grid, adapt_ha_grid
@@ -828,6 +829,7 @@ export SSJGEJacobian, SSJImpulseResponse
 export combine_blocks, block_jacobian, ssj_jacobian, ssj_irf, ssj_arg_order
 # DCEGM — discrete-continuous choice (Iskhakov et al. 2017)
 export DCEGMProblem, DCEGMSolution, DCEGMDistribution
+export DCEGMUtility, DCEGMIncome
 export dcegm_solve, dcegm_policy, dcegm_choice_probabilities, dcegm_threshold
 export dcegm_simulate, dcegm_retirement_model
 export DCEGMFirm, DCEGMEquilibrium, DCEGMTransition

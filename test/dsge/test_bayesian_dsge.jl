@@ -3525,6 +3525,11 @@ end
         show(io, bsim)
         @test length(take!(io)) > 0
         report(bsim)
+
+        bsim_seed = simulate(result, 12; n_draws=6, seed=3)
+        @test bsim_seed.manifest isa ReproManifest
+        @test bsim_seed.manifest.seed == 3
+        @test simulate(result, 12; n_draws=6, seed=3).all_paths == bsim_seed.all_paths
     end
 end
 

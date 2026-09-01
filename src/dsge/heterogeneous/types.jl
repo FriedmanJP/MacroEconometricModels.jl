@@ -153,6 +153,10 @@ struct HAGrid{T<:AbstractFloat}
     end
 end
 
+# 7-arg form for generic serialization reconstruction (`total` is recomputed).
+HAGrid{T}(grids, n_points, n_dims, n_income, bounds, labels, _total) where {T<:AbstractFloat} =
+    HAGrid{T}(grids, n_points, n_dims, n_income, bounds, labels)
+
 """
     HAGrid(; assets=(0.0, 200.0, 500), income_states=7, grid_type=:double_exp)
     HAGrid(; liquid=(0.0, 50.0, 200), illiquid=(0.0, 200.0, 200), income_states=7, grid_type=:double_exp)
@@ -519,6 +523,65 @@ function _ghh_net_income(ls::LaborSupply{T}, w_e::T) where {T<:AbstractFloat}
 end
 
 # =============================================================================
+# CRRAUtility — saveable CRRA callables (replaces anonymous `_crra_utility` closures)
+# =============================================================================
+
+"""
+    CRRAUtility{T}(sigma)
+
+Callable CRRA utility `u(c) = c^(1-σ)/(1-σ)`, or `log(c)` when `σ == 1`.
+Consumption is floored at `1e-15`. This is the saveable way to write `utility`
+on [`IndividualProblem`](@ref); anonymous `c -> …` closures still solve but
+cannot be persisted by `save_model`.
+"""
+struct CRRAUtility{T<:AbstractFloat}
+    sigma::T
+end
+
+"""
+    CRRAMarginalUtility{T}(sigma)
+
+Callable CRRA marginal utility `u'(c) = c^(-σ)` (`1/c` when `σ == 1`), with
+the same `1e-15` floor as [`CRRAUtility`](@ref).
+"""
+struct CRRAMarginalUtility{T<:AbstractFloat}
+    sigma::T
+end
+
+"""
+    CRRAInverseMarginalUtility{T}(sigma)
+
+Callable inverse CRRA marginal utility `(u')⁻¹(m) = m^(-1/σ)` (`1/m` when
+`σ == 1`), with the same `1e-15` floor as [`CRRAUtility`](@ref).
+"""
+struct CRRAInverseMarginalUtility{T<:AbstractFloat}
+    sigma::T
+end
+
+@inline function (u::CRRAUtility{T})(c) where {T<:AbstractFloat}
+    cf = max(convert(T, c), T(1e-15))
+    σ = u.sigma
+    return σ == one(T) ? log(cf) : cf^(one(T) - σ) / (one(T) - σ)
+end
+
+@inline function (u::CRRAMarginalUtility{T})(c) where {T<:AbstractFloat}
+    cf = max(convert(T, c), T(1e-15))
+    σ = u.sigma
+    return σ == one(T) ? inv(cf) : cf^(-σ)
+end
+
+@inline function (u::CRRAInverseMarginalUtility{T})(m) where {T<:AbstractFloat}
+    mf = max(convert(T, m), T(1e-15))
+    σ = u.sigma
+    return σ == one(T) ? inv(mf) : mf^(-one(T) / σ)
+end
+
+# Discrete-continuous EGM utilities take `(c, d)`; the CRRA flow ignores the option.
+@inline (u::CRRAUtility)(c, d) = u(c)
+@inline (u::CRRAMarginalUtility)(c, d) = u(c)
+@inline (u::CRRAInverseMarginalUtility)(m, d) = u(m)
+
+# =============================================================================
 # IndividualProblem — Household optimization specification
 # =============================================================================
 
@@ -534,16 +597,19 @@ end
 Specification of the individual household optimization problem.
 
 Fields:
-- `utility::Function` — `u(c)` utility function
-- `utility_prime::Function` — `u'(c)` marginal utility
-- `utility_prime_inv::Function` — `(u')⁻¹(v)` inverse marginal utility
+- `utility` — `u(c)` utility function ([`CRRAUtility`](@ref) is the saveable CRRA form)
+- `utility_prime` — `u'(c)` marginal utility ([`CRRAMarginalUtility`](@ref))
+- `utility_prime_inv` — `(u')⁻¹(v)` inverse marginal utility ([`CRRAInverseMarginalUtility`](@ref))
 - `beta::T` — discount factor
-- `budget_fn::Function` — `budget(a, z, prices...)` → available resources
+- `budget_fn` — `budget(a, z, prices...)` → available resources (named function)
 - `borrowing_constraint::Vector{T}` — lower bound per asset dimension
-- `adjustment_cost::Union{Nothing,Function}` — optional `χ(d)` portfolio adjustment cost (two-asset)
+- `adjustment_cost` — optional `χ(d)` portfolio adjustment cost (two-asset)
 - `n_asset_dims::Int` — number of asset dimensions (1 or 2)
 - `labor::Union{Nothing,LaborSupply{T}}` — optional endogenous labor supply
   (default `nothing`, i.e. exogenous labor). Pass via the `labor` keyword.
+
+Anonymous closures still solve; `save_model` requires a named function or a
+callable struct (`CRRAUtility` and friends).
 
 # Endogenous labor
 
@@ -923,6 +989,8 @@ Fields:
 - `spec::ModelSpec{T}` — model specification
 - `converged::Bool` — whether PLM iteration converged
 - `iterations::Int` — number of KS outer loop iterations
+- `manifest::Union{Nothing,ReproManifest}` — seed and environment of the PLM
+  simulation; populated by `solve(...; method=:krusell_smith, seed=N)`
 """
 struct KrusellSmithSolution{T<:AbstractFloat}
     steady_state::HASteadyState{T}
@@ -931,4 +999,11 @@ struct KrusellSmithSolution{T<:AbstractFloat}
     spec::ModelSpec{T}
     converged::Bool
     iterations::Int
+    manifest::Union{Nothing,ReproManifest}
 end
+
+# Backward-compatible 6-arg constructor; `manifest` is keyword-defaulted.
+KrusellSmithSolution{T}(steady_state, plm_coefficients, r_squared, spec,
+                        converged, iterations; manifest=nothing) where {T<:AbstractFloat} =
+    KrusellSmithSolution{T}(steady_state, plm_coefficients, r_squared, spec,
+                            converged, iterations, manifest)

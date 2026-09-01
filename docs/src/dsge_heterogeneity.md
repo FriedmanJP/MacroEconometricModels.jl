@@ -53,6 +53,19 @@ Discrete and continuous time are alternative formulations of the same incomplete
 
 ---
 
+## Saving and Reloading
+
+Every child family round-trips through [`save_model`](@ref) / [`load_model`](@ref). Representative-agent residuals recompile from stored equations; household utilities persist as [`CRRAUtility`](@ref) (or a named function). [`DCEGMProblem`](@ref) needs [`DCEGMUtility`](@ref) / [`DCEGMIncome`](@ref); [`IntermediarySystem`](@ref) aggregation functions must be named. Persist [`BlanchardOLG`](@ref) itself rather than `to_spec(m)` --- those residual closures are not IR. The security caveat (a loaded file is executed code) and the named-function rule live on [Data Management](@ref data_page); each child page has a short family-specific note.
+
+```@example dsge_het
+het_path = joinpath(mktempdir(), "ha_ss.jld2")
+save_model(ss, het_path)
+ss_loaded = load_model(het_path)
+round(ss_loaded.excess_demand; sigdigits=3)
+```
+
+---
+
 ## References
 
 - Achdou, Yves, Jiequn Han, Jean-Michel Lasry, Pierre-Louis Lions, and Benjamin Moll. 2022. "Income and Wealth Distribution in Macroeconomics: A Continuous-Time Approach." *Review of Economic Studies* 89 (1): 45--86. [DOI](https://doi.org/10.1093/restud/rdab002)

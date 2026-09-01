@@ -209,6 +209,9 @@ HAGrid
 HAGrid()
 IncomeProcess
 IndividualProblem
+CRRAUtility
+CRRAMarginalUtility
+CRRAInverseMarginalUtility
 HASteadyState
 HADSGESolution
 KrusellSmithSolution
@@ -275,6 +278,8 @@ Filter  = f -> f === MacroEconometricModels.report
 
 ```@docs
 DCEGMProblem
+DCEGMUtility
+DCEGMIncome
 DCEGMSolution
 DCEGMDistribution
 DCEGMFirm
