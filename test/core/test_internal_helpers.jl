@@ -310,6 +310,10 @@ const MEM_IH = MacroEconometricModels
         @test last(kept[2]) == ["io/test_io_types.jl"]
         @test last(kept[3]) == ["core/test_kalman.jl"]
         @test collect(_numerical_groups(dummy, false)) == collect(dummy)
+        # Serialization is its own 1.10 cell — do not drop it under NUMERICAL.
+        dummy_ser = ["Serialization" => ["core/test_serialization.jl"],
+                     "Plotting" => ["plotting/test_plot_render.jl"]]
+        @test first.(_numerical_groups(dummy_ser, true)) == ["Serialization"]
 
         dummy2 = ["HA-DSGE" => ["dsge/test_ha_dsge.jl"],
                   "DSGE Core" => ["dsge/test_dsge.jl"],
@@ -335,7 +339,10 @@ const MEM_IH = MacroEconometricModels
             @test "dsge/test_modelspec_kinds.jl" in serial_files
             ser_files = Set(f for (n, fs) in TEST_GROUPS if n in _SERIALIZATION_SUITE_GROUPS for f in fs)
             dsge_files = Set(f for (n, fs) in TEST_GROUPS if n in _DSGE_SUITE_GROUPS for f in fs)
+            emp_files = Set(f for (n, fs) in TEST_GROUPS if n ∉ _DSGE_SUITE_GROUPS && n ∉ _SERIALIZATION_SUITE_GROUPS for f in fs)
             @test isempty(ser_files ∩ dsge_files)
+            @test "core/test_serialization.jl" in ser_files
+            @test "core/test_serialization.jl" ∉ emp_files
             if "dsge/test_dsge_serialization.jl" in serial_files
                 @test "dsge/test_dsge_serialization.jl" in ser_files
                 @test "dsge/test_dsge_serialization.jl" ∉ dsge_files

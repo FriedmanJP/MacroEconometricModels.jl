@@ -53,10 +53,10 @@ end
 
 # Ubuntu 1.10 Optim-v1 cell (`MACRO_NUMERICAL_CI=1`): skip display/
 # plotting/coverage-harness groups. ubuntu LTS keeps the full list.
+# Serialization groups are kept — they are their own 1.10 cell.
 const _NUMERICAL_SKIP_GROUPS = Set(["Plotting", "Display", "Coverage-A", "Coverage-B"])
 const _NUMERICAL_SKIP_CORE = Set([
     "core/test_aqua.jl",
-    "core/test_serialization.jl",
     "core/test_display_backends.jl",
 ])
 
