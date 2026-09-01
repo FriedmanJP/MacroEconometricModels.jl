@@ -3,12 +3,15 @@ coverage:
   round: down
   range: "70...100"
 
-  # macOS FAST cells upload on every CI run (dsge | empirical flags). Keep
-  # GitHub checks informational so a thin FAST report cannot block a PR.
+  # Coverage-A/B/C run on the serialization suite. macOS FAST uploads every
+  # suite flag; ubuntu stable serialization uploads the full-sampling harness.
+  # Carryforward so a cancelled macos-empirical cell cannot drop the default
+  # to ~50%. GitHub checks stay informational (a thin FAST report must not
+  # block a PR) but the project target is 95%.
   status:
     project:
       default:
-        target: auto
+        target: 95%
         threshold: 1%
         informational: true
     patch:
@@ -16,6 +19,17 @@ coverage:
         target: auto
         threshold: 1%
         informational: true
+
+flag_management:
+  default_rules:
+    carryforward: true
+  individual_flags:
+    - name: dsge
+      carryforward: true
+    - name: empirical
+      carryforward: true
+    - name: serialization
+      carryforward: true
 
 comment:
   layout: "reach,diff,flags,tree"

@@ -133,6 +133,7 @@ jobs:
       #   ubuntu stable  — full suite, split dsge | empirical | serialization; Optim v2; no coverage
       #   ubuntu 1.10    — numerical profile, same three suites, Optim v1 pin, --check-bounds=yes
       #   macos          — FAST=1 smoke, split dsge | empirical | serialization; Codecov every run
+      #   ubuntu stable serialization — also Codecov (full sampling + Coverage-A/B/C)
       #   windows        — FAST=1 smoke, split dsge | empirical | serialization (#708)
       #
       # Default cells use the threaded single-process runner (package loaded
@@ -142,7 +143,7 @@ jobs:
       # (smaller set, cheaper compile).
       - uses: julia-actions/julia-runtest@v1
         with:
-          coverage: ${{ matrix.os == 'macos-latest' }}
+          coverage: ${{ matrix.os == 'macos-latest' || (matrix.os == 'ubuntu-latest' && matrix.version == '1' && matrix.suite == 'serialization') }}
           # Pkg.test / julia-runtest default is --check-bounds=yes, which
           # re-precompiles the depot vs julia-buildpkg and honors no @inbounds.
           # Windows: auto (REPL default) so NTFS does not pay that wave.
@@ -159,10 +160,10 @@ jobs:
           MACRO_CI_SUITE: ${{ matrix.suite }}
 
       - uses: julia-actions/julia-processcoverage@v1
-        if: matrix.os == 'macos-latest'
+        if: matrix.os == 'macos-latest' || (matrix.os == 'ubuntu-latest' && matrix.version == '1' && matrix.suite == 'serialization')
 
       - uses: codecov/codecov-action@v7
-        if: matrix.os == 'macos-latest'
+        if: matrix.os == 'macos-latest' || (matrix.os == 'ubuntu-latest' && matrix.version == '1' && matrix.suite == 'serialization')
         with:
           files: lcov.info
           slug: FriedmanJP/MacroEconometricModels.jl

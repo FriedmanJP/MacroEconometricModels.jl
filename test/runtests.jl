@@ -224,6 +224,7 @@ const TEST_GROUPS = [
     ("Coverage-A" => [
         "coverage/test_dsge_coverage.jl",
         "coverage/test_dsge_bayes_coverage.jl",
+        "coverage/test_dsge_statid_coverage.jl",
     ]),
     # Extensions: JuMP/Ipopt/PATH weakdep cold-load isolated here (#309) so the
     # ~1-3 min ext compile is paid once, in its own process, instead of twice.
@@ -237,13 +238,17 @@ const TEST_GROUPS = [
         "coverage/test_display_coverage.jl",
         "coverage/test_gmm_ext_coverage.jl",
     ]),
-    # Group 10: Coverage-C + IO. The io tests are sub-second, so they fold into this light
-    # group rather than paying a standalone process (#127).
-    ("Coverage-C + IO" => [
+    # Group 10a: Coverage-C (Codecov gap harness). Lives in the serialization
+    # suite with Coverage-A/B so one CI cell owns the coverage tests.
+    ("Coverage-C" => [
         "coverage/test_pvar_nongaussian_coverage.jl",
         "coverage/test_nowcast_coverage.jl",
         "coverage/test_vecm_teststat_coverage.jl",
         "coverage/test_misc_coverage.jl",
+        "coverage/test_codecov_gaps.jl",
+    ]),
+    # Group 10b: IO. Sub-second files; stay in empirical (not a coverage harness).
+    ("IO" => [
         "io/test_io_smoke.jl",
         "io/test_io_types.jl",
         "io/test_io_coefficients.jl",

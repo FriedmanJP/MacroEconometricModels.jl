@@ -53,8 +53,11 @@ end
 
 # Ubuntu 1.10 Optim-v1 cell (`MACRO_NUMERICAL_CI=1`): skip display/
 # plotting/coverage-harness groups. ubuntu LTS keeps the full list.
-# Serialization groups are kept — they are their own 1.10 cell.
-const _NUMERICAL_SKIP_GROUPS = Set(["Plotting", "Display", "Coverage-A", "Coverage-B"])
+# Serialization round-trip groups are kept — they are their own 1.10 cell.
+# Coverage-A/B/C skip here too (they ride the serialization *stable* cell).
+const _NUMERICAL_SKIP_GROUPS = Set([
+    "Plotting", "Display", "Coverage-A", "Coverage-B", "Coverage-C",
+])
 const _NUMERICAL_SKIP_CORE = Set([
     "core/test_aqua.jl",
     "core/test_display_backends.jl",
@@ -65,9 +68,7 @@ function _numerical_groups(groups, numerical::Bool)
     out = Pair{String, Vector{String}}[]
     for (name, files) in groups
         name in _NUMERICAL_SKIP_GROUPS && continue
-        fs = if name == "Coverage-C + IO"
-            filter(f -> startswith(f, "io/"), files)
-        elseif name == "Core & VAR"
+        fs = if name == "Core & VAR"
             filter(f -> f ∉ _NUMERICAL_SKIP_CORE, files)
         else
             files
@@ -86,12 +87,14 @@ const _DSGE_SUITE_GROUPS = Set([
     "DSGE Bayesian & HD",
     "HA-DSGE",
     "HA-DSGE Advanced",
-    "Coverage-A",
     "Extensions (JuMP/Ipopt/PATH)",
 ])
 const _SERIALIZATION_SUITE_GROUPS = Set([
     "Serialization",
     "Serialization DSGE",
+    "Coverage-A",
+    "Coverage-B",
+    "Coverage-C",
 ])
 
 function _ci_suite_groups(groups, suite::AbstractString)
