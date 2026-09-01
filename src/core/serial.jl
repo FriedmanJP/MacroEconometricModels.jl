@@ -39,8 +39,10 @@
 #
 # `ModelSpec` is registered: `residual_fns` are rebuilt from stored
 # `NamedEquation.expr` (AST allowlist + `Core.eval` + `invokelatest`). `ss_fn`
-# recompilation is DSER-03. The rest of the DSGE / HA / OLG / CT solution family
-# (`DSGESolution`, `BayesianDSGE`, `HADSGESolution`, …) is still follow-up.
+# is rebuilt from a stored `:steady_state` IR declaration, or a `linear` zeros
+# closure; a programmatic closure warns once and drops. The rest of the DSGE /
+# HA / OLG / CT solution family (`DSGESolution`, `BayesianDSGE`,
+# `HADSGESolution`, …) is still follow-up.
 
 include("serial/registry.jl")
 include("serial/codecs.jl")

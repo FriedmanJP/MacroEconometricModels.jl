@@ -388,6 +388,7 @@ function _parse_ha_dsge(block::Expr)
             append!(exog, _extract_names(stmt))
         elseif label === :steady_state
             ss_body = stmt.args[3]
+            push!(extra_decls, IRDecl(:steady_state, nothing, ss_body))
         elseif label === :clock
             clock_val = _extract_clock_horizon_flag(stmt, :clock)
             push!(extra_decls, IRDecl(:clock, nothing, stmt))
@@ -399,6 +400,7 @@ function _parse_ha_dsge(block::Expr)
         elseif label === nothing
             if stmt isa Expr && stmt.head == :(=) && stmt.args[1] === :steady_state
                 ss_body = stmt.args[2]
+                push!(extra_decls, IRDecl(:steady_state, nothing, ss_body))
             elseif stmt isa Expr && stmt.head == :(=)
                 push!(raw_equations, stmt)
             else

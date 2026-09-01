@@ -100,7 +100,9 @@ end
 
 Parser output. `_respec` does **not** recompile this; it is source for `@dsge`
 and explicit `compile`. `clock` is `:discrete` or `:continuous`. `horizon` is
-`:infinite`, `:finite`, `:ages`, or `:perpetual_youth`.
+`:infinite`, `:finite`, `:ages`, or `:perpetual_youth`. Extra declarations
+include `steady_state`, `linear`, `varnames`, and Bellman `utility` / `beta` /
+`controls` when present.
 """
 struct ModelIR
     clock::Symbol
@@ -453,6 +455,7 @@ const _RESIDUAL_AST_ALLOW = Set{Symbol}([
     :tanh, :sinh, :cosh, :atan, :sin, :cos, :tan, :erf, :erfc,
     :sign, :floor, :ceil, :round, :mod, :rem, :hypot, :log1p, :expm1,
     :inv, :cbrt, :clamp, :(==), :<, :>, :<=, :>=, :!, :&, :|,
+    :vcat, :hcat, :hvcat, :cat, :zeros, :ones, :fill, :vec,
 ])
 
 """
@@ -509,4 +512,62 @@ function _recompile_named_equation(eq::NamedEquation, endog, exog, params)
         regimes[k isa Symbol ? k : Symbol(k)] = _recompile_named_equation(v, endog, exog, params)
     end
     NamedEquation(eq.name, eq.defines, eq.expr, residual; timing=eq.timing, regimes=regimes)
+end
+
+# =============================================================================
+# Analytical ss_fn: shared Expr + load-time recompile (DSER-03 / #761)
+# =============================================================================
+
+"""
+    _ss_fn_expr(ss_body, params, n_endog, linear) → Expr
+
+Build `θ → y_ss` from a `steady_state` block (parameter unpack + body), or
+`θ → zeros(n)` when `linear` and no block, or `:nothing`.
+"""
+function _ss_fn_expr(ss_body, params, n_endog::Int, linear::Bool)
+    if ss_body !== nothing
+        param_unpack = [:($(p) = _ss_θ_[$(QuoteNode(p))]) for p in params]
+        if ss_body isa Expr && ss_body.head == :block
+            inner = filter(a -> !(a isa LineNumberNode), ss_body.args)
+            body = Expr(:block, param_unpack..., inner...)
+        else
+            body = Expr(:block, param_unpack..., ss_body)
+        end
+        return Expr(:->, :_ss_θ_, body)
+    elseif linear
+        return :((_ss_θ_) -> zeros($(n_endog)))
+    else
+        return :nothing
+    end
+end
+
+"""
+    _compile_ss_fn(ss_body, params, n_endog, linear) → Union{Nothing,Function}
+
+Sanitize a stored `steady_state` body, `Core.eval` `_ss_fn_expr`, and wrap with
+`invokelatest`. The generated linear `zeros` closure is not sanitized.
+"""
+function _compile_ss_fn(ss_body, params, n_endog::Int, linear::Bool)
+    if ss_body !== nothing
+        _sanitize_residual_ast(ss_body, :steady_state)
+    end
+    expr = _ss_fn_expr(ss_body, params, n_endog, linear)
+    expr === :nothing && return nothing
+    fn = Core.eval(MacroEconometricModels, expr)
+    θ -> Base.invokelatest(fn, θ)
+end
+
+function _recompile_ss_fn_from_ir(ir::ModelIR, params, n_endog::Int, linear::Bool,
+                                  had_ss_fn::Bool)
+    idx = findfirst(d -> d.kind === :steady_state, ir.declarations)
+    if idx !== nothing
+        return _compile_ss_fn(ir.declarations[idx].payload, params, n_endog, linear)
+    elseif linear
+        return _compile_ss_fn(nothing, params, n_endog, true)
+    else
+        if had_ss_fn
+            @warn "ss_fn was a Julia closure and was not saved; compute_steady_state will use the numerical solver"
+        end
+        return nothing
+    end
 end

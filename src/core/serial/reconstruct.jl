@@ -174,6 +174,12 @@ function _from_serializable(::Type{<:ModelSpec}, p::AbstractDict, ver::Int)
     _from_serializable_modelspec(p, ver)
 end
 
+function _to_serializable(m::ModelSpec)
+    d = _capture_fields(m)
+    d["had_ss_fn"] = m.ss_fn !== nothing
+    return d
+end
+
 function _from_serializable_modelspec(p::AbstractDict, ver::Int)
     T = Float64
     ss_raw = p["steady_state"]
@@ -208,11 +214,10 @@ function _from_serializable_modelspec(p::AbstractDict, ver::Int)
     residual_fns = Function[eq.residual for eq in equations]
 
     original_endog = Symbol[_as_symbol(s) for s in _deser_field(p["original_endog"])]
-    original_equations = NamedEquation[_recompile_named_equation(_as_named_eq(eq), original_endog, exog, params)
+    # Parser stores `identity` residuals on `original_equations` (pre-augmentation
+    # AST, including deep exog news lags). Display uses `.expr`, not `.residual`.
+    original_equations = NamedEquation[_as_named_eq(eq)
                                        for eq in _deser_field(p["original_equations"])]
-
-    ss_fn = _deser_field(p["ss_fn"])
-    ss_fn isa Function || (ss_fn = nothing)
 
     n_expect = Int(p["n_expect"])
     forward_indices = Int[Int(i) for i in _deser_field(p["forward_indices"])]
@@ -223,6 +228,11 @@ function _from_serializable_modelspec(p::AbstractDict, ver::Int)
     bellman_consumption = let c = _deser_field(p["bellman_consumption"])
         c === nothing ? nothing : _as_symbol(c)
     end
+    ir = _deser_field(p["ir"])
+    ir isa ModelIR || throw(SerializationError("ModelSpec.ir is not a ModelIR"))
+    linear = Bool(p["linear"])
+    had_ss_fn = Bool(get(p, "had_ss_fn", false))
+    ss_fn = _recompile_ss_fn_from_ir(ir, params, length(endog), linear, had_ss_fn)
 
     return ModelSpec{T}(
         endog, exog, params, param_values, equations, residual_fns,
@@ -232,13 +242,13 @@ function _from_serializable_modelspec(p::AbstractDict, ver::Int)
         augmented=Bool(p["augmented"]),
         max_lag=Int(p["max_lag"]),
         max_lead=Int(p["max_lead"]),
-        linear=Bool(p["linear"]),
+        linear=linear,
         bellman_utility=_deser_field(p["bellman_utility"]),
         bellman_beta=_deser_field(p["bellman_beta"]),
         bellman_consumption=bellman_consumption,
         bellman_controls=bellman_controls,
         agents=_deser_field(p["agents"]),
-        ir=_deser_field(p["ir"]),
+        ir=ir,
         varnames=varnames,
     )
 end

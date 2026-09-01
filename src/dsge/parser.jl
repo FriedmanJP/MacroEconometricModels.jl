@@ -346,27 +346,24 @@ function _dsge_impl(block::Expr)
                                     for i in eachindex(original_raw_equations))...)
     fn_vec_expr = Expr(:ref, :Function, residual_fn_exprs...)
 
-    ss_fn_expr = if ss_body !== nothing
-        param_unpack = [:($(p) = _ss_θ_[$(QuoteNode(p))]) for p in params]
-        if ss_body isa Expr && ss_body.head == :block
-            inner = filter(a -> !(a isa LineNumberNode), ss_body.args)
-            body = Expr(:block, param_unpack..., inner...)
-        else
-            body = Expr(:block, param_unpack..., ss_body)
-        end
-        Expr(:->, :_ss_θ_, body)
-    elseif is_linear
-        n_endog_val = length(endog)
-        :((_ss_θ_) -> zeros($n_endog_val))
-    else
-        :nothing
-    end
+    ss_fn_expr = _ss_fn_expr(ss_body, params, length(endog), is_linear)
 
     decls = IRDecl[
         IRDecl(:parameters, nothing, copy(params)),
         IRDecl(:endogenous, nothing, copy(original_endog)),
         IRDecl(:exogenous, nothing, copy(exog)),
     ]
+    ss_body !== nothing && push!(decls, IRDecl(:steady_state, nothing, ss_body))
+    is_linear && push!(decls, IRDecl(:linear, nothing, true))
+    if user_varnames !== nothing
+        push!(decls, IRDecl(:varnames, nothing, copy(user_varnames)))
+    end
+    if bellman_util_ex !== nothing
+        util = bellman_util_ex isa QuoteNode ? bellman_util_ex.value : bellman_util_ex
+        push!(decls, IRDecl(:utility, nothing, util))
+    end
+    bellman_beta_ex !== nothing && push!(decls, IRDecl(:beta, nothing, bellman_beta_ex))
+    !isempty(bellman_ctrl_ex) && push!(decls, IRDecl(:controls, nothing, copy(bellman_ctrl_ex)))
     append!(decls, extra_decls)
     ir_eqs = IREquation[IREquation(original_eq_names[i], original_eq_defines[i],
                                    original_raw_equations[i].args[1],
