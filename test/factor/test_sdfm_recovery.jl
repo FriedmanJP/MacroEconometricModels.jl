@@ -43,6 +43,32 @@ function _rel_rmse(est, truth)
     den <= 0 ? num : num / den
 end
 
+"""True if `A` matches `B` after independent ±1 row and column signs (PCA/eigen LAPACK)."""
+function _same_up_to_row_col_signs(A::AbstractMatrix, B::AbstractMatrix; atol=1e-6, rtol=1e-6)
+    size(A) == size(B) || return false
+    r, c = size(A)
+    (r > 8 || c > 8) && throw(ArgumentError("_same_up_to_row_col_signs: r,c ≤ 8"))
+    sr = Vector{eltype(A)}(undef, r)
+    sc = Vector{eltype(A)}(undef, c)
+    for maskr in 0:(2^r - 1), maskc in 0:(2^c - 1)
+        @inbounds for i in 1:r
+            sr[i] = ((maskr >> (i - 1)) & 1) == 1 ? -one(eltype(A)) : one(eltype(A))
+        end
+        @inbounds for j in 1:c
+            sc[j] = ((maskc >> (j - 1)) & 1) == 1 ? -one(eltype(A)) : one(eltype(A))
+        end
+        ok = true
+        @inbounds for j in 1:c, i in 1:r
+            if !isapprox(sr[i] * A[i, j] * sc[j], B[i, j]; atol=atol, rtol=rtol)
+                ok = false
+                break
+            end
+        end
+        ok && return true
+    end
+    false
+end
+
 @testset "SDFM recovery, fixture, and proxy" begin
 
     @testset "committed FGLR Cholesky fixture" begin
@@ -52,12 +78,15 @@ end
         irfref = readdlm(joinpath(_SDFM_REF, "irf.csv"), ',', Float64)
         sdfm = estimate_structural_dfm(X, 2; r=2, p=1, H=12, identification=:cholesky,
             order=[1, 2], standardize=true, method=:fglr)
-        @test sdfm.K ≈ Kref atol=1e-6 rtol=1e-6
-        @test sdfm.B0 ≈ B0ref atol=1e-6 rtol=1e-6
+        # Factor-row and shock-column signs of K and B0 follow LAPACK eigen/PCA
+        # (Windows CI flipped two signs vs the committed Linux fixture).
+        @test _same_up_to_row_col_signs(sdfm.K, Kref; atol=1e-6, rtol=1e-6)
+        @test _same_up_to_row_col_signs(sdfm.B0, B0ref; atol=1e-6, rtol=1e-6)
         ir = irf(sdfm, 12).values
         H, N, q = size(ir)
-        flat = reshape(ir, H * N, q)
-        @test flat ≈ irfref atol=1e-6 rtol=1e-6
+        irref3 = reshape(irfref, H, N, q)
+        aligned = _align_irf_columns(ir, irref3)
+        @test aligned ≈ irref3 atol=1e-6 rtol=1e-6
         m2 = MacroEconometricModels._reconstruct_from_container(
             MacroEconometricModels._build_container(sdfm))
         @test m2.identification === sdfm.identification

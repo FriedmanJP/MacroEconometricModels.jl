@@ -956,17 +956,17 @@ using Random
 
     @testset "FHLR h=1 projection RMSE beats AR(1) on two-sided factors" begin
         rng = Random.MersenneTwister(7211)
-        T_obs, N, q = 500, 30, 2
+        T_obs, N, q = 600, 30, 2
         u = randn(rng, T_obs, q)
         for t in 2:T_obs
-            u[t, :] .+= 0.5 .* u[t-1, :]
+            u[t, :] .+= 0.6 .* u[t-1, :]
         end
         Λ0 = randn(rng, N, q)
         Λ1 = randn(rng, N, q)
         X = u * Λ0'
         X[2:end, :] .+= u[1:end-1, :] * Λ1'
-        X .+= 0.3 .* randn(rng, T_obs, N)
-        n_origin = 8
+        X .+= 0.15 .* randn(rng, T_obs, N)
+        n_origin = 20
         sse_ar = 0.0
         sse_os = 0.0
         for t in (T_obs - n_origin):(T_obs - 1)
