@@ -11,7 +11,7 @@ using LinearAlgebra
 const FAST = get(ENV, "MACRO_FAST_TESTS", "") == "1"
 # Ubuntu 1.10 Optim-v1 cell: important numerical tests only (see _numerical_groups).
 const NUMERICAL = get(ENV, "MACRO_NUMERICAL_CI", "") == "1"
-# CI job split: "dsge" | "empirical" | "" (local full suite).
+# CI job split: "dsge" | "empirical" | "serialization" | "" (local full suite).
 const SUITE = get(ENV, "MACRO_CI_SUITE", "")
 
 # Shared test data generators (available to all test files)
@@ -34,7 +34,6 @@ const TEST_GROUPS = [
         "core/test_tables.jl",
         "core/test_logging.jl",
         "core/test_repro.jl",
-        "core/test_serialization.jl",
         "core/test_utils.jl",
         "core/test_edge_cases.jl",
         "core/test_examples.jl",
@@ -62,7 +61,6 @@ const TEST_GROUPS = [
         "var/test_ab.jl",                 # SID-13 (#742): AB-model ML
         "var/test_conditional_forecast.jl",   # T241 (#340): Waggoner-Zha conditional forecasts
         "preg/test_panel_nonlinear.jl",   # moved from the ceiling ARIMA group to rebalance (#127)
-        "bvar/test_bvar_serialization.jl",
     ]),
     # Group 3: IRF/FEVD/HD & VECM
     ("IRF & VECM" => [
@@ -74,10 +72,8 @@ const TEST_GROUPS = [
         "var/test_proxy.jl",              # SID-11 (#740): proxy SVAR / external instruments
         "var/test_maxshare.jl",           # SID-12 (#741): max-share identification
         "vecm/test_vecm.jl",
-        "vecm/test_vecm_serialization.jl",
         "vecm/test_vecm_restrictions.jl", # EV-38 (#446)
         "preg/test_panel_iv.jl",          # moved from the ceiling ARIMA group to rebalance (#127)
-        "var/test_var_serialization.jl",
     ]),
     # Group 4: LP & Factor Models & Nowcasting & DiD
     ("LP & Factor & Nowcast" => [
@@ -90,16 +86,12 @@ const TEST_GROUPS = [
         "factor/test_dynamicfactormodel.jl",
         "factor/test_gdfm.jl",
         "factor/test_factor_forecast.jl",
-        "factor/test_factor_serialization.jl",
         "factor/test_restricted.jl",
         "factor/test_favar.jl",
         "factor/test_structural_dfm.jl",
         "nowcast/test_nowcast.jl",
         "did/test_did.jl",
         "did/test_lpdid.jl",
-        "lp/test_lp_serialization.jl",
-        "nowcast/test_nowcast_serialization.jl",
-        "did/test_did_serialization.jl",
     ]),
     # Group 5: ARIMA & Statistical Tests & Data & PVAR & Reg
     ("ARIMA & Tests & Data & Reg" => [
@@ -128,7 +120,6 @@ const TEST_GROUPS = [
         "teststat/test_bubble.jl",   # EV-30 (#438): SADF/GSADF explosive-bubble detection
 
         "gmm/test_gmm.jl",
-        "gmm/test_gmm_serialization.jl",
         "gmm/test_smm.jl",
         "data/test_data.jl",
         "pvar/test_pvar.jl",
@@ -148,12 +139,10 @@ const TEST_GROUPS = [
         "reg/test_ordered.jl",
         "reg/test_multinomial.jl",
         "midas/test_midas.jl",
-        "midas/test_midas_serialization.jl",
         "ardl/test_ardl.jl",   # EV-08 (#416): ARDL + PSS bounds test
         "ardl/test_nardl.jl",  # EV-09 (#417): nonlinear ARDL (NARDL) + dynamic multipliers
         "ardl/test_pmg.jl",    # EV-23 (#431): panel ARDL — PMG / MG / DFE + Hausman
         "fceval/test_fceval.jl",   # EV-39 (#447): forecast eval metrics + DM/CW/MZ/encompassing + combination
-        "fceval/test_fceval_serialization.jl",
         "cointreg/test_cointreg.jl",   # EV-10 (#418): FMOLS/CCR/DOLS cointegrating regression
         "teststat/test_cointegration_resid.jl",   # EV-11 (#419): Engle-Granger/Phillips-Ouliaris/Hansen-Lc/Park
         "teststat/test_variance_ratio.jl",   # EV-27 (#435): Lo-MacKinlay/Chow-Denning/Wright/Kim variance-ratio tests
@@ -161,10 +150,6 @@ const TEST_GROUPS = [
         "preg/test_panel_reg.jl",
         "preg/test_pcse_prais.jl",   # EV-25 (#433): Beck-Katz PCSE + Prais-Winsten AR(1)
         "preg/test_panel_tests.jl",
-        "reg/test_reg_serialization.jl",
-        "teststat/test_teststat_serialization.jl",
-        "arima/test_arima_serialization.jl",
-        "system/test_system_serialization.jl",
     ]),
     # Group 6: Volatility & Non-Gaussian & Plotting & Filters & Spectral
     ("Volatility & Filters" => [
@@ -173,7 +158,6 @@ const TEST_GROUPS = [
         "volatility/test_garch_midas.jl",   # EV-02 (#410): GARCH-MIDAS long/short-run components
         "volatility/test_figarch.jl",       # EV-14 (#422): FIGARCH/FIEGARCH fractionally-integrated volatility
         "volatility/test_garch_family.jl",  # EV-15 (#423): IGARCH/Component-GARCH/APARCH + sign-bias/Nyblom tests
-        "volatility/test_volatility_serialization.jl",
         "mgarch/test_mgarch.jl",            # EV-16 (#424): multivariate GARCH — CCC/DCC/BEKK
         "nongaussian/test_nongaussian_svar.jl",
         "nongaussian/test_nongaussian_internals.jl",
@@ -181,7 +165,6 @@ const TEST_GROUPS = [
         "filters/test_x13.jl",
         "filters/test_x13_coverage.jl",
         "spectral/test_spectral.jl",
-        "filters/test_filters_serialization.jl",
     ]),
     # Plotting — consolidated plot_result harness (PLT-39). Split from the old
     # monolith (test_plot_result.jl) into per-domain lanes + the Wave-2 dispatch
@@ -209,7 +192,6 @@ const TEST_GROUPS = [
         "nonlinear/test_threshold.jl",
         "nonlinear/test_star.jl",       # EV-06 smooth-transition (STAR)
         "nonlinear/test_markov_switching.jl",  # EV-07 Markov-switching regression / MS-AR
-        "nonlinear/test_nonlinear_serialization.jl",
         "nonparametric/test_nonparametric.jl",  # EV-33 (#441): kernel density / kernel-reg / LOWESS
     ]),
     # Group 7 split into three so the DSGE critical path balances across processes (#123):
@@ -222,7 +204,6 @@ const TEST_GROUPS = [
         "dsge/test_blanchard_olg.jl",
         "dsge/test_lifecycle_olg.jl",
         "dsge/test_continuous_aiyagari.jl",
-        "dsge/test_dsge_serialization.jl",
     ]),
     ("DSGE Bayesian & HD" => [
         "dsge/test_bayesian_dsge.jl",
@@ -294,7 +275,6 @@ const TEST_GROUPS = [
         "io/test_io_plotting.jl",
         "io/test_io_refs.jl",
         "io/test_io_coverage.jl",
-        "io/test_io_serialization.jl",
     ]),
     # Group 11: Display regression harness (T176/#275). A dedicated group — the
     # fixtures compile a broad swath of estimators (VAR/VECM/BVAR/DSGE/GARCH/GMM/
@@ -331,6 +311,33 @@ const TEST_GROUPS = [
         "counterfactual/test_show.jl",
         "counterfactual/test_plotting.jl",
         "counterfactual/test_oracles.jl",
+    ]),
+    # Serialization suite (`MACRO_CI_SUITE=serialization`): round-trip files
+    # pulled out of the empirical/DSGE groups so they do not share a process
+    # with display-backend tests or sit on the 60 min job timeout.
+    ("Serialization DSGE" => [
+        "dsge/test_dsge_serialization.jl",
+    ]),
+    ("Serialization" => [
+        "core/test_serialization.jl",
+        "bvar/test_bvar_serialization.jl",
+        "vecm/test_vecm_serialization.jl",
+        "var/test_var_serialization.jl",
+        "factor/test_factor_serialization.jl",
+        "lp/test_lp_serialization.jl",
+        "nowcast/test_nowcast_serialization.jl",
+        "did/test_did_serialization.jl",
+        "gmm/test_gmm_serialization.jl",
+        "midas/test_midas_serialization.jl",
+        "fceval/test_fceval_serialization.jl",
+        "reg/test_reg_serialization.jl",
+        "teststat/test_teststat_serialization.jl",
+        "arima/test_arima_serialization.jl",
+        "system/test_system_serialization.jl",
+        "volatility/test_volatility_serialization.jl",
+        "filters/test_filters_serialization.jl",
+        "nonlinear/test_nonlinear_serialization.jl",
+        "io/test_io_serialization.jl",
         "counterfactual/test_counterfactual_serialization.jl",
     ]),
 ]

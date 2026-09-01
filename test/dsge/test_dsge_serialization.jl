@@ -6,58 +6,10 @@
 
 using Test, Random, LinearAlgebra, SparseArrays, Distributions, MacroEconometricModels
 
-# Task 4 helpers are not on this commit — copy `_MEM` / `_roundtrip`
-# from test/core/test_serialization.jl (do not include that file).
-const _MEM = MacroEconometricModels
-_roundtrip(m) = _MEM._reconstruct_from_container(_MEM._build_container(m))
+if !@isdefined(_assert_roundtrip)
+    include(joinpath(@__DIR__, "..", "serialization_helpers.jl"))
+end
 const _suppress_warnings = _MEM._suppress_warnings
-
-# Recursive equality that treats recompiled closures as matching and strips
-# Expr line numbers (the Expr codec drops them).
-function _deep_equal(a, b)
-    a === nothing && return b === nothing
-    a isa Missing && return b isa Missing
-    a isa Function && return b isa Function
-    if a isa Expr
-        b isa Expr || return false
-        return Base.remove_linenums!(deepcopy(a)) == Base.remove_linenums!(deepcopy(b))
-    end
-    if a isa Number
-        return (isnan(a) && b isa Number && isnan(b)) || isequal(a, b)
-    end
-    (a isa AbstractString || a isa Symbol || a isa Enum || a isa Bool) && return isequal(a, b)
-    if a isa AbstractArray
-        b isa AbstractArray || return false
-        size(a) == size(b) || return false
-        return all(_deep_equal(a[i], b[i]) for i in eachindex(a))
-    end
-    if a isa AbstractDict
-        b isa AbstractDict || return false
-        Set(keys(a)) == Set(keys(b)) || return false
-        return all(_deep_equal(a[k], b[k]) for k in keys(a))
-    end
-    if a isa NamedTuple
-        b isa NamedTuple || return false
-        keys(a) === keys(b) || keys(a) == keys(b) || return false
-        return all(_deep_equal(a[k], b[k]) for k in keys(a))
-    end
-    a isa Tuple && return length(a) == length(b) && all(_deep_equal(a[i], b[i]) for i in eachindex(a))
-    if isstructtype(typeof(a)) && parentmodule(typeof(a)) === _MEM
-        typeof(a).name === typeof(b).name || return false
-        return all(_deep_equal(getfield(a, f), getfield(b, f)) for f in fieldnames(typeof(a)))
-    end
-    return isequal(a, b)
-end
-
-function _assert_roundtrip(m; skip::Vector{Symbol}=Symbol[])
-    m2 = _roundtrip(m)
-    @test typeof(m2).name === typeof(m).name
-    for f in fieldnames(typeof(m))
-        f in skip && continue
-        @test _deep_equal(getfield(m, f), getfield(m2, f))
-    end
-    return m2
-end
 
 function _dser04_rbc()
     spec = @dsge begin

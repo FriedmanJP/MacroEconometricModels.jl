@@ -607,21 +607,28 @@ function _k_regime_ml(Sigma_hats::Vector{Matrix{T}}, Tks::AbstractVector;
         end
         isfinite(v) ? v : T(1e20)
     end
-    g! = (G, x) -> ForwardDiff.gradient!(G, obj, x)
-    nll0 = obj(params0)
-    result = Optim.optimize(obj, g!, params0, Optim.LBFGS(),
-                            Optim.Options(iterations=max_iter, g_tol=tol,
-                                          f_reltol=T(1e-12)))
-    p_opt = Vector{T}(Optim.minimizer(result))
-    # Keep the eigendecomposition start when LBFGS does not improve nll.
-    # Optim v1 (Julia 1.10 numerical cell) can walk off a good start.
-    p = obj(p_opt) <= nll0 ? p_opt : params0
+    conv = true
+    nit = 0
+    p = params0
+    # K=2 identification is the eigendecomposition (Lanne–Lütkepohl). LBFGS on
+    # Optim v1 can report a lower nll at a spurious rotation (Julia 1.10 CI).
+    if K > 2
+        g! = (G, x) -> ForwardDiff.gradient!(G, obj, x)
+        nll0 = obj(params0)
+        result = Optim.optimize(obj, g!, params0, Optim.LBFGS(),
+                                Optim.Options(iterations=max_iter, g_tol=tol,
+                                              f_reltol=T(1e-12)))
+        p_opt = Vector{T}(Optim.minimizer(result))
+        p = obj(p_opt) <= nll0 ? p_opt : params0
+        conv = Optim.converged(result)
+        nit = Optim.iterations(result)
+    end
     B, Q, Lambdas = _k_regime_unpack(p, n, K)
     B, Q, Lambdas, idx = _k_regime_normalize(B, Q, Lambdas, n, K)
     Lfac = Matrix{T}(safe_cholesky(B * B'; silent=true))
     Q = Lfac \ B
     p = _k_regime_pack(B, Lambdas, n, K)
-    (B, Q, Lambdas, p, Lfac, Optim.converged(result), Optim.iterations(result), idx)
+    (B, Q, Lambdas, p, Lfac, conv, nit, idx)
 end
 
 function _k_regime_lambda(params, n::Int, k::Int)

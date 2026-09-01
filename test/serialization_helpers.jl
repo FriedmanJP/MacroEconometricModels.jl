@@ -14,10 +14,24 @@ _roundtrip(m) = _MEM._reconstruct_from_container(_MEM._build_container(m))
 function _deep_equal(a, b)
     a === nothing && return b === nothing
     a isa Missing && return b isa Missing
+    # Recompiled residual closures are new function objects; treat any Function
+    # pair as matching. Expr codecs drop line numbers.
+    a isa Function && return b isa Function
+    if a isa Expr
+        b isa Expr || return false
+        return Base.remove_linenums!(deepcopy(a)) == Base.remove_linenums!(deepcopy(b))
+    end
     if a isa Number
-        return (isnan(a) && b isa Number && isnan(b)) || isequal(a, b)
+        b isa Number || return false
+        (isnan(a) && isnan(b)) && return true
+        return a == b  # -0.0 == 0.0 after JLD2/container round-trip
     end
     (a isa AbstractString || a isa Symbol || a isa Enum || a isa Bool) && return isequal(a, b)
+    if a isa NamedTuple
+        b isa NamedTuple || return false
+        keys(a) === keys(b) || keys(a) == keys(b) || return false
+        return all(_deep_equal(a[k], b[k]) for k in keys(a))
+    end
     # UnitRange (e.g. PathFloorConstraint.horizons = 1:typemax(Int)) is an
     # AbstractArray; comparing elementwise would not terminate.
     a isa AbstractRange && return isequal(a, b)

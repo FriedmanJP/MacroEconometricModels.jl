@@ -36,6 +36,7 @@ jobs:
         suite:
           - dsge
           - empirical
+          - serialization
         include:
           - version: '1'
             os: macos-latest
@@ -45,19 +46,45 @@ jobs:
             os: macos-latest
             arch: arm64
             suite: empirical
-          # One Windows FAST cell for both suites. Windows precompile is
-          # still the slowest cell even with a per-CPU native cache (#708).
+          - version: '1'
+            os: macos-latest
+            arch: arm64
+            suite: serialization
+          # Windows FAST: three suites. One combined cell ran 48–56 min and
+          # raced serialization helpers with DSER in the same process (#708).
           - version: '1'
             os: windows-latest
             arch: x64
+            suite: dsge
             fast: true
-          # Dual-major Optim compat (T153/#252): the only Julia 1.10 cell.
-          # Pins Optim@1 and runs MACRO_NUMERICAL_CI. Drops Plotting/Display/
-          # Coverage-A/B only — nearly the full suite at full sampling.
+          - version: '1'
+            os: windows-latest
+            arch: x64
+            suite: empirical
+            fast: true
+          - version: '1'
+            os: windows-latest
+            arch: x64
+            suite: serialization
+            fast: true
+          # Dual-major Optim compat (T153/#252): Julia 1.10, Optim@1,
+          # MACRO_NUMERICAL_CI. Split like the other full-sampling cells so
+          # the combined job cannot sit on the 60 min timeout.
           - version: '1.10'
             os: ubuntu-latest
             arch: x64
             optim_v1: true
+            suite: dsge
+          - version: '1.10'
+            os: ubuntu-latest
+            arch: x64
+            optim_v1: true
+            suite: empirical
+          - version: '1.10'
+            os: ubuntu-latest
+            arch: x64
+            optim_v1: true
+            suite: serialization
 
     steps:
       - uses: actions/checkout@v7
@@ -103,10 +130,10 @@ jobs:
       - uses: julia-actions/julia-buildpkg@v1
 
       # Cell roles:
-      #   ubuntu stable  — full suite, split dsge | empirical; Optim v2; no coverage
-      #   ubuntu 1.10    — numerical profile, one job, Optim v1 pin, --check-bounds=yes
-      #   macos          — FAST=1 smoke, split dsge | empirical; Codecov every run
-      #   windows        — FAST=1 smoke, both suites, one job (#708)
+      #   ubuntu stable  — full suite, split dsge | empirical | serialization; Optim v2; no coverage
+      #   ubuntu 1.10    — numerical profile, same three suites, Optim v1 pin, --check-bounds=yes
+      #   macos          — FAST=1 smoke, split dsge | empirical | serialization; Codecov every run
+      #   windows        — FAST=1 smoke, split dsge | empirical | serialization (#708)
       #
       # Default cells use the threaded single-process runner (package loaded
       # once). Julia 1.12 compile is 2–3× 1.10; multiprocess paid that per

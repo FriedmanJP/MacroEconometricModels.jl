@@ -315,19 +315,31 @@ const MEM_IH = MacroEconometricModels
                   "DSGE Core" => ["dsge/test_dsge.jl"],
                   "Coverage-A" => ["coverage/test_dsge_coverage.jl"],
                   "Core & VAR" => ["core/test_kalman.jl"],
-                  "Plotting" => ["plotting/test_plot_render.jl"]]
+                  "Plotting" => ["plotting/test_plot_render.jl"],
+                  "Serialization" => ["core/test_serialization.jl"],
+                  "Serialization DSGE" => ["dsge/test_dsge_serialization.jl"]]
         @test first.(_ci_suite_groups(dummy2, "dsge")) ==
               ["HA-DSGE", "DSGE Core", "Coverage-A"]
         @test first.(_ci_suite_groups(dummy2, "empirical")) ==
               ["Core & VAR", "Plotting"]
+        @test first.(_ci_suite_groups(dummy2, "serialization")) ==
+              ["Serialization", "Serialization DSGE"]
         @test collect(_ci_suite_groups(dummy2, "")) == collect(dummy2)
         @test_throws ArgumentError _ci_suite_groups(dummy2, "bogus")
+        @test _expected_rank("Serialization DSGE") > _expected_rank("Serialization")
 
         if @isdefined(TEST_GROUPS)
             serial_files = Set(f for (_, fs) in TEST_GROUPS for f in fs)
             @test "dsge/test_perfect_foresight_sparse.jl" in serial_files
             @test "dsge/test_dcegm_plot.jl" in serial_files
             @test "dsge/test_modelspec_kinds.jl" in serial_files
+            ser_files = Set(f for (n, fs) in TEST_GROUPS if n in _SERIALIZATION_SUITE_GROUPS for f in fs)
+            dsge_files = Set(f for (n, fs) in TEST_GROUPS if n in _DSGE_SUITE_GROUPS for f in fs)
+            @test isempty(ser_files ∩ dsge_files)
+            if "dsge/test_dsge_serialization.jl" in serial_files
+                @test "dsge/test_dsge_serialization.jl" in ser_files
+                @test "dsge/test_dsge_serialization.jl" ∉ dsge_files
+            end
         end
 
         @test _expected_rank("DSGE Core") > _expected_rank("Counterfactual")

@@ -19,7 +19,9 @@ function _expected_rank(name::AbstractString)
     startswith(name, "Coverage-A")            && return 60
     name == "ARIMA & Tests & Data & Reg"      && return 55
     name == "Plotting"            && return 52   # render + 11 lanes; schedule early to avoid a straggler
+    name == "Serialization DSGE"  && return 88  # DSER is DSGE-Core-sized; start with HA
     name == "IRF & VECM"          && return 50
+    name == "Serialization"       && return 48  # RSER files pulled out of empirical groups
     name == "Bayesian & SVAR"     && return 45
     name == "Display"             && return 42   # est-heavy compile; schedule with the medium wave
     startswith(name, "Coverage")  && return 20   # light coverage groups last
@@ -76,11 +78,9 @@ function _numerical_groups(groups, numerical::Bool)
     return out
 end
 
-# CI job split (`MACRO_CI_SUITE=dsge|empirical`): DSGE/HA vs the empirical rest.
-# julia-actions/cache@v3 already keys on the full matrix (include-matrix), so
-# the two suite jobs do not share a compiled/ depot. The pidfile/checksum
-# storm on macOS empirical was intra-job: multiprocess children racing
-# `using` before a warm cache existed (see `_warm_compile_cache`).
+# CI job split (`MACRO_CI_SUITE=dsge|empirical|serialization`): DSGE/HA vs
+# round-trip files vs the empirical rest. julia-actions/cache@v3 keys on the
+# full matrix (include-matrix), so suite jobs do not share a compiled/ depot.
 const _DSGE_SUITE_GROUPS = Set([
     "DSGE Core",
     "DSGE Bayesian & HD",
@@ -89,16 +89,27 @@ const _DSGE_SUITE_GROUPS = Set([
     "Coverage-A",
     "Extensions (JuMP/Ipopt/PATH)",
 ])
+const _SERIALIZATION_SUITE_GROUPS = Set([
+    "Serialization",
+    "Serialization DSGE",
+])
 
 function _ci_suite_groups(groups, suite::AbstractString)
     isempty(suite) && return groups
-    suite == "dsge" || suite == "empirical" || throw(ArgumentError(
-        "MACRO_CI_SUITE must be \"dsge\", \"empirical\", or empty; got $(repr(suite))"))
-    want_dsge = suite == "dsge"
+    suite in ("dsge", "empirical", "serialization") || throw(ArgumentError(
+        "MACRO_CI_SUITE must be \"dsge\", \"empirical\", \"serialization\", or empty; got $(repr(suite))"))
     out = Pair{String, Vector{String}}[]
     for (name, files) in groups
-        (name in _DSGE_SUITE_GROUPS) == want_dsge || continue
-        push!(out, String(name) => Vector{String}(files))
+        in_dsge = name in _DSGE_SUITE_GROUPS
+        in_ser = name in _SERIALIZATION_SUITE_GROUPS
+        keep = if suite == "dsge"
+            in_dsge
+        elseif suite == "serialization"
+            in_ser
+        else
+            !in_dsge && !in_ser
+        end
+        keep && push!(out, String(name) => Vector{String}(files))
     end
     return out
 end

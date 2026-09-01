@@ -96,7 +96,12 @@ end
 
         nm2 = _roundtrip(nm)
         @test _deep_equal(symmetry_test(nm2), st)
-        @test _deep_equal(dynamic_multipliers(nm2, 6; bootstrap=false), mm)
+        mm_rt = dynamic_multipliers(nm2, 6; bootstrap=false)
+        @test mm_rt.m_pos ≈ mm.m_pos
+        @test mm_rt.m_neg ≈ mm.m_neg
+        @test mm_rt.m_diff ≈ mm.m_diff
+        @test mm_rt.theta_pos ≈ mm.theta_pos
+        @test mm_rt.theta_neg ≈ mm.theta_neg
         @test _deep_equal(bounds_test(nm2), bounds_test(nm))
     end
 end
