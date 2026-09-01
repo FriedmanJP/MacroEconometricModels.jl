@@ -12,21 +12,25 @@ Patch on the `0.9` series: SVAR identification completion (SID series, `#730`--`
 
 **New**
 
-- Proxy SVAR (`identify_proxy`, `method=:proxy`), AB-model ML (`estimate_svar`), max-share / news shocks (`identify_max_share`), structural VECM (`identify_svec`).
-- Moment-based GMM (`identify_gmm_moments`); K-regime joint ML for heteroskedastic schemes; `label_shocks`.
-- Set-identified summaries (`median_target`, `modal_model`, `joint_band`, `sup_t_band`) and Giacomini–Kitagawa robust Bayes (`identify_robust_bayes`).
-- Principled identifiability tests (`test_lambda_distinct`, `test_gaussian_shock_count`, `test_label_stability`).
+- Proxy SVAR (`identify_proxy`, `method=:proxy`; `#740`), AB-model ML (`estimate_svar`; `#742`), max-share / news shocks (`identify_max_share`; `#741`), structural VECM (`identify_svec`; `#745`).
+- Moment-based GMM (`identify_gmm_moments`; `#750`); K-regime joint ML for heteroskedastic schemes (`#739`); `label_shocks` (`#749`).
+- Set-identified summaries (`median_target`, `modal_model`, `joint_band`, `sup_t_band`; `#746`) and Giacomini–Kitagawa robust Bayes (`identify_robust_bayes`; `#747`).
+- Principled identifiability tests (`test_lambda_distinct`, `test_gaussian_shock_count`, `test_label_stability`; `#751`).
+- ADRR narrative restrictions (`identify_narrative`; `#744`); keyword `compute_Q` registry (`#748`); RWZ rank/order checker (`#752`).
 
 **Correctness**
 
-- Heteroskedastic kernel is the symmetric generalized eigenproblem ``L_1^{-1}\Sigma_2 L_1^{-\top} = W\Lambda W'``, ``B_0 = L_1 W`` (no polar projection).
-- Smooth-transition identification is joint ML, not a frozen sample split.
-- Uhlig penalty weights: 1 if the sign is satisfied, 100 if violated.
-- `irf(; method=:sign/:narrative)` returns the identified-set median (`ci_type = :identified_set`); `max_draws` defaults to 1000.
+- Heteroskedastic kernel is the symmetric generalized eigenproblem ``L_1^{-1}\Sigma_2 L_1^{-\top} = W\Lambda W'``, ``B_0 = L_1 W`` (no polar projection) (`#730`).
+- Smooth-transition identification is joint ML, not a frozen sample split (`#738`).
+- Uhlig penalty weights: 1 if the sign is satisfied, 100 if violated (`#732`).
+- `irf(; method=:sign/:narrative)` returns the identified-set median (`ci_type = :identified_set`); `max_draws` defaults to 1000 (`#734`).
 
 **Also**
 
 - Identification documentation rewrite (`#754`): method-choice table, proxy / AB / max-share pages, structural VECM section.
+- Horizon ranges, long-run zeros, ``A_0`` and bound restrictions (`#743`); Arias/Uhlig evaluated at `max_h` (`#731`); bootstrap column matching (`#733`).
+- Theoretical CIs rejected for residual-based and set-ID methods (`#735`); BVAR posterior skips `IdentificationError` draws (`#736`); non-orthogonal long-run ``Q`` throws (`#737`).
+- Identification result serialization (`#753`); DGP-recovery tests and identification oracle (`#755`); parallel Arias draws and ForwardDiff volume (`#756`).
 
 ---
 
