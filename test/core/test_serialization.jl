@@ -412,6 +412,17 @@ end
             @test haskey(_MEM._SERIALIZABLE_TYPES, name)
         end
     end
+
+    @testset "DSGE-family: OLG / CT (DSER-09)" begin
+        for name in ("BlanchardOLG", "BlanchardOLGSteadyState", "BlanchardOLGSolution",
+                     "LifeCycleOLG", "LifeCycleSystem", "LifeCycleSteadyState",
+                     "LifeCycleTransition", "CTPoissonIncome", "CTAiyagari",
+                     "CTSteadyState", "CTTransition", "CTTwoAsset",
+                     "CTTwoAssetSolution", "CTTwoAssetGE", "CTTwoAssetTransition",
+                     "ContinuousHouseholdSystem")
+            @test haskey(_MEM._SERIALIZABLE_TYPES, name)
+        end
+    end
 end
 
 @testset "DSER-01 leaf codecs" begin

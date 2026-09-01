@@ -56,7 +56,11 @@
 # when `f` / `evaluate` are named functions or callable structs; `H_U_fact`
 # is recomputed. DCEGM / Khan–Thomas / intermediary families round-trip;
 # `DCEGMProblem` callables must be named functions or structs (`DCEGMUtility`,
-# `DCEGMIncome`, `CRRAUtility`). OLG / CT results are still follow-up.
+# `DCEGMIncome`, `CRRAUtility`). OLG / CT families (`BlanchardOLG`,
+# `LifeCycleOLG`, `CTAiyagari`, `CTTwoAsset` and their solutions / agent
+# wrappers) round-trip; sparse generators use the `__sparse__` codec.
+# `CTTwoAssetSolution` reconstructs through its keyword inner constructor.
+# Persist `BlanchardOLG` itself — `to_spec` residual closures are not IR.
 
 include("serial/registry.jl")
 include("serial/codecs.jl")

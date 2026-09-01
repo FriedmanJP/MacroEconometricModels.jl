@@ -293,6 +293,14 @@ endogenous `(k, C, r, w, Z)` and shock `eps_Z`. `ss_fn` delegates to
 [`blanchard_steady_state`](@ref) so `compute_steady_state` matches the family
 solver. `λ = (1 − βγ)(1 − γ)/γ` (zero when `γ = 1`). Optional NK residuals
 (Phillips, Taylor, Fisher) are added by [`blanchard_nk_spec`](@ref).
+
+`NamedEquation.expr` is documentation (Greek letters; `λ` is derived, not a
+parameter) and is **not** equivalent to the hand-written residual closures —
+`k[t+1]` / `r[t+1]` are substituted from the budget and firm FOC so gensys
+does not treat capital as a jump. `ss_fn` is a Julia closure, not an IR
+`steady_state` block. Persist the [`BlanchardOLG`](@ref) with [`save_model`](@ref)
+and rebuild the spec with `to_spec` after load; DSER-02 recompile of this spec
+does not recover the original closures.
 """
 function to_spec(m::BlanchardOLG{T}; rho_z=T(0), sigma_z=T(0)) where {T}
     ρz = T(rho_z)

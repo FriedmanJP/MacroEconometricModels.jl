@@ -1174,8 +1174,7 @@ end
 Print the stationary equilibrium: convergence, prices and aggregates, the social
 security budget, and the age profiles of assets, consumption, and income.
 """
-function report(ss::LifeCycleSteadyState{T}) where {T}
-    io = stdout
+function report(io::IO, ss::LifeCycleSteadyState{T}) where {T}
     m = ss.spec
     head = Any[
         "Converged"              ss.converged ? "Yes" : "No";
@@ -1224,6 +1223,7 @@ function report(ss::LifeCycleSteadyState{T}) where {T}
         alignment=[:r, :l, :r, :r, :r])
     return nothing
 end
+report(ss::LifeCycleSteadyState) = report(stdout, ss)   # G-17 (#254): io-routed report
 
 # =============================================================================
 # Sequence-space PE block (G-16 / #650)

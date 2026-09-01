@@ -4,7 +4,7 @@
 # This file is part of MacroEconometricModels.jl.
 # Licensed under GPL-3.0-or-later. See LICENSE for details.
 
-using Test, Random, LinearAlgebra, Distributions, MacroEconometricModels
+using Test, Random, LinearAlgebra, SparseArrays, Distributions, MacroEconometricModels
 
 # Task 4 helpers are not on this commit — copy `_MEM` / `_roundtrip`
 # from test/core/test_serialization.jl (do not include that file).
@@ -1660,5 +1660,216 @@ end
         tr_rt = _assert_roundtrip(tr)
         @test tr_rt.method === tr.method
         @test tr_rt.L == tr.L
+    end
+end
+
+# =============================================================================
+# DSER-09 — OLG / continuous-time families (#767)
+# =============================================================================
+
+const _DSER09_TYPES = (
+    "BlanchardOLG", "BlanchardOLGSteadyState", "BlanchardOLGSolution",
+    "LifeCycleOLG", "LifeCycleSystem", "LifeCycleSteadyState", "LifeCycleTransition",
+    "CTPoissonIncome", "CTAiyagari", "CTSteadyState", "CTTransition",
+    "CTTwoAsset", "CTTwoAssetSolution", "CTTwoAssetGE", "CTTwoAssetTransition",
+    "ContinuousHouseholdSystem",
+)
+
+function _assert_sparse_eq(A, B)
+    @test A isa SparseMatrixCSC
+    @test B isa SparseMatrixCSC
+    @test A == B
+    @test nnz(A) == nnz(B)
+    @test A.colptr == B.colptr
+    @test A.rowval == B.rowval
+    @test A.nzval == B.nzval
+    d = _MEM._ser_field(A)
+    @test d isa AbstractDict
+    @test d["__sparse__"] === true
+    @test d["colptr"] == A.colptr
+    @test _MEM._deser_field(d) == A
+end
+
+_dser09_det_income() = IncomeProcess{Float64}(ones(1, 1), [1.0], [1.0], :income)
+
+function _dser09_plot_lct(tr::LifeCycleTransition)
+    vals = hcat(tr.K, tr.r, tr.w, tr.Y, tr.C)
+    ir = _MEM._path_to_irf(vals, ("K", "r", "w", "Y", "C"), "Z")
+    return plot_result(ir)
+end
+
+@testset "DSER-09 types registered" begin
+    for name in _DSER09_TYPES
+        @test haskey(_MEM._SERIALIZABLE_TYPES, name)
+        @test string(nameof(_MEM._SERIALIZABLE_TYPES[name])) == name
+    end
+    if isdefined(_MEM, :_SERIALIZATION_EXCLUDED)
+        for name in _DSER09_TYPES
+            @test !haskey(_MEM._SERIALIZATION_EXCLUDED, name)
+        end
+    end
+end
+
+@testset "DSER-09 Blanchard OLG round-trip + solve(to_spec)" begin
+    m = BlanchardOLG(; gamma=0.98, beta=0.96, alpha=0.36, delta=0.08, Z=1.0, b=0.05)
+    m2 = _assert_roundtrip(m)
+    @test m2 isa BlanchardOLG{Float64}
+    @test m2.gamma == m.gamma && m2.b == m.b
+
+    ss = blanchard_steady_state(m)
+    ss2 = _assert_roundtrip(ss)
+    @test sprint(report, ss2) == sprint(report, ss)
+
+    sol = blanchard_solve(m, ss)
+    sol2 = _assert_roundtrip(sol)
+    @test sol2.eigenvalues == sol.eigenvalues
+    @test sol2.M == sol.M
+    @test sol2.policy_slope == sol.policy_slope
+    @test plot_result(sol2) isa PlotOutput
+    @test sprint(report, sol2.ss) == sprint(report, sol.ss)
+
+    # NamedEquation.expr is documentation (β, λ, α, δ) and is not equivalent to
+    # the hand-written residual closures; ss_fn is a Julia closure not stored in
+    # IR. The saveable object is BlanchardOLG; to_spec is rebuilt after load.
+    spec = to_spec(m; rho_z=0.9, sigma_z=0.01)
+    @test any(eq -> occursin("β", string(eq.expr)) || occursin("λ", string(eq.expr)),
+              spec.equations)
+    @test spec.ss_fn isa Function
+
+    spec_m = to_spec(m; rho_z=0.9, sigma_z=0.01)
+    spec_m2 = to_spec(m2; rho_z=0.9, sigma_z=0.01)
+    sol_spec = solve(spec_m)
+    sol_spec2 = solve(spec_m2)
+    @test sol_spec2 isa DSGESolution
+    @test sol_spec2.G1 ≈ sol_spec.G1 atol=0
+    @test sol_spec2.impact ≈ sol_spec.impact atol=0
+    ir = irf(sol_spec, 8)
+    ir2 = irf(sol_spec2, 8)
+    @test ir2.values == ir.values
+    @test plot_result(ir2) isa PlotOutput
+end
+
+@testset "DSER-09 LifeCycle OLG round-trip + solve(to_spec)" begin
+    _suppress_warnings() do
+        m = LifeCycleOLG(; J=16, J_retire=12, survival=0.995,
+                         income=_dser09_det_income(), a_max=40.0, n_a=40,
+                         beta=0.97, sigma=2.0, replacement=0.0, n_pop=0.0)
+        m2 = _assert_roundtrip(m)
+        @test m2.J == m.J && m2.grid.n_points == m.grid.n_points
+        @test m2.income.states == m.income.states
+
+        spec = to_spec(m)
+        spec2 = _roundtrip(spec)
+        @test has_kind(spec2, LifeCycleSystem)
+        @test only(values(spec2.agents)) isa LifeCycleSystem
+        @test only(values(spec2.agents)).model.beta == m.beta
+
+        ss = solve(spec; r_bounds=(-0.01, 0.15), tol=1e-4, max_iter=30)
+        ss_from2 = solve(to_spec(m2); r_bounds=(-0.01, 0.15), tol=1e-4, max_iter=30)
+        @test ss isa LifeCycleSteadyState
+        @test ss_from2.r ≈ ss.r atol=1e-12
+        @test ss_from2.K ≈ ss.K atol=1e-12
+        ss2 = _assert_roundtrip(ss)
+        @test ss2.spec isa LifeCycleOLG
+        @test ss2.dist == ss.dist
+        @test sprint(report, ss2) == sprint(report, ss)
+        @test plot_result(ss2) isa PlotOutput
+
+        ir = irf(ss, 4; shock_size=0.01, persist=0.0)
+        ir2 = irf(ss2, 4; shock_size=0.01, persist=0.0)
+        @test ir2.values ≈ ir.values atol=1e-10
+
+        tr = lifecycle_transition(m, 0.9 * ss.K; H=5, ss=ss, tol=1e-4, max_iter=20)
+        tr2 = _assert_roundtrip(tr)
+        @test tr2.K == tr.K
+        @test tr2.ss.r == tr.ss.r
+        @test _dser09_plot_lct(tr2) isa PlotOutput
+    end
+end
+
+@testset "DSER-09 CT Aiyagari round-trip + sparse generator + solve(to_spec)" begin
+    _suppress_warnings() do
+        inc = CTPoissonIncome{Float64}([0.1, 0.2], [0.5, 0.5])
+        inc2 = _assert_roundtrip(inc)
+        @test inc2.z == inc.z && inc2.lambda == inc.lambda
+
+        m = CTAiyagari(; I=40, a_max=15.0, sigma=2.0, rho=0.05, delta=0.05,
+                       z=[0.1, 0.2], lambda=[0.5, 0.5])
+        m2 = _assert_roundtrip(m)
+        @test m2.I == m.I && m2.income.z == m.income.z
+
+        spec = to_spec(m)
+        spec2 = _roundtrip(spec)
+        @test has_kind(spec2, ContinuousHouseholdSystem)
+        @test only(values(spec2.agents)) isa ContinuousHouseholdSystem
+        @test only(values(spec2.agents)).model isa CTAiyagari
+
+        ss = solve(spec; tol=1e-4, max_iter=40)
+        ss_from2 = solve(to_spec(m2); tol=1e-4, max_iter=40)
+        @test ss isa CTSteadyState
+        @test ss_from2.r ≈ ss.r atol=1e-12
+        @test ss_from2.K ≈ ss.K atol=1e-12
+        ss2 = _assert_roundtrip(ss)
+        _assert_sparse_eq(ss2.A, ss.A)
+        @test sprint(report, ss2) == sprint(report, ss)
+        @test plot_result(ss2) isa PlotOutput
+
+        Z = [m.Z * (1 + 0.02 * 0.5^(n - 1)) for n in 1:8]
+        tr = ct_mit_shock(m, ss, Z; dt=0.5, max_iter=40, tol=1e-4, relax=0.5)
+        tr2 = _assert_roundtrip(tr)
+        @test tr2.K == tr.K && tr2.r == tr.r
+        @test plot_result(tr2) isa PlotOutput
+        ir = irf(m, 4; ss=ss, shock_size=0.01, persist=0.0, dt=0.5, max_iter=30, tol=1e-3)
+        ir2 = irf(m2, 4; ss=ss2, shock_size=0.01, persist=0.0, dt=0.5, max_iter=30, tol=1e-3)
+        @test ir2.values ≈ ir.values atol=1e-8
+    end
+end
+
+@testset "DSER-09 CT two-asset round-trip + JLD2 GE" begin
+    _suppress_warnings() do
+        m = CTTwoAsset(; Ib=8, Ia=8, a_max=4.0, b_max=3.0, rho=0.08, sigma=2.0,
+                       r_a=0.05, r_b=0.02, chi=2.0)
+        m2 = _assert_roundtrip(m)
+        @test m2.Ib == m.Ib && m2.cost === m.cost
+        @test m2.income.z == m.income.z
+
+        spec = to_spec(m)
+        spec2 = _roundtrip(spec)
+        @test has_kind(spec2, ContinuousHouseholdSystem)
+        @test only(values(spec2.agents)).model isa CTTwoAsset
+
+        pe = ct_two_asset_solve(m; tol=1e-5, max_iter=80, check_stationarity=false)
+        pe2 = _assert_roundtrip(pe)
+        _assert_sparse_eq(pe2.gen, pe.gen)
+        @test pe2.V == pe.V && pe2.g == pe.g
+        @test pe2.bdelta == pe.bdelta && pe2.adelta == pe.adelta
+        @test sprint(report, pe2) == sprint(report, pe)
+        @test plot_result(pe2) isa PlotOutput
+
+        ge = solve(spec; max_iter=2, tol=1.0, hjb_max_iter=20, hjb_tol=1e-4)
+        ge_from2 = solve(to_spec(m2); max_iter=2, tol=1.0, hjb_max_iter=20, hjb_tol=1e-4)
+        @test ge isa CTTwoAssetGE
+        @test ge_from2.K ≈ ge.K atol=1e-10
+        @test ge_from2.r_a ≈ ge.r_a atol=1e-10
+        ge2 = _assert_roundtrip(ge)
+        _assert_sparse_eq(ge2.solution.gen, ge.solution.gen)
+        @test ge2.solution isa CTTwoAssetSolution
+        @test sprint(report, ge2) == sprint(report, ge)
+
+        mktempdir() do d
+            p = joinpath(d, "ct2ge.jld2")
+            save_model(ge, p)
+            ge_disk = load_model(p)
+            @test ge_disk isa CTTwoAssetGE
+            @test ge_disk.K == ge.K
+            @test ge_disk.solution.B == ge.solution.B
+            _assert_sparse_eq(ge_disk.solution.gen, ge.solution.gen)
+        end
+
+        Z = [m.Z * (1 + 0.02 * 0.5^(n - 1)) for n in 1:6]
+        tr = ct_two_asset_mit(m, ge, Z; dt=0.5, max_iter=20, tol=1e-3,
+                              relax_K=0.3, relax_rb=0.05)
+        tr2 = _assert_roundtrip(tr)
+        @test tr2.K == tr.K && tr2.r_a == tr.r_a
     end
 end

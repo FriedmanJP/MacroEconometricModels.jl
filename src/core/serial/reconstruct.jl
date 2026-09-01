@@ -859,6 +859,39 @@ _from_serializable(::Type{IntermediarySteadyState}, p::AbstractDict, ver::Int) =
 _from_serializable(::Type{<:IntermediarySteadyState}, p::AbstractDict, ver::Int) =
     _from_serializable_intermediaryss(p, ver)
 
+# ── DSER-09 OLG / continuous-time ────────────────────────────────────────────
+# CTTwoAssetSolution has a 12-positional keyword inner constructor; the
+# trailing diagnostics (kfe_residual, hjb_iterations, bdelta, adelta) are
+# keywords, so the generic 16-field positional call misses it.
+
+function _from_serializable_cttwoassetsolution(p::AbstractDict, ::Int)
+    b = Vector(_deser_field(p["b"]))
+    T = eltype(b)
+    T <: AbstractFloat || (T = Float64)
+    b = Vector{T}(b)
+    a = Vector{T}(_deser_field(p["a"]))
+    V = Array{T,3}(_deser_field(p["V"]))
+    c = Array{T,3}(_deser_field(p["c"]))
+    d = Array{T,3}(_deser_field(p["d"]))
+    sb = Array{T,3}(_deser_field(p["sb"]))
+    sa = Array{T,3}(_deser_field(p["sa"]))
+    g = Array{T,3}(_deser_field(p["g"]))
+    gen = _deser_field(p["gen"])
+    gen isa SparseMatrixCSC || throw(SerializationError(
+        "CTTwoAssetSolution.gen is not a SparseMatrixCSC"))
+    CTTwoAssetSolution{T}(
+        b, a, V, c, d, sb, sa, g, T(p["B"]), T(p["A"]), gen, Bool(p["hjb_converged"]);
+        kfe_residual=T(p["kfe_residual"]),
+        hjb_iterations=Int(p["hjb_iterations"]),
+        bdelta=Vector{T}(_deser_field(p["bdelta"])),
+        adelta=Vector{T}(_deser_field(p["adelta"])),
+    )
+end
+_from_serializable(::Type{CTTwoAssetSolution}, p::AbstractDict, ver::Int) =
+    _from_serializable_cttwoassetsolution(p, ver)
+_from_serializable(::Type{<:CTTwoAssetSolution}, p::AbstractDict, ver::Int) =
+    _from_serializable_cttwoassetsolution(p, ver)
+
 function _from_serializable(::Type{ObservationTrends}, p::AbstractDict, ::Int)
     function _trend_term(x, ::Type{S}) where {S}
         x isa Symbol && return x
