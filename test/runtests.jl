@@ -62,6 +62,7 @@ const TEST_GROUPS = [
         "var/test_ab.jl",                 # SID-13 (#742): AB-model ML
         "var/test_conditional_forecast.jl",   # T241 (#340): Waggoner-Zha conditional forecasts
         "preg/test_panel_nonlinear.jl",   # moved from the ceiling ARIMA group to rebalance (#127)
+        "bvar/test_bvar_serialization.jl",
     ]),
     # Group 3: IRF/FEVD/HD & VECM
     ("IRF & VECM" => [
@@ -75,6 +76,7 @@ const TEST_GROUPS = [
         "vecm/test_vecm.jl",
         "vecm/test_vecm_restrictions.jl", # EV-38 (#446)
         "preg/test_panel_iv.jl",          # moved from the ceiling ARIMA group to rebalance (#127)
+        "var/test_var_serialization.jl",
     ]),
     # Group 4: LP & Factor Models & Nowcasting & DiD
     ("LP & Factor & Nowcast" => [
@@ -93,6 +95,9 @@ const TEST_GROUPS = [
         "nowcast/test_nowcast.jl",
         "did/test_did.jl",
         "did/test_lpdid.jl",
+        "lp/test_lp_serialization.jl",
+        "nowcast/test_nowcast_serialization.jl",
+        "did/test_did_serialization.jl",
     ]),
     # Group 5: ARIMA & Statistical Tests & Data & PVAR & Reg
     ("ARIMA & Tests & Data & Reg" => [
@@ -151,6 +156,8 @@ const TEST_GROUPS = [
         "preg/test_panel_reg.jl",
         "preg/test_pcse_prais.jl",   # EV-25 (#433): Beck-Katz PCSE + Prais-Winsten AR(1)
         "preg/test_panel_tests.jl",
+        "reg/test_reg_serialization.jl",
+        "teststat/test_teststat_serialization.jl",
     ]),
     # Group 6: Volatility & Non-Gaussian & Plotting & Filters & Spectral
     ("Volatility & Filters" => [
@@ -166,6 +173,7 @@ const TEST_GROUPS = [
         "filters/test_x13.jl",
         "filters/test_x13_coverage.jl",
         "spectral/test_spectral.jl",
+        "filters/test_filters_serialization.jl",
     ]),
     # Plotting — consolidated plot_result harness (PLT-39). Split from the old
     # monolith (test_plot_result.jl) into per-domain lanes + the Wave-2 dispatch
@@ -276,6 +284,7 @@ const TEST_GROUPS = [
         "io/test_io_plotting.jl",
         "io/test_io_refs.jl",
         "io/test_io_coverage.jl",
+        "io/test_io_serialization.jl",
     ]),
     # Group 11: Display regression harness (T176/#275). A dedicated group — the
     # fixtures compile a broad swath of estimators (VAR/VECM/BVAR/DSGE/GARCH/GMM/
@@ -312,6 +321,7 @@ const TEST_GROUPS = [
         "counterfactual/test_show.jl",
         "counterfactual/test_plotting.jl",
         "counterfactual/test_oracles.jl",
+        "counterfactual/test_counterfactual_serialization.jl",
     ]),
 ]
 
