@@ -304,6 +304,41 @@ function DCEGMProblem(; beta::Real, R::Real, utility, utility_prime,
         opts, abs_, ag, income_process, n_periods, T(taste_shock_scale), T(credit_limit))
 end
 
+"""
+    DCEGMUtility{T,U}(flow, option_disutility)
+
+Callable discrete-continuous utility `u(c, d) = flow(c) - option_disutility[d]`.
+Returns `-Inf` when `c ≤ 0`. `flow` is typically [`CRRAUtility`](@ref).
+"""
+struct DCEGMUtility{T<:AbstractFloat,U}
+    flow::U
+    option_disutility::Vector{T}
+end
+DCEGMUtility(flow, option_disutility::AbstractVector{T}) where {T<:AbstractFloat} =
+    DCEGMUtility{T,typeof(flow)}(flow, collect(T, option_disutility))
+
+function (u::DCEGMUtility{T})(c, d::Integer) where {T<:AbstractFloat}
+    cc = convert(T, c)
+    cc > zero(T) || return T(-Inf)
+    return u.flow(cc) - u.option_disutility[Int(d)]
+end
+
+"""
+    DCEGMIncome{T}(wage, pension, states, work_option)
+
+Income schedule `y(d, j)`: `wage * states[j]` on the work option, else `pension`.
+"""
+struct DCEGMIncome{T<:AbstractFloat}
+    wage::T
+    pension::T
+    states::Vector{T}
+    work_option::Int
+end
+
+function (y::DCEGMIncome{T})(d::Integer, j::Integer) where {T<:AbstractFloat}
+    return d == y.work_option ? y.wage * y.states[j] : y.pension
+end
+
 "Options still feasible after choosing option `d` last period."
 _dcegm_feasible(prob::DCEGMProblem, d::Int) =
     prob.absorbing[d] ? (d:d) : (1:length(prob.options))
@@ -976,10 +1011,11 @@ function dcegm_retirement_model(; n_periods::Int=20, beta::Real=0.98, R::Real=1.
     pen = Float64(pension)
 
     # d = 1 → retire (absorbing), d = 2 → work
-    u(c, d) = c > 0 ? log(c) - (d == 2 ? delta : 0.0) : -Inf
-    up(c, d) = c > 0 ? 1 / c : Inf
-    upinv(m, d) = m > 0 ? 1 / m : Inf
-    y(d, j) = d == 2 ? w * states[j] : pen
+    flow = CRRAUtility{Float64}(1.0)
+    u = DCEGMUtility(flow, [0.0, delta])
+    up = CRRAMarginalUtility{Float64}(1.0)
+    upinv = CRRAInverseMarginalUtility{Float64}(1.0)
+    y = DCEGMIncome{Float64}(w, pen, copy(states), 2)
 
     # Curved grid, dense near the credit limit. A uniform grid leaves the first
     # asset step unresolved, and just above the credit limit a retiree with no
@@ -1512,8 +1548,8 @@ end
 Print the problem setup, convergence diagnostics, and the number of
 discrete-choice switching thresholds the upper envelope found per period.
 """
-function report(sol::DCEGMSolution{T}) where {T}
-    io = stdout
+report(sol::DCEGMSolution) = report(stdout, sol)
+function report(io::IO, sol::DCEGMSolution{T}) where {T}
     prob = sol.prob
     head = Any[
         "Options"              join(string.(prob.options), ", ");

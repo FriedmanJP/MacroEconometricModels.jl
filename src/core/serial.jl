@@ -54,7 +54,9 @@
 # diagnostics) round-trip. Sequence-space blocks (`SimpleBlock` / `HetBlock` /
 # `MitBlock`, `SSJModel`, `SSJGEJacobian`, `SSJImpulseResponse`) round-trip
 # when `f` / `evaluate` are named functions or callable structs; `H_U_fact`
-# is recomputed. OLG / CT results are still follow-up.
+# is recomputed. DCEGM / Khan–Thomas / intermediary families round-trip;
+# `DCEGMProblem` callables must be named functions or structs (`DCEGMUtility`,
+# `DCEGMIncome`, `CRRAUtility`). OLG / CT results are still follow-up.
 
 include("serial/registry.jl")
 include("serial/codecs.jl")

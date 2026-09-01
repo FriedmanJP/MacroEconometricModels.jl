@@ -718,6 +718,147 @@ _from_serializable(::Type{SSJImpulseResponse}, p::AbstractDict, ver::Int) =
 _from_serializable(::Type{<:SSJImpulseResponse}, p::AbstractDict, ver::Int) =
     _from_serializable_ssjir(p, ver)
 
+# ── DSER-10 DCEGM / firms / intermediary ─────────────────────────────────────
+
+function _dcegm_vecarray3(::Type{T}, raw) where {T}
+    out = Array{Vector{T},3}(undef, size(raw)...)
+    @inbounds for i in eachindex(raw)
+        out[i] = Vector{T}(raw[i])
+    end
+    return out
+end
+
+function _from_serializable_dcegmproblem(p::AbstractDict, ::Int)
+    inc = _deser_field(p["income_process"])
+    T = eltype(inc.states)
+    T <: AbstractFloat || (T = Float64)
+    prob = DCEGMProblem(;
+        beta=T(p["beta"]),
+        R=T(p["R"]),
+        utility=_deser_field(p["utility"]),
+        utility_prime=_deser_field(p["utility_prime"]),
+        utility_prime_inv=_deser_field(p["utility_prime_inv"]),
+        income=_deser_field(p["income"]),
+        options=Symbol[_as_symbol(s) for s in _deser_field(p["options"])],
+        absorbing=Bool[Bool(x) for x in _deser_field(p["absorbing"])],
+        asset_grid=Vector{T}(_deser_field(p["asset_grid"])),
+        income_process=inc,
+        n_periods=Int(p["n_periods"]),
+        taste_shock_scale=T(p["taste_shock_scale"]),
+        credit_limit=T(p["credit_limit"]),
+    )
+    _assert_serializable_dcegm_callables(prob)
+    return prob
+end
+_from_serializable(::Type{DCEGMProblem}, p::AbstractDict, ver::Int) =
+    _from_serializable_dcegmproblem(p, ver)
+_from_serializable(::Type{<:DCEGMProblem}, p::AbstractDict, ver::Int) =
+    _from_serializable_dcegmproblem(p, ver)
+
+function _from_serializable(::Type{DCEGMSystem}, p::AbstractDict, ::Int)
+    DCEGMSystem(_deser_field(p["problem"]))
+end
+_from_serializable(::Type{<:DCEGMSystem}, p::AbstractDict, ver::Int) =
+    _from_serializable(DCEGMSystem, p, ver)
+
+function _from_serializable_dcegmsolution(p::AbstractDict, ::Int)
+    M_raw = _deser_field(p["M"])
+    T = Float64
+    if !isempty(M_raw)
+        el = eltype(first(M_raw))
+        el <: AbstractFloat && (T = el)
+    end
+    DCEGMSolution{T}(
+        _dcegm_vecarray3(T, M_raw),
+        _dcegm_vecarray3(T, _deser_field(p["c"])),
+        _dcegm_vecarray3(T, _deser_field(p["v"])),
+        Array{T,3}(_deser_field(p["ev_constrained"])),
+        Array{Int,3}(_deser_field(p["n_kinks"])),
+        _deser_field(p["prob"]),
+        Int(p["n_periods"]),
+        Bool(p["converged"]),
+        Int(p["iterations"]),
+        T(p["sup_diff"]),
+    )
+end
+_from_serializable(::Type{DCEGMSolution}, p::AbstractDict, ver::Int) =
+    _from_serializable_dcegmsolution(p, ver)
+_from_serializable(::Type{<:DCEGMSolution}, p::AbstractDict, ver::Int) =
+    _from_serializable_dcegmsolution(p, ver)
+
+function _from_serializable(::Type{DCEGMFirm}, p::AbstractDict, ::Int)
+    DCEGMFirm(; alpha=p["alpha"], delta=p["delta"], Z=p["Z"], L=p["L"])
+end
+_from_serializable(::Type{<:DCEGMFirm}, p::AbstractDict, ver::Int) =
+    _from_serializable(DCEGMFirm, p, ver)
+
+function _from_serializable_intermediarysystem(p::AbstractDict, ::Int)
+    grid = _deser_field(p["grid"])
+    T = eltype(grid.grids[1])
+    T <: AbstractFloat || (T = Float64)
+    agg_raw = _deser_field(p["aggregation"])
+    aggregation = Pair{Symbol,Function}[
+        _as_symbol(pr.first) => pr.second for pr in agg_raw
+    ]
+    het = _deser_field(p["het_params"])
+    het_params = Dict{Symbol,T}(_as_symbol(k) => convert(T, v) for (k, v) in het)
+    IntermediarySystem{T}(
+        grid,
+        _deser_field(p["xi"]),
+        T(p["kappa"]), T(p["beta"]), T(p["sigma"]), T(p["lambda"]),
+        T(p["zeta1"]), T(p["zeta2"]), T(p["R"]), T(p["rk"]),
+        T(p["Z"]), T(p["alpha"]), T(p["n_enter"]),
+        het_params, aggregation,
+        _as_symbol(p["model"]), _as_symbol(p["distribution"]),
+    )
+end
+_from_serializable(::Type{IntermediarySystem}, p::AbstractDict, ver::Int) =
+    _from_serializable_intermediarysystem(p, ver)
+_from_serializable(::Type{<:IntermediarySystem}, p::AbstractDict, ver::Int) =
+    _from_serializable_intermediarysystem(p, ver)
+
+function _from_serializable_intermediarype(p::AbstractDict, ::Int)
+    V = _deser_field(p["V"])
+    T = eltype(V)
+    T <: AbstractFloat || (T = Float64)
+    IntermediaryPE{T}(
+        Matrix{T}(V),
+        Matrix{T}(_deser_field(p["l_policy"])),
+        Matrix{T}(_deser_field(p["b_policy"])),
+        _ha_symbol_t_dict(T, _deser_field(p["prices"])),
+        Bool(p["converged"]),
+        Int(p["iterations"]),
+    )
+end
+_from_serializable(::Type{IntermediaryPE}, p::AbstractDict, ver::Int) =
+    _from_serializable_intermediarype(p, ver)
+_from_serializable(::Type{<:IntermediaryPE}, p::AbstractDict, ver::Int) =
+    _from_serializable_intermediarype(p, ver)
+
+function _from_serializable_intermediaryss(p::AbstractDict, ::Int)
+    dist = _deser_field(p["distribution"])
+    T = eltype(dist)
+    T <: AbstractFloat || (T = Float64)
+    IntermediarySteadyState{T}(
+        _deser_field(p["system"]),
+        Matrix{T}(_deser_field(p["V"])),
+        Matrix{T}(_deser_field(p["l_policy"])),
+        Matrix{T}(_deser_field(p["b_policy"])),
+        Matrix{T}(dist),
+        _ha_symbol_t_dict(T, _deser_field(p["prices"])),
+        _ha_symbol_t_dict(T, _deser_field(p["aggregates"])),
+        _deser_field(p["grid"]),
+        _deser_field(p["xi"]),
+        Bool(p["converged"]),
+        Int(p["iterations"]),
+        T(p["excess_demand"]),
+    )
+end
+_from_serializable(::Type{IntermediarySteadyState}, p::AbstractDict, ver::Int) =
+    _from_serializable_intermediaryss(p, ver)
+_from_serializable(::Type{<:IntermediarySteadyState}, p::AbstractDict, ver::Int) =
+    _from_serializable_intermediaryss(p, ver)
+
 function _from_serializable(::Type{ObservationTrends}, p::AbstractDict, ::Int)
     function _trend_term(x, ::Type{S}) where {S}
         x isa Symbol && return x

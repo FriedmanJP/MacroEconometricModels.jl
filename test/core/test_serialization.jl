@@ -402,6 +402,16 @@ end
             @test haskey(_MEM._SERIALIZABLE_TYPES, name)
         end
     end
+
+    @testset "DSGE-family: DCEGM / firms / intermediary (DSER-10)" begin
+        for name in ("DCEGMProblem", "DCEGMSolution", "DCEGMEquilibrium",
+                     "DCEGMTransition", "FirmSystem", "KhanThomasSteadyState",
+                     "KhanThomasTransition", "IntermediarySystem",
+                     "IntermediaryPE", "IntermediarySteadyState",
+                     "IntermediaryTransition")
+            @test haskey(_MEM._SERIALIZABLE_TYPES, name)
+        end
+    end
 end
 
 @testset "DSER-01 leaf codecs" begin

@@ -576,6 +576,11 @@ end
     return σ == one(T) ? inv(mf) : mf^(-one(T) / σ)
 end
 
+# Discrete-continuous EGM utilities take `(c, d)`; the CRRA flow ignores the option.
+@inline (u::CRRAUtility)(c, d) = u(c)
+@inline (u::CRRAMarginalUtility)(c, d) = u(c)
+@inline (u::CRRAInverseMarginalUtility)(m, d) = u(m)
+
 # =============================================================================
 # IndividualProblem — Household optimization specification
 # =============================================================================

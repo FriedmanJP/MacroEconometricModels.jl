@@ -120,6 +120,40 @@ function _to_serializable(b::MitBlock)
     _assert_ssj_callable(b.evaluate, "MitBlock", b.name, "evaluate")
     return _capture_fields(b)
 end
+
+function _assert_serializable_dcegm_callables(prob::DCEGMProblem)
+    for (val, name) in (
+        (prob.utility, "utility"),
+        (prob.utility_prime, "utility_prime"),
+        (prob.utility_prime_inv, "utility_prime_inv"),
+        (prob.income, "income"),
+    )
+        if val isa Function && !_is_named_function(val)
+            throw(SerializationError(
+                "DCEGMProblem.$name is an anonymous function; save_model needs a named function or a callable struct (see CRRAUtility)"))
+        end
+    end
+    return nothing
+end
+
+function _to_serializable(prob::DCEGMProblem)
+    _assert_serializable_dcegm_callables(prob)
+    return _capture_fields(prob)
+end
+function _ser_field(prob::DCEGMProblem)
+    _assert_serializable_dcegm_callables(prob)
+    return _struct_to_dict(prob)
+end
+
+function _to_serializable(s::IntermediarySystem)
+    for pr in s.aggregation
+        if pr.second isa Function && !_is_named_function(pr.second)
+            throw(SerializationError(
+                "IntermediarySystem.aggregation[:$(pr.first)] is an anonymous function; save_model needs a named function or a callable struct"))
+        end
+    end
+    return _capture_fields(s)
+end
 const _FUNCTION_MODULES = (MacroEconometricModels, Base, Main)
 function _deser_function(d::AbstractDict)
     modname = Symbol(d["module"]); fname = Symbol(d["__function__"])
@@ -265,14 +299,14 @@ end
 # structs from their tagged dicts; recurse into arrays/dicts of them.
 # JLD2 often returns `Vector{Any}` of a common concrete eltype; narrow so
 # typed fields (`Vector{OccBinConstraint{T}}`, `Vector{Vector{T}}`) construct.
-function _narrow_concrete(a::AbstractVector)
+function _narrow_concrete(a::AbstractArray)
     isempty(a) && return a
     T0 = typeof(first(a))
     T0 === Any && return a
     for x in a
         typeof(x) === T0 || return a
     end
-    return Vector{T0}(a)
+    return convert(Array{T0, ndims(a)}, a)
 end
 
 function _deser_field(x)
@@ -295,7 +329,7 @@ function _deser_field(x)
     if x isa AbstractArray
         _is_plain_eltype(eltype(x)) && return x
         mapped = map(_deser_field, x)
-        return mapped isa AbstractVector ? _narrow_concrete(mapped) : mapped
+        return mapped isa AbstractArray ? _narrow_concrete(mapped) : mapped
     end
     x isa Tuple && return map(_deser_field, x)
     return x

@@ -89,6 +89,8 @@ het_params(s::IntermediarySystem) = s.het_params
 ssj_inputs(::IntermediarySystem) = [:R, :rk]
 ssj_outputs(s::IntermediarySystem) = first.(s.aggregation)
 
+_intermediary_agg_mass(x, d) = sum(x .* d)
+
 """
     _xi_process(rho, sigma, n; mu=1) → IncomeProcess
 
@@ -193,8 +195,8 @@ function IntermediarySystem(;
         :zeta1 => T(zeta1), :zeta2 => T(zeta2),
         :sigma => T(sigma), :beta => T(beta)) : het_params
     agg = aggregation === nothing ? Pair{Symbol,Function}[
-        :L => (l, d) -> sum(l .* d),
-        :N => (n, d) -> sum(n .* d),
+        :L => _intermediary_agg_mass,
+        :N => _intermediary_agg_mass,
     ] : aggregation
 
     return IntermediarySystem{T}(

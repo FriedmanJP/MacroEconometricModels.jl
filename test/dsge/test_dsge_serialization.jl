@@ -1474,3 +1474,191 @@ end
         @test _dser08_report_text(model) == _dser08_report_text(_roundtrip(model))
     end
 end
+
+# =============================================================================
+# DSER-10 — DCEGM, Khan–Thomas, intermediary (#768)
+# =============================================================================
+
+const _DSER10_TYPES = (
+    "DCEGMProblem", "DCEGMSystem", "DCEGMSolution", "DCEGMDistribution",
+    "DCEGMFirm", "DCEGMEquilibrium", "DCEGMTransition",
+    "FirmSystem", "KhanThomasSteadyState", "KhanThomasTransition",
+    "IntermediarySystem", "IntermediaryPE", "IntermediarySteadyState",
+    "IntermediaryTransition",
+)
+
+@testset "DSER-10 types registered" begin
+    for name in _DSER10_TYPES
+        @test haskey(_MEM._SERIALIZABLE_TYPES, name)
+        @test string(nameof(_MEM._SERIALIZABLE_TYPES[name])) == name
+    end
+    if isdefined(_MEM, :_SERIALIZATION_EXCLUDED)
+        for name in _DSER10_TYPES
+            @test !haskey(_MEM._SERIALIZATION_EXCLUDED, name)
+        end
+    end
+end
+
+@testset "DSER-10 DCEGMProblem callables and anonymous error" begin
+    prob = dcegm_retirement_model(; n_a=20, n_periods=4, a_max=40.0)
+    @test prob.utility isa DCEGMUtility
+    @test prob.utility_prime isa CRRAMarginalUtility
+    @test prob.income isa DCEGMIncome
+    prob2 = _assert_roundtrip(prob)
+    @test prob2.utility(1.3, 1) == prob.utility(1.3, 1)
+    @test prob2.utility(1.3, 2) == prob.utility(1.3, 2)
+    @test prob2.utility_prime(1.3, 2) == prob.utility_prime(1.3, 2)
+    @test prob2.utility_prime_inv(0.7, 1) == prob.utility_prime_inv(0.7, 1)
+    @test prob2.income(2, 1) == prob.income(2, 1)
+    @test prob2.income(1, 1) == prob.income(1, 1)
+
+    spec = to_spec(prob)
+    spec2 = _roundtrip(spec)
+    @test has_kind(spec2, DCEGMSystem)
+    @test only(values(spec2.agents)) isa DCEGMSystem
+    @test only(values(spec2.agents)).problem.beta == prob.beta
+
+    inc = IncomeProcess{Float64}(ones(1, 1), [1.0], [1.0], :income)
+    anon = DCEGMProblem(; beta=0.96, R=1.0,
+                        utility=(c, d) -> (c > 0 ? log(c) : -Inf),
+                        utility_prime=(c, d) -> (c > 0 ? 1 / c : Inf),
+                        utility_prime_inv=(m, d) -> (m > 0 ? 1 / m : Inf),
+                        income=(d, j) -> 1.0,
+                        options=[:work], absorbing=[false],
+                        asset_grid=[0.0, 1.0, 2.0],
+                        income_process=inc)
+    err = try
+        _MEM._ser_field(anon)
+        nothing
+    catch e
+        e
+    end
+    @test err isa SerializationError
+    msg = sprint(showerror, err)
+    @test occursin("DCEGMProblem.utility", msg)
+    @test occursin("anonymous", msg)
+end
+
+@testset "DSER-10 DCEGMSolution ragged arrays + plot/report" begin
+    _suppress_warnings() do
+        prob = dcegm_retirement_model(; n_a=20, n_periods=4, a_max=40.0)
+        sol = dcegm_solve(prob)
+        @test sol isa DCEGMSolution
+        sol2 = _assert_roundtrip(sol)
+        @test typeof(sol2.M) === Array{Vector{Float64},3}
+        @test typeof(sol2.c) === Array{Vector{Float64},3}
+        @test typeof(sol2.v) === Array{Vector{Float64},3}
+        @test size(sol2.M) == size(sol.M)
+        for I in eachindex(sol.M)
+            @test sol2.M[I] == sol.M[I]
+            @test sol2.c[I] == sol.c[I]
+        end
+        @test sprint(report, sol2) == sprint(report, sol)
+        @test plot_result(sol2) isa PlotOutput
+        @test plot_result(sol2; view=:threshold) isa PlotOutput
+    end
+end
+
+@testset "DSER-10 DCEGM equilibrium / MIT on reload" begin
+    _suppress_warnings() do
+        firm = DCEGMFirm(; alpha=0.36, delta=0.08, Z=1.0, L=1.0)
+        firm2 = _assert_roundtrip(firm)
+        @test firm2.alpha == firm.alpha && firm2.L == firm.L
+
+        prob = dcegm_retirement_model(; n_periods=6, n_a=30, a_max=40.0, beta=0.96,
+                                        wage=20.0, pension=2.0, disutility=0.5)
+        eq = dcegm_steady_state(prob, firm; r_bounds=(0.06, 0.14), tol=1e-3, max_iter=30)
+        @test eq isa DCEGMEquilibrium
+        eq2 = _assert_roundtrip(eq)
+        @test eq2.r ≈ eq.r atol=0
+        @test eq2.K ≈ eq.K atol=0
+        @test typeof(eq2.solution.M) === Array{Vector{Float64},3}
+        @test sprint(report, eq2) == sprint(report, eq)
+
+        Z = [firm.Z * (1 + 0.03 * 0.6^(n - 1)) for n in 1:6]
+        tr = dcegm_mit(eq, Z)
+        tr2 = dcegm_mit(eq2, Z)
+        @test tr2.K ≈ tr.K atol=1e-10
+        @test tr2.r ≈ tr.r atol=1e-10
+        tr_rt = _assert_roundtrip(tr)
+        @test tr_rt.method === :mit
+        @test tr_rt.K == tr.K
+    end
+end
+
+@testset "DSER-10 FirmSystem / KhanThomas MIT on reload" begin
+    _suppress_warnings() do
+        fs = khan_thomas_example(; n_k=8, n_eps=2)
+        fs2 = _assert_roundtrip(fs)
+        @test fs2 isa FirmSystem
+        @test fs2.k_grid == fs.k_grid
+        @test fs2.alpha == fs.alpha
+
+        spec = to_spec(fs)
+        spec2 = _roundtrip(spec)
+        @test has_kind(spec2, FirmSystem)
+        @test only(values(spec2.agents)).delta == fs.delta
+
+        ss = khan_thomas_steady_state(fs; max_iter=12, tol=2e-3,
+                                      vfi_tol=1e-4, vfi_max_iter=40)
+        ss_from2 = khan_thomas_steady_state(spec2; max_iter=12, tol=2e-3,
+                                           vfi_tol=1e-4, vfi_max_iter=40)
+        @test ss_from2.K ≈ ss.K atol=1e-10
+        @test ss_from2.Y ≈ ss.Y atol=1e-10
+        ss2 = _assert_roundtrip(ss)
+        @test ss2.K == ss.K
+        @test ss2.method === ss.method
+        report(ss2)
+
+        Z = [ss.firm.Z * (1 + 0.02 * ss.firm.rho_z^(t - 1)) for t in 1:6]
+        tr = khan_thomas_mit(ss, Z)
+        tr2 = khan_thomas_mit(ss2, Z)
+        @test tr2.Y ≈ tr.Y atol=1e-10
+        @test tr2.K ≈ tr.K atol=1e-10
+        tr_rt = _assert_roundtrip(tr)
+        @test tr_rt.method === :mit
+        @test tr_rt.Y == tr.Y
+    end
+end
+
+@testset "DSER-10 IntermediarySystem / MIT on reload" begin
+    _suppress_warnings() do
+        sys = IntermediarySystem(; n_min=0.08, n_max=6.0, n_n=11,
+                                 n_xi=2, rho_xi=0.55, sigma_xi=0.08,
+                                 kappa=1.0, beta=0.99, sigma=0.94, lambda=0.20,
+                                 zeta1=0.02, zeta2=2.0,
+                                 R=1.01, rk=0.05, Z=0.25, alpha=0.33)
+        @test sys.aggregation[1].second === _MEM._intermediary_agg_mass
+        sys2 = _assert_roundtrip(sys)
+        @test sys2.aggregation[1].second === _MEM._intermediary_agg_mass
+        @test sys2.lambda == sys.lambda
+
+        spec = to_spec(sys)
+        spec2 = _roundtrip(spec)
+        @test has_kind(spec2, IntermediarySystem)
+
+        ss = intermediary_steady_state(sys; tol=2e-3, max_iter=12,
+                                       pe_max_iter=80, pe_tol=1e-4)
+        sol2 = solve(spec2; tol=2e-3, max_iter=12, pe_max_iter=80, pe_tol=1e-4)
+        @test sol2 isa IntermediarySteadyState
+        @test sol2.aggregates[:L] ≈ ss.aggregates[:L] atol=1e-8
+        ss2 = _assert_roundtrip(ss)
+        @test ss2.prices isa Dict{Symbol,Float64}
+        @test ss2.aggregates[:L] == ss.aggregates[:L]
+        report(ss2)
+
+        pe = intermediary_pe(sys; R=1.01, rk=0.06, max_iter=80, tol=1e-5)
+        pe2 = _assert_roundtrip(pe)
+        @test pe2.V == pe.V
+        @test pe2.prices[:rk] == pe.prices[:rk]
+
+        Z = [ss.system.Z * (1 + 0.02 * 0.5^(t - 1)) for t in 1:6]
+        tr = intermediary_mit(ss, Z; pe_max_iter=40, pe_tol=1e-4)
+        tr2 = intermediary_mit(ss2, Z; pe_max_iter=40, pe_tol=1e-4)
+        @test tr2.L ≈ tr.L atol=1e-8
+        @test tr2.Y ≈ tr.Y atol=1e-8
+        tr_rt = _assert_roundtrip(tr)
+        @test tr_rt.method === tr.method
+        @test tr_rt.L == tr.L
+    end
+end

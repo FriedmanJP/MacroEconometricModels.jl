@@ -826,6 +826,7 @@ export SSJGEJacobian, SSJImpulseResponse
 export combine_blocks, block_jacobian, ssj_jacobian, ssj_irf, ssj_arg_order
 # DCEGM — discrete-continuous choice (Iskhakov et al. 2017)
 export DCEGMProblem, DCEGMSolution, DCEGMDistribution
+export DCEGMUtility, DCEGMIncome
 export dcegm_solve, dcegm_policy, dcegm_choice_probabilities, dcegm_threshold
 export dcegm_simulate, dcegm_retirement_model
 export DCEGMFirm, DCEGMEquilibrium, DCEGMTransition
