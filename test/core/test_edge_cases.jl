@@ -280,9 +280,10 @@ Random.seed!(12345)
         Y = randn(100, 2)
         model = estimate_var(Y, 2)
 
-        # Empty sign restrictions = Cholesky identification
+        # Empty restrictions are RWZ-underidentified (SID-23). Haar sampling of
+        # O(n) is still the documented unrestricted Arias path; opt out of the gate.
         r = SVARRestrictions(2; signs=SignRestriction[], zeros=ZeroRestriction[])
-        result = identify_arias(model, r, 10; n_draws=50)
+        result = identify_arias(model, r, 10; n_draws=50, check_id=false)
 
         @test length(result.Q_draws) >= 1
         @test result.acceptance_rate > 0.0
