@@ -66,7 +66,13 @@ function _assert_roundtrip(m; skip::Vector{Symbol}=Symbol[])
     return m2
 end
 
-_assert_report_equal(a, b) = (@test sprint(report, a) == sprint(report, b); a)
+# Prefer 2-arg `report(io, x)` when it exists; many result types only define
+# `report(x) = show(stdout, x)`, which `sprint(report, x)` cannot call.
+function _assert_report_equal(a, b)
+    text(x) = applicable(report, IOBuffer(), x) ? sprint(report, x) : sprint(show, x)
+    @test text(a) == text(b)
+    a
+end
 function _assert_plot_equal(a, b)
     pa, pb = plot_result(a), plot_result(b)
     @test typeof(pa) === typeof(pb)

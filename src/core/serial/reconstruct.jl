@@ -166,3 +166,20 @@ function _from_serializable(::Type{IdentificationStatus}, p::AbstractDict, ::Int
                          Vector{Int}(p["orders"]),
                          Int(p["n_overidentifying"]))
 end
+
+# Keyword inner constructor: 29 positionals + `fitted` / `fitted_filtered`.
+function _from_serializable(::Type{MSRegModel}, p::AbstractDict, ::Int)
+    Tf = eltype(p["y"])
+    MSRegModel{Tf}(
+        _as_symbol(p["model_type"]),
+        p["y"], p["X"], p["k_regimes"], p["p"],
+        p["mu"], p["coefs"], p["se_coefs"], p["ar"], p["se_ar"],
+        p["sigma2"], p["se_sigma2"], p["P"], p["ergodic"], p["expected_durations"],
+        p["filtered_prob"], p["smoothed_prob"], p["residuals"],
+        p["loglik"], p["aic"], p["bic"],
+        p["n"], p["n_params"], p["switching_var"], p["switching_ar"],
+        p["converged"], p["iterations"], p["xnames"], p["yname"];
+        fitted=p["fitted"],
+        fitted_filtered=p["fitted_filtered"],
+    )
+end

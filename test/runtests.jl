@@ -158,6 +158,8 @@ const TEST_GROUPS = [
         "preg/test_panel_tests.jl",
         "reg/test_reg_serialization.jl",
         "teststat/test_teststat_serialization.jl",
+        "arima/test_arima_serialization.jl",
+        "system/test_system_serialization.jl",
     ]),
     # Group 6: Volatility & Non-Gaussian & Plotting & Filters & Spectral
     ("Volatility & Filters" => [
@@ -166,6 +168,7 @@ const TEST_GROUPS = [
         "volatility/test_garch_midas.jl",   # EV-02 (#410): GARCH-MIDAS long/short-run components
         "volatility/test_figarch.jl",       # EV-14 (#422): FIGARCH/FIEGARCH fractionally-integrated volatility
         "volatility/test_garch_family.jl",  # EV-15 (#423): IGARCH/Component-GARCH/APARCH + sign-bias/Nyblom tests
+        "volatility/test_volatility_serialization.jl",
         "mgarch/test_mgarch.jl",            # EV-16 (#424): multivariate GARCH — CCC/DCC/BEKK
         "nongaussian/test_nongaussian_svar.jl",
         "nongaussian/test_nongaussian_internals.jl",
@@ -201,6 +204,7 @@ const TEST_GROUPS = [
         "nonlinear/test_threshold.jl",
         "nonlinear/test_star.jl",       # EV-06 smooth-transition (STAR)
         "nonlinear/test_markov_switching.jl",  # EV-07 Markov-switching regression / MS-AR
+        "nonlinear/test_nonlinear_serialization.jl",
         "nonparametric/test_nonparametric.jl",  # EV-33 (#441): kernel density / kernel-reg / LOWESS
     ]),
     # Group 7 split into three so the DSGE critical path balances across processes (#123):
