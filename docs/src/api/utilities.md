@@ -88,6 +88,7 @@ ReproReport
 ```@docs
 save_model
 load_model
+model_info
 SERIALIZATION_FORMAT_VERSION
 ```
 

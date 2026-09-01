@@ -574,3 +574,148 @@ end
         @test _deep_equal(a2.weights, arias.weights)
     end
 end
+
+# =============================================================================
+# RSER-12 / #785 — bundles, note=, model_info
+# =============================================================================
+
+@testset "RSER-12 bundles + model_info (#785)" begin
+    Y = randn(MersenneTwister(785), 80, 2)
+    m = estimate_var(Y, 2)
+    ir = irf(m, 4)
+    fc = forecast(m, 4; ci_method=:none)
+
+    @testset "named Dict bundle round-trips with per-entry equality" begin
+        p = joinpath(mktempdir(), "bundle.jld2")
+        @test save_model(Dict("var" => m, "irf" => ir, "fc" => fc), p;
+                         note="session 1") == p
+        @test isfile(p)
+        b = load_model(p)
+        @test b isa Dict{String,Any}
+        @test Set(keys(b)) == Set(["var", "irf", "fc"])
+        @test b["var"] isa VARModel
+        @test b["irf"] isa ImpulseResponse
+        @test b["fc"] isa VARForecast
+        @test _deep_equal(b["var"], m)
+        @test _deep_equal(b["irf"], ir)
+        @test _deep_equal(b["fc"], fc)
+        _assert_consumers(m, b["var"])
+        _assert_consumers(ir, b["irf"])
+        _assert_consumers(fc, b["fc"])
+
+        c = _MEM._read_model_container(p)
+        @test c["format_version"] == SERIALIZATION_FORMAT_VERSION
+        @test c["bundle"] === true
+        @test c["note"] == "session 1"
+        @test c["entries"] isa AbstractDict
+        @test Set(keys(c["entries"])) == Set(["var", "irf", "fc"])
+        @test !haskey(c, "type")          # issue shape: "bundle"=>true, not type="__bundle__"
+        @test !haskey(c, "payload")
+        for k in ("var", "irf", "fc")
+            @test haskey(c["entries"][k], "manifest")
+            @test haskey(c["entries"][k], "type")
+            @test haskey(c["entries"][k], "payload")
+        end
+        @test c["entries"]["var"]["type"] == "VARModel"
+        @test c["entries"]["irf"]["type"] == "ImpulseResponse"
+        @test c["entries"]["fc"]["type"] == "VARForecast"
+    end
+
+    @testset "vector bundle is keyed 1, 2, …" begin
+        p = joinpath(mktempdir(), "vec.jld2")
+        save_model([m, ir], p)
+        b = load_model(p)
+        @test b isa Dict{String,Any}
+        @test Set(keys(b)) == Set(["1", "2"])
+        @test _deep_equal(b["1"], m)
+        @test _deep_equal(b["2"], ir)
+    end
+
+    @testset "note= on a single-object file; old files without note still load" begin
+        p = joinpath(mktempdir(), "noted.jld2")
+        save_model(m, p; note="vintage 2020")
+        @test _deep_equal(load_model(p), m)
+        info = model_info(p)
+        @test info["note"] == "vintage 2020"
+        @test info["type"] == "VARModel"
+        @test info["bundle"] === false
+        @test !haskey(info, "payload")
+        @test info["format_version"] == SERIALIZATION_FORMAT_VERSION
+        @test !isempty(info["package_version"])
+        @test !isempty(info["julia_version"])
+        @test !isempty(info["created"])
+
+        # pre-RSER-12 container: no "note" key
+        oldp = joinpath(mktempdir(), "old.jld2")
+        _MEM._write_model_container(oldp, _MEM._build_container(m))
+        @test _deep_equal(load_model(oldp), m)
+        old_info = model_info(oldp)
+        @test old_info["note"] == ""
+        @test old_info["bundle"] === false
+        @test old_info["type"] == "VARModel"
+    end
+
+    @testset "model_info returns the header without reconstructing a corrupt payload" begin
+        p = joinpath(mktempdir(), "corrupt.jld2")
+        save_model(m, p; note="keep me")
+        c = _MEM._read_model_container(p)
+        c["payload"] = "not-a-dict"
+        _MEM._write_model_container(p, c)
+        info = model_info(p)
+        @test info["type"] == "VARModel"
+        @test info["note"] == "keep me"
+        @test info["bundle"] === false
+        @test !haskey(info, "payload")
+        @test_throws SerializationError load_model(p)
+
+        bp = joinpath(mktempdir(), "corrupt-bundle.jld2")
+        save_model(Dict("var" => m, "irf" => ir), bp; note="bundle note")
+        bc = _MEM._read_model_container(bp)
+        bc["entries"]["var"]["payload"] = "not-a-dict"
+        _MEM._write_model_container(bp, bc)
+        binfo = model_info(bp)
+        @test binfo["bundle"] === true
+        @test binfo["note"] == "bundle note"
+        @test !haskey(binfo, "payload")
+        @test binfo["entries"] isa AbstractDict
+        @test binfo["entries"]["var"]["type"] == "VARModel"
+        @test binfo["entries"]["irf"]["type"] == "ImpulseResponse"
+        @test !haskey(binfo["entries"]["var"], "payload")
+        @test !haskey(binfo["entries"]["irf"], "payload")
+        @test_throws SerializationError load_model(bp)
+    end
+
+    @testset "unregistered object in a bundle raises before writing" begin
+        dir = mktempdir()
+        p = joinpath(dir, "bad.jld2")
+        err = try
+            save_model(Dict("var" => m, "bad" => 3.14), p)
+            nothing
+        catch e
+            e
+        end
+        @test err isa SerializationError
+        @test occursin("bundle key 'bad'", err.msg)
+        @test !isfile(p)
+
+        p2 = joinpath(dir, "badvec.jld2")
+        err2 = try
+            save_model([m, 3.14], p2)
+            nothing
+        catch e
+            e
+        end
+        @test err2 isa SerializationError
+        @test occursin("bundle key '2'", err2.msg)
+        @test !isfile(p2)
+    end
+
+    @testset "model_info missing file; compress= still round-trips" begin
+        @test_throws SerializationError model_info(joinpath(mktempdir(), "nope.jld2"))
+        p = joinpath(mktempdir(), "z.jld2")
+        save_model(Dict("var" => m), p; compress=true, note="")
+        b = load_model(p)
+        @test _deep_equal(b["var"], m)
+        save_model(m, joinpath(mktempdir(), "z2.jld2"); compress=true)
+    end
+end

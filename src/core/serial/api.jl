@@ -67,7 +67,9 @@ function _read_model_container(path::AbstractString)
 end
 
 """
-    save_model(model, path) -> path
+    save_model(model, path; note="", compress=false) -> path
+    save_model(objs::AbstractDict{String}, path; note="", compress=false) -> path
+    save_model(objs::AbstractVector, path; note="", compress=false) -> path
 
 Persist a fitted `model` — or a data container — to `path` in a versioned,
 self-describing container. Coverage spans every VAR/BVAR (including mixed-frequency
@@ -98,19 +100,35 @@ with a reason — permanent exclusions (rendered HTML, workspaces, transient
 `reproduce` reports, inline covariance-estimator configs) and pending
 `DSER`/`RSER` registrations. The file records the
 [`SERIALIZATION_FORMAT_VERSION`](@ref), the package and Julia versions, a
-timestamp, and — for a randomized result — its reproducibility manifest. Only
-public fields are stored; cached factorizations are recomputed on load, and
-compiled equation functions (DSGE) are not yet serializable.
+timestamp, an optional `note`, and — for a randomized result — its
+reproducibility manifest. Only public fields are stored; cached factorizations
+are recomputed on load, and compiled equation functions (DSGE) are not yet
+serializable.
+
+`note=` is free-form header metadata (a label, a data vintage); read it back
+with [`model_info`](@ref) — it is not reconstructed onto the model. Old files
+without a `note` key still load. `compress=true` enables JLD2 compression.
+
+A `Dict{String,<:Any}` of named objects, or a `Vector` of objects, is written
+as a **bundle**: one file whose `"bundle" => true` header holds an `entries`
+dict of per-object containers. [`load_model`](@ref) returns a `Dict{String,Any}`
+(vector bundles are keyed `"1"`, `"2"`, …). An unregistered object raises
+[`SerializationError`](@ref) naming the key before anything is written.
 
 ```julia
 m = estimate_var(Y, 2)
 save_model(m, "model.jld2")
 m2 = load_model("model.jld2")   # identical public fields
+
+save_model(Dict("var" => m, "irf" => irf(m, 8)), "session.jld2"; note="vintage")
+b = load_model("session.jld2")  # Dict{String,Any}
+model_info("session.jld2")["note"] == "vintage"
 ```
 """
-function save_model(model, path::AbstractString)
+function save_model(model, path::AbstractString; note::AbstractString="", compress::Bool=false)
     container = _build_container(model)
-    _write_model_container(String(path), container)
+    container["note"] = String(note)
+    _write_model_container(String(path), container; compress=compress)
     return path
 end
 
@@ -120,12 +138,15 @@ end
 Reconstruct a model saved by [`save_model`](@ref). Validates the stored
 `format_version` and type tag; raises a [`SerializationError`](@ref) naming the
 expected-versus-found version on an unrecognized format, rather than returning a
-corrupted object.
+corrupted object. A bundle file (`"bundle" => true`) returns a `Dict{String,Any}`
+of reconstructed objects. Inspect the header without reconstructing with
+[`model_info`](@ref).
 """
 function load_model(path::AbstractString)
     isfile(path) || throw(SerializationError("no such model file: $path"))
     container = _read_model_container(String(path))
     container isa AbstractDict || throw(SerializationError(
         "file '$path' does not contain a MacroEconometricModels model container"))
+    get(container, "bundle", false) === true && return _load_bundle(container)
     return _reconstruct_from_container(container)
 end

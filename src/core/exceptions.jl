@@ -68,8 +68,9 @@ SingularSystemError(msg::AbstractString; cond=nothing) =
 
 A model file cannot be read back — an unrecognized on-disk `format_version`, an
 unknown or unsupported result type, or a corrupted/missing container. Raised by
-[`load_model`](@ref); the message names the expected versus found version so an
-upgrade path is discoverable.
+[`save_model`](@ref), [`load_model`](@ref), and [`model_info`](@ref); the
+message names the expected versus found version so an upgrade path is
+discoverable.
 """
 struct SerializationError <: MacroModelError
     msg::String

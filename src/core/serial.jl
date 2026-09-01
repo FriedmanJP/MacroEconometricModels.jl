@@ -24,12 +24,16 @@
 #      functions and `Factorization`s drop to `nothing`.
 #   2. `_build_container(m)` wraps that payload with a metadata header: the
 #      `format_version`, the package + Julia versions, a timestamp, the result
-#      type name, and (when present) the reproducibility manifest.
+#      type name, and (when present) the reproducibility manifest. `save_model`
+#      adds a free-form `note` on the file header. A Dict/Vector of objects is
+#      a bundle (`"bundle" => true`, named `entries`); `model_info` reads the
+#      header without reconstructing payloads.
 #   3. Disk read/write is the JLD2 package-dependency backend
 #      (`_write_model_container` / `_read_model_container` in api.jl).
 #   4. `load_model` validates the `format_version` and type tag and raises a
 #      typed `SerializationError` naming the expected-vs-found version on a
-#      mismatch, rather than returning a corrupted object.
+#      mismatch, rather than returning a corrupted object. Bundles reconstruct
+#      each entry independently.
 #
 # Reduction is generic — `_capture_fields` walks the public fields and
 # `_ser_field` flattens each — so adding a type is largely a matter of listing it
@@ -48,3 +52,4 @@ include("serial/registry.jl")
 include("serial/codecs.jl")
 include("serial/reconstruct.jl")
 include("serial/api.jl")
+include("serial/bundles.jl")

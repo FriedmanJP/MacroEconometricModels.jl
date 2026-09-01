@@ -1080,7 +1080,7 @@ export report, refs
 export table, print_table
 export long_table, write_csv                 # Tables.jl-compatible tidy exports (#346)
 export ReproManifest, capture_manifest, reproduce, ReproReport   # reproducibility manifest (#345)
-export save_model, load_model, SERIALIZATION_FORMAT_VERSION      # versioned serialization (#347)
+export save_model, load_model, model_info, SERIALIZATION_FORMAT_VERSION  # versioned serialization (#347, #785)
 export point_estimate, has_uncertainty, uncertainty_bounds
 export set_display_backend, get_display_backend, with_display_backend
 export default_abstol, default_reltol
