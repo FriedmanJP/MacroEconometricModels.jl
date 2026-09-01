@@ -36,6 +36,11 @@ function _deep_equal(a, b)
         Set(keys(a)) == Set(keys(b)) || return false
         return all(_deep_equal(a[k], b[k]) for k in keys(a))
     end
+    if a isa NamedTuple
+        b isa NamedTuple || return false
+        keys(a) === keys(b) || keys(a) == keys(b) || return false
+        return all(_deep_equal(a[k], b[k]) for k in keys(a))
+    end
     a isa Tuple && return length(a) == length(b) && all(_deep_equal(a[i], b[i]) for i in eachindex(a))
     if isstructtype(typeof(a)) && parentmodule(typeof(a)) === _MEM
         typeof(a).name === typeof(b).name || return false
@@ -1068,5 +1073,248 @@ end
         @test ip2.budget_fn === _dser06_named_budget
         @test ip2.budget_fn(1.0, 1.0, prices) == ip.budget_fn(1.0, 1.0, prices)
         @test ip2.utility(1.3) == ip.utility(1.3)
+    end
+end
+
+# =============================================================================
+# DSER-07 — HA results (#765)
+# =============================================================================
+
+const _DSER07_TYPES = (
+    "HASteadyState", "HADSGESolution", "KrusellSmithSolution",
+    "WinberryFamily", "DenHaanAccuracy", "HAGridDiagnostics",
+    "HAGrid", "IncomeProcess",
+    "HouseholdSystem", "IndividualProblem",
+)
+
+_dser07_huggett() = _MEM._huggett_example(; credit_limit=-2.0, a_max=8.0, n_a=40)
+
+function _dser07_two_huggett()
+    s1 = _MEM._huggett_example(; credit_limit=-2.0, a_max=6.0, n_a=20, beta=0.96)
+    s2 = _MEM._huggett_example(; credit_limit=-2.0, a_max=6.0, n_a=20, beta=0.985)
+    hh_u = only(values(s1.agents))
+    hh_h = only(values(s2.agents))
+    return ModelSpec{Float64}(
+        Symbol[], Symbol[], s1.params, copy(s1.param_values),
+        NamedEquation[], Function[], 0, Int[], Float64[];
+        agents=(unconstrained=hh_u, htm=hh_h))
+end
+
+function _dser07_assert_ss_types(ss)
+    T = eltype(ss.distribution)
+    @test ss.policies isa Dict{Symbol,Array{T}}
+    @test ss.prices isa Dict{Symbol,T}
+    @test ss.aggregates isa Dict{Symbol,T}
+    @test ss.grid isa HAGrid{T}
+    @test ss.income isa IncomeProcess{T}
+    for v in values(ss.policies)
+        @test v isa Array{T}
+    end
+end
+
+@testset "DSER-07 HA results registered" begin
+    for name in _DSER07_TYPES
+        @test haskey(_MEM._SERIALIZABLE_TYPES, name)
+        @test string(nameof(_MEM._SERIALIZABLE_TYPES[name])) == name
+    end
+    if isdefined(_MEM, :_SERIALIZATION_EXCLUDED)
+        for name in _DSER07_TYPES
+            @test !haskey(_MEM._SERIALIZATION_EXCLUDED, name)
+        end
+    end
+end
+
+@testset "DSER-07 HAGrid / IncomeProcess standalone save_model" begin
+    grid = HAGrid(; assets=(0.0, 10.0, 5), income_states=2, grid_type=:linear)
+    g2 = _assert_roundtrip(grid)
+    @test g2.total_individual_states == grid.total_individual_states
+    mktemp() do p, _
+        save_model(grid, p)
+        g3 = load_model(p)
+        @test g3 isa HAGrid
+        @test g3.grids == grid.grids
+    end
+
+    inc = rouwenhorst(0.9, 0.1, 3)
+    i2 = _assert_roundtrip(inc)
+    @test i2.states == inc.states && i2.transition == inc.transition
+    mktemp() do p, _
+        save_model(inc, p)
+        i3 = load_model(p)
+        @test i3 isa IncomeProcess
+        @test i3.labels === inc.labels
+    end
+end
+
+@testset "DSER-07 WinberryFamily / DenHaanAccuracy / HAGridDiagnostics" begin
+    pd = ParametricDensity{Float64}([0.1, 0.2], [1.0, 0.5], 1.0, 0.5, 0.0, true, 3, 1e-8)
+    wf = WinberryFamily{Float64}([pd, pd], [0.6, 0.4], 2, [0.0, 1.0], [0.5, 0.5],
+                                 (0.0, 1.0), true)
+    wf2 = _assert_roundtrip(wf)
+    @test wf2.densities isa Vector{<:ParametricDensity}
+    @test wf2.n_moments == 2
+    @test wf2.bounds == (0.0, 1.0)
+    @test wf2.densities[1].lambda == pd.lambda
+
+    dh = DenHaanAccuracy{Float64}(:K, 0.02, 0.01, 0.1, 0.09,
+                                  [1.0, 1.1, 1.05], [1.0, 1.08, 1.04],
+                                  3, 1; source=:plm)
+    dh2 = _assert_roundtrip(dh)
+    @test dh2.aggregate === :K
+    @test dh2.source === :plm
+    @test dh2.ref_path == dh.ref_path
+    @test dh2.dh_max == dh.dh_max
+    report(dh2)
+
+    gd = HAGridDiagnostics{Float64}(0.0, 10.0, 5, 2, 0.0, 0.1, 0, 0,
+                                    0.0, 0.0, 1.0, 1.0, 0.0, 0.0, 9.0,
+                                    1e-6, 1e-6, true)
+    gd2 = _assert_roundtrip(gd)
+    @test gd2.adequate && gd2.n_a == 5
+    @test gd2.a_max == 10.0
+end
+
+@testset "DSER-07 ModelSpec.agents round-trip" begin
+    for name in (:krusell_smith, :one_asset_hank, :two_asset_hank, :huggett)
+        spec = load_ha_example(name)
+        spec2 = _roundtrip(spec)
+        @test has_kind(spec2, HouseholdSystem)
+        @test keys(spec2.agents) == keys(spec.agents)
+        hh = first(values(spec.agents))
+        hh2 = first(values(spec2.agents))
+        @test hh2 isa HouseholdSystem
+        @test hh2.model === hh.model
+        @test hh2.individual.beta == hh.individual.beta
+    end
+
+    spec_w = load_ha_example(:krusell_smith; distribution=:winberry)
+    spec_w2 = _roundtrip(spec_w)
+    @test first(values(spec_w2.agents)).distribution === :winberry
+
+    mp = _dser07_two_huggett()
+    mp2 = _roundtrip(mp)
+    @test keys(mp2.agents) == keys(mp.agents)
+    @test collect(keys(mp2.agents)) == [:unconstrained, :htm]
+    @test has_kind(mp2, HouseholdSystem)
+    @test length(collect(agents_of(mp2, HouseholdSystem))) == 2
+end
+
+@testset "DSER-07 HASteadyState round-trip" begin
+    _suppress_warnings() do
+        for name in (:krusell_smith, :one_asset_hank, :two_asset_hank, :huggett)
+            spec = if name === :two_asset_hank
+                _MEM._two_asset_hank_example(; n_liquid=6, n_illiquid=5, n_e=2, B_supply=1.0)
+            elseif name === :huggett
+                _dser07_huggett()
+            else
+                load_ha_example(name)
+            end
+            ss_kw = name === :two_asset_hank ?
+                (max_iter=15, tol=5e-2, grid_check=:none) :
+                (max_iter=80, tol=1e-4, grid_check=:none)
+            ss = compute_steady_state(spec; ss_kw...)
+            @test ss isa HASteadyState
+            ss2 = _assert_roundtrip(ss)
+            _dser07_assert_ss_types(ss2)
+            @test typeof(ss2.policies) === typeof(ss.policies)
+            @test typeof(ss2.prices) === typeof(ss.prices)
+            @test typeof(ss2.aggregates) === typeof(ss.aggregates)
+            @test ss2.converged == ss.converged
+            report(ss2)
+            if ss.grid.n_dims == 1
+                @test plot_result(ss2; view=:distribution) isa PlotOutput
+                @test plot_result(ss2; view=:lorenz) isa PlotOutput
+                @test plot_result(ss2; view=:policy) isa PlotOutput
+                gd = ha_grid_diagnostics(ss)
+                gd2 = _assert_roundtrip(gd)
+                @test gd2.n_a == gd.n_a
+            end
+        end
+
+        spec_w = _MEM._replace_household(_dser07_huggett(); distribution=:winberry)
+        ss_w = compute_steady_state(spec_w; max_iter=40, tol=1e-4, grid_check=:none)
+        @test ss_w.parametric isa WinberryFamily
+        ss_w2 = _assert_roundtrip(ss_w)
+        @test ss_w2.parametric isa WinberryFamily
+        @test ss_w2.parametric.n_moments == ss_w.parametric.n_moments
+        @test ss_w2.parametric.mass == ss_w.parametric.mass
+    end
+end
+
+@testset "DSER-07 reloaded spec reproduces SS and SSJ G1" begin
+    _suppress_warnings() do
+        spec = _dser07_huggett()
+        spec2 = _roundtrip(spec)
+        @test has_kind(spec2, HouseholdSystem)
+        @test keys(spec2.agents) == keys(spec.agents)
+        ss = compute_steady_state(spec; max_iter=40, tol=1e-6, grid_check=:none)
+        ss2 = compute_steady_state(spec2; max_iter=40, tol=1e-6, grid_check=:none)
+        @test ss2.converged && ss.converged
+        for k in keys(ss.prices)
+            @test ss2.prices[k] ≈ ss.prices[k] atol=1e-12
+        end
+        for k in keys(ss.aggregates)
+            @test ss2.aggregates[k] ≈ ss.aggregates[k] atol=1e-12
+        end
+        @test ss2.distribution ≈ ss.distribution atol=1e-12
+
+        sol = solve(spec; method=:ssj, ss=ss, T_horizon=12, n_reduced=4)
+        sol_from_spec2 = solve(spec2; method=:ssj, ss=ss2, T_horizon=12, n_reduced=4)
+        @test sol_from_spec2.linear_solution.G1 ≈ sol.linear_solution.G1 atol=1e-10
+    end
+end
+
+@testset "DSER-07 HADSGESolution ssj/reiter + consumers" begin
+    _suppress_warnings() do
+        spec = _dser07_huggett()
+        ss = compute_steady_state(spec; max_iter=40, tol=1e-4, grid_check=:none)
+        for method in (:ssj, :reiter)
+            sol = if method === :ssj
+                solve(spec; method=:ssj, ss=ss, T_horizon=12, n_reduced=4)
+            else
+                solve(spec; method=:reiter, ss=ss, n_reduced=4)
+            end
+            @test sol isa HADSGESolution
+            sol2 = _assert_roundtrip(sol)
+            @test sol2.method === sol.method
+            @test sol2.linear_solution.G1 == sol.linear_solution.G1
+            @test sol2.C_obs == sol.C_obs && sol2.D_obs == sol.D_obs
+            ir = irf(sol, 20)
+            ir2 = irf(sol2, 20)
+            @test ir2.values == ir.values
+            @test ir2.variables == ir.variables
+            fv = fevd(sol, 12)
+            fv2 = fevd(sol2, 12)
+            @test fv2.proportions == fv.proportions
+            sim = simulate(sol, 8; shock_draws=zeros(8, nshocks(sol)))
+            sim2 = simulate(sol2, 8; shock_draws=zeros(8, nshocks(sol2)))
+            @test sim2 == sim
+        end
+
+        sol = solve(spec; method=:ssj, ss=ss, T_horizon=12, n_reduced=4)
+        mktemp() do p, _
+            save_model(sol, p)
+            sol3 = load_model(p)
+            @test sol3 isa HADSGESolution
+            @test sol3.linear_solution.G1 == sol.linear_solution.G1
+            @test irf(sol3, 20).values == irf(sol, 20).values
+            report(sol3)
+        end
+    end
+end
+
+@testset "DSER-07 KrusellSmithSolution round-trip" begin
+    _suppress_warnings() do
+        spec = _dser07_huggett()
+        ss = compute_steady_state(spec; max_iter=40, tol=1e-4, grid_check=:none)
+        ks = solve(spec; method=:krusell_smith, ss=ss, T_sim=40, T_burn=8, max_outer=1)
+        @test ks isa KrusellSmithSolution
+        ks2 = _assert_roundtrip(ks)
+        @test ks2.plm_coefficients isa Dict{Symbol,Vector{Float64}}
+        @test ks2.r_squared isa Dict{Symbol,Float64}
+        @test ks2.plm_coefficients == ks.plm_coefficients
+        @test ks2.r_squared == ks.r_squared
+        @test ks2.converged == ks.converged
+        report(ks2)
     end
 end

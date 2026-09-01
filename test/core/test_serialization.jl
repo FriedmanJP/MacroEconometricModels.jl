@@ -37,6 +37,11 @@ function _deep_equal(a, b)
         Set(keys(a)) == Set(keys(b)) || return false
         return all(_deep_equal(a[k], b[k]) for k in keys(a))
     end
+    if a isa NamedTuple
+        b isa NamedTuple || return false
+        keys(a) === keys(b) || keys(a) == keys(b) || return false
+        return all(_deep_equal(a[k], b[k]) for k in keys(a))
+    end
     a isa Tuple && return length(a) == length(b) && all(_deep_equal(a[i], b[i]) for i in eachindex(a))
     if isstructtype(typeof(a)) && parentmodule(typeof(a)) === _MEM
         typeof(a).name === typeof(b).name || return false
@@ -379,14 +384,12 @@ end
         @test length(_MEM._SERIALIZABLE_TYPES) >= 50
     end
 
-    @testset "DSGE-family carve-out: HA results are not yet supported" begin
-        # RA solutions (DSER-04), Bayesian DSGE (DSER-05), and household
-        # problems (DSER-06) are registered. HA *results* are DSER-07+.
-        for name in ("HADSGESolution", "KrusellSmithSolution")
-            @test !haskey(_MEM._SERIALIZABLE_TYPES, name)
+    @testset "DSGE-family: HA results are registered (DSER-07)" begin
+        for name in ("HASteadyState", "HADSGESolution", "KrusellSmithSolution",
+                     "WinberryFamily", "DenHaanAccuracy", "HAGridDiagnostics",
+                     "HAGrid", "IncomeProcess", "HouseholdSystem", "IndividualProblem")
+            @test haskey(_MEM._SERIALIZABLE_TYPES, name)
         end
-        @test haskey(_MEM._SERIALIZABLE_TYPES, "HouseholdSystem")
-        @test haskey(_MEM._SERIALIZABLE_TYPES, "IndividualProblem")
         @test haskey(_MEM._SERIALIZABLE_TYPES, "DSGESolution")
         @test haskey(_MEM._SERIALIZABLE_TYPES, "DSGEEstimation")
         @test haskey(_MEM._SERIALIZABLE_TYPES, "BayesianDSGE")

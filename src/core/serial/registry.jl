@@ -159,4 +159,13 @@ const _SERIALIZABLE_TYPES = Dict{String,Type}(
     # ── DSER-06 HA household problem ─────────────────────────────────────────
     "IndividualProblem"             => IndividualProblem,
     "HouseholdSystem"               => HouseholdSystem,
+    # ── DSER-07 HA results ───────────────────────────────────────────────────
+    "HAGrid"                        => HAGrid,
+    "IncomeProcess"                 => IncomeProcess,
+    "HASteadyState"                 => HASteadyState,
+    "HADSGESolution"                => HADSGESolution,
+    "KrusellSmithSolution"          => KrusellSmithSolution,
+    "WinberryFamily"                => WinberryFamily,
+    "DenHaanAccuracy"               => DenHaanAccuracy,
+    "HAGridDiagnostics"             => HAGridDiagnostics,
 )

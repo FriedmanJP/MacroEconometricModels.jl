@@ -49,8 +49,9 @@
 # types, predictive / identification companions) round-trip; `H_inv` /
 # `log_det_H` are recomputed by the state-space constructors. Household
 # problems (`IndividualProblem`, `HouseholdSystem`) round-trip via
-# `CRRAUtility` / named budget functions; HA / OLG / CT *results*
-# (`HADSGESolution`, …) are still follow-up.
+# `CRRAUtility` / named budget functions. HA results (`HASteadyState`,
+# `HADSGESolution`, `KrusellSmithSolution`, Winberry / Den Haan / grid
+# diagnostics) round-trip; OLG / CT results are still follow-up.
 
 include("serial/registry.jl")
 include("serial/codecs.jl")

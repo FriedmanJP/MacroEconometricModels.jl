@@ -283,6 +283,8 @@ function _from_serializable_modelspec(p::AbstractDict, ver::Int)
     linear = Bool(p["linear"])
     had_ss_fn = Bool(get(p, "had_ss_fn", false))
     ss_fn = _recompile_ss_fn_from_ir(ir, params, length(endog), linear, had_ss_fn)
+    agents = _deser_field(p["agents"])
+    agents isa NamedTuple || throw(SerializationError("ModelSpec.agents is not a NamedTuple"))
 
     return ModelSpec{T}(
         endog, exog, params, param_values, equations, residual_fns,
@@ -297,7 +299,7 @@ function _from_serializable_modelspec(p::AbstractDict, ver::Int)
         bellman_beta=_deser_field(p["bellman_beta"]),
         bellman_consumption=bellman_consumption,
         bellman_controls=bellman_controls,
-        agents=_deser_field(p["agents"]),
+        agents=agents,
         ir=ir,
         varnames=varnames,
     )
@@ -472,6 +474,98 @@ function _from_serializable(::Type{HouseholdSystem}, p::AbstractDict, ::Int)
         het_params;
         model=_as_symbol(p["model"]),
         distribution=_as_symbol(p["distribution"]),
+    )
+end
+
+# ── DSER-07 HA results ───────────────────────────────────────────────────────
+
+function _ha_symbol_array_dict(::Type{T}, raw) where {T}
+    Dict{Symbol,Array{T}}(_as_symbol(k) => T.(v) for (k, v) in raw)
+end
+function _ha_symbol_t_dict(::Type{T}, raw) where {T}
+    Dict{Symbol,T}(_as_symbol(k) => convert(T, v) for (k, v) in raw)
+end
+function _ha_symbol_vec_dict(::Type{T}, raw) where {T}
+    Dict{Symbol,Vector{T}}(_as_symbol(k) => Vector{T}(v) for (k, v) in raw)
+end
+function _ha_symbol_mat_dict(::Type{T}, raw) where {T}
+    Dict{Symbol,Matrix{T}}(_as_symbol(k) => Matrix{T}(v) for (k, v) in raw)
+end
+
+# 11 positionals + parametric= / euler=. Policies / prices / aggregates must
+# re-enter as the declared Dict{Symbol,…} types, not Dict{Any,Any}.
+function _from_serializable(::Type{HASteadyState}, p::AbstractDict, ::Int)
+    dist = _deser_field(p["distribution"])
+    T = eltype(dist)
+    T <: AbstractFloat || (T = Float64)
+    HASteadyState{T}(
+        _ha_symbol_array_dict(T, _deser_field(p["policies"])),
+        T.(dist),
+        T.(_deser_field(p["value_fn"])),
+        _ha_symbol_t_dict(T, _deser_field(p["prices"])),
+        _ha_symbol_t_dict(T, _deser_field(p["aggregates"])),
+        _deser_field(p["grid"]),
+        _deser_field(p["income"]),
+        Bool(p["converged"]),
+        Int(p["iterations"]),
+        T(p["euler_error"]),
+        T(p["excess_demand"]);
+        parametric=_deser_field(p["parametric"]),
+        euler=_deser_field(p["euler"]),
+    )
+end
+
+function _from_serializable(::Type{HADSGESolution}, p::AbstractDict, ::Int)
+    ss = _deser_field(p["steady_state"])
+    T = eltype(ss.distribution)
+    T <: AbstractFloat || (T = Float64)
+    jac_raw = _deser_field(p["jacobians"])
+    jacobians = jac_raw === nothing ? nothing : _ha_symbol_mat_dict(T, jac_raw)
+    HADSGESolution{T}(
+        ss,
+        _deser_field(p["linear_solution"]),
+        _as_symbol(p["method"]),
+        _deser_field(p["spec"]),
+        Matrix{T}(_deser_field(p["reduction_basis"])),
+        Int(p["n_full_states"]),
+        Int(p["n_reduced"]),
+        T(p["explained_variance"]),
+        jacobians,
+        Matrix{T}(_deser_field(p["C_obs"])),
+        Matrix{T}(_deser_field(p["D_obs"])),
+    )
+end
+
+function _from_serializable(::Type{KrusellSmithSolution}, p::AbstractDict, ::Int)
+    ss = _deser_field(p["steady_state"])
+    T = eltype(ss.distribution)
+    T <: AbstractFloat || (T = Float64)
+    KrusellSmithSolution{T}(
+        ss,
+        _ha_symbol_vec_dict(T, _deser_field(p["plm_coefficients"])),
+        _ha_symbol_t_dict(T, _deser_field(p["r_squared"])),
+        _deser_field(p["spec"]),
+        Bool(p["converged"]),
+        Int(p["iterations"]),
+    )
+end
+
+# 9 positionals + source= keyword.
+function _from_serializable(::Type{DenHaanAccuracy}, p::AbstractDict, ::Int)
+    ref = _deser_field(p["ref_path"])
+    T = eltype(ref)
+    T <: AbstractFloat || (T = Float64)
+    DenHaanAccuracy{T}(
+        _as_symbol(p["aggregate"]),
+        T(p["dh_max"]),
+        T(p["dh_mean"]),
+        T(p["sigma_ref"]),
+        T(p["sigma_plm"]),
+        Vector{T}(ref),
+        Vector{T}(_deser_field(p["plm_path"])),
+        Int(p["T_sim"]),
+        Int(p["T_burn"]);
+        source=_as_symbol(p["source"]),
     )
 end
 
