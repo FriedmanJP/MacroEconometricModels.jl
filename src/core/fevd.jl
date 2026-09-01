@@ -67,6 +67,23 @@ function _compute_fevd(irfs::Array{T,3}, n::Int, horizon::Int) where {T<:Abstrac
     decomp, props
 end
 
+"""FEVD from a possibly rectangular IRF array (n_var × n_shock), e.g. FGLR `r×q`."""
+function _compute_fevd_rect(irfs::Array{T,3}, n_var::Int, n_shock::Int, horizon::Int) where {T<:AbstractFloat}
+    decomp, props = zeros(T, n_var, n_shock, horizon), zeros(T, n_var, n_shock, horizon)
+    @inbounds for h in 1:horizon
+        for i in 1:n_var
+            total = zero(T)
+            for j in 1:n_shock
+                prev = h == 1 ? zero(T) : decomp[i, j, h - 1]
+                decomp[i, j, h] = prev + irfs[h, i, j]^2
+                total += decomp[i, j, h]
+            end
+            total > 0 && (props[i, :, h] = decomp[i, :, h] ./ total)
+        end
+    end
+    decomp, props
+end
+
 """
     _check_fevd_orthogonality(P, Sigma; method=:cholesky) -> Bool
 

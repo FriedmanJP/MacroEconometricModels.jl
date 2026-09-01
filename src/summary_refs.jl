@@ -279,6 +279,46 @@ const _REFERENCES = Dict{Symbol, _RefEntry}(
         title="Forecasting Using Principal Components from a Large Number of Predictors",
         journal="Journal of the American Statistical Association", volume="97", issue="460", pages="1167--1179",
         doi="10.1198/016214502388618960", isbn="", publisher="", entry_type=:article),
+    :forni_hallin_lippi_reichlin2000 => (key=:forni_hallin_lippi_reichlin2000,
+        authors="Forni, Mario and Hallin, Marc and Lippi, Marco and Reichlin, Lucrezia", year=2000,
+        title="The Generalized Dynamic-Factor Model: Identification and Estimation",
+        journal="Review of Economics and Statistics", volume="82", issue="4", pages="540--554",
+        doi="10.1162/003465300559037", isbn="", publisher="", entry_type=:article),
+    :forni_hallin_lippi_reichlin2005 => (key=:forni_hallin_lippi_reichlin2005,
+        authors="Forni, Mario and Hallin, Marc and Lippi, Marco and Reichlin, Lucrezia", year=2005,
+        title="The Generalized Dynamic Factor Model: One-Sided Estimation and Forecasting",
+        journal="Journal of the American Statistical Association", volume="100", issue="471", pages="830--840",
+        doi="10.1198/016214504000002050", isbn="", publisher="", entry_type=:article),
+    :hallin_liska2007 => (key=:hallin_liska2007,
+        authors="Hallin, Marc and Liska, Roman", year=2007,
+        title="Determining the Number of Factors in the General Dynamic Factor Model",
+        journal="Journal of the American Statistical Association", volume="102", issue="478", pages="603--617",
+        doi="10.1198/016214506000001275", isbn="", publisher="", entry_type=:article),
+    :forni_gambetti2010 => (key=:forni_gambetti2010,
+        authors="Forni, Mario and Gambetti, Luca", year=2010,
+        title="The Dynamic Effects of Monetary Policy: A Structural Factor Model Approach",
+        journal="Journal of Monetary Economics", volume="57", issue="2", pages="203--216",
+        doi="10.1016/j.jmoneco.2009.11.009", isbn="", publisher="", entry_type=:article),
+    :stock_watson2005 => (key=:stock_watson2005,
+        authors="Stock, James H. and Watson, Mark W.", year=2005,
+        title="Implications of Dynamic Factor Models for VAR Analysis",
+        journal="NBER Working Paper 11467", volume="", issue="", pages="",
+        doi="10.3386/w11467", isbn="", publisher="", entry_type=:article),
+    :stock_watson2016 => (key=:stock_watson2016,
+        authors="Stock, James H. and Watson, Mark W.", year=2016,
+        title="Dynamic Factor Models, Factor-Augmented Vector Autoregressions, and Structural Vector Autoregressions in Macroeconomics",
+        journal="Handbook of Macroeconomics", volume="2A", issue="", pages="415--525",
+        doi="10.1016/bs.hesmac.2016.03.002", isbn="", publisher="", entry_type=:article),
+    :bai_ng2007 => (key=:bai_ng2007,
+        authors="Bai, Jushan and Ng, Serena", year=2007,
+        title="Determining the Number of Primitive Shocks in Factor Models",
+        journal="Journal of Business \\& Economic Statistics", volume="25", issue="1", pages="52--60",
+        doi="10.1198/073500106000000413", isbn="", publisher="", entry_type=:article),
+    :amengual_watson2007 => (key=:amengual_watson2007,
+        authors="Amengual, Dante and Watson, Mark W.", year=2007,
+        title="Consistent Estimation of the Number of Dynamic Factors in a Large N and T Panel",
+        journal="Journal of Business \\& Economic Statistics", volume="25", issue="1", pages="91--96",
+        doi="10.1198/073500106000000613", isbn="", publisher="", entry_type=:article),
     # --- Unit Root Tests ---
     :dickey_fuller1979 => (key=:dickey_fuller1979,
         authors="Dickey, David A. and Fuller, Wayne A.", year=1979,
@@ -1899,15 +1939,24 @@ const _TYPE_REFS = Dict{Symbol, Vector{Symbol}}(
     # Factor Models
     :FactorModel => [:bai_ng2002, :stock_watson2002],
     :DynamicFactorModel => [:stock_watson2002],
-    :GeneralizedDynamicFactorModel => [:stock_watson2002],
+    :GeneralizedDynamicFactorModel => [:forni_hallin_lippi_reichlin2000, :forni_hallin_lippi_reichlin2005],
     :FactorForecast => [:stock_watson2002],
+    :estimate_gdfm => [:forni_hallin_lippi_reichlin2000, :forni_hallin_lippi_reichlin2005],
+    :ic_criteria_gdfm => [:forni_hallin_lippi_reichlin2000, :hallin_liska2007],
+    :hallin_liska => [:hallin_liska2007],
+    :HallinLiskaResult => [:hallin_liska2007],
+    :bai_ng_q => [:bai_ng2007],
+    :BaiNgQResult => [:bai_ng2007],
+    :amengual_watson_q => [:amengual_watson2007],
+    :AmengualWatsonResult => [:amengual_watson2007],
     # FAVAR & Structural DFM
     :FAVARModel => [:bernanke_boivin_eliasz2005, :stock_watson2002],
     :BayesianFAVAR => [:bernanke_boivin_eliasz2005, :stock_watson2002],
-    :StructuralDFM => [:forni_giannone_lippi_reichlin2009, :stock_watson2002],
+    :StructuralDFM => [:forni_giannone_lippi_reichlin2009, :forni_hallin_lippi_reichlin2005],
     :favar => [:bernanke_boivin_eliasz2005, :stock_watson2002],
-    :structural_dfm => [:forni_giannone_lippi_reichlin2009, :stock_watson2002],
-    :sdfm_panel_irf => [:forni_giannone_lippi_reichlin2009, :stock_watson2002],
+    :structural_dfm => [:forni_giannone_lippi_reichlin2009, :forni_hallin_lippi_reichlin2005],
+    :estimate_structural_dfm => [:forni_giannone_lippi_reichlin2009, :forni_hallin_lippi_reichlin2005],
+    :sdfm_panel_irf => [:forni_giannone_lippi_reichlin2009, :forni_hallin_lippi_reichlin2005],
     # Unit Root Tests
     :ADFResult => [:dickey_fuller1979],
     :KPSSResult => [:kpss1992],
@@ -2423,7 +2472,7 @@ function _format_ref_html(io::IO, r::_RefEntry)
 end
 
 function _format_ref(io::IO, r::_RefEntry, format::Symbol)
-    if format == :text
+    if format == :text || format == :apa
         _format_ref_text(io, r)
     elseif format == :latex
         _format_ref_latex(io, r)
@@ -2432,7 +2481,7 @@ function _format_ref(io::IO, r::_RefEntry, format::Symbol)
     elseif format == :html
         _format_ref_html(io, r)
     else
-        throw(ArgumentError("Unknown format: $format. Use :text, :latex, :bibtex, or :html."))
+        throw(ArgumentError("Unknown format: $format. Use :text, :latex, :bibtex, :html, or :apa."))
     end
 end
 
@@ -2547,6 +2596,9 @@ refs(io::IO, ::FactorModel; kw...) = refs(io, _TYPE_REFS[:FactorModel]; kw...)
 refs(io::IO, ::DynamicFactorModel; kw...) = refs(io, _TYPE_REFS[:DynamicFactorModel]; kw...)
 refs(io::IO, ::GeneralizedDynamicFactorModel; kw...) = refs(io, _TYPE_REFS[:GeneralizedDynamicFactorModel]; kw...)
 refs(io::IO, ::FactorForecast; kw...) = refs(io, _TYPE_REFS[:FactorForecast]; kw...)
+refs(io::IO, ::HallinLiskaResult; kw...) = refs(io, _TYPE_REFS[:HallinLiskaResult]; kw...)
+refs(io::IO, ::BaiNgQResult; kw...) = refs(io, _TYPE_REFS[:BaiNgQResult]; kw...)
+refs(io::IO, ::AmengualWatsonResult; kw...) = refs(io, _TYPE_REFS[:AmengualWatsonResult]; kw...)
 
 # FAVAR & Structural DFM
 refs(io::IO, ::FAVARModel; kw...) = refs(io, _TYPE_REFS[:FAVARModel]; kw...)

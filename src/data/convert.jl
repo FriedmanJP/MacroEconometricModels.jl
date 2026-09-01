@@ -92,7 +92,31 @@ estimate_dynamic_factors(d::TimeSeriesData, r::Int, p::Int; kwargs...) =
     estimate_dynamic_factors(to_matrix(d), r, p; kwargs...)
 
 estimate_gdfm(d::TimeSeriesData, q::Int; kwargs...) =
-    estimate_gdfm(to_matrix(d), q; kwargs...)
+    estimate_gdfm(to_matrix(d), q; varnames=d.varnames, kwargs...)
+
+hallin_liska(d::TimeSeriesData, q_max::Int; kwargs...) =
+    hallin_liska(to_matrix(d), q_max; kwargs...)
+
+bai_ng_q(d::TimeSeriesData, r::Int; kwargs...) =
+    bai_ng_q(to_matrix(d), r; kwargs...)
+
+amengual_watson_q(d::TimeSeriesData, r::Int, p::Int=1; kwargs...) =
+    amengual_watson_q(to_matrix(d), r, p; kwargs...)
+
+ic_criteria_gdfm(d::TimeSeriesData, max_q::Int; kwargs...) =
+    ic_criteria_gdfm(to_matrix(d), max_q; kwargs...)
+
+estimate_structural_dfm(d::TimeSeriesData, q::Int; kwargs...) =
+    estimate_structural_dfm(to_matrix(d), q; varnames=d.varnames, kwargs...)
+
+estimate_structural_dfm(d::TimeSeriesData, q::Symbol; kwargs...) =
+    estimate_structural_dfm(to_matrix(d), q; varnames=d.varnames, kwargs...)
+
+estimate_favar(d::TimeSeriesData, key_indices::Vector{Int}, r::Int, p::Int; kwargs...) =
+    estimate_favar(to_matrix(d), key_indices, r, p; panel_varnames=d.varnames, kwargs...)
+
+estimate_favar(d::TimeSeriesData, Y_key::AbstractMatrix, r::Int, p::Int; kwargs...) =
+    estimate_favar(to_matrix(d), Y_key, r, p; panel_varnames=d.varnames, kwargs...)
 
 # LP
 estimate_lp(d::TimeSeriesData, shock_var::Int, horizon::Int; kwargs...) =

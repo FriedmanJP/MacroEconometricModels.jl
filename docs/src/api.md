@@ -331,10 +331,13 @@ Static PCA, Dynamic Factor, and Generalized Dynamic Factor model estimation, for
 | `estimate_gdfm(X, q; ...)` | Generalized dynamic factor model |
 | `forecast(fm, h; p=1, ci_method=:none)` | Static FM forecast (fits VAR(p) on factors) |
 | `forecast(dfm, h; ci_method=:none)` | DFM forecast (`:none/:theoretical/:bootstrap/:simulation`) |
-| `forecast(gdfm, h; ci_method=:none)` | GDFM forecast (`:none/:theoretical/:bootstrap`) |
+| `forecast(gdfm, h; ci_method=:none)` | GDFM forecast (`method=:ar` or `:one_sided`/`:spectral`) |
 | `ic_criteria(X, r_max)` | Bai-Ng information criteria |
 | `ic_criteria_dynamic(X, max_r, max_p)` | DFM factor/lag selection |
-| `ic_criteria_gdfm(X, max_q)` | GDFM dynamic factor selection |
+| `ic_criteria_gdfm(X, max_q)` | GDFM eigenvalue-ratio / 90% variance heuristic |
+| `hallin_liska(X, q_max)` | Hallin–Liška (2007) IC with second stability plateau |
+| `bai_ng_q(X, r)` | Bai–Ng (2007) residual-covariance rank statistics |
+| `amengual_watson_q(X, r, p)` | Amengual–Watson (2007) Bai–Ng IC on lagged-factor residuals |
 | `scree_plot_data(model)` | Data for scree plot |
 | `is_stationary(dfm)` | Check DFM factor VAR stationarity |
 | `common_variance_share(gdfm)` | GDFM common variance share per variable |
@@ -724,8 +727,14 @@ Structural DFM combining GDFM spectral estimation with structural VAR identifica
 
 | Function | Description |
 |----------|-------------|
-| `estimate_structural_dfm(X, q; ...)` | Structural DFM (GDFM + VAR) |
+| `estimate_structural_dfm(X, q; ...)` | Structural DFM (FGLR 2009; `method=:fglr`) |
 | `sdfm_panel_irf(sdfm, H)` | Map structural factor IRFs to observables |
+| `structural_shocks(sdfm)` | Estimated structural shock series |
+| `forecast(sdfm, h; ...)` | Panel forecast from the factor VAR |
+| `varindex(sdfm, name)` | Panel variable index for sign restrictions |
+| `fevd(sdfm, H; space=:panel)` | Observable FEVD (optional idiosyncratic column) |
+| `historical_decomposition(sdfm)` | Panel HD from the stored rotation |
+| `historical_decomposition(gdfm)` | Dynamic-PC decomposition of the common component |
 
 Periodogram, Welch/Daniell/AR spectral density, cross-spectrum, coherence, and autocorrelation functions. See [Spectral Analysis](@ref spectral_page) for theory and examples, and [Model Diagnostics](@ref tests_diagnostics_page) for serial correlation tests.
 

@@ -6,6 +6,34 @@ output, not just documentation.
 
 ---
 
+## v0.9.1
+
+Patch release: Structural DFM and GDFM defaults follow FGLR (2009) and FHLR lag-window spectra. `estimate_structural_dfm` and `estimate_gdfm` **change numerical output** under default keywords. Legacy paths stay: `method=:gdfm_var` and `spectral=:smoothed_periodogram`.
+
+This is a patch on the `0.9` series. Downstream `[compat]` of `MacroEconometricModels = "0.9"` resolves here; no bound change is required.
+
+**New**
+
+- **FGLR structural DFM** (`#711`): default `method=:fglr` extracts `r ≥ q` static PCA factors, fits a VAR(`p`), reduces residuals to rank `q` (`K`), and identifies `H` on selected observables. Panel IRFs are ``\Lambda \Psi_h K H``. `r < q` throws.
+- **FHLR lag-window spectrum** (`#720`): GDFM default `spectral=:lag_window` is the full-rank estimator ``(1/2\pi)\sum_{k=-M}^{M} w(k/M)\hat\Gamma_k e^{-ik\theta}`` with ``M=\max(3,\mathrm{round}(\tfrac12\sqrt{T}))``.
+- **Selecting ``q``** (`#719`): `hallin_liska`, `bai_ng_q`, and `amengual_watson_q`. `ic_criteria_gdfm` warns when the 90% rule hits `max_q`. `estimate_structural_dfm(X, :auto; q_method=...)` consumes the selectors.
+- **FHLR (2005) one-sided GDFM** (`#721`): `Z`, `factors_onesided`, `common_component_onesided` on every GDFM. `forecast(gdfm, h; method=:one_sided)` is the projection ``\hat\chi_{T+h|T}=\hat\Gamma_\chi(h)Z(Z'\hat\Gamma_X(0)Z)^{-1}Z'X_T``. `method=:spectral` is that path, **not** an AR(1) alias.
+- **SDFM bootstrap IRFs, shocks, forecast, lag selection** (`#714`, `#716`, `#718`): `irf(sdfm, H; ci_type=:bootstrap)` returns panel-space residual-bootstrap bands; `structural_shocks` and `forecast(sdfm, h)` complete FAVAR parity (HD is `#729`); `p=:bic` selects the factor-VAR lag and `show` prints the companion modulus.
+
+**Correctness**
+
+- `fevd(::StructuralDFM)` uses the stored identification (`#710`).
+- `irf(sdfm, h)` computes on demand for any horizon (`#717`).
+
+**Also**
+
+- `TimeSeriesData` dispatch, GDFM `varnames`, `shock_names`, accessors (`#722`).
+- `refs` / `report` for SDFM and GDFM (`#724`); two stale SDFM doc sentences (`#725`).
+- CI: coverage uploads from macOS on every run; the version-bump-only Codecov job is gone.
+- SDFM polish (`#723`, `#726`, `#727`): `plot_result` views for SDFM/GDFM, FGLR recovery tests plus a committed Cholesky fixture, and `identification=:proxy` with first-stage F.
+
+---
+
 ## v0.9.0
 
 Breaking feature release: **unified `ModelSpec`** (`#630`, `#631`). One public spec type replaces `DSGESpec` / `HADSGESpec`. Leads are rational expectations (`E[t](...)` is gone). Agent keys are free names; kinds are `AbstractAgentSystem` subtypes. `solve` dispatches on `has_kind`.

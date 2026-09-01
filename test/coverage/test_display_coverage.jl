@@ -18,6 +18,22 @@ if !@isdefined(M)
     const M = MacroEconometricModels
 end
 
+# `redirect_stdout` is thread-unsafe under the spawned parallel runner and
+# raises `SystemError: dup: Bad file descriptor` on Julia 1.12 (Coverage-B).
+# Capture via `report(io, x)` / `show`, matching `test/display/display_helpers.jl`.
+function _capture_report(xs...)
+    buf = IOBuffer()
+    for x in xs
+        try
+            report(buf, x)
+        catch e
+            e isa MethodError || rethrow()
+            show(buf, MIME("text/plain"), x)
+        end
+    end
+    return String(take!(buf))
+end
+
 @testset "Display Coverage" begin
 
     # =========================================================================
@@ -238,10 +254,7 @@ end
         rng = Random.MersenneTwister(9030)
         Y = cumsum(randn(rng, 150, 3), dims=1)
         vecm = estimate_vecm(Y, 2; rank=1)
-        redirect_stdout(devnull) do
-            report(vecm)
-        end
-        @test true
+        @test !isempty(_capture_report(vecm))
     end
 
     @testset "summary.jl — report(VECMForecast)" begin
@@ -249,63 +262,43 @@ end
         Y = cumsum(randn(rng, 150, 3), dims=1)
         vecm = estimate_vecm(Y, 2; rank=1)
         fc = forecast(vecm, 10)
-        redirect_stdout(devnull) do
-            report(fc)
-        end
-        @test true
+        @test !isempty(_capture_report(fc))
     end
 
     @testset "summary.jl — report(LP variants)" begin
         rng = Random.MersenneTwister(9032)
         Y = randn(rng, 100, 3)
         lp = estimate_lp(Y, 1, 8; lags=2)
-        redirect_stdout(devnull) do
-            report(lp)
-        end
-        @test true
+        @test !isempty(_capture_report(lp))
     end
 
     @testset "summary.jl — report(ARIMA)" begin
         rng = Random.MersenneTwister(9033)
         y = randn(rng, 200)
         ar = estimate_ar(y, 2)
-        redirect_stdout(devnull) do
-            report(ar)
-        end
-        @test true
+        @test !isempty(_capture_report(ar))
     end
 
     @testset "summary.jl — report(FactorModel)" begin
         rng = Random.MersenneTwister(9034)
         X = randn(rng, 100, 10)
         fm = estimate_factors(X, 3)
-        redirect_stdout(devnull) do
-            report(fm)
-        end
-        @test true
+        @test !isempty(_capture_report(fm))
     end
 
     @testset "summary.jl — report(GARCHModel)" begin
         rng = Random.MersenneTwister(9035)
         y = randn(rng, 500)
         m = estimate_garch(y, 1, 1)
-        redirect_stdout(devnull) do
-            report(m)
-        end
-        @test true
+        @test !isempty(_capture_report(m))
     end
 
     @testset "summary.jl — report(filter types)" begin
         rng = Random.MersenneTwister(9036)
         y = cumsum(randn(rng, 200))
-        redirect_stdout(devnull) do
-            report(hp_filter(y))
-            report(hamilton_filter(y))
-            report(beveridge_nelson(y))
-            report(baxter_king(y))
-            report(boosted_hp(y))
-        end
-        @test true
+        @test !isempty(_capture_report(hp_filter(y), hamilton_filter(y),
+                                       beveridge_nelson(y), baxter_king(y),
+                                       boosted_hp(y)))
     end
 
     @testset "summary.jl — report(IRF/FEVD/HD)" begin
@@ -315,12 +308,7 @@ end
         irf_r = irf(m, 8)
         fevd_r = fevd(m, 8)
         hd_r = historical_decomposition(m, size(m.Y, 1) - m.p)
-        redirect_stdout(devnull) do
-            report(irf_r)
-            report(fevd_r)
-            report(hd_r)
-        end
-        @test true
+        @test !isempty(_capture_report(irf_r, fevd_r, hd_r))
     end
 
     @testset "summary.jl — report(DSGESolution)" begin
@@ -332,21 +320,14 @@ end
         end
         spec = compute_steady_state(spec)
         sol = solve(spec; method=:gensys)
-        redirect_stdout(devnull) do
-            report(sol)
-            report(spec)
-        end
-        @test true
+        @test !isempty(_capture_report(sol, spec))
     end
 
     @testset "summary.jl — report(BVARPosterior)" begin
         rng = Random.MersenneTwister(9039)
         Y = randn(rng, 100, 3)
         post = estimate_bvar(Y, 2; n_draws=25)
-        redirect_stdout(devnull) do
-            report(post)
-        end
-        @test true
+        @test !isempty(_capture_report(post))
     end
 
     @testset "summary.jl — report(GMM)" begin
@@ -354,10 +335,7 @@ end
         data_gmm = randn(rng, 200, 3)
         g = (theta, data) -> data[:, 2:3] .* (data[:, 1] .- theta[1])
         gmm_m = estimate_gmm(g, [0.0], data_gmm)
-        redirect_stdout(devnull) do
-            report(gmm_m)
-        end
-        @test true
+        @test !isempty(_capture_report(gmm_m))
     end
 
     @testset "summary.jl — report(VECMGrangerResult)" begin
@@ -365,10 +343,7 @@ end
         Y = cumsum(randn(rng, 150, 3), dims=1)
         vecm = estimate_vecm(Y, 2; rank=1)
         gc = granger_causality_vecm(vecm, 1, 2)
-        redirect_stdout(devnull) do
-            report(gc)
-        end
-        @test true
+        @test !isempty(_capture_report(gc))
     end
 
     @testset "summary.jl — point_estimate/has_uncertainty/uncertainty_bounds" begin
@@ -436,10 +411,7 @@ end
 
         est = M.estimate_dsge(spec, Y_obs, [:rho];
             method=:euler_gmm, weighting=:identity)
-        redirect_stdout(devnull) do
-            report(est)
-        end
-        @test true
+        @test !isempty(_capture_report(est))
     end
 
     # =========================================================================

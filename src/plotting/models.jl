@@ -742,17 +742,219 @@ end
 # StructuralDFM
 # =============================================================================
 
-"""
-    plot_result(m::StructuralDFM; title="", save_path=nothing, var=nothing, ncols=0)
+const _SDFM_PLOT_VIEWS = (:irf, :impact, :fevd, :factors, :shocks, :loadings)
 
-Plot Structural DFM: structural IRFs for panel variables.
+"""
+    plot_result(m::StructuralDFM; view=:irf, var=nothing, ncols=0, title="", save_path=nothing)
+
+Plot a fitted structural DFM.
+
+# Views
+- `:irf` — panel structural IRFs (default)
+- `:impact` — impact heatmap (observables × shocks at horizon 0)
+- `:fevd` — panel FEVD stacked areas
+- `:factors` — estimated factor series
+- `:shocks` — structural shock series
+- `:loadings` — loading heatmap (variables × factors)
 """
 function plot_result(m::StructuralDFM{T};
-                     title::String="", save_path::Union{String,Nothing}=nothing,
-                     var::Union{Nothing,Int,String}=nothing, ncols::Int=0) where {T}
-    r = irf(m, size(m.structural_irf, 1))
+                     view::Symbol=:irf,
+                     var::Union{Nothing,Int,String}=nothing,
+                     ncols::Int=0,
+                     max_vars::Int=12,
+                     max_factors::Int=5,
+                     title::String="",
+                     save_path::Union{String,Nothing}=nothing) where {T}
+    view in _SDFM_PLOT_VIEWS || throw(ArgumentError(
+        "Unknown view: :$view. Use $(_SDFM_PLOT_VIEWS)"))
+    p = if view === :irf
+        _plot_sdfm_irf(m; var=var, ncols=ncols, title=title)
+    elseif view === :impact
+        _plot_sdfm_impact(m; max_vars=max_vars, title=title)
+    elseif view === :fevd
+        _plot_sdfm_fevd(m; var=var, ncols=ncols, title=title)
+    elseif view === :factors
+        _plot_sdfm_factors(m; max_factors=max_factors, title=title)
+    elseif view === :shocks
+        _plot_sdfm_shocks(m; title=title)
+    else
+        _plot_sdfm_loadings(m; max_vars=max_vars, title=title)
+    end
+    save_path !== nothing && save_plot(p, save_path)
+    p
+end
+
+function _plot_sdfm_irf(m::StructuralDFM; var, ncols::Int, title::String)
+    H = size(m.structural_irf, 1)
+    H < 1 && (H = 40)
+    r = irf(m, H)
     plot_result(r; title=isempty(title) ? "Structural DFM IRFs" : title,
-                save_path=save_path, var=var, ncols=ncols)
+                var=var, ncols=ncols)
+end
+
+function _plot_sdfm_impact(m::StructuralDFM{T}; max_vars::Int, title::String) where {T}
+    H = size(m.structural_irf, 1)
+    H < 1 && (H = 1)
+    impact = irf(m, max(H, 1)).values[1, :, :]   # N × q
+    N, q = size(impact)
+    shown = min(N, max_vars)
+    rows = String[m.varnames[i] for i in 1:shown]
+    cols = copy(m.shock_names)
+    id = _next_plot_id("sdfm_imp")
+    data_json = _matrix_heatmap_json(impact[1:shown, :], rows, cols)
+    js = _render_heatmap_js(id, data_json, _json(rows), _json(cols);
+                            scale=:diverging, midpoint=0,
+                            xlabel="Shock", ylabel="Variable", tip_label="Impact")
+    ptitle = _cap_title("Impact (h = 0)", shown, N)
+    fig = isempty(title) ? "Structural DFM impact" : title
+    _make_plot([_PanelSpec(id, ptitle, js)]; title=fig, ncols=1,
+               note=_cap_note("variables", shown, N, "max_vars"))
+end
+
+function _plot_sdfm_fevd(m::StructuralDFM; var, ncols::Int, title::String)
+    H = max(size(m.structural_irf, 1), 8)
+    f = fevd(m, H; space=:panel)
+    plot_result(f; var=var, ncols=ncols,
+                title=isempty(title) ? "Structural DFM FEVD" : title)
+end
+
+function _plot_sdfm_factors(m::StructuralDFM; max_factors::Int, title::String)
+    F = factors(m)
+    T_obs, r = size(F)
+    n_plot = min(r, max_factors)
+    names = ["Factor $i" for i in 1:n_plot]
+    id = _next_plot_id("sdfm_fac")
+    data = _timeseries_data_json(F[:, 1:n_plot], names)
+    s = _series_json(names, _palette_take(n_plot); keys=["v$i" for i in 1:n_plot])
+    js = _render_line_js(id, data, s; xlabel="Period", ylabel="Factor")
+    ptitle = _cap_title("Factors", n_plot, r)
+    fig = isempty(title) ? "Structural DFM factors" : title
+    _make_plot([_PanelSpec(id, ptitle, js)]; title=fig, ncols=1,
+               note=_cap_note("factors", n_plot, r, "max_factors"))
+end
+
+function _plot_sdfm_shocks(m::StructuralDFM; title::String)
+    ε = structural_shocks(m)
+    names = copy(m.shock_names)
+    q = length(names)
+    id = _next_plot_id("sdfm_shk")
+    data = _timeseries_data_json(ε, names)
+    s = _series_json(names, _palette_take(q); keys=["v$i" for i in 1:q])
+    refs = "[{\"value\":0,\"color\":\"#999\",\"dash\":\"4,3\"}]"
+    js = _render_line_js(id, data, s; xlabel="Period", ylabel="Shock",
+                         ref_lines_json=refs)
+    fig = isempty(title) ? "Structural DFM shocks" : title
+    _make_plot([_PanelSpec(id, "Structural shocks", js)]; title=fig, ncols=1)
+end
+
+function _plot_sdfm_loadings(m::StructuralDFM; max_vars::Int, title::String)
+    Λ = loadings(m)
+    N, r = size(Λ)
+    shown = min(N, max_vars)
+    rows = String[m.varnames[i] for i in 1:shown]
+    cols = ["Factor $j" for j in 1:r]
+    id = _next_plot_id("sdfm_load")
+    data_json = _matrix_heatmap_json(Λ[1:shown, :], rows, cols)
+    js = _render_heatmap_js(id, data_json, _json(rows), _json(cols);
+                            scale=:diverging, midpoint=0,
+                            xlabel="Factor", ylabel="Variable", tip_label="Loading")
+    ptitle = _cap_title("Loadings", shown, N)
+    fig = isempty(title) ? "Structural DFM loadings" : title
+    _make_plot([_PanelSpec(id, ptitle, js)]; title=fig, ncols=1,
+               note=_cap_note("variables", shown, N, "max_vars"))
+end
+
+# =============================================================================
+# GeneralizedDynamicFactorModel
+# =============================================================================
+
+const _GDFM_PLOT_VIEWS = (:eigenvalues, :common, :variance)
+
+"""
+    plot_result(m::GeneralizedDynamicFactorModel; view=:eigenvalues, var=nothing, title="", save_path=nothing)
+
+Plot a fitted generalized dynamic factor model.
+
+# Views
+- `:eigenvalues` — first `min(q+2, 6)` dynamic eigenvalues against frequency (log₁₀ scale)
+- `:common` — overlay of `x_i` and the common component `χ_i` for `var=`
+- `:variance` — per-variable common-variance share
+"""
+function plot_result(m::GeneralizedDynamicFactorModel{T};
+                     view::Symbol=:eigenvalues,
+                     var::Union{Nothing,Int,String}=nothing,
+                     max_eigs::Int=6,
+                     max_vars::Int=20,
+                     title::String="",
+                     save_path::Union{String,Nothing}=nothing) where {T}
+    view in _GDFM_PLOT_VIEWS || throw(ArgumentError(
+        "Unknown view: :$view. Use $(_GDFM_PLOT_VIEWS)"))
+    p = if view === :eigenvalues
+        _plot_gdfm_eigenvalues(m; max_eigs=max_eigs, title=title)
+    elseif view === :common
+        _plot_gdfm_common(m; var=var, title=title)
+    else
+        _plot_gdfm_variance(m; max_vars=max_vars, title=title)
+    end
+    save_path !== nothing && save_plot(p, save_path)
+    p
+end
+
+function _plot_gdfm_eigenvalues(m::GeneralizedDynamicFactorModel{T};
+                                max_eigs::Int, title::String) where {T}
+    dat = spectral_eigenvalue_plot_data(m)
+    freq = dat.frequencies
+    ev = dat.eigenvalues                      # N × n_freq
+    n_eigs_total = size(ev, 1)
+    n_plot = min(max(m.q + 2, 1), max_eigs, n_eigs_total)
+    names = ["λ$i" for i in 1:n_plot]
+    rows = Vector{Pair{String,String}}[]
+    floor = T(1e-12)
+    for j in 1:length(freq)
+        row = Pair{String,String}["x" => _json(freq[j])]
+        for i in 1:n_plot
+            push!(row, "v$i" => _json(log10(max(ev[i, j], floor))))
+        end
+        push!(rows, row)
+    end
+    id = _next_plot_id("gdfm_eig")
+    data = _json_array_of_objects(rows)
+    s = _series_json(names, _palette_take(n_plot); keys=["v$i" for i in 1:n_plot])
+    js = _render_line_js(id, data, s; xlabel="Frequency", ylabel="log₁₀ eigenvalue")
+    ptitle = _cap_title("Dynamic eigenvalues", n_plot, n_eigs_total)
+    fig = isempty(title) ? "GDFM dynamic eigenvalues" : title
+    _make_plot([_PanelSpec(id, ptitle, js)]; title=fig, ncols=1,
+               note=_cap_note("eigenvalues", n_plot, n_eigs_total, "max_eigs"))
+end
+
+function _plot_gdfm_common(m::GeneralizedDynamicFactorModel; var, title::String)
+    i = _resolve_var(var, m.varnames, 1)
+    names = [m.varnames[i], "Common"]
+    Y = hcat(m.X[:, i], m.common_component[:, i])
+    id = _next_plot_id("gdfm_com")
+    data = _timeseries_data_json(Y, names)
+    s = _series_json(names, _palette_take(2); keys=["v1", "v2"])
+    js = _render_line_js(id, data, s; xlabel="Period", ylabel=m.varnames[i])
+    fig = isempty(title) ? "GDFM common component" : title
+    _make_plot([_PanelSpec(id, names[1], js)]; title=fig, ncols=1)
+end
+
+function _plot_gdfm_variance(m::GeneralizedDynamicFactorModel; max_vars::Int, title::String)
+    share = common_variance_share(m)
+    N = length(share)
+    shown = min(N, max_vars)
+    rows = Vector{Pair{String,String}}[]
+    for i in 1:shown
+        push!(rows, ["x" => _json(m.varnames[i]), "share" => _json(share[i])])
+    end
+    id = _next_plot_id("gdfm_var")
+    data = _json_array_of_objects(rows)
+    s = _series_json(["Common share"], [_PLOT_COLORS[1]]; keys=["share"])
+    js = _render_bar_js(id, data, s; mode="grouped", ylabel="Share")
+    ptitle = _cap_title("Common-variance share", shown, N)
+    fig = isempty(title) ? "GDFM variance shares" : title
+    _make_plot([_PanelSpec(id, ptitle, js)]; title=fig, ncols=1,
+               note=_cap_note("variables", shown, N, "max_vars"))
 end
 
 # =============================================================================

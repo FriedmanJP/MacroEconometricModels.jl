@@ -15,6 +15,7 @@
 # Uses shared plot_test_helpers.jl assertions (Testing Rules 1-7).
 
 using Test, Random, DataFrames
+using MacroEconometricModels
 
 isdefined(@__MODULE__, :check_plot) || include(joinpath(@__DIR__, "plot_test_helpers.jl"))
 
@@ -131,6 +132,41 @@ const _MEM_MODELS = MacroEconometricModels
         @test occursin("Structural DFM", p.html)
         # var selection delegates through the IRF dispatch (C3).
         check_plot(plot_result(sdfm; var=1))
+        hd = historical_decomposition(sdfm)
+        check_plot(plot_result(hd)); assert_all_json_valid(plot_result(hd))
+        gdfm = estimate_gdfm(X, q; standardize=false)
+        check_plot(plot_result(historical_decomposition(gdfm)))
+        fc = forecast(sdfm, 6; ci_method=:none)
+        check_plot(plot_result(fc)); assert_all_json_valid(plot_result(fc))
+        irb = irf(sdfm, 8; ci_type=:bootstrap, reps=20, rng=Random.MersenneTwister(1))
+        pb = plot_result(irb)
+        check_plot(pb); assert_all_json_valid(pb)
+        @test occursin("bootstrap CI", pb.html)
+        @test occursin("\"lo_key\"", pb.html)
+        @test !occursin("const bands = [];", pb.html)
+        for v in (:irf, :impact, :fevd, :factors, :shocks, :loadings)
+            pv = plot_result(sdfm; view=v)
+            check_plot(pv); assert_all_json_valid(pv)
+        end
+        err = try
+            plot_result(sdfm; view=:not_a_view)
+            ""
+        catch e
+            e isa ArgumentError ? e.msg : sprint(showerror, e)
+        end
+        @test occursin("irf", err) && occursin("impact", err) && occursin("fevd", err)
+        @test occursin("factors", err) && occursin("shocks", err) && occursin("loadings", err)
+        for v in (:eigenvalues, :common, :variance)
+            pg = plot_result(gdfm; view=v)
+            check_plot(pg); assert_all_json_valid(pg)
+        end
+        errg = try
+            plot_result(gdfm; view=:scree)
+            ""
+        catch e
+            e isa ArgumentError ? e.msg : sprint(showerror, e)
+        end
+        @test occursin("eigenvalues", errg) && occursin("common", errg) && occursin("variance", errg)
     end
 
     # =========================================================================

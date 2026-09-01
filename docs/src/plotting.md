@@ -99,6 +99,8 @@ Results that carry more than one natural exhibit dispatch on `view::Symbol`. Pas
 | Result type | `view=` values |
 |-------------|----------------|
 | `HASteadyState` | `:default` / `:distribution` (default), `:lorenz`, `:policy` |
+| `StructuralDFM` | `:irf` (default), `:impact`, `:fevd`, `:factors`, `:shocks`, `:loadings` |
+| `GeneralizedDynamicFactorModel` | `:eigenvalues` (default), `:common`, `:variance` |
 | `HADSGESolution` | `:distribution_dynamics` (default; alias `:distribution`), `:inequality` |
 | `CTSteadyState` | `:distribution` (default), `:policy`, `:lorenz` |
 | `CTTwoAssetSolution` | `:consumption` (default), `:density`, `:deposit`, `:liquid_drift`, `:illiquid_drift` |
@@ -269,6 +271,26 @@ Volatility, factor, DSGE, input-output, and nonlinear models. The same result ty
 
 ```@raw html
 <iframe src="../assets/plots/gmm_moment_fit.html" width="100%" height="440" frameborder="0" style="border:1px solid #ddd;border-radius:4px;"></iframe>
+```
+
+A fitted structural DFM exposes impact and FEVD views of the same identification; the GDFM plots the dynamic eigenvalues that justify ``q``.
+
+```julia
+plot_result(sdfm; view=:impact)
+plot_result(sdfm; view=:fevd)
+plot_result(gdfm; view=:eigenvalues)
+```
+
+```@raw html
+<iframe src="../assets/plots/sdfm_impact.html" width="100%" height="480" frameborder="0" style="border:1px solid #ddd;border-radius:4px;"></iframe>
+```
+
+```@raw html
+<iframe src="../assets/plots/sdfm_fevd.html" width="100%" height="460" frameborder="0" style="border:1px solid #ddd;border-radius:4px;"></iframe>
+```
+
+```@raw html
+<iframe src="../assets/plots/gdfm_eigenvalues.html" width="100%" height="440" frameborder="0" style="border:1px solid #ddd;border-radius:4px;"></iframe>
 ```
 
 An occasionally-binding-constraint (OccBin) solution path shades the periods in which the constraint binds:
