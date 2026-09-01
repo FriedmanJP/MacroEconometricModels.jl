@@ -812,6 +812,7 @@ export dsge_smoother, dsge_particle_smoother
 
 # Heterogeneous Agent DSGE types
 export HAGrid, IncomeProcess, IndividualProblem
+export CRRAUtility, CRRAMarginalUtility, CRRAInverseMarginalUtility
 export HASteadyState, HADSGESolution, KrusellSmithSolution, DenHaanAccuracy
 export HAGridDiagnostics, ha_grid_diagnostics
 export adaptive_asset_grid, adapt_ha_grid

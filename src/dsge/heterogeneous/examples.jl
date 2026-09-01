@@ -28,19 +28,14 @@ Provides pre-calibrated `ModelSpec` specifications for canonical models:
     _crra_utility(sigma_c) -> (u, u_prime, u_prime_inv)
 
 Return CRRA utility `u(c) = c^(1-sigma)/(1-sigma)` (or `log(c)` when sigma=1),
-its marginal utility, and the inverse of marginal utility.
+its marginal utility, and the inverse of marginal utility as the callable
+structs [`CRRAUtility`](@ref), [`CRRAMarginalUtility`](@ref), and
+[`CRRAInverseMarginalUtility`](@ref).
 """
 function _crra_utility(sigma_c::Float64)
-    if sigma_c ≈ 1.0
-        u   = (c::Float64) -> log(max(c, 1e-15))
-        up  = (c::Float64) -> 1.0 / max(c, 1e-15)
-        upi = (m::Float64) -> 1.0 / max(m, 1e-15)
-    else
-        u   = (c::Float64) -> max(c, 1e-15)^(1.0 - sigma_c) / (1.0 - sigma_c)
-        up  = (c::Float64) -> max(c, 1e-15)^(-sigma_c)
-        upi = (m::Float64) -> max(m, 1e-15)^(-1.0 / sigma_c)
-    end
-    return u, up, upi
+    σ = sigma_c ≈ 1.0 ? 1.0 : sigma_c
+    return CRRAUtility{Float64}(σ), CRRAMarginalUtility{Float64}(σ),
+           CRRAInverseMarginalUtility{Float64}(σ)
 end
 
 # =============================================================================

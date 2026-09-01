@@ -156,4 +156,7 @@ const _SERIALIZABLE_TYPES = Dict{String,Type}(
     "PosteriorPredictiveCheck"      => PosteriorPredictiveCheck,
     "PrefilterSpec"                 => PrefilterSpec,
     "ObservationTrends"             => ObservationTrends,
+    # ── DSER-06 HA household problem ─────────────────────────────────────────
+    "IndividualProblem"             => IndividualProblem,
+    "HouseholdSystem"               => HouseholdSystem,
 )

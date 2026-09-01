@@ -47,8 +47,10 @@
 # …) round-trip through the registry; cached `Factorization`s drop to `nothing`.
 # Bayesian DSGE results (`BayesianDSGE`, `DSGEPrior`, the three state-space
 # types, predictive / identification companions) round-trip; `H_inv` /
-# `log_det_H` are recomputed by the state-space constructors. HA / OLG / CT
-# results (`HADSGESolution`, …) are still follow-up.
+# `log_det_H` are recomputed by the state-space constructors. Household
+# problems (`IndividualProblem`, `HouseholdSystem`) round-trip via
+# `CRRAUtility` / named budget functions; HA / OLG / CT *results*
+# (`HADSGESolution`, …) are still follow-up.
 
 include("serial/registry.jl")
 include("serial/codecs.jl")

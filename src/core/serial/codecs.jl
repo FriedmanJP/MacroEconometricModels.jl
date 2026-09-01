@@ -78,6 +78,27 @@ function _ser_field(f::Function)
     Dict{String,Any}("__function__" => String(nameof(f)),
                      "module" => String(nameof(parentmodule(f))))
 end
+
+function _assert_serializable_ip_callables(ip::IndividualProblem)
+    for (val, name) in (
+        (ip.utility, "utility"),
+        (ip.utility_prime, "utility_prime"),
+        (ip.utility_prime_inv, "utility_prime_inv"),
+        (ip.budget_fn, "budget_fn"),
+        (ip.adjustment_cost, "adjustment_cost"),
+    )
+        if val isa Function && !_is_named_function(val)
+            throw(SerializationError(
+                "IndividualProblem.$name is an anonymous function; save_model needs a named function or a callable struct (see CRRAUtility)"))
+        end
+    end
+    return nothing
+end
+
+function _ser_field(ip::IndividualProblem)
+    _assert_serializable_ip_callables(ip)
+    return _struct_to_dict(ip)
+end
 const _FUNCTION_MODULES = (MacroEconometricModels, Base, Main)
 function _deser_function(d::AbstractDict)
     modname = Symbol(d["module"]); fname = Symbol(d["__function__"])

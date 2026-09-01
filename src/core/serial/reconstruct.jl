@@ -429,6 +429,52 @@ function _from_serializable(::Type{PrefilterSpec}, p::AbstractDict, ::Int)
     )
 end
 
+function _to_serializable(ip::IndividualProblem)
+    _assert_serializable_ip_callables(ip)
+    return _capture_fields(ip)
+end
+
+function _from_serializable(::Type{IndividualProblem}, p::AbstractDict, ::Int)
+    beta = _deser_field(p["beta"])
+    T = typeof(beta)
+    T <: AbstractFloat || (T = Float64)
+    labor = _deser_field(get(p, "labor", nothing))
+    IndividualProblem{T}(
+        _deser_field(p["utility"]),
+        _deser_field(p["utility_prime"]),
+        _deser_field(p["utility_prime_inv"]),
+        T(beta),
+        _deser_field(p["budget_fn"]),
+        Vector{T}(_deser_field(p["borrowing_constraint"])),
+        _deser_field(p["adjustment_cost"]),
+        Int(p["n_asset_dims"]);
+        labor=labor,
+    )
+end
+
+function _from_serializable(::Type{HouseholdSystem}, p::AbstractDict, ::Int)
+    individual = _deser_field(p["individual"])
+    individual isa IndividualProblem || throw(SerializationError(
+        "HouseholdSystem.individual is not an IndividualProblem"))
+    T = typeof(individual.beta)
+    T <: AbstractFloat || (T = Float64)
+    agg_raw = _deser_field(p["aggregation"])
+    aggregation = Pair{Symbol,Function}[
+        _as_symbol(pr.first) => pr.second for pr in agg_raw
+    ]
+    het = _deser_field(p["het_params"])
+    het_params = Dict{Symbol,T}(_as_symbol(k) => convert(T, v) for (k, v) in het)
+    HouseholdSystem{T}(
+        individual,
+        _deser_field(p["income"]),
+        _deser_field(p["grid"]),
+        aggregation,
+        het_params;
+        model=_as_symbol(p["model"]),
+        distribution=_as_symbol(p["distribution"]),
+    )
+end
+
 function _from_serializable(::Type{ObservationTrends}, p::AbstractDict, ::Int)
     function _trend_term(x, ::Type{S}) where {S}
         x isa Symbol && return x

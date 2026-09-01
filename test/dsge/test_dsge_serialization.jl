@@ -918,3 +918,155 @@ end
         @test btr2.trends.linears == btr.trends.linears
     end
 end
+
+# =============================================================================
+# DSER-06 — CRRAUtility callable structs (#764)
+# =============================================================================
+
+# Named `Main` budget so the Function codec round-trips in this session.
+function _dser06_named_budget(a::Float64, e::Float64, prices::Dict{Symbol,Float64})
+    (1.0 + prices[:r]) * a + prices[:w] * e
+end
+
+const _DSER06_TYPES = ("HouseholdSystem", "IndividualProblem")
+
+function _dser06_prices(hh)
+    Dict{Symbol,Float64}(:r => 0.02, :w => 1.1, :div => 0.05,
+                         :r_b => 0.01, :tau => 0.0)
+end
+
+function _dser06_assert_callables(hh, hh2)
+    ip, ip2 = hh.individual, hh2.individual
+    @test ip2.utility(1.3) == ip.utility(1.3)
+    @test ip2.utility_prime(1.3) == ip.utility_prime(1.3)
+    @test ip2.utility_prime_inv(0.7) == ip.utility_prime_inv(0.7)
+    prices = _dser06_prices(hh)
+    if ip.n_asset_dims == 1
+        @test ip2.budget_fn(1.0, 1.0, prices) == ip.budget_fn(1.0, 1.0, prices)
+    else
+        @test ip2.budget_fn(1.0, 1.0, 1.0, prices) == ip.budget_fn(1.0, 1.0, 1.0, prices)
+        @test ip2.adjustment_cost(0.1, 2.0) == ip.adjustment_cost(0.1, 2.0)
+    end
+    @test ip2.budget_fn === ip.budget_fn
+    return hh2
+end
+
+@testset "DSER-06 CRRAUtility structs and household round-trip" begin
+    @testset "registry" begin
+        for name in _DSER06_TYPES
+            @test haskey(_MEM._SERIALIZABLE_TYPES, name)
+            @test string(nameof(_MEM._SERIALIZABLE_TYPES[name])) == name
+        end
+        if isdefined(_MEM, :_SERIALIZATION_EXCLUDED)
+            for name in _DSER06_TYPES
+                @test !haskey(_MEM._SERIALIZATION_EXCLUDED, name)
+            end
+        end
+        @test CRRAUtility isa Type
+        @test CRRAMarginalUtility isa Type
+        @test CRRAInverseMarginalUtility isa Type
+    end
+
+    @testset "CRRA values match the 1e-15 floor and sigma==1 log branch" begin
+        u, up, upi = _MEM._crra_utility(1.0)
+        @test u isa CRRAUtility
+        @test up isa CRRAMarginalUtility
+        @test upi isa CRRAInverseMarginalUtility
+        @test u(1.3) == log(1.3)
+        @test up(1.3) == 1.0 / 1.3
+        @test upi(0.7) == 1.0 / 0.7
+        @test u(0.0) == log(1e-15)
+        @test up(0.0) == 1.0 / 1e-15
+        @test upi(0.0) == 1.0 / 1e-15
+
+        u2, up2, upi2 = _MEM._crra_utility(2.0)
+        @test u2(1.3) == 1.3^(1.0 - 2.0) / (1.0 - 2.0)
+        @test up2(1.3) == 1.3^(-2.0)
+        @test upi2(0.7) == 0.7^(-1.0 / 2.0)
+        @test u2(0.0) == (1e-15)^(1.0 - 2.0) / (1.0 - 2.0)
+        enc = _MEM._ser_field(u)
+        @test enc isa AbstractDict && enc["__struct__"] == "CRRAUtility"
+        _MEM._assert_plain_payload(enc)
+        @test _MEM._deser_field(enc).sigma == u.sigma
+    end
+
+    @testset "HAGrid / IncomeProcess / LaborSupply are generic" begin
+        grid = HAGrid(; assets=(0.0, 10.0, 5), income_states=2, grid_type=:linear)
+        g2 = _MEM._deser_field(_MEM._ser_field(grid))
+        @test g2 isa HAGrid
+        @test g2.grids == grid.grids && g2.bounds == grid.bounds
+        @test g2.total_individual_states == grid.total_individual_states
+
+        inc = rouwenhorst(0.9, 0.1, 3)
+        i2 = _MEM._deser_field(_MEM._ser_field(inc))
+        @test i2 isa IncomeProcess
+        @test i2.states == inc.states && i2.transition == inc.transition
+
+        ls = LaborSupply(; kind=:ghh, psi=3.0, frisch=0.5)
+        ls2 = _MEM._deser_field(_MEM._ser_field(ls))
+        @test ls2 isa LaborSupply
+        @test ls2.kind === :ghh && ls2.psi == ls.psi && ls2.frisch == ls.frisch
+    end
+
+    @testset "example households round-trip" begin
+        for name in (:krusell_smith, :one_asset_hank, :two_asset_hank, :huggett)
+            spec = load_ha_example(name)
+            hh = first(values(spec.agents))
+            hh2 = _assert_roundtrip(hh)
+            _dser06_assert_callables(hh, hh2)
+        end
+        spec_el = _MEM._endogenous_labor_example()
+        hh = first(values(spec_el.agents))
+        hh2 = _assert_roundtrip(hh)
+        _dser06_assert_callables(hh, hh2)
+        @test hh2.individual.labor isa LaborSupply
+        @test hh2.individual.labor.kind === hh.individual.labor.kind
+    end
+
+    @testset "reloaded household reproduces KS steady state" begin
+        spec = load_ha_example(:krusell_smith)
+        hh = first(values(spec.agents))
+        hh2 = _roundtrip(hh)
+        spec2 = _MEM._copy_model_spec(spec; agents=(household=hh2,))
+        ss = compute_steady_state(spec)
+        ss2 = compute_steady_state(spec2)
+        @test ss2.converged && ss.converged
+        for k in keys(ss.prices)
+            @test ss2.prices[k] ≈ ss.prices[k] atol=1e-12
+        end
+        for k in keys(ss.aggregates)
+            @test ss2.aggregates[k] ≈ ss.aggregates[k] atol=1e-12
+        end
+        @test ss2.distribution ≈ ss.distribution atol=1e-12
+    end
+
+    @testset "anonymous IndividualProblem is a SerializationError" begin
+        ip = IndividualProblem{Float64}(
+            c -> log(max(c, 1e-15)), c -> 1.0 / max(c, 1e-15),
+            m -> 1.0 / max(m, 1e-15), 0.99,
+            (a, e, prices) -> (1 + prices[:r]) * a + prices[:w] * e,
+            [0.0], nothing, 1)
+        err = try
+            _MEM._ser_field(ip)
+            nothing
+        catch e
+            e
+        end
+        @test err isa SerializationError
+        msg = sprint(showerror, err)
+        @test occursin("IndividualProblem.utility", msg)
+        @test occursin("anonymous function", msg)
+        @test occursin("CRRAUtility", msg)
+    end
+
+    @testset "Main-named budget function round-trips" begin
+        u, up, upi = _MEM._crra_utility(1.0)
+        ip = IndividualProblem{Float64}(u, up, upi, 0.99, _dser06_named_budget,
+                                        [0.0], nothing, 1)
+        ip2 = _assert_roundtrip(ip)
+        prices = Dict{Symbol,Float64}(:r => 0.02, :w => 1.1)
+        @test ip2.budget_fn === _dser06_named_budget
+        @test ip2.budget_fn(1.0, 1.0, prices) == ip.budget_fn(1.0, 1.0, prices)
+        @test ip2.utility(1.3) == ip.utility(1.3)
+    end
+end
