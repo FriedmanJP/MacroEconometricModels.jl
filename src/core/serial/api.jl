@@ -9,6 +9,10 @@
 # ─────────────────────────────────────────────────────────────────────────────
 
 _to_serializable(m) = _capture_fields(m)
+function _to_serializable(c::FunctionConstraint)
+    _assert_named_function_constraint(c)
+    return _capture_fields(c)
+end
 
 function _build_container(m)
     tname = string(nameof(typeof(m)))
@@ -81,7 +85,9 @@ pre-trend, negative weights, HonestDiD), filter/spectral/nonparametric results
 (HP/Hamilton/BN/BK/boosted-HP/X-13, ACF/periodogram/cross-spectrum, kernel
 density/regression/LOWESS, data summary/diagnostics), test-statistic results
 (unit-root/panel/cointegration/breaks/diagnostics, including Bai–Perron,
-panel-unit-root summaries, and SADF/GSADF bubble tests), Johansen/GPH/local-Whittle companions, and the data containers
+panel-unit-root summaries, and SADF/GSADF bubble tests), counterfactual/OPP
+results (policy causal effects, rules/loss, OPP, model bank, path-floor and
+named-function constraints), Johansen/GPH/local-Whittle companions, and the data containers
 (`TimeSeriesData`, `PanelData`, `CrossSectionData`, `IOData`); the full set is
 `MacroEconometricModels._SERIALIZABLE_TYPES`. Exported
 concrete structs that are not saveable are listed in `_SERIALIZATION_EXCLUDED`

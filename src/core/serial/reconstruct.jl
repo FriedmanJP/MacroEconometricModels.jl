@@ -39,6 +39,7 @@ function _infer_float_param_value(a)
         E = eltype(a)
         E <: AbstractFloat && return E
         E <: Complex{<:AbstractFloat} && return real(E)
+        a isa AbstractRange && return nothing  # PathFloorConstraint.horizons may be 1:typemax(Int)
         for x in a
             P = _infer_float_param_value(x)
             P !== nothing && return P

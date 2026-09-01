@@ -77,6 +77,16 @@ function _ser_field(f::Function)
     Dict{String,Any}("__function__" => String(nameof(f)),
                      "module" => String(nameof(parentmodule(f))))
 end
+
+function _assert_named_function_constraint(c::FunctionConstraint)
+    _is_named_function(c.g) || throw(SerializationError(
+        "FunctionConstraint :$(c.name) wraps an anonymous function; define it as a named function to make the OPP result saveable"))
+    return c
+end
+function _ser_field(c::FunctionConstraint)
+    _assert_named_function_constraint(c)
+    return _struct_to_dict(c)
+end
 const _FUNCTION_MODULES = (MacroEconometricModels, Base, Main)
 function _deser_function(d::AbstractDict)
     modname = Symbol(d["module"]); fname = Symbol(d["__function__"])

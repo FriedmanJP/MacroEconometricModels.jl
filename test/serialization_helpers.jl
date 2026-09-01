@@ -18,6 +18,9 @@ function _deep_equal(a, b)
         return (isnan(a) && b isa Number && isnan(b)) || isequal(a, b)
     end
     (a isa AbstractString || a isa Symbol || a isa Enum || a isa Bool) && return isequal(a, b)
+    # UnitRange (e.g. PathFloorConstraint.horizons = 1:typemax(Int)) is an
+    # AbstractArray; comparing elementwise would not terminate.
+    a isa AbstractRange && return isequal(a, b)
     if a isa AbstractArray
         b isa AbstractArray || return false
         size(a) == size(b) || return false
