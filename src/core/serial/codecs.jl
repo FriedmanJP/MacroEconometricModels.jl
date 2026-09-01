@@ -13,11 +13,12 @@
 _is_plain_eltype(::Type{S}) where {S} = S <: Union{Number,AbstractString,Symbol,Char,Bool,Enum}
 
 # Is `x` a MacroEconometricModels struct we should flatten recursively? Types
-# from Base / LinearAlgebra / Distributions (parentmodule ≠ this package) fall
-# through to JLD2's own storage; the manifest and covariance estimators have
-# their own tagged-dict methods below and never reach here. Functions are
-# singleton structs whose parentmodule is this package for named helpers;
-# they are handled by the Function codec, not as MEM structs.
+# from Base / LinearAlgebra (parentmodule ≠ this package) fall through; named
+# `Distributions.jl` objects use the `__distribution__` codec below and never
+# reach JLD2's internal layout. The manifest and covariance estimators have
+# their own tagged-dict methods and never reach here. Functions are singleton
+# structs whose parentmodule is this package for named helpers; they are
+# handled by the Function codec, not as MEM structs.
 function _is_mem_struct(x)
     x isa Function && return false
     T = typeof(x)
@@ -95,6 +96,63 @@ _deser_sparse(d::AbstractDict) = SparseMatrixCSC(Int(d["m"]), Int(d["n"]),
     Vector{Int}(d["colptr"]), Vector{Int}(d["rowval"]), d["nzval"])
 
 _ser_field(::Factorization) = nothing
+
+# Closed set of named Distributions.jl types with plain `params`. InverseGamma1
+# (package type), affine LocationScale/AffineDistribution, and Truncated are
+# special-cased; anything else — MixtureModel, user-defined `<: Distribution` —
+# is a SerializationError so JLD2 never stores Distributions internals.
+const _DISTRIBUTION_CTORS = Dict{String,Function}(
+    "Normal"        => (ps) -> Normal(ps...),
+    "Gamma"         => (ps) -> Gamma(ps...),
+    "Beta"          => (ps) -> Beta(ps...),
+    "InverseGamma"  => (ps) -> InverseGamma(ps...),
+    "Uniform"       => (ps) -> Uniform(ps...),
+    "LogNormal"     => (ps) -> LogNormal(ps...),
+    "Exponential"   => (ps) -> Exponential(ps...),
+    "TDist"         => (ps) -> TDist(ps...),
+    "Cauchy"        => (ps) -> Cauchy(ps...),
+)
+
+function _ser_field(d::Distribution)
+    if d isa InverseGamma1
+        return Dict{String,Any}("__distribution__" => "InverseGamma1",
+                                "s" => d.s, "nu" => d.nu)
+    elseif d isa LocationScale
+        return Dict{String,Any}("__distribution__" => "Affine",
+                                "mu" => d.μ, "sigma" => d.σ,
+                                "base" => _ser_field(d.ρ))
+    elseif d isa Truncated
+        return Dict{String,Any}("__distribution__" => "Truncated",
+                                "lower" => d.lower, "upper" => d.upper,
+                                "base" => _ser_field(d.untruncated))
+    end
+    name = string(nameof(typeof(d)))
+    if haskey(_DISTRIBUTION_CTORS, name)
+        return Dict{String,Any}("__distribution__" => name,
+                                "params" => collect(Distributions.params(d)))
+    end
+    throw(SerializationError(
+        "Distribution subtype $(typeof(d)) cannot be serialized; only named " *
+        "Distributions.jl types with plain fields (plus InverseGamma1, affine, " *
+        "and truncated wrappers) are supported"))
+end
+
+function _deser_distribution(d::AbstractDict)
+    name = String(d["__distribution__"])
+    if name == "InverseGamma1"
+        return InverseGamma1(d["s"], d["nu"])
+    elseif name == "Affine"
+        base = _deser_field(d["base"])
+        return d["mu"] + d["sigma"] * base
+    elseif name == "Truncated"
+        base = _deser_field(d["base"])
+        return truncated(base, d["lower"], d["upper"])
+    elseif haskey(_DISTRIBUTION_CTORS, name)
+        ps = _deser_field(d["params"])
+        return _DISTRIBUTION_CTORS[name](ps)
+    end
+    throw(SerializationError("unknown distribution '$name' in serialized payload"))
+end
 
 function _ser_field(x)
     x === nothing && return nothing
@@ -185,6 +243,7 @@ function _deser_field(x)
         haskey(x, "__pair__")        && return _deser_pair(x)
         haskey(x, "__function__")    && return _deser_function(x)
         haskey(x, "__sparse__")      && return _deser_sparse(x)
+        haskey(x, "__distribution__") && return _deser_distribution(x)
         haskey(x, "__manifest__")    && return _manifest_from_dict(x)
         haskey(x, "__estimator__")   && return _cov_from_dict(x)
         haskey(x, "__struct__")      && return _deser_struct(x)

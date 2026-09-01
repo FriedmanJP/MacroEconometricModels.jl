@@ -20,8 +20,10 @@
 #      MacroEconometricModels struct (a `VECMModel`'s `JohansenResult`, an
 #      `IOData`'s `IOMetaData`, a `StructuralDFM`'s wrapped `VARModel`, …) are
 #      flattened recursively to tagged dicts. Leaf codecs also flatten `Expr`,
-#      `NamedTuple`, `Pair`, named `Function`, and `SparseMatrixCSC`; anonymous
-#      functions and `Factorization`s drop to `nothing`.
+#      `NamedTuple`, `Pair`, named `Function`, `SparseMatrixCSC`, and named
+#      `Distributions.jl` objects (`__distribution__`); anonymous functions and
+#      `Factorization`s drop to `nothing`. User-defined `<: Distribution`
+#      subtypes are rejected.
 #   2. `_build_container(m)` wraps that payload with a metadata header: the
 #      `format_version`, the package + Julia versions, a timestamp, the result
 #      type name, and (when present) the reproducibility manifest.
@@ -43,8 +45,10 @@
 # closure; a programmatic closure warns once and drops. Representative-agent
 # solutions (`LinearDSGE`, `DSGESolution`, perturbation / projection / OccBin,
 # …) round-trip through the registry; cached `Factorization`s drop to `nothing`.
-# Bayesian / HA / OLG / CT results (`BayesianDSGE`, `HADSGESolution`, …) are
-# still follow-up.
+# Bayesian DSGE results (`BayesianDSGE`, `DSGEPrior`, the three state-space
+# types, predictive / identification companions) round-trip; `H_inv` /
+# `log_det_H` are recomputed by the state-space constructors. HA / OLG / CT
+# results (`HADSGESolution`, …) are still follow-up.
 
 include("serial/registry.jl")
 include("serial/codecs.jl")

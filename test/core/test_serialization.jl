@@ -379,14 +379,16 @@ end
         @test length(_MEM._SERIALIZABLE_TYPES) >= 50
     end
 
-    @testset "DSGE-family carve-out: Bayesian / HA results are not yet supported" begin
-        # RA solutions are registered (DSER-04). Bayesian DSGE, HA, and KS still
-        # hold distributions / household callables (DSER-05+).
-        for name in ("BayesianDSGE", "HADSGESolution", "KrusellSmithSolution")
+    @testset "DSGE-family carve-out: HA results are not yet supported" begin
+        # RA solutions (DSER-04) and Bayesian DSGE (DSER-05) are registered.
+        # HA / KS still hold household callables (DSER-06+).
+        for name in ("HADSGESolution", "KrusellSmithSolution")
             @test !haskey(_MEM._SERIALIZABLE_TYPES, name)
         end
         @test haskey(_MEM._SERIALIZABLE_TYPES, "DSGESolution")
         @test haskey(_MEM._SERIALIZABLE_TYPES, "DSGEEstimation")
+        @test haskey(_MEM._SERIALIZABLE_TYPES, "BayesianDSGE")
+        @test haskey(_MEM._SERIALIZABLE_TYPES, "DSGEPrior")
     end
 end
 

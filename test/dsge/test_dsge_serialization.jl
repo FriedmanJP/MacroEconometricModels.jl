@@ -4,7 +4,7 @@
 # This file is part of MacroEconometricModels.jl.
 # Licensed under GPL-3.0-or-later. See LICENSE for details.
 
-using Test, Random, LinearAlgebra, MacroEconometricModels
+using Test, Random, LinearAlgebra, Distributions, MacroEconometricModels
 
 # Task 4 helpers are not on this commit — copy `_MEM` / `_roundtrip`
 # from test/core/test_serialization.jl (do not include that file).
@@ -599,5 +599,322 @@ end
         e2 = _roundtrip(est)
         @test e2.theta == est.theta
         @test e2.solution.G1 == est.solution.G1
+    end
+end
+
+# =============================================================================
+# DSER-05 — Bayesian DSGE + Distribution codec (#763)
+# =============================================================================
+
+const _DSER05_TYPES = (
+    "DSGEPrior", "DSGEStateSpace", "NonlinearStateSpace", "ProjectionStateSpace",
+    "BayesianDSGE", "PosteriorMode", "BayesianDSGESimulation", "MCMCDiagnostics",
+    "IdentificationDiagnostics", "LearningRateCheck", "PriorPosteriorOverlap",
+    "PriorPredictiveResult", "PosteriorPredictiveCheck", "PrefilterSpec",
+    "ObservationTrends",
+)
+
+function _dser05_test_points(d)
+    lo = minimum(d); hi = maximum(d)
+    finite_lo = isfinite(lo) ? Float64(lo) : -5.0
+    finite_hi = isfinite(hi) ? Float64(hi) : 5.0
+    if finite_hi <= finite_lo
+        finite_hi = finite_lo + 1.0
+    end
+    # Interior of the support so logpdf is finite for truncated / bounded priors.
+    span = finite_hi - finite_lo
+    return [finite_lo + span * f for f in (0.15, 0.30, 0.50, 0.70, 0.85)]
+end
+
+function _dser05_assert_dist(d1, d2)
+    @test nameof(typeof(d1)) == nameof(typeof(d2))
+    if d1 isa InverseGamma1
+        @test d2 isa InverseGamma1
+        @test d1.s == d2.s && d1.nu == d2.nu
+    else
+        @test collect(params(d1)) == collect(params(d2))
+    end
+    @test minimum(d1) == minimum(d2)
+    @test maximum(d1) == maximum(d2)
+    for x in _dser05_test_points(d1)
+        @test logpdf(d1, x) == logpdf(d2, x)
+    end
+end
+
+struct DSER05DummyDist <: Distribution{Univariate, Continuous} end
+
+@testset "DSER-05 family registered" begin
+    for name in _DSER05_TYPES
+        @test haskey(_MEM._SERIALIZABLE_TYPES, name)
+        @test string(nameof(_MEM._SERIALIZABLE_TYPES[name])) == name
+    end
+    if isdefined(_MEM, :_SERIALIZATION_EXCLUDED)
+        for name in _DSER05_TYPES
+            @test !haskey(_MEM._SERIALIZATION_EXCLUDED, name)
+        end
+    end
+end
+
+@testset "DSER-05 Distribution codec" begin
+    ser, deser = _MEM._ser_field, _MEM._deser_field
+
+    kinds = Any[
+        dynare_prior(:normal, 0.0, 1.0),
+        dynare_prior(:gamma, 1.5, 0.25),
+        dynare_prior(:beta, 0.7, 0.1),
+        dynare_prior(:inv_gamma, 0.02, 0.05),
+        dynare_prior(:inv_gamma2, 0.02, 0.05),
+        dynare_prior(:uniform, 0.5, 0.1),
+        dynare_prior(:beta, 0.5, 0.1; lower=0.0, upper=0.9),
+        InverseGamma(2, 3),
+        truncated(Normal(0, 1), 0, 1),
+        0.2 + 0.7 * Beta(2, 3),
+        LogNormal(0.0, 1.0),
+        Exponential(2.0),
+        TDist(5.0),
+        Cauchy(0.0, 1.0),
+    ]
+    for d in kinds
+        enc = ser(d)
+        @test enc isa AbstractDict
+        @test haskey(enc, "__distribution__")
+        _MEM._assert_plain_payload(enc)
+        d2 = deser(enc)
+        _dser05_assert_dist(d, d2)
+    end
+
+    mix = MixtureModel([Normal(), Normal(1, 1)])
+    @test_throws SerializationError ser(mix)
+    err = try
+        ser(DSER05DummyDist())
+        nothing
+    catch e
+        e
+    end
+    @test err isa SerializationError
+    @test occursin("DSER05DummyDist", sprint(showerror, err))
+end
+
+@testset "DSER-05 DSGEPrior + state spaces" begin
+    prior = _MEM.DSGEPrior(Dict(
+        :ρ => dynare_prior(:beta, 0.7, 0.1),
+        :σ => dynare_prior(:inv_gamma, 0.02, 0.05),
+        :α => dynare_prior(:normal, 0.3, 0.05),
+        :φ => InverseGamma(2, 3),
+        :ψ => truncated(Normal(0.5, 0.2), 0.0, 1.0),
+        :θ => 0.2 + 0.7 * Beta(2, 3),
+    ))
+    @test prior isa _MEM.DSGEPrior
+    p2 = _assert_roundtrip(prior)
+    @test p2 isa _MEM.DSGEPrior
+    @test p2.param_names == prior.param_names
+    for (d1, d2) in zip(prior.distributions, p2.distributions)
+        _dser05_assert_dist(d1, d2)
+    end
+
+    spec = _dser04_ar1()
+    sol = solve(spec)
+    Z, d, H = _MEM._build_observation_equation(spec, [:y], [0.01])
+    ss = _MEM._build_state_space(sol, Z, d, H)
+    @test ss isa _MEM.DSGEStateSpace
+    ss2 = _roundtrip(ss)
+    @test ss2.G1 == ss.G1 && ss2.impact == ss.impact
+    @test ss2.Z == ss.Z && ss2.d == ss.d && ss2.H == ss.H && ss2.Q == ss.Q
+    @test ss2.H_inv ≈ ss.H_inv
+    @test ss2.log_det_H ≈ ss.log_det_H
+
+    psol = perturbation_solver(spec; order=2)
+    nss = _MEM._build_nonlinear_state_space(psol, Z, d, H)
+    @test nss isa _MEM.NonlinearStateSpace
+    nss2 = _roundtrip(nss)
+    @test nss2.hx == nss.hx && nss2.gx == nss.gx && nss2.order == 2
+    @test nss2.H_inv ≈ nss.H_inv
+    @test nss2.log_det_H ≈ nss.log_det_H
+
+    proj = collocation_solver(spec; grid=:tensor, degree=3, verbose=false)
+    pss = _MEM._build_projection_state_space(proj, Z, d, H)
+    @test pss isa _MEM.ProjectionStateSpace
+    pss2 = _roundtrip(pss)
+    @test pss2.coefficients == pss.coefficients
+    @test pss2.H_inv ≈ pss.H_inv
+    @test pss2.log_det_H ≈ pss.log_det_H
+end
+
+@testset "DSER-05 companion types" begin
+    pm = PosteriorMode{Float64}([0.5], [0.01;;], [100.0;;], -1.2, -0.8, -3.0,
+                                [:ρ], true, 12)
+    _assert_roundtrip(pm)
+
+    diag = MCMCDiagnostics{Float64}([:ρ], [1.01], [50.0], [40.0], [0.1], [0.9],
+                                    [0.5], [0.1], 30, :smc)
+    _assert_roundtrip(diag)
+
+    idd = IdentificationDiagnostics{Float64}([:ρ], [0.5], 1, 1, 3, 2,
+                                             [1.0], 1e-8, zeros(1, 0), true)
+    _assert_roundtrip(idd)
+
+    lrc = LearningRateCheck{Float64}([:ρ], [50, 100], [0.1 0.05], [0.9], [false], 0.2)
+    _assert_roundtrip(lrc)
+
+    ppo = PriorPosteriorOverlap{Float64}([:ρ], [0.3], [false], 0.8)
+    _assert_roundtrip(ppo)
+
+    ppr = PriorPredictiveResult{Float64}(["mean_y"], reshape([0.1], 1, 1), 10, 8, 50)
+    _assert_roundtrip(ppr)
+
+    ppc = PosteriorPredictiveCheck{Float64}(["mean_y"], [0.1], reshape([0.0], 1, 1),
+                                            [0.5], 10, 8)
+    _assert_roundtrip(ppc)
+
+    bsim = BayesianDSGESimulation{Float64}(
+        zeros(5, 1, 4), zeros(5, 1), 5, ["y"],
+        Float64[0.05, 0.16, 0.84, 0.95], zeros(3, 5, 1))
+    _assert_roundtrip(bsim)
+
+    Y = randn(MersenneTwister(763), 1, 20)
+    _, pf = apply_prefilter(Y, :demean; observables=[:y])
+    @test pf isa PrefilterSpec
+    pf2 = _assert_roundtrip(pf)
+    @test pf2.transform === :demean
+    @test invert_prefilter(pf2, zeros(1, 2); time_offset=20) ==
+          invert_prefilter(pf, zeros(1, 2); time_offset=20)
+
+    tr = observation_trends(Dict(:y => (constant=1.0, linear=:g, quadratic=0.0)), [:y])
+    @test tr.constants[1] == 1.0 && tr.linears[1] === :g
+    tr2 = _assert_roundtrip(tr)
+    @test tr2.constants[1] == 1.0
+    @test tr2.linears[1] === :g
+    mktemp() do p, _
+        save_model(tr, p)
+        tr3 = load_model(p)
+        @test tr3 isa ObservationTrends
+        @test tr3.constants[1] == 1.0
+        @test tr3.linears[1] === :g
+        @test eltype(tr3.constants) <: Union{AbstractFloat,Symbol}
+    end
+end
+
+@testset "DSER-05 BayesianDSGE Kalman SMC + consumers" begin
+    b = _suppress_warnings() do
+        spec = _dser04_ar1()
+        rng = MersenneTwister(763)
+        sim = simulate(solve(spec), 40; rng=rng)
+        priors = Dict(:ρ => Beta(2, 2))
+        estimate_dsge_bayes(spec, sim, [0.5];
+            priors=priors, method=:smc, observables=[:y],
+            n_smc=30, n_mh_steps=1, ess_target=0.5,
+            measurement_error=[0.01],
+            rng=MersenneTwister(7631))
+    end
+    @test b isa BayesianDSGE
+    @test b.state_space isa _MEM.DSGEStateSpace
+    b2 = _assert_roundtrip(b; skip=[:state_space])
+    @test b2.state_space.H_inv ≈ b.state_space.H_inv
+    @test b2.state_space.log_det_H ≈ b.state_space.log_det_H
+    @test b2.solver_kwargs == b.solver_kwargs
+
+    @test posterior_summary(b2) == posterior_summary(b)
+    @test marginal_likelihood(b2) == marginal_likelihood(b)
+    @test bayes_factor(b2, b2) == 0.0
+    @test prior_posterior_table(b2) == prior_posterior_table(b)
+    @test trace(b2, :ρ) == trace(b, :ρ)
+    @test sprint(show, b2) == sprint(show, b)
+
+    rng = MersenneTwister(1)
+    @test posterior_predictive(b2, 5; T_periods=8, rng=MersenneTwister(1)) ==
+          posterior_predictive(b, 5; T_periods=8, rng=MersenneTwister(1))
+
+    d1 = mcmc_diagnostics(b)
+    d2 = mcmc_diagnostics(b2)
+    @test d2.rhat == d1.rhat && d2.ess_bulk == d1.ess_bulk
+
+    hd = historical_decomposition(b2, Matrix(b.data'), [:y]; mode_only=true, n_draws=5)
+    @test hd isa HistoricalDecomposition
+
+    birf = irf(b2, 5; n_draws=5, rng=MersenneTwister(2))
+    @test birf isa BayesianImpulseResponse
+    bsim = simulate(b2, 8; n_draws=5, rng=MersenneTwister(3))
+    @test bsim isa BayesianDSGESimulation
+    ppc = posterior_predictive_check(b2; n_draws=5, rng=MersenneTwister(4))
+    @test ppc isa PosteriorPredictiveCheck
+    idd = identification_diagnostics(b2.spec, b2.param_names; observables=b2.observables)
+    @test idd isa IdentificationDiagnostics
+    ppo = prior_posterior_overlap(b2)
+    @test ppo isa PriorPosteriorOverlap
+    @test plot_result(b2) isa PlotOutput
+
+    mktemp() do p, _
+        save_model(b, p)
+        b3 = load_model(p)
+        @test b3 isa BayesianDSGE
+        @test sprint(show, b3) == sprint(show, b)
+        @test b3.state_space.H_inv ≈ b.state_space.H_inv
+        proj = dirname(Base.active_project())
+        cmd = `$(Base.julia_cmd()) --project=$proj -e "using MacroEconometricModels; m = load_model(raw\"$p\"); print(sprint(show, m))"`
+        loaded = read(cmd, String)
+        @test loaded == sprint(show, b)
+    end
+end
+
+@testset "DSER-05 NonlinearStateSpace / ProjectionStateSpace BayesianDSGE" begin
+    _suppress_warnings() do
+        spec = _dser04_ar1()
+        data_obs = randn(MersenneTwister(42), 1, 24) .* 0.02
+        priors = Dict(:ρ => Normal(0.5, 0.2))
+        θ0 = [0.5]
+
+        bp = estimate_dsge_bayes(spec, data_obs, θ0;
+            priors=priors, method=:smc2, observables=[:y],
+            n_smc=8, n_particles=20, n_mh_steps=1, ess_target=0.5,
+            measurement_error=[0.005],
+            solver=:perturbation, solver_kwargs=(order=2,),
+            rng=MersenneTwister(7632))
+        @test bp.state_space isa _MEM.NonlinearStateSpace
+        bp2 = _assert_roundtrip(bp; skip=[:state_space])
+        @test bp2.state_space isa _MEM.NonlinearStateSpace
+        @test bp2.state_space.H_inv ≈ bp.state_space.H_inv
+        @test bp2.solver_kwargs == bp.solver_kwargs
+
+        bj = estimate_dsge_bayes(spec, data_obs, θ0;
+            priors=priors, method=:smc2, observables=[:y],
+            n_smc=8, n_particles=20, n_mh_steps=1, ess_target=0.5,
+            measurement_error=[0.005],
+            solver=:projection, solver_kwargs=(degree=3, scale=5.0),
+            rng=MersenneTwister(7633))
+        @test bj.state_space isa _MEM.ProjectionStateSpace
+        bj2 = _assert_roundtrip(bj; skip=[:state_space])
+        @test bj2.state_space isa _MEM.ProjectionStateSpace
+        @test bj2.state_space.H_inv ≈ bj.state_space.H_inv
+    end
+end
+
+@testset "DSER-05 prefilter= and trends= on BayesianDSGE" begin
+    _suppress_warnings() do
+        spec = _dser04_ar1()
+        rng = MersenneTwister(7634)
+        sim = simulate(solve(spec), 50; rng=rng)
+        y_level = sim .+ 0.5 .+ 0.01 .* collect(1.0:50)
+        priors = Dict(:ρ => Beta(2, 2))
+
+        bpf = estimate_dsge_bayes(spec, y_level, [0.5];
+            priors=priors, method=:mh, n_draws=40, burnin=10,
+            observables=[:y], prefilter=:linear_detrend,
+            warn_trends=false, rng=MersenneTwister(7635))
+        @test bpf.prefilter isa PrefilterSpec
+        bpf2 = _assert_roundtrip(bpf; skip=[:state_space])
+        @test bpf2.prefilter isa PrefilterSpec
+        @test bpf2.prefilter.transform === :linear_detrend
+        @test bpf2.prefilter.slopes == bpf.prefilter.slopes
+
+        btr = estimate_dsge_bayes(spec, y_level, [0.5];
+            priors=priors, method=:mh, n_draws=40, burnin=10,
+            observables=[:y],
+            observation_trends=Dict(:y => (constant=0.5, linear=0.01)),
+            warn_trends=false, rng=MersenneTwister(7636))
+        @test btr.trends isa ObservationTrends
+        btr2 = _assert_roundtrip(btr; skip=[:state_space])
+        @test btr2.trends isa ObservationTrends
+        @test btr2.trends.constants == btr.trends.constants
+        @test btr2.trends.linears == btr.trends.linears
     end
 end

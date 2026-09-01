@@ -302,3 +302,151 @@ function _from_serializable_modelspec(p::AbstractDict, ver::Int)
         varnames=varnames,
     )
 end
+
+# ── DSER-05 Bayesian DSGE ────────────────────────────────────────────────────
+
+function _from_serializable(::Type{DSGEPrior}, p::AbstractDict, ::Int)
+    names = Symbol[_as_symbol(s) for s in _deser_field(p["param_names"])]
+    dists_raw = _deser_field(p["distributions"])
+    dists = Distribution[d for d in dists_raw]
+    lower = _deser_field(p["lower"])
+    T = eltype(lower)
+    T <: AbstractFloat || (T = Float64)
+    DSGEPrior{T}(names, dists, Vector{T}(lower), Vector{T}(_deser_field(p["upper"])))
+end
+
+# Inner ctors take the raw observation matrices and recompute H_inv / log_det_H.
+function _from_serializable(::Type{DSGEStateSpace}, p::AbstractDict, ::Int)
+    G1 = _deser_field(p["G1"])
+    T = eltype(G1)
+    T <: AbstractFloat || (T = Float64)
+    DSGEStateSpace{T}(
+        Matrix{T}(G1),
+        Matrix{T}(_deser_field(p["impact"])),
+        Matrix{T}(_deser_field(p["Z"])),
+        Vector{T}(_deser_field(p["d"])),
+        Matrix{T}(_deser_field(p["H"])),
+        Matrix{T}(_deser_field(p["Q"])),
+    )
+end
+
+function _from_serializable(::Type{NonlinearStateSpace}, p::AbstractDict, ::Int)
+    hx = _deser_field(p["hx"])
+    T = eltype(hx)
+    T <: AbstractFloat || (T = Float64)
+    _matT(x) = x === nothing ? nothing : Matrix{T}(x)
+    _vecT(x) = x === nothing ? nothing : Vector{T}(x)
+    NonlinearStateSpace{T}(
+        Matrix{T}(hx),
+        Matrix{T}(_deser_field(p["gx"])),
+        Matrix{T}(_deser_field(p["eta"])),
+        Vector{T}(_deser_field(p["steady_state"])),
+        Vector{Int}(_deser_field(p["state_indices"])),
+        Vector{Int}(_deser_field(p["control_indices"])),
+        Int(p["order"]),
+        _matT(_deser_field(p["hxx"])),
+        _matT(_deser_field(p["gxx"])),
+        _vecT(_deser_field(p["hsigmasigma"])),
+        _vecT(_deser_field(p["gsigmasigma"])),
+        _matT(_deser_field(p["hxxx"])),
+        _matT(_deser_field(p["gxxx"])),
+        _matT(_deser_field(p["hsigmax"])),
+        _matT(_deser_field(p["gsigmax"])),
+        _vecT(_deser_field(p["hsigmasigmasigma"])),
+        _vecT(_deser_field(p["gsigmasigmasigma"])),
+        Matrix{T}(_deser_field(p["Z"])),
+        Vector{T}(_deser_field(p["d"])),
+        Matrix{T}(_deser_field(p["H"])),
+    )
+end
+
+function _from_serializable(::Type{ProjectionStateSpace}, p::AbstractDict, ::Int)
+    coef = _deser_field(p["coefficients"])
+    T = eltype(coef)
+    T <: AbstractFloat || (T = Float64)
+    ProjectionStateSpace{T}(
+        Matrix{T}(coef),
+        Matrix{Int}(_deser_field(p["multi_indices"])),
+        Int(p["max_degree"]),
+        Vector{T}(_deser_field(p["steady_state"])),
+        Vector{Int}(_deser_field(p["state_indices"])),
+        Vector{Int}(_deser_field(p["control_indices"])),
+        Matrix{T}(_deser_field(p["impact"])),
+        Matrix{T}(_deser_field(p["state_bounds"])),
+        Vector{T}(_deser_field(p["scale"])),
+        Vector{T}(_deser_field(p["shift"])),
+        Matrix{T}(_deser_field(p["Z"])),
+        Vector{T}(_deser_field(p["d"])),
+        Matrix{T}(_deser_field(p["H"])),
+    )
+end
+
+function _from_serializable(::Type{BayesianDSGE}, p::AbstractDict, ::Int)
+    theta = _deser_field(p["theta_draws"])
+    T = eltype(theta)
+    T <: AbstractFloat || (T = Float64)
+    me = _deser_field(p["measurement_error"])
+    BayesianDSGE{T}(
+        Matrix{T}(theta),
+        Vector{T}(_deser_field(p["log_posterior"])),
+        Symbol[_as_symbol(s) for s in _deser_field(p["param_names"])],
+        _deser_field(p["priors"]),
+        T(p["log_marginal_likelihood"]),
+        _as_symbol(p["method"]),
+        T(p["acceptance_rate"]),
+        Vector{T}(_deser_field(p["ess_history"])),
+        Vector{T}(_deser_field(p["phi_schedule"])),
+        _deser_field(p["spec"]),
+        _deser_field(p["solution"]),
+        _deser_field(p["state_space"]),
+        Int(p["n_failed_draws"]),
+        Int(p["n_lik_evals"]),
+        _as_symbol(p["solved_at"]),
+        Matrix{T}(_deser_field(p["data"])),
+        Symbol[_as_symbol(s) for s in _deser_field(p["observables"])],
+        me === nothing ? nothing : Vector{T}(me),
+        _as_symbol(p["solver"]),
+        _deser_field(p["solver_kwargs"]),
+        _deser_field(p["prefilter"]),
+        _deser_field(p["trends"]),
+    )
+end
+
+function _from_serializable(::Type{PrefilterSpec}, p::AbstractDict, ::Int)
+    intercepts = _deser_field(p["intercepts"])
+    T = eltype(intercepts)
+    T <: AbstractFloat || (T = Float64)
+    PrefilterSpec{T}(
+        _as_symbol(p["transform"]),
+        Symbol[_as_symbol(s) for s in _deser_field(p["observables"])],
+        Vector{T}(intercepts),
+        Vector{T}(_deser_field(p["slopes"])),
+        Vector{T}(_deser_field(p["initial_levels"])),
+        Vector{T}(_deser_field(p["final_levels"])),
+        Matrix{T}(_deser_field(p["removed"])),
+        T(p["lambda"]),
+        Int(p["n_dropped"]),
+    )
+end
+
+function _from_serializable(::Type{ObservationTrends}, p::AbstractDict, ::Int)
+    function _trend_term(x, ::Type{S}) where {S}
+        x isa Symbol && return x
+        x isa AbstractString && return Symbol(x)
+        return S(x)
+    end
+    constants = _deser_field(p["constants"])
+    T = Float64
+    for v in constants
+        if v isa AbstractFloat
+            T = typeof(v)
+            break
+        end
+    end
+    ObservationTrends{T}(
+        Symbol[_as_symbol(s) for s in _deser_field(p["observables"])],
+        Union{T,Symbol}[_trend_term(x, T) for x in constants],
+        Union{T,Symbol}[_trend_term(x, T) for x in _deser_field(p["linears"])],
+        Union{T,Symbol}[_trend_term(x, T) for x in _deser_field(p["quadratics"])],
+    )
+end
