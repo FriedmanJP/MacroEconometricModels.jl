@@ -76,7 +76,8 @@ STAR/MS/conditional/nowcast) and forecast-evaluation results (DM/CW/MZ/encompass
 combination), nowcast models (DFM/BVAR/bridge) and news decompositions,
 cross-section/micro results (robust/penalized/Heckman/Tobit/count/quantile/RDD,
 selection, marginal effects, diagnostics, Anderson–Rubin, wild cluster bootstrap,
-panel tests), Johansen/GPH/local-Whittle companions, and the data containers
+panel tests), DiD results (TWFE/CS/SA/BJS/dCDH, event-study LP, LP-DiD, Bacon,
+pre-trend, negative weights, HonestDiD), Johansen/GPH/local-Whittle companions, and the data containers
 (`TimeSeriesData`, `PanelData`, `CrossSectionData`, `IOData`); the full set is
 `MacroEconometricModels._SERIALIZABLE_TYPES`. Exported
 concrete structs that are not saveable are listed in `_SERIALIZATION_EXCLUDED`

@@ -154,7 +154,8 @@ along with per-horizon regression details for diagnostics.
 - `clean_controls::Bool` — LP-DiD flag (true = only not-yet-treated controls)
 - `cluster::Symbol` — clustering level
 - `conf_level::T` — confidence level
-- `data::PanelData{T}` — original data
+- `data::PanelData{T}` — original data. Embedded on disk (not dropped); rely
+  on `compress=` (DSER-14) for large event-study objects.
 
 # References
 - Jorda, O. (2005). *AER* 95(1), 161-182.
@@ -231,7 +232,9 @@ LP-DiD estimation result with full Dube, Girardi, Jordà & Taylor (2025) specifi
 - `post_window::Int` — post-treatment event window
 - `cluster::Symbol` — clustering level
 - `conf_level::T` — confidence level
-- `data::PanelData{T}` — original panel data
+- `data::PanelData{T}` — original panel data. Kept on disk so `plot_result`
+  can rebuild the event-study path; rely on `compress=` (DSER-14) for large
+  LP-DiD objects.
 
 # References
 - Dube, A., Girardi, D., Jordà, Ò. & Taylor, A.M. (2025). *JAE*.

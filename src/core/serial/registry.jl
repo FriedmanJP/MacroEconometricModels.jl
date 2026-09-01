@@ -204,6 +204,14 @@ const _SERIALIZABLE_TYPES = Dict{String,Type}(
     "AndersonRubinCI"                   => AndersonRubinCI,
     "WildClusterBootstrap"              => WildClusterBootstrap,
     "PanelTestResult"                   => PanelTestResult,
+    # ── DiD / event study (RSER-07 / #780) ───────────────────────────────────
+    "DIDResult"                         => DIDResult,
+    "EventStudyLP"                      => EventStudyLP,
+    "LPDiDResult"                       => LPDiDResult,
+    "BaconDecomposition"                => BaconDecomposition,
+    "PretrendTestResult"                => PretrendTestResult,
+    "NegativeWeightResult"              => NegativeWeightResult,
+    "HonestDiDResult"                   => HonestDiDResult,
 )
 
 # Exported concrete structs that are not top-level `save_model` targets, with a
@@ -309,14 +317,6 @@ const _SERIALIZATION_EXCLUDED = Dict{String,String}(
     "IntermediaryTransition" => "pending DSER-10",
     "KhanThomasSteadyState" => "pending DSER-10",
     "KhanThomasTransition" => "pending DSER-10",
-    # pending RSER-07
-    "BaconDecomposition" => "pending RSER-07",
-    "DIDResult" => "pending RSER-07",
-    "EventStudyLP" => "pending RSER-07",
-    "HonestDiDResult" => "pending RSER-07",
-    "LPDiDResult" => "pending RSER-07",
-    "NegativeWeightResult" => "pending RSER-07",
-    "PretrendTestResult" => "pending RSER-07",
     # pending RSER-08
     "ACFResult" => "pending RSER-08",
     "BartlettWhiteNoiseResult" => "pending RSER-08",
