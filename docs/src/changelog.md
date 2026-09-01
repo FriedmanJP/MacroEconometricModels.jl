@@ -22,6 +22,7 @@ Patch on the `0.9` series: `save_model` / `load_model` for every result type (DS
 
 **Also**
 
+- `@float_fallback` throws `MethodError` instead of overflowing when no concrete method exists (`#758`).
 - Persistence documentation, the executed-code caveat, the named-function / `CRRAUtility` requirement, and the saveable-type table (`#771`, `#788`).
 - Dynare/HA solve-equality serialization suite and committed v1 fixtures (`#770`).
 - Module-split serialization tests, report/plot equivalence helpers, and the completeness flip (`#787`).
