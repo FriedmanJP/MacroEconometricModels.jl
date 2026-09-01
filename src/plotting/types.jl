@@ -188,12 +188,19 @@ available. Within one figure `_color_map` (order-based, collision-free) wins.
 _color_for(name::AbstractString)::String =
     _PLOT_SERIES[mod1(1 + Int(abs(hash(String(name))) % length(_PLOT_SERIES)), length(_PLOT_SERIES))]
 
-# Global counter for unique SVG IDs (thread-safe via Ref)
+# Global counter for unique SVG/HTML element IDs. Increment is lock-protected so
+# concurrent `plot_result` calls (threaded test runner, JULIA_NUM_THREADS=auto)
+# cannot interleave IDs. Tests that rewind the counter to compare two plots must
+# hold `_with_plot_id_lock` around the rewind + both renders.
 const _plot_counter = Ref(0)
+const _PLOT_ID_LOCK = ReentrantLock()
 function _next_plot_id(prefix::String)
-    _plot_counter[] += 1
-    "$(prefix)_$(_plot_counter[])"
+    lock(_PLOT_ID_LOCK) do
+        _plot_counter[] += 1
+        "$(prefix)_$(_plot_counter[])"
+    end
 end
+_with_plot_id_lock(f) = lock(f, _PLOT_ID_LOCK)
 
 # =============================================================================
 # Vendored D3.js (self-contained output — plotrule A12)

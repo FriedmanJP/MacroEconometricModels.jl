@@ -29,10 +29,8 @@ function _rser05_data(; T_obs=60, nM=4, nQ=1, r=1, seed=778)
 end
 
 function _assert_plot_view_equal(a, b, view)
-    c0 = _MEM._plot_counter[]
-    pa = plot_result(a; view=view)
-    _MEM._plot_counter[] = c0
-    pb = plot_result(b; view=view)
+    pa, pb = _paired_plot_result(() -> plot_result(a; view=view),
+                                 () -> plot_result(b; view=view))
     @test typeof(pa) === typeof(pb)
     for f in fieldnames(typeof(pa))
         @test _deep_equal(getfield(pa, f), getfield(pb, f))

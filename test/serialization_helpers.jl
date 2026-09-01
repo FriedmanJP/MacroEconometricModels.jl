@@ -96,17 +96,26 @@ end
 function _assert_report_equal(a, b)
     _record_helper!(_REPORT_COVERED, a)
     text(x) = applicable(report, IOBuffer(), x) ? sprint(report, x) : sprint(show, x)
-    @test text(a) == text(b)
+    # Pin :text: Coverage/Display groups call set_display_backend(:latex) on the
+    # process default, and the threaded runner shares that Ref across groups.
+    _MEM.with_display_backend(:text) do
+        @test text(a) == text(b)
+    end
     a
+end
+# Render two plots with the same element IDs (counter rewind under the plot-id lock).
+function _paired_plot_result(fa::Function, fb::Function)
+    _MEM._with_plot_id_lock() do
+        c0 = _MEM._plot_counter[]
+        pa = fa()
+        _MEM._plot_counter[] = c0
+        pb = fb()
+        pa, pb
+    end
 end
 function _assert_plot_equal(a, b)
     _record_helper!(_PLOT_COVERED, a)
-    # Plot IDs come from a process-wide counter; rewind so two identical objects
-    # produce identical HTML rather than `irf_N` vs `irf_N+1`.
-    c0 = _MEM._plot_counter[]
-    pa = plot_result(a)
-    _MEM._plot_counter[] = c0
-    pb = plot_result(b)
+    pa, pb = _paired_plot_result(() -> plot_result(a), () -> plot_result(b))
     @test typeof(pa) === typeof(pb)
     for f in fieldnames(typeof(pa))
         @test _deep_equal(getfield(pa, f), getfield(pb, f))

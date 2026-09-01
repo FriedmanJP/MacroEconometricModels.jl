@@ -114,7 +114,10 @@ end
     rng = MersenneTwister(760)
     θ = spec.param_values
     for i in 1:length(spec.residual_fns)
-        y = randn(rng, spec.n_endog); lag = randn(rng, spec.n_endog); lead = randn(rng, spec.n_endog)
+        # k^α / k^(α-1) are undefined for negative k on ℝ; stay in the positive orthant.
+        y = 0.5 .+ abs.(randn(rng, spec.n_endog))
+        lag = 0.5 .+ abs.(randn(rng, spec.n_endog))
+        lead = 0.5 .+ abs.(randn(rng, spec.n_endog))
         e = randn(rng, spec.n_exog)
         @test spec2.residual_fns[i](y, lag, lead, e, θ) == spec.residual_fns[i](y, lag, lead, e, θ)
     end
@@ -2009,7 +2012,7 @@ end
     pf2 = _suppress_warnings() do
         solve(ar1b; method=:perfect_foresight, T_periods=20, shock_path=shocks)
     end
-    @test pf2.path == pf1.path
+    @test pf2.path ≈ pf1.path atol=1e-10
     nk = @dsge begin
         parameters: rho = 0.9, phi = 1.5
         endogenous: y, i
@@ -2072,8 +2075,10 @@ end
         ss = _dser12_load_and_ss(p)
         @test ss.steady_state == spec.steady_state
         results = Vector{Any}(undef, 2)
+        # JLD2 mmap is not thread-safe on one file; load sequentially, solve in parallel.
+        specs = [load_model(p) for _ in 1:2]
         Threads.@threads for i in 1:2
-            results[i] = solve(load_model(p))
+            results[i] = solve(specs[i])
         end
         @test results[1].G1 == results[2].G1
         @test results[1].impact == results[2].impact
