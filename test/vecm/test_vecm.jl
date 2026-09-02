@@ -584,3 +584,90 @@ end
     @test effective_nobs(m) == size(m.U, 1)
     @test ncoefs(m) > 0
 end
+
+@testset "SID-08 long-run on cointegrated systems" begin
+    Random.seed!(737)
+    Tlen, n = 200, 2
+    trend = cumsum(randn(Tlen))
+    Yc = [trend .+ 0.3 .* randn(Tlen)  trend .+ 0.3 .* randn(Tlen)]
+    vecm = estimate_vecm(Yc, 2; rank=1)
+    @test_throws IdentificationError identify_long_run(to_var(vecm))
+    Ys = randn(200, 2)
+    ms = estimate_var(Ys, 1)
+    Q = identify_long_run(ms)
+    @test norm(Q' * Q - I(2)) < 1e-8
+end
+
+# =============================================================================
+# SID-16 structural VECM
+# =============================================================================
+
+@testset "SID-16 structural VECM" begin
+    if !@isdefined(simulate_common_trend_svec)
+        include(joinpath(@__DIR__, "..", "var", "id_dgps.jl"))
+    end
+
+    @testset "KPSW recovery, PT, FEVD, long-run IRF" begin
+        rng = MersenneTwister(745)
+        Tobs = 1000
+        Y, _, B0_true, Xi_true = simulate_common_trend_svec(; Tobs=Tobs, rng=rng)
+        lr_true = Xi_true * B0_true
+        vecm = estimate_vecm(Y, 1; rank=2, deterministic=:none)
+        svec = identify_svec(vecm)
+        @test svec isa SVECResult
+        @test svec.n_permanent == 1
+        lr = svec.Xi * svec.B0
+        @test maximum(abs, lr[:, 2]) < 1e-8
+        @test maximum(abs, lr[:, 3]) < 1e-8
+        perm = lr[:, 1]
+        truth = lr_true[:, 1]
+        perm = sign(dot(perm, truth)) * perm
+        @test norm(perm - truth) / norm(truth) < 0.10
+
+        ir_svec = irf(vecm, 200; method=:svec)
+        @test ir_svec.values[end, :, 1] ≈ lr[:, 1] atol=1e-2 rtol=0.05
+
+        ir_lr = irf(vecm, 10; method=:long_run)
+        @test ir_lr isa ImpulseResponse
+        @test ir_lr.values[1, :, :] ≈ irf(vecm, 10; method=:svec).values[1, :, :]
+
+        pt = permanent_transitory(vecm; method=:gonzalo_ng)
+        @test pt.permanent + pt.transitory ≈ vecm.Y atol=1e-8
+        for j in 1:3
+            adf = adf_test(pt.transitory[:, j])
+            @test adf.pvalue < 0.05
+        end
+
+        fv = fevd(vecm, 200; method=:svec)
+        @test all(fv.proportions[:, 2, end] .< 0.15)
+        @test all(fv.proportions[:, 3, end] .< 0.15)
+    end
+
+    @testset "reject frozen-Q CIs; merge PT zeros; peel IRF kwargs" begin
+        rng = MersenneTwister(7451)
+        Y, _, _, _ = simulate_common_trend_svec(; Tobs=250, rng=rng)
+        vecm = estimate_vecm(Y, 1; rank=2, deterministic=:none)
+
+        @test_throws ArgumentError irf(vecm, 4; method=:svec, ci_type=:bootstrap)
+        @test_throws ArgumentError irf(vecm, 4; method=:svec, ci_type=:theoretical)
+        @test_throws ArgumentError irf(vecm, 4; method=:long_run, ci_type=:bootstrap)
+        @test_throws ArgumentError irf(vecm, 4; method=:long_run, ci_type=:theoretical)
+        r = irf(vecm, 4; method=:svec, reps=10, conf_level=0.9)
+        @test r.ci_type === :none
+
+        n, n_perm = 3, 1
+        lrz = fill(NaN, n, n)
+        pat = MacroEconometricModels._svec_resolve_pattern(n, n_perm, nothing, lrz, nothing, Float64)
+        @test all(iszero, pat.long_run[:, 2])
+        @test all(iszero, pat.long_run[:, 3])
+
+        Bz = fill(NaN, n, n)
+        Bz[2, 3] = 0.0
+        custom = SVARPattern(Matrix{Float64}(I, n, n), Bz)
+        @test custom.long_run === nothing
+        svec = identify_svec(vecm; pattern=custom, n_starts=1, rng=MersenneTwister(2))
+        lr = svec.Xi * svec.B0
+        @test maximum(abs, lr[:, 2]) < 1e-5
+        @test maximum(abs, lr[:, 3]) < 1e-5
+    end
+end

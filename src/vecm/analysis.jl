@@ -7,35 +7,79 @@
 """
 IRF, FEVD, and Historical Decomposition dispatch for VECM via VAR conversion.
 
-All structural analysis methods work automatically through `to_var()`.
+Cholesky, sign, narrative, and statistical methods route through `to_var()`.
+`method=:svec` and `method=:long_run` go through [`identify_svec`](@ref)
+(KPSW permanent/transitory identification).
 """
 
-"""
-    irf(vecm::VECMModel, horizon; kwargs...) -> ImpulseResponse
+const _SVEC_IDENT_KW = (:long_run_zeros, :short_run_zeros, :pattern,
+                        :n_starts, :max_iter, :rng)
 
-Compute IRFs for a VECM by converting to VAR representation.
-All identification methods (Cholesky, sign, narrative, etc.) are supported.
-"""
-function irf(vecm::VECMModel{T}, horizon::Int; kwargs...) where {T}
-    irf(to_var(vecm), horizon; kwargs...)
+function _vecm_svec_ident_kwargs(kwargs)
+    Pair{Symbol,Any}[k => kwargs[k] for k in _SVEC_IDENT_KW if haskey(kwargs, k)]
+end
+
+function _vecm_svec_Q(vecm::VECMModel{T}; kwargs...) where {T}
+    identify_svec(vecm; _vecm_svec_ident_kwargs(kwargs)...).Q
+end
+
+function _vecm_reject_svec_ci(kwargs, method::Symbol)
+    ci = get(kwargs, :ci_type, :none)
+    if ci === :bootstrap || ci === :theoretical
+        throw(ArgumentError(
+            "ci_type=:$ci is not supported for VECM method=:$method: " *
+            "bands would reuse a frozen SVEC rotation rather than re-identifying " *
+            "each draw. Point IRFs with ci_type=:none remain available."))
+    end
+    nothing
 end
 
 """
-    fevd(vecm::VECMModel, horizon; kwargs...) -> FEVD
+    irf(vecm::VECMModel, horizon; method=:cholesky, kwargs...) -> ImpulseResponse
+
+Compute IRFs for a VECM. Cholesky, sign, narrative, and statistical methods
+convert to the levels VAR. `method=:svec` and `method=:long_run` use
+[`identify_svec`](@ref); levels IRFs of permanent shocks converge to the
+corresponding column of ``Ξ B_0``. `ci_type=:bootstrap` and
+`ci_type=:theoretical` throw `ArgumentError` on those methods: the levels-VAR
+resampler would inject a frozen SVEC rotation into every draw.
+"""
+function irf(vecm::VECMModel{T}, horizon::Int; method::Symbol=:cholesky, kwargs...) where {T}
+    if method === :svec || method === :long_run
+        _vecm_reject_svec_ci(kwargs, method)
+        Q = _vecm_svec_Q(vecm; kwargs...)
+        return irf(to_var(vecm), horizon; method=:svec, _svec_Q=Q, kwargs...)
+    end
+    irf(to_var(vecm), horizon; method=method, kwargs...)
+end
+
+"""
+    fevd(vecm::VECMModel, horizon; method=:cholesky, kwargs...) -> FEVD
 
 Compute FEVD for a VECM by converting to VAR representation.
+`method=:svec` and `method=:long_run` use [`identify_svec`](@ref).
 """
-function fevd(vecm::VECMModel{T}, horizon::Int; kwargs...) where {T}
-    fevd(to_var(vecm), horizon; kwargs...)
+function fevd(vecm::VECMModel{T}, horizon::Int; method::Symbol=:cholesky, kwargs...) where {T}
+    if method === :svec || method === :long_run
+        Q = _vecm_svec_Q(vecm; kwargs...)
+        return fevd(to_var(vecm), horizon; method=:svec, _svec_Q=Q, kwargs...)
+    end
+    fevd(to_var(vecm), horizon; method=method, kwargs...)
 end
 
 """
-    historical_decomposition(vecm::VECMModel, horizon; kwargs...) -> HistoricalDecomposition
+    historical_decomposition(vecm::VECMModel, horizon; method=:cholesky, kwargs...) -> HistoricalDecomposition
 
 Compute historical decomposition for a VECM by converting to VAR representation.
+`method=:svec` and `method=:long_run` use [`identify_svec`](@ref).
 """
-function historical_decomposition(vecm::VECMModel{T}, horizon::Int=effective_nobs(vecm); kwargs...) where {T}
-    historical_decomposition(to_var(vecm), horizon; kwargs...)
+function historical_decomposition(vecm::VECMModel{T}, horizon::Int=effective_nobs(vecm);
+                                  method::Symbol=:cholesky, kwargs...) where {T}
+    if method === :svec || method === :long_run
+        Q = _vecm_svec_Q(vecm; kwargs...)
+        return historical_decomposition(to_var(vecm), horizon; method=:svec, _svec_Q=Q, kwargs...)
+    end
+    historical_decomposition(to_var(vecm), horizon; method=method, kwargs...)
 end
 
 # =============================================================================

@@ -667,3 +667,30 @@ end
     @test !occursin("jarque_bera", s)
     set_display_backend(:text)
 end
+
+@testset "SID-24 identification display coverage (#753)" begin
+    MEM = MacroEconometricModels
+    extras = (:SignIdentifiedSet, :BayesianSetIdentifiedSVAR, :SVARModel,
+              :MaxShareResult, :SVECResult, :NonGaussianGMMResult,
+              :NonGaussianMLResult, :RobustBayesResult)
+    types = Type[]
+    for n in names(MacroEconometricModels)
+        T = getfield(MacroEconometricModels, n)
+        T isa Type || continue
+        s = string(nameof(T))
+        if endswith(s, "SVARResult") || n in extras
+            push!(types, T)
+        end
+    end
+    unique!(types)
+    @test length(types) >= 14
+    for T in types
+        Tc = T isa UnionAll ? T{Float64} : T
+        @test hasmethod(report, Tuple{Tc})
+        @test hasmethod(refs, Tuple{IO, Tc})
+        @test hasmethod(plot_result, Tuple{Tc})
+        @test hasmethod(save_model, Tuple{Tc, AbstractString})
+        @test haskey(MEM._SERIALIZABLE_TYPES, string(nameof(T)))
+    end
+    set_display_backend(:text)
+end

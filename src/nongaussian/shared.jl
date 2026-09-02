@@ -45,7 +45,7 @@ end
 # =============================================================================
 
 """Convert n(n-1)/2 Givens angles to n × n orthogonal matrix."""
-function _givens_to_orthogonal(angles::AbstractVector{T}, n::Int) where {T<:AbstractFloat}
+function _givens_to_orthogonal(angles::AbstractVector{T}, n::Int) where {T<:Real}
     Q = Matrix{T}(I, n, n)
     idx = 1
     for i in 1:n-1
@@ -118,55 +118,48 @@ function _ica_to_svar(W_ica::Matrix{T}, model::VARModel{T}) where {T<:AbstractFl
 
     (B0, Q, shocks)
 end
+
 """
-Identify B₀ from two covariance matrices via eigendecomposition.
+Identify B₀ from two covariance matrices via the symmetric generalized eigenproblem.
 
 Given Σ₁, Σ₂:
-  Σ₁⁻¹ Σ₂ has eigendecomposition V D V⁻¹
-  B₀ = Σ₁^{1/2} V (normalized so B₀ B₀' = Σ₁)
+  L₁ = chol(Σ₁)
+  L₁⁻¹ Σ₂ L₁⁻ᵀ = W Λ W'
+  B₀ = L₁ W
 
-Returns (B₀, Λ) where Λ = diag(D) are relative variance ratios.
-Identification requires distinct eigenvalues.
+Eigenvalues Λ are sorted ascending. Columns of Q = W are unit-norm and B₀ is
+signed so that its diagonal is positive. Identification requires distinct
+eigenvalues; a relative gap below 1e-8 throws `IdentificationError`.
+
+Returns `(B₀, Q, Λ)`.
 """
 function _eigendecomposition_id(Sigma1::Matrix{T}, Sigma2::Matrix{T}) where {T<:AbstractFloat}
     n = size(Sigma1, 1)
-    S1_inv = robust_inv(Sigma1)
-    M = S1_inv * Sigma2
-
-    E = eigen(M)
-    D = real.(E.values)
-    V = real.(E.vectors)
-
-    # Sort by eigenvalue magnitude for consistent ordering
-    idx = sortperm(D)
-    D = D[idx]
-    V = V[:, idx]
-
-    # B₀ = chol(Σ₁) * V, normalized so columns have unit norm
     L1 = safe_cholesky(Sigma1)
-    B0 = Matrix(L1) * V
-
-    # Normalize columns
+    L1M = Matrix(L1)
+    M = Symmetric(L1M \ Sigma2 / L1M')
+    E = eigen(M)
+    λ = real.(E.values)
+    Q = real.(E.vectors)
+    idx = sortperm(λ)
+    λ = λ[idx]
+    Q = Q[:, idx]
     for j in 1:n
-        B0[:, j] /= norm(B0[:, j])
-    end
-
-    # Scale so B₀ B₀' ≈ Σ₁
-    # B₀ = L₁ * Q where Q is orthogonal
-    Q_raw = robust_inv(Matrix(L1)) * B0
-    F = svd(Q_raw)
-    Q = F.U * F.Vt
-    B0 = Matrix(L1) * Q
-
-    Lambda = D
-
-    # Sign convention: positive diagonal
-    for j in 1:n
-        if B0[j, j] < 0
-            B0[:, j] *= -one(T)
-            Q[:, j] *= -one(T)
+        nrm = norm(Q[:, j])
+        nrm > zero(T) && (Q[:, j] ./= nrm)
+        if dot(Q[:, j], Q[:, j]) > 0 && Q[j, j] < 0
+            Q[:, j] .*= -one(T)
         end
     end
-
-    (B0, Q, Lambda)
+    B0 = L1M * Q
+    for j in 1:n
+        if B0[j, j] < 0
+            B0[:, j] .*= -one(T)
+            Q[:, j] .*= -one(T)
+        end
+    end
+    gap = n == 1 ? one(T) : minimum(abs(λ[i] - λ[j]) for i in 1:n, j in 1:n if i != j) / max(maximum(abs.(λ)), eps(T))
+    gap < T(1e-8) && throw(IdentificationError(
+        "heteroskedastic identification requires distinct λ; relative gap=$gap"))
+    (B0, Q, λ)
 end

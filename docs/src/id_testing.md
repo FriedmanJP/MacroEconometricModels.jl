@@ -1,6 +1,6 @@
 # [Identification Testing](@id id_testing_page)
 
-Statistical identification buys freedom from economic restrictions at the price of distributional assumptions, and those assumptions are testable. This page documents the diagnostics that decide whether non-Gaussian or heteroskedasticity-based identification is admissible on a given sample: multivariate normality tests on the reduced-form residuals, Gaussianity and independence tests on the recovered structural shocks, a likelihood-ratio test against the Gaussian benchmark, and bootstrap assessments of identification strength.
+Statistical identification buys freedom from economic restrictions at the price of distributional assumptions, and those assumptions are testable. This page documents the diagnostics that decide whether non-Gaussian or heteroskedasticity-based identification is admissible on a given sample: multivariate normality tests on the reduced-form residuals, Gaussianity and independence tests on the recovered structural shocks, a likelihood-ratio test against the Gaussian benchmark, Wald tests of distinct relative variances, a residual-bootstrap label-stability diagnostic, and likelihood-ratio / Wald overidentification tests of extra zeros on ``B_0``.
 
 For an overview and method comparison, see [Statistical Identification](@ref nongaussian_page). For the non-Gaussian estimators these tests validate, see [Non-Gaussian Methods](@ref id_nongaussian_page); for the volatility-based ones, see [Heteroskedasticity](@ref id_heteroskedastic_page).
 
@@ -45,12 +45,12 @@ lr = test_gaussian_vs_nongaussian(model; distribution=:student_t)
 report(lr)
 ```
 
-**Recipe 5: How strong is the identification?**
+**Recipe 5: Are the shock labels stable?**
 
 ```@example id_test
-strength = test_identification_strength(model; method=:fastica, n_bootstrap=499,
-                                        rng=MersenneTwister(7))
-report(strength)
+stab = test_label_stability(model; method=:fastica, n_bootstrap=50,
+                            rng=MersenneTwister(7))
+report(stab)
 ```
 
 ---
@@ -249,74 +249,179 @@ The two legs disagree, which is exactly why they are combined. The portmanteau s
 
 ## Identification Strength
 
-The bootstrap identification-strength test measures how stable ``B_0`` is under resampling. The procedure resamples the residual rows with replacement ``B`` times, re-estimates ``B_0`` with the chosen ICA method, and computes the **Procrustes distance** --- the minimum Frobenius distance over all signed column permutations --- between each bootstrap ``B_0`` and the original. The statistic is the median distance; `identified` is `true` when that median is below half the Frobenius norm of ``B_0``.
+Statistical identification of ``B_0`` fails when two relative variances are equal (heteroskedastic schemes) or when two or more shocks are Gaussian (non-Gaussian schemes), and it is only labelled uniquely up to signed permutation. Three diagnostics replace the old Procrustes-bootstrap threshold.
 
-!!! warning "Weak Identification"
-    Lewis (2022) shows that weak identification is common in practice. When variances change little or departures from Gaussianity are small, standard Wald tests have poor size and confidence intervals are unreliable. Run this test before reporting any structural result.
+!!! warning "Deprecated wrapper"
+    `test_identification_strength` remains as a one-release wrapper: heteroskedastic results dispatch to `test_lambda_distinct`, non-Gaussian results to `test_gaussian_shock_count`, and a `VARModel` with an ICA `method` to `test_label_stability`. Call the principled functions directly.
+
+### Distinct relative variances
+
+For Markov-switching, GARCH, smooth-transition, and external-volatility fits, identification of the columns of ``B_0`` requires ``\lambda_i \neq \lambda_j`` for every pair (Lanne, Lütkepohl and Maciejowska 2010). The Wald statistic for pair ``(i,j)`` is
+
+```math
+W_{ij} = \frac{(\hat\lambda_i - \hat\lambda_j)^2}{\widehat{\mathrm{Var}}(\hat\lambda_i - \hat\lambda_j)} \sim \chi^2(1)
+```
+
+where:
+- ``\hat\lambda`` is the relative-variance vector (regime ``k=2`` against ``\Lambda_1 = I``, or the GARCH / smooth-transition analogue)
+- the denominator is the corresponding contrast from the delta-method covariance of ``\lambda``
+
+`pairs=:all` tests every ``i < j`` and reports Bonferroni-adjusted p-values. Identification of every column requires every pair to reject.
 
 ```@example id_test
-strength = test_identification_strength(model; method=:fastica, n_bootstrap=499,
-                                        rng=MersenneTwister(7))
-report(strength)
+Random.seed!(20260831)
+ev = identify_external_volatility(model, vcat(fill(1, 59), fill(2, size(model.U, 1) - 59)))
+wλ = test_lambda_distinct(ev; pairs=:all)
+(wald = round.(wλ.statistic, digits=2),
+ p_bonferroni = round.(wλ.pvalue_bonferroni, digits=4))
+```
+
+A pair with a Bonferroni p-value above 5% means those two columns are not separately identified: the data cannot tell those two shocks apart from a rotation in their plane (Lewis 2022). Use that pair as the reason to drop a shock, split the sample differently, or switch scheme --- not as a licence to report both columns. The midpoint split here is only a demonstration that the Wald runs on an `ExternalVolatilitySVARResult`; a serious application uses a regime indicator with economic content (NBER recessions, a policy-rule break).
+
+### Gaussian-shock count
+
+Non-Gaussian identification of ``B_0`` requires **at most one** Gaussian shock (Darmois–Skitovich; Lanne, Meitz and Saikkonen 2017; Keweloh 2021). `test_gaussian_shock_count` applies a Jarque–Bera test and an excess-kurtosis ``z``-test to each recovered shock and Holm-adjusts the p-values (Holm 1979):
+
+```math
+JB_j = T\left(\frac{\hat s_j^2}{6} + \frac{\hat\kappa_j^2}{24}\right) \sim \chi^2(2), \qquad
+z_{\kappa,j} = \hat\kappa_j \big/ \sqrt{24/T} \sim N(0,1)
+```
+
+where:
+- ``\hat s_j`` and ``\hat\kappa_j`` are the sample skewness and excess kurtosis of shock ``j``
+- Holm's adjusted p-value is ``\tilde p_{(k)} = \max_{j\le k}\min\bigl(1,(m-j+1)p_{(j)}\bigr)``
+
+`identified` is `true` if and only if the Holm-adjusted JB count of Gaussian shocks is at most one.
+
+```@example id_test
+gcount = test_gaussian_shock_count(ica)
+report(gcount)
 ```
 
 ```@example id_test
-(median_distance = round(strength.statistic, digits=4),
- normalized = round(strength.details[:normalized_distance], digits=4),
- successful_bootstraps = strength.details[:n_bootstrap])
+(n_gaussian = gcount.details[:n_gaussian],
+ jb_p_holm = round.(gcount.details[:jb_pvals_holm], digits=5),
+ kurt_p = round.(gcount.details[:kurt_pvals], digits=5))
 ```
 
-The median bootstrap Procrustes distance is ``0.0325``, or ``24.3\%`` of ``\Vert B_0 \Vert_F`` --- comfortably inside the 50% threshold, so the identification is classified as strong. The reported p-value of ``0.060`` is the fraction of bootstrap replications *exceeding* that threshold, not a test of a null hypothesis in the usual sense: read it as "6% of resamples produce a materially different ``B_0``". Draws that fail to converge are dropped silently, so check `details[:n_bootstrap]` against the requested count.
+The second-smallest JB statistic is ``505.1``, and every Holm-adjusted p-value is below ``10^{-3}``, so `n_gaussian` is 0. Identification holds with a margin of one shock: the Darmois–Skitovich count is satisfied even though, as the label-stability diagnostic below shows, that is not the same thing as a unique labelling of the three columns.
+
+### Label-stability bootstrap
+
+Column labels are identified only up to signed permutation. The label-stability diagnostic re-estimates the VAR on a residual bootstrap, re-identifies ``B_0``, and matches each bootstrap impact to the original with `_match_columns`. The statistic is the **fraction of replications whose permutation is the identity**; signs are allowed to flip. There is **no p-value** --- this is a match-score, not a hypothesis test.
+
+```@example id_test
+stab = test_label_stability(model; method=:fastica, n_bootstrap=50,
+                            rng=MersenneTwister(7))
+report(stab)
+```
+
+```@example id_test
+(match_fraction = round(stab.details[:match_fraction], digits=3),
+ n_identity = stab.details[:n_identity],
+ n_bootstrap = stab.details[:n_bootstrap])
+```
+
+The match fraction is ``0.44``, below one half, so the diagnostic classifies the labels as unstable --- FastICA's three columns on this sample are not a pinned-down assignment. There is no p-value to quote. Draws that fail to converge are dropped, so check `details[:n_bootstrap]` against the requested count. Re-run with `n_bootstrap=999` before treating a published labelling as stable.
 
 | Keyword | Type | Default | Description |
 |---------|------|---------|-------------|
-| `method` | `Symbol` | `:fastica` | ICA method: `:fastica`, `:jade`, or `:sobi` |
-| `n_bootstrap` | `Int` | `999` | Number of bootstrap replications |
+| `method` | `Symbol` | `:fastica` | Identification method used on each bootstrap VAR |
+| `n_bootstrap` | `Int` | `999` | Residual-bootstrap replications |
 | `rng` | `AbstractRNG` | `Random.default_rng()` | Random number generator |
 
 ---
 
 ## Overidentification Test
 
-When restrictions beyond non-Gaussianity are imposed on ``B_0``, this bootstrap test asks whether they are consistent with the data. It compares the relative discrepancy between ``B_0 B_0'`` and ``\Sigma``, plus the orthogonality error of ``Q``, against a bootstrap distribution of the same discrepancy.
+Extra zeros on ``B_0`` overidentify a statistically identified SVAR. The test is a nested likelihood ratio for every parametric likelihood (non-Gaussian ML, the Amisano–Giannini AB model, SVEC via the AB B-model, and heteroskedastic ML). ICA has no likelihood: `test_overidentification` falls back to label-stability and records `details[:fallback] = :label_stability`.
 
-```@example id_test
-overid = test_overidentification(model, ica; n_bootstrap=499, rng=MersenneTwister(5))
-(statistic = overid.statistic,
- discrepancy = overid.details[:discrepancy],
- orthogonality_error = overid.details[:orthogonality_error])
+The LR statistic is the constrained MLE comparison
+
+```math
+\mathrm{LR} = 2(\ell_u - \ell_r) \sim \chi^2(q)
 ```
 
-The statistic is ``7.8 \times 10^{-16}``. That is the point: a plain ICA or ML solution is exactly identified, ``B_0 B_0' = \Sigma`` holds to machine precision by construction, and the test has nothing to detect. The `identified` flag it returns in that situation reflects floating-point noise rather than evidence, so apply this test only when ``B_0`` carries genuine overidentifying restrictions --- zero restrictions on the impact matrix, or a rotation imported from a different identification scheme.
+where:
+- ``\ell_u`` is the unrestricted log-likelihood (Givens rotation plus distribution parameters, or the concentrated AB likelihood)
+- ``\ell_r`` is the restricted log-likelihood with ``q`` zeros **imposed** on ``B_0``: the corresponding Givens angles are dropped (``Q`` is solved so ``(LQ)_{ij}=0``) and the remaining parameters are re-optimized
+- ``q`` is the number of zeros in the restriction mask (`0` = restricted, `NaN` = free)
+
+For an AB `SVARModel`, omitting `restrictions` reports the stored pattern's concentrated LR. A supplied mask is re-estimated as an AB B-model; the `SVARModel`-only method throws `ArgumentError` rather than silently recycling the stored pattern.
+
+When a covariance ``V`` of ``\mathrm{vec}(B_0)`` is stored, the companion statistic is the Wald quadratic form after the same signed-permutation alignment as `test_restrictions`:
+
+```math
+W = \bigl(R\,\mathrm{vec}(\hat B_0)\bigr)'\bigl(RVR'\bigr)^{-1}\bigl(R\,\mathrm{vec}(\hat B_0)\bigr) \sim \chi^2(q)
+```
+
+where:
+- ``R`` selects the restricted entries
+- ``V`` is the delta-method covariance of ``\mathrm{vec}(B_0)``
+- `details[:wald_approximation] = :rvr`
+
+If only diagonal SEs exist, the package reports the sum of squared ``t``-ratios as an **independence approximation** (`details[:wald_approximation] = :independence`). That figure is not a Wald ``\chi^2``.
+
+Failing to reject (``p \ge 0.05``) supports the extra zeros, so `identified` is `true` when the p-value is **large**. A just-identified fit with no extra zeros returns p-value 1 and `details[:just_identified] = true`.
+
+```@example id_test
+ml = identify_student_t(model)
+mask_upper = [NaN 0.0 0.0; NaN NaN 0.0; NaN NaN NaN]
+overid_ml = test_overidentification(model, ml; restrictions=mask_upper)
+report(overid_ml)
+```
+
+```@example id_test
+(LR = round(overid_ml.statistic, digits=2),
+ pvalue = round(overid_ml.pvalue, digits=4),
+ wald = haskey(overid_ml.details, :wald_statistic) ?
+        round(overid_ml.details[:wald_statistic], digits=2) : missing)
+```
+
+The recursive upper-triangle zeros are extra relative to Student-t identification. The nested LR statistic is ``34.44`` on 3 degrees of freedom and rejects at any conventional level: the statistically identified rotation does not sit on that triangle, so those zeros are not a restriction this sample will bear. When a covariance of ``\mathrm{vec}(B_0)`` is stored the same mask is also reported as an ``RVR'`` Wald in `details[:wald_statistic]`; check `details[:wald_approximation]`.
+
+ICA cannot run that comparison. The call records the fallback and reports the label-stability match fraction with no p-value:
+
+```@example id_test
+overid_ica = test_overidentification(model, ica; n_bootstrap=50, rng=MersenneTwister(5))
+(fallback = overid_ica.details[:fallback],
+ match_fraction = round(overid_ica.details[:match_fraction], digits=3),
+ pvalue = overid_ica.pvalue)
+```
+
+`details[:fallback]` is `:label_stability` and `pvalue` is `NaN`: ICA has nothing to overidentify, and the diagnostic says so rather than reporting a fake χ². The match fraction is the same object as `test_label_stability`, not a test of extra zeros.
 
 | Keyword | Type | Default | Description |
 |---------|------|---------|-------------|
-| `n_bootstrap` | `Int` | `499` | Bootstrap replications under the null |
-| `rng` | `AbstractRNG` | `Random.default_rng()` | Random number generator |
+| `restrictions` | `AbstractMatrix` or `nothing` | `nothing` | Zero mask on ``B_0`` (`0` = restricted, `NaN` = free) |
+| `n_bootstrap` | `Int` | `999` | Residual-bootstrap replications used only for the ICA label-stability fallback |
+| `rng` | `AbstractRNG` | `Random.default_rng()` | Random number generator for the ICA fallback |
 
 **Return value** (`IdentifiabilityTestResult` --- shared by every test in this section):
 
 | Field | Type | Description |
 |-------|------|-------------|
-| `test_name` | `Symbol` | `:shock_gaussianity`, `:gaussian_vs_nongaussian`, `:shock_independence`, `:identification_strength`, `:overidentification` |
-| `statistic` | `T` | Test statistic |
-| `pvalue` | `T` | p-value |
+| `test_name` | `Symbol` | `:shock_gaussianity`, `:gaussian_vs_nongaussian`, `:shock_independence`, `:gaussian_shock_count`, `:lambda_distinct`, `:label_stability`, `:overidentification` |
+| `statistic` | `T` | Test statistic (match fraction for label-stability) |
+| `pvalue` | `T` | p-value, or `NaN` for label-stability |
 | `identified` | `Bool` | Whether identification appears to hold (see the sign conventions below) |
 | `details` | `Dict{Symbol, Any}` | Method-specific details |
 
 | Test | `identified == true` means | Convention |
 |------|----------------------------|------------|
-| `test_shock_gaussianity` | At most one shock is Gaussian | Counts non-rejections |
+| `test_shock_gaussianity` | At most one shock is Gaussian | Holm-adjusted non-rejections |
+| `test_gaussian_shock_count` | At most one shock is Gaussian | Holm-adjusted JB count |
 | `test_gaussian_vs_nongaussian` | Gaussianity is rejected | Reject to identify |
 | `test_shock_independence` | Independence is not rejected | Fail to reject to identify |
-| `test_identification_strength` | Median distance below ``0.5\Vert B_0 \Vert_F`` | Threshold, not a p-value |
-| `test_overidentification` | Restrictions are not rejected | Fail to reject to identify |
+| `test_lambda_distinct` | Every ``\lambda_i \neq \lambda_j`` | Reject equality to identify |
+| `test_label_stability` | Match fraction ``\ge 1/2`` | Match-score, **no p-value** |
+| `test_overidentification` | Extra zeros are not rejected | Fail to reject to identify; ICA falls back to label-stability |
 
 ---
 
 ## Complete Example
 
-A full pre-flight check: residual normality, the parametric LR test, shock-level diagnostics, and identification strength, ending with the IRFs the diagnostics have licensed.
+A full pre-flight check: residual normality, the parametric LR test, shock-level diagnostics, and label-stability, then the IRFs those diagnostics licence --- or refuse to name.
 
 ```@example id_test
 # --- Step 1: Are the residuals non-normal at all? ---
@@ -346,20 +451,20 @@ indep = test_shock_independence(ica; max_lag=10)
 ```
 
 ```@example id_test
-# --- Step 4: Bootstrap identification strength ---
-strength = test_identification_strength(model; method=:fastica, n_bootstrap=199,
-                                        rng=MersenneTwister(7))
-(normalized_distance = round(strength.details[:normalized_distance], digits=4),
- strong = strength.identified)
+# --- Step 4: Label-stability of the ICA columns ---
+stab = test_label_stability(model; method=:fastica, n_bootstrap=50,
+                            rng=MersenneTwister(7))
+(match_fraction = round(stab.details[:match_fraction], digits=3),
+ labels_stable = stab.identified)
 ```
 
 ```@example id_test
-# --- Step 5: Structural IRFs, now that all four checks pass ---
+# --- Step 5: Reduced-form-rotated IRFs; columns are not yet labelled ---
 irfs = irf(model, 20; method=:fastica, rng=MersenneTwister(11))
 report(irfs)
 ```
 
-The four checks pass in sequence: the residuals are non-normal on all seven tests, the Student-t likelihood beats the Gaussian one by ``112.39``, none of the three recovered shocks is Gaussian, their independence is not rejected at ``p = 0.085``, and the bootstrap ``B_0`` sits ``22.9\%`` of a norm away from the point estimate under 199 replications. Only then are the impulse responses in step 5 interpretable as structural. Had any check failed --- Gaussian residuals, two Gaussian shocks, rejected independence, or a bootstrap distance near the threshold --- the correct response is to switch to [Heteroskedasticity](@ref id_heteroskedastic_page) or to an economically restricted scheme from [Structural Identification](@ref structural_identification_page), not to report the IRFs with a caveat.
+The residual and shock checks pass: the residuals are non-normal on all seven tests, the Student-t likelihood beats the Gaussian one by ``112.39``, none of the three recovered shocks is Gaussian, and their independence is not rejected at ``p = 0.085``. Label-stability does not: the match fraction is ``0.44``, so FastICA's column order is not a pinned-down assignment on this sample. The impulse responses in step 5 are still a rotation of the reduced-form MA, but the shock *names* are not identified. Label them with `label_shocks` from [Non-Gaussian Methods](@ref id_nongaussian_page), switch to [Heteroskedasticity](@ref id_heteroskedastic_page), or impose zeros and test them with `test_overidentification` --- do not report unnamed ICA columns as demand, supply, and monetary policy.
 
 ---
 
@@ -367,25 +472,35 @@ The four checks pass in sequence: the residuals are non-normal on all seven test
 
 1. **Normality rejection is not identification.** Rejecting multivariate normality of the residuals is necessary but not sufficient. The shock Gaussianity test must also confirm at most one Gaussian shock. The two operate on different objects: normality tests on reduced-form residuals, shock tests on the recovered structural shocks.
 
-2. **The `identified` flag changes direction between tests.** `test_gaussian_vs_nongaussian` sets it by *rejecting*; `test_shock_independence` and `test_overidentification` set it by *failing to reject*. The convention table above lists all five.
+2. **The `identified` flag changes direction between tests.** `test_gaussian_vs_nongaussian` and `test_lambda_distinct` set it by *rejecting*; `test_shock_independence` and `test_overidentification` set it by *failing to reject*. Label-stability has no p-value. The convention table above lists every test.
 
-3. **Permutation and bootstrap p-values move between runs.** The distance-covariance leg of the independence test and both bootstrap tests consume randomness. Seed the RNG or pass `rng=` before quoting any of these numbers in a paper.
+3. **Permutation and bootstrap diagnostics move between runs.** The distance-covariance leg of the independence test and the label-stability bootstrap consume randomness. Seed the RNG or pass `rng=` before quoting any of these numbers in a paper.
 
-4. **Bootstrap sample size.** Use `n_bootstrap=199` for exploratory work and `n_bootstrap=999` for published results; the identification-strength test re-runs the full ICA estimator on every replication and is the most expensive diagnostic here.
+4. **Bootstrap sample size.** Use `n_bootstrap=50` for exploratory work and `n_bootstrap=999` for published results. Label-stability re-estimates the VAR and re-identifies ``B_0`` on every replication.
 
-5. **Multiple testing.** Seven normality tests on one sample inflate the family-wise error rate. Look for consistent rejection across tests rather than the smallest p-value.
+5. **Multiple testing.** Seven normality tests on one sample inflate the family-wise error rate. Look for consistent rejection across tests rather than the smallest p-value. Per-shock JB p-values are Holm-adjusted inside `test_gaussian_shock_count`.
 
-6. **Overidentification needs something to overidentify.** Applied to a just-identified ICA or ML solution, the test compares two quantities that are both zero to machine precision and returns noise. Reserve it for a ``B_0`` carrying extra restrictions.
+6. **Overidentification needs something to overidentify.** A just-identified ML, GARCH, or AB fit with `restrictions=nothing` returns p-value 1. ICA has no likelihood: `test_overidentification` falls back to label-stability and says so. Pass a zero mask on ``B_0`` for the nested LR; an AB mask is re-estimated rather than tested against the stored pattern. The companion Wald is ``RVR'`` when ``V`` is stored and an independence approximation of diagonal SEs otherwise --- do not quote the latter as a Wald ``\chi^2``.
 
 ---
 
 ## References
 
+- Amisano, Gianni, and Carlo Giannini. 1997. *Topics in Structural VAR Econometrics*. 2nd ed. Berlin: Springer. ISBN 978-3-540-61942-0.
+
 - Doornik, Jurgen A., and Henrik Hansen. 2008. "An Omnibus Test for Univariate and Multivariate Normality." *Oxford Bulletin of Economics and Statistics* 70: 927--939. [DOI](https://doi.org/10.1111/j.1468-0084.2008.00537.x)
 
 - Henze, Norbert, and Bernhard Zirkler. 1990. "A Class of Invariant Consistent Tests for Multivariate Normality." *Communications in Statistics - Theory and Methods* 19 (10): 3595--3617. [DOI](https://doi.org/10.1080/03610929008830400)
 
+- Holm, Sture. 1979. "A Simple Sequentially Rejective Multiple Test Procedure." *Scandinavian Journal of Statistics* 6 (2): 65--70. [DOI](https://doi.org/10.2307/4615733)
+
 - Jarque, Carlos M., and Anil K. Bera. 1980. "Efficient Tests for Normality, Homoscedasticity and Serial Independence of Regression Residuals." *Economics Letters* 6 (3): 255--259. [DOI](https://doi.org/10.1016/0165-1765(80)90024-5)
+
+- Keweloh, Sascha A. 2021. "A Generalized Method of Moments Estimator for Structural Vector Autoregressions Based on Higher Moments." *Journal of Business & Economic Statistics* 39 (3): 772--782. [DOI](https://doi.org/10.1080/07350015.2020.1730858)
+
+- Lanne, Markku, Mika Meitz, and Pentti Saikkonen. 2017. "Identification and Estimation of Non-Gaussian Structural Vector Autoregressions." *Journal of Econometrics* 196 (2): 288--304. [DOI](https://doi.org/10.1016/j.jeconom.2016.06.002)
+
+- Lanne, Markku, Helmut Lütkepohl, and Katarzyna Maciejowska. 2010. "Structural Vector Autoregressions with Markov Switching." *Journal of Economic Dynamics and Control* 34 (2): 121--131. [DOI](https://doi.org/10.1016/j.jedc.2009.08.002)
 
 - Lewis, Daniel J. 2022. "Robust Inference in Models Identified via Heteroskedasticity." *Review of Economics and Statistics* 104 (3): 510--524. [DOI](https://doi.org/10.1162/rest_a_00963)
 

@@ -43,6 +43,7 @@ Fields:
 - `converged::Bool`
 - `iterations::Int`
 - `objective::T` — final objective value
+- `shock_names::Vector{String}` — labels for the n structural shocks
 """
 struct ICASVARResult{T<:AbstractFloat} <: AbstractNonGaussianSVAR
     B0::Matrix{T}
@@ -53,6 +54,19 @@ struct ICASVARResult{T<:AbstractFloat} <: AbstractNonGaussianSVAR
     converged::Bool
     iterations::Int
     objective::T
+    shock_names::Vector{String}
+end
+
+function ICASVARResult{T}(B0, W, Q, shocks, method, converged, iterations,
+                          objective) where {T<:AbstractFloat}
+    n = size(B0, 2)
+    ICASVARResult{T}(B0, W, Q, shocks, method, converged, iterations, objective,
+                     _default_shock_names(n))
+end
+
+function ICASVARResult(B0, W, Q, shocks, method, converged, iterations, objective)
+    T = eltype(B0)
+    ICASVARResult{T}(B0, W, Q, shocks, method, converged, iterations, objective)
 end
 
 function Base.show(io::IO, r::ICASVARResult{T}) where {T}
@@ -60,6 +74,7 @@ function Base.show(io::IO, r::ICASVARResult{T}) where {T}
     spec = Any[
         "Method"     string(r.method);
         "Variables"  n;
+        "Shocks"     join(r.shock_names, ", ");
         "Converged"  r.converged ? "Yes" : "No";
         "Iterations" r.iterations;
         "Objective"  _fmt(r.objective)
@@ -69,9 +84,7 @@ function Base.show(io::IO, r::ICASVARResult{T}) where {T}
         column_labels = ["", ""],
         alignment = [:l, :r],
     )
-    _matrix_table(io, r.B0, "Structural Impact Matrix (B₀)";
-        row_labels=["Var $i" for i in 1:n],
-        col_labels=["Shock $j" for j in 1:n])
+    _show_B0_ses(io, r.B0, fill(T(NaN), n, n))
 end
 
 # =============================================================================

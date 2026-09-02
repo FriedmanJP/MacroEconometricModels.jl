@@ -184,7 +184,7 @@ any Tables.jl sink.
 
 ```julia
 model = estimate_var(Y, 2)
-irf = compute_irf(model, compute_Q(model, :cholesky, 20), 20)
+irf = compute_irf(model, compute_Q(model, :cholesky; horizon=20), 20)
 df = long_table(irf)     # (horizon, variable, shock, value, lower, upper)
 ```
 """

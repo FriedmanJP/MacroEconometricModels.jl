@@ -335,7 +335,7 @@ end
         signs = [sign_restriction(1, 2, :positive)]
         restrictions = SVARRestrictions(n; zeros=zeros_r, signs=signs)
 
-        @test_throws ErrorException identify_uhlig(model, restrictions, 5)
+        @test_throws IdentificationError identify_uhlig(model, restrictions, 5)
     end
 
     # ==========================================================================
@@ -575,6 +575,189 @@ end
         @test isapprox(result.irf[1, :, :], expected_impact, atol=1e-8)
     end
 
+end
+
+@testset "SID-02 restriction horizon ≥ IRF horizon" begin
+    Random.seed!(731)
+    m = estimate_var(randn(150, 3), 2)
+    r5 = SVARRestrictions(3; signs=[sign_restriction(1, 1, :positive; horizon=5)])
+    u = identify_uhlig(m, r5, 3; n_starts=10, n_refine=2,
+                       max_iter_coarse=100, max_iter_fine=300, rng=MersenneTwister(731))
+    @test size(u.irf, 1) == 3
+    irf6 = compute_irf(m, u.Q, 6)
+    @test irf6[6, 1, 1] > 0
+    r0 = SVARRestrictions(3; zeros=[zero_restriction(2, 1; horizon=4)],
+                          signs=[sign_restriction(1, 1, :positive)])
+    u0 = identify_uhlig(m, r0, 2; n_starts=10, n_refine=2,
+                        max_iter_coarse=100, max_iter_fine=300, rng=MersenneTwister(7311))
+    @test abs(compute_irf(m, u0.Q, 5)[5, 2, 1]) < 1e-8
+    @test_throws ArgumentError SVARRestrictions(3; signs=[SignRestriction(4, 1, 0, 1)])
+    @test_throws ArgumentError sign_restriction(1, 1, :positive; horizon=-1)
+end
+
+@testset "SID-03 Uhlig penalty weights" begin
+    # Two :positive restrictions, normalised responses (1.00, 0.01) vs (1.05, -0.05)
+    # Satisfied candidate must have the lower (better) penalty.
+    # Construct via a tiny helper that injects responses — or call _uhlig_penalty
+    # on hand-built Qs once a VAR is estimated.
+    Random.seed!(732)
+    n = 2
+    Y = randn(200, n)
+    m = estimate_var(Y, 1)
+    r = SVARRestrictions(n; signs=[
+        sign_restriction(1, 1, :positive),
+        sign_restriction(2, 1, :positive),
+    ])
+    # Direct f(x) table
+    f(x; w=100) = x <= 0 ? x : w * x
+    # candidate A: both satisfied, normalized = (1.00, 0.01) → x = -normalized
+    penA = f(-1.00) + f(-0.01)
+    penB = f(-1.05) + f(0.05)
+    @test penA < penB
+    @test penA ≈ -1.01
+    @test penB ≈ 3.95
+
+    # If _uhlig_penalty still uses inverted weights, a violating rotation can score better.
+    # After the fix, the satisfied Q has the lower penalty.
+    # Negative residual correlation: θ≈0 maximises the first response but violates
+    # the second sign; a modest rotation satisfies both with a smaller first response.
+    ρ = -0.5
+    Sigma = [1.0 ρ; ρ 1.0]
+    B = zeros(1 + n * 1, n)
+    U = randn(199, n)
+    m_corr = VARModel(Y, 1, B, U, Sigma, 0.0, 0.0, 0.0)
+    horizon = 1
+    Phi = MacroEconometricModels._compute_ma_coefficients(m_corr, horizon)
+    L = MacroEconometricModels.safe_cholesky(m_corr.Sigma)
+    θA = [π / 6 + 0.05]          # both signs satisfied
+    θB = [0.0]                   # var 2 on impact is negative
+    penA_fn = MacroEconometricModels._uhlig_penalty(θA, r, Phi, L, m_corr, horizon, n)
+    penB_fn = MacroEconometricModels._uhlig_penalty(θB, r, Phi, L, m_corr, horizon, n)
+    QA = MacroEconometricModels._uhlig_build_Q(θA, r, Phi, L, n)
+    QB = MacroEconometricModels._uhlig_build_Q(θB, r, Phi, L, n)
+    @test QA[1, 1] > 0 && (MacroEconometricModels.safe_cholesky(m_corr.Sigma) * QA)[2, 1] > 0
+    @test QB[1, 1] > 0 && (MacroEconometricModels.safe_cholesky(m_corr.Sigma) * QB)[2, 1] < 0
+    @test penA_fn < penB_fn
+    penB_heavy = MacroEconometricModels._uhlig_penalty(θB, r, Phi, L, m_corr, horizon, n;
+                                                      penalty_weight=1000)
+    @test penB_heavy > penB_fn
+    spA = MacroEconometricModels._uhlig_shock_penalties(QA, r, Phi, L, m_corr, horizon)
+    spB = MacroEconometricModels._uhlig_shock_penalties(QB, r, Phi, L, m_corr, horizon)
+    @test spA[1] < spB[1]
+
+    # Unique admissible rotation: zero on (2,1) plus a positive impact sign on (1,1)
+    # is Cholesky up to the sign, which the restriction pins.
+    r_uniq = SVARRestrictions(n;
+        zeros=[zero_restriction(2, 1)],
+        signs=[sign_restriction(1, 1, :positive)])
+    u = identify_uhlig(m, r_uniq, 5; n_starts=(FAST ? 3 : 10), n_refine=(FAST ? 1 : 2),
+                       max_iter_coarse=(FAST ? 50 : 100), max_iter_fine=(FAST ? 100 : 300),
+                       rng=MersenneTwister(732))
+    @test u.converged == true
+    @test u.irf[1, 1, 1] > 0
+    @test abs(u.irf[1, 2, 1]) < 1e-8
+    @test all(sr -> sr.sign * u.irf[sr.horizon + 1, sr.variable, sr.shock] > 0,
+              r_uniq.signs)
+
+    io = IOBuffer()
+    show(io, u)
+    @test occursin("lower", lowercase(String(take!(io))))
+end
+
+@testset "SID-14 Uhlig rejects non-sign rejection types" begin
+    Random.seed!(743)
+    m = estimate_var(randn(80, 2), 1)
+    s1 = sign_restriction(1, 1, :positive)
+    mixed = [
+        SVARRestrictions(2; signs=[s1, elasticity_bound(1, 2, 1; lower=0.0, upper=1.0)]),
+        SVARRestrictions(2; signs=[s1, magnitude_bound(1, 1; lower=-1.0, upper=1.0)]),
+        SVARRestrictions(2; signs=[s1, fevd_share_restriction(1, 1; horizon=0, lower=0.2, upper=1.0)]),
+        SVARRestrictions(2; signs=[s1, cumulative_restriction(1, 1, :positive; horizons=0:2)]),
+        SVARRestrictions(2; signs=[s1, a0_sign_restriction(1, 1, :positive)]),
+    ]
+    for r in mixed
+        err = try
+            identify_uhlig(m, r, 4; n_starts=1, n_refine=1)
+            nothing
+        catch e
+            e
+        end
+        @test err isa ArgumentError
+        @test occursin("SignRestriction", sprint(showerror, err))
+    end
+    # Linear A0 zeros still go through the null space
+    r_a0z = SVARRestrictions(2;
+        zeros=[a0_zero_restriction(2, 1)],
+        signs=[sign_restriction(1, 1, :positive)])
+    u = identify_uhlig(m, r_a0z, 4; n_starts=(FAST ? 3 : 8), n_refine=1,
+                       max_iter_coarse=(FAST ? 50 : 100), max_iter_fine=(FAST ? 100 : 200),
+                       rng=MersenneTwister(743))
+    L = MacroEconometricModels.safe_cholesky(m.Sigma)
+    A0, _ = MacroEconometricModels._rf_to_struct(m.B, L, u.Q)
+    @test abs(A0[2, 1]) < 1e-8
+    @test A0 ≈ Matrix(L') \ u.Q atol=1e-10
+end
+
+@testset "SID-19 irf method=:uhlig" begin
+    Random.seed!(748)
+    m = estimate_var(randn(80, 2), 1)
+    r = SVARRestrictions(2; signs=[sign_restriction(1, 1, :positive)])
+    rng = MersenneTwister(748)
+    uhlig_kw = (n_starts=FAST ? 3 : 8, n_refine=1, max_iter_coarse=80, max_iter_fine=200)
+    u = identify_uhlig(m, r, 5; rng=copy(rng), uhlig_kw...)
+    ru = irf(m, 5; method=:uhlig, restrictions=r, rng=copy(rng), uhlig_kw...)
+    @test ru.values ≈ u.irf
+end
+
+@testset "SID-23 Uhlig RWZ checker" begin
+    Random.seed!(752)
+    n = 3
+    m = estimate_var(randn(120, n), 1)
+
+    @testset "sign-only is :set and report notes the set" begin
+        r = SVARRestrictions(n; signs=[sign_restriction(1, 1, :positive)])
+        @test check_identification(r, n).status === :set
+        u = identify_uhlig(m, r, 4; n_starts=(FAST ? 3 : 6), n_refine=1,
+                           max_iter_coarse=(FAST ? 40 : 80), max_iter_fine=(FAST ? 80 : 160),
+                           rng=MersenneTwister(7527))
+        shown = sprint(show, u)
+        @test occursin("set", lowercase(shown))
+        @test occursin("point", lowercase(shown))
+    end
+
+    @testset "zeros all on shock 1 → IdentificationError" begin
+        r = SVARRestrictions(n;
+            zeros=[zero_restriction(i, 1) for i in 1:n],
+            signs=[sign_restriction(1, 2, :positive)])
+        @test check_identification(r, n).status === :under
+        @test_throws IdentificationError identify_uhlig(m, r, 4; n_starts=1, n_refine=1)
+    end
+
+    @testset "extra independent zeros → :over IdentificationError" begin
+        m2 = estimate_var(randn(80, 2), 1)
+        r = SVARRestrictions(2;
+            zeros=[zero_restriction(1, 1), zero_restriction(2, 1)],
+            signs=[sign_restriction(1, 2, :positive)])
+        @test check_identification(r, 2).status === :over
+        @test_throws IdentificationError identify_uhlig(m2, r, 4; n_starts=1, n_refine=1)
+    end
+
+    @testset "report uses stored rank status, not order-only checker" begin
+        r = SVARRestrictions(n; zeros=[
+            zero_restriction(2, 1),
+            zero_restriction(2, 1),
+            zero_restriction(3, 2),
+        ], signs=[sign_restriction(1, 1, :positive)])
+        @test check_identification(r, n).status === :exact
+        st = check_identification(r, m; n_points=8, rng=MersenneTwister(7531))
+        @test st.status === :set
+        uh = UhligSVARResult{Float64}(Matrix{Float64}(I, n, n), randn(4, n, n), -1.0,
+                                      zeros(n), r, true, ["v$i" for i in 1:n], st)
+        @test uh.id_status.status === :set
+        shown = sprint(show, uh)
+        @test occursin("set", lowercase(shown))
+        @test occursin("point", lowercase(shown))
+    end
 end
 
 _tprint("Mountford-Uhlig (2009) tests completed.")

@@ -1,6 +1,6 @@
 # [Structural Identification](@id structural_identification_page)
 
-Structural identification recovers the mapping from reduced-form VAR residuals to economically interpretable structural shocks. The reduced-form covariance ``\Sigma = B_0 B_0'`` provides ``n(n+1)/2`` equations for ``n^2`` unknowns in the impact matrix ``B_0``, leaving ``n(n-1)/2`` free parameters. Additional restrictions --- economic, statistical, or a combination --- pin down the remaining degrees of freedom. This page documents the six schemes that impose *economic* restrictions:
+Structural identification recovers the mapping from reduced-form VAR residuals to economically interpretable structural shocks. The reduced-form covariance ``\Sigma = B_0 B_0'`` provides ``n(n+1)/2`` equations for ``n^2`` unknowns in the impact matrix ``B_0``, leaving ``n(n-1)/2`` free parameters. Additional restrictions --- economic, statistical, or a combination --- pin down the remaining degrees of freedom. This page documents the six schemes that impose *economic* restrictions on a rotation of the Cholesky factor. Non-recursive contemporaneous zeros estimated by ML live on [AB-Model SVAR](@ref id_ab_page).
 
 - **Cholesky (recursive)** --- lower-triangular ``B_0`` via Cholesky decomposition (Christiano, Eichenbaum & Evans 1999)
 - **Sign restrictions** --- set identification via random rotations satisfying inequality constraints (Rubio-Ramírez, Waggoner & Zha 2010)
@@ -9,7 +9,7 @@ Structural identification recovers the mapping from reduced-form VAR residuals t
 - **Zero + sign restrictions** --- exact zero restrictions with sign constraints and importance-weighted inference (Arias, Rubio-Ramírez & Waggoner 2018)
 - **Penalty function (Mountford-Uhlig)** --- point-identified rotation via constrained optimization (Mountford & Uhlig 2009)
 
-For statistical identification via non-Gaussianity or heteroskedasticity --- 14 further schemes reachable through the same `method=` keyword --- see [Statistical Identification](@ref nongaussian_page). Once ``B_0`` is identified, the impact matrix feeds the impulse responses, variance decompositions, and historical decompositions of [Innovation Accounting](@ref innovation_accounting_page).
+For identification from an external instrument (high-frequency surprises, narrative shocks) see [Proxy SVAR](@ref id_proxy_page). For AB-model maximum likelihood with patterns on ``A`` and ``B`` see [AB-Model SVAR](@ref id_ab_page). For the shock that maximises a target variable's forecast-error variance or spectral share see [Max-Share Identification](@ref id_maxshare_page). Cointegrated systems use the structural VECM route on [Vector Error Correction Models](@ref vecm_page) (`identify_svec`, `method=:svec`). For statistical identification via non-Gaussianity or heteroskedasticity --- 15 further schemes reachable through the same `method=` keyword --- see [Statistical Identification](@ref nongaussian_page). Once ``B_0`` is identified, the impact matrix feeds the impulse responses, variance decompositions, and historical decompositions of [Innovation Accounting](@ref innovation_accounting_page).
 
 ```@setup sid
 using MacroEconometricModels, Random
@@ -19,6 +19,7 @@ Y = to_matrix(apply_tcode(fred[:, ["INDPRO", "CPIAUCSL", "FEDFUNDS"]]))
 Y = Y[all.(isfinite, eachrow(Y)), :]
 Y = Y[end-59:end, :]
 model = estimate_var(Y, 2; varnames=["INDPRO", "CPIAUCSL", "FEDFUNDS"])
+post_rb = estimate_bvar(Y, 2; n_draws=100, seed=11)
 ```
 
 ## Quick Start
@@ -94,21 +95,25 @@ where:
 
 The restriction ``\Sigma = B_0 B_0'`` is satisfied by any ``B_0 = P Q`` where ``P = \text{chol}(\Sigma)`` and ``Q`` is an orthogonal rotation (``Q'Q = I``). The choice of ``Q`` determines the economic interpretation of the shocks. Every identification scheme in this package reduces to selecting ``Q`` under a different constraint set.
 
-Four of the six economic schemes are reachable through the `method=` keyword shared by `irf`, `fevd`, and `historical_decomposition`; the two set-identified schemes that need a restriction object have dedicated entry points.
+The six economic schemes, the instrument / pattern / share schemes, and the fifteen statistical schemes share the `method=` keyword of `irf`, `fevd`, and `historical_decomposition`. Set-identified schemes that need a restriction object also have dedicated entry points.
 
 | Scheme | Public interface | Extra arguments |
 |--------|------------------|-----------------|
 | Cholesky | `irf(m, H; method=:cholesky)` | none |
-| Sign | `irf(m, H; method=:sign, check_func=f)` or `identify_sign` | `check_func` |
-| Narrative | `irf(m, H; method=:narrative, check_func=f, narrative_check=g)` or `identify_narrative` | `check_func`, `narrative_check` |
+| Sign | `irf(m, H; method=:sign, check_func=f)` or `identify_sign` | `check_func`, `max_draws` |
+| Narrative (ADRR) | `identify_arias(m, r, H)` with `narrative_shock_restriction` / `narrative_contribution_restriction` | `n_narrative_sims`, `n_draws` |
 | Long-run | `irf(m, H; method=:long_run)` | none |
-| Zero + sign | `identify_arias(m, restrictions, H)` | `SVARRestrictions` |
-| Penalty function | `identify_uhlig(m, restrictions, H)` | `SVARRestrictions` |
+| Structural VECM | `irf(vecm, H; method=:svec)` | `VECMModel`; `method=:long_run` is an alias |
+| Zero + sign | `identify_arias(m, restrictions, H)` or `method=:arias` | `SVARRestrictions` |
+| Penalty function | `identify_uhlig(m, restrictions, H)` or `method=:uhlig` | `SVARRestrictions` |
+| Proxy | `irf(m, H; method=:proxy, instruments=Z)` | `instruments` |
+| AB-model | `irf(m, H; method=:ab, pattern=…)` | `pattern` |
+| Max-share | `irf(m, H; method=:max_share, target=…)` | `target` |
 
-Counting the fourteen statistical schemes documented on [Statistical Identification](@ref nongaussian_page), the `method=` keyword accepts eighteen symbols in total. Every one of them returns the same `ImpulseResponse` object, so switching identification never changes the downstream code.
+The `method=` keyword accepts **twenty-five** symbols: the ten above plus fifteen statistical schemes (five ICA, four ML, the `:nongaussian_ml` dispatcher, GMM, and four heteroskedasticity estimators). Every one of them returns the same `ImpulseResponse` object, so switching identification never changes the downstream code.
 
 !!! note "Technical Note"
-    `irf(m, H; method=:sign)` returns the **first** rotation that satisfies `check_func`, drawn from at most 100 candidates, and the draw budget is not exposed through `irf`. Use `identify_sign` when the full identified set --- or a larger `max_draws` --- is required.
+    `irf(m, H; method=:sign)` and `irf(m, H; method=:narrative)` run `identify_sign` / `identify_narrative` with `store_all=true` and return the **pointwise median** of the identified set. Bands are identified-set quantiles (`ci_type = :identified_set`); `max_draws` defaults to 1000. That median path is a set summary, not an IRF (Fry & Pagan 2011) --- use `median_target` for the admissible rotation closest to it.
 
 ---
 
@@ -173,7 +178,9 @@ The check function receives the full ``H \times n \times n`` IRF array, indexed 
 check = resp -> resp[1, 3, 3] > 0 && resp[1, 1, 3] < 0 && resp[1, 2, 3] < 0
 
 result_sign = irf(model, 20; method=:sign, check_func=check, rng=MersenneTwister(3))
-round.(result_sign.values[1, :, 3], digits=4)
+(impact = round.(result_sign.values[1, :, 3], digits=4),
+ ci_type = result_sign.ci_type,
+ impact_95 = round.((result_sign.ci_lower[1, 1, 3], result_sign.ci_upper[1, 1, 3]), digits=4))
 ```
 
 ```julia
@@ -184,7 +191,7 @@ plot_result(result_sign)
 <iframe src="../assets/plots/irf_sign.html" width="100%" height="500" frameborder="0" style="border:1px solid #ddd;border-radius:4px;"></iframe>
 ```
 
-The single accepted rotation puts the impact response of industrial production at ``-0.0069`` log points against a ``0.0105`` percentage-point rise in the funds rate. That draw is one admissible point in the identified set, not an estimate: a different seed returns a different admissible rotation. Inference requires the whole set.
+The reported path is the pointwise median of the identified set (`ci_type = :identified_set`): industrial production falls ``0.0037`` log points on impact against a ``0.0346`` percentage-point rise in the funds rate, with a 95% identified-set band of ``[-0.0066, -0.0003]``. `max_draws` defaults to 1000. The pointwise median is a set summary, not an IRF --- no single admissible ``Q`` is required to match it at every horizon (Fry & Pagan 2011).
 
 With `store_all=true`, `identify_sign` returns a `SignIdentifiedSet` holding every accepted rotation and its IRFs:
 
@@ -210,7 +217,7 @@ plot_result(id_set)
 <iframe src="../assets/plots/svar_setid_band.html" width="100%" height="500" frameborder="0" style="border:1px solid #ddd;border-radius:4px;"></iframe>
 ```
 
-498 of 5000 rotations satisfy all three impact conditions, an acceptance rate of ``10.0\%``. Across that set the median impact response of industrial production is ``-0.0030`` log points with a 68% interval of ``[-0.0058, -0.0010]``, which excludes zero --- unsurprisingly, since the restriction imposes the negative sign directly. The response dies out quickly: by ``h = 6`` the median is ``-0.0001``. The width of that band is identification uncertainty alone; it carries no estimation uncertainty, because every rotation is applied to the same point estimate of ``(B, \Sigma)``.
+498 of 5000 rotations satisfy all three impact conditions, an acceptance rate of ``10.0\%``. Across that set the median impact response of industrial production is ``-0.0030`` log points with a 68% interval of ``[-0.0058, -0.0010]``, which excludes zero --- unsurprisingly, since the restriction imposes the negative sign directly. The response dies out quickly: by ``h = 6`` the median is ``-0.0001``. The width of that band is identification uncertainty alone; it carries no estimation uncertainty, because every rotation is applied to the same point estimate of ``(B, \Sigma)``. Pick a single admissible path with `median_target` (below) rather than treating this median as a structural IRF.
 
 | Keyword | Type | Default | Description |
 |---------|------|---------|-------------|
@@ -224,47 +231,97 @@ plot_result(id_set)
 
 ---
 
-## Narrative Restrictions
+## Summarising the Identified Set
 
-**Narrative restrictions** augment sign restrictions with historical information about specific shocks at particular dates (Antolín-Díaz & Rubio-Ramírez 2018). Two types of narrative constraint appear in the literature:
+The pointwise median of a sign- or Arias-identified set need not equal the IRF of any single admissible rotation (Fry & Pagan 2011). Four summaries of a `SignIdentifiedSet` or `AriasSVARResult` pick either one stored draw or a joint band.
 
-1. **Shock sign narrative**: at date ``t^*``, structural shock ``j`` was positive (or negative)
-2. **Shock contribution narrative**: at date ``t^*``, shock ``j`` was the dominant driver of variable ``i``
-
-`identify_narrative` filters first for sign-satisfying rotations, then evaluates a second predicate on the recovered structural shocks ``\varepsilon = B_0^{-1} u``. The narrative predicate receives the ``T_{\text{eff}} \times n`` shock matrix, indexed `[period, shock]`.
-
-```@example sid
-sign_check = resp -> resp[1, 3, 3] > 0 && resp[1, 1, 3] < 0
-narrative_check = shocks -> shocks[20, 3] > 0   # tightening episode in period 20
-
-Q, irfs, shocks = identify_narrative(model, 20, sign_check, narrative_check;
-                                     max_draws=5000, rng=MersenneTwister(4))
-(shock_20 = round(shocks[20, 3], digits=4),
- impact = round.(irfs[1, :, 3], digits=4))
-```
-
-The returned rotation delivers a period-20 monetary shock of ``2.88`` standard deviations, with an impact response of ``-0.0038`` log points for industrial production against ``0.0163`` percentage points on the funds rate. To see how much the narrative constraint sharpens the set, apply it to the rotations that already satisfy the sign conditions:
+- **`median_target`** --- Fry–Pagan (2011): the stored ``Q`` whose IRF is closest to the pointwise median in standardised Euclidean distance
+- **`modal_model`** --- Inoue & Kilian (2013): the stored draw at which a Gaussian KDE over vectorised, cell-standardised IRFs attains its maximum
+- **`joint_band`** --- Inoue & Kilian (2022): the componentwise envelope of the lowest-loss draws whose weights sum to `level`, always including the median-target IRF
+- **`sup_t_band`** --- Montiel Olea & Plagborg-Møller (2019): ``\mathrm{median} \pm c\,\sigma``, with ``c`` the `level` quantile of ``\max_{h,i,j} |\mathrm{IRF}-\mathrm{median}|/\sigma``
 
 ```@example sid
-sign_admissible = identify_sign(model, 20, sign_check; max_draws=2000,
-                                store_all=true, rng=MersenneTwister(4))
-n_narrative = count(Q -> narrative_check(compute_structural_shocks(model, Q)),
-                    sign_admissible.Q_draws)
-(sign_only = sign_admissible.n_accepted, sign_and_narrative = n_narrative)
+mt = median_target(id_set)
+mm = modal_model(id_set)
+jb_lo, jb_hi = joint_band(id_set; level=0.68)
+st_lo, st_hi = sup_t_band(id_set; level=0.68)
+(median_target_index = mt.index,
+ modal_index = mm.index,
+ impact_mt = round.(mt.irf[1, :, 3], digits=4),
+ joint_68 = round.((jb_lo[1, 1, 3], jb_hi[1, 1, 3]), digits=4))
 ```
 
-Of 2000 random rotations, 412 satisfy the two sign conditions and 215 of those also place a positive monetary shock in period 20 --- the narrative constraint discards roughly half of the sign-admissible set, and it does so using information the sign restrictions cannot express. Because `identify_narrative` returns the first admissible draw rather than the set, build the set with `identify_sign` and filter it, as above, when credible bands are needed.
+```julia
+plot_result(id_set; view=:median_target)
+```
+
+```@raw html
+<iframe src="../assets/plots/svar_median_target.html" width="100%" height="500" frameborder="0" style="border:1px solid #ddd;border-radius:4px;"></iframe>
+```
+
+The median-target rotation is draw 312 of 498. Its impact on industrial production is ``-0.0030`` log points --- close to the pointwise median --- against a ``0.0541`` percentage-point rise in the funds rate. The modal draw is a different rotation (index 150). The 68% joint band for the output response on impact is ``[-0.0067, -0.0000]``, wider than the pointwise 68% interval because a path that stays inside the joint band at every ``(h,i,j)`` is a stricter requirement than a pointwise quantile. `plot_result(id_set; view=:median_target)` draws that single admissible IRF; `view=:joint` draws the joint band.
 
 | Keyword | Type | Default | Description |
 |---------|------|---------|-------------|
-| `max_draws` | `Int` | `1000` | Maximum rotation draws |
+| `level` | `Real` | `0.68` | Coverage of `joint_band` / `sup_t_band` |
+| `loss` | `Symbol` | `:absolute` | Loss for `joint_band` (`:absolute` is L1 to the pointwise median) |
+| `bandwidth` | `Union{Nothing,Real}` | `nothing` | KDE bandwidth for `modal_model` (mean pairwise distance on 32 draws) |
+
+---
+
+## Narrative Restrictions
+
+**Narrative restrictions** constrain structural shocks and historical decompositions at documented dates (Antolín-Díaz & Rubio-Ramírez 2018). They sit on the same `SVARRestrictions` object as traditional signs and zeros; `identify_arias` accepts a rotation only if it also matches the narrative, then reweights the draw by ``1/\hat\omega``.
+
+Two typed constraints are supported:
+
+1. **Shock sign**: at residual-sample dates ``t^*``, structural shock ``j`` was positive (or negative)
+2. **Contribution**: over a window, shock ``j``'s historical-decomposition contribution to variable ``i`` satisfies one of
+   - Type A (`kind=:most_important`, default): ``|H_{i,j}| > \max_{k \neq j} |H_{i,k}|``
+   - Type B (`kind=:overwhelming`): ``|H_{i,j}| > \sum_{k \neq j} |H_{i,k}|``
+   - least important (`kind=:least_important`): ``|H_{i,j}| < \min_{k \neq j} |H_{i,k}|``
+
+The contribution of shock ``j`` to the unexpected change in variable ``i`` between dates ``t`` and ``t+h`` is
+
+```math
+H_{i,j,t,t+h} = \sum_{\ell=0}^{h} \Theta_\ell[i,j] \, \varepsilon_{j,t+h-\ell}
+```
+
+where:
+- ``\Theta_\ell`` is the structural IRF at horizon ``\ell``
+- ``\varepsilon_{j,s}`` is structural shock ``j`` at date ``s`` (residual-sample index)
+
+Traditional sign restrictions truncate the prior on ``Q``. Narrative restrictions truncate the likelihood, so discarding the rotations that fail the narrative is not enough: draws that are more likely to satisfy it would otherwise be over-weighted. After a draw clears the sign/zero and narrative filters, ``\hat\omega`` is the fraction of `n_narrative_sims` independent paths ``\varepsilon^* \sim N(0,I)`` over the restricted dates that also satisfy the narrative. The Arias importance weight is multiplied by ``1/\hat\omega``. Consequently `ess_fraction < 1` whenever narrative restrictions are present, even with no zeros.
+
+```@example sid
+r_nar = SVARRestrictions(3;
+    signs = [sign_restriction(3, 3, :positive),
+             sign_restriction(1, 3, :negative),
+             narrative_shock_restriction(3, [20], :positive)])
+arias_nar = identify_arias(model, r_nar, 20; n_draws=200, n_narrative_sims=400,
+                           rng=MersenneTwister(4))
+pct_nar = irf_percentiles(arias_nar; quantiles=[0.16, 0.5, 0.84])
+(impact_median = round.(pct_nar[1, :, 3, 2], digits=4),
+ ess_fraction = round(arias_nar.ess_fraction, digits=3),
+ n_narrative_sims = arias_nar.n_narrative_sims)
+```
+
+The weighted median impact of the monetary shock is a ``0.0036`` log-point drop in industrial production against a ``0.0573`` percentage-point rise in the funds rate, with a 68% band of ``[-0.0057, -0.0012]`` for output. `ess_fraction = 0.998` of 200 draws: a single shock-sign date has ``\hat\omega \approx 1/2`` for every rotation, so the ``1/\hat\omega`` correction is almost uniform and Kish's ESS barely moves. Contribution restrictions and many dates make ``\hat\omega`` depend on ``Q`` and pull `ess_fraction` well below 1. `historical_decomposition(model, r_nar, H)` uses the same weighted draws.
+
+`identify_narrative(model, r_nar, H)` is a thin wrapper around `identify_arias`. The closure form `identify_narrative(model, H, sign_check, narrative_check)` remains the set-aware path for `irf(; method=:narrative)` and `compute_Q(:narrative)`.
+
+| Keyword | Type | Default | Description |
+|---------|------|---------|-------------|
+| `n_draws` | `Int` | `1000` | Target number of accepted rotations |
+| `n_rotations` | `Int` | `1000` | Maximum attempts per accepted draw |
+| `n_narrative_sims` | `Int` | `1000` | Monte Carlo draws of ``ε*`` used to estimate ``\hat\omega`` |
 | `rng` | `AbstractRNG` | `Random.default_rng()` | Random number generator |
 
-| Return | Type | Description |
-|--------|------|-------------|
-| `Q` | `Matrix{T}` | Accepted rotation |
-| `irf` | `Array{T,3}` | ``H \times n \times n`` impulse responses |
-| `shocks` | `Matrix{T}` | ``T_{\text{eff}} \times n`` structural shocks |
+| Field | Type | Description |
+|-------|------|-------------|
+| `ess_fraction` | `T` | Kish ESS over accepted draws; ``< 1`` with narrative restrictions |
+| `n_narrative_sims` | `Int` | ``M`` used for ``\hat\omega``; `0` when no narrative restriction is present |
+| `weights` | `Vector{T}` | Normalized importance weights (Arias volume element times ``1/\hat\omega``) |
 
 ---
 
@@ -308,13 +365,36 @@ When sign restrictions alone are insufficient, **zero restrictions** on specific
 
 The algorithm constructs ``Q`` column by column via QR decomposition in the null space of the zero-restriction matrix, then checks the sign restrictions on the candidate IRF ``\Theta_h = \Phi_h \, L \, Q``.
 
-| Type | Constructor | Description |
-|------|-------------|-------------|
-| Zero | `zero_restriction(var, shock; horizon=0)` | Variable `var` does not respond to `shock` at `horizon` |
-| Sign | `sign_restriction(var, shock, :positive; horizon=0)` | Response has the required sign at `horizon` |
+| Type | Constructor | Role |
+|------|-------------|------|
+| Zero | `zero_restriction(var, shock; horizon=0)` | Linear: variable `var` does not respond to `shock` at `horizon` |
+| Long-run zero | `zero_restriction(var, shock; horizon=:long_run)` | Linear: ``e_v' C(1) L q_s = 0`` with ``C(1)=(I-\sum A_i)^{-1}`` |
+| Sign | `sign_restriction(var, shock, :positive; horizon=0)` | Rejection: response has the required sign at `horizon` |
+| Sign (range) | `sign_restriction(var, shock, :positive; horizons=0:K)` | Expands to ``K+1`` sign restrictions |
+| ``A_0`` / ``A_+`` zero | `a0_zero_restriction(eq, shock)`, `aplus_zero_restriction(eq, shock; lag=1)` | Linear in ``Q``: zeros ``A_0[\mathrm{eq},\mathrm{shock}]`` in the RWZ form ``A_0 = L^{-T} Q`` (``y'A_0``), not the column-convention impact ``(LQ)[\mathrm{eq},\mathrm{shock}]`` (Arias, Caldara & Rubio-Ramírez 2019) |
+| Elasticity | `elasticity_bound(num, den, shock; lower, upper)` | Rejection: ``\Theta_{\mathrm{num}}/\Theta_{\mathrm{den}}`` in ``[\mathrm{lower},\mathrm{upper}]`` (Kilian & Murphy 2012) |
+| Magnitude | `magnitude_bound(var, shock; lower, upper)` | Rejection: IRF entry in a closed interval |
+| FEVD share | `fevd_share_restriction(var, shock; horizon, lower, upper)` | Rejection on the shock's forecast-error variance share |
+| Cumulative | `cumulative_restriction(var, shock, :positive; horizons=0:H)` | Rejection on the cumulated IRF |
+| Narrative shock | `narrative_shock_restriction(shock, dates, :positive)` | Rejection: ``ε_{j,t}`` has the given sign at residual-sample dates |
+| Narrative contribution | `narrative_contribution_restriction(var, shock, window; kind=:most_important)` | Rejection: Type A most important (``|H_j| > \max_{k\neq j}|H_k|``); `kind=:overwhelming` is Type B, `:least_important` is ``|H_j| < \min_{k\neq j}|H_k|`` |
+
+`SVARRestrictions` stores linear zeros and rejection restrictions in two lists. `sign_check(r)` returns an `irf -> Bool` closure for `identify_sign`, structural DFM, and counterfactuals; a handwritten predicate remains an escape hatch. Imposing all ``n(n-1)/2`` long-run zeros (on early-ordered shocks) recovers Blanchard–Quah as a just-identified special case, unique up to column sign. Cointegrated systems throw `IdentificationError` --- difference the data or use [`identify_svec`](@ref) on the VECM ([Vector Error Correction Models](@ref vecm_page)).
+
+```@example sid
+r_h = SVARRestrictions(3;
+    signs = [sign_restriction(3, 1, :positive; horizons=0:2),
+             sign_restriction(2, 1, :negative; horizons=0:2)])
+id_typed = identify_sign(model, 20, sign_check(r_h); max_draws=2000, store_all=true,
+                         rng=MersenneTwister(21))
+(n_accepted = id_typed.n_accepted,
+ rate = round(id_typed.acceptance_rate; digits=3))
+```
+
+`horizons=0:2` expands each sign to three restrictions (impact through two months). `sign_check(r_h)` is the predicate `identify_sign` consumes; the same container feeds `identify_arias`.
 
 !!! warning "Zero restrictions must go on early-ordered shocks"
-    Column ``j`` of ``Q`` is drawn from the null space of ``j-1`` orthogonality constraints plus its own zero restrictions, so shock ``j`` admits at most ``n - j`` zeros. Loading a zero restriction onto the last shock of an ``n``-variable system over-constrains the draw and raises an error. Order the restricted shock first.
+    Column ``j`` of ``Q`` is drawn from the null space of ``j-1`` orthogonality constraints plus its own zero restrictions, so shock ``j`` admits at most ``n - j`` zeros. Loading a zero restriction onto the last shock of an ``n``-variable system over-constrains the draw and raises `IdentificationError`. Order the restricted shock first.
 
 ```@example sid
 restrictions = SVARRestrictions(3;
@@ -353,6 +433,44 @@ The sampler accepts 200 draws from 975 attempts (``20.5\%``) and the impact resp
 | `restrictions` | `SVARRestrictions` | Imposed restrictions |
 | `ess` | `T` | Kish effective sample size of the importance weights |
 | `ess_fraction` | `T` | ``\mathrm{ESS} / n_{\text{draws}}`` |
+| `elapsed` | `T` | Wall-clock seconds of the accept/weight loop |
+| `weights_elapsed` | `T` | Summed seconds spent on the volume-element weight |
+
+### Rank and order conditions
+
+Linear zeros identify the rotation almost everywhere when they satisfy the
+Rubio-Ramírez, Waggoner & Zha (2010) rank condition. Order the zeros so shock
+``j`` carries ``q_j`` of them. Global identification holds at a generic
+``(A_0, A_+)`` if and only if
+
+```math
+\mathrm{rank}\bigl(M_j(f(A_0, A_+))\bigr) = n - j, \qquad j = 1,\ldots,n
+```
+
+where:
+- ``M_j`` stacks the linear zero-restriction rows for shock ``j`` (finite-horizon IRF, long-run, ``A_0``, and ``A_+``)
+- ``n - j`` is the number of free directions remaining after ``j-1`` orthogonality constraints
+- the **order condition** ``q_j \ge n - j`` is necessary but not sufficient: linearly dependent rows (a repeated impact zero, or an impact zero stacked with a long-run zero when ``C(1) = I``) drop the rank below the count
+
+`check_identification` returns an `IdentificationStatus` with `status ∈ (:exact, :over, :under, :set)`. `:under` and `:over` throw `IdentificationError` from `identify_arias` and `identify_uhlig`. Sign restrictions do not enter the rank; a drawable shortfall of zeros with at least one sign is `:set`. Uhlig still returns a point from that set, stores the RWZ status on the result, and `report` says so.
+
+```@example sid
+rec = SVARRestrictions(3; zeros=[zero_restriction(2, 1), zero_restriction(3, 1),
+                                 zero_restriction(3, 2)])
+st_rec = check_identification(rec, model)
+st_sign = check_identification(SVARRestrictions(3; signs=[sign_restriction(1, 1, :positive)]), 3)
+(recursive = (st_rec.status, st_rec.ranks),
+ sign_only = st_sign.status)
+```
+
+The three recursive impact zeros recover Cholesky: ``\mathrm{rank}(M_j) = (2, 1, 0) = n - j`` and the status is `:exact`. The sign-only container has no linear zeros, so the rank condition fails and the status is `:set` --- Arias samples the identified set; Uhlig reports one penalty-optimal rotation from it.
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `status` | `Symbol` | `:exact`, `:over`, `:under`, or `:set` |
+| `ranks` | `Vector{Int}` | ``\mathrm{rank}(M_j)`` for shock ``j`` (generic point) |
+| `orders` | `Vector{Int}` | Number of linear zeros on shock ``j`` |
+| `n_overidentifying` | `Int` | ``\sum_j \max(\mathrm{rank}_j - (n-j), 0)`` |
 
 ### Effective Sample Size
 
@@ -398,20 +516,75 @@ The same restriction object drives historical decompositions: `historical_decomp
 
 ---
 
+## Robust Bayesian inference
+
+Haar / uniform-on-``O(n)`` Bayesian inference is a **single-prior** procedure: the rotation prior is unrevisable given ``(B, \Sigma)``. Giacomini & Kitagawa (2021) drop that prior. `identify_robust_bayes` reports, for every IRF entry,
+
+- the **set of posterior means** of the identified-set bounds ``[\ell(B,\Sigma), u(B,\Sigma)]``
+- a **robust credible region** --- the smallest interval containing `level` of those sets
+- the Haar single-prior equal-tailed interval from `identify_arias_bayesian`, for comparison
+- the informativeness diagnostic ``\kappa = 1 - |C_{\mathrm{single}}| / |C_{\mathrm{robust}}|`` (clipped to ``[0,1]``) and the empty-set probability ``\Pi(\emptyset)``
+
+``\kappa`` near 0 means the Haar interval is essentially prior-free; ``\kappa`` near 1 means it is prior-driven. The robust region is **not** expanded post-hoc to nest the Haar interval.
+
+```@example sid
+r_gk = identify_robust_bayes(post_rb, signs_only, 12; level=0.68,
+                             solver=:draws, n_draws=50, n_rotations=50,
+                             rng=MersenneTwister(11))
+report(r_gk)
+```
+
+```@example sid
+(informativeness = round(r_gk.informativeness, digits=3),
+ empty_set_prob = round(r_gk.empty_set_prob, digits=3),
+ output_robust = round.((r_gk.robust_lower[1, 1, 3], r_gk.robust_upper[1, 1, 3]), digits=4))
+```
+
+```julia
+plot_result(r_gk)
+```
+
+```@raw html
+<iframe src="../assets/plots/svar_robust_bayes.html" width="100%" height="500" frameborder="0" style="border:1px solid #ddd;border-radius:4px;"></iframe>
+```
+
+On this 100-draw posterior ``\kappa = 0.31`` and the identified set is never empty. The Haar interval is about 30% narrower than the robust region because the uniform-on-``O(n)`` prior concentrates mass inside the identified set. Report both. `solver=:optimize` is the closed form for ``n = 2`` with linear-in-``Q`` restrictions; ``n = 3`` uses Haar draws of the identified-set bounds (`solver=:draws`).
+
+| Keyword | Type | Default | Description |
+|---------|------|---------|-------------|
+| `level` | `Real` | `0.68` | Credibility level of the robust region |
+| `solver` | `Symbol` | `:optimize` | `:optimize` (``n=2`` closed form) or `:draws` |
+| `n_draws` | `Int` | `200` | Haar draws per posterior draw when `solver=:draws` |
+| `n_rotations` | `Int` | `100` | Arias attempts per posterior draw for the single-prior interval |
+| `rng` | `AbstractRNG` | `Random.default_rng()` | Random number generator |
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `lower`, `upper` | `Array{T,3}` | Posterior means of the identified-set bounds |
+| `robust_lower`, `robust_upper` | `Array{T,3}` | Robust credible region |
+| `single_prior_lower`, `single_prior_upper` | `Array{T,3}` | Haar equal-tailed interval |
+| `informativeness` | `T` | ``\kappa \in [0,1]`` |
+| `empty_set_prob` | `T` | Posterior probability that the identified set is empty |
+| `level` | `T` | Credibility level |
+
+---
+
 ## Mountford-Uhlig (2009) Penalty Function
 
-When a single best rotation is preferred over a distribution of draws, Mountford & Uhlig (2009) provide a **penalty function** approach. Zero restrictions are enforced exactly via null-space projection; sign restrictions are encouraged through a penalty minimized with two-phase Nelder-Mead optimization.
+When a single best rotation is preferred over a distribution of draws, Mountford & Uhlig (2009) provide a **penalty function** approach. Zero restrictions of every linear type (finite IRF, long-run, ``A_0``, ``A_+``) are enforced exactly via null-space projection; `SignRestriction`s are encouraged through a penalty minimized with two-phase Nelder-Mead. Elasticity, magnitude, FEVD, cumulative, and ``A_0``/``A_+`` *sign* restrictions are not in the penalty --- `identify_uhlig` throws `ArgumentError` on those mixed containers; use `identify_arias`.
 
 ```math
-\text{penalty} = -\sum_{s \in \mathcal{S}} w_s \cdot \text{sign}_s \cdot \frac{\text{IRF}_s}{\sigma_s}
+x_s = -\mathrm{sign}_s \cdot \frac{\mathrm{IRF}_s}{\sigma_s}, \qquad
+f(x) = \begin{cases} x & x \le 0 \\ 100\, x & x > 0 \end{cases}, \qquad
+\mathrm{penalty} = \sum_{s \in \mathcal{S}} f(x_s)
 ```
 
 where:
-- ``w_s = 100`` if the sign restriction is satisfied, ``w_s = 1`` if violated
-- ``\text{sign}_s \in \{+1, -1\}`` is the required sign direction
+- ``x_s > 0`` if and only if sign restriction ``s`` is violated
+- ``\mathrm{sign}_s \in \{+1,-1\}`` is the required sign direction
 - ``\sigma_s = \sqrt{\Sigma_{ii}}`` is the reduced-form residual standard deviation of the response variable
 
-Satisfied restrictions are rewarded a hundred times more heavily than violations are penalized, so the optimizer first buys sign satisfaction and only then maximizes the magnitude of the admissible responses.
+Weight 1 applies when the restriction is satisfied and weight 100 when it is violated (Uhlig 2005, §3.3; Mountford & Uhlig 2009, §3). Minimization therefore makes violations prohibitively expensive rather than rewarding large already-admissible responses.
 
 ```@example sid
 result_uhlig = identify_uhlig(model, signs_only, 20; rng=MersenneTwister(9))
@@ -424,7 +597,7 @@ report(result_uhlig)
  impact = round.(result_uhlig.irf[1, :, 3], digits=4))
 ```
 
-All three sign conditions are satisfied (`converged = true`) at a total penalty of ``-154.81``, carried entirely by shock 3 --- the only shock carrying restrictions. The selected rotation puts the impact response of industrial production at ``-0.0039`` log points and the funds rate at ``0.0474`` percentage points, a sharper monetary contraction than the median of the sign-restricted set because the penalty rewards large admissible responses rather than averaging over them.
+All three sign conditions are satisfied (`converged = true`) at a total penalty of ``-1.55``, carried entirely by shock 3 --- the only shock carrying restrictions. Because satisfied restrictions enter at weight 1, that figure is the sum of the three normalised IRFs, not a hundred-fold reward. The selected rotation puts the impact response of industrial production at ``-0.0039`` log points and the funds rate at ``0.0474`` percentage points, close to the median of the sign-restricted set; the penalty's job is to rule out violations, not to inflate admissible magnitudes.
 
 | Keyword | Type | Default | Description |
 |---------|------|---------|-------------|
@@ -454,13 +627,20 @@ All three sign conditions are satisfied (`converged = true`) at a total penalty 
 
 | Feature needed | Recommended | Why |
 |----------------|-------------|-----|
-| Baseline recursive IRFs | Cholesky | Simple, transparent, widely used |
-| Agnostic about magnitudes | Sign restrictions | Avoids specifying exact zeros |
-| Historical event information | Narrative | Sharply reduces identified set |
-| Long-run neutrality | Blanchard-Quah | Natural for supply vs demand |
-| Exact zero + sign constraints | Arias et al. | Importance-weighted inference |
-| Single optimal rotation | Uhlig penalty | Fast, deterministic |
-| No credible economic restriction | [Statistical ID](@ref nongaussian_page) | Higher moments identify ``B_0`` |
+| Recursive contemporaneous ordering | Cholesky | Simple, exactly identified |
+| Long-run neutrality (stationary VAR) | Blanchard-Quah | Supply versus demand |
+| Permanent vs transitory (VECM) | [SVEC](@ref vecm_page) | Common trends; ``C(1)`` is singular |
+| External instrument for one (or ``k``) shock | [Proxy](@ref id_proxy_page) | High-frequency or narrative proxy |
+| Non-recursive short-run zeros | [AB-model](@ref id_ab_page) | Amisano–Giannini ML with LR over-ID |
+| Agnostic sign constraints | Sign restrictions | Avoids specifying exact zeros |
+| Exact zeros plus signs | Arias et al. | Importance-weighted identified set |
+| Single optimal rotation from signs | Uhlig penalty | Fast, deterministic |
+| Shock that dominates a target | [Max-share](@ref id_maxshare_page) | News and main-cycle shocks |
+| Documented historical episodes | Narrative (ADRR) | Truncates the likelihood, reweights by ``1/\hat\omega`` |
+| Independent non-Gaussian shocks | [ICA / ML](@ref id_nongaussian_page) | No economic restrictions |
+| Independence via higher moments | [GMM](@ref id_nongaussian_page) | Sandwich SEs and Hansen ``J`` |
+| Changing shock volatility | [Heteroskedastic](@ref id_heteroskedastic_page) | Regime covariances identify ``B_0`` |
+| Prior-robust set inference | Robust Bayes | Giacomini–Kitagawa multiple priors |
 
 ---
 
@@ -498,17 +678,21 @@ With the interest rate ordered last, the Cholesky scheme forces the contemporane
 
 2. **Sign restrictions are set-identified.** The median response across admissible rotations is a summary statistic, not a point estimate. Report the full credible set to avoid overstating precision (Uhlig 2005).
 
-3. **`irf(m, H; method=:sign)` draws only 100 candidates.** The keyword route returns the first admissible rotation and does not expose `max_draws`. With tight restrictions it raises an `IdentificationError`; switch to `identify_sign` and raise `max_draws`.
+3. **The pointwise median is not an IRF.** `irf(; method=:sign)` and `method=:narrative` report the pointwise median of the identified set; that path need not correspond to any single admissible rotation (Fry & Pagan 2011). Use `median_target` for the admissible rotation closest to that median, or `modal_model` for the Inoue–Kilian modal draw. With tight restrictions that exhaust `max_draws` (default 1000), raise `max_draws` on `irf` itself.
 
 4. **Low acceptance rates.** If `identify_sign` or `identify_arias` produces acceptance rates below 1%, the restrictions may be nearly contradictory. Relax the restrictions or increase `max_draws`.
 
-5. **Reading `identify_arias` draw counts at face value.** The acceptance rate says how many draws survived the restrictions; `ess_fraction` says how many of them actually count. With zero restrictions the two diverge --- check `ess_fraction` before trusting the width of a credible band.
+5. **Reading `identify_arias` draw counts at face value.** The acceptance rate says how many draws survived the restrictions; `ess_fraction` says how many of them actually count. With zero or narrative restrictions the two diverge --- check `ess_fraction` before trusting the width of a credible band. Narrative restrictions reweight by ``1/\hat\omega``; simply dropping the rotations that fail the historical constraint overstates the posterior of those more likely to match the episode (Antolín-Díaz & Rubio-Ramírez 2018).
 
-6. **Zero restrictions on late-ordered shocks over-constrain the draw.** Shock ``j`` admits at most ``n - j`` zero restrictions in both `identify_arias` and `identify_uhlig`. Reorder the system so the heavily restricted shock comes first.
+6. **Zero restrictions on late-ordered shocks over-constrain the draw.** Shock ``j`` admits at most ``n - j`` zero restrictions in both `identify_arias` and `identify_uhlig`. Reorder the system so the heavily restricted shock comes first. `check_identification` reports `:under` when the RWZ rank or order condition fails and `:over` when extra independent zeros empty the null space; both routines throw `IdentificationError` before sampling.
 
 7. **Uhlig may not converge.** If `result.converged == false`, increase `n_starts` or relax the sign restrictions. The optimizer found a local minimum where some sign conditions are violated.
 
-8. **Long-run identification requires stationarity.** If the VAR has a near-unit root, ``(I - A(1))`` is nearly singular and the long-run matrix ``C(1)`` explodes; `identify_long_run` warns when the condition number crosses ``1/\sqrt{\varepsilon}``. Use a VECM specification for cointegrated systems.
+8. **Uhlig only penalizes `SignRestriction`.** Elasticity, magnitude, FEVD, cumulative, and ``A_0``/``A_+`` signs throw `ArgumentError` from `identify_uhlig`; use `identify_arias`. ``A_0``/``A_+`` and long-run *zeros* remain null-space rows. `A0[eq, shock]` is the RWZ ``y'A_0`` entry ``(L^{-T} Q)[\mathrm{eq},\mathrm{shock}]``, not the impact ``(LQ)[\mathrm{eq},\mathrm{shock}]``.
+
+9. **Long-run identification requires stationarity.** If the VAR has a near-unit root, ``(I - A(1))`` is nearly singular and the long-run matrix ``C(1)`` explodes; `identify_long_run` warns when the condition number crosses ``1/\sqrt{\varepsilon}``. Use a VECM specification for cointegrated systems.
+
+10. **The order condition is not the rank condition.** Loading ``n(n-1)/2`` zeros on shock 1 satisfies the *count* for that shock and starves shocks ``2,\ldots,n``. An impact zero stacked with a long-run zero on the same entry can also pass the count while ``\mathrm{rank}(M_j) < n - j``. Read `IdentificationStatus.ranks`, not just `orders`.
 
 ---
 
@@ -516,6 +700,9 @@ With the interest rate ordered last, the Cholesky scheme forces the contemporane
 
 - Antolín-Díaz, J., & Rubio-Ramírez, J. F. (2018). Narrative Sign Restrictions for SVARs.
   *American Economic Review*, 108(10), 2802--2829. [DOI](https://doi.org/10.1257/aer.20161852)
+
+- Arias, J. E., Caldara, D., & Rubio-Ramírez, J. F. (2019). The Systematic Component of Monetary Policy in SVARs: An Agnostic Identification Procedure.
+  *Journal of Monetary Economics*, 101, 1--13. [DOI](https://doi.org/10.1016/j.jmoneco.2018.07.010)
 
 - Arias, J. E., Rubio-Ramírez, J. F., & Waggoner, D. F. (2018). Inference Based on Structural Vector Autoregressions Identified with Sign and Zero Restrictions: Theory and Applications.
   *Econometrica*, 86(2), 685--720. [DOI](https://doi.org/10.3982/ECTA14468)
@@ -529,10 +716,28 @@ With the interest rate ordered last, the Cholesky scheme forces the contemporane
 - Christiano, L. J., Eichenbaum, M., & Evans, C. L. (1999). Monetary Policy Shocks: What Have We Learned and to What End?
   In *Handbook of Macroeconomics*, Vol. 1A, 65--148. [DOI](https://doi.org/10.1016/S1574-0048(99)01005-8)
 
+- Fry, R., & Pagan, A. (2011). Sign Restrictions in Structural Vector Autoregressions: A Critical Review.
+  *Journal of Economic Literature*, 49(4), 938--960. [DOI](https://doi.org/10.1257/jel.49.4.938)
+
+- Giacomini, R., & Kitagawa, T. (2021). Robust Bayesian Inference for Set-Identified Models.
+  *Econometrica*, 89(4), 1519--1556. [DOI](https://doi.org/10.3982/ECTA16773)
+
+- Inoue, A., & Kilian, L. (2013). Inference on Impulse Response Functions in Structural VAR Models.
+  *Journal of Econometrics*, 177(1), 1--13. [DOI](https://doi.org/10.1016/j.jeconom.2013.04.013)
+
+- Inoue, A., & Kilian, L. (2022). Joint Bayesian Inference about Impulse Responses in VAR Models.
+  *Journal of Econometrics*, 231(2), 457--476. [DOI](https://doi.org/10.1016/j.jeconom.2021.05.010)
+
 - Kilian, L., & Lütkepohl, H. (2017). *Structural Vector Autoregressive Analysis*.
   Cambridge University Press. [DOI](https://doi.org/10.1017/9781108164818)
 
+- Kilian, L., & Murphy, D. P. (2012). Why Agnostic Sign Restrictions Are Not Enough: Understanding the Dynamics of Oil Market VAR Models.
+  *Journal of the European Economic Association*, 10(5), 1166--1188. [DOI](https://doi.org/10.1111/j.1542-4774.2012.01080.x)
+
 - Kish, L. (1965). *Survey Sampling*. Wiley. ISBN 978-0-471-48900-9.
+
+- Montiel Olea, J. L., & Plagborg-Møller, M. (2019). Simultaneous Confidence Bands: Theory, Implementation, and an Application to SVARs.
+  *Journal of Applied Econometrics*, 34(1), 1--17. [DOI](https://doi.org/10.1002/jae.2656)
 
 - Mountford, A., & Uhlig, H. (2009). What Are the Effects of Fiscal Policy Shocks?
   *Journal of Applied Econometrics*, 24(6), 960--992. [DOI](https://doi.org/10.1002/jae.1079)

@@ -629,3 +629,137 @@ end
     @test occursin("70/100", sh) && occursin("30 dropped", sh)
     @test !occursin("Effective draws", sprint(show, hd))
 end
+
+@testset "SID-07 IdentificationError in posterior loops" begin
+    Random.seed!(736)
+    Y = randn(80, 2)
+    post = estimate_bvar(Y, 1; n_draws=FAST ? 20 : 40, burnin=10)
+    impossible(irf) = irf[1, 1, 1] > 1e6
+    @test_throws IdentificationError irf(post, 5; method=:sign, check_func=impossible, max_draws=3)
+    @test_throws IdentificationError historical_decomposition(post; method=:sign, check_func=impossible, max_draws=3)
+    pos(irf) = irf[1, 1, 1] > 0
+    r = irf(post, 5; method=:sign, check_func=pos, max_draws=20)
+    @test r isa BayesianImpulseResponse
+    # n_failed = unidentified + non-stationary (SID-07). Both counts appear in the warning
+    # and, after SID-19, on BayesianSetIdentifiedSVAR.n_unidentified.
+    @test r.n_failed == r.n_requested - r.n_effective
+    # Minority identification failures must skip the draw, not abort the posterior loop.
+    # n_failed > 0 is the SID-07 contract; n_failed == n_requested - n_effective is constructor arithmetic.
+    r1 = irf(post, 5; method=:sign, check_func=pos, max_draws=1)
+    @test r1 isa BayesianImpulseResponse
+    @test r1.n_failed == r1.n_requested - r1.n_effective
+    @test r1.n_failed > 0
+    @test r1.n_effective > 0
+    hd1 = historical_decomposition(post; method=:sign, check_func=pos, max_draws=1)
+    @test hd1 isa BayesianHistoricalDecomposition
+    @test hd1.n_failed == hd1.n_requested - hd1.n_effective
+    @test hd1.n_failed > 0
+    @test hd1.n_effective > 0
+
+    # identify_arias_bayesian: skip unidentified posterior draws; throw only if all fail.
+    restr = SVARRestrictions(2; signs=[sign_restriction(1, 1, :positive)])
+    ar1 = identify_arias_bayesian(post, restr, 5; n_rotations=1)
+    @test ar1 isa BayesianSetIdentifiedSVAR
+    @test ar1.n_unidentified > 0
+    @test ar1.total_accepted > 0
+    @test ar1.n_degenerate_weights >= 0
+    restr_imp = SVARRestrictions(2; signs=[sign_restriction(1, 1, :positive),
+                                           sign_restriction(1, 1, :negative)])
+    @test_throws IdentificationError identify_arias_bayesian(post, restr_imp, 5; n_rotations=3)
+
+    # SID-19: irf/fevd(post; method=:arias) is identify_arias_bayesian, not compute_Q.
+    rng_a = MersenneTwister(748)
+    ir_arias = irf(post, 5; method=:arias, restrictions=restr, max_draws=1, rng=copy(rng_a))
+    ar_ref = identify_arias_bayesian(post, restr, 5; n_rotations=1, rng=copy(rng_a))
+    @test ir_arias isa BayesianImpulseResponse
+    @test ir_arias.quantiles ≈ irf(ar_ref).quantiles
+    rng_f = MersenneTwister(749)
+    fv_arias = fevd(post, 5; method=:arias, restrictions=restr, max_draws=1, rng=copy(rng_f))
+    ar_f = identify_arias_bayesian(post, restr, 5; n_rotations=1, rng=copy(rng_f))
+    @test fv_arias isa BayesianFEVD
+    @test fv_arias.quantiles ≈ fevd(ar_f).quantiles
+    err = try
+        historical_decomposition(post; method=:arias, restrictions=restr)
+        nothing
+    catch e
+        e
+    end
+    @test err isa ArgumentError
+    @test occursin("identify_arias_bayesian", err.msg)
+end
+
+@testset "SID-04 fallback P_ref when posterior-mean Q unidentified" begin
+    # Noiseless VAR so the posterior-mean B fits U ≈ 0. Smooth-transition ID
+    # calls `_eigendecomposition_id` on the split covariances (no λ-gap
+    # fallback), so identical ~eps I regimes throw IdentificationError on the
+    # mean; perturbed draws remain identified and become P_ref.
+    # (`:external_volatility` swallows the λ-gap error in `_two_regime_start`.)
+    n, p, Tobs = 2, 1, 80
+    A = [0.5 0.0; 0.0 0.5]
+    Y = zeros(Tobs, n)
+    Y[1, :] = [2.0, -1.5]
+    for t in 2:Tobs
+        Y[t, :] = A * Y[t-1, :]
+    end
+    B_true = [0.0 0.0; 0.5 0.0; 0.0 0.5]
+    Δ = [0.0 0.0; 0.0 0.15; 0.15 0.0]
+    B_draws = zeros(3, 3, 2)
+    B_draws[1, :, :] = B_true
+    B_draws[2, :, :] = B_true + Δ
+    B_draws[3, :, :] = B_true - Δ
+    Sigma_draws = zeros(3, 2, 2)
+    for s in 1:3
+        Sigma_draws[s, :, :] .= Matrix(1.0I, 2, 2)
+    end
+    post = BVARPosterior{Float64}(B_draws, Sigma_draws, 3, p, n, Y, :normal, :direct, ["y1", "y2"])
+    s = collect(range(-2.0, 2.0; length=Tobs))
+    results, ns = @test_logs (:warn, r"reference Q could not be identified") match_mode = :any begin
+        MacroEconometricModels.process_posterior_samples(post,
+            (m, Q, h) -> MacroEconometricModels.compute_irf(m, Q, h);
+            method=:smooth_transition, horizon=4, transition_var=s)
+    end
+    @test ns >= 2
+    @test length(results) == ns
+    @test all(r -> size(r) == (4, n, n) && all(isfinite, r), results)
+end
+
+@testset "SID-18 identify_robust_bayes on BVARPosterior" begin
+    Random.seed!(747)
+    Y = randn(50, 2)
+    post = estimate_bvar(Y, 1; n_draws=FAST ? 6 : 10, burnin=3, seed=747)
+    r = SVARRestrictions(2; signs=[sign_restriction(1, 1, :positive),
+                                   sign_restriction(2, 1, :positive)])
+    nrot = FAST ? 8 : 16
+    rng0 = MersenneTwister(747)
+    res = identify_robust_bayes(post, r, 2; level=0.68, solver=:optimize,
+                                n_rotations=nrot, rng=copy(rng0))
+    @test res isa RobustBayesResult
+    @test res.empty_set_prob == 0
+    @test 0 <= res.informativeness <= 1
+    # Single-prior interval is identify_arias_bayesian (all nonempty draws,
+    # pooled weights, equal-tailed). GK guarantees Haar coverage of the CR,
+    # not that the equal-tailed Haar interval ⊂ CR.
+    rand(rng0, UInt64, post.n_draws)
+    q_lo = (1 - 0.68) / 2
+    arias = identify_arias_bayesian(post, r, 2; n_rotations=nrot,
+                                    quantiles=[q_lo, 0.5, 1 - q_lo],
+                                    compute_weights=true, rng=rng0)
+    @test res.single_prior_lower ≈ arias.irf_quantiles[:, :, :, 1]
+    @test res.single_prior_upper ≈ arias.irf_quantiles[:, :, :, end]
+    w = arias.weights
+    n_acc = size(arias.irf_draws, 1)
+    H, n, _ = size(res.robust_lower)
+    for h in 1:H, i in 1:n, j in 1:n
+        cl = res.robust_lower[h, i, j]
+        cu = res.robust_upper[h, i, j]
+        (isfinite(cl) && isfinite(cu)) || continue
+        mass = zero(eltype(w))
+        for s in 1:n_acc
+            η = arias.irf_draws[s, h, i, j]
+            if cl - 1e-10 <= η <= cu + 1e-10
+                mass += w[s]
+            end
+        end
+        @test mass >= res.level - 1e-12
+    end
+end

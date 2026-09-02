@@ -388,3 +388,152 @@ end
         end
     end
 end
+
+# =============================================================================
+# SID-24 / #753 — identification result serialization
+# =============================================================================
+
+# Typed SID-14 restrictions (no closures). Function-valued `identify_sign` checks
+# are not serializable; those results store `restrictions === nothing`.
+_sid24_restrictions(n::Int=2) = SVARRestrictions(n;
+    zeros=[ZeroRestriction(2, 1, 0)],
+    signs=[SignRestriction(1, 1, 0, 1)])
+
+function _sid24_dummy_objects()
+    T = Float64
+    n = 2
+    B0 = T[1.2 0.3; 0.1 0.9]
+    Q = Matrix{T}(I, n, n)
+    shocks = randn(MersenneTwister(7531), 12, n)
+    se = fill(T(0.05), n, n)
+    vcov = Matrix{T}(I, 3, 3)
+    snames = ["Shock 1", "Shock 2"]
+    vnames = ["y1", "y2"]
+    restr = _sid24_restrictions(n)
+    idst = IdentificationStatus(:exact, [1, 1], [1, 1], 0)
+    I2 = Matrix{T}(I, n, n)
+    irf4 = randn(MersenneTwister(7532), 2, 3, n, n)
+    irf3 = randn(MersenneTwister(7533), 3, n, n)
+
+    ica = ICASVARResult{T}(B0, inv(B0), Q, shocks, :fastica, true, 10, T(0.1), snames)
+    ml = NonGaussianMLResult{T}(B0, Q, shocks, :student_t, T(-10), T(-12),
+                                 Dict{Symbol,Any}(:nu => T[5.0, 6.0]),
+                                 Matrix{T}(I, 4, 4), se, true, 20, T(22), T(24), snames)
+    gmm = NonGaussianGMMResult{T}(B0, Q, T[0.1], Matrix{T}(I, 1, 1), se,
+                                   T(1.2), T(0.3), :coskewness, :two_step,
+                                   shocks, vnames, snames)
+    ms = MarkovSwitchingSVARResult{T}(B0, Q, [I2, 2 .* I2],
+                                       [T[1.0, 1.0], T[2.0, 0.5]],
+                                       fill(T(0.5), 12, 2), T[0.9 0.1; 0.1 0.9],
+                                       T(-10), true, 5, 2, se, vcov, T(0.8),
+                                       shocks, snames)
+    garch = GARCHSVARResult{T}(B0, Q, T[0.1 0.1 0.8; 0.1 0.1 0.8],
+                                ones(T, 12, n), shocks, T(-10), true, 8,
+                                se, vcov, snames)
+    st = SmoothTransitionSVARResult{T}(B0, Q, [I2, 2 .* I2],
+                                        [T[1.0, 1.0], T[2.0, 0.5]],
+                                        T(1.5), T(0.0), randn(MersenneTwister(7534), 12),
+                                        fill(T(0.5), 12), T(-10), true, 6,
+                                        se, vcov, shocks, snames)
+    ext = ExternalVolatilitySVARResult{T}(B0, Q, [I2, 2 .* I2],
+                                           [T[1.0, 1.0], T[2.0, 0.5]],
+                                           [[1, 2, 3], [4, 5, 6]], T(-10),
+                                           se, vcov, shocks, snames)
+    proxy = ProxySVARResult{T}(Q, B0, 1, T(15), T(0.5), ["z1"], vnames,
+                                ["Proxy", "Unidentified 1"], true)
+    maxs = MaxShareResult{T}(Q, Q[:, 1], 1, 0:20, nothing, T(0.4), T[0.8, 0.2],
+                              vnames, ["Max share", "Complement"], true)
+    maxs_band = MaxShareResult{T}(Q, Q[:, 1], 1, nothing, (T(0.1), T(0.5)),
+                                   T(0.4), T[0.8, 0.2], vnames,
+                                   ["Max share", "Complement"], true)
+    arias = AriasSVARResult{T}([Q, Q], irf4, T[0.5, 0.5], T(0.4), restr,
+                                T(2), T(1), vnames, 0, 0)
+    uhlig = UhligSVARResult{T}(Q, irf3, T(0.1), T[0.1, 0.0], restr, true,
+                                vnames, IdentificationStatus(:set, [0, 0], [0, 0], 0))
+    bset = BayesianSetIdentifiedSVAR{T}([Q, Q], irf4, T[0.5, 0.5], T(2), restr,
+                                         vnames, 0, 0, irf4, irf3, T[0.5, 0.5], T(1), 0)
+    signs = SignIdentifiedSet{T}([Q], irf4[1:1, :, :, :], 1, 10, T(0.1),
+                                  vnames, snames, T[1.0], T(1), T(1), restr)
+    signs_fn = SignIdentifiedSet{T}([Q], irf4[1:1, :, :, :], 1, 10, T(0.1),
+                                     vnames, snames, T[1.0], T(1), T(1), nothing)
+    rb = RobustBayesResult{T}(irf3, irf3 .+ 1, irf3 .- T(0.1), irf3 .+ T(1.1),
+                               irf3, irf3 .+ T(0.5), T(0.2), T(0.0), T(0.68))
+    return [ica, ml, gmm, ms, garch, st, ext, proxy, maxs, maxs_band,
+            arias, uhlig, bset, signs, signs_fn, rb]
+end
+
+@testset "SID-24 identification result serialization (#753)" begin
+    Random.seed!(753)
+
+    @testset "nested restriction types resolve by name" begin
+        for name in ("ZeroRestriction", "SignRestriction", "SVARRestrictions",
+                     "LongRunZeroRestriction", "A0ZeroRestriction",
+                     "AplusZeroRestriction", "A0SignRestriction",
+                     "AplusSignRestriction", "SVARPattern", "IdentificationStatus")
+            @test _MEM._resolve_ser_type(name) isa Type
+        end
+        @test _MEM._resolve_ser_type("ZeroRestriction") === ZeroRestriction
+        @test _MEM._resolve_ser_type("SignRestriction") === SignRestriction
+        @test _MEM._resolve_ser_type("SVARRestrictions") === SVARRestrictions
+    end
+
+    @testset "dummy identification results round-trip fieldwise" begin
+        for m in _sid24_dummy_objects()
+            @test haskey(_MEM._SERIALIZABLE_TYPES, string(nameof(typeof(m))))
+            m2 = _assert_roundtrip(m)
+            @test typeof(m2) == typeof(m)
+        end
+    end
+
+    @testset "typed nested restrictions survive" begin
+        arias = _sid24_dummy_objects()[findfirst(x -> x isa AriasSVARResult,
+                                                 _sid24_dummy_objects())]
+        a2 = _roundtrip(arias)
+        @test a2.restrictions isa SVARRestrictions
+        @test a2.restrictions.zeros[1] isa ZeroRestriction
+        @test a2.restrictions.zeros[1].variable == 2
+        @test a2.restrictions.signs[1] isa SignRestriction
+        @test a2.restrictions.signs[1].sign == 1
+        uhlig = _sid24_dummy_objects()[findfirst(x -> x isa UhligSVARResult,
+                                                 _sid24_dummy_objects())]
+        u2 = _roundtrip(uhlig)
+        @test u2.restrictions.zeros[1] isa ZeroRestriction
+        @test u2.id_status.status === :set
+    end
+
+    @testset "SVARModel / SVECResult nested pattern and VECM" begin
+        Y = randn(MersenneTwister(753), 80, 2)
+        svar = estimate_svar(estimate_var(Y, 1), recursive_pattern(2);
+                             rng=MersenneTwister(753))
+        s2 = _assert_roundtrip(svar)
+        @test s2 isa SVARModel
+        @test s2.pattern isa SVARPattern
+        @test s2.identification isa IdentificationStatus
+        @test s2.varnames == svar.varnames
+
+        Yc = cumsum(randn(MersenneTwister(754), 80, 2); dims=1)
+        svec = identify_svec(estimate_vecm(Yc, 1; rank=1))
+        v2 = _assert_roundtrip(svec)
+        @test v2 isa SVECResult
+        @test v2.vecm isa VECMModel
+        @test v2.n_permanent == svec.n_permanent
+    end
+
+    @testset "disk round-trip via JLD2 for identification results" begin
+        proxy = _sid24_dummy_objects()[findfirst(x -> x isa ProxySVARResult,
+                                                 _sid24_dummy_objects())]
+        pth = joinpath(mktempdir(), "proxy.jld2")
+        @test save_model(proxy, pth) == pth
+        p2 = load_model(pth)
+        @test p2 isa ProxySVARResult && _deep_equal(p2.B0, proxy.B0)
+
+        arias = _sid24_dummy_objects()[findfirst(x -> x isa AriasSVARResult,
+                                                 _sid24_dummy_objects())]
+        ap = joinpath(mktempdir(), "arias.jld2")
+        save_model(arias, ap)
+        a2 = load_model(ap)
+        @test a2 isa AriasSVARResult
+        @test a2.restrictions.zeros[1] isa ZeroRestriction
+        @test _deep_equal(a2.weights, arias.weights)
+    end
+end

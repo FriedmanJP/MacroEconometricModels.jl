@@ -341,7 +341,7 @@ function estimate_lp_cholesky(Y::AbstractMatrix{T}, horizon::Int;
 
     var_model = estimate_var(Y, lags)
     U = var_model.U
-    L = identify_cholesky(var_model)
+    L = cholesky_factor(var_model)
     eps = (inv(L) * U')'
 
     Y_eff = Y[(lags+1):end, :]
@@ -435,8 +435,9 @@ function structural_lp(Y::AbstractMatrix{T}, horizon::Int;
     var_model = estimate_var(Y, p; varnames=varnames)
 
     # Step 2: Compute identification matrix Q
-    Q = compute_Q(var_model, method, horizon, check_func, narrative_check;
-                  max_draws=max_draws, transition_var=transition_var, regime_indicator=regime_indicator, rng=rng)
+    Q = compute_Q(var_model, method; horizon=horizon, check_func=check_func,
+                  narrative_check=narrative_check, max_draws=max_draws,
+                  transition_var=transition_var, regime_indicator=regime_indicator, rng=rng)
 
     # Step 3: Compute structural shocks
     eps = compute_structural_shocks(var_model, Q)
@@ -546,8 +547,9 @@ function _structural_lp_bootstrap(Y::AbstractMatrix{T}, horizon::Int, n::Int, p:
         try
             _suppress_warnings() do
                 var_m = estimate_var(Y_boot, p; check_stability=false)
-                Q_r = compute_Q(var_m, method, horizon, check_func, narrative_check;
-                                max_draws=max_draws, transition_var=transition_var, regime_indicator=regime_indicator, rng=local_rng)
+                Q_r = compute_Q(var_m, method; horizon=horizon, check_func=check_func,
+                                narrative_check=narrative_check, max_draws=max_draws,
+                                transition_var=transition_var, regime_indicator=regime_indicator, rng=local_rng)
                 eps_r = compute_structural_shocks(var_m, Q_r)
 
                 Y_eff_r = Y_boot[(p+1):end, :]

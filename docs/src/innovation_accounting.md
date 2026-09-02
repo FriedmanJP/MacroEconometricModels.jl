@@ -51,11 +51,11 @@ The three tools answer different questions about the same identified system:
 
 ## Structural Identification Overview
 
-Innovation accounting requires choosing an identification scheme to recover ``B_0`` from the reduced-form covariance ``\Sigma = B_0 B_0'``. The package implements six methods spanning point-identified and set-identified approaches --- Cholesky (recursive), sign restrictions, narrative restrictions, long-run (Blanchard-Quah), Arias et al. (zero + sign), and Uhlig penalty. These schemes, together with their functions and keyword arguments, are documented in full on the [Structural Identification](@ref structural_identification_page) page.
+Innovation accounting requires choosing an identification scheme to recover ``B_0`` from the reduced-form covariance ``\Sigma = B_0 B_0'``. Restriction-based schemes (Cholesky, sign, narrative, long-run, Arias, Uhlig), instrument / pattern / share schemes (proxy, AB-model, max-share, SVEC), and fifteen statistical schemes share the `method=` keyword --- twenty-five symbols in total. These schemes, together with their functions and keyword arguments, are documented in full on the [Structural Identification](@ref structural_identification_page) page.
 
 **Point identification** (Cholesky, long-run, Uhlig) produces a unique ``B_0`` and hence unique IRFs. **Set identification** (sign, narrative, Arias et al.) produces a set of admissible ``B_0`` matrices; the reported IRFs are the median across the admissible set, with the range reflected in wider confidence/credible bands.
 
-All six methods integrate seamlessly with `irf()`, `fevd()`, and `historical_decomposition()` via the `method` keyword or by passing a pre-identified rotation matrix. For statistical identification via heteroskedasticity or non-Gaussianity (14 additional methods: 5 ICA + 5 ML + 4 heteroskedasticity), see [Statistical Identification](@ref nongaussian_page).
+All twenty-five schemes integrate with `irf()`, `fevd()`, and `historical_decomposition()` via the `method` keyword or by passing a pre-identified rotation matrix. For statistical identification via heteroskedasticity or non-Gaussianity (15 methods: 5 ICA + 4 ML + dispatcher + GMM + 4 heteroskedasticity), see [Statistical Identification](@ref nongaussian_page).
 
 ---
 

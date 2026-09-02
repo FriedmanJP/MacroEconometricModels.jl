@@ -74,13 +74,21 @@ Reduced-form residuals are correlated across equations and carry no economic int
 | If you want to | Use | Why | Page |
 |----------------|-----|-----|------|
 | Impose a recursive ordering | `irf(m, H; method=:cholesky)` | Fastest, exactly identified | [Structural Identification](@ref structural_identification_page) |
-| Restrict the sign of responses | `identify_sign`, `identify_arias`, `identify_uhlig` | Weak, credible economic restrictions | [Structural Identification](@ref structural_identification_page) |
-| Use documented historical episodes | `identify_narrative` | Event evidence sharpens the set | [Structural Identification](@ref structural_identification_page) |
+| Restrict the sign of responses | `identify_sign` | Weak, credible inequalities; set-identified | [Structural Identification](@ref structural_identification_page) |
+| Combine exact zeros with signs | `identify_arias` | Importance-weighted identified set | [Structural Identification](@ref structural_identification_page) |
+| One penalty-optimal rotation | `identify_uhlig` | Weight 1 if satisfied, 100 if violated | [Structural Identification](@ref structural_identification_page) |
+| Use documented historical episodes | `identify_narrative`, ADRR typed restrictions | Truncates the likelihood; reweights by ``1/\hat\omega`` | [Structural Identification](@ref structural_identification_page) |
 | Restrict long-run effects to zero | `identify_long_run` | Blanchard-Quah supply-demand split | [Structural Identification](@ref structural_identification_page) |
-| Identify from non-Gaussian residuals | `identify_fastica`, `identify_jade`, `identify_sobi`, `identify_student_t` | Statistical identification, no restrictions | [Non-Gaussian Methods](@ref id_nongaussian_page) |
+| Permanent vs transitory shocks in a VECM | `identify_svec`, `irf(vecm; method=:svec)` | KPSW common trends | [VECM](@ref vecm_page) |
+| Identify with an external instrument | `identify_proxy`, `irf(m, H; method=:proxy, instruments=Z)` | High-frequency or narrative proxy for one (or k) shock | [Proxy SVAR](@ref id_proxy_page) |
+| Impose non-recursive short-run zeros | `estimate_svar`, `irf(m, H; method=:ab, pattern=…)` | Amisano–Giannini AB-model ML with LR over-ID test | [AB-Model SVAR](@ref id_ab_page) |
+| Identify the shock that dominates a target | `identify_max_share`, `irf(m, H; method=:max_share, target=…)` | News shocks and main business-cycle shocks | [Max-Share Identification](@ref id_maxshare_page) |
+| Identify from non-Gaussian residuals (ICA / ML) | `identify_fastica`, `identify_student_t` | Statistical identification, no restrictions | [Non-Gaussian Methods](@ref id_nongaussian_page) |
+| Identify from higher-moment GMM | `identify_gmm_moments` | Coskewness / cokurtosis; sandwich SEs | [Non-Gaussian Methods](@ref id_nongaussian_page) |
 | Identify from changing volatility | `identify_markov_switching`, `identify_garch`, `identify_smooth_transition`, `identify_external_volatility` | Regime variance shifts identify shocks | [Heteroskedasticity](@ref id_heteroskedastic_page) |
-| Compare the statistical schemes | `irf(m, H; method=...)` | Eighteen `method=` symbols, one call | [Statistical Identification](@ref nongaussian_page) |
-| Check that identification holds | independence and non-Gaussianity tests | Statistical ID needs testable assumptions | [Identification Testing](@ref id_testing_page) |
+| Prior-robust set inference | `identify_robust_bayes` | Giacomini–Kitagawa multiple priors | [Structural Identification](@ref structural_identification_page) |
+| Compare the schemes | `irf(m, H; method=...)` | Twenty-five `method=` symbols, one call | [Statistical Identification](@ref nongaussian_page) |
+| Check that identification holds | `test_lambda_distinct`, `test_gaussian_shock_count`, `test_label_stability` | Statistical ID needs testable assumptions | [Identification Testing](@ref id_testing_page) |
 | Trace a shock through time | `irf` | Dynamic causal effect paths | [Impulse Responses](@ref ia_irf_page) |
 | Attribute forecast error variance | `fevd` | Relative importance by horizon | [Variance Decomposition](@ref ia_fevd_page) |
 | Explain observed historical movements | `historical_decomposition` | Shock contributions to actual data | [Historical Decomposition](@ref ia_hd_page) |

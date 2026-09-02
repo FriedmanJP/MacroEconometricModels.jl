@@ -5,7 +5,8 @@
 - **Estimation**: Johansen (1991) reduced-rank MLE with automatic rank selection, and Engle-Granger (1987) two-step for bivariate systems
 - **Rank selection**: Trace and maximum eigenvalue tests at user-specified significance levels
 - **Deterministic specification**: None, constant, or linear trend in the cointegrating relation
-- **VAR conversion**: Automatic conversion to VAR in levels for full structural analysis (Cholesky, sign restrictions, ICA, and all 18 identification methods)
+- **VAR conversion**: Automatic conversion to VAR in levels for Cholesky, sign, narrative, and statistical identification
+- **Structural VECM**: King–Plosser–Stock–Watson permanent/transitory identification (`identify_svec`) and Gonzalo–Ng decompositions
 - **Forecasting**: Direct VECM iteration preserving cointegrating relationships, with bootstrap and simulation confidence intervals
 - **Granger causality**: Short-run, long-run, and strong (joint) causality decomposition
 - **Restriction testing**: Johansen likelihood-ratio tests on ``\alpha`` and ``\beta``, including weak exogeneity
@@ -263,7 +264,7 @@ round(is_stationary(var_model).max_modulus, digits=4)
 
 The converted VAR has a largest companion eigenvalue modulus of exactly 1.0, so `is_stationary` returns `false` --- as it must. A cointegrated system with ``r < n`` has ``n - r`` unit roots by construction, and the conversion preserves them. That is not a diagnostic failure here; it is the reason the model was specified as a VECM in the first place. The consequence is that the level VAR must not be used for anything requiring stationarity, such as unconditional-moment calculations or the stationarity-filtered bootstrap.
 
-The conversion matters because it makes all 18 identification methods (Cholesky, sign restrictions, ICA, narrative, and the rest) available to VECM models. `irf`, `fevd`, and `historical_decomposition` call `to_var()` internally, so `VECMModel` objects can be passed to them directly. The statistical (non-Gaussian) schemes are documented on the [Statistical Identification](@ref nongaussian_page) hub and its [Non-Gaussian Methods](@ref id_nongaussian_page) child.
+The conversion matters because it makes the twenty-five `method=` identification schemes (Cholesky, sign restrictions, ICA, narrative, proxy, max-share, and the rest) available to VECM models. `irf`, `fevd`, and `historical_decomposition` call `to_var()` internally, so `VECMModel` objects can be passed to them directly. Permanent versus transitory identification uses `method=:svec` on the VECM itself, not Blanchard–Quah on the converted VAR. The statistical (non-Gaussian) schemes are documented on the [Statistical Identification](@ref nongaussian_page) hub and its [Non-Gaussian Methods](@ref id_nongaussian_page) child.
 
 ---
 
@@ -505,6 +506,88 @@ nothing # hide
 
 ---
 
+## Structural VECM
+
+A cointegrated system has ``n - r`` common stochastic trends, so the economically natural restrictions are on **permanent** versus **transitory** shocks, not on the levels VAR's Blanchard–Quah factorisation of ``C(1)`` (which is singular). King, Plosser, Stock and Watson (1991) identify the permanent productivity shock in a three-variable system of output, consumption and investment as the disturbance that shifts the common trend; Gonzalo and Ng (2001) orthogonalise the reduced-form residuals into ``n-r`` permanent and ``r`` transitory shocks. Both are the structural-VECM (SVEC) route: [`identify_svec`](@ref) on a [`VECMModel`](@ref), not [`identify_long_run`](@ref) on `to_var(vecm)`.
+
+The Granger representation writes the levels as a random-walk common trend plus a stationary remainder,
+
+```math
+y_t = Ξ \sum_{s=1}^{t} u_s + Ξ^{*}(L) u_t + y_0^{*},
+```
+
+where:
+- ``Ξ = β_⊥ (α_⊥' Ψ β_⊥)^{-1} α_⊥'`` is the ``n \times n`` long-run impact of reduced-form shocks, of rank ``n-r``
+- ``Ψ = I - \sum_{i=1}^{p-1} Γ_i`` is the VECM lag polynomial at frequency zero
+- ``β_⊥`` and ``α_⊥`` are orthogonal complements of the cointegrating vectors and adjustment coefficients
+- ``u_t = B_0 \varepsilon_t`` maps orthogonal structural shocks into the reduced form
+
+With rank ``r``, ``Ξ B_0`` has ``r`` zero columns (the transitory shocks) by construction. The just-identified **KPSW** default adds a lower-triangular structure on the permanent block of ``Ξ B_0`` and a Cholesky factorisation of the transitory block — ``(n-r)(n-r-1)/2`` extra long-run zeros plus ``r(r-1)/2`` contemporaneous zeros (Lütkepohl 2005, eq. 9.2.10). Custom zeros are passed as `long_run_zeros` / `short_run_zeros` (`NaN` free, a finite number fixed) or as a full [`SVARPattern`](@ref), and are merged with those transitory-zero columns of ``Ξ B_0`` rather than replacing them. A complete `pattern` that already encodes the transitory columns is left unchanged.
+
+!!! note "Technical Note"
+    `irf(vecm; method=:long_run)` on a `VECMModel` is an alias of `method=:svec`. Calling [`identify_long_run`](@ref) on `to_var(vecm)` still throws [`IdentificationError`](@ref): the levels companion has unit roots, so ``C(1)`` is singular and the Blanchard–Quah rotation is not orthogonal (SID-08).
+
+!!! note "Technical Note"
+    The default `identify_svec` path is the Gonzalo–Ng closed form ``G = [\alpha_⊥'; \beta']``, ``B_0 = G^{-1} \mathrm{chol}(G \Sigma G')``, with a QR rotation of the permanent block so that ``Ξ B_0`` is lower triangular. Custom `long_run_zeros` / `short_run_zeros` / `pattern` go through [`estimate_svar`](@ref) as Lütkepohl's B-model (``A = I``, zeros on ``B_0`` and ``Ξ B_0``). The two numerical routes need not match even when the zero pattern is the KPSW just-identified scheme: Gonzalo–Ng uses ``β'`` to span the transitory space, while the B-model Cholesky factorises the transitory block of ``B_0``.
+
+The KPSW three-variable system on [`load_example(:fred_qd)`](@ref) is log real GDP, consumption, and investment. Balanced-growth theory predicts two cointegrating relations and one common trend, so ``r = 2`` and a single permanent shock.
+
+```@example vecm
+vecm_svec = estimate_vecm(Y, 2; rank=2, varnames=["GDP", "C", "I"])
+svec = identify_svec(vecm_svec)
+report(svec)
+```
+
+The long-run matrix ``Ξ B_0`` has two numerical-zero transitory columns and a permanent column ``(0.013, 0.014, 0.017)'``: a unit permanent shock raises log GDP by 1.3 percent in the long run, consumption by 1.4 percent, and investment by 1.8 percent. Consumption and output move almost one-for-one, which is the balanced-growth restriction the cointegrating space was built to encode; investment overshoots, as it does in the KPSW RBC prototype. Identification is exact (`status = :exact`).
+
+| Keyword | Type | Default | Description |
+|---------|------|---------|-------------|
+| `long_run_zeros` | `AbstractMatrix` or `nothing` | `nothing` | Pattern on ``Ξ B_0`` (`NaN` = free); merged with KPSW transitory-zero columns |
+| `short_run_zeros` | `AbstractMatrix` or `nothing` | `nothing` | Pattern on ``B_0`` (`NaN` = free) |
+| `pattern` | `SVARPattern` or `nothing` | `nothing` | Full AB-model (Lütkepohl B-model) pattern; transitory-zero columns of ``Ξ B_0`` are merged in unless already encoded |
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `B0` | `Matrix{T}` | Contemporaneous impact ``u_t = B_0 \varepsilon_t`` |
+| `Q` | `Matrix{T}` | Rotation ``Q = L^{-1} B_0`` |
+| `Xi` | `Matrix{T}` | Reduced-form long-run impact ``Ξ`` |
+| `n_permanent` | `Int` | Number of common trends ``n - r`` |
+| `vecm` | `VECMModel{T}` | The estimated VECM |
+| `identification` | `IdentificationStatus` | Rank/order classification |
+
+### Permanent-transitory decomposition
+
+[`permanent_transitory`](@ref) splits the levels into a common-trend component and a stationary remainder. The Gonzalo–Ng projector is ``P_t = β_⊥ (α_⊥' β_⊥)^{-1} α_⊥' y_t``; the two pieces sum to the data and the transitory piece is a linear combination of ``β' y_t``.
+
+```@example vecm
+pt = permanent_transitory(vecm_svec; method=:gonzalo_ng)
+(sum_err = round(maximum(abs, pt.permanent + pt.transitory - vecm_svec.Y); sigdigits=2),
+ n_permanent = pt.n_permanent)
+```
+
+The reconstruction error is on the order of ``10^{-15}``. Pass `method=:kpsw` for the Beveridge–Nelson trends ``Ξ \sum_s u_s``.
+
+### Impulse responses and FEVD
+
+Levels IRFs of the permanent shock converge to the corresponding column of ``Ξ B_0``. `method=:long_run` on the VECM is the same rotation. Point IRFs (`ci_type=:none`) are the supported output; `ci_type=:bootstrap` and `ci_type=:theoretical` throw `ArgumentError` because the levels-VAR resampler would inject a frozen SVEC rotation into every draw rather than re-estimating the VECM.
+
+```@example vecm
+ir_svec = irf(vecm_svec, 40; method=:svec)
+fv_svec = fevd(vecm_svec, 40; method=:svec)
+(irf_h40 = round.(ir_svec.values[end, :, 1]; digits=4),
+ fevd_h40 = round.(fv_svec.proportions[:, :, end]; digits=3))
+```
+
+At 40 quarters the permanent IRF is ``(0.012, 0.013, 0.018)'``, already on top of the long-run column ``(0.013, 0.014, 0.017)'``. The permanent shock accounts for 90 percent of GDP's forecast-error variance and 97 percent of consumption's; investment still has a 21 percent transitory share, the extra volatility of capital formation around the common trend.
+
+```@example vecm
+ir_lr = irf(vecm_svec, 10; method=:long_run)
+ir_s = irf(vecm_svec, 10; method=:svec)
+maximum(abs, ir_lr.values - ir_s.values)
+```
+
+---
+
 ## Complete Example
 
 This example demonstrates the full VECM workflow: cointegration testing, estimation, structural analysis, forecasting, and Granger causality.
@@ -561,7 +644,11 @@ The Johansen test rejects ``r_0 = 0`` and ``r_0 = 1`` but not ``r_0 = 2``, so th
 
 5. **Engle-Granger with multiple cointegrating vectors**: The Engle-Granger two-step method estimates only a single cointegrating vector via static OLS. Applying it to a system with ``r > 1`` recovers at most one linear combination and discards the remaining equilibrium relationships. Use the Johansen method for systems with multiple cointegrating vectors.
 
-6. **Forgetting VAR conversion for structural analysis**: `irf`, `fevd`, and `historical_decomposition` dispatch through `to_var()` automatically, so passing a `VECMModel` directly works. However, if you need the VAR coefficient matrices explicitly (e.g., for custom identification schemes), call `to_var(vecm)` and work with the resulting `VARModel`.
+6. **Forgetting VAR conversion for structural analysis**: `irf`, `fevd`, and `historical_decomposition` dispatch through `to_var()` automatically for Cholesky, sign, narrative, and statistical methods, so passing a `VECMModel` directly works. For permanent/transitory identification use `method=:svec` (or `method=:long_run`) on the VECM; do not call `identify_long_run(to_var(vecm))`.
+
+7. **Blanchard–Quah on a cointegrated VAR**: The levels companion of a VECM has unit roots, so ``C(1)`` is singular and the Blanchard–Quah rotation is not orthogonal. The package throws `IdentificationError` from `identify_long_run` on that VAR. Use [`identify_svec`](@ref).
+
+8. **Bootstrap or theoretical bands on SVEC IRFs**: `irf(vecm; method=:svec, ci_type=:bootstrap)` throws. The converted levels VAR is resampled, but the KPSW rotation is computed once from the point VECM and injected into every draw. Until a VECM-aware bootstrap exists, request point IRFs only (`ci_type=:none`). The Gonzalo–Ng closed form and the Lütkepohl B-model `pattern` path need not agree numerically; do not treat a gap between them as a bug.
 
 ---
 
@@ -587,3 +674,12 @@ The Johansen test rejects ``r_0 = 0`` and ``r_0 = 1`` but not ``r_0 = 2``, so th
 
 - Toda, H. Y., & Phillips, P. C. B. (1993). Vector Autoregressions and Causality.
   *Econometrica*, 61(6), 1367-1393. [DOI](https://doi.org/10.2307/2951647)
+
+- King, R. G., Plosser, C. I., Stock, J. H., & Watson, M. W. (1991). Stochastic Trends and Economic Fluctuations.
+  *American Economic Review*, 81(4), 819-840. [DOI](https://doi.org/10.2307/2006644)
+
+- Gonzalo, J., & Ng, S. (2001). A Systematic Framework for Analyzing the Dynamic Effects of Permanent and Transitory Shocks.
+  *Journal of Economic Dynamics and Control*, 25(10), 1527-1546. [DOI](https://doi.org/10.1016/S0165-1889(99)00062-7)
+
+- Warne, A. (1993). A Common Trends Model: Identification, Estimation and Inference.
+  *IIES Seminar Paper* 555. Institute for International Economic Studies, Stockholm University.

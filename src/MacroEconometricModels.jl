@@ -228,6 +228,9 @@ include("teststat/portmanteau.jl")
 
 # Structural identification
 include("core/identification.jl")
+include("core/ab.jl")   # SID-13 AB-model ML; after identification.jl (check_identification)
+include("vecm/svec.jl")  # SID-16 SVEC; after VECM types + estimate_svar
+include("core/maxshare.jl")  # SID-12 max-share; after identification.jl (compute_Q, cholesky)
 include("core/uhlig.jl")
 
 # Non-Gaussian identification (shared helpers first)
@@ -235,6 +238,7 @@ include("nongaussian/shared.jl")
 include("nongaussian/ica.jl")
 include("nongaussian/ml.jl")
 include("nongaussian/heteroskedastic.jl")
+include("nongaussian/gmm.jl")
 include("nongaussian/tests.jl")
 
 # Bayesian utilities (after bayesian + identification)
@@ -982,6 +986,7 @@ export select_lag_order
 
 export estimate_vecm, to_var, select_vecm_rank
 export cointegrating_rank, granger_causality_vecm
+export identify_svec, SVECResult, permanent_transitory
 # EV-38 (#446): Johansen LR restriction tests on the cointegrating structure
 export test_beta_restriction, test_alpha_restriction, test_weak_exogeneity
 export test_known_beta, test_joint_restriction
@@ -1011,22 +1016,39 @@ export optimize_hyperparameters_full
 # Exports - Structural Identification
 # =============================================================================
 
-export identify_cholesky
+export identify_cholesky, cholesky_factor
 export identify_sign
 export identify_narrative
 export identify_long_run
-export identify_proxy
-export generate_Q
+export identify_proxy, ProxySVARResult, proxy_ar_band
+export estimate_svar, SVARPattern, SVARModel, recursive_pattern
+export identify_max_share, MaxShareResult
+export a_model_pattern, b_model_pattern, ab_model_pattern, blanchard_quah_pattern
+export generate_Q, haar_orthogonal
 export compute_irf, compute_structural_shocks
+export IdentificationMethod, register_identification!
 
 # Arias et al. (2018) SVAR identification
+export AbstractSVARRestriction, is_linear_zero, sign_check
 export ZeroRestriction, SignRestriction, SVARRestrictions, AriasSVARResult
+export check_identification, IdentificationStatus
+export LongRunZeroRestriction, A0ZeroRestriction, AplusZeroRestriction
+export A0SignRestriction, AplusSignRestriction
+export ElasticityBound, MagnitudeBound, FEVDShareRestriction, CumulativeRestriction
+export NarrativeShockRestriction, NarrativeContributionRestriction
+export BayesianSetIdentifiedSVAR
 export identify_arias, identify_arias_bayesian
+export RobustBayesResult, identified_set_bounds, identify_robust_bayes
 export zero_restriction, sign_restriction
+export a0_zero_restriction, a0_sign_restriction, aplus_zero_restriction, aplus_sign_restriction
+export elasticity_bound, magnitude_bound, fevd_share_restriction, cumulative_restriction
+export narrative_shock_restriction, narrative_contribution_restriction
 export irf_percentiles, irf_mean
 
 # Sign restriction identified set (Baumeister & Hamilton 2015)
 export SignIdentifiedSet, irf_bounds, irf_median
+export median_target, modal_model, joint_band, sup_t_band
+export structural_shocks, label_shocks
 
 # Mountford & Uhlig (2009) penalty function identification
 export UhligSVARResult, identify_uhlig
@@ -1252,7 +1274,7 @@ export AbstractNormalityTest, AbstractNonGaussianSVAR
 
 # Result types
 export NormalityTestResult, NormalityTestSuite
-export ICASVARResult, NonGaussianMLResult
+export ICASVARResult, NonGaussianMLResult, NonGaussianGMMResult
 export MarkovSwitchingSVARResult, GARCHSVARResult
 export SmoothTransitionSVARResult, ExternalVolatilitySVARResult
 export IdentifiabilityTestResult
@@ -1269,6 +1291,9 @@ export identify_dcov, identify_hsic
 export identify_student_t, identify_mixture_normal
 export identify_pml, identify_skew_normal, identify_nongaussian_ml
 
+# Moment-based GMM SVAR
+export identify_gmm_moments
+
 # Heteroskedasticity identification
 export identify_markov_switching, identify_garch
 export identify_smooth_transition, identify_external_volatility
@@ -1276,7 +1301,9 @@ export identify_smooth_transition, identify_external_volatility
 # Identifiability tests
 export test_identification_strength, test_shock_gaussianity
 export test_gaussian_vs_nongaussian, test_shock_independence
-export test_overidentification
+export test_overidentification, test_label_stability
+export test_lambda_distinct, test_restrictions
+export test_gaussian_shock_count
 
 # =============================================================================
 # Exports - Volatility Models (ARCH/GARCH/SV)

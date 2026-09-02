@@ -18,6 +18,11 @@ plot_result methods for the statistical-identification SVAR family (PLT-32):
 - `ICASVARResult` — `view=:mixing` (`B0` heatmap) / `:unmixing` (`W` heatmap) /
   `:shocks` (recovered structural-shock lines).
 - `NonGaussianMLResult` — `B0` heatmap with a likelihood-ratio annotation.
+- `NonGaussianGMMResult` — `view=:mixing` (`B0` heatmap; same panel helper as ICA).
+- `ProxySVARResult` — `view=:B0` (impact heatmap) / `:impact` (identified columns).
+- `MaxShareResult` — `view=:Q` (rotation heatmap) / `:eigvals` (criterion eigenvalues).
+- `SVARModel` — `view=:B0` (impact ``A^{-1}B`` heatmap).
+- `SVECResult` — `view=:B0` (permanent/transitory impact heatmap).
 
 All rendering reuses the frozen renderers (A1); matrix views go through the shared
 heatmap renderer with a color-scale legend and a sign-appropriate scale (PLT-15):
@@ -89,6 +94,9 @@ end
 
 _statid_var_names(n::Int) = String["Var $i" for i in 1:n]
 _statid_shock_names(n::Int) = String["Shock $j" for j in 1:n]
+_statid_shock_names(r::AbstractNonGaussianSVAR) = r.shock_names
+_statid_var_names(r::AbstractNonGaussianSVAR) =
+    hasfield(typeof(r), :varnames) ? getfield(r, :varnames) : _statid_var_names(size(r.B0, 1))
 
 # =============================================================================
 # MarkovSwitchingSVARResult
@@ -125,7 +133,7 @@ function plot_result(r::MarkovSwitchingSVARResult{T};
         ftitle = isempty(title) ? "Markov-Switching SVAR — regime probabilities" : title
     elseif view === :B0
         id = _next_plot_id("ms_b0")
-        js = _statid_heatmap_panel(id, r.B0, _statid_var_names(n), _statid_shock_names(n);
+        js = _statid_heatmap_panel(id, r.B0, _statid_var_names(r), _statid_shock_names(r);
                                    scale=:diverging, xlabel="Shock", ylabel="Variable",
                                    tip_label="")
         panel = _PanelSpec(id, "Structural Impact Matrix (B₀)", js)
@@ -162,7 +170,7 @@ function plot_result(r::GARCHSVARResult{T};
                      view::Symbol=:variance, title::String="",
                      save_path::Union{String,Nothing}=nothing) where {T}
     n = size(r.B0, 1)
-    names = _statid_shock_names(n)
+    names = _statid_shock_names(r)
     if view === :variance
         id = _next_plot_id("garch_var")
         js = _statid_line_panel(id, r.cond_var, names; ylabel="Conditional variance")
@@ -278,21 +286,21 @@ function plot_result(r::ICASVARResult{T};
     n = size(r.B0, 1)
     if view === :mixing
         id = _next_plot_id("ica_b0")
-        js = _statid_heatmap_panel(id, r.B0, _statid_var_names(n), _statid_shock_names(n);
+        js = _statid_heatmap_panel(id, r.B0, _statid_var_names(r), _statid_shock_names(r);
                                    scale=:diverging, xlabel="Shock", ylabel="Variable",
                                    tip_label="")
         panel = _PanelSpec(id, "Mixing Matrix (B₀)", js)
         ftitle = isempty(title) ? "ICA-SVAR — mixing matrix ($(r.method))" : title
     elseif view === :unmixing
         id = _next_plot_id("ica_w")
-        js = _statid_heatmap_panel(id, r.W, _statid_shock_names(n), _statid_var_names(n);
+        js = _statid_heatmap_panel(id, r.W, _statid_shock_names(r), _statid_var_names(r);
                                    scale=:diverging, xlabel="Variable", ylabel="Shock",
                                    tip_label="")
         panel = _PanelSpec(id, "Unmixing Matrix (W)", js)
         ftitle = isempty(title) ? "ICA-SVAR — unmixing matrix ($(r.method))" : title
     elseif view === :shocks
         id = _next_plot_id("ica_shk")
-        js = _statid_line_panel(id, r.shocks, _statid_shock_names(n); ylabel="Structural shock")
+        js = _statid_line_panel(id, r.shocks, _statid_shock_names(r); ylabel="Structural shock")
         panel = _PanelSpec(id, "Recovered Structural Shocks", js)
         ftitle = isempty(title) ? "ICA-SVAR — structural shocks ($(r.method))" : title
     else
@@ -319,7 +327,7 @@ function plot_result(r::NonGaussianMLResult{T};
                      title::String="", save_path::Union{String,Nothing}=nothing) where {T}
     n = size(r.B0, 1)
     id = _next_plot_id("ml_b0")
-    js = _statid_heatmap_panel(id, r.B0, _statid_var_names(n), _statid_shock_names(n);
+    js = _statid_heatmap_panel(id, r.B0, _statid_var_names(r), _statid_shock_names(r);
                                scale=:diverging, xlabel="Shock", ylabel="Variable",
                                tip_label="")
     lr = max(2 * (r.loglik - r.loglik_gaussian), zero(T))
@@ -330,3 +338,172 @@ function plot_result(r::NonGaussianMLResult{T};
     save_path !== nothing && save_plot(p, save_path)
     p
 end
+
+# =============================================================================
+# NonGaussianGMMResult
+# =============================================================================
+
+"""
+    plot_result(r::NonGaussianGMMResult; view=:mixing, title="", save_path=nothing)
+
+Moment-based GMM SVAR diagnostics. `view=:mixing` (default) draws the structural
+impact / mixing matrix `B₀` as a diverging heatmap, reusing the ICA mixing-matrix
+panel helper. Unknown `view` throws an `ArgumentError`.
+"""
+function plot_result(r::NonGaussianGMMResult{T};
+                     view::Symbol=:mixing, title::String="",
+                     save_path::Union{String,Nothing}=nothing) where {T}
+    view === :mixing || throw(ArgumentError("Unknown view :$view. Valid views: :mixing"))
+    id = _next_plot_id("gmm_b0")
+    js = _statid_heatmap_panel(id, r.B0, r.varnames, r.shock_names;
+                               scale=:diverging, xlabel="Shock", ylabel="Variable",
+                               tip_label="")
+    panel = _PanelSpec(id, "Mixing Matrix (B₀)", js)
+    ftitle = isempty(title) ?
+             "Moment-based GMM SVAR — mixing matrix ($(r.moments), $(r.weighting))" :
+             title
+    p = _make_plot([panel]; title=ftitle, ncols=1)
+    save_path !== nothing && save_plot(p, save_path)
+    p
+end
+
+# =============================================================================
+# ProxySVARResult
+# =============================================================================
+
+"""
+    plot_result(r::ProxySVARResult; view=:B0, title="", save_path=nothing)
+
+Proxy-SVAR diagnostics. Views:
+
+- `:B0` (default) — structural impact matrix as a diverging heatmap.
+- `:impact` — identified columns of `B₀` as a diverging heatmap.
+
+Unknown `view` throws an `ArgumentError`.
+"""
+function plot_result(r::ProxySVARResult{T};
+                     view::Symbol=:B0, title::String="",
+                     save_path::Union{String,Nothing}=nothing) where {T}
+    if view === :B0
+        id = _next_plot_id("proxy_b0")
+        js = _statid_heatmap_panel(id, r.B0, r.varnames, r.shock_names;
+                                   scale=:diverging, xlabel="Shock", ylabel="Variable",
+                                   tip_label="")
+        panel = _PanelSpec(id, "Impact Matrix (B₀)", js)
+        ftitle = isempty(title) ? "Proxy SVAR — impact matrix" : title
+    elseif view === :impact
+        idx = [i for (i, s) in enumerate(r.shock_names) if occursin("Proxy", s)]
+        isempty(idx) && (idx = collect(1:r.k))
+        cols = r.B0[:, idx]
+        id = _next_plot_id("proxy_imp")
+        js = _statid_heatmap_panel(id, cols, r.varnames, r.shock_names[idx];
+                                   scale=:diverging, xlabel="Identified shock", ylabel="Variable",
+                                   tip_label="")
+        panel = _PanelSpec(id, "Identified Impact Columns", js)
+        ftitle = isempty(title) ? "Proxy SVAR — identified impacts" : title
+    else
+        throw(ArgumentError("Unknown view :$view. Valid views: :B0, :impact"))
+    end
+    p = _make_plot([panel]; title=ftitle, ncols=1)
+    save_path !== nothing && save_plot(p, save_path)
+    p
+end
+
+# =============================================================================
+# MaxShareResult
+# =============================================================================
+
+"""
+    plot_result(r::MaxShareResult; view=:Q, title="", save_path=nothing)
+
+Max-share diagnostics. Views:
+
+- `:Q` (default) — rotation matrix as a diverging heatmap.
+- `:eigvals` — criterion eigenvalues as a one-column heatmap.
+
+Unknown `view` throws an `ArgumentError`.
+"""
+function plot_result(r::MaxShareResult{T};
+                     view::Symbol=:Q, title::String="",
+                     save_path::Union{String,Nothing}=nothing) where {T}
+    if view === :Q
+        id = _next_plot_id("maxshare_q")
+        js = _statid_heatmap_panel(id, r.Q, r.varnames, r.shock_names;
+                                   scale=:diverging, xlabel="Shock", ylabel="Variable",
+                                   tip_label="")
+        panel = _PanelSpec(id, "Rotation (Q)", js)
+        ftitle = isempty(title) ? "Max-share — rotation" : title
+    elseif view === :eigvals
+        id = _next_plot_id("maxshare_eig")
+        n = length(r.eigvals)
+        labels = ["λ$j" for j in 1:n]
+        M = reshape(r.eigvals, :, 1)
+        js = _statid_heatmap_panel(id, M, labels, ["eigenvalue"];
+                                   scale=:sequential, xlabel="", ylabel="Eigenvalue",
+                                   tip_label="λ")
+        panel = _PanelSpec(id, "Criterion eigenvalues", js)
+        ftitle = isempty(title) ? "Max-share — eigenvalues" : title
+    else
+        throw(ArgumentError("Unknown view :$view. Valid views: :Q, :eigvals"))
+    end
+    p = _make_plot([panel]; title=ftitle, ncols=1)
+    save_path !== nothing && save_plot(p, save_path)
+    p
+end
+
+# =============================================================================
+# SVARModel (AB-model ML)
+# =============================================================================
+
+"""
+    plot_result(r::SVARModel; view=:B0, title="", save_path=nothing)
+
+AB-model SVAR. `view=:B0` (default) plots the impact ``A^{-1} B`` as a diverging
+heatmap. Unknown `view` throws an `ArgumentError`.
+"""
+function plot_result(r::SVARModel{T};
+                     view::Symbol=:B0, title::String="",
+                     save_path::Union{String,Nothing}=nothing) where {T}
+    n = size(r.A, 1)
+    view === :B0 || throw(ArgumentError("Unknown view :$view. Valid views: :B0"))
+    B0 = r.A \ r.B
+    id = _next_plot_id("svar_b0")
+    js = _statid_heatmap_panel(id, B0, r.varnames, _statid_shock_names(n);
+                               scale=:diverging, xlabel="Shock", ylabel="Variable",
+                               tip_label="")
+    panel = _PanelSpec(id, "Impact Matrix (B₀)", js)
+    ftitle = isempty(title) ? "AB-model SVAR — impact matrix" : title
+    p = _make_plot([panel]; title=ftitle, ncols=1)
+    save_path !== nothing && save_plot(p, save_path)
+    p
+end
+
+# =============================================================================
+# SVECResult
+# =============================================================================
+
+"""
+    plot_result(r::SVECResult; view=:B0, title="", save_path=nothing)
+
+Structural VECM. `view=:B0` (default) plots the contemporaneous impact with
+permanent (`P*`) then transitory (`T*`) shock columns. Unknown `view` throws
+an `ArgumentError`.
+"""
+function plot_result(r::SVECResult{T};
+                     view::Symbol=:B0, title::String="",
+                     save_path::Union{String,Nothing}=nothing) where {T}
+    n = size(r.B0, 1)
+    view === :B0 || throw(ArgumentError("Unknown view :$view. Valid views: :B0"))
+    snames = vcat(["P$i" for i in 1:r.n_permanent],
+                  ["T$i" for i in 1:(n - r.n_permanent)])
+    id = _next_plot_id("svec_b0")
+    js = _statid_heatmap_panel(id, r.B0, r.vecm.varnames, snames;
+                               scale=:diverging, xlabel="Shock", ylabel="Variable",
+                               tip_label="")
+    panel = _PanelSpec(id, "Impact Matrix (B₀)", js)
+    ftitle = isempty(title) ? "SVEC — impact matrix" : title
+    p = _make_plot([panel]; title=ftitle, ncols=1)
+    save_path !== nothing && save_plot(p, save_path)
+    p
+end
+

@@ -10,6 +10,10 @@ using LinearAlgebra
 using Statistics
 using Random
 
+if !@isdefined(FAST)
+    const FAST = get(ENV, "MACRO_FAST_TESTS", "") == "1"
+end
+
 Random.seed!(42)
 
 @testset "IRF Tests with Theoretical Verification" begin
@@ -340,7 +344,365 @@ end
     # :sign identification now threads rng through compute_Q -> identify_sign -> generate_Q
     # (previously the rotation draw leaked to the global RNG, so sign CIs were non-reproducible)
     check = ir -> ir[1, 1, 1] > 0
-    sg1 = irf(model, 8; ci_type=:bootstrap, method=:sign, check_func=check, reps=20, rng=mkrng())
-    sg2 = irf(model, 8; ci_type=:bootstrap, method=:sign, check_func=check, reps=20, rng=mkrng())
+    sg1 = irf(model, 8; ci_type=:bootstrap, method=:sign, check_func=check, reps=20, rng=mkrng(),
+              set_inference=:bootstrap_x_rotations)
+    sg2 = irf(model, 8; ci_type=:bootstrap, method=:sign, check_func=check, reps=20, rng=mkrng(),
+              set_inference=:bootstrap_x_rotations)
     @test sg1.ci_lower == sg2.ci_lower
+end
+
+@testset "SID-06 theoretical CI vs residual-based ID" begin
+    Random.seed!(735)
+    m = estimate_var(randn(120, 2), 1)
+    chk(irf) = irf[1, 1, 1] > 0
+    @test_throws ArgumentError irf(m, 5; method=:fastica, ci_type=:theoretical)
+    @test_throws ArgumentError irf(m, 5; method=:student_t, ci_type=:theoretical)
+    @test_throws ArgumentError irf(m, 5; method=:markov_switching, ci_type=:theoretical)
+    @test_throws ArgumentError irf(m, 5; method=:narrative, ci_type=:theoretical,
+                                   check_func=chk, narrative_check=_ -> true)
+    r = irf(m, 5; method=:cholesky, ci_type=:theoretical, reps=FAST ? 10 : 30)
+    @test r.ci_type === :theoretical
+end
+
+@testset "SID-08 long-run on cointegrated systems" begin
+    Random.seed!(737)
+    Tlen, n = 200, 2
+    trend = cumsum(randn(Tlen))
+    Yc = [trend .+ 0.3 .* randn(Tlen)  trend .+ 0.3 .* randn(Tlen)]
+    vecm = estimate_vecm(Yc, 2; rank=1)
+    @test_throws IdentificationError identify_long_run(to_var(vecm))
+    Ys = randn(200, 2)
+    ms = estimate_var(Ys, 1)
+    Q = identify_long_run(ms)
+    @test norm(Q' * Q - I(2)) < 1e-8
+end
+
+@testset "SID-05 set-aware sign IRFs" begin
+    Random.seed!(734)
+    m = estimate_var(randn(150, 2), 1)
+    chk(irf) = irf[1, 1, 1] > 0
+    rng = MersenneTwister(1)
+    s = identify_sign(m, 5, chk; store_all=true, rng=MersenneTwister(1), max_draws=200)
+    r = irf(m, 5; method=:sign, check_func=chk, seed=1, max_draws=200)
+    @test r.ci_type === :identified_set
+    @test r.values ≈ irf_median(s)
+    @test_throws ArgumentError irf(m, 5; method=:sign, check_func=chk, ci_type=:bootstrap)
+    @test_throws ArgumentError irf(m, 5; method=:sign, check_func=chk, ci_type=:theoretical)
+    r2 = irf(m, 5; method=:sign, check_func=chk, max_draws=500, seed=2)
+    @test r2.manifest.settings["max_draws"] == 500
+end
+
+@testset "SID-05 identify_narrative store_all" begin
+    Random.seed!(734)
+    m = estimate_var(randn(150, 2), 1)
+    chk(irf) = irf[1, 1, 1] > 0
+    s = identify_narrative(m, 5, chk, _ -> true; store_all=true, max_draws=80, rng=MersenneTwister(3))
+    @test s isa SignIdentifiedSet
+    r = irf(m, 5; method=:narrative, check_func=chk, narrative_check=_ -> true, seed=3, max_draws=80)
+    @test r.ci_type === :identified_set
+    @test r.values ≈ irf_median(s)
+    @test_throws ArgumentError irf(m, 5; method=:narrative, check_func=chk,
+                                   narrative_check=_ -> true, ci_type=:bootstrap)
+end
+
+@testset "SID-19 one identification API" begin
+    Random.seed!(748)
+    m = estimate_var(randn(80, 2), 1)
+    n = nvars(m)
+    @test identify_cholesky(m) ≈ Matrix{Float64}(I, n, n)
+    L = cholesky_factor(m)
+    @test istriu(L')
+    @test L * L' ≈ m.Sigma atol=1e-8
+
+    Qkw = MacroEconometricModels.compute_Q(m, :cholesky; horizon=5)
+    @test Qkw ≈ I(n)
+    Qpos = @test_deprecated MacroEconometricModels.compute_Q(m, :cholesky, 5, nothing, nothing)
+    @test Qpos ≈ I(n)
+
+    @test MacroEconometricModels._needs_residuals(:cholesky) == false
+    @test MacroEconometricModels._needs_residuals(:fastica) == true
+    @test MacroEconometricModels._is_set_identified(:arias)
+    @test !MacroEconometricModels._is_set_identified(:uhlig)
+    @test !MacroEconometricModels._is_partial(:cholesky)
+    @test_throws ArgumentError MacroEconometricModels._needs_residuals(:not_a_method)
+    @test haskey(MacroEconometricModels.IDENTIFICATION_REGISTRY, :proxy)
+    @test MacroEconometricModels._needs_residuals(:proxy)
+    @test !MacroEconometricModels._is_set_identified(:proxy)
+    @test MacroEconometricModels._is_partial(:proxy)
+    @test haskey(MacroEconometricModels.IDENTIFICATION_REGISTRY, :ab)
+    @test !MacroEconometricModels._needs_residuals(:ab)
+    @test !MacroEconometricModels._is_set_identified(:ab)
+    @test !MacroEconometricModels._is_partial(:ab)
+    @test haskey(MacroEconometricModels.IDENTIFICATION_REGISTRY, :max_share)
+    @test !MacroEconometricModels._needs_residuals(:max_share)
+    @test !MacroEconometricModels._is_set_identified(:max_share)
+    @test MacroEconometricModels._is_partial(:max_share)
+    @test !MacroEconometricModels._should_match_columns(:max_share)
+    @test haskey(MacroEconometricModels.IDENTIFICATION_REGISTRY, :svec)
+    @test !MacroEconometricModels._needs_residuals(:svec)
+    @test !MacroEconometricModels._is_set_identified(:svec)
+    @test !MacroEconometricModels._is_partial(:svec)
+
+    r = SVARRestrictions(2; signs=[sign_restriction(1, 1, :positive)])
+    ra = irf(m, 5; method=:arias, restrictions=r, max_draws=30, seed=1)
+    @test ra.ci_type === :identified_set
+    @test ra.values[1, 1, 1] > 0
+    @test size(ra.values) == (5, n, n)
+    # n_rotations used to collide with n_rotations=max_draws (repeated-keyword MethodError).
+    ra_nr = irf(m, 5; method=:arias, restrictions=r, n_rotations=20, max_draws=10, seed=1)
+    @test ra_nr isa ImpulseResponse
+    @test ra_nr.ci_type === :identified_set
+    Qa = MacroEconometricModels.compute_Q(m, :arias; restrictions=r, n_rotations=20)
+    @test Qa isa AbstractMatrix
+    @test size(Qa) == (n, n)
+
+    rng_u = MersenneTwister(748)
+    uhlig_kw = (n_starts=FAST ? 3 : 8, n_refine=1, max_iter_coarse=80, max_iter_fine=200)
+    u = identify_uhlig(m, r, 5; rng=copy(rng_u), uhlig_kw...)
+    ru = irf(m, 5; method=:uhlig, restrictions=r, rng=copy(rng_u), uhlig_kw...)
+    @test ru.values ≈ u.irf
+    @test ru.values[1, 1, 1] > 0
+
+    # Same-count quantile levels must be recomputed, not reused from stored 16/50/84.
+    post = estimate_bvar(randn(80, 2), 1; n_draws=FAST ? 16 : 30, burnin=5)
+    ar = identify_arias_bayesian(post, r, 4; n_rotations=FAST ? 20 : 40,
+                                 rng=MersenneTwister(748))
+    ir_def = irf(ar)
+    ir_wide = irf(ar; quantiles=[0.05, 0.5, 0.95])
+    @test ir_wide.quantile_levels ≈ [0.05, 0.5, 0.95]
+    @test ir_wide.quantiles != ar.irf_quantiles
+    @test ir_wide.quantiles != ir_def.quantiles
+end
+
+# =============================================================================
+# SID-17 (#746): Fry–Pagan / Inoue–Kilian set-ID summaries
+# =============================================================================
+@testset "SID-17 set-ID summaries" begin
+    Random.seed!(746)
+    m = estimate_var(randn(120, 2), 1)
+    chk(irf) = irf[1, 1, 1] > 0
+    s = identify_sign(m, 6, chk; store_all=true, max_draws=80, rng=MersenneTwister(746))
+
+    @testset "SignIdentifiedSet weights back-compat" begin
+        @test hasfield(typeof(s), :weights)
+        @test length(s.weights) == s.n_accepted
+        @test s.weights ≈ fill(1 / s.n_accepted, s.n_accepted)
+        @test s.ess ≈ s.n_accepted
+        @test s.ess_fraction ≈ 1
+        @test s.restrictions === nothing
+        s7 = SignIdentifiedSet{Float64}(s.Q_draws, s.irf_draws, s.n_accepted, s.n_total,
+                                        s.acceptance_rate, s.variables, s.shocks)
+        @test s7.weights ≈ fill(1 / s.n_accepted, s.n_accepted)
+        @test s7.ess ≈ Float64(s.n_accepted)
+        @test s7.ess_fraction ≈ 1.0
+        @test s7.restrictions === nothing
+        med = irf_median(s)
+        for h in axes(s.irf_draws, 2), i in axes(s.irf_draws, 3), j in axes(s.irf_draws, 4)
+            @test med[h, i, j] ≈ quantile(view(s.irf_draws, :, h, i, j), 0.5)
+        end
+    end
+
+    @testset "median_target is an admissible Q closest to irf_median" begin
+        mt = median_target(s)
+        @test mt.Q === s.Q_draws[mt.index]
+        @test any(Q -> Q === mt.Q, s.Q_draws)
+        @test mt.irf ≈ s.irf_draws[mt.index, :, :, :]
+        med = irf_median(s)
+        n_d = s.n_accepted
+        H, nv, ns = size(med)
+        σ = [std(view(s.irf_draws, :, h, i, j)) for h in 1:H, i in 1:nv, j in 1:ns]
+        dist(d) = sum(((s.irf_draws[d, h, i, j] - med[h, i, j]) /
+                       (σ[h, i, j] > 0 ? σ[h, i, j] : 1.0))^2
+                      for h in 1:H, i in 1:nv, j in 1:ns)
+        d_star = dist(mt.index)
+        @test all(d -> dist(d) >= d_star - 1e-12, 1:n_d)
+    end
+
+    @testset "joint_band contains median-target and covers level jointly" begin
+        nd, H, n = 5, 2, 2
+        Qs = [Matrix{Float64}(I, n, n) for _ in 1:nd]
+        draws = zeros(nd, H, n, n)
+        for i in 1:nd
+            draws[i, :, :, :] .= Float64(i)
+        end
+        tiny = SignIdentifiedSet{Float64}(Qs, draws, nd, nd, 1.0, ["y1", "y2"], ["e1", "e2"])
+        mt = median_target(tiny)
+        @test mt.index == 3
+        lo, hi = joint_band(tiny; level=0.6, loss=:absolute)
+        @test size(lo) == (H, n, n) && size(hi) == (H, n, n)
+        @test all(lo .<= mt.irf .<= hi)
+        inside(d) = all(lo[h, i, j] <= tiny.irf_draws[d, h, i, j] <= hi[h, i, j]
+                        for h in 1:H, i in 1:n, j in 1:n)
+        @test count(inside, 1:nd) / nd >= 0.6 - 1e-12
+        @test_throws ArgumentError joint_band(tiny; loss=:quadratic)
+    end
+
+    @testset "joint_band skips zero-weight L1 outliers" begin
+        nd, H, n = 4, 2, 2
+        Qs = [Matrix{Float64}(I, n, n) for _ in 1:nd]
+        draws = zeros(nd, H, n, n)
+        draws[1, :, :, :] .= 1.0
+        draws[2, :, :, :] .= 2.0
+        draws[3, :, :, :] .= 3.0
+        draws[4, :, :, :] .= 100.0   # L1 outlier
+        w = [0.4, 0.3, 0.3, 0.0]
+        tiny = SignIdentifiedSet{Float64}(Qs, draws, nd, nd, 1.0, ["y1", "y2"], ["e1", "e2"],
+                                          w, 3.0, 0.75, nothing)
+        lo, hi = joint_band(tiny; level=0.68)
+        @test all(hi .< 50)
+        @test all(lo .> 0.5)
+        # Same mass without the zero-weight draw → identical envelope
+        tiny3 = SignIdentifiedSet{Float64}(Qs[1:3], draws[1:3, :, :, :], 3, 3, 1.0,
+                                           ["y1", "y2"], ["e1", "e2"],
+                                           w[1:3], 3.0, 1.0, nothing)
+        lo3, hi3 = joint_band(tiny3; level=0.68)
+        @test lo ≈ lo3
+        @test hi ≈ hi3
+        # Zero-weight far-side draw visited before HPD mass is reached (tied L1
+        # with the opposite-side member) must still not widen the envelope.
+        Qs2 = [Matrix{Float64}(I, 1, 1) for _ in 1:3]
+        d2 = zeros(3, 1, 1, 1)
+        d2[1, 1, 1, 1] = 0.0
+        d2[2, 1, 1, 1] = 2.0
+        d2[3, 1, 1, 1] = 4.0
+        s2 = SignIdentifiedSet{Float64}(Qs2, d2, 3, 3, 1.0, ["y"], ["e"],
+                                        [0.0, 0.5, 0.5], 2.0, 2 / 3, nothing)
+        lo2, hi2 = joint_band(s2; level=0.68)
+        @test lo2[1, 1, 1] ≈ 2.0
+        @test hi2[1, 1, 1] ≈ 4.0
+    end
+
+    @testset "modal_model and sup_t_band" begin
+        mm = modal_model(s)
+        @test mm.Q === s.Q_draws[mm.index]
+        @test mm.irf ≈ s.irf_draws[mm.index, :, :, :]
+        mm2 = modal_model(s; bandwidth=1.0)
+        @test mm2.index isa Int
+        lo, hi = sup_t_band(s; level=0.68)
+        @test size(lo) == size(irf_median(s))
+        @test all(lo .<= hi)
+        mt = median_target(s)
+        # sup-t is simultaneous around the pointwise median; median-target need not
+        # sit inside, but the band is nonempty and finite.
+        @test all(isfinite, lo) && all(isfinite, hi)
+    end
+
+    @testset "fevd(model, s, H) weighted median and adding-up" begin
+        H = 6
+        fv = fevd(m, s, H)
+        @test fv isa BayesianFEVD
+        n = nvars(m)
+        n_d = s.n_accepted
+        props = Array{Float64}(undef, n_d, n, n, H)
+        for i in 1:n_d
+            _, p = MacroEconometricModels._compute_fevd(s.irf_draws[i, :, :, :], n, H)
+            props[i, :, :, :] = p
+            for h in 1:H, v in 1:n
+                @test sum(p[v, :, h]) ≈ 1 atol=1e-10
+            end
+        end
+        for v in 1:n, sh in 1:n, h in 1:H
+            @test fv.point_estimate[v, sh, h] ≈ quantile(view(props, :, v, sh, h), 0.5)
+        end
+    end
+
+    @testset "historical_decomposition and structural_shocks on the set" begin
+        hd = historical_decomposition(m, s)
+        @test hd isa BayesianHistoricalDecomposition
+        @test hd.n_effective == s.n_accepted
+        @test size(hd.point_estimate, 1) == effective_nobs(m)
+        sh = structural_shocks(m, s)
+        @test size(sh.median) == (effective_nobs(m), nvars(m))
+        @test size(sh.lower) == size(sh.median)
+        @test size(sh.upper) == size(sh.median)
+        @test all(sh.lower .<= sh.median .<= sh.upper)
+    end
+
+    @testset "Uhlig is a one-draw set" begin
+        r = SVARRestrictions(2; signs=[sign_restriction(1, 1, :positive)])
+        u = identify_uhlig(m, r, 4; n_starts=3, n_refine=1,
+                           max_iter_coarse=40, max_iter_fine=80, rng=MersenneTwister(746))
+        mt = median_target(u)
+        @test mt.Q === u.Q
+        @test mt.irf ≈ u.irf
+        @test mt.index == 1
+        mm = modal_model(u)
+        @test mm.Q === u.Q
+        @test_throws ArgumentError joint_band(u)
+        @test_throws ArgumentError sup_t_band(u)
+        fv = fevd(m, u, 4)
+        @test fv isa FEVD
+        hd = historical_decomposition(m, u)
+        @test hd isa HistoricalDecomposition
+        sh = structural_shocks(m, u)
+        point = MacroEconometricModels.compute_structural_shocks(m, u.Q)
+        @test sh.median == sh.lower == sh.upper
+        @test sh.median ≈ point
+        @test size(sh.quantiles, 3) == 3
+        @test sh.quantiles[:, :, 1] == sh.median
+    end
+end
+
+@testset "SID-20 unit-effect IRF and structural_shocks(model, Q)" begin
+    Random.seed!(749)
+    Tobs = FAST ? 250 : 400
+    n = 3
+    Y = zeros(Tobs, n)
+    A = 0.4 * Matrix{Float64}(I, n, n)
+    for t in 2:Tobs
+        Y[t, :] = A * Y[t-1, :] + randn(n)
+    end
+    m = estimate_var(Y, 1; varnames=["GDP", "CPI", "FEDFUNDS"])
+    k = findfirst(==("FEDFUNDS"), m.varnames)
+    @test k == 3
+
+    ir_uv = irf(m, 6; method=:cholesky)
+    @test ir_uv.values[1, 1, 1] != 0.25
+
+    ir_ue = irf(m, 6; method=:cholesky, normalize=:unit_effect,
+                shock_size=("FEDFUNDS" => 0.25))
+    hits = [j for j in 1:n if isapprox(ir_ue.values[1, k, j], 0.25; atol=1e-10)]
+    @test !isempty(hits)
+    jstar = hits[1]
+    @test ir_ue.values[1, k, jstar] ≈ 0.25 atol = 1e-10
+
+    ir_idx = irf(m, 4; method=:cholesky, normalize=:unit_effect,
+                 shock_size=(k => 0.25))
+    @test ir_idx.values[1, k, jstar] ≈ 0.25 atol = 1e-10
+
+    ir_fast = irf(m, 6; method=:fastica, normalize=:unit_effect,
+                  shock_size=("FEDFUNDS" => 0.25), seed=749)
+    @test any(j -> isapprox(ir_fast.values[1, k, j], 0.25; atol=1e-10), 1:n)
+
+    ir_band = irf(m, 4; method=:cholesky, normalize=:unit_effect,
+                  shock_size=("FEDFUNDS" => 0.25), ci_type=:bootstrap, reps=8,
+                  seed=750)
+    @test ir_band.values[1, k, jstar] ≈ 0.25 atol = 1e-10
+    @test ir_band.ci_lower[1, k, jstar] ≈ 0.25 atol = 1e-8
+    @test ir_band.ci_upper[1, k, jstar] ≈ 0.25 atol = 1e-8
+    @test any(ir_band.ci_lower .!= ir_band.ci_upper)
+
+    fv = MacroEconometricModels._suppress_warnings() do
+        fevd(m, 4; method=:cholesky, normalize=:unit_effect,
+             shock_size=("FEDFUNDS" => 0.25))
+    end
+    @test fv isa FEVD
+    @test size(fv.proportions, 1) == n
+
+    cum = cumulative_irf(ir_ue)
+    @test cum.values[1, k, jstar] ≈ 0.25 atol = 1e-10
+
+    Q = identify_cholesky(m)
+    sh_q = structural_shocks(m, Q)
+    @test sh_q ≈ MacroEconometricModels.compute_structural_shocks(m, Q)
+    @test size(sh_q) == (size(m.U, 1), n)
+
+    post = estimate_bvar(Y, 1; n_draws=FAST ? 12 : 24, burnin=4)
+    bir = irf(post, 4; method=:cholesky, normalize=:unit_effect,
+              shock_size=(1 => 0.25))
+    @test bir isa BayesianImpulseResponse
+    @test any(j -> isapprox(bir.point_estimate[1, 1, j], 0.25; atol=1e-8), 1:n)
+    hd_b = historical_decomposition(post, 4; method=:cholesky,
+                                    normalize=:unit_effect, shock_size=(1 => 0.25))
+    @test hd_b isa BayesianHistoricalDecomposition
 end

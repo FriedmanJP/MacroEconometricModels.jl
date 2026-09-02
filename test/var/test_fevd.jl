@@ -10,6 +10,10 @@ using LinearAlgebra
 using Statistics
 using Random
 
+if !@isdefined(FAST)
+    const FAST = get(ENV, "MACRO_FAST_TESTS", "") == "1"
+end
+
 @testset "FEVD Tests with Theoretical Verification" begin
     _tprint("Generating Data for FEVD Verification...")
     # FEVD Verification DGP:
@@ -170,4 +174,48 @@ end
             @test isapprox(sum(fevd_chol.proportions[v, :, h]), 1.0, atol=1e-10)
         end
     end
+end
+
+@testset "SID-05 set-aware sign FEVD" begin
+    Random.seed!(734)
+    m = estimate_var(randn(150, 2), 1)
+    chk(irf) = irf[1, 1, 1] > 0
+    s = identify_sign(m, 5, chk; store_all=true, rng=MersenneTwister(1), max_draws=200)
+    f = fevd(m, 5; method=:sign, check_func=chk, rng=MersenneTwister(1), max_draws=200)
+    @test f.n_effective == s.n_accepted
+    @test size(f.proportions) == (2, 2, 5)
+    @test all(f.proportions .>= -1e-12)
+    @test s.n_accepted > 1
+    n, H = 2, 5
+    acc = Array{Float64,4}(undef, s.n_accepted, n, n, H)
+    for (i, Q) in enumerate(s.Q_draws)
+        _, p = MacroEconometricModels._compute_fevd(compute_irf(m, Q, H), n, H)
+        acc[i, :, :, :] = p
+    end
+    med = similar(f.proportions)
+    for v in 1:n, sh in 1:n, h in 1:H
+        med[v, sh, h] = quantile(@view(acc[:, v, sh, h]), 0.5)
+    end
+    @test f.proportions ≈ med
+    _, p1 = MacroEconometricModels._compute_fevd(compute_irf(m, s.Q_draws[1], H), n, H)
+    @test f.proportions ≉ p1
+    irf_med = similar(s.irf_draws[1, :, :, :])
+    for h in 1:H, i in 1:n, j in 1:n
+        irf_med[h, i, j] = quantile(@view(s.irf_draws[:, h, i, j]), 0.5)
+    end
+    _, p_med_irf = MacroEconometricModels._compute_fevd(irf_med, n, H)
+    @test f.proportions ≉ p_med_irf
+end
+
+@testset "SID-19 arias/uhlig FEVD" begin
+    Random.seed!(748)
+    m = estimate_var(randn(80, 2), 1)
+    r = SVARRestrictions(2; signs=[sign_restriction(1, 1, :positive)])
+    fa = fevd(m, 5; method=:arias, restrictions=r, max_draws=20, rng=MersenneTwister(1))
+    @test fa isa FEVD
+    @test size(fa.proportions) == (2, 2, 5)
+    fu = fevd(m, 5; method=:uhlig, restrictions=r, rng=MersenneTwister(2),
+              n_starts=FAST ? 3 : 8, n_refine=1, max_iter_coarse=80, max_iter_fine=200)
+    @test fu isa FEVD
+    @test size(fu.proportions) == (2, 2, 5)
 end

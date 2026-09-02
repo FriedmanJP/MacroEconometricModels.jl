@@ -401,6 +401,20 @@ const MEM = MacroEconometricModels
         @test all(isapprox.(sum(P_new, dims=2), 1.0, atol=1e-10))
     end
 
+    @testset "MS regime order is increasing trace" begin
+        Σq = [1.0 0.2; 0.2 1.0]
+        Σl = [4.0 0.5; 0.5 5.0]
+        P = [0.8 0.2; 0.3 0.7]
+        sm = [0.1 0.9; 0.2 0.8; 0.15 0.85]
+        Σo, Po, smo = MEM._ms_order_regimes([Σl, Σq], P, sm)
+        @test tr(Σo[1]) < tr(Σo[2])
+        @test Σo[1] == Σq && Σo[2] == Σl
+        @test Po == [0.7 0.3; 0.2 0.8]
+        @test smo == sm[:, [2, 1]]
+        Σs, _, _ = MEM._ms_order_regimes([Σq, Σl], P, sm)
+        @test Σs[1] === Σq
+    end
+
     @testset "GARCH(1,1) filter" begin
         Random.seed!(7034)
         eps_sq = abs2.(randn(100))
@@ -564,4 +578,47 @@ end
     bufs = ntuple(_ -> Matrix{Float64}(undef, 60, 60), 6)
     @test MEM._hsic_objective(angles, Z, 2; sigma=1.0) ==
           MEM._hsic_objective(angles, Z, 2, bufs..., Hbuf; sigma=1.0)
+end
+
+@testset "SID-22 Holm adjustment and shock helpers" begin
+    p = [0.01, 0.04, 0.03]
+    h = MEM._holm_adjust(p)
+    # Sorted p: 0.01, 0.03, 0.04. Holm: 3·0.01=0.03; max(0.03, 2·0.03)=0.06;
+    # max(0.06, 1·0.04)=0.06.
+    @test h[1] ≈ 0.03
+    @test h[3] ≈ 0.06
+    @test h[2] ≈ 0.06
+    @test all(0 .<= h .<= 1)
+
+    B = [1.0 0.25; 0.4 1.2]
+    perm, signs = MEM._match_columns(B, B)
+    @test perm == [1, 2]
+    @test all(==(1), signs)
+
+    shocks = randn(MersenneTwister(75190), 40, 2)
+    dummy = ICASVARResult{Float64}(B, Matrix{Float64}(I, 2, 2),
+                                   Matrix{Float64}(I, 2, 2), shocks,
+                                   :fastica, true, 1, 0.0)
+    @test MEM._result_shocks(dummy) == shocks
+    @test MEM._result_method(dummy) == :fastica
+
+    B0 = [1.0 0.2; 0.3 1.1]
+    se = [0.1 0.05; 0.08 0.12]
+    mask = BitMatrix([false true; true false])
+    V = zeros(4, 4)
+    for j in 1:2, i in 1:2
+        V[i + (j - 1) * 2, i + (j - 1) * 2] = se[i, j]^2
+    end
+    w_diag = MEM._wald_B0_zeros(B0, se, mask)
+    w_rvr = MEM._wald_B0_zeros(B0, se, mask; vcov_B=V)
+    @test w_diag.approximation == :independence
+    @test w_rvr.approximation == :rvr
+    @test w_rvr.statistic ≈ w_diag.statistic atol=1e-10
+    V2 = copy(V)
+    i12 = 1 + 1 * 2
+    i21 = 2 + 0 * 2
+    V2[i12, i21] = V2[i21, i12] = 0.3 * se[1, 2] * se[2, 1]
+    w_c = MEM._wald_B0_zeros(B0, se, mask; vcov_B=V2)
+    @test w_c.approximation == :rvr
+    @test !isapprox(w_c.statistic, w_diag.statistic; rtol=1e-3)
 end

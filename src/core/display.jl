@@ -106,6 +106,14 @@ function _pretty_table(io::IO, data; kwargs...)
         end
     end
     be = get_display_backend()
+    # Latex/HTML backends reject text-only kwargs (`display_size` from PanelReg
+    # show, fit-to-display flags). A leaked `set_display_backend(:latex)` from
+    # a sibling threaded group would otherwise MethodError.
+    if be != :text
+        delete!(kw, :display_size)
+        delete!(kw, :fit_table_in_display_horizontally)
+        delete!(kw, :fit_table_in_display_vertically)
+    end
     if be == :text
         # Disable PrettyTables v3 fit-to-display cropping so significance/CI columns and
         # note rows are never silently dropped in non-TTY output (files, pipes, Documenter,

@@ -9,6 +9,11 @@ using Test
 using Random
 using LinearAlgebra
 using Statistics
+using Distributions
+
+if !@isdefined(FAST)
+    const FAST = get(ENV, "MACRO_FAST_TESTS", "") == "1"
+end
 
 const _suppress_warnings = MacroEconometricModels._suppress_warnings
 
@@ -158,7 +163,8 @@ const _suppress_warnings = MacroEconometricModels._suppress_warnings
             check_fn = irf_vals -> irf_vals[1, 1, 1] > 0
 
             irf_sign = irf(model, H; method=:sign, ci_type=:bootstrap, reps=(FAST ? 20 : 50),
-                           conf_level=0.90, check_func=check_fn)
+                           conf_level=0.90, check_func=check_fn,
+                           set_inference=:bootstrap_x_rotations)
 
             @test irf_sign isa ImpulseResponse
             @test size(irf_sign.values) == (H, n, n)
@@ -167,16 +173,10 @@ const _suppress_warnings = MacroEconometricModels._suppress_warnings
     end
 
     @testset "Sign restrictions - Theoretical CI" begin
-        _suppress_warnings() do
-            Random.seed!(12353)
-            check_fn = irf_vals -> irf_vals[1, 1, 1] > 0
-
-            irf_sign_theo = irf(model, H; method=:sign, ci_type=:theoretical, reps=(FAST ? 50 : 100),
-                                conf_level=0.90, check_func=check_fn)
-
-            @test irf_sign_theo isa ImpulseResponse
-            @test all(irf_sign_theo.ci_lower .<= irf_sign_theo.ci_upper)
-        end
+        check_fn = irf_vals -> irf_vals[1, 1, 1] > 0
+        @test_throws ArgumentError irf(model, H; method=:sign, ci_type=:theoretical,
+                                       reps=(FAST ? 50 : 100), conf_level=0.90,
+                                       check_func=check_fn)
     end
 
     # =========================================================================
@@ -194,29 +194,8 @@ const _suppress_warnings = MacroEconometricModels._suppress_warnings
         end
     end
 
-    @testset "FastICA - Theoretical CI symmetry" begin
-        _suppress_warnings() do
-            Random.seed!(12355)
-            # FastICA + theoretical CI can fail on perturbed matrices (NaN in whiten/eigen)
-            try
-                irf_ica_theo = irf(model, H; method=:fastica, ci_type=:theoretical, reps=(FAST ? 100 : 300), conf_level=0.90)
-
-                @test irf_ica_theo isa ImpulseResponse
-                @test all(irf_ica_theo.ci_lower .<= irf_ica_theo.ci_upper)
-
-                # Symmetricity test
-                width_lower = irf_ica_theo.values .- irf_ica_theo.ci_lower
-                width_upper = irf_ica_theo.ci_upper .- irf_ica_theo.values
-                @test all(width_lower .>= -1e-10)
-                @test all(width_upper .>= -1e-10)
-                max_width = max.(width_lower, width_upper, 1e-15)
-                asymmetry = abs.(width_lower .- width_upper) ./ max_width
-                @test mean(asymmetry) < 0.3
-            catch e
-                # FastICA can fail due to numerical sensitivity — skip silently
-                @test_skip "FastICA theoretical CI skipped due to numerical instability"
-            end
-        end
+    @testset "FastICA - Theoretical CI rejected (SID-06)" begin
+        @test_throws ArgumentError irf(model, H; method=:fastica, ci_type=:theoretical, reps=10)
     end
 
     # =========================================================================
@@ -341,5 +320,50 @@ const _suppress_warnings = MacroEconometricModels._suppress_warnings
                 @test_skip "Bayesian IRF CI test skipped due to MCMC failure"
             end
         end
+    end
+end
+
+@testset "SID-06 theoretical CI vs residual-based ID" begin
+    Random.seed!(735)
+    m = estimate_var(randn(120, 2), 1)
+    chk(irf) = irf[1, 1, 1] > 0
+    @test_throws ArgumentError irf(m, 5; method=:fastica, ci_type=:theoretical)
+    @test_throws ArgumentError irf(m, 5; method=:student_t, ci_type=:theoretical)
+    @test_throws ArgumentError irf(m, 5; method=:markov_switching, ci_type=:theoretical)
+    @test_throws ArgumentError irf(m, 5; method=:narrative, ci_type=:theoretical,
+                                   check_func=chk, narrative_check=_ -> true)
+    r = irf(m, 5; method=:cholesky, ci_type=:theoretical, reps=FAST ? 10 : 30)
+    @test r.ci_type === :theoretical
+end
+
+@testset "SID-04 column matching" begin
+    Random.seed!(733)
+    P = [1.0 0.2; 0.1 1.0]
+    P_b = [-P[:, 2] P[:, 1]]          # permutation + sign flip
+    perm, signs = MacroEconometricModels._match_columns(P, P_b)
+    Q = P_b[:, perm] .* signs'
+    @test all(diag(P' * Q) .> 0)
+    @test MacroEconometricModels._procrustes_distance(Q, P) < 1e-12
+end
+
+@testset "SID-04 FastICA bootstrap bands after matching" begin
+    _suppress_warnings() do
+        Random.seed!(733)
+        n, p, Tobs, H = 2, 1, FAST ? 200 : 300, 6
+        true_A = [0.5 0.1; 0.0 0.4]
+        B0 = [1.0 0.3; 0.2 1.0]
+        Y = zeros(Tobs, n)
+        for t in 2:Tobs
+            Y[t, :] = true_A * Y[t-1, :] + B0 * rand(TDist(3), n)
+        end
+        m = estimate_var(Y, p)
+        reps = FAST ? 20 : 100
+        ir_ica = irf(m, H; method=:fastica, ci_type=:bootstrap, reps=reps, seed=733)
+        ir_chol = irf(m, H; method=:cholesky, ci_type=:bootstrap, reps=reps, seed=733)
+        w_ica = mean(ir_ica.ci_upper[1, :, :] .- ir_ica.ci_lower[1, :, :])
+        w_chol = mean(ir_chol.ci_upper[1, :, :] .- ir_chol.ci_lower[1, :, :])
+        @test w_ica < 2 * w_chol
+        @test ir_ica.manifest !== nothing
+        @test haskey(ir_ica.manifest.settings, "relabeled_fraction")
     end
 end

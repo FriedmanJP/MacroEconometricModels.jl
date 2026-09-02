@@ -8,6 +8,7 @@ using MacroEconometricModels
 using Test
 using LinearAlgebra
 using Statistics
+using Random
 
 @testset "Summary Tables Tests" begin
 
@@ -1164,6 +1165,56 @@ using Statistics
             report(did)
         end
         @test true
+    end
+
+    @testset "SID-24 refs and SignIdentifiedSet report" begin
+        Random.seed!(753)
+        m = estimate_var(randn(150, 2), 1)
+        chk(irf) = irf[1, 1, 1] > 0
+        buf = IOBuffer()
+        report(buf, identify_sign(m, 5, chk; store_all=true, max_draws=200, rng=MersenneTwister(753)))
+        txt = String(take!(buf))
+        @test occursin("Accepted", txt) || occursin("sign", lowercase(txt))
+        rfast = sprint(io -> refs(io, identify_fastica(m); format=:plain))
+        @test occursin("Hyvärinen", rfast) || occursin("Hyvarinen", rfast)
+        @test !occursin("Lanne, Meitz", rfast)
+        rjade = sprint(io -> refs(io, identify_jade(m); format=:plain))
+        @test occursin("Cardoso", rjade)
+        @test !isempty(sprint(io -> refs(io, :garch; format=:plain)))
+    end
+
+    @testset "SID-24 statistical report ends with B₀ _coef_table" begin
+        Random.seed!(753)
+        m = estimate_var(randn(120, 2), 1)
+        statistical = (
+            identify_fastica(m),
+            identify_student_t(m; max_iter=40),
+            identify_gmm_moments(m; moments=:coskewness, n_starts=1,
+                                 rng=MersenneTwister(753)),
+        )
+        for r in statistical
+            @test hasmethod(report, Tuple{IO, typeof(r)})
+            txt = sprint(report, r)
+            @test occursin("Structural Impact Matrix", txt)
+            @test occursin("Std.Err.", txt)
+            @test occursin("B₀", txt) || occursin("B0", txt)
+            last_title = findlast("Structural Impact Matrix", txt)
+            @test last_title !== nothing
+            @test last_title.start > 1   # spec table precedes the B₀ coef table
+        end
+        # Heteroskedastic family: dummy with SEs so z/p populate when present.
+        B0 = [1.0 0.2; 0.1 1.0]
+        se = [0.05 0.04; 0.03 0.06]
+        I2 = Matrix{Float64}(I, 2, 2)
+        ms = MarkovSwitchingSVARResult{Float64}(
+            B0, I2, [I2, 2 .* I2], [[1.0, 1.0], [2.0, 0.5]],
+            fill(0.5, 8, 2), [0.9 0.1; 0.1 0.9], -10.0, true, 3, 2,
+            se, Matrix{Float64}(I, 3, 3), 0.8, randn(8, 2), ["Shock 1", "Shock 2"])
+        txt_ms = sprint(report, ms)
+        @test occursin("Structural Impact Matrix (B₀)", txt_ms)
+        @test occursin("Std.Err.", txt_ms)
+        @test findlast("Structural Impact Matrix", txt_ms).start >
+              findfirst("Markov-Switching", txt_ms).start
     end
 
 end

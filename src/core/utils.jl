@@ -141,6 +141,21 @@ function robust_inv(A::AbstractMatrix{T}; silent::Bool=false,
 end
 robust_inv(A::AbstractMatrix; kwargs...) = robust_inv(float.(A); kwargs...)
 
+# ForwardDiff.Dual is not AbstractFloat; `float.(Dual)` would strip partials.
+function robust_inv(A::AbstractMatrix{D}; silent::Bool=false,
+                    kwargs...) where {D<:ForwardDiff.Dual}
+    try
+        return inv(A)
+    catch e
+        if e isa LinearAlgebra.SingularException || e isa LinearAlgebra.LAPACKException
+            silent || @warn "Matrix singular. Using pseudo-inverse." maxlog=3
+            return pinv(A)
+        else
+            rethrow(e)
+        end
+    end
+end
+
 """
     safe_cholesky_jitter(A; rel_jitter=1e-10, silent=false) -> (L, applied_jitter)
 
@@ -182,6 +197,11 @@ to suppress the warning."""
 function safe_cholesky(A::AbstractMatrix{T}; jitter::T=T(1e-10), silent::Bool=false) where {T<:AbstractFloat}
     L, _ = safe_cholesky_jitter(A; rel_jitter=jitter, silent=silent)
     return L
+end
+
+function safe_cholesky(A::AbstractMatrix{D}; jitter=nothing,
+                       silent::Bool=false, kwargs...) where {D<:ForwardDiff.Dual}
+    cholesky(Symmetric(A)).L
 end
 
 """Log determinant with eigenvalue fallback for numerical issues."""
@@ -317,4 +337,28 @@ function _effective_sample_size(weights::AbstractVector{T}) where {T<:Real}
     s2 = sum(abs2, weights)
     (s1 <= 0 || s2 <= 0) && return zero(float(T))
     float(s1)^2 / float(s2)
+end
+
+"""Weighted quantile via linear interpolation on the cumulative weight."""
+function _weighted_quantile(vals::AbstractVector{T}, weights::AbstractVector{S}, q::Real) where {T,S}
+    perm = sortperm(vals)
+    sv, sw = vals[perm], weights[perm]
+    cw = cumsum(sw)
+    cw ./= cw[end]
+    idx = searchsortedfirst(cw, q)
+    idx == 1 && return sv[1]
+    idx > length(sv) && return sv[end]
+    t = (q - cw[idx-1]) / (cw[idx] - cw[idx-1] + eps(T))
+    (1 - t) * sv[idx-1] + t * sv[idx]
+end
+
+"""True when every weight equals the first (including the empty / singleton case)."""
+function _weights_are_uniform(w::AbstractVector)
+    n = length(w)
+    n <= 1 && return true
+    w1 = w[1]
+    @inbounds for i in 2:n
+        w[i] == w1 || return false
+    end
+    true
 end

@@ -39,6 +39,7 @@ Fields:
 - `variables`: Variable names
 - `shock_names`: Shock names
 - `method`: Identification method used
+- `n_effective`: Accepted rotations used for a set-ID summary (`method=:sign`/`:narrative`); `0` means untracked (point-ID)
 """
 struct HistoricalDecomposition{T<:AbstractFloat} <: AbstractHistoricalDecomposition
     contributions::Array{T,3}      # T_eff × n_vars × n_shocks
@@ -49,7 +50,14 @@ struct HistoricalDecomposition{T<:AbstractFloat} <: AbstractHistoricalDecomposit
     variables::Vector{String}
     shock_names::Vector{String}
     method::Symbol
+    n_effective::Int
 end
+
+# Backward-compatible constructor (pre-SID-05, no accepted-rotation count).
+HistoricalDecomposition{T}(contributions, initial_conditions, actual, shocks, T_eff,
+        variables, shock_names, method) where {T} =
+    HistoricalDecomposition{T}(contributions, initial_conditions, actual, shocks, T_eff,
+        variables, shock_names, method, 0)
 
 """
     BayesianHistoricalDecomposition{T} <: AbstractHistoricalDecomposition
@@ -162,6 +170,16 @@ function _compute_initial_conditions(actual::Matrix{T},
     initial
 end
 
+"""Per-Q historical decomposition: contributions, initial conditions, and structural shocks."""
+function _hd_from_Q(model::VARModel{T}, Q::AbstractMatrix{T}, horizon::Int,
+                    actual::Matrix{T}) where {T<:AbstractFloat}
+    shocks = compute_structural_shocks(model, Q)
+    Theta = _compute_structural_ma_coefficients(model, Q, horizon)
+    contributions = _compute_hd_contributions(shocks, Theta)
+    initial_conditions = _compute_initial_conditions(actual, contributions)
+    contributions, initial_conditions, shocks
+end
+
 # =============================================================================
 # Frequentist Historical Decomposition
 # =============================================================================
@@ -184,15 +202,29 @@ Decomposes observed data into contributions from each structural shock plus init
 - `max_draws::Int=1000`: Maximum draws for sign/narrative identification
 - `transition_var=nothing`: Transition variable (for method=:smooth_transition)
 - `regime_indicator=nothing`: Regime indicator (for method=:external_volatility)
+- `instruments`: Instrument vector/matrix for `method=:proxy` (length `T` or `T_eff`)
+- `pattern`: `SVARPattern` for `method=:ab`
+- `target`: Variable index or name for `method=:max_share`
+- `horizons` / `band`: Time- or frequency-domain window for `:max_share`
 
 # Methods
-`:cholesky`, `:sign`, `:narrative`, `:long_run`,
+`:cholesky`, `:sign`, `:narrative`, `:long_run`, `:proxy`, `:ab`, `:max_share`, `:svec`,
 `:fastica`, `:jade`, `:sobi`, `:dcov`, `:hsic`,
 `:student_t`, `:mixture_normal`, `:pml`, `:skew_normal`, `:nongaussian_ml`,
 `:markov_switching`, `:garch`, `:smooth_transition`, `:external_volatility`
 
 Note: `:smooth_transition` requires `transition_var` kwarg.
       `:external_volatility` requires `regime_indicator` kwarg.
+      `:proxy` requires `instruments` and is partial when `k < n`.
+      `:ab` requires `pattern::SVARPattern`.
+      `:max_share` requires `target` and is partial; pass `horizons` or `band`.
+      Default `normalize=:unit_effect`; structural shocks are recovered as
+      `B₀ \\ u` when `Q` is not orthogonal.
+
+For `:sign`/`:narrative`, each accepted rotation gets its own HD; the reported
+contributions, initial conditions, and shocks are the pointwise median.
+`n_effective` is the number of accepted rotations. The adding-up identity of
+the pointwise-median HD is not required (Fry & Pagan 2011).
 
 # Returns
 `HistoricalDecomposition` containing:
@@ -200,6 +232,7 @@ Note: `:smooth_transition` requires `transition_var` kwarg.
 - `initial_conditions`: Initial condition effects (T_eff × n_vars)
 - `actual`: Actual data values
 - `shocks`: Structural shocks
+- `n_effective`: Accepted rotations for `:sign`/`:narrative` (0 otherwise)
 
 # Example
 ```julia
@@ -214,7 +247,11 @@ function historical_decomposition(model::VARModel{T}, horizon::Int=effective_nob
     shock_names::Union{Nothing,Vector{String}}=nothing,
     transition_var::Union{Nothing,AbstractVector}=nothing,
     regime_indicator::Union{Nothing,AbstractVector{Int}}=nothing,
-    rng::AbstractRNG=Random.default_rng()
+    restrictions=nothing,
+    rng::AbstractRNG=Random.default_rng(),
+    normalize::Union{Nothing,Symbol}=nothing,
+    shock_size::Union{Nothing,Pair}=nothing,
+    kwargs...
 ) where {T<:AbstractFloat}
 
     _validate_data(model.Sigma, "Sigma")
@@ -225,26 +262,84 @@ function historical_decomposition(model::VARModel{T}, horizon::Int=effective_nob
     # Ensure horizon doesn't exceed T_eff
     horizon = min(horizon, T_eff)
 
-    # Get identification matrix Q
-    Q = compute_Q(model, method, horizon, check_func, narrative_check;
-                  max_draws=max_draws, transition_var=transition_var, regime_indicator=regime_indicator, rng=rng)
-
-    # Compute structural shocks: ε_t = Q' L^{-1} u_t
-    shocks = compute_structural_shocks(model, Q)
-
-    # Get actual data (effective sample)
     actual = model.Y[(model.p + 1):end, :]
-
-    # Compute structural MA coefficients
-    Theta = _compute_structural_ma_coefficients(model, Q, horizon)
-
-    # Compute contributions
-    contributions = _compute_hd_contributions(shocks, Theta)
-
-    # Compute initial conditions
-    initial_conditions = _compute_initial_conditions(actual, contributions)
-
     snames = isnothing(shock_names) ? model.varnames : shock_names
+    if _is_partial(method)
+        @warn "historical_decomposition: method=:$method is partially identified; contributions of unidentified shocks are not identified." maxlog = 1
+    end
+
+    # SID-05/19: HD of each accepted rotation, then pointwise median. The adding-up
+    # identity of the median HD is not required (Fry–Pagan; SID-17).
+    if _is_set_identified(method)
+        Qs, n_acc, wts = if method === :arias
+            isnothing(restrictions) && throw(ArgumentError("arias requires restrictions"))
+            s = identify_arias(model, restrictions, horizon;
+                               _arias_freq_kwargs(max_draws; rng=rng, kwargs...)...)
+            s.Q_draws, length(s.Q_draws), s.weights
+        else
+            isnothing(check_func) && throw(ArgumentError(
+                method === :narrative ? "Need check_func and narrative_check for narrative" :
+                                        "Need check_func for sign"))
+            method === :narrative && isnothing(narrative_check) &&
+                throw(ArgumentError("Need check_func and narrative_check for narrative"))
+            s = method === :sign ?
+                identify_sign(model, horizon, check_func; max_draws=max_draws, store_all=true, rng=rng) :
+                identify_narrative(model, horizon, check_func, narrative_check;
+                                   max_draws=max_draws, store_all=true, rng=rng)
+            s.Q_draws, s.n_accepted, nothing
+        end
+        all_contrib = zeros(T, n_acc, T_eff, n, n)
+        all_init = zeros(T, n_acc, T_eff, n)
+        all_shocks = zeros(T, n_acc, T_eff, n)
+        for i in 1:n_acc
+            contrib, init, shk = _hd_from_Q(model, Qs[i], horizon, actual)
+            all_contrib[i, :, :, :] = contrib
+            all_init[i, :, :] = init
+            all_shocks[i, :, :] = shk
+        end
+        contributions = zeros(T, T_eff, n, n)
+        initial_conditions = zeros(T, T_eff, n)
+        shocks = zeros(T, T_eff, n)
+        @inbounds for t in 1:T_eff, i in 1:n
+            if wts === nothing
+                initial_conditions[t, i] = quantile(@view(all_init[:, t, i]), T(0.5))
+                shocks[t, i] = quantile(@view(all_shocks[:, t, i]), T(0.5))
+                for j in 1:n
+                    contributions[t, i, j] = quantile(@view(all_contrib[:, t, i, j]), T(0.5))
+                end
+            else
+                initial_conditions[t, i] = _weighted_quantile(all_init[:, t, i], wts, T(0.5))
+                shocks[t, i] = _weighted_quantile(all_shocks[:, t, i], wts, T(0.5))
+                for j in 1:n
+                    contributions[t, i, j] = _weighted_quantile(all_contrib[:, t, i, j], wts, T(0.5))
+                end
+            end
+        end
+        return HistoricalDecomposition{T}(
+            contributions, initial_conditions, actual, shocks, T_eff,
+            model.varnames, snames, method, n_acc
+        )
+    end
+
+    Q = if method === :proxy && normalize !== nothing
+        compute_Q(model, method; horizon=horizon, check_func=check_func,
+                  narrative_check=narrative_check, restrictions=restrictions,
+                  max_draws=max_draws, transition_var=transition_var,
+                  regime_indicator=regime_indicator, rng=rng, kwargs...,
+                  normalize=normalize)
+    else
+        compute_Q(model, method; horizon=horizon, check_func=check_func,
+                  narrative_check=narrative_check, restrictions=restrictions,
+                  max_draws=max_draws, transition_var=transition_var,
+                  regime_indicator=regime_indicator, rng=rng, kwargs...)
+    end
+    eff_norm = normalize === nothing ? :unit_variance : normalize
+    apply_ue = (eff_norm === :unit_effect) && (method !== :proxy || shock_size !== nothing)
+    if apply_ue
+        Q = _apply_irf_scale(Q, model, _unit_effect_specs(Q, model, shock_size))
+    end
+    contributions, initial_conditions, shocks = _hd_from_Q(model, Q, horizon, actual)
+
     HistoricalDecomposition{T}(
         contributions, initial_conditions, actual, shocks, T_eff,
         model.varnames, snames, method
@@ -319,17 +414,20 @@ Compute Bayesian historical decomposition from posterior draws with posterior qu
 - `quantiles::Vector{<:Real}=[0.16, 0.5, 0.84]`: Posterior quantile levels
 - `check_func=nothing`: Sign restriction check function
 - `narrative_check=nothing`: Narrative restriction check function
+- `max_draws::Int=1000`: Maximum draws for sign/narrative identification
 - `transition_var=nothing`: Transition variable (for method=:smooth_transition)
 - `regime_indicator=nothing`: Regime indicator (for method=:external_volatility)
+- `instruments`: Instrument vector/matrix for `method=:proxy`
 
 # Methods
-`:cholesky`, `:sign`, `:narrative`, `:long_run`,
+`:cholesky`, `:sign`, `:narrative`, `:long_run`, `:proxy`, `:ab`,
 `:fastica`, `:jade`, `:sobi`, `:dcov`, `:hsic`,
 `:student_t`, `:mixture_normal`, `:pml`, `:skew_normal`, `:nongaussian_ml`,
 `:markov_switching`, `:garch`, `:smooth_transition`, `:external_volatility`
 
 Note: `:smooth_transition` requires `transition_var` kwarg.
       `:external_volatility` requires `regime_indicator` kwarg.
+      `:proxy` requires `instruments` and is partial when `k < n`.
 
 # Returns
 `BayesianHistoricalDecomposition` with posterior quantiles and means.
@@ -345,12 +443,21 @@ function historical_decomposition(post::BVARPosterior, horizon::Int=0;
     quantiles::Vector{<:Real}=[0.16, 0.5, 0.84], point_estimate::Symbol=:mean,
     check_func=nothing, narrative_check=nothing,
     shock_names::Union{Nothing,Vector{String}}=nothing,
+    max_draws::Int=1000,
     transition_var::Union{Nothing,AbstractVector}=nothing,
-    regime_indicator::Union{Nothing,AbstractVector{Int}}=nothing
+    regime_indicator::Union{Nothing,AbstractVector{Int}}=nothing,
+    restrictions=nothing,
+    normalize::Union{Nothing,Symbol}=nothing,
+    shock_size::Union{Nothing,Pair}=nothing,
+    kwargs...
 )
     use_data = isempty(data) ? post.data : data
     isempty(use_data) && throw(ArgumentError("Data required for historical decomposition"))
     _validate_narrative_data(method, use_data)
+    method === :arias && throw(ArgumentError(
+        "historical_decomposition(BVARPosterior; method=:arias) uses a single unweighted " *
+        "rotation per draw; call identify_arias_bayesian(post, restrictions, horizon) " *
+        "for the weighted posterior identified-set summary"))
 
     p, n = post.p, post.n
     horizon = horizon <= 0 ? size(use_data, 1) - p : horizon
@@ -366,28 +473,46 @@ function historical_decomposition(post::BVARPosterior, horizon::Int=0;
     all_shocks = zeros(ET, samples, T_eff, n)
 
     b_vecs, sigmas = extract_chain_parameters(post)
+    apply_ue = _unit_effect_requested(normalize)
 
     valid_count = 0
+    n_unidentified = 0
+    n_nonstationary = 0
     for s in 1:samples
-        m = parameters_to_model(b_vecs[s, :], sigmas[s, :], p, n, use_data)
+        m = parameters_to_model(b_vecs[s, :], sigmas[s, :], p, n, use_data;
+                                varnames=post.varnames)
         if !is_stationary(m).is_stationary
+            n_nonstationary += 1
             continue
         end
-        valid_count += 1
-        Q = compute_Q(m, method, horizon, check_func, narrative_check;
-                      max_draws=100, transition_var=transition_var, regime_indicator=regime_indicator)
+        try
+            Q = compute_Q(m, method; horizon=horizon, check_func=check_func,
+                          narrative_check=narrative_check, restrictions=restrictions,
+                          max_draws=max_draws, transition_var=transition_var,
+                          regime_indicator=regime_indicator, kwargs...)
+            if apply_ue
+                Q = _apply_irf_scale(Q, m, _unit_effect_specs(Q, m, shock_size))
+            end
+            shocks = compute_structural_shocks(m, Q)
+            Theta = _compute_structural_ma_coefficients(m, Q, horizon)
+            contributions = _compute_hd_contributions(shocks, Theta)
+            initial_cond = _compute_initial_conditions(actual, contributions)
 
-        shocks = compute_structural_shocks(m, Q)
-        Theta = _compute_structural_ma_coefficients(m, Q, horizon)
-        contributions = _compute_hd_contributions(shocks, Theta)
-        initial_cond = _compute_initial_conditions(actual, contributions)
-
-        all_contributions[valid_count, :, :, :] = contributions
-        all_initial[valid_count, :, :] = initial_cond
-        all_shocks[valid_count, :, :] = shocks
+            valid_count += 1
+            all_contributions[valid_count, :, :, :] = contributions
+            all_initial[valid_count, :, :] = initial_cond
+            all_shocks[valid_count, :, :] = shocks
+        catch e
+            e isa IdentificationError && (n_unidentified += 1; continue)
+            rethrow(e)
+        end
     end
-    valid_count == 0 && error("All posterior draws are non-stationary; cannot compute historical decomposition")
-    valid_count < samples ÷ 2 && @warn "$(samples - valid_count)/$samples posterior draws non-stationary, skipped"
+    valid_count == 0 && throw(IdentificationError(
+        "All posterior draws failed identification or were non-stationary " *
+        "(unidentified=$n_unidentified, non-stationary=$n_nonstationary)"))
+    n_nonstationary > samples ÷ 2 && @warn "$n_nonstationary/$samples posterior draws non-stationary, skipped"
+    frac_u = ET(n_unidentified) / ET(samples)
+    frac_u > ET(0.5) && @warn "$n_unidentified/$samples posterior draws unidentified ($n_nonstationary non-stationary)"
 
     # Compute quantiles and means
     q_vec = ET.(quantiles)
@@ -420,7 +545,7 @@ function historical_decomposition(post::BVARPosterior, horizon::Int=0;
     end
 
     snames = isnothing(shock_names) ? post.varnames : shock_names
-    # MC honesty (#244): non-stationary posterior draws are skipped (valid_count usable).
+    # MC honesty (#244): non-stationary / unidentified posterior draws are skipped (valid_count usable).
     BayesianHistoricalDecomposition{ET}(
         contrib_q, contrib_m, initial_q, initial_m, shocks_m, actual, T_eff,
         post.varnames, snames, q_vec, method,
@@ -465,7 +590,8 @@ function historical_decomposition(model::VARModel{T}, restrictions::SVARRestrict
     n_draws::Int=1000, n_rotations::Int=1000,
     quantiles::Vector{<:Real}=[0.16, 0.5, 0.84],
     shock_names::Union{Nothing,Vector{String}}=nothing,
-    rng::AbstractRNG=Random.default_rng()
+    rng::AbstractRNG=Random.default_rng(),
+    n_narrative_sims::Int=1000
 ) where {T<:AbstractFloat}
 
     n = nvars(model)
@@ -476,7 +602,8 @@ function historical_decomposition(model::VARModel{T}, restrictions::SVARRestrict
     actual = model.Y[(model.p + 1):end, :]
 
     # Use identify_arias to get valid Q draws with weights
-    arias_result = identify_arias(model, restrictions, horizon; n_draws=n_draws, n_rotations=n_rotations, rng=rng)
+    arias_result = identify_arias(model, restrictions, horizon; n_draws=n_draws, n_rotations=n_rotations,
+                                 rng=rng, n_narrative_sims=n_narrative_sims)
 
     n_acc = length(arias_result.Q_draws)
     weights = arias_result.weights
@@ -536,6 +663,96 @@ function historical_decomposition(model::VARModel{T}, restrictions::SVARRestrict
         contrib_q, contrib_m, initial_q, initial_m, shocks_m, actual, T_eff,
         model.varnames, snames, q_vec, :arias,
         n_draws, n_acc, max(0, n_draws - n_acc)
+    )
+end
+
+"""Bayesian HD from stored rotations (no re-sampling)."""
+function _bayesian_hd_from_Qs(model::VARModel{T}, Qs, weights, horizon::Int,
+                              varnames::Vector{String}, shock_names::Vector{String},
+                              method::Symbol, n_requested::Int, n_failed::Int;
+                              quantiles::Vector{<:Real}=[0.16, 0.5, 0.84],
+                              uniform_unweighted::Bool=false) where {T<:AbstractFloat}
+    n = nvars(model)
+    T_eff = effective_nobs(model)
+    horizon = min(horizon, T_eff)
+    actual = model.Y[(model.p + 1):end, :]
+    n_acc = length(Qs)
+    all_contributions = zeros(T, n_acc, T_eff, n, n)
+    all_initial = zeros(T, n_acc, T_eff, n)
+    all_shocks = zeros(T, n_acc, T_eff, n)
+    Threads.@threads for idx in 1:n_acc
+        contrib, init, shk = _hd_from_Q(model, Qs[idx], horizon, actual)
+        all_contributions[idx, :, :, :] = contrib
+        all_initial[idx, :, :] = init
+        all_shocks[idx, :, :] = shk
+    end
+    q_vec = T.(quantiles)
+    nq = length(quantiles)
+    contrib_q = zeros(T, T_eff, n, n, nq)
+    contrib_m = zeros(T, T_eff, n, n)
+    initial_q = zeros(T, T_eff, n, nq)
+    initial_m = zeros(T, T_eff, n)
+    shocks_m = zeros(T, T_eff, n)
+    @inbounds for t in 1:T_eff, i in 1:n
+        d_init = @view all_initial[:, t, i]
+        initial_m[t, i] = _setid_quantile(d_init, weights, T(0.5); uniform_unweighted=uniform_unweighted)
+        for (qi, q) in enumerate(q_vec)
+            initial_q[t, i, qi] = _setid_quantile(d_init, weights, q; uniform_unweighted=uniform_unweighted)
+        end
+        d_shock = @view all_shocks[:, t, i]
+        shocks_m[t, i] = _setid_quantile(d_shock, weights, T(0.5); uniform_unweighted=uniform_unweighted)
+        for j in 1:n
+            d = @view all_contributions[:, t, i, j]
+            contrib_m[t, i, j] = _setid_quantile(d, weights, T(0.5); uniform_unweighted=uniform_unweighted)
+            for (qi, q) in enumerate(q_vec)
+                contrib_q[t, i, j, qi] = _setid_quantile(d, weights, q; uniform_unweighted=uniform_unweighted)
+            end
+        end
+    end
+    BayesianHistoricalDecomposition{T}(
+        contrib_q, contrib_m, initial_q, initial_m, shocks_m, actual, T_eff,
+        varnames, shock_names, q_vec, method,
+        n_requested, n_acc, n_failed
+    )
+end
+
+"""
+    historical_decomposition(model, s::SignIdentifiedSet, horizon=effective_nobs(model))
+
+Historical decomposition of each stored rotation, summarised by weighted quantiles.
+Consumes `s.Q_draws` rather than re-sampling.
+"""
+function historical_decomposition(model::VARModel{T}, s::SignIdentifiedSet{T},
+                                  horizon::Int=effective_nobs(model);
+                                  quantiles::Vector{<:Real}=[0.16, 0.5, 0.84],
+                                  shock_names::Union{Nothing,Vector{String}}=nothing) where {T<:AbstractFloat}
+    snames = isnothing(shock_names) ? s.shocks : shock_names
+    _bayesian_hd_from_Qs(model, s.Q_draws, s.weights, horizon, s.variables, snames, :sign,
+                         s.n_total, max(0, s.n_total - s.n_accepted);
+                         quantiles=quantiles, uniform_unweighted=true)
+end
+
+function historical_decomposition(model::VARModel{T}, s::AriasSVARResult{T},
+                                  horizon::Int=effective_nobs(model);
+                                  quantiles::Vector{<:Real}=[0.16, 0.5, 0.84],
+                                  shock_names::Union{Nothing,Vector{String}}=nothing) where {T<:AbstractFloat}
+    n_acc = length(s.Q_draws)
+    snames = isnothing(shock_names) ? s.varnames : shock_names
+    _bayesian_hd_from_Qs(model, s.Q_draws, s.weights, horizon, s.varnames, snames, :arias,
+                         n_acc, 0; quantiles=quantiles, uniform_unweighted=false)
+end
+
+function historical_decomposition(model::VARModel{T}, r::UhligSVARResult{T},
+                                  horizon::Int=effective_nobs(model);
+                                  shock_names::Union{Nothing,Vector{String}}=nothing) where {T<:AbstractFloat}
+    T_eff = effective_nobs(model)
+    horizon = min(horizon, T_eff)
+    actual = model.Y[(model.p + 1):end, :]
+    contributions, initial_conditions, shocks = _hd_from_Q(model, r.Q, horizon, actual)
+    snames = isnothing(shock_names) ? r.varnames : shock_names
+    HistoricalDecomposition{T}(
+        contributions, initial_conditions, actual, shocks, T_eff,
+        r.varnames, snames, :uhlig
     )
 end
 
@@ -689,6 +906,7 @@ function Base.show(io::IO, hd::HistoricalDecomposition{T}) where {T}
         "Shocks" n_shocks;
         "Time periods" hd.T_eff
     ]
+    hd.n_effective > 0 && (spec_data = vcat(spec_data, ["Accepted rotations" hd.n_effective]))
     _pretty_table(io, spec_data;
         title = "Historical Decomposition",
         column_labels = ["Specification", ""],
@@ -712,9 +930,12 @@ function Base.show(io::IO, hd::HistoricalDecomposition{T}) where {T}
         alignment = vcat([:l], fill(:r, n_shocks + 1)),
     )
 
-    # Verification status
-    verified = verify_decomposition(hd)
-    status = verified ? "Passed" : "FAILED"
+    # Verification status. Pointwise-median set-ID HD need not add up (Fry–Pagan).
+    status = if hd.n_effective > 0
+        "Not required (pointwise median)"
+    else
+        verify_decomposition(hd) ? "Passed" : "FAILED"
+    end
     conc_data = Any["Decomposition identity" status]
     _pretty_table(io, conc_data;
         column_labels = ["", ""],

@@ -231,13 +231,22 @@ BayesianImpulseResponse{T}(quantiles, point_estimate, horizon, variables, shocks
 # FEVD
 # =============================================================================
 
-"""FEVD results: decomposition (n×n×H), proportions, variable/shock names."""
+"""FEVD results: decomposition (n×n×H), proportions, variable/shock names.
+
+`n_effective` is the number of accepted rotations used for a set-ID summary
+(`method=:sign`/`:narrative`); `0` means untracked (point-ID).
+"""
 struct FEVD{T<:AbstractFloat} <: AbstractFEVD
     decomposition::Array{T,3}
     proportions::Array{T,3}
     variables::Vector{String}
     shocks::Vector{String}
+    n_effective::Int
 end
+
+# Backward-compatible constructor (pre-SID-05, no accepted-rotation count).
+FEVD{T}(decomposition, proportions, variables, shocks) where {T} =
+    FEVD{T}(decomposition, proportions, variables, shocks, 0)
 
 """
 Bayesian FEVD with posterior quantiles.
@@ -323,6 +332,10 @@ Fields:
 - `acceptance_rate::T` — fraction accepted
 - `variables::Vector{String}` — variable names
 - `shocks::Vector{String}` — shock names
+- `weights::Vector{T}` — importance weights (uniform `1/n` for pure sign draws)
+- `ess::T` — Kish effective sample size
+- `ess_fraction::T` — `ess / n_accepted`
+- `restrictions` — `nothing` or the `SVARRestrictions` that generated the set
 """
 struct SignIdentifiedSet{T<:AbstractFloat} <: AbstractAnalysisResult
     Q_draws::Vector{Matrix{T}}
@@ -332,6 +345,19 @@ struct SignIdentifiedSet{T<:AbstractFloat} <: AbstractAnalysisResult
     acceptance_rate::T
     variables::Vector{String}
     shocks::Vector{String}
+    weights::Vector{T}
+    ess::T
+    ess_fraction::T
+    restrictions::Any
+end
+
+# 7-arg construction sites (pre-SID-17): uniform weights, ess = n_accepted.
+function SignIdentifiedSet{T}(Q_draws, irf_draws, n_accepted::Integer, n_total::Integer,
+                              acceptance_rate, variables, shocks) where {T<:AbstractFloat}
+    n = length(Q_draws)
+    w = n > 0 ? fill(one(T) / T(n), n) : T[]
+    SignIdentifiedSet{T}(Q_draws, irf_draws, Int(n_accepted), Int(n_total), T(acceptance_rate),
+                         variables, shocks, w, T(n_accepted), one(T), nothing)
 end
 
 function Base.show(io::IO, s::SignIdentifiedSet{T}) where {T}

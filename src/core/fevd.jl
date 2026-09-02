@@ -20,30 +20,87 @@ using LinearAlgebra, Statistics
 Compute FEVD showing proportion of h-step forecast error variance attributable to each shock.
 
 # Methods
-`:cholesky`, `:sign`, `:narrative`, `:long_run`,
+`:cholesky`, `:sign`, `:narrative`, `:long_run`, `:proxy`, `:ab`, `:max_share`, `:svec`,
 `:fastica`, `:jade`, `:sobi`, `:dcov`, `:hsic`,
 `:student_t`, `:mixture_normal`, `:pml`, `:skew_normal`, `:nongaussian_ml`,
 `:markov_switching`, `:garch`, `:smooth_transition`, `:external_volatility`
 
 Note: `:smooth_transition` requires `transition_var` kwarg.
       `:external_volatility` requires `regime_indicator` kwarg.
+      `:proxy` requires `instruments` and is partial when `k < n`.
+      `:ab` requires `pattern::SVARPattern`.
+      `:max_share` requires `target` and is partial; pass `horizons` or `band`.
+      `:svec` is the structural-VECM route (`identify_svec` on a `VECMModel`).
+
+For `:sign`/`:narrative`, each accepted rotation gets its own FEVD; the reported
+decomposition and proportions are the pointwise median. `n_effective` is the
+number of accepted rotations.
 """
 function fevd(model::VARModel{T}, horizon::Int;
     method::Symbol=:cholesky, check_func=nothing, narrative_check=nothing,
     shock_names::Union{Nothing,Vector{String}}=nothing,
     transition_var::Union{Nothing,AbstractVector}=nothing,
     regime_indicator::Union{Nothing,AbstractVector{Int}}=nothing,
-    rng::AbstractRNG=Random.default_rng()
+    restrictions=nothing,
+    max_draws::Int=1000,
+    rng::AbstractRNG=Random.default_rng(),
+    kwargs...
 ) where {T<:AbstractFloat}
     _validate_data(model.Sigma, "Sigma")
     _validate_data(model.B, "B")
+    snames = isnothing(shock_names) ? model.varnames : shock_names
+    # SID-05/19: FEVD of each accepted rotation, then pointwise median. The median
+    # IRF is not Σ-orthonormal, so this is not FEVD-of-the-median-IRF.
+    if _is_set_identified(method)
+        irf_draws, n_acc, wts = if method === :arias
+            isnothing(restrictions) && throw(ArgumentError("arias requires restrictions"))
+            s = identify_arias(model, restrictions, horizon;
+                               _arias_freq_kwargs(max_draws; rng=rng, kwargs...)...)
+            s.irf_draws, length(s.Q_draws), s.weights
+        else
+            isnothing(check_func) && throw(ArgumentError(
+                method === :narrative ? "Need check_func and narrative_check for narrative" :
+                                        "Need check_func for sign"))
+            method === :narrative && isnothing(narrative_check) &&
+                throw(ArgumentError("Need check_func and narrative_check for narrative"))
+            s = method === :sign ?
+                identify_sign(model, horizon, check_func; max_draws=max_draws, store_all=true, rng=rng) :
+                identify_narrative(model, horizon, check_func, narrative_check;
+                                   max_draws=max_draws, store_all=true, rng=rng)
+            s.irf_draws, s.n_accepted, nothing
+        end
+        n = nvars(model)
+        _check_fevd_orthogonality(@view(irf_draws[1, 1, :, :]), model.Sigma; method=method)
+        decomp_draws = zeros(T, n_acc, n, n, horizon)
+        props_draws = zeros(T, n_acc, n, n, horizon)
+        for i in 1:n_acc
+            d, p = _compute_fevd(irf_draws[i, :, :, :], n, horizon)
+            decomp_draws[i, :, :, :] = d
+            props_draws[i, :, :, :] = p
+        end
+        decomp = zeros(T, n, n, horizon)
+        props = zeros(T, n, n, horizon)
+        @inbounds for v in 1:n, sh in 1:n, h in 1:horizon
+            if wts === nothing
+                decomp[v, sh, h] = quantile(@view(decomp_draws[:, v, sh, h]), T(0.5))
+                props[v, sh, h] = quantile(@view(props_draws[:, v, sh, h]), T(0.5))
+            else
+                decomp[v, sh, h] = _weighted_quantile(decomp_draws[:, v, sh, h], wts, T(0.5))
+                props[v, sh, h] = _weighted_quantile(props_draws[:, v, sh, h], wts, T(0.5))
+            end
+        end
+        return FEVD{T}(decomp, props, model.varnames, snames, n_acc)
+    end
     irf_result = irf(model, horizon; method, check_func, narrative_check,
-                     transition_var=transition_var, regime_indicator=regime_indicator, rng=rng)
+                     transition_var=transition_var, regime_indicator=regime_indicator,
+                     restrictions=restrictions, rng=rng, max_draws=max_draws, kwargs...)
     # The impact matrix P = IRF[1,:,:] = chol(Σ)·Q; the squared-IRF FEVD accumulation is a
     # proper variance decomposition only when P is Σ-orthonormal (P*P' = Σ ⇔ Q*Q' = I).
+    if _is_partial(method)
+        @warn "fevd: method=:$method is partially identified; FEVD shares of unidentified shocks are not identified." maxlog = 1
+    end
     _check_fevd_orthogonality(@view(irf_result.values[1, :, :]), model.Sigma; method=method)
     decomp, props = _compute_fevd(irf_result.values, nvars(model), horizon)
-    snames = isnothing(shock_names) ? model.varnames : shock_names
     FEVD{T}(decomp, props, model.varnames, snames)
 end
 
@@ -138,13 +195,31 @@ function fevd(post::BVARPosterior, horizon::Int;
     shock_names::Union{Nothing,Vector{String}}=nothing,
     max_draws::Int=1000,
     transition_var::Union{Nothing,AbstractVector}=nothing,
-    regime_indicator::Union{Nothing,AbstractVector{Int}}=nothing
+    regime_indicator::Union{Nothing,AbstractVector{Int}}=nothing,
+    restrictions=nothing,
+    normalize::Union{Nothing,Symbol}=nothing,
+    shock_size::Union{Nothing,Pair}=nothing,
+    kwargs...
 )
     use_data = isempty(data) ? post.data : data
     _validate_narrative_data(method, use_data)
 
     n = post.n
     ET = eltype(use_data)
+
+    # Weighted identified-set summary; do not fall through to compute_Q (n_draws=1, unweighted).
+    if method === :arias
+        rng, n_rot, cw, n_nar = _arias_posterior_kwargs(max_draws; kwargs...)
+        use_data_a = isempty(data) ? nothing : data
+        rset = _arias_from_bvar_posterior(post, restrictions, horizon;
+            data=use_data_a, n_rotations=n_rot, quantiles=quantiles,
+            rng=rng, compute_weights=cw, n_narrative_sims=n_nar)
+        fv = fevd(rset; quantiles=collect(quantiles))
+        shock_names === nothing && return fv
+        return BayesianFEVD{ET}(fv.quantiles, fv.point_estimate, fv.horizon,
+            fv.variables, shock_names, fv.quantile_levels,
+            fv.n_requested, fv.n_effective, fv.n_failed)
+    end
 
     # Process posterior samples - compute FEVD proportions for each
     results, samples = process_posterior_samples(post,
@@ -156,7 +231,8 @@ function fevd(post::BVARPosterior, horizon::Int;
         data=use_data, method=method, horizon=horizon,
         check_func=check_func, narrative_check=narrative_check,
         max_draws=max_draws,
-        transition_var=transition_var, regime_indicator=regime_indicator
+        transition_var=transition_var, regime_indicator=regime_indicator,
+        restrictions=restrictions, kwargs...
     )
 
     # Stack results in FEVD axis order (variable, shock, horizon) — unified with
@@ -185,33 +261,100 @@ function fevd(post::BVARPosterior, p::Int, n::Int, horizon::Int; kwargs...)
     fevd(post, horizon; kwargs...)
 end
 
+"""FEVD of a [`BayesianSetIdentifiedSVAR`](@ref) (weighted per-draw decompositions)."""
+function fevd(r::BayesianSetIdentifiedSVAR{T}; quantiles::Vector{<:Real}=[0.16, 0.5, 0.84]) where {T<:AbstractFloat}
+    n_acc, H, n, _ = size(r.irf_draws)
+    all_props = zeros(T, n_acc, n, n, H)
+    for i in 1:n_acc
+        _, props = _compute_fevd(r.irf_draws[i, :, :, :], n, H)
+        all_props[i, :, :, :] = props
+    end
+    q_vec = T.(quantiles)
+    nq = length(q_vec)
+    fevd_q = zeros(T, n, n, H, nq)
+    fevd_m = zeros(T, n, n, H)
+    w = r.weights
+    for v in 1:n, sh in 1:n, h in 1:H
+        vals = @view all_props[:, v, sh, h]
+        fevd_m[v, sh, h] = sum(w .* vals)
+        for (qi, q) in enumerate(q_vec)
+            fevd_q[v, sh, h, qi] = _weighted_quantile(vals, w, q)
+        end
+    end
+    n_req = n_acc + r.n_unidentified
+    BayesianFEVD{T}(fevd_q, fevd_m, H, r.varnames, r.varnames, q_vec,
+                    n_req, n_acc, r.n_unidentified)
+end
+
+"""FEVD of stored identified-set rotations (weighted median of per-draw `_compute_fevd`)."""
+function _fevd_from_irf_draws(irf_draws::Array{T,4}, weights::AbstractVector, H::Int,
+                              varnames::Vector{String}, shock_names::Vector{String},
+                              n_requested::Int, n_failed::Int;
+                              quantiles::Vector{<:Real}=[0.16, 0.5, 0.84],
+                              uniform_unweighted::Bool=true) where {T<:AbstractFloat}
+    n_acc = size(irf_draws, 1)
+    n = size(irf_draws, 3)
+    props_draws = zeros(T, n_acc, n, n, H)
+    Threads.@threads for i in 1:n_acc
+        _, p = _compute_fevd(irf_draws[i, :, :, :], n, H)
+        props_draws[i, :, :, :] = p
+    end
+    q_vec = T.(quantiles)
+    nq = length(q_vec)
+    fevd_q = zeros(T, n, n, H, nq)
+    fevd_m = zeros(T, n, n, H)
+    @inbounds for v in 1:n, sh in 1:n, h in 1:H
+        vals = @view props_draws[:, v, sh, h]
+        for (qi, q) in enumerate(q_vec)
+            fevd_q[v, sh, h, qi] = _setid_quantile(vals, weights, q; uniform_unweighted=uniform_unweighted)
+        end
+        fevd_m[v, sh, h] = _setid_quantile(vals, weights, T(0.5); uniform_unweighted=uniform_unweighted)
+    end
+    BayesianFEVD{T}(fevd_q, fevd_m, H, varnames, shock_names, q_vec,
+                    n_requested, n_acc, n_failed)
+end
+
+"""
+    fevd(model, s::SignIdentifiedSet, H; quantiles=[0.16, 0.5, 0.84]) -> BayesianFEVD
+
+FEVD of each stored rotation, summarised by weighted quantiles. The reported
+point estimate is the (weighted) pointwise median of `_compute_fevd` over draws.
+Each draw's shares sum to 1.
+"""
+function fevd(model::VARModel{T}, s::SignIdentifiedSet{T}, H::Int;
+              quantiles::Vector{<:Real}=[0.16, 0.5, 0.84],
+              shock_names::Union{Nothing,Vector{String}}=nothing) where {T<:AbstractFloat}
+    draws = _setid_irfs_at_horizon(model, s.Q_draws, s.irf_draws, H)
+    snames = isnothing(shock_names) ? s.shocks : shock_names
+    _fevd_from_irf_draws(draws, s.weights, H, s.variables, snames,
+                         s.n_total, max(0, s.n_total - s.n_accepted);
+                         quantiles=quantiles, uniform_unweighted=true)
+end
+
+function fevd(model::VARModel{T}, s::AriasSVARResult{T}, H::Int;
+              quantiles::Vector{<:Real}=[0.16, 0.5, 0.84],
+              shock_names::Union{Nothing,Vector{String}}=nothing) where {T<:AbstractFloat}
+    draws = _setid_irfs_at_horizon(model, s.Q_draws, s.irf_draws, H)
+    n_acc = length(s.Q_draws)
+    snames = isnothing(shock_names) ? s.varnames : shock_names
+    _fevd_from_irf_draws(draws, s.weights, H, s.varnames, snames,
+                         n_acc, 0; quantiles=quantiles, uniform_unweighted=false)
+end
+
+function fevd(model::VARModel{T}, r::UhligSVARResult{T}, H::Int;
+              shock_names::Union{Nothing,Vector{String}}=nothing) where {T<:AbstractFloat}
+    irf_vals = (H == size(r.irf, 1)) ? r.irf : compute_irf(model, r.Q, H)
+    n = nvars(model)
+    decomp, props = _compute_fevd(irf_vals, n, H)
+    snames = isnothing(shock_names) ? r.varnames : shock_names
+    FEVD{T}(decomp, props, r.varnames, snames)
+end
+
 # =============================================================================
 # Generalized FEVD — Pesaran & Shin (1998)
 # =============================================================================
 
-"""
-    _reduced_form_ma(B, n, p, horizon) → Vector{Matrix{T}}
-
-Reduced-form moving-average coefficients `Φ_0 = I, Φ_1, …, Φ_{H-1}` of a VAR(p), from the
-recursion `Φ_h = Σ_{j=1}^{min(p,h)} A_j Φ_{h-j}`.
-
-These are the *unorthogonalized* MA matrices. `compute_irf` forms `Φ_h · P` for a structural
-impact matrix `P`; the generalized FEVD needs the `Φ_h` themselves, because it never
-orthogonalizes.
-"""
-function _reduced_form_ma(B::AbstractMatrix{T}, n::Int, p::Int, horizon::Int) where {T<:AbstractFloat}
-    A = extract_ar_coefficients(B, n, p)
-    Phi = [zeros(T, n, n) for _ in 1:horizon]
-    copyto!(Phi[1], I(n))
-    scratch = zeros(T, n, n)
-    @inbounds for h in 2:horizon
-        for j in 1:min(p, h - 1)
-            mul!(scratch, A[j], Phi[h-j])
-            Phi[h] .+= scratch
-        end
-    end
-    return Phi
-end
+# Reduced-form MA: `ma_coefficients` in irf.jl (SID-19 kernel merge).
 
 """
     _generalized_fevd_arrays(Phi, Sigma, horizon; normalize) → (decomp, props, rowsums)
@@ -316,7 +459,7 @@ function generalized_fevd(model::VARModel{T}, horizon::Int;
     _validate_data(model.Sigma, "Sigma")
     _validate_data(model.B, "B")
     n = nvars(model)
-    Phi = _reduced_form_ma(model.B, n, model.p, horizon)
+    Phi = ma_coefficients(model.B, n, model.p, horizon)
     decomp, props, _ = _generalized_fevd_arrays(Phi, model.Sigma, horizon; normalize=normalize)
     snames = isnothing(shock_names) ? model.varnames : shock_names
     return FEVD{T}(decomp, props, model.varnames, snames)
@@ -358,7 +501,7 @@ function generalized_fevd(post::BVARPosterior, horizon::Int;
         # `extract_ar_coefficients` expects. No transpose.
         B_s = Matrix{ET}(@view post.B_draws[s, :, :])
         S_s = Matrix{ET}(@view post.Sigma_draws[s, :, :])
-        Phi = _reduced_form_ma(B_s, n, p, horizon)
+        Phi = ma_coefficients(B_s, n, p, horizon)
         _, props, _ = _generalized_fevd_arrays(Phi, S_s, horizon; normalize=normalize)
         for h in 1:horizon, v in 1:n, sh in 1:n
             all_fevds[s, v, sh, h] = props[v, sh, h]

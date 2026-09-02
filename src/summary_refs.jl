@@ -181,6 +181,32 @@ const _REFERENCES = Dict{Symbol, _RefEntry}(
         title="New Introduction to Multiple Time Series Analysis", journal="",
         volume="", issue="", pages="", doi="",
         isbn="978-3-540-40172-8", publisher="Springer", entry_type=:book),
+    :king_plosser_stock_watson1991 => (key=:king_plosser_stock_watson1991,
+        authors="King, Robert G. and Plosser, Charles I. and Stock, James H. and Watson, Mark W.",
+        year=1991, title="Stochastic Trends and Economic Fluctuations",
+        journal="American Economic Review", volume="81", issue="4", pages="819--840",
+        doi="10.2307/2006644", isbn="", publisher="", entry_type=:article),
+    :gonzalo_ng2001 => (key=:gonzalo_ng2001,
+        authors="Gonzalo, Jes\\'us and Ng, Serena", year=2001,
+        title="A Systematic Framework for Analyzing the Dynamic Effects of Permanent and Transitory Shocks",
+        journal="Journal of Economic Dynamics and Control", volume="25", issue="10",
+        pages="1527--1546", doi="10.1016/S0165-1889(99)00062-7", isbn="",
+        publisher="", entry_type=:article),
+    :warne1993 => (key=:warne1993, authors="Warne, Anders", year=1993,
+        title="A Common Trends Model: Identification, Estimation and Inference",
+        journal="IIES Seminar Paper", volume="555", issue="", pages="",
+        doi="", isbn="", publisher="Institute for International Economic Studies, Stockholm University",
+        entry_type=:techreport),
+    :amisano_giannini1997 => (key=:amisano_giannini1997,
+        authors="Amisano, Gianni and Giannini, Carlo", year=1997,
+        title="Topics in Structural VAR Econometrics", journal="",
+        volume="", issue="", pages="", doi="10.1007/978-3-642-60623-6",
+        isbn="978-3-540-61942-0", publisher="Springer", entry_type=:book),
+    :sims1986 => (key=:sims1986, authors="Sims, Christopher A.", year=1986,
+        title="Are Forecasting Models Usable for Policy Analysis?",
+        journal="Federal Reserve Bank of Minneapolis Quarterly Review",
+        volume="10", issue="1", pages="2--16", doi="",
+        isbn="", publisher="", entry_type=:article),
     :blanchard_quah1989 => (key=:blanchard_quah1989, authors="Blanchard, Olivier Jean and Quah, Danny", year=1989,
         title="The Dynamic Effects of Aggregate Demand and Supply Disturbances",
         journal="American Economic Review", volume="79", issue="4", pages="655--673",
@@ -189,6 +215,27 @@ const _REFERENCES = Dict{Symbol, _RefEntry}(
         title="What Are the Effects of Monetary Policy on Output? Results from an Agnostic Identification Procedure",
         journal="Journal of Monetary Economics", volume="52", issue="2", pages="381--419",
         doi="10.1016/j.jmoneco.2004.05.007", isbn="", publisher="", entry_type=:article),
+    :uhlig2004gnp => (key=:uhlig2004gnp, authors="Uhlig, Harald", year=2004,
+        title="Do Technology Shocks Lead to a Fall in Total Hours Worked?",
+        journal="Journal of the European Economic Association", volume="2", issue="2-3",
+        pages="361--371", doi="10.1162/154247604323068041", isbn="", publisher="",
+        entry_type=:article),
+    :francis_owyang_roush_dicecio2014 => (key=:francis_owyang_roush_dicecio2014,
+        authors="Francis, Neville and Owyang, Michael T. and Roush, Jennifer E. and DiCecio, Riccardo",
+        year=2014,
+        title="A Flexible Finite-Horizon Alternative to Long-Run Restrictions with an Application to Technology Shocks",
+        journal="Journal of Money, Credit and Banking", volume="46", issue="2-3",
+        pages="343--370", doi="10.1111/jmcb.12105", isbn="", publisher="",
+        entry_type=:article),
+    :barsky_sims2011 => (key=:barsky_sims2011, authors="Barsky, Robert B. and Sims, Eric R.",
+        year=2011, title="News Shocks and Business Cycles",
+        journal="Journal of Monetary Economics", volume="58", issue="3", pages="273--289",
+        doi="10.1016/j.jmoneco.2011.03.001", isbn="", publisher="", entry_type=:article),
+    :angeletos_collard_dellas2020 => (key=:angeletos_collard_dellas2020,
+        authors="Angeletos, George-Marios and Collard, Fabrice and Dellas, Harris", year=2020,
+        title="Business-Cycle Anatomy",
+        journal="American Economic Review", volume="110", issue="10", pages="3030--3070",
+        doi="10.1257/aer.20181080", isbn="", publisher="", entry_type=:article),
     :antolin_diaz_rubio_ramirez2018 => (key=:antolin_diaz_rubio_ramirez2018,
         authors="Antol{\\'\\i}n-D{\\'\\i}az, Juan and Rubio-Ram{\\'\\i}rez, Juan F.", year=2018,
         title="Narrative Sign Restrictions for SVARs",
@@ -244,6 +291,21 @@ const _REFERENCES = Dict{Symbol, _RefEntry}(
         title="Identification and Estimation of Dynamic Causal Effects in Macroeconomics Using External Instruments",
         journal="Economic Journal", volume="128", issue="610", pages="917--948",
         doi="10.1111/ecoj.12593", isbn="", publisher="", entry_type=:article),
+    :mertens_ravn2013 => (key=:mertens_ravn2013,
+        authors="Mertens, Karel and Ravn, Morten O.", year=2013,
+        title="The Dynamic Effects of Personal and Corporate Income Tax Changes in the United States",
+        journal="American Economic Review", volume="103", issue="4", pages="1212--1247",
+        doi="10.1257/aer.103.4.1212", isbn="", publisher="", entry_type=:article),
+    :jentsch_lunsford2019 => (key=:jentsch_lunsford2019,
+        authors="Jentsch, Carsten and Lunsford, Kurt G.", year=2019,
+        title="The Dynamic Effects of Personal and Corporate Income Tax Changes in the United States: Comment",
+        journal="American Economic Review", volume="109", issue="7", pages="2655--2678",
+        doi="10.1257/aer.20162011", isbn="", publisher="", entry_type=:article),
+    :montiel_olea_stock_watson2021 => (key=:montiel_olea_stock_watson2021,
+        authors="Montiel Olea, Jos\\'e L. and Stock, James H. and Watson, Mark W.", year=2021,
+        title="Inference in Structural Vector Autoregressions Identified with an External Instrument",
+        journal="Journal of Econometrics", volume="225", issue="1", pages="74--87",
+        doi="10.1016/j.jeconom.2020.05.014", isbn="", publisher="", entry_type=:article),
     :barnichon_brownlees2019 => (key=:barnichon_brownlees2019,
         authors="Barnichon, Regis and Brownlees, Christian", year=2019,
         title="Impulse Response Estimation by Smooth Local Projections",
@@ -519,6 +581,16 @@ const _REFERENCES = Dict{Symbol, _RefEntry}(
         title="Identification and Estimation of Non-Gaussian Structural Vector Autoregressions",
         journal="Journal of Econometrics", volume="196", issue="2", pages="288--304",
         doi="10.1016/j.jeconom.2016.06.002", isbn="", publisher="", entry_type=:article),
+    :lanne_lutkepohl2010 => (key=:lanne_lutkepohl2010,
+        authors="Lanne, Markku and L\\\"utkepohl, Helmut", year=2010,
+        title="Structural Vector Autoregressions With Nonnormal Residuals",
+        journal="Journal of Business \\& Economic Statistics", volume="28", issue="1", pages="159--168",
+        doi="10.1198/jbes.2009.06003", isbn="", publisher="", entry_type=:article),
+    :azzalini1985 => (key=:azzalini1985,
+        authors="Azzalini, Adelchi", year=1985,
+        title="A Class of Distributions Which Includes the Normal Ones",
+        journal="Scandinavian Journal of Statistics", volume="12", issue="2", pages="171--178",
+        doi="10.2307/4615982", isbn="", publisher="", entry_type=:article),
     # --- Non-Gaussian SVAR — Heteroskedasticity ---
     :rigobon2003 => (key=:rigobon2003, authors="Rigobon, Roberto", year=2003,
         title="Identification Through Heteroskedasticity",
@@ -922,6 +994,36 @@ const _REFERENCES = Dict{Symbol, _RefEntry}(
         title="Sign Restrictions, Structural Vector Autoregressions, and Useful Prior Information",
         journal="Econometrica", volume="83", issue="5", pages="1963--1999",
         doi="10.3982/ECTA12356", isbn="", publisher="", entry_type=:article),
+    :giacomini_kitagawa2021 => (key=:giacomini_kitagawa2021,
+        authors="Giacomini, Raffaella and Kitagawa, Toru", year=2021,
+        title="Robust Bayesian Inference for Set-Identified Models",
+        journal="Econometrica", volume="89", issue="4", pages="1519--1556",
+        doi="10.3982/ECTA16773", isbn="", publisher="", entry_type=:article),
+    :gafarov_meier_montiel_olea2018 => (key=:gafarov_meier_montiel_olea2018,
+        authors="Gafarov, Bulat and Meier, Matthias and Montiel Olea, Jos\\'e L.", year=2018,
+        title="Delta-Method Inference for a Class of Set-Identified SVARs",
+        journal="Journal of Econometrics", volume="203", issue="2", pages="316--327",
+        doi="10.1016/j.jeconom.2017.12.004", isbn="", publisher="", entry_type=:article),
+    :fry_pagan2011 => (key=:fry_pagan2011,
+        authors="Fry, Ren\\'ee and Pagan, Adrian", year=2011,
+        title="Sign Restrictions in Structural Vector Autoregressions: A Critical Review",
+        journal="Journal of Economic Literature", volume="49", issue="4", pages="938--960",
+        doi="10.1257/jel.49.4.938", isbn="", publisher="", entry_type=:article),
+    :inoue_kilian2013 => (key=:inoue_kilian2013,
+        authors="Inoue, Atsushi and Kilian, Lutz", year=2013,
+        title="Inference on Impulse Response Functions in Structural VAR Models",
+        journal="Journal of Econometrics", volume="177", issue="1", pages="1--13",
+        doi="10.1016/j.jeconom.2013.02.009", isbn="", publisher="", entry_type=:article),
+    :inoue_kilian2022 => (key=:inoue_kilian2022,
+        authors="Inoue, Atsushi and Kilian, Lutz", year=2022,
+        title="Joint Bayesian Inference about Impulse Responses in VAR Models",
+        journal="Journal of Econometrics", volume="231", issue="2", pages="457--476",
+        doi="10.1016/j.jeconom.2021.03.008", isbn="", publisher="", entry_type=:article),
+    :montiel_olea_plagborg_moller2019 => (key=:montiel_olea_plagborg_moller2019,
+        authors="Montiel Olea, Jos\\'e L. and Plagborg-M{\\o}ller, Mikkel", year=2019,
+        title="Simultaneous Confidence Bands: Theory, Implementation, and an Application to SVARs",
+        journal="Journal of Applied Econometrics", volume="34", issue="1", pages="1--17",
+        doi="10.1002/jae.2656", isbn="", publisher="", entry_type=:article),
     :rubio_ramirez2010 => (key=:rubio_ramirez2010,
         authors="Rubio-Ram{\\'\\i}rez, Juan F. and Waggoner, Daniel F. and Zha, Tao", year=2010,
         title="Structural Vector Autoregressions: Theory of Identification and Algorithms for Inference",
@@ -1912,10 +2014,22 @@ const _TYPE_REFS = Dict{Symbol, Vector{Symbol}}(
     :HistoricalDecomposition => [:kilian_lutkepohl2017],
     :BayesianHistoricalDecomposition => [:kilian_lutkepohl2017],
     :AriasSVARResult => [:arias_rubio_ramirez_waggoner2018],
+    :BayesianSetIdentifiedSVAR => [:arias_rubio_ramirez_waggoner2018],
+    :RobustBayesResult => [:giacomini_kitagawa2021, :gafarov_meier_montiel_olea2018, :baumeister_hamilton2015],
     :UhligSVARResult => [:mountford_uhlig2009, :uhlig2005],
+    :ProxySVARResult => [:mertens_ravn2013, :stock_watson2018, :jentsch_lunsford2019, :montiel_olea_stock_watson2021],
+    :proxy => [:mertens_ravn2013, :stock_watson2018, :jentsch_lunsford2019, :montiel_olea_stock_watson2021],
+    :SVARModel => [:amisano_giannini1997, :lutkepohl2005, :sims1986],
+    :SVARPattern => [:amisano_giannini1997, :lutkepohl2005, :sims1986],
+    :ab => [:amisano_giannini1997, :lutkepohl2005, :sims1986],
+    :MaxShareResult => [:francis_owyang_roush_dicecio2014, :barsky_sims2011, :angeletos_collard_dellas2020, :uhlig2004gnp],
+    :max_share => [:francis_owyang_roush_dicecio2014, :barsky_sims2011, :angeletos_collard_dellas2020, :uhlig2004gnp],
+    :SVECResult => [:king_plosser_stock_watson1991, :gonzalo_ng2001, :lutkepohl2005, :warne1993],
+    :svec => [:king_plosser_stock_watson1991, :gonzalo_ng2001, :lutkepohl2005, :warne1993],
     :SVARRestrictions => [:arias_rubio_ramirez_waggoner2018],
+    :IdentificationStatus => [:rubio_ramirez2010, :arias_rubio_ramirez_waggoner2018],
     :ConditionalForecast => [:waggoner_zha1999, :antolin_diaz_petrella_rubio_ramirez2021],
-    :SignIdentifiedSet => [:rubio_ramirez2010, :baumeister_hamilton2015],
+    :SignIdentifiedSet => [:rubio_ramirez2010, :baumeister_hamilton2015, :fry_pagan2011, :inoue_kilian2013, :inoue_kilian2022, :montiel_olea_plagborg_moller2019],
     # Bayesian VAR
     :MinnesotaHyperparameters => [:litterman1986, :kadiyala_karlsson1997],
     :BVARPosterior => [:litterman1986, :kadiyala_karlsson1997, :giannone_lenza_primiceri2015],
@@ -1971,7 +2085,7 @@ const _TYPE_REFS = Dict{Symbol, Vector{Symbol}}(
     :ngperron => [:ng_perron2001],
     :johansen => [:johansen1991],
     # VECM
-    :VECMModel => [:johansen1991, :engle_granger1987, :lutkepohl2005],
+    :VECMModel => [:johansen1991, :engle_granger1987, :lutkepohl2005, :king_plosser_stock_watson1991],
     :VECMForecast => [:johansen1991, :lutkepohl2005],
     :VECMGrangerResult => [:johansen1991, :lutkepohl2005],
     :vecm => [:johansen1991, :engle_granger1987, :lutkepohl2005],
@@ -2044,9 +2158,11 @@ const _TYPE_REFS = Dict{Symbol, Vector{Symbol}}(
     :pml => [:lanne_meitz_saikkonen2017, :lewis2025],
     :skew_normal => [:lanne_meitz_saikkonen2017, :lewis2025],
     :nongaussian_ml => [:lanne_meitz_saikkonen2017, :lewis2025],
+    :gmm_moments => [:keweloh2021, :lanne_luoto2021, :lewis2025],
     # Non-Gaussian result types
-    :ICASVARResult => [:lanne_meitz_saikkonen2017, :lewis2025],
+    :ICASVARResult => [:lewis2025],
     :NonGaussianMLResult => [:lanne_meitz_saikkonen2017, :lewis2025],
+    :NonGaussianGMMResult => [:keweloh2021, :lanne_luoto2021, :lewis2025],
     # Heteroskedastic identification
     :MarkovSwitchingSVARResult => [:rigobon2003, :lanne_lutkepohl2008, :lewis2025],
     :GARCHSVARResult => [:rigobon2003, :normandin_phaneuf2004, :lewis2025],
@@ -2368,9 +2484,9 @@ const _ICA_METHOD_REFS = Dict{Symbol, Vector{Symbol}}(
 # ML distribution → additional ref keys
 const _ML_DIST_REFS = Dict{Symbol, Vector{Symbol}}(
     :student_t => Symbol[],
-    :mixture_normal => Symbol[],
-    :pml => Symbol[],
-    :skew_normal => Symbol[],
+    :mixture_normal => [:lanne_lutkepohl2010],
+    :pml => [:gourieroux_monfort_renne2017],
+    :skew_normal => [:azzalini1985],
 )
 
 # =============================================================================
@@ -2472,7 +2588,7 @@ function _format_ref_html(io::IO, r::_RefEntry)
 end
 
 function _format_ref(io::IO, r::_RefEntry, format::Symbol)
-    if format == :text || format == :apa
+    if format == :text || format == :apa || format == :plain
         _format_ref_text(io, r)
     elseif format == :latex
         _format_ref_latex(io, r)
@@ -2544,8 +2660,16 @@ refs(io::IO, ::BayesianFEVD; kw...) = refs(io, _TYPE_REFS[:BayesianFEVD]; kw...)
 refs(io::IO, ::HistoricalDecomposition; kw...) = refs(io, _TYPE_REFS[:HistoricalDecomposition]; kw...)
 refs(io::IO, ::BayesianHistoricalDecomposition; kw...) = refs(io, _TYPE_REFS[:BayesianHistoricalDecomposition]; kw...)
 refs(io::IO, ::AriasSVARResult; kw...) = refs(io, _TYPE_REFS[:AriasSVARResult]; kw...)
+refs(io::IO, ::BayesianSetIdentifiedSVAR; kw...) = refs(io, _TYPE_REFS[:BayesianSetIdentifiedSVAR]; kw...)
+refs(io::IO, ::RobustBayesResult; kw...) = refs(io, _TYPE_REFS[:RobustBayesResult]; kw...)
 refs(io::IO, ::UhligSVARResult; kw...) = refs(io, _TYPE_REFS[:UhligSVARResult]; kw...)
+refs(io::IO, ::ProxySVARResult; kw...) = refs(io, _TYPE_REFS[:ProxySVARResult]; kw...)
+refs(io::IO, ::SVARModel; kw...) = refs(io, _TYPE_REFS[:SVARModel]; kw...)
+refs(io::IO, ::MaxShareResult; kw...) = refs(io, _TYPE_REFS[:MaxShareResult]; kw...)
+refs(io::IO, ::SVECResult; kw...) = refs(io, _TYPE_REFS[:SVECResult]; kw...)
+refs(io::IO, ::SVARPattern; kw...) = refs(io, _TYPE_REFS[:SVARPattern]; kw...)
 refs(io::IO, ::SVARRestrictions; kw...) = refs(io, _TYPE_REFS[:SVARRestrictions]; kw...)
+refs(io::IO, ::IdentificationStatus; kw...) = refs(io, _TYPE_REFS[:IdentificationStatus]; kw...)
 refs(io::IO, ::SignIdentifiedSet; kw...) = refs(io, _TYPE_REFS[:SignIdentifiedSet]; kw...)
 refs(io::IO, ::ConditionalForecast; kw...) = refs(io, _TYPE_REFS[:ConditionalForecast]; kw...)
 refs(io::IO, ::MinnesotaHyperparameters; kw...) = refs(io, _TYPE_REFS[:MinnesotaHyperparameters]; kw...)
@@ -2699,6 +2823,11 @@ function refs(io::IO, r::NonGaussianMLResult; format::Symbol=get_display_backend
     base = _TYPE_REFS[:NonGaussianMLResult]
     extra = get(_ML_DIST_REFS, r.distribution, Symbol[])
     refs(io, unique(vcat(base, extra)); format=format)
+end
+
+function refs(io::IO, r::NonGaussianGMMResult; format::Symbol=get_display_backend())
+    base = _TYPE_REFS[:NonGaussianGMMResult]
+    refs(io, base; format=format)
 end
 
 # Heteroskedastic types (concrete type dispatch, no method field)

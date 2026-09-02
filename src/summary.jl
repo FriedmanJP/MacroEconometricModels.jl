@@ -50,6 +50,10 @@ uncertainty_bounds(r::AbstractAnalysisResult) = nothing
 # --- ImpulseResponse implementations ---
 
 point_estimate(r::ImpulseResponse) = r.values
+point_estimate(r::ProxySVARResult) = r.B0
+point_estimate(r::SVARModel) = r.A \ r.B
+point_estimate(r::MaxShareResult) = r.Q
+point_estimate(r::SVECResult) = r.B0
 has_uncertainty(r::ImpulseResponse) = r.ci_type != :none
 function uncertainty_bounds(r::ImpulseResponse)
     r.ci_type == :none && return nothing
@@ -62,6 +66,10 @@ function uncertainty_bounds(r::BayesianImpulseResponse)
     nq = length(r.quantile_levels)
     (r.quantiles[:,:,:,1], r.quantiles[:,:,:,nq])
 end
+
+point_estimate(r::RobustBayesResult) = (r.lower .+ r.upper) ./ 2
+has_uncertainty(::RobustBayesResult) = true
+uncertainty_bounds(r::RobustBayesResult) = (r.robust_lower, r.robust_upper)
 
 # --- FEVD implementations ---
 
@@ -496,7 +504,8 @@ end
 # --- Hypothesis test results ---
 report(x::AbstractUnitRootTest) = show(stdout, x)
 report(x::AbstractNormalityTest) = show(stdout, x)
-report(x::AbstractNonGaussianSVAR) = show(stdout, x)
+report(x::AbstractNonGaussianSVAR) = report(stdout, x)
+report(io::IO, x::AbstractNonGaussianSVAR) = (show(io, x); nothing)
 # Equality-of-distribution + rank-correlation battery (EV-34, #442)
 report(x::EqualityTestResult) = show(stdout, x)
 report(x::CorTestResult) = show(stdout, x)
@@ -531,8 +540,35 @@ report(x::StateTransition) = show(stdout, x)
 report(x::PropensityScoreConfig) = show(stdout, x)
 report(x::MinnesotaHyperparameters) = show(stdout, x)
 report(x::AriasSVARResult) = show(stdout, x)
+report(x::BayesianSetIdentifiedSVAR) = show(stdout, x)
+report(x::RobustBayesResult) = show(stdout, x)
 report(x::UhligSVARResult) = show(stdout, x)
+report(x::ProxySVARResult) = report(stdout, x)
+report(io::IO, r::ProxySVARResult) = (show(io, r); nothing)
+report(x::SVARModel) = report(stdout, x)
+report(io::IO, r::SVARModel) = (show(io, r); nothing)
+report(x::MaxShareResult) = report(stdout, x)
+report(io::IO, r::MaxShareResult) = (show(io, r); nothing)
+report(x::SVECResult) = report(stdout, x)
+report(io::IO, r::SVECResult) = (show(io, r); nothing)
 report(x::SVARRestrictions) = show(stdout, x)
+report(x::IdentificationStatus) = show(stdout, x)
+report(s::SignIdentifiedSet) = report(stdout, s)
+function report(io::IO, s::SignIdentifiedSet{T}) where {T}
+    n = length(s.variables)
+    H = s.n_accepted > 0 ? size(s.irf_draws, 2) : 0
+    _show_spec_table(io, "Sign-Identified Set",
+        ["Accepted draws" => "$(s.n_accepted) / $(s.n_total)",
+         "Acceptance rate" => _fmt_pct(s.acceptance_rate; digits=1),
+         "Variables" => n,
+         "IRF horizon" => H])
+    if s.n_accepted > 0
+        med = irf_median(s)
+        _matrix_table(io, med[1, :, :], "Pointwise median impact";
+                      row_labels=s.variables, col_labels=s.shocks)
+    end
+    return nothing
+end
 
 # DSGE
 report(x::DSGESolution) = show(stdout, x)

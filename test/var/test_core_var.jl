@@ -35,7 +35,9 @@ using Random
     model = estimate_var(Y, p)
 
     # 6. Identification (Cholesky)
-    L = identify_cholesky(model)
+    Q_chol_id = identify_cholesky(model)
+    @test Q_chol_id ≈ I(n)
+    L = cholesky_factor(model)
     @test istriu(L')
 
     # 7. Sign Restrictions
@@ -77,7 +79,7 @@ using Random
         A_sum += B[start_row:end_row, :]'
     end
     inv_lag = inv(I(n) - A_sum)
-    L_chol = identify_cholesky(model)
+    L_chol = cholesky_factor(model)
     P = L_chol * Q_lr
     LR_Matrix = inv_lag * P
 
@@ -378,7 +380,9 @@ using Random
         Y = randn(200, 3)
         model = estimate_var(Y, 1)
 
-        L = identify_cholesky(model)
+        Q = identify_cholesky(model)
+        @test Q ≈ I(3)
+        L = cholesky_factor(model)
         @test size(L) == (3, 3)
 
         # L should be lower triangular
@@ -592,7 +596,7 @@ end
     H = 12
 
     @testset "reduced-form MA recursion" begin
-        Phi = M._reduced_form_ma(m.B, 3, 2, 5)
+        Phi = M.ma_coefficients(m.B, 3, 2, 5)
         @test length(Phi) == 5
         @test Phi[1] ≈ I(3)                       # Phi_0 = I
         Acoef = M.extract_ar_coefficients(m.B, 3, 2)
@@ -831,5 +835,31 @@ end
         # the scheme is recorded in the reproducibility manifest
         @test irf(mv, 6; ci_type=:bootstrap, reps=10, seed=3,
                   bootstrap=:wild).manifest.settings["bootstrap"] == "wild"
+    end
+
+    @testset "SID-17 SignIdentifiedSet fields and irf_percentiles" begin
+        Random.seed!(7462)
+        model = estimate_var(randn(80, 2), 1)
+        s = identify_sign(model, 4, ir -> ir[1, 1, 1] > 0; store_all=true,
+                          max_draws=40, rng=MersenneTwister(7462))
+        @test length(s.weights) == s.n_accepted
+        @test s.ess_fraction == 1
+        pct = irf_percentiles(s; quantiles=[0.16, 0.5, 0.84])
+        @test size(pct) == (4, 2, 2, 3)
+        @test pct[:, :, :, 2] ≈ irf_median(s)
+        lo, hi = irf_bounds(s)
+        @test lo ≈ pct[:, :, :, 1]
+        @test hi ≈ pct[:, :, :, 3]
+        w = collect(Float64, 1:s.n_accepted)
+        w ./= sum(w)
+        ess = MacroEconometricModels._effective_sample_size(w)
+        sw = SignIdentifiedSet{Float64}(s.Q_draws, s.irf_draws, s.n_accepted, s.n_total,
+                                        s.acceptance_rate, s.variables, s.shocks,
+                                        w, ess, ess / s.n_accepted, nothing)
+        med_w = irf_median(sw)
+        med_u = irf_median(s)
+        @test any(abs.(med_w .- med_u) .> 1e-12)
+        @test med_w[1, 1, 1] ≈ MacroEconometricModels._weighted_quantile(
+            view(s.irf_draws, :, 1, 1, 1), w, 0.5)
     end
 end

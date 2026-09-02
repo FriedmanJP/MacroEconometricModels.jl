@@ -22,6 +22,7 @@ using LinearAlgebra
 using Statistics
 using Random
 using Logging
+using ForwardDiff
 using MacroEconometricModels
 
 if !@isdefined(FAST)
@@ -162,8 +163,9 @@ end
         @test 0 < res.acceptance_rate ≤ 1
 
         # (3) a genuine bug (out-of-range restriction index → BoundsError) now propagates
-        #     instead of being swallowed into "No valid identification after N attempts"
-        bogus = SVARRestrictions(3; signs=[SignRestriction(999, 1, 0, 1)])
+        #     instead of being swallowed into "No valid identification after N attempts".
+        #     Bypass the public constructor, which now rejects out-of-range indices.
+        bogus = SVARRestrictions(ZeroRestriction[], [SignRestriction(999, 1, 0, 1)], 3, 3)
         @test_throws BoundsError identify_arias(model, bogus, 8; n_draws=5, n_rotations=100)
     end
 
@@ -512,8 +514,8 @@ end
         result_arias = identify_arias(model, restrictions, 10; n_draws=(FAST ? 5 : 10), n_rotations=(FAST ? 20 : 100))
 
         # Get Cholesky IRF
-        L = identify_cholesky(model)
-        Q_chol = Matrix{Float64}(I, n, n)
+        L = cholesky_factor(model)
+        Q_chol = identify_cholesky(model)
         irf_chol = MacroEconometricModels.compute_irf(model, Q_chol, 10)
 
         # Impact responses from Arias should match Cholesky structure
@@ -859,11 +861,11 @@ end
         end
     end
 
-    @testset "_draw_uniform_orthogonal" begin
+    @testset "haar_orthogonal" begin
         Random.seed!(88888)
 
         for n in [2, 3, 4, 5]
-            Q = MacroEconometricModels._draw_uniform_orthogonal(n, Float64)
+            Q = MacroEconometricModels.haar_orthogonal(n, Float64)
 
             # Should be orthogonal
             @test size(Q) == (n, n)
@@ -875,6 +877,7 @@ end
                 @test abs(norm(Q[:, j]) - 1.0) < 1e-10
             end
         end
+        @test MacroEconometricModels.haar_orthogonal === MacroEconometricModels.generate_Q
     end
 
     @testset "_check_zero_restrictions" begin
@@ -974,7 +977,7 @@ end
 
         Phi = MacroEconometricModels._compute_ma_coefficients(model, 5)
         L = safe_cholesky(model.Sigma)
-        Q = MacroEconometricModels._draw_uniform_orthogonal(n, Float64)
+        Q = MacroEconometricModels.haar_orthogonal(n, Float64)
 
         # No zero restrictions - backward-compatible 4-arg form should return 1
         restrictions_no_zeros = SVARRestrictions(ZeroRestriction[], SignRestriction[], n, n)
@@ -1026,7 +1029,7 @@ end
         horizon = 5
         Phi = MacroEconometricModels._compute_ma_coefficients(model, horizon)
         L = safe_cholesky(model.Sigma)
-        Q = MacroEconometricModels._draw_uniform_orthogonal(n, Float64)
+        Q = MacroEconometricModels.haar_orthogonal(n, Float64)
 
         irf = MacroEconometricModels._compute_irf_for_Q(model, Q, Phi, L, horizon)
 
@@ -1132,7 +1135,7 @@ end
         model = estimate_var(Y, p)
 
         L = safe_cholesky(model.Sigma)
-        Q = MacroEconometricModels._draw_uniform_orthogonal(n, Float64)
+        Q = MacroEconometricModels.haar_orthogonal(n, Float64)
 
         # Forward: (B, L, Q) → (A0, Aplus)
         A0, Aplus = MacroEconometricModels._rf_to_struct(model.B, L, Q)
@@ -1366,7 +1369,7 @@ end
         ff_h = MacroEconometricModels._build_ff_h(setup, restrictions, n, m_size, p, max_h)
 
         # Jacobian should be finite and well-conditioned
-        J = MacroEconometricModels._numerical_jacobian(ff_h, structpara)
+        J = ForwardDiff.jacobian(ff_h, structpara)
         @test all(isfinite, J)
         @test !any(isnan, J)
 
@@ -1599,4 +1602,741 @@ end
     end
 end
 
+@testset "SID-02 restriction horizon ≥ IRF horizon" begin
+    Random.seed!(731)
+    m = estimate_var(randn(150, 3), 2)
+    r5 = SVARRestrictions(3; signs=[sign_restriction(1, 1, :positive; horizon=5)])
+    a = identify_arias(m, r5, 3; n_draws=5, n_rotations=200, rng=MersenneTwister(731))
+    @test size(a.irf_draws, 2) == 3
+    for Q in a.Q_draws
+        irf6 = compute_irf(m, Q, 6)
+        @test irf6[6, 1, 1] > 0
+    end
+    r0 = SVARRestrictions(3; zeros=[zero_restriction(2, 1; horizon=4)],
+                          signs=[sign_restriction(1, 1, :positive)])
+    a0 = identify_arias(m, r0, 2; n_draws=3, n_rotations=400, rng=MersenneTwister(7311))
+    for Q in a0.Q_draws
+        @test abs(compute_irf(m, Q, 5)[5, 2, 1]) < 1e-8
+    end
+    @test_throws ArgumentError SVARRestrictions(3; signs=[SignRestriction(4, 1, 0, 1)])
+    @test_throws ArgumentError sign_restriction(1, 1, :positive; horizon=-1)
+end
+
+@testset "SID-19 BayesianSetIdentifiedSVAR" begin
+    Random.seed!(748)
+    Y = randn(80, 2)
+    post = estimate_bvar(Y, 1; n_draws=FAST ? 12 : 20, burnin=5)
+    r = SVARRestrictions(2; signs=[sign_restriction(1, 1, :positive)])
+    res = identify_arias_bayesian(post, r, 4; n_rotations=FAST ? 20 : 50,
+                                  rng=MersenneTwister(748))
+    @test res isa BayesianSetIdentifiedSVAR
+    @test res.n_unidentified >= 0
+    @test res.n_degenerate_weights >= 0
+    @test res.total_accepted == size(res.irf_draws, 1)
+    @test length(res.weights) == res.total_accepted
+    @test hasproperty(res, :ess)
+    fv = fevd(res)
+    @test fv isa BayesianFEVD
+    ir = irf(res)
+    @test ir isa BayesianImpulseResponse
+    p = plot_result(res)
+    @test p isa PlotOutput
+end
+
+@testset "SID-14 typed restriction language" begin
+    Random.seed!(743)
+
+    @testset "horizons expansion and constructors" begin
+        srs = sign_restriction(1, 2, :positive; horizons=0:3)
+        @test srs isa Vector
+        @test length(srs) == 4
+        @test all(s -> s isa SignRestriction, srs)
+        @test [s.horizon for s in srs] == collect(0:3)
+        @test all(s -> s.variable == 1 && s.shock == 2 && s.sign == 1, srs)
+
+        r = SVARRestrictions(3; signs=[sign_restriction(1, 1, :negative; horizons=0:2)])
+        @test length(r.signs) == 3
+        @test all(s -> s isa SignRestriction && s.sign == -1, r.signs)
+
+        zr = zero_restriction(1, 2; horizon=:long_run)
+        @test zr isa LongRunZeroRestriction
+        @test zr.variable == 1 && zr.shock == 2
+        @test is_linear_zero(zr)
+        @test is_linear_zero(zero_restriction(1, 1))
+        @test !is_linear_zero(sign_restriction(1, 1, :positive))
+
+        @test a0_zero_restriction(2, 1) isa A0ZeroRestriction
+        @test is_linear_zero(a0_zero_restriction(2, 1))
+        @test is_linear_zero(aplus_zero_restriction(1, 1; lag=1))
+        @test !is_linear_zero(elasticity_bound(1, 2, 1; lower=0.0, upper=1.0))
+        @test !is_linear_zero(magnitude_bound(1, 1; lower=-1.0, upper=1.0))
+        @test !is_linear_zero(fevd_share_restriction(1, 1; horizon=4, lower=0.2, upper=1.0))
+        @test !is_linear_zero(cumulative_restriction(1, 1, :positive; horizons=0:4))
+        @test !is_linear_zero(narrative_shock_restriction(1, [2, 5], :negative))
+        @test !is_linear_zero(narrative_contribution_restriction(1, 1, 2:4))
+
+        @test_throws ArgumentError sign_restriction(1, 1, :positive; horizons=-1:2)
+        @test_throws ArgumentError elasticity_bound(1, 2, 1; lower=1.0, upper=0.5)
+        @test_throws ArgumentError elasticity_bound(1, 2, 1; lower=NaN, upper=1.0)
+        @test_throws ArgumentError magnitude_bound(1, 1; lower=-Inf, upper=1.0)
+        @test_throws ArgumentError fevd_share_restriction(1, 1; lower=-0.1, upper=0.5)
+        @test_throws ArgumentError fevd_share_restriction(1, 1; lower=0.0, upper=1.5)
+        @test_throws ArgumentError SVARRestrictions(2; zeros=[zero_restriction(3, 1; horizon=:long_run)])
+        @test_throws ArgumentError SVARRestrictions(2; signs=[elasticity_bound(1, 2, 1; lower=2.0, upper=1.0)])
+        @test_throws ArgumentError aplus_zero_restriction(2, 1; lag=0)
+    end
+
+    @testset "sign_check matches _check_sign_restrictions for pure signs" begin
+        n, H = 2, 6
+        irf = zeros(H, n, n)
+        irf[1, 1, 1] = 1.2
+        irf[1, 2, 1] = -0.4
+        irf[2, 1, 1] = 0.8
+        r = SVARRestrictions(n; signs=[
+            sign_restriction(1, 1, :positive),
+            sign_restriction(2, 1, :negative),
+            sign_restriction(1, 1, :positive; horizon=1),
+        ])
+        chk = sign_check(r)
+        @test chk(irf) == MacroEconometricModels._check_sign_restrictions(irf, r)
+        @test chk(irf)
+        irf[1, 1, 1] = -0.1
+        @test chk(irf) == MacroEconometricModels._check_sign_restrictions(irf, r)
+        @test !chk(irf)
+        @test_throws ArgumentError sign_check(
+            SVARRestrictions(2; signs=[a0_sign_restriction(1, 1, :positive)]))
+    end
+
+    @testset "Blanchard-Quah as n(n-1)/2 long-run zeros + impact signs" begin
+        T_obs, n, p = 250, 2, 1
+        Y = zeros(T_obs, n)
+        for t in 2:T_obs
+            Y[t, :] = 0.4 .* Y[t-1, :] + randn(n)
+        end
+        model = estimate_var(Y, p)
+        # Arias-feasible BQ: shock 1 is transitory for variable 1 (n(n-1)/2 = 1 zero).
+        r = SVARRestrictions(n;
+            zeros=[zero_restriction(1, 1; horizon=:long_run)],
+            signs=[sign_restriction(1, 1, :positive),
+                   sign_restriction(2, 2, :positive)])
+        result = identify_arias(model, r, 8; n_draws=FAST ? 8 : 20, n_rotations=200,
+                                rng=MersenneTwister(743))
+        @test length(result.Q_draws) >= 1
+        Q0 = result.Q_draws[1]
+        for Q in result.Q_draws
+            @test norm(Q' * Q - I(n)) < 1e-8
+            for j in 1:n
+                @test Q[:, j] ≈ Q0[:, j] atol=1e-8
+            end
+        end
+        L = MacroEconometricModels.safe_cholesky(model.Sigma)
+        C1 = MacroEconometricModels._long_run_multiplier(model.B, model.Sigma, n, p)[1]
+        C1Q = C1 * L * Q0
+        @test abs(C1Q[1, 1]) < 1e-6
+        Q_bq = identify_long_run(model)
+        C1_bq = C1 * L * Q_bq
+        @test abs(C1_bq[1, 2]) < 1e-6
+        # Same triangular long-run structure up to column permutation / sign.
+        matched = false
+        for perm in ([1, 2], [2, 1])
+            Qp = Q0[:, perm]
+            for s1 in (1.0, -1.0), s2 in (1.0, -1.0)
+                Qs = hcat(s1 * Qp[:, 1], s2 * Qp[:, 2])
+                if Qs ≈ Q_bq atol=1e-5
+                    matched = true
+                end
+            end
+        end
+        @test matched
+    end
+
+    @testset "elasticity bound shrinks irf_bounds vs signs alone" begin
+        Y = randn(MersenneTwister(7432), 180, 2)
+        m = estimate_var(Y, 1)
+        r_s = SVARRestrictions(2; signs=[
+            sign_restriction(1, 1, :positive),
+            sign_restriction(2, 1, :positive)])
+        s_s = identify_sign(m, 6, sign_check(r_s); store_all=true,
+                            max_draws=FAST ? 250 : 600, rng=MersenneTwister(7433))
+        @test s_s.n_accepted > 8
+        elas = [s_s.irf_draws[i, 1, 1, 1] / s_s.irf_draws[i, 1, 2, 1] for i in 1:s_s.n_accepted]
+        mid = median(elas)
+        lo_e, hi_e = mid - 0.15, mid + 0.15
+        r_e = SVARRestrictions(2; signs=[
+            sign_restriction(1, 1, :positive),
+            sign_restriction(2, 1, :positive),
+            elasticity_bound(1, 2, 1; horizon=0, lower=lo_e, upper=hi_e)])
+        keep = [sign_check(r_e)(s_s.irf_draws[i, :, :, :]) for i in 1:s_s.n_accepted]
+        n_keep = count(keep)
+        @test 0 < n_keep < s_s.n_accepted
+        idx = findall(keep)
+        irf_e = s_s.irf_draws[idx, :, :, :]
+        s_e = SignIdentifiedSet{Float64}(s_s.Q_draws[idx], irf_e, n_keep, s_s.n_total,
+                                         n_keep / s_s.n_total, s_s.variables, s_s.shocks)
+        lo_s, hi_s = irf_bounds(s_s)
+        lo_b, hi_b = irf_bounds(s_e)
+        @test all((hi_b .- lo_b) .<= (hi_s .- lo_s) .+ 1e-12)
+        @test any((hi_b .- lo_b) .< (hi_s .- lo_s) .- 1e-8)
+    end
+
+    @testset "A0 zeros, FEVD/cumulative/magnitude rejection, show" begin
+        Y = randn(MersenneTwister(7434), 160, 2)
+        m = estimate_var(Y, 1)
+        r_a0 = SVARRestrictions(2;
+            zeros=[a0_zero_restriction(2, 1)],
+            signs=[sign_restriction(1, 1, :positive)])
+        a0res = identify_arias(m, r_a0, 4; n_draws=FAST ? 4 : 8, n_rotations=300,
+                               rng=MersenneTwister(7434))
+        L = MacroEconometricModels.safe_cholesky(m.Sigma)
+        for Q in a0res.Q_draws
+            A0, _ = MacroEconometricModels._rf_to_struct(m.B, L, Q)
+            @test abs(A0[2, 1]) < 1e-8
+            # RWZ y'A0 form A0 = L^{-T} Q, not the column-convention impact LQ
+            @test A0 ≈ Matrix(L') \ Q atol=1e-10
+        end
+
+        irf = zeros(5, 2, 2)
+        irf[1, 1, 1] = 0.4
+        irf[1, 2, 1] = 0.2
+        irf[2, 1, 1] = 0.3
+        irf[3, 1, 1] = 0.1
+        @test MacroEconometricModels.check(magnitude_bound(1, 1; lower=0.0, upper=0.5),
+                                           irf, nothing, nothing, nothing)
+        @test !MacroEconometricModels.check(magnitude_bound(1, 1; lower=0.0, upper=0.2),
+                                            irf, nothing, nothing, nothing)
+        @test MacroEconometricModels.check(cumulative_restriction(1, 1, :positive; horizons=0:2),
+                                           irf, nothing, nothing, nothing)
+        fevd = MacroEconometricModels._compute_fevd(irf, 2, 5)[2]
+        @test MacroEconometricModels.check(fevd_share_restriction(1, 1; horizon=0, lower=0.5, upper=1.0),
+                                           irf, nothing, nothing, fevd)
+        ε_pos = zeros(2, 2); ε_pos[1, 1] = 1.2
+        @test MacroEconometricModels.check(narrative_shock_restriction(1, [1], :positive),
+                                           irf, nothing, nothing, nothing, ε_pos)
+        @test !MacroEconometricModels.check(narrative_shock_restriction(1, [1], :positive),
+                                            irf, nothing, nothing, nothing)
+
+        rshow = SVARRestrictions(2;
+            zeros=[zero_restriction(1, 2; horizon=:long_run), a0_zero_restriction(2, 1)],
+            signs=[sign_restriction(1, 1, :positive; horizons=0:1),
+                   elasticity_bound(1, 2, 1; lower=0.1, upper=2.0)])
+        shown = sprint(show, rshow)
+        @test occursin("SVAR Restrictions", shown)
+        @test occursin("long run", lowercase(shown))
+        @test occursin("positively", lowercase(shown))
+        @test occursin("elasticity", lowercase(shown))
+    end
+
+    @testset "SID-08 guard on long-run zeros" begin
+        Random.seed!(7435)
+        trend = cumsum(randn(200))
+        Yc = [trend .+ 0.3 .* randn(200)  trend .+ 0.3 .* randn(200)]
+        vecm = estimate_vecm(Yc, 2; rank=1)
+        r = SVARRestrictions(2; zeros=[zero_restriction(1, 1; horizon=:long_run)])
+        @test_throws IdentificationError identify_arias(to_var(vecm), r, 4;
+                                                       n_draws=1, n_rotations=5)
+    end
+end
+
+@testset "SID-23 RWZ rank/order checker" begin
+    Random.seed!(752)
+    recursive_zeros(n) = [zero_restriction(i, j) for j in 1:n-1 for i in (j + 1):n]
+
+    @testset "recursive zeros → :exact with rank(M_j)=n-j" begin
+        n, p = 3, 1
+        model = estimate_var(randn(180, n), p)
+        r = SVARRestrictions(n; zeros=recursive_zeros(n))
+        st = check_identification(r, model; n_points=8, rng=MersenneTwister(752))
+        @test st isa IdentificationStatus
+        @test st.status === :exact
+        @test st.ranks == [n - j for j in 1:n]
+        @test st.orders == [n - j for j in 1:n]
+        @test st.n_overidentifying == 0
+        st_o = check_identification(r, n)
+        @test st_o.status === :exact
+        @test st_o.orders == st.orders
+        @test st_o.n_overidentifying == 0
+        result = identify_arias(model, r, 4; n_draws=FAST ? 2 : 4, n_rotations=50,
+                                rng=MersenneTwister(7521))
+        @test length(result.Q_draws) >= 1
+    end
+
+    @testset "all zeros on shock 1 → :under and IdentificationError" begin
+        n, p = 3, 1
+        model = estimate_var(randn(180, n), p)
+        # n(n-1)/2 impact zeros, all loaded on shock 1
+        r = SVARRestrictions(n; zeros=[zero_restriction(i, 1) for i in 1:n])
+        st = check_identification(r, model; n_points=6, rng=MersenneTwister(7522))
+        @test st.status === :under
+        @test st.orders[1] == n
+        @test all(st.orders[j] == 0 for j in 2:n)
+        @test st.ranks[2] < n - 2 || st.ranks[3] < n - 3 || st.orders[2] < n - 2
+        st_o = check_identification(r, n)
+        @test st_o.status === :under
+        @test st_o.orders == [n, 0, 0]
+        @test_throws IdentificationError identify_arias(model, r, 4; n_draws=1, n_rotations=5,
+                                                       rng=MersenneTwister(7523))
+        err = try
+            identify_arias(model, r, 4; n_draws=1, n_rotations=5)
+            nothing
+        catch e
+            e
+        end
+        @test err isa IdentificationError
+        @test occursin("under", lowercase(err.msg))
+    end
+
+    @testset "sign-only container → :set" begin
+        n = 3
+        model = estimate_var(randn(120, n), 1)
+        r = SVARRestrictions(n; signs=[sign_restriction(1, 1, :positive),
+                                       sign_restriction(2, 1, :negative)])
+        st = check_identification(r, model; rng=MersenneTwister(7524))
+        @test st.status === :set
+        @test st.orders == zeros(Int, n)
+        @test st.ranks == zeros(Int, n)
+        @test st.n_overidentifying == 0
+        @test check_identification(r, n).status === :set
+        result = identify_arias(model, r, 4; n_draws=FAST ? 3 : 6, n_rotations=80,
+                                rng=MersenneTwister(7525))
+        @test length(result.Q_draws) >= 1
+    end
+
+    @testset "Impact zero + linearly dependent long-run zero" begin
+        n, p = 3, 1
+        model = estimate_var(randn(150, n), p)
+        # Order count for shock 1 is n-1, but the two ZF rows are the same
+        # restriction twice (impact copied), and a long-run zero on the same
+        # (variable, shock) is the same row whenever C(1)=I.
+        r = SVARRestrictions(n; zeros=[
+            zero_restriction(2, 1),
+            zero_restriction(2, 1),
+            zero_restriction(3, 2),
+        ])
+        st_o = check_identification(r, n)
+        @test st_o.orders == [2, 1, 0]
+        @test st_o.status === :exact   # count passes
+        st = check_identification(r, model; n_points=8, rng=MersenneTwister(7526))
+        @test st.orders == [2, 1, 0]
+        @test st.ranks[1] < n - 1
+        @test st.status === :under
+
+        B0 = copy(model.B)
+        B0[2:end, :] .= 0
+        model0 = VARModel(model.Y, p, B0, model.U, Matrix(model.Sigma),
+                          model.aic, model.bic, model.hqic, model.varnames)
+        r_lr = SVARRestrictions(n; zeros=[
+            zero_restriction(2, 1),
+            zero_restriction(2, 1; horizon=:long_run),
+            zero_restriction(3, 2),
+        ])
+        Phi = MacroEconometricModels.ma_coefficients(model0, 2)
+        L = safe_cholesky(model0.Sigma)
+        C1 = MacroEconometricModels._C1_from_B(model0.B, n, p)
+        Z1 = MacroEconometricModels._compute_ZF(r_lr, Phi, L, 1; B=model0.B, C1=C1)
+        @test size(Z1, 1) == 2
+        @test Z1[1, :] ≈ Z1[2, :] atol=1e-10
+        @test rank(Z1) == 1
+        st_lr = check_identification(r_lr, n)
+        @test st_lr.orders[1] == 2
+        @test st_lr.status === :exact
+    end
+
+    @testset "show / order-condition dimension check" begin
+        r = SVARRestrictions(2; signs=[sign_restriction(1, 1, :positive)])
+        st = check_identification(r, 2)
+        shown = sprint(show, st)
+        @test occursin("set", shown)
+        @test_throws ArgumentError check_identification(r, 3)
+    end
+
+    @testset "independent extra zeros → :over and IdentificationError" begin
+        n = 2
+        model = estimate_var(randn(120, n), 1)
+        r = SVARRestrictions(n; zeros=[zero_restriction(1, 1), zero_restriction(2, 1)])
+        st = check_identification(r, model; n_points=6, rng=MersenneTwister(7528))
+        @test st.status === :over
+        @test st.n_overidentifying >= 1
+        @test check_identification(r, n).status === :over
+        err = try
+            identify_arias(model, r, 4; n_draws=1, n_rotations=5, rng=MersenneTwister(7529))
+            nothing
+        catch e
+            e
+        end
+        @test err isa IdentificationError
+        @test occursin("over", lowercase(err.msg))
+    end
+
+    @testset "RWZ probe does not consume caller rng" begin
+        n = 2
+        model = estimate_var(randn(80, n), 1)
+        r = SVARRestrictions(n; signs=[sign_restriction(1, 1, :positive)])
+        rng_a = MersenneTwister(7530)
+        MacroEconometricModels._assert_rwz_identified(r, model; rng=rng_a)
+        x_a = rand(rng_a)
+        rng_b = MersenneTwister(7530)
+        x_b = rand(rng_b)
+        @test x_a == x_b
+        rng_c = MersenneTwister(7532)
+        identify_arias(model, r, 3; n_draws=1, n_rotations=50, rng=rng_c)
+        y_c = rand(rng_c)
+        rng_d = MersenneTwister(7532)
+        identify_arias(model, r, 3; n_draws=1, n_rotations=50, rng=rng_d, check_id=false)
+        y_d = rand(rng_d)
+        @test y_c == y_d
+    end
+end
+
+@testset "SID-15 ADRR narrative restrictions" begin
+    Random.seed!(744)
+
+    # Planted bivariate SVAR: lower-triangular B0, five large positive ε₁ dates.
+    function _adrr_planted(; Tobs=180, p=1, dates=[20, 30, 40, 50, 60],
+                           rng=MersenneTwister(744))
+        n = 2
+        B0 = [1.0 0.0; 0.4 1.0]
+        A1 = [0.5 0.1; 0.0 0.4]
+        ntot = Tobs + p + 40
+        ε = randn(rng, ntot, n)
+        start = ntot - Tobs + 1
+        for d in dates
+            ε[start + p + d - 1, 1] = 5.0
+        end
+        Yfull = zeros(ntot, n)
+        for t in (p + 1):ntot
+            Yfull[t, :] = A1 * Yfull[t - 1, :] + B0 * ε[t, :]
+        end
+        Y = Yfull[start:end, :]
+        return Y, dates, B0
+    end
+
+    Y, dates, B0 = _adrr_planted()
+    model = estimate_var(Y, 1)
+    n_sims = FAST ? 200 : 400
+    n_dr = FAST ? 24 : 60
+    n_rot = FAST ? 150 : 400
+
+    @testset "check evaluates shock-sign and Type A/B/least contribution" begin
+        Q_I = identify_cholesky(model)
+        irf_I = compute_irf(model, Q_I, 6)
+        ε_I = compute_structural_shocks(model, Q_I)
+        r_pos = narrative_shock_restriction(1, dates, :positive)
+        r_neg = narrative_shock_restriction(1, dates, :negative)
+        @test MacroEconometricModels.check(r_pos, irf_I, nothing, nothing, nothing,
+                                           ε_I, nothing)
+        @test !MacroEconometricModels.check(r_neg, irf_I, nothing, nothing, nothing,
+                                            ε_I, nothing)
+        @test !MacroEconometricModels.check(r_pos, irf_I, nothing, nothing, nothing)
+
+        r_c = narrative_contribution_restriction(1, 1, dates[1]:dates[1])
+        @test r_c.kind === :most_important
+        @test MacroEconometricModels.check(r_c, irf_I, nothing, nothing, nothing,
+                                           ε_I, nothing)
+        r_ov = narrative_contribution_restriction(1, 1, dates[1]:dates[1];
+                                                  kind=:overwhelming)
+        @test MacroEconometricModels.check(r_ov, irf_I, nothing, nothing, nothing,
+                                           ε_I, nothing)
+        r_least = narrative_contribution_restriction(1, 1, dates[1]:dates[1];
+                                                     kind=:least_important)
+        @test r_least.kind === :least_important
+        @test !MacroEconometricModels.check(r_least, irf_I, nothing, nothing, nothing,
+                                            ε_I, nothing)
+        r_least2 = narrative_contribution_restriction(1, 2, dates[1]:dates[1];
+                                                      kind=:least_important)
+        @test MacroEconometricModels.check(r_least2, irf_I, nothing, nothing, nothing,
+                                           ε_I, nothing)
+        Q_mix = [0.0 -1.0; 1.0 0.0]
+        irf_mix = compute_irf(model, Q_mix, 6)
+        ε_mix = compute_structural_shocks(model, Q_mix)
+        @test !MacroEconometricModels.check(r_c, irf_mix, nothing, nothing, nothing,
+                                            ε_mix, nothing)
+        @test !MacroEconometricModels.check(r_ov, irf_mix, nothing, nothing, nothing,
+                                            ε_mix, nothing)
+        H_A = [3.0, 2.0, 1.5]   # Type A but not Type B
+        H_B = [5.0, 1.0, 1.2]   # Type A and Type B
+        @test MacroEconometricModels._is_leading_contributor(H_A, 1, :most_important)
+        @test !MacroEconometricModels._is_leading_contributor(H_A, 1, :overwhelming)
+        @test MacroEconometricModels._is_leading_contributor(H_B, 1, :most_important)
+        @test MacroEconometricModels._is_leading_contributor(H_B, 1, :overwhelming)
+        @test MacroEconometricModels._is_leading_contributor(H_B, 2, :least_important)
+        @test !MacroEconometricModels._is_leading_contributor(H_B, 3, :least_important)
+        @test_throws ArgumentError narrative_contribution_restriction(1, 1, 2:4;
+                                                                      kind=:other)
+        @test_throws ArgumentError narrative_shock_restriction(1, Int[], :positive)
+    end
+
+    @testset "true sign shrinks irf_bounds; weighted median toward truth" begin
+        r_sign = SVARRestrictions(2; signs=[sign_restriction(1, 1, :positive)])
+        r_nar = SVARRestrictions(2; signs=[
+            sign_restriction(1, 1, :positive),
+            narrative_shock_restriction(1, dates, :positive)])
+        a_sign = identify_arias(model, r_sign, 6; n_draws=n_dr, n_rotations=n_rot,
+                                rng=MersenneTwister(7441))
+        a_nar = identify_arias(model, r_nar, 6; n_draws=n_dr, n_rotations=n_rot,
+                               n_narrative_sims=n_sims, rng=MersenneTwister(7441))
+        @test a_nar.n_narrative_sims == n_sims
+        @test a_sign.n_narrative_sims == 0
+        @test a_sign.ess_fraction ≈ 1.0 atol=1e-12
+        @test a_nar.ess_fraction < 1
+        keep = [MacroEconometricModels._narrative_restrictions_hold(
+                    r_nar, a_sign.irf_draws[i, :, :, :],
+                    compute_structural_shocks(model, a_sign.Q_draws[i]))
+                for i in 1:length(a_sign.Q_draws)]
+        n_keep = count(keep)
+        @test 0 < n_keep < length(keep)
+        idx = findall(keep)
+        irf_k = a_sign.irf_draws[idx, :, :, :]
+        lo_s = dropdims(minimum(a_sign.irf_draws; dims=1), dims=1)
+        hi_s = dropdims(maximum(a_sign.irf_draws; dims=1), dims=1)
+        lo_n = dropdims(minimum(irf_k; dims=1), dims=1)
+        hi_n = dropdims(maximum(irf_k; dims=1), dims=1)
+        @test all((hi_n .- lo_n) .<= (hi_s .- lo_s) .+ 1e-12)
+        @test any((hi_n .- lo_n) .< (hi_s .- lo_s) .- 1e-8)
+        L = MacroEconometricModels.safe_cholesky(model.Sigma)
+        truth = L[1, 1]
+        med_s = median(a_sign.irf_draws[:, 1, 1, 1])
+        med_n = median(irf_k[:, 1, 1, 1])
+        @test abs(med_n - truth) <= abs(med_s - truth) + 1e-8
+        med_w = irf_percentiles(a_nar; quantiles=[0.5])[1, 1, 1, 1]
+        @test abs(med_w - truth) <= abs(med_s - truth) + 0.15
+    end
+
+    @testset "wrong sign → IdentificationError or degenerate ESS" begin
+        r_wrong = SVARRestrictions(2; signs=[
+            sign_restriction(1, 1, :positive),
+            narrative_shock_restriction(1, dates, :negative)])
+        local got = nothing
+        try
+            got = identify_arias(model, r_wrong, 6; n_draws=FAST ? 8 : 20,
+                                 n_rotations=FAST ? 80 : 200,
+                                 n_narrative_sims=n_sims,
+                                 rng=MersenneTwister(7442))
+        catch e
+            @test e isa IdentificationError
+            got = :error
+        end
+        if got isa AriasSVARResult
+            @test got.ess_fraction < MacroEconometricModels._ARIAS_ESS_WARN_FRACTION
+        end
+        @test got === :error || got isa AriasSVARResult
+    end
+
+    @testset "identify_narrative wrapper and weighted HD" begin
+        r_nar = SVARRestrictions(2; signs=[
+            sign_restriction(1, 1, :positive),
+            narrative_shock_restriction(1, dates, :positive)])
+        wrapped = identify_narrative(model, r_nar, 4; n_draws=FAST ? 8 : 16,
+                                     n_rotations=n_rot, n_narrative_sims=n_sims,
+                                     rng=MersenneTwister(7444))
+        @test wrapped isa AriasSVARResult
+        @test wrapped.n_narrative_sims == n_sims
+        @test wrapped.ess_fraction < 1
+        Q_f, irf_f, sh_f = identify_narrative(model, 4,
+            ir -> ir[1, 1, 1] > 0, s -> s[dates[1], 1] > 0;
+            max_draws=FAST ? 200 : 800, rng=MersenneTwister(7445))
+        @test irf_f[1, 1, 1] > 0
+        @test sh_f[dates[1], 1] > 0
+        hd = historical_decomposition(model, r_nar, 8; n_draws=FAST ? 8 : 16,
+                                      n_rotations=n_rot, n_narrative_sims=n_sims,
+                                      rng=MersenneTwister(7446))
+        @test hd isa BayesianHistoricalDecomposition
+        @test hd.n_effective >= 1
+        @test hd.point_estimate[end, 1, 1] + hd.point_estimate[end, 1, 2] +
+              hd.initial_point_estimate[end, 1] ≈ hd.actual[end, 1] atol=1e-6
+    end
+
+    @testset "contribution restriction through identify_arias" begin
+        Q_I = identify_cholesky(model)
+        irf_I = compute_irf(model, Q_I, 6)
+        ε_I = compute_structural_shocks(model, Q_I)
+        win = dates[1]:dates[1]
+        r_c = narrative_contribution_restriction(1, 1, win)
+        @test MacroEconometricModels.check(r_c, irf_I, nothing, nothing, nothing,
+                                           ε_I, nothing)
+        r_sign = SVARRestrictions(2; signs=[sign_restriction(1, 1, :positive)])
+        r_contrib = SVARRestrictions(2; signs=[
+            sign_restriction(1, 1, :positive), r_c])
+        n_csims = FAST ? 80 : 200
+        n_cdr = FAST ? 16 : 40
+        a_sign = identify_arias(model, r_sign, 6; n_draws=n_cdr, n_rotations=n_rot,
+                                rng=MersenneTwister(7451))
+        a_c = identify_arias(model, r_contrib, 6; n_draws=n_cdr, n_rotations=n_rot,
+                             n_narrative_sims=n_csims, rng=MersenneTwister(7451))
+        @test a_c.n_narrative_sims == n_csims
+        @test a_sign.ess_fraction ≈ 1.0 atol=1e-12
+        @test a_c.ess_fraction < a_sign.ess_fraction - 0.01
+        keep = [MacroEconometricModels._narrative_restrictions_hold(
+                    r_contrib, a_sign.irf_draws[i, :, :, :],
+                    compute_structural_shocks(model, a_sign.Q_draws[i]))
+                for i in 1:length(a_sign.Q_draws)]
+        @test any(keep)
+        @test count(keep) < length(keep)
+        rng_ω = MersenneTwister(7452)
+        ω_I = MacroEconometricModels._omega_hat(r_contrib, irf_I, 2, Float64;
+                                                n_sims=n_csims, rng=rng_ω)
+        Q_mix = [0.0 -1.0; 1.0 0.0]
+        irf_mix = compute_irf(model, Q_mix, 6)
+        ω_mix = MacroEconometricModels._omega_hat(r_contrib, irf_mix, 2, Float64;
+                                                  n_sims=n_csims, rng=MersenneTwister(7453))
+        @test ω_I > ω_mix + 0.15
+        lo, hi = irf_bounds(a_c)
+        @test all(lo .<= hi)
+        pct = irf_percentiles(a_c; quantiles=[0.16, 0.84])
+        @test lo ≈ pct[:, :, :, 1]
+        @test hi ≈ pct[:, :, :, 2]
+    end
+
+    @testset "identify_arias_bayesian reports n_narrative_sims" begin
+        r_nar = SVARRestrictions(2; signs=[
+            sign_restriction(1, 1, :positive),
+            narrative_shock_restriction(1, dates[1:2], :positive)])
+        post = estimate_bvar(Y, 1; n_draws=FAST ? 8 : 12, burnin=3)
+        n_b = FAST ? 40 : 80
+        res = identify_arias_bayesian(post, r_nar, 4; n_rotations=FAST ? 20 : 40,
+                                      n_narrative_sims=n_b, rng=MersenneTwister(7447))
+        @test res isa BayesianSetIdentifiedSVAR
+        @test res.n_narrative_sims == n_b
+        @test res.ess_fraction < 1
+        r_sign = SVARRestrictions(2; signs=[sign_restriction(1, 1, :positive)])
+        res_s = identify_arias_bayesian(post, r_sign, 4; n_rotations=FAST ? 20 : 40,
+                                        rng=MersenneTwister(7448))
+        @test res_s.ess_fraction ≈ 1.0 atol=1e-12
+        @test res_s.n_narrative_sims == 0
+    end
+end
+
+@testset "SID-17 Arias set summaries" begin
+    Random.seed!(7461)
+    Y = randn(MersenneTwister(7461), 100, 2)
+    model = estimate_var(Y, 1)
+    r = SVARRestrictions(2; signs=[sign_restriction(1, 1, :positive)])
+    a = identify_arias(model, r, 5; n_draws=FAST ? 12 : 24, n_rotations=FAST ? 80 : 200,
+                       rng=MersenneTwister(7461))
+    mt = median_target(a)
+    @test any(Q -> Q === mt.Q, a.Q_draws)
+    @test mt.irf ≈ a.irf_draws[mt.index, :, :, :]
+    lo, hi = joint_band(a; level=0.68)
+    @test all(lo .<= mt.irf .<= hi)
+    mm = modal_model(a)
+    @test any(Q -> Q === mm.Q, a.Q_draws)
+    slo, shi = sup_t_band(a; level=0.68)
+    @test all(slo .<= shi)
+    H = 5
+    fv = fevd(model, a, H)
+    @test fv isa BayesianFEVD
+    n = 2
+    n_d = length(a.Q_draws)
+    props = Array{Float64}(undef, n_d, n, n, H)
+    for i in 1:n_d
+        _, p = MacroEconometricModels._compute_fevd(a.irf_draws[i, :, :, :], n, H)
+        props[i, :, :, :] = p
+        for h in 1:H, v in 1:n
+            @test sum(p[v, :, h]) ≈ 1 atol=1e-10
+        end
+    end
+    for v in 1:n, sh in 1:n, h in 1:H
+        @test fv.point_estimate[v, sh, h] ≈
+              MacroEconometricModels._weighted_quantile(view(props, :, v, sh, h), a.weights, 0.5)
+    end
+    hd = historical_decomposition(model, a)
+    @test hd isa BayesianHistoricalDecomposition
+    shk = structural_shocks(model, a)
+    @test size(shk.median, 2) == n
+end
+
+# ==========================================================================
+# SID-27: parallel draws + ForwardDiff volume (#756)
+# ==========================================================================
+
+@testset "SID-27 parallel Arias + ForwardDiff volume" begin
+    MEM = MacroEconometricModels
+
+    @testset "FD vs AD weights 1e-6 relative (pinned freeze-FD)" begin
+        Random.seed!(756)
+        Y = randn(150, 3)
+        model = estimate_var(Y, 1)
+        restrictions = SVARRestrictions(3;
+            zeros=[zero_restriction(2, 1), zero_restriction(3, 1)],
+            signs=[sign_restriction(1, 1, :positive)])
+        rng = MersenneTwister(75601)
+        Phi = MEM._compute_ma_coefficients(model, 10)
+        L = safe_cholesky(model.Sigma)
+        setup = MEM._AriasSVARSetup(restrictions, 3, Float64; rng=MersenneTwister(75602))
+        ws_ad = Float64[]
+        ws_fd = Float64[]
+        for _ in 1:40
+            Q = MEM._draw_Q_with_zero_restrictions(restrictions, Phi, L; rng=rng, B=model.B)
+            irf = MEM._compute_irf_for_Q(model, Q, Phi, L, 10)
+            irf[1, 1, 1] > 0 || continue
+            abs(irf[1, 2, 1]) < 1e-8 || continue
+            abs(irf[1, 3, 1]) < 1e-8 || continue
+            w_ad = MEM._compute_importance_weight(Q, model, setup, restrictions, Phi, L)
+            w_fd = MEM._compute_importance_weight_fd(Q, model, setup, restrictions, Phi, L)
+            push!(ws_ad, w_ad)
+            push!(ws_fd, w_fd)
+            length(ws_ad) >= 3 && break
+        end
+        @test length(ws_ad) >= 1
+        @test length(ws_fd) == length(ws_ad)
+        for i in eachindex(ws_ad)
+            @test isapprox(ws_ad[i], ws_fd[i]; rtol=1e-6)
+        end
+        ess_ad = MEM._effective_sample_size(ws_ad)
+        ess_fd = MEM._effective_sample_size(ws_fd)
+        @test isapprox(ess_ad, ess_fd; rtol=1e-6)
+    end
+
+    @testset "pre-seed slots are thread-count invariant" begin
+        Random.seed!(75611)
+        Y = randn(120, 3)
+        model = estimate_var(Y, 1)
+        restrictions = SVARRestrictions(3;
+            zeros=[zero_restriction(2, 1)],
+            signs=[sign_restriction(1, 1, :positive)])
+        r1 = identify_arias(model, restrictions, 5; n_draws=8, n_rotations=40,
+                            rng=MersenneTwister(75611))
+        r2 = identify_arias(model, restrictions, 5; n_draws=8, n_rotations=40,
+                            rng=MersenneTwister(75611))
+        @test length(r1.Q_draws) == length(r2.Q_draws)
+        @test length(r1.Q_draws) >= 1
+        @test r1.weights ≈ r2.weights
+        @test r1.irf_draws ≈ r2.irf_draws
+        @test r1.acceptance_rate ≈ r2.acceptance_rate
+        for (Q1, Q2) in zip(r1.Q_draws, r2.Q_draws)
+            @test Q1 ≈ Q2
+        end
+        # Same seed is thread-count invariant (r1 ≈ r2). Absolute weights/Q
+        # goldens are BLAS/OS-dependent and are not pinned.
+        @test length(r1.Q_draws) >= 1
+        @test r1.elapsed >= 0
+        @test r1.weights_elapsed >= 0
+        @test r1.weights_elapsed > 0  # zeros → volume-element weight
+    end
+
+    @testset "elapsed fields and back-compat constructors" begin
+        restr = SVARRestrictions(2)
+        ad = AriasSVARResult{Float64}([randn(2, 2) for _ in 1:4], randn(4, 3, 2, 2),
+                                      fill(0.25, 4), 0.5, restr)
+        @test ad.elapsed == 0
+        @test ad.weights_elapsed == 0
+        ad2 = AriasSVARResult{Float64}([randn(2, 2)], randn(1, 3, 2, 2), [1.0], 1.0, restr,
+                                       1.0, 1.0, ["y1", "y2"], 0, 0)
+        @test ad2.elapsed == 0
+        @test ad2.weights_elapsed == 0
+        ad3 = AriasSVARResult{Float64}([randn(2, 2)], randn(1, 3, 2, 2), [1.0], 1.0, restr,
+                                       1.0, 1.0, ["y1", "y2"], 0, 0, 0.12, 0.04)
+        @test ad3.elapsed ≈ 0.12
+        @test ad3.weights_elapsed ≈ 0.04
+
+        signs = SVARRestrictions(2; signs=[sign_restriction(1, 1, :positive)])
+        Y = randn(MersenneTwister(75612), 80, 2)
+        model = estimate_var(Y, 1)
+        rsign = identify_arias(model, signs, 4; n_draws=4, n_rotations=20,
+                               rng=MersenneTwister(75612))
+        @test rsign.elapsed >= 0
+        @test rsign.weights_elapsed == 0  # pure signs skip the volume element
+    end
+end
+
 _tprint("Arias et al. (2018) tests completed.")
+

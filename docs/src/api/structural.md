@@ -1,6 +1,6 @@
 # [Structural & Statistical Identification API](@id api_structural)
 
-Six restriction-based identification schemes (Cholesky, sign, long-run, narrative, Arias, Uhlig) and 14 statistical identification methods that exploit non-Gaussianity or heteroskedasticity instead of restrictions. See [Structural Identification](@ref structural_identification_page) and [Statistical Identification](@ref nongaussian_page) for theory and examples.
+Six restriction-based identification schemes (Cholesky, sign, long-run, narrative, Arias, Uhlig), AB-model ML, proxy / external-instrument identification, max-share / news-shock identification, structural VECM (KPSW), Giacomini–Kitagawa robust Bayes, and 15 statistical identification methods that exploit non-Gaussianity or heteroskedasticity instead of restrictions. See [Structural Identification](@ref structural_identification_page), [AB-Model SVAR](@ref id_ab_page), [Proxy SVAR](@ref id_proxy_page), [Max-Share Identification](@ref id_maxshare_page), [Vector Error Correction Models](@ref vecm_page), and [Statistical Identification](@ref nongaussian_page) for theory and examples. The `method=` keyword of `irf` / `fevd` / `historical_decomposition` accepts twenty-five symbols.
 
 In applied use these are reached through `irf(model, H; method=...)` rather than called directly; the entries below document the identification routines themselves.
 
@@ -9,12 +9,33 @@ In applied use these are reached through `irf(model, H; method=...)` rather than
 ## SVAR Identification Types
 
 ```@docs
+AbstractSVARRestriction
 ZeroRestriction
+LongRunZeroRestriction
+A0ZeroRestriction
+AplusZeroRestriction
 SignRestriction
+A0SignRestriction
+AplusSignRestriction
+ElasticityBound
+MagnitudeBound
+FEVDShareRestriction
+CumulativeRestriction
+NarrativeShockRestriction
+NarrativeContributionRestriction
 SVARRestrictions
+IdentificationStatus
 SignIdentifiedSet
 AriasSVARResult
 UhligSVARResult
+ProxySVARResult
+SVARPattern
+SVARModel
+MaxShareResult
+SVECResult
+BayesianSetIdentifiedSVAR
+RobustBayesResult
+IdentificationMethod
 ```
 
 ---
@@ -28,6 +49,7 @@ NormalityTestResult
 NormalityTestSuite
 ICASVARResult
 NonGaussianMLResult
+NonGaussianGMMResult
 MarkovSwitchingSVARResult
 GARCHSVARResult
 SmoothTransitionSVARResult
@@ -44,6 +66,7 @@ Modules = [MacroEconometricModels]
 Pages   = ["core/identification.jl"]
 Order   = [:function]
 Private = false
+Filter  = t -> !(t isa Function && nameof(t) === :irf_bounds)
 ```
 
 ### Arias et al. (2018) Sign/Zero Restrictions
@@ -51,8 +74,22 @@ Private = false
 ```@docs
 identify_arias
 identify_arias_bayesian
+identify_narrative(::VARModel, ::SVARRestrictions, ::Int)
+check_identification
+is_linear_zero
+sign_check
 zero_restriction
 sign_restriction
+a0_zero_restriction
+a0_sign_restriction
+aplus_zero_restriction
+aplus_sign_restriction
+elasticity_bound
+magnitude_bound
+fevd_share_restriction
+cumulative_restriction
+narrative_shock_restriction
+narrative_contribution_restriction
 ```
 
 ### Posterior Summaries of an Identified Set
@@ -64,12 +101,49 @@ the posterior draws of an `AriasSVARResult`.
 ```@docs
 irf_mean
 irf_percentiles
+irf_bounds
 ```
 
 ### Mountford-Uhlig (2009) Penalty Function
 
 ```@docs
 identify_uhlig
+```
+
+### Set-Identified Summaries and Robust Bayes
+
+`median_target`, `modal_model`, `joint_band`, `sup_t_band`, `label_shocks`,
+`structural_shocks`, `irf_bounds`, and `irf_median` are documented with the
+identification functions above (`core/identification.jl`). The two entries below
+are the Giacomini–Kitagawa (2021) robust-Bayes layer.
+
+```@docs
+identify_robust_bayes
+identified_set_bounds
+```
+
+### AB-Model ML (Amisano–Giannini)
+
+```@docs
+estimate_svar
+recursive_pattern
+blanchard_quah_pattern
+a_model_pattern
+b_model_pattern
+ab_model_pattern
+```
+
+### Max-Share Identification
+
+```@docs
+identify_max_share
+```
+
+### Structural VECM
+
+```@docs
+identify_svec
+permanent_transitory
 ```
 
 ---
@@ -116,6 +190,12 @@ identify_skew_normal
 identify_nongaussian_ml
 ```
 
+### Moment-Based GMM Identification
+
+```@docs
+identify_gmm_moments
+```
+
 ### Heteroskedasticity Identification
 
 Four ways of modelling the variance shift that delivers identification: discrete regimes,
@@ -135,8 +215,12 @@ system. See [Identification Testing](@ref id_testing_page) for how to read them.
 
 ```@docs
 test_identification_strength
+test_label_stability
 test_shock_gaussianity
 test_gaussian_vs_nongaussian
 test_shock_independence
 test_overidentification
+test_lambda_distinct
+test_gaussian_shock_count
+test_restrictions
 ```

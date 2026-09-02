@@ -222,7 +222,7 @@ Bayesian VARs whose coefficients or volatilities move over time, and VARs mixing
 | `latent_path(post)` | Posterior paths of the latent high-frequency series |
 | `optimize_hyperparameters_glp(Y, p; ...)` | Giannone-Lenza-Primiceri hierarchical prior selection |
 
-Impulse response functions, forecast error variance decomposition, historical decomposition, six restriction-based identification schemes, and 14 statistical identification methods (5 ICA, 5 non-Gaussian ML, 4 heteroskedasticity). See [Innovation Accounting](@ref innovation_accounting_page), [Structural Identification](@ref structural_identification_page), and [Statistical Identification](@ref nongaussian_page).
+Impulse response functions, forecast error variance decomposition, historical decomposition, six restriction-based identification schemes, proxy / AB-model / max-share / SVEC, Giacomini–Kitagawa robust Bayes, and 15 statistical identification methods (5 ICA, 4 non-Gaussian ML plus dispatcher, GMM, 4 heteroskedasticity). The `method=` keyword accepts twenty-five symbols. See [Innovation Accounting](@ref innovation_accounting_page), [Structural Identification](@ref structural_identification_page), and [Statistical Identification](@ref nongaussian_page).
 
 ### Structural Analysis Functions
 
@@ -249,6 +249,12 @@ Impulse response functions, forecast error variance decomposition, historical de
 | `identify_pml(model; ...)` | Pseudo-ML SVAR identification |
 | `identify_skew_normal(model; ...)` | Skew-normal ML SVAR identification |
 | `identify_nongaussian_ml(model; ...)` | Unified non-Gaussian ML dispatcher |
+| `identify_gmm_moments(model; ...)` | Coskewness / cokurtosis GMM SVAR identification |
+| `identify_proxy(model, Z; ...)` | External-instrument (proxy) SVAR identification |
+| `estimate_svar(model, pattern; ...)` | Amisano–Giannini AB-model ML |
+| `identify_max_share(model; target=...)` | Max-share / news-shock identification |
+| `identify_svec(vecm; ...)` | Structural VECM (KPSW / Gonzalo–Ng) |
+| `identify_robust_bayes(post, r, H; ...)` | Giacomini–Kitagawa robust Bayes |
 | `identify_markov_switching(model; ...)` | Markov-switching SVAR identification |
 | `identify_garch(model; ...)` | GARCH SVAR identification |
 | `identify_smooth_transition(model, s; ...)` | Smooth-transition SVAR identification |
@@ -395,8 +401,11 @@ Diagnostic tests for non-Gaussian SVAR identification validity. See [Statistical
 | `test_shock_gaussianity(result)` | Test non-Gaussianity of recovered shocks |
 | `test_gaussian_vs_nongaussian(model; ...)` | LR test: Gaussian vs non-Gaussian |
 | `test_shock_independence(result; ...)` | Test independence of recovered shocks |
-| `test_identification_strength(model; ...)` | Bootstrap identification strength test |
-| `test_overidentification(model, result; ...)` | Overidentification test |
+| `test_label_stability(model; ...)` | Column-label match fraction (no p-value) |
+| `test_lambda_distinct(result; ...)` | Wald test that relative variances differ |
+| `test_gaussian_shock_count(result)` | Holm-adjusted count of Gaussian shocks |
+| `test_identification_strength(model; ...)` | Deprecated wrapper; see `test_label_stability` / `test_lambda_distinct` / `test_gaussian_shock_count` |
+| `test_overidentification(model, result; ...)` | Nested LR / ``RVR'`` Wald overidentification test |
 
 ARCH, GARCH, EGARCH, GJR-GARCH, and Stochastic Volatility estimation, forecasting, and diagnostics. See [Volatility Models](@ref volatility_page).
 

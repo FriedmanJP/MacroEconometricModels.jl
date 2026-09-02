@@ -11,7 +11,7 @@ using LinearAlgebra
 const FAST = get(ENV, "MACRO_FAST_TESTS", "") == "1"
 # Ubuntu 1.10 Optim-v1 cell: important numerical tests only (see _numerical_groups).
 const NUMERICAL = get(ENV, "MACRO_NUMERICAL_CI", "") == "1"
-# CI job split: "dsge" | "empirical" | "" (local full suite).
+# CI job split: "dsge" | "empirical" | "serialization" | "" (local full suite).
 const SUITE = get(ENV, "MACRO_CI_SUITE", "")
 
 # Shared test data generators (available to all test files)
@@ -34,7 +34,6 @@ const TEST_GROUPS = [
         "core/test_tables.jl",
         "core/test_logging.jl",
         "core/test_repro.jl",
-        "core/test_serialization.jl",
         "core/test_utils.jl",
         "core/test_edge_cases.jl",
         "core/test_examples.jl",
@@ -57,7 +56,9 @@ const TEST_GROUPS = [
         "bvar/test_glp.jl",      # T252 (#351): GLP hierarchical hyperparameter optimization
         "bvar/test_issues_523_564.jl",   # PR #597 regression tests (BVAR/FAVAR/IRF fixes)
         "var/test_arias2018.jl",
+        "var/test_robust_bayes.jl",   # SID-18 (#747): Giacomini–Kitagawa robust Bayes
         "var/test_uhlig.jl",
+        "var/test_ab.jl",                 # SID-13 (#742): AB-model ML
         "var/test_conditional_forecast.jl",   # T241 (#340): Waggoner-Zha conditional forecasts
         "preg/test_panel_nonlinear.jl",   # moved from the ceiling ARIMA group to rebalance (#127)
     ]),
@@ -67,6 +68,9 @@ const TEST_GROUPS = [
         "var/test_irf_ci.jl",
         "var/test_fevd.jl",
         "var/test_hd.jl",
+        "var/test_id_recovery.jl",        # SID-01 (#730): heteroskedastic kernel recovery
+        "var/test_proxy.jl",              # SID-11 (#740): proxy SVAR / external instruments
+        "var/test_maxshare.jl",           # SID-12 (#741): max-share identification
         "vecm/test_vecm.jl",
         "vecm/test_vecm_restrictions.jl", # EV-38 (#446)
         "preg/test_panel_iv.jl",          # moved from the ceiling ARIMA group to rebalance (#127)
@@ -307,6 +311,12 @@ const TEST_GROUPS = [
         "counterfactual/test_show.jl",
         "counterfactual/test_plotting.jl",
         "counterfactual/test_oracles.jl",
+    ]),
+    # Serialization suite (`MACRO_CI_SUITE=serialization`): round-trip files
+    # pulled out of the empirical groups so they do not share a process with
+    # display-backend tests or sit on the 60 min job timeout.
+    ("Serialization" => [
+        "core/test_serialization.jl",
     ]),
 ]
 

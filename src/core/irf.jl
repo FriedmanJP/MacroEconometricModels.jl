@@ -11,6 +11,59 @@ Impulse Response Functions for frequentist and Bayesian VAR models.
 using LinearAlgebra, Statistics
 
 # =============================================================================
+# Shared MA / structural-IRF kernels (SID-19)
+# =============================================================================
+
+"""
+    ma_coefficients(B, n, p, H) -> Vector{Matrix{T}}
+
+Reduced-form moving-average coefficients `Φ_0 = I, Φ_1, …, Φ_{H-1}` of a VAR(p).
+"""
+function ma_coefficients(B::AbstractMatrix{T}, n::Int, p::Int, H::Int) where {T}
+    H >= 1 || throw(ArgumentError("H must be positive, got $H"))
+    A = extract_ar_coefficients(B, n, p)
+    Phi = [zeros(T, n, n) for _ in 1:H]
+    copyto!(Phi[1], I(n))
+    scratch = zeros(T, n, n)
+    @inbounds for h in 2:H
+        for j in 1:min(p, h - 1)
+            mul!(scratch, A[j], Phi[h-j])
+            Phi[h] .+= scratch
+        end
+    end
+    Phi
+end
+
+ma_coefficients(model::VARModel, H::Int) = ma_coefficients(model.B, nvars(model), model.p, H)
+
+"""Stacked MA coefficients as an `H × n × n` array (`Φ_0` in slice 1)."""
+function _ma_array(model::VARModel{T}, H::Int) where {T<:AbstractFloat}
+    Phi = ma_coefficients(model, H)
+    n = nvars(model)
+    out = zeros(T, H, n, n)
+    @inbounds for h in 1:H
+        out[h, :, :] = Phi[h]
+    end
+    out
+end
+
+"""
+    structural_irf(Phi, L, Q, H) -> Array{T,3}
+
+Structural IRFs `Θ_h = Φ_h L Q` for `h = 0,…,H-1`. `Phi` is length ≥ `H`.
+"""
+function structural_irf(Phi::Vector{<:AbstractMatrix{T}}, L::AbstractMatrix{T},
+                        Q::AbstractMatrix{T}, H::Int) where {T<:AbstractFloat}
+    n = size(L, 1)
+    P = L * Q
+    irf = zeros(T, H, n, n)
+    @inbounds for h in 1:H
+        irf[h, :, :] = Phi[h] * P
+    end
+    irf
+end
+
+# =============================================================================
 # Frequentist IRF
 # =============================================================================
 
@@ -20,21 +73,45 @@ using LinearAlgebra, Statistics
 Compute IRFs with optional confidence intervals.
 
 # Methods
-`:cholesky`, `:sign`, `:narrative`, `:long_run`,
+`:cholesky`, `:sign`, `:narrative`, `:long_run`, `:proxy`, `:ab`, `:max_share`, `:svec`,
 `:fastica`, `:jade`, `:sobi`, `:dcov`, `:hsic`,
 `:student_t`, `:mixture_normal`, `:pml`, `:skew_normal`, `:nongaussian_ml`,
 `:markov_switching`, `:garch`, `:smooth_transition`, `:external_volatility`
 
 Note: `:smooth_transition` requires `transition_var` kwarg.
       `:external_volatility` requires `regime_indicator` kwarg.
+      `:proxy` requires `instruments` (length `T` or `T_eff`) and is partial
+      when `k < n`. Default `normalize=:unit_effect`. With `ci_type=:bootstrap`,
+      jointly resamples `(u_t, z_t)` and rewrites `bootstrap=:iid` to `:block`
+      (Jentsch & Lunsford 2019); the reproducibility manifest records `:block`.
+      `:ab` requires `pattern::SVARPattern` (Amisano–Giannini AB-model ML).
+      `:max_share` requires `target` (variable index or name) and is partial;
+      pass `horizons` (time domain, default `0:20`) or `band=(ω₁, ω₂)`.
+      `:svec` is the structural-VECM route (`identify_svec`); call it on a
+      `VECMModel` via `irf(vecm; method=:svec)` or `method=:long_run`.
+      `normalize=:unit_variance` (default) leaves the identified rotation
+      unchanged. `normalize=:unit_effect` scales the shock so the impact on
+      `shock_size = (variable => value)` equals `value` (`variable` is an index
+      or name). Bands and FEVD that share `Q` are rescaled the same way.
 
 # CI types
 - `:none`
 - `:bootstrap` --- residual (recursive-design) bootstrap: resamples the estimated residuals,
   regenerates data from `B`, and re-estimates the VAR per replication. With
   `stationary_only=true`, draws whose companion matrix has `|λmax| ≥ 1` are rejected and
-  redrawn.
-- `:theoretical` --- asymptotic (delta-method) confidence intervals.
+  redrawn. For `:sign`/`:narrative` this mixes Haar rotations with sampling uncertainty
+  and throws unless `set_inference=:bootstrap_x_rotations`.
+- `:theoretical` --- asymptotic (delta-method) confidence intervals. Throws for
+  `:sign`/`:narrative`: identified-set methods do not have theoretical residual-free
+  coefficient bands; use the default identified-set bands or
+  `set_inference=:bootstrap_x_rotations`.
+- `:identified_set` --- returned automatically for `:sign`/`:narrative`: pointwise median
+  over accepted Haar rotations, with quantile bands over that set.
+
+# Set-ID options (SID-05)
+- `max_draws::Int=1000` --- Haar draws for `:sign`/`:narrative` (forwarded to `compute_Q`).
+- `set_inference::Symbol=:none` --- pass `:bootstrap_x_rotations` to opt into
+  bootstrap×rotation bands with `ci_type=:bootstrap`.
 
 # Bootstrap options ([T271])
 - `bootstrap::Symbol=:iid` --- residual resampling scheme. `:iid` resamples rows with
@@ -61,8 +138,14 @@ function irf(model::VARModel{T}, horizon::Int;
     shock_names::Union{Nothing,Vector{String}}=nothing,
     transition_var::Union{Nothing,AbstractVector}=nothing,
     regime_indicator::Union{Nothing,AbstractVector{Int}}=nothing,
+    restrictions=nothing,
+    max_draws::Int=1000,
+    set_inference::Symbol=:none,
     seed::Union{Integer,Nothing}=nothing,
-    rng::AbstractRNG=Random.default_rng()
+    rng::AbstractRNG=Random.default_rng(),
+    normalize::Union{Nothing,Symbol}=nothing,
+    shock_size::Union{Nothing,Pair}=nothing,
+    kwargs...
 ) where {T<:AbstractFloat}
 
     # Reproducibility (T246/#345): a `seed` owns the RNG so bootstrap bands can be
@@ -70,6 +153,12 @@ function irf(model::VARModel{T}, horizon::Int;
     rng = _resolve_repro_rng(rng, seed)
     _validate_data(model.Sigma, "Sigma")
     _validate_data(model.B, "B")
+    user_norm = normalize
+    eff_norm = user_norm === nothing ? :unit_variance : user_norm
+    eff_norm in (:unit_variance, :unit_effect) || throw(ArgumentError(
+        "normalize must be :unit_variance or :unit_effect, got :$eff_norm"))
+    apply_unit_effect = (eff_norm === :unit_effect) &&
+                        (method !== :proxy || shock_size !== nothing)
     # Kilian bias correction needs the bootstrap machinery to estimate Psi; with
     # any other ci_type it used to be silently ignored, returning the uncorrected
     # point under a kwarg that promised correction (#564).
@@ -78,10 +167,84 @@ function irf(model::VARModel{T}, horizon::Int;
             "bias_correct=true requires ci_type=:bootstrap (Kilian 1998 estimates " *
             "the coefficient bias by bootstrap); got ci_type=:$ci_type"))
     end
+    # SID-05/19: set-identified methods return the pointwise median IRF with
+    # identified-set bands. Bootstrap×rotations requires an explicit opt-in.
+    if _is_set_identified(method)
+        ci_type === :bootstrap && set_inference !== :bootstrap_x_rotations &&
+            throw(ArgumentError("ci_type=:bootstrap with method=:$method mixes rotations; " *
+                                "pass set_inference=:bootstrap_x_rotations to opt in"))
+        ci_type === :theoretical &&
+            throw(ArgumentError("ci_type=:theoretical with method=:$method: identified-set methods " *
+                                "do not have theoretical residual-free coefficient bands; " *
+                                "use the default identified-set bands or set_inference=:bootstrap_x_rotations"))
+        if ci_type !== :bootstrap
+            snames = isnothing(shock_names) ? model.varnames : shock_names
+            if method === :arias
+                isnothing(restrictions) && throw(ArgumentError("arias requires restrictions"))
+                s = identify_arias(model, restrictions, horizon;
+                                   _arias_freq_kwargs(max_draws; rng=rng, kwargs...)...)
+                alpha = (1 - T(conf_level)) / 2
+                pct = irf_percentiles(s; quantiles=Float64[alpha, 0.5, 1 - alpha])
+                med = pct[:, :, :, 2]
+                lo, hi = pct[:, :, :, 1], pct[:, :, :, 3]
+                draws = s.irf_draws
+                if apply_unit_effect
+                    specs = _unit_effect_specs_from_irf(med, model, shock_size)
+                    med, lo, hi, draws = _scale_setid_irf(med, lo, hi, draws, specs)
+                end
+                return ImpulseResponse{T}(med, lo, hi, horizon, model.varnames, snames,
+                                          :identified_set, draws, T(conf_level);
+                                          manifest=capture_manifest(; seed=seed, settings=Dict{String,Any}(
+                                              "method" => String(method), "ci_type" => "identified_set",
+                                              "max_draws" => max_draws, "acceptance_rate" => s.acceptance_rate)))
+            end
+            isnothing(check_func) && throw(ArgumentError(
+                method === :narrative ? "Need check_func and narrative_check for narrative" :
+                                        "Need check_func for sign"))
+            method === :narrative && isnothing(narrative_check) &&
+                throw(ArgumentError("Need check_func and narrative_check for narrative"))
+            s = method === :sign ?
+                identify_sign(model, horizon, check_func; max_draws=max_draws, store_all=true, rng=rng) :
+                identify_narrative(model, horizon, check_func, narrative_check; max_draws=max_draws, store_all=true, rng=rng)
+            med = irf_median(s)
+            lo, hi = irf_bounds(s; quantiles=((1 - conf_level)/2, 1 - (1 - conf_level)/2))
+            draws = s.irf_draws
+            if apply_unit_effect
+                specs = _unit_effect_specs_from_irf(med, model, shock_size)
+                med, lo, hi, draws = _scale_setid_irf(med, lo, hi, draws, specs)
+            end
+            return ImpulseResponse{T}(med, lo, hi, horizon, model.varnames, snames,
+                                      :identified_set, draws, T(conf_level);
+                                      manifest=capture_manifest(; seed=seed, settings=Dict{String,Any}(
+                                          "method" => String(method), "ci_type" => "identified_set",
+                                          "max_draws" => max_draws, "acceptance_rate" => s.acceptance_rate)))
+        end
+    end
+    if ci_type === :theoretical && _needs_residuals(method)
+        throw(ArgumentError(
+            "ci_type=:theoretical draws only the VAR coefficients; method=:$method " *
+            "identifies from residuals — use ci_type=:bootstrap"))
+    end
     n = nvars(model)
     p = model.p
-    Q = compute_Q(model, method, horizon, check_func, narrative_check;
-                  transition_var=transition_var, regime_indicator=regime_indicator, rng=rng)
+    Q = if method === :proxy && user_norm !== nothing
+        compute_Q(model, method; horizon=horizon, check_func=check_func,
+                  narrative_check=narrative_check, restrictions=restrictions,
+                  max_draws=max_draws, transition_var=transition_var,
+                  regime_indicator=regime_indicator, rng=rng, kwargs...,
+                  normalize=user_norm)
+    else
+        compute_Q(model, method; horizon=horizon, check_func=check_func,
+                  narrative_check=narrative_check, restrictions=restrictions,
+                  max_draws=max_draws, transition_var=transition_var,
+                  regime_indicator=regime_indicator, rng=rng, kwargs...)
+    end
+
+    # Jentsch & Lunsford (2019): i.i.d. residual bootstrap is invalid for proxy SVARs.
+    # Rewrite before bands *and* the manifest so recorded `bootstrap` is `:block`.
+    if method === :proxy && ci_type === :bootstrap && bootstrap === :iid
+        bootstrap = :block
+    end
 
     # Kilian (1998) bias-corrects the coefficient estimate itself, so the reported
     # point IRF must also use the bias-corrected B when bias_correct=true (#564).
@@ -96,20 +259,35 @@ function irf(model::VARModel{T}, horizon::Int;
         model_point = VARModel(model.Y, p, B_bc, model.U, model.Sigma,
                                model.aic, model.bic, model.hqic, model.varnames)
         # Re-identify at the bias-corrected coefficients so the point Q matches.
-        Q = compute_Q(model_point, method, horizon, check_func, narrative_check;
-                      transition_var=transition_var, regime_indicator=regime_indicator, rng=rng)
+        Q = if method === :proxy && user_norm !== nothing
+            compute_Q(model_point, method; horizon=horizon, check_func=check_func,
+                      narrative_check=narrative_check, restrictions=restrictions,
+                      max_draws=max_draws, transition_var=transition_var,
+                      regime_indicator=regime_indicator, rng=rng, kwargs...,
+                      normalize=user_norm)
+        else
+            compute_Q(model_point, method; horizon=horizon, check_func=check_func,
+                      narrative_check=narrative_check, restrictions=restrictions,
+                      max_draws=max_draws, transition_var=transition_var,
+                      regime_indicator=regime_indicator, rng=rng, kwargs...)
+        end
     end
+    Q_match = Q
+    scale_specs = apply_unit_effect ? _unit_effect_specs(Q, model_point, shock_size) : nothing
+    Q = _apply_irf_scale(Q, model_point, scale_specs)
     point_irf = compute_irf(model_point, Q, horizon)
 
     ci_lower, ci_upper = zeros(T, horizon, n, n), zeros(T, horizon, n, n)
     sim_irfs = nothing
     if ci_type != :none
-        sim_irfs = _simulate_irfs(model, method, horizon, check_func, narrative_check, ci_type, reps;
+        sim_irfs, relabeled_frac = _simulate_irfs(model, method, horizon, check_func, narrative_check, ci_type, reps;
                                   stationary_only=stationary_only,
                                   transition_var=transition_var, regime_indicator=regime_indicator,
+                                  restrictions=restrictions,
                                   rng=rng, bootstrap=bootstrap, block_length=block_length,
                                   wild_dist=wild_dist, bias_correct=bias_correct,
-                                  bias_reps=bias_reps, Psi_precomputed=Psi_point)
+                                  bias_reps=bias_reps, Psi_precomputed=Psi_point, Q_ref=Q_match,
+                                  max_draws=max_draws, irf_scale=scale_specs, kwargs...)
         alpha = (1 - T(conf_level)) / 2
         @inbounds for h in 1:horizon, v in 1:n, s in 1:n
             d = @view sim_irfs[:, h, v, s]
@@ -126,33 +304,59 @@ function irf(model::VARModel{T}, horizon::Int;
             "reps" => reps, "stationary_only" => stationary_only,
             "bootstrap" => String(bootstrap), "block_length" => block_length,
             "wild_dist" => String(wild_dist), "bias_correct" => bias_correct,
-            "bias_reps" => bias_reps))
+            "bias_reps" => bias_reps, "relabeled_fraction" => relabeled_frac))
     ImpulseResponse{T}(point_irf, ci_lower, ci_upper, horizon,
                        model.varnames, snames, ci_type, sim_irfs, cl; manifest=manifest)
+end
+
+"""Skip a proxy bootstrap draw on identification failure, not genuine bugs."""
+function _is_skippable_proxy_boot_error(e::Exception)
+    e isa IdentificationError && return true
+    e isa ArgumentError && return occursin("too few finite observations", sprint(showerror, e))
+    false
 end
 
 """Simulate IRFs for confidence intervals (bootstrap or asymptotic).
 
 `Psi_precomputed` optionally supplies a bias matrix already estimated by the caller
 (so the point IRF and bands share the same Ψ under `bias_correct=true`; #564).
+`Q_ref` is the point-estimate rotation; statistical-ID columns are matched to
+`chol(Σ) * Q_ref` before `compute_irf` (SID-04). Returns `(sim_irfs, relabeled_fraction)`.
 """
 function _simulate_irfs(model::VARModel{T}, method::Symbol, horizon::Int,
     check_func, narrative_check, ci_type::Symbol, reps::Int;
     stationary_only::Bool=false,
     transition_var::Union{Nothing,AbstractVector}=nothing,
     regime_indicator::Union{Nothing,AbstractVector{Int}}=nothing,
+    restrictions=nothing,
     rng::AbstractRNG=Random.default_rng(),
     bootstrap::Symbol=:iid, block_length::Int=0, wild_dist::Symbol=:rademacher,
     bias_correct::Bool=false, bias_reps::Int=0,
-    Psi_precomputed::Union{Nothing,AbstractMatrix}=nothing
+    Psi_precomputed::Union{Nothing,AbstractMatrix}=nothing,
+    Q_ref::Union{Nothing,AbstractMatrix}=nothing,
+    max_draws::Int=1000,
+    irf_scale=nothing,
+    kwargs...
 ) where {T<:AbstractFloat}
     n, p = nvars(model), model.p
     bootstrap in (:iid, :wild, :block) || throw(ArgumentError(
         "bootstrap must be :iid, :wild, or :block; got :$bootstrap"))
+    P_ref = (Q_ref !== nothing && _should_match_columns(method)) ?
+        Matrix{T}(safe_cholesky(model.Sigma) * Q_ref) : nothing
 
     if ci_type == :bootstrap
         U, T_eff = model.U, size(model.U, 1)
         Y_init = model.Y[1:p, :]
+        Z_eff = nothing
+        if method === :proxy
+            inst = get(kwargs, :instruments, nothing)
+            inst === nothing && throw(ArgumentError(":proxy requires instruments"))
+            Z_eff = inst isa AbstractVector ?
+                reshape(collect(_align_instrument(inst, size(model.Y, 1), p, T_eff)), :, 1) :
+                Matrix{T}(_align_instrument(inst, size(model.Y, 1), p, T_eff))
+            Z_eff = Matrix{T}(Z_eff)
+            bootstrap === :iid && (bootstrap = :block)
+        end
 
         # Kilian (1998) bootstrap-after-bootstrap: estimate the bias once, re-centre the DGP
         # at the corrected coefficients, and correct every outer draw by the same Ψ.
@@ -177,21 +381,32 @@ function _simulate_irfs(model::VARModel{T}, method::Symbol, horizon::Int,
             max_iter = 10 * reps
             staging = zeros(T, max_iter, horizon, n, n)
             passed = fill(false, max_iter)
+            relabeled = fill(false, max_iter)
             seeds = rand(rng, UInt64, max_iter)
             Threads.@threads for it in 1:max_iter
                 local_rng = Random.MersenneTwister(seeds[it])
                 _suppress_warnings() do
-                    U_boot = _resample_residuals(U, bootstrap, local_rng;
-                                                 block_length=block_length, wild_dist=wild_dist)
+                    U_boot, kw_boot = _resample_for_method(U, Z_eff, bootstrap, local_rng, kwargs;
+                                                           block_length=block_length, wild_dist=wild_dist)
                     Y_boot = _simulate_var(Y_init, B_dgp, U_boot, T_eff + p)
                     m = estimate_var(Y_boot, p; check_stability=false)
                     m = _apply_boot_bias_correction(m, Psi, n, p, bias_correct)
                     F = companion_matrix(m.B, n, p)
                     maximum(abs.(eigvals(F))) >= one(T) && return  # reject non-stationary draw
-                    Q = compute_Q(m, method, horizon, check_func, narrative_check;
-                                  transition_var=transition_var, regime_indicator=regime_indicator, rng=local_rng)
-                    staging[it, :, :, :] = compute_irf(m, Q, horizon)
-                    passed[it] = true
+                    try
+                        Q = compute_Q(m, method; horizon=horizon, check_func=check_func,
+                                      narrative_check=narrative_check, restrictions=restrictions,
+                                      max_draws=max_draws, transition_var=transition_var,
+                                      regime_indicator=regime_indicator, rng=local_rng, kw_boot...)
+                        Q, was_relabeled = _maybe_match_Q(Q, m, P_ref)
+                        Q = _apply_irf_scale(Q, m, irf_scale)
+                        staging[it, :, :, :] = compute_irf(m, Q, horizon)
+                        relabeled[it] = was_relabeled
+                        passed[it] = true
+                    catch e
+                        method === :proxy && _is_skippable_proxy_boot_error(e) && return
+                        rethrow()
+                    end
                 end
             end
             kept = findall(passed)
@@ -201,24 +416,47 @@ function _simulate_irfs(model::VARModel{T}, method::Symbol, horizon::Int,
             @inbounds for j in 1:n_valid
                 sim_irfs[j, :, :, :] = staging[kept[j], :, :, :]
             end
-            return sim_irfs
+            frac = n_valid == 0 ? zero(T) : T(count(j -> relabeled[kept[j]], 1:n_valid)) / T(n_valid)
+            return sim_irfs, frac
         else
             sim_irfs = zeros(T, reps, horizon, n, n)
+            relabeled = fill(false, reps)
+            passed = method === :proxy ? fill(false, reps) : nothing
             seeds = rand(rng, UInt64, reps)
             Threads.@threads for r in 1:reps
                 local_rng = Random.MersenneTwister(seeds[r])
                 _suppress_warnings() do
-                    U_boot = _resample_residuals(U, bootstrap, local_rng;
-                                                 block_length=block_length, wild_dist=wild_dist)
+                    U_boot, kw_boot = _resample_for_method(U, Z_eff, bootstrap, local_rng, kwargs;
+                                                           block_length=block_length, wild_dist=wild_dist)
                     Y_boot = _simulate_var(Y_init, B_dgp, U_boot, T_eff + p)
                     m = estimate_var(Y_boot, p; check_stability=false)
                     m = _apply_boot_bias_correction(m, Psi, n, p, bias_correct)
-                    Q = compute_Q(m, method, horizon, check_func, narrative_check;
-                                  transition_var=transition_var, regime_indicator=regime_indicator, rng=local_rng)
-                    sim_irfs[r, :, :, :] = compute_irf(m, Q, horizon)
+                    try
+                        Q = compute_Q(m, method; horizon=horizon, check_func=check_func,
+                                      narrative_check=narrative_check, restrictions=restrictions,
+                                      max_draws=max_draws, transition_var=transition_var,
+                                      regime_indicator=regime_indicator, rng=local_rng, kw_boot...)
+                        Q, was_relabeled = _maybe_match_Q(Q, m, P_ref)
+                        Q = _apply_irf_scale(Q, m, irf_scale)
+                        sim_irfs[r, :, :, :] = compute_irf(m, Q, horizon)
+                        relabeled[r] = was_relabeled
+                        passed !== nothing && (passed[r] = true)
+                    catch e
+                        method === :proxy && _is_skippable_proxy_boot_error(e) && return
+                        rethrow()
+                    end
                 end
             end
-            return sim_irfs
+            if passed !== nothing
+                kept = findall(passed)
+                n_valid = length(kept)
+                n_valid == 0 && throw(IdentificationError(
+                    "All $reps proxy bootstrap draws failed identification"))
+                n_valid < reps && @warn "Only $n_valid/$reps proxy bootstrap draws obtained"
+                sim_irfs = sim_irfs[kept, :, :, :]
+                return sim_irfs, T(count(relabeled[k] for k in kept)) / T(n_valid)
+            end
+            return sim_irfs, T(count(relabeled)) / T(reps)
         end
     elseif ci_type == :theoretical
         _, X = construct_var_matrices(model.Y, p)
@@ -229,6 +467,7 @@ function _simulate_irfs(model::VARModel{T}, method::Symbol, horizon::Int,
             max_iter = 10 * reps
             staging = zeros(T, max_iter, horizon, n, n)
             passed = fill(false, max_iter)
+            relabeled = fill(false, max_iter)
             seeds = rand(rng, UInt64, max_iter)
             Threads.@threads for it in 1:max_iter
                 local_rng = Random.MersenneTwister(seeds[it])
@@ -236,10 +475,16 @@ function _simulate_irfs(model::VARModel{T}, method::Symbol, horizon::Int,
                     B_star = model.B + L_V * randn(local_rng, T, k, n) * L_S'
                     F = companion_matrix(B_star, n, p)
                     maximum(abs.(eigvals(F))) >= one(T) && return  # reject non-stationary draw
-                    m = VARModel(zeros(T, 0, n), p, B_star, zeros(T, 0, n), model.Sigma, zero(T), zero(T), zero(T))
-                    Q = compute_Q(m, method, horizon, check_func, narrative_check;
-                                  transition_var=transition_var, regime_indicator=regime_indicator, rng=local_rng)
+                    # Keep Y so residual-free ID (e.g. :ab) can recover effective_nobs; U stays empty.
+                    m = VARModel(model.Y, p, B_star, zeros(T, 0, n), model.Sigma, zero(T), zero(T), zero(T))
+                    Q = compute_Q(m, method; horizon=horizon, check_func=check_func,
+                                  narrative_check=narrative_check, restrictions=restrictions,
+                                  max_draws=max_draws, transition_var=transition_var,
+                                  regime_indicator=regime_indicator, rng=local_rng, kwargs...)
+                    Q, was_relabeled = _maybe_match_Q(Q, m, P_ref)
+                    Q = _apply_irf_scale(Q, m, irf_scale)
                     staging[it, :, :, :] = compute_irf(m, Q, horizon)
+                    relabeled[it] = was_relabeled
                     passed[it] = true
                 end
             end
@@ -250,24 +495,32 @@ function _simulate_irfs(model::VARModel{T}, method::Symbol, horizon::Int,
             @inbounds for j in 1:n_valid
                 sim_irfs[j, :, :, :] = staging[kept[j], :, :, :]
             end
-            return sim_irfs
+            frac = n_valid == 0 ? zero(T) : T(count(j -> relabeled[kept[j]], 1:n_valid)) / T(n_valid)
+            return sim_irfs, frac
         else
             sim_irfs = zeros(T, reps, horizon, n, n)
+            relabeled = fill(false, reps)
             seeds = rand(rng, UInt64, reps)
             Threads.@threads for r in 1:reps
                 local_rng = Random.MersenneTwister(seeds[r])
                 _suppress_warnings() do
                     B_star = model.B + L_V * randn(local_rng, T, k, n) * L_S'
-                    m = VARModel(zeros(T, 0, n), p, B_star, zeros(T, 0, n), model.Sigma, zero(T), zero(T), zero(T))
-                    Q = compute_Q(m, method, horizon, check_func, narrative_check;
-                                  transition_var=transition_var, regime_indicator=regime_indicator, rng=local_rng)
+                    # Keep Y so residual-free ID (e.g. :ab) can recover effective_nobs; U stays empty.
+                    m = VARModel(model.Y, p, B_star, zeros(T, 0, n), model.Sigma, zero(T), zero(T), zero(T))
+                    Q = compute_Q(m, method; horizon=horizon, check_func=check_func,
+                                  narrative_check=narrative_check, restrictions=restrictions,
+                                  max_draws=max_draws, transition_var=transition_var,
+                                  regime_indicator=regime_indicator, rng=local_rng, kwargs...)
+                    Q, was_relabeled = _maybe_match_Q(Q, m, P_ref)
+                    Q = _apply_irf_scale(Q, m, irf_scale)
                     sim_irfs[r, :, :, :] = compute_irf(m, Q, horizon)
+                    relabeled[r] = was_relabeled
                 end
             end
-            return sim_irfs
+            return sim_irfs, T(count(relabeled)) / T(reps)
         end
     end
-    zeros(T, reps, horizon, n, n)
+    zeros(T, reps, horizon, n, n), zero(T)
 end
 
 """Simulate VAR data from initial conditions and innovations."""
@@ -301,13 +554,14 @@ Compute Bayesian IRFs from posterior draws with posterior quantiles.
 Uses posterior mean as central tendency by default (pass `point_estimate=:median` for median).
 
 # Methods
-`:cholesky`, `:sign`, `:narrative`, `:long_run`,
+`:cholesky`, `:sign`, `:narrative`, `:long_run`, `:proxy`, `:ab`,
 `:fastica`, `:jade`, `:sobi`, `:dcov`, `:hsic`,
 `:student_t`, `:mixture_normal`, `:pml`, `:skew_normal`, `:nongaussian_ml`,
 `:markov_switching`, `:garch`, `:smooth_transition`, `:external_volatility`
 
 Note: `:smooth_transition` requires `transition_var` kwarg.
       `:external_volatility` requires `regime_indicator` kwarg.
+      `:proxy` requires `instruments` and is partial when `k < n`.
 
 Uses `process_posterior_samples` and `compute_posterior_quantiles` from bayesian_utils.jl.
 """
@@ -318,13 +572,32 @@ function irf(post::BVARPosterior, horizon::Int;
     shock_names::Union{Nothing,Vector{String}}=nothing,
     max_draws::Int=1000,
     transition_var::Union{Nothing,AbstractVector}=nothing,
-    regime_indicator::Union{Nothing,AbstractVector{Int}}=nothing
+    regime_indicator::Union{Nothing,AbstractVector{Int}}=nothing,
+    restrictions=nothing,
+    normalize::Union{Nothing,Symbol}=nothing,
+    shock_size::Union{Nothing,Pair}=nothing,
+    kwargs...
 )
     use_data = isempty(data) ? post.data : data
     _validate_narrative_data(method, use_data)
+    apply_ue = _unit_effect_requested(normalize)
 
     n = post.n
     ET = eltype(use_data)
+
+    # Weighted identified-set summary; do not fall through to compute_Q (n_draws=1, unweighted).
+    if method === :arias
+        rng, n_rot, cw, n_nar = _arias_posterior_kwargs(max_draws; kwargs...)
+        use_data_a = isempty(data) ? nothing : data
+        rset = _arias_from_bvar_posterior(post, restrictions, horizon;
+            data=use_data_a, n_rotations=n_rot, quantiles=quantiles,
+            rng=rng, compute_weights=cw, n_narrative_sims=n_nar)
+        bir = irf(rset; quantiles=collect(quantiles))
+        shock_names === nothing && return bir
+        return BayesianImpulseResponse{ET}(bir.quantiles, bir.point_estimate, bir.horizon,
+            bir.variables, shock_names, bir.quantile_levels, bir._draws,
+            bir.n_requested, bir.n_effective, bir.n_failed)
+    end
 
     # Process posterior samples using shared utility
     results, samples = process_posterior_samples(post,
@@ -332,11 +605,17 @@ function irf(post::BVARPosterior, horizon::Int;
         data=use_data, method=method, horizon=horizon,
         check_func=check_func, narrative_check=narrative_check,
         max_draws=max_draws,
-        transition_var=transition_var, regime_indicator=regime_indicator
+        transition_var=transition_var, regime_indicator=regime_indicator,
+        restrictions=restrictions, kwargs...
     )
 
     # Stack results into single array
     all_irfs = stack_posterior_results(results, (horizon, n, n), ET)
+    if apply_ue
+        irf_ref = dropdims(mean(all_irfs; dims=1), dims=1)
+        specs = _unit_effect_specs_from_irf(irf_ref, post.varnames, shock_size)
+        _scale_irf_draws!(all_irfs, specs)
+    end
 
     # Compute quantiles using shared utility (threaded for large arrays)
     q_vec = ET.(quantiles)
@@ -353,6 +632,32 @@ end
 # Deprecated wrapper for old (chain, p, n, horizon) signature
 function irf(post::BVARPosterior, p::Int, n::Int, horizon::Int; kwargs...)
     irf(post, horizon; kwargs...)
+end
+
+"""IRF view of a [`BayesianSetIdentifiedSVAR`](@ref).
+
+Quantiles are always recomputed from draws and importance weights (same as
+[`fevd`](@ref)), so requested levels are honored even when they differ from the
+stored `irf_quantiles` (default `[0.16, 0.5, 0.84]`).
+"""
+function irf(r::BayesianSetIdentifiedSVAR{T}; quantiles::Vector{<:Real}=[0.16, 0.5, 0.84]) where {T<:AbstractFloat}
+    H = size(r.irf_draws, 2)
+    n_acc = size(r.irf_draws, 1)
+    q_vec = T.(quantiles)
+    n1, n2 = size(r.irf_draws, 3), size(r.irf_draws, 4)
+    qarr = zeros(T, H, n1, n2, length(q_vec))
+    mean_irf = zeros(T, H, n1, n2)
+    w = r.weights
+    for h in 1:H, i in axes(r.irf_draws, 3), j in axes(r.irf_draws, 4)
+        vals = @view r.irf_draws[:, h, i, j]
+        mean_irf[h, i, j] = sum(w .* vals)
+        for (qi, q) in enumerate(q_vec)
+            qarr[h, i, j, qi] = _weighted_quantile(vals, w, q)
+        end
+    end
+    n_req = n_acc + r.n_unidentified
+    BayesianImpulseResponse{T}(qarr, mean_irf, H, r.varnames, r.varnames, q_vec, r.irf_draws,
+                               n_req, n_acc, r.n_unidentified)
 end
 
 # =============================================================================
