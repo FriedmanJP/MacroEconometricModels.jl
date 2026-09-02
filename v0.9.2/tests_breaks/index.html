@@ -1,0 +1,601 @@
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="UTF-8"/><meta name="viewport" content="width=device-width, initial-scale=1.0"/><title>Structural Breaks · MacroEconometricModels.jl</title><meta name="title" content="Structural Breaks · MacroEconometricModels.jl"/><meta property="og:title" content="Structural Breaks · MacroEconometricModels.jl"/><meta property="twitter:title" content="Structural Breaks · MacroEconometricModels.jl"/><meta name="description" content="Documentation for MacroEconometricModels.jl."/><meta property="og:description" content="Documentation for MacroEconometricModels.jl."/><meta property="twitter:description" content="Documentation for MacroEconometricModels.jl."/><meta property="og:url" content="https://FriedmanJP.github.io/MacroEconometricModels.jl/tests_breaks/"/><meta property="twitter:url" content="https://FriedmanJP.github.io/MacroEconometricModels.jl/tests_breaks/"/><link rel="canonical" href="https://FriedmanJP.github.io/MacroEconometricModels.jl/tests_breaks/"/><script data-outdated-warner src="../assets/warner.js"></script><link href="https://cdnjs.cloudflare.com/ajax/libs/lato-font/3.0.0/css/lato-font.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/juliamono/0.63.2/juliamono.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.2/css/fontawesome.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.2/css/solid.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.2/css/brands.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.8/katex.min.css" rel="stylesheet" type="text/css"/><script>documenterBaseURL=".."</script><script src="https://cdnjs.cloudflare.com/ajax/libs/require.js/2.3.6/require.min.js" data-main="../assets/documenter.js"></script><script src="../search_index.js"></script><script src="../siteinfo.js"></script><script src="../../versions.js"></script><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../assets/themes/catppuccin-mocha.css" data-theme-name="catppuccin-mocha"/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../assets/themes/catppuccin-macchiato.css" data-theme-name="catppuccin-macchiato"/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../assets/themes/catppuccin-frappe.css" data-theme-name="catppuccin-frappe"/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../assets/themes/catppuccin-latte.css" data-theme-name="catppuccin-latte"/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../assets/themes/documenter-dark.css" data-theme-name="documenter-dark" data-theme-primary-dark/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../assets/themes/documenter-light.css" data-theme-name="documenter-light" data-theme-primary/><script src="../assets/themeswap.js"></script><link href="../assets/custom.css" rel="stylesheet" type="text/css"/><script src="../assets/theme-toggle.js"></script></head><body><div id="documenter"><nav class="docs-sidebar"><div class="docs-package-name"><span class="docs-autofit"><a href="../">MacroEconometricModels.jl</a></span></div><button class="docs-search-query input is-rounded is-small is-clickable my-2 mx-auto py-1 px-2" id="documenter-search-query">Search docs (Ctrl + /)</button><ul class="docs-menu"><li><a class="tocitem" href="../">Home</a></li><li><span class="tocitem">Getting Started</span><ul><li><a class="tocitem" href="../getting_started/">Installation &amp; First Model</a></li><li><a class="tocitem" href="../method_guide/">Choosing a Method</a></li><li><a class="tocitem" href="../data/">Data Management</a></li></ul></li><li><span class="tocitem">Univariate Models</span><ul><li><a class="tocitem" href="../filters/">Time Series Filters</a></li><li><a class="tocitem" href="../x13/">X-13ARIMA-SEATS</a></li><li><a class="tocitem" href="../spectral/">Spectral Analysis</a></li><li><a class="tocitem" href="../arima/">ARIMA</a></li><li><a class="tocitem" href="../statespace/">State-Space Models</a></li><li><a class="tocitem" href="../volatility/">Volatility Models</a></li><li><a class="tocitem" href="../nonparametric/">Nonparametric Regression &amp; Density</a></li></ul></li><li><span class="tocitem">Multivariate Models</span><ul><li><a class="tocitem" href="../manual/">VAR</a></li><li><a class="tocitem" href="../bayesian/">Bayesian VAR</a></li><li><a class="tocitem" href="../vecm/">VECM</a></li><li><a class="tocitem" href="../ardl/">ARDL &amp; Bounds Test</a></li><li><a class="tocitem" href="../cointreg/">Cointegrating Regression</a></li><li><a class="tocitem" href="../lp/">Local Projections</a></li><li><a class="tocitem" href="../factormodels/">Factor Models</a></li><li><a class="tocitem" href="../favar/">FAVAR</a></li></ul></li><li><span class="tocitem">Nonlinear Time Series</span><ul><li><a class="tocitem" href="../nonlinear/">Threshold &amp; SETAR</a></li></ul></li><li><span class="tocitem">Cross-Section &amp; Panel</span><ul><li><a class="tocitem" href="../regression/">Linear Regression</a></li><li><a class="tocitem" href="../binary_choice/">Binary Choice Models</a></li><li><a class="tocitem" href="../ordered_multinomial/">Ordered &amp; Multinomial</a></li><li><a class="tocitem" href="../panel_reg/">Panel Regression</a></li><li><a class="tocitem" href="../pvar/">Panel VAR</a></li><li><a class="tocitem" href="../did/">Difference-in-Differences</a></li><li><a class="tocitem" href="../event_study/">Event Study LP</a></li></ul></li><li><a class="tocitem" href="../gmm/">GMM &amp; SMM</a></li><li><span class="tocitem">DSGE Models</span><ul><li><a class="tocitem" href="../dsge/">Overview</a></li><li><a class="tocitem" href="../dsge_linear/">Linear Solvers</a></li><li><a class="tocitem" href="../dsge_nonlinear/">Nonlinear Methods</a></li><li><a class="tocitem" href="../dsge_constraints/">Constraints</a></li><li><a class="tocitem" href="../dsge_estimation/">Estimation</a></li><li><a class="tocitem" href="../dsge_hd/">Historical Decomposition</a></li><li><input class="collapse-toggle" id="menuitem-8-7" type="checkbox"/><label class="tocitem" for="menuitem-8-7"><span class="docs-label">Heterogeneity &amp; Continuous Time</span><i class="docs-chevron"></i></label><ul class="collapsed"><li><a class="tocitem" href="../dsge_heterogeneity/">Overview</a></li><li><a class="tocitem" href="../dsge_ha/">Heterogeneous Agents</a></li><li><a class="tocitem" href="../dsge_olg/">Overlapping Generations</a></li><li><a class="tocitem" href="../dsge_continuous/">Continuous Time</a></li></ul></li></ul></li><li><span class="tocitem">Input-Output Analysis</span><ul><li><a class="tocitem" href="../io/">Overview</a></li><li><a class="tocitem" href="../io_classical/">Classical Analysis</a></li><li><a class="tocitem" href="../io_environmental/">Environmental Extensions</a></li><li><a class="tocitem" href="../io_mrio/">MRIO Trade Accounting</a></li><li><a class="tocitem" href="../io_baqaee_farhi/">Baqaee &amp; Farhi (2019)</a></li><li><a class="tocitem" href="../io_download/">Downloading Data</a></li></ul></li><li><span class="tocitem">Policy Counterfactuals</span><ul><li><a class="tocitem" href="../counterfactual/">Overview</a></li><li><a class="tocitem" href="../counterfactual_rules/">Rule Counterfactuals (McKay-Wolf)</a></li><li><a class="tocitem" href="../counterfactual_opp/">Optimal Policy Perturbations (Barnichon-Mesters)</a></li><li><a class="tocitem" href="../counterfactual_bank/">Model Bank &amp; Diagnostics (CMW)</a></li></ul></li><li><span class="tocitem">Structural Analysis</span><ul><li><a class="tocitem" href="../structural_identification/">Structural Identification</a></li><li><a class="tocitem" href="../id_proxy/">Proxy SVAR</a></li><li><a class="tocitem" href="../id_ab/">AB-Model SVAR</a></li><li><a class="tocitem" href="../id_maxshare/">Max-Share Identification</a></li><li><input class="collapse-toggle" id="menuitem-11-5" type="checkbox"/><label class="tocitem" for="menuitem-11-5"><span class="docs-label">Statistical Identification</span><i class="docs-chevron"></i></label><ul class="collapsed"><li><a class="tocitem" href="../nongaussian/">Overview</a></li><li><a class="tocitem" href="../id_nongaussian/">Non-Gaussian Methods</a></li><li><a class="tocitem" href="../id_heteroskedastic/">Heteroskedasticity</a></li><li><a class="tocitem" href="../id_testing/">Testing</a></li></ul></li><li><input class="collapse-toggle" id="menuitem-11-6" type="checkbox"/><label class="tocitem" for="menuitem-11-6"><span class="docs-label">Innovation Accounting</span><i class="docs-chevron"></i></label><ul class="collapsed"><li><a class="tocitem" href="../innovation_accounting/">Overview</a></li><li><a class="tocitem" href="../ia_irf/">Impulse Responses</a></li><li><a class="tocitem" href="../ia_fevd/">Variance Decomposition</a></li><li><a class="tocitem" href="../ia_hd/">Historical Decomposition</a></li></ul></li></ul></li><li><span class="tocitem">Nowcasting</span><ul><li><a class="tocitem" href="../nowcast/">Overview</a></li><li><a class="tocitem" href="../nowcast_dfm/">DFM Nowcasting</a></li><li><a class="tocitem" href="../nowcast_bvar/">BVAR Nowcasting</a></li><li><a class="tocitem" href="../nowcast_bridge/">Bridge Equations</a></li><li><a class="tocitem" href="../nowcast_news/">News Decomposition</a></li><li><a class="tocitem" href="../midas/">MIDAS Regression</a></li></ul></li><li><a class="tocitem" href="../forecast_evaluation/">Forecast Evaluation</a></li><li><span class="tocitem">Hypothesis Tests</span><ul><li><a class="tocitem" href="../tests/">Overview</a></li><li><a class="tocitem" href="../tests_unitroot/">Unit Root &amp; Cointegration</a></li><li><a class="tocitem" href="../tests_unitroot_advanced/">Advanced Unit Root</a></li><li><a class="tocitem" href="../tests_cointegration/">Residual-Based Cointegration</a></li><li class="is-active"><a class="tocitem" href>Structural Breaks</a><ul class="internal"><li><a class="tocitem" href="#Quick-Start"><span>Quick Start</span></a></li><li><a class="tocitem" href="#Andrews-Structural-Break-Test"><span>Andrews Structural Break Test</span></a></li><li><a class="tocitem" href="#Bai-Perron-Multiple-Break-Test"><span>Bai-Perron Multiple Break Test</span></a></li><li><a class="tocitem" href="#Factor-Model-Break-Tests"><span>Factor Model Break Tests</span></a></li><li><a class="tocitem" href="#Gregory-Hansen-Cointegration-Test"><span>Gregory-Hansen Cointegration Test</span></a></li><li><a class="tocitem" href="#Complete-Example"><span>Complete Example</span></a></li><li><a class="tocitem" href="#Common-Pitfalls"><span>Common Pitfalls</span></a></li><li><a class="tocitem" href="#References"><span>References</span></a></li></ul></li><li><a class="tocitem" href="../tests_panel/">Panel Tests</a></li><li><a class="tocitem" href="../tests_diagnostics/">Model Diagnostics</a></li></ul></li><li><a class="tocitem" href="../plotting/">Visualization</a></li><li><span class="tocitem">Project</span><ul><li><a class="tocitem" href="../notation/">Notation</a></li><li><a class="tocitem" href="../bibliography/">Bibliography</a></li><li><a class="tocitem" href="../changelog/">Changelog</a></li><li><a class="tocitem" href="../citation/">How to Cite</a></li></ul></li><li><span class="tocitem">API Reference</span><ul><li><a class="tocitem" href="../api/">Overview</a></li><li><a class="tocitem" href="../api/data/">Data Management</a></li><li><a class="tocitem" href="../api/univariate/">Univariate Models</a></li><li><a class="tocitem" href="../api/multivariate/">Multivariate Models</a></li><li><a class="tocitem" href="../api/cross_section/">Cross-Sectional Models</a></li><li><a class="tocitem" href="../api/panel/">Panel Models</a></li><li><a class="tocitem" href="../api/dsge/">DSGE Models</a></li><li><a class="tocitem" href="../api/structural/">Structural &amp; Statistical Identification</a></li><li><a class="tocitem" href="../api/counterfactual/">Policy Counterfactuals</a></li><li><a class="tocitem" href="../api/gmm/">GMM &amp; SMM</a></li><li><a class="tocitem" href="../api/tests/">Hypothesis Tests</a></li><li><a class="tocitem" href="../api/nowcasting/">Nowcasting</a></li><li><a class="tocitem" href="../api/visualization/">Visualization</a></li><li><a class="tocitem" href="../api/utilities/">Utilities &amp; Display</a></li></ul></li></ul><div class="docs-version-selector field has-addons"><div class="control"><span class="docs-label button is-static is-size-7">Version</span></div><div class="docs-selector control is-expanded"><div class="select is-fullwidth is-size-7"><select id="documenter-version-selector"></select></div></div></div></nav><div class="docs-main"><header class="docs-navbar"><a class="docs-sidebar-button docs-navbar-link fa-solid fa-bars is-hidden-desktop" id="documenter-sidebar-button" href="#"></a><nav class="breadcrumb"><ul class="is-hidden-mobile"><li><a class="is-disabled">Hypothesis Tests</a></li><li class="is-active"><a href>Structural Breaks</a></li></ul><ul class="is-hidden-tablet"><li class="is-active"><a href>Structural Breaks</a></li></ul></nav><div class="docs-right"><a class="docs-navbar-link" href="https://github.com/FriedmanJP/MacroEconometricModels.jl" title="View the repository on GitHub"><span class="docs-icon fa-brands"></span><span class="docs-label is-hidden-touch">GitHub</span></a><a class="docs-navbar-link" href="https://github.com/FriedmanJP/MacroEconometricModels.jl/blob/main/docs/src/tests_breaks.md#" title="Edit source on GitHub"><span class="docs-icon fa-solid"></span></a><a class="docs-settings-button docs-navbar-link fa-solid fa-gear" id="documenter-settings-button" href="#" title="Settings"></a><a class="docs-article-toggle-button fa-solid fa-chevron-up" id="documenter-article-toggle-button" href="javascript:;" title="Collapse all docstrings"></a></div></header><article class="content" id="documenter-page"><h1 id="tests_breaks_page"><a class="docs-heading-anchor" href="#tests_breaks_page">Structural Breaks</a><a id="tests_breaks_page-1"></a><a class="docs-heading-anchor-permalink" href="#tests_breaks_page" title="Permalink"></a></h1><p>This page covers tests for parameter instability and structural change. Structural breaks –- abrupt shifts in regression coefficients, factor loadings, or a cointegrating relationship –- invalidate standard inference and produce misleading forecasts when they go undetected. For the full test battery and the tables that route a question to a test, see <a href="../tests/#tests_page">Hypothesis Tests</a>. Four complementary frameworks are provided:</p><ul><li><strong>Andrews (1993)</strong>: One unknown break point in a linear regression. Nine variants combine three base statistics (Wald, LR, LM) with three functionals (supremum, exponential average, mean).</li><li><strong>Bai-Perron (1998, 2003)</strong>: Multiple unknown break points. Dynamic programming finds globally optimal break dates; sequential sup-F tests and the BIC and LWZ criteria select the number of breaks.</li><li><strong>Factor model break tests</strong>: Instability in factor loadings –- Breitung-Eickmeier (2011) pooled per-series LM, Chen-Dolado-Gonzalo (2014) regression sup-LM, and Han-Inoue (2015) sup-Wald.</li><li><strong>Gregory-Hansen (1996)</strong>: Cointegration allowing one structural break in the long-run relationship. Three break models (level shift, level + trend, regime shift) and three residual statistics (ADF*, Zt*, Za*).</li></ul><p>Every test on this page returns a result object that <code>report</code> renders as a specification block, a statistics block, a critical-value block, and a conclusion line. Unit root and cointegration tests without breaks live on <a href="../tests_unitroot/#tests_unitroot_page">Unit Root &amp; Cointegration</a>; the regression-stability tests that condition on a <em>known</em> break date (<code>chow_test</code>, <code>cusum_test</code>) live on <a href="../regression/#regression_page">Linear Regression</a>.</p><h2 id="Quick-Start"><a class="docs-heading-anchor" href="#Quick-Start">Quick Start</a><a id="Quick-Start-1"></a><a class="docs-heading-anchor-permalink" href="#Quick-Start" title="Permalink"></a></h2><p>Each recipe seeds its own generator, so the numbers below reproduce exactly when the block is copied into a fresh session.</p><p><strong>Recipe 1: Andrews sup-Wald test for one unknown break</strong></p><pre><code class="language-julia hljs">Random.seed!(42)
+X = hcat(ones(200), randn(200))                  # intercept + one regressor
+y = X * [1.0, 2.0] + 0.5 * randn(200)
+y[101:end] .+= 3.0 .* X[101:end, 2]              # slope jumps from 2.0 to 5.0 at t = 100
+
+report(andrews_test(y, X; test=:supwald))</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi"><span class="sgr1">             Andrews (1993) Structural Break Test</span>
+
+ <span class="sgr1"> Specification     </span> <span class="sgr1">                                         </span>
+
+  H₀                                      No structural break
+  H₁                  Single structural break at unknown date
+  Test type                                          Sup-Wald
+  Parameters tested                                         2
+  Trimming fraction                                      0.15
+  Observations                                            200
+
+<span class="sgr1">               Results</span>
+
+ <span class="sgr1">                    </span> <span class="sgr1">         Value </span>
+
+  Test statistic       1692.7647 ***
+  P-value                      0.005
+  Break date (index)             100
+  Break fraction                 0.5
+
+<span class="sgr1">    Critical Values</span>
+
+ <span class="sgr1">    1% </span> <span class="sgr1">    5% </span> <span class="sgr1">  10% </span>
+
+  14.72   11.03   9.16
+
+
+  Conclusion   Reject H₀ at 5% level: evidence of a structural break at observation 100
+  Note         *** p&lt;0.01, ** p&lt;0.05, * p&lt;0.10</code></pre><p><strong>Recipe 2: Bai-Perron search for multiple breaks</strong></p><pre><code class="language-julia hljs">Random.seed!(43)
+X_bp = ones(300, 1)                              # intercept-only regression
+y_bp = vcat(fill(2.0, 100), fill(5.0, 100), fill(1.0, 100)) + 0.5 * randn(300)
+
+report(bai_perron_test(y_bp, X_bp; max_breaks=5))</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi"><span class="sgr1">    Bai-Perron Multiple Structural Break Test</span>
+
+ <span class="sgr1"> Specification     </span> <span class="sgr1">                            </span>
+
+  H₀                        No structural breaks
+  H₁                  Multiple structural breaks
+  Max breaks tested                            5
+  Trimming fraction                         0.15
+  Observations                               300
+
+<span class="sgr1"> sup-F Tests (l breaks vs. 0 breaks)</span>
+
+ <span class="sgr1"> Test     </span> <span class="sgr1">     Statistic </span> <span class="sgr1"> P-value </span>
+
+  sup-F(1)    248.3693 ***     0.001
+  sup-F(2)   1699.8129 ***     0.001
+  sup-F(3)   1157.3417 ***     0.001
+  sup-F(4)    869.0569 ***     0.001
+  sup-F(5)     694.091 ***     0.001
+
+<span class="sgr1">Sequential Tests (l+1 breaks vs. l breaks)</span>
+
+ <span class="sgr1"> Test       </span> <span class="sgr1">     Statistic </span> <span class="sgr1"> P-value </span>
+
+  sup-F(2|1)   1719.2088 ***     0.001
+  sup-F(3|2)         6.7365     0.3557
+  sup-F(4|3)         1.2516     0.8878
+  sup-F(5|4)         0.4702       0.96
+
+<span class="sgr1">Information Criteria (* = selected)</span>
+
+ <span class="sgr1"> Breaks </span> <span class="sgr1">       BIC </span> <span class="sgr1">       LWZ </span>
+
+       0      356.03       361.9
+       1      179.87      191.62
+       2      -389.0   -371.38 *
+       3   -390.04 *     -366.55
+       4     -385.61     -356.24
+       5     -380.39     -345.14
+
+<span class="sgr1">    Estimated Break Dates</span>
+
+ <span class="sgr1"> Break </span> <span class="sgr1"> Date </span> <span class="sgr1">     95% CI </span>
+
+      1    100    [99, 101]
+      2    153   [138, 168]
+      3    200   [199, 201]
+
+
+  Conclusion   Estimated 3 structural breaks at observations 100, 153, 200
+  Note         *** p&lt;0.01, ** p&lt;0.05, * p&lt;0.10</code></pre><p><strong>Recipe 3: Factor loading stability</strong></p><pre><code class="language-julia hljs">Random.seed!(44)
+F = randn(200, 3)                                # 3 common factors
+Lambda = randn(60, 3)                            # stable loadings for 60 variables
+X_fac = F * Lambda&#39; + 0.5 * randn(200, 60)
+
+report(factor_break_test(X_fac, 3; method=:han_inoue))</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi"><span class="sgr1">          Factor Model Structural Break Test</span>
+
+ <span class="sgr1"> Specification </span> <span class="sgr1">                                     </span>
+
+  H₀                       Factor loadings are stable
+  H₁              Structural break in factor loadings
+  Method                    Han-Inoue (2015) Sup-Wald
+  Factors                                           3
+  Variables (N)                                    60
+  Time (T)                                        200
+
+<span class="sgr1">            Results</span>
+
+ <span class="sgr1">                    </span> <span class="sgr1">   Value </span>
+
+  Test statistic       -0.057
+  P-value               0.4988
+  Break date (index)       159
+
+<span class="sgr1">  Largest per-series break statistics</span>
+
+ <span class="sgr1"> Series </span> <span class="sgr1"> Sup statistic </span> <span class="sgr1"> Break date </span>
+
+       7          17.276          128
+      22         13.9495          104
+      47         12.7202           63
+      54         12.4407           89
+      58         10.6809           60
+
+
+  Conclusion   Fail to reject H₀: factor loadings appear stable
+  Note         *** p&lt;0.01, ** p&lt;0.05, * p&lt;0.10</code></pre><p><strong>Recipe 4: Cointegration with a regime shift</strong></p><pre><code class="language-julia hljs">Random.seed!(45)
+x_gh = cumsum(randn(200))                        # I(1) regressor
+y_gh = vcat(1.0 .+ 0.8 .* x_gh[1:100],           # slope and intercept both shift
+            3.0 .+ 1.5 .* x_gh[101:end]) + 0.5 * randn(200)
+
+report(gregory_hansen_test(hcat(y_gh, x_gh); model=:CS))</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi"><span class="sgr1"> Gregory-Hansen Cointegration Test with Structural Break</span>
+
+ <span class="sgr1"> Specification  </span> <span class="sgr1">                                       </span>
+
+  H₀                                    No cointegration
+  H₁               Cointegration with a structural break
+  Model                               C/S (regime shift)
+  Regressors (m)                                       1
+  Observations                                       200
+
+<span class="sgr1">                Test Statistics</span>
+
+ <span class="sgr1"> Statistic </span> <span class="sgr1">         Value </span> <span class="sgr1"> Break </span> <span class="sgr1"> P-value </span>
+
+  ADF*         -15.4195 ***     101     0.001
+  Zt*          -15.7494 ***     101     0.001
+  Za*         -213.6044 ***     101     0.001
+
+<span class="sgr1">            Critical Values</span>
+
+ <span class="sgr1">          </span> <span class="sgr1">     1% </span> <span class="sgr1">     5% </span> <span class="sgr1">    10% </span>
+
+ <span class="sgr1"> ADF*/Zt* </span>   -5.47    -4.95    -4.68
+ <span class="sgr1">      Za* </span>  -57.17   -47.04   -41.85
+
+
+  Conclusion   Reject H₀ (cointegration with structural break)
+  Note         *** p&lt;0.01, ** p&lt;0.05, * p&lt;0.10</code></pre><hr/><h2 id="Andrews-Structural-Break-Test"><a class="docs-heading-anchor" href="#Andrews-Structural-Break-Test">Andrews Structural Break Test</a><a id="Andrews-Structural-Break-Test-1"></a><a class="docs-heading-anchor-permalink" href="#Andrews-Structural-Break-Test" title="Permalink"></a></h2><p>The Andrews (1993) test detects a single structural break at an unknown date in a linear regression. The null hypothesis is parameter constancy: every coefficient is the same over the whole sample. The test evaluates a break statistic at each candidate date in a trimmed range and aggregates the resulting sequence with a functional.</p><p>Consider the linear model:</p><p class="math-container">\[y_t = X_t&#39; \beta + u_t, \quad t = 1, \ldots, T\]</p><p>where:</p><ul><li><span>$y_t$</span> is the dependent variable at time <span>$t$</span></li><li><span>$X_t$</span> is the <span>$k \times 1$</span> vector of regressors</li><li><span>$\beta$</span> is the <span>$k \times 1$</span> parameter vector</li><li><span>$u_t$</span> is the error term</li></ul><p>Under the alternative the parameter vector shifts at an unknown break date <span>$t_b$</span>:</p><p class="math-container">\[\beta = \begin{cases} \beta_1 &amp; t \leq t_b \\ \beta_2 &amp; t &gt; t_b \end{cases}\]</p><p>The <strong>Wald statistic</strong> at a candidate break date <span>$t_b$</span> compares the two sub-sample estimates:</p><p class="math-container">\[W(t_b) = (\hat{\beta}_1 - \hat{\beta}_2)&#39; \left[ V_1 + V_2 \right]^{-1} (\hat{\beta}_1 - \hat{\beta}_2)\]</p><p>where:</p><ul><li><span>$\hat{\beta}_1$</span> and <span>$\hat{\beta}_2$</span> are OLS estimates from observations <span>$1{:}t_b$</span> and <span>$(t_b{+}1){:}T$</span></li><li><span>$V_1 = \hat{\sigma}_1^2 (X_1&#39; X_1)^{-1}$</span> and <span>$V_2 = \hat{\sigma}_2^2 (X_2&#39; X_2)^{-1}$</span> are their covariance matrices, each using the degrees-of-freedom-corrected sub-sample variance</li></ul><p>The <strong>LR statistic</strong> compares the full-sample and split-sample residual sums of squares:</p><p class="math-container">\[\text{LR}(t_b) = T \left[ \ln(\text{SSR}_0 / T) - \ln(\text{SSR}_{\text{split}} / T) \right]\]</p><p>The <strong>LM statistic</strong> is a score test that needs only the full-sample estimates:</p><p class="math-container">\[\text{LM}(t_b) = \frac{S(t_b)&#39; (X&#39;X)^{-1} S(t_b)}{\hat{\sigma}^2 \cdot \tau (1 - \tau)}\]</p><p>where <span>$S(t_b) = \sum_{t=1}^{t_b} X_t \hat{u}_t$</span> is the partial sum of scores, <span>$\tau = t_b / T$</span>, and <span>$\hat{\sigma}^2 = \text{SSR}_0/T$</span>.</p><p>Three <strong>functionals</strong> aggregate the base statistic over the trimmed range <span>$[\pi T, (1 - \pi) T]$</span>:</p><table><tr><th style="text-align: right">Variant</th><th style="text-align: right">Functional</th><th style="text-align: right">Base statistic</th><th style="text-align: right">Reference</th></tr><tr><td style="text-align: right"><code>:supwald</code></td><td style="text-align: right">Supremum</td><td style="text-align: right">Wald</td><td style="text-align: right">Andrews (1993)</td></tr><tr><td style="text-align: right"><code>:suplr</code></td><td style="text-align: right">Supremum</td><td style="text-align: right">LR</td><td style="text-align: right">Andrews (1993)</td></tr><tr><td style="text-align: right"><code>:suplm</code></td><td style="text-align: right">Supremum</td><td style="text-align: right">LM</td><td style="text-align: right">Andrews (1993)</td></tr><tr><td style="text-align: right"><code>:expwald</code></td><td style="text-align: right">Exponential</td><td style="text-align: right">Wald</td><td style="text-align: right">Andrews-Ploberger (1994)</td></tr><tr><td style="text-align: right"><code>:explr</code></td><td style="text-align: right">Exponential</td><td style="text-align: right">LR</td><td style="text-align: right">Andrews-Ploberger (1994)</td></tr><tr><td style="text-align: right"><code>:explm</code></td><td style="text-align: right">Exponential</td><td style="text-align: right">LM</td><td style="text-align: right">Andrews-Ploberger (1994)</td></tr><tr><td style="text-align: right"><code>:meanwald</code></td><td style="text-align: right">Mean</td><td style="text-align: right">Wald</td><td style="text-align: right">Andrews-Ploberger (1994)</td></tr><tr><td style="text-align: right"><code>:meanlr</code></td><td style="text-align: right">Mean</td><td style="text-align: right">LR</td><td style="text-align: right">Andrews-Ploberger (1994)</td></tr><tr><td style="text-align: right"><code>:meanlm</code></td><td style="text-align: right">Mean</td><td style="text-align: right">LM</td><td style="text-align: right">Andrews-Ploberger (1994)</td></tr></table><p>The <strong>supremum</strong> functional takes the maximum statistic over all candidate dates and has optimal power against a single large break. The <strong>exponential</strong> functional computes <span>$\log(\text{mean}(\exp(W/2)))$</span> and the <strong>mean</strong> functional computes <span>$\text{mean}(W)$</span>; both weight every candidate date and gain power against small or gradual parameter changes (Andrews &amp; Ploberger 1994). All three report the same <code>break_index</code> –- the date at which the base statistic peaks –- because only the aggregation, not the argmax, differs across functionals.</p><div class="admonition is-info" id="Technical-Note-448d19709e84b8f2"><header class="admonition-header">Technical Note<a class="admonition-anchor" href="#Technical-Note-448d19709e84b8f2" title="Permalink"></a></header><div class="admonition-body"><p>P-values interpolate the Hansen (1997) critical-value tables, which are indexed by the number of parameters <span>$k$</span> and the functional. Models with <span>$k &gt; 10$</span> reuse the <span>$k = 10$</span> column. The tables are computed for the standard trimming <span>$\pi = 0.15$</span>, so a different <code>trimming</code> changes the statistic but not the reference distribution. Interpolated p-values are floored at 0.005 beyond the 1% critical value and rise toward 1.0 below the 10% value; the asymptotic null distribution is a functional of a <span>$k$</span>-dimensional Brownian bridge.</p></div></div><pre><code class="language-julia hljs">Random.seed!(101)
+X_a = hcat(ones(200), randn(200))
+y_a = vcat(X_a[1:100, :] * [1.0, 2.0],           # slope 2.0 for the first half
+           X_a[101:end, :] * [1.0, 5.0]) + 0.5 * randn(200)
+
+report(andrews_test(y_a, X_a; test=:supwald))</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi"><span class="sgr1">             Andrews (1993) Structural Break Test</span>
+
+ <span class="sgr1"> Specification     </span> <span class="sgr1">                                         </span>
+
+  H₀                                      No structural break
+  H₁                  Single structural break at unknown date
+  Test type                                          Sup-Wald
+  Parameters tested                                         2
+  Trimming fraction                                      0.15
+  Observations                                            200
+
+<span class="sgr1">               Results</span>
+
+ <span class="sgr1">                    </span> <span class="sgr1">         Value </span>
+
+  Test statistic       1803.7666 ***
+  P-value                      0.005
+  Break date (index)             100
+  Break fraction                 0.5
+
+<span class="sgr1">    Critical Values</span>
+
+ <span class="sgr1">    1% </span> <span class="sgr1">    5% </span> <span class="sgr1">  10% </span>
+
+  14.72   11.03   9.16
+
+
+  Conclusion   Reject H₀ at 5% level: evidence of a structural break at observation 100
+  Note         *** p&lt;0.01, ** p&lt;0.05, * p&lt;0.10</code></pre><p>The sup-Wald statistic of 1803.77 sits two orders of magnitude above the 1% critical value of 14.72, so the p-value hits its 0.005 floor and parameter constancy is rejected decisively. The estimated break at observation 100 –- a break fraction of exactly 0.5 –- recovers the true break date, and the 200-observation sample with a slope shift from 2.0 to 5.0 leaves no ambiguity about the split. This is the configuration the supremum functional is built for: one sharp, large change at a single date.</p><p>The exponential and mean functionals apply different weights to the same statistic sequence:</p><pre><code class="language-julia hljs">report(andrews_test(y_a, X_a; test=:expwald))</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi"><span class="sgr1">             Andrews (1993) Structural Break Test</span>
+
+ <span class="sgr1"> Specification     </span> <span class="sgr1">                                         </span>
+
+  H₀                                      No structural break
+  H₁                  Single structural break at unknown date
+  Test type                                          Exp-Wald
+  Parameters tested                                         2
+  Trimming fraction                                      0.15
+  Observations                                            200
+
+<span class="sgr1">              Results</span>
+
+ <span class="sgr1">                    </span> <span class="sgr1">       Value </span>
+
+  Test statistic       896.939 ***
+  P-value                    0.005
+  Break date (index)           100
+  Break fraction               0.5
+
+<span class="sgr1">   Critical Values</span>
+
+ <span class="sgr1">   1% </span> <span class="sgr1">   5% </span> <span class="sgr1">  10% </span>
+
+  5.01   3.21   2.38
+
+
+  Conclusion   Reject H₀ at 5% level: evidence of a structural break at observation 100
+  Note         *** p&lt;0.01, ** p&lt;0.05, * p&lt;0.10</code></pre><pre><code class="language-julia hljs">report(andrews_test(y_a, X_a; test=:meanwald))</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi"><span class="sgr1">             Andrews (1993) Structural Break Test</span>
+
+ <span class="sgr1"> Specification     </span> <span class="sgr1">                                         </span>
+
+  H₀                                      No structural break
+  H₁                  Single structural break at unknown date
+  Test type                                         Mean-Wald
+  Parameters tested                                         2
+  Trimming fraction                                      0.15
+  Observations                                            200
+
+<span class="sgr1">               Results</span>
+
+ <span class="sgr1">                    </span> <span class="sgr1">        Value </span>
+
+  Test statistic       411.7328 ***
+  P-value                     0.005
+  Break date (index)            100
+  Break fraction                0.5
+
+<span class="sgr1">   Critical Values</span>
+
+ <span class="sgr1">   1% </span> <span class="sgr1">   5% </span> <span class="sgr1">  10% </span>
+
+  7.58   5.26   4.16
+
+
+  Conclusion   Reject H₀ at 5% level: evidence of a structural break at observation 100
+  Note         *** p&lt;0.01, ** p&lt;0.05, * p&lt;0.10</code></pre><p>Exp-Wald returns 896.94 against a 1% critical value of 5.01, and mean-Wald returns 411.73 against 7.58 –- both reject at the same 0.005 floor and both place the break at observation 100. The statistics are not comparable in level across functionals because each has its own null distribution; only the position relative to the matching critical values carries information. Agreement across all three functionals, as here, is the signature of a break sharp enough that the weighting scheme does not matter.</p><p>Under the null the test is correctly sized but not conservative, because the supremum searches over every admissible split:</p><pre><code class="language-julia hljs">Random.seed!(102)
+X_0 = hcat(ones(200), randn(200))
+y_0 = X_0 * [1.0, 2.0] + 0.5 * randn(200)        # no break
+r_0 = andrews_test(y_0, X_0; test=:supwald)
+(statistic = round(r_0.statistic, digits=3),
+ pvalue = round(r_0.pvalue, digits=3),
+ break_index = r_0.break_index)</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">(statistic = 9.967, pvalue = 0.078, break_index = 96)</code></pre><p>With no break in the data the statistic falls to 9.967, below the 5% critical value of 11.03, and the test correctly fails to reject at conventional levels. The p-value of 0.078 is nevertheless small enough to look suggestive, which is exactly the size behaviour to expect: the maximum of a Brownian-bridge functional over 140 candidate dates is large by construction, and the reported <code>break_index</code> of 96 is a sampling artefact with no economic content. Never read a break date from a test that does not reject.</p><h3 id="Options"><a class="docs-heading-anchor" href="#Options">Options</a><a id="Options-1"></a><a class="docs-heading-anchor-permalink" href="#Options" title="Permalink"></a></h3><table><tr><th style="text-align: right">Keyword</th><th style="text-align: right">Type</th><th style="text-align: right">Default</th><th style="text-align: right">Description</th></tr><tr><td style="text-align: right"><code>test</code></td><td style="text-align: right"><code>Symbol</code></td><td style="text-align: right"><code>:supwald</code></td><td style="text-align: right">Any of the nine functional/base-statistic combinations above</td></tr><tr><td style="text-align: right"><code>trimming</code></td><td style="text-align: right"><code>Real</code></td><td style="text-align: right"><code>0.15</code></td><td style="text-align: right">Fraction of the sample trimmed from each end, in <span>$(0, 0.5)$</span></td></tr></table><p>The test requires at least 20 observations and <span>$y$</span> and <span>$X$</span> with matching row counts.</p><h3 id="Return-values"><a class="docs-heading-anchor" href="#Return-values">Return values</a><a id="Return-values-1"></a><a class="docs-heading-anchor-permalink" href="#Return-values" title="Permalink"></a></h3><table><tr><th style="text-align: right">Field</th><th style="text-align: right">Type</th><th style="text-align: right">Description</th></tr><tr><td style="text-align: right"><code>statistic</code></td><td style="text-align: right"><code>T</code></td><td style="text-align: right">Functional applied to the base-statistic sequence</td></tr><tr><td style="text-align: right"><code>pvalue</code></td><td style="text-align: right"><code>T</code></td><td style="text-align: right">Interpolated p-value from the Hansen (1997) tables</td></tr><tr><td style="text-align: right"><code>break_index</code></td><td style="text-align: right"><code>Int</code></td><td style="text-align: right">Observation index at which the base statistic peaks</td></tr><tr><td style="text-align: right"><code>break_fraction</code></td><td style="text-align: right"><code>T</code></td><td style="text-align: right"><code>break_index / nobs</code></td></tr><tr><td style="text-align: right"><code>test_type</code></td><td style="text-align: right"><code>Symbol</code></td><td style="text-align: right">Test variant, e.g. <code>:supwald</code></td></tr><tr><td style="text-align: right"><code>critical_values</code></td><td style="text-align: right"><code>Dict{Int,T}</code></td><td style="text-align: right">Critical values keyed by <code>1</code>, <code>5</code>, <code>10</code> (percent)</td></tr><tr><td style="text-align: right"><code>stat_sequence</code></td><td style="text-align: right"><code>Vector{T}</code></td><td style="text-align: right">Base statistic at every candidate break date</td></tr><tr><td style="text-align: right"><code>trimming</code></td><td style="text-align: right"><code>T</code></td><td style="text-align: right">Trimming fraction used</td></tr><tr><td style="text-align: right"><code>nobs</code></td><td style="text-align: right"><code>Int</code></td><td style="text-align: right">Number of observations</td></tr><tr><td style="text-align: right"><code>n_params</code></td><td style="text-align: right"><code>Int</code></td><td style="text-align: right">Number of regressors <span>$k$</span></td></tr></table><p><code>plot_result(result)</code> draws the full <code>stat_sequence</code> over the trimmed candidate range, with the estimated break date as a vertical line and the 5% critical value as a dashed horizontal reference.</p><hr/><h2 id="Bai-Perron-Multiple-Break-Test"><a class="docs-heading-anchor" href="#Bai-Perron-Multiple-Break-Test">Bai-Perron Multiple Break Test</a><a id="Bai-Perron-Multiple-Break-Test-1"></a><a class="docs-heading-anchor-permalink" href="#Bai-Perron-Multiple-Break-Test" title="Permalink"></a></h2><p>The Bai-Perron (1998, 2003) procedure detects and dates multiple structural breaks. Dynamic programming finds the break dates that globally minimize the total sum of squared residuals, avoiding the suboptimality of sequential single-break searches.</p><p>The model with <span>$m$</span> breaks has <span>$m + 1$</span> regimes:</p><p class="math-container">\[y_t = X_t&#39; \beta_j + u_t, \quad t = T_{j-1} + 1, \ldots, T_j, \quad j = 1, \ldots, m + 1\]</p><p>where:</p><ul><li><span>$T_0 = 0$</span> and <span>$T_{m+1} = T$</span> are the sample boundaries</li><li><span>$T_1, \ldots, T_m$</span> are the unknown break dates</li><li><span>$\beta_j$</span> is the <span>$k \times 1$</span> parameter vector for regime <span>$j$</span></li></ul><p>The optimal break dates minimize the total SSR:</p><p class="math-container">\[(\hat{T}_1, \ldots, \hat{T}_m) = \arg\min_{T_1, \ldots, T_m} \sum_{j=1}^{m+1} \sum_{t=T_{j-1}+1}^{T_j} (y_t - X_t&#39; \hat{\beta}_j)^2\]</p><p>The <strong>sup-F test</strong> of <span>$l$</span> breaks against zero breaks is:</p><p class="math-container">\[\text{sup-}F(l) = \frac{(\text{SSR}_0 - \text{SSR}_l) / (l \cdot k)}{\text{SSR}_l / (T - (l+1) \cdot k)}\]</p><p>where:</p><ul><li><span>$\text{SSR}_0$</span> is the full-sample residual sum of squares</li><li><span>$\text{SSR}_l$</span> is the minimized SSR with <span>$l$</span> optimally placed breaks</li><li><span>$k$</span> is the number of regressors</li></ul><p>The <strong>sequential test</strong> <span>$\text{sup-}F(l+1 \mid l)$</span> asks whether one more break improves the fit over the <span>$l$</span>-break model. Two <strong>information criteria</strong> offer an alternative to sequential testing:</p><p class="math-container">\[\text{BIC}(m) = T \ln(\text{SSR}_m / T) + (m+1) k \ln T\]</p><p class="math-container">\[\text{LWZ}(m) = T \ln(\text{SSR}_m / T) + (m+1) k \cdot 0.299 (\ln T)^{2.1}\]</p><p>where:</p><ul><li><span>$m$</span> is the number of breaks</li><li><span>$(m+1)k$</span> is the total number of estimated coefficients</li><li>the LWZ criterion (Liu, Wu &amp; Zidek 1997) penalizes each additional regime more heavily than BIC</li></ul><p>Both criteria are always computed; <code>criterion</code> chooses which one sets the reported <code>n_breaks</code>.</p><div class="admonition is-info" id="Technical-Note-32636fcf9b9746df"><header class="admonition-header">Technical Note<a class="admonition-anchor" href="#Technical-Note-32636fcf9b9746df" title="Permalink"></a></header><div class="admonition-body"><p>The dynamic program has complexity <span>$O(T^2 \cdot m_{\max})$</span>. A segment SSR matrix is pre-computed once and reused across all candidate configurations. Each segment needs at least <span>$h = \max(k+1, \lceil \pi T \rceil)$</span> observations, so <code>max_breaks</code> is silently reduced to <span>$\lfloor T/h \rfloor - 1$</span> when the requested value is infeasible. Break-date confidence intervals follow Bai (1997), with a half-width of <span>$1.96^2 \hat{\sigma}^2 / (\delta&#39; \hat{Q} \delta)$</span> where <span>$\delta$</span> is the coefficient change at the break.</p></div></div><pre><code class="language-julia hljs">Random.seed!(103)
+X_2 = hcat(ones(300), randn(300))
+y_2 = vcat(X_2[1:100, :]   * [1.0,  2.0],        # regime 1
+           X_2[101:200, :] * [3.0, -1.0],        # regime 2
+           X_2[201:300, :] * [0.0,  4.0]) + 0.5 * randn(300)
+
+bp = bai_perron_test(y_2, X_2; max_breaks=5, criterion=:bic)
+report(bp)</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi"><span class="sgr1">    Bai-Perron Multiple Structural Break Test</span>
+
+ <span class="sgr1"> Specification     </span> <span class="sgr1">                            </span>
+
+  H₀                        No structural breaks
+  H₁                  Multiple structural breaks
+  Max breaks tested                            5
+  Trimming fraction                         0.15
+  Observations                               300
+
+<span class="sgr1"> sup-F Tests (l breaks vs. 0 breaks)</span>
+
+ <span class="sgr1"> Test     </span> <span class="sgr1">     Statistic </span> <span class="sgr1"> P-value </span>
+
+  sup-F(1)    225.7862 ***     0.001
+  sup-F(2)   1554.5077 ***     0.001
+  sup-F(3)   1052.9676 ***     0.001
+  sup-F(4)    798.1265 ***     0.001
+  sup-F(5)    643.2769 ***     0.001
+
+<span class="sgr1">Sequential Tests (l+1 breaks vs. l breaks)</span>
+
+ <span class="sgr1"> Test       </span> <span class="sgr1">     Statistic </span> <span class="sgr1"> P-value </span>
+
+  sup-F(2|1)   1142.2137 ***     0.001
+  sup-F(3|2)         3.2071     0.7651
+  sup-F(4|3)         2.4403     0.8297
+  sup-F(5|4)          1.994     0.8668
+
+<span class="sgr1">Information Criteria (* = selected)</span>
+
+ <span class="sgr1"> Breaks </span> <span class="sgr1">       BIC </span> <span class="sgr1">      LWZ </span>
+
+       0       536.9     548.64
+       1      270.36     293.86
+       2   -369.64 *   -334.4 *
+       3     -364.75    -317.76
+       4     -358.35    -299.61
+       5     -351.07    -280.58
+
+<span class="sgr1">    Estimated Break Dates</span>
+
+ <span class="sgr1"> Break </span> <span class="sgr1"> Date </span> <span class="sgr1">     95% CI </span>
+
+      1    100    [99, 101]
+      2    200   [199, 201]
+
+
+  Conclusion   Estimated 2 structural breaks at observations 100, 200
+  Note         *** p&lt;0.01, ** p&lt;0.05, * p&lt;0.10</code></pre><p>The procedure recovers the design exactly: two breaks at observations 100 and 200, each with a 95% confidence interval two observations wide. The sequential column tells the same story –- sup-F(2|1) is 1142.21 with a p-value at the 0.001 floor, while sup-F(3|2) falls to 3.21 with a p-value of 0.765 –- so the sequential rule stops at two breaks. BIC and LWZ both mark <span>$m = 2$</span> as the minimum, so all three selection devices agree; disagreement between them is the normal signal that the break structure is weakly identified.</p><p>The regime coefficients recover the true parameter vectors to within two standard errors:</p><pre><code class="language-julia hljs">[(regime = j,
+  intercept = round(c[1], digits=2), se_intercept = round(s[1], digits=3),
+  slope = round(c[2], digits=2), se_slope = round(s[2], digits=3))
+ for (j, (c, s)) in enumerate(zip(bp.regime_coefs, bp.regime_ses))]</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">3-element Vector{@NamedTuple{regime::Int64, intercept::Float64, se_intercept::Float64, slope::Float64, se_slope::Float64}}:
+ (regime = 1, intercept = 0.99, se_intercept = 0.054, slope = 1.92, se_slope = 0.055)
+ (regime = 2, intercept = 2.98, se_intercept = 0.045, slope = -0.99, se_slope = 0.047)
+ (regime = 3, intercept = 0.0, se_intercept = 0.055, slope = 4.0, se_slope = 0.059)</code></pre><p>Regime 1 returns <span>$(0.99, 1.92)$</span> against the true <span>$(1.0, 2.0)$</span>, regime 2 returns <span>$(2.98, -0.99)$</span> against <span>$(3.0, -1.0)$</span>, and regime 3 returns <span>$(0.00, 4.00)$</span> against <span>$(0.0, 4.0)$</span>. Standard errors near 0.05 make every deviation statistically indistinguishable from zero. Because the break dates are estimated, these standard errors condition on the selected dates and understate the true uncertainty; use <code>break_cis</code> to gauge how much the dates themselves could move.</p><p>P-values interpolate the Bai &amp; Perron (1998, 2003) critical-value tables, indexed by the number of breaking regressors <span>$q$</span> (every regressor breaks in this pure structural-change model, so <span>$q = k$</span>, and <span>$q \leq 10$</span> is required) and by the trimming fraction <span>$\varepsilon \in \{0.05, 0.10, 0.15, 0.20, 0.25\}$</span>. A requested trimming off that grid snaps to the nearest tabulated value with a warning. The sup-F tables cover 9, 8, 5, 3, and 2 breaks for the five trimmings respectively; a statistic beyond the tabulated break count returns <code>NaN</code> rather than an extrapolated number.</p><h3 id="Options-2"><a class="docs-heading-anchor" href="#Options-2">Options</a><a class="docs-heading-anchor-permalink" href="#Options-2" title="Permalink"></a></h3><table><tr><th style="text-align: right">Keyword</th><th style="text-align: right">Type</th><th style="text-align: right">Default</th><th style="text-align: right">Description</th></tr><tr><td style="text-align: right"><code>max_breaks</code></td><td style="text-align: right"><code>Int</code></td><td style="text-align: right"><code>5</code></td><td style="text-align: right">Maximum number of breaks searched, reduced automatically when segments are too short</td></tr><tr><td style="text-align: right"><code>trimming</code></td><td style="text-align: right"><code>Real</code></td><td style="text-align: right"><code>0.15</code></td><td style="text-align: right">Minimum fraction of observations per segment</td></tr><tr><td style="text-align: right"><code>criterion</code></td><td style="text-align: right"><code>Symbol</code></td><td style="text-align: right"><code>:bic</code></td><td style="text-align: right">Criterion that sets <code>n_breaks</code>: <code>:bic</code> or <code>:lwz</code></td></tr></table><h3 id="Return-values-2"><a class="docs-heading-anchor" href="#Return-values-2">Return values</a><a class="docs-heading-anchor-permalink" href="#Return-values-2" title="Permalink"></a></h3><table><tr><th style="text-align: right">Field</th><th style="text-align: right">Type</th><th style="text-align: right">Description</th></tr><tr><td style="text-align: right"><code>n_breaks</code></td><td style="text-align: right"><code>Int</code></td><td style="text-align: right">Number of breaks selected by <code>criterion</code></td></tr><tr><td style="text-align: right"><code>break_dates</code></td><td style="text-align: right"><code>Vector{Int}</code></td><td style="text-align: right">Estimated break date indices</td></tr><tr><td style="text-align: right"><code>break_cis</code></td><td style="text-align: right"><code>Vector{Tuple{Int,Int}}</code></td><td style="text-align: right">95% confidence intervals for the break dates (Bai 1997)</td></tr><tr><td style="text-align: right"><code>regime_coefs</code></td><td style="text-align: right"><code>Vector{Vector{T}}</code></td><td style="text-align: right">OLS coefficients for each of the <span>$m+1$</span> regimes</td></tr><tr><td style="text-align: right"><code>regime_ses</code></td><td style="text-align: right"><code>Vector{Vector{T}}</code></td><td style="text-align: right">Standard errors for each regime</td></tr><tr><td style="text-align: right"><code>supf_stats</code></td><td style="text-align: right"><code>Vector{T}</code></td><td style="text-align: right">sup-F(l) statistics for <span>$l = 1, \ldots, m_{\max}$</span></td></tr><tr><td style="text-align: right"><code>supf_pvalues</code></td><td style="text-align: right"><code>Vector{T}</code></td><td style="text-align: right">P-values for sup-F, <code>NaN</code> beyond the tabulated break count</td></tr><tr><td style="text-align: right"><code>sequential_stats</code></td><td style="text-align: right"><code>Vector{T}</code></td><td style="text-align: right">Sequential sup-F(l+1|l) statistics</td></tr><tr><td style="text-align: right"><code>sequential_pvalues</code></td><td style="text-align: right"><code>Vector{T}</code></td><td style="text-align: right">P-values for the sequential statistics</td></tr><tr><td style="text-align: right"><code>bic_values</code></td><td style="text-align: right"><code>Vector{T}</code></td><td style="text-align: right">BIC for 0 through <span>$m_{\max}$</span> breaks</td></tr><tr><td style="text-align: right"><code>lwz_values</code></td><td style="text-align: right"><code>Vector{T}</code></td><td style="text-align: right">LWZ for 0 through <span>$m_{\max}$</span> breaks</td></tr><tr><td style="text-align: right"><code>trimming</code></td><td style="text-align: right"><code>T</code></td><td style="text-align: right">Trimming fraction used</td></tr><tr><td style="text-align: right"><code>nobs</code></td><td style="text-align: right"><code>Int</code></td><td style="text-align: right">Number of observations</td></tr></table><p><code>plot_result(bp)</code> draws the BIC and LWZ paths against the number of breaks with the selection marked; <code>plot_result(bp; view=:breaks)</code> draws the estimated break dates as a timeline with their confidence bands shaded.</p><hr/><h2 id="Factor-Model-Break-Tests"><a class="docs-heading-anchor" href="#Factor-Model-Break-Tests">Factor Model Break Tests</a><a id="Factor-Model-Break-Tests-1"></a><a class="docs-heading-anchor-permalink" href="#Factor-Model-Break-Tests" title="Permalink"></a></h2><p>A factor model assumes that a large cross-section <span>$X_{it}$</span> loads on a few common factors <span>$F_t$</span> through time-invariant loadings <span>$\Lambda$</span>. Instability in the loadings breaks principal-components estimation and everything built on it. Three tests target different forms of that instability, and all three accept either a <span>$T \times N$</span> matrix or an estimated <a href="../api/multivariate/#MacroEconometricModels.FactorModel"><code>FactorModel</code></a>.</p><p>All three treat the break date as unknown, so all three maximize a statistic over the trimmed grid <span>$\pi \in [0.15, 0.85]$</span>. A supremum is not <span>$\chi^2$</span>: Chen-Dolado-Gonzalo reads its p-value from the Andrews (1993)/Hansen (1997) sup-Wald tables, and the two pooled tests –- Breitung-Eickmeier and Han-Inoue –- simulate their null references conditional on the estimated factors.</p><p>The examples in this section use one panel with genuinely stable loadings and one in which every loading shifts halfway through the sample:</p><pre><code class="language-julia hljs">Random.seed!(104)
+F_t = randn(200, 3)                              # 3 factors, T = 200
+Lambda_1 = randn(60, 3)                          # loadings for N = 60 variables
+Lambda_2 = Lambda_1 .+ 1.5 .* randn(60, 3)       # every loading shifts at t = 100
+
+X_stable = F_t * Lambda_1&#39; + 0.5 * randn(200, 60)
+X_break = vcat(F_t[1:100, :] * Lambda_1&#39;,
+               F_t[101:end, :] * Lambda_2&#39;) + 0.5 * randn(200, 60)
+size(X_stable, 1), size(X_stable, 2)</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">(200, 60)</code></pre><h3 id="Han-Inoue-(2015)"><a class="docs-heading-anchor" href="#Han-Inoue-(2015)">Han-Inoue (2015)</a><a id="Han-Inoue-(2015)-1"></a><a class="docs-heading-anchor-permalink" href="#Han-Inoue-(2015)" title="Permalink"></a></h3><p>The Han-Inoue test asks whether the panel&#39;s loadings break at <strong>one common date</strong>. For variable <span>$i$</span> and candidate break date <span>$t$</span>, the loading regression <span>$x_{it} = F_t&#39; \lambda_i + e_{it}$</span> is estimated on <span>$[1, t]$</span> and <span>$[t+1, T]$</span>, giving the Chow-Wald statistic</p><p class="math-container">\[W_i(t) = (\hat{\lambda}_{1,i} - \hat{\lambda}_{2,i})&#39; \left[ \hat{\sigma}_i^2 \left( (F_1&#39;F_1)^{-1} + (F_2&#39;F_2)^{-1} \right) \right]^{-1} (\hat{\lambda}_{1,i} - \hat{\lambda}_{2,i})\]</p><p>and the panel statistic pools the evidence at each date before maximizing, then standardizes against its simulated null:</p><p class="math-container">\[W = \sup_t \sum_{i=1}^{N} W_i(t), \qquad Z = \frac{W - \hat{\mu}}{\hat{\sigma}}\]</p><p>where:</p><ul><li><span>$\hat{\lambda}_{1,i}$</span> and <span>$\hat{\lambda}_{2,i}$</span> are sub-sample loading estimates for variable <span>$i$</span></li><li><span>$\hat{\sigma}_i^2$</span> is the full-sample residual variance for variable <span>$i$</span></li><li><span>$F_1$</span> and <span>$F_2$</span> are the estimated factor matrices for the two sub-samples</li><li><span>$\hat{\mu}$</span> and <span>$\hat{\sigma}$</span> are the mean and standard deviation of <span>$W$</span> under the simulated null</li></ul><p>Pooling at a common date is what distinguishes Han-Inoue from Breitung-Eickmeier below, which sups each series at its own date: Han-Inoue concentrates power on an economy-wide break, and its estimated date is the single date the whole panel agrees on. At any fixed date each <span>$W_i(t)$</span> is approximately <span>$\chi^2(r)$</span>, so the pooled path concentrates near <span>$Nr$</span> under the null and its supremum has no tabulated reference. The null distribution of <span>$W$</span> is therefore simulated conditional on the estimated factors, with the same machinery as Breitung-Eickmeier: per-series null statistic paths from <span>$N(0,1)$</span> series projected off <span>$\hat{F}$</span>, resampled into panels of <span>$N$</span> and pooled, with <code>nsim</code>, <code>nboot</code>, and <code>seed</code> controlling the draws.</p><pre><code class="language-julia hljs">report(factor_break_test(X_stable, 3; method=:han_inoue))</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi"><span class="sgr1">          Factor Model Structural Break Test</span>
+
+ <span class="sgr1"> Specification </span> <span class="sgr1">                                     </span>
+
+  H₀                       Factor loadings are stable
+  H₁              Structural break in factor loadings
+  Method                    Han-Inoue (2015) Sup-Wald
+  Factors                                           3
+  Variables (N)                                    60
+  Time (T)                                        200
+
+<span class="sgr1">             Results</span>
+
+ <span class="sgr1">                    </span> <span class="sgr1">    Value </span>
+
+  Test statistic       -0.4777
+  P-value                0.6712
+  Break date (index)         52
+
+<span class="sgr1">  Largest per-series break statistics</span>
+
+ <span class="sgr1"> Series </span> <span class="sgr1"> Sup statistic </span> <span class="sgr1"> Break date </span>
+
+       5         17.8884           47
+      33         15.0134           44
+      37         14.0736          138
+       3         13.9325          160
+      36         13.0981           33
+
+
+  Conclusion   Fail to reject H₀: factor loadings appear stable
+  Note         *** p&lt;0.01, ** p&lt;0.05, * p&lt;0.10</code></pre><pre><code class="language-julia hljs">report(factor_break_test(X_break, 3; method=:han_inoue))</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi"><span class="sgr1">          Factor Model Structural Break Test</span>
+
+ <span class="sgr1"> Specification </span> <span class="sgr1">                                     </span>
+
+  H₀                       Factor loadings are stable
+  H₁              Structural break in factor loadings
+  Method                    Han-Inoue (2015) Sup-Wald
+  Factors                                           3
+  Variables (N)                                    60
+  Time (T)                                        200
+
+<span class="sgr1">               Results</span>
+
+ <span class="sgr1">                    </span> <span class="sgr1">        Value </span>
+
+  Test statistic       453.2525 ***
+  P-value                    &lt;0.001
+  Break date (index)            100
+
+<span class="sgr1">  Largest per-series break statistics</span>
+
+ <span class="sgr1"> Series </span> <span class="sgr1"> Sup statistic </span> <span class="sgr1"> Break date </span>
+
+      23         177.068          100
+      47         174.891          100
+      31         171.384          100
+      44         164.257           98
+      36         162.115          100
+
+
+  Conclusion   Reject H₀ at 5% level: evidence of loading instability at observation 100
+  Note         *** p&lt;0.01, ** p&lt;0.05, * p&lt;0.10</code></pre><p>On the stable panel the standardized statistic is <span>$-0.4777$</span> –- half a standard deviation <em>below</em> the simulated null mean –- with a p-value of 0.6712, so loading stability survives. On the broken panel the statistic is 453.2525 standard deviations above the null, the p-value hits the <span>$1/2001$</span> resampling floor of 0.0005, and the estimated break lands on observation 100, the true date. Note the break date of 52 reported on the stable panel –- meaningless, because the null was not rejected.</p><p>Both pooled tests also report the largest <strong>per-series</strong> sup statistics with each series&#39; own maximizing date, stored in <code>series_statistics</code> and <code>series_break_dates</code>. On the broken panel every series posts a three-digit statistic because every loading moved by construction; when only a few series break, the ranking singles them out –- subject to the attribution caveat in Pitfall 5.</p><h3 id="Breitung-Eickmeier-(2011)"><a class="docs-heading-anchor" href="#Breitung-Eickmeier-(2011)">Breitung-Eickmeier (2011)</a><a id="Breitung-Eickmeier-(2011)-1"></a><a class="docs-heading-anchor-permalink" href="#Breitung-Eickmeier-(2011)" title="Permalink"></a></h3><p>The Breitung-Eickmeier test runs one loading-break regression per series and pools the results across the cross-section. For series <span>$i$</span> and candidate date <span>$\tau$</span>, the auxiliary regression</p><p class="math-container">\[x_{it} = \lambda_i&#39; \hat{F}_t + \delta_i&#39; \hat{F}_t \cdot 1(t &gt; \tau) + e_{it}\]</p><p>is tested for <span>$H_0: \delta_i = 0$</span> by the LM statistic</p><p class="math-container">\[LM_i(\tau) = \frac{S_i(\tau)&#39; \left[ A_1(\tau)^{-1} + A_2(\tau)^{-1} \right] S_i(\tau)}{\hat{\sigma}_i^2}\]</p><p>where:</p><ul><li><span>$S_i(\tau) = \sum_{t \leq \tau} \hat{F}_t \hat{e}_{it}$</span> is the partial sum of the full-sample loading scores</li><li><span>$A_1(\tau) = \sum_{t \leq \tau} \hat{F}_t \hat{F}_t&#39;$</span> and <span>$A_2(\tau) = \hat{F}&#39;\hat{F} - A_1(\tau)$</span></li><li><span>$\hat{\sigma}_i^2$</span> is the full-sample idiosyncratic variance of series <span>$i$</span></li></ul><p>At a fixed <span>$\tau$</span> this is algebraically the Chow-Wald statistic for equality of the pre- and post-break loadings of series <span>$i$</span>, and is asymptotically <span>$\chi^2(r)$</span>. The break date is unknown, so the series-level statistic is the supremum <span>$M_i = \sup_\tau LM_i(\tau)$</span>, and the panel statistic standardizes the pooled sum:</p><p class="math-container">\[Z = \frac{\sum_{i=1}^{N} M_i - N \hat{\mu}}{\hat{\sigma} \sqrt{N}}\]</p><p>where <span>$\hat{\mu}$</span> and <span>$\hat{\sigma}$</span> are the mean and standard deviation of <span>$M_i$</span> under the null. A supremum of <span>$LM_i(\tau)$</span> is not <span>$\chi^2(r)$</span> and a pool of <span>$N$</span> of them is not <span>$\chi^2(Nr)$</span>, so both moments are simulated rather than tabulated.</p><div class="admonition is-info" id="Technical-Note-dc2a19be8685185"><header class="admonition-header">Technical Note<a class="admonition-anchor" href="#Technical-Note-dc2a19be8685185" title="Permalink"></a></header><div class="admonition-body"><p>The null reference draws <code>nsim</code> independent <span>$N(0,1)$</span> series of length <span>$T$</span>, projects them off <span>$\hat{F}$</span>, and runs them through the same statistic path, so it conditions on the estimated factors and on the trimmed grid actually in use. The p-value is the Monte Carlo upper tail of <span>$\sum_i M_i$</span> under resampling from that pool, which accommodates the right skewness a normal approximation to the sum would miss. <code>nsim</code>, <code>nboot</code>, and <code>seed</code> control the simulation; the fixed default seed makes the p-value reproducible across calls on the same data.</p></div></div><pre><code class="language-julia hljs">report(factor_break_test(X_stable, 3; method=:breitung_eickmeier))</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi"><span class="sgr1">          Factor Model Structural Break Test</span>
+
+ <span class="sgr1"> Specification </span> <span class="sgr1">                                     </span>
+
+  H₀                       Factor loadings are stable
+  H₁              Structural break in factor loadings
+  Method          Breitung-Eickmeier (2011) Pooled LM
+  Factors                                           3
+  Variables (N)                                    60
+  Time (T)                                        200
+
+<span class="sgr1">            Results</span>
+
+ <span class="sgr1">                    </span> <span class="sgr1">   Value </span>
+
+  Test statistic       0.4886
+  P-value               0.3038
+  Break date (index)        52
+
+<span class="sgr1">  Largest per-series break statistics</span>
+
+ <span class="sgr1"> Series </span> <span class="sgr1"> Sup statistic </span> <span class="sgr1"> Break date </span>
+
+       5         17.8884           47
+      33         15.0134           44
+      37         14.0736          138
+       3         13.9325          160
+      36         13.0981           33
+
+
+  Conclusion   Fail to reject H₀: factor loadings appear stable
+  Note         *** p&lt;0.01, ** p&lt;0.05, * p&lt;0.10</code></pre><pre><code class="language-julia hljs">report(factor_break_test(X_break, 3; method=:breitung_eickmeier))</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi"><span class="sgr1">          Factor Model Structural Break Test</span>
+
+ <span class="sgr1"> Specification </span> <span class="sgr1">                                     </span>
+
+  H₀                       Factor loadings are stable
+  H₁              Structural break in factor loadings
+  Method          Breitung-Eickmeier (2011) Pooled LM
+  Factors                                           3
+  Variables (N)                                    60
+  Time (T)                                        200
+
+<span class="sgr1">               Results</span>
+
+ <span class="sgr1">                    </span> <span class="sgr1">        Value </span>
+
+  Test statistic       280.9414 ***
+  P-value                    &lt;0.001
+  Break date (index)            100
+
+<span class="sgr1">  Largest per-series break statistics</span>
+
+ <span class="sgr1"> Series </span> <span class="sgr1"> Sup statistic </span> <span class="sgr1"> Break date </span>
+
+      23         177.068          100
+      47         174.891          100
+      31         171.384          100
+      44         164.257           98
+      36         162.115          100
+
+
+  Conclusion   Reject H₀ at 5% level: evidence of loading instability at observation 100
+  Note         *** p&lt;0.01, ** p&lt;0.05, * p&lt;0.10</code></pre><p>On the stable panel the pooled statistic is 0.4886 –- half a standard deviation above the simulated null mean –- with a p-value of 0.3038. On the broken panel it is 280.9414, the p-value hits 0.0005, and the break is dated at observation 100, the true date. That 0.0005 is a floor, not a measurement: with <code>nboot = 2000</code> resampling draws the smallest attainable p-value is <span>$1/2001$</span>. Because <span>$Z$</span> is standardized by the cross-section, the statistic is comparable across panels of different width, unlike the raw pooled sum.</p><p>The <code>FactorModel</code> dispatch reuses factors that have already been estimated:</p><pre><code class="language-julia hljs">fm = estimate_factors(X_break, 3)
+be = factor_break_test(fm; method=:breitung_eickmeier)
+(statistic = round(be.statistic, digits=3),
+ pvalue = round(be.pvalue, digits=4),
+ break_date = be.break_date)</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">(statistic = 280.941, pvalue = 0.0005, break_date = 100)</code></pre><p>The dispatch reads <code>fm.X</code> and <code>fm.r</code> off the model and returns the same statistic, 280.941 at observation 100, as the matrix call. Use it whenever a factor model has already been fitted for other purposes, since it avoids re-running the principal-components step.</p><h3 id="Chen-Dolado-Gonzalo-(2014)"><a class="docs-heading-anchor" href="#Chen-Dolado-Gonzalo-(2014)">Chen-Dolado-Gonzalo (2014)</a><a id="Chen-Dolado-Gonzalo-(2014)-1"></a><a class="docs-heading-anchor-permalink" href="#Chen-Dolado-Gonzalo-(2014)" title="Permalink"></a></h3><p>The Chen-Dolado-Gonzalo test targets a <strong>big break</strong> –- one large enough that the full sample needs more principal components than either sub-sample –- and is the only one of the three that does not require <span>$r$</span> as an input. A big break in <span>$\Lambda$</span> inflates the apparent number of factors, and the extra estimated factors are mixtures of the pre- and post-break factor spaces. That mixing is the signal. Regressing the first estimated factor on the remaining ones,</p><p class="math-container">\[\hat{F}_{1t} = c + \beta&#39; \hat{F}_{2:r,t} + u_t\]</p><p>gives coefficients that are constant under <span>$H_0$</span> –- and zero, since principal components are orthogonal over the full sample –- but shift at the break date under <span>$H_1$</span>. The test is a sup-LM test for instability in that regression:</p><p class="math-container">\[\text{CDG} = \sup_{\pi \in [0.15,\, 0.85]} \frac{S(\tau)&#39; \hat{\Omega}^{-1} S(\tau)}{\pi (1 - \pi)}, \qquad \pi = \tau / T\]</p><p>where:</p><ul><li><span>$S(\tau) = T^{-1/2} \sum_{t \leq \tau} Z_t \hat{u}_t$</span> is the partial sum of the regression scores, with <span>$Z_t = (1, \hat{F}_{2:r,t}&#39;)&#39;$</span></li><li><span>$\hat{u}_t$</span> are the full-sample regression residuals</li><li><span>$\hat{\Omega}$</span> is a Newey-West HAC estimate of the long-run variance of <span>$Z_t u_t$</span>, with the Newey-West (1994) automatic bandwidth</li></ul><p>The p-value comes from the Andrews (1993)/Hansen (1997) sup-Wald tables with <span>$p = r$</span> parameters under test –- the intercept plus <span>$r - 1$</span> slopes –- the same machinery <code>andrews_test</code> uses. The HAC variance is not optional: estimated factors are serially correlated, and a homoskedastic-i.i.d. variance makes the same statistic reject far too often.</p><p>Omitting <span>$r$</span> selects it by the Bai-Ng (2002) IC2 criterion over <span>$r \leq \min(\lfloor\sqrt{\min(T, N)}\rfloor, 10)$</span>:</p><pre><code class="language-julia hljs">report(factor_break_test(X_break; method=:chen_dolado_gonzalo))</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi"><span class="sgr1">               Factor Model Structural Break Test</span>
+
+ <span class="sgr1"> Specification </span> <span class="sgr1">                                              </span>
+
+  H₀                                Factor loadings are stable
+  H₁                       Structural break in factor loadings
+  Method          Chen-Dolado-Gonzalo (2014) Regression Sup-LM
+  Factors                                                    7
+  Variables (N)                                             60
+  Time (T)                                                 200
+
+<span class="sgr1">              Results</span>
+
+ <span class="sgr1">                    </span> <span class="sgr1">      Value </span>
+
+  Test statistic       23.4356 **
+  P-value                  0.0138
+  Break date (index)          100
+
+
+  Conclusion   Reject H₀ at 5% level: evidence of loading instability at observation 100
+  Note         *** p&lt;0.01, ** p&lt;0.05, * p&lt;0.10</code></pre><p>IC2 reads 7 factors off the broken panel –- more than the 3 that generated it, which is exactly the inflation the test exploits –- and the sup-LM statistic of 23.4356 rejects at 5% with the break dated at observation 100. On the stable panel the same call selects 5 factors and returns 10.0023 with a p-value of 0.3620.</p><p>Supplying <span>$r$</span> is not automatically the stronger choice:</p><pre><code class="language-julia hljs">cdg_r3 = factor_break_test(X_break, 3; method=:chen_dolado_gonzalo)
+(statistic = round(cdg_r3.statistic, digits=3),
+ pvalue = round(cdg_r3.pvalue, digits=4),
+ break_date = cdg_r3.break_date)</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">(statistic = 7.418, pvalue = 0.3875, break_date = 126)</code></pre><p>Fixing <span>$r$</span> at 3 –- the number of factors that generated the data –- drops the statistic to 7.418 and the p-value to 0.3875, and the test no longer rejects: the extra factor directions the break creates are precisely what was discarded. Neither call dominates, and which one wins depends on how much of the cross-section moves. In simulation on <span>$T = 200$</span>, <span>$N = 60$</span>, <span>$r = 3$</span> panels, a sign flip in half the loadings is found 69% of the time at 5% with <span>$r = 3$</span> supplied against 41% by the IC2 dispatch, while a flip in only a quarter of them reverses the ranking, 15% against 46%.</p><div class="admonition is-warning" id="A-break-that-flips-every-loading-is-not-identified-51a3996ef9315e26"><header class="admonition-header">A break that flips every loading is not identified<a class="admonition-anchor" href="#A-break-that-flips-every-loading-is-not-identified-51a3996ef9315e26" title="Permalink"></a></header><div class="admonition-body"><p>If every loading changes sign at <span>$\tau$</span>, then <span>$X = \tilde{F}\Lambda&#39;$</span> with <span>$\tilde{F}_t = F_t$</span> before the break and <span>$-F_t$</span> after fits the same data with <em>stable</em> loadings. No test on this page rejects that alternative, and none should: in simulation all three reject it at roughly their nominal size (0.035, 0.040, and 0.030 at the 5% level). Loading breaks are identified only relative to a fixed normalization of the factors.</p></div></div><h3 id="Choosing-a-method"><a class="docs-heading-anchor" href="#Choosing-a-method">Choosing a method</a><a id="Choosing-a-method-1"></a><a class="docs-heading-anchor-permalink" href="#Choosing-a-method" title="Permalink"></a></h3><table><tr><th style="text-align: right">Feature needed</th><th style="text-align: right">Recommended</th><th style="text-align: right">Why</th></tr><tr><td style="text-align: right">Reject/fail decision, <span>$r$</span> known</td><td style="text-align: right"><code>:breitung_eickmeier</code> or <code>:han_inoue</code></td><td style="text-align: right">Size near nominal, power 1.00</td></tr><tr><td style="text-align: right">One economy-wide break date</td><td style="text-align: right"><code>:han_inoue</code></td><td style="text-align: right">Pools evidence at a common date</td></tr><tr><td style="text-align: right">Series breaking at their own dates</td><td style="text-align: right"><code>:breitung_eickmeier</code></td><td style="text-align: right">Sups each series separately</td></tr><tr><td style="text-align: right"><span>$r$</span> unknown</td><td style="text-align: right"><code>:chen_dolado_gonzalo</code></td><td style="text-align: right">Only method not needing <span>$r$</span></td></tr><tr><td style="text-align: right">Very narrow panel (<span>$N \lesssim 10$</span>)</td><td style="text-align: right"><code>:breitung_eickmeier</code></td><td style="text-align: right">Han-Inoue over-rejects there</td></tr></table><p>Simulated size at the 5% level with stable loadings runs 0.017 to 0.043 for Breitung-Eickmeier, 0.050 to 0.055 for Han-Inoue, and 0.013 to 0.063 for Chen-Dolado-Gonzalo across <span>$(T, N, r)$</span> from <span>$(35, 8, 2)$</span> to <span>$(300, 120, 3)$</span> –- except that Han-Inoue reaches 0.115 on the smallest panel (Pitfall 6). Against a sign flip in half the loadings at <span>$T/2$</span>, Breitung-Eickmeier and Han-Inoue reject on every replication and date the break to within 0.1% of <span>$T$</span>; Chen-Dolado-Gonzalo rejects 69% of the time. Highly persistent factors are the one regime where the size guarantees weaken –- with AR(0.9) factors Chen-Dolado-Gonzalo rejects 11.3% of stable panels, Breitung-Eickmeier turns very conservative at 0.7%, and Han-Inoue holds up best at 3.5%.</p><h3 id="Options-and-return-values"><a class="docs-heading-anchor" href="#Options-and-return-values">Options and return values</a><a id="Options-and-return-values-1"></a><a class="docs-heading-anchor-permalink" href="#Options-and-return-values" title="Permalink"></a></h3><p><code>factor_break_test</code> takes <code>method</code>, defaulting to <code>:breitung_eickmeier</code> for the two-argument form <code>factor_break_test(X, r)</code> and to <code>:chen_dolado_gonzalo</code> for the one-argument form <code>factor_break_test(X)</code>. Passing <code>:breitung_eickmeier</code> or <code>:han_inoue</code> without <code>r</code> raises an <code>ArgumentError</code>. All three methods require at least 30 time periods and standardize the panel internally, so no pre-scaling is needed. Breitung-Eickmeier and Han-Inoue need <span>$r$</span> as an input: determine it first with <code>ic_criteria(X, r_max)</code>, which reports the Bai-Ng (2002) criteria, and see <a href="../factormodels/#factor_page">Factor Models</a>.</p><table><tr><th style="text-align: right">Keyword</th><th style="text-align: right">Type</th><th style="text-align: right">Default</th><th style="text-align: right">Description</th></tr><tr><td style="text-align: right"><code>method</code></td><td style="text-align: right"><code>Symbol</code></td><td style="text-align: right"><code>:breitung_eickmeier</code> or <code>:chen_dolado_gonzalo</code></td><td style="text-align: right">Test method, depending on the dispatch</td></tr><tr><td style="text-align: right"><code>nsim</code></td><td style="text-align: right"><code>Int</code></td><td style="text-align: right"><code>0</code></td><td style="text-align: right">Null-reference draws; <code>0</code> selects <span>$\min(\max(100N, 2000), 20000)$</span></td></tr><tr><td style="text-align: right"><code>nboot</code></td><td style="text-align: right"><code>Int</code></td><td style="text-align: right"><code>2000</code></td><td style="text-align: right">Resampling draws behind the pooled p-value</td></tr><tr><td style="text-align: right"><code>seed</code></td><td style="text-align: right"><code>Integer</code></td><td style="text-align: right"><code>20110711</code> / <code>20151031</code></td><td style="text-align: right">Seed for the null reference (Breitung-Eickmeier / Han-Inoue)</td></tr></table><p><code>nsim</code>, <code>nboot</code>, and <code>seed</code> tune the simulated references of the two pooled tests and are ignored by <code>:chen_dolado_gonzalo</code>.</p><table><tr><th style="text-align: right">Field</th><th style="text-align: right">Type</th><th style="text-align: right">Description</th></tr><tr><td style="text-align: right"><code>statistic</code></td><td style="text-align: right"><code>T</code></td><td style="text-align: right">Test statistic</td></tr><tr><td style="text-align: right"><code>pvalue</code></td><td style="text-align: right"><code>T</code></td><td style="text-align: right">Monte Carlo p-value for the pooled tests, Hansen (1997) tables for <code>:chen_dolado_gonzalo</code></td></tr><tr><td style="text-align: right"><code>break_date</code></td><td style="text-align: right"><code>Union{Int, Nothing}</code></td><td style="text-align: right">Estimated break index, <code>nothing</code> when the trimmed range is empty</td></tr><tr><td style="text-align: right"><code>method</code></td><td style="text-align: right"><code>Symbol</code></td><td style="text-align: right">Method used</td></tr><tr><td style="text-align: right"><code>n_factors</code></td><td style="text-align: right"><code>Int</code></td><td style="text-align: right"><span>$r$</span>, or the IC2 selection when Chen-Dolado-Gonzalo is called without it</td></tr><tr><td style="text-align: right"><code>nobs</code></td><td style="text-align: right"><code>Int</code></td><td style="text-align: right">Number of time periods <span>$T$</span></td></tr><tr><td style="text-align: right"><code>n_vars</code></td><td style="text-align: right"><code>Int</code></td><td style="text-align: right">Number of cross-section units <span>$N$</span></td></tr><tr><td style="text-align: right"><code>series_statistics</code></td><td style="text-align: right"><code>Union{Vector{T}, Nothing}</code></td><td style="text-align: right">Per-series sup statistics <span>$M_i$</span> for the pooled tests, <code>nothing</code> for <code>:chen_dolado_gonzalo</code></td></tr><tr><td style="text-align: right"><code>series_break_dates</code></td><td style="text-align: right"><code>Union{Vector{Int}, Nothing}</code></td><td style="text-align: right">Date maximizing each series&#39; own statistic path, same availability</td></tr></table><hr/><h2 id="Gregory-Hansen-Cointegration-Test"><a class="docs-heading-anchor" href="#Gregory-Hansen-Cointegration-Test">Gregory-Hansen Cointegration Test</a><a id="Gregory-Hansen-Cointegration-Test-1"></a><a class="docs-heading-anchor-permalink" href="#Gregory-Hansen-Cointegration-Test" title="Permalink"></a></h2><p>The Gregory-Hansen test (Gregory &amp; Hansen 1996) extends residual-based cointegration testing by allowing one structural break in the cointegrating relationship. Standard tests lose power when the long-run relationship shifts at an unknown date, so what looks like no cointegration may be cointegration with a regime change.</p><p>The cointegrating regression is estimated at every candidate break date and residual-based statistics are computed from each fit. The null is no cointegration; the alternative is cointegration with a single break.</p><p>Three models control the form of the break:</p><p><strong>Level shift</strong> (<code>:C</code>):</p><p class="math-container">\[y_{1t} = \mu_1 + \mu_2 D_t + \alpha&#39; y_{2t} + e_t\]</p><p><strong>Level + trend shift</strong> (<code>:CT</code>):</p><p class="math-container">\[y_{1t} = \mu_1 + \mu_2 D_t + \beta t + \alpha&#39; y_{2t} + e_t\]</p><p><strong>Regime shift</strong> (<code>:CS</code>):</p><p class="math-container">\[y_{1t} = \mu_1 + \mu_2 D_t + \alpha_1&#39; y_{2t} + \alpha_2&#39; y_{2t} D_t + e_t\]</p><p>where:</p><ul><li><span>$y_{1t}$</span> is the dependent variable (the first column of <code>Y</code>)</li><li><span>$y_{2t}$</span> is the <span>$m \times 1$</span> vector of regressors (the remaining columns)</li><li><span>$D_t = \mathbf{1}(t &gt; T_B)$</span> is the break dummy</li><li><span>$T_B$</span> is the break date, searched over the trimmed range</li></ul><p>Three statistics are computed from the residuals <span>$\hat{e}_t$</span> at each candidate date, and each takes its own minimum:</p><ul><li>**ADF***: smallest ADF t-statistic on the residuals across break dates</li><li>**Zt***: smallest Phillips-Perron <span>$Z_t$</span> statistic</li><li>**Za***: smallest Phillips-Perron <span>$Z_\alpha$</span> statistic</li></ul><p>ADF* is the statistic normally reported. ADF* and Zt* share one critical-value table; Za* has its own, because it is a coefficient-based rather than a t-based statistic.</p><pre><code class="language-julia hljs">Random.seed!(105)
+x_c = cumsum(randn(250))                         # I(1) regressor
+y_c = vcat(2.0 .+ 1.0 .* x_c[1:120],             # intercept jumps 2.0 -&gt; 5.0 at t = 120
+           5.0 .+ 1.0 .* x_c[121:end]) + 0.3 * randn(250)
+
+report(gregory_hansen_test(hcat(y_c, x_c); model=:C))</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi"><span class="sgr1"> Gregory-Hansen Cointegration Test with Structural Break</span>
+
+ <span class="sgr1"> Specification  </span> <span class="sgr1">                                       </span>
+
+  H₀                                    No cointegration
+  H₁               Cointegration with a structural break
+  Model                                  C (level shift)
+  Regressors (m)                                       1
+  Observations                                       250
+
+<span class="sgr1">                Test Statistics</span>
+
+ <span class="sgr1"> Statistic </span> <span class="sgr1">         Value </span> <span class="sgr1"> Break </span> <span class="sgr1"> P-value </span>
+
+  ADF*         -16.7034 ***     121     0.001
+  Zt*          -15.5435 ***     121     0.001
+  Za*         -297.1176 ***     119     0.001
+
+<span class="sgr1">            Critical Values</span>
+
+ <span class="sgr1">          </span> <span class="sgr1">     1% </span> <span class="sgr1">     5% </span> <span class="sgr1">    10% </span>
+
+ <span class="sgr1"> ADF*/Zt* </span>   -5.13    -4.61    -4.34
+ <span class="sgr1">      Za* </span>  -50.07   -40.48   -36.19
+
+
+  Conclusion   Reject H₀ (cointegration with structural break)
+  Note         *** p&lt;0.01, ** p&lt;0.05, * p&lt;0.10</code></pre><p>ADF* of <span>$-16.70$</span> clears the 1% critical value of <span>$-5.13$</span> by a wide margin, so the null of no cointegration is rejected and the two series share a long-run relationship once the level shift is allowed. ADF* and Zt* both date the break at observation 121, one period after the true shift at 120, while Za* –- built on the coefficient rather than the t-ratio –- settles on 119. Disagreement of one or two observations across the three statistics is normal and is a useful informal measure of how sharply the break is identified.</p><p>When the series genuinely do not cointegrate, the test says so:</p><pre><code class="language-julia hljs">Random.seed!(106)
+x_i = cumsum(randn(250))                         # two independent random walks
+y_i = cumsum(randn(250))
+g_i = gregory_hansen_test(hcat(y_i, x_i); model=:C)
+(adf_statistic = round(g_i.adf_statistic, digits=3),
+ adf_pvalue = round(g_i.adf_pvalue, digits=3),
+ adf_break = g_i.adf_break)</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">(adf_statistic = -4.342, adf_pvalue = 0.1, adf_break = 46)</code></pre><p>ADF* of <span>$-4.342$</span> falls short of the 10% critical value of <span>$-4.34$</span> by a hair, and the reported p-value of 0.1 is the flat value assigned to any statistic above the 10% threshold rather than an interpolated number. The estimated break at observation 46 is meaningless under a non-rejection, exactly as with the Andrews test. Two independent random walks will always produce <em>some</em> minimizing break date; only the statistic decides whether it means anything.</p><h3 id="Interpreting-the-outcome"><a class="docs-heading-anchor" href="#Interpreting-the-outcome">Interpreting the outcome</a><a id="Interpreting-the-outcome-1"></a><a class="docs-heading-anchor-permalink" href="#Interpreting-the-outcome" title="Permalink"></a></h3><p><strong>Reject</strong> <span>$H_0$</span> (p-value &lt; 0.05): the series cointegrate once a break is allowed, and the estimated break date says when the relationship shifted. <strong>Fail to reject</strong>: no cointegration, even permitting a regime change. The natural use of the test is diagnostic –- when Johansen or Engle-Granger finds nothing but theory insists on a long-run relationship, Gregory-Hansen checks whether a single regime shift explains the discrepancy.</p><h3 id="Options-3"><a class="docs-heading-anchor" href="#Options-3">Options</a><a class="docs-heading-anchor-permalink" href="#Options-3" title="Permalink"></a></h3><table><tr><th style="text-align: right">Keyword</th><th style="text-align: right">Type</th><th style="text-align: right">Default</th><th style="text-align: right">Description</th></tr><tr><td style="text-align: right"><code>model</code></td><td style="text-align: right"><code>Symbol</code></td><td style="text-align: right"><code>:C</code></td><td style="text-align: right">Break model: <code>:C</code> (level shift), <code>:CT</code> (level + trend), <code>:CS</code> (regime shift)</td></tr><tr><td style="text-align: right"><code>lags</code></td><td style="text-align: right"><code>Union{Int,Symbol}</code></td><td style="text-align: right"><code>:aic</code></td><td style="text-align: right">Augmenting lags for the residual ADF, or <code>:aic</code>/<code>:bic</code></td></tr><tr><td style="text-align: right"><code>max_lags</code></td><td style="text-align: right"><code>Union{Int,Nothing}</code></td><td style="text-align: right"><code>nothing</code></td><td style="text-align: right">Cap for IC selection, default <span>$\lfloor 12 (T/100)^{1/4} \rfloor$</span></td></tr><tr><td style="text-align: right"><code>trim</code></td><td style="text-align: right"><code>Real</code></td><td style="text-align: right"><code>0.15</code></td><td style="text-align: right">Trimming fraction for the break search</td></tr></table><p>At least 50 observations and two columns are required.</p><h3 id="Return-values-3"><a class="docs-heading-anchor" href="#Return-values-3">Return values</a><a class="docs-heading-anchor-permalink" href="#Return-values-3" title="Permalink"></a></h3><table><tr><th style="text-align: right">Field</th><th style="text-align: right">Type</th><th style="text-align: right">Description</th></tr><tr><td style="text-align: right"><code>adf_statistic</code></td><td style="text-align: right"><code>T</code></td><td style="text-align: right">ADF* statistic (minimum ADF over break dates)</td></tr><tr><td style="text-align: right"><code>adf_pvalue</code></td><td style="text-align: right"><code>T</code></td><td style="text-align: right">P-value for ADF*</td></tr><tr><td style="text-align: right"><code>zt_statistic</code></td><td style="text-align: right"><code>T</code></td><td style="text-align: right">Zt* Phillips-Perron statistic</td></tr><tr><td style="text-align: right"><code>zt_pvalue</code></td><td style="text-align: right"><code>T</code></td><td style="text-align: right">P-value for Zt*</td></tr><tr><td style="text-align: right"><code>za_statistic</code></td><td style="text-align: right"><code>T</code></td><td style="text-align: right">Za* Phillips-Perron statistic</td></tr><tr><td style="text-align: right"><code>za_pvalue</code></td><td style="text-align: right"><code>T</code></td><td style="text-align: right">P-value for Za*</td></tr><tr><td style="text-align: right"><code>adf_break</code></td><td style="text-align: right"><code>Int</code></td><td style="text-align: right">Break date minimizing ADF*</td></tr><tr><td style="text-align: right"><code>zt_break</code></td><td style="text-align: right"><code>Int</code></td><td style="text-align: right">Break date minimizing Zt*</td></tr><tr><td style="text-align: right"><code>za_break</code></td><td style="text-align: right"><code>Int</code></td><td style="text-align: right">Break date minimizing Za*</td></tr><tr><td style="text-align: right"><code>model</code></td><td style="text-align: right"><code>Symbol</code></td><td style="text-align: right">Break model used</td></tr><tr><td style="text-align: right"><code>n_regressors</code></td><td style="text-align: right"><code>Int</code></td><td style="text-align: right">Number of regressors <span>$m$</span></td></tr><tr><td style="text-align: right"><code>adf_critical_values</code></td><td style="text-align: right"><code>Dict{Int,T}</code></td><td style="text-align: right">Critical values for ADF* and Zt* at 1%, 5%, 10%</td></tr><tr><td style="text-align: right"><code>za_critical_values</code></td><td style="text-align: right"><code>Dict{Int,T}</code></td><td style="text-align: right">Critical values for Za* at 1%, 5%, 10%</td></tr><tr><td style="text-align: right"><code>nobs</code></td><td style="text-align: right"><code>Int</code></td><td style="text-align: right">Number of observations</td></tr></table><div class="admonition is-info" id="Technical-Note-da6a5690640a84fe"><header class="admonition-header">Technical Note<a class="admonition-anchor" href="#Technical-Note-da6a5690640a84fe" title="Permalink"></a></header><div class="admonition-body"><p>Critical values are tabulated by break model and by the number of regressors <span>$m = 1, \ldots, 4$</span>; a regression with more than four regressors reuses the <span>$m = 4$</span> column, which makes the test conservative. P-values interpolate between the 1%, 5%, and 10% values, are floored at 0.001, and are reported as a flat 0.20 for any statistic above the 10% critical value.</p></div></div><hr/><h2 id="Complete-Example"><a class="docs-heading-anchor" href="#Complete-Example">Complete Example</a><a id="Complete-Example-1"></a><a class="docs-heading-anchor-permalink" href="#Complete-Example" title="Permalink"></a></h2><p>Real GDP growth is the canonical testing ground for parameter instability. This workflow fits an AR(1) to quarterly US real GDP growth from FRED-QD (McCracken &amp; Ng 2021), tests it for one unknown break with Andrews, then lets Bai-Perron search for several.</p><pre><code class="language-julia hljs">fred_q = load_example(:fred_qd)
+g = filter(isfinite, to_vector(apply_tcode(fred_q[:, [&quot;GDPC1&quot;]])))   # log growth of real GDP
+
+X_ar = hcat(ones(length(g) - 1), g[1:end-1])     # AR(1): intercept + one lag
+y_ar = g[2:end]
+
+report(andrews_test(y_ar, X_ar; test=:supwald))</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi"><span class="sgr1">             Andrews (1993) Structural Break Test</span>
+
+ <span class="sgr1"> Specification     </span> <span class="sgr1">                                         </span>
+
+  H₀                                      No structural break
+  H₁                  Single structural break at unknown date
+  Test type                                          Sup-Wald
+  Parameters tested                                         2
+  Trimming fraction                                      0.15
+  Observations                                            265
+
+<span class="sgr1">              Results</span>
+
+ <span class="sgr1">                    </span> <span class="sgr1">       Value </span>
+
+  Test statistic       18.1888 ***
+  P-value                    0.005
+  Break date (index)           200
+  Break fraction             0.755
+
+<span class="sgr1">    Critical Values</span>
+
+ <span class="sgr1">    1% </span> <span class="sgr1">    5% </span> <span class="sgr1">  10% </span>
+
+  14.72   11.03   9.16
+
+
+  Conclusion   Reject H₀ at 5% level: evidence of a structural break at observation 200
+  Note         *** p&lt;0.01, ** p&lt;0.05, * p&lt;0.10</code></pre><p>The sup-Wald statistic of 18.19 exceeds the 1% critical value of 14.72, so the AR(1) coefficients are not constant over the 265 usable quarters, and the p-value hits the 0.005 floor. The peak sits at observation 200, roughly three-quarters of the way through the post-1959 sample. Andrews stops there: it tests for one break and reports where the evidence is strongest, without ruling out more.</p><pre><code class="language-julia hljs">bp_gdp = bai_perron_test(y_ar, X_ar; max_breaks=5)
+report(bp_gdp)</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi"><span class="sgr1">    Bai-Perron Multiple Structural Break Test</span>
+
+ <span class="sgr1"> Specification     </span> <span class="sgr1">                            </span>
+
+  H₀                        No structural breaks
+  H₁                  Multiple structural breaks
+  Max breaks tested                            5
+  Trimming fraction                         0.15
+  Observations                               265
+
+<span class="sgr1">sup-F Tests (l breaks vs. 0 breaks)</span>
+
+ <span class="sgr1"> Test     </span> <span class="sgr1">  Statistic </span> <span class="sgr1"> P-value </span>
+
+  sup-F(1)   12.8774 **    0.0264
+  sup-F(2)      7.8933     0.1768
+  sup-F(3)      5.7841     0.3096
+  sup-F(4)      4.5915     0.3652
+  sup-F(5)      3.6295     0.3802
+
+<span class="sgr1">Sequential Tests (l+1 breaks vs. l breaks)</span>
+
+ <span class="sgr1"> Test       </span> <span class="sgr1"> Statistic </span> <span class="sgr1"> P-value </span>
+
+  sup-F(2|1)     2.7378     0.7839
+  sup-F(3|2)      1.504     0.8899
+  sup-F(4|3)     1.0121     0.9294
+  sup-F(5|4)        0.0     &gt;0.999
+
+<span class="sgr1">Information Criteria (* = selected)</span>
+
+ <span class="sgr1"> Breaks </span> <span class="sgr1">        BIC </span> <span class="sgr1">        LWZ </span>
+
+       0     -2402.75      -2391.8
+       1   -2416.53 *   -2394.63 *
+       2     -2410.91     -2378.06
+       3     -2402.84     -2359.03
+       4     -2393.77     -2339.02
+       5     -2382.48     -2316.77
+
+<span class="sgr1">    Estimated Break Dates</span>
+
+ <span class="sgr1"> Break </span> <span class="sgr1"> Date </span> <span class="sgr1">     95% CI </span>
+
+      1    201   [193, 209]
+
+
+  Conclusion   Estimated 1 structural break at observation 201
+  Note         *** p&lt;0.01, ** p&lt;0.05, * p&lt;0.10</code></pre><p>Bai-Perron confirms a single break and dates it at observation 201 with a 95% confidence interval of <span>$[193, 209]$</span> –- four years wide on quarterly data, which is about as sharp as break dating gets in macroeconomic samples. All three selection devices agree: sup-F(1) is 12.88 with a p-value of 0.026, the sequential test sup-F(2|1) falls to 2.74 with a p-value of 0.784, and BIC and LWZ both bottom out at one break. Agreement of the sequential rule with both information criteria is the strongest evidence the procedure can deliver.</p><pre><code class="language-julia hljs">[(regime = j,
+  intercept = round(c[1], digits=4),
+  ar1 = round(c[2], digits=3),
+  se_ar1 = round(s[2], digits=3))
+ for (j, (c, s)) in enumerate(zip(bp_gdp.regime_coefs, bp_gdp.regime_ses))]</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">2-element Vector{@NamedTuple{regime::Int64, intercept::Float64, ar1::Float64, se_ar1::Float64}}:
+ (regime = 1, intercept = 0.0054, ar1 = 0.301, se_ar1 = 0.067)
+ (regime = 2, intercept = 0.0077, ar1 = -0.283, se_ar1 = 0.122)</code></pre><p>The economics is in the AR(1) coefficient. Before the break, growth is positively autocorrelated at 0.301 with a standard error of 0.067 –- a strong quarter tends to be followed by another. After it, the coefficient turns to <span>$-0.283$</span> with a standard error of 0.122, so growth now reverses itself from quarter to quarter. Both estimates are more than two standard errors from zero and of opposite sign, which is a change in the character of the process, not a change in its scale: forecasting rules and impulse responses estimated on the pooled sample describe neither regime.</p><hr/><h2 id="Common-Pitfalls"><a class="docs-heading-anchor" href="#Common-Pitfalls">Common Pitfalls</a><a id="Common-Pitfalls-1"></a><a class="docs-heading-anchor-permalink" href="#Common-Pitfalls" title="Permalink"></a></h2><ol><li><p><strong>Reading a break date from a test that does not reject.</strong> Every test on this page reports the date that maximizes its statistic, and that date always exists –- even in i.i.d. data with no break at all. The Andrews example above returns <code>break_index = 96</code> for a series generated with constant coefficients. The date is only interpretable once the null has been rejected.</p></li><li><p><strong>Trimming too aggressively or too leniently.</strong> <code>trimming</code> controls how much of the sample is excluded from the break search. The default <span>$\pi = 0.15$</span> leaves candidate dates in <span>$[0.15T, 0.85T]$</span>. Setting it near 0.05 admits splits in which one sub-sample has too few observations to estimate <span>$\beta$</span> reliably; setting it near 0.30 excludes breaks in the first or last third of the sample entirely. The Bai-Perron critical-value tables are only defined on the <span>$\{0.05, 0.10, 0.15, 0.20, 0.25\}$</span> grid, so off-grid values snap to the nearest with a warning.</p></li><li><p><strong>Confusing the power properties of <code>:supwald</code> and <code>:expwald</code>.</strong> The supremum has optimal power against one sharp break at an unknown date. The exponential and mean functionals (Andrews &amp; Ploberger 1994) average information over all candidate dates and do better against small or gradual shifts. When the shape of the break is unknown, run all three: agreement, as in the example above, means the result is not an artefact of the weighting.</p></li><li><p><strong>Bai-Perron silently reducing <code>max_breaks</code>.</strong> Each regime needs at least <span>$\max(k+1, \lceil \pi T \rceil)$</span> observations, so the feasible maximum is <span>$\lfloor T/h \rfloor - 1$</span>. With many regressors or a short sample the requested <code>max_breaks</code> is cut without an error. Check <code>length(result.supf_stats)</code> to see how many breaks were actually searched.</p></li><li><p><strong>Reading the per-series statistics as an attribution under a big break.</strong> <code>series_statistics</code> ranks the breaking series reliably when a modest subset of the panel breaks –- with 6 of 60 series breaking, the six largest statistics are exactly the breakers in simulation. But a break large enough to rotate the estimated factor space, such as half the panel flipping sign, elevates the <em>stable</em> series&#39; statistics too, because loading breaks are only identified relative to the factor normalization. Pooled rejection first, attribution second, and only when the rejection is not a panel-wide rotation.</p></li><li><p><strong>Expecting power from a narrow cross-section.</strong> Size holds in small panels for Breitung-Eickmeier –- it rejects 4.3% of stable panels at <span>$T = 35$</span>, <span>$N = 8$</span>, while Han-Inoue over-rejects there (11.5%), so prefer <code>:breitung_eickmeier</code> on very narrow panels. Power, though, comes from pooling across units: a break confined to a few series in a narrow panel goes undetected. For small panels, apply <code>andrews_test</code> or <code>bai_perron_test</code> to the individual equations instead.</p></li><li><p><strong>Choosing the Gregory-Hansen model by fit rather than by theory.</strong> The <code>:CS</code> regime shift lets every slope change at the break, which makes it the most flexible alternative and therefore the least powerful: it estimates <span>$m$</span> extra coefficients under <span>$H_1$</span>. Start with <code>:C</code> and move to <code>:CT</code> or <code>:CS</code> only when theory says the trend or the slopes should shift.</p></li></ol><hr/><h2 id="References"><a class="docs-heading-anchor" href="#References">References</a><a id="References-1"></a><a class="docs-heading-anchor-permalink" href="#References" title="Permalink"></a></h2><ul><li><p>Andrews, D. W. K. (1993). Tests for parameter instability and structural change with unknown change point. <em>Econometrica</em>, 61(4), 821-856. <a href="https://doi.org/10.2307/2951764">DOI</a></p></li><li><p>Andrews, D. W. K., &amp; Ploberger, W. (1994). Optimal tests when a nuisance parameter is present only under the alternative. <em>Econometrica</em>, 62(6), 1383-1414. <a href="https://doi.org/10.2307/2951753">DOI</a></p></li><li><p>Bai, J. (1997). Estimation of a change point in multiple regression models. <em>Review of Economics and Statistics</em>, 79(4), 551-563. <a href="https://doi.org/10.1162/003465397557132">DOI</a></p></li><li><p>Bai, J., &amp; Ng, S. (2002). Determining the number of factors in approximate factor models. <em>Econometrica</em>, 70(1), 191-221. <a href="https://doi.org/10.1111/1468-0262.00273">DOI</a></p></li><li><p>Bai, J., &amp; Perron, P. (1998). Estimating and testing linear models with multiple structural changes. <em>Econometrica</em>, 66(1), 47-78. <a href="https://doi.org/10.2307/2998540">DOI</a></p></li><li><p>Bai, J., &amp; Perron, P. (2003). Computation and analysis of multiple structural change models. <em>Journal of Applied Econometrics</em>, 18(1), 1-22. <a href="https://doi.org/10.1002/jae.659">DOI</a></p></li><li><p>Breitung, J., &amp; Eickmeier, S. (2011). Testing for structural breaks in dynamic factor models. <em>Journal of Econometrics</em>, 163(1), 71-84. <a href="https://doi.org/10.1016/j.jeconom.2010.11.008">DOI</a></p></li><li><p>Chen, L., Dolado, J. J., &amp; Gonzalo, J. (2014). Detecting big structural breaks in large factor models. <em>Journal of Econometrics</em>, 180(1), 30-48. <a href="https://doi.org/10.1016/j.jeconom.2014.01.006">DOI</a></p></li><li><p>Gregory, A. W., &amp; Hansen, B. E. (1996). Residual-based tests for cointegration in models with regime shifts. <em>Journal of Econometrics</em>, 70(1), 99-126. <a href="https://doi.org/10.1016/0304-4076(69)41685-7">DOI</a></p></li><li><p>Han, X., &amp; Inoue, A. (2015). Tests for parameter instability in dynamic factor models. <em>Econometric Theory</em>, 31(5), 1117-1152. <a href="https://doi.org/10.1017/S0266466614000486">DOI</a></p></li><li><p>Hansen, B. E. (1997). Approximate asymptotic p values for structural-change tests. <em>Journal of Business &amp; Economic Statistics</em>, 15(1), 60-67. <a href="https://doi.org/10.1080/07350015.1997.10524687">DOI</a></p></li><li><p>Liu, J., Wu, S., &amp; Zidek, J. V. (1997). On segmented multivariate regression. <em>Statistica Sinica</em>, 7(2), 497-525.</p></li><li><p>McCracken, M. W., &amp; Ng, S. (2021). FRED-QD: A quarterly database for macroeconomic research. <em>Federal Reserve Bank of St. Louis Review</em>, 103(1), 1-44. <a href="https://doi.org/10.20955/r.103.1-44">DOI</a></p></li><li><p>Newey, W. K., &amp; West, K. D. (1994). Automatic lag selection in covariance matrix estimation. <em>Review of Economic Studies</em>, 61(4), 631-653. <a href="https://doi.org/10.2307/2297912">DOI</a></p></li></ul></article><nav class="docs-footer"><a class="docs-footer-prevpage" href="../tests_cointegration/">« Residual-Based Cointegration</a><a class="docs-footer-nextpage" href="../tests_panel/">Panel Tests »</a><div class="flexbox-break"></div><p class="footer-message">Powered by <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> and the <a href="https://julialang.org/">Julia Programming Language</a>.</p></nav></div><div class="modal" id="documenter-settings"><div class="modal-background"></div><div class="modal-card"><header class="modal-card-head"><p class="modal-card-title">Settings</p><button class="delete"></button></header><section class="modal-card-body"><p><label class="label">Theme</label><div class="select"><select id="documenter-themepicker"><option value="auto">Automatic (OS)</option><option value="documenter-light">documenter-light</option><option value="documenter-dark">documenter-dark</option><option value="catppuccin-latte">catppuccin-latte</option><option value="catppuccin-frappe">catppuccin-frappe</option><option value="catppuccin-macchiato">catppuccin-macchiato</option><option value="catppuccin-mocha">catppuccin-mocha</option></select></div></p><hr/><p>This document was generated with <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> version 1.19.0 on <span class="colophon-date" title="Thursday 3 September 2026 05:12">Thursday 3 September 2026</span>. Using Julia version 1.12.6.</p></section><footer class="modal-card-foot"></footer></div></div></div></body></html>
