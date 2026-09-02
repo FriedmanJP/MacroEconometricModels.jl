@@ -799,6 +799,19 @@ The shared filter helpers `MacroEconometricModels._frac_diff_weights(d, K)` and 
 
 ---
 
+## Saving Results
+
+[`save_model`](@ref) persists the fitted result to a versioned JLD2 file; [`load_model`](@ref) reconstructs it. JLD2 is a package dependency --- no extra `using` is required. Every exported result type on this page is saveable; the living catalog is the [API Reference](@ref api_page) Persistence table. See [Data Management](@ref data_page) for bundles, `note=`, `model_info`, compression, and the reproducibility manifest.
+
+```@example arima
+path = joinpath(mktempdir(), "arima.jld2")
+save_model(ar, path)
+ar2 = load_model(path)
+typeof(ar2)
+```
+
+---
+
 ## Common Pitfalls
 
 1. **Fitting ARMA to a non-stationary series**: Estimating ARMA(p,q) on an I(1) level series produces spurious coefficient estimates and unreliable forecasts. Always test for unit roots with `adf_test` or `kpss_test` before estimation, and use `estimate_arima` with ``d \geq 1`` for integrated processes.

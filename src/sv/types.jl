@@ -31,6 +31,7 @@ Stochastic Volatility model (Taylor 1986), estimated via Kim-Shephard-Chib (1998
 - `dist::Symbol`: Error distribution (:normal or :studentt)
 - `leverage::Bool`: Whether leverage effect was estimated
 - `n_samples::Int`: Number of posterior samples
+- `manifest::Union{ReproManifest,Nothing}`: Provenance record when `estimate_sv` was called with `seed=`; `reproduce(m)` re-runs from that seed
 """
 struct SVModel{T<:AbstractFloat} <: AbstractVolatilityModel
     y::Vector{T}
@@ -44,7 +45,20 @@ struct SVModel{T<:AbstractFloat} <: AbstractVolatilityModel
     dist::Symbol
     leverage::Bool
     n_samples::Int
+    manifest::Union{ReproManifest,Nothing}
 end
+
+SVModel{T}(y, h_draws, mu_post, phi_post, sigma_eta_post, volatility_mean,
+           volatility_quantiles, quantile_levels, dist, leverage, n_samples;
+           manifest=nothing) where {T<:AbstractFloat} =
+    SVModel{T}(y, h_draws, mu_post, phi_post, sigma_eta_post, volatility_mean,
+               volatility_quantiles, quantile_levels, dist, leverage, n_samples, manifest)
+SVModel(y, h_draws, mu_post, phi_post, sigma_eta_post, volatility_mean,
+        volatility_quantiles, quantile_levels, dist, leverage, n_samples;
+        manifest=nothing) =
+    SVModel{eltype(y)}(y, h_draws, mu_post, phi_post, sigma_eta_post, volatility_mean,
+                       volatility_quantiles, quantile_levels, dist, leverage, n_samples;
+                       manifest=manifest)
 
 # Accessors needed by _show_volatility_model
 # SVModel doesn't have omega/alpha/beta, so we define mu/omega for display compatibility

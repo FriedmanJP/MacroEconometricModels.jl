@@ -420,7 +420,9 @@ function estimate_sv(y::AbstractVector{T};
                      n_samples::Int=2000, burnin::Int=1000,
                      dist::Symbol=:normal, leverage::Bool=false,
                      quantile_levels::Vector{<:Real}=[0.025, 0.5, 0.975],
+                     seed::Union{Integer,Nothing}=nothing,
                      rng::AbstractRNG=Random.default_rng()) where {T<:AbstractFloat}
+    rng = _resolve_repro_rng(rng, seed)
     _validate_data(y, "y")
     n = length(y)
     n < 20 && throw(ArgumentError("Need at least 20 observations for SV model, got $n"))
@@ -520,8 +522,12 @@ function estimate_sv(y::AbstractVector{T};
         end
     end
 
-    SVModel(y_vec, h_draws, mu_draws, phi_draws, sigma_eta_draws,
-            vol_mean, vol_quantiles, ql, dist, leverage, n_samples)
+    result = SVModel(y_vec, h_draws, mu_draws, phi_draws, sigma_eta_draws,
+                     vol_mean, vol_quantiles, ql, dist, leverage, n_samples)
+    return _with_manifest(result, capture_manifest(; seed=seed,
+        settings=Dict{String,Any}("n_samples" => n_samples, "burnin" => burnin,
+                                  "dist" => String(dist), "leverage" => leverage,
+                                  "quantile_levels" => Vector{Float64}(ql))))
 end
 
 estimate_sv(y::AbstractVector; kwargs...) = estimate_sv(Float64.(y); kwargs...)

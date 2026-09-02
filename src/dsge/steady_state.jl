@@ -143,8 +143,9 @@ function compute_steady_state(spec::ModelSpec{T};
     end
 
     if method == :analytical
-        ss_fn === nothing && throw(ArgumentError("method=:analytical requires ss_fn"))
-        y_ss = T.(ss_fn(θ))
+        fn = ss_fn === nothing ? spec.ss_fn : ss_fn
+        fn === nothing && throw(ArgumentError("method=:analytical requires ss_fn"))
+        y_ss = T.(fn(θ))
         @assert length(y_ss) == n "ss_fn must return vector of length $n"
         return _update_steady_state(spec, y_ss)
     end

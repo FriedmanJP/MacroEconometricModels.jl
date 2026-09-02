@@ -396,7 +396,9 @@ long-run θ⁺_j / θ⁻_j.
 """
 function dynamic_multipliers(m::NARDLModel{T}, H::Int; bootstrap::Bool=true,
                              nreps::Int=500, level::Real=0.95,
+                             seed::Union{Integer,Nothing}=nothing,
                              rng::AbstractRNG=Random.default_rng()) where {T<:AbstractFloat}
+    rng = _resolve_repro_rng(rng, seed)
     H >= 0 || throw(ArgumentError("H must be ≥ 0; got $H"))
     na = length(m.asym)
     Hp1 = H + 1
@@ -421,8 +423,11 @@ function dynamic_multipliers(m::NARDLModel{T}, H::Int; bootstrap::Bool=true,
     end
 
     names = [m.xnames[o] for o in m.asym]
-    NARDLMultipliers{T}(collect(0:H), copy(m.asym), names, m_pos, m_neg, m_dif,
-                       pl, ph, nl, nh, dl, dh, tp, tn, nreps, T(level))
+    result = NARDLMultipliers{T}(collect(0:H), copy(m.asym), names, m_pos, m_neg, m_dif,
+                                pl, ph, nl, nh, dl, dh, tp, tn, nreps, T(level))
+    return _with_manifest(result, capture_manifest(; seed=seed,
+        settings=Dict{String,Any}("H" => H, "nreps" => nreps, "level" => Float64(level),
+                                  "bootstrap" => bootstrap)))
 end
 
 # =============================================================================

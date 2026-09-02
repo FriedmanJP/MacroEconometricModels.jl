@@ -396,9 +396,11 @@ Deprecated wrapper (one release) around the principled diagnostics:
 """
 function test_identification_strength(model::VARModel{T}; method::Symbol=:fastica,
                                        n_bootstrap::Int=999,
+                                       seed::Union{Integer,Nothing}=nothing,
                                        rng::AbstractRNG=Random.default_rng(),
                                        transition_var=nothing,
                                        regime_indicator=nothing) where {T<:AbstractFloat}
+    rng = _resolve_repro_rng(rng, seed)
     Base.depwarn(_STRENGTH_DEPWARN, :test_identification_strength)
     if method in _ICA_METHODS
         return test_label_stability(model; method=method, n_bootstrap=n_bootstrap, rng=rng)
@@ -569,7 +571,9 @@ every result that stores (or can form) shocks, including Markov-switching and
 external-volatility identification.
 """
 function test_shock_independence(result; max_lag::Int=10,
+                                  seed::Union{Integer,Nothing}=nothing,
                                   rng::AbstractRNG=Random.default_rng())
+    rng = _resolve_repro_rng(rng, seed)
     s = _result_shocks(result)
     _test_independence_impl(Matrix{eltype(s)}(s), max_lag; rng=rng)
 end
@@ -1022,7 +1026,9 @@ With no extra restrictions a just-identified parametric fit returns p-value 1.
 function test_overidentification(model::VARModel{T}, result::ICASVARResult{T};
                                   restrictions=nothing,
                                   n_bootstrap::Int=999,
+                                  seed::Union{Integer,Nothing}=nothing,
                                   rng::AbstractRNG=Random.default_rng()) where {T<:AbstractFloat}
+    rng = _resolve_repro_rng(rng, seed)
     stab = test_label_stability(model; method=result.method, n_bootstrap=n_bootstrap, rng=rng)
     details = Dict{Symbol, Any}(stab.details)
     details[:fallback] = :label_stability
@@ -1036,7 +1042,9 @@ end
 function test_overidentification(model::VARModel{T}, result::NonGaussianMLResult{T};
                                   restrictions=nothing,
                                   n_bootstrap::Int=999,
+                                  seed::Union{Integer,Nothing}=nothing,
                                   rng::AbstractRNG=Random.default_rng()) where {T<:AbstractFloat}
+    rng = _resolve_repro_rng(rng, seed)
     if restrictions === nothing
         return _just_id_overid(T; note="Non-Gaussian ML B₀ = LQ is just-identified " *
                                        "without extra zeros on B₀")
@@ -1054,7 +1062,9 @@ end
 function test_overidentification(model::VARModel{T}, result::NonGaussianGMMResult{T};
                                   restrictions=nothing,
                                   n_bootstrap::Int=999,
+                                  seed::Union{Integer,Nothing}=nothing,
                                   rng::AbstractRNG=Random.default_rng()) where {T<:AbstractFloat}
+    rng = _resolve_repro_rng(rng, seed)
     if restrictions === nothing
         identified = isnan(result.J_pvalue) ? true : result.J_pvalue >= T(0.05)
         return IdentifiabilityTestResult{T}(:overidentification, result.J, result.J_pvalue,
@@ -1080,7 +1090,9 @@ function test_overidentification(model::VARModel{T},
                                                 ExternalVolatilitySVARResult{T}};
                                   restrictions=nothing,
                                   n_bootstrap::Int=999,
+                                  seed::Union{Integer,Nothing}=nothing,
                                   rng::AbstractRNG=Random.default_rng()) where {T<:AbstractFloat}
+    rng = _resolve_repro_rng(rng, seed)
     if restrictions === nothing
         return _just_id_overid(T; note="Heteroskedastic B₀ is just-identified without extra zeros")
     end
@@ -1096,14 +1108,18 @@ end
 function test_overidentification(model::VARModel{T}, result::SVARModel{T};
                                   restrictions=nothing,
                                   n_bootstrap::Int=999,
+                                  seed::Union{Integer,Nothing}=nothing,
                                   rng::AbstractRNG=Random.default_rng()) where {T<:AbstractFloat}
+    rng = _resolve_repro_rng(rng, seed)
     _ab_overidentification(model, result; restrictions=restrictions, rng=rng)
 end
 
 function test_overidentification(model::VARModel{T}, result::SVECResult{T};
                                   restrictions=nothing,
                                   n_bootstrap::Int=999,
+                                  seed::Union{Integer,Nothing}=nothing,
                                   rng::AbstractRNG=Random.default_rng()) where {T<:AbstractFloat}
+    rng = _resolve_repro_rng(rng, seed)
     if restrictions === nothing
         df = result.identification.n_overidentifying
         df == 0 && return _just_id_overid(T; note="Default KPSW SVEC is just-identified")
@@ -1130,7 +1146,9 @@ end
 function test_overidentification(result::SVARModel{T};
                                   restrictions=nothing,
                                   n_bootstrap::Int=999,
+                                  seed::Union{Integer,Nothing}=nothing,
                                   rng::AbstractRNG=Random.default_rng()) where {T<:AbstractFloat}
+    rng = _resolve_repro_rng(rng, seed)
     _ab_overidentification(nothing, result; restrictions=restrictions, rng=rng)
 end
 

@@ -109,7 +109,13 @@ struct MFVARPosterior{T<:AbstractFloat}
     freq_ratio::Int
     aggregation::Vector{Symbol}
     varnames::Vector{String}
+    manifest::Union{ReproManifest,Nothing}
 end
+
+MFVARPosterior{T}(B_draws, Sigma_draws, Z_draws, data, p, n, T_hf, low_freq,
+                  freq_ratio, aggregation, varnames; manifest=nothing) where {T<:AbstractFloat} =
+    MFVARPosterior{T}(B_draws, Sigma_draws, Z_draws, data, p, n, T_hf, low_freq,
+                      freq_ratio, aggregation, varnames, manifest)
 
 n_draws(post::MFVARPosterior) = size(post.B_draws, 1)
 
@@ -493,7 +499,9 @@ function estimate_mfvar(data::AbstractMatrix{T}, p::Int;
                         prior::Symbol=:minnesota,
                         hyper::Union{Nothing,MinnesotaHyperparameters}=nothing,
                         varnames::Vector{String}=String[],
+                        seed::Union{Integer,Nothing}=nothing,
                         rng::AbstractRNG=Random.default_rng()) where {T<:AbstractFloat}
+    rng = _resolve_repro_rng(rng, seed)
     p >= 1 || throw(ArgumentError("p must be at least 1, got $p"))
     n_draws >= 1 || throw(ArgumentError("n_draws must be positive"))
     n_burn >= 0 || throw(ArgumentError("n_burn must be non-negative"))
@@ -572,8 +580,11 @@ function estimate_mfvar(data::AbstractMatrix{T}, p::Int;
         end
     end
 
-    return MFVARPosterior{T}(B_out, S_out, Z_out, dm, p, n, T_hf,
-                             copy(low_freq), freq_ratio, aggs, vn)
+    result = MFVARPosterior{T}(B_out, S_out, Z_out, dm, p, n, T_hf,
+                              copy(low_freq), freq_ratio, aggs, vn)
+    return _with_manifest(result, capture_manifest(; seed=seed,
+        settings=Dict{String,Any}("n_draws" => n_draws, "n_burn" => n_burn,
+                                  "prior" => String(prior), "freq_ratio" => freq_ratio)))
 end
 
 estimate_mfvar(data::AbstractMatrix, p::Int; kwargs...) =

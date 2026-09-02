@@ -116,7 +116,15 @@ struct ConditionalForecast{T<:AbstractFloat} <: AbstractForecastResult{T}
     shocks::Matrix{T}
     identification::Symbol
     n_draws::Int
+    manifest::Union{ReproManifest,Nothing}
 end
+
+ConditionalForecast{T}(forecast, ci_lower, ci_upper, horizon, conf_level, varnames,
+                       conditions, unconditional, shocks, identification, n_draws;
+                       manifest=nothing) where {T<:AbstractFloat} =
+    ConditionalForecast{T}(forecast, ci_lower, ci_upper, horizon, conf_level, varnames,
+                           conditions, unconditional, shocks, identification, n_draws,
+                           manifest)
 
 function Base.show(io::IO, fc::ConditionalForecast{T}) where {T}
     n_vars = length(fc.varnames)
@@ -459,7 +467,9 @@ function conditional_forecast(model::VARModel{T}, conditions, h::Int;
                               Q::Union{Nothing,AbstractMatrix}=nothing,
                               reps::Int=1000,
                               conf_level::Real=0.95,
+                              seed::Union{Integer,Nothing}=nothing,
                               rng::AbstractRNG=Random.default_rng()) where {T<:AbstractFloat}
+    rng = _resolve_repro_rng(rng, seed)
     h < 1 && throw(ArgumentError("Forecast horizon must be positive"))
     reps < 1 && throw(ArgumentError("reps must be positive"))
     (0 < conf_level < 1) || throw(ArgumentError("conf_level must be in (0, 1)"))
@@ -495,8 +505,10 @@ function conditional_forecast(model::VARModel{T}, conditions, h::Int;
     end
     lo, hi = _cf_bands(sim, conf_level)
 
-    return ConditionalForecast{T}(point, lo, hi, h, T(conf_level), varnames, conds,
-                                  uncond, shock_mean, ident, reps)
+    result = ConditionalForecast{T}(point, lo, hi, h, T(conf_level), varnames, conds,
+                                    uncond, shock_mean, ident, reps)
+    return _with_manifest(result, capture_manifest(; seed=seed,
+        settings=Dict{String,Any}("reps" => reps, "conf_level" => Float64(conf_level))))
 end
 
 # =============================================================================
@@ -527,7 +539,9 @@ function conditional_forecast(post::BVARPosterior{T}, conditions, h::Int;
                               reps::Union{Nothing,Int}=nothing,
                               conf_level::Real=0.95,
                               point_estimate::Symbol=:mean,
+                              seed::Union{Integer,Nothing}=nothing,
                               rng::AbstractRNG=Random.default_rng()) where {T<:AbstractFloat}
+    rng = _resolve_repro_rng(rng, seed)
     h < 1 && throw(ArgumentError("Forecast horizon must be positive"))
     (0 < conf_level < 1) || throw(ArgumentError("conf_level must be in (0, 1)"))
     point_estimate ∈ (:mean, :median) ||
@@ -587,6 +601,8 @@ function conditional_forecast(post::BVARPosterior{T}, conditions, h::Int;
     end
     lo, hi = _cf_bands(sim, conf_level)
 
-    return ConditionalForecast{T}(point, lo, hi, h, T(conf_level), varnames, conds,
-                                  uncond_acc ./ valid, shock_acc ./ valid, ident, valid)
+    result = ConditionalForecast{T}(point, lo, hi, h, T(conf_level), varnames, conds,
+                                    uncond_acc ./ valid, shock_acc ./ valid, ident, valid)
+    return _with_manifest(result, capture_manifest(; seed=seed,
+        settings=Dict{String,Any}("reps" => valid, "conf_level" => Float64(conf_level))))
 end

@@ -317,7 +317,15 @@ struct NARDLMultipliers{T<:AbstractFloat}
     theta_neg::Vector{T}
     nreps::Int
     level::T
+    manifest::Union{ReproManifest,Nothing}
 end
+
+NARDLMultipliers{T}(horizons, reg_index, reg_names, m_pos, m_neg, m_diff, m_pos_lo,
+                    m_pos_hi, m_neg_lo, m_neg_hi, m_diff_lo, m_diff_hi, theta_pos,
+                    theta_neg, nreps, level; manifest=nothing) where {T<:AbstractFloat} =
+    NARDLMultipliers{T}(horizons, reg_index, reg_names, m_pos, m_neg, m_diff, m_pos_lo,
+                        m_pos_hi, m_neg_lo, m_neg_hi, m_diff_lo, m_diff_hi, theta_pos,
+                        theta_neg, nreps, level, manifest)
 
 # PMGModel — dynamic heterogeneous panel ARDL (PMG / MG / DFE), EV-23 (#431)
 # =============================================================================

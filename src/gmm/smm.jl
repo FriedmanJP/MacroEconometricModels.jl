@@ -57,10 +57,11 @@ struct SMMModel{T<:AbstractFloat} <: AbstractGMMModel
     converged::Bool
     iterations::Int
     sim_ratio::Int
+    manifest::Union{ReproManifest,Nothing}
 
     function SMMModel{T}(theta, vcov, n_moments, n_params, n_obs, weighting, W,
                           g_bar, J_stat, J_pvalue, converged, iterations,
-                          sim_ratio) where {T<:AbstractFloat}
+                          sim_ratio, manifest::Union{ReproManifest,Nothing}=nothing) where {T<:AbstractFloat}
         @assert length(theta) == n_params
         @assert size(vcov) == (n_params, n_params)
         @assert size(W) == (n_moments, n_moments)
@@ -68,7 +69,7 @@ struct SMMModel{T<:AbstractFloat} <: AbstractGMMModel
         @assert n_moments >= n_params "SMM requires at least as many moments as parameters"
         @assert sim_ratio >= 1
         new{T}(theta, vcov, n_moments, n_params, n_obs, weighting, W,
-               g_bar, J_stat, J_pvalue, converged, iterations, sim_ratio)
+               g_bar, J_stat, J_pvalue, converged, iterations, sim_ratio, manifest)
     end
 end
 
@@ -386,7 +387,9 @@ function estimate_smm(simulator_fn::Function, moments_fn::Function,
                       bounds::Union{Nothing,ParameterTransform}=nothing,
                       hac::Bool=true, bandwidth::Int=0,
                       max_iter::Int=1000, tol::Real=1e-8,
+                      seed::Union{Integer,Nothing}=nothing,
                       rng=Random.default_rng())
+    rng = _resolve_repro_rng(rng, seed)
     T_type = eltype(data) <: AbstractFloat ? eltype(data) : Float64
     data_T = Matrix{T_type}(data)
     theta0_T = T_type.(theta0)
@@ -564,8 +567,11 @@ function estimate_smm(simulator_fn::Function, moments_fn::Function,
 
     weighting_spec = GMMWeighting{T_type}(weighting, max_iter, tol_T)
 
-    SMMModel{T_type}(
+    result = SMMModel{T_type}(
         theta_hat, vcov, n_moments, n_params, n_obs, weighting_spec,
         W_final, g_bar, J_stat, J_pvalue, converged, iterations, sim_ratio
     )
+    return _with_manifest(result, capture_manifest(; seed=seed,
+        settings=Dict{String,Any}("sim_ratio" => sim_ratio, "burn" => burn,
+                                  "weighting" => String(weighting))))
 end

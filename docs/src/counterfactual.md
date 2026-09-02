@@ -79,6 +79,19 @@ Each additional capability costs one additional assumption. Climb only as far as
 
 ---
 
+## Saving Results
+
+[`save_model`](@ref) persists the fitted result to a versioned JLD2 file; [`load_model`](@ref) reconstructs it. JLD2 is a package dependency --- no extra `using` is required. Every exported result type on this page is saveable; the living catalog is the [API Reference](@ref api_page) Persistence table. See [Data Management](@ref data_page) for bundles, `note=`, `model_info`, compression, and the reproducibility manifest.
+
+```@example cfhub
+path = joinpath(mktempdir(), "counterfactual.jld2")
+save_model(pc, path)
+pc2 = load_model(path)
+typeof(pc2)
+```
+
+---
+
 ## References
 
 - Barnichon, R., and G. Mesters (2023). "A Sufficient Statistics Approach for Macroeconomic Policy." *American Economic Review* 113(11), 2809–2845. doi:10.1257/aer.20220581

@@ -66,7 +66,7 @@ function policy_forecast(fc::Union{VARForecast{T},BVARForecast{T}},
             draws[i] = D .- tgt
         end
     end
-    PolicyForecast{T}(out_syms, values, draws, H, String(origin))
+    PolicyForecast{T}(out_syms, values, draws, H, String(origin))  # deterministic path; no seed
 end
 
 """
@@ -96,10 +96,12 @@ function policy_forecast(outcomes::AbstractVector{Symbol},
                          rho::Real=0.9,
                          n_draws::Int=1000,
                          rng::AbstractRNG=Random.default_rng(),
+                         seed::Union{Integer,Nothing}=nothing,
                          H::Int=isempty(values) ? 0 : length(first(values)),
                          cross_corr::Union{Symbol,AbstractMatrix}=:independent,
                          min_sd::Real=0.0,
                          origin::AbstractString="")
+    rng = _resolve_repro_rng(rng, seed)
     isempty(outcomes) && throw(ArgumentError("outcomes: expected at least one outcome"))
     length(values) == length(outcomes) || throw(ArgumentError(
         "values: expected $(length(outcomes)) paths (one per outcome), got $(length(values))"))
@@ -126,7 +128,9 @@ function policy_forecast(outcomes::AbstractVector{Symbol},
                 draws[i][:, d] = y[(i-1)*H+1:i*H]
             end
         end
-        return PolicyForecast{T}(collect(Symbol, outcomes), vals, draws, H, String(origin))
+        result = PolicyForecast{T}(collect(Symbol, outcomes), vals, draws, H, String(origin))
+        return _with_manifest(result, capture_manifest(; seed=seed,
+            settings=Dict{String,Any}("n_draws" => n_draws, "rho" => Float64(rho))))
     end
 
     sd === nothing && throw(ArgumentError(
@@ -161,7 +165,9 @@ function policy_forecast(outcomes::AbstractVector{Symbol},
             draws[i][:, d] = vals[i] + C * randn(rng, T, H)
         end
     end
-    PolicyForecast{T}(collect(Symbol, outcomes), vals, draws, H, String(origin))
+    result = PolicyForecast{T}(collect(Symbol, outcomes), vals, draws, H, String(origin))
+    return _with_manifest(result, capture_manifest(; seed=seed,
+        settings=Dict{String,Any}("n_draws" => n_draws, "rho" => Float64(rho))))
 end
 
 """

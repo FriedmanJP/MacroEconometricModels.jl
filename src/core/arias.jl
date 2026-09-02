@@ -1449,8 +1449,10 @@ function identify_arias(model::VARModel{T}, restrictions::SVARRestrictions, hori
                         normalize_weights::Bool=true,
                         setup::Union{Nothing,_AriasSVARSetup}=nothing,
                         rng::AbstractRNG=Random.default_rng(),
+                        seed::Union{Integer,Nothing}=nothing,
                         check_id::Bool=true,
                         n_narrative_sims::Int=1000) where {T<:AbstractFloat}
+    rng = _resolve_repro_rng(rng, seed)
     n = nvars(model)
     @assert restrictions.n_vars == n "Restriction dimension must match model"
     check_id && _assert_rwz_identified(restrictions, model; rng=rng)
@@ -1634,7 +1636,9 @@ function identify_arias_bayesian(post::BVARPosterior, restrictions::SVARRestrict
     data::Union{Nothing,AbstractMatrix}=nothing, n_rotations::Int=100,
     quantiles::Vector{Float64}=[0.16, 0.5, 0.84], compute_weights::Bool=true,
     rng::AbstractRNG=Random.default_rng(),
+    seed::Union{Integer,Nothing}=nothing,
     n_narrative_sims::Int=1000)
+    rng = _resolve_repro_rng(rng, seed)
 
     use_data = isnothing(data) ? (isempty(post.data) ? nothing : post.data) : data
     p, n = post.p, post.n

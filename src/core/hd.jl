@@ -93,7 +93,16 @@ struct BayesianHistoricalDecomposition{T<:AbstractFloat} <: AbstractHistoricalDe
     n_requested::Int
     n_effective::Int
     n_failed::Int
+    manifest::Union{ReproManifest,Nothing}
 end
+
+BayesianHistoricalDecomposition{T}(quantiles, point_estimate, initial_quantiles,
+        initial_point_estimate, shocks_point_estimate, actual, T_eff, variables,
+        shock_names, quantile_levels, method, n_requested, n_effective, n_failed;
+        manifest=nothing) where {T} =
+    BayesianHistoricalDecomposition{T}(quantiles, point_estimate, initial_quantiles,
+        initial_point_estimate, shocks_point_estimate, actual, T_eff, variables,
+        shock_names, quantile_levels, method, n_requested, n_effective, n_failed, manifest)
 
 # Backward-compatible constructor (pre-#244, no MC counts ⇒ untracked, no dropped draws).
 BayesianHistoricalDecomposition{T}(quantiles, point_estimate, initial_quantiles,
@@ -449,8 +458,11 @@ function historical_decomposition(post::BVARPosterior, horizon::Int=0;
     restrictions=nothing,
     normalize::Union{Nothing,Symbol}=nothing,
     shock_size::Union{Nothing,Pair}=nothing,
+    seed::Union{Integer,Nothing}=nothing,
     kwargs...
 )
+    rng = _resolve_repro_rng(get(kwargs, :rng, Random.default_rng()), seed)
+    kwargs = (; kwargs..., rng=rng)
     use_data = isempty(data) ? post.data : data
     isempty(use_data) && throw(ArgumentError("Data required for historical decomposition"))
     _validate_narrative_data(method, use_data)
@@ -546,11 +558,13 @@ function historical_decomposition(post::BVARPosterior, horizon::Int=0;
 
     snames = isnothing(shock_names) ? post.varnames : shock_names
     # MC honesty (#244): non-stationary / unidentified posterior draws are skipped (valid_count usable).
-    BayesianHistoricalDecomposition{ET}(
+    result = BayesianHistoricalDecomposition{ET}(
         contrib_q, contrib_m, initial_q, initial_m, shocks_m, actual, T_eff,
         post.varnames, snames, q_vec, method,
         samples, valid_count, samples - valid_count
     )
+    return _with_manifest(result, capture_manifest(; seed=seed,
+        settings=Dict{String,Any}("method" => String(method), "max_draws" => max_draws)))
 end
 
 # Deprecated wrapper for old (chain, p, n, horizon) signature
@@ -664,7 +678,7 @@ function historical_decomposition(model::VARModel{T}, restrictions::SVARRestrict
         model.varnames, snames, q_vec, :arias,
         n_draws, n_acc, max(0, n_draws - n_acc)
     )
-end
+end  # manifest attached by the public historical_decomposition(BVARPosterior) path
 
 """Bayesian HD from stored rotations (no re-sampling)."""
 function _bayesian_hd_from_Qs(model::VARModel{T}, Qs, weights, horizon::Int,

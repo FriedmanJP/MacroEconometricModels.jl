@@ -150,6 +150,19 @@ The **contributions view** draws three stacked bars --- the target's sample mean
 
 ---
 
+## Saving Results
+
+[`save_model`](@ref) persists the fitted result to a versioned JLD2 file; [`load_model`](@ref) reconstructs it. JLD2 is a package dependency --- no extra `using` is required. Every exported result type on this page is saveable; the living catalog is the [API Reference](@ref api_page) Persistence table. See [Data Management](@ref data_page) for bundles, `note=`, `model_info`, compression, and the reproducibility manifest.
+
+```@example nc
+path = joinpath(mktempdir(), "nowcast_dfm.jld2")
+save_model(dfm, path)
+dfm2 = load_model(path)
+typeof(dfm2)
+```
+
+---
+
 ## References
 
 - Banbura, Marta, and Michele Modugno. 2014. "Maximum Likelihood Estimation of Factor Models on Datasets with Arbitrary Pattern of Missing Data." *Journal of Applied Econometrics* 29 (1): 133--160. [DOI: 10.1002/jae.2306](https://doi.org/10.1002/jae.2306)

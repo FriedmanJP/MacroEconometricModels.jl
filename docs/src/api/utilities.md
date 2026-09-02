@@ -74,7 +74,7 @@ with_min_level
 
 ### Reproducibility
 
-`reproduce` is documented here in its generic form; the per-result methods for [`BVARPosterior`](@ref) and bootstrap [`ImpulseResponse`](@ref) results appear in [Multivariate Models API](@ref api_multivariate).
+`reproduce` is documented here in its generic form; per-result methods for [`BVARPosterior`](@ref) and bootstrap [`ImpulseResponse`](@ref) appear in [Multivariate Models API](@ref api_multivariate), and for [`BayesianDSGE`](@ref) and [`KrusellSmithSolution`](@ref) in [DSGE API](@ref api_dsge).
 
 ```@docs
 ReproManifest
@@ -85,9 +85,12 @@ ReproReport
 
 ### Serialization
 
+JLD2 is a package dependency. The living catalog of saveable types is the Persistence table on the [API Reference](@ref api_page); narrative coverage (bundles, `note=`, `model_info`, compression, the executed-code caveat) lives on [Data Management](@ref data_page).
+
 ```@docs
 save_model
 load_model
+model_info
 SERIALIZATION_FORMAT_VERSION
 ```
 

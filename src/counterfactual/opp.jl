@@ -214,7 +214,9 @@ function estimate_opp(fc::PolicyForecast{T}, ce::PolicyCausalEffects{T},
                       independent::Bool=true,
                       levels::Union{Tuple,AbstractVector}=(0.60, 0.75, 0.90),
                       n_sim::Int=2000,
+                      seed::Union{Integer,Nothing}=nothing,
                       rng::AbstractRNG=Random.default_rng()) where {T<:AbstractFloat}
+    rng = _resolve_repro_rng(rng, seed)
     all(l -> 0 < l < 1, levels) || throw(ArgumentError(
         "levels: expected band levels strictly between 0 and 1, got $levels"))
     n_sim >= 2 || throw(ArgumentError("n_sim: expected >= 2, got $n_sim"))
@@ -305,7 +307,12 @@ function estimate_opp(fc::PolicyForecast{T}, ce::PolicyCausalEffects{T},
         reject[lv] = rj
     end
 
-    _opp_package(fc, ce, loss, delta_med, r0.delta_plugin, r0.gradient,
+    result = _opp_package(fc, ce, loss, delta_med, r0.delta_plugin, r0.gradient,
                  P_base, p_syms, wz, ix_ce, ix_fc, iz_p,
                  delta_draws, bands, reject, n_failed)
+    return _with_manifest(result, capture_manifest(; seed=seed,
+        settings=Dict{String,Any}(
+            "n_sim" => n_sim, "independent" => independent,
+            "levels" => collect(Float64, levels),
+            "fc" => fc, "ce" => ce, "loss" => loss)))
 end

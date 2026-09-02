@@ -359,7 +359,9 @@ function identify_uhlig(model::VARModel{T}, restrictions::SVARRestrictions, hori
                          max_iter_coarse::Int=500, max_iter_fine::Int=2000,
                          tol_coarse::T=T(1e-4), tol_fine::T=T(1e-8),
                          penalty_weight::Real=100,
+                         seed::Union{Integer,Nothing}=nothing,
                          rng::AbstractRNG=Random.default_rng()) where {T<:AbstractFloat}
+    rng = _resolve_repro_rng(rng, seed)
     n = nvars(model)
     @assert restrictions.n_vars == n "Restriction dimension ($( restrictions.n_vars)) must match model ($n)"
 

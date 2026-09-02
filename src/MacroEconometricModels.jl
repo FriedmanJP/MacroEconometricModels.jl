@@ -76,6 +76,7 @@ import ForwardDiff
 import NLopt
 import NonlinearSolve
 import Optim
+import JLD2
 import JuMP
 import Ipopt
 using Logging
@@ -620,9 +621,12 @@ include("summary.jl")
 # Tables.jl source interface + tidy exports (after all result types are defined)
 include("core/tables.jl")
 
+# Per-type reproduce() methods (RSER-13 / #786): after every result type.
+include("core/repro_methods.jl")
+
 # Versioned result serialization (#347): dispatches on every result type, so it
-# loads after they are all defined (JLD2 disk backend is a weak-dep extension).
-include("core/serialization.jl")
+# loads after they are all defined.
+include("core/serial.jl")
 
 # Data conversion and estimation dispatch wrappers (after all estimation functions)
 include("data/convert.jl")
@@ -685,7 +689,7 @@ include("plotting/counterfactual.jl")  # CF-22 (#402): policy-counterfactual res
 # Input-Output analysis
 export IOData, IOExtension, IOMetaData
 export technical_coefficients, leontief_inverse, allocation_coefficients, ghosh_inverse
-export leontief, ghosh, multipliers, linkages, rasmussen, key_sectors
+export leontief, ghosh, multipliers, IOMultipliers, linkages, LinkageResult, rasmussen, key_sectors
 export sda, SDAResult, hypothetical_extraction
 export ras, gras, balance, RASResult
 export price_model, PriceModelResult
@@ -811,6 +815,7 @@ export dsge_smoother, dsge_particle_smoother
 
 # Heterogeneous Agent DSGE types
 export HAGrid, IncomeProcess, IndividualProblem
+export CRRAUtility, CRRAMarginalUtility, CRRAInverseMarginalUtility
 export HASteadyState, HADSGESolution, KrusellSmithSolution, DenHaanAccuracy
 export HAGridDiagnostics, ha_grid_diagnostics
 export adaptive_asset_grid, adapt_ha_grid
@@ -824,6 +829,7 @@ export SSJGEJacobian, SSJImpulseResponse
 export combine_blocks, block_jacobian, ssj_jacobian, ssj_irf, ssj_arg_order
 # DCEGM — discrete-continuous choice (Iskhakov et al. 2017)
 export DCEGMProblem, DCEGMSolution, DCEGMDistribution
+export DCEGMUtility, DCEGMIncome
 export dcegm_solve, dcegm_policy, dcegm_choice_probabilities, dcegm_threshold
 export dcegm_simulate, dcegm_retirement_model
 export DCEGMFirm, DCEGMEquilibrium, DCEGMTransition
@@ -1079,7 +1085,7 @@ export report, refs
 export table, print_table
 export long_table, write_csv                 # Tables.jl-compatible tidy exports (#346)
 export ReproManifest, capture_manifest, reproduce, ReproReport   # reproducibility manifest (#345)
-export save_model, load_model, SERIALIZATION_FORMAT_VERSION      # versioned serialization (#347)
+export save_model, load_model, model_info, SERIALIZATION_FORMAT_VERSION  # versioned serialization (#347, #785)
 export point_estimate, has_uncertainty, uncertainty_bounds
 export set_display_backend, get_display_backend, with_display_backend
 export default_abstol, default_reltol

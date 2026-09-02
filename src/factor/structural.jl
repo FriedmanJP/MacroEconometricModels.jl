@@ -81,7 +81,19 @@ struct StructuralDFM{T<:AbstractFloat} <: AbstractFactorModel
     max_eigenvalue_modulus::T
     instrument::Union{Nothing,Vector{T}}
     first_stage_F::T
+    manifest::Union{ReproManifest,Nothing}
 end
+
+StructuralDFM{T}(gdfm, factor_var, B0, Q, identification, structural_irf, loadings_td,
+                 p_var, shock_names, varnames, K, r, method, static_factors,
+                 loadings_static, shock_variance_share, units, identified_set,
+                 acceptance_rate, id_order, lag_criterion, max_eigenvalue_modulus,
+                 instrument, first_stage_F; manifest=nothing) where {T} =
+    StructuralDFM{T}(gdfm, factor_var, B0, Q, identification, structural_irf, loadings_td,
+                     p_var, shock_names, varnames, K, r, method, static_factors,
+                     loadings_static, shock_variance_share, units, identified_set,
+                     acceptance_rate, id_order, lag_criterion, max_eigenvalue_modulus,
+                     instrument, first_stage_F, manifest)
 
 # Backward-compatible constructor (pre-SDFM-18, no proxy fields)
 StructuralDFM{T}(gdfm, factor_var, B0, Q, identification, structural_irf, loadings_td,
@@ -242,9 +254,11 @@ function estimate_structural_dfm(X::AbstractMatrix{T}, q::Int;
     varnames::Union{Nothing,Vector{String}}=nothing,
     shock_names::Union{Nothing,Vector{String}}=nothing,
     rng::AbstractRNG=Random.default_rng(),
+    seed::Union{Integer,Nothing}=nothing,
     instrument::Union{Nothing,AbstractVector}=nothing,
     normalize::Union{Nothing,Tuple}=nothing,
 ) where {T<:AbstractFloat}
+    rng = _resolve_repro_rng(rng, seed)
 
     _validate_data(X, "X")
     r_use = r <= 0 ? q : r
@@ -262,7 +276,8 @@ function estimate_structural_dfm(X::AbstractMatrix{T}, q::Int;
         max_draws=max_draws, narrative_check=narrative_check,
         target_vars=target_vars, restrictions=restrictions,
         transition_var=transition_var, regime_indicator=regime_indicator,
-        varnames=varnames, shock_names=shock_names, rng=rng, standardize=standardize)
+        varnames=varnames, shock_names=shock_names, rng=rng, seed=seed,
+        standardize=standardize)
 end
 
 @float_fallback estimate_structural_dfm X
@@ -367,10 +382,12 @@ function estimate_structural_dfm(gdfm::GeneralizedDynamicFactorModel{T};
     varnames::Union{Nothing,Vector{String}}=nothing,
     shock_names::Union{Nothing,Vector{String}}=nothing,
     rng::AbstractRNG=Random.default_rng(),
+    seed::Union{Integer,Nothing}=nothing,
     standardize::Bool=true,
     instrument::Union{Nothing,AbstractVector}=nothing,
     normalize::Union{Nothing,Tuple}=nothing,
 ) where {T<:AbstractFloat}
+    rng = _resolve_repro_rng(rng, seed)
 
     identification in _SDFM_ID_METHODS || throw(ArgumentError(
         "identification must be one of $(_SDFM_ID_METHODS), got :$identification"))
@@ -411,17 +428,22 @@ function estimate_structural_dfm(gdfm::GeneralizedDynamicFactorModel{T};
     length(sn) == q || throw(ArgumentError(
         "shock_names has $(length(sn)) entries but q=$q"))
 
-    if method === :fglr
-        return _estimate_sdfm_fglr(gdfm, q, r_use, p, p_max, check_stability, H, identification, order, units,
+    result = if method === :fglr
+        _estimate_sdfm_fglr(gdfm, q, r_use, p, p_max, check_stability, H, identification, order, units,
             sign_check, sign_restrictions, restriction_space, store_all,
             max_draws, narrative_check, target_vars, restrictions,
             transition_var, regime_indicator, vn, sn, rng, standardize,
             instrument, normalize)
+    else
+        _estimate_sdfm_gdfm_var(gdfm, q, p, p_max, check_stability, H, identification, sign_check, sign_restrictions,
+            restriction_space, store_all, max_draws, narrative_check, target_vars,
+            restrictions, transition_var, regime_indicator, vn, sn, rng,
+            instrument, normalize)
     end
-    _estimate_sdfm_gdfm_var(gdfm, q, p, p_max, check_stability, H, identification, sign_check, sign_restrictions,
-        restriction_space, store_all, max_draws, narrative_check, target_vars,
-        restrictions, transition_var, regime_indicator, vn, sn, rng,
-        instrument, normalize)
+    return _with_manifest(result, capture_manifest(; seed=seed,
+        settings=Dict{String,Any}("identification" => String(identification),
+                                  "max_draws" => max_draws, "H" => H,
+                                  "method" => String(method))))
 end
 
 # =============================================================================
@@ -950,7 +972,7 @@ function _estimate_sdfm_gdfm_var(gdfm::GeneralizedDynamicFactorModel{T}, q::Int,
         structural_irf, Lambda, p_use, sn, vn,
         K, q, :gdfm_var, F, Lambda, one(T), :raw, idset, rate,
         collect(1:q), lag_crit, T(modu), z_store, Fstat)
-end
+end  # caller attaches the reproducibility manifest
 
 # =============================================================================
 # StatsAPI Interface

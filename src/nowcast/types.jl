@@ -41,7 +41,10 @@ using EM algorithm + Kalman smoother.
 - `nM::Int` — number of monthly variables
 - `nQ::Int` — number of quarterly variables
 - `idio::Symbol` — idiosyncratic spec (:ar1 or :iid)
-- `data::Matrix{T}` — original data with NaN
+- `data::Matrix{T}` — original data with NaN (the vintage `nowcast_news` needs)
+
+`X_sm` and `data` both store the panel, so a serialized `NowcastDFM` duplicates it
+on disk; rely on `compress=` (DSER-14) when persisting large vintages.
 """
 struct NowcastDFM{T<:AbstractFloat} <: AbstractNowcastModel
     X_sm::Matrix{T}

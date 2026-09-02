@@ -1853,6 +1853,19 @@ OLS puts the return to education at 0.966 against a true 0.8, biased upward by t
 
 ---
 
+## Saving Results
+
+[`save_model`](@ref) persists the fitted result to a versioned JLD2 file; [`load_model`](@ref) reconstructs it. JLD2 is a package dependency --- no extra `using` is required. Every exported result type on this page is saveable; the living catalog is the [API Reference](@ref api_page) Persistence table. See [Data Management](@ref data_page) for bundles, `note=`, `model_info`, compression, and the reproducibility manifest.
+
+```@example reg
+path = joinpath(mktempdir(), "reg.jld2")
+save_model(m_ols, path)
+m2 = load_model(path)
+typeof(m2)
+```
+
+---
+
 ## Common Pitfalls
 
 1. **Forgetting the intercept column.** `estimate_reg` requires the user to include a column of ones in `X` for the intercept. If omitted, the model is estimated without a constant, which biases ``R^2`` and the F-test. The `CrossSectionData` dispatch adds the intercept automatically.

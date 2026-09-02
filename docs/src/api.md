@@ -508,10 +508,174 @@ Publication-quality tables, display backend switching, and bibliographic referen
 | `with_min_level(f, level)` | Run `f()` with a scoped minimum log level |
 | `capture_manifest(; seed)` | Capture a reproducibility manifest (seed, threads, versions, git) |
 | `reproduce(result)` | Re-run a randomized result from its seed; returns a `ReproReport` |
-| `save_model(model, path)` | Persist a fitted model or data container to a versioned container (needs JLD2) |
-| `load_model(path)` | Reconstruct a saved model, validating the format version |
+| `save_model(model, path; note="", compress=false)` | Persist a fitted model, DSGE/HA/OLG result, data container, or named bundle (JLD2 is a dependency) |
+| `load_model(path)` | Reconstruct a saved model (or a `Dict` of objects for a bundle). Treat a DSGE file as executed code |
+| `model_info(path)` | Read the file header (`note`, versions, type tags) without reconstructing the payload |
 | `refs(model; format=...)` | Bibliographic references |
 | `refs(io, :method; format=...)` | References by method name |
+
+Versioned JLD2 persistence for every registered result type. See [Data Management](@ref data_page) for bundles, `note=`, compression, and the executed-code caveat. Docstrings live on [Utilities & Display API](@ref api_utilities).
+
+### Persistence
+
+| Function | Description |
+|----------|-------------|
+| `save_model(model, path; note="", compress=false)` | Persist one registered result |
+| `save_model(dict, path; note="", compress=false)` | Persist a named bundle (`Dict{String,<:Any}`) |
+| `save_model(vec, path; note="", compress=false)` | Persist a vector bundle (keys `"1"`, `"2"`, …) |
+| `load_model(path)` | Reconstruct one object, or a `Dict{String,Any}` for a bundle |
+| `model_info(path)` | Header only: `note`, versions, type tags, per-entry manifests |
+| `SERIALIZATION_FORMAT_VERSION` | On-disk schema version (currently `1`) |
+| `SerializationError` | Format/type mismatch, missing file, or unregistered type |
+
+The table below is generated at build time from `MacroEconometricModels._SERIALIZABLE_TYPES`. A build-time guard asserts that every registered type appears in exactly one family, so the catalog cannot silently drift from the registry.
+
+```@eval
+using MacroEconometricModels
+import Markdown
+
+const _SER = MacroEconometricModels._SERIALIZABLE_TYPES
+const _SER_GROUPS = [
+    "Data containers" => ["TimeSeriesData", "PanelData", "CrossSectionData"],
+    "Input-output" => ["IOData", "IOMetaData", "ExtractionResult", "PriceModelResult",
+        "ImpactResult", "NetworkStatsResult", "VerticalSpecialization",
+        "ExportDecomposition", "RegionalFootprintResult", "BaqaeeFarhiResult",
+        "ProductionNetwork", "SDAResult", "RASResult", "BFLocal", "BFElasticities",
+        "BFShockCurve", "BFEquilibrium", "BFWedgeDecomp", "BFMisallocation",
+        "FootprintResult", "IOMultipliers", "LinkageResult", "IOExtension"],
+    "VAR / BVAR / VECM / PVAR" => ["VARModel", "BVARPosterior", "VECMModel",
+        "CointRegModel", "PanelCointRegModel", "JohansenResult", "PVARModel",
+        "MFVARPosterior", "TVPVARPosterior", "MinnesotaHyperparameters",
+        "GLPHyperparameters"],
+    "Regression / panel / discrete choice" => ["RegModel", "LogitModel", "ProbitModel",
+        "PanelRegModel", "PanelIVModel", "PanelLogitModel", "PanelProbitModel",
+        "OrderedLogitModel", "OrderedProbitModel", "MultinomialLogitModel"],
+    "Local projections" => ["LPModel", "LPIVModel", "SmoothLPModel", "StateLPModel",
+        "PropensityLPModel", "MontielOleaPfluegerF", "LPIVARBand", "BSplineBasis",
+        "PropensityScoreConfig"],
+    "GMM / SUR / 3SLS" => ["SURModel", "ThreeSLSModel", "GMMModel", "SMMModel",
+        "GMMWeighting", "ParameterTransform"],
+    "Volatility" => ["ARCHModel", "GARCHModel", "EGARCHModel", "GJRGARCHModel",
+        "APARCHModel", "CGARCHModel", "FIGARCHModel", "FIEGARCHModel", "IGARCHModel",
+        "GarchMidasModel", "SVModel", "MGARCHModel"],
+    "Factor / FAVAR" => ["FactorModel", "DynamicFactorModel",
+        "GeneralizedDynamicFactorModel", "FAVARModel", "BayesianFAVAR",
+        "StructuralDFM", "HallinLiskaResult", "BaiNgQResult", "AmengualWatsonResult"],
+    "ARIMA / ARDL / nonlinear / MIDAS / state space" => ["ARModel", "MAModel",
+        "ARMAModel", "ARIMAModel", "SARIMAModel", "ARFIMAModel", "ARIMAOrderSelection",
+        "GPHResult", "LocalWhittleResult", "ARDLModel", "ARDLLongRun", "ARDLBoundsTest",
+        "NARDLModel", "NARDLMultipliers", "NARDLSymmetryTest", "PMGModel",
+        "ThresholdModel", "STARModel", "MSRegModel", "HansenLinearityTest",
+        "MidasModel", "StateSpaceModel"],
+    "SVAR identification" => ["ProxySVARResult", "SVARModel", "MaxShareResult",
+        "SVECResult", "ICASVARResult", "NonGaussianMLResult", "NonGaussianGMMResult",
+        "MarkovSwitchingSVARResult", "GARCHSVARResult", "SmoothTransitionSVARResult",
+        "ExternalVolatilitySVARResult", "AriasSVARResult", "UhligSVARResult",
+        "BayesianSetIdentifiedSVAR", "SignIdentifiedSet", "RobustBayesResult",
+        "IdentifiabilityTestResult"],
+    "Innovation accounting" => ["ImpulseResponse", "BayesianImpulseResponse", "FEVD",
+        "BayesianFEVD", "HistoricalDecomposition", "BayesianHistoricalDecomposition",
+        "LPImpulseResponse", "LPFEVD", "StructuralLP", "GrangerCausalityResult",
+        "VARStationarityResult", "PVARStability", "PVARTestResult",
+        "VECMGrangerResult", "VECMRestrictionTest"],
+    "Forecasts / evaluation" => ["VARForecast", "BVARForecast", "VECMForecast",
+        "ARIMAForecast", "LPForecast", "MidasForecast", "FactorForecast",
+        "VolatilityForecast", "ThresholdForecast", "STARForecast", "MSForecast",
+        "ConditionalForecast", "ForecastCondition", "ForecastEvaluation",
+        "DMTestResult", "ClarkWestResult", "MincerZarnowitzResult",
+        "ForecastEncompassingResult", "ForecastCombination"],
+    "Nowcasting" => ["NowcastDFM", "NowcastBVAR", "NowcastBridge", "NowcastResult",
+        "NowcastNews", "NowcastForecast"],
+    "Cross-section / micro" => ["RobustRegModel", "PenalizedRegModel", "HeckmanModel",
+        "TobitModel", "TruncRegModel", "PoissonModel", "NegBinModel", "DispersionTest",
+        "QuantileRegModel", "RDDResult", "SelectionResult", "MarginalEffects",
+        "MultinomialMarginalEffects", "OddsRatio", "InfluenceStats", "StabilityResult",
+        "RegDiagnosticResult", "AndersonRubinTest", "AndersonRubinCI",
+        "WildClusterBootstrap", "PanelTestResult"],
+    "DiD / event study" => ["DIDResult", "EventStudyLP", "LPDiDResult",
+        "BaconDecomposition", "PretrendTestResult", "NegativeWeightResult",
+        "HonestDiDResult"],
+    "Filters / spectral / nonparametric" => ["HPFilterResult", "HamiltonFilterResult",
+        "BeveridgeNelsonResult", "BaxterKingResult", "BoostedHPResult",
+        "X13FilterResult", "ACFResult", "SpectralDensityResult", "CrossSpectrumResult",
+        "TransferFunctionResult", "FisherTestResult", "BartlettWhiteNoiseResult",
+        "KernelDensity", "KernelRegression", "LowessFit", "DataSummary",
+        "DataDiagnostic"],
+    "Hypothesis tests" => ["ADFResult", "KPSSResult", "PPResult", "ZAResult",
+        "NgPerronResult", "DFGLSResult", "LMUnitRootResult", "ADF2BreakResult",
+        "FourierADFResult", "FourierKPSSResult", "ERSResult", "HEGYResult",
+        "VarianceRatioResult", "BubbleResult", "LLCResult", "IPSResult",
+        "BreitungPanelResult", "FisherPanelResult", "HadriResult", "PANICResult",
+        "PesaranCIPSResult", "MoonPerronResult", "PanelUnitRootSummary",
+        "EngleGrangerResult", "PhillipsOuliarisResult", "GregoryHansenResult",
+        "PedroniResult", "KaoResult", "WesterlundResult", "FisherJohansenResult",
+        "ParkAddedResult", "AndrewsResult", "BaiPerronResult",
+        "HansenInstabilityResult", "FactorBreakResult", "LjungBoxResult",
+        "BoxPierceResult", "DurbinWatsonResult", "LRTestResult", "LMTestResult",
+        "NormalityTestResult", "NormalityTestSuite", "EDFTestResult", "BDSResult",
+        "CorTestResult", "EqualityTestResult", "DumitrescuHurlinResult"],
+    "Counterfactual / OPP" => ["PolicyCausalEffects", "PolicyRule", "PolicyLoss",
+        "BaselinePath", "PolicyForecast", "WoldRepresentation",
+        "PolicyCounterfactual", "CounterfactualMoments", "OPPResult", "OPPSequence",
+        "ModelBankMember", "CounterfactualHistory", "SpanningDiagnostic",
+        "ForecastSufficiency", "PathFloorConstraint", "FunctionConstraint"],
+    "DSGE / HA / OLG / continuous time" => ["ModelSpec", "NamedEquation", "ModelIR",
+        "IREquation", "IRDecl", "TimingInfo", "LinearDSGE", "DSGESolution",
+        "PerturbationSolution", "ProjectionSolution", "PerfectForesightPath",
+        "PrunedStateSpace", "DeterminacyMap", "KalmanSmootherResult",
+        "DSGEEstimation", "OccBinConstraint", "OccBinRegime", "OccBinSolution",
+        "OccBinIRF", "DSGEPrior", "DSGEStateSpace", "NonlinearStateSpace",
+        "ProjectionStateSpace", "BayesianDSGE", "PosteriorMode",
+        "BayesianDSGESimulation", "MCMCDiagnostics", "IdentificationDiagnostics",
+        "LearningRateCheck", "PriorPosteriorOverlap", "PriorPredictiveResult",
+        "PosteriorPredictiveCheck", "PrefilterSpec", "ObservationTrends",
+        "IndividualProblem", "HouseholdSystem", "HAGrid", "IncomeProcess",
+        "HASteadyState", "HADSGESolution", "KrusellSmithSolution", "WinberryFamily",
+        "DenHaanAccuracy", "HAGridDiagnostics", "SimpleBlock", "HetBlock", "MitBlock",
+        "SSJModel", "SSJGEJacobian", "SSJImpulseResponse", "DCEGMProblem",
+        "DCEGMSystem", "DCEGMSolution", "DCEGMDistribution", "DCEGMFirm",
+        "DCEGMEquilibrium", "DCEGMTransition", "FirmSystem", "KhanThomasSteadyState",
+        "KhanThomasTransition", "IntermediarySystem", "IntermediaryPE",
+        "IntermediarySteadyState", "IntermediaryTransition", "BlanchardOLG",
+        "BlanchardOLGSteadyState", "BlanchardOLGSolution", "LifeCycleOLG",
+        "LifeCycleSystem", "LifeCycleSteadyState", "LifeCycleTransition",
+        "CTPoissonIncome", "CTAiyagari", "CTSteadyState", "CTTransition",
+        "CTTwoAsset", "CTTwoAssetSolution", "CTTwoAssetGE", "CTTwoAssetTransition",
+        "ContinuousHouseholdSystem"],
+]
+
+listed = String[]
+for (_, types) in _SER_GROUPS
+    append!(listed, types)
+end
+listed_set = Set(listed)
+reg_set = Set(keys(_SER))
+missing_from_table = sort!(collect(setdiff(reg_set, listed_set)))
+extra_in_table = sort!(collect(setdiff(listed_set, reg_set)))
+dups = let seen = Set{String}(); d = String[]
+    for t in listed
+        t in seen ? push!(d, t) : push!(seen, t)
+    end
+    unique(d)
+end
+isempty(missing_from_table) && isempty(extra_in_table) && isempty(dups) ||
+    error("api.md saveable-type table drift: missing=$(missing_from_table) " *
+          "extra=$(extra_in_table) duplicates=$(dups)")
+
+io = IOBuffer()
+println(io, "The registry holds **$(length(_SER))** top-level saveable types. ",
+            "Exported concrete structs that are not independent `save_model` ",
+            "targets live in `_SERIALIZATION_EXCLUDED` (",
+            length(MacroEconometricModels._SERIALIZATION_EXCLUDED), " entries).")
+println(io)
+println(io, "| Family | Saveable types |")
+println(io, "|--------|----------------|")
+for (fam, types) in _SER_GROUPS
+    cells = join(["`" * t * "`" for t in types], ", ")
+    println(io, "| ", fam, " | ", cells, " |")
+end
+Markdown.parse(String(take!(io)))
+```
 
 HAC (Newey-West), heteroskedasticity-robust (White), and panel-robust (Driscoll-Kraay) covariance estimators.
 

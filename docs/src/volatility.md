@@ -1232,6 +1232,19 @@ The industrial production growth series exhibits ARCH effects, confirming the ne
 
 ---
 
+## Saving Results
+
+[`save_model`](@ref) persists the fitted result to a versioned JLD2 file; [`load_model`](@ref) reconstructs it. JLD2 is a package dependency --- no extra `using` is required. Every exported result type on this page is saveable; the living catalog is the [API Reference](@ref api_page) Persistence table. See [Data Management](@ref data_page) for bundles, `note=`, `model_info`, compression, and the reproducibility manifest.
+
+```@example volatility
+path = joinpath(mktempdir(), "garch.jld2")
+save_model(garch, path)
+garch2 = load_model(path)
+typeof(garch2)
+```
+
+---
+
 ## Common Pitfalls
 
 1. **Non-stationarity when persistence ``\geq 1``**: If ``\sum \alpha_i + \sum \beta_j \geq 1`` (GARCH), the process is non-stationary and the unconditional variance is infinite. The `unconditional_variance()` accessor returns `Inf` and `halflife()` returns `Inf`. This typically indicates the model is overparameterized or the data contains a structural break in volatility. Consider a lower-order specification or splitting the sample.

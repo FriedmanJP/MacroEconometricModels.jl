@@ -819,7 +819,9 @@ ghosh_inverse
 leontief
 ghosh
 multipliers
+IOMultipliers
 linkages
+LinkageResult
 rasmussen
 key_sectors
 sda

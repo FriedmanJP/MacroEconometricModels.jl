@@ -6,6 +6,29 @@ output, not just documentation.
 
 ---
 
+## v0.9.3
+
+Patch on the `0.9` series: `save_model` / `load_model` for every result type (DSER `#759`--`#773`, RSER `#774`--`#788`). JLD2 is a hard dependency. `SERIALIZATION_FORMAT_VERSION` stays `1`. Downstream `[compat]` of `MacroEconometricModels = "0.9"` still resolves.
+
+**New**
+
+- `save_model` / `load_model` cover `ModelSpec`, representative-agent solutions, Bayesian DSGE results, HA steady states and SSJ objects, DCEGM / firm / intermediary, OLG, and continuous-time families (`#759`--`#768`).
+- `CRRAUtility` / `CRRAMarginalUtility` / `CRRAInverseMarginalUtility` callable structs replace anonymous household utilities (`#764`).
+- `seed=` / `manifest` / `reproduce` for `BayesianDSGE` and `KrusellSmithSolution` (`#769`).
+- `save_model(...; compress=true)` forwards CodecZlib compression to JLD2 (`#772`).
+- Every non-DSGE fitted model, IRF/FEVD/HD, forecast, nowcast, DiD, test, counterfactual, IO, and companion result round-trips through the registry (`#774`--`#787`).
+- Bundles (`Dict` / `Vector` of objects per file), `note=`, and `model_info(path)` (`#785`).
+- `seed=` / `manifest` / `reproduce` for randomized non-DSGE estimators (`#786`).
+
+**Also**
+
+- `@float_fallback` throws `MethodError` instead of overflowing when no concrete method exists (`#758`).
+- Persistence documentation, the executed-code caveat, the named-function / `CRRAUtility` requirement, and the saveable-type table (`#771`, `#788`).
+- Dynare/HA solve-equality serialization suite and committed v1 fixtures (`#770`).
+- Module-split serialization tests, report/plot equivalence helpers, and the completeness flip (`#787`).
+
+---
+
 ## v0.9.2
 
 Patch on the `0.9` series: SVAR identification completion (SID series, `#730`--`#756`). Downstream `[compat]` of `MacroEconometricModels = "0.9"` still resolves. **Changed numerical output** for heteroskedastic ``B_0``, the Uhlig penalty, and `irf(; method=:sign/:narrative)`.

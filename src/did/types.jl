@@ -86,6 +86,19 @@ struct DIDResult{T<:AbstractFloat} <: AbstractFrequentistResult
     conf_level::T
     att_vcov::Union{Matrix{T}, Nothing}
     base_period::Symbol
+    manifest::Union{ReproManifest,Nothing}
+end
+
+function DIDResult{T}(att, se, ci_lower, ci_upper, event_times, reference_period,
+                      group_time_att, cohorts, overall_att, overall_se, n_obs,
+                      n_groups, n_treated, n_control, method, outcome_var,
+                      treatment_var, control_group, cluster, conf_level,
+                      att_vcov, base_period; manifest=nothing) where {T<:AbstractFloat}
+    DIDResult{T}(att, se, ci_lower, ci_upper, event_times, reference_period,
+                 group_time_att, cohorts, overall_att, overall_se, n_obs,
+                 n_groups, n_treated, n_control, method, outcome_var,
+                 treatment_var, control_group, cluster, conf_level, att_vcov,
+                 base_period, manifest)
 end
 
 # Back-compat outer constructors: legacy 20-arg positional calls (through `conf_level`)
@@ -154,7 +167,8 @@ along with per-horizon regression details for diagnostics.
 - `clean_controls::Bool` — LP-DiD flag (true = only not-yet-treated controls)
 - `cluster::Symbol` — clustering level
 - `conf_level::T` — confidence level
-- `data::PanelData{T}` — original data
+- `data::PanelData{T}` — original data. Embedded on disk (not dropped); rely
+  on `compress=` (DSER-14) for large event-study objects.
 
 # References
 - Jorda, O. (2005). *AER* 95(1), 161-182.
@@ -231,7 +245,9 @@ LP-DiD estimation result with full Dube, Girardi, Jordà & Taylor (2025) specifi
 - `post_window::Int` — post-treatment event window
 - `cluster::Symbol` — clustering level
 - `conf_level::T` — confidence level
-- `data::PanelData{T}` — original panel data
+- `data::PanelData{T}` — original panel data. Kept on disk so `plot_result`
+  can rebuild the event-study path; rely on `compress=` (DSER-14) for large
+  LP-DiD objects.
 
 # References
 - Dube, A., Girardi, D., Jordà, Ò. & Taylor, A.M. (2025). *JAE*.

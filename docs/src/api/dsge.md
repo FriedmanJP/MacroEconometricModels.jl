@@ -137,6 +137,7 @@ estimate_dsge
 
 ```@docs
 estimate_dsge_bayes
+reproduce(::BayesianDSGE)
 posterior_mode
 PosteriorMode
 posterior_summary
@@ -209,6 +210,9 @@ HAGrid
 HAGrid()
 IncomeProcess
 IndividualProblem
+CRRAUtility
+CRRAMarginalUtility
+CRRAInverseMarginalUtility
 HASteadyState
 HADSGESolution
 KrusellSmithSolution
@@ -228,6 +232,7 @@ distribution_irf
 inequality_irf
 simulate_panel
 den_haan_test
+reproduce(::KrusellSmithSolution)
 ha_grid_diagnostics
 adaptive_asset_grid
 adapt_ha_grid
@@ -275,6 +280,8 @@ Filter  = f -> f === MacroEconometricModels.report
 
 ```@docs
 DCEGMProblem
+DCEGMUtility
+DCEGMIncome
 DCEGMSolution
 DCEGMDistribution
 DCEGMFirm

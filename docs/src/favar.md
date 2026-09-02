@@ -405,6 +405,19 @@ The two-step FAVAR extracts 2 factors from the 7-series panel, removes the compo
 
 ---
 
+## Saving Results
+
+[`save_model`](@ref) persists the fitted result to a versioned JLD2 file; [`load_model`](@ref) reconstructs it. JLD2 is a package dependency --- no extra `using` is required. Every exported result type on this page is saveable; the living catalog is the [API Reference](@ref api_page) Persistence table. See [Data Management](@ref data_page) for bundles, `note=`, `model_info`, compression, and the reproducibility manifest.
+
+```@example favar
+path = joinpath(mktempdir(), "favar.jld2")
+save_model(favar, path)
+favar2 = load_model(path)
+typeof(favar2)
+```
+
+---
+
 ## Common Pitfalls
 
 1. **Slow/fast misclassification.** The ordering ``[\tilde F, Y^{key}]`` makes the factors slow and the key variables fast under Cholesky. Putting a genuinely slow-moving series such as GDP in `Y_key` asserts that it responds to policy within the period. Encode the identification through the factor ordering, or switch to sign restrictions.

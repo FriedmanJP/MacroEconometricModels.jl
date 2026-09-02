@@ -30,6 +30,7 @@ Normal-Inverse-Wishart posterior directly.
 - `prior::Symbol`: Prior used (:normal or :minnesota)
 - `sampler::Symbol`: Sampler used (:direct or :gibbs)
 - `varnames::Vector{String}`: Variable names
+- `manifest::Union{ReproManifest,Nothing}`: Provenance record when `estimate_bvar` was called with `seed=`; `reproduce(post)` re-runs from that seed
 """
 struct BVARPosterior{T<:AbstractFloat}
     B_draws::Array{T,3}       # n_draws × k × n

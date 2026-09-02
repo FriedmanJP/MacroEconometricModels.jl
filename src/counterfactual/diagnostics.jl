@@ -37,7 +37,9 @@ function spanning_diagnostic(base::BaselinePath{T}, ce_emp::PolicyCausalEffects{
                              policy::Union{PolicyRule{T},PolicyLoss{T}};
                              draws::Symbol=:auto, tol::Real=0.1, n_sim::Int=200,
                              quantiles::Union{Tuple,AbstractVector}=(0.16, 0.5, 0.84),
+                             seed::Union{Integer,Nothing}=nothing,
                              rng::AbstractRNG=Random.default_rng()) where {T<:AbstractFloat}
+    rng = _resolve_repro_rng(rng, seed)
     is_square(ce_full) || throw(ArgumentError(
         "ce_full must be a square (model-implied) container; got n_s = $(n_shocks(ce_full)) < H = $(ce_full.H)"))
     ce_emp.H == ce_full.H || throw(ArgumentError(
@@ -117,8 +119,10 @@ function spanning_diagnostic(base::BaselinePath{T}, ce_emp::PolicyCausalEffects{
         end
     end
 
-    SpanningDiagnostic{T}(gap, gap_rel, loading, pc_e.rel_residual, spanned,
-                          copy(ce_emp.outcomes), pc_e.x_cf, pc_f.x_cf, bands_gap)
+    result = SpanningDiagnostic{T}(gap, gap_rel, loading, pc_e.rel_residual, spanned,
+                                   copy(ce_emp.outcomes), pc_e.x_cf, pc_f.x_cf, bands_gap)
+    return _with_manifest(result, capture_manifest(; seed=seed,
+        settings=Dict{String,Any}("n_sim" => n_sim, "tol" => Float64(tol))))
 end
 
 """

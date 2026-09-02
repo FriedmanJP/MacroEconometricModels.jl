@@ -677,6 +677,19 @@ Choose the estimators here when treatment is absorbing and the question is a coh
 
 ---
 
+## Saving Results
+
+[`save_model`](@ref) persists the fitted result to a versioned JLD2 file; [`load_model`](@ref) reconstructs it. JLD2 is a package dependency --- no extra `using` is required. Every exported result type on this page is saveable; the living catalog is the [API Reference](@ref api_page) Persistence table. See [Data Management](@ref data_page) for bundles, `note=`, `model_info`, compression, and the reproducibility manifest.
+
+```@example did
+path = joinpath(mktempdir(), "did.jld2")
+save_model(did, path)
+did2 = load_model(path)
+typeof(did2)
+```
+
+---
+
 ## Common Pitfalls
 
 1. **Parallel trends is untestable**: Pre-trend tests evaluate whether pre-treatment coefficients are jointly zero, but non-rejection does not prove parallel trends hold in the post-treatment period. Conditioning on passing a pre-trend test introduces pre-testing bias (Roth 2022). Always complement with HonestDiD sensitivity analysis.

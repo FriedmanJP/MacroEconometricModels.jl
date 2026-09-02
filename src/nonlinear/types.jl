@@ -47,7 +47,13 @@ struct HansenLinearityTest{T<:AbstractFloat}
     reps::Int
     trim::T
     n_grid::Int
+    manifest::Union{ReproManifest,Nothing}
 end
+
+HansenLinearityTest{T}(sup_lm, sup_wald, pvalue_lm, pvalue_wald, gamma_sup, reps, trim,
+                       n_grid; manifest=nothing) where {T<:AbstractFloat} =
+    HansenLinearityTest{T}(sup_lm, sup_wald, pvalue_lm, pvalue_wald, gamma_sup, reps, trim,
+                           n_grid, manifest)
 
 # =============================================================================
 # Threshold / SETAR model
@@ -123,7 +129,16 @@ struct ThresholdModel{T<:AbstractFloat} <: AbstractNonlinearTSModel
     qname::String
     trim::T
     linearity::Union{Nothing,HansenLinearityTest{T}}
+    manifest::Union{ReproManifest,Nothing}
 end
+
+ThresholdModel{T}(y, X, q, gamma, gamma_ci, gamma_ci_level, beta1, beta2, se1, se2,
+                  regime, ssr1, ssr2, ssr, sigma2, residuals, n, k, n1, n2, p, d,
+                  is_setar, aic, bic, xnames, qname, trim, linearity;
+                  manifest=nothing) where {T<:AbstractFloat} =
+    ThresholdModel{T}(y, X, q, gamma, gamma_ci, gamma_ci_level, beta1, beta2, se1, se2,
+                      regime, ssr1, ssr2, ssr, sigma2, residuals, n, k, n1, n2, p, d,
+                      is_setar, aic, bic, xnames, qname, trim, linearity, manifest)
 
 """
     ThresholdForecast{T} <: AbstractForecastResult{T}
@@ -146,7 +161,12 @@ struct ThresholdForecast{T<:AbstractFloat} <: AbstractForecastResult{T}
     horizon::Int
     conf_level::T
     reps::Int
+    manifest::Union{ReproManifest,Nothing}
 end
+
+ThresholdForecast{T}(forecast, ci_lower, ci_upper, se, horizon, conf_level, reps;
+                     manifest=nothing) where {T<:AbstractFloat} =
+    ThresholdForecast{T}(forecast, ci_lower, ci_upper, se, horizon, conf_level, reps, manifest)
 
 # =============================================================================
 # Hansen (2000) tabulated critical values for the threshold confidence interval
@@ -341,7 +361,17 @@ struct STARModel{T<:AbstractFloat} <: AbstractNonlinearTSModel
     lm3_fpvalue::T
     sel_pvalues::Union{Nothing,NTuple{3,T}}
     converged::Bool
+    manifest::Union{ReproManifest,Nothing}
 end
+
+STARModel{T}(y, z, s, phi1, phi2, se_phi1, se_phi2, gamma, c, se_gamma, se_c, G,
+             trans_type, residuals, ssr, sigma2, n, p, d, k, sigma_s, aic, bic,
+             znames, sname, lm3_stat, lm3_pvalue, lm3_fstat, lm3_fpvalue, sel_pvalues,
+             converged; manifest=nothing) where {T<:AbstractFloat} =
+    STARModel{T}(y, z, s, phi1, phi2, se_phi1, se_phi2, gamma, c, se_gamma, se_c, G,
+                 trans_type, residuals, ssr, sigma2, n, p, d, k, sigma_s, aic, bic,
+                 znames, sname, lm3_stat, lm3_pvalue, lm3_fstat, lm3_fpvalue, sel_pvalues,
+                 converged, manifest)
 
 """
     STARForecast{T} <: AbstractForecastResult{T}
@@ -364,7 +394,12 @@ struct STARForecast{T<:AbstractFloat} <: AbstractForecastResult{T}
     horizon::Int
     conf_level::T
     reps::Int
+    manifest::Union{ReproManifest,Nothing}
 end
+
+STARForecast{T}(forecast, ci_lower, ci_upper, se, horizon, conf_level, reps;
+                manifest=nothing) where {T<:AbstractFloat} =
+    STARForecast{T}(forecast, ci_lower, ci_upper, se, horizon, conf_level, reps, manifest)
 
 """
     MSForecast{T} <: AbstractForecastResult{T}
@@ -388,7 +423,13 @@ struct MSForecast{T<:AbstractFloat} <: AbstractForecastResult{T}
     horizon::Int
     conf_level::T
     reps::Int
+    manifest::Union{ReproManifest,Nothing}
 end
+
+MSForecast{T}(forecast, ci_lower, ci_upper, se, regime_prob, horizon, conf_level, reps;
+              manifest=nothing) where {T<:AbstractFloat} =
+    MSForecast{T}(forecast, ci_lower, ci_upper, se, regime_prob, horizon, conf_level, reps,
+                  manifest)
 
 # Human-readable transition-type label.
 function _star_type_label(t::Symbol)

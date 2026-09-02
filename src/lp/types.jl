@@ -191,7 +191,13 @@ struct StructuralLP{T<:AbstractFloat} <: AbstractFrequentistResult
     n_requested::Int
     n_effective::Int
     n_failed::Int
+    manifest::Union{ReproManifest,Nothing}
 end
+
+StructuralLP{T}(irf, structural_shocks, var_model, Q, method, lags, cov_type, se, lp_models,
+                n_requested, n_effective, n_failed; manifest=nothing) where {T} =
+    StructuralLP{T}(irf, structural_shocks, var_model, Q, method, lags, cov_type, se, lp_models,
+                    n_requested, n_effective, n_failed, manifest)
 
 # Backward-compatible constructor (pre-#244, no bootstrap counts ⇒ all zero).
 StructuralLP{T}(irf, structural_shocks, var_model, Q, method, lags, cov_type, se, lp_models) where {T} =

@@ -73,7 +73,9 @@ function estimate_did(pd::PanelData{T}, outcome::Union{String,Symbol},
                       conf_level::Real=0.95,
                       n_boot::Int=200,
                       base_period::Symbol=:varying,
+                      seed::Union{Integer,Nothing}=nothing,
                       rng::AbstractRNG=Random.default_rng()) where {T<:AbstractFloat}
+    rng = _resolve_repro_rng(rng, seed)
     # Validate inputs
     outcome_col = _resolve_varindex(pd, outcome)
     treat_col = _resolve_varindex(pd, treatment)
@@ -86,7 +88,7 @@ function estimate_did(pd::PanelData{T}, outcome::Union{String,Symbol},
     horizon >= 0 || throw(ArgumentError("horizon must be non-negative"))
     leads >= 0 || throw(ArgumentError("leads must be non-negative"))
 
-    if method == :twfe
+    result = if method == :twfe
         _estimate_twfe(pd, outcome_col, treat_col;
                        leads=leads, horizon=horizon,
                        covariate_cols=cov_cols,
@@ -117,6 +119,14 @@ function estimate_did(pd::PanelData{T}, outcome::Union{String,Symbol},
         throw(ArgumentError("Unknown DiD method :$method. " *
             "Available: :twfe, :callaway_santanna, :sun_abraham, :bjs, :did_multiplegt"))
     end
+    return _with_manifest(result, capture_manifest(; seed=seed,
+        settings=Dict{String,Any}(
+            "method" => String(method), "leads" => leads, "horizon" => horizon,
+            "covariates" => copy(covariates), "control_group" => String(control_group),
+            "cluster" => String(cluster), "conf_level" => Float64(conf_level),
+            "n_boot" => n_boot, "base_period" => String(base_period),
+            "outcome" => string(outcome), "treatment" => string(treatment),
+            "data" => pd)))
 end
 
 

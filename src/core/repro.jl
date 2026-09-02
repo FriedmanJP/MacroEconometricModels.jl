@@ -182,11 +182,41 @@ the single seed-injection point every randomized estimator routes through.
 _resolve_repro_rng(rng, seed::Integer) = Random.MersenneTwister(seed)
 _resolve_repro_rng(rng, ::Nothing) = rng
 
+"""Rebuild `x` replacing its trailing `manifest` field. Used by randomized
+estimators so existing construction sites stay at the old arity."""
+function _with_manifest(x, m::Union{ReproManifest,Nothing})
+    ns = fieldnames(typeof(x))
+    ns[end] === :manifest || throw(ArgumentError(
+        "_with_manifest: last field of $(typeof(x)) is :$(ns[end]), expected :manifest"))
+    args = ntuple(i -> getfield(x, i), length(ns) - 1)
+    return typeof(x)(args..., m)
+end
+
+# Flatten a NamedTuple (solver_kwargs, ha_kwargs) to a plain Dict so a
+# ReproManifest payload stays numbers/strings/bools.
+function _plain_nt_settings(nt::NamedTuple)
+    d = Dict{String,Any}()
+    for (k, v) in pairs(nt)
+        d[String(k)] = v isa Symbol ? String(v) : v
+    end
+    return d
+end
+function _nt_from_settings(d::AbstractDict)
+    isempty(d) && return NamedTuple()
+    ks = Symbol[Symbol(k) for k in keys(d)]
+    vs = Tuple(d[string(k)] for k in ks)
+    return NamedTuple{Tuple(ks)}(vs)
+end
+
 # ─────────────────────────────────────────────────────────────────────────────
 # Manifest ↔ Dict (plain primitives only — for versioned serialization, #347)
 # ─────────────────────────────────────────────────────────────────────────────
 
 function _manifest_to_dict(m::ReproManifest)
+    settings = Dict{String,Any}()
+    for (k, v) in m.settings
+        settings[String(k)] = _ser_field(v)
+    end
     return Dict{String,Any}(
         "__manifest__"        => true,
         "seed"                => m.seed,
@@ -199,7 +229,7 @@ function _manifest_to_dict(m::ReproManifest)
         "timestamp"           => m.timestamp,
         "git_sha"             => m.git_sha,
         "git_dirty"           => m.git_dirty,
-        "settings"            => Dict{String,Any}(m.settings),
+        "settings"            => settings,
     )
 end
 _manifest_to_dict(::Nothing) = nothing
@@ -221,7 +251,14 @@ function _manifest_from_dict(d::AbstractDict)
         String(get(d, "timestamp", "unknown")),
         String(get(d, "git_sha", "unknown")),
         Bool(get(d, "git_dirty", false)),
-        Dict{String,Any}(get(d, "settings", Dict{String,Any}())),
+        begin
+            raw = get(d, "settings", Dict{String,Any}())
+            s = Dict{String,Any}()
+            for (k, v) in raw
+                s[String(k)] = _deser_field(v)
+            end
+            s
+        end,
     )
 end
 _manifest_from_dict(::Nothing) = nothing
@@ -306,14 +343,18 @@ Re-run the randomized computation that produced `result` from its stored
 reproducibility manifest (same seed) and check the output matches bit-for-bit.
 This is the "did my published number actually come from this code" check.
 
-Supported: [`BVARPosterior`](@ref) (self-contained), and a bootstrap
-[`ImpulseResponse`](@ref) via the two-argument `reproduce(ir, model)` (the source
-`VARModel` is not retained on the IRF result). Returns a [`ReproReport`](@ref);
-`matched` is `missing` when reproduction cannot be attempted.
+Supported: [`BVARPosterior`](@ref) (self-contained), [`BayesianDSGE`](@ref),
+[`KrusellSmithSolution`](@ref), a bootstrap [`ImpulseResponse`](@ref) via the
+two-argument `reproduce(ir, model)` (the source `VARModel` is not retained on
+the IRF result), and the randomized estimators that store a [`ReproManifest`](@ref)
+(SV, TVP-VAR, PVAR bootstrap, DiD bootstrap SEs, MS/STAR/threshold forecasts,
+OPP, …). Returns a [`ReproReport`](@ref); `matched` is `missing` when
+reproduction cannot be attempted.
 """
 reproduce(x) = ReproReport(missing, ReproFieldDiff[], nothing, 0, Threads.nthreads(),
-    "reproduce() is not implemented for $(typeof(x)); supported: BVARPosterior and " *
-    "bootstrap ImpulseResponse (reproduce(ir, model)).")
+    "reproduce() is not implemented for $(typeof(x)); supported: BVARPosterior, " *
+    "BayesianDSGE, KrusellSmithSolution, bootstrap ImpulseResponse (reproduce(ir, model)), " *
+    "and randomized estimators that record a ReproManifest.")
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Display

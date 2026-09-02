@@ -820,6 +820,16 @@ using MacroEconometricModels
         end
     end
 
+    @testset "seed= records a manifest on :fglr and :gdfm_var" begin
+        X = randn(Random.MersenneTwister(26), 80, 8)
+        sdfm = estimate_structural_dfm(X, 2; r=2, p=1, H=4, seed=1)
+        @test sdfm.manifest isa ReproManifest
+        @test sdfm.manifest.seed == 1
+        sdfm_g = estimate_structural_dfm(X, 2; r=2, p=1, H=4, method=:gdfm_var, seed=7)
+        @test sdfm_g.manifest isa ReproManifest
+        @test sdfm_g.manifest.seed == 7
+    end
+
     # =========================================================================
     # SDFM-06: panel FEVD
     # =========================================================================

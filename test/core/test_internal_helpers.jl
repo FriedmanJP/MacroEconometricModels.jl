@@ -302,32 +302,38 @@ const MEM_IH = MacroEconometricModels
 
         dummy = ["Plotting" => ["plotting/test_plot_render.jl"],
                  "HA-DSGE" => ["dsge/test_ha_dsge.jl"],
-                 "Coverage-C + IO" => ["coverage/test_misc_coverage.jl", "io/test_io_types.jl"],
+                 "Coverage-C" => ["coverage/test_misc_coverage.jl"],
+                 "IO" => ["io/test_io_types.jl"],
                  "Core & VAR" => ["core/test_aqua.jl", "core/test_kalman.jl"]]
         kept = _numerical_groups(dummy, true)
         names = first.(kept)
-        @test names == ["HA-DSGE", "Coverage-C + IO", "Core & VAR"]
+        @test names == ["HA-DSGE", "IO", "Core & VAR"]
         @test last(kept[2]) == ["io/test_io_types.jl"]
         @test last(kept[3]) == ["core/test_kalman.jl"]
         @test collect(_numerical_groups(dummy, false)) == collect(dummy)
-        # Serialization is its own 1.10 cell — do not drop it under NUMERICAL.
+        # Serialization round-trips stay on the 1.10 cell; Coverage-* drop.
         dummy_ser = ["Serialization" => ["core/test_serialization.jl"],
+                     "Coverage-A" => ["coverage/test_dsge_coverage.jl"],
                      "Plotting" => ["plotting/test_plot_render.jl"]]
         @test first.(_numerical_groups(dummy_ser, true)) == ["Serialization"]
 
         dummy2 = ["HA-DSGE" => ["dsge/test_ha_dsge.jl"],
                   "DSGE Core" => ["dsge/test_dsge.jl"],
                   "Coverage-A" => ["coverage/test_dsge_coverage.jl"],
+                  "Coverage-B" => ["coverage/test_display_coverage.jl"],
+                  "Coverage-C" => ["coverage/test_misc_coverage.jl"],
+                  "IO" => ["io/test_io_types.jl"],
                   "Core & VAR" => ["core/test_kalman.jl"],
                   "Plotting" => ["plotting/test_plot_render.jl"],
                   "Serialization" => ["core/test_serialization.jl"],
                   "Serialization DSGE" => ["dsge/test_dsge_serialization.jl"]]
         @test first.(_ci_suite_groups(dummy2, "dsge")) ==
-              ["HA-DSGE", "DSGE Core", "Coverage-A"]
+              ["HA-DSGE", "DSGE Core"]
         @test first.(_ci_suite_groups(dummy2, "empirical")) ==
-              ["Core & VAR", "Plotting"]
+              ["IO", "Core & VAR", "Plotting"]
         @test first.(_ci_suite_groups(dummy2, "serialization")) ==
-              ["Serialization", "Serialization DSGE"]
+              ["Coverage-A", "Coverage-B", "Coverage-C",
+               "Serialization", "Serialization DSGE"]
         @test collect(_ci_suite_groups(dummy2, "")) == collect(dummy2)
         @test_throws ArgumentError _ci_suite_groups(dummy2, "bogus")
         @test _expected_rank("Serialization DSGE") > _expected_rank("Serialization")
@@ -343,6 +349,10 @@ const MEM_IH = MacroEconometricModels
             @test isempty(ser_files ∩ dsge_files)
             @test "core/test_serialization.jl" in ser_files
             @test "core/test_serialization.jl" ∉ emp_files
+            @test "coverage/test_dsge_coverage.jl" in ser_files
+            @test "coverage/test_dsge_coverage.jl" ∉ dsge_files
+            @test "coverage/test_misc_coverage.jl" in ser_files
+            @test "io/test_io_types.jl" in emp_files
             if "dsge/test_dsge_serialization.jl" in serial_files
                 @test "dsge/test_dsge_serialization.jl" in ser_files
                 @test "dsge/test_dsge_serialization.jl" ∉ dsge_files

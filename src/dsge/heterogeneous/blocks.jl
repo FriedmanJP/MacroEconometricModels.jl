@@ -1164,8 +1164,8 @@ end
 Print the block graph in topological order with each block's inputs, outputs, and
 type, followed by the model's exogenous variables and their steady-state levels.
 """
-function report(model::SSJModel{T}) where {T}
-    io = stdout
+report(model::SSJModel) = report(stdout, model)
+function report(io::IO, model::SSJModel{T}) where {T}
     n = length(model.blocks)
     data = Matrix{Any}(undef, n, 4)
     for (i, b) in enumerate(model.blocks)
@@ -1201,8 +1201,8 @@ end
 Print the general-equilibrium system dimensions, the unknowns/targets/shocks, and
 the norm of each `(target, unknown)` and `(target, shock)` Jacobian block.
 """
-function report(gej::SSJGEJacobian{T}) where {T}
-    io = stdout
+report(gej::SSJGEJacobian) = report(stdout, gej)
+function report(io::IO, gej::SSJGEJacobian{T}) where {T}
     Th = gej.T_horizon
     head = Any[
         "Model"           string(gej.model.name);
@@ -1244,8 +1244,8 @@ end
 Print the approximation order, the peak response of each unknown, the relative
 size of the second-order correction, and the nonlinear market-clearing residual.
 """
-function report(r::SSJImpulseResponse{T}) where {T}
-    io = stdout
+report(r::SSJImpulseResponse) = report(stdout, r)
+function report(io::IO, r::SSJImpulseResponse{T}) where {T}
     head = Any[
         "Order"           r.order;
         "Horizon T"       r.T_horizon;

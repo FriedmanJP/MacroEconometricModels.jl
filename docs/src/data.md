@@ -762,21 +762,86 @@ reproduce(post)
 
 The report compares every stored draw array against a fresh run from the recorded seed and settings, and states the thread count under which each was produced. A seed cannot be recovered from an `AbstractRNG` after the fact, so the estimator has to own it: pass `seed=N` and it seeds a fresh generator, records `N`, and reproduces exactly, independently of thread count. Without a seed the manifest still captures the environment but marks the result as not seed-reproducible. A bootstrap IRF carries a manifest too, reproduced with `reproduce(ir, model)` because the source model is not retained on the IRF.
 
-`save_model` and `load_model` persist a fitted model --- or a data container --- to a versioned, self-describing file backed by the optional `JLD2` package. Coverage spans the VAR, regression, panel, volatility, factor, ARIMA, local-projection, and GMM families plus `TimeSeriesData`, `PanelData`, `CrossSectionData`, and `IOData`. The file records its format version, the package and Julia versions, and any reproducibility manifest; a file whose `format_version` the running build does not recognize is rejected with a `SerializationError` naming the expected version rather than silently misread. Only public fields are stored, so cached factorizations recompute on load and a state-space `builder` closure returns as `nothing`.
+`save_model` and `load_model` persist a fitted model --- or a data container --- to a versioned, self-describing file. **JLD2 is a package dependency**; `using MacroEconometricModels` is enough. Coverage is every exported result type except those listed in `_SERIALIZATION_EXCLUDED` (workspaces, rendered HTML, nested-only configs); the living catalog is the [API Reference](@ref api_page) Persistence table, generated from `_SERIALIZABLE_TYPES`. The file records its format version, the package and Julia versions, an optional `note`, and any reproducibility manifest; a file whose `format_version` the running build does not recognize is rejected with a `SerializationError` naming the expected version rather than silently misread. Only public fields are stored, so cached factorizations recompute on load and a state-space `builder` closure returns as `nothing`. DSGE `ModelSpec` residuals and `ss_fn` recompile from stored equations.
 
-```julia
-using JLD2                                       # loads the disk backend
-save_model(post, "bvar_posterior.jld2")
-post_reloaded = load_model("bvar_posterior.jld2")
+!!! warning "A loaded DSGE file is executed code"
+    Equations are recompiled at load through `Core.eval` behind an AST allowlist that rejects `eval`, `ccall`, `include`, and similar constructs. The allowlist is defence in depth, not a sandbox: treat a `.jld2` model file as you would `Serialization.deserialize` and load only files you trust.
+
+!!! warning "Closures must be named or callable structs"
+    `IndividualProblem` utilities, `SimpleBlock` / `MitBlock` functions, and programmatic `ModelSpec` residuals / `ss_fn` must be **named functions** or callable structs ([`CRRAUtility`](@ref) and friends). Anonymous `c -> …` closures still solve, but `save_model` raises `SerializationError`. Named functions resolve from `Main` or `MacroEconometricModels` in the loading session.
+
+```@example data
+bvar_path = joinpath(mktempdir(), "bvar_posterior.jld2")
+save_model(post, bvar_path; note="FRED-MD BVAR")
+post_reloaded = load_model(bvar_path)
 reproduce(post_reloaded)                         # still reproduces from the persisted seed
 ```
+
+A `Dict` of named objects, or a `Vector`, is a **bundle**: one file, several results. `load_model` returns a `Dict{String,Any}` (vector bundles are keyed `"1"`, `"2"`, …). `model_info` reads the header --- versions, `note`, type tags, per-entry manifests --- without reconstructing payloads.
+
+```@example data
+session_path = joinpath(mktempdir(), "session.jld2")
+save_model(Dict("var" => model, "bvar" => post), session_path; note="FRED-MD vintage")
+info = model_info(session_path)
+(info["bundle"], info["note"], sort(collect(keys(info["entries"]))))
+```
+
+```@example data
+loaded = load_model(session_path)
+typeof(loaded["var"])
+```
+
+A bootstrap IRF carries its own `ReproManifest`. Pass `seed=N` so `reproduce` can re-run after reload; the source VAR is an argument because the IRF does not store it.
+
+```@example data
+ir = irf(model, 12; ci_type=:bootstrap, reps=50, seed=20260802)
+ir_path = joinpath(mktempdir(), "irf.jld2")
+save_model(ir, ir_path)
+reproduce(load_model(ir_path), model)
+```
+
+The same path persists a solved DSGE. `irf` on the reloaded solution matches the original because residuals recompile from the stored `NamedEquation.expr`:
+
+```@example data
+rbc_spec = @dsge begin
+    parameters: β = 0.99, α = 0.36, δ = 0.025, ρ = 0.9, σ = 0.01
+    endogenous: Y, C, K, A
+    exogenous: ε_A
+    Y[t] = A[t] * K[t-1]^α
+    C[t] + K[t] = Y[t] + (1 - δ) * K[t-1]
+    1 = β * (C[t] / C[t+1]) * (α * A[t+1] * K[t]^(α - 1) + 1 - δ)
+    A[t] = A[t-1]^ρ * exp(σ * ε_A[t])
+    steady_state = begin
+        A_ss = 1.0
+        K_ss = (α * β / (1 - β * (1 - δ)))^(1 / (1 - α))
+        Y_ss = K_ss^α
+        C_ss = Y_ss - δ * K_ss
+        [Y_ss, C_ss, K_ss, A_ss]
+    end
+end
+rbc_spec = compute_steady_state(rbc_spec)
+rbc_sol = solve(rbc_spec)
+rbc_path = joinpath(mktempdir(), "rbc.jld2")
+save_model(rbc_sol, rbc_path)
+rbc_loaded = load_model(rbc_path)
+size(irf(rbc_loaded, 20).values)
+```
+
+`compress=true` forwards CodecZlib compression to JLD2. The default writes an uncompressed file, byte-identical to previous releases; `load_model` reads both. Posterior draws and dense sequence-space Jacobians shrink; a small representative-agent solution and a KS histogram do not.
+
+| Object | Uncompressed | `compress=true` | Ratio |
+|--------|--------------|-----------------|-------|
+| `BayesianDSGE` (20k MH draws, 3 parameters) | 828 KB | 190 KB | 4.4× |
+| `HASteadyState` (KS default 200 × 7 grid) | 68 KB | 66 KB | 1.03× |
+| `SSJGEJacobian` (Huggett, ``T = 300``) | 5.83 MB | 3.13 MB | 1.9× |
 
 | Function | Description |
 |----------|-------------|
 | `capture_manifest(; seed)` | Capture the current environment as a `ReproManifest` |
 | `reproduce(result)` | Re-run from the recorded seed and return a `ReproReport` (`matched` true/false/`missing`) |
-| `save_model(model, path)` | Persist to a versioned container (requires `using JLD2`) |
-| `load_model(path)` | Reconstruct a saved model, validating `format_version` |
+| `save_model(model, path; note="", compress=false)` | Persist a model, container, or named bundle (JLD2 is a package dependency) |
+| `load_model(path)` | Reconstruct a saved model or a `Dict` of bundle entries, validating `format_version` |
+| `model_info(path)` | Read the file header (`note`, versions, type tags) without reconstructing the payload |
 
 ---
 
@@ -883,6 +948,10 @@ Filtering log real GDP for three countries over 1950-2023 gives cyclical standar
 8. **Filters can unbalance a panel.** Hamilton and Baxter-King trim each group against that group's own valid range, so a balanced panel of unequal-length groups comes back unbalanced. Check `isbalanced` after filtering, or use HP, Beveridge-Nelson, or Boosted HP, which preserve the row count.
 
 9. **`refs` prints and returns `nothing`.** The one-argument form writes the bibliography to `stdout`, so `print(refs(d))` renders it and then appends a stray `nothing`. Call `refs(d)` bare, or `refs(io, d)` to target another stream; `sprint(refs, d)` captures it as a `String`.
+
+10. **Do not load untrusted DSGE files.** `load_model` recompiles stored equations. The AST allowlist rejects `eval` / `ccall` / `include`, but it is not a sandbox. Only load `.jld2` files you produced or received from a trusted source.
+
+11. **Anonymous closures are not saveable.** `save_model` on an `IndividualProblem` whose `utility` is `c -> log(c)`, or a `SimpleBlock` whose `f` is `x -> [x[1]]`, raises `SerializationError`. Use [`CRRAUtility`](@ref) (or a top-level named function) and rewrite the block function as `bond_mkt_clearing(x) = [x[1]]` at module scope, not inside a `do` / `let`.
 
 ---
 

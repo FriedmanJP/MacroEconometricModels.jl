@@ -404,4 +404,13 @@ using Random
         @test size(L2) == (2, 2)
         @test L2 * L2' ≈ B atol=1e-10
     end
+
+    @testset "#758 @float_fallback MethodError instead of StackOverflow" begin
+        Y = randn(50, 2)
+        @test_throws MethodError estimate_vecm(Y, 2, 1)
+        Yi = Int.(rand(1:5, 50, 2))
+        m = estimate_var(Yi, 1)
+        @test m isa VARModel
+        @test eltype(m.Y) === Float64
+    end
 end

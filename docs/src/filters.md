@@ -495,6 +495,19 @@ Cycle standard deviations span a factor of twenty across the five filters, becau
 
 ---
 
+## Saving Results
+
+[`save_model`](@ref) persists the fitted result to a versioned JLD2 file; [`load_model`](@ref) reconstructs it. JLD2 is a package dependency --- no extra `using` is required. Every exported result type on this page is saveable; the living catalog is the [API Reference](@ref api_page) Persistence table. See [Data Management](@ref data_page) for bundles, `note=`, `model_info`, compression, and the reproducibility manifest.
+
+```@example filters
+path = joinpath(mktempdir(), "hp.jld2")
+save_model(hp, path)
+hp2 = load_model(path)
+typeof(hp2)
+```
+
+---
+
 ## Common Pitfalls
 
 1. **Wrong ``\lambda`` for data frequency.** Using ``\lambda = 1600`` (the quarterly default) on monthly data produces an excessively smooth trend that misses business cycle turning points. Scale ``\lambda`` by the fourth power of the frequency ratio: 6.25 for annual, 1600 for quarterly, 129600 for monthly (Ravn & Uhlig 2002).
