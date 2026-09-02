@@ -74,7 +74,7 @@ with_min_level
 
 ### Reproducibility
 
-`reproduce` is documented here in its generic form; the per-result methods for [`BVARPosterior`](@ref) and bootstrap [`ImpulseResponse`](@ref) results appear in [Multivariate Models API](@ref api_multivariate).
+`reproduce` is documented here in its generic form; per-result methods for [`BVARPosterior`](@ref) and bootstrap [`ImpulseResponse`](@ref) appear in [Multivariate Models API](@ref api_multivariate), and for [`BayesianDSGE`](@ref) and [`KrusellSmithSolution`](@ref) in [DSGE API](@ref api_dsge).
 
 ```@docs
 ReproManifest

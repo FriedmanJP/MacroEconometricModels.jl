@@ -137,6 +137,7 @@ estimate_dsge
 
 ```@docs
 estimate_dsge_bayes
+reproduce(::BayesianDSGE)
 posterior_mode
 PosteriorMode
 posterior_summary
@@ -231,6 +232,7 @@ distribution_irf
 inequality_irf
 simulate_panel
 den_haan_test
+reproduce(::KrusellSmithSolution)
 ha_grid_diagnostics
 adaptive_asset_grid
 adapt_ha_grid
