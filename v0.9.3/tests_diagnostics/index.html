@@ -1,0 +1,652 @@
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="UTF-8"/><meta name="viewport" content="width=device-width, initial-scale=1.0"/><title>Model Diagnostics · MacroEconometricModels.jl</title><meta name="title" content="Model Diagnostics · MacroEconometricModels.jl"/><meta property="og:title" content="Model Diagnostics · MacroEconometricModels.jl"/><meta property="twitter:title" content="Model Diagnostics · MacroEconometricModels.jl"/><meta name="description" content="Documentation for MacroEconometricModels.jl."/><meta property="og:description" content="Documentation for MacroEconometricModels.jl."/><meta property="twitter:description" content="Documentation for MacroEconometricModels.jl."/><meta property="og:url" content="https://FriedmanJP.github.io/MacroEconometricModels.jl/tests_diagnostics/"/><meta property="twitter:url" content="https://FriedmanJP.github.io/MacroEconometricModels.jl/tests_diagnostics/"/><link rel="canonical" href="https://FriedmanJP.github.io/MacroEconometricModels.jl/tests_diagnostics/"/><script data-outdated-warner src="../assets/warner.js"></script><link href="https://cdnjs.cloudflare.com/ajax/libs/lato-font/3.0.0/css/lato-font.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/juliamono/0.050/juliamono.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.2/css/fontawesome.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.2/css/solid.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.2/css/brands.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.8/katex.min.css" rel="stylesheet" type="text/css"/><script>documenterBaseURL=".."</script><script src="https://cdnjs.cloudflare.com/ajax/libs/require.js/2.3.6/require.min.js" data-main="../assets/documenter.js"></script><script src="../search_index.js"></script><script src="../siteinfo.js"></script><script src="../../versions.js"></script><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../assets/themes/catppuccin-mocha.css" data-theme-name="catppuccin-mocha"/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../assets/themes/catppuccin-macchiato.css" data-theme-name="catppuccin-macchiato"/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../assets/themes/catppuccin-frappe.css" data-theme-name="catppuccin-frappe"/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../assets/themes/catppuccin-latte.css" data-theme-name="catppuccin-latte"/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../assets/themes/documenter-dark.css" data-theme-name="documenter-dark" data-theme-primary-dark/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../assets/themes/documenter-light.css" data-theme-name="documenter-light" data-theme-primary/><script src="../assets/themeswap.js"></script><link href="../assets/custom.css" rel="stylesheet" type="text/css"/><script src="../assets/theme-toggle.js"></script></head><body><div id="documenter"><nav class="docs-sidebar"><div class="docs-package-name"><span class="docs-autofit"><a href="../">MacroEconometricModels.jl</a></span></div><button class="docs-search-query input is-rounded is-small is-clickable my-2 mx-auto py-1 px-2" id="documenter-search-query">Search docs (Ctrl + /)</button><ul class="docs-menu"><li><a class="tocitem" href="../">Home</a></li><li><span class="tocitem">Getting Started</span><ul><li><a class="tocitem" href="../getting_started/">Installation &amp; First Model</a></li><li><a class="tocitem" href="../method_guide/">Choosing a Method</a></li><li><a class="tocitem" href="../data/">Data Management</a></li></ul></li><li><span class="tocitem">Univariate Models</span><ul><li><a class="tocitem" href="../filters/">Time Series Filters</a></li><li><a class="tocitem" href="../x13/">X-13ARIMA-SEATS</a></li><li><a class="tocitem" href="../spectral/">Spectral Analysis</a></li><li><a class="tocitem" href="../arima/">ARIMA</a></li><li><a class="tocitem" href="../statespace/">State-Space Models</a></li><li><a class="tocitem" href="../volatility/">Volatility Models</a></li><li><a class="tocitem" href="../nonparametric/">Nonparametric Regression &amp; Density</a></li></ul></li><li><span class="tocitem">Multivariate Models</span><ul><li><a class="tocitem" href="../manual/">VAR</a></li><li><a class="tocitem" href="../bayesian/">Bayesian VAR</a></li><li><a class="tocitem" href="../vecm/">VECM</a></li><li><a class="tocitem" href="../ardl/">ARDL &amp; Bounds Test</a></li><li><a class="tocitem" href="../cointreg/">Cointegrating Regression</a></li><li><a class="tocitem" href="../lp/">Local Projections</a></li><li><a class="tocitem" href="../factormodels/">Factor Models</a></li><li><a class="tocitem" href="../favar/">FAVAR</a></li></ul></li><li><span class="tocitem">Nonlinear Time Series</span><ul><li><a class="tocitem" href="../nonlinear/">Threshold &amp; SETAR</a></li></ul></li><li><span class="tocitem">Cross-Section &amp; Panel</span><ul><li><a class="tocitem" href="../regression/">Linear Regression</a></li><li><a class="tocitem" href="../binary_choice/">Binary Choice Models</a></li><li><a class="tocitem" href="../ordered_multinomial/">Ordered &amp; Multinomial</a></li><li><a class="tocitem" href="../panel_reg/">Panel Regression</a></li><li><a class="tocitem" href="../pvar/">Panel VAR</a></li><li><a class="tocitem" href="../did/">Difference-in-Differences</a></li><li><a class="tocitem" href="../event_study/">Event Study LP</a></li></ul></li><li><a class="tocitem" href="../gmm/">GMM &amp; SMM</a></li><li><span class="tocitem">DSGE Models</span><ul><li><a class="tocitem" href="../dsge/">Overview</a></li><li><a class="tocitem" href="../dsge_linear/">Linear Solvers</a></li><li><a class="tocitem" href="../dsge_nonlinear/">Nonlinear Methods</a></li><li><a class="tocitem" href="../dsge_constraints/">Constraints</a></li><li><a class="tocitem" href="../dsge_estimation/">Estimation</a></li><li><a class="tocitem" href="../dsge_hd/">Historical Decomposition</a></li><li><input class="collapse-toggle" id="menuitem-8-7" type="checkbox"/><label class="tocitem" for="menuitem-8-7"><span class="docs-label">Heterogeneity &amp; Continuous Time</span><i class="docs-chevron"></i></label><ul class="collapsed"><li><a class="tocitem" href="../dsge_heterogeneity/">Overview</a></li><li><a class="tocitem" href="../dsge_ha/">Heterogeneous Agents</a></li><li><a class="tocitem" href="../dsge_olg/">Overlapping Generations</a></li><li><a class="tocitem" href="../dsge_continuous/">Continuous Time</a></li></ul></li></ul></li><li><span class="tocitem">Input-Output Analysis</span><ul><li><a class="tocitem" href="../io/">Overview</a></li><li><a class="tocitem" href="../io_classical/">Classical Analysis</a></li><li><a class="tocitem" href="../io_environmental/">Environmental Extensions</a></li><li><a class="tocitem" href="../io_mrio/">MRIO Trade Accounting</a></li><li><a class="tocitem" href="../io_baqaee_farhi/">Baqaee &amp; Farhi (2019)</a></li><li><a class="tocitem" href="../io_download/">Downloading Data</a></li></ul></li><li><span class="tocitem">Policy Counterfactuals</span><ul><li><a class="tocitem" href="../counterfactual/">Overview</a></li><li><a class="tocitem" href="../counterfactual_rules/">Rule Counterfactuals (McKay-Wolf)</a></li><li><a class="tocitem" href="../counterfactual_opp/">Optimal Policy Perturbations (Barnichon-Mesters)</a></li><li><a class="tocitem" href="../counterfactual_bank/">Model Bank &amp; Diagnostics (CMW)</a></li></ul></li><li><span class="tocitem">Structural Analysis</span><ul><li><a class="tocitem" href="../structural_identification/">Structural Identification</a></li><li><a class="tocitem" href="../id_proxy/">Proxy SVAR</a></li><li><a class="tocitem" href="../id_ab/">AB-Model SVAR</a></li><li><a class="tocitem" href="../id_maxshare/">Max-Share Identification</a></li><li><input class="collapse-toggle" id="menuitem-11-5" type="checkbox"/><label class="tocitem" for="menuitem-11-5"><span class="docs-label">Statistical Identification</span><i class="docs-chevron"></i></label><ul class="collapsed"><li><a class="tocitem" href="../nongaussian/">Overview</a></li><li><a class="tocitem" href="../id_nongaussian/">Non-Gaussian Methods</a></li><li><a class="tocitem" href="../id_heteroskedastic/">Heteroskedasticity</a></li><li><a class="tocitem" href="../id_testing/">Testing</a></li></ul></li><li><input class="collapse-toggle" id="menuitem-11-6" type="checkbox"/><label class="tocitem" for="menuitem-11-6"><span class="docs-label">Innovation Accounting</span><i class="docs-chevron"></i></label><ul class="collapsed"><li><a class="tocitem" href="../innovation_accounting/">Overview</a></li><li><a class="tocitem" href="../ia_irf/">Impulse Responses</a></li><li><a class="tocitem" href="../ia_fevd/">Variance Decomposition</a></li><li><a class="tocitem" href="../ia_hd/">Historical Decomposition</a></li></ul></li></ul></li><li><span class="tocitem">Nowcasting</span><ul><li><a class="tocitem" href="../nowcast/">Overview</a></li><li><a class="tocitem" href="../nowcast_dfm/">DFM Nowcasting</a></li><li><a class="tocitem" href="../nowcast_bvar/">BVAR Nowcasting</a></li><li><a class="tocitem" href="../nowcast_bridge/">Bridge Equations</a></li><li><a class="tocitem" href="../nowcast_news/">News Decomposition</a></li><li><a class="tocitem" href="../midas/">MIDAS Regression</a></li></ul></li><li><a class="tocitem" href="../forecast_evaluation/">Forecast Evaluation</a></li><li><span class="tocitem">Hypothesis Tests</span><ul><li><a class="tocitem" href="../tests/">Overview</a></li><li><a class="tocitem" href="../tests_unitroot/">Unit Root &amp; Cointegration</a></li><li><a class="tocitem" href="../tests_unitroot_advanced/">Advanced Unit Root</a></li><li><a class="tocitem" href="../tests_cointegration/">Residual-Based Cointegration</a></li><li><a class="tocitem" href="../tests_breaks/">Structural Breaks</a></li><li><a class="tocitem" href="../tests_panel/">Panel Tests</a></li><li class="is-active"><a class="tocitem" href>Model Diagnostics</a><ul class="internal"><li><a class="tocitem" href="#Quick-Start"><span>Quick Start</span></a></li><li><a class="tocitem" href="#VAR-Stationarity"><span>VAR Stationarity</span></a></li><li><a class="tocitem" href="#Granger-Causality"><span>Granger Causality</span></a></li><li><a class="tocitem" href="#Normality-Tests"><span>Normality Tests</span></a></li><li><a class="tocitem" href="#ARCH-Diagnostics"><span>ARCH Diagnostics</span></a></li><li><a class="tocitem" href="#BDS-Independence-Test"><span>BDS Independence Test</span></a></li><li><a class="tocitem" href="#EDF-Goodness-of-Fit-Tests"><span>EDF Goodness-of-Fit Tests</span></a></li><li><a class="tocitem" href="#Variance-Ratio-Tests"><span>Variance-Ratio Tests</span></a></li><li><a class="tocitem" href="#Equality-and-Rank-Correlation-Tests"><span>Equality and Rank-Correlation Tests</span></a></li><li><a class="tocitem" href="#Model-Comparison-Tests"><span>Model Comparison Tests</span></a></li><li><a class="tocitem" href="#Complete-Example"><span>Complete Example</span></a></li><li><a class="tocitem" href="#Common-Pitfalls"><span>Common Pitfalls</span></a></li><li><a class="tocitem" href="#References"><span>References</span></a></li></ul></li></ul></li><li><a class="tocitem" href="../plotting/">Visualization</a></li><li><span class="tocitem">Project</span><ul><li><a class="tocitem" href="../notation/">Notation</a></li><li><a class="tocitem" href="../bibliography/">Bibliography</a></li><li><a class="tocitem" href="../changelog/">Changelog</a></li><li><a class="tocitem" href="../citation/">How to Cite</a></li></ul></li><li><span class="tocitem">API Reference</span><ul><li><a class="tocitem" href="../api/">Overview</a></li><li><a class="tocitem" href="../api/data/">Data Management</a></li><li><a class="tocitem" href="../api/univariate/">Univariate Models</a></li><li><a class="tocitem" href="../api/multivariate/">Multivariate Models</a></li><li><a class="tocitem" href="../api/cross_section/">Cross-Sectional Models</a></li><li><a class="tocitem" href="../api/panel/">Panel Models</a></li><li><a class="tocitem" href="../api/dsge/">DSGE Models</a></li><li><a class="tocitem" href="../api/structural/">Structural &amp; Statistical Identification</a></li><li><a class="tocitem" href="../api/counterfactual/">Policy Counterfactuals</a></li><li><a class="tocitem" href="../api/gmm/">GMM &amp; SMM</a></li><li><a class="tocitem" href="../api/tests/">Hypothesis Tests</a></li><li><a class="tocitem" href="../api/nowcasting/">Nowcasting</a></li><li><a class="tocitem" href="../api/visualization/">Visualization</a></li><li><a class="tocitem" href="../api/utilities/">Utilities &amp; Display</a></li></ul></li></ul><div class="docs-version-selector field has-addons"><div class="control"><span class="docs-label button is-static is-size-7">Version</span></div><div class="docs-selector control is-expanded"><div class="select is-fullwidth is-size-7"><select id="documenter-version-selector"></select></div></div></div></nav><div class="docs-main"><header class="docs-navbar"><a class="docs-sidebar-button docs-navbar-link fa-solid fa-bars is-hidden-desktop" id="documenter-sidebar-button" href="#"></a><nav class="breadcrumb"><ul class="is-hidden-mobile"><li><a class="is-disabled">Hypothesis Tests</a></li><li class="is-active"><a href>Model Diagnostics</a></li></ul><ul class="is-hidden-tablet"><li class="is-active"><a href>Model Diagnostics</a></li></ul></nav><div class="docs-right"><a class="docs-navbar-link" href="https://github.com/FriedmanJP/MacroEconometricModels.jl" title="View the repository on GitHub"><span class="docs-icon fa-brands"></span><span class="docs-label is-hidden-touch">GitHub</span></a><a class="docs-navbar-link" href="https://github.com/FriedmanJP/MacroEconometricModels.jl/blob/main/docs/src/tests_diagnostics.md#" title="Edit source on GitHub"><span class="docs-icon fa-solid"></span></a><a class="docs-settings-button docs-navbar-link fa-solid fa-gear" id="documenter-settings-button" href="#" title="Settings"></a><a class="docs-article-toggle-button fa-solid fa-chevron-up" id="documenter-article-toggle-button" href="javascript:;" title="Collapse all docstrings"></a></div></header><article class="content" id="documenter-page"><h1 id="tests_diagnostics_page"><a class="docs-heading-anchor" href="#tests_diagnostics_page">Model Diagnostics</a><a id="tests_diagnostics_page-1"></a><a class="docs-heading-anchor-permalink" href="#tests_diagnostics_page" title="Permalink"></a></h1><p>Post-estimation specification testing validates the assumptions that inference rests on. This page covers the diagnostics that take a <em>fitted model</em> or a <em>raw series</em> as input: VAR stability, Granger causality, multivariate normality, ARCH effects, nonlinear dependence, distributional fit, the random-walk hypothesis, group comparisons, and nested-model comparison. For the full test battery and the tables that route a question to a test, see <a href="../tests/#tests_page">Hypothesis Tests</a>.</p><div class="admonition is-info" id="Where-the-other-diagnostics-live-e86ba5fc09a0fd9c"><header class="admonition-header">Where the other diagnostics live<a class="admonition-anchor" href="#Where-the-other-diagnostics-live-e86ba5fc09a0fd9c" title="Permalink"></a></header><div class="admonition-body"><p>Two families of specification tests are documented elsewhere because they belong to the estimator they diagnose. The <strong>regression diagnostics</strong> –- <code>chow_test</code>, <code>cusum_test</code>, <code>cusumsq_test</code>, <code>breusch_godfrey_test</code>, <code>reset_test</code>, <code>white_test</code>, and <code>breusch_pagan_test</code> –- are on <a href="../regression/#regression_page">Linear Regression</a>, since each takes a fitted <code>RegModel</code>. The <strong>portmanteau tests</strong> –- <code>ljung_box_test</code>, <code>box_pierce_test</code>, and <code>durbin_watson_test</code> –- are on <a href="../spectral/#spectral_page">Spectral Analysis</a>, where they sit next to their frequency-domain counterparts. Panel VAR GMM diagnostics (<code>pvar_hansen_j</code>, <code>pvar_mmsc</code>, <code>pvar_lag_selection</code>) are on <a href="../tests_panel/#tests_panel_page">Panel Tests</a>.</p></div></div><ul><li><strong>VAR stationarity</strong>: Companion matrix eigenvalue check for stable dynamics</li><li><strong>Granger causality</strong>: Pairwise and block Wald tests for predictive causality (Granger 1969)</li><li><strong>Normality</strong>: Jarque-Bera, Mardia, Doornik-Hansen, and Henze-Zirkler tests plus a seven-test suite</li><li><strong>ARCH diagnostics</strong>: Engle (1982) ARCH-LM and Ljung-Box on squared residuals</li><li><strong>BDS independence</strong>: Brock, Dechert, Scheinkman &amp; LeBaron (1996) test against <em>any</em> departure from i.i.d.</li><li><strong>EDF goodness of fit</strong>: Kolmogorov-Smirnov, Lilliefors, Cramér-von Mises, Anderson-Darling, and Watson against seven parametric families</li><li><strong>Variance ratios</strong>: Lo-MacKinlay (1988), Chow-Denning (1993), Wright (2000) rank/sign, and Kim (2006) wild bootstrap</li><li><strong>Equality and correlation</strong>: One-way location and scale tests by classifier, plus Pearson, Spearman, and Kendall correlation tests</li><li><strong>Model comparison</strong>: Likelihood ratio (Wilks 1938) and Lagrange multiplier (Rao 1948) tests for nested models</li></ul><h2 id="Quick-Start"><a class="docs-heading-anchor" href="#Quick-Start">Quick Start</a><a id="Quick-Start-1"></a><a class="docs-heading-anchor-permalink" href="#Quick-Start" title="Permalink"></a></h2><p>The VAR examples use three FRED-MD series in their recommended transformations: industrial production growth, the change in CPI inflation, and the federal funds rate. Blocks that simulate data seed their own generator, so those numbers reproduce exactly in a fresh session.</p><p><strong>Recipe 1: Fit a VAR and check stability</strong></p><pre><code class="language-julia hljs">fred = load_example(:fred_md)
+Y = to_matrix(apply_tcode(fred[:, [&quot;INDPRO&quot;, &quot;CPIAUCSL&quot;, &quot;FEDFUNDS&quot;]]))
+Y = Y[all.(isfinite, eachrow(Y)), :]           # drop rows lost to differencing
+m = estimate_var(Y, 2)
+
+show(stdout, is_stationary(m))</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi"><span class="sgr1">VAR Model Stationarity Test — Companion Matrix Eigenvalues</span>
+
+ <span class="sgr1"> Index </span> <span class="sgr1">      Eigenvalue </span> <span class="sgr1"> Modulus </span>
+
+      1   -0.1827-0.4623i     0.497
+      2   -0.1827+0.4623i     0.497
+      3    0.1517-0.3872i    0.4158
+      4    0.1517+0.3872i    0.4158
+      5    0.2029-0.1974i     0.283
+      6    0.2029+0.1974i     0.283
+
+<span class="sgr1">                                 Summary</span>
+
+  Maximum modulus                                              0.497046
+  Number of eigenvalues                                               6
+  Stationary                                                        Yes
+  Result                  VAR is STATIONARY (all eigenvalue moduli &lt; 1)</code></pre><p><strong>Recipe 2: Granger causality</strong></p><pre><code class="language-julia hljs">report(granger_test(m, 3, 1))                  # does the funds rate cause output?</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi"><span class="sgr1">                     Granger Causality Test</span>
+
+ <span class="sgr1"> Specification </span> <span class="sgr1">                                              </span>
+
+  H₀              Variable 3 does not Granger-cause Variable 1
+  H₁                      Variable 3 Granger-causes Variable 1
+  Test type                                           Pairwise
+  Lag order                                                  2
+  Variables                                                  3
+  Observations                                             797
+
+<span class="sgr1">             Results</span>
+
+ <span class="sgr1">                    </span> <span class="sgr1">     Value </span>
+
+  Wald statistic       7.8995 **
+  Degrees of freedom           2
+  P-value                 0.0193
+
+
+  Conclusion   Reject H₀ at 5% level — Variable 3 Granger-causes Variable 1
+  Note         *** p&lt;0.01, ** p&lt;0.05, * p&lt;0.10</code></pre><p><strong>Recipe 3: Normality suite on the residuals</strong></p><pre><code class="language-julia hljs">report(normality_test_suite(m))</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi"><span class="sgr1">          Multivariate Normality Test Suite (n=797, k=3)</span>
+
+ <span class="sgr1"> Test                         </span> <span class="sgr1">   Statistic </span> <span class="sgr1"> P-value </span> <span class="sgr1"> H₀ (5%) </span>
+
+  Jarque–Bera (multivariate)     128189.3734    &lt;0.001   Reject
+  Jarque–Bera (component-wise)   159604.9688    &lt;0.001   Reject
+  Mardia skewness                  2135.3847    &lt;0.001   Reject
+  Mardia kurtosis                   275.0134    &lt;0.001   Reject
+  Mardia Both                     77767.7779    &lt;0.001   Reject
+  Doornik–Hansen                 120768.2408    &lt;0.001   Reject
+  Henze–Zirkler                       8.2093    &lt;0.001   Reject</code></pre><p><strong>Recipe 4: ARCH-LM test on a raw series</strong></p><pre><code class="language-julia hljs">Random.seed!(7)
+arch_iid = arch_lm_test(randn(500), 5)
+(statistic = round(arch_iid.statistic, digits=4),
+ pvalue = round(arch_iid.pvalue, digits=4),
+ q = arch_iid.q)</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">(statistic = 1.7303, pvalue = 0.8851, q = 5)</code></pre><p><strong>Recipe 5: Likelihood ratio test for lag order</strong></p><pre><code class="language-julia hljs">report(lr_test(estimate_var(Y, 1), m))</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi"><span class="sgr1">                       Likelihood Ratio Test</span>
+
+ <span class="sgr1"> Specification     </span> <span class="sgr1">                                              </span>
+
+  H₀                                  Restricted model is adequate
+  H₁                  Unrestricted model fits significantly better
+  Restricted dof                                                12
+  Unrestricted dof                                              21
+  Restricted nobs                                              799
+  Unrestricted nobs                                            799
+
+<span class="sgr1">                    Results</span>
+
+ <span class="sgr1">                               </span> <span class="sgr1">       Value </span>
+
+  Log-likelihood (restricted)       5734.7494
+  Log-likelihood (unrestricted)     5773.2237
+  LR statistic                    76.9486 ***
+  Degrees of freedom                        9
+  P-value                              &lt;0.001
+
+
+  Conclusion   Reject H₀ at 1% level — unrestricted model preferred
+  Note         *** p&lt;0.01, ** p&lt;0.05, * p&lt;0.10</code></pre><hr/><h2 id="VAR-Stationarity"><a class="docs-heading-anchor" href="#VAR-Stationarity">VAR Stationarity</a><a id="VAR-Stationarity-1"></a><a class="docs-heading-anchor-permalink" href="#VAR-Stationarity" title="Permalink"></a></h2><p>A VAR(<span>$p$</span>) process is covariance-stationary if and only if every eigenvalue of its companion matrix lies strictly inside the unit circle. Stationarity is what makes impulse responses decay, forecasts converge to the unconditional mean, and the asymptotic theory behind coefficient standard errors and Granger tests valid.</p><p>The companion form stacks the VAR(<span>$p$</span>) system into a first-order representation:</p><p class="math-container">\[\xi_t = F \, \xi_{t-1} + v_t\]</p><p>where the <span>$np \times np$</span> companion matrix is:</p><p class="math-container">\[F = \begin{bmatrix} A_1 &amp; A_2 &amp; \cdots &amp; A_p \\ I_n &amp; 0 &amp; \cdots &amp; 0 \\ \vdots &amp; &amp; \ddots &amp; \vdots \\ 0 &amp; \cdots &amp; I_n &amp; 0 \end{bmatrix}\]</p><p>where:</p><ul><li><span>$A_1, \ldots, A_p$</span> are the <span>$n \times n$</span> VAR coefficient matrices</li><li><span>$I_n$</span> is the <span>$n \times n$</span> identity matrix</li><li><span>$\xi_t = (y_t&#39;, y_{t-1}&#39;, \ldots, y_{t-p+1}&#39;)&#39;$</span> is the stacked state vector</li></ul><p>The stability condition is <span>$|\lambda_i(F)| &lt; 1$</span> for every eigenvalue <span>$\lambda_i$</span>.</p><pre><code class="language-julia hljs">stat = is_stationary(m)
+(is_stationary = stat.is_stationary,
+ max_modulus = round(stat.max_modulus, digits=4),
+ n_eigenvalues = length(stat.eigenvalues))</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">(is_stationary = true, max_modulus = 0.497, n_eigenvalues = 6)</code></pre><p>The maximum modulus of 0.497 sits well inside the unit circle, so the fitted VAR(2) is stationary and every downstream object –- impulse responses, forecast error variance decompositions, Granger tests –- is well defined. The six eigenvalues are the <span>$np = 3 \times 2$</span> roots of the companion matrix, and they arrive in three complex-conjugate pairs, so the system&#39;s dynamics are oscillatory rather than monotone. A modulus close to but below 1.0 signals persistence, common when levels rather than growth rates enter the system; at or above 1.0 the VAR has a unit or explosive root and must be respecified, usually by differencing or by reducing the lag order.</p><p><code>is_stationary</code> returns a <code>VARStationarityResult</code>, which has no <code>report</code> method; use <code>show(stdout, result)</code> for the formatted table, as in Recipe 1.</p><table><tr><th style="text-align: right">Field</th><th style="text-align: right">Type</th><th style="text-align: right">Description</th></tr><tr><td style="text-align: right"><code>is_stationary</code></td><td style="text-align: right"><code>Bool</code></td><td style="text-align: right"><code>true</code> when every eigenvalue has modulus strictly below 1</td></tr><tr><td style="text-align: right"><code>eigenvalues</code></td><td style="text-align: right"><code>Vector</code></td><td style="text-align: right">Companion matrix eigenvalues (real or complex)</td></tr><tr><td style="text-align: right"><code>max_modulus</code></td><td style="text-align: right"><code>T</code></td><td style="text-align: right">Largest eigenvalue modulus</td></tr><tr><td style="text-align: right"><code>companion_matrix</code></td><td style="text-align: right"><code>Matrix{T}</code></td><td style="text-align: right">The <span>$np \times np$</span> companion matrix <span>$F$</span></td></tr></table><hr/><h2 id="Granger-Causality"><a class="docs-heading-anchor" href="#Granger-Causality">Granger Causality</a><a id="Granger-Causality-1"></a><a class="docs-heading-anchor-permalink" href="#Granger-Causality" title="Permalink"></a></h2><p>The Granger causality test (Granger 1969) asks whether lagged values of one variable improve the prediction of another within a VAR. The <strong>pairwise test</strong> checks whether all lag coefficients from variable <span>$j$</span> are zero in the equation for variable <span>$i$</span>; the <strong>block test</strong> generalizes it to a group of causing variables.</p><p>For the pairwise test the null is:</p><p class="math-container">\[H_0: A_1[i,j] = A_2[i,j] = \cdots = A_p[i,j] = 0\]</p><p>where <span>$A_l[i,j]$</span> is the coefficient on the <span>$l$</span>-th lag of variable <span>$j$</span> in the equation for variable <span>$i$</span>. The Wald statistic is:</p><p class="math-container">\[W = \hat{\theta}&#39; \hat{V}^{-1} \hat{\theta} \sim \chi^2(p)\]</p><p>where:</p><ul><li><span>$\hat{\theta}$</span> is the <span>$p \times 1$</span> vector of restricted coefficients</li><li><span>$\hat{V} = \hat{\sigma}_{ii} (X&#39;X)^{-1}$</span> restricted to the corresponding rows and columns</li><li><span>$p$</span> is the lag order, which is also the degrees of freedom</li></ul><p>For a block test with <span>$m$</span> causing variables the degrees of freedom become <span>$p \times m$</span>.</p><div class="admonition is-info" id="Technical-Note-de32a0452c3d4d60"><header class="admonition-header">Technical Note<a class="admonition-anchor" href="#Technical-Note-de32a0452c3d4d60" title="Permalink"></a></header><div class="admonition-body"><p>Granger causality is a <strong>predictive</strong> concept, not a structural one. Variable <span>$j$</span> Granger-causes variable <span>$i$</span> when lags of <span>$j$</span> help forecast <span>$i$</span> beyond the information already in the lags of <span>$i$</span> and of every other variable in the VAR. Adding or removing a variable from the system can reverse the conclusion, which is precisely why it carries no structural content.</p></div></div><pre><code class="language-julia hljs">report(granger_test(m, 3, 1))</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi"><span class="sgr1">                     Granger Causality Test</span>
+
+ <span class="sgr1"> Specification </span> <span class="sgr1">                                              </span>
+
+  H₀              Variable 3 does not Granger-cause Variable 1
+  H₁                      Variable 3 Granger-causes Variable 1
+  Test type                                           Pairwise
+  Lag order                                                  2
+  Variables                                                  3
+  Observations                                             797
+
+<span class="sgr1">             Results</span>
+
+ <span class="sgr1">                    </span> <span class="sgr1">     Value </span>
+
+  Wald statistic       7.8995 **
+  Degrees of freedom           2
+  P-value                 0.0193
+
+
+  Conclusion   Reject H₀ at 5% level — Variable 3 Granger-causes Variable 1
+  Note         *** p&lt;0.01, ** p&lt;0.05, * p&lt;0.10</code></pre><p>The Wald statistic of 7.8995 on 2 degrees of freedom gives a p-value of 0.0193, so the federal funds rate Granger-causes industrial production growth at the 5% level: past policy rates carry information about future output growth beyond what output&#39;s own history supplies. The test says nothing about the sign or the transmission channel –- for that, identify the system and read the impulse responses.</p><p>The block form tests several causing variables jointly:</p><pre><code class="language-julia hljs">report(granger_test(m, [2, 3], 1))</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi"><span class="sgr1">                        Granger Causality Test</span>
+
+ <span class="sgr1"> Specification </span> <span class="sgr1">                                                    </span>
+
+  H₀              Variables [2, 3] does not Granger-cause Variable 1
+  H₁                      Variables [2, 3] Granger-causes Variable 1
+  Test type                                                    Block
+  Lag order                                                        2
+  Variables                                                        3
+  Observations                                                   797
+
+<span class="sgr1">              Results</span>
+
+ <span class="sgr1">                    </span> <span class="sgr1">       Value </span>
+
+  Wald statistic       19.5165 ***
+  Degrees of freedom             4
+  P-value                   &lt;0.001
+
+
+  Conclusion   Reject H₀ at 1% level — Variables [2, 3] Granger-causes Variable 1
+  Note         *** p&lt;0.01, ** p&lt;0.05, * p&lt;0.10</code></pre><p>Adding inflation to the conditioning set raises the statistic to 19.5165 on 4 degrees of freedom, with a p-value below 0.001. The block test is not the sum of two pairwise tests: it accounts for the covariance between the two blocks of coefficients, so it can reject when neither variable rejects alone, or fail to reject when one does. Use it whenever the hypothesis concerns a group –- &quot;do nominal variables help forecast real activity?&quot; –- rather than a single series.</p><p><code>granger_test_all</code> returns an <span>$n \times n$</span> matrix in which entry <span>$[i, j]$</span> tests whether variable <span>$j$</span> Granger-causes variable <span>$i$</span>, with <code>nothing</code> on the diagonal. The matrix has no compact display of its own, so extract the fields for a readable screen:</p><pre><code class="language-julia hljs">names_var = [&quot;INDPRO&quot;, &quot;CPIAUCSL&quot;, &quot;FEDFUNDS&quot;]
+g_all = granger_test_all(m)
+[(cause = names_var[j], effect = names_var[i],
+  statistic = round(g_all[i, j].statistic, digits=3),
+  pvalue = round(g_all[i, j].pvalue, digits=4))
+ for i in 1:3, j in 1:3 if i != j]</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">6-element Vector{@NamedTuple{cause::String, effect::String, statistic::Float64, pvalue::Float64}}:
+ (cause = &quot;INDPRO&quot;, effect = &quot;CPIAUCSL&quot;, statistic = 1.739, pvalue = 0.4192)
+ (cause = &quot;INDPRO&quot;, effect = &quot;FEDFUNDS&quot;, statistic = 16.455, pvalue = 0.0003)
+ (cause = &quot;CPIAUCSL&quot;, effect = &quot;INDPRO&quot;, statistic = 10.502, pvalue = 0.0052)
+ (cause = &quot;CPIAUCSL&quot;, effect = &quot;FEDFUNDS&quot;, statistic = 4.755, pvalue = 0.0928)
+ (cause = &quot;FEDFUNDS&quot;, effect = &quot;INDPRO&quot;, statistic = 7.9, pvalue = 0.0193)
+ (cause = &quot;FEDFUNDS&quot;, effect = &quot;CPIAUCSL&quot;, statistic = 14.787, pvalue = 0.0006)</code></pre><p>Five of the six directions reject at 5%. The exception is industrial production to inflation, at 1.739 with a p-value of 0.419 –- output growth carries no predictive content for the change in inflation, while the reverse link is significant at 10.502 with a p-value of 0.005. The strongest single link is output to the funds rate, at 16.455 with a p-value of 0.0003, which is what a policy reaction function implies. Screening the full matrix before imposing an identification scheme is the cheapest way to see whether the recursive ordering a Cholesky decomposition would assume is consistent with the predictive structure of the data.</p><table><tr><th style="text-align: right">Field</th><th style="text-align: right">Type</th><th style="text-align: right">Description</th></tr><tr><td style="text-align: right"><code>statistic</code></td><td style="text-align: right"><code>T</code></td><td style="text-align: right">Wald <span>$\chi^2$</span> statistic</td></tr><tr><td style="text-align: right"><code>pvalue</code></td><td style="text-align: right"><code>T</code></td><td style="text-align: right">P-value from <span>$\chi^2(df)$</span></td></tr><tr><td style="text-align: right"><code>df</code></td><td style="text-align: right"><code>Int</code></td><td style="text-align: right">Degrees of freedom (number of restrictions)</td></tr><tr><td style="text-align: right"><code>cause</code></td><td style="text-align: right"><code>Vector{Int}</code></td><td style="text-align: right">Indices of the causing variable(s), sorted</td></tr><tr><td style="text-align: right"><code>effect</code></td><td style="text-align: right"><code>Int</code></td><td style="text-align: right">Index of the effect variable</td></tr><tr><td style="text-align: right"><code>n</code></td><td style="text-align: right"><code>Int</code></td><td style="text-align: right">Number of variables in the VAR</td></tr><tr><td style="text-align: right"><code>p</code></td><td style="text-align: right"><code>Int</code></td><td style="text-align: right">Lag order</td></tr><tr><td style="text-align: right"><code>nobs</code></td><td style="text-align: right"><code>Int</code></td><td style="text-align: right">Effective number of observations</td></tr><tr><td style="text-align: right"><code>test_type</code></td><td style="text-align: right"><code>Symbol</code></td><td style="text-align: right"><code>:pairwise</code> or <code>:block</code></td></tr></table><hr/><h2 id="Normality-Tests"><a class="docs-heading-anchor" href="#Normality-Tests">Normality Tests</a><a id="Normality-Tests-1"></a><a class="docs-heading-anchor-permalink" href="#Normality-Tests" title="Permalink"></a></h2><p>Multivariate normality of the residuals is what licenses exact finite-sample inference on coefficient t-statistics and confidence intervals. OLS estimates stay consistent under any residual distribution, but likelihood-based tests and bootstrap intervals can behave poorly when normality fails badly. Every test below accepts either a <code>VARModel</code>, from which residuals are extracted automatically, or a raw residual matrix.</p><h3 id="Jarque-Bera"><a class="docs-heading-anchor" href="#Jarque-Bera">Jarque-Bera</a><a id="Jarque-Bera-1"></a><a class="docs-heading-anchor-permalink" href="#Jarque-Bera" title="Permalink"></a></h3><p>The multivariate Jarque-Bera test (Jarque &amp; Bera 1980; Lutkepohl 2005, Section 4.5) combines multivariate skewness and kurtosis into one statistic. The <code>:multivariate</code> method computes:</p><p class="math-container">\[\lambda_{JB} = \lambda_s + \lambda_k = \frac{T \, b_{1,k}}{6} + \frac{T \, (b_{2,k} - k(k+2))^2}{24k}\]</p><p>where:</p><ul><li><span>$b_{1,k} = \frac{1}{T^2} \sum_{i,j} (u_i&#39; \Sigma^{-1} u_j)^3$</span> is multivariate skewness</li><li><span>$b_{2,k} = \frac{1}{T} \sum_i (u_i&#39; \Sigma^{-1} u_i)^2$</span> is multivariate kurtosis</li><li><span>$k$</span> is the number of variables</li><li>under <span>$H_0$</span>, <span>$\lambda_{JB} \sim \chi^2(2k)$</span></li></ul><pre><code class="language-julia hljs">report(jarque_bera_test(m; method=:multivariate))</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi"><span class="sgr1">               Normality Test: Jarque–Bera</span>
+
+  H₀                   Residuals are multivariate normal
+  H₁                            Residuals are non-normal
+  Test Statistic                         128189.3734 ***
+  P-value                                         &lt;0.001
+  Degrees of freedom                                   6
+  Variables                                            3
+  Observations                                       797
+
+
+  Conclusion   Reject H₀ (residuals are non-normal)
+  Note         *** p&lt;0.01, ** p&lt;0.05, * p&lt;0.10</code></pre><p>The statistic of 128189.37 on 6 degrees of freedom rejects normality at any level whatsoever. That is the normal state of affairs for monthly macroeconomic residuals: the funds-rate equation alone spans the 1980-82 Volcker episode and the 2008 collapse, and no two-moment family absorbs those. The practical consequence is documented in the pitfalls below –- it invalidates exact small-sample inference, not the coefficient estimates.</p><p>The <code>:component</code> method runs univariate Jarque-Bera tests on each standardized residual and sums them, which localizes the failure:</p><pre><code class="language-julia hljs">jb_comp = jarque_bera_test(m; method=:component)
+[(variable = v, statistic = round(s, digits=1), pvalue = round(p, digits=4))
+ for (v, s, p) in zip(names_var, jb_comp.components, jb_comp.component_pvalues)]</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">3-element Vector{@NamedTuple{variable::String, statistic::Float64, pvalue::Float64}}:
+ (variable = &quot;INDPRO&quot;, statistic = 77859.0, pvalue = 0.0)
+ (variable = &quot;CPIAUCSL&quot;, statistic = 720.4, pvalue = 0.0)
+ (variable = &quot;FEDFUNDS&quot;, statistic = 81025.7, pvalue = 0.0)</code></pre><p>Every equation rejects, but not equally: the funds-rate residual contributes 81025.7 and industrial production 77859.0, while the inflation equation contributes only 720.4 –- two orders of magnitude less. Reading the components rather than the aggregate is what turns a rejection into a modelling decision, and here it says the tail problem lives in the real-activity and policy-rate equations, not in the price equation.</p><h3 id="Mardia"><a class="docs-heading-anchor" href="#Mardia">Mardia</a><a id="Mardia-1"></a><a class="docs-heading-anchor-permalink" href="#Mardia" title="Permalink"></a></h3><p>Mardia&#39;s tests (Mardia 1970) assess multivariate normality through skewness and kurtosis, separately or jointly:</p><ul><li><code>:skewness</code> tests <span>$H_0: b_{1,k} = 0$</span>, with <span>$T \cdot b_{1,k} / 6 \sim \chi^2(k(k+1)(k+2)/6)$</span></li><li><code>:kurtosis</code> tests <span>$H_0: b_{2,k} = k(k+2)$</span>, with <span>$(b_{2,k} - k(k+2)) / \sqrt{8k(k+2)/T} \sim N(0,1)$</span></li><li><code>:both</code> combines the two into a single <span>$\chi^2$</span> statistic</li></ul><pre><code class="language-julia hljs">report(mardia_test(m; type=:skewness))</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi"><span class="sgr1">             Normality Test: Mardia skewness</span>
+
+  H₀                   Residuals are multivariate normal
+  H₁                            Residuals are non-normal
+  Test Statistic                           2135.3847 ***
+  P-value                                         &lt;0.001
+  Degrees of freedom                                  10
+  Variables                                            3
+  Observations                                       797
+
+
+  Conclusion   Reject H₀ (residuals are non-normal)
+  Note         *** p&lt;0.01, ** p&lt;0.05, * p&lt;0.10</code></pre><pre><code class="language-julia hljs">report(mardia_test(m; type=:kurtosis))</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi"><span class="sgr1">             Normality Test: Mardia kurtosis</span>
+
+  H₀                   Residuals are multivariate normal
+  H₁                            Residuals are non-normal
+  Test Statistic                            275.0134 ***
+  P-value                                         &lt;0.001
+  Degrees of freedom                                   1
+  Variables                                            3
+  Observations                                       797
+
+
+  Conclusion   Reject H₀ (residuals are non-normal)
+  Note         *** p&lt;0.01, ** p&lt;0.05, * p&lt;0.10</code></pre><p>Skewness gives 2135.38 on 10 degrees of freedom and kurtosis gives 275.01 as a standardized deviate; both reject overwhelmingly. Because the two have different null distributions their levels are not directly comparable, but the kurtosis statistic is a <span>$z$</span>-score of 275 –- an unambiguous statement about tail thickness. That distinction matters operationally: heavy tails argue for robust or bootstrap standard errors, while asymmetry would argue for a transformation or an asymmetric error distribution.</p><h3 id="Doornik-Hansen"><a class="docs-heading-anchor" href="#Doornik-Hansen">Doornik-Hansen</a><a id="Doornik-Hansen-1"></a><a class="docs-heading-anchor-permalink" href="#Doornik-Hansen" title="Permalink"></a></h3><p>The Doornik-Hansen omnibus test (Doornik &amp; Hansen 2008) applies the Bowman-Shenton transformation to each component&#39;s skewness and kurtosis, producing approximately <span>$N(0,1)$</span> values <span>$z_1$</span> and <span>$z_2$</span>, then sums their squares:</p><p class="math-container">\[DH = \sum_{j=1}^{k} (z_{1,j}^2 + z_{2,j}^2) \sim \chi^2(2k)\]</p><p>The transformation improves finite-sample size relative to the raw Jarque-Bera statistic, which is why it is the default omnibus test in most modern software.</p><pre><code class="language-julia hljs">report(doornik_hansen_test(m))</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi"><span class="sgr1">              Normality Test: Doornik–Hansen</span>
+
+  H₀                   Residuals are multivariate normal
+  H₁                            Residuals are non-normal
+  Test Statistic                         120768.2408 ***
+  P-value                                         &lt;0.001
+  Degrees of freedom                                   6
+  Variables                                            3
+  Observations                                       797
+
+
+  Conclusion   Reject H₀ (residuals are non-normal)
+  Note         *** p&lt;0.01, ** p&lt;0.05, * p&lt;0.10</code></pre><p>The statistic of 120768.24 on 6 degrees of freedom rejects, marginally below the multivariate Jarque-Bera value of 128189.37 on the same residuals and the same degrees of freedom. The two agreeing this closely is the expected outcome in a sample of 797: the Bowman-Shenton transformation buys its size improvement in small samples, and there is nothing small about this one. The <code>components</code> and <code>component_pvalues</code> fields give the per-equation breakdown.</p><h3 id="Henze-Zirkler"><a class="docs-heading-anchor" href="#Henze-Zirkler">Henze-Zirkler</a><a id="Henze-Zirkler-1"></a><a class="docs-heading-anchor-permalink" href="#Henze-Zirkler" title="Permalink"></a></h3><p>The Henze-Zirkler test (Henze &amp; Zirkler 1990) works from the empirical characteristic function and is consistent against <em>any</em> non-normal alternative, not only against moment deviations:</p><p class="math-container">\[T_{\beta} = \frac{1}{n} \sum_{i,j} e^{-\beta^2 D_{ij}/2} - 2(1+\beta^2)^{-k/2} \sum_i e^{-\beta^2 d_i^2/(2(1+\beta^2))} + n(1+2\beta^2)^{-k/2}\]</p><p>where:</p><ul><li><span>$D_{ij} = (z_i - z_j)&#39;(z_i - z_j)$</span> is the squared distance between standardized residuals</li><li><span>$d_i = z_i&#39; z_i$</span> is the squared norm of the <span>$i$</span>-th standardized residual</li><li><span>$\beta$</span> is a bandwidth chosen as a function of <span>$k$</span> and <span>$n$</span></li><li>the p-value uses a log-normal approximation under <span>$H_0$</span></li></ul><pre><code class="language-julia hljs">report(henze_zirkler_test(m))</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi"><span class="sgr1">              Normality Test: Henze–Zirkler</span>
+
+  H₀                   Residuals are multivariate normal
+  H₁                            Residuals are non-normal
+  Test Statistic                              8.2093 ***
+  P-value                                         &lt;0.001
+  Degrees of freedom                                   0
+  Variables                                            3
+  Observations                                       797
+
+
+  Conclusion   Reject H₀ (residuals are non-normal)
+  Note         *** p&lt;0.01, ** p&lt;0.05, * p&lt;0.10</code></pre><p>The statistic of 8.2093 rejects with a p-value below 0.001. Because it is consistent against every alternative, the interesting case for Henze-Zirkler is a rejection alongside a Mardia non-rejection –- non-normality in a shape the first four moments do not capture. Here all four tests agree, so the extra generality buys nothing beyond confirmation.</p><h3 id="Test-suite"><a class="docs-heading-anchor" href="#Test-suite">Test suite</a><a id="Test-suite-1"></a><a class="docs-heading-anchor-permalink" href="#Test-suite" title="Permalink"></a></h3><p><code>normality_test_suite</code> runs all seven tests –- multivariate Jarque-Bera, component-wise Jarque-Bera, Mardia skewness, Mardia kurtosis, Mardia combined, Doornik-Hansen, and Henze-Zirkler –- and returns a <code>NormalityTestSuite</code> with a consolidated display. It also accepts a raw residual matrix, so it works for any model whose residuals can be extracted.</p><pre><code class="language-julia hljs">suite = normality_test_suite(m)
+[(test = r.test_name, statistic = round(r.statistic, digits=2), pvalue = round(r.pvalue, digits=4))
+ for r in suite.results]</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">7-element Vector{@NamedTuple{test::Symbol, statistic::Float64, pvalue::Float64}}:
+ (test = :jarque_bera, statistic = 128189.37, pvalue = 0.0)
+ (test = :jarque_bera, statistic = 159604.97, pvalue = 0.0)
+ (test = :mardia_skewness, statistic = 2135.38, pvalue = 0.0)
+ (test = :mardia_kurtosis, statistic = 275.01, pvalue = 0.0)
+ (test = :mardia_both, statistic = 77767.78, pvalue = 0.0)
+ (test = :doornik_hansen, statistic = 120768.24, pvalue = 0.0)
+ (test = :henze_zirkler, statistic = 8.21, pvalue = 0.0)</code></pre><p>All seven p-values are zero to four decimal places. Unanimity is the usual outcome on macroeconomic residuals and is not itself informative; what the suite buys is the <em>pattern</em>. The two <code>:jarque_bera</code> rows are the multivariate and component-wise variants, which differ by more than 30,000 here, and the Mardia rows separate a skewness statistic of 2135.38 from a kurtosis <span>$z$</span>-score of 275.01. Together with the component breakdown above, that pattern points at heavy tails in the real-activity and policy-rate equations rather than at a misspecified conditional mean.</p><p><strong><code>NormalityTestResult</code> fields</strong></p><table><tr><th style="text-align: right">Field</th><th style="text-align: right">Type</th><th style="text-align: right">Description</th></tr><tr><td style="text-align: right"><code>test_name</code></td><td style="text-align: right"><code>Symbol</code></td><td style="text-align: right">Test identifier, e.g. <code>:jarque_bera</code>, <code>:mardia_skewness</code></td></tr><tr><td style="text-align: right"><code>statistic</code></td><td style="text-align: right"><code>T</code></td><td style="text-align: right">Test statistic</td></tr><tr><td style="text-align: right"><code>pvalue</code></td><td style="text-align: right"><code>T</code></td><td style="text-align: right">P-value</td></tr><tr><td style="text-align: right"><code>df</code></td><td style="text-align: right"><code>Int</code></td><td style="text-align: right">Degrees of freedom for <span>$\chi^2$</span> tests; 0 for Henze-Zirkler</td></tr><tr><td style="text-align: right"><code>n_vars</code></td><td style="text-align: right"><code>Int</code></td><td style="text-align: right">Number of variables</td></tr><tr><td style="text-align: right"><code>n_obs</code></td><td style="text-align: right"><code>Int</code></td><td style="text-align: right">Number of observations</td></tr><tr><td style="text-align: right"><code>components</code></td><td style="text-align: right"><code>Union{Nothing, Vector{T}}</code></td><td style="text-align: right">Per-component statistics when applicable</td></tr><tr><td style="text-align: right"><code>component_pvalues</code></td><td style="text-align: right"><code>Union{Nothing, Vector{T}}</code></td><td style="text-align: right">Per-component p-values when applicable</td></tr></table><p><code>NormalityTestSuite</code> holds <code>results</code> (a length-7 vector), the <code>residuals</code> matrix tested, <code>n_vars</code>, and <code>n_obs</code>.</p><hr/><h2 id="ARCH-Diagnostics"><a class="docs-heading-anchor" href="#ARCH-Diagnostics">ARCH Diagnostics</a><a id="ARCH-Diagnostics-1"></a><a class="docs-heading-anchor-permalink" href="#ARCH-Diagnostics" title="Permalink"></a></h2><p>Conditional heteroskedasticity violates the constant-variance assumption, degrading the efficiency of OLS and the coverage of standard confidence intervals. Two complementary tests detect it, and both accept either a raw vector or a fitted volatility model, in which case they use the standardized residuals.</p><h3 id="ARCH-LM"><a class="docs-heading-anchor" href="#ARCH-LM">ARCH-LM</a><a id="ARCH-LM-1"></a><a class="docs-heading-anchor-permalink" href="#ARCH-LM" title="Permalink"></a></h3><p>The ARCH-LM test (Engle 1982) regresses squared residuals on their own lags. Under the null of no ARCH effects the auxiliary regression</p><p class="math-container">\[\varepsilon_t^2 = \alpha_0 + \alpha_1 \varepsilon_{t-1}^2 + \cdots + \alpha_q \varepsilon_{t-q}^2 + v_t\]</p><p>has no explanatory power, and the statistic is:</p><p class="math-container">\[LM = T \cdot R^2 \sim \chi^2(q)\]</p><p>where:</p><ul><li><span>$T$</span> is the effective sample size after <span>$q$</span> lags</li><li><span>$R^2$</span> is the coefficient of determination of the auxiliary regression</li><li><span>$q$</span> is the number of lags</li></ul><p>The function returns a plain named tuple <code>(statistic, pvalue, q)</code> rather than a result object, so read the fields directly.</p><pre><code class="language-julia hljs">Random.seed!(12)
+h = ones(600); e = zeros(600)
+for t in 2:600                                  # GARCH(1,1) with strong persistence
+    h[t] = 0.05 + 0.15 * e[t-1]^2 + 0.80 * h[t-1]
+    e[t] = sqrt(h[t]) * randn()
+end
+
+arch_raw = arch_lm_test(e, 5)
+(statistic = round(arch_raw.statistic, digits=3), pvalue = round(arch_raw.pvalue, digits=6), q = arch_raw.q)</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">(statistic = 38.54, pvalue = 0.0, q = 5)</code></pre><p>The statistic of 38.54 on 5 degrees of freedom gives a p-value of zero to six decimal places, so the ARCH effects built into this series are detected easily. Compare with Recipe 4, where the same test on 500 i.i.d. normal draws returned 1.7303 with a p-value of 0.8851 –- the test has both size and power at these sample sizes. The natural next step is to fit a volatility model and re-run the test on its standardized residuals:</p><pre><code class="language-julia hljs">g_e = estimate_garch(e)
+arch_std = arch_lm_test(g_e, 10)
+(statistic = round(arch_std.statistic, digits=3), pvalue = round(arch_std.pvalue, digits=4))</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">(statistic = 6.796, pvalue = 0.7445)</code></pre><p>After fitting the GARCH(1,1), the ARCH-LM statistic on the standardized residuals falls to 6.796 with a p-value of 0.7445 on 10 lags. The conditional variance model has absorbed the heteroskedasticity: nothing is left for a further ARCH term to explain. That before-and-after pair –- reject on the raw series, fail to reject on the standardized residuals –- is the standard adequacy check for a volatility specification.</p><h3 id="Ljung-Box-on-squared-residuals"><a class="docs-heading-anchor" href="#Ljung-Box-on-squared-residuals">Ljung-Box on squared residuals</a><a id="Ljung-Box-on-squared-residuals-1"></a><a class="docs-heading-anchor-permalink" href="#Ljung-Box-on-squared-residuals" title="Permalink"></a></h3><p>The Ljung-Box test applied to squared residuals detects serial correlation in the variance process. Under the null of no autocorrelation in <span>$z_t^2$</span>:</p><p class="math-container">\[Q = n(n+2) \sum_{k=1}^{K} \frac{\hat{\rho}_k^2}{n-k} \sim \chi^2(K)\]</p><p>where:</p><ul><li><span>$\hat{\rho}_k$</span> is the sample autocorrelation of the squared series at lag <span>$k$</span></li><li><span>$n$</span> is the sample size</li><li><span>$K$</span> is the maximum lag</li></ul><p>Like <code>arch_lm_test</code>, it returns a named tuple, here <code>(statistic, pvalue, K)</code>.</p><pre><code class="language-julia hljs">lb_raw = ljung_box_squared(e, 10)
+lb_std = ljung_box_squared(g_e, 10)
+(raw = (statistic = round(lb_raw.statistic, digits=3), pvalue = round(lb_raw.pvalue, digits=6)),
+ standardized = (statistic = round(lb_std.statistic, digits=3), pvalue = round(lb_std.pvalue, digits=4)))</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">(raw = (statistic = 72.928, pvalue = 0.0), standardized = (statistic = 7.722, pvalue = 0.656))</code></pre><p>The squared raw series gives <span>$Q^2 = 72.928$</span> on 10 lags with a p-value of zero, and the squared standardized residuals give 7.722 with a p-value of 0.656. Ljung-Box and ARCH-LM reach the same verdict because they are near-equivalent here: ARCH-LM is a Lagrange-multiplier test of exactly the autocorrelation that <span>$Q^2$</span> measures directly. Running both is cheap insurance, since they weight the lags differently and can diverge when the variance dynamics are long-memory.</p><div class="admonition is-info" id="Technical-Note-e30e19f54e52f36"><header class="admonition-header">Technical Note<a class="admonition-anchor" href="#Technical-Note-e30e19f54e52f36" title="Permalink"></a></header><div class="admonition-body"><p>Apply <code>arch_lm_test</code> to a raw series to decide <em>whether</em> to fit a volatility model, and apply both <code>arch_lm_test</code> and <code>ljung_box_squared</code> to the fitted model object –- which routes to the standardized residuals <span>$\hat\varepsilon_t/\hat\sigma_t$</span> –- to check that the specification is adequate. Running either test on the raw returns after fitting merely re-detects the clustering the model has already accounted for.</p></div></div><hr/><h2 id="BDS-Independence-Test"><a class="docs-heading-anchor" href="#BDS-Independence-Test">BDS Independence Test</a><a id="BDS-Independence-Test-1"></a><a class="docs-heading-anchor-permalink" href="#BDS-Independence-Test" title="Permalink"></a></h2><p>Ljung-Box and ARCH-LM detect only <em>linear</em> dependence or conditional heteroskedasticity of a known form. The Brock-Dechert-Scheinkman-LeBaron (BDS) test (Brock, Dechert, Scheinkman &amp; LeBaron 1996) detects <em>any</em> departure from independence and identical distribution –- nonlinear serial dependence, neglected heteroskedasticity, or deterministic chaos –- which makes it the canonical post-ARIMA and post-GARCH adequacy check.</p><p>The test compares the correlation integral of the <span>$m$</span>-dimensional embedding of the series with what independence would imply. For a distance threshold <span>$\varepsilon$</span> and the indicator <span>$\Theta_{ij} = \mathbf{1}(|y_i - y_j| &lt; \varepsilon)$</span>, the correlation integral is</p><p class="math-container">\[C_m(\varepsilon) = \frac{2}{T_m(T_m-1)} \sum_{s &lt; t} \prod_{k=0}^{m-1} \Theta_{s+k,\, t+k}, \qquad T_m = T - m + 1 ,\]</p><p>and the standardized statistic is</p><p class="math-container">\[w_m = \sqrt{T}\, \frac{C_m(\varepsilon) - C_1(\varepsilon)^m}{\sigma_m(\varepsilon)} \xrightarrow{d} N(0, 1) ,\]</p><p>where:</p><ul><li><span>$C_1(\varepsilon)$</span> is the first-order correlation integral over the full sample</li><li><span>$\sigma_m(\varepsilon)$</span> is the asymptotic standard deviation (Brock et al. 1996), a function of <span>$C_1$</span> and the triple-overlap probability <span>$K$</span></li><li><span>$m$</span> is the embedding dimension and <span>$\varepsilon = \texttt{eps\_frac} \cdot \operatorname{sd}(y)$</span></li></ul><p>Under <span>$H_0$</span> the observations are i.i.d., and a large <span>$|w_m|$</span> rejects independence in a two-sided test. The result carries one cell per <span>$(m, \varepsilon)$</span> pair.</p><pre><code class="language-julia hljs">Random.seed!(13)
+report(bds_test(randn(400); m=2:3, eps_frac=1.0))</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi"><span class="sgr1">         BDS Independence Test (Brock-Dechert-Scheinkman-LeBaron 1996)</span>
+
+ <span class="sgr1"> Specification      </span> <span class="sgr1">                                                         </span>
+
+  H₀                                        Observations are iid (independent)
+  H₁                   Observations are not iid (nonlinear dependence / chaos)
+  Embedding dims (m)                                                    [2, 3]
+  ε multipliers                                                  [1.0000] × sd
+  Sample sd                                                             0.9798
+  Observations (T)                                                         400
+  Bootstrap                                                               none
+
+<span class="sgr1">Results (two-sided N(0,1); one row per (m, ε))</span>
+
+ <span class="sgr1"> m </span> <span class="sgr1">      ε </span> <span class="sgr1">    C_m </span> <span class="sgr1">    w (z) </span> <span class="sgr1"> P-value </span>
+
+  2   0.9798   0.2672   -1.1546     0.2483
+  3   0.9798   0.1395   -0.3181     0.7504
+
+
+  Conclusion   Fail to reject H₀ — no evidence against iid
+  Note         *** p&lt;0.01, ** p&lt;0.05, * p&lt;0.10</code></pre><p>On 400 i.i.d. normal draws both statistics are small –- <span>$w_2 = -1.155$</span> and <span>$w_3 = -0.318$</span>, with p-values of 0.248 and 0.750 –- and independence survives, as it must. The threshold <span>$\varepsilon$</span> is one sample standard deviation here, which is the middle of the range Brock et al. recommend; too small and the correlation integrals rest on too few close pairs, too large and every pair counts as close and the test loses power.</p><p>Deterministic chaos is the clearest demonstration of what linear diagnostics miss:</p><pre><code class="language-julia hljs">z_chaos = Vector{Float64}(undef, 400); z_chaos[1] = 0.3
+for t in 2:400
+    z_chaos[t] = 4 * z_chaos[t-1] * (1 - z_chaos[t-1])     # logistic map
+end
+report(bds_test(z_chaos; m=2:3, eps_frac=0.7))</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi"><span class="sgr1">         BDS Independence Test (Brock-Dechert-Scheinkman-LeBaron 1996)</span>
+
+ <span class="sgr1"> Specification      </span> <span class="sgr1">                                                         </span>
+
+  H₀                                        Observations are iid (independent)
+  H₁                   Observations are not iid (nonlinear dependence / chaos)
+  Embedding dims (m)                                                    [2, 3]
+  ε multipliers                                                  [0.7000] × sd
+  Sample sd                                                             0.3494
+  Observations (T)                                                         400
+  Bootstrap                                                               none
+
+<span class="sgr1"> Results (two-sided N(0,1); one row per (m, ε))</span>
+
+ <span class="sgr1"> m </span> <span class="sgr1">      ε </span> <span class="sgr1">    C_m </span> <span class="sgr1">        w (z) </span> <span class="sgr1"> P-value </span>
+
+  2   0.2446   0.2172   475.8258 ***    &lt;0.001
+  3   0.2446   0.1279   556.8093 ***    &lt;0.001
+
+
+  Conclusion   Reject H₀ at 1% — series is not iid
+  Note         *** p&lt;0.01, ** p&lt;0.05, * p&lt;0.10</code></pre><p>The logistic map is perfectly deterministic yet has essentially zero autocorrelation, so Ljung-Box would find nothing. BDS returns <span>$w_2 = 475.83$</span> and <span>$w_3 = 556.81$</span>, both with p-values below machine precision, because the correlation integrals of a chaotic orbit are nothing like the <span>$C_1(\varepsilon)^m$</span> that independence implies. This is exactly the structure BDS exists to catch, and the reason to run it on residuals that have already passed the linear tests.</p><p>For fitted models, pass the object: <code>bds_test(model)</code> tests ARIMA residuals, and for volatility models it tests the <strong>standardized</strong> residuals, since running it on raw returns would merely re-detect the clustering the model has removed.</p><pre><code class="language-julia hljs">report(bds_test(g_e; m=2, eps_frac=[1.0, 1.5]))</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi"><span class="sgr1">         BDS Independence Test (Brock-Dechert-Scheinkman-LeBaron 1996)</span>
+
+ <span class="sgr1"> Specification      </span> <span class="sgr1">                                                         </span>
+
+  H₀                                        Observations are iid (independent)
+  H₁                   Observations are not iid (nonlinear dependence / chaos)
+  Embedding dims (m)                                                       [2]
+  ε multipliers                                          [1.0000, 1.5000] × sd
+  Sample sd                                                             1.0019
+  Observations (T)                                                         600
+  Bootstrap                                                               none
+
+<span class="sgr1">Results (two-sided N(0,1); one row per (m, ε))</span>
+
+ <span class="sgr1"> m </span> <span class="sgr1">      ε </span> <span class="sgr1">    C_m </span> <span class="sgr1">   w (z) </span> <span class="sgr1"> P-value </span>
+
+  2   1.0019   0.2635   0.3856     0.6998
+  2   1.5029   0.4969   0.2797     0.7797
+
+
+  Conclusion   Fail to reject H₀ — no evidence against iid
+  Note         *** p&lt;0.01, ** p&lt;0.05, * p&lt;0.10</code></pre><p>At <span>$\varepsilon = 1.0\,\text{sd}$</span> the statistic is 0.386 with a p-value of 0.700, and at <span>$1.5\,\text{sd}$</span> it is 0.280 with 0.780, so the fitted GARCH(1,1) leaves no detectable nonlinear structure. Passing a vector to <code>eps_frac</code> produces one row per threshold, which is how to check that a conclusion is not an artefact of a single bandwidth –- a rejection at one <span>$\varepsilon$</span> and not another usually means the sample is too short rather than that the truth changes with the threshold.</p><div class="admonition is-info" id="Small-samples-and-the-bootstrap-14b70997cd3b0f44"><header class="admonition-header">Small samples and the bootstrap<a class="admonition-anchor" href="#Small-samples-and-the-bootstrap-14b70997cd3b0f44" title="Permalink"></a></header><div class="admonition-body"><p>The asymptotic <span>$N(0,1)$</span> approximation is unreliable for <span>$T &lt; 200$</span>, and a warning is emitted below that threshold. For short series pass <code>bootstrap=500</code> or more: each replication permutes the series to impose the i.i.d. null and recomputes <span>$w_m$</span>, yielding a permutation p-value in <code>boot_pvalue</code> that does not rely on the asymptotic distribution.</p></div></div><table><tr><th style="text-align: right">Keyword</th><th style="text-align: right">Type</th><th style="text-align: right">Default</th><th style="text-align: right">Description</th></tr><tr><td style="text-align: right"><code>m</code></td><td style="text-align: right"><code>AbstractVector{Int}</code></td><td style="text-align: right"><code>2:6</code></td><td style="text-align: right">Embedding dimensions; values with <span>$T - m + 1 &lt; 2$</span> are dropped</td></tr><tr><td style="text-align: right"><code>eps_frac</code></td><td style="text-align: right"><code>Real</code> or <code>AbstractVector</code></td><td style="text-align: right"><code>0.7</code></td><td style="text-align: right">Threshold multipliers of the sample standard deviation</td></tr><tr><td style="text-align: right"><code>bootstrap</code></td><td style="text-align: right"><code>Int</code></td><td style="text-align: right"><code>0</code></td><td style="text-align: right">Permutation replications for an i.i.d.-null p-value</td></tr><tr><td style="text-align: right"><code>seed</code></td><td style="text-align: right"><code>Int</code></td><td style="text-align: right"><code>1234</code></td><td style="text-align: right">RNG seed for the permutation bootstrap</td></tr></table><p><code>BDSResult</code> stores <code>m</code>, <code>eps</code>, <code>eps_frac</code>, <code>sd</code>, the <code>statistic</code> and <code>pvalue</code> matrices (<span>$|m| \times |\varepsilon|$</span>), <code>boot_pvalue</code>, the raw correlation integrals <code>C</code>, <code>nobs</code>, <code>small_sample</code>, <code>bootstrap</code>, and <code>seed</code>.</p><hr/><h2 id="EDF-Goodness-of-Fit-Tests"><a class="docs-heading-anchor" href="#EDF-Goodness-of-Fit-Tests">EDF Goodness-of-Fit Tests</a><a id="EDF-Goodness-of-Fit-Tests-1"></a><a class="docs-heading-anchor-permalink" href="#EDF-Goodness-of-Fit-Tests" title="Permalink"></a></h2><p>Empirical-distribution-function tests compare the sample distribution with a hypothesized continuous distribution through the probability-integral transform <span>$z_{(i)} = F(y_{(i)}; \theta)$</span>. Unlike the moment-based normality suite above, <code>edf_test</code> tests fit against any of seven parametric families and reports one of five statistics. It is the standard tool for checking residuals, PIT transforms, or loss series in risk and forecast-evaluation work.</p><p>The statistics summarize the gap between the empirical and hypothesized CDFs differently:</p><p class="math-container">\[\begin{aligned}
+D   &amp;= \max_i\left[\max\left(\tfrac{i}{n} - z_{(i)},\; z_{(i)} - \tfrac{i-1}{n}\right)\right] &amp; &amp;\text{(Kolmogorov-Smirnov)}\\
+W^2 &amp;= \frac{1}{12n} + \sum_{i=1}^n\left(z_{(i)} - \frac{2i-1}{2n}\right)^2 &amp; &amp;\text{(Cramér-von Mises)}\\
+A^2 &amp;= -n - \frac{1}{n}\sum_{i=1}^n (2i-1)\left[\ln z_{(i)} + \ln\!\left(1 - z_{(n+1-i)}\right)\right] &amp; &amp;\text{(Anderson-Darling)}\\
+U^2 &amp;= W^2 - n\left(\bar{z} - \tfrac{1}{2}\right)^2 &amp; &amp;\text{(Watson)}
+\end{aligned}\]</p><p>where:</p><ul><li><span>$z_{(i)}$</span> are the sorted PIT values</li><li><span>$n$</span> is the sample size</li><li><span>$\bar{z}$</span> is the mean of the PIT values</li></ul><p>Anderson-Darling weights the tails most heavily and is the recommended default.</p><div class="admonition is-warning" id="Estimated-parameters-change-the-null-distribution-25208d4daef88f65"><header class="admonition-header">Estimated parameters change the null distribution<a class="admonition-anchor" href="#Estimated-parameters-change-the-null-distribution-25208d4daef88f65" title="Permalink"></a></header><div class="admonition-body"><p>With <code>params=:specified</code> the statistics are distribution-free, and the p-values use the Marsaglia-Tsang-Wang exact Kolmogorov CDF for <span>$n \le 100$</span>, the Marsaglia ADinf distribution for <span>$A^2$</span>, and asymptotic tables for <span>$W^2$</span> and <span>$U^2$</span>. With <code>params=:estimate</code> they are not distribution-free. Only the <strong>normal</strong> family has tabulated null distributions –- the Stephens (1974) modified statistics with D&#39;Agostino &amp; Stephens (1986) closed-form p-values, and the Dallal-Wilkinson (1986) approximation for Lilliefors. Every other family under <code>params=:estimate</code> returns <code>pvalue = NaN</code> with the reason in the <code>case</code> label, rather than a wrong number.</p></div></div><pre><code class="language-julia hljs">Random.seed!(19)
+z_norm = rand(Normal(0.5, 2.0), 300)
+
+report(edf_test(z_norm; dist=:normal, test=:ad, params=:estimate))</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi"><span class="sgr1">                           EDF Goodness-of-Fit Test</span>
+
+ <span class="sgr1"> Specification </span> <span class="sgr1">                                                             </span>
+
+  H₀                                      Data follow the Normal distribution
+  H₁                               Data do not follow the Normal distribution
+  Statistic                                             Anderson–Darling (A²)
+  Distribution                                                         Normal
+  Parameters                                   estimated (ML): 0.4340, 1.7811
+  Null case       Case 3 (μ,σ estimated) — Stephens A²* / D&#39;Agostino–Stephens
+  Observations                                                            300
+
+<span class="sgr1">     Results (right-tailed)</span>
+
+ <span class="sgr1">                    </span> <span class="sgr1">   Value </span>
+
+  Modified statistic   0.2671
+  Raw EDF statistic     0.2664
+  P-value               0.6875
+
+<span class="sgr1">      Critical Values</span>
+
+ <span class="sgr1">     1% </span> <span class="sgr1">     5% </span> <span class="sgr1">    10% </span>
+
+  1.0920   0.7870   0.6560
+
+
+  Conclusion   Fail to reject H₀ — no evidence against the Normal fit
+  Note         *** p&lt;0.01, ** p&lt;0.05, * p&lt;0.10</code></pre><p>The modified Anderson-Darling statistic <span>$A^{2*} = 0.2671$</span>, with mean and variance estimated from the data at 0.434 and 1.781, gives a p-value of 0.6875 against a 5% critical value of 0.787 –- normality is not rejected, the right answer for 300 Gaussian draws. The <code>case</code> label records Stephens Case 3, both parameters estimated, which is what selects those modified critical values; the unmodified <code>raw_statistic</code> of 0.2664 is reported alongside for reference. Testing the same series against a <em>fully specified</em> null takes the distribution-free route and gives a very different answer:</p><pre><code class="language-julia hljs">report(edf_test(z_norm; dist=:normal, test=:ks, params=:specified, theta=(0.0, 1.0)))</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi"><span class="sgr1">                     EDF Goodness-of-Fit Test</span>
+
+ <span class="sgr1"> Specification </span> <span class="sgr1">                                                </span>
+
+  H₀                         Data follow the Normal distribution
+  H₁                  Data do not follow the Normal distribution
+  Statistic                               Kolmogorov–Smirnov (D)
+  Distribution                                            Normal
+  Parameters                           specified: 0.0000, 1.0000
+  Null case       Case 0 (fully specified) — KS exact/asymptotic
+  Observations                                               300
+
+<span class="sgr1">      Results (right-tailed)</span>
+
+ <span class="sgr1">                   </span> <span class="sgr1">      Value </span>
+
+  Statistic           0.2370 ***
+  Raw EDF statistic       0.2370
+  P-value                 &lt;0.001
+
+<span class="sgr1">      Critical Values</span>
+
+ <span class="sgr1">     1% </span> <span class="sgr1">     5% </span> <span class="sgr1">    10% </span>
+
+  0.0940   0.0784   0.0707
+
+
+  Conclusion   Reject H₀ at 1% — data do not follow the Normal distribution
+  Note         *** p&lt;0.01, ** p&lt;0.05, * p&lt;0.10</code></pre><p>The Kolmogorov-Smirnov statistic of 0.2370 against <span>$N(0,1)$</span> rejects with a p-value below 0.001, more than three times the 1% critical value of 0.094. That is correct: the data are <span>$N(0.5, 2.0)$</span>, so the specified null has both the location and the scale wrong. The contrast between the two blocks is the whole point of the <code>params</code> keyword –- the first asks &quot;is this Gaussian?&quot;, the second asks &quot;is this <em>this particular</em> Gaussian?&quot;, and only the second can detect a calibration failure in a forecast distribution or a risk model.</p><p>Non-normal families are supported for the specified route, and for the estimated route wherever a published null table exists:</p><pre><code class="language-julia hljs">Random.seed!(20)
+d_exp = rand(Exponential(1.5), 200)
+r_exp = edf_test(d_exp; dist=:exponential, test=:ad, params=:specified, theta=(1.5,))
+(statistic = round(r_exp.statistic, digits=4), pvalue = round(r_exp.pvalue, digits=4), case = r_exp.case)</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">(statistic = 0.7459, pvalue = 0.5217, case = &quot;Case 0 (fully specified) — AD asymptotic (ADinf)&quot;)</code></pre><p>The exponential draws give an Anderson-Darling statistic of 0.7459 with a p-value of 0.5217 against the correct rate, so the fit is accepted. The <code>case</code> label reads &quot;Case 0 (fully specified)&quot;, which is the signal that the distribution-free ADinf p-value applies; had <code>params=:estimate</code> been used here the p-value would have come back <code>NaN</code> with the reason spelled out, since no published null table covers the estimated-parameter exponential case.</p><table><tr><th style="text-align: right">Keyword</th><th style="text-align: right">Type</th><th style="text-align: right">Default</th><th style="text-align: right">Description</th></tr><tr><td style="text-align: right"><code>dist</code></td><td style="text-align: right"><code>Symbol</code></td><td style="text-align: right"><code>:normal</code></td><td style="text-align: right"><code>:normal</code>, <code>:exponential</code>, <code>:logistic</code>, <code>:gumbel</code>, <code>:gamma</code>, <code>:weibull</code>, <code>:chisq</code></td></tr><tr><td style="text-align: right"><code>test</code></td><td style="text-align: right"><code>Symbol</code></td><td style="text-align: right"><code>:ad</code></td><td style="text-align: right"><code>:ks</code>, <code>:lilliefors</code>, <code>:cvm</code>, <code>:ad</code>, <code>:watson</code></td></tr><tr><td style="text-align: right"><code>params</code></td><td style="text-align: right"><code>Symbol</code></td><td style="text-align: right"><code>:estimate</code></td><td style="text-align: right"><code>:estimate</code> (ML fit) or <code>:specified</code> (supply <code>theta</code>)</td></tr><tr><td style="text-align: right"><code>theta</code></td><td style="text-align: right"><code>Tuple</code>/<code>Vector</code></td><td style="text-align: right"><code>nothing</code></td><td style="text-align: right">Parameters when <code>params=:specified</code></td></tr></table><p><code>EDFTestResult</code> stores <code>test</code>, <code>dist</code>, <code>params</code>, <code>statistic</code> (the value compared with the critical values), <code>raw_statistic</code> (the unmodified EDF statistic), <code>pvalue</code>, <code>nobs</code>, the fitted or specified <code>theta</code>, a <code>critical_values</code> dictionary, and a human-readable <code>case</code> label.</p><hr/><h2 id="Variance-Ratio-Tests"><a class="docs-heading-anchor" href="#Variance-Ratio-Tests">Variance-Ratio Tests</a><a id="Variance-Ratio-Tests-1"></a><a class="docs-heading-anchor-permalink" href="#Variance-Ratio-Tests" title="Permalink"></a></h2><p>The variance-ratio test evaluates the <strong>random-walk (martingale) hypothesis</strong> for a level series such as a log price or log exchange rate. Under a random walk the variance of the <span>$q$</span>-period increment grows linearly in <span>$q$</span>, so the ratio equals one at every aggregation:</p><p class="math-container">\[VR(q) = \frac{\operatorname{Var}(y_t - y_{t-q})}{q \, \operatorname{Var}(y_t - y_{t-1})}.\]</p><p><code>variance_ratio_test</code> treats its argument as the <strong>level</strong> series and works internally with the first differences <span>$x_t = y_t - y_{t-1}$</span>. It reports the overlapping Lo-MacKinlay (1988) estimator with the unbiased normalizer <span>$m = q(N-q+1)(1-q/N)$</span>, the homoskedastic statistic <span>$Z(q)$</span> and the heteroskedasticity-robust <span>$Z^*(q)$</span> (both asymptotically <span>$N(0,1)$</span>), and the Chow-Denning (1993) joint statistic <span>$\max_q |Z(q)|$</span> whose p-value comes from the studentized-maximum-modulus complement <span>$1 - (2\Phi(\cdot) - 1)^m$</span>.</p><ul><li><span>$VR(q) &gt; 1$</span> –- positive autocorrelation in the increments (trending, momentum)</li><li><span>$VR(q) &lt; 1$</span> –- negative autocorrelation (mean reversion)</li></ul><pre><code class="language-julia hljs">Random.seed!(16)
+rw = cumsum(randn(600))                          # a simulated random walk (level series)
+report(variance_ratio_test(rw; q=[2, 4, 8, 16]))</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi"><span class="sgr1">              Variance-Ratio (Random-Walk) Test</span>
+
+ <span class="sgr1"> Specification    </span> <span class="sgr1">                                         </span>
+
+  H₀                   Series is a random walk (VR(q)=1 ∀ q)
+  H₁                 Increments serially dependent (VR(q)≠1)
+  Method                                        Lo-MacKinlay
+  Aggregations (q)                             [2, 4, 8, 16]
+  Observations                                           600
+  Bootstrap                                             none
+
+<span class="sgr1">         Lo-MacKinlay Variance Ratios</span>
+
+ <span class="sgr1">  q </span> <span class="sgr1">  VR(q) </span> <span class="sgr1">     Z(q) </span> <span class="sgr1">    Z*(q) </span> <span class="sgr1">  P(Z*) </span>
+
+   2   1.0448    1.0968     1.1254    0.2604
+   4   1.1138    1.4881     1.5027    0.1329
+   8   1.2313   1.9139 *   1.9208 *   0.0548
+  16   1.1996    1.1096     1.1079    0.2679
+
+<span class="sgr1">Chow-Denning Joint Test (max|Z|)</span>
+
+ <span class="sgr1"> Statistic          </span> <span class="sgr1">   Value </span>
+
+  CD (homoskedastic)   1.9139
+    P-value (SMM)       0.2046
+  CD* (robust)         1.9208
+    P-value (SMM)       0.2017
+
+
+  Conclusion   Fail to reject H₀ — series consistent with a random walk
+  Note         *** p&lt;0.01, ** p&lt;0.05, * p&lt;0.10 (two-sided)</code></pre><p>The ratios range from 1.045 to 1.231 and the joint test does not reject: the Chow-Denning statistic of 1.921 has a p-value of 0.202, so the random-walk null survives. This block is also the cleanest possible illustration of why the joint test exists. The individual <span>$Z^*(8) = 1.921$</span> carries a p-value of 0.0548 and picks up a significance star, and a reader scanning the four rows for the smallest p-value would report a near-rejection. The Chow-Denning statistic is the same 1.921 read against the studentized-maximum-modulus distribution instead of the normal, and once the search over four aggregations is priced in, the evidence disappears.</p><h3 id="Wright-rank/sign-and-wild-bootstrap-variants"><a class="docs-heading-anchor" href="#Wright-rank/sign-and-wild-bootstrap-variants">Wright rank/sign and wild-bootstrap variants</a><a id="Wright-rank/sign-and-wild-bootstrap-variants-1"></a><a class="docs-heading-anchor-permalink" href="#Wright-rank/sign-and-wild-bootstrap-variants" title="Permalink"></a></h3><p><code>method=:wright</code> adds Wright&#39;s (2000) rank (<span>$R1$</span>, <span>$R2$</span>) and sign (<span>$S1$</span>) statistics, whose exact i.i.d.-null distributions are simulated on demand and cached. These are robust to non-normality and often more powerful in small samples. <code>bootstrap=B</code> adds Kim&#39;s (2006) wild-bootstrap p-values for <span>$Z^*(q)$</span> and for the Chow-Denning statistic.</p><pre><code class="language-julia hljs">Random.seed!(17)
+ar1 = zeros(800)
+for t in 2:800
+    ar1[t] = 0.5 * ar1[t-1] + randn()            # mean-reverting level: not a random walk
+end
+vr_ar = variance_ratio_test(ar1; q=[2, 4, 8], method=:wright, bootstrap=299)
+(vr = round.(vr_ar.vr, digits=3),
+ cd_star = round(vr_ar.cd_star_stat, digits=3),
+ cd_boot_p = round(vr_ar.cd_boot_pvalue, digits=4))</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">(vr = [0.801, 0.49, 0.261], cd_star = 7.016, cd_boot_p = 0.0033)</code></pre><p>The ratios fall monotonically –- 0.801, 0.490, 0.261 –- exactly the signature of mean reversion, and the robust Chow-Denning statistic of 7.016 with a wild-bootstrap p-value of 0.0033 rejects the random walk decisively. The monotone decline in <span>$VR(q)$</span> is more informative than the rejection itself: it says the deviation is a stationary autoregressive component rather than a one-off level shift, which would leave the ratios flat across <span>$q$</span>.</p><table><tr><th style="text-align: right">Keyword</th><th style="text-align: right">Type</th><th style="text-align: right">Default</th><th style="text-align: right">Description</th></tr><tr><td style="text-align: right"><code>q</code></td><td style="text-align: right"><code>Vector{Int}</code></td><td style="text-align: right"><code>[2,4,8,16]</code></td><td style="text-align: right">Aggregation values, each with <span>$2 \le q &lt; N$</span></td></tr><tr><td style="text-align: right"><code>method</code></td><td style="text-align: right"><code>Symbol</code></td><td style="text-align: right"><code>:lomackinlay</code></td><td style="text-align: right"><code>:lomackinlay</code>, or <code>:wright</code> to add rank and sign statistics</td></tr><tr><td style="text-align: right"><code>bootstrap</code></td><td style="text-align: right"><code>Int</code></td><td style="text-align: right"><code>0</code></td><td style="text-align: right">Kim (2006) wild-bootstrap replications</td></tr><tr><td style="text-align: right"><code>robust</code></td><td style="text-align: right"><code>Bool</code></td><td style="text-align: right"><code>true</code></td><td style="text-align: right">Report the heteroskedasticity-robust branch as primary</td></tr><tr><td style="text-align: right"><code>boot_weights</code></td><td style="text-align: right"><code>Symbol</code></td><td style="text-align: right"><code>:rademacher</code></td><td style="text-align: right"><code>:rademacher</code> or <code>:normal</code> wild-bootstrap weights</td></tr><tr><td style="text-align: right"><code>seed</code></td><td style="text-align: right"><code>Int</code></td><td style="text-align: right"><code>1234</code></td><td style="text-align: right">RNG seed for the wild bootstrap</td></tr></table><p><code>VarianceRatioResult</code> stores <code>q</code>, <code>vr</code>, the <code>z</code>/<code>z_star</code> statistics with their p-values, the joint <code>cd_stat</code>/<code>cd_star_stat</code> and their p-values, the Wright <code>R1</code>/<code>R2</code>/<code>S1</code> vectors with p-values, the bootstrap p-values <code>z_star_boot_pvalue</code> and <code>cd_boot_pvalue</code>, and <code>nobs</code>.</p><hr/><h2 id="Equality-and-Rank-Correlation-Tests"><a class="docs-heading-anchor" href="#Equality-and-Rank-Correlation-Tests">Equality and Rank-Correlation Tests</a><a id="Equality-and-Rank-Correlation-Tests-1"></a><a class="docs-heading-anchor-permalink" href="#Equality-and-Rank-Correlation-Tests" title="Permalink"></a></h2><p>This battery compares the location, scale, or distribution of a response across the groups of a classifier, and measures the association between two series –- the EViews <em>Equality Tests by Classification</em> and <em>Correlations</em> dialogs. <code>equality_test(y, g; test=...)</code> groups <code>y</code> by the distinct values of <code>g</code>; <code>cor_test(x, y; method=...)</code> returns a rank or product-moment correlation. Both also dispatch on <code>CrossSectionData</code> and <code>PanelData</code> via column symbols, and <code>ttest</code> provides the one-sample and paired forms that a classifier cannot express.</p><p><strong>Location tests</strong>: two-sample and paired <span>$t$</span> (pooled or Welch), one-way ANOVA (classic <span>$F$</span> or Welch), Mann-Whitney <span>$U$</span>, Wilcoxon signed-rank, Kruskal-Wallis <span>$H$</span>, van der Waerden normal scores, and the Mood median <span>$\chi^2$</span>. <strong>Scale tests</strong>: two-group variance <span>$F$</span>, Bartlett, Levene (centred at the group mean), Brown-Forsythe (centred at the group median), and Siegel-Tukey. The rank tests use the exact null for small tie-free samples and otherwise a continuity- and tie-corrected normal approximation, matching R&#39;s <code>wilcox.test</code> and <code>kruskal.test</code>.</p><div class="admonition is-info" id="Grouped-data-versus-regression-residuals-e3db7e59377bda19"><header class="admonition-header">Grouped data versus regression residuals<a class="admonition-anchor" href="#Grouped-data-versus-regression-residuals-e3db7e59377bda19" title="Permalink"></a></header><div class="admonition-body"><p>The Levene and Brown-Forsythe tests here operate on <strong>raw data split by a classifier</strong>. For the regression-residual heteroskedasticity variants, which work from the deviations of fitted residuals, use <code>white_test</code> and <code>breusch_pagan_test</code> on <a href="../regression/#regression_page">Linear Regression</a>.</p></div></div><pre><code class="language-julia hljs">g1 = [5.1, 4.9, 6.2, 5.7, 6.0, 5.5]
+g2 = [6.1, 5.9, 7.2, 6.8, 6.5]
+g3 = [7.0, 7.5, 6.9, 8.1, 7.3, 7.8]
+y_grp = vcat(g1, g2, g3)
+grp = vcat(fill(1, 6), fill(2, 5), fill(3, 6))
+
+report(anova_test(y_grp, grp))</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi"><span class="sgr1">                 Equality Test: One-Way ANOVA (F)</span>
+
+ <span class="sgr1"> Specification </span> <span class="sgr1">                                                </span>
+
+  H₀              Groups share a common distribution / parameter
+  H₁                                               Groups differ
+  Method                                classic (equal variance)
+  Groups                                                       3
+  Group sizes                                          [6, 5, 6]
+  Null                                                     exact
+
+<span class="sgr1">                 Results</span>
+
+ <span class="sgr1">                    </span> <span class="sgr1">             Value </span>
+
+  F statistic                21.2302 ***
+  Degrees of freedom   (2.0000, 14.0000)
+  P-value                         &lt;0.001
+
+
+  Conclusion   Reject H₀ at 1% significance level
+  Note         *** p&lt;0.01, ** p&lt;0.05, * p&lt;0.10</code></pre><p>The classic equal-variance <span>$F$</span> of 21.2302 on <span>$(2, 14)$</span> degrees of freedom gives a p-value below 0.001, so the three group means differ. <code>anova_test</code> is a thin wrapper for <code>equality_test(y, g; test=:anova)</code>; <code>equal_var=false</code> switches to Welch&#39;s unequal-variance <span>$F$</span>, which is the safer default whenever the group variances are not known to match.</p><pre><code class="language-julia hljs">report(equality_test(y_grp, grp; test=:kruskal_wallis))</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi"><span class="sgr1">               Equality Test: Kruskal-Wallis H Test</span>
+
+ <span class="sgr1"> Specification </span> <span class="sgr1">                                                </span>
+
+  H₀              Groups share a common distribution / parameter
+  H₁                                               Groups differ
+  Method                                           tie-corrected
+  Groups                                                       3
+  Group sizes                                          [6, 5, 6]
+  Null                                  asymptotic approximation
+
+<span class="sgr1">              Results</span>
+
+ <span class="sgr1">                    </span> <span class="sgr1">       Value </span>
+
+  H statistic          12.1712 ***
+  Degrees of freedom        2.0000
+  P-value                   0.0023
+
+
+  Conclusion   Reject H₀ at 1% significance level
+  Note         *** p&lt;0.01, ** p&lt;0.05, * p&lt;0.10</code></pre><p>The tie-corrected Kruskal-Wallis <span>$H$</span> of 12.1712 on 2 degrees of freedom gives 0.0023 and reaches the same conclusion without assuming normality. Agreement between the parametric and rank tests, as here, means the ANOVA rejection is not driven by an outlier or by skew –- the check worth running whenever a group has fewer than ten observations.</p><pre><code class="language-julia hljs">report(equality_test(y_grp, grp; test=:brown_forsythe))</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi"><span class="sgr1">       Equality Test: Brown-Forsythe Test (center = median)</span>
+
+ <span class="sgr1"> Specification </span> <span class="sgr1">                                                </span>
+
+  H₀              Groups share a common distribution / parameter
+  H₁                                               Groups differ
+  Method                            deviations from group median
+  Groups                                                       3
+  Group sizes                                          [6, 5, 6]
+  Null                                  asymptotic approximation
+
+<span class="sgr1">                 Results</span>
+
+ <span class="sgr1">                    </span> <span class="sgr1">             Value </span>
+
+  F statistic                    0.0338
+  Degrees of freedom   (2.0000, 14.0000)
+  P-value                         0.9668
+
+
+  Conclusion   Fail to reject H₀
+  Note         *** p&lt;0.01, ** p&lt;0.05, * p&lt;0.10</code></pre><p>Brown-Forsythe returns 0.0338 with a p-value of 0.9668, so the group dispersions are indistinguishable and the equal-variance <span>$F$</span> above was the right choice. Bartlett&#39;s test (<code>test=:bartlett</code>) is more powerful when the data really are normal but is notoriously sensitive to departures from it; Brown-Forsythe, centred at the group median, is the robust alternative and the one to reach for by default.</p><pre><code class="language-julia hljs">y_12 = vcat(g1, g2); grp_12 = vcat(fill(1, 6), fill(2, 5))
+report(equality_test(y_12, grp_12; test=:mann_whitney))</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi"><span class="sgr1">                Equality Test: Mann-Whitney U Test</span>
+
+ <span class="sgr1"> Specification </span> <span class="sgr1">                                                </span>
+
+  H₀              Groups share a common distribution / parameter
+  H₁                                               Groups differ
+  Method                                              exact null
+  Groups                                                       2
+  Group sizes                                             [6, 5]
+  Null                                                     exact
+
+<span class="sgr1">             Results</span>
+
+ <span class="sgr1">                    </span> <span class="sgr1">     Value </span>
+
+  U statistic          3.0000 **
+  Degrees of freedom      6.0000
+  P-value                 0.0303
+
+
+  Conclusion   Reject H₀ at 5% significance level
+  Note         *** p&lt;0.01, ** p&lt;0.05, * p&lt;0.10</code></pre><p>Restricted to the first two groups, the Mann-Whitney <span>$U$</span> of 3.0 gives a p-value of 0.0303 and rejects equality of distributions at 5%. With six and five observations and no ties, the exact null is used rather than the normal approximation, which matters at these sample sizes: the asymptotic p-value would overstate the significance. The two-sample, paired, variance-ratio, and Siegel-Tukey tests all require exactly two groups and raise an <code>ArgumentError</code> otherwise.</p><p>Association between two series is measured by <code>cor_test</code>, whose Kendall statistic counts concordant minus discordant pairs in <span>$O(n \log n)$</span> with a merge-sort inversion counter –- <span>$\tau_a$</span> under the exact null for small tie-free samples, and the tie-adjusted <span>$\tau_b$</span> otherwise:</p><pre><code class="language-julia hljs">x_cor = [10.0, 8, 13, 9, 11, 14, 6, 4, 12, 7, 5]
+z_cor = [8.04, 6.95, 7.58, 8.81, 8.33, 9.96, 7.24, 4.26, 10.84, 4.82, 5.68]
+report(cor_test(x_cor, z_cor; method=:pearson))</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi"><span class="sgr1">       Correlation Test: Pearson product-moment</span>
+
+ <span class="sgr1"> Specification </span> <span class="sgr1">                                    </span>
+
+  H₀                No association (coefficient = 0)
+  H₁                             Nonzero association
+  Method          Pearson product-moment correlation
+  Observations                                    11
+  Null                      asymptotic approximation
+
+<span class="sgr1">              Results</span>
+
+ <span class="sgr1">               </span> <span class="sgr1">            Value </span>
+
+  Correlation r         0.8164 ***
+  t statistic               4.2415
+  P-value                   0.0022
+  95% CI          [0.4244, 0.9507]
+
+
+  Conclusion   Reject H₀ at 1% — significant association
+  Note         *** p&lt;0.01, ** p&lt;0.05, * p&lt;0.10</code></pre><pre><code class="language-julia hljs">report(cor_test(x_cor, z_cor; method=:kendall))</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi"><span class="sgr1">           Correlation Test: Kendall rank</span>
+
+ <span class="sgr1"> Specification </span> <span class="sgr1">                                  </span>
+
+  H₀              No association (coefficient = 0)
+  H₁                           Nonzero association
+  Method                Kendall&#39;s τ_a (exact null)
+  Observations                                  11
+  Null                                       exact
+
+<span class="sgr1">            Results</span>
+
+ <span class="sgr1">                </span> <span class="sgr1">      Value </span>
+
+  τ_a              0.6364 ***
+  T (concordant)      45.0000
+  P-value              0.0057
+
+
+  Conclusion   Reject H₀ at 1% — significant association
+  Note         *** p&lt;0.01, ** p&lt;0.05, * p&lt;0.10</code></pre><p>Pearson gives <span>$r = 0.8164$</span> with <span>$t = 4.24$</span>, a p-value of 0.0022, and a 95% interval of <span>$[0.424, 0.951]$</span>; Kendall gives <span>$\tau_a = 0.6364$</span> with an exact p-value of 0.0057. Spearman (<code>method=:spearman</code>) sits between them. The three answer different questions –- Pearson measures linear association and assumes it, Spearman measures monotone association on ranks, Kendall measures the probability that two randomly chosen pairs are concordant –- so a large gap between Pearson and the rank measures signals nonlinearity or a single influential point, not a contradiction.</p><hr/><h2 id="Model-Comparison-Tests"><a class="docs-heading-anchor" href="#Model-Comparison-Tests">Model Comparison Tests</a><a id="Model-Comparison-Tests-1"></a><a class="docs-heading-anchor-permalink" href="#Model-Comparison-Tests" title="Permalink"></a></h2><p>The classical trinity –- Wald, likelihood ratio, and Lagrange multiplier –- gives asymptotically equivalent tests of nested hypotheses. This package implements the LR and LM tests with automatic detection of which model is restricted.</p><p>The <strong>likelihood ratio test</strong> (Wilks 1938) compares maximized log-likelihoods:</p><p class="math-container">\[LR = -2(\ell_R - \ell_U) \sim \chi^2(df)\]</p><p>where:</p><ul><li><span>$\ell_R$</span> is the maximized log-likelihood of the restricted model</li><li><span>$\ell_U$</span> is the maximized log-likelihood of the unrestricted model</li><li><span>$df = k_U - k_R$</span> is the difference in the number of parameters</li></ul><p>The <strong>Lagrange multiplier test</strong> (Rao 1948) evaluates the score of the unrestricted log-likelihood at the restricted estimates:</p><p class="math-container">\[LM = s&#39; (-H)^{-1} s \sim \chi^2(df)\]</p><p>where:</p><ul><li><span>$s$</span> is the score vector at the restricted estimates</li><li><span>$H$</span> is the Hessian of the negative log-likelihood at those estimates</li></ul><div class="admonition is-info" id="Technical-Note-37fbf38b1c6be958"><header class="admonition-header">Technical Note<a class="admonition-anchor" href="#Technical-Note-37fbf38b1c6be958" title="Permalink"></a></header><div class="admonition-body"><p>In the linear regression model with normal errors the three statistics satisfy <span>$W \geq LR \geq LM$</span> (Berndt &amp; Savin 1977). The ordering is not guaranteed outside that setting, and it need not hold at all when the score and Hessian are obtained numerically, as they are here by central differences. LR needs both models estimated, LM needs only the restricted model plus the unrestricted parameterization for the score, and Wald needs only the unrestricted model.</p></div></div><p><code>lr_test</code> works for any pair implementing <code>loglikelihood</code>, <code>dof</code>, and <code>nobs</code> from <code>StatsAPI</code>. <code>lm_test</code> requires same-family nesting, because it must embed the restricted parameters into the unrestricted parameter space.</p><table><tr><th style="text-align: right">Test</th><th style="text-align: right">Supported pairs</th><th style="text-align: right">Notes</th></tr><tr><td style="text-align: right"><code>lr_test</code></td><td style="text-align: right">Any pair with <code>loglikelihood</code>, <code>dof</code>, <code>nobs</code></td><td style="text-align: right">Generic; detects restricted vs. unrestricted automatically</td></tr><tr><td style="text-align: right"><code>lm_test</code></td><td style="text-align: right">ARIMA × ARIMA</td><td style="text-align: right">Same differencing order <span>$d$</span> required</td></tr><tr><td style="text-align: right"><code>lm_test</code></td><td style="text-align: right">VAR × VAR</td><td style="text-align: right">Same data matrix, different lag orders</td></tr><tr><td style="text-align: right"><code>lm_test</code></td><td style="text-align: right">ARCH × ARCH, GARCH × GARCH</td><td style="text-align: right">Same family, different orders</td></tr><tr><td style="text-align: right"><code>lm_test</code></td><td style="text-align: right">ARCH × GARCH</td><td style="text-align: right">Cross-type nesting (ARCH is GARCH with <span>$p = 0$</span>)</td></tr><tr><td style="text-align: right"><code>lm_test</code></td><td style="text-align: right">EGARCH × EGARCH, GJR × GJR</td><td style="text-align: right">Same family, different orders</td></tr></table><pre><code class="language-julia hljs">Random.seed!(18)
+y_mc = cumsum(randn(200))
+ar2 = estimate_ar(diff(y_mc), 2; method=:mle)
+ar4 = estimate_ar(diff(y_mc), 4; method=:mle)
+
+report(lr_test(ar2, ar4))</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi"><span class="sgr1">                       Likelihood Ratio Test</span>
+
+ <span class="sgr1"> Specification     </span> <span class="sgr1">                                              </span>
+
+  H₀                                  Restricted model is adequate
+  H₁                  Unrestricted model fits significantly better
+  Restricted dof                                                 4
+  Unrestricted dof                                               6
+  Restricted nobs                                              199
+  Unrestricted nobs                                            199
+
+<span class="sgr1">                   Results</span>
+
+ <span class="sgr1">                               </span> <span class="sgr1">     Value </span>
+
+  Log-likelihood (restricted)     -279.4091
+  Log-likelihood (unrestricted)   -275.7677
+  LR statistic                    7.2828 **
+  Degrees of freedom                      2
+  P-value                            0.0262
+
+
+  Conclusion   Reject H₀ at 5% level — unrestricted model preferred
+  Note         *** p&lt;0.01, ** p&lt;0.05, * p&lt;0.10</code></pre><p>The LR statistic of 7.2828 on 2 degrees of freedom gives a p-value of 0.0262, so the AR(2) is rejected against the AR(4) at the 5% level. The two maximized log-likelihoods, <span>$-279.41$</span> and <span>$-275.77$</span>, differ by only 3.64 –- a reminder of how little separation a rejection at this level represents. The arguments may be passed in either order, since the function identifies the restricted model as the one with fewer parameters.</p><pre><code class="language-julia hljs">report(lm_test(ar2, ar4))</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi"><span class="sgr1">                Lagrange Multiplier (Score) Test</span>
+
+ <span class="sgr1"> Specification </span> <span class="sgr1">                                              </span>
+
+  H₀                              Restricted model is adequate
+  H₁              Unrestricted model fits significantly better
+  Observations                                             199
+
+<span class="sgr1">             Results</span>
+
+ <span class="sgr1">                    </span> <span class="sgr1">     Value </span>
+
+  LM statistic         7.7057 **
+  Degrees of freedom           2
+  P-value                 0.0212
+  Score norm (‖s‖₂)      37.9334
+
+
+  Conclusion   Reject H₀ at 5% level — unrestricted model preferred
+  Note         *** p&lt;0.01, ** p&lt;0.05, * p&lt;0.10</code></pre><p>The LM statistic of 7.7057 gives a p-value of 0.0212 and agrees with LR on the decision. It also exceeds the LR statistic of 7.2828, which the Berndt-Savin inequality would forbid in the linear model with normal errors; here the score and Hessian come from central differences of an ARMA likelihood, so a discrepancy of this size is a numerical-differentiation artefact rather than evidence about the models. When the two diverge materially, prefer LR, which uses both maximized likelihoods, over LM, which extrapolates from one.</p><p><code>lr_test</code> handles the VAR case identically:</p><pre><code class="language-julia hljs">report(lr_test(estimate_var(Y, 2), estimate_var(Y, 3)))</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi"><span class="sgr1">                       Likelihood Ratio Test</span>
+
+ <span class="sgr1"> Specification     </span> <span class="sgr1">                                              </span>
+
+  H₀                                  Restricted model is adequate
+  H₁                  Unrestricted model fits significantly better
+  Restricted dof                                                21
+  Unrestricted dof                                              30
+  Restricted nobs                                              799
+  Unrestricted nobs                                            799
+
+<span class="sgr1">                    Results</span>
+
+ <span class="sgr1">                               </span> <span class="sgr1">       Value </span>
+
+  Log-likelihood (restricted)       5773.2237
+  Log-likelihood (unrestricted)     5794.6577
+  LR statistic                    42.8681 ***
+  Degrees of freedom                        9
+  P-value                              &lt;0.001
+
+
+  Conclusion   Reject H₀ at 1% level — unrestricted model preferred
+  Note         *** p&lt;0.01, ** p&lt;0.05, * p&lt;0.10</code></pre><p>The LR statistic of 42.8681 on 9 degrees of freedom rejects VAR(2) against VAR(3) with a p-value below 0.001, so the third lag carries information the first two do not. Sequential LR testing of this kind over-selects in large samples relative to BIC, because its critical value does not grow with <span>$T$</span>; use it as a complement to the information criteria reported by <code>estimate_var</code>, not as a substitute.</p><p><strong><code>LRTestResult</code> fields</strong></p><table><tr><th style="text-align: right">Field</th><th style="text-align: right">Type</th><th style="text-align: right">Description</th></tr><tr><td style="text-align: right"><code>statistic</code></td><td style="text-align: right"><code>T</code></td><td style="text-align: right">LR statistic <span>$-2(\ell_R - \ell_U)$</span></td></tr><tr><td style="text-align: right"><code>pvalue</code></td><td style="text-align: right"><code>T</code></td><td style="text-align: right">P-value from <span>$\chi^2(df)$</span></td></tr><tr><td style="text-align: right"><code>df</code></td><td style="text-align: right"><code>Int</code></td><td style="text-align: right">Degrees of freedom <span>$k_U - k_R$</span></td></tr><tr><td style="text-align: right"><code>loglik_restricted</code></td><td style="text-align: right"><code>T</code></td><td style="text-align: right">Log-likelihood of the restricted model</td></tr><tr><td style="text-align: right"><code>loglik_unrestricted</code></td><td style="text-align: right"><code>T</code></td><td style="text-align: right">Log-likelihood of the unrestricted model</td></tr><tr><td style="text-align: right"><code>dof_restricted</code></td><td style="text-align: right"><code>Int</code></td><td style="text-align: right">Parameters in the restricted model</td></tr><tr><td style="text-align: right"><code>dof_unrestricted</code></td><td style="text-align: right"><code>Int</code></td><td style="text-align: right">Parameters in the unrestricted model</td></tr><tr><td style="text-align: right"><code>nobs_restricted</code></td><td style="text-align: right"><code>Int</code></td><td style="text-align: right">Observations in the restricted model</td></tr><tr><td style="text-align: right"><code>nobs_unrestricted</code></td><td style="text-align: right"><code>Int</code></td><td style="text-align: right">Observations in the unrestricted model</td></tr></table><p><strong><code>LMTestResult</code> fields</strong></p><table><tr><th style="text-align: right">Field</th><th style="text-align: right">Type</th><th style="text-align: right">Description</th></tr><tr><td style="text-align: right"><code>statistic</code></td><td style="text-align: right"><code>T</code></td><td style="text-align: right">LM statistic <span>$s&#39;(-H)^{-1}s$</span></td></tr><tr><td style="text-align: right"><code>pvalue</code></td><td style="text-align: right"><code>T</code></td><td style="text-align: right">P-value from <span>$\chi^2(df)$</span></td></tr><tr><td style="text-align: right"><code>df</code></td><td style="text-align: right"><code>Int</code></td><td style="text-align: right">Degrees of freedom <span>$k_U - k_R$</span></td></tr><tr><td style="text-align: right"><code>nobs</code></td><td style="text-align: right"><code>Int</code></td><td style="text-align: right">Number of observations</td></tr><tr><td style="text-align: right"><code>score_norm</code></td><td style="text-align: right"><code>T</code></td><td style="text-align: right">Euclidean norm of the score vector</td></tr></table><hr/><h2 id="Complete-Example"><a class="docs-heading-anchor" href="#Complete-Example">Complete Example</a><a id="Complete-Example-1"></a><a class="docs-heading-anchor-permalink" href="#Complete-Example" title="Permalink"></a></h2><p>A full post-estimation diagnostic pass on the FRED-MD VAR(2): stability, causal structure, residual distribution, residual dependence, and lag order.</p><pre><code class="language-julia hljs">show(stdout, is_stationary(m))</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi"><span class="sgr1">VAR Model Stationarity Test — Companion Matrix Eigenvalues</span>
+
+ <span class="sgr1"> Index </span> <span class="sgr1">      Eigenvalue </span> <span class="sgr1"> Modulus </span>
+
+      1   -0.1827-0.4623i     0.497
+      2   -0.1827+0.4623i     0.497
+      3    0.1517-0.3872i    0.4158
+      4    0.1517+0.3872i    0.4158
+      5    0.2029-0.1974i     0.283
+      6    0.2029+0.1974i     0.283
+
+<span class="sgr1">                                 Summary</span>
+
+  Maximum modulus                                              0.497046
+  Number of eigenvalues                                               6
+  Stationary                                                        Yes
+  Result                  VAR is STATIONARY (all eigenvalue moduli &lt; 1)</code></pre><pre><code class="language-julia hljs"># Standardize each residual before the variance diagnostics — see Pitfall 4
+u_std = [m.U[:, j] ./ std(m.U[:, j]) for j in 1:3]
+
+[(variable = v,
+  arch_lm_pvalue = round(arch_lm_test(u_std[j], 5).pvalue, digits=4),
+  bds_min_pvalue = round(minimum(bds_test(u_std[j]; m=2:3, eps_frac=1.0).pvalue), digits=4))
+ for (j, v) in enumerate(names_var)]</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">3-element Vector{@NamedTuple{variable::String, arch_lm_pvalue::Float64, bds_min_pvalue::Float64}}:
+ (variable = &quot;INDPRO&quot;, arch_lm_pvalue = 0.0, bds_min_pvalue = 0.0)
+ (variable = &quot;CPIAUCSL&quot;, arch_lm_pvalue = 0.0, bds_min_pvalue = 0.0)
+ (variable = &quot;FEDFUNDS&quot;, arch_lm_pvalue = 0.0, bds_min_pvalue = 0.0)</code></pre><pre><code class="language-julia hljs">report(lr_test(m, estimate_var(Y, 3)))</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi"><span class="sgr1">                       Likelihood Ratio Test</span>
+
+ <span class="sgr1"> Specification     </span> <span class="sgr1">                                              </span>
+
+  H₀                                  Restricted model is adequate
+  H₁                  Unrestricted model fits significantly better
+  Restricted dof                                                21
+  Unrestricted dof                                              30
+  Restricted nobs                                              799
+  Unrestricted nobs                                            799
+
+<span class="sgr1">                    Results</span>
+
+ <span class="sgr1">                               </span> <span class="sgr1">       Value </span>
+
+  Log-likelihood (restricted)       5773.2237
+  Log-likelihood (unrestricted)     5794.6577
+  LR statistic                    42.8681 ***
+  Degrees of freedom                        9
+  P-value                              &lt;0.001
+
+
+  Conclusion   Reject H₀ at 1% level — unrestricted model preferred
+  Note         *** p&lt;0.01, ** p&lt;0.05, * p&lt;0.10</code></pre><p>The VAR(2) is stable with a maximum companion modulus of 0.497, and the Granger screen above showed the funds rate predicting industrial production while industrial production does not predict inflation –- the asymmetry a monetary VAR is built to exploit. The residual diagnostics are the sobering part: all three equations reject no-ARCH and reject independence at any level, so the residuals are neither homoskedastic nor i.i.d. even though the conditional mean is correctly specified in the linear sense. Bootstrap or heteroskedasticity-robust inference is mandatory here, and the LR test&#39;s rejection of VAR(2) against VAR(3) at 42.87 should be read with that in mind, since the likelihood it maximizes assumes exactly the Gaussian homoskedastic errors the diagnostics have ruled out.</p><hr/><h2 id="Common-Pitfalls"><a class="docs-heading-anchor" href="#Common-Pitfalls">Common Pitfalls</a><a id="Common-Pitfalls-1"></a><a class="docs-heading-anchor-permalink" href="#Common-Pitfalls" title="Permalink"></a></h2><ol><li><p><strong>Reading Granger causality as causation.</strong> Granger causality is predictive and conditional on the information set in the VAR. It can arise from an omitted common cause, from the timing of measurement, or from temporal aggregation. Adding a fourth variable to a three-variable system routinely reverses a Granger conclusion, which is the clearest evidence that it carries no structural content.</p></li><li><p><strong>Treating a normality rejection as fatal.</strong> OLS coefficients in a VAR stay consistent and asymptotically normal whatever the residual distribution. A rejection says that <em>exact finite-sample</em> inference –- t-tests, F-tests, and normal-quantile confidence intervals –- is unreliable, not that the model is wrong. The remedy is robust standard errors or bootstrap intervals, not a different estimator.</p></li><li><p><strong>Testing raw and standardized residuals interchangeably.</strong> Apply <code>arch_lm_test</code> to a raw series to decide whether a volatility model is needed; apply it to the fitted model object afterwards, which routes to the standardized residuals, to check that the model is adequate. Passing the raw returns after fitting simply re-detects the clustering the model already removed, and passing the standardized residuals before fitting is not defined.</p></li><li><p><strong>Feeding a very small-scale series to <code>arch_lm_test</code>.</strong> The auxiliary regression puts an intercept column of ones next to columns of squared residuals. When the series has a standard deviation of order <span>$10^{-3}$</span> –- routine for a twice-differenced price index –- those columns differ by twelve orders of magnitude, <span>$X&#39;X$</span> becomes numerically singular, and the reported <span>$T R^2$</span> collapses toward zero with a p-value near 1. Divide by the sample standard deviation first, as the Complete Example does: on the CPIAUCSL residuals the raw call returns a p-value of exactly 1.0 while the standardized call rejects at any level.</p></li><li><p><strong>Feeding returns to <code>variance_ratio_test</code>.</strong> The function expects the <strong>level</strong> series –- a log price, not a log return –- and differences it internally. Passing returns tests whether the <em>returns</em> follow a random walk, which is a different and usually uninteresting hypothesis, and will produce ratios far below one for any stationary return series.</p></li><li><p><strong>Trusting an estimated-parameter EDF p-value outside the normal family.</strong> Only the normal family has tabulated null distributions for <code>params=:estimate</code>. Every other family returns <code>pvalue = NaN</code> and records the reason in <code>case</code>; that is deliberate, and an <code>NaN</code> there must not be read as a non-rejection. Either specify the parameters or use a parametric bootstrap.</p></li><li><p><strong>Running BDS on short series without the bootstrap.</strong> The asymptotic <span>$N(0,1)$</span> approximation is unreliable below <span>$T = 200$</span>, where the test is badly over-sized. A warning is emitted, but the statistic is still returned; pass <code>bootstrap=500</code> or more to get a permutation p-value that does not depend on the asymptotics.</p></li><li><p><strong>Using <code>lm_test</code> across model families.</strong> The Lagrange multiplier test embeds the restricted parameters into the unrestricted parameter space, which is family-specific: an ARIMA model cannot be compared with a GARCH model this way. Use <code>lr_test</code>, which needs only <code>loglikelihood</code>, <code>dof</code>, and <code>nobs</code>, for cross-family comparisons.</p></li></ol><hr/><h2 id="References"><a class="docs-heading-anchor" href="#References">References</a><a id="References-1"></a><a class="docs-heading-anchor-permalink" href="#References" title="Permalink"></a></h2><ul><li><p>Anderson, T. W., &amp; Darling, D. A. (1954). A test of goodness of fit. <em>Journal of the American Statistical Association</em>, 49(268), 765-769. <a href="https://doi.org/10.1080/01621459.1954.10501232">DOI</a></p></li><li><p>Bartlett, M. S. (1937). Properties of sufficiency and statistical tests. <em>Proceedings of the Royal Society A</em>, 160(901), 268-282. <a href="https://doi.org/10.1098/rspa.1937.0109">DOI</a></p></li><li><p>Berndt, E. R., &amp; Savin, N. E. (1977). Conflict among criteria for testing hypotheses in the multivariate linear regression model. <em>Econometrica</em>, 45(5), 1263-1277. <a href="https://doi.org/10.2307/1914072">DOI</a></p></li><li><p>Brock, W. A., Dechert, W. D., Scheinkman, J. A., &amp; LeBaron, B. (1996). A test for independence based on the correlation dimension. <em>Econometric Reviews</em>, 15(3), 197-235. <a href="https://doi.org/10.1080/07474939608800353">DOI</a></p></li><li><p>Brock, W. A., Hsieh, D. A., &amp; LeBaron, B. (1991). <em>Nonlinear Dynamics, Chaos, and Instability: Statistical Theory and Economic Evidence</em>. Cambridge, MA: MIT Press. ISBN 978-0-262-02329-0.</p></li><li><p>Brown, M. B., &amp; Forsythe, A. B. (1974). Robust tests for the equality of variances. <em>Journal of the American Statistical Association</em>, 69(346), 364-367. <a href="https://doi.org/10.1080/01621459.1974.10482955">DOI</a></p></li><li><p>Chow, K. V., &amp; Denning, K. C. (1993). A simple multiple variance ratio test. <em>Journal of Econometrics</em>, 58(3), 385-401. <a href="https://doi.org/10.1016/0304-4076(93)90051-6">DOI</a></p></li><li><p>D&#39;Agostino, R. B., &amp; Stephens, M. A. (1986). <em>Goodness-of-Fit Techniques</em>. New York: Marcel Dekker. ISBN 978-0-8247-7487-5.</p></li><li><p>Dallal, G. E., &amp; Wilkinson, L. (1986). An analytic approximation to the distribution of Lilliefors&#39;s test statistic for normality. <em>The American Statistician</em>, 40(4), 294-296. <a href="https://doi.org/10.1080/00031305.1986.10475419">DOI</a></p></li><li><p>Doornik, J. A., &amp; Hansen, H. (2008). An omnibus test for univariate and multivariate normality. <em>Oxford Bulletin of Economics and Statistics</em>, 70(s1), 927-939. <a href="https://doi.org/10.1111/j.1468-0084.2008.00537.x">DOI</a></p></li><li><p>Engle, R. F. (1982). Autoregressive conditional heteroscedasticity with estimates of the variance of United Kingdom inflation. <em>Econometrica</em>, 50(4), 987-1007. <a href="https://doi.org/10.2307/1912773">DOI</a></p></li><li><p>Granger, C. W. J. (1969). Investigating causal relations by econometric models and cross-spectral methods. <em>Econometrica</em>, 37(3), 424-438. <a href="https://doi.org/10.2307/1912791">DOI</a></p></li><li><p>Henze, N., &amp; Zirkler, B. (1990). A class of invariant consistent tests for multivariate normality. <em>Communications in Statistics –- Theory and Methods</em>, 19(10), 3595-3617. <a href="https://doi.org/10.1080/03610929008830400">DOI</a></p></li><li><p>Jarque, C. M., &amp; Bera, A. K. (1980). Efficient tests for normality, homoscedasticity and serial independence of regression residuals. <em>Economics Letters</em>, 6(3), 255-259. <a href="https://doi.org/10.1016/0165-1765(80)90024-5">DOI</a></p></li><li><p>Kendall, M. G. (1938). A new measure of rank correlation. <em>Biometrika</em>, 30(1/2), 81-93. <a href="https://doi.org/10.1093/biomet/30.1-2.81">DOI</a></p></li><li><p>Kim, J. H. (2006). Wild bootstrapping variance ratio tests. <em>Economics Letters</em>, 92(1), 38-43. <a href="https://doi.org/10.1016/j.econlet.2006.01.007">DOI</a></p></li><li><p>Knight, W. R. (1966). A computer method for calculating Kendall&#39;s tau with ungrouped data. <em>Journal of the American Statistical Association</em>, 61(314), 436-439. <a href="https://doi.org/10.1080/01621459.1966.10480879">DOI</a></p></li><li><p>Kruskal, W. H., &amp; Wallis, W. A. (1952). Use of ranks in one-criterion variance analysis. <em>Journal of the American Statistical Association</em>, 47(260), 583-621. <a href="https://doi.org/10.1080/01621459.1952.10483441">DOI</a></p></li><li><p>Lilliefors, H. W. (1967). On the Kolmogorov-Smirnov test for normality with mean and variance unknown. <em>Journal of the American Statistical Association</em>, 62(318), 399-402. <a href="https://doi.org/10.1080/01621459.1967.10482916">DOI</a></p></li><li><p>Ljung, G. M., &amp; Box, G. E. P. (1978). On a measure of lack of fit in time series models. <em>Biometrika</em>, 65(2), 297-303. <a href="https://doi.org/10.1093/biomet/65.2.297">DOI</a></p></li><li><p>Lo, A. W., &amp; MacKinlay, A. C. (1988). Stock market prices do not follow random walks: Evidence from a simple specification test. <em>Review of Financial Studies</em>, 1(1), 41-66. <a href="https://doi.org/10.1093/rfs/1.1.41">DOI</a></p></li><li><p>Lutkepohl, H. (2005). <em>New Introduction to Multiple Time Series Analysis</em>. Berlin: Springer. ISBN 978-3-540-40172-8.</p></li><li><p>Mann, H. B., &amp; Whitney, D. R. (1947). On a test of whether one of two random variables is stochastically larger than the other. <em>The Annals of Mathematical Statistics</em>, 18(1), 50-60. <a href="https://doi.org/10.1214/aoms/1177730491">DOI</a></p></li><li><p>Mardia, K. V. (1970). Measures of multivariate skewness and kurtosis with applications. <em>Biometrika</em>, 57(3), 519-530. <a href="https://doi.org/10.1093/biomet/57.3.519">DOI</a></p></li><li><p>Marsaglia, G., Tsang, W. W., &amp; Wang, J. (2003). Evaluating Kolmogorov&#39;s distribution. <em>Journal of Statistical Software</em>, 8(18), 1-4. <a href="https://doi.org/10.18637/jss.v008.i18">DOI</a></p></li><li><p>McCracken, M. W., &amp; Ng, S. (2016). FRED-MD: A monthly database for macroeconomic research. <em>Journal of Business &amp; Economic Statistics</em>, 34(4), 574-589. <a href="https://doi.org/10.1080/07350015.2015.1086655">DOI</a></p></li><li><p>Rao, C. R. (1948). Large sample tests of statistical hypotheses concerning several parameters with applications to problems of estimation. <em>Mathematical Proceedings of the Cambridge Philosophical Society</em>, 44(1), 50-57. <a href="https://doi.org/10.1017/S0305004100023987">DOI</a></p></li><li><p>Spearman, C. (1904). The proof and measurement of association between two things. <em>The American Journal of Psychology</em>, 15(1), 72-101. <a href="https://doi.org/10.2307/1412159">DOI</a></p></li><li><p>Stephens, M. A. (1974). EDF statistics for goodness of fit and some comparisons. <em>Journal of the American Statistical Association</em>, 69(347), 730-737. <a href="https://doi.org/10.1080/01621459.1974.10480196">DOI</a></p></li><li><p>van der Waerden, B. L. (1952). Order tests for the two-sample problem and their power. <em>Indagationes Mathematicae</em>, 14, 453-458.</p></li><li><p>Watson, G. S. (1961). Goodness-of-fit tests on a circle. <em>Biometrika</em>, 48(1/2), 109-114. <a href="https://doi.org/10.1093/biomet/48.1-2.109">DOI</a></p></li><li><p>Wilcoxon, F. (1945). Individual comparisons by ranking methods. <em>Biometrics Bulletin</em>, 1(6), 80-83. <a href="https://doi.org/10.2307/3001968">DOI</a></p></li><li><p>Wilks, S. S. (1938). The large-sample distribution of the likelihood ratio for testing composite hypotheses. <em>Annals of Mathematical Statistics</em>, 9(1), 60-62. <a href="https://doi.org/10.1214/aoms/1177732360">DOI</a></p></li><li><p>Wright, J. H. (2000). Alternative variance-ratio tests using ranks and signs. <em>Journal of Business &amp; Economic Statistics</em>, 18(1), 1-9. <a href="https://doi.org/10.1080/07350015.2000.10524842">DOI</a></p></li></ul></article><nav class="docs-footer"><a class="docs-footer-prevpage" href="../tests_panel/">« Panel Tests</a><a class="docs-footer-nextpage" href="../plotting/">Visualization »</a><div class="flexbox-break"></div><p class="footer-message">Powered by <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> and the <a href="https://julialang.org/">Julia Programming Language</a>.</p></nav></div><div class="modal" id="documenter-settings"><div class="modal-background"></div><div class="modal-card"><header class="modal-card-head"><p class="modal-card-title">Settings</p><button class="delete"></button></header><section class="modal-card-body"><p><label class="label">Theme</label><div class="select"><select id="documenter-themepicker"><option value="auto">Automatic (OS)</option><option value="documenter-light">documenter-light</option><option value="documenter-dark">documenter-dark</option><option value="catppuccin-latte">catppuccin-latte</option><option value="catppuccin-frappe">catppuccin-frappe</option><option value="catppuccin-macchiato">catppuccin-macchiato</option><option value="catppuccin-mocha">catppuccin-mocha</option></select></div></p><hr/><p>This document was generated with <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> version 1.17.0 on <span class="colophon-date" title="Thursday 3 September 2026 05:29">Thursday 3 September 2026</span>. Using Julia version 1.12.6.</p></section><footer class="modal-card-foot"></footer></div></div></div></body></html>
