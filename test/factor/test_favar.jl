@@ -99,21 +99,22 @@ using MacroEconometricModels
 
     @testset "BayesianFAVAR display" begin
         # Construct a BayesianFAVAR manually to test display
+        rng = MersenneTwister(7101)  # DGP-01: explicit rng (display-only data)
         T_obs = 50; r = 2; n_key = 1; n_var = 3; p = 1; k = 1 + n_var * p; n_draws = 10
         bfavar = BayesianFAVAR{Float64}(
-            randn(n_draws, k, n_var),        # B_draws
-            randn(n_draws, n_var, n_var),     # Sigma_draws
-            randn(n_draws, T_obs, r),         # factor_draws
-            randn(n_draws, 20, r),            # loadings_draws
-            randn(n_draws, 20, n_key),        # lambda_y_draws
-            randn(T_obs, 20),                 # X_panel
+            randn(rng, n_draws, k, n_var),        # B_draws
+            randn(rng, n_draws, n_var, n_var),     # Sigma_draws
+            randn(rng, n_draws, T_obs, r),         # factor_draws
+            randn(rng, n_draws, 20, r),            # loadings_draws
+            randn(rng, n_draws, 20, n_key),        # lambda_y_draws
+            randn(rng, T_obs, 20),                 # X_panel
             ["X$i" for i in 1:20],            # panel_varnames
             [1],                              # Y_key_indices
             r,                                # n_factors
             n_key,                            # n_key
             n_var,                            # n
             p,                                # p
-            randn(T_obs, n_var),              # data
+            randn(rng, T_obs, n_var),              # data
             ["F1", "F2", "Y1"]                # varnames
         )
         io = IOBuffer()
@@ -190,7 +191,8 @@ using MacroEconometricModels
     end
 
     @testset "Float fallback (Integer matrix)" begin
-        X_int = round.(Int, randn(100, 20) * 10)
+        rng = MersenneTwister(7102)  # DGP-01: explicit rng
+        X_int = round.(Int, randn(rng, 100, 20) * 10)
         Y_key_int = X_int[:, [1, 2]]
         favar = estimate_favar(X_int, Y_key_int, 2, 1)
         @test favar isa FAVARModel{Float64}
@@ -201,6 +203,7 @@ using MacroEconometricModels
     # =========================================================================
 
     @testset "Validation errors" begin
+        rng = MersenneTwister(7104)  # DGP-01: explicit rng (throws-only data)
         X, _ = make_favar_data(T_obs=200, N=30)
 
         # r too large
@@ -214,7 +217,7 @@ using MacroEconometricModels
         @test_throws ArgumentError estimate_favar(X, [0, 1], 2, 1)
 
         # Mismatched rows
-        @test_throws ArgumentError estimate_favar(randn(100, 30), randn(50, 2), 2, 1)
+        @test_throws ArgumentError estimate_favar(randn(rng, 100, 30), randn(rng, 50, 2), 2, 1)
 
         # Wrong panel_varnames length
         @test_throws ArgumentError estimate_favar(X, [1, 2], 2, 1;
@@ -231,11 +234,12 @@ using MacroEconometricModels
     end
 
     @testset "NaN/Inf data validation" begin
-        X_nan = randn(100, 20)
+        rng = MersenneTwister(7103)  # DGP-01: explicit rng
+        X_nan = randn(rng, 100, 20)
         X_nan[5, 3] = NaN
         @test_throws ArgumentError estimate_favar(X_nan, [1, 2], 2, 1)
 
-        X_ok = randn(100, 20)
+        X_ok = randn(rng, 100, 20)
         Y_key_inf = copy(X_ok[:, [1, 2]])
         Y_key_inf[1, 1] = Inf
         @test_throws ArgumentError estimate_favar(X_ok, Y_key_inf, 2, 1)

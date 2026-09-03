@@ -1,4 +1,4 @@
-using Test, MacroEconometricModels
+using Test, Random, MacroEconometricModels
 import SHA
 using MacroEconometricModels: scrape_links, _log_download!, IO_HEADERS, IOMetaData,
                               _verify_download, fetch_file
@@ -24,7 +24,7 @@ end
 
 @testset "SHA-256 integrity verification (#250)" begin
     dir = mktempdir()
-    payload = rand(UInt8, 512)
+    payload = rand(MersenneTwister(2501), UInt8, 512)  # DGP-01: explicit rng
     path = joinpath(dir, "archive.zip"); write(path, payload)
 
     # io_file_digest is the exact SHA-256 of the bytes

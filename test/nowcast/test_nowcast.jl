@@ -141,8 +141,9 @@ end
     end
 
     @testset "_miss_data row elimination" begin
+        rng = MersenneTwister(7201)  # DGP-01: explicit rng (plumbing data)
         y = [1.0, NaN, 3.0, NaN, 5.0]
-        C = randn(5, 2)
+        C = randn(rng, 5, 2)
         R = Matrix{Float64}(0.1 * I(5))
 
         y_obs, C_obs, R_obs, idx = MacroEconometricModels._miss_data(y, C, R)
@@ -153,8 +154,9 @@ end
     end
 
     @testset "All NaN row" begin
+        rng = MersenneTwister(7202)  # DGP-01: explicit rng (plumbing data)
         y = [NaN, NaN, NaN]
-        C = randn(3, 2)
+        C = randn(rng, 3, 2)
         R = Matrix{Float64}(0.1 * I(3))
 
         y_obs, C_obs, R_obs, idx = MacroEconometricModels._miss_data(y, C, R)
@@ -360,7 +362,8 @@ end
     end
 
     @testset "Input validation" begin
-        Y = randn(50, 5)
+        rng = MersenneTwister(7203)  # DGP-01: explicit rng (throws-only data)
+        Y = randn(rng, 50, 5)
         @test_throws ArgumentError nowcast_dfm(Y, 3, 3)  # nM + nQ != N
         @test_throws ArgumentError nowcast_dfm(Y, 5, 0; r=0)  # r < 1
         @test_throws ArgumentError nowcast_dfm(Y, 5, 0; idio=:foo)  # invalid idio
@@ -587,7 +590,8 @@ end
     end
 
     @testset "Input validation" begin
-        Y = randn(50, 5)
+        rng = MersenneTwister(7204)  # DGP-01: explicit rng (throws-only data)
+        Y = randn(rng, 50, 5)
         @test_throws ArgumentError nowcast_bvar(Y, 3, 3)  # nM + nQ != N
         @test_throws ArgumentError nowcast_bvar(Y, 5, 0; lags=0)  # lags < 1
     end
@@ -745,7 +749,8 @@ end
     end
 
     @testset "Input validation" begin
-        Y = randn(60, 5)
+        rng = MersenneTwister(7205)  # DGP-01: explicit rng (throws-only data)
+        Y = randn(rng, 60, 5)
         @test_throws ArgumentError nowcast_bridge(Y, 3, 3)  # nM + nQ != N
         @test_throws ArgumentError nowcast_bridge(Y, 5, 0)  # nQ < 1
     end

@@ -11,9 +11,11 @@ using Statistics
 using Random
 
 @testset "Summary Tables Tests" begin
+    rng = MersenneTwister(7100)  # DGP-01: explicit rng
 
     @testset "report(VARModel)" begin
-        Y = randn(100, 2)
+        rng = MersenneTwister(7101)  # DGP-01: explicit rng
+        Y = randn(rng, 100, 2)
         model = estimate_var(Y, 2)
 
         # report() should not throw - use devnull
@@ -24,7 +26,8 @@ using Random
     end
 
     @testset "report(VARModel) uses varnames" begin
-        Y = randn(100, 3)
+        rng = MersenneTwister(7102)  # DGP-01: explicit rng
+        Y = randn(rng, 100, 3)
         model = estimate_var(Y, 2; varnames=["GDP", "INF", "FFR"])
         # IOBuffer, not redirect_stdout(): Windows threaded CI races the global
         # stdout pipe and captured "" (occursin("GDP", "")). Same reason
@@ -42,7 +45,8 @@ using Random
     end
 
     @testset "report(VECMModel) uses varnames" begin
-        Y = randn(200, 3)
+        rng = MersenneTwister(7103)  # DGP-01: explicit rng
+        Y = randn(rng, 200, 3)
         vecm = estimate_vecm(Y, 2; varnames=["GDP", "INF", "FFR"])
         io = IOBuffer()
         report(io, vecm)
@@ -55,7 +59,8 @@ using Random
     end
 
     @testset "show(BVARPosterior) uses varnames" begin
-        Y = randn(100, 3)
+        rng = MersenneTwister(7104)  # DGP-01: explicit rng
+        Y = randn(rng, 100, 3)
         post = estimate_bvar(Y, 2; n_draws=100, varnames=["GDP", "INF", "FFR"])
         io = IOBuffer()
         show(io, post)
@@ -67,7 +72,8 @@ using Random
     end
 
     @testset "IRF table and print_table" begin
-        Y = randn(100, 2)
+        rng = MersenneTwister(7105)  # DGP-01: explicit rng
+        Y = randn(rng, 100, 2)
         model = estimate_var(Y, 2)
 
         # Frequentist IRF
@@ -105,7 +111,8 @@ using Random
     end
 
     @testset "FEVD table and print_table" begin
-        Y = randn(100, 2)
+        rng = MersenneTwister(7106)  # DGP-01: explicit rng
+        Y = randn(rng, 100, 2)
         model = estimate_var(Y, 2)
 
         fevd_result = fevd(model, 12)
@@ -132,7 +139,8 @@ using Random
     end
 
     @testset "HD table and print_table" begin
-        Y = randn(100, 2)
+        rng = MersenneTwister(7107)  # DGP-01: explicit rng
+        Y = randn(rng, 100, 2)
         model = estimate_var(Y, 2)
 
         hd = historical_decomposition(model, 98)
@@ -159,7 +167,8 @@ using Random
     end
 
     @testset "report() for all types" begin
-        Y = randn(100, 2)
+        rng = MersenneTwister(7108)  # DGP-01: explicit rng
+        Y = randn(rng, 100, 2)
         model = estimate_var(Y, 2)
 
         irf_result = irf(model, 8)
@@ -177,6 +186,7 @@ using Random
     end
 
     @testset "_select_horizons" begin
+        rng = MersenneTwister(7109)  # DGP-01: explicit rng
         @test MacroEconometricModels._select_horizons(3) == [1, 2, 3]
         @test MacroEconometricModels._select_horizons(5) == [1, 2, 3, 4, 5]
         @test MacroEconometricModels._select_horizons(10) == [1, 4, 8, 10]
@@ -189,7 +199,8 @@ using Random
     # =================================================================
 
     @testset "point_estimate, has_uncertainty, uncertainty_bounds" begin
-        Y = randn(100, 2)
+        rng = MersenneTwister(7110)  # DGP-01: explicit rng
+        Y = randn(rng, 100, 2)
         model = estimate_var(Y, 2)
 
         # ImpulseResponse without CI
@@ -229,16 +240,17 @@ using Random
     # =================================================================
 
     @testset "BayesianImpulseResponse" begin
+        rng = MersenneTwister(7111)  # DGP-01: explicit rng
         # Construct a synthetic BayesianImpulseResponse
         H, n = 8, 2
         nq = 3
-        quantiles_arr = randn(H, n, n, nq)
+        quantiles_arr = randn(rng, H, n, n, nq)
         # Ensure ordered quantiles
         for h in 1:H, i in 1:n, j in 1:n
             vals = sort(quantiles_arr[h, i, j, :])
             quantiles_arr[h, i, j, :] = vals
         end
-        mean_arr = randn(H, n, n)
+        mean_arr = randn(rng, H, n, n)
         vars = ["Var 1", "Var 2"]
         shocks = ["Shock 1", "Shock 2"]
         q_levels = [0.16, 0.5, 0.84]
@@ -297,11 +309,12 @@ using Random
     # =================================================================
 
     @testset "BayesianFEVD" begin
+        rng = MersenneTwister(7112)  # DGP-01: explicit rng
         # Construct a synthetic BayesianFEVD — axis order (variable, shock, horizon) (#527)
         H, n = 8, 2
         nq = 3
-        quantiles_arr = abs.(randn(n, n, H, nq))
-        mean_arr = abs.(randn(n, n, H))
+        quantiles_arr = abs.(randn(rng, n, n, H, nq))
+        mean_arr = abs.(randn(rng, n, n, H))
         vars = ["Var 1", "Var 2"]
         shocks = ["Shock 1", "Shock 2"]
         q_levels = [0.16, 0.5, 0.84]
@@ -361,15 +374,16 @@ using Random
     # =================================================================
 
     @testset "BayesianHistoricalDecomposition report and table" begin
+        rng = MersenneTwister(7113)  # DGP-01: explicit rng
         # Construct a synthetic BayesianHistoricalDecomposition
         T_eff, n = 50, 2
         nq = 3
-        quantiles_arr = randn(T_eff, n, n, nq)
-        mean_arr = randn(T_eff, n, n)
-        initial_q = randn(T_eff, n, nq)
-        initial_m = randn(T_eff, n)
-        shocks_m = randn(T_eff, n)
-        actual = randn(T_eff, n)
+        quantiles_arr = randn(rng, T_eff, n, n, nq)
+        mean_arr = randn(rng, T_eff, n, n)
+        initial_q = randn(rng, T_eff, n, nq)
+        initial_m = randn(rng, T_eff, n)
+        shocks_m = randn(rng, T_eff, n)
+        actual = randn(rng, T_eff, n)
         vars = ["Var 1", "Var 2"]
         shock_names = ["Shock 1", "Shock 2"]
         q_levels = [0.16, 0.5, 0.84]
@@ -432,8 +446,9 @@ using Random
     # =================================================================
 
     @testset "report() coverage for models and results" begin
+        rng = MersenneTwister(7114)  # DGP-01: explicit rng
         # --- ARIMA models ---
-        y = randn(200)
+        y = randn(rng, 200)
         ar_model = estimate_ar(y, 2)
         redirect_stdout(devnull) do
             report(ar_model)
@@ -441,7 +456,7 @@ using Random
         @test true
 
         # --- Factor model ---
-        X = randn(100, 10)
+        X = randn(rng, 100, 10)
         fm = estimate_factors(X, 3)
         redirect_stdout(devnull) do
             report(fm)
@@ -449,7 +464,7 @@ using Random
         @test true
 
         # --- ARCH model ---
-        arch_m = estimate_arch(randn(200), 1)
+        arch_m = estimate_arch(randn(rng, 200), 1)
         redirect_stdout(devnull) do
             report(arch_m)
         end
@@ -457,7 +472,7 @@ using Random
 
         # --- GMM model ---
         n_obs = 200
-        data_gmm = randn(n_obs, 3)
+        data_gmm = randn(rng, n_obs, 3)
         g = (theta, data) -> data[:, 2:3] .* (data[:, 1] .- theta[1])
         gmm_m = estimate_gmm(g, [0.0], data_gmm)
         redirect_stdout(devnull) do
@@ -466,14 +481,14 @@ using Random
         @test true
 
         # --- Unit root test ---
-        adf_r = adf_test(cumsum(randn(200)))
+        adf_r = adf_test(cumsum(randn(rng, 200)))
         redirect_stdout(devnull) do
             report(adf_r)
         end
         @test true
 
         # --- LP model ---
-        Y_lp = randn(100, 3)
+        Y_lp = randn(rng, 100, 3)
         lp_m = estimate_lp(Y_lp, 1, 10)
         redirect_stdout(devnull) do
             report(lp_m)
@@ -513,7 +528,8 @@ using Random
     # =================================================================
 
     @testset "table() for VolatilityForecast" begin
-        arch_m = estimate_arch(randn(200), 1)
+        rng = MersenneTwister(7115)  # DGP-01: explicit rng
+        arch_m = estimate_arch(randn(rng, 200), 1)
         vf = forecast(arch_m, 5)
         t = table(vf)
         @test size(t) == (5, 5)
@@ -525,7 +541,8 @@ using Random
     end
 
     @testset "print_table() for VolatilityForecast" begin
-        arch_m = estimate_arch(randn(200), 1)
+        rng = MersenneTwister(7116)  # DGP-01: explicit rng
+        arch_m = estimate_arch(randn(rng, 200), 1)
         vf = forecast(arch_m, 5)
         io = IOBuffer()
         print_table(io, vf)
@@ -535,7 +552,8 @@ using Random
     end
 
     @testset "table() for ARIMAForecast" begin
-        y = randn(200)
+        rng = MersenneTwister(7117)  # DGP-01: explicit rng
+        y = randn(rng, 200)
         ar_m = estimate_ar(y, 2)
         af = forecast(ar_m, 5)
         t = table(af)
@@ -548,7 +566,8 @@ using Random
     end
 
     @testset "print_table() for ARIMAForecast" begin
-        y = randn(200)
+        rng = MersenneTwister(7118)  # DGP-01: explicit rng
+        y = randn(rng, 200)
         ar_m = estimate_ar(y, 2)
         af = forecast(ar_m, 5)
         io = IOBuffer()
@@ -559,7 +578,8 @@ using Random
     end
 
     @testset "table() for FactorForecast" begin
-        X = randn(100, 10)
+        rng = MersenneTwister(7119)  # DGP-01: explicit rng
+        X = randn(rng, 100, 10)
         fm = estimate_factors(X, 3)
         fc = forecast(fm, 5)
         # Observable table
@@ -574,7 +594,8 @@ using Random
     end
 
     @testset "print_table() for FactorForecast" begin
-        X = randn(100, 10)
+        rng = MersenneTwister(7120)  # DGP-01: explicit rng
+        X = randn(rng, 100, 10)
         fm = estimate_factors(X, 3)
         fc = forecast(fm, 5)
         io = IOBuffer()
@@ -590,7 +611,8 @@ using Random
     end
 
     @testset "table() for LPImpulseResponse" begin
-        Y_lp = randn(100, 3)
+        rng = MersenneTwister(7121)  # DGP-01: explicit rng
+        Y_lp = randn(rng, 100, 3)
         lp_m = estimate_lp(Y_lp, 1, 8)
         lp_irf_r = lp_irf(lp_m)
         t = table(lp_irf_r, 1)
@@ -604,7 +626,8 @@ using Random
     end
 
     @testset "print_table() for LPImpulseResponse" begin
-        Y_lp = randn(100, 3)
+        rng = MersenneTwister(7122)  # DGP-01: explicit rng
+        Y_lp = randn(rng, 100, 3)
         lp_m = estimate_lp(Y_lp, 1, 8)
         lp_irf_r = lp_irf(lp_m)
         io = IOBuffer()
@@ -618,7 +641,8 @@ using Random
     # refs() Returns String (Issue #16)
     # =================================================================
     @testset "refs() prints to stdout (#530)" begin
-        Y = randn(100, 3)
+        rng = MersenneTwister(7123)  # DGP-01: explicit rng
+        Y = randn(rng, 100, 3)
         model = estimate_var(Y, 2)
 
         # one-arg refs() prints (like report()) and returns nothing
@@ -645,7 +669,8 @@ using Random
     # report() for VECM
     # =================================================================
     @testset "report(VECMModel)" begin
-        Y = cumsum(randn(150, 3), dims=1)
+        rng = MersenneTwister(7124)  # DGP-01: explicit rng
+        Y = cumsum(randn(rng, 150, 3), dims=1)
         vecm = estimate_vecm(Y, 2; rank=1)
         redirect_stdout(devnull) do
             report(vecm)
@@ -657,7 +682,8 @@ using Random
     # report() for all 5 filter types
     # =================================================================
     @testset "report() for filter types" begin
-        y = cumsum(randn(200))
+        rng = MersenneTwister(7125)  # DGP-01: explicit rng
+        y = cumsum(randn(rng, 200))
         redirect_stdout(devnull) do
             report(hp_filter(y))
             report(hamilton_filter(y))
@@ -672,7 +698,8 @@ using Random
     # report() for VARForecast and BVARForecast
     # =================================================================
     @testset "report() for VARForecast and BVARForecast" begin
-        Y = randn(100, 3)
+        rng = MersenneTwister(7126)  # DGP-01: explicit rng
+        Y = randn(rng, 100, 3)
         m = estimate_var(Y, 2)
         fc = forecast(m, 5)
         redirect_stdout(devnull) do
@@ -692,10 +719,11 @@ using Random
     # report() for LP variants
     # =================================================================
     @testset "report() for LP variants" begin
-        Y = randn(100, 3)
+        rng = MersenneTwister(7127)  # DGP-01: explicit rng
+        Y = randn(rng, 100, 3)
 
         # LPIVModel
-        Z = randn(100, 1)
+        Z = randn(rng, 100, 1)
         lp_iv = estimate_lp_iv(Y, 1, Z, 8; lags=2)
         redirect_stdout(devnull) do
             report(lp_iv)
@@ -718,8 +746,8 @@ using Random
         @test true
 
         # PropensityLPModel
-        treatment = Float64.(randn(100) .> 0)
-        covariates = randn(100, 2)
+        treatment = Float64.(randn(rng, 100) .> 0)
+        covariates = randn(rng, 100, 2)
         prop_lp = estimate_propensity_lp(Y, treatment, covariates, 8)
         redirect_stdout(devnull) do
             report(prop_lp)
@@ -731,7 +759,8 @@ using Random
     # report() for StructuralLP, LPForecast, LPFEVD
     # =================================================================
     @testset "show/report for StructuralLP, LPForecast, LPFEVD" begin
-        Y = randn(100, 3)
+        rng = MersenneTwister(7128)  # DGP-01: explicit rng
+        Y = randn(rng, 100, 3)
         slp = structural_lp(Y, 8; method=:cholesky, lags=2)
         # StructuralLP has show() but no report() — use show() directly
         io = IOBuffer()
@@ -757,7 +786,8 @@ using Random
     # show() for LP model types
     # =================================================================
     @testset "show() for LP model types" begin
-        Y = randn(100, 3)
+        rng = MersenneTwister(7129)  # DGP-01: explicit rng
+        Y = randn(rng, 100, 3)
 
         # LPModel
         lp = estimate_lp(Y, 1, 8; lags=2)
@@ -768,7 +798,7 @@ using Random
         @test occursin("Newey-West", out) || occursin("Jordà", out)
 
         # LPIVModel
-        Z = randn(100, 1)
+        Z = randn(rng, 100, 1)
         lp_iv = estimate_lp_iv(Y, 1, Z, 8; lags=2)
         io = IOBuffer()
         show(io, lp_iv)
@@ -791,8 +821,8 @@ using Random
         @test occursin("State-Dependent", out) || occursin("Auerbach", out)
 
         # PropensityLPModel
-        treatment = Float64.(randn(100) .> 0)
-        covariates = randn(100, 2)
+        treatment = Float64.(randn(rng, 100) .> 0)
+        covariates = randn(rng, 100, 2)
         prop_lp = estimate_propensity_lp(Y, treatment, covariates, 8)
         io = IOBuffer()
         show(io, prop_lp)
@@ -804,6 +834,7 @@ using Random
     # show() for supporting types
     # =================================================================
     @testset "show() for supporting types" begin
+        rng = MersenneTwister(7130)  # DGP-01: explicit rng
         # ZeroRestriction
         zr = ZeroRestriction(1, 2, 0)
         io = IOBuffer()
@@ -871,7 +902,8 @@ using Random
     # show() for BSplineBasis, StateTransition, PropensityScoreConfig
     # =================================================================
     @testset "show() for BSplineBasis, StateTransition, PropensityScoreConfig" begin
-        Y = randn(100, 3)
+        rng = MersenneTwister(7131)  # DGP-01: explicit rng
+        Y = randn(rng, 100, 3)
 
         # BSplineBasis - from smooth LP
         slp = estimate_smooth_lp(Y, 1, 8; lags=2, degree=3, n_knots=3)
@@ -889,8 +921,8 @@ using Random
         @test occursin("State Transition", out)
 
         # PropensityScoreConfig - from propensity LP
-        treatment = Float64.(randn(100) .> 0)
-        covariates = randn(100, 2)
+        treatment = Float64.(randn(rng, 100) .> 0)
+        covariates = randn(rng, 100, 2)
         prop_lp = estimate_propensity_lp(Y, treatment, covariates, 8)
         io = IOBuffer()
         show(io, prop_lp.config)
@@ -902,13 +934,14 @@ using Random
     # refs() comprehensive format and dispatch
     # =================================================================
     @testset "refs() comprehensive format and dispatch" begin
+        rng = MersenneTwister(7132)  # DGP-01: explicit rng
         # Symbol dispatch
         r = sprint(io -> refs(io, :johansen))
         @test r isa String
         @test !isempty(r)
 
         # All four formats for various types
-        Y = randn(100, 3)
+        Y = randn(rng, 100, 3)
         lp = estimate_lp(Y, 1, 8)
         for fmt in (:text, :latex, :bibtex, :html)
             r = sprint(io -> refs(io, lp; format=fmt))
@@ -923,7 +956,7 @@ using Random
         @test !isempty(r)
 
         # refs for filter types
-        y = cumsum(randn(200))
+        y = cumsum(randn(rng, 200))
         for f in [hp_filter(y), hamilton_filter(y)]
             r = sprint(io -> refs(io, f))
             @test r isa String
@@ -943,19 +976,19 @@ using Random
         @test occursin("<p>", r_html)
 
         # refs for ARIMA models
-        ar = estimate_ar(randn(200), 2)
+        ar = estimate_ar(randn(rng, 200), 2)
         r = sprint(io -> refs(io, ar; format=:bibtex))
         @test r isa String
         @test !isempty(r)
 
         # refs for volatility models
-        gm = estimate_garch(randn(300), 1, 1)
+        gm = estimate_garch(randn(rng, 300), 1, 1)
         r = sprint(io -> refs(io, gm))
         @test r isa String
         @test !isempty(r)
 
         # refs for unit root tests
-        adf_r = adf_test(randn(200))
+        adf_r = adf_test(randn(rng, 200))
         r = sprint(io -> refs(io, adf_r))
         @test r isa String
     end
@@ -964,6 +997,7 @@ using Random
     # _delatex() Unicode replacements
     # =================================================================
     @testset "_delatex() Unicode replacements" begin
+        rng = MersenneTwister(7133)  # DGP-01: explicit rng
         @test MacroEconometricModels._delatex("L\\\"utkepohl") == "Lütkepohl"
         @test MacroEconometricModels._delatex("Jord\\'e") == "Jordé"
         @test MacroEconometricModels._delatex("em---dash") == "em\u2014dash"
@@ -976,8 +1010,9 @@ using Random
     # Nowcast show() and report()
     # =================================================================
     @testset "Nowcast show() and report()" begin
+        rng = MersenneTwister(7134)  # DGP-01: explicit rng
         nM = 4; nQ = 1
-        Y_nc = randn(100, nM + nQ)
+        Y_nc = randn(rng, 100, nM + nQ)
         Y_nc[end, end] = NaN
 
         # NowcastDFM show
@@ -1002,7 +1037,7 @@ using Random
         @test true
 
         # NowcastNews show
-        X_old = randn(100, 5)
+        X_old = randn(rng, 100, 5)
         X_old[end, end] = NaN
         X_new = copy(X_old)
         X_new[end, end] = 0.5
@@ -1022,7 +1057,8 @@ using Random
     # show() and print_table() for StructuralLP
     # =================================================================
     @testset "show() and print_table() for StructuralLP" begin
-        Y = randn(100, 3)
+        rng = MersenneTwister(7135)  # DGP-01: explicit rng
+        Y = randn(rng, 100, 3)
         slp = structural_lp(Y, 8; method=:cholesky, lags=2)
         io = IOBuffer()
         show(io, slp)
@@ -1040,7 +1076,8 @@ using Random
     # show() and print_table() for LPForecast
     # =================================================================
     @testset "show() and print_table() for LPForecast" begin
-        Y = randn(100, 3)
+        rng = MersenneTwister(7136)  # DGP-01: explicit rng
+        Y = randn(rng, 100, 3)
         lp = estimate_lp(Y, 1, 8; lags=2)
         shock_path = zeros(8); shock_path[1] = 1.0
         fc = forecast(lp, shock_path)
@@ -1059,7 +1096,8 @@ using Random
     # show() and print_table() for LPFEVD
     # =================================================================
     @testset "show() and print_table() for LPFEVD" begin
-        Y = randn(100, 3)
+        rng = MersenneTwister(7137)  # DGP-01: explicit rng
+        Y = randn(rng, 100, 3)
         slp = structural_lp(Y, 8; method=:cholesky, lags=2)
         f = lp_fevd(slp, 8; n_boot=0)
         io = IOBuffer()
@@ -1085,7 +1123,8 @@ using Random
     # show() for AriasSVARResult and UhligSVARResult
     # =================================================================
     @testset "show() for AriasSVARResult and UhligSVARResult" begin
-        Y = randn(100, 3)
+        rng = MersenneTwister(7138)  # DGP-01: explicit rng
+        Y = randn(rng, 100, 3)
         m = estimate_var(Y, 2)
 
         # Uhlig
@@ -1117,10 +1156,11 @@ using Random
     # table() for BayesianFEVD with stat=1
     # =================================================================
     @testset "table() for BayesianFEVD quantile stat" begin
+        rng = MersenneTwister(7139)  # DGP-01: explicit rng
         H, n = 8, 2
         nq = 3
-        quantiles_arr = abs.(randn(n, n, H, nq))
-        mean_arr = abs.(randn(n, n, H))
+        quantiles_arr = abs.(randn(rng, n, n, H, nq))
+        mean_arr = abs.(randn(rng, n, n, H))
         vars = ["Var 1", "Var 2"]
         shocks = ["Shock 1", "Shock 2"]
         q_levels = [0.16, 0.5, 0.84]
@@ -1133,12 +1173,13 @@ using Random
     end
 
     @testset "report() for PVAR types" begin
+        rng = MersenneTwister(7140)  # DGP-01: explicit rng
         using DataFrames
         df = DataFrame(
             id = repeat(1:10, inner=20),
             time = repeat(1:20, outer=10),
-            y1 = randn(200),
-            y2 = randn(200)
+            y1 = randn(rng, 200),
+            y2 = randn(rng, 200)
         )
         pd = xtset(df, :id, :time)
         pvar = estimate_pvar(pd, 1)
@@ -1150,12 +1191,13 @@ using Random
     end
 
     @testset "report() for DiD types" begin
+        rng = MersenneTwister(7141)  # DGP-01: explicit rng
         using DataFrames
         n_units, n_periods = 40, 10
         df = DataFrame(
             unit = repeat(1:n_units, inner=n_periods),
             time = repeat(1:n_periods, outer=n_units),
-            y = randn(n_units * n_periods),
+            y = randn(rng, n_units * n_periods),
             treat = repeat(vcat(zeros(Int, n_units÷2), ones(Int, n_units÷2)), inner=n_periods) .*
                     repeat(vcat(zeros(Int, n_periods÷2), ones(Int, n_periods÷2)), outer=n_units)
         )
@@ -1168,8 +1210,9 @@ using Random
     end
 
     @testset "SID-24 refs and SignIdentifiedSet report" begin
+        rng = MersenneTwister(7142)  # DGP-01: explicit rng
         Random.seed!(753)
-        m = estimate_var(randn(150, 2), 1)
+        m = estimate_var(randn(rng, 150, 2), 1)
         chk(irf) = irf[1, 1, 1] > 0
         buf = IOBuffer()
         report(buf, identify_sign(m, 5, chk; store_all=true, max_draws=200, rng=MersenneTwister(753)))
@@ -1184,8 +1227,9 @@ using Random
     end
 
     @testset "SID-24 statistical report ends with B₀ _coef_table" begin
+        rng = MersenneTwister(7143)  # DGP-01: explicit rng
         Random.seed!(753)
-        m = estimate_var(randn(120, 2), 1)
+        m = estimate_var(randn(rng, 120, 2), 1)
         statistical = (
             identify_fastica(m),
             identify_student_t(m; max_iter=40),
@@ -1209,7 +1253,7 @@ using Random
         ms = MarkovSwitchingSVARResult{Float64}(
             B0, I2, [I2, 2 .* I2], [[1.0, 1.0], [2.0, 0.5]],
             fill(0.5, 8, 2), [0.9 0.1; 0.1 0.9], -10.0, true, 3, 2,
-            se, Matrix{Float64}(I, 3, 3), 0.8, randn(8, 2), ["Shock 1", "Shock 2"])
+            se, Matrix{Float64}(I, 3, 3), 0.8, randn(rng, 8, 2), ["Shock 1", "Shock 2"])
         txt_ms = sprint(report, ms)
         @test occursin("Structural Impact Matrix (B₀)", txt_ms)
         @test occursin("Std.Err.", txt_ms)
