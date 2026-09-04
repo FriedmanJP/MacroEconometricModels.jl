@@ -10,11 +10,11 @@ using Random
 using LinearAlgebra
 
 @testset "Core Kalman operations" begin
-    Random.seed!(42)
+    rng = MersenneTwister(42)  # DGP-02: explicit rng
     n, m = 4, 2
 
     F = 0.9 * I(n) |> Matrix{Float64}
-    H = randn(m, n)
+    H = randn(rng, m, n)
     Q = 0.1 * I(n) |> Matrix{Float64}
     R = 0.05 * I(m) |> Matrix{Float64}
     x0 = zeros(n)
@@ -55,7 +55,7 @@ using LinearAlgebra
 
     @testset "update step" begin
         x_pred, P_pred = MacroEconometricModels._kalman_predict(x0, P0, F, Q)
-        y = H * x_pred + 0.1 * randn(m)
+        y = H * x_pred + 0.1 * randn(rng, m)
         x_upd, P_upd, v, S, K = MacroEconometricModels._kalman_update(x_pred, P_pred, y, H, R)
         @test size(x_upd) == (n,)
         @test size(P_upd) == (n, n)
@@ -71,7 +71,7 @@ using LinearAlgebra
         prev_tr = tr(P)
         for _ in 1:5
             x, P = MacroEconometricModels._kalman_predict(x, P, F, Q)
-            y = H * x + 0.1 * randn(m)
+            y = H * x + 0.1 * randn(rng, m)
             x, P, _, _, _ = MacroEconometricModels._kalman_update(x, P, y, H, R)
         end
         @test tr(P) < tr(P0)  # steady-state P should be smaller than initial
@@ -86,15 +86,20 @@ using LinearAlgebra
     end
 
     @testset "predict-update roundtrip consistency" begin
-        # Verify that predict followed by update with perfect observation recovers state
-        x_true = randn(n)
-        x_pred, P_pred = MacroEconometricModels._kalman_predict(x_true, Q, F, Q)
-        # Observe with zero noise
-        R_zero = zeros(m, m) + 1e-12 * I(m)
-        y_obs = H * (F * x_true)
-        x_upd, P_upd, _, _, _ = MacroEconometricModels._kalman_update(x_pred, P_pred, y_obs, H, R_zero)
-        # With near-zero observation noise, updated state should be close to predicted
-        @test norm(x_upd - x_pred) < norm(x_true)  # update moved toward observation
+        # DGP-02 #791: the old version observed H·(F·x_true) with ZERO noise, so
+        # the innovation was identically zero and a no-op update "passed". Now
+        # the observation carries real noise and the prior mean is deliberately
+        # wrong with a diffuse covariance — only a genuine update shrinks the
+        # state error toward the true predicted state F·x_true.
+        x_true = randn(rng, n)
+        x_wrong = x_true + [1.0, -1.0, 0.5, 0.25]  # fixed bad-prior offset
+        P_big = 10.0 * Matrix{Float64}(I(n))       # diffuse prior covariance
+        x_pred, P_pred = MacroEconometricModels._kalman_predict(x_wrong, P_big, F, Q)
+        v_noise = cholesky(Symmetric(R)).L * randn(rng, m)
+        y_obs = H * (F * x_true) + v_noise
+        x_upd, P_upd, _, _, _ = MacroEconometricModels._kalman_update(x_pred, P_pred, y_obs, H, R)
+        @test norm(x_upd - F * x_true) < norm(x_pred - F * x_true)  # update helps
+        @test tr(P_upd) < tr(P_pred)  # and uncertainty shrinks
     end
 
     @testset "Lyapunov stability & convergence warns (T062 C-12)" begin
@@ -108,9 +113,9 @@ using LinearAlgebra
     end
 
     @testset "Joseph-form measurement update (T058)" begin
-        Random.seed!(4242)
+        rng = MersenneTwister(4242)  # DGP-02: explicit rng
         x_pred, P_pred = MacroEconometricModels._kalman_predict(x0, P0, F, Q)
-        y = H * x_pred + 0.1 * randn(m)
+        y = H * x_pred + 0.1 * randn(rng, m)
         x_upd, P_upd, v, S, K = MacroEconometricModels._kalman_update(x_pred, P_pred, y, H, R)
 
         # (a) Joseph P_upd is symmetric and PSD by construction; S is returned exact.
@@ -128,8 +133,8 @@ using LinearAlgebra
 
         # (b) On an ill-conditioned filter covariance (eigenvalue spread 1e11), the Joseph
         #     form stays symmetric + PSD across many steps.
-        Random.seed!(77)
-        U = qr(randn(n, n)).Q
+        rng = MersenneTwister(77)  # DGP-02: explicit rng
+        U = qr(randn(rng, n, n)).Q
         P = Matrix(U * Diagonal([1.0, 1e-4, 1e-8, 1e-11]) * U')
         x = zeros(n)
         Qsmall = 1e-10 * Matrix{Float64}(I(n))
@@ -137,7 +142,7 @@ using LinearAlgebra
         worst_negeig = 0.0
         for _ in 1:300
             x, P = MacroEconometricModels._kalman_predict(x, P, F, Qsmall)
-            y = H * x + 0.1 * randn(m)
+            y = H * x + 0.1 * randn(rng, m)
             x, P, _, _, _ = MacroEconometricModels._kalman_update(x, P, y, H, R)
             worst_asym = max(worst_asym, norm(P - P'))
             worst_negeig = min(worst_negeig, minimum(eigvals(Symmetric(P))))
@@ -157,12 +162,11 @@ using LinearAlgebra
         b = [0.2, -0.1]; d = [0.05, 0.02]
         n_state = 2; n_obs = 2; T_obs = 40
         a0, P0 = MEM._kalman_init(:stationary, Tt, RQR, n_state)
-        LR = cholesky(Symmetric(RQR)).L; LH = cholesky(Symmetric(Hobs)).L
-        y = Matrix{Float64}(undef, n_obs, T_obs); x = copy(a0)
-        for t in 1:T_obs
-            x = b + Tt * x + LR * randn(rng, n_state)
-            y[:, t] = d + Z * x + LH * randn(rng, n_obs)
-        end
+        # Shared state-space DGP (DGP-02 #791): bit-identical draws to the old
+        # hand loop, plus the TRUE state path the smoother must recover.
+        sim = dgp_state_space(rng; F=Tt, H=Z, Q=RQR, R=Hobs, b=b, d=d, x0=a0, T=T_obs)
+        y = Matrix(sim.y')        # n_obs × T_obs layout used below
+        Xtrue = Matrix(sim.x')    # n_state × T_obs true states
 
         # reference forward filter assembled from the core _kalman_update primitive
         function ref_filter(y, Z, Tt, RQR, Hobs, b, d, a0, P0; skip=0)
@@ -192,11 +196,8 @@ using LinearAlgebra
 
         # scalar rank-1 path == multivariate path on a single-observation series
         Zs = reshape([1.0, 0.4], 1, 2); Hs = reshape([0.12], 1, 1); ds = [0.03]
-        ys = Matrix{Float64}(undef, 1, T_obs); xs = copy(a0)
-        for t in 1:T_obs
-            xs = b + Tt * xs + LR * randn(rng, 2)
-            ys[1, t] = ds[1] + (Zs * xs)[1] + sqrt(Hs[1, 1]) * randn(rng)
-        end
+        sims = dgp_state_space(rng; F=Tt, H=Zs, Q=RQR, R=Hs, b=b, d=ds, x0=a0, T=T_obs)
+        ys = Matrix(sims.y')
         ll_scalar = MEM._kalman_filter!(nothing, ys, Zs, Tt, RQR, Hs; d=ds, b=b, a0=a0, P0=P0, scalar=true)
         ll_multiv = MEM._kalman_filter!(nothing, ys, Zs, Tt, RQR, Hs; d=ds, b=b, a0=a0, P0=P0, scalar=false)
         @test ll_scalar ≈ ll_multiv rtol = 1e-10
@@ -238,6 +239,17 @@ using LinearAlgebra
         end
         @test as ≈ as_ref rtol = 1e-9
         @test as[:, end] == store2.a_filt[:, end]
+
+        # DGP-02 #791: the smoother recovers the SIMULATED states (the old test
+        # built the true path and discarded it). R² floor 0.7 (realized 0.83 at
+        # seed 246 — short T=40 sample; the margin covers cross-platform LAPACK
+        # variation while a prior-mean "smoother" would score ≈ 0). Smoother MSE
+        # strictly below filter MSE, as RTS theory requires.
+        resid_s = as - Xtrue
+        resid_f = store2.a_filt - Xtrue
+        R2_s = 1 - sum(abs2, resid_s) / sum(abs2, Xtrue .- mean(Xtrue))
+        @test R2_s > 0.7
+        @test sum(abs2, resid_s) / length(resid_s) < sum(abs2, resid_f) / length(resid_f)
 
         # nlag: lag-1 smoothed cross-cov Plag[1][:,:,t] = Cov(x_t,x_{t-1}|Y_T) = P_{t|T} J_{t-1}'
         _, Ps_n, Plag = MEM._rts_smoother(store2, Tt; nlag=1)

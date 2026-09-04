@@ -130,28 +130,32 @@ function dgp_lagged_pair(rng::AbstractRNG; d::Int=3, gain::Float64=2.0,
 end
 
 """
-    dgp_state_space(rng; F, H, Q, R, x0, T) -> NamedTuple
+    dgp_state_space(rng; F, H, Q, R, b, d, x0, T) -> NamedTuple
 
-Linear Gaussian state space `x_{t+1} = F x_t + w_t`, `y_t = H x_t + v_t`,
-`w ~ N(0, Q)`, `v ~ N(0, R)`. Multivariate-capable. Returns
-`(y, x)` with the true state path.
+Linear Gaussian state space `x_{t+1} = b + F x_t + w_t`, `y_t = d + H x_t + v_t`,
+`w ~ N(0, Q)`, `v ~ N(0, R)`. Intercepts `b` (state) and `d` (observation)
+default to zero. Multivariate-capable. Returns `(y, x)` with the true state
+path, plus the system matrices and intercepts.
 """
 function dgp_state_space(rng::AbstractRNG; F=[0.9;;], H=[1.0;;],
-                         Q=[0.5;;], R=[0.5;;], x0=nothing, T::Int=300)
+                         Q=[0.5;;], R=[0.5;;], b=nothing, d=nothing,
+                         x0=nothing, T::Int=300)
     Fm, Hm = Matrix{Float64}(F), Matrix{Float64}(H)
     Qm, Rm = Matrix{Float64}(Q), Matrix{Float64}(R)
     k, n = size(Fm, 1), size(Hm, 1)
+    bv = b === nothing ? zeros(k) : Vector{Float64}(b)
+    dv = d === nothing ? zeros(n) : Vector{Float64}(d)
     Lq = cholesky(Symmetric(Qm)).L
     Lr = cholesky(Symmetric(Rm)).L
     x = x0 === nothing ? zeros(k) : Vector{Float64}(x0)
     X = zeros(T, k)
     Y = zeros(T, n)
     for t in 1:T
-        x = Fm * x + Lq * randn(rng, k)
+        x = bv + Fm * x + Lq * randn(rng, k)
         X[t, :] .= x
-        Y[t, :] .= Hm * x + Lr * randn(rng, n)
+        Y[t, :] .= dv + Hm * x + Lr * randn(rng, n)
     end
-    return (y=Y, x=X, F=Fm, H=Hm, Q=Qm, R=Rm)
+    return (y=Y, x=X, F=Fm, H=Hm, Q=Qm, R=Rm, b=bv, d=dv)
 end
 
 """
