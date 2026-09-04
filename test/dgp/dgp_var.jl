@@ -23,18 +23,24 @@ Stationary VAR(p): `Y_t = c + A_1 Y_{t-1} + … + A_p Y_{t-p} + u_t`,
   DGP-02 reference design with non-diagonal dynamics and a non-identity impact
   matrix, so shock orderings and rotations matter.
 - `B0` / `Sigma`: impact matrix (default lower-triangular) or error
-  covariance (`Sigma = B0 * B0'`; pass one of them).
+  covariance (`Sigma = B0 * B0'`). Pass exactly one: `Sigma` alone takes the
+  lower Cholesky factor; passing both throws.
 - Returns `(Y, eps, A, Sigma, B0, c)`: the `T×n` sample (post-burn-in), the
   `T×n` structural shocks, the coefficient list, `Sigma`, `B0`, intercept.
 """
+const _DGP_VAR_B0 = [1.0 0.0 0.0; 0.5 1.0 0.0; 0.3 0.2 1.0]
+
 function dgp_var(rng::AbstractRNG;
                  A=[0.5 0.1 0.0; 0.2 0.4 0.1; 0.0 0.1 0.3],
-                 B0=[1.0 0.0 0.0; 0.5 1.0 0.0; 0.3 0.2 1.0],
+                 B0=nothing,
                  Sigma=nothing, c=nothing, T::Int=500, burn::Int=200)
     As = A isa AbstractMatrix ? [Matrix{Float64}(A)] : [Matrix{Float64}(a) for a in A]
     n, p = size(As[1], 1), length(As)
-    L = B0 === nothing ? Matrix{Float64}(cholesky(Symmetric(Matrix{Float64}(Sigma))).L) :
-                         Matrix{Float64}(B0)
+    B0 !== nothing && Sigma !== nothing &&
+        throw(ArgumentError("dgp_var: pass exactly one of B0 and Sigma"))
+    L = B0 !== nothing ? Matrix{Float64}(B0) :
+        Sigma !== nothing ? Matrix{Float64}(cholesky(Symmetric(Matrix{Float64}(Sigma))).L) :
+        Matrix{Float64}(_DGP_VAR_B0)
     S = L * L'
     cc = c === nothing ? zeros(n) : Vector{Float64}(c)
     Eps = randn(rng, T + burn, n)

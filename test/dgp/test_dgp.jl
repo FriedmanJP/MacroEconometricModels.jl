@@ -29,6 +29,14 @@ using DataFrames  # nrow (no-op when fixtures.jl already loaded it)
         rv = dgp_var(MersenneTwister(11); A=[[0.5 0.0; 0.0 0.4], [0.1 0.0; 0.0 0.1]],
                      B0=[1.0 0.0; 0.0 1.0], T=50)
         @test size(rv.Y) == (50, 2) && length(rv.A) == 2
+        # Sigma-only form is honored (DGP-02 #791: it was silently ignored
+        # before, keeping the default B0); passing both throws.
+        S_in = [1.0 0.4; 0.4 0.9]
+        rs = dgp_var(MersenneTwister(11); A=[0.5 0.1; 0.0 0.4], Sigma=S_in, T=50)
+        @test rs.Sigma ≈ S_in
+        @test rs.B0 * rs.B0' ≈ S_in
+        @test_throws ArgumentError dgp_var(MersenneTwister(11); Sigma=S_in,
+                                           B0=[1.0 0.0; 0.0 1.0])
     end
 
     @testset "VAR sample autocovariance ≈ Lyapunov Γ₀" begin

@@ -59,9 +59,8 @@ using StatsAPI
                   0.50 0.80 0.10;
                   0.20 0.10 0.60]
 
-        # Shared DGP with the known (A_true, Σ_true) truth (DGP-02 #791; note
-        # dgp_var consumes Sigma only with B0=nothing).
-        Y = dgp_var(rng; A=A_true, B0=nothing, Sigma=Σ_true, T=T).Y
+        # Shared DGP with the known (A_true, Σ_true) truth (DGP-02 #791).
+        Y = dgp_var(rng; A=A_true, Sigma=Σ_true, T=T).Y
 
         # VAR estimation
         model = fit(VARModel, Y, p)
@@ -125,7 +124,7 @@ using StatsAPI
                   0.20 0.10 0.60]
 
         # Shared DGP with the known (A_true, Σ_true) truth (DGP-02 #791).
-        Y = dgp_var(rng; A=A_true, B0=nothing, Sigma=Σ_true, T=T).Y
+        Y = dgp_var(rng; A=A_true, Sigma=Σ_true, T=T).Y
 
         # Hyperparameter optimization
         best_hyper = optimize_hyperparameters(Y, p; grid_size=5)

@@ -24,8 +24,7 @@ end
 
 # Simulate a stationary VAR(1): U_t = A U_{t-1} + e_t, e_t ~ N(0, Σ_e).
 function _sim_var1(A::AbstractMatrix, Σ::AbstractMatrix, T::Int; rng, burn::Int=500)
-    # NOTE: dgp_var uses Sigma only when B0=nothing (else the default B0 wins).
-    return dgp_var(rng; A=A, B0=nothing, Sigma=Matrix(Σ), T=T, burn=burn).Y
+    return dgp_var(rng; A=A, Sigma=Matrix(Σ), T=T, burn=burn).Y
 end
 
 @testset "Long-run variance toolkit (EV-12)" begin
