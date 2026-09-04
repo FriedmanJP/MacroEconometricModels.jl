@@ -14,13 +14,10 @@ const M = MacroEconometricModels
 @testset "Issue fixes #523–#564" begin
 
     @testset "#523 NIW S0 is scale-invariant" begin
-        Random.seed!(42)
-        T_obs, n, p = 80, 2, 1
-        Y = zeros(T_obs, n)
-        A = [0.5 0.1; 0.0 0.4]
-        for t in 2:T_obs
-            Y[t, :] = A * Y[t-1, :] + 0.01 * randn(n)   # small residual scale
-        end
+        rng = MersenneTwister(42)  # DGP-03: explicit rng
+        p = 1
+        # Small residual scale truth (DGP-03 #792: shared simulator).
+        Y = dgp_var(rng; A=[0.5 0.1; 0.0 0.4], Sigma=Matrix(1e-4 * I, 2, 2), T=80).Y
         post = estimate_bvar(Y, p; n_draws=200, prior=:normal, seed=1)
         Sigma_mean = dropdims(mean(post.Sigma_draws; dims=1), dims=1)
         # Posterior mean residual scale should be O(data scale²) ≈ 1e-4, not O(1)
@@ -29,8 +26,10 @@ const M = MacroEconometricModels
     end
 
     @testset "#529 omega replicates the covariance dummy block" begin
-        Random.seed!(7)
-        Y = randn(60, 2)
+        rng = MersenneTwister(7)  # DGP-03: explicit rng
+        # Stationary VAR(1) truth (DGP-03 #792) — the dummy algebra only needs
+        # a well-conditioned Y for the residual scale.
+        Y = dgp_var(rng; A=[0.5 0.1; 0.0 0.4], B0=Matrix{Float64}(I, 2, 2), T=60).Y
         n = size(Y, 2)
         h0 = MinnesotaHyperparameters(tau=1.0, lambda=1.0, mu=1.0, omega=0.0)
         h1 = MinnesotaHyperparameters(tau=1.0, lambda=1.0, mu=1.0, omega=1.0)
@@ -52,11 +51,9 @@ const M = MacroEconometricModels
     end
 
     @testset "#527 BayesianFEVD axis order matches FEVD" begin
-        Random.seed!(11)
-        Y = randn(100, 2)
-        for t in 2:100
-            Y[t, :] = [0.5 0.1; 0.0 0.4] * Y[t-1, :] + 0.5 * randn(2)
-        end
+        rng = MersenneTwister(11)  # DGP-03: explicit rng
+        # Same design as the old inline sim, on the shared simulator (DGP-03 #792).
+        Y = dgp_var(rng; A=[0.5 0.1; 0.0 0.4], Sigma=Matrix(0.25 * I, 2, 2), T=100).Y
         m = estimate_var(Y, 1)
         post = estimate_bvar(Y, 1; n_draws=80, seed=3)
         f = fevd(m, 6)
@@ -86,13 +83,10 @@ const M = MacroEconometricModels
     end
 
     @testset "#564 bias_correct corrects the point IRF" begin
-        Random.seed!(99)
-        # Persistent VAR where small-sample bias is non-negligible
-        T_obs, n = 40, 1
-        Y = zeros(T_obs, n)
-        for t in 2:T_obs
-            Y[t, 1] = 0.9 * Y[t-1, 1] + 0.5 * randn()
-        end
+        rng = MersenneTwister(99)  # DGP-03: explicit rng
+        # Persistent AR(1) where small-sample bias is non-negligible
+        # (DGP-03 #792: shared univariate simulator, truth φ = 0.9).
+        Y = reshape(dgp_arima(rng; phi=[0.9], sigma=0.5, T=40).y, :, 1)
         m = estimate_var(Y, 1)
         base = irf(m, 8; ci_type=:none)
         bc = irf(m, 8; ci_type=:bootstrap, reps=60, seed=5,
@@ -110,8 +104,9 @@ const M = MacroEconometricModels
     end
 
     @testset "#538 FactorModel / StructuralDFM carry varnames" begin
-        Random.seed!(3)
-        X = randn(80, 6)
+        rng = MersenneTwister(3)  # DGP-03: explicit rng
+        # Genuine 2-factor panel (DGP-03 #792) instead of white noise.
+        X = dgp_dynamic_factors(rng; N=6, T=80).X
         names = ["A", "B", "C", "D", "E", "F"]
         fm = estimate_factors(X, 2; varnames=names)
         @test fm.varnames == names
@@ -125,12 +120,13 @@ const M = MacroEconometricModels
     end
 
     @testset "#526 block-restricted variance is per-block" begin
-        Random.seed!(5)
-        T_obs, N = 100, 10
-        F1 = randn(T_obs); F2 = randn(T_obs)
-        X = zeros(T_obs, N)
-        X[:, 1:5]  = F1 * randn(5)' .+ 0.1 .* randn(T_obs, 5)
-        X[:, 6:10] = F2 * randn(5)' .+ 0.1 .* randn(T_obs, 5)
+        rng = MersenneTwister(5)  # DGP-03: explicit rng
+        # Block-restricted 2-factor truth (DGP-03 #792): factor 1 loads on
+        # series 1:5, factor 2 on series 6:10.
+        N = 10
+        d = dgp_dynamic_factors(rng; N=N, T=100,
+                                blocks=Dict(1 => 1:5, 2 => 6:10))
+        X = d.X
         blocks = Dict(:real => collect(1:5), :nominal => collect(6:10))
         fm = estimate_factors(X, 2; blocks=blocks)
         @test fm.block_names !== nothing
@@ -144,10 +140,10 @@ const M = MacroEconometricModels
     end
 
     @testset "#525 Bayesian panel mapping is Λ·factor_irf (no Λ_y channel)" begin
-        Random.seed!(12)
-        T_obs, N, r = 100, 12, 2
-        F = randn(T_obs, r)
-        X = F * randn(N, r)' .+ 0.3 .* randn(T_obs, N)
+        rng = MersenneTwister(12)  # DGP-03: explicit rng
+        N, r = 12, 2
+        # Genuine dynamic-factor panel (DGP-03 #792) instead of white noise.
+        X = dgp_dynamic_factors(rng; N=N, T=100).X
         bf = estimate_favar(X, [1, 2], r, 1; method=:bayesian, n_draws=40, burnin=10)
         # The mapping is Λ · factor_irf with no Λ_y channel, because `BayesianFAVAR`
         # stores no Λ_y: the Gibbs sampler now carries one internally (#528) but treats
@@ -177,9 +173,9 @@ const M = MacroEconometricModels
         # The fix is BBE's measurement equation X = ΛF + Λ_y Y + e with Λ[anchor,:] = I,
         # which stops F from tracking Y_key and keeps the VAR design well conditioned,
         # so a magnitude bound can now be asserted alongside finiteness.
-        Random.seed!(15)
-        T_obs, N = 60, 10
-        X = randn(T_obs, N)
+        rng = MersenneTwister(15)  # DGP-03: explicit rng
+        # Genuine dynamic-factor panel (DGP-03 #792) instead of white noise.
+        X = dgp_dynamic_factors(rng; N=10, T=60).X
         bf = estimate_favar(X, [1], 2, 1; method=:bayesian, n_draws=40, burnin=15)
         B_mean = dropdims(mean(bf.B_draws; dims=1), dims=1)
         @test all(isfinite, B_mean)
@@ -188,9 +184,9 @@ const M = MacroEconometricModels
     end
 
     @testset "#524 panel CI lower ≤ upper via draws" begin
-        Random.seed!(21)
-        T_obs, N = 100, 12
-        X = randn(T_obs, N)
+        rng = MersenneTwister(21)  # DGP-03: explicit rng
+        # Genuine dynamic-factor panel (DGP-03 #792) instead of white noise.
+        X = dgp_dynamic_factors(rng; N=12, T=100).X
         favar = estimate_favar(X, [1, 3], 2, 1)
         ir = irf(favar, 6; ci_type=:bootstrap, reps=25, seed=9)
         panel = favar_panel_irf(favar, ir)
