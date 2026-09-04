@@ -17,20 +17,17 @@ using StatsAPI
     # README Quick Start
     # =========================================================================
     @testset "README Quick Start" begin
-        Random.seed!(42)
+        rng = MersenneTwister(42)  # DGP-02: explicit rng
         T, n = 200, 3
         A = [0.5 0.1 0.0; 0.0 0.6 0.1; 0.1 0.0 0.4]
-        Y = zeros(T, n)
-        for t in 2:T
-            Y[t, :] = A * Y[t-1, :] + randn(n)
-        end
+        Y = dgp_var(rng; A=A, B0=Matrix{Float64}(I, n, n), T=T).Y  # DGP-02 #791
 
         # VAR estimation
         model = estimate_var(Y, 2)
         @test model isa VARModel
 
         # IRF with bootstrap CI
-        irf_result = irf(model, 20; ci_type=:bootstrap, reps=50)
+        irf_result = irf(model, 20; ci_type=:bootstrap, reps=50, rng=rng)
         @test irf_result isa ImpulseResponse
 
         # Local Projections
@@ -40,7 +37,7 @@ using StatsAPI
         @test lp_irf_result isa LPImpulseResponse
 
         # Bayesian estimation (reduced draws for speed)
-        post = estimate_bvar(Y, 2; prior=:minnesota, n_draws=50)
+        post = estimate_bvar(Y, 2; prior=:minnesota, n_draws=50, rng=rng)
         @test post isa BVARPosterior
     end
 
@@ -48,7 +45,7 @@ using StatsAPI
     # Example 1: Three-Variable VAR Analysis (docs/src/examples.md)
     # =========================================================================
     @testset "Three-Variable VAR Analysis" begin
-        Random.seed!(42)
+        rng = MersenneTwister(42)  # DGP-02: explicit rng
 
         T = 200
         n = 3
@@ -62,13 +59,9 @@ using StatsAPI
                   0.50 0.80 0.10;
                   0.20 0.10 0.60]
 
-        Y = zeros(T, n)
-        Y[1, :] = randn(n)
-        chol_Σ = cholesky(Σ_true).L
-
-        for t in 2:T
-            Y[t, :] = A_true * Y[t-1, :] + chol_Σ * randn(n)
-        end
+        # Shared DGP with the known (A_true, Σ_true) truth (DGP-02 #791; note
+        # dgp_var consumes Sigma only with B0=nothing).
+        Y = dgp_var(rng; A=A_true, B0=nothing, Sigma=Σ_true, T=T).Y
 
         # VAR estimation
         model = fit(VARModel, Y, p)
@@ -87,6 +80,11 @@ using StatsAPI
         irfs = irf(model, H; method=:cholesky)
         @test irfs isa ImpulseResponse
         @test size(irfs.values) == (H, n, n)
+
+        # Known impact truth (DGP-02 #791): estimated impact recovers
+        # chol(Σ_true) (max err 0.074 realized; bound 0.15 ≈ Σ̂ noise at T=200).
+        Ctrue = cholesky(Symmetric(Σ_true)).L
+        @test maximum(abs, tril(irfs.values[1, :, :] - Ctrue)) < 0.15
 
         # Sign restriction identification
         function check_demand_shock(irf_array)
@@ -112,7 +110,7 @@ using StatsAPI
     # Example 2: Bayesian VAR with Minnesota Prior (docs/src/examples.md)
     # =========================================================================
     @testset "Bayesian VAR with Minnesota Prior" begin
-        Random.seed!(42)
+        rng = MersenneTwister(42)  # DGP-02: explicit rng
 
         T = 200
         n = 3
@@ -126,13 +124,8 @@ using StatsAPI
                   0.50 0.80 0.10;
                   0.20 0.10 0.60]
 
-        Y = zeros(T, n)
-        Y[1, :] = randn(n)
-        chol_Σ = cholesky(Σ_true).L
-
-        for t in 2:T
-            Y[t, :] = A_true * Y[t-1, :] + chol_Σ * randn(n)
-        end
+        # Shared DGP with the known (A_true, Σ_true) truth (DGP-02 #791).
+        Y = dgp_var(rng; A=A_true, B0=nothing, Sigma=Σ_true, T=T).Y
 
         # Hyperparameter optimization
         best_hyper = optimize_hyperparameters(Y, p; grid_size=5)
@@ -143,7 +136,8 @@ using StatsAPI
         post = estimate_bvar(Y, p;
             n_draws=50,
             prior=:minnesota,
-            hyper=best_hyper
+            hyper=best_hyper,
+            rng=rng
         )
         @test post isa BVARPosterior
 
@@ -152,25 +146,28 @@ using StatsAPI
         birf_chol = irf(post, H; method=:cholesky)
         @test birf_chol isa BayesianImpulseResponse
         @test size(birf_chol.quantiles) == (H, n, n, 3)  # 16%, 50%, 84%
+
+        # Posterior-median impact recovers chol(Σ_true) (DGP-02 #791; max err
+        # 0.078 realized, bound 0.2 for 50-draw posterior noise).
+        Ctrue = cholesky(Symmetric(Σ_true)).L
+        med = birf_chol.quantiles[:, :, :, 2]
+        @test maximum(abs, tril(med[1, :, :] - Ctrue)) < 0.2
     end
 
     # =========================================================================
     # Example 3: Local Projections (docs/src/examples.md)
     # =========================================================================
     @testset "Local Projections" begin
-        Random.seed!(42)
+        rng = MersenneTwister(42)  # DGP-02: explicit rng
 
         T = 200
         n = 3
-        Y = zeros(T, n)
-        Y[1:2, :] = randn(2, n)
 
         A1 = [0.5 0.1 -0.1; 0.05 0.6 0.0; 0.1 0.15 0.7]
         A2 = [0.2 0.05 0.0; 0.0 0.2 0.0; 0.05 0.05 0.1]
 
-        for t in 3:T
-            Y[t, :] = A1 * Y[t-1, :] + A2 * Y[t-2, :] + 0.5 * randn(n)
-        end
+        # Known VAR(2) truth (DGP-02 #791).
+        Y = dgp_var(rng; A=[A1, A2], B0=0.5 * Matrix{Float64}(I, n, n), T=T).Y
 
         H = 20
         shock_var = 1
@@ -197,21 +194,20 @@ using StatsAPI
     # Example 3b: LP with Instrumental Variables (docs/src/examples.md)
     # =========================================================================
     @testset "LP with Instrumental Variables" begin
-        Random.seed!(123)
+        rng = MersenneTwister(123)  # DGP-02: explicit rng
 
         T = 200
-        n = 3
-        Y = zeros(T, n)
-        Y[1:2, :] = randn(2, n)
 
         A1 = [0.5 0.1 -0.1; 0.05 0.6 0.0; 0.1 0.15 0.7]
+        B0 = [0.5 0.0 0.0; 0.1 0.5 0.0; 0.05 0.1 0.5]
+        sim = dgp_var(rng; A=A1, B0=B0, T=T)  # DGP-02 #791: truth + shocks
+        Y = sim.Y
 
-        for t in 2:T
-            Y[t, :] = A1 * Y[t-1, :] + 0.5 * randn(n)
-        end
-
-        # External instrument
-        Z = 0.5 * Y[:, 3] + randn(T, 1)
+        # VALID instrument (DGP-02 #791): the structural shock to var 3 plus
+        # noise — relevant by construction, exogenous to all other shocks. The
+        # old Z = 0.5·Y[:,3] + noise loads on lagged shocks of every variable,
+        # violating exclusion by construction.
+        Z = sim.eps[:, 3:3] + 0.5 * randn(rng, T, 1)
 
         H = 10
         shock_var = 3
@@ -219,10 +215,13 @@ using StatsAPI
         lpiv_model = estimate_lp_iv(Y, shock_var, Z, H; lags=2, cov_type=:newey_west)
         @test lpiv_model isa LPIVModel
 
-        # Weak instrument test
+        # Strong valid instrument: first-stage F clears 10 at every horizon
+        # (realized min 758 — relevance is structural, not luck).
         weak_test = weak_instrument_test(lpiv_model; threshold=10.0)
         @test hasfield(typeof(weak_test), :F_stats)
         @test hasfield(typeof(weak_test), :passes_threshold)
+        @test weak_test.passes_threshold
+        @test weak_test.min_F > 10.0
 
         # LP-IV IRF
         lpiv_result = lp_iv_irf(lpiv_model)
@@ -233,14 +232,13 @@ using StatsAPI
     # Example 3c: Smooth Local Projection (docs/src/examples.md)
     # =========================================================================
     @testset "Smooth Local Projection" begin
-        Random.seed!(42)
+        rng = MersenneTwister(42)  # DGP-02: explicit rng
 
         T = 200
         n = 3
-        Y = zeros(T, n)
-        for t in 2:T
-            Y[t, :] = 0.5 * Y[t-1, :] + randn(n)
-        end
+        # Persistent VAR(1) truth (DGP-02 #791).
+        Y = dgp_var(rng; A=0.5 * Matrix{Float64}(I, n, n),
+                    B0=Matrix{Float64}(I, n, n), T=T).Y
 
         H = 15
 
@@ -269,21 +267,13 @@ using StatsAPI
     # Example 3d: State-Dependent Local Projection (docs/src/examples.md)
     # =========================================================================
     @testset "State-Dependent Local Projection" begin
-        Random.seed!(42)
+        rng = MersenneTwister(42)  # DGP-02: explicit rng
 
-        T = 200
-        n = 3
-        Y = zeros(T, n)
-        for t in 2:T
-            Y[t, :] = 0.5 * Y[t-1, :] + randn(n)
-        end
-
-        # Construct state variable
-        state_var = zeros(T)
-        for t in 4:T
-            state_var[t] = mean(Y[t-3:t, 1])
-        end
-        state_var = (state_var .- mean(state_var[4:end])) ./ std(state_var[4:end])
+        # Regime-dependent truth (DGP-02 #791): expansion dynamics are far more
+        # persistent than recession dynamics. The old test ran on a DGP with NO
+        # regime dependence, so any regime split it found was pure noise.
+        sim = dgp_state_dependent_var(rng; T=2000)
+        Y, state_var = sim.Y, vec(sim.z)
 
         H = 10
 
@@ -299,6 +289,10 @@ using StatsAPI
         @test hasfield(typeof(irf_both), :expansion)
         @test hasfield(typeof(irf_both), :recession)
 
+        # Known direction: expansion responses cumulate above recession ones
+        # (realized 5.16 vs 2.01 — persistence differs by construction).
+        @test sum(irf_both.expansion.values) > sum(irf_both.recession.values)
+
         # Test for regime differences
         diff_test = test_regime_difference(state_model)
         @test hasfield(typeof(diff_test), :joint_test)
@@ -308,17 +302,16 @@ using StatsAPI
     # Example 4: Factor Model (docs/src/examples.md, examples/factor_model_example.jl)
     # =========================================================================
     @testset "Factor Model" begin
-        Random.seed!(42)
+        rng = MersenneTwister(42)  # DGP-02: explicit rng
 
         T = 200
         N = 30
         r_true = 5
 
-        # Generate true factors and loadings
-        F_true = randn(T, r_true)
-        Λ_true = randn(N, r_true)
-        noise_std = 0.5
-        X = F_true * Λ_true' + noise_std * randn(T, N)
+        # 5 persistent factors with calibrated signal share (DGP-02 #791).
+        A5 = [0.8 0.1 0.0 0.0 0.0; 0.0 0.7 0.1 0.0 0.0; 0.0 0.0 0.75 0.05 0.0;
+              0.0 0.0 0.0 0.65 0.1; 0.05 0.0 0.0 0.0 0.7]
+        X = dgp_dynamic_factors(rng; A=A5, N=N, T=T).X
 
         # Estimate factor model
         model = estimate_factors(X, r_true)
@@ -373,58 +366,41 @@ using StatsAPI
     # Example 4b: Realistic Macroeconomic Factor Model (examples/factor_model_example.jl)
     # =========================================================================
     @testset "Realistic Macroeconomic Factor Model" begin
-        Random.seed!(42)
+        rng = MersenneTwister(42)  # DGP-02: explicit rng
 
-        T_macro = 150
-        N_macro = 50
-        r_macro = 3
-
-        # Create factors with AR persistence
-        F_macro = zeros(T_macro, r_macro)
-        for i in 1:r_macro
-            F_macro[1, i] = randn()
-            for t in 2:T_macro
-                F_macro[t, i] = 0.8 * F_macro[t-1, i] + 0.3 * randn()
-            end
-        end
-
-        # Loadings with variable strength
-        Λ_macro = randn(N_macro, r_macro)
-        Λ_macro[1:10, 1] .*= 2.0
-        Λ_macro[11:20, 2] .*= 2.0
-        Λ_macro[21:30, 3] .*= 2.0
-
-        X_macro = F_macro * Λ_macro' + 0.5 * randn(T_macro, N_macro)
+        # 3 persistent factors, N=40, T=400 (DGP-02 #791): IC2 recovers the
+        # true r exactly (verified pin), replacing the old vacuous bounds.
+        fsim = dgp_dynamic_factors(rng;
+            A=[0.8 0.1 0.0; 0.0 0.7 0.1; 0.05 0.0 0.6], N=40, T=400)
+        X_macro = fsim.X
 
         # Determine optimal number of factors
         ic_macro = ic_criteria(X_macro, 8)
         r_optimal = ic_macro.r_IC2
-        @test r_optimal >= 1
-        @test r_optimal <= 8
+        @test r_optimal == 3
 
-        # Estimate with optimal number (IC criteria may not always select true r with finite samples)
+        # Estimate with the recovered number of factors
         model_macro = estimate_factors(X_macro, r_optimal)
         @test model_macro isa FactorModel
-        # With IC-selected factors, R² can vary widely depending on random seed
-        # Just test that the mean R² is non-negative
-        @test mean(r2(model_macro)) >= 0.0
+        # Strong factors (signal share 0.7): mean R² well above noise.
+        @test mean(r2(model_macro)) > 0.5
     end
 
     # =========================================================================
     # Example 5: GMM Estimation (docs/src/examples.md)
     # =========================================================================
     @testset "GMM Estimation" begin
-        Random.seed!(42)
+        rng = MersenneTwister(42)  # DGP-02: explicit rng
 
         n_obs = 500
         n_params = 2
 
         # Instruments
-        Z = randn(n_obs, 3)
+        Z = randn(rng, n_obs, 3)
 
         # Endogenous regressor
-        u = randn(n_obs)
-        X = hcat(ones(n_obs), Z[:, 1] + 0.5 * u + 0.2 * randn(n_obs))
+        u = randn(rng, n_obs)
+        X = hcat(ones(n_obs), Z[:, 1] + 0.5 * u + 0.2 * randn(rng, n_obs))
 
         # Outcome
         β_true = [1.0, 2.0]
@@ -471,13 +447,13 @@ using StatsAPI
     # Example 6: Complete Workflow (docs/src/examples.md)
     # =========================================================================
     @testset "Complete Workflow" begin
-        Random.seed!(2024)
+        rng = MersenneTwister(2024)  # DGP-02: explicit rng
 
         T, n = 200, 4
-        Y = randn(T, n)
-        for t in 2:T
-            Y[t, :] = 0.6 * Y[t-1, :] + 0.3 * randn(n)
-        end
+        # VAR(1) truth (DGP-02 #791): AIC recovers the true lag exactly.
+        Y = dgp_var(rng; A=[0.6 0.1 0.0 0.0; 0.0 0.5 0.1 0.0;
+                            0.0 0.0 0.55 0.05; 0.05 0.0 0.0 0.45],
+                    B0=0.3 * Matrix{Float64}(I, n, n), T=T).Y
 
         # Lag selection
         aics = Float64[]
@@ -489,7 +465,7 @@ using StatsAPI
         end
         p_aic = argmin(aics)
         p_bic = argmin(bics)
-        @test 1 <= p_aic <= 8
+        @test p_aic == 1
         @test 1 <= p_bic <= 8
         p = p_bic
 
@@ -533,7 +509,7 @@ using StatsAPI
     # Local Projections Example (examples/local_projections_example.jl)
     # =========================================================================
     @testset "Local Projections Example File" begin
-        Random.seed!(42)
+        rng = MersenneTwister(42)  # DGP-02: explicit rng
 
         T = 200
         n = 3
@@ -541,12 +517,8 @@ using StatsAPI
         A1 = [0.5 0.1 -0.1; 0.05 0.6 0.0; 0.1 0.15 0.7]
         A2 = [0.2 0.05 0.0; 0.0 0.2 0.0; 0.05 0.05 0.1]
 
-        Y = zeros(T, n)
-        Y[1:2, :] = randn(2, n)
-
-        for t in 3:T
-            Y[t, :] = A1 * Y[t-1, :] + A2 * Y[t-2, :] + 0.5 * randn(n)
-        end
+        # Known VAR(2) truth (DGP-02 #791).
+        Y = dgp_var(rng; A=[A1, A2], B0=0.5 * Matrix{Float64}(I, n, n), T=T).Y
 
         horizon = 20
         shock_var = 1
