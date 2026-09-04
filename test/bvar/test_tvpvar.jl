@@ -18,27 +18,27 @@ end
 
 const _M = MacroEconometricModels
 
-"""Homoskedastic constant-coefficient VAR(1)."""
-function _tvp_sim_const(T_obs::Int; seed::Int=1)
-    rng = Random.MersenneTwister(seed)
-    A = [0.5 0.1; 0.2 0.4]
-    L = [0.5 0.0; 0.2 0.4]
-    Y = zeros(T_obs, 2)
-    for t in 2:T_obs
-        Y[t, :] = A * Y[t-1, :] + L * randn(rng, 2)
-    end
-    return Y
+# DGP-03 (#792): constant-coefficient homoskedastic VAR(1) on the shared
+# simulator (truth: _TVP_A with impact _TVP_B0).
+const _TVP_A = [0.5 0.1; 0.2 0.4]
+const _TVP_B0 = [0.5 0.0; 0.2 0.4]
+
+"""Homoskedastic constant-coefficient VAR(1) with known truth."""
+function _tvp_sim_const(rng::AbstractRNG, T_obs::Int)
+    return dgp_var(rng; A=_TVP_A, B0=_TVP_B0, T=T_obs).Y
 end
 
-"""VAR(1) whose shock standard deviations jump by `scale` at the midpoint."""
-function _tvp_sim_break(T_obs::Int; seed::Int=2, scale::Float64=3.0)
-    rng = Random.MersenneTwister(seed)
-    A = [0.5 0.1; 0.2 0.4]
+"""VAR(1) whose shock standard deviations jump by `scale` at the midpoint.
+
+No shared discrete-volatility-break simulator exists, so this stays local —
+but rng-first with explicit truth (midpoint, scale) for the SV tracking tests.
+"""
+function _tvp_sim_break(rng::AbstractRNG, T_obs::Int; scale::Float64=3.0)
     sd = [0.5, 0.4]
     Y = zeros(T_obs, 2)
     for t in 2:T_obs
         sc = t > T_obs ÷ 2 ? scale : 1.0
-        Y[t, :] = A * Y[t-1, :] .+ sc .* sd .* randn(rng, 2)
+        Y[t, :] = _TVP_A * Y[t-1, :] .+ sc .* sd .* randn(rng, 2)
     end
     return Y
 end
@@ -142,7 +142,7 @@ end
 # ─────────────────────────────────────────────────────────────────────────────
 
 @testset "constant-coefficient SV-BVAR matches OLS and the conjugate BVAR" begin
-    Y = _tvp_sim_const(FAST ? 300 : 600)
+    Y = _tvp_sim_const(Random.MersenneTwister(1), FAST ? 300 : 600)
     post = estimate_tvpvar(Y, 1; tvp=false, sv=true,
                            n_draws=FAST ? 120 : 300, n_burn=FAST ? 120 : 300,
                            varnames=["y1", "y2"], rng=Random.MersenneTwister(11))
@@ -163,6 +163,11 @@ end
     Yw = Y[(post.n_train - post.p + 1):end, :]
     ols = estimate_var(Yw, 1)
     A1_ols = Matrix(ols.B[2:3, :]')
+    # Truth recovery (DGP-03 #792): OLS on this window is within sampling
+    # error of the known design — a t-stat bound, so it scales with the design
+    # instead of hard-coding an MC-fragile absolute tolerance.
+    SE = reshape(stderror(ols), 3, 2)[2:3, :]   # rows of B holding A1'
+    @test maximum(abs, (ols.B[2:3, :] - _TVP_A') ./ SE) < 4.0
     @test A1_sv ≈ A1_ols atol = 0.05
     @test [B[1], B[4]] ≈ ols.B[1, :] atol = 0.05
 
@@ -172,7 +177,7 @@ end
 end
 
 @testset "stochastic volatility tracks a known break" begin
-    Y = _tvp_sim_break(FAST ? 200 : 300; scale=3.0)
+    Y = _tvp_sim_break(Random.MersenneTwister(2), FAST ? 200 : 300; scale=3.0)
     post = estimate_tvpvar(Y, 1; n_draws=FAST ? 120 : 250, n_burn=FAST ? 120 : 250,
                            varnames=["y1", "y2"], rng=Random.MersenneTwister(21))
     @test post.tvp && post.sv
@@ -203,7 +208,7 @@ end
 end
 
 @testset "sv=false freezes the volatilities" begin
-    Y = _tvp_sim_const(200)
+    Y = _tvp_sim_const(Random.MersenneTwister(2), 200)
     post = estimate_tvpvar(Y, 1; tvp=true, sv=false, n_draws=60, n_burn=60,
                            rng=Random.MersenneTwister(31))
     @test !post.sv
@@ -237,7 +242,7 @@ end
 # ─────────────────────────────────────────────────────────────────────────────
 
 @testset "time-varying IRFs differ across dates and have usable bands" begin
-    Y = _tvp_sim_break(FAST ? 200 : 300; scale=3.0)
+    Y = _tvp_sim_break(Random.MersenneTwister(2), FAST ? 200 : 300; scale=3.0)
     post = estimate_tvpvar(Y, 1; n_draws=FAST ? 100 : 200, n_burn=FAST ? 100 : 200,
                            varnames=["y1", "y2"], rng=Random.MersenneTwister(21))
 
@@ -277,7 +282,7 @@ end
 # ─────────────────────────────────────────────────────────────────────────────
 
 @testset "reproducibility, validation and display" begin
-    Y = _tvp_sim_const(200)
+    Y = _tvp_sim_const(Random.MersenneTwister(2), 200)
 
     a = estimate_tvpvar(Y, 1; n_draws=40, n_burn=40, rng=Random.MersenneTwister(77))
     b = estimate_tvpvar(Y, 1; n_draws=40, n_burn=40, rng=Random.MersenneTwister(77))
