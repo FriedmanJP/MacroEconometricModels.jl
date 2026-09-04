@@ -12,18 +12,16 @@ using Random
 
 @testset "BGR 2010 Optimization" begin
     _tprint("Testing BGR 2010 Hyperparameter Optimization...")
+    rng = MersenneTwister(1001)  # DGP-03: explicit rng
 
     # Generate synthetic data (VAR(1))
     T = 60
     n = 3
     p = 1
 
-    # Stable VAR
-    A = 0.4 * I(n)
-    Y = zeros(T, n)
-    for t in 2:T
-        Y[t, :] = Y[t-1, :]' * A + 0.5 * randn(n)'
-    end
+    # Small stationary VAR(1) (DGP-03 #792: shared simulator, no A' idiom).
+    Y = dgp_var(rng; A=0.4 * Matrix{Float64}(I, n, n),
+                B0=0.5 * Matrix{Float64}(I, n, n), T=T).Y
 
     # 1. Test Log Marginal Likelihood
     _tprint("Testing Marginal Likelihood...")
@@ -64,20 +62,11 @@ end
     n_large = 20
     p_large = 1
 
-    # Sparse Transition: Diagonal 0.9 (Persistent), rest 0
-    A_large = zeros(n_large, n_large)
-    for i in 1:n_large
-        A_large[i, i] = 0.9
-    end
-
-    Y_large = zeros(T_large, n_large)
-    # Initialize near mean
-    Y_large[1, :] = randn(n_large)
-
-    Random.seed!(999)
-    for t in 2:T_large
-        Y_large[t, :] = Y_large[t-1, :]' * A_large + randn(n_large)'
-    end
+    # Near-RW diagonal VAR (DGP-03 #792: shared simulator, no A' idiom;
+    # rng first — the old code drew Y_large[1,:] BEFORE Random.seed!).
+    rng = MersenneTwister(999)
+    Y_large = dgp_var(rng; A=0.9 * Matrix{Float64}(I, n_large, n_large),
+                      B0=Matrix{Float64}(I, n_large, n_large), T=T_large).Y
 
     # Optimize Hyperparameters
     _tprint("Optimizing Hyperparameters for Large VAR...")
@@ -99,4 +88,12 @@ end
     @test ml_opt > ml_loose
     @test !isnan(ml_opt)
     @test best_hyper_large.tau < 10.0 # Should prefer some shrinkage
+
+    # BGR finding (DGP-03 #792): the large system wants strictly tighter
+    # shrinkage than the small stationary one (realized 0.01 vs 2.51/1.12 —
+    # the large grid optimum sits at the floor in both grid modes).
+    Y_small = dgp_var(MersenneTwister(1001); A=0.4 * Matrix{Float64}(I, 3, 3),
+                      B0=0.5 * Matrix{Float64}(I, 3, 3), T=60).Y
+    best_hyper_small = optimize_hyperparameters(Y_small, 1; grid_size=(FAST ? 5 : 10))
+    @test best_hyper_large.tau < best_hyper_small.tau
 end
