@@ -36,23 +36,23 @@ using Test, MacroEconometricModels, Random, LinearAlgebra, Statistics
     # -------------------------------------------------------------------------
     # Fixed-seed DGPs
     # -------------------------------------------------------------------------
-    # Cointegrated system with a KNOWN long-run multiplier θ_true on x.
-    # y_t = y_{t-1} − φ·(y_{t-1} − θ·x_{t-1}) + ψ·Δx_t + ε_t  (error-correction DGP)
-    function coint_dgp(; T=300, θ=2.0, φ=0.4, ψ=0.5, σ=0.3, seed=20240716)
-        rng = MersenneTwister(seed)
-        x = cumsum(randn(rng, T))
-        y = zeros(T)
-        for t in 2:T
-            y[t] = y[t-1] - φ * (y[t-1] - θ * x[t-1]) + ψ * (x[t] - x[t-1]) + σ * randn(rng)
-        end
-        (y, x)
+    # Cointegrated system with a KNOWN long-run multiplier θ_true on x, on the
+    # shared simulator (DGP-04 #793). The old EC form
+    #   y_t = y_{t-1} − φ·(y_{t-1} − θ·x_{t-1}) + ψ·Δx_t + ε_t
+    # is the levels ARDL(1,1) y = (1−φ)·y_1 + ψ·x + (φθ−ψ)·x_1; x is a RW
+    # (rho_x = 1). Renamed: `coint_dgp` meant different things in test_ardl.jl
+    # and test_cointreg.jl. (Shared σ = 1 replaces the old σ = 0.3.)
+    function _ardl_ec_dgp(; T=300, θ=2.0, φ=0.4, ψ=0.5, seed=20240716)
+        d = dgp_ardl(MersenneTwister(seed); phi=1 - φ, beta0=ψ, beta1=φ * θ - ψ,
+                     rho_x=1.0, c=0.0, T=T)
+        (d.y, d.x)
     end
 
     # -------------------------------------------------------------------------
     # (1) Published PSS (2001) critical-value spot-checks
     # -------------------------------------------------------------------------
     @testset "PSS 2001 critical-value tables" begin
-        y, x = coint_dgp()
+        y, x = _ardl_ec_dgp()
         m = estimate_ardl(y, x; p=1, q=1, case=3)
         bt = bounds_test(m; level=0.05)          # Case III, k=1
 
@@ -82,7 +82,7 @@ using Test, MacroEconometricModels, Random, LinearAlgebra, Statistics
     # -------------------------------------------------------------------------
     @testset "long-run coefficients (analytic)" begin
         θ_true = 2.0
-        y, x = coint_dgp(; θ=θ_true, T=400)
+        y, x = _ardl_ec_dgp(; θ=θ_true, T=400)
         m = estimate_ardl(y, x; p=2, q=2, case=3)
         lr = long_run(m)
 
@@ -115,7 +115,7 @@ using Test, MacroEconometricModels, Random, LinearAlgebra, Statistics
     # (3) ECM re-parameterisation + bounds-F cross-check (independent SSR-F)
     # -------------------------------------------------------------------------
     @testset "ECM form & bounds-F cross-check" begin
-        y, x = coint_dgp(; T=300)
+        y, x = _ardl_ec_dgp(; T=300)
         m = estimate_ardl(y, x; p=1, q=1, case=3)   # ARDL(1,1), Case III
         ecm = MacroEconometricModels.ecm_form(m)
 
@@ -159,19 +159,22 @@ using Test, MacroEconometricModels, Random, LinearAlgebra, Statistics
     # -------------------------------------------------------------------------
     @testset "bounds-test decisions" begin
         # Strongly cointegrated pair ⇒ reject H0 (F above I(1), t below I(1)).
-        y, x = coint_dgp(; T=300, φ=0.5)
+        y, x = _ardl_ec_dgp(; T=300, φ=0.5)
         bt = bounds_test(estimate_ardl(y, x; p=1, q=0, case=3))
         @test bt.f_decision == :cointegrated
         @test bt.t_decision == :cointegrated
         @test bt.fstat > bt.f_upper[2]
 
         # Independent random walks ⇒ do not reject (F below I(0)).
-        rng = MersenneTwister(99)
-        nrej = 0
-        for s in 1:20
-            xr = cumsum(randn(rng, 250)); yr = cumsum(randn(rng, 250))
-            b = bounds_test(estimate_ardl(yr, xr; p=1, q=0, case=3))
-            b.f_decision == :cointegrated && (nrej += 1)
+        # H0 draws from the shared spurious simulator (DGP-04 #793; probed
+        # nrej = 1 over seeds 501:520).
+        nrej = let n = 0
+            for s in 1:20
+                d = dgp_cointreg(MersenneTwister(500 + s); T=250, spurious=true)
+                b = bounds_test(estimate_ardl(d.y, d.X[:, 1]; p=1, q=0, case=3))
+                b.f_decision == :cointegrated && (n += 1)
+            end
+            n
         end
         # A correctly-sized 5% test rejects on pure noise only rarely.
         @test nrej <= 3
@@ -181,7 +184,7 @@ using Test, MacroEconometricModels, Random, LinearAlgebra, Statistics
     # Estimation / selection mechanics
     # -------------------------------------------------------------------------
     @testset "estimation & IC selection" begin
-        y, x = coint_dgp(; T=300)
+        y, x = _ardl_ec_dgp(; T=300)
         m = estimate_ardl(y, x; p=2, q=3, case=3)
         @test m.p == 2 && m.q == [3]
         @test m.n == length(y) - 3            # L = max(2,3) = 3
@@ -189,10 +192,11 @@ using Test, MacroEconometricModels, Random, LinearAlgebra, Statistics
         @test length(m.residuals) == m.n
         @test isapprox(m.fitted + m.residuals, m.y; rtol=1e-10)
 
-        # Auto grid selection returns valid orders in range.
+        # BIC selects the true ARDL(1,1) order (DGP-04 #793; the old
+        # `1 ≤ p ≤ 3` passed for any selection. Probed exact on this DGP).
         mg = estimate_ardl(y, x; p=:auto, q=:auto, max_p=3, max_q=3, ic=:bic, case=3)
         @test mg.selected
-        @test 1 <= mg.p <= 3 && 0 <= mg.q[1] <= 3
+        @test mg.p == 1 && mg.q == [1]
         @test mg.ic == :bic
 
         # Deterministics per case.
@@ -200,6 +204,14 @@ using Test, MacroEconometricModels, Random, LinearAlgebra, Statistics
         @test estimate_ardl(y, x; p=1, q=1, case=3).intercept_col > 0
         m5 = estimate_ardl(y, x; p=1, q=1, case=5)
         @test m5.trend == :trend && m5.trend_col > 0
+        # Trend coefficient ≈ 0 on the trendless DGP (DGP-04 #793; probed
+        # −0.00068, bound 0.01), and recovers a planted trend up to the AR
+        # propagation τ = δ(1−φ): τ̂/(1−φ̂) ≈ δ (probed 0.019 vs 0.02).
+        @test abs(m5.coef[m5.trend_col]) < 0.01
+        t = collect(1.0:length(y))
+        m5t = estimate_ardl(y .+ 0.02 .* t, x; p=1, q=1, case=5)
+        phihat = sum(m5t.coef[m5t.ar_idx])
+        @test m5t.coef[m5t.trend_col] / (1 - phihat) ≈ 0.02 atol=0.01
 
         # StatsAPI surface.
         @test nobs(m) == m.n
@@ -240,7 +252,7 @@ using Test, MacroEconometricModels, Random, LinearAlgebra, Statistics
     # Input validation & error paths
     # -------------------------------------------------------------------------
     @testset "validation" begin
-        y, x = coint_dgp(; T=120)
+        y, x = _ardl_ec_dgp(; T=120)
         @test_throws ArgumentError estimate_ardl(y, x; p=1, q=1, case=6)
         @test_throws ArgumentError estimate_ardl(y, x; p=1, q=1, ic=:hqic)
         @test_throws ArgumentError estimate_ardl(y[1:50], x; p=1, q=1)      # length mismatch
@@ -250,8 +262,9 @@ using Test, MacroEconometricModels, Random, LinearAlgebra, Statistics
         @test_throws ArgumentError bounds_test(m; level=0.075)              # not tabulated
         @test_throws ArgumentError bounds_test(m; case=9)
         # k beyond the tabulated range (k>10) is rejected.
-        bigX = randn(200, 11)
-        mbig = estimate_ardl(cumsum(randn(200)), cumsum(bigX, dims=1); p=1,
+        rng = MersenneTwister(8)   # DGP-04: explicit rng (was global RNG)
+        bigX = randn(rng, 200, 11)
+        mbig = estimate_ardl(cumsum(randn(rng, 200)), cumsum(bigX, dims=1); p=1,
                              q=fill(0, 11), case=3)
         @test_throws ArgumentError bounds_test(mbig)
     end
@@ -271,7 +284,7 @@ using Test, MacroEconometricModels, Random, LinearAlgebra, Statistics
     # Display & references render without error, and NEVER emit a p-value
     # -------------------------------------------------------------------------
     @testset "display & refs" begin
-        y, x = coint_dgp(; T=200)
+        y, x = _ardl_ec_dgp(; T=200)
         m = estimate_ardl(y, x; p=1, q=1, case=3)
         bt = bounds_test(m)
 

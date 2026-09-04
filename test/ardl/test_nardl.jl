@@ -158,18 +158,46 @@ using Test, MacroEconometricModels, Random, LinearAlgebra, Statistics, Delimited
     # =========================================================================
     # (2) Size spot-check — SYMMETRIC DGP does not reject long-run symmetry
     # =========================================================================
-    @testset "symmetry Wald: size spot-check (symmetric DGP)" begin
-        # NOTE: seeded SINGLE draw — a size spot-check, NOT a Monte Carlo.
-        # θ⁺ = θ⁻ ⇒ the long-run symmetry Wald should not reject at 5%.
-        y, x = _nardl_dgp(31337, 300; θp=0.9, θn=0.9)
-        m = estimate_nardl(y, reshape(x, :, 1); asymmetric=:all, p=1, q=1, case=3)
+    @testset "symmetry Wald: size on symmetric DGP (20-draw count)" begin
+        # θ⁺ = θ⁻ on the shared simulator (DGP-04 #793) — a single-draw
+        # p-value threshold on an unpinned RNG series proves nothing, so count
+        # rejections over 20 draws (probed 0; a 5% Wald rejects only rarely).
+        nrej = let n = 0
+            for seed in 1:20
+                d = dgp_nardl(MersenneTwister(seed); beta_pos=0.6, beta_neg=0.6,
+                              T=300)
+                m = estimate_nardl(d.y, reshape(d.x, :, 1); asymmetric=:all,
+                                   p=1, q=1, case=3)
+                symmetry_test(m).lr_p_chi2[1] < 0.05 && (n += 1)
+            end
+            n
+        end
+        @test nrej <= 3
+        # Interface on one symmetric draw (kept from the old spot-check).
+        d = dgp_nardl(MersenneTwister(31337); beta_pos=0.6, beta_neg=0.6, T=300)
+        m = estimate_nardl(d.y, reshape(d.x, :, 1); asymmetric=:all, p=1, q=1,
+                           case=3)
         st = symmetry_test(m)
         @test st.reg_names == ["x1"]
         @test st.df == 1
-        @test st.lr_p_chi2[1] > 0.05                   # do not reject symmetry
         @test st.sr_p_chi2[1] >= 0.0 && st.sr_p_chi2[1] <= 1.0
-        # θ⁺ and θ⁻ should be close under the symmetric DGP
         @test isapprox(st.theta_pos[1], st.theta_neg[1]; atol=0.2)
+    end
+
+    @testset "symmetry Wald: power on asymmetric DGP (20-draw count)" begin
+        # Sign asymmetry θ⁺ = 3.0 vs θ⁻ = −1.0 on the shared simulator
+        # (DGP-04 #793): the Wald must reject nearly always (probed 20/20).
+        nrej = let n = 0
+            for seed in 1:20
+                d = dgp_nardl(MersenneTwister(seed); beta_pos=1.2, beta_neg=-0.4,
+                              T=400)
+                m = estimate_nardl(d.y, reshape(d.x, :, 1); asymmetric=:all,
+                                   p=1, q=1, case=3)
+                symmetry_test(m).lr_p_chi2[1] < 0.05 && (n += 1)
+            end
+            n
+        end
+        @test nrej >= 18
     end
 
     # =========================================================================
