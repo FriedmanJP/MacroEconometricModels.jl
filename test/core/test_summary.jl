@@ -46,7 +46,8 @@ using Random
 
     @testset "report(VECMModel) uses varnames" begin
         rng = MersenneTwister(7103)  # DGP-01: explicit rng
-        Y = randn(rng, 200, 3)
+        # Rank-1 cointegrated truth (DGP-02 #791) — not I(0) white noise.
+        Y = dgp_vecm(rng; T=200).Y
         vecm = estimate_vecm(Y, 2; varnames=["GDP", "INF", "FFR"])
         io = IOBuffer()
         report(io, vecm)
@@ -670,7 +671,9 @@ using Random
     # =================================================================
     @testset "report(VECMModel)" begin
         rng = MersenneTwister(7124)  # DGP-01: explicit rng
-        Y = cumsum(randn(rng, 150, 3), dims=1)
+        # Rank-1 cointegrated truth (DGP-02 #791) — not independent random
+        # walks (rank 1 on those is a misspecification).
+        Y = dgp_vecm(rng; T=150).Y
         vecm = estimate_vecm(Y, 2; rank=1)
         redirect_stdout(devnull) do
             report(vecm)
