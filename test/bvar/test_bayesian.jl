@@ -18,25 +18,21 @@ end
 @testset "BVAR Bayesian Parameter Recovery" begin
     _tprint("Generating Data for Bayesian Verification...")
 
-    # 1. Generate Synthetic Data
+    # 1. Reference DGP (DGP-03 #792): non-diagonal A, non-identity B0, burn-in.
+    # b_vecs layout is vec(B) = [c1, A11, A12, c2, A21, A22] (B = [c'; A']).
+    rng = MersenneTwister(42)
     T = 100
     n = 2
     p = 1
-    Random.seed!(42)
 
-    true_A = [0.5 0.0; 0.0 0.5]
-    true_c = [0.0; 0.0]
-
-    Y = zeros(T, n)
-    for t in 2:T
-        u = randn(2)  # Unit variance
-        Y[t, :] = true_c + true_A * Y[t-1, :] + u
-    end
+    true_A = [0.5 0.1; 0.0 0.4]
+    B0_true = [1.0 0.0; 0.3 1.0]
+    Y = dgp_var(rng; A=true_A, B0=B0_true, T=T).Y
 
     # 2. Direct Sampler Parameter Recovery (Primary Test)
     @testset "Direct Sampler Parameter Recovery" begin
         _tprint("Estimating BVAR (direct)...")
-        post = estimate_bvar(Y, p; n_draws=(FAST ? 30 : 100), sampler=:direct)
+        post = estimate_bvar(Y, p; n_draws=(FAST ? 30 : 100), sampler=:direct, rng=rng)
         @test post isa BVARPosterior
 
         # Extract and check parameter recovery
@@ -49,13 +45,11 @@ end
         @test abs(means_arr[1]) < 0.5
         @test abs(means_arr[4]) < 0.5
 
-        # Check diagonal A elements (should be near 0.5)
-        @test isapprox(means_arr[2], 0.5, atol=0.35)
-        @test isapprox(means_arr[6], 0.5, atol=0.35)
-
-        # Check off-diagonal A elements (should be near 0)
-        @test abs(means_arr[3]) < 0.35
-        @test abs(means_arr[5]) < 0.35
+        # Check A elements against the truth (keep the draw counts)
+        @test isapprox(means_arr[2], 0.5, atol=0.35)  # A11
+        @test isapprox(means_arr[3], 0.1, atol=0.35)  # A12
+        @test isapprox(means_arr[5], 0.0, atol=0.35)  # A21
+        @test isapprox(means_arr[6], 0.4, atol=0.35)  # A22
 
         _tprint("Direct Sampler Parameter Recovery Verified.")
     end
@@ -64,12 +58,82 @@ end
     @testset "Gibbs Sampler Smoke Test" begin
         _tprint("Estimating BVAR (Gibbs)...")
         post_gibbs = estimate_bvar(Y, p;
-            n_draws=(FAST ? 20 : 50), sampler=:gibbs, burnin=(FAST ? 20 : 50), thin=1
+            n_draws=(FAST ? 20 : 50), sampler=:gibbs, burnin=(FAST ? 20 : 50), thin=1,
+            rng=rng
         )
         @test post_gibbs isa BVARPosterior
         @test post_gibbs.n_draws == (FAST ? 20 : 50)
         @test post_gibbs.sampler == :gibbs
         _tprint("Gibbs Sampler Smoke Test Passed.")
+    end
+
+    # DGP-03 #792: posterior calibration on known truth. One n_draws=1000
+    # posterior serves four checks: B-draw ESS (a collapsed sampler fails),
+    # empirical-quantile vs normal-theory width (wrong scale fails), 70%-band
+    # frequentist coverage over 12 fresh datasets (miscalibrated variance
+    # fails), and nodal IRF coverage against the var_irf truth (biased IRFs
+    # fail). NOTE on indexing: b_vecs = vec(B) with B = [c'; A'], so slope
+    # indices [2,3,5,6] are [A11, A12, A21, A22] — the transpose interleaves.
+    @testset "Posterior calibration on known truth" begin
+        Yc = dgp_var(MersenneTwister(4700); A=true_A, B0=B0_true, T=200).Y
+        post_c = estimate_bvar(Yc, 1; n_draws=1000, sampler=:direct,
+                               rng=MersenneTwister(4701))
+
+        # B-draw ESS ≥ 200 everywhere (realized min 995: iid direct draws).
+        for j in axes(post_c.B_draws, 2), k in axes(post_c.B_draws, 3)
+            x = post_c.B_draws[:, j, k]
+            r1 = cor(x[1:end-1], x[2:end])
+            ess = isfinite(r1) ? 1000 * (1 - r1) / (1 + r1) : 1000
+            @test ess >= 200
+        end
+
+        # Empirical 16-84 half-width vs normal-theory sd (realized 0.97-0.99;
+        # NIW marginals are near-normal at T=200).
+        for j in axes(post_c.B_draws, 2), k in axes(post_c.B_draws, 3)
+            x = post_c.B_draws[:, j, k]
+            q = quantile(x, [0.16, 0.84])
+            @test 0.7 <= ((q[2] - q[1]) / 2) / std(x) <= 1.4
+        end
+
+        # 70%-band frequentist coverage: 12 fresh datasets × 4 slopes
+        # (realized 32/48 = 0.67 vs nominal 0.7; MC SE ≈ 0.07).
+        slope_truth = [true_A[1, 1], true_A[1, 2], true_A[2, 1], true_A[2, 2]]
+        covers = 0
+        for s in 1:12
+            Ys = dgp_var(MersenneTwister(9000 + s); A=true_A, B0=B0_true, T=200).Y
+            ps = estimate_bvar(Ys, 1; n_draws=500, sampler=:direct,
+                               rng=MersenneTwister(9100 + s))
+            bv, _ = MacroEconometricModels.extract_chain_parameters(ps)
+            for (idx, tr) in zip([2, 3, 5, 6], slope_truth)
+                qq = quantile(bv[:, idx], [0.15, 0.85])
+                covers += (qq[1] <= tr <= qq[2])
+            end
+        end
+        @test 0.5 <= covers / 48 <= 0.9
+
+        # Nodal IRF coverage against the var_irf truth (realized 0.90 with 90%
+        # bands over 40 nodes).
+        bir = irf(post_c, 10; method=:cholesky, quantiles=[0.05, 0.5, 0.95])
+        TH = var_irf([true_A], cholesky(Symmetric(B0_true * B0_true')).L, 10)
+        lo, hi = bir.quantiles[:, :, :, 1], bir.quantiles[:, :, :, 3]
+        @test sum(lo[h, i, j] <= TH[h, i, j] <= hi[h, i, j]
+                  for h in 1:10, i in 1:n, j in 1:n) / 40 >= 0.7
+    end
+
+    # DGP-03 #792: one-step posterior-mean forecasts vs the truth-implied MSE
+    # (innovation variances). Fit once on the first 400 of T=800, roll 400
+    # origins (realized ratios 1.10/0.91 — estimation penalty plus luck).
+    @testset "Forecast MSE within 20% of truth-implied" begin
+        Yf = dgp_var(MersenneTwister(4800); A=true_A, B0=B0_true, T=800).Y
+        post_f = estimate_bvar(Yf[1:400, :], 1; n_draws=500, sampler=:direct,
+                               rng=MersenneTwister(4801))
+        Bm = dropdims(mean(post_f.B_draws; dims=1); dims=1)
+        Stru = B0_true * B0_true'
+        for j in 1:n
+            mse = sum((Yf[t+1, j] - dot(vcat(1.0, Yf[t, :]), Bm[:, j]))^2
+                      for t in 400:799) / 400
+            @test mse <= 1.2 * Stru[j, j]
+        end
     end
 
     # ==========================================================================
@@ -78,17 +142,15 @@ end
 
     @testset "Reproducibility" begin
         _tprint("Testing BVAR reproducibility...")
-        Random.seed!(77777)
-        Y_rep = zeros(80, 2)
-        for t in 2:80
-            Y_rep[t, :] = 0.5 * Y_rep[t-1, :] + randn(2)
-        end
+        rng = MersenneTwister(77777)  # DGP-03: explicit rng
+        Y_rep = dgp_var(rng; A=0.5 * Matrix{Float64}(I, 2, 2),
+                        B0=Matrix{Float64}(I, 2, 2), T=80).Y
 
-        Random.seed!(88888)
-        post1 = estimate_bvar(Y_rep, 1; n_draws=50, sampler=:direct)
+        post1 = estimate_bvar(Y_rep, 1; n_draws=50, sampler=:direct,
+                              rng=MersenneTwister(88888))
 
-        Random.seed!(88888)
-        post2 = estimate_bvar(Y_rep, 1; n_draws=50, sampler=:direct)
+        post2 = estimate_bvar(Y_rep, 1; n_draws=50, sampler=:direct,
+                              rng=MersenneTwister(88888))
 
         # Same random seed should give same results
         @test post1.B_draws ≈ post2.B_draws
@@ -98,15 +160,15 @@ end
 
     @testset "Numerical Stability - Near-Collinear Data" begin
         _tprint("Testing numerical stability with near-collinear data...")
-        Random.seed!(11111)
+        rng = MersenneTwister(11111)  # DGP-03: explicit rng
         T_nc = 80
         n_nc = 3
 
         # Create data with near-collinearity
-        Y_nc = randn(T_nc, n_nc)
-        Y_nc[:, 3] = Y_nc[:, 1] + 0.01 * randn(T_nc)
+        Y_nc = randn(rng, T_nc, n_nc)
+        Y_nc[:, 3] = Y_nc[:, 1] + 0.01 * randn(rng, T_nc)
 
-        post_nc = estimate_bvar(Y_nc, 1; n_draws=50, sampler=:direct)
+        post_nc = estimate_bvar(Y_nc, 1; n_draws=50, sampler=:direct, rng=rng)
         @test post_nc isa BVARPosterior
 
         # Check all parameters are finite
@@ -116,11 +178,11 @@ end
 
     @testset "Edge Cases" begin
         _tprint("Testing edge cases...")
-        Random.seed!(22222)
+        rng = MersenneTwister(22222)  # DGP-03: explicit rng
 
         # Single variable BVAR
-        Y_single = randn(80, 1)
-        post_single = estimate_bvar(Y_single, 1; n_draws=50)
+        Y_single = randn(rng, 80, 1)
+        post_single = estimate_bvar(Y_single, 1; n_draws=50, rng=rng)
         @test post_single isa BVARPosterior
 
         # Verify parameter dimensions for single variable
@@ -132,13 +194,11 @@ end
 
     @testset "Posterior Draws Structure" begin
         _tprint("Testing posterior draws structure...")
-        Random.seed!(33333)
-        Y_diag = zeros(80, 2)
-        for t in 2:80
-            Y_diag[t, :] = 0.5 * Y_diag[t-1, :] + randn(2)
-        end
+        rng = MersenneTwister(33333)  # DGP-03: explicit rng
+        Y_diag = dgp_var(rng; A=0.5 * Matrix{Float64}(I, 2, 2),
+                         B0=Matrix{Float64}(I, 2, 2), T=80).Y
 
-        post_diag = estimate_bvar(Y_diag, 1; n_draws=50, sampler=:direct)
+        post_diag = estimate_bvar(Y_diag, 1; n_draws=50, sampler=:direct, rng=rng)
 
         # Check structure
         @test post_diag.n_draws == 50
@@ -165,13 +225,11 @@ end
 
     @testset "Posterior Model Extraction" begin
         _tprint("Testing posterior model extraction...")
-        Random.seed!(44444)
-        Y_post = zeros(80, 2)
-        for t in 2:80
-            Y_post[t, :] = 0.5 * Y_post[t-1, :] + randn(2)
-        end
+        rng = MersenneTwister(44444)  # DGP-03: explicit rng
+        Y_post = dgp_var(rng; A=0.5 * Matrix{Float64}(I, 2, 2),
+                         B0=Matrix{Float64}(I, 2, 2), T=80).Y
 
-        post = estimate_bvar(Y_post, 1; n_draws=50)
+        post = estimate_bvar(Y_post, 1; n_draws=50, rng=rng)
 
         # Extract posterior mean model
         mean_model = posterior_mean_model(post; data=Y_post)
@@ -192,22 +250,22 @@ end
     end
 
     @testset "Minnesota prior with BVAR" begin
-        Random.seed!(99887)
-        Y_mn = randn(80, 2)
+        rng = MersenneTwister(99887)  # DGP-03: explicit rng
+        Y_mn = randn(rng, 80, 2)
         hyper = MinnesotaHyperparameters(tau=0.2, decay=2.0, omega=0.5)
-        post_mn = estimate_bvar(Y_mn, 1; prior=:minnesota, hyper=hyper, n_draws=100)
+        post_mn = estimate_bvar(Y_mn, 1; prior=:minnesota, hyper=hyper, n_draws=100, rng=rng)
         @test post_mn isa BVARPosterior
         @test post_mn.prior == :minnesota
         _tprint("Minnesota prior BVAR test passed.")
     end
 
     @testset "BVAR sampler variants" begin
-        Random.seed!(99886)
-        Y_sv = randn(60, 2)
+        rng = MersenneTwister(99886)  # DGP-03: explicit rng
+        Y_sv = randn(rng, 60, 2)
 
         # Direct sampler
         @testset "Direct sampler" begin
-            post_direct = estimate_bvar(Y_sv, 1; sampler=:direct, n_draws=50)
+            post_direct = estimate_bvar(Y_sv, 1; sampler=:direct, n_draws=50, rng=rng)
             @test post_direct isa BVARPosterior
             @test post_direct.sampler == :direct
             _tprint("Direct sampler test passed.")
@@ -215,7 +273,7 @@ end
 
         # Gibbs sampler
         @testset "Gibbs sampler" begin
-            post_gibbs = estimate_bvar(Y_sv, 1; sampler=:gibbs, n_draws=50, burnin=100)
+            post_gibbs = estimate_bvar(Y_sv, 1; sampler=:gibbs, n_draws=50, burnin=100, rng=rng)
             @test post_gibbs isa BVARPosterior
             @test post_gibbs.sampler == :gibbs
             _tprint("Gibbs sampler test passed.")
@@ -229,7 +287,7 @@ end
 
     # 8. BVARPosterior show() method
     @testset "BVARPosterior show method" begin
-        post = estimate_bvar(Y, 1; n_draws=(FAST ? 30 : 50), sampler=:direct)
+        post = estimate_bvar(Y, 1; n_draws=(FAST ? 30 : 50), sampler=:direct, rng=rng)
         io = IOBuffer()
         show(io, post)
         out = String(take!(io))
@@ -247,8 +305,8 @@ end
     # ==========================================================================
 
     @testset "forecast(BVARPosterior, h)" begin
-        Random.seed!(50001)
-        post = estimate_bvar(Y, 1; n_draws=(FAST ? 30 : 80), sampler=:direct)
+        rng = MersenneTwister(50001)  # DGP-03: explicit rng
+        post = estimate_bvar(Y, 1; n_draws=(FAST ? 30 : 80), sampler=:direct, rng=rng)
 
         # Basic forecast
         fc = forecast(post, 4)
@@ -283,8 +341,8 @@ end
     end
 
     @testset "BVARForecast show method" begin
-        Random.seed!(50002)
-        post = estimate_bvar(Y, 1; n_draws=(FAST ? 30 : 60), sampler=:direct)
+        rng = MersenneTwister(50002)  # DGP-03: explicit rng
+        post = estimate_bvar(Y, 1; n_draws=(FAST ? 30 : 60), sampler=:direct, rng=rng)
 
         # Show with :median (explicit)
         fc_med = forecast(post, 3; point_estimate=:median)
@@ -308,8 +366,8 @@ end
     end
 
     @testset "BVARPosterior show with varnames" begin
-        Random.seed!(50003)
-        post_vn = estimate_bvar(Y, 1; n_draws=(FAST ? 30 : 50), sampler=:direct,
+        rng = MersenneTwister(50003)  # DGP-03: explicit rng
+        post_vn = estimate_bvar(Y, 1; n_draws=(FAST ? 30 : 50), sampler=:direct, rng=rng,
                                 varnames=["GDP", "Inflation"])
         io = IOBuffer()
         show(io, post_vn)
@@ -324,8 +382,8 @@ end
     end
 
     @testset "posterior_mean_model and posterior_median_model (default data)" begin
-        Random.seed!(50004)
-        post = estimate_bvar(Y, 1; n_draws=(FAST ? 30 : 50), sampler=:direct)
+        rng = MersenneTwister(50004)  # DGP-03: explicit rng
+        post = estimate_bvar(Y, 1; n_draws=(FAST ? 30 : 50), sampler=:direct, rng=rng)
 
         # Without explicit data kwarg — should use post.data
         mean_m = posterior_mean_model(post)
@@ -346,8 +404,8 @@ end
     end
 
     @testset "Deprecated wrapper process_posterior_samples(post, p, n, func)" begin
-        Random.seed!(50005)
-        post = estimate_bvar(Y, 1; n_draws=(FAST ? 20 : 40), sampler=:direct)
+        rng = MersenneTwister(50005)  # DGP-03: explicit rng
+        post = estimate_bvar(Y, 1; n_draws=(FAST ? 20 : 40), sampler=:direct, rng=rng)
 
         # The 4-arg deprecated wrapper should delegate to the 2-arg version
         results, n_samples = MacroEconometricModels.process_posterior_samples(
@@ -362,8 +420,8 @@ end
     end
 
     @testset "Base.size and Base.length for BVARPosterior" begin
-        Random.seed!(50006)
-        post = estimate_bvar(Y, 1; n_draws=(FAST ? 25 : 50), sampler=:direct)
+        rng = MersenneTwister(50006)  # DGP-03: explicit rng
+        post = estimate_bvar(Y, 1; n_draws=(FAST ? 25 : 50), sampler=:direct, rng=rng)
 
         # length
         @test length(post) == post.n_draws
@@ -378,15 +436,15 @@ end
     end
 
     @testset "varnames() accessor" begin
-        Random.seed!(50007)
+        rng = MersenneTwister(50007)  # DGP-03: explicit rng
         # Default varnames
-        post_def = estimate_bvar(Y, 1; n_draws=(FAST ? 20 : 40), sampler=:direct)
+        post_def = estimate_bvar(Y, 1; n_draws=(FAST ? 20 : 40), sampler=:direct, rng=rng)
         vn = varnames(post_def)
         @test vn isa Vector{String}
         @test length(vn) == 2
 
         # Custom varnames
-        post_custom = estimate_bvar(Y, 1; n_draws=(FAST ? 20 : 40), sampler=:direct,
+        post_custom = estimate_bvar(Y, 1; n_draws=(FAST ? 20 : 40), sampler=:direct, rng=rng,
                                     varnames=["X1", "X2"])
         @test varnames(post_custom) == ["X1", "X2"]
 
@@ -394,9 +452,9 @@ end
     end
 
     @testset "compute_posterior_quantiles with central=:median" begin
-        Random.seed!(50008)
+        rng = MersenneTwister(50008)  # DGP-03: explicit rng
         # Create synthetic samples array: n_samples x dim1 x dim2
-        samples = randn(Float64, 100, 5, 3)
+        samples = randn(rng, Float64, 100, 5, 3)
 
         q_vec = [0.16, 0.5, 0.84]
         q_out, m_out = MacroEconometricModels.compute_posterior_quantiles(
@@ -429,24 +487,24 @@ end
     end
 
     @testset "Minnesota prior edge cases" begin
-        Random.seed!(50009)
-        Y_mn = randn(80, 2)
+        rng = MersenneTwister(50009)  # DGP-03: explicit rng
+        Y_mn = randn(rng, 80, 2)
 
         # lambda=0 and mu=0: these disable sum-of-coefficients and co-persistence priors
         hyper_no_soc = MinnesotaHyperparameters(tau=0.5, decay=2.0, lambda=0.0, mu=0.0, omega=0.5)
-        post_no_soc = estimate_bvar(Y_mn, 1; prior=:minnesota, hyper=hyper_no_soc, n_draws=50)
+        post_no_soc = estimate_bvar(Y_mn, 1; prior=:minnesota, hyper=hyper_no_soc, n_draws=50, rng=rng)
         @test post_no_soc isa BVARPosterior
         @test all(isfinite.(post_no_soc.B_draws))
 
         # Very tight prior (small tau)
         hyper_tight = MinnesotaHyperparameters(tau=0.01, decay=2.0, omega=0.5)
-        post_tight = estimate_bvar(Y_mn, 1; prior=:minnesota, hyper=hyper_tight, n_draws=50)
+        post_tight = estimate_bvar(Y_mn, 1; prior=:minnesota, hyper=hyper_tight, n_draws=50, rng=rng)
         @test post_tight isa BVARPosterior
         @test all(isfinite.(post_tight.B_draws))
 
         # Very loose prior (large tau)
         hyper_loose = MinnesotaHyperparameters(tau=10.0, decay=1.0, omega=1.0)
-        post_loose = estimate_bvar(Y_mn, 1; prior=:minnesota, hyper=hyper_loose, n_draws=50)
+        post_loose = estimate_bvar(Y_mn, 1; prior=:minnesota, hyper=hyper_loose, n_draws=50, rng=rng)
         @test post_loose isa BVARPosterior
         @test all(isfinite.(post_loose.B_draws))
 
@@ -454,8 +512,8 @@ end
     end
 
     @testset "log_marginal_likelihood" begin
-        Random.seed!(50010)
-        Y_lml = randn(80, 2)
+        rng = MersenneTwister(50010)  # DGP-03: explicit rng
+        Y_lml = randn(rng, 80, 2)
 
         # Standard hyper
         hyper = MinnesotaHyperparameters(tau=0.5, decay=2.0, omega=0.5)
@@ -562,13 +620,12 @@ end
     # Integration: the actual forecast() is deterministic on a fixed seed (the refactor did not
     # change RNG consumption), and produces finite, ordered bands.
     rngd = Random.MersenneTwister(20210)
-    Yd = zeros(140, n)
-    for t in 2:140
-        Yd[t, :] = 0.5 .* Yd[t-1, :] .+ randn(rngd, n)
-    end
-    Random.seed!(9090); post = estimate_bvar(Yd, 2; n_draws=(FAST ? 40 : 80), sampler=:direct)
-    Random.seed!(31337); fc1 = forecast(post, 6)
-    Random.seed!(31337); fc2 = forecast(post, 6)
+    # Persistent VAR(2) truth (DGP-03 #792: shared simulator).
+    Yd = dgp_var(rngd; A=[0.5 0.1; 0.05 0.4], B0=Matrix{Float64}(I, n, n), T=140).Y
+    post = estimate_bvar(Yd, 2; n_draws=(FAST ? 40 : 80), sampler=:direct,
+                         rng=MersenneTwister(9090))
+    fc1 = forecast(post, 6; rng=MersenneTwister(31337))
+    fc2 = forecast(post, 6; rng=MersenneTwister(31337))
     @test fc1.forecast == fc2.forecast
     @test fc1.ci_lower == fc2.ci_lower
     @test fc1.ci_upper == fc2.ci_upper
@@ -577,9 +634,9 @@ end
 end
 
 @testset "BVAR IRF MC honesty counts (#244)" begin
-    Random.seed!(4244)
-    Y = randn(120, 2)
-    post = estimate_bvar(Y, 2; n_draws=80, sampler=:direct)
+    rng = MersenneTwister(4244)  # DGP-03: explicit rng
+    Y = randn(rng, 120, 2)
+    post = estimate_bvar(Y, 2; n_draws=80, sampler=:direct, rng=rng)
     b = irf(post, 8; method=:cholesky)
     @test b.n_requested == 80
     @test b.n_effective + b.n_failed == b.n_requested
@@ -631,9 +688,9 @@ end
 end
 
 @testset "SID-07 IdentificationError in posterior loops" begin
-    Random.seed!(736)
-    Y = randn(80, 2)
-    post = estimate_bvar(Y, 1; n_draws=FAST ? 20 : 40, burnin=10)
+    rng = MersenneTwister(736)  # DGP-03: explicit rng
+    Y = randn(rng, 80, 2)
+    post = estimate_bvar(Y, 1; n_draws=FAST ? 20 : 40, burnin=10, rng=rng)
     impossible(irf) = irf[1, 1, 1] > 1e6
     @test_throws IdentificationError irf(post, 5; method=:sign, check_func=impossible, max_draws=3)
     @test_throws IdentificationError historical_decomposition(post; method=:sign, check_func=impossible, max_draws=3)
@@ -724,8 +781,8 @@ end
 end
 
 @testset "SID-18 identify_robust_bayes on BVARPosterior" begin
-    Random.seed!(747)
-    Y = randn(50, 2)
+    rngy = MersenneTwister(747)  # DGP-03: explicit rng
+    Y = randn(rngy, 50, 2)
     post = estimate_bvar(Y, 1; n_draws=FAST ? 6 : 10, burnin=3, seed=747)
     r = SVARRestrictions(2; signs=[sign_restriction(1, 1, :positive),
                                    sign_restriction(2, 1, :positive)])
