@@ -18,17 +18,14 @@ end
 const _suppress_warnings = MacroEconometricModels._suppress_warnings
 
 @testset "IRF Confidence Intervals" begin
-    # Generate stable VAR(1) data
+    # Non-diagonal A + non-identity B0 via dgp_var (DGP-02 #791): every CI
+    # method faces genuine dynamics and shock correlation.
     T_obs = 200
     n = 3
     p = 1
-    Random.seed!(12345)
-
-    true_A = [0.5 0.1 0.0; 0.0 0.4 0.1; 0.0 0.0 0.3]
-    Y = zeros(T_obs, n)
-    for t in 2:T_obs
-        Y[t, :] = true_A * Y[t-1, :] + randn(n)
-    end
+    rng = MersenneTwister(12345)  # DGP-02: explicit rng
+    d = dgp_var(rng; T=T_obs)
+    Y = d.Y
 
     model = estimate_var(Y, p)
     H = 10
@@ -39,8 +36,7 @@ const _suppress_warnings = MacroEconometricModels._suppress_warnings
 
     @testset "Cholesky - Bootstrap CI" begin
         _suppress_warnings() do
-            Random.seed!(12346)
-            irf_boot = irf(model, H; method=:cholesky, ci_type=:bootstrap, reps=(FAST ? 100 : 200), conf_level=0.90)
+            irf_boot = irf(model, H; method=:cholesky, ci_type=:bootstrap, reps=(FAST ? 100 : 200), conf_level=0.90, seed=12346)
 
             @test irf_boot isa ImpulseResponse
             @test irf_boot.ci_type == :bootstrap
@@ -57,8 +53,7 @@ const _suppress_warnings = MacroEconometricModels._suppress_warnings
 
     @testset "Cholesky - Theoretical CI" begin
         _suppress_warnings() do
-            Random.seed!(12347)
-            irf_theo = irf(model, H; method=:cholesky, ci_type=:theoretical, reps=(FAST ? 200 : 500), conf_level=0.90)
+            irf_theo = irf(model, H; method=:cholesky, ci_type=:theoretical, reps=(FAST ? 200 : 500), conf_level=0.90, seed=12347)
 
             @test irf_theo isa ImpulseResponse
             @test irf_theo.ci_type == :theoretical
@@ -81,26 +76,26 @@ const _suppress_warnings = MacroEconometricModels._suppress_warnings
 
     @testset "Cholesky - Theoretical vs Bootstrap consistency" begin
         _suppress_warnings() do
-            Random.seed!(12348)
-            irf_boot = irf(model, H; method=:cholesky, ci_type=:bootstrap, reps=(FAST ? 200 : 500), conf_level=0.90)
-            irf_theo = irf(model, H; method=:cholesky, ci_type=:theoretical, reps=(FAST ? 200 : 500), conf_level=0.90)
+            irf_boot = irf(model, H; method=:cholesky, ci_type=:bootstrap, reps=(FAST ? 200 : 500), conf_level=0.90, seed=12348)
+            irf_theo = irf(model, H; method=:cholesky, ci_type=:theoretical, reps=(FAST ? 200 : 500), conf_level=0.90, seed=12348)
 
             # Point estimates should be identical (same model, same Q)
             @test irf_boot.values ≈ irf_theo.values
 
-            # CI widths should be of similar magnitude (not perfectly equal)
+            # Both bands estimate the same asymptotic variance, so their mean
+            # widths agree within 40% (was: order of magnitude — vacuous).
             boot_width = irf_boot.ci_upper .- irf_boot.ci_lower
             theo_width = irf_theo.ci_upper .- irf_theo.ci_lower
             ratio = mean(boot_width) / mean(theo_width)
-            @test 0.3 < ratio < 3.0  # within an order of magnitude
+            @test 0.7 < ratio < 1.4
         end
     end
 
     @testset "Cholesky - Confidence level affects width" begin
         _suppress_warnings() do
-            Random.seed!(12349)
-            irf_90 = irf(model, H; method=:cholesky, ci_type=:bootstrap, reps=(FAST ? 100 : 200), conf_level=0.90)
-            irf_68 = irf(model, H; method=:cholesky, ci_type=:bootstrap, reps=(FAST ? 100 : 200), conf_level=0.68)
+            # Common seed: same bootstrap draws, so the width ordering is exact.
+            irf_90 = irf(model, H; method=:cholesky, ci_type=:bootstrap, reps=(FAST ? 100 : 200), conf_level=0.90, seed=12349)
+            irf_68 = irf(model, H; method=:cholesky, ci_type=:bootstrap, reps=(FAST ? 100 : 200), conf_level=0.68, seed=12349)
 
             width_90 = mean(irf_90.ci_upper .- irf_90.ci_lower)
             width_68 = mean(irf_68.ci_upper .- irf_68.ci_lower)
@@ -123,8 +118,7 @@ const _suppress_warnings = MacroEconometricModels._suppress_warnings
 
     @testset "Long-run - Bootstrap CI" begin
         _suppress_warnings() do
-            Random.seed!(12350)
-            irf_lr = irf(model, H; method=:long_run, ci_type=:bootstrap, reps=(FAST ? 50 : 100), conf_level=0.90)
+            irf_lr = irf(model, H; method=:long_run, ci_type=:bootstrap, reps=(FAST ? 50 : 100), conf_level=0.90, seed=12350)
 
             @test irf_lr isa ImpulseResponse
             @test size(irf_lr.values) == (H, n, n)
@@ -134,8 +128,9 @@ const _suppress_warnings = MacroEconometricModels._suppress_warnings
 
     @testset "Long-run - Theoretical CI" begin
         _suppress_warnings() do
-            Random.seed!(12351)
-            irf_lr_theo = irf(model, H; method=:long_run, ci_type=:theoretical, reps=(FAST ? 100 : 300), conf_level=0.90)
+            # 1500 draws: quantile asymmetry is Monte Carlo noise scaling as
+            # 1/sqrt(reps) (0.35 at 300 reps, 0.25 at 1500 on the reference DGP).
+            irf_lr_theo = irf(model, H; method=:long_run, ci_type=:theoretical, reps=(FAST ? 500 : 1500), conf_level=0.90, seed=12351)
 
             @test irf_lr_theo isa ImpulseResponse
             @test all(irf_lr_theo.ci_lower .<= irf_lr_theo.ci_upper)
@@ -147,7 +142,12 @@ const _suppress_warnings = MacroEconometricModels._suppress_warnings
             @test all(width_upper .>= -1e-10)
             max_width = max.(width_lower, width_upper, 1e-15)
             asymmetry = abs.(width_lower .- width_upper) ./ max_width
-            @test mean(asymmetry) < 0.3
+            # Symmetry is a property of material cells: for near-zero IRF
+            # entries the width itself is Monte Carlo quantile noise, so the
+            # relative asymmetry there measures noise, not the method.
+            material = max_width .> 0.05
+            @test any(material)
+            @test mean(asymmetry[material]) < 0.3
         end
     end
 
@@ -157,13 +157,12 @@ const _suppress_warnings = MacroEconometricModels._suppress_warnings
 
     @testset "Sign restrictions - Bootstrap CI" begin
         _suppress_warnings() do
-            Random.seed!(12352)
             # check_func takes a single arg: IRF array (H x n x n)
             # Sign restriction: shock 1 has positive impact on variable 1 at horizon 1
             check_fn = irf_vals -> irf_vals[1, 1, 1] > 0
 
             irf_sign = irf(model, H; method=:sign, ci_type=:bootstrap, reps=(FAST ? 20 : 50),
-                           conf_level=0.90, check_func=check_fn,
+                           conf_level=0.90, check_func=check_fn, seed=12352,
                            set_inference=:bootstrap_x_rotations)
 
             @test irf_sign isa ImpulseResponse
@@ -185,8 +184,10 @@ const _suppress_warnings = MacroEconometricModels._suppress_warnings
 
     @testset "FastICA - Bootstrap CI" begin
         _suppress_warnings() do
-            Random.seed!(12354)
-            irf_ica = irf(model, H; method=:fastica, ci_type=:bootstrap, reps=(FAST ? 20 : 50), conf_level=0.90)
+            # Non-Gaussian shocks: ICA has something to identify (DGP-02 #791).
+            dng = dgp_nongaussian_var(MersenneTwister(12354); T=T_obs)
+            mng = estimate_var(dng.Y, p)
+            irf_ica = irf(mng, H; method=:fastica, ci_type=:bootstrap, reps=(FAST ? 20 : 50), conf_level=0.90, seed=12354)
 
             @test irf_ica isa ImpulseResponse
             @test size(irf_ica.values) == (H, n, n)
@@ -204,8 +205,10 @@ const _suppress_warnings = MacroEconometricModels._suppress_warnings
 
     @testset "JADE - Bootstrap CI" begin
         _suppress_warnings() do
-            Random.seed!(12356)
-            irf_jade = irf(model, H; method=:jade, ci_type=:bootstrap, reps=(FAST ? 20 : 50), conf_level=0.90)
+            # Non-Gaussian shocks: JADE has something to identify (DGP-02 #791).
+            dng = dgp_nongaussian_var(MersenneTwister(12356); T=T_obs)
+            mng = estimate_var(dng.Y, p)
+            irf_jade = irf(mng, H; method=:jade, ci_type=:bootstrap, reps=(FAST ? 20 : 50), conf_level=0.90, seed=12356)
 
             @test irf_jade isa ImpulseResponse
             @test size(irf_jade.values) == (H, n, n)
@@ -219,9 +222,8 @@ const _suppress_warnings = MacroEconometricModels._suppress_warnings
 
     @testset "All methods produce valid IRFs" begin
         _suppress_warnings() do
-            Random.seed!(12357)
             for method in [:cholesky, :long_run, :fastica, :jade]
-                ir = irf(model, H; method=method, ci_type=:none)
+                ir = irf(model, H; method=method, ci_type=:none, seed=12357)
                 @test ir isa ImpulseResponse
                 @test all(isfinite, ir.values)
                 @test size(ir.values) == (H, n, n)
@@ -237,9 +239,7 @@ const _suppress_warnings = MacroEconometricModels._suppress_warnings
 
     @testset "Theoretical CI symmetry - $method" for method in [:cholesky, :long_run]
         _suppress_warnings() do
-            Random.seed!(12358 + hash(method))
-
-            ir = irf(model, H; method=method, ci_type=:theoretical, reps=(FAST ? 300 : 500), conf_level=0.90)
+            ir = irf(model, H; method=method, ci_type=:theoretical, reps=(FAST ? 300 : 500), conf_level=0.90, seed=12358 + (method === :cholesky ? 1 : 2))
             @test ir isa ImpulseResponse
 
             # Symmetry check
@@ -248,10 +248,13 @@ const _suppress_warnings = MacroEconometricModels._suppress_warnings
             # Non-negative widths
             @test all(width_lower .>= -1e-10)
             @test all(width_upper .>= -1e-10)
-            # Symmetry metric
+            # Symmetry metric over material cells only (near-zero IRF entries
+            # carry only Monte Carlo quantile noise in relative terms).
             max_width = max.(width_lower, width_upper, 1e-15)
             asymmetry = abs.(width_lower .- width_upper) ./ max_width
-            @test mean(asymmetry) < 0.3
+            material = max_width .> 0.05
+            @test any(material)
+            @test mean(asymmetry[material]) < 0.3
         end
     end
 
@@ -261,10 +264,9 @@ const _suppress_warnings = MacroEconometricModels._suppress_warnings
 
     @testset "stationary_only - Bootstrap" begin
         _suppress_warnings() do
-            Random.seed!(12361)
             # Standard model should have most draws stationary
             irf_stat = irf(model, H; method=:cholesky, ci_type=:bootstrap, reps=(FAST ? 20 : 50),
-                           conf_level=0.90, stationary_only=true)
+                           conf_level=0.90, stationary_only=true, seed=12361)
             @test irf_stat isa ImpulseResponse
             @test size(irf_stat.values) == (H, n, n)
             @test all(irf_stat.ci_lower .<= irf_stat.ci_upper)
@@ -277,9 +279,8 @@ const _suppress_warnings = MacroEconometricModels._suppress_warnings
 
     @testset "stationary_only - Theoretical" begin
         _suppress_warnings() do
-            Random.seed!(12362)
             irf_stat_theo = irf(model, H; method=:cholesky, ci_type=:theoretical, reps=(FAST ? 20 : 50),
-                                conf_level=0.90, stationary_only=true)
+                                conf_level=0.90, stationary_only=true, seed=12362)
             @test irf_stat_theo isa ImpulseResponse
             @test all(irf_stat_theo.ci_lower .<= irf_stat_theo.ci_upper)
         end
@@ -287,8 +288,7 @@ const _suppress_warnings = MacroEconometricModels._suppress_warnings
 
     @testset "stationary_only=false is default" begin
         _suppress_warnings() do
-            Random.seed!(12363)
-            irf_default = irf(model, H; method=:cholesky, ci_type=:bootstrap, reps=(FAST ? 20 : 50), conf_level=0.90)
+            irf_default = irf(model, H; method=:cholesky, ci_type=:bootstrap, reps=(FAST ? 20 : 50), conf_level=0.90, seed=12363)
             @test irf_default isa ImpulseResponse
             # Default behavior should work as before
             @test irf_default._draws !== nothing
@@ -302,30 +302,66 @@ const _suppress_warnings = MacroEconometricModels._suppress_warnings
 
     @testset "Bayesian IRF - Credible Intervals" begin
         _suppress_warnings() do
-            Random.seed!(12360)
-            try
-                post = estimate_bvar(Y, p; n_draws=(FAST ? 25 : 50))
-                irf_bayes = irf(post, H)
+            post = estimate_bvar(Y, p; n_draws=(FAST ? 25 : 50), seed=12360)
+            irf_bayes = irf(post, H)
 
-                @test size(irf_bayes.quantiles, 4) == 3  # [16th, 50th, 84th percentile]
-                # Ordering: 16th <= 50th <= 84th
-                @test all(irf_bayes.quantiles[:, :, :, 1] .<= irf_bayes.quantiles[:, :, :, 2])
-                @test all(irf_bayes.quantiles[:, :, :, 2] .<= irf_bayes.quantiles[:, :, :, 3])
+            @test size(irf_bayes.quantiles, 4) == 3  # [16th, 50th, 84th percentile]
+            # Ordering: 16th <= 50th <= 84th
+            @test all(irf_bayes.quantiles[:, :, :, 1] .<= irf_bayes.quantiles[:, :, :, 2])
+            @test all(irf_bayes.quantiles[:, :, :, 2] .<= irf_bayes.quantiles[:, :, :, 3])
 
-                # Credible interval width should be positive
-                width = irf_bayes.quantiles[:, :, :, 3] .- irf_bayes.quantiles[:, :, :, 1]
-                @test all(width .>= 0)
-            catch e
-                # Bayesian IRF CI can fail due to MCMC issues — skip silently
-                @test_skip "Bayesian IRF CI test skipped due to MCMC failure"
+            # Credible interval width should be positive
+            width = irf_bayes.quantiles[:, :, :, 3] .- irf_bayes.quantiles[:, :, :, 1]
+            @test all(width .>= 0)
+        end
+    end
+
+    @testset "Band coverage MC (DGP-02 #791)" begin
+        # Seeded MC: nominal-90% bands contain the TRUE IRF (not the point
+        # estimate) — a band 3x too narrow fails. Bootstrap covers h in
+        # {1, 4, 8}; theoretical conditions on Sigma-hat (draws only VAR
+        # coefficients, so the impact row is degenerate) and covers {4, 8}.
+        # Nominal 90% with 200 reps: MC se ≈ 0.02; [0.80, 0.97] is safe.
+        nrep = FAST ? 25 : 200
+        Hmc, Tmc = 8, 200
+        hs_boot, hs_theo = [1, 4, 8], [4, 8]
+        cover_boot = zeros(length(hs_boot))
+        cover_theo = zeros(length(hs_theo))
+        for r in 1:nrep
+            rng = MersenneTwister(7600 + r)
+            dmc = dgp_var(rng; T=Tmc)
+            mmc = estimate_var(dmc.Y, 1)
+            truth = var_irf(dmc.A, dmc.B0, Hmc - 1)
+            b = irf(mmc, Hmc; method=:cholesky, ci_type=:bootstrap, reps=100,
+                    conf_level=0.90, seed=7600 + r, stationary_only=true)
+            t = irf(mmc, Hmc; method=:cholesky, ci_type=:theoretical, reps=300,
+                    conf_level=0.90, seed=7600 + r)
+            for (k, h) in enumerate(hs_boot)
+                cover_boot[k] += mean(b.ci_lower[h, :, :] .<= truth[h, :, :] .<= b.ci_upper[h, :, :])
+            end
+            for (k, h) in enumerate(hs_theo)
+                cover_theo[k] += mean(t.ci_lower[h, :, :] .<= truth[h, :, :] .<= t.ci_upper[h, :, :])
             end
         end
+        cover_boot ./= nrep
+        cover_theo ./= nrep
+        for k in eachindex(hs_boot)
+            @test 0.80 <= cover_boot[k] <= 0.97
+        end
+        for k in eachindex(hs_theo)
+            @test 0.80 <= cover_theo[k] <= 0.97
+        end
+        # Theoretical impact row is degenerate by construction (Sigma-hat held
+        # fixed): document it rather than covering it.
+        t0 = irf(model, Hmc; method=:cholesky, ci_type=:theoretical, reps=300,
+                 conf_level=0.90, seed=1)
+        @test all(t0.ci_upper[1, :, :] .== t0.ci_lower[1, :, :])
     end
 end
 
 @testset "SID-06 theoretical CI vs residual-based ID" begin
-    Random.seed!(735)
-    m = estimate_var(randn(120, 2), 1)
+    rng = MersenneTwister(735)  # DGP-02: explicit rng (throws-only data)
+    m = estimate_var(randn(rng, 120, 2), 1)
     chk(irf) = irf[1, 1, 1] > 0
     @test_throws ArgumentError irf(m, 5; method=:fastica, ci_type=:theoretical)
     @test_throws ArgumentError irf(m, 5; method=:student_t, ci_type=:theoretical)
@@ -337,7 +373,7 @@ end
 end
 
 @testset "SID-04 column matching" begin
-    Random.seed!(733)
+    # No draws in this testset (pure linear algebra); the old global seed is dropped.
     P = [1.0 0.2; 0.1 1.0]
     P_b = [-P[:, 2] P[:, 1]]          # permutation + sign flip
     perm, signs = MacroEconometricModels._match_columns(P, P_b)
@@ -348,13 +384,13 @@ end
 
 @testset "SID-04 FastICA bootstrap bands after matching" begin
     _suppress_warnings() do
-        Random.seed!(733)
+        rng = MersenneTwister(733)  # DGP-02: explicit rng
         n, p, Tobs, H = 2, 1, FAST ? 200 : 300, 6
         true_A = [0.5 0.1; 0.0 0.4]
         B0 = [1.0 0.3; 0.2 1.0]
         Y = zeros(Tobs, n)
         for t in 2:Tobs
-            Y[t, :] = true_A * Y[t-1, :] + B0 * rand(TDist(3), n)
+            Y[t, :] = true_A * Y[t-1, :] + B0 * rand(rng, TDist(3), n)
         end
         m = estimate_var(Y, p)
         reps = FAST ? 20 : 100
