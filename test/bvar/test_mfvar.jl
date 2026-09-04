@@ -18,16 +18,14 @@ end
 
 const _M = MacroEconometricModels
 
-"""Latent high-frequency VAR(1) path."""
-function _mf_sim(T_hf::Int; seed::Int=1)
-    rng = Random.MersenneTwister(seed)
-    A = [0.6 0.1; 0.15 0.5]
-    L = [0.4 0.0; 0.1 0.3]
-    Z = zeros(T_hf, 2)
-    for t in 2:T_hf
-        Z[t, :] = A * Z[t-1, :] + L * randn(rng, 2)
-    end
-    return Z
+# DGP-03 (#792): latent high-frequency VAR(1) path on the shared simulator
+# (same design as the GLP file's historical DGP).
+const _MF_A = [0.6 0.1; 0.15 0.5]
+const _MF_B0 = [0.4 0.0; 0.1 0.3]
+
+"""Latent high-frequency VAR(1) path with known truth."""
+function _mf_sim(rng::AbstractRNG, T_hf::Int)
+    return dgp_var(rng; A=_MF_A, B0=_MF_B0, T=T_hf).Y
 end
 
 """Aggregate column `col` of `Z` to the low frequency, blanking the other rows."""
@@ -112,7 +110,7 @@ end
 
 @testset "the latent path reproduces the low-frequency observations exactly" begin
     T_hf = FAST ? 90 : 150
-    Z = _mf_sim(T_hf; seed=4)
+    Z = _mf_sim(Random.MersenneTwister(4), T_hf)
     for kind in (:flow, :average, :growth, :stock)
         m = 3
         data = _mf_blank(Z, 2, kind, m)
@@ -144,7 +142,7 @@ end
 end
 
 @testset "high-frequency series pass through untouched" begin
-    Z = _mf_sim(120; seed=6)
+    Z = _mf_sim(Random.MersenneTwister(6), 120)
     data = _mf_blank(Z, 2, :flow, 3)
     post = estimate_mfvar(data, 1; low_freq=[2], aggregation=:flow,
                           n_draws=40, n_burn=40, rng=Random.MersenneTwister(5))
@@ -155,7 +153,7 @@ end
 
 @testset "the interpolated path tracks a known latent truth" begin
     T_hf = FAST ? 150 : 240
-    Z = _mf_sim(T_hf; seed=1)
+    Z = _mf_sim(Random.MersenneTwister(1), T_hf)
     data = _mf_blank(Z, 2, :flow, 3)
     post = estimate_mfvar(data, 1; low_freq=[2], aggregation=:flow, freq_ratio=3,
                           n_draws=FAST ? 100 : 200, n_burn=FAST ? 100 : 200,
@@ -182,7 +180,7 @@ end
 # ─────────────────────────────────────────────────────────────────────────────
 
 @testset "no low-frequency series reduces to the conjugate BVAR" begin
-    Z = _mf_sim(FAST ? 120 : 180; seed=9)
+    Z = _mf_sim(Random.MersenneTwister(9), FAST ? 120 : 180)
     post = estimate_mfvar(Z, 1; n_draws=FAST ? 150 : 300, n_burn=100,
                           rng=Random.MersenneTwister(9))
     bv = estimate_bvar(Z, 1; n_draws=FAST ? 150 : 300, rng=Random.MersenneTwister(9))
@@ -206,7 +204,7 @@ end
 # ─────────────────────────────────────────────────────────────────────────────
 
 @testset "forecasts and IRFs at the high frequency" begin
-    Z = _mf_sim(150; seed=11)
+    Z = _mf_sim(Random.MersenneTwister(11), 150)
     data = _mf_blank(Z, 2, :growth, 3)
     post = estimate_mfvar(data, 1; low_freq=[2], aggregation=:growth,
                           n_draws=100, n_burn=80, varnames=["m", "q"],
@@ -229,7 +227,7 @@ end
 # ─────────────────────────────────────────────────────────────────────────────
 
 @testset "frequency ratios, reproducibility, validation and display" begin
-    Z = _mf_sim(160; seed=17)
+    Z = _mf_sim(Random.MersenneTwister(17), 160)
 
     # A 4:1 ratio works as well as 3:1
     d4 = _mf_blank(Z, 2, :flow, 4)
