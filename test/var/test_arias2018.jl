@@ -623,46 +623,41 @@ end
         Y = dgp_var(rng; A=[0.5 0.1; 0.0 0.4], B0=[1.0 0.0; 0.3 1.0], T=T_obs).Y
 
         # Estimate BVAR
-        try
-            post = estimate_bvar(Y, p; n_draws=(FAST ? 15 : 30), rng=rng)
+        post = estimate_bvar(Y, p; n_draws=(FAST ? 15 : 30), rng=rng)
 
-            # Define sign restrictions
-            signs = [sign_restriction(1, 1, :positive)]
-            restrictions = SVARRestrictions(n; signs=signs)
+        # Define sign restrictions
+        signs = [sign_restriction(1, 1, :positive)]
+        restrictions = SVARRestrictions(n; signs=signs)
 
-            # Run Bayesian identification
-            result = identify_arias_bayesian(post, restrictions, 5;
-                n_rotations=(FAST ? 10 : 30), quantiles=[0.16, 0.5, 0.84], rng=rng)
+        # Run Bayesian identification
+        result = identify_arias_bayesian(post, restrictions, 5;
+            n_rotations=(FAST ? 10 : 30), quantiles=[0.16, 0.5, 0.84], rng=rng)
 
-            # Check output structure
-            @test haskey(result, :irf_quantiles)
-            @test haskey(result, :irf_mean)
-            @test haskey(result, :acceptance_rates)
-            @test haskey(result, :total_accepted)
-            @test haskey(result, :weights)
+        # Check output structure
+        @test haskey(result, :irf_quantiles)
+        @test haskey(result, :irf_mean)
+        @test haskey(result, :acceptance_rates)
+        @test haskey(result, :total_accepted)
+        @test haskey(result, :weights)
 
-            # Check dimensions
-            @test size(result.irf_quantiles) == (5, n, n, 3)  # horizon × n × n × quantiles
-            @test size(result.irf_mean) == (5, n, n)
-            @test length(result.acceptance_rates) == (FAST ? 15 : 30)  # n_draws from posterior
-            @test length(result.weights) == result.total_accepted
+        # Check dimensions
+        @test size(result.irf_quantiles) == (5, n, n, 3)  # horizon × n × n × quantiles
+        @test size(result.irf_mean) == (5, n, n)
+        @test length(result.acceptance_rates) == (FAST ? 15 : 30)  # n_draws from posterior
+        @test length(result.weights) == result.total_accepted
 
-            # Check weights sum to 1
-            @test abs(sum(result.weights) - 1.0) < 1e-10
+        # Check weights sum to 1
+        @test abs(sum(result.weights) - 1.0) < 1e-10
 
-            # Check quantiles are ordered
-            for h in 1:5, i in 1:n, j in 1:n
-                @test result.irf_quantiles[h, i, j, 1] <= result.irf_quantiles[h, i, j, 2]
-                @test result.irf_quantiles[h, i, j, 2] <= result.irf_quantiles[h, i, j, 3]
-            end
-
-            # Check mean is finite
-            @test all(isfinite, result.irf_mean)
-
-        catch e
-            @warn "Bayesian identification test failed" exception=(e, catch_backtrace())
-            @test_skip "Bayesian Arias identification may fail due to MCMC issues"
+        # Check quantiles are ordered
+        for h in 1:5, i in 1:n, j in 1:n
+            @test result.irf_quantiles[h, i, j, 1] <= result.irf_quantiles[h, i, j, 2]
+            @test result.irf_quantiles[h, i, j, 2] <= result.irf_quantiles[h, i, j, 3]
         end
+
+        # Check mean is finite
+        @test all(isfinite, result.irf_mean)
+
     end
 
     @testset "Bayesian Zero Restrictions" begin
@@ -671,78 +666,66 @@ end
         T_obs, n, p = 100, 3, 1
         Y = dgp_var(rng; T=T_obs).Y
 
-        try
-            post = estimate_bvar(Y, p; n_draws=(FAST ? 10 : 20), rng=rng)
+        post = estimate_bvar(Y, p; n_draws=(FAST ? 10 : 20), rng=rng)
 
-            # Cholesky-equivalent zero restrictions (package RWZ convention:
-            # shock 1 most restricted → upper-triangular impact)
-            zeros = [
-                zero_restriction(2, 1),
-                zero_restriction(3, 1),
-                zero_restriction(3, 2),
-            ]
-            restrictions = SVARRestrictions(n; zeros=zeros)
+        # Cholesky-equivalent zero restrictions (package RWZ convention:
+        # shock 1 most restricted → upper-triangular impact)
+        zeros = [
+            zero_restriction(2, 1),
+            zero_restriction(3, 1),
+            zero_restriction(3, 2),
+        ]
+        restrictions = SVARRestrictions(n; zeros=zeros)
 
-            result = identify_arias_bayesian(post, restrictions, 5;
-                n_rotations=(FAST ? 10 : 50), rng=rng)
+        result = identify_arias_bayesian(post, restrictions, 5;
+            n_rotations=(FAST ? 10 : 50), rng=rng)
 
-            @test result.total_accepted > 0
-            @test all(isfinite, result.irf_mean)
+        @test result.total_accepted > 0
+        @test all(isfinite, result.irf_mean)
 
-        catch e
-            @warn "Bayesian zero restrictions test failed" exception=(e, catch_backtrace())
-            @test_skip "Bayesian identification with zeros may have convergence issues"
-        end
     end
 
     @testset "Bayesian Mixed Zero and Sign Restrictions" begin
         rng = MersenneTwister(33333)  # DGP-02: explicit rng
 
         T_obs, n, p = 100, 2, 1
-        Y = randn(rng, T_obs, n)
+        # Reference 2-var DGP (DGP-02 #791); the (1,1)+ restriction holds
+        # at the truth (B0[1,1] = 1).
+        Y = dgp_var(rng; A=[0.5 0.1; 0.0 0.4], B0=[1.0 0.0; 0.3 1.0], T=T_obs).Y
 
-        try
-            post = estimate_bvar(Y, p; n_draws=(FAST ? 10 : 20), rng=rng)
+        post = estimate_bvar(Y, p; n_draws=(FAST ? 10 : 20), rng=rng)
 
-            zeros = [zero_restriction(2, 1)]
-            signs = [sign_restriction(1, 1, :positive)]
-            restrictions = SVARRestrictions(n; zeros=zeros, signs=signs)
+        zeros = [zero_restriction(2, 1)]
+        signs = [sign_restriction(1, 1, :positive)]
+        restrictions = SVARRestrictions(n; zeros=zeros, signs=signs)
 
-            result = identify_arias_bayesian(post, restrictions, 5;
-                n_rotations=(FAST ? 10 : 50), rng=rng)
+        result = identify_arias_bayesian(post, restrictions, 5;
+            n_rotations=(FAST ? 10 : 50), rng=rng)
 
-            @test result.total_accepted > 0
-            @test size(result.irf_mean) == (5, n, n)
+        @test result.total_accepted > 0
+        @test size(result.irf_mean) == (5, n, n)
 
-        catch e
-            @warn "Bayesian mixed restrictions test failed" exception=(e, catch_backtrace())
-            @test_skip "Bayesian mixed restrictions may have issues"
-        end
     end
 
     @testset "Bayesian Identification without Data" begin
         rng = MersenneTwister(44444)  # DGP-02: explicit rng
 
         T_obs, n, p = 100, 2, 1
-        Y = randn(rng, T_obs, n)
+        # Reference 2-var DGP (DGP-02 #791).
+        Y = dgp_var(rng; A=[0.5 0.1; 0.0 0.4], B0=[1.0 0.0; 0.3 1.0], T=T_obs).Y
 
-        try
-            post = estimate_bvar(Y, p; n_draws=(FAST ? 10 : 20), rng=rng)
+        post = estimate_bvar(Y, p; n_draws=(FAST ? 10 : 20), rng=rng)
 
-            signs = [sign_restriction(1, 1, :positive)]
-            restrictions = SVARRestrictions(n; signs=signs)
+        signs = [sign_restriction(1, 1, :positive)]
+        restrictions = SVARRestrictions(n; signs=signs)
 
-            # Run without providing data
-            result = identify_arias_bayesian(post, restrictions, 5;
-                n_rotations=(FAST ? 10 : 30), rng=rng)
+        # Run without providing data
+        result = identify_arias_bayesian(post, restrictions, 5;
+            n_rotations=(FAST ? 10 : 30), rng=rng)
 
-            @test result.total_accepted > 0
-            @test all(isfinite, result.irf_mean)
+        @test result.total_accepted > 0
+        @test all(isfinite, result.irf_mean)
 
-        catch e
-            @warn "Bayesian identification without data test failed" exception=(e, catch_backtrace())
-            @test_skip "Bayesian identification without data may have issues"
-        end
     end
 
     @testset "Bayesian Custom Quantiles" begin
@@ -751,54 +734,45 @@ end
         T_obs, n, p = 100, 2, 1
         Y = dgp_var(rng; A=[0.5 0.1; 0.0 0.4], B0=[1.0 0.0; 0.3 1.0], T=T_obs).Y
 
-        try
-            post = estimate_bvar(Y, p; n_draws=(FAST ? 10 : 20), rng=rng)
+        post = estimate_bvar(Y, p; n_draws=(FAST ? 10 : 20), rng=rng)
 
-            signs = [sign_restriction(1, 1, :positive)]
-            restrictions = SVARRestrictions(n; signs=signs)
+        signs = [sign_restriction(1, 1, :positive)]
+        restrictions = SVARRestrictions(n; signs=signs)
 
-            # Custom quantiles
-            custom_q = [0.05, 0.25, 0.5, 0.75, 0.95]
-            result = identify_arias_bayesian(post, restrictions, 5;
-                n_rotations=(FAST ? 10 : 30), quantiles=custom_q, rng=rng)
+        # Custom quantiles
+        custom_q = [0.05, 0.25, 0.5, 0.75, 0.95]
+        result = identify_arias_bayesian(post, restrictions, 5;
+            n_rotations=(FAST ? 10 : 30), quantiles=custom_q, rng=rng)
 
-            @test size(result.irf_quantiles, 4) == length(custom_q)
+        @test size(result.irf_quantiles, 4) == length(custom_q)
 
-            # Quantiles should be ordered
-            for h in 1:5, i in 1:n, j in 1:n
-                for q in 1:(length(custom_q)-1)
-                    @test result.irf_quantiles[h, i, j, q] <= result.irf_quantiles[h, i, j, q+1]
-                end
+        # Quantiles should be ordered
+        for h in 1:5, i in 1:n, j in 1:n
+            for q in 1:(length(custom_q)-1)
+                @test result.irf_quantiles[h, i, j, q] <= result.irf_quantiles[h, i, j, q+1]
             end
-
-        catch e
-            @warn "Custom quantiles test failed" exception=(e, catch_backtrace())
-            @test_skip "Custom quantiles test may have issues"
         end
+
     end
 
     @testset "Bayesian Single Variable" begin
         rng = MersenneTwister(66666)  # DGP-02: explicit rng
 
         T_obs, n, p = 80, 1, 1
-        Y = randn(rng, T_obs, n)
+        # Univariate reference DGP (DGP-02 #791).
+        Y = dgp_var(rng; A=reshape([0.5], 1, 1), B0=reshape([1.0], 1, 1), T=T_obs).Y
 
-        try
-            post = estimate_bvar(Y, p; n_draws=(FAST ? 10 : 20), rng=rng)
+        post = estimate_bvar(Y, p; n_draws=(FAST ? 10 : 20), rng=rng)
 
-            signs = [sign_restriction(1, 1, :positive)]
-            restrictions = SVARRestrictions(n; signs=signs)
+        signs = [sign_restriction(1, 1, :positive)]
+        restrictions = SVARRestrictions(n; signs=signs)
 
-            result = identify_arias_bayesian(post, restrictions, 5;
-                n_rotations=(FAST ? 10 : 30), rng=rng)
+        result = identify_arias_bayesian(post, restrictions, 5;
+            n_rotations=(FAST ? 10 : 30), rng=rng)
 
-            @test result.total_accepted > 0
-            @test size(result.irf_mean) == (5, 1, 1)
+        @test result.total_accepted > 0
+        @test size(result.irf_mean) == (5, 1, 1)
 
-        catch e
-            @warn "Single variable Bayesian test failed" exception=(e, catch_backtrace())
-            @test_skip "Single variable Bayesian identification may have issues"
-        end
     end
 
 end
@@ -2339,6 +2313,7 @@ end
     end
 
     @testset "elapsed fields and back-compat constructors" begin
+        rng = MersenneTwister(75621)  # DGP-02: explicit rng (was leaking scope)
         restr = SVARRestrictions(2)
         ad = AriasSVARResult{Float64}([randn(rng, 2, 2) for _ in 1:4], randn(rng, 4, 3, 2, 2),
                                       fill(0.25, 4), 0.5, restr)
