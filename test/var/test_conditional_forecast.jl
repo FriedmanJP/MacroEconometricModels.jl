@@ -19,16 +19,10 @@ end
 
 # A 2-variable VAR whose Cholesky impact matrix is known by construction: the first
 # shock loads +0.6 onto the second variable on impact, so a positive condition on y1
-# must push y2 up.
+# must push y2 up. Built on the shared reference DGP (DGP-02 #791).
 function _cf_fixture(; T_obs::Int=300, seed::Int=241)
     rng = Random.MersenneTwister(seed)
-    A = [0.5 0.0; 0.4 0.5]
-    L = [1.0 0.0; 0.6 1.0]
-    Y = zeros(T_obs, 2)
-    for t in 2:T_obs
-        Y[t, :] = A * Y[t-1, :] + L * randn(rng, 2)
-    end
-    return Y
+    return dgp_var(rng; A=[0.5 0.0; 0.4 0.5], B0=[1.0 0.0; 0.6 1.0], T=T_obs).Y
 end
 
 @testset "Conditional Forecast (Waggoner-Zha)" begin

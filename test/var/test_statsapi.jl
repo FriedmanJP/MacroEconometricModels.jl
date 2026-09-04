@@ -12,19 +12,11 @@ using Statistics
 using Random
 
 @testset "StatsAPI Compatibility" begin
-    # Generate Data
-    T = 100
-    n = 2
-    p = 1
-    Random.seed!(42)
-
-    true_A = [0.5 0.0; 0.0 0.5]
-    true_c = [0.1; 0.1]
-    Y = zeros(T, n)
-    for t in 2:T
-        u = randn(n) * 0.1
-        Y[t, :] = true_c + true_A * Y[t-1, :] + u
-    end
+    # Reference DGP (DGP-02 #791): non-diagonal A, non-identity B0, intercept.
+    rng = MersenneTwister(42)
+    T, n, p = 100, 2, 1
+    Y = dgp_var(rng; A=[0.5 0.1; 0.0 0.5], B0=[0.1 0.0; 0.05 0.1],
+                c=[0.1, 0.1], T=T).Y
 
     model = StatsAPI.fit(VARModel, Y, p)
 
@@ -105,22 +97,25 @@ using Random
 end
 
 @testset "StatsAPI r2 for VARModel" begin
-    Random.seed!(123)
-    T, n, p = 100, 2, 1
-    Y = randn(T, n)
-    model = estimate_var(Y, p)
+    # r2 IS implemented for VARModel (per-equation R² vector), so assert the
+    # contract directly — no try/catch skip (DGP-02 #791).
+    rng = MersenneTwister(123)
+    T, n, p = 1000, 2, 1
+    A_ref = [0.5 0.1; 0.0 0.5]
+    B0_ref = [0.3 0.0; 0.1 0.2]
+    sim = dgp_var(rng; A=A_ref, B0=B0_ref, T=T)
+    model = estimate_var(sim.Y, p)
 
-    # r2 might not be defined for VAR, but should not error
-    # or should return reasonable values if defined
-    try
-        r2_val = StatsAPI.r2(model)
-        @test r2_val isa Number || r2_val isa Vector
-        _tprint("r2 for VAR: ", r2_val)
-    catch e
-        if e isa MethodError
-            @test_skip "r2 not implemented for VARModel"
-        else
-            rethrow(e)
-        end
-    end
+    r2_val = StatsAPI.r2(model)
+    @test r2_val isa AbstractVector
+    @test length(r2_val) == n
+    @test all(isfinite, r2_val)
+    @test all(x -> 0 <= x <= 1, r2_val)
+    _tprint("r2 for VAR: ", r2_val)
+
+    # Population truth R²_i = 1 - Σ_ii/Γ0_ii; atol 0.05 covers sampling noise
+    # of the variance ratio at T=1000 (SE ≈ √(2/T) ≈ 0.045).
+    G0 = lyapunov_gamma0(Matrix(A_ref), sim.Sigma)
+    r2_pop = [1 - sim.Sigma[i, i] / G0[i, i] for i in 1:n]
+    @test r2_val ≈ r2_pop atol = 0.05
 end
