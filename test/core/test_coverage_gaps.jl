@@ -21,16 +21,14 @@ using Statistics
 using StatsAPI
 using LinearAlgebra
 
-Random.seed!(7001)
-
 # =============================================================================
 # Unit Root Test StatsAPI Interface
 # =============================================================================
 
 @testset "Unit root StatsAPI interface" begin
-    Random.seed!(7010)
-    y_stationary = randn(200)
-    y_unit_root = cumsum(randn(200))
+    rng = MersenneTwister(7010)  # DGP-02: explicit rng
+    y_stationary = randn(rng, 200)
+    y_unit_root = cumsum(randn(rng, 200))
 
     @testset "ADF StatsAPI" begin
         r = adf_test(y_stationary)
@@ -123,7 +121,8 @@ Random.seed!(7001)
     end
 
     @testset "Johansen StatsAPI" begin
-        Y = randn(100, 3)
+        # Rank-1 cointegrated truth (DGP-02 #791) — not I(0) white noise.
+        Y = dgp_vecm(rng; T=200).Y
         r = johansen_test(Y, 2)
         @test StatsAPI.nobs(r) > 0
         @test StatsAPI.dof(r) == 2  # r.lags
@@ -140,11 +139,11 @@ end
 # =============================================================================
 
 @testset "BVAR weighted quantiles threaded" begin
-    Random.seed!(7020)
+    rng = MersenneTwister(7020)  # DGP-02: explicit rng
 
     @testset "compute_posterior_quantiles threaded=true with large array" begin
         # prod(other_dims) = 50 * 5 * 5 = 1250 > 1000 → triggers threaded path
-        samples = randn(30, 50, 5, 5)
+        samples = randn(rng, 30, 50, 5, 5)
         q_vec = [0.16, 0.5, 0.84]
 
         q_out, m_out = MacroEconometricModels.compute_posterior_quantiles(samples, q_vec; threaded=true)
@@ -159,8 +158,8 @@ end
 
     @testset "compute_weighted_quantiles_threaded!" begin
         # Need large enough array: 50 * 5 * 5 = 1250 > 1000
-        samples = randn(30, 50, 5, 5)
-        weights = rand(30)
+        samples = randn(rng, 30, 50, 5, 5)
+        weights = rand(rng, 30)
         weights ./= sum(weights)
 
         q_vec = Float64.([0.16, 0.5, 0.84])
@@ -187,9 +186,9 @@ end
 # =============================================================================
 
 @testset "BVARPosterior size and length" begin
-    Random.seed!(7030)
-    Y = randn(50, 2)
-    post = estimate_bvar(Y, 1; n_draws=20)
+    rng = MersenneTwister(7030)  # DGP-02: explicit rng
+    Y = randn(rng, 50, 2)
+    post = estimate_bvar(Y, 1; n_draws=20, rng=rng)
 
     @test Base.length(post) == 20
     @test Base.size(post, 1) == 20
@@ -201,9 +200,9 @@ end
 # =============================================================================
 
 @testset "process_posterior_samples deprecated wrapper" begin
-    Random.seed!(7040)
-    Y = randn(50, 2)
-    post = estimate_bvar(Y, 1; n_draws=10)
+    rng = MersenneTwister(7040)  # DGP-02: explicit rng
+    Y = randn(rng, 50, 2)
+    post = estimate_bvar(Y, 1; n_draws=10, rng=rng)
 
     # The deprecated (post, p, n, func) signature should still work
     results, n_samples = MacroEconometricModels.process_posterior_samples(
@@ -221,8 +220,8 @@ end
 # =============================================================================
 
 @testset "Forecast accessor functions" begin
-    Random.seed!(7050)
-    Y = randn(100, 3)
+    rng = MersenneTwister(7050)  # DGP-02: explicit rng
+    Y = randn(rng, 100, 3)
 
     @testset "VARForecast" begin
         m = estimate_var(Y, 2)
@@ -234,7 +233,7 @@ end
     end
 
     @testset "BVARForecast" begin
-        post = estimate_bvar(Y, 1; n_draws=50)
+        post = estimate_bvar(Y, 1; n_draws=50, rng=rng)
         fc = forecast(post, 5)
         @test point_forecast(fc) === fc.forecast
         @test lower_bound(fc) === fc.ci_lower
@@ -243,7 +242,8 @@ end
     end
 
     @testset "ARIMAForecast" begin
-        y = cumsum(randn(100))
+        # AR(2) truth (DGP-02 #791) — not a level random walk.
+        y = dgp_arima(rng; phi=[0.5, 0.2], T=100).y
         am = estimate_ar(y, 2)
         afc = forecast(am, 5)
         @test point_forecast(afc) === afc.forecast
@@ -255,8 +255,8 @@ end
     @testset "VECMForecast" begin
         # Cointegrated system: y2 = y1 + noise
         n = 150
-        y1 = cumsum(randn(n))
-        y2 = y1 + 0.1 * randn(n)
+        y1 = cumsum(randn(rng, n))
+        y2 = y1 + 0.1 * randn(rng, n)
         Y_ci = hcat(y1, y2)
         vecm = estimate_vecm(Y_ci, 2; rank=1)
         fc = forecast(vecm, 5)
@@ -267,7 +267,8 @@ end
     end
 
     @testset "FactorForecast" begin
-        X = randn(80, 10)
+        # 2-factor truth (DGP-02 #791).
+        X = dgp_dynamic_factors(rng; A=[0.8 0.1; 0.0 0.7], N=10, T=80).X
         fm = estimate_factors(X, 2)
         fc = forecast(fm, 3)
         @test point_forecast(fc) === fc.observables         # FactorForecast override
@@ -277,7 +278,8 @@ end
     end
 
     @testset "VolatilityForecast" begin
-        y_vol = cumsum(randn(200))
+        # GARCH(1,1) truth (DGP-02 #791) — not a level random walk.
+        y_vol = dgp_garch_family(rng; T=500).y
         gm = estimate_garch(y_vol, 1, 1)
         fc = forecast(gm, 5)
         @test point_forecast(fc) === fc.forecast
