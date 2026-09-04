@@ -84,7 +84,8 @@ const MEM_EP = MacroEconometricModels
 
     @testset "construct_var_matrices errors" begin
         # Too few observations
-        Y = randn(3, 2)
+        rng = MersenneTwister(8000)  # DGP-02: explicit rng
+        Y = randn(rng, 3, 2)
         @test_throws ArgumentError MEM_EP.construct_var_matrices(Y, 5)
     end
 
@@ -142,9 +143,9 @@ const MEM_EP = MacroEconometricModels
     end
 
     @testset "White HC variants" begin
-        Random.seed!(8001)
-        X = randn(50, 3)
-        u = randn(50)
+        rng = MersenneTwister(8001)  # DGP-02: explicit rng
+        X = randn(rng, 50, 3)
+        u = randn(rng, 50)
         for variant in [:hc0, :hc1, :hc2, :hc3]
             V = MEM_EP.white_vcov(X, u; variant=variant)
             @test size(V) == (3, 3)
@@ -153,64 +154,64 @@ const MEM_EP = MacroEconometricModels
     end
 
     @testset "Newey-West with prewhitening" begin
-        Random.seed!(8002)
-        X = randn(50, 3)
-        u = randn(50)
+        rng = MersenneTwister(8002)  # DGP-02: explicit rng
+        X = randn(rng, 50, 3)
+        u = randn(rng, 50)
         V_pw = MEM_EP.newey_west(X, u; prewhiten=true)
         @test size(V_pw) == (3, 3)
     end
 
     @testset "Newey-West multivariate" begin
-        Random.seed!(8003)
-        X = randn(50, 3)
-        U = randn(50, 2)
+        rng = MersenneTwister(8003)  # DGP-02: explicit rng
+        X = randn(rng, 50, 3)
+        U = randn(rng, 50, 2)
         V = MEM_EP.newey_west(X, U)
         @test size(V) == (6, 6)
     end
 
     @testset "White multivariate" begin
-        Random.seed!(8004)
-        X = randn(50, 3)
-        U = randn(50, 2)
+        rng = MersenneTwister(8004)  # DGP-02: explicit rng
+        X = randn(rng, 50, 3)
+        U = randn(rng, 50, 2)
         V = MEM_EP.white_vcov(X, U)
         @test size(V) == (6, 6)
     end
 
     @testset "Driscoll-Kraay single and multi" begin
-        Random.seed!(8005)
-        X = randn(50, 3)
-        u = randn(50)
+        rng = MersenneTwister(8005)  # DGP-02: explicit rng
+        X = randn(rng, 50, 3)
+        u = randn(rng, 50)
         V = MEM_EP.driscoll_kraay(X, u)
         @test size(V) == (3, 3)
 
-        U = randn(50, 2)
+        U = randn(rng, 50, 2)
         V2 = MEM_EP.driscoll_kraay(X, U)
         @test size(V2) == (6, 6)
     end
 
     @testset "precompute_XtX_inv" begin
-        Random.seed!(8006)
-        X = randn(50, 3)
+        rng = MersenneTwister(8006)  # DGP-02: explicit rng
+        X = randn(rng, 50, 3)
         XtX_inv = MEM_EP.precompute_XtX_inv(X)
         @test size(XtX_inv) == (3, 3)
         @test norm(XtX_inv - inv(X' * X)) < 1e-10
 
         # Use with newey_west
-        u = randn(50)
+        u = randn(rng, 50)
         V1 = MEM_EP.newey_west(X, u)
         V2 = MEM_EP.newey_west(X, u; XtX_inv=XtX_inv)
         @test norm(V1 - V2) < 1e-10
     end
 
     @testset "Long-run variance/covariance" begin
-        Random.seed!(8007)
+        rng = MersenneTwister(8007)  # DGP-02: explicit rng
         # Short vector (length 1: var returns NaN)
         x_short = [1.0]
         lrv = MEM_EP.long_run_variance(x_short)
         @test isnan(lrv) || isfinite(lrv)  # implementation-dependent edge case
 
         # Normal case
-        x = randn(100)
+        x = randn(rng, 100)
         lrv_normal = MEM_EP.long_run_variance(x)
         @test lrv_normal >= 0
 
@@ -221,21 +222,21 @@ const MEM_EP = MacroEconometricModels
         end
 
         # Multivariate long-run covariance
-        X = randn(100, 3)
+        X = randn(rng, 100, 3)
         lrc = MEM_EP.long_run_covariance(X)
         @test size(lrc) == (3, 3)
         @test issymmetric(lrc) || norm(lrc - lrc') < 1e-10
 
         # Short multivariate
-        X_short = randn(1, 2)
+        X_short = randn(rng, 1, 2)
         lrc_short = MEM_EP.long_run_covariance(X_short)
         @test size(lrc_short) == (2, 2)
     end
 
     @testset "robust_vcov dispatch" begin
-        Random.seed!(8008)
-        X = randn(50, 3)
-        u = randn(50)
+        rng = MersenneTwister(8008)  # DGP-02: explicit rng
+        X = randn(rng, 50, 3)
+        u = randn(rng, 50)
 
         V_nw = MEM_EP.robust_vcov(X, u, NeweyWestEstimator())
         @test size(V_nw) == (3, 3)
@@ -247,7 +248,7 @@ const MEM_EP = MacroEconometricModels
         @test size(V_dk) == (3, 3)
 
         # Multivariate dispatch
-        U = randn(50, 2)
+        U = randn(rng, 50, 2)
         V_nw2 = MEM_EP.robust_vcov(X, U, NeweyWestEstimator())
         @test size(V_nw2) == (6, 6)
         V_w2 = MEM_EP.robust_vcov(X, U, WhiteEstimator())
@@ -261,8 +262,8 @@ const MEM_EP = MacroEconometricModels
     # =========================================================================
 
     @testset "compute_Q error paths" begin
-        Random.seed!(8010)
-        Y = randn(100, 3)
+        rng = MersenneTwister(8010)  # DGP-02: explicit rng
+        Y = randn(rng, 100, 3)
         model = estimate_var(Y, 2)
         # Unknown method
         @test_throws Union{ArgumentError, ErrorException} MEM_EP.compute_Q(model, :nonexistent_method, 10, nothing, nothing)
@@ -273,12 +274,13 @@ const MEM_EP = MacroEconometricModels
     # =========================================================================
 
     @testset "ARIMA validation" begin
+        rng = MersenneTwister(8015)  # DGP-02: explicit rng
         # Too short series
         @test_throws ArgumentError estimate_ar(ones(5), 1)
         # Negative orders (via estimate_arima)
-        @test_throws ArgumentError estimate_arima(randn(100), -1, 0, 0)
-        @test_throws ArgumentError estimate_arima(randn(100), 0, -1, 0)
-        @test_throws ArgumentError estimate_arima(randn(100), 0, 0, -1)
+        @test_throws ArgumentError estimate_arima(randn(rng, 100), -1, 0, 0)
+        @test_throws ArgumentError estimate_arima(randn(rng, 100), 0, -1, 0)
+        @test_throws ArgumentError estimate_arima(randn(rng, 100), 0, 0, -1)
     end
 
     @testset "Differencing" begin
@@ -294,8 +296,8 @@ const MEM_EP = MacroEconometricModels
     end
 
     @testset "ARIMA forecast h<1" begin
-        Random.seed!(8020)
-        y = randn(100)
+        rng = MersenneTwister(8020)  # DGP-02: explicit rng
+        y = randn(rng, 100)
         m = estimate_ar(y, 1)
         @test_throws ArgumentError forecast(m, 0)
     end
@@ -305,8 +307,8 @@ const MEM_EP = MacroEconometricModels
     # =========================================================================
 
     @testset "Factor model validation" begin
-        Random.seed!(8030)
-        X = randn(50, 10)
+        rng = MersenneTwister(8030)  # DGP-02: explicit rng
+        X = randn(rng, 50, 10)
         # r too large
         @test_throws ArgumentError estimate_factors(X, 51)
         # r = 0
@@ -329,14 +331,17 @@ const MEM_EP = MacroEconometricModels
     # =========================================================================
 
     @testset "companion_matrix" begin
-        Random.seed!(8040)
-        Y = randn(100, 3)
+        rng = MersenneTwister(8040)  # DGP-02: explicit rng
+        # Stationary truth (DGP-02 #791): estimated companion stays stable,
+        # so the bound is < 1, not the old < 2.0 "loose for random data".
+        Y = dgp_var(rng; A=[0.5 0.1 0.0; 0.0 0.5 0.1; 0.0 0.0 0.5],
+                    B0=Matrix{Float64}(I, 3, 3), T=200).Y
         model = estimate_var(Y, 2)
         F = MEM_EP.companion_matrix(model.B, 3, 2)
         @test size(F) == (6, 6)
         # For stable VAR, all eigenvalues should have modulus < 1
         evals = eigvals(F)
-        @test all(abs.(evals) .< 2.0)  # loose bound for random data
+        @test all(abs.(evals) .< 1.0)
 
         # p=1 case
         model1 = estimate_var(Y, 1)
@@ -345,17 +350,22 @@ const MEM_EP = MacroEconometricModels
     end
 
     @testset "extract_ar_coefficients" begin
-        Random.seed!(8041)
-        Y = randn(100, 3)
+        rng = MersenneTwister(8041)  # DGP-02: explicit rng
+        Y = dgp_var(rng; A=[0.5 0.1 0.0; 0.0 0.5 0.1; 0.0 0.0 0.5],
+                    B0=Matrix{Float64}(I, 3, 3), T=200).Y
         model = estimate_var(Y, 2)
         coeffs = MEM_EP.extract_ar_coefficients(model.B, 3, 2)
         @test length(coeffs) == 2
         @test all(size(A) == (3, 3) for A in coeffs)
+        # Exact block recovery (DGP-02 #791): extraction inverts the B layout,
+        # so transposed blocks or reversed lag order fail here.
+        @test coeffs[1] == model.B[2:4, :]'
+        @test coeffs[2] == model.B[5:7, :]'
     end
 
     @testset "univariate_ar_variance" begin
-        Random.seed!(8042)
-        y = randn(100)
+        rng = MersenneTwister(8042)  # DGP-02: explicit rng
+        y = randn(rng, 100)
         v = MEM_EP.univariate_ar_variance(y)
         @test v > 0
         # Short vector
