@@ -39,7 +39,6 @@ both headings; a file on either list is exempt.
 - test/vecm/test_vecm_serialization.jl
 - test/var/test_var_serialization.jl
 - test/lp/test_lp_serialization.jl
-- test/nowcast/test_nowcast_serialization.jl
 - test/did/test_did_serialization.jl
 - test/gmm/test_gmm_serialization.jl
 - test/midas/test_midas_serialization.jl
@@ -91,8 +90,6 @@ both headings; a file on either list is exempt.
 - test/lp/test_lp_fevd.jl
 - test/lp/test_lp_forecast.jl
 - test/lp/test_lp_structural.jl
-<!-- DGP-07 (#796) -->
-- test/nowcast/test_nowcast.jl
 <!-- DGP-08 (#797) -->
 - test/gmm/test_gmm.jl
 - test/gmm/test_smm.jl
