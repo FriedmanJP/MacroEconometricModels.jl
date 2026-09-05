@@ -12,7 +12,9 @@
 using MacroEconometricModels
 using Random, Statistics, Printf
 
-Random.seed!(2024)
+# One shared rng threads the VAR loop, the VAR bootstrap, and the BVAR
+# posterior sequentially — the same stream as the old seed!(2024).
+rng = Random.MersenneTwister(2024)
 
 # ── Generate a persistent 3-variable VAR(1) system ──────────────────────
 T_obs = 300
@@ -23,7 +25,7 @@ A = [0.7 0.1 0.0;
 
 Y = zeros(T_obs, n)
 for t in 2:T_obs
-    Y[t, :] = A * Y[t-1, :] + randn(n)
+    Y[t, :] = A * Y[t-1, :] + randn(rng, n)
 end
 
 H = 40
@@ -36,7 +38,7 @@ _tprint("=" ^ 72)
 
 _tprint("\n── VAR (bootstrap CI, 500 reps) ──")
 var_model = estimate_var(Y, 2)
-var_irf = irf(var_model, H; method=:cholesky, ci_type=:bootstrap, reps=500)
+var_irf = irf(var_model, H; method=:cholesky, ci_type=:bootstrap, reps=500, rng=rng)
 
 var_widths = var_irf.ci_upper .- var_irf.ci_lower
 _tprint(@sprintf("  %-6s  %10s  %10s  %10s", "h", "Width(1,1)", "Width(2,1)", "Width(3,1)"))
@@ -47,7 +49,7 @@ end
 
 # ── BVAR posterior CI ───────────────────────────────────────────────────
 _tprint("\n── BVAR (posterior CI, 1000 draws) ──")
-bvar_post = estimate_bvar(Y, 2; n_draws=1000)
+bvar_post = estimate_bvar(Y, 2; n_draws=1000, rng=rng)
 bvar_irf = irf(bvar_post, H; method=:cholesky)
 
 # BayesianImpulseResponse: quantiles is (H, n, n, nq) with levels [0.16, 0.5, 0.84]
