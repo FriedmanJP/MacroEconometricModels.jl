@@ -64,9 +64,9 @@ end
     end
 
     @testset "linear_gmm_solve vector vs matrix S_Zy" begin
-        rng2 = MersenneTwister(99)
-        S_ZX = randn(rng2, 4, 2)
-        S_Zy_vec = randn(rng2, 4)
+        rng = MersenneTwister(99)
+        S_ZX = randn(rng, 4, 2)
+        S_Zy_vec = randn(rng, 4)
         S_Zy_mat = reshape(S_Zy_vec, :, 1)
         W = Matrix(1.0I, 4, 4)
 
@@ -76,11 +76,11 @@ end
     end
 
     @testset "gmm_sandwich_vcov dimensions" begin
-        rng2 = MersenneTwister(77)
+        rng = MersenneTwister(77)
         q, k = 5, 3
-        S_ZX = randn(rng2, q, k)
+        S_ZX = randn(rng, q, k)
         W = Matrix(1.0I, q, q)
-        D_e = randn(rng2, q, q)
+        D_e = randn(rng, q, q)
         D_e = D_e' * D_e  # PSD
 
         V = gmm_sandwich_vcov(S_ZX, W, D_e)
@@ -144,8 +144,8 @@ end
 
     @testset "FOD orthogonality" begin
         # FOD errors should be uncorrelated when original errors are i.i.d.
-        rng2 = MersenneTwister(88)
-        eps_orig = randn(rng2, 100, 1)
+        rng = MersenneTwister(88)
+        eps_orig = randn(rng, 100, 1)
         fod_eps = MacroEconometricModels._panel_fod(eps_orig)
         # Autocorrelation should be small
         acf1 = cor(fod_eps[1:end-1, 1], fod_eps[2:end, 1])
@@ -214,8 +214,8 @@ end
     end
 
     @testset "PCA reduction" begin
-        rng2 = MersenneTwister(111)
-        Z = randn(rng2, 50, 100)  # many instruments
+        rng = MersenneTwister(111)
+        Z = randn(rng, 50, 100)  # many instruments
         Z_pca = MacroEconometricModels._pca_reduce_instruments(Z; max_components=10)
         @test size(Z_pca, 1) == 50
         @test size(Z_pca, 2) == 10

@@ -1970,18 +1970,22 @@ end
         n = 2
         model = estimate_var(randn(rng, 80, n), 1)
         r = SVARRestrictions(n; signs=[sign_restriction(1, 1, :positive)])
-        rng_a = MersenneTwister(7530)
-        MacroEconometricModels._assert_rwz_identified(r, model; rng=rng_a)
-        x_a = rand(rng_a)
-        rng_b = MersenneTwister(7530)
-        x_b = rand(rng_b)
+        # let-shadowed `rng` keeps the lint's rng-first names while probing
+        # two independent streams (DGP-02 #791).
+        x_a = let rng = MersenneTwister(7530)
+            MacroEconometricModels._assert_rwz_identified(r, model; rng=rng)
+            rand(rng)
+        end
+        x_b = rand(MersenneTwister(7530))
         @test x_a == x_b
-        rng_c = MersenneTwister(7532)
-        identify_arias(model, r, 3; n_draws=1, n_rotations=50, rng=rng_c)
-        y_c = rand(rng_c)
-        rng_d = MersenneTwister(7532)
-        identify_arias(model, r, 3; n_draws=1, n_rotations=50, rng=rng_d, check_id=false)
-        y_d = rand(rng_d)
+        y_c = let rng = MersenneTwister(7532)
+            identify_arias(model, r, 3; n_draws=1, n_rotations=50, rng=rng)
+            rand(rng)
+        end
+        y_d = let rng = MersenneTwister(7532)
+            identify_arias(model, r, 3; n_draws=1, n_rotations=50, rng=rng, check_id=false)
+            rand(rng)
+        end
         @test y_c == y_d
     end
 end

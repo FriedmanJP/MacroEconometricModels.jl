@@ -580,8 +580,8 @@ end
     # (box B) The preallocated-and-reused companion produces eigenvalues identical to a freshly
     # built companion, for every draw, so the stationarity gate never diverges.
     n, p = 2, 3
-    rngb = Random.MersenneTwister(101)
-    draws = [[0.2 .* randn(rngb, n, n) for _ in 1:p] for _ in 1:5]
+    rng = Random.MersenneTwister(101)
+    draws = [[0.2 .* randn(rng, n, n) for _ in 1:p] for _ in 1:5]
     comp_reuse = zeros(n * p, n * p)
     if p > 1
         comp_reuse[n+1:end, 1:n*(p-1)] = Matrix{Float64}(I, n*(p-1), n*(p-1))
@@ -602,11 +602,10 @@ end
     end
 
     # (box C) The in-place history ring shift reproduces the `vcat`-rebuilt ring exactly.
-    rngc = Random.MersenneTwister(202)
-    hist_vcat = randn(rngc, p, n)
+    hist_vcat = randn(rng, p, n)
     hist_inpl = copy(hist_vcat)
     for step in 1:8
-        y_hat = randn(rngc, n)
+        y_hat = randn(rng, n)
         # old: rebuild via vcat
         hist_vcat = vcat(@view(hist_vcat[2:end, :]), y_hat')
         # new: in-place shift
@@ -781,26 +780,26 @@ end
 end
 
 @testset "SID-18 identify_robust_bayes on BVARPosterior" begin
-    rngy = MersenneTwister(747)  # DGP-03: explicit rng
-    Y = randn(rngy, 50, 2)
+    rng = MersenneTwister(747)  # DGP-03: explicit rng
+    Y = randn(rng, 50, 2)
     post = estimate_bvar(Y, 1; n_draws=FAST ? 6 : 10, burnin=3, seed=747)
     r = SVARRestrictions(2; signs=[sign_restriction(1, 1, :positive),
                                    sign_restriction(2, 1, :positive)])
     nrot = FAST ? 8 : 16
-    rng0 = MersenneTwister(747)
+    rng = MersenneTwister(747)
     res = identify_robust_bayes(post, r, 2; level=0.68, solver=:optimize,
-                                n_rotations=nrot, rng=copy(rng0))
+                                n_rotations=nrot, rng=copy(rng))
     @test res isa RobustBayesResult
     @test res.empty_set_prob == 0
     @test 0 <= res.informativeness <= 1
     # Single-prior interval is identify_arias_bayesian (all nonempty draws,
     # pooled weights, equal-tailed). GK guarantees Haar coverage of the CR,
     # not that the equal-tailed Haar interval ⊂ CR.
-    rand(rng0, UInt64, post.n_draws)
+    rand(rng, UInt64, post.n_draws)
     q_lo = (1 - 0.68) / 2
     arias = identify_arias_bayesian(post, r, 2; n_rotations=nrot,
                                     quantiles=[q_lo, 0.5, 1 - q_lo],
-                                    compute_weights=true, rng=rng0)
+                                    compute_weights=true, rng=rng)
     @test res.single_prior_lower ≈ arias.irf_quantiles[:, :, :, 1]
     @test res.single_prior_upper ≈ arias.irf_quantiles[:, :, :, end]
     w = arias.weights

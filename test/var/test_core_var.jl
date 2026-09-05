@@ -647,10 +647,10 @@ end
     @testset "diagonal Sigma ⇒ gFEVD coincides with Cholesky" begin
         # With uncorrelated reduced-form errors there is nothing to orthogonalize, so the
         # generalized and recursive decompositions agree (up to the sample correlation).
-        rng2 = Random.MersenneTwister(3); n2 = 4000
+        rng = Random.MersenneTwister(3); n2 = 4000
         Y2 = zeros(n2, 2); A2 = [0.5 0.0; 0.0 0.4]
         for t in 2:n2
-            Y2[t, :] = A2 * Y2[t-1, :] + randn(rng2, 2)
+            Y2[t, :] = A2 * Y2[t-1, :] + randn(rng, 2)
         end
         m2 = estimate_var(Y2, 1)
         @test abs(m2.Sigma[1, 2] / sqrt(m2.Sigma[1, 1] * m2.Sigma[2, 2])) < 0.05
@@ -662,10 +662,10 @@ end
     end
 
     @testset "Bayesian generalized FEVD" begin
-        rng3 = Random.MersenneTwister(5); n3 = 300
+        rng = Random.MersenneTwister(5); n3 = 300
         A3 = [0.4 0.1; 0.1 0.35]; Y3 = zeros(n3, 2)
         for t in 2:n3
-            Y3[t, :] = A3 * Y3[t-1, :] + [1.0 0.0; 0.5 1.0] * randn(rng3, 2)
+            Y3[t, :] = A3 * Y3[t-1, :] + [1.0 0.0; 0.5 1.0] * randn(rng, 2)
         end
         post = estimate_bvar(Y3, 2; n_draws=150)
         g = generalized_fevd(post, 8)
@@ -720,9 +720,10 @@ end
 
         # BLOCK keeps serial dependence that i.i.d. resampling destroys.
         ar = zeros(600)
-        rng2 = Random.MersenneTwister(21)
-        for t in 2:600
-            ar[t] = 0.9 * ar[t-1] + randn(rng2)
+        let rng = Random.MersenneTwister(21)
+            for t in 2:600
+                ar[t] = 0.9 * ar[t-1] + randn(rng)
+            end
         end
         Ua = reshape(ar, :, 1)
         ac(x) = cor(x[2:end], x[1:end-1])

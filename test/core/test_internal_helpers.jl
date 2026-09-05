@@ -84,8 +84,8 @@ const MEM_IH = MacroEconometricModels
     end
 
     @testset "ARIMA _white_noise_fit" begin
-        Random.seed!(9001)
-        y = randn(100) .+ 2.0
+        rng = MersenneTwister(9001)
+        y = randn(rng, 100) .+ 2.0
         c, sigma2, loglik, residuals, fitted = MEM_IH._white_noise_fit(y)
         @test c ≈ mean(y)
         @test sigma2 ≈ var(y; corrected=false) atol = 1e-10
@@ -195,8 +195,8 @@ const MEM_IH = MacroEconometricModels
     # =========================================================================
 
     @testset "construct_var_matrices" begin
-        Random.seed!(9010)
-        Y = randn(50, 3)
+        rng = MersenneTwister(9010)
+        Y = randn(rng, 50, 3)
         Y_eff, X = MEM_IH.construct_var_matrices(Y, 2)
         @test size(Y_eff) == (48, 3)
         @test size(X) == (48, 1 + 3 * 2)  # intercept + n*p
@@ -212,8 +212,8 @@ const MEM_IH = MacroEconometricModels
     # =========================================================================
 
     @testset "Kalman filter ARMA" begin
-        Random.seed!(9020)
-        y = randn(100)
+        rng = MersenneTwister(9020)
+        y = randn(rng, 100)
         c = 0.0
         phi = [0.5]
         theta = Float64[]
@@ -261,23 +261,23 @@ const MEM_IH = MacroEconometricModels
     # =========================================================================
 
     @testset "optimal_bandwidth_nw" begin
-        Random.seed!(9030)
-        x = randn(100)
+        rng = MersenneTwister(9030)
+        x = randn(rng, 100)
         bw = MEM_IH.optimal_bandwidth_nw(x)
         @test bw >= 0
         @test bw <= 100
 
         # Short vector
-        bw_short = MEM_IH.optimal_bandwidth_nw(randn(3))
+        bw_short = MEM_IH.optimal_bandwidth_nw(randn(rng, 3))
         @test bw_short == 0
 
         # Multivariate
-        X = randn(100, 3)
+        X = randn(rng, 100, 3)
         bw_multi = MEM_IH.optimal_bandwidth_nw(X)
         @test bw_multi >= 0
 
         # Empty multivariate
-        X_empty = randn(100, 0)
+        X_empty = randn(rng, 100, 0)
         bw_empty = MEM_IH.optimal_bandwidth_nw(X_empty)
         @test bw_empty == 0
     end

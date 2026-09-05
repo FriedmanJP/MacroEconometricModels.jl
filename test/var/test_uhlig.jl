@@ -45,7 +45,7 @@ end
         # Different angles should produce different unit vectors
         rng = MersenneTwister(100)  # DGP-02: explicit rng
         m = 3
-        vecs = [MacroEconometricModels._spherical_to_unit_vector(rand(m-1) .* 2π, m) for _ in 1:10]
+        vecs = [MacroEconometricModels._spherical_to_unit_vector(rand(rng, m-1) .* 2π, m) for _ in 1:10]
         # Not all the same
         @test !all(v -> isapprox(v, vecs[1], atol=1e-8), vecs[2:end])
     end
@@ -610,9 +610,9 @@ end
     # exactly (verified); it stays on white noise because the r_uniq block
     # below is seed-sensitive at ~50/50 across streams — see #814 (filed
     # from DGP-02 #791).
-    xrng = Xoshiro(732)  # DGP-02: explicit rng
+    rng = Xoshiro(732)  # DGP-02: explicit rng
     n = 2
-    Y = randn(xrng, 200, n)
+    Y = randn(rng, 200, n)
     m = estimate_var(Y, 1)
     r = SVARRestrictions(n; signs=[
         sign_restriction(1, 1, :positive),
@@ -634,7 +634,7 @@ end
     ρ = -0.5
     Sigma = [1.0 ρ; ρ 1.0]
     B = zeros(1 + n * 1, n)
-    U = randn(xrng, 199, n)
+    U = randn(rng, 199, n)
     m_corr = VARModel(Y, 1, B, U, Sigma, 0.0, 0.0, 0.0)
     horizon = 1
     Phi = MacroEconometricModels._compute_ma_coefficients(m_corr, horizon)
@@ -662,7 +662,7 @@ end
         signs=[sign_restriction(1, 1, :positive)])
     u = identify_uhlig(m, r_uniq, 5; n_starts=(FAST ? 3 : 10), n_refine=(FAST ? 1 : 2),
                        max_iter_coarse=(FAST ? 50 : 100), max_iter_fine=(FAST ? 100 : 300),
-                       rng=xrng)
+                       rng=rng)
     @test u.converged == true
     @test u.irf[1, 1, 1] > 0
     @test abs(u.irf[1, 2, 1]) < 1e-8

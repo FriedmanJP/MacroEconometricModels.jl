@@ -255,8 +255,9 @@ end
         @test norm(Λ_pw - Λ_true) / norm(Λ_true) < 0.25
 
         # Near-unit-root moments: prewhitening falls back gracefully (no throw, PSD result).
-        rng2 = MersenneTwister(4)
-        rw = cumsum(randn(rng2, 300, 2), dims=1)
+        rw = let rng = MersenneTwister(4)
+            cumsum(randn(rng, 300, 2), dims=1)
+        end
         Ω_rw = @test_logs (:warn,) match_mode=:any lrcov(rw; prewhiten=true)
         @test size(Ω_rw) == (2, 2)
     end

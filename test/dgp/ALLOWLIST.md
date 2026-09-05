@@ -56,35 +56,6 @@ both headings; a file on either list is exempt.
 
 ## Grandfathered (pending per-module DGP migration — remove as DGP-02…18 land)
 
-<!-- DGP-02 (#791) -->
-- test/core/test_covariance.jl
-- test/core/test_coverage_gaps.jl
-- test/core/test_edge_cases.jl
-- test/core/test_error_paths.jl
-- test/core/test_examples.jl
-- test/core/test_internal_helpers.jl
-- test/core/test_lrvar.jl
-- test/core/test_utils.jl
-- test/var/test_arias2018.jl
-- test/var/test_core_var.jl
-- test/var/test_fevd.jl
-- test/var/test_hd.jl
-- test/var/test_irf.jl
-- test/var/test_irf_ci.jl
-- test/var/test_robust_bayes.jl
-- test/var/test_statsapi.jl
-- test/var/test_uhlig.jl
-<!-- DGP-03 (#792) -->
-- test/bvar/test_bayesian.jl
-- test/bvar/test_bayesian_utils.jl
-- test/bvar/test_bgr.jl
-- test/bvar/test_issues_523_564.jl
-- test/bvar/test_minnesota.jl
-- test/bvar/test_samplers.jl
-<!-- DGP-04 (#793) -->
-- test/ardl/test_ardl.jl
-- test/pvar/test_pvar.jl
-- test/vecm/test_vecm.jl
 <!-- DGP-09 (#798) -->
 - test/arima/test_arfima.jl
 - test/arima/test_arima.jl
