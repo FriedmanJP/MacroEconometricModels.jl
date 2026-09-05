@@ -56,11 +56,6 @@ both headings; a file on either list is exempt.
 
 ## Grandfathered (pending per-module DGP migration — remove as DGP-02…18 land)
 
-<!-- DGP-11 (#800) -->
-- test/nongaussian/test_nongaussian_internals.jl
-- test/nongaussian/test_nongaussian_svar.jl
-- test/nonlinear/test_markov_switching.jl
-- test/nonlinear/test_star.jl
 <!-- DGP-12 (#801) -->
 - test/teststat/test_bds.jl
 - test/teststat/test_bubble.jl

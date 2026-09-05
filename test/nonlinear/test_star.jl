@@ -292,7 +292,7 @@ end
         @test_throws ArgumentError estimate_star(y, 0)               # p < 1
         @test_throws ArgumentError estimate_star(y, 1; d=0)          # d < 1
         @test_throws ArgumentError estimate_star(y, 1; type=:bogus)  # bad type
-        @test_throws DimensionMismatch estimate_star(y, 1; s=randn(10))  # s length
+        @test_throws DimensionMismatch estimate_star(y, 1; s=randn(MersenneTwister(295), 10))  # s length
         @test_throws ArgumentError estimate_star(fill(1.0, 100), 1)  # zero-variance s
         @test_throws ArgumentError star_linearity_test(y, 0)
     end

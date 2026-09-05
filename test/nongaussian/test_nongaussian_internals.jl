@@ -20,9 +20,9 @@ const MEM = MacroEconometricModels
     # =========================================================================
 
     @testset "Whitening" begin
-        Random.seed!(7001)
+        rng = MersenneTwister(7001)
         # Identity-covariance input should yield near-identity output covariance
-        U = randn(200, 3)
+        U = randn(rng, 200, 3)
         Z, W_white, dewhiten = MEM._whiten(U)
         @test size(Z) == (200, 3)
         @test size(W_white) == (3, 3)
@@ -31,17 +31,17 @@ const MEM = MacroEconometricModels
         @test norm(cov_Z - I) < 0.3  # approximately identity
 
         # Near-zero eigenvalue: rank-deficient input
-        U_rank = hcat(randn(100, 2), zeros(100))
+        U_rank = hcat(randn(rng, 100, 2), zeros(100))
         Z2, W2, dw2 = MEM._whiten(U_rank)
         @test size(Z2, 1) == 100
         @test size(Z2, 2) <= 3  # may drop near-zero eigenvalue component
     end
 
     @testset "Givens rotation roundtrip" begin
-        Random.seed!(7002)
+        rng = MersenneTwister(7002)
         n = 3
         n_angles = n * (n - 1) ÷ 2
-        angles_orig = randn(n_angles)
+        angles_orig = randn(rng, n_angles)
         Q = MEM._givens_to_orthogonal(angles_orig, n)
         @test size(Q) == (n, n)
         # Q should be orthogonal
@@ -90,8 +90,8 @@ const MEM = MacroEconometricModels
     end
 
     @testset "FastICA deflation" begin
-        Random.seed!(7003)
-        Z = randn(100, 3)
+        rng = MersenneTwister(7003)
+        Z = randn(rng, 100, 3)
         # Whiten it properly
         Z_w, _, _ = MEM._whiten(Z)
         n = size(Z_w, 2)
@@ -105,8 +105,8 @@ const MEM = MacroEconometricModels
     end
 
     @testset "FastICA symmetric" begin
-        Random.seed!(7004)
-        Z = randn(100, 3)
+        rng = MersenneTwister(7004)
+        Z = randn(rng, 100, 3)
         Z_w, _, _ = MEM._whiten(Z)
         n = size(Z_w, 2)
         W, iters = MEM._fastica_symmetric(Z_w, n; contrast=:exp, max_iter=50)
@@ -116,8 +116,8 @@ const MEM = MacroEconometricModels
     end
 
     @testset "ICA to SVAR conversion" begin
-        Random.seed!(7005)
-        Y = randn(200, 3)
+        rng = MersenneTwister(7005)
+        Y = randn(rng, 200, 3)
         model = estimate_var(Y, 2)
         n = 3
         W_ica = Matrix{Float64}(I, n, n)  # identity rotation
@@ -130,8 +130,8 @@ const MEM = MacroEconometricModels
     end
 
     @testset "JADE cumulant matrices" begin
-        Random.seed!(7006)
-        Z = randn(100, 3)
+        rng = MersenneTwister(7006)
+        Z = randn(rng, 100, 3)
         Z_w, _, _ = MEM._whiten(Z)
         mats = MEM._jade_cumulant_matrices(Z_w)
         n = size(Z_w, 2)
@@ -141,7 +141,6 @@ const MEM = MacroEconometricModels
     end
 
     @testset "Joint diagonalization" begin
-        Random.seed!(7007)
         # Diagonal matrices should converge quickly
         n = 3
         D1 = Diagonal([1.0, 2.0, 3.0])
@@ -155,8 +154,8 @@ const MEM = MacroEconometricModels
     end
 
     @testset "SOBI autocovariance" begin
-        Random.seed!(7008)
-        Z = randn(100, 3)
+        rng = MersenneTwister(7008)
+        Z = randn(rng, 100, 3)
         R = MEM._sobi_autocovariance(Z, 1)
         @test size(R) == (3, 3)
         R0 = MEM._sobi_autocovariance(Z, 0)
@@ -164,21 +163,21 @@ const MEM = MacroEconometricModels
     end
 
     @testset "Distance covariance" begin
-        Random.seed!(7009)
+        rng = MersenneTwister(7009)
         # Independent variables: low distance covariance
-        x = randn(50)
-        y = randn(50)
+        x = randn(rng, 50)
+        y = randn(rng, 50)
         dcov_ind = MEM._distance_covariance(x, y)
         @test dcov_ind >= 0
 
         # Perfectly dependent: high distance covariance
-        dcov_dep = MEM._distance_covariance(x, x .^ 2 .+ 0.01 * randn(50))
+        dcov_dep = MEM._distance_covariance(x, x .^ 2 .+ 0.01 * randn(rng, 50))
         @test dcov_dep >= 0
     end
 
     @testset "dCov objective" begin
-        Random.seed!(7010)
-        Z = randn(50, 2)
+        rng = MersenneTwister(7010)
+        Z = randn(rng, 50, 2)
         angles = zeros(1)  # 2x2 case: 1 angle
         obj = MEM._dcov_objective(angles, Z, 2)
         @test obj >= 0
@@ -186,16 +185,16 @@ const MEM = MacroEconometricModels
     end
 
     @testset "HSIC statistic" begin
-        Random.seed!(7011)
-        x = randn(30)
-        y = randn(30)
+        rng = MersenneTwister(7011)
+        x = randn(rng, 30)
+        y = randn(rng, 30)
         hsic_val = MEM._hsic_statistic(x, y; sigma=1.0)
         @test isfinite(hsic_val)
     end
 
     @testset "HSIC objective" begin
-        Random.seed!(7012)
-        Z = randn(30, 2)
+        rng = MersenneTwister(7012)
+        Z = randn(rng, 30, 2)
         angles = zeros(1)
         obj = MEM._hsic_objective(angles, Z, 2; sigma=1.0)
         @test isfinite(obj)
@@ -248,8 +247,8 @@ const MEM = MacroEconometricModels
     end
 
     @testset "Gaussian log-likelihood" begin
-        Random.seed!(7020)
-        Y = randn(100, 2)
+        rng = MersenneTwister(7020)
+        Y = randn(rng, 100, 2)
         model = estimate_var(Y, 1)
         ll = MEM._gaussian_loglik(model)
         @test isfinite(ll)
@@ -291,8 +290,8 @@ const MEM = MacroEconometricModels
     end
 
     @testset "Non-Gaussian loglik branches" begin
-        Random.seed!(7025)
-        Y = randn(100, 2)
+        rng = MersenneTwister(7025)
+        Y = randn(rng, 100, 2)
         model = estimate_var(Y, 1)
         n = 2
         L = MEM.safe_cholesky(model.Sigma)
@@ -308,8 +307,8 @@ const MEM = MacroEconometricModels
     end
 
     @testset "Non-Gaussian vcov shape" begin
-        Random.seed!(7026)
-        Y = randn(80, 2)
+        rng = MersenneTwister(7026)
+        Y = randn(rng, 80, 2)
         model = estimate_var(Y, 1)
         n = 2
         L = MEM.safe_cholesky(model.Sigma)
@@ -327,12 +326,12 @@ const MEM = MacroEconometricModels
     # =========================================================================
 
     @testset "Eigendecomposition identification" begin
-        Random.seed!(7030)
+        rng = MersenneTwister(7030)
         n = 3
         # Create two distinct covariance matrices
-        A = randn(n, n)
+        A = randn(rng, n, n)
         Sigma1 = A * A' + I
-        B = randn(n, n)
+        B = randn(rng, n, n)
         Sigma2 = B * B' + I
 
         B0, Q, Lambda = MEM._eigendecomposition_id(Sigma1, Sigma2)
@@ -344,10 +343,10 @@ const MEM = MacroEconometricModels
     end
 
     @testset "Hamilton filter" begin
-        Random.seed!(7031)
+        rng = MersenneTwister(7031)
         T_obs = 100
         n = 2
-        U = randn(T_obs, n)
+        U = randn(rng, T_obs, n)
         Sigma1 = U' * U / T_obs + I
         Sigma2 = 2 * U' * U / T_obs + I
         P = [0.9 0.1; 0.1 0.9]
@@ -361,10 +360,10 @@ const MEM = MacroEconometricModels
     end
 
     @testset "Hamilton smoother" begin
-        Random.seed!(7032)
+        rng = MersenneTwister(7032)
         T_obs = 50
         n = 2
-        U = randn(T_obs, n)
+        U = randn(rng, T_obs, n)
         Sigma1 = U' * U / T_obs + I
         Sigma2 = 2 * U' * U / T_obs + I
         P = [0.9 0.1; 0.1 0.9]
@@ -378,11 +377,11 @@ const MEM = MacroEconometricModels
     end
 
     @testset "MS EM step" begin
-        Random.seed!(7033)
+        rng = MersenneTwister(7033)
         T_obs = 50
         n = 2
         K = 2
-        U = randn(T_obs, n)
+        U = randn(rng, T_obs, n)
         # Build proper filtered/predicted/smoothed probabilities via Hamilton filter
         Sigma1 = U' * U / T_obs + I
         Sigma2 = 2 * U' * U / T_obs + I
@@ -416,8 +415,8 @@ const MEM = MacroEconometricModels
     end
 
     @testset "GARCH(1,1) filter" begin
-        Random.seed!(7034)
-        eps_sq = abs2.(randn(100))
+        rng = MersenneTwister(7034)
+        eps_sq = abs2.(randn(rng, 100))
         h = MEM._garch11_filter(0.01, 0.05, 0.9, eps_sq)
         @test length(h) == 100
         @test all(h .> 0)
@@ -426,8 +425,8 @@ const MEM = MacroEconometricModels
     end
 
     @testset "GARCH(1,1) loglik" begin
-        Random.seed!(7035)
-        eps_sq = abs2.(randn(100))
+        rng = MersenneTwister(7035)
+        eps_sq = abs2.(randn(rng, 100))
         # Valid params: omega ~ 0.01, alpha ~ 0.12, beta ~ 0.5
         # sigmoid(-2) ≈ 0.12 → alpha ≈ 0.06, sigmoid(0) = 0.5 → beta ≈ 0.495
         params = [log(0.01), -2.0, 0.0]
@@ -441,9 +440,9 @@ const MEM = MacroEconometricModels
     end
 
     @testset "Estimate GARCH(1,1)" begin
-        Random.seed!(7036)
+        rng = MersenneTwister(7036)
         # Use simpler data: squared normal (no explosive dynamics)
-        eps_sq = abs2.(randn(200))
+        eps_sq = abs2.(randn(rng, 200))
         omega, alpha, beta, h_est = MEM._estimate_garch11(eps_sq)
         @test omega > 0
         @test alpha >= 0
@@ -490,9 +489,9 @@ const MEM = MacroEconometricModels
     end
 
     @testset "Cross-correlation test" begin
-        Random.seed!(7040)
+        rng = MersenneTwister(7040)
         # Independent shocks
-        shocks = randn(100, 3)
+        shocks = randn(rng, 100, 3)
         stat, pval, df = MEM._cross_correlation_test(shocks, 5)
         @test stat >= 0
         @test 0 <= pval <= 1
@@ -500,9 +499,9 @@ const MEM = MacroEconometricModels
     end
 
     @testset "dCov independence test" begin
-        Random.seed!(7041)
+        rng = MersenneTwister(7041)
         # Independent shocks
-        shocks = randn(50, 2)
+        shocks = randn(rng, 50, 2)
         stat, pval = MEM._dcov_independence_test(shocks)
         @test stat >= 0
         @test 0 <= pval <= 1

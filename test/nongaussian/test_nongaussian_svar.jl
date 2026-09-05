@@ -21,11 +21,11 @@ if !@isdefined(simulate_two_regime)
 end
 
 @testset "Non-Gaussian SVAR Identification" begin
-    Random.seed!(54321)
+    rng = MersenneTwister(54321)
 
     # Generate VAR data
     n_obs = 300
-    Y = randn(n_obs, 3)
+    Y = randn(rng, n_obs, 3)
     model = estimate_var(Y, 2)
     n = 3
 
@@ -229,8 +229,8 @@ end
             end
 
             @testset "Smooth transition" begin
-                Random.seed!(99)
-                s = randn(n_obs)
+                rng = MersenneTwister(99)
+                s = randn(rng, n_obs)
                 result = identify_smooth_transition(model, s)
                 @test result isa SmoothTransitionSVARResult{Float64}
                 @test size(result.B0) == (n, n)
@@ -391,7 +391,7 @@ end
             garch = identify_garch(model)
             @test garch isa AbstractNonGaussianSVAR
 
-            st = identify_smooth_transition(model, randn(n_obs))
+            st = identify_smooth_transition(model, randn(rng, n_obs))
             @test st isa AbstractNonGaussianSVAR
 
             ev = identify_external_volatility(model, vcat(fill(1, 150), fill(2, 150)))
@@ -401,7 +401,7 @@ end
 
     @testset "Bivariate model" begin
         _suppress_warnings() do
-            Y2 = randn(200, 2)
+            Y2 = randn(rng, 200, 2)
             model2 = estimate_var(Y2, 1)
 
             ica2 = identify_fastica(model2)
@@ -498,15 +498,15 @@ end
     end
 
     @testset "SID-09 smooth-transition joint ML" begin
-        Random.seed!(738)
-        m = estimate_var(randn(80, 2), 1)
+        rng = MersenneTwister(738)
+        m = estimate_var(randn(rng, 80, 2), 1)
         @test_throws ArgumentError identify_external_volatility(m, vcat(fill(1, 78), fill(2, 2)))
-        m3 = estimate_var(randn(120, 2), 1)
+        m3 = estimate_var(randn(rng, 120, 2), 1)
         ri3 = vcat(fill(1, 40), fill(2, 40), fill(3, 40))
         ev3 = identify_external_volatility(m3, ri3; regimes=3)
         @test length(ev3.Lambda) == 3
         @test size(ev3.se) == (2, 2)
-        st = identify_smooth_transition(m, randn(size(m.U, 1)))
+        st = identify_smooth_transition(m, randn(rng, size(m.U, 1)))
         @test size(st.se) == (2, 2)
         @test st.vcov isa AbstractMatrix
         B0_reid, _, _ = MacroEconometricModels._eigendecomposition_id(
@@ -650,9 +650,9 @@ end
 
     @testset "Smooth transition edge cases" begin
         _suppress_warnings() do
-            Random.seed!(99999)
+            rng = MersenneTwister(99999)
             # Extreme transition variable (all same sign)
-            s_edge = abs.(randn(n_obs)) .+ 5.0
+            s_edge = abs.(randn(rng, n_obs)) .+ 5.0
             result = identify_smooth_transition(model, s_edge)
             @test result isa SmoothTransitionSVARResult{Float64}
             @test result.gamma > 0
@@ -669,8 +669,8 @@ end
 
     @testset "4-variable scalability" begin
         _suppress_warnings() do
-            Random.seed!(55555)
-            Y4 = randn(200, 4)
+            rng = MersenneTwister(55555)
+            Y4 = randn(rng, 200, 4)
             model4 = estimate_var(Y4, 1)
             ica4 = identify_fastica(model4)
             @test size(ica4.B0) == (4, 4)
@@ -719,7 +719,7 @@ end
             @test norm(Q_ngml' * Q_ngml - I) < 1e-4
 
             # :smooth_transition with transition_var
-            tv = randn(n_obs)
+            tv = randn(rng, n_obs)
             Q_st = MacroEconometricModels.compute_Q(model, :smooth_transition, 10, nothing, nothing;
                                                      transition_var=tv)
             @test size(Q_st) == (n, n)
@@ -738,7 +738,7 @@ end
 
     @testset "Hetero-ID through irf/fevd/hd" begin
         _suppress_warnings() do
-            tv = randn(n_obs)
+            tv = randn(rng, n_obs)
             ri = vcat(fill(1, 150), fill(2, 150))
             T_eff = n_obs - 2
 
@@ -784,8 +784,8 @@ end
 
     @testset "Structural LP Non-Gaussian" begin
         _suppress_warnings() do
-            Random.seed!(88888)
-            Y_lp = randn(200, 3)
+            rng = MersenneTwister(88888)
+            Y_lp = randn(rng, 200, 3)
             for method in [:fastica, :student_t]
                 slp = structural_lp(Y_lp, 8; method=method, lags=2)
                 @test slp isa MacroEconometricModels.StructuralLP
@@ -803,8 +803,8 @@ end
 
     @testset "SID-21 GMM moments" begin
         _suppress_warnings() do
-            Random.seed!(750)
-            Y2 = randn(250, 2)
+            rng = MersenneTwister(750)
+            Y2 = randn(rng, 250, 2)
             model2 = estimate_var(Y2, 1)
             n2 = 2
             n_angles = n2 * (n2 - 1) ÷ 2
@@ -914,6 +914,7 @@ end
     end
 
     @testset "SID-20 shock labels and structural_shocks" begin
+        rng = MersenneTwister(920)
         B_true = [1.2 0.35 -0.25; 0.20 1.05 0.40; -0.30 0.25 1.10]
         n3 = 3
         perm0 = [2, 3, 1]
@@ -921,7 +922,7 @@ end
         B_shuf = B_true[:, perm0] .* signs0'
         Q_shuf = Matrix{Float64}(I, n3, n3)[:, perm0] .* signs0'
         W_shuf = Matrix{Float64}(I, n3, n3)
-        shocks_shuf = randn(20, n3)
+        shocks_shuf = randn(rng, 20, n3)
         ica_shuf = ICASVARResult{Float64}(B_shuf, W_shuf, Q_shuf, shocks_shuf,
                                           :fastica, true, 1, 0.0)
         @test length(ica_shuf.shock_names) == n3
@@ -984,7 +985,7 @@ end
         theta0 = zeros(1)
         gmm0 = NonGaussianGMMResult{Float64}(
             B2, Q2, copy(theta0), Matrix{Float64}(I, 1, 1), zeros(n2, n2),
-            0.0, 1.0, :cokurtosis, :two_step, randn(12, n2),
+            0.0, 1.0, :cokurtosis, :two_step, randn(rng, 12, n2),
             ["y1", "y2"], ["Shock 1", "Shock 2"])
         B_swap = B2[:, [2, 1]]
         lab_g = @test_logs (:warn, r"det\(Q\)") match_mode = :any begin
@@ -996,7 +997,7 @@ end
         @test all(isnan, lab_g.theta)
 
         ml_old = NonGaussianMLResult{Float64}(
-            B_true, Matrix{Float64}(I, n3, n3), randn(12, n3), :student_t,
+            B_true, Matrix{Float64}(I, n3, n3), randn(rng, 12, n3), :student_t,
             -1.0, -2.0, Dict{Symbol,Any}(), zeros(n3, n3), zeros(n3, n3),
             true, 1, 1.0, 2.0)
         @test length(ml_old.shock_names) == n3
