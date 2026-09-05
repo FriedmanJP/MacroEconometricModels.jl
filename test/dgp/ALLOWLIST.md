@@ -56,8 +56,6 @@ both headings; a file on either list is exempt.
 
 ## Grandfathered (pending per-module DGP migration — remove as DGP-02…18 land)
 
-<!-- DGP-16 (#805) -->
-- test/did/test_did.jl
 <!-- DGP-17 (#806) -->
 - test/empirical/test_irf_ci_bands.jl
 <!-- DGP-18 (#807) -->
