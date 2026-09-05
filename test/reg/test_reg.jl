@@ -70,9 +70,9 @@ using LinearAlgebra, Statistics, Random, Distributions
     @testset "LogitModel type construction and StatsAPI" begin
         n, k = 50, 2
         m = LogitModel{Float64}(
-            ones(n), randn(n, k), [0.5, -0.3],
+            ones(n), randn(Random.MersenneTwister(1409), n, k), [0.5, -0.3],
             Matrix{Float64}(I, k, k) * 0.04,
-            randn(n), fill(0.5, n),
+            randn(Random.MersenneTwister(1410), n), fill(0.5, n),
             -30.0, -34.0, 0.12, 64.0, 68.0,
             ["const", "x1"], true, 5, :ols
         )
@@ -102,9 +102,9 @@ using LinearAlgebra, Statistics, Random, Distributions
     @testset "ProbitModel type construction and StatsAPI" begin
         n, k = 50, 2
         m = ProbitModel{Float64}(
-            ones(n), randn(n, k), [0.3, -0.2],
+            ones(n), randn(Random.MersenneTwister(1411), n, k), [0.3, -0.2],
             Matrix{Float64}(I, k, k) * 0.03,
-            randn(n), fill(0.5, n),
+            randn(Random.MersenneTwister(1412), n), fill(0.5, n),
             -28.0, -34.0, 0.18, 60.0, 64.0,
             ["const", "x1"], true, 4, :ols
         )
@@ -222,7 +222,7 @@ using LinearAlgebra, Statistics, Random, Distributions
 
         @testset "Covariance error handling" begin
             X = ones(10, 2)
-            resid = randn(10)
+            resid = randn(Random.MersenneTwister(1413), 10)
             XtXinv = Matrix{Float64}(I, 2, 2)
 
             # Invalid cov_type
@@ -399,24 +399,27 @@ using LinearAlgebra, Statistics, Random, Distributions
 
     @testset "NaN validation" begin
         n = 50
-        X = hcat(ones(n), randn(n))
-        y = randn(n)
+        rng = MersenneTwister(1414)
+        X = hcat(ones(n), randn(rng, n))
+        y = randn(rng, n)
         y[10] = NaN
 
         @test_throws ArgumentError estimate_reg(y, X)
 
-        y2 = randn(n)
-        X2 = hcat(ones(n), randn(n))
+        y2 = randn(rng, n)
+        X2 = hcat(ones(n), randn(rng, n))
         X2[5, 2] = NaN
         @test_throws ArgumentError estimate_reg(y2, X2)
     end
 
     @testset "Dimension mismatch" begin
-        @test_throws ArgumentError estimate_reg(randn(50), randn(60, 2))
+        @test_throws ArgumentError estimate_reg(randn(Random.MersenneTwister(1415), 50),
+                                                randn(Random.MersenneTwister(1416), 60, 2))
     end
 
     @testset "n <= k error" begin
-        @test_throws ArgumentError estimate_reg(randn(3), randn(3, 4))
+        @test_throws ArgumentError estimate_reg(randn(Random.MersenneTwister(1417), 3),
+                                                randn(Random.MersenneTwister(1418), 3, 4))
     end
 
     @testset "Float fallback (Integer input)" begin
@@ -686,15 +689,16 @@ end
 
     @testset "IV — error handling" begin
         n = 50
-        X = hcat(ones(n), randn(n))
+        rng = MersenneTwister(1419)
+        X = hcat(ones(n), randn(rng, n))
         Z = hcat(ones(n))  # only 1 instrument < 2 regressors
-        y = randn(n)
+        y = randn(rng, n)
 
         # Order condition violation
         @test_throws ArgumentError estimate_iv(y, X, Z; endogenous=[2])
 
         # Empty endogenous
-        Z2 = hcat(ones(n), randn(n))
+        Z2 = hcat(ones(n), randn(rng, n))
         @test_throws ArgumentError estimate_iv(y, X, Z2; endogenous=Int[])
 
         # Invalid endogenous index
@@ -865,13 +869,15 @@ end
 
     @testset "Logit error handling" begin
         n = 50
-        X = hcat(ones(n), randn(n))
+        rng = MersenneTwister(1420)
+        X = hcat(ones(n), randn(rng, n))
 
         # Non-binary y
-        @test_throws ArgumentError estimate_logit(randn(n), X)
+        @test_throws ArgumentError estimate_logit(randn(rng, n), X)
 
         # Dimension mismatch
-        @test_throws ArgumentError estimate_logit(Float64.([0,1,0,1,1]), randn(10, 2))
+        @test_throws ArgumentError estimate_logit(Float64.([0,1,0,1,1]),
+                                                  randn(Random.MersenneTwister(1421), 10, 2))
     end
 
     @testset "Logit Float fallback" begin
@@ -1039,10 +1045,11 @@ end
 
     @testset "Probit error handling" begin
         n = 50
-        X = hcat(ones(n), randn(n))
+        rng = MersenneTwister(1422)
+        X = hcat(ones(n), randn(rng, n))
 
         # Non-binary y
-        @test_throws ArgumentError estimate_probit(randn(n), X)
+        @test_throws ArgumentError estimate_probit(randn(rng, n), X)
     end
 
     @testset "Probit Float fallback" begin
@@ -1081,22 +1088,22 @@ end
 @testset "Marginal Effects and Odds Ratios (Task 8)" begin
 
     # ---- Shared data for logit ----
-    rng_logit = MersenneTwister(8001)
+    rng = MersenneTwister(8001)
     n_logit = 1000
     beta_true_logit = [0.0, 1.5, -1.0]
-    X_logit = hcat(ones(n_logit), randn(rng_logit, n_logit, 2))
+    X_logit = hcat(ones(n_logit), randn(rng, n_logit, 2))
     p_logit = 1.0 ./ (1.0 .+ exp.(-X_logit * beta_true_logit))
-    y_logit = Float64.(rand(rng_logit, n_logit) .< p_logit)
+    y_logit = Float64.(rand(rng, n_logit) .< p_logit)
     m_logit = estimate_logit(y_logit, X_logit; varnames=["const", "x1", "x2"])
 
     # ---- Shared data for probit ----
-    rng_probit = MersenneTwister(8002)
+    rng = MersenneTwister(8002)
     n_probit = 1000
     beta_true_probit = [0.0, 1.0, -0.8]
-    X_probit = hcat(ones(n_probit), randn(rng_probit, n_probit, 2))
+    X_probit = hcat(ones(n_probit), randn(rng, n_probit, 2))
     d_norm = Distributions.Normal()
     p_probit = Distributions.cdf.(d_norm, X_probit * beta_true_probit)
-    y_probit = Float64.(rand(rng_probit, n_probit) .< p_probit)
+    y_probit = Float64.(rand(rng, n_probit) .< p_probit)
     m_probit = estimate_probit(y_probit, X_probit; varnames=["const", "x1", "x2"])
 
     @testset "Logit AME — basic properties" begin
@@ -1389,11 +1396,11 @@ end
         @test abs(sum(h_uw) - 2.0) > 1e-3
 
         # Exact hand-built weighted HC2/HC3 reference on synthetic inputs
-        rng2 = MersenneTwister(18804)
+        rng = MersenneTwister(18804)
         n3 = 40
-        X3 = hcat(ones(n3), randn(rng2, n3, 2))
-        w3 = 0.05 .+ 0.9 .* rand(rng2, n3)
-        e3 = randn(rng2, n3)
+        X3 = hcat(ones(n3), randn(rng, n3, 2))
+        w3 = 0.05 .+ 0.9 .* rand(rng, n3)
+        e3 = randn(rng, n3)
         A3 = Matrix(MacroEconometricModels.robust_inv(X3' * Diagonal(w3) * X3))
         h3 = [w3[i] * dot(X3[i, :], A3 * X3[i, :]) for i in 1:n3]
         for (ct, dexp) in ((:hc2, 1), (:hc3, 2))
@@ -1639,7 +1646,7 @@ end
         m = estimate_reg(y, X)
 
         # Wrong number of columns
-        @test_throws ArgumentError predict(m, randn(10, 5))
+        @test_throws ArgumentError predict(m, randn(rng, 10, 5))
     end
 
     @testset "LogitModel predict — new data" begin
@@ -1681,7 +1688,7 @@ end
         y = Float64.(rand(rng, n) .< p)
         m = estimate_logit(y, X)
 
-        @test_throws ArgumentError predict(m, randn(10, 5))
+        @test_throws ArgumentError predict(m, randn(rng, 10, 5))
     end
 
     @testset "ProbitModel predict — new data" begin
@@ -1725,7 +1732,7 @@ end
         y = Float64.(rand(rng, n) .< p)
         m = estimate_probit(y, X)
 
-        @test_throws ArgumentError predict(m, randn(10, 5))
+        @test_throws ArgumentError predict(m, randn(rng, 10, 5))
     end
 
     @testset "Predict consistency across models" begin
@@ -2046,8 +2053,8 @@ end
         # an intercept-only fit has R1 = 0 and reproduces the sample quantile
         # Odd n so the LAD median is UNIQUE: for even n the intercept-only solution is
         # set-valued (any point between the two middle order statistics minimizes the loss).
-        rng2 = Random.MersenneTwister(42); n_odd = 801
-        y_odd = randn(rng2, n_odd)
+        n_odd = 801
+        y_odd = randn(Random.MersenneTwister(42), n_odd)
         m0 = estimate_qreg(y_odd, reshape(ones(n_odd), n_odd, 1), 0.5)
         @test m0.pseudo_r2[1] ≈ 0.0 atol = 1e-8
         @test vec(coef(m0))[1] ≈ Statistics.quantile(y_odd, 0.5) atol = 1e-6
@@ -2173,11 +2180,11 @@ end
         for hfix in (0.6, 0.9)
             bias_c = Float64[]; bias_b = Float64[]; cov_c = 0; cov_r = 0
             for r in 1:reps
-                rr = Random.MersenneTwister(3000 + r); n = 2000
-                x = 2 .* rand(rr, n) .- 1
+                rng = Random.MersenneTwister(3000 + r); n = 2000
+                x = 2 .* rand(rng, n) .- 1
                 # curvature only on the LEFT, so the two intercept biases cannot cancel
                 y = (@. 0.5 + 1.0 * x + 4.0 * x^2 * (x < 0) + tau0 * (x >= 0)) .+
-                    0.2 .* randn(rr, n)
+                    0.2 .* randn(rng, n)
                 rd = estimate_rdd(y, x; cutoff=0.0, h=hfix, b=hfix * 1.5)
                 push!(bias_c, rd.tau_conventional - tau0)
                 push!(bias_b, rd.tau_bias_corrected - tau0)
