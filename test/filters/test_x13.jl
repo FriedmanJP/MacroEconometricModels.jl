@@ -5,11 +5,11 @@ using LinearAlgebra
 
 @testset "X-13ARIMA-SEATS Seasonal Adjustment" begin
 
-    Random.seed!(42)
+    rng = MersenneTwister(42)
     n = 120
-    trend_c = cumsum(randn(n) .* 0.1)
+    trend_c = cumsum(randn(rng, n) .* 0.1)
     seasonal_c = 10.0 .* sin.(2π .* (1:n) ./ 12) .+ 5.0 .* cos.(2π .* (1:n) ./ 6)
-    y = 100.0 .+ trend_c .+ seasonal_c .+ randn(n)
+    y = 100.0 .+ trend_c .+ seasonal_c .+ randn(rng, n)
 
     # Shared X-11 fit reused by the deterministic same-input testsets below
     # (each asserts a distinct property of this single result).
@@ -62,9 +62,9 @@ using LinearAlgebra
     end
 
     @testset "quarterly data" begin
-        Random.seed!(123)
+        rng = MersenneTwister(123)
         nq = 80
-        yq = 100.0 .+ cumsum(randn(nq) .* 0.1) .+ 5.0 .* sin.(2π .* (1:nq) ./ 4) .+ randn(nq)
+        yq = 100.0 .+ cumsum(randn(rng, nq) .* 0.1) .+ 5.0 .* sin.(2π .* (1:nq) ./ 4) .+ randn(rng, nq)
         r = x13_filter(yq; frequency=4, method=:x11)
         @test r isa X13FilterResult{Float64}
         @test r.frequency == 4
@@ -73,7 +73,7 @@ using LinearAlgebra
     end
 
     @testset "log transformation" begin
-        y_pos = exp.(3.0 .+ 0.01 .* (1:n) .+ 0.3 .* sin.(2π .* (1:n) ./ 12) .+ 0.1 .* randn(n))
+        y_pos = exp.(3.0 .+ 0.01 .* (1:n) .+ 0.3 .* sin.(2π .* (1:n) ./ 12) .+ 0.1 .* randn(rng, n))
         r = x13_filter(y_pos; frequency=12, transform=:log)
         @test r.transform == :log
         @test all(isfinite, r.trend)
@@ -108,7 +108,7 @@ using LinearAlgebra
     end
 
     @testset "edge cases" begin
-        @test_throws ArgumentError x13_filter(randn(20); frequency=12)
+        @test_throws ArgumentError x13_filter(randn(MersenneTwister(111), 20); frequency=12)
         @test_throws ArgumentError x13_filter(y; frequency=7)
         @test_throws ArgumentError x13_filter(y; frequency=12, method=:invalid)
     end

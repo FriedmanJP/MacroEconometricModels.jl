@@ -56,15 +56,6 @@ both headings; a file on either list is exempt.
 
 ## Grandfathered (pending per-module DGP migration — remove as DGP-02…18 land)
 
-<!-- DGP-09 (#798) -->
-- test/arima/test_arfima.jl
-- test/arima/test_arima.jl
-- test/arima/test_arima_coverage.jl
-- test/arima/test_sarima.jl
-- test/filters/test_filters.jl
-- test/filters/test_x13.jl
-- test/filters/test_x13_coverage.jl
-- test/spectral/test_spectral.jl
 <!-- DGP-10 (#799) -->
 - test/mgarch/test_mgarch.jl
 - test/volatility/test_figarch.jl

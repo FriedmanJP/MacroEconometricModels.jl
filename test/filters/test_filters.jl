@@ -16,8 +16,8 @@ using SparseArrays
     # HP Filter
     # =============================================================================
     @testset "HP Filter" begin
-        Random.seed!(42)
-        y = cumsum(randn(200))
+        rng = MersenneTwister(42)
+        y = cumsum(randn(rng, 200))
 
         @testset "basic functionality" begin
             r = hp_filter(y)
@@ -107,8 +107,8 @@ using SparseArrays
     # Hamilton Filter
     # =============================================================================
     @testset "Hamilton Filter" begin
-        Random.seed!(42)
-        y = cumsum(randn(200))
+        rng = MersenneTwister(42)
+        y = cumsum(randn(rng, 200))
 
         @testset "basic functionality" begin
             r = hamilton_filter(y)
@@ -190,11 +190,11 @@ using SparseArrays
     # Beveridge-Nelson Decomposition
     # =============================================================================
     @testset "Beveridge-Nelson" begin
-        Random.seed!(42)
+        rng = MersenneTwister(42)
 
         @testset "basic functionality" begin
             # Random walk + stationary AR(1)
-            y = cumsum(randn(200)) + 0.3 * sin.(2π * (1:200) / 20)
+            y = cumsum(randn(rng, 200)) + 0.3 * sin.(2π * (1:200) / 20)
             r = beveridge_nelson(y)
             @test r isa BeveridgeNelsonResult{Float64}
             @test length(r.permanent) == 200
@@ -206,15 +206,15 @@ using SparseArrays
         end
 
         @testset "manual order" begin
-            y = cumsum(randn(200))
+            y = cumsum(randn(rng, 200))
             r = beveridge_nelson(y; p=2, q=1)
             @test r.arima_order == (2, 1, 1)
             @test r.permanent .+ r.transitory ≈ y
         end
 
         @testset "pure random walk (p=0, q=0 white noise differences)" begin
-            Random.seed!(123)
-            y = cumsum(randn(200))
+            rng = MersenneTwister(123)
+            y = cumsum(randn(rng, 200))
             r = beveridge_nelson(y; p=0, q=0)
             # When Δy is white noise, transitory = 0, permanent = y
             @test r.permanent ≈ y
@@ -223,21 +223,21 @@ using SparseArrays
         end
 
         @testset "accessors" begin
-            y = cumsum(randn(200))
+            y = cumsum(randn(rng, 200))
             r = beveridge_nelson(y; p=1, q=0)
             @test trend(r) === r.permanent
             @test cycle(r) === r.transitory
         end
 
         @testset "Float32 input" begin
-            y = Float32.(cumsum(randn(200)))
+            y = Float32.(cumsum(randn(rng, 200)))
             # auto_arima may fail with Float32 in some cases, use manual order
             r = beveridge_nelson(y; p=1, q=0)
             @test r isa BeveridgeNelsonResult{Float32}
         end
 
         @testset "Integer input (fallback)" begin
-            yi = round.(Int, cumsum(randn(200)) .* 10)
+            yi = round.(Int, cumsum(randn(rng, 200)) .* 10)
             r = beveridge_nelson(yi; p=1, q=0)
             @test r isa BeveridgeNelsonResult{Float64}
         end
@@ -248,7 +248,7 @@ using SparseArrays
         end
 
         @testset "display" begin
-            y = cumsum(randn(200))
+            y = cumsum(randn(rng, 200))
             r = beveridge_nelson(y; p=1, q=0)
             io = IOBuffer()
             show(io, r)
@@ -257,7 +257,7 @@ using SparseArrays
         end
 
         @testset "refs" begin
-            y = cumsum(randn(200))
+            y = cumsum(randn(rng, 200))
             r = beveridge_nelson(y; p=1, q=0)
             io = IOBuffer()
             refs(io, r)
@@ -270,8 +270,8 @@ using SparseArrays
     # Baxter-King Band-Pass Filter
     # =============================================================================
     @testset "Baxter-King" begin
-        Random.seed!(42)
-        y = cumsum(randn(200))
+        rng = MersenneTwister(42)
+        y = cumsum(randn(rng, 200))
 
         @testset "basic functionality" begin
             r = baxter_king(y)
@@ -371,8 +371,8 @@ using SparseArrays
     # Boosted HP Filter
     # =============================================================================
     @testset "Boosted HP" begin
-        Random.seed!(42)
-        y = cumsum(randn(200))
+        rng = MersenneTwister(42)
+        y = cumsum(randn(rng, 200))
 
         @testset "BIC stopping" begin
             r = boosted_hp(y; stopping=:BIC)
@@ -520,8 +520,8 @@ using SparseArrays
     # Filter Non-Mutation (Issue #25)
     # =============================================================================
     @testset "filter non-mutation" begin
-        Random.seed!(42)
-        y = cumsum(randn(200))
+        rng = MersenneTwister(42)
+        y = cumsum(randn(rng, 200))
         y_copy = copy(y)
 
         hp_filter(y)
@@ -544,8 +544,8 @@ using SparseArrays
     # AbstractFilterResult type hierarchy
     # =============================================================================
     @testset "Type hierarchy" begin
-        Random.seed!(42)
-        y = cumsum(randn(200))
+        rng = MersenneTwister(42)
+        y = cumsum(randn(rng, 200))
         @test hp_filter(y) isa AbstractFilterResult
         @test hamilton_filter(y) isa AbstractFilterResult
         @test beveridge_nelson(y; p=1, q=0) isa AbstractFilterResult
@@ -557,8 +557,8 @@ using SparseArrays
     # Beveridge-Nelson State-Space / Morley 2002 (Issue #11)
     # =================================================================
     @testset "BN State-Space (Morley 2002)" begin
-        Random.seed!(42)
-        y = cumsum(randn(200)) .+ 0.1 * (1:200)
+        rng = MersenneTwister(42)
+        y = cumsum(randn(rng, 200)) .+ 0.1 * (1:200)
 
         # method=:statespace should work
         result = beveridge_nelson(y; method=:statespace)

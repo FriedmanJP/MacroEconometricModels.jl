@@ -285,7 +285,7 @@ end
         gt = gph_test(_sim_arfima(3, 600, 0.3, 0.0); m=40, trim=2)
         @test gt.m == 40
         @test gt.trim == 2
-        @test_throws ArgumentError gph_test(randn(5))
+        @test_throws ArgumentError gph_test(randn(MersenneTwister(1), 5))
     end
 
     # =========================================================================
@@ -307,7 +307,7 @@ end
         gm = mean(gph_test(_sim_arfima(s, 800, 0.4, 0.0)).d for s in 1:15)
         @test abs(lm - gm) < 0.2
 
-        @test_throws ArgumentError local_whittle(randn(5))
+        @test_throws ArgumentError local_whittle(randn(MersenneTwister(2), 5))
     end
 
     # =========================================================================

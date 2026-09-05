@@ -190,7 +190,7 @@ end
     @test_throws ArgumentError estimate_sarima(y, -1, 1, 1, 0, 1, 1, 4)
     @test_throws ArgumentError estimate_sarima(y, 0, 1, 1, 1, 0, 0, 1)   # s < 2 with P > 0
     @test_throws ArgumentError estimate_sarima(y, 0, 1, 1, 0, 1, 1, 4; method=:bogus)
-    @test_throws ArgumentError estimate_sarima(randn(20), 2, 1, 2, 1, 1, 1, 12)  # too short
+    @test_throws ArgumentError estimate_sarima(randn(MersenneTwister(1), 20), 2, 1, 2, 1, 1, 1, 12)  # too short
 end
 
 @testset "StatsAPI interface and display" begin

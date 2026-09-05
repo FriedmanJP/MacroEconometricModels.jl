@@ -22,14 +22,14 @@ using Random
 using Statistics
 using StatsAPI
 
-Random.seed!(6001)
+rng = MersenneTwister(6001)
 
 # =============================================================================
 # ic_table() Tests
 # =============================================================================
 
 @testset "ic_table" begin
-    y = randn(200)
+    y = randn(rng, 200)
     result = select_arima_order(y, 2, 2; criterion=:bic)
 
     @testset "BIC table" begin
@@ -51,8 +51,8 @@ end
 # =============================================================================
 
 @testset "auto_arima criterion=:aic" begin
-    Random.seed!(6002)
-    y = randn(200)
+    rng = MersenneTwister(6002)
+    y = randn(rng, 200)
 
     model = auto_arima(y; criterion=:aic, max_p=2, max_q=2, max_d=1)
     @test model isa MacroEconometricModels.AbstractARIMAModel
@@ -64,8 +64,8 @@ end
 # =============================================================================
 
 @testset "select_arima_order with differencing" begin
-    Random.seed!(6003)
-    y = cumsum(randn(200))  # I(1) series
+    rng = MersenneTwister(6003)
+    y = cumsum(randn(rng, 200))  # I(1) series
 
     result = select_arima_order(y, 2, 2; d=1, criterion=:bic)
     @test result isa MacroEconometricModels.ARIMAOrderSelection
@@ -78,7 +78,7 @@ end
 # =============================================================================
 
 @testset "select_arima_order validation" begin
-    y = randn(100)
+    y = randn(rng, 100)
     @test_throws ArgumentError select_arima_order(y, -1, 1)
     @test_throws ArgumentError select_arima_order(y, 1, -1)
     @test_throws ArgumentError select_arima_order(y, 1, 1; d=-1)
@@ -90,7 +90,7 @@ end
 # =============================================================================
 
 @testset "_select_d_heuristic edge cases" begin
-    y = randn(100)
+    y = randn(rng, 100)
 
     # max_d = 0 should immediately return 0
     d = MacroEconometricModels._select_d_heuristic(y, 0)
@@ -106,7 +106,7 @@ end
 # =============================================================================
 
 @testset "auto_arima integer input" begin
-    y_int = round.(Int, randn(200) .* 100)
+    y_int = round.(Int, randn(rng, 200) .* 100)
     model = auto_arima(y_int; max_p=1, max_q=1, max_d=0)
     @test model isa MacroEconometricModels.AbstractARIMAModel
 end
@@ -116,7 +116,7 @@ end
 # =============================================================================
 
 @testset "select_arima_order integer input" begin
-    y_int = round.(Int, randn(150) .* 100)
+    y_int = round.(Int, randn(rng, 150) .* 100)
     result = select_arima_order(y_int, 1, 1)
     @test result isa MacroEconometricModels.ARIMAOrderSelection
 end
@@ -126,10 +126,10 @@ end
 # =============================================================================
 
 @testset "ARIMA display methods" begin
-    Random.seed!(6010)
+    rng = MersenneTwister(6010)
 
     @testset "ARModel display" begin
-        y = randn(200)
+        y = randn(rng, 200)
         m = estimate_ar(y, 2)
         io = IOBuffer()
         show(io, m)
@@ -140,7 +140,7 @@ end
     end
 
     @testset "ARIMAForecast display h > 10" begin
-        y = randn(200)
+        y = randn(rng, 200)
         m = estimate_ar(y, 1)
         fc = forecast(m, 15)
         io = IOBuffer()
@@ -151,7 +151,7 @@ end
     end
 
     @testset "ARIMAForecast display h <= 10" begin
-        y = randn(200)
+        y = randn(rng, 200)
         m = estimate_ar(y, 1)
         fc = forecast(m, 5)
         io = IOBuffer()
@@ -162,7 +162,7 @@ end
     end
 
     @testset "ARIMAOrderSelection display" begin
-        y = randn(200)
+        y = randn(rng, 200)
         result = select_arima_order(y, 2, 2)
         io = IOBuffer()
         show(io, result)
