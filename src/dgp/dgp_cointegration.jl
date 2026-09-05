@@ -14,7 +14,7 @@
 
 VECM `ΔY_t = αβ′Y_{t-1} + Σ_i Γ_i ΔY_{t-i} + μ + ε_t`, `ε ~ N(0, Sigma)`.
 Default: 3-variable rank-1 with distinct dynamics (`α = (−0.3, 0.1, 0)`,
-`β = (1, −1, 0)`, non-zero `Γ`). Returns `(Y, alpha, beta, Gamma, mu, eps)`.
+`β = (1, −1, 0)`, non-zero `Γ`). Returns `(Y, alpha, beta, Gamma, mu, Sigma, eps)`.
 """
 function dgp_vecm(rng::AbstractRNG; alpha=[-0.3, 0.1, 0.0],
                   beta=[1.0, -1.0, 0.0],
@@ -72,7 +72,7 @@ end
 
 Panel VAR(1) `y_{it} = μ_i + A1 y_{i,t-1} + ε_{it}` with random effects
 `μ_i ~ N(0, mu_sd²I)`, stationary start (burn-in per unit). Returns
-`(Y, id, time, A1, mu)` with `Y` stacked `NT×m`.
+`(Y, id, time, A1, mu, Sigma)` with `Y` stacked `NT×m`.
 """
 function dgp_panel_var(rng::AbstractRNG; A1=[0.8 0.15; 0.05 0.7], N::Int=30,
                        T::Int=25, mu_sd::Float64=1.0, Sigma=nothing,

@@ -36,7 +36,7 @@ end
 
 Two-regime VAR with logistic transition `G(z_t)` (`z` AR(1)):
 `Y_t = (1−G)A_rec Y_{t-1} + G·A_exp Y_{t-1} + B0 ε_t`. Returns
-`(Y, G, A_exp, A_rec, B0)` plus each regime's true IRF
+`(Y, G, z, A_exp, A_rec, B0)` plus each regime's true IRF
 (`irf_exp`, `irf_rec` at `H = 12`).
 """
 function dgp_state_dependent_var(rng::AbstractRNG;
@@ -72,7 +72,7 @@ end
 Propensity-score DGP: `X` covariates, `ps = logistic(Xβ_ps)`,
 `D ~ Bernoulli(ps)`, `Y₀ = Xγ_y + e` (`confounding = true`; else `Y₀ = e`),
 `Y = Y₀ + τD`. The naive difference-in-means is biased by the known
-confounding amount. Returns `(Y, D, X, tau, beta_ps, att)`.
+confounding amount. Returns `(Y, D, X, tau, beta_ps, att, ps)`.
 """
 function dgp_propensity(rng::AbstractRNG; beta_ps=[0.5, 0.3], tau::Float64=1.0,
                         gamma_y=[0.7, -0.4], confounding::Bool=true,

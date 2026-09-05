@@ -287,6 +287,16 @@ using DataFrames  # nrow (no-op when fixtures.jl already loaded it)
         q1 = quantile(vec(ce.draws .- ce.point'), [0.05, 0.95])
         q2 = quantile(vec(ce2.draws .- ce2.point'), [0.05, 0.95])
         @test (q2[2] - q2[1]) / (q1[2] - q1[1]) ≈ 2.0 atol=0.3
+        # Matrix input: draws shaped (n_draws, H, k), centred on point (C1).
+        cem = dgp_pce_draws(MersenneTwister(64), ones(4, 3); sd=0.1)
+        @test size(cem.draws) == (500, 4, 3)
+        # Mean over the draws axis ≈ point (per-element MC se = 0.1/sqrt(500)
+        # ≈ 0.0045; atol=0.05 is >10x se, safe for 12 elements).
+        @test dropdims(mean(cem.draws; dims=1); dims=1) ≈ cem.point atol=0.05
+        # Vector input with corr != 0 runs and stays centred (C1 second path).
+        cev = dgp_pce_draws(MersenneTwister(65), [1.0, 2.0, 3.0]; sd=0.1, corr=0.5)
+        @test size(cev.draws) == (500, 3) && all(isfinite, cev.draws)
+        @test vec(mean(cev.draws; dims=1)) ≈ [1.0, 2.0, 3.0] atol=0.05
         do_ = dgp_dsge_observed(MersenneTwister(63), ones(50, 2); H=[0.25, 0.25])
         @test size(do_.y_obs) == (50, 2)
     end

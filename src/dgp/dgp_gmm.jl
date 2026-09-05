@@ -64,10 +64,11 @@ function dgp_pce_draws(rng::AbstractRNG, ce_point::AbstractArray;
         e = randn(rng, size(p))
         if corr != 0.0  # AR(1) along the first axis (horizon)
             for t in 2:size(p, 1)
-                e[t, :] = corr * e[t - 1, :] + sqrt(1 - corr^2) * e[t, :]
+                selectdim(e, 1, t) .= corr .* selectdim(e, 1, t - 1) .+
+                    sqrt(1 - corr^2) .* selectdim(e, 1, t)
             end
         end
-        draws[i, :] = vec(p + s .* e)
+        selectdim(draws, 1, i) .= p + s .* e
     end
     return (draws=draws, point=p, sd=s)
 end

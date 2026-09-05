@@ -65,7 +65,7 @@ VAR with time-varying shock variances, `u_t = B0 * Λ_t^{1/2} * ε_t`.
 `kind ∈ :markov | :garch | :smooth | :external`. `Lambda` (default
 `diagm([1, 4, 0.25])`) gives genuinely distinct eigenvalue ratios, so the
 heteroskedasticity carries identifying information. Returns
-`(Y, eps, scales, B0, Sigma_full, path)` where `scales` is the `T×n`
+`(Y, eps, scales, B0, Sigma_full, Lambda, path, kind)` where `scales` is the `T×n`
 variance path and `path` the regime/transition descriptor.
 """
 function dgp_heteroskedastic_var(rng::AbstractRNG;

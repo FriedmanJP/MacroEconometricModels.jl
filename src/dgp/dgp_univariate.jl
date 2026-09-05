@@ -93,7 +93,7 @@ end
     dgp_ar2_peak(rng; period, modulus, sigma, T) -> NamedTuple
 
 AR(2) with spectral peak at `1/period` (`modulus` < 1 controls sharpness).
-Returns `(y, phi, spectrum)` with the analytic spectrum
+Returns `(y, phi, freqs, spectrum)` with the analytic spectrum
 `S(ω) = σ²/2π / |1 − φ₁e^{−iω} − φ₂e^{−i2ω}|²` on a 256 grid.
 """
 function dgp_ar2_peak(rng::AbstractRNG; period::Float64=8.0, modulus::Float64=0.9,
