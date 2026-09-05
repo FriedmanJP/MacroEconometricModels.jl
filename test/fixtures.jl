@@ -16,15 +16,6 @@ using Random, LinearAlgebra, Statistics, Distributions, DataFrames
 # DGP-01 (#790): shared truth-returning DGP library. Every simulator takes
 # rng::AbstractRNG first, burns in, and returns (data, truth...) — see
 # test/dgp/ALLOWLIST.md for the white-noise lint allowlist.
-if !isdefined(@__MODULE__, :dgp_var)  # include guard: fixtures may load twice
-    for _dgp_file in ("dgp_var.jl", "dgp_svar_nongauss.jl", "dgp_univariate.jl",
-                      "dgp_cointegration.jl", "dgp_volatility.jl",
-                      "dgp_factors.jl", "dgp_lp.jl", "dgp_micro.jl",
-                      "dgp_regime.jl", "dgp_gmm.jl", "dgp_truth.jl")
-        include(joinpath(@__DIR__, "dgp", _dgp_file))
-    end
-end
-
 # Safe println that silently catches IOError when stdout pipe is closed
 # (happens in threaded parallel test execution on macOS CI)
 function _tprint(args...)
