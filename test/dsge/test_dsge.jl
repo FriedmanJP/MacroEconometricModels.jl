@@ -241,7 +241,7 @@ end
         0, Int[], [1.0, 4.0]
     )
     T_periods = 50
-    path = rand(T_periods, 2)
+    path = rand(Random.MersenneTwister(1402), T_periods, 2)
     devs = path .- [1.0 4.0]
     pf = PerfectForesightPath{Float64}(path, devs, true, 12, spec)
     @test size(pf.path) == (50, 2)
@@ -256,7 +256,8 @@ end
         [:(C[t]), :(K[t])], [identity, identity],
         0, Int[], [1.0, 4.0]
     )
-    pf = PerfectForesightPath{Float64}(rand(50, 2), rand(50, 2), true, 8, spec)
+    pf = PerfectForesightPath{Float64}(rand(Random.MersenneTwister(1403), 50, 2),
+                                      rand(Random.MersenneTwister(1404), 50, 2), true, 8, spec)
     io = IOBuffer()
     show(io, pf)
     s = String(take!(io))
@@ -1993,9 +1994,8 @@ end
     @testset "solve_lyapunov unchanged through the new path" begin
         @test M.solve_lyapunov(reshape([0.9], 1, 1), reshape([1.0], 1, 1))[1, 1] ≈
               1 / (1 - 0.81) rtol = 1e-10
-        rng2 = Random.MersenneTwister(2661)
         G1 = [0.5 0.1; -0.2 0.6]
-        imp = randn(rng2, 2, 2)
+        imp = randn(Random.MersenneTwister(2661), 2, 2)
         Sig = M.solve_lyapunov(G1, imp)
         @test Sig ≈ G1 * Sig * G1' + imp * imp' rtol = 1e-10
         @test Sig == Sig'
@@ -2652,8 +2652,7 @@ end
 @testset "Simulate: stochastic" begin
     spec = AR1_SPEC_SIGMA_LOW
     sol = solve(spec)
-    Random.seed!(42)
-    sim = simulate(sol, 200)
+    sim = simulate(sol, 200; seed=42)
     @test size(sim) == (200, 1)
     @test std(sim[:, 1]) > 0  # not all zeros
     @test std(sim[:, 1]) < 1  # bounded
@@ -2716,8 +2715,7 @@ end
     end
 
     # Simulate also works
-    Random.seed!(42)
-    sim = simulate(sol, 50)
+    sim = simulate(sol, 50; seed=42)
     @test size(sim) == (50, 2)
 end
 
@@ -2797,7 +2795,7 @@ end
         exogenous: ε
         y[t] = ρ * y[t-1] + ε[t]
     end
-    Y = randn(100, 1)
+    Y = randn(Random.MersenneTwister(1405), 100, 1)
     @test_throws ArgumentError estimate_dsge(spec, Y, [:ρ]; method=:invalid)
 end
 
@@ -2842,8 +2840,8 @@ end
             y[t] = ρ * y[t-1] + ε[t]
         end
         H = 10
-        vm = estimate_var(Y, 4); Random.seed!(7)
-        base = irf(vm, H; method=:cholesky, ci_type=:bootstrap, reps=200)
+        vm = estimate_var(Y, 4)
+        base = irf(vm, H; method=:cholesky, ci_type=:bootstrap, reps=200, seed=7)
         vals = base.values; d = base._draws
         dev  = d .- reshape(vals, 1, size(vals)...)
         # Two targets with IDENTICAL point IRFs but bootstrap draws scaled by 0.5 vs 2.0.
@@ -2875,6 +2873,8 @@ end
             exogenous: ε
             y[t] = ρ * y[t-1] + ε[t]
         end
+        # Global seed stays: _estimate_irf_matching does not forward rng/seed to
+        # its internal VAR bootstrap, so this is the only reproducibility handle.
         H = 10; Random.seed!(11)
         est = estimate_dsge(spec, Y, [:ρ]; method=:irf_matching,
                             irf_horizon=H, weighting=:efficient, n_boot=300)
@@ -2931,8 +2931,7 @@ end
     @test fevd_result isa FEVD
 
     # Simulate
-    Random.seed!(42)
-    sim = simulate(sol, 200)
+    sim = simulate(sol, 200; seed=42)
     @test size(sim) == (200, 1)
 
     # Plot (smoke test)
@@ -3080,7 +3079,7 @@ end
         exogenous: e
         y[t] = rho * y[t-1] + e[t]
     end
-    Y = randn(100, 1)
+    Y = randn(Random.MersenneTwister(1406), 100, 1)
     @test_throws ArgumentError estimate_dsge(spec, Y, [:rho]; method=:invalid)
 end
 
@@ -3278,7 +3277,7 @@ end
         exogenous: e
         y[t] = rho * y[t-1] + e[t]
     end
-    Y = randn(100, 1)
+    Y = randn(Random.MersenneTwister(1407), 100, 1)
     @test_throws ArgumentError estimate_dsge(spec, Y, [:rho]; method=:invalid)
 end
 
@@ -3318,8 +3317,9 @@ end
     T_periods = 20
     n_endog = 1
     n_constraints = 1
-    linear_path = randn(T_periods, n_endog)
-    piecewise_path = randn(T_periods, n_endog)
+    rng = Random.MersenneTwister(1408)
+    linear_path = randn(rng, T_periods, n_endog)
+    piecewise_path = randn(rng, T_periods, n_endog)
     ss = zeros(n_endog)
     regime_hist = zeros(Int, T_periods, n_constraints)
     regime_hist[5:8, 1] .= 1  # binding in periods 5-8
@@ -3347,8 +3347,8 @@ end
 
     # OccBinIRF
     H = 20
-    linear_irf = randn(H, n_endog)
-    pw_irf = randn(H, n_endog)
+    linear_irf = randn(rng, H, n_endog)
+    pw_irf = randn(rng, H, n_endog)
     regime_irf = zeros(Int, H, n_constraints)
     regime_irf[1:3, 1] .= 1
 
@@ -5771,8 +5771,8 @@ end
     end
 
     @testset "Data moments computation" begin
-        Random.seed!(42)
-        data = randn(500, 1)
+        rng = Random.MersenneTwister(42)
+        data = randn(rng, 500, 1)
         m_data = MacroEconometricModels._compute_data_moments(data; lags=[1])
         # 1 mean + 1 product moment + 1 autocov = 3
         @test length(m_data) == 3
@@ -5780,13 +5780,13 @@ end
         @test m_data[2] ≈ dot(data[:, 1], data[:, 1]) / 500 atol=1e-10
 
         # Multi-variable data moments
-        data2 = randn(500, 2)
+        data2 = randn(rng, 500, 2)
         m_data2 = MacroEconometricModels._compute_data_moments(data2; lags=[1, 3])
         # ny=2: 2 means + 3 product moments + 2*2 autocov = 2 + 3 + 4 = 9
         @test length(m_data2) == 9
 
         # observable_indices filtering
-        data3 = randn(500, 3)
+        data3 = randn(rng, 500, 3)
         m_sub = MacroEconometricModels._compute_data_moments(data3; lags=[1], observable_indices=[1, 3])
         # 2 means + 3 product moments + 2 autocov = 7
         @test length(m_sub) == 7
@@ -5802,7 +5802,6 @@ end
         spec = compute_steady_state(spec)
 
         # Generate data from known parameters
-        Random.seed!(42)
         sol_true = solve(spec; method=:perturbation, order=2)
         data = simulate(sol_true, 500; rng=Random.MersenneTwister(42))
 
@@ -5876,7 +5875,6 @@ end
     end
 
     @testset "Data moments match analytical for generated data" begin
-        Random.seed!(123)
         spec = @dsge begin
             parameters: ρ = 0.9, σ = 0.01
             endogenous: y
@@ -5974,7 +5972,6 @@ end
         end
         spec = compute_steady_state(spec)
         sol = solve(spec; method=:gensys)
-        Random.seed!(42)
         data = simulate(sol, 200; rng=Random.MersenneTwister(42))
 
         # Old API: estimate_dsge with analytical_gmm, no perturbation kwargs
@@ -5999,7 +5996,6 @@ end
 
         # Generate data from known model
         sol_true = solve(spec; method=:perturbation, order=2)
-        Random.seed!(7777)
         data = simulate(sol_true, 1000; rng=Random.MersenneTwister(7777))
 
         # Estimate ρ with perturbation order 2, multiple autocov lags
@@ -6294,9 +6290,9 @@ end
     spec = compute_steady_state(spec)
     sol = solve(spec; method=:projection, degree=5, verbose=false)
 
-    # simulate returns T × n matrix
-    Random.seed!(42)
-    Y_sim = simulate(sol, 100)
+    # simulate returns T × n matrix (one shared rng ⇒ same stream as the old seed!(42))
+    rng = Random.MersenneTwister(42)
+    Y_sim = simulate(sol, 100; rng=rng)
     @test size(Y_sim) == (100, 1)
     @test all(abs.(Y_sim) .< 1.0)
 
@@ -6307,7 +6303,7 @@ end
     @test size(Y_det) == (50, 1)
 
     # irf returns ImpulseResponse
-    irfs = irf(sol, 20; n_sim=200)
+    irfs = irf(sol, 20; n_sim=200, rng=rng)
     @test irfs isa ImpulseResponse
     @test size(irfs.values) == (20, 1, 1)
     # First period: should be close to σ = 0.01 (impact of unit shock)
@@ -6707,8 +6703,7 @@ end
     @test euler_err < 1e-2
 
     # Simulation should produce bounded values
-    Random.seed!(42)
-    Y_sim = simulate(sol, 100)
+    Y_sim = simulate(sol, 100; seed=42)
     @test size(Y_sim) == (100, 2)
     @test all(isfinite.(Y_sim))
 end
@@ -7095,13 +7090,14 @@ end
     @test occursin("Converged", output)
     @test occursin("Value", output) || occursin("VFI", output) || occursin("value", output)
 
-    Random.seed!(42)
-    Y_sim = simulate(sol, 40)
+    # One shared rng ⇒ same stream as the old seed!(42)
+    rng = Random.MersenneTwister(42)
+    Y_sim = simulate(sol, 40; rng=rng)
     @test size(Y_sim) == (40, 3)
     @test all(isfinite, Y_sim)
     @test all(Y_sim[:, 1] .> 0)   # consumption
 
-    irfs = irf(sol, 6; n_sim=8)
+    irfs = irf(sol, 6; n_sim=8, rng=rng)
     @test irfs isa ImpulseResponse
     @test size(irfs.values, 1) == 6
     @test size(irfs.values, 2) == 3

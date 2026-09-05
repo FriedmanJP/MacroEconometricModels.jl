@@ -205,7 +205,7 @@ const _HUG_SS_M2 = compute_steady_state(_HUG_SPEC_M2; max_iter=FAST ? 80 : 200, 
             proposal_scale=0.001, adapt_interval=50, rng=Random.MersenneTwister(7))
         @test result_nt.theta_draws ≈ result_dict.theta_draws
         @test_throws ArgumentError estimate_dsge_bayes(
-            spec, randn(3, T_data), [0.36];                  # neither dim == n_obs (1)
+            spec, randn(Random.MersenneTwister(1401), 3, T_data), [0.36];  # neither dim == n_obs (1)
             priors=priors, observables=[:K], n_draws=10,
             ha_method=:ssj, ha_kwargs=(T_horizon=30, n_reduced=10))
     end

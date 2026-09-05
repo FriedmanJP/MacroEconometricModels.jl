@@ -56,11 +56,6 @@ both headings; a file on either list is exempt.
 
 ## Grandfathered (pending per-module DGP migration — remove as DGP-02…18 land)
 
-<!-- DGP-13 (#802) -->
-- test/dsge/test_bayesian_dsge.jl
-- test/dsge/test_dsge.jl
-- test/dsge/test_ha_dsge.jl
-- test/dsge/test_ha_dsge_advanced.jl
 <!-- DGP-14 (#803) -->
 - test/reg/test_heckman.jl
 - test/reg/test_multinomial.jl

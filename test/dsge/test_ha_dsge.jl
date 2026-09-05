@@ -846,10 +846,10 @@ end
     for lz in 1:n_z, kK in 1:n_K
         @views c0[:, :, kK, lz] .= css
     end
-    rng_ks = Random.MersenneTwister(11)
+    rng = Random.MersenneTwister(11)
     T_s = 60; zidx = zeros(Int, T_s); zidx[1] = 2; zc = cumsum(zt; dims=2)
     for t in 2:T_s
-        u = rand(rng_ks)
+        u = rand(rng)
         zidx[t] = clamp(searchsortedfirst(view(zc, zidx[t-1], :), u), 1, n_z)
     end
     ks_egm_iter = 200

@@ -87,9 +87,10 @@ end
     n_obs = 2
     n_shocks = 2
 
+    rng = Random.MersenneTwister(1409)
     G1 = 0.5 * Matrix{Float64}(I, n_states, n_states)
-    impact = randn(n_states, n_shocks)
-    Z = randn(n_obs, n_states)
+    impact = randn(rng, n_states, n_shocks)
+    Z = randn(rng, n_obs, n_states)
     d = zeros(n_obs)
     H = Matrix{Float64}(0.01 * I(n_obs))
     Q = Matrix{Float64}(I(n_shocks))
@@ -113,17 +114,20 @@ end
 @testset "DSGEStateSpace validation" begin
     # Non-square G1
     @test_throws AssertionError MacroEconometricModels.DSGEStateSpace{Float64}(
-        randn(3, 4), randn(3, 2), randn(2, 3), zeros(2),
+        randn(Random.MersenneTwister(1410), 3, 4), randn(Random.MersenneTwister(1411), 3, 2),
+        randn(Random.MersenneTwister(1412), 2, 3), zeros(2),
         0.01 * Matrix{Float64}(I(2)), Matrix{Float64}(I(2))
     )
     # Z columns don't match G1
     @test_throws AssertionError MacroEconometricModels.DSGEStateSpace{Float64}(
-        0.5 * Matrix{Float64}(I(3)), randn(3, 2), randn(2, 4), zeros(2),
+        0.5 * Matrix{Float64}(I(3)), randn(Random.MersenneTwister(1413), 3, 2),
+        randn(Random.MersenneTwister(1414), 2, 4), zeros(2),
         0.01 * Matrix{Float64}(I(2)), Matrix{Float64}(I(2))
     )
     # d length mismatch
     @test_throws AssertionError MacroEconometricModels.DSGEStateSpace{Float64}(
-        0.5 * Matrix{Float64}(I(3)), randn(3, 2), randn(2, 3), zeros(3),
+        0.5 * Matrix{Float64}(I(3)), randn(Random.MersenneTwister(1415), 3, 2),
+        randn(Random.MersenneTwister(1416), 2, 3), zeros(3),
         0.01 * Matrix{Float64}(I(2)), Matrix{Float64}(I(2))
     )
 end
@@ -134,12 +138,13 @@ end
     nv = nx + 1  # states + shocks
     n_obs = 2
 
-    hx = randn(nx, nv)
-    gx = randn(ny, nv)
+    rng = Random.MersenneTwister(1417)
+    hx = randn(rng, nx, nv)
+    gx = randn(rng, ny, nv)
     eta = zeros(nv, 1)
     eta[nx+1, 1] = 1.0
     ss = ones(nx + ny)
-    Z = randn(n_obs, ny)
+    Z = randn(rng, n_obs, ny)
     d = zeros(n_obs)
     H = Matrix{Float64}(0.01 * I(n_obs))
 
@@ -157,10 +162,10 @@ end
     @test nlss.log_det_H ≈ logdet(H) atol=1e-10
 
     # Order 2
-    hxx = randn(nx, nv * nv)
-    gxx = randn(ny, nv * nv)
-    hsig = randn(nx)
-    gsig = randn(ny)
+    hxx = randn(rng, nx, nv * nv)
+    gxx = randn(rng, ny, nv * nv)
+    hsig = randn(rng, nx)
+    gsig = randn(rng, ny)
     nlss2 = MacroEconometricModels.NonlinearStateSpace{Float64}(
         hx, gx, eta, ss, [1, 2], [3], 2,
         hxx, gxx, hsig, gsig,
@@ -173,12 +178,12 @@ end
     @test nlss2.hxxx === nothing
 
     # Order 3
-    hxxx = randn(nx, nv * nv * nv)
-    gxxx = randn(ny, nv * nv * nv)
-    hsx = randn(nx, nv)
-    gsx = randn(ny, nv)
-    hsss = randn(nx)
-    gsss = randn(ny)
+    hxxx = randn(rng, nx, nv * nv * nv)
+    gxxx = randn(rng, ny, nv * nv * nv)
+    hsx = randn(rng, nx, nv)
+    gsx = randn(rng, ny, nv)
+    hsss = randn(rng, nx)
+    gsss = randn(rng, ny)
     nlss3 = MacroEconometricModels.NonlinearStateSpace{Float64}(
         hx, gx, eta, ss, [1, 2], [3], 3,
         hxx, gxx, hsig, gsig,
@@ -193,10 +198,11 @@ end
 @testset "NonlinearStateSpace validation" begin
     # Invalid order
     @test_throws AssertionError MacroEconometricModels.NonlinearStateSpace{Float64}(
-        randn(2, 3), randn(1, 3), zeros(3, 1), ones(3), [1, 2], [3], 4,
+        randn(Random.MersenneTwister(1418), 2, 3), randn(Random.MersenneTwister(1419), 1, 3),
+        zeros(3, 1), ones(3), [1, 2], [3], 4,
         nothing, nothing, nothing, nothing,
         nothing, nothing, nothing, nothing, nothing, nothing,
-        randn(2, 1), zeros(2), 0.01 * Matrix{Float64}(I(2))
+        randn(Random.MersenneTwister(1420), 2, 1), zeros(2), 0.01 * Matrix{Float64}(I(2))
     )
 end
 
@@ -355,7 +361,7 @@ end
     N_smc = 200
 
     state = MacroEconometricModels.SMCState{Float64}(
-        randn(n_params, N_smc),
+        randn(Random.MersenneTwister(1421), n_params, N_smc),
         zeros(N_smc),
         zeros(N_smc),
         zeros(N_smc),
@@ -534,7 +540,7 @@ end
 end
 
 @testset "Kalman loglikelihood: AR(1)" begin
-    Random.seed!(42)
+    rng = Random.MersenneTwister(42)
 
     # AR(1): y_t = rho * y_{t-1} + eps_t
     rho_true = 0.8
@@ -544,7 +550,7 @@ end
     # Simulate data
     y = zeros(T_sim)
     for t in 2:T_sim
-        y[t] = rho_true * y[t-1] + sigma_eps * randn()
+        y[t] = rho_true * y[t-1] + sigma_eps * randn(rng)
     end
 
     # Build state space for correct model
@@ -621,7 +627,7 @@ end
 end
 
 @testset "Kalman loglikelihood: 2D with missing data" begin
-    Random.seed!(123)
+    rng = Random.MersenneTwister(123)
 
     # 2D VAR(1): x_t = G1 * x_{t-1} + eps_t
     G1 = [0.7 0.1; 0.0 0.5]
@@ -631,7 +637,7 @@ end
     # Simulate
     x = zeros(2, T_sim)
     for t in 2:T_sim
-        x[:, t] = G1 * x[:, t-1] + impact * randn(2)
+        x[:, t] = G1 * x[:, t-1] + impact * randn(rng, 2)
     end
 
     Z = Matrix{Float64}(I, 2, 2)
@@ -669,17 +675,17 @@ end
 # ─────────────────────────────────────────────────────────────────────────────
 
 @testset "Linear transition kernel" begin
-    Random.seed!(101)
+    rng = Random.MersenneTwister(101)
     n_states = 3
     N = 100
     n_shocks = 2
 
     G1 = 0.5 * Matrix{Float64}(I, n_states, n_states)
     G1[1, 2] = 0.1
-    impact = randn(n_states, n_shocks)
+    impact = randn(rng, n_states, n_shocks)
 
-    S_old = randn(n_states, N)
-    E = randn(n_shocks, N)
+    S_old = randn(rng, n_states, N)
+    E = randn(rng, n_shocks, N)
     S_new = zeros(n_states, N)
 
     MacroEconometricModels._pf_transition_linear!(S_new, S_old, E, G1, impact)
@@ -692,19 +698,19 @@ end
 end
 
 @testset "Log-weight computation" begin
-    Random.seed!(102)
+    rng = Random.MersenneTwister(102)
     n_obs = 2
     N = 50
     n_states = 3
 
-    Z = randn(n_obs, n_states)
-    d = randn(n_obs)
+    Z = randn(rng, n_obs, n_states)
+    d = randn(rng, n_obs)
     H = [0.1 0.01; 0.01 0.2]
     H_inv = Matrix{Float64}(inv(H))
     log_det_H = logdet(H)
 
-    S = randn(n_states, N)
-    y_t = randn(n_obs)
+    S = randn(rng, n_states, N)
+    y_t = randn(rng, n_obs)
 
     log_w = zeros(N)
     innovations = zeros(n_obs, N)
@@ -723,7 +729,7 @@ end
 end
 
 @testset "Systematic resampling" begin
-    Random.seed!(103)
+    # (seed!(103) removed: _systematic_resample! below takes an explicit MT(42))
     N = 1000
 
     # Concentrated weights: [0.5, 0.3, 0.2, 0, 0, ...]
@@ -779,10 +785,10 @@ end
 end
 
 @testset "Kronecker buffer fill (2nd-order)" begin
-    Random.seed!(104)
+    rng = Random.MersenneTwister(104)
     nv = 3
     N = 20
-    V = randn(nv, N)
+    V = randn(rng, nv, N)
     buffer = zeros(nv * nv, N)
 
     MacroEconometricModels._fill_kron_buffer!(buffer, V, nv)
@@ -795,10 +801,10 @@ end
 end
 
 @testset "Kronecker buffer fill (3rd-order)" begin
-    Random.seed!(105)
+    rng = Random.MersenneTwister(105)
     nv = 2
     N = 10
-    V = randn(nv, N)
+    V = randn(rng, nv, N)
     buffer = zeros(nv * nv * nv, N)
 
     MacroEconometricModels._fill_kron3_buffer!(buffer, V, nv)
@@ -829,7 +835,7 @@ end
 end
 
 @testset "Bootstrap particle filter: AR(1)" begin
-    Random.seed!(200)
+    rng = Random.MersenneTwister(200)
 
     # AR(1): y_t = rho * y_{t-1} + sigma * eps_t,  observed with measurement error
     rho = 0.8
@@ -841,10 +847,10 @@ end
     x = zeros(T_sim)
     y = zeros(T_sim)
     for t in 2:T_sim
-        x[t] = rho * x[t-1] + sigma_eps * randn()
+        x[t] = rho * x[t-1] + sigma_eps * randn(rng)
     end
     for t in 1:T_sim
-        y[t] = x[t] + sigma_me * randn()
+        y[t] = x[t] + sigma_me * randn(rng)
     end
 
     # Build state space
@@ -885,7 +891,7 @@ end
 
 
 @testset "Conditional SMC" begin
-    Random.seed!(400)
+    rng = Random.MersenneTwister(400)
 
     rho = 0.8
     sigma_eps = 0.5
@@ -895,10 +901,10 @@ end
     x = zeros(T_sim)
     y = zeros(T_sim)
     for t in 2:T_sim
-        x[t] = rho * x[t-1] + sigma_eps * randn()
+        x[t] = rho * x[t-1] + sigma_eps * randn(rng)
     end
     for t in 1:T_sim
-        y[t] = x[t] + sigma_me * randn()
+        y[t] = x[t] + sigma_me * randn(rng)
     end
 
     G1 = fill(rho, 1, 1)
@@ -957,11 +963,11 @@ end
 end
 
 @testset "Resample particles" begin
-    Random.seed!(106)
+    rng = Random.MersenneTwister(106)
     n_states = 3
     N = 10
 
-    S_old = randn(n_states, N)
+    S_old = randn(rng, n_states, N)
     S_new = zeros(n_states, N)
     ancestors = [1, 1, 3, 3, 3, 5, 5, 7, 7, 7]
 
@@ -973,8 +979,7 @@ end
 end
 
 @testset "Stationary initialization" begin
-    Random.seed!(107)
-
+    # (seed!(107) removed: _pf_initialize_stationary! below takes an explicit rng)
     G1 = [0.5 0.1; 0.0 0.3]
     impact = [0.2 0.0; 0.0 0.3]
     Z = Matrix{Float64}(I, 2, 2)
@@ -1599,7 +1604,7 @@ end
         steady_state = [0.0]
     end
     spec = compute_steady_state(spec)
-    sim_data = randn(1, 100)
+    sim_data = randn(Random.MersenneTwister(1422), 1, 100)
     priors = Dict(:ρ => Beta(2, 2))
     @test_throws ArgumentError estimate_dsge_bayes(spec, sim_data, [0.5];
         priors=priors, method=:invalid, observables=[:y])
@@ -1663,7 +1668,7 @@ end
     A = randn(Random.MersenneTwister(1), 40, 3)
     @test _od(A, 3, Float64) == _od(permutedims(A), 3, Float64)                 # same internal matrix
     # Neither dimension equals n_obs → informative ArgumentError (was a silent best-guess).
-    @test_throws ArgumentError _od(randn(3, 100), 1, Float64)
+    @test_throws ArgumentError _od(randn(Random.MersenneTwister(1423), 3, 100), 1, Float64)
 end
 
 @testset "estimate_dsge_bayes: T×n and n×T give the same likelihood (#142)" begin
@@ -1685,7 +1690,7 @@ end
         observables=[:y], n_smc=100, rng=Random.MersenneTwister(5))
     @test r_tn.log_marginal_likelihood ≈ r_nt.log_marginal_likelihood
     # A shape where neither dimension equals n_obs errors instead of guessing.
-    @test_throws ArgumentError estimate_dsge_bayes(spec, randn(3, 100), [0.5];
+    @test_throws ArgumentError estimate_dsge_bayes(spec, randn(Random.MersenneTwister(1424), 3, 100), [0.5];
         priors=priors, method=:smc, observables=[:y], n_smc=50)
     end
 end
@@ -1720,7 +1725,7 @@ end
     # Wrong-length vector, missing/unknown Dict key, and neither-dim-matches shape all error.
     @test_throws ArgumentError posterior_mode(spec, data, [0.5]; priors=priors, observables=[:y])
     @test_throws ArgumentError posterior_mode(spec, data, Dict(:ρ => 0.5); priors=priors, observables=[:y])
-    @test_throws ArgumentError posterior_mode(spec, randn(3, 120), [0.5, 0.5];
+    @test_throws ArgumentError posterior_mode(spec, randn(Random.MersenneTwister(1425), 3, 120), [0.5, 0.5];
                                               priors=priors, observables=[:y])
     end
 end
@@ -1743,7 +1748,7 @@ end
     ppc_nt = posterior_predictive_check(fit; data=permutedims(data), n_draws=40,
                                         rng=Random.MersenneTwister(1))
     @test ppc_tn.p_values ≈ ppc_nt.p_values
-    @test_throws ArgumentError posterior_predictive_check(fit; data=randn(3, 120), n_draws=10)
+    @test_throws ArgumentError posterior_predictive_check(fit; data=randn(Random.MersenneTwister(1426), 3, 120), n_draws=10)
     end
 end
 
@@ -2687,10 +2692,9 @@ end
     fill!(ws.particles_so, 0.0)
     fill!(ws.particles, 0.0)
 
-    # Replay same shocks as simulate()
-    rng_replay = Random.MersenneTwister(99)
+    # Replay same shocks as simulate() above (fresh MT(99) ⇒ identical first draws)
     T_periods = 5
-    e = randn(rng_replay, T_periods, n_eps)
+    e = randn(Random.MersenneTwister(99), T_periods, n_eps)
 
     for t in 1:T_periods
         # Set shocks in workspace
@@ -4819,7 +4823,6 @@ end  # @testset "Bayesian DSGE"
 # =============================================================================
 
 @testset "posterior irf/fevd/simulate with n_endog > n_shocks" begin
-    Random.seed!(13901)
     spec = @dsge begin
         parameters: ρ = 0.9, α = 0.33
         endogenous: Y, K, A
@@ -4830,11 +4833,12 @@ end  # @testset "Bayesian DSGE"
     end
     spec2 = compute_steady_state(spec)
     sol = solve(spec2; method=:gensys)
-    Y = simulate(sol, 150)
+    Y = simulate(sol, 150; rng=Random.MersenneTwister(13901))
     b = estimate_dsge_bayes(spec, Y[:, [1]], [0.8];
                             priors=Dict(:ρ => Beta(5, 2)),
                             method=:mh, n_draws=200, burnin=80,
-                            observables=[:Y])
+                            observables=[:Y],
+                            rng=Random.MersenneTwister(13902))
     r = irf(b, 8; n_draws=4)
     @test size(r.point_estimate) == (8, 3, 1)
     f = fevd(b, 8; n_draws=4)
@@ -4987,7 +4991,7 @@ end
     ha = load_ha_example(:krusell_smith)
     dc = to_spec(dcegm_retirement_model(; n_periods=4, n_a=20))
     firm = to_spec(khan_thomas_example(; n_k=8, n_eps=2))
-    Y = randn(20, 1)
+    Y = randn(Random.MersenneTwister(1427), 20, 1)
 
     err = try
         estimate_dsge(ha, Y, [:alpha]; method=:euler_gmm)
@@ -5067,7 +5071,7 @@ end
         y[t] = ρ * y[t-1] + ε[t]
     end
     ha = load_ha_example(:krusell_smith)
-    Y = randn(12, 1)
+    Y = randn(Random.MersenneTwister(1428), 12, 1)
     priors_ra = Dict(:ρ => Uniform(0.1, 0.9))
     θ0 = Dict(:ρ => 0.5)
     @test_throws ArgumentError estimate_dsge_bayes(ra, Y, θ0;
