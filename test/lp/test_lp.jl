@@ -55,6 +55,26 @@ using Random
         @test result.values[end, 1] < result.values[1, 1]
     end
 
+    @testset "LP recovers VAR truth at long T (Plagborg-Møller & Wolf 2021)" begin
+        # Non-diagonal dynamics + non-identity impact (DGP-05 #794): LP of the
+        # first variable traces the structural shock-1 response scaled by the
+        # impact (unit-u1 shock ⟺ ε1 = 1/B0[1,1]), so truth = Θ/B0[1,1].
+        # Bounds (probed 0.041/0.16/0.006 on this draw): LP variance grows
+        # with h, hence atol (not rtol) at h ≤ 8.
+        A = [0.6 0.1; 0.2 0.5]
+        B0 = [0.5 0.0; 0.2 0.4]
+        d = dgp_var(MersenneTwister(11); A=A, B0=B0, T=2000)
+        m = estimate_lp(d.Y, 1, 8; lags=4)
+        r = lp_irf(m)
+        truth = var_irf(A, B0, 8)[:, :, 1] / B0[1, 1]
+        @test maximum(abs, r.values - truth) < 0.1
+        # Cumulative IRF tracks cumulative truth (sums amplify: bound 0.25).
+        @test maximum(abs, cumsum(r.values; dims=1) - cumsum(truth; dims=1)) < 0.25
+        # ... and LP ≈ VAR (the fixed compare_var_lp off-by-one is gone).
+        cmp = compare_var_lp(d.Y, 8; lags=4)
+        @test maximum(abs, cmp.difference[1:5, :, :]) < 0.1
+    end
+
     @testset "HAC Covariance Estimation" begin
         # Generate serially correlated data
         T = 200
@@ -92,7 +112,11 @@ using Random
     end
 
     @testset "LP-IV (Stock & Watson 2018)" begin
-        # Generate data with endogeneity
+        # Generate data with endogeneity. Own seed (DGP-05 #794): the impact
+        # and F assertions below are draw-specific (LP-IV at T = 300 is too
+        # noisy beyond h = 0 — 8-seed MC at T = 2000 centers on truth, but
+        # single draws swing ±0.3 at h ≥ 1; decay lives in the next testset).
+        rng = MersenneTwister(94)
         T = 300
         n = 2
 
@@ -117,17 +141,32 @@ using Random
         @test model isa LPIVModel
         @test length(model.first_stage_F) == horizon + 1
 
-        # First stage F-stats should be reasonable (Z is relevant)
-        @test all(model.first_stage_F .> 1)
+        # Strong instrument (probed F ≈ 230; population no-control F ≈ 260).
+        @test all(model.first_stage_F .> 100)
 
-        # Weak instrument test
+        # ... so every horizon passes the weak-IV threshold (DGP-05 #794).
         wk_test = weak_instrument_test(model; threshold=10.0)
         @test haskey(wk_test, :F_stats)
         @test haskey(wk_test, :passes_threshold)
+        @test all(wk_test[:passes_threshold])
 
-        # Extract IRF
+        # Extract IRF: impact ≈ 0.5 (probed 0.547).
         result = lp_iv_irf(model)
         @test result isa LPImpulseResponse
+        @test result.values[1, 2] ≈ 0.5 atol=0.15
+    end
+
+    @testset "LP-IV recovers θ·φʰ on the shared IV DGP" begin
+        # dgp_lp_iv truth: y loads on s with impact θ = 1 and AR(1) 0.5, so
+        # the causal IRF is θ·0.5ʰ (DGP-05 #794; probed errs ≤ 0.061 at h ≤ 2
+        # on this draw — LP-IV variance grows with h, hence h ≤ 2, atol 0.2).
+        d = dgp_lp_iv(MersenneTwister(21); T=2000)
+        m = estimate_lp_iv(d.Y, 1, d.Z, 4; lags=2)
+        r = lp_iv_irf(m)
+        @test [r.values[h + 1, 2] for h in 0:2] ≈ [1.0 * 0.5^h for h in 0:2] atol=0.2
+        # First stage within a factor of the population F = (T−2)·π₁² ≈ 4495
+        # (probed ≈ 5040; the lag controls shift it mildly).
+        @test 0.5 * 4495 < m.first_stage_F[1] < 2 * 4495
     end
 
     @testset "LP-IV HAC-robust F-statistic (#35)" begin
@@ -430,15 +469,13 @@ using Random
     end
 
     @testset "Compare LP and VAR IRFs" begin
-        # Generate VAR(1) data
+        # VAR(1) truth on the shared simulator (DGP-05 #794). Own seed: the
+        # tightened bound below is draw-specific (probed 0.24 on MT(42)).
+        rng = MersenneTwister(42)
         T = 300
         n = 2
-        A = [0.5 0.1; 0.1 0.5]
-
-        Y = zeros(T, n)
-        for t in 2:T
-            Y[t, :] = A * Y[t-1, :] + randn(rng, n)
-        end
+        Y = dgp_var(rng; A=[0.5 0.1; 0.1 0.5], B0=Matrix{Float64}(I, n, n),
+                    T=T).Y
 
         horizon = 10
 
@@ -450,9 +487,10 @@ using Random
         @test size(comparison.difference) == (horizon, n, n)
 
         # For correctly specified model, LP and VAR should give similar IRFs
-        # (LP is less efficient but consistent)
+        # (LP is less efficient but consistent). Now that the off-by-one is
+        # fixed, 0.3 replaces the old 1.0 (probed 0.24 on this draw).
         max_diff = maximum(abs.(comparison.difference))
-        @test max_diff < 1.0  # Reasonable tolerance
+        @test max_diff < 0.3
     end
 
     @testset "StatsAPI Interface" begin
