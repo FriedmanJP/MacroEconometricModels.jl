@@ -56,9 +56,6 @@ both headings; a file on either list is exempt.
 
 ## Grandfathered (pending per-module DGP migration — remove as DGP-02…18 land)
 
-<!-- DGP-15 (#804) -->
-- test/preg/test_panel_nonlinear.jl
-- test/preg/test_panel_reg.jl
 <!-- DGP-16 (#805) -->
 - test/did/test_did.jl
 <!-- DGP-17 (#806) -->

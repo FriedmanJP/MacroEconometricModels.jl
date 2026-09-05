@@ -809,14 +809,14 @@ end
     end
 
     @testset "multi-way absorption == explicit-dummy OLS" begin
-        rng3 = Random.MersenneTwister(7)
+        rng = Random.MersenneTwister(7)
         n3 = 600
-        firm = rand(rng3, 1:20, n3)
-        yr = rand(rng3, 1:8, n3)
-        ind = rand(rng3, 1:5, n3)
-        X3 = randn(rng3, n3, 2)
-        y3 = X3 * [1.2, -0.6] .+ randn(rng3, 20)[firm] .+ randn(rng3, 8)[yr] .+
-             randn(rng3, 5)[ind] .+ 0.5 .* randn(rng3, n3)
+        firm = rand(rng, 1:20, n3)
+        yr = rand(rng, 1:8, n3)
+        ind = rand(rng, 1:5, n3)
+        X3 = randn(rng, n3, 2)
+        y3 = X3 * [1.2, -0.6] .+ randn(rng, 20)[firm] .+ randn(rng, 8)[yr] .+
+             randn(rng, 5)[ind] .+ 0.5 .* randn(rng, n3)
 
         D3 = hcat(_dumm(firm, 20), _dumm(yr, 8), _dumm(ind, 5))
         b_dummy = pinv(hcat(X3, D3)) * y3          # min-norm OLS with dummies
@@ -839,14 +839,14 @@ end
     end
 
     @testset "coefficients invariant to FE-dimension ordering" begin
-        rng4 = Random.MersenneTwister(7)
+        rng = Random.MersenneTwister(7)
         n4 = 400
-        d1 = rand(rng4, 1:15, n4)
-        d2 = rand(rng4, 1:9, n4)
-        d3 = rand(rng4, 1:6, n4)
-        X4 = randn(rng4, n4, 2)
-        y4 = X4 * [0.7, 1.4] .+ randn(rng4, 15)[d1] .+ randn(rng4, 9)[d2] .+
-             randn(rng4, 6)[d3] .+ 0.5 .* randn(rng4, n4)
+        d1 = rand(rng, 1:15, n4)
+        d2 = rand(rng, 1:9, n4)
+        d3 = rand(rng, 1:6, n4)
+        X4 = randn(rng, n4, 2)
+        y4 = X4 * [0.7, 1.4] .+ randn(rng, 15)[d1] .+ randn(rng, 9)[d2] .+
+             randn(rng, 6)[d3] .+ 0.5 .* randn(rng, n4)
 
         base = absorb_fe(y4, X4, [d1, d2, d3])
         b_base = base.X \ base.y
@@ -887,8 +887,8 @@ end
         # panel; on an unbalanced one it is a different, biased estimator (it put
         # the x2 coefficient 2.1e-3 away from the dummy-OLS truth here). Both
         # entry points now use alternating projections, which are exact either way.
-        rng8 = Random.MersenneTwister(21)
-        dfu = df[rand(rng8, n) .> 0.25, :]
+        rng = Random.MersenneTwister(21)
+        dfu = df[rand(rng, n) .> 0.25, :]
         pdu = xtset(dfu, :id, :t)
         Xu = Matrix{Float64}(dfu[:, [:x1, :x2]])
         yu = Vector{Float64}(dfu.y)

@@ -110,11 +110,11 @@ end
 
     # (c) SCALE-EQUIVARIANCE through _xtlogit_fe: β(50·x) = β(x)/50, equal maximized loglik.
     #     With large |Xβ| the old raw-exp DP overflowed (NaN); the log-space DP stays valid.
-    rng2 = Random.MersenneTwister(880); N_g = 60; T_p = 8; nn = N_g * T_p
+    rng = Random.MersenneTwister(880); N_g = 60; T_p = 8; nn = N_g * T_p
     ids = repeat(1:N_g, inner=T_p); ts = repeat(1:T_p, N_g)
-    x1 = randn(rng2, nn)
-    alpha = repeat(randn(rng2, N_g), inner=T_p)
-    y = Float64.(rand(rng2, nn) .< 1.0 ./ (1.0 .+ exp.(-(alpha .+ 0.7 .* x1))))
+    x1 = randn(rng, nn)
+    alpha = repeat(randn(rng, N_g), inner=T_p)
+    y = Float64.(rand(rng, nn) .< 1.0 ./ (1.0 .+ exp.(-(alpha .+ 0.7 .* x1))))
     m1 = estimate_xtlogit(xtset(DataFrame(id=ids, t=ts, x1=x1, y=y), :id, :t), :y, [:x1]; model=:fe)
     m2 = estimate_xtlogit(xtset(DataFrame(id=ids, t=ts, x1=50.0 .* x1, y=y), :id, :t), :y, [:x1]; model=:fe)
     @test all(isfinite, coef(m2))
@@ -145,10 +145,10 @@ end
     @test norm(FD.gradient(nll, vcat(coef(m), log(m.sigma_u)))) < 1e-4
 
     # (3) adaptive-vs-fixed accuracy on a large-σ_u (=3) fixture where fixed GH under-resolves
-    rng2 = Random.MersenneTwister(3072); N2 = 150; Tp2 = 8; n2 = N2 * Tp2
+    rng = Random.MersenneTwister(3072); N2 = 150; Tp2 = 8; n2 = N2 * Tp2
     ids2 = repeat(1:N2, inner=Tp2)
-    x2 = randn(rng2, n2); a2 = repeat(randn(rng2, N2) .* 3.0, inner=Tp2)
-    y2 = Float64.(rand(rng2, n2) .< 1.0 ./ (1.0 .+ exp.(-(a2 .+ 0.5 .* x2))))
+    x2 = randn(rng, n2); a2 = repeat(randn(rng, N2) .* 3.0, inner=Tp2)
+    y2 = Float64.(rand(rng, n2) .< 1.0 ./ (1.0 .+ exp.(-(a2 .+ 0.5 .* x2))))
     Xc2 = hcat(ones(n2), x2); ug2 = sort(unique(ids2))
     gobs2 = Dict(g => findall(==(g), ids2) for g in ug2)
     theta_true = [0.0, 0.5, log(3.0)]
