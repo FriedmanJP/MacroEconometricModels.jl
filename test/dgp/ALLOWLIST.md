@@ -56,13 +56,6 @@ both headings; a file on either list is exempt.
 
 ## Grandfathered (pending per-module DGP migration — remove as DGP-02…18 land)
 
-<!-- DGP-10 (#799) -->
-- test/mgarch/test_mgarch.jl
-- test/volatility/test_figarch.jl
-- test/volatility/test_garch_family.jl
-- test/volatility/test_garch_midas.jl
-- test/volatility/test_volatility.jl
-- test/volatility/test_volatility_coverage.jl
 <!-- DGP-11 (#800) -->
 - test/nongaussian/test_nongaussian_internals.jl
 - test/nongaussian/test_nongaussian_svar.jl

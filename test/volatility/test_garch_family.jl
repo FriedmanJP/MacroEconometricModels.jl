@@ -318,6 +318,6 @@ end
         @test_throws ArgumentError estimate_igarch(y_sym, 0, 1)          # p ≥ 1
         @test_throws ArgumentError estimate_aparch(y_sym, 1, 1; fix_delta=-1.0)
         @test_throws ArgumentError estimate_aparch(y_sym, 1, 1; fix_gamma=1.5)
-        @test_throws ArgumentError estimate_igarch(randn(5), 1, 1)       # too few obs
+        @test_throws ArgumentError estimate_igarch(randn(MersenneTwister(26), 5), 1, 1)       # too few obs
     end
 end

@@ -276,9 +276,9 @@ _min_eig(H) = minimum(eigen(Symmetric(Matrix(H))).values)
     end
 
     @testset "input validation & StatsAPI" begin
-        @test_throws ArgumentError estimate_ccc(randn(100, 1))   # need ≥2 series
-        @test_throws ArgumentError estimate_dcc(randn(100, 2); correction = :bad)
-        @test_throws ArgumentError estimate_bekk(randn(100, 2); kind = :bad)
+        @test_throws ArgumentError estimate_ccc(randn(MersenneTwister(21), 100, 1))   # need ≥2 series
+        @test_throws ArgumentError estimate_dcc(randn(MersenneTwister(22), 100, 2); correction = :bad)
+        @test_throws ArgumentError estimate_bekk(randn(MersenneTwister(23), 100, 2); kind = :bad)
         Y = _sim_dcc(500)
         m = estimate_dcc(Y)
         @test StatsAPI.nobs(m) == 500

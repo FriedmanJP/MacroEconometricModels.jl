@@ -209,7 +209,7 @@ end
     # =========================================================================
     @testset "input validation" begin
         @test_throws ArgumentError estimate_garch_midas(r, X; K=1, m_freq=22)
-        @test_throws ArgumentError estimate_garch_midas(randn(10), randn(10); K=3, m_freq=2)
+        @test_throws ArgumentError estimate_garch_midas(randn(MersenneTwister(24), 10), randn(MersenneTwister(25), 10); K=3, m_freq=2)
         # rv=:macro needs enough low-frequency observations
         @test_throws ArgumentError estimate_garch_midas(r, X[1:3]; K=12, m_freq=22)
         @test_throws ArgumentError estimate_garch_midas(r, X; K=12, m_freq=22, rv=:bogus)

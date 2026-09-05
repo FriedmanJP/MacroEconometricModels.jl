@@ -37,20 +37,26 @@ function dgp_garch_family(rng::AbstractRNG; kind::Symbol=:garch,
         throw(ArgumentError("unknown innov :$innov (gauss|t|laplace)"))
     end
     y, h = zeros(N), zeros(N)
-    h0 = omega / max(0.05, 1 - alpha - beta)
+    # :arch has no beta term: neutralise it so the default beta=0.88 cannot
+    # make a pure ARCH explosive (DGP-10 #799).
+    beta_eff = kind === :arch ? 0.0 : beta
+    h0 = omega / max(0.05, 1 - alpha - beta_eff)
     # All recursions floor the variance at 1e-8 (standard truncation: the
     # component-GARCH transient can otherwise dip below zero after a spike).
     if kind === :arch || kind === :garch || kind === :igarch || kind === :gjr
         h[1] = h0
         y[1] = mu + sqrt(h[1]) * z[1]
         for t in 2:N
-            v = omega + alpha * (y[t - 1] - mu)^2 + beta * h[t - 1]
+            v = omega + alpha * (y[t - 1] - mu)^2 + beta_eff * h[t - 1]
             kind === :gjr && (v += gamma * (y[t - 1] < mu) * (y[t - 1] - mu)^2)
             h[t] = max(v, 1e-8)
             y[t] = mu + sqrt(h[t]) * z[t]
         end
     elseif kind === :egarch
-        lnh = log(h0)
+        # omega is a log-variance intercept (often negative) and alpha+beta
+        # routinely exceeds 1, so h0 is meaningless here: initialise at the
+        # stationary log-variance mean (DGP-10 #799).
+        lnh = beta < 1.0 ? omega / (1 - beta) : omega
         for t in 1:N
             h[t] = exp(lnh)
             y[t] = mu + sqrt(h[t]) * z[t]

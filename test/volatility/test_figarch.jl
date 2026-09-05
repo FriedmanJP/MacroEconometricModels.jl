@@ -52,7 +52,7 @@ const _M = MacroEconometricModels
 """Simulate a FIGARCH(1,d,1) path from the truncated ARCH(∞) recursion."""
 function _sim_figarch(T::Int; omega=0.05, d=0.4, phi=0.2, beta=0.5,
                       K=1500, burn=3000, seed=1)
-    Random.seed!(seed)
+    rng = MersenneTwister(seed)
     lam = _M._figarch_lambda(float(d), [float(phi)], [float(beta)], K)
     ostar = omega / (1 - beta)
     n = T + burn
@@ -64,7 +64,7 @@ function _sim_figarch(T::Int; omega=0.05, d=0.4, phi=0.2, beta=0.5,
             h += lam[i] * e2[t-i]
         end
         h = max(h, 1e-12)
-        r[t] = sqrt(h) * randn()
+        r[t] = sqrt(h) * randn(rng)
         e2[t] = r[t]^2
     end
     r[burn+1:end]
@@ -72,14 +72,14 @@ end
 
 """Simulate a GARCH(1,1) path."""
 function _sim_garch11(T::Int; omega=0.05, alpha=0.08, beta=0.9, burn=1500, seed=1)
-    Random.seed!(seed)
+    rng = MersenneTwister(seed)
     n = T + burn
     h = omega / (1 - alpha - beta)
     r = zeros(n)
     ep = 0.0
     @inbounds for t in 1:n
         h = omega + alpha * ep^2 + beta * h
-        r[t] = sqrt(h) * randn()
+        r[t] = sqrt(h) * randn(rng)
         ep = r[t]
     end
     r[burn+1:end]
@@ -88,7 +88,7 @@ end
 """Simulate a FIEGARCH path from the truncated log-variance MA(∞)."""
 function _sim_fiegarch(T::Int; omega=-0.1, theta=-0.08, gamma=0.15, d=0.35,
                        phi=0.2, beta=0.4, K=1000, burn=2000, seed=1)
-    Random.seed!(seed)
+    rng = MersenneTwister(seed)
     psi = _M._fiegarch_psi(float(d), [float(phi)], [float(beta)], K)
     Eabsz = sqrt(2 / pi)
     n = T + burn
@@ -102,7 +102,7 @@ function _sim_fiegarch(T::Int; omega=-0.1, theta=-0.08, gamma=0.15, d=0.35,
         end
         lg = clamp(lg, -50.0, 50.0)
         h = exp(lg)
-        z = randn()
+        z = randn(rng)
         r[t] = sqrt(h) * z
         gz[t] = theta * z + gamma * (abs(z) - Eabsz)
     end
@@ -297,7 +297,7 @@ end
     # =========================================================================
     @testset "input validation" begin
         r = _sim_figarch(500; seed=2, K=400)
-        @test_throws ArgumentError estimate_figarch(randn(5))          # too few obs
+        @test_throws ArgumentError estimate_figarch(randn(MersenneTwister(3), 5))          # too few obs
         @test_throws ArgumentError estimate_figarch(r; truncation=0)
         @test_throws ArgumentError estimate_figarch(r; d0=1.5)
         @test_throws ArgumentError estimate_fiegarch(r; d0=0.0)

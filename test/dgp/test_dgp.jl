@@ -90,6 +90,15 @@ using DataFrames  # nrow (no-op when fixtures.jl already loaded it)
         end
         gt = dgp_garch_family(MersenneTwister(26); innov=:t, T=200)
         @test length(gt.y) == 200
+        # :arch ignores beta (default 0.88 must not make it explosive).
+        ga = dgp_garch_family(MersenneTwister(30); kind=:arch, omega=0.1,
+                              alpha=0.3, T=20000)
+        @test mean(ga.y .^ 2) ≈ 0.1 / (1 - 0.3) rtol=0.1
+        # :egarch with persistent negative-omega params must not crash on
+        # log of a negative init (DGP-10 #799).
+        ge = dgp_garch_family(MersenneTwister(31); kind=:egarch, omega=-0.3,
+                              alpha=0.15, gamma=-0.08, beta=0.95, T=2000)
+        @test all(isfinite.(ge.y)) && all(ge.h .> 0)
     end
 
     @testset "dgp_sv / dgp_mgarch / dgp_midas shapes" begin
