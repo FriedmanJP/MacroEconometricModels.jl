@@ -12,15 +12,15 @@ using Distributions
 using StatsAPI: pvalue
 
 @testset "Multivariate Normality Tests" begin
-    Random.seed!(12345)
+    rng = Random.MersenneTwister(12345)
 
     # Generate Gaussian data (should not reject)
     n_obs, k = 500, 3
-    Y_gauss = randn(n_obs + 2, k)
+    Y_gauss = randn(rng, n_obs + 2, k)
     model_gauss = estimate_var(Y_gauss, 2)
 
     # Generate non-Gaussian data (t-distributed, should reject)
-    Y_nong = rand(TDist(3), n_obs + 2, k)
+    Y_nong = rand(rng, TDist(3), n_obs + 2, k)
     model_nong = estimate_var(Y_nong, 2)
 
     @testset "Jarque-Bera Multivariate" begin
@@ -142,7 +142,7 @@ using StatsAPI: pvalue
     end
 
     @testset "Bivariate case" begin
-        Y2 = randn(200, 2)
+        Y2 = randn(rng, 200, 2)
         model2 = estimate_var(Y2, 1)
         suite2 = normality_test_suite(model2)
         @test length(suite2.results) == 7
@@ -150,8 +150,7 @@ using StatsAPI: pvalue
     end
 
     @testset "Raw matrix dispatch" begin
-        Random.seed!(5678)
-        U_raw = randn(200, 3)
+        U_raw = randn(Random.MersenneTwister(5678), 200, 3)
         # mardia_test with raw matrix
         r_mardia = mardia_test(U_raw)
         @test r_mardia isa MacroEconometricModels.NormalityTestResult
@@ -164,8 +163,7 @@ using StatsAPI: pvalue
     end
 
     @testset "Large k=5 case" begin
-        Random.seed!(5679)
-        U_large = randn(200, 5)
+        U_large = randn(Random.MersenneTwister(5679), 200, 5)
         r_jb = jarque_bera_test(U_large)
         @test r_jb.n_vars == 5
         r_hz = henze_zirkler_test(U_large)
@@ -174,8 +172,7 @@ using StatsAPI: pvalue
     end
 
     @testset "Univariate k=1 edge" begin
-        Random.seed!(5680)
-        U_uni = randn(200, 1)
+        U_uni = randn(Random.MersenneTwister(5680), 200, 1)
         r_jb = jarque_bera_test(U_uni)
         @test r_jb.n_vars == 1
         @test r_jb.statistic >= 0

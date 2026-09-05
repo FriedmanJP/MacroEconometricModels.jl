@@ -223,4 +223,34 @@ end
         @test_throws ArgumentError estimate_xtcointreg(yv, xv, idv, tv; pooling=:bogus)
         @test_throws ArgumentError estimate_xtcointreg(yv, xv, idv, tv; trend=:bogus)
     end
+
+    # ---------------------------------------------------------------------
+    # DGP-04 (#793): heterogeneous slopes make group-mean and pooled
+    # different estimands. A :group implementation that pooled would return
+    # pooled's number — on this draw the two visibly differ (probed gap
+    # 0.073), while group-mean recovers mean(β_i) (probed err 0.009).
+    # ---------------------------------------------------------------------
+    @testset "heterogeneous slopes: group-mean ≈ mean(β_i) ≠ pooled" begin
+        rng = MersenneTwister(54)
+        N, T, beta0 = 10, 150, 1.5
+        bi = beta0 .+ 0.6 .* randn(rng, N)
+        hy, hx, hi, ht = Float64[], Float64[], Int[], Int[]
+        for i in 1:N
+            v = randn(rng, T); e = randn(rng, T)
+            x = cumsum(v)
+            rho, phi = 0.2 + 0.05 * (i % 6), 0.3 + 0.05 * (i % 6)
+            u = zeros(T)
+            for t in 1:T
+                u[t] = rho * (t == 1 ? 0.0 : u[t-1]) + e[t] + phi * v[t]
+            end
+            append!(hy, (1.0 + 0.5 * i) .+ bi[i] .* x .+ u)
+            append!(hx, x); append!(hi, fill(i, T)); append!(ht, 1:T)
+        end
+        mg = estimate_xtcointreg(hy, hx, hi, ht; method=:fmols, pooling=:group,
+                                 trend=:const, bandwidth=bw)
+        mp = estimate_xtcointreg(hy, hx, hi, ht; method=:fmols, pooling=:pooled,
+                                 trend=:const, bandwidth=bw)
+        @test S.coef(mg)[2] ≈ mean(bi) atol=0.1
+        @test abs(S.coef(mg)[2] - S.coef(mp)[1]) > 0.02
+    end
 end

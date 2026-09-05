@@ -16,14 +16,10 @@ using Test, MacroEconometricModels, Random, Statistics, LinearAlgebra, StatsAPI,
     @test r.ci > 0
 
     # AR(1) with rho=0.8: ACF(1) should be close to 0.8
-    rng2 = Random.MersenneTwister(1002)
+    rng = Random.MersenneTwister(1002)
     n = 1000
     rho = 0.8
-    ar1 = zeros(n)
-    ar1[1] = randn(rng2)
-    for t in 2:n
-        ar1[t] = rho * ar1[t-1] + randn(rng2)
-    end
+    ar1 = dgp_arima(rng; phi=[rho], T=n).y
     r2 = acf(ar1; lags=10)
     @test abs(r2.acf[1] - rho) < 0.1
     # ACF should decay geometrically
@@ -34,12 +30,7 @@ end
     # AR(2): PACF should cut off after lag 2
     rng = Random.MersenneTwister(2001)
     n = 2000
-    ar2 = zeros(n)
-    ar2[1] = randn(rng)
-    ar2[2] = randn(rng)
-    for t in 3:n
-        ar2[t] = 0.5 * ar2[t-1] - 0.3 * ar2[t-2] + randn(rng)
-    end
+    ar2 = dgp_arima(rng; phi=[0.5, -0.3], T=n).y
 
     # Levinson method
     r_lev = pacf(ar2; lags=10, method=:levinson)
@@ -209,12 +200,8 @@ end
     @test lb.pvalue > 0.01  # should generally not reject
 
     # AR(1): low p-value (reject H0)
-    rng2 = Random.MersenneTwister(8002)
-    ar1 = zeros(500)
-    ar1[1] = randn(rng2)
-    for t in 2:500
-        ar1[t] = 0.8 * ar1[t-1] + randn(rng2)
-    end
+    rng = Random.MersenneTwister(8002)
+    ar1 = dgp_arima(rng; phi=[0.8], T=500).y
     lb2 = ljung_box_test(ar1; lags=10)
     @test lb2.pvalue < 0.05
 end
@@ -250,8 +237,8 @@ end
     @test ft.peak_freq > 0
 
     # White noise: should not detect periodicity (high p-value, usually)
-    rng2 = Random.MersenneTwister(9002)
-    wn = randn(rng2, 200)
+    rng = Random.MersenneTwister(9002)
+    wn = randn(rng, 200)
     ft2 = fisher_test(wn)
     @test ft2.pvalue > 0.01
 end
@@ -265,12 +252,8 @@ end
     @test bt.pvalue > 0.01
 
     # AR(1) with strong autocorrelation: should fail (low p-value)
-    rng2 = Random.MersenneTwister(9004)
-    ar1 = zeros(300)
-    ar1[1] = randn(rng2)
-    for t in 2:300
-        ar1[t] = 0.9 * ar1[t-1] + randn(rng2)
-    end
+    rng = Random.MersenneTwister(9004)
+    ar1 = dgp_arima(rng; phi=[0.9], T=300).y
     bt2 = bartlett_white_noise_test(ar1)
     @test bt2.pvalue < 0.05
 end
@@ -370,8 +353,8 @@ end
     @test length(String(take!(io))) > 0
 
     # CrossSpectrumResult
-    rng2 = Random.MersenneTwister(12002)
-    x = randn(rng2, 200)
+    rng = Random.MersenneTwister(12002)
+    x = randn(rng, 200)
     cs = cross_spectrum(x, y)
     show(io, cs)
     @test length(String(take!(io))) > 0
@@ -417,8 +400,8 @@ end
     @test p isa MacroEconometricModels.PlotOutput
 
     # CCF plot
-    rng2 = Random.MersenneTwister(13002)
-    x = randn(rng2, 200)
+    rng = Random.MersenneTwister(13002)
+    x = randn(rng, 200)
     r_ccf = ccf(x, y; lags=10)
     p2 = plot_result(r_ccf)
     @test p2 isa MacroEconometricModels.PlotOutput
@@ -529,6 +512,7 @@ end
 @testset "Input validation — ArgumentError" begin
     short2 = [1.0, 2.0]
     short3 = [1.0, 2.0, 3.0]
+    bad100 = randn(Random.MersenneTwister(99000), 100)
 
     # acf/pacf/acf_pacf require n >= 3
     @test_throws ArgumentError acf(short2)
@@ -559,16 +543,16 @@ end
     @test_throws ArgumentError ideal_bandpass(short3, 0.5, 1.5)
 
     # ideal_bandpass invalid frequency bounds
-    @test_throws ArgumentError ideal_bandpass(randn(100), 1.5, 0.5)  # f_low >= f_high
-    @test_throws ArgumentError ideal_bandpass(randn(100), -0.1, 1.0) # f_low < 0
-    @test_throws ArgumentError ideal_bandpass(randn(100), 0.5, 4.0)  # f_high > π
+    @test_throws ArgumentError ideal_bandpass(bad100, 1.5, 0.5)  # f_low >= f_high
+    @test_throws ArgumentError ideal_bandpass(bad100, -0.1, 1.0) # f_low < 0
+    @test_throws ArgumentError ideal_bandpass(bad100, 0.5, 4.0)  # f_high > π
 
     # Invalid method for pacf
-    @test_throws ArgumentError pacf(randn(100); method=:invalid)
-    @test_throws ArgumentError acf_pacf(randn(100); method=:invalid)
+    @test_throws ArgumentError pacf(bad100; method=:invalid)
+    @test_throws ArgumentError acf_pacf(bad100; method=:invalid)
 
     # Invalid method for spectral_density
-    @test_throws ArgumentError spectral_density(randn(100); method=:invalid)
+    @test_throws ArgumentError spectral_density(bad100; method=:invalid)
 
     # Invalid filter for transfer_function
     @test_throws ArgumentError transfer_function(:bogus)
@@ -998,8 +982,8 @@ end
     @test occursin("Partial Autocorrelation Function", s3)
 
     # CCF display
-    rng2 = Random.MersenneTwister(39002)
-    x = randn(rng2, 200)
+    rng = Random.MersenneTwister(39002)
+    x = randn(rng, 200)
     r_ccf = ccf(x, y; lags=10)
     show(io, r_ccf)
     s4 = String(take!(io))

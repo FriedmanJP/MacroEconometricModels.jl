@@ -19,15 +19,18 @@ end
 
 const _M = MacroEconometricModels
 
-function _glp_sim(T_obs::Int; seed::Int=1)
-    rng = Random.MersenneTwister(seed)
-    A = [0.6 0.1; 0.15 0.5]
-    L = [0.4 0.0; 0.1 0.3]
-    Y = zeros(T_obs, 2)
-    for t in 2:T_obs
-        Y[t, :] = A * Y[t-1, :] + L * randn(rng, 2)
-    end
-    return Y
+# DGP-03 (#792): the file's historical design (non-diagonal dynamics,
+# non-identity impact so shock orderings matter) on the shared simulator.
+const _GLP_A = [0.6 0.1; 0.15 0.5]
+const _GLP_B0 = [0.4 0.0; 0.1 0.3]
+
+function _glp_sim(rng::AbstractRNG, T_obs::Int)
+    return dgp_var(rng; A=_GLP_A, B0=_GLP_B0, T=T_obs).Y
+end
+
+"""Genuine random-walk panel (unit-root DGP) for the boundary-pinning test."""
+function _glp_rw(rng::AbstractRNG)
+    return dgp_var(rng; A=Matrix{Float64}(I, 3, 3), T=150).Y
 end
 
 @testset "GLP hierarchical hyperparameter optimization" begin
@@ -71,7 +74,7 @@ end
 end
 
 @testset "objective is the negative log posterior, penalized outside the box" begin
-    Y = _glp_sim(120; seed=2)
+    Y = _glp_sim(Random.MersenneTwister(2), 120)
     x = log.([0.3, 1.2, 0.8])
     got = _M._glp_objective(x, Y, 2, 0.5, 2.0, Float64)
 
@@ -93,7 +96,7 @@ end
 # ─────────────────────────────────────────────────────────────────────────────
 
 @testset "joint optimization beats the tau-only grid and the defaults" begin
-    Y = _glp_sim(FAST ? 120 : 200; seed=1)
+    Y = _glp_sim(Random.MersenneTwister(1), FAST ? 120 : 200)
     p = 2
     r = optimize_hyperparameters_glp(Y, p)
 
@@ -133,19 +136,19 @@ end
     n_pinned = 0
     for seed in 1:25
         rc = optimize_hyperparameters_glp(
-            cumsum(randn(Random.MersenneTwister(seed), 150, 3); dims=1), 2; verbose=false)
+            _glp_rw(Random.MersenneTwister(seed)), 2; verbose=false)
         rc.at_bound && (n_pinned += 1; @test !rc.converged)
     end
 
-    # Near-random-walk data drives the overall tightness to the edge of the box —
-    # but only for some draws (8 of 40 seeds), and WHICH draws is a property of the
-    # RNG stream, which is not stable across Julia versions: seed 4 pins on 1.12
-    # and does not on 1.10. So search for a pinning draw instead of hard-coding a
-    # seed, which makes the end-to-end assertions below independent of the stream.
+    # Random-walk data drives the overall tightness to the edge of the box —
+    # but only for some draws, and WHICH draws is a property of the RNG stream,
+    # which is not stable across Julia versions. So search for a pinning draw
+    # instead of hard-coding a seed, which makes the end-to-end assertions below
+    # independent of the stream.
     Y_rw = nothing
     r = nothing
     for seed in 1:40
-        Yc = cumsum(randn(Random.MersenneTwister(seed), 150, 3); dims=1)
+        Yc = _glp_rw(Random.MersenneTwister(seed))
         rc = optimize_hyperparameters_glp(Yc, 2; verbose=false)
         if rc.at_bound
             Y_rw, r = Yc, rc
@@ -178,13 +181,13 @@ end
     hg = optimize_hyperparameters(Y_rw, 2)
     @test hg.tau ≈ 0.01 atol = 1e-8    # the grid's lower endpoint
 
-    good = optimize_hyperparameters_glp(_glp_sim(200; seed=1), 2)
+    good = optimize_hyperparameters_glp(_glp_sim(Random.MersenneTwister(1), 200), 2)
     @test occursin("Converged", sprint(show, good))
     @test !occursin("did NOT converge", sprint(show, good))
 end
 
 @testset "optimizer keywords" begin
-    Y = _glp_sim(100; seed=3)
+    Y = _glp_sim(Random.MersenneTwister(3), 100)
     @test optimize_hyperparameters_glp(Y, 1; starts=1).converged isa Bool
     @test optimize_hyperparameters_glp(Y, 1; max_iter=50) isa GLPHyperparameters
     @test_throws ArgumentError optimize_hyperparameters_glp(Y, 0)
@@ -200,7 +203,7 @@ end
 # ─────────────────────────────────────────────────────────────────────────────
 
 @testset "estimate_bvar defaults to GLP, with the grid path unchanged" begin
-    Y = _glp_sim(150; seed=5)
+    Y = _glp_sim(Random.MersenneTwister(5), 150)
     p = 2
 
     # The default path equals passing the GLP-selected hyperparameters explicitly
@@ -220,6 +223,10 @@ end
 
     # The two selection paths genuinely differ
     @test !isapprox(a.B_draws, c.B_draws; atol=1e-8)
+
+    # Truth recovery (DGP-03 #792): the posterior mean recovers the known design.
+    Bm = dropdims(mean(a.B_draws; dims=1); dims=1)
+    @test maximum(abs, Matrix(Bm[2:3, :]') - _GLP_A) < 0.2
 
     # An explicit hyper bypasses selection under either setting
     fixed = MinnesotaHyperparameters(; tau=0.7, lambda=2.0, mu=1.5)

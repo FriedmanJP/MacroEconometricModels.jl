@@ -14,13 +14,13 @@ using LinearAlgebra
 using Statistics
 using Random
 
-Random.seed!(54321)
+rng = MersenneTwister(54321)  # DGP-03: explicit rng
 
 @testset "Bayesian Processing Utilities" begin
 
     @testset "compute_posterior_quantiles" begin
         # Create test samples: 100 samples of a 10×3×3 array
-        samples = randn(100, 10, 3, 3)
+        samples = randn(rng, 100, 10, 3, 3)
         q_vec = [0.16, 0.5, 0.84]
 
         # Test allocating version
@@ -39,7 +39,7 @@ Random.seed!(54321)
     end
 
     @testset "compute_posterior_quantiles!" begin
-        samples = randn(50, 5, 2)
+        samples = randn(rng, 50, 5, 2)
         q_vec = Float64.([0.1, 0.5, 0.9])
 
         q_out = zeros(5, 2, 3)
@@ -57,7 +57,7 @@ Random.seed!(54321)
     end
 
     @testset "compute_posterior_quantiles_threaded!" begin
-        samples = randn(200, 10, 4, 4)
+        samples = randn(rng, 200, 10, 4, 4)
         q_vec = Float64.([0.16, 0.5, 0.84])
 
         q_out = zeros(10, 4, 4, 3)
@@ -76,7 +76,7 @@ Random.seed!(54321)
 
     @testset "stack_posterior_results" begin
         # Create vector of result arrays
-        results = [randn(5, 3, 3) for _ in 1:20]
+        results = [randn(rng, 5, 3, 3) for _ in 1:20]
 
         stacked = MacroEconometricModels.stack_posterior_results(results, (5, 3, 3), Float64)
 
@@ -90,8 +90,8 @@ Random.seed!(54321)
 
     @testset "Weighted Quantiles" begin
         # Test compute_weighted_quantiles!
-        samples = randn(100, 5, 2)
-        weights = rand(100)
+        samples = randn(rng, 100, 5, 2)
+        weights = rand(rng, 100)
         weights ./= sum(weights)  # Normalize
 
         q_vec = Float64.([0.16, 0.5, 0.84])
@@ -109,9 +109,9 @@ Random.seed!(54321)
     end
 
     @testset "Performance Utilities - XtX_inv Caching" begin
-        X = randn(100, 5)
-        residuals1 = randn(100)
-        residuals2 = randn(100)
+        X = randn(rng, 100, 5)
+        residuals1 = randn(rng, 100)
+        residuals2 = randn(rng, 100)
 
         # Pre-compute XtX_inv
         XtX_inv = MacroEconometricModels.precompute_XtX_inv(X)
@@ -141,12 +141,9 @@ end
     # observable difference is that the container's element type is now concrete, not `Any`.
     rng = Random.MersenneTwister(20210)
     n, p, T = 2, 2, 140
-    Y = zeros(T, n)
-    for t in 2:T
-        Y[t, :] = 0.5 .* Y[t-1, :] .+ randn(rng, n)
-    end
-    Random.seed!(4242)
-    post = estimate_bvar(Y, p; n_draws=60, sampler=:direct)
+    # Persistent VAR(1) truth (DGP-03 #792: shared simulator).
+    Y = dgp_var(rng; A=[0.5 0.1; 0.05 0.4], B0=Matrix{Float64}(I, n, n), T=T).Y
+    post = estimate_bvar(Y, p; n_draws=60, sampler=:direct, rng=MersenneTwister(4242))
 
     # (1) The internal machinery now returns a concretely-typed vector of Array{Float64,3}
     #     (from compute_irf), not Vector{Any}.
@@ -161,9 +158,10 @@ end
     @test all(r -> size(r) == (8, n, n), results)
 
     # (2) Before/after equality: the deterministic Cholesky posterior-IRF pipeline reproduces the
-    #     same result on a fixed seed across repeated runs (the container change is value-neutral).
-    Random.seed!(777); ir1 = irf(post, 8; method=:cholesky)
-    Random.seed!(777); ir2 = irf(post, 8; method=:cholesky)
+    #     same result across repeated runs with NO reseeding (the container change is value-neutral;
+    #     DGP-03 #792: the old global reseeds were a crutch — determinism must not need them).
+    ir1 = irf(post, 8; method=:cholesky)
+    ir2 = irf(post, 8; method=:cholesky)
     @test ir1.point_estimate == ir2.point_estimate
     @test ir1.quantiles == ir2.quantiles
     @test all(isfinite, ir1.point_estimate)

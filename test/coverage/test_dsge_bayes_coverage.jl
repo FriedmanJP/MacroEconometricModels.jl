@@ -701,8 +701,8 @@ end
     @test norm(Sigma - (A * Sigma * A' + B)) < 1e-8
 
     # Errors
-    @test_throws ArgumentError M._dlyap_doubling(randn(2, 3), B)
-    @test_throws ArgumentError M._dlyap_doubling(A, randn(3, 3))
+    @test_throws ArgumentError M._dlyap_doubling(randn(Random.MersenneTwister(1441), 2, 3), B)
+    @test_throws ArgumentError M._dlyap_doubling(A, randn(Random.MersenneTwister(1442), 3, 3))
 end
 
 # =====================================================================

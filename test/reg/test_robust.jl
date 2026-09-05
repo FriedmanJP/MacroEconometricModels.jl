@@ -329,13 +329,13 @@ end
         ratio = Float64[]
         n_cov_hc = 0; n_cov_con = 0
         for r in 1:reps
-            rr = Random.MersenneTwister(1000 + r)
-            la = 40 .+ 4 .* rand(rr, 150); lo = -100 .+ 4 .* rand(rr, 150)
+            rng = Random.MersenneTwister(1000 + r)
+            la = 40 .+ 4 .* rand(rng, 150); lo = -100 .+ 4 .* rand(rng, 150)
             blk = @. Int(floor(la - 40)) * 10 + Int(floor(lo + 100))
-            ush = Dict(b => randn(rr) for b in unique(blk))
-            xsh = Dict(b => randn(rr) for b in unique(blk))
-            xb = [xsh[blk[i]] for i in 1:150] .+ 0.3 .* randn(rr, 150)
-            u = [ush[blk[i]] for i in 1:150] .+ 0.3 .* randn(rr, 150)
+            ush = Dict(b => randn(rng) for b in unique(blk))
+            xsh = Dict(b => randn(rng) for b in unique(blk))
+            xb = [xsh[blk[i]] for i in 1:150] .+ 0.3 .* randn(rng, 150)
+            u = [ush[blk[i]] for i in 1:150] .+ 0.3 .* randn(rng, 150)
             Xr = hcat(ones(150), xb)
             mh = estimate_reg(Xr * [1.0, 0.5] .+ u, Xr; cov_type=:hc0)
             ch = conley_se(mh; coords=hcat(la, lo), cutoff=120.0, kernel=:uniform,

@@ -292,7 +292,10 @@ const TEST_GROUPS = [
     ]),
     # Group 12: Policy counterfactuals (CF-01, #381). Later CF tasks append their
     # test files here. Lightest group; ranked last in _expected_rank.
+    # DGP-01 (#790) self-tests + white-noise lint live here (lightest group).
     ("Counterfactual" => [
+        "dgp/test_dgp.jl",
+        "dgp/test_dgp_lint.jl",
         "counterfactual/test_types.jl",
         "counterfactual/test_rules.jl",
         "counterfactual/test_kernel.jl",

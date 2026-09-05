@@ -67,29 +67,26 @@ using Random
     # =========================================================================
 
     @testset "optimal_bandwidth_nw" begin
-        Random.seed!(42)
+        rng = MersenneTwister(42)  # DGP-02: explicit rng
 
         # White noise: bandwidth should be small
-        x_wn = randn(200)
+        x_wn = randn(rng, 200)
         bw_wn = MacroEconometricModels.optimal_bandwidth_nw(x_wn)
         @test bw_wn >= 0
         @test bw_wn <= 20  # Should be small for white noise
 
-        # Persistent series: bandwidth should be larger
-        x_pers = zeros(200)
-        x_pers[1] = randn()
-        for t in 2:200
-            x_pers[t] = 0.9 * x_pers[t-1] + 0.1 * randn()
-        end
+        # Persistent series (stationary AR(1), DGP-02 #791): bandwidth larger
+        x_pers = dgp_arima(rng; phi=[0.9], sigma=0.1, T=200).y
         bw_pers = MacroEconometricModels.optimal_bandwidth_nw(x_pers)
         @test bw_pers >= 0
+        @test bw_pers > bw_wn  # persistence needs lags; iid does not
 
         # Short series
-        bw_short = MacroEconometricModels.optimal_bandwidth_nw(randn(3))
+        bw_short = MacroEconometricModels.optimal_bandwidth_nw(randn(rng, 3))
         @test bw_short == 0
 
         # Multivariate version
-        X_mv = randn(200, 3)
+        X_mv = randn(rng, 200, 3)
         bw_mv = MacroEconometricModels.optimal_bandwidth_nw(X_mv)
         @test bw_mv >= 0
 
@@ -101,12 +98,9 @@ using Random
     @testset "optimal_bandwidth_nw — Andrews (1991) plug-in (T052)" begin
         # Persistent AR(1) with ρ≈0.5 so the plug-in bandwidth comfortably exceeds
         # the old degenerate floor(n^(1/3))=5 clamp but stays under the Schwert cap.
-        Random.seed!(4242)
+        rng = MersenneTwister(4242)  # DGP-02: explicit rng
         n = 200
-        x = zeros(n); x[1] = randn()
-        for t in 2:n
-            x[t] = 0.5 * x[t-1] + randn()
-        end
+        x = dgp_arima(rng; phi=[0.5], T=n).y
         # Recompute ρ̂ with the SAME estimator the function uses → the pins are exact
         # regardless of the realized draw.
         rho = dot(@view(x[1:end-1]), @view(x[2:end])) / dot(@view(x[1:end-1]), @view(x[1:end-1]))
@@ -142,7 +136,7 @@ using Random
         @test new_uncapped < old_uncapped
 
         # (6) Smoke: every kernel flows finitely through the public estimators
-        X = hcat(ones(n), randn(n, 2)); u = randn(n)
+        X = hcat(ones(n), randn(rng, n, 2)); u = randn(rng, n)
         for k in (:bartlett, :parzen, :quadratic_spectral, :tukey_hanning)
             @test all(isfinite, MacroEconometricModels.newey_west(X, u; kernel=k))
             @test isfinite(MacroEconometricModels.long_run_variance(x; kernel=k))
@@ -165,10 +159,7 @@ using Random
         # AR(1), ρ=0.7 (project convention: explicit MersenneTwister seed).
         rng = Random.MersenneTwister(53)
         n = 200
-        x = zeros(n); x[1] = randn(rng)
-        for t in 2:n
-            x[t] = 0.7 * x[t-1] + randn(rng)
-        end
+        x = dgp_arima(rng; phi=[0.7], T=n).y  # DGP-02 #791: shared simulator
         xd = x .- Statistics.mean(x)
         bw = 4
         γ(j) = sum(@view(xd[j+1:n]) .* @view(xd[1:n-j])) / n
@@ -195,12 +186,9 @@ using Random
         # (A) Scalar reduction (k=1, X=ones): the VAR(1) collapses to a scalar AR(1)
         #     with ρ = Σu_{t-1}u_t / Σu_{t-1}², whitened û_t = u_t − ρ u_{t-1} (t=2..n,
         #     length n−1, NOT spliced with u[1]), recolored by 1/(1−ρ)².
-        Random.seed!(71)
+        rng = MersenneTwister(71)  # DGP-02: explicit rng
         n = 300
-        u = zeros(n); u[1] = randn()
-        for t in 2:n
-            u[t] = 0.6 * u[t-1] + randn()
-        end
+        u = dgp_arima(rng; phi=[0.6], T=n).y  # DGP-02 #791: shared simulator
         bw = 5
         ulag = @view u[1:n-1]; ulead = @view u[2:n]
         rho = dot(ulag, ulead) / dot(ulag, ulag)
@@ -218,16 +206,10 @@ using Random
 
         # (B) Multivariate: the new VAR(1) prewhitening genuinely differs from both the
         #     non-prewhitened estimate and the OLD scalar-AR(1) prewhitening.
-        Random.seed!(72)
-        xreg = zeros(n); xreg[1] = randn()
-        for t in 2:n
-            xreg[t] = 0.7 * xreg[t-1] + randn()
-        end
+        rng = MersenneTwister(72)  # DGP-02: explicit rng (fresh, was global reseed)
+        xreg = dgp_arima(rng; phi=[0.7], T=n).y  # DGP-02 #791: shared simulator
         X = hcat(ones(n), xreg)
-        uu = zeros(n); uu[1] = randn()
-        for t in 2:n
-            uu[t] = 0.5 * uu[t-1] + randn()
-        end
+        uu = dgp_arima(rng; phi=[0.5], T=n).y  # DGP-02 #791
         V_new = MacroEconometricModels.newey_west(X, uu; prewhiten=true, bandwidth=bw)
         V_noprew = MacroEconometricModels.newey_west(X, uu; prewhiten=false, bandwidth=bw)
         # inline reconstruction of the OLD scalar-AR(1) prewhitening (spliced first obs)
@@ -250,28 +232,22 @@ using Random
 
         # (C) Stability guard: a near-unit-root moment VAR(1) → warned fallback to no
         #     prewhitening (bit-for-bit equal to prewhiten=false).
-        Random.seed!(99)
+        rng = MersenneTwister(99)  # DGP-02: explicit rng
         m = 500
-        u_rw = zeros(m); u_rw[1] = randn()
-        for t in 2:m
-            u_rw[t] = 0.995 * u_rw[t-1] + randn()
-        end
+        u_rw = dgp_arima(rng; phi=[0.995], T=m).y  # DGP-02 #791: shared simulator
         Xc = reshape(ones(m), m, 1)
         V_fallback = @test_logs (:warn,) match_mode = :any MacroEconometricModels.newey_west(
             Xc, u_rw; prewhiten=true, bandwidth=4)
         @test V_fallback ≈ MacroEconometricModels.newey_west(Xc, u_rw; prewhiten=false, bandwidth=4)
 
         # (D) Helper contract: stable moments → (n-1)×k whitened + k×k A; near-unit-root → nothing.
-        Random.seed!(7)
-        Gm = randn(300, 2)
+        rng = MersenneTwister(7)  # DGP-02: explicit rng
+        Gm = randn(rng, 300, 2)
         Ghat, A = MacroEconometricModels._prewhiten_moments(Gm)
         @test size(Ghat) == (299, 2)
         @test size(A) == (2, 2)
-        g1 = zeros(m); g1[1] = randn(); g2 = zeros(m); g2[1] = randn()
-        for t in 2:m
-            g1[t] = 0.995 * g1[t-1] + randn()
-            g2[t] = 0.99 * g2[t-1] + randn()
-        end
+        g1 = dgp_arima(rng; phi=[0.995], T=m).y  # DGP-02 #791: shared simulator
+        g2 = dgp_arima(rng; phi=[0.99], T=m).y  # DGP-02 #791
         Gh2, _ = MacroEconometricModels._prewhiten_moments(hcat(g1, g2); radius_cap=0.97)
         @test Gh2 === nothing
     end
@@ -279,8 +255,8 @@ using Random
     @testset "long_run_covariance PSD gate (T063 SUB-2)" begin
         # The isposdef gate is behavior-preserving: the result is symmetric + PSD on both
         # the Bartlett (PD) and QS (may be non-PD → projected) paths.
-        Random.seed!(63)
-        X = hcat(ones(200), randn(200, 2))
+        rng = MersenneTwister(63)  # DGP-02: explicit rng
+        X = hcat(ones(200), randn(rng, 200, 2))
         for k in (:bartlett, :quadratic_spectral)
             S = MacroEconometricModels.long_run_covariance(X; bandwidth=4, kernel=k)
             @test isapprox(S, S'; atol=1e-12)
@@ -289,12 +265,12 @@ using Random
     end
 
     @testset "System HAC cross-equation blocks (T055)" begin
-        Random.seed!(313)
+        rng = MersenneTwister(313)  # DGP-02: explicit rng
         n = 300; k = 2; n_eq = 2
-        X = hcat(ones(n), randn(n))
-        fac = randn(n)                       # common factor → correlated equations
-        u1 = randn(n) .+ fac
-        u2 = randn(n) .+ fac
+        X = hcat(ones(n), randn(rng, n))
+        fac = randn(rng, n)                  # common factor → correlated equations
+        u1 = randn(rng, n) .+ fac
+        u2 = randn(rng, n) .+ fac
         U = hcat(u1, u2)
         bw = 4
         XtXinv = inv(X'X)
@@ -336,10 +312,10 @@ using Random
         @test Vd[blk1, blk2] ≈ Vd[blk2, blk2] atol = 1e-10
 
         # Independent equations ⇒ cross-block small relative to diagonal
-        Random.seed!(314)
+        rng = MersenneTwister(314)  # DGP-02: explicit rng
         ni = 2000
-        Xi = hcat(ones(ni), randn(ni))
-        Vi = MacroEconometricModels.white_vcov(Xi, hcat(randn(ni), randn(ni)); variant=:hc0)
+        Xi = hcat(ones(ni), randn(rng, ni))
+        Vi = MacroEconometricModels.white_vcov(Xi, hcat(randn(rng, ni), randn(rng, ni)); variant=:hc0)
         @test opnorm(Vi[blk1, blk2]) < 0.15 * opnorm(Vi[blk1, blk1])
     end
 
@@ -348,12 +324,12 @@ using Random
     # =========================================================================
 
     @testset "newey_west - univariate residuals" begin
-        Random.seed!(100)
+        rng = MersenneTwister(100)  # DGP-02: explicit rng
         n = 200
         k = 3
-        X = hcat(ones(n), randn(n, k - 1))
+        X = hcat(ones(n), randn(rng, n, k - 1))
         beta = [1.0, 2.0, -0.5]
-        residuals = randn(n)
+        residuals = randn(rng, n)
 
         # Bartlett kernel (default)
         V_nw = MacroEconometricModels.newey_west(X, residuals)
@@ -384,12 +360,12 @@ using Random
     end
 
     @testset "newey_west - multivariate residuals" begin
-        Random.seed!(200)
+        rng = MersenneTwister(200)  # DGP-02: explicit rng
         n = 200
         k = 2
         n_eq = 3
-        X = hcat(ones(n), randn(n))
-        residuals = randn(n, n_eq)
+        X = hcat(ones(n), randn(rng, n))
+        residuals = randn(rng, n, n_eq)
 
         V = MacroEconometricModels.newey_west(X, residuals)
         @test size(V) == (k * n_eq, k * n_eq)
@@ -404,11 +380,11 @@ using Random
     # =========================================================================
 
     @testset "white_vcov - all HC variants" begin
-        Random.seed!(300)
+        rng = MersenneTwister(300)  # DGP-02: explicit rng
         n = 100
         k = 3
-        X = hcat(ones(n), randn(n, k - 1))
-        residuals = randn(n) .* exp.(0.5 * randn(n))  # Heteroscedastic
+        X = hcat(ones(n), randn(rng, n, k - 1))
+        residuals = randn(rng, n) .* exp.(0.5 * randn(rng, n))  # Heteroscedastic
 
         for variant in [:hc0, :hc1, :hc2, :hc3]
             V = MacroEconometricModels.white_vcov(X, residuals; variant=variant)
@@ -428,12 +404,12 @@ using Random
     end
 
     @testset "white_vcov - multivariate residuals" begin
-        Random.seed!(400)
+        rng = MersenneTwister(400)  # DGP-02: explicit rng
         n = 100
         k = 2
         n_eq = 2
-        X = hcat(ones(n), randn(n))
-        residuals = randn(n, n_eq)
+        X = hcat(ones(n), randn(rng, n))
+        residuals = randn(rng, n, n_eq)
 
         V = MacroEconometricModels.white_vcov(X, residuals)
         @test size(V) == (k * n_eq, k * n_eq)
@@ -444,11 +420,11 @@ using Random
     # =========================================================================
 
     @testset "driscoll_kraay - univariate" begin
-        Random.seed!(500)
+        rng = MersenneTwister(500)  # DGP-02: explicit rng
         n = 200
         k = 3
-        X = hcat(ones(n), randn(n, k - 1))
-        u = randn(n)
+        X = hcat(ones(n), randn(rng, n, k - 1))
+        u = randn(rng, n)
 
         V = MacroEconometricModels.driscoll_kraay(X, u)
         @test size(V) == (k, k)
@@ -467,12 +443,12 @@ using Random
     end
 
     @testset "driscoll_kraay - multivariate" begin
-        Random.seed!(600)
+        rng = MersenneTwister(600)  # DGP-02: explicit rng
         n = 200
         k = 2
         n_eq = 3
-        X = hcat(ones(n), randn(n))
-        U = randn(n, n_eq)
+        X = hcat(ones(n), randn(rng, n))
+        U = randn(rng, n, n_eq)
 
         V = MacroEconometricModels.driscoll_kraay(X, U)
         @test size(V) == (k * n_eq, k * n_eq)
@@ -483,11 +459,11 @@ using Random
     # =========================================================================
 
     @testset "robust_vcov dispatch" begin
-        Random.seed!(700)
+        rng = MersenneTwister(700)  # DGP-02: explicit rng
         n = 100
         k = 2
-        X = hcat(ones(n), randn(n))
-        residuals = randn(n)
+        X = hcat(ones(n), randn(rng, n))
+        residuals = randn(rng, n)
 
         # NeweyWestEstimator
         nw_est = MacroEconometricModels.NeweyWestEstimator()
@@ -505,7 +481,7 @@ using Random
         @test size(V_dk) == (k, k)
 
         # Multivariate dispatch
-        residuals_mv = randn(n, 2)
+        residuals_mv = randn(rng, n, 2)
         V_nw_mv = MacroEconometricModels.robust_vcov(X, residuals_mv, nw_est)
         @test size(V_nw_mv) == (k * 2, k * 2)
 
@@ -546,10 +522,10 @@ using Random
     # =========================================================================
 
     @testset "precompute_XtX_inv" begin
-        Random.seed!(800)
+        rng = MersenneTwister(800)  # DGP-02: explicit rng
         n = 100
         k = 3
-        X = hcat(ones(n), randn(n, k - 1))
+        X = hcat(ones(n), randn(rng, n, k - 1))
 
         XtX_inv = MacroEconometricModels.precompute_XtX_inv(X)
         @test size(XtX_inv) == (k, k)
@@ -560,7 +536,7 @@ using Random
         @test isapprox(XtX * XtX_inv, Matrix{Float64}(I, k, k), atol=1e-8)
 
         # Caching: results from NW with/without cached should match
-        residuals = randn(n)
+        residuals = randn(rng, n)
         V1 = MacroEconometricModels.newey_west(X, residuals)
         V2 = MacroEconometricModels.newey_west(X, residuals; XtX_inv=XtX_inv)
         @test isapprox(V1, V2, atol=1e-10)
@@ -571,22 +547,18 @@ using Random
     # =========================================================================
 
     @testset "long_run_variance" begin
-        Random.seed!(900)
+        rng = MersenneTwister(900)  # DGP-02: explicit rng
 
         # White noise: long-run variance ≈ variance
         n = 1000
-        x_wn = randn(n)
+        x_wn = randn(rng, n)
         lrv = MacroEconometricModels.long_run_variance(x_wn)
         @test lrv > 0
         @test isapprox(lrv, var(x_wn), rtol=0.3)  # Approximately variance for white noise
 
         # AR(1) with rho = 0.5: theoretical LRV = sigma^2 / (1-rho)^2
         rho = 0.5
-        x_ar = zeros(n)
-        x_ar[1] = randn()
-        for t in 2:n
-            x_ar[t] = rho * x_ar[t-1] + randn()
-        end
+        x_ar = dgp_arima(rng; phi=[rho], T=n).y  # DGP-02 #791: shared simulator
         lrv_ar = MacroEconometricModels.long_run_variance(x_ar)
         theoretical_lrv = 1.0 / (1 - rho)^2  # sigma^2 / (1-rho)^2
         @test lrv_ar > 0
@@ -612,10 +584,10 @@ using Random
     # =========================================================================
 
     @testset "long_run_covariance" begin
-        Random.seed!(1000)
+        rng = MersenneTwister(1000)  # DGP-02: explicit rng
         n = 300
         k = 3
-        X = randn(n, k)
+        X = randn(rng, n, k)
 
         lrc = MacroEconometricModels.long_run_covariance(X)
         @test size(lrc) == (k, k)
@@ -634,15 +606,61 @@ using Random
         @test size(lrc_bw) == (k, k)
 
         # Short series
-        X_short = randn(1, 2)
+        X_short = randn(rng, 1, 2)
         lrc_short = MacroEconometricModels.long_run_covariance(X_short)
         @test size(lrc_short) == (2, 2)
     end
 
+    @testset "HAC recovers known long-run variance (DGP-02 #791)" begin
+        # AR(1) ρ=0.7, σ=1: LRV = σ²/(1−ρ)² = 11.11. MA(1) θ=0.5: LRV =
+        # σ²(1+θ)² = 2.25. With X=ones, n·V[1,1] estimates the LRV for the
+        # sandwich (NW), rescaled (DK), and direct (long_run_variance) forms.
+        # rtol 0.25 covers Bartlett-kernel downward bias plus sampling noise
+        # of the long-run average at T=2000.
+        rng = MersenneTwister(90210)
+        T = 2000
+        X1 = ones(T, 1)
+        ar = dgp_arima(rng; phi=[0.7], T=T).y
+        ma = dgp_arima(rng; theta=[0.5], T=T).y
+
+        Vnw_ar = MacroEconometricModels.newey_west(X1, ar)
+        @test isapprox(T * Vnw_ar[1, 1], 1 / (1 - 0.7)^2; rtol=0.25)
+        Vnw_ma = MacroEconometricModels.newey_west(X1, ma)
+        @test isapprox(T * Vnw_ma[1, 1], (1 + 0.5)^2; rtol=0.25)
+
+        # A Newey-West that dropped every lag term (= White) cannot see serial
+        # correlation: NW exceeds White by a wide margin on these DGPs.
+        Vw_ar = MacroEconometricModels.white_vcov(X1, ar; variant=:hc0)
+        @test Vnw_ar[1, 1] > 3 * Vw_ar[1, 1]   # LRV 11.1 vs γ0 ≈ 2.0
+        Vw_ma = MacroEconometricModels.white_vcov(X1, ma; variant=:hc0)
+        @test Vnw_ma[1, 1] > 1.3 * Vw_ma[1, 1]  # LRV 2.25 vs γ0 = 1.25
+
+        # Driscoll-Kraay sees the same LRV through the moment LRV ...
+        Vdk_ar = MacroEconometricModels.driscoll_kraay(X1, ar)
+        @test isapprox(T * Vdk_ar[1, 1], 1 / (1 - 0.7)^2; rtol=0.25)
+        Vdk_ma = MacroEconometricModels.driscoll_kraay(X1, ma)
+        @test isapprox(T * Vdk_ma[1, 1], (1 + 0.5)^2; rtol=0.3)
+
+        # ... and inflates under a common serially correlated shock: f+e1
+        # carries LRV(f)+1 ≈ 12.1 versus ≈ 1 without the common shock.
+        f = dgp_arima(rng; phi=[0.7], T=T).y
+        e1 = randn(rng, T)
+        e2 = randn(rng, T)
+        Vdk_com = MacroEconometricModels.driscoll_kraay(X1, f .+ e1)
+        Vdk_idio = MacroEconometricModels.driscoll_kraay(X1, e2)
+        @test Vdk_com[1, 1] > 5 * Vdk_idio[1, 1]
+
+        # long_run_covariance on [persistent, iid]: known diagonal, ~0 off-diag.
+        S = MacroEconometricModels.long_run_covariance(hcat(ar, e2))
+        @test isapprox(S[1, 1], 1 / (1 - 0.7)^2; rtol=0.25)
+        @test isapprox(S[2, 2], 1.0; rtol=0.3)
+        @test abs(S[1, 2]) < 1.0  # independent series: no long-run comovement
+    end
+
     @testset "precompute_XtX_inv caching pattern" begin
-        Random.seed!(8801)
-        X = randn(80, 4)
-        u = randn(80)
+        rng = MersenneTwister(8801)  # DGP-02: explicit rng
+        X = randn(rng, 80, 4)
+        u = randn(rng, 80)
         XtX_inv = MacroEconometricModels.precompute_XtX_inv(X)
 
         # Newey-West with cached XtX_inv
@@ -665,11 +683,11 @@ using Random
         # Regression test: for white noise residuals, auto-bandwidth ≈ 0,
         # so NW should approximate White HC0 (both are sandwich estimators
         # with the same meat when there is no autocorrelation).
-        Random.seed!(12345)
+        rng = MersenneTwister(12345)  # DGP-02: explicit rng
         n = 500
         k = 3
-        X = hcat(ones(n), randn(n, k - 1))
-        u = randn(n)  # white noise — auto bandwidth should be 0 or very small
+        X = hcat(ones(n), randn(rng, n, k - 1))
+        u = randn(rng, n)  # white noise — auto bandwidth should be 0 or very small
 
         V_nw = MacroEconometricModels.newey_west(X, u; bandwidth=0)
         V_white = MacroEconometricModels.white_vcov(X, u; variant=:hc0)
@@ -692,9 +710,9 @@ using Random
     end
 
     @testset "Newey-West with fixed bandwidth and all kernels" begin
-        Random.seed!(8802)
-        X = randn(80, 3)
-        u = randn(80)
+        rng = MersenneTwister(8802)  # DGP-02: explicit rng
+        X = randn(rng, 80, 3)
+        u = randn(rng, 80)
         for kernel in [:bartlett, :parzen, :quadratic_spectral, :tukey_hanning]
             V = MacroEconometricModels.newey_west(X, u; bandwidth=5, kernel=kernel)
             @test size(V) == (3, 3)

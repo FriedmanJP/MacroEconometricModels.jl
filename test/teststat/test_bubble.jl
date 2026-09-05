@@ -128,9 +128,9 @@ end
         # RW with an embedded φ=1.05 explosive interval [50,90] inside T=150
         # (PSY 2015 date-stamping oracle; loose overlap, seeded).
         function make_bubble(seed; T=150, a=50, b=90, phi=1.05)
-            r = MersenneTwister(seed); yb = zeros(T)
+            rng = MersenneTwister(seed); yb = zeros(T)
             for t in 2:T
-                yb[t] = (a <= t <= b ? phi : 1.0) * yb[t-1] + randn(r)
+                yb[t] = (a <= t <= b ? phi : 1.0) * yb[t-1] + randn(rng)
             end
             yb
         end
@@ -209,7 +209,7 @@ end
     end
 
     @testset "argument validation" begin
-        @test_throws ArgumentError sadf_test(randn(10))               # T too small
+        @test_throws ArgumentError sadf_test(randn(Random.MersenneTwister(91), 10))  # T too small
         @test_throws ArgumentError gsadf_test(y_rw; cv=:bogus)
         @test_throws ArgumentError gsadf_test(y_rw; adflag=-1)
         @test_throws ArgumentError gsadf_test(y_rw; r0=1.5)

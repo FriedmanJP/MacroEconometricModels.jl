@@ -220,15 +220,15 @@ using LinearAlgebra, Statistics, Random, Distributions
         m = estimate_ologit(y, X)
 
         # New data prediction
-        rng2 = MersenneTwister(4444)
-        X_new = randn(rng2, 50, 2)
+        rng = MersenneTwister(4444)
+        X_new = randn(rng, 50, 2)
         probs_new = predict(m, X_new)
         @test size(probs_new) == (50, 3)
         @test all(probs_new .>= 0)
         @test all(abs.(sum(probs_new, dims=2) .- 1.0) .< 1e-10)
 
         # Error on wrong dimensions
-        @test_throws ArgumentError predict(m, randn(10, 5))
+        @test_throws ArgumentError predict(m, randn(Random.MersenneTwister(4445), 10, 5))
     end
 
     # =========================================================================

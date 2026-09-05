@@ -19,8 +19,6 @@ using LinearAlgebra
 using Statistics
 using StatsAPI
 
-Random.seed!(9006)
-
 const _suppress_warnings = MacroEconometricModels._suppress_warnings
 
 # ============================================================================
@@ -195,11 +193,15 @@ end
             @test size(result.vcov) == (2, 2)
             @test all(isfinite, result.vcov)
 
-            # J-test should be available for overidentified model
+            # J-test should be available for overidentified model.
+            # Identity weighting: J is not χ²-distributed, so p_value is
+            # deliberately NaN (source contract since DGP-08).
             jt = j_test(result)
             @test jt.df == 1
             @test jt.J_stat >= 0
-            @test 0 <= jt.p_value <= 1
+            @test isnan(jt.p_value)
+            @test jt.reject_05 == false
+            @test occursin("not χ²-distributed", jt.message)
         end
     end
 
@@ -428,10 +430,10 @@ end
 @testset "GMM bounds coverage" begin
 
     @testset "estimate_gmm with shifted lower bound" begin
-        Random.seed!(9006)
+        rng = Random.MersenneTwister(9006)
         n = 200
         # True mean is 5.0; use bounds [2, Inf) to exercise (a, Inf) branch via GMM
-        data = 5.0 .+ 0.5 .* randn(n, 1)
+        data = 5.0 .+ 0.5 .* randn(rng, n, 1)
         moment_fn(theta, d) = d .- theta[1]
 
         bounds = ParameterTransform([2.0], [Inf])
@@ -442,10 +444,10 @@ end
     end
 
     @testset "estimate_gmm with upper-only bound" begin
-        Random.seed!(9007)
+        rng = Random.MersenneTwister(9007)
         n = 200
         # True mean is -3.0; use bounds (-Inf, 0] to exercise (-Inf, b) branch via GMM
-        data = -3.0 .+ 0.5 .* randn(n, 1)
+        data = -3.0 .+ 0.5 .* randn(rng, n, 1)
         moment_fn(theta, d) = d .- theta[1]
 
         bounds = ParameterTransform([-Inf], [0.0])
@@ -456,10 +458,10 @@ end
     end
 
     @testset "estimate_gmm with shifted upper bound" begin
-        Random.seed!(9008)
+        rng = Random.MersenneTwister(9008)
         n = 200
         # True mean is 1.0; use bounds (-Inf, 3) to exercise (-Inf, b) with b != 0
-        data = 1.0 .+ 0.3 .* randn(n, 1)
+        data = 1.0 .+ 0.3 .* randn(rng, n, 1)
         moment_fn(theta, d) = d .- theta[1]
 
         bounds = ParameterTransform([-Inf], [3.0])

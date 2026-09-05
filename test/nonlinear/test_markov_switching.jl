@@ -69,10 +69,10 @@ end
     # Internal helpers — exact analytic identities
     # =========================================================================
     @testset "helper identities" begin
+        rng = MersenneTwister(11)
         # logit ↔ P round-trip (row-softmax, last column reference).
         for K in (2, 3)
-            Random.seed!(11)
-            rows = [rand(Dirichlet(ones(K))) for _ in 1:K]
+            rows = [rand(rng, Dirichlet(ones(K))) for _ in 1:K]
             P = permutedims(hcat(rows...))                 # K×K, rows sum to 1
             l = MEM._P_to_logits(P, K)
             P2 = MEM._logits_to_P(l, K)
@@ -99,7 +99,7 @@ end
         @test all(isapprox.(sum(Pexp, dims=2), 1.0; atol=1e-12))  # still stochastic
         # Marginalisation sums a distribution back to 1.
         M = size(states, 1)
-        prob = rand(5, M); prob ./= sum(prob, dims=2)
+        prob = rand(rng, 5, M); prob ./= sum(prob, dims=2)
         marg = MEM._ms_marginalise(prob, states, K)
         @test all(isapprox.(sum(marg, dims=2), 1.0; atol=1e-12))
         @test size(marg) == (5, K)
@@ -281,7 +281,7 @@ end
         @test_throws ArgumentError estimate_ms_ar(y, 0)          # p ≥ 1
         @test_throws ArgumentError estimate_ms_ar(y, 4; k_regimes=1)
         @test_throws ArgumentError estimate_ms(y; k_regimes=1)
-        @test_throws ArgumentError estimate_ms_ar(randn(6), 4)   # too short
+        @test_throws ArgumentError estimate_ms_ar(randn(MersenneTwister(284), 6), 4)   # too short
         @test_throws DimensionMismatch estimate_ms(y, ones(length(y) + 3, 1))
     end
 
@@ -358,17 +358,17 @@ end
         # Monte Carlo of the model definition. 100k draws give a standard error of
         # roughly 0.006 here.
         R = 100_000
-        mrng = MersenneTwister(99)
+        rng = MersenneTwister(99)
         mu_h = m.mu; ph = m.ar; sg = sqrt.(m.sigma2); Pm = m.P
         xi0 = m.filtered_prob[end, :]
         zlast = m.y[end] - dot(m.smoothed_prob[end, :], mu_h)
         acc = zeros(h)
         for _ in 1:R
-            s = rand(mrng) < xi0[1] ? 1 : 2
+            s = rand(rng) < xi0[1] ? 1 : 2
             z = zlast
             for k in 1:h
-                s = rand(mrng) < Pm[s, 1] ? 1 : 2
-                z = ph[1] * z + sg[s] * randn(mrng)
+                s = rand(rng) < Pm[s, 1] ? 1 : 2
+                z = ph[1] * z + sg[s] * randn(rng)
                 acc[k] += z + mu_h[s]
             end
         end
@@ -415,7 +415,7 @@ end
         # The two signatures are not interchangeable, and say so.
         @test_throws ArgumentError forecast(mr, 5)
         @test_throws ArgumentError forecast(m, Xn)
-        @test_throws ArgumentError forecast(mr, hcat(ones(5), randn(5), randn(5)))
+        @test_throws ArgumentError forecast(mr, hcat(ones(5), randn(MersenneTwister(418), 5), randn(MersenneTwister(419), 5)))
         @test_throws ArgumentError forecast(m, 0)
         @test_throws ArgumentError forecast(m, 4; level=1.5)
     end

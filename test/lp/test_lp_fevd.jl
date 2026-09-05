@@ -11,16 +11,13 @@ using LinearAlgebra
 using Statistics
 
 @testset "LP-FEVD (Gorodnichenko & Lee 2019)" begin
-    Random.seed!(42)
-
-    # Generate test data with known structure
+    # Diagonal AR(1) on the shared simulator (DGP-05 #794): same design as
+    # the legacy inline loop (0.3 persistence, identity innovations).
     T_obs = 200
     n = 3
-    Y = zeros(T_obs, n)
-    Y[1, :] = randn(n)
-    for t in 2:T_obs
-        Y[t, :] = 0.3 * Y[t-1, :] + randn(n)
-    end
+    A_fevd = 0.3 .* Matrix{Float64}(I, n, n)
+    Y = dgp_var(MersenneTwister(42); A=A_fevd, B0=Matrix{Float64}(I, n, n),
+                T=T_obs).Y
 
     H = 12
     slp = structural_lp(Y, H; method=:cholesky, lags=4)
@@ -202,21 +199,36 @@ using Statistics
     end
 
     # =========================================================================
-    @testset "Confidence levels affect CI width" begin
-        f_90 = lp_fevd(slp, 8; n_boot=(FAST ? 25 : 50), conf_level=0.90)
-        f_99 = lp_fevd(slp, 8; n_boot=(FAST ? 25 : 50), conf_level=0.99)
+    @testset "R² FEVD recovers var_fevd truth on a B0 design" begin
+        # Non-identity impact (DGP-05 #794): the file's diagonal-AR design
+        # makes every ordering equivalent. R² shares converge to the VAR
+        # shares (probed max diff 0.065 at T = 2000 on MT(42)).
+        A = [0.5 0.1 0.0; 0.1 0.4 0.1; 0.0 0.1 0.3]
+        B0 = [0.6 0.0 0.0; 0.2 0.5 0.0; 0.1 0.15 0.4]
+        Yb = dgp_var(MersenneTwister(205); A=A, B0=B0, T=2000).Y
+        slpb = structural_lp(Yb, 12; method=:cholesky, lags=4)
+        fb = lp_fevd(slpb, 12; n_boot=0)
+        truth = var_fevd(A, B0, 12)
+        @test maximum(abs, fb.proportions - permutedims(truth[2:13, :, :], (2, 3, 1))) < 0.15
+    end
 
-        # 99% CIs should generally be at least as wide as 90% CIs
-        # (check on average due to bootstrap randomness)
+    # =========================================================================
+    @testset "Confidence levels affect CI width" begin
+        nb = FAST ? 25 : 50
+        # Same rng ⇒ identical bootstrap draws ⇒ the 0.8 fudge is unnecessary:
+        # wider quantiles of the SAME distribution are wider, exactly.
+        f_90 = lp_fevd(slp, 8; n_boot=nb, conf_level=0.90, rng=MersenneTwister(7))
+        f_99 = lp_fevd(slp, 8; n_boot=nb, conf_level=0.99, rng=MersenneTwister(7))
+
         width_90 = mean(f_90.ci_upper - f_90.ci_lower)
         width_99 = mean(f_99.ci_upper - f_99.ci_lower)
-        @test width_99 >= width_90 * 0.8  # allow some tolerance for bootstrap noise
+        @test width_99 >= width_90
     end
 end
 
 @testset "LP-FEVD MC honesty counts (#244)" begin
-    Random.seed!(4244)
-    Y = randn(120, 2)
+    rng = MersenneTwister(4244)
+    Y = randn(rng, 120, 2)
     slp = structural_lp(Y, 5; method=:cholesky, lags=2)
 
     @testset "counts on a real bootstrap" begin

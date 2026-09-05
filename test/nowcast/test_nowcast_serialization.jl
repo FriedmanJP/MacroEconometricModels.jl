@@ -11,21 +11,13 @@ end
 const _RSER05 = ("NowcastDFM", "NowcastBVAR", "NowcastBridge",
                  "NowcastResult", "NowcastNews", "NowcastForecast")
 
-# Mixed-frequency panel matching `_make_nowcast_data` in test_nowcast.jl.
+# Mixed-frequency panel matching `_make_nowcast_data` in test_nowcast.jl
+# (DGP-07 #796): the shared Mariano–Murasawa ragged-edge simulator.
 function _rser05_data(; T_obs=60, nM=4, nQ=1, r=1, seed=778)
     rng = Random.MersenneTwister(seed)
-    F = randn(rng, T_obs, r)
-    for t in 2:T_obs
-        F[t, :] = 0.7 * F[t-1, :] + 0.3 * randn(rng, r)
-    end
-    X_M = F * randn(rng, nM, r)' + 0.2 * randn(rng, T_obs, nM)
-    X_Q = F * randn(rng, nQ, r)' + 0.2 * randn(rng, T_obs, nQ)
-    for t in 1:T_obs
-        if mod(t, 3) != 0
-            X_Q[t, :] .= NaN
-        end
-    end
-    return hcat(X_M, X_Q)
+    A = r == 1 ? reshape([0.7], 1, 1) : r == 2 ? [0.7 0.1; 0.05 0.6] :
+        0.5 * Matrix{Float64}(I, r, r)
+    return dgp_mixed_frequency_panel(rng; A=A, nM=nM, nQ=nQ, T=T_obs).Y
 end
 
 function _assert_plot_view_equal(a, b, view)

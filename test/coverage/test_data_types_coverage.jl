@@ -155,7 +155,9 @@ const _suppress_warnings = M._suppress_warnings
 
     @testset "types.jl — DataFrame constructors" begin
         # TimeSeriesData from DataFrame
-        df = DataFrame(a=randn(30), b=randn(30), c=["str" for _ in 1:30])
+        df = DataFrame(a=randn(Random.MersenneTwister(1431), 30),
+                       b=randn(Random.MersenneTwister(1432), 30),
+                       c=["str" for _ in 1:30])
         ts_df = TimeSeriesData(df)
         @test nobs(ts_df) == 30
         @test nvars(ts_df) == 2  # only numeric columns

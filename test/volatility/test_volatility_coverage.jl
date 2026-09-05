@@ -26,10 +26,10 @@ using StatsAPI
 # =============================================================================
 
 @testset "SV leverage variant" begin
-    Random.seed!(5001)
+    rng = MersenneTwister(5001)
     # Simulate data with leverage-like properties
     n = 100
-    y = randn(n) .* exp.(cumsum(0.15 .* randn(n)) ./ 2)
+    y = randn(rng, n) .* exp.(cumsum(0.15 .* randn(rng, n)) ./ 2)
 
     m = estimate_sv(y; n_samples=(FAST ? 20 : 40), burnin=(FAST ? 10 : 20), leverage=true)
 
@@ -57,9 +57,9 @@ end
 # =============================================================================
 
 @testset "SV Student-t deeper coverage" begin
-    Random.seed!(5002)
+    rng = MersenneTwister(5002)
     n = 100
-    y = randn(n) .* exp.(cumsum(0.1 .* randn(n)) ./ 2)
+    y = randn(rng, n) .* exp.(cumsum(0.1 .* randn(rng, n)) ./ 2)
 
     m = estimate_sv(y; n_samples=(FAST ? 20 : 40), burnin=(FAST ? 10 : 20), dist=:studentt)
 
@@ -88,9 +88,9 @@ end
 # =============================================================================
 
 @testset "SV leverage + Student-t combined" begin
-    Random.seed!(5004)
+    rng = MersenneTwister(5004)
     n = 100
-    y = randn(n) .* exp.(cumsum(0.12 .* randn(n)) ./ 2)
+    y = randn(rng, n) .* exp.(cumsum(0.12 .* randn(rng, n)) ./ 2)
 
     m = estimate_sv(y; n_samples=(FAST ? 15 : 30), burnin=(FAST ? 8 : 15), dist=:studentt, leverage=true)
 
@@ -106,8 +106,8 @@ end
 # Shared deterministic base fits (n=300) reused across edge-case, StatsAPI, and
 # display testsets below — each reads distinct fields / constructs its own
 # extreme model, so one shared fit per family suffices (dedupe).
-Random.seed!(5099)
-y300 = randn(300)
+rng = MersenneTwister(5099)
+y300 = randn(rng, 300)
 garch300 = estimate_garch(y300, 1, 1)
 egarch300 = estimate_egarch(y300, 1, 1)
 gjr300 = estimate_gjr_garch(y300, 1, 1)

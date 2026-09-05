@@ -16,24 +16,15 @@ const MEM = MacroEconometricModels
 # Helpers
 # ---------------------------------------------------------------------------
 
-# Discrete Lyapunov Γ₀ = A Γ₀ A' + Σ via vec: vec(Γ₀) = (I − A⊗A)⁻¹ vec(Σ).
+# Shims over the shared DGP library (DGP-02 #791): identical math, one
+# implementation. `_sim_var1` keeps its (A, Σ, T) signature; callers unchanged.
 function _lyap_gamma0(A::AbstractMatrix, Σ::AbstractMatrix)
-    k = size(A, 1)
-    G = (I(k * k) - kron(A, A)) \ vec(Σ)
-    return reshape(G, k, k)
+    return lyapunov_gamma0(A, Σ)
 end
 
 # Simulate a stationary VAR(1): U_t = A U_{t-1} + e_t, e_t ~ N(0, Σ_e).
 function _sim_var1(A::AbstractMatrix, Σ::AbstractMatrix, T::Int; rng, burn::Int=500)
-    k = size(A, 1)
-    L = cholesky(Symmetric(Σ)).L
-    U = zeros(T, k)
-    x = zeros(k)
-    for t in 1:(T + burn)
-        x = A * x + L * randn(rng, k)
-        t > burn && (U[t - burn, :] .= x)
-    end
-    return U
+    return dgp_var(rng; A=A, Sigma=Matrix(Σ), T=T, burn=burn).Y
 end
 
 @testset "Long-run variance toolkit (EV-12)" begin
@@ -177,10 +168,7 @@ end
 
         # Scalar AR(1): analytic LRV = σ²/(1−ρ)².
         ρ = 0.7
-        x = zeros(6000)
-        for t in 2:6000
-            x[t] = ρ * x[t-1] + randn(rng)
-        end
+        x = dgp_arima(rng; phi=[ρ], T=6000).y  # DGP-02 #791: shared simulator
         lrv_true = 1.0 / (1 - ρ)^2
         @test abs(varhac(x) - lrv_true) / lrv_true < 0.20
     end
@@ -229,10 +217,7 @@ end
         rng = MersenneTwister(11)
         # Persistent AR(1) → longer bandwidth than iid.
         ρ = 0.8
-        x = zeros(500)
-        for t in 2:500
-            x[t] = ρ * x[t-1] + randn(rng)
-        end
+        x = dgp_arima(rng; phi=[ρ], T=500).y  # DGP-02 #791: shared simulator
         bw_persist = optimal_bandwidth_nw94(x; kernel=:bartlett)
         bw_iid = optimal_bandwidth_nw94(randn(rng, 500); kernel=:bartlett)
         @test bw_persist isa Int && bw_persist ≥ 0
@@ -270,8 +255,9 @@ end
         @test norm(Λ_pw - Λ_true) / norm(Λ_true) < 0.25
 
         # Near-unit-root moments: prewhitening falls back gracefully (no throw, PSD result).
-        rng2 = MersenneTwister(4)
-        rw = cumsum(randn(rng2, 300, 2), dims=1)
+        rw = let rng = MersenneTwister(4)
+            cumsum(randn(rng, 300, 2), dims=1)
+        end
         Ω_rw = @test_logs (:warn,) match_mode=:any lrcov(rw; prewhiten=true)
         @test size(Ω_rw) == (2, 2)
     end

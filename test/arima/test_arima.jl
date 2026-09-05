@@ -11,8 +11,8 @@ using Random
 using StatsAPI
 using LinearAlgebra
 
-# Set seed for reproducibility
-Random.seed!(42)
+# Explicit rng for reproducibility (DGP-09 #798)
+rng = MersenneTwister(42)
 
 @testset "AR Model Estimation" begin
     @testset "AR(1) OLS estimation" begin
@@ -22,11 +22,8 @@ Random.seed!(42)
         c_true = 0.5
         sigma_true = 1.0
 
-        y = zeros(n)
-        y[1] = c_true / (1 - phi_true) + randn()
-        for t in 2:n
-            y[t] = c_true + phi_true * y[t-1] + sigma_true * randn()
-        end
+        y = dgp_arima(rng; phi=[phi_true], c=c_true, sigma=sigma_true,
+                      T=n).y
 
         model = estimate_ar(y, 1; method=:ols)
 
@@ -46,11 +43,7 @@ Random.seed!(42)
         n = 500
         phi_true = [0.5, 0.3]
 
-        y = zeros(n)
-        y[1:2] = randn(2)
-        for t in 3:n
-            y[t] = phi_true[1] * y[t-1] + phi_true[2] * y[t-2] + randn()
-        end
+        y = dgp_arima(rng; phi=phi_true, T=n).y
 
         model = estimate_ar(y, 2; method=:ols, include_intercept=false)
 
@@ -64,11 +57,7 @@ Random.seed!(42)
         n = 300
         phi_true = 0.8
 
-        y = zeros(n)
-        y[1] = randn()
-        for t in 2:n
-            y[t] = phi_true * y[t-1] + randn()
-        end
+        y = dgp_arima(rng; phi=[phi_true], T=n).y
 
         model = estimate_ar(y, 1; method=:mle, include_intercept=false)
 
@@ -77,7 +66,7 @@ Random.seed!(42)
     end
 
     @testset "AR StatsAPI interface" begin
-        y = randn(200)
+        y = randn(rng, 200)
         model = estimate_ar(y, 2)
 
         @test nobs(model) == 200
@@ -100,8 +89,7 @@ end
         theta_true = 0.6
         sigma_true = 1.0
 
-        eps = sigma_true * randn(n + 1)
-        y = [eps[t] + theta_true * eps[t-1] for t in 2:n+1]
+        y = dgp_arima(rng; theta=[theta_true], sigma=sigma_true, T=n).y
 
         model = estimate_ma(y, 1; method=:css_mle)
 
@@ -116,8 +104,7 @@ end
         n = 500
         theta_true = [0.4, 0.3]
 
-        eps = randn(n + 2)
-        y = [eps[t] + theta_true[1] * eps[t-1] + theta_true[2] * eps[t-2] for t in 3:n+2]
+        y = dgp_arima(rng; theta=theta_true, T=n).y
 
         model = estimate_ma(y, 2)
 
@@ -129,7 +116,7 @@ end
     end
 
     @testset "MA(1) invertibility check" begin
-        y = randn(200)
+        y = randn(rng, 200)
         model = estimate_ma(y, 1)
 
         # Estimated theta should be invertible (|θ| < 1)
@@ -144,12 +131,7 @@ end
         phi_true = 0.6
         theta_true = 0.4
 
-        eps = randn(n + 1)
-        y = zeros(n)
-        y[1] = eps[1]
-        for t in 2:n
-            y[t] = phi_true * y[t-1] + eps[t] + theta_true * eps[t-1]
-        end
+        y = dgp_arima(rng; phi=[phi_true], theta=[theta_true], T=n).y
 
         model = estimate_arma(y, 1, 1; method=:css_mle)
 
@@ -162,7 +144,7 @@ end
     end
 
     @testset "ARMA(0,0) is white noise" begin
-        y = randn(200)
+        y = randn(rng, 200)
         model = estimate_arma(y, 0, 0)
 
         @test model.p == 0
@@ -173,7 +155,7 @@ end
     end
 
     @testset "ARMA(p,0) matches AR(p)" begin
-        y = randn(200)
+        y = randn(rng, 200)
 
         arma = estimate_arma(y, 2, 0; method=:css_mle)
         ar = estimate_ar(y, 2; method=:ols)
@@ -184,7 +166,7 @@ end
     end
 
     @testset "ARMA stationarity and invertibility" begin
-        y = randn(200)
+        y = randn(rng, 200)
         model = estimate_arma(y, 2, 2)
 
         # Check stationarity via companion matrix
@@ -221,13 +203,8 @@ end
         phi_true = 0.5
         drift = 0.1
 
-        # Generate I(1) process
-        y_diff = zeros(n)
-        y_diff[1] = randn()
-        for t in 2:n
-            y_diff[t] = drift + phi_true * y_diff[t-1] + randn()
-        end
-        y = cumsum(y_diff)
+        # I(1) process on the shared simulator (DGP-09 #798)
+        y = dgp_arima(rng; phi=[phi_true], d=1, c=drift, T=n).y
 
         model = estimate_arima(y, 1, 1, 0)
 
@@ -242,10 +219,8 @@ end
         n = 300
         theta_true = 0.5
 
-        # Generate I(1) MA(1) process
-        eps = randn(n + 1)
-        y_diff = [eps[t] + theta_true * eps[t-1] for t in 2:n+1]
-        y = cumsum(y_diff)
+        # I(1) MA(1) process on the shared simulator (DGP-09 #798)
+        y = dgp_arima(rng; theta=[theta_true], d=1, T=n).y
 
         model = estimate_arima(y, 0, 1, 1)
 
@@ -257,7 +232,7 @@ end
     end
 
     @testset "ARIMA(p,0,q) matches ARMA(p,q)" begin
-        y = randn(200)
+        y = randn(rng, 200)
 
         arima = estimate_arima(y, 1, 0, 1)
         arma = estimate_arma(y, 1, 1)
@@ -269,8 +244,8 @@ end
     end
 
     @testset "ARIMA with d=2" begin
-        # I(2) process
-        y = cumsum(cumsum(randn(200)))
+        # I(2) process on the shared simulator (DGP-09 #798)
+        y = dgp_arima(rng; d=2, T=200).y
 
         model = estimate_arima(y, 1, 2, 0)
 
@@ -284,11 +259,7 @@ end
         # Stationary AR(1)
         phi = 0.7
         n = 200
-        y = zeros(n)
-        y[1] = randn()
-        for t in 2:n
-            y[t] = phi * y[t-1] + randn()
-        end
+        y = dgp_arima(rng; phi=[phi], T=n).y
 
         model = estimate_ar(y, 1)
         fc = forecast(model, 10)
@@ -308,13 +279,11 @@ end
     end
 
     @testset "MLE forecast unbiased on non-demeaned series (R-01 / #121)" begin
-        Random.seed!(4121)
+        rng = MersenneTwister(4121)
         n = 800
         mu, phi_true = 20.0, 0.6
-        y = fill(mu, n)
-        for t in 2:n
-            y[t] = mu + phi_true * (y[t-1] - mu) + 0.5 * randn()
-        end
+        y = dgp_arima(rng; phi=[phi_true], c=mu * (1 - phi_true), sigma=0.5,
+                      T=n).y
         # :mle stores c as the AR intercept μ(1-φ); the 1-step forecast is c + φ·y_T
         # (= μ + φ(y_T - μ)), not the pre-fix μ + φ·y_T which biased it by μ·φ.
         m = estimate_ar(y, 1; method=:mle)
@@ -329,7 +298,7 @@ end
     end
 
     @testset "MA forecast" begin
-        y = randn(200)
+        y = randn(rng, 200)
         model = estimate_ma(y, 2)
         fc = forecast(model, 10)
 
@@ -341,7 +310,7 @@ end
     end
 
     @testset "ARMA forecast" begin
-        y = randn(200)
+        y = randn(rng, 200)
         model = estimate_arma(y, 1, 1)
         fc = forecast(model, 12)
 
@@ -351,8 +320,8 @@ end
     end
 
     @testset "ARIMA forecast integration" begin
-        # Random walk
-        y = cumsum(randn(200))
+        # Random walk on the shared simulator (DGP-09 #798)
+        y = dgp_arima(rng; d=1, T=200).y
         model = estimate_arima(y, 0, 1, 0; include_intercept=false)
         fc = forecast(model, 10)
 
@@ -362,11 +331,11 @@ end
     end
 
     @testset "ARIMA(d>=1) intervals via nondifferenced psi-weights (T094 #193)" begin
-        Random.seed!(321)
+        rng = MersenneTwister(321)
         # ARIMA(0,1,0) random walk: forecast-error variance is σ²·h, and the band must be
         # forecast ± z·se. The old code integrated the differenced CI arrays (half-width linear
         # in h) but reported se = sqrt(cumsum(se_diff.^2)) (sqrt in h), so ci ≠ forecast ± z·se.
-        y = cumsum(randn(300))
+        y = dgp_arima(rng; d=1, T=300).y
         m = estimate_arima(y, 0, 1, 0; include_intercept=false)
         fc = forecast(m, 10; conf_level=0.95)
         z = 1.959963984540054   # Φ⁻¹(0.975)
@@ -377,11 +346,7 @@ end
 
         # ARIMA(1,1,0): the expanded operator φ*(L) = φ(L)(1-L) = [1+φ₁, -φ₁] carries the ψ
         # cross-terms the old _integrate_se dropped.
-        e = zeros(300)
-        for t in 2:300
-            e[t] = 0.4 * e[t-1] + randn()
-        end
-        y2 = cumsum(e)
+        y2 = dgp_arima(rng; phi=[0.4], d=1, T=300).y
         m2 = estimate_arima(y2, 1, 1, 0; include_intercept=false)
         fc2 = forecast(m2, 8)
         phistar = MacroEconometricModels._expand_ar_with_differencing(m2.phi, 1)
@@ -397,11 +362,7 @@ end
         # Generate known process
         phi = 0.5
         n = 200
-        y = zeros(n)
-        y[1] = randn()
-        for t in 2:n
-            y[t] = phi * y[t-1] + randn()
-        end
+        y = dgp_arima(rng; phi=[phi], T=n).y
 
         model = estimate_ar(y, 1)
         fc = forecast(model, 5; conf_level=0.95)
@@ -411,7 +372,7 @@ end
     end
 
     @testset "StatsAPI predict with horizon" begin
-        y = randn(200)
+        y = randn(rng, 200)
         model = estimate_ar(y, 2)
 
         # predict(model) returns fitted values
@@ -425,15 +386,11 @@ end
 
 @testset "Order Selection" begin
     @testset "Select correct AR order" begin
-        # Generate AR(2) data
+        # AR(2) data on the shared simulator (DGP-09 #798)
         n = 200
         phi_true = [0.5, 0.3]
 
-        y = zeros(n)
-        y[1:2] = randn(2)
-        for t in 3:n
-            y[t] = phi_true[1] * y[t-1] + phi_true[2] * y[t-2] + randn()
-        end
+        y = dgp_arima(rng; phi=phi_true, T=n).y
 
         result = select_arima_order(y, 2, 0; criterion=:bic)
 
@@ -447,8 +404,7 @@ end
         n = 200
         theta_true = 0.6
 
-        eps = randn(n + 1)
-        y = [eps[t] + theta_true * eps[t-1] for t in 2:n+1]
+        y = dgp_arima(rng; theta=[theta_true], T=n).y
 
         result = select_arima_order(y, 0, 1; criterion=:bic)
 
@@ -458,11 +414,8 @@ end
     end
 
     @testset "CSS common conditioning window for order comparability (T108 #207)" begin
-        Random.seed!(4242)
-        y = zeros(300)
-        for t in 3:300
-            y[t] = 0.6 * y[t-1] - 0.2 * y[t-2] + randn()
-        end
+        rng = MersenneTwister(4242)
+        y = dgp_arima(rng; phi=[0.6, -0.2], T=300).y
         m1 = estimate_arma(y, 1, 0; method=:css, include_intercept=true)
         m2 = estimate_arma(y, 2, 2; method=:css, include_intercept=true)
         m_max = 2
@@ -488,7 +441,7 @@ end
     end
 
     @testset "IC matrix dimensions" begin
-        y = randn(200)
+        y = randn(rng, 200)
         result = select_arima_order(y, 1, 1)
 
         @test size(result.aic_matrix) == (2, 2)  # (max_p+1, max_q+1)
@@ -496,7 +449,7 @@ end
     end
 
     @testset "Best model is fitted" begin
-        y = randn(200)
+        y = randn(rng, 200)
         result = select_arima_order(y, 1, 1)
 
         @test isa(result.best_model_aic, AbstractARIMAModel)
@@ -507,7 +460,7 @@ end
 
     @testset "auto_arima" begin
         # Random walk
-        y = cumsum(randn(200))
+        y = cumsum(randn(rng, 200))
         model = auto_arima(y; max_p=1, max_q=1, max_d=1)
 
         @test isa(model, AbstractARIMAModel)
@@ -518,11 +471,7 @@ end
     @testset "AR(1) near unit root" begin
         phi = 0.99
         n = 200
-        y = zeros(n)
-        y[1] = randn()
-        for t in 2:n
-            y[t] = phi * y[t-1] + randn()
-        end
+        y = dgp_arima(rng; phi=[phi], T=n).y
 
         model = estimate_ar(y, 1)
         @test model.converged || model.method == :ols
@@ -530,7 +479,7 @@ end
     end
 
     @testset "Short time series" begin
-        y = randn(30)
+        y = randn(rng, 30)
 
         # Should still work with small n
         ar = estimate_ar(y, 1)
@@ -541,7 +490,7 @@ end
     end
 
     @testset "p=0, q=0" begin
-        y = randn(100)
+        y = randn(rng, 100)
         model = estimate_arma(y, 0, 0)
 
         @test isempty(model.phi)
@@ -550,7 +499,7 @@ end
     end
 
     @testset "High order ARMA" begin
-        y = randn(500)
+        y = randn(rng, 500)
         model = estimate_arma(y, 4, 3)
 
         @test model.p == 4
@@ -560,20 +509,20 @@ end
     end
 
     @testset "Input validation" begin
-        y = randn(100)
+        y = randn(rng, 100)
 
         @test_throws ArgumentError estimate_ar(y, -1)
         @test_throws ArgumentError estimate_ma(y, -1)
         @test_throws ArgumentError estimate_arima(y, 1, -1, 0)
 
         # Too short
-        y_short = randn(5)
+        y_short = randn(rng, 5)
         @test_throws ArgumentError estimate_ar(y_short, 1)
     end
 end
 
 @testset "Type Accessors" begin
-    y = randn(200)
+    y = randn(rng, 200)
 
     ar = estimate_ar(y, 2)
     @test ar_order(ar) == 2
@@ -590,7 +539,7 @@ end
     @test ma_order(arma) == 1
     @test diff_order(arma) == 0
 
-    y_rw = cumsum(randn(200))
+    y_rw = dgp_arima(rng; d=1, T=200).y
     arima = estimate_arima(y_rw, 1, 1, 1)
     @test ar_order(arima) == 1
     @test ma_order(arima) == 1
@@ -598,7 +547,7 @@ end
 end
 
 @testset "Display Methods" begin
-    y = randn(200)
+    y = randn(rng, 200)
 
     ar = estimate_ar(y, 2)
     @test contains(repr(ar), "AR(2)")
@@ -609,7 +558,7 @@ end
     arma = estimate_arma(y, 1, 1)
     @test contains(repr(arma), "ARMA(1,1)")
 
-    y_rw = cumsum(randn(200))
+    y_rw = dgp_arima(rng; d=1, T=200).y
     arima = estimate_arima(y_rw, 1, 1, 0)
     @test contains(repr(arima), "ARIMA(1,1,0)")
 
@@ -622,20 +571,20 @@ end
 
 @testset "Numerical Stability" begin
     @testset "Large variance data" begin
-        y = 1000 .* randn(200)
+        y = 1000 .* randn(rng, 200)
         model = estimate_ar(y, 1)
         @test !isnan(model.loglik)
         @test !isinf(model.loglik)
     end
 
     @testset "Small variance data" begin
-        y = 0.001 .* randn(200)
+        y = 0.001 .* randn(rng, 200)
         model = estimate_ar(y, 1)
         @test !isnan(model.loglik)
     end
 
     @testset "Data with trend" begin
-        y = collect(1.0:200.0) .+ randn(200)
+        y = collect(1.0:200.0) .+ randn(rng, 200)
         # First difference should remove trend
         model = estimate_arima(y, 1, 1, 0)
         @test !isnan(model.loglik)
@@ -643,7 +592,7 @@ end
 end
 
 @testset "fit Interface" begin
-    y = randn(200)
+    y = randn(rng, 200)
 
     ar = fit(ARModel, y, 2)
     @test isa(ar, ARModel)
@@ -654,7 +603,7 @@ end
     arma = fit(ARMAModel, y, 1, 1)
     @test isa(arma, ARMAModel)
 
-    y_rw = cumsum(randn(200))
+    y_rw = dgp_arima(rng; d=1, T=200).y
     arima = fit(ARIMAModel, y_rw, 1, 1, 0)
     @test isa(arima, ARIMAModel)
 end
@@ -664,12 +613,11 @@ end
 # =============================================================================
 
 @testset "StatsAPI Interface - MA Model" begin
-    Random.seed!(7000)
+    rng = MersenneTwister(7000)
     n = 300
-    # Generate MA(1) data
-    eps = randn(n + 1)
+    # MA(1) data on the shared simulator (DGP-09 #798)
     theta_true = 0.6
-    y = [eps[t] + theta_true * eps[t-1] for t in 2:(n+1)]
+    y = dgp_arima(rng; theta=[theta_true], T=n).y
 
     model = estimate_ma(y, 1)
 
@@ -729,10 +677,9 @@ end
 end
 
 @testset "StatsAPI Interface - MA(2) Model" begin
-    Random.seed!(7100)
+    rng = MersenneTwister(7100)
     n = 300
-    eps = randn(n + 2)
-    y = [eps[t] + 0.5 * eps[t-1] - 0.3 * eps[t-2] for t in 3:(n+2)]
+    y = dgp_arima(rng; theta=[0.5, -0.3], T=n).y
 
     model = estimate_ma(y, 2)
 
@@ -744,17 +691,12 @@ end
 end
 
 @testset "StatsAPI Interface - ARMA Model" begin
-    Random.seed!(7200)
+    rng = MersenneTwister(7200)
     n = 400
-    # Generate ARMA(1,1) data
+    # ARMA(1,1) data on the shared simulator (DGP-09 #798)
     phi_true = 0.5
     theta_true = 0.3
-    eps = randn(n)
-    y = zeros(n)
-    y[1] = eps[1]
-    for t in 2:n
-        y[t] = phi_true * y[t-1] + eps[t] + theta_true * eps[t-1]
-    end
+    y = dgp_arima(rng; phi=[phi_true], theta=[theta_true], T=n).y
 
     model = estimate_arma(y, 1, 1)
 
@@ -798,14 +740,9 @@ end
 end
 
 @testset "StatsAPI Interface - ARMA(2,1) Model" begin
-    Random.seed!(7300)
+    rng = MersenneTwister(7300)
     n = 400
-    eps = randn(n)
-    y = zeros(n)
-    y[1:2] = randn(2)
-    for t in 3:n
-        y[t] = 0.4 * y[t-1] + 0.2 * y[t-2] + eps[t] + 0.3 * eps[t-1]
-    end
+    y = dgp_arima(rng; phi=[0.4, 0.2], theta=[0.3], T=n).y
 
     model = estimate_arma(y, 2, 1)
 
@@ -816,16 +753,10 @@ end
 end
 
 @testset "StatsAPI Interface - ARIMA Model" begin
-    Random.seed!(7400)
+    rng = MersenneTwister(7400)
     n = 300
-    # Generate ARIMA(1,1,1) data
-    eps = randn(n)
-    z = zeros(n)
-    z[1] = eps[1]
-    for t in 2:n
-        z[t] = 0.5 * z[t-1] + eps[t] + 0.3 * eps[t-1]
-    end
-    y = cumsum(z)  # Integration order 1
+    # ARIMA(1,1,1) data on the shared simulator (DGP-09 #798)
+    y = dgp_arima(rng; phi=[0.5], theta=[0.3], d=1, T=n).y
 
     model = estimate_arima(y, 1, 1, 1)
 
@@ -872,14 +803,9 @@ end
 end
 
 @testset "StatsAPI Interface - ARIMA(2,1,0) Model" begin
-    Random.seed!(7500)
+    rng = MersenneTwister(7500)
     n = 300
-    z = zeros(n)
-    z[1:2] = randn(2)
-    for t in 3:n
-        z[t] = 0.4 * z[t-1] + 0.2 * z[t-2] + randn()
-    end
-    y = cumsum(z)
+    y = dgp_arima(rng; phi=[0.4, 0.2], d=1, T=n).y
 
     model = estimate_arima(y, 2, 1, 0)
 
@@ -891,11 +817,9 @@ end
 end
 
 @testset "StatsAPI Interface - ARIMA(0,1,2) Model" begin
-    Random.seed!(7600)
+    rng = MersenneTwister(7600)
     n = 300
-    eps = randn(n + 2)
-    z = [eps[t] + 0.4 * eps[t-1] - 0.2 * eps[t-2] for t in 3:(n+2)]
-    y = cumsum(z)
+    y = dgp_arima(rng; theta=[0.4, -0.2], d=1, T=n).y
 
     model = estimate_arima(y, 0, 1, 2)
 
@@ -906,10 +830,10 @@ end
 end
 
 @testset "StatsAPI consistency checks" begin
-    Random.seed!(7700)
+    rng = MersenneTwister(7700)
 
     # For each model type, check StatsAPI.dof_residual == nobs_residuals - dof + 1
-    y = randn(300)
+    y = randn(rng, 300)
 
     for (ModelType, args) in [
         (MAModel, (y, 2)),
@@ -919,15 +843,15 @@ end
         @test StatsAPI.dof_residual(model) == length(residuals(model)) - dof(model) + 1
     end
 
-    y_rw = cumsum(randn(300))
+    y_rw = dgp_arima(rng; d=1, T=300).y
     model_arima = fit(ARIMAModel, y_rw, 1, 1, 1)
     @test StatsAPI.dof_residual(model_arima) == length(residuals(model_arima)) - dof(model_arima) + 1
 end
 
 @testset "Display methods - MA/ARMA/ARIMA" begin
-    Random.seed!(7800)
-    y = randn(200)
-    y_rw = cumsum(randn(200))
+    rng = MersenneTwister(7800)
+    y = randn(rng, 200)
+    y_rw = dgp_arima(rng; d=1, T=200).y
 
     # MA show
     ma = estimate_ma(y, 1)
@@ -955,9 +879,9 @@ end
 end
 
 @testset "ARIMA d=2 (double differencing)" begin
-    Random.seed!(6001)
-    # Generate I(2) series
-    y_i2 = cumsum(cumsum(randn(200)))
+    rng = MersenneTwister(6001)
+    # I(2) series on the shared simulator (DGP-09 #798)
+    y_i2 = dgp_arima(rng; d=2, T=200).y
     m = estimate_arima(y_i2, 1, 2, 1; method=:css_mle)
     @test m isa MacroEconometricModels.ARIMAModel{Float64}
     @test m.d == 2
@@ -966,8 +890,8 @@ end
 end
 
 @testset "auto_arima include_intercept=false" begin
-    Random.seed!(6002)
-    y = randn(100)
+    rng = MersenneTwister(6002)
+    y = randn(rng, 100)
     m = auto_arima(y; include_intercept=false, max_p=1, max_q=1)
     @test m isa MacroEconometricModels.AbstractARIMAModel
     fc = forecast(m, 3)
@@ -975,8 +899,8 @@ end
 end
 
 @testset "select_arima_order larger grid" begin
-    Random.seed!(6003)
-    y = randn(100)
+    rng = MersenneTwister(6003)
+    y = randn(rng, 100)
     result = select_arima_order(y, 2, 1)
     @test result isa MacroEconometricModels.ARIMAOrderSelection
     @test result.best_p_aic >= 0
@@ -986,8 +910,8 @@ end
 end
 
 @testset "Forecast with conf_level=0.99" begin
-    Random.seed!(6004)
-    y = randn(100)
+    rng = MersenneTwister(6004)
+    y = randn(rng, 100)
     m = estimate_ar(y, 2)
     fc = forecast(m, 5; conf_level=0.99)
     @test length(fc.forecast) == 5
@@ -998,8 +922,8 @@ end
 end
 
 @testset "conf_level accepts Real" begin
-    Random.seed!(42)
-    y = cumsum(randn(100))
+    rng = MersenneTwister(42)
+    y = cumsum(randn(rng, 100))
     m = estimate_ar(y, 2)
     # Should accept Float64 and Float32 without error
     fc1 = forecast(m, 5; conf_level=0.9)
@@ -1014,8 +938,8 @@ end
 
 @testset "auto_arima stepwise search" begin
     @testset "stepwise=true (default) returns valid model" begin
-        Random.seed!(7001)
-        y = randn(200)
+        rng = MersenneTwister(7001)
+        y = randn(rng, 200)
         m = auto_arima(y; max_p=4, max_q=4, max_d=0)
         @test m isa MacroEconometricModels.AbstractARIMAModel
         @test ar_order(m) <= 4
@@ -1023,15 +947,15 @@ end
     end
 
     @testset "stepwise=false falls back to grid search" begin
-        Random.seed!(7002)
-        y = randn(150)
+        rng = MersenneTwister(7002)
+        y = randn(rng, 150)
         m = auto_arima(y; max_p=2, max_q=2, max_d=0, stepwise=false)
         @test m isa MacroEconometricModels.AbstractARIMAModel
     end
 
     @testset "stepwise finds same or comparable model to grid" begin
-        Random.seed!(7003)
-        y = randn(200)
+        rng = MersenneTwister(7003)
+        y = randn(rng, 200)
         m_step = auto_arima(y; max_p=3, max_q=3, max_d=0, stepwise=true, criterion=:bic)
         m_grid = auto_arima(y; max_p=3, max_q=3, max_d=0, stepwise=false, criterion=:bic)
         # Stepwise may not find the exact same model, but BIC should be close
@@ -1039,22 +963,22 @@ end
     end
 
     @testset "stepwise with d > 0" begin
-        Random.seed!(7004)
-        y = cumsum(randn(200))
+        rng = MersenneTwister(7004)
+        y = cumsum(randn(rng, 200))
         m = auto_arima(y; max_p=3, max_q=3, max_d=2, stepwise=true)
         @test m isa MacroEconometricModels.AbstractARIMAModel
     end
 
     @testset "stepwise with criterion=:aic" begin
-        Random.seed!(7005)
-        y = randn(150)
+        rng = MersenneTwister(7005)
+        y = randn(rng, 150)
         m = auto_arima(y; max_p=3, max_q=3, max_d=0, stepwise=true, criterion=:aic)
         @test m isa MacroEconometricModels.AbstractARIMAModel
     end
 
     @testset "stepwise with small bounds max_p=1, max_q=0" begin
-        Random.seed!(7006)
-        y = randn(100)
+        rng = MersenneTwister(7006)
+        y = randn(rng, 100)
         m = auto_arima(y; max_p=1, max_q=0, max_d=0, stepwise=true)
         @test m isa MacroEconometricModels.AbstractARIMAModel
         @test ar_order(m) <= 1
@@ -1064,8 +988,8 @@ end
     @testset "stepwise respects tight bounds max_p=0, max_q=0 (R-23 / #117)" begin
         # Only (0,0) is admissible; the _fit_and_cache bounds guard (parenthesized so the
         # full ||-chain gates the early return) must never admit an out-of-bounds order.
-        Random.seed!(7007)
-        y = randn(120)
+        rng = MersenneTwister(7007)
+        y = randn(rng, 120)
         m = auto_arima(y; max_p=0, max_q=0, max_d=0, stepwise=true)
         @test m isa MacroEconometricModels.AbstractARIMAModel
         @test ar_order(m) == 0
@@ -1172,8 +1096,8 @@ end
     end
 
     # End-to-end: a fitted ARIMA is unaffected (loglik reproduces on a fixed seed).
-    Random.seed!(314)
-    yr = 0.1 .+ cumsum(0.5 .* randn(200) .+ 0.3 .* [0.0; randn(199)])
+    rng = MersenneTwister(314)
+    yr = 0.1 .+ cumsum(0.5 .* randn(rng, 200) .+ 0.3 .* [0.0; randn(rng, 199)])
     m1 = estimate_arima(yr, 1, 0, 1)
     m2 = estimate_arima(yr, 1, 0, 1)
     @test loglikelihood(m1) == loglikelihood(m2)

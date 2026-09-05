@@ -19,10 +19,10 @@ using MacroEconometricModels
     # ==========================================================================
 
     @testset "Basic Estimation - Two-Step" begin
-        Random.seed!(12345)
+        rng = Random.MersenneTwister(12345)
 
         T_obs, N, r, p = 200, 20, 3, 2
-        X = randn(T_obs, N)
+        X = randn(rng, T_obs, N)
 
         model = estimate_dynamic_factors(X, r, p)
 
@@ -44,10 +44,10 @@ using MacroEconometricModels
     end
 
     @testset "Basic Estimation - EM Algorithm" begin
-        Random.seed!(12346)
+        rng = Random.MersenneTwister(12346)
 
         T_obs, N, r, p = 150, 15, 2, 1
-        X = randn(T_obs, N)
+        X = randn(rng, T_obs, N)
 
         model = estimate_dynamic_factors(X, r, p; method=:em, max_iter=50)
 
@@ -61,10 +61,10 @@ using MacroEconometricModels
     end
 
     @testset "Non-Standardized Estimation" begin
-        Random.seed!(12347)
+        rng = Random.MersenneTwister(12347)
 
         T_obs, N, r, p = 100, 10, 2, 1
-        X = randn(T_obs, N) .* 10 .+ 5
+        X = randn(rng, T_obs, N .* 10 .+ 5)
 
         model = estimate_dynamic_factors(X, r, p; standardize=false)
 
@@ -77,7 +77,9 @@ using MacroEconometricModels
     # ==========================================================================
 
     @testset "Parameter Recovery - Known DGP" begin
-        Random.seed!(54321)
+        # DGP-06: shared VAR(2)-factor simulator (was: bespoke zero-initialized
+        # loop without burn-in). The simulator burns in, so factors start stationary.
+        rng = Random.MersenneTwister(54321)
 
         # Known DGP parameters
         T_obs, N, r_true, p_true = 500, 20, 3, 2
@@ -86,18 +88,10 @@ using MacroEconometricModels
         A1_true = [0.4 0.1 0.0; 0.1 0.4 0.1; 0.0 0.1 0.4]
         A2_true = [0.1 0.0 0.0; 0.0 0.1 0.0; 0.0 0.0 0.1]
 
-        # True loadings
-        Lambda_true = randn(N, r_true)
-
-        # Generate factors with VAR dynamics
-        F_true = zeros(T_obs, r_true)
-        for t in (p_true+1):T_obs
-            F_true[t, :] = A1_true * F_true[t-1, :] + A2_true * F_true[t-2, :] + 0.3 * randn(r_true)
-        end
-
         # Generate observables
         sigma_e = 0.2
-        X = F_true * Lambda_true' + sigma_e * randn(T_obs, N)
+        d = dgp_dynamic_factors(rng; A=[A1_true, A2_true], N=N, T=T_obs, idio_sd=sigma_e)
+        X, F_true, Lambda_true = d.X, d.F, d.Lambda
 
         # Estimate
         model = estimate_dynamic_factors(X, r_true, p_true)
@@ -127,20 +121,16 @@ using MacroEconometricModels
     end
 
     @testset "Parameter Recovery - Larger Sample" begin
-        Random.seed!(99999)
+        # DGP-06: shared simulator (was: bespoke loop).
+        rng = Random.MersenneTwister(99999)
 
         T_obs, N, r_true, p_true = 1000, 30, 2, 1
 
         # Simple AR(1) factor dynamics
         A_true = [0.6 0.1; 0.1 0.6]
-        Lambda_true = randn(N, r_true)
 
-        F_true = zeros(T_obs, r_true)
-        for t in 2:T_obs
-            F_true[t, :] = A_true * F_true[t-1, :] + 0.3 * randn(r_true)
-        end
-
-        X = F_true * Lambda_true' + 0.15 * randn(T_obs, N)
+        d = dgp_dynamic_factors(rng; A=A_true, N=N, T=T_obs, idio_sd=0.15)
+        X = d.X
 
         model = estimate_dynamic_factors(X, r_true, p_true)
 
@@ -156,15 +146,15 @@ using MacroEconometricModels
     # ==========================================================================
 
     @testset "Numerical Stability - Near-Singular Covariance" begin
-        Random.seed!(11111)
+        # DGP-06: zero-dynamics shared DGP with near-zero idiosyncratic noise
+        # (was: bespoke iid-factor loop). Near-singularity comes from the tiny
+        # noise, not from dynamics.
+        rng = Random.MersenneTwister(11111)
 
         T_obs, N, r = 100, 10, 2
 
         # Create data with highly correlated variables
-        F = randn(T_obs, r)
-        Lambda = randn(N, r)
-        # Very low noise
-        X = F * Lambda' + 1e-6 * randn(T_obs, N)
+        X = dgp_dynamic_factors(rng; A=zeros(r, r), N=N, T=T_obs, idio_sd=1e-6).X
 
         # Should not throw, should handle gracefully
         model = estimate_dynamic_factors(X, r, 1)
@@ -173,11 +163,11 @@ using MacroEconometricModels
     end
 
     @testset "Numerical Stability - Ill-Conditioned Data" begin
-        Random.seed!(22222)
+        rng = Random.MersenneTwister(22222)
 
         T_obs, N, r = 100, 15, 3
 
-        X = randn(T_obs, N)
+        X = randn(rng, T_obs, N)
         # Scale columns dramatically
         X[:, 1] *= 1e4
         X[:, end] *= 1e-4
@@ -189,19 +179,14 @@ using MacroEconometricModels
     end
 
     @testset "Numerical Stability - Nearly Non-Stationary" begin
-        Random.seed!(33333)
+        # DGP-06: shared simulator with near-unit-root factor dynamics.
+        rng = Random.MersenneTwister(33333)
 
         T_obs, N, r, p = 200, 10, 2, 1
 
         # Generate factors with near-unit-root dynamics
-        F = zeros(T_obs, r)
         A_near_unit = [0.95 0.0; 0.0 0.95]
-        for t in 2:T_obs
-            F[t, :] = A_near_unit * F[t-1, :] + 0.1 * randn(r)
-        end
-
-        Lambda = randn(N, r)
-        X = F * Lambda' + 0.2 * randn(T_obs, N)
+        X = dgp_dynamic_factors(rng; A=A_near_unit, N=N, T=T_obs, idio_sd=0.2).X
 
         model = estimate_dynamic_factors(X, r, p)
         @test model isa DynamicFactorModel
@@ -215,12 +200,11 @@ using MacroEconometricModels
     # ==========================================================================
 
     @testset "Edge Cases - Single Factor (r=1)" begin
-        Random.seed!(44444)
+        # DGP-06: shared simulator (was: bespoke iid-factor loop).
+        rng = Random.MersenneTwister(44444)
 
         T_obs, N = 100, 10
-        F = randn(T_obs, 1)
-        Lambda = randn(N, 1)
-        X = F * Lambda' + 0.3 * randn(T_obs, N)
+        X = dgp_dynamic_factors(rng; A=reshape([0.5], 1, 1), N=N, T=T_obs, idio_sd=0.3).X
 
         model = estimate_dynamic_factors(X, 1, 1)
 
@@ -231,10 +215,10 @@ using MacroEconometricModels
     end
 
     @testset "Edge Cases - Single Lag (p=1)" begin
-        Random.seed!(55555)
+        rng = Random.MersenneTwister(55555)
 
         T_obs, N, r = 100, 10, 2
-        X = randn(T_obs, N)
+        X = randn(rng, T_obs, N)
 
         model = estimate_dynamic_factors(X, r, 1)
 
@@ -244,10 +228,10 @@ using MacroEconometricModels
     end
 
     @testset "Edge Cases - Multiple Lags (p=4)" begin
-        Random.seed!(55556)
+        rng = Random.MersenneTwister(55556)
 
         T_obs, N, r, p = 200, 12, 2, 4
-        X = randn(T_obs, N)
+        X = randn(rng, T_obs, N)
 
         model = estimate_dynamic_factors(X, r, p)
 
@@ -257,10 +241,10 @@ using MacroEconometricModels
     end
 
     @testset "Edge Cases - Short Sample" begin
-        Random.seed!(66666)
+        rng = Random.MersenneTwister(66666)
 
         T_obs, N, r, p = 50, 8, 2, 1
-        X = randn(T_obs, N)
+        X = randn(rng, T_obs, N)
 
         model = estimate_dynamic_factors(X, r, p)
 
@@ -269,10 +253,10 @@ using MacroEconometricModels
     end
 
     @testset "Edge Cases - Many Variables (N > T)" begin
-        Random.seed!(77777)
+        rng = Random.MersenneTwister(77777)
 
         T_obs, N, r = 50, 100, 3
-        X = randn(T_obs, N)
+        X = randn(rng, T_obs, N)
 
         model = estimate_dynamic_factors(X, r, 1)
 
@@ -281,11 +265,11 @@ using MacroEconometricModels
     end
 
     @testset "Edge Cases - Maximum Factors" begin
-        Random.seed!(88888)
+        rng = Random.MersenneTwister(88888)
 
         T_obs, N = 60, 20
         r_max = min(T_obs, N) - 5  # Leave room for estimation
-        X = randn(T_obs, N)
+        X = randn(rng, T_obs, N)
 
         model = estimate_dynamic_factors(X, r_max, 1)
 
@@ -298,10 +282,10 @@ using MacroEconometricModels
     # ==========================================================================
 
     @testset "Forecasting - Dimensions" begin
-        Random.seed!(10101)
+        rng = Random.MersenneTwister(10101)
 
         T_obs, N, r, p = 100, 10, 2, 2
-        X = randn(T_obs, N)
+        X = randn(rng, T_obs, N)
         model = estimate_dynamic_factors(X, r, p)
 
         h = 12
@@ -312,10 +296,10 @@ using MacroEconometricModels
     end
 
     @testset "Forecasting - With Confidence Intervals" begin
-        Random.seed!(10102)
+        rng = Random.MersenneTwister(10102)
 
         T_obs, N, r, p = 100, 8, 2, 1
-        X = randn(T_obs, N)
+        X = randn(rng, T_obs, N)
         model = estimate_dynamic_factors(X, r, p)
 
         h = 6
@@ -334,19 +318,15 @@ using MacroEconometricModels
     end
 
     @testset "Forecasting - Accuracy with Known Dynamics" begin
-        Random.seed!(10103)
+        # DGP-06: shared simulator over the train+holdout span, then split
+        # (was: bespoke loop). The holdout is a genuine continuation of the DGP.
+        rng = Random.MersenneTwister(10103)
 
         T_obs, N, r, p = 300, 12, 2, 1
 
         # Generate with known dynamics
         A_true = [0.7 0.1; 0.1 0.7]
-        F = zeros(T_obs + 20, r)
-        for t in 2:(T_obs + 20)
-            F[t, :] = A_true * F[t-1, :] + 0.2 * randn(r)
-        end
-
-        Lambda = randn(N, r)
-        X_full = F * Lambda' + 0.15 * randn(T_obs + 20, N)
+        X_full = dgp_dynamic_factors(rng; A=A_true, N=N, T=T_obs + 20, idio_sd=0.15).X
 
         # Estimate on first T_obs observations
         X_train = X_full[1:T_obs, :]
@@ -371,14 +351,14 @@ using MacroEconometricModels
     # ==========================================================================
 
     @testset "Static Model as Special Case" begin
-        Random.seed!(20202)
+        # DGP-06: the static DGP is the shared simulator with zero transition —
+        # iid factors by construction (was: bespoke iid loop).
+        rng = Random.MersenneTwister(20202)
 
         T_obs, N, r = 200, 15, 3
 
         # Generate static factor data (no dynamics in true DGP)
-        F_true = randn(T_obs, r)
-        Lambda_true = randn(N, r)
-        X = F_true * Lambda_true' + 0.3 * randn(T_obs, N)
+        X = dgp_dynamic_factors(rng; A=zeros(r, r), N=N, T=T_obs, idio_sd=0.3).X
 
         # Estimate static model
         static_model = estimate_factors(X, r)
@@ -399,10 +379,10 @@ using MacroEconometricModels
     # ==========================================================================
 
     @testset "StatsAPI Interface" begin
-        Random.seed!(30303)
+        rng = Random.MersenneTwister(30303)
 
         T_obs, N, r, p = 100, 12, 3, 2
-        X = randn(T_obs, N)
+        X = randn(rng, T_obs, N)
 
         model = estimate_dynamic_factors(X, r, p)
 
@@ -444,19 +424,15 @@ using MacroEconometricModels
     # ==========================================================================
 
     @testset "Information Criteria - Model Selection" begin
-        Random.seed!(40404)
+        # DGP-06: shared simulator (was: bespoke loop).
+        rng = Random.MersenneTwister(40404)
 
         T_obs, N = 200, 20
         r_true, p_true = 2, 1
 
         # Generate data with known (r, p)
         A_true = [0.5 0.1; 0.1 0.5]
-        F = zeros(T_obs, r_true)
-        for t in 2:T_obs
-            F[t, :] = A_true * F[t-1, :] + 0.3 * randn(r_true)
-        end
-        Lambda = randn(N, r_true)
-        X = F * Lambda' + 0.3 * randn(T_obs, N)
+        X = dgp_dynamic_factors(rng; A=A_true, N=N, T=T_obs, idio_sd=0.3).X
 
         ic = ic_criteria_dynamic(X, 4, 2)  # Reduced range to avoid edge case failures
 
@@ -477,8 +453,9 @@ using MacroEconometricModels
     # ==========================================================================
 
     @testset "Input Validation" begin
+        rng = Random.MersenneTwister(40504)
         T_obs, N = 100, 10
-        X = randn(T_obs, N)
+        X = randn(rng, T_obs, N)
 
         # Invalid number of factors
         @test_throws ArgumentError estimate_dynamic_factors(X, 0, 1)
@@ -504,18 +481,14 @@ using MacroEconometricModels
     # ==========================================================================
 
     @testset "Consistency Between Methods" begin
-        Random.seed!(50505)
+        # DGP-06: shared simulator (was: bespoke loop).
+        rng = Random.MersenneTwister(50505)
 
         T_obs, N, r, p = 200, 15, 2, 1
 
         # Generate data with moderate dynamics
-        F = zeros(T_obs, r)
         A_true = [0.5 0.1; 0.1 0.5]
-        for t in 2:T_obs
-            F[t, :] = A_true * F[t-1, :] + 0.3 * randn(r)
-        end
-        Lambda = randn(N, r)
-        X = F * Lambda' + 0.25 * randn(T_obs, N)
+        X = dgp_dynamic_factors(rng; A=A_true, N=N, T=T_obs, idio_sd=0.25).X
 
         model_twostep = estimate_dynamic_factors(X, r, p; method=:twostep)
         model_em = estimate_dynamic_factors(X, r, p; method=:em, max_iter=100)
@@ -546,7 +519,9 @@ using MacroEconometricModels
     # ==========================================================================
 
     @testset "Asymptotic Properties - Consistency" begin
-        Random.seed!(60606)
+        # DGP-06: shared simulator with FIXED loadings across sample sizes
+        # (was: bespoke loop). Holding Λ fixed isolates the T effect.
+        rng = Random.MersenneTwister(60606)
 
         r, p = 2, 1
         N = 15
@@ -557,15 +532,12 @@ using MacroEconometricModels
 
         # Fixed true parameters
         A_true = [0.5 0.1; 0.1 0.5]
-        Lambda_true = randn(N, r)
+        Lambda_true = randn(rng, N, r)
 
         for T_obs in sample_sizes
             # Generate data
-            F = zeros(T_obs, r)
-            for t in 2:T_obs
-                F[t, :] = A_true * F[t-1, :] + 0.3 * randn(r)
-            end
-            X = F * Lambda_true' + 0.2 * randn(T_obs, N)
+            X = dgp_dynamic_factors(rng; A=A_true, Lambda=Lambda_true, N=N,
+                                    T=T_obs, idio_sd=0.2).X
 
             model = estimate_dynamic_factors(X, r, p)
 
@@ -584,10 +556,10 @@ using MacroEconometricModels
     # ==========================================================================
 
     @testset "Companion Matrix" begin
-        Random.seed!(70707)
+        rng = Random.MersenneTwister(70707)
 
         T_obs, N, r, p = 100, 10, 2, 3
-        X = randn(T_obs, N)
+        X = randn(rng, T_obs, N)
 
         model = estimate_dynamic_factors(X, r, p)
 
@@ -607,10 +579,10 @@ using MacroEconometricModels
     end
 
     @testset "Stationarity Check" begin
-        Random.seed!(70708)
+        rng = Random.MersenneTwister(70708)
 
         T_obs, N, r, p = 150, 12, 2, 1
-        X = randn(T_obs, N)
+        X = randn(rng, T_obs, N)
 
         model = estimate_dynamic_factors(X, r, p)
 
@@ -627,12 +599,12 @@ using MacroEconometricModels
     # ==========================================================================
 
     @testset "Type Conversion" begin
-        Random.seed!(80808)
+        rng = Random.MersenneTwister(80808)
 
         T_obs, N, r, p = 80, 10, 2, 1
 
         # Integer input should be converted to Float64
-        X_int = rand(1:10, T_obs, N)
+        X_int = rand(rng, 1:10, T_obs, N)
         model = estimate_dynamic_factors(X_int, r, p)
 
         @test model isa DynamicFactorModel{Float64}
@@ -645,10 +617,10 @@ using MacroEconometricModels
     # ==========================================================================
 
     @testset "Variance Explained Properties" begin
-        Random.seed!(90909)
+        rng = Random.MersenneTwister(90909)
 
         T_obs, N, r = 100, 20, 5
-        X = randn(T_obs, N)
+        X = randn(rng, T_obs, N)
 
         model = estimate_dynamic_factors(X, r, 2)
 
@@ -667,17 +639,14 @@ using MacroEconometricModels
     # ==========================================================================
 
     @testset "Residuals Properties" begin
-        Random.seed!(91919)
+        # DGP-06: shared simulator (was: bespoke loop).
+        rng = Random.MersenneTwister(91919)
 
         T_obs, N, r, p = 150, 15, 3, 1
 
         # Generate data with clear factor structure
-        F_true = zeros(T_obs, r)
-        for t in 2:T_obs
-            F_true[t, :] = 0.5 * F_true[t-1, :] + randn(r)
-        end
-        Lambda = randn(N, r)
-        X = F_true * Lambda' + 0.2 * randn(T_obs, N)
+        X = dgp_dynamic_factors(rng; A=0.5 * Matrix{Float64}(I, r, r), N=N,
+                                T=T_obs, idio_sd=0.2).X
 
         model = estimate_dynamic_factors(X, r, p)
 
@@ -686,11 +655,14 @@ using MacroEconometricModels
         # Check residuals dimensions
         @test size(resid) == size(X)
 
-        # Residuals should generally have lower variance than standardized original
-        # Note: comparison is in standardized space, so tolerances need adjustment
+        # DGP-06: residuals() lives in standardized space (see
+        # StatsAPI.residuals), so the reference must be standardized too —
+        # comparing against raw X only passed before by scale luck (the old
+        # bespoke DGP had Var(X) ≈ 4 > 1).
+        X_ref = MacroEconometricModels._standardize(X)
         count_lower = 0
         for i in 1:N
-            if var(resid[:, i]) <= var(X[:, i])
+            if var(resid[:, i]) <= var(X_ref[:, i])
                 count_lower += 1
             end
         end
@@ -706,19 +678,15 @@ using MacroEconometricModels
     # ==========================================================================
 
     @testset "Reconstruction Quality" begin
-        Random.seed!(92929)
+        # DGP-06: shared simulator (was: bespoke loop).
+        rng = Random.MersenneTwister(92929)
 
         T_obs, N, r_true = 200, 15, 3
 
         # Generate data with clear factor structure
-        F_true = zeros(T_obs, r_true)
-        A_true = 0.6 * I(r_true)
-        for t in 2:T_obs
-            F_true[t, :] = A_true * F_true[t-1, :] + 0.3 * randn(r_true)
-        end
-        Lambda_true = randn(N, r_true)
+        A_true = 0.6 * Matrix{Float64}(I, r_true, r_true)
         noise_level = 0.1
-        X = F_true * Lambda_true' + noise_level * randn(T_obs, N)
+        X = dgp_dynamic_factors(rng; A=A_true, N=N, T=T_obs, idio_sd=noise_level).X
 
         model = estimate_dynamic_factors(X, r_true, 1)
         X_fitted = predict(model)
@@ -738,14 +706,14 @@ using MacroEconometricModels
         # Pt_smooth[t] must equal the EXACT lag-one smoother cross-covariance
         # Cov(alpha_{t+1}, alpha_t | Y) = P_smooth[t+1]·J_t'. The old J_t·P_smooth[t+1]
         # transposed the time order, corrupting the DFM EM VAR / Sigma_eta updates.
-        Random.seed!(11)
+        rng = Random.MersenneTwister(11)
         r, p, N, Tn = 1, 2, 2, 6
         sd = r * p
         Λ = reshape([1.0, 0.7], N, r)
         A = [reshape([0.5], 1, 1), reshape([0.2], 1, 1)]
         Sigma_eta = reshape([0.3], 1, 1)
         Sigma_e = [0.4 0.0; 0.0 0.5]
-        Y = randn(Tn, N)
+        Y = randn(rng, Tn, N)
         _, _, Pt, _ = MacroEconometricModels._kalman_smoother_dfm(Y, Λ, A, Sigma_eta, Sigma_e, r, p)
         T_mat = zeros(sd, sd); T_mat[1:r, 1:r] = A[1]; T_mat[1:r, r+1:2r] = A[2]
         T_mat[r+1:sd, 1:sd-r] = Matrix(I, sd-r, sd-r)

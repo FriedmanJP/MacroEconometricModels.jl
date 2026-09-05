@@ -95,17 +95,17 @@ end
     end
 
     @testset "identify_robust_bayes" begin
-        Random.seed!(747)
-        Y = randn(70, 2)
+        rng = MersenneTwister(747)
+        Y = randn(rng, 70, 2)
         post = estimate_bvar(Y, 1; n_draws=FAST ? 8 : 14, burnin=4, seed=747)
         r = SVARRestrictions(2; signs=[
             sign_restriction(1, 1, :positive),
             sign_restriction(2, 1, :positive),
         ])
         nrot = FAST ? 15 : 30
-        rng0 = MersenneTwister(747)
+        rng = MersenneTwister(747)
         res = identify_robust_bayes(post, r, 3; level=0.68, solver=:optimize,
-                                    n_rotations=nrot, rng=copy(rng0))
+                                    n_rotations=nrot, rng=copy(rng))
         @test res isa RobustBayesResult
         @test res isa AbstractAnalysisResult
         @test size(res.lower) == (3, 2, 2)
@@ -123,11 +123,11 @@ end
         # Single-prior interval is identify_arias_bayesian (all nonempty draws,
         # pooled weights, equal-tailed). GK guarantees Haar coverage of the CR,
         # not that the equal-tailed Haar interval ⊂ CR.
-        rand(rng0, UInt64, post.n_draws)
+        rand(rng, UInt64, post.n_draws)
         q_lo = (1 - 0.68) / 2
         arias = identify_arias_bayesian(post, r, 3; n_rotations=nrot,
                                         quantiles=[q_lo, 0.5, 1 - q_lo],
-                                        compute_weights=true, rng=rng0)
+                                        compute_weights=true, rng=rng)
         @test res.single_prior_lower ≈ arias.irf_quantiles[:, :, :, 1]
         @test res.single_prior_upper ≈ arias.irf_quantiles[:, :, :, end]
         w = arias.weights
@@ -154,8 +154,8 @@ end
     end
 
     @testset "empty-set probability" begin
-        Random.seed!(748)
-        Y = randn(60, 2)
+        rng = MersenneTwister(748)
+        Y = randn(rng, 60, 2)
         post = estimate_bvar(Y, 1; n_draws=FAST ? 6 : 10, burnin=3, seed=748)
         r_ok = SVARRestrictions(2; signs=[
             sign_restriction(1, 1, :positive),
@@ -175,8 +175,8 @@ end
     end
 
     @testset "report / refs / plot_result" begin
-        Random.seed!(749)
-        Y = randn(50, 2)
+        rng = MersenneTwister(749)
+        Y = randn(rng, 50, 2)
         post = estimate_bvar(Y, 1; n_draws=FAST ? 6 : 10, burnin=3, seed=749)
         r = SVARRestrictions(2; signs=[sign_restriction(1, 1, :positive)])
         res = identify_robust_bayes(post, r, 2; solver=:optimize, n_rotations=10,
@@ -201,7 +201,8 @@ end
         r = SVARRestrictions(2; signs=[sign_restriction(1, 1, :positive)])
         @test_throws ArgumentError identified_set_bounds(m, r, 1; solver=:bogus)
         @test_throws ArgumentError identified_set_bounds(m, r, 0; solver=:optimize)
-        Y = randn(40, 2)
+        rng = MersenneTwister(1)
+        Y = randn(rng, 40, 2)
         post = estimate_bvar(Y, 1; n_draws=4, burnin=1, seed=1)
         @test_throws ArgumentError identify_robust_bayes(post, r, 2; level=1.5)
         @test_throws ArgumentError identify_robust_bayes(post, r, 2; level=0)

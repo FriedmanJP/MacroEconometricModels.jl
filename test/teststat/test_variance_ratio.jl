@@ -265,8 +265,8 @@ _pop_vr(ρ::Function, q::Int) = 1 + 2 * sum((1 - k / q) * ρ(k) for k in 1:(q-1)
         @test 0 < rn.cd_boot_pvalue <= 1
 
         # Power: AR(1) level ⇒ wild-bootstrap Chow-Denning rejects
-        rng2 = MersenneTwister(3)
-        z = zeros(2000); for t in 2:2000; z[t] = 0.5 * z[t-1] + randn(rng2); end
+        rng = MersenneTwister(3)
+        z = zeros(2000); for t in 2:2000; z[t] = 0.5 * z[t-1] + randn(rng); end
         rar = variance_ratio_test(z; q=[2, 4, 8, 16], bootstrap=299, seed=11)
         @test rar.cd_boot_pvalue < 0.05
     end

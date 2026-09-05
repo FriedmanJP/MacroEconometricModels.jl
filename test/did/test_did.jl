@@ -1826,14 +1826,14 @@ const _MPDTA = load_example(:mpdta)
 
         # A panel with no treated cohort must throw rather than report ATT = 0.0: with no
         # adoption period there is no estimand, and 0.0 reads as "no effect".
-        rng0 = Random.MersenneTwister(5981)
+        rng = Random.MersenneTwister(5981)
         n0, p0 = 6, 5
         N0 = n0 * p0
         d0 = Matrix{Float64}(undef, N0, 2)
         g0 = Vector{Int}(undef, N0); t0 = Vector{Int}(undef, N0)
         r0 = 1
         for g in 1:n0, t in 1:p0
-            d0[r0, 1] = randn(rng0); d0[r0, 2] = 0.0
+            d0[r0, 1] = randn(rng); d0[r0, 2] = 0.0
             g0[r0] = g; t0[r0] = t; r0 += 1
         end
         pd_none = PanelData{Float64}(d0, ["y", "d"], Quarterly, [1, 1], g0, t0,

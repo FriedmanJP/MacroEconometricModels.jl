@@ -215,4 +215,88 @@ end
         @test_throws DimensionMismatch estimate_cointreg(y, x[1:end-1])
         @test_throws ArgumentError estimate_cointreg(y[1:4], x[1:4])
     end
+
+    # ---------------------------------------------------------------------
+    # DGP-04 (#793) power arms on the shared endogenous simulator.
+    # The R-oracle testsets above are untouched; these assert the estimators'
+    # purpose (bias reduction), SE honesty, trend handling and the spurious
+    # boundary on data with known truth.
+    # ---------------------------------------------------------------------
+    @testset "POWER: FMOLS/DOLS/CCR cut OLS bias on the endogenous DGP" begin
+        # 20-seed MC means at T = 500, endog_rho = 0.9 (strong endogeneity so
+        # OLS bias is the visible target; probed FMOLS ratio 0.21, bound 0.5).
+        scope = let bo = 0.0, bf = 0.0, bd = 0.0, bc = 0.0
+            for seed in 1:20
+                d = dgp_cointreg(MersenneTwister(seed); beta=[1.5], T=500,
+                                 endog_rho=0.9)
+                xx = d.X[:, 1]
+                bo += abs((hcat(ones(500), xx) \ d.y)[2] - 1.5)
+                bf += abs(coef(estimate_cointreg(d.y, xx; method=:fmols,
+                                                 bandwidth=3))[2] - 1.5)
+                bd += abs(coef(estimate_cointreg(d.y, xx; method=:dols, leads=2,
+                                                 lags=2, bandwidth=3))[2] - 1.5)
+                bc += abs(coef(estimate_cointreg(d.y, xx; method=:ccr,
+                                                 bandwidth=3))[2] - 1.5)
+            end
+            (bf / bo, bd / bo, bc / bo)
+        end
+        @test scope[1] < 0.5   # FMOLS
+        @test scope[2] < 0.5   # DOLS
+        @test scope[3] < 0.5   # CCR
+    end
+
+    @testset "POWER: robust vs LRV SEs differ; both track MC dispersion" begin
+        d = dgp_cointreg(MersenneTwister(7); beta=[1.5], T=500, endog_rho=0.9)
+        xx = d.X[:, 1]
+        mr = estimate_cointreg(d.y, xx; method=:dols, leads=2, lags=2,
+                               bandwidth=3, dols_se=:robust)
+        ml = estimate_cointreg(d.y, xx; method=:dols, leads=2, lags=2,
+                               bandwidth=3, dols_se=:lrv)
+        # A :robust branch returning the :lrv numbers is invisible to a `> 0`
+        # check — the two computations must differ.
+        @test S.stderror(mr)[2] != S.stderror(ml)[2]
+        # ... and both must be honest about sampling noise: within rtol 0.5 of
+        # the 20-seed MC dispersion of the FMOLS slope (probed 1.05-1.06x).
+        slopes = Float64[]
+        for seed in 1:20
+            dd = dgp_cointreg(MersenneTwister(seed); beta=[1.5], T=500,
+                              endog_rho=0.9)
+            push!(slopes, coef(estimate_cointreg(dd.y, dd.X[:, 1]; method=:fmols,
+                                                 bandwidth=3))[2])
+        end
+        disp = std(slopes)
+        @test S.stderror(mr)[2] ≈ disp rtol=0.5
+        @test S.stderror(ml)[2] ≈ disp rtol=0.5
+    end
+
+    @testset "Trend coefficient on trendless vs trended DGP" begin
+        d = dgp_cointreg(MersenneTwister(7); beta=[1.5], T=300)
+        xx = d.X[:, 1]
+        ml = estimate_cointreg(d.y, xx; method=:fmols, trend=:linear, bandwidth=3)
+        @test abs(coef(ml)[2]) < 0.05   # no trend in the DGP (probed ≤ 0.004)
+        t = collect(1.0:300)
+        y2 = d.y .+ 0.5 .* t
+        ml2 = estimate_cointreg(y2, xx; method=:fmols, trend=:linear, bandwidth=3)
+        @test coef(ml2)[2] ≈ 0.5 atol=0.05   # planted trend recovered
+    end
+
+    @testset "Spurious boundary: residual ADF usually does not reject" begin
+        # Independent RWs (no cointegration): the residual unit-root test must
+        # mostly fail to reject, while on the cointegrated DGP it rejects.
+        # Probed 8/10 and 10/10 over seeds 201:210 — bounds keep a margin.
+        n_spurious, n_coint = let ns = 0, nc = 0
+            for seed in 201:210
+                ds = dgp_cointreg(MersenneTwister(seed); beta=[1.5], T=500,
+                                  spurious=true)
+                ms = estimate_cointreg(ds.y, ds.X[:, 1]; method=:fmols, bandwidth=3)
+                adf_test(residuals(ms)).pvalue > 0.05 && (ns += 1)
+                dc = dgp_cointreg(MersenneTwister(seed); beta=[1.5], T=500)
+                mc = estimate_cointreg(dc.y, dc.X[:, 1]; method=:fmols, bandwidth=3)
+                adf_test(residuals(mc)).pvalue < 0.05 && (nc += 1)
+            end
+            (ns, nc)
+        end
+        @test n_spurious >= 7
+        @test n_coint >= 8
+    end
 end

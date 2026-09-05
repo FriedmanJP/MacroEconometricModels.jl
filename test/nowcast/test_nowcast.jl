@@ -17,31 +17,14 @@ using DataFrames
 
 """Generate synthetic mixed-frequency data with known factor structure."""
 function _make_nowcast_data(; T_obs=120, nM=6, nQ=2, r=2, seed=42)
+    # DGP-07 (#796): the shared Mariano–Murasawa ragged-edge simulator — monthly
+    # VAR factors, MM-aggregated quarterly series observed every 3rd month.
+    # Same 4-tuple return (Y, F, Lambda_M, Lambda_Q); all call sites unchanged.
     rng = Random.MersenneTwister(seed)
-
-    # True factors (monthly)
-    F = randn(rng, T_obs, r)
-    for t in 2:T_obs
-        F[t, :] = 0.7 * F[t-1, :] + 0.3 * randn(rng, r)
-    end
-
-    # Monthly loadings
-    Lambda_M = randn(rng, nM, r)
-    X_M = F * Lambda_M' + 0.2 * randn(rng, T_obs, nM)
-
-    # Quarterly loadings (observed every 3rd month)
-    Lambda_Q = randn(rng, nQ, r)
-    X_Q = F * Lambda_Q' + 0.2 * randn(rng, T_obs, nQ)
-
-    # Set quarterly to NaN for non-quarter months
-    for t in 1:T_obs
-        if mod(t, 3) != 0
-            X_Q[t, :] .= NaN
-        end
-    end
-
-    Y = hcat(X_M, X_Q)
-    return Y, F, Lambda_M, Lambda_Q
+    A = r == 1 ? reshape([0.7], 1, 1) : r == 2 ? [0.7 0.1; 0.05 0.6] :
+        0.5 * Matrix{Float64}(I, r, r)
+    d = dgp_mixed_frequency_panel(rng; A=A, nM=nM, nQ=nQ, T=T_obs)
+    return d.Y, d.F, d.Lambda_M, d.Lambda_Q
 end
 
 """Generate synthetic data with ragged edge pattern."""
@@ -141,8 +124,9 @@ end
     end
 
     @testset "_miss_data row elimination" begin
+        rng = MersenneTwister(7201)  # DGP-01: explicit rng (plumbing data)
         y = [1.0, NaN, 3.0, NaN, 5.0]
-        C = randn(5, 2)
+        C = randn(rng, 5, 2)
         R = Matrix{Float64}(0.1 * I(5))
 
         y_obs, C_obs, R_obs, idx = MacroEconometricModels._miss_data(y, C, R)
@@ -153,8 +137,9 @@ end
     end
 
     @testset "All NaN row" begin
+        rng = MersenneTwister(7202)  # DGP-01: explicit rng (plumbing data)
         y = [NaN, NaN, NaN]
-        C = randn(3, 2)
+        C = randn(rng, 3, 2)
         R = Matrix{Float64}(0.1 * I(3))
 
         y_obs, C_obs, R_obs, idx = MacroEconometricModels._miss_data(y, C, R)
@@ -360,7 +345,8 @@ end
     end
 
     @testset "Input validation" begin
-        Y = randn(50, 5)
+        rng = MersenneTwister(7203)  # DGP-01: explicit rng (throws-only data)
+        Y = randn(rng, 50, 5)
         @test_throws ArgumentError nowcast_dfm(Y, 3, 3)  # nM + nQ != N
         @test_throws ArgumentError nowcast_dfm(Y, 5, 0; r=0)  # r < 1
         @test_throws ArgumentError nowcast_dfm(Y, 5, 0; idio=:foo)  # invalid idio
@@ -378,6 +364,27 @@ end
             valid = filter(!isnan, Y[:, j])
             @test all(abs.(m.X_sm[86:90, j]) .< 10 * std(valid) + abs(mean(valid)))
         end
+    end
+
+    @testset "EM-Kalman ragged nowcast beats carry-forward (DGP-07 #796)" begin
+        # DGP-07 headline: on a Mariano–Murasawa ragged-edge DGP with KNOWN
+        # withheld values, the EM-Kalman smoothed fill must beat the naive
+        # carry-forward benchmark. Realized ratio ≈ 0.20 at seed 444.
+        rng = Random.MersenneTwister(444)
+        T_obs, nM, nQ, k = 240, 6, 2, 6
+        d = dgp_mixed_frequency_panel(rng; nM=nM, nQ=nQ, T=T_obs)
+        truth = copy(d.Y)
+        Y = copy(d.Y)
+        Y[(T_obs-k+1):T_obs, 1:3] .= NaN   # ragged edge on three monthlies
+
+        m = nowcast_dfm(Y, nM, nQ; r=2, p=1, max_iter=50)
+
+        rows = (T_obs-k+1):T_obs
+        rmse_model = sqrt(mean((m.X_sm[rows, 1:3] .- truth[rows, 1:3]) .^ 2))
+        naive = repeat(Y[T_obs-k, 1:3]', k, 1)
+        rmse_naive = sqrt(mean((naive .- truth[rows, 1:3]) .^ 2))
+        @test isfinite(rmse_model) && isfinite(rmse_naive)
+        @test rmse_model < 0.5 * rmse_naive
     end
 
     @testset "StatsAPI interface" begin
@@ -480,9 +487,9 @@ end
         @test length(unique(round.(mls, digits=6))) == 4
         @test all(isfinite, mls)
 
-        # (6) end-to-end through the public API
-        rng2 = Random.MersenneTwister(6021)
-        Yn = randn(rng2, 70, 4)
+        # (6) end-to-end through the public API (fresh stream, lint-accepted name)
+        rng = Random.MersenneTwister(6021)
+        Yn = randn(rng, 70, 4)
         for t in 2:70
             Yn[t, :] .+= 0.5 .* Yn[t-1, :]
         end
@@ -587,7 +594,8 @@ end
     end
 
     @testset "Input validation" begin
-        Y = randn(50, 5)
+        rng = MersenneTwister(7204)  # DGP-01: explicit rng (throws-only data)
+        Y = randn(rng, 50, 5)
         @test_throws ArgumentError nowcast_bvar(Y, 3, 3)  # nM + nQ != N
         @test_throws ArgumentError nowcast_bvar(Y, 5, 0; lags=0)  # lags < 1
     end
@@ -745,7 +753,8 @@ end
     end
 
     @testset "Input validation" begin
-        Y = randn(60, 5)
+        rng = MersenneTwister(7205)  # DGP-01: explicit rng (throws-only data)
+        Y = randn(rng, 60, 5)
         @test_throws ArgumentError nowcast_bridge(Y, 3, 3)  # nM + nQ != N
         @test_throws ArgumentError nowcast_bridge(Y, 5, 0)  # nQ < 1
     end
@@ -880,12 +889,12 @@ _NC_M = nowcast_dfm(_NC_Y, 4, 1; r=1, p=1, max_iter=20, thresh=1e-3)
         # Plag[j][:,:,t] = Cov(x_t, x_{t-j} | Y_T) must match the analytic joint-Gaussian
         # posterior covariance. The old j>=2 recursion J_{t-1}·Plag[j-1][t-1] was wrong; the
         # correct one is Plag[j-1][t]·J_{t-j}'.
-        Random.seed!(7)
+        rng = Random.MersenneTwister(7)
         A = [0.7 0.1; 0.0 0.5]; C = reshape([1.0, 0.5], 1, 2)
         Q = [0.3 0.0; 0.0 0.2]; R = reshape([0.4], 1, 1)
         x0 = [0.2, -0.1]; P0 = [1.0 0.2; 0.2 0.8]
         Tn, sd, N = 6, 2, 1
-        y = randn(N, Tn)
+        y = randn(rng, N, Tn)
         _, _, Plag, _ = MacroEconometricModels._kalman_smoother_lag(y, A, C, Q, R, x0, P0, Tn - 1)
         Vt = Vector{Matrix{Float64}}(undef, Tn); Vt[1] = A * P0 * A' + Q
         for t in 2:Tn; Vt[t] = A * Vt[t-1] * A' + Q; end
@@ -1092,7 +1101,8 @@ end
     end
 
     @testset "Input validation" begin
-        Y = randn(30, 3)
+        rng = Random.MersenneTwister(2101)
+        Y = randn(rng, 30, 3)
         Y[25:30, 1] .= NaN
         ts = TimeSeriesData(Y)
         @test_throws ArgumentError balance_panel(ts; method=:foo)

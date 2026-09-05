@@ -15,7 +15,9 @@ end
         _assert_report_equal(h, h2)
         @test sprint(io -> refs(io, h)) == sprint(io -> refs(io, h2))
 
-        Yg = randn(MersenneTwister(351), 80, 2)
+        # Stationary VAR(1) truth (DGP-03 #792) instead of white noise.
+        Yg = dgp_var(MersenneTwister(351); A=[0.5 0.1; 0.0 0.4],
+                     B0=Matrix{Float64}(I, 2, 2), T=80).Y
         glp = optimize_hyperparameters_glp(Yg, 1; starts=1, max_iter=40, verbose=false)
         glp2 = _assert_roundtrip(glp)
         _assert_report_equal(glp, glp2)
@@ -25,7 +27,8 @@ end
 
     @testset "BayesianFAVAR" begin
         rng = MersenneTwister(525)
-        X = randn(rng, 60, 8)
+        # Genuine dynamic-factor panel (DGP-03 #792) instead of white noise.
+        X = dgp_dynamic_factors(rng; N=8, T=60).X
         bf = estimate_favar(X, [1, 2], 1, 1; method=:bayesian, n_draws=12, burnin=5)
         bf2 = _assert_roundtrip(bf)
         _assert_report_equal(bf, bf2)
@@ -37,12 +40,9 @@ end
 
     @testset "MFVARPosterior" begin
         T_hf = 48
-        Z = zeros(T_hf, 2)
         rng = MersenneTwister(350)
-        A = [0.6 0.1; 0.15 0.5]
-        for t in 2:T_hf
-            Z[t, :] = A * Z[t-1, :] + 0.3 .* randn(rng, 2)
-        end
+        # Latent HF VAR(1) truth (DGP-03 #792): same design as the old inline sim.
+        Z = dgp_var(rng; A=[0.6 0.1; 0.15 0.5], Sigma=Matrix(0.09 * I, 2, 2), T=T_hf).Y
         data = copy(Z)
         for t in 1:T_hf
             data[t, 2] = t % 3 == 0 ? sum(Z[max(t-2, 1):t, 2]) : NaN
@@ -56,7 +56,9 @@ end
     end
 
     @testset "TVPVARPosterior" begin
-        Y = randn(MersenneTwister(349), 70, 2)
+        # Stationary VAR(1) truth (DGP-03 #792) instead of white noise.
+        Y = dgp_var(MersenneTwister(349); A=[0.5 0.1; 0.0 0.4],
+                    B0=Matrix{Float64}(I, 2, 2), T=70).Y
         post = estimate_tvpvar(Y, 1; tvp=true, sv=true,
                                n_draws=12, n_burn=12, rng=MersenneTwister(21))
         args = Any[getfield(post, i) for i in 1:nfields(post)]
@@ -77,7 +79,9 @@ end
 end
 
 @testset "RSER-04 BVARForecast serialization (#777)" begin
-    Y = randn(MersenneTwister(777), 60, 2)
+    # Stationary VAR(1) truth (DGP-03 #792) instead of white noise.
+    Y = dgp_var(MersenneTwister(777); A=[0.5 0.1; 0.0 0.4],
+                B0=Matrix{Float64}(I, 2, 2), T=60).Y
     post = estimate_bvar(Y, 1; n_draws=24, seed=2)
     fc = forecast(post, 4; store_draws=true, rng=MersenneTwister(1))
     @test fc._draws isa Array{Float64,3}

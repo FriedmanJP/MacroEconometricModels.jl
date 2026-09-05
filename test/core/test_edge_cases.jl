@@ -19,7 +19,7 @@ using MacroEconometricModels
 using LinearAlgebra
 using Random
 
-Random.seed!(12345)
+rng = MersenneTwister(12345)  # DGP-02: explicit rng
 
 @testset "Edge Cases" begin
 
@@ -27,7 +27,7 @@ Random.seed!(12345)
     # 1. Univariate Models (n=1)
     # =========================================================================
     @testset "Univariate VAR" begin
-        Y = randn(100, 1)
+        Y = randn(rng, 100, 1)
         model = estimate_var(Y, 2)
 
         @test nvars(model) == 1
@@ -52,7 +52,7 @@ Random.seed!(12345)
     # 2. Boundary Horizons
     # =========================================================================
     @testset "Boundary Horizons" begin
-        Y = randn(100, 2)
+        Y = randn(rng, 100, 2)
         model = estimate_var(Y, 2)
 
         # Minimal horizon (h=1)
@@ -88,7 +88,7 @@ Random.seed!(12345)
     end
 
     @testset "Very Short Horizon for HD" begin
-        Y = randn(50, 2)
+        Y = randn(rng, 50, 2)
         model = estimate_var(Y, 1)
 
         # Minimal effective sample
@@ -101,8 +101,8 @@ Random.seed!(12345)
     # =========================================================================
     @testset "Near-Collinear Variables" begin
         # Create nearly collinear data
-        Y = randn(100, 3)
-        Y[:, 3] = Y[:, 1] + 0.001 * randn(100)  # Variable 3 almost equals variable 1
+        Y = randn(rng, 100, 3)
+        Y[:, 3] = Y[:, 1] + 0.001 * randn(rng, 100)  # Variable 3 almost equals variable 1
 
         model = estimate_var(Y, 1)
 
@@ -112,11 +112,9 @@ Random.seed!(12345)
     end
 
     @testset "Near Unit Root" begin
-        # Generate highly persistent data
-        Y_persistent = zeros(200, 2)
-        for t in 2:200
-            Y_persistent[t, :] = 0.99 * Y_persistent[t-1, :] + 0.1 * randn(2)
-        end
+        # Highly persistent diagonal VAR(1) (DGP-02 #791: shared simulator).
+        Y_persistent = dgp_var(rng; A=[0.99 0.0; 0.0 0.99],
+                               B0=0.1 * Matrix{Float64}(I, 2, 2), T=200).Y
 
         model_persistent = estimate_var(Y_persistent, 1)
 
@@ -140,7 +138,7 @@ Random.seed!(12345)
         Y_det = zeros(100, 2)
         Y_det[1, :] = [1.0, 1.0]
         for t in 2:100
-            Y_det[t, :] = 0.5 * Y_det[t-1, :] + 1e-10 * randn(2)  # Tiny noise
+            Y_det[t, :] = 0.5 * Y_det[t-1, :] + 1e-10 * randn(rng, 2)  # Tiny noise
         end
 
         model = estimate_var(Y_det, 1)
@@ -155,7 +153,9 @@ Random.seed!(12345)
     # 4. Factor Model Edge Cases
     # =========================================================================
     @testset "Single Factor" begin
-        X = randn(100, 10)
+        # 1-factor truth, signal share 0.7 (DGP-02 #791): mean R² recovers the
+        # share (realized 0.72; bounds carry sampling + loading-draw noise).
+        X = dgp_dynamic_factors(rng; A=[0.8;;], N=10, T=100).X
         fm = estimate_factors(X, 1)
 
         @test size(fm.factors, 2) == 1
@@ -165,10 +165,12 @@ Random.seed!(12345)
         r2_vals = r2(fm)
         @test all(r2_vals .>= 0.0)
         @test all(r2_vals .<= 1.0)
+        @test 0.5 < sum(r2_vals) / length(r2_vals) < 0.9  # ≈ signal share
     end
 
     @testset "Maximum Factors (r = min(T, N))" begin
-        X = randn(50, 10)  # T < N case
+        # 2-factor truth, T < N case (DGP-02 #791).
+        X = dgp_dynamic_factors(rng; A=[0.8 0.1; 0.0 0.7], N=10, T=50).X
 
         # r = T should be allowed (up to numerical precision issues)
         r_max = min(size(X)...)
@@ -182,7 +184,8 @@ Random.seed!(12345)
     end
 
     @testset "Factors Equal Variables" begin
-        X = randn(100, 5)
+        # 2-factor truth (DGP-02 #791).
+        X = dgp_dynamic_factors(rng; A=[0.8 0.1; 0.0 0.7], N=5, T=100).X
 
         # When r = N, should explain all variance
         fm_full = estimate_factors(X, 5)
@@ -194,7 +197,8 @@ Random.seed!(12345)
     end
 
     @testset "Dynamic Factor Model Minimal Settings" begin
-        X = randn(100, 10)
+        # 1-factor truth (DGP-02 #791).
+        X = dgp_dynamic_factors(rng; A=[0.8;;], N=10, T=100).X
 
         # Minimal factors and lags
         dfm = estimate_dynamic_factors(X, 1, 1)
@@ -207,7 +211,8 @@ Random.seed!(12345)
     end
 
     @testset "GDFM with q=1" begin
-        X = randn(100, 10)
+        # 1-factor truth (DGP-02 #791).
+        X = dgp_dynamic_factors(rng; A=[0.8;;], N=10, T=100).X
 
         gdfm = estimate_gdfm(X, 1)
         @test gdfm.q == 1
@@ -222,7 +227,7 @@ Random.seed!(12345)
     # 5. Local Projection Edge Cases
     # =========================================================================
     @testset "LP Minimal Horizon" begin
-        Y = randn(100, 2)
+        Y = randn(rng, 100, 2)
 
         # Minimal horizon h=1 (h=0 not allowed - horizon must be positive)
         lp_model = estimate_lp(Y, 1, 1; lags=2)
@@ -233,7 +238,7 @@ Random.seed!(12345)
     end
 
     @testset "LP Large Horizon" begin
-        Y = randn(200, 2)
+        Y = randn(rng, 200, 2)
 
         # Test with larger horizon relative to sample
         lp_model = estimate_lp(Y, 1, 50; lags=2)
@@ -247,7 +252,7 @@ Random.seed!(12345)
     # 6. Unified Interface Edge Cases
     # =========================================================================
     @testset "Unified Interface" begin
-        Y = randn(100, 2)
+        Y = randn(rng, 100, 2)
         model = estimate_var(Y, 2)
 
         # Test point_estimate returns correct types
@@ -277,7 +282,7 @@ Random.seed!(12345)
     # 7. Sign Restriction Edge Cases
     # =========================================================================
     @testset "Sign Restrictions Empty" begin
-        Y = randn(100, 2)
+        Y = randn(rng, 100, 2)
         model = estimate_var(Y, 2)
 
         # Empty restrictions are RWZ-underidentified (SID-23). Haar sampling of

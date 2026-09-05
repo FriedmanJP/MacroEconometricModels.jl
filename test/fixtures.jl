@@ -11,8 +11,11 @@ All functions are pure (no global state) and accept an explicit `rng` argument
 for reproducibility across threaded test groups.
 """
 
-using Random, LinearAlgebra
+using Random, LinearAlgebra, Statistics, Distributions, DataFrames
 
+# DGP-01 (#790): shared truth-returning DGP library. Every simulator takes
+# rng::AbstractRNG first, burns in, and returns (data, truth...) — see
+# test/dgp/ALLOWLIST.md for the white-noise lint allowlist.
 # Safe println that silently catches IOError when stdout pipe is closed
 # (happens in threaded parallel test execution on macOS CI)
 function _tprint(args...)
@@ -30,33 +33,16 @@ end
 """
     make_var1_data(; T=200, n=3, seed=42) -> Matrix{Float64}
 
-Generate VAR(1) data with diagonal coefficient matrix A = 0.5*I.
-Returns T×n matrix.
+Legacy shim (DGP-01 #790): VAR(1) with `A = 0.5*I`, now with burn-in and
+Cholesky-scaled innovations via `dgp_var`. New tests should call `dgp_var`
+directly (it also returns `A`, `Sigma`, `B0`, the shocks).
 """
 function make_var1_data(; T::Int=200, n::Int=3, seed::Int=42)
-    rng = Random.MersenneTwister(seed)
-    A = 0.5 * I(n)
-    Y = zeros(T, n)
-    for t in 2:T
-        Y[t, :] = A * Y[t-1, :] + randn(rng, n)
-    end
-    Y
+    dgp_var(Random.MersenneTwister(seed); A=Matrix{Float64}(0.5 * I(n)),
+            B0=Matrix{Float64}(I(n)), T=T).Y
 end
 
-"""
-    make_var_data(A::AbstractMatrix, T::Int; c=zeros(size(A,1)), seed=42) -> Matrix{Float64}
-
-Generate VAR(1) data with specified coefficient matrix A and intercept c.
-"""
-function make_var_data(A::AbstractMatrix, T::Int; c::Vector{Float64}=zeros(size(A, 1)), seed::Int=42)
-    rng = Random.MersenneTwister(seed)
-    n = size(A, 1)
-    Y = zeros(T, n)
-    for t in 2:T
-        Y[t, :] = c + A * Y[t-1, :] + randn(rng, n)
-    end
-    Y
-end
+# make_var_data removed in DGP-01 (#790): it had zero callers. Use dgp_var.
 
 # =============================================================================
 # Univariate DGP generators
@@ -89,17 +75,38 @@ function make_random_walk(; n::Int=200, seed::Int=42)
 end
 
 """
-    make_cointegrated_data(; T_obs=200, n=3, rank=1, seed=42) -> Matrix{Float64}
+    make_cointegrated_data(; T_obs=200, n=3, rank=1, seed=42, alpha=nothing,
+                            beta=nothing, Gamma=nothing) -> Matrix{Float64}
 
-Generate n-dimensional I(1) data with `rank` cointegrating relationships.
+Legacy shim (DGP-01 #790): parametrised VECM via `dgp_vecm` (moderate
+adjustment, non-zero `Gamma`, distinct trends) replacing the degenerate
+instant-adjustment corner. New tests should call `dgp_vecm` directly.
 """
-function make_cointegrated_data(; T_obs::Int=200, n::Int=3, rank::Int=1, seed::Int=42)
-    rng = Random.MersenneTwister(seed)
-    Y = cumsum(randn(rng, T_obs, n), dims=1)
-    for r in 1:min(rank, n - 1)
-        Y[:, r + 1] = Y[:, 1] + 0.1 * randn(rng, T_obs)
+function make_cointegrated_data(; T_obs::Int=200, n::Int=3, rank::Int=1, seed::Int=42,
+                                alpha=nothing, beta=nothing, Gamma=nothing)
+    r = min(rank, n - 1)
+    # Default β: each of columns 2..r+1 cointegrates against y₁ (distinct trends).
+    be = if beta === nothing
+        B = zeros(n, r)
+        B[1, :] .= 1.0
+        for j in 1:r
+            B[j + 1, j] = -1.0
+        end
+        B
+    else
+        beta
     end
-    Y
+    al = if alpha === nothing
+        A = zeros(n, r)
+        for j in 1:r
+            A[j + 1, j] = -0.3
+        end
+        A
+    else
+        alpha
+    end
+    Ga = Gamma === nothing ? [Matrix{Float64}(0.2 * I, n, n)] : Gamma
+    dgp_vecm(Random.MersenneTwister(seed); alpha=al, beta=be, Gamma=Ga, T=T_obs).Y
 end
 
 # =============================================================================
@@ -107,18 +114,17 @@ end
 # =============================================================================
 
 """
-    make_factor_data(; T=200, N=20, r=3, noise=0.5, seed=42) -> (X, F_true, Lambda_true)
+    make_factor_data(; T=200, N=20, r=3, noise=0.5, seed=42) -> (X, F_true, Lambda_true, A)
 
-Generate factor model data: X = F Λ' + noise * E.
+Legacy shim (DGP-01 #790): factors are now VAR(1) (not iid) via
+`dgp_dynamic_factors`. New tests should call `dgp_dynamic_factors` directly.
 """
 function make_factor_data(; T::Int=200, N::Int=20, r::Int=3,
                            noise::Float64=0.5, seed::Int=42)
-    rng = Random.MersenneTwister(seed)
-    F_true = randn(rng, T, r)
-    Lambda_true = randn(rng, N, r)
-    E = randn(rng, T, N)
-    X = F_true * Lambda_true' + noise * E
-    (X=X, F_true=F_true, Lambda_true=Lambda_true)
+    A = Matrix{Float64}(0.7 * I, r, r)
+    d = dgp_dynamic_factors(Random.MersenneTwister(seed); A=A, r=r, N=N, T=T,
+                            idio_sd=noise, signal_share=1.0 / (1.0 + noise^2))
+    (X=d.X, F_true=d.F, Lambda_true=d.Lambda, A=d.A[1])
 end
 
 # =============================================================================
@@ -128,37 +134,23 @@ end
 """
     simulate_arch1(; n=1000, omega=0.1, alpha1=0.3, mu=0.0, seed=42) -> Vector{Float64}
 
-Simulate ARCH(1) process.
+Legacy shim (DGP-01 #790): ARCH(1) with burn-in via `dgp_garch_family`
+(which also returns the variance path `h` this shim discards).
 """
 function simulate_arch1(; n::Int=1000, omega::Float64=0.1, alpha1::Float64=0.3,
                          mu::Float64=0.0, seed::Int=42)
-    rng = Random.MersenneTwister(seed)
-    y = zeros(n)
-    h = zeros(n)
-    h[1] = omega / (1 - alpha1)
-    y[1] = mu + sqrt(h[1]) * randn(rng)
-    for t in 2:n
-        h[t] = omega + alpha1 * (y[t-1] - mu)^2
-        y[t] = mu + sqrt(h[t]) * randn(rng)
-    end
-    y
+    dgp_garch_family(Random.MersenneTwister(seed); kind=:arch, omega=omega,
+                     alpha=alpha1, beta=0.0, mu=mu, T=n).y
 end
 
 """
     simulate_garch11(; n=1000, omega=0.01, alpha1=0.05, beta1=0.90, mu=0.0, seed=42) -> Vector{Float64}
 
-Simulate GARCH(1,1) process.
+Legacy shim (DGP-01 #790): GARCH(1,1) with burn-in via `dgp_garch_family`
+(which also returns the variance path `h` this shim discards).
 """
 function simulate_garch11(; n::Int=1000, omega::Float64=0.01, alpha1::Float64=0.05,
                            beta1::Float64=0.90, mu::Float64=0.0, seed::Int=42)
-    rng = Random.MersenneTwister(seed)
-    y = zeros(n)
-    h = zeros(n)
-    h[1] = omega / (1 - alpha1 - beta1)
-    y[1] = mu + sqrt(h[1]) * randn(rng)
-    for t in 2:n
-        h[t] = omega + alpha1 * (y[t-1] - mu)^2 + beta1 * h[t-1]
-        y[t] = mu + sqrt(h[t]) * randn(rng)
-    end
-    y
+    dgp_garch_family(Random.MersenneTwister(seed); kind=:garch, omega=omega,
+                     alpha=alpha1, beta=beta1, mu=mu, T=n).y
 end

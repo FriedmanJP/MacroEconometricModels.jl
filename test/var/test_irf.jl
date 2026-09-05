@@ -14,26 +14,14 @@ if !@isdefined(FAST)
     const FAST = get(ENV, "MACRO_FAST_TESTS", "") == "1"
 end
 
-Random.seed!(42)
-
 @testset "IRF Tests with Theoretical Verification" begin
+    # Non-diagonal A + non-identity B0 (DGP-02 #791): shock ordering matters,
+    # so a transposed B0 or wrong rotation fails this testset.
+    rng = MersenneTwister(7401)  # DGP-02: explicit rng
     _tprint("Generating Data for IRF Verification...")
-    # 1. Setup Data with Known DGP
-    # VAR(1): Y_t = A Y_{t-1} + u_t, u_t ~ N(0, I)
-    # A = 0.5 * I
-    T = 500
-    n = 2
-    p = 1
-    true_A = [0.5 0.0; 0.0 0.5]
-    true_c = [0.0; 0.0]
-    Sigma_true = [1.0 0.0; 0.0 1.0] # Identity
-    L_true = [1.0 0.0; 0.0 1.0]      # Cholesky of Identity is Identity
-
-    Y = zeros(T, n)
-    for t in 2:T
-        u = randn(2)
-        Y[t, :] = true_c + true_A * Y[t-1, :] + u
-    end
+    d = dgp_var(rng; A=[0.5 0.1; 0.0 0.4], B0=[1.0 0.0; 0.3 1.0], T=2000)
+    Y, p = d.Y, 1
+    truth_irf = var_irf(d.A, d.B0, 5)
 
     model = estimate_var(Y, p)
     _tprint("Frequentist Estimation Done.")
@@ -42,24 +30,9 @@ Random.seed!(42)
     _tprint("Testing Frequentist IRF (Cholesky)...")
     irf_freq = irf(model, 6; method=:cholesky) # Horizon 6 (lags 0 to 5)
 
-    # Theoretical IRF: Phi_h * P
-    # P = L_true = I
-    # Phi_h = A^h
-    # Since A is diagonal 0.5:
-    # IRF at h (lag h-1) = 0.5^(h-1) * I
-
+    # T = 2000: OLS se ≈ 0.02; atol 0.1 keeps 5x margin.
     for h in 1:6
-        lag = h - 1
-        theoretical_impact = (0.5^lag) * I(2)
-        estimated_impact = irf_freq.values[h, :, :]
-
-        # Check diagonal elements
-        @test isapprox(estimated_impact[1, 1], theoretical_impact[1, 1], atol=0.1)
-        @test isapprox(estimated_impact[2, 2], theoretical_impact[2, 2], atol=0.1)
-
-        # Check off-diagonal (should be close to 0)
-        @test abs(estimated_impact[1, 2]) < 0.1
-        @test abs(estimated_impact[2, 1]) < 0.1
+        @test irf_freq.values[h, :, :] ≈ truth_irf[h, :, :] atol=0.1
     end
 
     # 3. Frequentist IRF (Sign) - Basic check logic remains
@@ -82,13 +55,11 @@ Random.seed!(42)
 
         # Check Mean IRF against Theoretical
         for h in 1:6
-            lag = h - 1
-            theoretical_impact = (0.5^lag) * I(2)
             bayes_mean = irf_bayes.point_estimate[h, :, :]
 
             # Allow larger tolerance for smaller chain
-            @test isapprox(bayes_mean[1, 1], theoretical_impact[1, 1], atol=0.3)
-            @test isapprox(bayes_mean[2, 2], theoretical_impact[2, 2], atol=0.3)
+            @test isapprox(bayes_mean[1, 1], truth_irf[h, 1, 1], atol=0.3)
+            @test isapprox(bayes_mean[2, 2], truth_irf[h, 2, 2], atol=0.3)
         end
 
     catch e
@@ -99,12 +70,24 @@ Random.seed!(42)
     end
 end
 
+@testset "IRF closed-form corner (A = 0.5I, Sigma = I)" begin
+    # Kept as the analytic corner: IRF at lag h-1 is exactly 0.5^(h-1)·I.
+    rng = MersenneTwister(7402)  # DGP-02: explicit rng
+    d = dgp_var(rng; A=Matrix{Float64}(0.5 * I, 2, 2), B0=Matrix{Float64}(I, 2, 2),
+                T=2000)
+    model = estimate_var(d.Y, 1)
+    irf_c = irf(model, 6; method=:cholesky)
+    for h in 1:6
+        @test irf_c.values[h, :, :] ≈ (0.5^(h - 1)) * I(2) atol=0.1
+    end
+end
+
 # =============================================================================
 # Cumulative IRF (Issue #15 + #31 fix: cumulate draws before quantile extraction)
 # =============================================================================
 @testset "Cumulative IRF" begin
-    Random.seed!(42)
-    Y = randn(200, 3)
+    rng = MersenneTwister(42)  # DGP-02: explicit rng
+    Y = randn(rng, 200, 3)
     model = estimate_var(Y, 2)
     H = 20
 
@@ -126,7 +109,7 @@ end
     end
 
     @testset "VAR cumulative IRF - bootstrap CI (Issue #31)" begin
-        Random.seed!(12345)
+        rng = MersenneTwister(12345)  # DGP-02: explicit rng
         irf_boot = irf(model, H; ci_type=:bootstrap, reps=200, conf_level=0.90)
 
         # Raw draws should be stored
@@ -186,12 +169,12 @@ end
 # compute_irf exported (Issue #20)
 # =============================================================================
 @testset "Bootstrap is uncorrected residual bootstrap (T060)" begin
-    Random.seed!(606)
+    rng = MersenneTwister(606)  # DGP-02: explicit rng
     Tn, n, p = 200, 2, 1
     A = [0.5 0.1; 0.0 0.4]
     Y = zeros(Tn, n)
     for t in 2:Tn
-        Y[t, :] = A * Y[t-1, :] + randn(n)
+        Y[t, :] = A * Y[t-1, :] + randn(rng, n)
     end
     model = estimate_var(Y, p)
     H = 6
@@ -214,11 +197,11 @@ end
 @testset "compute_irf buffer rewrite equivalence (T063)" begin
     # The preallocated-buffer/mul! rewrite must reproduce the analytic VAR(1) IRF
     # IRF[h] = A₁^(h-1)·P exactly (behavior-preserving).
-    Random.seed!(63)
+    rng = MersenneTwister(63)  # DGP-02: explicit rng
     A1 = [0.5 0.1; 0.0 0.4]
     Y = zeros(200, 2)
     for t in 2:200
-        Y[t, :] = A1 * Y[t-1, :] + randn(2)
+        Y[t, :] = A1 * Y[t-1, :] + randn(rng, 2)
     end
     model = estimate_var(Y, 1)
     Q = Matrix{Float64}(I, 2, 2)
@@ -232,7 +215,7 @@ end
 
 @testset "Core numerics batch (T062: C-14/C-16/C-18)" begin
     # C-14: generate_Q never zeroes a rotation column (explicit ±1 map, not sign(0)=0)
-    Random.seed!(614)
+    rng = MersenneTwister(614)  # DGP-02: explicit rng
     Q4 = MacroEconometricModels.generate_Q(4)
     @test Q4' * Q4 ≈ I(4) atol = 1e-10
     @test rank(Q4) == 4
@@ -243,10 +226,10 @@ end
 
     # C-16: triangular solves reproduce the inverse-based results exactly, and the
     #       long-run rotation stays orthonormal (L⁻¹(I−ΣA)D · (...)' = I).
-    Random.seed!(615)
+    rng = MersenneTwister(615)  # DGP-02: explicit rng
     Y = zeros(200, 3)
     for t in 2:200
-        Y[t, :] = 0.4 * Y[t-1, :] + randn(3)
+        Y[t, :] = 0.4 * Y[t-1, :] + randn(rng, 3)
     end
     model = estimate_var(Y, 1)
     Q = MacroEconometricModels.generate_Q(3)
@@ -262,8 +245,8 @@ end
 end
 
 @testset "compute_irf exported" begin
-    Random.seed!(42)
-    Y = randn(200, 3)
+    rng = MersenneTwister(42)  # DGP-02: explicit rng
+    Y = randn(rng, 200, 3)
     model = estimate_var(Y, 2)
     n = 3
 
@@ -277,23 +260,26 @@ end
 # Sign Identified Set (Issue #21)
 # =============================================================================
 @testset "Sign Identified Set" begin
-    Random.seed!(42)
-    Y = randn(200, 3)
+    # Structured DGP (DGP-02 #791): the restriction holds at the truth
+    # (B0[1,1] = 1 > 0.5) but a random rotation violates it, so the
+    # acceptance rate is strictly interior — the old check_all=true tautology
+    # (n_accepted == 50 by construction) is gone.
+    rng = MersenneTwister(42)  # DGP-02: explicit rng
+    d = dgp_var(rng; T=500)
+    Y = d.Y
     model = estimate_var(Y, 2)
     n = 3
     H = 10
 
-    # Accept-all check function for testing
-    check_all(irf_result) = true
+    check_some(irf_result) = irf_result[1, 1, 1] > 0.5
 
-    result = identify_sign(model, H, check_all; max_draws=50, store_all=true)
+    result = identify_sign(model, H, check_some; max_draws=50, store_all=true, rng=rng)
 
     @test result isa SignIdentifiedSet
-    @test result.n_accepted == 50
-    @test result.n_total == 50
-    @test result.acceptance_rate ≈ 1.0
-    @test length(result.Q_draws) == 50
-    @test size(result.irf_draws) == (50, H, n, n)
+    @test 0 < result.n_accepted < result.n_total
+    @test 0.0 < result.acceptance_rate < 1.0
+    @test length(result.Q_draws) == result.n_accepted
+    @test size(result.irf_draws) == (result.n_accepted, H, n, n)
 
     # irf_bounds
     lower, upper = irf_bounds(result)
@@ -311,16 +297,16 @@ end
     show(io, result)
     output = String(take!(io))
     @test occursin("Sign-Identified Set", output)
-    @test occursin("50", output)
+    @test occursin(string(result.n_accepted), output)
 end
 
 @testset "irf bootstrap CI is reproducible + thread-invariant (C-02/#243)" begin
     mkrng() = Random.MersenneTwister(7)
-    Random.seed!(123)
+    rng = MersenneTwister(123)  # DGP-02: explicit rng
     Y = zeros(120, 2)
     for t in 2:120
-        Y[t, 1] = 0.5Y[t-1, 1] + 0.1Y[t-1, 2] + randn()
-        Y[t, 2] = -0.2Y[t-1, 1] + 0.4Y[t-1, 2] + randn()
+        Y[t, 1] = 0.5Y[t-1, 1] + 0.1Y[t-1, 2] + randn(rng, )
+        Y[t, 2] = -0.2Y[t-1, 1] + 0.4Y[t-1, 2] + randn(rng, )
     end
     model = estimate_var(Y, 2)
     # Same seed -> bitwise-identical CI bands. The rejection loops now seed each iteration by
@@ -352,8 +338,8 @@ end
 end
 
 @testset "SID-06 theoretical CI vs residual-based ID" begin
-    Random.seed!(735)
-    m = estimate_var(randn(120, 2), 1)
+    rng = MersenneTwister(735)  # DGP-02: explicit rng
+    m = estimate_var(randn(rng, 120, 2), 1)
     chk(irf) = irf[1, 1, 1] > 0
     @test_throws ArgumentError irf(m, 5; method=:fastica, ci_type=:theoretical)
     @test_throws ArgumentError irf(m, 5; method=:student_t, ci_type=:theoretical)
@@ -365,21 +351,21 @@ end
 end
 
 @testset "SID-08 long-run on cointegrated systems" begin
-    Random.seed!(737)
+    rng = MersenneTwister(737)  # DGP-02: explicit rng
     Tlen, n = 200, 2
-    trend = cumsum(randn(Tlen))
-    Yc = [trend .+ 0.3 .* randn(Tlen)  trend .+ 0.3 .* randn(Tlen)]
+    trend = cumsum(randn(rng, Tlen))
+    Yc = [trend .+ 0.3 .* randn(rng, Tlen)  trend .+ 0.3 .* randn(rng, Tlen)]
     vecm = estimate_vecm(Yc, 2; rank=1)
     @test_throws IdentificationError identify_long_run(to_var(vecm))
-    Ys = randn(200, 2)
+    Ys = randn(rng, 200, 2)
     ms = estimate_var(Ys, 1)
     Q = identify_long_run(ms)
     @test norm(Q' * Q - I(2)) < 1e-8
 end
 
 @testset "SID-05 set-aware sign IRFs" begin
-    Random.seed!(734)
-    m = estimate_var(randn(150, 2), 1)
+    rng = MersenneTwister(734)  # DGP-02: explicit rng
+    m = estimate_var(randn(rng, 150, 2), 1)
     chk(irf) = irf[1, 1, 1] > 0
     rng = MersenneTwister(1)
     s = identify_sign(m, 5, chk; store_all=true, rng=MersenneTwister(1), max_draws=200)
@@ -393,8 +379,8 @@ end
 end
 
 @testset "SID-05 identify_narrative store_all" begin
-    Random.seed!(734)
-    m = estimate_var(randn(150, 2), 1)
+    rng = MersenneTwister(734)  # DGP-02: explicit rng
+    m = estimate_var(randn(rng, 150, 2), 1)
     chk(irf) = irf[1, 1, 1] > 0
     s = identify_narrative(m, 5, chk, _ -> true; store_all=true, max_draws=80, rng=MersenneTwister(3))
     @test s isa SignIdentifiedSet
@@ -406,8 +392,8 @@ end
 end
 
 @testset "SID-19 one identification API" begin
-    Random.seed!(748)
-    m = estimate_var(randn(80, 2), 1)
+    rng = MersenneTwister(748)  # DGP-02: explicit rng
+    m = estimate_var(randn(rng, 80, 2), 1)
     n = nvars(m)
     @test identify_cholesky(m) ≈ Matrix{Float64}(I, n, n)
     L = cholesky_factor(m)
@@ -464,7 +450,7 @@ end
     @test ru.values[1, 1, 1] > 0
 
     # Same-count quantile levels must be recomputed, not reused from stored 16/50/84.
-    post = estimate_bvar(randn(80, 2), 1; n_draws=FAST ? 16 : 30, burnin=5)
+    post = estimate_bvar(randn(rng, 80, 2), 1; n_draws=FAST ? 16 : 30, burnin=5)
     ar = identify_arias_bayesian(post, r, 4; n_rotations=FAST ? 20 : 40,
                                  rng=MersenneTwister(748))
     ir_def = irf(ar)
@@ -478,8 +464,8 @@ end
 # SID-17 (#746): Fry–Pagan / Inoue–Kilian set-ID summaries
 # =============================================================================
 @testset "SID-17 set-ID summaries" begin
-    Random.seed!(746)
-    m = estimate_var(randn(120, 2), 1)
+    rng = MersenneTwister(746)  # DGP-02: explicit rng
+    m = estimate_var(randn(rng, 120, 2), 1)
     chk(irf) = irf[1, 1, 1] > 0
     s = identify_sign(m, 6, chk; store_all=true, max_draws=80, rng=MersenneTwister(746))
 
@@ -644,13 +630,13 @@ end
 end
 
 @testset "SID-20 unit-effect IRF and structural_shocks(model, Q)" begin
-    Random.seed!(749)
+    rng = MersenneTwister(749)  # DGP-02: explicit rng
     Tobs = FAST ? 250 : 400
     n = 3
     Y = zeros(Tobs, n)
     A = 0.4 * Matrix{Float64}(I, n, n)
     for t in 2:Tobs
-        Y[t, :] = A * Y[t-1, :] + randn(n)
+        Y[t, :] = A * Y[t-1, :] + randn(rng, n)
     end
     m = estimate_var(Y, 1; varnames=["GDP", "CPI", "FEDFUNDS"])
     k = findfirst(==("FEDFUNDS"), m.varnames)

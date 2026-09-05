@@ -12,24 +12,18 @@ using DataFrames
 using Random
 
 @testset "Core VAR & Identification" begin
-    # Use fixed seed for reproducibility
-    Random.seed!(12345)
+    # Non-diagonal A + non-identity B0 (DGP-02 #791): identification schemes
+    # face genuine dynamics and shock correlation. (The BQ triangularity
+    # check below holds by estimator construction on any data.)
+    rng = MersenneTwister(12345)  # DGP-02: explicit rng
 
     # 1. Generate Synthetic Data
     T = 200
     n = 2
     p = 1
 
-    true_A = [0.5 0.0; 0.0 0.5] # Diagonal AR
-    true_c = [0.0; 0.0]
-    Sigma_true = [1.0 0.0; 0.0 1.0] # Identity
-
-    Y = zeros(T, n)
-    # Generate data
-    for t in 2:T
-        u = randn(2)
-        Y[t, :] = true_c + true_A * Y[t-1, :] + u
-    end
+    d = dgp_var(rng; A=[0.5 0.1; 0.0 0.4], B0=[1.0 0.0; 0.3 1.0], T=T)
+    Y = d.Y
 
     # 2. Estimate
     model = estimate_var(Y, p)
@@ -105,9 +99,9 @@ using Random
         Sigma_true = [1.0 0.0; 0.0 1.0]
 
         # Simulation
-        Random.seed!(42) # Ensure reproducibility
+        rng = MersenneTwister(42) # Ensure reproducibility (DGP-02: explicit rng)
         for t in p+1:T_large
-            u = randn(n)
+            u = randn(rng, n)
             # Y_t = A1 * Y_{t-1} + A12 * Y_{t-12} + u
             Y[t, :] = A1 * Y[t-1, :] + A12 * Y[t-12, :] + u
         end
@@ -145,17 +139,17 @@ using Random
 
     @testset "Reproducibility" begin
         # Same seed should produce identical results
-        Random.seed!(99999)
+        rng = MersenneTwister(99999)  # DGP-02: explicit rng
         Y1 = zeros(100, 2)
         for t in 2:100
-            Y1[t, :] = 0.5 * Y1[t-1, :] + randn(2)
+            Y1[t, :] = 0.5 * Y1[t-1, :] + randn(rng, 2)
         end
         model1 = estimate_var(Y1, 1)
 
-        Random.seed!(99999)
+        rng = MersenneTwister(99999)  # DGP-02: explicit rng
         Y2 = zeros(100, 2)
         for t in 2:100
-            Y2[t, :] = 0.5 * Y2[t-1, :] + randn(2)
+            Y2[t, :] = 0.5 * Y2[t-1, :] + randn(rng, 2)
         end
         model2 = estimate_var(Y2, 1)
 
@@ -166,7 +160,7 @@ using Random
 
     @testset "Stability Check" begin
         # VAR should detect stable vs unstable systems
-        Random.seed!(11111)
+        rng = MersenneTwister(11111)  # DGP-02: explicit rng
         T_stab = 200
         n_stab = 2
         p_stab = 1
@@ -175,7 +169,7 @@ using Random
         Y_stable = zeros(T_stab, n_stab)
         A_stable = [0.3 0.1; 0.1 0.3]  # All eigenvalues < 1
         for t in 2:T_stab
-            Y_stable[t, :] = A_stable * Y_stable[t-1, :] + randn(n_stab)
+            Y_stable[t, :] = A_stable * Y_stable[t-1, :] + randn(rng, n_stab)
         end
         model_stable = estimate_var(Y_stable, p_stab)
 
@@ -186,13 +180,13 @@ using Random
     end
 
     @testset "Numerical Stability - Near-Collinear Data" begin
-        Random.seed!(22222)
+        rng = MersenneTwister(22222)  # DGP-02: explicit rng
         T_nc = 200
         n_nc = 3
 
         # Create data with near-collinearity
-        Y_nc = randn(T_nc, n_nc)
-        Y_nc[:, 3] = Y_nc[:, 1] + 0.01 * randn(T_nc)  # Variable 3 ≈ Variable 1
+        Y_nc = randn(rng, T_nc, n_nc)
+        Y_nc[:, 3] = Y_nc[:, 1] + 0.01 * randn(rng, T_nc)  # Variable 3 ≈ Variable 1
 
         # Should not crash with near-singular covariance
         model_nc = estimate_var(Y_nc, 1)
@@ -202,10 +196,10 @@ using Random
     end
 
     @testset "Edge Cases" begin
-        Random.seed!(33333)
+        rng = MersenneTwister(33333)  # DGP-02: explicit rng
 
         # Single variable VAR
-        Y_single = randn(100, 1)
+        Y_single = randn(rng, 100, 1)
         model_single = estimate_var(Y_single, 1)
         @test size(model_single.B) == (2, 1)  # intercept + 1 lag
         @test size(model_single.Sigma) == (1, 1)
@@ -214,21 +208,21 @@ using Random
         n_min = 2
         p_min = 2
         T_min = p_min * n_min + 10  # Bare minimum observations
-        Y_min = randn(T_min, n_min)
+        Y_min = randn(rng, T_min, n_min)
         model_min = estimate_var(Y_min, p_min)
         @test model_min isa VARModel
 
         # VAR(1) - simplest case
-        Y_var1 = randn(50, 2)
+        Y_var1 = randn(rng, 50, 2)
         model_var1 = estimate_var(Y_var1, 1)
         @test model_var1.p == 1
     end
 
     @testset "Orthogonality of Q Matrices" begin
-        Random.seed!(44444)
+        rng = MersenneTwister(44444)  # DGP-02: explicit rng
         T_q = 150
         n_q = 3
-        Y_q = randn(T_q, n_q)
+        Y_q = randn(rng, T_q, n_q)
         model_q = estimate_var(Y_q, 1)
 
         # Cholesky Q should be identity (orthogonal)
@@ -248,8 +242,8 @@ using Random
     end
 
     @testset "Input Validation" begin
-        Random.seed!(55555)
-        Y_val = randn(100, 2)
+        rng = MersenneTwister(55555)  # DGP-02: explicit rng
+        Y_val = randn(rng, 100, 2)
 
         # p = 0 should error or be handled
         @test_throws Exception estimate_var(Y_val, 0)
@@ -268,7 +262,7 @@ using Random
     # =================================================================
 
     @testset "generate_Q properties" begin
-        Random.seed!(60000)
+        rng = MersenneTwister(60000)  # DGP-02: explicit rng
 
         for n in [2, 3, 5]
             Q = MacroEconometricModels.generate_Q(n)
@@ -294,8 +288,8 @@ using Random
     end
 
     @testset "compute_structural_shocks" begin
-        Random.seed!(61000)
-        Y = randn(200, 3)
+        rng = MersenneTwister(61000)  # DGP-02: explicit rng
+        Y = randn(rng, 200, 3)
         model = estimate_var(Y, 2)
         n = 3
 
@@ -324,8 +318,8 @@ using Random
     end
 
     @testset "compute_irf" begin
-        Random.seed!(62000)
-        Y = randn(200, 2)
+        rng = MersenneTwister(62000)  # DGP-02: explicit rng
+        Y = randn(rng, 200, 2)
         model = estimate_var(Y, 1)
         n = 2
         horizon = 10
@@ -347,8 +341,8 @@ using Random
     end
 
     @testset "compute_Q dispatcher" begin
-        Random.seed!(63000)
-        Y = randn(200, 2)
+        rng = MersenneTwister(63000)  # DGP-02: explicit rng
+        Y = randn(rng, 200, 2)
         model = estimate_var(Y, 1)
         n = 2
 
@@ -376,8 +370,8 @@ using Random
     end
 
     @testset "identify_cholesky" begin
-        Random.seed!(64000)
-        Y = randn(200, 3)
+        rng = MersenneTwister(64000)  # DGP-02: explicit rng
+        Y = randn(rng, 200, 3)
         model = estimate_var(Y, 1)
 
         Q = identify_cholesky(model)
@@ -393,8 +387,8 @@ using Random
     end
 
     @testset "identify_sign multiple draws" begin
-        Random.seed!(65000)
-        Y = randn(200, 2)
+        rng = MersenneTwister(65000)  # DGP-02: explicit rng
+        Y = randn(rng, 200, 2)
         model = estimate_var(Y, 1)
 
         # Multiple draws should all satisfy constraint
@@ -407,8 +401,8 @@ using Random
     end
 
     @testset "identify_long_run" begin
-        Random.seed!(66000)
-        Y = randn(200, 2)
+        rng = MersenneTwister(66000)  # DGP-02: explicit rng
+        Y = randn(rng, 200, 2)
         model = estimate_var(Y, 1)
 
         Q = identify_long_run(model)
@@ -427,8 +421,8 @@ using Random
     end
 
     @testset "irf_percentiles and irf_mean" begin
-        Random.seed!(67000)
-        Y = randn(200, 2)
+        rng = MersenneTwister(67000)  # DGP-02: explicit rng
+        Y = randn(rng, 200, 2)
         model = estimate_var(Y, 1)
         n = 2
         horizon = 8
@@ -438,9 +432,8 @@ using Random
             signs=[sign_restriction(1, 1, :positive; horizon=0)]
         )
 
-        try
-            result = MacroEconometricModels.identify_arias(model, restrictions, horizon;
-                n_draws=50, n_rotations=500)
+        result = MacroEconometricModels.identify_arias(model, restrictions, horizon;
+            n_draws=50, n_rotations=500)
 
             # irf_percentiles
             pct = MacroEconometricModels.irf_percentiles(result; quantiles=[0.16, 0.5, 0.84])
@@ -456,19 +449,14 @@ using Random
             mean_irf = MacroEconometricModels.irf_mean(result)
             @test size(mean_irf) == (horizon, n, n)
             @test !any(isnan, mean_irf)
-
-        catch e
-            @warn "Arias identification test failed (may need more draws)" exception=e
-            @test_skip "Arias identification skipped"
-        end
     end
 
     # =================================================================
     # VARModel Variable Names (Issue #17)
     # =================================================================
     @testset "VARModel Variable Names" begin
-        Random.seed!(42)
-        Y = randn(100, 3)
+        rng = MersenneTwister(42)  # DGP-02: explicit rng
+        Y = randn(rng, 100, 3)
 
         # Default variable names
         m1 = estimate_var(Y, 2)
@@ -659,10 +647,10 @@ end
     @testset "diagonal Sigma ⇒ gFEVD coincides with Cholesky" begin
         # With uncorrelated reduced-form errors there is nothing to orthogonalize, so the
         # generalized and recursive decompositions agree (up to the sample correlation).
-        rng2 = Random.MersenneTwister(3); n2 = 4000
+        rng = Random.MersenneTwister(3); n2 = 4000
         Y2 = zeros(n2, 2); A2 = [0.5 0.0; 0.0 0.4]
         for t in 2:n2
-            Y2[t, :] = A2 * Y2[t-1, :] + randn(rng2, 2)
+            Y2[t, :] = A2 * Y2[t-1, :] + randn(rng, 2)
         end
         m2 = estimate_var(Y2, 1)
         @test abs(m2.Sigma[1, 2] / sqrt(m2.Sigma[1, 1] * m2.Sigma[2, 2])) < 0.05
@@ -674,10 +662,10 @@ end
     end
 
     @testset "Bayesian generalized FEVD" begin
-        rng3 = Random.MersenneTwister(5); n3 = 300
+        rng = Random.MersenneTwister(5); n3 = 300
         A3 = [0.4 0.1; 0.1 0.35]; Y3 = zeros(n3, 2)
         for t in 2:n3
-            Y3[t, :] = A3 * Y3[t-1, :] + [1.0 0.0; 0.5 1.0] * randn(rng3, 2)
+            Y3[t, :] = A3 * Y3[t-1, :] + [1.0 0.0; 0.5 1.0] * randn(rng, 2)
         end
         post = estimate_bvar(Y3, 2; n_draws=150)
         g = generalized_fevd(post, 8)
@@ -732,9 +720,10 @@ end
 
         # BLOCK keeps serial dependence that i.i.d. resampling destroys.
         ar = zeros(600)
-        rng2 = Random.MersenneTwister(21)
-        for t in 2:600
-            ar[t] = 0.9 * ar[t-1] + randn(rng2)
+        let rng = Random.MersenneTwister(21)
+            for t in 2:600
+                ar[t] = 0.9 * ar[t-1] + randn(rng)
+            end
         end
         Ua = reshape(ar, :, 1)
         ac(x) = cor(x[2:end], x[1:end-1])
@@ -838,8 +827,8 @@ end
     end
 
     @testset "SID-17 SignIdentifiedSet fields and irf_percentiles" begin
-        Random.seed!(7462)
-        model = estimate_var(randn(80, 2), 1)
+        rng = MersenneTwister(7462)  # DGP-02: explicit rng
+        model = estimate_var(randn(rng, 80, 2), 1)
         s = identify_sign(model, 4, ir -> ir[1, 1, 1] > 0; store_all=true,
                           max_draws=40, rng=MersenneTwister(7462))
         @test length(s.weights) == s.n_accepted

@@ -11,7 +11,7 @@ using Statistics
 using Random
 
 @testset "Utility Functions" begin
-    Random.seed!(12345)
+    rng = MersenneTwister(12345)  # DGP-02: explicit rng
 
     # ==========================================================================
     # Input Validation Tests
@@ -131,7 +131,7 @@ using Random
 
         # Nearly positive semi-definite (needs jitter)
         eigenvals = [1.0, 1e-14]  # One very small eigenvalue
-        Q = qr(randn(2, 2)).Q
+        Q = qr(randn(rng, 2, 2)).Q
         A_npsd = Q * Diagonal(eigenvals) * Q'
         A_npsd = (A_npsd + A_npsd') / 2  # Ensure symmetric
         L_npsd = MacroEconometricModels.safe_cholesky(A_npsd)
@@ -198,7 +198,7 @@ using Random
         T_obs = 100
         n = 3
         p = 2
-        Y = randn(T_obs, n)
+        Y = randn(rng, T_obs, n)
 
         Y_eff, X = MacroEconometricModels.construct_var_matrices(Y, p)
 
@@ -219,7 +219,7 @@ using Random
         end
 
         # Test with non-Float64 input
-        Y_int = rand(1:10, 50, 2)
+        Y_int = rand(rng, 1:10, 50, 2)
         Y_eff_int, X_int = MacroEconometricModels.construct_var_matrices(Y_int, 1)
         @test eltype(Y_eff_int) == Float64
         @test eltype(X_int) == Float64
@@ -231,8 +231,14 @@ using Random
     @testset "AR Coefficient Extraction" begin
         n = 2
         p = 3
-        # B matrix: (1 + n*p) x n = 7 x 2
-        B = randn(1 + n*p, n)
+        # B matrix: (1 + n*p) x n = 7 x 2, rows = [intercept; A1'; A2'; A3'].
+        # DGP-02 #791: build B from KNOWN blocks — extraction must recover them
+        # exactly (it is pure slicing; transposed blocks or reversed lag order
+        # fail here, while the old shape-only pins passed them).
+        A1 = [0.5 0.1; -0.2 0.4]
+        A2 = [0.1 0.0; 0.05 -0.1]
+        A3 = [0.0 0.05; 0.0 0.0]
+        B = vcat([0.1 0.2], A1', A2', A3')
 
         A_coeffs = MacroEconometricModels.extract_ar_coefficients(B, n, p)
 
@@ -240,6 +246,9 @@ using Random
         for i in 1:p
             @test size(A_coeffs[i]) == (n, n)
         end
+        @test A_coeffs[1] == A1
+        @test A_coeffs[2] == A2
+        @test A_coeffs[3] == A3
     end
 
     @testset "Companion Matrix Construction" begin
@@ -278,10 +287,7 @@ using Random
         T_ar = 500
         rho = 0.7
         sigma = 1.0
-        y = zeros(T_ar)
-        for t in 2:T_ar
-            y[t] = rho * y[t-1] + sigma * randn()
-        end
+        y = dgp_arima(rng; phi=[rho], sigma=sigma, T=T_ar).y  # DGP-02 #791
 
         ar_std = MacroEconometricModels.univariate_ar_variance(y)
         @test ar_std > 0
@@ -316,21 +322,24 @@ using Random
     # ==========================================================================
 
     @testset "Integration with VAR Estimation" begin
-        Random.seed!(54321)
+        rng = MersenneTwister(54321)  # DGP-02: explicit rng
         T_int = 200
         n_int = 2
         p_int = 2
 
-        # Generate VAR data
-        Y_int = zeros(T_int, n_int)
+        # Reference VAR(1) DGP with known A1 (DGP-02 #791)
         A1 = [0.5 0.1; 0.1 0.4]
-        for t in 2:T_int
-            Y_int[t, :] = A1 * Y_int[t-1, :] + randn(n_int)
-        end
+        Y_int = dgp_var(rng; A=A1, B0=[1.0 0.0; 0.3 1.0], T=T_int).Y
 
         # The utilities should work correctly within VAR estimation
         model = estimate_var(Y_int, p_int)
         @test model isa VARModel
+
+        # The estimated A1 block recovers the truth: max coefficient error bound
+        # 0.15 ≈ 2.5× the asymptotic SE ≈ 0.06 at T=200 (realized 0.119); the
+        # lag-2 block is ≈ 0 (bound 0.2 ≈ 3× SE over its 4 coefficients).
+        @test maximum(abs, model.B[2:3, :]' - A1) < 0.15
+        @test maximum(abs, model.B[4:5, :]) < 0.2
 
         # Check that the companion matrix is stable (eigenvalues < 1)
         F = MacroEconometricModels.companion_matrix(model.B, n_int, p_int)
@@ -339,22 +348,22 @@ using Random
     end
 
     @testset "Numerical Stability Edge Cases" begin
-        Random.seed!(99999)
+        rng = MersenneTwister(99999)  # DGP-02: explicit rng
 
         # Very small values
-        Y_small = 1e-10 * randn(100, 2)
+        Y_small = 1e-10 * randn(rng, 100, 2)
         Y_eff, X = MacroEconometricModels.construct_var_matrices(Y_small, 2)
         @test all(isfinite.(Y_eff))
         @test all(isfinite.(X))
 
         # Very large values
-        Y_large = 1e10 * randn(100, 2)
+        Y_large = 1e10 * randn(rng, 100, 2)
         Y_eff_l, X_l = MacroEconometricModels.construct_var_matrices(Y_large, 2)
         @test all(isfinite.(Y_eff_l))
         @test all(isfinite.(X_l))
 
         # Mixed scales
-        Y_mixed = hcat(1e-8 * randn(100), 1e8 * randn(100))
+        Y_mixed = hcat(1e-8 * randn(rng, 100), 1e8 * randn(rng, 100))
         Y_eff_m, X_m = MacroEconometricModels.construct_var_matrices(Y_mixed, 2)
         @test all(isfinite.(Y_eff_m))
         @test all(isfinite.(X_m))
@@ -381,10 +390,10 @@ using Random
         @test_throws ArgumentError MacroEconometricModels._validate_data(y_inf)
 
         # Clean data should pass without error
-        Y_clean = randn(10, 3)
+        Y_clean = randn(rng, 10, 3)
         @test MacroEconometricModels._validate_data(Y_clean) === nothing
 
-        y_clean = randn(10)
+        y_clean = randn(rng, 10)
         @test MacroEconometricModels._validate_data(y_clean) === nothing
     end
 
@@ -406,9 +415,9 @@ using Random
     end
 
     @testset "#758 @float_fallback MethodError instead of StackOverflow" begin
-        Y = randn(50, 2)
+        Y = randn(rng, 50, 2)
         @test_throws MethodError estimate_vecm(Y, 2, 1)
-        Yi = Int.(rand(1:5, 50, 2))
+        Yi = Int.(rand(rng, 1:5, 50, 2))
         m = estimate_var(Yi, 1)
         @test m isa VARModel
         @test eltype(m.Y) === Float64

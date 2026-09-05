@@ -9,7 +9,7 @@ if !@isdefined(_assert_roundtrip)
 end
 
 @testset "RSER-04 FactorForecast serialization (#777)" begin
-    X = randn(MersenneTwister(77701), 60, 8)
+    X = dgp_dynamic_factors(MersenneTwister(77701); N=8, T=60).X
     fm = estimate_factors(X, 2)
     fc = forecast(fm, 4)
     @test _from_serializable_is_generic(FactorForecast)

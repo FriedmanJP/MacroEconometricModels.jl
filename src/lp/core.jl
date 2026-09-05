@@ -629,7 +629,10 @@ function compare_var_lp(Y::AbstractMatrix{T}, horizon::Int; lags::Int=4) where {
     for shock in 1:n
         for (h_idx, h) in enumerate(1:horizon)
             for resp in 1:n
-                lp_values[h_idx, resp, shock] = lp_results[shock].values[h + 1, resp]
+                # DGP-05 (#794): LP values are h = 0…H (horizon + 1 rows) while
+                # the VAR side is h = 0…H−1 — index h_idx, not h + 1, or row k
+                # compares VAR Θ_{k−1} against LP Θ_k (off-by-one horizons).
+                lp_values[h_idx, resp, shock] = lp_results[shock].values[h_idx, resp]
             end
         end
     end

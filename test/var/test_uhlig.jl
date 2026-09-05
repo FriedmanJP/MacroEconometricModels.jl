@@ -30,8 +30,7 @@ end
 
     @testset "Spherical coordinate unit norm" begin
         for m in [2, 3, 4, 5]
-            Random.seed!(42 + m)
-            theta = rand(m - 1) .* 2π
+            theta = rand(MersenneTwister(42 + m), m - 1) .* 2π  # DGP-02: explicit rng
             x = MacroEconometricModels._spherical_to_unit_vector(theta, m)
             @test length(x) == m
             @test isapprox(norm(x), 1.0, atol=1e-12)
@@ -44,9 +43,9 @@ end
 
     @testset "Spherical coordinates cover full space" begin
         # Different angles should produce different unit vectors
-        Random.seed!(100)
+        rng = MersenneTwister(100)  # DGP-02: explicit rng
         m = 3
-        vecs = [MacroEconometricModels._spherical_to_unit_vector(rand(m-1) .* 2π, m) for _ in 1:10]
+        vecs = [MacroEconometricModels._spherical_to_unit_vector(rand(rng, m-1) .* 2π, m) for _ in 1:10]
         # Not all the same
         @test !all(v -> isapprox(v, vecs[1], atol=1e-8), vecs[2:end])
     end
@@ -56,10 +55,10 @@ end
     # ==========================================================================
 
     @testset "Q orthogonality — no zero restrictions" begin
-        Random.seed!(12345)
+        rng = MersenneTwister(12345)  # DGP-02: explicit rng
 
         T_obs, n, p = 200, 3, 1
-        Y = randn(T_obs, n)
+        Y = randn(rng, T_obs, n)
         model = estimate_var(Y, p)
 
         signs = [
@@ -69,7 +68,7 @@ end
         restrictions = SVARRestrictions(n; signs=signs)
 
         result = identify_uhlig(model, restrictions, 10;
-            n_starts=(FAST ? 3 : 10), n_refine=(FAST ? 1 : 2), max_iter_coarse=(FAST ? 50 : 100), max_iter_fine=(FAST ? 100 : 300))
+            n_starts=(FAST ? 3 : 10), n_refine=(FAST ? 1 : 2), max_iter_coarse=(FAST ? 50 : 100), max_iter_fine=(FAST ? 100 : 300), rng=rng)
 
         # Q should be orthogonal
         @test norm(result.Q' * result.Q - I(n)) < 1e-8
@@ -82,10 +81,10 @@ end
     end
 
     @testset "Q orthogonality — with zero restrictions" begin
-        Random.seed!(23456)
+        rng = MersenneTwister(23456)  # DGP-02: explicit rng
 
         T_obs, n, p = 200, 3, 1
-        Y = randn(T_obs, n)
+        Y = randn(rng, T_obs, n)
         model = estimate_var(Y, p)
 
         zeros_r = [zero_restriction(2, 1)]
@@ -93,7 +92,7 @@ end
         restrictions = SVARRestrictions(n; zeros=zeros_r, signs=signs)
 
         result = identify_uhlig(model, restrictions, 10;
-            n_starts=(FAST ? 3 : 10), n_refine=(FAST ? 1 : 2), max_iter_coarse=(FAST ? 50 : 100), max_iter_fine=(FAST ? 100 : 300))
+            n_starts=(FAST ? 3 : 10), n_refine=(FAST ? 1 : 2), max_iter_coarse=(FAST ? 50 : 100), max_iter_fine=(FAST ? 100 : 300), rng=rng)
 
         @test norm(result.Q' * result.Q - I(n)) < 1e-8
         @test norm(result.Q * result.Q' - I(n)) < 1e-8
@@ -104,10 +103,11 @@ end
     # ==========================================================================
 
     @testset "Zero restrictions enforced exactly" begin
-        Random.seed!(34567)
+        rng = MersenneTwister(34567)  # DGP-02: explicit rng
 
+        # Cholesky zeros hold at the truth (lower-triangular B0, DGP-02 #791).
         T_obs, n, p = 200, 3, 1
-        Y = randn(T_obs, n)
+        Y = dgp_var(rng; T=T_obs).Y
         model = estimate_var(Y, p)
 
         zeros_r = [
@@ -118,7 +118,7 @@ end
         restrictions = SVARRestrictions(n; zeros=zeros_r, signs=signs)
 
         result = identify_uhlig(model, restrictions, 10;
-            n_starts=(FAST ? 3 : 10), n_refine=(FAST ? 1 : 2), max_iter_coarse=(FAST ? 50 : 100), max_iter_fine=(FAST ? 100 : 300))
+            n_starts=(FAST ? 3 : 10), n_refine=(FAST ? 1 : 2), max_iter_coarse=(FAST ? 50 : 100), max_iter_fine=(FAST ? 100 : 300), rng=rng)
 
         # Zero restrictions must be satisfied exactly
         @test abs(result.irf[1, 2, 1]) < 1e-8  # Var 2, Shock 1, impact
@@ -126,12 +126,12 @@ end
     end
 
     @testset "Zero restrictions at non-zero horizon" begin
-        Random.seed!(45678)
+        rng = MersenneTwister(45678)  # DGP-02: explicit rng
 
         # Use n=3 to avoid over-constraining (n=2 with 1 zero on shock 2
         # leaves 0 free dimensions for column 2: 2-1-1=0)
         T_obs, n, p = 200, 3, 2
-        Y = randn(T_obs, n)
+        Y = randn(rng, T_obs, n)
         model = estimate_var(Y, p)
 
         # Zero at horizon 1 on shock 1 (which has no orthogonality constraints)
@@ -140,7 +140,7 @@ end
         restrictions = SVARRestrictions(n; zeros=zeros_r, signs=signs)
 
         result = identify_uhlig(model, restrictions, 10;
-            n_starts=(FAST ? 3 : 10), n_refine=(FAST ? 1 : 2), max_iter_coarse=(FAST ? 50 : 100), max_iter_fine=(FAST ? 100 : 300))
+            n_starts=(FAST ? 3 : 10), n_refine=(FAST ? 1 : 2), max_iter_coarse=(FAST ? 50 : 100), max_iter_fine=(FAST ? 100 : 300), rng=rng)
 
         # Zero restriction at h=1 (index 2): var 1, shock 1
         @test abs(result.irf[2, 1, 1]) < 1e-8
@@ -151,13 +151,11 @@ end
     # ==========================================================================
 
     @testset "Pure sign restrictions — convergence" begin
-        Random.seed!(56789)
+        rng = MersenneTwister(56789)  # DGP-02: explicit rng
 
+        # Reference DGP (DGP-02 #791): (1,1)+ and (2,2)+ hold at the truth.
         T_obs, n, p = 200, 3, 1
-        Y = zeros(T_obs, n)
-        for t in 2:T_obs
-            Y[t, :] = 0.5 * Y[t-1, :] + randn(n)
-        end
+        Y = dgp_var(rng; T=T_obs).Y
         model = estimate_var(Y, p)
 
         signs = [
@@ -167,7 +165,7 @@ end
         restrictions = SVARRestrictions(n; signs=signs)
 
         result = identify_uhlig(model, restrictions, 10;
-            n_starts=(FAST ? 3 : 15), n_refine=(FAST ? 1 : 3), max_iter_coarse=(FAST ? 50 : 150), max_iter_fine=(FAST ? 100 : 500))
+            n_starts=(FAST ? 3 : 15), n_refine=(FAST ? 1 : 3), max_iter_coarse=(FAST ? 50 : 150), max_iter_fine=(FAST ? 100 : 500), rng=rng)
 
         @test result isa UhligSVARResult
         @test result.converged == true
@@ -181,10 +179,11 @@ end
     # ==========================================================================
 
     @testset "Mixed zero and sign restrictions" begin
-        Random.seed!(67890)
+        rng = MersenneTwister(67890)  # DGP-02: explicit rng
 
+        # B0[3,2] < 0: the (3,2)-negative restriction holds at the truth (DGP-02 #791).
         T_obs, n, p = 200, 3, 1
-        Y = randn(T_obs, n)
+        Y = dgp_var(rng; B0=[1.0 0.0 0.0; 0.5 1.0 0.0; 0.3 -0.2 1.0], T=T_obs).Y
         model = estimate_var(Y, p)
 
         zeros_r = [zero_restriction(2, 1)]
@@ -195,7 +194,7 @@ end
         restrictions = SVARRestrictions(n; zeros=zeros_r, signs=signs)
 
         result = identify_uhlig(model, restrictions, 10;
-            n_starts=(FAST ? 3 : 10), n_refine=(FAST ? 1 : 2), max_iter_coarse=(FAST ? 50 : 100), max_iter_fine=(FAST ? 100 : 300))
+            n_starts=(FAST ? 3 : 10), n_refine=(FAST ? 1 : 2), max_iter_coarse=(FAST ? 50 : 100), max_iter_fine=(FAST ? 100 : 300), rng=rng)
 
         # Zero restriction must hold
         @test abs(result.irf[1, 2, 1]) < 1e-8
@@ -212,10 +211,10 @@ end
     # ==========================================================================
 
     @testset "Full Cholesky zeros ≈ Cholesky identification" begin
-        Random.seed!(78901)
+        rng = MersenneTwister(78901)  # DGP-02: explicit rng
 
         T_obs, n, p = 200, 3, 1
-        Y = randn(T_obs, n)
+        Y = randn(rng, T_obs, n)
         model = estimate_var(Y, p)
 
         # Full lower-triangular zero restrictions
@@ -229,7 +228,7 @@ end
         restrictions = SVARRestrictions(n; zeros=zeros_r, signs=signs)
 
         result = identify_uhlig(model, restrictions, 10;
-            n_starts=(FAST ? 3 : 10), n_refine=(FAST ? 1 : 2), max_iter_coarse=(FAST ? 50 : 100), max_iter_fine=(FAST ? 100 : 300))
+            n_starts=(FAST ? 3 : 10), n_refine=(FAST ? 1 : 2), max_iter_coarse=(FAST ? 50 : 100), max_iter_fine=(FAST ? 100 : 300), rng=rng)
 
         # Cholesky IRF for comparison
         Q_chol = Matrix{Float64}(I, n, n)
@@ -251,10 +250,11 @@ end
     # ==========================================================================
 
     @testset "Uhlig Q satisfies same restrictions as Arias" begin
-        Random.seed!(89012)
+        rng = MersenneTwister(89012)  # DGP-02: explicit rng
 
+        # Reference DGP (DGP-02 #791).
         T_obs, n, p = 200, 3, 1
-        Y = randn(T_obs, n)
+        Y = dgp_var(rng; T=T_obs).Y
         model = estimate_var(Y, p)
 
         zeros_r = [zero_restriction(3, 1)]
@@ -262,7 +262,7 @@ end
         restrictions = SVARRestrictions(n; zeros=zeros_r, signs=signs)
 
         result = identify_uhlig(model, restrictions, 10;
-            n_starts=(FAST ? 3 : 15), n_refine=(FAST ? 1 : 3), max_iter_coarse=(FAST ? 50 : 150), max_iter_fine=(FAST ? 100 : 500))
+            n_starts=(FAST ? 3 : 15), n_refine=(FAST ? 1 : 3), max_iter_coarse=(FAST ? 50 : 150), max_iter_fine=(FAST ? 100 : 500), rng=rng)
 
         if result.converged
             # Verify zero restriction
@@ -277,17 +277,17 @@ end
     # ==========================================================================
 
     @testset "n=2 system" begin
-        Random.seed!(90123)
+        rng = MersenneTwister(90123)  # DGP-02: explicit rng
 
         T_obs, n, p = 150, 2, 1
-        Y = randn(T_obs, n)
+        Y = dgp_var(rng; A=[0.5 0.1; 0.0 0.4], B0=[1.0 0.0; 0.3 1.0], T=T_obs).Y
         model = estimate_var(Y, p)
 
         signs = [sign_restriction(1, 1, :positive)]
         restrictions = SVARRestrictions(n; signs=signs)
 
         result = identify_uhlig(model, restrictions, 5;
-            n_starts=(FAST ? 3 : 8), n_refine=(FAST ? 1 : 2), max_iter_coarse=(FAST ? 50 : 100), max_iter_fine=(FAST ? 100 : 300))
+            n_starts=(FAST ? 3 : 8), n_refine=(FAST ? 1 : 2), max_iter_coarse=(FAST ? 50 : 100), max_iter_fine=(FAST ? 100 : 300), rng=rng)
 
         @test result isa UhligSVARResult
         @test size(result.Q) == (n, n)
@@ -296,10 +296,10 @@ end
     end
 
     @testset "No sign restrictions throws error" begin
-        Random.seed!(12321)
+        rng = MersenneTwister(12321)  # DGP-02: explicit rng
 
         T_obs, n, p = 100, 2, 1
-        Y = randn(T_obs, n)
+        Y = randn(rng, T_obs, n)
         model = estimate_var(Y, p)
 
         # Only zero restrictions, no signs
@@ -310,10 +310,10 @@ end
     end
 
     @testset "Dimension mismatch throws error" begin
-        Random.seed!(23232)
+        rng = MersenneTwister(23232)  # DGP-02: explicit rng
 
         T_obs, n, p = 100, 2, 1
-        Y = randn(T_obs, n)
+        Y = randn(rng, T_obs, n)
         model = estimate_var(Y, p)
 
         restrictions = SVARRestrictions(3; signs=[sign_restriction(1, 1, :positive)])
@@ -321,10 +321,10 @@ end
     end
 
     @testset "Over-constrained zero restrictions" begin
-        Random.seed!(34343)
+        rng = MersenneTwister(34343)  # DGP-02: explicit rng
 
         T_obs, n, p = 100, 2, 1
-        Y = randn(T_obs, n)
+        Y = randn(rng, T_obs, n)
         model = estimate_var(Y, p)
 
         # Two zero restrictions on shock 1 in a 2-var system: leaves 0 free dims
@@ -345,20 +345,21 @@ end
     @testset "Reproducibility with same seed" begin
         T_obs, n, p = 150, 2, 1
 
-        Random.seed!(54321)
-        Y = randn(T_obs, n)
+        rng = MersenneTwister(54321)  # DGP-02: explicit rng
+        Y = randn(rng, T_obs, n)
         model = estimate_var(Y, p)
 
         signs = [sign_restriction(1, 1, :positive)]
         restrictions = SVARRestrictions(n; signs=signs)
 
-        Random.seed!(11111)
+        # Same explicit rng stream twice → identical results (DGP-02).
         result1 = identify_uhlig(model, restrictions, 5;
-            n_starts=3, n_refine=1, max_iter_coarse=50, max_iter_fine=100)
+            n_starts=3, n_refine=1, max_iter_coarse=50, max_iter_fine=100,
+            rng=MersenneTwister(11111))
 
-        Random.seed!(11111)
         result2 = identify_uhlig(model, restrictions, 5;
-            n_starts=3, n_refine=1, max_iter_coarse=50, max_iter_fine=100)
+            n_starts=3, n_refine=1, max_iter_coarse=50, max_iter_fine=100,
+            rng=MersenneTwister(11111))
 
         @test result1.Q ≈ result2.Q
         @test result1.irf ≈ result2.irf
@@ -370,10 +371,10 @@ end
     # ==========================================================================
 
     @testset "Penalty values are finite and negative" begin
-        Random.seed!(65432)
+        rng = MersenneTwister(65432)  # DGP-02: explicit rng
 
         T_obs, n, p = 200, 3, 1
-        Y = randn(T_obs, n)
+        Y = randn(rng, T_obs, n)
         model = estimate_var(Y, p)
 
         signs = [
@@ -383,7 +384,7 @@ end
         restrictions = SVARRestrictions(n; signs=signs)
 
         result = identify_uhlig(model, restrictions, 10;
-            n_starts=(FAST ? 3 : 10), n_refine=(FAST ? 1 : 2), max_iter_coarse=(FAST ? 50 : 100), max_iter_fine=(FAST ? 100 : 300))
+            n_starts=(FAST ? 3 : 10), n_refine=(FAST ? 1 : 2), max_iter_coarse=(FAST ? 50 : 100), max_iter_fine=(FAST ? 100 : 300), rng=rng)
 
         @test isfinite(result.penalty)
         @test result.penalty < 0  # Satisfied restrictions yield large negative penalties
@@ -397,10 +398,10 @@ end
     # ==========================================================================
 
     @testset "show() output" begin
-        Random.seed!(76543)
+        rng = MersenneTwister(76543)  # DGP-02: explicit rng
 
         T_obs, n, p = 150, 3, 1
-        Y = randn(T_obs, n)
+        Y = randn(rng, T_obs, n)
         model = estimate_var(Y, p)
 
         zeros_r = [zero_restriction(2, 1)]
@@ -408,7 +409,7 @@ end
         restrictions = SVARRestrictions(n; zeros=zeros_r, signs=signs)
 
         result = identify_uhlig(model, restrictions, 10;
-            n_starts=(FAST ? 3 : 8), n_refine=(FAST ? 1 : 2), max_iter_coarse=(FAST ? 50 : 100), max_iter_fine=(FAST ? 100 : 200))
+            n_starts=(FAST ? 3 : 8), n_refine=(FAST ? 1 : 2), max_iter_coarse=(FAST ? 50 : 100), max_iter_fine=(FAST ? 100 : 200), rng=rng)
 
         io = IOBuffer()
         show(io, result)
@@ -421,17 +422,17 @@ end
     end
 
     @testset "report() dispatches to show()" begin
-        Random.seed!(87654)
+        rng = MersenneTwister(87654)  # DGP-02: explicit rng
 
         T_obs, n, p = 150, 2, 1
-        Y = randn(T_obs, n)
+        Y = randn(rng, T_obs, n)
         model = estimate_var(Y, p)
 
         signs = [sign_restriction(1, 1, :positive)]
         restrictions = SVARRestrictions(n; signs=signs)
 
         result = identify_uhlig(model, restrictions, 5;
-            n_starts=(FAST ? 3 : 5), n_refine=(FAST ? 1 : 2), max_iter_coarse=(FAST ? 50 : 100), max_iter_fine=(FAST ? 100 : 200))
+            n_starts=(FAST ? 3 : 5), n_refine=(FAST ? 1 : 2), max_iter_coarse=(FAST ? 50 : 100), max_iter_fine=(FAST ? 100 : 200), rng=rng)
 
         # report() should not error
         io = IOBuffer()
@@ -442,17 +443,17 @@ end
     end
 
     @testset "refs() output" begin
-        Random.seed!(98765)
+        rng = MersenneTwister(98765)  # DGP-02: explicit rng
 
         T_obs, n, p = 150, 2, 1
-        Y = randn(T_obs, n)
+        Y = randn(rng, T_obs, n)
         model = estimate_var(Y, p)
 
         signs = [sign_restriction(1, 1, :positive)]
         restrictions = SVARRestrictions(n; signs=signs)
 
         result = identify_uhlig(model, restrictions, 5;
-            n_starts=(FAST ? 3 : 5), n_refine=(FAST ? 1 : 2), max_iter_coarse=(FAST ? 50 : 100), max_iter_fine=(FAST ? 100 : 200))
+            n_starts=(FAST ? 3 : 5), n_refine=(FAST ? 1 : 2), max_iter_coarse=(FAST ? 50 : 100), max_iter_fine=(FAST ? 100 : 200), rng=rng)
 
         io = IOBuffer()
         refs(io, result)
@@ -498,10 +499,15 @@ end
     # ==========================================================================
 
     @testset "Larger system (4 variables)" begin
-        Random.seed!(11111)
+        rng = MersenneTwister(11111)  # DGP-02: explicit rng
 
+        # 4-variable reference DGP (DGP-02 #791); the optimizer enforces the
+        # sign pattern below by construction (shock-3 sign flip is free).
         T_obs, n, p = 300, 4, 1
-        Y = randn(T_obs, n)
+        Y = dgp_var(rng; A=[0.5 0.1 0.0 0.0; 0.0 0.4 0.1 0.0;
+                            0.0 0.0 0.35 0.05; 0.05 0.0 0.0 0.3],
+                    B0=[1.0 0.0 0.0 0.0; 0.4 1.0 0.0 0.0;
+                        0.2 0.3 1.0 0.0; 0.1 0.2 0.3 1.0], T=T_obs).Y
         model = estimate_var(Y, p)
 
         signs = [
@@ -512,7 +518,7 @@ end
         restrictions = SVARRestrictions(n; signs=signs)
 
         result = identify_uhlig(model, restrictions, 10;
-            n_starts=(FAST ? 3 : 12), n_refine=(FAST ? 1 : 3), max_iter_coarse=(FAST ? 50 : 150), max_iter_fine=(FAST ? 100 : 400))
+            n_starts=(FAST ? 3 : 12), n_refine=(FAST ? 1 : 3), max_iter_coarse=(FAST ? 50 : 150), max_iter_fine=(FAST ? 100 : 400), rng=rng)
 
         @test result isa UhligSVARResult
         @test size(result.irf) == (10, 4, 4)
@@ -530,11 +536,11 @@ end
     # ==========================================================================
 
     @testset "Near-singular covariance doesn't crash" begin
-        Random.seed!(22222)
+        rng = MersenneTwister(22222)  # DGP-02: explicit rng
 
         T_obs, n, p = 200, 3, 1
-        Y = randn(T_obs, n)
-        Y[:, 3] = Y[:, 1] + 0.01 * randn(T_obs)  # Near-collinear
+        Y = randn(rng, T_obs, n)
+        Y[:, 3] = Y[:, 1] + 0.01 * randn(rng, T_obs)  # Near-collinear
 
         model = estimate_var(Y, p)
 
@@ -542,7 +548,7 @@ end
         restrictions = SVARRestrictions(n; signs=signs)
 
         result = identify_uhlig(model, restrictions, 5;
-            n_starts=(FAST ? 3 : 8), n_refine=(FAST ? 1 : 2), max_iter_coarse=(FAST ? 50 : 100), max_iter_fine=(FAST ? 100 : 200))
+            n_starts=(FAST ? 3 : 8), n_refine=(FAST ? 1 : 2), max_iter_coarse=(FAST ? 50 : 100), max_iter_fine=(FAST ? 100 : 200), rng=rng)
 
         @test result isa UhligSVARResult
         @test all(isfinite, result.irf)
@@ -553,10 +559,10 @@ end
     # ==========================================================================
 
     @testset "IRF dimensions and finiteness" begin
-        Random.seed!(33333)
+        rng = MersenneTwister(33333)  # DGP-02: explicit rng
 
         T_obs, n, p = 200, 3, 2
-        Y = randn(T_obs, n)
+        Y = randn(rng, T_obs, n)
         model = estimate_var(Y, p)
 
         signs = [sign_restriction(1, 1, :positive)]
@@ -564,7 +570,7 @@ end
 
         horizon = 20
         result = identify_uhlig(model, restrictions, horizon;
-            n_starts=(FAST ? 3 : 8), n_refine=(FAST ? 1 : 2), max_iter_coarse=(FAST ? 50 : 100), max_iter_fine=(FAST ? 100 : 200))
+            n_starts=(FAST ? 3 : 8), n_refine=(FAST ? 1 : 2), max_iter_coarse=(FAST ? 50 : 100), max_iter_fine=(FAST ? 100 : 200), rng=rng)
 
         @test size(result.irf) == (horizon, n, n)
         @test all(isfinite, result.irf)
@@ -578,8 +584,8 @@ end
 end
 
 @testset "SID-02 restriction horizon ≥ IRF horizon" begin
-    Random.seed!(731)
-    m = estimate_var(randn(150, 3), 2)
+    rng = MersenneTwister(731)  # DGP-02: explicit rng
+    m = estimate_var(randn(rng, 150, 3), 2)
     r5 = SVARRestrictions(3; signs=[sign_restriction(1, 1, :positive; horizon=5)])
     u = identify_uhlig(m, r5, 3; n_starts=10, n_refine=2,
                        max_iter_coarse=100, max_iter_fine=300, rng=MersenneTwister(731))
@@ -600,9 +606,13 @@ end
     # Satisfied candidate must have the lower (better) penalty.
     # Construct via a tiny helper that injects responses — or call _uhlig_penalty
     # on hand-built Qs once a VAR is estimated.
-    Random.seed!(732)
+    # Xoshiro(732) reproduces this testset's historical global-RNG stream
+    # exactly (verified); it stays on white noise because the r_uniq block
+    # below is seed-sensitive at ~50/50 across streams — see #814 (filed
+    # from DGP-02 #791).
+    rng = Xoshiro(732)  # DGP-02: explicit rng
     n = 2
-    Y = randn(200, n)
+    Y = randn(rng, 200, n)
     m = estimate_var(Y, 1)
     r = SVARRestrictions(n; signs=[
         sign_restriction(1, 1, :positive),
@@ -624,7 +634,7 @@ end
     ρ = -0.5
     Sigma = [1.0 ρ; ρ 1.0]
     B = zeros(1 + n * 1, n)
-    U = randn(199, n)
+    U = randn(rng, 199, n)
     m_corr = VARModel(Y, 1, B, U, Sigma, 0.0, 0.0, 0.0)
     horizon = 1
     Phi = MacroEconometricModels._compute_ma_coefficients(m_corr, horizon)
@@ -652,7 +662,7 @@ end
         signs=[sign_restriction(1, 1, :positive)])
     u = identify_uhlig(m, r_uniq, 5; n_starts=(FAST ? 3 : 10), n_refine=(FAST ? 1 : 2),
                        max_iter_coarse=(FAST ? 50 : 100), max_iter_fine=(FAST ? 100 : 300),
-                       rng=MersenneTwister(732))
+                       rng=rng)
     @test u.converged == true
     @test u.irf[1, 1, 1] > 0
     @test abs(u.irf[1, 2, 1]) < 1e-8
@@ -665,8 +675,8 @@ end
 end
 
 @testset "SID-14 Uhlig rejects non-sign rejection types" begin
-    Random.seed!(743)
-    m = estimate_var(randn(80, 2), 1)
+    rng = MersenneTwister(743)  # DGP-02: explicit rng
+    m = estimate_var(randn(rng, 80, 2), 1)
     s1 = sign_restriction(1, 1, :positive)
     mixed = [
         SVARRestrictions(2; signs=[s1, elasticity_bound(1, 2, 1; lower=0.0, upper=1.0)]),
@@ -677,7 +687,7 @@ end
     ]
     for r in mixed
         err = try
-            identify_uhlig(m, r, 4; n_starts=1, n_refine=1)
+            identify_uhlig(m, r, 4; n_starts=1, n_refine=1, rng=rng)
             nothing
         catch e
             e
@@ -699,8 +709,8 @@ end
 end
 
 @testset "SID-19 irf method=:uhlig" begin
-    Random.seed!(748)
-    m = estimate_var(randn(80, 2), 1)
+    rng = MersenneTwister(748)  # DGP-02: explicit rng
+    m = estimate_var(randn(rng, 80, 2), 1)
     r = SVARRestrictions(2; signs=[sign_restriction(1, 1, :positive)])
     rng = MersenneTwister(748)
     uhlig_kw = (n_starts=FAST ? 3 : 8, n_refine=1, max_iter_coarse=80, max_iter_fine=200)
@@ -710,9 +720,9 @@ end
 end
 
 @testset "SID-23 Uhlig RWZ checker" begin
-    Random.seed!(752)
+    rng = MersenneTwister(752)  # DGP-02: explicit rng
     n = 3
-    m = estimate_var(randn(120, n), 1)
+    m = estimate_var(randn(rng, 120, n), 1)
 
     @testset "sign-only is :set and report notes the set" begin
         r = SVARRestrictions(n; signs=[sign_restriction(1, 1, :positive)])
@@ -734,7 +744,7 @@ end
     end
 
     @testset "extra independent zeros → :over IdentificationError" begin
-        m2 = estimate_var(randn(80, 2), 1)
+        m2 = estimate_var(randn(rng, 80, 2), 1)
         r = SVARRestrictions(2;
             zeros=[zero_restriction(1, 1), zero_restriction(2, 1)],
             signs=[sign_restriction(1, 2, :positive)])
@@ -751,7 +761,7 @@ end
         @test check_identification(r, n).status === :exact
         st = check_identification(r, m; n_points=8, rng=MersenneTwister(7531))
         @test st.status === :set
-        uh = UhligSVARResult{Float64}(Matrix{Float64}(I, n, n), randn(4, n, n), -1.0,
+        uh = UhligSVARResult{Float64}(Matrix{Float64}(I, n, n), randn(rng, 4, n, n), -1.0,
                                       zeros(n), r, true, ["v$i" for i in 1:n], st)
         @test uh.id_status.status === :set
         shown = sprint(show, uh)

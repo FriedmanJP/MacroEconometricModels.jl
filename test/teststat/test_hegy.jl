@@ -103,7 +103,7 @@ end
         io2 = IOBuffer(); refs(io2, r); @test occursin("Elliott", String(take!(io2)))
         # integer input path
         @test ers_test(round.(Int, y .* 10)) isa ERSResult
-        @test_throws ArgumentError ers_test(randn(10))
+        @test_throws ArgumentError ers_test(randn(Random.MersenneTwister(94), 10))
     end
 
     # (2b) ERS point-optimal direction/size. With S(1) computed as the a=1 (unit-root)
@@ -120,9 +120,9 @@ end
         @test r_st.P_T < r_st.critical_values[5]
         # Random walk (unit-root null) ⇒ large P_T ⇒ fail to reject in the vast majority.
         rej = 0
-        rng2 = Random.MersenneTwister(404)
+        rng = Random.MersenneTwister(404)
         for _ in 1:100
-            yrw = cumsum(randn(rng2, 200))
+            yrw = cumsum(randn(rng, 200))
             r = ers_test(yrw)
             r.P_T < r.critical_values[5] && (rej += 1)
         end
@@ -248,6 +248,6 @@ end
         y = _seasonal_rw(120, 4; seed=9)
         @test_throws ArgumentError hegy_test(y; frequency=5)     # unsupported period
         @test_throws ArgumentError hegy_test(y; frequency=4, deterministic=:bogus)
-        @test_throws ArgumentError hegy_test(randn(10); frequency=4)  # too few obs
+        @test_throws ArgumentError hegy_test(randn(Random.MersenneTwister(95), 10); frequency=4)  # too few obs
     end
 end

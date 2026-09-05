@@ -118,6 +118,23 @@ end
         @test pmg.theta_vcov[1, 1] ≤ mg.theta_vcov[1, 1] + 1e-10
     end
 
+    @testset "(5) Hausman REJECTS on heterogeneous long-run (power arm)" begin
+        # The homog=false DGP existed but was never called (DGP-04 #793): on
+        # the shared hetero panel (N=30, T=100) the homogeneity null is false
+        # and the test must reject (probed p = 0.003).
+        dh = dgp_pmg(MersenneTwister(123); N=30, T=100, homogeneous=false)
+        tmh = repeat(1:100, outer=30)
+        Xh = reshape(dh.X, :, 1)
+        pmgh = estimate_pmg(dh.Y, Xh, dh.id, tmh; p=1, q=1, method=:pmg,
+                            xnames=["x"])
+        mgh = estimate_pmg(dh.Y, Xh, dh.id, tmh; p=1, q=1, method=:mg,
+                           xnames=["x"])
+        h = hausman_test(pmgh, mgh)
+        @test h.pvalue < 0.05
+        # MG stays consistent for the mean long-run under heterogeneity.
+        @test mgh.theta[1] ≈ mean(dh.theta_i) atol=0.2
+    end
+
     @testset "DFE: pooled EC with clustered SEs" begin
         @test dfe.theta[1] ≈ 1.5 atol=0.08
         @test dfe.phi < 0
@@ -175,6 +192,17 @@ end
         @test !("(Intercept)" in pmg_n.srnames)
         @test "trend" in pmg_t.srnames && "(Intercept)" in pmg_t.srnames
         @test isfinite(pmg_n.theta[1]) && isfinite(pmg_t.theta[1])
+        # Trend short-run coefficient ≈ 0 on the trendless DGP (DGP-04 #793;
+        # probed −0.00068), and scales with a planted trend: in EC form
+        # τ = −φδ, so τ̂/(−φ̂) ≈ δ (probed 0.048 vs planted 0.05).
+        it = findfirst(==("trend"), pmg_t.srnames)
+        @test abs(pmg_t.sr[it]) < 0.01
+        T = length(ys[1])
+        yv2 = vcat([ys[i] .+ 0.05 .* collect(1.0:T) for i in 1:length(ys)]...)
+        pmg_t2 = estimate_pmg(yv2, Xv, id, tm; p=1, q=1, method=:pmg,
+                              trend=:trend, xnames=["x"])
+        @test pmg_t2.sr[it] > 0.01
+        @test pmg_t2.sr[it] / (-pmg_t2.phi) ≈ 0.05 atol=0.02
     end
 
     @testset "display / refs render" begin
@@ -200,18 +228,30 @@ end
     end
 
     @testset "non-error-correcting flag (φ_i ≥ 0)" begin
-        # A short pure-noise panel can produce φ_i ≥ 0 for some units; n_nonconv counts them.
+        # Explosive units (AR 1.08) cannot error-correct, so n_nonconv > 0
+        # UNCONDITIONALLY (DGP-04 #793) — the old `> 0 && @test` guard
+        # evaporated on pure noise (n_nonconv == 0 for seeds 5, 6, 7).
         rng = MersenneTwister(5)
         N = 6; T = 25
         rec = NamedTuple[]
         for i in 1:N, t in 1:T
             push!(rec, (id=i, time=t, y=randn(rng), x=randn(rng)))
         end
-        pd = xtset(DataFrame(rec), :id, :time)
+        ys_x = Dict{Int,Vector{Float64}}()
+        for i in 1:N
+            ei = [r.y for r in rec if r.id == i]
+            ye = zeros(T); ye[1] = ei[1]
+            for t in 2:T
+                ye[t] = 1.08 * ye[t-1] + ei[t]
+            end
+            ys_x[i] = ye
+        end
+        rec2 = [(id=r.id, time=r.time, y=ys_x[r.id][r.time], x=r.x) for r in rec]
+        pd = xtset(DataFrame(rec2), :id, :time)
         m = estimate_pmg(pd, :y, :x; p=1, q=1, method=:mg)
+        @test m.n_nonconv > 0                       # probed 4 on this draw
         @test m.n_nonconv == count(>=(0.0), m.phi_i)
         io = IOBuffer(); report(io, m)
-        s = String(take!(io))
-        m.n_nonconv > 0 && @test occursin("non-error-correcting", s)
+        @test occursin("non-error-correcting", String(take!(io)))
     end
 end

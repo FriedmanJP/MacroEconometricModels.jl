@@ -231,6 +231,12 @@ function _smooth_lp_cv_errors(Y::AbstractMatrix{T}, shock_var::Int, horizon::Int
                               lambda_grid::AbstractVector{T}=T.(10.0 .^ (-4:0.5:2)),
                               k_folds::Int=5, kwargs...) where {T<:AbstractFloat}
     T_obs = size(Y, 1)
+    # DGP-05 (#794, #697): reject unknown kwargs — `get` silently swallowed
+    # typos such as n_folds (the smoke test passed k_folds = 5 while asking 3).
+    for key in keys(kwargs)
+        key in (:lags, :response_vars, :cov_type, :bandwidth) ||
+            throw(ArgumentError("unknown keyword argument: $key"))
+    end
     lags = get(kwargs, :lags, 4)
     resp = get(kwargs, :response_vars, collect(1:size(Y, 2)))
     cvt = get(kwargs, :cov_type, :newey_west)

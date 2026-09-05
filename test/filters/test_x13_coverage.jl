@@ -13,15 +13,15 @@ const M = MacroEconometricModels
 @testset "X-13 Coverage" begin
 
 # ── Shared test data ──
-Random.seed!(42)
+rng = MersenneTwister(42)
 n = 120
-trend = cumsum(randn(n) .* 0.1)
+trend = cumsum(randn(rng, n) .* 0.1)
 seasonal = 10.0 .* sin.(2π .* (1:n) ./ 12) .+ 5.0 .* cos.(2π .* (1:n) ./ 6)
-y_monthly = 100.0 .+ trend .+ seasonal .+ randn(n)
-y_pos = exp.(3.0 .+ 0.01 .* (1:n) .+ 0.3 .* sin.(2π .* (1:n) ./ 12) .+ 0.1 .* randn(n))
+y_monthly = 100.0 .+ trend .+ seasonal .+ randn(rng, n)
+y_pos = exp.(3.0 .+ 0.01 .* (1:n) .+ 0.3 .* sin.(2π .* (1:n) ./ 12) .+ 0.1 .* randn(rng, n))
 
 nq = 80
-y_quarterly = 100.0 .+ cumsum(randn(nq) .* 0.1) .+ 5.0 .* sin.(2π .* (1:nq) ./ 4) .+ randn(nq)
+y_quarterly = 100.0 .+ cumsum(randn(rng, nq) .* 0.1) .+ 5.0 .* sin.(2π .* (1:nq) ./ 4) .+ randn(rng, nq)
 
 # ═══════════════════════════════════════════════════════════════════════════
 # types.jl
@@ -184,7 +184,7 @@ end
         @test fy0 ≈ y_monthly
 
         # With regressors
-        Xr = randn(n, 2)
+        Xr = randn(rng, n, 2)
         fy_r, fXr, na_r, _, _ = M._x13_armafl!(copy(y_monthly), model, copy(Xr))
         @test size(fXr) == (na_r, 2)
     end
@@ -203,7 +203,7 @@ end
 
     # QR factorization
     m, nn = 4, 3
-    a = randn(m, nn)
+    a = randn(rng, m, nn)
     ipvt = zeros(Int, nn)
     rdiag = zeros(nn)
     acnorm = zeros(nn)
@@ -218,7 +218,7 @@ end
 @testset "Likelihood utilities" begin
     @test M._x13_yprmy([3.0, 4.0]) ≈ 25.0
 
-    Xy = randn(20, 3)
+    Xy = randn(rng, 20, 3)
     b = zeros(2)
     pxpx = 3 * 4 ÷ 2
     chl = zeros(pxpx)
@@ -317,7 +317,7 @@ end
 
     @testset "user regressors" begin
         ts = M._X13TimeSeries(copy(y_monthly), (2010, 1), 12)
-        ur = randn(n, 3)
+        ur = randn(rng, n, 3)
         spec = M._X13RegressionSpec(trading_day=false, easter=false, easter_window=8, user=ur)
         X = M._x13_build_regressors(ts, spec)
         @test size(X) == (n, 3)
@@ -325,7 +325,7 @@ end
 
     @testset "combined regressors" begin
         ts = M._X13TimeSeries(copy(y_monthly), (2010, 1), 12)
-        ur = randn(n, 2)
+        ur = randn(rng, n, 2)
         spec = M._X13RegressionSpec(trading_day=true, easter=true, easter_window=15, user=ur)
         X = M._x13_build_regressors(ts, spec)
         @test size(X, 2) == 6 + 1 + 2
@@ -408,7 +408,7 @@ end
     spec_ns = M._X13ARIMASpec(1, 1, 0, 0, 0, 0, 1)
     model_ns = M._X13ARIMAModel(spec_ns)
     model_ns.ar[1] = 0.5
-    fc_ns = M._x13_forecast(model_ns, randn(50), 10)
+    fc_ns = M._x13_forecast(model_ns, randn(rng, 50), 10)
     @test length(fc_ns) == 10 && all(isfinite, fc_ns)
 end
 
