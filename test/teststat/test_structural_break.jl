@@ -208,12 +208,12 @@ using Statistics
 end
 
 @testset "Andrews Structural Break Tests" begin
-    Random.seed!(42)
+    rng = Random.MersenneTwister(42)
 
     @testset "Known structural break" begin
         T_obs = 100
-        X = hcat(ones(T_obs), randn(T_obs))
-        y = X * [1.0, 2.0] + randn(T_obs) * 0.5
+        X = hcat(ones(T_obs), randn(rng, T_obs))
+        y = X * [1.0, 2.0] + randn(rng, T_obs) * 0.5
         y[51:end] .+= X[51:end, 2] .* 3.0  # break at t=50
 
         result = andrews_test(y, X; test=:supwald, trimming=0.15)
@@ -230,8 +230,8 @@ end
 
     @testset "No break (stable series)" begin
         T_obs = 200
-        X = hcat(ones(T_obs), randn(T_obs))
-        y = X * [1.0, 2.0] + randn(T_obs) * 0.5
+        X = hcat(ones(T_obs), randn(rng, T_obs))
+        y = X * [1.0, 2.0] + randn(rng, T_obs) * 0.5
         result = andrews_test(y, X; test=:supwald)
         @test result isa AndrewsResult{Float64}
         @test result.pvalue >= 0.0
@@ -239,8 +239,8 @@ end
 
     @testset "All 9 test variants" begin
         T_obs = 100
-        X = hcat(ones(T_obs), randn(T_obs))
-        y = X * [1.0, 2.0] + randn(T_obs)
+        X = hcat(ones(T_obs), randn(rng, T_obs))
+        y = X * [1.0, 2.0] + randn(rng, T_obs)
         for test_type in [:supwald, :suplr, :suplm, :expwald, :explr, :explm, :meanwald, :meanlr, :meanlm]
             result = andrews_test(y, X; test=test_type)
             @test result.test_type == test_type
@@ -250,26 +250,26 @@ end
     end
 
     @testset "Error handling" begin
-        @test_throws ArgumentError andrews_test(randn(100), ones(100, 1); test=:invalid)
-        @test_throws ArgumentError andrews_test(randn(10), ones(5, 1))
+        @test_throws ArgumentError andrews_test(randn(Random.MersenneTwister(11), 100), ones(100, 1); test=:invalid)
+        @test_throws ArgumentError andrews_test(randn(Random.MersenneTwister(12), 10), ones(5, 1))
     end
 
     @testset "Float64 fallback" begin
-        result = andrews_test(round.(Int, randn(100) .* 10), round.(Int, randn(100, 2) .* 10))
+        result = andrews_test(round.(Int, randn(Random.MersenneTwister(13), 100) .* 10), round.(Int, randn(Random.MersenneTwister(14), 100, 2) .* 10))
         @test result isa AndrewsResult{Float64}
     end
 end
 
 @testset "Bai-Perron Multiple Break Tests" begin
-    Random.seed!(123)
+    rng = Random.MersenneTwister(123)
 
     @testset "Two known breaks" begin
         T_obs = 150
         X = hcat(ones(T_obs), collect(1:T_obs) ./ T_obs)
         y = zeros(T_obs)
-        y[1:50] = X[1:50, :] * [1.0, 2.0] + randn(50) * 0.3
-        y[51:100] = X[51:100, :] * [3.0, -1.0] + randn(50) * 0.3
-        y[101:150] = X[101:150, :] * [0.0, 4.0] + randn(50) * 0.3
+        y[1:50] = X[1:50, :] * [1.0, 2.0] + randn(rng, 50) * 0.3
+        y[51:100] = X[51:100, :] * [3.0, -1.0] + randn(rng, 50) * 0.3
+        y[101:150] = X[101:150, :] * [0.0, 4.0] + randn(rng, 50) * 0.3
 
         result = bai_perron_test(y, X; max_breaks=3, trimming=0.15)
         @test result isa BaiPerronResult{Float64}
@@ -285,22 +285,22 @@ end
     @testset "No breaks" begin
         T_obs = 100
         X = ones(T_obs, 1)
-        y = 2.0 .+ randn(T_obs) * 0.5
+        y = 2.0 .+ randn(rng, T_obs) * 0.5
         result = bai_perron_test(y, X; max_breaks=3)
         @test result isa BaiPerronResult{Float64}
         @test result.n_breaks >= 0
     end
 
     @testset "Float64 fallback" begin
-        result = bai_perron_test(round.(Int, randn(100) .* 10), round.(Int, randn(100, 1) .* 10))
+        result = bai_perron_test(round.(Int, randn(Random.MersenneTwister(21), 100) .* 10), round.(Int, randn(Random.MersenneTwister(22), 100, 1) .* 10))
         @test result isa BaiPerronResult{Float64}
     end
 
     @testset "Single known break" begin
-        Random.seed!(456)
+        rng = Random.MersenneTwister(456)
         T_obs = 100
         X = ones(T_obs, 1)
-        y = vcat(fill(1.0, 50), fill(5.0, 50)) + randn(T_obs) * 0.3
+        y = vcat(fill(1.0, 50), fill(5.0, 50)) + randn(rng, T_obs) * 0.3
         result = bai_perron_test(y, X; max_breaks=3, trimming=0.15)
         @test result isa BaiPerronResult{Float64}
         @test result.n_breaks >= 1
@@ -311,26 +311,26 @@ end
     end
 
     @testset "LWZ criterion" begin
-        Random.seed!(789)
+        rng = Random.MersenneTwister(789)
         T_obs = 100
         X = ones(T_obs, 1)
-        y = vcat(fill(2.0, 50), fill(4.0, 50)) + randn(T_obs) * 0.5
+        y = vcat(fill(2.0, 50), fill(4.0, 50)) + randn(rng, T_obs) * 0.5
         result = bai_perron_test(y, X; max_breaks=3, criterion=:lwz)
         @test result isa BaiPerronResult{Float64}
         @test length(result.lwz_values) >= 2
     end
 
     @testset "Error handling" begin
-        @test_throws ArgumentError bai_perron_test(randn(10), ones(10, 1))  # too short
-        @test_throws ArgumentError bai_perron_test(randn(100), ones(50, 1))  # size mismatch
-        @test_throws ArgumentError bai_perron_test(randn(100), ones(100, 1); criterion=:invalid)
+        @test_throws ArgumentError bai_perron_test(randn(Random.MersenneTwister(23), 10), ones(10, 1))  # too short
+        @test_throws ArgumentError bai_perron_test(randn(Random.MersenneTwister(24), 100), ones(50, 1))  # size mismatch
+        @test_throws ArgumentError bai_perron_test(randn(Random.MersenneTwister(25), 100), ones(100, 1); criterion=:invalid)
     end
 
     @testset "Regime coefficients and SEs" begin
-        Random.seed!(111)
+        rng = Random.MersenneTwister(111)
         T_obs = 120
         X = ones(T_obs, 1)
-        y = vcat(fill(3.0, 60), fill(7.0, 60)) + randn(T_obs) * 0.2
+        y = vcat(fill(3.0, 60), fill(7.0, 60)) + randn(rng, T_obs) * 0.2
         result = bai_perron_test(y, X; max_breaks=2, trimming=0.15)
         @test result isa BaiPerronResult{Float64}
         # Each regime should have 1 coefficient (intercept only)
@@ -344,10 +344,10 @@ end
     end
 
     @testset "sup-F and sequential statistics" begin
-        Random.seed!(222)
+        rng = Random.MersenneTwister(222)
         T_obs = 150
         X = ones(T_obs, 1)
-        y = vcat(fill(1.0, 50), fill(4.0, 50), fill(2.0, 50)) + randn(T_obs) * 0.3
+        y = vcat(fill(1.0, 50), fill(4.0, 50), fill(2.0, 50)) + randn(rng, T_obs) * 0.3
         result = bai_perron_test(y, X; max_breaks=4, trimming=0.15)
         @test all(result.supf_stats .>= 0)
         @test all(0 .<= result.supf_pvalues .<= 1)
@@ -358,10 +358,10 @@ end
     end
 
     @testset "Display method" begin
-        Random.seed!(333)
+        rng = Random.MersenneTwister(333)
         T_obs = 100
         X = ones(T_obs, 1)
-        y = vcat(fill(2.0, 50), fill(5.0, 50)) + randn(T_obs) * 0.5
+        y = vcat(fill(2.0, 50), fill(5.0, 50)) + randn(rng, T_obs) * 0.5
         result = bai_perron_test(y, X; max_breaks=2)
         io = IOBuffer()
         show(io, result)
@@ -372,10 +372,10 @@ end
 
     @testset "Bai (1997) CIs valid ranges" begin
         # CIs should be valid ranges
-        rng_bp = Random.MersenneTwister(55443)
+        rng = Random.MersenneTwister(55443)
         T_bp = 100
         X_bp = ones(T_bp, 1)
-        y_bp = vcat(2.0 * ones(50), 5.0 * ones(50)) + 0.5 * randn(rng_bp, T_bp)
+        y_bp = vcat(2.0 * ones(50), 5.0 * ones(50)) + 0.5 * randn(rng, T_bp)
         result_bp = bai_perron_test(y_bp, X_bp; max_breaks=3)
         if result_bp.n_breaks > 0
             for (lo, hi) in result_bp.break_cis
@@ -388,12 +388,12 @@ end
 end
 
 @testset "Factor Break Tests" begin
-    Random.seed!(42)
+    rng = Random.MersenneTwister(42)
 
     @testset "Breitung-Eickmeier" begin
         # Panel with stable loadings
         T_obs, N = 100, 20
-        X = randn(T_obs, N)
+        X = randn(rng, T_obs, N)
         result = factor_break_test(X, 2; method=:breitung_eickmeier)
         @test result isa FactorBreakResult{Float64}
         @test result.method == :breitung_eickmeier
@@ -405,21 +405,21 @@ end
     end
 
     @testset "FactorModel dispatch" begin
-        X = randn(80, 15)
+        X = randn(rng, 80, 15)
         fm = estimate_factors(X, 2)
         result = factor_break_test(fm; method=:breitung_eickmeier)
         @test result isa FactorBreakResult{Float64}
     end
 
     @testset "Chen-Dolado-Gonzalo" begin
-        X = randn(100, 20)
+        X = randn(rng, 100, 20)
         result = factor_break_test(X; method=:chen_dolado_gonzalo)
         @test result isa FactorBreakResult{Float64}
         @test result.method == :chen_dolado_gonzalo
     end
 
     @testset "Han-Inoue" begin
-        X = randn(100, 20)
+        X = randn(rng, 100, 20)
         result = factor_break_test(X, 2; method=:han_inoue)
         @test result isa FactorBreakResult{Float64}
         @test result.method == :han_inoue
@@ -441,12 +441,12 @@ end
     end
 
     @testset "Error handling" begin
-        @test_throws ArgumentError factor_break_test(randn(10, 5), 2)  # too short
-        @test_throws ArgumentError factor_break_test(randn(100, 20), 2; method=:invalid)
+        @test_throws ArgumentError factor_break_test(randn(Random.MersenneTwister(31), 10, 5), 2)  # too short
+        @test_throws ArgumentError factor_break_test(randn(Random.MersenneTwister(32), 100, 20), 2; method=:invalid)
     end
 
     @testset "Float64 fallback" begin
-        result = factor_break_test(round.(Int, randn(80, 15) .* 10), 2)
+        result = factor_break_test(round.(Int, randn(Random.MersenneTwister(33), 80, 15) .* 10), 2)
         @test result isa FactorBreakResult{Float64}
     end
 
@@ -528,13 +528,13 @@ end
 end
 
 @testset "PANIC Panel Unit Root" begin
-    Random.seed!(42)
+    rng = Random.MersenneTwister(42)
 
     @testset "Basic PANIC" begin
         T_obs, N = 100, 20
-        F = cumsum(randn(T_obs))
-        Lambda = randn(N)
-        e = randn(T_obs, N)
+        F = cumsum(randn(rng, T_obs))
+        Lambda = randn(rng, N)
+        e = randn(rng, T_obs, N)
         X = F * Lambda' + e
 
         result = panic_test(X; r=1, method=:pooled)
@@ -549,14 +549,14 @@ end
     end
 
     @testset "Auto factor selection" begin
-        X = randn(80, 15)
+        X = randn(rng, 80, 15)
         result = panic_test(X; r=:auto)
         @test result isa PANICResult{Float64}
         @test result.n_factors >= 1
     end
 
     @testset "Individual method" begin
-        X = randn(60, 10)
+        X = randn(rng, 60, 10)
         result = panic_test(X; r=1, method=:individual)
         @test result.method == :individual
         @test length(result.individual_pvalues) == 10
@@ -564,7 +564,7 @@ end
 
     @testset "PanelData dispatch" begin
         using DataFrames
-        df = DataFrame(group=repeat(1:5, inner=20), time=repeat(1:20, 5), y=randn(100))
+        df = DataFrame(group=repeat(1:5, inner=20), time=repeat(1:20, 5), y=randn(rng, 100))
         pd = xtset(df, :group, :time)
         result = panic_test(pd; r=1)
         @test result isa PANICResult{Float64}
@@ -572,16 +572,16 @@ end
     end
 
     @testset "Error handling" begin
-        @test_throws ArgumentError panic_test(randn(5, 2); r=1)
-        @test_throws ArgumentError panic_test(randn(50, 3); r=0)
+        @test_throws ArgumentError panic_test(randn(Random.MersenneTwister(41), 5, 2); r=1)
+        @test_throws ArgumentError panic_test(randn(Random.MersenneTwister(42), 50, 3); r=0)
     end
 end
 
 @testset "Pesaran CIPS" begin
-    Random.seed!(42)
+    rng = Random.MersenneTwister(42)
 
     @testset "Stationary panel" begin
-        X = randn(50, 20)
+        X = randn(rng, 50, 20)
         result = pesaran_cips_test(X; lags=1, deterministic=:constant)
         @test result isa PesaranCIPSResult{Float64}
         @test result.nobs == 50
@@ -591,7 +591,7 @@ end
     end
 
     @testset "Deterministic variants" begin
-        X = randn(50, 10)
+        X = randn(rng, 50, 10)
         for det in [:none, :constant, :trend]
             result = pesaran_cips_test(X; lags=1, deterministic=det)
             @test result.deterministic == det
@@ -599,16 +599,16 @@ end
     end
 
     @testset "Error handling" begin
-        @test_throws ArgumentError pesaran_cips_test(randn(5, 2); lags=1)
-        @test_throws ArgumentError pesaran_cips_test(randn(50, 3); deterministic=:invalid)
+        @test_throws ArgumentError pesaran_cips_test(randn(Random.MersenneTwister(51), 5, 2); lags=1)
+        @test_throws ArgumentError pesaran_cips_test(randn(Random.MersenneTwister(52), 50, 3); deterministic=:invalid)
     end
 end
 
 @testset "Moon-Perron" begin
-    Random.seed!(42)
+    rng = Random.MersenneTwister(42)
 
     @testset "Basic test" begin
-        X = randn(80, 15)
+        X = randn(rng, 80, 15)
         result = moon_perron_test(X; r=1)
         @test result isa MoonPerronResult{Float64}
         @test result.n_factors == 1
@@ -619,13 +619,13 @@ end
     end
 
     @testset "Auto factor selection" begin
-        X = randn(60, 10)
+        X = randn(rng, 60, 10)
         result = moon_perron_test(X; r=:auto)
         @test result isa MoonPerronResult{Float64}
     end
 
     @testset "Error handling" begin
-        @test_throws ArgumentError moon_perron_test(randn(5, 2); r=1)
+        @test_throws ArgumentError moon_perron_test(randn(Random.MersenneTwister(61), 5, 2); r=1)
     end
 end
 

@@ -11,31 +11,33 @@ using Statistics
 
 @testset "Unit Root Tests" begin
 
-    # Set seed for reproducibility
-    Random.seed!(12345)
+    # Explicit RNG: reproducible without touching the global stream (DGP-12 #801)
+    rng_ur = Random.MersenneTwister(12345)
 
     # ==========================================================================
     # Test Data Generation
     # ==========================================================================
 
-    # Generate stationary AR(1) process: y_t = 0.5 * y_{t-1} + e_t
-    function generate_stationary(n::Int; rho::Float64=0.5)
+    # Generate stationary AR(1) process: y_t = 0.5 * y_{t-1} + e_t.
+    # Loop bodies are intentionally unchanged (DGP-12 #801): the draw order
+    # stays byte-identical to the old global-seed sequence.
+    function generate_stationary(n::Int; rho::Float64=0.5, rng::AbstractRNG=rng_ur)
         y = zeros(n)
-        y[1] = randn()
+        y[1] = randn(rng)
         for t in 2:n
-            y[t] = rho * y[t-1] + randn()
+            y[t] = rho * y[t-1] + randn(rng)
         end
         y
     end
 
     # Generate random walk (unit root): y_t = y_{t-1} + e_t
-    function generate_random_walk(n::Int)
-        cumsum(randn(n))
+    function generate_random_walk(n::Int; rng::AbstractRNG=rng_ur)
+        cumsum(randn(rng, n))
     end
 
     # Generate trend stationary: y_t = a + b*t + e_t
-    function generate_trend_stationary(n::Int)
-        0.5 .+ 0.02 .* (1:n) .+ randn(n)
+    function generate_trend_stationary(n::Int; rng::AbstractRNG=rng_ur)
+        0.5 .+ 0.02 .* (1:n) .+ randn(rng, n)
     end
 
     # ==========================================================================
@@ -92,8 +94,8 @@ using Statistics
         @test result_fixed.lags == 2
 
         # Test error handling
-        @test_throws ArgumentError adf_test(randn(10); regression=:invalid)
-        @test_throws ArgumentError adf_test(randn(5))  # Too short
+        @test_throws ArgumentError adf_test(randn(Random.MersenneTwister(71), 10); regression=:invalid)
+        @test_throws ArgumentError adf_test(randn(Random.MersenneTwister(72), 5))  # Too short
 
         # Test type conversion (Integer input)
         y_int = round.(Int, y_stationary * 10)
@@ -180,8 +182,8 @@ using Statistics
         @test exp_aic != var_aic
 
         # (c) SANITY on a pure AR(1): a small lag, always within bounds
-        Random.seed!(778)
-        ys = generate_stationary(200; rho=0.5)
+        rng_778 = Random.MersenneTwister(778)
+        ys = generate_stationary(200; rho=0.5, rng=rng_778)
         lag = A.adf_select_lags(ys, 12, :constant, :aic)
         @test 0 <= lag <= 12
         @test lag <= 3
@@ -227,8 +229,8 @@ using Statistics
         @test result_bw.bandwidth == 5
 
         # Test error handling
-        @test_throws ArgumentError kpss_test(randn(100); regression=:none)  # Invalid regression
-        @test_throws ArgumentError kpss_test(randn(5))  # Too short
+        @test_throws ArgumentError kpss_test(randn(Random.MersenneTwister(73), 100); regression=:none)  # Invalid regression
+        @test_throws ArgumentError kpss_test(randn(Random.MersenneTwister(74), 5))  # Too short
     end
 
     # ==========================================================================
@@ -270,8 +272,9 @@ using Statistics
 
     @testset "Zivot-Andrews Test" begin
         # Generate series with structural break
+        rng = Random.MersenneTwister(15001)
         n = 150
-        y_break = vcat(randn(75), randn(75) .+ 3.0)  # Level shift at t=75
+        y_break = vcat(randn(rng, 75), randn(rng, 75) .+ 3.0)  # Level shift at t=75
 
         result = za_test(y_break; regression=:constant)
 
@@ -296,8 +299,8 @@ using Statistics
         @test result_trim isa ZAResult
 
         # Test error handling
-        @test_throws ArgumentError za_test(randn(30))  # Too short
-        @test_throws ArgumentError za_test(randn(100); trim=0.6)  # Invalid trim
+        @test_throws ArgumentError za_test(randn(Random.MersenneTwister(75), 30))  # Too short
+        @test_throws ArgumentError za_test(randn(Random.MersenneTwister(76), 100); trim=0.6)  # Invalid trim
 
         # Test that AIC lag selection actually varies (not hardcoded)
         result_aic = za_test(y_break; regression=:constant, lags=:aic)
@@ -363,12 +366,12 @@ using Statistics
         # Regression test: GLS detrending should use original Z, not quasi-differenced Z
         # After fix, MZt for stationary AR(1) with rho=0.3 should be more negative
         # than for a random walk
-        rng_np = Random.MersenneTwister(99887)
+        rng = Random.MersenneTwister(99887)
         y_ar_np = zeros(200)
-        y_ar_np[1] = randn(rng_np)
-        for t in 2:200; y_ar_np[t] = 0.3 * y_ar_np[t-1] + randn(rng_np); end
+        y_ar_np[1] = randn(rng)
+        for t in 2:200; y_ar_np[t] = 0.3 * y_ar_np[t-1] + randn(rng); end
         result_ar_np = ngperron_test(y_ar_np; regression=:trend)
-        y_rw_np = cumsum(randn(rng_np, 200))
+        y_rw_np = cumsum(randn(rng, 200))
         result_rw_np = ngperron_test(y_rw_np; regression=:trend)
         @test result_ar_np.MZt < result_rw_np.MZt  # stationary should be more negative
     end
@@ -380,16 +383,16 @@ using Statistics
     @testset "Johansen Cointegration Test" begin
         # Generate cointegrated system
         n, T = 3, 200
-        Random.seed!(42)
+        rng = Random.MersenneTwister(42)
 
         # Common stochastic trend
-        trend = cumsum(randn(T))
+        trend = cumsum(randn(rng, T))
 
         # Cointegrated variables
         Y = zeros(T, n)
-        Y[:, 1] = trend + 0.5 * randn(T)
-        Y[:, 2] = 0.8 * trend + 0.3 * randn(T)
-        Y[:, 3] = randn(T)  # Stationary, not cointegrated
+        Y[:, 1] = trend + 0.5 * randn(rng, T)
+        Y[:, 2] = 0.8 * trend + 0.3 * randn(rng, T)
+        Y[:, 3] = randn(rng, T)  # Stationary, not cointegrated
 
         result = johansen_test(Y, 2; deterministic=:constant)
 
@@ -438,12 +441,12 @@ using Statistics
 
         # Test error handling
         @test_throws ArgumentError johansen_test(Y, 0)  # Invalid lags
-        @test_throws ArgumentError johansen_test(randn(10, 3), 2)  # Too few obs
+        @test_throws ArgumentError johansen_test(randn(Random.MersenneTwister(77), 10, 3), 2)  # Too few obs
 
         # Test Case 4 (:trend) runs without error and produces valid results
-        rng_joh = Random.MersenneTwister(7744)
-        Y_coint = hcat(cumsum(randn(rng_joh, 200)), cumsum(randn(rng_joh, 200)))
-        Y_coint[:, 2] = Y_coint[:, 1] + 0.1 * randn(rng_joh, 200)
+        rng = Random.MersenneTwister(7744)
+        Y_coint = hcat(cumsum(randn(rng, 200)), cumsum(randn(rng, 200)))
+        Y_coint[:, 2] = Y_coint[:, 1] + 0.1 * randn(rng, 200)
         result_trend4 = johansen_test(Y_coint, 2; deterministic=:trend)
         @test result_trend4 isa JohansenResult
         @test result_trend4.deterministic == :trend
@@ -475,14 +478,14 @@ using Statistics
 
     @testset "VAR Stationarity" begin
         # Generate stationary VAR data
-        Random.seed!(123)
+        rng = Random.MersenneTwister(123)
         T, n = 200, 2
 
         # Stationary VAR(1) with coefficients ensuring stationarity
         Y = zeros(T, n)
         A = [0.5 0.1; 0.1 0.5]  # All eigenvalues < 1
         for t in 2:T
-            Y[t, :] = A * Y[t-1, :] + randn(n)
+            Y[t, :] = A * Y[t-1, :] + randn(rng, n)
         end
 
         model_stat = estimate_var(Y, 1; check_stability=false)
@@ -503,7 +506,7 @@ using Statistics
         @test result.is_stationary isa Bool
 
         # Test with non-stationary data (random walk)
-        Y_rw = cumsum(randn(T, n), dims=1)
+        Y_rw = cumsum(randn(rng, T, n), dims=1)
         model_rw = estimate_var(Y_rw, 1; check_stability=false)
         result_rw = is_stationary(model_rw)
         @test result_rw isa VARStationarityResult
@@ -516,11 +519,11 @@ using Statistics
     # ==========================================================================
 
     @testset "estimate_var Stability Check" begin
-        Random.seed!(456)
+        rng = Random.MersenneTwister(456)
         T, n = 100, 2
 
         # Generate random walk data
-        Y_rw = cumsum(randn(T, n), dims=1)
+        Y_rw = cumsum(randn(rng, T, n), dims=1)
 
         # Should produce warning with check_stability=true (default)
         @test_logs (:warn, r"non-stationary") estimate_var(Y_rw, 1; check_stability=true)
@@ -593,11 +596,12 @@ using Statistics
         result_np = ngperron_test(y)
         @test sprint(show, result_np) isa String
 
-        Y = randn(150, 3)
+        rng = Random.MersenneTwister(15002)
+        Y = randn(rng, 150, 3)
         result_joh = johansen_test(Y, 2)
         @test sprint(show, result_joh) isa String
 
-        model = estimate_var(randn(100, 2), 1; check_stability=false)
+        model = estimate_var(randn(rng, 100, 2), 1; check_stability=false)
         result_stat = is_stationary(model)
         @test sprint(show, result_stat) isa String
     end
@@ -608,7 +612,7 @@ using Statistics
 
     @testset "Critical Values" begin
         # ADF critical values should be ordered: cv[1] < cv[5] < cv[10] (more negative = more stringent)
-        y = randn(100)
+        y = randn(Random.MersenneTwister(15003), 100)
         result = adf_test(y)
         @test result.critical_values[1] < result.critical_values[5] < result.critical_values[10]
 
@@ -622,7 +626,7 @@ using Statistics
     end
 
     @testset "PP with trend" begin
-        y = randn(100)
+        y = randn(Random.MersenneTwister(15004), 100)
         result = pp_test(y; regression=:trend)
         @test result isa MacroEconometricModels.PPResult
         @test isfinite(result.statistic)
@@ -630,7 +634,7 @@ using Statistics
     end
 
     @testset "Ng-Perron with trend" begin
-        y = randn(100)
+        y = randn(Random.MersenneTwister(15005), 100)
         result = ngperron_test(y; regression=:trend)
         @test result isa MacroEconometricModels.NgPerronResult
         @test isfinite(result.MZa)
@@ -640,7 +644,7 @@ using Statistics
     end
 
     @testset "ZA with both regression" begin
-        y = cumsum(randn(100))
+        y = cumsum(randn(Random.MersenneTwister(15006), 100))
         result = za_test(y; regression=:both)
         @test result isa MacroEconometricModels.ZAResult
         @test result.regression == :both
@@ -648,7 +652,7 @@ using Statistics
     end
 
     @testset "unit_root_summary with custom test list" begin
-        y = randn(100)
+        y = randn(Random.MersenneTwister(15007), 100)
         summary_result = unit_root_summary(y; tests=[:adf, :pp])
         @test length(summary_result.results) >= 2
         @test haskey(summary_result.results, :adf)
@@ -660,8 +664,8 @@ using Statistics
     end
 
     @testset "test_all_variables with pp and za" begin
-        Random.seed!(8801)
-        Y = randn(100, 3)
+        rng = Random.MersenneTwister(8801)
+        Y = randn(rng, 100, 3)
         results_pp = test_all_variables(Y; test=:pp)
         @test length(results_pp) == 3
 

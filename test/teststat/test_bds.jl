@@ -230,8 +230,8 @@ end
         end
         @test r.small_sample
         # Bootstrap under iid: p-value is a valid fraction; iid ⇒ not tiny.
-        rng2 = Random.MersenneTwister(6)
-        yb = randn(rng2, 150)
+        rng = Random.MersenneTwister(6)
+        yb = randn(rng, 150)
         rb = bds_test(yb; m=2, eps_frac=1.0, bootstrap=300, seed=99)
         @test rb.bootstrap == 300
         @test isfinite(rb.boot_pvalue[1, 1])
@@ -261,9 +261,9 @@ end
         @test isfinite(r_arima.statistic[1, 1])
 
         # GARCH dispatch tests STANDARDIZED residuals (documented behaviour).
-        rng2 = Random.MersenneTwister(21)
+        rng = Random.MersenneTwister(21)
         n = 600
-        e = randn(rng2, n)
+        e = randn(rng, n)
         h = ones(n); ret = zeros(n)
         for t in 2:n
             h[t] = 0.05 + 0.1 * ret[t-1]^2 + 0.85 * h[t-1]

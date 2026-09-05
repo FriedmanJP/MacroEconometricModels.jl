@@ -213,8 +213,8 @@ end
         y, x = coint_pair(1, 100)
         @test_throws DimensionMismatch engle_granger_test(y, x[1:50])
         @test_throws ArgumentError phillips_ouliaris_test(reshape(y, :, 1))  # <2 cols
-        short = randn(10)
-        @test_throws ArgumentError engle_granger_test(short, randn(10))       # too few obs
+        short = randn(Random.MersenneTwister(92), 10)
+        @test_throws ArgumentError engle_granger_test(short, randn(Random.MersenneTwister(93), 10))  # too few obs
         mc = estimate_cointreg(y, x; method=:fmols, trend=:const)
         @test_throws ArgumentError park_added_test(mc; q_add=0)
     end

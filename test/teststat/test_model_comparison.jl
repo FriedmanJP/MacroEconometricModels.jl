@@ -6,28 +6,24 @@
 
 using Random
 
-Random.seed!(12345)
+rng = Random.MersenneTwister(12345)
 
 # =============================================================================
 # Shared test data
 # =============================================================================
 
 # ARIMA data
-y_arima = randn(300)
+y_arima = randn(rng, 300)
 
 # VAR data
-Y_var = randn(150, 3)
+Y_var = randn(rng, 150, 3)
 
-# Volatility data (GARCH-like)
+# Volatility data: GARCH(1,1) with ω=0.05, α=0.15, β=0.75 (DGP-12 #801)
 n_vol = 500
-z_vol = randn(n_vol)
-h_vol = ones(n_vol)
-y_vol = zeros(n_vol)
-y_vol[1] = z_vol[1]
-for t in 2:n_vol
-    h_vol[t] = 0.05 + 0.15 * y_vol[t-1]^2 + 0.75 * h_vol[t-1]
-    y_vol[t] = sqrt(h_vol[t]) * z_vol[t]
-end
+garch_truth = dgp_garch_family(rng; kind=:garch, omega=0.05, alpha=0.15,
+                               beta=0.75, T=n_vol, burn=200)
+y_vol = garch_truth.y
+h_vol = garch_truth.h
 
 # =============================================================================
 # LR Test — ARIMA Family
@@ -127,7 +123,7 @@ end
 
 @testset "LR Test — VECM" begin
     # VECM with different lag orders
-    Y_ci = randn(120, 2)
+    Y_ci = randn(rng, 120, 2)
     # Accumulate to create I(1)-like data
     Y_ci = cumsum(Y_ci, dims=1)
 
@@ -280,8 +276,7 @@ end
     @test_throws ArgumentError lm_test(ar2, ar2b)
 
     # Different data — use explicit seed to guarantee different data from y_arima
-    rng_other = Random.MersenneTwister(99999)
-    y_other = randn(rng_other, 300)
+    y_other = randn(Random.MersenneTwister(99999), 300)
     ar4_other = estimate_ar(y_other, 4; method=:mle)
     @test_throws ArgumentError lm_test(ar2, ar4_other)
 
@@ -297,16 +292,14 @@ end
 end
 
 @testset "LM Test — VAR different data" begin
-    rng_v = Random.MersenneTwister(77777)
-    Y_other = randn(rng_v, 150, 3)
+    Y_other = randn(Random.MersenneTwister(77777), 150, 3)
     var1 = estimate_var(Y_var, 1)
     var2_other = estimate_var(Y_other, 2)
     @test_throws ArgumentError lm_test(var1, var2_other)
 end
 
 @testset "LM Test — Volatility different data" begin
-    rng_vol = Random.MersenneTwister(55555)
-    y_other_vol = randn(rng_vol, 500)
+    y_other_vol = randn(Random.MersenneTwister(55555), 500)
     arch1 = estimate_arch(y_vol, 1)
     arch2_other = estimate_arch(y_other_vol, 2)
     @test_throws ArgumentError lm_test(arch1, arch2_other)
@@ -474,13 +467,10 @@ end
 # =============================================================================
 
 @testset "LR Test — Significant result" begin
-    # Generate AR(2) data to make AR(2) vs AR(0+) meaningful
-    Random.seed!(999)
+    # Generate AR(2) data to make AR(2) vs AR(0+) meaningful (DGP-12 #801)
+    rng_sig = Random.MersenneTwister(999)
     n_sig = 500
-    y_sig = zeros(n_sig)
-    for t in 3:n_sig
-        y_sig[t] = 0.5 * y_sig[t-1] - 0.3 * y_sig[t-2] + randn()
-    end
+    y_sig = dgp_arima(rng_sig; phi=[0.5, -0.3], T=n_sig).y
 
     ar0 = estimate_ar(y_sig, 1; method=:mle)  # underfit
     ar2 = estimate_ar(y_sig, 2; method=:mle)  # correct

@@ -6,10 +6,10 @@
 
 using Random
 
-Random.seed!(54321)
+rng = Random.MersenneTwister(54321)
 
 # Shared test data
-Y_gc = randn(200, 3)
+Y_gc = randn(rng, 200, 3)
 m2 = estimate_var(Y_gc, 2)
 
 # =============================================================================
@@ -144,8 +144,8 @@ end
 
 @testset "Granger Test Edge Cases" begin
     # VAR(1) — single lag
-    rng1 = Random.MersenneTwister(999)
-    Y1 = randn(rng1, 100, 2)
+    rng = Random.MersenneTwister(999)
+    Y1 = randn(rng, 100, 2)
     m1 = estimate_var(Y1, 1)
     g1 = granger_test(m1, 1, 2)
     @test g1.df == 1  # p = 1
@@ -161,8 +161,8 @@ end
     @test results_2var[2, 1] isa GrangerCausalityResult
 
     # VAR with more lags
-    rng4 = Random.MersenneTwister(888)
-    Y4 = randn(rng4, 200, 3)
+    rng = Random.MersenneTwister(888)
+    Y4 = randn(rng, 200, 3)
     m4 = estimate_var(Y4, 4)
     g4 = granger_test(m4, 1, 2)
     @test g4.df == 4

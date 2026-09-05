@@ -139,10 +139,10 @@ end
         @test rc.Ztilde_pvalue < 0.01          # reject non-causality
 
         # Independent series: x should NOT Granger-cause y.
-        rng2 = MersenneTwister(999)
-        xi = randn(rng2, T); yi = zeros(T)
+        rng = MersenneTwister(999)
+        xi = randn(rng, T); yi = zeros(T)
         for t in 2:T
-            yi[t] = 0.3 * yi[t-1] + randn(rng2)
+            yi[t] = 0.3 * yi[t-1] + randn(rng)
         end
         pdi = xtset(DataFrame(id = ones(Int, T), time = 1:T, y = yi, x = xi), :id, :time)
         ri = dh_causality_test(pdi, :x, :y; p = 1)
