@@ -14,8 +14,6 @@
 
 using Test, MacroEconometricModels, Random, LinearAlgebra, DataFrames, Statistics, Distributions
 
-Random.seed!(9003)
-
 const MEM = MacroEconometricModels
 const _suppress = MEM._suppress_warnings
 
@@ -408,13 +406,14 @@ end
 # =============================================================================
 
 @testset "Identification strength jade/sobi" begin
-    Random.seed!(9080)
-    Y = randn(200, 3)
+    rng = Random.MersenneTwister(9080)
+    Y = randn(rng, 200, 3)
     model = estimate_var(Y, 2)
 
     _suppress() do
         @testset "jade method" begin
-            result = test_identification_strength(model; method=:jade, n_bootstrap=(FAST ? 5 : 15))
+            result = test_identification_strength(model; method=:jade, n_bootstrap=(FAST ? 5 : 15),
+                                                  rng=rng)
             @test result isa MEM.IdentifiabilityTestResult{Float64}
             @test result.test_name == :label_stability
             @test 0 <= result.statistic <= 1
@@ -424,7 +423,8 @@ end
         end
 
         @testset "sobi method" begin
-            result = test_identification_strength(model; method=:sobi, n_bootstrap=(FAST ? 5 : 15))
+            result = test_identification_strength(model; method=:sobi, n_bootstrap=(FAST ? 5 : 15),
+                                                  rng=rng)
             @test result isa MEM.IdentifiabilityTestResult{Float64}
             @test result.test_name == :label_stability
             @test isnan(result.pvalue)
@@ -438,8 +438,8 @@ end
 # =============================================================================
 
 @testset "Shock gaussianity with NonGaussianMLResult" begin
-    Random.seed!(9090)
-    Y = randn(250, 3)
+    rng = Random.MersenneTwister(9090)
+    Y = randn(rng, 250, 3)
     model = estimate_var(Y, 2)
 
     _suppress() do
@@ -477,14 +477,14 @@ end
 # =============================================================================
 
 @testset "Shock independence with NonGaussianMLResult" begin
-    Random.seed!(9100)
-    Y = randn(200, 3)
+    rng = Random.MersenneTwister(9100)
+    Y = randn(rng, 200, 3)
     model = estimate_var(Y, 2)
 
     _suppress() do
         @testset "student_t ML result" begin
             ml = identify_student_t(model)
-            result = test_shock_independence(ml; max_lag=5)
+            result = test_shock_independence(ml; max_lag=5, rng=rng)
             @test result isa MEM.IdentifiabilityTestResult{Float64}
             @test result.test_name == :shock_independence
             @test result.statistic >= 0
@@ -508,15 +508,15 @@ end
 # =============================================================================
 
 @testset "Overidentification test" begin
-    Random.seed!(9110)
-    Y = randn(250, 3)
+    rng = Random.MersenneTwister(9110)
+    Y = randn(rng, 250, 3)
     model = estimate_var(Y, 2)
 
     _suppress() do
         @testset "with ICA result" begin
-            ica = identify_fastica(model)
+            ica = identify_fastica(model; rng=rng)
             nb = FAST ? 9 : 49
-            result = test_overidentification(model, ica; n_bootstrap=nb)
+            result = test_overidentification(model, ica; n_bootstrap=nb, rng=rng)
             @test result isa MEM.IdentifiabilityTestResult{Float64}
             @test result.test_name == :overidentification
             @test result.statistic >= 0
@@ -528,7 +528,7 @@ end
 
         @testset "with ML result" begin
             ml = identify_student_t(model)
-            result = test_overidentification(model, ml; n_bootstrap=(FAST ? 9 : 29))
+            result = test_overidentification(model, ml; n_bootstrap=(FAST ? 9 : 29), rng=rng)
             @test result isa MEM.IdentifiabilityTestResult{Float64}
             @test result.test_name == :overidentification
             @test result.statistic >= 0
@@ -536,7 +536,7 @@ end
 
         @testset "with JADE result" begin
             jade_res = identify_jade(model)
-            result = test_overidentification(model, jade_res; n_bootstrap=(FAST ? 9 : 19))
+            result = test_overidentification(model, jade_res; n_bootstrap=(FAST ? 9 : 19), rng=rng)
             @test result isa MEM.IdentifiabilityTestResult{Float64}
         end
     end
@@ -547,12 +547,12 @@ end
 # =============================================================================
 
 @testset "IdentifiabilityTestResult show" begin
-    Random.seed!(9120)
-    Y = randn(200, 3)
+    rng = Random.MersenneTwister(9120)
+    Y = randn(rng, 200, 3)
     model = estimate_var(Y, 2)
 
     _suppress() do
-        ica = identify_fastica(model)
+        ica = identify_fastica(model; rng=rng)
         gauss_result = test_shock_gaussianity(ica)
         s = sprint(show, gauss_result)
         @test occursin("Identifiability Test", s)

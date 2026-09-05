@@ -21,8 +21,8 @@ function _with_each_backend(f)
 end
 
 @testset "Display Backend Switching" begin
-    Random.seed!(42)
-    Y = randn(100, 3)
+    rng = Random.MersenneTwister(42)
+    Y = randn(rng, 100, 3)
     m = estimate_var(Y, 2)
 
     @testset "Default backend is :text" begin
@@ -112,7 +112,7 @@ end
     end
 
     @testset "ARIMA models render in all backends" begin
-        y = randn(200)
+        y = randn(Random.MersenneTwister(1471), 200)
         ar = estimate_ar(y, 2)
         _with_each_backend() do be
             buf = IOBuffer()
@@ -128,7 +128,7 @@ end
     end
 
     @testset "Unit root tests render in all backends" begin
-        y = cumsum(randn(200))
+        y = cumsum(randn(Random.MersenneTwister(1472), 200))
         adf = adf_test(y)
         _with_each_backend() do be
             buf = IOBuffer()
@@ -139,7 +139,7 @@ end
     end
 
     @testset "Factor model renders in all backends" begin
-        X = randn(100, 10)
+        X = randn(Random.MersenneTwister(1473), 100, 10)
         fm = estimate_factors(X, 3)
         _with_each_backend() do be
             buf = IOBuffer()
@@ -178,8 +178,8 @@ end
     end
 
     @testset "ARIMA show in all backends" begin
-        Random.seed!(9901)
-        y = randn(100)
+        rng = Random.MersenneTwister(9901)
+        y = randn(rng, 100)
         ar_m = estimate_ar(y, 1)
         ma_m = estimate_ma(y, 1)
         arma_m = estimate_arma(y, 1, 1)
@@ -193,8 +193,8 @@ end
     end
 
     @testset "Unit root result show in all backends" begin
-        Random.seed!(9902)
-        y = randn(100)
+        rng = Random.MersenneTwister(9902)
+        y = randn(rng, 100)
         adf_r = adf_test(y)
         kpss_r = kpss_test(y)
         pp_r = pp_test(y)
@@ -208,8 +208,8 @@ end
     end
 
     @testset "Factor model show in all backends" begin
-        Random.seed!(9903)
-        X = randn(100, 10)
+        rng = Random.MersenneTwister(9903)
+        X = randn(rng, 100, 10)
         fm = estimate_factors(X, 2)
         _with_each_backend() do be
             buf = IOBuffer()
@@ -219,10 +219,10 @@ end
     end
 
     @testset "Non-Gaussian result show in all backends" begin
-        Random.seed!(9904)
-        Y = randn(100, 2)
+        rng = Random.MersenneTwister(9904)
+        Y = randn(rng, 100, 2)
         var_m = estimate_var(Y, 1)
-        ica_r = identify_fastica(var_m)
+        ica_r = identify_fastica(var_m; rng=rng)
         ml_r = identify_student_t(var_m; max_iter=50)
         _with_each_backend() do be
             for r in [ica_r, ml_r]
@@ -234,8 +234,8 @@ end
     end
 
     @testset "refs() bibliographic references" begin
-        Random.seed!(42)
-        model = estimate_var(randn(100, 2), 2)
+        rng = Random.MersenneTwister(42)
+        model = estimate_var(randn(rng, 100, 2), 2)
 
         # Text format
         io = IOBuffer(); refs(io, model; format=:text)
@@ -270,14 +270,14 @@ end
         @test occursin("Johansen", s)
 
         # Unit root test refs
-        y = cumsum(randn(200))
+        y = cumsum(randn(rng, 200))
         adf_r = adf_test(y)
         io = IOBuffer(); refs(io, adf_r; format=:text)
         s = String(take!(io))
         @test occursin("Dickey", s)
 
         # ARIMA refs
-        ar_m = estimate_ar(randn(100), 1)
+        ar_m = estimate_ar(randn(rng, 100), 1)
         io = IOBuffer(); refs(io, ar_m; format=:text)
         s = String(take!(io))
         @test occursin("Box", s)
@@ -288,8 +288,8 @@ end
         @test occursin("@article{bollerslev1986", s)
 
         # ICA variant-dependent refs
-        var_m2 = estimate_var(randn(200, 2), 1)
-        ica_r2 = identify_fastica(var_m2)
+        var_m2 = estimate_var(randn(rng, 200, 2), 1)
+        ica_r2 = identify_fastica(var_m2; rng=rng)
         io = IOBuffer(); refs(io, ica_r2; format=:text)
         s = String(take!(io))
         @test occursin("rinen", s)  # Hyvärinen from FastICA method-specific ref
@@ -307,8 +307,8 @@ end
 end
 
 @testset "with_display_backend (scoped, concurrency-safe) — #249" begin
-    Random.seed!(2049)
-    m = estimate_var(randn(80, 2), 1)
+    rng = Random.MersenneTwister(2049)
+    m = estimate_var(randn(rng, 80, 2), 1)
     set_display_backend(:text)   # process default
 
     @testset "scoped override restores on exit" begin
@@ -390,9 +390,9 @@ end
     # (A) Wide 8-column coefficient table at a NARROW width. With PrettyTables' fit-to-
     #     display crop ON (the pre-fix default) the trailing significance/CI columns are
     #     dropped with a "N columns omitted" footer. Crop OFF renders the full table.
-    Random.seed!(1)
-    X = randn(200, 4)
-    y = X * [1.0, -0.8, 0.6, 0.4] .+ 0.1 .* randn(200)
+    rng = Random.MersenneTwister(1)
+    X = randn(rng, 200, 4)
+    y = X * [1.0, -0.8, 0.6, 0.4] .+ 0.1 .* randn(rng, 200)
     mr = estimate_reg(y, X)
     buf = IOBuffer(); show(IOContext(buf, :displaysize => (24, 50), :color => false), mr)
     out = String(take!(buf))
@@ -401,14 +401,14 @@ end
     @test occursin("P>|", out)               # p-value column (last-but-two) survives
 
     # (B) GARCH show spans >24 lines → the pre-fix vertical crop drops interior rows.
-    Random.seed!(2)
-    mg = estimate_garch(randn(400))
+    rng = Random.MersenneTwister(2)
+    mg = estimate_garch(randn(rng, 400))
     buf = IOBuffer(); show(IOContext(buf, :displaysize => (24, 80), :color => false), mg)
     out = String(take!(buf))
     @test !occursin("omitted", out)          # vertical crop off
 
     # (C) ACF with 25 lags → long table (audit V04 vertical-crop victim).
-    ra = acf(randn(300); lags = 25)
+    ra = acf(randn(rng, 300); lags = 25)
     buf = IOBuffer(); show(IOContext(buf, :displaysize => (24, 80), :color => false), ra)
     out = String(take!(buf))
     @test !occursin("omitted", out)
@@ -527,11 +527,12 @@ end
     end
 
     # show() must round-trip for every horizon on the result types that consume it.
+    rng = Random.MersenneTwister(1474)
     for H in 1:30
-        vals = randn(H, 2, 2)
+        vals = randn(rng, H, 2, 2)
         ir = MEM.ImpulseResponse{Float64}(vals, vals .- 1, vals .+ 1, H,
                                           ["y1", "y2"], ["s1", "s2"], :bootstrap)
-        bir = MEM.BayesianImpulseResponse{Float64}(randn(H, 2, 2, 3), vals, H,
+        bir = MEM.BayesianImpulseResponse{Float64}(randn(rng, H, 2, 2, 3), vals, H,
                                                   ["y1", "y2"], ["s1", "s2"],
                                                   [0.16, 0.5, 0.84])
         @test (sprint(show, ir); true)
@@ -609,8 +610,8 @@ end
 
 @testset "report() ends with an estimates table (S4/T168 pt1)" begin
     set_display_backend(:text)
-    Random.seed!(11)
-    Y = randn(120, 3)
+    rng = Random.MersenneTwister(11)
+    Y = randn(rng, 120, 3)
     # LP report now appends an IRF horizon table (was spec-table only) including impact h=0.
     m = estimate_lp(Y, 1, 8)
     s = sprint(show, m)
@@ -639,8 +640,8 @@ end
     @test MEM._fmt_pct((1 - 0.95) / 2) == "2.5%"
     @test MEM._fmt_pct((1 + 0.95) / 2) == "97.5%"
     # end-to-end: the BVAR forecast table now labels the band 2.5%/97.5%
-    Random.seed!(9)
-    bp = estimate_bvar(randn(80, 2), 2; n_draws = 100)
+    rng = Random.MersenneTwister(9)
+    bp = estimate_bvar(randn(rng, 80, 2), 2; n_draws = 100, seed = 9)
     s = sprint(show, forecast(bp, 4))
     @test occursin("2.5%", s) && occursin("97.5%", s)
     set_display_backend(:text)

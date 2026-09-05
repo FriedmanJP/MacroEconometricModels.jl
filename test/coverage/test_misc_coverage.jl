@@ -11,15 +11,13 @@
 #   - src/arima/estimation.jl (css_mle method, unknown method, Yule-Walker catch, MLE SE catch)
 #   - src/bvar/types.jl (size dim=3 error, BVARForecast show with :median)
 
-Random.seed!(9004)
-
 @testset "Misc Coverage Tests" begin
 
     # =========================================================================
     # 1. src/data/summary_stats.jl — CrossSectionData dispatch
     # =========================================================================
     @testset "describe_data(CrossSectionData)" begin
-        X = randn(50, 3)
+        X = randn(Random.MersenneTwister(1443), 50, 3)
         cs = CrossSectionData(X; varnames=["x1", "x2", "x3"])
         s = describe_data(cs)
         @test s isa MacroEconometricModels.DataSummary
@@ -36,7 +34,7 @@ Random.seed!(9004)
     # 2. src/data/summary_stats.jl — all-NaN column
     # =========================================================================
     @testset "describe_data with all-NaN column" begin
-        Y = randn(30, 3)
+        Y = randn(Random.MersenneTwister(1444), 30, 3)
         Y[:, 2] .= NaN  # entire column is NaN
         ts = TimeSeriesData(Y; varnames=["a", "b_nan", "c"])
         s = describe_data(ts)
@@ -58,7 +56,7 @@ Random.seed!(9004)
     @testset "describe_data with single-observation column" begin
         Y = fill(NaN, 20, 2)
         Y[5, 1] = 3.14     # only one finite value in column 1
-        Y[:, 2] .= randn(20)  # normal column
+        Y[:, 2] .= randn(Random.MersenneTwister(1445), 20)  # normal column
         ts = TimeSeriesData(Y; varnames=["single_obs", "normal"])
         s = describe_data(ts)
         @test s.n[1] == 1
@@ -77,7 +75,7 @@ Random.seed!(9004)
         Y = fill(NaN, 20, 2)
         Y[3, 1] = 1.0
         Y[7, 1] = 5.0  # two finite values, std > 0 but nf <= 2
-        Y[:, 2] .= randn(20)
+        Y[:, 2] .= randn(Random.MersenneTwister(1446), 20)
         ts = TimeSeriesData(Y; varnames=["two_obs", "normal"])
         s = describe_data(ts)
         @test s.n[1] == 2
@@ -133,7 +131,7 @@ Random.seed!(9004)
     # 8. src/arima/estimation.jl — estimate_arma with unknown method
     # =========================================================================
     @testset "estimate_arma unknown method" begin
-        y = randn(100)
+        y = randn(Random.MersenneTwister(1447), 100)
         @test_throws ArgumentError estimate_arma(y, 1, 1; method=:unknown)
     end
 
@@ -192,8 +190,8 @@ Random.seed!(9004)
     # 11. src/bvar/types.jl — size(post, 3) error
     # =========================================================================
     @testset "BVARPosterior size dim=3 error" begin
-        Y = randn(100, 3)
-        post = estimate_bvar(Y, 2; n_draws=50)
+        Y = randn(Random.MersenneTwister(1448), 100, 3)
+        post = estimate_bvar(Y, 2; n_draws=50, seed=1448)
         @test size(post, 1) == 50
         @test length(post) == 50
         @test_throws ErrorException size(post, 3)
@@ -203,8 +201,8 @@ Random.seed!(9004)
     # 12. src/bvar/types.jl — BVARForecast show with :median point estimate
     # =========================================================================
     @testset "BVARForecast show with :median" begin
-        Y = randn(100, 2)
-        post = estimate_bvar(Y, 2; n_draws=50, varnames=["GDP", "INF"])
+        Y = randn(Random.MersenneTwister(1449), 100, 2)
+        post = estimate_bvar(Y, 2; n_draws=50, varnames=["GDP", "INF"], seed=1449)
         fc = forecast(post, 5; point_estimate=:median)
         @test fc isa MacroEconometricModels.BVARForecast
         @test fc.point_estimate == :median
@@ -218,8 +216,8 @@ Random.seed!(9004)
     # 13. src/bvar/types.jl — BVARForecast show with :mean point estimate
     # =========================================================================
     @testset "BVARForecast show with :mean" begin
-        Y = randn(100, 2)
-        post = estimate_bvar(Y, 2; n_draws=50, varnames=["X1", "X2"])
+        Y = randn(Random.MersenneTwister(1450), 100, 2)
+        post = estimate_bvar(Y, 2; n_draws=50, varnames=["X1", "X2"], seed=1450)
         fc = forecast(post, 3; point_estimate=:mean)
         @test fc.point_estimate == :mean
         str = sprint(show, fc)
@@ -229,14 +227,14 @@ Random.seed!(9004)
     @testset "particle-filter kron buffer bounds guards (#254 G-19)" begin
         kb  = MacroEconometricModels._fill_kron_buffer!
         kb3 = MacroEconometricModels._fill_kron3_buffer!
-        V = randn(3, 4)                       # nv=3, N=4
+        V = randn(Random.MersenneTwister(1451), 3, 4)  # nv=3, N=4
         # correctly sized buffers do not throw
         @test (kb(zeros(9, 4), V, 3);  true)  # nv^2 = 9
         @test (kb3(zeros(27, 4), V, 3); true) # nv^3 = 27
         # mis-sized buffers raise a clean DimensionMismatch instead of corrupting memory
         @test_throws DimensionMismatch kb(zeros(4, 4), V, 3)     # too few rows
         @test_throws DimensionMismatch kb(zeros(9, 2), V, 3)     # too few cols
-        @test_throws DimensionMismatch kb(zeros(9, 4), randn(2, 4), 3)  # V too small
+        @test_throws DimensionMismatch kb(zeros(9, 4), randn(Random.MersenneTwister(1452), 2, 4), 3)  # V too small
         @test_throws DimensionMismatch kb3(zeros(10, 4), V, 3)
     end
 

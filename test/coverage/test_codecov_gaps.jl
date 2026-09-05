@@ -75,7 +75,8 @@ const M = MacroEconometricModels
 
     @testset "xtprobit validation" begin
         df = DataFrame(id=repeat(1:10, inner=4), t=repeat(1:4, 10),
-                       x=randn(40), y=Float64.(rand(40) .< 0.5))
+                       x=randn(Random.MersenneTwister(1429), 40),
+                       y=Float64.(rand(Random.MersenneTwister(1430), 40) .< 0.5))
         pd = xtset(df, :id, :t)
         @test_throws ArgumentError estimate_xtprobit(pd, :y, [:x]; model=:fe)
         @test_throws ArgumentError estimate_xtprobit(pd, :missing, [:x])

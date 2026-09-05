@@ -92,27 +92,28 @@ const M = MacroEconometricModels
         @test isfinite(M._ess_bulk(x))
         @test isfinite(M._ess_tail(x))
         @test isfinite(M._geweke_nse(x))
-        @test isnan(M._rhat_rank(randn(4)))
-        @test isnan(M._ess_bulk(randn(4)))
-        @test isnan(M._rhat_chains(randn(3, 2)))
-        @test isnan(M._ess_chains(randn(3, 2)))
+        @test isnan(M._rhat_rank(randn(Random.MersenneTwister(1433), 4)))
+        @test isnan(M._ess_bulk(randn(Random.MersenneTwister(1434), 4)))
+        @test isnan(M._rhat_chains(randn(Random.MersenneTwister(1435), 3, 2)))
+        @test isnan(M._ess_chains(randn(Random.MersenneTwister(1436), 3, 2)))
     end
 
     @testset "detect_trend / PrefilterSpec show" begin
-        @test detect_trend(randn(5)).trending == false
+        @test detect_trend(randn(Random.MersenneTwister(1437), 5)).trending == false
         tr = collect(0.0:0.5:20.0)
         d = detect_trend(tr)
         @test d.trending
-        flags = detect_trend(hcat(tr, randn(length(tr))); names=[:trend, :noise], warn=true)
+        flags = detect_trend(hcat(tr, randn(Random.MersenneTwister(1438), length(tr)));
+                             names=[:trend, :noise], warn=true)
         @test flags[1] && flags[2] == false
-        Y = randn(1, 40)   # n_obs × T (Kalman orientation)
+        Y = randn(Random.MersenneTwister(1439), 1, 40)   # n_obs × T (Kalman orientation)
         _, pf = apply_prefilter(Y, :demean; observables=[:y])
         @test occursin("PrefilterSpec", sprint(show, pf))
         @test occursin(":demean", sprint(show, pf))
     end
 
     @testset "family facade helpers" begin
-        ir = M._path_to_irf(randn(6, 2), ("y", "c"), "e")
+        ir = M._path_to_irf(randn(Random.MersenneTwister(1440), 6, 2), ("y", "c"), "e")
         @test ir isa ImpulseResponse
         @test size(ir.values, 1) == 6
         fv = M._fevd_from_irf(ir)

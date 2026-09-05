@@ -56,15 +56,4 @@ both headings; a file on either list is exempt.
 
 ## Grandfathered (pending per-module DGP migration — remove as DGP-02…18 land)
 
-<!-- DGP-18 (#807) -->
-- test/core/test_display_backends.jl
-- test/coverage/test_codecov_gaps.jl
-- test/coverage/test_data_types_coverage.jl
-- test/coverage/test_dsge_bayes_coverage.jl
-- test/coverage/test_dsge_coverage.jl
-- test/coverage/test_dsge_statid_coverage.jl
-- test/coverage/test_gmm_ext_coverage.jl
-- test/coverage/test_misc_coverage.jl
-- test/coverage/test_pvar_nongaussian_coverage.jl
-- test/coverage/test_teststat_break_panel_coverage.jl
-- test/gen_ev_fixtures.jl
+(All entries migrated; section intentionally left empty — DGP-18 #807.)

@@ -8,8 +8,6 @@
 # Targets: display.jl, occbin.jl, pruning.jl, blanchard_kahn.jl, pfi.jl,
 #          constraints.jl, gensys.jl, perturbation.jl, projection.jl
 
-Random.seed!(9005)
-
 const _suppress = MacroEconometricModels._suppress_warnings
 
 @testset "DSGE Coverage" begin
@@ -453,7 +451,7 @@ end
     @test all(isfinite, sim)
 
     # With custom shock draws
-    shocks = randn(50, 1)
+    shocks = randn(Random.MersenneTwister(9005), 50, 1)
     sim2 = simulate(sol, 50; shock_draws=shocks)
     @test size(sim2) == (50, 1)
 

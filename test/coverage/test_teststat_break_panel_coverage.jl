@@ -27,8 +27,6 @@ using DataFrames, Statistics
 #                                     _nw_bandwidth, _long_run_variance, _regression_name (all branches)
 #   panel_unit_root_summary         — IO dispatch, PanelData dispatch
 
-Random.seed!(9010)
-
 @testset "Teststat Break & Panel Coverage" begin
 
     # =========================================================================
@@ -297,17 +295,17 @@ Random.seed!(9010)
 
     @testset "Andrews test: error handling" begin
         # Invalid test type
-        @test_throws ArgumentError andrews_test(randn(100), ones(100, 1); test=:invalid)
+        @test_throws ArgumentError andrews_test(randn(Random.MersenneTwister(1453), 100), ones(100, 1); test=:invalid)
 
         # Dimension mismatch
-        @test_throws ArgumentError andrews_test(randn(100), ones(50, 1))
+        @test_throws ArgumentError andrews_test(randn(Random.MersenneTwister(1454), 100), ones(50, 1))
 
         # Too short series
-        @test_throws ArgumentError andrews_test(randn(10), ones(10, 1))
+        @test_throws ArgumentError andrews_test(randn(Random.MersenneTwister(1455), 10), ones(10, 1))
 
         # Invalid trimming
-        @test_throws ArgumentError andrews_test(randn(100), ones(100, 1); trimming=0.6)
-        @test_throws ArgumentError andrews_test(randn(100), ones(100, 1); trimming=-0.1)
+        @test_throws ArgumentError andrews_test(randn(Random.MersenneTwister(1456), 100), ones(100, 1); trimming=0.6)
+        @test_throws ArgumentError andrews_test(randn(Random.MersenneTwister(1457), 100), ones(100, 1); trimming=-0.1)
     end
 
     @testset "Andrews show method: reject and fail-to-reject" begin
@@ -487,11 +485,11 @@ Random.seed!(9010)
 
     @testset "factor_break_test: error handling" begin
         # Too short
-        @test_throws ArgumentError factor_break_test(randn(10, 5), 2)
+        @test_throws ArgumentError factor_break_test(randn(Random.MersenneTwister(1458), 10, 5), 2)
         # Invalid method (with r)
-        @test_throws ArgumentError factor_break_test(randn(100, 20), 2; method=:invalid)
+        @test_throws ArgumentError factor_break_test(randn(Random.MersenneTwister(1459), 100, 20), 2; method=:invalid)
         # Invalid method (no r)
-        @test_throws ArgumentError factor_break_test(randn(100, 20); method=:invalid)
+        @test_throws ArgumentError factor_break_test(randn(Random.MersenneTwister(1460), 100, 20); method=:invalid)
     end
 
     @testset "_be_sup_lm_path / _be_null_pool / _be_pooled_pvalue" begin
@@ -670,17 +668,17 @@ Random.seed!(9010)
 
     @testset "moon_perron_test: error handling" begin
         # Too short time dimension
-        @test_throws ArgumentError moon_perron_test(randn(5, 3); r=1)
+        @test_throws ArgumentError moon_perron_test(randn(Random.MersenneTwister(1461), 5, 3); r=1)
         # r < 1
-        @test_throws ArgumentError moon_perron_test(randn(80, 15); r=0)
+        @test_throws ArgumentError moon_perron_test(randn(Random.MersenneTwister(1462), 80, 15); r=0)
         # r too large
-        @test_throws ArgumentError moon_perron_test(randn(80, 15); r=100)
+        @test_throws ArgumentError moon_perron_test(randn(Random.MersenneTwister(1463), 80, 15); r=100)
     end
 
     @testset "moon_perron_test show: all 3 conclusion branches" begin
         # Branch 1: both reject (stationary panel data)
-        rng1 = Random.MersenneTwister(4010)
-        X_stat = randn(rng1, 100, 20)  # stationary → both should reject
+        rng = Random.MersenneTwister(4010)
+        X_stat = randn(rng, 100, 20)  # stationary → both should reject
         result_both = moon_perron_test(X_stat; r=1)
         io = IOBuffer()
         show(io, result_both)
@@ -760,13 +758,13 @@ Random.seed!(9010)
 
     @testset "panic_test: error handling" begin
         # Too short
-        @test_throws ArgumentError panic_test(randn(5, 3); r=1)
+        @test_throws ArgumentError panic_test(randn(Random.MersenneTwister(1465), 5, 3); r=1)
         # Invalid method
-        @test_throws ArgumentError panic_test(randn(80, 15); r=1, method=:invalid)
+        @test_throws ArgumentError panic_test(randn(Random.MersenneTwister(1466), 80, 15); r=1, method=:invalid)
         # r < 1
-        @test_throws ArgumentError panic_test(randn(80, 15); r=0)
+        @test_throws ArgumentError panic_test(randn(Random.MersenneTwister(1467), 80, 15); r=0)
         # r too large
-        @test_throws ArgumentError panic_test(randn(80, 15); r=100)
+        @test_throws ArgumentError panic_test(randn(Random.MersenneTwister(1468), 80, 15); r=100)
     end
 
     @testset "panic_test show: reject and fail-to-reject" begin
@@ -888,9 +886,9 @@ Random.seed!(9010)
 
     @testset "pesaran_cips_test: error handling" begin
         # Too short
-        @test_throws ArgumentError pesaran_cips_test(randn(5, 3); lags=1)
+        @test_throws ArgumentError pesaran_cips_test(randn(Random.MersenneTwister(1469), 5, 3); lags=1)
         # Invalid deterministic
-        @test_throws ArgumentError pesaran_cips_test(randn(50, 10); deterministic=:invalid)
+        @test_throws ArgumentError pesaran_cips_test(randn(Random.MersenneTwister(1470), 50, 10); deterministic=:invalid)
     end
 
     @testset "_nearest_val" begin

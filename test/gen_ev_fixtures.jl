@@ -140,8 +140,8 @@ let
     _write("teststat", "bubble_yrw.csv", reshape(y_rw, :, 1))
 end
 let
-    r = MersenneTwister(2024); T = 120; yy = zeros(T)
-    for t in 2:T; yy[t] = (50 <= t <= 75 ? 1.05 : 1.0) * yy[t-1] + randn(r); end
+    rng = MersenneTwister(2024); T = 120; yy = zeros(T)
+    for t in 2:T; yy[t] = (50 <= t <= 75 ? 1.05 : 1.0) * yy[t-1] + randn(rng); end
     _write("teststat", "bubble_yb.csv", reshape(yy, :, 1))
 end
 
