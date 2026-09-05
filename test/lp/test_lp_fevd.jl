@@ -11,15 +11,15 @@ using LinearAlgebra
 using Statistics
 
 @testset "LP-FEVD (Gorodnichenko & Lee 2019)" begin
-    Random.seed!(42)
+    rng = MersenneTwister(42)
 
     # Generate test data with known structure
     T_obs = 200
     n = 3
     Y = zeros(T_obs, n)
-    Y[1, :] = randn(n)
+    Y[1, :] = randn(rng, n)
     for t in 2:T_obs
-        Y[t, :] = 0.3 * Y[t-1, :] + randn(n)
+        Y[t, :] = 0.3 * Y[t-1, :] + randn(rng, n)
     end
 
     H = 12
@@ -215,8 +215,8 @@ using Statistics
 end
 
 @testset "LP-FEVD MC honesty counts (#244)" begin
-    Random.seed!(4244)
-    Y = randn(120, 2)
+    rng = MersenneTwister(4244)
+    Y = randn(rng, 120, 2)
     slp = structural_lp(Y, 5; method=:cholesky, lags=2)
 
     @testset "counts on a real bootstrap" begin

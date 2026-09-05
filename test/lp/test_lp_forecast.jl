@@ -11,15 +11,15 @@ using LinearAlgebra
 using Statistics
 
 @testset "LP Forecasting" begin
-    Random.seed!(123)
+    rng = MersenneTwister(123)
 
     # Generate test data
     T_obs = 200
     n = 3
     Y = zeros(T_obs, n)
-    Y[1, :] = randn(n)
+    Y[1, :] = randn(rng, n)
     for t in 2:T_obs
-        Y[t, :] = 0.3 * Y[t-1, :] + randn(n)
+        Y[t, :] = 0.3 * Y[t-1, :] + randn(rng, n)
     end
 
     H = 8

@@ -11,15 +11,15 @@ using LinearAlgebra
 using Statistics
 
 @testset "Structural LP" begin
-    Random.seed!(42)
+    rng = MersenneTwister(42)
 
     # Generate test data with some structure
     T_obs = 200
     n = 3
     Y = zeros(T_obs, n)
-    Y[1, :] = randn(n)
+    Y[1, :] = randn(rng, n)
     for t in 2:T_obs
-        Y[t, :] = 0.3 * Y[t-1, :] + randn(n)
+        Y[t, :] = 0.3 * Y[t-1, :] + randn(rng, n)
     end
 
     # =========================================================================
