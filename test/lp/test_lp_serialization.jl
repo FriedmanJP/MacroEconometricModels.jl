@@ -9,7 +9,7 @@ if !@isdefined(_assert_roundtrip)
 end
 
 @testset "RSER-03 LP innovation-accounting serialization (#776)" begin
-    Y = dgp_var(MersenneTwister(776); A=[0.5 0.1; 0.2 0.4], T=80).Y
+    Y = dgp_var(MersenneTwister(776); A=[0.5 0.1; 0.2 0.4], B0=[1.0 0.0; 0.0 1.0], T=80).Y
 
     @testset "LPImpulseResponse" begin
         lp = estimate_lp(Y, 1, 6; lags=1)
@@ -46,7 +46,7 @@ end
 end
 
 @testset "RSER-04 LPForecast serialization (#777)" begin
-    Y = dgp_var(MersenneTwister(777); A=[0.5 0.1; 0.2 0.4], T=80).Y
+    Y = dgp_var(MersenneTwister(777); A=[0.5 0.1; 0.2 0.4], B0=[1.0 0.0; 0.0 1.0], T=80).Y
     lp = estimate_lp(Y, 1, 6; lags=1)
     fc = forecast(lp, ones(6); ci_method=:analytical)
     @test _from_serializable_is_generic(LPForecast)
@@ -117,7 +117,7 @@ end
 
     @testset "BSplineBasis from SmoothLPModel" begin
         @test _from_serializable_is_generic(BSplineBasis)
-        Y = dgp_var(MersenneTwister(7841); A=[0.5 0.1; 0.2 0.4], T=80).Y
+        Y = dgp_var(MersenneTwister(7841); A=[0.5 0.1; 0.2 0.4], B0=[1.0 0.0; 0.0 1.0], T=80).Y
         sm = estimate_smooth_lp(Y, 1, 8; degree=3, n_knots=4, lambda=1.0, lags=1)
         basis = sm.spline_basis
         @test basis isa BSplineBasis{Float64}
