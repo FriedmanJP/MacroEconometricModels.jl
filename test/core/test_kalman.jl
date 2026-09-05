@@ -8,6 +8,11 @@ using Test
 using MacroEconometricModels
 using Random
 using LinearAlgebra
+using Statistics
+
+if !@isdefined(FAST)
+    const FAST = get(ENV, "MACRO_FAST_TESTS", "") == "1"
+end
 
 @testset "Core Kalman operations" begin
     rng = MersenneTwister(42)  # DGP-02: explicit rng
@@ -288,5 +293,99 @@ using LinearAlgebra
         @test a_e == [1.0, 2.0] && P_e == [2.0 0.0; 0.0 3.0]
         @test_throws ArgumentError MEM._kalman_init(:bogus, Tt, RQR, 2)
         @test_throws ArgumentError MEM._kalman_init(:stationary, [1.01 0.0; 0.0 0.5], RQR, 2)
+    end
+
+    @testset "Innovations form: stored (v, F) reproduce the prediction-error likelihood" begin
+        # DGP-06 (#795): the kernel's log-likelihood IS the innovations form
+        # Σ_t log p(y_t | y_{1:t-1}); recompute it by hand from the stored
+        # one-step errors v_t and covariances F_t, and check their definitions.
+        MEM = MacroEconometricModels
+        rng = Random.MersenneTwister(1246)
+        Tt = [0.5 0.1; -0.2 0.4]
+        RQR = [0.30 0.05; 0.05 0.20]
+        Z = [1.0 0.0; 0.3 1.0]
+        Hobs = [0.10 0.0; 0.0 0.15]
+        b = [0.2, -0.1]; d = [0.05, 0.02]
+        T_obs = 60
+        a0, P0 = MEM._kalman_init(:stationary, Tt, RQR, 2)
+        sim = dgp_state_space(rng; F=Tt, H=Z, Q=RQR, R=Hobs, b=b, d=d, x0=a0, T=T_obs)
+        y = Matrix(sim.y')
+
+        store = MEM.KalmanFilterStore{Float64}(2, T_obs; innovations=true)
+        ll = MEM._kalman_filter!(store, y, Z, Tt, RQR, Hobs; d=d, b=b, a0=a0, P0=P0,
+                                 scalar=false)
+        @test all(v -> length(v) == 2, store.v)       # fully observed: no ragged steps
+        ll_hand = 0.0
+        for t in 1:T_obs
+            v, Ft = store.v[t], store.F[t]
+            # definitions: v_t = y_t − d − Z a_{t|t-1}, F_t = Z P_{t|t-1} Z' + H
+            @test v ≈ y[:, t] - d - Z * store.a_pred[:, t] rtol = 1e-9
+            @test Ft ≈ Z * store.P_pred[:, :, t] * Z' + Hobs rtol = 1e-9
+            L = cholesky(Symmetric((Ft + Ft') / 2)).L
+            w = L \ v
+            ll_hand += -0.5 * (2 * log(2π) + 2 * sum(log, diag(L)) + dot(w, w))
+        end
+        @test ll_hand ≈ ll rtol = 1e-10
+    end
+
+    @testset "Diffuse initialization" begin
+        # DGP-06 (#795): :diffuse collapses to the stationary Lyapunov solution
+        # on stable transitions, and puts κ on unit-root directions (with a
+        # one-time warning, silenced here — the warning itself is covered by
+        # the #512 testset in test/statespace/test_statespace.jl).
+        MEM = MacroEconometricModels
+        Tt = [0.5 0.1; -0.2 0.4]
+        RQR = [0.30 0.05; 0.05 0.20]
+        Pd = MEM._kalman_init(:diffuse, Tt, RQR, 2)[2]
+        Ps = MEM._kalman_init(:stationary, Tt, RQR, 2)[2]
+        @test Pd ≈ Ps rtol = 1e-8
+        @test Pd != 1e6 * Matrix(I, 2, 2)          # genuinely not the κ prior
+        Pu = MEM._suppress_warnings() do
+            MEM._kalman_init(:diffuse, reshape([1.0], 1, 1), reshape([0.5], 1, 1),
+                             1; kappa=1e6)[2]
+        end
+        @test Pu ≈ fill(1e6, 1, 1) rtol = 1e-8    # κ on the unit-root direction
+    end
+
+    @testset "Simulation smoother: draw mean matches RTS, draws vary" begin
+        # DGP-06 (#795): Durbin–Koopman draws α̃ ~ p(α|y). The draw average must
+        # recover the RTS smoother mean and the draw covariance the smoother
+        # covariance; a mean-only "smoother" fails the variance checks.
+        # Calibrated (seed 1247): max|drawmean − RTS|/scale ≈ 0.043 at S=200.
+        MEM = MacroEconometricModels
+        rng = Random.MersenneTwister(1247)
+        Tt = [0.5 0.1; -0.2 0.4]
+        RQR = [0.30 0.05; 0.05 0.20]
+        Z = [1.0 0.0; 0.3 1.0]
+        Hobs = [0.10 0.0; 0.0 0.15]
+        b = [0.2, -0.1]; d = [0.05, 0.02]
+        T_obs = 60
+        a0, P0 = MEM._kalman_init(:stationary, Tt, RQR, 2)
+        sim = dgp_state_space(rng; F=Tt, H=Z, Q=RQR, R=Hobs, b=b, d=d, x0=a0, T=T_obs)
+        y = Matrix(sim.y')
+        store = MEM.KalmanFilterStore{Float64}(2, T_obs)
+        MEM._kalman_filter!(store, y, Z, Tt, RQR, Hobs; d=d, b=b, a0=a0, P0=P0,
+                            scalar=false)
+        as, Ps, _ = MEM._rts_smoother(store, Tt)
+
+        S = FAST ? 64 : 400
+        acc = zeros(2, T_obs); acc2 = zeros(2, T_obs)
+        for s in 1:S
+            dr = MEM._simulation_smoother(rng, y, Z, Tt, RQR, Hobs; d=d, b=b,
+                                          a0=a0, P0=P0)
+            @test all(isfinite, dr)
+            acc .+= dr; acc2 .+= dr .^ 2
+        end
+        dmean = acc / S
+        dvar = acc2 / S - dmean .^ 2
+        scale = maximum(abs, as)
+        @test maximum(abs, dmean - as) / scale < (FAST ? 0.2 : 0.08)
+        # Draws genuinely vary, with roughly the smoother variance (MC-loose:
+        # Var of a variance estimate over S draws is ~2/S).
+        @test all(dvar .> 0)
+        mid = T_obs ÷ 2
+        for i in 1:2
+            @test isapprox(dvar[i, mid], Ps[i, i, mid]; rtol=0.5)
+        end
     end
 end

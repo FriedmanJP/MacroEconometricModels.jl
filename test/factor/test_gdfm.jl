@@ -24,13 +24,12 @@ using Random
     # ==========================================================================
 
     @testset "Basic GDFM Estimation" begin
-        Random.seed!(12345)
+        # DGP-06: shared dynamic-factor simulator (was: bespoke iid loop).
+        rng = Random.MersenneTwister(12345)
         T_obs, N, q = 200, 20, 2
 
         # Generate simple factor data
-        F_true = randn(T_obs, q)
-        Lambda = randn(N, q)
-        X = F_true * Lambda' + 0.3 * randn(T_obs, N)
+        X = dgp_dynamic_factors(rng; N=N, T=T_obs, idio_sd=0.3).X
 
         # Estimate GDFM
         model = estimate_gdfm(X, q)
@@ -53,11 +52,16 @@ using Random
     end
 
     @testset "Common component via Forni projector (T096 #195)" begin
-        Random.seed!(1959)
+        # DGP-06: shared simulator; the true common component comes from the
+        # simulator's factors/loadings (was: bespoke iid loop).
+        rng = Random.MersenneTwister(1959)
         T_obs, N = 120, 6
-        F = randn(T_obs, 2); Λ = randn(N, 2)
-        common_true = F * Λ'
-        X = common_true + 0.1 * randn(T_obs, N)
+        # O(1) loadings keep the strong-signal regime the 0.9 bound was
+        # written for (the simulator default targets a 0.7 common share).
+        d = dgp_dynamic_factors(rng; Lambda=randn(rng, N, 2), N=N, T=T_obs,
+                                idio_sd=0.1)
+        common_true = d.F * d.Lambda'
+        X = d.X
         # q = N: the projector L·Lᴴ = I, so the common component reconstructs X exactly (the old
         # raw rank-1 periodogram Wiener filter did not).
         m_full = estimate_gdfm(X, N; standardize=false, spectral=:smoothed_periodogram)
@@ -70,9 +74,9 @@ using Random
     end
 
     @testset "Different Kernels" begin
-        Random.seed!(23456)
+        rng = Random.MersenneTwister(23456)
         T_obs, N, q = 150, 15, 2
-        X = randn(T_obs, N)
+        X = randn(rng, T_obs, N)
 
         for kernel in [:bartlett, :parzen, :tukey]
             model = estimate_gdfm(X, q; kernel=kernel)
@@ -82,11 +86,11 @@ using Random
     end
 
     @testset "Standardization Options" begin
-        Random.seed!(34567)
+        rng = Random.MersenneTwister(34567)
         T_obs, N, q = 100, 10, 1
 
         # Create data with different scales
-        X = randn(T_obs, N)
+        X = randn(rng, T_obs, N)
         X[:, 1] .*= 100  # Large scale
         X[:, 2] .*= 0.01  # Small scale
 
@@ -104,9 +108,9 @@ using Random
     end
 
     @testset "Custom Bandwidth" begin
-        Random.seed!(45678)
+        rng = Random.MersenneTwister(45678)
         T_obs, N, q = 120, 12, 1
-        X = randn(T_obs, N)
+        X = randn(rng, T_obs, N)
 
         # Automatic bandwidth
         model_auto = estimate_gdfm(X, q; bandwidth=0)
@@ -123,15 +127,14 @@ using Random
     # ==========================================================================
 
     @testset "Single Factor Recovery" begin
-        Random.seed!(56789)
+        # DGP-06: shared simulator (was: bespoke iid loop).
+        rng = Random.MersenneTwister(56789)
         T_obs, N = 300, 30
         q = 1
 
-        # Generate single factor data with clear structure
-        F_true = randn(T_obs)
-        Lambda = randn(N)
-        # Low noise for clearer recovery
-        X = F_true * Lambda' + 0.2 * randn(T_obs, N)
+        # Generate single factor data with clear structure (low noise)
+        X = dgp_dynamic_factors(rng; A=reshape([0.5], 1, 1), N=N, T=T_obs,
+                                idio_sd=0.2).X
 
         model = estimate_gdfm(X, q)
 
@@ -142,14 +145,14 @@ using Random
     end
 
     @testset "Multiple Factor Recovery" begin
-        Random.seed!(67890)
+        # DGP-06: shared simulator (was: bespoke iid loop).
+        rng = Random.MersenneTwister(67890)
         T_obs, N = 400, 40
         q_true = 3
 
         # Generate multi-factor data
-        F_true = randn(T_obs, q_true)
-        Lambda = randn(N, q_true)
-        X = F_true * Lambda' + 0.25 * randn(T_obs, N)
+        A3 = [0.5 0.1 0.0; 0.05 0.5 0.1; 0.0 0.05 0.5]
+        X = dgp_dynamic_factors(rng; A=A3, N=N, T=T_obs, idio_sd=0.25).X
 
         model = estimate_gdfm(X, q_true)
 
@@ -163,18 +166,14 @@ using Random
     end
 
     @testset "Dynamic Factor Structure" begin
-        Random.seed!(78901)
+        # DGP-06: shared simulator (was: bespoke AR loop).
+        rng = Random.MersenneTwister(78901)
         T_obs, N = 300, 25
         q = 2
 
         # Generate factors with AR dynamics
-        F_true = zeros(T_obs, q)
-        for t in 2:T_obs
-            F_true[t, :] = 0.7 * F_true[t-1, :] + randn(q)
-        end
-
-        Lambda = randn(N, q)
-        X = F_true * Lambda' + 0.3 * randn(T_obs, N)
+        X = dgp_dynamic_factors(rng; A=[0.7 0.0; 0.0 0.7], N=N, T=T_obs,
+                                idio_sd=0.3).X
 
         model = estimate_gdfm(X, q)
 
@@ -188,9 +187,9 @@ using Random
     # ==========================================================================
 
     @testset "Spectral Density Properties" begin
-        Random.seed!(89012)
+        rng = Random.MersenneTwister(89012)
         T_obs, N, q = 128, 16, 2
-        X = randn(T_obs, N)
+        X = randn(rng, T_obs, N)
 
         model = estimate_gdfm(X, q)
 
@@ -211,9 +210,9 @@ using Random
     end
 
     @testset "Eigenvalue Ordering" begin
-        Random.seed!(90123)
+        rng = Random.MersenneTwister(90123)
         T_obs, N, q = 100, 15, 3
-        X = randn(T_obs, N)
+        X = randn(rng, T_obs, N)
 
         model = estimate_gdfm(X, q)
 
@@ -230,9 +229,9 @@ using Random
     # ==========================================================================
 
     @testset "StatsAPI Interface" begin
-        Random.seed!(12345)
+        rng = Random.MersenneTwister(12345)
         T_obs, N, q = 100, 10, 2
-        X = randn(T_obs, N)
+        X = randn(rng, T_obs, N)
 
         model = estimate_gdfm(X, q)
 
@@ -259,16 +258,17 @@ using Random
     end
 
     @testset "R² Consistency" begin
-        Random.seed!(23456)
+        # DGP-06: shared simulator for the strong panel; the weak panel scales
+        # the same common component down against unit noise (was: bespoke loop).
+        rng = Random.MersenneTwister(23456)
         T_obs, N, q = 150, 12, 2
 
         # Strong factor structure
-        F_true = randn(T_obs, q)
-        Lambda = randn(N, q)
-        X_strong = F_true * Lambda' + 0.1 * randn(T_obs, N)
+        d = dgp_dynamic_factors(rng; N=N, T=T_obs, idio_sd=0.1)
+        X_strong = d.X
 
         # Weak factor structure
-        X_weak = 0.1 * F_true * Lambda' + randn(T_obs, N)
+        X_weak = 0.1 * (d.F * d.Lambda') + randn(rng, T_obs, N)
 
         model_strong = estimate_gdfm(X_strong, q)
         model_weak = estimate_gdfm(X_weak, q)
@@ -285,10 +285,10 @@ using Random
     # ==========================================================================
 
     @testset "Information Criteria Computation" begin
-        Random.seed!(34567)
+        rng = Random.MersenneTwister(34567)
         T_obs, N = 200, 20
         max_q = 5
-        X = randn(T_obs, N)
+        X = randn(rng, T_obs, N)
 
         ic = ic_criteria_gdfm(X, max_q)
 
@@ -311,15 +311,14 @@ using Random
     end
 
     @testset "Factor Selection with Known Structure" begin
-        Random.seed!(45678)
+        # DGP-06: shared simulator (was: bespoke iid loop).
+        rng = Random.MersenneTwister(45678)
         T_obs, N = 300, 30
         q_true = 2
         max_q = 5
 
         # Generate data with clear 2-factor structure
-        F_true = randn(T_obs, q_true)
-        Lambda = randn(N, q_true)
-        X = F_true * Lambda' + 0.2 * randn(T_obs, N)
+        X = dgp_dynamic_factors(rng; N=N, T=T_obs, idio_sd=0.2).X
 
         ic = ic_criteria_gdfm(X, max_q)
 
@@ -336,11 +335,11 @@ using Random
     # ==========================================================================
 
     @testset "Basic Forecasting" begin
-        Random.seed!(56789)
+        rng = Random.MersenneTwister(56789)
         T_obs, N, q = 150, 15, 2
         h = 10
 
-        X = randn(T_obs, N)
+        X = randn(rng, T_obs, N)
         model = estimate_gdfm(X, q)
 
         fc = forecast(model, h; method=:ar)
@@ -355,11 +354,11 @@ using Random
     end
 
     @testset "Forecast Methods" begin
-        Random.seed!(67890)
+        rng = Random.MersenneTwister(67890)
         T_obs, N, q = 120, 12, 2
         h = 5
 
-        X = randn(T_obs, N)
+        X = randn(rng, T_obs, N)
         model = estimate_gdfm(X, q)
 
         # AR method
@@ -375,19 +374,15 @@ using Random
     end
 
     @testset "Forecast with Dynamic Factors" begin
-        Random.seed!(78901)
+        # DGP-06: shared simulator (was: bespoke AR loop).
+        rng = Random.MersenneTwister(78901)
         T_obs, N, q = 200, 20, 2
         h = 12
 
         # Generate AR(1) factors
-        F_true = zeros(T_obs, q)
         phi = 0.8
-        for t in 2:T_obs
-            F_true[t, :] = phi * F_true[t-1, :] + randn(q)
-        end
-
-        Lambda = randn(N, q)
-        X = F_true * Lambda' + 0.3 * randn(T_obs, N)
+        X = dgp_dynamic_factors(rng; A=[phi 0.0; 0.0 phi], N=N, T=T_obs,
+                                idio_sd=0.3).X
 
         model = estimate_gdfm(X, q)
         fc = forecast(model, h)
@@ -405,11 +400,11 @@ using Random
     # ==========================================================================
 
     @testset "Single Factor (q=1)" begin
-        Random.seed!(89012)
+        rng = Random.MersenneTwister(89012)
         T_obs, N = 100, 15
         q = 1
 
-        X = randn(T_obs, N)
+        X = randn(rng, T_obs, N)
         model = estimate_gdfm(X, q)
 
         @test model.q == 1
@@ -418,11 +413,11 @@ using Random
     end
 
     @testset "Many Factors (q close to N)" begin
-        Random.seed!(90123)
+        rng = Random.MersenneTwister(90123)
         T_obs, N = 100, 10
         q = N - 2  # Many factors
 
-        X = randn(T_obs, N)
+        X = randn(rng, T_obs, N)
         model = estimate_gdfm(X, q)
 
         @test model.q == q
@@ -435,11 +430,11 @@ using Random
     end
 
     @testset "Short Time Series" begin
-        Random.seed!(12345)
+        rng = Random.MersenneTwister(12345)
         T_obs = 50  # Short
         N, q = 10, 2
 
-        X = randn(T_obs, N)
+        X = randn(rng, T_obs, N)
         model = estimate_gdfm(X, q)
 
         @test size(model.factors) == (T_obs, q)
@@ -447,12 +442,12 @@ using Random
     end
 
     @testset "Wide Panel (N > T)" begin
-        Random.seed!(23456)
+        rng = Random.MersenneTwister(23456)
         T_obs = 25
         N = 50  # N > T
         q = 2
 
-        X = randn(T_obs, N)
+        X = randn(rng, T_obs, N)
         model = estimate_gdfm(X, q)
 
         @test size(model.X) == (T_obs, N)
@@ -460,11 +455,11 @@ using Random
     end
 
     @testset "Power of 2 Sample Size" begin
-        Random.seed!(34567)
+        rng = Random.MersenneTwister(34567)
         T_obs = 256  # Power of 2 for efficient FFT
         N, q = 20, 3
 
-        X = randn(T_obs, N)
+        X = randn(rng, T_obs, N)
         model = estimate_gdfm(X, q)
 
         @test size(model.factors) == (T_obs, q)
@@ -475,13 +470,13 @@ using Random
     # ==========================================================================
 
     @testset "Near-Collinear Data" begin
-        Random.seed!(45678)
+        rng = Random.MersenneTwister(45678)
         T_obs, N = 100, 10
         q = 2
 
         # Create nearly collinear variables
-        X = randn(T_obs, N)
-        X[:, 2] = X[:, 1] + 1e-8 * randn(T_obs)
+        X = randn(rng, T_obs, N)
+        X[:, 2] = X[:, 1] + 1e-8 * randn(rng, T_obs)
 
         model = estimate_gdfm(X, q)
         @test all(isfinite, model.common_component)
@@ -489,25 +484,25 @@ using Random
     end
 
     @testset "Extreme Scaling" begin
-        Random.seed!(56789)
+        rng = Random.MersenneTwister(56789)
         T_obs, N, q = 100, 10, 2
 
         # Very large values
-        X_large = 1e6 * randn(T_obs, N)
+        X_large = 1e6 * randn(rng, T_obs, N)
         model_large = estimate_gdfm(X_large, q; standardize=true)
         @test all(isfinite, model_large.common_component)
 
         # Very small values
-        X_small = 1e-6 * randn(T_obs, N)
+        X_small = 1e-6 * randn(rng, T_obs, N)
         model_small = estimate_gdfm(X_small, q; standardize=true)
         @test all(isfinite, model_small.common_component)
     end
 
     @testset "Mixed Scaling" begin
-        Random.seed!(67890)
+        rng = Random.MersenneTwister(67890)
         T_obs, N, q = 100, 10, 2
 
-        X = randn(T_obs, N)
+        X = randn(rng, T_obs, N)
         X[:, 1] .*= 1e6
         X[:, end] .*= 1e-6
 
@@ -517,10 +512,10 @@ using Random
     end
 
     @testset "Constant Column" begin
-        Random.seed!(78901)
+        rng = Random.MersenneTwister(78901)
         T_obs, N, q = 100, 10, 2
 
-        X = randn(T_obs, N)
+        X = randn(rng, T_obs, N)
         X[:, 3] .= 5.0  # Constant column
 
         model = estimate_gdfm(X, q; standardize=true)
@@ -533,9 +528,9 @@ using Random
     # ==========================================================================
 
     @testset "Input Validation" begin
-        Random.seed!(89012)
+        rng = Random.MersenneTwister(89012)
         T_obs, N = 100, 10
-        X = randn(T_obs, N)
+        X = randn(rng, T_obs, N)
 
         # Invalid q
         @test_throws ArgumentError estimate_gdfm(X, 0)
@@ -549,9 +544,9 @@ using Random
     end
 
     @testset "IC Criteria Validation" begin
-        Random.seed!(90123)
+        rng = Random.MersenneTwister(90123)
         T_obs, N = 100, 10
-        X = randn(T_obs, N)
+        X = randn(rng, T_obs, N)
 
         # Invalid max_q
         @test_throws ArgumentError ic_criteria_gdfm(X, 0)
@@ -559,9 +554,9 @@ using Random
     end
 
     @testset "Forecast Validation" begin
-        Random.seed!(12345)
+        rng = Random.MersenneTwister(12345)
         T_obs, N, q = 100, 10, 2
-        X = randn(T_obs, N)
+        X = randn(rng, T_obs, N)
         model = estimate_gdfm(X, q)
 
         # Invalid horizon
@@ -577,13 +572,12 @@ using Random
     # ==========================================================================
 
     @testset "Common Variance Share" begin
-        Random.seed!(23456)
+        # DGP-06: shared simulator (was: bespoke iid loop).
+        rng = Random.MersenneTwister(23456)
         T_obs, N, q = 150, 15, 2
 
         # Strong factor structure
-        F_true = randn(T_obs, q)
-        Lambda = randn(N, q)
-        X = F_true * Lambda' + 0.1 * randn(T_obs, N)
+        X = dgp_dynamic_factors(rng; N=N, T=T_obs, idio_sd=0.1).X
 
         model = estimate_gdfm(X, q)
 
@@ -601,9 +595,9 @@ using Random
     end
 
     @testset "Spectral Eigenvalue Plot Data" begin
-        Random.seed!(34567)
+        rng = Random.MersenneTwister(34567)
         T_obs, N, q = 100, 12, 2
-        X = randn(T_obs, N)
+        X = randn(rng, T_obs, N)
 
         model = estimate_gdfm(X, q)
 
@@ -621,9 +615,9 @@ using Random
     # ==========================================================================
 
     @testset "Decomposition Consistency" begin
-        Random.seed!(45678)
+        rng = Random.MersenneTwister(45678)
         T_obs, N, q = 120, 15, 2
-        X = randn(T_obs, N)
+        X = randn(rng, T_obs, N)
 
         model = estimate_gdfm(X, q)
 
@@ -638,9 +632,9 @@ using Random
     end
 
     @testset "Reproducibility" begin
-        Random.seed!(56789)
+        rng = Random.MersenneTwister(56789)
         T_obs, N, q = 100, 10, 2
-        X = randn(T_obs, N)
+        X = randn(rng, T_obs, N)
 
         # Same data should give same results
         model1 = estimate_gdfm(X, q; bandwidth=5, kernel=:bartlett)
@@ -651,10 +645,10 @@ using Random
     end
 
     @testset "Integer Matrix Input" begin
-        Random.seed!(67890)
+        rng = Random.MersenneTwister(67890)
         T_obs, N, q = 100, 10, 2
 
-        X_int = rand(1:10, T_obs, N)
+        X_int = rand(rng, 1:10, T_obs, N)
 
         model = estimate_gdfm(X_int, q)
         @test model isa GeneralizedDynamicFactorModel{Float64}
@@ -666,19 +660,21 @@ using Random
     # ==========================================================================
 
     @testset "Increasing Sample Size" begin
-        Random.seed!(78901)
+        # DGP-06: shared simulator with FIXED loadings across sample sizes, so
+        # only T varies (was: bespoke nested truncation). Each span is drawn
+        # fresh from the same DGP parameters.
+        rng = Random.MersenneTwister(78901)
         N, q = 20, 2
         sample_sizes = [100, 400]
 
         # Generate consistent DGP
-        F_full = randn(500, q)
-        Lambda = randn(N, q)
-        e = 0.3 * randn(500, N)
+        Lambda = randn(rng, N, q)
 
         r2_values = Float64[]
 
         for T_obs in sample_sizes
-            X = F_full[1:T_obs, :] * Lambda' + e[1:T_obs, :]
+            X = dgp_dynamic_factors(rng; Lambda=Lambda, N=N, T=T_obs,
+                                    idio_sd=0.3).X
             model = estimate_gdfm(X, q)
             push!(r2_values, mean(r2(model)))
         end
@@ -689,16 +685,15 @@ using Random
     end
 
     @testset "Increasing Panel Width" begin
-        Random.seed!(89012)
+        # DGP-06: shared simulator (was: bespoke iid loop per width).
+        rng = Random.MersenneTwister(89012)
         T_obs, q = 200, 2
         panel_widths = [10, 25]
 
         variance_explained_list = Float64[]
 
         for N in panel_widths
-            F_true = randn(T_obs, q)
-            Lambda = randn(N, q)
-            X = F_true * Lambda' + 0.3 * randn(T_obs, N)
+            X = dgp_dynamic_factors(rng; N=N, T=T_obs, idio_sd=0.3).X
 
             model = estimate_gdfm(X, q)
             push!(variance_explained_list, sum(model.variance_explained))
@@ -709,9 +704,9 @@ using Random
     end
 
     @testset "TimeSeriesData varnames and NaN validation" begin
-        Random.seed!(42)
+        rng = Random.MersenneTwister(42)
         T_obs, N, q = 80, 8, 2
-        X = randn(T_obs, N)
+        X = randn(rng, T_obs, N)
         names = ["x$i" for i in 1:N]
         ts = TimeSeriesData(X; varnames=names)
         m = estimate_gdfm(ts, q)
@@ -740,16 +735,14 @@ using Random
     end
 
     @testset "both spectral estimators on a dynamic-factor panel" begin
+        # DGP-06: shared simulator; truth common component from its factors
+        # (was: bespoke AR loop).
         rng = Random.MersenneTwister(11)
         T_obs, N, q = 120, 15, 2
-        F = zeros(T_obs, q)
-        F[1, :] = randn(rng, q)
-        for t in 2:T_obs
-            F[t, :] = 0.5 .* F[t - 1, :] .+ randn(rng, q)
-        end
-        Λ = randn(rng, N, q)
-        common_true = F * Λ'
-        X = common_true .+ 0.3 .* randn(rng, T_obs, N)
+        d = dgp_dynamic_factors(rng; A=[0.5 0.0; 0.0 0.5], N=N, T=T_obs,
+                                idio_sd=0.3)
+        common_true = d.F * d.Lambda'
+        X = d.X
         for spec in (:lag_window, :smoothed_periodogram)
             m = estimate_gdfm(X, q; spectral=spec, standardize=false)
             @test m.spectral === spec
@@ -797,19 +790,18 @@ using Random
     end
 
     @testset "GDFM historical decomposition by dynamic PC" begin
+        # DGP-06: shared simulator with the same block loadings and AR matrix
+        # (was: bespoke loop). The simulator burns in; the assertions are HD
+        # identities plus loose orthogonality/variance-ratio bounds.
         rng = Random.MersenneTwister(7291)
         T_obs, N, q = 400, 30, 2
-        F = zeros(T_obs, q)
-        F[1, :] = randn(rng, q)
         Φ = [0.8 0.0; 0.0 -0.5]
-        for t in 2:T_obs
-            F[t, :] = Φ * F[t-1, :] .+ randn(rng, q)
-        end
         Λ = zeros(N, q)
         Λ[1:15, 1] .= 1
         Λ[16:30, 2] .= 1
         Λ .+= 0.05 .* randn(rng, N, q)
-        X = F * Λ' .+ 0.15 .* randn(rng, T_obs, N)
+        X = dgp_dynamic_factors(rng; A=Φ, Lambda=Λ, N=N, T=T_obs,
+                                idio_sd=0.15).X
         gdfm = estimate_gdfm(X, q; standardize=false, spectral=:lag_window)
         hd = historical_decomposition(gdfm)
         @test verify_decomposition(hd; tol=1e-8)
@@ -830,10 +822,12 @@ using Random
     end
 
     @testset "GDFM HD reconstructs common_component under default standardize" begin
+        # DGP-06: shared zero-dynamics simulator plus a nonzero level
+        # (was: bespoke iid loop). The assertions are HD identities.
         rng = Random.MersenneTwister(7293)
         T_obs, N, q = 120, 12, 2
-        F = randn(rng, T_obs, q)
-        X = F * randn(rng, N, q)' .+ 0.2 .* randn(rng, T_obs, N) .+ 5
+        X = dgp_dynamic_factors(rng; A=zeros(q, q), N=N, T=T_obs,
+                                idio_sd=0.2).X .+ 5
         gdfm = estimate_gdfm(X, q)   # default standardize=true
         @test gdfm.standardized
         hd = historical_decomposition(gdfm)
@@ -920,20 +914,24 @@ using Random
     end
 
     @testset "one-sided FHLR factors: contemporaneous identity and two-sided wrap" begin
+        # DGP-06: shared simulator (was: bespoke AR loop). O(1) loadings keep
+        # the strong-signal regime the 0.9 one-sided/two-sided bound needs.
         rng = Random.MersenneTwister(721)
         T_obs, N, q = 500, 30, 2
-        F = zeros(T_obs, q)
-        F[1, :] = randn(rng, q)
-        for t in 2:T_obs
-            F[t, :] = 0.7 .* F[t-1, :] .+ randn(rng, q)
-        end
-        X = F * randn(rng, N, q)' .+ 0.3 .* randn(rng, T_obs, N)
+        X = dgp_dynamic_factors(rng; A=[0.7 0.0; 0.0 0.7], Lambda=randn(rng, N, q),
+                                N=N, T=T_obs, idio_sd=0.3).X
         m = estimate_gdfm(X, q; standardize=false)
         @test size(m.Z) == (N, q)
         @test size(m.factors_onesided) == (T_obs, q)
         @test m.factors_onesided ≈ X * m.Z atol=1e-8
-        cors = [abs(cor(m.factors_onesided[:, j], m.factors[:, j])) for j in 1:q]
-        @test all(>(0.9), cors)
+        # One-sided and two-sided factors span the same space. Asserted as a
+        # subspace distance (rotation/ordering-invariant): the old per-column
+        # `all(cors .> 0.9)` was MC-fragile by construction — nearby streams
+        # score anywhere in 0.75-1.0 under BOTH the old bespoke loop and this
+        # DGP (column-order flips, not worse estimates). Calibrated: 0.13-0.38
+        # over seeds 721-725; a broken estimator scores ≈ 1.
+        Qo = Matrix(qr(m.factors_onesided).Q); Qt = Matrix(qr(m.factors).Q)
+        @test opnorm((I - Qo * Qo') * Qt) < 0.5
         # Drop last 10: contemporaneous filter is unchanged on the common sample
         # (the defining one-sided property). Re-estimating Z from the truncated
         # sample is O(1/T); two-sided IFFT factors move because they wrap.

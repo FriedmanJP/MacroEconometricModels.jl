@@ -38,7 +38,6 @@ both headings; a file on either list is exempt.
 - test/bvar/test_bvar_serialization.jl
 - test/vecm/test_vecm_serialization.jl
 - test/var/test_var_serialization.jl
-- test/factor/test_factor_serialization.jl
 - test/lp/test_lp_serialization.jl
 - test/nowcast/test_nowcast_serialization.jl
 - test/did/test_did_serialization.jl
@@ -65,7 +64,6 @@ both headings; a file on either list is exempt.
 - test/core/test_error_paths.jl
 - test/core/test_examples.jl
 - test/core/test_internal_helpers.jl
-- test/core/test_kalman.jl
 - test/core/test_lrvar.jl
 - test/core/test_utils.jl
 - test/var/test_arias2018.jl
@@ -93,14 +91,6 @@ both headings; a file on either list is exempt.
 - test/lp/test_lp_fevd.jl
 - test/lp/test_lp_forecast.jl
 - test/lp/test_lp_structural.jl
-<!-- DGP-06 (#795) -->
-- test/factor/test_dynamicfactormodel.jl
-- test/factor/test_factor_forecast.jl
-- test/factor/test_factormodel.jl
-- test/factor/test_favar.jl
-- test/factor/test_gdfm.jl
-- test/factor/test_restricted.jl
-- test/factor/test_structural_dfm.jl
 <!-- DGP-07 (#796) -->
 - test/nowcast/test_nowcast.jl
 <!-- DGP-08 (#797) -->

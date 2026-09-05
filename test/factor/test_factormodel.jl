@@ -17,19 +17,33 @@ const fm_predict = MacroEconometricModels.predict
 const fm_nobs = MacroEconometricModels.nobs
 const fm_dof = MacroEconometricModels.dof
 
+if !@isdefined(FAST)
+    const FAST = get(ENV, "MACRO_FAST_TESTS", "") == "1"
+end
+
+# DGP-06 (#795): sine of the largest principal angle between the column spaces
+# of A and B (0 = same subspace, 1 = orthogonal). PCA identifies loadings only
+# up to rotation, so recovery is asserted on the subspace, never elementwise.
+function _subspace_dist(A::AbstractMatrix, B::AbstractMatrix)
+    QA = Matrix(qr(A).Q)
+    QB = Matrix(qr(B).Q)
+    size(QA, 2) == size(QB, 2) ||
+        throw(DimensionMismatch("_subspace_dist needs equal column counts"))
+    return opnorm((I - QA * QA') * QB)
+end
+
+# Shared stationary factor-transition matrices (dgp_dynamic_factors sizes r from A).
+const _FM_A2 = [0.6 0.15; 0.1 0.5]
+const _FM_A3 = [0.5 0.1 0.0; 0.05 0.5 0.1; 0.0 0.05 0.5]
+
 @testset "Factor Model Tests" begin
 
     @testset "Basic Factor Model Estimation" begin
-        Random.seed!(123)
-        # Generate synthetic data with known factor structure
+        rng = Random.MersenneTwister(123)
+        # DGP-06: VAR(1) factors with known loadings instead of iid draws.
         T, N, r_true = 100, 20, 3
-
-        # True factors and loadings
-        F_true = randn(T, r_true)
-        Lambda_true = randn(N, r_true)
-
-        # Generate data: X = F * Lambda' + noise
-        X = F_true * Lambda_true' + 0.3 * randn(T, N)
+        d = dgp_dynamic_factors(rng; A=_FM_A3, N=N, T=T, idio_sd=0.3)
+        X = d.X
 
         # Estimate factor model
         model = estimate_factors(X, r_true)
@@ -53,10 +67,24 @@ const fm_dof = MacroEconometricModels.dof
         @test model.cumulative_variance[end] ≈ 1.0
     end
 
+    @testset "PCA recovery on a dynamic-factor DGP (T=500)" begin
+        # DGP-06 (#795): the white-noise smoke test becomes a truth assertion —
+        # PCA recovers the loadings subspace of a VAR-factor DGP. Realized
+        # distance ≈ 0.06 at seed 7; the FAST bound is deliberately loose for
+        # cross-platform LAPACK variation, the full bound is the honest one.
+        rng = Random.MersenneTwister(7)
+        T, N, r_true = 500, 30, 3
+        d = dgp_dynamic_factors(rng; A=_FM_A3, N=N, T=T)
+        model = estimate_factors(d.X, r_true)
+        Xs = vec(std(d.X, dims=1))
+        # The estimator works in standardized space: truth loadings are Λ/σ.
+        @test _subspace_dist(d.Lambda ./ Xs, model.loadings) < (FAST ? 0.3 : 0.15)
+    end
+
     @testset "Factor Model without Standardization" begin
-        Random.seed!(234)
+        rng = Random.MersenneTwister(234)
         T, N, r = 50, 10, 2
-        X = randn(T, N)
+        X = dgp_dynamic_factors(rng; A=_FM_A2, N=N, T=T, idio_sd=0.5).X
 
         model = estimate_factors(X, r; standardize=false)
 
@@ -66,12 +94,9 @@ const fm_dof = MacroEconometricModels.dof
     end
 
     @testset "Prediction and Residuals" begin
-        Random.seed!(345)
+        rng = Random.MersenneTwister(345)
         T, N, r = 80, 15, 3
-        F_true = randn(T, r)
-        Lambda_true = randn(N, r)
-        noise = 0.2 * randn(T, N)
-        X = F_true * Lambda_true' + noise
+        X = dgp_dynamic_factors(rng; A=_FM_A3, N=N, T=T, idio_sd=0.2).X
 
         model = estimate_factors(X, r)
 
@@ -91,13 +116,10 @@ const fm_dof = MacroEconometricModels.dof
     end
 
     @testset "R-squared Computation" begin
-        Random.seed!(456)
+        rng = Random.MersenneTwister(456)
         T, N, r = 100, 10, 2
-        F_true = randn(T, r)
-        Lambda_true = randn(N, r)
-
-        # Generate data with low noise for reasonable R²
-        X = F_true * Lambda_true' + 0.1 * randn(T, N)
+        # Low idiosyncratic noise for reasonable R².
+        X = dgp_dynamic_factors(rng; A=_FM_A2, N=N, T=T, idio_sd=0.1).X
 
         model = estimate_factors(X, r)
         r2_vals = fm_r2(model)
@@ -111,14 +133,10 @@ const fm_dof = MacroEconometricModels.dof
     end
 
     @testset "Information Criteria" begin
-        Random.seed!(567)
+        rng = Random.MersenneTwister(567)
         T, N = 100, 20
         r_true = 3
-
-        # Generate data with r_true factors
-        F_true = randn(T, r_true)
-        Lambda_true = randn(N, r_true)
-        X = F_true * Lambda_true' + 0.3 * randn(T, N)
+        X = dgp_dynamic_factors(rng; A=_FM_A3, N=N, T=T, idio_sd=0.3).X
 
         max_r = 8
         ic = ic_criteria(X, max_r)
@@ -138,9 +156,9 @@ const fm_dof = MacroEconometricModels.dof
     end
 
     @testset "Scree Plot Data" begin
-        Random.seed!(678)
+        rng = Random.MersenneTwister(678)
         T, N, r = 100, 15, 5
-        X = randn(T, N)
+        X = dgp_dynamic_factors(rng; A=0.5 * Matrix{Float64}(I, r, r), N=N, T=T).X
 
         model = estimate_factors(X, r)
         scree_data = scree_plot_data(model)
@@ -157,9 +175,9 @@ const fm_dof = MacroEconometricModels.dof
     end
 
     @testset "StatsAPI Interface" begin
-        Random.seed!(789)
+        rng = Random.MersenneTwister(789)
         T, N, r = 100, 12, 3
-        X = randn(T, N)
+        X = dgp_dynamic_factors(rng; A=_FM_A3, N=N, T=T).X
 
         model = estimate_factors(X, r)
 
@@ -173,9 +191,9 @@ const fm_dof = MacroEconometricModels.dof
     end
 
     @testset "Input Validation" begin
-        Random.seed!(890)
+        rng = Random.MersenneTwister(890)
         T, N = 50, 10
-        X = randn(T, N)
+        X = randn(rng, T, N)
 
         # Test invalid number of factors
         @test_throws ArgumentError estimate_factors(X, 0)
@@ -188,26 +206,26 @@ const fm_dof = MacroEconometricModels.dof
     end
 
     @testset "Edge Cases" begin
-        Random.seed!(901)
+        rng = Random.MersenneTwister(901)
         # Single factor
         T, N = 100, 10
-        X = randn(T, N)
+        X = dgp_dynamic_factors(rng; A=reshape([0.5], 1, 1), N=N, T=T).X
         model = estimate_factors(X, 1)
         @test size(model.factors) == (T, 1)
         @test size(model.loadings) == (N, 1)
 
         # Maximum number of factors
         T, N = 50, 20
-        X = randn(T, N)
+        X = randn(rng, T, N)
         r_max = min(T, N)
         model = estimate_factors(X, r_max)
         @test size(model.factors) == (T, r_max)
     end
 
     @testset "Constant Series Handling" begin
-        Random.seed!(12)
+        rng = Random.MersenneTwister(12)
         T, N = 100, 10
-        X = randn(T, N)
+        X = randn(rng, T, N)
 
         # Add a constant series
         X[:, 1] .= 5.0
@@ -218,9 +236,9 @@ const fm_dof = MacroEconometricModels.dof
     end
 
     @testset "Explained Variance Properties" begin
-        Random.seed!(23)
+        rng = Random.MersenneTwister(23)
         T, N, r = 100, 20, 5
-        X = randn(T, N)
+        X = dgp_dynamic_factors(rng; A=0.5 * Matrix{Float64}(I, r, r), N=N, T=T).X
 
         model = estimate_factors(X, r)
 
@@ -235,15 +253,10 @@ const fm_dof = MacroEconometricModels.dof
     end
 
     @testset "Reconstruction Quality" begin
-        Random.seed!(34)
+        rng = Random.MersenneTwister(34)
         T, N = 150, 15  # More observations for stability
         r_true = 3
-
-        # Generate data with clear factor structure
-        F_true = randn(T, r_true)
-        Lambda_true = randn(N, r_true)
-        noise_level = 0.1
-        X = F_true * Lambda_true' + noise_level * randn(T, N)
+        X = dgp_dynamic_factors(rng; A=_FM_A3, N=N, T=T, idio_sd=0.1).X
 
         model = estimate_factors(X, r_true)
         X_fitted = fm_predict(model)
@@ -259,26 +272,26 @@ const fm_dof = MacroEconometricModels.dof
     end
 
     @testset "Type Stability" begin
-        Random.seed!(45)
+        rng = Random.MersenneTwister(45)
         T, N, r = 50, 10, 2
 
         # Float64
-        X64 = randn(Float64, T, N)
+        X64 = randn(rng, Float64, T, N)
         model64 = estimate_factors(X64, r)
         @test eltype(model64.factors) == Float64
         @test eltype(model64.loadings) == Float64
 
         # Float32
-        X32 = randn(Float32, T, N)
+        X32 = randn(rng, Float32, T, N)
         model32 = estimate_factors(X32, r)
         @test eltype(model32.factors) == Float32
         @test eltype(model32.loadings) == Float32
     end
 
     @testset "Integer Input Conversion" begin
-        Random.seed!(56)
+        rng = Random.MersenneTwister(56)
         T, N, r = 50, 10, 2
-        X_int = rand(1:10, T, N)
+        X_int = rand(rng, 1:10, T, N)
 
         model = estimate_factors(X_int, r)
         @test model isa FactorModel{Float64}
@@ -289,10 +302,10 @@ const fm_dof = MacroEconometricModels.dof
         # Reconstruction F·Λ' must equal the true PCA projection X·Vᵣ·Vᵣ', and
         # factors must be unit-variance (F'F/T = I). Mis-scaled factors (the F-06 bug)
         # break predict/residuals/r2 and make ic_criteria pick the wrong factor count.
-        Random.seed!(20260623)
+        rng = Random.MersenneTwister(20260623)
         T, N, rtrue = 200, 30, 3
-        F0 = randn(T, rtrue); Λ0 = randn(N, rtrue)
-        X = F0 * Λ0' + randn(T, N)
+        F0 = randn(rng, T, rtrue); Λ0 = randn(rng, N, rtrue)
+        X = F0 * Λ0' + randn(rng, T, N)
 
         m = estimate_factors(X, rtrue; standardize=false)
         # projection onto the top-rtrue principal directions

@@ -19,7 +19,8 @@ Dynamic factor model: `F_t = A_1 F_{t-1} + … + A_p F_{t-p} + η_t`,
 (`idio = :ar1` with `idio_ar`). `blocks::Dict{Int,Vector{Int}}` restricts
 columns of `Λ` to row blocks (zero elsewhere). Loadings default to a
 `signal_share ≈ 0.7` common component. Returns
-`(X, F, Lambda, A, Sigma_F, idio_var)`.
+`(X, F, Lambda, A, Sigma_F, idio_var, eps)` with `eps` the standardized
+factor innovations (pre-`Sigma_F`-impact, same convention as `dgp_var`).
 """
 function dgp_dynamic_factors(rng::AbstractRNG;
                              A=[0.6 0.15; 0.1 0.5], Lambda=nothing,
@@ -55,9 +56,12 @@ function dgp_dynamic_factors(rng::AbstractRNG;
     end
     Nn = T + burn
     F = zeros(Nn, rr)
+    Eps = zeros(Nn, rr)
     hist = [zeros(rr) for _ in 1:pp]
     for t in 1:Nn
-        f = LF * randn(rng, rr)
+        e = randn(rng, rr)
+        Eps[t, :] .= e
+        f = LF * e
         for i in 1:pp
             f += As[i] * hist[i]
         end
@@ -81,7 +85,7 @@ function dgp_dynamic_factors(rng::AbstractRNG;
     X = F * Lam' + idio_sd * E
     keep = (burn + 1):Nn
     return (X=X[keep, :], F=F[keep, :], Lambda=Lam, A=As, Sigma_F=SF,
-            idio_var=idio === :iid ? 1.0 : 1.0, r=rr, p=pp)
+            idio_var=idio === :iid ? 1.0 : 1.0, eps=Eps[keep, :], r=rr, p=pp)
 end
 
 """

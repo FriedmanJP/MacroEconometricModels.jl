@@ -231,3 +231,52 @@ function _rts_smoother(store::KalmanFilterStore{T}, Tt::AbstractMatrix{T};
     end
     return a_smooth, P_smooth, Plag
 end
+
+"""
+    _simulation_smoother(rng, y, Z, Tt, RQR, Hobs; d=nothing, b=nothing, a0, P0)
+        -> draw::Matrix{T}
+
+Durbin–Koopman (2002) simulation smoother: one draw `α̃ ~ p(α | y)` from the
+smoothing distribution, reusing the consolidated kernel (no new filter math).
+Simulate an unconditional path `α⁺` (from the same `(a0, P0)` prior) and the
+observations `y⁺` it implies, RTS-smooth both `y` and `y⁺` with identical linear
+operations, and mean-correct: `α̃ = E[α|y] + (α⁺ − E[α⁺|y⁺])`. `y` is
+`n_obs × T_obs` (columns = periods, `NaN` = missing); the draw is
+`n_state × T_obs`. `P0`, `RQR`, `Hobs` must be positive definite.
+"""
+function _simulation_smoother(rng::AbstractRNG, y::AbstractMatrix{T}, Z::AbstractMatrix{T},
+                              Tt::AbstractMatrix{T}, RQR::AbstractMatrix{T},
+                              Hobs::AbstractMatrix{T};
+                              d=nothing, b=nothing,
+                              a0::AbstractVector{T}, P0::AbstractMatrix{T}) where {T<:AbstractFloat}
+    n_obs, T_obs = size(y)
+    n_state = length(a0)
+    Zm, Tm = Matrix{T}(Z), Matrix{T}(Tt)
+    L0 = _psd_sqrt(Matrix{T}(P0))
+    Lq = safe_cholesky(Symmetric(Matrix{T}(RQR)))
+    Lh = safe_cholesky(Symmetric(Matrix{T}(Hobs)))
+    d_vec = d === nothing ? zeros(T, n_obs) : Vector{T}(d)
+    b_vec = b === nothing ? zeros(T, n_state) : Vector{T}(b)
+    # --- 1. unconditional forward simulation from the same prior ---
+    a_plus = Matrix{T}(undef, n_state, T_obs)
+    y_plus = Matrix{T}(undef, n_obs, T_obs)
+    a = Vector{T}(a0) + L0 * randn(rng, T, n_state)
+    for t in 1:T_obs
+        t > 1 && (a = b_vec + Tm * a + Lq * randn(rng, T, n_state))
+        @inbounds a_plus[:, t] = a
+        @inbounds y_plus[:, t] = d_vec + Zm * a + Lh * randn(rng, T, n_obs)
+    end
+    # --- 2. smooth y and y⁺ with identical linear operations ---
+    store = KalmanFilterStore{T}(n_state, T_obs)
+    _kalman_filter!(store, Matrix{T}(y), Zm, Tm, Matrix{T}(RQR), Matrix{T}(Hobs);
+                    d=d === nothing ? nothing : d_vec, b=b === nothing ? nothing : b_vec,
+                    a0=Vector{T}(a0), P0=Matrix{T}(P0))
+    a_smooth, _, _ = _rts_smoother(store, Tm)
+    store_plus = KalmanFilterStore{T}(n_state, T_obs)
+    _kalman_filter!(store_plus, y_plus, Zm, Tm, Matrix{T}(RQR), Matrix{T}(Hobs);
+                    d=d === nothing ? nothing : d_vec, b=b === nothing ? nothing : b_vec,
+                    a0=Vector{T}(a0), P0=Matrix{T}(P0))
+    a_plus_smooth, _, _ = _rts_smoother(store_plus, Tm)
+    # --- 3. mean correction: the draw inherits Cov(α|y) exactly in expectation ---
+    return a_smooth + (a_plus - a_plus_smooth)
+end

@@ -10,6 +10,10 @@ using Statistics
 using Random
 using MacroEconometricModels
 
+if !@isdefined(FAST)
+    const FAST = get(ENV, "MACRO_FAST_TESTS", "") == "1"
+end
+
 @testset "FAVAR Tests" begin
 
     # =========================================================================
@@ -17,11 +21,14 @@ using MacroEconometricModels
     # =========================================================================
     function make_favar_data(; T_obs=200, N=30, r_true=3, n_key=2, seed=42)
         rng = Random.MersenneTwister(seed)
-        F_true = randn(rng, T_obs, r_true)
-        Lambda_true = randn(rng, N, r_true)
-        noise = 0.3 * randn(rng, T_obs, N)
-        X = F_true * Lambda_true' + noise
-        return X, n_key
+        # DGP-06 (#795): FAVAR DGP — VAR factors + loadings + idiosyncratic
+        # noise via the shared simulator (was: iid factors). Returns only the
+        # panel; call sites are unchanged.
+        A = r_true == 2 ? [0.7 0.1; 0.05 0.6] :
+            r_true == 3 ? [0.5 0.1 0.0; 0.05 0.5 0.1; 0.0 0.05 0.5] :
+            0.5 * Matrix{Float64}(I, r_true, r_true)
+        d = dgp_dynamic_factors(rng; A=A, N=N, T=T_obs, idio_sd=0.3)
+        return d.X, n_key
     end
 
     # =========================================================================
@@ -549,13 +556,10 @@ using MacroEconometricModels
     @testset "Bayesian FAVAR draws (B,Σ) and FFBS factors (T093 #192)" begin
         rng = Random.MersenneTwister(11)
         T_obs, N, r = 120, 12, 2
-        F = zeros(T_obs, r)
-        for t in 2:T_obs
-            F[t, :] = 0.7 .* F[t-1, :] .+ randn(rng, r)
-        end
-        Lam = randn(rng, N, r)
-        X = F * Lam' .+ 0.5 .* randn(rng, T_obs, N)
-        bf = estimate_favar(X, [1, 2], r, 1; method=:bayesian, n_draws=120, burnin=80)
+        # DGP-06: shared FAVAR DGP (was: bespoke AR(1)-factor loop).
+        d = dgp_dynamic_factors(rng; A=[0.7 0.0; 0.0 0.7], N=N, T=T_obs, idio_sd=0.5)
+        X = d.X
+        bf = estimate_favar(X, [1, 2], r, 1; method=:bayesian, n_draws=120, burnin=80, seed=11)
 
         # (1) Conjugate NIW draw: (B, Σ) genuinely vary across sweeps. The old code reused the
         #     fixed OLS point estimate every sweep, so this variance was ~0.
@@ -576,14 +580,14 @@ using MacroEconometricModels
         #     large constant drift, tiny innovations, and uninformative observations, the sampled
         #     factors must track the drift level (~2) — the pre-remediation transition dropped it
         #     and would leave the factors near 0.
-        Random.seed!(5)
         Tt = 60
         Xz = zeros(Tt, 3)
         Lam1 = [1.0 0.0; 0.0 1.0; 0.5 0.5]
         Alag = [zeros(2, 2)]
         drift_big = fill(2.0, Tt, 2)
         Fdraw = MacroEconometricModels._favar_ffbs(Xz, Lam1, Alag, Matrix(1e-4I, 2, 2),
-                                                   fill(1e6, 3), 2, 1, drift_big)
+                                                   fill(1e6, 3), 2, 1, drift_big,
+                                                   Random.MersenneTwister(5))
         @test mean(Fdraw) ≈ 2.0 atol=0.3
     end
 
@@ -646,11 +650,10 @@ using MacroEconometricModels
     # =========================================================================
 
     # Shared Bayesian Gibbs chain reused across the 5 structural-analysis testsets
-    # below (identical config previously rebuilt in each). Seed the global RNG so the
-    # chain is reproducible; make_favar_data is deterministic via its own MersenneTwister.
+    # below (identical config previously rebuilt in each). DGP-06: the estimator
+    # takes seed= directly — no global RNG seeding.
     Xb, _ = make_favar_data(T_obs=150, N=20, r_true=2)
-    Random.seed!(320)
-    bfavar = estimate_favar(Xb, [1, 5], 2, 1; method=:bayesian, n_draws=60, burnin=20)
+    bfavar = estimate_favar(Xb, [1, 5], 2, 1; method=:bayesian, n_draws=60, burnin=20, seed=320)
 
     @testset "Bayesian FAVAR IRF" begin
         irf_result = irf(bfavar, 10)
@@ -766,40 +769,34 @@ end  # @testset "FAVAR Tests"
 
     # (1) Primitive equivalence: `randn!` into a reused buffer == fresh `randn(T, n)` on the same
     #     seed, for both the vector and matrix shapes used by the sampler.
+    #     DGP-06: explicit rngs (was: global Random.seed!).
     for (shape, mk) in ((5, () -> Vector{Float64}(undef, 5)),
                         ((4, 3), () -> Matrix{Float64}(undef, 4, 3)))
-        Random.seed!(9)
-        a = shape isa Tuple ? randn(Float64, shape...) : randn(Float64, shape)
-        Random.seed!(9)
-        b = mk(); randn!(b)
+        a = shape isa Tuple ? randn(Random.MersenneTwister(9), Float64, shape...) :
+                              randn(Random.MersenneTwister(9), Float64, shape)
+        b = mk(); randn!(Random.MersenneTwister(9), b)
         @test a == b
     end
 
     # (2) `_favar_ffbs` reproduces its sampled path on a fixed seed (exercises the reused buffer).
-    Random.seed!(5)
     Tt = 40; Xz = zeros(Tt, 3)
     Lam1 = [1.0 0.0; 0.0 1.0; 0.5 0.5]
     Alag = [0.5 .* Matrix{Float64}(I, 2, 2)]
     drift = fill(0.3, Tt, 2)
-    Random.seed!(123)
-    F1 = MacroEconometricModels._favar_ffbs(Xz, Lam1, Alag, Matrix(0.1I, 2, 2), fill(1.0, 3), 2, 1, drift)
-    Random.seed!(123)
-    F2 = MacroEconometricModels._favar_ffbs(Xz, Lam1, Alag, Matrix(0.1I, 2, 2), fill(1.0, 3), 2, 1, drift)
+    ffbs_args = (Xz, Lam1, Alag, Matrix(0.1I, 2, 2), fill(1.0, 3), 2, 1, drift)
+    F1 = MacroEconometricModels._favar_ffbs(ffbs_args..., Random.MersenneTwister(123))
+    F2 = MacroEconometricModels._favar_ffbs(ffbs_args..., Random.MersenneTwister(123))
     @test F1 == F2
     @test all(isfinite, F1)
 
     # (3) Integration before/after: the full Bayesian FAVAR is deterministic on a fixed seed — the
     #     buffer refactor changed neither the RNG stream nor any arithmetic.
+    #     DGP-06: shared DGP + seed= kwarg (was: bespoke loop + global seeds).
     rng = Random.MersenneTwister(11)
     T_obs, N, r = 100, 10, 2
-    F = zeros(T_obs, r)
-    for t in 2:T_obs
-        F[t, :] = 0.7 .* F[t-1, :] .+ randn(rng, r)
-    end
-    Lam = randn(rng, N, r)
-    X = F * Lam' .+ 0.5 .* randn(rng, T_obs, N)
-    Random.seed!(54321); bf1 = estimate_favar(X, [1, 2], r, 1; method=:bayesian, n_draws=40, burnin=25)
-    Random.seed!(54321); bf2 = estimate_favar(X, [1, 2], r, 1; method=:bayesian, n_draws=40, burnin=25)
+    X = dgp_dynamic_factors(rng; A=[0.7 0.0; 0.0 0.7], N=N, T=T_obs, idio_sd=0.5).X
+    bf1 = estimate_favar(X, [1, 2], r, 1; method=:bayesian, n_draws=40, burnin=25, seed=54321)
+    bf2 = estimate_favar(X, [1, 2], r, 1; method=:bayesian, n_draws=40, burnin=25, seed=54321)
     @test bf1.B_draws == bf2.B_draws
     @test bf1.Sigma_draws == bf2.Sigma_draws
     @test bf1.factor_draws == bf2.factor_draws
@@ -814,15 +811,11 @@ end
     # key variable's own variation. Without them a docs-sized sample produced VAR posterior
     # means in the hundreds (#528).
     T_obs, N, r, p = 60, 8, 2, 2
-    Random.seed!(528)
-    F_true = zeros(T_obs, r)
-    for t in 2:T_obs
-        F_true[t, :] = 0.6 .* F_true[t-1, :] .+ randn(r)
-    end
-    X = F_true * randn(N, r)' .+ 0.5 .* randn(T_obs, N)
+    # DGP-06: shared DGP (was: bespoke AR loop on the global RNG) + seed= kwarg.
+    X = dgp_dynamic_factors(Random.MersenneTwister(528); A=0.6 * Matrix{Float64}(I, r, r),
+                            N=N, T=T_obs, idio_sd=0.5).X
 
-    Random.seed!(528)
-    bf = estimate_favar(X, [5], r, p; method=:bayesian, n_draws=60, burnin=30)
+    bf = estimate_favar(X, [5], r, p; method=:bayesian, n_draws=60, burnin=30, seed=528)
 
     # (1) Every stored loading draw satisfies the identity block exactly. Column 5 is the key
     #     variable, so the anchors are panel columns 1 and 2.
@@ -842,6 +835,51 @@ end
                   for d in 1:size(bf2.loadings_draws, 1)) == 0.0
 
     # (4) Too few non-key columns to anchor r factors is rejected, not silently mis-fit.
-    @test_throws ArgumentError estimate_favar(randn(40, 3), [1, 2], 2, 1;
+    @test_throws ArgumentError estimate_favar(randn(Random.MersenneTwister(528), 40, 3),
+                                              [1, 2], 2, 1;
                                               method=:bayesian, n_draws=5, burnin=5)
+end
+
+@testset "Gibbs posterior-mean loadings vs truth on a BBE-structured DGP" begin
+    # DGP-06 (#795): the Gibbs sampler's loadings are partial effects given the
+    # direct Λ_y channel, so the DGP must identify (Λ, Λ_y) separately: the key
+    # series follows its own AR (independent of the factors) and loads directly
+    # onto one panel row (ly[4] = 3). Comparing against a plain factor DGP here
+    # would test a marginal-against-partial mismatch, not the sampler.
+    # The sampler works in standardized-X space (Λ/σ) with the anchor
+    # normalization Λ[anchor, :] = I, so truth is mapped to that space and
+    # rotated by the anchor block before comparing. Realized (seed 909):
+    # subdist ≈ 0.008, channel error ≈ 0.001-0.009, non-channel |λ_y| ≤ 0.018.
+    rng = Random.MersenneTwister(909)
+    T_f, N, r = 300, 10, 2
+    F = zeros(T_f, r)
+    for t in 2:T_f
+        F[t, :] = 0.6 .* F[t-1, :] .+ randn(rng, r)
+    end
+    Yk = zeros(T_f)
+    for t in 2:T_f
+        Yk[t] = 0.5 * Yk[t-1] + randn(rng)
+    end
+    Lf = randn(rng, N - 1, r)
+    ly = zeros(N - 1); ly[4] = 3.0
+    Xobs = F * Lf' .+ Yk * ly' .+ 0.1 .* randn(rng, T_f, N - 1)
+    X = hcat(Yk, Xobs)   # column 1 = key; anchors = [2, 3]; channel row = 5
+    anchor = [2, 3]
+    nonkey = setdiff(1:N, [1])
+
+    nd, bi = FAST ? (80, 40) : (300, 150)
+    bf = estimate_favar(X, [1], r, 1; method=:bayesian, n_draws=nd, burnin=bi, seed=77)
+    Lmean = dropdims(mean(bf.loadings_draws, dims=1), dims=1)
+    Lymean = dropdims(mean(bf.lambda_y_draws, dims=1), dims=1)
+
+    Xs = vec(std(X, dims=1))
+    Lam_s_rot = ((vcat(zeros(1, r), Lf) ./ Xs)) * inv(((vcat(zeros(1, r), Lf) ./ Xs))[anchor, :])
+    # Posterior-mean loadings recover the anchor-rotated truth subspace.
+    QA = Matrix(qr(Lam_s_rot[nonkey, :]).Q); QB = Matrix(qr(Lmean[nonkey, :]).Q)
+    @test opnorm((I - QA * QA') * QB) < 0.1
+    # The direct Y-channel row recovers its truth (λ_y stored in X-std × Y-raw
+    # units: truth = ly/σ); rows without a channel stay near zero. The key row
+    # itself is excluded: X_1 ≡ Y makes (λ_1, λ_y,1) split unidentified.
+    @test abs(Lymean[5, 1] - ly[4] / Xs[5]) < 0.05
+    @test maximum(abs, Lymean[setdiff(nonkey, [5]), 1]) < 0.06
 end

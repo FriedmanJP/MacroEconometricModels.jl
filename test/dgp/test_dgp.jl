@@ -114,6 +114,10 @@ using DataFrames  # nrow (no-op when fixtures.jl already loaded it)
         fb = dgp_dynamic_factors(MersenneTwister(31); T=100,
                                  blocks=Dict(1 => collect(1:20)))
         @test all(fb.Lambda[21:40, 1] .== 0)
+        # DGP-06: the returned innovations reproduce the factor path exactly
+        # (F[t] = A·F[t-1] + L·eps[t] with L the Sigma_F Cholesky factor).
+        L = cholesky(Symmetric(f.Sigma_F)).L
+        @test f.F[2:end, :] ≈ f.F[1:end-1, :] * f.A[1]' + f.eps[2:end, :] * L'
     end
 
     @testset "dgp_mixed_frequency_panel: MM identity + NaN pattern" begin

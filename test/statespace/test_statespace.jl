@@ -266,6 +266,56 @@ using Test, MacroEconometricModels, Random, LinearAlgebra, Statistics, Distribut
                                                          a1=[1.0]), [0.0])
     end
 
+    # ------------------------------------------------------------------
+    # Diffuse-prior MLE recovers stationary state dynamics (DGP-06 #795)
+    # ------------------------------------------------------------------
+    @testset "diffuse init MLE recovers AR(1) state dynamics" begin
+        # Same DGP shape as the :kappa recovery testset above, fit under the
+        # exact-diffuse prior instead. Both priors must recover φ; they need
+        # not agree exactly (different P1 ⇒ slightly different surfaces).
+        rng = MersenneTwister(71)
+        T = 400
+        φ = 0.7; ση = 1.0; σε = 0.5
+        α = zeros(T)
+        for t in 2:T
+            α[t] = φ * α[t-1] + ση * randn(rng)
+        end
+        y = α .+ σε .* randn(rng, T)
+        build = θ -> (Z=reshape([1.0], 1, 1), H=reshape([exp(θ[3])], 1, 1),
+                      T=reshape([tanh(θ[1])], 1, 1),
+                      Q=reshape([exp(θ[2])], 1, 1))
+        m = estimate_statespace(build, [0.3, 0.0, 0.0], y;
+                                param_names=["atanh(φ)", "logσ²_η", "logσ²_ε"],
+                                init_mode=:diffuse)
+        @test m isa StateSpaceModel
+        @test m.init_mode === :diffuse
+        @test isapprox(tanh(m.theta[1]), φ; atol=0.15)   # φ recovered
+        @test isfinite(m.loglik)
+    end
+
+    # ------------------------------------------------------------------
+    # local_linear_trend recovers a known drift (DGP-06 #795)
+    # ------------------------------------------------------------------
+    @testset "local_linear_trend drift recovery" begin
+        # Random-walk slope around a constant drift δ, RW level, noisy obs.
+        # The MLE may reallocate variance across states (representation is not
+        # unique), so assert on the smoothed drift and level path, not θ.
+        rng = MersenneTwister(72)
+        T = 300
+        δ = 0.1
+        ν = fill(δ, T)
+        μ = zeros(T)
+        for t in 2:T
+            ν[t] = ν[t-1] + 0.01 * randn(rng)
+            μ[t] = μ[t-1] + ν[t-1] + 0.1 * randn(rng)
+        end
+        y = μ .+ 0.5 .* randn(rng, T)
+        m = local_linear_trend(y)
+        @test m isa StateSpaceModel
+        @test isapprox(mean(m.smoothed_state[:, 2]), δ; atol=0.05)
+        @test sqrt(mean((m.smoothed_state[:, 1] .- μ) .^ 2)) < 0.8
+    end
+
     @testset "#512: init_mode docstrings match the signatures" begin
         # Six public signatures documented `init_mode=:diffuse` while defaulting to
         # `:kappa`. Lock the actual default so the docstrings cannot drift back.

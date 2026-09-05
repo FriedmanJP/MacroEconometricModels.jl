@@ -19,25 +19,28 @@ const rfm_nobs = MacroEconometricModels.nobs
 @testset "Block-Restricted Factor Model Tests" begin
 
     @testset "Unrestricted model has block_names = nothing" begin
-        Random.seed!(42)
-        X = randn(100, 20)
+        rng = Random.MersenneTwister(42)
+        X = randn(rng, 100, 20)
         fm = estimate_factors(X, 3)
         @test fm.block_names === nothing
         @test fm isa FactorModel
     end
 
     @testset "Block-restricted estimation — correct dimensions" begin
-        Random.seed!(123)
+        # DGP-06: shared simulator with explicit block-structured loadings
+        # (was: bespoke iid-factor loop). Dynamics do not disturb the blocks.
+        rng = Random.MersenneTwister(123)
         T_obs, N = 200, 15
         r = 3
 
         # Generate data with known block structure
-        F_true = randn(T_obs, r)
         Lambda_true = zeros(N, r)
-        Lambda_true[1:5, 1] = randn(5)
-        Lambda_true[6:10, 2] = randn(5)
-        Lambda_true[11:15, 3] = randn(5)
-        X = F_true * Lambda_true' + 0.3 * randn(T_obs, N)
+        Lambda_true[1:5, 1] = randn(rng, 5)
+        Lambda_true[6:10, 2] = randn(rng, 5)
+        Lambda_true[11:15, 3] = randn(rng, 5)
+        A3 = [0.5 0.1 0.0; 0.05 0.5 0.1; 0.0 0.05 0.5]
+        X = dgp_dynamic_factors(rng; A=A3, Lambda=Lambda_true, N=N, T=T_obs,
+                                idio_sd=0.3).X
 
         blocks = Dict(:block_A => [1,2,3,4,5], :block_B => [6,7,8,9,10], :block_C => [11,12,13,14,15])
         fm = estimate_factors(X, r; blocks=blocks)
@@ -56,16 +59,17 @@ const rfm_nobs = MacroEconometricModels.nobs
     end
 
     @testset "Zero restrictions enforced" begin
-        Random.seed!(234)
+        # DGP-06: shared simulator with explicit block-structured loadings.
+        rng = Random.MersenneTwister(234)
         T_obs, N = 200, 12
         r = 2
 
         # Generate data with block structure
-        F_true = randn(T_obs, r)
         Lambda_true = zeros(N, r)
-        Lambda_true[1:6, 1] = randn(6)
-        Lambda_true[7:12, 2] = randn(6)
-        X = F_true * Lambda_true' + 0.3 * randn(T_obs, N)
+        Lambda_true[1:6, 1] = randn(rng, 6)
+        Lambda_true[7:12, 2] = randn(rng, 6)
+        X = dgp_dynamic_factors(rng; A=[0.5 0.1; 0.1 0.5], Lambda=Lambda_true,
+                                N=N, T=T_obs, idio_sd=0.3).X
 
         blocks = Dict(:real => [1,2,3,4,5,6], :nominal => [7,8,9,10,11,12])
         fm = estimate_factors(X, r; blocks=blocks)
@@ -86,16 +90,17 @@ const rfm_nobs = MacroEconometricModels.nobs
     end
 
     @testset "R-squared reasonable for known DGP" begin
-        Random.seed!(345)
+        # DGP-06: shared simulator with explicit strong block loadings.
+        rng = Random.MersenneTwister(345)
         T_obs, N = 300, 10
         r = 2
 
         # Strong factor structure
-        F_true = randn(T_obs, r)
         Lambda_true = zeros(N, r)
-        Lambda_true[1:5, 1] = randn(5) .* 2.0
-        Lambda_true[6:10, 2] = randn(5) .* 2.0
-        X = F_true * Lambda_true' + 0.2 * randn(T_obs, N)
+        Lambda_true[1:5, 1] = randn(rng, 5) .* 2.0
+        Lambda_true[6:10, 2] = randn(rng, 5) .* 2.0
+        X = dgp_dynamic_factors(rng; A=[0.5 0.1; 0.1 0.5], Lambda=Lambda_true,
+                                N=N, T=T_obs, idio_sd=0.2).X
 
         blocks = Dict(:factor1 => [1,2,3,4,5], :factor2 => [6,7,8,9,10])
         fm = estimate_factors(X, r; blocks=blocks)
@@ -109,8 +114,8 @@ const rfm_nobs = MacroEconometricModels.nobs
     end
 
     @testset "Validation — wrong block count" begin
-        Random.seed!(456)
-        X = randn(100, 10)
+        rng = Random.MersenneTwister(456)
+        X = randn(rng, 100, 10)
 
         # 2 blocks but r=3
         blocks = Dict(:a => [1,2,3,4,5], :b => [6,7,8,9,10])
@@ -122,8 +127,8 @@ const rfm_nobs = MacroEconometricModels.nobs
     end
 
     @testset "Validation — overlapping indices" begin
-        Random.seed!(567)
-        X = randn(100, 10)
+        rng = Random.MersenneTwister(567)
+        X = randn(rng, 100, 10)
 
         # Variable 5 in both blocks
         blocks = Dict(:a => [1,2,3,4,5], :b => [5,6,7,8,9])
@@ -131,8 +136,8 @@ const rfm_nobs = MacroEconometricModels.nobs
     end
 
     @testset "Validation — out-of-range indices" begin
-        Random.seed!(678)
-        X = randn(100, 10)
+        rng = Random.MersenneTwister(678)
+        X = randn(rng, 100, 10)
 
         # Index 0 is out of range
         blocks = Dict(:a => [0,1,2,3,4], :b => [5,6,7,8,9])
@@ -144,8 +149,8 @@ const rfm_nobs = MacroEconometricModels.nobs
     end
 
     @testset "Validation — too few variables per block" begin
-        Random.seed!(789)
-        X = randn(100, 10)
+        rng = Random.MersenneTwister(789)
+        X = randn(rng, 100, 10)
 
         # Block :a has only 1 variable
         blocks = Dict(:a => [1], :b => [2,3,4,5,6,7,8,9,10])
@@ -153,15 +158,16 @@ const rfm_nobs = MacroEconometricModels.nobs
     end
 
     @testset "Display with block names" begin
-        Random.seed!(890)
+        # DGP-06: shared simulator with explicit block-structured loadings.
+        rng = Random.MersenneTwister(890)
         T_obs, N = 100, 10
         r = 2
 
-        F_true = randn(T_obs, r)
         Lambda_true = zeros(N, r)
-        Lambda_true[1:5, 1] = randn(5)
-        Lambda_true[6:10, 2] = randn(5)
-        X = F_true * Lambda_true' + 0.3 * randn(T_obs, N)
+        Lambda_true[1:5, 1] = randn(rng, 5)
+        Lambda_true[6:10, 2] = randn(rng, 5)
+        X = dgp_dynamic_factors(rng; A=[0.5 0.1; 0.1 0.5], Lambda=Lambda_true,
+                                N=N, T=T_obs, idio_sd=0.3).X
 
         blocks = Dict(:real_activity => [1,2,3,4,5], :prices => [6,7,8,9,10])
         fm = estimate_factors(X, r; blocks=blocks)
@@ -177,15 +183,16 @@ const rfm_nobs = MacroEconometricModels.nobs
     end
 
     @testset "StatsAPI interface works with restricted model" begin
-        Random.seed!(901)
+        # DGP-06: shared simulator with explicit block-structured loadings.
+        rng = Random.MersenneTwister(901)
         T_obs, N = 100, 10
         r = 2
 
-        F_true = randn(T_obs, r)
         Lambda_true = zeros(N, r)
-        Lambda_true[1:5, 1] = randn(5)
-        Lambda_true[6:10, 2] = randn(5)
-        X = F_true * Lambda_true' + 0.3 * randn(T_obs, N)
+        Lambda_true[1:5, 1] = randn(rng, 5)
+        Lambda_true[6:10, 2] = randn(rng, 5)
+        X = dgp_dynamic_factors(rng; A=[0.5 0.1; 0.1 0.5], Lambda=Lambda_true,
+                                N=N, T=T_obs, idio_sd=0.3).X
 
         blocks = Dict(:block1 => [1,2,3,4,5], :block2 => [6,7,8,9,10])
         fm = estimate_factors(X, r; blocks=blocks)
@@ -206,15 +213,16 @@ const rfm_nobs = MacroEconometricModels.nobs
     end
 
     @testset "Without standardization" begin
-        Random.seed!(12)
+        # DGP-06: shared simulator with explicit block-structured loadings.
+        rng = Random.MersenneTwister(12)
         T_obs, N = 100, 8
         r = 2
 
-        F_true = randn(T_obs, r)
         Lambda_true = zeros(N, r)
-        Lambda_true[1:4, 1] = randn(4)
-        Lambda_true[5:8, 2] = randn(4)
-        X = F_true * Lambda_true' + 0.3 * randn(T_obs, N)
+        Lambda_true[1:4, 1] = randn(rng, 4)
+        Lambda_true[5:8, 2] = randn(rng, 4)
+        X = dgp_dynamic_factors(rng; A=[0.5 0.1; 0.1 0.5], Lambda=Lambda_true,
+                                N=N, T=T_obs, idio_sd=0.3).X
 
         blocks = Dict(:a => [1,2,3,4], :b => [5,6,7,8])
         fm = estimate_factors(X, r; blocks=blocks, standardize=false)
@@ -225,11 +233,11 @@ const rfm_nobs = MacroEconometricModels.nobs
     end
 
     @testset "Float32 type stability" begin
-        Random.seed!(23)
+        rng = Random.MersenneTwister(23)
         T_obs, N = 100, 8
         r = 2
 
-        X32 = randn(Float32, T_obs, N)
+        X32 = randn(rng, Float32, T_obs, N)
         blocks = Dict(:a => [1,2,3,4], :b => [5,6,7,8])
         fm = estimate_factors(X32, r; blocks=blocks)
 
@@ -239,11 +247,11 @@ const rfm_nobs = MacroEconometricModels.nobs
     end
 
     @testset "Partial coverage — not all variables assigned" begin
-        Random.seed!(34)
+        rng = Random.MersenneTwister(34)
         T_obs, N = 100, 10
         r = 2
 
-        X = randn(T_obs, N)
+        X = randn(rng, T_obs, N)
         # Only 8 of 10 variables are assigned to blocks
         blocks = Dict(:a => [1,2,3,4], :b => [5,6,7,8])
         fm = estimate_factors(X, r; blocks=blocks)
