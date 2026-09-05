@@ -76,8 +76,11 @@ using Random
     end
 
     @testset "HAC Covariance Estimation" begin
-        # Generate serially correlated data
-        T = 200
+        # Serially correlated AR(1) errors, T = 2000 for HAC precision
+        # (DGP-05 #794: own seed; at T = 200 the trace ratio swings 1.1–1.6
+        # across seeds — draw luck, e.g. sample var(u) = 1.0 vs 1.33).
+        rng = MersenneTwister(58)
+        T = 2000
         u = zeros(T)
         rho_u = 0.5
         for t in 2:T
@@ -86,7 +89,6 @@ using Random
 
         X = hcat(ones(T), randn(rng, T))
 
-        # Newey-West should give larger SE than White when there's serial correlation
         V_nw = newey_west(X, u; bandwidth=5, kernel=:bartlett)
         V_white = white_vcov(X, u)
 
@@ -95,8 +97,19 @@ using Random
         @test issymmetric(V_nw)
         @test issymmetric(V_white)
 
-        # Newey-West SE should generally be larger due to autocorrelation adjustment
-        # (not always, but typically with positive autocorrelation)
+        # Intercept moments inherit u's autocorrelation: NW/White ≈ 2.3
+        # (Bartlett-truncated LRV/Var; probed 2.25–2.38 over seeds 58–61, so
+        # rtol 0.25 is ~8x the observed cross-seed spread).
+        @test V_nw[1, 1] / V_white[1, 1] ≈ 2.3 rtol=0.25
+        # ... hence NW ≈ 1.6x White overall (probed trace ratio 1.63–1.74).
+        @test tr(V_nw) / tr(V_white) ≈ 1.65 rtol=0.2
+        # ... and the intercept NW hits the (truncated) LRV truth LRV/T
+        # (probed 0.00147–0.00157 vs 0.0015; bound = 9x the spread).
+        @test V_nw[1, 1] ≈ 0.0015 rtol=0.3
+        # Slope moments are MDS (x iid ⟹ E[x_t x_{t-j}] = 0 kills every
+        # autocovariance term), so HAC ≈ White there by CONSTRUCTION —
+        # a White-returning-NW swap is still caught by the intercept ratio.
+        @test V_nw[2, 2] / V_white[2, 2] ≈ 1.0 atol=0.25
         @test tr(V_nw) > 0
         @test tr(V_white) > 0
 
@@ -1228,19 +1241,25 @@ using Random
     @testset "Long-Run Variance and Covariance" begin
         rng = MersenneTwister(80808)
 
-        # Long-run variance for white noise
-        white_noise = randn(rng, 200)
+        # Long-run variance for white noise (LRV = variance; T = 2000 for
+        # precision — probed within 1%, so atol 0.5 becomes rtol 0.1).
+        white_noise = randn(rng, 2000)
         lrv_white = MacroEconometricModels.long_run_variance(white_noise; bandwidth=0)
         @test lrv_white >= 0
-        @test isapprox(lrv_white, var(white_noise), atol=0.5)
+        @test isapprox(lrv_white, var(white_noise), rtol=0.1)
 
-        # Long-run variance for persistent series
-        persistent = zeros(200)
-        for t in 2:200
+        # Long-run variance for persistent series: AR(1) ρ = 0.8 has LRV
+        # 1/(1−0.8)² = 25 (DGP-05 #794). Kernel estimators undershoot by
+        # design (bw=10 → ~15, bw=30 → ~20, Andrews → ~20 at T = 2000), so
+        # the truth bound is honestly wide: rtol 0.3 is ~4x the observed
+        # two-seed spread (18.7–20.7).
+        persistent = zeros(2000)
+        for t in 2:2000
             persistent[t] = 0.8 * persistent[t-1] + randn(rng)
         end
-        lrv_pers = MacroEconometricModels.long_run_variance(persistent; bandwidth=10)
+        lrv_pers = MacroEconometricModels.long_run_variance(persistent; bandwidth=30)
         @test lrv_pers > var(persistent)  # LRV should be larger for persistent series
+        @test lrv_pers ≈ 25 rtol=0.3
 
         # Different kernels
         for kernel in [:bartlett, :parzen, :quadratic_spectral]
@@ -1360,7 +1379,7 @@ using Random
 
     @testset "Newey-West Prewhitening" begin
         rng = MersenneTwister(84848)
-        T_pw = 200
+        T_pw = 2000
 
         X_pw = hcat(ones(T_pw), randn(rng, T_pw, 2))
 
@@ -1385,6 +1404,14 @@ using Random
         # Both should give reasonable (finite) results
         @test all(isfinite.(V_no_pw))
         @test all(isfinite.(V_pw))
+
+        # Prewhitening de-biases the persistent (intercept) moments: the ratio
+        # is ≈ 1.6 there (DGP-05 #794; probed 1.59/1.71 over two seeds, so
+        # rtol 0.2 is ~5x the spread) ...
+        @test V_pw[1, 1] / V_no_pw[1, 1] ≈ 1.65 rtol=0.2
+        # ... while the MDS slope moments agree (both ≈ White by construction).
+        @test V_pw[2, 2] / V_no_pw[2, 2] ≈ 1.0 atol=0.1
+        @test V_pw[3, 3] / V_no_pw[3, 3] ≈ 1.0 atol=0.1
     end
 
     @testset "White Vcov HC Variants" begin
@@ -1500,6 +1527,23 @@ using Random
         V_dk_multi = driscoll_kraay(X_dk, U_dk; bandwidth=5)
         @test size(V_dk_multi) == (6, 6)
         @test V_dk_multi ≈ V_dk_multi' atol=1e-10
+
+        # Panel structure with a common shock (DGP-05 #794): the DK estimator
+        # has something to find — the cross-equation intercept covariance
+        # picks up the common component (probed 0.012–0.015 over seeds 5–7
+        # with common-sd 2) while independent units sit at ~0. Own rng so the
+        # draw matches the probe and downstream draws do not shift.
+        dk_rng = MersenneTwister(5)
+        T_com, N_com = 300, 2
+        X_com = hcat(ones(T_com), randn(dk_rng, T_com, 2))
+        common_shock = 2.0 * randn(dk_rng, T_com)
+        U_com = hcat(common_shock + randn(dk_rng, T_com),
+                     common_shock + randn(dk_rng, T_com))
+        V_com = driscoll_kraay(X_com, U_com; bandwidth=5)
+        @test V_com[1, 4] > 0.005
+        U_ind = randn(dk_rng, T_com, N_com)
+        V_ind = driscoll_kraay(X_com, U_ind; bandwidth=5)
+        @test abs(V_ind[1, 4]) < 0.005
 
         # Test robust_vcov dispatch
         dk_estimator = MacroEconometricModels.DriscollKraayEstimator{Float64}(5)
@@ -1619,8 +1663,11 @@ using Random
     @testset "Smooth LP cross_validate_lambda smoke" begin
         rng = MersenneTwister(88920)
         Y_sm = randn(rng, 200, 2)
-        best_lambda = cross_validate_lambda(Y_sm, 1, 8; n_folds=3)
+        # DGP-05 (#794): the old call passed n_folds=3 — silently ignored
+        # (k_folds stayed 5). Fixed kwarg + rejection of unknown kwargs (#697).
+        best_lambda = cross_validate_lambda(Y_sm, 1, 8; k_folds=3)
         @test best_lambda > 0
+        @test_throws ArgumentError cross_validate_lambda(Y_sm, 1, 8; n_folds=3)
     end
 
     @testset "Smooth LP higher lambda" begin

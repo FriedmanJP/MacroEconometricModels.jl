@@ -95,8 +95,9 @@ using Statistics
         nonzero_path = ones(H)
         fc_nonzero = forecast(lp, nonzero_path; ci_method=:none)
 
-        # Forecasts should differ when shock path differs
-        @test fc_zero.forecast != fc_nonzero.forecast
+        # The unit-shock path moves the forecast by a visible margin
+        # (probed 0.55 on this design — not just bitwise inequality).
+        @test maximum(abs, fc_nonzero.forecast - fc_zero.forecast) > 0.1
     end
 
     # =========================================================================
@@ -106,9 +107,12 @@ using Statistics
 
         fc1 = forecast(lp, path1; ci_method=:none)
         fc2 = forecast(lp, path2; ci_method=:none)
+        fc0 = forecast(lp, zeros(H); ci_method=:none)
 
-        # fc2 forecasts should differ from fc1 (linearity in shock)
-        @test fc1.forecast != fc2.forecast
+        # Affine-linearity in the shock path is EXACT (probed 7e-16): the
+        # zero path is the intercept, so fc(2p) = 2·fc(p) − fc(0). (A plain
+        # fc2 == 2·fc1 fails by the baseline — probed 0.19.)
+        @test fc2.forecast ≈ 2 * fc1.forecast - fc0.forecast atol=1e-10
     end
 
     # =========================================================================

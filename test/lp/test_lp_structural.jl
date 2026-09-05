@@ -164,22 +164,23 @@ using Statistics
 
     # =========================================================================
     @testset "VAR vs LP IRF comparison" begin
-        slp = structural_lp(Y, 12; method=:cholesky, lags=4)
-        var_model = estimate_var(Y, 4)
-        var_irf = irf(var_model, 12; method=:cholesky)
+        # Non-identity impact + cross-dynamics truth (DGP-05 #794): the old
+        # diagonal-AR file design made every ordering equivalent. Structural
+        # LP covers h = 1..12 (probed: matches Θ_1..12, not Θ_0..11).
+        A = [0.5 0.1 0.0; 0.1 0.4 0.1; 0.0 0.1 0.3]
+        B0 = [0.6 0.0 0.0; 0.2 0.5 0.0; 0.1 0.15 0.4]
+        Yb = dgp_var(MersenneTwister(166); A=A, B0=B0, T=2000).Y
+        slp = structural_lp(Yb, 12; method=:cholesky, lags=4)
+        var_model = estimate_var(Yb, 4)
+        var_vals = irf(var_model, 12; method=:cholesky).values
+        # Overlap window h = 1..11 (VAR rows are h = 0..11, LP rows h = 1..12).
+        truth = var_irf(A, B0, 12)[2:12, :, :]
 
-        # LP and VAR IRFs should be similar but not identical (finite-sample)
-        # Check that they're at least correlated
-        for shock in 1:n
-            for resp in 1:n
-                lp_vals = slp.irf.values[:, resp, shock]
-                var_vals = var_irf.values[:, resp, shock]
-                # At least same sign at impact for most
-                if abs(var_vals[1]) > 0.1
-                    @test sign(lp_vals[1]) == sign(var_vals[1]) || abs(lp_vals[1]) < 0.2
-                end
-            end
-        end
+        # Both recover truth (probed LP 0.036 on MT(42)) — the sign check with
+        # its `|| abs < 0.2` escape hatch passed for anti-correlated estimates.
+        @test maximum(abs, slp.irf.values[1:11, :, :] - truth) < 0.1
+        # ... hence they agree with each other (transitively, < 0.2).
+        @test maximum(abs, slp.irf.values[1:11, :, :] - var_vals[2:12, :, :]) < 0.2
     end
 
     # =========================================================================
