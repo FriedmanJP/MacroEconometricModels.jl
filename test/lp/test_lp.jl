@@ -286,8 +286,27 @@ using Random
         @test haskey(diff_test, :p_values)
     end
 
+    @testset "State LP regime IRFs + difference power/size on hard-threshold DGP" begin
+        # dgp_state_dependent_var default contrast (DGP-05 #794): expansion AR
+        # 0.9 vs recession AR 0.2 in var 1; var 2 identical across regimes —
+        # a built-in power arm (var 1) and size arm (var 2) on one draw.
+        # Probed on MT(31), T = 600: expansion h=1..3 > recession h=1..3;
+        # var-1 p < 0.05 at h = 0..4; var-2 p > 0.05 everywhere.
+        d = dgp_state_dependent_var(MersenneTwister(31); T=600)
+        m = estimate_state_lp(d.Y, 1, d.z, 6; gamma=10.0, threshold=0.0, lags=2)
+        r = state_irf(m; regime=:both)
+        @test all(r[:expansion].values[2:4, 1] .> r[:recession].values[2:4, 1])
+        dt = test_regime_difference(m)
+        @test all(dt[:p_values][1:5, 1] .< 0.05)
+        @test all(dt[:p_values][:, 2] .> 0.05)
+    end
+
     @testset "Propensity Score LP (Angrist et al. 2018)" begin
-        # Generate treatment effect data
+        # Generate treatment effect data WITH confounding (DGP-05 #794): X
+        # drives both treatment and the outcome, so the naive treated-control
+        # gap overstates τ while IPW/DR adjust. Own seed: the naive gap below
+        # is draw-specific (probed +0.29 on MT(289)).
+        rng = MersenneTwister(289)
         T = 300
         n = 2
 
@@ -298,12 +317,12 @@ using Random
         propensity_true = 1 ./ (1 .+ exp.(-0.5 .* X[:, 1] .- 0.3 .* X[:, 2]))
         treatment = rand(rng, T) .< propensity_true
 
-        # Potential outcomes
+        # Potential outcomes (X1 confounds: raises Y0 and treatment odds)
         Y0 = zeros(T, n)  # Control potential outcome
         Y1 = zeros(T, n)  # Treated potential outcome
 
         for t in 2:T
-            Y0[t, :] = 0.5 * Y0[t-1, :] + randn(rng, n)
+            Y0[t, :] = 0.5 * Y0[t-1, :] .+ 0.8 .* X[t, 1] .+ randn(rng, n)
             Y1[t, :] = Y0[t, :] .+ 0.5  # Treatment effect = 0.5
         end
 
@@ -323,10 +342,15 @@ using Random
         @test all(0 .< model.propensity_scores .< 1)
         @test size(model.ate) == (horizon + 1, n)
 
-        # ATE estimates should be positive (true effect is 0.5)
-        # Allow wide tolerance due to small sample
-        @test mean(model.ate[:, 1]) > -1.0
-        @test mean(model.ate[:, 1]) < 2.0
+        # IPW and DR recover τ = 0.5 at h = 0 (probed 0.532/0.529), the naive
+        # treated-control gap overstates it (probed 0.788), and the fitted
+        # scores track the true propensity (probed cor 0.984).
+        @test model.ate[1, 1] ≈ 0.5 atol=0.2
+        naive_gap = mean(Y[treatment .== 1, 1]) - mean(Y[treatment .== 0, 1])
+        @test naive_gap - 0.5 > 0.15
+        ps_hat = estimate_propensity_score(Vector{Bool}(treatment), X;
+                                           method=:logit)
+        @test cor(ps_hat, propensity_true) > 0.9
 
         # Propensity diagnostics
         diag = propensity_diagnostics(model)
@@ -341,6 +365,7 @@ using Random
         # Test doubly robust estimator
         dr_model = doubly_robust_lp(Y, treatment, X, horizon; lags=2)
         @test dr_model isa PropensityLPModel
+        @test dr_model.ate[1, 1] ≈ 0.5 atol=0.2
     end
 
     @testset "Doubly-robust LP applies HAC to overlapping influence functions (T102 #201)" begin
@@ -649,7 +674,10 @@ using Random
         wk_test = weak_instrument_test(model_weak; threshold=10.0)
         @test haskey(wk_test, :F_stats)
         @test haskey(wk_test, :passes_threshold)
-        # With weak instrument, some horizons should fail threshold
+        # Simulated F ≈ 0.1 at every horizon (probed) — passes_threshold is
+        # false at ALL horizons, while the strong :94 design passes at all
+        # horizons (DGP-05 #794; the old comment-only assertion is now exact).
+        @test !any(wk_test[:passes_threshold])
     end
 
     # ==========================================================================
