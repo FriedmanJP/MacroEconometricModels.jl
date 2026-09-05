@@ -172,6 +172,13 @@ using DataFrames  # nrow (no-op when fixtures.jl already loaded it)
         @test size(sv.irf_exp) == (13, 2, 2)
         pr = dgp_propensity(MersenneTwister(42); n=500)
         @test length(pr.Y) == 500 && pr.att == 1.0
+        ha = dgp_hac(MersenneTwister(48); rho=0.5, T=500, k=2)
+        @test size(ha.X) == (500, 3) && length(ha.u) == 500
+        @test ha.lrv == 1 / (1 - 0.5)^2
+        # AR(1) errors inherit persistence (slope se ≈ 0.04 at T = 500).
+        @test cor(ha.u[1:499], ha.u[2:500]) ≈ 0.5 atol=0.15
+        hx = dgp_hac(MersenneTwister(49); rho=0.0, T=200, k=1, x_first=true)
+        @test size(hx.X) == (200, 2) && abs(cor(hx.u[1:199], hx.u[2:200])) < 0.2
     end
 
     @testset "dgp_nongaussian_var / dgp_heteroskedastic_var" begin

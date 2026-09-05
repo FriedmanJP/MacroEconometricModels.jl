@@ -14,15 +14,15 @@ using Random
     rng = MersenneTwister(42)
 
     @testset "Core LP Estimation (Jordà 2005)" begin
-        # Generate AR(1) data: y_t = 0.7 * y_{t-1} + ε_t
+        # Diagonal AR(1) on the shared simulator (DGP-05 #794): y_t = 0.7 *
+        # y_{t-1} + ε_t, T = 200, n = 2. The ρ^h theory below is exact for
+        # diagonal A with identity innovations.
         T = 200
         n = 2
         rho = 0.7
 
-        Y = zeros(T, n)
-        for t in 2:T
-            Y[t, :] = rho * Y[t-1, :] + randn(rng, n)
-        end
+        Y = dgp_var(rng; A=[rho 0.0; 0.0 rho], B0=Matrix{Float64}(I, n, n),
+                    T=T).Y
 
         # Estimate LP
         horizon = 10
@@ -81,13 +81,11 @@ using Random
         # across seeds — draw luck, e.g. sample var(u) = 1.0 vs 1.33).
         rng = MersenneTwister(58)
         T = 2000
-        u = zeros(T)
         rho_u = 0.5
-        for t in 2:T
-            u[t] = rho_u * u[t-1] + randn(rng)
-        end
-
-        X = hcat(ones(T), randn(rng, T))
+        # Shared HAC DGP (DGP-05 #794): byte-identical draw order, so the
+        # probed ratios below hold without re-probing.
+        hac = dgp_hac(rng; rho=rho_u, T=T, k=1)
+        u, X = hac.u, hac.X
 
         V_nw = newey_west(X, u; bandwidth=5, kernel=:bartlett)
         V_white = white_vcov(X, u)
@@ -125,27 +123,14 @@ using Random
     end
 
     @testset "LP-IV (Stock & Watson 2018)" begin
-        # Generate data with endogeneity. Own seed (DGP-05 #794): the impact
-        # and F assertions below are draw-specific (LP-IV at T = 300 is too
-        # noisy beyond h = 0 — 8-seed MC at T = 2000 centers on truth, but
-        # single draws swing ±0.3 at h ≥ 1; decay lives in the next testset).
-        rng = MersenneTwister(94)
-        T = 300
-        n = 2
-
-        # Instrument
-        Z = randn(rng, T, 1)
-
-        # Endogenous shock (correlated with error)
-        common = randn(rng, T)
-        shock = 0.5 * Z[:, 1] + 0.5 * common + 0.2 * randn(rng, T)
-
-        # Outcome
-        Y = zeros(T, n)
-        Y[:, 1] = shock  # Shock variable
-        for t in 2:T
-            Y[t, 2] = 0.3 * Y[t-1, 2] + 0.5 * shock[t] + common[t] + randn(rng)
-        end
+        # Shared IV DGP (DGP-05 #794): s = π₁z + v with π₁ = 1.5, y loads
+        # on s with impact θ = 1 and AR(1) 0.5. Own seed: at T = 300 the
+        # first stage is very strong (probed F 552–557; population
+        # (T−2)·π₁² ≈ 670), so every horizon clears the weak-IV threshold;
+        # only the h = 0 impact is asserted (LP-IV variance grows with h —
+        # the θ·φʰ recovery testset covers h ≤ 2 at T = 2000).
+        d = dgp_lp_iv(MersenneTwister(94); T=300)
+        Y, Z = d.Y, d.Z
 
         # Estimate LP-IV
         horizon = 5
@@ -154,19 +139,19 @@ using Random
         @test model isa LPIVModel
         @test length(model.first_stage_F) == horizon + 1
 
-        # Strong instrument (probed F ≈ 230; population no-control F ≈ 260).
+        # Strong instrument: every horizon clears 100 by a 5x margin.
         @test all(model.first_stage_F .> 100)
 
-        # ... so every horizon passes the weak-IV threshold (DGP-05 #794).
+        # ... so every horizon passes the weak-IV threshold.
         wk_test = weak_instrument_test(model; threshold=10.0)
         @test haskey(wk_test, :F_stats)
         @test haskey(wk_test, :passes_threshold)
         @test all(wk_test[:passes_threshold])
 
-        # Extract IRF: impact ≈ 0.5 (probed 0.547).
+        # Extract IRF: impact ≈ θ = 1 (probed 1.042).
         result = lp_iv_irf(model)
         @test result isa LPImpulseResponse
-        @test result.values[1, 2] ≈ 0.5 atol=0.15
+        @test result.values[1, 2] ≈ 1.0 atol=0.2
     end
 
     @testset "LP-IV recovers θ·φʰ on the shared IV DGP" begin
@@ -223,13 +208,11 @@ using Random
     end
 
     @testset "Smooth LP (Barnichon & Brownlees 2019)" begin
-        # Generate data
+        # Diagonal AR(1) on the shared simulator (DGP-05 #794).
         T = 200
         n = 2
-        Y = zeros(T, n)
-        for t in 2:T
-            Y[t, :] = 0.5 * Y[t-1, :] + randn(rng, n)
-        end
+        Y = dgp_var(rng; A=[0.5 0.0; 0.0 0.5], B0=Matrix{Float64}(I, 2, 2),
+                    T=T).Y
 
         horizon = 15
 
@@ -551,20 +534,16 @@ using Random
     # ==========================================================================
 
     @testset "Reproducibility" begin
-        # Same seed should produce identical LP estimates
-        rng = MersenneTwister(11111)
-        Y1 = zeros(150, 2)
-        for t in 2:150
-            Y1[t, :] = 0.5 * Y1[t-1, :] + randn(rng, 2)
-        end
+        # Same seed should produce identical LP estimates (DGP-05 #794:
+        # shared simulator, drawn twice from the same seed).
+        A_rep = [0.5 0.0; 0.0 0.5]
+        Y1 = dgp_var(MersenneTwister(11111); A=A_rep, B0=Matrix{Float64}(I, 2, 2),
+                     T=150).Y
         model1 = estimate_lp(Y1, 1, 10; lags=2)
         irf1 = lp_irf(model1)
 
-        rng = MersenneTwister(11111)
-        Y2 = zeros(150, 2)
-        for t in 2:150
-            Y2[t, :] = 0.5 * Y2[t-1, :] + randn(rng, 2)
-        end
+        Y2 = dgp_var(MersenneTwister(11111); A=A_rep, B0=Matrix{Float64}(I, 2, 2),
+                     T=150).Y
         model2 = estimate_lp(Y2, 1, 10; lags=2)
         irf2 = lp_irf(model2)
 
@@ -614,10 +593,8 @@ using Random
     @testset "Confidence Interval Properties" begin
         rng = MersenneTwister(44444)
         T_ci = 200
-        Y_ci = zeros(T_ci, 2)
-        for t in 2:T_ci
-            Y_ci[t, :] = 0.5 * Y_ci[t-1, :] + randn(rng, 2)
-        end
+        Y_ci = dgp_var(rng; A=[0.5 0.0; 0.0 0.5], B0=Matrix{Float64}(I, 2, 2),
+                       T=T_ci).Y
 
         model_ci = estimate_lp(Y_ci, 1, 10; lags=2, cov_type=:newey_west)
         irf_ci = lp_irf(model_ci; conf_level=0.95)
@@ -646,10 +623,8 @@ using Random
     @testset "Cumulative IRF Properties" begin
         rng = MersenneTwister(55555)
         T_cum = 150
-        Y_cum = zeros(T_cum, 2)
-        for t in 2:T_cum
-            Y_cum[t, :] = 0.5 * Y_cum[t-1, :] + randn(rng, 2)
-        end
+        Y_cum = dgp_var(rng; A=[0.5 0.0; 0.0 0.5], B0=Matrix{Float64}(I, 2, 2),
+                        T=T_cum).Y
 
         model_cum = estimate_lp(Y_cum, 1, 10; lags=2)
         irf_std = lp_irf(model_cum)
@@ -666,30 +641,19 @@ using Random
     end
 
     @testset "LP-IV Weak Instrument Handling" begin
-        rng = MersenneTwister(66666)
-        T_weak = 200
-        n_weak = 2
-
-        # Create weak instrument scenario
-        Z_weak = randn(rng, T_weak, 1)
-        shock_weak = 0.1 * Z_weak[:, 1] + randn(rng, T_weak)  # Weak correlation
-
-        Y_weak = zeros(T_weak, n_weak)
-        Y_weak[:, 1] = shock_weak
-        for t in 2:T_weak
-            Y_weak[t, 2] = 0.3 * Y_weak[t-1, 2] + 0.5 * shock_weak[t] + randn(rng)
-        end
-
-        model_weak = estimate_lp_iv(Y_weak, 1, Z_weak, 5; lags=2)
+        # Shared IV DGP with a weak first stage (DGP-05 #794): π₁ = 0.1 at
+        # T = 200 gives population F ≈ T·π₁² ≈ 2, so no horizon clears 10
+        # (probed max F ≈ 0.12 on MT(66666)).
+        d = dgp_lp_iv(MersenneTwister(66666); T=200, pi1=0.1)
+        model_weak = estimate_lp_iv(d.Y, 1, d.Z, 5; lags=2)
         @test model_weak isa LPIVModel
 
         # Weak instrument test should detect weakness
         wk_test = weak_instrument_test(model_weak; threshold=10.0)
         @test haskey(wk_test, :F_stats)
         @test haskey(wk_test, :passes_threshold)
-        # Simulated F ≈ 0.1 at every horizon (probed) — passes_threshold is
-        # false at ALL horizons, while the strong :94 design passes at all
-        # horizons (DGP-05 #794; the old comment-only assertion is now exact).
+        # passes_threshold is false at ALL horizons, while the strong shared
+        # design above passes at all horizons.
         @test !any(wk_test[:passes_threshold])
     end
 
@@ -773,10 +737,8 @@ using Random
         rng = MersenneTwister(88888)
         T_cv = 200
         n_cv = 2
-        Y_cv = zeros(T_cv, n_cv)
-        for t in 2:T_cv
-            Y_cv[t, :] = 0.5 * Y_cv[t-1, :] + randn(rng, n_cv)
-        end
+        Y_cv = dgp_var(rng; A=[0.5 0.0; 0.0 0.5], B0=Matrix{Float64}(I, 2, 2),
+                       T=T_cv).Y
 
         # Test cross-validation for lambda selection
         lambda_grid = Float64.([0.01, 0.1, 1.0, 10.0])
@@ -793,10 +755,8 @@ using Random
         # so every fold MSE was 0 and CV always returned lambda_grid[1] regardless of the data.
         rng = MersenneTwister(2718)
         T_cv2, n_cv2 = 220, 2
-        Y_hld = zeros(T_cv2, n_cv2)
-        for t in 2:T_cv2
-            Y_hld[t, :] = 0.6 * Y_hld[t-1, :] + randn(rng, n_cv2)
-        end
+        Y_hld = dgp_var(rng; A=[0.6 0.0; 0.0 0.6], B0=Matrix{Float64}(I, 2, 2),
+                        T=T_cv2).Y
         grid = collect(10.0 .^ (-4:1.0:2))
         errs = MacroEconometricModels._smooth_lp_cv_errors(Y_hld, 1, 6; lambda_grid=grid, k_folds=5, lags=2)
         @test length(errs) == length(grid)
@@ -814,10 +774,8 @@ using Random
         # the off-diagonals are non-negligible and materially change the reported bands.
         rng = MersenneTwister(1234)
         T_sc = 200
-        Y_sc = zeros(T_sc, 2)
-        for t in 2:T_sc
-            Y_sc[t, :] = 0.6 * Y_sc[t-1, :] + randn(rng, 2)
-        end
+        Y_sc = dgp_var(rng; A=[0.6 0.0; 0.0 0.6], B0=Matrix{Float64}(I, 2, 2),
+                       T=T_sc).Y
         H = 8
         ce = MacroEconometricModels.create_cov_estimator(:newey_west, Float64)
         Sig = MacroEconometricModels._lp_shock_irf_covariance(Y_sc, 1, H, 2, [1, 2], ce, 1)
@@ -851,10 +809,8 @@ using Random
         rng = MersenneTwister(99999)
         T_cmp = 150
         n_cmp = 2
-        Y_cmp = zeros(T_cmp, n_cmp)
-        for t in 2:T_cmp
-            Y_cmp[t, :] = 0.5 * Y_cmp[t-1, :] + randn(rng, n_cmp)
-        end
+        Y_cmp = dgp_var(rng; A=[0.5 0.0; 0.0 0.5], B0=Matrix{Float64}(I, 2, 2),
+                        T=T_cmp).Y
 
         # Compare standard and smooth LP
         comparison = MacroEconometricModels.compare_smooth_lp(Y_cmp, 1, 10; lambda=1.0, lags=2)
@@ -1188,8 +1144,8 @@ using Random
     @testset "White Covariance Estimator" begin
         rng = MersenneTwister(60606)
         T_wh = 100
-        X_wh = hcat(ones(T_wh), randn(rng, T_wh, 2))
-        u_wh = randn(rng, T_wh)
+        hac_wh = dgp_hac(rng; rho=0.0, T=T_wh, k=2, x_first=true)
+        X_wh, u_wh = hac_wh.X, hac_wh.u
 
         V_white = white_vcov(X_wh, u_wh)
         @test size(V_white) == (3, 3)
@@ -1216,10 +1172,8 @@ using Random
         rng = MersenneTwister(70707)
         T_cov = 150
         n_cov = 2
-        Y_cov = zeros(T_cov, n_cov)
-        for t in 2:T_cov
-            Y_cov[t, :] = 0.5 * Y_cov[t-1, :] + randn(rng, n_cov)
-        end
+        Y_cov = dgp_var(rng; A=[0.5 0.0; 0.0 0.5], B0=Matrix{Float64}(I, 2, 2),
+                        T=T_cov).Y
 
         # Test with White covariance
         model_white = estimate_lp(Y_cov, 1, 8; lags=2, cov_type=:white)
@@ -1253,10 +1207,7 @@ using Random
         # design (bw=10 → ~15, bw=30 → ~20, Andrews → ~20 at T = 2000), so
         # the truth bound is honestly wide: rtol 0.3 is ~4x the observed
         # two-seed spread (18.7–20.7).
-        persistent = zeros(2000)
-        for t in 2:2000
-            persistent[t] = 0.8 * persistent[t-1] + randn(rng)
-        end
+        persistent = dgp_hac(rng; rho=0.8, T=2000, k=0).u
         lrv_pers = MacroEconometricModels.long_run_variance(persistent; bandwidth=30)
         @test lrv_pers > var(persistent)  # LRV should be larger for persistent series
         @test lrv_pers ≈ 25 rtol=0.3
@@ -1287,12 +1238,9 @@ using Random
         T_chol = 200
         n_chol = 3
 
-        # Generate VAR data
-        Y_chol = zeros(T_chol, n_chol)
+        # VAR data on the shared simulator (DGP-05 #794).
         A = [0.5 0.1 0.0; 0.1 0.4 0.1; 0.0 0.1 0.3]
-        for t in 2:T_chol
-            Y_chol[t, :] = A * Y_chol[t-1, :] + randn(rng, n_chol)
-        end
+        Y_chol = dgp_var(rng; A=A, T=T_chol).Y
 
         horizon = 10
 
@@ -1317,10 +1265,8 @@ using Random
         T_multi = 200
         n_multi = 3
 
-        Y_multi = zeros(T_multi, n_multi)
-        for t in 2:T_multi
-            Y_multi[t, :] = 0.5 * Y_multi[t-1, :] + randn(rng, n_multi)
-        end
+        Y_multi = dgp_var(rng; A=[0.5 0.0 0.0; 0.0 0.5 0.0; 0.0 0.0 0.5],
+                          T=T_multi).Y
 
         horizon = 8
 
@@ -1381,14 +1327,11 @@ using Random
         rng = MersenneTwister(84848)
         T_pw = 2000
 
-        X_pw = hcat(ones(T_pw), randn(rng, T_pw, 2))
-
-        # AR(1) residuals with strong autocorrelation
-        u_pw = zeros(T_pw)
+        # AR(1) residuals with strong autocorrelation (DGP-05 #794: shared
+        # HAC DGP, X-first draw order — byte-identical to the inline loop).
         rho = 0.7
-        for t in 2:T_pw
-            u_pw[t] = rho * u_pw[t-1] + randn(rng)
-        end
+        hac_pw = dgp_hac(rng; rho=rho, T=T_pw, k=2, x_first=true)
+        X_pw, u_pw = hac_pw.X, hac_pw.u
 
         # Without prewhitening
         V_no_pw = newey_west(X_pw, u_pw; bandwidth=5, prewhiten=false)
@@ -1418,8 +1361,8 @@ using Random
         rng = MersenneTwister(85858)
         T_hc = 100
 
-        X_hc = hcat(ones(T_hc), randn(rng, T_hc, 2))
-        u_hc = randn(rng, T_hc)
+        hac_hc = dgp_hac(rng; rho=0.0, T=T_hc, k=2, x_first=true)
+        X_hc, u_hc = hac_hc.X, hac_hc.u
 
         # Test all HC variants
         for variant in [:hc0, :hc1, :hc2, :hc3]
@@ -1505,10 +1448,11 @@ using Random
         # Invalid bandwidth should throw
         @test_throws ArgumentError MacroEconometricModels.DriscollKraayEstimator{Float64}(-1)
 
-        # Test driscoll_kraay function directly
+        # Test driscoll_kraay function directly (DGP-05 #794: shared HAC
+        # DGP, X-first draw order — byte-identical to the inline draws).
         T_dk = 200
-        X_dk = hcat(ones(T_dk), randn(rng, T_dk, 2))
-        u_dk = randn(rng, T_dk)
+        hac_dk = dgp_hac(rng; rho=0.0, T=T_dk, k=2, x_first=true)
+        X_dk, u_dk = hac_dk.X, hac_dk.u
 
         V_dk = driscoll_kraay(X_dk, u_dk; bandwidth=5)
         @test size(V_dk) == (3, 3)
@@ -1531,31 +1475,31 @@ using Random
         # Panel structure with a common shock (DGP-05 #794): the DK estimator
         # has something to find — the cross-equation intercept covariance
         # picks up the common component (probed 0.012–0.015 over seeds 5–7
-        # with common-sd 2) while independent units sit at ~0. Own rng so the
-        # draw matches the probe and downstream draws do not shift.
-        dk_rng = MersenneTwister(5)
-        T_com, N_com = 300, 2
-        X_com = hcat(ones(T_com), randn(dk_rng, T_com, 2))
-        common_shock = 2.0 * randn(dk_rng, T_com)
-        U_com = hcat(common_shock + randn(dk_rng, T_com),
-                     common_shock + randn(dk_rng, T_com))
-        V_com = driscoll_kraay(X_com, U_com; bandwidth=5)
-        @test V_com[1, 4] > 0.005
-        U_ind = randn(dk_rng, T_com, N_com)
-        V_ind = driscoll_kraay(X_com, U_ind; bandwidth=5)
-        @test abs(V_ind[1, 4]) < 0.005
+        # with common-sd 2) while independent units sit at ~0. Own MT(5)
+        # stream in a let-shadow: the `rng` name satisfies the rng-first
+        # lint while the draws — and every downstream draw — are unchanged.
+        let rng = MersenneTwister(5)
+            T_com, N_com = 300, 2
+            X_com = hcat(ones(T_com), randn(rng, T_com, 2))
+            common_shock = 2.0 * randn(rng, T_com)
+            U_com = hcat(common_shock + randn(rng, T_com),
+                         common_shock + randn(rng, T_com))
+            V_com = driscoll_kraay(X_com, U_com; bandwidth=5)
+            @test V_com[1, 4] > 0.005
+            U_ind = randn(rng, T_com, N_com)
+            V_ind = driscoll_kraay(X_com, U_ind; bandwidth=5)
+            @test abs(V_ind[1, 4]) < 0.005
+        end
 
         # Test robust_vcov dispatch
         dk_estimator = MacroEconometricModels.DriscollKraayEstimator{Float64}(5)
         V_dispatch = MacroEconometricModels.robust_vcov(X_dk, u_dk, dk_estimator)
         @test V_dispatch ≈ V_dk atol=1e-10
 
-        # Test in estimate_lp
+        # Test in estimate_lp (DGP-05 #794: shared simulator).
         n_dk = 2
-        Y_dk = zeros(T_dk, n_dk)
-        for t in 2:T_dk
-            Y_dk[t, :] = 0.5 * Y_dk[t-1, :] + randn(rng, n_dk)
-        end
+        Y_dk = dgp_var(rng; A=[0.5 0.0; 0.0 0.5], B0=Matrix{Float64}(I, 2, 2),
+                       T=T_dk).Y
 
         model_dk = estimate_lp(Y_dk, 1, 8; lags=2, cov_type=:driscoll_kraay, bandwidth=5)
         @test model_dk isa LPModel
@@ -1700,10 +1644,9 @@ using Random
         n_hab = 2
 
         # Persistent VAR(1) data — makes the bandwidth correction matter
-        Y_hab = zeros(T_hab, n_hab)
-        for t in 2:T_hab
-            Y_hab[t, :] = 0.7 * Y_hab[t-1, :] + randn(rng, n_hab)
-        end
+        # (DGP-05 #794: shared simulator).
+        Y_hab = dgp_var(rng; A=[0.7 0.0; 0.0 0.7], B0=Matrix{Float64}(I, 2, 2),
+                        T=T_hab).Y
 
         horizon = 15
         model_hab = estimate_lp(Y_hab, 1, horizon; lags=2, cov_type=:newey_west)
@@ -1782,10 +1725,8 @@ using Random
         n_slh = 2
 
         state_slh = randn(rng, T_slh)
-        Y_slh = zeros(T_slh, n_slh)
-        for t in 2:T_slh
-            Y_slh[t, :] = 0.6 * Y_slh[t-1, :] + randn(rng, n_slh)
-        end
+        Y_slh = dgp_var(rng; A=[0.6 0.0; 0.0 0.6], B0=Matrix{Float64}(I, 2, 2),
+                        T=T_slh).Y
 
         horizon = 8
         model_slh = estimate_state_lp(Y_slh, 1, state_slh, horizon; lags=2, gamma=1.5)
@@ -1994,10 +1935,8 @@ end
 @testset "LP bootstrap IRF bands (#370, T271)" begin
     M = MacroEconometricModels
     rng = Random.MersenneTwister(371)
-    Y = randn(rng, 300, 2)
-    for t in 2:300
-        Y[t, :] = [0.6 0.1; 0.2 0.5] * Y[t-1, :] + randn(rng, 2)
-    end
+    Y = dgp_var(rng; A=[0.6 0.1; 0.2 0.5], B0=Matrix{Float64}(I, 2, 2),
+                T=300).Y
     m = estimate_lp(Y, 1, 8; lags=2)
     a = lp_irf(m)
 

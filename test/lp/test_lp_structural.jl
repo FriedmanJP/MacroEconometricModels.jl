@@ -11,16 +11,13 @@ using LinearAlgebra
 using Statistics
 
 @testset "Structural LP" begin
-    rng = MersenneTwister(42)
-
-    # Generate test data with some structure
+    # Diagonal AR(1) on the shared simulator (DGP-05 #794): same design as
+    # the legacy inline loop (0.3 persistence, identity innovations).
     T_obs = 200
     n = 3
-    Y = zeros(T_obs, n)
-    Y[1, :] = randn(rng, n)
-    for t in 2:T_obs
-        Y[t, :] = 0.3 * Y[t-1, :] + randn(rng, n)
-    end
+    A_slp = 0.3 .* Matrix{Float64}(I, n, n)
+    Y = dgp_var(MersenneTwister(42); A=A_slp, B0=Matrix{Float64}(I, n, n),
+                T=T_obs).Y
 
     # =========================================================================
     @testset "structural_lp with Cholesky" begin

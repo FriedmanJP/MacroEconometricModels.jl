@@ -11,16 +11,13 @@ using LinearAlgebra
 using Statistics
 
 @testset "LP Forecasting" begin
-    rng = MersenneTwister(123)
-
-    # Generate test data
+    # Diagonal AR(1) on the shared simulator (DGP-05 #794): same design as
+    # the legacy inline loop (0.3 persistence, identity innovations).
     T_obs = 200
     n = 3
-    Y = zeros(T_obs, n)
-    Y[1, :] = randn(rng, n)
-    for t in 2:T_obs
-        Y[t, :] = 0.3 * Y[t-1, :] + randn(rng, n)
-    end
+    A_fc = 0.3 .* Matrix{Float64}(I, n, n)
+    Y = dgp_var(MersenneTwister(123); A=A_fc, B0=Matrix{Float64}(I, n, n),
+                T=T_obs).Y
 
     H = 8
     lp = estimate_lp(Y, 1, H; lags=4)

@@ -88,3 +88,39 @@ function dgp_propensity(rng::AbstractRNG; beta_ps=[0.5, 0.3], tau::Float64=1.0,
     Y = Y0 + tau * D
     return (Y=Y, D=D, X=X, tau=tau, beta_ps=bp, att=tau, ps=ps)
 end
+
+"""
+    dgp_hac(rng; rho, T, k, x_first) -> NamedTuple
+
+HAC-covariance regression DGP (DGP-05 #794): AR(1) errors
+`u_t = ρ·u_{t-1} + ε_t` with `u_1 = 0` (exactly like the legacy inline
+loops it replaces) and iid regressors `X = [1 X̃]`, `X̃ ~ N(0, I_k)`.
+Returns `(X, u, rho, lrv)` with the population long-run variance
+`lrv = 1/(1−ρ)²` (unit innovations).
+
+Draw order matches the legacy LP blocks byte-for-byte so probed
+HAC/White constants hold without re-probing: `u` first by default;
+`x_first = true` draws `X` first (blocks that built `X` first; with
+`rho = 0` the white `u` is one vector draw, as before). `k = 0` skips
+the `X̃` block (no draws).
+"""
+function dgp_hac(rng::AbstractRNG; rho::Float64=0.5, T::Int=2000, k::Int=1,
+                 x_first::Bool=false)
+    if x_first
+        X = k > 0 ? hcat(ones(T), randn(rng, T, k)) : ones(T, 1)
+        u = rho == 0.0 ? randn(rng, T) : _ar1_errors(rng, rho, T)
+    else
+        u = _ar1_errors(rng, rho, T)
+        X = k > 0 ? hcat(ones(T), randn(rng, T, k)) : ones(T, 1)
+    end
+    return (X=X, u=u, rho=rho, lrv=1 / (1 - rho)^2)
+end
+
+# AR(1) errors with u_1 = 0 (legacy inline-loop convention, DGP-05 #794).
+function _ar1_errors(rng::AbstractRNG, rho::Float64, T::Int)
+    u = zeros(T)
+    for t in 2:T
+        u[t] = rho * u[t-1] + randn(rng)
+    end
+    return u
+end

@@ -85,11 +85,6 @@ both headings; a file on either list is exempt.
 - test/ardl/test_ardl.jl
 - test/pvar/test_pvar.jl
 - test/vecm/test_vecm.jl
-<!-- DGP-05 (#794) -->
-- test/lp/test_lp.jl
-- test/lp/test_lp_fevd.jl
-- test/lp/test_lp_forecast.jl
-- test/lp/test_lp_structural.jl
 <!-- DGP-09 (#798) -->
 - test/arima/test_arfima.jl
 - test/arima/test_arima.jl
