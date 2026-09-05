@@ -8,7 +8,6 @@
 # LSTAR, ESTR) returning the true state/transition path for classification
 # and correlation asserts.
 
-using Random, LinearAlgebra
 
 """
     dgp_regime_switching(rng; kind, T, burn, kwargs...) -> NamedTuple

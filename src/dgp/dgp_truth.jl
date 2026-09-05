@@ -7,7 +7,6 @@
 # DGP-01 (#790): analytic truth helpers living next to the simulators —
 # closed-form moments a recovery assertion compares against.
 
-using LinearAlgebra, Distributions
 
 """
     arma_spectrum(phi, theta, sigma, freqs) -> Vector

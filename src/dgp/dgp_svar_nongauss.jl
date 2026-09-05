@@ -9,7 +9,6 @@
 # identification scheme unidentified in population; these simulators give each
 # method data with the feature it needs.
 
-using Random, LinearAlgebra, Distributions
 
 # Independent non-Gaussian structural shocks, unit variance.
 function _nongauss_shocks(rng::AbstractRNG, T::Int, n::Int, dist::Symbol, nu::Float64)

@@ -7,7 +7,6 @@
 # DGP-01 (#790) / DGP-09 (#798) / DGP-12 (#801): univariate, trend-cycle,
 # state-space and hypothesis-test-pair simulators.
 
-using Random, LinearAlgebra, Distributions
 
 """
     dgp_arima(rng; phi, theta, d, Phi, Theta, s, c, sigma, T, burn)

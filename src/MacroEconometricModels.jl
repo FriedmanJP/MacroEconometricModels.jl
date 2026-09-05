@@ -108,6 +108,19 @@ include("data/panel.jl")
 include("data/summary_stats.jl")
 include("data/examples.jl")
 
+# Simulation DGPs (public user-facing simulators, ex-test/dgp)
+include("dgp/dgp_var.jl")
+include("dgp/dgp_svar_nongauss.jl")
+include("dgp/dgp_univariate.jl")
+include("dgp/dgp_cointegration.jl")
+include("dgp/dgp_volatility.jl")
+include("dgp/dgp_factors.jl")
+include("dgp/dgp_lp.jl")
+include("dgp/dgp_micro.jl")
+include("dgp/dgp_regime.jl")
+include("dgp/dgp_gmm.jl")
+include("dgp/dgp_truth.jl")
+
 # Input-Output analysis
 include("io/types.jl")
 include("io/coefficients.jl")
@@ -1450,6 +1463,19 @@ export to_matrix, to_vector
 
 # Examples
 export load_example
+
+# Simulation DGPs (public simulators, ex-test/dgp)
+export dgp_var, lyapunov_gamma0, var_irf, var_fevd, var_hd
+export dgp_nongaussian_var, dgp_heteroskedastic_var
+export dgp_arima, dgp_trend_cycle, dgp_ar2_peak, dgp_lagged_pair, dgp_state_space, dgp_unit_root_pair
+export dgp_vecm, dgp_cointreg, dgp_panel_var, dgp_ardl, dgp_nardl, dgp_pmg
+export dgp_garch_family, dgp_sv, dgp_mgarch, dgp_midas
+export dgp_dynamic_factors, dgp_mixed_frequency_panel
+export dgp_lp_iv, dgp_state_dependent_var, dgp_propensity, dgp_hac
+export dgp_cross_section, dgp_panel, dgp_staggered_did
+export dgp_regime_switching
+export dgp_gmm, dgp_pce_draws, dgp_dsge_observed
+export arma_spectrum, mm_aggregate, logit_ame, probit_ame
 
 # =============================================================================
 # Exports - Cross-Sectional Regression

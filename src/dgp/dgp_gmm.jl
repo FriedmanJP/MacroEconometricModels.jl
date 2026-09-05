@@ -7,7 +7,6 @@
 # DGP-01 (#790) / DGP-08 (#797) / DGP-17 (#806) / DGP-13 (#802): GMM, PCE
 # band-draw and DSGE-observation simulators.
 
-using Random, LinearAlgebra, Distributions
 
 """
     dgp_gmm(rng; kind, beta, n, hetero, overid_k, invalid_k, pi1) -> NamedTuple

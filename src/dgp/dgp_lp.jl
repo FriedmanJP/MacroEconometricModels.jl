@@ -7,7 +7,6 @@
 # DGP-01 (#790) / DGP-05 (#794): LP simulators — the exemplary `_lpiv_sim`
 # promoted to rng-first, plus state-dependent VAR and confounded propensity.
 
-using Random, LinearAlgebra, Distributions
 
 """
     dgp_lp_iv(rng; T, pi1, theta) -> NamedTuple

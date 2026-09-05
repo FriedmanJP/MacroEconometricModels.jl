@@ -8,7 +8,6 @@
 # mixed-frequency (Mariano–Murasawa) simulators. Factors are VAR(p) — never
 # iid — so dynamic-factor / FAVAR / GDFM tests have factor dynamics to recover.
 
-using Random, LinearAlgebra
 
 """
     dgp_dynamic_factors(rng; A, Lambda, r, p, N, T, Sigma_F, idio, idio_ar,

@@ -6,12 +6,11 @@
 
 # DGP-01 (#790): shared truth-returning VAR simulators.
 #
-# Contract for every simulator in test/dgp/: rng::AbstractRNG first positional
+# Contract for every public simulator (see docs/src/simulation.md): rng::AbstractRNG first positional
 # argument (never touches the global RNG), burn-in for dynamic processes
 # (default burn = 200), and a NamedTuple return with everything a recovery
 # assertion needs (coefficients, covariances, shocks, latent paths).
 
-using Random, LinearAlgebra
 
 """
     dgp_var(rng; A, B0, Sigma, c, T, burn) -> NamedTuple

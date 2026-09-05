@@ -8,7 +8,6 @@
 # The old corner fixture (instant full adjustment, no Γ, one shared trend) is
 # replaced by a parametrised VECM with distinct trends and moderate adjustment.
 
-using Random, LinearAlgebra
 
 """
     dgp_vecm(rng; alpha, beta, Gamma, mu, Sigma, T, burn) -> NamedTuple

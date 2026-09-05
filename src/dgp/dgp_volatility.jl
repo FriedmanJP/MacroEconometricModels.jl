@@ -8,7 +8,6 @@
 # multivariate-GARCH and MIDAS simulators. Every simulator returns the
 # conditional-variance path the old fixtures discarded.
 
-using Random, LinearAlgebra, Distributions
 
 """
     dgp_garch_family(rng; kind, omega, alpha, beta, gamma, delta, d, theta,

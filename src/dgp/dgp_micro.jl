@@ -8,7 +8,6 @@
 # simulators — cross-section (14 kinds), linear/nonlinear panel with
 # correlated effects, and staggered difference-in-differences.
 
-using Random, LinearAlgebra, Distributions, DataFrames
 
 _logistic(x) = 1 / (1 + exp(-x))
 
