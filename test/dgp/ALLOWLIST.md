@@ -90,9 +90,6 @@ both headings; a file on either list is exempt.
 - test/lp/test_lp_fevd.jl
 - test/lp/test_lp_forecast.jl
 - test/lp/test_lp_structural.jl
-<!-- DGP-08 (#797) -->
-- test/gmm/test_gmm.jl
-- test/gmm/test_smm.jl
 <!-- DGP-09 (#798) -->
 - test/arima/test_arfima.jl
 - test/arima/test_arima.jl

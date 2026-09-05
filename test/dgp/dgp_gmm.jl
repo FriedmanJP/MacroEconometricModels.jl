@@ -15,7 +15,10 @@ using Random, LinearAlgebra, Distributions
 GMM DGP: heteroskedastic errors (`σᵢ = 0.5 + |x₁|`, so two-step weighting
 matters), `overid_k` instruments, `invalid_k` of them correlated with the
 error (J-test power arm), first-stage strength `pi1`. `kind ∈ :ols|:iv`.
-Returns `(y, X, Z, beta, pi1)`.
+The invalid instruments are the LAST `invalid_k` (the overidentifying ones):
+contaminating the relevant first instrument instead lets the slope absorb the
+violation (θ̂ biased, J silent) — verified on seed 7 (J p ≈ 0.19) — so that
+variant belongs in-test, not here. Returns `(y, X, Z, beta, pi1)`.
 """
 function dgp_gmm(rng::AbstractRNG; kind::Symbol=:iv, beta=[1.0, 0.5],
                  n::Int=1000, hetero::Bool=true, overid_k::Int=2,
@@ -33,7 +36,7 @@ function dgp_gmm(rng::AbstractRNG; kind::Symbol=:iv, beta=[1.0, 0.5],
         v = randn(rng, n)
         u = sig .* (0.6 .* v + 0.8 .* randn(rng, n))
         if invalid_k > 0
-            Z[:, 2:(1 + invalid_k)] .+= 0.8 .* u
+            Z[:, (m - invalid_k + 1):m] .+= 0.8 .* u
         end
         x_endog = Z[:, 2] * pi1 + v
         XX = k > 2 ? hcat(ones(n), x_endog, X[:, 3:end]) : hcat(ones(n), x_endog)

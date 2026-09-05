@@ -11,6 +11,10 @@ using LinearAlgebra
 using Random
 import StatsAPI
 
+if !@isdefined(FAST)
+    const FAST = get(ENV, "MACRO_FAST_TESTS", "") == "1"
+end
+
 @testset "GMM Estimation" begin
 
     # =========================================================================
@@ -75,10 +79,10 @@ import StatsAPI
     end
 
     @testset "gmm_objective" begin
-        Random.seed!(42)
+        rng = Random.MersenneTwister(42)
         # Simple moment function: E[data - theta] = 0
         moment_fn(theta, data) = data .- theta[1]'
-        data = randn(100, 2) .+ 3.0
+        data = randn(rng, 100, 2) .+ 3.0
         W = Matrix{Float64}(I, 2, 2)
 
         obj = MacroEconometricModels.gmm_objective([3.0], moment_fn, data, W)
@@ -91,15 +95,15 @@ import StatsAPI
     end
 
     @testset "optimal_weighting_matrix" begin
-        Random.seed!(42)
+        rng = Random.MersenneTwister(42)
 
         n = 200
         k = 3
 
         # Simple OLS moment conditions: E[X'(y - X*beta)] = 0
-        X = randn(n, 2)
+        X = randn(rng, n, 2)
         beta_true = [1.0, 2.0]
-        y = X * beta_true + 0.5 * randn(n)
+        y = X * beta_true + 0.5 * randn(rng, n)
         data = hcat(y, X)
 
         moment_fn(theta, d) = begin
@@ -120,13 +124,13 @@ import StatsAPI
     end
 
     @testset "estimate_gmm - identity weighting" begin
-        Random.seed!(100)
+        rng = Random.MersenneTwister(100)
         n = 300
 
         # OLS as GMM: E[X'(y - X*beta)] = 0  (just-identified)
-        X = randn(n, 2)
+        X = randn(rng, n, 2)
         beta_true = [1.0, -0.5]
-        y = X * beta_true + randn(n)
+        y = X * beta_true + randn(rng, n)
         data = hcat(y, X)
 
         moment_fn(theta, d) = begin
@@ -150,12 +154,12 @@ import StatsAPI
     end
 
     @testset "estimate_gmm - two_step weighting" begin
-        Random.seed!(200)
+        rng = Random.MersenneTwister(200)
         n = 300
 
-        X = randn(n, 2)
+        X = randn(rng, n, 2)
         beta_true = [1.0, -0.5]
-        y = X * beta_true + randn(n)
+        y = X * beta_true + randn(rng, n)
         data = hcat(y, X)
 
         moment_fn(theta, d) = begin
@@ -174,12 +178,12 @@ import StatsAPI
     end
 
     @testset "estimate_gmm - iterated weighting" begin
-        Random.seed!(300)
+        rng = Random.MersenneTwister(300)
         n = 300
 
-        X = randn(n, 2)
+        X = randn(rng, n, 2)
         beta_true = [1.0, -0.5]
-        y = X * beta_true + randn(n)
+        y = X * beta_true + randn(rng, n)
         data = hcat(y, X)
 
         moment_fn(theta, d) = begin
@@ -198,12 +202,12 @@ import StatsAPI
     end
 
     @testset "estimate_gmm - optimal weighting" begin
-        Random.seed!(350)
+        rng = Random.MersenneTwister(350)
         n = 300
 
-        X = randn(n, 2)
+        X = randn(rng, n, 2)
         beta_true = [1.0, -0.5]
-        y = X * beta_true + randn(n)
+        y = X * beta_true + randn(rng, n)
         data = hcat(y, X)
 
         moment_fn(theta, d) = begin
@@ -222,13 +226,13 @@ import StatsAPI
     end
 
     @testset "estimate_gmm - overidentified IV" begin
-        Random.seed!(400)
+        rng = Random.MersenneTwister(400)
         n = 500
 
         # IV regression: y = X*beta + eps, X correlated with eps
         # Use Z as instruments (3 instruments for 1 parameter => overidentified)
-        Z = randn(n, 3)
-        eps = randn(n)
+        Z = randn(rng, n, 3)
+        eps = randn(rng, n)
         X = Z * [0.5, 0.3, 0.2] + 0.5 * eps  # X correlated with eps
         beta_true = [2.0]
         y = X .* beta_true[1] + eps
@@ -254,12 +258,12 @@ import StatsAPI
     end
 
     @testset "j_test" begin
-        Random.seed!(500)
+        rng = Random.MersenneTwister(500)
         n = 500
 
         # Overidentified IV
-        Z = randn(n, 3)
-        eps = randn(n)
+        Z = randn(rng, n, 3)
+        eps = randn(rng, n)
         X = Z * [0.5, 0.3, 0.2] + 0.5 * eps
         beta_true = [2.0]
         y = X .* beta_true[1] + eps
@@ -300,12 +304,12 @@ import StatsAPI
     end
 
     @testset "gmm_summary" begin
-        Random.seed!(600)
+        rng = Random.MersenneTwister(600)
         n = 300
 
-        X = randn(n, 2)
+        X = randn(rng, n, 2)
         beta_true = [1.0, -0.5]
-        y = X * beta_true + randn(n)
+        y = X * beta_true + randn(rng, n)
         data = hcat(y, X)
 
         moment_fn(theta, d) = begin
@@ -333,12 +337,12 @@ import StatsAPI
     end
 
     @testset "GMMModel StatsAPI interface" begin
-        Random.seed!(700)
+        rng = Random.MersenneTwister(700)
         n = 300
 
-        X = randn(n, 2)
+        X = randn(rng, n, 2)
         beta_true = [1.0, -0.5]
-        y = X * beta_true + randn(n)
+        y = X * beta_true + randn(rng, n)
         data = hcat(y, X)
 
         moment_fn(theta, d) = begin
@@ -370,11 +374,11 @@ import StatsAPI
     end
 
     @testset "is_overidentified and overid_df" begin
-        Random.seed!(800)
+        rng = Random.MersenneTwister(800)
         n = 200
 
-        X = randn(n, 2)
-        y = X * [1.0, 2.0] + randn(n)
+        X = randn(rng, n, 2)
+        y = X * [1.0, 2.0] + randn(rng, n)
         data = hcat(y, X)
 
         # Just-identified
@@ -390,7 +394,7 @@ import StatsAPI
         @test MacroEconometricModels.overid_df(result) == 0
 
         # Overidentified (add extra instrument)
-        Z = hcat(X, randn(n))
+        Z = hcat(X, randn(rng, n))
         data_ov = hcat(y, X, Z)
         moment_fn_ov(theta, d) = begin
             y_d = d[:, 1]
@@ -406,10 +410,10 @@ import StatsAPI
     end
 
     @testset "lp_gmm_moments" begin
-        Random.seed!(900)
+        rng = Random.MersenneTwister(900)
         n_obs = 100
         n_vars = 3
-        Y = randn(n_obs, n_vars)
+        Y = randn(rng, n_obs, n_vars)
         lags = 2
         shock_var = 1
         h = 1
@@ -427,10 +431,10 @@ import StatsAPI
     end
 
     @testset "estimate_lp_gmm" begin
-        Random.seed!(1000)
+        rng = Random.MersenneTwister(1000)
         n_obs = 150
         n_vars = 2
-        Y = randn(n_obs, n_vars)
+        Y = randn(rng, n_obs, n_vars)
         horizon = 4
 
         # LP-GMM may fail if optimal_weighting_matrix returns Hermitian (type mismatch)
@@ -445,11 +449,11 @@ import StatsAPI
     end
 
     @testset "Single parameter estimation" begin
-        Random.seed!(1100)
+        rng = Random.MersenneTwister(1100)
         n = 300
 
         # Simple mean estimation: E[y - mu] = 0
-        y_data = randn(n) .+ 5.0
+        y_data = randn(rng, n) .+ 5.0
         data = reshape(y_data, n, 1)
 
         moment_fn(theta, d) = d .- theta[1]
@@ -460,12 +464,12 @@ import StatsAPI
     end
 
     @testset "vcov matrix properties" begin
-        Random.seed!(1200)
+        rng = Random.MersenneTwister(1200)
         n = 300
 
-        X = randn(n, 3)
+        X = randn(rng, n, 3)
         beta_true = [1.0, -0.5, 0.3]
-        y = X * beta_true + randn(n)
+        y = X * beta_true + randn(rng, n)
         data = hcat(y, X)
 
         moment_fn(theta, d) = begin
@@ -481,14 +485,27 @@ import StatsAPI
         @test size(V) == (3, 3)
         @test isapprox(V, V', atol=1e-10)  # Symmetric
         @test all(diag(V) .>= 0)  # Non-negative diagonal
+
+        # DGP-08 (#797, :462): vcov against the hand-computed sandwich (exact —
+        # realized max rel dev 1e-9) and the homoskedastic σ²(X'X)⁻¹ limit.
+        # The analytic leg is loose by design: sandwich sampling noise is
+        # ~30% at n=300 — it pins the scale/shape, the sandwich pins the math.
+        ro = estimate_gmm(moment_fn, zeros(3), data; weighting=:two_step, hac=false)
+        e = y - X * ro.theta
+        G = X .* e
+        Om = (G' * G) / n
+        V_hand = n * inv(Symmetric(X' * X)) * Om * inv(Symmetric(X' * X))
+        @test ro.vcov ≈ V_hand rtol=1e-6
+        s2 = var(e)
+        @test ro.vcov ≈ s2 * inv(Symmetric(X' * X)) rtol=0.5
     end
 
     @testset "Iterated weighting" begin
-        Random.seed!(3201)
+        rng = Random.MersenneTwister(3201)
         n = 100
-        X = hcat(ones(n), randn(n, 2))
+        X = hcat(ones(n), randn(rng, n, 2))
         beta_true = [1.0, -0.5, 0.3]
-        y = X * beta_true + randn(n)
+        y = X * beta_true + randn(rng, n)
         data = hcat(y, X)
 
         moment_fn(theta, d) = begin
@@ -505,11 +522,11 @@ import StatsAPI
     end
 
     @testset "Identity weighting (one-step)" begin
-        Random.seed!(3202)
+        rng = Random.MersenneTwister(3202)
         n = 100
-        X = hcat(ones(n), randn(n, 2))
+        X = hcat(ones(n), randn(rng, n, 2))
         beta_true = [1.0, -0.5, 0.3]
-        y = X * beta_true + randn(n)
+        y = X * beta_true + randn(rng, n)
         data = hcat(y, X)
 
         moment_fn(theta, d) = begin
@@ -525,11 +542,11 @@ import StatsAPI
     end
 
     @testset "J-test direct" begin
-        Random.seed!(3203)
+        rng = Random.MersenneTwister(3203)
         n = 200
-        X = hcat(ones(n), randn(n, 3))  # 4 instruments for 3 parameters = overid
+        X = hcat(ones(n), randn(rng, n, 3))  # 4 instruments for 3 parameters = overid
         beta_true = [1.0, -0.5, 0.3]
-        y = X[:, 1:3] * beta_true + randn(n)
+        y = X[:, 1:3] * beta_true + randn(rng, n)
         data = hcat(y, X)
 
         moment_fn(theta, d) = begin
@@ -549,10 +566,10 @@ import StatsAPI
     end
 
     @testset "StatsAPI methods on GMMModel" begin
-        Random.seed!(3204)
+        rng = Random.MersenneTwister(3204)
         n = 100
-        X = hcat(ones(n), randn(n))
-        y = X * [1.0, 0.5] + randn(n)
+        X = hcat(ones(n), randn(rng, n))
+        y = X * [1.0, 0.5] + randn(rng, n)
         data = hcat(y, X)
 
         moment_fn(theta, d) = begin
@@ -576,11 +593,11 @@ end
 @testset "T089: GMM identity J p-value + numerical_gradient step kwarg" begin
 
     @testset "M-29: J p-value invalid under identity weighting" begin
-        Random.seed!(18901)
+        rng = Random.MersenneTwister(18901)
         n = 300
-        X = randn(n, 2)
-        y = X * [1.0, -0.5] + randn(n)
-        Z = hcat(X, randn(n))  # extra instrument -> overidentified
+        X = randn(rng, n, 2)
+        y = X * [1.0, -0.5] + randn(rng, n)
+        Z = hcat(X, randn(rng, n))  # extra instrument -> overidentified
         data = hcat(y, X, Z)
 
         moment_fn(theta, d) = begin
@@ -627,4 +644,121 @@ end
         @test J_step ≈ analytic atol = 1e-6
     end
 
+end
+
+# =============================================================================
+# DGP-08 (#797): truth arms on the shared dgp_gmm / dgp_var simulators
+# =============================================================================
+
+@testset "DGP-08 weighting values on hetero overidentified IV" begin
+    # dgp_gmm with heteroskedastic errors: one-step and efficient weights must
+    # genuinely differ; iterated must agree with two-step; the optimal matrix
+    # must equal the hand-computed Ω⁻¹. Realized: W diff 0.49, iterated≈2step
+    # to 1e-6, optimal==hand exactly.
+    # Deliberately NO "two-step SE smaller" assertion: the reported SEs estimate
+    # different probability limits (sandwich vs efficient-form), and an R=25 MC
+    # gives dispersion ratio 1.006 — the efficiency gap is below MC resolution
+    # on this design. Comparing their magnitudes would test noise, not theory.
+    rng = Random.MersenneTwister(42)
+    d = dgp_gmm(rng; kind=:iv, beta=[1.0, 0.5], n=1000, hetero=true, overid_k=2)
+    data = hcat(d.y, d.X, d.Z)
+    moment_fn(theta, dd) = dd[:, 4:6] .* (dd[:, 1] - dd[:, 2:3] * theta)
+
+    r_id = estimate_gmm(moment_fn, [0.0, 0.0], data; weighting=:identity)
+    r_ts = estimate_gmm(moment_fn, [0.0, 0.0], data; weighting=:two_step, hac=false)
+    r_it = estimate_gmm(moment_fn, [0.0, 0.0], data; weighting=:iterated, hac=false)
+
+    @test r_id.theta ≈ d.beta atol=0.15
+    @test r_ts.theta ≈ d.beta atol=0.15
+    @test maximum(abs, r_ts.W - Matrix{Float64}(I, 3, 3)) > 0.3
+    @test r_it.theta ≈ r_ts.theta atol=1e-3
+
+    G = moment_fn(d.beta, data)
+    Gc = G .- mean(G, dims=1)
+    W_hand = inv(Symmetric((Gc' * Gc) / size(G, 1)))
+    W_opt = MacroEconometricModels.optimal_weighting_matrix(moment_fn, d.beta, data;
+                                                            hac=false)
+    @test W_opt ≈ W_hand rtol=1e-8
+end
+
+@testset "DGP-08 J-test size and power" begin
+    # Size: valid design over 40 seeds (12 in FAST), rejection rate ≤ 0.15
+    # (expected 0.05, se ≈ 0.034 — ~3σ headroom). Power: invalid_k=1 puts the
+    # violation on the overidentifying instrument (see dgp_gmm docstring) and
+    # must reject at 1% (realized J ≈ 217).
+    moment_fn(theta, dd) = dd[:, 4:6] .* (dd[:, 1] - dd[:, 2:3] * theta)
+    nreps = FAST ? 12 : 40
+    rej = 0
+    for s in 1:nreps
+        dd = dgp_gmm(Random.MersenneTwister(2000 + s); kind=:iv, beta=[1.0, 0.5],
+                     n=1000, hetero=true, overid_k=2)
+        res = estimate_gmm(moment_fn, [0.0, 0.0], hcat(dd.y, dd.X, dd.Z);
+                           weighting=:two_step, hac=false)
+        jt = MacroEconometricModels.j_test(res)
+        @test jt.df == 1
+        rej += jt.p_value < 0.05
+    end
+    @test rej / nreps <= (FAST ? 0.25 : 0.15)
+
+    dd_bad = dgp_gmm(Random.MersenneTwister(7); kind=:iv, beta=[1.0, 0.5],
+                     n=1000, hetero=true, overid_k=2, invalid_k=1)
+    jt_bad = MacroEconometricModels.j_test(estimate_gmm(moment_fn, [0.0, 0.0],
+        hcat(dd_bad.y, dd_bad.X, dd_bad.Z); weighting=:two_step, hac=false))
+    @test jt_bad.p_value < 0.01
+
+    # df tracks the instrument count: overid_k=4 → 5 moments − 2 params = 3.
+    dd4 = dgp_gmm(Random.MersenneTwister(7); kind=:iv, beta=[1.0, 0.5],
+                  n=1000, hetero=true, overid_k=4)
+    moment_fn5(theta, dd) = dd[:, 4:8] .* (dd[:, 1] - dd[:, 2:3] * theta)
+    jt4 = MacroEconometricModels.j_test(estimate_gmm(moment_fn5, [0.0, 0.0],
+        hcat(dd4.y, dd4.X, dd4.Z); weighting=:two_step, hac=false))
+    @test jt4.df == 3
+end
+
+@testset "DGP-08 LP-GMM IRF recovery on dgp_var" begin
+    # The stale Hermitian comment is retired: estimate_lp_gmm works under
+    # :two_step (verified — optimal_weighting_matrix returns Matrix). LP-GMM is
+    # just-identified (Z = X), so both weightings must agree AND recover the
+    # closed-form IRF (realized max dev 0.04 at T=2000; bound 0.1).
+    rng = Random.MersenneTwister(3)
+    A = [0.5 0.1; 0.2 0.4]
+    B0 = [1.0 0.0; 0.3 1.0]
+    Y = dgp_var(rng; A=A, B0=B0, T=2000).Y
+    models = MacroEconometricModels.estimate_lp_gmm(Y, 1, 4; lags=1, weighting=:two_step)
+    models_id = MacroEconometricModels.estimate_lp_gmm(Y, 1, 4; lags=1, weighting=:identity)
+    IRF = var_irf(A, B0, 4)
+    @test length(models) == 5
+    for h in 0:4
+        @test models[h + 1].theta[2] ≈ IRF[h + 1, 1, 1] atol=0.1
+        @test models[h + 1].theta[2] ≈ models_id[h + 1].theta[2] atol=1e-3
+    end
+
+    # lp_gmm_moments at non-zero θ against a hand-stacked row (k = 2 + 2·1).
+    th = [0.1, 0.5, -0.2, 0.3]
+    M = MacroEconometricModels.lp_gmm_moments(Y, 1, 2, th, 1)
+    @test size(M) == (2000 - 2 - 1, 4)
+    x = [1.0, Y[2, 1], Y[1, 1], Y[1, 2]]
+    @test vec(M[1, :]) ≈ x .* (Y[4, 1] - dot(x, th))
+end
+
+@testset "DGP-08 weak identification design" begin
+    # pi1 = 0.07 delivers first-stage F ≈ 3.8 (asserted 2–6). The estimators run
+    # without complaint — no first-stage diagnostic is reported anywhere, which
+    # is filed as a separate feature (#815).
+    rw = Random.MersenneTwister(9)
+    dw = dgp_gmm(rw; kind=:iv, beta=[1.0, 0.5], n=1000, hetero=false,
+                 overid_k=2, pi1=0.07)
+    x = dw.X[:, 2]
+    Z = dw.Z
+    k = size(Z, 2)
+    Pz = Z * inv(Symmetric(Z' * Z)) * Z'
+    Fstat = ((dot(x, Pz * x) - dot(x, ones(length(x)))^2 / length(x)) / (k - 1)) /
+            ((dot(x, x) - dot(x, Pz * x)) / (length(x) - k))
+    @test 2.0 < Fstat < 6.0
+
+    moment_fn(theta, dd) = dd[:, 4:6] .* (dd[:, 1] - dd[:, 2:3] * theta)
+    res = estimate_gmm(moment_fn, [0.0, 0.0], hcat(dw.y, dw.X, dw.Z);
+                       weighting=:two_step, hac=false)
+    @test res isa MacroEconometricModels.GMMModel
+    @test all(isfinite, res.theta)
 end

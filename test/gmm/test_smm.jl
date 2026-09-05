@@ -104,6 +104,23 @@ end
     @test m[1] ≈ sum((data[:,1] .- mean(data[:,1])).^2) / 500 atol=1e-10
 end
 
+@testset "autocovariance_moments match VAR(1) population moments" begin
+    # DGP-08 (#797): all five entries against closed-form truth — Γ₀ from the
+    # Lyapunov equation, Γ₁ = A·Γ₀. T = 20000 keeps MC noise (≈6%) well inside
+    # the 0.15 bound; the 1/n divisor + demeaning bias is O(1/T).
+    A = [0.6 0.2; 0.1 0.5]
+    S = [1.0 0.3; 0.3 0.8]
+    Y = dgp_var(Random.MersenneTwister(11); A=A, Sigma=S, T=20000).Y
+    G0 = lyapunov_gamma0(A, S)
+    G1 = A * G0
+    m = autocovariance_moments(Y; lags=1)
+    truth = [G0[1, 1], G0[1, 2], G0[2, 2], G1[1, 1], G1[2, 2]]
+    @test length(m) == 5
+    for i in 1:5
+        @test isapprox(m[i], truth[i]; rtol=0.15)
+    end
+end
+
 @testset "SMMModel construction and interface" begin
     theta = [0.5, 0.3]
     vcov_mat = [0.01 0.0; 0.0 0.02]
@@ -129,6 +146,9 @@ end
 end
 
 @testset "SMMModel j_test" begin
+    # DGP-08 (#797): j_test COMPUTES the χ² tail from the stored J — it never
+    # echoes a stored p-value (the old 0.47 fabrication is gone).
+    # 1 - cdf(Chisq(3), 2.5) = 0.4753 (verified against Distributions).
     theta = [0.5, 0.3]
     vcov_mat = [0.01 0.0; 0.0 0.02]
     n_moments = 5
@@ -144,7 +164,19 @@ end
     jt = j_test(smm)
     @test jt.df == 3  # 5 moments - 2 params
     @test jt.J_stat == 2.5
-    @test jt.p_value == 0.47
+    @test jt.p_value ≈ 0.4753 atol=1e-4
+
+    # Identity weighting: no valid χ² p-value (M-29 policy, mirrors GMMModel)
+    weighting_id = MacroEconometricModels.GMMWeighting{Float64}(:identity, 100, 1e-8)
+    smm_id = MacroEconometricModels.SMMModel{Float64}(
+        theta, vcov_mat, n_moments, 2, 200, weighting_id, W, g_bar,
+        2.5, NaN, true, 10, 5
+    )
+    jt_id = j_test(smm_id)
+    @test jt_id.J_stat == 2.5
+    @test isnan(jt_id.p_value)
+    @test jt_id.reject_05 == false
+    @test haskey(jt_id, :message)
 
     # Just-identified case
     smm_just = MacroEconometricModels.SMMModel{Float64}(
@@ -186,8 +218,10 @@ end
     )
     ci = confint(smm)
     @test size(ci) == (2, 2)
-    @test ci[1, 1] < 0.5 < ci[1, 2]  # CI contains point estimate
-    @test ci[2, 1] < 0.3 < ci[2, 2]
+    # DGP-08 (#797): exact interval, not just containment — se = (0.1, 0.2),
+    # z_0.975 = 1.9599… (atol covers the 1.96 rounding, 4e-6 on the bounds).
+    @test ci[1, :] ≈ [0.5 - 1.96 * 0.1, 0.5 + 1.96 * 0.1] atol=1e-4
+    @test ci[2, :] ≈ [0.3 - 1.96 * 0.2, 0.3 + 1.96 * 0.2] atol=1e-4
 end
 
 @testset "autocovariance_moment_contributions — mean identity" begin
@@ -247,14 +281,12 @@ end
 # the "AR(1) recovery" anchor and the "with bounds" testset — one n=500
 # estimation instead of two near-identical ones.
 _shared_bounded_fit = _suppress_warnings() do
-    rng = Random.MersenneTwister(42)
+    # DGP-08: data from the shared AR(1) simulator (was: bespoke zero-init loop).
     true_rho = 0.8
     true_sigma = 0.5
     T_obs = 500
-    y = zeros(T_obs)
-    for t in 2:T_obs
-        y[t] = true_rho * y[t-1] + true_sigma * randn(rng)
-    end
+    y = dgp_arima(Random.MersenneTwister(42); phi=[true_rho], sigma=true_sigma,
+                  T=T_obs).y
     data = reshape(y, :, 1)
 
     function sim_ar1(theta, T_periods, burn; rng=Random.default_rng())
@@ -320,11 +352,9 @@ end
         rho_hat = Float64[]
         se_rho = Float64[]
         for r in 1:R
-            drng = Random.MersenneTwister(5000 + r)
-            y = zeros(T_obs)
-            for t in 2:T_obs
-                y[t] = true_rho * y[t-1] + true_sigma * randn(drng)
-            end
+            # DGP-08: shared AR(1) data (was: bespoke loop).
+            y = dgp_arima(Random.MersenneTwister(5000 + r); phi=[true_rho],
+                          sigma=true_sigma, T=T_obs).y
             res = estimate_smm(sim_ar1, d -> autocovariance_moments(d; lags=1),
                                [0.5, 0.4], reshape(y, :, 1);
                                sim_ratio=5, burn=100, weighting=:two_step,
@@ -336,6 +366,8 @@ end
         mc_std = std(rho_hat)
         mean_se = mean(se_rho)
         @test isapprox(mc_std, mean_se; rtol=0.35)
+        # DGP-08 (#797, :300): the Monte-Carlo mean itself must be unbiased.
+        @test abs(mean(rho_hat) - 0.7) < 0.02
     end
 end
 
@@ -350,38 +382,40 @@ end
 end
 
 @testset "estimate_smm — identity weighting" begin
+    # DGP-08 (#797, :352 fix): the simulator takes σ as a parameter (it used
+    # to hard-wire innov sd 1 against data with σ = 0.4) and data comes from
+    # the shared AR(1) simulator. Both parameters must recover. T = 500: the
+    # identity-weighted just-identified SMM needs it (drho 0.14 → 0.05 → 0.03
+    # at T = 300/500/800; bound 0.1).
     _suppress_warnings() do
-        rng = Random.MersenneTwister(99)
-        y = zeros(300)
-        for t in 2:300
-            y[t] = 0.6 * y[t-1] + 0.4 * randn(rng)
-        end
+        y = dgp_arima(Random.MersenneTwister(99); phi=[0.6], sigma=0.4, T=500).y
         data = reshape(y, :, 1)
 
         function sim_fn_identity(theta, T_periods, burn; rng=Random.default_rng())
-            rho = theta[1]
+            rho, sigma = theta[1], abs(theta[2])
             sim = zeros(T_periods + burn)
             for t in 2:(T_periods + burn)
-                sim[t] = rho * sim[t-1] + randn(rng)
+                sim[t] = rho * sim[t-1] + sigma * randn(rng)
             end
             reshape(sim[(burn+1):end], :, 1)
         end
 
         result = estimate_smm(sim_fn_identity, d -> autocovariance_moments(d; lags=1),
-                              [0.3], data;
+                              [0.3, 1.0], data;
                               sim_ratio=5, burn=50, weighting=:identity,
                               rng=Random.MersenneTwister(42))
         @test result isa SMMModel{Float64}
+        @test abs(result.theta[1] - 0.6) < 0.1
+        @test abs(result.theta[2] - 0.4) < 0.1
     end
 end
 
 @testset "j_test on SMMModel from estimate_smm" begin
+    # DGP-08 (#797, :378): two-step WITHOUT contributions_fn falls back to
+    # identity weighting (warns) — so the stored method is :identity and
+    # j_test reports the M-29 NaN policy, not a χ² p-value.
     _suppress_warnings() do
-        rng = Random.MersenneTwister(42)
-        y = zeros(300)
-        for t in 2:300
-            y[t] = 0.7 * y[t-1] + 0.5 * randn(rng)
-        end
+        y = dgp_arima(Random.MersenneTwister(42); phi=[0.7], sigma=0.5, T=300).y
         data = reshape(y, :, 1)
 
         function sim_fn_jtest(theta, T_periods, burn; rng=Random.default_rng())
@@ -398,8 +432,41 @@ end
                               sim_ratio=5, burn=100, weighting=:two_step,
                               rng=Random.MersenneTwister(55))
         # k=1 variable, lags=2: k*(k+1)/2 + k*lags = 1 + 2 = 3 moments, 2 params → overid
+        @test result.weighting.method == :identity
         jt = j_test(result)
         @test jt.df == result.n_moments - result.n_params
+        @test jt.J_stat >= 0
+        @test isnan(jt.p_value)
+        @test jt.reject_05 == false
+        @test haskey(jt, :message)
+    end
+end
+
+@testset "j_test valid p-value on an efficient fitted model" begin
+    # Companion to the fallback testset above: WITH contributions_fn the
+    # two-step fit is genuinely efficient, so j_test returns a computed χ²
+    # p-value in [0, 1] (k=1, lags=2 → 3 moments, 2 params, df=1).
+    _suppress_warnings() do
+        y = dgp_arima(Random.MersenneTwister(43); phi=[0.7], sigma=0.5, T=300).y
+        data = reshape(y, :, 1)
+
+        function sim_fn_eff(theta, T_periods, burn; rng=Random.default_rng())
+            rho, sigma = theta
+            sim = zeros(T_periods + burn)
+            for t in 2:(T_periods + burn)
+                sim[t] = rho * sim[t-1] + sigma * randn(rng)
+            end
+            reshape(sim[(burn+1):end], :, 1)
+        end
+
+        result = estimate_smm(sim_fn_eff, d -> autocovariance_moments(d; lags=2),
+                              [0.5, 0.3], data;
+                              sim_ratio=5, burn=100, weighting=:two_step,
+                              contributions_fn=d -> autocovariance_moment_contributions(d; lags=2),
+                              rng=Random.MersenneTwister(56))
+        @test result.weighting.method == :two_step
+        jt = j_test(result)
+        @test jt.df == 1
         @test jt.J_stat >= 0
         @test 0 <= jt.p_value <= 1
     end
@@ -408,9 +475,8 @@ end
 # Shared display fit (#318): one default-:two_step estimate reused by both the
 # show and refs testsets (they asserted only on display output).
 _display_fit = _suppress_warnings() do
-    rng = Random.MersenneTwister(42)
-    y = zeros(200)
-    for t in 2:200; y[t] = 0.7 * y[t-1] + randn(rng); end
+    # DGP-08: shared AR(1) data (was: bespoke loop).
+    y = dgp_arima(Random.MersenneTwister(42); phi=[0.7], sigma=1.0, T=200).y
     data = reshape(y, :, 1)
 
     function sim_fn_display(theta, T_periods, burn; rng=Random.default_rng())
