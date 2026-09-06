@@ -13,7 +13,7 @@ _fisher_J(n, phi) = [t <= s ? -phi^(-(s - t + 1)) : 0.0 for t in 1:n, s in 1:n]
 _backward_J(n, rho) = [t >= s ? rho^(t - s) : 0.0 for t in 1:n, s in 1:n]
 
 @testset "Behavioral operators (CF-09)" begin
-    rng = MersenneTwister(20260809)
+    rng = Xoshiro(20260809)
     n = 12
     JF = _fisher_J(n, 1.5)
     JB = _backward_J(n, 0.8)

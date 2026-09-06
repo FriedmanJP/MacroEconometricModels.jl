@@ -48,7 +48,7 @@ const MEM = MacroEconometricModels
 
 "Simulate a GARCH(1,1) return series (symmetric)."
 function _sim_garch11(n; omega=0.02, alpha=0.08, beta=0.90, mu=0.0, seed=20230815)
-    rng = MersenneTwister(seed)
+    rng = Xoshiro(seed)
     h = zeros(n); e = zeros(n)
     h[1] = omega / (1 - alpha - beta)
     e[1] = sqrt(h[1]) * randn(rng)
@@ -61,7 +61,7 @@ end
 
 "Simulate a GJR-GARCH(1,1) return series (leverage γ>0)."
 function _sim_gjr11(n; omega=0.02, alpha=0.03, gamma=0.12, beta=0.88, seed=42)
-    rng = MersenneTwister(seed)
+    rng = Xoshiro(seed)
     h = zeros(n); e = zeros(n)
     h[1] = omega / (1 - alpha - gamma/2 - beta)
     e[1] = sqrt(h[1]) * randn(rng)
@@ -318,6 +318,6 @@ end
         @test_throws ArgumentError estimate_igarch(y_sym, 0, 1)          # p ≥ 1
         @test_throws ArgumentError estimate_aparch(y_sym, 1, 1; fix_delta=-1.0)
         @test_throws ArgumentError estimate_aparch(y_sym, 1, 1; fix_gamma=1.5)
-        @test_throws ArgumentError estimate_igarch(randn(MersenneTwister(26), 5), 1, 1)       # too few obs
+        @test_throws ArgumentError estimate_igarch(randn(Xoshiro(26), 5), 1, 1)       # too few obs
     end
 end

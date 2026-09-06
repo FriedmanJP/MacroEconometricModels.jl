@@ -22,7 +22,7 @@ using Random
 using Statistics
 using StatsAPI
 
-rng = MersenneTwister(6001)
+rng = Xoshiro(6001)
 
 # =============================================================================
 # ic_table() Tests
@@ -51,7 +51,7 @@ end
 # =============================================================================
 
 @testset "auto_arima criterion=:aic" begin
-    rng = MersenneTwister(6002)
+    rng = Xoshiro(6002)
     y = randn(rng, 200)
 
     model = auto_arima(y; criterion=:aic, max_p=2, max_q=2, max_d=1)
@@ -64,7 +64,7 @@ end
 # =============================================================================
 
 @testset "select_arima_order with differencing" begin
-    rng = MersenneTwister(6003)
+    rng = Xoshiro(6003)
     y = cumsum(randn(rng, 200))  # I(1) series
 
     result = select_arima_order(y, 2, 2; d=1, criterion=:bic)
@@ -126,7 +126,7 @@ end
 # =============================================================================
 
 @testset "ARIMA display methods" begin
-    rng = MersenneTwister(6010)
+    rng = Xoshiro(6010)
 
     @testset "ARModel display" begin
         y = randn(rng, 200)

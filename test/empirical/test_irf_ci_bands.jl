@@ -14,7 +14,7 @@ using Random, Statistics, Printf
 
 # One shared rng threads the VAR loop, the VAR bootstrap, and the BVAR
 # posterior sequentially — the same stream as the old seed!(2024).
-rng = Random.MersenneTwister(2024)
+rng = Random.Xoshiro(2024)
 
 # ── Generate a persistent 3-variable VAR(1) system ──────────────────────
 T_obs = 300

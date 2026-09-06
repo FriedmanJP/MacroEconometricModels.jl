@@ -208,7 +208,7 @@ using Statistics
 end
 
 @testset "Andrews Structural Break Tests" begin
-    rng = Random.MersenneTwister(42)
+    rng = Random.Xoshiro(42)
 
     @testset "Known structural break" begin
         T_obs = 100
@@ -250,18 +250,18 @@ end
     end
 
     @testset "Error handling" begin
-        @test_throws ArgumentError andrews_test(randn(Random.MersenneTwister(11), 100), ones(100, 1); test=:invalid)
-        @test_throws ArgumentError andrews_test(randn(Random.MersenneTwister(12), 10), ones(5, 1))
+        @test_throws ArgumentError andrews_test(randn(Random.Xoshiro(11), 100), ones(100, 1); test=:invalid)
+        @test_throws ArgumentError andrews_test(randn(Random.Xoshiro(12), 10), ones(5, 1))
     end
 
     @testset "Float64 fallback" begin
-        result = andrews_test(round.(Int, randn(Random.MersenneTwister(13), 100) .* 10), round.(Int, randn(Random.MersenneTwister(14), 100, 2) .* 10))
+        result = andrews_test(round.(Int, randn(Random.Xoshiro(13), 100) .* 10), round.(Int, randn(Random.Xoshiro(14), 100, 2) .* 10))
         @test result isa AndrewsResult{Float64}
     end
 end
 
 @testset "Bai-Perron Multiple Break Tests" begin
-    rng = Random.MersenneTwister(123)
+    rng = Random.Xoshiro(123)
 
     @testset "Two known breaks" begin
         T_obs = 150
@@ -292,12 +292,12 @@ end
     end
 
     @testset "Float64 fallback" begin
-        result = bai_perron_test(round.(Int, randn(Random.MersenneTwister(21), 100) .* 10), round.(Int, randn(Random.MersenneTwister(22), 100, 1) .* 10))
+        result = bai_perron_test(round.(Int, randn(Random.Xoshiro(21), 100) .* 10), round.(Int, randn(Random.Xoshiro(22), 100, 1) .* 10))
         @test result isa BaiPerronResult{Float64}
     end
 
     @testset "Single known break" begin
-        rng = Random.MersenneTwister(456)
+        rng = Random.Xoshiro(456)
         T_obs = 100
         X = ones(T_obs, 1)
         y = vcat(fill(1.0, 50), fill(5.0, 50)) + randn(rng, T_obs) * 0.3
@@ -311,7 +311,7 @@ end
     end
 
     @testset "LWZ criterion" begin
-        rng = Random.MersenneTwister(789)
+        rng = Random.Xoshiro(789)
         T_obs = 100
         X = ones(T_obs, 1)
         y = vcat(fill(2.0, 50), fill(4.0, 50)) + randn(rng, T_obs) * 0.5
@@ -321,13 +321,13 @@ end
     end
 
     @testset "Error handling" begin
-        @test_throws ArgumentError bai_perron_test(randn(Random.MersenneTwister(23), 10), ones(10, 1))  # too short
-        @test_throws ArgumentError bai_perron_test(randn(Random.MersenneTwister(24), 100), ones(50, 1))  # size mismatch
-        @test_throws ArgumentError bai_perron_test(randn(Random.MersenneTwister(25), 100), ones(100, 1); criterion=:invalid)
+        @test_throws ArgumentError bai_perron_test(randn(Random.Xoshiro(23), 10), ones(10, 1))  # too short
+        @test_throws ArgumentError bai_perron_test(randn(Random.Xoshiro(24), 100), ones(50, 1))  # size mismatch
+        @test_throws ArgumentError bai_perron_test(randn(Random.Xoshiro(25), 100), ones(100, 1); criterion=:invalid)
     end
 
     @testset "Regime coefficients and SEs" begin
-        rng = Random.MersenneTwister(111)
+        rng = Random.Xoshiro(111)
         T_obs = 120
         X = ones(T_obs, 1)
         y = vcat(fill(3.0, 60), fill(7.0, 60)) + randn(rng, T_obs) * 0.2
@@ -344,7 +344,7 @@ end
     end
 
     @testset "sup-F and sequential statistics" begin
-        rng = Random.MersenneTwister(222)
+        rng = Random.Xoshiro(222)
         T_obs = 150
         X = ones(T_obs, 1)
         y = vcat(fill(1.0, 50), fill(4.0, 50), fill(2.0, 50)) + randn(rng, T_obs) * 0.3
@@ -358,7 +358,7 @@ end
     end
 
     @testset "Display method" begin
-        rng = Random.MersenneTwister(333)
+        rng = Random.Xoshiro(333)
         T_obs = 100
         X = ones(T_obs, 1)
         y = vcat(fill(2.0, 50), fill(5.0, 50)) + randn(rng, T_obs) * 0.5
@@ -372,7 +372,7 @@ end
 
     @testset "Bai (1997) CIs valid ranges" begin
         # CIs should be valid ranges
-        rng = Random.MersenneTwister(55443)
+        rng = Random.Xoshiro(55443)
         T_bp = 100
         X_bp = ones(T_bp, 1)
         y_bp = vcat(2.0 * ones(50), 5.0 * ones(50)) + 0.5 * randn(rng, T_bp)
@@ -388,7 +388,7 @@ end
 end
 
 @testset "Factor Break Tests" begin
-    rng = Random.MersenneTwister(42)
+    rng = Random.Xoshiro(42)
 
     @testset "Breitung-Eickmeier" begin
         # Panel with stable loadings
@@ -441,12 +441,12 @@ end
     end
 
     @testset "Error handling" begin
-        @test_throws ArgumentError factor_break_test(randn(Random.MersenneTwister(31), 10, 5), 2)  # too short
-        @test_throws ArgumentError factor_break_test(randn(Random.MersenneTwister(32), 100, 20), 2; method=:invalid)
+        @test_throws ArgumentError factor_break_test(randn(Random.Xoshiro(31), 10, 5), 2)  # too short
+        @test_throws ArgumentError factor_break_test(randn(Random.Xoshiro(32), 100, 20), 2; method=:invalid)
     end
 
     @testset "Float64 fallback" begin
-        result = factor_break_test(round.(Int, randn(Random.MersenneTwister(33), 80, 15) .* 10), 2)
+        result = factor_break_test(round.(Int, randn(Random.Xoshiro(33), 80, 15) .* 10), 2)
         @test result isa FactorBreakResult{Float64}
     end
 
@@ -475,10 +475,10 @@ end
 
         # Counts over 8 panels, not verdicts on one: each test has a few percent of
         # false rejections by construction, and Chen-Dolado-Gonzalo sees this break
-        # on ~87% of panels, so single-panel assertions would be a coin flip (and
-        # `MersenneTwister` streams are not stable across Julia versions).
-        stable = [_break_panel(Random.MersenneTwister(583_000 + s)) for s in 1:8]
-        broken = [_break_panel(Random.MersenneTwister(583_100 + s); brk=150) for s in 1:8]
+        # on ~87% of panels, so single-panel assertions would be a coin flip on
+        # any single stream.
+        stable = [_break_panel(Random.Xoshiro(583_000 + s)) for s in 1:8]
+        broken = [_break_panel(Random.Xoshiro(583_100 + s); brk=150) for s in 1:8]
 
         # Stable loadings: rejections stay rare. Before #583 the eigenvalue-ratio
         # Chen-Dolado-Gonzalo statistic rejected every stable panel (size 1.00), and
@@ -501,7 +501,7 @@ end
         # statistics identify them exactly. (Under the half-panel flip above they
         # deliberately do NOT separate — a break that large rotates the estimated
         # factor space, which elevates the stable series' statistics too.)
-        sparse_broken = [_break_panel(Random.MersenneTwister(583_200 + s);
+        sparse_broken = [_break_panel(Random.Xoshiro(583_200 + s);
                                       brk=150, nb=6) for s in 1:4]
         for X in sparse_broken
             res = factor_break_test(X, 3; method=:breitung_eickmeier)
@@ -528,7 +528,7 @@ end
 end
 
 @testset "PANIC Panel Unit Root" begin
-    rng = Random.MersenneTwister(42)
+    rng = Random.Xoshiro(42)
 
     @testset "Basic PANIC" begin
         T_obs, N = 100, 20
@@ -572,13 +572,13 @@ end
     end
 
     @testset "Error handling" begin
-        @test_throws ArgumentError panic_test(randn(Random.MersenneTwister(41), 5, 2); r=1)
-        @test_throws ArgumentError panic_test(randn(Random.MersenneTwister(42), 50, 3); r=0)
+        @test_throws ArgumentError panic_test(randn(Random.Xoshiro(41), 5, 2); r=1)
+        @test_throws ArgumentError panic_test(randn(Random.Xoshiro(42), 50, 3); r=0)
     end
 end
 
 @testset "Pesaran CIPS" begin
-    rng = Random.MersenneTwister(42)
+    rng = Random.Xoshiro(42)
 
     @testset "Stationary panel" begin
         X = randn(rng, 50, 20)
@@ -599,13 +599,13 @@ end
     end
 
     @testset "Error handling" begin
-        @test_throws ArgumentError pesaran_cips_test(randn(Random.MersenneTwister(51), 5, 2); lags=1)
-        @test_throws ArgumentError pesaran_cips_test(randn(Random.MersenneTwister(52), 50, 3); deterministic=:invalid)
+        @test_throws ArgumentError pesaran_cips_test(randn(Random.Xoshiro(51), 5, 2); lags=1)
+        @test_throws ArgumentError pesaran_cips_test(randn(Random.Xoshiro(52), 50, 3); deterministic=:invalid)
     end
 end
 
 @testset "Moon-Perron" begin
-    rng = Random.MersenneTwister(42)
+    rng = Random.Xoshiro(42)
 
     @testset "Basic test" begin
         X = randn(rng, 80, 15)
@@ -625,7 +625,7 @@ end
     end
 
     @testset "Error handling" begin
-        @test_throws ArgumentError moon_perron_test(randn(Random.MersenneTwister(61), 5, 2); r=1)
+        @test_throws ArgumentError moon_perron_test(randn(Random.Xoshiro(61), 5, 2); r=1)
     end
 end
 
@@ -669,7 +669,7 @@ end
     end
 
     @testset "bai_perron_test threads q = k" begin
-        rng = Random.MersenneTwister(18501)
+        rng = Random.Xoshiro(18501)
         n = 200
         x = randn(rng, n)
         y = vcat(0.5 .+ 0.3 .* x[1:100], 2.5 .+ 0.3 .* x[101:200]) .+ 0.4 .* randn(rng, n)

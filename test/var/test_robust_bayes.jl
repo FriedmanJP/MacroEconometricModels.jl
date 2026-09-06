@@ -66,10 +66,10 @@ end
         ])
         lo_opt, hi_opt = identified_set_bounds(m, r, 1; solver=:optimize)
         lo50, hi50 = identified_set_bounds(m, r, 1; solver=:draws, n_draws=50,
-                                          rng=MersenneTwister(747))
+                                          rng=Xoshiro(747))
         n_big = FAST ? 300 : 800
         lo_big, hi_big = identified_set_bounds(m, r, 1; solver=:draws, n_draws=n_big,
-                                              rng=MersenneTwister(747))
+                                              rng=Xoshiro(747))
         # Envelope is an inner approximation of the true set. Haar draws are
         # stochastic; require both envelopes inside the opt set and that more
         # draws are not a much worse inner approx.
@@ -91,11 +91,11 @@ end
         ])
         @test_throws IdentificationError identified_set_bounds(m, r_imp, 1; solver=:optimize)
         @test_throws IdentificationError identified_set_bounds(m, r_imp, 1; solver=:draws,
-                                                              n_draws=20, rng=MersenneTwister(1))
+                                                              n_draws=20, rng=Xoshiro(1))
     end
 
     @testset "identify_robust_bayes" begin
-        rng = MersenneTwister(747)
+        rng = Xoshiro(747)
         Y = randn(rng, 70, 2)
         post = estimate_bvar(Y, 1; n_draws=FAST ? 8 : 14, burnin=4, seed=747)
         r = SVARRestrictions(2; signs=[
@@ -103,7 +103,7 @@ end
             sign_restriction(2, 1, :positive),
         ])
         nrot = FAST ? 15 : 30
-        rng = MersenneTwister(747)
+        rng = Xoshiro(747)
         res = identify_robust_bayes(post, r, 3; level=0.68, solver=:optimize,
                                     n_rotations=nrot, rng=copy(rng))
         @test res isa RobustBayesResult
@@ -154,7 +154,7 @@ end
     end
 
     @testset "empty-set probability" begin
-        rng = MersenneTwister(748)
+        rng = Xoshiro(748)
         Y = randn(rng, 60, 2)
         post = estimate_bvar(Y, 1; n_draws=FAST ? 6 : 10, burnin=3, seed=748)
         r_ok = SVARRestrictions(2; signs=[
@@ -162,25 +162,25 @@ end
             sign_restriction(2, 1, :positive),
         ])
         ok = identify_robust_bayes(post, r_ok, 2; solver=:optimize, n_rotations=10,
-                                   rng=MersenneTwister(748))
+                                   rng=Xoshiro(748))
         @test ok.empty_set_prob == 0
         r_bad = SVARRestrictions(2; signs=[
             sign_restriction(1, 1, :positive),
             sign_restriction(1, 1, :negative),
         ])
         bad = identify_robust_bayes(post, r_bad, 2; solver=:optimize, n_rotations=5,
-                                    rng=MersenneTwister(748))
+                                    rng=Xoshiro(748))
         @test bad.empty_set_prob > 0
         @test bad.empty_set_prob == 1
     end
 
     @testset "report / refs / plot_result" begin
-        rng = MersenneTwister(749)
+        rng = Xoshiro(749)
         Y = randn(rng, 50, 2)
         post = estimate_bvar(Y, 1; n_draws=FAST ? 6 : 10, burnin=3, seed=749)
         r = SVARRestrictions(2; signs=[sign_restriction(1, 1, :positive)])
         res = identify_robust_bayes(post, r, 2; solver=:optimize, n_rotations=10,
-                                    rng=MersenneTwister(749))
+                                    rng=Xoshiro(749))
         sh = sprint(show, res)
         @test occursin("Giacomini", sh) || occursin("Robust Bayes", sh)
         @test occursin("Informativeness", sh) || occursin("informativeness", sh)
@@ -201,7 +201,7 @@ end
         r = SVARRestrictions(2; signs=[sign_restriction(1, 1, :positive)])
         @test_throws ArgumentError identified_set_bounds(m, r, 1; solver=:bogus)
         @test_throws ArgumentError identified_set_bounds(m, r, 0; solver=:optimize)
-        rng = MersenneTwister(1)
+        rng = Xoshiro(1)
         Y = randn(rng, 40, 2)
         post = estimate_bvar(Y, 1; n_draws=4, burnin=1, seed=1)
         @test_throws ArgumentError identify_robust_bayes(post, r, 2; level=1.5)
@@ -237,9 +237,9 @@ end
         n_env = FAST ? 16 : 32
         seed = 747
         lo_d, hi_d = identified_set_bounds(m, r, 1; solver=:draws, n_draws=n_env,
-                                           rng=MersenneTwister(seed), threaded=false)
+                                           rng=Xoshiro(seed), threaded=false)
         lo_o, hi_o = identified_set_bounds(m, r, 1; solver=:optimize, n_rotations=n_env,
-                                           n_starts=2, rng=MersenneTwister(seed))
+                                           n_starts=2, rng=Xoshiro(seed))
         @test all(lo_o .<= hi_o)
         @test all(lo_d .<= hi_d)
         # n=3 optimize with few starts can miss the Haar envelope; both are

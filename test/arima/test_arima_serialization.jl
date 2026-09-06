@@ -9,8 +9,8 @@ if !@isdefined(_assert_roundtrip)
 end
 
 @testset "RSER-02 ARIMA / ARDL / long-memory serialization" begin
-    ya = randn(MersenneTwister(11), 160)
-    xa = cumsum(randn(MersenneTwister(41), 160))
+    ya = randn(Xoshiro(11), 160)
+    xa = cumsum(randn(Xoshiro(41), 160))
 
     @testset "SARIMAModel" begin
         m = estimate_sarima(ya, 1, 0, 1, 0, 0, 0, 4; method=:css)
@@ -107,7 +107,7 @@ end
 end
 
 @testset "RSER-04 ARIMAForecast serialization (#777)" begin
-    ya = randn(MersenneTwister(11), 80)
+    ya = randn(Xoshiro(11), 80)
     m = estimate_ar(ya, 1; method=:ols)
     fc = forecast(m, 6)
     @test _from_serializable_is_generic(ARIMAForecast)

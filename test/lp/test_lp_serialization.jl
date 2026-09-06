@@ -9,7 +9,7 @@ if !@isdefined(_assert_roundtrip)
 end
 
 @testset "RSER-03 LP innovation-accounting serialization (#776)" begin
-    Y = dgp_var(MersenneTwister(776); A=[0.5 0.1; 0.2 0.4], B0=[1.0 0.0; 0.0 1.0], T=80).Y
+    Y = dgp_var(Xoshiro(776); A=[0.5 0.1; 0.2 0.4], B0=[1.0 0.0; 0.0 1.0], T=80).Y
 
     @testset "LPImpulseResponse" begin
         lp = estimate_lp(Y, 1, 6; lags=1)
@@ -46,7 +46,7 @@ end
 end
 
 @testset "RSER-04 LPForecast serialization (#777)" begin
-    Y = dgp_var(MersenneTwister(777); A=[0.5 0.1; 0.2 0.4], B0=[1.0 0.0; 0.0 1.0], T=80).Y
+    Y = dgp_var(Xoshiro(777); A=[0.5 0.1; 0.2 0.4], B0=[1.0 0.0; 0.0 1.0], T=80).Y
     lp = estimate_lp(Y, 1, 6; lags=1)
     fc = forecast(lp, ones(6); ci_method=:analytical)
     @test _from_serializable_is_generic(LPForecast)
@@ -62,7 +62,7 @@ const _RSER11_LP = ("BSplineBasis", "LPIVARBand", "MontielOleaPfluegerF",
 
 """LP-IV DGP used by test_lp_weak_iv.jl: `pi1` sets instrument strength."""
 function _rser11_lpiv_sim(T_obs::Int; pi1::Float64=1.5, seed::Int=784, theta::Float64=1.0)
-    rng = MersenneTwister(seed)
+    rng = Xoshiro(seed)
     z = randn(rng, T_obs)
     v = randn(rng, T_obs)
     s = pi1 .* z .+ v
@@ -117,7 +117,7 @@ end
 
     @testset "BSplineBasis from SmoothLPModel" begin
         @test _from_serializable_is_generic(BSplineBasis)
-        Y = dgp_var(MersenneTwister(7841); A=[0.5 0.1; 0.2 0.4], B0=[1.0 0.0; 0.0 1.0], T=80).Y
+        Y = dgp_var(Xoshiro(7841); A=[0.5 0.1; 0.2 0.4], B0=[1.0 0.0; 0.0 1.0], T=80).Y
         sm = estimate_smooth_lp(Y, 1, 8; degree=3, n_knots=4, lambda=1.0, lags=1)
         basis = sm.spline_basis
         @test basis isa BSplineBasis{Float64}
@@ -141,7 +141,7 @@ end
         @test cfg2.trimming === (0.05, 0.95)
 
         Tobs, n = 60, 2
-        rng = MersenneTwister(7842)
+        rng = Xoshiro(7842)
         X = randn(rng, Tobs, 2)
         treatment = rand(rng, Tobs) .< 0.4
         Y = randn(rng, Tobs, n)

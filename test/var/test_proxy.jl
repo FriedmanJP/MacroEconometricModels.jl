@@ -25,7 +25,7 @@ const MEM = MacroEconometricModels
     A = [0.5 * Matrix{Float64}(I, 3, 3)]
 
     @testset "vector method still returns NamedTuple" begin
-        rng = MersenneTwister(7401)
+        rng = Xoshiro(7401)
         Y, _, z = simulate_proxy_svar(B_true, A; Tobs=400, ρ=0.8, rng=rng)
         m = estimate_var(Y, 1)
         nt = identify_proxy(m, z)
@@ -37,7 +37,7 @@ const MEM = MacroEconometricModels
     end
 
     @testset "matrix method returns ProxySVARResult" begin
-        rng = MersenneTwister(7402)
+        rng = Xoshiro(7402)
         Y, _, z = simulate_proxy_svar(B_true, A; Tobs=400, ρ=0.8, rng=rng)
         m = estimate_var(Y, 1)
         r = identify_proxy(m, reshape(z, :, 1))
@@ -54,7 +54,7 @@ const MEM = MacroEconometricModels
     end
 
     @testset "vector and matrix k=1 unit-effect agree" begin
-        rng = MersenneTwister(7403)
+        rng = Xoshiro(7403)
         Y, _, z = simulate_proxy_svar(B_true, A; Tobs=400, ρ=0.8, rng=rng)
         m = estimate_var(Y, 1)
         nt = identify_proxy(m, z; normalize=1, normalize_value=1)
@@ -64,7 +64,7 @@ const MEM = MacroEconometricModels
     end
 
     @testset "first-stage F matches first_stage_regression" begin
-        rng = MersenneTwister(7404)
+        rng = Xoshiro(7404)
         Y, _, z = simulate_proxy_svar(B_true, A; Tobs=500, ρ=0.7, rng=rng)
         m = estimate_var(Y, 1)
         r = identify_proxy(m, reshape(z, :, 1); normalize=:unit_effect, normalize_var=1)
@@ -81,7 +81,7 @@ const MEM = MacroEconometricModels
     @testset "reliability rises with ρ" begin
         rels = Float64[]
         for (i, ρ) in enumerate((0.3, 0.9))
-            rng = MersenneTwister(7405 + i)
+            rng = Xoshiro(7405 + i)
             Y, _, z = simulate_proxy_svar(B_true, A; Tobs=800, ρ=ρ, rng=rng)
             m = estimate_var(Y, 1)
             r = identify_proxy(m, reshape(z, :, 1); normalize=:unit_variance)
@@ -97,7 +97,7 @@ const MEM = MacroEconometricModels
         @test MEM._is_partial(:proxy)
         @test !MEM._should_match_columns(:proxy)
         @test MEM._should_match_columns(:fastica)
-        rng = MersenneTwister(7406)
+        rng = Xoshiro(7406)
         Y, _, z = simulate_proxy_svar(B_true, A; Tobs=300, ρ=0.8, rng=rng)
         m = estimate_var(Y, 1)
         Q = MEM.compute_Q(m, :proxy; instruments=reshape(z, :, 1), normalize=:unit_variance)
@@ -107,7 +107,7 @@ const MEM = MacroEconometricModels
     end
 
     @testset "irf/fevd/hd method=:proxy" begin
-        rng = MersenneTwister(7407)
+        rng = Xoshiro(7407)
         Y, _, z = simulate_proxy_svar(B_true, A; Tobs=300, ρ=0.8, rng=rng)
         m = estimate_var(Y, 1)
         Z = reshape(z, :, 1)
@@ -122,7 +122,7 @@ const MEM = MacroEconometricModels
     end
 
     @testset "align=true drops NaN instrument rows" begin
-        rng = MersenneTwister(7408)
+        rng = Xoshiro(7408)
         Y, _, z = simulate_proxy_svar(B_true, A; Tobs=400, ρ=0.8, rng=rng)
         z[1:20] .= NaN
         m = estimate_var(Y, 1)
@@ -132,14 +132,14 @@ const MEM = MacroEconometricModels
     end
 
     @testset "weak instrument warns" begin
-        rng = MersenneTwister(7409)
+        rng = Xoshiro(7409)
         Y, _, z = simulate_proxy_svar(B_true, A; Tobs=300, ρ=0.05, rng=rng)
         m = estimate_var(Y, 1)
         @test_logs (:warn, r"(?i)weak") identify_proxy(m, reshape(z, :, 1))
     end
 
     @testset "report / refs / plot_result" begin
-        rng = MersenneTwister(7410)
+        rng = Xoshiro(7410)
         Y, _, z = simulate_proxy_svar(B_true, A; Tobs=250, ρ=0.8, rng=rng)
         m = estimate_var(Y, 1)
         r = identify_proxy(m, reshape(z, :, 1))
@@ -159,7 +159,7 @@ const MEM = MacroEconometricModels
     end
 
     @testset "k=1 Anderson-Rubin bands reuse lp_iv_ar_band" begin
-        rng = MersenneTwister(7411)
+        rng = Xoshiro(7411)
         Y, _, z = simulate_proxy_svar(B_true, A; Tobs=400, ρ=0.8, rng=rng)
         m = estimate_var(Y, 1)
         band = proxy_ar_band(m, z; horizon=2, normalize_var=1, n_grid=81, span=8)
@@ -193,7 +193,7 @@ const MEM = MacroEconometricModels
     end
 
     @testset "unit-effect proxy HD uses B0\\u" begin
-        rng = MersenneTwister(7412)
+        rng = Xoshiro(7412)
         Y, _, z = simulate_proxy_svar(B_true, A; Tobs=300, ρ=0.8, rng=rng)
         m = estimate_var(Y, 1)
         Z = reshape(z, :, 1)
@@ -211,7 +211,7 @@ const MEM = MacroEconometricModels
     end
 
     @testset "reliability is invariant to instrument location" begin
-        rng = MersenneTwister(7413)
+        rng = Xoshiro(7413)
         Y, _, z = simulate_proxy_svar(B_true, A; Tobs=400, ρ=0.8, rng=rng)
         m = estimate_var(Y, 1)
         r0 = identify_proxy(m, reshape(z, :, 1); normalize=:unit_variance)
@@ -225,7 +225,7 @@ const MEM = MacroEconometricModels
             ArgumentError("instrument has too few finite observations"))
         @test MEM._is_skippable_proxy_boot_error(IdentificationError("unidentified"))
         @test !MEM._is_skippable_proxy_boot_error(ArgumentError("proxy requires instruments"))
-        rng = MersenneTwister(7414)
+        rng = Xoshiro(7414)
         Y, _, z = simulate_proxy_svar(B_true, A; Tobs=100, ρ=0.8, rng=rng)
         z[21:end] .= NaN
         m = estimate_var(Y, 1)
@@ -239,7 +239,7 @@ const MEM = MacroEconometricModels
     end
 
     @testset "proxy iid bootstrap is recorded as block" begin
-        rng = MersenneTwister(7415)
+        rng = Xoshiro(7415)
         Y, _, z = simulate_proxy_svar(B_true, A; Tobs=150, ρ=0.8, rng=rng)
         m = estimate_var(Y, 1)
         ir = irf(m, 2; method=:proxy, instruments=reshape(z, :, 1),
@@ -248,7 +248,7 @@ const MEM = MacroEconometricModels
     end
 
     @testset "unit-effect proxy bootstrap keeps identified impact" begin
-        rng = MersenneTwister(7416)
+        rng = Xoshiro(7416)
         Y, _, z = simulate_proxy_svar(B_true, A; Tobs=200, ρ=0.8, rng=rng)
         m = estimate_var(Y, 1)
         nv, nval = 2, 1.0
@@ -266,7 +266,7 @@ const MEM = MacroEconometricModels
             nrep = 200
             ncover = 0
             for r in 1:nrep
-                rng = MersenneTwister(7500 + r)
+                rng = Xoshiro(7500 + r)
                 Y, _, z = simulate_proxy_svar(B_true, A; Tobs=400, ρ=0.7, rng=rng)
                 m = estimate_var(Y, 1)
                 ir = irf(m, 1; method=:proxy, instruments=reshape(z, :, 1),

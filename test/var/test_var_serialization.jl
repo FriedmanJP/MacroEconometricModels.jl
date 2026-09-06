@@ -24,7 +24,7 @@ const _RSER03_H = FAST ? 4 : 8
 const _RSER03_DRAWS = FAST ? 4 : 24
 
 function _rser03_panel(; N=FAST ? 12 : 30, T_total=FAST ? 8 : 15, m=2,
-                       rng=MersenneTwister(7763))
+                       rng=Xoshiro(7763))
     data_mat = randn(rng, N * T_total, m)
     df = DataFrame(data_mat, ["y$i" for i in 1:m])
     df.id = repeat(1:N, inner=T_total)
@@ -41,7 +41,7 @@ end
         @test !any(v == "pending RSER-03" for v in values(_MEM._SERIALIZATION_EXCLUDED))
     end
 
-    Y = randn(MersenneTwister(776), FAST ? 40 : 80, 2)
+    Y = randn(Xoshiro(776), FAST ? 40 : 80, 2)
     m = estimate_var(Y, 2)
 
     @testset "ImpulseResponse bootstrap" begin
@@ -177,13 +177,13 @@ end
 end
 
 @testset "RSER-04 VAR / conditional forecast serialization (#777)" begin
-    Y = randn(MersenneTwister(777), FAST ? 40 : 80, 2)
+    Y = randn(Xoshiro(777), FAST ? 40 : 80, 2)
     m = estimate_var(Y, 1)
 
     @testset "VARForecast" begin
         fc = forecast(m, FAST ? 4 : 6;
                       ci_method=FAST ? :analytic : :bootstrap,
-                      reps=_RSER03_REPS, rng=MersenneTwister(1))
+                      reps=_RSER03_REPS, rng=Xoshiro(1))
         if !FAST
             @test fc._draws isa Array{Float64,3}
             payload = _MEM._capture_fields(fc)
@@ -204,7 +204,7 @@ end
         _assert_report_equal(cond, cond2)
         @test cond2.variable == 1 && cond2.horizon == 1 && cond2.value == 0.5
 
-        cf = conditional_forecast(m, [cond], 4; reps=_RSER03_REPS, rng=MersenneTwister(2))
+        cf = conditional_forecast(m, [cond], 4; reps=_RSER03_REPS, rng=Xoshiro(2))
         @test _from_serializable_is_generic(ConditionalForecast)
         cf2 = _assert_roundtrip(cf)
         _assert_consumers(cf, cf2)

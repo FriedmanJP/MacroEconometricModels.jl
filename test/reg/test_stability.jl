@@ -227,7 +227,7 @@ end
     @testset "leverage-1 guard" begin
         # A regressor that is nonzero for exactly one observation gives that obs
         # leverage ≈ 1 (a dedicated dummy). Denominators must not blow up.
-        rng = MersenneTwister(7)
+        rng = Xoshiro(7)
         nn = 40
         z = randn(rng, nn)
         d = zeros(nn); d[nn] = 1.0            # unique dummy ⇒ h_nn = 1, exact fit
@@ -247,7 +247,7 @@ end
     # 8. Property: engineered mid-sample mean shift ⇒ CUSUM crosses its bound.
     # -------------------------------------------------------------------------
     @testset "CUSUM crosses under a mean shift" begin
-        rng = MersenneTwister(123)
+        rng = Xoshiro(123)
         nn = 120
         x1 = randn(rng, nn)
         yb = 1 .+ 0.5 .* x1 .+ randn(rng, nn)

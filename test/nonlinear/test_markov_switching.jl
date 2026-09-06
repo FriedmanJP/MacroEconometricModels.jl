@@ -69,7 +69,7 @@ end
     # Internal helpers — exact analytic identities
     # =========================================================================
     @testset "helper identities" begin
-        rng = MersenneTwister(11)
+        rng = Xoshiro(11)
         # logit ↔ P round-trip (row-softmax, last column reference).
         for K in (2, 3)
             rows = [rand(rng, Dirichlet(ones(K))) for _ in 1:K]
@@ -180,8 +180,8 @@ end
     # Determinism: label ordering stable across RNG seeds; estimation is seed-free
     # =========================================================================
     @testset "deterministic labelling / seed independence" begin
-        y1, _ = _sim_ms_ar1(MersenneTwister(101))
-        y2, _ = _sim_ms_ar1(MersenneTwister(202))
+        y1, _ = _sim_ms_ar1(Xoshiro(101))
+        y2, _ = _sim_ms_ar1(Xoshiro(202))
         m1 = estimate_ms_ar(y1, 1; k_regimes=2)
         m2 = estimate_ms_ar(y2, 1; k_regimes=2)
         # Low-mean regime is ALWAYS regime 1 regardless of the data seed.
@@ -198,7 +198,7 @@ end
     # Recovery on a synthetic mean-switching DGP with known parameters
     # =========================================================================
     @testset "parameter recovery (synthetic MS-AR1)" begin
-        y, strue = _sim_ms_ar1(MersenneTwister(7); n=800, mu=(-1.0, 3.0),
+        y, strue = _sim_ms_ar1(Xoshiro(7); n=800, mu=(-1.0, 3.0),
                                phi=0.4, sigma=0.6, P=[0.92 0.08; 0.12 0.88])
         m = estimate_ms_ar(y, 1; k_regimes=2)
         @test isapprox(m.mu[1], -1.0; atol=0.4)
@@ -218,7 +218,7 @@ end
     # estimate_ms with an explicit design (switching slope) + switching_variance flag
     # =========================================================================
     @testset "estimate_ms with regressors and non-switching variance" begin
-        rng = MersenneTwister(33)
+        rng = Xoshiro(33)
         n = 500
         x = randn(rng, n)
         s = Vector{Int}(undef, n); s[1] = 1
@@ -281,7 +281,7 @@ end
         @test_throws ArgumentError estimate_ms_ar(y, 0)          # p ≥ 1
         @test_throws ArgumentError estimate_ms_ar(y, 4; k_regimes=1)
         @test_throws ArgumentError estimate_ms(y; k_regimes=1)
-        @test_throws ArgumentError estimate_ms_ar(randn(MersenneTwister(284), 6), 4)   # too short
+        @test_throws ArgumentError estimate_ms_ar(randn(Xoshiro(284), 6), 4)   # too short
         @test_throws DimensionMismatch estimate_ms(y, ones(length(y) + 3, 1))
     end
 
@@ -300,7 +300,7 @@ end
 @testset "#510: MS fitted values and forecasts" begin
     # Part A asked for the regime-weighted conditional mean the estimator already
     # computed and then discarded; Part B for the forecast the family lacked.
-    y, _ = _sim_ms_ar1(MersenneTwister(510); n=600, mu=(-1.0, 2.0),
+    y, _ = _sim_ms_ar1(Xoshiro(510); n=600, mu=(-1.0, 2.0),
                        phi=0.5, sigma=0.6, P=[0.95 0.05; 0.10 0.90])
     m = estimate_ms_ar(y, 1; k_regimes=2)
     @test m.converged
@@ -327,7 +327,7 @@ end
     end
 
     @testset "Part A — switching regression" begin
-        rng = MersenneTwister(5102)
+        rng = Xoshiro(5102)
         n = 400
         X = hcat(ones(n), randn(rng, n))
         st = ones(Int, n)
@@ -343,7 +343,7 @@ end
 
     @testset "Part B — exact mean, validated against Monte Carlo" begin
         h = 8
-        f = forecast(m, h; reps=2000, rng=MersenneTwister(1))
+        f = forecast(m, h; reps=2000, rng=Xoshiro(1))
         @test f isa MSForecast{Float64}
         @test f.horizon == h && length(f.forecast) == h
         @test size(f.regime_prob) == (h, m.k_regimes)
@@ -358,7 +358,7 @@ end
         # Monte Carlo of the model definition. 100k draws give a standard error of
         # roughly 0.006 here.
         R = 100_000
-        rng = MersenneTwister(99)
+        rng = Xoshiro(99)
         mu_h = m.mu; ph = m.ar; sg = sqrt.(m.sigma2); Pm = m.P
         xi0 = m.filtered_prob[end, :]
         zlast = m.y[end] - dot(m.smoothed_prob[end, :], mu_h)
@@ -375,7 +375,7 @@ end
         @test maximum(abs, f.forecast .- acc ./ R) < 0.03
 
         # Two seeds give the SAME mean (it is analytic) but different bands.
-        f2 = forecast(m, h; reps=2000, rng=MersenneTwister(2))
+        f2 = forecast(m, h; reps=2000, rng=Xoshiro(2))
         @test f2.forecast ≈ f.forecast atol = 1e-14
         @test f2.ci_lower != f.ci_lower
     end
@@ -385,14 +385,14 @@ end
         # converge to the ergodic distribution. The forecast must therefore tend to
         # the ergodic average of the regime means. This is exact, not asymptotic in
         # the simulation, because the mean path is analytic.
-        f = forecast(m, 400; reps=50, rng=MersenneTwister(3))
+        f = forecast(m, 400; reps=50, rng=Xoshiro(3))
         @test f.forecast[end] ≈ dot(m.ergodic, m.mu) atol = 1e-8
         # ... and the propagated regime probabilities converge to the ergodic vector.
         @test f.regime_prob[end, :] ≈ m.ergodic atol = 1e-8
     end
 
     @testset "Part B — switching regression needs future regressors" begin
-        rng = MersenneTwister(5103)
+        rng = Xoshiro(5103)
         n = 300
         X = hcat(ones(n), randn(rng, n))
         st = ones(Int, n)
@@ -403,8 +403,8 @@ end
               for t in 1:n]
         mr = estimate_ms(yr, X; k_regimes=2)
 
-        Xn = hcat(ones(5), randn(MersenneTwister(4), 5))
-        fr = forecast(mr, Xn; reps=2000, rng=MersenneTwister(5))
+        Xn = hcat(ones(5), randn(Xoshiro(4), 5))
+        fr = forecast(mr, Xn; reps=2000, rng=Xoshiro(5))
         @test fr.horizon == 5
         @test size(fr.regime_prob) == (5, 2)
         # Exact mean: sum_k xi_k * x'beta_k.
@@ -415,7 +415,7 @@ end
         # The two signatures are not interchangeable, and say so.
         @test_throws ArgumentError forecast(mr, 5)
         @test_throws ArgumentError forecast(m, Xn)
-        @test_throws ArgumentError forecast(mr, hcat(ones(5), randn(MersenneTwister(418), 5), randn(MersenneTwister(419), 5)))
+        @test_throws ArgumentError forecast(mr, hcat(ones(5), randn(Xoshiro(418), 5), randn(Xoshiro(419), 5)))
         @test_throws ArgumentError forecast(m, 0)
         @test_throws ArgumentError forecast(m, 4; level=1.5)
     end

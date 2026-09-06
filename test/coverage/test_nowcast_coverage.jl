@@ -29,7 +29,7 @@ Random.seed!(9002)
         # After fallback fills NaN and resets t_complete = T_obs, the
         # _bvar_smooth_missing call on the original Ymat (still with NaN)
         # triggers interior NaN interpolation branches.
-        rng = Random.MersenneTwister(9040)
+        rng = Random.Xoshiro(9040)
         T_obs = 30
         N = 3
         Y = randn(rng, T_obs, N)
@@ -50,7 +50,7 @@ Random.seed!(9002)
     @testset "Fallback with empty valid set (column all NaN)" begin
         # A column that is entirely NaN triggers the `isempty(valid) ? zero(Tf)` path
         # in the fallback (line 85).
-        rng = Random.MersenneTwister(9041)
+        rng = Random.Xoshiro(9041)
         T_obs = 20
         N = 3
         Y = randn(rng, T_obs, N)
@@ -74,7 +74,7 @@ Random.seed!(9002)
     @testset "Ragged edge with t_lag < 1 in smoothing" begin
         # When t_complete < T_obs and lags are large, the BVAR forecasting
         # loop can hit the t_lag < 1 branch (line 295: zeros fallback).
-        rng = Random.MersenneTwister(9055)
+        rng = Random.Xoshiro(9055)
         T_obs = 20
         N = 3
         Y = randn(rng, T_obs, N)
@@ -92,7 +92,7 @@ Random.seed!(9002)
     @testset "Fallback with NaN in first rows (right-neighbor-only interpolation)" begin
         # Triggers interior NaN interpolation where row 1 has NaN ->
         # lo search finds nothing, only hi neighbor exists.
-        rng = Random.MersenneTwister(9042)
+        rng = Random.Xoshiro(9042)
         T_obs = 24
         N = 3
         Y = randn(rng, T_obs, N)
@@ -114,7 +114,7 @@ Random.seed!(9002)
     @testset "Fallback with NaN in last rows (left-neighbor-only interpolation)" begin
         # Triggers interior NaN interpolation where last row has NaN ->
         # hi search finds nothing, only lo neighbor exists.
-        rng = Random.MersenneTwister(9043)
+        rng = Random.Xoshiro(9043)
         T_obs = 24
         N = 3
         Y = randn(rng, T_obs, N)
@@ -135,7 +135,7 @@ Random.seed!(9002)
     @testset "Fallback with consecutive NaN block" begin
         # Block of consecutive NaN in one column exercises the while loops
         # for lo/hi neighbor search in _bvar_smooth_missing.
-        rng = Random.MersenneTwister(9044)
+        rng = Random.Xoshiro(9044)
         T_obs = 30
         N = 3
         Y = randn(rng, T_obs, N)
@@ -172,7 +172,7 @@ end
     # with the prior mean (0) — so the old interpolation value assertions below are updated.
 
     @testset "Interior NaN: Kalman-smoothed fill (#204)" begin
-        rng = Random.MersenneTwister(9200)
+        rng = Random.Xoshiro(9200)
         T_obs = 20
         N = 2
         lags = 2
@@ -193,7 +193,7 @@ end
     end
 
     @testset "First-row NaN: Kalman-smoothed fill (#204)" begin
-        rng = Random.MersenneTwister(9210)
+        rng = Random.Xoshiro(9210)
         T_obs = 15
         N = 2
         lags = 2
@@ -213,7 +213,7 @@ end
     end
 
     @testset "Last-row NaN within t_complete: Kalman-smoothed fill (#204)" begin
-        rng = Random.MersenneTwister(9220)
+        rng = Random.Xoshiro(9220)
         T_obs = 15
         N = 2
         lags = 2
@@ -233,7 +233,7 @@ end
     end
 
     @testset "Entire column NaN: column mean fallback (else branch)" begin
-        rng = Random.MersenneTwister(9230)
+        rng = Random.Xoshiro(9230)
         T_obs = 15
         N = 2
         lags = 2
@@ -252,7 +252,7 @@ end
     end
 
     @testset "Consecutive NaN block: Kalman-smoothed fill (#204)" begin
-        rng = Random.MersenneTwister(9240)
+        rng = Random.Xoshiro(9240)
         T_obs = 20
         N = 2
         lags = 2
@@ -275,7 +275,7 @@ end
     end
 
     @testset "Ragged edge: t_complete < T_obs with t_lag < 1 zeros fallback" begin
-        rng = Random.MersenneTwister(9250)
+        rng = Random.Xoshiro(9250)
         T_obs = 10
         N = 2
         lags = 3
@@ -296,7 +296,7 @@ end
     end
 
     @testset "Multiple NaN patterns across columns in interior" begin
-        rng = Random.MersenneTwister(9260)
+        rng = Random.Xoshiro(9260)
         T_obs = 20
         N = 3
         lags = 2
@@ -334,7 +334,7 @@ end
 
     @testset "Multiple monthly indicators: pair combinations with 5 monthly vars" begin
         # With nM = 5, _bridge_combinations generates C(5,2) + 5 = 15 equations.
-        rng = Random.MersenneTwister(9100)
+        rng = Random.Xoshiro(9100)
         T_obs = 120
         nM = 5
         nQ = 2
@@ -381,7 +381,7 @@ end
     end
 
     @testset "Interior NaN in monthly columns triggers interpolation" begin
-        rng = Random.MersenneTwister(9110)
+        rng = Random.Xoshiro(9110)
         T_obs = 90
         nM = 3
         nQ = 1
@@ -402,7 +402,7 @@ end
     end
 
     @testset "End-of-column NaN in monthly: forward fill" begin
-        rng = Random.MersenneTwister(9120)
+        rng = Random.Xoshiro(9120)
         T_obs = 60
         nM = 2
         nQ = 1
@@ -420,7 +420,7 @@ end
     end
 
     @testset "Column mean fallback in bridge fill (entire column NaN)" begin
-        rng = Random.MersenneTwister(9130)
+        rng = Random.Xoshiro(9130)
         T_obs = 60
         nM = 3
         nQ = 1
@@ -439,7 +439,7 @@ end
     end
 
     @testset "Singular XtX: collinear monthly indicators" begin
-        rng = Random.MersenneTwister(9140)
+        rng = Random.Xoshiro(9140)
         T_obs = 90
         nM = 3
         nQ = 1
@@ -459,7 +459,7 @@ end
     end
 
     @testset "Very short sample: some equations skipped" begin
-        rng = Random.MersenneTwister(9150)
+        rng = Random.Xoshiro(9150)
         T_obs = 18  # only 6 quarters
         nM = 3
         nQ = 1
@@ -480,7 +480,7 @@ end
     end
 
     @testset "Multiple quarterly variables with pairs" begin
-        rng = Random.MersenneTwister(9160)
+        rng = Random.Xoshiro(9160)
         T_obs = 120
         nM = 4
         nQ = 3

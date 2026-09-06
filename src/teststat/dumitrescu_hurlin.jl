@@ -269,7 +269,7 @@ function _dh_bootstrap(yvecs::Vector{Vector{T}}, xvecs::Vector{Vector{T}},
     balanced = all(==(ms[1]), ms)
     L = max(1, round(Int, ms[1]^(1/3)))     # block length ~ m^{1/3}
 
-    rng = Random.MersenneTwister(seed)
+    rng = Random.Xoshiro(seed)
     count_ge = 0
     Evec = T[T(_dh_ew(ms[i], p)) for i in 1:N]
     Vvec = T[T(_dh_varw(ms[i], p)) for i in 1:N]

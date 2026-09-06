@@ -61,7 +61,7 @@ using LinearAlgebra, Statistics, Random, Distributions
     # =========================================================================
 
     @testset "3-category coefficient recovery" begin
-        rng = MersenneTwister(2024)
+        rng = Xoshiro(2024)
         n = 5000
         # K=3 (intercept + 2 vars), J-1=2 alternatives
         beta_true = [0.5 -0.3;
@@ -92,7 +92,7 @@ using LinearAlgebra, Statistics, Random, Distributions
     # =========================================================================
 
     @testset "4-category coefficient recovery" begin
-        rng = MersenneTwister(9999)
+        rng = Xoshiro(9999)
         n = 8000
         # K=3 (intercept + 2 vars), J-1=3 alternatives
         beta_true = [0.3 -0.5  0.2;
@@ -121,7 +121,7 @@ using LinearAlgebra, Statistics, Random, Distributions
     # =========================================================================
 
     @testset "StatsAPI interface" begin
-        rng = MersenneTwister(1111)
+        rng = Xoshiro(1111)
         n = 1000
         beta_true = [0.5 -0.3;
                      1.0 -0.5;
@@ -188,7 +188,7 @@ using LinearAlgebra, Statistics, Random, Distributions
     # =========================================================================
 
     @testset "Out-of-sample prediction" begin
-        rng = MersenneTwister(3333)
+        rng = Xoshiro(3333)
         n = 1000
         beta_true = [0.5 -0.3;
                      1.0 -0.5;
@@ -199,7 +199,7 @@ using LinearAlgebra, Statistics, Random, Distributions
         m = estimate_mlogit(y, X)
 
         # New data prediction
-        rng = MersenneTwister(4444)
+        rng = Xoshiro(4444)
         X_new = [ones(50) randn(rng, 50, 2)]
         probs_new = predict(m, X_new)
         @test size(probs_new) == (50, 3)
@@ -207,7 +207,7 @@ using LinearAlgebra, Statistics, Random, Distributions
         @test all(abs.(sum(probs_new, dims=2) .- 1.0) .< 1e-10)
 
         # Error on wrong dimensions
-        @test_throws ArgumentError predict(m, randn(Random.MersenneTwister(4445), 10, 5))
+        @test_throws ArgumentError predict(m, randn(Random.Xoshiro(4445), 10, 5))
     end
 
     # =========================================================================
@@ -215,7 +215,7 @@ using LinearAlgebra, Statistics, Random, Distributions
     # =========================================================================
 
     @testset "Robust standard errors" begin
-        rng = MersenneTwister(7777)
+        rng = Xoshiro(7777)
         n = 2000
         beta_true = [0.5 -0.3;
                      1.0 -0.5;
@@ -248,7 +248,7 @@ using LinearAlgebra, Statistics, Random, Distributions
     # =========================================================================
 
     @testset "Category remapping" begin
-        rng = MersenneTwister(5555)
+        rng = Xoshiro(5555)
         n = 1000
         beta_true = [0.5 -0.3;
                      1.0 -0.5;
@@ -274,7 +274,7 @@ using LinearAlgebra, Statistics, Random, Distributions
     # =========================================================================
 
     @testset "Display output" begin
-        rng = MersenneTwister(8888)
+        rng = Xoshiro(8888)
         n = 500
         beta_true = [0.5 -0.3;
                      1.0 -0.5;
@@ -305,7 +305,7 @@ using LinearAlgebra, Statistics, Random, Distributions
     # =========================================================================
 
     @testset "Float64 fallback" begin
-        rng = MersenneTwister(6666)
+        rng = Xoshiro(6666)
         n = 500
         beta_true = [0.5 -0.3;
                      1.0 -0.5;
@@ -324,7 +324,7 @@ using LinearAlgebra, Statistics, Random, Distributions
     # =========================================================================
 
     @testset "Model fit statistics" begin
-        rng = MersenneTwister(4242)
+        rng = Xoshiro(4242)
         n = 2000
         beta_true = [0.5 -0.3;
                      1.0 -0.5;
@@ -369,7 +369,7 @@ using LinearAlgebra, Statistics, Random, Distributions
     # =========================================================================
 
     @testset "Multinomial Logit — marginal effects" begin
-        rng = MersenneTwister(3030)
+        rng = Xoshiro(3030)
         n = 5000
         beta_true = [0.5 -0.3;
                      1.0 -0.5;
@@ -400,7 +400,7 @@ using LinearAlgebra, Statistics, Random, Distributions
     end
 
     @testset "Multinomial Logit — marginal effects 4-category" begin
-        rng = MersenneTwister(4040)
+        rng = Xoshiro(4040)
         n = 8000
         beta_true = [0.3 -0.5  0.2;
                      0.8 -0.3  0.6;
@@ -426,7 +426,7 @@ using LinearAlgebra, Statistics, Random, Distributions
     # =========================================================================
 
     @testset "Hausman IIA test — structure" begin
-        rng = MersenneTwister(5050)
+        rng = Xoshiro(5050)
         n = 5000
         # Use 4-category model so omitting one leaves 3 categories
         beta_true = [0.3 -0.5  0.2;
@@ -461,7 +461,7 @@ using LinearAlgebra, Statistics, Random, Distributions
     end
 
     @testset "Hausman IIA test — different omit categories" begin
-        rng = MersenneTwister(6060)
+        rng = Xoshiro(6060)
         n = 5000
         # 4-category model to ensure enough categories after omission
         beta_true = [0.3 -0.5  0.2;
@@ -490,7 +490,7 @@ using LinearAlgebra, Statistics, Random, Distributions
     # =========================================================================
 
     @testset "Input validation" begin
-        rng = MersenneTwister(1234)
+        rng = Xoshiro(1234)
         X = randn(rng, 100, 2)
 
         # Only 2 categories should fail
@@ -508,7 +508,7 @@ using LinearAlgebra, Statistics, Random, Distributions
 end
 
 @testset "#507: residuals for multinomial logit" begin
-    rng = Random.MersenneTwister(5072)
+    rng = Random.Xoshiro(5072)
     n = 600
     X = hcat(ones(n), randn(rng, n), randn(rng, n))
     beta_true = [0.0 0.5; 1.0 -0.8; -0.5 0.6]        # K x (J-1), base category 1

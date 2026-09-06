@@ -13,7 +13,7 @@ deser_ser_roundtrip(x) = _MEM._deser_field(_MEM._ser_field(x))
 @testset "Versioned serialization (T248/#347)" begin
 
     @testset "container round-trip reconstructs public fields exactly — all types" begin
-        Y = randn(MersenneTwister(1), 120, 2)
+        Y = randn(Xoshiro(1), 120, 2)
 
         model = estimate_var(Y, 2)
         v2 = _roundtrip(model)
@@ -33,8 +33,8 @@ deser_ser_roundtrip(x) = _MEM._deser_field(_MEM._ser_field(x))
         @test b2.prior == post.prior && b2.sampler == post.sampler
         @test b2.manifest isa ReproManifest && b2.manifest.seed == 7
 
-        X = hcat(ones(100), randn(MersenneTwister(2), 100, 2))
-        yv = X * [1.0, 0.5, -0.3] .+ 0.1 .* randn(MersenneTwister(3), 100)
+        X = hcat(ones(100), randn(Xoshiro(2), 100, 2))
+        yv = X * [1.0, 0.5, -0.3] .+ 0.1 .* randn(Xoshiro(3), 100)
         reg = estimate_reg(yv, X)
         r2 = _roundtrip(reg)
         @test r2 isa RegModel
@@ -44,7 +44,7 @@ deser_ser_roundtrip(x) = _MEM._deser_field(_MEM._ser_field(x))
         @test r2.method == reg.method && r2.cov_type == reg.cov_type
         @test r2.weights === reg.weights    # nothing survives as nothing
 
-        yb = Float64.((X * [0.0, 1.5, -1.5] .+ 0.3 .* randn(MersenneTwister(4), 100)) .> 0)
+        yb = Float64.((X * [0.0, 1.5, -1.5] .+ 0.3 .* randn(Xoshiro(4), 100)) .> 0)
         logit = estimate_logit(yb, X)
         l2 = _roundtrip(logit)
         @test l2 isa LogitModel
@@ -68,7 +68,7 @@ deser_ser_roundtrip(x) = _MEM._deser_field(_MEM._ser_field(x))
     end
 
     @testset "save_model / load_model disk round-trip via JLD2" begin
-        Y = randn(MersenneTwister(5), 120, 3)
+        Y = randn(Xoshiro(5), 120, 3)
 
         model = estimate_var(Y, 2)
         path = joinpath(mktempdir(), "var.jld2")
@@ -91,7 +91,7 @@ deser_ser_roundtrip(x) = _MEM._deser_field(_MEM._ser_field(x))
     end
 
     @testset "container metadata header" begin
-        Y = randn(MersenneTwister(6), 80, 2)
+        Y = randn(Xoshiro(6), 80, 2)
         c = _MEM._build_container(estimate_var(Y, 2))
         @test c["format_version"] == SERIALIZATION_FORMAT_VERSION
         @test c["type"] == "VARModel"
@@ -101,7 +101,7 @@ deser_ser_roundtrip(x) = _MEM._deser_field(_MEM._ser_field(x))
     end
 
     @testset "top-level manifest travels with the container" begin
-        Y = randn(MersenneTwister(7), 80, 2)
+        Y = randn(Xoshiro(7), 80, 2)
         post = estimate_bvar(Y, 2; n_draws=30, seed=11)
         c = _MEM._build_container(post)
         @test c["manifest"] isa AbstractDict
@@ -112,7 +112,7 @@ deser_ser_roundtrip(x) = _MEM._deser_field(_MEM._ser_field(x))
     end
 
     @testset "unknown format_version and type raise a typed, informative error" begin
-        Y = randn(MersenneTwister(8), 80, 2)
+        Y = randn(Xoshiro(8), 80, 2)
         c = _MEM._build_container(estimate_var(Y, 2))
 
         bad_ver = copy(c); bad_ver["format_version"] = 999
@@ -141,7 +141,7 @@ end
 @testset "Full model & data-container coverage (#505)" begin
 
     @testset "data containers" begin
-        Y = randn(MersenneTwister(1), 120, 3)
+        Y = randn(Xoshiro(1), 120, 3)
         tsd = TimeSeriesData(Y; varnames=["a", "b", "c"], frequency=_MEM.Quarterly,
                              vardesc=Dict("a" => "alpha"))
         m2 = _cover(tsd)
@@ -149,10 +149,10 @@ end
         @test m2.vardesc == tsd.vardesc                                 # Dict survives
 
         dfp = DataFrame(g=repeat(1:10, inner=8), t=repeat(1:8, outer=10),
-                        y=randn(MersenneTwister(2), 80), x=randn(MersenneTwister(3), 80))
+                        y=randn(Xoshiro(2), 80), x=randn(Xoshiro(3), 80))
         _cover(xtset(dfp, :g, :t))
 
-        dfc = DataFrame(y=randn(MersenneTwister(4), 60), x1=randn(MersenneTwister(5), 60))
+        dfc = DataFrame(y=randn(Xoshiro(4), 60), x1=randn(Xoshiro(5), 60))
         _cover(CrossSectionData(Matrix(dfc); varnames=["y", "x1"]))
 
         io = load_example(:wiot)          # nested IOMetaData + Dict{String,IOExtension}
@@ -162,24 +162,24 @@ end
     end
 
     @testset "cointegration / VECM" begin
-        Yci = cumsum(randn(MersenneTwister(3), 150, 2); dims=1)
+        Yci = cumsum(randn(Xoshiro(3), 150, 2); dims=1)
         _cover(estimate_vecm(Yci, 2; rank=1))   # nested JohansenResult + Vector{Matrix}
 
-        xci = cumsum(randn(MersenneTwister(4), 120)); yci = 2 .* xci .+ randn(MersenneTwister(41), 120)
+        xci = cumsum(randn(Xoshiro(4), 120)); yci = 2 .* xci .+ randn(Xoshiro(41), 120)
         _cover(estimate_cointreg(yci, xci; method=:fmols, trend=:const))
 
         dfCI = DataFrame(g=repeat(1:8, inner=30), t=repeat(1:30, outer=8))
         xp = Float64[]; yp = Float64[]
         for gg in 1:8
-            xx = cumsum(randn(MersenneTwister(100 + gg), 30))
-            append!(xp, xx); append!(yp, 1.5 .* xx .+ randn(MersenneTwister(200 + gg), 30))
+            xx = cumsum(randn(Xoshiro(100 + gg), 30))
+            append!(xp, xx); append!(yp, 1.5 .* xx .+ randn(Xoshiro(200 + gg), 30))
         end
         dfCI.y = yp; dfCI.x = xp
         _cover(estimate_xtcointreg(xtset(dfCI, :g, :t), :y, :x; method=:fmols))
     end
 
     @testset "volatility" begin
-        yv = randn(MersenneTwister(7), 400)
+        yv = randn(Xoshiro(7), 400)
         _cover(estimate_arch(yv, 1))
         _cover(estimate_garch(yv, 1, 1))
         _cover(estimate_egarch(yv, 1, 1))
@@ -190,19 +190,19 @@ end
         # long-memory MLE into a ~36s optimizer thrash (450× slower) — the single dominant cost
         # in this file. Serialization coverage only needs a converged model, not a specific d, so
         # use the fast config (FIGARCH correctness/truncation is exercised in test_volatility.jl).
-        rl = randn(MersenneTwister(38), 300)
+        rl = randn(Xoshiro(38), 300)
         _cover(estimate_figarch(rl; truncation=50))
         _cover(estimate_fiegarch(rl; truncation=50))
         # GARCH-MIDAS needs > K+1 low-freq blocks (⌈n/m_freq⌉ > 13 ⇒ n ≥ 308); its own 400-obs
         # series (already fast) stays, decoupled from the shrunk FI(E)GARCH series above.
-        _cover(estimate_garch_midas(randn(MersenneTwister(38), 400),
-                                               randn(MersenneTwister(39), 400); K=12, m_freq=22))
-        _cover(estimate_dcc(randn(MersenneTwister(40), 250, 2)))
+        _cover(estimate_garch_midas(randn(Xoshiro(38), 400),
+                                               randn(Xoshiro(39), 400); K=12, m_freq=22))
+        _cover(estimate_dcc(randn(Xoshiro(40), 250, 2)))
         _cover(estimate_sv(yv[1:150]; n_samples=20, burnin=10))
     end
 
     @testset "factor / FAVAR" begin
-        X = randn(MersenneTwister(9), 150, 8)
+        X = randn(Xoshiro(9), 150, 8)
         _cover(estimate_factors(X, 2))
         _cover(estimate_dynamic_factors(X, 2, 1))
         _cover(estimate_gdfm(X, 2))
@@ -211,18 +211,18 @@ end
     end
 
     @testset "ARIMA / ARDL / nonlinear / MIDAS / state space" begin
-        ya = randn(MersenneTwister(11), 200)
+        ya = randn(Xoshiro(11), 200)
         _cover(estimate_ar(ya, 2))
         _cover(estimate_ma(ya, 1))
         _cover(estimate_arma(ya, 1, 1))
         _cover(estimate_arima(ya, 1, 0, 1))
         _cover(estimate_arfima(ya, 1, 0; method=:css))
-        xa = randn(MersenneTwister(41), 200)
+        xa = randn(Xoshiro(41), 200)
         _cover(estimate_ardl(ya, reshape(xa, :, 1); p=1, q=1, case=3))
         _cover(estimate_nardl(ya, reshape(xa, :, 1); p=1, q=1))
         Xthr = hcat(ones(199), ya[1:199])
-        _cover(estimate_threshold(ya[2:end], Xthr, randn(MersenneTwister(42), 199); linearity=false))
-        _cover(estimate_midas(randn(MersenneTwister(43), 60), randn(MersenneTwister(44), 180);
+        _cover(estimate_threshold(ya[2:end], Xthr, randn(Xoshiro(42), 199); linearity=false))
+        _cover(estimate_midas(randn(Xoshiro(43), 60), randn(Xoshiro(44), 180);
                                          m=3, K=6, weights=:umidas, p_ar=0))
 
         # PMG (pooled mean group) panel ARDL
@@ -230,8 +230,8 @@ end
         idv = repeat(1:NGp, inner=TTp); tmv = repeat(1:TTp, outer=NGp)
         xv = Float64[]; yv = Float64[]
         for gg in 1:NGp
-            xx = cumsum(randn(MersenneTwister(300 + gg), TTp))
-            append!(xv, xx); append!(yv, 0.8 .* xx .+ randn(MersenneTwister(400 + gg), TTp))
+            xx = cumsum(randn(Xoshiro(300 + gg), TTp))
+            append!(xv, xx); append!(yv, 0.8 .* xx .+ randn(Xoshiro(400 + gg), TTp))
         end
         _cover(estimate_pmg(yv, reshape(xv, :, 1), idv, tmv;
                                        p=1, q=1, method=:pmg, xnames=["x"]))
@@ -240,7 +240,7 @@ end
         # (compiled functions don't round-trip); it reloads as `nothing`.
         build = θ -> (Z=reshape([1.0], 1, 1), H=reshape([exp(θ[3])], 1, 1),
                       T=reshape([tanh(θ[1])], 1, 1), Q=reshape([exp(θ[2])], 1, 1))
-        yss = cumsum(randn(MersenneTwister(23), 80))
+        yss = cumsum(randn(Xoshiro(23), 80))
         ssm = estimate_statespace(build, [0.3, 0.0, 0.0], yss)
         ssm2 = _cover(ssm; skip=[:builder])
         @test ssm.builder isa Function      # original carried a builder…
@@ -249,32 +249,32 @@ end
     end
 
     @testset "discrete / limited-dependent choice" begin
-        Xo = randn(MersenneTwister(13), 200, 2)
-        yo = rand(MersenneTwister(14), 1:3, 200)
+        Xo = randn(Xoshiro(13), 200, 2)
+        yo = rand(Xoshiro(14), 1:3, 200)
         _cover(estimate_ologit(yo, Xo; varnames=["x1", "x2"]))
         _cover(estimate_oprobit(yo, Xo; varnames=["x1", "x2"]))
-        Xm = hcat(ones(200), randn(MersenneTwister(15), 200, 2))
-        ym = rand(MersenneTwister(16), 1:3, 200)
+        Xm = hcat(ones(200), randn(Xoshiro(15), 200, 2))
+        ym = rand(Xoshiro(16), 1:3, 200)
         _cover(estimate_mlogit(ym, Xm; varnames=["c", "x1", "x2"]))
     end
 
     @testset "local-projection variants" begin
-        Ylp = randn(MersenneTwister(17), 150, 3)
-        _cover(estimate_lp_iv(Ylp, 1, randn(MersenneTwister(18), 150, 1), 6;
+        Ylp = randn(Xoshiro(17), 150, 3)
+        _cover(estimate_lp_iv(Ylp, 1, randn(Xoshiro(18), 150, 1), 6;
                                          lags=2, cov_type=:newey_west))
         _cover(estimate_smooth_lp(Ylp, 1, 6; lambda=1.0, lags=2))   # nested BSplineBasis
-        _cover(estimate_state_lp(Ylp, 1, randn(MersenneTwister(19), 150), 6;
+        _cover(estimate_state_lp(Ylp, 1, randn(Xoshiro(19), 150), 6;
                                             gamma=1.5, threshold=0.0, lags=2))  # nested StateTransition
-        _cover(estimate_propensity_lp(Ylp, rand(MersenneTwister(20), Bool, 150),
-                                                 randn(MersenneTwister(24), 150, 2), 5; lags=2))
+        _cover(estimate_propensity_lp(Ylp, rand(Xoshiro(20), Bool, 150),
+                                                 randn(Xoshiro(24), 150, 2), 5; lags=2))
     end
 
     @testset "systems / GMM" begin
-        y1 = randn(MersenneTwister(30), 60); X1 = hcat(ones(60), randn(MersenneTwister(31), 60, 2))
-        y2 = randn(MersenneTwister(32), 60); X2 = hcat(ones(60), randn(MersenneTwister(33), 60, 2))
+        y1 = randn(Xoshiro(30), 60); X1 = hcat(ones(60), randn(Xoshiro(31), 60, 2))
+        y2 = randn(Xoshiro(32), 60); X2 = hcat(ones(60), randn(Xoshiro(33), 60, 2))
         _cover(estimate_sur([(y1, X1, ["c", "v", "k"]), (y2, X2, ["c", "v", "k"])]))
 
-        gdata = randn(MersenneTwister(21), 200, 1)
+        gdata = randn(Xoshiro(21), 200, 1)
         mfn = (θ, d) -> hcat(d[:, 1] .- θ[1], (d[:, 1] .- θ[1]).^2 .- θ[2])
         _cover(estimate_gmm(mfn, [0.0, 1.0], gdata; weighting=:identity))   # nested GMMWeighting
 
@@ -283,7 +283,7 @@ end
             for t in 2:n; x[t] = θ[1] * x[t-1] + randn(rng); end
             reshape(x[burn+1:end], Tp, 1)
         end
-        sdata = reshape(cumsum(randn(MersenneTwister(35), 200)) .* 0.1, 200, 1)
+        sdata = reshape(cumsum(randn(Xoshiro(35), 200)) .* 0.1, 200, 1)
         _cover(estimate_smm(sim_ar1,
             d -> [Statistics.mean(d[:, 1]), Statistics.var(d[:, 1])],
             [0.3], sdata; weighting=:identity, sim_ratio=2))
@@ -292,10 +292,10 @@ end
     @testset "panel / PVAR" begin
         NG, TT = 20, 10; N = NG * TT
         dfP = DataFrame(g=repeat(1:NG, inner=TT), t=repeat(1:TT, outer=NG),
-                        y=randn(MersenneTwister(50), N), x1=randn(MersenneTwister(51), N),
-                        x2=randn(MersenneTwister(52), N), xen=randn(MersenneTwister(53), N),
-                        z1=randn(MersenneTwister(54), N), z2=randn(MersenneTwister(55), N),
-                        yb=Float64.(rand(MersenneTwister(56), N) .> 0.5))
+                        y=randn(Xoshiro(50), N), x1=randn(Xoshiro(51), N),
+                        x2=randn(Xoshiro(52), N), xen=randn(Xoshiro(53), N),
+                        z1=randn(Xoshiro(54), N), z2=randn(Xoshiro(55), N),
+                        yb=Float64.(rand(Xoshiro(56), N) .> 0.5))
         pdP = xtset(dfP, :g, :t)
         pv = estimate_pvar(pdP, 1)
         _cover(pv)
@@ -331,7 +331,7 @@ end
     end
 
     @testset "DSER-14 save_model compress= shrinks a VARModel and reloads" begin
-        Y = randn(MersenneTwister(772), 400, 4)
+        Y = randn(Xoshiro(772), 400, 4)
         m = estimate_var(Y, 3)
         mktempdir() do d
             p_raw = joinpath(d, "var.jld2")
@@ -349,7 +349,7 @@ end
     end
 
     @testset "disk round-trip via JLD2 for a non-VAR model + data container" begin
-        Y = randn(MersenneTwister(70), 120, 2)
+        Y = randn(Xoshiro(70), 120, 2)
         vecm = estimate_vecm(cumsum(Y; dims=1), 2; rank=1)
         pth = joinpath(mktempdir(), "vecm.jld2")
         @test save_model(vecm, pth) == pth
@@ -430,14 +430,14 @@ end
     @test ser(x -> x) === nothing   # anonymous; owning type decides (DSER-06)
 
     using SparseArrays
-    S = sprand(MersenneTwister(759), 8, 8, 0.3)
+    S = sprand(Xoshiro(759), 8, 8, 0.3)
     S2 = deser(ser(S))
     @test S2 isa SparseMatrixCSC && Array(S2) == Array(S)
 
-    F = lu(randn(MersenneTwister(760), 4, 4))
+    F = lu(randn(Xoshiro(760), 4, 4))
     @test ser(F) === nothing
 
-    d = _MEM._build_container(estimate_var(randn(MersenneTwister(1), 40, 2), 1))
+    d = _MEM._build_container(estimate_var(randn(Xoshiro(1), 40, 2), 1))
     _MEM._assert_plain_payload(d)
 end
 
@@ -487,10 +487,10 @@ end
 
     # Keyword-constructor detector: every registered type reconstructs from
     # positional field values, or has an explicit `_from_serializable` override.
-    Y = randn(MersenneTwister(774), 40, 2)
+    Y = randn(Xoshiro(774), 40, 2)
     samples = Any[
         estimate_var(Y, 1),
-        estimate_factors(randn(MersenneTwister(775), 50, 6), 1),
+        estimate_factors(randn(Xoshiro(775), 50, 6), 1),
         TimeSeriesData(Y; varnames=["a", "b"]),
     ]
     for m in samples
@@ -524,7 +524,7 @@ function _sid24_dummy_objects()
     n = 2
     B0 = T[1.2 0.3; 0.1 0.9]
     Q = Matrix{T}(I, n, n)
-    shocks = randn(MersenneTwister(7531), 12, n)
+    shocks = randn(Xoshiro(7531), 12, n)
     se = fill(T(0.05), n, n)
     vcov = Matrix{T}(I, 3, 3)
     snames = ["Shock 1", "Shock 2"]
@@ -532,8 +532,8 @@ function _sid24_dummy_objects()
     restr = _sid24_restrictions(n)
     idst = IdentificationStatus(:exact, [1, 1], [1, 1], 0)
     I2 = Matrix{T}(I, n, n)
-    irf4 = randn(MersenneTwister(7532), 2, 3, n, n)
-    irf3 = randn(MersenneTwister(7533), 3, n, n)
+    irf4 = randn(Xoshiro(7532), 2, 3, n, n)
+    irf3 = randn(Xoshiro(7533), 3, n, n)
 
     ica = ICASVARResult{T}(B0, inv(B0), Q, shocks, :fastica, true, 10, T(0.1), snames)
     ml = NonGaussianMLResult{T}(B0, Q, shocks, :student_t, T(-10), T(-12),
@@ -552,7 +552,7 @@ function _sid24_dummy_objects()
                                 se, vcov, snames)
     st = SmoothTransitionSVARResult{T}(B0, Q, [I2, 2 .* I2],
                                         [T[1.0, 1.0], T[2.0, 0.5]],
-                                        T(1.5), T(0.0), randn(MersenneTwister(7534), 12),
+                                        T(1.5), T(0.0), randn(Xoshiro(7534), 12),
                                         fill(T(0.5), 12), T(-10), true, 6,
                                         se, vcov, shocks, snames)
     ext = ExternalVolatilitySVARResult{T}(B0, Q, [I2, 2 .* I2],
@@ -623,9 +623,9 @@ end
     end
 
     @testset "SVARModel / SVECResult nested pattern and VECM" begin
-        Y = randn(MersenneTwister(753), 80, 2)
+        Y = randn(Xoshiro(753), 80, 2)
         svar = estimate_svar(estimate_var(Y, 1), recursive_pattern(2);
-                             rng=MersenneTwister(753))
+                             rng=Xoshiro(753))
         s2 = _assert_roundtrip(svar)
         _assert_consumers(svar, s2)
         @test s2 isa SVARModel
@@ -633,7 +633,7 @@ end
         @test s2.identification isa IdentificationStatus
         @test s2.varnames == svar.varnames
 
-        Yc = cumsum(randn(MersenneTwister(754), 80, 2); dims=1)
+        Yc = cumsum(randn(Xoshiro(754), 80, 2); dims=1)
         svec = identify_svec(estimate_vecm(Yc, 1; rank=1))
         v2 = _assert_roundtrip(svec)
         _assert_consumers(svec, v2)
@@ -666,7 +666,7 @@ end
 # =============================================================================
 
 @testset "RSER-12 bundles + model_info (#785)" begin
-    Y = randn(MersenneTwister(785), 80, 2)
+    Y = randn(Xoshiro(785), 80, 2)
     m = estimate_var(Y, 2)
     ir = irf(m, 4)
     fc = forecast(m, 4; ci_method=:none)
@@ -970,7 +970,7 @@ end
     @test miss_p == String[]
 
     # Runtime: a registered type with both dispatches round-trips with helpers.
-    Y = randn(MersenneTwister(787), 60, 2)
+    Y = randn(Xoshiro(787), 60, 2)
     m = estimate_var(Y, 1)
     ir = irf(m, 4)
     @test string(nameof(typeof(ir))) in plot_names

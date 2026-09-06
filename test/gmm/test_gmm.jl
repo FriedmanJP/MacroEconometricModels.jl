@@ -79,7 +79,7 @@ end
     end
 
     @testset "gmm_objective" begin
-        rng = Random.MersenneTwister(42)
+        rng = Random.Xoshiro(42)
         # Simple moment function: E[data - theta] = 0
         moment_fn(theta, data) = data .- theta[1]'
         data = randn(rng, 100, 2) .+ 3.0
@@ -95,7 +95,7 @@ end
     end
 
     @testset "optimal_weighting_matrix" begin
-        rng = Random.MersenneTwister(42)
+        rng = Random.Xoshiro(42)
 
         n = 200
         k = 3
@@ -124,7 +124,7 @@ end
     end
 
     @testset "estimate_gmm - identity weighting" begin
-        rng = Random.MersenneTwister(100)
+        rng = Random.Xoshiro(100)
         n = 300
 
         # OLS as GMM: E[X'(y - X*beta)] = 0  (just-identified)
@@ -154,7 +154,7 @@ end
     end
 
     @testset "estimate_gmm - two_step weighting" begin
-        rng = Random.MersenneTwister(200)
+        rng = Random.Xoshiro(200)
         n = 300
 
         X = randn(rng, n, 2)
@@ -178,7 +178,7 @@ end
     end
 
     @testset "estimate_gmm - iterated weighting" begin
-        rng = Random.MersenneTwister(300)
+        rng = Random.Xoshiro(300)
         n = 300
 
         X = randn(rng, n, 2)
@@ -202,7 +202,7 @@ end
     end
 
     @testset "estimate_gmm - optimal weighting" begin
-        rng = Random.MersenneTwister(350)
+        rng = Random.Xoshiro(350)
         n = 300
 
         X = randn(rng, n, 2)
@@ -226,7 +226,7 @@ end
     end
 
     @testset "estimate_gmm - overidentified IV" begin
-        rng = Random.MersenneTwister(400)
+        rng = Random.Xoshiro(400)
         n = 500
 
         # IV regression: y = X*beta + eps, X correlated with eps
@@ -258,7 +258,7 @@ end
     end
 
     @testset "j_test" begin
-        rng = Random.MersenneTwister(500)
+        rng = Random.Xoshiro(500)
         n = 500
 
         # Overidentified IV
@@ -304,7 +304,7 @@ end
     end
 
     @testset "gmm_summary" begin
-        rng = Random.MersenneTwister(600)
+        rng = Random.Xoshiro(600)
         n = 300
 
         X = randn(rng, n, 2)
@@ -337,7 +337,7 @@ end
     end
 
     @testset "GMMModel StatsAPI interface" begin
-        rng = Random.MersenneTwister(700)
+        rng = Random.Xoshiro(700)
         n = 300
 
         X = randn(rng, n, 2)
@@ -374,7 +374,7 @@ end
     end
 
     @testset "is_overidentified and overid_df" begin
-        rng = Random.MersenneTwister(800)
+        rng = Random.Xoshiro(800)
         n = 200
 
         X = randn(rng, n, 2)
@@ -410,7 +410,7 @@ end
     end
 
     @testset "lp_gmm_moments" begin
-        rng = Random.MersenneTwister(900)
+        rng = Random.Xoshiro(900)
         n_obs = 100
         n_vars = 3
         Y = randn(rng, n_obs, n_vars)
@@ -431,7 +431,7 @@ end
     end
 
     @testset "estimate_lp_gmm" begin
-        rng = Random.MersenneTwister(1000)
+        rng = Random.Xoshiro(1000)
         n_obs = 150
         n_vars = 2
         Y = randn(rng, n_obs, n_vars)
@@ -449,7 +449,7 @@ end
     end
 
     @testset "Single parameter estimation" begin
-        rng = Random.MersenneTwister(1100)
+        rng = Random.Xoshiro(1100)
         n = 300
 
         # Simple mean estimation: E[y - mu] = 0
@@ -464,7 +464,7 @@ end
     end
 
     @testset "vcov matrix properties" begin
-        rng = Random.MersenneTwister(1200)
+        rng = Random.Xoshiro(1200)
         n = 300
 
         X = randn(rng, n, 3)
@@ -501,7 +501,7 @@ end
     end
 
     @testset "Iterated weighting" begin
-        rng = Random.MersenneTwister(3201)
+        rng = Random.Xoshiro(3201)
         n = 100
         X = hcat(ones(n), randn(rng, n, 2))
         beta_true = [1.0, -0.5, 0.3]
@@ -522,7 +522,7 @@ end
     end
 
     @testset "Identity weighting (one-step)" begin
-        rng = Random.MersenneTwister(3202)
+        rng = Random.Xoshiro(3202)
         n = 100
         X = hcat(ones(n), randn(rng, n, 2))
         beta_true = [1.0, -0.5, 0.3]
@@ -542,7 +542,7 @@ end
     end
 
     @testset "J-test direct" begin
-        rng = Random.MersenneTwister(3203)
+        rng = Random.Xoshiro(3203)
         n = 200
         X = hcat(ones(n), randn(rng, n, 3))  # 4 instruments for 3 parameters = overid
         beta_true = [1.0, -0.5, 0.3]
@@ -566,7 +566,7 @@ end
     end
 
     @testset "StatsAPI methods on GMMModel" begin
-        rng = Random.MersenneTwister(3204)
+        rng = Random.Xoshiro(3204)
         n = 100
         X = hcat(ones(n), randn(rng, n))
         y = X * [1.0, 0.5] + randn(rng, n)
@@ -593,7 +593,7 @@ end
 @testset "T089: GMM identity J p-value + numerical_gradient step kwarg" begin
 
     @testset "M-29: J p-value invalid under identity weighting" begin
-        rng = Random.MersenneTwister(18901)
+        rng = Random.Xoshiro(18901)
         n = 300
         X = randn(rng, n, 2)
         y = X * [1.0, -0.5] + randn(rng, n)
@@ -659,7 +659,7 @@ end
     # different probability limits (sandwich vs efficient-form), and an R=25 MC
     # gives dispersion ratio 1.006 — the efficiency gap is below MC resolution
     # on this design. Comparing their magnitudes would test noise, not theory.
-    rng = Random.MersenneTwister(42)
+    rng = Random.Xoshiro(42)
     d = dgp_gmm(rng; kind=:iv, beta=[1.0, 0.5], n=1000, hetero=true, overid_k=2)
     data = hcat(d.y, d.X, d.Z)
     moment_fn(theta, dd) = dd[:, 4:6] .* (dd[:, 1] - dd[:, 2:3] * theta)
@@ -690,7 +690,7 @@ end
     nreps = FAST ? 12 : 40
     rej = 0
     for s in 1:nreps
-        dd = dgp_gmm(Random.MersenneTwister(2000 + s); kind=:iv, beta=[1.0, 0.5],
+        dd = dgp_gmm(Random.Xoshiro(2000 + s); kind=:iv, beta=[1.0, 0.5],
                      n=1000, hetero=true, overid_k=2)
         res = estimate_gmm(moment_fn, [0.0, 0.0], hcat(dd.y, dd.X, dd.Z);
                            weighting=:two_step, hac=false)
@@ -700,14 +700,14 @@ end
     end
     @test rej / nreps <= (FAST ? 0.25 : 0.15)
 
-    dd_bad = dgp_gmm(Random.MersenneTwister(7); kind=:iv, beta=[1.0, 0.5],
+    dd_bad = dgp_gmm(Random.Xoshiro(7); kind=:iv, beta=[1.0, 0.5],
                      n=1000, hetero=true, overid_k=2, invalid_k=1)
     jt_bad = MacroEconometricModels.j_test(estimate_gmm(moment_fn, [0.0, 0.0],
         hcat(dd_bad.y, dd_bad.X, dd_bad.Z); weighting=:two_step, hac=false))
     @test jt_bad.p_value < 0.01
 
     # df tracks the instrument count: overid_k=4 → 5 moments − 2 params = 3.
-    dd4 = dgp_gmm(Random.MersenneTwister(7); kind=:iv, beta=[1.0, 0.5],
+    dd4 = dgp_gmm(Random.Xoshiro(7); kind=:iv, beta=[1.0, 0.5],
                   n=1000, hetero=true, overid_k=4)
     moment_fn5(theta, dd) = dd[:, 4:8] .* (dd[:, 1] - dd[:, 2:3] * theta)
     jt4 = MacroEconometricModels.j_test(estimate_gmm(moment_fn5, [0.0, 0.0],
@@ -720,7 +720,7 @@ end
     # :two_step (verified — optimal_weighting_matrix returns Matrix). LP-GMM is
     # just-identified (Z = X), so both weightings must agree AND recover the
     # closed-form IRF (realized max dev 0.04 at T=2000; bound 0.1).
-    rng = Random.MersenneTwister(3)
+    rng = Random.Xoshiro(3)
     A = [0.5 0.1; 0.2 0.4]
     B0 = [1.0 0.0; 0.3 1.0]
     Y = dgp_var(rng; A=A, B0=B0, T=2000).Y
@@ -745,17 +745,23 @@ end
     # pi1 = 0.07 delivers first-stage F ≈ 3.8 (asserted 2–6). The estimators run
     # without complaint — no first-stage diagnostic is reported anywhere, which
     # is filed as a separate feature (#815).
-    rw = Random.MersenneTwister(9)
+    # Mean F over 10 seeds: a single weak-IV F is volatile, so the band
+    # is asserted on the mean, which concentrates on the design value.
+    Fstats = map(9:18) do s
+        d = dgp_gmm(Random.Xoshiro(s); kind=:iv, beta=[1.0, 0.5],
+                    n=1000, hetero=false, overid_k=2, pi1=0.07)
+        x = d.X[:, 2]
+        Z = d.Z
+        k = size(Z, 2)
+        Pz = Z * inv(Symmetric(Z' * Z)) * Z'
+        ((dot(x, Pz * x) - dot(x, ones(length(x)))^2 / length(x)) / (k - 1)) /
+        ((dot(x, x) - dot(x, Pz * x)) / (length(x) - k))
+    end
+    @test 2.0 < sum(Fstats) / length(Fstats) < 6.0
+
+    rw = Random.Xoshiro(9)
     dw = dgp_gmm(rw; kind=:iv, beta=[1.0, 0.5], n=1000, hetero=false,
                  overid_k=2, pi1=0.07)
-    x = dw.X[:, 2]
-    Z = dw.Z
-    k = size(Z, 2)
-    Pz = Z * inv(Symmetric(Z' * Z)) * Z'
-    Fstat = ((dot(x, Pz * x) - dot(x, ones(length(x)))^2 / length(x)) / (k - 1)) /
-            ((dot(x, x) - dot(x, Pz * x)) / (length(x) - k))
-    @test 2.0 < Fstat < 6.0
-
     moment_fn(theta, dd) = dd[:, 4:6] .* (dd[:, 1] - dd[:, 2:3] * theta)
     res = estimate_gmm(moment_fn, [0.0, 0.0], hcat(dw.y, dw.X, dw.Z);
                        weighting=:two_step, hac=false)

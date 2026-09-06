@@ -84,7 +84,7 @@ const MEM_EP = MacroEconometricModels
 
     @testset "construct_var_matrices errors" begin
         # Too few observations
-        rng = MersenneTwister(8000)  # DGP-02: explicit rng
+        rng = Xoshiro(8000)  # DGP-02: explicit rng
         Y = randn(rng, 3, 2)
         @test_throws ArgumentError MEM_EP.construct_var_matrices(Y, 5)
     end
@@ -143,7 +143,7 @@ const MEM_EP = MacroEconometricModels
     end
 
     @testset "White HC variants" begin
-        rng = MersenneTwister(8001)  # DGP-02: explicit rng
+        rng = Xoshiro(8001)  # DGP-02: explicit rng
         X = randn(rng, 50, 3)
         u = randn(rng, 50)
         for variant in [:hc0, :hc1, :hc2, :hc3]
@@ -154,7 +154,7 @@ const MEM_EP = MacroEconometricModels
     end
 
     @testset "Newey-West with prewhitening" begin
-        rng = MersenneTwister(8002)  # DGP-02: explicit rng
+        rng = Xoshiro(8002)  # DGP-02: explicit rng
         X = randn(rng, 50, 3)
         u = randn(rng, 50)
         V_pw = MEM_EP.newey_west(X, u; prewhiten=true)
@@ -162,7 +162,7 @@ const MEM_EP = MacroEconometricModels
     end
 
     @testset "Newey-West multivariate" begin
-        rng = MersenneTwister(8003)  # DGP-02: explicit rng
+        rng = Xoshiro(8003)  # DGP-02: explicit rng
         X = randn(rng, 50, 3)
         U = randn(rng, 50, 2)
         V = MEM_EP.newey_west(X, U)
@@ -170,7 +170,7 @@ const MEM_EP = MacroEconometricModels
     end
 
     @testset "White multivariate" begin
-        rng = MersenneTwister(8004)  # DGP-02: explicit rng
+        rng = Xoshiro(8004)  # DGP-02: explicit rng
         X = randn(rng, 50, 3)
         U = randn(rng, 50, 2)
         V = MEM_EP.white_vcov(X, U)
@@ -178,7 +178,7 @@ const MEM_EP = MacroEconometricModels
     end
 
     @testset "Driscoll-Kraay single and multi" begin
-        rng = MersenneTwister(8005)  # DGP-02: explicit rng
+        rng = Xoshiro(8005)  # DGP-02: explicit rng
         X = randn(rng, 50, 3)
         u = randn(rng, 50)
         V = MEM_EP.driscoll_kraay(X, u)
@@ -190,7 +190,7 @@ const MEM_EP = MacroEconometricModels
     end
 
     @testset "precompute_XtX_inv" begin
-        rng = MersenneTwister(8006)  # DGP-02: explicit rng
+        rng = Xoshiro(8006)  # DGP-02: explicit rng
         X = randn(rng, 50, 3)
         XtX_inv = MEM_EP.precompute_XtX_inv(X)
         @test size(XtX_inv) == (3, 3)
@@ -204,7 +204,7 @@ const MEM_EP = MacroEconometricModels
     end
 
     @testset "Long-run variance/covariance" begin
-        rng = MersenneTwister(8007)  # DGP-02: explicit rng
+        rng = Xoshiro(8007)  # DGP-02: explicit rng
         # Short vector (length 1: var returns NaN)
         x_short = [1.0]
         lrv = MEM_EP.long_run_variance(x_short)
@@ -234,7 +234,7 @@ const MEM_EP = MacroEconometricModels
     end
 
     @testset "robust_vcov dispatch" begin
-        rng = MersenneTwister(8008)  # DGP-02: explicit rng
+        rng = Xoshiro(8008)  # DGP-02: explicit rng
         X = randn(rng, 50, 3)
         u = randn(rng, 50)
 
@@ -262,7 +262,7 @@ const MEM_EP = MacroEconometricModels
     # =========================================================================
 
     @testset "compute_Q error paths" begin
-        rng = MersenneTwister(8010)  # DGP-02: explicit rng
+        rng = Xoshiro(8010)  # DGP-02: explicit rng
         Y = randn(rng, 100, 3)
         model = estimate_var(Y, 2)
         # Unknown method
@@ -274,7 +274,7 @@ const MEM_EP = MacroEconometricModels
     # =========================================================================
 
     @testset "ARIMA validation" begin
-        rng = MersenneTwister(8015)  # DGP-02: explicit rng
+        rng = Xoshiro(8015)  # DGP-02: explicit rng
         # Too short series
         @test_throws ArgumentError estimate_ar(ones(5), 1)
         # Negative orders (via estimate_arima)
@@ -296,7 +296,7 @@ const MEM_EP = MacroEconometricModels
     end
 
     @testset "ARIMA forecast h<1" begin
-        rng = MersenneTwister(8020)  # DGP-02: explicit rng
+        rng = Xoshiro(8020)  # DGP-02: explicit rng
         y = randn(rng, 100)
         m = estimate_ar(y, 1)
         @test_throws ArgumentError forecast(m, 0)
@@ -307,7 +307,7 @@ const MEM_EP = MacroEconometricModels
     # =========================================================================
 
     @testset "Factor model validation" begin
-        rng = MersenneTwister(8030)  # DGP-02: explicit rng
+        rng = Xoshiro(8030)  # DGP-02: explicit rng
         X = randn(rng, 50, 10)
         # r too large
         @test_throws ArgumentError estimate_factors(X, 51)
@@ -331,7 +331,7 @@ const MEM_EP = MacroEconometricModels
     # =========================================================================
 
     @testset "companion_matrix" begin
-        rng = MersenneTwister(8040)  # DGP-02: explicit rng
+        rng = Xoshiro(8040)  # DGP-02: explicit rng
         # Stationary truth (DGP-02 #791): estimated companion stays stable,
         # so the bound is < 1, not the old < 2.0 "loose for random data".
         Y = dgp_var(rng; A=[0.5 0.1 0.0; 0.0 0.5 0.1; 0.0 0.0 0.5],
@@ -350,7 +350,7 @@ const MEM_EP = MacroEconometricModels
     end
 
     @testset "extract_ar_coefficients" begin
-        rng = MersenneTwister(8041)  # DGP-02: explicit rng
+        rng = Xoshiro(8041)  # DGP-02: explicit rng
         Y = dgp_var(rng; A=[0.5 0.1 0.0; 0.0 0.5 0.1; 0.0 0.0 0.5],
                     B0=Matrix{Float64}(I, 3, 3), T=200).Y
         model = estimate_var(Y, 2)
@@ -364,7 +364,7 @@ const MEM_EP = MacroEconometricModels
     end
 
     @testset "univariate_ar_variance" begin
-        rng = MersenneTwister(8042)  # DGP-02: explicit rng
+        rng = Xoshiro(8042)  # DGP-02: explicit rng
         y = randn(rng, 100)
         v = MEM_EP.univariate_ar_variance(y)
         @test v > 0

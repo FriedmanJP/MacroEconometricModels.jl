@@ -9,7 +9,7 @@ if !@isdefined(_assert_roundtrip)
 end
 
 @testset "RSER-04 MidasForecast serialization (#777)" begin
-    rng = MersenneTwister(409)
+    rng = Xoshiro(409)
     m, K, T_lf = 3, 4, 40
     x = randn(rng, m * T_lf)
     y = randn(rng, T_lf)

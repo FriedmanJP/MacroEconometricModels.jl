@@ -14,7 +14,7 @@ const M = MacroEconometricModels
 @testset "Issue fixes #523–#564" begin
 
     @testset "#523 NIW S0 is scale-invariant" begin
-        rng = MersenneTwister(42)  # DGP-03: explicit rng
+        rng = Xoshiro(42)  # DGP-03: explicit rng
         p = 1
         # Small residual scale truth (DGP-03 #792: shared simulator).
         Y = dgp_var(rng; A=[0.5 0.1; 0.0 0.4], Sigma=Matrix(1e-4 * I, 2, 2), T=80).Y
@@ -26,7 +26,7 @@ const M = MacroEconometricModels
     end
 
     @testset "#529 omega replicates the covariance dummy block" begin
-        rng = MersenneTwister(7)  # DGP-03: explicit rng
+        rng = Xoshiro(7)  # DGP-03: explicit rng
         # Stationary VAR(1) truth (DGP-03 #792) — the dummy algebra only needs
         # a well-conditioned Y for the residual scale.
         Y = dgp_var(rng; A=[0.5 0.1; 0.0 0.4], B0=Matrix{Float64}(I, 2, 2), T=60).Y
@@ -51,7 +51,7 @@ const M = MacroEconometricModels
     end
 
     @testset "#527 BayesianFEVD axis order matches FEVD" begin
-        rng = MersenneTwister(11)  # DGP-03: explicit rng
+        rng = Xoshiro(11)  # DGP-03: explicit rng
         # Same design as the old inline sim, on the shared simulator (DGP-03 #792).
         Y = dgp_var(rng; A=[0.5 0.1; 0.0 0.4], Sigma=Matrix(0.25 * I, 2, 2), T=100).Y
         m = estimate_var(Y, 1)
@@ -83,7 +83,7 @@ const M = MacroEconometricModels
     end
 
     @testset "#564 bias_correct corrects the point IRF" begin
-        rng = MersenneTwister(99)  # DGP-03: explicit rng
+        rng = Xoshiro(99)  # DGP-03: explicit rng
         # Persistent AR(1) where small-sample bias is non-negligible
         # (DGP-03 #792: shared univariate simulator, truth φ = 0.9).
         Y = reshape(dgp_arima(rng; phi=[0.9], sigma=0.5, T=40).y, :, 1)
@@ -104,7 +104,7 @@ const M = MacroEconometricModels
     end
 
     @testset "#538 FactorModel / StructuralDFM carry varnames" begin
-        rng = MersenneTwister(3)  # DGP-03: explicit rng
+        rng = Xoshiro(3)  # DGP-03: explicit rng
         # Genuine 2-factor panel (DGP-03 #792) instead of white noise.
         X = dgp_dynamic_factors(rng; N=6, T=80).X
         names = ["A", "B", "C", "D", "E", "F"]
@@ -120,11 +120,14 @@ const M = MacroEconometricModels
     end
 
     @testset "#526 block-restricted variance is per-block" begin
-        rng = MersenneTwister(5)  # DGP-03: explicit rng
+        rng = Xoshiro(5)  # DGP-03: explicit rng
         # Block-restricted 2-factor truth (DGP-03 #792): factor 1 loads on
         # series 1:5, factor 2 on series 6:10.
+        # signal_share = 0.9: per-block shares must clear 0.5, but at the
+        # default 0.7 the weak block sits at ≈0.51 (T does not help — the
+        # share is systematic, not noise). At 0.9 the shares are ≈0.72/0.90.
         N = 10
-        d = dgp_dynamic_factors(rng; N=N, T=100,
+        d = dgp_dynamic_factors(rng; N=N, T=100, signal_share=0.9,
                                 blocks=Dict(1 => 1:5, 2 => 6:10))
         X = d.X
         blocks = Dict(:real => collect(1:5), :nominal => collect(6:10))
@@ -140,7 +143,7 @@ const M = MacroEconometricModels
     end
 
     @testset "#525 Bayesian panel mapping is Λ·factor_irf (no Λ_y channel)" begin
-        rng = MersenneTwister(12)  # DGP-03: explicit rng
+        rng = Xoshiro(12)  # DGP-03: explicit rng
         N, r = 12, 2
         # Genuine dynamic-factor panel (DGP-03 #792) instead of white noise.
         X = dgp_dynamic_factors(rng; N=N, T=100).X
@@ -173,7 +176,7 @@ const M = MacroEconometricModels
         # The fix is BBE's measurement equation X = ΛF + Λ_y Y + e with Λ[anchor,:] = I,
         # which stops F from tracking Y_key and keeps the VAR design well conditioned,
         # so a magnitude bound can now be asserted alongside finiteness.
-        rng = MersenneTwister(15)  # DGP-03: explicit rng
+        rng = Xoshiro(15)  # DGP-03: explicit rng
         # Genuine dynamic-factor panel (DGP-03 #792) instead of white noise.
         X = dgp_dynamic_factors(rng; N=10, T=60).X
         bf = estimate_favar(X, [1], 2, 1; method=:bayesian, n_draws=40, burnin=15)
@@ -184,7 +187,7 @@ const M = MacroEconometricModels
     end
 
     @testset "#524 panel CI lower ≤ upper via draws" begin
-        rng = MersenneTwister(21)  # DGP-03: explicit rng
+        rng = Xoshiro(21)  # DGP-03: explicit rng
         # Genuine dynamic-factor panel (DGP-03 #792) instead of white noise.
         X = dgp_dynamic_factors(rng; N=12, T=100).X
         favar = estimate_favar(X, [1, 3], 2, 1)

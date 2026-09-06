@@ -12,7 +12,7 @@ if !@isdefined(FAST)
 end
 
 @testset "FactorForecast Struct" begin
-    rng = Random.MersenneTwister(77701)
+    rng = Random.Xoshiro(77701)
     X = dgp_dynamic_factors(rng; N=10, T=100).X
     fm = estimate_factors(X, 2)
     fc = forecast(fm, 5)
@@ -34,7 +34,7 @@ end
 # =============================================================================
 
 @testset "FactorModel Forecast - Dimensions" begin
-    rng = Random.MersenneTwister(77702)
+    rng = Random.Xoshiro(77702)
     T_obs, N, r = 120, 15, 3
     X = dgp_dynamic_factors(rng; A=[0.5 0.1 0.0; 0.05 0.5 0.1; 0.0 0.05 0.5], N=N, T=T_obs).X
     fm = estimate_factors(X, r)
@@ -56,7 +56,7 @@ end
 end
 
 @testset "FactorModel Forecast - CI Ordering" begin
-    rng = Random.MersenneTwister(77703)
+    rng = Random.Xoshiro(77703)
     X = dgp_dynamic_factors(rng; N=12, T=150).X
     fm = estimate_factors(X, 2)
 
@@ -70,7 +70,7 @@ end
 end
 
 @testset "FactorModel Forecast - Theoretical CI by Default" begin
-    rng = Random.MersenneTwister(77704)
+    rng = Random.Xoshiro(77704)
     X = dgp_dynamic_factors(rng; N=10, T=100).X
     fm = estimate_factors(X, 2)
     fc = forecast(fm, 5)
@@ -96,7 +96,7 @@ end
 end
 
 @testset "ci_method=:none yields exactly-zero bounds across model types (T098 #197)" begin
-    rng = Random.MersenneTwister(19797)
+    rng = Random.Xoshiro(19797)
     X = dgp_dynamic_factors(rng; N=8, T=120).X
     for fc in (forecast(estimate_factors(X, 2), 5; ci_method=:none),
                forecast(estimate_dynamic_factors(X, 2, 1), 5; ci_method=:none),
@@ -110,7 +110,7 @@ end
 end
 
 @testset "FactorModel Forecast - VAR Lag" begin
-    rng = Random.MersenneTwister(77705)
+    rng = Random.Xoshiro(77705)
     X = dgp_dynamic_factors(rng; N=10, T=100).X
     fm = estimate_factors(X, 2)
 
@@ -121,7 +121,7 @@ end
 end
 
 @testset "FactorModel Forecast - Input Validation" begin
-    rng = Random.MersenneTwister(77706)
+    rng = Random.Xoshiro(77706)
     X = dgp_dynamic_factors(rng; N=10, T=100).X
     fm = estimate_factors(X, 2)
 
@@ -136,7 +136,7 @@ end
 # =============================================================================
 
 @testset "DFM Forecast - Dimensions (all ci_methods)" begin
-    rng = Random.MersenneTwister(77710)
+    rng = Random.Xoshiro(77710)
     T_obs, N, r, p = 120, 12, 2, 2
     X = dgp_dynamic_factors(rng; N=N, T=T_obs).X
     dfm = estimate_dynamic_factors(X, r, p)
@@ -155,7 +155,7 @@ end
 end
 
 @testset "DFM Forecast - CI Ordering" begin
-    rng = Random.MersenneTwister(77711)
+    rng = Random.Xoshiro(77711)
     T_obs, N, r, p = 150, 10, 2, 1
     X = dgp_dynamic_factors(rng; N=N, T=T_obs).X
     dfm = estimate_dynamic_factors(X, r, p)
@@ -170,7 +170,7 @@ end
 end
 
 @testset "DFM Forecast - Legacy ci=true Compat" begin
-    rng = Random.MersenneTwister(77712)
+    rng = Random.Xoshiro(77712)
     T_obs, N, r, p = 100, 8, 2, 1
     X = dgp_dynamic_factors(rng; N=N, T=T_obs).X
     dfm = estimate_dynamic_factors(X, r, p)
@@ -190,7 +190,7 @@ end
 end
 
 @testset "DFM Forecast - Theoretical SE Non-Decreasing" begin
-    rng = Random.MersenneTwister(77713)
+    rng = Random.Xoshiro(77713)
     T_obs, N, r, p = 200, 10, 2, 1
     X = dgp_dynamic_factors(rng; N=N, T=T_obs).X
     dfm = estimate_dynamic_factors(X, r, p)
@@ -205,7 +205,7 @@ end
 end
 
 @testset "DFM Forecast - Point Forecast Match Manual" begin
-    rng = Random.MersenneTwister(77714)
+    rng = Random.Xoshiro(77714)
     T_obs, r, p = 80, 2, 1
     X = dgp_dynamic_factors(rng; N=8, T=T_obs).X
     dfm = estimate_dynamic_factors(X, r, p)
@@ -219,7 +219,7 @@ end
 end
 
 @testset "DFM Forecast - Input Validation" begin
-    rng = Random.MersenneTwister(77716)
+    rng = Random.Xoshiro(77716)
     X = dgp_dynamic_factors(rng; N=10, T=100).X
     dfm = estimate_dynamic_factors(X, 2, 1)
 
@@ -233,7 +233,7 @@ end
 # =============================================================================
 
 @testset "GDFM Forecast - Dimensions (all ci_methods)" begin
-    rng = Random.MersenneTwister(77720)
+    rng = Random.Xoshiro(77720)
     T_obs, N, q = 150, 15, 2
     X = dgp_dynamic_factors(rng; N=N, T=T_obs).X
     gdfm = estimate_gdfm(X, q)
@@ -252,7 +252,7 @@ end
 end
 
 @testset "GDFM Forecast - CI Ordering" begin
-    rng = Random.MersenneTwister(77721)
+    rng = Random.Xoshiro(77721)
     T_obs, N, q = 120, 12, 2
     X = dgp_dynamic_factors(rng; N=N, T=T_obs).X
     gdfm = estimate_gdfm(X, q)
@@ -267,7 +267,7 @@ end
 end
 
 @testset "GDFM Forecast - Theoretical SE Non-Decreasing" begin
-    rng = Random.MersenneTwister(77722)
+    rng = Random.Xoshiro(77722)
     T_obs, N, q = 150, 10, 2
     X = dgp_dynamic_factors(rng; N=N, T=T_obs).X
     gdfm = estimate_gdfm(X, q)
@@ -282,7 +282,7 @@ end
 end
 
 @testset "GDFM Forecast - Input Validation" begin
-    rng = Random.MersenneTwister(77726)
+    rng = Random.Xoshiro(77726)
     X = dgp_dynamic_factors(rng; N=10, T=100).X
     gdfm = estimate_gdfm(X, 2)
 
@@ -293,7 +293,7 @@ end
 end
 
 @testset "GDFM Forecast - Backward Compat (observables field)" begin
-    rng = Random.MersenneTwister(77723)
+    rng = Random.Xoshiro(77723)
     X = dgp_dynamic_factors(rng; N=10, T=100).X
     gdfm = estimate_gdfm(X, 2)
 
@@ -304,7 +304,7 @@ end
 end
 
 @testset "DFM simulation CI method" begin
-    rng = Random.MersenneTwister(77730)
+    rng = Random.Xoshiro(77730)
     X = dgp_dynamic_factors(rng; N=8, T=100).X
     dfm = estimate_dynamic_factors(X, 2, 1)
     fc_sim = forecast(dfm, 5; ci_method=:simulation, n_boot=20)
@@ -318,7 +318,7 @@ end
 end
 
 @testset "DFM legacy ci=true compatibility" begin
-    rng = Random.MersenneTwister(77731)
+    rng = Random.Xoshiro(77731)
     X = dgp_dynamic_factors(rng; N=8, T=100).X
     dfm = estimate_dynamic_factors(X, 2, 1)
     fc_legacy = forecast(dfm, 5; ci=true)
@@ -327,7 +327,7 @@ end
 end
 
 @testset "Static FM with p=3 bootstrap CIs" begin
-    rng = Random.MersenneTwister(77732)
+    rng = Random.Xoshiro(77732)
     X = dgp_dynamic_factors(rng; N=8, T=100).X
     fm = estimate_factors(X, 2)
     fc = forecast(fm, 5; p=3, ci_method=:bootstrap, n_boot=20)
@@ -339,7 +339,7 @@ end
 end
 
 @testset "GDFM spectral vs ar forecast" begin
-    rng = Random.MersenneTwister(77733)
+    rng = Random.Xoshiro(77733)
     X = dgp_dynamic_factors(rng; N=10, T=100).X
     gdfm = estimate_gdfm(X, 2)
     fc_ar = forecast(gdfm, 5; method=:ar, ci_method=:none)

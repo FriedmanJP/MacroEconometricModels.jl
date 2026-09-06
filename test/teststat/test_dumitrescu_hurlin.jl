@@ -110,7 +110,7 @@ end
 
     @testset "N=1 analytic identity: W_i = p·F (independent RSS F-test)" begin
         for p in (1, 2, 3)
-            rng = MersenneTwister(77 + p)
+            rng = Xoshiro(77 + p)
             T = 60
             x = randn(rng, T)
             y = zeros(T)
@@ -128,7 +128,7 @@ end
 
     @testset "N=1 causality direction (rejects when x drives y, not otherwise)" begin
         # x strongly drives y.
-        rng = MersenneTwister(2024)
+        rng = Xoshiro(2024)
         T = 120
         x = randn(rng, T); y = zeros(T)
         for t in 2:T
@@ -139,7 +139,7 @@ end
         @test rc.Ztilde_pvalue < 0.01          # reject non-causality
 
         # Independent series: x should NOT Granger-cause y.
-        rng = MersenneTwister(999)
+        rng = Xoshiro(999)
         xi = randn(rng, T); yi = zeros(T)
         for t in 2:T
             yi[t] = 0.3 * yi[t-1] + randn(rng)
@@ -155,7 +155,7 @@ end
         p = 1; N = 12; T = 40; reps = 300
         rejZbar = 0; rejZtil = 0
         zbars = Float64[]
-        rng = MersenneTwister(4242)
+        rng = Xoshiro(4242)
         for r in 1:reps
             ids = Int[]; tt = Int[]; ys = Float64[]; xs = Float64[]
             for i in 1:N

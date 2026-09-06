@@ -46,7 +46,7 @@ end
 
     # -------------------------------------------------------------------------
     @testset "End-to-end: :pcse runs, point estimates unchanged vs :ols" begin
-        rng = MersenneTwister(433)
+        rng = Xoshiro(433)
         pd = _balanced_panel(rng, 10, 40)
         m_ols = estimate_xtreg(pd, :y, [:x1, :x2]; cov_type=:ols)
         m_pcse = estimate_xtreg(pd, :y, [:x1, :x2]; cov_type=:pcse)
@@ -65,7 +65,7 @@ end
     # -------------------------------------------------------------------------
     @testset "Analytic identity: time-by-time meat == block-Kronecker sandwich" begin
         # Small balanced panel; recompute the Beck-Katz sandwich two ways.
-        rng = MersenneTwister(7)
+        rng = Xoshiro(7)
         N, T = 4, 12
         pd = _balanced_panel(rng, N, T; rho=0.0)
         m = estimate_xtreg(pd, :y, [:x1, :x2]; cov_type=:pcse)
@@ -108,7 +108,7 @@ end
     @testset "Limiting case: diagonal homoskedastic Σ̂ ⇒ PCSE SE ≈ OLS SE" begin
         # Cross-sectionally independent, homoskedastic errors + long T ⇒ Σ̂ → σ²I,
         # so PCSE V → σ²(X'X)⁻¹ ≈ OLS V. Loose tolerance (σ² uses /T vs /(n-k)).
-        rng = MersenneTwister(2024)
+        rng = Xoshiro(2024)
         pd = _balanced_panel(rng, 6, 250; rho=0.0, sig=0.5)
         m_ols = estimate_xtreg(pd, :y, [:x1, :x2]; cov_type=:ols)
         m_pcse = estimate_xtreg(pd, :y, [:x1, :x2]; cov_type=:pcse)
@@ -142,7 +142,7 @@ end
     # -------------------------------------------------------------------------
     @testset "Prais-Winsten ρ̂ recovery ≈ true ρ (:common)" begin
         # Feed an AR(1) residual series with known ρ; the estimator should recover it.
-        rng = MersenneTwister(99)
+        rng = Xoshiro(99)
         N, T = 12, 300
         rho_true = 0.6
         groups = repeat(1:N, inner=T)
@@ -199,7 +199,7 @@ end
 
     # -------------------------------------------------------------------------
     @testset "estimate_xtreg ar1=:common / :panel_specific run end-to-end" begin
-        rng = MersenneTwister(101)
+        rng = Xoshiro(101)
         pd = _balanced_panel(rng, 10, 40; rho=0.5)
 
         m_c = estimate_xtreg(pd, :y, [:x1, :x2]; cov_type=:pcse, ar1=:common)
@@ -226,7 +226,7 @@ end
 
     # -------------------------------------------------------------------------
     @testset "Unbalanced: :casewise and :pairwise both run" begin
-        rng = MersenneTwister(55)
+        rng = Xoshiro(55)
         pd = _balanced_panel(rng, 8, 30)
         # Drop some rows to unbalance (keep every period fully observed for at least casewise).
         df = DataFrame(id=pd.group_id, t=pd.time_id,
@@ -248,7 +248,7 @@ end
     # -------------------------------------------------------------------------
     @testset "T<N casewise ⇒ warn (no garbage inverse)" begin
         # N=6 units, only T=3 fully-observed periods ⇒ rank-deficient Σ̂.
-        rng = MersenneTwister(3)
+        rng = Xoshiro(3)
         pd = _balanced_panel(rng, 6, 3)
         y = pd.data[:, findfirst(==("y"), pd.varnames)]
         X = pd.data[:, [findfirst(==("x1"), pd.varnames), findfirst(==("x2"), pd.varnames)]]

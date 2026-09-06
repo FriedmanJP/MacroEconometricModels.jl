@@ -39,7 +39,7 @@ const _FM_A3 = [0.5 0.1 0.0; 0.05 0.5 0.1; 0.0 0.05 0.5]
 @testset "Factor Model Tests" begin
 
     @testset "Basic Factor Model Estimation" begin
-        rng = Random.MersenneTwister(123)
+        rng = Random.Xoshiro(123)
         # DGP-06: VAR(1) factors with known loadings instead of iid draws.
         T, N, r_true = 100, 20, 3
         d = dgp_dynamic_factors(rng; A=_FM_A3, N=N, T=T, idio_sd=0.3)
@@ -72,7 +72,7 @@ const _FM_A3 = [0.5 0.1 0.0; 0.05 0.5 0.1; 0.0 0.05 0.5]
         # PCA recovers the loadings subspace of a VAR-factor DGP. Realized
         # distance ≈ 0.06 at seed 7; the FAST bound is deliberately loose for
         # cross-platform LAPACK variation, the full bound is the honest one.
-        rng = Random.MersenneTwister(7)
+        rng = Random.Xoshiro(7)
         T, N, r_true = 500, 30, 3
         d = dgp_dynamic_factors(rng; A=_FM_A3, N=N, T=T)
         model = estimate_factors(d.X, r_true)
@@ -82,7 +82,7 @@ const _FM_A3 = [0.5 0.1 0.0; 0.05 0.5 0.1; 0.0 0.05 0.5]
     end
 
     @testset "Factor Model without Standardization" begin
-        rng = Random.MersenneTwister(234)
+        rng = Random.Xoshiro(234)
         T, N, r = 50, 10, 2
         X = dgp_dynamic_factors(rng; A=_FM_A2, N=N, T=T, idio_sd=0.5).X
 
@@ -94,7 +94,7 @@ const _FM_A3 = [0.5 0.1 0.0; 0.05 0.5 0.1; 0.0 0.05 0.5]
     end
 
     @testset "Prediction and Residuals" begin
-        rng = Random.MersenneTwister(345)
+        rng = Random.Xoshiro(345)
         T, N, r = 80, 15, 3
         X = dgp_dynamic_factors(rng; A=_FM_A3, N=N, T=T, idio_sd=0.2).X
 
@@ -116,7 +116,7 @@ const _FM_A3 = [0.5 0.1 0.0; 0.05 0.5 0.1; 0.0 0.05 0.5]
     end
 
     @testset "R-squared Computation" begin
-        rng = Random.MersenneTwister(456)
+        rng = Random.Xoshiro(456)
         T, N, r = 100, 10, 2
         # Low idiosyncratic noise for reasonable R².
         X = dgp_dynamic_factors(rng; A=_FM_A2, N=N, T=T, idio_sd=0.1).X
@@ -133,7 +133,7 @@ const _FM_A3 = [0.5 0.1 0.0; 0.05 0.5 0.1; 0.0 0.05 0.5]
     end
 
     @testset "Information Criteria" begin
-        rng = Random.MersenneTwister(567)
+        rng = Random.Xoshiro(567)
         T, N = 100, 20
         r_true = 3
         X = dgp_dynamic_factors(rng; A=_FM_A3, N=N, T=T, idio_sd=0.3).X
@@ -156,7 +156,7 @@ const _FM_A3 = [0.5 0.1 0.0; 0.05 0.5 0.1; 0.0 0.05 0.5]
     end
 
     @testset "Scree Plot Data" begin
-        rng = Random.MersenneTwister(678)
+        rng = Random.Xoshiro(678)
         T, N, r = 100, 15, 5
         X = dgp_dynamic_factors(rng; A=0.5 * Matrix{Float64}(I, r, r), N=N, T=T).X
 
@@ -175,7 +175,7 @@ const _FM_A3 = [0.5 0.1 0.0; 0.05 0.5 0.1; 0.0 0.05 0.5]
     end
 
     @testset "StatsAPI Interface" begin
-        rng = Random.MersenneTwister(789)
+        rng = Random.Xoshiro(789)
         T, N, r = 100, 12, 3
         X = dgp_dynamic_factors(rng; A=_FM_A3, N=N, T=T).X
 
@@ -191,7 +191,7 @@ const _FM_A3 = [0.5 0.1 0.0; 0.05 0.5 0.1; 0.0 0.05 0.5]
     end
 
     @testset "Input Validation" begin
-        rng = Random.MersenneTwister(890)
+        rng = Random.Xoshiro(890)
         T, N = 50, 10
         X = randn(rng, T, N)
 
@@ -206,7 +206,7 @@ const _FM_A3 = [0.5 0.1 0.0; 0.05 0.5 0.1; 0.0 0.05 0.5]
     end
 
     @testset "Edge Cases" begin
-        rng = Random.MersenneTwister(901)
+        rng = Random.Xoshiro(901)
         # Single factor
         T, N = 100, 10
         X = dgp_dynamic_factors(rng; A=reshape([0.5], 1, 1), N=N, T=T).X
@@ -223,7 +223,7 @@ const _FM_A3 = [0.5 0.1 0.0; 0.05 0.5 0.1; 0.0 0.05 0.5]
     end
 
     @testset "Constant Series Handling" begin
-        rng = Random.MersenneTwister(12)
+        rng = Random.Xoshiro(12)
         T, N = 100, 10
         X = randn(rng, T, N)
 
@@ -236,7 +236,7 @@ const _FM_A3 = [0.5 0.1 0.0; 0.05 0.5 0.1; 0.0 0.05 0.5]
     end
 
     @testset "Explained Variance Properties" begin
-        rng = Random.MersenneTwister(23)
+        rng = Random.Xoshiro(23)
         T, N, r = 100, 20, 5
         X = dgp_dynamic_factors(rng; A=0.5 * Matrix{Float64}(I, r, r), N=N, T=T).X
 
@@ -253,7 +253,7 @@ const _FM_A3 = [0.5 0.1 0.0; 0.05 0.5 0.1; 0.0 0.05 0.5]
     end
 
     @testset "Reconstruction Quality" begin
-        rng = Random.MersenneTwister(34)
+        rng = Random.Xoshiro(34)
         T, N = 150, 15  # More observations for stability
         r_true = 3
         X = dgp_dynamic_factors(rng; A=_FM_A3, N=N, T=T, idio_sd=0.1).X
@@ -272,7 +272,7 @@ const _FM_A3 = [0.5 0.1 0.0; 0.05 0.5 0.1; 0.0 0.05 0.5]
     end
 
     @testset "Type Stability" begin
-        rng = Random.MersenneTwister(45)
+        rng = Random.Xoshiro(45)
         T, N, r = 50, 10, 2
 
         # Float64
@@ -289,7 +289,7 @@ const _FM_A3 = [0.5 0.1 0.0; 0.05 0.5 0.1; 0.0 0.05 0.5]
     end
 
     @testset "Integer Input Conversion" begin
-        rng = Random.MersenneTwister(56)
+        rng = Random.Xoshiro(56)
         T, N, r = 50, 10, 2
         X_int = rand(rng, 1:10, T, N)
 
@@ -302,7 +302,7 @@ const _FM_A3 = [0.5 0.1 0.0; 0.05 0.5 0.1; 0.0 0.05 0.5]
         # Reconstruction F·Λ' must equal the true PCA projection X·Vᵣ·Vᵣ', and
         # factors must be unit-variance (F'F/T = I). Mis-scaled factors (the F-06 bug)
         # break predict/residuals/r2 and make ic_criteria pick the wrong factor count.
-        rng = Random.MersenneTwister(20260623)
+        rng = Random.Xoshiro(20260623)
         T, N, rtrue = 200, 30, 3
         F0 = randn(rng, T, rtrue); Λ0 = randn(rng, N, rtrue)
         X = F0 * Λ0' + randn(rng, T, N)

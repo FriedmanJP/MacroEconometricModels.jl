@@ -846,7 +846,7 @@ end
     for lz in 1:n_z, kK in 1:n_K
         @views c0[:, :, kK, lz] .= css
     end
-    rng = Random.MersenneTwister(11)
+    rng = Random.Xoshiro(11)
     T_s = 60; zidx = zeros(Int, T_s); zidx[1] = 2; zc = cumsum(zt; dims=2)
     for t in 2:T_s
         u = rand(rng)
@@ -1225,7 +1225,7 @@ end
 
     # simulate_panel
     panel = MacroEconometricModels.simulate_panel(ss; N_agents=100, T_periods=50,
-        rng=Random.MersenneTwister(42))
+        rng=Random.Xoshiro(42))
     @test size(panel) == (100, 50)
     @test all(panel .>= 0)
     @test all(isfinite.(panel))
@@ -1864,7 +1864,7 @@ end
         wn = M._node_widths(xn)
         @test sum(wn) ≈ xn[end] - xn[1]
         # the smoother preserves a constant and is a contraction on the range
-        v = randn(Random.MersenneTwister(258), 20)
+        v = randn(Random.Xoshiro(258), 20)
         @test M._smooth3(ones(20)) ≈ ones(20)
         sv = M._smooth3(v)
         @test minimum(sv) >= minimum(v) && maximum(sv) <= maximum(v)

@@ -459,12 +459,12 @@ function _smc_mutation!(state::SMCState{T}, phi::T, ll_fn, prior::DSGEPrior{T},
     total_proposed = Threads.Atomic{Int}(0)
 
     # Pre-generate per-particle seeds BEFORE entering @threads
-    # (MersenneTwister is NOT thread-safe, so all rng calls must be sequential)
+    # (Xoshiro is NOT thread-safe, so all rng calls must be sequential)
     particle_seeds = [hash((j, rand(rng, UInt64))) for j in 1:N]
 
     Threads.@threads for j in 1:N
         # Per-thread RNG seeded from pre-generated seed
-        thread_rng = Random.MersenneTwister(particle_seeds[j])
+        thread_rng = Random.Xoshiro(particle_seeds[j])
 
         theta_j = state.theta_particles[:, j]
         ll_j = state.log_likelihoods[j]
@@ -1056,7 +1056,7 @@ function _pf_estimator_variance(spec::ModelSpec{T}, param_names::Vector{Symbol},
         theta_i = Vector{T}(theta_particles[:, i])
         reps = T[]
         for r in 1:n_rep
-            rr = Random.MersenneTwister(hash((:nx_probe, i, r, rand(rng, UInt64))))
+            rr = Random.Xoshiro(hash((:nx_probe, i, r, rand(rng, UInt64))))
             ll = _solve_and_run_pf(spec, param_names, theta_i, observables,
                 measurement_error, solver, solver_kwargs, ws, data, T_obs, rr)
             isfinite(ll) && push!(reps, ll)
@@ -1085,7 +1085,7 @@ function _exchange_step!(state::SMCState{T}, spec::ModelSpec{T},
     Threads.@threads for c in eachindex(ranges)
         ws = pool[c]
         for j in ranges[c]
-            rr = Random.MersenneTwister(seeds[j])
+            rr = Random.Xoshiro(seeds[j])
             state.log_likelihoods[j] = _solve_and_run_pf(spec, param_names,
                 Vector{T}(state.theta_particles[:, j]), observables, measurement_error,
                 solver, solver_kwargs, ws, data, T_obs, rr)
@@ -1253,7 +1253,7 @@ function _smc2_init_likelihoods!(log_likelihoods::Vector{T}, solutions::Vector{A
     Threads.@threads for c in eachindex(ranges)
         ws = pool[c]
         for j in ranges[c]
-            thread_rng = Random.MersenneTwister(seeds[j])
+            thread_rng = Random.Xoshiro(seeds[j])
             if solver in (:projection, :pfi)
                 ll_j, sol_j = _solve_and_run_pf(spec, param_names,
                     Vector{T}(theta_particles[:, j]), observables,
@@ -1475,7 +1475,7 @@ function _smc2_sample(spec::ModelSpec{T}, data::AbstractMatrix,
         Threads.@threads for c in eachindex(screen_ranges)
             ws = screen_pool[c]
             for j in screen_ranges[c]
-                screen_rng = Random.MersenneTwister(screen_seeds[j])
+                screen_rng = Random.Xoshiro(screen_seeds[j])
                 ll_cheap[j] = _solve_and_run_pf(spec, param_names,
                                                   Vector{T}(theta_particles[:, j]), observables,
                                                   measurement_error, solver, solver_kwargs,
@@ -1594,7 +1594,7 @@ function _smc2_sample(spec::ModelSpec{T}, data::AbstractMatrix,
         total_proposed = Threads.Atomic{Int}(0)
 
         # Pre-generate per-particle seeds BEFORE entering @threads
-        # (MersenneTwister is NOT thread-safe)
+        # (Xoshiro is NOT thread-safe)
         particle_seeds_mut = [hash((j, phi_new, rand(rng, UInt64))) for j in 1:N]
 
         # PMMH mutation (E-06 / #134). Each θ-particle's move is a particle-marginal
@@ -1613,7 +1613,7 @@ function _smc2_sample(spec::ModelSpec{T}, data::AbstractMatrix,
             ws = pool[c]
             ws_screen = delayed_acceptance ? screen_pool[c] : ws
             for j in chunk_ranges[c]
-                thread_rng = Random.MersenneTwister(particle_seeds_mut[j])
+                thread_rng = Random.Xoshiro(particle_seeds_mut[j])
 
                 theta_j = state.theta_particles[:, j]
                 ll_j = state.log_likelihoods[j]   # incumbent unbiased PF estimate (PMMH)

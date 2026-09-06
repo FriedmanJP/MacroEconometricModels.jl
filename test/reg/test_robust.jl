@@ -79,7 +79,7 @@ const CLEAN17_OLS = [-37.6524589008, 0.7976855601, 0.5773404574, -0.0670601769]
 
     # ---- MAD scale Fisher-consistency ----
     @testset "normalized-MAD scale consistency" begin
-        rng = MersenneTwister(20240716)
+        rng = Xoshiro(20240716)
         z = 3.0 .* randn(rng, 200_000)     # N(0, 3²)
         @test _mad_scale(z) ≈ 3.0 rtol = 0.02
     end
@@ -88,7 +88,7 @@ const CLEAN17_OLS = [-37.6524589008, 0.7976855601, 0.5773404574, -0.0670601769]
     @testset "S-estimator constant b (50% breakdown)" begin
         @test _S_B / (_S_C0^2 / 6) ≈ 0.5 atol = 1e-3   # b/ρ(∞) = breakdown = 0.5
         # M-scale is scale-equivariant: s(a·r) = a·s(r).
-        rng = MersenneTwister(1)
+        rng = Xoshiro(1)
         r = randn(rng, 50)
         s1 = _m_scale(r, Float64(_S_C0), Float64(_S_B))
         s2 = _m_scale(5.0 .* r, Float64(_S_C0), Float64(_S_B))
@@ -125,7 +125,7 @@ const CLEAN17_OLS = [-37.6524589008, 0.7976855601, 0.5773404574, -0.0670601769]
 
     # ---- MM-estimation: canonical high-breakdown fit + reproducibility ----
     @testset "MM-estimation (Yohai) — breakdown & reproducibility" begin
-        m = estimate_robust(y, X; method=:mm, rng=MersenneTwister(1), varnames=vn)
+        m = estimate_robust(y, X; method=:mm, rng=Xoshiro(1), varnames=vn)
         @test m.method == :mm
         @test m.psi == :bisquare          # MM forces bisquare
         @test m.tuning ≈ 4.685
@@ -140,15 +140,15 @@ const CLEAN17_OLS = [-37.6524589008, 0.7976855601, 0.5773404574, -0.0670601769]
         ols = X \ y
         @test norm(m.beta .- ols) > 1.0
         # Reproducible given a fixed rng; robust to the seed (same global optimum).
-        m_same = estimate_robust(y, X; method=:mm, rng=MersenneTwister(1))
+        m_same = estimate_robust(y, X; method=:mm, rng=Xoshiro(1))
         @test m.beta == m_same.beta
-        m_seed2 = estimate_robust(y, X; method=:mm, rng=MersenneTwister(999))
+        m_seed2 = estimate_robust(y, X; method=:mm, rng=Xoshiro(999))
         @test maximum(abs.(m.beta .- m_seed2.beta)) < 1e-6
     end
 
     # ---- Analytic property: clean data ⇒ robust ≈ OLS; one outlier barely moves bisquare ----
     @testset "clean data ≈ OLS; single outlier downweighted" begin
-        rng = MersenneTwister(2024)
+        rng = Xoshiro(2024)
         n = 200
         Xc = hcat(ones(n), randn(rng, n, 2))
         beta_true = [1.0, 2.0, -0.5]
@@ -204,7 +204,7 @@ const CLEAN17_OLS = [-37.6524589008, 0.7976855601, 0.5773404574, -0.0670601769]
         @test occursin("Downweighted", str)
         @test occursin("(Intercept)", str)
         # MM report labels the method.
-        mm = estimate_robust(y, X; method=:mm, rng=MersenneTwister(1), varnames=vn)
+        mm = estimate_robust(y, X; method=:mm, rng=Xoshiro(1), varnames=vn)
         buf2 = IOBuffer()
         show(buf2, mm)
         @test occursin("MM-estimation", String(take!(buf2)))
@@ -228,7 +228,7 @@ end
 
 @testset "Conley (1999) spatial HAC standard errors (#360/T261)" begin
     M = MacroEconometricModels
-    rng = Random.MersenneTwister(2610)
+    rng = Random.Xoshiro(2610)
     n = 150
     lat = 40 .+ 4 .* rand(rng, n)
     lon = -100 .+ 4 .* rand(rng, n)
@@ -329,7 +329,7 @@ end
         ratio = Float64[]
         n_cov_hc = 0; n_cov_con = 0
         for r in 1:reps
-            rng = Random.MersenneTwister(1000 + r)
+            rng = Random.Xoshiro(1000 + r)
             la = 40 .+ 4 .* rand(rng, 150); lo = -100 .+ 4 .* rand(rng, 150)
             blk = @. Int(floor(la - 40)) * 10 + Int(floor(lo + 100))
             ush = Dict(b => randn(rng) for b in unique(blk))
@@ -358,11 +358,11 @@ end
 
     @testset "spatial panel: the time kernel multiplies the spatial one" begin
         nT = 4; nS = 30; N = nS * nT
-        la = repeat(40 .+ rand(Random.MersenneTwister(5), nS); inner=nT)
-        lo = repeat(-100 .+ rand(Random.MersenneTwister(6), nS); inner=nT)
+        la = repeat(40 .+ rand(Random.Xoshiro(5), nS); inner=nT)
+        lo = repeat(-100 .+ rand(Random.Xoshiro(6), nS); inner=nT)
         tt = repeat(1:nT, outer=nS)
-        X2 = hcat(ones(N), randn(Random.MersenneTwister(7), N))
-        m2 = estimate_reg(X2 * [1.0, 0.5] .+ randn(Random.MersenneTwister(8), N), X2;
+        X2 = hcat(ones(N), randn(Random.Xoshiro(7), N))
+        m2 = estimate_reg(X2 * [1.0, 0.5] .+ randn(Random.Xoshiro(8), N), X2;
                           cov_type=:hc0)
         c0 = conley_se(m2; coords=hcat(la, lo), cutoff=50.0, kernel=:uniform,
                        metric=:haversine, time=tt, time_cutoff=0, psd=false)

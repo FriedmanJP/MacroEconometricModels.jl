@@ -18,7 +18,7 @@ const _RSER10 = ("BaselinePath", "CounterfactualHistory", "CounterfactualMoments
 # Named Main callback for FunctionConstraint (anonymous g must error at save).
 rser10_g(δ, paths) = [1.0]
 
-function _rser10_ce(; H=6, n_s=2, draws=false, rng=MersenneTwister(783))
+function _rser10_ce(; H=6, n_s=2, draws=false, rng=Xoshiro(783))
     Tx = [randn(rng, H, n_s), 0.5 .* randn(rng, H, n_s)]
     Tz = [randn(rng, H, n_s)]
     kw = draws ? (; Theta_x_draws=[cat((Tx[1] for _ in 1:4)...; dims=3),
@@ -29,10 +29,10 @@ function _rser10_ce(; H=6, n_s=2, draws=false, rng=MersenneTwister(783))
 end
 
 function _rser10_fixtures()
-    rng = MersenneTwister(783)
+    rng = Xoshiro(783)
     H, n_s = 6, 2
     ce = _rser10_ce(; H=H, n_s=n_s, rng=rng)
-    ce_d = _rser10_ce(; H=H, n_s=n_s, draws=true, rng=MersenneTwister(7831))
+    ce_d = _rser10_ce(; H=H, n_s=n_s, draws=true, rng=Xoshiro(7831))
     rule = PolicyRule(outcomes=[:u, :infl], instruments=[:rate],
                       A_x=[Matrix{Float64}(I, H, H), zeros(H, H)],
                       A_z=[Matrix{Float64}(I, H, H)], name="taylor")
@@ -48,7 +48,7 @@ function _rser10_fixtures()
                                  nothing, H, "2021Q2")
     fc_d = PolicyForecast{Float64}([:u], [randn(rng, H)], [randn(rng, H, 3)],
                                    H, "2021Q2")
-    Y = randn(MersenneTwister(7832), 80, 2)
+    Y = randn(Xoshiro(7832), 80, 2)
     mvar = estimate_var(Y, 1)
     wold = wold_representation(mvar; H=H)
     wold_d = WoldRepresentation{Float64}(wold.Theta, wold.Sigma_u, wold.varnames,
@@ -91,7 +91,7 @@ function _rser10_fixtures()
                      PolicyCausalEffects(outcomes=[:u], Theta_x=[ce.Theta_x[1]],
                                          Theta_x_draws=[ce_d.Theta_x_draws[1]]),
                      policy_loss([:u], H; lambda=[1.0]);
-                     n_sim=40, rng=MersenneTwister(7833))
+                     n_sim=40, rng=Xoshiro(7833))
     end
     fcs = [PolicyForecast{Float64}([:u], [randn(rng, H)], nothing, H, "d$q")
            for q in 1:3]
@@ -234,7 +234,7 @@ end
 
     @testset "opp_sequence continuation from reloaded OPPResult" begin
         r2 = _roundtrip(extra.opp_pt)
-        rng = MersenneTwister(7834)
+        rng = Xoshiro(7834)
         H = extra.ce.H
         fcs = [extra.fc,
                PolicyForecast{Float64}(extra.fc.outcomes,
@@ -260,11 +260,11 @@ end
         @test payload["menu_draws"][1]["__struct__"] == "PolicyCausalEffects"
         orig = _MEM._suppress_warnings() do
             model_average([mb, mb_alt], [0.6, 0.4]; n_pool=30,
-                          rng=MersenneTwister(7835))
+                          rng=Xoshiro(7835))
         end
         reloaded = _MEM._suppress_warnings() do
             model_average([_roundtrip(mb), _roundtrip(mb_alt)], [0.6, 0.4];
-                          n_pool=30, rng=MersenneTwister(7835))
+                          n_pool=30, rng=Xoshiro(7835))
         end
         @test reloaded isa PolicyCausalEffects{Float64}
         @test reloaded.source === :pooled

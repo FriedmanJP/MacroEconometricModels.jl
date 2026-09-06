@@ -7,7 +7,7 @@ using MacroEconometricModels
 const MEM = MacroEconometricModels
 
 @testset "Spanning + forecast sufficiency (CF-19)" begin
-    rng = MersenneTwister(20260819)
+    rng = Xoshiro(20260819)
 
     @testset "spanning: spanned case" begin
         H = 8
@@ -73,7 +73,7 @@ const MEM = MacroEconometricModels
         rule = inflation_target_rule(H; pi_var=:x, outcomes=[:x], instruments=[:z])
         sd = MEM._suppress_warnings() do
             spanning_diagnostic(base, ce_emp, ce_full, rule; n_sim=40,
-                                rng=MersenneTwister(2))
+                                rng=Xoshiro(2))
         end
         @test sd.bands_gap !== nothing
         @test size(sd.bands_gap[1]) == (H, 3)

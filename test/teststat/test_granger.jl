@@ -6,7 +6,7 @@
 
 using Random
 
-rng = Random.MersenneTwister(54321)
+rng = Random.Xoshiro(54321)
 
 # Shared test data
 Y_gc = randn(rng, 200, 3)
@@ -144,7 +144,7 @@ end
 
 @testset "Granger Test Edge Cases" begin
     # VAR(1) — single lag
-    rng = Random.MersenneTwister(999)
+    rng = Random.Xoshiro(999)
     Y1 = randn(rng, 100, 2)
     m1 = estimate_var(Y1, 1)
     g1 = granger_test(m1, 1, 2)
@@ -161,7 +161,7 @@ end
     @test results_2var[2, 1] isa GrangerCausalityResult
 
     # VAR with more lags
-    rng = Random.MersenneTwister(888)
+    rng = Random.Xoshiro(888)
     Y4 = randn(rng, 200, 3)
     m4 = estimate_var(Y4, 4)
     g4 = granger_test(m4, 1, 2)

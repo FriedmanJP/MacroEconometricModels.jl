@@ -36,7 +36,7 @@ const _RSER11_GMM = ("GMMWeighting", "ParameterTransform")
     end
 
     @testset "GMMWeighting nested in GMMModel" begin
-        rng = MersenneTwister(784)
+        rng = Xoshiro(784)
         n = 80
         X = randn(rng, n, 2)
         beta_true = [1.0, -0.5]

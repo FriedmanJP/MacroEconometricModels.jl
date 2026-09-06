@@ -26,7 +26,7 @@ using StatsAPI
 # =============================================================================
 
 @testset "SV leverage variant" begin
-    rng = MersenneTwister(5001)
+    rng = Xoshiro(5001)
     # Simulate data with leverage-like properties
     n = 100
     y = randn(rng, n) .* exp.(cumsum(0.15 .* randn(rng, n)) ./ 2)
@@ -57,7 +57,7 @@ end
 # =============================================================================
 
 @testset "SV Student-t deeper coverage" begin
-    rng = MersenneTwister(5002)
+    rng = Xoshiro(5002)
     n = 100
     y = randn(rng, n) .* exp.(cumsum(0.1 .* randn(rng, n)) ./ 2)
 
@@ -88,7 +88,7 @@ end
 # =============================================================================
 
 @testset "SV leverage + Student-t combined" begin
-    rng = MersenneTwister(5004)
+    rng = Xoshiro(5004)
     n = 100
     y = randn(rng, n) .* exp.(cumsum(0.12 .* randn(rng, n)) ./ 2)
 
@@ -106,7 +106,7 @@ end
 # Shared deterministic base fits (n=300) reused across edge-case, StatsAPI, and
 # display testsets below — each reads distinct fields / constructs its own
 # extreme model, so one shared fit per family suffices (dedupe).
-rng = MersenneTwister(5099)
+rng = Xoshiro(5099)
 y300 = randn(rng, 300)
 garch300 = estimate_garch(y300, 1, 1)
 egarch300 = estimate_egarch(y300, 1, 1)

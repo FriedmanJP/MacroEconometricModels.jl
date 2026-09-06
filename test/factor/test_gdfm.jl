@@ -25,7 +25,7 @@ using Random
 
     @testset "Basic GDFM Estimation" begin
         # DGP-06: shared dynamic-factor simulator (was: bespoke iid loop).
-        rng = Random.MersenneTwister(12345)
+        rng = Random.Xoshiro(12345)
         T_obs, N, q = 200, 20, 2
 
         # Generate simple factor data
@@ -54,7 +54,7 @@ using Random
     @testset "Common component via Forni projector (T096 #195)" begin
         # DGP-06: shared simulator; the true common component comes from the
         # simulator's factors/loadings (was: bespoke iid loop).
-        rng = Random.MersenneTwister(1959)
+        rng = Random.Xoshiro(1959)
         T_obs, N = 120, 6
         # O(1) loadings keep the strong-signal regime the 0.9 bound was
         # written for (the simulator default targets a 0.7 common share).
@@ -74,7 +74,7 @@ using Random
     end
 
     @testset "Different Kernels" begin
-        rng = Random.MersenneTwister(23456)
+        rng = Random.Xoshiro(23456)
         T_obs, N, q = 150, 15, 2
         X = randn(rng, T_obs, N)
 
@@ -86,7 +86,7 @@ using Random
     end
 
     @testset "Standardization Options" begin
-        rng = Random.MersenneTwister(34567)
+        rng = Random.Xoshiro(34567)
         T_obs, N, q = 100, 10, 1
 
         # Create data with different scales
@@ -108,7 +108,7 @@ using Random
     end
 
     @testset "Custom Bandwidth" begin
-        rng = Random.MersenneTwister(45678)
+        rng = Random.Xoshiro(45678)
         T_obs, N, q = 120, 12, 1
         X = randn(rng, T_obs, N)
 
@@ -128,7 +128,7 @@ using Random
 
     @testset "Single Factor Recovery" begin
         # DGP-06: shared simulator (was: bespoke iid loop).
-        rng = Random.MersenneTwister(56789)
+        rng = Random.Xoshiro(56789)
         T_obs, N = 300, 30
         q = 1
 
@@ -146,7 +146,7 @@ using Random
 
     @testset "Multiple Factor Recovery" begin
         # DGP-06: shared simulator (was: bespoke iid loop).
-        rng = Random.MersenneTwister(67890)
+        rng = Random.Xoshiro(67890)
         T_obs, N = 400, 40
         q_true = 3
 
@@ -167,7 +167,7 @@ using Random
 
     @testset "Dynamic Factor Structure" begin
         # DGP-06: shared simulator (was: bespoke AR loop).
-        rng = Random.MersenneTwister(78901)
+        rng = Random.Xoshiro(78901)
         T_obs, N = 300, 25
         q = 2
 
@@ -187,7 +187,7 @@ using Random
     # ==========================================================================
 
     @testset "Spectral Density Properties" begin
-        rng = Random.MersenneTwister(89012)
+        rng = Random.Xoshiro(89012)
         T_obs, N, q = 128, 16, 2
         X = randn(rng, T_obs, N)
 
@@ -210,7 +210,7 @@ using Random
     end
 
     @testset "Eigenvalue Ordering" begin
-        rng = Random.MersenneTwister(90123)
+        rng = Random.Xoshiro(90123)
         T_obs, N, q = 100, 15, 3
         X = randn(rng, T_obs, N)
 
@@ -229,7 +229,7 @@ using Random
     # ==========================================================================
 
     @testset "StatsAPI Interface" begin
-        rng = Random.MersenneTwister(12345)
+        rng = Random.Xoshiro(12345)
         T_obs, N, q = 100, 10, 2
         X = randn(rng, T_obs, N)
 
@@ -260,7 +260,7 @@ using Random
     @testset "R² Consistency" begin
         # DGP-06: shared simulator for the strong panel; the weak panel scales
         # the same common component down against unit noise (was: bespoke loop).
-        rng = Random.MersenneTwister(23456)
+        rng = Random.Xoshiro(23456)
         T_obs, N, q = 150, 12, 2
 
         # Strong factor structure
@@ -285,7 +285,7 @@ using Random
     # ==========================================================================
 
     @testset "Information Criteria Computation" begin
-        rng = Random.MersenneTwister(34567)
+        rng = Random.Xoshiro(34567)
         T_obs, N = 200, 20
         max_q = 5
         X = randn(rng, T_obs, N)
@@ -312,7 +312,7 @@ using Random
 
     @testset "Factor Selection with Known Structure" begin
         # DGP-06: shared simulator (was: bespoke iid loop).
-        rng = Random.MersenneTwister(45678)
+        rng = Random.Xoshiro(45678)
         T_obs, N = 300, 30
         q_true = 2
         max_q = 5
@@ -335,7 +335,7 @@ using Random
     # ==========================================================================
 
     @testset "Basic Forecasting" begin
-        rng = Random.MersenneTwister(56789)
+        rng = Random.Xoshiro(56789)
         T_obs, N, q = 150, 15, 2
         h = 10
 
@@ -354,7 +354,7 @@ using Random
     end
 
     @testset "Forecast Methods" begin
-        rng = Random.MersenneTwister(67890)
+        rng = Random.Xoshiro(67890)
         T_obs, N, q = 120, 12, 2
         h = 5
 
@@ -375,7 +375,7 @@ using Random
 
     @testset "Forecast with Dynamic Factors" begin
         # DGP-06: shared simulator (was: bespoke AR loop).
-        rng = Random.MersenneTwister(78901)
+        rng = Random.Xoshiro(78901)
         T_obs, N, q = 200, 20, 2
         h = 12
 
@@ -400,7 +400,7 @@ using Random
     # ==========================================================================
 
     @testset "Single Factor (q=1)" begin
-        rng = Random.MersenneTwister(89012)
+        rng = Random.Xoshiro(89012)
         T_obs, N = 100, 15
         q = 1
 
@@ -413,7 +413,7 @@ using Random
     end
 
     @testset "Many Factors (q close to N)" begin
-        rng = Random.MersenneTwister(90123)
+        rng = Random.Xoshiro(90123)
         T_obs, N = 100, 10
         q = N - 2  # Many factors
 
@@ -430,7 +430,7 @@ using Random
     end
 
     @testset "Short Time Series" begin
-        rng = Random.MersenneTwister(12345)
+        rng = Random.Xoshiro(12345)
         T_obs = 50  # Short
         N, q = 10, 2
 
@@ -442,7 +442,7 @@ using Random
     end
 
     @testset "Wide Panel (N > T)" begin
-        rng = Random.MersenneTwister(23456)
+        rng = Random.Xoshiro(23456)
         T_obs = 25
         N = 50  # N > T
         q = 2
@@ -455,7 +455,7 @@ using Random
     end
 
     @testset "Power of 2 Sample Size" begin
-        rng = Random.MersenneTwister(34567)
+        rng = Random.Xoshiro(34567)
         T_obs = 256  # Power of 2 for efficient FFT
         N, q = 20, 3
 
@@ -470,7 +470,7 @@ using Random
     # ==========================================================================
 
     @testset "Near-Collinear Data" begin
-        rng = Random.MersenneTwister(45678)
+        rng = Random.Xoshiro(45678)
         T_obs, N = 100, 10
         q = 2
 
@@ -484,7 +484,7 @@ using Random
     end
 
     @testset "Extreme Scaling" begin
-        rng = Random.MersenneTwister(56789)
+        rng = Random.Xoshiro(56789)
         T_obs, N, q = 100, 10, 2
 
         # Very large values
@@ -499,7 +499,7 @@ using Random
     end
 
     @testset "Mixed Scaling" begin
-        rng = Random.MersenneTwister(67890)
+        rng = Random.Xoshiro(67890)
         T_obs, N, q = 100, 10, 2
 
         X = randn(rng, T_obs, N)
@@ -512,7 +512,7 @@ using Random
     end
 
     @testset "Constant Column" begin
-        rng = Random.MersenneTwister(78901)
+        rng = Random.Xoshiro(78901)
         T_obs, N, q = 100, 10, 2
 
         X = randn(rng, T_obs, N)
@@ -528,7 +528,7 @@ using Random
     # ==========================================================================
 
     @testset "Input Validation" begin
-        rng = Random.MersenneTwister(89012)
+        rng = Random.Xoshiro(89012)
         T_obs, N = 100, 10
         X = randn(rng, T_obs, N)
 
@@ -544,7 +544,7 @@ using Random
     end
 
     @testset "IC Criteria Validation" begin
-        rng = Random.MersenneTwister(90123)
+        rng = Random.Xoshiro(90123)
         T_obs, N = 100, 10
         X = randn(rng, T_obs, N)
 
@@ -554,7 +554,7 @@ using Random
     end
 
     @testset "Forecast Validation" begin
-        rng = Random.MersenneTwister(12345)
+        rng = Random.Xoshiro(12345)
         T_obs, N, q = 100, 10, 2
         X = randn(rng, T_obs, N)
         model = estimate_gdfm(X, q)
@@ -573,7 +573,7 @@ using Random
 
     @testset "Common Variance Share" begin
         # DGP-06: shared simulator (was: bespoke iid loop).
-        rng = Random.MersenneTwister(23456)
+        rng = Random.Xoshiro(23456)
         T_obs, N, q = 150, 15, 2
 
         # Strong factor structure
@@ -595,7 +595,7 @@ using Random
     end
 
     @testset "Spectral Eigenvalue Plot Data" begin
-        rng = Random.MersenneTwister(34567)
+        rng = Random.Xoshiro(34567)
         T_obs, N, q = 100, 12, 2
         X = randn(rng, T_obs, N)
 
@@ -615,7 +615,7 @@ using Random
     # ==========================================================================
 
     @testset "Decomposition Consistency" begin
-        rng = Random.MersenneTwister(45678)
+        rng = Random.Xoshiro(45678)
         T_obs, N, q = 120, 15, 2
         X = randn(rng, T_obs, N)
 
@@ -632,7 +632,7 @@ using Random
     end
 
     @testset "Reproducibility" begin
-        rng = Random.MersenneTwister(56789)
+        rng = Random.Xoshiro(56789)
         T_obs, N, q = 100, 10, 2
         X = randn(rng, T_obs, N)
 
@@ -645,7 +645,7 @@ using Random
     end
 
     @testset "Integer Matrix Input" begin
-        rng = Random.MersenneTwister(67890)
+        rng = Random.Xoshiro(67890)
         T_obs, N, q = 100, 10, 2
 
         X_int = rand(rng, 1:10, T_obs, N)
@@ -663,7 +663,7 @@ using Random
         # DGP-06: shared simulator with FIXED loadings across sample sizes, so
         # only T varies (was: bespoke nested truncation). Each span is drawn
         # fresh from the same DGP parameters.
-        rng = Random.MersenneTwister(78901)
+        rng = Random.Xoshiro(78901)
         N, q = 20, 2
         sample_sizes = [100, 400]
 
@@ -686,7 +686,7 @@ using Random
 
     @testset "Increasing Panel Width" begin
         # DGP-06: shared simulator (was: bespoke iid loop per width).
-        rng = Random.MersenneTwister(89012)
+        rng = Random.Xoshiro(89012)
         T_obs, q = 200, 2
         panel_widths = [10, 25]
 
@@ -704,7 +704,7 @@ using Random
     end
 
     @testset "TimeSeriesData varnames and NaN validation" begin
-        rng = Random.MersenneTwister(42)
+        rng = Random.Xoshiro(42)
         T_obs, N, q = 80, 8, 2
         X = randn(rng, T_obs, N)
         names = ["x$i" for i in 1:N]
@@ -737,7 +737,7 @@ using Random
     @testset "both spectral estimators on a dynamic-factor panel" begin
         # DGP-06: shared simulator; truth common component from its factors
         # (was: bespoke AR loop).
-        rng = Random.MersenneTwister(11)
+        rng = Random.Xoshiro(11)
         T_obs, N, q = 120, 15, 2
         d = dgp_dynamic_factors(rng; A=[0.5 0.0; 0.0 0.5], N=N, T=T_obs,
                                 idio_sd=0.3)
@@ -755,7 +755,7 @@ using Random
     end
 
     @testset "lag-window spectrum has full rank; smoothed periodogram does not" begin
-        rng = Random.MersenneTwister(720)
+        rng = Random.Xoshiro(720)
         T_obs, N = 300, 40
         X = randn(rng, T_obs, N)
         bw = 5
@@ -774,7 +774,7 @@ using Random
     @testset "lag-window estimator matches AR(1) spectrum (closed-form check)" begin
         # Oracle for `_estimate_spectral_density_lagwindow`, not a GDFM fit: a univariate
         # AR(1) is the unique simple process whose spectral density is known in closed form.
-        rng = Random.MersenneTwister(721)
+        rng = Random.Xoshiro(721)
         T_obs, M, φ, σ2 = 2000, 25, 0.5, 1.0
         y = zeros(T_obs)
         y[1] = sqrt(σ2 / (1 - φ^2)) * randn(rng)
@@ -793,7 +793,7 @@ using Random
         # DGP-06: shared simulator with the same block loadings and AR matrix
         # (was: bespoke loop). The simulator burns in; the assertions are HD
         # identities plus loose orthogonality/variance-ratio bounds.
-        rng = Random.MersenneTwister(7291)
+        rng = Random.Xoshiro(7291)
         T_obs, N, q = 400, 30, 2
         Φ = [0.8 0.0; 0.0 -0.5]
         Λ = zeros(N, q)
@@ -824,7 +824,7 @@ using Random
     @testset "GDFM HD reconstructs common_component under default standardize" begin
         # DGP-06: shared zero-dynamics simulator plus a nonzero level
         # (was: bespoke iid loop). The assertions are HD identities.
-        rng = Random.MersenneTwister(7293)
+        rng = Random.Xoshiro(7293)
         T_obs, N, q = 120, 12, 2
         X = dgp_dynamic_factors(rng; A=zeros(q, q), N=N, T=T_obs,
                                 idio_sd=0.2).X .+ 5
@@ -843,7 +843,7 @@ using Random
     # ==========================================================================
 
     @testset "ic_criteria_gdfm warns on 90% boundary" begin
-        rng = Random.MersenneTwister(71901)
+        rng = Random.Xoshiro(71901)
         X = randn(rng, 80, 12)
         ic = @test_logs (:warn, r"q_variance") ic_criteria_gdfm(X, 2)
         @test ic.boundary
@@ -860,7 +860,7 @@ using Random
         n_hl = 0
         n_bn = 0
         for i in 1:n_rep
-            rng = Random.MersenneTwister(71900 + i)
+            rng = Random.Xoshiro(71900 + i)
             u = randn(rng, T_obs, q_true)
             for t in 2:T_obs
                 u[t, :] .+= 0.4 .* u[t-1, :]
@@ -879,7 +879,7 @@ using Random
         end
         @test n_hl >= 8
         @test n_bn >= 8
-        rng = Random.MersenneTwister(71999)
+        rng = Random.Xoshiro(71999)
         u = randn(rng, T_obs, q_true)
         X = u * randn(rng, N, q_true)'
         X[2:end, :] .+= u[1:end-1, :] * randn(rng, N, q_true)'
@@ -891,7 +891,7 @@ using Random
     end
 
     @testset "spectrum inverts to asymmetric lag-1 covariance (not the even part)" begin
-        rng = Random.MersenneTwister(72101)
+        rng = Random.Xoshiro(72101)
         T_obs, N = 2000, 16
         u = randn(rng, T_obs)
         X = zeros(T_obs, N)
@@ -916,7 +916,7 @@ using Random
     @testset "one-sided FHLR factors: contemporaneous identity and two-sided wrap" begin
         # DGP-06: shared simulator (was: bespoke AR loop). O(1) loadings keep
         # the strong-signal regime the 0.9 one-sided/two-sided bound needs.
-        rng = Random.MersenneTwister(721)
+        rng = Random.Xoshiro(721)
         T_obs, N, q = 500, 30, 2
         X = dgp_dynamic_factors(rng; A=[0.7 0.0; 0.0 0.7], Lambda=randn(rng, N, q),
                                 N=N, T=T_obs, idio_sd=0.3).X
@@ -953,7 +953,7 @@ using Random
     end
 
     @testset "FHLR h=1 projection RMSE beats AR(1) on two-sided factors" begin
-        rng = Random.MersenneTwister(7211)
+        rng = Random.Xoshiro(7211)
         T_obs, N, q = 600, 30, 2
         u = randn(rng, T_obs, q)
         for t in 2:T_obs

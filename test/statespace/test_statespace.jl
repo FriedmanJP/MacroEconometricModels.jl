@@ -85,7 +85,7 @@ using Test, MacroEconometricModels, Random, LinearAlgebra, Statistics, Distribut
     # TVP regression — recover a known random-walk slope (analytic oracle)
     # ------------------------------------------------------------------
     @testset "estimate_tvp_reg random-walk-slope recovery" begin
-        rng = MersenneTwister(20240717)
+        rng = Xoshiro(20240717)
         T = 300
         x = randn(rng, T)
         beta = zeros(T); beta[1] = 1.0
@@ -142,7 +142,7 @@ using Test, MacroEconometricModels, Random, LinearAlgebra, Statistics, Distribut
     @testset "generic estimate_statespace user builder" begin
         # Stationary AR(1) in the state, observed with noise:
         #   αₜ = φ αₜ₋₁ + ηₜ,  yₜ = αₜ + εₜ.  θ = [φ, log σ²_η, log σ²_ε].
-        rng = MersenneTwister(7)
+        rng = Xoshiro(7)
         T = 400
         φ = 0.7; ση = 1.0; σε = 0.5
         α = zeros(T)
@@ -251,7 +251,7 @@ using Test, MacroEconometricModels, Random, LinearAlgebra, Statistics, Distribut
         # ... and the two really are different models. The issue measured three
         # orders of magnitude between them, which is why silently dropping a1
         # mattered: the user who omitted P1 got the more plausible-looking number.
-        y = reshape(cumsum(randn(MersenneTwister(512), 150)), :, 1)
+        y = reshape(cumsum(randn(Xoshiro(512), 150)), :, 1)
         ll_none = estimate_statespace(m_none, y).loglik
         ll_both = estimate_statespace(m_both, y).loglik
         @test ll_none > ll_both + 1000
@@ -273,7 +273,7 @@ using Test, MacroEconometricModels, Random, LinearAlgebra, Statistics, Distribut
         # Same DGP shape as the :kappa recovery testset above, fit under the
         # exact-diffuse prior instead. Both priors must recover φ; they need
         # not agree exactly (different P1 ⇒ slightly different surfaces).
-        rng = MersenneTwister(71)
+        rng = Xoshiro(71)
         T = 400
         φ = 0.7; ση = 1.0; σε = 0.5
         α = zeros(T)
@@ -300,7 +300,7 @@ using Test, MacroEconometricModels, Random, LinearAlgebra, Statistics, Distribut
         # Random-walk slope around a constant drift δ, RW level, noisy obs.
         # The MLE may reallocate variance across states (representation is not
         # unique), so assert on the smoothed drift and level path, not θ.
-        rng = MersenneTwister(72)
+        rng = Xoshiro(72)
         T = 300
         δ = 0.1
         ν = fill(δ, T)
@@ -321,11 +321,11 @@ using Test, MacroEconometricModels, Random, LinearAlgebra, Statistics, Distribut
         # `:kappa`. Lock the actual default so the docstrings cannot drift back.
         Z = reshape([1.0], 1, 1); H = reshape([1.0], 1, 1)
         Tt = reshape([1.0], 1, 1); Q = reshape([0.5], 1, 1)
-        y = cumsum(randn(MersenneTwister(5122), 80))
+        y = cumsum(randn(Xoshiro(5122), 80))
         @test StateSpaceModel(Z, H, Tt, Q).init_mode === :kappa
         @test local_level(y).init_mode === :kappa
         @test local_linear_trend(y).init_mode === :kappa
-        @test estimate_tvp_reg(y, randn(MersenneTwister(3), 80, 1)).init_mode === :kappa
+        @test estimate_tvp_reg(y, randn(Xoshiro(3), 80, 1)).init_mode === :kappa
         # :diffuse remains reachable and is a genuinely different initialization on a
         # model with a stationary direction (it warns about the nonstationary one).
         @test StateSpaceModel(Z, H, Tt, Q; init_mode=:diffuse).init_mode === :diffuse

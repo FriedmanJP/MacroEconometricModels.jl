@@ -30,7 +30,7 @@ end
 
     @testset "Spherical coordinate unit norm" begin
         for m in [2, 3, 4, 5]
-            theta = rand(MersenneTwister(42 + m), m - 1) .* 2π  # DGP-02: explicit rng
+            theta = rand(Xoshiro(42 + m), m - 1) .* 2π  # DGP-02: explicit rng
             x = MacroEconometricModels._spherical_to_unit_vector(theta, m)
             @test length(x) == m
             @test isapprox(norm(x), 1.0, atol=1e-12)
@@ -43,7 +43,7 @@ end
 
     @testset "Spherical coordinates cover full space" begin
         # Different angles should produce different unit vectors
-        rng = MersenneTwister(100)  # DGP-02: explicit rng
+        rng = Xoshiro(100)  # DGP-02: explicit rng
         m = 3
         vecs = [MacroEconometricModels._spherical_to_unit_vector(rand(rng, m-1) .* 2π, m) for _ in 1:10]
         # Not all the same
@@ -55,7 +55,7 @@ end
     # ==========================================================================
 
     @testset "Q orthogonality — no zero restrictions" begin
-        rng = MersenneTwister(12345)  # DGP-02: explicit rng
+        rng = Xoshiro(12345)  # DGP-02: explicit rng
 
         T_obs, n, p = 200, 3, 1
         Y = randn(rng, T_obs, n)
@@ -81,7 +81,7 @@ end
     end
 
     @testset "Q orthogonality — with zero restrictions" begin
-        rng = MersenneTwister(23456)  # DGP-02: explicit rng
+        rng = Xoshiro(23456)  # DGP-02: explicit rng
 
         T_obs, n, p = 200, 3, 1
         Y = randn(rng, T_obs, n)
@@ -103,7 +103,7 @@ end
     # ==========================================================================
 
     @testset "Zero restrictions enforced exactly" begin
-        rng = MersenneTwister(34567)  # DGP-02: explicit rng
+        rng = Xoshiro(34567)  # DGP-02: explicit rng
 
         # Cholesky zeros hold at the truth (lower-triangular B0, DGP-02 #791).
         T_obs, n, p = 200, 3, 1
@@ -126,7 +126,7 @@ end
     end
 
     @testset "Zero restrictions at non-zero horizon" begin
-        rng = MersenneTwister(45678)  # DGP-02: explicit rng
+        rng = Xoshiro(45678)  # DGP-02: explicit rng
 
         # Use n=3 to avoid over-constraining (n=2 with 1 zero on shock 2
         # leaves 0 free dimensions for column 2: 2-1-1=0)
@@ -151,7 +151,7 @@ end
     # ==========================================================================
 
     @testset "Pure sign restrictions — convergence" begin
-        rng = MersenneTwister(56789)  # DGP-02: explicit rng
+        rng = Xoshiro(56789)  # DGP-02: explicit rng
 
         # Reference DGP (DGP-02 #791): (1,1)+ and (2,2)+ hold at the truth.
         T_obs, n, p = 200, 3, 1
@@ -179,7 +179,7 @@ end
     # ==========================================================================
 
     @testset "Mixed zero and sign restrictions" begin
-        rng = MersenneTwister(67890)  # DGP-02: explicit rng
+        rng = Xoshiro(67890)  # DGP-02: explicit rng
 
         # B0[3,2] < 0: the (3,2)-negative restriction holds at the truth (DGP-02 #791).
         T_obs, n, p = 200, 3, 1
@@ -211,7 +211,7 @@ end
     # ==========================================================================
 
     @testset "Full Cholesky zeros ≈ Cholesky identification" begin
-        rng = MersenneTwister(78901)  # DGP-02: explicit rng
+        rng = Xoshiro(78901)  # DGP-02: explicit rng
 
         T_obs, n, p = 200, 3, 1
         Y = randn(rng, T_obs, n)
@@ -250,7 +250,7 @@ end
     # ==========================================================================
 
     @testset "Uhlig Q satisfies same restrictions as Arias" begin
-        rng = MersenneTwister(89012)  # DGP-02: explicit rng
+        rng = Xoshiro(89012)  # DGP-02: explicit rng
 
         # Reference DGP (DGP-02 #791).
         T_obs, n, p = 200, 3, 1
@@ -277,7 +277,7 @@ end
     # ==========================================================================
 
     @testset "n=2 system" begin
-        rng = MersenneTwister(90123)  # DGP-02: explicit rng
+        rng = Xoshiro(90123)  # DGP-02: explicit rng
 
         T_obs, n, p = 150, 2, 1
         Y = dgp_var(rng; A=[0.5 0.1; 0.0 0.4], B0=[1.0 0.0; 0.3 1.0], T=T_obs).Y
@@ -296,7 +296,7 @@ end
     end
 
     @testset "No sign restrictions throws error" begin
-        rng = MersenneTwister(12321)  # DGP-02: explicit rng
+        rng = Xoshiro(12321)  # DGP-02: explicit rng
 
         T_obs, n, p = 100, 2, 1
         Y = randn(rng, T_obs, n)
@@ -310,7 +310,7 @@ end
     end
 
     @testset "Dimension mismatch throws error" begin
-        rng = MersenneTwister(23232)  # DGP-02: explicit rng
+        rng = Xoshiro(23232)  # DGP-02: explicit rng
 
         T_obs, n, p = 100, 2, 1
         Y = randn(rng, T_obs, n)
@@ -321,7 +321,7 @@ end
     end
 
     @testset "Over-constrained zero restrictions" begin
-        rng = MersenneTwister(34343)  # DGP-02: explicit rng
+        rng = Xoshiro(34343)  # DGP-02: explicit rng
 
         T_obs, n, p = 100, 2, 1
         Y = randn(rng, T_obs, n)
@@ -345,7 +345,7 @@ end
     @testset "Reproducibility with same seed" begin
         T_obs, n, p = 150, 2, 1
 
-        rng = MersenneTwister(54321)  # DGP-02: explicit rng
+        rng = Xoshiro(54321)  # DGP-02: explicit rng
         Y = randn(rng, T_obs, n)
         model = estimate_var(Y, p)
 
@@ -355,11 +355,11 @@ end
         # Same explicit rng stream twice → identical results (DGP-02).
         result1 = identify_uhlig(model, restrictions, 5;
             n_starts=3, n_refine=1, max_iter_coarse=50, max_iter_fine=100,
-            rng=MersenneTwister(11111))
+            rng=Xoshiro(11111))
 
         result2 = identify_uhlig(model, restrictions, 5;
             n_starts=3, n_refine=1, max_iter_coarse=50, max_iter_fine=100,
-            rng=MersenneTwister(11111))
+            rng=Xoshiro(11111))
 
         @test result1.Q ≈ result2.Q
         @test result1.irf ≈ result2.irf
@@ -371,7 +371,7 @@ end
     # ==========================================================================
 
     @testset "Penalty values are finite and negative" begin
-        rng = MersenneTwister(65432)  # DGP-02: explicit rng
+        rng = Xoshiro(65432)  # DGP-02: explicit rng
 
         T_obs, n, p = 200, 3, 1
         Y = randn(rng, T_obs, n)
@@ -398,7 +398,7 @@ end
     # ==========================================================================
 
     @testset "show() output" begin
-        rng = MersenneTwister(76543)  # DGP-02: explicit rng
+        rng = Xoshiro(76543)  # DGP-02: explicit rng
 
         T_obs, n, p = 150, 3, 1
         Y = randn(rng, T_obs, n)
@@ -422,7 +422,7 @@ end
     end
 
     @testset "report() dispatches to show()" begin
-        rng = MersenneTwister(87654)  # DGP-02: explicit rng
+        rng = Xoshiro(87654)  # DGP-02: explicit rng
 
         T_obs, n, p = 150, 2, 1
         Y = randn(rng, T_obs, n)
@@ -443,7 +443,7 @@ end
     end
 
     @testset "refs() output" begin
-        rng = MersenneTwister(98765)  # DGP-02: explicit rng
+        rng = Xoshiro(98765)  # DGP-02: explicit rng
 
         T_obs, n, p = 150, 2, 1
         Y = randn(rng, T_obs, n)
@@ -499,7 +499,7 @@ end
     # ==========================================================================
 
     @testset "Larger system (4 variables)" begin
-        rng = MersenneTwister(11111)  # DGP-02: explicit rng
+        rng = Xoshiro(11111)  # DGP-02: explicit rng
 
         # 4-variable reference DGP (DGP-02 #791); the optimizer enforces the
         # sign pattern below by construction (shock-3 sign flip is free).
@@ -536,7 +536,7 @@ end
     # ==========================================================================
 
     @testset "Near-singular covariance doesn't crash" begin
-        rng = MersenneTwister(22222)  # DGP-02: explicit rng
+        rng = Xoshiro(22222)  # DGP-02: explicit rng
 
         T_obs, n, p = 200, 3, 1
         Y = randn(rng, T_obs, n)
@@ -559,7 +559,7 @@ end
     # ==========================================================================
 
     @testset "IRF dimensions and finiteness" begin
-        rng = MersenneTwister(33333)  # DGP-02: explicit rng
+        rng = Xoshiro(33333)  # DGP-02: explicit rng
 
         T_obs, n, p = 200, 3, 2
         Y = randn(rng, T_obs, n)
@@ -584,18 +584,18 @@ end
 end
 
 @testset "SID-02 restriction horizon ≥ IRF horizon" begin
-    rng = MersenneTwister(731)  # DGP-02: explicit rng
+    rng = Xoshiro(731)  # DGP-02: explicit rng
     m = estimate_var(randn(rng, 150, 3), 2)
     r5 = SVARRestrictions(3; signs=[sign_restriction(1, 1, :positive; horizon=5)])
     u = identify_uhlig(m, r5, 3; n_starts=10, n_refine=2,
-                       max_iter_coarse=100, max_iter_fine=300, rng=MersenneTwister(731))
+                       max_iter_coarse=100, max_iter_fine=300, rng=Xoshiro(731))
     @test size(u.irf, 1) == 3
     irf6 = compute_irf(m, u.Q, 6)
     @test irf6[6, 1, 1] > 0
     r0 = SVARRestrictions(3; zeros=[zero_restriction(2, 1; horizon=4)],
                           signs=[sign_restriction(1, 1, :positive)])
     u0 = identify_uhlig(m, r0, 2; n_starts=10, n_refine=2,
-                        max_iter_coarse=100, max_iter_fine=300, rng=MersenneTwister(7311))
+                        max_iter_coarse=100, max_iter_fine=300, rng=Xoshiro(7311))
     @test abs(compute_irf(m, u0.Q, 5)[5, 2, 1]) < 1e-8
     @test_throws ArgumentError SVARRestrictions(3; signs=[SignRestriction(4, 1, 0, 1)])
     @test_throws ArgumentError sign_restriction(1, 1, :positive; horizon=-1)
@@ -675,7 +675,7 @@ end
 end
 
 @testset "SID-14 Uhlig rejects non-sign rejection types" begin
-    rng = MersenneTwister(743)  # DGP-02: explicit rng
+    rng = Xoshiro(743)  # DGP-02: explicit rng
     m = estimate_var(randn(rng, 80, 2), 1)
     s1 = sign_restriction(1, 1, :positive)
     mixed = [
@@ -701,7 +701,7 @@ end
         signs=[sign_restriction(1, 1, :positive)])
     u = identify_uhlig(m, r_a0z, 4; n_starts=(FAST ? 3 : 8), n_refine=1,
                        max_iter_coarse=(FAST ? 50 : 100), max_iter_fine=(FAST ? 100 : 200),
-                       rng=MersenneTwister(743))
+                       rng=Xoshiro(743))
     L = MacroEconometricModels.safe_cholesky(m.Sigma)
     A0, _ = MacroEconometricModels._rf_to_struct(m.B, L, u.Q)
     @test abs(A0[2, 1]) < 1e-8
@@ -709,10 +709,10 @@ end
 end
 
 @testset "SID-19 irf method=:uhlig" begin
-    rng = MersenneTwister(748)  # DGP-02: explicit rng
+    rng = Xoshiro(748)  # DGP-02: explicit rng
     m = estimate_var(randn(rng, 80, 2), 1)
     r = SVARRestrictions(2; signs=[sign_restriction(1, 1, :positive)])
-    rng = MersenneTwister(748)
+    rng = Xoshiro(748)
     uhlig_kw = (n_starts=FAST ? 3 : 8, n_refine=1, max_iter_coarse=80, max_iter_fine=200)
     u = identify_uhlig(m, r, 5; rng=copy(rng), uhlig_kw...)
     ru = irf(m, 5; method=:uhlig, restrictions=r, rng=copy(rng), uhlig_kw...)
@@ -720,7 +720,7 @@ end
 end
 
 @testset "SID-23 Uhlig RWZ checker" begin
-    rng = MersenneTwister(752)  # DGP-02: explicit rng
+    rng = Xoshiro(752)  # DGP-02: explicit rng
     n = 3
     m = estimate_var(randn(rng, 120, n), 1)
 
@@ -729,7 +729,7 @@ end
         @test check_identification(r, n).status === :set
         u = identify_uhlig(m, r, 4; n_starts=(FAST ? 3 : 6), n_refine=1,
                            max_iter_coarse=(FAST ? 40 : 80), max_iter_fine=(FAST ? 80 : 160),
-                           rng=MersenneTwister(7527))
+                           rng=Xoshiro(7527))
         shown = sprint(show, u)
         @test occursin("set", lowercase(shown))
         @test occursin("point", lowercase(shown))
@@ -759,7 +759,7 @@ end
             zero_restriction(3, 2),
         ], signs=[sign_restriction(1, 1, :positive)])
         @test check_identification(r, n).status === :exact
-        st = check_identification(r, m; n_points=8, rng=MersenneTwister(7531))
+        st = check_identification(r, m; n_points=8, rng=Xoshiro(7531))
         @test st.status === :set
         uh = UhligSVARResult{Float64}(Matrix{Float64}(I, n, n), randn(rng, 4, n, n), -1.0,
                                       zeros(n), r, true, ["v$i" for i in 1:n], st)

@@ -21,7 +21,7 @@
 #
 # A seed is NOT recoverable from an `AbstractRNG`, so bit-for-bit reproduction
 # requires the estimator to OWN the seed: pass `seed=N` to a randomized estimator
-# (`estimate_bvar`, bootstrap `irf`) and it seeds a fresh `MersenneTwister(N)`,
+# (`estimate_bvar`, bootstrap `irf`) and it seeds a fresh `Xoshiro(N)`,
 # records `N` in the manifest, and `reproduce(result)` reconstructs it.
 #
 # This file is included EARLY (before the result-type definitions) because
@@ -175,11 +175,11 @@ end
 """
     _resolve_repro_rng(rng, seed) -> AbstractRNG
 
-If `seed` is given, return a fresh `MersenneTwister(seed)` (so the draw stream is
+If `seed` is given, return a fresh `Xoshiro(seed)` (so the draw stream is
 reproducible from the recorded seed); otherwise return `rng` unchanged. This is
 the single seed-injection point every randomized estimator routes through.
 """
-_resolve_repro_rng(rng, seed::Integer) = Random.MersenneTwister(seed)
+_resolve_repro_rng(rng, seed::Integer) = Random.Xoshiro(seed)
 _resolve_repro_rng(rng, ::Nothing) = rng
 
 """Rebuild `x` replacing its trailing `manifest` field. Used by randomized

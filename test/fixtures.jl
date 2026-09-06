@@ -38,7 +38,7 @@ Cholesky-scaled innovations via `dgp_var`. New tests should call `dgp_var`
 directly (it also returns `A`, `Sigma`, `B0`, the shocks).
 """
 function make_var1_data(; T::Int=200, n::Int=3, seed::Int=42)
-    dgp_var(Random.MersenneTwister(seed); A=Matrix{Float64}(0.5 * I(n)),
+    dgp_var(Random.Xoshiro(seed); A=Matrix{Float64}(0.5 * I(n)),
             B0=Matrix{Float64}(I(n)), T=T).Y
 end
 
@@ -55,7 +55,7 @@ Generate stationary AR(1) process: yₜ = c + φ yₜ₋₁ + σ εₜ.
 """
 function make_ar1_data(; n::Int=500, phi::Float64=0.7, c::Float64=0.5,
                         sigma::Float64=1.0, seed::Int=42)
-    rng = Random.MersenneTwister(seed)
+    rng = Random.Xoshiro(seed)
     y = zeros(n)
     y[1] = c / (1 - phi) + randn(rng)
     for t in 2:n
@@ -70,7 +70,7 @@ end
 Generate I(1) random walk: yₜ = yₜ₋₁ + εₜ.
 """
 function make_random_walk(; n::Int=200, seed::Int=42)
-    rng = Random.MersenneTwister(seed)
+    rng = Random.Xoshiro(seed)
     cumsum(randn(rng, n))
 end
 
@@ -106,7 +106,7 @@ function make_cointegrated_data(; T_obs::Int=200, n::Int=3, rank::Int=1, seed::I
         alpha
     end
     Ga = Gamma === nothing ? [Matrix{Float64}(0.2 * I, n, n)] : Gamma
-    dgp_vecm(Random.MersenneTwister(seed); alpha=al, beta=be, Gamma=Ga, T=T_obs).Y
+    dgp_vecm(Random.Xoshiro(seed); alpha=al, beta=be, Gamma=Ga, T=T_obs).Y
 end
 
 # =============================================================================
@@ -122,7 +122,7 @@ Legacy shim (DGP-01 #790): factors are now VAR(1) (not iid) via
 function make_factor_data(; T::Int=200, N::Int=20, r::Int=3,
                            noise::Float64=0.5, seed::Int=42)
     A = Matrix{Float64}(0.7 * I, r, r)
-    d = dgp_dynamic_factors(Random.MersenneTwister(seed); A=A, r=r, N=N, T=T,
+    d = dgp_dynamic_factors(Random.Xoshiro(seed); A=A, r=r, N=N, T=T,
                             idio_sd=noise, signal_share=1.0 / (1.0 + noise^2))
     (X=d.X, F_true=d.F, Lambda_true=d.Lambda, A=d.A[1])
 end
@@ -139,7 +139,7 @@ Legacy shim (DGP-01 #790): ARCH(1) with burn-in via `dgp_garch_family`
 """
 function simulate_arch1(; n::Int=1000, omega::Float64=0.1, alpha1::Float64=0.3,
                          mu::Float64=0.0, seed::Int=42)
-    dgp_garch_family(Random.MersenneTwister(seed); kind=:arch, omega=omega,
+    dgp_garch_family(Random.Xoshiro(seed); kind=:arch, omega=omega,
                      alpha=alpha1, beta=0.0, mu=mu, T=n).y
 end
 
@@ -151,6 +151,6 @@ Legacy shim (DGP-01 #790): GARCH(1,1) with burn-in via `dgp_garch_family`
 """
 function simulate_garch11(; n::Int=1000, omega::Float64=0.01, alpha1::Float64=0.05,
                            beta1::Float64=0.90, mu::Float64=0.0, seed::Int=42)
-    dgp_garch_family(Random.MersenneTwister(seed); kind=:garch, omega=omega,
+    dgp_garch_family(Random.Xoshiro(seed); kind=:garch, omega=omega,
                      alpha=alpha1, beta=beta1, mu=mu, T=n).y
 end

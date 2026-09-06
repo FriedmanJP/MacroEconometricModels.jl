@@ -166,7 +166,7 @@ using Test, MacroEconometricModels, Random, LinearAlgebra, Statistics
 
     @testset "Clark–West nested-model test" begin
         # Nested DGP: small = AR(0) mean forecast; big adds a (noisy) signal.
-        rng = Random.MersenneTwister(4477)
+        rng = Random.Xoshiro(4477)
         T = 200
         x = randn(rng, T)
         y = 0.4 .* x .+ randn(rng, T)
@@ -184,7 +184,7 @@ using Test, MacroEconometricModels, Random, LinearAlgebra, Statistics
     end
 
     @testset "Forecast combination" begin
-        rng = Random.MersenneTwister(9931)
+        rng = Random.Xoshiro(9931)
         T = 300
         truth = cumsum(randn(rng, T)) .* 0.1
         # 3 models with different error variances

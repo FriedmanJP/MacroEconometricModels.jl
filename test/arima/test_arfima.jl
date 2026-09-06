@@ -41,10 +41,10 @@ _gamma(x) = exp(loggamma(x))
 # -----------------------------------------------------------------------------
 # Deterministic ARFIMA(1,d,0) simulator: (1−φL)(1−L)^d x = e  ⇒
 #   x = (1−L)^{−d} · (1−φL)^{−1} e.  Long burn-in so the truncated fractional
-# filter has effectively converged. Fixed MersenneTwister seed ⇒ reproducible.
+# filter has effectively converged. Fixed Xoshiro seed ⇒ reproducible.
 # -----------------------------------------------------------------------------
 function _sim_arfima(seed::Int, n::Int, d::Float64, phi::Float64; burn::Int=3000)
-    rng = MersenneTwister(seed)
+    rng = Xoshiro(seed)
     N = n + burn
     e = randn(rng, N)
     u = zeros(N)
@@ -80,7 +80,7 @@ end
         @test abs(wpos[end]) < abs(wpos[2])
 
         # _frac_diff(y, 0) returns y unchanged (identity of the filter at d=0)
-        y = randn(MersenneTwister(11), 60)
+        y = randn(Xoshiro(11), 60)
         @test _frac_diff(y, 0.0) ≈ y atol = 1e-13
         @test _frac_diff(y, 0.0; method=:direct) ≈ y atol = 1e-13
 
@@ -137,7 +137,7 @@ end
     @testset "Durbin–Levinson concentrated loglik" begin
         # AR(1) with φ=0.5, σ²=1 ⇒ γ(k)=φ^k/(1−φ²). DL innovations e_t must equal
         # x_t − φ x_{t−1}, and σ̂² the innovation variance.
-        rng = MersenneTwister(3)
+        rng = Xoshiro(3)
         n = 300; phi = 0.5
         x = zeros(n); x[1] = randn(rng)
         for t in 2:n
@@ -157,7 +157,7 @@ end
     # d=0 degenerate identity: CSS component ≡ ARMA CSS residuals (exact)
     # =========================================================================
     @testset "Degenerate d=0 ⇒ ARMA CSS identity" begin
-        rng = MersenneTwister(9)
+        rng = Xoshiro(9)
         y = randn(rng, 200) .* 2.0 .+ 1.0
         c = 0.5; phi = [0.3]; theta = [0.2]
         ll, s2, resid, fit = _arfima_components(0.0, c, phi, theta, y, :css)
@@ -208,7 +208,7 @@ end
     @testset "White noise ⇒ d ≈ 0" begin
         ds = Float64[]
         for s in 1:8
-            y = randn(MersenneTwister(100 + s), 400)
+            y = randn(Xoshiro(100 + s), 400)
             push!(ds, estimate_arfima(y, 0, 0; method=:css).d)
         end
         @test abs(mean(ds)) < 0.05
@@ -258,7 +258,7 @@ end
     # =========================================================================
     @testset "gph_test" begin
         # Periodogram sanity: length ⌊n/2⌋, all nonnegative
-        x = randn(MersenneTwister(7), 128)
+        x = randn(Xoshiro(7), 128)
         lam, I = _periodogram(x)
         @test length(lam) == 64
         @test length(I) == 64
@@ -278,14 +278,14 @@ end
 
         # H₀: d=0 rejects strongly on a highly-persistent series and is honest on
         # white noise (average p-value not tiny)
-        pw = mean(gph_test(randn(MersenneTwister(200 + s), 500)).pval for s in 1:10)
+        pw = mean(gph_test(randn(Xoshiro(200 + s), 500)).pval for s in 1:10)
         @test pw > 0.2
 
         # options: custom m and trimming, and the short-series guard
         gt = gph_test(_sim_arfima(3, 600, 0.3, 0.0); m=40, trim=2)
         @test gt.m == 40
         @test gt.trim == 2
-        @test_throws ArgumentError gph_test(randn(MersenneTwister(1), 5))
+        @test_throws ArgumentError gph_test(randn(Xoshiro(1), 5))
     end
 
     # =========================================================================
@@ -307,7 +307,7 @@ end
         gm = mean(gph_test(_sim_arfima(s, 800, 0.4, 0.0)).d for s in 1:15)
         @test abs(lm - gm) < 0.2
 
-        @test_throws ArgumentError local_whittle(randn(MersenneTwister(2), 5))
+        @test_throws ArgumentError local_whittle(randn(Xoshiro(2), 5))
     end
 
     # =========================================================================

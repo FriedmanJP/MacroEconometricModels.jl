@@ -210,7 +210,7 @@ end
     @testset "Property: seeded MC calibration of KS specified" begin
         # N(0,1) data tested against N(0,1) specified: PIT is Uniform(0,1); the
         # KS rejection rate at 5% should sit near nominal (loose MC band).
-        rng = MersenneTwister(20260717)
+        rng = Xoshiro(20260717)
         reps = 600
         nrej = 0
         for _ in 1:reps
@@ -224,12 +224,12 @@ end
 
     @testset "Degenerate / invalid input errors cleanly" begin
         @test_throws ArgumentError edf_test(fill(3.0, 25))                 # constant
-        @test_throws ArgumentError edf_test(randn(MersenneTwister(1), 3))  # n < 5
-        @test_throws ArgumentError edf_test(randn(MersenneTwister(1), 20); dist=:bogus)
-        @test_throws ArgumentError edf_test(randn(MersenneTwister(1), 20); test=:bogus)
-        @test_throws ArgumentError edf_test(randn(MersenneTwister(1), 20); params=:bogus)
+        @test_throws ArgumentError edf_test(randn(Xoshiro(1), 3))  # n < 5
+        @test_throws ArgumentError edf_test(randn(Xoshiro(1), 20); dist=:bogus)
+        @test_throws ArgumentError edf_test(randn(Xoshiro(1), 20); test=:bogus)
+        @test_throws ArgumentError edf_test(randn(Xoshiro(1), 20); params=:bogus)
         # specified without theta
-        @test_throws ArgumentError edf_test(randn(MersenneTwister(1), 20); params=:specified)
+        @test_throws ArgumentError edf_test(randn(Xoshiro(1), 20); params=:specified)
         # lilliefors only for normal + estimate
         @test_throws ArgumentError edf_test(abs.(EDF_VEC) .+ 0.1; dist=:exponential, test=:lilliefors)
         @test_throws ArgumentError edf_test(EDF_VEC; test=:lilliefors, params=:specified, theta=(0.0, 1.0))

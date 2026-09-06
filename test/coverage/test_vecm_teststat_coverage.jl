@@ -22,7 +22,7 @@ Random.seed!(9001)
 
     @testset "VECM Granger: p=1 path (no short-run Gamma)" begin
         # Cointegrated data: Y2 tracks Y1
-        rng = Random.MersenneTwister(1234)
+        rng = Random.Xoshiro(1234)
         T_obs = 200
         e = randn(rng, T_obs, 2)
         Y = cumsum(e, dims=1)
@@ -46,7 +46,7 @@ Random.seed!(9001)
 
     @testset "VECM Granger: rank=0 path (no long-run alpha)" begin
         # Independent random walks — no cointegration
-        rng = Random.MersenneTwister(5678)
+        rng = Random.Xoshiro(5678)
         Y = cumsum(randn(rng, 200, 2), dims=1)
 
         vecm = estimate_vecm(Y, 2; rank=0, deterministic=:constant)
@@ -65,7 +65,7 @@ Random.seed!(9001)
     end
 
     @testset "VECM Granger: deterministic=:trend path" begin
-        rng = Random.MersenneTwister(9012)
+        rng = Random.Xoshiro(9012)
         T_obs = 200
         e = randn(rng, T_obs, 2)
         Y = cumsum(e, dims=1)
@@ -84,7 +84,7 @@ Random.seed!(9001)
 
     @testset "VECM Granger: p=1 and rank=0 combined (strong_df=0)" begin
         # Both p=1 (no Gamma) and rank=0 (no alpha) => strong_df=0
-        rng = Random.MersenneTwister(3456)
+        rng = Random.Xoshiro(3456)
         Y = cumsum(randn(rng, 200, 2), dims=1)
 
         vecm = estimate_vecm(Y, 1; rank=0, deterministic=:constant)
@@ -104,7 +104,7 @@ Random.seed!(9001)
     # =========================================================================
 
     @testset "unit_root_summary: :za and :ngperron branches" begin
-        y_ur = cumsum(randn(Random.MersenneTwister(42), 200))
+        y_ur = cumsum(randn(Random.Xoshiro(42), 200))
 
         # Test with :za included
         result_za = unit_root_summary(y_ur; tests=[:adf, :kpss, :za])
@@ -118,7 +118,7 @@ Random.seed!(9001)
     end
 
     @testset "unit_root_summary: regression=:none remapping for ZA/NgPerron" begin
-        y = cumsum(randn(Random.MersenneTwister(99), 200))
+        y = cumsum(randn(Random.Xoshiro(99), 200))
 
         # When regression=:none, ZA and NgPerron should remap to :constant
         result = unit_root_summary(y; tests=[:adf, :kpss, :za, :ngperron], regression=:none)
@@ -134,7 +134,7 @@ Random.seed!(9001)
     # =========================================================================
 
     @testset "ADF test with :hqic lag selection criterion" begin
-        y = cumsum(randn(Random.MersenneTwister(111), 200))
+        y = cumsum(randn(Random.Xoshiro(111), 200))
         result = adf_test(y; lags=:hqic)
         @test result isa MacroEconometricModels.ADFResult
         @test result.lags >= 0
@@ -171,7 +171,7 @@ Random.seed!(9001)
 
     @testset "ZA show: fail-to-reject (unit root series)" begin
         # A unit root series should cause ZA to fail to reject
-        y = cumsum(randn(Random.MersenneTwister(444), 200))
+        y = cumsum(randn(Random.Xoshiro(444), 200))
         result = za_test(y; regression=:constant)
         s = sprint(show, result)
         @test occursin("Zivot-Andrews", s)
@@ -195,7 +195,7 @@ Random.seed!(9001)
 
     @testset "Johansen show: rank=0 (no cointegration)" begin
         # Independent random walks — expect rank=0
-        rng = Random.MersenneTwister(666)
+        rng = Random.Xoshiro(666)
         Y = cumsum(randn(rng, 200, 3), dims=1)
         joh = johansen_test(Y, 2)
 
@@ -207,7 +207,7 @@ Random.seed!(9001)
 
     @testset "Johansen show: rank=n (all stationary)" begin
         # Stationary data should yield rank=n (full rank)
-        rng = Random.MersenneTwister(777)
+        rng = Random.Xoshiro(777)
         Y = randn(rng, 200, 2)  # Stationary
         joh = johansen_test(Y, 2)
 
@@ -217,7 +217,7 @@ Random.seed!(9001)
     end
 
     @testset "NgPerron show: fail-to-reject (unit root series)" begin
-        y = cumsum(randn(Random.MersenneTwister(888), 200))
+        y = cumsum(randn(Random.Xoshiro(888), 200))
         result = ngperron_test(y; regression=:constant)
         s = sprint(show, result)
         @test occursin("Ng-Perron", s)
@@ -228,7 +228,7 @@ Random.seed!(9001)
 
     @testset "VARStationarity show: >10 eigenvalues truncation" begin
         # 4 variables * 3 lags = 12 eigenvalues in companion matrix
-        rng = Random.MersenneTwister(999)
+        rng = Random.Xoshiro(999)
         Y = randn(rng, 200, 4)
         m = estimate_var(Y, 3)
         sr = is_stationary(m)
@@ -243,7 +243,7 @@ Random.seed!(9001)
 
     @testset "VARStationarity show: complex eigenvalues" begin
         # VAR models frequently produce complex eigenvalues
-        rng = Random.MersenneTwister(1010)
+        rng = Random.Xoshiro(1010)
         Y = randn(rng, 200, 3)
         m = estimate_var(Y, 2)
         sr = is_stationary(m)

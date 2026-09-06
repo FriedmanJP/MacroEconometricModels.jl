@@ -20,7 +20,7 @@ end
     # fails here. fevd(model,H).proportions[:,:,h] accumulates horizons 0..h-1,
     # i.e. var_fevd row h.
     _tprint("Generating Data for FEVD Verification...")
-    rng = MersenneTwister(7501)  # DGP-02: explicit rng
+    rng = Xoshiro(7501)  # DGP-02: explicit rng
     d = dgp_var(rng; A=[0.5 0.1; 0.0 0.4], B0=[1.0 0.0; 0.3 1.0], T=2000)
     Y, n, p = d.Y, 2, 1
     truth_fevd = var_fevd(d.A, d.B0, 5)
@@ -64,7 +64,7 @@ end
 @testset "FEVD identity corner (B0 = I)" begin
     # Kept as the closed-form corner: with B0 = I the true FEVD is the
     # identity at every horizon under every identification scheme.
-    rng = MersenneTwister(7502)  # DGP-02: explicit rng
+    rng = Xoshiro(7502)  # DGP-02: explicit rng
     d = dgp_var(rng; A=[0.3 0.0; 0.0 0.3], B0=Matrix{Float64}(I, 2, 2), T=2000)
     model = fit(VARModel, d.Y, 1)
     fe = fevd(model, 5; method=:cholesky)
@@ -77,7 +77,7 @@ end
 end
 
 @testset "FEVD Basic Functionality" begin
-    rng = MersenneTwister(123)  # DGP-02: explicit rng
+    rng = Xoshiro(123)  # DGP-02: explicit rng
 
     # Simple VAR model
     T, n, p = 200, 3, 2
@@ -112,7 +112,7 @@ end
 end
 
 @testset "FEVD orthogonality guard (T061)" begin
-    rng = MersenneTwister(61)  # DGP-02: explicit rng
+    rng = Xoshiro(61)  # DGP-02: explicit rng
     Y = zeros(200, 3)
     for t in 2:200
         Y[t, :] = 0.5 * Y[t-1, :] + randn(rng, 3)
@@ -135,7 +135,7 @@ end
 end
 
 @testset "FEVD Methods" begin
-    rng = MersenneTwister(456)  # DGP-02: explicit rng
+    rng = Xoshiro(456)  # DGP-02: explicit rng
 
     T, n, p = 150, 2, 1
     Y = randn(rng, T, n)
@@ -156,11 +156,11 @@ end
 end
 
 @testset "SID-05 set-aware sign FEVD" begin
-    rng = MersenneTwister(734)  # DGP-02: explicit rng
+    rng = Xoshiro(734)  # DGP-02: explicit rng
     m = estimate_var(randn(rng, 150, 2), 1)
     chk(irf) = irf[1, 1, 1] > 0
-    s = identify_sign(m, 5, chk; store_all=true, rng=MersenneTwister(1), max_draws=200)
-    f = fevd(m, 5; method=:sign, check_func=chk, rng=MersenneTwister(1), max_draws=200)
+    s = identify_sign(m, 5, chk; store_all=true, rng=Xoshiro(1), max_draws=200)
+    f = fevd(m, 5; method=:sign, check_func=chk, rng=Xoshiro(1), max_draws=200)
     @test f.n_effective == s.n_accepted
     @test size(f.proportions) == (2, 2, 5)
     @test all(f.proportions .>= -1e-12)
@@ -187,13 +187,13 @@ end
 end
 
 @testset "SID-19 arias/uhlig FEVD" begin
-    rng = MersenneTwister(748)  # DGP-02: explicit rng
+    rng = Xoshiro(748)  # DGP-02: explicit rng
     m = estimate_var(randn(rng, 80, 2), 1)
     r = SVARRestrictions(2; signs=[sign_restriction(1, 1, :positive)])
-    fa = fevd(m, 5; method=:arias, restrictions=r, max_draws=20, rng=MersenneTwister(1))
+    fa = fevd(m, 5; method=:arias, restrictions=r, max_draws=20, rng=Xoshiro(1))
     @test fa isa FEVD
     @test size(fa.proportions) == (2, 2, 5)
-    fu = fevd(m, 5; method=:uhlig, restrictions=r, rng=MersenneTwister(2),
+    fu = fevd(m, 5; method=:uhlig, restrictions=r, rng=Xoshiro(2),
               n_starts=FAST ? 3 : 8, n_refine=1, max_iter_coarse=80, max_iter_fine=200)
     @test fu isa FEVD
     @test size(fu.proportions) == (2, 2, 5)

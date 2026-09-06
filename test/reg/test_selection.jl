@@ -13,14 +13,14 @@ using LinearAlgebra, Statistics, Random, DelimitedFiles
 import StatsAPI
 
 # =============================================================================
-# Deterministic DGPs (fixed-seed MersenneTwister — reproducible across groups)
+# Deterministic DGPs (fixed-seed Xoshiro — reproducible across groups)
 # =============================================================================
 
 # Strong-signal, near-orthogonal design for stepwise ≡ best-subset agreement.
 # QR-orthogonalising the regressors makes greedy forward/backward search reach
 # the global best-subset optimum (a classical guarantee for orthogonal designs).
 function _sel_dgp_orth(; n=120, k=8, seed=11, active=[2, 4, 6], b=3.0)
-    rng = MersenneTwister(seed)
+    rng = Xoshiro(seed)
     Q = Matrix(qr(randn(rng, n, k)).Q)[:, 1:k] .* sqrt(n)
     X = hcat(ones(n), Q)
     beta = zeros(k + 1); beta[1] = 1.0
@@ -42,7 +42,7 @@ function _sel_dgp_sparse(; n=200, k=20, seed=42, active=[2, 5, 8, 11, 14], b=1.5
         X = hcat(ones(size(d, 1)), d[:, 2:end])
         return (d[:, 1], X, active)
     end
-    rng = MersenneTwister(seed)
+    rng = Xoshiro(seed)
     X = hcat(ones(n), randn(rng, n, k))
     beta = zeros(k + 1); beta[1] = 0.5
     for a in active; beta[a] = b; end

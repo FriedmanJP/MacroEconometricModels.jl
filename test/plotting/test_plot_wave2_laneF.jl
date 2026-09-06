@@ -25,7 +25,7 @@ isdefined(Main, :check_plot) || include(joinpath(@__DIR__, "plot_test_helpers.jl
 # -----------------------------------------------------------------------------
 
 function _laneF_ct_ss(; I::Int=25, seed::Int=11, nan_c::Bool=false)
-    rng = MersenneTwister(seed)
+    rng = Xoshiro(seed)
     a = collect(range(0.0, 12.0; length=I))
     g = abs.(randn(rng, I, 2)) .+ 0.1
     da = a[2] - a[1]
@@ -79,7 +79,7 @@ function _laneF_ks(; agg::Symbol=:K)
 end
 
 _laneF_den_haan(; Tn::Int=60, T_burn::Int=10, nan::Bool=false) = begin
-    rng = MersenneTwister(7)
+    rng = Xoshiro(7)
     ref = 4.0 .+ 0.1 .* randn(rng, Tn)
     plm = 4.0 .+ 0.1 .* randn(rng, Tn)
     nan && (ref[Tn - 2] = NaN)

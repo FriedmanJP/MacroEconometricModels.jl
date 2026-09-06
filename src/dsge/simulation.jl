@@ -24,7 +24,7 @@ Returns `T_periods x n_endog` matrix of levels (steady state + deviations).
 
 # Keyword Arguments
 - `shock_draws`: `T_periods x n_shocks` matrix of pre-drawn shocks (default: `nothing`, draws from N(0,1))
-- `seed`: if given, owns the RNG (a fresh `MersenneTwister(seed)`); wins over `rng`
+- `seed`: if given, owns the RNG (a fresh `Xoshiro(seed)`); wins over `rng`
 - `rng`: random number generator (default: `Random.default_rng()`)
 """
 function simulate(sol::DSGESolution{T}, T_periods::Int;
@@ -307,7 +307,7 @@ function irf(sol::ProjectionSolution{T}, horizon::Int;
     for j in 1:n_eps
         irf_sum = zeros(T, horizon, n)
         for s in 1:n_sim
-            rep_rng = Random.MersenneTwister(hash((j, s, base_seed)))
+            rep_rng = Random.Xoshiro(hash((j, s, base_seed)))
             e = randn(rep_rng, T, horizon, n_eps)   # shared future shocks for this replication
 
             x_base = copy(ss[sol.state_indices])

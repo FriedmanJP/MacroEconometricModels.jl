@@ -84,7 +84,7 @@ end
 end
 
 @testset "Carter-Kohn FFBS: Q = 0 gives an exactly constant path at the GLS posterior" begin
-    rng = Random.MersenneTwister(5)
+    rng = Random.Xoshiro(5)
     T_eff, k = 60, 2
     b_true = [1.5, -0.8]
     Xt = [randn(rng, 1, k) for _ in 1:T_eff]
@@ -100,7 +100,7 @@ end
     # residue — and hence the jitter the square root injects — scales with the prior
     # variance (P0 = 1e6·I leaves ~4e-4 of drift, P0 = 100·I only ~2e-6).
     P0 = 100.0 * Matrix{Float64}(I, 2, 2)
-    path = _M._tvp_ffbs_rw(y, Xt, Rt, Q, zeros(2), P0, Random.MersenneTwister(7))
+    path = _M._tvp_ffbs_rw(y, Xt, Rt, Q, zeros(2), P0, Random.Xoshiro(7))
 
     # With Q = 0 the state cannot move: the backward gain G = P_{t|t}P_{t+1|t}^{-1} is the
     # identity and the conditional covariance vanishes, so every row equals the last.
@@ -118,13 +118,13 @@ end
     end
     gls = XtX \ Xty
     draws = reduce(hcat, [_M._tvp_ffbs_rw(y, Xt, Rt, Q, zeros(2), P0,
-                                          Random.MersenneTwister(100 + d))[1, :]
+                                          Random.Xoshiro(100 + d))[1, :]
                           for d in 1:400])
     @test vec(mean(draws; dims=2)) ≈ gls atol = 0.06
 end
 
 @testset "Carter-Kohn FFBS: large Q lets the state track the data" begin
-    rng = Random.MersenneTwister(9)
+    rng = Random.Xoshiro(9)
     T_eff = 80
     Xt = [ones(1, 1) for _ in 1:T_eff]
     Rt = [fill(0.01, 1, 1) for _ in 1:T_eff]
@@ -132,7 +132,7 @@ end
     y = reshape([b_path[t] + 0.1 * randn(rng) for t in 1:T_eff], T_eff, 1)
 
     path = _M._tvp_ffbs_rw(y, Xt, Rt, fill(1.0, 1, 1), [0.0], fill(1.0, 1, 1),
-                           Random.MersenneTwister(3))
+                           Random.Xoshiro(3))
     @test mean(path[1:35, 1]) < 1.0
     @test mean(path[45:end, 1]) > 4.0
 end
@@ -142,10 +142,10 @@ end
 # ─────────────────────────────────────────────────────────────────────────────
 
 @testset "constant-coefficient SV-BVAR matches OLS and the conjugate BVAR" begin
-    Y = _tvp_sim_const(Random.MersenneTwister(1), FAST ? 300 : 600)
+    Y = _tvp_sim_const(Random.Xoshiro(1), FAST ? 300 : 600)
     post = estimate_tvpvar(Y, 1; tvp=false, sv=true,
                            n_draws=FAST ? 120 : 300, n_burn=FAST ? 120 : 300,
-                           varnames=["y1", "y2"], rng=Random.MersenneTwister(11))
+                           varnames=["y1", "y2"], rng=Random.Xoshiro(11))
 
     @test post isa TVPVARPosterior{Float64}
     @test !post.tvp && post.sv
@@ -171,15 +171,15 @@ end
     @test A1_sv ≈ A1_ols atol = 0.05
     @test [B[1], B[4]] ≈ ols.B[1, :] atol = 0.05
 
-    bv = estimate_bvar(Yw, 1; n_draws=300, rng=Random.MersenneTwister(11))
+    bv = estimate_bvar(Yw, 1; n_draws=300, rng=Random.Xoshiro(11))
     Bb = dropdims(mean(bv.B_draws; dims=1); dims=1)
     @test A1_sv ≈ Matrix(Bb[2:3, :]') atol = 0.05
 end
 
 @testset "stochastic volatility tracks a known break" begin
-    Y = _tvp_sim_break(Random.MersenneTwister(2), FAST ? 200 : 300; scale=3.0)
+    Y = _tvp_sim_break(Random.Xoshiro(2), FAST ? 200 : 300; scale=3.0)
     post = estimate_tvpvar(Y, 1; n_draws=FAST ? 120 : 250, n_burn=FAST ? 120 : 250,
-                           varnames=["y1", "y2"], rng=Random.MersenneTwister(21))
+                           varnames=["y1", "y2"], rng=Random.Xoshiro(21))
     @test post.tvp && post.sv
 
     vol, qs = volatility_path(post)
@@ -208,9 +208,9 @@ end
 end
 
 @testset "sv=false freezes the volatilities" begin
-    Y = _tvp_sim_const(Random.MersenneTwister(2), 200)
+    Y = _tvp_sim_const(Random.Xoshiro(2), 200)
     post = estimate_tvpvar(Y, 1; tvp=true, sv=false, n_draws=60, n_burn=60,
-                           rng=Random.MersenneTwister(31))
+                           rng=Random.Xoshiro(31))
     @test !post.sv
     # Every draw keeps the training-sample volatility at every date
     for d in 1:size(post.H_draws, 1)
@@ -221,7 +221,7 @@ end
 
 @testset "drifting coefficients actually drift" begin
     # A coefficient break: the AR(1) persistence of y1 doubles at the midpoint
-    rng = Random.MersenneTwister(41)
+    rng = Random.Xoshiro(41)
     T_obs = 400
     Y = zeros(T_obs, 2)
     for t in 2:T_obs
@@ -230,7 +230,7 @@ end
         Y[t, 2] = 0.3 * Y[t-1, 2] + 0.2 * Y[t-1, 1] + 0.3 * randn(rng)
     end
     post = estimate_tvpvar(Y, 1; n_draws=FAST ? 100 : 250, n_burn=FAST ? 100 : 250,
-                           k_Q=0.05, rng=Random.MersenneTwister(43))
+                           k_Q=0.05, rng=Random.Xoshiro(43))
     B = dropdims(mean(post.B_draws; dims=1); dims=1)      # T_eff × k
     Te = post.T_eff
     a11_path = B[:, 2]                                    # equation 1, own first lag
@@ -242,9 +242,9 @@ end
 # ─────────────────────────────────────────────────────────────────────────────
 
 @testset "time-varying IRFs differ across dates and have usable bands" begin
-    Y = _tvp_sim_break(Random.MersenneTwister(2), FAST ? 200 : 300; scale=3.0)
+    Y = _tvp_sim_break(Random.Xoshiro(2), FAST ? 200 : 300; scale=3.0)
     post = estimate_tvpvar(Y, 1; n_draws=FAST ? 100 : 200, n_burn=FAST ? 100 : 200,
-                           varnames=["y1", "y2"], rng=Random.MersenneTwister(21))
+                           varnames=["y1", "y2"], rng=Random.Xoshiro(21))
 
     early = irf(post, 8; t=5, n_draws=100)
     late = irf(post, 8; t=post.T_eff, n_draws=100)
@@ -282,10 +282,10 @@ end
 # ─────────────────────────────────────────────────────────────────────────────
 
 @testset "reproducibility, validation and display" begin
-    Y = _tvp_sim_const(Random.MersenneTwister(2), 200)
+    Y = _tvp_sim_const(Random.Xoshiro(2), 200)
 
-    a = estimate_tvpvar(Y, 1; n_draws=40, n_burn=40, rng=Random.MersenneTwister(77))
-    b = estimate_tvpvar(Y, 1; n_draws=40, n_burn=40, rng=Random.MersenneTwister(77))
+    a = estimate_tvpvar(Y, 1; n_draws=40, n_burn=40, rng=Random.Xoshiro(77))
+    b = estimate_tvpvar(Y, 1; n_draws=40, n_burn=40, rng=Random.Xoshiro(77))
     @test a.B_draws == b.B_draws
     @test a.H_draws == b.H_draws
 
@@ -300,7 +300,7 @@ end
     @test _M.n_draws(a) == 40
 
     # thin keeps the requested number of draws
-    th = estimate_tvpvar(Y, 1; n_draws=20, n_burn=20, thin=2, rng=Random.MersenneTwister(7))
+    th = estimate_tvpvar(Y, 1; n_draws=20, n_burn=20, thin=2, rng=Random.Xoshiro(7))
     @test size(th.B_draws, 1) == 20
 
     @test_throws ArgumentError estimate_tvpvar(Y, 0)
@@ -318,7 +318,7 @@ end
     @test report(a) === nothing
 
     cs = estimate_tvpvar(Y, 1; tvp=false, n_draws=20, n_burn=20,
-                         rng=Random.MersenneTwister(5))
+                         rng=Random.Xoshiro(5))
     @test occursin("Cogley-Sargent", sprint(show, cs))
 end
 

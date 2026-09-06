@@ -11,10 +11,10 @@ using Statistics
 using Random
 
 @testset "Summary Tables Tests" begin
-    rng = MersenneTwister(7100)  # DGP-01: explicit rng
+    rng = Xoshiro(7100)  # DGP-01: explicit rng
 
     @testset "report(VARModel)" begin
-        rng = MersenneTwister(7101)  # DGP-01: explicit rng
+        rng = Xoshiro(7101)  # DGP-01: explicit rng
         Y = randn(rng, 100, 2)
         model = estimate_var(Y, 2)
 
@@ -26,7 +26,7 @@ using Random
     end
 
     @testset "report(VARModel) uses varnames" begin
-        rng = MersenneTwister(7102)  # DGP-01: explicit rng
+        rng = Xoshiro(7102)  # DGP-01: explicit rng
         Y = randn(rng, 100, 3)
         model = estimate_var(Y, 2; varnames=["GDP", "INF", "FFR"])
         # IOBuffer, not redirect_stdout(): Windows threaded CI races the global
@@ -45,7 +45,7 @@ using Random
     end
 
     @testset "report(VECMModel) uses varnames" begin
-        rng = MersenneTwister(7103)  # DGP-01: explicit rng
+        rng = Xoshiro(7103)  # DGP-01: explicit rng
         # Rank-1 cointegrated truth (DGP-02 #791) — not I(0) white noise.
         Y = dgp_vecm(rng; T=200).Y
         vecm = estimate_vecm(Y, 2; varnames=["GDP", "INF", "FFR"])
@@ -60,7 +60,7 @@ using Random
     end
 
     @testset "show(BVARPosterior) uses varnames" begin
-        rng = MersenneTwister(7104)  # DGP-01: explicit rng
+        rng = Xoshiro(7104)  # DGP-01: explicit rng
         Y = randn(rng, 100, 3)
         post = estimate_bvar(Y, 2; n_draws=100, varnames=["GDP", "INF", "FFR"])
         io = IOBuffer()
@@ -73,7 +73,7 @@ using Random
     end
 
     @testset "IRF table and print_table" begin
-        rng = MersenneTwister(7105)  # DGP-01: explicit rng
+        rng = Xoshiro(7105)  # DGP-01: explicit rng
         Y = randn(rng, 100, 2)
         model = estimate_var(Y, 2)
 
@@ -112,7 +112,7 @@ using Random
     end
 
     @testset "FEVD table and print_table" begin
-        rng = MersenneTwister(7106)  # DGP-01: explicit rng
+        rng = Xoshiro(7106)  # DGP-01: explicit rng
         Y = randn(rng, 100, 2)
         model = estimate_var(Y, 2)
 
@@ -140,7 +140,7 @@ using Random
     end
 
     @testset "HD table and print_table" begin
-        rng = MersenneTwister(7107)  # DGP-01: explicit rng
+        rng = Xoshiro(7107)  # DGP-01: explicit rng
         Y = randn(rng, 100, 2)
         model = estimate_var(Y, 2)
 
@@ -168,7 +168,7 @@ using Random
     end
 
     @testset "report() for all types" begin
-        rng = MersenneTwister(7108)  # DGP-01: explicit rng
+        rng = Xoshiro(7108)  # DGP-01: explicit rng
         Y = randn(rng, 100, 2)
         model = estimate_var(Y, 2)
 
@@ -187,7 +187,7 @@ using Random
     end
 
     @testset "_select_horizons" begin
-        rng = MersenneTwister(7109)  # DGP-01: explicit rng
+        rng = Xoshiro(7109)  # DGP-01: explicit rng
         @test MacroEconometricModels._select_horizons(3) == [1, 2, 3]
         @test MacroEconometricModels._select_horizons(5) == [1, 2, 3, 4, 5]
         @test MacroEconometricModels._select_horizons(10) == [1, 4, 8, 10]
@@ -200,7 +200,7 @@ using Random
     # =================================================================
 
     @testset "point_estimate, has_uncertainty, uncertainty_bounds" begin
-        rng = MersenneTwister(7110)  # DGP-01: explicit rng
+        rng = Xoshiro(7110)  # DGP-01: explicit rng
         Y = randn(rng, 100, 2)
         model = estimate_var(Y, 2)
 
@@ -241,7 +241,7 @@ using Random
     # =================================================================
 
     @testset "BayesianImpulseResponse" begin
-        rng = MersenneTwister(7111)  # DGP-01: explicit rng
+        rng = Xoshiro(7111)  # DGP-01: explicit rng
         # Construct a synthetic BayesianImpulseResponse
         H, n = 8, 2
         nq = 3
@@ -310,7 +310,7 @@ using Random
     # =================================================================
 
     @testset "BayesianFEVD" begin
-        rng = MersenneTwister(7112)  # DGP-01: explicit rng
+        rng = Xoshiro(7112)  # DGP-01: explicit rng
         # Construct a synthetic BayesianFEVD — axis order (variable, shock, horizon) (#527)
         H, n = 8, 2
         nq = 3
@@ -375,7 +375,7 @@ using Random
     # =================================================================
 
     @testset "BayesianHistoricalDecomposition report and table" begin
-        rng = MersenneTwister(7113)  # DGP-01: explicit rng
+        rng = Xoshiro(7113)  # DGP-01: explicit rng
         # Construct a synthetic BayesianHistoricalDecomposition
         T_eff, n = 50, 2
         nq = 3
@@ -447,7 +447,7 @@ using Random
     # =================================================================
 
     @testset "report() coverage for models and results" begin
-        rng = MersenneTwister(7114)  # DGP-01: explicit rng
+        rng = Xoshiro(7114)  # DGP-01: explicit rng
         # --- ARIMA models ---
         y = randn(rng, 200)
         ar_model = estimate_ar(y, 2)
@@ -529,7 +529,7 @@ using Random
     # =================================================================
 
     @testset "table() for VolatilityForecast" begin
-        rng = MersenneTwister(7115)  # DGP-01: explicit rng
+        rng = Xoshiro(7115)  # DGP-01: explicit rng
         arch_m = estimate_arch(randn(rng, 200), 1)
         vf = forecast(arch_m, 5)
         t = table(vf)
@@ -542,7 +542,7 @@ using Random
     end
 
     @testset "print_table() for VolatilityForecast" begin
-        rng = MersenneTwister(7116)  # DGP-01: explicit rng
+        rng = Xoshiro(7116)  # DGP-01: explicit rng
         arch_m = estimate_arch(randn(rng, 200), 1)
         vf = forecast(arch_m, 5)
         io = IOBuffer()
@@ -553,7 +553,7 @@ using Random
     end
 
     @testset "table() for ARIMAForecast" begin
-        rng = MersenneTwister(7117)  # DGP-01: explicit rng
+        rng = Xoshiro(7117)  # DGP-01: explicit rng
         y = randn(rng, 200)
         ar_m = estimate_ar(y, 2)
         af = forecast(ar_m, 5)
@@ -567,7 +567,7 @@ using Random
     end
 
     @testset "print_table() for ARIMAForecast" begin
-        rng = MersenneTwister(7118)  # DGP-01: explicit rng
+        rng = Xoshiro(7118)  # DGP-01: explicit rng
         y = randn(rng, 200)
         ar_m = estimate_ar(y, 2)
         af = forecast(ar_m, 5)
@@ -579,7 +579,7 @@ using Random
     end
 
     @testset "table() for FactorForecast" begin
-        rng = MersenneTwister(7119)  # DGP-01: explicit rng
+        rng = Xoshiro(7119)  # DGP-01: explicit rng
         X = randn(rng, 100, 10)
         fm = estimate_factors(X, 3)
         fc = forecast(fm, 5)
@@ -595,7 +595,7 @@ using Random
     end
 
     @testset "print_table() for FactorForecast" begin
-        rng = MersenneTwister(7120)  # DGP-01: explicit rng
+        rng = Xoshiro(7120)  # DGP-01: explicit rng
         X = randn(rng, 100, 10)
         fm = estimate_factors(X, 3)
         fc = forecast(fm, 5)
@@ -612,7 +612,7 @@ using Random
     end
 
     @testset "table() for LPImpulseResponse" begin
-        rng = MersenneTwister(7121)  # DGP-01: explicit rng
+        rng = Xoshiro(7121)  # DGP-01: explicit rng
         Y_lp = randn(rng, 100, 3)
         lp_m = estimate_lp(Y_lp, 1, 8)
         lp_irf_r = lp_irf(lp_m)
@@ -627,7 +627,7 @@ using Random
     end
 
     @testset "print_table() for LPImpulseResponse" begin
-        rng = MersenneTwister(7122)  # DGP-01: explicit rng
+        rng = Xoshiro(7122)  # DGP-01: explicit rng
         Y_lp = randn(rng, 100, 3)
         lp_m = estimate_lp(Y_lp, 1, 8)
         lp_irf_r = lp_irf(lp_m)
@@ -642,7 +642,7 @@ using Random
     # refs() Returns String (Issue #16)
     # =================================================================
     @testset "refs() prints to stdout (#530)" begin
-        rng = MersenneTwister(7123)  # DGP-01: explicit rng
+        rng = Xoshiro(7123)  # DGP-01: explicit rng
         Y = randn(rng, 100, 3)
         model = estimate_var(Y, 2)
 
@@ -670,7 +670,7 @@ using Random
     # report() for VECM
     # =================================================================
     @testset "report(VECMModel)" begin
-        rng = MersenneTwister(7124)  # DGP-01: explicit rng
+        rng = Xoshiro(7124)  # DGP-01: explicit rng
         # Rank-1 cointegrated truth (DGP-02 #791) — not independent random
         # walks (rank 1 on those is a misspecification).
         Y = dgp_vecm(rng; T=150).Y
@@ -685,7 +685,7 @@ using Random
     # report() for all 5 filter types
     # =================================================================
     @testset "report() for filter types" begin
-        rng = MersenneTwister(7125)  # DGP-01: explicit rng
+        rng = Xoshiro(7125)  # DGP-01: explicit rng
         y = cumsum(randn(rng, 200))
         redirect_stdout(devnull) do
             report(hp_filter(y))
@@ -701,7 +701,7 @@ using Random
     # report() for VARForecast and BVARForecast
     # =================================================================
     @testset "report() for VARForecast and BVARForecast" begin
-        rng = MersenneTwister(7126)  # DGP-01: explicit rng
+        rng = Xoshiro(7126)  # DGP-01: explicit rng
         Y = randn(rng, 100, 3)
         m = estimate_var(Y, 2)
         fc = forecast(m, 5)
@@ -722,7 +722,7 @@ using Random
     # report() for LP variants
     # =================================================================
     @testset "report() for LP variants" begin
-        rng = MersenneTwister(7127)  # DGP-01: explicit rng
+        rng = Xoshiro(7127)  # DGP-01: explicit rng
         Y = randn(rng, 100, 3)
 
         # LPIVModel
@@ -762,7 +762,7 @@ using Random
     # report() for StructuralLP, LPForecast, LPFEVD
     # =================================================================
     @testset "show/report for StructuralLP, LPForecast, LPFEVD" begin
-        rng = MersenneTwister(7128)  # DGP-01: explicit rng
+        rng = Xoshiro(7128)  # DGP-01: explicit rng
         Y = randn(rng, 100, 3)
         slp = structural_lp(Y, 8; method=:cholesky, lags=2)
         # StructuralLP has show() but no report() — use show() directly
@@ -789,7 +789,7 @@ using Random
     # show() for LP model types
     # =================================================================
     @testset "show() for LP model types" begin
-        rng = MersenneTwister(7129)  # DGP-01: explicit rng
+        rng = Xoshiro(7129)  # DGP-01: explicit rng
         Y = randn(rng, 100, 3)
 
         # LPModel
@@ -837,7 +837,7 @@ using Random
     # show() for supporting types
     # =================================================================
     @testset "show() for supporting types" begin
-        rng = MersenneTwister(7130)  # DGP-01: explicit rng
+        rng = Xoshiro(7130)  # DGP-01: explicit rng
         # ZeroRestriction
         zr = ZeroRestriction(1, 2, 0)
         io = IOBuffer()
@@ -905,7 +905,7 @@ using Random
     # show() for BSplineBasis, StateTransition, PropensityScoreConfig
     # =================================================================
     @testset "show() for BSplineBasis, StateTransition, PropensityScoreConfig" begin
-        rng = MersenneTwister(7131)  # DGP-01: explicit rng
+        rng = Xoshiro(7131)  # DGP-01: explicit rng
         Y = randn(rng, 100, 3)
 
         # BSplineBasis - from smooth LP
@@ -937,7 +937,7 @@ using Random
     # refs() comprehensive format and dispatch
     # =================================================================
     @testset "refs() comprehensive format and dispatch" begin
-        rng = MersenneTwister(7132)  # DGP-01: explicit rng
+        rng = Xoshiro(7132)  # DGP-01: explicit rng
         # Symbol dispatch
         r = sprint(io -> refs(io, :johansen))
         @test r isa String
@@ -1000,7 +1000,7 @@ using Random
     # _delatex() Unicode replacements
     # =================================================================
     @testset "_delatex() Unicode replacements" begin
-        rng = MersenneTwister(7133)  # DGP-01: explicit rng
+        rng = Xoshiro(7133)  # DGP-01: explicit rng
         @test MacroEconometricModels._delatex("L\\\"utkepohl") == "Lütkepohl"
         @test MacroEconometricModels._delatex("Jord\\'e") == "Jordé"
         @test MacroEconometricModels._delatex("em---dash") == "em\u2014dash"
@@ -1013,7 +1013,7 @@ using Random
     # Nowcast show() and report()
     # =================================================================
     @testset "Nowcast show() and report()" begin
-        rng = MersenneTwister(7134)  # DGP-01: explicit rng
+        rng = Xoshiro(7134)  # DGP-01: explicit rng
         nM = 4; nQ = 1
         Y_nc = randn(rng, 100, nM + nQ)
         Y_nc[end, end] = NaN
@@ -1060,7 +1060,7 @@ using Random
     # show() and print_table() for StructuralLP
     # =================================================================
     @testset "show() and print_table() for StructuralLP" begin
-        rng = MersenneTwister(7135)  # DGP-01: explicit rng
+        rng = Xoshiro(7135)  # DGP-01: explicit rng
         Y = randn(rng, 100, 3)
         slp = structural_lp(Y, 8; method=:cholesky, lags=2)
         io = IOBuffer()
@@ -1079,7 +1079,7 @@ using Random
     # show() and print_table() for LPForecast
     # =================================================================
     @testset "show() and print_table() for LPForecast" begin
-        rng = MersenneTwister(7136)  # DGP-01: explicit rng
+        rng = Xoshiro(7136)  # DGP-01: explicit rng
         Y = randn(rng, 100, 3)
         lp = estimate_lp(Y, 1, 8; lags=2)
         shock_path = zeros(8); shock_path[1] = 1.0
@@ -1099,7 +1099,7 @@ using Random
     # show() and print_table() for LPFEVD
     # =================================================================
     @testset "show() and print_table() for LPFEVD" begin
-        rng = MersenneTwister(7137)  # DGP-01: explicit rng
+        rng = Xoshiro(7137)  # DGP-01: explicit rng
         Y = randn(rng, 100, 3)
         slp = structural_lp(Y, 8; method=:cholesky, lags=2)
         f = lp_fevd(slp, 8; n_boot=0)
@@ -1126,7 +1126,7 @@ using Random
     # show() for AriasSVARResult and UhligSVARResult
     # =================================================================
     @testset "show() for AriasSVARResult and UhligSVARResult" begin
-        rng = MersenneTwister(7138)  # DGP-01: explicit rng
+        rng = Xoshiro(7138)  # DGP-01: explicit rng
         Y = randn(rng, 100, 3)
         m = estimate_var(Y, 2)
 
@@ -1159,7 +1159,7 @@ using Random
     # table() for BayesianFEVD with stat=1
     # =================================================================
     @testset "table() for BayesianFEVD quantile stat" begin
-        rng = MersenneTwister(7139)  # DGP-01: explicit rng
+        rng = Xoshiro(7139)  # DGP-01: explicit rng
         H, n = 8, 2
         nq = 3
         quantiles_arr = abs.(randn(rng, n, n, H, nq))
@@ -1176,7 +1176,7 @@ using Random
     end
 
     @testset "report() for PVAR types" begin
-        rng = MersenneTwister(7140)  # DGP-01: explicit rng
+        rng = Xoshiro(7140)  # DGP-01: explicit rng
         using DataFrames
         df = DataFrame(
             id = repeat(1:10, inner=20),
@@ -1194,7 +1194,7 @@ using Random
     end
 
     @testset "report() for DiD types" begin
-        rng = MersenneTwister(7141)  # DGP-01: explicit rng
+        rng = Xoshiro(7141)  # DGP-01: explicit rng
         using DataFrames
         n_units, n_periods = 40, 10
         df = DataFrame(
@@ -1213,12 +1213,12 @@ using Random
     end
 
     @testset "SID-24 refs and SignIdentifiedSet report" begin
-        rng = MersenneTwister(7142)  # DGP-01: explicit rng
+        rng = Xoshiro(7142)  # DGP-01: explicit rng
         Random.seed!(753)
         m = estimate_var(randn(rng, 150, 2), 1)
         chk(irf) = irf[1, 1, 1] > 0
         buf = IOBuffer()
-        report(buf, identify_sign(m, 5, chk; store_all=true, max_draws=200, rng=MersenneTwister(753)))
+        report(buf, identify_sign(m, 5, chk; store_all=true, max_draws=200, rng=Xoshiro(753)))
         txt = String(take!(buf))
         @test occursin("Accepted", txt) || occursin("sign", lowercase(txt))
         rfast = sprint(io -> refs(io, identify_fastica(m); format=:plain))
@@ -1230,14 +1230,14 @@ using Random
     end
 
     @testset "SID-24 statistical report ends with B₀ _coef_table" begin
-        rng = MersenneTwister(7143)  # DGP-01: explicit rng
+        rng = Xoshiro(7143)  # DGP-01: explicit rng
         Random.seed!(753)
         m = estimate_var(randn(rng, 120, 2), 1)
         statistical = (
             identify_fastica(m),
             identify_student_t(m; max_iter=40),
             identify_gmm_moments(m; moments=:coskewness, n_starts=1,
-                                 rng=MersenneTwister(753)),
+                                 rng=Xoshiro(753)),
         )
         for r in statistical
             @test hasmethod(report, Tuple{IO, typeof(r)})

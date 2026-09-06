@@ -467,7 +467,7 @@ X should NOT include an intercept column -- it is absorbed into cutpoints.
 # Examples
 ```julia
 using MacroEconometricModels, Random, Distributions
-rng = MersenneTwister(42)
+rng = Xoshiro(42)
 n = 1000
 X = randn(rng, n, 2)
 xb = X * [1.0, -0.5]
@@ -510,7 +510,7 @@ Same as `estimate_ologit` (including `cov_type ∈ (:ols, :hc0, :hc1, :cluster)`
 # Examples
 ```julia
 using MacroEconometricModels, Random, Distributions
-rng = MersenneTwister(42)
+rng = Xoshiro(42)
 n = 1000
 X = randn(rng, n, 2)
 xb = X * [0.8, -0.5]

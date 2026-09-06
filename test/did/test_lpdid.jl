@@ -22,7 +22,7 @@ Create a clean staggered-adoption panel for LP-DiD tests.
 """
 function _make_lpdid_panel(; n_units=60, n_periods=30, treat_effect=2.0,
                               treat_period=15, n_treated=20, seed=42)
-    rng = Random.MersenneTwister(seed)
+    rng = Random.Xoshiro(seed)
     N_obs = n_units * n_periods
     data = Matrix{Float64}(undef, N_obs, 2)  # y, treat
     group_id = Vector{Int}(undef, N_obs)
@@ -57,7 +57,7 @@ end
 Create a staggered panel with multiple cohorts (for more complex tests).
 """
 function _make_lpdid_staggered(; n_units=60, n_periods=30, seed=42)
-    rng = Random.MersenneTwister(seed)
+    rng = Random.Xoshiro(seed)
     N_obs = n_units * n_periods
     data = Matrix{Float64}(undef, N_obs, 2)  # y, treat
     group_id = Vector{Int}(undef, N_obs)
@@ -346,7 +346,7 @@ end
     # Timing column (treat_time as year values)
     # =========================================================================
     @testset "Timing column treatment" begin
-        rng = Random.MersenneTwister(112)
+        rng = Random.Xoshiro(112)
         n_units, n_periods = 40, 25
         N_obs = n_units * n_periods
         data = Matrix{Float64}(undef, N_obs, 2)

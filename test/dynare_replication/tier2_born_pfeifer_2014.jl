@@ -191,7 +191,7 @@ try
 
     # Pruned simulation at order=2
     println("\n  Pruned simulation (order=2, T=500):")
-    sim2 = simulate(sol2, 500; rng=MersenneTwister(42))
+    sim2 = simulate(sol2, 500; rng=Xoshiro(42))
     println("  Simulation size: ", size(sim2))
 
     # Filter to original 19 variables

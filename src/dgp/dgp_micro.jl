@@ -7,9 +7,11 @@
 # DGP-01 (#790) / DGP-14 (#803) / DGP-15 (#804) / DGP-16 (#805): micro
 # simulators — cross-section (14 kinds), linear/nonlinear panel with
 # correlated effects, and staggered difference-in-differences.
+#
+# NOTE: uses the shared `_logistic` from src/garch/figarch.jl (same module);
+# do not redefine it here — duplicate definitions fail precompilation
+# (Julia ≥ 1.12 errors on method overwriting during precompile).
 
-
-_logistic(x) = 1 / (1 + exp(-x))
 
 """
     dgp_cross_section(rng; kind, beta, n, hetero, cluster_rho, G, endog_rho,

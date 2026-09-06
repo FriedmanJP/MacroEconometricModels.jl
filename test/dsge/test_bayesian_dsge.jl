@@ -87,7 +87,7 @@ end
     n_obs = 2
     n_shocks = 2
 
-    rng = Random.MersenneTwister(1409)
+    rng = Random.Xoshiro(1409)
     G1 = 0.5 * Matrix{Float64}(I, n_states, n_states)
     impact = randn(rng, n_states, n_shocks)
     Z = randn(rng, n_obs, n_states)
@@ -114,20 +114,20 @@ end
 @testset "DSGEStateSpace validation" begin
     # Non-square G1
     @test_throws AssertionError MacroEconometricModels.DSGEStateSpace{Float64}(
-        randn(Random.MersenneTwister(1410), 3, 4), randn(Random.MersenneTwister(1411), 3, 2),
-        randn(Random.MersenneTwister(1412), 2, 3), zeros(2),
+        randn(Random.Xoshiro(1410), 3, 4), randn(Random.Xoshiro(1411), 3, 2),
+        randn(Random.Xoshiro(1412), 2, 3), zeros(2),
         0.01 * Matrix{Float64}(I(2)), Matrix{Float64}(I(2))
     )
     # Z columns don't match G1
     @test_throws AssertionError MacroEconometricModels.DSGEStateSpace{Float64}(
-        0.5 * Matrix{Float64}(I(3)), randn(Random.MersenneTwister(1413), 3, 2),
-        randn(Random.MersenneTwister(1414), 2, 4), zeros(2),
+        0.5 * Matrix{Float64}(I(3)), randn(Random.Xoshiro(1413), 3, 2),
+        randn(Random.Xoshiro(1414), 2, 4), zeros(2),
         0.01 * Matrix{Float64}(I(2)), Matrix{Float64}(I(2))
     )
     # d length mismatch
     @test_throws AssertionError MacroEconometricModels.DSGEStateSpace{Float64}(
-        0.5 * Matrix{Float64}(I(3)), randn(Random.MersenneTwister(1415), 3, 2),
-        randn(Random.MersenneTwister(1416), 2, 3), zeros(3),
+        0.5 * Matrix{Float64}(I(3)), randn(Random.Xoshiro(1415), 3, 2),
+        randn(Random.Xoshiro(1416), 2, 3), zeros(3),
         0.01 * Matrix{Float64}(I(2)), Matrix{Float64}(I(2))
     )
 end
@@ -138,7 +138,7 @@ end
     nv = nx + 1  # states + shocks
     n_obs = 2
 
-    rng = Random.MersenneTwister(1417)
+    rng = Random.Xoshiro(1417)
     hx = randn(rng, nx, nv)
     gx = randn(rng, ny, nv)
     eta = zeros(nv, 1)
@@ -198,11 +198,11 @@ end
 @testset "NonlinearStateSpace validation" begin
     # Invalid order
     @test_throws AssertionError MacroEconometricModels.NonlinearStateSpace{Float64}(
-        randn(Random.MersenneTwister(1418), 2, 3), randn(Random.MersenneTwister(1419), 1, 3),
+        randn(Random.Xoshiro(1418), 2, 3), randn(Random.Xoshiro(1419), 1, 3),
         zeros(3, 1), ones(3), [1, 2], [3], 4,
         nothing, nothing, nothing, nothing,
         nothing, nothing, nothing, nothing, nothing, nothing,
-        randn(Random.MersenneTwister(1420), 2, 1), zeros(2), 0.01 * Matrix{Float64}(I(2))
+        randn(Random.Xoshiro(1420), 2, 1), zeros(2), 0.01 * Matrix{Float64}(I(2))
     )
 end
 
@@ -251,7 +251,7 @@ end
     Q = reshape([1.0], nsh, nsh)
     ss = MacroEconometricModels.DSGEStateSpace{Float64}(G1, impact, Z, d, H, Q)
     T_obs = 50
-    data = let rng = MersenneTwister(1), x = zeros(ns), dat = zeros(no, T_obs), Hc = sqrt(H[1, 1])
+    data = let rng = Xoshiro(1), x = zeros(ns), dat = zeros(no, T_obs), Hc = sqrt(H[1, 1])
         for t in 1:T_obs
             x = G1 * x + impact * randn(rng, nsh)
             dat[:, t] = Z * x .+ d .+ Hc * randn(rng, no)
@@ -265,7 +265,7 @@ end
         for s in 1:50
             ws = MacroEconometricModels._allocate_pf_workspace(Float64, ns, no, nsh, N)
             push!(lls, MacroEconometricModels._bootstrap_particle_filter!(
-                ws, ss, data, T_obs; threshold=thr, rng=MersenneTwister(1000 + s)))
+                ws, ss, data, T_obs; threshold=thr, rng=Xoshiro(1000 + s)))
         end
         @test isapprox(mean(lls), ll_kalman; rtol=0.05)
     end
@@ -361,7 +361,7 @@ end
     N_smc = 200
 
     state = MacroEconometricModels.SMCState{Float64}(
-        randn(Random.MersenneTwister(1421), n_params, N_smc),
+        randn(Random.Xoshiro(1421), n_params, N_smc),
         zeros(N_smc),
         zeros(N_smc),
         zeros(N_smc),
@@ -495,11 +495,11 @@ end
 
         # (d) Entry-point singularity check fires before sampling.
         spec1c = compute_steady_state(spec1)
-        data1 = simulate(solve(spec1c; method=:gensys), 50; rng=Random.MersenneTwister(1))
+        data1 = simulate(solve(spec1c; method=:gensys), 50; rng=Random.Xoshiro(1))
         @test_throws MacroEconometricModels.StochasticSingularityError estimate_dsge_bayes(
             spec1c, data1, [0.5]; priors=Dict(:rho => Beta(2, 2)),
             method=:smc, observables=[:y, :k], measurement_error=nothing,
-            n_smc=20, rng=Random.MersenneTwister(0))
+            n_smc=20, rng=Random.Xoshiro(0))
     end
 
     # (e) :auto scales per-observable to √(0.1·var) and warns (outside suppression).
@@ -540,7 +540,7 @@ end
 end
 
 @testset "Kalman loglikelihood: AR(1)" begin
-    rng = Random.MersenneTwister(42)
+    rng = Random.Xoshiro(42)
 
     # AR(1): y_t = rho * y_{t-1} + eps_t
     rho_true = 0.8
@@ -592,7 +592,7 @@ end
     H = 1e-6 * Matrix{Float64}(I, 2, 2)
     Q = Matrix{Float64}(I, 2, 2)
 
-    x = zeros(2, 200); rng = Random.MersenneTwister(20240709)
+    x = zeros(2, 200); rng = Random.Xoshiro(20240709)
     for t in 2:200; x[:, t] = G1 * x[:, t-1] + impact * randn(rng, 2); end
     data = x
 
@@ -619,7 +619,7 @@ end
     impact_bad = zeros(2, 1)         # 2 rows vs n_states=1 ⇒ solve_lyapunov throws
     Z = ones(1, 1); d = zeros(1); H = fill(1e-6, 1, 1); Q = ones(1, 1)
     ss_bad = MacroEconometricModels.DSGEStateSpace{Float64}(G1, impact_bad, Z, d, H, Q)
-    data = reshape(randn(Random.MersenneTwister(1), 20), 1, 20)
+    data = reshape(randn(Random.Xoshiro(1), 20), 1, 20)
     # Old code swallowed this into P0=10I and returned a finite ll; now it propagates.
     @test_throws ArgumentError _suppress_warnings() do
         MacroEconometricModels._kalman_loglikelihood(ss_bad, data)
@@ -627,7 +627,7 @@ end
 end
 
 @testset "Kalman loglikelihood: 2D with missing data" begin
-    rng = Random.MersenneTwister(123)
+    rng = Random.Xoshiro(123)
 
     # 2D VAR(1): x_t = G1 * x_{t-1} + eps_t
     G1 = [0.7 0.1; 0.0 0.5]
@@ -675,7 +675,7 @@ end
 # ─────────────────────────────────────────────────────────────────────────────
 
 @testset "Linear transition kernel" begin
-    rng = Random.MersenneTwister(101)
+    rng = Random.Xoshiro(101)
     n_states = 3
     N = 100
     n_shocks = 2
@@ -698,7 +698,7 @@ end
 end
 
 @testset "Log-weight computation" begin
-    rng = Random.MersenneTwister(102)
+    rng = Random.Xoshiro(102)
     n_obs = 2
     N = 50
     n_states = 3
@@ -729,7 +729,7 @@ end
 end
 
 @testset "Systematic resampling" begin
-    # (seed!(103) removed: _systematic_resample! below takes an explicit MT(42))
+    # (seed!(103) removed: _systematic_resample! below takes an explicit Xoshiro(42))
     N = 1000
 
     # Concentrated weights: [0.5, 0.3, 0.2, 0, 0, ...]
@@ -742,7 +742,7 @@ end
     cumweights = zeros(N)
 
     MacroEconometricModels._systematic_resample!(ancestors, weights, cumweights, N,
-                                                  Random.MersenneTwister(42))
+                                                  Random.Xoshiro(42))
 
     # Count how many times each original particle is selected
     counts = zeros(Int, N)
@@ -785,7 +785,7 @@ end
 end
 
 @testset "Kronecker buffer fill (2nd-order)" begin
-    rng = Random.MersenneTwister(104)
+    rng = Random.Xoshiro(104)
     nv = 3
     N = 20
     V = randn(rng, nv, N)
@@ -801,7 +801,7 @@ end
 end
 
 @testset "Kronecker buffer fill (3rd-order)" begin
-    rng = Random.MersenneTwister(105)
+    rng = Random.Xoshiro(105)
     nv = 2
     N = 10
     V = randn(rng, nv, N)
@@ -835,7 +835,7 @@ end
 end
 
 @testset "Bootstrap particle filter: AR(1)" begin
-    rng = Random.MersenneTwister(200)
+    rng = Random.Xoshiro(200)
 
     # AR(1): y_t = rho * y_{t-1} + sigma * eps_t,  observed with measurement error
     rho = 0.8
@@ -875,7 +875,7 @@ end
     for r in 1:n_runs
         ws = MacroEconometricModels._allocate_pf_workspace(Float64, 1, 1, 1, N_particles)
         ll_pf_runs[r] = MacroEconometricModels._bootstrap_particle_filter!(
-            ws, ss, data, T_sim; rng=Random.MersenneTwister(r * 1000))
+            ws, ss, data, T_sim; rng=Random.Xoshiro(r * 1000))
     end
 
     ll_pf_mean = mean(ll_pf_runs)
@@ -891,7 +891,7 @@ end
 
 
 @testset "Conditional SMC" begin
-    rng = Random.MersenneTwister(400)
+    rng = Random.Xoshiro(400)
 
     rho = 0.8
     sigma_eps = 0.5
@@ -923,14 +923,14 @@ end
     ws = MacroEconometricModels._allocate_pf_workspace(Float64, 1, 1, 1, N_particles;
                                                         T_obs=T_sim)
     ll_init = MacroEconometricModels._bootstrap_particle_filter!(
-        ws, ss, data, T_sim; rng=Random.MersenneTwister(500), store_trajectory=true)
+        ws, ss, data, T_sim; rng=Random.Xoshiro(500), store_trajectory=true)
 
     @test isfinite(ll_init)
     @test ws.reference_trajectory !== nothing
 
     # CSMC run
     ll_csmc = MacroEconometricModels._conditional_smc!(
-        ws, ss, data, T_sim; rng=Random.MersenneTwister(600))
+        ws, ss, data, T_sim; rng=Random.Xoshiro(600))
 
     @test isfinite(ll_csmc)
     @test ll_csmc < 0.0  # log-likelihood should be negative
@@ -963,7 +963,7 @@ end
 end
 
 @testset "Resample particles" begin
-    rng = Random.MersenneTwister(106)
+    rng = Random.Xoshiro(106)
     n_states = 3
     N = 10
 
@@ -992,7 +992,7 @@ end
     N = 1000
     ws = MacroEconometricModels._allocate_pf_workspace(Float64, 2, 2, 2, N)
 
-    MacroEconometricModels._pf_initialize_stationary!(ws, ss; rng=Random.MersenneTwister(42))
+    MacroEconometricModels._pf_initialize_stationary!(ws, ss; rng=Random.Xoshiro(42))
 
     # Particles should be drawn from N(0, P0) where P0 = solve_lyapunov(G1, impact)
     # Check that sample covariance is roughly correct
@@ -1012,7 +1012,7 @@ end
 
 @testset "Adaptive tempering bisection" begin
     N = 100
-    log_liks = randn(Random.MersenneTwister(123), N)
+    log_liks = randn(Random.Xoshiro(123), N)
     log_weights = fill(-log(N), N)          # uniform incoming weights (5-arg signature, #133)
     phi_old = 0.0
     ess_target = 0.5
@@ -1063,7 +1063,7 @@ end
     spec = compute_steady_state(spec)
 
     sol = solve(spec; method=:gensys)
-    data_mat = simulate(sol, 100; rng=Random.MersenneTwister(42))'  # n_obs × T
+    data_mat = simulate(sol, 100; rng=Random.Xoshiro(42))'  # n_obs × T
 
     ll_fn = MacroEconometricModels._build_likelihood_fn(spec, [:ρ], data_mat,
         [:y], nothing, :gensys, NamedTuple())
@@ -1090,7 +1090,7 @@ end
     end
     spec = compute_steady_state(spec)
     sol = solve(spec; method=:gensys)
-    good = simulate(sol, 100; rng=Random.MersenneTwister(42))'   # 1×100
+    good = simulate(sol, 100; rng=Random.Xoshiro(42))'   # 1×100
 
     # (a) A genuine bug (dimension mismatch: 2-row data vs 1 observable) PROPAGATES
     #     rather than being swallowed to -Inf.
@@ -1121,12 +1121,12 @@ end
     end
     spec = compute_steady_state(spec)
     sol = solve(spec; method=:gensys)
-    data = simulate(sol, 200; rng=Random.MersenneTwister(7))'
+    data = simulate(sol, 200; rng=Random.Xoshiro(7))'
     # Uniform(0,1.4) prior ⇒ ~29% of particles are explosive (ρ>1) ⇒ many failed evals.
     priors = Dict(:ρ => Uniform(0.0, 1.4))
     result = estimate_dsge_bayes(spec, data, [0.5];
         priors=priors, method=:smc, observables=[:y],
-        n_smc=200, n_mh_steps=1, rng=Random.MersenneTwister(123))
+        n_smc=200, n_mh_steps=1, rng=Random.Xoshiro(123))
     @test result.n_lik_evals > 0
     @test result.n_failed_draws > 0
     @test occursin("Failed lik. evals", sprint(show, result))
@@ -1154,14 +1154,14 @@ end
     post = BayesianDSGE{Float64}(td, zeros(n), [:ρ], prior, 0.0, :smc, 0.5,
         Float64[], Float64[], spec, sol, ss)   # 12-arg compat ctor
     Y = @test_warn r"dropped" posterior_predictive(post, 30; T_periods=25,
-        rng=Random.MersenneTwister(9))
+        rng=Random.Xoshiro(9))
     @test size(Y, 1) < 30                                    # dropped, not zero-filled to 30
     @test all(any(!iszero, Y[s, :, :]) for s in 1:size(Y, 1))   # no zero path survived
 end
 
 @testset "SMC with Kalman: AR(1) recovery" begin
     _suppress_warnings() do
-    rng = Random.MersenneTwister(42)
+    rng = Random.Xoshiro(42)
 
     spec = @dsge begin
         parameters: ρ = 0.5, σ = 0.5
@@ -1190,7 +1190,7 @@ end
         n_smc=200, n_mh_steps=1, ess_target=0.5,
         observables=[:y], measurement_error=nothing,
         solver=:gensys, solver_kwargs=NamedTuple(),
-        rng=Random.MersenneTwister(123))
+        rng=Random.Xoshiro(123))
 
     @test length(result.phi_schedule) > 1
     @test result.phi_schedule[end] ≈ 1.0
@@ -1214,7 +1214,7 @@ end
         end
         spec = compute_steady_state(spec)
         sol = solve(spec; method=:gensys)
-        data = simulate(sol, 50; rng=Random.MersenneTwister(7))'  # n_obs × T
+        data = simulate(sol, 50; rng=Random.Xoshiro(7))'  # n_obs × T
 
         # Prior support (Normal(5.0, 0.01)) lies entirely OUTSIDE the [0.01, 0.99] bounds →
         # every draw is rejected → the initializer must fail loudly, not substitute a midpoint.
@@ -1225,7 +1225,7 @@ end
         err = try
             MacroEconometricModels._smc_sample(spec, data, [:ρ], bad_prior, [0.5];
                 n_smc=4, observables=[:y], solver=:gensys,
-                rng=Random.MersenneTwister(123))
+                rng=Random.Xoshiro(123))
             nothing
         catch e
             e
@@ -1255,14 +1255,14 @@ end
         steady_state = [0.0]
     end
     true_spec = compute_steady_state(true_spec)
-    data = simulate(solve(true_spec; method=:gensys), 200; rng=Random.MersenneTwister(42))'
+    data = simulate(solve(true_spec; method=:gensys), 200; rng=Random.Xoshiro(42))'
     prior = MacroEconometricModels.DSGEPrior(Dict(:ρ => Beta(2, 2));
         lower=Dict(:ρ => 0.01), upper=Dict(:ρ => 0.99))
     # An informative 200-obs AR(1) SMC needs many tempering stages; capping at 2 must raise.
     @test_throws ErrorException MacroEconometricModels._smc_sample(
         spec, data, [:ρ], prior, [0.5];
         n_smc=100, n_mh_steps=1, ess_target=0.5, observables=[:y],
-        solver=:gensys, max_stages=2, rng=Random.MersenneTwister(123))
+        solver=:gensys, max_stages=2, rng=Random.Xoshiro(123))
     end
 end
 
@@ -1298,20 +1298,20 @@ end
         steady_state = [0.0]
     end
     true_spec = compute_steady_state(true_spec)
-    data = simulate(solve(true_spec; method=:gensys), 100; rng=Random.MersenneTwister(42))'
+    data = simulate(solve(true_spec; method=:gensys), 100; rng=Random.Xoshiro(42))'
     prior = MacroEconometricModels.DSGEPrior(Dict(:ρ => Beta(2, 2));
         lower=Dict(:ρ => 0.01), upper=Dict(:ρ => 0.99))
     @test_throws ErrorException MacroEconometricModels._smc2_sample(
         spec, data, [:ρ], prior, [0.5];
         n_smc=40, n_particles=20, n_mh_steps=1, ess_target=0.5,
         observables=[:y], measurement_error=[0.5], solver=:gensys,
-        max_stages=2, rng=Random.MersenneTwister(5))
+        max_stages=2, rng=Random.Xoshiro(5))
     end
 end
 
 @testset "Adaptive RWMH: AR(1) recovery" begin
     _suppress_warnings() do
-    rng = Random.MersenneTwister(42)
+    rng = Random.Xoshiro(42)
 
     spec = @dsge begin
         parameters: ρ = 0.5, σ = 0.5
@@ -1340,7 +1340,7 @@ end
         n_draws=2000, burnin=500, adapt_interval=100,
         observables=[:y], measurement_error=nothing,
         solver=:gensys, solver_kwargs=NamedTuple(),
-        rng=Random.MersenneTwister(123))
+        rng=Random.Xoshiro(123))
 
     @test size(draws, 1) == 2000
     @test size(draws, 2) == 1
@@ -1372,7 +1372,7 @@ end
         steady_state = [0.0]
     end
     true_spec = compute_steady_state(true_spec)
-    data = simulate(solve(true_spec; method=:gensys), 200; rng=Random.MersenneTwister(42))'
+    data = simulate(solve(true_spec; method=:gensys), 200; rng=Random.Xoshiro(42))'
 
     prior = MacroEconometricModels.DSGEPrior(Dict(:ρ => Beta(2, 2));
         lower=Dict(:ρ => 0.01), upper=Dict(:ρ => 0.99))
@@ -1384,7 +1384,7 @@ end
         n_draws=1500, burnin=300, adapt_interval=50,
         observables=[:y], measurement_error=nothing,
         solver=:gensys, solver_kwargs=NamedTuple(),
-        rng=Random.MersenneTwister(123))
+        rng=Random.Xoshiro(123))
 
     # 1. FREEZE: proposal at end of burn-in == proposal at end of run.
     @test diag.proposal_L_at_burnin ≈ diag.proposal_L
@@ -1433,7 +1433,7 @@ end
     end
     spec = compute_steady_state(spec)
     sol = solve(spec; method=:gensys)
-    data_mat = simulate(sol, 50; rng=Random.MersenneTwister(42))'
+    data_mat = simulate(sol, 50; rng=Random.Xoshiro(42))'
 
     # Bootstrap PF needs nonzero measurement error to weight particles (T042 default is
     # zero ME); [0.01] reproduces the former 1e-4·I default (0.01² = 1e-4).
@@ -1441,7 +1441,7 @@ end
         [:y], [0.01], :gensys, NamedTuple(), 100)
 
     ws = MacroEconometricModels._allocate_pf_workspace(Float64, 1, 1, 1, 100; T_obs=50)
-    rng = Random.MersenneTwister(123)
+    rng = Random.Xoshiro(123)
 
     ll = pf_ll_fn([0.8], ws, rng)
     @test isfinite(ll)
@@ -1456,7 +1456,7 @@ end
 @testset "SMC² with particle filter: AR(1)" begin
     FAST && return
     _suppress_warnings() do
-    rng = Random.MersenneTwister(42)
+    rng = Random.Xoshiro(42)
 
     spec = @dsge begin
         parameters: ρ = 0.5, σ = 0.5
@@ -1485,7 +1485,7 @@ end
         n_smc=50, n_particles=50, n_mh_steps=1, ess_target=0.5,
         observables=[:y], measurement_error=nothing,
         solver=:gensys, solver_kwargs=NamedTuple(),
-        rng=Random.MersenneTwister(123))
+        rng=Random.Xoshiro(123))
 
     @test result.phi_schedule[end] ≈ 1.0
     @test isfinite(result.log_marginal_likelihood)
@@ -1498,7 +1498,7 @@ end
 
 @testset "estimate_dsge_bayes: SMC + Kalman" begin
     _suppress_warnings() do
-    rng = Random.MersenneTwister(42)
+    rng = Random.Xoshiro(42)
     spec = @dsge begin
         parameters: ρ = 0.5, σ = 0.5
         endogenous: y
@@ -1523,7 +1523,7 @@ end
     result = estimate_dsge_bayes(spec, sim_data, [0.5];
         priors=priors, method=:smc, observables=[:y],
         n_smc=200, n_mh_steps=1,
-        rng=Random.MersenneTwister(123))
+        rng=Random.Xoshiro(123))
 
     @test result isa BayesianDSGE{Float64}
     @test result.method == :smc
@@ -1538,7 +1538,7 @@ end
 
 @testset "estimate_dsge_bayes: MH" begin
     _suppress_warnings() do
-    rng = Random.MersenneTwister(42)
+    rng = Random.Xoshiro(42)
     spec = @dsge begin
         parameters: ρ = 0.5, σ = 0.5
         endogenous: y
@@ -1554,7 +1554,7 @@ end
     result = estimate_dsge_bayes(spec, sim_data, [0.5];
         priors=priors, method=:mh, observables=[:y],
         n_draws=1000, burnin=200,
-        rng=Random.MersenneTwister(123))
+        rng=Random.Xoshiro(123))
 
     @test result isa BayesianDSGE{Float64}
     @test result.method == :rwmh
@@ -1567,14 +1567,14 @@ end
     result_full = estimate_dsge_bayes(spec, sim_data, [0.5];
         priors=priors, method=:mh, observables=[:y],
         n_draws=300, burnin=100, keep_burnin=true,
-        rng=Random.MersenneTwister(7))
+        rng=Random.Xoshiro(7))
     @test size(result_full.theta_draws, 1) == 300
     end
 end
 
 @testset "estimate_dsge_bayes: auto data transpose" begin
     _suppress_warnings() do
-    rng = Random.MersenneTwister(42)
+    rng = Random.Xoshiro(42)
     spec = @dsge begin
         parameters: ρ = 0.5
         endogenous: y
@@ -1589,7 +1589,7 @@ end
     priors = Dict(:ρ => Beta(2, 2))
     result = estimate_dsge_bayes(spec, sim_data, [0.5];
         priors=priors, method=:smc, observables=[:y],
-        n_smc=100, rng=Random.MersenneTwister(1))
+        n_smc=100, rng=Random.Xoshiro(1))
     @test result isa BayesianDSGE{Float64}
     end
 end
@@ -1604,7 +1604,7 @@ end
         steady_state = [0.0]
     end
     spec = compute_steady_state(spec)
-    sim_data = randn(Random.MersenneTwister(1422), 1, 100)
+    sim_data = randn(Random.Xoshiro(1422), 1, 100)
     priors = Dict(:ρ => Beta(2, 2))
     @test_throws ArgumentError estimate_dsge_bayes(spec, sim_data, [0.5];
         priors=priors, method=:invalid, observables=[:y])
@@ -1644,18 +1644,18 @@ end
     end
     spec = compute_steady_state(spec)
     sol = solve(spec; method=:gensys)
-    sim_data = simulate(sol, 100; rng=Random.MersenneTwister(42))
+    sim_data = simulate(sol, 100; rng=Random.Xoshiro(42))
     priors = Dict(:ρ => Beta(2, 2), :σ => InverseGamma(3.0, 1.0))
 
     # Dict theta0 in scrambled order runs end-to-end (order-independent).
     r = estimate_dsge_bayes(spec, sim_data, Dict(:σ => 0.5, :ρ => 0.5);
         priors=priors, method=:smc, observables=[:y], n_smc=100,
-        rng=Random.MersenneTwister(1))
+        rng=Random.Xoshiro(1))
     @test r isa BayesianDSGE{Float64}
     # Wrong-length positional vector errors before sampling.
     @test_throws ArgumentError estimate_dsge_bayes(spec, sim_data, [0.5];
         priors=priors, method=:smc, observables=[:y], n_smc=100,
-        rng=Random.MersenneTwister(1))
+        rng=Random.Xoshiro(1))
     end
 end
 
@@ -1665,10 +1665,10 @@ end
     _od = MacroEconometricModels._orient_data
     @test size(_od(reshape(collect(1.0:20), 10, 2), 2, Float64)) == (2, 10)   # T×n → n_obs×T_obs
     @test size(_od(reshape(collect(1.0:20), 2, 10), 2, Float64)) == (2, 10)    # n×T → as-is
-    A = randn(Random.MersenneTwister(1), 40, 3)
+    A = randn(Random.Xoshiro(1), 40, 3)
     @test _od(A, 3, Float64) == _od(permutedims(A), 3, Float64)                 # same internal matrix
     # Neither dimension equals n_obs → informative ArgumentError (was a silent best-guess).
-    @test_throws ArgumentError _od(randn(Random.MersenneTwister(1423), 3, 100), 1, Float64)
+    @test_throws ArgumentError _od(randn(Random.Xoshiro(1423), 3, 100), 1, Float64)
 end
 
 @testset "estimate_dsge_bayes: T×n and n×T give the same likelihood (#142)" begin
@@ -1681,16 +1681,16 @@ end
         steady_state = [0.0]
     end
     spec = compute_steady_state(spec)
-    sim = simulate(solve(spec; method=:gensys), 100; rng=Random.MersenneTwister(42))  # 100×1 (T×n)
+    sim = simulate(solve(spec; method=:gensys), 100; rng=Random.Xoshiro(42))  # 100×1 (T×n)
     priors = Dict(:ρ => Beta(2, 2))
 
     r_tn = estimate_dsge_bayes(spec, sim, [0.5]; priors=priors, method=:smc,
-        observables=[:y], n_smc=100, rng=Random.MersenneTwister(5))
+        observables=[:y], n_smc=100, rng=Random.Xoshiro(5))
     r_nt = estimate_dsge_bayes(spec, permutedims(sim), [0.5]; priors=priors, method=:smc,
-        observables=[:y], n_smc=100, rng=Random.MersenneTwister(5))
+        observables=[:y], n_smc=100, rng=Random.Xoshiro(5))
     @test r_tn.log_marginal_likelihood ≈ r_nt.log_marginal_likelihood
     # A shape where neither dimension equals n_obs errors instead of guessing.
-    @test_throws ArgumentError estimate_dsge_bayes(spec, randn(Random.MersenneTwister(1424), 3, 100), [0.5];
+    @test_throws ArgumentError estimate_dsge_bayes(spec, randn(Random.Xoshiro(1424), 3, 100), [0.5];
         priors=priors, method=:smc, observables=[:y], n_smc=50)
     end
 end
@@ -1709,7 +1709,7 @@ end
         steady_state = [0.0]
     end
     spec = compute_steady_state(spec)
-    data = simulate(solve(spec; method=:gensys), 120; rng=Random.MersenneTwister(7))  # 120×1 (T×n)
+    data = simulate(solve(spec; method=:gensys), 120; rng=Random.Xoshiro(7))  # 120×1 (T×n)
     priors = Dict(:ρ => Beta(2, 2), :σ => InverseGamma(3.0, 1.0))
 
     pm_vec  = posterior_mode(spec, data, [0.5, 0.5]; priors=priors, observables=[:y])
@@ -1725,7 +1725,7 @@ end
     # Wrong-length vector, missing/unknown Dict key, and neither-dim-matches shape all error.
     @test_throws ArgumentError posterior_mode(spec, data, [0.5]; priors=priors, observables=[:y])
     @test_throws ArgumentError posterior_mode(spec, data, Dict(:ρ => 0.5); priors=priors, observables=[:y])
-    @test_throws ArgumentError posterior_mode(spec, randn(Random.MersenneTwister(1425), 3, 120), [0.5, 0.5];
+    @test_throws ArgumentError posterior_mode(spec, randn(Random.Xoshiro(1425), 3, 120), [0.5, 0.5];
                                               priors=priors, observables=[:y])
     end
 end
@@ -1740,15 +1740,15 @@ end
         steady_state = [0.0]
     end
     spec = compute_steady_state(spec)
-    data = simulate(solve(spec; method=:gensys), 120; rng=Random.MersenneTwister(7))
+    data = simulate(solve(spec; method=:gensys), 120; rng=Random.Xoshiro(7))
     priors = Dict(:ρ => Beta(2, 2), :σ => InverseGamma(3.0, 1.0))
     fit = estimate_dsge_bayes(spec, data, [0.5, 0.5]; priors=priors, method=:smc,
-                              observables=[:y], n_smc=80, rng=Random.MersenneTwister(3))
-    ppc_tn = posterior_predictive_check(fit; data=data, n_draws=40, rng=Random.MersenneTwister(1))
+                              observables=[:y], n_smc=80, rng=Random.Xoshiro(3))
+    ppc_tn = posterior_predictive_check(fit; data=data, n_draws=40, rng=Random.Xoshiro(1))
     ppc_nt = posterior_predictive_check(fit; data=permutedims(data), n_draws=40,
-                                        rng=Random.MersenneTwister(1))
+                                        rng=Random.Xoshiro(1))
     @test ppc_tn.p_values ≈ ppc_nt.p_values
-    @test_throws ArgumentError posterior_predictive_check(fit; data=randn(Random.MersenneTwister(1426), 3, 120), n_draws=10)
+    @test_throws ArgumentError posterior_predictive_check(fit; data=randn(Random.Xoshiro(1426), 3, 120), n_draws=10)
     end
 end
 
@@ -1758,7 +1758,7 @@ end
 
 @testset "posterior_summary" begin
     _suppress_warnings() do
-    rng = Random.MersenneTwister(42)
+    rng = Random.Xoshiro(42)
     spec = @dsge begin
         parameters: ρ = 0.5, σ = 0.5
         endogenous: y
@@ -1773,7 +1773,7 @@ end
     priors = Dict(:ρ => Beta(2, 2))
     result = estimate_dsge_bayes(spec, sim_data, [0.5];
         priors=priors, method=:smc, observables=[:y],
-        n_smc=100, rng=Random.MersenneTwister(1))
+        n_smc=100, rng=Random.Xoshiro(1))
 
     ps = posterior_summary(result)
     @test haskey(ps, :ρ)
@@ -1788,7 +1788,7 @@ end
 
 @testset "posterior_summary: quantiles equal Statistics.quantile (#144)" begin
     _suppress_warnings() do
-    rng = Random.MersenneTwister(42)
+    rng = Random.Xoshiro(42)
     spec = @dsge begin
         parameters: ρ = 0.5, σ = 0.5
         endogenous: y
@@ -1801,7 +1801,7 @@ end
     priors = Dict(:ρ => Beta(2, 2))
     result = estimate_dsge_bayes(spec, sim_data, [0.5];
         priors=priors, method=:smc, observables=[:y],
-        n_smc=300, rng=Random.MersenneTwister(1))
+        n_smc=300, rng=Random.Xoshiro(1))
 
     ps = posterior_summary(result)
     d = result.theta_draws[:, 1]
@@ -1824,12 +1824,12 @@ end
     end
     spec = compute_steady_state(spec)
     sol = solve(spec; method=:gensys)
-    sim_data = simulate(sol, 100; rng=Random.MersenneTwister(42))
+    sim_data = simulate(sol, 100; rng=Random.Xoshiro(42))
 
     priors = Dict(:ρ => Beta(2, 2))
     result = estimate_dsge_bayes(spec, sim_data, [0.5];
         priors=priors, method=:smc, observables=[:y],
-        n_smc=100, rng=Random.MersenneTwister(1))
+        n_smc=100, rng=Random.Xoshiro(1))
 
     ml = marginal_likelihood(result)
     @test isfinite(ml)
@@ -1839,7 +1839,7 @@ end
 
 @testset "bayes_factor" begin
     _suppress_warnings() do
-    rng = Random.MersenneTwister(42)
+    rng = Random.Xoshiro(42)
     spec = @dsge begin
         parameters: ρ = 0.5
         endogenous: y
@@ -1853,9 +1853,9 @@ end
 
     priors = Dict(:ρ => Beta(2, 2))
     r1 = estimate_dsge_bayes(spec, sim_data, [0.5]; priors=priors, method=:smc,
-        observables=[:y], n_smc=100, rng=Random.MersenneTwister(1))
+        observables=[:y], n_smc=100, rng=Random.Xoshiro(1))
     r2 = estimate_dsge_bayes(spec, sim_data, [0.5]; priors=priors, method=:smc,
-        observables=[:y], n_smc=100, rng=Random.MersenneTwister(2))
+        observables=[:y], n_smc=100, rng=Random.Xoshiro(2))
 
     bf = bayes_factor(r1, r2)
     @test isfinite(bf)
@@ -1870,7 +1870,7 @@ end
     # The MHM estimator applied to draws from N(μ,Σ) must recover log c — this is
     # the precise, deterministic check that the estimator (not just "some finite
     # number") is correct.
-    rng = Random.MersenneTwister(20260708)
+    rng = Random.Xoshiro(20260708)
     μ = [0.5, -0.3]
     Σ = [0.04 0.01; 0.01 0.09]
     mvn = MvNormal(μ, Σ)
@@ -1893,10 +1893,10 @@ end
 @testset "_geweke_mhm: short-chain / degenerate guards return NaN" begin
     _suppress_warnings() do
         # S < 10·d → NaN, not a silently wrong number.
-        short = randn(Random.MersenneTwister(1), 5, 2)
+        short = randn(Random.Xoshiro(1), 5, 2)
         @test isnan(MacroEconometricModels._geweke_mhm(short, fill(-1.0, 5)))
         # No finite kernel value → NaN.
-        big = randn(Random.MersenneTwister(2), 100, 1)
+        big = randn(Random.Xoshiro(2), 100, 1)
         @test isnan(MacroEconometricModels._geweke_mhm(big, fill(-Inf, 100)))
     end
 end
@@ -1920,13 +1920,13 @@ end
     end
     true_spec = compute_steady_state(true_spec)
     sol_true = solve(true_spec; method=:gensys)
-    sim_data = simulate(sol_true, 200; rng=Random.MersenneTwister(2024))
+    sim_data = simulate(sol_true, 200; rng=Random.Xoshiro(2024))
 
     priors = Dict(:ρ => Beta(2, 2))
     r_smc = estimate_dsge_bayes(spec, sim_data, [0.5]; priors=priors, method=:smc,
-        observables=[:y], n_smc=400, rng=Random.MersenneTwister(11))
+        observables=[:y], n_smc=400, rng=Random.Xoshiro(11))
     r_mh = estimate_dsge_bayes(spec, sim_data, [0.5]; priors=priors, method=:mh,
-        observables=[:y], n_draws=6000, burnin=2000, rng=Random.MersenneTwister(12))
+        observables=[:y], n_draws=6000, burnin=2000, rng=Random.Xoshiro(12))
 
     ml_smc = marginal_likelihood(r_smc)
     ml_mh  = marginal_likelihood(r_mh)
@@ -1973,12 +1973,12 @@ end
     end
     true_spec = compute_steady_state(true_spec)
     sol_true = solve(true_spec; method=:gensys)
-    sim_data = simulate(sol_true, 150; rng=Random.MersenneTwister(99))
+    sim_data = simulate(sol_true, 150; rng=Random.Xoshiro(99))
     priors = Dict(:ρ => Beta(2, 2), :σ => Gamma(2, 0.5))
 
     run_cfg(ess) = [marginal_likelihood(estimate_dsge_bayes(spec, sim_data, [0.5, 1.0];
                         priors=priors, method=:smc, observables=[:y], n_smc=400,
-                        ess_target=ess, rng=Random.MersenneTwister(sd)))
+                        ess_target=ess, rng=Random.Xoshiro(sd)))
                     for sd in 1:6]
 
     ml_lo = run_cfg(0.50)   # few, large steps → non-resampled stages
@@ -1997,7 +1997,7 @@ end
 @testset "_adaptive_tempering: ESS on cumulative weights (no overshoot)" begin
     lse = MacroEconometricModels._logsumexp
     N = 300
-    rng = Random.MersenneTwister(7)
+    rng = Random.Xoshiro(7)
     log_liks = 1.5 .* randn(rng, N)
     log_weights = 0.7 .* randn(rng, N)      # non-uniform incoming cumulative weights
     phi_old = 0.3
@@ -2027,7 +2027,7 @@ end
 @testset "_terminal_resample!: unweighted quantiles match weighted pre-resample set" begin
     lse = MacroEconometricModels._logsumexp
     np, Np = 2, 500
-    rng = Random.MersenneTwister(11)
+    rng = Random.Xoshiro(11)
     theta = randn(rng, np, Np); theta[1, :] .+= 3.0
     lw0 = 1.2 .* randn(rng, Np)              # deliberately non-uniform terminal weights
     state = MacroEconometricModels.SMCState{Float64}(
@@ -2040,7 +2040,7 @@ end
     perm = sortperm(theta[1, :]); cw = cumsum(w[perm]); cw ./= cw[end]
     wq50_before = theta[1, perm][findfirst(>=(0.5), cw)]
 
-    did = MacroEconometricModels._terminal_resample!(state, Np, Random.MersenneTwister(123))
+    did = MacroEconometricModels._terminal_resample!(state, Np, Random.Xoshiro(123))
     @test did                                                    # non-uniform → resampled
     weights_after = exp.(state.log_weights .- lse(state.log_weights))
     @test all(≈(1 / Np), weights_after)                          # stored weights uniform
@@ -2052,7 +2052,7 @@ end
         copy(theta), fill(-log(Float64(Np)), Np), zeros(Np), zeros(Np),
         Float64[0.0, 1.0], Float64[], Float64[], 0.0,
         MacroEconometricModels.PFWorkspace{Float64}[], Matrix{Float64}(I, np, np))
-    @test MacroEconometricModels._terminal_resample!(state_u, Np, Random.MersenneTwister(1)) == false
+    @test MacroEconometricModels._terminal_resample!(state_u, Np, Random.Xoshiro(1)) == false
 end
 
 # ── E-06 / #134: SMC² PMMH mutation (chunked workspaces, unconditional PF) ──
@@ -2095,17 +2095,17 @@ end
     end
     true_spec = compute_steady_state(true_spec)
     sol_true = solve(true_spec; method=:gensys)
-    sim_data = simulate(sol_true, 120; rng=Random.MersenneTwister(2026))
+    sim_data = simulate(sol_true, 120; rng=Random.Xoshiro(2026))
     priors = Dict(:ρ => Beta(2, 2))
     merr = [0.1]
 
     r_smc = estimate_dsge_bayes(spec, sim_data, [0.5]; priors=priors, method=:smc,
         observables=[:y], n_smc=300, measurement_error=merr,
-        rng=Random.MersenneTwister(1))
+        rng=Random.Xoshiro(1))
     r_smc2 = estimate_dsge_bayes(spec, sim_data, [0.5]; priors=priors, method=:smc2,
         observables=[:y], n_smc=200, n_particles=200, n_mh_steps=2,
         measurement_error=merr, solver=:gensys,
-        rng=Random.MersenneTwister(101))
+        rng=Random.Xoshiro(101))
 
     ρ_smc = mean(r_smc.theta_draws[:, 1])
     ρ_smc2 = mean(r_smc2.theta_draws[:, 1])
@@ -2137,7 +2137,7 @@ end
     end
     true_spec = compute_steady_state(true_spec)
     sol_true = solve(true_spec; method=:gensys)
-    sim = simulate(sol_true, 80; rng=Random.MersenneTwister(7))
+    sim = simulate(sol_true, 80; rng=Random.Xoshiro(7))
     data = Matrix(reshape(sim[:, 1], 1, :))          # n_obs × T_obs
     T_obs = size(data, 2)
     merr = [0.4]
@@ -2148,7 +2148,7 @@ end
     # A DIFFUSE θ-population: ρ ranges widely, so the likelihood level varies a lot
     # across particles ⇒ var(ll across θ) is large (this is what the OLD trigger fired on).
     diffuse = reshape(collect(range(0.2, 0.9; length=40)), 1, 40)
-    rng = Random.MersenneTwister(123)
+    rng = Random.Xoshiro(123)
 
     est400 = MacroEconometricModels._pf_estimator_variance(
         spec, [:ρ], diffuse, [:y], merr, :gensys, NamedTuple(), mkpool(400),
@@ -2160,7 +2160,7 @@ end
     # var(ll across θ) — the OLD (wrong) trigger quantity — on the same diffuse set.
     ws = mkpool(400)[1]; lls = Float64[]
     for i in 1:size(diffuse, 2)
-        rr = Random.MersenneTwister(hash((:av, i)))
+        rr = Random.Xoshiro(hash((:av, i)))
         ll = MacroEconometricModels._solve_and_run_pf(
             spec, [:ρ], diffuse[:, i], [:y], merr, :gensys, NamedTuple(),
             ws, data, T_obs, rr)
@@ -2194,7 +2194,7 @@ end
         steady_state = [0.0]
     end
     true_spec = compute_steady_state(true_spec)
-    sim = simulate(solve(true_spec; method=:gensys), 60; rng=Random.MersenneTwister(3))
+    sim = simulate(solve(true_spec; method=:gensys), 60; rng=Random.Xoshiro(3))
     data = Matrix(reshape(sim[:, 1], 1, :)); T_obs = size(data, 2)
     merr = [0.4]; N = 20; N_x = 200
     n_states = spec.n_endog; n_shocks = spec.n_exog
@@ -2212,7 +2212,7 @@ end
 
     MacroEconometricModels._exchange_step!(
         state, spec, [:ρ], [:y], merr, :gensys, NamedTuple(),
-        pool, data, T_obs, Random.MersenneTwister(99))
+        pool, data, T_obs, Random.Xoshiro(99))
 
     @test all(isfinite, state.log_likelihoods)          # all recomputed to finite values
     @test all(state.log_likelihoods .!= SENTINEL)       # no stale (old-N_x) estimate remains
@@ -2237,7 +2237,7 @@ end
         steady_state = [0.0]
     end
     true_spec = compute_steady_state(true_spec)
-    sim = simulate(solve(true_spec; method=:gensys), 60; rng=Random.MersenneTwister(3))
+    sim = simulate(solve(true_spec; method=:gensys), 60; rng=Random.Xoshiro(3))
     data = Matrix(reshape(sim[:, 1], 1, :)); T_obs = size(data, 2)
     merr = [0.4]; N = 12; N_x = 200
     n_states = spec.n_endog; n_shocks = spec.n_exog
@@ -2260,7 +2260,7 @@ end
     ws = MacroEconometricModels._allocate_pf_workspace(Float64, n_states, 1, n_shocks, N_x; T_obs=T_obs)
     ll_ser = fill(-Inf, N)
     for j in 1:N
-        rr = Random.MersenneTwister(seeds[j])
+        rr = Random.Xoshiro(seeds[j])
         ll_ser[j] = pf_ll_fn(Vector{Float64}(thetas[:, j]), ws, rr)
     end
 
@@ -2275,7 +2275,7 @@ end
 
 @testset "BayesianDSGE show" begin
     _suppress_warnings() do
-    rng = Random.MersenneTwister(42)
+    rng = Random.Xoshiro(42)
     spec = @dsge begin
         parameters: ρ = 0.5, σ = 0.5
         endogenous: y
@@ -2290,7 +2290,7 @@ end
     priors = Dict(:ρ => Beta(2, 2))
     result = estimate_dsge_bayes(spec, sim_data, [0.5];
         priors=priors, method=:smc, observables=[:y],
-        n_smc=100, rng=Random.MersenneTwister(1))
+        n_smc=100, rng=Random.Xoshiro(1))
 
     io = IOBuffer()
     show(io, result)
@@ -2308,7 +2308,7 @@ end
 
 @testset "BayesianDSGE report" begin
     _suppress_warnings() do
-    rng = Random.MersenneTwister(42)
+    rng = Random.Xoshiro(42)
     spec = @dsge begin
         parameters: ρ = 0.5, σ = 0.5
         endogenous: y
@@ -2323,7 +2323,7 @@ end
     priors = Dict(:ρ => Beta(2, 2))
     result = estimate_dsge_bayes(spec, sim_data, [0.5];
         priors=priors, method=:smc, observables=[:y],
-        n_smc=100, rng=Random.MersenneTwister(1))
+        n_smc=100, rng=Random.Xoshiro(1))
 
     # report() calls show(stdout, result); capture stdout
     io = IOBuffer()
@@ -2336,7 +2336,7 @@ end
 
 @testset "BayesianDSGE refs" begin
     _suppress_warnings() do
-    rng = Random.MersenneTwister(42)
+    rng = Random.Xoshiro(42)
     spec = @dsge begin
         parameters: ρ = 0.5, σ = 0.5
         endogenous: y
@@ -2351,7 +2351,7 @@ end
     priors = Dict(:ρ => Beta(2, 2))
     result = estimate_dsge_bayes(spec, sim_data, [0.5];
         priors=priors, method=:smc, observables=[:y],
-        n_smc=100, rng=Random.MersenneTwister(1))
+        n_smc=100, rng=Random.Xoshiro(1))
 
     io = IOBuffer()
     refs(io, result)
@@ -2363,7 +2363,7 @@ end
 
 @testset "plot_result(BayesianDSGE)" begin
     _suppress_warnings() do
-    rng = Random.MersenneTwister(42)
+    rng = Random.Xoshiro(42)
     spec = @dsge begin
         parameters: ρ = 0.5, σ = 0.5
         endogenous: y
@@ -2378,7 +2378,7 @@ end
     priors = Dict(:ρ => Beta(2, 2))
     result = estimate_dsge_bayes(spec, sim_data, [0.5];
         priors=priors, method=:smc, observables=[:y],
-        n_smc=100, rng=Random.MersenneTwister(1))
+        n_smc=100, rng=Random.Xoshiro(1))
 
     # Default view is :trace (MCMC diagnostics) after the PLT plotting overhaul.
     p = plot_result(result)
@@ -2396,7 +2396,7 @@ end
 
 @testset "StatsAPI methods for BayesianDSGE" begin
     _suppress_warnings() do
-    rng = Random.MersenneTwister(42)
+    rng = Random.Xoshiro(42)
     spec = @dsge begin
         parameters: ρ = 0.5, σ = 0.5
         endogenous: y
@@ -2411,7 +2411,7 @@ end
     priors = Dict(:ρ => Beta(2, 2))
     result = estimate_dsge_bayes(spec, sim_data, [0.5];
         priors=priors, method=:smc, observables=[:y],
-        n_smc=100, rng=Random.MersenneTwister(1))
+        n_smc=100, rng=Random.Xoshiro(1))
 
     c = StatsAPI.coef(result)
     @test length(c) == 1
@@ -2428,7 +2428,7 @@ end
 
 @testset "estimate_dsge_bayes with TimeSeriesData" begin
     _suppress_warnings() do
-    rng = Random.MersenneTwister(42)
+    rng = Random.Xoshiro(42)
     spec = @dsge begin
         parameters: ρ = 0.5, σ = 0.5
         endogenous: y
@@ -2446,7 +2446,7 @@ end
     priors = Dict(:ρ => Beta(2, 2))
     result = estimate_dsge_bayes(spec, ts, [0.5];
         priors=priors, method=:smc, observables=[:y],
-        n_smc=100, rng=Random.MersenneTwister(1))
+        n_smc=100, rng=Random.Xoshiro(1))
     @test result isa BayesianDSGE{Float64}
     end
 end
@@ -2457,7 +2457,7 @@ end
 
 @testset "E2E: 2-variable model, SMC + Kalman" begin
     _suppress_warnings() do
-    rng = Random.MersenneTwister(42)
+    rng = Random.Xoshiro(42)
 
     # Simple RBC-like model
     spec = @dsge begin
@@ -2492,7 +2492,7 @@ end
         priors=priors, method=:smc, observables=[:y, :k],
         measurement_error=[0.01, 0.01],
         n_smc=300, n_mh_steps=1,
-        rng=Random.MersenneTwister(123))
+        rng=Random.Xoshiro(123))
 
     @test result isa BayesianDSGE{Float64}
     @test length(result.param_names) == 2
@@ -2515,7 +2515,7 @@ end
 
 @testset "E2E: MH baseline" begin
     _suppress_warnings() do
-    rng = Random.MersenneTwister(42)
+    rng = Random.Xoshiro(42)
     spec = @dsge begin
         parameters: ρ = 0.5, σ = 0.5
         endogenous: y
@@ -2531,7 +2531,7 @@ end
     result = estimate_dsge_bayes(spec, data, [0.5];
         priors=priors, method=:mh, observables=[:y],
         n_draws=500, burnin=100,
-        rng=Random.MersenneTwister(1))
+        rng=Random.Xoshiro(1))
 
     @test result.method == :mh || result.method == :rwmh
     @test size(result.theta_draws, 1) == 500 - 100   # burn-in discarded (E-03 / #122)
@@ -2621,7 +2621,7 @@ end
 
 @testset "Nonlinear PF: _pf_initialize_nonlinear!" begin
     _suppress_warnings() do
-    rng = Random.MersenneTwister(42)
+    rng = Random.Xoshiro(42)
     spec = @dsge begin
         parameters: ρ = 0.9, σ = 0.01
         endogenous: y
@@ -2660,7 +2660,7 @@ end
 
 @testset "Nonlinear PF: _pf_transition_pruned! matches pruning.jl" begin
     _suppress_warnings() do
-    rng = Random.MersenneTwister(42)
+    rng = Random.Xoshiro(42)
     spec = @dsge begin
         parameters: ρ = 0.9, σ = 0.01
         endogenous: y
@@ -2672,7 +2672,7 @@ end
     sol = solve(spec; method=:perturbation, order=2)
 
     # Simulate with pruning.jl for reference
-    rng_ref = Random.MersenneTwister(99)
+    rng_ref = Random.Xoshiro(99)
     ref_data = simulate(sol, 5; rng=rng_ref)
 
     # Now replicate using the PF transition kernel on a single particle
@@ -2692,9 +2692,9 @@ end
     fill!(ws.particles_so, 0.0)
     fill!(ws.particles, 0.0)
 
-    # Replay same shocks as simulate() above (fresh MT(99) ⇒ identical first draws)
+    # Replay same shocks as simulate() above (fresh Xoshiro(99) ⇒ identical first draws)
     T_periods = 5
-    e = randn(Random.MersenneTwister(99), T_periods, n_eps)
+    e = randn(Random.Xoshiro(99), T_periods, n_eps)
 
     for t in 1:T_periods
         # Set shocks in workspace
@@ -2747,7 +2747,7 @@ end
 
 @testset "Nonlinear bootstrap PF: finite log-likelihood (order 2)" begin
     _suppress_warnings() do
-    rng = Random.MersenneTwister(42)
+    rng = Random.Xoshiro(42)
     spec = @dsge begin
         parameters: ρ = 0.9, σ = 0.01
         endogenous: y
@@ -2759,7 +2759,7 @@ end
     sol = solve(spec; method=:perturbation, order=2)
 
     # Generate data
-    data_sim = simulate(sol, 50; rng=Random.MersenneTwister(1))
+    data_sim = simulate(sol, 50; rng=Random.Xoshiro(1))
     data = Matrix{Float64}(data_sim')  # n_obs x T_obs
 
     # Bootstrap PF needs nonzero measurement error (T042 default is zero ME);
@@ -2776,7 +2776,7 @@ end
     ws = MacroEconometricModels._allocate_pf_workspace(Float64, n_endog, 1, n_eps, N;
                                                          nv=nv, nx=nx, order=2)
     ll = MacroEconometricModels._bootstrap_particle_filter!(ws, nlss, data, 50;
-                                                              rng=Random.MersenneTwister(42))
+                                                              rng=Random.Xoshiro(42))
 
     @test isfinite(ll)
     @test ll > -1e6  # not absurdly large negative
@@ -2785,7 +2785,7 @@ end
 
 @testset "Nonlinear CSMC: finite log-likelihood (order 2)" begin
     _suppress_warnings() do
-    rng = Random.MersenneTwister(42)
+    rng = Random.Xoshiro(42)
     spec = @dsge begin
         parameters: ρ = 0.9, σ = 0.01
         endogenous: y
@@ -2797,7 +2797,7 @@ end
     sol = solve(spec; method=:perturbation, order=2)
 
     T_obs = 30
-    data_sim = simulate(sol, T_obs; rng=Random.MersenneTwister(1))
+    data_sim = simulate(sol, T_obs; rng=Random.Xoshiro(1))
     data = Matrix{Float64}(data_sim')
 
     # Bootstrap PF/CSMC need nonzero measurement error (T042 default is zero ME).
@@ -2815,12 +2815,12 @@ end
     # Initialize reference trajectory via a bootstrap PF run
     ll1 = MacroEconometricModels._bootstrap_particle_filter!(ws, nlss, data, T_obs;
                                                                store_trajectory=true,
-                                                               rng=Random.MersenneTwister(10))
+                                                               rng=Random.Xoshiro(10))
     @test isfinite(ll1)
 
     # Now run CSMC using the stored reference trajectory
     ll2 = MacroEconometricModels._conditional_smc!(ws, nlss, data, T_obs;
-                                                      rng=Random.MersenneTwister(20))
+                                                      rng=Random.Xoshiro(20))
     @test isfinite(ll2)
     @test ll2 > -1e6
     end
@@ -2830,7 +2830,7 @@ end
     _suppress_warnings() do
     # For a linear (order=1) model, the nonlinear PF should give similar results
     # to the exact Kalman filter (within Monte Carlo noise)
-    rng = Random.MersenneTwister(42)
+    rng = Random.Xoshiro(42)
     spec = @dsge begin
         parameters: ρ = 0.9, σ = 0.1
         endogenous: y
@@ -2845,7 +2845,7 @@ end
     sol_pert = solve(spec; method=:perturbation, order=1)
 
     T_obs = 50
-    data_sim = simulate(sol_lin, T_obs; rng=Random.MersenneTwister(1))
+    data_sim = simulate(sol_lin, T_obs; rng=Random.Xoshiro(1))
     data = Matrix{Float64}(data_sim')
 
     # Kalman log-likelihood. Bootstrap PF needs nonzero measurement error (T042 default
@@ -2868,7 +2868,7 @@ end
         ws = MacroEconometricModels._allocate_pf_workspace(Float64, n_endog, 1, n_eps, N;
                                                              nv=nv, nx=nx, order=1)
         ll = MacroEconometricModels._bootstrap_particle_filter!(ws, nlss, data, T_obs;
-                                                                   rng=Random.MersenneTwister(seed))
+                                                                   rng=Random.Xoshiro(seed))
         push!(ll_pf_runs, ll)
     end
     ll_pf_mean = mean(ll_pf_runs)
@@ -2894,7 +2894,7 @@ end
 
     # Generate data
     sol = solve(spec; method=:gensys)
-    data_sim = simulate(sol, 20; rng=Random.MersenneTwister(1))
+    data_sim = simulate(sol, 20; rng=Random.Xoshiro(1))
     data = Matrix{Float64}(data_sim')
 
     # Build Kalman likelihood function with perturbation solver (order=2)
@@ -3000,7 +3000,7 @@ end
         proj_max_degree=pss.max_degree, proj_n_vars=n_vars)
 
     # Set particles to known states and zero shocks
-    rng = Random.MersenneTwister(42)
+    rng = Random.Xoshiro(42)
     states_before = zeros(N)
     for k in 1:N
         x_k = 0.001 * randn(rng)
@@ -3057,7 +3057,7 @@ end
     sol = solve(spec; method=:projection, degree=3, scale=5.0)
 
     # Generate synthetic data
-    sim_data = simulate(sol, 50; rng=Random.MersenneTwister(42))
+    sim_data = simulate(sol, 50; rng=Random.Xoshiro(42))
     data = reshape(sim_data[:, 1], 1, :)  # 1 × T_obs
 
     Z = ones(Float64, 1, 1)
@@ -3079,7 +3079,7 @@ end
         proj_max_degree=pss.max_degree, proj_n_vars=n_vars,
         T_obs=T_obs)
 
-    rng = Random.MersenneTwister(123)
+    rng = Random.Xoshiro(123)
     ll = MacroEconometricModels._bootstrap_particle_filter!(
         ws, pss, data, T_obs; rng=rng)
 
@@ -3102,7 +3102,7 @@ end
     @test sol isa MacroEconometricModels.ProjectionSolution
     @test sol.method == :pfi
 
-    sim_data = simulate(sol, 50; rng=Random.MersenneTwister(42))
+    sim_data = simulate(sol, 50; rng=Random.Xoshiro(42))
     data = reshape(sim_data[:, 1], 1, :)
 
     Z = ones(Float64, 1, 1)
@@ -3124,7 +3124,7 @@ end
         proj_max_degree=pss.max_degree, proj_n_vars=n_vars,
         T_obs=T_obs)
 
-    rng = Random.MersenneTwister(123)
+    rng = Random.Xoshiro(123)
     ll = MacroEconometricModels._bootstrap_particle_filter!(
         ws, pss, data, T_obs; rng=rng)
 
@@ -3145,7 +3145,7 @@ end
     spec = compute_steady_state(spec)
     sol = solve(spec; method=:projection, degree=3, scale=5.0)
 
-    sim_data = simulate(sol, 30; rng=Random.MersenneTwister(42))
+    sim_data = simulate(sol, 30; rng=Random.Xoshiro(42))
     data = reshape(sim_data[:, 1], 1, :)
 
     Z = ones(Float64, 1, 1)
@@ -3167,7 +3167,7 @@ end
         proj_max_degree=pss.max_degree, proj_n_vars=n_vars,
         T_obs=T_obs)
 
-    rng = Random.MersenneTwister(456)
+    rng = Random.Xoshiro(456)
     ll = MacroEconometricModels._conditional_smc!(
         ws, pss, data, T_obs; rng=rng)
 
@@ -3189,7 +3189,7 @@ end
 
     # Generate data from linear model
     sol_lin = solve(spec; method=:gensys)
-    sim = simulate(sol_lin, 50; rng=Random.MersenneTwister(42))
+    sim = simulate(sol_lin, 50; rng=Random.Xoshiro(42))
     data = reshape(sim[:, 1], 1, :)
 
     Z = ones(Float64, 1, 1)
@@ -3218,7 +3218,7 @@ end
             Float64, n_endog, 1, n_shocks, N;
             proj_nx=nx, proj_n_basis=n_basis,
             proj_max_degree=pss.max_degree, proj_n_vars=n_vars)
-        rng = Random.MersenneTwister(seed)
+        rng = Random.Xoshiro(seed)
         ll = MacroEconometricModels._bootstrap_particle_filter!(
             ws, pss, data, T_obs; rng=rng)
         push!(lls, ll)
@@ -3267,7 +3267,7 @@ end
         steady_state = [0.0]
     end
     spec = compute_steady_state(spec)
-    data_obs = randn(MersenneTwister(42), 1, 30) .* 0.02
+    data_obs = randn(Xoshiro(42), 1, 30) .* 0.02
     priors = Dict(:ρ => Normal(0.5, 0.2))
     θ0 = [0.5]
 
@@ -3277,7 +3277,7 @@ end
         n_smc=10, n_particles=25, n_mh_steps=3,
         ess_target=0.5, measurement_error=[0.005],
         solver=:projection, solver_kwargs=(degree=3, scale=5.0),
-        rng=MersenneTwister(123))
+        rng=Xoshiro(123))
     @test result isa MacroEconometricModels.BayesianDSGE
     @test isfinite(result.log_marginal_likelihood)
     @test any(r -> r > 0, result.ess_history)
@@ -3367,7 +3367,7 @@ end
         steady_state = [0.0]
     end
     spec = compute_steady_state(spec)
-    data_obs = randn(MersenneTwister(42), 1, 30) .* 0.02
+    data_obs = randn(Xoshiro(42), 1, 30) .* 0.02
     priors = Dict(:ρ => Normal(0.5, 0.2))
     θ0 = [0.5]
 
@@ -3378,7 +3378,7 @@ end
         n_smc=10, n_particles=25, n_mh_steps=2,
         ess_target=0.5, measurement_error=[0.005],
         solver=:projection, solver_kwargs=(degree=3, scale=5.0),
-        rng=MersenneTwister(999))
+        rng=Xoshiro(999))
     @test result isa MacroEconometricModels.BayesianDSGE
     @test isfinite(result.log_marginal_likelihood)
     end
@@ -3394,7 +3394,7 @@ end
         steady_state = [0.0]
     end
     spec = compute_steady_state(spec)
-    data_obs = randn(MersenneTwister(42), 1, 30) .* 0.02
+    data_obs = randn(Xoshiro(42), 1, 30) .* 0.02
     priors = Dict(:ρ => Normal(0.5, 0.2))
     θ0 = [0.5]
 
@@ -3406,7 +3406,7 @@ end
         ess_target=0.5, measurement_error=[0.005],
         solver=:projection, solver_kwargs=(degree=3, scale=5.0),
         delayed_acceptance=true, n_screen=15,
-        rng=MersenneTwister(555))
+        rng=Xoshiro(555))
     @test result isa MacroEconometricModels.BayesianDSGE
     @test isfinite(result.log_marginal_likelihood)
     end
@@ -3422,7 +3422,7 @@ end
         steady_state = [0.0]
     end
     spec = compute_steady_state(spec)
-    data_obs = randn(MersenneTwister(42), 1, 50) .* 0.02
+    data_obs = randn(Xoshiro(42), 1, 50) .* 0.02
     priors = Dict(:ρ => Normal(0.5, 0.2))
     θ0 = [0.5]
 
@@ -3433,7 +3433,7 @@ end
         n_smc=20, n_particles=50, n_mh_steps=2,
         ess_target=0.5, measurement_error=[0.005],
         solver=:projection, solver_kwargs=(degree=3, scale=5.0),
-        rng=MersenneTwister(777))
+        rng=Xoshiro(777))
 
     # Run delayed acceptance SMC²
     result_da = estimate_dsge_bayes(
@@ -3443,7 +3443,7 @@ end
         ess_target=0.5, measurement_error=[0.005],
         solver=:projection, solver_kwargs=(degree=3, scale=5.0),
         delayed_acceptance=true, n_screen=30,
-        rng=MersenneTwister(777))
+        rng=Xoshiro(777))
 
     @test result_da isa MacroEconometricModels.BayesianDSGE
     @test isfinite(result_da.log_marginal_likelihood)
@@ -3469,7 +3469,7 @@ _bayes_dsge_irf_test_result = _suppress_warnings() do
         steady_state = [0.0]
     end
     spec = compute_steady_state(spec)
-    data_obs = randn(MersenneTwister(42), 1, 30) .* 0.02
+    data_obs = randn(Xoshiro(42), 1, 30) .* 0.02
     priors = Dict(:rho => Normal(0.5, 0.2))
     theta0 = [0.5]
     estimate_dsge_bayes(
@@ -3477,13 +3477,13 @@ _bayes_dsge_irf_test_result = _suppress_warnings() do
         priors=priors, method=:smc, observables=[:y],
         n_smc=30, n_mh_steps=1, ess_target=0.5,
         measurement_error=[0.01],
-        rng=MersenneTwister(123))
+        rng=Xoshiro(123))
 end
 
 @testset "irf(::BayesianDSGE)" begin
     result = _bayes_dsge_irf_test_result
     _suppress_warnings() do
-        birf = irf(result, 10; n_draws=10, rng=MersenneTwister(42))
+        birf = irf(result, 10; n_draws=10, rng=Xoshiro(42))
         @test birf isa BayesianImpulseResponse{Float64}
         @test birf.horizon == 10
         @test length(birf.variables) >= 1
@@ -3493,7 +3493,7 @@ end
         @test size(birf.quantiles, ndims(birf.quantiles)) == 4  # 4 quantile levels
 
         # Custom quantiles
-        birf2 = irf(result, 5; n_draws=5, quantiles=[0.1, 0.9], rng=MersenneTwister(42))
+        birf2 = irf(result, 5; n_draws=5, quantiles=[0.1, 0.9], rng=Xoshiro(42))
         @test birf2.quantile_levels == Float64[0.1, 0.9]
         @test size(birf2.quantiles, ndims(birf2.quantiles)) == 2
 
@@ -3507,7 +3507,7 @@ end
 @testset "fevd(::BayesianDSGE)" begin
     result = _bayes_dsge_irf_test_result
     _suppress_warnings() do
-        bfevd = fevd(result, 10; n_draws=10, rng=MersenneTwister(42))
+        bfevd = fevd(result, 10; n_draws=10, rng=Xoshiro(42))
         @test bfevd isa BayesianFEVD{Float64}
         @test bfevd.horizon == 10
         @test length(bfevd.variables) >= 1
@@ -3522,7 +3522,7 @@ end
 @testset "simulate(::BayesianDSGE)" begin
     result = _bayes_dsge_irf_test_result
     _suppress_warnings() do
-        bsim = simulate(result, 20; n_draws=10, rng=MersenneTwister(42))
+        bsim = simulate(result, 20; n_draws=10, rng=Xoshiro(42))
         @test bsim isa BayesianDSGESimulation{Float64}
         @test bsim.T_periods == 20
         @test length(bsim.variables) >= 1
@@ -3619,7 +3619,7 @@ end
 
 @testset "posterior_mode: mode finding + Laplace ML (#332)" begin
     _suppress_warnings() do
-    rng = Random.MersenneTwister(42)
+    rng = Random.Xoshiro(42)
 
     spec = @dsge begin
         parameters: ρ = 0.5, σ = 0.5
@@ -3679,7 +3679,7 @@ end
     # tolerance: 1.0 nat on this 1-parameter linear-Gaussian model)
     smc_fit = estimate_dsge_bayes(spec, data, [0.5];
         priors=priors, method=:smc, observables=[:y],
-        n_smc=300, rng=Random.MersenneTwister(11))
+        n_smc=300, rng=Random.Xoshiro(11))
     @test abs(pm.laplace_log_ml - marginal_likelihood(smc_fit)) < 1.0
 
     # show does not error
@@ -3692,7 +3692,7 @@ end
 
 @testset "posterior_mode: RWMH proposal seeding (proposal=:mode)" begin
     _suppress_warnings() do
-    rng = Random.MersenneTwister(42)
+    rng = Random.Xoshiro(42)
 
     spec = @dsge begin
         parameters: ρ = 0.5, σ = 0.5
@@ -3719,7 +3719,7 @@ end
     fit = estimate_dsge_bayes(spec, data, [0.5];
         priors=priors, method=:mh, proposal=:mode,
         n_draws=1500, burnin=500, observables=[:y],
-        rng=Random.MersenneTwister(7))
+        rng=Random.Xoshiro(7))
 
     @test fit isa BayesianDSGE{Float64}
     # Mode-seeded inverse-Hessian proposal achieves a reasonable acceptance rate
@@ -3737,7 +3737,7 @@ end
 
 @testset "posterior_mode: non-PD Hessian fallback (flat posterior)" begin
     _suppress_warnings() do
-    rng = Random.MersenneTwister(42)
+    rng = Random.Xoshiro(42)
 
     # κ multiplies a zero regressor: the likelihood is flat in κ, and the
     # Uniform(0,1) prior contributes zero curvature → H ≈ 0 → not PD
@@ -3769,7 +3769,7 @@ end
 
 @testset "MCMC diagnostics internals: rank-normalized R̂/ESS/Geweke (#333)" begin
     M = MacroEconometricModels
-    rng = Random.MersenneTwister(2026)
+    rng = Random.Xoshiro(2026)
 
     # Tied ranks average
     @test M._tied_ranks([1.0, 2.0, 2.0, 3.0]) == [1.0, 2.5, 2.5, 4.0]
@@ -3806,7 +3806,7 @@ end
 
 @testset "mcmc_diagnostics + trace/acf accessors + low-ESS warning (#333)" begin
     _suppress_warnings() do
-    rng = Random.MersenneTwister(42)
+    rng = Random.Xoshiro(42)
 
     spec = @dsge begin
         parameters: ρ = 0.5, σ = 0.5
@@ -3831,7 +3831,7 @@ end
     priors = Dict(:ρ => Beta(2, 2))
     fit = estimate_dsge_bayes(spec, data, [0.5];
         priors=priors, method=:mh, n_draws=2000, burnin=500,
-        observables=[:y], rng=Random.MersenneTwister(123))
+        observables=[:y], rng=Random.Xoshiro(123))
 
     # mcmc_diagnostics returns per-parameter stats on the retained chain
     d = mcmc_diagnostics(fit)
@@ -3880,7 +3880,7 @@ end
     # SMC results carry no ESS annotation (weighted particles, not a chain)
     smc_fit = estimate_dsge_bayes(spec, data, [0.5];
         priors=priors, method=:smc, n_smc=100,
-        observables=[:y], rng=Random.MersenneTwister(5))
+        observables=[:y], rng=Random.Xoshiro(5))
     pss = posterior_summary(smc_fit)
     @test !haskey(pss[:ρ], :ess_bulk)
     # mcmc_diagnostics on SMC draws warns but still computes
@@ -3897,7 +3897,7 @@ end
 
 @testset "bridge_sampling_ml: agrees with SMC and Laplace (#334)" begin
     _suppress_warnings() do
-    rng = Random.MersenneTwister(42)
+    rng = Random.Xoshiro(42)
 
     spec = @dsge begin
         parameters: ρ = 0.5, σ = 0.5
@@ -3924,7 +3924,7 @@ end
     fit = estimate_dsge_bayes(spec, data, [0.5];
         priors=priors, method=:mh, proposal=:mode,
         n_draws=3000, burnin=1000, observables=[:y],
-        rng=Random.MersenneTwister(7))
+        rng=Random.Xoshiro(7))
 
     # Estimation context is now stored on the result
     @test !isempty(fit.data)
@@ -3932,25 +3932,25 @@ end
     @test fit.observables == [:y]
     @test fit.solver == :gensys
 
-    bml = bridge_sampling_ml(fit; rng=Random.MersenneTwister(3))
+    bml = bridge_sampling_ml(fit; rng=Random.Xoshiro(3))
     @test isfinite(bml)
 
     # Documented tolerance: 1 nat against the SMC tempering path and Laplace
     smc_fit = estimate_dsge_bayes(spec, data, [0.5];
         priors=priors, method=:smc, observables=[:y],
-        n_smc=300, rng=Random.MersenneTwister(11))
+        n_smc=300, rng=Random.Xoshiro(11))
     @test abs(bml - marginal_likelihood(smc_fit)) < 1.0
 
     pm = posterior_mode(spec, data, [0.5]; priors=priors, observables=[:y])
     @test abs(bml - pm.laplace_log_ml) < 1.0
 
     # Student-t proposal agrees closely with the normal proposal
-    bml_t = bridge_sampling_ml(fit; proposal=:t, df=5, rng=Random.MersenneTwister(3))
+    bml_t = bridge_sampling_ml(fit; proposal=:t, df=5, rng=Random.Xoshiro(3))
     @test isfinite(bml_t)
     @test abs(bml_t - bml) < 0.5
 
     # Works on SMC draws too (context stored for all methods)
-    bml_smc = bridge_sampling_ml(smc_fit; rng=Random.MersenneTwister(3))
+    bml_smc = bridge_sampling_ml(smc_fit; rng=Random.Xoshiro(3))
     @test isfinite(bml_smc)
     @test abs(bml_smc - bml) < 0.5
 
@@ -3961,7 +3961,7 @@ end
 
 @testset "bridge_sampling_ml: failure paths return NaN + warn (#334)" begin
     _suppress_warnings() do
-    rng = Random.MersenneTwister(42)
+    rng = Random.Xoshiro(42)
 
     spec = @dsge begin
         parameters: ρ = 0.5, σ = 0.5
@@ -3978,7 +3978,7 @@ end
     # Chain too short → NaN + warning
     fit_short = estimate_dsge_bayes(spec, data, [0.5];
         priors=priors, method=:mh, n_draws=15, burnin=5, observables=[:y],
-        rng=Random.MersenneTwister(9))
+        rng=Random.Xoshiro(9))
     bml = @test_logs (:warn, r"chain too short") match_mode=:any begin
         bridge_sampling_ml(fit_short)
     end
@@ -4043,7 +4043,7 @@ end
 
 @testset "learning_rate_check + prior_posterior_overlap (#335)" begin
     _suppress_warnings() do
-    rng = Random.MersenneTwister(42)
+    rng = Random.Xoshiro(42)
 
     # κ multiplies a zero regressor → data are uninformative about κ
     spec = @dsge begin
@@ -4067,7 +4067,7 @@ end
     priors = Dict(:ρ => Beta(2, 2), :κ => Beta(2, 2))
     fit = estimate_dsge_bayes(spec, data, [0.5, 0.5];
         priors=priors, method=:smc, n_smc=300, observables=[:y],
-        rng=Random.MersenneTwister(11))
+        rng=Random.Xoshiro(11))
 
     # Overlap: κ's posterior is essentially the prior; ρ's is not
     ppo = prior_posterior_overlap(fit)
@@ -4084,7 +4084,7 @@ end
 
     # KPS learning rate: ρ's posterior variance shrinks with T, κ's does not
     lrc = learning_rate_check(fit; fractions=[0.4, 1.0], n_smc=200,
-                              rng=Random.MersenneTwister(3))
+                              rng=Random.Xoshiro(3))
     @test lrc isa LearningRateCheck{Float64}
     @test lrc.flagged[findfirst(==(:κ), lrc.param_names)]
     @test lrc.learning_rate[findfirst(==(:ρ), lrc.param_names)] > 0.2
@@ -4105,7 +4105,7 @@ end
 
 @testset "prior_predictive + posterior_predictive_check (#336)" begin
     _suppress_warnings() do
-    rng = Random.MersenneTwister(42)
+    rng = Random.Xoshiro(42)
 
     spec = @dsge begin
         parameters: ρ = 0.5, σ = 0.5
@@ -4119,7 +4119,7 @@ end
 
     # Prior predictive: draw-level statistic distribution, sensible variance
     ppr = prior_predictive(spec, priors; n_draws=100, T_periods=150,
-                           observables=[:y], rng=Random.MersenneTwister(1))
+                           observables=[:y], rng=Random.Xoshiro(1))
     @test ppr isa PriorPredictiveResult{Float64}
     @test ppr.n_draws == 100
     @test 0 < ppr.n_effective <= 100
@@ -4146,9 +4146,9 @@ end
     data = simulate(solve(true_spec; method=:gensys), 300; rng=rng)'
     fit = estimate_dsge_bayes(spec, data, [0.5];
         priors=priors, method=:smc, n_smc=200, observables=[:y],
-        rng=Random.MersenneTwister(11))
+        rng=Random.Xoshiro(11))
 
-    ppc = posterior_predictive_check(fit; n_draws=150, rng=Random.MersenneTwister(2))
+    ppc = posterior_predictive_check(fit; n_draws=150, rng=Random.Xoshiro(2))
     @test ppc isa PosteriorPredictiveCheck{Float64}
     @test ppc.n_effective > 0
     @test length(ppc.p_values) == length(ppc.stat_names) == length(ppc.observed)
@@ -4166,20 +4166,20 @@ end
     tight = Dict(:ρ => Beta(60, 240))
     fit_bad = estimate_dsge_bayes(spec, data, [0.2];
         priors=tight, method=:smc, n_smc=200, observables=[:y],
-        rng=Random.MersenneTwister(12))
+        rng=Random.Xoshiro(12))
     ppc_bad = posterior_predictive_check(fit_bad; n_draws=150,
-                                         rng=Random.MersenneTwister(3))
+                                         rng=Random.Xoshiro(3))
     @test ppc_bad.p_values[findfirst(==("ar1_y"), ppc_bad.stat_names)] < 0.05
 
     # Custom stats via NamedTuple contract
-    ppc_c = posterior_predictive_check(fit; n_draws=50, rng=Random.MersenneTwister(4),
+    ppc_c = posterior_predictive_check(fit; n_draws=50, rng=Random.Xoshiro(4),
         stats=Y -> (skew_y = mean(((Y[:, 1] .- mean(Y[:, 1])) ./ std(Y[:, 1])).^3),))
     @test ppc_c.stat_names == ["skew_y"]
     @test length(ppc_c.p_values) == 1
 
     # Explicit data argument (T_obs × n_obs orientation) matches stored data
     ppc_d = posterior_predictive_check(fit; data=Matrix(data'), n_draws=50,
-                                       rng=Random.MersenneTwister(5))
+                                       rng=Random.Xoshiro(5))
     @test ppc_d.observed ≈ ppc.observed
 
     # Regression: model with MORE endogenous series than observables — the
@@ -4192,13 +4192,13 @@ end
         i[t] = φ2 * y[t]
     end
     spec2 = compute_steady_state(spec2)
-    data2 = simulate(solve(spec2; method=:gensys), 150; rng=Random.MersenneTwister(6))
+    data2 = simulate(solve(spec2; method=:gensys), 150; rng=Random.Xoshiro(6))
     # Pass only the observed column (dev convention: data columns == observables, #142)
     fit2 = estimate_dsge_bayes(spec2, data2[:, [1]], [0.5];
         priors=Dict(:ρ2 => Beta(2, 2)), method=:smc, n_smc=100,
-        observables=[:y], rng=Random.MersenneTwister(13))
+        observables=[:y], rng=Random.Xoshiro(13))
     ppc2 = posterior_predictive_check(fit2; n_draws=25,
-                                      rng=Random.MersenneTwister(14))
+                                      rng=Random.Xoshiro(14))
     @test ppc2.stat_names == ["mean_y", "var_y", "ar1_y"]   # no phantom cross-corrs
     @test all(isfinite, ppc2.observed)
     end
@@ -4235,7 +4235,7 @@ end
 
 @testset "RWMH transform=true: boundary-safe walk (#337)" begin
     _suppress_warnings() do
-    rng = Random.MersenneTwister(42)
+    rng = Random.Xoshiro(42)
 
     # σ = 0.05 sits near the zero boundary of its positive support
     spec = @dsge begin
@@ -4264,11 +4264,11 @@ end
     fit_t = estimate_dsge_bayes(spec, data, [0.5, 0.1];
         priors=priors, method=:mh, transform=true,
         n_draws=5000, burnin=2000, observables=[:y],
-        rng=Random.MersenneTwister(7))
+        rng=Random.Xoshiro(7))
     fit_u = estimate_dsge_bayes(spec, data, [0.5, 0.1];
         priors=priors, method=:mh, transform=false,
         n_draws=5000, burnin=2000, observables=[:y],
-        rng=Random.MersenneTwister(7))
+        rng=Random.Xoshiro(7))
 
     # Posterior means agree across parameterizations within Monte Carlo error
     mt = vec(mean(fit_t.theta_draws; dims=1))
@@ -4289,7 +4289,7 @@ end
     fit_mt = estimate_dsge_bayes(spec, data, [0.5, 0.1];
         priors=priors, method=:mh, transform=true, proposal=:mode,
         n_draws=1500, burnin=500, observables=[:y],
-        rng=Random.MersenneTwister(9))
+        rng=Random.Xoshiro(9))
     @test 0.1 < fit_mt.acceptance_rate < 0.6
     @test abs(mean(fit_mt.theta_draws[:, 1]) - 0.8) < 0.15
     end
@@ -4372,7 +4372,7 @@ end
 
     # draw-based moments on a milder prior (ν ≈ 14.7 — 4th moment exists)
     ig_mild = dynare_prior(:inv_gamma, 0.5, 0.1)
-    rng = Random.MersenneTwister(1)
+    rng = Random.Xoshiro(1)
     draws = [rand(rng, ig_mild) for _ in 1:100_000]
     @test mean(draws) ≈ 0.5 rtol=0.02
     @test std(draws) ≈ 0.1 rtol=0.05
@@ -4390,7 +4390,7 @@ end
 
 @testset "dynare_prior: end-to-end in estimate_dsge_bayes (#338)" begin
     _suppress_warnings() do
-    rng = Random.MersenneTwister(42)
+    rng = Random.Xoshiro(42)
     spec = @dsge begin
         parameters: ρ = 0.5, σ = 0.5
         endogenous: y
@@ -4414,7 +4414,7 @@ end
         :σ => dynare_prior(:inv_gamma, 0.5, 0.3))
     fit = estimate_dsge_bayes(spec, data, [0.5, 0.5];
         priors=priors, method=:smc, n_smc=200, observables=[:y],
-        rng=Random.MersenneTwister(3))
+        rng=Random.Xoshiro(3))
     ps = posterior_summary(fit)
     @test abs(ps[:ρ][:mean] - 0.8) < 0.25
     @test abs(ps[:σ][:mean] - 0.5) < 0.2
@@ -4605,7 +4605,7 @@ end
 end
 
 @testset "T240 detect_trend guidance" begin
-    rng = Random.MersenneTwister(2401)
+    rng = Random.Xoshiro(2401)
     trending = collect(1.0:100.0) .+ 0.1 .* randn(rng, 100)
     noise = randn(rng, 100)
 
@@ -4634,7 +4634,7 @@ end
 @testset "T240 observation trends give the same likelihood as detrended data" begin
     # AC2 oracle: filtering a trending level series through y_t = d + Z s_t + trend_t
     # must reproduce, exactly, the likelihood of the underlying stationary series.
-    rng = Random.MersenneTwister(2402)
+    rng = Random.Xoshiro(2402)
     true_spec = @dsge begin
         parameters: ρ = 0.8, σ = 0.5, g = 0.02
         endogenous: y
@@ -4695,7 +4695,7 @@ end
 end
 
 @testset "T240 estimate_dsge_bayes wiring: prefilter, trends, warning" begin
-    rng = Random.MersenneTwister(2403)
+    rng = Random.Xoshiro(2403)
     true_spec = @dsge begin
         parameters: ρ = 0.8, σ = 0.5, g = 0.02
         endogenous: y
@@ -4725,7 +4725,7 @@ end
         estimate_dsge_bayes(spec, y_level, Dict(:ρ => 0.5); priors=priors,
                             method=:mh, n_draws=400, burnin=150, observables=[:y],
                             observation_trends=Dict(:y => (constant=a, linear=b)),
-                            rng=Random.MersenneTwister(11))
+                            rng=Random.Xoshiro(11))
     end
     @test res_tr.trends isa ObservationTrends{Float64}
     @test res_tr.prefilter === nothing
@@ -4736,7 +4736,7 @@ end
         estimate_dsge_bayes(spec, y_level, Dict(:ρ => 0.5); priors=priors,
                             method=:mh, n_draws=400, burnin=150, observables=[:y],
                             prefilter=:linear_detrend,
-                            rng=Random.MersenneTwister(11))
+                            rng=Random.Xoshiro(11))
     end
     @test res_pf.prefilter isa PrefilterSpec{Float64}
     @test res_pf.prefilter.transform === :linear_detrend
@@ -4751,7 +4751,7 @@ end
         estimate_dsge_bayes(spec, y_level, Dict(:ρ => 0.5); priors=priors,
                             method=:mh, n_draws=120, burnin=40, observables=[:y],
                             prefilter=:first_difference,
-                            rng=Random.MersenneTwister(11))
+                            rng=Random.Xoshiro(11))
     end
     @test res_fd.prefilter.n_dropped == 1
     @test size(res_fd.data, 2) == Tn - 1
@@ -4767,25 +4767,25 @@ end
     @test emits_trend_warning() do
         estimate_dsge_bayes(spec, y_level, Dict(:ρ => 0.5); priors=priors,
                             method=:mh, n_draws=30, burnin=10, observables=[:y],
-                            rng=Random.MersenneTwister(11))
+                            rng=Random.Xoshiro(11))
     end
 
     # ... and is silenced by either remedy, or by warn_trends=false
     @test !emits_trend_warning() do
         estimate_dsge_bayes(spec, y_level, Dict(:ρ => 0.5); priors=priors,
                             method=:mh, n_draws=30, burnin=10, observables=[:y],
-                            warn_trends=false, rng=Random.MersenneTwister(11))
+                            warn_trends=false, rng=Random.Xoshiro(11))
     end
     @test !emits_trend_warning() do
         estimate_dsge_bayes(spec, y_level, Dict(:ρ => 0.5); priors=priors,
                             method=:mh, n_draws=30, burnin=10, observables=[:y],
-                            prefilter=:linear_detrend, rng=Random.MersenneTwister(11))
+                            prefilter=:linear_detrend, rng=Random.Xoshiro(11))
     end
     @test !emits_trend_warning() do
         estimate_dsge_bayes(spec, y_level, Dict(:ρ => 0.5); priors=priors,
                             method=:mh, n_draws=30, burnin=10, observables=[:y],
                             observation_trends=Dict(:y => (constant=a, linear=b)),
-                            rng=Random.MersenneTwister(11))
+                            rng=Random.Xoshiro(11))
     end
 
     # Estimated trend slope: give :g a prior and let the sampler find it
@@ -4794,7 +4794,7 @@ end
                             priors=Dict(:ρ => Beta(2, 2), :g => Normal(0.0, 0.1)),
                             method=:mh, n_draws=1200, burnin=400, observables=[:y],
                             observation_trends=Dict(:y => (constant=a, linear=:g)),
-                            rng=Random.MersenneTwister(12))
+                            rng=Random.Xoshiro(12))
     end
     g_idx = findfirst(==(:g), res_est.param_names)
     @test abs(mean(res_est.theta_draws[:, g_idx]) - b) < 0.02
@@ -4805,7 +4805,7 @@ end
                             priors=Dict(:ρ => Beta(2, 2), :g => Normal(0.0, 0.1)),
                             method=:smc2, n_smc=4, n_particles=4, observables=[:y],
                             observation_trends=Dict(:y => (constant=a, linear=:g)),
-                            rng=Random.MersenneTwister(13))
+                            rng=Random.Xoshiro(13))
         nothing
     catch e
         e
@@ -4833,12 +4833,12 @@ end  # @testset "Bayesian DSGE"
     end
     spec2 = compute_steady_state(spec)
     sol = solve(spec2; method=:gensys)
-    Y = simulate(sol, 150; rng=Random.MersenneTwister(13901))
+    Y = simulate(sol, 150; rng=Random.Xoshiro(13901))
     b = estimate_dsge_bayes(spec, Y[:, [1]], [0.8];
                             priors=Dict(:ρ => Beta(5, 2)),
                             method=:mh, n_draws=200, burnin=80,
                             observables=[:Y],
-                            rng=Random.MersenneTwister(13902))
+                            rng=Random.Xoshiro(13902))
     r = irf(b, 8; n_draws=4)
     @test size(r.point_estimate) == (8, 3, 1)
     f = fevd(b, 8; n_draws=4)
@@ -4858,7 +4858,7 @@ end
         spec_dgp = compute_steady_state(to_spec(m; rho_z=rho_true, sigma_z=0.02))
         sol = solve(spec_dgp; method=:gensys)
         @test is_determined(sol)
-        sim = simulate(sol, 180; rng=Random.MersenneTwister(64901))
+        sim = simulate(sol, 180; rng=Random.Xoshiro(64901))
         # Z is the last endogenous (k, C, r, w, Z)
         z_idx = findfirst(==(:Z), spec_dgp.endog)
         data = reshape(sim[:, z_idx], :, 1)
@@ -4870,7 +4870,7 @@ end
         r_smc = estimate_dsge_bayes(spec_est, data, theta0;
             priors=priors, method=:smc, observables=[:Z],
             n_smc=80, n_mh_steps=1,
-            rng=Random.MersenneTwister(64902))
+            rng=Random.Xoshiro(64902))
         @test r_smc isa BayesianDSGE{Float64}
         @test r_smc.method === :smc
         @test r_smc.param_names == [:rho_z]
@@ -4882,7 +4882,7 @@ end
         r_mh = estimate_dsge_bayes(spec_est, data, theta0;
             priors=priors, method=:mh, observables=[:Z],
             n_draws=400, burnin=120,
-            rng=Random.MersenneTwister(64903))
+            rng=Random.Xoshiro(64903))
         @test r_mh isa BayesianDSGE{Float64}
         @test r_mh.method === :rwmh
         rho_mh = mean(r_mh.theta_draws[:, 1])
@@ -4968,7 +4968,7 @@ end
             priors=priors, observables=[:r], n_draws=6, burnin=2,
             ha_method=:ssj, ha_kwargs=(T_horizon=20, n_reduced=8),
             proposal_scale=0.001, adapt_interval=50,
-            rng=Random.MersenneTwister(64910))
+            rng=Random.Xoshiro(64910))
     end
     @test r_default.method === :rwmh
 
@@ -4977,7 +4977,7 @@ end
             priors=priors, method=:smc, observables=[:r],
             n_smc=6, n_mh_steps=1,
             ha_method=:ssj, ha_kwargs=(T_horizon=20, n_reduced=8),
-            rng=Random.MersenneTwister(64911))
+            rng=Random.Xoshiro(64911))
     end
     @test r_smc isa BayesianDSGE{Float64}
     @test r_smc.method === :smc
@@ -4991,7 +4991,7 @@ end
     ha = load_ha_example(:krusell_smith)
     dc = to_spec(dcegm_retirement_model(; n_periods=4, n_a=20))
     firm = to_spec(khan_thomas_example(; n_k=8, n_eps=2))
-    Y = randn(Random.MersenneTwister(1427), 20, 1)
+    Y = randn(Random.Xoshiro(1427), 20, 1)
 
     err = try
         estimate_dsge(ha, Y, [:alpha]; method=:euler_gmm)
@@ -5071,7 +5071,7 @@ end
         y[t] = ρ * y[t-1] + ε[t]
     end
     ha = load_ha_example(:krusell_smith)
-    Y = randn(Random.MersenneTwister(1428), 12, 1)
+    Y = randn(Random.Xoshiro(1428), 12, 1)
     priors_ra = Dict(:ρ => Uniform(0.1, 0.9))
     θ0 = Dict(:ρ => 0.5)
     @test_throws ArgumentError estimate_dsge_bayes(ra, Y, θ0;

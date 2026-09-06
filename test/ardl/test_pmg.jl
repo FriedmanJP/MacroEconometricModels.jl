@@ -39,7 +39,7 @@ using Test, MacroEconometricModels, Random, Statistics, LinearAlgebra, DataFrame
 # `homog=true` ⇒ common long-run θ; `homog=false` ⇒ θ_i spread around θ.
 # ---------------------------------------------------------------------------
 function _pmg_dgp(; N=20, T=60, theta=1.5, seed=123, homog=true, spread=0.8)
-    rng = MersenneTwister(seed)
+    rng = Xoshiro(seed)
     ys = Vector{Vector{Float64}}(); xs = Vector{Matrix{Float64}}()
     for i in 1:N
         phi = -(0.2 + 0.4 * rand(rng))                    # φ_i ∈ (-0.6, -0.2)
@@ -122,7 +122,7 @@ end
         # The homog=false DGP existed but was never called (DGP-04 #793): on
         # the shared hetero panel (N=30, T=100) the homogeneity null is false
         # and the test must reject (probed p = 0.003).
-        dh = dgp_pmg(MersenneTwister(123); N=30, T=100, homogeneous=false)
+        dh = dgp_pmg(Xoshiro(123); N=30, T=100, homogeneous=false)
         tmh = repeat(1:100, outer=30)
         Xh = reshape(dh.X, :, 1)
         pmgh = estimate_pmg(dh.Y, Xh, dh.id, tmh; p=1, q=1, method=:pmg,
@@ -155,7 +155,7 @@ end
     end
 
     @testset "multi-regressor, higher lags (k=2, p=2, q=2)" begin
-        rng = MersenneTwister(99)
+        rng = Xoshiro(99)
         N = 15; T = 70
         rec = NamedTuple[]
         for i in 1:N
@@ -231,7 +231,7 @@ end
         # Explosive units (AR 1.08) cannot error-correct, so n_nonconv > 0
         # UNCONDITIONALLY (DGP-04 #793) — the old `> 0 && @test` guard
         # evaporated on pure noise (n_nonconv == 0 for seeds 5, 6, 7).
-        rng = MersenneTwister(5)
+        rng = Xoshiro(5)
         N = 6; T = 25
         rec = NamedTuple[]
         for i in 1:N, t in 1:T

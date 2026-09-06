@@ -34,10 +34,10 @@ function _cf21_fixtures(rng)
                                      [randn(rng, H), randn(rng, H)],
                                      [randn(rng, H, 8), randn(rng, H, 8)], H, "2021Q2")
     r_opp = MEM._suppress_warnings() do
-        estimate_opp(fc, ce, loss; n_sim=60, rng=MersenneTwister(3))
+        estimate_opp(fc, ce, loss; n_sim=60, rng=Xoshiro(3))
     end
     sq = MEM._suppress_warnings() do
-        opp_sequence([fc, fc], ce, loss; n_sim=40, rng=MersenneTwister(4))
+        opp_sequence([fc, fc], ce, loss; n_sim=40, rng=Xoshiro(4))
     end
     wold = MEM.WoldRepresentation{Float64}(
         cat([Matrix{Float64}(I, 3, 3) .* 0.5^h for h in 0:H-1]...; dims=3) |>
@@ -55,7 +55,7 @@ function _cf21_fixtures(rng)
 end
 
 @testset "report()/refs() integration (CF-21)" begin
-    rng = MersenneTwister(20260821)
+    rng = Xoshiro(20260821)
     ce, pc, po, r_opp, sq, cm, sdg = _cf21_fixtures(rng)
 
     @testset "honesty strings" begin

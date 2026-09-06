@@ -16,31 +16,31 @@ using DataFrames  # nrow (no-op when fixtures.jl already loaded it)
 @testset "DGP library self-tests (DGP-01)" begin
 
     @testset "dgp_var: shapes, determinism, burn-in" begin
-        r1 = dgp_var(MersenneTwister(11); T=100)
+        r1 = dgp_var(Xoshiro(11); T=100)
         @test size(r1.Y) == (100, 3)
         @test size(r1.eps) == (100, 3)
         @test r1.Sigma ≈ r1.B0 * r1.B0'
         # Same seed -> bit-identical draws (rng-first contract).
-        r2 = dgp_var(MersenneTwister(11); T=100)
+        r2 = dgp_var(Xoshiro(11); T=100)
         @test r1.Y == r2.Y
-        r3 = dgp_var(MersenneTwister(12); T=100)
+        r3 = dgp_var(Xoshiro(12); T=100)
         @test r1.Y != r3.Y
         # VAR(2) vector-of-matrices form.
-        rv = dgp_var(MersenneTwister(11); A=[[0.5 0.0; 0.0 0.4], [0.1 0.0; 0.0 0.1]],
+        rv = dgp_var(Xoshiro(11); A=[[0.5 0.0; 0.0 0.4], [0.1 0.0; 0.0 0.1]],
                      B0=[1.0 0.0; 0.0 1.0], T=50)
         @test size(rv.Y) == (50, 2) && length(rv.A) == 2
         # Sigma-only form is honored (DGP-02 #791: it was silently ignored
         # before, keeping the default B0); passing both throws.
         S_in = [1.0 0.4; 0.4 0.9]
-        rs = dgp_var(MersenneTwister(11); A=[0.5 0.1; 0.0 0.4], Sigma=S_in, T=50)
+        rs = dgp_var(Xoshiro(11); A=[0.5 0.1; 0.0 0.4], Sigma=S_in, T=50)
         @test rs.Sigma ≈ S_in
         @test rs.B0 * rs.B0' ≈ S_in
-        @test_throws ArgumentError dgp_var(MersenneTwister(11); Sigma=S_in,
+        @test_throws ArgumentError dgp_var(Xoshiro(11); Sigma=S_in,
                                            B0=[1.0 0.0; 0.0 1.0])
     end
 
     @testset "VAR sample autocovariance ≈ Lyapunov Γ₀" begin
-        rng = MersenneTwister(21)
+        rng = Xoshiro(21)
         d = dgp_var(rng; T=20000)
         G0 = lyapunov_gamma0(d.A[1], d.Sigma)
         Yc = d.Y .- mean(d.Y, dims=1)
@@ -50,7 +50,7 @@ using DataFrames  # nrow (no-op when fixtures.jl already loaded it)
     end
 
     @testset "var_irf/var_fevd/var_hd identities" begin
-        rng = MersenneTwister(22)
+        rng = Xoshiro(22)
         d = dgp_var(rng; T=200, burn=0)  # starts at μ: HD identity is exact
         irf = var_irf(d.A, d.B0, 8)
         @test irf[1, :, :] ≈ d.B0  # Θ₀ = B0 exactly
@@ -63,7 +63,7 @@ using DataFrames  # nrow (no-op when fixtures.jl already loaded it)
     end
 
     @testset "dgp_arima: lengths and order recovery smoke" begin
-        rng = MersenneTwister(23)
+        rng = Xoshiro(23)
         d = dgp_arima(rng; phi=[0.7], theta=[0.3], T=300)
         @test length(d.y) == 300
         @test d.phi == [0.7] && d.theta == [0.3] && d.d == 0
@@ -74,7 +74,7 @@ using DataFrames  # nrow (no-op when fixtures.jl already loaded it)
     end
 
     @testset "dgp_garch_family: unconditional variance ≈ ω/(1−α−β)" begin
-        rng = MersenneTwister(24)
+        rng = Xoshiro(24)
         g = dgp_garch_family(rng; kind=:garch, omega=0.02, alpha=0.08,
                              beta=0.88, T=20000)
         uv = 0.02 / (1 - 0.08 - 0.88)
@@ -84,43 +84,43 @@ using DataFrames  # nrow (no-op when fixtures.jl already loaded it)
         @test all(g.h .> 0)
         for kind in (:arch, :egarch, :gjr, :aparch, :igarch, :cgarch,
                      :figarch, :fiegarch)
-            gk = dgp_garch_family(MersenneTwister(25); kind=kind, T=200)
+            gk = dgp_garch_family(Xoshiro(25); kind=kind, T=200)
             @test length(gk.y) == 200 && length(gk.h) == 200
             @test all(gk.h .> 0)
         end
-        gt = dgp_garch_family(MersenneTwister(26); innov=:t, T=200)
+        gt = dgp_garch_family(Xoshiro(26); innov=:t, T=200)
         @test length(gt.y) == 200
         # :arch ignores beta (default 0.88 must not make it explosive).
-        ga = dgp_garch_family(MersenneTwister(30); kind=:arch, omega=0.1,
+        ga = dgp_garch_family(Xoshiro(30); kind=:arch, omega=0.1,
                               alpha=0.3, T=20000)
         @test mean(ga.y .^ 2) ≈ 0.1 / (1 - 0.3) rtol=0.1
         # :egarch with persistent negative-omega params must not crash on
         # log of a negative init (DGP-10 #799).
-        ge = dgp_garch_family(MersenneTwister(31); kind=:egarch, omega=-0.3,
+        ge = dgp_garch_family(Xoshiro(31); kind=:egarch, omega=-0.3,
                               alpha=0.15, gamma=-0.08, beta=0.95, T=2000)
         @test all(isfinite.(ge.y)) && all(ge.h .> 0)
     end
 
     @testset "dgp_sv / dgp_mgarch / dgp_midas shapes" begin
-        s = dgp_sv(MersenneTwister(27); T=200)
+        s = dgp_sv(Xoshiro(27); T=200)
         @test length(s.y) == 200 && length(s.h) == 200
         for kind in (:ccc, :dcc, :bekk)
-            m = dgp_mgarch(MersenneTwister(28); kind=kind, T=100)
+            m = dgp_mgarch(Xoshiro(28); kind=kind, T=100)
             @test size(m.Y) == (100, 2) && size(m.H) == (100, 2, 2)
         end
-        md = dgp_midas(MersenneTwister(29); T_lf=50)
+        md = dgp_midas(Xoshiro(29); T_lf=50)
         @test length(md.y) == 50 && abs(sum(md.w_true) - 1.0) < 1e-12
     end
 
     @testset "dgp_dynamic_factors: R² ≈ signal share" begin
-        rng = MersenneTwister(30)
+        rng = Xoshiro(30)
         f = dgp_dynamic_factors(rng; T=400, N=40)
         @test size(f.X) == (400, 40) && size(f.F) == (400, 2)
         r2 = 1 - sum(var(f.X - f.F * f.Lambda', dims=1)) /
                  sum(var(f.X, dims=1))
         # Variance-ratio noise at T = 400 ≈ 0.03; 3× margin around 0.7.
         @test r2 ≈ 0.7 atol=0.1
-        fb = dgp_dynamic_factors(MersenneTwister(31); T=100,
+        fb = dgp_dynamic_factors(Xoshiro(31); T=100,
                                  blocks=Dict(1 => collect(1:20)))
         @test all(fb.Lambda[21:40, 1] .== 0)
         # DGP-06: the returned innovations reproduce the factor path exactly
@@ -130,7 +130,7 @@ using DataFrames  # nrow (no-op when fixtures.jl already loaded it)
     end
 
     @testset "dgp_mixed_frequency_panel: MM identity + NaN pattern" begin
-        rng = MersenneTwister(32)
+        rng = Xoshiro(32)
         mp = dgp_mixed_frequency_panel(rng; T=120, ragged=3)
         @test size(mp.Y, 1) == 120
         @test mp.agg_weights == [1.0, 2.0, 3.0, 2.0, 1.0]
@@ -147,7 +147,7 @@ using DataFrames  # nrow (no-op when fixtures.jl already loaded it)
     end
 
     @testset "dgp_vecm: Δy regression recovers α" begin
-        rng = MersenneTwister(33)
+        rng = Xoshiro(33)
         v = dgp_vecm(rng; Gamma=zeros(3, 3), T=5000)
         dY = diff(v.Y, dims=1)
         ec = vec(v.Y[1:end - 1, :] * v.beta)
@@ -158,72 +158,75 @@ using DataFrames  # nrow (no-op when fixtures.jl already loaded it)
     end
 
     @testset "dgp_cointreg / dgp_panel_var / dgp_ardl / dgp_nardl / dgp_pmg" begin
-        c = dgp_cointreg(MersenneTwister(34); T=100)
+        c = dgp_cointreg(Xoshiro(34); T=100)
         @test length(c.y) == 100 && size(c.X) == (100, 2)
-        cs = dgp_cointreg(MersenneTwister(35); T=100, spurious=true)
+        cs = dgp_cointreg(Xoshiro(35); T=100, spurious=true)
         @test length(cs.y) == 100
-        pv = dgp_panel_var(MersenneTwister(36); N=10, T=25)
+        pv = dgp_panel_var(Xoshiro(36); N=10, T=25)
         @test size(pv.Y) == (250, 2) && length(pv.id) == 250
-        a = dgp_ardl(MersenneTwister(37); T=100)
+        a = dgp_ardl(Xoshiro(37); T=100)
         @test length(a.y) == 100 && a.theta ≈ (0.8 + 0.4) / (1 - 0.6)
-        nd = dgp_nardl(MersenneTwister(38); T=100)
+        nd = dgp_nardl(Xoshiro(38); T=100)
         @test length(nd.y) == 100
-        pm = dgp_pmg(MersenneTwister(39); N=5, T=30)
+        pm = dgp_pmg(Xoshiro(39); N=5, T=30)
         @test length(pm.Y) == 150
     end
 
     @testset "dgp_lp_iv / dgp_state_dependent_var / dgp_propensity" begin
-        li = dgp_lp_iv(MersenneTwister(40); T=200)
+        li = dgp_lp_iv(Xoshiro(40); T=200)
         @test size(li.Y) == (200, 3) && size(li.Z) == (200, 1)
         @test li.pi1 == 1.5 && li.theta == 1.0
-        sv = dgp_state_dependent_var(MersenneTwister(41); T=200)
+        sv = dgp_state_dependent_var(Xoshiro(41); T=200)
         @test size(sv.Y) == (200, 2) && length(sv.G) == 200
         @test size(sv.irf_exp) == (13, 2, 2)
-        pr = dgp_propensity(MersenneTwister(42); n=500)
+        pr = dgp_propensity(Xoshiro(42); n=500)
         @test length(pr.Y) == 500 && pr.att == 1.0
-        ha = dgp_hac(MersenneTwister(48); rho=0.5, T=500, k=2)
+        ha = dgp_hac(Xoshiro(48); rho=0.5, T=500, k=2)
         @test size(ha.X) == (500, 3) && length(ha.u) == 500
         @test ha.lrv == 1 / (1 - 0.5)^2
         # AR(1) errors inherit persistence (slope se ≈ 0.04 at T = 500).
         @test cor(ha.u[1:499], ha.u[2:500]) ≈ 0.5 atol=0.15
-        hx = dgp_hac(MersenneTwister(49); rho=0.0, T=200, k=1, x_first=true)
+        hx = dgp_hac(Xoshiro(49); rho=0.0, T=200, k=1, x_first=true)
         @test size(hx.X) == (200, 2) && abs(cor(hx.u[1:199], hx.u[2:200])) < 0.2
     end
 
     @testset "dgp_nongaussian_var / dgp_heteroskedastic_var" begin
-        ng = dgp_nongaussian_var(MersenneTwister(43); T=500)
+        ng = dgp_nongaussian_var(Xoshiro(43); T=500)
         @test size(ng.Y) == (500, 3)
-        # t₅ shocks are leptokurtic (kurtosis 9, se ≈ 0.35 at T = 500).
-        @test mean(ng.eps .^ 4) / mean(ng.eps .^ 2)^2 > 5.0
+        # t₅ shocks are leptokurtic (population kurtosis 9 vs Gaussian 3).
+        # The sample fourth moment has infinite variance under t₅, so the
+        # realized kurtosis swings widely by draw; the 4.0 bar sits between
+        # Gaussian (≈3.0) and t₅ with margin on both sides.
+        @test mean(ng.eps .^ 4) / mean(ng.eps .^ 2)^2 > 4.0
         for kind in (:markov, :garch, :smooth, :external)
-            hh = dgp_heteroskedastic_var(MersenneTwister(44); kind=kind, T=200)
+            hh = dgp_heteroskedastic_var(Xoshiro(44); kind=kind, T=200)
             @test size(hh.Y) == (200, 3) && size(hh.scales) == (200, 3)
         end
     end
 
     @testset "dgp_regime_switching: all four kinds return truth" begin
-        ms = dgp_regime_switching(MersenneTwister(45); kind=:ms, T=200)
+        ms = dgp_regime_switching(Xoshiro(45); kind=:ms, T=200)
         @test length(ms.y) == 200 && all(s -> s == 1 || s == 2, ms.s)
-        st = dgp_regime_switching(MersenneTwister(46); kind=:setar, T=200)
+        st = dgp_regime_switching(Xoshiro(46); kind=:setar, T=200)
         @test length(st.y) == 200
-        ls = dgp_regime_switching(MersenneTwister(47); kind=:lstar, T=200)
+        ls = dgp_regime_switching(Xoshiro(47); kind=:lstar, T=200)
         @test all(0 .<= ls.G .<= 1)
-        es = dgp_regime_switching(MersenneTwister(48); kind=:estr, T=200)
+        es = dgp_regime_switching(Xoshiro(48); kind=:estr, T=200)
         @test all(0 .<= es.G .<= 1)
     end
 
     @testset "dgp_trend_cycle / dgp_ar2_peak / dgp_lagged_pair / dgp_state_space" begin
-        tc = dgp_trend_cycle(MersenneTwister(49); T=200)
+        tc = dgp_trend_cycle(Xoshiro(49); T=200)
         @test length(tc.y) == 200
         # AR(2) cycle lag-1 autocorrelation = φ₁/(1−φ₂) ≈ 0.92 (se ≈ 0.03).
         @test cor(tc.cycle[1:199], tc.cycle[2:200]) > 0.8
-        ap = dgp_ar2_peak(MersenneTwister(50); T=300)
+        ap = dgp_ar2_peak(Xoshiro(50); T=300)
         @test length(ap.y) == 300 && length(ap.spectrum) == 256
         _, imax = findmax(ap.spectrum)
         @test abs(ap.freqs[imax] - 2pi / 8) < 2pi / 256 * 2  # within 2 bins
-        lp = dgp_lagged_pair(MersenneTwister(51); T=300)
+        lp = dgp_lagged_pair(Xoshiro(51); T=300)
         @test length(lp.x) == 300 && lp.d == 3 && lp.gain == 2.0
-        ss = dgp_state_space(MersenneTwister(52); T=100)
+        ss = dgp_state_space(Xoshiro(52); T=100)
         @test size(ss.y) == (100, 1) && size(ss.x) == (100, 1)
     end
 
@@ -231,10 +234,10 @@ using DataFrames  # nrow (no-op when fixtures.jl already loaded it)
         for kind in (:adf, :kpss, :trend, :break_level, :break_trend, :seasonal,
                      :fourier, :explosive, :cointegrated_pair, :granger,
                      :panel_ur, :nongaussian, :heteroskedastic_groups)
-            d = dgp_unit_root_pair(MersenneTwister(53); kind=kind, T=120)
+            d = dgp_unit_root_pair(Xoshiro(53); kind=kind, T=120)
             @test d.truth.kind == kind
         end
-        g = dgp_unit_root_pair(MersenneTwister(54); kind=:granger, T=500)
+        g = dgp_unit_root_pair(Xoshiro(54); kind=:granger, T=500)
         # y₂ loads on lagged y₁ with 0.7: correlation must clear noise (se ≈ 0.045).
         @test cor(g.h1[2][2:end], g.h1[1][1:end - 1]) > 0.3
         @test abs(cor(g.h0[2][2:end], g.h0[1][1:end - 1])) < 0.2
@@ -244,20 +247,20 @@ using DataFrames  # nrow (no-op when fixtures.jl already loaded it)
         for kind in (:ols, :hc, :cluster, :iv, :logit, :probit, :ordered,
                      :mlogit, :poisson, :nb, :tobit, :truncreg, :heckman,
                      :qreg, :rdd)
-            d = dgp_cross_section(MersenneTwister(55); kind=kind, n=300)
+            d = dgp_cross_section(Xoshiro(55); kind=kind, n=300)
             @test kind === :truncreg ? 0 < length(d.y) < 300 : length(d.y) == 300
         end
-        lo = dgp_cross_section(MersenneTwister(56); kind=:logit, n=2000)
+        lo = dgp_cross_section(Xoshiro(56); kind=:logit, n=2000)
         @test length(logit_ame(lo.X, lo.beta)) == 2
         @test length(probit_ame(lo.X, lo.beta)) == 2
     end
 
     @testset "dgp_panel / dgp_staggered_did" begin
-        p = dgp_panel(MersenneTwister(57); N=20, T=10)
+        p = dgp_panel(Xoshiro(57); N=20, T=10)
         @test nrow(p.df) == 200 && p.mundlak == zeros(2)
-        pc = dgp_panel(MersenneTwister(58); N=20, T=10, corr_alpha_x=0.7)
+        pc = dgp_panel(Xoshiro(58); N=20, T=10, corr_alpha_x=0.7)
         @test pc.mundlak == fill(0.7, 2)
-        d = dgp_staggered_did(MersenneTwister(59); N=120, T=25)
+        d = dgp_staggered_did(Xoshiro(59); N=120, T=25)
         @test nrow(d.df) == 3000
         # e = 0 is observed for every cohort: ATT(0) ≈ mean_g τ(g,0) = 1.25
         # (cohort-share noise ≈ 0.03; 3× margin).
@@ -275,29 +278,29 @@ using DataFrames  # nrow (no-op when fixtures.jl already loaded it)
     end
 
     @testset "dgp_gmm / dgp_pce_draws / dgp_dsge_observed" begin
-        g = dgp_gmm(MersenneTwister(60); n=200)
+        g = dgp_gmm(Xoshiro(60); n=200)
         @test length(g.y) == 200 && size(g.Z, 2) == 3
-        go = dgp_gmm(MersenneTwister(61); kind=:ols, n=200)
+        go = dgp_gmm(Xoshiro(61); kind=:ols, n=200)
         @test length(go.y) == 200
-        ce = dgp_pce_draws(MersenneTwister(62), [1.0, 2.0, 3.0]; sd=0.1)
+        ce = dgp_pce_draws(Xoshiro(62), [1.0, 2.0, 3.0]; sd=0.1)
         @test size(ce.draws) == (500, 3)
         # Width scales with sd on centred draws: doubling sd doubles the
         # 5–95% range (pooled over coordinates; MC noise ≈ ±10%).
-        ce2 = dgp_pce_draws(MersenneTwister(62), [1.0, 2.0, 3.0]; sd=0.2)
+        ce2 = dgp_pce_draws(Xoshiro(62), [1.0, 2.0, 3.0]; sd=0.2)
         q1 = quantile(vec(ce.draws .- ce.point'), [0.05, 0.95])
         q2 = quantile(vec(ce2.draws .- ce2.point'), [0.05, 0.95])
         @test (q2[2] - q2[1]) / (q1[2] - q1[1]) ≈ 2.0 atol=0.3
         # Matrix input: draws shaped (n_draws, H, k), centred on point (C1).
-        cem = dgp_pce_draws(MersenneTwister(64), ones(4, 3); sd=0.1)
+        cem = dgp_pce_draws(Xoshiro(64), ones(4, 3); sd=0.1)
         @test size(cem.draws) == (500, 4, 3)
         # Mean over the draws axis ≈ point (per-element MC se = 0.1/sqrt(500)
         # ≈ 0.0045; atol=0.05 is >10x se, safe for 12 elements).
         @test dropdims(mean(cem.draws; dims=1); dims=1) ≈ cem.point atol=0.05
         # Vector input with corr != 0 runs and stays centred (C1 second path).
-        cev = dgp_pce_draws(MersenneTwister(65), [1.0, 2.0, 3.0]; sd=0.1, corr=0.5)
+        cev = dgp_pce_draws(Xoshiro(65), [1.0, 2.0, 3.0]; sd=0.1, corr=0.5)
         @test size(cev.draws) == (500, 3) && all(isfinite, cev.draws)
         @test vec(mean(cev.draws; dims=1)) ≈ [1.0, 2.0, 3.0] atol=0.05
-        do_ = dgp_dsge_observed(MersenneTwister(63), ones(50, 2); H=[0.25, 0.25])
+        do_ = dgp_dsge_observed(Xoshiro(63), ones(50, 2); H=[0.25, 0.25])
         @test size(do_.y_obs) == (50, 2)
     end
 

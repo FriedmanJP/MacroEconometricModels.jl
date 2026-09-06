@@ -51,7 +51,7 @@ using Test, MacroEconometricModels, Random, LinearAlgebra, Statistics, Delimited
             d = readdlm(f, ',', Float64)
             return d[:, 1], d[:, 2]
         end
-        rng = MersenneTwister(seed)
+        rng = Xoshiro(seed)
         x = zeros(N)
         for t in 2:N
             x[t] = x[t-1] + randn(rng)
@@ -74,7 +74,7 @@ using Test, MacroEconometricModels, Random, LinearAlgebra, Statistics, Delimited
     # (1a) Partial-sum decomposition identity — machine tolerance
     # =========================================================================
     @testset "partial-sum identity" begin
-        rng = MersenneTwister(42)
+        rng = Xoshiro(42)
         x = cumsum(randn(rng, 300))
         xp, xn = MacroEconometricModels._partial_sums(x)
         # x_t = x_1 + x⁺_t + x⁻_t  exactly (baseline is the first level)
@@ -118,7 +118,7 @@ using Test, MacroEconometricModels, Random, LinearAlgebra, Statistics, Delimited
     @testset "bounds k counts partial sums separately" begin
         # two regressors: x1 asymmetric (→ 2 cols), x2 symmetric (→ 1 col) ⇒ k=3
         y, x1 = _nardl_dgp(555, 220; θp=1.0, θn=-0.4)
-        rng = MersenneTwister(556)
+        rng = Xoshiro(556)
         x2 = cumsum(randn(rng, 220))
         X = hcat(x1, x2)
         m = estimate_nardl(y, X; asymmetric=[1], p=1, q=1, case=3)
@@ -164,7 +164,7 @@ using Test, MacroEconometricModels, Random, LinearAlgebra, Statistics, Delimited
         # rejections over 20 draws (probed 0; a 5% Wald rejects only rarely).
         nrej = let n = 0
             for seed in 1:20
-                d = dgp_nardl(MersenneTwister(seed); beta_pos=0.6, beta_neg=0.6,
+                d = dgp_nardl(Xoshiro(seed); beta_pos=0.6, beta_neg=0.6,
                               T=300)
                 m = estimate_nardl(d.y, reshape(d.x, :, 1); asymmetric=:all,
                                    p=1, q=1, case=3)
@@ -174,7 +174,7 @@ using Test, MacroEconometricModels, Random, LinearAlgebra, Statistics, Delimited
         end
         @test nrej <= 3
         # Interface on one symmetric draw (kept from the old spot-check).
-        d = dgp_nardl(MersenneTwister(31337); beta_pos=0.6, beta_neg=0.6, T=300)
+        d = dgp_nardl(Xoshiro(31337); beta_pos=0.6, beta_neg=0.6, T=300)
         m = estimate_nardl(d.y, reshape(d.x, :, 1); asymmetric=:all, p=1, q=1,
                            case=3)
         st = symmetry_test(m)
@@ -189,7 +189,7 @@ using Test, MacroEconometricModels, Random, LinearAlgebra, Statistics, Delimited
         # (DGP-04 #793): the Wald must reject nearly always (probed 20/20).
         nrej = let n = 0
             for seed in 1:20
-                d = dgp_nardl(MersenneTwister(seed); beta_pos=1.2, beta_neg=-0.4,
+                d = dgp_nardl(Xoshiro(seed); beta_pos=1.2, beta_neg=-0.4,
                               T=400)
                 m = estimate_nardl(d.y, reshape(d.x, :, 1); asymmetric=:all,
                                    p=1, q=1, case=3)
@@ -220,7 +220,7 @@ using Test, MacroEconometricModels, Random, LinearAlgebra, Statistics, Delimited
     @testset "recursive-design residual bootstrap bands" begin
         y, x = _nardl_dgp(2024, 260; θp=1.5, θn=-0.5)
         m = estimate_nardl(y, reshape(x, :, 1); asymmetric=:all, p=1, q=1, case=3)
-        rng = MersenneTwister(7)
+        rng = Xoshiro(7)
         mm = dynamic_multipliers(m, 24; bootstrap=true, nreps=500, level=0.90, rng=rng)
 
         @test mm.nreps == 500
@@ -245,7 +245,7 @@ using Test, MacroEconometricModels, Random, LinearAlgebra, Statistics, Delimited
     # =========================================================================
     @testset "asymmetric selection" begin
         y, x1 = _nardl_dgp(111, 200; θp=1.0, θn=-0.3)
-        rng = MersenneTwister(112)
+        rng = Xoshiro(112)
         x2 = cumsum(randn(rng, 200))
         X = hcat(x1, x2)
         m = estimate_nardl(y, X; asymmetric=[2], p=1, q=1, case=3,
@@ -265,7 +265,7 @@ using Test, MacroEconometricModels, Random, LinearAlgebra, Statistics, Delimited
         y, x = _nardl_dgp(2024, 260; θp=1.5, θn=-0.5)
         m = estimate_nardl(y, reshape(x, :, 1); asymmetric=:all, p=1, q=1, case=3)
         st = symmetry_test(m)
-        rng = MersenneTwister(9)
+        rng = Xoshiro(9)
         mm = dynamic_multipliers(m, 20; bootstrap=true, nreps=200, level=0.90, rng=rng)
 
         io = IOBuffer()

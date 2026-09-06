@@ -24,7 +24,7 @@ end
 
 @testset "SHA-256 integrity verification (#250)" begin
     dir = mktempdir()
-    payload = rand(MersenneTwister(2501), UInt8, 512)  # DGP-01: explicit rng
+    payload = rand(Xoshiro(2501), UInt8, 512)  # DGP-01: explicit rng
     path = joinpath(dir, "archive.zip"); write(path, payload)
 
     # io_file_digest is the exact SHA-256 of the bytes

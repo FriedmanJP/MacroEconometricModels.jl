@@ -165,7 +165,7 @@ end
     @testset "Simulated selection DGP — parameter recovery" begin
         # Bespoke design (exclusion restriction + σ=1.5): dgp_cross_section
         # :heckman has neither, so this simulator stays inline with an explicit rng.
-        rng = Random.MersenneTwister(20260717)
+        rng = Random.Xoshiro(20260717)
         n = 6000
         z2 = randn(rng, n); x2 = randn(rng, n)
         Z = hcat(ones(n), z2, x2)          # z2 is the exclusion restriction

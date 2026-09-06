@@ -128,7 +128,7 @@ end
         # RW with an embedded φ=1.05 explosive interval [50,90] inside T=150
         # (PSY 2015 date-stamping oracle; loose overlap, seeded).
         function make_bubble(seed; T=150, a=50, b=90, phi=1.05)
-            rng = MersenneTwister(seed); yb = zeros(T)
+            rng = Xoshiro(seed); yb = zeros(T)
             for t in 2:T
                 yb[t] = (a <= t <= b ? phi : 1.0) * yb[t-1] + randn(rng)
             end
@@ -157,7 +157,7 @@ end
     @testset "pure random walk yields no episode w.h.p." begin
         noep = 0
         for sd in 1:10
-            yr = cumsum(randn(MersenneTwister(3000 + sd), 120))
+            yr = cumsum(randn(Xoshiro(3000 + sd), 120))
             r = gsadf_test(yr; mc_reps=149, seed=99)
             isempty(r.episodes) && (noep += 1)
         end
@@ -209,7 +209,7 @@ end
     end
 
     @testset "argument validation" begin
-        @test_throws ArgumentError sadf_test(randn(Random.MersenneTwister(91), 10))  # T too small
+        @test_throws ArgumentError sadf_test(randn(Random.Xoshiro(91), 10))  # T too small
         @test_throws ArgumentError gsadf_test(y_rw; cv=:bogus)
         @test_throws ArgumentError gsadf_test(y_rw; adflag=-1)
         @test_throws ArgumentError gsadf_test(y_rw; r0=1.5)

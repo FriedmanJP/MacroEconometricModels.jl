@@ -318,7 +318,7 @@ end
         yi = Int.(round.(D.y_pois))
         @test coef(estimate_poisson(yi, D.X)) ≈ coef(estimate_poisson(D.y_pois, D.X)) atol = 1e-12
         # An all-zero response is degenerate but must not throw.
-        mz = estimate_poisson(zeros(50), hcat(ones(50), randn(MersenneTwister(1), 50)))
+        mz = estimate_poisson(zeros(50), hcat(ones(50), randn(Xoshiro(1), 50)))
         @test all(mz.fitted .< 1e-3)
     end
 

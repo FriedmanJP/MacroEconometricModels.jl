@@ -32,7 +32,7 @@ function _laneD_ms(; K=2, Tt=5, nanprob=false, nantrans=false)
     B0 = [1.0 0.2; 0.3 1.0]; Q = Matrix(1.0I, 2, 2)
     rp = zeros(Tt, K)
     for t in 1:Tt
-        v = abs.(randn(MersenneTwister(t), K)) .+ 0.1
+        v = abs.(randn(Xoshiro(t), K)) .+ 0.1
         rp[t, :] = v ./ sum(v)
     end
     nanprob && (rp[1, 1] = NaN)
@@ -44,10 +44,10 @@ end
 
 function _laneD_garch(; nanvar=false)
     B0 = [1.0 0.2; 0.3 1.0]; Q = Matrix(1.0I, 2, 2)
-    cv = abs.(randn(MersenneTwister(3), 6, 2)) .+ 0.2
+    cv = abs.(randn(Xoshiro(3), 6, 2)) .+ 0.2
     nanvar && (cv[2, 1] = NaN)
     _MEM.GARCHSVARResult(B0, Q, [0.1 0.2 0.7; 0.1 0.3 0.6], cv,
-        randn(MersenneTwister(4), 6, 2), -50.0, true, 3)
+        randn(Xoshiro(4), 6, 2), -50.0, true, 3)
 end
 
 function _laneD_star()
@@ -63,10 +63,10 @@ _laneD_extvol() = _MEM.ExternalVolatilitySVARResult([1.0 0.2; 0.3 1.0], Matrix(1
     [[1, 2, 3], [4, 5, 6]], -70.0)
 
 _laneD_ica() = _MEM.ICASVARResult([1.0 0.2; 0.3 1.0], [1.0 -0.2; -0.3 1.0],
-    Matrix(1.0I, 2, 2), randn(MersenneTwister(5), 6, 2), :fastica, true, 10, 0.5)
+    Matrix(1.0I, 2, 2), randn(Xoshiro(5), 6, 2), :fastica, true, 10, 0.5)
 
 _laneD_ml() = _MEM.NonGaussianMLResult([1.0 0.2; 0.3 1.0], Matrix(1.0I, 2, 2),
-    randn(MersenneTwister(6), 6, 2), :t, -40.0, -55.0, Dict{Symbol,Any}(),
+    randn(Xoshiro(6), 6, 2), :t, -40.0, -55.0, Dict{Symbol,Any}(),
     Matrix(1.0I, 4, 4), [0.1 0.1; 0.1 0.1], true, 8, 90.0, 100.0)
 
 # Directly-constructed DSGE fixtures.
@@ -90,13 +90,13 @@ function _laneD_pf(; nvar=2, nanpath=false)
 end
 
 function _laneD_ks(; ns=2, Tn=6, nancov=false)
-    states = randn(MersenneTwister(7), ns, Tn)
+    states = randn(Xoshiro(7), ns, Tn)
     covs = zeros(ns, ns, Tn)
     for t in 1:Tn
         covs[:, :, t] = Matrix(0.5I, ns, ns)
     end
     nancov && (states[1, 2] = NaN)
-    _MEM.KalmanSmootherResult(states, covs, randn(MersenneTwister(8), ns, Tn),
+    _MEM.KalmanSmootherResult(states, covs, randn(Xoshiro(8), ns, Tn),
         states, covs, states, covs, -123.0)
 end
 
@@ -116,7 +116,7 @@ end
 
 # Small panels / cross-sections for the micro coefficient plots.
 function _laneD_panel(; N=8, Tt=10, varnames=("x1", "x2"), seed=11)
-    rng = MersenneTwister(seed)
+    rng = Xoshiro(seed)
     df = DataFrame(id=repeat(1:N, inner=Tt), time=repeat(1:Tt, outer=N))
     df[!, varnames[1]] = randn(rng, N * Tt)
     df[!, varnames[2]] = randn(rng, N * Tt)
@@ -242,7 +242,7 @@ end
             @test occursin("Smoothed States", p.html)
             @test occursin("\"lo_key\":\"lo\"", p.html)          # ±1.96 s.e. band
             # observed overlay
-            po = plot_result(ks; varnames=["a", "b"], data=randn(MersenneTwister(1), 6, 2))
+            po = plot_result(ks; varnames=["a", "b"], data=randn(Xoshiro(1), 6, 2))
             @test occursin("Observed", po.html)
             # required + validated kwargs
             @test_throws ArgumentError plot_result(ks)                       # missing varnames
@@ -333,7 +333,7 @@ end
     # PLT-36 — micro / panel / LDV coefficient plots
     # =========================================================================
     @testset "PLT-36 micro / panel coefficient plots" begin
-        rng = MersenneTwister(21)
+        rng = Xoshiro(21)
         n = 300
         X = randn(rng, n, 2)
         xb = X * [0.8, -0.5]
@@ -355,7 +355,7 @@ end
             pdh = _laneD_panel(varnames=(HOSTILE_NAME, "x2"))
             assert_escapes(plot_result(estimate_xtreg(pdh, :y, [Symbol(HOSTILE_NAME), :x2])))
             # PanelIV — x2 endogenous, z the instrument
-            rng2 = MersenneTwister(31)
+            rng2 = Xoshiro(31)
             Np, Tt = 8, 10
             dfi = DataFrame(id=repeat(1:Np, inner=Tt), time=repeat(1:Tt, outer=Np))
             dfi.x1 = randn(rng2, Np * Tt); dfi.z = randn(rng2, Np * Tt)

@@ -95,7 +95,7 @@ end
 
     if !FAST
         @testset "FGLR recovers r>q DGP; gdfm_var does not" begin
-            rng = Random.MersenneTwister(72602)
+            rng = Random.Xoshiro(72602)
             T_obs, N, q, rstat = 500, 60, 2, 4
             Φ = [0.5 0.0; 0.1 0.4]
             Λ = 0.4 .* randn(rng, N, rstat)
@@ -137,7 +137,7 @@ end
         end
 
         @testset "proxy identification recovers the instrumented shock" begin
-            rng = Random.MersenneTwister(72701)
+            rng = Random.Xoshiro(72701)
             T_obs, N, q = 600, 20, 2
             F = zeros(T_obs, q)
             εtrue = zeros(T_obs, q)
@@ -170,7 +170,7 @@ end
         end
     else
         @testset "proxy identification (FAST)" begin
-            rng = Random.MersenneTwister(72711)
+            rng = Random.Xoshiro(72711)
             T_obs, N, q = 120, 10, 2
             F = zeros(T_obs, q)
             ε1 = randn(rng, T_obs)

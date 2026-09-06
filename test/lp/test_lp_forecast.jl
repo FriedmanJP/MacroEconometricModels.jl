@@ -16,7 +16,7 @@ using Statistics
     T_obs = 200
     n = 3
     A_fc = 0.3 .* Matrix{Float64}(I, n, n)
-    Y = dgp_var(MersenneTwister(123); A=A_fc, B0=Matrix{Float64}(I, n, n),
+    Y = dgp_var(Xoshiro(123); A=A_fc, B0=Matrix{Float64}(I, n, n),
                 T=T_obs).Y
 
     H = 8
@@ -223,7 +223,7 @@ using Statistics
 
     @testset "Forecast control origin off-by-one (#209 R-27)" begin
         M = MacroEconometricModels
-        rng = Random.MersenneTwister(2709)
+        rng = Random.Xoshiro(2709)
         Y = randn(rng, 80, 2)
         lags = 3
         lp = estimate_lp(Y, 1, 4; lags=lags)

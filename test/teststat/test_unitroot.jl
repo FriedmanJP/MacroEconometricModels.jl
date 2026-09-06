@@ -12,7 +12,7 @@ using Statistics
 @testset "Unit Root Tests" begin
 
     # Explicit RNG: reproducible without touching the global stream (DGP-12 #801)
-    rng_ur = Random.MersenneTwister(12345)
+    rng_ur = Random.Xoshiro(12345)
 
     # ==========================================================================
     # Test Data Generation
@@ -94,8 +94,8 @@ using Statistics
         @test result_fixed.lags == 2
 
         # Test error handling
-        @test_throws ArgumentError adf_test(randn(Random.MersenneTwister(71), 10); regression=:invalid)
-        @test_throws ArgumentError adf_test(randn(Random.MersenneTwister(72), 5))  # Too short
+        @test_throws ArgumentError adf_test(randn(Random.Xoshiro(71), 10); regression=:invalid)
+        @test_throws ArgumentError adf_test(randn(Random.Xoshiro(72), 5))  # Too short
 
         # Test type conversion (Integer input)
         y_int = round.(Int, y_stationary * 10)
@@ -143,7 +143,7 @@ using Statistics
         A = MacroEconometricModels
         # AR(2) fixture with an early mean shift: the fixed-sample IC (correct) picks the
         # theoretically right lag while the old variable-sample IC is badly biased.
-        rng = MersenneTwister(2079)
+        rng = Xoshiro(2079)
         n = 120; max_p = 8
         e = randn(rng, n)
         y = zeros(n)
@@ -182,7 +182,7 @@ using Statistics
         @test exp_aic != var_aic
 
         # (c) SANITY on a pure AR(1): a small lag, always within bounds
-        rng_778 = Random.MersenneTwister(778)
+        rng_778 = Random.Xoshiro(778)
         ys = generate_stationary(200; rho=0.5, rng=rng_778)
         lag = A.adf_select_lags(ys, 12, :constant, :aic)
         @test 0 <= lag <= 12
@@ -229,8 +229,8 @@ using Statistics
         @test result_bw.bandwidth == 5
 
         # Test error handling
-        @test_throws ArgumentError kpss_test(randn(Random.MersenneTwister(73), 100); regression=:none)  # Invalid regression
-        @test_throws ArgumentError kpss_test(randn(Random.MersenneTwister(74), 5))  # Too short
+        @test_throws ArgumentError kpss_test(randn(Random.Xoshiro(73), 100); regression=:none)  # Invalid regression
+        @test_throws ArgumentError kpss_test(randn(Random.Xoshiro(74), 5))  # Too short
     end
 
     # ==========================================================================
@@ -272,7 +272,7 @@ using Statistics
 
     @testset "Zivot-Andrews Test" begin
         # Generate series with structural break
-        rng = Random.MersenneTwister(15001)
+        rng = Random.Xoshiro(15001)
         n = 150
         y_break = vcat(randn(rng, 75), randn(rng, 75) .+ 3.0)  # Level shift at t=75
 
@@ -299,8 +299,8 @@ using Statistics
         @test result_trim isa ZAResult
 
         # Test error handling
-        @test_throws ArgumentError za_test(randn(Random.MersenneTwister(75), 30))  # Too short
-        @test_throws ArgumentError za_test(randn(Random.MersenneTwister(76), 100); trim=0.6)  # Invalid trim
+        @test_throws ArgumentError za_test(randn(Random.Xoshiro(75), 30))  # Too short
+        @test_throws ArgumentError za_test(randn(Random.Xoshiro(76), 100); trim=0.6)  # Invalid trim
 
         # Test that AIC lag selection actually varies (not hardcoded)
         result_aic = za_test(y_break; regression=:constant, lags=:aic)
@@ -366,7 +366,7 @@ using Statistics
         # Regression test: GLS detrending should use original Z, not quasi-differenced Z
         # After fix, MZt for stationary AR(1) with rho=0.3 should be more negative
         # than for a random walk
-        rng = Random.MersenneTwister(99887)
+        rng = Random.Xoshiro(99887)
         y_ar_np = zeros(200)
         y_ar_np[1] = randn(rng)
         for t in 2:200; y_ar_np[t] = 0.3 * y_ar_np[t-1] + randn(rng); end
@@ -383,7 +383,7 @@ using Statistics
     @testset "Johansen Cointegration Test" begin
         # Generate cointegrated system
         n, T = 3, 200
-        rng = Random.MersenneTwister(42)
+        rng = Random.Xoshiro(42)
 
         # Common stochastic trend
         trend = cumsum(randn(rng, T))
@@ -441,10 +441,10 @@ using Statistics
 
         # Test error handling
         @test_throws ArgumentError johansen_test(Y, 0)  # Invalid lags
-        @test_throws ArgumentError johansen_test(randn(Random.MersenneTwister(77), 10, 3), 2)  # Too few obs
+        @test_throws ArgumentError johansen_test(randn(Random.Xoshiro(77), 10, 3), 2)  # Too few obs
 
         # Test Case 4 (:trend) runs without error and produces valid results
-        rng = Random.MersenneTwister(7744)
+        rng = Random.Xoshiro(7744)
         Y_coint = hcat(cumsum(randn(rng, 200)), cumsum(randn(rng, 200)))
         Y_coint[:, 2] = Y_coint[:, 1] + 0.1 * randn(rng, 200)
         result_trend4 = johansen_test(Y_coint, 2; deterministic=:trend)
@@ -455,7 +455,7 @@ using Statistics
     end
 
     @testset "Johansen rank selection (B1/T171)" begin
-        rng = MersenneTwister(11)
+        rng = Xoshiro(11)
         tr = cumsum(randn(rng, 300, 1); dims=1)          # one common stochastic trend
         Y = hcat(tr, tr .+ 0.1 .* randn(rng, 300), tr .+ 0.1 .* randn(rng, 300))
         res = johansen_test(Y, 2)
@@ -478,7 +478,7 @@ using Statistics
 
     @testset "VAR Stationarity" begin
         # Generate stationary VAR data
-        rng = Random.MersenneTwister(123)
+        rng = Random.Xoshiro(123)
         T, n = 200, 2
 
         # Stationary VAR(1) with coefficients ensuring stationarity
@@ -519,7 +519,7 @@ using Statistics
     # ==========================================================================
 
     @testset "estimate_var Stability Check" begin
-        rng = Random.MersenneTwister(456)
+        rng = Random.Xoshiro(456)
         T, n = 100, 2
 
         # Generate random walk data
@@ -596,7 +596,7 @@ using Statistics
         result_np = ngperron_test(y)
         @test sprint(show, result_np) isa String
 
-        rng = Random.MersenneTwister(15002)
+        rng = Random.Xoshiro(15002)
         Y = randn(rng, 150, 3)
         result_joh = johansen_test(Y, 2)
         @test sprint(show, result_joh) isa String
@@ -612,7 +612,7 @@ using Statistics
 
     @testset "Critical Values" begin
         # ADF critical values should be ordered: cv[1] < cv[5] < cv[10] (more negative = more stringent)
-        y = randn(Random.MersenneTwister(15003), 100)
+        y = randn(Random.Xoshiro(15003), 100)
         result = adf_test(y)
         @test result.critical_values[1] < result.critical_values[5] < result.critical_values[10]
 
@@ -626,7 +626,7 @@ using Statistics
     end
 
     @testset "PP with trend" begin
-        y = randn(Random.MersenneTwister(15004), 100)
+        y = randn(Random.Xoshiro(15004), 100)
         result = pp_test(y; regression=:trend)
         @test result isa MacroEconometricModels.PPResult
         @test isfinite(result.statistic)
@@ -634,7 +634,7 @@ using Statistics
     end
 
     @testset "Ng-Perron with trend" begin
-        y = randn(Random.MersenneTwister(15005), 100)
+        y = randn(Random.Xoshiro(15005), 100)
         result = ngperron_test(y; regression=:trend)
         @test result isa MacroEconometricModels.NgPerronResult
         @test isfinite(result.MZa)
@@ -644,7 +644,7 @@ using Statistics
     end
 
     @testset "ZA with both regression" begin
-        y = cumsum(randn(Random.MersenneTwister(15006), 100))
+        y = cumsum(randn(Random.Xoshiro(15006), 100))
         result = za_test(y; regression=:both)
         @test result isa MacroEconometricModels.ZAResult
         @test result.regression == :both
@@ -652,7 +652,7 @@ using Statistics
     end
 
     @testset "unit_root_summary with custom test list" begin
-        y = randn(Random.MersenneTwister(15007), 100)
+        y = randn(Random.Xoshiro(15007), 100)
         summary_result = unit_root_summary(y; tests=[:adf, :pp])
         @test length(summary_result.results) >= 2
         @test haskey(summary_result.results, :adf)
@@ -664,7 +664,7 @@ using Statistics
     end
 
     @testset "test_all_variables with pp and za" begin
-        rng = Random.MersenneTwister(8801)
+        rng = Random.Xoshiro(8801)
         Y = randn(rng, 100, 3)
         results_pp = test_all_variables(Y; test=:pp)
         @test length(results_pp) == 3
@@ -728,7 +728,7 @@ end
     end
 
     @testset "johansen_test p-values are Doornik-based" begin
-        rng = Random.MersenneTwister(17701)
+        rng = Random.Xoshiro(17701)
         Tn = 200
         x = cumsum(randn(rng, Tn))
         Y = hcat(x .+ 0.2 .* randn(rng, Tn), x .+ 0.2 .* randn(rng, Tn),

@@ -38,7 +38,7 @@ using LinearAlgebra
 function _sim_setar(; n::Int, gamma::Float64=0.0,
                     b1=(0.5, 0.6), b2=(-0.3, -0.4), sigma::Float64=0.3,
                     seed::Int=20240716)
-    rng = MersenneTwister(seed)
+    rng = Xoshiro(seed)
     y = zeros(n)
     for t in 2:n
         if y[t-1] <= gamma
@@ -52,7 +52,7 @@ end
 
 """Simulate a linear AR(1) (the linearity-test null)."""
 function _sim_ar1(; n::Int, phi::Float64=0.4, sigma::Float64=1.0, seed::Int=1)
-    rng = MersenneTwister(seed)
+    rng = Xoshiro(seed)
     y = zeros(n)
     for t in 2:n
         y[t] = phi * y[t-1] + sigma * randn(rng)
@@ -154,7 +154,7 @@ end
         y = _sim_setar(; n=400, seed=3, b1=(1.0, 0.5), b2=(-1.0, -0.5))
         X = hcat(ones(length(y)-1), y[1:end-1])
         lt = hansen_linearity_test(y[2:end], X, y[1:end-1]; reps=200,
-                                   rng=MersenneTwister(11))
+                                   rng=Xoshiro(11))
         @test lt isa HansenLinearityTest
         @test lt.sup_lm > 0
         @test lt.sup_wald > 0
@@ -168,7 +168,7 @@ end
         y = _sim_ar1(; n=300, phi=0.4, seed=7)
         X = hcat(ones(length(y)-1), y[1:end-1])
         lt = hansen_linearity_test(y[2:end], X, y[1:end-1]; reps=300,
-                                   rng=MersenneTwister(11))
+                                   rng=Xoshiro(11))
         @test lt.pvalue_lm > 0.05
 
         # Small Monte-Carlo: bootstrap p-values must not systematically over-reject.
@@ -179,7 +179,7 @@ end
             yy = _sim_ar1(; n=140, phi=0.4, seed=1000 + s)
             Xs = hcat(ones(length(yy)-1), yy[1:end-1])
             l = hansen_linearity_test(yy[2:end], Xs, yy[1:end-1]; reps=99,
-                                      rng=MersenneTwister(500 + s))
+                                      rng=Xoshiro(500 + s))
             push!(below, l.pvalue_lm)
             l.pvalue_lm < 0.10 && (rej10 += 1)
         end
@@ -194,7 +194,7 @@ end
     # =========================================================================
     @testset "SETAR :auto delay selection" begin
         # DGP switches on y_{t-2}; :auto should prefer d = 2.
-        rng = MersenneTwister(42)
+        rng = Xoshiro(42)
         n = 1500
         y = zeros(n)
         for t in 3:n
@@ -230,7 +230,7 @@ end
         # dimension mismatch
         @test_throws DimensionMismatch estimate_threshold(y[2:end], X, q[1:end-1]; linearity=false)
         # too few observations for two 2-regressor regimes (need ≥ 2·(k+1) = 6)
-        yt = randn(MersenneTwister(1), 5); Xt = hcat(ones(5), randn(MersenneTwister(2), 5))
+        yt = randn(Xoshiro(1), 5); Xt = hcat(ones(5), randn(Xoshiro(2), 5))
         @test_throws ArgumentError estimate_threshold(yt, Xt, yt; trim=0.15, linearity=false)
         # SETAR order guard
         @test_throws ArgumentError estimate_setar(y, 0)
@@ -242,7 +242,7 @@ end
     @testset "SETAR bootstrap forecast" begin
         y = _sim_setar(; n=800, seed=8)
         m = estimate_setar(y, 1, 1; linearity=false)
-        f = forecast(m, 8; reps=500, level=0.90, rng=MersenneTwister(5))
+        f = forecast(m, 8; reps=500, level=0.90, rng=Xoshiro(5))
         @test f isa ThresholdForecast
         @test f.horizon == 8
         @test length(f.forecast) == 8
@@ -281,7 +281,7 @@ end
     # =========================================================================
     @testset "report / refs / plot_result" begin
         y = _sim_setar(; n=400, seed=21)
-        m = estimate_setar(y, 1, 1; reps=100, rng=MersenneTwister(3))
+        m = estimate_setar(y, 1, 1; reps=100, rng=Xoshiro(3))
         @test m.linearity !== nothing
 
         io = IOBuffer()
@@ -301,7 +301,7 @@ end
         @test occursin("Hansen", String(take!(rio2)))
 
         # forecast show
-        f = forecast(m, 5; reps=200, rng=MersenneTwister(1))
+        f = forecast(m, 5; reps=200, rng=Xoshiro(1))
         fio = IOBuffer(); show(fio, f)
         @test occursin("Forecast", String(take!(fio)))
 

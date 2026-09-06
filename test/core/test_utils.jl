@@ -11,7 +11,7 @@ using Statistics
 using Random
 
 @testset "Utility Functions" begin
-    rng = MersenneTwister(12345)  # DGP-02: explicit rng
+    rng = Xoshiro(12345)  # DGP-02: explicit rng
 
     # ==========================================================================
     # Input Validation Tests
@@ -322,8 +322,8 @@ using Random
     # ==========================================================================
 
     @testset "Integration with VAR Estimation" begin
-        rng = MersenneTwister(54321)  # DGP-02: explicit rng
-        T_int = 200
+        rng = Xoshiro(54321)  # DGP-02: explicit rng
+        T_int = 800
         n_int = 2
         p_int = 2
 
@@ -336,8 +336,8 @@ using Random
         @test model isa VARModel
 
         # The estimated A1 block recovers the truth: max coefficient error bound
-        # 0.15 ≈ 2.5× the asymptotic SE ≈ 0.06 at T=200 (realized 0.119); the
-        # lag-2 block is ≈ 0 (bound 0.2 ≈ 3× SE over its 4 coefficients).
+        # 0.15 ≈ 5× the asymptotic SE ≈ 0.03 at T=800 (at T=200 the SE ≈ 0.06
+        # made the bound a 2.5σ coin flip); the lag-2 block is ≈ 0 (bound 0.2).
         @test maximum(abs, model.B[2:3, :]' - A1) < 0.15
         @test maximum(abs, model.B[4:5, :]) < 0.2
 
@@ -348,7 +348,7 @@ using Random
     end
 
     @testset "Numerical Stability Edge Cases" begin
-        rng = MersenneTwister(99999)  # DGP-02: explicit rng
+        rng = Xoshiro(99999)  # DGP-02: explicit rng
 
         # Very small values
         Y_small = 1e-10 * randn(rng, 100, 2)
@@ -403,7 +403,11 @@ using Random
     @testset "safe_cholesky Warning" begin
         # Nearly singular matrix that needs jitter
         A = [1.0 1.0; 1.0 1.0]  # singular, rank-1
-        L = @test_warn r"required jitter" MacroEconometricModels.safe_cholesky(A)
+        # @test_logs (not @test_warn): the jitter warning carries maxlog=3 on
+        # the shared global logger, and earlier warnings from anywhere in the
+        # threaded suite exhaust that budget, after which fd-capture sees
+        # nothing. @test_logs installs a fresh logger, so it always matches.
+        L = @test_logs (:warn, r"required jitter") MacroEconometricModels.safe_cholesky(A)
         @test size(L) == (2, 2)
         @test all(isfinite.(L))
 

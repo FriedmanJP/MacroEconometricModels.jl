@@ -13,7 +13,7 @@ using Random
 
 @testset "StatsAPI Compatibility" begin
     # Reference DGP (DGP-02 #791): non-diagonal A, non-identity B0, intercept.
-    rng = MersenneTwister(42)
+    rng = Xoshiro(42)
     T, n, p = 100, 2, 1
     Y = dgp_var(rng; A=[0.5 0.1; 0.0 0.5], B0=[0.1 0.0; 0.05 0.1],
                 c=[0.1, 0.1], T=T).Y
@@ -99,8 +99,11 @@ end
 @testset "StatsAPI r2 for VARModel" begin
     # r2 IS implemented for VARModel (per-equation R² vector), so assert the
     # contract directly — no try/catch skip (DGP-02 #791).
-    rng = MersenneTwister(123)
-    T, n, p = 1000, 2, 1
+    rng = Xoshiro(123)
+    # T = 10000: the variance-ratio sampling noise (SE ≈ √(2/T)) must sit
+    # well inside atol = 0.05 (at T = 1000 the SE ≈ 0.045 matched the
+    # tolerance, so the test was draw-luck).
+    T, n, p = 10000, 2, 1
     A_ref = [0.5 0.1; 0.0 0.5]
     B0_ref = [0.3 0.0; 0.1 0.2]
     sim = dgp_var(rng; A=A_ref, B0=B0_ref, T=T)
@@ -113,8 +116,8 @@ end
     @test all(x -> 0 <= x <= 1, r2_val)
     _tprint("r2 for VAR: ", r2_val)
 
-    # Population truth R²_i = 1 - Σ_ii/Γ0_ii; atol 0.05 covers sampling noise
-    # of the variance ratio at T=1000 (SE ≈ √(2/T) ≈ 0.045).
+    # Population truth R²_i = 1 - Σ_ii/Γ0_ii; atol 0.05 is ≈3.5 SEs of the
+    # variance ratio at T=10000 (SE ≈ √(2/T) ≈ 0.014).
     G0 = lyapunov_gamma0(Matrix(A_ref), sim.Sigma)
     r2_pop = [1 - sim.Sigma[i, i] / G0[i, i] for i in 1:n]
     @test r2_val ≈ r2_pop atol = 0.05

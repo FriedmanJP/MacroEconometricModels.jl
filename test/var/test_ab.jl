@@ -58,11 +58,11 @@ const MEM = MacroEconometricModels
     end
 
     @testset "recursive pattern reproduces Cholesky" begin
-        rng = MersenneTwister(7421)
+        rng = Xoshiro(7421)
         Y, _ = simulate_svar([1.0 0.3; 0.4 1.0], [0.5 * Matrix{Float64}(I, 2, 2)];
                              Tobs=400, rng=rng)
         model = estimate_var(Y, 1)
-        svar = estimate_svar(model, recursive_pattern(2); rng=MersenneTwister(74211))
+        svar = estimate_svar(model, recursive_pattern(2); rng=Xoshiro(74211))
         @test svar isa SVARModel
         @test svar.Q ≈ I(2) atol = 1e-6
         @test svar.lr_df == 0
@@ -75,12 +75,12 @@ const MEM = MacroEconometricModels
     end
 
     @testset "Blanchard–Quah long-run form ≈ identify_long_run" begin
-        rng = MersenneTwister(7422)
+        rng = Xoshiro(7422)
         Y, _ = simulate_svar([1.2 0.2; 0.3 0.9], [0.4 * Matrix{Float64}(I, 2, 2)];
                              Tobs=500, rng=rng)
         model = estimate_var(Y, 1)
         svar = estimate_svar(model, blanchard_quah_pattern(2);
-                             rng=MersenneTwister(74221), n_starts=3)
+                             rng=Xoshiro(74221), n_starts=3)
         Q_lr = identify_long_run(model)
         @test size(svar.Q) == (2, 2)
         @test svar.Q ≈ Q_lr atol = 1e-4
@@ -93,14 +93,14 @@ const MEM = MacroEconometricModels
     end
 
     @testset "underidentified pattern throws IdentificationError" begin
-        rng = MersenneTwister(7423)
+        rng = Xoshiro(7423)
         Y, _ = simulate_svar(Matrix{Float64}(I, 2, 2), [0.3 * Matrix{Float64}(I, 2, 2)];
                              Tobs=200, rng=rng)
         model = estimate_var(Y, 1)
         pat = ab_model_pattern(fill(NaN, 2, 2), Matrix{Float64}(I, 2, 2))
         st = check_identification(pat, 2)
         @test st.status === :under
-        @test_throws IdentificationError estimate_svar(model, pat; rng=MersenneTwister(1))
+        @test_throws IdentificationError estimate_svar(model, pat; rng=Xoshiro(1))
     end
 
     @testset "registry flags and compute_Q" begin
@@ -108,39 +108,39 @@ const MEM = MacroEconometricModels
         @test !MEM._needs_residuals(:ab)
         @test !MEM._is_set_identified(:ab)
         @test !MEM._is_partial(:ab)
-        rng = MersenneTwister(7424)
+        rng = Xoshiro(7424)
         Y, _ = simulate_svar([1.0 0.2; 0.3 1.0], [0.4 * Matrix{Float64}(I, 2, 2)];
                              Tobs=250, rng=rng)
         model = estimate_var(Y, 1)
         pat = recursive_pattern(2)
-        Q = MEM.compute_Q(model, :ab; pattern=pat, rng=MersenneTwister(74241))
+        Q = MEM.compute_Q(model, :ab; pattern=pat, rng=Xoshiro(74241))
         @test Q ≈ I(2) atol = 1e-6
         @test_throws ArgumentError MEM.compute_Q(model, :ab)
     end
 
     @testset "irf/fevd/hd method=:ab" begin
-        rng = MersenneTwister(7425)
+        rng = Xoshiro(7425)
         Y, _ = simulate_svar([1.0 0.25; 0.2 1.0], [0.45 * Matrix{Float64}(I, 2, 2)];
                              Tobs=250, rng=rng)
         model = estimate_var(Y, 1)
         pat = recursive_pattern(2)
-        ir = irf(model, 6; method=:ab, pattern=pat, rng=MersenneTwister(74251))
+        ir = irf(model, 6; method=:ab, pattern=pat, rng=Xoshiro(74251))
         @test ir isa ImpulseResponse
         @test size(ir.values) == (6, 2, 2)
         @test ir.values[1, :, :] ≈ cholesky_factor(model) atol = 1e-5
-        fv = fevd(model, 6; method=:ab, pattern=pat, rng=MersenneTwister(74252))
+        fv = fevd(model, 6; method=:ab, pattern=pat, rng=Xoshiro(74252))
         @test fv isa FEVD
         hd = historical_decomposition(model, 20; method=:ab, pattern=pat,
-                                      rng=MersenneTwister(74253))
+                                      rng=Xoshiro(74253))
         @test hd isa HistoricalDecomposition
     end
 
     @testset "report and refs" begin
-        rng = MersenneTwister(7426)
+        rng = Xoshiro(7426)
         Y, _ = simulate_svar([1.0 0.2; 0.3 1.0], [0.4 * Matrix{Float64}(I, 2, 2)];
                              Tobs=200, rng=rng)
         model = estimate_var(Y, 1)
-        svar = estimate_svar(model, recursive_pattern(2); rng=MersenneTwister(74261))
+        svar = estimate_svar(model, recursive_pattern(2); rng=Xoshiro(74261))
         buf = IOBuffer()
         report(buf, svar)
         txt = String(take!(buf))
@@ -160,7 +160,7 @@ const MEM = MacroEconometricModels
         A_true = [1.0 0.0 0.0; 0.4 1.0 0.0; 0.0 0.3 1.0]
         B_true = Diagonal([0.8, 1.1, 0.9])
         B0 = A_true \ Matrix(B_true)
-        rng = MersenneTwister(7427)
+        rng = Xoshiro(7427)
         Y, _ = simulate_svar(Matrix(B0), [0.35 * Matrix{Float64}(I, n, n)];
                              Tobs=FAST ? 300 : 800, rng=rng)
         model = estimate_var(Y, 1)
@@ -171,7 +171,7 @@ const MEM = MacroEconometricModels
         st = check_identification(pat, n)
         @test st.status === :over
         @test st.n_overidentifying >= 1
-        svar = estimate_svar(model, pat; rng=MersenneTwister(74271), n_starts=FAST ? 2 : 5)
+        svar = estimate_svar(model, pat; rng=Xoshiro(74271), n_starts=FAST ? 2 : 5)
         @test svar.lr_df == st.n_overidentifying || svar.lr_df >= 1
         @test svar.identification.status === :over
         @test svar.lr_pvalue > 0.01  # true restriction should not reject
@@ -179,14 +179,14 @@ const MEM = MacroEconometricModels
         if !FAST
             A_false = [1.0 0.0 0.0; 0.0 1.0 0.0; NaN NaN 1.0]
             pat_f = SVARPattern(A_false, B_pat)
-            svar_f = estimate_svar(model, pat_f; rng=MersenneTwister(74272), n_starts=4)
+            svar_f = estimate_svar(model, pat_f; rng=Xoshiro(74272), n_starts=4)
             @test svar_f.lr_df >= 1
             @test svar_f.lr_pvalue < 0.05
         end
     end
 
     @testset "theoretical CI uses residual sample size" begin
-        rng = MersenneTwister(7428)
+        rng = Xoshiro(7428)
         Y, _ = simulate_svar([1.0 0.35; 0.4 1.0], [0.5 * Matrix{Float64}(I, 2, 2)];
                              Tobs=220, rng=rng)
         model = estimate_var(Y, 1)
@@ -203,14 +203,14 @@ const MEM = MacroEconometricModels
                             model.varnames)
         @test MEM._ab_nobs(m_emptyU) == size(model.Y, 1) - model.p
         @test MEM._ab_nobs(m_emptyU) == effective_nobs(model)
-        svar_full = estimate_svar(model, pat; n_starts=2, rng=MersenneTwister(74281))
-        svar_empty = estimate_svar(m_emptyU, pat; n_starts=2, rng=MersenneTwister(74281))
+        svar_full = estimate_svar(model, pat; n_starts=2, rng=Xoshiro(74281))
+        svar_empty = estimate_svar(m_emptyU, pat; n_starts=2, rng=Xoshiro(74281))
         @test svar_empty.Q ≈ svar_full.Q atol = 1e-5
         L = cholesky_factor(model)
         B0 = svar_full.A \ svar_full.B
         @test B0 ≉ L atol = 1e-3
         ir = irf(model, 4; method=:ab, pattern=pat, ci_type=:theoretical,
-                 reps=FAST ? 8 : 16, n_starts=1, rng=MersenneTwister(74282))
+                 reps=FAST ? 8 : 16, n_starts=1, rng=Xoshiro(74282))
         @test ir.ci_type === :theoretical
         @test ir.values[1, :, :] ≉ L atol = 1e-3
         @test all(ir.ci_lower .<= ir.values .+ sqrt(eps(T)))
@@ -218,7 +218,7 @@ const MEM = MacroEconometricModels
     end
 
     @testset "non-BQ long-run throws ArgumentError" begin
-        rng = MersenneTwister(7429)
+        rng = Xoshiro(7429)
         Y, _ = simulate_svar([1.0 0.2; 0.3 1.0], [0.4 * Matrix{Float64}(I, 2, 2)];
                              Tobs=180, rng=rng)
         model = estimate_var(Y, 1)
@@ -237,10 +237,10 @@ const MEM = MacroEconometricModels
         @test err isa ArgumentError
         @test occursin("Blanchard", sprint(showerror, err))
         @test_throws ArgumentError check_identification(pat_mix, model)
-        @test_throws ArgumentError estimate_svar(model, pat_mix; rng=MersenneTwister(1))
+        @test_throws ArgumentError estimate_svar(model, pat_mix; rng=Xoshiro(1))
         @test_throws ArgumentError irf(model, 4; method=:ab, pattern=pat_mix)
         svar_bq = estimate_svar(model, blanchard_quah_pattern(2);
-                                rng=MersenneTwister(74291), n_starts=2)
+                                rng=Xoshiro(74291), n_starts=2)
         @test svar_bq.identification.status === :exact
         @test svar_bq.Q ≈ identify_long_run(model) atol = 1e-4
     end
@@ -259,11 +259,11 @@ const MEM = MacroEconometricModels
             pat = SVARPattern(A_pat, B_pat)
             pvals = Float64[]
             for s in 1:12
-                rng = MersenneTwister(74300 + s)
+                rng = Xoshiro(74300 + s)
                 Y, _ = simulate_svar(Matrix(B0), [0.3 * Matrix{Float64}(I, n, n)];
                                      Tobs=600, rng=rng)
                 model = estimate_var(Y, 1)
-                svar = estimate_svar(model, pat; rng=MersenneTwister(74350 + s), n_starts=3)
+                svar = estimate_svar(model, pat; rng=Xoshiro(74350 + s), n_starts=3)
                 push!(pvals, svar.lr_pvalue)
             end
             rej = mean(pvals .< 0.05)

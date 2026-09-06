@@ -77,7 +77,7 @@ const _suppress_warnings = MacroEconometricModels._suppress_warnings
 end
 
 @testset "GMM with Parameter Transforms" begin
-    rng = Random.MersenneTwister(42)
+    rng = Random.Xoshiro(42)
     true_mu = 0.7
     data = true_mu .+ 0.1 .* randn(rng, 200, 1)
 
@@ -95,7 +95,7 @@ end
 end
 
 @testset "autocovariance_moments" begin
-    rng = Random.MersenneTwister(123)
+    rng = Random.Xoshiro(123)
     data = randn(rng, 500, 2)
     m = autocovariance_moments(data; lags=1)
     # k=2, lags=1: k*(k+1)/2 + k*lags = 3 + 2 = 5 moments
@@ -110,7 +110,7 @@ end
     # the 0.15 bound; the 1/n divisor + demeaning bias is O(1/T).
     A = [0.6 0.2; 0.1 0.5]
     S = [1.0 0.3; 0.3 0.8]
-    Y = dgp_var(Random.MersenneTwister(11); A=A, Sigma=S, T=20000).Y
+    Y = dgp_var(Random.Xoshiro(11); A=A, Sigma=S, T=20000).Y
     G0 = lyapunov_gamma0(A, S)
     G1 = A * G0
     m = autocovariance_moments(Y; lags=1)
@@ -228,19 +228,19 @@ end
     # HARD deterministic oracle: the per-observation contributions decompose the mean
     # moments exactly (vec(mean(H)) == autocovariance_moments) to machine precision.
     for lags in (1, 2)
-        data = randn(Random.MersenneTwister(11), 300, 2)
+        data = randn(Random.Xoshiro(11), 300, 2)
         H = autocovariance_moment_contributions(data; lags=lags)
         k = 2
         @test size(H) == (300, k*(k+1)÷2 + k*lags)
         @test vec(mean(H, dims=1)) ≈ autocovariance_moments(data; lags=lags) atol=1e-12
     end
     # Real-input conversion method
-    Hi = autocovariance_moment_contributions(randn(Random.MersenneTwister(3), 50, 1) .|> Float32 .|> Float64; lags=1)
+    Hi = autocovariance_moment_contributions(randn(Random.Xoshiro(3), 50, 1) .|> Float32 .|> Float64; lags=1)
     @test eltype(Hi) == Float64
 end
 
 @testset "smm_weighting_matrix" begin
-    rng = Random.MersenneTwister(42)
+    rng = Random.Xoshiro(42)
     data = randn(rng, 200, 2)
     cfn = d -> autocovariance_moment_contributions(d; lags=1)
     W = MacroEconometricModels.smm_weighting_matrix(data, cfn; hac=false)
@@ -254,7 +254,7 @@ end
 end
 
 @testset "smm Ω full-rank, W ≠ identity" begin
-    rng = Random.MersenneTwister(42)
+    rng = Random.Xoshiro(42)
     data = randn(rng, 200, 2)
     cfn = d -> autocovariance_moment_contributions(d; lags=1)
     n_moments = 5
@@ -271,7 +271,7 @@ end
 @testset "Ω magnitude analytic oracle (iid Gaussian)" begin
     # For iid N(0,σ²), the variance-moment contribution (x-μ)² has long-run variance
     # Var[(X-μ)²] = E[(X-μ)⁴] - σ⁴ = 3σ⁴ - σ⁴ = 2σ⁴ = 2.0 (σ=1). iid ⇒ bandwidth irrelevant.
-    x = randn(Random.MersenneTwister(2024), 4000, 1)
+    x = randn(Random.Xoshiro(2024), 4000, 1)
     cfn = d -> autocovariance_moment_contributions(d; lags=1)
     Omega = MacroEconometricModels.smm_data_covariance(x, cfn; hac=false)
     @test isapprox(Omega[1, 1], 2.0; rtol=0.15)
@@ -285,7 +285,7 @@ _shared_bounded_fit = _suppress_warnings() do
     true_rho = 0.8
     true_sigma = 0.5
     T_obs = 500
-    y = dgp_arima(Random.MersenneTwister(42); phi=[true_rho], sigma=true_sigma,
+    y = dgp_arima(Random.Xoshiro(42); phi=[true_rho], sigma=true_sigma,
                   T=T_obs).y
     data = reshape(y, :, 1)
 
@@ -307,7 +307,7 @@ _shared_bounded_fit = _suppress_warnings() do
                  sim_ratio=5, burn=100, weighting=:two_step,
                  contributions_fn=d -> autocovariance_moment_contributions(d; lags=1),
                  bounds=bounds,
-                 rng=Random.MersenneTwister(123))
+                 rng=Random.Xoshiro(123))
 end
 
 @testset "estimate_smm — AR(1) recovery" begin
@@ -353,13 +353,13 @@ end
         se_rho = Float64[]
         for r in 1:R
             # DGP-08: shared AR(1) data (was: bespoke loop).
-            y = dgp_arima(Random.MersenneTwister(5000 + r); phi=[true_rho],
+            y = dgp_arima(Random.Xoshiro(5000 + r); phi=[true_rho],
                           sigma=true_sigma, T=T_obs).y
             res = estimate_smm(sim_ar1, d -> autocovariance_moments(d; lags=1),
                                [0.5, 0.4], reshape(y, :, 1);
                                sim_ratio=5, burn=100, weighting=:two_step,
                                contributions_fn=cfn, bounds=bounds,
-                               rng=Random.MersenneTwister(9000 + r))
+                               rng=Random.Xoshiro(9000 + r))
             push!(rho_hat, res.theta[1])
             push!(se_rho, stderror(res)[1])
         end
@@ -388,7 +388,7 @@ end
     # identity-weighted just-identified SMM needs it (drho 0.14 → 0.05 → 0.03
     # at T = 300/500/800; bound 0.1).
     _suppress_warnings() do
-        y = dgp_arima(Random.MersenneTwister(99); phi=[0.6], sigma=0.4, T=500).y
+        y = dgp_arima(Random.Xoshiro(99); phi=[0.6], sigma=0.4, T=500).y
         data = reshape(y, :, 1)
 
         function sim_fn_identity(theta, T_periods, burn; rng=Random.default_rng())
@@ -403,7 +403,7 @@ end
         result = estimate_smm(sim_fn_identity, d -> autocovariance_moments(d; lags=1),
                               [0.3, 1.0], data;
                               sim_ratio=5, burn=50, weighting=:identity,
-                              rng=Random.MersenneTwister(42))
+                              rng=Random.Xoshiro(42))
         @test result isa SMMModel{Float64}
         @test abs(result.theta[1] - 0.6) < 0.1
         @test abs(result.theta[2] - 0.4) < 0.1
@@ -415,7 +415,7 @@ end
     # identity weighting (warns) — so the stored method is :identity and
     # j_test reports the M-29 NaN policy, not a χ² p-value.
     _suppress_warnings() do
-        y = dgp_arima(Random.MersenneTwister(42); phi=[0.7], sigma=0.5, T=300).y
+        y = dgp_arima(Random.Xoshiro(42); phi=[0.7], sigma=0.5, T=300).y
         data = reshape(y, :, 1)
 
         function sim_fn_jtest(theta, T_periods, burn; rng=Random.default_rng())
@@ -430,7 +430,7 @@ end
         result = estimate_smm(sim_fn_jtest, d -> autocovariance_moments(d; lags=2),
                               [0.5, 0.3], data;
                               sim_ratio=5, burn=100, weighting=:two_step,
-                              rng=Random.MersenneTwister(55))
+                              rng=Random.Xoshiro(55))
         # k=1 variable, lags=2: k*(k+1)/2 + k*lags = 1 + 2 = 3 moments, 2 params → overid
         @test result.weighting.method == :identity
         jt = j_test(result)
@@ -447,7 +447,7 @@ end
     # two-step fit is genuinely efficient, so j_test returns a computed χ²
     # p-value in [0, 1] (k=1, lags=2 → 3 moments, 2 params, df=1).
     _suppress_warnings() do
-        y = dgp_arima(Random.MersenneTwister(43); phi=[0.7], sigma=0.5, T=300).y
+        y = dgp_arima(Random.Xoshiro(43); phi=[0.7], sigma=0.5, T=300).y
         data = reshape(y, :, 1)
 
         function sim_fn_eff(theta, T_periods, burn; rng=Random.default_rng())
@@ -463,7 +463,7 @@ end
                               [0.5, 0.3], data;
                               sim_ratio=5, burn=100, weighting=:two_step,
                               contributions_fn=d -> autocovariance_moment_contributions(d; lags=2),
-                              rng=Random.MersenneTwister(56))
+                              rng=Random.Xoshiro(56))
         @test result.weighting.method == :two_step
         jt = j_test(result)
         @test jt.df == 1
@@ -476,7 +476,7 @@ end
 # show and refs testsets (they asserted only on display output).
 _display_fit = _suppress_warnings() do
     # DGP-08: shared AR(1) data (was: bespoke loop).
-    y = dgp_arima(Random.MersenneTwister(42); phi=[0.7], sigma=1.0, T=200).y
+    y = dgp_arima(Random.Xoshiro(42); phi=[0.7], sigma=1.0, T=200).y
     data = reshape(y, :, 1)
 
     function sim_fn_display(theta, T_periods, burn; rng=Random.default_rng())
@@ -488,7 +488,7 @@ _display_fit = _suppress_warnings() do
 
     estimate_smm(sim_fn_display, d -> autocovariance_moments(d; lags=1),
                  [0.5], data; sim_ratio=3, burn=50, max_iter=200,
-                 rng=Random.MersenneTwister(42))
+                 rng=Random.Xoshiro(42))
 end
 
 @testset "SMMModel report and show" begin

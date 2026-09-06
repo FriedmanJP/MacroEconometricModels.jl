@@ -48,22 +48,22 @@ const M = MacroEconometricModels
     @testset "wild bootstrap helpers" begin
         @test M._default_block_length(1) == 1
         @test M._default_block_length(1000) == ceil(Int, cbrt(1000))
-        rng = MersenneTwister(7)
+        rng = Xoshiro(7)
         w_r = M._wild_weights(rng, 20, :rademacher, Float64)
         @test length(w_r) == 20
         @test all(abs.(w_r) .≈ 1)
-        w_m = M._wild_weights(MersenneTwister(8), 50, :mammen, Float64)
+        w_m = M._wild_weights(Xoshiro(8), 50, :mammen, Float64)
         @test length(w_m) == 50
         @test isapprox(mean(w_m), 0.0; atol=0.5)
         @test_throws ArgumentError M._wild_weights(rng, 4, :bogus, Float64)
-        U = randn(MersenneTwister(9), 30, 2)
-        Uw = M._resample_residuals(U, :wild, MersenneTwister(9))
-        Ub = M._resample_residuals(U, :block, MersenneTwister(9); block_length=5)
+        U = randn(Xoshiro(9), 30, 2)
+        Uw = M._resample_residuals(U, :wild, Xoshiro(9))
+        Ub = M._resample_residuals(U, :block, Xoshiro(9); block_length=5)
         @test size(Uw) == size(U) && size(Ub) == size(U)
     end
 
     @testset "GARCHModel show / StatsAPI" begin
-        rng = MersenneTwister(11)
+        rng = Xoshiro(11)
         y = randn(rng, 200)
         m = estimate_garch(y, 1, 1)
         @test m isa M.GARCHModel
@@ -75,8 +75,8 @@ const M = MacroEconometricModels
 
     @testset "xtprobit validation" begin
         df = DataFrame(id=repeat(1:10, inner=4), t=repeat(1:4, 10),
-                       x=randn(Random.MersenneTwister(1429), 40),
-                       y=Float64.(rand(Random.MersenneTwister(1430), 40) .< 0.5))
+                       x=randn(Random.Xoshiro(1429), 40),
+                       y=Float64.(rand(Random.Xoshiro(1430), 40) .< 0.5))
         pd = xtset(df, :id, :t)
         @test_throws ArgumentError estimate_xtprobit(pd, :y, [:x]; model=:fe)
         @test_throws ArgumentError estimate_xtprobit(pd, :missing, [:x])

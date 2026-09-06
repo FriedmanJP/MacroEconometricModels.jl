@@ -9,7 +9,7 @@ const MEM = MacroEconometricModels
 
 # 1 outcome, 1 instrument, 2 shock columns; forecast chosen so the
 # unconstrained recommendation cuts the rate deep below zero.
-function _cf15_setup(; H=6, rng=MersenneTwister(15))
+function _cf15_setup(; H=6, rng=Xoshiro(15))
     Tx = randn(rng, H, 2)
     Tz = hcat(ones(H), fill(0.5, H))          # deterministic rate loadings
     ce = PolicyCausalEffects(outcomes=[:u], instruments=[:rate],
@@ -96,11 +96,11 @@ end
         out_bad = constrained_opp(fc, ce, loss, [ring];
                                   instrument_path=[:rate => p0],
                                   delta0=du .+ [3.5, 0.0], multistart=1,
-                                  rng=MersenneTwister(1))
+                                  rng=Xoshiro(1))
         out_multi = constrained_opp(fc, ce, loss, [ring];
                                     instrument_path=[:rate => p0],
                                     delta0=du .+ [3.5, 0.0], multistart=8,
-                                    rng=MersenneTwister(2))
+                                    rng=Xoshiro(2))
         @test out_multi.result.loss_opp <= out_bad.result.loss_opp + 1e-10
         @test sum(abs2, out_multi.result.delta .- du) >= 9.0 - 1e-6  # on/outside the ring
     end
@@ -108,7 +108,7 @@ end
     @testset "infeasible floor errors with the constraint named" begin
         # zero instrument loadings: no delta can lift the path to the floor
         H = 6
-        rng = MersenneTwister(16)
+        rng = Xoshiro(16)
         Tx = randn(rng, H, 2)
         ce = PolicyCausalEffects(outcomes=[:u], instruments=[:rate],
                                  Theta_x=[Tx], Theta_z=[zeros(H, 2)])
@@ -127,11 +127,11 @@ end
     end
 
     @testset "inference with the constrained solve per draw" begin
-        rng = MersenneTwister(155)
+        rng = Xoshiro(155)
         H = 6
         Tx = randn(rng, H, 2)
         Tz = 0.5 .* randn(rng, H, 2) .+ 1.0
-        noises = 0.05 .* randn(MersenneTwister(3), 25)
+        noises = 0.05 .* randn(Xoshiro(3), 25)
         Dx = cat((Tx .* (1 + e) for e in noises)...; dims=3)
         Dz = cat((Tz .* (1 + e) for e in noises)...; dims=3)
         ce = PolicyCausalEffects(outcomes=[:u], instruments=[:rate],
@@ -144,7 +144,7 @@ end
         out = MEM._suppress_warnings() do
             constrained_opp(fc, ce, loss, [zlb_constraint()];
                             instrument_path=[:rate => p0],
-                            n_sim=60, rng=MersenneTwister(4))
+                            n_sim=60, rng=Xoshiro(4))
         end
         @test out.result.delta_draws !== nothing
         @test size(out.result.delta_draws, 1) == 2

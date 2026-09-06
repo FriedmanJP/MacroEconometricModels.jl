@@ -19,7 +19,7 @@ using MacroEconometricModels
     # ==========================================================================
 
     @testset "Basic Estimation - Two-Step" begin
-        rng = Random.MersenneTwister(12345)
+        rng = Random.Xoshiro(12345)
 
         T_obs, N, r, p = 200, 20, 3, 2
         X = randn(rng, T_obs, N)
@@ -44,7 +44,7 @@ using MacroEconometricModels
     end
 
     @testset "Basic Estimation - EM Algorithm" begin
-        rng = Random.MersenneTwister(12346)
+        rng = Random.Xoshiro(12346)
 
         T_obs, N, r, p = 150, 15, 2, 1
         X = randn(rng, T_obs, N)
@@ -61,7 +61,7 @@ using MacroEconometricModels
     end
 
     @testset "Non-Standardized Estimation" begin
-        rng = Random.MersenneTwister(12347)
+        rng = Random.Xoshiro(12347)
 
         T_obs, N, r, p = 100, 10, 2, 1
         X = randn(rng, T_obs, N .* 10 .+ 5)
@@ -79,7 +79,7 @@ using MacroEconometricModels
     @testset "Parameter Recovery - Known DGP" begin
         # DGP-06: shared VAR(2)-factor simulator (was: bespoke zero-initialized
         # loop without burn-in). The simulator burns in, so factors start stationary.
-        rng = Random.MersenneTwister(54321)
+        rng = Random.Xoshiro(54321)
 
         # Known DGP parameters
         T_obs, N, r_true, p_true = 500, 20, 3, 2
@@ -122,7 +122,7 @@ using MacroEconometricModels
 
     @testset "Parameter Recovery - Larger Sample" begin
         # DGP-06: shared simulator (was: bespoke loop).
-        rng = Random.MersenneTwister(99999)
+        rng = Random.Xoshiro(99999)
 
         T_obs, N, r_true, p_true = 1000, 30, 2, 1
 
@@ -149,7 +149,7 @@ using MacroEconometricModels
         # DGP-06: zero-dynamics shared DGP with near-zero idiosyncratic noise
         # (was: bespoke iid-factor loop). Near-singularity comes from the tiny
         # noise, not from dynamics.
-        rng = Random.MersenneTwister(11111)
+        rng = Random.Xoshiro(11111)
 
         T_obs, N, r = 100, 10, 2
 
@@ -163,7 +163,7 @@ using MacroEconometricModels
     end
 
     @testset "Numerical Stability - Ill-Conditioned Data" begin
-        rng = Random.MersenneTwister(22222)
+        rng = Random.Xoshiro(22222)
 
         T_obs, N, r = 100, 15, 3
 
@@ -180,7 +180,7 @@ using MacroEconometricModels
 
     @testset "Numerical Stability - Nearly Non-Stationary" begin
         # DGP-06: shared simulator with near-unit-root factor dynamics.
-        rng = Random.MersenneTwister(33333)
+        rng = Random.Xoshiro(33333)
 
         T_obs, N, r, p = 200, 10, 2, 1
 
@@ -201,7 +201,7 @@ using MacroEconometricModels
 
     @testset "Edge Cases - Single Factor (r=1)" begin
         # DGP-06: shared simulator (was: bespoke iid-factor loop).
-        rng = Random.MersenneTwister(44444)
+        rng = Random.Xoshiro(44444)
 
         T_obs, N = 100, 10
         X = dgp_dynamic_factors(rng; A=reshape([0.5], 1, 1), N=N, T=T_obs, idio_sd=0.3).X
@@ -215,7 +215,7 @@ using MacroEconometricModels
     end
 
     @testset "Edge Cases - Single Lag (p=1)" begin
-        rng = Random.MersenneTwister(55555)
+        rng = Random.Xoshiro(55555)
 
         T_obs, N, r = 100, 10, 2
         X = randn(rng, T_obs, N)
@@ -228,7 +228,7 @@ using MacroEconometricModels
     end
 
     @testset "Edge Cases - Multiple Lags (p=4)" begin
-        rng = Random.MersenneTwister(55556)
+        rng = Random.Xoshiro(55556)
 
         T_obs, N, r, p = 200, 12, 2, 4
         X = randn(rng, T_obs, N)
@@ -241,7 +241,7 @@ using MacroEconometricModels
     end
 
     @testset "Edge Cases - Short Sample" begin
-        rng = Random.MersenneTwister(66666)
+        rng = Random.Xoshiro(66666)
 
         T_obs, N, r, p = 50, 8, 2, 1
         X = randn(rng, T_obs, N)
@@ -253,7 +253,7 @@ using MacroEconometricModels
     end
 
     @testset "Edge Cases - Many Variables (N > T)" begin
-        rng = Random.MersenneTwister(77777)
+        rng = Random.Xoshiro(77777)
 
         T_obs, N, r = 50, 100, 3
         X = randn(rng, T_obs, N)
@@ -265,7 +265,7 @@ using MacroEconometricModels
     end
 
     @testset "Edge Cases - Maximum Factors" begin
-        rng = Random.MersenneTwister(88888)
+        rng = Random.Xoshiro(88888)
 
         T_obs, N = 60, 20
         r_max = min(T_obs, N) - 5  # Leave room for estimation
@@ -282,7 +282,7 @@ using MacroEconometricModels
     # ==========================================================================
 
     @testset "Forecasting - Dimensions" begin
-        rng = Random.MersenneTwister(10101)
+        rng = Random.Xoshiro(10101)
 
         T_obs, N, r, p = 100, 10, 2, 2
         X = randn(rng, T_obs, N)
@@ -296,7 +296,7 @@ using MacroEconometricModels
     end
 
     @testset "Forecasting - With Confidence Intervals" begin
-        rng = Random.MersenneTwister(10102)
+        rng = Random.Xoshiro(10102)
 
         T_obs, N, r, p = 100, 8, 2, 1
         X = randn(rng, T_obs, N)
@@ -320,7 +320,7 @@ using MacroEconometricModels
     @testset "Forecasting - Accuracy with Known Dynamics" begin
         # DGP-06: shared simulator over the train+holdout span, then split
         # (was: bespoke loop). The holdout is a genuine continuation of the DGP.
-        rng = Random.MersenneTwister(10103)
+        rng = Random.Xoshiro(10103)
 
         T_obs, N, r, p = 300, 12, 2, 1
 
@@ -353,7 +353,7 @@ using MacroEconometricModels
     @testset "Static Model as Special Case" begin
         # DGP-06: the static DGP is the shared simulator with zero transition —
         # iid factors by construction (was: bespoke iid loop).
-        rng = Random.MersenneTwister(20202)
+        rng = Random.Xoshiro(20202)
 
         T_obs, N, r = 200, 15, 3
 
@@ -379,7 +379,7 @@ using MacroEconometricModels
     # ==========================================================================
 
     @testset "StatsAPI Interface" begin
-        rng = Random.MersenneTwister(30303)
+        rng = Random.Xoshiro(30303)
 
         T_obs, N, r, p = 100, 12, 3, 2
         X = randn(rng, T_obs, N)
@@ -425,7 +425,7 @@ using MacroEconometricModels
 
     @testset "Information Criteria - Model Selection" begin
         # DGP-06: shared simulator (was: bespoke loop).
-        rng = Random.MersenneTwister(40404)
+        rng = Random.Xoshiro(40404)
 
         T_obs, N = 200, 20
         r_true, p_true = 2, 1
@@ -453,7 +453,7 @@ using MacroEconometricModels
     # ==========================================================================
 
     @testset "Input Validation" begin
-        rng = Random.MersenneTwister(40504)
+        rng = Random.Xoshiro(40504)
         T_obs, N = 100, 10
         X = randn(rng, T_obs, N)
 
@@ -482,7 +482,7 @@ using MacroEconometricModels
 
     @testset "Consistency Between Methods" begin
         # DGP-06: shared simulator (was: bespoke loop).
-        rng = Random.MersenneTwister(50505)
+        rng = Random.Xoshiro(50505)
 
         T_obs, N, r, p = 200, 15, 2, 1
 
@@ -521,7 +521,7 @@ using MacroEconometricModels
     @testset "Asymptotic Properties - Consistency" begin
         # DGP-06: shared simulator with FIXED loadings across sample sizes
         # (was: bespoke loop). Holding Λ fixed isolates the T effect.
-        rng = Random.MersenneTwister(60606)
+        rng = Random.Xoshiro(60606)
 
         r, p = 2, 1
         N = 15
@@ -556,7 +556,7 @@ using MacroEconometricModels
     # ==========================================================================
 
     @testset "Companion Matrix" begin
-        rng = Random.MersenneTwister(70707)
+        rng = Random.Xoshiro(70707)
 
         T_obs, N, r, p = 100, 10, 2, 3
         X = randn(rng, T_obs, N)
@@ -579,7 +579,7 @@ using MacroEconometricModels
     end
 
     @testset "Stationarity Check" begin
-        rng = Random.MersenneTwister(70708)
+        rng = Random.Xoshiro(70708)
 
         T_obs, N, r, p = 150, 12, 2, 1
         X = randn(rng, T_obs, N)
@@ -599,7 +599,7 @@ using MacroEconometricModels
     # ==========================================================================
 
     @testset "Type Conversion" begin
-        rng = Random.MersenneTwister(80808)
+        rng = Random.Xoshiro(80808)
 
         T_obs, N, r, p = 80, 10, 2, 1
 
@@ -617,7 +617,7 @@ using MacroEconometricModels
     # ==========================================================================
 
     @testset "Variance Explained Properties" begin
-        rng = Random.MersenneTwister(90909)
+        rng = Random.Xoshiro(90909)
 
         T_obs, N, r = 100, 20, 5
         X = randn(rng, T_obs, N)
@@ -640,7 +640,7 @@ using MacroEconometricModels
 
     @testset "Residuals Properties" begin
         # DGP-06: shared simulator (was: bespoke loop).
-        rng = Random.MersenneTwister(91919)
+        rng = Random.Xoshiro(91919)
 
         T_obs, N, r, p = 150, 15, 3, 1
 
@@ -679,7 +679,7 @@ using MacroEconometricModels
 
     @testset "Reconstruction Quality" begin
         # DGP-06: shared simulator (was: bespoke loop).
-        rng = Random.MersenneTwister(92929)
+        rng = Random.Xoshiro(92929)
 
         T_obs, N, r_true = 200, 15, 3
 
@@ -706,7 +706,7 @@ using MacroEconometricModels
         # Pt_smooth[t] must equal the EXACT lag-one smoother cross-covariance
         # Cov(alpha_{t+1}, alpha_t | Y) = P_smooth[t+1]·J_t'. The old J_t·P_smooth[t+1]
         # transposed the time order, corrupting the DFM EM VAR / Sigma_eta updates.
-        rng = Random.MersenneTwister(11)
+        rng = Random.Xoshiro(11)
         r, p, N, Tn = 1, 2, 2, 6
         sd = r * p
         Λ = reshape([1.0, 0.7], N, r)

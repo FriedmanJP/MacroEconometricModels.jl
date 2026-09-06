@@ -10,7 +10,7 @@ using LinearAlgebra
 using Statistics
 using Random
 
-rng = MersenneTwister(42)  # DGP-03: explicit rng
+rng = Xoshiro(42)  # DGP-03: explicit rng
 
 @testset "Minnesota Prior Tests" begin
     _tprint("Generating Data for Minnesota Test...")
@@ -97,7 +97,7 @@ rng = MersenneTwister(42)  # DGP-03: explicit rng
         # prior mean (I), and posterior variance shrinks. 500 direct draws make
         # posterior-mean MC error negligible next to the gaps (realized
         # d-to-I: 0.03 vs 1.37; d-to-0: 1.39 vs 0.14; variance 4x).
-        rng = MersenneTwister(4455)
+        rng = Xoshiro(4455)
         Y_wn = dgp_var(rng; A=zeros(2, 2), B0=0.5 * Matrix{Float64}(I, 2, 2), T=200).Y
         post_tight = estimate_bvar(Y_wn, 1; n_draws=500, sampler=:direct,
             prior=:minnesota, hyper=MinnesotaHyperparameters(tau=0.01), rng=rng)
@@ -118,10 +118,12 @@ rng = MersenneTwister(42)  # DGP-03: explicit rng
         ml_01 = log_marginal_likelihood(Y_wn, 1, MinnesotaHyperparameters(tau=0.1))
         ml_10 = log_marginal_likelihood(Y_wn, 1, MinnesotaHyperparameters(tau=1.0))
         @test ml_10 > ml_01 > ml_001
-        # ... while on RW truth (A = 0.9I) it peaks at an INTERIOR tau
-        # (realized argmax 0.1: −326.5 beats −329.6 at 0.01 and −337.8 at 10).
+        # ... while on RW truth (A = 0.9I) it peaks at an INTERIOR tau.
+        # T = 1000: ML gaps scale with T while noise scales with √T, so the
+        # interior peak location is stable (at T = 200 the 0.1-vs-0.01 gap
+        # flipped sign across streams).
         Y_rw = dgp_var(rng; A=0.9 * Matrix{Float64}(I, 2, 2),
-                       B0=0.5 * Matrix{Float64}(I, 2, 2), T=200).Y
+                       B0=0.5 * Matrix{Float64}(I, 2, 2), T=1000).Y
         ml_rw001 = log_marginal_likelihood(Y_rw, 1, MinnesotaHyperparameters(tau=0.01))
         ml_rw01 = log_marginal_likelihood(Y_rw, 1, MinnesotaHyperparameters(tau=0.1))
         ml_rw10 = log_marginal_likelihood(Y_rw, 1, MinnesotaHyperparameters(tau=10.0))
@@ -130,7 +132,7 @@ rng = MersenneTwister(42)  # DGP-03: explicit rng
     end
 
     @testset "Extreme hyperparameters" begin
-        rng = MersenneTwister(4456)  # DGP-03: explicit rng
+        rng = Xoshiro(4456)  # DGP-03: explicit rng
         # White-noise DGP (DGP-03 #792).
         Y_ex = dgp_var(rng; A=zeros(2, 2), B0=0.5 * Matrix{Float64}(I, 2, 2), T=80).Y
         p_ex = 1
@@ -147,7 +149,7 @@ rng = MersenneTwister(42)  # DGP-03: explicit rng
     end
 
     @testset "optimize_hyperparameters returns valid type" begin
-        rng = MersenneTwister(4457)  # DGP-03: explicit rng
+        rng = Xoshiro(4457)  # DGP-03: explicit rng
         # White-noise DGP (DGP-03 #792).
         Y_opt = dgp_var(rng; A=zeros(2, 2), B0=0.5 * Matrix{Float64}(I, 2, 2), T=80).Y
         hyper_opt = optimize_hyperparameters(Y_opt, 1; grid_size=(FAST ? 2 : 3))

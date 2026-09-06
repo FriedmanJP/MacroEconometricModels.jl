@@ -130,7 +130,7 @@ parameters (`het_params[:rho_z]`; #236).
 - `n_reduced::Int` — maximum number of retained singular vectors (default 50)
 - `dx::Real` — perturbation scale for distribution probing (default 1e-6)
 - `n_sim::Int` — number of random distribution perturbations (default 200)
-- `rng` — random number generator (default `MersenneTwister(1234)`)
+- `rng` — random number generator (default `Xoshiro(1234)`)
 
 # Returns
 - `G1::Matrix{T}` — `(n_red + n_agg) × (n_red + n_agg)` transition matrix
@@ -160,7 +160,7 @@ function _reiter_linearize(ss::HASteadyState{T}, ip::IndividualProblem{T},
     @assert grid.n_dims == 1 "Reiter linearization requires a one- or two-asset grid"
     @assert ip.n_asset_dims == 1 "One-asset Reiter requires n_asset_dims == 1"
 
-    rng_actual = isnothing(rng) ? Random.MersenneTwister(1234) : rng
+    rng_actual = isnothing(rng) ? Random.Xoshiro(1234) : rng
     dx_T = T(dx)
 
     n_a = grid.n_points[1]

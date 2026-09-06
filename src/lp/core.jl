@@ -539,14 +539,14 @@ function _structural_lp_bootstrap(Y::AbstractMatrix{T}, horizon::Int, n::Int, p:
     sim_irfs = zeros(T, reps, horizon, n, n)
     block_size = max(1, round(Int, T_obs^(1/3)))
 
-    # Pre-seed one MersenneTwister per replication so bootstrap CIs are reproducible and
+    # Pre-seed one Xoshiro per replication so bootstrap CIs are reproducible and
     # thread-count invariant: each fixed r-slot draws only on its own local_rng, threaded
     # into BOTH the block resample and the sign/narrative rejection sampler (#243).
     seeds = rand(rng, UInt64, reps)
     n_failed = Threads.Atomic{Int}(0)     # dropped draws (#244 MC honesty count; atomic total
                                           # is thread-count invariant like the seeded slots)
     Threads.@threads for r in 1:reps
-        local_rng = Random.MersenneTwister(seeds[r])
+        local_rng = Random.Xoshiro(seeds[r])
         # Block bootstrap on Y
         Y_boot = _block_bootstrap(Y, block_size, local_rng)
         try

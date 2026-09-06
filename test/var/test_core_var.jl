@@ -15,7 +15,7 @@ using Random
     # Non-diagonal A + non-identity B0 (DGP-02 #791): identification schemes
     # face genuine dynamics and shock correlation. (The BQ triangularity
     # check below holds by estimator construction on any data.)
-    rng = MersenneTwister(12345)  # DGP-02: explicit rng
+    rng = Xoshiro(12345)  # DGP-02: explicit rng
 
     # 1. Generate Synthetic Data
     T = 200
@@ -99,7 +99,7 @@ using Random
         Sigma_true = [1.0 0.0; 0.0 1.0]
 
         # Simulation
-        rng = MersenneTwister(42) # Ensure reproducibility (DGP-02: explicit rng)
+        rng = Xoshiro(42) # Ensure reproducibility (DGP-02: explicit rng)
         for t in p+1:T_large
             u = randn(rng, n)
             # Y_t = A1 * Y_{t-1} + A12 * Y_{t-12} + u
@@ -139,14 +139,14 @@ using Random
 
     @testset "Reproducibility" begin
         # Same seed should produce identical results
-        rng = MersenneTwister(99999)  # DGP-02: explicit rng
+        rng = Xoshiro(99999)  # DGP-02: explicit rng
         Y1 = zeros(100, 2)
         for t in 2:100
             Y1[t, :] = 0.5 * Y1[t-1, :] + randn(rng, 2)
         end
         model1 = estimate_var(Y1, 1)
 
-        rng = MersenneTwister(99999)  # DGP-02: explicit rng
+        rng = Xoshiro(99999)  # DGP-02: explicit rng
         Y2 = zeros(100, 2)
         for t in 2:100
             Y2[t, :] = 0.5 * Y2[t-1, :] + randn(rng, 2)
@@ -160,7 +160,7 @@ using Random
 
     @testset "Stability Check" begin
         # VAR should detect stable vs unstable systems
-        rng = MersenneTwister(11111)  # DGP-02: explicit rng
+        rng = Xoshiro(11111)  # DGP-02: explicit rng
         T_stab = 200
         n_stab = 2
         p_stab = 1
@@ -180,7 +180,7 @@ using Random
     end
 
     @testset "Numerical Stability - Near-Collinear Data" begin
-        rng = MersenneTwister(22222)  # DGP-02: explicit rng
+        rng = Xoshiro(22222)  # DGP-02: explicit rng
         T_nc = 200
         n_nc = 3
 
@@ -196,7 +196,7 @@ using Random
     end
 
     @testset "Edge Cases" begin
-        rng = MersenneTwister(33333)  # DGP-02: explicit rng
+        rng = Xoshiro(33333)  # DGP-02: explicit rng
 
         # Single variable VAR
         Y_single = randn(rng, 100, 1)
@@ -219,7 +219,7 @@ using Random
     end
 
     @testset "Orthogonality of Q Matrices" begin
-        rng = MersenneTwister(44444)  # DGP-02: explicit rng
+        rng = Xoshiro(44444)  # DGP-02: explicit rng
         T_q = 150
         n_q = 3
         Y_q = randn(rng, T_q, n_q)
@@ -242,7 +242,7 @@ using Random
     end
 
     @testset "Input Validation" begin
-        rng = MersenneTwister(55555)  # DGP-02: explicit rng
+        rng = Xoshiro(55555)  # DGP-02: explicit rng
         Y_val = randn(rng, 100, 2)
 
         # p = 0 should error or be handled
@@ -262,7 +262,7 @@ using Random
     # =================================================================
 
     @testset "generate_Q properties" begin
-        rng = MersenneTwister(60000)  # DGP-02: explicit rng
+        rng = Xoshiro(60000)  # DGP-02: explicit rng
 
         for n in [2, 3, 5]
             Q = MacroEconometricModels.generate_Q(n)
@@ -288,7 +288,7 @@ using Random
     end
 
     @testset "compute_structural_shocks" begin
-        rng = MersenneTwister(61000)  # DGP-02: explicit rng
+        rng = Xoshiro(61000)  # DGP-02: explicit rng
         Y = randn(rng, 200, 3)
         model = estimate_var(Y, 2)
         n = 3
@@ -318,7 +318,7 @@ using Random
     end
 
     @testset "compute_irf" begin
-        rng = MersenneTwister(62000)  # DGP-02: explicit rng
+        rng = Xoshiro(62000)  # DGP-02: explicit rng
         Y = randn(rng, 200, 2)
         model = estimate_var(Y, 1)
         n = 2
@@ -341,7 +341,7 @@ using Random
     end
 
     @testset "compute_Q dispatcher" begin
-        rng = MersenneTwister(63000)  # DGP-02: explicit rng
+        rng = Xoshiro(63000)  # DGP-02: explicit rng
         Y = randn(rng, 200, 2)
         model = estimate_var(Y, 1)
         n = 2
@@ -370,7 +370,7 @@ using Random
     end
 
     @testset "identify_cholesky" begin
-        rng = MersenneTwister(64000)  # DGP-02: explicit rng
+        rng = Xoshiro(64000)  # DGP-02: explicit rng
         Y = randn(rng, 200, 3)
         model = estimate_var(Y, 1)
 
@@ -387,7 +387,7 @@ using Random
     end
 
     @testset "identify_sign multiple draws" begin
-        rng = MersenneTwister(65000)  # DGP-02: explicit rng
+        rng = Xoshiro(65000)  # DGP-02: explicit rng
         Y = randn(rng, 200, 2)
         model = estimate_var(Y, 1)
 
@@ -401,7 +401,7 @@ using Random
     end
 
     @testset "identify_long_run" begin
-        rng = MersenneTwister(66000)  # DGP-02: explicit rng
+        rng = Xoshiro(66000)  # DGP-02: explicit rng
         Y = randn(rng, 200, 2)
         model = estimate_var(Y, 1)
 
@@ -421,7 +421,7 @@ using Random
     end
 
     @testset "irf_percentiles and irf_mean" begin
-        rng = MersenneTwister(67000)  # DGP-02: explicit rng
+        rng = Xoshiro(67000)  # DGP-02: explicit rng
         Y = randn(rng, 200, 2)
         model = estimate_var(Y, 1)
         n = 2
@@ -455,7 +455,7 @@ using Random
     # VARModel Variable Names (Issue #17)
     # =================================================================
     @testset "VARModel Variable Names" begin
-        rng = MersenneTwister(42)  # DGP-02: explicit rng
+        rng = Xoshiro(42)  # DGP-02: explicit rng
         Y = randn(rng, 100, 3)
 
         # Default variable names
@@ -480,7 +480,7 @@ using Random
     # Forecast bands: parameter uncertainty (#208)
     # =================================================================
     @testset "VAR forecast parameter uncertainty (#208)" begin
-        rng = Random.MersenneTwister(2208)
+        rng = Random.Xoshiro(2208)
         n = 2
         Atrue = [0.5 0.1; 0.0 0.4]
         Lσ = cholesky([1.0 0.2; 0.2 1.0]).L
@@ -515,19 +515,19 @@ using Random
         end
 
         # --- bootstrap-B reproducibility under a fixed rng ---
-        fb1 = forecast(m, H; ci_method=:bootstrap, reps=800, rng=Random.MersenneTwister(7))
-        fb2 = forecast(m, H; ci_method=:bootstrap, reps=800, rng=Random.MersenneTwister(7))
+        fb1 = forecast(m, H; ci_method=:bootstrap, reps=800, rng=Random.Xoshiro(7))
+        fb2 = forecast(m, H; ci_method=:bootstrap, reps=800, rng=Random.Xoshiro(7))
         @test fb1.ci_lower == fb2.ci_lower
         @test fb1.ci_upper == fb2.ci_upper
 
         # --- bootstrap-B adds coefficient uncertainty ⇒ wider than innovation-only analytic ---
         fa95 = forecast(m, H; ci_method=:analytic)
-        fb95 = forecast(m, H; ci_method=:bootstrap, reps=4000, rng=Random.MersenneTwister(11))
+        fb95 = forecast(m, H; ci_method=:bootstrap, reps=4000, rng=Random.Xoshiro(11))
         @test sum(fb95.ci_upper .- fb95.ci_lower) > sum(fa95.ci_upper .- fa95.ci_lower)
 
         # --- stationary_only, :none, and validation ---
         fs = forecast(m, H; ci_method=:bootstrap, reps=300, stationary_only=true,
-                      rng=Random.MersenneTwister(3))
+                      rng=Random.Xoshiro(3))
         @test all(fs.ci_upper .>= fs.ci_lower)
         fn = forecast(m, 3; ci_method=:none)
         @test all(fn.ci_lower .== 0) && all(fn.ci_upper .== 0)
@@ -539,7 +539,7 @@ end
     # Box C replaces the per-step `vcat` history ring in `predict(model, steps)` with an in-place
     # row shift. The point-forecast recursion is deterministic, so it must be bit-for-bit identical
     # to a naive `vcat`-based recursion (the pre-refactor algorithm) reconstructed here.
-    rng = Random.MersenneTwister(7)
+    rng = Random.Xoshiro(7)
     n, p, Tn = 3, 2, 120
     A1 = [0.4 0.1 0.0; 0.0 0.3 0.1; 0.1 0.0 0.2]
     Y = zeros(Tn, n)
@@ -573,7 +573,7 @@ end
 
     # A stationary 3-variable VAR with CORRELATED reduced-form errors — correlation is what
     # makes the ordering matter for Cholesky and is therefore the interesting case.
-    rng = Random.MersenneTwister(11); nobs = 600
+    rng = Random.Xoshiro(11); nobs = 600
     A = [0.4 0.15 0.05; 0.10 0.35 0.10; 0.05 0.10 0.30]
     L = [1.0 0.0 0.0; 0.5 1.0 0.0; 0.3 0.4 1.0]
     Y = zeros(nobs, 3)
@@ -647,7 +647,7 @@ end
     @testset "diagonal Sigma ⇒ gFEVD coincides with Cholesky" begin
         # With uncorrelated reduced-form errors there is nothing to orthogonalize, so the
         # generalized and recursive decompositions agree (up to the sample correlation).
-        rng = Random.MersenneTwister(3); n2 = 4000
+        rng = Random.Xoshiro(3); n2 = 4000
         Y2 = zeros(n2, 2); A2 = [0.5 0.0; 0.0 0.4]
         for t in 2:n2
             Y2[t, :] = A2 * Y2[t-1, :] + randn(rng, 2)
@@ -662,7 +662,7 @@ end
     end
 
     @testset "Bayesian generalized FEVD" begin
-        rng = Random.MersenneTwister(5); n3 = 300
+        rng = Random.Xoshiro(5); n3 = 300
         A3 = [0.4 0.1; 0.1 0.35]; Y3 = zeros(n3, 2)
         for t in 2:n3
             Y3[t, :] = A3 * Y3[t-1, :] + [1.0 0.0; 0.5 1.0] * randn(rng, 2)
@@ -700,53 +700,53 @@ end
     M = MacroEconometricModels
 
     @testset "resampling schemes preserve what they claim to" begin
-        rng = Random.MersenneTwister(3)
+        rng = Random.Xoshiro(3)
         U = randn(rng, 200, 3)
         for sch in (:iid, :wild, :block)
-            A = M._resample_residuals(U, sch, Random.MersenneTwister(5))
+            A = M._resample_residuals(U, sch, Random.Xoshiro(5))
             @test size(A) == size(U)                                   # every scheme returns T_eff rows
-            @test A == M._resample_residuals(U, sch, Random.MersenneTwister(5))   # reproducible
+            @test A == M._resample_residuals(U, sch, Random.Xoshiro(5))   # reproducible
             @test all(isfinite, A)
         end
         @test_throws ArgumentError M._resample_residuals(U, :bogus, rng)
 
         # WILD scales whole rows, so the contemporaneous cross-equation correlation survives
         # exactly — that is the property that makes it robust to conditional heteroskedasticity.
-        Uc = randn(Random.MersenneTwister(9), 4000, 2) * [1.0 0.8; 0.0 0.6]
-        w = M._resample_residuals(Uc, :wild, Random.MersenneTwister(11))
+        Uc = randn(Random.Xoshiro(9), 4000, 2) * [1.0 0.8; 0.0 0.6]
+        w = M._resample_residuals(Uc, :wild, Random.Xoshiro(11))
         @test cor(w[:, 1], w[:, 2]) ≈ cor(Uc[:, 1], Uc[:, 2]) atol = 0.03
         # ... and it is a pure row rescaling: |u*| equals |u| row by row under Rademacher
         @test abs.(w) ≈ abs.(Uc) atol = 1e-12
 
         # BLOCK keeps serial dependence that i.i.d. resampling destroys.
         ar = zeros(600)
-        let rng = Random.MersenneTwister(21)
+        let rng = Random.Xoshiro(21)
             for t in 2:600
                 ar[t] = 0.9 * ar[t-1] + randn(rng)
             end
         end
         Ua = reshape(ar, :, 1)
         ac(x) = cor(x[2:end], x[1:end-1])
-        @test ac(vec(M._resample_residuals(Ua, :block, Random.MersenneTwister(2);
+        @test ac(vec(M._resample_residuals(Ua, :block, Random.Xoshiro(2);
                                            block_length=30))) > 0.6
-        @test abs(ac(vec(M._resample_residuals(Ua, :iid, Random.MersenneTwister(2))))) < 0.15
+        @test abs(ac(vec(M._resample_residuals(Ua, :iid, Random.Xoshiro(2))))) < 0.15
         @test M._default_block_length(1000) == 10
         @test M._default_block_length(1) == 1
     end
 
     @testset "wild weights match their moments" begin
-        r = M._wild_weights(Random.MersenneTwister(4), 200_000, :rademacher, Float64)
+        r = M._wild_weights(Random.Xoshiro(4), 200_000, :rademacher, Float64)
         @test all(x -> x == 1.0 || x == -1.0, r)
         @test mean(r) ≈ 0 atol = 0.01
         @test mean(r .^ 2) ≈ 1 atol = 1e-12                # exactly 1 for ±1
         # Mammen matches the THIRD moment as well, which Rademacher cannot (its odd moments
         # are zero by symmetry). That is the whole reason to offer it.
-        mm = M._wild_weights(Random.MersenneTwister(4), 400_000, :mammen, Float64)
+        mm = M._wild_weights(Random.Xoshiro(4), 400_000, :mammen, Float64)
         @test mean(mm) ≈ 0 atol = 0.01
         @test mean(mm .^ 2) ≈ 1 atol = 0.02
         @test mean(mm .^ 3) ≈ 1 atol = 0.05
         @test abs(mean(r .^ 3)) < 0.01                     # Rademacher: zero, not one
-        @test_throws ArgumentError M._wild_weights(Random.MersenneTwister(1), 5, :nope, Float64)
+        @test_throws ArgumentError M._wild_weights(Random.Xoshiro(1), 5, :nope, Float64)
     end
 
     @testset "Kilian bias correction reduces the OLS bias" begin
@@ -756,14 +756,14 @@ end
         bias_ols = Float64[]
         bias_bc = Float64[]
         for s in 1:nsim
-            rng = Random.MersenneTwister(1000 + s)
+            rng = Random.Xoshiro(1000 + s)
             y = zeros(Tn, 1)
             for t in 2:Tn
                 y[t, 1] = rho_true * y[t-1, 1] + randn(rng)
             end
             m = estimate_var(y, 1; check_stability=false)
             push!(bias_ols, M.extract_ar_coefficients(m.B, 1, 1)[1][1, 1] - rho_true)
-            Psi = M._estimate_var_bias(m, 60, :iid, Random.MersenneTwister(7000 + s))
+            Psi = M._estimate_var_bias(m, 60, :iid, Random.Xoshiro(7000 + s))
             Bc, _ = M._kilian_bias_correction(m.B, Psi, 1, 1)
             push!(bias_bc, M.extract_ar_coefficients(Bc, 1, 1)[1][1, 1] - rho_true)
         end
@@ -791,7 +791,7 @@ end
     end
 
     @testset "IRF bands: default unchanged, all schemes valid and reproducible" begin
-        rng = Random.MersenneTwister(42)
+        rng = Random.Xoshiro(42)
         Y = randn(rng, 200, 2)
         for t in 2:200
             Y[t, :] = [0.5 0.1; 0.2 0.4] * Y[t-1, :] + 0.5 * randn(rng, 2)
@@ -827,10 +827,10 @@ end
     end
 
     @testset "SID-17 SignIdentifiedSet fields and irf_percentiles" begin
-        rng = MersenneTwister(7462)  # DGP-02: explicit rng
+        rng = Xoshiro(7462)  # DGP-02: explicit rng
         model = estimate_var(randn(rng, 80, 2), 1)
         s = identify_sign(model, 4, ir -> ir[1, 1, 1] > 0; store_all=true,
-                          max_draws=40, rng=MersenneTwister(7462))
+                          max_draws=40, rng=Xoshiro(7462))
         @test length(s.weights) == s.n_accepted
         @test s.ess_fraction == 1
         pct = irf_percentiles(s; quantiles=[0.16, 0.5, 0.84])

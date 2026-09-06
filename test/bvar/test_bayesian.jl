@@ -20,7 +20,7 @@ end
 
     # 1. Reference DGP (DGP-03 #792): non-diagonal A, non-identity B0, burn-in.
     # b_vecs layout is vec(B) = [c1, A11, A12, c2, A21, A22] (B = [c'; A']).
-    rng = MersenneTwister(42)
+    rng = Xoshiro(42)
     T = 100
     n = 2
     p = 1
@@ -75,9 +75,9 @@ end
     # fail). NOTE on indexing: b_vecs = vec(B) with B = [c'; A'], so slope
     # indices [2,3,5,6] are [A11, A12, A21, A22] — the transpose interleaves.
     @testset "Posterior calibration on known truth" begin
-        Yc = dgp_var(MersenneTwister(4700); A=true_A, B0=B0_true, T=200).Y
+        Yc = dgp_var(Xoshiro(4700); A=true_A, B0=B0_true, T=200).Y
         post_c = estimate_bvar(Yc, 1; n_draws=1000, sampler=:direct,
-                               rng=MersenneTwister(4701))
+                               rng=Xoshiro(4701))
 
         # B-draw ESS ≥ 200 everywhere (realized min 995: iid direct draws).
         for j in axes(post_c.B_draws, 2), k in axes(post_c.B_draws, 3)
@@ -100,9 +100,9 @@ end
         slope_truth = [true_A[1, 1], true_A[1, 2], true_A[2, 1], true_A[2, 2]]
         covers = 0
         for s in 1:12
-            Ys = dgp_var(MersenneTwister(9000 + s); A=true_A, B0=B0_true, T=200).Y
+            Ys = dgp_var(Xoshiro(9000 + s); A=true_A, B0=B0_true, T=200).Y
             ps = estimate_bvar(Ys, 1; n_draws=500, sampler=:direct,
-                               rng=MersenneTwister(9100 + s))
+                               rng=Xoshiro(9100 + s))
             bv, _ = MacroEconometricModels.extract_chain_parameters(ps)
             for (idx, tr) in zip([2, 3, 5, 6], slope_truth)
                 qq = quantile(bv[:, idx], [0.15, 0.85])
@@ -124,9 +124,9 @@ end
     # (innovation variances). Fit once on the first 400 of T=800, roll 400
     # origins (realized ratios 1.10/0.91 — estimation penalty plus luck).
     @testset "Forecast MSE within 20% of truth-implied" begin
-        Yf = dgp_var(MersenneTwister(4800); A=true_A, B0=B0_true, T=800).Y
+        Yf = dgp_var(Xoshiro(4800); A=true_A, B0=B0_true, T=800).Y
         post_f = estimate_bvar(Yf[1:400, :], 1; n_draws=500, sampler=:direct,
-                               rng=MersenneTwister(4801))
+                               rng=Xoshiro(4801))
         Bm = dropdims(mean(post_f.B_draws; dims=1); dims=1)
         Stru = B0_true * B0_true'
         for j in 1:n
@@ -142,15 +142,15 @@ end
 
     @testset "Reproducibility" begin
         _tprint("Testing BVAR reproducibility...")
-        rng = MersenneTwister(77777)  # DGP-03: explicit rng
+        rng = Xoshiro(77777)  # DGP-03: explicit rng
         Y_rep = dgp_var(rng; A=0.5 * Matrix{Float64}(I, 2, 2),
                         B0=Matrix{Float64}(I, 2, 2), T=80).Y
 
         post1 = estimate_bvar(Y_rep, 1; n_draws=50, sampler=:direct,
-                              rng=MersenneTwister(88888))
+                              rng=Xoshiro(88888))
 
         post2 = estimate_bvar(Y_rep, 1; n_draws=50, sampler=:direct,
-                              rng=MersenneTwister(88888))
+                              rng=Xoshiro(88888))
 
         # Same random seed should give same results
         @test post1.B_draws ≈ post2.B_draws
@@ -160,7 +160,7 @@ end
 
     @testset "Numerical Stability - Near-Collinear Data" begin
         _tprint("Testing numerical stability with near-collinear data...")
-        rng = MersenneTwister(11111)  # DGP-03: explicit rng
+        rng = Xoshiro(11111)  # DGP-03: explicit rng
         T_nc = 80
         n_nc = 3
 
@@ -178,7 +178,7 @@ end
 
     @testset "Edge Cases" begin
         _tprint("Testing edge cases...")
-        rng = MersenneTwister(22222)  # DGP-03: explicit rng
+        rng = Xoshiro(22222)  # DGP-03: explicit rng
 
         # Single variable BVAR
         Y_single = randn(rng, 80, 1)
@@ -194,7 +194,7 @@ end
 
     @testset "Posterior Draws Structure" begin
         _tprint("Testing posterior draws structure...")
-        rng = MersenneTwister(33333)  # DGP-03: explicit rng
+        rng = Xoshiro(33333)  # DGP-03: explicit rng
         Y_diag = dgp_var(rng; A=0.5 * Matrix{Float64}(I, 2, 2),
                          B0=Matrix{Float64}(I, 2, 2), T=80).Y
 
@@ -225,7 +225,7 @@ end
 
     @testset "Posterior Model Extraction" begin
         _tprint("Testing posterior model extraction...")
-        rng = MersenneTwister(44444)  # DGP-03: explicit rng
+        rng = Xoshiro(44444)  # DGP-03: explicit rng
         Y_post = dgp_var(rng; A=0.5 * Matrix{Float64}(I, 2, 2),
                          B0=Matrix{Float64}(I, 2, 2), T=80).Y
 
@@ -250,7 +250,7 @@ end
     end
 
     @testset "Minnesota prior with BVAR" begin
-        rng = MersenneTwister(99887)  # DGP-03: explicit rng
+        rng = Xoshiro(99887)  # DGP-03: explicit rng
         Y_mn = randn(rng, 80, 2)
         hyper = MinnesotaHyperparameters(tau=0.2, decay=2.0, omega=0.5)
         post_mn = estimate_bvar(Y_mn, 1; prior=:minnesota, hyper=hyper, n_draws=100, rng=rng)
@@ -260,7 +260,7 @@ end
     end
 
     @testset "BVAR sampler variants" begin
-        rng = MersenneTwister(99886)  # DGP-03: explicit rng
+        rng = Xoshiro(99886)  # DGP-03: explicit rng
         Y_sv = randn(rng, 60, 2)
 
         # Direct sampler
@@ -305,7 +305,7 @@ end
     # ==========================================================================
 
     @testset "forecast(BVARPosterior, h)" begin
-        rng = MersenneTwister(50001)  # DGP-03: explicit rng
+        rng = Xoshiro(50001)  # DGP-03: explicit rng
         post = estimate_bvar(Y, 1; n_draws=(FAST ? 30 : 80), sampler=:direct, rng=rng)
 
         # Basic forecast
@@ -341,7 +341,7 @@ end
     end
 
     @testset "BVARForecast show method" begin
-        rng = MersenneTwister(50002)  # DGP-03: explicit rng
+        rng = Xoshiro(50002)  # DGP-03: explicit rng
         post = estimate_bvar(Y, 1; n_draws=(FAST ? 30 : 60), sampler=:direct, rng=rng)
 
         # Show with :median (explicit)
@@ -366,7 +366,7 @@ end
     end
 
     @testset "BVARPosterior show with varnames" begin
-        rng = MersenneTwister(50003)  # DGP-03: explicit rng
+        rng = Xoshiro(50003)  # DGP-03: explicit rng
         post_vn = estimate_bvar(Y, 1; n_draws=(FAST ? 30 : 50), sampler=:direct, rng=rng,
                                 varnames=["GDP", "Inflation"])
         io = IOBuffer()
@@ -382,7 +382,7 @@ end
     end
 
     @testset "posterior_mean_model and posterior_median_model (default data)" begin
-        rng = MersenneTwister(50004)  # DGP-03: explicit rng
+        rng = Xoshiro(50004)  # DGP-03: explicit rng
         post = estimate_bvar(Y, 1; n_draws=(FAST ? 30 : 50), sampler=:direct, rng=rng)
 
         # Without explicit data kwarg — should use post.data
@@ -404,7 +404,7 @@ end
     end
 
     @testset "Deprecated wrapper process_posterior_samples(post, p, n, func)" begin
-        rng = MersenneTwister(50005)  # DGP-03: explicit rng
+        rng = Xoshiro(50005)  # DGP-03: explicit rng
         post = estimate_bvar(Y, 1; n_draws=(FAST ? 20 : 40), sampler=:direct, rng=rng)
 
         # The 4-arg deprecated wrapper should delegate to the 2-arg version
@@ -420,7 +420,7 @@ end
     end
 
     @testset "Base.size and Base.length for BVARPosterior" begin
-        rng = MersenneTwister(50006)  # DGP-03: explicit rng
+        rng = Xoshiro(50006)  # DGP-03: explicit rng
         post = estimate_bvar(Y, 1; n_draws=(FAST ? 25 : 50), sampler=:direct, rng=rng)
 
         # length
@@ -436,7 +436,7 @@ end
     end
 
     @testset "varnames() accessor" begin
-        rng = MersenneTwister(50007)  # DGP-03: explicit rng
+        rng = Xoshiro(50007)  # DGP-03: explicit rng
         # Default varnames
         post_def = estimate_bvar(Y, 1; n_draws=(FAST ? 20 : 40), sampler=:direct, rng=rng)
         vn = varnames(post_def)
@@ -452,7 +452,7 @@ end
     end
 
     @testset "compute_posterior_quantiles with central=:median" begin
-        rng = MersenneTwister(50008)  # DGP-03: explicit rng
+        rng = Xoshiro(50008)  # DGP-03: explicit rng
         # Create synthetic samples array: n_samples x dim1 x dim2
         samples = randn(rng, Float64, 100, 5, 3)
 
@@ -487,7 +487,7 @@ end
     end
 
     @testset "Minnesota prior edge cases" begin
-        rng = MersenneTwister(50009)  # DGP-03: explicit rng
+        rng = Xoshiro(50009)  # DGP-03: explicit rng
         Y_mn = randn(rng, 80, 2)
 
         # lambda=0 and mu=0: these disable sum-of-coefficients and co-persistence priors
@@ -512,7 +512,7 @@ end
     end
 
     @testset "log_marginal_likelihood" begin
-        rng = MersenneTwister(50010)  # DGP-03: explicit rng
+        rng = Xoshiro(50010)  # DGP-03: explicit rng
         Y_lml = randn(rng, 80, 2)
 
         # Standard hyper
@@ -580,7 +580,7 @@ end
     # (box B) The preallocated-and-reused companion produces eigenvalues identical to a freshly
     # built companion, for every draw, so the stationarity gate never diverges.
     n, p = 2, 3
-    rng = Random.MersenneTwister(101)
+    rng = Random.Xoshiro(101)
     draws = [[0.2 .* randn(rng, n, n) for _ in 1:p] for _ in 1:5]
     comp_reuse = zeros(n * p, n * p)
     if p > 1
@@ -618,13 +618,13 @@ end
 
     # Integration: the actual forecast() is deterministic on a fixed seed (the refactor did not
     # change RNG consumption), and produces finite, ordered bands.
-    rngd = Random.MersenneTwister(20210)
+    rngd = Random.Xoshiro(20210)
     # Persistent VAR(2) truth (DGP-03 #792: shared simulator).
     Yd = dgp_var(rngd; A=[0.5 0.1; 0.05 0.4], B0=Matrix{Float64}(I, n, n), T=140).Y
     post = estimate_bvar(Yd, 2; n_draws=(FAST ? 40 : 80), sampler=:direct,
-                         rng=MersenneTwister(9090))
-    fc1 = forecast(post, 6; rng=MersenneTwister(31337))
-    fc2 = forecast(post, 6; rng=MersenneTwister(31337))
+                         rng=Xoshiro(9090))
+    fc1 = forecast(post, 6; rng=Xoshiro(31337))
+    fc2 = forecast(post, 6; rng=Xoshiro(31337))
     @test fc1.forecast == fc2.forecast
     @test fc1.ci_lower == fc2.ci_lower
     @test fc1.ci_upper == fc2.ci_upper
@@ -633,7 +633,7 @@ end
 end
 
 @testset "BVAR IRF MC honesty counts (#244)" begin
-    rng = MersenneTwister(4244)  # DGP-03: explicit rng
+    rng = Xoshiro(4244)  # DGP-03: explicit rng
     Y = randn(rng, 120, 2)
     post = estimate_bvar(Y, 2; n_draws=80, sampler=:direct, rng=rng)
     b = irf(post, 8; method=:cholesky)
@@ -687,7 +687,7 @@ end
 end
 
 @testset "SID-07 IdentificationError in posterior loops" begin
-    rng = MersenneTwister(736)  # DGP-03: explicit rng
+    rng = Xoshiro(736)  # DGP-03: explicit rng
     Y = randn(rng, 80, 2)
     post = estimate_bvar(Y, 1; n_draws=FAST ? 20 : 40, burnin=10, rng=rng)
     impossible(irf) = irf[1, 1, 1] > 1e6
@@ -724,12 +724,12 @@ end
     @test_throws IdentificationError identify_arias_bayesian(post, restr_imp, 5; n_rotations=3)
 
     # SID-19: irf/fevd(post; method=:arias) is identify_arias_bayesian, not compute_Q.
-    rng_a = MersenneTwister(748)
+    rng_a = Xoshiro(748)
     ir_arias = irf(post, 5; method=:arias, restrictions=restr, max_draws=1, rng=copy(rng_a))
     ar_ref = identify_arias_bayesian(post, restr, 5; n_rotations=1, rng=copy(rng_a))
     @test ir_arias isa BayesianImpulseResponse
     @test ir_arias.quantiles ≈ irf(ar_ref).quantiles
-    rng_f = MersenneTwister(749)
+    rng_f = Xoshiro(749)
     fv_arias = fevd(post, 5; method=:arias, restrictions=restr, max_draws=1, rng=copy(rng_f))
     ar_f = identify_arias_bayesian(post, restr, 5; n_rotations=1, rng=copy(rng_f))
     @test fv_arias isa BayesianFEVD
@@ -780,13 +780,13 @@ end
 end
 
 @testset "SID-18 identify_robust_bayes on BVARPosterior" begin
-    rng = MersenneTwister(747)  # DGP-03: explicit rng
+    rng = Xoshiro(747)  # DGP-03: explicit rng
     Y = randn(rng, 50, 2)
     post = estimate_bvar(Y, 1; n_draws=FAST ? 6 : 10, burnin=3, seed=747)
     r = SVARRestrictions(2; signs=[sign_restriction(1, 1, :positive),
                                    sign_restriction(2, 1, :positive)])
     nrot = FAST ? 8 : 16
-    rng = MersenneTwister(747)
+    rng = Xoshiro(747)
     res = identify_robust_bayes(post, r, 2; level=0.68, solver=:optimize,
                                 n_rotations=nrot, rng=copy(rng))
     @test res isa RobustBayesResult

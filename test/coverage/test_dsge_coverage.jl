@@ -431,7 +431,7 @@ end
     spec = compute_steady_state(spec)
     sol = perturbation_solver(spec; order=1)
 
-    sim = simulate(sol, 100; rng=Random.MersenneTwister(42))
+    sim = simulate(sol, 100; rng=Random.Xoshiro(42))
     @test size(sim) == (100, 1)
     @test all(isfinite, sim)
 end
@@ -446,17 +446,17 @@ end
     spec = compute_steady_state(spec)
     sol = perturbation_solver(spec; order=2)
 
-    sim = simulate(sol, 100; rng=Random.MersenneTwister(42))
+    sim = simulate(sol, 100; rng=Random.Xoshiro(42))
     @test size(sim) == (100, 1)
     @test all(isfinite, sim)
 
     # With custom shock draws
-    shocks = randn(Random.MersenneTwister(9005), 50, 1)
+    shocks = randn(Random.Xoshiro(9005), 50, 1)
     sim2 = simulate(sol, 50; shock_draws=shocks)
     @test size(sim2) == (50, 1)
 
     # Antithetic variates
-    sim3 = simulate(sol, 100; antithetic=true, rng=Random.MersenneTwister(42))
+    sim3 = simulate(sol, 100; antithetic=true, rng=Random.Xoshiro(42))
     @test size(sim3) == (100, 1)
 end
 
@@ -625,9 +625,12 @@ end
         @test size(Y) == (3, 1)
     end
 
-    # Out-of-bounds extrapolation (test outside _suppress so @test_warn can see the warning)
+    # Out-of-bounds extrapolation (test outside _suppress so the warning is
+    # visible; @test_logs, not @test_warn: the warning carries maxlog=1 on the
+    # shared global logger, so any earlier extrapolation warning anywhere in
+    # the threaded suite would exhaust it and fd-capture would see nothing)
     big_state = [sol_eval.state_bounds[1, 2] * 2.0]
-    @test_warn r"extrapolating" evaluate_policy(sol_eval, big_state)
+    @test_logs (:warn, r"extrapolating") evaluate_policy(sol_eval, big_state)
 end
 
 @testset "projection.jl: max_euler_error" begin
@@ -641,7 +644,7 @@ end
         spec = compute_steady_state(spec)
 
         sol = MacroEconometricModels.collocation_solver(spec; degree=3, max_iter=5, tol=1e-4)
-        err = max_euler_error(sol; n_test=20, rng=Random.MersenneTwister(42))
+        err = max_euler_error(sol; n_test=20, rng=Random.Xoshiro(42))
         @test isfinite(err)
         @test err >= 0
     end
@@ -997,7 +1000,7 @@ end
 
     _suppress() do
         sol = perturbation_solver(spec; order=2)
-        sim = simulate(sol, 25; rng=Random.MersenneTwister(42))
+        sim = simulate(sol, 25; rng=Random.Xoshiro(42))
         @test size(sim, 1) == 25
         @test size(sim, 2) >= 2  # at least 2 variables (may be augmented)
         @test all(isfinite, sim)
@@ -1130,7 +1133,7 @@ function _make_sylvester_problem(n::Int, nvd::Int, rng)
 end
 
 @testset "perturbation.jl: _solve_kronecker_sylvester dense path" begin
-    rng = Random.MersenneTwister(2024)
+    rng = Random.Xoshiro(2024)
     n, nvd = 8, 8                           # total = 64 <= 5000 -> dense solve
     f_c, f_f, Mkd, RHS = _make_sylvester_problem(n, nvd, rng)
 
@@ -1149,7 +1152,7 @@ end
 end
 
 @testset "perturbation.jl: _solve_kronecker_sylvester GMRES path (large system)" begin
-    rng = Random.MersenneTwister(99)
+    rng = Random.Xoshiro(99)
     n, nvd = 60, 100                        # total = 6000 > 5000 -> matrix-free GMRES
     f_c, f_f, Mkd, RHS = _make_sylvester_problem(n, nvd, rng)
 

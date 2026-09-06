@@ -1050,7 +1050,7 @@ const HEGY_CV_MONTHLY = Dict(
 #
 # Generation (test/oracle/gen_lm_adf2break_cvs.jl — rerun it to regenerate):
 #   DGP driftless RW, y_t = y_{t-1} + N(0,1); reps 10000 per cell;
-#   MersenneTwister(5770000 + rep) per-rep seeding; lags = 0;
+#   Xoshiro(5770000 + rep) per-rep seeding; lags = 0;
 #   trim 0.15 (min-LM) / 0.10 (two-break ADF); T grid (100, 150, 250, 500);
 #   columns are the 1%, 2.5%, 5%, 10% quantiles of the minimised statistic.
 # Lookup interpolates linearly in 1/T and clamps outside the grid

@@ -67,7 +67,7 @@ using Random
     # =========================================================================
 
     @testset "optimal_bandwidth_nw" begin
-        rng = MersenneTwister(42)  # DGP-02: explicit rng
+        rng = Xoshiro(42)  # DGP-02: explicit rng
 
         # White noise: bandwidth should be small
         x_wn = randn(rng, 200)
@@ -98,7 +98,7 @@ using Random
     @testset "optimal_bandwidth_nw — Andrews (1991) plug-in (T052)" begin
         # Persistent AR(1) with ρ≈0.5 so the plug-in bandwidth comfortably exceeds
         # the old degenerate floor(n^(1/3))=5 clamp but stays under the Schwert cap.
-        rng = MersenneTwister(4242)  # DGP-02: explicit rng
+        rng = Xoshiro(4242)  # DGP-02: explicit rng
         n = 200
         x = dgp_arima(rng; phi=[0.5], T=n).y
         # Recompute ρ̂ with the SAME estimator the function uses → the pins are exact
@@ -156,8 +156,8 @@ using Random
             @test MacroEconometricModels.kernel_weight(10, 3, k) == 0.0
         end
 
-        # AR(1), ρ=0.7 (project convention: explicit MersenneTwister seed).
-        rng = Random.MersenneTwister(53)
+        # AR(1), ρ=0.7 (project convention: explicit Xoshiro seed).
+        rng = Random.Xoshiro(53)
         n = 200
         x = dgp_arima(rng; phi=[0.7], T=n).y  # DGP-02 #791: shared simulator
         xd = x .- Statistics.mean(x)
@@ -186,7 +186,7 @@ using Random
         # (A) Scalar reduction (k=1, X=ones): the VAR(1) collapses to a scalar AR(1)
         #     with ρ = Σu_{t-1}u_t / Σu_{t-1}², whitened û_t = u_t − ρ u_{t-1} (t=2..n,
         #     length n−1, NOT spliced with u[1]), recolored by 1/(1−ρ)².
-        rng = MersenneTwister(71)  # DGP-02: explicit rng
+        rng = Xoshiro(71)  # DGP-02: explicit rng
         n = 300
         u = dgp_arima(rng; phi=[0.6], T=n).y  # DGP-02 #791: shared simulator
         bw = 5
@@ -206,7 +206,7 @@ using Random
 
         # (B) Multivariate: the new VAR(1) prewhitening genuinely differs from both the
         #     non-prewhitened estimate and the OLD scalar-AR(1) prewhitening.
-        rng = MersenneTwister(72)  # DGP-02: explicit rng (fresh, was global reseed)
+        rng = Xoshiro(72)  # DGP-02: explicit rng (fresh, was global reseed)
         xreg = dgp_arima(rng; phi=[0.7], T=n).y  # DGP-02 #791: shared simulator
         X = hcat(ones(n), xreg)
         uu = dgp_arima(rng; phi=[0.5], T=n).y  # DGP-02 #791
@@ -232,7 +232,7 @@ using Random
 
         # (C) Stability guard: a near-unit-root moment VAR(1) → warned fallback to no
         #     prewhitening (bit-for-bit equal to prewhiten=false).
-        rng = MersenneTwister(99)  # DGP-02: explicit rng
+        rng = Xoshiro(99)  # DGP-02: explicit rng
         m = 500
         u_rw = dgp_arima(rng; phi=[0.995], T=m).y  # DGP-02 #791: shared simulator
         Xc = reshape(ones(m), m, 1)
@@ -241,7 +241,7 @@ using Random
         @test V_fallback ≈ MacroEconometricModels.newey_west(Xc, u_rw; prewhiten=false, bandwidth=4)
 
         # (D) Helper contract: stable moments → (n-1)×k whitened + k×k A; near-unit-root → nothing.
-        rng = MersenneTwister(7)  # DGP-02: explicit rng
+        rng = Xoshiro(7)  # DGP-02: explicit rng
         Gm = randn(rng, 300, 2)
         Ghat, A = MacroEconometricModels._prewhiten_moments(Gm)
         @test size(Ghat) == (299, 2)
@@ -255,7 +255,7 @@ using Random
     @testset "long_run_covariance PSD gate (T063 SUB-2)" begin
         # The isposdef gate is behavior-preserving: the result is symmetric + PSD on both
         # the Bartlett (PD) and QS (may be non-PD → projected) paths.
-        rng = MersenneTwister(63)  # DGP-02: explicit rng
+        rng = Xoshiro(63)  # DGP-02: explicit rng
         X = hcat(ones(200), randn(rng, 200, 2))
         for k in (:bartlett, :quadratic_spectral)
             S = MacroEconometricModels.long_run_covariance(X; bandwidth=4, kernel=k)
@@ -265,7 +265,7 @@ using Random
     end
 
     @testset "System HAC cross-equation blocks (T055)" begin
-        rng = MersenneTwister(313)  # DGP-02: explicit rng
+        rng = Xoshiro(313)  # DGP-02: explicit rng
         n = 300; k = 2; n_eq = 2
         X = hcat(ones(n), randn(rng, n))
         fac = randn(rng, n)                  # common factor → correlated equations
@@ -312,7 +312,7 @@ using Random
         @test Vd[blk1, blk2] ≈ Vd[blk2, blk2] atol = 1e-10
 
         # Independent equations ⇒ cross-block small relative to diagonal
-        rng = MersenneTwister(314)  # DGP-02: explicit rng
+        rng = Xoshiro(314)  # DGP-02: explicit rng
         ni = 2000
         Xi = hcat(ones(ni), randn(rng, ni))
         Vi = MacroEconometricModels.white_vcov(Xi, hcat(randn(rng, ni), randn(rng, ni)); variant=:hc0)
@@ -324,7 +324,7 @@ using Random
     # =========================================================================
 
     @testset "newey_west - univariate residuals" begin
-        rng = MersenneTwister(100)  # DGP-02: explicit rng
+        rng = Xoshiro(100)  # DGP-02: explicit rng
         n = 200
         k = 3
         X = hcat(ones(n), randn(rng, n, k - 1))
@@ -360,7 +360,7 @@ using Random
     end
 
     @testset "newey_west - multivariate residuals" begin
-        rng = MersenneTwister(200)  # DGP-02: explicit rng
+        rng = Xoshiro(200)  # DGP-02: explicit rng
         n = 200
         k = 2
         n_eq = 3
@@ -380,7 +380,7 @@ using Random
     # =========================================================================
 
     @testset "white_vcov - all HC variants" begin
-        rng = MersenneTwister(300)  # DGP-02: explicit rng
+        rng = Xoshiro(300)  # DGP-02: explicit rng
         n = 100
         k = 3
         X = hcat(ones(n), randn(rng, n, k - 1))
@@ -404,7 +404,7 @@ using Random
     end
 
     @testset "white_vcov - multivariate residuals" begin
-        rng = MersenneTwister(400)  # DGP-02: explicit rng
+        rng = Xoshiro(400)  # DGP-02: explicit rng
         n = 100
         k = 2
         n_eq = 2
@@ -420,7 +420,7 @@ using Random
     # =========================================================================
 
     @testset "driscoll_kraay - univariate" begin
-        rng = MersenneTwister(500)  # DGP-02: explicit rng
+        rng = Xoshiro(500)  # DGP-02: explicit rng
         n = 200
         k = 3
         X = hcat(ones(n), randn(rng, n, k - 1))
@@ -443,7 +443,7 @@ using Random
     end
 
     @testset "driscoll_kraay - multivariate" begin
-        rng = MersenneTwister(600)  # DGP-02: explicit rng
+        rng = Xoshiro(600)  # DGP-02: explicit rng
         n = 200
         k = 2
         n_eq = 3
@@ -459,7 +459,7 @@ using Random
     # =========================================================================
 
     @testset "robust_vcov dispatch" begin
-        rng = MersenneTwister(700)  # DGP-02: explicit rng
+        rng = Xoshiro(700)  # DGP-02: explicit rng
         n = 100
         k = 2
         X = hcat(ones(n), randn(rng, n))
@@ -522,7 +522,7 @@ using Random
     # =========================================================================
 
     @testset "precompute_XtX_inv" begin
-        rng = MersenneTwister(800)  # DGP-02: explicit rng
+        rng = Xoshiro(800)  # DGP-02: explicit rng
         n = 100
         k = 3
         X = hcat(ones(n), randn(rng, n, k - 1))
@@ -547,7 +547,7 @@ using Random
     # =========================================================================
 
     @testset "long_run_variance" begin
-        rng = MersenneTwister(900)  # DGP-02: explicit rng
+        rng = Xoshiro(900)  # DGP-02: explicit rng
 
         # White noise: long-run variance ≈ variance
         n = 1000
@@ -584,7 +584,7 @@ using Random
     # =========================================================================
 
     @testset "long_run_covariance" begin
-        rng = MersenneTwister(1000)  # DGP-02: explicit rng
+        rng = Xoshiro(1000)  # DGP-02: explicit rng
         n = 300
         k = 3
         X = randn(rng, n, k)
@@ -617,7 +617,7 @@ using Random
         # sandwich (NW), rescaled (DK), and direct (long_run_variance) forms.
         # rtol 0.25 covers Bartlett-kernel downward bias plus sampling noise
         # of the long-run average at T=2000.
-        rng = MersenneTwister(90210)
+        rng = Xoshiro(90210)
         T = 2000
         X1 = ones(T, 1)
         ar = dgp_arima(rng; phi=[0.7], T=T).y
@@ -658,7 +658,7 @@ using Random
     end
 
     @testset "precompute_XtX_inv caching pattern" begin
-        rng = MersenneTwister(8801)  # DGP-02: explicit rng
+        rng = Xoshiro(8801)  # DGP-02: explicit rng
         X = randn(rng, 80, 4)
         u = randn(rng, 80)
         XtX_inv = MacroEconometricModels.precompute_XtX_inv(X)
@@ -683,7 +683,7 @@ using Random
         # Regression test: for white noise residuals, auto-bandwidth ≈ 0,
         # so NW should approximate White HC0 (both are sandwich estimators
         # with the same meat when there is no autocorrelation).
-        rng = MersenneTwister(12345)  # DGP-02: explicit rng
+        rng = Xoshiro(12345)  # DGP-02: explicit rng
         n = 500
         k = 3
         X = hcat(ones(n), randn(rng, n, k - 1))
@@ -710,7 +710,7 @@ using Random
     end
 
     @testset "Newey-West with fixed bandwidth and all kernels" begin
-        rng = MersenneTwister(8802)  # DGP-02: explicit rng
+        rng = Xoshiro(8802)  # DGP-02: explicit rng
         X = randn(rng, 80, 3)
         u = randn(rng, 80)
         for kernel in [:bartlett, :parzen, :quadratic_spectral, :tukey_hanning]

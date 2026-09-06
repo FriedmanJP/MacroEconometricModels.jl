@@ -18,7 +18,7 @@ using LinearAlgebra, Statistics, Random, Distributions
     @testset "RegModel type construction and StatsAPI" begin
         # Manually construct a RegModel to test StatsAPI accessors
         n, k = 100, 3
-        rng = MersenneTwister(42)
+        rng = Xoshiro(42)
         X = hcat(ones(n), randn(rng, n, k - 1))
         beta_true = [1.0, 2.0, -0.5]
         y = X * beta_true + 0.3 * randn(rng, n)
@@ -70,9 +70,9 @@ using LinearAlgebra, Statistics, Random, Distributions
     @testset "LogitModel type construction and StatsAPI" begin
         n, k = 50, 2
         m = LogitModel{Float64}(
-            ones(n), randn(Random.MersenneTwister(1409), n, k), [0.5, -0.3],
+            ones(n), randn(Random.Xoshiro(1409), n, k), [0.5, -0.3],
             Matrix{Float64}(I, k, k) * 0.04,
-            randn(Random.MersenneTwister(1410), n), fill(0.5, n),
+            randn(Random.Xoshiro(1410), n), fill(0.5, n),
             -30.0, -34.0, 0.12, 64.0, 68.0,
             ["const", "x1"], true, 5, :ols
         )
@@ -102,9 +102,9 @@ using LinearAlgebra, Statistics, Random, Distributions
     @testset "ProbitModel type construction and StatsAPI" begin
         n, k = 50, 2
         m = ProbitModel{Float64}(
-            ones(n), randn(Random.MersenneTwister(1411), n, k), [0.3, -0.2],
+            ones(n), randn(Random.Xoshiro(1411), n, k), [0.3, -0.2],
             Matrix{Float64}(I, k, k) * 0.03,
-            randn(Random.MersenneTwister(1412), n), fill(0.5, n),
+            randn(Random.Xoshiro(1412), n), fill(0.5, n),
             -28.0, -34.0, 0.18, 60.0, 64.0,
             ["const", "x1"], true, 4, :ols
         )
@@ -156,7 +156,7 @@ using LinearAlgebra, Statistics, Random, Distributions
     @testset "Covariance estimators" begin
 
         @testset "HC0-HC3 ordering on heteroskedastic data" begin
-            rng = MersenneTwister(123)
+            rng = Xoshiro(123)
             n = 200
             k = 3
             X = hcat(ones(n), randn(rng, n, k - 1))
@@ -192,7 +192,7 @@ using LinearAlgebra, Statistics, Random, Distributions
         end
 
         @testset "Cluster-robust covariance" begin
-            rng = MersenneTwister(456)
+            rng = Xoshiro(456)
             n = 200
             G = 20  # 20 clusters of 10 each
             X = hcat(ones(n), randn(rng, n, 2))
@@ -222,7 +222,7 @@ using LinearAlgebra, Statistics, Random, Distributions
 
         @testset "Covariance error handling" begin
             X = ones(10, 2)
-            resid = randn(Random.MersenneTwister(1413), 10)
+            resid = randn(Random.Xoshiro(1413), 10)
             XtXinv = Matrix{Float64}(I, 2, 2)
 
             # Invalid cov_type
@@ -241,7 +241,7 @@ using LinearAlgebra, Statistics, Random, Distributions
     # =========================================================================
 
     @testset "OLS estimation — coefficient recovery" begin
-        rng = MersenneTwister(789)
+        rng = Xoshiro(789)
         n = 500
         beta_true = [1.0, 2.0, -0.5]
         k = length(beta_true)
@@ -268,7 +268,7 @@ using LinearAlgebra, Statistics, Random, Distributions
     end
 
     @testset "OLS — robust SEs same coefs, different SEs" begin
-        rng = MersenneTwister(101)
+        rng = Xoshiro(101)
         n = 300
         X = hcat(ones(n), randn(rng, n, 2))
         sigma_i = 0.5 .+ 2.0 .* abs.(X[:, 2])
@@ -288,7 +288,7 @@ using LinearAlgebra, Statistics, Random, Distributions
     end
 
     @testset "OLS — F-test significant" begin
-        rng = MersenneTwister(202)
+        rng = Xoshiro(202)
         n = 200
         X = hcat(ones(n), randn(rng, n, 3))
         y = X * [1.0, 3.0, -2.0, 1.5] + 0.5 * randn(rng, n)
@@ -299,7 +299,7 @@ using LinearAlgebra, Statistics, Random, Distributions
     end
 
     @testset "OLS — AIC/BIC finite" begin
-        rng = MersenneTwister(303)
+        rng = Xoshiro(303)
         n = 100
         X = hcat(ones(n), randn(rng, n))
         y = X * [1.0, 0.5] + randn(rng, n)
@@ -311,7 +311,7 @@ using LinearAlgebra, Statistics, Random, Distributions
     end
 
     @testset "OLS — varnames auto-generated and custom" begin
-        rng = MersenneTwister(404)
+        rng = Xoshiro(404)
         n = 50
         X = hcat(ones(n), randn(rng, n, 2))
         y = randn(rng, n)
@@ -326,7 +326,7 @@ using LinearAlgebra, Statistics, Random, Distributions
     end
 
     @testset "WLS estimation" begin
-        rng = MersenneTwister(505)
+        rng = Xoshiro(505)
         n = 200
         X = hcat(ones(n), randn(rng, n, 2))
         beta_true = [1.0, 2.0, -1.0]
@@ -348,7 +348,7 @@ using LinearAlgebra, Statistics, Random, Distributions
     @testset "WLS covariance equivalence (T075)" begin
         # Primary oracle: WLS(weights=w) ≡ OLS on the √W-transformed data (√w·y, √w·X)
         # for coefficients AND the FULL covariance, for every cov_type.
-        rng = MersenneTwister(505)
+        rng = Xoshiro(505)
         n = 200
         X = hcat(ones(n), randn(rng, n, 2))
         beta_true = [1.0, 2.0, -1.0]
@@ -379,7 +379,7 @@ using LinearAlgebra, Statistics, Random, Distributions
     end
 
     @testset "Intercept-only model" begin
-        rng = MersenneTwister(606)
+        rng = Xoshiro(606)
         n = 100
         X = ones(n, 1)
         y = 5.0 .+ randn(rng, n)
@@ -399,7 +399,7 @@ using LinearAlgebra, Statistics, Random, Distributions
 
     @testset "NaN validation" begin
         n = 50
-        rng = MersenneTwister(1414)
+        rng = Xoshiro(1414)
         X = hcat(ones(n), randn(rng, n))
         y = randn(rng, n)
         y[10] = NaN
@@ -413,17 +413,17 @@ using LinearAlgebra, Statistics, Random, Distributions
     end
 
     @testset "Dimension mismatch" begin
-        @test_throws ArgumentError estimate_reg(randn(Random.MersenneTwister(1415), 50),
-                                                randn(Random.MersenneTwister(1416), 60, 2))
+        @test_throws ArgumentError estimate_reg(randn(Random.Xoshiro(1415), 50),
+                                                randn(Random.Xoshiro(1416), 60, 2))
     end
 
     @testset "n <= k error" begin
-        @test_throws ArgumentError estimate_reg(randn(Random.MersenneTwister(1417), 3),
-                                                randn(Random.MersenneTwister(1418), 3, 4))
+        @test_throws ArgumentError estimate_reg(randn(Random.Xoshiro(1417), 3),
+                                                randn(Random.Xoshiro(1418), 3, 4))
     end
 
     @testset "Float fallback (Integer input)" begin
-        rng = MersenneTwister(707)
+        rng = Xoshiro(707)
         n = 50
         X = hcat(ones(Int, n), rand(rng, 0:10, n))
         y = rand(rng, 0:20, n)
@@ -435,7 +435,7 @@ using LinearAlgebra, Statistics, Random, Distributions
     end
 
     @testset "Cluster estimation via estimate_reg" begin
-        rng = MersenneTwister(808)
+        rng = Xoshiro(808)
         n = 200
         G = 20
         clusters = repeat(1:G, inner=10)
@@ -450,7 +450,7 @@ using LinearAlgebra, Statistics, Random, Distributions
     @testset "show method with IV fields" begin
         # Construct a model pretending to be IV for show coverage
         n, k = 50, 2
-        rng = MersenneTwister(909)
+        rng = Xoshiro(909)
         X = hcat(ones(n), randn(rng, n))
         y = randn(rng, n)
         beta = X \ y
@@ -477,7 +477,7 @@ using LinearAlgebra, Statistics, Random, Distributions
     end
 
     @testset "confint at different levels" begin
-        rng = MersenneTwister(1010)
+        rng = Xoshiro(1010)
         n = 100
         X = hcat(ones(n), randn(rng, n))
         y = X * [1.0, 2.0] + 0.5 * randn(rng, n)
@@ -506,7 +506,7 @@ end
 @testset "IV/2SLS Estimation (Task 5)" begin
 
     @testset "2SLS recovers true beta better than OLS" begin
-        rng = MersenneTwister(5001)
+        rng = Xoshiro(5001)
         n = 1000
         beta_true = [1.0, 2.0]
 
@@ -536,7 +536,7 @@ end
     end
 
     @testset "First-stage F > 10 (strong instruments)" begin
-        rng = MersenneTwister(5002)
+        rng = Xoshiro(5002)
         n = 500
         z1 = randn(rng, n)
         z2 = randn(rng, n)
@@ -553,7 +553,7 @@ end
     end
 
     @testset "Excluded-instrument partial F + CD/KP/Stock-Yogo (T072)" begin
-        rng = MersenneTwister(5099)
+        rng = Xoshiro(5099)
         n = 800
         z1, z2 = randn(rng, n), randn(rng, n)
         w = randn(rng, n)                        # included exogenous control
@@ -599,7 +599,7 @@ end
     end
 
     @testset "Sargan test: overidentified has stat, exactly identified is nothing" begin
-        rng = MersenneTwister(5003)
+        rng = Xoshiro(5003)
         n = 500
         z1 = randn(rng, n)
         z2 = randn(rng, n)
@@ -627,7 +627,7 @@ end
     end
 
     @testset "IV overid: Hansen J under robust weighting (T076)" begin
-        rng = MersenneTwister(7601)
+        rng = Xoshiro(7601)
         n = 2000
         z1 = randn(rng, n); z2 = randn(rng, n)
         v = randn(rng, n)
@@ -667,7 +667,7 @@ end
 
 
     @testset "IV — robust covariance types" begin
-        rng = MersenneTwister(5004)
+        rng = Xoshiro(5004)
         n = 300
         z1 = randn(rng, n)
         z2 = randn(rng, n)
@@ -689,7 +689,7 @@ end
 
     @testset "IV — error handling" begin
         n = 50
-        rng = MersenneTwister(1419)
+        rng = Xoshiro(1419)
         X = hcat(ones(n), randn(rng, n))
         Z = hcat(ones(n))  # only 1 instrument < 2 regressors
         y = randn(rng, n)
@@ -706,7 +706,7 @@ end
     end
 
     @testset "IV — Float fallback" begin
-        rng = MersenneTwister(5005)
+        rng = Xoshiro(5005)
         n = 100
         z1 = rand(rng, 0:10, n)
         x = z1 .+ rand(rng, 0:3, n)
@@ -720,7 +720,7 @@ end
     end
 
     @testset "IV — show method" begin
-        rng = MersenneTwister(5006)
+        rng = Xoshiro(5006)
         n = 200
         z1 = randn(rng, n)
         z2 = randn(rng, n)
@@ -742,7 +742,7 @@ end
     end
 
     @testset "IV — AIC/BIC/loglik finite" begin
-        rng = MersenneTwister(5007)
+        rng = Xoshiro(5007)
         n = 200
         z1 = randn(rng, n)
         v = randn(rng, n)
@@ -768,7 +768,7 @@ end
 @testset "Logit Estimation (Task 6)" begin
 
     @testset "Logit coefficient recovery" begin
-        rng = MersenneTwister(6001)
+        rng = Xoshiro(6001)
         n = 1000
         beta_true = [0.0, 1.5, -1.0]
         X = hcat(ones(n), randn(rng, n, 2))
@@ -784,7 +784,7 @@ end
     end
 
     @testset "Logit convergence and predictions" begin
-        rng = MersenneTwister(6002)
+        rng = Xoshiro(6002)
         n = 500
         X = hcat(ones(n), randn(rng, n, 2))
         beta_true = [0.5, 1.0, -0.5]
@@ -808,7 +808,7 @@ end
     end
 
     @testset "Logit StatsAPI interface" begin
-        rng = MersenneTwister(6003)
+        rng = Xoshiro(6003)
         n = 300
         X = hcat(ones(n), randn(rng, n))
         p = 1.0 ./ (1.0 .+ exp.(-X * [0.0, 1.0]))
@@ -827,7 +827,7 @@ end
     end
 
     @testset "Logit deviance residuals finite" begin
-        rng = MersenneTwister(6004)
+        rng = Xoshiro(6004)
         n = 500
         X = hcat(ones(n), randn(rng, n, 2))
         p = 1.0 ./ (1.0 .+ exp.(-X * [0.0, 1.0, -0.5]))
@@ -840,7 +840,7 @@ end
     end
 
     @testset "Logit AIC/BIC" begin
-        rng = MersenneTwister(6005)
+        rng = Xoshiro(6005)
         n = 400
         X = hcat(ones(n), randn(rng, n))
         p = 1.0 ./ (1.0 .+ exp.(-X * [0.0, 0.8]))
@@ -854,7 +854,7 @@ end
     end
 
     @testset "Logit robust covariance" begin
-        rng = MersenneTwister(6006)
+        rng = Xoshiro(6006)
         n = 500
         X = hcat(ones(n), randn(rng, n, 2))
         p = 1.0 ./ (1.0 .+ exp.(-X * [0.0, 1.0, -0.5]))
@@ -869,7 +869,7 @@ end
 
     @testset "Logit error handling" begin
         n = 50
-        rng = MersenneTwister(1420)
+        rng = Xoshiro(1420)
         X = hcat(ones(n), randn(rng, n))
 
         # Non-binary y
@@ -877,11 +877,11 @@ end
 
         # Dimension mismatch
         @test_throws ArgumentError estimate_logit(Float64.([0,1,0,1,1]),
-                                                  randn(Random.MersenneTwister(1421), 10, 2))
+                                                  randn(Random.Xoshiro(1421), 10, 2))
     end
 
     @testset "Logit Float fallback" begin
-        rng = MersenneTwister(6007)
+        rng = Xoshiro(6007)
         n = 100
         X = hcat(ones(Int, n), rand(rng, 0:1, n))
         y = rand(rng, 0:1, n)
@@ -891,7 +891,7 @@ end
     end
 
     @testset "Logit show method" begin
-        rng = MersenneTwister(6008)
+        rng = Xoshiro(6008)
         n = 200
         X = hcat(ones(n), randn(rng, n))
         p = 1.0 ./ (1.0 .+ exp.(-X * [0.0, 1.0]))
@@ -915,7 +915,7 @@ end
 @testset "Probit Estimation (Task 7)" begin
 
     @testset "Probit coefficient recovery" begin
-        rng = MersenneTwister(7001)
+        rng = Xoshiro(7001)
         n = 1000
         beta_true = [0.0, 1.0, -0.8]
         X = hcat(ones(n), randn(rng, n, 2))
@@ -932,7 +932,7 @@ end
     end
 
     @testset "Probit robust SE uses the score residual (M-02 / #113)" begin
-        rng = MersenneTwister(7013)
+        rng = Xoshiro(7013)
         n = 600
         X = hcat(ones(n), randn(rng, n), randn(rng, n))
         beta_true = [0.3, 0.8, -0.5]
@@ -961,7 +961,7 @@ end
     end
 
     @testset "Probit convergence and predictions" begin
-        rng = MersenneTwister(7002)
+        rng = Xoshiro(7002)
         n = 500
         X = hcat(ones(n), randn(rng, n, 2))
         beta_true = [0.3, 0.8, -0.5]
@@ -978,7 +978,7 @@ end
     end
 
     @testset "Probit beta ≈ logit beta / 1.6" begin
-        rng = MersenneTwister(7003)
+        rng = Xoshiro(7003)
         n = 2000
         beta_true_logit = [0.0, 2.0, -1.5]
         X = hcat(ones(n), randn(rng, n, 2))
@@ -999,7 +999,7 @@ end
     end
 
     @testset "Probit StatsAPI interface" begin
-        rng = MersenneTwister(7004)
+        rng = Xoshiro(7004)
         n = 300
         X = hcat(ones(n), randn(rng, n))
         d = Distributions.Normal()
@@ -1017,7 +1017,7 @@ end
     end
 
     @testset "Probit deviance residuals finite" begin
-        rng = MersenneTwister(7005)
+        rng = Xoshiro(7005)
         n = 500
         X = hcat(ones(n), randn(rng, n, 2))
         d = Distributions.Normal()
@@ -1029,7 +1029,7 @@ end
     end
 
     @testset "Probit robust covariance" begin
-        rng = MersenneTwister(7006)
+        rng = Xoshiro(7006)
         n = 500
         X = hcat(ones(n), randn(rng, n))
         d = Distributions.Normal()
@@ -1045,7 +1045,7 @@ end
 
     @testset "Probit error handling" begin
         n = 50
-        rng = MersenneTwister(1422)
+        rng = Xoshiro(1422)
         X = hcat(ones(n), randn(rng, n))
 
         # Non-binary y
@@ -1053,7 +1053,7 @@ end
     end
 
     @testset "Probit Float fallback" begin
-        rng = MersenneTwister(7007)
+        rng = Xoshiro(7007)
         n = 100
         X = hcat(ones(Int, n), rand(rng, 0:1, n))
         y = rand(rng, 0:1, n)
@@ -1063,7 +1063,7 @@ end
     end
 
     @testset "Probit show method" begin
-        rng = MersenneTwister(7008)
+        rng = Xoshiro(7008)
         n = 200
         X = hcat(ones(n), randn(rng, n))
         d = Distributions.Normal()
@@ -1088,7 +1088,7 @@ end
 @testset "Marginal Effects and Odds Ratios (Task 8)" begin
 
     # ---- Shared data for logit ----
-    rng = MersenneTwister(8001)
+    rng = Xoshiro(8001)
     n_logit = 1000
     beta_true_logit = [0.0, 1.5, -1.0]
     X_logit = hcat(ones(n_logit), randn(rng, n_logit, 2))
@@ -1097,7 +1097,7 @@ end
     m_logit = estimate_logit(y_logit, X_logit; varnames=["const", "x1", "x2"])
 
     # ---- Shared data for probit ----
-    rng = MersenneTwister(8002)
+    rng = Xoshiro(8002)
     n_probit = 1000
     beta_true_probit = [0.0, 1.0, -0.8]
     X_probit = hcat(ones(n_probit), randn(rng, n_probit, 2))
@@ -1307,7 +1307,7 @@ end
         @test_logs (:warn, r"separation") estimate_probit(y, X)
 
         # Overlapping (non-separated) design must not warn
-        rng = MersenneTwister(18801)
+        rng = Xoshiro(18801)
         n2 = 300
         x2 = randn(rng, n2)
         p2 = 1.0 ./ (1.0 .+ exp.(-0.5 .* x2))
@@ -1318,7 +1318,7 @@ end
     end
 
     @testset "M-28: discrete-change AME/MEM for binary regressors" begin
-        rng = MersenneTwister(18802)
+        rng = Xoshiro(18802)
         n = 800
         x1 = randn(rng, n)
         d = Float64.(rand(rng, n) .< 0.4)  # genuine {0,1} dummy
@@ -1375,7 +1375,7 @@ end
     end
 
     @testset "M-32: GLM weighted leverage for HC2/HC3" begin
-        rng = MersenneTwister(18803)
+        rng = Xoshiro(18803)
         n = 200
         x = randn(rng, n)
         X = hcat(ones(n), x)
@@ -1396,7 +1396,7 @@ end
         @test abs(sum(h_uw) - 2.0) > 1e-3
 
         # Exact hand-built weighted HC2/HC3 reference on synthetic inputs
-        rng = MersenneTwister(18804)
+        rng = Xoshiro(18804)
         n3 = 40
         X3 = hcat(ones(n3), randn(rng, n3, 2))
         w3 = 0.05 .+ 0.9 .* rand(rng, n3)
@@ -1441,7 +1441,7 @@ end
 @testset "Diagnostics — VIF and Classification Table (Task 9)" begin
 
     @testset "VIF — low collinearity" begin
-        rng = MersenneTwister(9001)
+        rng = Xoshiro(9001)
         n = 500
         X = hcat(ones(n), randn(rng, n, 3))
         y = X * [1.0, 2.0, -0.5, 0.3] + 0.5 * randn(rng, n)
@@ -1456,7 +1456,7 @@ end
     end
 
     @testset "VIF — high collinearity" begin
-        rng = MersenneTwister(9002)
+        rng = Xoshiro(9002)
         n = 500
         x1 = randn(rng, n)
         x2 = x1 .+ 0.01 .* randn(rng, n)  # nearly collinear with x1
@@ -1472,7 +1472,7 @@ end
     end
 
     @testset "VIF — single regressor" begin
-        rng = MersenneTwister(9003)
+        rng = Xoshiro(9003)
         n = 100
         X = hcat(ones(n), randn(rng, n))
         y = X * [1.0, 2.0] + randn(rng, n)
@@ -1486,7 +1486,7 @@ end
     end
 
     @testset "Classification table — logit" begin
-        rng = MersenneTwister(9004)
+        rng = Xoshiro(9004)
         n = 500
         X = hcat(ones(n), randn(rng, n, 2))
         beta_true = [0.0, 2.0, -1.5]
@@ -1532,7 +1532,7 @@ end
     end
 
     @testset "Classification table — probit" begin
-        rng = MersenneTwister(9005)
+        rng = Xoshiro(9005)
         n = 500
         X = hcat(ones(n), randn(rng, n, 2))
         d_norm = Distributions.Normal()
@@ -1549,7 +1549,7 @@ end
     end
 
     @testset "Classification table — custom threshold" begin
-        rng = MersenneTwister(9006)
+        rng = Xoshiro(9006)
         n = 300
         X = hcat(ones(n), randn(rng, n))
         p = 1.0 ./ (1.0 .+ exp.(-X * [0.0, 1.0]))
@@ -1571,7 +1571,7 @@ end
 
     @testset "Classification table — perfect separation" begin
         # If model is very good, accuracy should be near 1
-        rng = MersenneTwister(9007)
+        rng = Xoshiro(9007)
         n = 200
         x = randn(rng, n)
         X = hcat(ones(n), x)
@@ -1586,7 +1586,7 @@ end
     end
 
     @testset "F1 score consistency" begin
-        rng = MersenneTwister(9008)
+        rng = Xoshiro(9008)
         n = 400
         X = hcat(ones(n), randn(rng, n, 2))
         p = 1.0 ./ (1.0 .+ exp.(-X * [0.0, 1.5, -1.0]))
@@ -1613,7 +1613,7 @@ end
 @testset "Predict Dispatches (Task 10)" begin
 
     @testset "RegModel predict — new data" begin
-        rng = MersenneTwister(10001)
+        rng = Xoshiro(10001)
         n = 200
         beta_true = [1.0, 2.0, -0.5]
         k = length(beta_true)
@@ -1639,7 +1639,7 @@ end
     end
 
     @testset "RegModel predict — dimension mismatch" begin
-        rng = MersenneTwister(10002)
+        rng = Xoshiro(10002)
         n = 100
         X = hcat(ones(n), randn(rng, n, 2))
         y = randn(rng, n)
@@ -1650,7 +1650,7 @@ end
     end
 
     @testset "LogitModel predict — new data" begin
-        rng = MersenneTwister(10003)
+        rng = Xoshiro(10003)
         n = 500
         X = hcat(ones(n), randn(rng, n, 2))
         beta_true = [0.0, 1.5, -1.0]
@@ -1681,7 +1681,7 @@ end
     end
 
     @testset "LogitModel predict — dimension mismatch" begin
-        rng = MersenneTwister(10004)
+        rng = Xoshiro(10004)
         n = 100
         X = hcat(ones(n), randn(rng, n))
         p = 1.0 ./ (1.0 .+ exp.(-X * [0.0, 1.0]))
@@ -1692,7 +1692,7 @@ end
     end
 
     @testset "ProbitModel predict — new data" begin
-        rng = MersenneTwister(10005)
+        rng = Xoshiro(10005)
         n = 500
         X = hcat(ones(n), randn(rng, n, 2))
         beta_true = [0.0, 1.0, -0.8]
@@ -1724,7 +1724,7 @@ end
     end
 
     @testset "ProbitModel predict — dimension mismatch" begin
-        rng = MersenneTwister(10006)
+        rng = Xoshiro(10006)
         n = 100
         X = hcat(ones(n), randn(rng, n))
         d_norm = Distributions.Normal()
@@ -1737,7 +1737,7 @@ end
 
     @testset "Predict consistency across models" begin
         # Generate data, fit all three model types, check predict dimensions
-        rng = MersenneTwister(10007)
+        rng = Xoshiro(10007)
         n = 200
         X = hcat(ones(n), randn(rng, n, 2))
 
@@ -1771,7 +1771,7 @@ end
 @testset "Report and Refs (Task 11)" begin
 
     @testset "report() produces output" begin
-        rng = MersenneTwister(11001)
+        rng = Xoshiro(11001)
         n = 200
         X = hcat(ones(n), randn(rng, n, 2))
         y = X * [1.0, 2.0, -1.0] + randn(rng, n)
@@ -1809,7 +1809,7 @@ end
     end
 
     @testset "refs() for cross-sectional models" begin
-        rng = MersenneTwister(11002)
+        rng = Xoshiro(11002)
         n = 200
         X = hcat(ones(n), randn(rng, n))
         y = X * [1.0, 2.0] + randn(rng, n)
@@ -1841,7 +1841,7 @@ end
     using DataFrames
 
     @testset "OLS via CrossSectionData" begin
-        rng = MersenneTwister(12001)
+        rng = Xoshiro(12001)
         n = 200
         df = DataFrame(
             y = zeros(n),
@@ -1864,7 +1864,7 @@ end
     end
 
     @testset "Logit/Probit via CrossSectionData" begin
-        rng = MersenneTwister(12002)
+        rng = Xoshiro(12002)
         n = 300
         df = DataFrame(
             x1 = randn(rng, n),
@@ -1886,7 +1886,7 @@ end
     end
 
     @testset "IV via CrossSectionData" begin
-        rng = MersenneTwister(12003)
+        rng = Xoshiro(12003)
         n = 500
         df = DataFrame(
             z1 = randn(rng, n),
@@ -1907,7 +1907,7 @@ end
     end
 
     @testset "CrossSectionData variable not found" begin
-        rng = MersenneTwister(12004)
+        rng = Xoshiro(12004)
         df = DataFrame(x1 = randn(rng, 50), y = randn(rng, 50))
         d = CrossSectionData(df)
 
@@ -1948,7 +1948,7 @@ end
             end
             rec(1, Int[]); return best, bl
         end
-        rng = Random.MersenneTwister(7)
+        rng = Random.Xoshiro(7)
         for tau in (0.25, 0.5, 0.75), (n, k) in ((14, 2), (16, 3))
             X = hcat(ones(n), randn(rng, n, k - 1))
             y = X * ones(k) .+ randn(rng, n)
@@ -1962,7 +1962,7 @@ end
     end
 
     @testset "median regression recovers OLS on a homoskedastic Gaussian DGP" begin
-        rng = Random.MersenneTwister(11); n = 3000
+        rng = Random.Xoshiro(11); n = 3000
         X = hcat(ones(n), randn(rng, n), randn(rng, n))
         y = X * [1.0, 2.0, -0.5] .+ randn(rng, n)
         mo = estimate_reg(y, X)
@@ -1980,7 +1980,7 @@ end
     end
 
     @testset "residual sign split tracks tau" begin
-        rng = Random.MersenneTwister(31); n = 2000
+        rng = Random.Xoshiro(31); n = 2000
         X = hcat(ones(n), randn(rng, n))
         y = X * [1.0, 0.5] .+ randn(rng, n)
         for t in (0.1, 0.25, 0.5, 0.75, 0.9)
@@ -1994,7 +1994,7 @@ end
         #   y = a + b x + (1 + c x) z,   z ~ N(0,1),
         # the tau-quantile is  a + z_tau + (b + c z_tau) x, so slope(tau) = b + c z_tau
         # is exactly monotone in tau and analytically known.
-        rng = Random.MersenneTwister(23); n = 6000
+        rng = Random.Xoshiro(23); n = 6000
         a0, b0, c0 = 1.0, 0.5, 0.5
         x = 2 .* rand(rng, n); X = hcat(ones(n), x)
         y = a0 .+ b0 .* x .+ (1.0 .+ c0 .* x) .* randn(rng, n)
@@ -2017,14 +2017,14 @@ end
     @testset "standard errors agree with each other and with theory" begin
         # For median regression with N(0,1) errors the sparsity is s(0.5) = 1/phi(0) =
         # sqrt(2 pi), so V = 0.25 * 2pi * (X'X)^-1 and se(slope) -> sqrt(pi/2)/sqrt(n).
-        rng = Random.MersenneTwister(11); n = 3000
+        rng = Random.Xoshiro(11); n = 3000
         X = hcat(ones(n), randn(rng, n))
         y = X * [1.0, 2.0] .+ randn(rng, n)
         theory = sqrt(pi / 2) / sqrt(n)
         m_iid = estimate_qreg(y, X, 0.5; se=:iid)
         m_rob = estimate_qreg(y, X, 0.5; se=:robust)
         m_bt = estimate_qreg(y, X, 0.5; se=:boot, n_boot=120,
-                             rng=Random.MersenneTwister(5))
+                             rng=Random.Xoshiro(5))
         for m in (m_iid, m_rob, m_bt)
             @test vec(m.stderr)[2] ≈ theory rtol = 0.25
             @test all(vec(m.stderr) .> 0)
@@ -2041,7 +2041,7 @@ end
     end
 
     @testset "pseudo R1 and the objective" begin
-        rng = Random.MersenneTwister(41); n = 800
+        rng = Random.Xoshiro(41); n = 800
         X = hcat(ones(n), randn(rng, n))
         y = X * [1.0, 1.5] .+ randn(rng, n)
         m = estimate_qreg(y, X, 0.5)
@@ -2054,14 +2054,14 @@ end
         # Odd n so the LAD median is UNIQUE: for even n the intercept-only solution is
         # set-valued (any point between the two middle order statistics minimizes the loss).
         n_odd = 801
-        y_odd = randn(Random.MersenneTwister(42), n_odd)
+        y_odd = randn(Random.Xoshiro(42), n_odd)
         m0 = estimate_qreg(y_odd, reshape(ones(n_odd), n_odd, 1), 0.5)
         @test m0.pseudo_r2[1] ≈ 0.0 atol = 1e-8
         @test vec(coef(m0))[1] ≈ Statistics.quantile(y_odd, 0.5) atol = 1e-6
     end
 
     @testset "StatsAPI interface and shapes" begin
-        rng = Random.MersenneTwister(13); n = 300
+        rng = Random.Xoshiro(13); n = 300
         X = hcat(ones(n), randn(rng, n))
         y = X * [1.0, 0.5] .+ randn(rng, n)
         ms = estimate_qreg(y, X, 0.5)
@@ -2085,7 +2085,7 @@ end
     end
 
     @testset "input validation" begin
-        rng = Random.MersenneTwister(17); n = 60
+        rng = Random.Xoshiro(17); n = 60
         X = hcat(ones(n), randn(rng, n)); y = randn(rng, n)
         @test_throws ArgumentError estimate_qreg(y, X, 0.0)
         @test_throws ArgumentError estimate_qreg(y, X, 1.0)
@@ -2119,7 +2119,7 @@ end
     @testset "conventional estimate equals a hand-rolled two-sided WLS" begin
         # With a uniform kernel, p = 1 and a fixed h the estimator is just the difference of
         # two OLS intercepts, which can be computed independently.
-        rng = Random.MersenneTwister(5); n = 800
+        rng = Random.Xoshiro(5); n = 800
         x = 2 .* rand(rng, n) .- 1
         y = (@. 1.0 + 0.8 * x + 0.7 * (x >= 0)) .+ 0.2 .* randn(rng, n)
         h = 0.5
@@ -2152,7 +2152,7 @@ end
             taus = Float64[]
             local rd
             for s in 1:nrep
-                rng = Random.MersenneTwister(1000 * s + 7); n = 3000
+                rng = Random.Xoshiro(1000 * s + 7); n = 3000
                 x = 2 .* rand(rng, n) .- 1
                 y = (@. 0.5 + 1.2 * x + 0.4 * x^2 + tau0 * (x >= 0)) .+ 0.3 .* randn(rng, n)
                 rd = estimate_rdd(y, x; cutoff=0.0)
@@ -2180,7 +2180,7 @@ end
         for hfix in (0.6, 0.9)
             bias_c = Float64[]; bias_b = Float64[]; cov_c = 0; cov_r = 0
             for r in 1:reps
-                rng = Random.MersenneTwister(3000 + r); n = 2000
+                rng = Random.Xoshiro(3000 + r); n = 2000
                 x = 2 .* rand(rng, n) .- 1
                 # curvature only on the LEFT, so the two intercept biases cannot cancel
                 y = (@. 0.5 + 1.0 * x + 4.0 * x^2 * (x < 0) + tau0 * (x >= 0)) .+
@@ -2202,7 +2202,7 @@ end
     end
 
     @testset "the robust standard error exceeds the conventional one" begin
-        rng = Random.MersenneTwister(7); n = 2000
+        rng = Random.Xoshiro(7); n = 2000
         x = 2 .* rand(rng, n) .- 1
         y = (@. 0.5 + 1.0 * x + 1.5 * x^2 + 0.6 * (x >= 0)) .+ 0.3 .* randn(rng, n)
         rd = estimate_rdd(y, x; cutoff=0.0)
@@ -2212,7 +2212,7 @@ end
     end
 
     @testset "fuzzy design recovers the local Wald ratio" begin
-        rng = Random.MersenneTwister(31); n = 6000
+        rng = Random.Xoshiro(31); n = 6000
         x = 2 .* rand(rng, n) .- 1
         pr = @. 0.25 + 0.5 * (x >= 0)               # treatment probability jumps by 0.5
         d = rand(rng, n) .< pr
@@ -2228,7 +2228,7 @@ end
     end
 
     @testset "kernels and polynomial orders all run and agree roughly" begin
-        rng = Random.MersenneTwister(77); n = 2500
+        rng = Random.Xoshiro(77); n = 2500
         x = 2 .* rand(rng, n) .- 1
         y = (@. 0.5 + 1.0 * x + 0.8 * (x >= 0)) .+ 0.25 .* randn(rng, n)
         ests = Float64[]
@@ -2242,7 +2242,7 @@ end
     end
 
     @testset "non-zero cutoff is handled by shifting, not by luck" begin
-        rng = Random.MersenneTwister(19); n = 2500
+        rng = Random.Xoshiro(19); n = 2500
         x = 2 .* rand(rng, n) .- 1
         y = (@. 1.0 + 0.5 * x + 0.7 * (x >= 0.3)) .+ 0.2 .* randn(rng, n)
         rd = estimate_rdd(y, x; cutoff=0.3)
@@ -2256,7 +2256,7 @@ end
     end
 
     @testset "display and validation" begin
-        rng = Random.MersenneTwister(3); n = 600
+        rng = Random.Xoshiro(3); n = 600
         x = 2 .* rand(rng, n) .- 1
         y = (@. 0.5 * x + 0.5 * (x >= 0)) .+ 0.2 .* randn(rng, n)
         rd = estimate_rdd(y, x; cutoff=0.0)

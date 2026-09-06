@@ -7,7 +7,7 @@
 using Test, MacroEconometricModels, Random
 
 @testset "LM Unit Root Tests" begin
-    rng = Random.MersenneTwister(77889)
+    rng = Random.Xoshiro(77889)
 
     y_stat = zeros(200)
     y_stat[1] = randn(rng)
@@ -161,8 +161,8 @@ using Test, MacroEconometricModels, Random
 
         @testset "size and power at 5%" begin
             # A driftless random walk (the null) must not reject; white noise must.
-            y_null = cumsum(randn(MersenneTwister(577_001), 200))
-            y_alt = randn(MersenneTwister(577_002), 200)
+            y_null = cumsum(randn(Xoshiro(577_001), 200))
+            y_alt = randn(Xoshiro(577_002), 200)
             for breaks in 0:2, reg in (:level, :both)
                 r0 = lm_unitroot_test(y_null; breaks=breaks, regression=reg, lags=0)
                 @test r0.statistic > r0.critical_values[5]

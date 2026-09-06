@@ -17,7 +17,7 @@ end
 @testset "IRF Tests with Theoretical Verification" begin
     # Non-diagonal A + non-identity B0 (DGP-02 #791): shock ordering matters,
     # so a transposed B0 or wrong rotation fails this testset.
-    rng = MersenneTwister(7401)  # DGP-02: explicit rng
+    rng = Xoshiro(7401)  # DGP-02: explicit rng
     _tprint("Generating Data for IRF Verification...")
     d = dgp_var(rng; A=[0.5 0.1; 0.0 0.4], B0=[1.0 0.0; 0.3 1.0], T=2000)
     Y, p = d.Y, 1
@@ -72,7 +72,7 @@ end
 
 @testset "IRF closed-form corner (A = 0.5I, Sigma = I)" begin
     # Kept as the analytic corner: IRF at lag h-1 is exactly 0.5^(h-1)·I.
-    rng = MersenneTwister(7402)  # DGP-02: explicit rng
+    rng = Xoshiro(7402)  # DGP-02: explicit rng
     d = dgp_var(rng; A=Matrix{Float64}(0.5 * I, 2, 2), B0=Matrix{Float64}(I, 2, 2),
                 T=2000)
     model = estimate_var(d.Y, 1)
@@ -86,7 +86,7 @@ end
 # Cumulative IRF (Issue #15 + #31 fix: cumulate draws before quantile extraction)
 # =============================================================================
 @testset "Cumulative IRF" begin
-    rng = MersenneTwister(42)  # DGP-02: explicit rng
+    rng = Xoshiro(42)  # DGP-02: explicit rng
     Y = randn(rng, 200, 3)
     model = estimate_var(Y, 2)
     H = 20
@@ -109,7 +109,7 @@ end
     end
 
     @testset "VAR cumulative IRF - bootstrap CI (Issue #31)" begin
-        rng = MersenneTwister(12345)  # DGP-02: explicit rng
+        rng = Xoshiro(12345)  # DGP-02: explicit rng
         irf_boot = irf(model, H; ci_type=:bootstrap, reps=200, conf_level=0.90)
 
         # Raw draws should be stored
@@ -169,7 +169,7 @@ end
 # compute_irf exported (Issue #20)
 # =============================================================================
 @testset "Bootstrap is uncorrected residual bootstrap (T060)" begin
-    rng = MersenneTwister(606)  # DGP-02: explicit rng
+    rng = Xoshiro(606)  # DGP-02: explicit rng
     Tn, n, p = 200, 2, 1
     A = [0.5 0.1; 0.0 0.4]
     Y = zeros(Tn, n)
@@ -197,7 +197,7 @@ end
 @testset "compute_irf buffer rewrite equivalence (T063)" begin
     # The preallocated-buffer/mul! rewrite must reproduce the analytic VAR(1) IRF
     # IRF[h] = A₁^(h-1)·P exactly (behavior-preserving).
-    rng = MersenneTwister(63)  # DGP-02: explicit rng
+    rng = Xoshiro(63)  # DGP-02: explicit rng
     A1 = [0.5 0.1; 0.0 0.4]
     Y = zeros(200, 2)
     for t in 2:200
@@ -215,7 +215,7 @@ end
 
 @testset "Core numerics batch (T062: C-14/C-16/C-18)" begin
     # C-14: generate_Q never zeroes a rotation column (explicit ±1 map, not sign(0)=0)
-    rng = MersenneTwister(614)  # DGP-02: explicit rng
+    rng = Xoshiro(614)  # DGP-02: explicit rng
     Q4 = MacroEconometricModels.generate_Q(4)
     @test Q4' * Q4 ≈ I(4) atol = 1e-10
     @test rank(Q4) == 4
@@ -226,7 +226,7 @@ end
 
     # C-16: triangular solves reproduce the inverse-based results exactly, and the
     #       long-run rotation stays orthonormal (L⁻¹(I−ΣA)D · (...)' = I).
-    rng = MersenneTwister(615)  # DGP-02: explicit rng
+    rng = Xoshiro(615)  # DGP-02: explicit rng
     Y = zeros(200, 3)
     for t in 2:200
         Y[t, :] = 0.4 * Y[t-1, :] + randn(rng, 3)
@@ -245,7 +245,7 @@ end
 end
 
 @testset "compute_irf exported" begin
-    rng = MersenneTwister(42)  # DGP-02: explicit rng
+    rng = Xoshiro(42)  # DGP-02: explicit rng
     Y = randn(rng, 200, 3)
     model = estimate_var(Y, 2)
     n = 3
@@ -264,7 +264,7 @@ end
     # (B0[1,1] = 1 > 0.5) but a random rotation violates it, so the
     # acceptance rate is strictly interior — the old check_all=true tautology
     # (n_accepted == 50 by construction) is gone.
-    rng = MersenneTwister(42)  # DGP-02: explicit rng
+    rng = Xoshiro(42)  # DGP-02: explicit rng
     d = dgp_var(rng; T=500)
     Y = d.Y
     model = estimate_var(Y, 2)
@@ -301,8 +301,8 @@ end
 end
 
 @testset "irf bootstrap CI is reproducible + thread-invariant (C-02/#243)" begin
-    mkrng() = Random.MersenneTwister(7)
-    rng = MersenneTwister(123)  # DGP-02: explicit rng
+    mkrng() = Random.Xoshiro(7)
+    rng = Xoshiro(123)  # DGP-02: explicit rng
     Y = zeros(120, 2)
     for t in 2:120
         Y[t, 1] = 0.5Y[t-1, 1] + 0.1Y[t-1, 2] + randn(rng, )
@@ -325,7 +325,7 @@ end
     t2 = irf(model, 10; ci_type=:theoretical, reps=50, rng=mkrng())
     @test t1.ci_lower == t2.ci_lower
     # different seed -> different draws
-    b3 = irf(model, 10; ci_type=:bootstrap, reps=50, rng=Random.MersenneTwister(99))
+    b3 = irf(model, 10; ci_type=:bootstrap, reps=50, rng=Random.Xoshiro(99))
     @test b1.ci_lower != b3.ci_lower
     # :sign identification now threads rng through compute_Q -> identify_sign -> generate_Q
     # (previously the rotation draw leaked to the global RNG, so sign CIs were non-reproducible)
@@ -338,7 +338,7 @@ end
 end
 
 @testset "SID-06 theoretical CI vs residual-based ID" begin
-    rng = MersenneTwister(735)  # DGP-02: explicit rng
+    rng = Xoshiro(735)  # DGP-02: explicit rng
     m = estimate_var(randn(rng, 120, 2), 1)
     chk(irf) = irf[1, 1, 1] > 0
     @test_throws ArgumentError irf(m, 5; method=:fastica, ci_type=:theoretical)
@@ -351,7 +351,7 @@ end
 end
 
 @testset "SID-08 long-run on cointegrated systems" begin
-    rng = MersenneTwister(737)  # DGP-02: explicit rng
+    rng = Xoshiro(737)  # DGP-02: explicit rng
     Tlen, n = 200, 2
     trend = cumsum(randn(rng, Tlen))
     Yc = [trend .+ 0.3 .* randn(rng, Tlen)  trend .+ 0.3 .* randn(rng, Tlen)]
@@ -364,11 +364,11 @@ end
 end
 
 @testset "SID-05 set-aware sign IRFs" begin
-    rng = MersenneTwister(734)  # DGP-02: explicit rng
+    rng = Xoshiro(734)  # DGP-02: explicit rng
     m = estimate_var(randn(rng, 150, 2), 1)
     chk(irf) = irf[1, 1, 1] > 0
-    rng = MersenneTwister(1)
-    s = identify_sign(m, 5, chk; store_all=true, rng=MersenneTwister(1), max_draws=200)
+    rng = Xoshiro(1)
+    s = identify_sign(m, 5, chk; store_all=true, rng=Xoshiro(1), max_draws=200)
     r = irf(m, 5; method=:sign, check_func=chk, seed=1, max_draws=200)
     @test r.ci_type === :identified_set
     @test r.values ≈ irf_median(s)
@@ -379,10 +379,10 @@ end
 end
 
 @testset "SID-05 identify_narrative store_all" begin
-    rng = MersenneTwister(734)  # DGP-02: explicit rng
+    rng = Xoshiro(734)  # DGP-02: explicit rng
     m = estimate_var(randn(rng, 150, 2), 1)
     chk(irf) = irf[1, 1, 1] > 0
-    s = identify_narrative(m, 5, chk, _ -> true; store_all=true, max_draws=80, rng=MersenneTwister(3))
+    s = identify_narrative(m, 5, chk, _ -> true; store_all=true, max_draws=80, rng=Xoshiro(3))
     @test s isa SignIdentifiedSet
     r = irf(m, 5; method=:narrative, check_func=chk, narrative_check=_ -> true, seed=3, max_draws=80)
     @test r.ci_type === :identified_set
@@ -392,7 +392,7 @@ end
 end
 
 @testset "SID-19 one identification API" begin
-    rng = MersenneTwister(748)  # DGP-02: explicit rng
+    rng = Xoshiro(748)  # DGP-02: explicit rng
     m = estimate_var(randn(rng, 80, 2), 1)
     n = nvars(m)
     @test identify_cholesky(m) ≈ Matrix{Float64}(I, n, n)
@@ -442,7 +442,7 @@ end
     @test Qa isa AbstractMatrix
     @test size(Qa) == (n, n)
 
-    rng_u = MersenneTwister(748)
+    rng_u = Xoshiro(748)
     uhlig_kw = (n_starts=FAST ? 3 : 8, n_refine=1, max_iter_coarse=80, max_iter_fine=200)
     u = identify_uhlig(m, r, 5; rng=copy(rng_u), uhlig_kw...)
     ru = irf(m, 5; method=:uhlig, restrictions=r, rng=copy(rng_u), uhlig_kw...)
@@ -452,7 +452,7 @@ end
     # Same-count quantile levels must be recomputed, not reused from stored 16/50/84.
     post = estimate_bvar(randn(rng, 80, 2), 1; n_draws=FAST ? 16 : 30, burnin=5)
     ar = identify_arias_bayesian(post, r, 4; n_rotations=FAST ? 20 : 40,
-                                 rng=MersenneTwister(748))
+                                 rng=Xoshiro(748))
     ir_def = irf(ar)
     ir_wide = irf(ar; quantiles=[0.05, 0.5, 0.95])
     @test ir_wide.quantile_levels ≈ [0.05, 0.5, 0.95]
@@ -464,10 +464,10 @@ end
 # SID-17 (#746): Fry–Pagan / Inoue–Kilian set-ID summaries
 # =============================================================================
 @testset "SID-17 set-ID summaries" begin
-    rng = MersenneTwister(746)  # DGP-02: explicit rng
+    rng = Xoshiro(746)  # DGP-02: explicit rng
     m = estimate_var(randn(rng, 120, 2), 1)
     chk(irf) = irf[1, 1, 1] > 0
-    s = identify_sign(m, 6, chk; store_all=true, max_draws=80, rng=MersenneTwister(746))
+    s = identify_sign(m, 6, chk; store_all=true, max_draws=80, rng=Xoshiro(746))
 
     @testset "SignIdentifiedSet weights back-compat" begin
         @test hasfield(typeof(s), :weights)
@@ -607,7 +607,7 @@ end
     @testset "Uhlig is a one-draw set" begin
         r = SVARRestrictions(2; signs=[sign_restriction(1, 1, :positive)])
         u = identify_uhlig(m, r, 4; n_starts=3, n_refine=1,
-                           max_iter_coarse=40, max_iter_fine=80, rng=MersenneTwister(746))
+                           max_iter_coarse=40, max_iter_fine=80, rng=Xoshiro(746))
         mt = median_target(u)
         @test mt.Q === u.Q
         @test mt.irf ≈ u.irf
@@ -630,7 +630,7 @@ end
 end
 
 @testset "SID-20 unit-effect IRF and structural_shocks(model, Q)" begin
-    rng = MersenneTwister(749)  # DGP-02: explicit rng
+    rng = Xoshiro(749)  # DGP-02: explicit rng
     Tobs = FAST ? 250 : 400
     n = 3
     Y = zeros(Tobs, n)

@@ -71,7 +71,7 @@ const _HUG_SS_M2 = compute_steady_state(_HUG_SPEC_M2; max_iter=FAST ? 80 : 200, 
     ss = compute_steady_state(spec; K_init=10.0, r_bounds=(-0.02, 0.04), max_iter=50, tol=1e-3)
     K_ss = ss.aggregates[:K]
     T_data = 16
-    rng = Random.MersenneTwister(42)
+    rng = Random.Xoshiro(42)
     data_K = K_ss .+ 0.1 .* randn(rng, T_data)  # K with noise
 
     # [T206] hoist one shared :ssj solve to avoid re-solving in the two helper testsets below.
@@ -144,7 +144,7 @@ const _HUG_SS_M2 = compute_steady_state(_HUG_SPEC_M2; max_iter=FAST ? 80 : 200, 
     @testset "estimate_dsge_bayes dispatch" begin
         # Very small run to verify the method dispatches correctly
         priors = Dict(:alpha => Distributions.Normal(0.36, 0.05))
-        rng_est = Random.MersenneTwister(123)
+        rng_est = Random.Xoshiro(123)
 
         result = estimate_dsge_bayes(
             spec, reshape(data_K, T_data, 1), [0.36];
@@ -189,7 +189,7 @@ const _HUG_SS_M2 = compute_steady_state(_HUG_SPEC_M2; max_iter=FAST ? 80 : 200, 
             spec, reshape(data_K, T_data, 1), Dict(:alpha => 0.36);
             priors=priors, observables=[:K], n_draws=6, burnin=2,
             ha_method=:ssj, ha_kwargs=(T_horizon=30, n_reduced=10),
-            proposal_scale=0.001, adapt_interval=50, rng=Random.MersenneTwister(7))
+            proposal_scale=0.001, adapt_interval=50, rng=Random.Xoshiro(7))
         @test result_dict isa BayesianDSGE{Float64}
         @test_throws ArgumentError estimate_dsge_bayes(
             spec, reshape(data_K, T_data, 1), [0.36, 0.9];   # length 2, but 1 prior
@@ -202,10 +202,10 @@ const _HUG_SS_M2 = compute_steady_state(_HUG_SPEC_M2; max_iter=FAST ? 80 : 200, 
             spec, reshape(data_K, 1, T_data), Dict(:alpha => 0.36);
             priors=priors, observables=[:K], n_draws=6, burnin=2,
             ha_method=:ssj, ha_kwargs=(T_horizon=30, n_reduced=10),
-            proposal_scale=0.001, adapt_interval=50, rng=Random.MersenneTwister(7))
+            proposal_scale=0.001, adapt_interval=50, rng=Random.Xoshiro(7))
         @test result_nt.theta_draws ≈ result_dict.theta_draws
         @test_throws ArgumentError estimate_dsge_bayes(
-            spec, randn(Random.MersenneTwister(1401), 3, T_data), [0.36];  # neither dim == n_obs (1)
+            spec, randn(Random.Xoshiro(1401), 3, T_data), [0.36];  # neither dim == n_obs (1)
             priors=priors, observables=[:K], n_draws=10,
             ha_method=:ssj, ha_kwargs=(T_horizon=30, n_reduced=10))
     end

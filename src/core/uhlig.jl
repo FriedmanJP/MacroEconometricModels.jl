@@ -398,7 +398,7 @@ function identify_uhlig(model::VARModel{T}, restrictions::SVARRestrictions, hori
 
     seeds1 = rand(rng, UInt64, n_starts)
     Threads.@threads for i in 1:n_starts
-        local_rng = Random.MersenneTwister(seeds1[i])
+        local_rng = Random.Xoshiro(seeds1[i])
         theta0 = rand(local_rng, T, n_params) .* T(2π)
 
         res = try
@@ -430,7 +430,7 @@ function identify_uhlig(model::VARModel{T}, restrictions::SVARRestrictions, hori
 
     seeds2 = rand(rng, UInt64, n_refine)
     Threads.@threads for i in 1:n_refine
-        local_rng = Random.MersenneTwister(seeds2[i])
+        local_rng = Random.Xoshiro(seeds2[i])
         theta0 = if i == 1
             copy(best_theta_snap)
         else

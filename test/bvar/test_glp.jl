@@ -74,7 +74,7 @@ end
 end
 
 @testset "objective is the negative log posterior, penalized outside the box" begin
-    Y = _glp_sim(Random.MersenneTwister(2), 120)
+    Y = _glp_sim(Random.Xoshiro(2), 120)
     x = log.([0.3, 1.2, 0.8])
     got = _M._glp_objective(x, Y, 2, 0.5, 2.0, Float64)
 
@@ -96,7 +96,7 @@ end
 # ─────────────────────────────────────────────────────────────────────────────
 
 @testset "joint optimization beats the tau-only grid and the defaults" begin
-    Y = _glp_sim(Random.MersenneTwister(1), FAST ? 120 : 200)
+    Y = _glp_sim(Random.Xoshiro(1), FAST ? 120 : 200)
     p = 2
     r = optimize_hyperparameters_glp(Y, p)
 
@@ -136,7 +136,7 @@ end
     n_pinned = 0
     for seed in 1:25
         rc = optimize_hyperparameters_glp(
-            _glp_rw(Random.MersenneTwister(seed)), 2; verbose=false)
+            _glp_rw(Random.Xoshiro(seed)), 2; verbose=false)
         rc.at_bound && (n_pinned += 1; @test !rc.converged)
     end
 
@@ -148,7 +148,7 @@ end
     Y_rw = nothing
     r = nothing
     for seed in 1:40
-        Yc = _glp_rw(Random.MersenneTwister(seed))
+        Yc = _glp_rw(Random.Xoshiro(seed))
         rc = optimize_hyperparameters_glp(Yc, 2; verbose=false)
         if rc.at_bound
             Y_rw, r = Yc, rc
@@ -181,13 +181,13 @@ end
     hg = optimize_hyperparameters(Y_rw, 2)
     @test hg.tau ≈ 0.01 atol = 1e-8    # the grid's lower endpoint
 
-    good = optimize_hyperparameters_glp(_glp_sim(Random.MersenneTwister(1), 200), 2)
+    good = optimize_hyperparameters_glp(_glp_sim(Random.Xoshiro(1), 200), 2)
     @test occursin("Converged", sprint(show, good))
     @test !occursin("did NOT converge", sprint(show, good))
 end
 
 @testset "optimizer keywords" begin
-    Y = _glp_sim(Random.MersenneTwister(3), 100)
+    Y = _glp_sim(Random.Xoshiro(3), 100)
     @test optimize_hyperparameters_glp(Y, 1; starts=1).converged isa Bool
     @test optimize_hyperparameters_glp(Y, 1; max_iter=50) isa GLPHyperparameters
     @test_throws ArgumentError optimize_hyperparameters_glp(Y, 0)
@@ -203,22 +203,22 @@ end
 # ─────────────────────────────────────────────────────────────────────────────
 
 @testset "estimate_bvar defaults to GLP, with the grid path unchanged" begin
-    Y = _glp_sim(Random.MersenneTwister(5), 150)
+    Y = _glp_sim(Random.Xoshiro(5), 150)
     p = 2
 
     # The default path equals passing the GLP-selected hyperparameters explicitly
     glp_h = optimize_hyperparameters_glp(Y, p).hyper
-    a = estimate_bvar(Y, p; prior=:minnesota, n_draws=50, rng=Random.MersenneTwister(1))
+    a = estimate_bvar(Y, p; prior=:minnesota, n_draws=50, rng=Random.Xoshiro(1))
     b = estimate_bvar(Y, p; prior=:minnesota, hyper=glp_h, n_draws=50,
-                      rng=Random.MersenneTwister(1))
+                      rng=Random.Xoshiro(1))
     @test a.B_draws ≈ b.B_draws atol = 1e-12
 
     # hyperopt=:grid reproduces the historical tau-only path exactly
     grid_h = optimize_hyperparameters(Y, p)
     c = estimate_bvar(Y, p; prior=:minnesota, hyperopt=:grid, n_draws=50,
-                      rng=Random.MersenneTwister(1))
+                      rng=Random.Xoshiro(1))
     d = estimate_bvar(Y, p; prior=:minnesota, hyper=grid_h, n_draws=50,
-                      rng=Random.MersenneTwister(1))
+                      rng=Random.Xoshiro(1))
     @test c.B_draws ≈ d.B_draws atol = 1e-12
 
     # The two selection paths genuinely differ
@@ -231,14 +231,14 @@ end
     # An explicit hyper bypasses selection under either setting
     fixed = MinnesotaHyperparameters(; tau=0.7, lambda=2.0, mu=1.5)
     e = estimate_bvar(Y, p; prior=:minnesota, hyper=fixed, hyperopt=:grid, n_draws=50,
-                      rng=Random.MersenneTwister(1))
+                      rng=Random.Xoshiro(1))
     f = estimate_bvar(Y, p; prior=:minnesota, hyper=fixed, n_draws=50,
-                      rng=Random.MersenneTwister(1))
+                      rng=Random.Xoshiro(1))
     @test e.B_draws ≈ f.B_draws atol = 1e-12
 
     # A non-Minnesota prior is untouched by the hyperparameter machinery
-    g1 = estimate_bvar(Y, p; n_draws=50, rng=Random.MersenneTwister(1))
-    g2 = estimate_bvar(Y, p; hyperopt=:grid, n_draws=50, rng=Random.MersenneTwister(1))
+    g1 = estimate_bvar(Y, p; n_draws=50, rng=Random.Xoshiro(1))
+    g2 = estimate_bvar(Y, p; hyperopt=:grid, n_draws=50, rng=Random.Xoshiro(1))
     @test g1.B_draws ≈ g2.B_draws atol = 1e-12
 
     @test_throws ArgumentError estimate_bvar(Y, p; hyperopt=:bogus)

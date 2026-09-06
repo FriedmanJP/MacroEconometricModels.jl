@@ -103,7 +103,7 @@ end
     end
 
     @testset "bands from posterior draws" begin
-        rng = MersenneTwister(10)
+        rng = Xoshiro(10)
         A = [0.5 0.1 0.0; 0.0 0.4 0.1; 0.1 0.0 0.3]
         Y = zeros(220, 3)
         for t in 2:220

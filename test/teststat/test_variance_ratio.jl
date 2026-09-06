@@ -74,7 +74,7 @@ _pop_vr(ρ::Function, q::Int) = 1 + 2 * sum((1 - k / q) * ρ(k) for k in 1:(q-1)
     # (2) Independent hand-recomputation oracle
     # ------------------------------------------------------------------------
     @testset "hand-recomputation matches module (independent)" begin
-        rng = MersenneTwister(4242)
+        rng = Xoshiro(4242)
         y = cumsum(0.3 .+ randn(rng, 250))          # drifting level series
         r = variance_ratio_test(y; q=[2, 3, 5, 10])
         @test r.nobs == length(y)
@@ -93,7 +93,7 @@ _pop_vr(ρ::Function, q::Int) = 1 + 2 * sum((1 - k / q) * ρ(k) for k in 1:(q-1)
     # (1) Analytic property: random walk ⇒ VR(q)≈1, do not reject
     # ------------------------------------------------------------------------
     @testset "random walk: VR(q)≈1, no rejection" begin
-        rng = MersenneTwister(12345)
+        rng = Xoshiro(12345)
         y = cumsum(randn(rng, 6000))                # T ≥ 5000 random walk
         r = variance_ratio_test(y; q=[2, 4, 8, 16])
         for v in r.vr
@@ -111,7 +111,7 @@ _pop_vr(ρ::Function, q::Int) = 1 + 2 * sum((1 - k / q) * ρ(k) for k in 1:(q-1)
     # (1) Analytic property: AR(1) ρ=0.5 level ⇒ reject
     # ------------------------------------------------------------------------
     @testset "AR(1) ρ=0.5 level: robust test rejects" begin
-        rng = MersenneTwister(999)
+        rng = Xoshiro(999)
         T = 4000
         z = zeros(T)
         for t in 2:T
@@ -129,7 +129,7 @@ _pop_vr(ρ::Function, q::Int) = 1 + 2 * sum((1 - k / q) * ρ(k) for k in 1:(q-1)
     # ------------------------------------------------------------------------
     @testset "sample VR → population VR for AR(1) returns (CLM 1997)" begin
         # Build returns as AR(1) with φ=0.4, then levels = cumsum(returns).
-        rng = MersenneTwister(2024)
+        rng = Xoshiro(2024)
         φ = 0.4
         T = 40_000
         x = zeros(T)
@@ -151,7 +151,7 @@ _pop_vr(ρ::Function, q::Int) = 1 + 2 * sum((1 - k / q) * ρ(k) for k in 1:(q-1)
     # (3) PUBLISHED closed form: Chow-Denning SMM-complement p-value
     # ------------------------------------------------------------------------
     @testset "Chow-Denning SMM p-value = 1-(2Φ(CD)-1)^m (not Bonferroni)" begin
-        rng = MersenneTwister(77)
+        rng = Xoshiro(77)
         y = cumsum(randn(rng, 800))
         qv = [2, 4, 8, 16]
         r = variance_ratio_test(y; q=qv)
@@ -176,7 +176,7 @@ _pop_vr(ρ::Function, q::Int) = 1 + 2 * sum((1 - k / q) * ρ(k) for k in 1:(q-1)
     # Per-q asymptotic p-values are the two-sided normal tails
     # ------------------------------------------------------------------------
     @testset "per-q asymptotic p-values (two-sided normal)" begin
-        rng = MersenneTwister(31)
+        rng = Xoshiro(31)
         y = cumsum(randn(rng, 600))
         r = variance_ratio_test(y; q=[2, 4, 8])
         for i in eachindex(r.q)
@@ -195,7 +195,7 @@ _pop_vr(ρ::Function, q::Int) = 1 + 2 * sum((1 - k / q) * ρ(k) for k in 1:(q-1)
     # Wright (2000) rank / sign statistics + simulated-null caching
     # ------------------------------------------------------------------------
     @testset "Wright rank/sign statistics and cached iid nulls" begin
-        rng = MersenneTwister(555)
+        rng = Xoshiro(555)
         # AR(1) returns give the rank/sign tests power
         T = 1200
         x = zeros(T)
@@ -235,7 +235,7 @@ _pop_vr(ρ::Function, q::Int) = 1 + 2 * sum((1 - k / q) * ρ(k) for k in 1:(q-1)
     # Wright null is a genuine iid-null: on a random walk it should almost never
     # reject at 5% (well-calibrated simulated p-values).
     @testset "Wright null calibration on a random walk" begin
-        rng = MersenneTwister(8)
+        rng = Xoshiro(8)
         y = cumsum(randn(rng, 1500))
         r = variance_ratio_test(y; q=[2, 4], method=:wright)
         @test all(r.R1_pvalue .> 0.05)
@@ -246,7 +246,7 @@ _pop_vr(ρ::Function, q::Int) = 1 + 2 * sum((1 - k / q) * ρ(k) for k in 1:(q-1)
     # Kim (2006) wild bootstrap
     # ------------------------------------------------------------------------
     @testset "Kim wild bootstrap p-values (reproducible)" begin
-        rng = MersenneTwister(61)
+        rng = Xoshiro(61)
         y = cumsum(randn(rng, 500))
         r1 = variance_ratio_test(y; q=[2, 4, 8], bootstrap=299, seed=2024)
         r2 = variance_ratio_test(y; q=[2, 4, 8], bootstrap=299, seed=2024)
@@ -265,7 +265,7 @@ _pop_vr(ρ::Function, q::Int) = 1 + 2 * sum((1 - k / q) * ρ(k) for k in 1:(q-1)
         @test 0 < rn.cd_boot_pvalue <= 1
 
         # Power: AR(1) level ⇒ wild-bootstrap Chow-Denning rejects
-        rng = MersenneTwister(3)
+        rng = Xoshiro(3)
         z = zeros(2000); for t in 2:2000; z[t] = 0.5 * z[t-1] + randn(rng); end
         rar = variance_ratio_test(z; q=[2, 4, 8, 16], bootstrap=299, seed=11)
         @test rar.cd_boot_pvalue < 0.05
@@ -275,7 +275,7 @@ _pop_vr(ρ::Function, q::Int) = 1 + 2 * sum((1 - k / q) * ρ(k) for k in 1:(q-1)
     # Argument validation
     # ------------------------------------------------------------------------
     @testset "argument validation" begin
-        y = cumsum(randn(MersenneTwister(1), 100))
+        y = cumsum(randn(Xoshiro(1), 100))
         @test_throws ArgumentError variance_ratio_test(y; q=[1, 2])          # q ≥ 2
         @test_throws ArgumentError variance_ratio_test(y; q=[2, 200])        # q < N
         @test_throws ArgumentError variance_ratio_test(y; method=:bogus)
@@ -291,7 +291,7 @@ _pop_vr(ρ::Function, q::Int) = 1 + 2 * sum((1 - k / q) * ρ(k) for k in 1:(q-1)
     # Display + refs render without error
     # ------------------------------------------------------------------------
     @testset "show / report / refs render" begin
-        rng = MersenneTwister(2)
+        rng = Xoshiro(2)
         y = cumsum(randn(rng, 400))
         r = variance_ratio_test(y; q=[2, 4, 8], method=:wright, bootstrap=99)
         s = sprint(show, r)

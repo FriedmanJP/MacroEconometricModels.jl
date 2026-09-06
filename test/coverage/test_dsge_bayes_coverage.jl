@@ -67,7 +67,7 @@ end
     ss = M.DSGEStateSpace{Float64}(G1, impact, Z, d, H, Q)
     ws = M._allocate_pf_workspace(Float64, n_states, 2, 2, N)
 
-    M._pf_initialize_stationary!(ws, ss; rng=Random.MersenneTwister(1234))
+    M._pf_initialize_stationary!(ws, ss; rng=Random.Xoshiro(1234))
 
     @test all(isfinite, ws.particles)
     @test all(ws.weights .≈ 1.0 / N)
@@ -77,8 +77,8 @@ end
 @testset "particle_filter: _fill_kron_cross_buffer!" begin
     nv = 3
     N = 10
-    V1 = randn(Random.MersenneTwister(100), nv, N)
-    V2 = randn(Random.MersenneTwister(101), nv, N)
+    V1 = randn(Random.Xoshiro(100), nv, N)
+    V2 = randn(Random.Xoshiro(101), nv, N)
     buffer = zeros(nv * nv, N)
 
     M._fill_kron_cross_buffer!(buffer, V1, V2, nv)
@@ -90,7 +90,7 @@ end
 end
 
 @testset "particle_filter: bootstrap PF with store_trajectory" begin
-    rng = Random.MersenneTwister(5001)
+    rng = Random.Xoshiro(5001)
     rho = 0.7
     sigma_eps = 0.4
     sigma_me = 0.05
@@ -119,7 +119,7 @@ end
     ws = M._allocate_pf_workspace(Float64, 1, 1, 1, N_particles; T_obs=T_sim)
 
     ll = M._bootstrap_particle_filter!(ws, ss, data, T_sim;
-            rng=Random.MersenneTwister(5002), store_trajectory=true)
+            rng=Random.Xoshiro(5002), store_trajectory=true)
 
     @test isfinite(ll)
     @test ws.reference_trajectory !== nothing
@@ -128,7 +128,7 @@ end
 end
 
 @testset "particle_filter: conditional SMC with short reference" begin
-    rng = Random.MersenneTwister(5006)
+    rng = Random.Xoshiro(5006)
     T_sim = 30
 
     G1 = fill(0.7, 1, 1)
@@ -146,12 +146,12 @@ end
 
     # Bootstrap first to populate reference
     M._bootstrap_particle_filter!(ws, ss, data, T_sim;
-        rng=Random.MersenneTwister(5007), store_trajectory=true)
+        rng=Random.Xoshiro(5007), store_trajectory=true)
 
     # Run CSMC multiple times (exercises trajectory update)
     for i in 1:3
         ll = M._conditional_smc!(ws, ss, data, T_sim;
-            rng=Random.MersenneTwister(5007 + i))
+            rng=Random.Xoshiro(5007 + i))
         @test isfinite(ll)
     end
 end
@@ -180,7 +180,7 @@ end
         ws = M._allocate_pf_workspace(Float64, n_endog, n_obs, n_eps, N;
                                         nv=nv, nx=nx, order=2)
 
-        M._pf_initialize_nonlinear!(ws, nlss; rng=Random.MersenneTwister(6001))
+        M._pf_initialize_nonlinear!(ws, nlss; rng=Random.Xoshiro(6001))
 
         @test all(isfinite, ws.particles)
         @test all(isfinite, ws.particles_fo)
@@ -250,7 +250,7 @@ end
         end
         spec = compute_steady_state(spec)
         sol = solve(spec; method=:gensys)
-        data_mat = simulate(sol, 80; rng=Random.MersenneTwister(7001))'
+        data_mat = simulate(sol, 80; rng=Random.Xoshiro(7001))'
 
         ll_fn = M._build_likelihood_fn(spec, [:rho], data_mat,
             [:y], nothing, :gensys, NamedTuple())
@@ -274,7 +274,7 @@ end
 
 @testset "smc: _adaptive_tempering edge cases" begin
     N = 25
-    rng = Random.MersenneTwister(7002)
+    rng = Random.Xoshiro(7002)
 
     # 5-arg signature (#133): pass uniform incoming cumulative weights.
     uw = fill(-log(N), N)
@@ -300,7 +300,7 @@ end
 @testset "smc: _update_proposal_cov!" begin
     n_params = 2
     N = 25
-    rng = Random.MersenneTwister(7003)
+    rng = Random.Xoshiro(7003)
 
     theta_particles = randn(rng, n_params, N)
     log_weights = fill(-log(Float64(N)), N)
@@ -375,7 +375,7 @@ end
 
 @testset "bayes_estimation: StatsAPI interface" begin
     _suppress_warnings() do
-        rng = Random.MersenneTwister(8001)
+        rng = Random.Xoshiro(8001)
         spec = @dsge begin
             parameters: rho = 0.5
             endogenous: y
@@ -390,7 +390,7 @@ end
         priors = Dict(:rho => Beta(2, 2))
         result = estimate_dsge_bayes(spec, sim_data, [0.5];
             priors=priors, method=:smc, observables=[:y],
-            n_smc=20, rng=Random.MersenneTwister(8002))
+            n_smc=20, rng=Random.Xoshiro(8002))
 
         # StatsAPI.coef
         c = StatsAPI.coef(result)
@@ -404,7 +404,7 @@ end
 
 @testset "bayes_estimation: prior_posterior_table" begin
     _suppress_warnings() do
-        rng = Random.MersenneTwister(8003)
+        rng = Random.Xoshiro(8003)
         spec = @dsge begin
             parameters: rho = 0.5
             endogenous: y
@@ -419,7 +419,7 @@ end
         priors = Dict(:rho => Beta(2, 2))
         result = estimate_dsge_bayes(spec, sim_data, [0.5];
             priors=priors, method=:smc, observables=[:y],
-            n_smc=20, rng=Random.MersenneTwister(8004))
+            n_smc=20, rng=Random.Xoshiro(8004))
 
         pt = prior_posterior_table(result)
         @test length(pt) == 1
@@ -435,7 +435,7 @@ end
 
 @testset "bayes_estimation: show method" begin
     _suppress_warnings() do
-        rng = Random.MersenneTwister(8005)
+        rng = Random.Xoshiro(8005)
         spec = @dsge begin
             parameters: rho = 0.5
             endogenous: y
@@ -450,7 +450,7 @@ end
         priors = Dict(:rho => Beta(2, 2))
         result = estimate_dsge_bayes(spec, sim_data, [0.5];
             priors=priors, method=:smc, observables=[:y],
-            n_smc=20, rng=Random.MersenneTwister(8006))
+            n_smc=20, rng=Random.Xoshiro(8006))
 
         io = IOBuffer()
         show(io, result)
@@ -466,7 +466,7 @@ end
 
 @testset "bayes_estimation: estimate_dsge_bayes with :mh (small)" begin
     _suppress_warnings() do
-        rng = Random.MersenneTwister(8007)
+        rng = Random.Xoshiro(8007)
         spec = @dsge begin
             parameters: rho = 0.5
             endogenous: y
@@ -482,7 +482,7 @@ end
         result = estimate_dsge_bayes(spec, sim_data, [0.5];
             priors=priors, method=:mh, observables=[:y],
             n_draws=80, burnin=20,
-            rng=Random.MersenneTwister(8008))
+            rng=Random.Xoshiro(8008))
 
         @test result isa BayesianDSGE{Float64}
         @test result.method == :rwmh
@@ -505,7 +505,7 @@ end
 
 @testset "bayes_estimation: data transpose (T_obs x n_obs input)" begin
     _suppress_warnings() do
-        rng = Random.MersenneTwister(8009)
+        rng = Random.Xoshiro(8009)
         spec = @dsge begin
             parameters: rho = 0.5
             endogenous: y
@@ -522,7 +522,7 @@ end
         priors = Dict(:rho => Beta(2, 2))
         result = estimate_dsge_bayes(spec, sim_data, [0.5];
             priors=priors, method=:smc, observables=[:y],
-            n_smc=20, rng=Random.MersenneTwister(8010))
+            n_smc=20, rng=Random.Xoshiro(8010))
 
         @test result isa BayesianDSGE{Float64}
     end
@@ -538,7 +538,7 @@ end
         sol = perturbation_solver(spec; order=3)
         @test sol.order == 3
 
-        sim = simulate(sol, 30; rng=Random.MersenneTwister(9001))
+        sim = simulate(sol, 30; rng=Random.Xoshiro(9001))
         @test all(isfinite, sim)
         @test size(sim, 1) == 30
     end
@@ -550,7 +550,7 @@ end
         sol = perturbation_solver(spec; order=3)
 
         n_eps = nshocks(sol)
-        shocks = randn(Random.MersenneTwister(9002), 40, n_eps)
+        shocks = randn(Random.Xoshiro(9002), 40, n_eps)
         sim = simulate(sol, 40; shock_draws=shocks)
         @test all(isfinite, sim)
         @test size(sim, 1) == 40
@@ -562,7 +562,7 @@ end
         spec = _make_fwd_spec()
         sol = perturbation_solver(spec; order=2)
 
-        sim = simulate(sol, 40; antithetic=true, rng=Random.MersenneTwister(9003))
+        sim = simulate(sol, 40; antithetic=true, rng=Random.Xoshiro(9003))
         @test all(isfinite, sim)
         @test size(sim, 1) == 40
     end
@@ -573,7 +573,7 @@ end
         spec = _make_fwd_spec()
         sol = perturbation_solver(spec; order=3)
 
-        sim = simulate(sol, 40; antithetic=true, rng=Random.MersenneTwister(9004))
+        sim = simulate(sol, 40; antithetic=true, rng=Random.Xoshiro(9004))
         @test all(isfinite, sim)
         @test size(sim, 1) == 40
     end
@@ -654,7 +654,7 @@ end
     nrows = 2
 
     # xx block
-    Mvv = randn(Random.MersenneTwister(9010), nrows, nv * nv)
+    Mvv = randn(Random.Xoshiro(9010), nrows, nv * nv)
     Mxx = M._extract_xx_block(Mvv, nx, nv)
     @test size(Mxx) == (nrows, nx * nx)
     for a in 1:nx, b in 1:nx
@@ -664,7 +664,7 @@ end
     end
 
     # xxx block
-    Mvvv = randn(Random.MersenneTwister(9011), nrows, nv^3)
+    Mvvv = randn(Random.Xoshiro(9011), nrows, nv^3)
     Mxxx = M._extract_xxx_block(Mvvv, nx, nv)
     @test size(Mxxx) == (nrows, nx^3)
     for a in 1:nx, b in 1:nx, c in 1:nx
@@ -675,7 +675,7 @@ end
 end
 
 @testset "pruning: _innovation_variance_2nd" begin
-    rng = Random.MersenneTwister(9012)
+    rng = Random.Xoshiro(9012)
     nx = 2
     n_eps = 1
     hx_state = [0.5 0.1; 0.0 0.3]
@@ -701,8 +701,8 @@ end
     @test norm(Sigma - (A * Sigma * A' + B)) < 1e-8
 
     # Errors
-    @test_throws ArgumentError M._dlyap_doubling(randn(Random.MersenneTwister(1441), 2, 3), B)
-    @test_throws ArgumentError M._dlyap_doubling(A, randn(Random.MersenneTwister(1442), 3, 3))
+    @test_throws ArgumentError M._dlyap_doubling(randn(Random.Xoshiro(1441), 2, 3), B)
+    @test_throws ArgumentError M._dlyap_doubling(A, randn(Random.Xoshiro(1442), 3, 3))
 end
 
 # =====================================================================
@@ -1167,7 +1167,7 @@ end
 @testset "full pipeline: estimate_dsge_bayes with 2 params via SMC" begin
     FAST && return
     _suppress_warnings() do
-        rng = Random.MersenneTwister(10001)
+        rng = Random.Xoshiro(10001)
         spec = @dsge begin
             parameters: rho = 0.5, sigma = 0.5
             endogenous: y
@@ -1193,7 +1193,7 @@ end
         result = estimate_dsge_bayes(spec, data, [0.5, 0.5];
             priors=priors, method=:smc, observables=[:y],
             n_smc=30, n_mh_steps=1,
-            rng=Random.MersenneTwister(10002))
+            rng=Random.Xoshiro(10002))
 
         @test result isa BayesianDSGE{Float64}
         @test length(result.param_names) == 2

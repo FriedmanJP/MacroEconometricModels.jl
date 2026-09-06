@@ -27,7 +27,7 @@ effective_ss = (I - sol.G1) \ sol.C_sol
 
 # Generate synthetic observables
 T_obs = 150
-sim_raw = simulate(sol, T_obs; rng=MersenneTwister(2007))
+sim_raw = simulate(sol, T_obs; rng=Xoshiro(2007))
 
 obs_vars = [:dy, :dc, :dinve, :dw, :pinfobs, :robs, :labobs]
 obs_idx = [vi[v] for v in obs_vars]
@@ -78,7 +78,7 @@ result_sw = estimate_dsge_bayes(
     spec, Y_obs', true_vals_sw;
     priors=priors_sw, method=:smc, observables=obs_vars,
     n_smc=500, n_mh_steps=2, ess_target=0.5,
-    rng=MersenneTwister(42)
+    rng=Xoshiro(42)
 )
 
 ps = posterior_summary(result_sw)
@@ -128,7 +128,7 @@ end
 true_toy_spec = compute_steady_state(true_toy_spec)
 toy_sol = _sw() do; solve(true_toy_spec; method=:gensys); end
 
-toy_data = simulate(toy_sol, 400; rng=MersenneTwister(123))
+toy_data = simulate(toy_sol, 400; rng=Xoshiro(123))
 toy_priors = Dict(:rho_y => Beta(2, 2), :rho_pi => Beta(2, 2))
 toy_true = [0.8, 0.6]
 
@@ -151,7 +151,7 @@ println("\n  B1: SMC + Kalman")
 result_smc = _sw() do
     estimate_dsge_bayes(toy_spec, toy_data, [0.5, 0.5];
         priors=toy_priors, method=:smc, observables=[:y, :pi_v],
-        n_smc=500, n_mh_steps=2, ess_target=0.5, rng=MersenneTwister(42))
+        n_smc=500, n_mh_steps=2, ess_target=0.5, rng=Xoshiro(42))
 end
 smc_pass = _check_recovery(result_smc, toy_true, "SMC")
 
@@ -160,7 +160,7 @@ println("\n  B2: RWMH")
 result_mh = _sw() do
     estimate_dsge_bayes(toy_spec, toy_data, [0.5, 0.5];
         priors=toy_priors, method=:mh, observables=[:y, :pi_v],
-        n_draws=5000, burnin=1000, rng=MersenneTwister(42))
+        n_draws=5000, burnin=1000, rng=Xoshiro(42))
 end
 mh_pass = _check_recovery(result_mh, toy_true, "MH")
 println("      Acceptance: $(round(result_mh.acceptance_rate * 100, digits=1))%")
@@ -171,7 +171,7 @@ result_smc2 = _sw() do
     estimate_dsge_bayes(toy_spec, toy_data, [0.5, 0.5];
         priors=toy_priors, method=:smc2, observables=[:y, :pi_v],
         n_smc=200, n_particles=100, n_mh_steps=1, ess_target=0.5,
-        measurement_error=[0.1, 0.1], rng=MersenneTwister(42))
+        measurement_error=[0.1, 0.1], rng=Xoshiro(42))
 end
 smc2_pass = _check_recovery(result_smc2, toy_true, "SMC²")
 
@@ -183,9 +183,9 @@ println("      log BF(M,M) = $(round(bf, digits=4)) ≈ 0: ", bf_pass ? "PASS" :
 
 # B5: Posterior IRF/FEVD/Simulate
 println("\n  B5: Posterior Analysis")
-birf  = _sw() do; irf(result_smc, 20; n_draws=10, rng=MersenneTwister(1)); end
-bfevd = _sw() do; fevd(result_smc, 20; n_draws=10, rng=MersenneTwister(1)); end
-bsim  = _sw() do; simulate(result_smc, 50; n_draws=10, rng=MersenneTwister(1)); end
+birf  = _sw() do; irf(result_smc, 20; n_draws=10, rng=Xoshiro(1)); end
+bfevd = _sw() do; fevd(result_smc, 20; n_draws=10, rng=Xoshiro(1)); end
+bsim  = _sw() do; simulate(result_smc, 50; n_draws=10, rng=Xoshiro(1)); end
 @assert birf isa BayesianImpulseResponse && all(isfinite.(birf.point_estimate))
 @assert bfevd isa BayesianFEVD && all(x -> 0 <= x <= 1+1e-6, bfevd.point_estimate)
 @assert bsim isa BayesianDSGESimulation

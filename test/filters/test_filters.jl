@@ -16,7 +16,7 @@ using SparseArrays
     # HP Filter
     # =============================================================================
     @testset "HP Filter" begin
-        rng = MersenneTwister(42)
+        rng = Xoshiro(42)
         y = cumsum(randn(rng, 200))
 
         @testset "basic functionality" begin
@@ -107,7 +107,7 @@ using SparseArrays
     # Hamilton Filter
     # =============================================================================
     @testset "Hamilton Filter" begin
-        rng = MersenneTwister(42)
+        rng = Xoshiro(42)
         y = cumsum(randn(rng, 200))
 
         @testset "basic functionality" begin
@@ -190,7 +190,7 @@ using SparseArrays
     # Beveridge-Nelson Decomposition
     # =============================================================================
     @testset "Beveridge-Nelson" begin
-        rng = MersenneTwister(42)
+        rng = Xoshiro(42)
 
         @testset "basic functionality" begin
             # Random walk + stationary AR(1)
@@ -213,7 +213,7 @@ using SparseArrays
         end
 
         @testset "pure random walk (p=0, q=0 white noise differences)" begin
-            rng = MersenneTwister(123)
+            rng = Xoshiro(123)
             y = cumsum(randn(rng, 200))
             r = beveridge_nelson(y; p=0, q=0)
             # When Δy is white noise, transitory = 0, permanent = y
@@ -270,7 +270,7 @@ using SparseArrays
     # Baxter-King Band-Pass Filter
     # =============================================================================
     @testset "Baxter-King" begin
-        rng = MersenneTwister(42)
+        rng = Xoshiro(42)
         y = cumsum(randn(rng, 200))
 
         @testset "basic functionality" begin
@@ -371,7 +371,7 @@ using SparseArrays
     # Boosted HP Filter
     # =============================================================================
     @testset "Boosted HP" begin
-        rng = MersenneTwister(42)
+        rng = Xoshiro(42)
         y = cumsum(randn(rng, 200))
 
         @testset "BIC stopping" begin
@@ -520,7 +520,7 @@ using SparseArrays
     # Filter Non-Mutation (Issue #25)
     # =============================================================================
     @testset "filter non-mutation" begin
-        rng = MersenneTwister(42)
+        rng = Xoshiro(42)
         y = cumsum(randn(rng, 200))
         y_copy = copy(y)
 
@@ -544,7 +544,7 @@ using SparseArrays
     # AbstractFilterResult type hierarchy
     # =============================================================================
     @testset "Type hierarchy" begin
-        rng = MersenneTwister(42)
+        rng = Xoshiro(42)
         y = cumsum(randn(rng, 200))
         @test hp_filter(y) isa AbstractFilterResult
         @test hamilton_filter(y) isa AbstractFilterResult
@@ -557,7 +557,7 @@ using SparseArrays
     # Beveridge-Nelson State-Space / Morley 2002 (Issue #11)
     # =================================================================
     @testset "BN State-Space (Morley 2002)" begin
-        rng = MersenneTwister(42)
+        rng = Xoshiro(42)
         y = cumsum(randn(rng, 200)) .+ 0.1 * (1:200)
 
         # method=:statespace should work

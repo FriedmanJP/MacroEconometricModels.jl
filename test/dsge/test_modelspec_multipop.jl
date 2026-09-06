@@ -180,7 +180,7 @@ end
 
 @testset "HA estimate_dsge_bayes rejects multi-population (#701 / MSR-25)" begin
     spec = _two_huggett_spec()
-    rng = MersenneTwister(7012)  # DGP-01: explicit rng (error-path data)
+    rng = Xoshiro(7012)  # DGP-01: explicit rng (error-path data)
     err = try
         estimate_dsge_bayes(spec, randn(rng, 10, 1), Dict(:beta => 0.96);
             priors=Dict(:beta => Normal(0.96, 0.01)), n_draws=2, burnin=0)

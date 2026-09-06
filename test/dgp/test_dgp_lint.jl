@@ -15,7 +15,7 @@
 
 using Test
 
-const _RNG_FIRST_ARG = r"^\s*(rng\b|MersenneTwister|Random\.MersenneTwister|Xoshiro|RandomDevice|TaskLocalRNG)"
+const _RNG_FIRST_ARG = r"^\s*(rng\b|Xoshiro|Random\.Xoshiro|Xoshiro|RandomDevice|TaskLocalRNG)"
 const _DRAW_CALL = r"\brandn?!?\s*\("
 const _EST_CALL =
     r"(?<![\w.])(estimate_\w+|identify_\w+|nowcast_\w+|forecast|fevd|irf|historical_decomposition|\w+_test)\s*\("
@@ -135,9 +135,11 @@ end
     for (root, _, files) in walkdir(testdir)
         for f in files
             endswith(f, ".jl") || continue
-            rel = relpath(joinpath(root, f), testdir)
+            # Normalize to forward slashes: allowlist entries use test/...,
+            # but relpath yields backslashes on Windows (no match → false flags).
+            rel = replace(relpath(joinpath(root, f), testdir), '\\' => '/')
             # Allowlist entries carry the test/ prefix; relpaths do not.
-            (rel in allowed || joinpath("test", rel) in allowed) && continue
+            (rel in allowed || "test/" * rel in allowed) && continue
             r = _lint_file(joinpath(root, f))
             (r.bare > 0 || r.direct > 0) && (bad[rel] = r)
         end

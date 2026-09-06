@@ -9,7 +9,7 @@ using MacroEconometricModels
 const MEM = MacroEconometricModels
 
 @testset "Policy-projection kernel (CF-03)" begin
-    rng = MersenneTwister(20260805)
+    rng = Xoshiro(20260805)
 
     @testset "unweighted-ls" begin
         for _ in 1:5

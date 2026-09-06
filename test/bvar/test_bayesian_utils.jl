@@ -14,7 +14,7 @@ using LinearAlgebra
 using Statistics
 using Random
 
-rng = MersenneTwister(54321)  # DGP-03: explicit rng
+rng = Xoshiro(54321)  # DGP-03: explicit rng
 
 @testset "Bayesian Processing Utilities" begin
 
@@ -139,11 +139,11 @@ end
     # concrete element returned by `compute_func` (inferred from the first valid draw). The stored
     # values are computed by the identical `compute_func` call, so outputs are unchanged; the only
     # observable difference is that the container's element type is now concrete, not `Any`.
-    rng = Random.MersenneTwister(20210)
+    rng = Random.Xoshiro(20210)
     n, p, T = 2, 2, 140
     # Persistent VAR(1) truth (DGP-03 #792: shared simulator).
     Y = dgp_var(rng; A=[0.5 0.1; 0.05 0.4], B0=Matrix{Float64}(I, n, n), T=T).Y
-    post = estimate_bvar(Y, p; n_draws=60, sampler=:direct, rng=MersenneTwister(4242))
+    post = estimate_bvar(Y, p; n_draws=60, sampler=:direct, rng=Xoshiro(4242))
 
     # (1) The internal machinery now returns a concretely-typed vector of Array{Float64,3}
     #     (from compute_irf), not Vector{Any}.

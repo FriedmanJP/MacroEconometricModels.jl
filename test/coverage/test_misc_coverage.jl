@@ -17,7 +17,7 @@
     # 1. src/data/summary_stats.jl — CrossSectionData dispatch
     # =========================================================================
     @testset "describe_data(CrossSectionData)" begin
-        X = randn(Random.MersenneTwister(1443), 50, 3)
+        X = randn(Random.Xoshiro(1443), 50, 3)
         cs = CrossSectionData(X; varnames=["x1", "x2", "x3"])
         s = describe_data(cs)
         @test s isa MacroEconometricModels.DataSummary
@@ -34,7 +34,7 @@
     # 2. src/data/summary_stats.jl — all-NaN column
     # =========================================================================
     @testset "describe_data with all-NaN column" begin
-        Y = randn(Random.MersenneTwister(1444), 30, 3)
+        Y = randn(Random.Xoshiro(1444), 30, 3)
         Y[:, 2] .= NaN  # entire column is NaN
         ts = TimeSeriesData(Y; varnames=["a", "b_nan", "c"])
         s = describe_data(ts)
@@ -56,7 +56,7 @@
     @testset "describe_data with single-observation column" begin
         Y = fill(NaN, 20, 2)
         Y[5, 1] = 3.14     # only one finite value in column 1
-        Y[:, 2] .= randn(Random.MersenneTwister(1445), 20)  # normal column
+        Y[:, 2] .= randn(Random.Xoshiro(1445), 20)  # normal column
         ts = TimeSeriesData(Y; varnames=["single_obs", "normal"])
         s = describe_data(ts)
         @test s.n[1] == 1
@@ -75,7 +75,7 @@
         Y = fill(NaN, 20, 2)
         Y[3, 1] = 1.0
         Y[7, 1] = 5.0  # two finite values, std > 0 but nf <= 2
-        Y[:, 2] .= randn(Random.MersenneTwister(1446), 20)
+        Y[:, 2] .= randn(Random.Xoshiro(1446), 20)
         ts = TimeSeriesData(Y; varnames=["two_obs", "normal"])
         s = describe_data(ts)
         @test s.n[1] == 2
@@ -90,7 +90,7 @@
         # sig_p = 0 makes rejection (pval < sig) impossible for any p-value
         # implementation, so the filter must run to max_iter and keep the
         # last iteration — this pins the "ADF never rejected" branch.
-        rng = Random.MersenneTwister(42)
+        rng = Random.Xoshiro(42)
         y = cumsum(randn(rng, 200))  # strong unit root
         result = boosted_hp(y; stopping=:ADF, max_iter=3, sig_p=0.0)
         @test result isa MacroEconometricModels.BoostedHPResult
@@ -117,7 +117,7 @@
     # 7. src/arima/estimation.jl — estimate_arma with :css_mle method
     # =========================================================================
     @testset "estimate_arma css_mle method" begin
-        rng = Random.MersenneTwister(1234)
+        rng = Random.Xoshiro(1234)
         y = randn(rng, 200)
         m = estimate_arma(y, 1, 1; method=:css_mle)
         @test m isa ARMAModel
@@ -131,7 +131,7 @@
     # 8. src/arima/estimation.jl — estimate_arma with unknown method
     # =========================================================================
     @testset "estimate_arma unknown method" begin
-        y = randn(Random.MersenneTwister(1447), 100)
+        y = randn(Random.Xoshiro(1447), 100)
         @test_throws ArgumentError estimate_arma(y, 1, 1; method=:unknown)
     end
 
@@ -169,7 +169,7 @@
     # =========================================================================
     @testset "_arima_mle_stderror Hessian catch" begin
         # Estimate an MA(1) with near-degenerate data to stress the Hessian
-        rng = Random.MersenneTwister(777)
+        rng = Random.Xoshiro(777)
         y = randn(rng, 50)
         m = estimate_ma(y, 1; method=:mle)
         # Even if Hessian is well-conditioned, stderror should return finite values
@@ -190,7 +190,7 @@
     # 11. src/bvar/types.jl — size(post, 3) error
     # =========================================================================
     @testset "BVARPosterior size dim=3 error" begin
-        Y = randn(Random.MersenneTwister(1448), 100, 3)
+        Y = randn(Random.Xoshiro(1448), 100, 3)
         post = estimate_bvar(Y, 2; n_draws=50, seed=1448)
         @test size(post, 1) == 50
         @test length(post) == 50
@@ -201,7 +201,7 @@
     # 12. src/bvar/types.jl — BVARForecast show with :median point estimate
     # =========================================================================
     @testset "BVARForecast show with :median" begin
-        Y = randn(Random.MersenneTwister(1449), 100, 2)
+        Y = randn(Random.Xoshiro(1449), 100, 2)
         post = estimate_bvar(Y, 2; n_draws=50, varnames=["GDP", "INF"], seed=1449)
         fc = forecast(post, 5; point_estimate=:median)
         @test fc isa MacroEconometricModels.BVARForecast
@@ -216,7 +216,7 @@
     # 13. src/bvar/types.jl — BVARForecast show with :mean point estimate
     # =========================================================================
     @testset "BVARForecast show with :mean" begin
-        Y = randn(Random.MersenneTwister(1450), 100, 2)
+        Y = randn(Random.Xoshiro(1450), 100, 2)
         post = estimate_bvar(Y, 2; n_draws=50, varnames=["X1", "X2"], seed=1450)
         fc = forecast(post, 3; point_estimate=:mean)
         @test fc.point_estimate == :mean
@@ -227,14 +227,14 @@
     @testset "particle-filter kron buffer bounds guards (#254 G-19)" begin
         kb  = MacroEconometricModels._fill_kron_buffer!
         kb3 = MacroEconometricModels._fill_kron3_buffer!
-        V = randn(Random.MersenneTwister(1451), 3, 4)  # nv=3, N=4
+        V = randn(Random.Xoshiro(1451), 3, 4)  # nv=3, N=4
         # correctly sized buffers do not throw
         @test (kb(zeros(9, 4), V, 3);  true)  # nv^2 = 9
         @test (kb3(zeros(27, 4), V, 3); true) # nv^3 = 27
         # mis-sized buffers raise a clean DimensionMismatch instead of corrupting memory
         @test_throws DimensionMismatch kb(zeros(4, 4), V, 3)     # too few rows
         @test_throws DimensionMismatch kb(zeros(9, 2), V, 3)     # too few cols
-        @test_throws DimensionMismatch kb(zeros(9, 4), randn(Random.MersenneTwister(1452), 2, 4), 3)  # V too small
+        @test_throws DimensionMismatch kb(zeros(9, 4), randn(Random.Xoshiro(1452), 2, 4), 3)  # V too small
         @test_throws DimensionMismatch kb3(zeros(10, 4), V, 3)
     end
 

@@ -12,7 +12,7 @@ using StatsAPI
 using LinearAlgebra
 
 # Explicit rng for reproducibility (DGP-09 #798)
-rng = MersenneTwister(42)
+rng = Xoshiro(42)
 
 @testset "AR Model Estimation" begin
     @testset "AR(1) OLS estimation" begin
@@ -279,7 +279,7 @@ end
     end
 
     @testset "MLE forecast unbiased on non-demeaned series (R-01 / #121)" begin
-        rng = MersenneTwister(4121)
+        rng = Xoshiro(4121)
         n = 800
         mu, phi_true = 20.0, 0.6
         y = dgp_arima(rng; phi=[phi_true], c=mu * (1 - phi_true), sigma=0.5,
@@ -331,7 +331,7 @@ end
     end
 
     @testset "ARIMA(d>=1) intervals via nondifferenced psi-weights (T094 #193)" begin
-        rng = MersenneTwister(321)
+        rng = Xoshiro(321)
         # ARIMA(0,1,0) random walk: forecast-error variance is σ²·h, and the band must be
         # forecast ± z·se. The old code integrated the differenced CI arrays (half-width linear
         # in h) but reported se = sqrt(cumsum(se_diff.^2)) (sqrt in h), so ci ≠ forecast ± z·se.
@@ -414,7 +414,7 @@ end
     end
 
     @testset "CSS common conditioning window for order comparability (T108 #207)" begin
-        rng = MersenneTwister(4242)
+        rng = Xoshiro(4242)
         y = dgp_arima(rng; phi=[0.6, -0.2], T=300).y
         m1 = estimate_arma(y, 1, 0; method=:css, include_intercept=true)
         m2 = estimate_arma(y, 2, 2; method=:css, include_intercept=true)
@@ -613,7 +613,7 @@ end
 # =============================================================================
 
 @testset "StatsAPI Interface - MA Model" begin
-    rng = MersenneTwister(7000)
+    rng = Xoshiro(7000)
     n = 300
     # MA(1) data on the shared simulator (DGP-09 #798)
     theta_true = 0.6
@@ -677,7 +677,7 @@ end
 end
 
 @testset "StatsAPI Interface - MA(2) Model" begin
-    rng = MersenneTwister(7100)
+    rng = Xoshiro(7100)
     n = 300
     y = dgp_arima(rng; theta=[0.5, -0.3], T=n).y
 
@@ -691,7 +691,7 @@ end
 end
 
 @testset "StatsAPI Interface - ARMA Model" begin
-    rng = MersenneTwister(7200)
+    rng = Xoshiro(7200)
     n = 400
     # ARMA(1,1) data on the shared simulator (DGP-09 #798)
     phi_true = 0.5
@@ -740,7 +740,7 @@ end
 end
 
 @testset "StatsAPI Interface - ARMA(2,1) Model" begin
-    rng = MersenneTwister(7300)
+    rng = Xoshiro(7300)
     n = 400
     y = dgp_arima(rng; phi=[0.4, 0.2], theta=[0.3], T=n).y
 
@@ -753,7 +753,7 @@ end
 end
 
 @testset "StatsAPI Interface - ARIMA Model" begin
-    rng = MersenneTwister(7400)
+    rng = Xoshiro(7400)
     n = 300
     # ARIMA(1,1,1) data on the shared simulator (DGP-09 #798)
     y = dgp_arima(rng; phi=[0.5], theta=[0.3], d=1, T=n).y
@@ -803,7 +803,7 @@ end
 end
 
 @testset "StatsAPI Interface - ARIMA(2,1,0) Model" begin
-    rng = MersenneTwister(7500)
+    rng = Xoshiro(7500)
     n = 300
     y = dgp_arima(rng; phi=[0.4, 0.2], d=1, T=n).y
 
@@ -817,7 +817,7 @@ end
 end
 
 @testset "StatsAPI Interface - ARIMA(0,1,2) Model" begin
-    rng = MersenneTwister(7600)
+    rng = Xoshiro(7600)
     n = 300
     y = dgp_arima(rng; theta=[0.4, -0.2], d=1, T=n).y
 
@@ -830,7 +830,7 @@ end
 end
 
 @testset "StatsAPI consistency checks" begin
-    rng = MersenneTwister(7700)
+    rng = Xoshiro(7700)
 
     # For each model type, check StatsAPI.dof_residual == nobs_residuals - dof + 1
     y = randn(rng, 300)
@@ -849,7 +849,7 @@ end
 end
 
 @testset "Display methods - MA/ARMA/ARIMA" begin
-    rng = MersenneTwister(7800)
+    rng = Xoshiro(7800)
     y = randn(rng, 200)
     y_rw = dgp_arima(rng; d=1, T=200).y
 
@@ -879,7 +879,7 @@ end
 end
 
 @testset "ARIMA d=2 (double differencing)" begin
-    rng = MersenneTwister(6001)
+    rng = Xoshiro(6001)
     # I(2) series on the shared simulator (DGP-09 #798)
     y_i2 = dgp_arima(rng; d=2, T=200).y
     m = estimate_arima(y_i2, 1, 2, 1; method=:css_mle)
@@ -890,7 +890,7 @@ end
 end
 
 @testset "auto_arima include_intercept=false" begin
-    rng = MersenneTwister(6002)
+    rng = Xoshiro(6002)
     y = randn(rng, 100)
     m = auto_arima(y; include_intercept=false, max_p=1, max_q=1)
     @test m isa MacroEconometricModels.AbstractARIMAModel
@@ -899,7 +899,7 @@ end
 end
 
 @testset "select_arima_order larger grid" begin
-    rng = MersenneTwister(6003)
+    rng = Xoshiro(6003)
     y = randn(rng, 100)
     result = select_arima_order(y, 2, 1)
     @test result isa MacroEconometricModels.ARIMAOrderSelection
@@ -910,7 +910,7 @@ end
 end
 
 @testset "Forecast with conf_level=0.99" begin
-    rng = MersenneTwister(6004)
+    rng = Xoshiro(6004)
     y = randn(rng, 100)
     m = estimate_ar(y, 2)
     fc = forecast(m, 5; conf_level=0.99)
@@ -922,7 +922,7 @@ end
 end
 
 @testset "conf_level accepts Real" begin
-    rng = MersenneTwister(42)
+    rng = Xoshiro(42)
     y = cumsum(randn(rng, 100))
     m = estimate_ar(y, 2)
     # Should accept Float64 and Float32 without error
@@ -938,7 +938,7 @@ end
 
 @testset "auto_arima stepwise search" begin
     @testset "stepwise=true (default) returns valid model" begin
-        rng = MersenneTwister(7001)
+        rng = Xoshiro(7001)
         y = randn(rng, 200)
         m = auto_arima(y; max_p=4, max_q=4, max_d=0)
         @test m isa MacroEconometricModels.AbstractARIMAModel
@@ -947,14 +947,14 @@ end
     end
 
     @testset "stepwise=false falls back to grid search" begin
-        rng = MersenneTwister(7002)
+        rng = Xoshiro(7002)
         y = randn(rng, 150)
         m = auto_arima(y; max_p=2, max_q=2, max_d=0, stepwise=false)
         @test m isa MacroEconometricModels.AbstractARIMAModel
     end
 
     @testset "stepwise finds same or comparable model to grid" begin
-        rng = MersenneTwister(7003)
+        rng = Xoshiro(7003)
         y = randn(rng, 200)
         m_step = auto_arima(y; max_p=3, max_q=3, max_d=0, stepwise=true, criterion=:bic)
         m_grid = auto_arima(y; max_p=3, max_q=3, max_d=0, stepwise=false, criterion=:bic)
@@ -963,21 +963,21 @@ end
     end
 
     @testset "stepwise with d > 0" begin
-        rng = MersenneTwister(7004)
+        rng = Xoshiro(7004)
         y = cumsum(randn(rng, 200))
         m = auto_arima(y; max_p=3, max_q=3, max_d=2, stepwise=true)
         @test m isa MacroEconometricModels.AbstractARIMAModel
     end
 
     @testset "stepwise with criterion=:aic" begin
-        rng = MersenneTwister(7005)
+        rng = Xoshiro(7005)
         y = randn(rng, 150)
         m = auto_arima(y; max_p=3, max_q=3, max_d=0, stepwise=true, criterion=:aic)
         @test m isa MacroEconometricModels.AbstractARIMAModel
     end
 
     @testset "stepwise with small bounds max_p=1, max_q=0" begin
-        rng = MersenneTwister(7006)
+        rng = Xoshiro(7006)
         y = randn(rng, 100)
         m = auto_arima(y; max_p=1, max_q=0, max_d=0, stepwise=true)
         @test m isa MacroEconometricModels.AbstractARIMAModel
@@ -988,7 +988,7 @@ end
     @testset "stepwise respects tight bounds max_p=0, max_q=0 (R-23 / #117)" begin
         # Only (0,0) is admissible; the _fit_and_cache bounds guard (parenthesized so the
         # full ||-chain gates the early return) must never admit an out-of-bounds order.
-        rng = MersenneTwister(7007)
+        rng = Xoshiro(7007)
         y = randn(rng, 120)
         m = auto_arima(y; max_p=0, max_q=0, max_d=0, stepwise=true)
         @test m isa MacroEconometricModels.AbstractARIMAModel
@@ -1076,7 +1076,7 @@ end
              (0.0, [0.7], Float64[], 0.8),
              (-0.2, Float64[], [0.4, 0.1], 1.3),
              (0.05, [0.3, 0.2, -0.1], [0.5], 0.9)]
-    rng = Random.MersenneTwister(2024)
+    rng = Random.Xoshiro(2024)
     y = zeros(160)
     for t in 2:160
         y[t] = 0.55*y[t-1] + randn(rng)
@@ -1096,7 +1096,7 @@ end
     end
 
     # End-to-end: a fitted ARIMA is unaffected (loglik reproduces on a fixed seed).
-    rng = MersenneTwister(314)
+    rng = Xoshiro(314)
     yr = 0.1 .+ cumsum(0.5 .* randn(rng, 200) .+ 0.3 .* [0.0; randn(rng, 199)])
     m1 = estimate_arima(yr, 1, 0, 1)
     m2 = estimate_arima(yr, 1, 0, 1)

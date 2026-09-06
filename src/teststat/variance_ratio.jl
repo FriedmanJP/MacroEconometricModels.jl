@@ -156,7 +156,7 @@ function _wright_null(N::Int, q::Int, kind::Symbol)
     length(_WRIGHT_NULL_CACHE) >= _WRIGHT_CACHE_CAP && empty!(_WRIGHT_NULL_CACHE)
     seed = (UInt64(_WRIGHT_BASE_SEED) ⊻ (UInt64(N) * 0x9E3779B1) ⊻
             (UInt64(q) << 17) ⊻ (UInt64(hash(kind)))) % typemax(UInt32)
-    rng = Random.MersenneTwister(Int(seed))
+    rng = Random.Xoshiro(Int(seed))
     base = if kind === :r1
         Float64[(i - (N + 1) / 2) / sqrt((N - 1) * (N + 1) / 12) for i in 1:N]
     elseif kind === :r2
@@ -210,7 +210,7 @@ function _kim_bootstrap(x::AbstractVector{T}, qvec::Vector{Int}, B::Int,
     nq = length(qvec)
     cnt_z = zeros(Int, nq)
     cnt_cd = 0
-    rng = Random.MersenneTwister(seed)
+    rng = Random.Xoshiro(seed)
     xstar = Vector{T}(undef, N)
     for _ in 1:B
         @inbounds for t in 1:N

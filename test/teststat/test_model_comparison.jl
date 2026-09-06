@@ -6,7 +6,7 @@
 
 using Random
 
-rng = Random.MersenneTwister(12345)
+rng = Random.Xoshiro(12345)
 
 # =============================================================================
 # Shared test data
@@ -276,7 +276,7 @@ end
     @test_throws ArgumentError lm_test(ar2, ar2b)
 
     # Different data — use explicit seed to guarantee different data from y_arima
-    y_other = randn(Random.MersenneTwister(99999), 300)
+    y_other = randn(Random.Xoshiro(99999), 300)
     ar4_other = estimate_ar(y_other, 4; method=:mle)
     @test_throws ArgumentError lm_test(ar2, ar4_other)
 
@@ -292,14 +292,14 @@ end
 end
 
 @testset "LM Test — VAR different data" begin
-    Y_other = randn(Random.MersenneTwister(77777), 150, 3)
+    Y_other = randn(Random.Xoshiro(77777), 150, 3)
     var1 = estimate_var(Y_var, 1)
     var2_other = estimate_var(Y_other, 2)
     @test_throws ArgumentError lm_test(var1, var2_other)
 end
 
 @testset "LM Test — Volatility different data" begin
-    y_other_vol = randn(Random.MersenneTwister(55555), 500)
+    y_other_vol = randn(Random.Xoshiro(55555), 500)
     arch1 = estimate_arch(y_vol, 1)
     arch2_other = estimate_arch(y_other_vol, 2)
     @test_throws ArgumentError lm_test(arch1, arch2_other)
@@ -468,7 +468,7 @@ end
 
 @testset "LR Test — Significant result" begin
     # Generate AR(2) data to make AR(2) vs AR(0+) meaningful (DGP-12 #801)
-    rng_sig = Random.MersenneTwister(999)
+    rng_sig = Random.Xoshiro(999)
     n_sig = 500
     y_sig = dgp_arima(rng_sig; phi=[0.5, -0.3], T=n_sig).y
 

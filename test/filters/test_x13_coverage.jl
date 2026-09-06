@@ -13,7 +13,7 @@ const M = MacroEconometricModels
 @testset "X-13 Coverage" begin
 
 # ── Shared test data ──
-rng = MersenneTwister(42)
+rng = Xoshiro(42)
 n = 120
 trend = cumsum(randn(rng, n) .* 0.1)
 seasonal = 10.0 .* sin.(2π .* (1:n) ./ 12) .+ 5.0 .* cos.(2π .* (1:n) ./ 6)

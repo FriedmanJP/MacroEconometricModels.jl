@@ -7,7 +7,7 @@
 using Test, MacroEconometricModels, Random
 
 @testset "Fourier Unit Root Tests" begin
-    rng = Random.MersenneTwister(44556)
+    rng = Random.Xoshiro(44556)
 
     # Stationary AR(1) with moderate persistence
     y_stat = zeros(200)

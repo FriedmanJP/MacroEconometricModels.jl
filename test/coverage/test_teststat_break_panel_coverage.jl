@@ -172,7 +172,7 @@ using DataFrames, Statistics
     end
 
     @testset "adf_select_lags: all criteria" begin
-        rng = Random.MersenneTwister(4242)
+        rng = Random.Xoshiro(4242)
         y = cumsum(randn(rng, 200))
 
         for criterion in (:aic, :bic, :hqic)
@@ -191,7 +191,7 @@ using DataFrames, Statistics
     end
 
     @testset "_build_adf_matrix: all regression types x lag combos" begin
-        rng = Random.MersenneTwister(1111)
+        rng = Random.Xoshiro(1111)
         y = cumsum(randn(rng, 100))
         dy = diff(y)
 
@@ -214,7 +214,7 @@ using DataFrames, Statistics
     end
 
     @testset "_nw_bandwidth and _long_run_variance" begin
-        rng = Random.MersenneTwister(2222)
+        rng = Random.Xoshiro(2222)
         resid = randn(rng, 200)
 
         bw = MacroEconometricModels._nw_bandwidth(resid)
@@ -251,7 +251,7 @@ using DataFrames, Statistics
     # =========================================================================
 
     @testset "Andrews test: all 9 test variants produce valid results" begin
-        rng = Random.MersenneTwister(5555)
+        rng = Random.Xoshiro(5555)
         T_obs = 120
         X = hcat(ones(T_obs), randn(rng, T_obs))
         y = X * [1.0, 2.0] + randn(rng, T_obs) * 0.5
@@ -272,7 +272,7 @@ using DataFrames, Statistics
     end
 
     @testset "Andrews test: Float64 fallback from Int" begin
-        rng = Random.MersenneTwister(6666)
+        rng = Random.Xoshiro(6666)
         y_int = round.(Int, randn(rng, 100) .* 10)
         X_int = round.(Int, hcat(ones(100), randn(rng, 100)) .* 10)
         result = andrews_test(y_int, X_int; test=:supwald)
@@ -280,7 +280,7 @@ using DataFrames, Statistics
     end
 
     @testset "Andrews test: strong break detection" begin
-        rng = Random.MersenneTwister(7777)
+        rng = Random.Xoshiro(7777)
         T_obs = 150
         X = hcat(ones(T_obs), randn(rng, T_obs))
         y = X * [1.0, 2.0] + randn(rng, T_obs) * 0.3
@@ -295,21 +295,21 @@ using DataFrames, Statistics
 
     @testset "Andrews test: error handling" begin
         # Invalid test type
-        @test_throws ArgumentError andrews_test(randn(Random.MersenneTwister(1453), 100), ones(100, 1); test=:invalid)
+        @test_throws ArgumentError andrews_test(randn(Random.Xoshiro(1453), 100), ones(100, 1); test=:invalid)
 
         # Dimension mismatch
-        @test_throws ArgumentError andrews_test(randn(Random.MersenneTwister(1454), 100), ones(50, 1))
+        @test_throws ArgumentError andrews_test(randn(Random.Xoshiro(1454), 100), ones(50, 1))
 
         # Too short series
-        @test_throws ArgumentError andrews_test(randn(Random.MersenneTwister(1455), 10), ones(10, 1))
+        @test_throws ArgumentError andrews_test(randn(Random.Xoshiro(1455), 10), ones(10, 1))
 
         # Invalid trimming
-        @test_throws ArgumentError andrews_test(randn(Random.MersenneTwister(1456), 100), ones(100, 1); trimming=0.6)
-        @test_throws ArgumentError andrews_test(randn(Random.MersenneTwister(1457), 100), ones(100, 1); trimming=-0.1)
+        @test_throws ArgumentError andrews_test(randn(Random.Xoshiro(1456), 100), ones(100, 1); trimming=0.6)
+        @test_throws ArgumentError andrews_test(randn(Random.Xoshiro(1457), 100), ones(100, 1); trimming=-0.1)
     end
 
     @testset "Andrews show method: reject and fail-to-reject" begin
-        rng = Random.MersenneTwister(8888)
+        rng = Random.Xoshiro(8888)
         T_obs = 150
         X = hcat(ones(T_obs), randn(rng, T_obs))
 
@@ -326,7 +326,7 @@ using DataFrames, Statistics
         @test occursin("Critical Values", s)
 
         # No break: should fail to reject
-        y_stable = X * [1.0, 2.0] + randn(Random.MersenneTwister(9999), T_obs) * 2.0
+        y_stable = X * [1.0, 2.0] + randn(Random.Xoshiro(9999), T_obs) * 2.0
         result_norej = andrews_test(y_stable, X; test=:supwald)
         io2 = IOBuffer()
         show(io2, result_norej)
@@ -419,7 +419,7 @@ using DataFrames, Statistics
     # =========================================================================
 
     @testset "factor_break_test: breitung_eickmeier" begin
-        rng = Random.MersenneTwister(3001)
+        rng = Random.Xoshiro(3001)
         X = randn(rng, 100, 25)
         result = factor_break_test(X, 2; method=:breitung_eickmeier)
         @test result isa FactorBreakResult{Float64}
@@ -430,7 +430,7 @@ using DataFrames, Statistics
     end
 
     @testset "factor_break_test: chen_dolado_gonzalo" begin
-        rng = Random.MersenneTwister(3002)
+        rng = Random.Xoshiro(3002)
         X = randn(rng, 100, 25)
         # Matrix-only dispatch (no r)
         result = factor_break_test(X; method=:chen_dolado_gonzalo)
@@ -444,7 +444,7 @@ using DataFrames, Statistics
     end
 
     @testset "factor_break_test: han_inoue" begin
-        rng = Random.MersenneTwister(3003)
+        rng = Random.Xoshiro(3003)
         X = randn(rng, 100, 25)
         result = factor_break_test(X, 2; method=:han_inoue)
         @test result isa FactorBreakResult{Float64}
@@ -454,7 +454,7 @@ using DataFrames, Statistics
     end
 
     @testset "factor_break_test: FactorModel dispatch" begin
-        rng = Random.MersenneTwister(3004)
+        rng = Random.Xoshiro(3004)
         X = randn(rng, 100, 20)
         fm = estimate_factors(X, 2)
 
@@ -466,34 +466,34 @@ using DataFrames, Statistics
     end
 
     @testset "factor_break_test: Float64 fallback (with r)" begin
-        X_int = round.(Int, randn(Random.MersenneTwister(3005), 80, 20) .* 10)
+        X_int = round.(Int, randn(Random.Xoshiro(3005), 80, 20) .* 10)
         result = factor_break_test(X_int, 2; method=:breitung_eickmeier)
         @test result isa FactorBreakResult{Float64}
     end
 
     @testset "factor_break_test: Float64 fallback (no r)" begin
-        X_int = round.(Int, randn(Random.MersenneTwister(3006), 80, 20) .* 10)
+        X_int = round.(Int, randn(Random.Xoshiro(3006), 80, 20) .* 10)
         result = factor_break_test(X_int; method=:chen_dolado_gonzalo)
         @test result isa FactorBreakResult{Float64}
     end
 
     @testset "factor_break_test: matrix-only dispatch error for methods needing r" begin
-        X = randn(Random.MersenneTwister(3007), 100, 20)
+        X = randn(Random.Xoshiro(3007), 100, 20)
         @test_throws ArgumentError factor_break_test(X; method=:breitung_eickmeier)
         @test_throws ArgumentError factor_break_test(X; method=:han_inoue)
     end
 
     @testset "factor_break_test: error handling" begin
         # Too short
-        @test_throws ArgumentError factor_break_test(randn(Random.MersenneTwister(1458), 10, 5), 2)
+        @test_throws ArgumentError factor_break_test(randn(Random.Xoshiro(1458), 10, 5), 2)
         # Invalid method (with r)
-        @test_throws ArgumentError factor_break_test(randn(Random.MersenneTwister(1459), 100, 20), 2; method=:invalid)
+        @test_throws ArgumentError factor_break_test(randn(Random.Xoshiro(1459), 100, 20), 2; method=:invalid)
         # Invalid method (no r)
-        @test_throws ArgumentError factor_break_test(randn(Random.MersenneTwister(1460), 100, 20); method=:invalid)
+        @test_throws ArgumentError factor_break_test(randn(Random.Xoshiro(1460), 100, 20); method=:invalid)
     end
 
     @testset "_be_sup_lm_path / _be_null_pool / _be_pooled_pvalue" begin
-        rng = Random.MersenneTwister(3009)
+        rng = Random.Xoshiro(3009)
         X = randn(rng, 120, 15)
         r = 2
         fm = estimate_factors(X, r; standardize=true)
@@ -518,33 +518,33 @@ using DataFrames, Statistics
         @test vec(sum(paths; dims=2)) ≈ pooled
 
         pool = MacroEconometricModels._be_null_pool(F, 18, 102, 200,
-                                                    Random.MersenneTwister(7))
+                                                    Random.Xoshiro(7))
         @test length(pool) == 200
         @test all(pool .> 0)
 
         # A pooled sum far above / below the null pool maps to a small / unit p-value
         p_hi = MacroEconometricModels._be_pooled_pvalue(1e6, pool, 15,
-                                                        Random.MersenneTwister(8), 200)
+                                                        Random.Xoshiro(8), 200)
         p_lo = MacroEconometricModels._be_pooled_pvalue(0.0, pool, 15,
-                                                        Random.MersenneTwister(8), 200)
+                                                        Random.Xoshiro(8), 200)
         @test p_hi < 0.01
         @test p_lo ≈ 1.0
     end
 
     @testset "_hi_null_paths / _hi_pooled_sups (#605)" begin
-        rng = Random.MersenneTwister(3012)
+        rng = Random.Xoshiro(3012)
         X = randn(rng, 120, 15)
         fm = estimate_factors(X, 2; standardize=true)
         F = fm.factors
 
         # Chunking is exercised via a nsim that is not a multiple of the 2000 chunk
         paths = MacroEconometricModels._hi_null_paths(F, 18, 102, 150,
-                                                      Random.MersenneTwister(7))
+                                                      Random.Xoshiro(7))
         @test size(paths) == (102 - 18 + 1, 150)
         @test all(paths .>= 0)
 
         pool = MacroEconometricModels._hi_pooled_sups(paths, 15,
-                                                      Random.MersenneTwister(8), 300)
+                                                      Random.Xoshiro(8), 300)
         @test length(pool) == 300
         @test all(pool .> 0)
         # A pooled sup aggregates 15 per-series paths pointwise, so it can never
@@ -553,7 +553,7 @@ using DataFrames, Statistics
     end
 
     @testset "_sup_lm_hac / _cdg_select_r" begin
-        rng = Random.MersenneTwister(3010)
+        rng = Random.Xoshiro(3010)
         n = 150
         Z = hcat(ones(n), randn(rng, n, 2))
         y = Z * [1.0, 0.5, -0.5] + randn(rng, n)
@@ -574,12 +574,12 @@ using DataFrames, Statistics
         @test MacroEconometricModels._sup_lm_hac(y[1:5], Z[1:5, :], 0.15) == (0.0, nothing)
 
         # Bai-Ng IC2 selection stays inside the r_max = floor(sqrt(min(T,N))) grid
-        r_sel = MacroEconometricModels._cdg_select_r(randn(Random.MersenneTwister(3011), 100, 9))
+        r_sel = MacroEconometricModels._cdg_select_r(randn(Random.Xoshiro(3011), 100, 9))
         @test 1 <= r_sel <= 3
     end
 
     @testset "factor_break_test show: all 3 conclusion branches" begin
-        rng = Random.MersenneTwister(3011)
+        rng = Random.Xoshiro(3011)
         X = randn(rng, 100, 25)
 
         # Show with break_date (breitung_eickmeier)
@@ -632,7 +632,7 @@ using DataFrames, Statistics
     # =========================================================================
 
     @testset "moon_perron_test: basic with different r values" begin
-        rng = Random.MersenneTwister(4001)
+        rng = Random.Xoshiro(4001)
         X = randn(rng, 80, 15)
 
         result1 = moon_perron_test(X; r=1)
@@ -648,13 +648,13 @@ using DataFrames, Statistics
     end
 
     @testset "moon_perron_test: Float64 fallback" begin
-        X_int = round.(Int, randn(Random.MersenneTwister(4002), 80, 15) .* 10)
+        X_int = round.(Int, randn(Random.Xoshiro(4002), 80, 15) .* 10)
         result = moon_perron_test(X_int; r=1)
         @test result isa MoonPerronResult{Float64}
     end
 
     @testset "moon_perron_test: PanelData dispatch" begin
-        rng = Random.MersenneTwister(4003)
+        rng = Random.Xoshiro(4003)
         df = DataFrame(
             group = repeat(1:10, inner=30),
             time = repeat(1:30, 10),
@@ -668,16 +668,16 @@ using DataFrames, Statistics
 
     @testset "moon_perron_test: error handling" begin
         # Too short time dimension
-        @test_throws ArgumentError moon_perron_test(randn(Random.MersenneTwister(1461), 5, 3); r=1)
+        @test_throws ArgumentError moon_perron_test(randn(Random.Xoshiro(1461), 5, 3); r=1)
         # r < 1
-        @test_throws ArgumentError moon_perron_test(randn(Random.MersenneTwister(1462), 80, 15); r=0)
+        @test_throws ArgumentError moon_perron_test(randn(Random.Xoshiro(1462), 80, 15); r=0)
         # r too large
-        @test_throws ArgumentError moon_perron_test(randn(Random.MersenneTwister(1463), 80, 15); r=100)
+        @test_throws ArgumentError moon_perron_test(randn(Random.Xoshiro(1463), 80, 15); r=100)
     end
 
     @testset "moon_perron_test show: all 3 conclusion branches" begin
         # Branch 1: both reject (stationary panel data)
-        rng = Random.MersenneTwister(4010)
+        rng = Random.Xoshiro(4010)
         X_stat = randn(rng, 100, 20)  # stationary → both should reject
         result_both = moon_perron_test(X_stat; r=1)
         io = IOBuffer()
@@ -707,7 +707,7 @@ using DataFrames, Statistics
     # =========================================================================
 
     @testset "panic_test: pooled and individual methods" begin
-        rng = Random.MersenneTwister(5001)
+        rng = Random.Xoshiro(5001)
         # Create data with a common factor
         T_obs, N = 80, 15
         F = cumsum(randn(rng, T_obs))
@@ -730,7 +730,7 @@ using DataFrames, Statistics
     end
 
     @testset "panic_test: auto factor selection" begin
-        rng = Random.MersenneTwister(5002)
+        rng = Random.Xoshiro(5002)
         X = randn(rng, 80, 15)
         result = panic_test(X; r=:auto, method=:pooled)
         @test result isa PANICResult{Float64}
@@ -738,13 +738,13 @@ using DataFrames, Statistics
     end
 
     @testset "panic_test: Float64 fallback" begin
-        X_int = round.(Int, randn(Random.MersenneTwister(5003), 80, 15) .* 10)
+        X_int = round.(Int, randn(Random.Xoshiro(5003), 80, 15) .* 10)
         result = panic_test(X_int; r=1)
         @test result isa PANICResult{Float64}
     end
 
     @testset "panic_test: PanelData dispatch" begin
-        rng = Random.MersenneTwister(5004)
+        rng = Random.Xoshiro(5004)
         df = DataFrame(
             group = repeat(1:8, inner=25),
             time = repeat(1:25, 8),
@@ -758,17 +758,17 @@ using DataFrames, Statistics
 
     @testset "panic_test: error handling" begin
         # Too short
-        @test_throws ArgumentError panic_test(randn(Random.MersenneTwister(1465), 5, 3); r=1)
+        @test_throws ArgumentError panic_test(randn(Random.Xoshiro(1465), 5, 3); r=1)
         # Invalid method
-        @test_throws ArgumentError panic_test(randn(Random.MersenneTwister(1466), 80, 15); r=1, method=:invalid)
+        @test_throws ArgumentError panic_test(randn(Random.Xoshiro(1466), 80, 15); r=1, method=:invalid)
         # r < 1
-        @test_throws ArgumentError panic_test(randn(Random.MersenneTwister(1467), 80, 15); r=0)
+        @test_throws ArgumentError panic_test(randn(Random.Xoshiro(1467), 80, 15); r=0)
         # r too large
-        @test_throws ArgumentError panic_test(randn(Random.MersenneTwister(1468), 80, 15); r=100)
+        @test_throws ArgumentError panic_test(randn(Random.Xoshiro(1468), 80, 15); r=100)
     end
 
     @testset "panic_test show: reject and fail-to-reject" begin
-        rng = Random.MersenneTwister(5010)
+        rng = Random.Xoshiro(5010)
 
         # Stationary panel → should reject H0
         X_stat = randn(rng, 100, 20)
@@ -782,7 +782,7 @@ using DataFrames, Statistics
         @test occursin("Pooled", s)
 
         # Unit root panel → should fail to reject
-        X_ur = cumsum(randn(Random.MersenneTwister(5011), 100, 20), dims=1)
+        X_ur = cumsum(randn(Random.Xoshiro(5011), 100, 20), dims=1)
         result_norej = panic_test(X_ur; r=1, method=:pooled)
         io2 = IOBuffer()
         show(io2, result_norej)
@@ -807,7 +807,7 @@ using DataFrames, Statistics
     end
 
     @testset "_panel_to_matrix" begin
-        rng = Random.MersenneTwister(5020)
+        rng = Random.Xoshiro(5020)
         # Balanced panel
         df = DataFrame(
             group = repeat(1:5, inner=20),
@@ -840,7 +840,7 @@ using DataFrames, Statistics
     # =========================================================================
 
     @testset "pesaran_cips_test: all deterministic variants" begin
-        rng = Random.MersenneTwister(6001)
+        rng = Random.Xoshiro(6001)
         X = randn(rng, 60, 15)
 
         for det in (:none, :constant, :trend)
@@ -857,7 +857,7 @@ using DataFrames, Statistics
     end
 
     @testset "pesaran_cips_test: auto lags" begin
-        rng = Random.MersenneTwister(6002)
+        rng = Random.Xoshiro(6002)
         X = randn(rng, 60, 15)
         result = pesaran_cips_test(X; lags=:auto, deterministic=:constant)
         @test result isa PesaranCIPSResult{Float64}
@@ -866,13 +866,13 @@ using DataFrames, Statistics
     end
 
     @testset "pesaran_cips_test: Float64 fallback" begin
-        X_int = round.(Int, randn(Random.MersenneTwister(6003), 60, 15) .* 10)
+        X_int = round.(Int, randn(Random.Xoshiro(6003), 60, 15) .* 10)
         result = pesaran_cips_test(X_int; lags=1)
         @test result isa PesaranCIPSResult{Float64}
     end
 
     @testset "pesaran_cips_test: PanelData dispatch" begin
-        rng = Random.MersenneTwister(6004)
+        rng = Random.Xoshiro(6004)
         df = DataFrame(
             group = repeat(1:10, inner=30),
             time = repeat(1:30, 10),
@@ -886,9 +886,9 @@ using DataFrames, Statistics
 
     @testset "pesaran_cips_test: error handling" begin
         # Too short
-        @test_throws ArgumentError pesaran_cips_test(randn(Random.MersenneTwister(1469), 5, 3); lags=1)
+        @test_throws ArgumentError pesaran_cips_test(randn(Random.Xoshiro(1469), 5, 3); lags=1)
         # Invalid deterministic
-        @test_throws ArgumentError pesaran_cips_test(randn(Random.MersenneTwister(1470), 50, 10); deterministic=:invalid)
+        @test_throws ArgumentError pesaran_cips_test(randn(Random.Xoshiro(1470), 50, 10); deterministic=:invalid)
     end
 
     @testset "_nearest_val" begin
@@ -948,7 +948,7 @@ using DataFrames, Statistics
     end
 
     @testset "pesaran_cips_test show" begin
-        rng = Random.MersenneTwister(6010)
+        rng = Random.Xoshiro(6010)
 
         # Stationary panel → should reject
         X_stat = randn(rng, 60, 15)
@@ -976,7 +976,7 @@ using DataFrames, Statistics
         @test occursin("None", s3)
 
         # Unit root panel → fail to reject
-        X_ur = cumsum(randn(Random.MersenneTwister(6011), 60, 15), dims=1)
+        X_ur = cumsum(randn(Random.Xoshiro(6011), 60, 15), dims=1)
         result_ur = pesaran_cips_test(X_ur; lags=1, deterministic=:constant)
         io4 = IOBuffer()
         show(io4, result_ur)
@@ -989,7 +989,7 @@ using DataFrames, Statistics
     # =========================================================================
 
     @testset "panel_unit_root_summary: IOBuffer dispatch" begin
-        rng = Random.MersenneTwister(7001)
+        rng = Random.Xoshiro(7001)
         X = randn(rng, 80, 15)
         io = IOBuffer()
         panel_unit_root_summary(io, X; r=1, lags=1)
@@ -1001,7 +1001,7 @@ using DataFrames, Statistics
     end
 
     @testset "panel_unit_root_summary: stdout dispatch" begin
-        rng = Random.MersenneTwister(7002)
+        rng = Random.Xoshiro(7002)
         X = randn(rng, 80, 15)
         # Just verify it doesn't error — output goes to stdout
         io = IOBuffer()
@@ -1010,7 +1010,7 @@ using DataFrames, Statistics
     end
 
     @testset "panel_unit_root_summary: auto r and lags" begin
-        rng = Random.MersenneTwister(7003)
+        rng = Random.Xoshiro(7003)
         X = randn(rng, 80, 15)
         io = IOBuffer()
         panel_unit_root_summary(io, X; r=:auto, lags=:auto)
@@ -1019,7 +1019,7 @@ using DataFrames, Statistics
     end
 
     @testset "panel_unit_root_summary: PanelData dispatch" begin
-        rng = Random.MersenneTwister(7004)
+        rng = Random.Xoshiro(7004)
         df = DataFrame(
             group = repeat(1:8, inner=25),
             time = repeat(1:25, 8),

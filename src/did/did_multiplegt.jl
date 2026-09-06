@@ -245,7 +245,7 @@ function _estimate_did_multiplegt(pd::PanelData{T}, outcome_col::Int, treat_col:
     # Bootstrap SEs
     # -----------------------------------------------------------------
     # rng is caller-supplied (#243). Default is Random.default_rng(); pass
-    # rng=MersenneTwister(1234) to reproduce the previous fixed-seed bootstrap SEs.
+    # rng=Xoshiro(1234) to reproduce the previous fixed-seed bootstrap SEs.
     unit_ids = collect(keys(timing))
     n_units = length(unit_ids)
     boot_atts = Vector{Vector{T}}()

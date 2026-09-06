@@ -75,7 +75,7 @@ function pvar_bootstrap_irf(model::PVARModel{T}, H::Int;
     boot_seeds = rand(rng, UInt64, n_draws)
 
     Threads.@threads for b in 1:n_draws
-        local_rng = Random.MersenneTwister(boot_seeds[b])
+        local_rng = Random.Xoshiro(boot_seeds[b])
 
         # Resample groups with replacement
         sampled_groups = rand(local_rng, 1:N, N)

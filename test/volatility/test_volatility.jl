@@ -41,7 +41,7 @@ end
 # =============================================================================
 
 @testset "ARCH estimation" begin
-    rng = MersenneTwister(123)
+    rng = Xoshiro(123)
     y_arch = dgp_garch_family(rng; kind=:arch, omega=0.2, alpha=0.4,
                               T=1000).y
     m_arch = estimate_arch(y_arch, 1)  # shared deterministic MLE fit (dedupe)
@@ -82,8 +82,8 @@ end
     end
 
     @testset "ARCH input validation" begin
-        @test_throws ArgumentError estimate_arch(randn(MersenneTwister(11), 10), 1)  # Too few obs
-        @test_throws ArgumentError estimate_arch(randn(MersenneTwister(12), 100), 0)  # q < 1
+        @test_throws ArgumentError estimate_arch(randn(Xoshiro(11), 10), 1)  # Too few obs
+        @test_throws ArgumentError estimate_arch(randn(Xoshiro(12), 100), 0)  # q < 1
     end
 
     @testset "ARCH halflife" begin
@@ -105,7 +105,7 @@ end
 # =============================================================================
 
 @testset "GARCH estimation" begin
-    rng = MersenneTwister(456)
+    rng = Xoshiro(456)
     y_garch = dgp_garch_family(rng; kind=:garch, omega=0.01, alpha=0.05,
                                beta=0.90, T=1000).y
     m_garch = estimate_garch(y_garch, 1, 1)  # shared deterministic MLE fit (dedupe)
@@ -166,7 +166,7 @@ end
 # =============================================================================
 
 @testset "EGARCH estimation" begin
-    rng = MersenneTwister(789)
+    rng = Xoshiro(789)
     # EGARCH with leverage (larger negative shocks → higher vol) on the
     # shared simulator (DGP-10 #799): same recursion as the inline loop.
     n = 1000
@@ -213,7 +213,7 @@ end
 # =============================================================================
 
 @testset "GJR-GARCH estimation" begin
-    rng = MersenneTwister(101)
+    rng = Xoshiro(101)
     y_gjr = dgp_garch_family(rng; kind=:gjr, omega=0.01, alpha=0.03,
                              gamma=0.07, beta=0.85, T=1000).y
     m_gjr = estimate_gjr_garch(y_gjr, 1, 1)  # shared deterministic MLE fit (dedupe)
@@ -253,12 +253,12 @@ end
 # =============================================================================
 
 @testset "Volatility forecasting" begin
-    rng = MersenneTwister(202)
+    rng = Xoshiro(202)
     y = dgp_garch_family(rng; kind=:garch, omega=0.01, alpha=0.05,
                          beta=0.90, T=500).y
 
     @testset "ARCH forecast" begin
-        rng = MersenneTwister(303)
+        rng = Xoshiro(303)
         m = estimate_arch(y, 1)
         fc = forecast(m, 10; n_sim=500)
         @test fc isa VolatilityForecast{Float64}
@@ -272,7 +272,7 @@ end
     end
 
     @testset "GARCH forecast" begin
-        rng = MersenneTwister(303)
+        rng = Xoshiro(303)
         m = estimate_garch(y, 1, 1)
         fc = forecast(m, 10; n_sim=500)
         @test fc isa VolatilityForecast{Float64}
@@ -283,7 +283,7 @@ end
     end
 
     @testset "EGARCH forecast" begin
-        rng = MersenneTwister(303)
+        rng = Xoshiro(303)
         m = estimate_egarch(y, 1, 1)
         fc = forecast(m, 5; n_sim=500)
         @test fc isa VolatilityForecast{Float64}
@@ -293,7 +293,7 @@ end
     end
 
     @testset "GJR-GARCH forecast" begin
-        rng = MersenneTwister(303)
+        rng = Xoshiro(303)
         m = estimate_gjr_garch(y, 1, 1)
         fc = forecast(m, 5; n_sim=500)
         @test fc isa VolatilityForecast{Float64}
@@ -308,7 +308,7 @@ end
     end
 
     @testset "Forecast mean reversion" begin
-        rng = MersenneTwister(404)
+        rng = Xoshiro(404)
         m = estimate_garch(y, 1, 1)
         fc = forecast(m, 100; n_sim=500)
         uv = unconditional_variance(m)
@@ -324,7 +324,7 @@ end
 # =============================================================================
 
 @testset "StatsAPI compliance" begin
-    rng = MersenneTwister(505)
+    rng = Xoshiro(505)
     y = dgp_garch_family(rng; kind=:garch, omega=0.01, alpha=0.05,
                          beta=0.90, T=500).y
 
@@ -369,7 +369,7 @@ end
 
 @testset "Diagnostics" begin
     @testset "ARCH-LM on white noise" begin
-        rng = MersenneTwister(606)
+        rng = Xoshiro(606)
         y_wn = randn(rng, 500)
         result = arch_lm_test(y_wn, 5)
         @test result.pvalue > 0.01  # White noise should not reject
@@ -378,7 +378,7 @@ end
     end
 
     @testset "ARCH-LM on ARCH data" begin
-        rng = MersenneTwister(607)
+        rng = Xoshiro(607)
         y_arch = dgp_garch_family(rng; kind=:arch, omega=0.1, alpha=0.5,
                                   T=1000).y
         result = arch_lm_test(y_arch, 5)
@@ -386,7 +386,7 @@ end
     end
 
     @testset "ARCH-LM on fitted model" begin
-        rng = MersenneTwister(608)
+        rng = Xoshiro(608)
         y = dgp_garch_family(rng; kind=:arch, omega=0.1, alpha=0.3,
                              T=500).y
         m = estimate_arch(y, 1)
@@ -397,12 +397,12 @@ end
     end
 
     @testset "ARCH-LM validation" begin
-        @test_throws ArgumentError arch_lm_test(randn(MersenneTwister(13), 5), 10)  # Too few obs
-        @test_throws ArgumentError arch_lm_test(randn(MersenneTwister(14), 100), 0)  # q < 1
+        @test_throws ArgumentError arch_lm_test(randn(Xoshiro(13), 5), 10)  # Too few obs
+        @test_throws ArgumentError arch_lm_test(randn(Xoshiro(14), 100), 0)  # q < 1
     end
 
     @testset "Ljung-Box squared" begin
-        rng = MersenneTwister(609)
+        rng = Xoshiro(609)
         y_wn = randn(rng, 500)
         result = ljung_box_squared(y_wn, 10)
         @test result.pvalue > 0.01  # No correlation in squared white noise
@@ -411,7 +411,7 @@ end
     end
 
     @testset "Ljung-Box squared on ARCH data" begin
-        rng = MersenneTwister(610)
+        rng = Xoshiro(610)
         y = dgp_garch_family(rng; kind=:arch, omega=0.1, alpha=0.5,
                              T=1000).y
         z = y ./ std(y)
@@ -420,7 +420,7 @@ end
     end
 
     @testset "Ljung-Box on fitted model" begin
-        rng = MersenneTwister(611)
+        rng = Xoshiro(611)
         y = dgp_garch_family(rng; kind=:garch, omega=0.01, alpha=0.05,
                              beta=0.90, T=500).y
         m = estimate_garch(y, 1, 1)
@@ -435,7 +435,7 @@ end
 # =============================================================================
 
 @testset "News impact curve" begin
-    rng = MersenneTwister(707)
+    rng = Xoshiro(707)
     y = dgp_garch_family(rng; kind=:garch, omega=0.01, alpha=0.05,
                          beta=0.90, T=500).y
 
@@ -481,7 +481,7 @@ end
 # =============================================================================
 
 @testset "SV estimation" begin
-    rng = MersenneTwister(808)
+    rng = Xoshiro(808)
     # SV data on the shared simulator (DGP-10 #799)
     n_sv = 100
     mu_true = -1.0
@@ -536,7 +536,7 @@ end
     end
 
     @testset "SV input validation" begin
-        @test_throws ArgumentError estimate_sv(randn(MersenneTwister(15), 10))  # Too few obs
+        @test_throws ArgumentError estimate_sv(randn(Xoshiro(15), 10))  # Too few obs
     end
 
     @testset "SV forecast" begin
@@ -555,7 +555,7 @@ end
 # =============================================================================
 
 @testset "Display methods" begin
-    rng = MersenneTwister(1212)
+    rng = Xoshiro(1212)
     y = dgp_garch_family(rng; kind=:garch, omega=0.01, alpha=0.05,
                          beta=0.90, T=300).y
 
@@ -606,7 +606,7 @@ end
     end
 
     @testset "SVModel display" begin
-        rng = MersenneTwister(1313)
+        rng = Xoshiro(1313)
         y_sv = dgp_sv(rng; T=100).y
         m = estimate_sv(y_sv; n_samples=(FAST ? 20 : 30), burnin=(FAST ? 10 : 15))
         io = IOBuffer()
@@ -624,7 +624,7 @@ end
     Mod = MacroEconometricModels
 
     # (a) Backward-compat: cov_type=:hessian reproduces the OLD inverse-Hessian formula
-    yg = simulate_garch11_rng(MersenneTwister(11), 1500)
+    yg = simulate_garch11_rng(Xoshiro(11), 1500)
     mg = estimate_garch(yg, 1, 1)
     params_opt = vcat(mg.mu, log(mg.omega), log.(mg.alpha), log.(mg.beta))
     Hn = Mod._numerical_hessian(p -> Mod._garch_negloglik(p, mg.y, 1, 1), params_opt)
@@ -647,7 +647,7 @@ end
     @test_throws ArgumentError stderror(mg; cov_type=:bogus)
 
     # (c) Correct-spec (Gaussian, large n): robust ≈ hessian up to sampling noise
-    mg2 = estimate_garch(simulate_garch11_rng(MersenneTwister(77), 4000), 1, 1)
+    mg2 = estimate_garch(simulate_garch11_rng(Xoshiro(77), 4000), 1, 1)
     sr2 = stderror(mg2; cov_type=:robust)
     sh2 = stderror(mg2; cov_type=:hessian)
     @test 0.6 <= sr2[3] / sh2[3] <= 1.6
@@ -655,7 +655,7 @@ end
 
     # (d) Fat-tail divergence (the point of the fix): t(5) innovations inflate the OPG
     #     meat B relative to H, so robust α/β SEs exceed the inverse-Hessian ones.
-    mt = estimate_garch(simulate_garch11_rng(MersenneTwister(2024), 3000;
+    mt = estimate_garch(simulate_garch11_rng(Xoshiro(2024), 3000;
                                              omega=0.02, alpha1=0.08, beta1=0.90, innov=:t5), 1, 1)
     srt = stderror(mt; cov_type=:robust)
     sht = stderror(mt; cov_type=:hessian)
@@ -669,7 +669,7 @@ end
     R = 120; nrep = 1200
     ahat = Float64[]; ser = Float64[]; seh = Float64[]
     for r in 1:R
-        yr = simulate_garch11_rng(MersenneTwister(3000 + r), nrep;
+        yr = simulate_garch11_rng(Xoshiro(3000 + r), nrep;
                                   omega=0.02, alpha1=0.08, beta1=0.90, innov=:t5)
         mr = try; estimate_garch(yr, 1, 1); catch; continue; end
         mr.converged || continue
@@ -688,7 +688,7 @@ end
     @test mean(ser) - mean(seh) > 0.5 * (sigma_mc - mean(seh))
 
     # EGARCH / GJR smoke: robust SE finite, positive, correct length, ≠ hessian
-    ye = simulate_garch11_rng(MersenneTwister(303), 1200)
+    ye = simulate_garch11_rng(Xoshiro(303), 1200)
     me = estimate_egarch(ye, 1, 1)
     se_e = stderror(me; cov_type=:robust)
     @test length(se_e) == 2 + 2 * 1 + 1 && all(isfinite, se_e) && all(se_e .> 0)
@@ -706,7 +706,7 @@ end
 @testset "T090: SV contiguous layout + GARCH covariance cache" begin
 
     @testset "SUB-4: SV h_draws deterministic and correctly shaped" begin
-        rng = MersenneTwister(19004)
+        rng = Xoshiro(19004)
         y_sv = 0.05 .* randn(rng, 300)
         Random.seed!(42)
         m1 = estimate_sv(y_sv; n_samples=20, burnin=10)
@@ -718,7 +718,7 @@ end
     end
 
     @testset "SUB-5: GARCH/EGARCH/GJR covariance cache" begin
-        rng = MersenneTwister(19005)
+        rng = Xoshiro(19005)
         n = 400
         h = zeros(n); yv = zeros(n)
         h[1] = 0.1
@@ -835,7 +835,7 @@ end
     end
 
     @testset "the dist-aware likelihood reduces to the Gaussian one" begin
-        rng = Random.MersenneTwister(9); n = 500
+        rng = Random.Xoshiro(9); n = 500
         h = 0.5 .+ rand(rng, n)
         rsq = (h .* randn(rng, n) .^ 2)
         @test M._vol_negloglik_dist(h, rsq, n, :normal, 0.0) ≈
@@ -846,7 +846,7 @@ end
 
     @testset "recovers a known shape on simulated fat-tailed returns" begin
         function sim_t(n, om, al, be, nu; burn=2000, seed=4)
-            rng = Random.MersenneTwister(seed)
+            rng = Random.Xoshiro(seed)
             N = n + burn; h = zeros(N); r = zeros(N)
             h[1] = om / (1 - al - be); sc = sqrt((nu - 2) / nu)
             for t in 2:N
@@ -882,7 +882,7 @@ end
     end
 
     @testset "EGARCH and GJR accept the same distributions" begin
-        rng = Random.MersenneTwister(21); n = 1200
+        rng = Random.Xoshiro(21); n = 1200
         y = randn(rng, n) .* 0.5
         for f in (estimate_egarch, estimate_gjr_garch)
             mn = f(y, 1, 1)
@@ -896,7 +896,7 @@ end
     end
 
     @testset "dist=:normal is unchanged" begin
-        rng = Random.MersenneTwister(77); n = 1500
+        rng = Random.Xoshiro(77); n = 1500
         y = randn(rng, n)
         m = estimate_garch(y, 1, 1)
         # the Gaussian path keeps the original parameter count and no shape

@@ -21,7 +21,7 @@ isdefined(@__MODULE__, :check_plot) || include(joinpath(@__DIR__, "plot_test_hel
     # =========================================================================
     @testset "NowcastResult (default)" begin
         nM, nQ = 4, 1
-        Y = randn(Random.MersenneTwister(70), 100, nM + nQ); Y[end, end] = NaN
+        Y = randn(Random.Xoshiro(70), 100, nM + nQ); Y[end, end] = NaN
         nr = nowcast(nowcast_dfm(Y, nM, nQ; r=2, p=1))
         p = plot_result(nr)
         check_plot(p); assert_all_json_valid(p)
@@ -30,7 +30,7 @@ isdefined(@__MODULE__, :check_plot) || include(joinpath(@__DIR__, "plot_test_hel
 
     @testset "NowcastResult view=:default with DFM factors" begin
         nM, nQ = 4, 1
-        Y = randn(Random.MersenneTwister(70), 100, nM + nQ); Y[end, end] = NaN
+        Y = randn(Random.Xoshiro(70), 100, nM + nQ); Y[end, end] = NaN
         nr = nowcast(nowcast_dfm(Y, nM, nQ; r=2, p=1))
         p = plot_result(nr; view=:default)
         check_plot(p); assert_all_json_valid(p)
@@ -39,7 +39,7 @@ isdefined(@__MODULE__, :check_plot) || include(joinpath(@__DIR__, "plot_test_hel
 
     @testset "NowcastResult view=:heatmap (z-score ragged edge)" begin
         nM, nQ = 4, 1
-        Y = randn(Random.MersenneTwister(77), 100, nM + nQ)
+        Y = randn(Random.Xoshiro(77), 100, nM + nQ)
         Y[end, end] = NaN; Y[end-1:end, 3] .= NaN
         nr = nowcast(nowcast_dfm(Y, nM, nQ; r=2, p=1))
         p = plot_result(nr; view=:heatmap)
@@ -50,7 +50,7 @@ isdefined(@__MODULE__, :check_plot) || include(joinpath(@__DIR__, "plot_test_hel
 
     @testset "NowcastResult view=:contributions" begin
         nM, nQ = 4, 1
-        Y = randn(Random.MersenneTwister(71), 100, nM + nQ); Y[end, end] = NaN
+        Y = randn(Random.Xoshiro(71), 100, nM + nQ); Y[end, end] = NaN
         nr = nowcast(nowcast_dfm(Y, nM, nQ; r=2, p=1))
         p = plot_result(nr; view=:contributions)
         check_plot(p); assert_all_json_valid(p)
@@ -58,13 +58,13 @@ isdefined(@__MODULE__, :check_plot) || include(joinpath(@__DIR__, "plot_test_hel
     end
 
     @testset "NowcastResult view guards (C5)" begin
-        rng = Random.MersenneTwister(72)
+        rng = Random.Xoshiro(72)
         Y = randn(rng, 60, 4); Y[55:60, 3:4] .= NaN
         nr_bvar = nowcast(nowcast_bvar(Y, 2, 2; lags=2, max_iter=20))
         @test_throws ArgumentError plot_result(nr_bvar; view=:contributions)  # DFM-only view
 
         nM, nQ = 4, 1
-        Y2 = randn(Random.MersenneTwister(73), 100, nM + nQ); Y2[end, end] = NaN
+        Y2 = randn(Random.Xoshiro(73), 100, nM + nQ); Y2[end, end] = NaN
         nr = nowcast(nowcast_dfm(Y2, nM, nQ; r=2, p=1))
         @test_throws ArgumentError plot_result(nr; view=:bad)
     end
@@ -82,7 +82,7 @@ isdefined(@__MODULE__, :check_plot) || include(joinpath(@__DIR__, "plot_test_hel
     end
 
     @testset "NowcastNews view=:groups (group_names live)" begin
-        X_old = randn(Random.MersenneTwister(55), 100, 5); X_old[end, end] = NaN
+        X_old = randn(Random.Xoshiro(55), 100, 5); X_old[end, end] = NaN
         X_new = copy(X_old); X_new[end, end] = 0.5
         nn = nowcast_news(X_new, X_old, nowcast_dfm(X_old, 4, 1; r=2, p=1), 5;
                           groups=[1, 1, 2, 2, 3],
@@ -93,8 +93,8 @@ isdefined(@__MODULE__, :check_plot) || include(joinpath(@__DIR__, "plot_test_hel
     end
 
     @testset "NowcastNews view=:individual" begin
-        X_old = randn(Random.MersenneTwister(56), 100, 5); X_old[98:100, 1:2] .= NaN
-        X_new = copy(X_old); X_new[98:100, 1:2] .= randn(Random.MersenneTwister(57), 3, 2)
+        X_old = randn(Random.Xoshiro(56), 100, 5); X_old[98:100, 1:2] .= NaN
+        X_new = copy(X_old); X_new[98:100, 1:2] .= randn(Random.Xoshiro(57), 3, 2)
         nn = nowcast_news(X_new, X_old, nowcast_dfm(X_old, 4, 1; r=2, p=1), 5)
         p = plot_result(nn; view=:individual)
         check_plot(p); assert_all_json_valid(p)
@@ -102,7 +102,7 @@ isdefined(@__MODULE__, :check_plot) || include(joinpath(@__DIR__, "plot_test_hel
     end
 
     @testset "NowcastNews unknown view → ArgumentError (C5)" begin
-        X_old = randn(Random.MersenneTwister(58), 100, 5); X_old[end, end] = NaN
+        X_old = randn(Random.Xoshiro(58), 100, 5); X_old[end, end] = NaN
         X_new = copy(X_old); X_new[end, end] = 0.5
         nn = nowcast_news(X_new, X_old, nowcast_dfm(X_old, 4, 1; r=2, p=1), 5)
         @test_throws ArgumentError plot_result(nn; view=:nonexistent)

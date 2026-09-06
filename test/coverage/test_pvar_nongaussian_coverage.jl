@@ -21,7 +21,7 @@ const _suppress = MEM._suppress_warnings
 # Helper: generate balanced panel DGP (same pattern as test/pvar/test_pvar.jl)
 # =============================================================================
 
-function _make_panel(; N=30, T_total=25, m=3, p=1, rng=MersenneTwister(9003))
+function _make_panel(; N=30, T_total=25, m=3, p=1, rng=Xoshiro(9003))
     A1 = 0.3 * I(m) + 0.05 * randn(rng, m, m)
     F = eigvals(A1)
     while maximum(abs.(F)) >= 0.95
@@ -47,7 +47,7 @@ function _make_panel(; N=30, T_total=25, m=3, p=1, rng=MersenneTwister(9003))
 end
 
 # Panel with an extra "exog" column for predetermined / exogenous variable tests
-function _make_panel_with_extras(; N=20, T_total=20, rng=MersenneTwister(9004))
+function _make_panel_with_extras(; N=20, T_total=20, rng=Xoshiro(9004))
     m = 2  # endogenous
     A1 = 0.3 * I(m) + 0.05 * randn(rng, m, m)
     F = eigvals(A1)
@@ -79,7 +79,7 @@ function _make_panel_with_extras(; N=20, T_total=20, rng=MersenneTwister(9004))
 end
 
 # Panel with very few time periods per group (short Ti)
-function _make_short_panel(; N=40, T_total=8, m=2, rng=MersenneTwister(9005))
+function _make_short_panel(; N=40, T_total=8, m=2, rng=Xoshiro(9005))
     A1 = 0.25 * I(m)
     data_mat = zeros(N * T_total, m)
     for i in 1:N
@@ -101,7 +101,7 @@ end
 # =============================================================================
 
 @testset "PVAR :mstep iterated GMM" begin
-    dgp = _make_panel(N=25, T_total=20, m=2, p=1, rng=MersenneTwister(9010))
+    dgp = _make_panel(N=25, T_total=20, m=2, p=1, rng=Xoshiro(9010))
     pd = dgp.pd
 
     @testset "mstep converges" begin
@@ -140,7 +140,7 @@ end
 # =============================================================================
 
 @testset "PVAR System GMM" begin
-    dgp = _make_panel(N=25, T_total=20, m=2, p=1, rng=MersenneTwister(9020))
+    dgp = _make_panel(N=25, T_total=20, m=2, p=1, rng=Xoshiro(9020))
     pd = dgp.pd
 
     @testset "System GMM twostep" begin
@@ -192,7 +192,7 @@ end
 # =============================================================================
 
 @testset "PVAR System GMM Display" begin
-    dgp = _make_panel(N=20, T_total=20, m=2, p=1, rng=MersenneTwister(9030))
+    dgp = _make_panel(N=20, T_total=20, m=2, p=1, rng=Xoshiro(9030))
 
     @testset "show System GMM model includes 'System GMM'" begin
         model = estimate_pvar(dgp.pd, 1; system_instruments=true, steps=:twostep)
@@ -222,7 +222,7 @@ end
 # =============================================================================
 
 @testset "PVAR Windmeijer Correction" begin
-    dgp = _make_panel(N=30, T_total=20, m=2, p=1, rng=MersenneTwister(9040))
+    dgp = _make_panel(N=30, T_total=20, m=2, p=1, rng=Xoshiro(9040))
     pd = dgp.pd
 
     @testset "twostep SEs differ from onestep" begin
@@ -246,7 +246,7 @@ end
 # =============================================================================
 
 @testset "PVAR Short Ti" begin
-    pd_short = _make_short_panel(N=40, T_total=8, m=2, rng=MersenneTwister(9050))
+    pd_short = _make_short_panel(N=40, T_total=8, m=2, rng=Xoshiro(9050))
 
     @testset "FD-GMM with short T" begin
         model = estimate_pvar(pd_short, 1; steps=:onestep)
@@ -280,7 +280,7 @@ end
 # =============================================================================
 
 @testset "PVAR Predetermined Variables" begin
-    pd = _make_panel_with_extras(N=20, T_total=20, rng=MersenneTwister(9060))
+    pd = _make_panel_with_extras(N=20, T_total=20, rng=Xoshiro(9060))
 
     @testset "FD-GMM with predetermined vars" begin
         model = estimate_pvar(pd, 1;
@@ -360,7 +360,7 @@ end
 # =============================================================================
 
 @testset "Procrustes distance n > 5" begin
-    rng = MersenneTwister(9070)
+    rng = Xoshiro(9070)
 
     @testset "greedy matching for 6x6" begin
         B1 = randn(rng, 6, 6)
@@ -406,7 +406,7 @@ end
 # =============================================================================
 
 @testset "Identification strength jade/sobi" begin
-    rng = Random.MersenneTwister(9080)
+    rng = Random.Xoshiro(9080)
     Y = randn(rng, 200, 3)
     model = estimate_var(Y, 2)
 
@@ -438,7 +438,7 @@ end
 # =============================================================================
 
 @testset "Shock gaussianity with NonGaussianMLResult" begin
-    rng = Random.MersenneTwister(9090)
+    rng = Random.Xoshiro(9090)
     Y = randn(rng, 250, 3)
     model = estimate_var(Y, 2)
 
@@ -477,7 +477,7 @@ end
 # =============================================================================
 
 @testset "Shock independence with NonGaussianMLResult" begin
-    rng = Random.MersenneTwister(9100)
+    rng = Random.Xoshiro(9100)
     Y = randn(rng, 200, 3)
     model = estimate_var(Y, 2)
 
@@ -508,7 +508,7 @@ end
 # =============================================================================
 
 @testset "Overidentification test" begin
-    rng = Random.MersenneTwister(9110)
+    rng = Random.Xoshiro(9110)
     Y = randn(rng, 250, 3)
     model = estimate_var(Y, 2)
 
@@ -547,7 +547,7 @@ end
 # =============================================================================
 
 @testset "IdentifiabilityTestResult show" begin
-    rng = Random.MersenneTwister(9120)
+    rng = Random.Xoshiro(9120)
     Y = randn(rng, 200, 3)
     model = estimate_var(Y, 2)
 
@@ -566,7 +566,7 @@ end
 # =============================================================================
 
 @testset "PVAR PCA Instruments" begin
-    dgp = _make_panel(N=25, T_total=20, m=2, p=1, rng=MersenneTwister(9130))
+    dgp = _make_panel(N=25, T_total=20, m=2, p=1, rng=Xoshiro(9130))
     pd = dgp.pd
 
     @testset "PCA reduction with auto components" begin
@@ -586,7 +586,7 @@ end
 # =============================================================================
 
 @testset "System GMM structural analysis" begin
-    dgp = _make_panel(N=25, T_total=20, m=2, p=1, rng=MersenneTwister(9140))
+    dgp = _make_panel(N=25, T_total=20, m=2, p=1, rng=Xoshiro(9140))
     pd = dgp.pd
 
     model = estimate_pvar(pd, 1; system_instruments=true, steps=:twostep)

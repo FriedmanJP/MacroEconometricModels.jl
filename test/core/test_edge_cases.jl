@@ -19,7 +19,7 @@ using MacroEconometricModels
 using LinearAlgebra
 using Random
 
-rng = MersenneTwister(12345)  # DGP-02: explicit rng
+rng = Xoshiro(12345)  # DGP-02: explicit rng
 
 @testset "Edge Cases" begin
 

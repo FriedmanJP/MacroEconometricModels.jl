@@ -7,7 +7,7 @@
 using Test, MacroEconometricModels, Random, StatsAPI
 
 @testset "Two-Break ADF Test" begin
-    rng = Random.MersenneTwister(88990)
+    rng = Random.Xoshiro(88990)
 
     y_2break = vcat(randn(rng, 80), randn(rng, 60) .+ 3.0, randn(rng, 60) .+ 1.0)
     y_short = vcat(randn(rng, 30), randn(rng, 25) .+ 3.0, randn(rng, 25) .+ 1.0)
@@ -102,8 +102,8 @@ using Test, MacroEconometricModels, Random, StatsAPI
         @test M._adf_2break_cv_row(:both, 200)[3] < M._adf_2break_cv_row(:level, 200)[3]
 
         # A driftless random walk (the null) must not reject; white noise must.
-        y_null = cumsum(randn(MersenneTwister(577_001), 200))
-        y_alt = randn(MersenneTwister(577_002), 200)
+        y_null = cumsum(randn(Xoshiro(577_001), 200))
+        y_alt = randn(Xoshiro(577_002), 200)
         for model in (:level, :both)
             r0 = adf_2break_test(y_null; model=model, lags=0)
             @test r0.statistic > r0.critical_values[5]

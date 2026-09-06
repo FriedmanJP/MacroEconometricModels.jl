@@ -19,7 +19,7 @@ const rfm_nobs = MacroEconometricModels.nobs
 @testset "Block-Restricted Factor Model Tests" begin
 
     @testset "Unrestricted model has block_names = nothing" begin
-        rng = Random.MersenneTwister(42)
+        rng = Random.Xoshiro(42)
         X = randn(rng, 100, 20)
         fm = estimate_factors(X, 3)
         @test fm.block_names === nothing
@@ -29,7 +29,7 @@ const rfm_nobs = MacroEconometricModels.nobs
     @testset "Block-restricted estimation — correct dimensions" begin
         # DGP-06: shared simulator with explicit block-structured loadings
         # (was: bespoke iid-factor loop). Dynamics do not disturb the blocks.
-        rng = Random.MersenneTwister(123)
+        rng = Random.Xoshiro(123)
         T_obs, N = 200, 15
         r = 3
 
@@ -60,7 +60,7 @@ const rfm_nobs = MacroEconometricModels.nobs
 
     @testset "Zero restrictions enforced" begin
         # DGP-06: shared simulator with explicit block-structured loadings.
-        rng = Random.MersenneTwister(234)
+        rng = Random.Xoshiro(234)
         T_obs, N = 200, 12
         r = 2
 
@@ -91,7 +91,7 @@ const rfm_nobs = MacroEconometricModels.nobs
 
     @testset "R-squared reasonable for known DGP" begin
         # DGP-06: shared simulator with explicit strong block loadings.
-        rng = Random.MersenneTwister(345)
+        rng = Random.Xoshiro(345)
         T_obs, N = 300, 10
         r = 2
 
@@ -114,7 +114,7 @@ const rfm_nobs = MacroEconometricModels.nobs
     end
 
     @testset "Validation — wrong block count" begin
-        rng = Random.MersenneTwister(456)
+        rng = Random.Xoshiro(456)
         X = randn(rng, 100, 10)
 
         # 2 blocks but r=3
@@ -127,7 +127,7 @@ const rfm_nobs = MacroEconometricModels.nobs
     end
 
     @testset "Validation — overlapping indices" begin
-        rng = Random.MersenneTwister(567)
+        rng = Random.Xoshiro(567)
         X = randn(rng, 100, 10)
 
         # Variable 5 in both blocks
@@ -136,7 +136,7 @@ const rfm_nobs = MacroEconometricModels.nobs
     end
 
     @testset "Validation — out-of-range indices" begin
-        rng = Random.MersenneTwister(678)
+        rng = Random.Xoshiro(678)
         X = randn(rng, 100, 10)
 
         # Index 0 is out of range
@@ -149,7 +149,7 @@ const rfm_nobs = MacroEconometricModels.nobs
     end
 
     @testset "Validation — too few variables per block" begin
-        rng = Random.MersenneTwister(789)
+        rng = Random.Xoshiro(789)
         X = randn(rng, 100, 10)
 
         # Block :a has only 1 variable
@@ -159,7 +159,7 @@ const rfm_nobs = MacroEconometricModels.nobs
 
     @testset "Display with block names" begin
         # DGP-06: shared simulator with explicit block-structured loadings.
-        rng = Random.MersenneTwister(890)
+        rng = Random.Xoshiro(890)
         T_obs, N = 100, 10
         r = 2
 
@@ -184,7 +184,7 @@ const rfm_nobs = MacroEconometricModels.nobs
 
     @testset "StatsAPI interface works with restricted model" begin
         # DGP-06: shared simulator with explicit block-structured loadings.
-        rng = Random.MersenneTwister(901)
+        rng = Random.Xoshiro(901)
         T_obs, N = 100, 10
         r = 2
 
@@ -214,7 +214,7 @@ const rfm_nobs = MacroEconometricModels.nobs
 
     @testset "Without standardization" begin
         # DGP-06: shared simulator with explicit block-structured loadings.
-        rng = Random.MersenneTwister(12)
+        rng = Random.Xoshiro(12)
         T_obs, N = 100, 8
         r = 2
 
@@ -233,7 +233,7 @@ const rfm_nobs = MacroEconometricModels.nobs
     end
 
     @testset "Float32 type stability" begin
-        rng = Random.MersenneTwister(23)
+        rng = Random.Xoshiro(23)
         T_obs, N = 100, 8
         r = 2
 
@@ -247,7 +247,7 @@ const rfm_nobs = MacroEconometricModels.nobs
     end
 
     @testset "Partial coverage — not all variables assigned" begin
-        rng = Random.MersenneTwister(34)
+        rng = Random.Xoshiro(34)
         T_obs, N = 100, 10
         r = 2
 

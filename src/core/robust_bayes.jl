@@ -420,7 +420,7 @@ function _draws_identified_set_bounds(model::VARModel{T}, restrictions::SVARRest
     accepted = fill(false, n_draws)
 
     draw_one = function (d::Int)
-        local_rng = Random.MersenneTwister(seeds[d])
+        local_rng = Random.Xoshiro(seeds[d])
         try
             Q = if has_zeros
                 _draw_Q_with_zero_restrictions(restrictions, Phi, L; rng=local_rng,
@@ -761,7 +761,7 @@ function identify_robust_bayes(post::BVARPosterior, restrictions::SVARRestrictio
     threaded = solver === :optimize && n == 2 && _gk_linear_in_Q(restrictions)
 
     process_draw = function (s::Int)
-        local_rng = Random.MersenneTwister(seeds[s])
+        local_rng = Random.Xoshiro(seeds[s])
         m = parameters_to_model(b_vecs[s, :], sigmas[s, :], p, n, use_data;
                                 varnames=post.varnames)
         try

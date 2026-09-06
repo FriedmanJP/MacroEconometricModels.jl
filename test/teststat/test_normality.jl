@@ -12,7 +12,7 @@ using Distributions
 using StatsAPI: pvalue
 
 @testset "Multivariate Normality Tests" begin
-    rng = Random.MersenneTwister(12345)
+    rng = Random.Xoshiro(12345)
 
     # Generate Gaussian data (should not reject)
     n_obs, k = 500, 3
@@ -150,7 +150,7 @@ using StatsAPI: pvalue
     end
 
     @testset "Raw matrix dispatch" begin
-        U_raw = randn(Random.MersenneTwister(5678), 200, 3)
+        U_raw = randn(Random.Xoshiro(5678), 200, 3)
         # mardia_test with raw matrix
         r_mardia = mardia_test(U_raw)
         @test r_mardia isa MacroEconometricModels.NormalityTestResult
@@ -163,7 +163,7 @@ using StatsAPI: pvalue
     end
 
     @testset "Large k=5 case" begin
-        U_large = randn(Random.MersenneTwister(5679), 200, 5)
+        U_large = randn(Random.Xoshiro(5679), 200, 5)
         r_jb = jarque_bera_test(U_large)
         @test r_jb.n_vars == 5
         r_hz = henze_zirkler_test(U_large)
@@ -172,7 +172,7 @@ using StatsAPI: pvalue
     end
 
     @testset "Univariate k=1 edge" begin
-        U_uni = randn(Random.MersenneTwister(5680), 200, 1)
+        U_uni = randn(Random.Xoshiro(5680), 200, 1)
         r_jb = jarque_bera_test(U_uni)
         @test r_jb.n_vars == 1
         @test r_jb.statistic >= 0

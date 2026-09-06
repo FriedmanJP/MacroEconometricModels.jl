@@ -54,7 +54,7 @@ function _assert_statsapi(m, m2)
 end
 
 function _rser06_ols(n=60; seed=779)
-    rng = MersenneTwister(seed)
+    rng = Xoshiro(seed)
     X = hcat(ones(n), randn(rng, n), randn(rng, n))
     y = X * [1.0, 0.6, -0.4] .+ 0.4 .* randn(rng, n)
     (y, X)
@@ -94,7 +94,7 @@ end
     end
 
     @testset "HeckmanModel" begin
-        rng = MersenneTwister(7791)
+        rng = Xoshiro(7791)
         n = 160
         z = randn(rng, n)
         x = 0.3 .* z .+ randn(rng, n)
@@ -201,7 +201,7 @@ end
     end
 
     @testset "RDDResult Tuple CI" begin
-        rng = MersenneTwister(7792)
+        rng = Xoshiro(7792)
         nrd = 400
         xr = 2 .* rand(rng, nrd) .- 1
         yr = @. 1.0 + 0.5 * xr + 0.8 * (xr >= 0) + 0.25 * randn(rng)
@@ -224,7 +224,7 @@ end
     end
 
     @testset "SelectionResult nested RegModel" begin
-        rng = MersenneTwister(7793)
+        rng = Xoshiro(7793)
         n = 80
         Q = Matrix(qr(randn(rng, n, 6)).Q)[:, 1:6] .* sqrt(n)
         Xs = hcat(ones(n), Q)
@@ -246,7 +246,7 @@ end
     end
 
     @testset "MarginalEffects / OddsRatio / classification_table" begin
-        rng = MersenneTwister(7794)
+        rng = Xoshiro(7794)
         n = 120
         Xl = hcat(ones(n), randn(rng, n), randn(rng, n))
         yb = Float64.((Xl * [0.0, 0.6, -0.5] .+ randn(rng, n)) .> 0)
@@ -272,7 +272,7 @@ end
     end
 
     @testset "MultinomialMarginalEffects" begin
-        rng = MersenneTwister(7795)
+        rng = Xoshiro(7795)
         n = 150
         Xm = hcat(ones(n), randn(rng, n), randn(rng, n))
         V = Xm * [0.0 0.6; 0.8 -0.5; -0.4 0.3]
@@ -329,7 +329,7 @@ end
     end
 
     @testset "AndersonRubinTest / AndersonRubinCI Vector{Tuple}" begin
-        rng = MersenneTwister(7796)
+        rng = Xoshiro(7796)
         n = 200
         z = randn(rng, n)
         vv = randn(rng, n)
@@ -354,7 +354,7 @@ end
 
     @testset "WildClusterBootstrap disk" begin
         G, n_per = 6, 8
-        rng = MersenneTwister(7797)
+        rng = Xoshiro(7797)
         n = G * n_per
         cl = repeat(1:G, inner=n_per)
         xw = randn(rng, n)
@@ -368,7 +368,7 @@ end
         Xw = hcat(ones(n), xw)
         mw = estimate_reg(yw, Xw; varnames=["const", "x"])
         b = wild_cluster_bootstrap(mw, "x", 0.0; clusters=cl, n_boot=64,
-                                   ci=false, rng=MersenneTwister(1))
+                                   ci=false, rng=Xoshiro(1))
         @test _from_serializable_is_generic(WildClusterBootstrap)
         b2 = _assert_roundtrip(b)
         _assert_consumers(b, b2)
@@ -384,7 +384,7 @@ end
     end
 
     @testset "PanelTestResult Int and Tuple df" begin
-        rng = MersenneTwister(7798)
+        rng = Xoshiro(7798)
         N_g, T_p = 20, 12
         n = N_g * T_p
         ids = repeat(1:N_g, inner=T_p)

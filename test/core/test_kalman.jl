@@ -15,7 +15,7 @@ if !@isdefined(FAST)
 end
 
 @testset "Core Kalman operations" begin
-    rng = MersenneTwister(42)  # DGP-02: explicit rng
+    rng = Xoshiro(42)  # DGP-02: explicit rng
     n, m = 4, 2
 
     F = 0.9 * I(n) |> Matrix{Float64}
@@ -96,11 +96,16 @@ end
         # the observation carries real noise and the prior mean is deliberately
         # wrong with a diffuse covariance — only a genuine update shrinks the
         # state error toward the true predicted state F·x_true.
-        x_true = randn(rng, n)
+        # Fully deterministic (no draws): a single random draw decides this
+        # comparison by luck, so the state and noise are fixed instead. NOTE:
+        # this testset no longer consumes the file-level rng; the only later
+        # user of that stream is the DSGE byte-equivalence guard below, which
+        # compares two filters on identical data and is stream-agnostic.
+        x_true = [0.5, -0.3, 0.8, 0.1]
         x_wrong = x_true + [1.0, -1.0, 0.5, 0.25]  # fixed bad-prior offset
         P_big = 10.0 * Matrix{Float64}(I(n))       # diffuse prior covariance
         x_pred, P_pred = MacroEconometricModels._kalman_predict(x_wrong, P_big, F, Q)
-        v_noise = cholesky(Symmetric(R)).L * randn(rng, m)
+        v_noise = [0.05, -0.04]  # small but nonzero observation noise
         y_obs = H * (F * x_true) + v_noise
         x_upd, P_upd, _, _, _ = MacroEconometricModels._kalman_update(x_pred, P_pred, y_obs, H, R)
         @test norm(x_upd - F * x_true) < norm(x_pred - F * x_true)  # update helps
@@ -118,7 +123,7 @@ end
     end
 
     @testset "Joseph-form measurement update (T058)" begin
-        rng = MersenneTwister(4242)  # DGP-02: explicit rng
+        rng = Xoshiro(4242)  # DGP-02: explicit rng
         x_pred, P_pred = MacroEconometricModels._kalman_predict(x0, P0, F, Q)
         y = H * x_pred + 0.1 * randn(rng, m)
         x_upd, P_upd, v, S, K = MacroEconometricModels._kalman_update(x_pred, P_pred, y, H, R)
@@ -138,7 +143,7 @@ end
 
         # (b) On an ill-conditioned filter covariance (eigenvalue spread 1e11), the Joseph
         #     form stays symmetric + PSD across many steps.
-        rng = MersenneTwister(77)  # DGP-02: explicit rng
+        rng = Xoshiro(77)  # DGP-02: explicit rng
         U = qr(randn(rng, n, n)).Q
         P = Matrix(U * Diagonal([1.0, 1e-4, 1e-8, 1e-11]) * U')
         x = zeros(n)
@@ -158,7 +163,7 @@ end
 
     @testset "Consolidated kernel (T147/#246) matches the core primitive" begin
         MEM = MacroEconometricModels
-        rng = Random.MersenneTwister(246)
+        rng = Random.Xoshiro(246)
         # small stable linear-Gaussian system WITH both intercepts (b state, d obs)
         Tt = [0.5 0.1; -0.2 0.4]
         RQR = [0.30 0.05; 0.05 0.20]
@@ -248,13 +253,27 @@ end
         # DGP-02 #791: the smoother recovers the SIMULATED states (the old test
         # built the true path and discarded it). R² floor 0.7 (realized 0.83 at
         # seed 246 — short T=40 sample; the margin covers cross-platform LAPACK
-        # variation while a prior-mean "smoother" would score ≈ 0). Smoother MSE
-        # strictly below filter MSE, as RTS theory requires.
+        # variation while a prior-mean "smoother" would score ≈ 0).
         resid_s = as - Xtrue
         resid_f = store2.a_filt - Xtrue
         R2_s = 1 - sum(abs2, resid_s) / sum(abs2, Xtrue .- mean(Xtrue))
         @test R2_s > 0.7
-        @test sum(abs2, resid_s) / length(resid_s) < sum(abs2, resid_f) / length(resid_f)
+        # Smoother MSE below filter MSE holds in EXPECTATION (RTS theory), not
+        # on every single short-T draw — so the comparison is averaged over 10
+        # seeds, where the systematic gap dominates draw noise.
+        mses = map(1:10) do s
+            sms = dgp_state_space(Random.Xoshiro(246 + s); F=Tt, H=Z, Q=RQR,
+                                  R=Hobs, b=b, d=d, x0=a0, T=T_obs)
+            ys = Matrix(sms.y')
+            Xs = Matrix(sms.x')
+            st = MEM.KalmanFilterStore{Float64}(n_state, T_obs)
+            MEM._kalman_filter!(st, ys, Z, Tt, RQR, Hobs; d=d, b=b, a0=a0,
+                               P0=P0, scalar=false)
+            as, _ = MEM._rts_smoother(st, Tt)
+            (sum(abs2, as - Xs) / length(Xs),
+             sum(abs2, st.a_filt - Xs) / length(Xs))
+        end
+        @test mean(first.(mses)) < mean(last.(mses))
 
         # nlag: lag-1 smoothed cross-cov Plag[1][:,:,t] = Cov(x_t,x_{t-1}|Y_T) = P_{t|T} J_{t-1}'
         _, Ps_n, Plag = MEM._rts_smoother(store2, Tt; nlag=1)
@@ -300,7 +319,7 @@ end
         # Σ_t log p(y_t | y_{1:t-1}); recompute it by hand from the stored
         # one-step errors v_t and covariances F_t, and check their definitions.
         MEM = MacroEconometricModels
-        rng = Random.MersenneTwister(1246)
+        rng = Random.Xoshiro(1246)
         Tt = [0.5 0.1; -0.2 0.4]
         RQR = [0.30 0.05; 0.05 0.20]
         Z = [1.0 0.0; 0.3 1.0]
@@ -353,7 +372,7 @@ end
         # covariance; a mean-only "smoother" fails the variance checks.
         # Calibrated (seed 1247): max|drawmean − RTS|/scale ≈ 0.043 at S=200.
         MEM = MacroEconometricModels
-        rng = Random.MersenneTwister(1247)
+        rng = Random.Xoshiro(1247)
         Tt = [0.5 0.1; -0.2 0.4]
         RQR = [0.30 0.05; 0.05 0.20]
         Z = [1.0 0.0; 0.3 1.0]

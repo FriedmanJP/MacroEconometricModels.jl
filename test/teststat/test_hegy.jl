@@ -36,7 +36,7 @@ using MacroEconometricModels: _ers_pt_statistic, _ers_gls_detrend, _ers_lrv
 # any frequency. After seasonal-dummy detrending it is white noise ⇒ every HEGY
 # null should reject.
 function _det_seasonal(n, s; seed=101)
-    rng = Random.MersenneTwister(seed)
+    rng = Random.Xoshiro(seed)
     pat = s == 4 ? [6.0, -3.0, 4.0, -7.0] :
                    [5.0, -4.0, 3.0, -6.0, 2.0, -5.0, 4.0, -3.0, 1.0, -2.0, 6.0, -7.0]
     y = zeros(n)
@@ -54,7 +54,7 @@ end
 function _seasonal_rw(n, s; seed=202)
     f = joinpath(@__DIR__, "data", "hegy_srw_$(n)_$(s)_$(seed).csv")
     isfile(f) && return vec(readdlm(f, ',', Float64))
-    rng = Random.MersenneTwister(seed)
+    rng = Random.Xoshiro(seed)
     y = zeros(n)
     e = randn(rng, n)
     for t in 1:n
@@ -70,7 +70,7 @@ end
     # =======================================================================
     @testset "ERS ≡ DF-GLS pt_statistic (shared helper)" begin
         for seed in (1, 7, 42, 99)
-            rng = Random.MersenneTwister(seed)
+            rng = Random.Xoshiro(seed)
             y = cumsum(randn(rng, 160)) .+ 0.2 .* (1:160)   # trending near-I(1)
 
             e_c = ers_test(y; trend=false)
@@ -88,7 +88,7 @@ end
     end
 
     @testset "ERS StatsAPI + display + refs" begin
-        rng = Random.MersenneTwister(5)
+        rng = Random.Xoshiro(5)
         y = cumsum(randn(rng, 120))
         r = ers_test(y)
         @test StatsAPI.nobs(r) == 120
@@ -103,7 +103,7 @@ end
         io2 = IOBuffer(); refs(io2, r); @test occursin("Elliott", String(take!(io2)))
         # integer input path
         @test ers_test(round.(Int, y .* 10)) isa ERSResult
-        @test_throws ArgumentError ers_test(randn(Random.MersenneTwister(94), 10))
+        @test_throws ArgumentError ers_test(randn(Random.Xoshiro(94), 10))
     end
 
     # (2b) ERS point-optimal direction/size. With S(1) computed as the a=1 (unit-root)
@@ -113,14 +113,14 @@ end
     # the time; this testset guards against that regression.)
     @testset "ERS point-optimal size & power" begin
         # Stationary AR(1) ρ=0.4, T=400 ⇒ small P_T ⇒ reject the unit-root null at 5%.
-        rng = Random.MersenneTwister(303)
+        rng = Random.Xoshiro(303)
         y_st = zeros(400)
         for t in 2:400; y_st[t] = 0.4 * y_st[t-1] + randn(rng); end
         r_st = ers_test(y_st)
         @test r_st.P_T < r_st.critical_values[5]
         # Random walk (unit-root null) ⇒ large P_T ⇒ fail to reject in the vast majority.
         rej = 0
-        rng = Random.MersenneTwister(404)
+        rng = Random.Xoshiro(404)
         for _ in 1:100
             yrw = cumsum(randn(rng, 200))
             r = ers_test(yrw)
@@ -133,7 +133,7 @@ end
     # (3) Independent hand-recomputation of the ERS P_T formula
     # =======================================================================
     @testset "ERS P_T formula hand-recomputation" begin
-        rng = Random.MersenneTwister(77)
+        rng = Random.Xoshiro(77)
         y = cumsum(randn(rng, 90))
         reg = :constant
         n = length(y)
@@ -248,6 +248,6 @@ end
         y = _seasonal_rw(120, 4; seed=9)
         @test_throws ArgumentError hegy_test(y; frequency=5)     # unsupported period
         @test_throws ArgumentError hegy_test(y; frequency=4, deterministic=:bogus)
-        @test_throws ArgumentError hegy_test(randn(Random.MersenneTwister(95), 10); frequency=4)  # too few obs
+        @test_throws ArgumentError hegy_test(randn(Random.Xoshiro(95), 10); frequency=4)  # too few obs
     end
 end

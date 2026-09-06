@@ -84,7 +84,7 @@ const MEM_IH = MacroEconometricModels
     end
 
     @testset "ARIMA _white_noise_fit" begin
-        rng = MersenneTwister(9001)
+        rng = Xoshiro(9001)
         y = randn(rng, 100) .+ 2.0
         c, sigma2, loglik, residuals, fitted = MEM_IH._white_noise_fit(y)
         @test c ≈ mean(y)
@@ -195,7 +195,7 @@ const MEM_IH = MacroEconometricModels
     # =========================================================================
 
     @testset "construct_var_matrices" begin
-        rng = MersenneTwister(9010)
+        rng = Xoshiro(9010)
         Y = randn(rng, 50, 3)
         Y_eff, X = MEM_IH.construct_var_matrices(Y, 2)
         @test size(Y_eff) == (48, 3)
@@ -212,7 +212,7 @@ const MEM_IH = MacroEconometricModels
     # =========================================================================
 
     @testset "Kalman filter ARMA" begin
-        rng = MersenneTwister(9020)
+        rng = Xoshiro(9020)
         y = randn(rng, 100)
         c = 0.0
         phi = [0.5]
@@ -261,7 +261,7 @@ const MEM_IH = MacroEconometricModels
     # =========================================================================
 
     @testset "optimal_bandwidth_nw" begin
-        rng = MersenneTwister(9030)
+        rng = Xoshiro(9030)
         x = randn(rng, 100)
         bw = MEM_IH.optimal_bandwidth_nw(x)
         @test bw >= 0

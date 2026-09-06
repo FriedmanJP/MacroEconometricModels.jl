@@ -62,7 +62,7 @@ function run_bvar_checks()
 
     # Sign-set 16/84 impact bounds for shock 1 (Haar RNG differs; MC tolerance).
     chk = irf -> irf[1, 1, 1] > 0 && irf[1, 2, 1] > 0
-    s = identify_sign(m, 8, chk; max_draws=2000, store_all=true, rng=MersenneTwister(75503))
+    s = identify_sign(m, 8, chk; max_draws=2000, store_all=true, rng=Xoshiro(75503))
     imps = reduce(hcat, (s.irf_draws[i, 1, :, 1] for i in 1:s.n_accepted))
     lo = [quantile(@view(imps[j, :]), 0.16) for j in 1:size(imps, 1)]
     hi = [quantile(@view(imps[j, :]), 0.84) for j in 1:size(imps, 1)]

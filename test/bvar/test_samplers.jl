@@ -14,7 +14,7 @@ using Random
     _tprint("Testing BVAR samplers...")
 
     # Reference DGP (DGP-03 #792): non-diagonal A, non-identity B0, burn-in.
-    rng = MersenneTwister(123)
+    rng = Xoshiro(123)
     T = 400
     n = 2
     p = 1
@@ -97,8 +97,8 @@ using Random
     @testset "Direct-Gibbs equivalence and recovery" begin
         _tprint("Testing direct-vs-Gibbs posterior equivalence")
         nd = 2000
-        post_d = estimate_bvar(Y, p; n_draws=nd, sampler=:direct, rng=MersenneTwister(31))
-        post_g = estimate_bvar(Y, p; n_draws=nd, sampler=:gibbs, burnin=500, rng=MersenneTwister(32))
+        post_d = estimate_bvar(Y, p; n_draws=nd, sampler=:direct, rng=Xoshiro(31))
+        post_g = estimate_bvar(Y, p; n_draws=nd, sampler=:gibbs, burnin=500, rng=Xoshiro(32))
 
         Bd, Bg = post_d.B_draws, post_g.B_draws
         @test size(Bd) == size(Bg) == (nd, 1 + n * p, n)

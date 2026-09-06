@@ -7,7 +7,7 @@
 using Test, MacroEconometricModels, Random, LinearAlgebra
 
 @testset "Gregory-Hansen Cointegration Test" begin
-    rng = Random.MersenneTwister(99001)
+    rng = Random.Xoshiro(99001)
 
     T_gh = 200
     x = cumsum(randn(rng, T_gh))

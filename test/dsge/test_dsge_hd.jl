@@ -38,7 +38,7 @@ end
     Z, d, H = MacroEconometricModels._build_observation_equation(spec, observables, nothing)
     ss = MacroEconometricModels._build_state_space(sol, Z, d, H)
 
-    rng = Random.MersenneTwister(42)
+    rng = Random.Xoshiro(42)
     sim_data = simulate(sol, 50; rng=rng)
     data_matrix = Matrix{Float64}(sim_data' .- sol.spec.steady_state)
 
@@ -57,7 +57,7 @@ end
     sol = solve(spec)
 
     T_obs = 100
-    rng = Random.MersenneTwister(123)
+    rng = Random.Xoshiro(123)
     true_shocks = randn(rng, T_obs)
     shock_matrix = reshape(true_shocks, T_obs, 1)
     sim_data = simulate(sol, T_obs; shock_draws=shock_matrix)
@@ -84,7 +84,7 @@ end
     sol = solve(spec)
 
     T_obs = 100
-    rng = Random.MersenneTwister(99)
+    rng = Random.Xoshiro(99)
     true_shocks = randn(rng, T_obs, 3)
     sim_data = simulate(sol, T_obs; shock_draws=true_shocks)
 
@@ -111,7 +111,7 @@ end
     sol = solve(spec)
 
     T_obs = 80
-    rng = Random.MersenneTwister(55)
+    rng = Random.Xoshiro(55)
     sim_data = simulate(sol, T_obs; rng=rng)
     observables = [:y, :pi_var, :r]
 
@@ -135,7 +135,7 @@ end
     sol = solve(spec)
 
     T_obs = 60
-    rng = Random.MersenneTwister(77)
+    rng = Random.Xoshiro(77)
     sim_data = simulate(sol, T_obs; rng=rng)
     hd = historical_decomposition(sol, sim_data, [:y])
     @test size(hd.contributions, 3) == 1
@@ -153,7 +153,7 @@ end
     sol = solve(spec)
 
     T_obs = 40
-    rng = Random.MersenneTwister(33)
+    rng = Random.Xoshiro(33)
     sim_data = simulate(sol, T_obs; rng=rng)
     hd = historical_decomposition(sol, sim_data, [:y, :pi_var]; states=:all)
     @test size(hd.contributions, 2) == 2
@@ -164,7 +164,7 @@ end
 # =============================================================================
 
 @testset "Particle smoother helper — _categorical_draw" begin
-    rng = Random.MersenneTwister(42)
+    rng = Random.Xoshiro(42)
     w = [0.1, 0.3, 0.6]
     counts = zeros(Int, 3)
     for _ in 1:10000
@@ -215,7 +215,7 @@ end
     spec = compute_steady_state(spec)
 
     T_obs = 30
-    rng = Random.MersenneTwister(88)
+    rng = Random.Xoshiro(88)
     sim_data = simulate(sol, T_obs; rng=rng)
     observables = [:y]
 
@@ -231,7 +231,7 @@ end
 
     rts_result = dsge_smoother(ss, data_matrix)
     pf_result = dsge_particle_smoother(nss, data_matrix; N=2000, N_back=200,
-                                        rng=Random.MersenneTwister(42))
+                                        rng=Random.Xoshiro(42))
 
     @test pf_result isa KalmanSmootherResult{Float64}
     @test size(pf_result.smoothed_states, 1) == 1
@@ -254,7 +254,7 @@ end
     spec = compute_steady_state(spec)
 
     T_obs = 30
-    rng = Random.MersenneTwister(101)
+    rng = Random.Xoshiro(101)
     sim_data = simulate(sol, T_obs; rng=rng)
 
     psol = perturbation_solver(spec; order=1)
@@ -264,7 +264,7 @@ end
     data_matrix = Matrix{Float64}(sim_data' .- sol.spec.steady_state)
 
     pf_result = dsge_particle_smoother(nss, data_matrix; N=1500, N_back=150,
-                                        rng=Random.MersenneTwister(55))
+                                        rng=Random.Xoshiro(55))
 
     @test size(pf_result.smoothed_states) == (2, T_obs)
     @test size(pf_result.smoothed_shocks) == (2, T_obs)
@@ -287,13 +287,13 @@ end
     psol = perturbation_solver(spec; order=1)
 
     T_obs = 25
-    rng = Random.MersenneTwister(44)
+    rng = Random.Xoshiro(44)
     sim_data = simulate(psol, T_obs; rng=rng)
     observables = [:y]
 
     hd = historical_decomposition(psol, sim_data, observables;
                                    N=1000, N_back=100,
-                                   rng=Random.MersenneTwister(42))
+                                   rng=Random.Xoshiro(42))
 
     @test hd isa HistoricalDecomposition{Float64}
     @test size(hd.contributions) == (T_obs, 1, 1)
@@ -316,13 +316,13 @@ end
     psol = perturbation_solver(spec; order=2)
 
     T_obs = 30
-    rng = Random.MersenneTwister(66)
+    rng = Random.Xoshiro(66)
     sim_data = simulate(psol, T_obs; rng=rng)
     observables = [:y, :pi_var]
 
     hd = historical_decomposition(psol, sim_data, observables;
                                    N=500, N_back=50,
-                                   rng=Random.MersenneTwister(42))
+                                   rng=Random.Xoshiro(42))
 
     @test hd isa HistoricalDecomposition{Float64}
     @test size(hd.contributions) == (T_obs, 2, 2)
@@ -356,7 +356,7 @@ end
     n_draws = 10
     param_names = [:rho_y, :rho_pi, :rho_r]
     theta_draws = repeat([0.8, 0.5, 0.6]', n_draws, 1)
-    theta_draws .+= 0.01 * randn(Random.MersenneTwister(1), n_draws, 3)
+    theta_draws .+= 0.01 * randn(Random.Xoshiro(1), n_draws, 3)
     theta_draws = clamp.(theta_draws, 0.01, 0.99)
 
     prior = MacroEconometricModels.DSGEPrior{Float64}(
@@ -372,7 +372,7 @@ end
     )
 
     T_obs = 40
-    rng = Random.MersenneTwister(42)
+    rng = Random.Xoshiro(42)
     sim_data = simulate(sol, T_obs; rng=rng)
 
     hd = historical_decomposition(post, sim_data, observables; mode_only=true)
@@ -398,7 +398,7 @@ end
     n_draws = 20
     param_names = [:rho_y, :rho_pi, :rho_r]
     theta_draws = repeat([0.8, 0.5, 0.6]', n_draws, 1)
-    theta_draws .+= 0.02 * randn(Random.MersenneTwister(2), n_draws, 3)
+    theta_draws .+= 0.02 * randn(Random.Xoshiro(2), n_draws, 3)
     theta_draws = clamp.(theta_draws, 0.01, 0.99)
 
     prior = MacroEconometricModels.DSGEPrior{Float64}(
@@ -414,7 +414,7 @@ end
     )
 
     T_obs = 30
-    rng = Random.MersenneTwister(42)
+    rng = Random.Xoshiro(42)
     sim_data = simulate(sol, T_obs; rng=rng)
 
     hd = historical_decomposition(post, sim_data, observables;
@@ -444,7 +444,7 @@ end
     sol = solve(spec)
 
     T_obs = 50
-    rng = Random.MersenneTwister(44)
+    rng = Random.Xoshiro(44)
     sim_data = simulate(sol, T_obs; rng=rng)
     observables = [:y]
     Z, d, H_mat = MacroEconometricModels._build_observation_equation(spec, observables, nothing)
@@ -471,7 +471,7 @@ end
     end
     sol = solve(spec)
 
-    rng = Random.MersenneTwister(11)
+    rng = Random.Xoshiro(11)
     sim_data = simulate(sol, 5; rng=rng)
     hd = historical_decomposition(sol, sim_data, [:y])
     @test size(hd.contributions, 1) == 5
@@ -487,7 +487,7 @@ end
     end
     sol = solve(spec)
 
-    rng = Random.MersenneTwister(22)
+    rng = Random.Xoshiro(22)
     sim_data = simulate(sol, 30; rng=rng)
     hd = historical_decomposition(sol, sim_data, [:y])
     @test size(hd.contributions) == (30, 1, 1)
@@ -510,7 +510,7 @@ end
     sol = solve(spec)
 
     T_obs = 50
-    rng = Random.MersenneTwister(99)
+    rng = Random.Xoshiro(99)
     sim_data = simulate(sol, T_obs; rng=rng)
     observables = [:y, :pi_var, :r]
 
@@ -547,7 +547,7 @@ end
         y[t] = rho * y[t-1] + eps[t]
     end
     sol = solve(spec)
-    rng = Random.MersenneTwister(42)
+    rng = Random.Xoshiro(42)
     sim_data = simulate(sol, 30; rng=rng)
     Z, d, H_mat = MacroEconometricModels._build_observation_equation(spec, [:y], nothing)
     ss = MacroEconometricModels._build_state_space(sol, Z, d, H_mat)
@@ -567,7 +567,7 @@ end
     ss = compute_steady_state(spec; max_iter=100, tol=1e-3)
     sol = solve(spec; method=:ssj, ss=ss, T_horizon=24, n_reduced=8)
     T_obs = 30
-    sim = simulate(sol, T_obs; rng=Random.MersenneTwister(7))
+    sim = simulate(sol, T_obs; rng=Random.Xoshiro(7))
     r_ss = sol.steady_state.prices[:r]
     data = sim .+ r_ss
     hd = historical_decomposition(sol, data, [:r])

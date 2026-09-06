@@ -102,7 +102,7 @@ end
 # Null critical-value simulation (analytic PSY driftless random walk) or the
 # Phillips–Shi (2020) wild bootstrap. Returns (sup_stats, bsadf_matrix) where
 # `bsadf_matrix` is mc_reps × m (m = T - swindow0 + 1). Per-draw seeded via the
-# repo's threaded-bootstrap pattern (pre-generate seeds, one MersenneTwister per
+# repo's threaded-bootstrap pattern (pre-generate seeds, one Xoshiro per
 # draw so results are thread-order independent).
 #
 # `kind` selects which sup the returned `sup_stats` records (`:gsadf` → row-max
@@ -128,11 +128,11 @@ function _simulate_bubble_null(kind::Symbol, Tn::Int, swindow0::Int, p::Int,
         wb_resid = dy .- mean(dy)          # driftless null residuals
     end
 
-    boot_rng = MersenneTwister(seed)
+    boot_rng = Xoshiro(seed)
     draw_seeds = rand(boot_rng, UInt64, mc_reps)
 
     Threads.@threads for b in 1:mc_reps
-        rng = MersenneTwister(draw_seeds[b])
+        rng = Xoshiro(draw_seeds[b])
         ystar = Vector{Float64}(undef, Tn)
         if cv_method == :wildboot
             ystar[1] = 0.0

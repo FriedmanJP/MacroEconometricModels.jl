@@ -27,7 +27,7 @@ Create a PanelData with staggered treatment adoption for DiD testing.
 """
 function _make_did_panel(; n_units=50, n_periods=20, treat_effect=2.0,
                            n_cohorts=2, seed=42)
-    rng = Random.MersenneTwister(seed)
+    rng = Random.Xoshiro(seed)
     T_type = Float64
 
     units_per_group = n_units ÷ (n_cohorts + 1)
@@ -213,7 +213,7 @@ const _MPDTA = load_example(:mpdta)
         # units 5-6 treated at g=4. Universal base ⇒ base_t = g-1 for every (g,t), so the
         # cells are analytically simple and the event-time IF covariance V_evt = Φ'Φ can be
         # reconstructed independently from the difference-in-means influence function.
-        rng = MersenneTwister(6501)
+        rng = Xoshiro(6501)
         treat_time = [0, 0, 0, 3, 4, 4]
         gid = Int[]; tid = Int[]; yv = Float64[]; gt = Float64[]
         alpha = [0.0, 0.4, 0.9, 1.3, 1.8, 2.2]
@@ -590,7 +590,7 @@ const _MPDTA = load_example(:mpdta)
         pd_all_treat, _ = _make_did_panel(seed=1400, n_cohorts=3, n_units=30)
         # With n_cohorts=3 and n_units=30, units_per_group=30/4=7, so 21 treated and 9 never-treated
         # We need ALL units treated. Build a custom panel:
-        rng = Random.MersenneTwister(1500)
+        rng = Random.Xoshiro(1500)
         n_u = 20
         n_t = 10
         N_all = n_u * n_t
@@ -794,7 +794,7 @@ const _MPDTA = load_example(:mpdta)
         # --- Oracle: with a SINGLE treated cohort and a reporting window covering the full
         # relative-period support, the SA saturated regression IS the TWFE event-study
         # regression, so att and the joint clustered SEs must match TWFE exactly. ---
-        rng = MersenneTwister(6701)
+        rng = Xoshiro(6701)
         treat1 = [0, 0, 0, 4, 4, 4]                 # units 1-3 never, 4-6 cohort g=4
         gid = Int[]; tid = Int[]; yv = Float64[]; gt = Float64[]
         a1 = [0.0, 0.5, 1.0, 1.5, 2.0, 2.5]
@@ -856,7 +856,7 @@ const _MPDTA = load_example(:mpdta)
         # at t=3. The homoskedastic Prop-6 IF variance is Var(τ̂(e)) = σ̂²(1/N_e + W_e'M⁺W_e),
         # where M⁺ is the untreated two-way-FE Gram pseudo-inverse, W_e the mean treated
         # design row, and σ̂² the untreated residual variance.
-        rng = Random.MersenneTwister(2266)
+        rng = Random.Xoshiro(2266)
         gid = Int[]; tid = Int[]; yv = Float64[]; gtime = Float64[]
         alpha = [0.0, 1.0, 2.0, 3.0]
         treat_time = [0, 0, 3, 3]
@@ -998,7 +998,7 @@ const _MPDTA = load_example(:mpdta)
 
         dcdh = estimate_did(pd, "outcome", "treat_time";
                             method=:did_multiplegt, leads=3, horizon=5,
-                            n_boot=10, rng=MersenneTwister(1234))
+                            n_boot=10, rng=Xoshiro(1234))
 
         @test dcdh isa DIDResult{Float64}
         @test dcdh.method == :did_multiplegt
@@ -1051,7 +1051,7 @@ const _MPDTA = load_example(:mpdta)
         dcdh_nyt = estimate_did(pd, "outcome", "treat_time";
                                 method=:did_multiplegt, leads=2, horizon=4,
                                 control_group=:not_yet_treated, n_boot=10,
-                                rng=MersenneTwister(1234))
+                                rng=Xoshiro(1234))
 
         @test dcdh_nyt isa DIDResult{Float64}
         @test dcdh_nyt.method == :did_multiplegt
@@ -1157,7 +1157,7 @@ const _MPDTA = load_example(:mpdta)
 
         # All methods should produce positive overall ATT for a large effect
         for meth in (:callaway_santanna, :sun_abraham, :bjs, :did_multiplegt)
-            kwargs = meth == :did_multiplegt ? (; n_boot=10, rng=MersenneTwister(1234)) : (;)
+            kwargs = meth == :did_multiplegt ? (; n_boot=10, rng=Xoshiro(1234)) : (;)
             did = estimate_did(pd, "outcome", "treat_time";
                                method=meth, leads=2, horizon=4, kwargs...)
             @test did.overall_att > 0
@@ -1172,7 +1172,7 @@ const _MPDTA = load_example(:mpdta)
         pd, te = _make_did_panel(seed=2700, n_units=60, n_periods=20)
 
         for meth in (:sun_abraham, :bjs, :did_multiplegt)
-            kwargs = meth == :did_multiplegt ? (; n_boot=10, rng=MersenneTwister(1234)) : (;)
+            kwargs = meth == :did_multiplegt ? (; n_boot=10, rng=Xoshiro(1234)) : (;)
             did = estimate_did(pd, "outcome", "treat_time";
                                method=meth, leads=3, horizon=5, kwargs...)
             pt = pretrend_test(did)
@@ -1205,7 +1205,7 @@ const _MPDTA = load_example(:mpdta)
         # dCDH plot
         dcdh = estimate_did(pd, "outcome", "treat_time";
                             method=:did_multiplegt, leads=2, horizon=3, n_boot=10,
-                            rng=MersenneTwister(1234))
+                            rng=Xoshiro(1234))
         p_dcdh = plot_result(dcdh)
         @test p_dcdh isa PlotOutput
         @test occursin("dCDH", p_dcdh.html)
@@ -1250,7 +1250,7 @@ const _MPDTA = load_example(:mpdta)
 
         dcdh_single = estimate_did(pd_single, "outcome", "treat_time";
                                    method=:did_multiplegt, leads=2, horizon=3, n_boot=10,
-                                   rng=MersenneTwister(1234))
+                                   rng=Xoshiro(1234))
         @test dcdh_single isa DIDResult{Float64}
 
         # Updated error message includes new methods
@@ -1273,7 +1273,7 @@ const _MPDTA = load_example(:mpdta)
         pd, te = _make_did_panel(seed=3200, n_units=60, n_periods=20)
 
         for meth in (:sun_abraham, :bjs, :did_multiplegt)
-            kwargs = meth == :did_multiplegt ? (; n_boot=10, rng=MersenneTwister(1234)) : (;)
+            kwargs = meth == :did_multiplegt ? (; n_boot=10, rng=Xoshiro(1234)) : (;)
             did = estimate_did(pd, "outcome", "treat_time";
                                method=meth, leads=2, horizon=3, kwargs...)
             @test nobs(did) == did.n_obs
@@ -1291,7 +1291,7 @@ const _MPDTA = load_example(:mpdta)
     # =========================================================================
     @testset "Cohort ID Override" begin
         # Create panel with explicit cohort_id that differs from treatment timing
-        rng = Random.MersenneTwister(999)
+        rng = Random.Xoshiro(999)
         n_units = 30
         n_periods = 15
         N_obs = n_units * n_periods
@@ -1344,7 +1344,7 @@ const _MPDTA = load_example(:mpdta)
 
         # dCDH (uses bootstrap, test it runs)
         did_dcdh = estimate_did(pd_c, "y", "tt"; method=:did_multiplegt,
-                                leads=1, horizon=2, n_boot=10, rng=MersenneTwister(1234))
+                                leads=1, horizon=2, n_boot=10, rng=Xoshiro(1234))
         @test did_dcdh isa DIDResult{Float64}
 
         # Event study LP
@@ -1601,7 +1601,7 @@ const _MPDTA = load_example(:mpdta)
 
         # ----- dCDH: empirical bootstrap covariance stored; diag == bootstrap se² -----
         dcdh = estimate_did(pd, "outcome", "treat_time"; method=:did_multiplegt,
-                            leads=3, horizon=4, n_boot=200, rng=MersenneTwister(1234))
+                            leads=3, horizon=4, n_boot=200, rng=Xoshiro(1234))
         Vd = vcov(dcdh)
         @test Vd isa Matrix{Float64}
         @test isapprox(Vd, Vd'; atol=1e-10)
@@ -1628,7 +1628,7 @@ const _MPDTA = load_example(:mpdta)
     # =========================================================================
 
     @testset "T089 M-33: _cluster_vcov n_absorbed kwarg" begin
-        rng = Random.MersenneTwister(18937)
+        rng = Random.Xoshiro(18937)
         N = 90; K = 2
         X = randn(rng, N, K)
         resid = randn(rng, N)
@@ -1793,7 +1793,7 @@ const _MPDTA = load_example(:mpdta)
         n_units, periods = 12, -3:3
         N598 = n_units * length(periods)
         function _build598(shift)
-            rng = Random.MersenneTwister(598)
+            rng = Random.Xoshiro(598)
             data = Matrix{Float64}(undef, N598, 2)
             gid = Vector{Int}(undef, N598); tid = Vector{Int}(undef, N598)
             coh = Vector{Int}(undef, N598)
@@ -1826,7 +1826,7 @@ const _MPDTA = load_example(:mpdta)
 
         # A panel with no treated cohort must throw rather than report ATT = 0.0: with no
         # adoption period there is no estimand, and 0.0 reads as "no effect".
-        rng = Random.MersenneTwister(5981)
+        rng = Random.Xoshiro(5981)
         n0, p0 = 6, 5
         N0 = n0 * p0
         d0 = Matrix{Float64}(undef, N0, 2)

@@ -36,7 +36,7 @@ import StatsAPI as S
 # heterogeneous intercepts / dynamics / endogeneity across units.
 # -----------------------------------------------------------------------------
 function coint_panel(; seed::Int=20260716, N::Int=6, T::Int=120, beta0::Float64=1.5)
-    rng = MersenneTwister(seed)
+    rng = Xoshiro(seed)
     yv = Float64[]
     xv = Float64[]
     idv = Int[]
@@ -231,7 +231,7 @@ end
     # 0.073), while group-mean recovers mean(β_i) (probed err 0.009).
     # ---------------------------------------------------------------------
     @testset "heterogeneous slopes: group-mean ≈ mean(β_i) ≠ pooled" begin
-        rng = MersenneTwister(54)
+        rng = Xoshiro(54)
         N, T, beta0 = 10, 150, 1.5
         bi = beta0 .+ 0.6 .* randn(rng, N)
         hy, hx, hi, ht = Float64[], Float64[], Int[], Int[]

@@ -1375,7 +1375,7 @@ function _winberry_explained(ss::HASteadyState{T}, grid::HAGrid{T},
     n_e = grid.n_income
     N = n_a * n_e
     n_e_m = size(M_ss, 2)
-    rng_actual = isnothing(rng) ? Random.MersenneTwister(1234) : rng
+    rng_actual = isnothing(rng) ? Random.Xoshiro(1234) : rng
 
     Lambda = _build_transition_matrix(collect(T, a_pol), grid, income)
     a_vec = zeros(T, N)

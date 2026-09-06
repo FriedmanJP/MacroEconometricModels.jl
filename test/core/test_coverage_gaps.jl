@@ -26,7 +26,7 @@ using LinearAlgebra
 # =============================================================================
 
 @testset "Unit root StatsAPI interface" begin
-    rng = MersenneTwister(7010)  # DGP-02: explicit rng
+    rng = Xoshiro(7010)  # DGP-02: explicit rng
     y_stationary = randn(rng, 200)
     y_unit_root = cumsum(randn(rng, 200))
 
@@ -139,7 +139,7 @@ end
 # =============================================================================
 
 @testset "BVAR weighted quantiles threaded" begin
-    rng = MersenneTwister(7020)  # DGP-02: explicit rng
+    rng = Xoshiro(7020)  # DGP-02: explicit rng
 
     @testset "compute_posterior_quantiles threaded=true with large array" begin
         # prod(other_dims) = 50 * 5 * 5 = 1250 > 1000 → triggers threaded path
@@ -186,7 +186,7 @@ end
 # =============================================================================
 
 @testset "BVARPosterior size and length" begin
-    rng = MersenneTwister(7030)  # DGP-02: explicit rng
+    rng = Xoshiro(7030)  # DGP-02: explicit rng
     Y = randn(rng, 50, 2)
     post = estimate_bvar(Y, 1; n_draws=20, rng=rng)
 
@@ -200,7 +200,7 @@ end
 # =============================================================================
 
 @testset "process_posterior_samples deprecated wrapper" begin
-    rng = MersenneTwister(7040)  # DGP-02: explicit rng
+    rng = Xoshiro(7040)  # DGP-02: explicit rng
     Y = randn(rng, 50, 2)
     post = estimate_bvar(Y, 1; n_draws=10, rng=rng)
 
@@ -220,7 +220,7 @@ end
 # =============================================================================
 
 @testset "Forecast accessor functions" begin
-    rng = MersenneTwister(7050)  # DGP-02: explicit rng
+    rng = Xoshiro(7050)  # DGP-02: explicit rng
     Y = randn(rng, 100, 3)
 
     @testset "VARForecast" begin

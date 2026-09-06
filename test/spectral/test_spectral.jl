@@ -5,7 +5,7 @@
 using Test, MacroEconometricModels, Random, Statistics, LinearAlgebra, StatsAPI, DataFrames
 
 @testset "ACF" begin
-    rng = Random.MersenneTwister(1001)
+    rng = Random.Xoshiro(1001)
     # White noise: ACF near zero at all lags
     wn = randn(rng, 500)
     r = acf(wn; lags=20)
@@ -16,7 +16,7 @@ using Test, MacroEconometricModels, Random, Statistics, LinearAlgebra, StatsAPI,
     @test r.ci > 0
 
     # AR(1) with rho=0.8: ACF(1) should be close to 0.8
-    rng = Random.MersenneTwister(1002)
+    rng = Random.Xoshiro(1002)
     n = 1000
     rho = 0.8
     ar1 = dgp_arima(rng; phi=[rho], T=n).y
@@ -28,7 +28,7 @@ end
 
 @testset "PACF" begin
     # AR(2): PACF should cut off after lag 2
-    rng = Random.MersenneTwister(2001)
+    rng = Random.Xoshiro(2001)
     n = 2000
     ar2 = dgp_arima(rng; phi=[0.5, -0.3], T=n).y
 
@@ -50,7 +50,7 @@ end
 end
 
 @testset "acf_pacf combined" begin
-    rng = Random.MersenneTwister(3001)
+    rng = Random.Xoshiro(3001)
     y = randn(rng, 300)
     # Inject mild AR(1) structure
     for t in 2:300
@@ -68,7 +68,7 @@ end
 end
 
 @testset "CCF" begin
-    rng = Random.MersenneTwister(4001)
+    rng = Random.Xoshiro(4001)
     n = 500
     x = randn(rng, n)
     y = randn(rng, n)
@@ -90,7 +90,7 @@ end
 
 @testset "Periodogram" begin
     # Sinusoid + noise: periodogram should spike at the sinusoid frequency
-    rng = Random.MersenneTwister(5001)
+    rng = Random.Xoshiro(5001)
     n = 256
     freq_true = 0.1  # cycles per sample
     t_grid = collect(1:n)
@@ -112,7 +112,7 @@ end
 end
 
 @testset "Welch spectral density" begin
-    rng = Random.MersenneTwister(6001)
+    rng = Random.Xoshiro(6001)
     y = randn(rng, 512)
     r = spectral_density(y; method=:welch)
     @test r isa MacroEconometricModels.SpectralDensityResult
@@ -125,7 +125,7 @@ end
 
 @testset "AR spectral density" begin
     # AR(1) spectrum should peak at omega=0
-    rng = Random.MersenneTwister(6002)
+    rng = Random.Xoshiro(6002)
     n = 2000
     ar1 = zeros(n)
     ar1[1] = randn(rng)
@@ -144,7 +144,7 @@ end
 end
 
 @testset "Smoothed spectral density" begin
-    rng = Random.MersenneTwister(6003)
+    rng = Random.Xoshiro(6003)
     y = randn(rng, 256)
     r = spectral_density(y; method=:smoothed)
     @test r.method == :smoothed
@@ -153,7 +153,7 @@ end
 end
 
 @testset "Cross-spectrum" begin
-    rng = Random.MersenneTwister(7001)
+    rng = Random.Xoshiro(7001)
     n = 512
     x = randn(rng, n)
     # y = alpha * x + noise  (high coherence expected)
@@ -193,21 +193,21 @@ end
 
 @testset "Ljung-Box test" begin
     # White noise: high p-value (fail to reject H0: no autocorrelation)
-    rng = Random.MersenneTwister(8001)
+    rng = Random.Xoshiro(8001)
     wn = randn(rng, 500)
     lb = ljung_box_test(wn; lags=10)
     @test lb isa MacroEconometricModels.LjungBoxResult
     @test lb.pvalue > 0.01  # should generally not reject
 
     # AR(1): low p-value (reject H0)
-    rng = Random.MersenneTwister(8002)
+    rng = Random.Xoshiro(8002)
     ar1 = dgp_arima(rng; phi=[0.8], T=500).y
     lb2 = ljung_box_test(ar1; lags=10)
     @test lb2.pvalue < 0.05
 end
 
 @testset "Box-Pierce test" begin
-    rng = Random.MersenneTwister(8003)
+    rng = Random.Xoshiro(8003)
     wn = randn(rng, 500)
     bp = box_pierce_test(wn; lags=10)
     @test bp isa MacroEconometricModels.BoxPierceResult
@@ -215,7 +215,7 @@ end
 end
 
 @testset "Durbin-Watson test" begin
-    rng = Random.MersenneTwister(8004)
+    rng = Random.Xoshiro(8004)
     # iid residuals: DW near 2
     resid = randn(rng, 300)
     dw = durbin_watson_test(resid)
@@ -226,7 +226,7 @@ end
 
 @testset "Fisher's test" begin
     # Planted sinusoid: should detect periodicity (low p-value)
-    rng = Random.MersenneTwister(9001)
+    rng = Random.Xoshiro(9001)
     n = 200
     t_grid = collect(1:n)
     y_sin = 5.0 .* sin.(2pi .* 0.1 .* t_grid) .+ 0.5 .* randn(rng, n)
@@ -237,7 +237,7 @@ end
     @test ft.peak_freq > 0
 
     # White noise: should not detect periodicity (high p-value, usually)
-    rng = Random.MersenneTwister(9002)
+    rng = Random.Xoshiro(9002)
     wn = randn(rng, 200)
     ft2 = fisher_test(wn)
     @test ft2.pvalue > 0.01
@@ -245,21 +245,21 @@ end
 
 @testset "Bartlett's white-noise test" begin
     # White noise: should pass (high p-value)
-    rng = Random.MersenneTwister(9003)
+    rng = Random.Xoshiro(9003)
     wn = randn(rng, 300)
     bt = bartlett_white_noise_test(wn)
     @test bt isa MacroEconometricModels.BartlettWhiteNoiseResult
     @test bt.pvalue > 0.01
 
     # AR(1) with strong autocorrelation: should fail (low p-value)
-    rng = Random.MersenneTwister(9004)
+    rng = Random.Xoshiro(9004)
     ar1 = dgp_arima(rng; phi=[0.9], T=300).y
     bt2 = bartlett_white_noise_test(ar1)
     @test bt2.pvalue < 0.05
 end
 
 @testset "band_power" begin
-    rng = Random.MersenneTwister(10001)
+    rng = Random.Xoshiro(10001)
     y = randn(rng, 256)
     r = periodogram(y)
     # Band power over full range
@@ -271,7 +271,7 @@ end
 end
 
 @testset "ideal_bandpass" begin
-    rng = Random.MersenneTwister(11001)
+    rng = Random.Xoshiro(11001)
     n = 256
     t_grid = collect(1:n)
     # Two sinusoids at different frequencies
@@ -338,7 +338,7 @@ end
 end
 
 @testset "Display (show methods)" begin
-    rng = Random.MersenneTwister(12001)
+    rng = Random.Xoshiro(12001)
     y = randn(rng, 200)
 
     # ACFResult
@@ -353,7 +353,7 @@ end
     @test length(String(take!(io))) > 0
 
     # CrossSpectrumResult
-    rng = Random.MersenneTwister(12002)
+    rng = Random.Xoshiro(12002)
     x = randn(rng, 200)
     cs = cross_spectrum(x, y)
     show(io, cs)
@@ -391,7 +391,7 @@ end
 end
 
 @testset "Plotting (plot_result)" begin
-    rng = Random.MersenneTwister(13001)
+    rng = Random.Xoshiro(13001)
     y = randn(rng, 200)
 
     # ACFResult
@@ -400,7 +400,7 @@ end
     @test p isa MacroEconometricModels.PlotOutput
 
     # CCF plot
-    rng = Random.MersenneTwister(13002)
+    rng = Random.Xoshiro(13002)
     x = randn(rng, 200)
     r_ccf = ccf(x, y; lags=10)
     p2 = plot_result(r_ccf)
@@ -423,7 +423,7 @@ end
 end
 
 @testset "TimeSeriesData dispatch" begin
-    rng = Random.MersenneTwister(14001)
+    rng = Random.Xoshiro(14001)
     y_vec = randn(rng, 200)
     td = TimeSeriesData(y_vec)
 
@@ -456,7 +456,7 @@ end
 end
 
 @testset "Float32 fallback" begin
-    rng = Random.MersenneTwister(15001)
+    rng = Random.Xoshiro(15001)
     y32 = Float32.(randn(rng, 200))
 
     # Float32 <: AbstractFloat, so primary methods accept it directly
@@ -499,7 +499,7 @@ end
 
 @testset "FFTW fix (estimate_gdfm)" begin
     # estimate_gdfm uses FFTW internally; should work without explicit `using FFTW`
-    rng = Random.MersenneTwister(16001)
+    rng = Random.Xoshiro(16001)
     X = randn(rng, 100, 5)
     gdfm = estimate_gdfm(X, 2)
     @test gdfm !== nothing
@@ -512,7 +512,7 @@ end
 @testset "Input validation — ArgumentError" begin
     short2 = [1.0, 2.0]
     short3 = [1.0, 2.0, 3.0]
-    bad100 = randn(Random.MersenneTwister(99000), 100)
+    bad100 = randn(Random.Xoshiro(99000), 100)
 
     # acf/pacf/acf_pacf require n >= 3
     @test_throws ArgumentError acf(short2)
@@ -558,7 +558,7 @@ end
     @test_throws ArgumentError transfer_function(:bogus)
 
     # band_power: f_low >= f_high
-    rng = Random.MersenneTwister(99001)
+    rng = Random.Xoshiro(99001)
     r = periodogram(randn(rng, 256))
     @test_throws ArgumentError band_power(r, 1.5, 0.5)
 end
@@ -580,13 +580,13 @@ end
     @test all(r_ap.pacf .== 0)
 
     # CCF with one constant series
-    rng = Random.MersenneTwister(20001)
+    rng = Random.Xoshiro(20001)
     r_ccf = ccf(const_series, randn(rng, 200))
     @test all(r_ccf.ccf .== 0)
 end
 
 @testset "Convenience extractors: coherence, phase, gain" begin
-    rng = Random.MersenneTwister(21001)
+    rng = Random.Xoshiro(21001)
     n = 256
     x = randn(rng, n)
     y = 2.0 .* x .+ 0.3 .* randn(rng, n)
@@ -604,7 +604,7 @@ end
 end
 
 @testset "StatsAPI interface — nobs, pvalue" begin
-    rng = Random.MersenneTwister(22001)
+    rng = Random.Xoshiro(22001)
     y = randn(rng, 200)
 
     ft = fisher_test(y)
@@ -617,7 +617,7 @@ end
 end
 
 @testset "Custom conf_level" begin
-    rng = Random.MersenneTwister(23001)
+    rng = Random.Xoshiro(23001)
     y = randn(rng, 300)
 
     r90 = acf(y; lags=10, conf_level=0.90)
@@ -631,7 +631,7 @@ end
 end
 
 @testset "Welch — segment options" begin
-    rng = Random.MersenneTwister(24001)
+    rng = Random.Xoshiro(24001)
     y = randn(rng, 512)
 
     # Custom segment_length
@@ -655,7 +655,7 @@ end
 end
 
 @testset "Smoothed — custom bandwidth" begin
-    rng = Random.MersenneTwister(25001)
+    rng = Random.Xoshiro(25001)
     y = randn(rng, 256)
 
     r1 = spectral_density(y; method=:smoothed, bandwidth=3)
@@ -667,7 +667,7 @@ end
 end
 
 @testset "AR spectrum — custom order and AIC selection" begin
-    rng = Random.MersenneTwister(26001)
+    rng = Random.Xoshiro(26001)
     n = 500
     y = zeros(n)
     y[1] = randn(rng)
@@ -695,7 +695,7 @@ end
 end
 
 @testset "Periodogram with windows" begin
-    rng = Random.MersenneTwister(27001)
+    rng = Random.Xoshiro(27001)
     y = randn(rng, 256)
 
     for win in [:rectangular, :bartlett, :hann, :hamming, :blackman, :tukey, :flat_top]
@@ -706,7 +706,7 @@ end
 end
 
 @testset "Cross-spectrum with custom segment options" begin
-    rng = Random.MersenneTwister(28001)
+    rng = Random.Xoshiro(28001)
     n = 512
     x = randn(rng, n)
     y = randn(rng, n)
@@ -790,7 +790,7 @@ end
 @testset "Levinson-Durbin early break" begin
     # Series that triggers denominator < 1e-15 in Levinson-Durbin
     # A unit root series with near-perfect ACF[1] ≈ 1
-    rng = Random.MersenneTwister(29001)
+    rng = Random.Xoshiro(29001)
     n = 100
     rw = cumsum(randn(rng, n))
     # Still should return valid result without error
@@ -800,7 +800,7 @@ end
 end
 
 @testset "OLS PACF with short series / high lags" begin
-    rng = Random.MersenneTwister(30001)
+    rng = Random.Xoshiro(30001)
     # Request more lags than feasible for OLS
     y = randn(rng, 20)
     r = pacf(y; lags=15, method=:ols)
@@ -811,7 +811,7 @@ end
 end
 
 @testset "Fisher test — edge cases" begin
-    rng = Random.MersenneTwister(31001)
+    rng = Random.Xoshiro(31001)
     # Very short series (n=4, m=1)
     y4 = randn(rng, 4)
     ft4 = fisher_test(y4)
@@ -826,7 +826,7 @@ end
 end
 
 @testset "Bartlett test — edge cases" begin
-    rng = Random.MersenneTwister(32001)
+    rng = Random.Xoshiro(32001)
     # Minimum valid n=4
     y4 = randn(rng, 4)
     bt4 = bartlett_white_noise_test(y4)
@@ -835,7 +835,7 @@ end
 end
 
 @testset "band_power — edge cases" begin
-    rng = Random.MersenneTwister(33001)
+    rng = Random.Xoshiro(33001)
     r = periodogram(randn(rng, 256))
 
     # Very narrow band
@@ -850,7 +850,7 @@ end
 end
 
 @testset "ideal_bandpass — full band and edge cases" begin
-    rng = Random.MersenneTwister(34001)
+    rng = Random.Xoshiro(34001)
     n = 128
     y = randn(rng, n)
 
@@ -867,7 +867,7 @@ end
 end
 
 @testset "Non-Float64 fallbacks for estimation" begin
-    rng = Random.MersenneTwister(35001)
+    rng = Random.Xoshiro(35001)
     y_int = round.(Int, randn(rng, 200) .* 10)
 
     # Integer → Float64 via fallback
@@ -901,7 +901,7 @@ end
 end
 
 @testset "PanelData dispatch — acf, spectral_density" begin
-    rng = Random.MersenneTwister(36001)
+    rng = Random.Xoshiro(36001)
     # Create simple PanelData with 3 groups, 50 time periods each
     n_groups = 3
     n_time = 50
@@ -933,7 +933,7 @@ end
 end
 
 @testset "Default lag selection" begin
-    rng = Random.MersenneTwister(37001)
+    rng = Random.Xoshiro(37001)
     # lags=0 → auto-select min(n-1, 10*log10(n))
     y50 = randn(rng, 50)
     r50 = acf(y50)  # default lags
@@ -947,7 +947,7 @@ end
 end
 
 @testset "Burg coefficient edge case" begin
-    rng = Random.MersenneTwister(38001)
+    rng = Random.Xoshiro(38001)
     y = randn(rng, 50)
     # AR order close to n should throw
     @test_throws ArgumentError MacroEconometricModels._burg_coefficients(y, 50)
@@ -959,7 +959,7 @@ end
 end
 
 @testset "report() for spectral types" begin
-    rng = Random.MersenneTwister(39001)
+    rng = Random.Xoshiro(39001)
     y = randn(rng, 200)
 
     # report() should work for all spectral result types
@@ -982,7 +982,7 @@ end
     @test occursin("Partial Autocorrelation Function", s3)
 
     # CCF display
-    rng = Random.MersenneTwister(39002)
+    rng = Random.Xoshiro(39002)
     x = randn(rng, 200)
     r_ccf = ccf(x, y; lags=10)
     show(io, r_ccf)
@@ -1040,7 +1040,7 @@ end
 
 @testset "DW show branches" begin
     # Positive autocorrelation (DW < 1.5)
-    rng = Random.MersenneTwister(40001)
+    rng = Random.Xoshiro(40001)
     n = 300
     ar_pos = zeros(n)
     ar_pos[1] = randn(rng)
@@ -1062,7 +1062,7 @@ end
 end
 
 @testset "CCF type fallbacks" begin
-    rng = Random.MersenneTwister(41001)
+    rng = Random.Xoshiro(41001)
     x64 = randn(rng, 100)
     y_int = round.(Int, randn(rng, 100) .* 10)
 
@@ -1095,7 +1095,7 @@ end
 end
 
 @testset "cross_spectrum single-segment warn (#209 R-32)" begin
-    rng = Random.MersenneTwister(3209)
+    rng = Random.Xoshiro(3209)
     x = randn(rng, 40)
     y = randn(rng, 40)
     # segment_length == n ⇒ exactly one segment ⇒ squared coherence ≡ 1 ⇒ must warn
@@ -1105,7 +1105,7 @@ end
 end
 
 @testset "fisher_test large-n BigFloat p-value (#209 R-33)" begin
-    rng = Random.MersenneTwister(3309)
+    rng = Random.Xoshiro(3309)
     # Large m: the old Float64 term C(m,k)·(1-kg)^{m-1} overflows to Inf·0 = NaN.
     y = randn(rng, 5000)
     ft = fisher_test(y)

@@ -43,7 +43,7 @@ using Test, MacroEconometricModels, Random, LinearAlgebra, Statistics
     # (rho_x = 1). Renamed: `coint_dgp` meant different things in test_ardl.jl
     # and test_cointreg.jl. (Shared σ = 1 replaces the old σ = 0.3.)
     function _ardl_ec_dgp(; T=300, θ=2.0, φ=0.4, ψ=0.5, seed=20240716)
-        d = dgp_ardl(MersenneTwister(seed); phi=1 - φ, beta0=ψ, beta1=φ * θ - ψ,
+        d = dgp_ardl(Xoshiro(seed); phi=1 - φ, beta0=ψ, beta1=φ * θ - ψ,
                      rho_x=1.0, c=0.0, T=T)
         (d.y, d.x)
     end
@@ -69,7 +69,7 @@ using Test, MacroEconometricModels, Random, LinearAlgebra, Statistics
         @test bt.f_lower[4] == 6.84 && bt.f_upper[4] == 7.84
 
         # The I(0) t lower-bound is k-invariant for a given case (Case III, 5%).
-        m2 = estimate_ardl(y, hcat(x, cumsum(randn(MersenneTwister(1), length(y)))); p=1, q=[1,1], case=3)
+        m2 = estimate_ardl(y, hcat(x, cumsum(randn(Xoshiro(1), length(y)))); p=1, q=[1,1], case=3)
         bt2 = bounds_test(m2)
         @test bt2.k == 2
         @test bt2.t_lower[li5] == -2.86            # same I(0) as k=1
@@ -166,18 +166,21 @@ using Test, MacroEconometricModels, Random, LinearAlgebra, Statistics
         @test bt.fstat > bt.f_upper[2]
 
         # Independent random walks ⇒ do not reject (F below I(0)).
-        # H0 draws from the shared spurious simulator (DGP-04 #793; probed
-        # nrej = 1 over seeds 501:520).
+        # H0 draws from the shared spurious simulator (DGP-04 #793). 100
+        # draws at T = 500: with 20 draws the count is Binomial noise;
+        # 100 draws pin the size and T = 500 shrinks finite-sample size
+        # distortion toward the 5% nominal (mean 5, sd ≈ 2.2 — the 12 bar
+        # is ≈3σ).
         nrej = let n = 0
-            for s in 1:20
-                d = dgp_cointreg(MersenneTwister(500 + s); T=250, spurious=true)
+            for s in 1:100
+                d = dgp_cointreg(Xoshiro(500 + s); T=500, spurious=true)
                 b = bounds_test(estimate_ardl(d.y, d.X[:, 1]; p=1, q=0, case=3))
                 b.f_decision == :cointegrated && (n += 1)
             end
             n
         end
         # A correctly-sized 5% test rejects on pure noise only rarely.
-        @test nrej <= 3
+        @test nrej <= 12
     end
 
     # -------------------------------------------------------------------------
@@ -223,7 +226,7 @@ using Test, MacroEconometricModels, Random, LinearAlgebra, Statistics
     # Multi-regressor & case handling
     # -------------------------------------------------------------------------
     @testset "multi-regressor & cases" begin
-        rng = MersenneTwister(5)
+        rng = Xoshiro(5)
         T = 300
         x1 = cumsum(randn(rng, T)); x2 = cumsum(randn(rng, T))
         y = zeros(T)
@@ -262,7 +265,7 @@ using Test, MacroEconometricModels, Random, LinearAlgebra, Statistics
         @test_throws ArgumentError bounds_test(m; level=0.075)              # not tabulated
         @test_throws ArgumentError bounds_test(m; case=9)
         # k beyond the tabulated range (k>10) is rejected.
-        rng = MersenneTwister(8)   # DGP-04: explicit rng (was global RNG)
+        rng = Xoshiro(8)   # DGP-04: explicit rng (was global RNG)
         bigX = randn(rng, 200, 11)
         mbig = estimate_ardl(cumsum(randn(rng, 200)), cumsum(bigX, dims=1); p=1,
                              q=fill(0, 11), case=3)
@@ -273,8 +276,8 @@ using Test, MacroEconometricModels, Random, LinearAlgebra, Statistics
     # Integer input + vector convenience
     # -------------------------------------------------------------------------
     @testset "input conversion" begin
-        yi = round.(Int, cumsum(randn(MersenneTwister(3), 150)) .* 10)
-        xi = round.(Int, cumsum(randn(MersenneTwister(4), 150)) .* 10)
+        yi = round.(Int, cumsum(randn(Xoshiro(3), 150)) .* 10)
+        xi = round.(Int, cumsum(randn(Xoshiro(4), 150)) .* 10)
         m = estimate_ardl(yi, xi; p=1, q=1, case=3)     # Int vectors → Float64
         @test m isa ARDLModel{Float64}
         @test m.q == [1]

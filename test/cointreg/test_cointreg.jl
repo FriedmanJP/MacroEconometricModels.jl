@@ -28,7 +28,7 @@ function coint_dgp(; seed::Int=20260716, T::Int=200, endog::Bool=true)
         d = readdlm(joinpath(@__DIR__, "data", "coint_dgp_endog.csv"), ',', Float64)
         return d[:, 1], d[:, 2]
     end
-    rng = MersenneTwister(seed)
+    rng = Xoshiro(seed)
     v = randn(rng, T)
     e = randn(rng, T)
     x = cumsum(v)
@@ -227,7 +227,7 @@ end
         # OLS bias is the visible target; probed FMOLS ratio 0.21, bound 0.5).
         scope = let bo = 0.0, bf = 0.0, bd = 0.0, bc = 0.0
             for seed in 1:20
-                d = dgp_cointreg(MersenneTwister(seed); beta=[1.5], T=500,
+                d = dgp_cointreg(Xoshiro(seed); beta=[1.5], T=500,
                                  endog_rho=0.9)
                 xx = d.X[:, 1]
                 bo += abs((hcat(ones(500), xx) \ d.y)[2] - 1.5)
@@ -246,7 +246,7 @@ end
     end
 
     @testset "POWER: robust vs LRV SEs differ; both track MC dispersion" begin
-        d = dgp_cointreg(MersenneTwister(7); beta=[1.5], T=500, endog_rho=0.9)
+        d = dgp_cointreg(Xoshiro(7); beta=[1.5], T=500, endog_rho=0.9)
         xx = d.X[:, 1]
         mr = estimate_cointreg(d.y, xx; method=:dols, leads=2, lags=2,
                                bandwidth=3, dols_se=:robust)
@@ -259,7 +259,7 @@ end
         # the 20-seed MC dispersion of the FMOLS slope (probed 1.05-1.06x).
         slopes = Float64[]
         for seed in 1:20
-            dd = dgp_cointreg(MersenneTwister(seed); beta=[1.5], T=500,
+            dd = dgp_cointreg(Xoshiro(seed); beta=[1.5], T=500,
                               endog_rho=0.9)
             push!(slopes, coef(estimate_cointreg(dd.y, dd.X[:, 1]; method=:fmols,
                                                  bandwidth=3))[2])
@@ -270,7 +270,7 @@ end
     end
 
     @testset "Trend coefficient on trendless vs trended DGP" begin
-        d = dgp_cointreg(MersenneTwister(7); beta=[1.5], T=300)
+        d = dgp_cointreg(Xoshiro(7); beta=[1.5], T=300)
         xx = d.X[:, 1]
         ml = estimate_cointreg(d.y, xx; method=:fmols, trend=:linear, bandwidth=3)
         @test abs(coef(ml)[2]) < 0.05   # no trend in the DGP (probed ≤ 0.004)
@@ -286,11 +286,11 @@ end
         # Probed 8/10 and 10/10 over seeds 201:210 — bounds keep a margin.
         n_spurious, n_coint = let ns = 0, nc = 0
             for seed in 201:210
-                ds = dgp_cointreg(MersenneTwister(seed); beta=[1.5], T=500,
+                ds = dgp_cointreg(Xoshiro(seed); beta=[1.5], T=500,
                                   spurious=true)
                 ms = estimate_cointreg(ds.y, ds.X[:, 1]; method=:fmols, bandwidth=3)
                 adf_test(residuals(ms)).pvalue > 0.05 && (ns += 1)
-                dc = dgp_cointreg(MersenneTwister(seed); beta=[1.5], T=500)
+                dc = dgp_cointreg(Xoshiro(seed); beta=[1.5], T=500)
                 mc = estimate_cointreg(dc.y, dc.X[:, 1]; method=:fmols, bandwidth=3)
                 adf_test(residuals(mc)).pvalue < 0.05 && (nc += 1)
             end

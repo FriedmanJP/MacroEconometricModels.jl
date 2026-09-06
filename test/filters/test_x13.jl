@@ -5,7 +5,7 @@ using LinearAlgebra
 
 @testset "X-13ARIMA-SEATS Seasonal Adjustment" begin
 
-    rng = MersenneTwister(42)
+    rng = Xoshiro(42)
     n = 120
     trend_c = cumsum(randn(rng, n) .* 0.1)
     seasonal_c = 10.0 .* sin.(2π .* (1:n) ./ 12) .+ 5.0 .* cos.(2π .* (1:n) ./ 6)
@@ -62,7 +62,7 @@ using LinearAlgebra
     end
 
     @testset "quarterly data" begin
-        rng = MersenneTwister(123)
+        rng = Xoshiro(123)
         nq = 80
         yq = 100.0 .+ cumsum(randn(rng, nq) .* 0.1) .+ 5.0 .* sin.(2π .* (1:nq) ./ 4) .+ randn(rng, nq)
         r = x13_filter(yq; frequency=4, method=:x11)
@@ -108,7 +108,7 @@ using LinearAlgebra
     end
 
     @testset "edge cases" begin
-        @test_throws ArgumentError x13_filter(randn(MersenneTwister(111), 20); frequency=12)
+        @test_throws ArgumentError x13_filter(randn(Xoshiro(111), 20); frequency=12)
         @test_throws ArgumentError x13_filter(y; frequency=7)
         @test_throws ArgumentError x13_filter(y; frequency=12, method=:invalid)
     end

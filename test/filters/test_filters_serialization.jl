@@ -16,7 +16,7 @@ const _RSER08 = ("HPFilterResult", "HamiltonFilterResult", "BeveridgeNelsonResul
                  "DataSummary", "DataDiagnostic")
 
 function _rser08_series(; n=80, seed=781)
-    rng = MersenneTwister(seed)
+    rng = Xoshiro(seed)
     t = 1:n
     trend = 0.02 .* collect(t)
     cycle = 1.5 .* sin.(2π .* collect(t) ./ 16)
@@ -24,7 +24,7 @@ function _rser08_series(; n=80, seed=781)
 end
 
 function _rser08_seasonal(; n=96, seed=7812)
-    rng = MersenneTwister(seed)
+    rng = Xoshiro(seed)
     t = 1:n
     return 100.0 .+ 0.05 .* collect(t) .+ 8.0 .* sin.(2π .* collect(t) ./ 12) .+
            0.4 .* randn(rng, n)

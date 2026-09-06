@@ -16,7 +16,7 @@ using Statistics
     T_obs = 200
     n = 3
     A_slp = 0.3 .* Matrix{Float64}(I, n, n)
-    Y = dgp_var(MersenneTwister(42); A=A_slp, B0=Matrix{Float64}(I, n, n),
+    Y = dgp_var(Xoshiro(42); A=A_slp, B0=Matrix{Float64}(I, n, n),
                 T=T_obs).Y
 
     # =========================================================================
@@ -166,7 +166,7 @@ using Statistics
         # LP covers h = 1..12 (probed: matches Θ_1..12, not Θ_0..11).
         A = [0.5 0.1 0.0; 0.1 0.4 0.1; 0.0 0.1 0.3]
         B0 = [0.6 0.0 0.0; 0.2 0.5 0.0; 0.1 0.15 0.4]
-        Yb = dgp_var(MersenneTwister(166); A=A, B0=B0, T=2000).Y
+        Yb = dgp_var(Xoshiro(166); A=A, B0=B0, T=2000).Y
         slp = structural_lp(Yb, 12; method=:cholesky, lags=4)
         var_model = estimate_var(Yb, 4)
         var_vals = irf(var_model, 12; method=:cholesky).values
@@ -263,13 +263,13 @@ using Statistics
     @testset "MC honesty counts (#244)" begin
         # bootstrap path: n_requested == reps, invariant holds
         slp = structural_lp(Y, 6; method=:cholesky, lags=2, ci_type=:bootstrap,
-                            reps=30, rng=MersenneTwister(1))
+                            reps=30, rng=Xoshiro(1))
         @test slp.n_requested == 30
         @test slp.n_effective + slp.n_failed == slp.n_requested
         @test 0 <= slp.n_failed <= slp.n_requested
         # count is reproducible under a fixed seed (atomic total is thread-count invariant)
         slp2 = structural_lp(Y, 6; method=:cholesky, lags=2, ci_type=:bootstrap,
-                             reps=30, rng=MersenneTwister(1))
+                             reps=30, rng=Xoshiro(1))
         @test slp.n_failed == slp2.n_failed
         # no bootstrap ⇒ zero counts
         slp0 = structural_lp(Y, 6; method=:cholesky, lags=2, ci_type=:none)

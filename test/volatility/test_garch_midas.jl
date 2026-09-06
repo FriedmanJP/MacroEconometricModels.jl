@@ -46,7 +46,7 @@ high-frequency return series (length `nblk*m_freq`).
 function simulate_garch_midas(; nblk::Int=260, m_freq::Int=22, K::Int=12,
                               mu=0.02, alpha=0.06, beta=0.90,
                               m=-0.5, theta=0.3, w=4.0, seed::Int=11)
-    rng = MersenneTwister(seed)
+    rng = Xoshiro(seed)
     phi = midas_weights([1.0, w], K; kind=:beta2)
     X = zeros(nblk)
     for t in 2:nblk
@@ -209,7 +209,7 @@ end
     # =========================================================================
     @testset "input validation" begin
         @test_throws ArgumentError estimate_garch_midas(r, X; K=1, m_freq=22)
-        @test_throws ArgumentError estimate_garch_midas(randn(MersenneTwister(24), 10), randn(MersenneTwister(25), 10); K=3, m_freq=2)
+        @test_throws ArgumentError estimate_garch_midas(randn(Xoshiro(24), 10), randn(Xoshiro(25), 10); K=3, m_freq=2)
         # rv=:macro needs enough low-frequency observations
         @test_throws ArgumentError estimate_garch_midas(r, X[1:3]; K=12, m_freq=22)
         @test_throws ArgumentError estimate_garch_midas(r, X; K=12, m_freq=22, rv=:bogus)

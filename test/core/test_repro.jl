@@ -50,7 +50,7 @@ const _MEM = MacroEconometricModels
     end
 
     @testset "BVAR posterior carries a manifest and reproduces bit-for-bit" begin
-        Y = randn(MersenneTwister(1), 80, 2)
+        Y = randn(Xoshiro(1), 80, 2)
         post = estimate_bvar(Y, 2; n_draws=100, seed=20260717)
         @test post.manifest isa ReproManifest
         @test post.manifest.seed == 20260717
@@ -69,7 +69,7 @@ const _MEM = MacroEconometricModels
     end
 
     @testset "BVAR gibbs sampler reproduces (burnin/thin recorded)" begin
-        Y = randn(MersenneTwister(5), 70, 2)
+        Y = randn(Xoshiro(5), 70, 2)
         post = estimate_bvar(Y, 2; n_draws=60, sampler=:gibbs, thin=2, seed=314)
         @test post.manifest.settings["thin"] == 2
         @test post.manifest.settings["burnin"] == 200   # gibbs default recorded
@@ -77,7 +77,7 @@ const _MEM = MacroEconometricModels
     end
 
     @testset "BVAR without a seed: manifest present, reproduction declines" begin
-        Y = randn(MersenneTwister(2), 80, 2)
+        Y = randn(Xoshiro(2), 80, 2)
         post = estimate_bvar(Y, 2; n_draws=50)          # no seed
         @test post.manifest isa ReproManifest
         @test post.manifest.seed === nothing
@@ -87,7 +87,7 @@ const _MEM = MacroEconometricModels
     end
 
     @testset "bootstrap IRF carries a manifest and reproduces via reproduce(ir, model)" begin
-        Y = randn(MersenneTwister(3), 100, 2)
+        Y = randn(Xoshiro(3), 100, 2)
         model = estimate_var(Y, 2)
         ir = irf(model, 10; ci_type=:bootstrap, reps=80, seed=123)
         @test ir.manifest isa ReproManifest
@@ -130,7 +130,7 @@ const _MEM = MacroEconometricModels
     end
 
     @testset "reproducibility footer is opt-in (#521)" begin
-        Y = randn(MersenneTwister(4), 80, 2)
+        Y = randn(Xoshiro(4), 80, 2)
         post = estimate_bvar(Y, 2; n_draws=50, seed=5)
         model = estimate_var(Y, 2)
         boot = irf(model, 10; ci_type=:bootstrap, reps=20, seed=5)
@@ -168,7 +168,7 @@ const _MEM = MacroEconometricModels
     end
 
     @testset "ReproManifest display gates only the git line (#521)" begin
-        Y = randn(MersenneTwister(4), 80, 2)
+        Y = randn(Xoshiro(4), 80, 2)
         post = estimate_bvar(Y, 2; n_draws=50, seed=5)
         m = post.manifest
 
@@ -204,8 +204,8 @@ const _MEM = MacroEconometricModels
         sol = solve(spec)
         @test simulate(sol, 20; seed=3) == simulate(sol, 20; seed=3)
         @test simulate(sol, 20; seed=3) != simulate(sol, 20; seed=4)
-        rng_path = simulate(sol, 20; rng=MersenneTwister(9))
-        @test simulate(sol, 20; rng=MersenneTwister(9)) == rng_path
+        rng_path = simulate(sol, 20; rng=Xoshiro(9))
+        @test simulate(sol, 20; rng=Xoshiro(9)) == rng_path
 
         spec_ss = compute_steady_state(spec)
         psol = perturbation_solver(spec_ss; order=2)
@@ -248,7 +248,7 @@ end
 # =============================================================================
 
 function _rser13_did_panel(; n_units=12, n_periods=10, seed=42)
-    rng = MersenneTwister(seed)
+    rng = Xoshiro(seed)
     n_cohorts = 2
     units_per = n_units ÷ (n_cohorts + 1)
     treat_times = zeros(Int, n_units)
@@ -279,7 +279,7 @@ function _rser13_did_panel(; n_units=12, n_periods=10, seed=42)
 end
 
 function _rser13_pvar(; N=8, T_total=14, m=2, seed=11)
-    rng = MersenneTwister(seed)
+    rng = Xoshiro(seed)
     data_mat = zeros(N * T_total, m)
     for i in 1:N
         mu = randn(rng, m)
@@ -327,14 +327,14 @@ end
         @test Q1 == Q2
         Q3 = generate_Q(3; seed=18)
         @test Q1 != Q3
-        Qr = generate_Q(3; rng=MersenneTwister(17))
+        Qr = generate_Q(3; rng=Xoshiro(17))
         @test Qr isa Matrix
         # seed wins when both are passed
-        @test generate_Q(3; rng=MersenneTwister(99), seed=17) == Q1
+        @test generate_Q(3; rng=Xoshiro(99), seed=17) == Q1
     end
 
     @testset "estimate_sv: seed, manifest, reproduce, round-trip" begin
-        y = randn(MersenneTwister(3), 40)
+        y = randn(Xoshiro(3), 40)
         m = estimate_sv(y; n_samples=12, burnin=6, seed=20260717)
         @test m.manifest isa ReproManifest
         @test m.manifest.seed == 20260717
@@ -349,11 +349,11 @@ end
         @test m_ns.manifest.seed === nothing
         @test reproduce(m_ns).matched === missing
         # rng= still works
-        @test estimate_sv(y; n_samples=8, burnin=4, rng=MersenneTwister(1)) isa SVModel
+        @test estimate_sv(y; n_samples=8, burnin=4, rng=Xoshiro(1)) isa SVModel
     end
 
     @testset "estimate_tvpvar: seed, manifest, reproduce, round-trip" begin
-        Y = randn(MersenneTwister(4), 40, 2)
+        Y = randn(Xoshiro(4), 40, 2)
         post = estimate_tvpvar(Y, 1; tvp=true, sv=true, n_draws=6, n_burn=6,
                                n_train=8, seed=314)
         @test post.manifest isa ReproManifest
@@ -362,7 +362,7 @@ end
         post2 = _MEM._reconstruct_from_container(_MEM._build_container(post))
         @test reproduce(post2).matched === true
         @test estimate_tvpvar(Y, 1; n_draws=6, n_burn=6, n_train=8,
-                              rng=MersenneTwister(1)) isa TVPVARPosterior
+                              rng=Xoshiro(1)) isa TVPVARPosterior
     end
 
     @testset "pvar_bootstrap_irf: seed, manifest, reproduce, round-trip" begin
@@ -378,7 +378,7 @@ end
         loaded = _MEM._reconstruct_from_container(_MEM._build_container(boot.model))
         @test reproduce(loaded).matched === true
         @test pvar_bootstrap_irf(model, 3; n_draws=4,
-                                 rng=MersenneTwister(1)).draws isa Array
+                                 rng=Xoshiro(1)).draws isa Array
     end
 
     @testset "PVARModel v1 payload without boot_* keys still loads" begin
@@ -402,7 +402,7 @@ end
     end
 
     @testset "estimate_structural_dfm: seed, manifest on both methods" begin
-        X = randn(MersenneTwister(1), 80, 8)
+        X = randn(Xoshiro(1), 80, 8)
         sdfm = estimate_structural_dfm(X, 2; r=2, p=1, H=4, seed=1)
         @test sdfm.manifest isa ReproManifest
         @test sdfm.manifest.seed == 1
@@ -434,11 +434,11 @@ end
         @test reproduce(r2).matched === true
         @test estimate_did(pd, :outcome, :treat_time; method=:did_multiplegt,
                            leads=1, horizon=2, n_boot=6,
-                           rng=MersenneTwister(1)) isa DIDResult
+                           rng=Xoshiro(1)) isa DIDResult
     end
 
     @testset "forecast(::MSRegModel): seed, manifest, reproduce, round-trip" begin
-        rng = MersenneTwister(510)
+        rng = Xoshiro(510)
         n = 120
         y = zeros(n)
         s = 1
@@ -457,14 +457,14 @@ end
         @test reproduce(fc).matched === true
         fc2 = _MEM._reconstruct_from_container(_MEM._build_container(fc))
         @test reproduce(fc2).matched === true
-        @test forecast(ms, 3; reps=10, rng=MersenneTwister(2)) isa MSForecast
+        @test forecast(ms, 3; reps=10, rng=Xoshiro(2)) isa MSForecast
     end
 
     @testset "estimate_opp: seed, manifest, reproduce, round-trip" begin
         H, n_s = 6, 2
-        Tx0 = randn(MersenneTwister(8), H, n_s)
-        v0 = randn(MersenneTwister(9), H)
-        noises = 0.05 .* randn(MersenneTwister(2), 12)
+        Tx0 = randn(Xoshiro(8), H, n_s)
+        v0 = randn(Xoshiro(9), H)
+        noises = 0.05 .* randn(Xoshiro(2), 12)
         D = cat((Tx0 .* (1 + e) for e in noises)...; dims=3)
         ce = PolicyCausalEffects(outcomes=[:u], Theta_x=[Tx0], Theta_x_draws=[D])
         d = [hcat((v0 .* (1 + e) for e in noises)...)]
@@ -478,11 +478,11 @@ end
         r2 = _MEM._reconstruct_from_container(_MEM._build_container(r))
         @test reproduce(r2).matched === true
         @test estimate_opp(fc, ce, loss; n_sim=16,
-                           rng=MersenneTwister(3)) isa OPPResult
+                           rng=Xoshiro(3)) isa OPPResult
     end
 
     @testset "two-arg reproduce(ir, model) is unchanged" begin
-        Y = randn(MersenneTwister(3), 80, 2)
+        Y = randn(Xoshiro(3), 80, 2)
         model = estimate_var(Y, 2)
         ir = irf(model, 8; ci_type=:bootstrap, reps=40, seed=123)
         @test reproduce(ir, model).matched === true

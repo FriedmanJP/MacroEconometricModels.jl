@@ -16,7 +16,7 @@ using PrecompileTools: @setup_workload, @compile_workload
 
 @setup_workload begin
     # Seeded so the precompile inputs are deterministic (and rng-lint clean, #243).
-    rng = Random.MersenneTwister(0)
+    rng = Random.Xoshiro(0)
     Y = randn(rng, 60, 3)
     X = Y[:, 2:3]
     yv = collect(@view Y[:, 1])

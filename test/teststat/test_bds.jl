@@ -123,7 +123,7 @@ end
     # =========================================================================
     @testset "Engine matches naive brute force" begin
         for seed in (11, 42, 907)
-            rng = Random.MersenneTwister(seed)
+            rng = Random.Xoshiro(seed)
             y = randn(rng, 60)
             sd = std(y)
             for m in (2, 3, 5), frac in (0.5, 1.0, 1.5)
@@ -144,7 +144,7 @@ end
         ws = Float64[]
         nreject = 0
         for s in 1:nseed
-            rng = Random.MersenneTwister(3000 + s)
+            rng = Random.Xoshiro(3000 + s)
             y = randn(rng, 400)
             r = bds_test(y; m=2, eps_frac=1.0)          # T≥200 ⇒ no warning
             w = r.statistic[1, 1]
@@ -174,7 +174,7 @@ end
         nreject = 0
         nseed = 20
         for s in 1:nseed
-            rng = Random.MersenneTwister(700 + s)
+            rng = Random.Xoshiro(700 + s)
             y0 = 0.05 + 0.9 * rand(rng)
             y = logistic(500, y0)
             r = bds_test(y; m=2:3, eps_frac=0.7)
@@ -190,7 +190,7 @@ end
     # API surface: table shape, multi-ε, StatsAPI, show, refs.
     # =========================================================================
     @testset "API, table shape, StatsAPI, show, refs" begin
-        rng = Random.MersenneTwister(1)
+        rng = Random.Xoshiro(1)
         y = randn(rng, 300)
         r = bds_test(y; m=2:4, eps_frac=[0.5, 1.0, 1.5])
         @test r isa BDSResult
@@ -222,7 +222,7 @@ end
     # Small-sample warning + permutation bootstrap.
     # =========================================================================
     @testset "small-sample flag & bootstrap" begin
-        rng = Random.MersenneTwister(5)
+        rng = Random.Xoshiro(5)
         y = randn(rng, 80)
         local r
         @test_logs (:warn,) match_mode=:any begin
@@ -230,7 +230,7 @@ end
         end
         @test r.small_sample
         # Bootstrap under iid: p-value is a valid fraction; iid ⇒ not tiny.
-        rng = Random.MersenneTwister(6)
+        rng = Random.Xoshiro(6)
         yb = randn(rng, 150)
         rb = bds_test(yb; m=2, eps_frac=1.0, bootstrap=300, seed=99)
         @test rb.bootstrap == 300
@@ -252,7 +252,7 @@ end
     # =========================================================================
     @testset "ARIMA & GARCH residual dispatches" begin
         # White-noise data ⇒ AR(1) residuals ≈ iid ⇒ do not reject.
-        rng = Random.MersenneTwister(20)
+        rng = Random.Xoshiro(20)
         y = randn(rng, 400)
         ar = estimate_ar(y, 1)
         r_arima = bds_test(ar; m=2, eps_frac=1.0)
@@ -261,7 +261,7 @@ end
         @test isfinite(r_arima.statistic[1, 1])
 
         # GARCH dispatch tests STANDARDIZED residuals (documented behaviour).
-        rng = Random.MersenneTwister(21)
+        rng = Random.Xoshiro(21)
         n = 600
         e = randn(rng, n)
         h = ones(n); ret = zeros(n)
@@ -282,7 +282,7 @@ end
     # Edge cases / argument validation.
     # =========================================================================
     @testset "edge cases & validation" begin
-        rng = Random.MersenneTwister(9)
+        rng = Random.Xoshiro(9)
         y = randn(rng, 250)
         # Very large ε ⇒ Θ all-ones ⇒ degenerate variance ⇒ NaN statistic.
         r = bds_test(y; m=2, eps_frac=1e6)

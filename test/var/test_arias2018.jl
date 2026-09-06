@@ -78,7 +78,7 @@ end
     # ==========================================================================
 
     @testset "Pure Sign Restrictions" begin
-        rng = MersenneTwister(12345)  # DGP-02: explicit rng
+        rng = Xoshiro(12345)  # DGP-02: explicit rng
 
         # Reference DGP (DGP-02 #791): non-diagonal A, non-identity B0.
         # The (1,1)+ and (2,2)+ restrictions hold at the truth (B0 diag = 1).
@@ -144,7 +144,7 @@ end
         @test !MacroEconometricModels._is_rejectable_draw_error(MethodError(sqrt, ("x",)))
         @test !MacroEconometricModels._is_rejectable_draw_error(DimensionMismatch("x"))
 
-        rng = MersenneTwister(2018)  # DGP-02: explicit rng
+        rng = Xoshiro(2018)  # DGP-02: explicit rng
         Y = zeros(150, 3)
         for t in 2:150
             Y[t, :] = 0.5 * Y[t-1, :] + randn(rng, 3)
@@ -165,7 +165,7 @@ end
     end
 
     @testset "Pure Zero Restrictions (Cholesky-like)" begin
-        rng = MersenneTwister(23456)  # DGP-02: explicit rng
+        rng = Xoshiro(23456)  # DGP-02: explicit rng
 
         # Reference DGP (DGP-02 #791); Cholesky-like zeros hold at the truth
         # (lower-triangular B0).
@@ -200,7 +200,7 @@ end
     end
 
     @testset "Mixed Zero and Sign Restrictions" begin
-        rng = MersenneTwister(34567)  # DGP-02: explicit rng
+        rng = Xoshiro(34567)  # DGP-02: explicit rng
 
         # Reference DGP with B0[3,2] < 0 (DGP-02 #791): the (3,2)-negative
         # sign restriction below holds at the truth instead of by luck.
@@ -239,7 +239,7 @@ end
     # ==========================================================================
 
     @testset "Zero Restrictions at Different Horizons" begin
-        rng = MersenneTwister(45678)  # DGP-02: explicit rng
+        rng = Xoshiro(45678)  # DGP-02: explicit rng
 
         # Reference 2-var DGP (DGP-02 #791) estimated with p = 2 lags.
         T_obs, n, p = 200, 2, 2
@@ -266,7 +266,7 @@ end
     # ==========================================================================
 
     @testset "IRF Percentiles and Mean" begin
-        rng = MersenneTwister(56789)  # DGP-02: explicit rng
+        rng = Xoshiro(56789)  # DGP-02: explicit rng
 
         T_obs, n, p = 150, 2, 1
         Y = randn(rng, T_obs, n)
@@ -303,7 +303,7 @@ end
     # ==========================================================================
 
     @testset "Orthogonality of Q Matrices" begin
-        rng = MersenneTwister(67890)  # DGP-02: explicit rng
+        rng = Xoshiro(67890)  # DGP-02: explicit rng
 
         T_obs, n, p = 150, 3, 1
         Y = randn(rng, T_obs, n)
@@ -327,7 +327,7 @@ end
     end
 
     @testset "Weights are Positive and Sum to One" begin
-        rng = MersenneTwister(78901)  # DGP-02: explicit rng
+        rng = Xoshiro(78901)  # DGP-02: explicit rng
 
         T_obs, n, p = 150, 2, 1
         Y = randn(rng, T_obs, n)
@@ -351,7 +351,7 @@ end
     # ==========================================================================
 
     @testset "Single Variable" begin
-        rng = MersenneTwister(89012)  # DGP-02: explicit rng
+        rng = Xoshiro(89012)  # DGP-02: explicit rng
 
         T_obs, n, p = 100, 1, 1
         Y = dgp_var(rng; A=reshape([0.5], 1, 1), B0=reshape([1.0], 1, 1), T=T_obs).Y
@@ -367,7 +367,7 @@ end
     end
 
     @testset "Two Variables - Block Recursive" begin
-        rng = MersenneTwister(90123)  # DGP-02: explicit rng
+        rng = Xoshiro(90123)  # DGP-02: explicit rng
 
         T_obs, n, p = 150, 2, 1
         # Block-recursive truth: lower-triangular B0 (DGP-02 #791).
@@ -388,7 +388,7 @@ end
     end
 
     @testset "Many Zero Restrictions" begin
-        rng = MersenneTwister(12345)  # DGP-02: explicit rng
+        rng = Xoshiro(12345)  # DGP-02: explicit rng
 
         T_obs, n, p = 200, 4, 1
         # 4-variable reference DGP: stationary A (row sums <= 0.6),
@@ -433,7 +433,7 @@ end
     # ==========================================================================
 
     @testset "Numerical Stability - Near Singular Covariance" begin
-        rng = MersenneTwister(23456)  # DGP-02: explicit rng
+        rng = Xoshiro(23456)  # DGP-02: explicit rng
 
         T_obs, n, p = 150, 3, 1
         Y = randn(rng, T_obs, n)
@@ -455,7 +455,7 @@ end
     @testset "Reproducibility" begin
         T_obs, n, p = 150, 2, 1
 
-        rng = MersenneTwister(54321)  # DGP-02: explicit rng
+        rng = Xoshiro(54321)  # DGP-02: explicit rng
         Y = randn(rng, T_obs, n)
         model = estimate_var(Y, p)
 
@@ -464,10 +464,10 @@ end
 
         # Same explicit rng stream twice → identical results (DGP-02).
         result1 = identify_arias(model, restrictions, 5; n_draws=5, n_rotations=20,
-                                 rng=MersenneTwister(11111))
+                                 rng=Xoshiro(11111))
 
         result2 = identify_arias(model, restrictions, 5; n_draws=5, n_rotations=20,
-                                 rng=MersenneTwister(11111))
+                                 rng=Xoshiro(11111))
 
         # Same seed should give same results
         @test length(result1.Q_draws) == length(result2.Q_draws)
@@ -479,7 +479,7 @@ end
     # ==========================================================================
 
     @testset "Input Validation" begin
-        rng = MersenneTwister(34567)  # DGP-02: explicit rng
+        rng = Xoshiro(34567)  # DGP-02: explicit rng
 
         T_obs, n, p = 100, 2, 1
         Y = randn(rng, T_obs, n)
@@ -496,7 +496,7 @@ end
     # ==========================================================================
 
     @testset "Comparison with Cholesky Identification" begin
-        rng = MersenneTwister(45678)  # DGP-02: explicit rng
+        rng = Xoshiro(45678)  # DGP-02: explicit rng
 
         T_obs, n, p = 200, 3, 1
         # Reference DGP: Cholesky zeros hold at the truth (DGP-02 #791).
@@ -538,7 +538,7 @@ end
     # ==========================================================================
 
     @testset "Larger System (5 variables)" begin
-        rng = MersenneTwister(56789)  # DGP-02: explicit rng
+        rng = Xoshiro(56789)  # DGP-02: explicit rng
 
         T_obs, n, p = 300, 5, 2
         # 5-variable reference DGP: stationary A, lower-triangular B0 (DGP-02 #791).
@@ -572,7 +572,7 @@ end
     # ==========================================================================
 
     @testset "AriasSVARResult Methods" begin
-        rng = MersenneTwister(67890)  # DGP-02: explicit rng
+        rng = Xoshiro(67890)  # DGP-02: explicit rng
 
         T_obs, n, p = 150, 2, 1
         Y = randn(rng, T_obs, n)
@@ -614,7 +614,7 @@ end
 @testset "identify_arias_bayesian" begin
 
     @testset "Basic Bayesian Sign Restrictions" begin
-        rng = MersenneTwister(11111)  # DGP-02: explicit rng
+        rng = Xoshiro(11111)  # DGP-02: explicit rng
 
         # Generate simple VAR data (reduced from T=200)
         T_obs, n, p = 100, 2, 1
@@ -661,7 +661,7 @@ end
     end
 
     @testset "Bayesian Zero Restrictions" begin
-        rng = MersenneTwister(22222)  # DGP-02: explicit rng
+        rng = Xoshiro(22222)  # DGP-02: explicit rng
 
         T_obs, n, p = 100, 3, 1
         Y = dgp_var(rng; T=T_obs).Y
@@ -686,7 +686,7 @@ end
     end
 
     @testset "Bayesian Mixed Zero and Sign Restrictions" begin
-        rng = MersenneTwister(33333)  # DGP-02: explicit rng
+        rng = Xoshiro(33333)  # DGP-02: explicit rng
 
         T_obs, n, p = 100, 2, 1
         # Reference 2-var DGP (DGP-02 #791); the (1,1)+ restriction holds
@@ -708,7 +708,7 @@ end
     end
 
     @testset "Bayesian Identification without Data" begin
-        rng = MersenneTwister(44444)  # DGP-02: explicit rng
+        rng = Xoshiro(44444)  # DGP-02: explicit rng
 
         T_obs, n, p = 100, 2, 1
         # Reference 2-var DGP (DGP-02 #791).
@@ -729,7 +729,7 @@ end
     end
 
     @testset "Bayesian Custom Quantiles" begin
-        rng = MersenneTwister(55555)  # DGP-02: explicit rng
+        rng = Xoshiro(55555)  # DGP-02: explicit rng
 
         T_obs, n, p = 100, 2, 1
         Y = dgp_var(rng; A=[0.5 0.1; 0.0 0.4], B0=[1.0 0.0; 0.3 1.0], T=T_obs).Y
@@ -756,7 +756,7 @@ end
     end
 
     @testset "Bayesian Single Variable" begin
-        rng = MersenneTwister(66666)  # DGP-02: explicit rng
+        rng = Xoshiro(66666)  # DGP-02: explicit rng
 
         T_obs, n, p = 80, 1, 1
         # Univariate reference DGP (DGP-02 #791).
@@ -818,7 +818,7 @@ end
     end
 
     @testset "_compute_ma_coefficients" begin
-        rng = MersenneTwister(77777)  # DGP-02: explicit rng
+        rng = Xoshiro(77777)  # DGP-02: explicit rng
 
         T_obs, n, p = 100, 2, 2
         Y = randn(rng, T_obs, n)
@@ -845,7 +845,7 @@ end
     end
 
     @testset "haar_orthogonal" begin
-        rng = MersenneTwister(88888)  # DGP-02: explicit rng
+        rng = Xoshiro(88888)  # DGP-02: explicit rng
 
         for n in [2, 3, 4, 5]
             Q = MacroEconometricModels.haar_orthogonal(n, Float64)
@@ -926,7 +926,7 @@ end
     end
 
     @testset "_draw_null_space_vector" begin
-        rng = MersenneTwister(99999)  # DGP-02: explicit rng
+        rng = Xoshiro(99999)  # DGP-02: explicit rng
 
         # No constraints - should return random unit vector
         n = 3
@@ -952,7 +952,7 @@ end
     end
 
     @testset "_compute_importance_weight" begin
-        rng = MersenneTwister(12121)  # DGP-02: explicit rng
+        rng = Xoshiro(12121)  # DGP-02: explicit rng
 
         T_obs, n, p = 100, 3, 1
         Y = randn(rng, T_obs, n)
@@ -978,7 +978,7 @@ end
     end
 
     @testset "_build_zero_constraint_matrix" begin
-        rng = MersenneTwister(23232)  # DGP-02: explicit rng
+        rng = Xoshiro(23232)  # DGP-02: explicit rng
 
         T_obs, n, p = 100, 3, 1
         Y = randn(rng, T_obs, n)
@@ -1003,7 +1003,7 @@ end
     end
 
     @testset "_compute_irf_for_Q" begin
-        rng = MersenneTwister(34343)  # DGP-02: explicit rng
+        rng = Xoshiro(34343)  # DGP-02: explicit rng
 
         T_obs, n, p = 100, 2, 1
         Y = randn(rng, T_obs, n)
@@ -1025,7 +1025,7 @@ end
     end
 
     @testset "_draw_Q_with_zero_restrictions" begin
-        rng = MersenneTwister(45454)  # DGP-02: explicit rng
+        rng = Xoshiro(45454)  # DGP-02: explicit rng
 
         T_obs, n, p = 100, 3, 1
         Y = randn(rng, T_obs, n)
@@ -1060,7 +1060,7 @@ end
 @testset "Draw-Dependent Importance Weight Correctness" begin
 
     @testset "Weight variability with zero restrictions" begin
-        rng = MersenneTwister(42424)  # DGP-02: explicit rng
+        rng = Xoshiro(42424)  # DGP-02: explicit rng
 
         T_obs, n, p = 200, 3, 1
         Y = randn(rng, T_obs, n)
@@ -1081,7 +1081,7 @@ end
     end
 
     @testset "Pure sign restrictions give unit weights" begin
-        rng = MersenneTwister(43434)  # DGP-02: explicit rng
+        rng = Xoshiro(43434)  # DGP-02: explicit rng
 
         T_obs, n, p = 200, 3, 1
         Y = randn(rng, T_obs, n)
@@ -1112,7 +1112,7 @@ end
     end
 
     @testset "Structural param roundtrip" begin
-        rng = MersenneTwister(44444)  # DGP-02: explicit rng
+        rng = Xoshiro(44444)  # DGP-02: explicit rng
 
         T_obs, n, p = 200, 3, 1
         Y = randn(rng, T_obs, n)
@@ -1140,7 +1140,7 @@ end
     end
 
     @testset "Q ↔ spheres roundtrip" begin
-        rng = MersenneTwister(45454)  # DGP-02: explicit rng
+        rng = Xoshiro(45454)  # DGP-02: explicit rng
 
         T_obs, n, p = 200, 3, 1
         Y = randn(rng, T_obs, n)
@@ -1166,7 +1166,7 @@ end
     end
 
     @testset "Volume element sanity checks" begin
-        rng = MersenneTwister(46464)  # DGP-02: explicit rng
+        rng = Xoshiro(46464)  # DGP-02: explicit rng
 
         T_obs, n, p = 200, 3, 1
         Y = randn(rng, T_obs, n)
@@ -1191,7 +1191,7 @@ end
     end
 
     @testset "Cholesky equivalence: diagonal impact entries match" begin
-        rng = MersenneTwister(47474)  # DGP-02: explicit rng
+        rng = Xoshiro(47474)  # DGP-02: explicit rng
 
         T_obs, n, p = 300, 3, 1
         # Reference DGP (DGP-02 #791).
@@ -1237,7 +1237,7 @@ end
     end
 
     @testset "compute_weights=false gives unit weights" begin
-        rng = MersenneTwister(48484)  # DGP-02: explicit rng
+        rng = Xoshiro(48484)  # DGP-02: explicit rng
 
         T_obs, n, p = 200, 3, 1
         Y = randn(rng, T_obs, n)
@@ -1285,7 +1285,7 @@ end
     end
 
     @testset "_pack/_unpack_structural roundtrip" begin
-        rng = MersenneTwister(49494)  # DGP-02: explicit rng
+        rng = Xoshiro(49494)  # DGP-02: explicit rng
         n, m = 3, 7  # m = 1 + n*p for p=2
         A0 = randn(rng, n, n)
         Aplus = randn(rng, m, n)
@@ -1320,7 +1320,7 @@ end
     end
 
     @testset "_compute_qr_signs" begin
-        rng = MersenneTwister(50505)  # DGP-02: explicit rng
+        rng = Xoshiro(50505)  # DGP-02: explicit rng
         T_obs, n, p = 200, 3, 1
         Y = randn(rng, T_obs, n)
         model = estimate_var(Y, p)
@@ -1347,7 +1347,7 @@ end
     end
 
     @testset "ff_h Jacobian smoothness (Issue #37)" begin
-        rng = MersenneTwister(51515)  # DGP-02: explicit rng
+        rng = Xoshiro(51515)  # DGP-02: explicit rng
         T_obs, n, p = 200, 3, 1
         Y = randn(rng, T_obs, n)
         model = estimate_var(Y, p)
@@ -1379,7 +1379,7 @@ end
     end
 
     @testset "_draw_w" begin
-        rng = MersenneTwister(49494)  # DGP-02: explicit rng
+        rng = Xoshiro(49494)  # DGP-02: explicit rng
 
         n = 3
         zrs = [zero_restriction(2, 1)]
@@ -1406,7 +1406,7 @@ end
 @testset "Error Handling" begin
 
     @testset "No Valid Identification" begin
-        rng = MersenneTwister(56565)  # DGP-02: explicit rng
+        rng = Xoshiro(56565)  # DGP-02: explicit rng
 
         T_obs, n, p = 100, 2, 1
         Y = randn(rng, T_obs, n)
@@ -1424,7 +1424,7 @@ end
     end
 
     @testset "Dimension Mismatch" begin
-        rng = MersenneTwister(67676)  # DGP-02: explicit rng
+        rng = Xoshiro(67676)  # DGP-02: explicit rng
 
         T_obs, n, p = 100, 2, 1
         Y = randn(rng, T_obs, n)
@@ -1439,14 +1439,14 @@ end
 end
 
 @testset "Arias rng reproducibility (#243/T144)" begin
-    rng = MersenneTwister(7)  # DGP-02: explicit rng
+    rng = Xoshiro(7)  # DGP-02: explicit rng
     Y = randn(rng, 150, 3)
     model = estimate_var(Y, 2)
     restr = SVARRestrictions(3; signs=[sign_restriction(1, 1, :positive)])
-    r1 = identify_arias(model, restr, 8; n_draws=10, n_rotations=30, rng=Random.MersenneTwister(11))
-    r2 = identify_arias(model, restr, 8; n_draws=10, n_rotations=30, rng=Random.MersenneTwister(11))
+    r1 = identify_arias(model, restr, 8; n_draws=10, n_rotations=30, rng=Random.Xoshiro(11))
+    r2 = identify_arias(model, restr, 8; n_draws=10, n_rotations=30, rng=Random.Xoshiro(11))
     @test r1.Q_draws == r2.Q_draws          # same seed -> bitwise-identical rotations
-    r3 = identify_arias(model, restr, 8; n_draws=10, n_rotations=30, rng=Random.MersenneTwister(99))
+    r3 = identify_arias(model, restr, 8; n_draws=10, n_rotations=30, rng=Random.Xoshiro(99))
     @test r1.Q_draws != r3.Q_draws          # different seed -> different draws
 end
 
@@ -1469,14 +1469,14 @@ end
 
         # Scale invariance: the ratio is unchanged by normalization, which is why
         # `ess` can be computed before the weights are scaled to sum to 1.
-        w = abs.(randn(Random.MersenneTwister(1), 200))
+        w = abs.(randn(Random.Xoshiro(1), 200))
         @test MEM._effective_sample_size(w) ≈ MEM._effective_sample_size(1e6 .* w)
         @test MEM._effective_sample_size(w) ≈ MEM._effective_sample_size(w ./ sum(w))
         @test MEM._effective_sample_size(w) ≈ kish(w)
 
         # 1 <= ESS <= n for any non-negative weight vector.
         for seed in 1:50
-            v = abs.(randn(Random.MersenneTwister(seed), 2 + seed % 40))
+            v = abs.(randn(Random.Xoshiro(seed), 2 + seed % 40))
             e = MEM._effective_sample_size(v)
             @test 1 - 1e-9 <= e <= length(v) + 1e-9
         end
@@ -1487,7 +1487,7 @@ end
         @test_throws ArgumentError MEM._effective_sample_size([1.0, -1.0])
     end
 
-    rng = MersenneTwister(7)  # DGP-02: explicit rng
+    rng = Xoshiro(7)  # DGP-02: explicit rng
     n_v, p_v, T_v = 3, 2, 150
     Yb = randn(rng, T_v, n_v)
     for t in 3:T_v
@@ -1501,7 +1501,7 @@ end
     @testset "identify_arias populates ess / ess_fraction" begin
         nd = FAST ? 40 : 120
         r = identify_arias(model_b, restr_zs, 6; n_draws=nd, n_rotations=300,
-                           rng=Random.MersenneTwister(42))
+                           rng=Random.Xoshiro(42))
         @test length(r.weights) == nd
         @test r.ess ≈ kish(r.weights) rtol = 1e-10
         @test r.ess_fraction ≈ r.ess / nd
@@ -1514,7 +1514,7 @@ end
 
         # ESS is computed pre-normalization and is unchanged by it.
         r_raw = identify_arias(model_b, restr_zs, 6; n_draws=nd, n_rotations=300,
-                               normalize_weights=false, rng=Random.MersenneTwister(42))
+                               normalize_weights=false, rng=Random.Xoshiro(42))
         @test r_raw.ess ≈ r.ess
         @test r_raw.ess_fraction ≈ r.ess_fraction
         @test !isapprox(sum(r_raw.weights), 1.0)         # raw volume-element scale
@@ -1524,7 +1524,7 @@ end
     @testset "pure sign restrictions give a full effective sample" begin
         nd = FAST ? 20 : 60
         rs = identify_arias(model_b, SVARRestrictions(n_v; signs=[SignRestriction(3, 1, 0, 1)]),
-                            6; n_draws=nd, rng=Random.MersenneTwister(1))
+                            6; n_draws=nd, rng=Random.Xoshiro(1))
         # Uniform weights: no importance sampling, so nothing is lost.
         @test rs.ess ≈ nd
         @test rs.ess_fraction ≈ 1.0
@@ -1590,7 +1590,7 @@ end
         # unweighted ones; pooling must happen once, on the raw scale.
         post = estimate_bvar(Yb, p_v; n_draws=(FAST ? 15 : 30), rng=rng)
         rb = identify_arias_bayesian(post, restr_zs, 4; n_rotations=300,
-                                     rng=Random.MersenneTwister(9))
+                                     rng=Random.Xoshiro(9))
         @test rb.total_accepted > 1
         @test length(unique(round.(rb.weights; digits=12))) > 1     # not all identical
         @test sum(rb.weights) ≈ 1.0
@@ -1602,10 +1602,10 @@ end
 end
 
 @testset "SID-02 restriction horizon ≥ IRF horizon" begin
-    rng = MersenneTwister(731)  # DGP-02: explicit rng
+    rng = Xoshiro(731)  # DGP-02: explicit rng
     m = estimate_var(randn(rng, 150, 3), 2)
     r5 = SVARRestrictions(3; signs=[sign_restriction(1, 1, :positive; horizon=5)])
-    a = identify_arias(m, r5, 3; n_draws=5, n_rotations=200, rng=MersenneTwister(731))
+    a = identify_arias(m, r5, 3; n_draws=5, n_rotations=200, rng=Xoshiro(731))
     @test size(a.irf_draws, 2) == 3
     for Q in a.Q_draws
         irf6 = compute_irf(m, Q, 6)
@@ -1613,7 +1613,7 @@ end
     end
     r0 = SVARRestrictions(3; zeros=[zero_restriction(2, 1; horizon=4)],
                           signs=[sign_restriction(1, 1, :positive)])
-    a0 = identify_arias(m, r0, 2; n_draws=3, n_rotations=400, rng=MersenneTwister(7311))
+    a0 = identify_arias(m, r0, 2; n_draws=3, n_rotations=400, rng=Xoshiro(7311))
     for Q in a0.Q_draws
         @test abs(compute_irf(m, Q, 5)[5, 2, 1]) < 1e-8
     end
@@ -1622,12 +1622,12 @@ end
 end
 
 @testset "SID-19 BayesianSetIdentifiedSVAR" begin
-    rng = MersenneTwister(748)  # DGP-02: explicit rng
+    rng = Xoshiro(748)  # DGP-02: explicit rng
     Y = randn(rng, 80, 2)
     post = estimate_bvar(Y, 1; n_draws=FAST ? 12 : 20, burnin=5, rng=rng)
     r = SVARRestrictions(2; signs=[sign_restriction(1, 1, :positive)])
     res = identify_arias_bayesian(post, r, 4; n_rotations=FAST ? 20 : 50,
-                                  rng=MersenneTwister(748))
+                                  rng=Xoshiro(748))
     @test res isa BayesianSetIdentifiedSVAR
     @test res.n_unidentified >= 0
     @test res.n_degenerate_weights >= 0
@@ -1643,7 +1643,7 @@ end
 end
 
 @testset "SID-14 typed restriction language" begin
-    rng = MersenneTwister(743)  # DGP-02: explicit rng
+    rng = Xoshiro(743)  # DGP-02: explicit rng
 
     @testset "horizons expansion and constructors" begin
         srs = sign_restriction(1, 2, :positive; horizons=0:3)
@@ -1719,7 +1719,7 @@ end
             signs=[sign_restriction(1, 1, :positive),
                    sign_restriction(2, 2, :positive)])
         result = identify_arias(model, r, 8; n_draws=FAST ? 8 : 20, n_rotations=200,
-                                rng=MersenneTwister(743))
+                                rng=Xoshiro(743))
         @test length(result.Q_draws) >= 1
         Q0 = result.Q_draws[1]
         for Q in result.Q_draws
@@ -1750,13 +1750,13 @@ end
     end
 
     @testset "elasticity bound shrinks irf_bounds vs signs alone" begin
-        Y = randn(MersenneTwister(7432), 180, 2)
+        Y = randn(Xoshiro(7432), 180, 2)
         m = estimate_var(Y, 1)
         r_s = SVARRestrictions(2; signs=[
             sign_restriction(1, 1, :positive),
             sign_restriction(2, 1, :positive)])
         s_s = identify_sign(m, 6, sign_check(r_s); store_all=true,
-                            max_draws=FAST ? 250 : 600, rng=MersenneTwister(7433))
+                            max_draws=FAST ? 250 : 600, rng=Xoshiro(7433))
         @test s_s.n_accepted > 8
         elas = [s_s.irf_draws[i, 1, 1, 1] / s_s.irf_draws[i, 1, 2, 1] for i in 1:s_s.n_accepted]
         mid = median(elas)
@@ -1779,13 +1779,13 @@ end
     end
 
     @testset "A0 zeros, FEVD/cumulative/magnitude rejection, show" begin
-        Y = randn(MersenneTwister(7434), 160, 2)
+        Y = randn(Xoshiro(7434), 160, 2)
         m = estimate_var(Y, 1)
         r_a0 = SVARRestrictions(2;
             zeros=[a0_zero_restriction(2, 1)],
             signs=[sign_restriction(1, 1, :positive)])
         a0res = identify_arias(m, r_a0, 4; n_draws=FAST ? 4 : 8, n_rotations=300,
-                               rng=MersenneTwister(7434))
+                               rng=Xoshiro(7434))
         L = MacroEconometricModels.safe_cholesky(m.Sigma)
         for Q in a0res.Q_draws
             A0, _ = MacroEconometricModels._rf_to_struct(m.B, L, Q)
@@ -1826,7 +1826,7 @@ end
     end
 
     @testset "SID-08 guard on long-run zeros" begin
-        rng = MersenneTwister(7435)  # DGP-02: explicit rng
+        rng = Xoshiro(7435)  # DGP-02: explicit rng
         trend = cumsum(randn(rng, 200))
         Yc = [trend .+ 0.3 .* randn(rng, 200)  trend .+ 0.3 .* randn(rng, 200)]
         vecm = estimate_vecm(Yc, 2; rank=1)
@@ -1837,14 +1837,14 @@ end
 end
 
 @testset "SID-23 RWZ rank/order checker" begin
-    rng = MersenneTwister(752)  # DGP-02: explicit rng
+    rng = Xoshiro(752)  # DGP-02: explicit rng
     recursive_zeros(n) = [zero_restriction(i, j) for j in 1:n-1 for i in (j + 1):n]
 
     @testset "recursive zeros → :exact with rank(M_j)=n-j" begin
         n, p = 3, 1
         model = estimate_var(randn(rng, 180, n), p)
         r = SVARRestrictions(n; zeros=recursive_zeros(n))
-        st = check_identification(r, model; n_points=8, rng=MersenneTwister(752))
+        st = check_identification(r, model; n_points=8, rng=Xoshiro(752))
         @test st isa IdentificationStatus
         @test st.status === :exact
         @test st.ranks == [n - j for j in 1:n]
@@ -1855,7 +1855,7 @@ end
         @test st_o.orders == st.orders
         @test st_o.n_overidentifying == 0
         result = identify_arias(model, r, 4; n_draws=FAST ? 2 : 4, n_rotations=50,
-                                rng=MersenneTwister(7521))
+                                rng=Xoshiro(7521))
         @test length(result.Q_draws) >= 1
     end
 
@@ -1864,7 +1864,7 @@ end
         model = estimate_var(randn(rng, 180, n), p)
         # n(n-1)/2 impact zeros, all loaded on shock 1
         r = SVARRestrictions(n; zeros=[zero_restriction(i, 1) for i in 1:n])
-        st = check_identification(r, model; n_points=6, rng=MersenneTwister(7522))
+        st = check_identification(r, model; n_points=6, rng=Xoshiro(7522))
         @test st.status === :under
         @test st.orders[1] == n
         @test all(st.orders[j] == 0 for j in 2:n)
@@ -1873,7 +1873,7 @@ end
         @test st_o.status === :under
         @test st_o.orders == [n, 0, 0]
         @test_throws IdentificationError identify_arias(model, r, 4; n_draws=1, n_rotations=5,
-                                                       rng=MersenneTwister(7523))
+                                                       rng=Xoshiro(7523))
         err = try
             identify_arias(model, r, 4; n_draws=1, n_rotations=5, rng=rng)
             nothing
@@ -1889,14 +1889,14 @@ end
         model = estimate_var(randn(rng, 120, n), 1)
         r = SVARRestrictions(n; signs=[sign_restriction(1, 1, :positive),
                                        sign_restriction(2, 1, :negative)])
-        st = check_identification(r, model; rng=MersenneTwister(7524))
+        st = check_identification(r, model; rng=Xoshiro(7524))
         @test st.status === :set
         @test st.orders == zeros(Int, n)
         @test st.ranks == zeros(Int, n)
         @test st.n_overidentifying == 0
         @test check_identification(r, n).status === :set
         result = identify_arias(model, r, 4; n_draws=FAST ? 3 : 6, n_rotations=80,
-                                rng=MersenneTwister(7525))
+                                rng=Xoshiro(7525))
         @test length(result.Q_draws) >= 1
     end
 
@@ -1914,7 +1914,7 @@ end
         st_o = check_identification(r, n)
         @test st_o.orders == [2, 1, 0]
         @test st_o.status === :exact   # count passes
-        st = check_identification(r, model; n_points=8, rng=MersenneTwister(7526))
+        st = check_identification(r, model; n_points=8, rng=Xoshiro(7526))
         @test st.orders == [2, 1, 0]
         @test st.ranks[1] < n - 1
         @test st.status === :under
@@ -1952,12 +1952,12 @@ end
         n = 2
         model = estimate_var(randn(rng, 120, n), 1)
         r = SVARRestrictions(n; zeros=[zero_restriction(1, 1), zero_restriction(2, 1)])
-        st = check_identification(r, model; n_points=6, rng=MersenneTwister(7528))
+        st = check_identification(r, model; n_points=6, rng=Xoshiro(7528))
         @test st.status === :over
         @test st.n_overidentifying >= 1
         @test check_identification(r, n).status === :over
         err = try
-            identify_arias(model, r, 4; n_draws=1, n_rotations=5, rng=MersenneTwister(7529))
+            identify_arias(model, r, 4; n_draws=1, n_rotations=5, rng=Xoshiro(7529))
             nothing
         catch e
             e
@@ -1972,17 +1972,17 @@ end
         r = SVARRestrictions(n; signs=[sign_restriction(1, 1, :positive)])
         # let-shadowed `rng` keeps the lint's rng-first names while probing
         # two independent streams (DGP-02 #791).
-        x_a = let rng = MersenneTwister(7530)
+        x_a = let rng = Xoshiro(7530)
             MacroEconometricModels._assert_rwz_identified(r, model; rng=rng)
             rand(rng)
         end
-        x_b = rand(MersenneTwister(7530))
+        x_b = rand(Xoshiro(7530))
         @test x_a == x_b
-        y_c = let rng = MersenneTwister(7532)
+        y_c = let rng = Xoshiro(7532)
             identify_arias(model, r, 3; n_draws=1, n_rotations=50, rng=rng)
             rand(rng)
         end
-        y_d = let rng = MersenneTwister(7532)
+        y_d = let rng = Xoshiro(7532)
             identify_arias(model, r, 3; n_draws=1, n_rotations=50, rng=rng, check_id=false)
             rand(rng)
         end
@@ -1991,11 +1991,11 @@ end
 end
 
 @testset "SID-15 ADRR narrative restrictions" begin
-    rng = MersenneTwister(744)  # DGP-02: explicit rng
+    rng = Xoshiro(744)  # DGP-02: explicit rng
 
     # Planted bivariate SVAR: lower-triangular B0, five large positive ε₁ dates.
     function _adrr_planted(; Tobs=180, p=1, dates=[20, 30, 40, 50, 60],
-                           rng=MersenneTwister(744))
+                           rng=Xoshiro(744))
         n = 2
         B0 = [1.0 0.0; 0.4 1.0]
         A1 = [0.5 0.1; 0.0 0.4]
@@ -2074,9 +2074,9 @@ end
             sign_restriction(1, 1, :positive),
             narrative_shock_restriction(1, dates, :positive)])
         a_sign = identify_arias(model, r_sign, 6; n_draws=n_dr, n_rotations=n_rot,
-                                rng=MersenneTwister(7441))
+                                rng=Xoshiro(7441))
         a_nar = identify_arias(model, r_nar, 6; n_draws=n_dr, n_rotations=n_rot,
-                               n_narrative_sims=n_sims, rng=MersenneTwister(7441))
+                               n_narrative_sims=n_sims, rng=Xoshiro(7441))
         @test a_nar.n_narrative_sims == n_sims
         @test a_sign.n_narrative_sims == 0
         @test a_sign.ess_fraction ≈ 1.0 atol=1e-12
@@ -2113,7 +2113,7 @@ end
             got = identify_arias(model, r_wrong, 6; n_draws=FAST ? 8 : 20,
                                  n_rotations=FAST ? 80 : 200,
                                  n_narrative_sims=n_sims,
-                                 rng=MersenneTwister(7442))
+                                 rng=Xoshiro(7442))
         catch e
             @test e isa IdentificationError
             got = :error
@@ -2130,18 +2130,18 @@ end
             narrative_shock_restriction(1, dates, :positive)])
         wrapped = identify_narrative(model, r_nar, 4; n_draws=FAST ? 8 : 16,
                                      n_rotations=n_rot, n_narrative_sims=n_sims,
-                                     rng=MersenneTwister(7444))
+                                     rng=Xoshiro(7444))
         @test wrapped isa AriasSVARResult
         @test wrapped.n_narrative_sims == n_sims
         @test wrapped.ess_fraction < 1
         Q_f, irf_f, sh_f = identify_narrative(model, 4,
             ir -> ir[1, 1, 1] > 0, s -> s[dates[1], 1] > 0;
-            max_draws=FAST ? 200 : 800, rng=MersenneTwister(7445))
+            max_draws=FAST ? 200 : 800, rng=Xoshiro(7445))
         @test irf_f[1, 1, 1] > 0
         @test sh_f[dates[1], 1] > 0
         hd = historical_decomposition(model, r_nar, 8; n_draws=FAST ? 8 : 16,
                                       n_rotations=n_rot, n_narrative_sims=n_sims,
-                                      rng=MersenneTwister(7446))
+                                      rng=Xoshiro(7446))
         @test hd isa BayesianHistoricalDecomposition
         @test hd.n_effective >= 1
         @test hd.point_estimate[end, 1, 1] + hd.point_estimate[end, 1, 2] +
@@ -2162,9 +2162,9 @@ end
         n_csims = FAST ? 80 : 200
         n_cdr = FAST ? 16 : 40
         a_sign = identify_arias(model, r_sign, 6; n_draws=n_cdr, n_rotations=n_rot,
-                                rng=MersenneTwister(7451))
+                                rng=Xoshiro(7451))
         a_c = identify_arias(model, r_contrib, 6; n_draws=n_cdr, n_rotations=n_rot,
-                             n_narrative_sims=n_csims, rng=MersenneTwister(7451))
+                             n_narrative_sims=n_csims, rng=Xoshiro(7451))
         @test a_c.n_narrative_sims == n_csims
         @test a_sign.ess_fraction ≈ 1.0 atol=1e-12
         @test a_c.ess_fraction < a_sign.ess_fraction - 0.01
@@ -2174,13 +2174,13 @@ end
                 for i in 1:length(a_sign.Q_draws)]
         @test any(keep)
         @test count(keep) < length(keep)
-        rng_ω = MersenneTwister(7452)
+        rng_ω = Xoshiro(7452)
         ω_I = MacroEconometricModels._omega_hat(r_contrib, irf_I, 2, Float64;
                                                 n_sims=n_csims, rng=rng_ω)
         Q_mix = [0.0 -1.0; 1.0 0.0]
         irf_mix = compute_irf(model, Q_mix, 6)
         ω_mix = MacroEconometricModels._omega_hat(r_contrib, irf_mix, 2, Float64;
-                                                  n_sims=n_csims, rng=MersenneTwister(7453))
+                                                  n_sims=n_csims, rng=Xoshiro(7453))
         @test ω_I > ω_mix + 0.15
         lo, hi = irf_bounds(a_c)
         @test all(lo .<= hi)
@@ -2196,25 +2196,25 @@ end
         post = estimate_bvar(Y, 1; n_draws=FAST ? 8 : 12, burnin=3, rng=rng)
         n_b = FAST ? 40 : 80
         res = identify_arias_bayesian(post, r_nar, 4; n_rotations=FAST ? 20 : 40,
-                                      n_narrative_sims=n_b, rng=MersenneTwister(7447))
+                                      n_narrative_sims=n_b, rng=Xoshiro(7447))
         @test res isa BayesianSetIdentifiedSVAR
         @test res.n_narrative_sims == n_b
         @test res.ess_fraction < 1
         r_sign = SVARRestrictions(2; signs=[sign_restriction(1, 1, :positive)])
         res_s = identify_arias_bayesian(post, r_sign, 4; n_rotations=FAST ? 20 : 40,
-                                        rng=MersenneTwister(7448))
+                                        rng=Xoshiro(7448))
         @test res_s.ess_fraction ≈ 1.0 atol=1e-12
         @test res_s.n_narrative_sims == 0
     end
 end
 
 @testset "SID-17 Arias set summaries" begin
-    rng = MersenneTwister(7461)  # DGP-02: explicit rng
-    Y = randn(MersenneTwister(7461), 100, 2)
+    rng = Xoshiro(7461)  # DGP-02: explicit rng
+    Y = randn(Xoshiro(7461), 100, 2)
     model = estimate_var(Y, 1)
     r = SVARRestrictions(2; signs=[sign_restriction(1, 1, :positive)])
     a = identify_arias(model, r, 5; n_draws=FAST ? 12 : 24, n_rotations=FAST ? 80 : 200,
-                       rng=MersenneTwister(7461))
+                       rng=Xoshiro(7461))
     mt = median_target(a)
     @test any(Q -> Q === mt.Q, a.Q_draws)
     @test mt.irf ≈ a.irf_draws[mt.index, :, :, :]
@@ -2255,16 +2255,16 @@ end
     MEM = MacroEconometricModels
 
     @testset "FD vs AD weights 1e-6 relative (pinned freeze-FD)" begin
-        rng = MersenneTwister(756)  # DGP-02: explicit rng
+        rng = Xoshiro(756)  # DGP-02: explicit rng
         Y = randn(rng, 150, 3)
         model = estimate_var(Y, 1)
         restrictions = SVARRestrictions(3;
             zeros=[zero_restriction(2, 1), zero_restriction(3, 1)],
             signs=[sign_restriction(1, 1, :positive)])
-        rng = MersenneTwister(75601)
+        rng = Xoshiro(75601)
         Phi = MEM._compute_ma_coefficients(model, 10)
         L = safe_cholesky(model.Sigma)
-        setup = MEM._AriasSVARSetup(restrictions, 3, Float64; rng=MersenneTwister(75602))
+        setup = MEM._AriasSVARSetup(restrictions, 3, Float64; rng=Xoshiro(75602))
         ws_ad = Float64[]
         ws_fd = Float64[]
         for _ in 1:40
@@ -2290,16 +2290,16 @@ end
     end
 
     @testset "pre-seed slots are thread-count invariant" begin
-        rng = MersenneTwister(75611)  # DGP-02: explicit rng
+        rng = Xoshiro(75611)  # DGP-02: explicit rng
         Y = randn(rng, 120, 3)
         model = estimate_var(Y, 1)
         restrictions = SVARRestrictions(3;
             zeros=[zero_restriction(2, 1)],
             signs=[sign_restriction(1, 1, :positive)])
         r1 = identify_arias(model, restrictions, 5; n_draws=8, n_rotations=40,
-                            rng=MersenneTwister(75611))
+                            rng=Xoshiro(75611))
         r2 = identify_arias(model, restrictions, 5; n_draws=8, n_rotations=40,
-                            rng=MersenneTwister(75611))
+                            rng=Xoshiro(75611))
         @test length(r1.Q_draws) == length(r2.Q_draws)
         @test length(r1.Q_draws) >= 1
         @test r1.weights ≈ r2.weights
@@ -2317,7 +2317,7 @@ end
     end
 
     @testset "elapsed fields and back-compat constructors" begin
-        rng = MersenneTwister(75621)  # DGP-02: explicit rng (was leaking scope)
+        rng = Xoshiro(75621)  # DGP-02: explicit rng (was leaking scope)
         restr = SVARRestrictions(2)
         ad = AriasSVARResult{Float64}([randn(rng, 2, 2) for _ in 1:4], randn(rng, 4, 3, 2, 2),
                                       fill(0.25, 4), 0.5, restr)
@@ -2333,10 +2333,10 @@ end
         @test ad3.weights_elapsed ≈ 0.04
 
         signs = SVARRestrictions(2; signs=[sign_restriction(1, 1, :positive)])
-        Y = randn(MersenneTwister(75612), 80, 2)
+        Y = randn(Xoshiro(75612), 80, 2)
         model = estimate_var(Y, 1)
         rsign = identify_arias(model, signs, 4; n_draws=4, n_rotations=20,
-                               rng=MersenneTwister(75612))
+                               rng=Xoshiro(75612))
         @test rsign.elapsed >= 0
         @test rsign.weights_elapsed == 0  # pure signs skip the volume element
     end

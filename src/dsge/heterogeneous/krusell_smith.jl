@@ -352,7 +352,7 @@ function _krusell_smith_solve(ss::HASteadyState{T},
     tol_T = T(tol)
     damping_T = T(damping)
 
-    rng = Random.MersenneTwister(seed)
+    rng = Random.Xoshiro(seed)
     K_ss = ss.aggregates[:K]
 
     # Aggregate-state grids: log-TFP z (Rouwenhorst) and capital K (log-spaced ±40%).
@@ -512,7 +512,7 @@ function _krusell_smith_huggett(ss::HASteadyState{T}, ip::IndividualProblem{T},
                                  tol::Real=1e-5, damping::Real=0.5,
                                  seed::Int=1234) where {T<:AbstractFloat}
     rho = T(rho_e); sig = T(sigma_e); tol_T = T(tol)
-    rng = Random.MersenneTwister(seed)
+    rng = Random.Xoshiro(seed)
     r_ss = ss.prices[:r]
 
     # Aggregate endowment shock path (log endowment).
@@ -564,7 +564,7 @@ function _krusell_smith_two_asset(ss::HASteadyState{T}, ip::IndividualProblem{T}
                                   rho_z::Real=0.95, sigma_z::Real=0.007,
                                   tol::Real=1e-3, damping::Real=0.5,
                                   seed::Int=1234) where {T<:AbstractFloat}
-    rng = Random.MersenneTwister(seed)
+    rng = Random.Xoshiro(seed)
     K_ss = ss.aggregates[:K]
     n_z = 3
     z_grid, z_trans = _ks_build_z_grid(T(rho_z), T(sigma_z), n_z)
@@ -831,7 +831,7 @@ function den_haan_test(ks::KrusellSmithSolution{T};
     b = ks.plm_coefficients[:K]
     @assert length(b) == 3 "den_haan_test expects a z-augmented PLM (log K' = b1 + b2 log K + b3 z)"
     return _den_haan_core(ks.spec, ks.steady_state, Vector{T}(b), T_sim, T_burn,
-                          T(rho_z), T(sigma_z), Random.MersenneTwister(seed), :plm,
+                          T(rho_z), T(sigma_z), Random.Xoshiro(seed), :plm,
                           :effective_capital)
 end
 
@@ -902,7 +902,7 @@ function den_haan_test(sol::HADSGESolution{T};
     ρ = T(rho_z); σ = T(sigma_z)
 
     # ── Recover the implied aggregate law of motion from the linear solution ──
-    rng_fit = Random.MersenneTwister(seed)
+    rng_fit = Random.Xoshiro(seed)
     innov = σ .* randn(rng_fit, T, T_fit, 1)
     Y = simulate(sol, T_fit; shock_draws=innov)
 
@@ -939,5 +939,5 @@ function den_haan_test(sol::HADSGESolution{T};
     # The linearizations put the aggregate shock in TFP, not in effective capital, so the
     # reference simulation must be priced that way to match the law fitted from them.
     return _den_haan_core(sol.spec, ss, b, T_sim, T_burn, ρ, σ,
-                          Random.MersenneTwister(seed), :linear, :tfp)
+                          Random.Xoshiro(seed), :linear, :tfp)
 end

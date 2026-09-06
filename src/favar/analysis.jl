@@ -561,7 +561,7 @@ function _sdfm_bootstrap_irf(sdfm::StructuralDFM{T}, horizon::Int;
     attempt = 0
     while n_kept < reps && attempt < max_try
         attempt += 1
-        local_rng = Random.MersenneTwister(attempt <= reps ? seeds[attempt] : rand(rng, UInt64))
+        local_rng = Random.Xoshiro(attempt <= reps ? seeds[attempt] : rand(rng, UInt64))
         panel = _sdfm_one_boot_irf(sdfm, fv, U, F_init, p, T_eff, Lambda, q, N, order,
             horizon, bootstrap, block_length, wild_dist, local_rng)
         if stationary_only

@@ -2,7 +2,7 @@ using Test, MacroEconometricModels, DataFrames, Distributions, Random, Statistic
 using StatsAPI: coef, vcov, predict, nobs, stderror, confint, loglikelihood, aic, bic, dof, islinear
 
 @testset "estimate_xtlogit -- pooled" begin
-    rng = Random.MersenneTwister(1234)
+    rng = Random.Xoshiro(1234)
     N_g = 50; T_p = 10; n = N_g * T_p
     ids = repeat(1:N_g, inner=T_p)
     ts = repeat(1:T_p, N_g)
@@ -46,7 +46,7 @@ using StatsAPI: coef, vcov, predict, nobs, stderror, confint, loglikelihood, aic
 end
 
 @testset "estimate_xtlogit -- FE (conditional)" begin
-    rng = Random.MersenneTwister(5678)
+    rng = Random.Xoshiro(5678)
     N_g = 100; T_p = 10; n = N_g * T_p
     ids = repeat(1:N_g, inner=T_p)
     ts = repeat(1:T_p, N_g)
@@ -98,7 +98,7 @@ end
     @test all(isfinite, p) && isapprox(sum(p), 1.0)
 
     # (b) BRUTE-FORCE cross-check (T_g=5, s=2) against explicit subset enumeration
-    rng = Random.MersenneTwister(88); eta = randn(rng, 5) .* 0.5
+    rng = Random.Xoshiro(88); eta = randn(rng, 5) .* 0.5
     ld5, p5 = dp(reshape(eta, 5, 1), [1.0], 2)
     subs = [(i, j) for i in 1:5 for j in (i+1):5]
     denom_bf = sum(exp(eta[i] + eta[j]) for (i, j) in subs)
@@ -110,7 +110,7 @@ end
 
     # (c) SCALE-EQUIVARIANCE through _xtlogit_fe: β(50·x) = β(x)/50, equal maximized loglik.
     #     With large |Xβ| the old raw-exp DP overflowed (NaN); the log-space DP stays valid.
-    rng = Random.MersenneTwister(880); N_g = 60; T_p = 8; nn = N_g * T_p
+    rng = Random.Xoshiro(880); N_g = 60; T_p = 8; nn = N_g * T_p
     ids = repeat(1:N_g, inner=T_p); ts = repeat(1:T_p, N_g)
     x1 = randn(rng, nn)
     alpha = repeat(randn(rng, N_g), inner=T_p)
@@ -128,7 +128,7 @@ end
     agh = MacroEconometricModels._re_logit_agh_loglik
     fixed = MacroEconometricModels._re_logit_loglik
 
-    rng = Random.MersenneTwister(3071); N = 100; Tp = 8; nn = N * Tp
+    rng = Random.Xoshiro(3071); N = 100; Tp = 8; nn = N * Tp
     ids = repeat(1:N, inner=Tp); ts = repeat(1:Tp, N)
     x1 = randn(rng, nn); alpha = repeat(randn(rng, N) .* 1.0, inner=Tp)
     y = Float64.(rand(rng, nn) .< 1.0 ./ (1.0 .+ exp.(-(alpha .+ 0.7 .* x1))))
@@ -145,7 +145,7 @@ end
     @test norm(FD.gradient(nll, vcat(coef(m), log(m.sigma_u)))) < 1e-4
 
     # (3) adaptive-vs-fixed accuracy on a large-σ_u (=3) fixture where fixed GH under-resolves
-    rng = Random.MersenneTwister(3072); N2 = 150; Tp2 = 8; n2 = N2 * Tp2
+    rng = Random.Xoshiro(3072); N2 = 150; Tp2 = 8; n2 = N2 * Tp2
     ids2 = repeat(1:N2, inner=Tp2)
     x2 = randn(rng, n2); a2 = repeat(randn(rng, N2) .* 3.0, inner=Tp2)
     y2 = Float64.(rand(rng, n2) .< 1.0 ./ (1.0 .+ exp.(-(a2 .+ 0.5 .* x2))))
@@ -171,7 +171,7 @@ end
     agh = MacroEconometricModels._re_logit_agh_loglik
     ghnw = MacroEconometricModels._gauss_hermite_nodes_weights
 
-    rng = Random.MersenneTwister(600); N = 40; Tp = 6; nn = N * Tp
+    rng = Random.Xoshiro(600); N = 40; Tp = 6; nn = N * Tp
     ids = repeat(1:N, inner=Tp); ts = repeat(1:Tp, N)
     x1 = randn(rng, nn); alpha = repeat(randn(rng, N) .* 0.8, inner=Tp)
     y = Float64.(rand(rng, nn) .< 1.0 ./ (1.0 .+ exp.(-(alpha .+ 0.9 .* x1))))
@@ -216,7 +216,7 @@ end
 end
 
 @testset "estimate_xtlogit -- RE" begin
-    rng = Random.MersenneTwister(9012)
+    rng = Random.Xoshiro(9012)
     N_g = 50; T_p = 10; n = N_g * T_p
     ids = repeat(1:N_g, inner=T_p)
     ts = repeat(1:T_p, N_g)
@@ -260,7 +260,7 @@ end
 end
 
 @testset "estimate_xtlogit -- CRE" begin
-    rng = Random.MersenneTwister(3456)
+    rng = Random.Xoshiro(3456)
     N_g = 50; T_p = 10; n = N_g * T_p
     ids = repeat(1:N_g, inner=T_p)
     ts = repeat(1:T_p, N_g)
@@ -292,7 +292,7 @@ end
 end
 
 @testset "estimate_xtprobit -- pooled" begin
-    rng = Random.MersenneTwister(7890)
+    rng = Random.Xoshiro(7890)
     N_g = 50; T_p = 10; n = N_g * T_p
     ids = repeat(1:N_g, inner=T_p)
     ts = repeat(1:T_p, N_g)
@@ -323,7 +323,7 @@ end
 end
 
 @testset "estimate_xtprobit -- RE" begin
-    rng = Random.MersenneTwister(1122)
+    rng = Random.Xoshiro(1122)
     N_g = 50; T_p = 10; n = N_g * T_p
     ids = repeat(1:N_g, inner=T_p)
     ts = repeat(1:T_p, N_g)
@@ -358,7 +358,7 @@ end
 end
 
 @testset "estimate_xtprobit -- FE throws" begin
-    rng = Random.MersenneTwister(3344)
+    rng = Random.Xoshiro(3344)
     N_g = 10; T_p = 5; n = N_g * T_p
     ids = repeat(1:N_g, inner=T_p)
     ts = repeat(1:T_p, N_g)
@@ -371,7 +371,7 @@ end
 end
 
 @testset "Panel nonlinear -- StatsAPI" begin
-    rng = Random.MersenneTwister(5566)
+    rng = Random.Xoshiro(5566)
     N_g = 30; T_p = 8; n = N_g * T_p
     ids = repeat(1:N_g, inner=T_p)
     ts = repeat(1:T_p, N_g)
@@ -409,7 +409,7 @@ end
 
 @testset "Panel marginal effects" begin
     @testset "Pooled logit" begin
-        rng = Random.MersenneTwister(4001)
+        rng = Random.Xoshiro(4001)
         N_g = 50; T_p = 10; n = N_g * T_p
         ids = repeat(1:N_g, inner=T_p)
         ts = repeat(1:T_p, N_g)
@@ -437,7 +437,7 @@ end
     end
 
     @testset "RE logit — attenuation" begin
-        rng = Random.MersenneTwister(4002)
+        rng = Random.Xoshiro(4002)
         N_g = 50; T_p = 10; n = N_g * T_p
         ids = repeat(1:N_g, inner=T_p)
         ts = repeat(1:T_p, N_g)
@@ -463,7 +463,7 @@ end
     end
 
     @testset "FE logit" begin
-        rng = Random.MersenneTwister(4003)
+        rng = Random.Xoshiro(4003)
         N_g = 100; T_p = 10; n = N_g * T_p
         ids = repeat(1:N_g, inner=T_p)
         ts = repeat(1:T_p, N_g)
@@ -487,7 +487,7 @@ end
     end
 
     @testset "Pooled probit" begin
-        rng = Random.MersenneTwister(4004)
+        rng = Random.Xoshiro(4004)
         N_g = 50; T_p = 10; n = N_g * T_p
         ids = repeat(1:N_g, inner=T_p)
         ts = repeat(1:T_p, N_g)
@@ -513,7 +513,7 @@ end
     end
 
     @testset "CRE logit — only original vars" begin
-        rng = Random.MersenneTwister(4005)
+        rng = Random.Xoshiro(4005)
         N_g = 50; T_p = 10; n = N_g * T_p
         ids = repeat(1:N_g, inner=T_p)
         ts = repeat(1:T_p, N_g)
@@ -538,7 +538,7 @@ end
 end
 
 @testset "Panel nonlinear -- display" begin
-    rng = Random.MersenneTwister(7788)
+    rng = Random.Xoshiro(7788)
     N_g = 20; T_p = 5; n = N_g * T_p
     ids = repeat(1:N_g, inner=T_p)
     ts = repeat(1:T_p, N_g)
@@ -568,7 +568,7 @@ end
 # =============================================================================
 
 @testset "T089 M-36: xtprobit :fe throws (incidental parameters)" begin
-    rng = Random.MersenneTwister(18936)
+    rng = Random.Xoshiro(18936)
     N_g = 10; T_p = 8; n = N_g * T_p
     ids = repeat(1:N_g, inner=T_p)
     ts = repeat(1:T_p, N_g)
@@ -592,7 +592,7 @@ end
 # =============================================================================
 
 @testset "#543 FE conditional logit: invariance, convergence, SEs" begin
-    rng = Random.MersenneTwister(543543)
+    rng = Random.Xoshiro(543543)
     N_g = 40; T_p = 8; n = N_g * T_p
     ids = repeat(1:N_g, inner=T_p)
     ts = repeat(1:T_p, N_g)
@@ -630,7 +630,7 @@ end
 # =============================================================================
 
 @testset "#542 RE cluster sandwich finite-sample correction" begin
-    rng = Random.MersenneTwister(542542)
+    rng = Random.Xoshiro(542542)
     N_g = 20; T_p = 6; n = N_g * T_p
     ids = repeat(1:N_g, inner=T_p)
     ts = repeat(1:T_p, N_g)
@@ -654,7 +654,7 @@ end
     FD = MacroEconometricModels.ForwardDiff
     # (1) Fisher identity: the Louis score equals the AGH objective gradient (to
     # quadrature error) at an arbitrary point, and group scores sum to the total
-    rng = Random.MersenneTwister(1542)
+    rng = Random.Xoshiro(1542)
     N_g = 12; T_p = 5; n = N_g * T_p
     ids = repeat(1:N_g, inner=T_p)
     x1 = randn(rng, n)

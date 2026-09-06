@@ -12,7 +12,7 @@ using Random
 
 @testset "BGR 2010 Optimization" begin
     _tprint("Testing BGR 2010 Hyperparameter Optimization...")
-    rng = MersenneTwister(1001)  # DGP-03: explicit rng
+    rng = Xoshiro(1001)  # DGP-03: explicit rng
 
     # Generate synthetic data (VAR(1))
     T = 60
@@ -64,7 +64,7 @@ end
 
     # Near-RW diagonal VAR (DGP-03 #792: shared simulator, no A' idiom;
     # rng first — the old code drew Y_large[1,:] BEFORE Random.seed!).
-    rng = MersenneTwister(999)
+    rng = Xoshiro(999)
     Y_large = dgp_var(rng; A=0.9 * Matrix{Float64}(I, n_large, n_large),
                       B0=Matrix{Float64}(I, n_large, n_large), T=T_large).Y
 
@@ -92,7 +92,7 @@ end
     # BGR finding (DGP-03 #792): the large system wants strictly tighter
     # shrinkage than the small stationary one (realized 0.01 vs 2.51/1.12 —
     # the large grid optimum sits at the floor in both grid modes).
-    Y_small = dgp_var(MersenneTwister(1001); A=0.4 * Matrix{Float64}(I, 3, 3),
+    Y_small = dgp_var(Xoshiro(1001); A=0.4 * Matrix{Float64}(I, 3, 3),
                       B0=0.5 * Matrix{Float64}(I, 3, 3), T=60).Y
     best_hyper_small = optimize_hyperparameters(Y_small, 1; grid_size=(FAST ? 5 : 10))
     @test best_hyper_large.tau < best_hyper_small.tau

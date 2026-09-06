@@ -21,7 +21,7 @@ function _with_each_backend(f)
 end
 
 @testset "Display Backend Switching" begin
-    rng = Random.MersenneTwister(42)
+    rng = Random.Xoshiro(42)
     Y = randn(rng, 100, 3)
     m = estimate_var(Y, 2)
 
@@ -112,7 +112,7 @@ end
     end
 
     @testset "ARIMA models render in all backends" begin
-        y = randn(Random.MersenneTwister(1471), 200)
+        y = randn(Random.Xoshiro(1471), 200)
         ar = estimate_ar(y, 2)
         _with_each_backend() do be
             buf = IOBuffer()
@@ -128,7 +128,7 @@ end
     end
 
     @testset "Unit root tests render in all backends" begin
-        y = cumsum(randn(Random.MersenneTwister(1472), 200))
+        y = cumsum(randn(Random.Xoshiro(1472), 200))
         adf = adf_test(y)
         _with_each_backend() do be
             buf = IOBuffer()
@@ -139,7 +139,7 @@ end
     end
 
     @testset "Factor model renders in all backends" begin
-        X = randn(Random.MersenneTwister(1473), 100, 10)
+        X = randn(Random.Xoshiro(1473), 100, 10)
         fm = estimate_factors(X, 3)
         _with_each_backend() do be
             buf = IOBuffer()
@@ -178,7 +178,7 @@ end
     end
 
     @testset "ARIMA show in all backends" begin
-        rng = Random.MersenneTwister(9901)
+        rng = Random.Xoshiro(9901)
         y = randn(rng, 100)
         ar_m = estimate_ar(y, 1)
         ma_m = estimate_ma(y, 1)
@@ -193,7 +193,7 @@ end
     end
 
     @testset "Unit root result show in all backends" begin
-        rng = Random.MersenneTwister(9902)
+        rng = Random.Xoshiro(9902)
         y = randn(rng, 100)
         adf_r = adf_test(y)
         kpss_r = kpss_test(y)
@@ -208,7 +208,7 @@ end
     end
 
     @testset "Factor model show in all backends" begin
-        rng = Random.MersenneTwister(9903)
+        rng = Random.Xoshiro(9903)
         X = randn(rng, 100, 10)
         fm = estimate_factors(X, 2)
         _with_each_backend() do be
@@ -219,7 +219,7 @@ end
     end
 
     @testset "Non-Gaussian result show in all backends" begin
-        rng = Random.MersenneTwister(9904)
+        rng = Random.Xoshiro(9904)
         Y = randn(rng, 100, 2)
         var_m = estimate_var(Y, 1)
         ica_r = identify_fastica(var_m; rng=rng)
@@ -234,7 +234,7 @@ end
     end
 
     @testset "refs() bibliographic references" begin
-        rng = Random.MersenneTwister(42)
+        rng = Random.Xoshiro(42)
         model = estimate_var(randn(rng, 100, 2), 2)
 
         # Text format
@@ -307,7 +307,7 @@ end
 end
 
 @testset "with_display_backend (scoped, concurrency-safe) — #249" begin
-    rng = Random.MersenneTwister(2049)
+    rng = Random.Xoshiro(2049)
     m = estimate_var(randn(rng, 80, 2), 1)
     set_display_backend(:text)   # process default
 
@@ -390,7 +390,7 @@ end
     # (A) Wide 8-column coefficient table at a NARROW width. With PrettyTables' fit-to-
     #     display crop ON (the pre-fix default) the trailing significance/CI columns are
     #     dropped with a "N columns omitted" footer. Crop OFF renders the full table.
-    rng = Random.MersenneTwister(1)
+    rng = Random.Xoshiro(1)
     X = randn(rng, 200, 4)
     y = X * [1.0, -0.8, 0.6, 0.4] .+ 0.1 .* randn(rng, 200)
     mr = estimate_reg(y, X)
@@ -401,7 +401,7 @@ end
     @test occursin("P>|", out)               # p-value column (last-but-two) survives
 
     # (B) GARCH show spans >24 lines → the pre-fix vertical crop drops interior rows.
-    rng = Random.MersenneTwister(2)
+    rng = Random.Xoshiro(2)
     mg = estimate_garch(randn(rng, 400))
     buf = IOBuffer(); show(IOContext(buf, :displaysize => (24, 80), :color => false), mg)
     out = String(take!(buf))
@@ -527,7 +527,7 @@ end
     end
 
     # show() must round-trip for every horizon on the result types that consume it.
-    rng = Random.MersenneTwister(1474)
+    rng = Random.Xoshiro(1474)
     for H in 1:30
         vals = randn(rng, H, 2, 2)
         ir = MEM.ImpulseResponse{Float64}(vals, vals .- 1, vals .+ 1, H,
@@ -610,7 +610,7 @@ end
 
 @testset "report() ends with an estimates table (S4/T168 pt1)" begin
     set_display_backend(:text)
-    rng = Random.MersenneTwister(11)
+    rng = Random.Xoshiro(11)
     Y = randn(rng, 120, 3)
     # LP report now appends an IRF horizon table (was spec-table only) including impact h=0.
     m = estimate_lp(Y, 1, 8)
@@ -640,7 +640,7 @@ end
     @test MEM._fmt_pct((1 - 0.95) / 2) == "2.5%"
     @test MEM._fmt_pct((1 + 0.95) / 2) == "97.5%"
     # end-to-end: the BVAR forecast table now labels the band 2.5%/97.5%
-    rng = Random.MersenneTwister(9)
+    rng = Random.Xoshiro(9)
     bp = estimate_bvar(randn(rng, 80, 2), 2; n_draws = 100, seed = 9)
     s = sprint(show, forecast(bp, 4))
     @test occursin("2.5%", s) && occursin("97.5%", s)
@@ -662,7 +662,7 @@ end
 @testset "Display one-offs (T174)" begin
     set_display_backend(:text)
     # V09: the normality suite disambiguates its two Jarque–Bera rows
-    s = sprint(show, normality_test_suite(randn(Random.MersenneTwister(3), 200, 3)))
+    s = sprint(show, normality_test_suite(randn(Random.Xoshiro(3), 200, 3)))
     @test occursin("Jarque–Bera (multivariate)", s)
     @test occursin("Jarque–Bera (component-wise)", s)
     @test !occursin("jarque_bera", s)

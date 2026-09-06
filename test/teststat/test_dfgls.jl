@@ -7,7 +7,7 @@
 using Test, MacroEconometricModels, Random
 
 @testset "DF-GLS Unit Root Test" begin
-    rng = Random.MersenneTwister(66778)
+    rng = Random.Xoshiro(66778)
 
     y_stat = zeros(200)
     y_stat[1] = randn(rng)

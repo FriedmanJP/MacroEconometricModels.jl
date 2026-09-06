@@ -92,7 +92,7 @@ end
     end
 
     @testset "render.jl — save_plot" begin
-        rng = Random.MersenneTwister(9001)
+        rng = Random.Xoshiro(9001)
         y = cumsum(randn(rng, 200))
         r = hp_filter(y)
         p = plot_result(r)
@@ -133,7 +133,7 @@ end
     # 2. plotting/models.jl — plot_result for model types
     # =========================================================================
     @testset "models.jl — ARCHModel plot" begin
-        rng = Random.MersenneTwister(9010)
+        rng = Random.Xoshiro(9010)
         y = randn(rng, 300)
         m = estimate_arch(y, 2)
         p = plot_result(m)
@@ -142,7 +142,7 @@ end
     end
 
     @testset "models.jl — GARCHModel plot" begin
-        rng = Random.MersenneTwister(9011)
+        rng = Random.Xoshiro(9011)
         y = randn(rng, 500)
         m = estimate_garch(y, 1, 1)
         p = plot_result(m)
@@ -151,7 +151,7 @@ end
     end
 
     @testset "models.jl — EGARCHModel plot" begin
-        rng = Random.MersenneTwister(9012)
+        rng = Random.Xoshiro(9012)
         y = randn(rng, 300)
         m = estimate_egarch(y, 1, 1)
         p = plot_result(m)
@@ -160,7 +160,7 @@ end
     end
 
     @testset "models.jl — GJRGARCHModel plot" begin
-        rng = Random.MersenneTwister(9013)
+        rng = Random.Xoshiro(9013)
         y = randn(rng, 300)
         m = estimate_gjr_garch(y, 1, 1)
         p = plot_result(m)
@@ -170,7 +170,7 @@ end
 
     if !FAST
         @testset "models.jl — SVModel plot" begin
-            rng = Random.MersenneTwister(9014)
+            rng = Random.Xoshiro(9014)
             y = randn(rng, 200)
             m = estimate_sv(y; n_samples=50, burnin=20)
             p = plot_result(m)
@@ -180,7 +180,7 @@ end
     end
 
     @testset "models.jl — FactorModel plot" begin
-        rng = Random.MersenneTwister(9015)
+        rng = Random.Xoshiro(9015)
         X = randn(rng, 200, 20)
         fm = estimate_factors(X, 3)
         p = plot_result(fm)
@@ -190,7 +190,7 @@ end
     end
 
     @testset "models.jl — DynamicFactorModel plot" begin
-        rng = Random.MersenneTwister(9016)
+        rng = Random.Xoshiro(9016)
         X = randn(rng, 200, 20)
         fm = estimate_dynamic_factors(X, 2, 1)
         p = plot_result(fm)
@@ -199,7 +199,7 @@ end
     end
 
     @testset "models.jl — TimeSeriesData plot" begin
-        rng = Random.MersenneTwister(9017)
+        rng = Random.Xoshiro(9017)
         d = TimeSeriesData(randn(rng, 100, 3); varnames=["GDP", "CPI", "RATE"])
         p = plot_result(d)
         @test p isa PlotOutput
@@ -211,7 +211,7 @@ end
     end
 
     @testset "models.jl — PanelData plot" begin
-        rng = Random.MersenneTwister(9018)
+        rng = Random.Xoshiro(9018)
         df = DataFrame(group=repeat(1:3, inner=20), time=repeat(1:20, 3),
             x=randn(rng, 60), y=randn(rng, 60))
         pd = xtset(df, :group, :time)
@@ -220,7 +220,7 @@ end
     end
 
     @testset "models.jl — FAVARModel plot" begin
-        rng = Random.MersenneTwister(9019)
+        rng = Random.Xoshiro(9019)
         Y_slow = randn(rng, 150, 3)
         Y_fast = randn(rng, 150, 10)
         m = estimate_favar(Y_slow, Y_fast, 2, 2)
@@ -230,7 +230,7 @@ end
     end
 
     @testset "models.jl — plot with save_path kwarg" begin
-        rng = Random.MersenneTwister(9020)
+        rng = Random.Xoshiro(9020)
         y = randn(rng, 300)
         m = estimate_arch(y, 1)
         tmpfile = tempname() * ".html"
@@ -240,7 +240,7 @@ end
     end
 
     @testset "models.jl — plot with custom title" begin
-        rng = Random.MersenneTwister(9021)
+        rng = Random.Xoshiro(9021)
         y = randn(rng, 300)
         m = estimate_garch(y, 1, 1)
         p = plot_result(m; title="Custom Title")
@@ -251,14 +251,14 @@ end
     # 3. summary.jl — report() dispatches, point_estimate/has_uncertainty
     # =========================================================================
     @testset "summary.jl — report(VECMModel)" begin
-        rng = Random.MersenneTwister(9030)
+        rng = Random.Xoshiro(9030)
         Y = cumsum(randn(rng, 150, 3), dims=1)
         vecm = estimate_vecm(Y, 2; rank=1)
         @test !isempty(_capture_report(vecm))
     end
 
     @testset "summary.jl — report(VECMForecast)" begin
-        rng = Random.MersenneTwister(9031)
+        rng = Random.Xoshiro(9031)
         Y = cumsum(randn(rng, 150, 3), dims=1)
         vecm = estimate_vecm(Y, 2; rank=1)
         fc = forecast(vecm, 10)
@@ -266,35 +266,35 @@ end
     end
 
     @testset "summary.jl — report(LP variants)" begin
-        rng = Random.MersenneTwister(9032)
+        rng = Random.Xoshiro(9032)
         Y = randn(rng, 100, 3)
         lp = estimate_lp(Y, 1, 8; lags=2)
         @test !isempty(_capture_report(lp))
     end
 
     @testset "summary.jl — report(ARIMA)" begin
-        rng = Random.MersenneTwister(9033)
+        rng = Random.Xoshiro(9033)
         y = randn(rng, 200)
         ar = estimate_ar(y, 2)
         @test !isempty(_capture_report(ar))
     end
 
     @testset "summary.jl — report(FactorModel)" begin
-        rng = Random.MersenneTwister(9034)
+        rng = Random.Xoshiro(9034)
         X = randn(rng, 100, 10)
         fm = estimate_factors(X, 3)
         @test !isempty(_capture_report(fm))
     end
 
     @testset "summary.jl — report(GARCHModel)" begin
-        rng = Random.MersenneTwister(9035)
+        rng = Random.Xoshiro(9035)
         y = randn(rng, 500)
         m = estimate_garch(y, 1, 1)
         @test !isempty(_capture_report(m))
     end
 
     @testset "summary.jl — report(filter types)" begin
-        rng = Random.MersenneTwister(9036)
+        rng = Random.Xoshiro(9036)
         y = cumsum(randn(rng, 200))
         @test !isempty(_capture_report(hp_filter(y), hamilton_filter(y),
                                        beveridge_nelson(y), baxter_king(y),
@@ -302,7 +302,7 @@ end
     end
 
     @testset "summary.jl — report(IRF/FEVD/HD)" begin
-        rng = Random.MersenneTwister(9037)
+        rng = Random.Xoshiro(9037)
         Y = randn(rng, 100, 3)
         m = estimate_var(Y, 2)
         irf_r = irf(m, 8)
@@ -324,14 +324,14 @@ end
     end
 
     @testset "summary.jl — report(BVARPosterior)" begin
-        rng = Random.MersenneTwister(9039)
+        rng = Random.Xoshiro(9039)
         Y = randn(rng, 100, 3)
         post = estimate_bvar(Y, 2; n_draws=25)
         @test !isempty(_capture_report(post))
     end
 
     @testset "summary.jl — report(GMM)" begin
-        rng = Random.MersenneTwister(9040)
+        rng = Random.Xoshiro(9040)
         data_gmm = randn(rng, 200, 3)
         g = (theta, data) -> data[:, 2:3] .* (data[:, 1] .- theta[1])
         gmm_m = estimate_gmm(g, [0.0], data_gmm)
@@ -339,7 +339,7 @@ end
     end
 
     @testset "summary.jl — report(VECMGrangerResult)" begin
-        rng = Random.MersenneTwister(9041)
+        rng = Random.Xoshiro(9041)
         Y = cumsum(randn(rng, 150, 3), dims=1)
         vecm = estimate_vecm(Y, 2; rank=1)
         gc = granger_causality_vecm(vecm, 1, 2)
@@ -347,7 +347,7 @@ end
     end
 
     @testset "summary.jl — point_estimate/has_uncertainty/uncertainty_bounds" begin
-        rng = Random.MersenneTwister(9042)
+        rng = Random.Xoshiro(9042)
         Y = randn(rng, 100, 2)
         m = estimate_var(Y, 2)
 
@@ -377,7 +377,7 @@ end
     end
 
     @testset "summary.jl — Bayesian point_estimate/uncertainty_bounds" begin
-        rng = Random.MersenneTwister(9043)
+        rng = Random.Xoshiro(9043)
         Y = randn(rng, 100, 2)
         post = estimate_bvar(Y, 2; n_draws=25)
 
@@ -426,7 +426,7 @@ end
     end
 
     @testset "refs.jl — 4 formats on VARModel" begin
-        rng = Random.MersenneTwister(9050)
+        rng = Random.Xoshiro(9050)
         Y = randn(rng, 100, 3)
         m = estimate_var(Y, 2)
         for fmt in (:text, :latex, :bibtex, :html)
@@ -453,7 +453,7 @@ end
     end
 
     @testset "refs.jl — AndrewsResult" begin
-        rng = Random.MersenneTwister(9051)
+        rng = Random.Xoshiro(9051)
         y = randn(rng, 200)
         X = hcat(ones(200), randn(rng, 200))
         ar = andrews_test(y, X; test=:supwald)
@@ -465,7 +465,7 @@ end
     end
 
     @testset "refs.jl — BaiPerronResult" begin
-        rng = Random.MersenneTwister(9052)
+        rng = Random.Xoshiro(9052)
         y = randn(rng, 200)
         X = hcat(ones(200), randn(rng, 200))
         bp = bai_perron_test(y, X; max_breaks=2, trimming=0.15)
@@ -474,7 +474,7 @@ end
     end
 
     @testset "refs.jl — PANICResult" begin
-        rng = Random.MersenneTwister(9053)
+        rng = Random.Xoshiro(9053)
         X = randn(rng, 100, 10)
         pr = panic_test(X; r=2)
         for fmt in (:text, :html)
@@ -485,7 +485,7 @@ end
     end
 
     @testset "refs.jl — PesaranCIPSResult" begin
-        rng = Random.MersenneTwister(9054)
+        rng = Random.Xoshiro(9054)
         X = randn(rng, 100, 10)
         pc = pesaran_cips_test(X; lags=1)
         r = sprint(io -> refs(io, pc))
@@ -493,7 +493,7 @@ end
     end
 
     @testset "refs.jl — MoonPerronResult" begin
-        rng = Random.MersenneTwister(9055)
+        rng = Random.Xoshiro(9055)
         X = randn(rng, 100, 10)
         mp = moon_perron_test(X; r=2)
         r = sprint(io -> refs(io, mp))
@@ -501,7 +501,7 @@ end
     end
 
     @testset "refs.jl — FactorBreakResult" begin
-        rng = Random.MersenneTwister(9056)
+        rng = Random.Xoshiro(9056)
         X = randn(rng, 200, 20)
         fb = factor_break_test(X, 3)
         for fmt in (:text, :latex, :bibtex, :html)
@@ -512,7 +512,7 @@ end
     end
 
     @testset "refs.jl — FactorModel refs" begin
-        rng = Random.MersenneTwister(9057)
+        rng = Random.Xoshiro(9057)
         X = randn(rng, 200, 20)
         fm = estimate_factors(X, 3)
         r = sprint(io -> refs(io, fm))
@@ -520,7 +520,7 @@ end
     end
 
     @testset "refs.jl — LP types refs" begin
-        rng = Random.MersenneTwister(9058)
+        rng = Random.Xoshiro(9058)
         Y = randn(rng, 100, 3)
         lp = estimate_lp(Y, 1, 8; lags=2)
         r = sprint(io -> refs(io, lp))
@@ -532,7 +532,7 @@ end
     end
 
     @testset "refs.jl — Volatility refs" begin
-        rng = Random.MersenneTwister(9059)
+        rng = Random.Xoshiro(9059)
         y = randn(rng, 300)
         arch_m = estimate_arch(y, 1)
         garch_m = estimate_garch(y, 1, 1)
@@ -546,7 +546,7 @@ end
     end
 
     @testset "refs.jl — Filter refs" begin
-        rng = Random.MersenneTwister(9060)
+        rng = Random.Xoshiro(9060)
         y = cumsum(randn(rng, 200))
         @test !isempty(sprint(io -> refs(io, hp_filter(y))))
         @test !isempty(sprint(io -> refs(io, hamilton_filter(y))))
@@ -576,7 +576,7 @@ end
     end
 
     @testset "refs.jl — VECM refs" begin
-        rng = Random.MersenneTwister(9062)
+        rng = Random.Xoshiro(9062)
         Y = cumsum(randn(rng, 150, 3), dims=1)
         vecm = estimate_vecm(Y, 2; rank=1)
         r = sprint(io -> refs(io, vecm))
@@ -584,7 +584,7 @@ end
     end
 
     @testset "refs.jl — Nowcast refs" begin
-        rng = Random.MersenneTwister(9063)
+        rng = Random.Xoshiro(9063)
         nM = 4; nQ = 1
         Y_nc = randn(rng, 100, nM + nQ)
         Y_nc[end, end] = NaN
@@ -603,7 +603,7 @@ end
     end
 
     @testset "refs.jl — ARIMA refs" begin
-        rng = Random.MersenneTwister(9064)
+        rng = Random.Xoshiro(9064)
         y = randn(rng, 200)
         ar = estimate_ar(y, 2)
         r = sprint(io -> refs(io, ar))
@@ -699,7 +699,7 @@ end
     end
 
     @testset "refs.jl — GMM/SMM refs" begin
-        rng = Random.MersenneTwister(9065)
+        rng = Random.Xoshiro(9065)
         data_gmm = randn(rng, 200, 3)
         g = (theta, data) -> data[:, 2:3] .* (data[:, 1] .- theta[1])
         gmm_m = estimate_gmm(g, [0.0], data_gmm)

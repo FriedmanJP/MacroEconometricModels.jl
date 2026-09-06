@@ -4,7 +4,7 @@ using LinearAlgebra
 
 @testset "Panel Covariance" begin
     # Setup: small panel N=10, T=20
-    rng = Random.MersenneTwister(42)
+    rng = Random.Xoshiro(42)
     N_g = 10; T_p = 20; n = N_g * T_p
     ids = repeat(1:N_g, inner=T_p)
     ts = repeat(1:T_p, N_g)
@@ -62,7 +62,7 @@ end
 
 @testset "estimate_xtreg - Fixed Effects" begin
     @testset "Coefficient recovery with entity FE" begin
-        rng = Random.MersenneTwister(123)
+        rng = Random.Xoshiro(123)
         N_g = 50; T_p = 20; n = N_g * T_p
         beta_true = [1.5, -0.8]
 
@@ -95,7 +95,7 @@ end
     end
 
     @testset "between-R² not degenerate to 1.0 (B3/T172)" begin
-        rng = Random.MersenneTwister(271)
+        rng = Random.Xoshiro(271)
         N_g = 20; T_p = 8; n = N_g * T_p
         ids = repeat(1:N_g, inner=T_p)
         ts = repeat(1:T_p, N_g)
@@ -116,7 +116,7 @@ end
     end
 
     @testset "Two-way FE" begin
-        rng = Random.MersenneTwister(456)
+        rng = Random.Xoshiro(456)
         N_g = 30; T_p = 15; n = N_g * T_p
         beta_true = [2.0, -1.0]
 
@@ -140,7 +140,7 @@ end
     end
 
     @testset "StatsAPI interface" begin
-        rng = Random.MersenneTwister(789)
+        rng = Random.Xoshiro(789)
         N_g = 20; T_p = 10; n = N_g * T_p
         ids = repeat(1:N_g, inner=T_p)
         ts = repeat(1:T_p, N_g)
@@ -168,7 +168,7 @@ end
     end
 
     @testset "Display output" begin
-        rng = Random.MersenneTwister(101)
+        rng = Random.Xoshiro(101)
         N_g = 10; T_p = 10; n = N_g * T_p
         ids = repeat(1:N_g, inner=T_p)
         ts = repeat(1:T_p, N_g)
@@ -190,7 +190,7 @@ end
     end
 
     @testset "Variance components" begin
-        rng = Random.MersenneTwister(202)
+        rng = Random.Xoshiro(202)
         N_g = 40; T_p = 25; n = N_g * T_p
 
         ids = repeat(1:N_g, inner=T_p)
@@ -212,7 +212,7 @@ end
     end
 
     @testset "Input validation" begin
-        rng = Random.MersenneTwister(303)
+        rng = Random.Xoshiro(303)
         N_g = 5; T_p = 10; n = N_g * T_p
         ids = repeat(1:N_g, inner=T_p)
         ts = repeat(1:T_p, N_g)
@@ -232,7 +232,7 @@ end
 @testset "estimate_xtreg — Random Effects" begin
     @testset "Coefficient recovery" begin
         # N=50, T=20, uncorrelated alpha_i with X
-        rng = Random.MersenneTwister(5001)
+        rng = Random.Xoshiro(5001)
         N_g = 50; T_p = 20; n = N_g * T_p
         beta_true = [1.5, -0.8]
 
@@ -257,7 +257,7 @@ end
     end
 
     @testset "Variance components" begin
-        rng = Random.MersenneTwister(5002)
+        rng = Random.Xoshiro(5002)
         N_g = 50; T_p = 20; n = N_g * T_p
 
         ids = repeat(1:N_g, inner=T_p)
@@ -279,7 +279,7 @@ end
     end
 
     @testset "R-squared variants" begin
-        rng = Random.MersenneTwister(5003)
+        rng = Random.Xoshiro(5003)
         N_g = 40; T_p = 15; n = N_g * T_p
 
         ids = repeat(1:N_g, inner=T_p)
@@ -298,7 +298,7 @@ end
     end
 
     @testset "Display output" begin
-        rng = Random.MersenneTwister(5004)
+        rng = Random.Xoshiro(5004)
         N_g = 10; T_p = 10; n = N_g * T_p
         ids = repeat(1:N_g, inner=T_p)
         ts = repeat(1:T_p, N_g)
@@ -320,7 +320,7 @@ end
 
 @testset "estimate_xtreg — First Differences" begin
     @testset "Coefficient recovery" begin
-        rng = Random.MersenneTwister(6001)
+        rng = Random.Xoshiro(6001)
         N_g = 50; T_p = 20; n = N_g * T_p
         beta_true = [1.5, -0.8]
 
@@ -346,7 +346,7 @@ end
 
     @testset "Handles time gaps" begin
         # Panel with a gap in time
-        rng = Random.MersenneTwister(6002)
+        rng = Random.Xoshiro(6002)
         N_g = 10; n_obs = N_g * 5
         ids = repeat(1:N_g, inner=5)
         # Time periods with a gap: 1,2,3,5,6 (skip 4)
@@ -365,7 +365,7 @@ end
     end
 
     @testset "Display output" begin
-        rng = Random.MersenneTwister(6003)
+        rng = Random.Xoshiro(6003)
         N_g = 10; T_p = 10; n = N_g * T_p
         ids = repeat(1:N_g, inner=T_p)
         ts = repeat(1:T_p, N_g)
@@ -387,7 +387,7 @@ end
 @testset "estimate_xtreg — Between" begin
     @testset "Coefficient recovery" begin
         # Between variation: time-invariant component drives identification
-        rng = Random.MersenneTwister(7001)
+        rng = Random.Xoshiro(7001)
         N_g = 100; T_p = 10; n = N_g * T_p
         beta_true = [2.0, -1.0]
 
@@ -416,7 +416,7 @@ end
     end
 
     @testset "R-squared" begin
-        rng = Random.MersenneTwister(7002)
+        rng = Random.Xoshiro(7002)
         N_g = 80; T_p = 10; n = N_g * T_p
 
         ids = repeat(1:N_g, inner=T_p)
@@ -432,7 +432,7 @@ end
     end
 
     @testset "Display output" begin
-        rng = Random.MersenneTwister(7003)
+        rng = Random.Xoshiro(7003)
         N_g = 20; T_p = 5; n = N_g * T_p
         ids = repeat(1:N_g, inner=T_p)
         ts = repeat(1:T_p, N_g)
@@ -452,7 +452,7 @@ end
 
 @testset "estimate_xtreg — CRE (Mundlak)" begin
     @testset "CRE slopes approximate FE slopes" begin
-        rng = Random.MersenneTwister(8001)
+        rng = Random.Xoshiro(8001)
         N_g = 50; T_p = 20; n = N_g * T_p
         beta_true = [1.5, -0.8]
 
@@ -478,7 +478,7 @@ end
     end
 
     @testset "Variable names include mean variables" begin
-        rng = Random.MersenneTwister(8002)
+        rng = Random.Xoshiro(8002)
         N_g = 20; T_p = 10; n = N_g * T_p
         ids = repeat(1:N_g, inner=T_p)
         ts = repeat(1:T_p, N_g)
@@ -497,7 +497,7 @@ end
     end
 
     @testset "Theta and variance components" begin
-        rng = Random.MersenneTwister(8003)
+        rng = Random.Xoshiro(8003)
         N_g = 40; T_p = 15; n = N_g * T_p
         ids = repeat(1:N_g, inner=T_p)
         ts = repeat(1:T_p, N_g)
@@ -517,7 +517,7 @@ end
     end
 
     @testset "Display output" begin
-        rng = Random.MersenneTwister(8004)
+        rng = Random.Xoshiro(8004)
         N_g = 10; T_p = 10; n = N_g * T_p
         ids = repeat(1:N_g, inner=T_p)
         ts = repeat(1:T_p, N_g)
@@ -538,7 +538,7 @@ end
 end
 
 @testset "estimate_xtreg -- Arellano-Bond" begin
-    rng = Random.MersenneTwister(9001)
+    rng = Random.Xoshiro(9001)
     N_g = 100; T_p = 20; n = N_g * T_p
 
     ids = repeat(1:N_g, inner=T_p)
@@ -605,7 +605,7 @@ end
 end
 
 @testset "estimate_xtreg -- Blundell-Bond" begin
-    rng = Random.MersenneTwister(9002)
+    rng = Random.Xoshiro(9002)
     N_g = 100; T_p = 20; n = N_g * T_p
 
     ids = repeat(1:N_g, inner=T_p)
@@ -653,7 +653,7 @@ end
 @testset "T089: panel cluster dof + between cov_type warning" begin
 
     @testset "M-33: n_absorbed scales the cluster correction" begin
-        rng = Random.MersenneTwister(18933)
+        rng = Random.Xoshiro(18933)
         N_g = 8; T_p = 12; n = N_g * T_p; k = 2
         X = randn(rng, n, k)
         resid = randn(rng, n)
@@ -687,7 +687,7 @@ end
     end
 
     @testset "M-35: between estimator warns when cov_type is ignored" begin
-        rng = Random.MersenneTwister(18935)
+        rng = Random.Xoshiro(18935)
         N_g = 12; T_p = 6; n = N_g * T_p
         ids = repeat(1:N_g, inner=T_p)
         ts = repeat(1:T_p, N_g)
@@ -712,7 +712,7 @@ end
 # =============================================================================
 
 @testset "T090 SUB-1: _group_index_map == findall" begin
-    rng = Random.MersenneTwister(19001)
+    rng = Random.Xoshiro(19001)
     ids = rand(rng, [3, 7, 1, 12, 5], 500)  # unsorted, repeated group labels
     gmap = MacroEconometricModels._group_index_map(ids)
     @test sort(collect(keys(gmap))) == sort(unique(ids))
@@ -752,7 +752,7 @@ end
     # of `absorb_fe` is never to build one of these).
     _dumm(c, G) = [Float64(c[i] == g) for i in 1:length(c), g in 1:G]
 
-    rng = Random.MersenneTwister(11)
+    rng = Random.Xoshiro(11)
     Ng, Tp = 25, 12
     n = Ng * Tp
     ids = repeat(1:Ng, inner=Tp)
@@ -809,7 +809,7 @@ end
     end
 
     @testset "multi-way absorption == explicit-dummy OLS" begin
-        rng = Random.MersenneTwister(7)
+        rng = Random.Xoshiro(7)
         n3 = 600
         firm = rand(rng, 1:20, n3)
         yr = rand(rng, 1:8, n3)
@@ -839,7 +839,7 @@ end
     end
 
     @testset "coefficients invariant to FE-dimension ordering" begin
-        rng = Random.MersenneTwister(7)
+        rng = Random.Xoshiro(7)
         n4 = 400
         d1 = rand(rng, 1:15, n4)
         d2 = rand(rng, 1:9, n4)
@@ -863,8 +863,8 @@ end
         wk = vcat(repeat(1:10, inner=6), repeat(11:20, inner=6))
         fm = vcat([1 + (i % 3) for i in 1:60], [4 + (i % 3) for i in 1:60])
         nn = length(wk)
-        Xd = randn(Random.MersenneTwister(3), nn, 1)
-        yd = Xd * [1.0] .+ randn(Random.MersenneTwister(4), nn)
+        Xd = randn(Random.Xoshiro(3), nn, 1)
+        yd = Xd * [1.0] .+ randn(Random.Xoshiro(4), nn)
 
         ad = absorb_fe(yd, Xd, [wk, fm])
         Dd = hcat(_dumm(wk, 20), _dumm(fm, 6))
@@ -877,7 +877,7 @@ end
         # A fully connected design collapses to one group.
         wk2 = repeat(1:10, inner=6)
         fm2 = [1 + (i % 6) for i in 1:60]
-        a2 = absorb_fe(randn(Random.MersenneTwister(6), 60), zeros(60, 0), [wk2, fm2])
+        a2 = absorb_fe(randn(Random.Xoshiro(6), 60), zeros(60, 0), [wk2, fm2])
         @test a2.n_components == 1
         @test a2.n_absorbed == 10 + 6 - 1
     end
@@ -887,7 +887,7 @@ end
         # panel; on an unbalanced one it is a different, biased estimator (it put
         # the x2 coefficient 2.1e-3 away from the dummy-OLS truth here). Both
         # entry points now use alternating projections, which are exact either way.
-        rng = Random.MersenneTwister(21)
+        rng = Random.Xoshiro(21)
         dfu = df[rand(rng, n) .> 0.25, :]
         pdu = xtset(dfu, :id, :t)
         Xu = Matrix{Float64}(dfu[:, [:x1, :x2]])
@@ -914,10 +914,10 @@ end
         worker = repeat(1:150, inner=6)
         frm = [1 + ((w - 1) ÷ 3 + (j % 2)) % 50 for w in 1:150 for j in 1:6]
         nw = length(worker)
-        Xw = randn(Random.MersenneTwister(99), nw, 1)
-        yw = Xw * [2.0] .+ randn(Random.MersenneTwister(98), 150)[worker] .+
-             randn(Random.MersenneTwister(97), 50)[frm] .+
-             0.3 .* randn(Random.MersenneTwister(96), nw)
+        Xw = randn(Random.Xoshiro(99), nw, 1)
+        yw = Xw * [2.0] .+ randn(Random.Xoshiro(98), 150)[worker] .+
+             randn(Random.Xoshiro(97), 50)[frm] .+
+             0.3 .* randn(Random.Xoshiro(96), nw)
 
         Dw = hcat(_dumm(worker, 150), _dumm(frm, 50))
         b_true = (pinv(hcat(Xw, Dw)) * yw)[1]
@@ -987,7 +987,7 @@ end
         # `converged` is honest about a starved budget.
         worker = repeat(1:150, inner=6)
         frm = [1 + ((w - 1) ÷ 3 + (j % 2)) % 50 for w in 1:150 for j in 1:6]
-        Xs = randn(Random.MersenneTwister(1), length(worker), 1)
+        Xs = randn(Random.Xoshiro(1), length(worker), 1)
         a_short = absorb_fe(Xs[:, 1], Xs, [worker, frm]; maxiter=3, accel=false)
         @test !a_short.converged
         @test a_short.iterations == 3
@@ -1051,13 +1051,13 @@ end
         # Wild cluster bootstrap (T243) re-absorbs with the fit's own dimensions:
         # absorb=[:entity] must reproduce the plain-FE bootstrap exactly.
         wb_plain = wild_cluster_bootstrap(estimate_xtreg(pd, :y, [:x1, :x2]), :x1;
-                                          n_boot=99, rng=Random.MersenneTwister(5))
+                                          n_boot=99, rng=Random.Xoshiro(5))
         wb_abs = wild_cluster_bootstrap(estimate_xtreg(pd, :y, [:x1, :x2]; absorb=[:entity]),
-                                        :x1; n_boot=99, rng=Random.MersenneTwister(5))
+                                        :x1; n_boot=99, rng=Random.Xoshiro(5))
         @test wb_abs.t_stat ≈ wb_plain.t_stat atol = 1e-10
         @test wb_abs.p_value == wb_plain.p_value
 
-        wb_hd = wild_cluster_bootstrap(m_hd, :x1; n_boot=99, rng=Random.MersenneTwister(5))
+        wb_hd = wild_cluster_bootstrap(m_hd, :x1; n_boot=99, rng=Random.Xoshiro(5))
         @test isfinite(wb_hd.t_stat)
         @test 0 <= wb_hd.p_value <= 1
 
@@ -1068,7 +1068,7 @@ end
         @test m_noaccel.hdfe.accel == false
         @test coef(m_noaccel) ≈ coef(m_hd) atol = 1e-9
         wb_na = wild_cluster_bootstrap(m_noaccel, :x1; n_boot=99,
-                                       rng=Random.MersenneTwister(5))
+                                       rng=Random.Xoshiro(5))
         @test wb_na.t_stat ≈ wb_hd.t_stat atol = 1e-6
     end
 end
@@ -1078,7 +1078,7 @@ end
     # symbol leaked into the table ("Cov. type  cluster"). Every panel covariance
     # type must now render the same human-readable label the cross-sectional
     # estimators use.
-    rng = Random.MersenneTwister(407)
+    rng = Random.Xoshiro(407)
     # T >= N so the PCSE contemporaneous covariance is full rank (Beck & Katz 1995).
     N_g = 8; T_p = 14; n = N_g * T_p
     df = DataFrame(id=repeat(1:N_g, inner=T_p), t=repeat(1:T_p, N_g),

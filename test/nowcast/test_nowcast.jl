@@ -20,7 +20,7 @@ function _make_nowcast_data(; T_obs=120, nM=6, nQ=2, r=2, seed=42)
     # DGP-07 (#796): the shared Mariano–Murasawa ragged-edge simulator — monthly
     # VAR factors, MM-aggregated quarterly series observed every 3rd month.
     # Same 4-tuple return (Y, F, Lambda_M, Lambda_Q); all call sites unchanged.
-    rng = Random.MersenneTwister(seed)
+    rng = Random.Xoshiro(seed)
     A = r == 1 ? reshape([0.7], 1, 1) : r == 2 ? [0.7 0.1; 0.05 0.6] :
         0.5 * Matrix{Float64}(I, r, r)
     d = dgp_mixed_frequency_panel(rng; A=A, nM=nM, nQ=nQ, T=T_obs)
@@ -44,7 +44,7 @@ end
 # =============================================================================
 
 @testset "Kalman Filter with Missing Data" begin
-    rng = Random.MersenneTwister(123)
+    rng = Random.Xoshiro(123)
 
     @testset "Basic functionality" begin
         # Simple 2-state system
@@ -124,7 +124,7 @@ end
     end
 
     @testset "_miss_data row elimination" begin
-        rng = MersenneTwister(7201)  # DGP-01: explicit rng (plumbing data)
+        rng = Xoshiro(7201)  # DGP-01: explicit rng (plumbing data)
         y = [1.0, NaN, 3.0, NaN, 5.0]
         C = randn(rng, 5, 2)
         R = Matrix{Float64}(0.1 * I(5))
@@ -137,7 +137,7 @@ end
     end
 
     @testset "All NaN row" begin
-        rng = MersenneTwister(7202)  # DGP-01: explicit rng (plumbing data)
+        rng = Xoshiro(7202)  # DGP-01: explicit rng (plumbing data)
         y = [NaN, NaN, NaN]
         C = randn(rng, 3, 2)
         R = Matrix{Float64}(0.1 * I(3))
@@ -224,7 +224,7 @@ end
     end
 
     @testset "All monthly (no quarterly)" begin
-        rng = Random.MersenneTwister(789)
+        rng = Random.Xoshiro(789)
         Y = randn(rng, 80, 5)
         Y[75:80, 3:5] .= NaN  # ragged edge
 
@@ -249,7 +249,7 @@ end
     end
 
     @testset "Single factor" begin
-        rng = Random.MersenneTwister(111)
+        rng = Random.Xoshiro(111)
         F = cumsum(randn(rng, 60, 1), dims=1) * 0.1
         Lambda = randn(rng, 4, 1)
         Y = F * Lambda' + 0.1 * randn(rng, 60, 4)
@@ -302,7 +302,7 @@ end
     end
 
     @testset "Mariano-Murasawa temporal aggregation (#38)" begin
-        rng = Random.MersenneTwister(3838)
+        rng = Random.Xoshiro(3838)
         T_obs = 120; nM = 3; nQ = 2; r = 2
 
         Y = randn(rng, T_obs, nM + nQ)
@@ -345,7 +345,7 @@ end
     end
 
     @testset "Input validation" begin
-        rng = MersenneTwister(7203)  # DGP-01: explicit rng (throws-only data)
+        rng = Xoshiro(7203)  # DGP-01: explicit rng (throws-only data)
         Y = randn(rng, 50, 5)
         @test_throws ArgumentError nowcast_dfm(Y, 3, 3)  # nM + nQ != N
         @test_throws ArgumentError nowcast_dfm(Y, 5, 0; r=0)  # r < 1
@@ -369,22 +369,25 @@ end
     @testset "EM-Kalman ragged nowcast beats carry-forward (DGP-07 #796)" begin
         # DGP-07 headline: on a Mariano–Murasawa ragged-edge DGP with KNOWN
         # withheld values, the EM-Kalman smoothed fill must beat the naive
-        # carry-forward benchmark. Realized ratio ≈ 0.20 at seed 444.
-        rng = Random.MersenneTwister(444)
+        # carry-forward benchmark. Mean ratio over 5 seeds: a single draw's
+        # ratio swings widely, so the 2× bar is asserted on the mean,
+        # which concentrates on every stream.
         T_obs, nM, nQ, k = 240, 6, 2, 6
-        d = dgp_mixed_frequency_panel(rng; nM=nM, nQ=nQ, T=T_obs)
-        truth = copy(d.Y)
-        Y = copy(d.Y)
-        Y[(T_obs-k+1):T_obs, 1:3] .= NaN   # ragged edge on three monthlies
-
-        m = nowcast_dfm(Y, nM, nQ; r=2, p=1, max_iter=50)
-
-        rows = (T_obs-k+1):T_obs
-        rmse_model = sqrt(mean((m.X_sm[rows, 1:3] .- truth[rows, 1:3]) .^ 2))
-        naive = repeat(Y[T_obs-k, 1:3]', k, 1)
-        rmse_naive = sqrt(mean((naive .- truth[rows, 1:3]) .^ 2))
-        @test isfinite(rmse_model) && isfinite(rmse_naive)
-        @test rmse_model < 0.5 * rmse_naive
+        ratios = map(444:448) do s
+            d = dgp_mixed_frequency_panel(Random.Xoshiro(s);
+                                          nM=nM, nQ=nQ, T=T_obs)
+            truth = copy(d.Y)
+            Y = copy(d.Y)
+            Y[(T_obs-k+1):T_obs, 1:3] .= NaN   # ragged edge on three monthlies
+            m = nowcast_dfm(Y, nM, nQ; r=2, p=1, max_iter=50)
+            rows = (T_obs-k+1):T_obs
+            rmse_model = sqrt(mean((m.X_sm[rows, 1:3] .- truth[rows, 1:3]) .^ 2))
+            naive = repeat(Y[T_obs-k, 1:3]', k, 1)
+            rmse_naive = sqrt(mean((naive .- truth[rows, 1:3]) .^ 2))
+            @test isfinite(rmse_model) && isfinite(rmse_naive)
+            rmse_model / rmse_naive
+        end
+        @test sum(ratios) / length(ratios) < 0.5
     end
 
     @testset "StatsAPI interface" begin
@@ -408,13 +411,13 @@ end
         # and the NIW marginal likelihood are correct (#571/#572), so assert the detector's
         # invariant rather than one panel's outcome: pinned ⇔ !converged, and !converged
         # ⇒ show() carries the warning.
-        m = nowcast_bvar(randn(Random.MersenneTwister(9), 50, 10), 6, 4; lags=5)
+        m = nowcast_bvar(randn(Random.Xoshiro(9), 50, 10), 6, 4; lags=5)
         log_pars = log.([m.lambda, m.theta, m.miu, m.alpha])
         @test m.converged == !any(x -> abs(x) >= 5 - 1e-3, log_pars)
         @test m.converged || occursin("WARNING", sprint(show, m))
         @test isfinite(m.loglik) && m.loglik > -1e9   # not the degenerate -1e10 sentinel
         # A well-conditioned interior fit converges and does NOT warn.
-        m2 = nowcast_bvar(randn(Random.MersenneTwister(300), 100, 6), 4, 2; lags=3, max_iter=50)
+        m2 = nowcast_bvar(randn(Random.Xoshiro(300), 100, 6), 4, 2; lags=3, max_iter=50)
         @test m2.converged
         @test !occursin("WARNING", sprint(show, m2))
         # Display half of the detector: flag down ⇒ warning, whatever the fit produced.
@@ -426,7 +429,7 @@ end
 
     @testset "Litterman non-conjugate prior (#602)" begin
         MEM = MacroEconometricModels
-        rng = Random.MersenneTwister(602)
+        rng = Random.Xoshiro(602)
         N, lags, T_obs = 3, 2, 40
         Y = randn(rng, T_obs, N)
         for t in 2:T_obs
@@ -488,7 +491,7 @@ end
         @test all(isfinite, mls)
 
         # (6) end-to-end through the public API (fresh stream, lint-accepted name)
-        rng = Random.MersenneTwister(6021)
+        rng = Random.Xoshiro(6021)
         Yn = randn(rng, 70, 4)
         for t in 2:70
             Yn[t, :] .+= 0.5 .* Yn[t-1, :]
@@ -536,7 +539,7 @@ end
     end
 
     @testset "Basic estimation" begin
-        rng = Random.MersenneTwister(100)
+        rng = Random.Xoshiro(100)
         Y = randn(rng, 80, 5)
         Y[75:80, 4:5] .= NaN  # ragged edge
 
@@ -554,7 +557,7 @@ end
     end
 
     @testset "Fills ragged edge" begin
-        rng = Random.MersenneTwister(200)
+        rng = Random.Xoshiro(200)
         Y = randn(rng, 60, 4)
         Y[56:60, 3:4] .= NaN
 
@@ -581,7 +584,7 @@ end
     end
 
     @testset "Hyperparameter optimization" begin
-        rng = Random.MersenneTwister(300)
+        rng = Random.Xoshiro(300)
         Y = randn(rng, 100, 6)
 
         m = nowcast_bvar(Y, 4, 2; lags=3, max_iter=50)
@@ -594,7 +597,7 @@ end
     end
 
     @testset "Input validation" begin
-        rng = MersenneTwister(7204)  # DGP-01: explicit rng (throws-only data)
+        rng = Xoshiro(7204)  # DGP-01: explicit rng (throws-only data)
         Y = randn(rng, 50, 5)
         @test_throws ArgumentError nowcast_bvar(Y, 3, 3)  # nM + nQ != N
         @test_throws ArgumentError nowcast_bvar(Y, 5, 0; lags=0)  # lags < 1
@@ -606,7 +609,7 @@ end
         # 1, X_d'X_d is singular and the NIW marginal likelihood collapses to the -1e10
         # sentinel. Cross-vs-own relative tightness is not a free hyperparameter of a
         # conjugate NIW prior (it is √(Σ_mm/Σ_jj)); theta is the lag-decay exponent (#572).
-        rng = Random.MersenneTwister(500)
+        rng = Random.Xoshiro(500)
         N, lags = 3, 2
         Y0 = randn(rng, lags, N)
         sigma_ar = [1.0, 2.0, 3.0]
@@ -646,7 +649,7 @@ end
         # default start and vary smoothly in the hyperparameters. With the rank-1 lag
         # blocks, K_prior was singular, logdet_safe returned -Inf and EVERY evaluation
         # clamped to -1e10 — a flat plateau that pinned the optimizer at the box wall.
-        rng = Random.MersenneTwister(4242)
+        rng = Random.Xoshiro(4242)
         N, T_burn, T_obs = 4, 50, 120
         Yb = zeros(T_burn + T_obs, N)
         for t in 2:(T_burn + T_obs), j in 1:N
@@ -672,7 +675,7 @@ end
     end
 
     @testset "StatsAPI interface" begin
-        rng = Random.MersenneTwister(400)
+        rng = Random.Xoshiro(400)
         Y = randn(rng, 60, 4)
         m = nowcast_bvar(Y, 2, 2; lags=2, max_iter=10)
 
@@ -683,7 +686,7 @@ end
 
     @testset "Handles near-singular data without NaN" begin
         # Construct data with near-collinear columns to stress the optimizer
-        rng = Random.MersenneTwister(999)
+        rng = Random.Xoshiro(999)
         base = randn(rng, 80, 1)
         Y = hcat(base, base .+ 1e-8 * randn(rng, 80, 1),
                  base .+ 1e-8 * randn(rng, 80, 1))
@@ -702,7 +705,7 @@ end
 
 @testset "Bridge Equation Nowcasting" begin
     @testset "Basic estimation" begin
-        rng = Random.MersenneTwister(500)
+        rng = Random.Xoshiro(500)
         Y = randn(rng, 90, 5)  # 3 monthly + 2 quarterly
         # Make quarterly variables NaN except every 3rd month
         for t in 1:90
@@ -722,7 +725,7 @@ end
     end
 
     @testset "Bridge nowcasts the incomplete current quarter (T104 #203)" begin
-        rng = Random.MersenneTwister(203)
+        rng = Random.Xoshiro(203)
         T_obs = 92                          # NOT a multiple of 3 → a partial current quarter
         Y = randn(rng, T_obs, 5)            # 3 monthly + 2 quarterly
         for t in 1:T_obs
@@ -753,14 +756,14 @@ end
     end
 
     @testset "Input validation" begin
-        rng = MersenneTwister(7205)  # DGP-01: explicit rng (throws-only data)
+        rng = Xoshiro(7205)  # DGP-01: explicit rng (throws-only data)
         Y = randn(rng, 60, 5)
         @test_throws ArgumentError nowcast_bridge(Y, 3, 3)  # nM + nQ != N
         @test_throws ArgumentError nowcast_bridge(Y, 5, 0)  # nQ < 1
     end
 
     @testset "Nowcast values reasonable" begin
-        rng = Random.MersenneTwister(600)
+        rng = Random.Xoshiro(600)
         T_obs = 120
         Y = randn(rng, T_obs, 5)
         for t in 1:T_obs
@@ -863,7 +866,7 @@ _NC_M = nowcast_dfm(_NC_Y, 4, 1; r=1, p=1, max_iter=20, thresh=1e-3)
         @test news.impact_revision ≈ delta atol=1e-10
         @test abs(news.impact_reestimation) <= 1e-10
         # Non-vacuity guard: the revision actually moved the nowcast. The magnitude is
-        # seed-stream dependent (Julia 1.10's RNG gives variable 2 a near-zero loading,
+        # seed-stream dependent (one stream gave variable 2 a near-zero loading,
         # delta ≈ 1e-5), so the bar sits well above the 1e-10 identity atol, not at 1e-4.
         @test abs(delta) > 1e-8
 
@@ -889,7 +892,7 @@ _NC_M = nowcast_dfm(_NC_Y, 4, 1; r=1, p=1, max_iter=20, thresh=1e-3)
         # Plag[j][:,:,t] = Cov(x_t, x_{t-j} | Y_T) must match the analytic joint-Gaussian
         # posterior covariance. The old j>=2 recursion J_{t-1}·Plag[j-1][t-1] was wrong; the
         # correct one is Plag[j-1][t]·J_{t-j}'.
-        rng = Random.MersenneTwister(7)
+        rng = Random.Xoshiro(7)
         A = [0.7 0.1; 0.0 0.5]; C = reshape([1.0, 0.5], 1, 2)
         Q = [0.3 0.0; 0.0 0.2]; R = reshape([0.4], 1, 1)
         x0 = [0.2, -0.1]; P0 = [1.0 0.2; 0.2 0.8]
@@ -980,7 +983,7 @@ end
     end
 
     @testset "nowcast() BVAR" begin
-        rng = Random.MersenneTwister(1300)
+        rng = Random.Xoshiro(1300)
         Y = randn(rng, 60, 4)
         Y[55:60, 3:4] .= NaN
 
@@ -993,7 +996,7 @@ end
     end
 
     @testset "nowcast() Bridge" begin
-        rng = Random.MersenneTwister(1400)
+        rng = Random.Xoshiro(1400)
         Y = randn(rng, 90, 4)
         for t in 1:90
             mod(t, 3) != 0 && (Y[t, 4] = NaN)
@@ -1020,7 +1023,7 @@ end
     end
 
     @testset "forecast() BVAR" begin
-        rng = Random.MersenneTwister(1600)
+        rng = Random.Xoshiro(1600)
         Y = randn(rng, 60, 4)
         m = nowcast_bvar(Y, 2, 2; lags=2, max_iter=10)
 
@@ -1044,7 +1047,7 @@ end
 
 @testset "balance_panel" begin
     @testset "PanelData with NaN" begin
-        rng = Random.MersenneTwister(1800)
+        rng = Random.Xoshiro(1800)
         x_vals = Vector{Union{Missing,Float64}}(randn(rng, 90))
         y_vals = Vector{Union{Missing,Float64}}(randn(rng, 90))
         x_vals[85:90] .= missing
@@ -1065,7 +1068,7 @@ end
     end
 
     @testset "Already balanced panel" begin
-        rng = Random.MersenneTwister(1900)
+        rng = Random.Xoshiro(1900)
         df = DataFrame(
             id = repeat(1:2, inner=20),
             t = repeat(1:20, 2),
@@ -1079,7 +1082,7 @@ end
     end
 
     @testset "TimeSeriesData with NaN" begin
-        rng = Random.MersenneTwister(2000)
+        rng = Random.Xoshiro(2000)
         Y = randn(rng, 50, 3)
         Y[45:50, 2] .= NaN
 
@@ -1093,7 +1096,7 @@ end
     end
 
     @testset "No NaN returns same" begin
-        rng = Random.MersenneTwister(2100)
+        rng = Random.Xoshiro(2100)
         Y = randn(rng, 30, 2)
         ts = TimeSeriesData(Y)
         ts_bal = balance_panel(ts; r=1)
@@ -1101,7 +1104,7 @@ end
     end
 
     @testset "Input validation" begin
-        rng = Random.MersenneTwister(2101)
+        rng = Random.Xoshiro(2101)
         Y = randn(rng, 30, 3)
         Y[25:30, 1] .= NaN
         ts = TimeSeriesData(Y)
@@ -1126,7 +1129,7 @@ end
     end
 
     @testset "NowcastBVAR show" begin
-        rng = Random.MersenneTwister(2300)
+        rng = Random.Xoshiro(2300)
         Y = randn(rng, 60, 4)
         m = nowcast_bvar(Y, 2, 2; lags=2, max_iter=10)
 
@@ -1138,7 +1141,7 @@ end
     end
 
     @testset "NowcastBridge show" begin
-        rng = Random.MersenneTwister(2400)
+        rng = Random.Xoshiro(2400)
         Y = randn(rng, 60, 4)
         for t in 1:60
             mod(t, 3) != 0 && (Y[t, 4] = NaN)
@@ -1234,7 +1237,7 @@ end
 
 @testset "TimeSeriesData Dispatch" begin
     @testset "nowcast_dfm with TimeSeriesData" begin
-        rng = Random.MersenneTwister(2900)
+        rng = Random.Xoshiro(2900)
         Y = randn(rng, 60, 4)
         Y[55:60, 3:4] .= NaN
         ts = TimeSeriesData(Y)
@@ -1245,7 +1248,7 @@ end
     end
 
     @testset "nowcast_bvar with TimeSeriesData" begin
-        rng = Random.MersenneTwister(3000)
+        rng = Random.Xoshiro(3000)
         Y = randn(rng, 60, 4)
         ts = TimeSeriesData(Y)
 
@@ -1254,7 +1257,7 @@ end
     end
 
     @testset "nowcast_bridge with TimeSeriesData" begin
-        rng = Random.MersenneTwister(3100)
+        rng = Random.Xoshiro(3100)
         Y = randn(rng, 60, 4)
         for t in 1:60
             mod(t, 3) != 0 && (Y[t, 4] = NaN)
@@ -1272,7 +1275,7 @@ end
 
 @testset "Edge Cases" begin
     @testset "High missingness" begin
-        rng = Random.MersenneTwister(3200)
+        rng = Random.Xoshiro(3200)
         Y = randn(rng, 60, 4)
         # 50% missing
         for i in 1:60, j in 1:4
@@ -1284,7 +1287,7 @@ end
     end
 
     @testset "Small sample" begin
-        rng = Random.MersenneTwister(3300)
+        rng = Random.Xoshiro(3300)
         Y = randn(rng, 15, 3)
         Y[13:15, 2] .= NaN
 
@@ -1294,7 +1297,7 @@ end
     end
 
     @testset "Two variables" begin
-        rng = Random.MersenneTwister(3400)
+        rng = Random.Xoshiro(3400)
         Y = randn(rng, 40, 2)
         Y[35:40, 2] .= NaN
 
@@ -1303,7 +1306,7 @@ end
     end
 
     @testset "Float32 input" begin
-        rng = Random.MersenneTwister(3500)
+        rng = Random.Xoshiro(3500)
         Y = Float32.(randn(rng, 40, 3))
         Y[35:40, 2] .= NaN32
 
