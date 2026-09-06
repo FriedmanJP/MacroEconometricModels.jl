@@ -6,6 +6,29 @@ output, not just documentation.
 
 ---
 
+## v0.9.4
+
+Patch on the `0.9` series: public DGP simulation API (`src/dgp/`, 40 exports) and rng-first test seeding across the suite (DGP series, `#790`–`#807`, `#813`). Downstream `[compat]` of `MacroEconometricModels = "0.9"` still resolves. **Changed numerical output** for `compare_var_lp` and SMM `j_test` under identity weighting (both bugfixes, below).
+
+**New**
+
+- Public simulation library: truth-returning `dgp_*` simulators for VAR/SVAR, VECM and panel cointegration, ARIMA, GARCH/SV/MGARCH/MIDAS, dynamic factors, LP-IV/state-dependent/propensity, cross-section/panel/DiD, regime-switching, and GMM, plus analytic helpers (`var_irf`, `var_fevd`, `lyapunov_gamma0`, `arma_spectrum`, `mm_aggregate`; `#790`, `#813`).
+- Simulation guide and DGP API reference (`#813`).
+- Suite-wide explicit `Xoshiro` seeding (no global RNG) with a white-noise lint (`#790`–`#807`).
+
+**Correctness**
+
+- `compare_var_lp` aligns VAR Θ to LP Θ row-wise (off-by-one horizon fix; DGP-05 `#794`).
+- SMM `j_test` reports a `NaN` p-value under identity weighting (the χ² limit needs efficient weighting; M-29 policy; DGP-08 `#797`).
+
+**Also**
+
+- `_smooth_lp_cv_errors` rejects unknown keyword arguments instead of silently ignoring them (`#794`).
+- Johansen display normalizes numerical-noise `-0.0` via `_fmt` (display only; `#790`).
+- Randomized-estimator default RNGs move `MersenneTwister` → `Xoshiro`: same-seed streams differ from `≤ v0.9.3`, but `seed=` / `reproduce` still bit-reproduce from the recorded seed.
+
+---
+
 ## v0.9.3
 
 Patch on the `0.9` series: `save_model` / `load_model` for every result type (DSER `#759`--`#773`, RSER `#774`--`#788`). JLD2 is a hard dependency. `SERIALIZATION_FORMAT_VERSION` stays `1`. Downstream `[compat]` of `MacroEconometricModels = "0.9"` still resolves.
