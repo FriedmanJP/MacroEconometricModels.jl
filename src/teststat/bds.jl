@@ -292,7 +292,7 @@ end
 recomputes `w_m`, and returns the fraction of `|w*| ≥ |w_obs|` per `(m, ε)`."""
 function _bds_bootstrap(y::AbstractVector{T}, ms::Vector{Int}, epsvals::Vector{T},
                         Wobs::Matrix{T}, B::Int, seed::Int, ::Type{T}) where {T<:AbstractFloat}
-    rng = Random.MersenneTwister(seed)
+    rng = Random.Xoshiro(seed)
     n = length(y)
     ge = zeros(Int, size(Wobs))
     absobs = abs.(Wobs)

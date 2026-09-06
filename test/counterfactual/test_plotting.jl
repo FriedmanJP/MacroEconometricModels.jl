@@ -32,7 +32,7 @@ function _cf22_pc(rng; spanned::Bool)
 end
 
 @testset "Counterfactual plotting (CF-22)" begin
-    rng = MersenneTwister(20260822)
+    rng = Xoshiro(20260822)
 
     @testset "PolicyCounterfactual paths + error panel" begin
         pc_ok = _cf22_pc(rng; spanned=true)
@@ -57,7 +57,7 @@ end
     @testset "OPPResult delta + paths" begin
         H = 6
         Tx = randn(rng, H, 2)
-        noises = 0.1 .* randn(MersenneTwister(1), 30)
+        noises = 0.1 .* randn(Xoshiro(1), 30)
         Dx = cat((Tx .* (1 + e) for e in noises)...; dims=3)
         ce = PolicyCausalEffects(outcomes=[:u], Theta_x=[Tx], Theta_x_draws=[Dx])
         fc = MEM.PolicyForecast{Float64}([:u], [randn(rng, H)], nothing, H, "t")
@@ -66,7 +66,7 @@ end
         p = plot_result(r_pt)                              # plug-in: bar form
         @test p isa PlotOutput
         check_plot(p)
-        r = estimate_opp(fc, ce, loss; n_sim=200, rng=MersenneTwister(2))
+        r = estimate_opp(fc, ce, loss; n_sim=200, rng=Xoshiro(2))
         p2 = plot_result(r)                                # bands: whisker form
         @test occursin("LOWER levels", p2.html)            # polarity in the panel title
         p3 = plot_result(r; view=:paths)
@@ -77,13 +77,13 @@ end
     @testset "OPPSequence fan nests correctly" begin
         H = 6
         Tx = randn(rng, H, 1)
-        noises = 0.1 .* randn(MersenneTwister(3), 30)
+        noises = 0.1 .* randn(Xoshiro(3), 30)
         Dx = cat((Tx .* (1 + e) for e in noises)...; dims=3)
         ce = PolicyCausalEffects(outcomes=[:u], Theta_x=[Tx], Theta_x_draws=[Dx])
         loss = policy_loss([:u], H; lambda=[1.0])
         fcs = [MEM.PolicyForecast{Float64}([:u], [randn(rng, H)], nothing, H, "d$q")
                for q in 1:5]
-        sq = opp_sequence(fcs, ce, loss; n_sim=200, rng=MersenneTwister(4),
+        sq = opp_sequence(fcs, ce, loss; n_sim=200, rng=Xoshiro(4),
                           dates=["d$q" for q in 1:5])
         p = plot_result(sq; view=:fan)
         @test p isa PlotOutput

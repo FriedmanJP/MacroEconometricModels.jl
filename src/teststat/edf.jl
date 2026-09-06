@@ -476,7 +476,7 @@ in the ADF style via `report`/`show`.
 # Example
 ```julia
 using Random
-y = randn(MersenneTwister(1), 200)
+y = randn(Xoshiro(1), 200)
 edf_test(y; dist=:normal, test=:ad, params=:estimate)
 edf_test(y; dist=:normal, test=:ks, params=:specified, theta=(0.0, 1.0))
 ```

@@ -75,7 +75,7 @@ _stat_panel(rng, T=60, N=20) = randn(rng, T, N)
 
         # --- Hadri (2000) exact standardization constants (ξ, ζ²) ---
         # constant: (1/6, 1/45); trend: (1/15, 11/6300). Assert via a fitted result.
-        rng = MersenneTwister(11)
+        rng = Xoshiro(11)
         hc = hadri_test(_rw_panel(rng), deterministic = :constant)
         @test hc.xi == 1 / 6
         @test hc.zeta ≈ sqrt(1 / 45) atol = 1e-14
@@ -85,7 +85,7 @@ _stat_panel(rng, T=60, N=20) = randn(rng, T, N)
     end
 
     @testset "Fisher N=1 ≡ single-series adf/pp p-value" begin
-        rng = MersenneTwister(202)
+        rng = Xoshiro(202)
         y = cumsum(randn(rng, 80))
         X1 = reshape(y, :, 1)
         # Maddala-Wu P = -2 ln(p_1); its χ²(2) upper tail equals p_1 exactly.
@@ -135,7 +135,7 @@ _stat_panel(rng, T=60, N=20) = randn(rng, T, N)
         @test hrw.pvalue < 0.05                            # reject stationarity for a random walk
         @test hrw.statistic > 5.0                          # RW pushes Z strongly positive
         # Distributional rejection-rate check (not an oracle): its own rng.
-        rng = MersenneTwister(7)
+        rng = Xoshiro(7)
         n_rej_stat = count(1:12) do _
             hadri_test(_stat_panel(rng)).pvalue < 0.05
         end
@@ -146,7 +146,7 @@ _stat_panel(rng, T=60, N=20) = randn(rng, T, N)
         # Under each test's own null the standardized statistic is ~N(0,1). Loose
         # bounds (Monte Carlo error) with a fixed seed for determinism.
         reps = 120
-        rng = MersenneTwister(99)
+        rng = Xoshiro(99)
         for (f, gen, det) in (
             (llc_test, _rw_panel, :constant),
             (ips_test, _rw_panel, :constant),
@@ -169,7 +169,7 @@ _stat_panel(rng, T=60, N=20) = randn(rng, T, N)
     end
 
     @testset "Trend specification runs and rejects stationary" begin
-        rng = MersenneTwister(55)
+        rng = Xoshiro(55)
         Xst = _stat_panel(rng, 70, 18)
         @test llc_test(Xst; deterministic = :trend).pvalue < 0.05
         @test ips_test(Xst; deterministic = :trend).pvalue < 0.05
@@ -182,7 +182,7 @@ _stat_panel(rng, T=60, N=20) = randn(rng, T, N)
     end
 
     @testset "Lag augmentation and prewhitening" begin
-        rng = MersenneTwister(321)
+        rng = Xoshiro(321)
         # AR(1)-in-differences (serially correlated) stationary panel.
         T, N = 80, 15
         X = zeros(T, N)
@@ -204,7 +204,7 @@ _stat_panel(rng, T=60, N=20) = randn(rng, T, N)
     end
 
     @testset "cs_demean heuristic runs" begin
-        rng = MersenneTwister(88)
+        rng = Xoshiro(88)
         # Panel with a strong common factor (cross-sectional dependence).
         T, N = 60, 20
         f = cumsum(randn(rng, T))
@@ -217,7 +217,7 @@ _stat_panel(rng, T=60, N=20) = randn(rng, T, N)
     end
 
     @testset "PanelData dispatch" begin
-        rng = MersenneTwister(404)
+        rng = Xoshiro(404)
         # Build a long-format balanced PanelData via xtset.
         T, N = 50, 12
         Xst = _stat_panel(rng, T, N)
@@ -234,7 +234,7 @@ _stat_panel(rng, T=60, N=20) = randn(rng, T, N)
     end
 
     @testset "Result types, StatsAPI, show, refs" begin
-        rng = MersenneTwister(1234)
+        rng = Xoshiro(1234)
         X = _stat_panel(rng)
         rl = llc_test(X); ri = ips_test(X); rb = breitung_panel_test(X)
         rf = fisher_panel_test(X); rh = hadri_test(X)
@@ -262,7 +262,7 @@ _stat_panel(rng, T=60, N=20) = randn(rng, T, N)
     end
 
     @testset "panel_unit_root_summary runs all eight tests" begin
-        rng = MersenneTwister(2468)
+        rng = Xoshiro(2468)
         X = _stat_panel(rng, 60, 20)
         s = panel_unit_root_summary(X; r = 1)
         @test s isa PanelUnitRootSummary
@@ -283,7 +283,7 @@ _stat_panel(rng, T=60, N=20) = randn(rng, T, N)
     end
 
     @testset "Input validation" begin
-        rng = MersenneTwister(1)
+        rng = Xoshiro(1)
         @test_throws ArgumentError llc_test(randn(rng, 60, 20); deterministic = :bogus)
         @test_throws ArgumentError ips_test(randn(rng, 60, 20); deterministic = :none)  # IPS: no :none moments
         @test_throws ArgumentError hadri_test(randn(rng, 60, 20); deterministic = :none)

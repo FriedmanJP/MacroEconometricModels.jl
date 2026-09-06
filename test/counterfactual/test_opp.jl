@@ -8,7 +8,7 @@ using MacroEconometricModels
 const MEM = MacroEconometricModels
 
 @testset "OPP statistic (CF-13)" begin
-    rng = MersenneTwister(20260813)
+    rng = Xoshiro(20260813)
 
     @testset "WLS identity" begin
         H, n_s = 6, 2

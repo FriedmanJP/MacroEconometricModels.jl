@@ -14,8 +14,6 @@
 
 using Test, MacroEconometricModels, Random, LinearAlgebra, DataFrames, Statistics, Distributions
 
-Random.seed!(9003)
-
 const MEM = MacroEconometricModels
 const _suppress = MEM._suppress_warnings
 
@@ -23,7 +21,7 @@ const _suppress = MEM._suppress_warnings
 # Helper: generate balanced panel DGP (same pattern as test/pvar/test_pvar.jl)
 # =============================================================================
 
-function _make_panel(; N=30, T_total=25, m=3, p=1, rng=MersenneTwister(9003))
+function _make_panel(; N=30, T_total=25, m=3, p=1, rng=Xoshiro(9003))
     A1 = 0.3 * I(m) + 0.05 * randn(rng, m, m)
     F = eigvals(A1)
     while maximum(abs.(F)) >= 0.95
@@ -49,7 +47,7 @@ function _make_panel(; N=30, T_total=25, m=3, p=1, rng=MersenneTwister(9003))
 end
 
 # Panel with an extra "exog" column for predetermined / exogenous variable tests
-function _make_panel_with_extras(; N=20, T_total=20, rng=MersenneTwister(9004))
+function _make_panel_with_extras(; N=20, T_total=20, rng=Xoshiro(9004))
     m = 2  # endogenous
     A1 = 0.3 * I(m) + 0.05 * randn(rng, m, m)
     F = eigvals(A1)
@@ -81,7 +79,7 @@ function _make_panel_with_extras(; N=20, T_total=20, rng=MersenneTwister(9004))
 end
 
 # Panel with very few time periods per group (short Ti)
-function _make_short_panel(; N=40, T_total=8, m=2, rng=MersenneTwister(9005))
+function _make_short_panel(; N=40, T_total=8, m=2, rng=Xoshiro(9005))
     A1 = 0.25 * I(m)
     data_mat = zeros(N * T_total, m)
     for i in 1:N
@@ -103,7 +101,7 @@ end
 # =============================================================================
 
 @testset "PVAR :mstep iterated GMM" begin
-    dgp = _make_panel(N=25, T_total=20, m=2, p=1, rng=MersenneTwister(9010))
+    dgp = _make_panel(N=25, T_total=20, m=2, p=1, rng=Xoshiro(9010))
     pd = dgp.pd
 
     @testset "mstep converges" begin
@@ -142,7 +140,7 @@ end
 # =============================================================================
 
 @testset "PVAR System GMM" begin
-    dgp = _make_panel(N=25, T_total=20, m=2, p=1, rng=MersenneTwister(9020))
+    dgp = _make_panel(N=25, T_total=20, m=2, p=1, rng=Xoshiro(9020))
     pd = dgp.pd
 
     @testset "System GMM twostep" begin
@@ -194,7 +192,7 @@ end
 # =============================================================================
 
 @testset "PVAR System GMM Display" begin
-    dgp = _make_panel(N=20, T_total=20, m=2, p=1, rng=MersenneTwister(9030))
+    dgp = _make_panel(N=20, T_total=20, m=2, p=1, rng=Xoshiro(9030))
 
     @testset "show System GMM model includes 'System GMM'" begin
         model = estimate_pvar(dgp.pd, 1; system_instruments=true, steps=:twostep)
@@ -224,7 +222,7 @@ end
 # =============================================================================
 
 @testset "PVAR Windmeijer Correction" begin
-    dgp = _make_panel(N=30, T_total=20, m=2, p=1, rng=MersenneTwister(9040))
+    dgp = _make_panel(N=30, T_total=20, m=2, p=1, rng=Xoshiro(9040))
     pd = dgp.pd
 
     @testset "twostep SEs differ from onestep" begin
@@ -248,7 +246,7 @@ end
 # =============================================================================
 
 @testset "PVAR Short Ti" begin
-    pd_short = _make_short_panel(N=40, T_total=8, m=2, rng=MersenneTwister(9050))
+    pd_short = _make_short_panel(N=40, T_total=8, m=2, rng=Xoshiro(9050))
 
     @testset "FD-GMM with short T" begin
         model = estimate_pvar(pd_short, 1; steps=:onestep)
@@ -282,7 +280,7 @@ end
 # =============================================================================
 
 @testset "PVAR Predetermined Variables" begin
-    pd = _make_panel_with_extras(N=20, T_total=20, rng=MersenneTwister(9060))
+    pd = _make_panel_with_extras(N=20, T_total=20, rng=Xoshiro(9060))
 
     @testset "FD-GMM with predetermined vars" begin
         model = estimate_pvar(pd, 1;
@@ -362,7 +360,7 @@ end
 # =============================================================================
 
 @testset "Procrustes distance n > 5" begin
-    rng = MersenneTwister(9070)
+    rng = Xoshiro(9070)
 
     @testset "greedy matching for 6x6" begin
         B1 = randn(rng, 6, 6)
@@ -395,7 +393,12 @@ end
     end
 
     @testset "greedy matching 10x10" begin
-        B1 = randn(rng, 10, 10)
+        # Orthonormal random B1 (not raw Gaussian): greedy matches by RAW
+        # |dot|, so χ²-distributed Gaussian column norms overlap correct and
+        # wrong matches (44/101 seeds mismatch with d ≥ 1.0). Orthonormal
+        # columns separate structurally (correct ≈ 1, wrong ≈ 0.01), so a 1%
+        # perturbation always matches: worst d = 0.12 over 101 seeds.
+        B1 = Matrix(qr(randn(rng, 10, 10)).Q)
         B2 = B1 + 0.01 * randn(rng, 10, 10)  # small perturbation
         d = MEM._procrustes_distance(B1, B2)
         @test d >= 0
@@ -408,13 +411,14 @@ end
 # =============================================================================
 
 @testset "Identification strength jade/sobi" begin
-    Random.seed!(9080)
-    Y = randn(200, 3)
+    rng = Random.Xoshiro(9080)
+    Y = randn(rng, 200, 3)
     model = estimate_var(Y, 2)
 
     _suppress() do
         @testset "jade method" begin
-            result = test_identification_strength(model; method=:jade, n_bootstrap=(FAST ? 5 : 15))
+            result = test_identification_strength(model; method=:jade, n_bootstrap=(FAST ? 5 : 15),
+                                                  rng=rng)
             @test result isa MEM.IdentifiabilityTestResult{Float64}
             @test result.test_name == :label_stability
             @test 0 <= result.statistic <= 1
@@ -424,7 +428,8 @@ end
         end
 
         @testset "sobi method" begin
-            result = test_identification_strength(model; method=:sobi, n_bootstrap=(FAST ? 5 : 15))
+            result = test_identification_strength(model; method=:sobi, n_bootstrap=(FAST ? 5 : 15),
+                                                  rng=rng)
             @test result isa MEM.IdentifiabilityTestResult{Float64}
             @test result.test_name == :label_stability
             @test isnan(result.pvalue)
@@ -438,8 +443,8 @@ end
 # =============================================================================
 
 @testset "Shock gaussianity with NonGaussianMLResult" begin
-    Random.seed!(9090)
-    Y = randn(250, 3)
+    rng = Random.Xoshiro(9090)
+    Y = randn(rng, 250, 3)
     model = estimate_var(Y, 2)
 
     _suppress() do
@@ -477,14 +482,14 @@ end
 # =============================================================================
 
 @testset "Shock independence with NonGaussianMLResult" begin
-    Random.seed!(9100)
-    Y = randn(200, 3)
+    rng = Random.Xoshiro(9100)
+    Y = randn(rng, 200, 3)
     model = estimate_var(Y, 2)
 
     _suppress() do
         @testset "student_t ML result" begin
             ml = identify_student_t(model)
-            result = test_shock_independence(ml; max_lag=5)
+            result = test_shock_independence(ml; max_lag=5, rng=rng)
             @test result isa MEM.IdentifiabilityTestResult{Float64}
             @test result.test_name == :shock_independence
             @test result.statistic >= 0
@@ -508,15 +513,15 @@ end
 # =============================================================================
 
 @testset "Overidentification test" begin
-    Random.seed!(9110)
-    Y = randn(250, 3)
+    rng = Random.Xoshiro(9110)
+    Y = randn(rng, 250, 3)
     model = estimate_var(Y, 2)
 
     _suppress() do
         @testset "with ICA result" begin
-            ica = identify_fastica(model)
+            ica = identify_fastica(model; rng=rng)
             nb = FAST ? 9 : 49
-            result = test_overidentification(model, ica; n_bootstrap=nb)
+            result = test_overidentification(model, ica; n_bootstrap=nb, rng=rng)
             @test result isa MEM.IdentifiabilityTestResult{Float64}
             @test result.test_name == :overidentification
             @test result.statistic >= 0
@@ -528,7 +533,7 @@ end
 
         @testset "with ML result" begin
             ml = identify_student_t(model)
-            result = test_overidentification(model, ml; n_bootstrap=(FAST ? 9 : 29))
+            result = test_overidentification(model, ml; n_bootstrap=(FAST ? 9 : 29), rng=rng)
             @test result isa MEM.IdentifiabilityTestResult{Float64}
             @test result.test_name == :overidentification
             @test result.statistic >= 0
@@ -536,7 +541,7 @@ end
 
         @testset "with JADE result" begin
             jade_res = identify_jade(model)
-            result = test_overidentification(model, jade_res; n_bootstrap=(FAST ? 9 : 19))
+            result = test_overidentification(model, jade_res; n_bootstrap=(FAST ? 9 : 19), rng=rng)
             @test result isa MEM.IdentifiabilityTestResult{Float64}
         end
     end
@@ -547,12 +552,12 @@ end
 # =============================================================================
 
 @testset "IdentifiabilityTestResult show" begin
-    Random.seed!(9120)
-    Y = randn(200, 3)
+    rng = Random.Xoshiro(9120)
+    Y = randn(rng, 200, 3)
     model = estimate_var(Y, 2)
 
     _suppress() do
-        ica = identify_fastica(model)
+        ica = identify_fastica(model; rng=rng)
         gauss_result = test_shock_gaussianity(ica)
         s = sprint(show, gauss_result)
         @test occursin("Identifiability Test", s)
@@ -566,7 +571,7 @@ end
 # =============================================================================
 
 @testset "PVAR PCA Instruments" begin
-    dgp = _make_panel(N=25, T_total=20, m=2, p=1, rng=MersenneTwister(9130))
+    dgp = _make_panel(N=25, T_total=20, m=2, p=1, rng=Xoshiro(9130))
     pd = dgp.pd
 
     @testset "PCA reduction with auto components" begin
@@ -586,7 +591,7 @@ end
 # =============================================================================
 
 @testset "System GMM structural analysis" begin
-    dgp = _make_panel(N=25, T_total=20, m=2, p=1, rng=MersenneTwister(9140))
+    dgp = _make_panel(N=25, T_total=20, m=2, p=1, rng=Xoshiro(9140))
     pd = dgp.pd
 
     model = estimate_pvar(pd, 1; system_instruments=true, steps=:twostep)

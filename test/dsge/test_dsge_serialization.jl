@@ -63,7 +63,7 @@ end
     end
     @test haskey(_MEM._SERIALIZABLE_TYPES, "ModelSpec")
     spec2 = _roundtrip(spec)
-    rng = MersenneTwister(760)
+    rng = Xoshiro(760)
     θ = spec.param_values
     for i in 1:length(spec.residual_fns)
         # k^α / k^(α-1) are undefined for negative k on ℝ; stay in the positive orthant.
@@ -316,7 +316,7 @@ end
         @test is_stable(sol2) == is_stable(sol)
         @test irf(sol2, 20).values == irf(sol, 20).values
         @test fevd(sol2, 20).proportions == fevd(sol, 20).proportions
-        @test simulate(sol2, 50; rng=MersenneTwister(1)) == simulate(sol, 50; rng=MersenneTwister(1))
+        @test simulate(sol2, 50; rng=Xoshiro(1)) == simulate(sol, 50; rng=Xoshiro(1))
         @test analytical_moments(sol2) == analytical_moments(sol)
         @test sprint(show, sol2) == sprint(show, sol)
     end
@@ -372,8 +372,8 @@ end
     @test t2.method == tens.method
     x = [0.01]
     @test evaluate_policy(t2, x) == evaluate_policy(tens, x)
-    @test max_euler_error(t2; n_test=50, rng=MersenneTwister(762)) ==
-          max_euler_error(tens; n_test=50, rng=MersenneTwister(762))
+    @test max_euler_error(t2; n_test=50, rng=Xoshiro(762)) ==
+          max_euler_error(tens; n_test=50, rng=Xoshiro(762))
     mktemp() do p, _
         save_model(tens, p)
         t3 = load_model(p)
@@ -499,7 +499,7 @@ end
 @testset "DSER-04 KalmanSmootherResult (HD path)" begin
     spec = _dser04_ar1()
     sol = solve(spec)
-    rng = MersenneTwister(762)
+    rng = Xoshiro(762)
     sim = simulate(sol, 40; rng=rng)
     Z, d, H = _MEM._build_observation_equation(spec, [:y], nothing)
     ss = _MEM._build_state_space(sol, Z, d, H)
@@ -547,7 +547,7 @@ end
     end
 
     _suppress_warnings() do
-        rng = MersenneTwister(762)
+        rng = Xoshiro(762)
         y = zeros(60)
         for t in 2:60
             y[t] = 0.8 * y[t-1] + 0.01 * randn(rng)
@@ -731,7 +731,7 @@ end
         Float64[0.05, 0.16, 0.84, 0.95], zeros(3, 5, 1))
     _assert_roundtrip(bsim)
 
-    Y = randn(MersenneTwister(763), 1, 20)
+    Y = randn(Xoshiro(763), 1, 20)
     _, pf = apply_prefilter(Y, :demean; observables=[:y])
     @test pf isa PrefilterSpec
     pf2 = _assert_roundtrip(pf)
@@ -757,14 +757,14 @@ end
 @testset "DSER-05 BayesianDSGE Kalman SMC + consumers" begin
     b = _suppress_warnings() do
         spec = _dser04_ar1()
-        rng = MersenneTwister(763)
+        rng = Xoshiro(763)
         sim = simulate(solve(spec), 40; rng=rng)
         priors = Dict(:ρ => Beta(2, 2))
         estimate_dsge_bayes(spec, sim, [0.5];
             priors=priors, method=:smc, observables=[:y],
             n_smc=30, n_mh_steps=1, ess_target=0.5,
             measurement_error=[0.01],
-            rng=MersenneTwister(7631))
+            rng=Xoshiro(7631))
     end
     @test b isa BayesianDSGE
     @test b.state_space isa _MEM.DSGEStateSpace
@@ -780,9 +780,9 @@ end
     @test trace(b2, :ρ) == trace(b, :ρ)
     @test sprint(show, b2) == sprint(show, b)
 
-    rng = MersenneTwister(1)
-    @test posterior_predictive(b2, 5; T_periods=8, rng=MersenneTwister(1)) ==
-          posterior_predictive(b, 5; T_periods=8, rng=MersenneTwister(1))
+    rng = Xoshiro(1)
+    @test posterior_predictive(b2, 5; T_periods=8, rng=Xoshiro(1)) ==
+          posterior_predictive(b, 5; T_periods=8, rng=Xoshiro(1))
 
     d1 = mcmc_diagnostics(b)
     d2 = mcmc_diagnostics(b2)
@@ -791,11 +791,11 @@ end
     hd = historical_decomposition(b2, Matrix(b.data'), [:y]; mode_only=true, n_draws=5)
     @test hd isa HistoricalDecomposition
 
-    birf = irf(b2, 5; n_draws=5, rng=MersenneTwister(2))
+    birf = irf(b2, 5; n_draws=5, rng=Xoshiro(2))
     @test birf isa BayesianImpulseResponse
-    bsim = simulate(b2, 8; n_draws=5, rng=MersenneTwister(3))
+    bsim = simulate(b2, 8; n_draws=5, rng=Xoshiro(3))
     @test bsim isa BayesianDSGESimulation
-    ppc = posterior_predictive_check(b2; n_draws=5, rng=MersenneTwister(4))
+    ppc = posterior_predictive_check(b2; n_draws=5, rng=Xoshiro(4))
     @test ppc isa PosteriorPredictiveCheck
     idd = identification_diagnostics(b2.spec, b2.param_names; observables=b2.observables)
     @test idd isa IdentificationDiagnostics
@@ -819,7 +819,7 @@ end
 @testset "DSER-05 NonlinearStateSpace / ProjectionStateSpace BayesianDSGE" begin
     _suppress_warnings() do
         spec = _dser04_ar1()
-        data_obs = randn(MersenneTwister(42), 1, 24) .* 0.02
+        data_obs = randn(Xoshiro(42), 1, 24) .* 0.02
         priors = Dict(:ρ => Normal(0.5, 0.2))
         θ0 = [0.5]
 
@@ -828,7 +828,7 @@ end
             n_smc=8, n_particles=20, n_mh_steps=1, ess_target=0.5,
             measurement_error=[0.005],
             solver=:perturbation, solver_kwargs=(order=2,),
-            rng=MersenneTwister(7632))
+            rng=Xoshiro(7632))
         @test bp.state_space isa _MEM.NonlinearStateSpace
         bp2 = _assert_roundtrip(bp; skip=[:state_space])
         @test bp2.state_space isa _MEM.NonlinearStateSpace
@@ -840,7 +840,7 @@ end
             n_smc=8, n_particles=20, n_mh_steps=1, ess_target=0.5,
             measurement_error=[0.005],
             solver=:projection, solver_kwargs=(degree=3, scale=5.0),
-            rng=MersenneTwister(7633))
+            rng=Xoshiro(7633))
         @test bj.state_space isa _MEM.ProjectionStateSpace
         bj2 = _assert_roundtrip(bj; skip=[:state_space])
         @test bj2.state_space isa _MEM.ProjectionStateSpace
@@ -851,7 +851,7 @@ end
 @testset "DSER-05 prefilter= and trends= on BayesianDSGE" begin
     _suppress_warnings() do
         spec = _dser04_ar1()
-        rng = MersenneTwister(7634)
+        rng = Xoshiro(7634)
         sim = simulate(solve(spec), 50; rng=rng)
         y_level = sim .+ 0.5 .+ 0.01 .* collect(1.0:50)
         priors = Dict(:ρ => Beta(2, 2))
@@ -859,7 +859,7 @@ end
         bpf = estimate_dsge_bayes(spec, y_level, [0.5];
             priors=priors, method=:mh, n_draws=40, burnin=10,
             observables=[:y], prefilter=:linear_detrend,
-            warn_trends=false, rng=MersenneTwister(7635))
+            warn_trends=false, rng=Xoshiro(7635))
         @test bpf.prefilter isa PrefilterSpec
         bpf2 = _assert_roundtrip(bpf; skip=[:state_space])
         @test bpf2.prefilter isa PrefilterSpec
@@ -870,7 +870,7 @@ end
             priors=priors, method=:mh, n_draws=40, burnin=10,
             observables=[:y],
             observation_trends=Dict(:y => (constant=0.5, linear=0.01)),
-            warn_trends=false, rng=MersenneTwister(7636))
+            warn_trends=false, rng=Xoshiro(7636))
         @test btr.trends isa ObservationTrends
         btr2 = _assert_roundtrip(btr; skip=[:state_space])
         @test btr2.trends isa ObservationTrends
@@ -1384,7 +1384,7 @@ end
         @test gej2.H_U == gej.H_U
         @test gej2.H_Z == gej.H_Z
         @test typeof(gej2.curlyJ) === typeof(gej.curlyJ)
-        rng = MersenneTwister(766)
+        rng = Xoshiro(766)
         v = randn(rng, size(gej.H_U, 1))
         @test gej2.H_U_fact \ v ≈ gej.H_U_fact \ v atol=1e-12
 
@@ -1419,7 +1419,7 @@ end
         gej2 = _assert_roundtrip(gej; skip=[:H_U_fact])
         @test gej2.model.blocks isa Vector{AbstractSSJBlock}
         @test gej2.H_U ≈ gej.H_U atol=1e-12
-        rng = MersenneTwister(7661)
+        rng = Xoshiro(7661)
         v = randn(rng, size(gej.H_U, 1))
         @test gej2.H_U_fact \ v ≈ gej.H_U_fact \ v atol=1e-10
         dw = Dict(:w => [0.02 * 0.9^(t - 1) for t in 1:12])
@@ -1874,7 +1874,7 @@ end
     end
     n_solve = 0
     n_resid = 0
-    rng = MersenneTwister(770)
+    rng = Xoshiro(770)
     for path in tier_files
         parsed = Meta.parseall(read(path, String); filename=path)
         blocks = _dser02_collect_dsge_blocks(parsed)

@@ -764,7 +764,7 @@ ss_obj = MacroEconometricModels.DSGEStateSpace{Float64}(
 
 # Simulate data from the model at posterior mode and compute log-likelihood
 using Random
-sim_data = MacroEconometricModels.simulate(sol, 200; rng=MersenneTwister(42))
+sim_data = MacroEconometricModels.simulate(sol, 200; rng=Xoshiro(42))
 # Extract observables and apply observation equation
 obs_data = zeros(7, 200)
 for t in 1:200

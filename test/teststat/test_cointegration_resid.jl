@@ -31,7 +31,7 @@ function coint_pair(seed::Int, T::Int; beta::Float64=2.0, rho::Float64=0.5)
         d = readdlm(f, ',', Float64)
         return d[:, 1], d[:, 2]
     end
-    rng = MersenneTwister(seed)
+    rng = Xoshiro(seed)
     x = cumsum(randn(rng, T))
     e = zeros(T)
     for t in 2:T
@@ -46,7 +46,7 @@ function indep_pair(seed::Int, T::Int)
         d = readdlm(f, ',', Float64)
         return d[:, 1], d[:, 2]
     end
-    rng = MersenneTwister(seed)
+    rng = Xoshiro(seed)
     x = cumsum(randn(rng, T))
     y = cumsum(randn(rng, T))
     return y, x
@@ -163,7 +163,7 @@ end
         @test h_stable.pvalue > 0.05                     # do not reject stability
 
         # Structural break in the cointegrating slope halfway: Lc SHOULD reject.
-        rng = MersenneTwister(555); T = 300
+        rng = Xoshiro(555); T = 300
         xb = cumsum(randn(rng, T))
         e = 0.3 .* randn(rng, T)
         beta_t = vcat(fill(1.0, T ÷ 2), fill(3.0, T - T ÷ 2))
@@ -213,8 +213,8 @@ end
         y, x = coint_pair(1, 100)
         @test_throws DimensionMismatch engle_granger_test(y, x[1:50])
         @test_throws ArgumentError phillips_ouliaris_test(reshape(y, :, 1))  # <2 cols
-        short = randn(10)
-        @test_throws ArgumentError engle_granger_test(short, randn(10))       # too few obs
+        short = randn(Random.Xoshiro(92), 10)
+        @test_throws ArgumentError engle_granger_test(short, randn(Random.Xoshiro(93), 10))  # too few obs
         mc = estimate_cointreg(y, x; method=:fmols, trend=:const)
         @test_throws ArgumentError park_added_test(mc; q_add=0)
     end

@@ -27,6 +27,7 @@ makedocs(;
             "Installation & First Model" => "getting_started.md",
             "Choosing a Method" => "method_guide.md",
             "Data Management" => "data.md",
+            "Simulation (DGPs)" => "simulation.md",
         ],
         "Univariate Models" => [
             "Time Series Filters" => "filters.md",
@@ -134,6 +135,7 @@ makedocs(;
         "API Reference" => [
             "Overview" => "api.md",
             "Data Management" => "api/data.md",
+            "Simulation" => "api/simulation.md",
             "Univariate Models" => "api/univariate.md",
             "Multivariate Models" => "api/multivariate.md",
             "Cross-Sectional Models" => "api/cross_section.md",

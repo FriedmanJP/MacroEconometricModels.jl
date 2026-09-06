@@ -476,7 +476,7 @@ function estimate_elastic_net(y::AbstractVector{T}, X::AbstractMatrix{T};
         idx = 1
         sel = lambda isa Union{Real,AbstractVector} ? :fixed : select
     elseif use_cv
-        rng = MersenneTwister(seed)
+        rng = Xoshiro(seed)
         cv_mse, cv_se = _cv_curve(X, y, α, λpath, cv, nfolds, adaptive,
                                   T(adaptive_gamma), standardize, T(tol), maxit, rng)
         imin = argmin(cv_mse)

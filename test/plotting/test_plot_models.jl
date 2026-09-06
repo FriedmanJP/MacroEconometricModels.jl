@@ -118,7 +118,7 @@ const _MEM_MODELS = MacroEconometricModels
 
     @testset "StructuralDFM ★" begin
         # Small GDFM panel with q=2 common shocks.
-        rng = Random.MersenneTwister(7)
+        rng = Random.Xoshiro(7)
         T_obs, N, q = 120, 12, 2
         F = zeros(T_obs, q); F[1, :] = randn(rng, q)
         for t in 2:T_obs
@@ -138,7 +138,7 @@ const _MEM_MODELS = MacroEconometricModels
         check_plot(plot_result(historical_decomposition(gdfm)))
         fc = forecast(sdfm, 6; ci_method=:none)
         check_plot(plot_result(fc)); assert_all_json_valid(plot_result(fc))
-        irb = irf(sdfm, 8; ci_type=:bootstrap, reps=20, rng=Random.MersenneTwister(1))
+        irb = irf(sdfm, 8; ci_type=:bootstrap, reps=20, rng=Random.Xoshiro(1))
         pb = plot_result(irb)
         check_plot(pb); assert_all_json_valid(pb)
         @test occursin("bootstrap CI", pb.html)

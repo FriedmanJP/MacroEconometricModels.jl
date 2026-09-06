@@ -7,7 +7,7 @@ using Logging: with_logger
     # 1. Hausman Test — X correlated with alpha_i triggers rejection
     # =========================================================================
     @testset "Hausman test" begin
-        rng = Random.MersenneTwister(1234)
+        rng = Random.Xoshiro(1234)
         N_g = 50; T_p = 20; n = N_g * T_p
         ids = repeat(1:N_g, inner=T_p)
         ts = repeat(1:T_p, N_g)
@@ -65,7 +65,7 @@ using Logging: with_logger
     # 2. Breusch-Pagan LM Test — Large sigma_u triggers rejection
     # =========================================================================
     @testset "Breusch-Pagan LM test" begin
-        rng = Random.MersenneTwister(2345)
+        rng = Random.Xoshiro(2345)
         N_g = 50; T_p = 20; n = N_g * T_p
         ids = repeat(1:N_g, inner=T_p)
         ts = repeat(1:T_p, N_g)
@@ -95,7 +95,7 @@ using Logging: with_logger
     # 3. F-test for FE — Large entity effects triggers rejection
     # =========================================================================
     @testset "F-test for fixed effects" begin
-        rng = Random.MersenneTwister(3456)
+        rng = Random.Xoshiro(3456)
         N_g = 30; T_p = 15; n = N_g * T_p
         ids = repeat(1:N_g, inner=T_p)
         ts = repeat(1:T_p, N_g)
@@ -126,7 +126,7 @@ using Logging: with_logger
     # 4. Pesaran CD Test — Common shock creates cross-sectional dependence
     # =========================================================================
     @testset "Pesaran CD test" begin
-        rng = Random.MersenneTwister(4567)
+        rng = Random.Xoshiro(4567)
         N_g = 30; T_p = 20; n = N_g * T_p
         ids = repeat(1:N_g, inner=T_p)
         ts = repeat(1:T_p, N_g)
@@ -157,7 +157,7 @@ using Logging: with_logger
     # 5. Wooldridge AR Test — AR(1) errors trigger serial correlation
     # =========================================================================
     @testset "Wooldridge AR(1) test" begin
-        rng = Random.MersenneTwister(5678)
+        rng = Random.Xoshiro(5678)
         N_g = 50; T_p = 25; n = N_g * T_p
         ids = repeat(1:N_g, inner=T_p)
         ts = repeat(1:T_p, N_g)
@@ -197,7 +197,7 @@ using Logging: with_logger
     # 6. Modified Wald Test — Heterogeneous sigma_i triggers rejection
     # =========================================================================
     @testset "Modified Wald test" begin
-        rng = Random.MersenneTwister(6789)
+        rng = Random.Xoshiro(6789)
         N_g = 40; T_p = 20; n = N_g * T_p
         ids = repeat(1:N_g, inner=T_p)
         ts = repeat(1:T_p, N_g)
@@ -230,7 +230,7 @@ using Logging: with_logger
     # Non-rejection cases (sanity checks)
     # =========================================================================
     @testset "Non-rejection under null" begin
-        rng = Random.MersenneTwister(9999)
+        rng = Random.Xoshiro(9999)
         N_g = 30; T_p = 20; n = N_g * T_p
         ids = repeat(1:N_g, inner=T_p)
         ts = repeat(1:T_p, N_g)

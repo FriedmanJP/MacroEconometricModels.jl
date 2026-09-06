@@ -6,7 +6,7 @@ using Test, MacroEconometricModels, DataFrames, Distributions, Random, LinearAlg
     # DGP helper: endogenous x correlated with error, z is instrument
     # =================================================================
     function make_iv_panel(; N=50, Ti=20, beta_x=1.5, beta_endog=2.0, seed=42)
-        rng = Random.MersenneTwister(seed)
+        rng = Random.Xoshiro(seed)
         n = N * Ti
         id = repeat(1:N, inner=Ti)
         t = repeat(1:Ti, N)
@@ -80,7 +80,7 @@ using Test, MacroEconometricModels, DataFrames, Distributions, Random, LinearAlg
 
     # =================================================================
     @testset "estimate_xtiv - RE-IV (EC2SLS)" begin
-        rng = Random.MersenneTwister(789)
+        rng = Random.Xoshiro(789)
         N, Ti = 60, 15
         n = N * Ti
         id = repeat(1:N, inner=Ti)
@@ -117,7 +117,7 @@ using Test, MacroEconometricModels, DataFrames, Distributions, Random, LinearAlg
 
     # =================================================================
     @testset "estimate_xtiv - Hausman-Taylor" begin
-        rng = Random.MersenneTwister(101)
+        rng = Random.Xoshiro(101)
         N, Ti = 200, 20
         n = N * Ti
         id = repeat(1:N, inner=Ti)
@@ -277,7 +277,7 @@ using Test, MacroEconometricModels, DataFrames, Distributions, Random, LinearAlg
 
         # Singleton-cluster equivalence: with one obs per entity the clustered meat equals
         # the HC0 meat, so the panel cluster Hansen J == the cross-sectional HC0 Hansen J.
-        rng = MersenneTwister(4242)
+        rng = Xoshiro(4242)
         nq = 300
         Zq = hcat(ones(nq), randn(rng, nq), randn(rng, nq))   # m = 3
         eq = randn(rng, nq)

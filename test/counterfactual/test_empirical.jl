@@ -19,12 +19,12 @@ function _cf04_data(rng; T_obs=250, n=3)
 end
 
 @testset "Empirical adapters (CF-04)" begin
-    rng = MersenneTwister(20260805)
+    rng = Xoshiro(20260805)
     Y = _cf04_data(rng)
     m = estimate_var(Y, 2)
 
     @testset "frequentist round-trip" begin
-        ir = irf(m, 12; ci_type=:bootstrap, reps=50, rng=MersenneTwister(1))
+        ir = irf(m, 12; ci_type=:bootstrap, reps=50, rng=Xoshiro(1))
         H = 10
         ce = policy_causal_effects(ir, [3], [:y1 => 1, :y2 => ir.variables[2]],
                                    [:rate => 3]; H=H)
@@ -75,7 +75,7 @@ end
     end
 
     @testset "instrument-impact normalization" begin
-        ir = irf(m, 12; ci_type=:bootstrap, reps=40, rng=MersenneTwister(2))
+        ir = irf(m, 12; ci_type=:bootstrap, reps=40, rng=Xoshiro(2))
         ce = policy_causal_effects(ir, [3], [:y1 => 1, :y2 => 2], [:rate => 3];
                                    H=10, normalize=:instrument_impact)
         @test ce.Theta_z[1][1, 1] ≈ 1.0 atol = 1e-14
@@ -106,7 +106,7 @@ end
     @testset "sign-set route" begin
         check = irfarr -> irfarr[1, 1, 1] > 0
         s = identify_sign(m, 12, check; max_draws=300, store_all=true,
-                          rng=MersenneTwister(3))
+                          rng=Xoshiro(3))
         med = irf_median(s)
         ce = policy_causal_effects(s, [2], [:y1 => 1], [:rate => 3]; H=9)
         @test ce.source == :sign_set
@@ -121,7 +121,7 @@ end
         nresp = length(lpr.response_vars)
         @test nresp >= 1
         ce = policy_causal_effects(lpr, [:resp1 => 1]; n_draws=4000,
-                                   rng=MersenneTwister(4))
+                                   rng=Xoshiro(4))
         @test ce.source == :lp
         @test MEM.n_shocks(ce) == 1
         @test ce.shock_labels == [lpr.shock_var]
@@ -133,12 +133,12 @@ end
 
         # convenience dispatch on the LP model itself
         ce2 = policy_causal_effects(mlp, [:resp1 => 1]; n_draws=10,
-                                    rng=MersenneTwister(5))
+                                    rng=Xoshiro(5))
         @test ce2.Theta_x[1] == ce.Theta_x[1]
     end
 
     @testset "baseline_path" begin
-        ir = irf(m, 12; ci_type=:bootstrap, reps=30, rng=MersenneTwister(6))
+        ir = irf(m, 12; ci_type=:bootstrap, reps=30, rng=Xoshiro(6))
         H = 10
         bp = baseline_path(ir, 2, [:y1 => 1, :y3 => 3], [:rate => 3]; H=H)
         @test bp isa BaselinePath{Float64}
@@ -165,7 +165,7 @@ end
     end
 
     @testset "Wold representation" begin
-        Y2 = _cf04_data(MersenneTwister(11); T_obs=400, n=2)[:, 1:2]
+        Y2 = _cf04_data(Xoshiro(11); T_obs=400, n=2)[:, 1:2]
         m1 = estimate_var(Y2, 1)
         H = 6
         w = wold_representation(m1; H=H)

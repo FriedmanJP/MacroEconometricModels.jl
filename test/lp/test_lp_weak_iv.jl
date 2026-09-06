@@ -23,7 +23,7 @@ const _suppress_warnings = MacroEconometricModels._suppress_warnings
 
 """LP-IV DGP: `pi1` sets instrument strength, `theta` the impact response of y to the shock."""
 function _lpiv_sim(T_obs::Int; pi1::Float64=1.5, seed::Int=1, theta::Float64=1.0)
-    rng = Random.MersenneTwister(seed)
+    rng = Random.Xoshiro(seed)
     z = randn(rng, T_obs)
     v = randn(rng, T_obs)
     s = pi1 .* z .+ v                     # shock, endogenous w.r.t. the y equation
@@ -238,7 +238,7 @@ end
 @testset "the T013 Sargan-J fix is untouched" begin
     # Two instruments so the model is over-identified and the J statistic is defined.
     Y, Z1 = _lpiv_sim(300; pi1=1.2, seed=17)
-    rng = Random.MersenneTwister(99)
+    rng = Random.Xoshiro(99)
     Z2 = 0.9 .* Z1 .+ 0.3 .* randn(rng, size(Z1, 1), 1)
     m = estimate_lp_iv(Y, 1, hcat(Z1, Z2), 2; lags=2)
     sj = sargan_test(m, 0)
@@ -262,7 +262,7 @@ end
         nrep = 30
         for seed in 1:nrep
             Y, Z1 = _lpiv_sim(300; pi1=1.2, seed=seed)
-            rng = Random.MersenneTwister(1000 + seed)
+            rng = Random.Xoshiro(1000 + seed)
             Z2 = 0.9 .* Z1 .+ 0.3 .* randn(rng, size(Z1, 1), 1)
             m = estimate_lp_iv(Y, 1, hcat(Z1, Z2), 3; lags=2)
             sj = sargan_test(m, h)
@@ -276,7 +276,7 @@ end
     # The degenerate equation is dropped, not silently zeroed: the h=0 residual
     # variance of the shock's own response is numerically zero by construction.
     Y, Z1 = _lpiv_sim(300; pi1=1.2, seed=5)
-    rng = Random.MersenneTwister(11)
+    rng = Random.Xoshiro(11)
     Z2 = 0.9 .* Z1 .+ 0.3 .* randn(rng, size(Z1, 1), 1)
     m = estimate_lp_iv(Y, 1, hcat(Z1, Z2), 2; lags=2)
     U0 = m.residuals[1]

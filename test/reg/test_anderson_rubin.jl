@@ -22,7 +22,7 @@ const _suppress_warnings = MacroEconometricModels._suppress_warnings
 
 """Just-identified IV DGP; `pi1` controls instrument strength."""
 function _ar_sim(n::Int; pi1::Float64=1.0, seed::Int=1, beta::Float64=1.0)
-    rng = Random.MersenneTwister(seed)
+    rng = Random.Xoshiro(seed)
     z = randn(rng, n)
     v = randn(rng, n)
     u = 0.8 .* v .+ 0.6 .* randn(rng, n)
@@ -34,7 +34,7 @@ end
 """Over-identified IV DGP with `n_z` excluded instruments; `invalid` adds a direct effect."""
 function _ar_sim_overid(n::Int; pi1::Float64=0.5, seed::Int=1, beta::Float64=1.0,
                         n_z::Int=3, invalid::Float64=0.0)
-    rng = Random.MersenneTwister(seed)
+    rng = Random.Xoshiro(seed)
     Zx = randn(rng, n, n_z)
     v = randn(rng, n)
     u = 0.8 .* v .+ 0.6 .* randn(rng, n)
@@ -256,7 +256,7 @@ end
     @test_throws ArgumentError anderson_rubin_ci(m; n_grid=2)
 
     # Multiple endogenous regressors: the test still works, the 1-D inversion does not
-    rng = Random.MersenneTwister(2)
+    rng = Random.Xoshiro(2)
     n = 400
     Zx = randn(rng, n, 4)
     v1 = randn(rng, n); v2 = randn(rng, n)

@@ -142,9 +142,15 @@ Hansen's J-test for overidentifying restrictions on an SMM model.
 H0: All moment conditions are valid (E[g(theta_0)] = 0)
 H1: Some moment conditions are violated
 
+The p-value is COMPUTED here from the stored J statistic
+(`1 - cdf(Chisq(df), J)`), never echoed: `estimate_smm` stores `NaN`
+(and records `:identity` weighting) whenever `W` is not efficient, and
+under `:identity` no valid χ² p-value exists (same M-29 policy as
+`j_test(::GMMModel)`).
+
 Returns:
 - J_stat: Test statistic
-- p_value: p-value from chi-squared distribution
+- p_value: p-value from chi-squared distribution (NaN under :identity)
 - df: Degrees of freedom (n_moments - n_params)
 - reject_05: Whether to reject at 5% level
 """
@@ -154,7 +160,13 @@ function j_test(m::SMMModel{T}) where {T}
         return (J_stat=zero(T), p_value=one(T), df=0, reject_05=false,
                 message="Model is just-identified, J-test not applicable")
     end
-    (J_stat=m.J_stat, p_value=m.J_pvalue, df=df, reject_05=m.J_pvalue < T(0.05))
+    if m.weighting.method == :identity
+        return (J_stat=m.J_stat, p_value=T(NaN), df=df, reject_05=false,
+                message="J-statistic under identity weighting is not χ²-distributed; " *
+                        "p-value invalid — re-estimate with efficient weighting")
+    end
+    pv = T(1 - cdf(Chisq(df), m.J_stat))
+    (J_stat=m.J_stat, p_value=pv, df=df, reject_05=pv < T(0.05))
 end
 
 # =============================================================================
@@ -463,6 +475,10 @@ function estimate_smm(simulator_fn::Function, moments_fn::Function,
         @warn "estimate_smm: two-step weighting requires `contributions_fn` (per-observation moment contributions whose column-mean equals moments_fn(data)) for a valid Ω; falling back to identity weighting." maxlog=1
     end
     use_optimal = weighting == :two_step && contributions_fn !== nothing
+    # The stored weighting honestly records what W was: any non-efficient path
+    # (explicit :identity, or the silent two-step fallback above) is :identity,
+    # so j_test/show report the M-29 NaN policy instead of a χ² p-value.
+    stored_method = use_optimal ? weighting : :identity
     if use_optimal
         W2 = smm_weighting_matrix(data_T, contributions_fn; hac=hac, bandwidth=bw)
 
@@ -556,16 +572,18 @@ function estimate_smm(simulator_fn::Function, moments_fn::Function,
     # ------------------------------------------------------------------
     # J-statistic (Hansen overidentification test)
     # ------------------------------------------------------------------
+    # The χ²(m−k) limit requires efficient weighting; under identity W the
+    # quadratic form has no valid p-value (M-29 policy) — store NaN.
     J_stat, J_pvalue = if n_moments > n_params
         J = T_type(n_obs) * dot(g_bar, W_final * g_bar)
         J = max(J, zero(T_type))
         df = n_moments - n_params
-        (J, one(T_type) - cdf(Chisq(df), J))
+        (J, use_optimal ? one(T_type) - cdf(Chisq(df), J) : T_type(NaN))
     else
         (zero(T_type), one(T_type))
     end
 
-    weighting_spec = GMMWeighting{T_type}(weighting, max_iter, tol_T)
+    weighting_spec = GMMWeighting{T_type}(stored_method, max_iter, tol_T)
 
     result = SMMModel{T_type}(
         theta_hat, vcov, n_moments, n_params, n_obs, weighting_spec,

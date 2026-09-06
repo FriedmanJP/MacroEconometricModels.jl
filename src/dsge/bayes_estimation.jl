@@ -354,7 +354,7 @@ SMC², or Random-Walk Metropolis-Hastings (RWMH).
   natural-space walk.
 - `rng::AbstractRNG=Random.default_rng()` — random number generator
 - `seed::Union{Nothing,Integer}=nothing` — if given, owns the RNG (a fresh
-  `MersenneTwister(seed)`) and records it on `result.manifest` so
+  `Xoshiro(seed)`) and records it on `result.manifest` so
   [`reproduce`](@ref) can re-run bit-for-bit. `seed` wins when both `seed` and
   `rng` are passed.
 

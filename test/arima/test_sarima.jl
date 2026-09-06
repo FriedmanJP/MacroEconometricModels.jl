@@ -21,7 +21,7 @@ const _M = MacroEconometricModels
 
 """Simulate the airline model (0,1,1)(0,1,1)ₛ with known θ, Θ."""
 function _airline_series(n::Int, s::Int, th::Float64, TH::Float64; seed::Int=7, sigma::Float64=1.0)
-    rng = Random.MersenneTwister(seed)
+    rng = Random.Xoshiro(seed)
     burn = 50
     N = n + burn
     resid = sigma .* randn(rng, N)
@@ -77,7 +77,7 @@ end
 
 @testset "_undifference inverts the operator exactly" begin
     # Round trip: differencing then undifferencing recovers the tail of a known series
-    rng = Random.MersenneTwister(3)
+    rng = Random.Xoshiro(3)
     y = cumsum(cumsum(randn(rng, 80)))          # I(2)-ish, plenty of structure
     for (d, D, s) in ((1, 0, 0), (2, 0, 0), (0, 1, 4), (1, 1, 4), (1, 1, 12))
         delta = _M._sarima_diff_poly(d, D, s, Float64)
@@ -95,7 +95,7 @@ end
 # ─────────────────────────────────────────────────────────────────────────────
 
 @testset "zero seasonal orders reproduce ARIMA exactly" begin
-    rng = Random.MersenneTwister(42)
+    rng = Random.Xoshiro(42)
     n = 200
     resid = randn(rng, n)
     z = zeros(n)
@@ -154,7 +154,7 @@ end
 end
 
 @testset "seasonal AR recovery" begin
-    rng = Random.MersenneTwister(11)
+    rng = Random.Xoshiro(11)
     n = 450
     resid = randn(rng, n)
     z = zeros(n)
@@ -190,7 +190,7 @@ end
     @test_throws ArgumentError estimate_sarima(y, -1, 1, 1, 0, 1, 1, 4)
     @test_throws ArgumentError estimate_sarima(y, 0, 1, 1, 1, 0, 0, 1)   # s < 2 with P > 0
     @test_throws ArgumentError estimate_sarima(y, 0, 1, 1, 0, 1, 1, 4; method=:bogus)
-    @test_throws ArgumentError estimate_sarima(randn(20), 2, 1, 2, 1, 1, 1, 12)  # too short
+    @test_throws ArgumentError estimate_sarima(randn(Xoshiro(1), 20), 2, 1, 2, 1, 1, 1, 12)  # too short
 end
 
 @testset "StatsAPI interface and display" begin
@@ -300,7 +300,7 @@ end
     # ... and a regular one afterwards
     @test _M._auto_regular_diff(_M._seasonal_difference(y, 1, s)) == 1
     # White noise needs neither
-    rng = Random.MersenneTwister(21)
+    rng = Random.Xoshiro(21)
     @test _M._auto_regular_diff(randn(rng, 200)) == 0
     # HEGY does not apply outside s ∈ {4, 12} or on short samples → 0
     @test _M._auto_seasonal_diff(y, 7) == 0

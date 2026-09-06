@@ -12,7 +12,7 @@ function _cf16_fc(H, v)
 end
 
 @testset "OPP sequences (CF-16)" begin
-    rng = MersenneTwister(20260816)
+    rng = Xoshiro(20260816)
     H, n_s = 6, 2
     Tx = randn(rng, H, n_s)
     ce = PolicyCausalEffects(outcomes=[:u], Theta_x=[Tx])
@@ -75,11 +75,11 @@ end
     end
 
     @testset "bands per date" begin
-        noises = 0.05 .* randn(MersenneTwister(2), 30)
+        noises = 0.05 .* randn(Xoshiro(2), 30)
         Dx = cat((Tx .* (1 + e) for e in noises)...; dims=3)
         ce_n = PolicyCausalEffects(outcomes=[:u], Theta_x=[Tx], Theta_x_draws=[Dx])
         fcs = [_cf16_fc(H, randn(rng, H)) for _ in 1:3]
-        sq = opp_sequence(fcs, ce_n, loss; n_sim=200, rng=MersenneTwister(3))
+        sq = opp_sequence(fcs, ce_n, loss; n_sim=200, rng=Xoshiro(3))
         @test sq.bands !== nothing
         @test size(sq.bands[0.9]) == (n_s, 2, 3)
         for t in 1:3, k in 1:n_s

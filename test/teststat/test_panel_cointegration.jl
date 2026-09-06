@@ -142,7 +142,7 @@ end
     # (1) Machine-tolerance reconstruction oracle — pins the tail convention.
     # =========================================================================
     @testset "Pedroni: p-values reconstruct from N(0,1), correct tails" begin
-        rng = MersenneTwister(2024)
+        rng = Xoshiro(2024)
         Y, X = _coint_dgp(rng, 60, 20)
         r = pedroni_test(_mk_coint_panel(Y, X), :y, :x1; trend = :constant)
         @test length(r.statistics) == 7
@@ -161,7 +161,7 @@ end
     end
 
     @testset "Kao: p-values reconstruct from N(0,1) (all left-tailed)" begin
-        rng = MersenneTwister(11)
+        rng = Xoshiro(11)
         Y, X = _coint_dgp(rng, 60, 20)
         r = kao_test(_mk_coint_panel(Y, X), :y, :x1)
         @test length(r.statistics) == 5
@@ -180,7 +180,7 @@ end
     end
 
     @testset "Westerlund: p-values reconstruct from N(0,1) (all left-tailed)" begin
-        rng = MersenneTwister(101)
+        rng = Xoshiro(101)
         Y, X = _coint_dgp(rng, 60, 20)
         r = westerlund_test(_mk_coint_panel(Y, X), :y, :x1)
         @test r.names == ["Gt", "Ga", "Pt", "Pa"]
@@ -195,7 +195,7 @@ end
     # (3) Degenerate equivalence — Fisher-Johansen with N=1 ≡ single johansen.
     # =========================================================================
     @testset "Fisher-Johansen N=1 ≡ single johansen_test (exact)" begin
-        rng = MersenneTwister(7)
+        rng = Xoshiro(7)
         Tobs = 80
         a = cumsum(randn(rng, Tobs))
         b = a .+ 0.5 .* randn(rng, Tobs)
@@ -218,7 +218,7 @@ end
     end
 
     @testset "Fisher-Johansen: MW upper-tailed χ²(2N) reconstruction" begin
-        rng = MersenneTwister(303)
+        rng = Xoshiro(303)
         fj = fisher_johansen_test(_fj_panel(rng, 60, 12; coint = true), :a, :b; lags = 2)
         N = fj.n_units
         for r in eachindex(fj.ranks)
@@ -232,7 +232,7 @@ end
     # (4) Analytic DGP behaviour — cointegration rejects, random walks do not.
     # =========================================================================
     @testset "Cointegrated panel rejects H0(no cointegration)" begin
-        rng = MersenneTwister(42)
+        rng = Xoshiro(42)
         Yc, Xc = _coint_dgp(rng, 60, 20)
         pdc = _mk_coint_panel(Yc, Xc)
 
@@ -273,7 +273,7 @@ end
 
         # Fisher-Johansen recovers rank 0 for independent walks, rank>=1 when
         # cointegrated.
-        rng2 = MersenneTwister(55)
+        rng2 = Xoshiro(55)
         @test fisher_johansen_test(_fj_panel(rng2, 60, 15; coint = false), :a, :b; lags = 2).rank == 0
         @test fisher_johansen_test(_fj_panel(rng2, 60, 15; coint = true), :a, :b; lags = 2).rank >= 1
     end
@@ -282,7 +282,7 @@ end
     # Deterministic specifications, multiple regressors, and options.
     # =========================================================================
     @testset "Trend / none deterministics and k=2 regressors" begin
-        rng = MersenneTwister(88)
+        rng = Xoshiro(88)
         Yc, Xc = _coint_dgp(rng, 70, 15; k = 2, beta = [1.0, -0.5])
         pd = _mk_coint_panel(Yc, Xc)
         for tr in (:none, :constant, :trend)
@@ -298,7 +298,7 @@ end
     end
 
     @testset "Westerlund seeded bootstrap is reproducible" begin
-        rng = MersenneTwister(909)
+        rng = Xoshiro(909)
         Yc, Xc = _coint_dgp(rng, 50, 12)
         pd = _mk_coint_panel(Yc, Xc)
         w1 = westerlund_test(pd, :y, :x1; bootstrap = 30, seed = 314)
@@ -314,7 +314,7 @@ end
     # StatsAPI interface, lag options, and input validation.
     # =========================================================================
     @testset "StatsAPI accessors" begin
-        rng = MersenneTwister(5)
+        rng = Xoshiro(5)
         Yc, Xc = _coint_dgp(rng, 55, 10)
         pd = _mk_coint_panel(Yc, Xc)
         pr = pedroni_test(pd, :y, :x1)
@@ -329,7 +329,7 @@ end
     end
 
     @testset "Explicit lag / bandwidth options" begin
-        rng = MersenneTwister(17)
+        rng = Xoshiro(17)
         Yc, Xc = _coint_dgp(rng, 60, 12)
         pd = _mk_coint_panel(Yc, Xc)
         pr = pedroni_test(pd, :y, :x1; lags = 3, adf_lags = 3)
@@ -341,7 +341,7 @@ end
     end
 
     @testset "Input validation" begin
-        rng = MersenneTwister(9)
+        rng = Xoshiro(9)
         Yc, Xc = _coint_dgp(rng, 40, 6)
         pd = _mk_coint_panel(Yc, Xc)
         @test_throws ArgumentError pedroni_test(pd, :y)                    # no regressor
@@ -355,7 +355,7 @@ end
     end
 
     @testset "show / refs render without error" begin
-        rng = MersenneTwister(21)
+        rng = Xoshiro(21)
         Yc, Xc = _coint_dgp(rng, 50, 10)
         pd = _mk_coint_panel(Yc, Xc)
         for r in (pedroni_test(pd, :y, :x1), kao_test(pd, :y, :x1),

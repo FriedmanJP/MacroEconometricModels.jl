@@ -21,7 +21,7 @@ const _RSER07_H = FAST ? 2 : 3
 # xtset output (not a hand-built PanelData). Timing column `treat_time` feeds
 # DID/Bacon/NW; binary `treat` feeds LP-DiD.
 function _rser07_panel(; n_units=36, n_periods=16, seed=780)
-    rng = MersenneTwister(seed)
+    rng = Xoshiro(seed)
     n_cohorts = 2
     units_per = n_units ÷ (n_cohorts + 1)
     treat_times = zeros(Int, n_units)
@@ -109,7 +109,7 @@ end
         if !FAST
             did_dcdh = estimate_did(pd, :y, :treat_time; method=:did_multiplegt,
                                     leads=2, horizon=3, n_boot=10,
-                                    rng=MersenneTwister(7801))
+                                    rng=Xoshiro(7801))
             @test did_dcdh isa DIDResult{Float64}
             d2 = _assert_roundtrip(did_dcdh)
             _assert_consumers(did_dcdh, d2)

@@ -19,16 +19,10 @@ end
 
 # A 2-variable VAR whose Cholesky impact matrix is known by construction: the first
 # shock loads +0.6 onto the second variable on impact, so a positive condition on y1
-# must push y2 up.
+# must push y2 up. Built on the shared reference DGP (DGP-02 #791).
 function _cf_fixture(; T_obs::Int=300, seed::Int=241)
-    rng = Random.MersenneTwister(seed)
-    A = [0.5 0.0; 0.4 0.5]
-    L = [1.0 0.0; 0.6 1.0]
-    Y = zeros(T_obs, 2)
-    for t in 2:T_obs
-        Y[t, :] = A * Y[t-1, :] + L * randn(rng, 2)
-    end
-    return Y
+    rng = Random.Xoshiro(seed)
+    return dgp_var(rng; A=[0.5 0.0; 0.4 0.5], B0=[1.0 0.0; 0.6 1.0], T=T_obs).Y
 end
 
 @testset "Conditional Forecast (Waggoner-Zha)" begin
@@ -96,7 +90,7 @@ end
     unc = StatsAPI.predict(m, H)
 
     conds = Dict((1, k) => unc[k, 1] for k in 1:3)
-    cf = conditional_forecast(m, conds, H; reps=100, rng=Random.MersenneTwister(1))
+    cf = conditional_forecast(m, conds, H; reps=100, rng=Random.Xoshiro(1))
 
     # r = 0 ⇒ the minimum-norm shock mean is exactly zero ⇒ the conditional mean path
     # IS the unconditional path (Waggoner-Zha degenerate case).
@@ -112,7 +106,7 @@ end
     m = estimate_var(_cf_fixture(), 1)
     H = 8
     conds = [forecast_condition(1, k, 2.0) for k in 1:4]
-    cf = conditional_forecast(m, conds, H; reps=200, rng=Random.MersenneTwister(2))
+    cf = conditional_forecast(m, conds, H; reps=200, rng=Random.Xoshiro(2))
 
     for k in 1:4
         @test cf.forecast[k, 1] ≈ 2.0 atol = 1e-9
@@ -131,9 +125,9 @@ end
     unc = StatsAPI.predict(m, H)
 
     up = conditional_forecast(m, Dict((1, 1) => unc[1, 1] + 1.0), H;
-                              reps=100, rng=Random.MersenneTwister(3))
+                              reps=100, rng=Random.Xoshiro(3))
     down = conditional_forecast(m, Dict((1, 1) => unc[1, 1] - 1.0), H;
-                                reps=100, rng=Random.MersenneTwister(3))
+                                reps=100, rng=Random.Xoshiro(3))
 
     # The Cholesky impact of shock 1 on y2 is positive (0.6 by construction), so pushing
     # y1 up must push y2 up, and symmetrically down.
@@ -154,11 +148,11 @@ end
     target = 2.0
 
     tight = conditional_forecast(m, [forecast_condition(1, 1, target; sd=1e-6)], H;
-                                 reps=50, rng=Random.MersenneTwister(4))
+                                 reps=50, rng=Random.Xoshiro(4))
     loose = conditional_forecast(m, [forecast_condition(1, 1, target; sd=1.0)], H;
-                                 reps=50, rng=Random.MersenneTwister(4))
+                                 reps=50, rng=Random.Xoshiro(4))
     hard = conditional_forecast(m, [forecast_condition(1, 1, target)], H;
-                                reps=50, rng=Random.MersenneTwister(4))
+                                reps=50, rng=Random.Xoshiro(4))
 
     # sd → 0 recovers the hard condition
     @test tight.forecast[1, 1] ≈ hard.forecast[1, 1] atol = 1e-6
@@ -176,8 +170,8 @@ end
     Q = [cos(theta) -sin(theta); sin(theta) cos(theta)]
     conds = Dict((1, 1) => 2.0, (2, 3) => 1.0)
 
-    chol = conditional_forecast(m, conds, H; reps=50, rng=Random.MersenneTwister(5))
-    rot = conditional_forecast(m, conds, H; Q=Q, reps=50, rng=Random.MersenneTwister(5))
+    chol = conditional_forecast(m, conds, H; reps=50, rng=Random.Xoshiro(5))
+    rot = conditional_forecast(m, conds, H; Q=Q, reps=50, rng=Random.Xoshiro(5))
 
     @test chol.identification === :cholesky
     @test rot.identification === :custom
@@ -200,7 +194,7 @@ end
 @testset "argument validation and accessors" begin
     m = estimate_var(_cf_fixture(; T_obs=120), 1)
     cf = conditional_forecast(m, Dict((1, 1) => 1.0), 4; reps=20,
-                              rng=Random.MersenneTwister(6))
+                              rng=Random.Xoshiro(6))
 
     @test cf isa MacroEconometricModels.AbstractForecastResult
     @test point_forecast(cf) === cf.forecast
@@ -223,9 +217,9 @@ end
 @testset "reproducible under a seeded rng" begin
     m = estimate_var(_cf_fixture(; T_obs=150), 1)
     a = conditional_forecast(m, Dict((2, 2) => 1.0), 5; reps=40,
-                             rng=Random.MersenneTwister(99))
+                             rng=Random.Xoshiro(99))
     b = conditional_forecast(m, Dict((2, 2) => 1.0), 5; reps=40,
-                             rng=Random.MersenneTwister(99))
+                             rng=Random.Xoshiro(99))
     @test a.forecast == b.forecast
     @test a.ci_lower == b.ci_lower && a.ci_upper == b.ci_upper
 end
@@ -236,11 +230,11 @@ end
 
 @testset "BVAR conditional forecast integrates over the posterior" begin
     Y = _cf_fixture(; T_obs=200)
-    post = estimate_bvar(Y, 1; n_draws=200, rng=Random.MersenneTwister(11))
+    post = estimate_bvar(Y, 1; n_draws=200, rng=Random.Xoshiro(11))
     H = 5
 
     cf = conditional_forecast(post, Dict((1, 1) => 2.0), H;
-                              rng=Random.MersenneTwister(12))
+                              rng=Random.Xoshiro(12))
     @test cf isa ConditionalForecast{Float64}
     @test cf.horizon == H
     @test cf.n_draws <= post.n_draws
@@ -254,7 +248,7 @@ end
     # compare against the VAR method on the same data at the same shock draws.
     m = estimate_var(Y, 1)
     cf_var = conditional_forecast(m, Dict((1, 1) => 2.0), H; reps=cf.n_draws,
-                                  rng=Random.MersenneTwister(12))
+                                  rng=Random.Xoshiro(12))
     width_bvar = mean(cf.ci_upper[:, 2] .- cf.ci_lower[:, 2])
     width_var = mean(cf_var.ci_upper[:, 2] .- cf_var.ci_lower[:, 2])
     @test width_bvar > 0.9 * width_var
@@ -268,7 +262,7 @@ end
                                                     point_estimate=:mode)
 
     med = conditional_forecast(post, Dict((1, 1) => 2.0), H; point_estimate=:median,
-                               rng=Random.MersenneTwister(12))
+                               rng=Random.Xoshiro(12))
     @test med.forecast[1, 1] ≈ 2.0 atol = 1e-9
     @test occursin("Conditional Forecast", sprint(show, med))
 end
@@ -276,7 +270,7 @@ end
 @testset "report and plot_result dispatch" begin
     m = estimate_var(_cf_fixture(; T_obs=120), 1)
     cf = conditional_forecast(m, Dict((1, 1) => 1.0), 4; reps=20,
-                              rng=Random.MersenneTwister(7))
+                              rng=Random.Xoshiro(7))
 
     @test report(cf) === nothing
 

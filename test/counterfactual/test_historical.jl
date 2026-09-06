@@ -54,7 +54,7 @@ function _cf18_varmodel(sol, Y)
 end
 
 @testset "Historical counterfactuals (CF-18)" begin
-    rng = MersenneTwister(20260818)
+    rng = Xoshiro(20260818)
 
     @testset "revision alignment on a trended AR(1)" begin
         c, phi = 0.7, 0.6                     # nonzero intercept: must cancel

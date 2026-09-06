@@ -298,7 +298,9 @@ function Base.show(io::IO, r::JohansenResult)
         stars = reject_1 ? "***" : (reject_5 ? "**" : (reject_10 ? "*" : ""))
         pval_str = _format_pvalue(pval)
         trace_data[i, 1] = rank
-        trace_data[i, 2] = string(round(stat, digits=2), " ", stars)
+        # _fmt (not round): numerical-noise stats (e.g. -1e-14) must not
+        # render as "-0.00" (display invariant S2; DGP-01 #790).
+        trace_data[i, 2] = string(_fmt(stat; digits=2), " ", stars)
         trace_data[i, 3] = round(cv, digits=2)
         trace_data[i, 4] = pval_str
         trace_data[i, 5] = reject_5 ? "Reject" : ""
@@ -320,7 +322,7 @@ function Base.show(io::IO, r::JohansenResult)
         stars = reject_1 ? "***" : (reject_5 ? "**" : (reject_10 ? "*" : ""))
         pval_str = _format_pvalue(pval)
         max_data[i, 1] = rank
-        max_data[i, 2] = string(round(stat, digits=2), " ", stars)
+        max_data[i, 2] = string(_fmt(stat; digits=2), " ", stars)
         max_data[i, 3] = round(cv, digits=2)
         max_data[i, 4] = pval_str
         max_data[i, 5] = reject_5 ? "Reject" : ""
@@ -332,7 +334,8 @@ function Base.show(io::IO, r::JohansenResult)
     )
     eig_data = Matrix{Any}(undef, 1, n)
     for i in 1:n
-        eig_data[1, i] = round(r.eigenvalues[i], digits=4)
+        # _fmt (not round): normalises numerical-noise -0.0 (DGP-01 #790).
+        eig_data[1, i] = _fmt(r.eigenvalues[i]; digits=4)
     end
     _pretty_table(io, eig_data;
         title = "Eigenvalues",

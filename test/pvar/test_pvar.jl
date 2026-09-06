@@ -11,32 +11,31 @@ using Logging: with_logger
 # Helper: generate balanced panel DGP
 # =============================================================================
 
-function _make_panel_dgp(; N=30, T_total=25, m=3, p=1, rng=MersenneTwister(123))
-    # VAR(p) DGP with fixed effects
-    # y_{i,t} = mu_i + A_1 y_{i,t-1} + eps_{i,t}
-    A1 = 0.3 * I(m) + 0.05 * randn(rng, m, m)
-    # Ensure stationarity
-    F = eigvals(A1)
-    while maximum(abs.(F)) >= 0.95
-        A1 *= 0.8
-        F = eigvals(A1)
-    end
+# DGP-04 (#793): panel VAR(1) on the shared simulator with an explicit KNOWN
+# A1. The old design drew A1 = 0.3·I + noise fresh per call (truth discarded
+# in 36 of 37 testsets), started units AT μ_i with no burn-in, and hid
+# difference-GMM's weak-instrument problem at φ ≈ 0.3. Burn-in runs from the
+# stationary mean; Σ = 0.01·I preserves T082's innovation-scale truth;
+# μ_sd = 1 keeps Var(α_i) ≈ 1. Same NamedTuple shape, so call sites are
+# unchanged. NOTE (finding): with Var(α_i) ≈ 1 the system-GMM levels moments
+# are swamped by μ_i (RE sd 1 vs signal sd ≈ 0.17) — sys Phi pulls toward
+# unity (probed tmax 15 at N=200/T=25) while diff-GMM recovers truth, so the
+# series' sys-superiority arm is asserted nowhere; sys keeps shape cover.
+const _PVAR_A1 = Dict{Int,Matrix{Float64}}(
+    1 => reshape([0.8], 1, 1),
+    2 => [0.8 0.15; 0.05 0.7],                       # max|eig| = 0.85
+    3 => [0.8 0.1 0.0; 0.05 0.7 0.1; 0.0 0.05 0.6])  # max|eig| ≈ 0.84
 
-    data_mat = zeros(N * T_total, m)
-    for i in 1:N
-        mu_i = randn(rng, m)
-        offset = (i - 1) * T_total
-        data_mat[offset + 1, :] = mu_i + 0.1 * randn(rng, m)
-        for t in 2:T_total
-            data_mat[offset + t, :] = mu_i + A1 * data_mat[offset + t - 1, :] + 0.1 * randn(rng, m)
-        end
-    end
-
-    df = DataFrame(data_mat, ["y$i" for i in 1:m])
-    df.id = repeat(1:N, inner=T_total)
-    df.time = repeat(1:T_total, outer=N)
+function _make_panel_dgp(; N=30, T_total=25, m=3, p=1, rng=Xoshiro(123),
+                           A1=nothing)
+    A = A1 === nothing ? _PVAR_A1[m] : Matrix{Float64}(A1)
+    d = dgp_panel_var(rng; A1=A, N=N, T=T_total, mu_sd=1.0,
+                      Sigma=Matrix(0.01 * I, m, m))
+    df = DataFrame(d.Y, ["y$i" for i in 1:m])
+    df.id = d.id
+    df.time = d.time
     pd = xtset(df, :id, :time)
-    (pd=pd, A1=A1, N=N, T_total=T_total, m=m)
+    (pd=pd, A1=d.A1, N=N, T_total=T_total, m=m)
 end
 
 # =============================================================================
@@ -44,7 +43,7 @@ end
 # =============================================================================
 
 @testset "GMM Extensions" begin
-    rng = MersenneTwister(42)
+    rng = Xoshiro(42)
 
     @testset "linear_gmm_solve known system" begin
         # Simple IV: Z'X β = Z'y
@@ -65,9 +64,9 @@ end
     end
 
     @testset "linear_gmm_solve vector vs matrix S_Zy" begin
-        rng2 = MersenneTwister(99)
-        S_ZX = randn(rng2, 4, 2)
-        S_Zy_vec = randn(rng2, 4)
+        rng = Xoshiro(99)
+        S_ZX = randn(rng, 4, 2)
+        S_Zy_vec = randn(rng, 4)
         S_Zy_mat = reshape(S_Zy_vec, :, 1)
         W = Matrix(1.0I, 4, 4)
 
@@ -77,11 +76,11 @@ end
     end
 
     @testset "gmm_sandwich_vcov dimensions" begin
-        rng2 = MersenneTwister(77)
+        rng = Xoshiro(77)
         q, k = 5, 3
-        S_ZX = randn(rng2, q, k)
+        S_ZX = randn(rng, q, k)
         W = Matrix(1.0I, q, q)
-        D_e = randn(rng2, q, q)
+        D_e = randn(rng, q, q)
         D_e = D_e' * D_e  # PSD
 
         V = gmm_sandwich_vcov(S_ZX, W, D_e)
@@ -110,7 +109,7 @@ end
 # =============================================================================
 
 @testset "Panel Transforms" begin
-    rng = MersenneTwister(55)
+    rng = Xoshiro(55)
 
     @testset "first difference" begin
         Y = [1.0 2.0; 3.0 5.0; 6.0 9.0]
@@ -145,8 +144,8 @@ end
 
     @testset "FOD orthogonality" begin
         # FOD errors should be uncorrelated when original errors are i.i.d.
-        rng2 = MersenneTwister(88)
-        eps_orig = randn(rng2, 100, 1)
+        rng = Xoshiro(88)
+        eps_orig = randn(rng, 100, 1)
         fod_eps = MacroEconometricModels._panel_fod(eps_orig)
         # Autocorrelation should be small
         acf1 = cor(fod_eps[1:end-1, 1], fod_eps[2:end, 1])
@@ -180,7 +179,7 @@ end
 # =============================================================================
 
 @testset "Instruments" begin
-    rng = MersenneTwister(66)
+    rng = Xoshiro(66)
 
     @testset "FD instruments dimensions" begin
         Y = randn(rng, 15, 2)  # T=15, m=2
@@ -215,8 +214,8 @@ end
     end
 
     @testset "PCA reduction" begin
-        rng2 = MersenneTwister(111)
-        Z = randn(rng2, 50, 100)  # many instruments
+        rng = Xoshiro(111)
+        Z = randn(rng, 50, 100)  # many instruments
         Z_pca = MacroEconometricModels._pca_reduce_instruments(Z; max_components=10)
         @test size(Z_pca, 1) == 50
         @test size(Z_pca, 2) == 10
@@ -289,12 +288,33 @@ end
 
     @testset "DGP coefficient recovery (FE-OLS, large T)" begin
         # FE-OLS should recover true coefficients better with large T
-        dgp_large = _make_panel_dgp(N=50, T_total=100, m=2, p=1, rng=MersenneTwister(200))
+        dgp_large = _make_panel_dgp(N=50, T_total=100, m=2, p=1, rng=Xoshiro(200))
         model = estimate_pvar_feols(dgp_large.pd, 1)
         A_hat = model.Phi[:, 1:2]
         A_true = dgp_large.A1
         # With 50 groups × 100 periods, should be close
         @test norm(A_hat - A_true) / norm(A_true) < 0.3
+    end
+
+    @testset "difference-GMM recovers A1 at short T" begin
+        # N=200, T=25, persistent known A1 (DGP-04 #793): twostep
+        # difference-GMM lands within 2·se everywhere (probed tmax 1.2 on
+        # this draw).
+        d = _make_panel_dgp(N=200, T_total=25, m=2, p=1, rng=Xoshiro(1))
+        md = estimate_pvar(d.pd, 1; steps=:twostep)
+        @test maximum(abs, (md.Phi - d.A1) ./ md.se) < 2
+    end
+
+    @testset "FE-OLS Nickell bias visible at short T; GMM centered" begin
+        # T=15, φ≈0.5 design (DGP-04 #793): FE-OLS biased LOW (Nickell ≈
+        # −(1−φ)(1+φ)²/T ≈ −0.075). The 0.04 bar keeps "visibly biased"
+        # (over half the theoretical bias) with margin for draw noise.
+        d = _make_panel_dgp(N=200, T_total=15, m=2, p=1, rng=Xoshiro(3),
+                            A1=[0.5 0.15; 0.05 0.4])
+        fe = estimate_pvar_feols(d.pd, 1)
+        @test (d.A1 - fe.Phi)[1, 1] > 0.04
+        md = estimate_pvar(d.pd, 1; steps=:twostep, collapse=true)
+        @test maximum(abs, (md.Phi - d.A1) ./ md.se) < 2
     end
 end
 
@@ -368,9 +388,11 @@ end
     @testset "GIRF vs OIRF first shock" begin
         oirf = pvar_oirf(model, H)
         girf = pvar_girf(model, H)
-        # For the first shock, OIRF and GIRF should be proportional
-        # (GIRF uses Sigma e_1 / sqrt(sigma_11))
         @test size(oirf) == size(girf)
+        # Cholesky's first column IS Σe_1/√σ_11, so shock-1 responses coincide
+        # exactly — the proportionality the old test never checked (DGP-04
+        # #793; probed max diff 1.4e-17).
+        @test maximum(abs, oirf[:, :, 1] - girf[:, :, 1]) < 1e-10
     end
 
     @testset "FEVD dimensions" begin
@@ -400,11 +422,13 @@ end
     end
 
     @testset "stability from DGP" begin
-        # Use FE-OLS (more numerically stable than GMM) on a large panel
-        dgp_large = _make_panel_dgp(N=100, T_total=50, m=3, p=1, rng=MersenneTwister(999))
+        # Use FE-OLS (more numerically stable than GMM) on a large panel.
+        # Truth max|eig| ≈ 0.84 for the m=3 design (DGP-04 #793) — the old
+        # `< 1.0` passed for anything stationary while truth sat at ≈ 0.39.
+        dgp_large = _make_panel_dgp(N=100, T_total=50, m=3, p=1, rng=Xoshiro(999))
         model_large = estimate_pvar_feols(dgp_large.pd, 1)
         stab = pvar_stability(model_large)
-        @test maximum(stab.moduli) < 1.0
+        @test maximum(stab.moduli) ≈ 0.84 rtol=0.15
     end
 
     @testset "negative horizon" begin
@@ -442,6 +466,39 @@ end
         @test j.df == j.n_instruments - j.n_params
     end
 
+    @testset "Hansen J size on the valid design" begin
+        # 20-seed rejection count at 5% on collapsed valid moments (DGP-04
+        # #793; probed 1 — bound ≤ 3 is the issue's rate ≤ 0.15). Full AB
+        # lags make J degenerate (p ≈ 1 on every draw), hence collapse.
+        nrej = let n = 0
+            for seed in 1:20
+                dd = _make_panel_dgp(N=200, T_total=25, m=2, p=1,
+                                     rng=Xoshiro(300 + seed))
+                mm = estimate_pvar(dd.pd, 1; steps=:twostep, collapse=true)
+                pvar_hansen_j(mm).pvalue < 0.05 && (n += 1)
+            end
+            n
+        end
+        @test nrej <= 3
+    end
+
+    @testset "Hansen J power on invalid lag-1 instruments" begin
+        # min_lag_endo=1 instruments with lag-1 levels, correlated with Δu
+        # through u_{t-1}: invalid by construction, so J must reject
+        # (DGP-04 #793; probed 10/10 over seeds 401:410).
+        nrej = let n = 0
+            for seed in 1:10
+                dd = _make_panel_dgp(N=200, T_total=25, m=2, p=1,
+                                     rng=Xoshiro(400 + seed))
+                mm = estimate_pvar(dd.pd, 1; steps=:twostep, collapse=true,
+                                   min_lag_endo=1)
+                pvar_hansen_j(mm).pvalue < 0.05 && (n += 1)
+            end
+            n
+        end
+        @test nrej >= 8
+    end
+
     @testset "Hansen J not for FE-OLS" begin
         model2 = estimate_pvar_feols(dgp.pd, 1)
         @test_throws ArgumentError pvar_hansen_j(model2)
@@ -458,9 +515,10 @@ end
 
     @testset "lag selection" begin
         sel = pvar_lag_selection(dgp.pd, 3; steps=:onestep)
-        @test sel.best_bic >= 1
-        @test sel.best_aic >= 1
-        @test sel.best_hqic >= 1
+        # True order is p = 1 (DGP-04 #793) — the old `≥ 1` passed for anything.
+        @test sel.best_bic == 1
+        @test sel.best_aic == 1
+        @test sel.best_hqic == 1
         @test size(sel.table) == (3, 4)
     end
 end
@@ -470,11 +528,11 @@ end
 # =============================================================================
 
 @testset "Bootstrap" begin
-    dgp = _make_panel_dgp(N=20, T_total=15, m=2, p=1, rng=MersenneTwister(444))
+    dgp = _make_panel_dgp(N=20, T_total=15, m=2, p=1, rng=Xoshiro(444))
     model = estimate_pvar(dgp.pd, 1; steps=:onestep, collapse=true)
 
     @testset "bootstrap OIRF" begin
-        result = pvar_bootstrap_irf(model, 5; n_draws=(FAST ? 10 : 20), rng=MersenneTwister(55))
+        result = pvar_bootstrap_irf(model, 5; n_draws=(FAST ? 10 : 20), rng=Xoshiro(55))
         @test size(result.irf) == (6, 2, 2)
         @test size(result.lower) == (6, 2, 2)
         @test size(result.upper) == (6, 2, 2)
@@ -482,12 +540,14 @@ end
     end
 
     @testset "bootstrap CI ordering" begin
-        result = pvar_bootstrap_irf(model, 3; n_draws=(FAST ? 10 : 20), rng=MersenneTwister(66))
+        result = pvar_bootstrap_irf(model, 3; n_draws=(FAST ? 10 : 20), rng=Xoshiro(66))
         @test all(result.lower .<= result.upper)
+        # Bands bracket the point estimate (DGP-04 #793).
+        @test all(result.lower .<= result.irf .<= result.upper)
     end
 
     @testset "bootstrap GIRF" begin
-        result = pvar_bootstrap_irf(model, 3; irf_type=:girf, n_draws=(FAST ? 5 : 10), rng=MersenneTwister(77))
+        result = pvar_bootstrap_irf(model, 3; irf_type=:girf, n_draws=(FAST ? 5 : 10), rng=Xoshiro(77))
         @test size(result.irf) == (4, 2, 2)
     end
 
@@ -502,7 +562,7 @@ end
 # =============================================================================
 
 @testset "Integration" begin
-    dgp = _make_panel_dgp(N=20, T_total=20, m=2, p=1, rng=MersenneTwister(999))
+    dgp = _make_panel_dgp(N=20, T_total=20, m=2, p=1, rng=Xoshiro(999))
 
     @testset "PanelData input" begin
         model = estimate_pvar(dgp.pd, 1; steps=:onestep)
@@ -558,7 +618,7 @@ end
 # =============================================================================
 
 @testset "Display" begin
-    dgp = _make_panel_dgp(N=20, T_total=20, m=2, p=1, rng=MersenneTwister(888))
+    dgp = _make_panel_dgp(N=20, T_total=20, m=2, p=1, rng=Xoshiro(888))
 
     @testset "show PVARModel" begin
         model = estimate_pvar(dgp.pd, 1; steps=:onestep)
@@ -623,7 +683,7 @@ end
     nrep = 40
     bs = Float64[]; ses = Float64[]
     for r in 1:nrep
-        rng = MersenneTwister(4321 + r); pd = _wm_panel(rng, 120, 8, 0.4)
+        rng = Xoshiro(4321 + r); pd = _wm_panel(rng, 120, 8, 0.4)
         m = estimate_pvar(pd, 1; steps=:twostep)
         push!(bs, m.Phi[1, 1]); push!(ses, m.se[1, 1])
     end
@@ -637,7 +697,7 @@ end
     # Unbalanced univariate panel: group lengths [6, 6, 8]. The AB block-diagonal FD
     # instruments have per-group widths that differ; the fix zero-pads every group to the
     # MAX width (keeping longer units' later-period moments) instead of truncating to MIN.
-    rng = MersenneTwister(4080)
+    rng = Xoshiro(4080)
     Tlens = [6, 6, 8]
     ids = Int[]; times = Int[]; ys = Float64[]
     grp_levels = Matrix{Float64}[]
@@ -671,7 +731,7 @@ end
     @test A._ab_h_matrix(Float64, 1) == reshape([2.0], 1, 1)
 
     # Balanced univariate panel, p=1
-    rng = MersenneTwister(4081)
+    rng = Xoshiro(4081)
     N = 40; Tt = 8
     ids = Int[]; times = Int[]; ys = Float64[]
     grp = Matrix{Float64}[]
@@ -723,7 +783,7 @@ end
 @testset "PVAR Σ removes fixed effects (T082)" begin
     # DGP: Var(α_i) ≈ 1, innovation sd 0.1 ⇒ Σ_true = 0.01·I. Level residuals would give
     # diag ≈ Var(α_i) + Σ ≈ 1.01; the fix uses transformation-consistent innovations ⇒ ≈0.01.
-    dgp = _make_panel_dgp(N=50, T_total=100, m=2, p=1, rng=MersenneTwister(400))
+    dgp = _make_panel_dgp(N=50, T_total=100, m=2, p=1, rng=Xoshiro(400))
     # (a) FE-OLS within residuals annihilate the unit fixed effect α_i
     mfe = estimate_pvar_feols(dgp.pd, 1)
     @test maximum(diag(mfe.Sigma)) < 0.05                      # α_i removed (old ≈1.01 fails this)
@@ -737,7 +797,7 @@ end
 
     # (d) GMM FD (scale 0.5) and FOD (scale 1.0) both recover Σ_true ≈ 0.01. Capped
     # instrument lags keep the GMM tractable (full lags on a long panel explode n_inst).
-    dgpg = _make_panel_dgp(N=50, T_total=30, m=2, p=1, rng=MersenneTwister(401))
+    dgpg = _make_panel_dgp(N=50, T_total=30, m=2, p=1, rng=Xoshiro(401))
     mg = estimate_pvar(dgpg.pd, 1; max_lag_endo=3)
     @test maximum(diag(mg.Sigma)) < 0.05
     @test norm(diag(mg.Sigma) .- 0.01) / 0.01 < 0.45
@@ -750,7 +810,7 @@ end
     # Capture with respect_maxlog=false so the check is independent of the maxlog=1 counter
     # (the warning may already have fired in earlier testsets this session).
     # (a) short-N / long-T ⇒ n_inst ≫ N ⇒ warning fires
-    dgp = _make_panel_dgp(N=8, T_total=14, m=2, p=1, rng=MersenneTwister(4084))
+    dgp = _make_panel_dgp(N=8, T_total=14, m=2, p=1, rng=Xoshiro(4084))
     tl = Test.TestLogger(respect_maxlog=false)
     m = with_logger(() -> estimate_pvar(dgp.pd, 1; steps=:twostep), tl)
     @test any(r -> occursin("Too many instruments", r.message), tl.logs)
@@ -760,7 +820,7 @@ end
     @test occursin("groups:", sprint(show, m))
 
     # (b) wide-N / short-T ⇒ n_inst ≤ N ⇒ no too-many-instruments warning
-    dgp2 = _make_panel_dgp(N=60, T_total=5, m=1, p=1, rng=MersenneTwister(4085))
+    dgp2 = _make_panel_dgp(N=60, T_total=5, m=1, p=1, rng=Xoshiro(4085))
     tl2 = Test.TestLogger(respect_maxlog=false)
     m2 = with_logger(() -> estimate_pvar(dgp2.pd, 1), tl2)
     @test !any(r -> occursin("Too many instruments", r.message), tl2.logs)

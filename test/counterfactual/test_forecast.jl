@@ -19,15 +19,15 @@ function _cf05_data(rng; T_obs=250, n=3)
 end
 
 @testset "Forecast adapters (CF-05)" begin
-    rng = MersenneTwister(20260805)
+    rng = Xoshiro(20260805)
     Y = _cf05_data(rng)
 
     @testset "BVAR store_draws retention" begin
         post = estimate_bvar(Y, 2; n_draws=300)
-        fc0 = forecast(post, 8; rng=MersenneTwister(1))
+        fc0 = forecast(post, 8; rng=Xoshiro(1))
         @test fc0._draws === nothing            # default: zero behavior change
 
-        fc = forecast(post, 8; store_draws=true, rng=MersenneTwister(1))
+        fc = forecast(post, 8; store_draws=true, rng=Xoshiro(1))
         @test fc._draws isa Array{Float64,3}
         @test size(fc._draws, 2) == 8
         @test size(fc._draws, 3) == 3
@@ -41,14 +41,14 @@ end
 
     @testset "VAR bootstrap draws present (pre-existing #524 path)" begin
         m = estimate_var(Y, 2)
-        fc = forecast(m, 6; reps=60, rng=MersenneTwister(2))
+        fc = forecast(m, 6; reps=60, rng=Xoshiro(2))
         @test fc._draws isa Array{Float64,3}
         @test size(fc._draws, 2) == 6
     end
 
     @testset "gap transform from package forecasts" begin
         m = estimate_var(Y, 2)
-        fc = forecast(m, 10; reps=50, rng=MersenneTwister(3))
+        fc = forecast(m, 10; reps=50, rng=Xoshiro(3))
         pf = policy_forecast(fc, [:infl => 1, :ygap => 2];
                              targets=[:infl => 2.0], H=8, origin="2021Q2")
         @test pf isa PolicyForecast{Float64}
@@ -90,7 +90,7 @@ end
         vals = [collect(range(1.0, 0.0; length=H)), fill(-0.5, H)]
         sds = [fill(0.4, H), fill(0.2, H)]
         pf = policy_forecast([:infl, :ygap], vals; sd=sds, rho=0.9,
-                             n_draws=6000, rng=MersenneTwister(4), H=H)
+                             n_draws=6000, rng=Xoshiro(4), H=H)
         @test pf.values[1] == vals[1]
         @test MEM.n_draws(pf) == 6000
 
@@ -109,7 +109,7 @@ end
         base = [0.09 * 0.95^abs(j - k) for j in 1:H, k in 1:H]
         Sig = [base base; base base] + 1e-10 * I
         pfc = policy_forecast([:infl, :ygap], vals; cross_corr=Sig,
-                              n_draws=4000, rng=MersenneTwister(5), H=H)
+                              n_draws=4000, rng=Xoshiro(5), H=H)
         cc = cor(vec(pfc.draws[1][2, :]), vec(pfc.draws[2][2, :]))
         @test cc > 0.99
 
@@ -126,7 +126,7 @@ end
         sds = [[0.3, 0.3, 0.0, 0.0]]      # long-run pinned at target, zero sd
         pf = @test_logs (:warn, r"floored 2 dispersion entries") match_mode = :any begin
             policy_forecast([:infl], vals; sd=sds, n_draws=2000,
-                            rng=MersenneTwister(6), H=H, min_sd=0.05)
+                            rng=Xoshiro(6), H=H, min_sd=0.05)
         end
         @test std(pf.draws[1][3, :]) > 0.03   # floored, not degenerate
     end

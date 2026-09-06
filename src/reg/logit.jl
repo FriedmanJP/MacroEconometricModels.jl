@@ -185,7 +185,7 @@ mu = 1/(1+exp(-X*beta)). Converges when the change in log-likelihood is below
 # Examples
 ```julia
 using MacroEconometricModels, Random
-rng = MersenneTwister(42)
+rng = Xoshiro(42)
 n = 500
 X = hcat(ones(n), randn(rng, n, 2))
 beta_true = [0.0, 1.5, -1.0]

@@ -141,7 +141,7 @@ import ForwardDiff
     # O4 — U-MIDAS ≡ plain OLS on stacked lags (to 1e-8)
     # =========================================================================
     @testset "U-MIDAS ≡ estimate_reg on stacked lags" begin
-        rng = MersenneTwister(20240716)
+        rng = Xoshiro(20240716)
         m, K, T_lf = 3, 5, 120
         x = randn(rng, m * T_lf)
         y = randn(rng, T_lf)
@@ -164,7 +164,7 @@ import ForwardDiff
     # O6 — end-to-end fixed-seed recovery (m=3, K=6, exp-Almon, p_ar=1)
     # =========================================================================
     @testset "exp-Almon ADL-MIDAS recovery + report()" begin
-        rng = MersenneTwister(424242)
+        rng = Xoshiro(424242)
         m, K = 3, 6
         T_lf = 320
         θ_true = [0.35, -0.06]
@@ -227,7 +227,7 @@ import ForwardDiff
     # Beta and polynomial-Almon estimators run end-to-end
     # =========================================================================
     @testset "Beta & Almon estimation run" begin
-        rng = MersenneTwister(999)
+        rng = Xoshiro(999)
         m, K, T_lf = 3, 6, 200
         w_true = _midas_weights([1.0, 4.0], K, :beta2)
         x = randn(rng, m * T_lf)
@@ -258,7 +258,7 @@ import ForwardDiff
         @test sum(w) ≈ 1.0 atol = 1e-12
         @test w ≈ _midas_weights([0.3, -0.05], 6, :expalmon)
 
-        rng = MersenneTwister(7)
+        rng = Xoshiro(7)
         m, K, T_lf = 3, 5, 90
         x = randn(rng, m * T_lf); y = randn(rng, T_lf)
         model = estimate_midas(y, x; m=m, K=K, weights=:expalmon, p_ar=0)

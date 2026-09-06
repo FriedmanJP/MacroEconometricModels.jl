@@ -21,11 +21,11 @@ if !@isdefined(simulate_two_regime)
 end
 
 @testset "Non-Gaussian SVAR Identification" begin
-    Random.seed!(54321)
+    rng = Xoshiro(54321)
 
     # Generate VAR data
     n_obs = 300
-    Y = randn(n_obs, 3)
+    Y = randn(rng, n_obs, 3)
     model = estimate_var(Y, 2)
     n = 3
 
@@ -229,8 +229,8 @@ end
             end
 
             @testset "Smooth transition" begin
-                Random.seed!(99)
-                s = randn(n_obs)
+                rng = Xoshiro(99)
+                s = randn(rng, n_obs)
                 result = identify_smooth_transition(model, s)
                 @test result isa SmoothTransitionSVARResult{Float64}
                 @test size(result.B0) == (n, n)
@@ -323,7 +323,7 @@ end
             @testset "Overidentification" begin
                 # ICA is just-identified; overid falls back to label-stability (no p-value)
                 result = test_overidentification(model, ica; n_bootstrap=(FAST ? 9 : 19),
-                                                 rng=MersenneTwister(75101))
+                                                 rng=Xoshiro(75101))
                 @test result isa IdentifiabilityTestResult{Float64}
                 @test result.test_name == :overidentification
                 @test result.statistic >= 0
@@ -335,7 +335,7 @@ end
             @testset "Identification strength" begin
                 result = test_identification_strength(model; method=:fastica,
                                                       n_bootstrap=(FAST ? 9 : 19),
-                                                      rng=MersenneTwister(75102))
+                                                      rng=Xoshiro(75102))
                 @test result isa IdentifiabilityTestResult{Float64}
                 @test result.test_name == :label_stability
                 @test 0 <= result.statistic <= 1
@@ -391,7 +391,7 @@ end
             garch = identify_garch(model)
             @test garch isa AbstractNonGaussianSVAR
 
-            st = identify_smooth_transition(model, randn(n_obs))
+            st = identify_smooth_transition(model, randn(rng, n_obs))
             @test st isa AbstractNonGaussianSVAR
 
             ev = identify_external_volatility(model, vcat(fill(1, 150), fill(2, 150)))
@@ -401,7 +401,7 @@ end
 
     @testset "Bivariate model" begin
         _suppress_warnings() do
-            Y2 = randn(200, 2)
+            Y2 = randn(rng, 200, 2)
             model2 = estimate_var(Y2, 1)
 
             ica2 = identify_fastica(model2)
@@ -450,7 +450,7 @@ end
             for method in [:jade, :sobi]
                 result = test_identification_strength(model; method=method,
                                                       n_bootstrap=(FAST ? 5 : 9),
-                                                      rng=MersenneTwister(75103))
+                                                      rng=Xoshiro(75103))
                 @test result isa IdentifiabilityTestResult{Float64}
                 @test result.test_name == :label_stability
                 @test isnan(result.pvalue)
@@ -498,15 +498,15 @@ end
     end
 
     @testset "SID-09 smooth-transition joint ML" begin
-        Random.seed!(738)
-        m = estimate_var(randn(80, 2), 1)
+        rng = Xoshiro(738)
+        m = estimate_var(randn(rng, 80, 2), 1)
         @test_throws ArgumentError identify_external_volatility(m, vcat(fill(1, 78), fill(2, 2)))
-        m3 = estimate_var(randn(120, 2), 1)
+        m3 = estimate_var(randn(rng, 120, 2), 1)
         ri3 = vcat(fill(1, 40), fill(2, 40), fill(3, 40))
         ev3 = identify_external_volatility(m3, ri3; regimes=3)
         @test length(ev3.Lambda) == 3
         @test size(ev3.se) == (2, 2)
-        st = identify_smooth_transition(m, randn(size(m.U, 1)))
+        st = identify_smooth_transition(m, randn(rng, size(m.U, 1)))
         @test size(st.se) == (2, 2)
         @test st.vcov isa AbstractMatrix
         B0_reid, _, _ = MacroEconometricModels._eigendecomposition_id(
@@ -521,7 +521,7 @@ end
         Λ = [0.4, 3.0]
         A = [0.4 * Matrix{Float64}(I, n_sid, n_sid)]
         Ysid, regime = simulate_two_regime(B_rec, A, Λ; Tobs=800, split=0.5,
-                                           rng=MersenneTwister(739))
+                                           rng=Xoshiro(739))
         modelsid = estimate_var(Ysid, 1)
         ri = regime[2:end]
         ev = identify_external_volatility(modelsid, ri; regimes=2)
@@ -543,10 +543,10 @@ end
         @test lr_false.pvalue < 0.05
 
         ms = identify_markov_switching(modelsid; n_regimes=2, n_starts=2,
-                                       rng=MersenneTwister(739), max_iter=(FAST ? 20 : 80))
+                                       rng=Xoshiro(739), max_iter=(FAST ? 20 : 80))
         @test ms.classification_quality > 0
         ms2 = identify_markov_switching(modelsid; n_regimes=2, n_starts=2,
-                                        rng=MersenneTwister(739), max_iter=(FAST ? 20 : 80))
+                                        rng=Xoshiro(739), max_iter=(FAST ? 20 : 80))
         @test ms.B0 ≈ ms2.B0 atol=1e-8
 
         st = identify_smooth_transition(modelsid, modelsid.U[:, 1])
@@ -610,7 +610,7 @@ end
             n_rej_size = 0
             n_ok_size = 0
             for r in 1:n_reps
-                rng_r = MersenneTwister(73900 + r)
+                rng_r = Xoshiro(73900 + r)
                 Ys, regs = simulate_two_regime(B_rec, A, [1.5, 1.5]; Tobs=Tobs_w,
                                                split=0.5, rng=rng_r)
                 m_s = estimate_var(Ys, 1)  # size/power draws; does not clobber `model`
@@ -630,7 +630,7 @@ end
             n_rej_pow = 0
             n_ok_pow = 0
             for r in 1:100
-                rng_r = MersenneTwister(73950 + r)
+                rng_r = Xoshiro(73950 + r)
                 Yp, regp = simulate_two_regime(B_rec, A, [1.0, 2.0]; Tobs=Tobs_w,
                                                split=0.5, rng=rng_r)
                 m_p = estimate_var(Yp, 1)
@@ -650,9 +650,9 @@ end
 
     @testset "Smooth transition edge cases" begin
         _suppress_warnings() do
-            Random.seed!(99999)
+            rng = Xoshiro(99999)
             # Extreme transition variable (all same sign)
-            s_edge = abs.(randn(n_obs)) .+ 5.0
+            s_edge = abs.(randn(rng, n_obs)) .+ 5.0
             result = identify_smooth_transition(model, s_edge)
             @test result isa SmoothTransitionSVARResult{Float64}
             @test result.gamma > 0
@@ -669,8 +669,8 @@ end
 
     @testset "4-variable scalability" begin
         _suppress_warnings() do
-            Random.seed!(55555)
-            Y4 = randn(200, 4)
+            rng = Xoshiro(55555)
+            Y4 = randn(rng, 200, 4)
             model4 = estimate_var(Y4, 1)
             ica4 = identify_fastica(model4)
             @test size(ica4.B0) == (4, 4)
@@ -719,7 +719,7 @@ end
             @test norm(Q_ngml' * Q_ngml - I) < 1e-4
 
             # :smooth_transition with transition_var
-            tv = randn(n_obs)
+            tv = randn(rng, n_obs)
             Q_st = MacroEconometricModels.compute_Q(model, :smooth_transition, 10, nothing, nothing;
                                                      transition_var=tv)
             @test size(Q_st) == (n, n)
@@ -738,7 +738,7 @@ end
 
     @testset "Hetero-ID through irf/fevd/hd" begin
         _suppress_warnings() do
-            tv = randn(n_obs)
+            tv = randn(rng, n_obs)
             ri = vcat(fill(1, 150), fill(2, 150))
             T_eff = n_obs - 2
 
@@ -784,8 +784,8 @@ end
 
     @testset "Structural LP Non-Gaussian" begin
         _suppress_warnings() do
-            Random.seed!(88888)
-            Y_lp = randn(200, 3)
+            rng = Xoshiro(88888)
+            Y_lp = randn(rng, 200, 3)
             for method in [:fastica, :student_t]
                 slp = structural_lp(Y_lp, 8; method=method, lags=2)
                 @test slp isa MacroEconometricModels.StructuralLP
@@ -803,8 +803,8 @@ end
 
     @testset "SID-21 GMM moments" begin
         _suppress_warnings() do
-            Random.seed!(750)
-            Y2 = randn(250, 2)
+            rng = Xoshiro(750)
+            Y2 = randn(rng, 250, 2)
             model2 = estimate_var(Y2, 1)
             n2 = 2
             n_angles = n2 * (n2 - 1) ÷ 2
@@ -882,7 +882,7 @@ end
 
             @testset "test_gaussian_shock_count" begin
                 Tobs = FAST ? 400 : 2000
-                rng = MersenneTwister(75021)
+                rng = Xoshiro(75021)
                 n = 3
                 # Two Gaussian shocks + one t(5): identification fails
                 shocks_two = randn(rng, Tobs, n)
@@ -914,6 +914,7 @@ end
     end
 
     @testset "SID-20 shock labels and structural_shocks" begin
+        rng = Xoshiro(920)
         B_true = [1.2 0.35 -0.25; 0.20 1.05 0.40; -0.30 0.25 1.10]
         n3 = 3
         perm0 = [2, 3, 1]
@@ -921,7 +922,7 @@ end
         B_shuf = B_true[:, perm0] .* signs0'
         Q_shuf = Matrix{Float64}(I, n3, n3)[:, perm0] .* signs0'
         W_shuf = Matrix{Float64}(I, n3, n3)
-        shocks_shuf = randn(20, n3)
+        shocks_shuf = randn(rng, 20, n3)
         ica_shuf = ICASVARResult{Float64}(B_shuf, W_shuf, Q_shuf, shocks_shuf,
                                           :fastica, true, 1, 0.0)
         @test length(ica_shuf.shock_names) == n3
@@ -984,7 +985,7 @@ end
         theta0 = zeros(1)
         gmm0 = NonGaussianGMMResult{Float64}(
             B2, Q2, copy(theta0), Matrix{Float64}(I, 1, 1), zeros(n2, n2),
-            0.0, 1.0, :cokurtosis, :two_step, randn(12, n2),
+            0.0, 1.0, :cokurtosis, :two_step, randn(rng, 12, n2),
             ["y1", "y2"], ["Shock 1", "Shock 2"])
         B_swap = B2[:, [2, 1]]
         lab_g = @test_logs (:warn, r"det\(Q\)") match_mode = :any begin
@@ -996,7 +997,7 @@ end
         @test all(isnan, lab_g.theta)
 
         ml_old = NonGaussianMLResult{Float64}(
-            B_true, Matrix{Float64}(I, n3, n3), randn(12, n3), :student_t,
+            B_true, Matrix{Float64}(I, n3, n3), randn(rng, 12, n3), :student_t,
             -1.0, -2.0, Dict{Symbol,Any}(), zeros(n3, n3), zeros(n3, n3),
             true, 1, 1.0, 2.0)
         @test length(ml_old.shock_names) == n3
@@ -1007,10 +1008,10 @@ end
         if !FAST
             B_dgp = [1.0 0.35; -0.40 1.15]
             A = [0.4 * Matrix{Float64}(I, 2, 2)]
-            rng_d = MersenneTwister(74920)
+            rng_d = Xoshiro(74920)
             Yd, _ = simulate_svar(B_dgp, A; Tobs=2000, shocks=:t, rng=rng_d)
             md = estimate_var(Yd, 1)
-            ica_d = identify_fastica(md; rng=MersenneTwister(74921))
+            ica_d = identify_fastica(md; rng=Xoshiro(74921))
             Sd = Int.(sign.(B_dgp))
             lab_d = label_shocks(ica_d; by=:restrictions, restrictions=Sd)
             @test MacroEconometricModels._procrustes_distance(lab_d.B0, B_dgp) < 0.35
@@ -1024,10 +1025,10 @@ end
             Random.seed!(751)
 
             @testset "label-stability reports match fraction and no p-value" begin
-                Y2 = randn(MersenneTwister(75110), 180, 2)
+                Y2 = randn(Xoshiro(75110), 180, 2)
                 m2 = estimate_var(Y2, 1)
                 stab = test_label_stability(m2; method=:fastica, n_bootstrap=(FAST ? 7 : 15),
-                                            rng=MersenneTwister(75111))
+                                            rng=Xoshiro(75111))
                 @test stab isa IdentifiabilityTestResult{Float64}
                 @test stab.test_name == :label_stability
                 @test 0 <= stab.statistic <= 1
@@ -1053,10 +1054,10 @@ end
             end
 
             @testset "deprecated strength wrapper: ICA → label-stability" begin
-                Y2 = randn(MersenneTwister(75120), 160, 2)
+                Y2 = randn(Xoshiro(75120), 160, 2)
                 m2 = estimate_var(Y2, 1)
                 r = test_identification_strength(m2; method=:fastica, n_bootstrap=5,
-                                                 rng=MersenneTwister(75121))
+                                                 rng=Xoshiro(75121))
                 @test r.test_name == :label_stability
                 @test isnan(r.pvalue)
             end
@@ -1065,7 +1066,7 @@ end
                 Yh, rh = simulate_two_regime([1.0 0.0; 0.4 1.0],
                                              [0.4 * Matrix{Float64}(I, 2, 2)],
                                              [0.5, 3.0]; Tobs=400, split=0.5,
-                                             rng=MersenneTwister(75130))
+                                             rng=Xoshiro(75130))
                 mh = estimate_var(Yh, 1)
                 ev = identify_external_volatility(mh, rh[2:end]; regimes=2)
                 r = test_identification_strength(ev)
@@ -1075,7 +1076,7 @@ end
             end
 
             @testset "deprecated strength wrapper: non-Gaussian → Gaussian count + Holm" begin
-                shocks_t = rand(MersenneTwister(75140), TDist(5.0), FAST ? 400 : 800, 3)
+                shocks_t = rand(Xoshiro(75140), TDist(5.0), FAST ? 400 : 800, 3)
                 shocks_t .*= sqrt(3 / 5)
                 dummy = NonGaussianGMMResult{Float64}(
                     Matrix{Float64}(I, 3, 3), Matrix{Float64}(I, 3, 3),
@@ -1091,15 +1092,15 @@ end
             end
 
             @testset "shock independence/gaussianity dispatch including MS" begin
-                Ym = randn(MersenneTwister(75150), 220, 2)
+                Ym = randn(Xoshiro(75150), 220, 2)
                 mm = estimate_var(Ym, 1)
                 ms = identify_markov_switching(mm; n_regimes=2, n_starts=1,
-                                               rng=MersenneTwister(75151),
+                                               rng=Xoshiro(75151),
                                                max_iter=(FAST ? 15 : 40))
                 @test size(ms.shocks, 2) == 2
                 @test size(ms.shocks, 1) == size(mm.U, 1)
                 indep_ms = test_shock_independence(ms; max_lag=3,
-                                                   rng=MersenneTwister(75152))
+                                                   rng=Xoshiro(75152))
                 @test indep_ms isa IdentifiabilityTestResult{Float64}
                 @test indep_ms.test_name == :shock_independence
                 @test 0 <= indep_ms.pvalue <= 1
@@ -1108,7 +1109,7 @@ end
 
                 garch = identify_garch(mm; max_iter=(FAST ? 5 : 20))
                 @test test_shock_independence(garch; max_lag=2,
-                                              rng=MersenneTwister(75153)).test_name ==
+                                              rng=Xoshiro(75153)).test_name ==
                       :shock_independence
                 @test test_shock_gaussianity(garch).test_name == :shock_gaussianity
 
@@ -1118,12 +1119,12 @@ end
                 ev = identify_external_volatility(mm, vcat(fill(1, 110), fill(2, size(mm.U, 1) - 110)))
                 @test size(ev.shocks, 1) == size(mm.U, 1)
                 @test test_shock_independence(ev; max_lag=2,
-                                              rng=MersenneTwister(75154)).test_name ==
+                                              rng=Xoshiro(75154)).test_name ==
                       :shock_independence
             end
 
             @testset "overidentification: ML just-identified and AB LR" begin
-                Y2 = randn(MersenneTwister(75160), 200, 2)
+                Y2 = randn(Xoshiro(75160), 200, 2)
                 m2 = estimate_var(Y2, 1)
                 ml = identify_student_t(m2)
                 oid_ml = test_overidentification(m2, ml)
@@ -1131,7 +1132,7 @@ end
                 @test get(oid_ml.details, :just_identified, false) == true
                 @test oid_ml.pvalue == 1.0
 
-                svar = estimate_svar(m2, recursive_pattern(2); rng=MersenneTwister(75161))
+                svar = estimate_svar(m2, recursive_pattern(2); rng=Xoshiro(75161))
                 oid_ab = test_overidentification(m2, svar)
                 @test oid_ab.test_name == :overidentification
                 @test get(oid_ab.details, :method, nothing) == :lr
@@ -1142,7 +1143,7 @@ end
 
                 mask_b = [NaN 0.0; NaN NaN]
                 oid_ab_mask = test_overidentification(m2, svar; restrictions=mask_b,
-                                                      rng=MersenneTwister(75162))
+                                                      rng=Xoshiro(75162))
                 @test get(oid_ab_mask.details, :pattern, nothing) == :reestimated
                 @test oid_ab_mask.test_name == :overidentification
                 @test_throws ArgumentError test_overidentification(svar; restrictions=mask_b)
@@ -1152,7 +1153,7 @@ end
                 Yh, rh = simulate_two_regime([1.0 0.0; 0.45 1.0],
                                              [0.4 * Matrix{Float64}(I, 2, 2)],
                                              [0.4, 3.0]; Tobs=500, split=0.5,
-                                             rng=MersenneTwister(75170))
+                                             rng=Xoshiro(75170))
                 mh = estimate_var(Yh, 1)
                 ev = identify_external_volatility(mh, rh[2:end]; regimes=2)
                 mask_true = [NaN 0.0; NaN NaN]
@@ -1164,11 +1165,11 @@ end
             end
 
             @testset "ICA overidentification says it falls back to label-stability" begin
-                Y2 = randn(MersenneTwister(75180), 150, 2)
+                Y2 = randn(Xoshiro(75180), 150, 2)
                 m2 = estimate_var(Y2, 1)
-                ica2 = identify_fastica(m2; rng=MersenneTwister(75181))
+                ica2 = identify_fastica(m2; rng=Xoshiro(75181))
                 oid = test_overidentification(m2, ica2; n_bootstrap=5,
-                                              rng=MersenneTwister(75182))
+                                              rng=Xoshiro(75182))
                 @test oid.details[:fallback] == :label_stability
                 @test isnan(oid.pvalue)
                 buf = IOBuffer()
@@ -1190,7 +1191,7 @@ end
                 n_rej_pow = 0
                 n_ok_pow = 0
                 for r in 1:n_reps
-                    rng_r = MersenneTwister(75100 + r)
+                    rng_r = Xoshiro(75100 + r)
                     Ys, _ = simulate_svar(B_rec, A_lr; Tobs=Tobs_lr, shocks=:t, rng=rng_r)
                     m_s = estimate_var(Ys, 1)
                     try
@@ -1207,7 +1208,7 @@ end
                 @test 0.01 <= size_est <= 0.12
 
                 for r in 1:100
-                    rng_r = MersenneTwister(75300 + r)
+                    rng_r = Xoshiro(75300 + r)
                     Yp, _ = simulate_svar(B_rec, A_lr; Tobs=Tobs_lr, shocks=:t, rng=rng_r)
                     m_p = estimate_var(Yp, 1)
                     try

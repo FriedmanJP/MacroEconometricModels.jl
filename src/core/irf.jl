@@ -384,7 +384,7 @@ function _simulate_irfs(model::VARModel{T}, method::Symbol, horizon::Int,
             relabeled = fill(false, max_iter)
             seeds = rand(rng, UInt64, max_iter)
             Threads.@threads for it in 1:max_iter
-                local_rng = Random.MersenneTwister(seeds[it])
+                local_rng = Random.Xoshiro(seeds[it])
                 _suppress_warnings() do
                     U_boot, kw_boot = _resample_for_method(U, Z_eff, bootstrap, local_rng, kwargs;
                                                            block_length=block_length, wild_dist=wild_dist)
@@ -424,7 +424,7 @@ function _simulate_irfs(model::VARModel{T}, method::Symbol, horizon::Int,
             passed = method === :proxy ? fill(false, reps) : nothing
             seeds = rand(rng, UInt64, reps)
             Threads.@threads for r in 1:reps
-                local_rng = Random.MersenneTwister(seeds[r])
+                local_rng = Random.Xoshiro(seeds[r])
                 _suppress_warnings() do
                     U_boot, kw_boot = _resample_for_method(U, Z_eff, bootstrap, local_rng, kwargs;
                                                            block_length=block_length, wild_dist=wild_dist)
@@ -470,7 +470,7 @@ function _simulate_irfs(model::VARModel{T}, method::Symbol, horizon::Int,
             relabeled = fill(false, max_iter)
             seeds = rand(rng, UInt64, max_iter)
             Threads.@threads for it in 1:max_iter
-                local_rng = Random.MersenneTwister(seeds[it])
+                local_rng = Random.Xoshiro(seeds[it])
                 _suppress_warnings() do
                     B_star = model.B + L_V * randn(local_rng, T, k, n) * L_S'
                     F = companion_matrix(B_star, n, p)
@@ -502,7 +502,7 @@ function _simulate_irfs(model::VARModel{T}, method::Symbol, horizon::Int,
             relabeled = fill(false, reps)
             seeds = rand(rng, UInt64, reps)
             Threads.@threads for r in 1:reps
-                local_rng = Random.MersenneTwister(seeds[r])
+                local_rng = Random.Xoshiro(seeds[r])
                 _suppress_warnings() do
                     B_star = model.B + L_V * randn(local_rng, T, k, n) * L_S'
                     # Keep Y so residual-free ID (e.g. :ab) can recover effective_nobs; U stays empty.
@@ -762,7 +762,7 @@ function _lp_irf_bootstrap_bands(model::LPModel{T}, conf_level::T, reps::Int,
         draws = zeros(T, reps, nr)
         seeds = rand(rng, UInt64, reps)
         Threads.@threads for r in 1:reps
-            local_rng = Random.MersenneTwister(seeds[r])
+            local_rng = Random.Xoshiro(seeds[r])
             U_star = _resample_residuals(U_h, scheme, local_rng;
                                          block_length=block_length, wild_dist=wild_dist)
             B_star = XtX_inv * (X_h' * (fitted + U_star))

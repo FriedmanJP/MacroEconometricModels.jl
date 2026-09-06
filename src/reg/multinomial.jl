@@ -297,7 +297,7 @@ with beta_1 = 0 (base category).
 # Examples
 ```julia
 using MacroEconometricModels, Random
-rng = MersenneTwister(42)
+rng = Xoshiro(42)
 n = 1000
 X = [ones(n) randn(rng, n, 2)]
 beta_true = [0.5 -0.3; 1.0 -0.5; -0.5 0.8]  # K=3 x (J-1)=2

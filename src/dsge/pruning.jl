@@ -232,7 +232,7 @@ function _girf(sol::PerturbationSolution{T}, horizon::Int;
         irf_accum = zeros(T, horizon, n_out)
 
         for d in 1:n_draws
-            rng_draw = Random.MersenneTwister(d * 31 + j * 17)
+            rng_draw = Random.Xoshiro(d * 31 + j * 17)
 
             # Common future shocks for both shocked and baseline
             future_shocks = randn(rng_draw, T, horizon, n_eps)
@@ -1145,7 +1145,7 @@ Uses a fixed RNG seed (12345) for reproducibility and T=100,000 simulation perio
 """
 function _simulation_moments(sol::PerturbationSolution{T}; lags::Int=1) where {T<:AbstractFloat}
     T_sim = 100_000
-    sim = simulate(sol, T_sim; rng=Random.MersenneTwister(12345))
+    sim = simulate(sol, T_sim; rng=Random.Xoshiro(12345))
 
     k = size(sim, 2)
 

@@ -168,19 +168,19 @@ end
 # `ref=true` → the render must contain a dashed reference row (`—`) with no `***`
 # on it. All fixtures are checked against the universal invariants regardless.
 #
-# Sizes are reduced and every RNG is an explicit MersenneTwister so the goldens
+# Sizes are reduced and every RNG is an explicit Xoshiro so the goldens
 # are reproducible. NO Krusell-Smith / full HA solve (too heavy, per the plan).
 
 # strongly-significant OLS design: y = X β + small noise
 function _reg_fixture()
-    rng = MersenneTwister(11)
+    rng = Xoshiro(11)
     X = randn(rng, 120, 3)
     y = X * [1.5, -1.2, 0.8] .+ 0.15 .* randn(rng, 120)
     estimate_reg(y, X)
 end
 
 function _binary_fixtures()
-    rng = MersenneTwister(21)
+    rng = Xoshiro(21)
     X = randn(rng, 300, 2)
     η = X * [1.4, -1.0]
     p = @. 1 / (1 + exp(-η))
@@ -189,7 +189,7 @@ function _binary_fixtures()
 end
 
 function _ologit_fixture()
-    rng = MersenneTwister(31)
+    rng = Xoshiro(31)
     n = 800
     β = [1.2, -0.8]
     X = randn(rng, n, 2)
@@ -206,7 +206,7 @@ function _ologit_fixture()
 end
 
 function _mlogit_fixture()
-    rng = MersenneTwister(41)
+    rng = Xoshiro(41)
     n = 800
     β = [0.5 -0.3; 1.2 -0.6; -0.7 0.9]   # K=3 (incl. intercept) × (J-1)=2
     X = [ones(n) randn(rng, n, 2)]
@@ -226,7 +226,7 @@ function _mlogit_fixture()
 end
 
 function _panel_fixture()
-    rng = MersenneTwister(51)
+    rng = Xoshiro(51)
     N_g = 8; T_p = 12; n = N_g * T_p
     gid = repeat(1:N_g, inner = T_p)
     tid = repeat(1:T_p, N_g)
@@ -243,7 +243,7 @@ function _panel_fixture()
 end
 
 function _did_fixture()
-    rng = MersenneTwister(61)
+    rng = Xoshiro(61)
     n_units = 30; n_periods = 16; te = 2.0
     units_per_group = n_units ÷ 3
     treat_times = zeros(Int, n_units)
@@ -273,7 +273,7 @@ function _did_fixture()
 end
 
 function _gmm_fixture()
-    rng = MersenneTwister(71)
+    rng = Xoshiro(71)
     n = 300
     X = randn(rng, n, 2)
     y = X * [1.0, -0.5] .+ randn(rng, n)
@@ -283,7 +283,7 @@ function _gmm_fixture()
 end
 
 function _sdfm_fixture()
-    rng = MersenneTwister(101)
+    rng = Xoshiro(101)
     T_obs, N, q = 80, 8, 2
     F = zeros(T_obs, q)
     F[1, :] = randn(rng, q)
@@ -296,7 +296,7 @@ function _sdfm_fixture()
 end
 
 function _dsge_est_fixture()
-    rng = MersenneTwister(81)
+    rng = Xoshiro(81)
     T_obs = 300
     y = zeros(T_obs)
     for t in 2:T_obs
@@ -344,7 +344,12 @@ function build_display_fixtures()
     push!(fx, (name = "probit",     obj = probit,                                                             stars = true,  ref = false))
     push!(fx, (name = "ologit",     obj = _ologit_fixture(),                                                  stars = true,  ref = false))
     push!(fx, (name = "mlogit",     obj = _mlogit_fixture(),                                                  stars = false, ref = false))
-    push!(fx, (name = "arma",       obj = estimate_arma(make_ar1_data(n = 200, seed = 91), 1, 1),             stars = false, ref = false))
+    # ARMA(1,1) on genuine ARMA(1,1) data (not AR(1)): an MA term fit to
+    # AR(1) data is near-unidentified (MA root cancels), so its SE collapses
+    # to ~0 and the row renders degenerate `—` z/p/CI cells — a knife-edge
+    # skeleton that flips with the RNG stream. Identified data keeps every
+    # row (and the golden) decisive.
+    push!(fx, (name = "arma",       obj = estimate_arma(dgp_arima(Xoshiro(91); phi = [0.7], theta = [0.4], T = 200).y, 1, 1), stars = false, ref = false))
     push!(fx, (name = "garch",      obj = estimate_garch(simulate_garch11(n = 500, seed = 92)),               stars = false, ref = false))
     push!(fx, (name = "gmm",        obj = _gmm_fixture(),                                                     stars = true,  ref = false))
     push!(fx, (name = "panel_fe",   obj = _panel_fixture(),                                                   stars = true,  ref = false))
@@ -359,7 +364,7 @@ function build_display_fixtures()
     # decision boundary, and `randn`'s stream is not stable across Julia versions, so the
     # H₀-decision word flipped 1.10↔1.12 (a numerically-derived categorical the golden
     # canonicalizer cannot mask). A decisive fixture keeps every decision stable everywhere.
-    push!(fx, (name = "normality",  obj = normality_test_suite(randexp(MersenneTwister(94), 200, 3)),        stars = false, ref = false))
+    push!(fx, (name = "normality",  obj = normality_test_suite(randexp(Xoshiro(94), 200, 3)),        stars = false, ref = false))
     push!(fx, (name = "dsge_est",   obj = _dsge_est_fixture(),                                                stars = false, ref = false))
     push!(fx, (name = "sdfm",       obj = _sdfm_fixture(),                                                    stars = false, ref = false))
     return fx

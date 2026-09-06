@@ -199,7 +199,7 @@ function _estimate_var_bias(model::VARModel{T}, reps::Int, scheme::Symbol, rng::
     ok = fill(false, reps)
     seeds = rand(rng, UInt64, reps)
     Threads.@threads for r in 1:reps
-        local_rng = Random.MersenneTwister(seeds[r])
+        local_rng = Random.Xoshiro(seeds[r])
         _suppress_warnings() do
             U_boot = _resample_residuals(U, scheme, local_rng;
                                          block_length=block_length, wild_dist=wild_dist)

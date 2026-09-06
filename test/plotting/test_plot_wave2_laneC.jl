@@ -21,7 +21,7 @@ end
 
 # Small stationary panel VAR for the PVAR dispatches.
 function _lanec_panel(; N=12, Tt=16, m=2, varnames=nothing, seed=7)
-    rng = MersenneTwister(seed)
+    rng = Xoshiro(seed)
     A1 = 0.3 * I(m) + 0.03 * randn(rng, m, m)
     dm = zeros(N * Tt, m)
     for i in 1:N
@@ -229,7 +229,7 @@ end
     # =========================================================================
     @testset "PLT-31 set-ID SVAR" begin
         H = 8; n = 2; nd = 60
-        draws = randn(MersenneTwister(3), nd, H, n, n) .* 0.5
+        draws = randn(Xoshiro(3), nd, H, n, n) .* 0.5
         sis = SignIdentifiedSet{Float64}([randn(n, n) for _ in 1:nd], draws, nd, 120,
                                          nd / 120, ["gdp", "infl"], ["demand", "supply"])
         restr = SVARRestrictions(n)

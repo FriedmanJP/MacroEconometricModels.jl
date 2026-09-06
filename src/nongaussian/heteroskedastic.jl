@@ -1096,7 +1096,7 @@ function identify_markov_switching(model::VARModel{T}; n_regimes::Int=2,
     seeds = rand(rng, UInt64, n_starts)
     packed = Vector{NamedTuple}(undef, n_starts)
     Threads.@threads for s in 1:n_starts
-        rng_s = Random.MersenneTwister(seeds[s])
+        rng_s = Random.Xoshiro(seeds[s])
         Σ0, P0 = s == 1 ? _ms_chunk_init(model.U, K) : _ms_dirichlet_init(model.U, K, rng_s)
         packed[s] = _ms_em_run(model.U, K, max_iter, tol, Σ0, P0)
     end

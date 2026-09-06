@@ -10,6 +10,7 @@ using StatsAPI
 using LinearAlgebra
 using Random
 using Statistics
+import Distributions   # qualified: `quantile` would clash with Statistics
 import NonlinearSolve
 
 if !@isdefined(FAST)
@@ -241,7 +242,7 @@ end
         0, Int[], [1.0, 4.0]
     )
     T_periods = 50
-    path = rand(T_periods, 2)
+    path = rand(Random.Xoshiro(1402), T_periods, 2)
     devs = path .- [1.0 4.0]
     pf = PerfectForesightPath{Float64}(path, devs, true, 12, spec)
     @test size(pf.path) == (50, 2)
@@ -256,7 +257,8 @@ end
         [:(C[t]), :(K[t])], [identity, identity],
         0, Int[], [1.0, 4.0]
     )
-    pf = PerfectForesightPath{Float64}(rand(50, 2), rand(50, 2), true, 8, spec)
+    pf = PerfectForesightPath{Float64}(rand(Random.Xoshiro(1403), 50, 2),
+                                      rand(Random.Xoshiro(1404), 50, 2), true, 8, spec)
     io = IOBuffer()
     show(io, pf)
     s = String(take!(io))
@@ -864,7 +866,7 @@ end
     @testset "orders 2 and 3 reproduce the linear solution exactly" begin
         @test maximum(abs, perturbation_solver(lin; order=2).hxx) < 1e-8   # the premise
         Tn = 12
-        rng = Random.MersenneTwister(269)
+        rng = Random.Xoshiro(269)
         e = randn(rng, Tn, 1)
         # Ground truth: iterate y_t = G1·y_{t-1} + impact·ε_t directly.
         truth = zeros(Tn, 2)
@@ -1034,7 +1036,7 @@ end
         mild = cubic_spec(0.15, 0.05, 0.3)
         for order in (2, 3)
             sol = perturbation_solver(mild; order=order)
-            e = randn(Random.MersenneTwister(4), 2000, 1)
+            e = randn(Random.Xoshiro(4), 2000, 1)
             sp = simulate(sol, 2000; shock_draws=e) .- sol.steady_state'
             su = simulate_unpruned(sol, e)
             @test sp[1:2, :] ≈ su[1:2, :] rtol = 1e-10
@@ -1048,7 +1050,7 @@ end
         strong = cubic_spec(0.4, 0.2, 0.6)
         for order in (2, 3), seed in (1, 2, 3, 4)
             sol = perturbation_solver(strong; order=order)
-            e = randn(Random.MersenneTwister(seed), 2000, 1)
+            e = randn(Random.Xoshiro(seed), 2000, 1)
             sp = simulate(sol, 2000; shock_draws=e) .- sol.steady_state'
             @test all(isfinite, sp)
             @test maximum(abs, sp) < 50
@@ -1092,8 +1094,8 @@ end
 
         # The pruned simulation responds the same way — the correction is not merely in the
         # moment formula. Same seed, so the difference is the coefficient, not the draws.
-        v1 = var(simulate(sol, 200_000; rng=Random.MersenneTwister(9))[:, 1])
-        v0 = var(simulate(sol0, 200_000; rng=Random.MersenneTwister(9))[:, 1])
+        v1 = var(simulate(sol, 200_000; rng=Random.Xoshiro(9))[:, 1])
+        v0 = var(simulate(sol0, 200_000; rng=Random.Xoshiro(9))[:, 1])
         @test abs(v1 - v0) / v1 > 0.2
         @test sign(m1[:Var_y][1, 1] - m0[:Var_y][1, 1]) == sign(v1 - v0)
     end
@@ -1115,7 +1117,7 @@ end
         hxx_xx = M._extract_xx_block(pss.hxx, pss.nx, pss.nv)
         @test maximum(abs, pss.hxx) ≈ maximum(abs, hxx_xx)    # the premise: no shock blocks
         d = M._augmented_moments_3rd(sol; lags=[1])
-        dev = simulate(sol, 1_000_000; rng=Random.MersenneTwister(11)) .- sol.steady_state'
+        dev = simulate(sol, 1_000_000; rng=Random.Xoshiro(11)) .- sol.steady_state'
         @test d[:Var_y] ≈ cov(dev) rtol = 0.02
         @test d[:E_y] ≈ vec(mean(dev; dims=1)) rtol = 0.05
     end
@@ -1132,7 +1134,7 @@ end
         rbc = compute_steady_state(rbc)
         sol = perturbation_solver(rbc; order=2)
         d = M._augmented_moments_2nd(sol; lags=[1])
-        dev = simulate(sol, 400_000; rng=Random.MersenneTwister(11)) .- sol.steady_state'
+        dev = simulate(sol, 400_000; rng=Random.Xoshiro(11)) .- sol.steady_state'
         V = cov(dev)
         @test d[:Var_y] ≈ V rtol = 0.05
         @test vec(d[:E_y]) ≈ vec(mean(dev; dims=1)) atol = 0.05 * maximum(abs, d[:E_y])
@@ -1158,7 +1160,7 @@ end
         # The linear-in-z map reproduces the pruned step exactly up to the bilinear x⊗ε term
         # that no C·z + noise·ε form can represent. Assert BOTH halves of that claim: the gap
         # is exactly the omitted second-order shock blocks, not an unexplained residual.
-        rng = Random.MersenneTwister(3)
+        rng = Random.Xoshiro(3)
         e = randn(rng, 40, 1)
         dev = M._pss_simulate_dev(pss, e)
         nv, nx = pss.nv, pss.nx
@@ -1452,7 +1454,7 @@ end
         @test M._should_use_sparse_klein(f0, f1, fl)
         @test M._solve_qz_quadratic(f0, f1, fl, fe).sparse !== nothing
         # Large but DENSE → dense, because the advantage vanishes without sparsity.
-        rng = Random.MersenneTwister(270)
+        rng = Random.Xoshiro(270)
         nd = 420
         f0d = Matrix{Float64}(4.0I, nd, nd) .+ 0.02 .* randn(rng, nd, nd)
         @test M._sparse_density(f0d, f0d, f0d) > 0.9
@@ -1604,7 +1606,7 @@ end
     @testset "agrees with the root count on generic models" begin
         # The count is a theorem under a rank condition; where the rank condition holds — i.e.
         # essentially always for randomly drawn systems — the two verdicts must coincide.
-        rng = Random.MersenneTwister(267)
+        rng = Random.Xoshiro(267)
         agree = 0; total = 0
         for _ in 1:300
             n = rand(rng, 1:4)
@@ -1744,7 +1746,7 @@ end
 
 @testset "GMRES Sylvester residual guard (#215)" begin
     M = MacroEconometricModels
-    rng = Random.MersenneTwister(215)
+    rng = Random.Xoshiro(215)
     n = 80
     nvd = 80                                   # total = 6400 > 5000 → matrix-free GMRES branch
     f_c = Matrix{Float64}(3.0I, n, n) .+ 0.02 .* randn(rng, n, n)   # diagonally dominant
@@ -1772,7 +1774,7 @@ end
 
 @testset "Matrix-free Kronecker power (#225 part 1)" begin
     M = MacroEconometricModels
-    rng = Random.MersenneTwister(1225)
+    rng = Random.Xoshiro(1225)
 
     # _kron_power reproduces Julia's left-associative kron exactly.
     A = randn(rng, 4, 4)
@@ -1819,7 +1821,7 @@ end
 
 @testset "Generalized-Schur Sylvester solver (#365, T266)" begin
     M = MacroEconometricModels
-    rng = Random.MersenneTwister(266)
+    rng = Random.Xoshiro(266)
 
     # Dense-Kronecker reference: [(I ⊗ A) + (C^{⊗d}' ⊗ B)] vec(X) = vec(D).
     function sylv_dense(A, B, C, D, d)
@@ -1993,9 +1995,8 @@ end
     @testset "solve_lyapunov unchanged through the new path" begin
         @test M.solve_lyapunov(reshape([0.9], 1, 1), reshape([1.0], 1, 1))[1, 1] ≈
               1 / (1 - 0.81) rtol = 1e-10
-        rng2 = Random.MersenneTwister(2661)
         G1 = [0.5 0.1; -0.2 0.6]
-        imp = randn(rng2, 2, 2)
+        imp = randn(Random.Xoshiro(2661), 2, 2)
         Sig = M.solve_lyapunov(G1, imp)
         @test Sig ≈ G1 * Sig * G1' + imp * imp' rtol = 1e-10
         @test Sig == Sig'
@@ -2194,7 +2195,7 @@ end
         _, mi_big = M._smolyak_grid(2, [2, 2])
         rows_small = Set(mi_small[i, :] for i in 1:size(mi_small, 1))
         @test all(r in Set(mi_big[i, :] for i in 1:size(mi_big, 1)) for r in rows_small)
-        old = randn(Random.MersenneTwister(258), 3, size(mi_small, 1))
+        old = randn(Random.Xoshiro(258), 3, size(mi_small, 1))
         new = M._pad_coefficients(old, mi_small, mi_big)
         @test size(new) == (3, size(mi_big, 1))
         lookup = Dict(mi_big[i, :] => i for i in 1:size(mi_big, 1))
@@ -2245,13 +2246,13 @@ end
         spec = compute_steady_state(spec)
 
         base = collocation_solver(spec; grid=:smolyak, smolyak_mu=1, max_iter=60)
-        e_base = max_euler_error(base; n_test=200, rng=Random.MersenneTwister(7))
+        e_base = max_euler_error(base; n_test=200, rng=Random.Xoshiro(7))
 
         sol = @test_logs (:warn, r"Adaptive refinement finished") match_mode = :any (
             collocation_solver(spec; grid=:smolyak, smolyak_mu=1, adaptive=true,
                                euler_tol=1e-8, max_nodes=200, max_refinements=6,
                                n_euler_test=100, max_iter=60,
-                               rng=Random.MersenneTwister(7)))
+                               rng=Random.Xoshiro(7)))
         @test sol.converged
         @test sol.refinements > 0
         @test size(sol.collocation_nodes, 1) > size(base.collocation_nodes, 1)
@@ -2259,12 +2260,12 @@ end
         @test sol.euler_error < e_base                       # 1.3e-4 vs 1.2e-2
 
         # the reported accuracy is the same statistic `max_euler_error` computes
-        e_ind = max_euler_error(sol; n_test=200, rng=Random.MersenneTwister(7))
+        e_ind = max_euler_error(sol; n_test=200, rng=Random.Xoshiro(7))
         @test isapprox(e_ind, sol.euler_error; rtol=0.5)
 
         # beats the isotropic grid it would otherwise have to pay for
         iso3 = collocation_solver(spec; grid=:smolyak, smolyak_mu=3, max_iter=60)
-        e_iso3 = max_euler_error(iso3; n_test=200, rng=Random.MersenneTwister(7))
+        e_iso3 = max_euler_error(iso3; n_test=200, rng=Random.Xoshiro(7))
         @test size(sol.collocation_nodes, 1) <= size(iso3.collocation_nodes, 1)
         @test sol.euler_error < e_iso3                       # 1.3e-4 vs 2.1e-4
 
@@ -2272,7 +2273,7 @@ end
         capped = collocation_solver(spec; grid=:smolyak, smolyak_mu=1, adaptive=true,
                                     euler_tol=1e-14, max_nodes=15, max_refinements=10,
                                     n_euler_test=40, max_iter=40,
-                                    rng=Random.MersenneTwister(7))
+                                    rng=Random.Xoshiro(7))
         @test size(capped.collocation_nodes, 1) <= 15
     end
 
@@ -2293,7 +2294,7 @@ end
         sol = collocation_solver(spec; grid=:smolyak, smolyak_mu=1, adaptive=true,
                                  euler_tol=1e-10, max_nodes=120, max_refinements=6,
                                  n_euler_test=60, max_iter=60,
-                                 rng=Random.MersenneTwister(11))
+                                 rng=Random.Xoshiro(11))
         names = spec.varnames[sol.state_indices]
         zi = findfirst(==("z"), names)
         @test zi !== nothing
@@ -2317,7 +2318,7 @@ end
         @test_throws ArgumentError collocation_solver(spec; grid=:tensor, adaptive=true)
         # grid=:auto upgrades to Smolyak when adaptivity is requested
         sol = collocation_solver(spec; adaptive=true, euler_tol=1e-6, max_refinements=1,
-                                 n_euler_test=20, max_iter=30, rng=Random.MersenneTwister(1))
+                                 n_euler_test=20, max_iter=30, rng=Random.Xoshiro(1))
         @test sol.grid_type == :smolyak
     end
 
@@ -2347,7 +2348,7 @@ end
     # near-unit-root does NOT throw (a=0.999 → ≈500.25)
     @test M.solve_lyapunov(reshape([0.999], 1, 1), reshape([1.0], 1, 1))[1, 1] ≈ 1 / (1 - 0.999^2) rtol = 1e-8
     # matrix case: doubling matches the dense kron solution
-    rng = Random.MersenneTwister(220)
+    rng = Random.Xoshiro(220)
     n = 6
     G = randn(rng, n, n)
     G ./= (2 * opnorm(G))                       # spectral radius ≤ 0.5 < 1
@@ -2652,8 +2653,7 @@ end
 @testset "Simulate: stochastic" begin
     spec = AR1_SPEC_SIGMA_LOW
     sol = solve(spec)
-    Random.seed!(42)
-    sim = simulate(sol, 200)
+    sim = simulate(sol, 200; seed=42)
     @test size(sim) == (200, 1)
     @test std(sim[:, 1]) > 0  # not all zeros
     @test std(sim[:, 1]) < 1  # bounded
@@ -2716,8 +2716,7 @@ end
     end
 
     # Simulate also works
-    Random.seed!(42)
-    sim = simulate(sol, 50)
+    sim = simulate(sol, 50; seed=42)
     @test size(sim) == (50, 2)
 end
 
@@ -2741,7 +2740,7 @@ end
 @testset "IRF matching: recover AR(1) parameter" begin
     _suppress_warnings() do
     # True model: y_t = 0.8 * y_{t-1} + ε_t
-    rng = Random.MersenneTwister(42)
+    rng = Random.Xoshiro(42)
     T_obs = FAST ? 300 : 500
     y_true = zeros(T_obs)
     for t in 2:T_obs
@@ -2768,7 +2767,7 @@ end
 
 @testset "Euler GMM: basic" begin
     _suppress_warnings() do
-    rng = Random.MersenneTwister(123)
+    rng = Random.Xoshiro(123)
     T_obs = FAST ? 200 : 300
     y_true = zeros(T_obs)
     for t in 2:T_obs
@@ -2797,13 +2796,13 @@ end
         exogenous: ε
         y[t] = ρ * y[t-1] + ε[t]
     end
-    Y = randn(100, 1)
+    Y = randn(Random.Xoshiro(1405), 100, 1)
     @test_throws ArgumentError estimate_dsge(spec, Y, [:ρ]; method=:invalid)
 end
 
 @testset "IRF matching: pre-computed target IRFs" begin
     _suppress_warnings() do
-    rng = Random.MersenneTwister(99)
+    rng = Random.Xoshiro(99)
     T_obs = FAST ? 200 : 400
     y_true = zeros(T_obs)
     for t in 2:T_obs
@@ -2831,7 +2830,7 @@ end
 
 @testset "IRF matching: SEs respond to target IRF covariance Ω (T039)" begin
     _suppress_warnings() do
-        rng = Random.MersenneTwister(2039)
+        rng = Random.Xoshiro(2039)
         T_obs = 300; y = zeros(T_obs)
         for t in 2:T_obs; y[t] = 0.8*y[t-1] + randn(rng); end
         Y = reshape(y, :, 1)
@@ -2842,8 +2841,8 @@ end
             y[t] = ρ * y[t-1] + ε[t]
         end
         H = 10
-        vm = estimate_var(Y, 4); Random.seed!(7)
-        base = irf(vm, H; method=:cholesky, ci_type=:bootstrap, reps=200)
+        vm = estimate_var(Y, 4)
+        base = irf(vm, H; method=:cholesky, ci_type=:bootstrap, reps=200, seed=7)
         vals = base.values; d = base._draws
         dev  = d .- reshape(vals, 1, size(vals)...)
         # Two targets with IDENTICAL point IRFs but bootstrap draws scaled by 0.5 vs 2.0.
@@ -2865,7 +2864,7 @@ end
 
 @testset "IRF matching: J is Ω-weighted χ² with correct dof (T039)" begin
     _suppress_warnings() do
-        rng = Random.MersenneTwister(4039)
+        rng = Random.Xoshiro(4039)
         T_obs = 400; y = zeros(T_obs)
         for t in 2:T_obs; y[t] = 0.8*y[t-1] + randn(rng); end
         Y = reshape(y, :, 1)
@@ -2875,6 +2874,8 @@ end
             exogenous: ε
             y[t] = ρ * y[t-1] + ε[t]
         end
+        # Global seed stays: _estimate_irf_matching does not forward rng/seed to
+        # its internal VAR bootstrap, so this is the only reproducibility handle.
         H = 10; Random.seed!(11)
         est = estimate_dsge(spec, Y, [:ρ]; method=:irf_matching,
                             irf_horizon=H, weighting=:efficient, n_boot=300)
@@ -2887,7 +2888,7 @@ end
 end
 
 @testset "DSGEEstimation show and report" begin
-    rng = Random.MersenneTwister(42)
+    rng = Random.Xoshiro(42)
     y_true = zeros(200)
     for t in 2:200
         y_true[t] = 0.8 * y_true[t-1] + randn(rng)
@@ -2931,8 +2932,7 @@ end
     @test fevd_result isa FEVD
 
     # Simulate
-    Random.seed!(42)
-    sim = simulate(sol, 200)
+    sim = simulate(sol, 200; seed=42)
     @test size(sim) == (200, 1)
 
     # Plot (smoke test)
@@ -3041,7 +3041,7 @@ end
 @testset "DSGE SMM Estimation" begin
     _suppress_warnings() do
     # Simple AR(1): y_t = rho * y_{t-1} + sigma * e_t
-    rng = Random.MersenneTwister(42)
+    rng = Random.Xoshiro(42)
     spec = @dsge begin
         parameters: rho = 0.7, sigma = 1.0
         endogenous: y
@@ -3060,7 +3060,7 @@ end
     est = estimate_dsge(spec, sim_data, [:rho];
                         method=:smm, sim_ratio=FAST ? 2 : 5, burn=FAST ? 40 : 100,
                         bounds=bounds,
-                        rng=Random.MersenneTwister(123))
+                        rng=Random.Xoshiro(123))
 
     @test est isa DSGEEstimation{Float64}
     @test est.method == :smm
@@ -3080,7 +3080,7 @@ end
         exogenous: e
         y[t] = rho * y[t-1] + e[t]
     end
-    Y = randn(100, 1)
+    Y = randn(Random.Xoshiro(1406), 100, 1)
     @test_throws ArgumentError estimate_dsge(spec, Y, [:rho]; method=:invalid)
 end
 
@@ -3151,7 +3151,7 @@ end
     @test length(m_analytical) == 7
 
     # Cross-check with long simulation
-    rng = Random.MersenneTwister(42)
+    rng = Random.Xoshiro(42)
     sim_data = simulate(sol, 30_000; rng=rng)
     m_simulated = autocovariance_moments(sim_data; lags=2)
     for i in eachindex(m_analytical)
@@ -3225,7 +3225,7 @@ end
 
 @testset "DSGE Analytical GMM Estimation" begin
     _suppress_warnings() do
-    rng = Random.MersenneTwister(42)
+    rng = Random.Xoshiro(42)
     spec = @dsge begin
         parameters: rho = 0.7, sigma = 1.0
         endogenous: y
@@ -3262,7 +3262,7 @@ end
     end
     spec = compute_steady_state(spec)
     sol = solve(spec; method=:gensys)
-    sim_data = simulate(sol, 300; rng=Random.MersenneTwister(99))
+    sim_data = simulate(sol, 300; rng=Random.Xoshiro(99))
 
     est = estimate_dsge(spec, sim_data, [:rho];
                         method=:analytical_gmm, lags=2)
@@ -3278,7 +3278,7 @@ end
         exogenous: e
         y[t] = rho * y[t-1] + e[t]
     end
-    Y = randn(100, 1)
+    Y = randn(Random.Xoshiro(1407), 100, 1)
     @test_throws ArgumentError estimate_dsge(spec, Y, [:rho]; method=:invalid)
 end
 
@@ -3318,8 +3318,9 @@ end
     T_periods = 20
     n_endog = 1
     n_constraints = 1
-    linear_path = randn(T_periods, n_endog)
-    piecewise_path = randn(T_periods, n_endog)
+    rng = Random.Xoshiro(1408)
+    linear_path = randn(rng, T_periods, n_endog)
+    piecewise_path = randn(rng, T_periods, n_endog)
     ss = zeros(n_endog)
     regime_hist = zeros(Int, T_periods, n_constraints)
     regime_hist[5:8, 1] .= 1  # binding in periods 5-8
@@ -3347,8 +3348,8 @@ end
 
     # OccBinIRF
     H = 20
-    linear_irf = randn(H, n_endog)
-    pw_irf = randn(H, n_endog)
+    linear_irf = randn(rng, H, n_endog)
+    pw_irf = randn(rng, H, n_endog)
     regime_irf = zeros(Int, H, n_constraints)
     regime_irf[1:3, 1] .= 1
 
@@ -5034,12 +5035,12 @@ end
         @test size(sim) == (100, 1)
 
         # Stochastic simulation doesn't explode
-        sim2 = simulate(sol, 10000; rng=Random.MersenneTwister(42))
+        sim2 = simulate(sol, 10000; rng=Random.Xoshiro(42))
         @test all(isfinite.(sim2))
         @test std(sim2[:, 1]) < 1.0
 
         # Antithetic shocks
-        sim_anti = simulate(sol, 1000; antithetic=true, rng=Random.MersenneTwister(42))
+        sim_anti = simulate(sol, 1000; antithetic=true, rng=Random.Xoshiro(42))
         @test size(sim_anti) == (1000, 1)
         @test all(isfinite.(sim_anti))
 
@@ -5264,12 +5265,12 @@ end
         @test all(isfinite.(sim))
 
         # Stochastic simulation doesn't explode
-        sim2 = simulate(sol3, 10000; rng=Random.MersenneTwister(42))
+        sim2 = simulate(sol3, 10000; rng=Random.Xoshiro(42))
         @test all(isfinite.(sim2))
         @test std(sim2[:, 1]) < 1.0
 
         # Antithetic shocks
-        sim_anti = simulate(sol3, 1000; antithetic=true, rng=Random.MersenneTwister(42))
+        sim_anti = simulate(sol3, 1000; antithetic=true, rng=Random.Xoshiro(42))
         @test size(sim_anti) == (1000, 1)
         @test all(isfinite.(sim_anti))
 
@@ -5284,7 +5285,7 @@ end
 
         # For linear model, order 3 sim should be very close to order 2
         sol2 = solve(spec; method=:perturbation, order=2)
-        shocks = randn(Random.MersenneTwister(99), 5000, 1)
+        shocks = randn(Random.Xoshiro(99), 5000, 1)
         sim2_data = simulate(sol2, 5000; shock_draws=shocks)
         sim3_data = simulate(sol3, 5000; shock_draws=shocks)
         @test sim2_data ≈ sim3_data atol=1e-6
@@ -5307,7 +5308,7 @@ end
 
         # Compare with simulation-based moments
         # full-size anchor (T215) — do not shrink
-        sim = simulate(sol3, 500_000; rng=Random.MersenneTwister(99))
+        sim = simulate(sol3, 500_000; rng=Random.Xoshiro(99))
         sim_dev = sim .- mean(sim, dims=1)
         m_mean = vec(mean(sim, dims=1)) .- sol3.steady_state'
         m_var = var(sim[:, 1])
@@ -5399,7 +5400,7 @@ end
         @test MacroEconometricModels.nstates(sol2) + MacroEconometricModels.ncontrols(sol2) == 2
 
         # Simulation
-        sim = simulate(sol2, 1000; rng=Random.MersenneTwister(42))
+        sim = simulate(sol2, 1000; rng=Random.Xoshiro(42))
         @test size(sim, 2) == 2
         @test all(isfinite.(sim))
 
@@ -5475,7 +5476,7 @@ end
 
         sol2 = solve(spec; method=:perturbation, order=2)
         # Long simulation should not explode — key pruning stability test
-        sim = simulate(sol2, 30000; rng=Random.MersenneTwister(42))
+        sim = simulate(sol2, 30000; rng=Random.Xoshiro(42))
         @test all(isfinite.(sim))
         @test std(sim[:, 1]) < 10.0  # bounded variance
     end
@@ -5493,7 +5494,7 @@ end
         sol_p = solve(spec; method=:perturbation, order=1)
 
         # Same simulation with same shocks
-        shocks = randn(Random.MersenneTwister(42), 100, 1)
+        shocks = randn(Random.Xoshiro(42), 100, 1)
         sim_g = simulate(sol_g, 100; shock_draws=shocks)
         sim_p = simulate(sol_p, 100; shock_draws=shocks)
         @test sim_g ≈ sim_p atol=1e-6
@@ -5665,7 +5666,7 @@ end
 
         # Antithetic simulation should have lower mean absolute value
         # (variance reduction technique)
-        rng1 = Random.MersenneTwister(123)
+        rng1 = Random.Xoshiro(123)
         sim_anti = simulate(sol, 2000; antithetic=true, rng=rng1)
         @test size(sim_anti) == (2000, 1)
         @test all(isfinite.(sim_anti))
@@ -5771,8 +5772,8 @@ end
     end
 
     @testset "Data moments computation" begin
-        Random.seed!(42)
-        data = randn(500, 1)
+        rng = Random.Xoshiro(42)
+        data = randn(rng, 500, 1)
         m_data = MacroEconometricModels._compute_data_moments(data; lags=[1])
         # 1 mean + 1 product moment + 1 autocov = 3
         @test length(m_data) == 3
@@ -5780,13 +5781,13 @@ end
         @test m_data[2] ≈ dot(data[:, 1], data[:, 1]) / 500 atol=1e-10
 
         # Multi-variable data moments
-        data2 = randn(500, 2)
+        data2 = randn(rng, 500, 2)
         m_data2 = MacroEconometricModels._compute_data_moments(data2; lags=[1, 3])
         # ny=2: 2 means + 3 product moments + 2*2 autocov = 2 + 3 + 4 = 9
         @test length(m_data2) == 9
 
         # observable_indices filtering
-        data3 = randn(500, 3)
+        data3 = randn(rng, 500, 3)
         m_sub = MacroEconometricModels._compute_data_moments(data3; lags=[1], observable_indices=[1, 3])
         # 2 means + 3 product moments + 2 autocov = 7
         @test length(m_sub) == 7
@@ -5802,9 +5803,8 @@ end
         spec = compute_steady_state(spec)
 
         # Generate data from known parameters
-        Random.seed!(42)
         sol_true = solve(spec; method=:perturbation, order=2)
-        data = simulate(sol_true, 500; rng=Random.MersenneTwister(42))
+        data = simulate(sol_true, 500; rng=Random.Xoshiro(42))
 
         # Estimate with perturbation order 2
         bounds = ParameterTransform{Float64}([0.01], [0.999])
@@ -5876,7 +5876,6 @@ end
     end
 
     @testset "Data moments match analytical for generated data" begin
-        Random.seed!(123)
         spec = @dsge begin
             parameters: ρ = 0.9, σ = 0.01
             endogenous: y
@@ -5887,7 +5886,7 @@ end
         sol1 = solve(spec; method=:perturbation, order=1)
 
         # Generate long simulation
-        data = simulate(sol1, 30_000; rng=Random.MersenneTwister(123))
+        data = simulate(sol1, 30_000; rng=Random.Xoshiro(123))
 
         # Data moments should converge to model moments
         m_model = analytical_moments(sol1; lags=1, format=:gmm)
@@ -5914,8 +5913,16 @@ end
         # Closed-form moments
         mom_cf = analytical_moments(sol2; lags=1, format=:gmm)
 
-        # Simulation-based moments (long run)
-        sim = simulate(sol2, 500_000; rng=Random.MersenneTwister(99))
+        # Simulation-based moments (long run). Shocks are inverse-CDF
+        # normals from a uniform stream: `randn` streams diverge between Julia
+        # 1.10 and 1.12 past ~10⁴ draws (ziggurat change), but the uniform
+        # `rand` stream is bit-identical, so these shocks — and this seed —
+        # reproduce exactly on every CI version. (`simulate` with
+        # `shock_draws` is pure deterministic recursion.)
+        su = rand(Random.Xoshiro(7), 500_000, 1)
+        e = Distributions.quantile.(Distributions.Normal(),
+                                    clamp.(su, eps(), 1 - eps()))
+        sim = simulate(sol2, 500_000; shock_draws=e)
         m_sim = MacroEconometricModels._compute_data_moments(sim; lags=[1])
 
         @test length(mom_cf) == length(m_sim)
@@ -5974,8 +5981,7 @@ end
         end
         spec = compute_steady_state(spec)
         sol = solve(spec; method=:gensys)
-        Random.seed!(42)
-        data = simulate(sol, 200; rng=Random.MersenneTwister(42))
+        data = simulate(sol, 200; rng=Random.Xoshiro(42))
 
         # Old API: estimate_dsge with analytical_gmm, no perturbation kwargs
         bounds = ParameterTransform{Float64}([0.01], [0.999])
@@ -5999,8 +6005,7 @@ end
 
         # Generate data from known model
         sol_true = solve(spec; method=:perturbation, order=2)
-        Random.seed!(7777)
-        data = simulate(sol_true, 1000; rng=Random.MersenneTwister(7777))
+        data = simulate(sol_true, 1000; rng=Random.Xoshiro(7777))
 
         # Estimate ρ with perturbation order 2, multiple autocov lags
         bounds = ParameterTransform{Float64}([0.01], [0.999])
@@ -6035,7 +6040,7 @@ end
 
         # Generate data from 3rd-order solution
         sol_true = solve(spec; method=:perturbation, order=3)
-        data = simulate(sol_true, 500; rng=Random.MersenneTwister(42))
+        data = simulate(sol_true, 500; rng=Random.Xoshiro(42))
 
         # Estimate with perturbation order 2 (order-2/order-3 divergence is O(σ²) here)
         bounds = ParameterTransform{Float64}([0.01], [0.999])
@@ -6279,7 +6284,7 @@ end
     end
 
     # max_euler_error should be small
-    euler_err = max_euler_error(sol; n_test=100, rng=Random.MersenneTwister(42))
+    euler_err = max_euler_error(sol; n_test=100, rng=Random.Xoshiro(42))
     @test euler_err < 1e-6
 end
 
@@ -6294,9 +6299,9 @@ end
     spec = compute_steady_state(spec)
     sol = solve(spec; method=:projection, degree=5, verbose=false)
 
-    # simulate returns T × n matrix
-    Random.seed!(42)
-    Y_sim = simulate(sol, 100)
+    # simulate returns T × n matrix (one shared rng ⇒ same stream as the old seed!(42))
+    rng = Random.Xoshiro(42)
+    Y_sim = simulate(sol, 100; rng=rng)
     @test size(Y_sim) == (100, 1)
     @test all(abs.(Y_sim) .< 1.0)
 
@@ -6307,7 +6312,7 @@ end
     @test size(Y_det) == (50, 1)
 
     # irf returns ImpulseResponse
-    irfs = irf(sol, 20; n_sim=200)
+    irfs = irf(sol, 20; n_sim=200, rng=rng)
     @test irfs isa ImpulseResponse
     @test size(irfs.values) == (20, 1, 1)
     # First period: should be close to σ = 0.01 (impact of unit shock)
@@ -6326,12 +6331,12 @@ end
     end
     spec = compute_steady_state(spec)
     sol = solve(spec; method=:projection, degree=5, verbose=false)
-    # GIRF is reproducible for a fixed rng (per-rep MersenneTwister seeds derive from it)
-    ir1 = irf(sol, 15; n_sim=100, rng=Random.MersenneTwister(217))
-    ir2 = irf(sol, 15; n_sim=100, rng=Random.MersenneTwister(217))
+    # GIRF is reproducible for a fixed rng (per-rep Xoshiro seeds derive from it)
+    ir1 = irf(sol, 15; n_sim=100, rng=Random.Xoshiro(217))
+    ir2 = irf(sol, 15; n_sim=100, rng=Random.Xoshiro(217))
     @test ir1.values == ir2.values
     # h=0 (t=1) response is deterministic — independent of n_sim / rng (no future shock yet)
-    ir3 = irf(sol, 15; n_sim=300, rng=Random.MersenneTwister(999))
+    ir3 = irf(sol, 15; n_sim=300, rng=Random.Xoshiro(999))
     @test ir1.values[1, 1, 1] ≈ ir3.values[1, 1, 1] atol = 1e-12
 end
 
@@ -6355,7 +6360,7 @@ end
 
 @testset "Collocation QR step == normal equations (#225 part 2)" begin
     M = MacroEconometricModels
-    rng = Random.MersenneTwister(2252)
+    rng = Random.Xoshiro(2252)
     # For the same well-conditioned Jacobian and residual, the column-pivoted QR least-squares
     # step equals the former J'J normal-equations step to tight tolerance (the collocation
     # Newton solver now uses the QR form to avoid squaring cond(J)).
@@ -6488,7 +6493,7 @@ end
     @test abs(y_at_ss[2] - c_ss) / c_ss < 0.01
 
     # Euler error check
-    euler_err = max_euler_error(sol; n_test=200, rng=Random.MersenneTwister(123))
+    euler_err = max_euler_error(sol; n_test=200, rng=Random.Xoshiro(123))
     @test euler_err < 1e-2
 end
 
@@ -6575,7 +6580,7 @@ end # Projection Methods
     end
 
     # Euler error
-    euler_err = max_euler_error(sol; n_test=100, rng=Random.MersenneTwister(42))
+    euler_err = max_euler_error(sol; n_test=100, rng=Random.Xoshiro(42))
     @test euler_err < 1e-6
 end
 
@@ -6703,12 +6708,11 @@ end
     @test abs(y_at_ss[2] - c_ss) / c_ss < 0.02
 
     # Euler error check
-    euler_err = max_euler_error(sol; n_test=200, rng=Random.MersenneTwister(123))
+    euler_err = max_euler_error(sol; n_test=200, rng=Random.Xoshiro(123))
     @test euler_err < 1e-2
 
     # Simulation should produce bounded values
-    Random.seed!(42)
-    Y_sim = simulate(sol, 100)
+    Y_sim = simulate(sol, 100; seed=42)
     @test size(Y_sim) == (100, 2)
     @test all(isfinite.(Y_sim))
 end
@@ -7095,13 +7099,14 @@ end
     @test occursin("Converged", output)
     @test occursin("Value", output) || occursin("VFI", output) || occursin("value", output)
 
-    Random.seed!(42)
-    Y_sim = simulate(sol, 40)
+    # One shared rng ⇒ same stream as the old seed!(42)
+    rng = Random.Xoshiro(42)
+    Y_sim = simulate(sol, 40; rng=rng)
     @test size(Y_sim) == (40, 3)
     @test all(isfinite, Y_sim)
     @test all(Y_sim[:, 1] .> 0)   # consumption
 
-    irfs = irf(sol, 6; n_sim=8)
+    irfs = irf(sol, 6; n_sim=8, rng=rng)
     @test irfs isa ImpulseResponse
     @test size(irfs.values, 1) == 6
     @test size(irfs.values, 2) == 3

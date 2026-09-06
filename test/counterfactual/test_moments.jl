@@ -36,7 +36,7 @@ const CF12_MAPS = (outcomes=[:x1 => 1, :x2 => "x2"], instruments=[:z => 3])
 @testset "Second-moment counterfactuals (CF-12)" begin
 
     @testset "baseline identity vs Lyapunov (estimated VAR)" begin
-        rng = MersenneTwister(12)
+        rng = Xoshiro(12)
         A = [0.5 0.2; 0.1 0.4]
         Y = zeros(500, 2)
         for t in 2:500
@@ -79,7 +79,7 @@ const CF12_MAPS = (outcomes=[:x1 => 1, :x2 => "x2"], instruments=[:z => 3])
         H = 40
         w = _cf12_wold(H; zero_instrument=false)
         ce = _cf12_ce(H)
-        rng = MersenneTwister(3)
+        rng = Xoshiro(3)
         Q = Matrix(qr(randn(rng, 3, 3)).Q)
         Theta_rot = similar(w.Theta)
         for h in 1:H

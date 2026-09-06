@@ -9,7 +9,7 @@ if !@isdefined(_assert_roundtrip)
 end
 
 @testset "RSER-02 JohansenResult serialization" begin
-    Yci = cumsum(randn(MersenneTwister(3), 100, 2); dims=1)
+    Yci = cumsum(randn(Xoshiro(3), 100, 2); dims=1)
     jr = johansen_test(Yci, 2)
     jr2 = _assert_roundtrip(jr)
     _assert_report_equal(jr, jr2)

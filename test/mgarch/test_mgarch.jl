@@ -53,7 +53,7 @@ const _MG = MacroEconometricModels
 
 """Bivariate series with CONSTANT correlation (drives CCC and the DCC→CCC collapse)."""
 function _sim_ccc(T::Int; rho=0.4, seed=42)
-    rng = MersenneTwister(seed)
+    rng = Xoshiro(seed)
     Y = zeros(T, 2); h1 = 1.0; h2 = 1.0
     for t in 2:T
         h1 = 0.05 + 0.10 * Y[t-1, 1]^2 + 0.85 * h1
@@ -67,7 +67,7 @@ end
 
 """Bivariate DCC(1,1) process with time-varying correlation and GARCH(1,1) margins."""
 function _sim_dcc(T::Int; a=0.05, b=0.90, rho=0.3, seed=7)
-    rng = MersenneTwister(seed)
+    rng = Xoshiro(seed)
     Qbar = [1.0 rho; rho 1.0]; Q = copy(Qbar)
     Y = zeros(T, 2); h = [1.0, 1.0]
     for t in 1:T
@@ -276,9 +276,9 @@ _min_eig(H) = minimum(eigen(Symmetric(Matrix(H))).values)
     end
 
     @testset "input validation & StatsAPI" begin
-        @test_throws ArgumentError estimate_ccc(randn(100, 1))   # need ≥2 series
-        @test_throws ArgumentError estimate_dcc(randn(100, 2); correction = :bad)
-        @test_throws ArgumentError estimate_bekk(randn(100, 2); kind = :bad)
+        @test_throws ArgumentError estimate_ccc(randn(Xoshiro(21), 100, 1))   # need ≥2 series
+        @test_throws ArgumentError estimate_dcc(randn(Xoshiro(22), 100, 2); correction = :bad)
+        @test_throws ArgumentError estimate_bekk(randn(Xoshiro(23), 100, 2); kind = :bad)
         Y = _sim_dcc(500)
         m = estimate_dcc(Y)
         @test StatsAPI.nobs(m) == 500

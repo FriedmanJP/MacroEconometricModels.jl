@@ -21,7 +21,7 @@ const _M = MacroEconometricModels
 
 """Few-cluster DGP with a within-cluster error component."""
 function _wcb_sim(G::Int, n_per::Int; beta::Float64=0.0, seed::Int=1, rho::Float64=0.5)
-    rng = Random.MersenneTwister(seed)
+    rng = Random.Xoshiro(seed)
     n = G * n_per
     cl = repeat(1:G, inner=n_per)
     x = randn(rng, n)
@@ -95,7 +95,7 @@ end
 # ─────────────────────────────────────────────────────────────────────────────
 
 @testset "weight matrix: exact enumeration and Webb support" begin
-    rng = Random.MersenneTwister(1)
+    rng = Random.Xoshiro(1)
 
     # 2^G ≤ n_boot with Rademacher weights ⇒ every sign vector exactly once
     V, enumerated = _M._wcb_weight_matrix(4, 999, :rademacher, rng, Float64)
@@ -132,7 +132,7 @@ end
 
     for r0 in (0.0, 0.1, -0.25)
         b = wild_cluster_bootstrap(m, "x", r0; clusters=cl, ci=false,
-                                   rng=Random.MersenneTwister(1))
+                                   rng=Random.Xoshiro(1))
         t_ref, p_ref, ts_ref = _wcb_bruteforce(y, X, cl, 2, r0)
         @test b.enumerated
         @test b.n_boot == 2^5
@@ -143,7 +143,7 @@ end
 
     # The observed t also matches the model's own cluster-robust t at r0 = 0
     b0 = wild_cluster_bootstrap(m, "x", 0.0; clusters=cl, ci=false,
-                                rng=Random.MersenneTwister(1))
+                                rng=Random.Xoshiro(1))
     @test b0.t_stat ≈ coef(m)[2] / stderror(m)[2] atol = 1e-8
     @test b0.estimate ≈ coef(m)[2] atol = 1e-10
 end
@@ -153,21 +153,21 @@ end
     m = estimate_reg(y, X; cov_type=:cluster, clusters=cl, varnames=["const", "x"])
 
     exact = wild_cluster_bootstrap(m, "x", 0.0; clusters=cl, ci=false,
-                                   rng=Random.MersenneTwister(1))
+                                   rng=Random.Xoshiro(1))
     @test exact.enumerated && exact.n_boot == 64
 
     # Drawing many Rademacher vectors samples the same 64-point space, so the simulated
     # p-value converges on the exact one. Enumeration must be switched off explicitly:
     # the default enumerates whenever 2^G ≤ n_boot, so a LARGER n_boot would be exact.
     sim = wild_cluster_bootstrap(m, "x", 0.0; clusters=cl, n_boot=20000, ci=false,
-                                 enumerate=false, rng=Random.MersenneTwister(2))
+                                 enumerate=false, rng=Random.Xoshiro(2))
     @test !sim.enumerated
     @test sim.n_boot == 20000
     @test sim.p_value ≈ exact.p_value atol = 0.02
 
     # enumerate=true is honored, and rejected when it cannot be satisfied
     @test wild_cluster_bootstrap(m, "x", 0.0; clusters=cl, n_boot=64, ci=false,
-                                 enumerate=true, rng=Random.MersenneTwister(2)).enumerated
+                                 enumerate=true, rng=Random.Xoshiro(2)).enumerated
     @test_throws ArgumentError wild_cluster_bootstrap(m, "x", 0.0; clusters=cl,
                                                       n_boot=10, enumerate=true)
     @test_throws ArgumentError wild_cluster_bootstrap(m, "x", 0.0; clusters=cl,
@@ -186,7 +186,7 @@ end
         y, X, cl = _wcb_sim(6, 30; beta=0.0, seed=1000 + s)
         m = estimate_reg(y, X; cov_type=:cluster, clusters=cl, varnames=["const", "x"])
         b = wild_cluster_bootstrap(m, "x", 0.0; clusters=cl, ci=false,
-                                   rng=Random.MersenneTwister(s))
+                                   rng=Random.Xoshiro(s))
         rej_boot += b.p_value < 0.05
         rej_asy += b.p_value_asymptotic < 0.05
     end
@@ -208,13 +208,13 @@ end
 @testset "CI inverts the test" begin
     y, X, cl = _wcb_sim(6, 30; beta=0.0, seed=11)
     m = estimate_reg(y, X; cov_type=:cluster, clusters=cl, varnames=["const", "x"])
-    b = wild_cluster_bootstrap(m, "x", 0.0; clusters=cl, rng=Random.MersenneTwister(1))
+    b = wild_cluster_bootstrap(m, "x", 0.0; clusters=cl, rng=Random.Xoshiro(1))
 
     @test isfinite(b.ci_lower) && isfinite(b.ci_upper)
     @test b.ci_lower < b.estimate < b.ci_upper
 
     pat(v) = wild_cluster_bootstrap(m, "x", v; clusters=cl, ci=false,
-                                    rng=Random.MersenneTwister(1)).p_value
+                                    rng=Random.Xoshiro(1)).p_value
 
     # Inside the interval the null is not rejected; just outside it is. With G=6 the
     # enumerated p-value is a step function on multiples of 1/65, so the endpoint p sits
@@ -227,13 +227,13 @@ end
 
     # A wider level gives a wider interval
     b90 = wild_cluster_bootstrap(m, "x", 0.0; clusters=cl, level=0.90,
-                                 rng=Random.MersenneTwister(1))
+                                 rng=Random.Xoshiro(1))
     @test b90.ci_upper - b90.ci_lower <= width + 1e-8
     @test b90.level == 0.90
 
     # ci=false leaves the bounds unset
     bn = wild_cluster_bootstrap(m, "x", 0.0; clusters=cl, ci=false,
-                                rng=Random.MersenneTwister(1))
+                                rng=Random.Xoshiro(1))
     @test isnan(bn.ci_lower) && isnan(bn.ci_upper)
 end
 
@@ -246,16 +246,16 @@ end
     m = estimate_reg(y, X; cov_type=:cluster, clusters=cl, varnames=["const", "x"])
 
     wcr = wild_cluster_bootstrap(m, "x", 0.0; clusters=cl, ci=false,
-                                 rng=Random.MersenneTwister(1))
+                                 rng=Random.Xoshiro(1))
     wcu = wild_cluster_bootstrap(m, "x", 0.0; clusters=cl, imposenull=false, ci=false,
-                                 rng=Random.MersenneTwister(1))
+                                 rng=Random.Xoshiro(1))
     @test wcr.imposenull
     @test !wcu.imposenull
     @test wcr.t_stat ≈ wcu.t_stat atol = 1e-10       # same observed statistic
     # The bootstrap DGPs differ, so the bootstrap t DISTRIBUTIONS must differ. The
     # p-values need not: with G=6 the 2^G sign vectors are enumerated and the
     # p-value lives on a 64-point grid, so the two procedures can land on the same
-    # grid point by coincidence — they did on Julia 1.10's stream.
+    # grid point by coincidence (observed on Julia 1.10's MT stream).
     @test wcr.t_boot != wcu.t_boot
 
     # Under WCU the bootstrap DGP is the unrestricted fit, so the bootstrap t
@@ -267,7 +267,7 @@ end
     y, X, cl = _wcb_sim(4, 30; beta=0.0, seed=5)
     m = estimate_reg(y, X; cov_type=:cluster, clusters=cl, varnames=["const", "x"])
     b = wild_cluster_bootstrap(m, "x", 0.0; clusters=cl, weights=:webb, n_boot=499,
-                               ci=false, rng=Random.MersenneTwister(3))
+                               ci=false, rng=Random.Xoshiro(3))
     @test b.weighttype === :webb
     @test !b.enumerated
     @test b.n_boot == 499
@@ -278,7 +278,7 @@ end
     y, X, cl = _wcb_sim(6, 30; beta=0.8, seed=31)
     m = estimate_reg(y, X; cov_type=:cluster, clusters=cl, varnames=["const", "x"])
     b = wild_cluster_bootstrap(m, "x", 0.0; clusters=cl, ci=false,
-                               rng=Random.MersenneTwister(1))
+                               rng=Random.Xoshiro(1))
     @test 0 < b.p_value_equaltail <= 1
     # A strong one-sided effect is detected by both p-values
     @test b.p_value < 0.10
@@ -295,7 +295,7 @@ end
     pd = xtset(df, :id, :t)
     pm = estimate_xtreg(pd, :y, [:x])
 
-    bp = wild_cluster_bootstrap(pm, "x", 0.0; ci=false, rng=Random.MersenneTwister(1))
+    bp = wild_cluster_bootstrap(pm, "x", 0.0; ci=false, rng=Random.Xoshiro(1))
     @test bp.n_clusters == 6
     @test bp.enumerated
     @test bp.estimate ≈ coef(pm)[1] atol = 1e-8
@@ -305,7 +305,7 @@ end
     y_dm, _ = _M._within_demean(y, cl, ug)
     X_dm, _ = _M._within_demean_matrix(reshape(X[:, 2], :, 1), cl, ug)
     manual = _M._wild_cluster_bootstrap(y_dm, X_dm, ["x"], cl, "x", 0.0;
-                                        ci=false, rng=Random.MersenneTwister(1))
+                                        ci=false, rng=Random.Xoshiro(1))
     @test bp.t_stat ≈ manual.t_stat atol = 1e-10
     @test bp.p_value ≈ manual.p_value atol = 1e-12
 
@@ -331,23 +331,23 @@ end
 
     # Coefficient selectable by name, Symbol, or index
     by_name = wild_cluster_bootstrap(m, "x", 0.0; clusters=cl, ci=false,
-                                     rng=Random.MersenneTwister(1))
+                                     rng=Random.Xoshiro(1))
     by_sym = wild_cluster_bootstrap(m, :x, 0.0; clusters=cl, ci=false,
-                                    rng=Random.MersenneTwister(1))
+                                    rng=Random.Xoshiro(1))
     by_idx = wild_cluster_bootstrap(m, 2, 0.0; clusters=cl, ci=false,
-                                    rng=Random.MersenneTwister(1))
+                                    rng=Random.Xoshiro(1))
     @test by_name.p_value == by_sym.p_value == by_idx.p_value
     @test by_idx.coefindex == 2 && by_idx.coefname == "x"
 
     # null_value defaults to zero
     @test wild_cluster_bootstrap(m, "x"; clusters=cl, ci=false,
-                                 rng=Random.MersenneTwister(1)).null_value == 0.0
+                                 rng=Random.Xoshiro(1)).null_value == 0.0
 
     # Reproducible under a seeded rng (simulated path)
     a1 = wild_cluster_bootstrap(m, "x", 0.0; clusters=cl, n_boot=200, ci=false,
-                                rng=Random.MersenneTwister(9))
+                                rng=Random.Xoshiro(9))
     a2 = wild_cluster_bootstrap(m, "x", 0.0; clusters=cl, n_boot=200, ci=false,
-                                rng=Random.MersenneTwister(9))
+                                rng=Random.Xoshiro(9))
     @test a1.p_value == a2.p_value
 
     @test_throws ArgumentError wild_cluster_bootstrap(m, "x", 0.0)          # clusters required

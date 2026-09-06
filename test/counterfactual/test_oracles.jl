@@ -109,7 +109,7 @@ include(joinpath(@__DIR__, "oracles_fixtures.jl"))
 
     @testset "5. OPP ≡ optimal projection" begin
         # BM Prop. 2 / MW eq. 27: OPP with a forecast base is the CF-11 solve.
-        rng = MersenneTwister(23)
+        rng = Xoshiro(23)
         _, ce, _ = orc_nk_inputs(H)
         v1, v2 = randn(rng, H), randn(rng, H)
         loss = policy_loss([:pi, :ygap], H; lambda=[1.0, 0.5], beta=0.98)
@@ -186,7 +186,7 @@ include(joinpath(@__DIR__, "oracles_fixtures.jl"))
 
     @testset "7. Historical evolution end-to-end" begin
         # CMW A.3: revision recursion == direct simulation under the new rule.
-        rng = MersenneTwister(7)
+        rng = Xoshiro(7)
         sol_A = solve(ORC_NK)
         sol_At = solve(orc_respec(ORC_NK, Dict(:φπ => 3.0)))
         t1, t2, T_all = 4, 18, 20
@@ -220,7 +220,7 @@ include(joinpath(@__DIR__, "oracles_fixtures.jl"))
 
     @testset "8. Rotation invariance of second moments" begin
         # CMW A.2: an orthogonal rotation of the Wold input cancels in Σ_cf.
-        rng = MersenneTwister(8)
+        rng = Xoshiro(8)
         Hm = 30
         Theta = zeros(Hm, 2, 2)
         for h in 1:Hm
@@ -250,11 +250,11 @@ include(joinpath(@__DIR__, "oracles_fixtures.jl"))
 
     @testset "9. Model-averaging degeneracy" begin
         # Two identical members: probs = 1/2 each; pooled bands = member bands.
-        rng = MersenneTwister(9)
+        rng = Xoshiro(9)
         Hq = 6
         ce0 = policy_news_matrix(ORC_NK, :eps_i, [:pi => :π]; H=Hq)
         menus = [ce0 for _ in 1:40]
-        mk() = MEM.ModelBankMember{Float64}("m", [:k], 0.1 .+ 0.01 .* randn(MersenneTwister(9), 40, 1),
+        mk() = MEM.ModelBankMember{Float64}("m", [:k], 0.1 .+ 0.01 .* randn(Xoshiro(9), 40, 1),
                                             fill(-3.0, 40), -10.0, menus, 0.3, 3)
         mA, mB = mk(), mk()
         probs = posterior_model_probs([mA, mB])

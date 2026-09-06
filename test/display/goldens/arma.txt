@@ -2,8 +2,8 @@ ARMA(N,N) Model
 
 Coef. Std.Err. z P>|z| CI lower CI upper
 
-(Intercept) N N — — — —
-φ[N] N N — — — —
+(Intercept) N N N N N N
+φ[N] N N N N N N
 θ[N] N N N N N N
 
 

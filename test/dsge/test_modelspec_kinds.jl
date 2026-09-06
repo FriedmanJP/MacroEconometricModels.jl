@@ -148,7 +148,7 @@ end
     fv = fevd(spec, 12)
     @test fv isa FEVD
     @test all(isfinite, fv.proportions)
-    path = simulate(sol, 20; rng=Random.MersenneTwister(1))
+    path = simulate(sol, 20; rng=Random.Xoshiro(1))
     @test size(path) == (20, 5)
     @test all(isfinite, path)
 

@@ -221,7 +221,7 @@ function _breitung_eickmeier_test(X::AbstractMatrix{T}, r::Int;
 
     # Simulated null reference for sup_τ LM(τ), conditional on the estimated factors
     n_draw = nsim > 0 ? nsim : clamp(100 * N, 2000, 20_000)
-    rng = MersenneTwister(seed)
+    rng = Xoshiro(seed)
     pool = _be_null_pool(F_hat, t_start, t_end, n_draw, rng)
 
     mu = mean(pool)
@@ -598,7 +598,7 @@ function _han_inoue_test(X::AbstractMatrix{T}, r::Int;
 
     # Simulated null: per-series LM paths conditional on F̂, resampled into panels
     n_draw = nsim > 0 ? nsim : clamp(100 * N, 2000, 20_000)
-    rng = MersenneTwister(seed)
+    rng = Xoshiro(seed)
     null_paths = _hi_null_paths(F_hat, t_start, t_end, n_draw, rng)
     pool = _hi_pooled_sups(null_paths, N, rng, nboot)
 

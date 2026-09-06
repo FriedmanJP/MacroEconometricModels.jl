@@ -259,7 +259,7 @@ _yg2() = (vcat(G1, G2), vcat(fill(1, 6), fill(2, 5)))
     end
 
     @testset "property: Kendall merge-sort C-D = brute force" begin
-        rng = Random.MersenneTwister(2024)
+        rng = Random.Xoshiro(2024)
         for _ in 1:40
             n = rand(rng, 5:30)
             x = rand(rng, 1:6, n) .|> Float64   # forces ties in both x and y

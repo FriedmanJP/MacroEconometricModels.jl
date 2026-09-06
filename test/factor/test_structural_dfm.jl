@@ -16,17 +16,12 @@ using MacroEconometricModels
     # Shared test data generation
     # =========================================================================
     function make_sdfm_data(; T_obs=200, N=20, q=3, seed=42)
-        rng = Random.MersenneTwister(seed)
-        # Generate factor structure with some serial correlation
-        F = zeros(T_obs, q)
-        F[1, :] = randn(rng, q)
-        for t in 2:T_obs
-            F[t, :] = 0.5 * F[t-1, :] + randn(rng, q)
-        end
-        Lambda = randn(rng, N, q)
-        noise = 0.3 * randn(rng, T_obs, N)
-        X = F * Lambda' + noise
-        return X, q
+        rng = Random.Xoshiro(seed)
+        # DGP-06 (#795): shared FAVAR DGP — VAR factors + loadings +
+        # idiosyncratic noise (was: bespoke zero-initialized AR loop).
+        d = dgp_dynamic_factors(rng; A=0.5 * Matrix{Float64}(I, q, q), N=N,
+                                T=T_obs, idio_sd=0.3)
+        return d.X, q
     end
 
     # Existing tests pin the two-sided GDFM-VAR pipeline; FGLR is covered below.
@@ -197,7 +192,7 @@ using MacroEconometricModels
 
     @testset "fevd uses stored rotation and shock names" begin
         X, q = make_sdfm_data(; q=2)
-        rng = Random.MersenneTwister(42)
+        rng = Random.Xoshiro(42)
         sign_check = irf_result -> irf_result[1, 1, 1] > 0 && irf_result[1, 1, 2] < 0
         sdfm = sdfm_legacy(X, 2;
             identification=:sign, p=1, H=20, restriction_space=:factor,
@@ -564,7 +559,7 @@ using MacroEconometricModels
         sdfm = estimate_structural_dfm(X, 2; r=4, method=:fglr, identification=:sign,
                                        restriction_space=:factor,
                                        sign_check=sign_check, max_draws=5000, p=1, H=10,
-                                       rng=Random.MersenneTwister(7), standardize=false)
+                                       rng=Random.Xoshiro(7), standardize=false)
         @test seen[] == (10, 4, 2)          # horizon × r × q, not H×N×q
         fac = MacroEconometricModels._sdfm_factor_structural_irf(sdfm, 10)
         @test fac[1, 1, 1] > 0 && fac[1, 1, 2] < 0
@@ -575,7 +570,7 @@ using MacroEconometricModels
     end
 
     @testset "FGLR lagged-factor Monte Carlo recovers panel IRFs" begin
-        rng = Random.MersenneTwister(20260830)
+        rng = Random.Xoshiro(20260830)
         T_obs, N, q, rstat = 400, 60, 2, 4
         Φ = [0.5 0.0; 0.1 0.4]
         # True contemporaneous impact on first two observables is lower triangular
@@ -624,22 +619,19 @@ using MacroEconometricModels
     # =========================================================================
 
     @testset "panel-space signs hold on observable IRF cells" begin
-        rng = Random.MersenneTwister(72503)
+        # DGP-06: shared simulator with the same pinned loadings (was: bespoke loop).
+        rng = Random.Xoshiro(72503)
         T_obs, N, q = 180, 12, 2
         Λ = 0.5 .* randn(rng, N, q)
         Λ[1:2, :] .= [1.0 0.0; -0.6 1.0]
-        F = zeros(T_obs, q)
-        F[1, :] = randn(rng, q)
-        for t in 2:T_obs
-            F[t, :] = 0.4 .* F[t - 1, :] .+ randn(rng, q)
-        end
-        X = F * Λ' .+ 0.15 .* randn(rng, T_obs, N)
+        X = dgp_dynamic_factors(rng; A=0.4 * Matrix{Float64}(I, q, q), Lambda=Λ,
+                                N=N, T=T_obs, idio_sd=0.15).X
         names = ["x$i" for i in 1:N]
         # Shock 1 raises x1 and lowers x2 at horizons 1:2 (true impact is lower-triangular)
         sdfm = estimate_structural_dfm(X, q; r=2, method=:fglr, identification=:sign,
             sign_restrictions=[("x1", 1, 1:2, :positive), ("x2", 1, 1:2, :negative)],
             restriction_space=:panel, p=1, H=8, max_draws=4000,
-            rng=Random.MersenneTwister(72503), standardize=false, varnames=names)
+            rng=Random.Xoshiro(72503), standardize=false, varnames=names)
         ir = irf(sdfm, 8)
         @test size(ir.values, 2) == N
         @test all(ir.values[h, 1, 1] > 0 for h in 1:2)
@@ -649,20 +641,18 @@ using MacroEconometricModels
     end
 
     @testset "store_all identified set has sign-set bands" begin
-        rng = Random.MersenneTwister(72504)
+        # DGP-06: shared simulator with the same pinned loadings (was: bespoke loop).
+        rng = Random.Xoshiro(72504)
         T_obs, N, q = 150, 10, 2
         Λ = 0.5 .* randn(rng, N, q)
         Λ[1:2, :] .= [1.0 0.0; -0.6 1.0]
-        F = zeros(T_obs, q); F[1, :] = randn(rng, q)
-        for t in 2:T_obs
-            F[t, :] = 0.4 .* F[t - 1, :] .+ randn(rng, q)
-        end
-        X = F * Λ' .+ 0.15 .* randn(rng, T_obs, N)
+        X = dgp_dynamic_factors(rng; A=0.4 * Matrix{Float64}(I, q, q), Lambda=Λ,
+                                N=N, T=T_obs, idio_sd=0.15).X
         names = ["x$i" for i in 1:N]
         sdfm = estimate_structural_dfm(X, q; r=2, method=:fglr, identification=:sign,
             sign_restrictions=[("x1", 1, 1:2, :positive), ("x2", 1, 1:2, :negative)],
             restriction_space=:panel, store_all=true, p=1, H=6, max_draws=3000,
-            rng=Random.MersenneTwister(72504), standardize=false, varnames=names)
+            rng=Random.Xoshiro(72504), standardize=false, varnames=names)
         @test sdfm.identified_set !== nothing
         @test sdfm.identified_set.n_accepted >= 1
         @test size(sdfm.identified_set.irf_draws) == (sdfm.identified_set.n_accepted, 6, N, q)
@@ -677,31 +667,32 @@ using MacroEconometricModels
     end
 
     @testset "declarative and closure forms share Haar draws" begin
-        rng1 = Random.MersenneTwister(91)
-        rng2 = Random.MersenneTwister(91)
+        # DGP-06: identical inline Xoshiro(91) streams (the lint only accepts
+        # rng / Xoshiro(...) as a draw's first argument, not rng1/rng2).
+        # X takes the first draws, both fits a fresh stream.
         T_obs, N, q = 120, 8, 2
-        X = randn(rng1, T_obs, N); rng1 = Random.MersenneTwister(91)
+        X = randn(Random.Xoshiro(91), T_obs, N)
         names = ["x$i" for i in 1:N]
         decl = estimate_structural_dfm(X, q; identification=:sign, method=:fglr, r=2,
             sign_restrictions=[("x1", 1, 1:1, :positive)],
             restriction_space=:panel, p=1, H=5, max_draws=2000,
-            rng=rng1, standardize=false, varnames=names)
+            rng=Random.Xoshiro(91), standardize=false, varnames=names)
         closefn(irf) = irf[1, 1, 1] > 0
         clo = estimate_structural_dfm(X, q; identification=:sign, method=:fglr, r=2,
             sign_check=closefn, restriction_space=:panel, p=1, H=5, max_draws=2000,
-            rng=rng2, standardize=false, varnames=names)
+            rng=Random.Xoshiro(91), standardize=false, varnames=names)
         @test decl.Q ≈ clo.Q
     end
 
     @testset "unsatisfiable restriction names the variable" begin
-        rng = Random.MersenneTwister(11)
+        rng = Random.Xoshiro(11)
         X = randn(rng, 80, 6)
         names = ["x$i" for i in 1:6]
         err = try
             estimate_structural_dfm(X, 2; identification=:sign, method=:fglr, r=2,
                 sign_restrictions=[("x2", 1, 1:1, :positive), ("x2", 1, 1:1, :negative)],
                 restriction_space=:panel, p=1, H=4, max_draws=50,
-                rng=Random.MersenneTwister(11), standardize=false, varnames=names)
+                rng=Random.Xoshiro(11), standardize=false, varnames=names)
             nothing
         catch e
             e
@@ -715,7 +706,7 @@ using MacroEconometricModels
         sign_check = irf -> irf[1, 1, 1] > 0
         sdfm = estimate_structural_dfm(X, 2; identification=:sign, restriction_space=:factor,
             sign_check=sign_check, max_draws=3000, p=1, H=6,
-            rng=Random.MersenneTwister(3), standardize=false)
+            rng=Random.Xoshiro(3), standardize=false)
         @test sdfm.identified_set === nothing
         fac = MacroEconometricModels._sdfm_factor_structural_irf(sdfm, 6)
         @test fac[1, 1, 1] > 0
@@ -736,16 +727,14 @@ using MacroEconometricModels
     end
 
     @testset "panel long-run zeros the second shock on the first target" begin
-        rng = Random.MersenneTwister(713)
+        # DGP-06: shared simulator with the same transition + pinned loadings.
+        rng = Random.Xoshiro(713)
         T_obs, N, q = 220, 10, 2
         Φ = [0.5 0.0; 0.1 0.4]
-        F = zeros(T_obs, q); F[1, :] = randn(rng, q)
-        for t in 2:T_obs
-            F[t, :] = Φ * F[t-1, :] .+ randn(rng, q)
-        end
         Λ = 0.4 .* randn(rng, N, q)
         Λ[1:2, :] .= [1.0 0.0; 0.5 1.0]
-        X = F * Λ' .+ 0.15 .* randn(rng, T_obs, N)
+        X = dgp_dynamic_factors(rng; A=Φ, Lambda=Λ, N=N, T=T_obs,
+                                idio_sd=0.15).X
         names = ["prod", "hours", ["x$i" for i in 3:N]...]
         sdfm = estimate_structural_dfm(X, q; r=2, identification=:long_run,
             target_vars=["prod", "hours"], varnames=names, p=1, H=24,
@@ -761,19 +750,17 @@ using MacroEconometricModels
     end
 
     @testset "compute_Q methods yield orthogonal Q consumed by irf/fevd" begin
-        rng = Random.MersenneTwister(7131)
+        # DGP-06: shared simulator (was: bespoke loop).
+        rng = Random.Xoshiro(7131)
         T_obs, N, q = 260, 8, 2
-        F = zeros(T_obs, q); F[1, :] = randn(rng, q)
-        for t in 2:T_obs
-            F[t, :] = 0.5 .* F[t-1, :] .+ randn(rng, q)
-        end
-        X = F * randn(rng, N, q)' .+ 0.25 .* randn(rng, T_obs, N)
+        X = dgp_dynamic_factors(rng; A=0.5 * Matrix{Float64}(I, q, q), N=N,
+                                T=T_obs, idio_sd=0.25).X
         sign_fn = irf -> irf[1, 1, 1] > 0
         narr = shocks -> true
         methods = (
             (:narrative, (sign_check=sign_fn, narrative_check=narr, max_draws=2000,
-                          rng=Random.MersenneTwister(3))),
-            (:fastica, (rng=Random.MersenneTwister(4),)),
+                          rng=Random.Xoshiro(3))),
+            (:fastica, (rng=Random.Xoshiro(4),)),
             (:student_t, NamedTuple()),
             (:garch, NamedTuple()),
         )
@@ -788,7 +775,7 @@ using MacroEconometricModels
         rest = SVARRestrictions(2; signs=[SignRestriction(1, 1, 0, 1)])
         sdfm_a = estimate_structural_dfm(X, q; r=2, identification=:arias,
             restrictions=rest, p=1, H=8, max_draws=2000,
-            rng=Random.MersenneTwister(5), standardize=false)
+            rng=Random.Xoshiro(5), standardize=false)
         @test sdfm_a.Q' * sdfm_a.Q ≈ I(q) atol=1e-8
         @test_throws ArgumentError estimate_structural_dfm(X, q; identification=:not_a_method)
         msg = try
@@ -801,27 +788,25 @@ using MacroEconometricModels
     end
 
     @testset "stochastic identification is seed-identical" begin
-        rng = Random.MersenneTwister(88)
+        # DGP-06: shared simulator (was: bespoke loop).
+        rng = Random.Xoshiro(88)
         T_obs, N, q = 200, 8, 2
-        F = zeros(T_obs, q); F[1, :] = randn(rng, q)
-        for t in 2:T_obs
-            F[t, :] = 0.5 .* F[t-1, :] .+ randn(rng, q)
-        end
-        X = F * randn(rng, N, q)' .+ 0.3 .* randn(rng, T_obs, N)
+        X = dgp_dynamic_factors(rng; A=0.5 * Matrix{Float64}(I, q, q), N=N,
+                                T=T_obs, idio_sd=0.3).X
         for id in (:fastica, :narrative)
             kw = id === :narrative ?
                 (sign_check=(irf -> irf[1, 1, 1] > 0), narrative_check=(shocks -> true),
                  max_draws=2000) : NamedTuple()
             a = estimate_structural_dfm(X, q; r=2, identification=id, p=1, H=8,
-                standardize=false, rng=Random.MersenneTwister(99), kw...)
+                standardize=false, rng=Random.Xoshiro(99), kw...)
             b = estimate_structural_dfm(X, q; r=2, identification=id, p=1, H=8,
-                standardize=false, rng=Random.MersenneTwister(99), kw...)
+                standardize=false, rng=Random.Xoshiro(99), kw...)
             @test a.Q ≈ b.Q
         end
     end
 
     @testset "seed= records a manifest on :fglr and :gdfm_var" begin
-        X = randn(Random.MersenneTwister(26), 80, 8)
+        X = randn(Random.Xoshiro(26), 80, 8)
         sdfm = estimate_structural_dfm(X, 2; r=2, p=1, H=4, seed=1)
         @test sdfm.manifest isa ReproManifest
         @test sdfm.manifest.seed == 1
@@ -835,15 +820,13 @@ using MacroEconometricModels
     # =========================================================================
 
     @testset "panel FEVD shares sum to 1 and idiosyncratic column" begin
-        rng = Random.MersenneTwister(715)
+        # DGP-06: shared simulator with the same pinned loadings (was: bespoke loop).
+        rng = Random.Xoshiro(715)
         T_obs, N, q = 180, 10, 2
         Λ = 0.5 .* randn(rng, N, q)
         Λ[1, :] .= [1.2, 0.05]
-        F = zeros(T_obs, q); F[1, :] = randn(rng, q)
-        for t in 2:T_obs
-            F[t, :] = 0.4 .* F[t-1, :] .+ randn(rng, q)
-        end
-        X = F * Λ' .+ 0.15 .* randn(rng, T_obs, N)
+        X = dgp_dynamic_factors(rng; A=0.4 * Matrix{Float64}(I, q, q), Lambda=Λ,
+                                N=N, T=T_obs, idio_sd=0.15).X
         names = ["x$i" for i in 1:N]
         sdfm = estimate_structural_dfm(X, q; r=2, identification=:cholesky, order=[1, 2],
             p=1, H=20, standardize=false, varnames=names)
@@ -876,18 +859,16 @@ using MacroEconometricModels
     # =========================================================================
 
     @testset "SDFM panel HD uses stored Q and verifies" begin
-        rng = Random.MersenneTwister(729)
+        # DGP-06: shared simulator (was: bespoke loop).
+        rng = Random.Xoshiro(729)
         T_obs, N, q = 160, 8, 2
-        F = zeros(T_obs, q); F[1, :] = randn(rng, q)
-        for t in 2:T_obs
-            F[t, :] = 0.45 .* F[t-1, :] .+ randn(rng, q)
-        end
-        X = F * randn(rng, N, q)' .+ 0.2 .* randn(rng, T_obs, N)
+        X = dgp_dynamic_factors(rng; A=0.45 * Matrix{Float64}(I, q, q), N=N,
+                                T=T_obs, idio_sd=0.2).X
         names = ["x$i" for i in 1:N]
         sdfm = estimate_structural_dfm(X, q; r=2, identification=:sign,
             sign_restrictions=[("x1", 1, 1:1, :positive)],
             varnames=names, p=1, H=12, max_draws=3000,
-            rng=Random.MersenneTwister(729), standardize=false)
+            rng=Random.Xoshiro(729), standardize=false)
         hd = historical_decomposition(sdfm)
         @test verify_decomposition(hd; tol=1e-8)
         T_eff = effective_nobs(sdfm.factor_var)
@@ -904,18 +885,16 @@ using MacroEconometricModels
     end
 
     @testset "SDFM HD recovers shock-1 path on a loading-heavy series" begin
-        rng = Random.MersenneTwister(7292)
+        # DGP-06: shared simulator with the same transition + pinned loadings;
+        # the TRUE shock path comes from the simulator's returned innovations
+        # (was: bespoke loop carrying its own εtrue).
+        rng = Random.Xoshiro(7292)
         T_obs, N, q = 400, 20, 2
-        εtrue = randn(rng, T_obs, q)
         Φ = [0.5 0.0; 0.0 0.3]
-        F = zeros(T_obs, q)
-        F[1, :] = εtrue[1, :]
-        for t in 2:T_obs
-            F[t, :] = Φ * F[t-1, :] .+ εtrue[t, :]
-        end
         Λ = 0.3 .* randn(rng, N, q)
         Λ[1, :] .= [1.5, 0.05]
-        X = F * Λ' .+ 0.1 .* randn(rng, T_obs, N)
+        d = dgp_dynamic_factors(rng; A=Φ, Lambda=Λ, N=N, T=T_obs, idio_sd=0.1)
+        F, εtrue, X = d.F, d.eps, d.X
         sdfm = estimate_structural_dfm(X, q; r=2, identification=:cholesky, order=[1, 2],
             p=1, H=40, standardize=false)
         hd = historical_decomposition(sdfm)
@@ -938,7 +917,7 @@ using MacroEconometricModels
     end
 
     @testset "auto q via Bai–Ng 2007" begin
-        rng = Random.MersenneTwister(71910)
+        rng = Random.Xoshiro(71910)
         T_obs, N, q = 120, 16, 2
         u = randn(rng, T_obs, q)
         X = u * randn(rng, N, q)'
@@ -960,24 +939,24 @@ using MacroEconometricModels
         X, q = make_sdfm_data(; T_obs=120, N=12, q=2, seed=714)
         sdfm = estimate_structural_dfm(X, q; r=2, identification=:cholesky,
             p=1, H=10, standardize=false)
-        ir = irf(sdfm, 10; ci_type=:bootstrap, reps=50, rng=Random.MersenneTwister(1))
+        ir = irf(sdfm, 10; ci_type=:bootstrap, reps=50, rng=Random.Xoshiro(1))
         @test ir.ci_type === :bootstrap
         @test size(ir._draws) == (50, 10, 12, 2)
         @test all(isfinite, ir.values)
         @test all(isfinite, ir.ci_lower)
         @test all(isfinite, ir.ci_upper)
         @test all(ir.ci_lower .<= ir.values .<= ir.ci_upper)
-        ir2 = irf(sdfm, 10; ci_type=:bootstrap, reps=50, rng=Random.MersenneTwister(1))
+        ir2 = irf(sdfm, 10; ci_type=:bootstrap, reps=50, rng=Random.Xoshiro(1))
         @test ir.ci_lower == ir2.ci_lower
         @test ir.ci_upper == ir2.ci_upper
         for sch in (:iid, :wild, :block)
             ir_s = irf(sdfm, 6; ci_type=:bootstrap, reps=8, bootstrap=sch,
-                rng=Random.MersenneTwister(2))
+                rng=Random.Xoshiro(2))
             @test ir_s.ci_type === :bootstrap
             @test size(ir_s._draws, 1) == 8
         end
         fv = irf(sdfm.factor_var, 10; ci_type=:bootstrap, reps=30,
-            rng=Random.MersenneTwister(3))
+            rng=Random.Xoshiro(3))
         pan = sdfm_panel_irf(sdfm, fv)
         @test pan.ci_type === :bootstrap
         @test any(pan.ci_upper .!= pan.ci_lower)
@@ -988,7 +967,7 @@ using MacroEconometricModels
     end
 
     @testset "bootstrap 90% bands cover the true IRF on the FGLR DGP" begin
-        rng = Random.MersenneTwister(20260830)
+        rng = Random.Xoshiro(20260830)
         T_obs, N, q, rstat = 400, 60, 2, 4
         Φ = [0.5 0.0; 0.1 0.4]
         Λ = 0.4 .* randn(rng, N, rstat)
@@ -1013,7 +992,7 @@ using MacroEconometricModels
         sdfm = estimate_structural_dfm(X, q; r=rstat, method=:fglr,
             identification=:cholesky, order=[1, 2], p=1, H=10, standardize=false)
         ir = irf(sdfm, 10; ci_type=:bootstrap, reps=200, conf_level=0.90,
-            rng=Random.MersenneTwister(714200))
+            rng=Random.Xoshiro(714200))
         aligned = copy(true_irf)
         for j in 1:q
             if dot(ir.values[1, :, j], true_irf[1, :, j]) < 0
@@ -1025,16 +1004,13 @@ using MacroEconometricModels
     end
 
     @testset "structural shocks and forecast" begin
-        rng = Random.MersenneTwister(716)
+        # DGP-06: shared simulator with the same pinned loadings (was: bespoke loop).
+        rng = Random.Xoshiro(716)
         T_obs, N, q = 400, 16, 2
-        F = zeros(T_obs, q)
-        F[1, :] = randn(rng, q)
-        for t in 2:T_obs
-            F[t, :] = 0.4 .* F[t-1, :] .+ randn(rng, q)
-        end
         Λ = randn(rng, N, q)
         Λ[1:2, :] .= [1.2 0.0; 0.4 1.0]
-        X = F * Λ' .+ 0.2 .* randn(rng, T_obs, N)
+        X = dgp_dynamic_factors(rng; A=0.4 * Matrix{Float64}(I, q, q), Lambda=Λ,
+                                N=N, T=T_obs, idio_sd=0.2).X
         names = ["x$i" for i in 1:N]
         sdfm_c = estimate_structural_dfm(X, q; r=2, identification=:cholesky,
             order=[1, 2], p=1, H=8, standardize=false, varnames=names)
@@ -1045,7 +1021,7 @@ using MacroEconometricModels
         sdfm_s = estimate_structural_dfm(X, q; r=2, identification=:sign,
             sign_restrictions=[("x1", 1, 1:1, :positive)],
             max_draws=800, p=1, H=8, standardize=false, varnames=names,
-            rng=Random.MersenneTwister(7162))
+            rng=Random.Xoshiro(7162))
         εs = structural_shocks(sdfm_s)
         Cs = cov(εs)
         @test Cs ≈ Matrix{Float64}(I, q, q) atol=0.05
@@ -1053,38 +1029,37 @@ using MacroEconometricModels
         @test size(fc.observables) == (6, N)
         @test all(isfinite, fc.observables)
         fcb = forecast(sdfm_c, 6; ci_method=:bootstrap, reps=40,
-            rng=Random.MersenneTwister(7163))
+            rng=Random.Xoshiro(7163))
         @test all(fcb.observables_lower .<= fcb.observables .<= fcb.observables_upper)
         @test sprint(report, fc) isa String
         @test plot_result(fc) isa MacroEconometricModels.PlotOutput
     end
 
     @testset "factor-VAR lag selection and stability" begin
-        rng = Random.MersenneTwister(718)
+        # DGP-06: shared VAR(2)-factor simulator (was: bespoke loop). The
+        # explosive counter-case below stays bespoke: it is a deliberate
+        # off-DGP stress design, not a recoverable factor panel.
+        rng = Random.Xoshiro(718)
         T_obs, N, q = 500, 20, 2
         Φ1 = [0.35 0.12; 0.05 0.30]
         Φ2 = [0.25 0.00; 0.00 0.22]
-        F = zeros(T_obs, q)
-        F[1, :] = randn(rng, q)
-        F[2, :] = Φ1 * F[1, :] .+ randn(rng, q)
-        for t in 3:T_obs
-            F[t, :] = Φ1 * F[t-1, :] .+ Φ2 * F[t-2, :] .+ randn(rng, q)
-        end
-        X = F * randn(rng, N, q)' .+ 0.15 .* randn(rng, T_obs, N)
+        X = dgp_dynamic_factors(rng; A=[Φ1, Φ2], N=N, T=T_obs,
+                                idio_sd=0.15).X
         sdfm = estimate_structural_dfm(X, q; r=2, p=:bic, p_max=5, H=8,
             identification=:cholesky, standardize=false)
         @test sdfm.p_var == 2
         @test sdfm.lag_criterion === :bic
         @test occursin("Max eigenvalue modulus", sprint(show, sdfm))
 
-        rng2 = Random.MersenneTwister(7182)
+        # Fresh stream, lint-accepted name (values identical to the old rng2).
+        rng = Random.Xoshiro(7182)
         Te, Ne = 80, 10
         Fe = zeros(Te, 1)
-        Fe[1] = randn(rng2)
+        Fe[1] = randn(rng)
         for t in 2:Te
-            Fe[t] = 1.08 * Fe[t-1] + 0.3 * randn(rng2)
+            Fe[t] = 1.08 * Fe[t-1] + 0.3 * randn(rng)
         end
-        Xe = Fe * randn(rng2, Ne, 1)' .+ 0.05 .* randn(rng2, Te, Ne)
+        Xe = Fe * randn(rng, Ne, 1)' .+ 0.05 .* randn(rng, Te, Ne)
         sdfm_e = @test_logs (:warn, r"stab") estimate_structural_dfm(Xe, 1; r=1, p=1, H=6,
             identification=:cholesky, standardize=false, check_stability=true)
         @test is_stable(sdfm_e) == false

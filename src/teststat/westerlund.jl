@@ -341,7 +341,7 @@ function _west_bootstrap(Y::Matrix{T}, X::Array{T,3}, trend, p, q, lrwindow,
                          B::Int, seed::Int, obs::Vector{T}) where {T<:AbstractFloat}
     Tobs, N = size(Y)
     k = size(X, 3)
-    rng = MersenneTwister(seed)
+    rng = Xoshiro(seed)
     # innovations under H0: Δy purged of any deterministic drift (demean per unit)
     dY = Matrix{T}(undef, Tobs - 1, N)
     for i in 1:N

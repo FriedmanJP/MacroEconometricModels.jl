@@ -19,8 +19,6 @@ using LinearAlgebra
 using Statistics
 using StatsAPI
 
-Random.seed!(9006)
-
 const _suppress_warnings = MacroEconometricModels._suppress_warnings
 
 # ============================================================================
@@ -162,7 +160,7 @@ end
         # Exercises the weighting=:identity path with sandwich vcov computation
         # (lines 463-467 in smm.jl) and ensures J-stat is computed correctly
         _suppress_warnings() do
-            rng = Random.MersenneTwister(9006)
+            rng = Random.Xoshiro(9006)
             true_rho = 0.7
             true_sigma = 0.4
             T_obs = 400
@@ -186,7 +184,7 @@ end
                                   [0.5, 0.3], data;
                                   sim_ratio=3, burn=50, weighting=:identity,
                                   max_iter=200,
-                                  rng=Random.MersenneTwister(42))
+                                  rng=Random.Xoshiro(42))
 
             @test result isa SMMModel{Float64}
             @test result.weighting.method == :identity
@@ -195,18 +193,22 @@ end
             @test size(result.vcov) == (2, 2)
             @test all(isfinite, result.vcov)
 
-            # J-test should be available for overidentified model
+            # J-test should be available for overidentified model.
+            # Identity weighting: J is not χ²-distributed, so p_value is
+            # deliberately NaN (source contract since DGP-08).
             jt = j_test(result)
             @test jt.df == 1
             @test jt.J_stat >= 0
-            @test 0 <= jt.p_value <= 1
+            @test isnan(jt.p_value)
+            @test jt.reject_05 == false
+            @test occursin("not χ²-distributed", jt.message)
         end
     end
 
     @testset "estimate_smm — identity weighting just-identified" begin
         # Just-identified identity weighting: sandwich formula with Omega computation
         _suppress_warnings() do
-            rng = Random.MersenneTwister(123)
+            rng = Random.Xoshiro(123)
             y = zeros(300)
             for t in 2:300
                 y[t] = 0.5 * y[t-1] + randn(rng)
@@ -228,7 +230,7 @@ end
                                   [0.3], data;
                                   sim_ratio=3, burn=25, weighting=:identity,
                                   max_iter=200,
-                                  rng=Random.MersenneTwister(55))
+                                  rng=Random.Xoshiro(55))
             @test result isa SMMModel{Float64}
             @test result.weighting.method == :identity
             @test all(isfinite, stderror(result))
@@ -353,7 +355,7 @@ end
     @testset "estimate_smm moment count assertion" begin
         # n_moments < n_params should fail
         _suppress_warnings() do
-            rng = Random.MersenneTwister(42)
+            rng = Random.Xoshiro(42)
             data = randn(rng, 100, 1)
 
             function sim_fn_bad(theta, T_periods, burn; rng=Random.default_rng())
@@ -366,12 +368,12 @@ end
                 d -> [mean(d)],
                 [0.1, 0.2, 0.3], data;
                 sim_ratio=2, burn=10,
-                rng=Random.MersenneTwister(1))
+                rng=Random.Xoshiro(1))
         end
     end
 
     @testset "smm_data_covariance" begin
-        rng = Random.MersenneTwister(42)
+        rng = Random.Xoshiro(42)
         data = randn(rng, 200, 2)
         Omega = MacroEconometricModels.smm_data_covariance(
             data, d -> autocovariance_moment_contributions(d; lags=1); hac=false)
@@ -387,7 +389,7 @@ end
     @testset "estimate_smm with bounds and identity weighting" begin
         # Combines bounds + identity weighting to exercise both paths simultaneously
         _suppress_warnings() do
-            rng = Random.MersenneTwister(77)
+            rng = Random.Xoshiro(77)
             y = zeros(300)
             for t in 2:300
                 y[t] = 0.6 * y[t-1] + 0.4 * randn(rng)
@@ -408,7 +410,7 @@ end
                                   [0.3], data;
                                   sim_ratio=3, burn=25, weighting=:identity,
                                   bounds=bounds, max_iter=200,
-                                  rng=Random.MersenneTwister(42))
+                                  rng=Random.Xoshiro(42))
             @test result isa SMMModel{Float64}
             @test -1.0 < result.theta[1] < 1.0
         end
@@ -428,10 +430,10 @@ end
 @testset "GMM bounds coverage" begin
 
     @testset "estimate_gmm with shifted lower bound" begin
-        Random.seed!(9006)
+        rng = Random.Xoshiro(9006)
         n = 200
         # True mean is 5.0; use bounds [2, Inf) to exercise (a, Inf) branch via GMM
-        data = 5.0 .+ 0.5 .* randn(n, 1)
+        data = 5.0 .+ 0.5 .* randn(rng, n, 1)
         moment_fn(theta, d) = d .- theta[1]
 
         bounds = ParameterTransform([2.0], [Inf])
@@ -442,10 +444,10 @@ end
     end
 
     @testset "estimate_gmm with upper-only bound" begin
-        Random.seed!(9007)
+        rng = Random.Xoshiro(9007)
         n = 200
         # True mean is -3.0; use bounds (-Inf, 0] to exercise (-Inf, b) branch via GMM
-        data = -3.0 .+ 0.5 .* randn(n, 1)
+        data = -3.0 .+ 0.5 .* randn(rng, n, 1)
         moment_fn(theta, d) = d .- theta[1]
 
         bounds = ParameterTransform([-Inf], [0.0])
@@ -456,10 +458,10 @@ end
     end
 
     @testset "estimate_gmm with shifted upper bound" begin
-        Random.seed!(9008)
+        rng = Random.Xoshiro(9008)
         n = 200
         # True mean is 1.0; use bounds (-Inf, 3) to exercise (-Inf, b) with b != 0
-        data = 1.0 .+ 0.3 .* randn(n, 1)
+        data = 1.0 .+ 0.3 .* randn(rng, n, 1)
         moment_fn(theta, d) = d .- theta[1]
 
         bounds = ParameterTransform([-Inf], [3.0])

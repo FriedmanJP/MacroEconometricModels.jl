@@ -9,7 +9,7 @@ const MEM = MacroEconometricModels
 
 # Toy container with recognizable entries: value = 100*var + 10*shock + h,
 # var 1 = :pi (outcome), var 2 = :r (instrument).
-function _cf06_container(; H=3, n_s=2, nd=40, rng=MersenneTwister(66))
+function _cf06_container(; H=3, n_s=2, nd=40, rng=Xoshiro(66))
     point(v) = [100.0 * v + 10.0 * k + h for h in 1:H, k in 1:n_s]
     noise(v) = begin
         D = Array{Float64,3}(undef, H, n_s, nd)
@@ -124,7 +124,7 @@ end
     end
 
     @testset "precision_of" begin
-        rng = MersenneTwister(7)
+        rng = Xoshiro(7)
         A = randn(rng, 5, 5)
         V = A * A' + 5.0 * I
         p = MEM.precision_of(V)

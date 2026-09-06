@@ -24,7 +24,7 @@ const _suppress_warnings = M._suppress_warnings
     # 1. src/data/convert.jl — TimeSeriesData dispatch wrappers
     # =========================================================================
     @testset "convert.jl — to_matrix / to_vector" begin
-        rng = Random.MersenneTwister(7001)
+        rng = Random.Xoshiro(7001)
         mat = randn(rng, 100, 3)
         ts = TimeSeriesData(mat; varnames=["a", "b", "c"])
 
@@ -49,7 +49,7 @@ const _suppress_warnings = M._suppress_warnings
     end
 
     @testset "convert.jl — multivariate dispatches" begin
-        rng = Random.MersenneTwister(7002)
+        rng = Random.Xoshiro(7002)
         Y = randn(rng, 120, 3)
         ts = TimeSeriesData(Y; varnames=["y1", "y2", "y3"])
 
@@ -78,7 +78,7 @@ const _suppress_warnings = M._suppress_warnings
     end
 
     @testset "convert.jl — univariate dispatches" begin
-        rng = Random.MersenneTwister(7003)
+        rng = Random.Xoshiro(7003)
         y = make_ar1_data(; n=300, seed=7003)
         ts1 = TimeSeriesData(y; varname="gdp")
 
@@ -118,7 +118,7 @@ const _suppress_warnings = M._suppress_warnings
     end
 
     @testset "convert.jl — volatility dispatches" begin
-        rng = Random.MersenneTwister(7004)
+        rng = Random.Xoshiro(7004)
         y = simulate_arch1(; n=500, seed=7004)
         ts1 = TimeSeriesData(y; varname="vol")
 
@@ -129,7 +129,7 @@ const _suppress_warnings = M._suppress_warnings
     end
 
     @testset "convert.jl — VECM dispatch" begin
-        rng = Random.MersenneTwister(7005)
+        rng = Random.Xoshiro(7005)
         coint = make_cointegrated_data(; T_obs=200, n=3, rank=1, seed=7005)
         ts = TimeSeriesData(coint; varnames=["x1", "x2", "x3"])
         vecm = estimate_vecm(ts, 2; rank=1)
@@ -155,7 +155,9 @@ const _suppress_warnings = M._suppress_warnings
 
     @testset "types.jl — DataFrame constructors" begin
         # TimeSeriesData from DataFrame
-        df = DataFrame(a=randn(30), b=randn(30), c=["str" for _ in 1:30])
+        df = DataFrame(a=randn(Random.Xoshiro(1431), 30),
+                       b=randn(Random.Xoshiro(1432), 30),
+                       c=["str" for _ in 1:30])
         ts_df = TimeSeriesData(df)
         @test nobs(ts_df) == 30
         @test nvars(ts_df) == 2  # only numeric columns
@@ -174,7 +176,7 @@ const _suppress_warnings = M._suppress_warnings
     end
 
     @testset "types.jl — getindex" begin
-        rng = Random.MersenneTwister(7010)
+        rng = Random.Xoshiro(7010)
         ts = TimeSeriesData(randn(rng, 50, 3); varnames=["GDP", "CPI", "FFR"])
 
         # Column by string
@@ -204,7 +206,7 @@ const _suppress_warnings = M._suppress_warnings
     end
 
     @testset "types.jl — date indexing" begin
-        rng = Random.MersenneTwister(7011)
+        rng = Random.Xoshiro(7011)
         ts = TimeSeriesData(randn(rng, 4, 2); varnames=["x", "y"])
 
         # No dates set -> error
@@ -232,7 +234,7 @@ const _suppress_warnings = M._suppress_warnings
     end
 
     @testset "types.jl — rename_vars!" begin
-        rng = Random.MersenneTwister(7012)
+        rng = Random.Xoshiro(7012)
 
         # TimeSeriesData pair rename
         ts = TimeSeriesData(randn(rng, 20, 2); varnames=["old1", "old2"],
@@ -274,7 +276,7 @@ const _suppress_warnings = M._suppress_warnings
     end
 
     @testset "types.jl — setters" begin
-        rng = Random.MersenneTwister(7013)
+        rng = Random.Xoshiro(7013)
         ts = TimeSeriesData(randn(rng, 10, 2); varnames=["a", "b"])
 
         # set_time_index!
@@ -314,7 +316,7 @@ const _suppress_warnings = M._suppress_warnings
     end
 
     @testset "types.jl — accessors & StatsAPI" begin
-        rng = Random.MersenneTwister(7014)
+        rng = Random.Xoshiro(7014)
         ts = TimeSeriesData(randn(rng, 50, 3); varnames=["a", "b", "c"],
                             frequency=M.Quarterly, desc="test")
 
@@ -341,7 +343,7 @@ const _suppress_warnings = M._suppress_warnings
     end
 
     @testset "types.jl — show methods" begin
-        rng = Random.MersenneTwister(7015)
+        rng = Random.Xoshiro(7015)
 
         # TimeSeriesData show
         ts = TimeSeriesData(randn(rng, 20, 2); varnames=["A", "B"],
@@ -386,7 +388,7 @@ const _suppress_warnings = M._suppress_warnings
     end
 
     @testset "types.jl — size / length / Matrix / Vector" begin
-        rng = Random.MersenneTwister(7016)
+        rng = Random.Xoshiro(7016)
         ts = TimeSeriesData(randn(rng, 10, 3))
         @test size(ts) == (10, 3)
         @test length(ts) == 30
@@ -416,7 +418,7 @@ const _suppress_warnings = M._suppress_warnings
     # 3. src/data/filter.jl — apply_filter dispatches
     # =========================================================================
     @testset "filter.jl — apply_filter TimeSeriesData single symbol" begin
-        rng = Random.MersenneTwister(7020)
+        rng = Random.Xoshiro(7020)
         y = cumsum(randn(rng, 200, 2), dims=1)
         ts = TimeSeriesData(y; varnames=["GDP", "CPI"])
 
@@ -435,7 +437,7 @@ const _suppress_warnings = M._suppress_warnings
     end
 
     @testset "filter.jl — apply_filter TimeSeriesData per-variable specs" begin
-        rng = Random.MersenneTwister(7021)
+        rng = Random.Xoshiro(7021)
         y = cumsum(randn(rng, 200, 3), dims=1)
         ts = TimeSeriesData(y; varnames=["A", "B", "C"])
 
@@ -455,7 +457,7 @@ const _suppress_warnings = M._suppress_warnings
     end
 
     @testset "filter.jl — apply_filter PanelData" begin
-        rng = Random.MersenneTwister(7022)
+        rng = Random.Xoshiro(7022)
         df = DataFrame(id=repeat(1:3, inner=100), t=repeat(1:100, 3),
                        x=cumsum(randn(rng, 300)), y=cumsum(randn(rng, 300)))
         pd = xtset(df, :id, :t)
@@ -466,7 +468,7 @@ const _suppress_warnings = M._suppress_warnings
     end
 
     @testset "filter.jl — _filter_valid_range dispatches" begin
-        rng = Random.MersenneTwister(7023)
+        rng = Random.Xoshiro(7023)
         y = cumsum(randn(rng, 200))
 
         hp_r = hp_filter(y)
@@ -523,7 +525,7 @@ const _suppress_warnings = M._suppress_warnings
     end
 
     @testset "transform.jl — apply_tcode TimeSeriesData" begin
-        rng = Random.MersenneTwister(7030)
+        rng = Random.Xoshiro(7030)
         mat = abs.(randn(rng, 100, 3)) .+ 1.0
         ts = TimeSeriesData(mat; varnames=["a", "b", "c"])
 
@@ -542,7 +544,7 @@ const _suppress_warnings = M._suppress_warnings
     end
 
     @testset "transform.jl — apply_tcode PanelData" begin
-        rng = Random.MersenneTwister(7031)
+        rng = Random.Xoshiro(7031)
         df = DataFrame(id=repeat(1:2, inner=50), t=repeat(1:50, 2),
                        x=abs.(randn(rng, 100)) .+ 1.0,
                        y=abs.(randn(rng, 100)) .+ 1.0)
@@ -606,7 +608,7 @@ const _suppress_warnings = M._suppress_warnings
     # 5. src/lp/types.jl — LP StatsAPI dispatches
     # =========================================================================
     @testset "lp/types.jl — LPModel StatsAPI" begin
-        rng = Random.MersenneTwister(7040)
+        rng = Random.Xoshiro(7040)
         Y = randn(rng, 200, 3)
         lp = _suppress_warnings() do
             estimate_lp(Y, 1, 8; lags=2)
@@ -626,7 +628,7 @@ const _suppress_warnings = M._suppress_warnings
     end
 
     @testset "lp/types.jl — LPIVModel StatsAPI" begin
-        rng = Random.MersenneTwister(7041)
+        rng = Random.Xoshiro(7041)
         Y = randn(rng, 200, 3)
         Z = randn(rng, 200, 1)  # instrument
         lpiv = _suppress_warnings() do
@@ -642,7 +644,7 @@ const _suppress_warnings = M._suppress_warnings
     end
 
     @testset "lp/types.jl — SmoothLPModel StatsAPI" begin
-        rng = Random.MersenneTwister(7042)
+        rng = Random.Xoshiro(7042)
         Y = randn(rng, 200, 3)
         slp = _suppress_warnings() do
             estimate_smooth_lp(Y, 1, 8; lags=2)
@@ -656,7 +658,7 @@ const _suppress_warnings = M._suppress_warnings
     end
 
     @testset "lp/types.jl — StateLPModel StatsAPI" begin
-        rng = Random.MersenneTwister(7043)
+        rng = Random.Xoshiro(7043)
         Y = randn(rng, 200, 3)
         sv = randn(rng, 200)  # state variable
         stlp = _suppress_warnings() do
@@ -671,7 +673,7 @@ const _suppress_warnings = M._suppress_warnings
 
     if !FAST
     @testset "lp/types.jl — PropensityLPModel StatsAPI" begin
-        rng = Random.MersenneTwister(7044)
+        rng = Random.Xoshiro(7044)
         n = 200
         Y = randn(rng, n, 3)
         treatment = rand(rng, Bool, n)
@@ -692,7 +694,7 @@ const _suppress_warnings = M._suppress_warnings
     # 6. src/arima/types.jl — order accessors, StatsAPI, show
     # =========================================================================
     @testset "arima/types.jl — order accessors" begin
-        rng = Random.MersenneTwister(7050)
+        rng = Random.Xoshiro(7050)
         y = make_ar1_data(; n=300, seed=7050)
 
         ar = estimate_ar(y, 2)
@@ -717,7 +719,7 @@ const _suppress_warnings = M._suppress_warnings
     end
 
     @testset "arima/types.jl — StatsAPI" begin
-        rng = Random.MersenneTwister(7051)
+        rng = Random.Xoshiro(7051)
         y = make_ar1_data(; n=300, seed=7051)
 
         ar = estimate_ar(y, 2)
@@ -760,7 +762,7 @@ const _suppress_warnings = M._suppress_warnings
     end
 
     @testset "arima/types.jl — show methods" begin
-        rng = Random.MersenneTwister(7052)
+        rng = Random.Xoshiro(7052)
         y = make_ar1_data(; n=300, seed=7052)
 
         ar = estimate_ar(y, 2)
@@ -786,7 +788,7 @@ const _suppress_warnings = M._suppress_warnings
     end
 
     @testset "arima/types.jl — ARIMAOrderSelection show" begin
-        rng = Random.MersenneTwister(7053)
+        rng = Random.Xoshiro(7053)
         y = make_ar1_data(; n=200, seed=7053)
         sel = M.select_arima_order(y, 2, 2)
         @test sel isa M.ARIMAOrderSelection
@@ -799,7 +801,7 @@ const _suppress_warnings = M._suppress_warnings
     end
 
     @testset "arima/types.jl — ARIMAForecast show" begin
-        rng = Random.MersenneTwister(7054)
+        rng = Random.Xoshiro(7054)
         y = make_ar1_data(; n=200, seed=7054)
         ar = estimate_ar(y, 2)
         fc = forecast(ar, 12)
@@ -939,7 +941,7 @@ const _suppress_warnings = M._suppress_warnings
     # 8. src/did/event_study.jl — estimate_lp_did and estimate_event_study_lp
     # =========================================================================
     @testset "event_study.jl — estimate_event_study_lp with covariates" begin
-        rng = Random.MersenneTwister(7070)
+        rng = Random.Xoshiro(7070)
         n_units, n_periods = 30, 20
         treat_times = zeros(Int, n_units)
         # First 10 units treated at period 8
@@ -991,7 +993,7 @@ const _suppress_warnings = M._suppress_warnings
     end
 
     @testset "event_study.jl — estimate_lp_did with clean controls" begin
-        rng = Random.MersenneTwister(7071)
+        rng = Random.Xoshiro(7071)
         n_units, n_periods = 30, 20
         treat_times = zeros(Int, n_units)
         for u in 1:10
@@ -1042,7 +1044,7 @@ const _suppress_warnings = M._suppress_warnings
     # 9. src/factor/generalized.jl — ic_criteria_gdfm, forecast CI, StatsAPI
     # =========================================================================
     @testset "generalized.jl — GDFM StatsAPI" begin
-        rng = Random.MersenneTwister(7080)
+        rng = Random.Xoshiro(7080)
         T_obs, N, q = 150, 15, 2
         X = randn(rng, T_obs, N)
         model = estimate_gdfm(X, q)
@@ -1068,7 +1070,7 @@ const _suppress_warnings = M._suppress_warnings
     end
 
     @testset "generalized.jl — GDFM show" begin
-        rng = Random.MersenneTwister(7081)
+        rng = Random.Xoshiro(7081)
         X = randn(rng, 120, 10)
         model = estimate_gdfm(X, 2)
         io = IOBuffer()
@@ -1079,7 +1081,7 @@ const _suppress_warnings = M._suppress_warnings
     end
 
     @testset "generalized.jl — forecast ci_method=:none" begin
-        rng = Random.MersenneTwister(7082)
+        rng = Random.Xoshiro(7082)
         T_obs, N, q = 120, 10, 2
         X = randn(rng, T_obs, N)
         model = estimate_gdfm(X, q)
@@ -1092,7 +1094,7 @@ const _suppress_warnings = M._suppress_warnings
     end
 
     @testset "generalized.jl — forecast ci_method=:theoretical" begin
-        rng = Random.MersenneTwister(7083)
+        rng = Random.Xoshiro(7083)
         T_obs, N, q = 120, 10, 2
         X = randn(rng, T_obs, N)
         model = estimate_gdfm(X, q)
@@ -1106,7 +1108,7 @@ const _suppress_warnings = M._suppress_warnings
     end
 
     @testset "generalized.jl — forecast ci_method=:bootstrap" begin
-        rng = Random.MersenneTwister(7084)
+        rng = Random.Xoshiro(7084)
         T_obs, N, q = 100, 8, 2
         X = randn(rng, T_obs, N)
         model = estimate_gdfm(X, q)
@@ -1119,7 +1121,7 @@ const _suppress_warnings = M._suppress_warnings
     end
 
     @testset "generalized.jl — ic_criteria_gdfm" begin
-        rng = Random.MersenneTwister(7085)
+        rng = Random.Xoshiro(7085)
         T_obs, N = 150, 12
         max_q = 4
         X = randn(rng, T_obs, N)
@@ -1133,14 +1135,14 @@ const _suppress_warnings = M._suppress_warnings
     end
 
     @testset "generalized.jl — GDFM with non-float fallback" begin
-        rng = Random.MersenneTwister(7086)
+        rng = Random.Xoshiro(7086)
         X_int = rand(rng, 1:10, 100, 8)
         model = estimate_gdfm(X_int, 2)
         @test model isa M.GeneralizedDynamicFactorModel{Float64}
     end
 
     @testset "generalized.jl — forecast errors" begin
-        rng = Random.MersenneTwister(7087)
+        rng = Random.Xoshiro(7087)
         X = randn(rng, 100, 8)
         model = estimate_gdfm(X, 2)
 

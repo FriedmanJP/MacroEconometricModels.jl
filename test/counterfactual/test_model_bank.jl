@@ -41,7 +41,7 @@ _cf17_menu_phi(psi) = policy_news_matrix(
     :eps_i, [:pi => :π, :y => :y]; H=CF17_H)
 
 # Non-diagonal target covariance (CTW-damped) around the true menu.
-function _cf17_target(kappa0; H_news=3, noise=0.0, rng=MersenneTwister(17))
+function _cf17_target(kappa0; H_news=3, noise=0.0, rng=Xoshiro(17))
     ce0 = _cf17_menu([kappa0])
     nu_true = [0.5, -0.2, 0.1][1:H_news]
     theta_hat = vcat(ce0.Theta_x[1][:, 1:H_news] * nu_true,
@@ -62,7 +62,7 @@ end
 @testset "Model bank (CF-17)" begin
 
     @testset "restricted GLS closed form" begin
-        rng = MersenneTwister(171)
+        rng = Xoshiro(171)
         H, H_news = 6, 3
         ce = PolicyCausalEffects(outcomes=[:pi], Theta_x=[randn(rng, H, H)])
         theta_hat = randn(rng, H)
@@ -103,9 +103,9 @@ end
         kw = (; H_news=3, n_adapt=400, n_burn=200, n_keep=800, thin=8,
               proposal_scale=5.66)      # 2.38²/d with d = 1
         mA = irf_match(_cf17_menu, target, priors, [:kappa];
-                       name="RE", rng=MersenneTwister(1), kw...)
+                       name="RE", rng=Xoshiro(1), kw...)
         mB = irf_match(_cf17_menu_b, target, priors, [:kappa];
-                       name="behavioral", rng=MersenneTwister(2), kw...)
+                       name="behavioral", rng=Xoshiro(2), kw...)
         @test mA isa ModelBankMember{Float64}
         @test size(mA.theta_draws, 1) == 100
         @test 0.05 <= mA.acceptance_rate <= 0.7
@@ -119,7 +119,7 @@ end
 
         # determinism under a fixed rng
         mA2 = irf_match(_cf17_menu, target, priors, [:kappa];
-                        name="RE", rng=MersenneTwister(1), kw...)
+                        name="RE", rng=Xoshiro(1), kw...)
         @test mA2.theta_draws == mA.theta_draws
         @test mA2.log_marglik == mA.log_marglik
 
@@ -128,7 +128,7 @@ end
         @test p2 ≈ [0.5, 0.5] atol = 1e-12
 
         # model averaging over the pooled bank
-        pooled = model_average([mA, mA2], p2; n_pool=50, rng=MersenneTwister(3))
+        pooled = model_average([mA, mA2], p2; n_pool=50, rng=Xoshiro(3))
         @test pooled isa PolicyCausalEffects{Float64}
         @test pooled.source == :pooled
         @test MEM.n_draws(pooled) == 50
@@ -139,12 +139,12 @@ end
 
         # subset pooling
         pooled_A = model_average([mA, mB], probs; n_pool=20, subset=[1],
-                                 rng=MersenneTwister(4))
+                                 rng=Xoshiro(4))
         @test MEM.n_draws(pooled_A) == 20
 
         # T_store truncation
         mT = irf_match(_cf17_menu, target, priors, [:kappa];
-                       name="trunc", rng=MersenneTwister(5), T_store=4, kw...)
+                       name="trunc", rng=Xoshiro(5), T_store=4, kw...)
         @test mT.menu_draws[1].H == 4
         @test is_square(mT.menu_draws[1])
     end
@@ -158,24 +158,24 @@ end
         m = @test_logs (:info, r"menu builds failed") match_mode = :any begin
             irf_match(_cf17_menu_phi, target, priors_wide, [:phi];
                       H_news=3, n_adapt=200, n_burn=100, n_keep=300, thin=6,
-                      rng=MersenneTwister(6))
+                      rng=Xoshiro(6))
         end
         @test m isa ModelBankMember{Float64}
         @test all(isfinite, m.log_post)
 
         priors = [truncated(Normal(0.1, 0.05), 0.01, 0.5)]
         @test_throws ArgumentError irf_match(_cf17_menu, target, priors, [:a, :b];
-                                             rng=MersenneTwister(7))
+                                             rng=Xoshiro(7))
         @test_throws ArgumentError irf_match(_cf17_menu, (; theta_hat=[1.0]),
-                                             priors, [:phi]; rng=MersenneTwister(8))
+                                             priors, [:phi]; rng=Xoshiro(8))
         # H_news larger than the menu
         @test_throws ArgumentError irf_match(_cf17_menu, target, priors, [:phi];
                                              H_news=CF17_H + 1, n_adapt=10,
                                              n_burn=5, n_keep=20, thin=2,
-                                             rng=MersenneTwister(9))
+                                             rng=Xoshiro(9))
         # thin/keep guards
         @test_throws ArgumentError irf_match(_cf17_menu, target, priors, [:phi];
-                                             n_keep=2, thin=5, rng=MersenneTwister(10))
+                                             n_keep=2, thin=5, rng=Xoshiro(10))
         # probs validation
         @test_throws ArgumentError posterior_model_probs(ModelBankMember{Float64}[])
     end

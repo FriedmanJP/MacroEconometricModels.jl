@@ -53,7 +53,7 @@ function _sim_lstar(; n::Int, gamma::Float64=8.0, c::Float64=0.0,
        phi2 == (-0.4, -0.3) && sigma == 0.3 && seed == 20240716
         return vec(readdlm(f, ',', Float64))
     end
-    rng = MersenneTwister(seed)
+    rng = Xoshiro(seed)
     y = zeros(n)
     for t in 2:n
         s = y[t-1]
@@ -66,7 +66,7 @@ end
 
 """Simulate a near-step SETAR(2;1,1) as the large-γ limit of LSTR1."""
 function _sim_sharp_setar(; n::Int, gamma::Float64=0.2, seed::Int=7)
-    rng = MersenneTwister(seed)
+    rng = Xoshiro(seed)
     y = zeros(n)
     for t in 2:n
         y[t] = y[t-1] <= gamma ? (0.5 + 0.5 * y[t-1] + 0.3 * randn(rng)) :
@@ -77,7 +77,7 @@ end
 
 """Simulate a linear AR(1) (the linearity-test null)."""
 function _sim_ar1_star(; n::Int, phi::Float64=0.5, sigma::Float64=1.0, seed::Int=1)
-    rng = MersenneTwister(seed)
+    rng = Xoshiro(seed)
     y = zeros(n)
     for t in 2:n
         y[t] = phi * y[t-1] + sigma * randn(rng)
@@ -204,7 +204,7 @@ end
     # -------------------------------------------------------------------------
     @testset "ESTR estimation runs end-to-end" begin
         # Symmetric (exponential-transition) DGP: extreme |y_{t-1}| in one regime.
-        rng = MersenneTwister(55)
+        rng = Xoshiro(55)
         n = 500
         y = zeros(n)
         for t in 2:n
@@ -269,7 +269,7 @@ end
 
     # -------------------------------------------------------------------------
     @testset "External transition variable" begin
-        rng = MersenneTwister(9)
+        rng = Xoshiro(9)
         n = 400
         sx = randn(rng, n)               # exogenous transition variable
         y = zeros(n)
@@ -292,7 +292,7 @@ end
         @test_throws ArgumentError estimate_star(y, 0)               # p < 1
         @test_throws ArgumentError estimate_star(y, 1; d=0)          # d < 1
         @test_throws ArgumentError estimate_star(y, 1; type=:bogus)  # bad type
-        @test_throws DimensionMismatch estimate_star(y, 1; s=randn(10))  # s length
+        @test_throws DimensionMismatch estimate_star(y, 1; s=randn(Xoshiro(295), 10))  # s length
         @test_throws ArgumentError estimate_star(fill(1.0, 100), 1)  # zero-variance s
         @test_throws ArgumentError star_linearity_test(y, 0)
     end

@@ -53,7 +53,7 @@ using LinearAlgebra, Statistics, Random, Distributions
     # =========================================================================
 
     @testset "Ordered Logit 3-category recovery" begin
-        rng = MersenneTwister(2024)
+        rng = Xoshiro(2024)
         n = 5000
         beta_true = [1.0, -0.5]
         cutpoints_true = [0.0, 1.5]
@@ -85,7 +85,7 @@ using LinearAlgebra, Statistics, Random, Distributions
     # =========================================================================
 
     @testset "Ordered Logit 5-category recovery" begin
-        rng = MersenneTwister(9999)
+        rng = Xoshiro(9999)
         n = 8000
         beta_true = [0.8, -0.6, 0.4]
         cutpoints_true = [-1.5, -0.3, 0.8, 2.0]
@@ -118,7 +118,7 @@ using LinearAlgebra, Statistics, Random, Distributions
     # =========================================================================
 
     @testset "Ordered Probit 3-category recovery" begin
-        rng = MersenneTwister(5678)
+        rng = Xoshiro(5678)
         n = 5000
         beta_true = [0.8, -0.5]
         cutpoints_true = [0.0, 1.0]
@@ -147,7 +147,7 @@ using LinearAlgebra, Statistics, Random, Distributions
     # =========================================================================
 
     @testset "StatsAPI interface" begin
-        rng = MersenneTwister(1111)
+        rng = Xoshiro(1111)
         n = 1000
         beta_true = [1.0, -0.5]
         cutpoints_true = [0.0, 1.5]
@@ -213,22 +213,22 @@ using LinearAlgebra, Statistics, Random, Distributions
     # =========================================================================
 
     @testset "Out-of-sample prediction" begin
-        rng = MersenneTwister(3333)
+        rng = Xoshiro(3333)
         n = 1000
         y, X = generate_ordered_data(rng, n, [1.0, -0.5], [0.0, 1.5]; link=:logit)
 
         m = estimate_ologit(y, X)
 
         # New data prediction
-        rng2 = MersenneTwister(4444)
-        X_new = randn(rng2, 50, 2)
+        rng = Xoshiro(4444)
+        X_new = randn(rng, 50, 2)
         probs_new = predict(m, X_new)
         @test size(probs_new) == (50, 3)
         @test all(probs_new .>= 0)
         @test all(abs.(sum(probs_new, dims=2) .- 1.0) .< 1e-10)
 
         # Error on wrong dimensions
-        @test_throws ArgumentError predict(m, randn(10, 5))
+        @test_throws ArgumentError predict(m, randn(Random.Xoshiro(4445), 10, 5))
     end
 
     # =========================================================================
@@ -236,7 +236,7 @@ using LinearAlgebra, Statistics, Random, Distributions
     # =========================================================================
 
     @testset "Robust standard errors" begin
-        rng = MersenneTwister(7777)
+        rng = Xoshiro(7777)
         n = 2000
         y, X = generate_ordered_data(rng, n, [1.0, -0.5], [0.0, 1.5]; link=:logit)
 
@@ -270,7 +270,7 @@ using LinearAlgebra, Statistics, Random, Distributions
                  MacroEconometricModels._logistic_pdf, MacroEconometricModels._logistic_pdf_deriv),
                 (:probit, MacroEconometricModels._normal_cdf,
                  MacroEconometricModels._normal_pdf, MacroEconometricModels._normal_pdf_deriv))
-            rng = MersenneTwister(11)
+            rng = Xoshiro(11)
             n = 400
             y, X = generate_ordered_data(rng, n, [0.8, -0.4], [-0.3, 0.9]; link=link)
             J = 3; K = 2; P = K + (J - 1)
@@ -303,7 +303,7 @@ using LinearAlgebra, Statistics, Random, Distributions
     end
 
     @testset "Classical SE = observed information; HC0 robust differs (T071)" begin
-        rng = MersenneTwister(7777)
+        rng = Xoshiro(7777)
         n = 2000
         y, X = generate_ordered_data(rng, n, [1.0, -0.5], [0.0, 1.5]; link=:logit)
         J = 3
@@ -332,7 +332,7 @@ using LinearAlgebra, Statistics, Random, Distributions
     # =========================================================================
 
     @testset "Category remapping" begin
-        rng = MersenneTwister(5555)
+        rng = Xoshiro(5555)
         n = 1000
         y, X = generate_ordered_data(rng, n, [1.0, -0.5], [0.0, 1.5]; link=:logit)
 
@@ -355,7 +355,7 @@ using LinearAlgebra, Statistics, Random, Distributions
     # =========================================================================
 
     @testset "Display output" begin
-        rng = MersenneTwister(8888)
+        rng = Xoshiro(8888)
         n = 500
         y, X = generate_ordered_data(rng, n, [1.0, -0.5], [0.0, 1.5]; link=:logit)
 
@@ -389,7 +389,7 @@ using LinearAlgebra, Statistics, Random, Distributions
     # =========================================================================
 
     @testset "Float64 fallback" begin
-        rng = MersenneTwister(6666)
+        rng = Xoshiro(6666)
         n = 500
         y, X = generate_ordered_data(rng, n, [1.0, -0.5], [0.0, 1.5]; link=:logit)
 
@@ -407,7 +407,7 @@ using LinearAlgebra, Statistics, Random, Distributions
     # =========================================================================
 
     @testset "Model fit statistics" begin
-        rng = MersenneTwister(4242)
+        rng = Xoshiro(4242)
         n = 2000
         y, X = generate_ordered_data(rng, n, [1.0, -0.5], [0.0, 1.5]; link=:logit)
 
@@ -435,7 +435,7 @@ using LinearAlgebra, Statistics, Random, Distributions
     # =========================================================================
 
     @testset "Ordered Logit — marginal effects" begin
-        rng = MersenneTwister(3030)
+        rng = Xoshiro(3030)
         n = 3000
         beta_true = [1.0, -0.5]
         cutpoints_true = [0.0, 1.5]
@@ -478,7 +478,7 @@ using LinearAlgebra, Statistics, Random, Distributions
     end
 
     @testset "Ordered Logit — marginal effects 5-category" begin
-        rng = MersenneTwister(4040)
+        rng = Xoshiro(4040)
         n = 5000
         beta_true = [0.8, -0.6, 0.4]
         cutpoints_true = [-1.5, -0.3, 0.8, 2.0]
@@ -503,7 +503,7 @@ using LinearAlgebra, Statistics, Random, Distributions
     # =========================================================================
 
     @testset "Brant test — structure" begin
-        rng = MersenneTwister(5050)
+        rng = Xoshiro(5050)
         n = 2000
         beta_true = [1.0, -0.5]
         cutpoints_true = [0.0, 1.5]
@@ -542,7 +542,7 @@ using LinearAlgebra, Statistics, Random, Distributions
 
     @testset "Brant test — proportional odds data should not reject" begin
         # Data generated from ordered logit (proportional odds holds by construction)
-        rng = MersenneTwister(6060)
+        rng = Xoshiro(6060)
         n = 5000
         beta_true = [1.0, -0.5]
         cutpoints_true = [0.0, 1.5]
@@ -557,7 +557,7 @@ using LinearAlgebra, Statistics, Random, Distributions
 
     @testset "Brant test — violation of proportional odds" begin
         # Generate data that violates proportional odds
-        rng = MersenneTwister(7070)
+        rng = Xoshiro(7070)
         n = 5000
         K = 2
         X = randn(rng, n, K)
@@ -591,7 +591,7 @@ using LinearAlgebra, Statistics, Random, Distributions
         # The binary logits are fit WITH an intercept, so the slope covariance is the
         # slope block of the (K+1)-dimensional sandwich. Building the bread from slope
         # columns only made the statistic depend on the origin of X.
-        rng = MersenneTwister(8080)
+        rng = Xoshiro(8080)
         y, X = generate_ordered_data(rng, 1500, [1.0, -0.5], [0.0, 1.5]; link=:logit)
 
         bt = brant_test(estimate_ologit(y, X; varnames=["x1", "x2"]))
@@ -607,7 +607,7 @@ using LinearAlgebra, Statistics, Random, Distributions
     # =========================================================================
 
     @testset "Input validation" begin
-        rng = MersenneTwister(1234)
+        rng = Xoshiro(1234)
         X = randn(rng, 100, 2)
 
         # Only 2 categories should fail
@@ -626,7 +626,7 @@ end
     # exposed, with deliberately different shapes:
     #   residuals(m)              -> n x K response/pearson/deviance matrix
     #   generalized_residuals(m)  -> length-n score residual d(loglik_i)/d(x_i'beta)
-    rng = Random.MersenneTwister(507)
+    rng = Random.Xoshiro(507)
     n = 500
     X = hcat(randn(rng, n), randn(rng, n))
     ystar = X * [0.8, -0.5] + randn(rng, n)

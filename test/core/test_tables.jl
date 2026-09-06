@@ -17,7 +17,7 @@ using DelimitedFiles
 
     # ── Coefficient-bearing models: DataFrame(result) ───────────────────────────
     @testset "DataFrame(RegModel) matches report inputs" begin
-        rng = MersenneTwister(11)
+        rng = Xoshiro(11)
         X = randn(rng, 90, 3); y = X * [1.0, -0.5, 0.3] .+ randn(rng, 90)
         m = estimate_reg(y, X)
         df = DataFrame(m)
@@ -36,7 +36,7 @@ using DelimitedFiles
     end
 
     @testset "DataFrame(LogitModel/ProbitModel)" begin
-        rng = MersenneTwister(12)
+        rng = Xoshiro(12)
         X = randn(rng, 150, 2); z = X * [0.8, -0.6]
         y = Float64.(rand(rng, 150) .< 1 ./ (1 .+ exp.(-z)))
         lm = estimate_logit(y, X)
@@ -48,7 +48,7 @@ using DelimitedFiles
     end
 
     @testset "DataFrame(MarginalEffects) drops non-finite rows" begin
-        rng = MersenneTwister(13)
+        rng = Xoshiro(13)
         X = randn(rng, 150, 2); z = X * [0.8, -0.6]
         y = Float64.(rand(rng, 150) .< 1 ./ (1 .+ exp.(-z)))
         me = marginal_effects(estimate_logit(y, X))
@@ -61,7 +61,7 @@ using DelimitedFiles
     end
 
     @testset "DataFrame(OrderedModel) — two blocks" begin
-        rng = MersenneTwister(14)
+        rng = Xoshiro(14)
         n = 300; X = randn(rng, n, 2); latent = X * [1.0, -0.8] .+ randn(rng, n)
         y = [v < -0.7 ? 1 : v < 0.7 ? 2 : 3 for v in latent]
         om = estimate_ologit(y, X)
@@ -74,7 +74,7 @@ using DelimitedFiles
     end
 
     @testset "DataFrame(MultinomialLogitModel) — per-alternative blocks" begin
-        rng = MersenneTwister(15)
+        rng = Xoshiro(15)
         n = 400; X = randn(rng, n, 2)
         # 3-category DGP.
         u2 = X * [1.0, 0.0]; u3 = X * [0.0, 1.0]
@@ -91,7 +91,7 @@ using DelimitedFiles
     end
 
     @testset "DataFrame(VARModel) — one row per (equation, term)" begin
-        rng = MersenneTwister(16)
+        rng = Xoshiro(16)
         Y = randn(rng, 120, 2); vm = estimate_var(Y, 2)
         d = DataFrame(vm)
         @test "equation" in names(d)
@@ -104,7 +104,7 @@ using DelimitedFiles
 
     # ── long_table for array-valued results ─────────────────────────────────────
     @testset "long_table(ImpulseResponse)" begin
-        rng = MersenneTwister(17)
+        rng = Xoshiro(17)
         vm = estimate_var(randn(rng, 120, 3), 2)
         ir = irf(vm, 10; method=:cholesky)
         lt = long_table(ir)
@@ -118,7 +118,7 @@ using DelimitedFiles
     end
 
     @testset "long_table(FEVD) and forecast" begin
-        rng = MersenneTwister(18)
+        rng = Xoshiro(18)
         vm = estimate_var(randn(rng, 120, 2), 2)
         lf = long_table(fevd(vm, 8))
         @test names(lf) == ["horizon", "variable", "shock", "value"]
@@ -142,7 +142,7 @@ using DelimitedFiles
 
     # ── write_csv ───────────────────────────────────────────────────────────────
     @testset "write_csv round-trips through a co-author read-back" begin
-        rng = MersenneTwister(19)
+        rng = Xoshiro(19)
         X = randn(rng, 80, 2); y = X * [1.0, -0.5] .+ randn(rng, 80)
         m = estimate_reg(y, X)
         path = tempname() * ".csv"

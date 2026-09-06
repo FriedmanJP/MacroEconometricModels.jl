@@ -539,14 +539,14 @@ function _structural_lp_bootstrap(Y::AbstractMatrix{T}, horizon::Int, n::Int, p:
     sim_irfs = zeros(T, reps, horizon, n, n)
     block_size = max(1, round(Int, T_obs^(1/3)))
 
-    # Pre-seed one MersenneTwister per replication so bootstrap CIs are reproducible and
+    # Pre-seed one Xoshiro per replication so bootstrap CIs are reproducible and
     # thread-count invariant: each fixed r-slot draws only on its own local_rng, threaded
     # into BOTH the block resample and the sign/narrative rejection sampler (#243).
     seeds = rand(rng, UInt64, reps)
     n_failed = Threads.Atomic{Int}(0)     # dropped draws (#244 MC honesty count; atomic total
                                           # is thread-count invariant like the seeded slots)
     Threads.@threads for r in 1:reps
-        local_rng = Random.MersenneTwister(seeds[r])
+        local_rng = Random.Xoshiro(seeds[r])
         # Block bootstrap on Y
         Y_boot = _block_bootstrap(Y, block_size, local_rng)
         try
@@ -629,7 +629,10 @@ function compare_var_lp(Y::AbstractMatrix{T}, horizon::Int; lags::Int=4) where {
     for shock in 1:n
         for (h_idx, h) in enumerate(1:horizon)
             for resp in 1:n
-                lp_values[h_idx, resp, shock] = lp_results[shock].values[h + 1, resp]
+                # DGP-05 (#794): LP values are h = 0…H (horizon + 1 rows) while
+                # the VAR side is h = 0…H−1 — index h_idx, not h + 1, or row k
+                # compares VAR Θ_{k−1} against LP Θ_k (off-by-one horizons).
+                lp_values[h_idx, resp, shock] = lp_results[shock].values[h_idx, resp]
             end
         end
     end

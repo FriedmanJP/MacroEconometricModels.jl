@@ -18,16 +18,14 @@ end
 
 const _M = MacroEconometricModels
 
-"""Latent high-frequency VAR(1) path."""
-function _mf_sim(T_hf::Int; seed::Int=1)
-    rng = Random.MersenneTwister(seed)
-    A = [0.6 0.1; 0.15 0.5]
-    L = [0.4 0.0; 0.1 0.3]
-    Z = zeros(T_hf, 2)
-    for t in 2:T_hf
-        Z[t, :] = A * Z[t-1, :] + L * randn(rng, 2)
-    end
-    return Z
+# DGP-03 (#792): latent high-frequency VAR(1) path on the shared simulator
+# (same design as the GLP file's historical DGP).
+const _MF_A = [0.6 0.1; 0.15 0.5]
+const _MF_B0 = [0.4 0.0; 0.1 0.3]
+
+"""Latent high-frequency VAR(1) path with known truth."""
+function _mf_sim(rng::AbstractRNG, T_hf::Int)
+    return dgp_var(rng; A=_MF_A, B0=_MF_B0, T=T_hf).Y
 end
 
 """Aggregate column `col` of `Z` to the low frequency, blanking the other rows."""
@@ -112,13 +110,13 @@ end
 
 @testset "the latent path reproduces the low-frequency observations exactly" begin
     T_hf = FAST ? 90 : 150
-    Z = _mf_sim(T_hf; seed=4)
+    Z = _mf_sim(Random.Xoshiro(4), T_hf)
     for kind in (:flow, :average, :growth, :stock)
         m = 3
         data = _mf_blank(Z, 2, kind, m)
         post = estimate_mfvar(data, 1; low_freq=[2], aggregation=kind, freq_ratio=m,
                               n_draws=FAST ? 40 : 80, n_burn=FAST ? 40 : 80,
-                              rng=Random.MersenneTwister(3))
+                              rng=Random.Xoshiro(3))
         w = _M._mf_agg_weights(kind, m, Float64)
         mu, _ = latent_path(post)
 
@@ -144,10 +142,10 @@ end
 end
 
 @testset "high-frequency series pass through untouched" begin
-    Z = _mf_sim(120; seed=6)
+    Z = _mf_sim(Random.Xoshiro(6), 120)
     data = _mf_blank(Z, 2, :flow, 3)
     post = estimate_mfvar(data, 1; low_freq=[2], aggregation=:flow,
-                          n_draws=40, n_burn=40, rng=Random.MersenneTwister(5))
+                          n_draws=40, n_burn=40, rng=Random.Xoshiro(5))
     for d in 1:size(post.Z_draws, 1)
         @test post.Z_draws[d, :, 1] ≈ Z[:, 1] atol = 1e-12
     end
@@ -155,11 +153,11 @@ end
 
 @testset "the interpolated path tracks a known latent truth" begin
     T_hf = FAST ? 150 : 240
-    Z = _mf_sim(T_hf; seed=1)
+    Z = _mf_sim(Random.Xoshiro(1), T_hf)
     data = _mf_blank(Z, 2, :flow, 3)
     post = estimate_mfvar(data, 1; low_freq=[2], aggregation=:flow, freq_ratio=3,
                           n_draws=FAST ? 100 : 200, n_burn=FAST ? 100 : 200,
-                          varnames=["m", "q"], rng=Random.MersenneTwister(3))
+                          varnames=["m", "q"], rng=Random.Xoshiro(3))
 
     mu, qs = latent_path(post)
     @test size(mu) == (T_hf, 2)
@@ -182,10 +180,10 @@ end
 # ─────────────────────────────────────────────────────────────────────────────
 
 @testset "no low-frequency series reduces to the conjugate BVAR" begin
-    Z = _mf_sim(FAST ? 120 : 180; seed=9)
+    Z = _mf_sim(Random.Xoshiro(9), FAST ? 120 : 180)
     post = estimate_mfvar(Z, 1; n_draws=FAST ? 150 : 300, n_burn=100,
-                          rng=Random.MersenneTwister(9))
-    bv = estimate_bvar(Z, 1; n_draws=FAST ? 150 : 300, rng=Random.MersenneTwister(9))
+                          rng=Random.Xoshiro(9))
+    bv = estimate_bvar(Z, 1; n_draws=FAST ? 150 : 300, rng=Random.Xoshiro(9))
 
     @test isempty(post.low_freq)
     Bm = dropdims(mean(post.B_draws; dims=1); dims=1)
@@ -206,11 +204,11 @@ end
 # ─────────────────────────────────────────────────────────────────────────────
 
 @testset "forecasts and IRFs at the high frequency" begin
-    Z = _mf_sim(150; seed=11)
+    Z = _mf_sim(Random.Xoshiro(11), 150)
     data = _mf_blank(Z, 2, :growth, 3)
     post = estimate_mfvar(data, 1; low_freq=[2], aggregation=:growth,
                           n_draws=100, n_burn=80, varnames=["m", "q"],
-                          rng=Random.MersenneTwister(13))
+                          rng=Random.Xoshiro(13))
 
     fc = forecast(post, 6)
     @test size(fc.forecast) == (6, 2)
@@ -229,12 +227,12 @@ end
 # ─────────────────────────────────────────────────────────────────────────────
 
 @testset "frequency ratios, reproducibility, validation and display" begin
-    Z = _mf_sim(160; seed=17)
+    Z = _mf_sim(Random.Xoshiro(17), 160)
 
     # A 4:1 ratio works as well as 3:1
     d4 = _mf_blank(Z, 2, :flow, 4)
     p4 = estimate_mfvar(d4, 1; low_freq=[2], aggregation=:flow, freq_ratio=4,
-                        n_draws=40, n_burn=40, rng=Random.MersenneTwister(4))
+                        n_draws=40, n_burn=40, rng=Random.Xoshiro(4))
     @test p4.freq_ratio == 4
     w4 = _M._mf_agg_weights(:flow, 4, Float64)
     mu4, _ = latent_path(p4)
@@ -244,9 +242,9 @@ end
 
     data = _mf_blank(Z, 2, :flow, 3)
     a = estimate_mfvar(data, 1; low_freq=[2], n_draws=30, n_burn=30, aggregation=:flow,
-                       rng=Random.MersenneTwister(77))
+                       rng=Random.Xoshiro(77))
     b = estimate_mfvar(data, 1; low_freq=[2], n_draws=30, n_burn=30, aggregation=:flow,
-                       rng=Random.MersenneTwister(77))
+                       rng=Random.Xoshiro(77))
     @test a.B_draws == b.B_draws
     @test a.Z_draws == b.Z_draws
     @test _M.n_draws(a) == 30
@@ -258,7 +256,7 @@ end
     two_low[:, 1] = _mf_blank(Z, 1, :stock, 3)[:, 1]
     two_low[:, 2] = _mf_blank(Z, 2, :flow, 3)[:, 2]
     pm = estimate_mfvar(two_low, 1; low_freq=[1, 2], aggregation=[:stock, :flow],
-                        n_draws=30, n_burn=30, rng=Random.MersenneTwister(19))
+                        n_draws=30, n_burn=30, rng=Random.Xoshiro(19))
     @test pm.aggregation == [:stock, :flow]
 
     @test_throws ArgumentError estimate_mfvar(data, 0; low_freq=[2])
@@ -279,7 +277,7 @@ end
     @test occursin("Interpolated high-frequency path", out)
     @test report(a) === nothing
 
-    single = estimate_mfvar(Z, 1; n_draws=20, n_burn=20, rng=Random.MersenneTwister(2))
+    single = estimate_mfvar(Z, 1; n_draws=20, n_burn=20, rng=Random.Xoshiro(2))
     @test occursin("single frequency", sprint(show, single))
 end
 

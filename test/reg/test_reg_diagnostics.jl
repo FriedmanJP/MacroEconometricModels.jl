@@ -170,7 +170,7 @@ end
         @test startswith(r.test_name, "Breusch-Pagan")
 
         # Panel method still returns a PanelTestResult (RE LM test) — unshadowed.
-        rng = MersenneTwister(7)
+        rng = Xoshiro(7)
         Ng, Tp = 20, 6
         n = Ng * Tp
         gid = repeat(1:Ng, inner = Tp)
@@ -195,7 +195,7 @@ end
         reps = 400
         n = 150
         rej_white = 0; rej_bp = 0; rej_bg = 0; rej_reset = 0
-        rng = MersenneTwister(4242)
+        rng = Xoshiro(4242)
         for _ in 1:reps
             xa = randn(rng, n); xb = randn(rng, n)
             yc = 0.5 .+ 1.0 .* xa .- 0.5 .* xb .+ randn(rng, n)   # homoskedastic iid
@@ -216,7 +216,7 @@ end
     @testset "MC power (heteroskedastic / serially correlated)" begin
         reps = 200
         n = 200
-        rng = MersenneTwister(99)
+        rng = Xoshiro(99)
         rej_white = 0; rej_bp = 0; rej_glej = 0; rej_harv = 0; rej_bg = 0
         for _ in 1:reps
             xa = randn(rng, n)
@@ -284,7 +284,7 @@ end
     # 6. White collinearity guard: a dummy regressor's square == itself.
     # -------------------------------------------------------------------------
     @testset "White collinear-column guard (dummy regressor)" begin
-        rng = MersenneTwister(11)
+        rng = Xoshiro(11)
         n = 200
         d = Float64.(rand(rng, n) .> 0.5)          # 0/1 dummy: d^2 == d
         xc = randn(rng, n)

@@ -83,7 +83,7 @@ _yr() = sin.((1:50) ./ 10) .+ 0.2 .* sin.(11 .* (1:50))
         @test lf.span == 2/3
         @test lf.iter == 3
         # unsorted input is sorted internally and gives the same fit
-        perm = shuffle(MersenneTwister(7), 1:50)
+        perm = shuffle(Xoshiro(7), 1:50)
         lf2 = lowess(yr[perm], xr[perm]; f=2/3, iter=3)
         @test lf2.fitted ≈ lf.fitted atol = 1e-10
     end

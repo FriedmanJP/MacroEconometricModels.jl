@@ -1438,7 +1438,7 @@ reported as degenerate and a warning is emitted.
   weight is multiplied by ``1/ω̂``. Unused (and stored as 0) when they are absent.
 
 Draws are assigned to pre-seeded slots (`seeds = rand(rng, UInt64, n_draws)`,
-per-slot `MersenneTwister`) and filled with `Threads.@threads`, so the accepted
+per-slot `Xoshiro`) and filled with `Threads.@threads`, so the accepted
 rotations are invariant to `JULIA_NUM_THREADS`. The result stores wall-clock
 `elapsed` for the accept loop and `weights_elapsed` as the summed time spent
 in the volume-element weight.
@@ -1503,7 +1503,7 @@ function identify_arias(model::VARModel{T}, restrictions::SVARRestrictions, hori
 
     t0 = time_ns()
     Threads.@threads for d in 1:n_draws
-        local_rng = Random.MersenneTwister(seeds[d])
+        local_rng = Random.Xoshiro(seeds[d])
         try
             for _rot in 1:n_rotations
                 n_att_slot[d] += 1
