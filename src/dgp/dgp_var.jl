@@ -12,6 +12,8 @@
 # assertion needs (coefficients, covariances, shocks, latent paths).
 
 
+const _DGP_VAR_B0 = [1.0 0.0 0.0; 0.5 1.0 0.0; 0.3 0.2 1.0]
+
 """
     dgp_var(rng; A, B0, Sigma, c, T, burn) -> NamedTuple
 
@@ -27,8 +29,6 @@ Stationary VAR(p): `Y_t = c + A_1 Y_{t-1} + … + A_p Y_{t-p} + u_t`,
 - Returns `(Y, eps, A, Sigma, B0, c)`: the `T×n` sample (post-burn-in), the
   `T×n` structural shocks, the coefficient list, `Sigma`, `B0`, intercept.
 """
-const _DGP_VAR_B0 = [1.0 0.0 0.0; 0.5 1.0 0.0; 0.3 0.2 1.0]
-
 function dgp_var(rng::AbstractRNG;
                  A=[0.5 0.1 0.0; 0.2 0.4 0.1; 0.0 0.1 0.3],
                  B0=nothing,

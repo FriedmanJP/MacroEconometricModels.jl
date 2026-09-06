@@ -55,6 +55,12 @@ function logit_ame(X::AbstractMatrix, beta::AbstractVector)
     return mean(p .* (1 .- p)) .* be
 end
 
+"""
+    probit_ame(X, beta) -> Vector
+
+Closed-form average marginal effect at `(X, beta)` for the probit model:
+`mean(φ(Xβ)) ⋅ β` with the standard Normal pdf `φ`.
+"""
 function probit_ame(X::AbstractMatrix, beta::AbstractVector)
     be = Vector{Float64}(beta)
     return mean(pdf.(Normal(), X * be)) .* be

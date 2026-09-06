@@ -45,7 +45,7 @@ yₜ = μ + Σⱼ₌₀^∞ ψⱼ εₜ₋ⱼ
 where ψ₀ = 1 and ψⱼ follows the recursion:
 ψⱼ = φ₁ψⱼ₋₁ + ... + φₚψⱼ₋ₚ + θⱼ
 
-Returns [ψ₁, ψ₂, ..., ψₕ] (excludes ψ₀ = 1).
+Returns the MA(∞) weights ψ₁, …, ψₕ (ψ₀ = 1 is excluded).
 """
 function _compute_psi_weights(phi::Vector{T}, theta::Vector{T}, h::Int) where {T<:AbstractFloat}
     p, q = length(phi), length(theta)

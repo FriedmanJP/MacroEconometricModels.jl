@@ -33,7 +33,7 @@ Ordered logistic regression model estimated via maximum likelihood.
 - `X::Matrix{T}` -- regressor matrix (no intercept)
 - `beta::Vector{T}` -- slope coefficients (K)
 - `cutpoints::Vector{T}` -- cutpoints/thresholds (J-1)
-- `vcov_mat::Matrix{T}` -- joint vcov of [beta; cutpoints] (K+J-1 x K+J-1)
+- `vcov_mat::Matrix{T}` -- joint vcov of `beta` and the cutpoints, a `(K+J-1 x K+J-1)` matrix
 - `fitted::Matrix{T}` -- predicted probabilities (n x J)
 - `loglik::T` -- maximized log-likelihood
 - `loglik_null::T` -- null model log-likelihood (cutpoints only)

@@ -25,8 +25,8 @@ References:
 
 Apply an ideal (brick-wall) bandpass filter in the frequency domain.
 
-Retains frequency components in [f_low, f_high] (radians, ∈ [0, π]) and
-zeroes everything else. Implements via FFT → zero outside band → IFFT.
+Retains frequency components with `f_low ≤ f ≤ f_high` (radians, `f ∈ [0, π]`)
+and zeroes everything else. Implements via FFT → zero outside band → IFFT.
 
 # Arguments
 - `y` — time series vector
