@@ -10,6 +10,7 @@ using StatsAPI
 using LinearAlgebra
 using Random
 using Statistics
+import Distributions   # qualified: `quantile` would clash with Statistics
 import NonlinearSolve
 
 if !@isdefined(FAST)
@@ -5912,8 +5913,16 @@ end
         # Closed-form moments
         mom_cf = analytical_moments(sol2; lags=1, format=:gmm)
 
-        # Simulation-based moments (long run)
-        sim = simulate(sol2, 500_000; rng=Random.Xoshiro(99))
+        # Simulation-based moments (long run). Shocks are inverse-CDF
+        # normals from a uniform stream: `randn` streams diverge between Julia
+        # 1.10 and 1.12 past ~10⁴ draws (ziggurat change), but the uniform
+        # `rand` stream is bit-identical, so these shocks — and this seed —
+        # reproduce exactly on every CI version. (`simulate` with
+        # `shock_draws` is pure deterministic recursion.)
+        su = rand(Random.Xoshiro(7), 500_000, 1)
+        e = Distributions.quantile.(Distributions.Normal(),
+                                    clamp.(su, eps(), 1 - eps()))
+        sim = simulate(sol2, 500_000; shock_draws=e)
         m_sim = MacroEconometricModels._compute_data_moments(sim; lags=[1])
 
         @test length(mom_cf) == length(m_sim)

@@ -227,17 +227,21 @@ end
     # ---------------------------------------------------------------------
     # DGP-04 (#793): heterogeneous slopes make group-mean and pooled
     # different estimands. A :group implementation that pooled would return
-    # pooled's number — on this draw the two visibly differ (probed gap
-    # 0.073), while group-mean recovers mean(β_i) (probed err 0.009).
+    # pooled's number. Slopes are deterministic and monotone in i with
+    # regressor scales correlated with β_i, so pooled FMOLS (a
+    # variance-weighted average) overshoots mean(β_i) BY CONSTRUCTION —
+    # random β_i would leave the gap to seed luck (both estimators chase
+    # mean(β_i) when weights ⊥ slopes).
     # ---------------------------------------------------------------------
     @testset "heterogeneous slopes: group-mean ≈ mean(β_i) ≠ pooled" begin
         rng = Xoshiro(54)
-        N, T, beta0 = 10, 150, 1.5
-        bi = beta0 .+ 0.6 .* randn(rng, N)
+        N, T = 10, 150
+        bi = 1.0 .+ 0.15 .* (1:N)          # 1.15 … 2.50, mean 1.825
+        si = 0.5 .+ 0.2 .* (1:N)           # x scales 0.7 … 2.5, ∝ β_i
         hy, hx, hi, ht = Float64[], Float64[], Int[], Int[]
         for i in 1:N
             v = randn(rng, T); e = randn(rng, T)
-            x = cumsum(v)
+            x = si[i] .* cumsum(v)
             rho, phi = 0.2 + 0.05 * (i % 6), 0.3 + 0.05 * (i % 6)
             u = zeros(T)
             for t in 1:T
@@ -251,6 +255,7 @@ end
         mp = estimate_xtcointreg(hy, hx, hi, ht; method=:fmols, pooling=:pooled,
                                  trend=:const, bandwidth=bw)
         @test S.coef(mg)[2] ≈ mean(bi) atol=0.1
-        @test abs(S.coef(mg)[2] - S.coef(mp)[1]) > 0.02
+        # variance weights ∝ s_i² put ≈ 2.10 on β: structural gap ≈ 0.27
+        @test abs(S.coef(mg)[2] - S.coef(mp)[1]) > 0.1
     end
 end

@@ -393,7 +393,12 @@ end
     end
 
     @testset "greedy matching 10x10" begin
-        B1 = randn(rng, 10, 10)
+        # Orthonormal random B1 (not raw Gaussian): greedy matches by RAW
+        # |dot|, so χ²-distributed Gaussian column norms overlap correct and
+        # wrong matches (44/101 seeds mismatch with d ≥ 1.0). Orthonormal
+        # columns separate structurally (correct ≈ 1, wrong ≈ 0.01), so a 1%
+        # perturbation always matches: worst d = 0.12 over 101 seeds.
+        B1 = Matrix(qr(randn(rng, 10, 10)).Q)
         B2 = B1 + 0.01 * randn(rng, 10, 10)  # small perturbation
         d = MEM._procrustes_distance(B1, B2)
         @test d >= 0

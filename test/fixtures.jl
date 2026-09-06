@@ -97,9 +97,12 @@ function make_cointegrated_data(; T_obs::Int=200, n::Int=3, rank::Int=1, seed::I
         beta
     end
     al = if alpha === nothing
+        # +0.3 (not −0.3): with β[j+1, j] = −1 the error-correction rate is
+        # β′α = −0.3 < 0 (EC root 0.7 modulo short-run). A −0.3 here gives
+        # β′α = +0.3, i.e. an EXPLOSIVE root 1.3, not cointegration.
         A = zeros(n, r)
         for j in 1:r
-            A[j + 1, j] = -0.3
+            A[j + 1, j] = 0.3
         end
         A
     else

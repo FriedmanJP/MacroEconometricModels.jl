@@ -300,6 +300,9 @@ using Test, MacroEconometricModels, Random, LinearAlgebra, Statistics, Distribut
         # Random-walk slope around a constant drift δ, RW level, noisy obs.
         # The MLE may reallocate variance across states (representation is not
         # unique), so assert on the smoothed drift and level path, not θ.
+        # The drift target is the REALIZED path mean(ν), not δ: a RW slope
+        # with sd 0.01/step wanders O(0.1) from δ over T=300 (seed 72 realizes
+        # mean(ν) = 0.326), and the smoother correctly tracks the path.
         rng = Xoshiro(72)
         T = 300
         δ = 0.1
@@ -312,7 +315,7 @@ using Test, MacroEconometricModels, Random, LinearAlgebra, Statistics, Distribut
         y = μ .+ 0.5 .* randn(rng, T)
         m = local_linear_trend(y)
         @test m isa StateSpaceModel
-        @test isapprox(mean(m.smoothed_state[:, 2]), δ; atol=0.05)
+        @test isapprox(mean(m.smoothed_state[:, 2]), mean(ν); atol=0.05)
         @test sqrt(mean((m.smoothed_state[:, 1] .- μ) .^ 2)) < 0.8
     end
 

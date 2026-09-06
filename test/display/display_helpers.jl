@@ -344,7 +344,12 @@ function build_display_fixtures()
     push!(fx, (name = "probit",     obj = probit,                                                             stars = true,  ref = false))
     push!(fx, (name = "ologit",     obj = _ologit_fixture(),                                                  stars = true,  ref = false))
     push!(fx, (name = "mlogit",     obj = _mlogit_fixture(),                                                  stars = false, ref = false))
-    push!(fx, (name = "arma",       obj = estimate_arma(make_ar1_data(n = 200, seed = 91), 1, 1),             stars = false, ref = false))
+    # ARMA(1,1) on genuine ARMA(1,1) data (not AR(1)): an MA term fit to
+    # AR(1) data is near-unidentified (MA root cancels), so its SE collapses
+    # to ~0 and the row renders degenerate `—` z/p/CI cells — a knife-edge
+    # skeleton that flips with the RNG stream. Identified data keeps every
+    # row (and the golden) decisive.
+    push!(fx, (name = "arma",       obj = estimate_arma(dgp_arima(Xoshiro(91); phi = [0.7], theta = [0.4], T = 200).y, 1, 1), stars = false, ref = false))
     push!(fx, (name = "garch",      obj = estimate_garch(simulate_garch11(n = 500, seed = 92)),               stars = false, ref = false))
     push!(fx, (name = "gmm",        obj = _gmm_fixture(),                                                     stars = true,  ref = false))
     push!(fx, (name = "panel_fe",   obj = _panel_fixture(),                                                   stars = true,  ref = false))
