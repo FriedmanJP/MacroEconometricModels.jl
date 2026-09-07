@@ -6,6 +6,33 @@ output, not just documentation.
 
 ---
 
+## v0.9.5
+
+Minor release on the `0.9` series: Smolyak sparse-grid and multi-control value-function iteration
+(DSGE `#817`–`#821`, parent `#620` §2). Downstream `[compat]` of `MacroEconometricModels = "0.9"`
+still resolves. **Changed numerical output**: none on default paths — the tensor VFI path is
+bit-identical to v0.9.4 and `optimizer=:auto` keeps the legacy 1-D scan for one control. The new
+`grid=:smolyak` / `:fminbox_nm` / `:fminbox_lbfgs` paths only take effect when requested.
+
+**New**
+
+- `grid=:smolyak` for `vfi_solver`: Smolyak sparse-grid Bellman iteration with a
+  Chebyshev-collocation interpolant refit every sweep (reused LU factorization); `grid=:auto`
+  routes `nx ≤ 3` to tensor and `nx ≥ 4` to Smolyak (41 nodes at `nx=4, μ=2` vs 20,736 uniform).
+  Anisotropic `smolyak_mu` vectors spend resolution on slow-moving states (31 nodes beat 41
+  isotropic nodes 15x on Euler error in the 4-state test model). `ProjectionSolution.smolyak_levels`
+  is filled and `evaluate_value` works on Smolyak solutions (`#817`, `#819`, `#821`).
+- Multi-control Bellman maximization: `optimizer=:auto` keeps `:grid1d` for one control and
+  selects derivative-free `Optim.Fminbox(NelderMead())` for control vectors, with
+  `:fminbox_lbfgs` (central finite differences) for smooth problems, `optimizer_opts` forwarded
+  to `Optim.Options`, and deterministic best-of-seeds globalization over warm start, midpoint,
+  and corners (`#818`).
+- Solver docs: Smolyak routing/node-count tables, optimizer routing table, per-dimension-μ
+  tuning guide, VFI-Smolyak vs PFI-Smolyak guidance, and worked 4-state Smolyak plus 2-control
+  labor examples (`#820`). Surplus-driven adaptive refinement stays future work (`#821`).
+
+---
+
 ## v0.9.4
 
 Patch on the `0.9` series: public DGP simulation API (`src/dgp/`, 40 exports) and rng-first test seeding across the suite (DGP series, `#790`–`#807`, `#813`). Downstream `[compat]` of `MacroEconometricModels = "0.9"` still resolves. **Changed numerical output** for `compare_var_lp` and SMM `j_test` under identity weighting (both bugfixes, below).

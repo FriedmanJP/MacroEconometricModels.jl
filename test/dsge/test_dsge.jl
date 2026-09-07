@@ -6912,6 +6912,165 @@ end
 
 T_lo(::Dict) = 1e-4
 
+# Two-control RA fixture for the #818 multi-control optimizer tests: RBC with
+# variable labor (states [k, a], controls [c, l]).
+function _vfi_labor_spec()
+    spec = @dsge begin
+        parameters: β = 0.99, α = 0.36, δ = 0.025, ρ = 0.95, σ = 0.007, ψ = 1.5
+        endogenous: c, l, k, a
+        exogenous: ε
+        euler: 1 / c[t] = β * (1 / c[t+1]) * (α * exp(a[t+1]) * k[t]^(α - 1) * l[t+1]^(1 - α) + 1 - δ)
+        c[t] + k[t] = exp(a[t]) * k[t-1]^α * l[t]^(1 - α) + (1 - δ) * k[t-1]
+        ψ * c[t] / (1 - l[t]) = (1 - α) * exp(a[t]) * k[t-1]^α * l[t]^(-α)
+        a[t] = ρ * a[t-1] + σ * ε[t]
+    end
+    return compute_steady_state(spec; initial_guess=[1.0, 0.36, 13.9, 0.0])
+end
+
+function _vfi_labor_bellman(spec)
+    function transition(x, ctrl, ε, θ)
+        k, a = x[1], x[2]
+        c, l = ctrl[1], ctrl[2]
+        k_next = exp(a) * k^θ[:α] * l^(1 - θ[:α]) + (1 - θ[:δ]) * k - c
+        a_next = θ[:ρ] * a + θ[:σ] * ε[1]
+        return [k_next, a_next]
+    end
+    function control_bounds(x, θ)
+        k, a = x[1], x[2]
+        y = exp(a) * k^θ[:α] * 0.3^(1 - θ[:α]) + (1 - θ[:δ]) * k
+        return ([1e-8, 1e-4], [max(y - 1e-8, 2e-8), 1 - 1e-4])
+    end
+    function outcome(x, ctrl, θ)
+        k, a = x[1], x[2]
+        c, l = ctrl[1], ctrl[2]
+        k_next = exp(a) * k^θ[:α] * l^(1 - θ[:α]) + (1 - θ[:δ]) * k - c
+        return [c, l, k_next, a]
+    end
+    util(y, y_lag, ε, θ) = log(y[1]) + θ[:ψ] * log(max(1 - y[2], 1e-12))
+    return (
+        utility = util,
+        beta = :β,
+        controls = [:c, :l],
+        transition = transition,
+        control_bounds = control_bounds,
+        outcome = outcome,
+    )
+end
+
+# Nested 1-control restriction of the labor model (labor pinned at lbar) for
+# the #818 Euler-error comparison. `lbar` enters as a parameter pinned via
+# `_respec` (`$`-interpolation is not supported inside `@dsge`).
+function _vfi_nested_spec(lbar::Real, guess::AbstractVector)
+    spec = @dsge begin
+        parameters: β = 0.99, α = 0.36, δ = 0.025, ρ = 0.95, σ = 0.007, lbar = 0.3
+        endogenous: c, k, a
+        exogenous: ε
+        1 / c[t] = β * (1 / c[t+1]) * (α * exp(a[t+1]) * k[t]^(α - 1) * lbar^(1 - α) + 1 - δ)
+        c[t] + k[t] = exp(a[t]) * k[t-1]^α * lbar^(1 - α) + (1 - δ) * k[t-1]
+        a[t] = ρ * a[t-1] + σ * ε[t]
+    end
+    pv = copy(spec.param_values)
+    pv[:lbar] = Float64(lbar)
+    spec = MacroEconometricModels._respec(spec, pv)
+    return compute_steady_state(spec; initial_guess=collect(Float64, guess))
+end
+
+function _vfi_nested_bellman(spec, lbar::Real)
+    lb = Float64(lbar)
+    function transition(x, ctrl, ε, θ)
+        k, a = x[1], x[2]
+        k_next = exp(a) * k^θ[:α] * lb^(1 - θ[:α]) + (1 - θ[:δ]) * k - ctrl[1]
+        return [k_next, θ[:ρ] * a + θ[:σ] * ε[1]]
+    end
+    function control_bounds(x, θ)
+        k, a = x[1], x[2]
+        y = exp(a) * k^θ[:α] * lb^(1 - θ[:α]) + (1 - θ[:δ]) * k
+        lo = max(y * 1e-4, 1e-8)
+        return ([lo], [max(y - 1e-8, lo + 1e-8)])
+    end
+    function outcome(x, ctrl, θ)
+        k, a = x[1], x[2]
+        k_next = exp(a) * k^θ[:α] * lb^(1 - θ[:α]) + (1 - θ[:δ]) * k - ctrl[1]
+        return [ctrl[1], k_next, a]
+    end
+    return (
+        utility = log,
+        beta = :β,
+        consumption = :c,
+        controls = [:c],
+        transition = transition,
+        control_bounds = control_bounds,
+        outcome = outcome,
+    )
+end
+
+# Four-state RA fixture for the #819 Smolyak routing tests: stochastic growth
+# with three independent AR(1) components (intractable on a tensor grid).
+function _vfi_4state_spec()
+    spec = @dsge begin
+        parameters: β = 0.99, α = 0.36, δ = 0.025, ρ1 = 0.95, ρ2 = 0.9, ρ3 = 0.5, σ = 0.007
+        endogenous: c, k, a1, a2, a3
+        exogenous: ε1, ε2, ε3
+        1 / c[t] = β * (1 / c[t+1]) * (α * exp(a1[t+1] + a2[t+1] + a3[t+1]) * k[t]^(α - 1) + 1 - δ)
+        c[t] + k[t] = exp(a1[t] + a2[t] + a3[t]) * k[t-1]^α + (1 - δ) * k[t-1]
+        a1[t] = ρ1 * a1[t-1] + σ * ε1[t]
+        a2[t] = ρ2 * a2[t-1] + σ * ε2[t]
+        a3[t] = ρ3 * a3[t-1] + σ * ε3[t]
+    end
+    return compute_steady_state(spec; initial_guess=[2.78, 37.7, 0.0, 0.0, 0.0])
+end
+
+function _vfi_4state_bellman(spec)
+    θ = spec.param_values
+    ρs = Float64[θ[:ρ1], θ[:ρ2], θ[:ρ3]]
+    function transition(x, ctrl, ε, θ)
+        k_next = exp(sum(x[2:4])) * x[1]^θ[:α] + (1 - θ[:δ]) * x[1] - ctrl[1]
+        return [k_next, [ρs[i] * x[1 + i] + θ[:σ] * ε[i] for i in 1:3]...]
+    end
+    function control_bounds(x, θ)
+        y = exp(sum(x[2:4])) * x[1]^θ[:α] + (1 - θ[:δ]) * x[1]
+        lo = max(y * 1e-4, 1e-8)
+        return ([lo], [max(y - 1e-8, lo + 1e-8)])
+    end
+    function outcome(x, ctrl, θ)
+        k_next = exp(sum(x[2:4])) * x[1]^θ[:α] + (1 - θ[:δ]) * x[1] - ctrl[1]
+        return [ctrl[1], k_next, x[2], x[3], x[4]]
+    end
+    return (
+        utility = log,
+        beta = :β,
+        consumption = :c,
+        controls = [:c],
+        transition = transition,
+        control_bounds = control_bounds,
+        outcome = outcome,
+    )
+end
+
+# Max consumption-Euler error of a 4-state solution over three capital points
+# (x_ss[1] is capital). Shared by the #819 convergence and #821 anisotropic tests.
+function _vfi_4state_maxeuler(sol, spec, x_ss)
+    M = MacroEconometricModels
+    qn4, qw4 = M._monomial_nodes_weights(3)
+    θ4 = spec.param_values
+    ρs = Float64[θ4[:ρ1], θ4[:ρ2], θ4[:ρ3]]
+    worst = 0.0
+    k4 = x_ss[1]
+    for x in ([k4, 0, 0, 0], [0.95 * k4, 0, 0, 0], [1.05 * k4, 0, 0, 0])
+        y = evaluate_policy(sol, x)
+        k1 = exp(sum(x[2:4])) * x[1]^θ4[:α] + (1 - θ4[:δ]) * x[1] - y[1]
+        acc = 0.0
+        for q in eachindex(qw4)
+            iszero(qw4[q]) && continue
+            ap = [ρs[i] * x[1 + i] + θ4[:σ] * qn4[q, i] for i in 1:3]
+            R = θ4[:α] * exp(sum(ap)) * k1^(θ4[:α] - 1) + 1 - θ4[:δ]
+            acc += qw4[q] * (1 / evaluate_policy(sol, [k1, ap...])[1]) * R
+        end
+        worst = max(worst, abs(1 - θ4[:β] * acc * y[1]))
+    end
+    return worst
+end
+
 @testset "Value Function Iteration" begin
 
     spec = _vfi_rbc_spec()
@@ -7014,8 +7173,23 @@ end
     @test occursin("pfi_solver", sprint(showerror, err2))
 end
 
-@testset "Smolyak is not supported on Bellman VFI" begin
-    @test_throws ArgumentError vfi_solver(spec; kw..., grid=:smolyak, smolyak_mu=2)
+@testset "Smolyak VFI solves the RBC (#819)" begin
+    # Supersedes the pre-#819 guard (grid=:smolyak threw ArgumentError).
+    sol_s = vfi_solver(spec; kw..., degree=3, n_grid=8, grid=:smolyak, smolyak_mu=2,
+                       max_iter=200, howard_steps=10, n_choice=17, tol=1e-6,
+                       verbose=false)
+    @test sol_s.converged
+    @test sol_s.grid_type == :smolyak
+    @test size(sol_s.collocation_nodes, 1) == 13       # N(2,2)
+    @test sol_s.n_basis == 13
+    @test size(sol_s.smolyak_levels) == (6, 2)
+    @test size(sol_s.value_fn) == (13, 1)
+    @test all(isfinite, sol_s.value_fn)
+    v_ss = evaluate_value(sol_s, x_ss)
+    @test isfinite(v_ss)
+    y_ss = evaluate_policy(sol_s, x_ss)
+    @test all(isfinite, y_ss)
+    @test 0 < y_ss[1] < 10
 end
 
 @testset "Growth model stores V and converges" begin
@@ -7214,6 +7388,253 @@ FAST || @testset "VFI threaded matches sequential" begin
     @test sol_par.converged
     @test abs(evaluate_policy(sol_seq, x_ss)[1] - evaluate_policy(sol_par, x_ss)[1]) < 1e-6
     @test abs(evaluate_value(sol_seq, x_ss) - evaluate_value(sol_par, x_ss)) < 1e-6
+end
+
+@testset "VFI Smolyak node counts match PFI construction (#817)" begin
+    M = MacroEconometricModels
+    for (d, mu, expect) in ((2, 2, 13), (3, 3, 69), (4, 2, 41), (4, 3, 137))
+        n, mi = M._smolyak_grid(d, mu)
+        @test size(n, 1) == expect
+        @test size(mi, 1) == expect
+    end
+    bounds = [0.5 2.0; -0.1 0.1]
+    cache = M._vfi_build_smolyak_grid(bounds, 2, 2)
+    nu, mmi = M._smolyak_grid_from_levels(
+        M._smolyak_admissible_levels(M._smolyak_level_vector(2, 2)))
+    @test size(cache.nodes, 1) == 13
+    @test sortslices(Matrix(cache.nodes); dims=1) ≈
+          sortslices(Matrix(M._scale_from_unit(nu, bounds)); dims=1) atol=1e-12
+    @test cache.multi_indices == mmi
+    @test size(cache.levels, 2) == 2
+end
+
+@testset "VSmolyakInterpolant exactness and boundary penalty (#817)" begin
+    M = MacroEconometricModels
+    bounds = [0.5 2.0; -0.1 0.1]
+    cache = M._vfi_build_smolyak_grid(bounds, 2, 2)
+    itp_c = M.build_V_interpolant(cache, fill(2.5, 13))
+    @test itp_c([1.0, 0.0]) ≈ 2.5 atol=1e-10
+    Vlin = [3.0 * cache.nodes[j, 1] - 2.0 * cache.nodes[j, 2] + 1.0 for j in 1:13]
+    itp_l = M.build_V_interpolant(cache, Vlin)
+    for s in ([1.0, 0.0], [0.7, 0.05], [1.8, -0.08])
+        @test itp_l(s) ≈ 3.0 * s[1] - 2.0 * s[2] + 1.0 atol=1e-10
+    end
+    # Out-of-box at 2x the box corner: clamp + penalty, no NaN, no throw.
+    @test isfinite(itp_l([4.0, 0.2]))
+    @test_throws ArgumentError M.build_V_interpolant(cache, ones(12))
+end
+
+@testset "m==1 optimizer=:auto is bit-identical to :grid1d (#818)" begin
+    base_kw = (; kw..., degree=3, n_grid=6, max_iter=60, howard_steps=5,
+               n_choice=17, tol=1e-6, verbose=false)
+    sol_auto = vfi_solver(spec; base_kw...)
+    sol_g1d = vfi_solver(spec; base_kw..., optimizer=:grid1d)
+    @test sol_auto.value_fn == sol_g1d.value_fn
+    @test sol_auto.coefficients == sol_g1d.coefficients
+    sol_nm = vfi_solver(spec; base_kw..., optimizer=:fminbox_nm)
+    if Base.pkgversion(MacroEconometricModels.Optim) < v"2"
+        # Optim v1 Fminbox(NelderMead) stalls at boundary optima (upstream: the
+        # 1-D min of -log(x) on [1e-4, 5] returns x=3.775 instead of 5.0, and is
+        # insensitive to mu0/mufactor; fixed by the Optim 2 Fminbox rewrite).
+        # Early VFI iterations maximize at the consumption bound, so the v1 NM
+        # solve lands ~8 from :grid1d and never converges. Track as broken so a
+        # future Optim v1 fix surfaces as an unexpected pass.
+        @test_broken abs(evaluate_value(sol_nm, x_ss) - evaluate_value(sol_auto, x_ss)) < 0.05
+    else
+        @test abs(evaluate_value(sol_nm, x_ss) - evaluate_value(sol_auto, x_ss)) < 0.05
+    end
+    sol_lb = vfi_solver(spec; base_kw..., optimizer=:fminbox_lbfgs)
+    @test abs(evaluate_value(sol_lb, x_ss) - evaluate_value(sol_auto, x_ss)) < 0.05
+end
+
+@testset "VFI optimizer error contract (#818)" begin
+    spec_labor = _vfi_labor_spec()
+    kw_labor = _vfi_labor_bellman(spec_labor)
+    # :grid1d is legal on one control (smoke check); m>1 + :grid1d throws.
+    sol_g1 = vfi_solver(spec; kw..., optimizer=:grid1d, degree=3, n_grid=6,
+                        max_iter=2, howard_steps=0, n_choice=9, verbose=false)
+    @test sol_g1 isa ProjectionSolution
+    @test_throws ArgumentError vfi_solver(
+        spec_labor; kw_labor..., degree=3, n_grid=6, max_iter=2, optimizer=:grid1d)
+    @test_throws ArgumentError vfi_solver(
+        spec; kw..., optimizer=:bogus, degree=3, n_grid=6, max_iter=2)
+    @test_throws ArgumentError vfi_solver(
+        spec; kw..., optimizer=:fminbox_nm, optimizer_opts=(; bogus=1),
+        degree=3, n_grid=6, max_iter=2)
+    @test_throws ArgumentError vfi_solver(
+        spec; kw..., grid=:bogus, degree=3, n_grid=6, max_iter=2)
+end
+
+@testset "Two-control VFI converges under :fminbox_nm (#818)" begin
+    spec_labor = _vfi_labor_spec()
+    kw_labor = _vfi_labor_bellman(spec_labor)
+    sol_2 = vfi_solver(spec_labor; kw_labor..., degree=3, n_grid=6,
+                       max_iter=200, howard_steps=5, tol=1e-5, n_choice=9,
+                       verbose=false)
+    @test sol_2.converged
+    x_2ss = spec_labor.steady_state[sol_2.state_indices]
+    y_2ss = evaluate_policy(sol_2, x_2ss)
+    @test all(isfinite, y_2ss)
+    @test abs(y_2ss[1] - spec_labor.steady_state[1]) / spec_labor.steady_state[1] < 0.05
+    @test abs(y_2ss[2] - spec_labor.steady_state[2]) < 0.05
+    # Euler errors vs the nested 1-control restriction (labor pinned at SS).
+    l_ss = spec_labor.steady_state[2]
+    k_ss = spec_labor.steady_state[3]
+    spec_n = _vfi_nested_spec(l_ss, [spec_labor.steady_state[1], k_ss, 0.0])
+    kw_n = _vfi_nested_bellman(spec_n, l_ss)
+    sol_1 = vfi_solver(spec_n; kw_n..., degree=3, n_grid=6,
+                       max_iter=200, howard_steps=5, tol=1e-5, n_choice=9,
+                       verbose=false)
+    @test sol_1.converged
+    # Consumption-Euler errors, reusing each model's own transition closure.
+    M = MacroEconometricModels
+    qn, qw = M._gauss_hermite_scaled(5, Matrix{Float64}(I, 1, 1))
+    function c_euler_2c(sol_x, bl, θ, x)
+        y = evaluate_policy(sol_x, x)
+        c, l = y[1], y[2]
+        acc = 0.0
+        for q in eachindex(qw)
+            iszero(qw[q]) && continue
+            ε = [qn[q, 1]]
+            xp = bl.transition(x, [c, l], ε, θ)
+            yp = evaluate_policy(sol_x, xp)
+            R = θ[:α] * exp(xp[2]) * xp[1]^(θ[:α] - 1) * yp[2]^(1 - θ[:α]) +
+                1 - θ[:δ]
+            acc += qw[q] * (1 / yp[1]) * R
+        end
+        return abs(1 - θ[:β] * acc * c)
+    end
+    function c_euler_1c(sol_x, bl, θ, lbar, x)
+        y = evaluate_policy(sol_x, x)
+        c = y[1]
+        acc = 0.0
+        for q in eachindex(qw)
+            iszero(qw[q]) && continue
+            ε = [qn[q, 1]]
+            xp = bl.transition(x, [c], ε, θ)
+            yp = evaluate_policy(sol_x, xp)
+            R = θ[:α] * exp(xp[2]) * xp[1]^(θ[:α] - 1) * lbar^(1 - θ[:α]) +
+                1 - θ[:δ]
+            acc += qw[q] * (1 / yp[1]) * R
+        end
+        return abs(1 - θ[:β] * acc * c)
+    end
+    p2 = spec_labor.param_values
+    xs2 = [[k_ss, 0.0], [0.95 * k_ss, 0.0], [1.05 * k_ss, 0.0]]
+    e2 = maximum(c_euler_2c(sol_2, kw_labor, p2, x) for x in xs2)
+    p1 = spec_n.param_values
+    k1ss = spec_n.steady_state[2]
+    xs1 = [[k1ss, 0.0], [0.95 * k1ss, 0.0], [1.05 * k1ss, 0.0]]
+    e1 = maximum(c_euler_1c(sol_1, kw_n, p1, l_ss, x) for x in xs1)
+    @test e2 < 0.05
+    @test e2 <= 2 * e1 + 1e-3
+end
+
+@testset "Smolyak vs tensor agreement improves with μ (#819)" begin
+    sol_m2 = vfi_solver(spec; kw..., degree=3, n_grid=8, grid=:smolyak, smolyak_mu=2,
+                        max_iter=200, howard_steps=10, n_choice=17, tol=1e-6,
+                        verbose=false)
+    sol_m3 = vfi_solver(spec; kw..., degree=3, n_grid=8, grid=:smolyak, smolyak_mu=3,
+                        max_iter=200, howard_steps=10, n_choice=17, tol=1e-6,
+                        verbose=false)
+    @test sol_m2.converged && sol_m3.converged
+    # sol (hoisted tensor baseline) vs sparse grids at SS. μ=2 is coarse on the
+    # wide RBC box (collocation error amplified 1/(1-β)); μ=3 halves nodes gap.
+    e2 = abs(evaluate_value(sol_m2, x_ss) - evaluate_value(sol, x_ss))
+    e3 = abs(evaluate_value(sol_m3, x_ss) - evaluate_value(sol, x_ss))
+    @test e3 < 2.0
+    @test e3 < e2
+end
+
+@testset "VFI grid=:auto routing (#819)" begin
+    sol_t = vfi_solver(spec; kw..., degree=3, n_grid=8, grid=:auto,
+                       max_iter=2, howard_steps=0, n_choice=9, tol=1e-12,
+                       verbose=false)
+    @test sol_t.grid_type == :tensor
+    @test size(sol_t.value_fn, 1) == 8^2
+    @test isempty(sol_t.smolyak_levels)
+    spec_4 = _vfi_4state_spec()
+    kw_4 = _vfi_4state_bellman(spec_4)
+    sol_s = vfi_solver(spec_4; kw_4..., n_grid=6, grid=:auto,
+                       max_iter=2, howard_steps=0, n_choice=9, tol=1e-12,
+                       verbose=false)
+    @test sol_s.grid_type == :smolyak
+    @test size(sol_s.value_fn, 1) == 41       # N(4,2) vs 6^4 = 1296 tensor
+    @test size(sol_s.smolyak_levels) == (15, 4)
+end
+
+@testset "Four-state Smolyak VFI converges (#819)" begin
+    spec_4 = _vfi_4state_spec()
+    kw_4 = _vfi_4state_bellman(spec_4)
+    sol_4 = vfi_solver(spec_4; kw_4..., n_grid=6,
+                       max_iter=200, howard_steps=5, tol=1e-6, n_choice=9,
+                       verbose=false)
+    @test sol_4.converged
+    @test sol_4.grid_type == :smolyak
+    x_4ss = spec_4.steady_state[sol_4.state_indices]
+    @test isfinite(evaluate_value(sol_4, x_4ss))
+    y_4ss = evaluate_policy(sol_4, x_4ss)
+    @test all(isfinite, y_4ss)
+    # Consumption-Euler errors via the solver's monomial quadrature.
+    @test _vfi_4state_maxeuler(sol_4, spec_4, x_4ss) < 0.05
+end
+
+@testset "Anisotropic Smolyak VFI (#821)" begin
+    M = MacroEconometricModels
+    # Vector smolyak_mu matches PFI's construction exactly.
+    sb = [30.0 46.0; -0.1 0.1; -0.1 0.1; -0.05 0.05]
+    cache = M._vfi_build_smolyak_grid(Matrix{Float64}(sb), 4, [3, 2, 2, 1])
+    nu, mmi = M._smolyak_grid_from_levels(
+        M._smolyak_admissible_levels(M._smolyak_level_vector(4, [3, 2, 2, 1])))
+    @test size(cache.nodes, 1) == 31
+    @test sortslices(Matrix(cache.nodes); dims=1) ≈
+          sortslices(Matrix(M._scale_from_unit(nu, sb)); dims=1) atol=1e-12
+    @test cache.multi_indices == mmi
+    # Heterogeneous persistence ([k, a1, a2, a3] with ρ = 0.95/0.9/0.5):
+    # extra resolution on capital, less on the fast shock — fewer nodes at
+    # equal-or-better Euler error than isotropic μ=2 (41 nodes).
+    spec_4 = _vfi_4state_spec()
+    kw_4 = _vfi_4state_bellman(spec_4)
+    sol_iso = vfi_solver(spec_4; kw_4..., n_grid=6, grid=:smolyak, smolyak_mu=2,
+                         max_iter=200, howard_steps=5, tol=1e-6, n_choice=9,
+                         verbose=false)
+    sol_ani = vfi_solver(spec_4; kw_4..., n_grid=6, grid=:smolyak,
+                         smolyak_mu=[3, 2, 2, 1], max_iter=300, howard_steps=5,
+                         tol=1e-6, n_choice=9, verbose=false)
+    @test sol_iso.converged
+    @test sol_ani.converged
+    @test size(sol_ani.collocation_nodes, 1) < size(sol_iso.collocation_nodes, 1)
+    x_4ss = spec_4.steady_state[sol_ani.state_indices]
+    e_iso = _vfi_4state_maxeuler(sol_iso, spec_4, x_4ss)
+    e_ani = _vfi_4state_maxeuler(sol_ani, spec_4, x_4ss)
+    @test e_ani < e_iso
+    @test e_ani < 0.005
+    @test isfinite(evaluate_value(sol_ani, x_4ss))
+    @test all(isfinite, evaluate_policy(sol_ani, x_4ss))
+end
+
+@testset "Two-control Smolyak VFI converges (#819)" begin
+    spec_labor = _vfi_labor_spec()
+    kw_labor = _vfi_labor_bellman(spec_labor)
+    sol_2s = vfi_solver(spec_labor; kw_labor..., grid=:smolyak, smolyak_mu=2,
+                        degree=3, n_grid=6, max_iter=200, howard_steps=5,
+                        tol=1e-5, n_choice=9, verbose=false)
+    @test sol_2s.converged
+    @test sol_2s.grid_type == :smolyak
+    x_2ss = spec_labor.steady_state[sol_2s.state_indices]
+    @test isfinite(evaluate_value(sol_2s, x_2ss))
+    y_2ss = evaluate_policy(sol_2s, x_2ss)
+    @test all(isfinite, y_2ss)
+    @test abs(y_2ss[1] - spec_labor.steady_state[1]) / spec_labor.steady_state[1] < 0.30
+end
+
+@testset "Smolyak VFI threaded determinism" begin
+    det_kw = (; kw..., degree=3, n_grid=6, grid=:smolyak, smolyak_mu=2,
+              max_iter=30, howard_steps=2, n_choice=9, tol=1e-12,
+              threaded=true, verbose=false)
+    sol_a = vfi_solver(spec; det_kw...)
+    sol_b = vfi_solver(spec; det_kw...)
+    @test sol_a.value_fn == sol_b.value_fn
 end
 
 end # Value Function Iteration
