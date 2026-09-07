@@ -107,7 +107,15 @@ This is not Euler time iteration; that algorithm is [`pfi_solver`](@ref).
 - `grid::Symbol=:tensor`: only `:tensor` (or `:auto` → tensor) is supported
 - `quadrature::Symbol=:auto`: `:gauss_hermite`, `:monomial`, or `:auto`
 - `n_quad::Int=5`: quadrature nodes per shock dimension
-- `n_choice::Int=41`: line-search points on the control box
+- `n_choice::Int=41`: line-search points on the control box (`:grid1d` only)
+- `optimizer::Symbol=:auto`: Bellman RHS maximizer. `:auto` → `:grid1d` for one
+  control, `:fminbox_nm` for a control vector. `:grid1d` is the legacy 1-D scan +
+  golden-section refine (one control only); `:fminbox_nm` is derivative-free
+  `Optim.Fminbox(NelderMead())` (any `m ≥ 1`, kink-robust); `:fminbox_lbfgs` is
+  `Optim.Fminbox(LBFGS())` with central finite-difference gradients (any `m ≥ 1`,
+  smooth problems). Unknown symbols throw `ArgumentError`.
+- `optimizer_opts::NamedTuple=(;)`: options forwarded to `Optim.Options`
+  (`iterations`, `x_tol`, `f_tol`, `g_tol`, `show_trace`)
 - `scale::Real=3.0`: state bounds = SS ± scale × σ (capital is widened further)
 - `tol::Real=1e-8`: sup-norm tolerance on ``V``
 - `max_iter::Int=500`: maximum VFI iterations
@@ -133,6 +141,8 @@ function vfi_solver(spec::ModelSpec{T};
                     quadrature::Symbol=:auto,
                     n_quad::Int=5,
                     n_choice::Int=41,
+                    optimizer::Symbol=:auto,
+                    optimizer_opts::NamedTuple=(;),
                     scale::Real=3.0,
                     tol::Real=1e-8,
                     max_iter::Int=500,
@@ -183,9 +193,7 @@ function vfi_solver(spec::ModelSpec{T};
 
     ctrl_names = controls === nothing ? spec.endog[control_idx] : collect(controls)
     n_ctrl = length(ctrl_names)
-    n_ctrl == 1 || throw(ArgumentError(
-        "vfi_solver supports one continuous control (got $(n_ctrl): $ctrl_names). " *
-        "Pass controls=[:c] (or the single choice variable) and recover the rest via outcome."))
+    optimizer = _vfi_resolve_optimizer(optimizer, n_ctrl)
     ctrl_idx = [findfirst(==(nm), spec.endog) for nm in ctrl_names]
     any(isnothing, ctrl_idx) && throw(ArgumentError(
         "controls $ctrl_names are not all in spec.endog = $(spec.endog)"))
@@ -278,31 +286,41 @@ function vfi_solver(spec::ModelSpec{T};
     for k in 1:max_iter
         iter = k
 
+        # Continuation-value evaluator over the current V iterate, rebuilt
+        # BEFORE the threaded node loop; the closure is read-only.
+        Veval = let Vloc = V, gridsloc = grids, bloc = state_bounds_T
+            xp -> _vfi_interp_V(Vloc, gridsloc, bloc, xp)
+        end
         if threaded && Threads.nthreads() > 1
             Threads.@threads for j in 1:n_nodes
                 V_new[cart[j]], a_pol[j, :] = _vfi_maximize(
                     nodes_phys[j, :], a_pol[j, :], spec, utility, consumption,
                     transition, control_bounds, outcome, ctrl_idx, state_idx,
-                    β, θ, ε_zero, V, grids, state_bounds_T,
-                    quad_nodes, quad_weights, n_choice)
+                    β, θ, ε_zero, Veval,
+                    quad_nodes, quad_weights, n_choice;
+                    optimizer=optimizer, optimizer_opts=optimizer_opts)
             end
         else
             for j in 1:n_nodes
                 V_new[cart[j]], a_pol[j, :] = _vfi_maximize(
                     nodes_phys[j, :], a_pol[j, :], spec, utility, consumption,
                     transition, control_bounds, outcome, ctrl_idx, state_idx,
-                    β, θ, ε_zero, V, grids, state_bounds_T,
-                    quad_nodes, quad_weights, n_choice)
+                    β, θ, ε_zero, Veval,
+                    quad_nodes, quad_weights, n_choice;
+                    optimizer=optimizer, optimizer_opts=optimizer_opts)
             end
         end
 
         for _h in 1:howard_steps
             Vh = copy(V_new)
+            Vheval = let Vloc = Vh, gridsloc = grids, bloc = state_bounds_T
+                xp -> _vfi_interp_V(Vloc, gridsloc, bloc, xp)
+            end
             for j in 1:n_nodes
                 V_new[cart[j]] = _vfi_eval_action(
                     nodes_phys[j, :], a_pol[j, :], spec, utility, consumption,
                     transition, outcome, ctrl_idx, state_idx, β, θ, ε_zero,
-                    Vh, grids, state_bounds_T, quad_nodes, quad_weights)
+                    Vheval, quad_nodes, quad_weights)
             end
         end
 
@@ -343,8 +361,11 @@ function vfi_solver(spec::ModelSpec{T};
     V_cheb = zeros(T, size(nodes_phys_cheb, 1))
     for j in 1:size(nodes_phys_cheb, 1)
         x = nodes_phys_cheb[j, :]
-        a = T[_vfi_multilinear_scalar(grids, reshape(a_pol[:, 1], V_shape), x,
-                                      state_bounds_T)]
+        a = Vector{T}(undef, n_ctrl)
+        for k in 1:n_ctrl
+            a[k] = _vfi_multilinear_scalar(grids, reshape(a_pol[:, k], V_shape),
+                                           x, state_bounds_T)
+        end
         y_cheb[j, :] = _vfi_pack_y(x, a, spec, outcome, ctrl_idx, state_idx,
                                    transition, θ, ε_zero)
         V_cheb[j] = _vfi_interp_V(V, grids, state_bounds_T, x)
@@ -521,7 +542,7 @@ function _vfi_multilinear_scalar(grids::Vector{Vector{T}}, V::AbstractArray{T},
 end
 
 function _vfi_expected_V(x::AbstractVector{T}, a::AbstractVector{T},
-                         transition, θ, V, grids, state_bounds,
+                         transition, θ, Veval,
                          quad_nodes::AbstractMatrix{T},
                          quad_weights::AbstractVector{T}) where {T}
     ev = zero(T)
@@ -532,7 +553,7 @@ function _vfi_expected_V(x::AbstractVector{T}, a::AbstractVector{T},
         iszero(w) && continue
         ε = n_eps == 0 ? T[] : vec(@view quad_nodes[q, :])
         xp = Vector{T}(transition(x, a, ε, θ))
-        ev += w * _vfi_interp_V(V, grids, state_bounds, xp)
+        ev += w * T(Veval(xp))
     end
     return ev
 end
@@ -575,22 +596,153 @@ function _vfi_pack_y(x, a, spec::ModelSpec{T}, outcome, ctrl_idx, state_idx,
 end
 
 function _vfi_eval_action(x, a, spec, utility, consumption, transition, outcome,
-                          ctrl_idx, state_idx, β, θ, ε_zero, V, grids,
-                          state_bounds, quad_nodes, quad_weights)
+                          ctrl_idx, state_idx, β, θ, ε_zero, Veval,
+                          quad_nodes, quad_weights)
     u = _vfi_reward(x, a, spec, utility, consumption, outcome, ctrl_idx,
                     state_idx, transition, θ, ε_zero)
-    ev = _vfi_expected_V(x, a, transition, θ, V, grids, state_bounds,
-                         quad_nodes, quad_weights)
+    ev = _vfi_expected_V(x, a, transition, θ, Veval, quad_nodes, quad_weights)
     return u + β * ev
+end
+
+const _VFI_OPTIMIZERS = (:auto, :grid1d, :fminbox_nm, :fminbox_lbfgs)
+
+"""
+    _vfi_resolve_optimizer(optimizer, n_ctrl) -> Symbol
+
+Resolve `optimizer=:auto` to `:grid1d` for a single control and `:fminbox_nm`
+for a control vector; validate explicit choices (`:grid1d` needs `m == 1`).
+"""
+function _vfi_resolve_optimizer(optimizer::Symbol, n_ctrl::Integer)
+    optimizer in _VFI_OPTIMIZERS || throw(ArgumentError(
+        "optimizer must be one of $(collect(_VFI_OPTIMIZERS)), got :$optimizer"))
+    optimizer === :auto && return n_ctrl == 1 ? :grid1d : :fminbox_nm
+    if optimizer === :grid1d && n_ctrl != 1
+        throw(ArgumentError(
+            "optimizer=:grid1d supports one continuous control (got $n_ctrl). " *
+            "Use optimizer=:fminbox_nm (or :fminbox_lbfgs for smooth problems)."))
+    end
+    return optimizer
+end
+
+"""
+    _vfi_optimizer_options(optimizer, optimizer_opts) -> Optim.Options
+
+Map user `optimizer_opts` onto `Optim.Options`. Recognized keys: `iterations`,
+`x_tol`, `f_tol`, `g_tol`, `show_trace`; anything else throws `ArgumentError`.
+Defaults: 200 iterations for `:fminbox_nm`, 100 for `:fminbox_lbfgs`.
+"""
+function _vfi_optimizer_options(optimizer::Symbol, optimizer_opts::NamedTuple)
+    allowed = (:iterations, :x_tol, :f_tol, :g_tol, :show_trace)
+    for k in keys(optimizer_opts)
+        k in allowed || throw(ArgumentError(
+            "unknown optimizer_opts key :$k (allowed: $allowed)"))
+    end
+    default_iter = optimizer === :fminbox_lbfgs ? 100 : 200
+    # Canonical Optim kwarg names (Optim 1 and 2): the short x_tol/f_tol aliases
+    # warn on Optim 2, so map user keys onto x_abstol/f_reltol/g_abstol.
+    return Optim.Options(;
+        iterations=get(optimizer_opts, :iterations, default_iter),
+        x_abstol=get(optimizer_opts, :x_tol, 1e-8),
+        f_reltol=get(optimizer_opts, :f_tol, 1e-8),
+        g_abstol=get(optimizer_opts, :g_tol, 1e-8),
+        show_trace=get(optimizer_opts, :show_trace, false))
+end
+
+"""
+Nudge a warm-start vector into the strict interior of `[lo, hi]`, as `Fminbox`
+requires. Per-node locals only — no shared mutable scratch.
+"""
+function _vfi_nudge_interior(a_start::AbstractVector{T}, lo::AbstractVector{T},
+                             hi::AbstractVector{T}) where {T}
+    x0 = Vector{T}(undef, length(lo))
+    @inbounds for i in eachindex(lo)
+        span = hi[i] - lo[i]
+        δ = max(T(1e-8), T(1e-6) * max(abs(hi[i]), abs(lo[i]), one(T)))
+        δ = min(δ, T(0.25) * max(span, eps(T)))
+        x0[i] = clamp(T(a_start[i]), lo[i] + δ, hi[i] - δ)
+    end
+    return x0
+end
+
+"""
+    _vfi_best_seed(a_start, rhs, lo, hi) -> Vector
+
+Best of a small deterministic seed set for the single Fminbox run: the
+warm-start `a_start` first, then the box midpoint, then box corners (all
+interior-nudged; corners capped at 8 for `m ≥ 4`). Each seed costs one RHS
+eval; the winner starts the optimizer. Pure warm-started local search tracks
+kink-induced local basins across VFI iterations (diagnosed #818: iteration-2
+corner node stuck 2.36 below the global max); best-of-seeds keeps the solve on
+the global basin while the warm seed still wins once the policy settles.
+"""
+function _vfi_best_seed(a_start::AbstractVector{T}, rhs,
+                        lo::AbstractVector{T}, hi::AbstractVector{T}) where {T}
+    m = length(lo)
+    seeds = Vector{Vector{T}}()
+    push!(seeds, _vfi_nudge_interior(a_start, lo, hi))
+    push!(seeds, _vfi_nudge_interior(T.(0.5 .* (lo .+ hi)), lo, hi))
+    if m <= 3
+        for mask in 0:(2^m - 1)
+            corner = Vector{T}(undef, m)
+            for i in 1:m
+                corner[i] = ((mask >> (i - 1)) & 1) == 1 ? hi[i] : lo[i]
+            end
+            push!(seeds, _vfi_nudge_interior(corner, lo, hi))
+        end
+    else
+        for i in 1:m
+            for v in (lo[i], hi[i])
+                pt = T.(0.5 .* (lo .+ hi))
+                pt[i] = v
+                push!(seeds, _vfi_nudge_interior(pt, lo, hi))
+            end
+        end
+    end
+    best_seed = seeds[1]
+    best_v = rhs(best_seed)
+    for s in seeds[2:end]
+        v = rhs(s)
+        if isfinite(v) && v > best_v
+            best_v = v
+            best_seed = s
+        end
+    end
+    return best_seed
 end
 
 function _vfi_maximize(x, a_guess, spec::ModelSpec{T}, utility, consumption,
                        transition, control_bounds, outcome, ctrl_idx, state_idx,
-                       β, θ, ε_zero, V, grids, state_bounds,
-                       quad_nodes, quad_weights, n_choice) where {T}
+                       β, θ, ε_zero, Veval,
+                       quad_nodes, quad_weights, n_choice;
+                       optimizer::Symbol=:auto,
+                       optimizer_opts::NamedTuple=(;)) where {T}
     lo_hi = control_bounds(x, θ)
-    lo = T(_vfi_bound_scalar(lo_hi[1]))
-    hi = T(_vfi_bound_scalar(lo_hi[2]))
+    lo = T.(_vfi_bound_vector(lo_hi[1], length(ctrl_idx)))
+    hi = T.(_vfi_bound_vector(lo_hi[2], length(ctrl_idx)))
+    for i in eachindex(lo)
+        hi[i] < lo[i] && ((lo[i], hi[i]) = (hi[i], lo[i]))
+        hi[i] == lo[i] && (hi[i] = lo[i] + T(1e-8))
+    end
+    opt = _vfi_resolve_optimizer(optimizer, length(ctrl_idx))
+    if opt === :grid1d
+        return _vfi_maximize_grid1d(x, a_guess, spec, utility, consumption,
+                                    transition, outcome, ctrl_idx, state_idx,
+                                    β, θ, ε_zero, Veval,
+                                    quad_nodes, quad_weights, n_choice,
+                                    lo[1], hi[1])
+    end
+    return _vfi_maximize_fminbox(x, a_guess, spec, utility, consumption,
+                                 transition, outcome, ctrl_idx, state_idx,
+                                 β, θ, ε_zero, Veval,
+                                 quad_nodes, quad_weights,
+                                 lo, hi, opt, optimizer_opts)
+end
+
+function _vfi_maximize_grid1d(x, a_guess, spec::ModelSpec{T}, utility, consumption,
+                              transition, outcome, ctrl_idx, state_idx,
+                              β, θ, ε_zero, Veval,
+                              quad_nodes, quad_weights, n_choice,
+                              lo::T, hi::T) where {T}
     hi < lo && ((lo, hi) = (hi, lo))
     hi == lo && (hi = lo + T(1e-8))
 
@@ -602,7 +754,7 @@ function _vfi_maximize(x, a_guess, spec::ModelSpec{T}, utility, consumption,
         a = T[lo + t * (hi - lo)]
         val = _vfi_eval_action(x, a, spec, utility, consumption, transition,
                                outcome, ctrl_idx, state_idx, β, θ, ε_zero,
-                               V, grids, state_bounds, quad_nodes, quad_weights)
+                               Veval, quad_nodes, quad_weights)
         if isfinite(val) && val > best_val
             best_val = val
             best_a = a
@@ -613,8 +765,7 @@ function _vfi_maximize(x, a_guess, spec::ModelSpec{T}, utility, consumption,
         best_a = T[(lo + hi) / 2]
         best_val = _vfi_eval_action(x, best_a, spec, utility, consumption,
                                     transition, outcome, ctrl_idx, state_idx,
-                                    β, θ, ε_zero, V, grids, state_bounds,
-                                    quad_nodes, quad_weights)
+                                    β, θ, ε_zero, Veval, quad_nodes, quad_weights)
         return best_val, best_a
     end
 
@@ -626,10 +777,10 @@ function _vfi_maximize(x, a_guess, spec::ModelSpec{T}, utility, consumption,
     a2 = glo + φ * (ghi - glo)
     f1 = _vfi_eval_action(x, T[a1], spec, utility, consumption, transition,
                           outcome, ctrl_idx, state_idx, β, θ, ε_zero,
-                          V, grids, state_bounds, quad_nodes, quad_weights)
+                          Veval, quad_nodes, quad_weights)
     f2 = _vfi_eval_action(x, T[a2], spec, utility, consumption, transition,
                           outcome, ctrl_idx, state_idx, β, θ, ε_zero,
-                          V, grids, state_bounds, quad_nodes, quad_weights)
+                          Veval, quad_nodes, quad_weights)
     for _ in 1:20
         (ghi - glo) < T(1e-8) * max(one(T), abs(best_a[1])) && break
         if f1 < f2
@@ -639,8 +790,7 @@ function _vfi_maximize(x, a_guess, spec::ModelSpec{T}, utility, consumption,
             a2 = glo + φ * (ghi - glo)
             f2 = _vfi_eval_action(x, T[a2], spec, utility, consumption,
                                   transition, outcome, ctrl_idx, state_idx,
-                                  β, θ, ε_zero, V, grids, state_bounds,
-                                  quad_nodes, quad_weights)
+                                  β, θ, ε_zero, Veval, quad_nodes, quad_weights)
         else
             ghi = a2
             a2 = a1
@@ -648,8 +798,7 @@ function _vfi_maximize(x, a_guess, spec::ModelSpec{T}, utility, consumption,
             a1 = ghi - φ * (ghi - glo)
             f1 = _vfi_eval_action(x, T[a1], spec, utility, consumption,
                                   transition, outcome, ctrl_idx, state_idx,
-                                  β, θ, ε_zero, V, grids, state_bounds,
-                                  quad_nodes, quad_weights)
+                                  β, θ, ε_zero, Veval, quad_nodes, quad_weights)
         end
     end
     if f1 >= f2 && f1 > best_val
@@ -662,8 +811,86 @@ function _vfi_maximize(x, a_guess, spec::ModelSpec{T}, utility, consumption,
     return best_val, best_a
 end
 
+"""
+    _vfi_maximize_fminbox(...) -> (best_val, best_a)
+
+Maximize the Bellman RHS over the control box `a ∈ [lo, hi] ⊂ R^m` with
+`Optim.Fminbox`: derivative-free Nelder-Mead (`:fminbox_nm`, kink-robust) or
+LBFGS (`:fminbox_lbfgs`, smooth opt-in; Garch-style two-stage NM→LBFGS is
+available by chaining solves). LBFGS uses Optim's built-in central
+finite-difference gradients rather than ForwardDiff: the Bellman RHS threads
+through user-supplied `transition`/`outcome`/`utility` closures (plus the
+tensor-path multilinear interpolant), which are not Dual-generic, so AD would
+be fragile here. The single Optim run starts from the best of a small
+deterministic seed set (warm-start previous-iteration policy first): pure
+warm-started local search tracks kink-induced local basins across iterations
+(the multilinear interpolant kinks at every grid line), while best-of-seeds
+globalization keeps the solve on the global basin at ~10 extra RHS evals per
+node. All seeds and optimizer temporaries are per-node locals, so the threaded
+node loop stays data-race free.
+"""
+function _vfi_maximize_fminbox(x, a_guess, spec, utility, consumption,
+                               transition, outcome, ctrl_idx, state_idx,
+                               β, θ, ε_zero, Veval,
+                               quad_nodes, quad_weights,
+                               lo::AbstractVector{T}, hi::AbstractVector{T},
+                               opt::Symbol, optimizer_opts::NamedTuple) where {T}
+    m = length(lo)
+    rhs(a) = try
+        _vfi_eval_action(x, a, spec, utility, consumption, transition,
+                         outcome, ctrl_idx, state_idx, β, θ, ε_zero,
+                         Veval, quad_nodes, quad_weights)
+    catch e
+        (e isa DomainError || e isa InexactError) && return T(-1e10)
+        rethrow(e)
+    end
+    obj(a) = begin
+        v = rhs(a)
+        (!isfinite(v) || v < T(-1e10)) ? T(1e10) : -v
+    end
+    a_start = length(a_guess) >= m ? Vector{T}(a_guess[1:m]) :
+              fill(T(0.5) * (lo[1] + hi[1]), m)
+    for i in (length(a_guess) + 1):m
+        a_start[i] = T(0.5) * (lo[i] + hi[i])
+    end
+    (all(isfinite, lo) && all(isfinite, hi)) || throw(ArgumentError(
+        "optimizer=:$opt needs finite control bounds (got lo=$lo, hi=$hi); " *
+        "pass control_bounds= explicitly with finite box."))
+    x0 = _vfi_best_seed(a_start, rhs, lo, hi)
+    options = _vfi_optimizer_options(opt, optimizer_opts)
+    inner = opt === :fminbox_lbfgs ? Optim.LBFGS() : Optim.NelderMead()
+    # LBFGS gradients are Optim's built-in central finite differences (see
+    # docstring): robust to non-Dual-generic user closures.
+    result = Optim.optimize(obj, Vector{Float64}(lo), Vector{Float64}(hi),
+                            Vector{Float64}(x0), Optim.Fminbox(inner), options)
+    best_a = T.(Optim.minimizer(result))
+    best_val = -T(Optim.minimum(result))
+    if !isfinite(best_val)
+        best_a = T.(0.5 .* (lo .+ hi))
+        best_val = rhs(best_a)
+    end
+    return best_val, best_a
+end
+
 _vfi_bound_scalar(x::Number) = x
 _vfi_bound_scalar(x::AbstractArray) = x[1]
+
+"""
+    _vfi_bound_vector(x, m) -> Vector
+
+Normalize one side of `control_bounds` output to a length-`m` vector: scalars
+broadcast, length-1 containers repeat, length-`m` containers pass through.
+"""
+function _vfi_bound_vector(x::Number, m::Integer)
+    return fill(x, Int(m))
+end
+function _vfi_bound_vector(x::AbstractArray, m::Integer)
+    v = vec(collect(x))
+    length(v) == 1 && return fill(v[1], Int(m))
+    length(v) == Int(m) || throw(ArgumentError(
+        "control_bounds side has length $(length(v)) for $m controls"))
+    return v
+end
 
 # =============================================================================
 # Infer transition / control_bounds from ModelSpec (#658)
@@ -812,40 +1039,45 @@ function _vfi_infer_transition(spec::ModelSpec{T}, state_idx::Vector{Int},
 end
 
 """
-Infer a box on the single VFI control: `variable_bound` / `constraints` when
-present, otherwise an SS collar of half-width `scale × σ` (Lyapunov, with floor).
+Infer a per-control box on the VFI controls: `variable_bound` / `constraints`
+when present, otherwise an SS collar of half-width `scale × σ` (Lyapunov, with
+floor), computed independently per control. The single-control case reproduces
+the legacy scalar box elementwise.
 """
 function _vfi_infer_control_bounds(spec::ModelSpec{T}, ctrl_idx::Vector{Int},
                                    scale::Real, constraints::Vector,
                                    G1::AbstractMatrix{T},
                                    impact::AbstractMatrix{T}) where {T}
-    ci = ctrl_idx[1]
-    ss_c = spec.steady_state[ci]
-    lo = T(-Inf)
-    hi = T(Inf)
-    cname = spec.endog[ci]
-    for c in constraints
-        if c isa VariableBound && c.var_name === cname
-            c.lower !== nothing && (lo = T(c.lower))
-            c.upper !== nothing && (hi = T(c.upper))
-        end
-    end
     Var_y = try
         solve_lyapunov(G1, impact)
     catch
         zeros(T, spec.n_endog, spec.n_endog)
     end
-    sigma_c = sqrt(max(Var_y[ci, ci], zero(T)))
-    half = max(T(scale) * sigma_c, T(0.5) * abs(ss_c), T(0.1))
-    if !isfinite(lo)
-        lo = ss_c > zero(T) ? max(T(1e-8), ss_c - half) : ss_c - half
+    lo_v = Vector{T}(undef, length(ctrl_idx))
+    hi_v = Vector{T}(undef, length(ctrl_idx))
+    for (k, ci) in enumerate(ctrl_idx)
+        ss_c = spec.steady_state[ci]
+        lo = T(-Inf)
+        hi = T(Inf)
+        cname = spec.endog[ci]
+        for c in constraints
+            if c isa VariableBound && c.var_name === cname
+                c.lower !== nothing && (lo = T(c.lower))
+                c.upper !== nothing && (hi = T(c.upper))
+            end
+        end
+        sigma_c = sqrt(max(Var_y[ci, ci], zero(T)))
+        half = max(T(scale) * sigma_c, T(0.5) * abs(ss_c), T(0.1))
+        if !isfinite(lo)
+            lo = ss_c > zero(T) ? max(T(1e-8), ss_c - half) : ss_c - half
+        end
+        if !isfinite(hi)
+            hi = ss_c + half
+            ss_c > zero(T) && (hi = max(hi, T(2) * ss_c))
+        end
+        hi <= lo && (hi = lo + T(1e-8))
+        lo_v[k] = lo
+        hi_v[k] = hi
     end
-    if !isfinite(hi)
-        hi = ss_c + half
-        ss_c > zero(T) && (hi = max(hi, T(2) * ss_c))
-    end
-    hi <= lo && (hi = lo + T(1e-8))
-    lo_v = T[lo]
-    hi_v = T[hi]
     return (x, θ) -> (lo_v, hi_v)
 end
