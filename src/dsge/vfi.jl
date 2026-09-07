@@ -102,9 +102,15 @@ This is not Euler time iteration; that algorithm is [`pfi_solver`](@ref).
 - `consumption::Union{Nothing,Symbol}=nothing`: if set, `utility` is `u(c::Real)`
 - `controls`: choice-variable names; default is the non-state endogenous variables
 - `outcome`: `(x, a, θ) → y` full endogenous vector; default fills states + controls
-- `degree::Int=5`: Chebyshev degree used to export the policy
+- `degree::Int=5`: Chebyshev degree used to export the policy (tensor path)
 - `n_grid::Int=12`: uniform tensor nodes per state for the Bellman grid
-- `grid::Symbol=:tensor`: only `:tensor` (or `:auto` → tensor) is supported
+  (tensor path only)
+- `grid::Symbol=:auto`: `:tensor` (uniform nodes + multilinear `V̂`) or `:smolyak`
+  (sparse nodes + Chebyshev-collocation `V̂`). `:auto` → `:tensor` for `nx ≤ 3`,
+  `:smolyak` for `nx ≥ 4` (uniform `n_grid^nx` is intractable there)
+- `smolyak_mu=2`: Smolyak level — scalar (isotropic `|l|₁ ≤ μ`) or `nx`-vector
+  (anisotropic `Σ l_k/μ_k ≤ 1`). μ=2 (41 nodes at `nx=4`) is the VFI default:
+  PFI's μ=3 is too rich per-iteration for VFI's refit-every-sweep cost
 - `quadrature::Symbol=:auto`: `:gauss_hermite`, `:monomial`, or `:auto`
 - `n_quad::Int=5`: quadrature nodes per shock dimension
 - `n_choice::Int=41`: line-search points on the control box (`:grid1d` only)
@@ -137,7 +143,7 @@ function vfi_solver(spec::ModelSpec{T};
                     degree::Int=5,
                     n_grid::Int=12,
                     grid::Symbol=:auto,
-                    smolyak_mu::Union{Integer,AbstractVector{<:Integer}}=3,
+                    smolyak_mu::Union{Integer,AbstractVector{<:Integer}}=2,
                     quadrature::Symbol=:auto,
                     n_quad::Int=5,
                     n_choice::Int=41,
@@ -171,14 +177,8 @@ function vfi_solver(spec::ModelSpec{T};
     n_grid >= 3 || throw(ArgumentError("n_grid must be ≥ 3, got $n_grid"))
     howard_steps >= 0 || throw(ArgumentError("howard_steps must be ≥ 0"))
 
-    if grid === :auto
-        grid = :tensor
-    end
-    grid === :tensor || throw(ArgumentError(
-        "vfi_solver supports grid=:tensor only (got :$grid). " *
-        "Smolyak value-function iteration is not implemented; use pfi_solver " *
-        "for Smolyak Euler time iteration."))
-    _ = smolyak_mu
+    grid in (:auto, :tensor, :smolyak) || throw(ArgumentError(
+        "grid must be :tensor, :smolyak, or :auto, got :$grid"))
 
     n_eq = spec.n_endog
     n_eps = spec.n_exog
@@ -190,6 +190,18 @@ function vfi_solver(spec::ModelSpec{T};
     state_idx, control_idx = _state_control_indices(ld)
     nx = length(state_idx)
     nx > 0 || throw(ArgumentError("Model has no state variables — VFI requires at least one"))
+
+    if grid === :auto
+        grid = nx <= 3 ? :tensor : :smolyak
+    end
+    use_smolyak = grid === :smolyak
+    if use_smolyak
+        # Smolyak levels are validated here so a bad smolyak_mu throws before
+        # any iteration work (tensor path ignores smolyak_mu, as before).
+        _smolyak_level_vector(nx, smolyak_mu)
+    else
+        _ = smolyak_mu
+    end
 
     ctrl_names = controls === nothing ? spec.endog[control_idx] : collect(controls)
     n_ctrl = length(ctrl_names)
@@ -209,15 +221,32 @@ function vfi_solver(spec::ModelSpec{T};
 
     state_bounds = _vfi_state_bounds(spec, ld, state_idx, scale)
     state_bounds_T = Matrix{T}(state_bounds)
-    grids, nodes_phys = _vfi_uniform_tensor(state_bounds_T, n_grid)
-    n_nodes = size(nodes_phys, 1)
-    V_shape = ntuple(_ -> n_grid, nx)
+    if use_smolyak
+        # Sparse collocation nodes ARE the Bellman grid; V is a Vector over
+        # nodes and the cached factorization refits the interpolant each sweep.
+        smolyak_cache = _vfi_build_smolyak_grid(state_bounds_T, nx, smolyak_mu)
+        nodes_phys = smolyak_cache.nodes
+        n_nodes = size(nodes_phys, 1)
+        V_shape = (n_nodes,)
+        multi_indices = smolyak_cache.multi_indices
+        n_basis = size(multi_indices, 1)
+        nodes_unit = Matrix{T}(_scale_to_unit(nodes_phys, state_bounds_T))
+        grids = Vector{Vector{T}}()
+        basis_cheb = Matrix{T}(undef, 0, 0)
+        nodes_phys_cheb = Matrix{T}(undef, 0, 0)
+    else
+        smolyak_cache = nothing
+        grids, nodes_phys = _vfi_uniform_tensor(state_bounds_T, n_grid)
+        n_nodes = size(nodes_phys, 1)
+        V_shape = ntuple(_ -> n_grid, nx)
 
-    # Chebyshev basis used only to export the policy / a Chebyshev copy of V
-    nodes_unit_cheb, multi_indices = _tensor_grid(nx, degree)
-    n_basis = size(multi_indices, 1)
-    basis_cheb = Matrix{T}(_chebyshev_basis_multi(nodes_unit_cheb, multi_indices))
-    nodes_phys_cheb = Matrix{T}(_scale_from_unit(nodes_unit_cheb, state_bounds_T))
+        # Chebyshev basis used only to export the policy / a Chebyshev copy of V
+        nodes_unit_cheb, multi_indices = _tensor_grid(nx, degree)
+        n_basis = size(multi_indices, 1)
+        basis_cheb = Matrix{T}(_chebyshev_basis_multi(nodes_unit_cheb, multi_indices))
+        nodes_phys_cheb = Matrix{T}(_scale_from_unit(nodes_unit_cheb, state_bounds_T))
+        nodes_unit = Matrix{T}(_scale_to_unit(nodes_phys, state_bounds_T))
+    end
 
     Sigma_e = Matrix{T}(I, max(n_eps, 1), max(n_eps, 1))
     if n_eps == 0
@@ -273,10 +302,11 @@ function vfi_solver(spec::ModelSpec{T};
     for j in 1:n_nodes
         x_dev = nodes_phys[j, :] .- ss[state_idx]
         y_lin = ss + G1[:, state_idx] * x_dev
-        a_pol[j, 1] = y_lin[ctrl_idx[1]]
+        for k in 1:n_ctrl
+            a_pol[j, k] = y_lin[ctrl_idx[k]]
+        end
     end
 
-    cart = CartesianIndices(V_shape)
     tol_T = T(tol)
     damp = T(damping)
     converged = false
@@ -287,13 +317,12 @@ function vfi_solver(spec::ModelSpec{T};
         iter = k
 
         # Continuation-value evaluator over the current V iterate, rebuilt
-        # BEFORE the threaded node loop; the closure is read-only.
-        Veval = let Vloc = V, gridsloc = grids, bloc = state_bounds_T
-            xp -> _vfi_interp_V(Vloc, gridsloc, bloc, xp)
-        end
+        # BEFORE the threaded node loop (collocation refit on the Smolyak
+        # path, read-only multilinear closure on the tensor path).
+        Veval = _vfi_make_veval(smolyak_cache, V, grids, state_bounds_T)
         if threaded && Threads.nthreads() > 1
             Threads.@threads for j in 1:n_nodes
-                V_new[cart[j]], a_pol[j, :] = _vfi_maximize(
+                V_new[j], a_pol[j, :] = _vfi_maximize(
                     nodes_phys[j, :], a_pol[j, :], spec, utility, consumption,
                     transition, control_bounds, outcome, ctrl_idx, state_idx,
                     β, θ, ε_zero, Veval,
@@ -302,7 +331,7 @@ function vfi_solver(spec::ModelSpec{T};
             end
         else
             for j in 1:n_nodes
-                V_new[cart[j]], a_pol[j, :] = _vfi_maximize(
+                V_new[j], a_pol[j, :] = _vfi_maximize(
                     nodes_phys[j, :], a_pol[j, :], spec, utility, consumption,
                     transition, control_bounds, outcome, ctrl_idx, state_idx,
                     β, θ, ε_zero, Veval,
@@ -313,11 +342,9 @@ function vfi_solver(spec::ModelSpec{T};
 
         for _h in 1:howard_steps
             Vh = copy(V_new)
-            Vheval = let Vloc = Vh, gridsloc = grids, bloc = state_bounds_T
-                xp -> _vfi_interp_V(Vloc, gridsloc, bloc, xp)
-            end
+            Vheval = _vfi_make_veval(smolyak_cache, Vh, grids, state_bounds_T)
             for j in 1:n_nodes
-                V_new[cart[j]] = _vfi_eval_action(
+                V_new[j] = _vfi_eval_action(
                     nodes_phys[j, :], a_pol[j, :], spec, utility, consumption,
                     transition, outcome, ctrl_idx, state_idx, β, θ, ε_zero,
                     Vheval, quad_nodes, quad_weights)
@@ -356,36 +383,57 @@ function vfi_solver(spec::ModelSpec{T};
         @warn "VFI solver did not converge after $max_iter iterations (||ΔV||_∞ = $sup_norm, tol = $tol)"
     end
 
-    # Export a Chebyshev policy (and a Chebyshev copy of V) on the degree-grid
-    y_cheb = zeros(T, size(nodes_phys_cheb, 1), n_eq)
-    V_cheb = zeros(T, size(nodes_phys_cheb, 1))
-    for j in 1:size(nodes_phys_cheb, 1)
-        x = nodes_phys_cheb[j, :]
-        a = Vector{T}(undef, n_ctrl)
-        for k in 1:n_ctrl
-            a[k] = _vfi_multilinear_scalar(grids, reshape(a_pol[:, k], V_shape),
-                                           x, state_bounds_T)
+    if use_smolyak
+        # Policy + value fitted directly on the Smolyak nodes with the cached
+        # collocation factorization (the nodes ARE the collocation points, one
+        # interpolant per control for m > 1 over the same basis).
+        y_nodes = zeros(T, n_nodes, n_eq)
+        for j in 1:n_nodes
+            x = nodes_phys[j, :]
+            y_nodes[j, :] = _vfi_pack_y(x, a_pol[j, :], spec, outcome, ctrl_idx,
+                                       state_idx, transition, θ, ε_zero)
         end
-        y_cheb[j, :] = _vfi_pack_y(x, a, spec, outcome, ctrl_idx, state_idx,
-                                   transition, θ, ε_zero)
-        V_cheb[j] = _vfi_interp_V(V, grids, state_bounds_T, x)
+        coeffs = zeros(T, n_eq, n_basis)
+        for v in 1:n_eq
+            coeffs[v, :] = smolyak_cache.F \ (y_nodes[:, v] .- ss[v])
+        end
+        V_coeffs = smolyak_cache.F \ vec(V)
+        smolyak_levels = smolyak_cache.levels
+        grid_out = :smolyak
+        degree_out = maximum(smolyak_levels)
+    else
+        # Export a Chebyshev policy (and a Chebyshev copy of V) on the degree-grid
+        y_cheb = zeros(T, size(nodes_phys_cheb, 1), n_eq)
+        V_cheb = zeros(T, size(nodes_phys_cheb, 1))
+        for j in 1:size(nodes_phys_cheb, 1)
+            x = nodes_phys_cheb[j, :]
+            a = Vector{T}(undef, n_ctrl)
+            for k in 1:n_ctrl
+                a[k] = _vfi_multilinear_scalar(grids, reshape(a_pol[:, k], V_shape),
+                                               x, state_bounds_T)
+            end
+            y_cheb[j, :] = _vfi_pack_y(x, a, spec, outcome, ctrl_idx, state_idx,
+                                       transition, θ, ε_zero)
+            V_cheb[j] = _vfi_interp_V(V, grids, state_bounds_T, x)
+        end
+        coeffs = zeros(T, n_eq, n_basis)
+        if initial_coeffs !== nothing && size(initial_coeffs) == (n_eq, n_basis)
+            coeffs = Matrix{T}(initial_coeffs)
+        end
+        for v in 1:n_eq
+            coeffs[v, :] = basis_cheb \ (y_cheb[:, v] .- ss[v])
+        end
+        V_coeffs = basis_cheb \ V_cheb
+        smolyak_levels = zeros(Int, 0, 0)
+        grid_out = :tensor
+        degree_out = degree
     end
-    coeffs = zeros(T, n_eq, n_basis)
-    if initial_coeffs !== nothing && size(initial_coeffs) == (n_eq, n_basis)
-        coeffs = Matrix{T}(initial_coeffs)
-    end
-    for v in 1:n_eq
-        coeffs[v, :] = basis_cheb \ (y_cheb[:, v] .- ss[v])
-    end
-    V_coeffs = basis_cheb \ V_cheb
-
-    nodes_unit = _scale_to_unit(nodes_phys, state_bounds_T)
 
     return ProjectionSolution{T}(
         coeffs,
         state_bounds_T,
-        :tensor,
-        degree,
+        grid_out,
+        degree_out,
         Matrix{T}(nodes_unit),
         sup_norm,
         n_basis,
@@ -402,6 +450,7 @@ function vfi_solver(spec::ModelSpec{T};
         :vfi;
         value_fn=reshape(vec(V), n_nodes, 1),
         value_coefficients=V_coeffs,
+        smolyak_levels=smolyak_levels,
     )
 end
 
@@ -484,6 +533,18 @@ function evaluate_value(sol::ProjectionSolution{T}, x_state::AbstractVector) whe
         "x_state must have $(nstates(sol)) elements"))
     nx = nstates(sol)
     n_nodes = size(sol.value_fn, 1)
+    if sol.grid_type === :smolyak
+        # Sparse-grid solutions store the collocation coefficients of V; reuse
+        # the (clamp + penalty) Smolyak interpolant — node counts are not
+        # tensor powers here, so the tensor reconstruction below must not run.
+        length(sol.value_coefficients) == size(sol.multi_indices, 1) ||
+            throw(ArgumentError(
+                "evaluate_value: Smolyak solution is missing value_coefficients"))
+        itp = VSmolyakInterpolant{T}(Matrix{T}(sol.state_bounds),
+                                     sol.multi_indices,
+                                     Vector{T}(sol.value_coefficients))
+        return itp(Vector{T}(x_state))
+    end
     n_grid = round(Int, n_nodes^(1 / nx))
     n_grid^nx == n_nodes || throw(ArgumentError(
         "evaluate_value: value_fn length $n_nodes is not a tensor power of $nx states"))
@@ -496,6 +557,24 @@ end
 function _vfi_interp_V(V::AbstractArray{T}, grids::Vector{Vector{T}},
                        state_bounds::AbstractMatrix{T}, x::AbstractVector{T}) where {T}
     return _vfi_multilinear_scalar(grids, V, x, state_bounds)
+end
+
+"""
+    _vfi_make_veval(cache, V, grids, state_bounds) -> evaluator
+
+Build the continuation-value evaluator over the current `V` iterate, fresh
+every outer VFI iteration (and every Howard sub-step) BEFORE the threaded node
+loop. Tensor path (`cache === nothing`): read-only multilinear closure.
+Smolyak path: immutable Chebyshev-collocation refit (`build_V_interpolant`).
+"""
+function _vfi_make_veval(::Nothing, V::AbstractArray{T}, grids::Vector{Vector{T}},
+                         state_bounds::AbstractMatrix{T}) where {T}
+    return xp -> _vfi_interp_V(V, grids, state_bounds, xp)
+end
+function _vfi_make_veval(cache::VFISmolyakCache{T}, V::AbstractArray{T},
+                         grids::Vector{Vector{T}},
+                         state_bounds::AbstractMatrix{T}) where {T}
+    return build_V_interpolant(cache, V)
 end
 
 function _vfi_multilinear_scalar(grids::Vector{Vector{T}}, V::AbstractArray{T},
