@@ -206,6 +206,10 @@ function vfi_solver(spec::ModelSpec{T};
     ctrl_names = controls === nothing ? spec.endog[control_idx] : collect(controls)
     n_ctrl = length(ctrl_names)
     optimizer = _vfi_resolve_optimizer(optimizer, n_ctrl)
+    if optimizer !== :grid1d
+        # Fail fast on unknown optimizer_opts keys (also validated per solve).
+        _vfi_optimizer_options(optimizer, optimizer_opts)
+    end
     ctrl_idx = [findfirst(==(nm), spec.endog) for nm in ctrl_names]
     any(isnothing, ctrl_idx) && throw(ArgumentError(
         "controls $ctrl_names are not all in spec.endog = $(spec.endog)"))
