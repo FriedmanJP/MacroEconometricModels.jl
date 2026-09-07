@@ -637,7 +637,7 @@ PFI reaches the ``10^{-8}`` sup-norm target in 223 iterations here — roughly f
 
 ## Value Function Iteration
 
-`vfi_solver` iterates the Bellman operator on a tensor state grid. At each node it maximizes ``u(c) + \beta E[V(x')]`` over a one-dimensional control box, then applies Howard (1960) policy evaluation: hold the policy fixed and iterate ``V = u + \beta P_\pi V``. Convergence is on ``\|V_{\text{new}} - V\|_\infty``. The exported policy is a Chebyshev fit of that grid policy, so `evaluate_policy`, `simulate`, and `irf` keep working.
+`vfi_solver` iterates the Bellman operator on a tensor or Smolyak state grid. At each node it maximizes ``u(x, a) + \beta E[V(x')]`` over the control box — a 1-D scan plus golden-section refine for one control, `Optim.Fminbox` for a control vector — then applies Howard (1960) policy evaluation: hold the policy fixed and iterate ``V = u + \beta P_\pi V``. Convergence is on ``\|V_{\text{new}} - V\|_\infty``. The exported policy is a Chebyshev fit of that grid policy, so `evaluate_policy`, `simulate`, and `irf` keep working. `grid=:auto` selects `:tensor` for ``n_x \le 3`` and `:smolyak` for ``n_x \ge 4``.
 
 `ModelSpec` still stores Euler residuals. The reward can be declared on the spec (`utility: log(C)`, `utility: C^(1-σ)/(1-σ)`, `beta: β`, `controls: C` in `@dsge`) and is then picked up automatically. When `transition` is omitted, `vfi_solver` defaults to `next_state=:residual` (drop control FOCs and Newton-solve the leftover residuals) whenever that system is square. `next_state=:linear` remains an explicit opt-in and throws if the linearized `G1` columns for the controls are numerically zero — those columns do not carry the resource constraint. When `control_bounds` is omitted, it is inferred from `constraint:` / `variable_bound` or an SS collar. Calling `vfi_solver(spec)` with no `utility`/`beta` throws `ArgumentError` and points at [`pfi_solver`](@ref).
 
@@ -674,13 +674,17 @@ Without Howard steps the contraction is essentially ``\beta = 0.99`` per sweep. 
 | `control_bounds` | `Function` | inferred | `(x, θ) → (a_lo, a_hi)`; `growth_bounds` above is the resource-feasible box |
 | `next_state` | `Symbol` | `:auto` | `:auto` → `:residual` when FOCs drop cleanly; `:linear` throws if `G1` ignores controls |
 | `consumption` | `Symbol` | `nothing` | If set, `utility` is `u(c)` |
-| `controls` | `Vector{Symbol}` | non-state endog | Choice variables (one continuous control in v1) |
+| `controls` | `Vector{Symbol}` | non-state endog | Choice variables; one control uses the grid scan, several use `optimizer` |
 | `outcome` | `Function` | fill states + controls | `(x, a, θ) → y` full endogenous vector; `growth_outcome` above returns ``(Y, C, K', A)`` |
-| `degree` | `Int` | `5` | Chebyshev degree of the exported policy |
-| `n_grid` | `Int` | `12` | Uniform tensor nodes per state for the Bellman grid |
+| `degree` | `Int` | `5` | Chebyshev degree of the exported policy (tensor path) |
+| `n_grid` | `Int` | `12` | Uniform tensor nodes per state for the Bellman grid (tensor path only) |
+| `grid` | `Symbol` | `:auto` | `:tensor`, `:smolyak`, or `:auto` (tensor if ``n_x \leq 3``, Smolyak if ``n_x \geq 4``) |
+| `smolyak_mu` | `Int` or `Vector{Int}` | `2` | Smolyak level: scalar is isotropic, an ``n_x``-vector is anisotropic |
 | `quadrature` | `Symbol` | `:auto` | `:gauss_hermite` or `:monomial` |
 | `n_quad` | `Int` | `5` | Quadrature nodes per shock dimension |
-| `n_choice` | `Int` | `41` | Line-search points on the control box |
+| `n_choice` | `Int` | `41` | Line-search points on the control box (`:grid1d` only) |
+| `optimizer` | `Symbol` | `:auto` | Bellman maximizer: `:grid1d`, `:fminbox_nm`, `:fminbox_lbfgs`, or `:auto` |
+| `optimizer_opts` | `NamedTuple` | `(;)` | Options forwarded to `Optim.Options` (`iterations`, `x_tol`, `f_tol`, `g_tol`) |
 | `howard_steps` | `Int` | `20` | Howard policy-evaluation steps per iteration |
 | `tol` | `Real` | ``10^{-8}`` | Sup-norm tolerance on ``V`` |
 | `max_iter` | `Int` | `500` | Maximum VFI iterations |
@@ -703,6 +707,124 @@ vfi_howard = vfi_solver(spec;
 
 Fifteen Howard steps cut the iteration count from the unconverged 400-sweep run above to 109, and ``\|V_{\mathrm{new}} - V\|_\infty`` meets ``10^{-8}``. The value at the deterministic steady state is 99.62, against the infinite-horizon payoff of staying there forever, ``u(C_{ss})/(1-\beta) = \log(C_{ss})/0.01 = 101.32``. The 1.7-unit gap is the cost of the coarse ``8 \times 8`` Bellman grid, not a discounting error.
 
+### Smolyak VFI Grids
+
+A uniform Bellman grid has ``n_{\text{grid}}^{n_x}`` nodes, so VFI is intractable past three states (``12^4 = 20{,}736`` nodes per sweep). With `grid=:smolyak` the Bellman grid is a Smolyak sparse grid with nested Clenshaw-Curtis points, and ``\hat V`` is the Chebyshev-collocation interpolant refit every sweep by reusing one LU factorization of the collocation basis. Only the node set and ``\hat V`` change: the fixed-point iteration, the Howard sub-steps, and the `optimizer` dispatch are identical.
+
+| `grid` | ``n_x`` | Nodes (``\hat V``) |
+|--------|---------|--------------------|
+| `:tensor` | any | ``n_{\text{grid}}^{n_x}`` uniform nodes, multilinear ``\hat V`` |
+| `:smolyak` | any | sparse nodes, Chebyshev-collocation ``\hat V`` |
+| `:auto` | ``\le 3`` | `:tensor` |
+| `:auto` | ``\ge 4`` | `:smolyak` |
+
+Sparse-grid node counts (``\mu`` = `smolyak_mu`) against the uniform ``12^d`` grid:
+
+| ``d`` | ``\mu=2`` | ``\mu=3`` | uniform ``12^d`` |
+|-------|-----------|-----------|------------------|
+| 2 | 13 | 29 | 144 |
+| 3 | 29 | 69 | 1,728 |
+| 4 | 41 | 137 | 20,736 |
+
+The VFI default is ``\mu = 2`` (PFI defaults to 3): VFI refits the interpolant every sweep, so a richer level costs far more here than in Euler time iteration. A scalar ``\mu`` is isotropic (``|l|_1 \le \mu``); an ``n_x``-vector is anisotropic (``\sum_k l_k / \mu_k \le 1``), which spends resolution on slow-moving states. `ProjectionSolution.smolyak_levels` records the admissible level set used.
+
+Choose per-dimension levels by persistence and box width, not by guesswork: give the highest ``\mu_k`` to the widest, slowest-moving state (usually capital) and the lowest to fast mean-reverting shocks. On the four-state model below — states ``(K, A_1, A_2, A_3)`` with persistence 0.95/0.9/0.5 — the anisotropic vector ``\mu = [3, 2, 2, 1]`` uses 31 nodes against 41 for isotropic ``\mu = 2`` and cuts the worst consumption-Euler error from 0.014 to below 0.001. Surplus-driven dimension-adaptive refinement in the style of Gerstner & Griebel (2003) is future work; the fixed anisotropic rule covers the heterogeneous-persistence case.
+
+!!! note "Sparse-grid accuracy"
+    Collocation error is amplified roughly ``1 / (1 - \beta)`` by value iteration, so a coarse level visibly shifts ``V``: on the two-state growth model above (``\beta = 0.99``), ``\mu = 2`` overshoots the tensor ``V_{ss}`` by about 5 units and ``\mu = 3`` by about 1 unit, while ``\mu = 4`` agrees to 0.8. Raise ``\mu`` when the object of interest is the value level; the policy is less sensitive. Out-of-box evaluation clamps to the state box with a linear penalty, exactly as on the tensor path.
+
+A four-state growth model with three independent productivity components is intractable on a tensor grid (``6^4 = 1{,}296`` nodes even at `n_grid = 6`) and solves on 41 Smolyak nodes:
+
+```@example dsge_nonlinear
+spec4 = @dsge begin
+    parameters: β = 0.99, α = 0.36, δ = 0.025, ρ1 = 0.95, ρ2 = 0.9, ρ3 = 0.5, σ = 0.007
+    endogenous: c, k, a1, a2, a3
+    exogenous: ε1, ε2, ε3
+    1 / c[t] = β * (1 / c[t+1]) * (α * exp(a1[t+1] + a2[t+1] + a3[t+1]) * k[t]^(α - 1) + 1 - δ)
+    c[t] + k[t] = exp(a1[t] + a2[t] + a3[t]) * k[t-1]^α + (1 - δ) * k[t-1]
+    a1[t] = ρ1 * a1[t-1] + σ * ε1[t]
+    a2[t] = ρ2 * a2[t-1] + σ * ε2[t]
+    a3[t] = ρ3 * a3[t-1] + σ * ε3[t]
+end
+spec4 = compute_steady_state(spec4; initial_guess = [2.78, 37.7, 0.0, 0.0, 0.0])
+θ4 = spec4.param_values
+ρs4 = [θ4[:ρ1], θ4[:ρ2], θ4[:ρ3]]
+function trans4(x, a, ε, θ)
+    k_next = exp(sum(x[2:4])) * x[1]^θ[:α] + (1 - θ[:δ]) * x[1] - a[1]
+    [k_next, [ρs4[i] * x[1 + i] + θ[:σ] * ε[i] for i in 1:3]...]
+end
+function bounds4(x, θ)
+    y = exp(sum(x[2:4])) * x[1]^θ[:α] + (1 - θ[:δ]) * x[1]
+    lo = max(y * 1e-4, 1e-8)
+    ([lo], [max(y - 1e-8, lo + 1e-8)])
+end
+function out4(x, a, θ)
+    k_next = exp(sum(x[2:4])) * x[1]^θ[:α] + (1 - θ[:δ]) * x[1] - a[1]
+    [a[1], k_next, x[2], x[3], x[4]]
+end
+vfi4 = vfi_solver(spec4;
+    utility = log, beta = :β, consumption = :c, controls = [:c],
+    transition = trans4, control_bounds = bounds4, outcome = out4,
+    grid = :smolyak, smolyak_mu = 2, n_grid = 6,
+    howard_steps = 5, max_iter = 200, tol = 1e-4)
+(converged = vfi4.converged, iterations = vfi4.iterations,
+ nodes = size(vfi4.collocation_nodes, 1),
+ V_ss = evaluate_value(vfi4, spec4.steady_state[vfi4.state_indices]))
+```
+
+`grid=:auto` routes this model to `:smolyak` because ``n_x = 4``. `evaluate_value` and the exported policy closures work on Smolyak solutions exactly as on tensor ones; only the node count differs (41 here instead of 1,296).
+
+### Multi-Control VFI
+
+With several choice variables the Bellman right-hand side is maximized over a control box ``[lo(s), hi(s)] \subset \mathbb{R}^m``. The `optimizer` keyword selects the algorithm; every switch is a `Symbol` and unknown symbols throw `ArgumentError`:
+
+| `optimizer` | ``m`` | Algorithm |
+|-------------|-------|-----------|
+| `:auto` | 1 | `:grid1d` (bit-identical to the legacy solver) |
+| `:auto` | > 1 | `:fminbox_nm` |
+| `:grid1d` | 1 only | legacy scan plus golden-section refine; throws for ``m > 1`` |
+| `:fminbox_nm` | any ``m \ge 1`` | derivative-free `Optim.Fminbox(NelderMead())`, kink-robust |
+| `:fminbox_lbfgs` | any ``m \ge 1`` | `Optim.Fminbox(LBFGS())` with central finite-difference gradients, smooth problems |
+
+The Fminbox simplex starts from the best of a deterministic seed set — the previous-iteration policy at that node first, then the box midpoint and corners — so early sweeps cannot strand the local search in a kink-induced basin while the settled policy still warm-starts nearly every solve (about 2.4x fewer objective evaluations per sweep than a cold start on the growth model). All optimizer scratch is per-node local, hence `threaded=true` stays data-race free. `control_bounds` may return per-control vectors; box inference already does. `optimizer_opts` forwards `iterations`, `x_tol`, `f_tol`, and `g_tol` to `Optim.Options`.
+
+A growth model with variable labor (controls ``(C, L)``) solves with the default `:auto` routing:
+
+```@example dsge_nonlinear
+specl = @dsge begin
+    parameters: β = 0.99, α = 0.36, δ = 0.025, ρ = 0.95, σ = 0.007, ψ = 1.5
+    endogenous: c, l, k, a
+    exogenous: ε
+    euler: 1 / c[t] = β * (1 / c[t+1]) * (α * exp(a[t+1]) * k[t]^(α - 1) * l[t+1]^(1 - α) + 1 - δ)
+    c[t] + k[t] = exp(a[t]) * k[t-1]^α * l[t]^(1 - α) + (1 - δ) * k[t-1]
+    ψ * c[t] / (1 - l[t]) = (1 - α) * exp(a[t]) * k[t-1]^α * l[t]^(-α)
+    a[t] = ρ * a[t-1] + σ * ε[t]
+end
+specl = compute_steady_state(specl; initial_guess = [1.0, 0.36, 13.9, 0.0])
+θl = specl.param_values
+function transl(x, a, ε, θ)
+    k_next = exp(x[2]) * x[1]^θ[:α] * a[2]^(1 - θ[:α]) + (1 - θ[:δ]) * x[1] - a[1]
+    [k_next, θ[:ρ] * x[2] + θ[:σ] * ε[1]]
+end
+function boundsl(x, θ)
+    y = exp(x[2]) * x[1]^θ[:α] * 0.3^(1 - θ[:α]) + (1 - θ[:δ]) * x[1]
+    ([1e-8, 1e-4], [max(y - 1e-8, 2e-8), 1 - 1e-4])
+end
+function outl(x, a, θ)
+    k_next = exp(x[2]) * x[1]^θ[:α] * a[2]^(1 - θ[:α]) + (1 - θ[:δ]) * x[1] - a[1]
+    [a[1], a[2], k_next, x[2]]
+end
+util_l(y, y_lag, ε, θ) = log(y[1]) + θ[:ψ] * log(max(1 - y[2], 1e-12))
+vfil = vfi_solver(specl;
+    utility = util_l, beta = :β, controls = [:c, :l],
+    transition = transl, control_bounds = boundsl, outcome = outl,
+    degree = 3, n_grid = 6, howard_steps = 5, max_iter = 200, tol = 1e-4)
+(converged = vfil.converged, iterations = vfil.iterations,
+ policy_ss = evaluate_policy(vfil, specl.steady_state[vfil.state_indices]))
+```
+
+The exported policy carries one interpolant per control over the same basis, so `evaluate_policy` returns the full ``(C, L)`` vector. Consumption-Euler errors of this two-control solution are within a factor of two of the nested one-control model with labor pinned at its steady state.
+
 ### VFI vs PFI vs Collocation
 
 All three global solvers return `ProjectionSolution{T}` and share `evaluate_policy`, `simulate`, `irf`, and `max_euler_error`. They are not the same algorithm:
@@ -710,6 +832,8 @@ All three global solvers return `ProjectionSolution{T}` and share `evaluate_poli
 - **Collocation** solves the Euler residual by Gauss-Newton on Chebyshev coefficients
 - **PFI** is Coleman time iteration on the Euler equation (no value function)
 - **VFI** maximizes the Bellman operator and stores ``V``
+
+Choose the Smolyak variant by the economics, not the grid: **VFI-Smolyak** for kinked or constrained problems where global maximization matters (borrowing limits, occasionally binding constraints, discrete margins approximated continuously) — the Bellman max sees the true non-smooth payoff. **PFI-Smolyak** for smooth problems where Euler time iteration converges — it avoids both the maximization step and the ``1/(1-\beta)`` amplification of collocation error, so it is faster and more accurate per node. Either way, prefer the tensor grid below four states and budget ``\mu = 2`` first for VFI, ``\mu = 3`` for PFI.
 
 On a smooth concave problem the three policies agree near the steady state. They need not share an Euler error to six digits: VFI's exported policy is a Chebyshev fit of a grid maximizer, so `max_euler_error` scores that fit, not the native Bellman residual.
 
