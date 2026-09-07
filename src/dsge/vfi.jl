@@ -119,7 +119,9 @@ This is not Euler time iteration; that algorithm is [`pfi_solver`](@ref).
   golden-section refine (one control only); `:fminbox_nm` is derivative-free
   `Optim.Fminbox(NelderMead())` (any `m ≥ 1`, kink-robust); `:fminbox_lbfgs` is
   `Optim.Fminbox(LBFGS())` with central finite-difference gradients (any `m ≥ 1`,
-  smooth problems). Unknown symbols throw `ArgumentError`.
+  smooth problems). Unknown symbols throw `ArgumentError`. `:fminbox_nm` needs
+  Optim ≥ 2 for full accuracy: Optim v1's `Fminbox(NelderMead())` stalls at
+  boundary optima, which poisons early VFI iterations.
 - `optimizer_opts::NamedTuple=(;)`: options forwarded to `Optim.Options`
   (`iterations`, `x_tol`, `f_tol`, `g_tol`, `show_trace`)
 - `scale::Real=3.0`: state bounds = SS ± scale × σ (capital is widened further)

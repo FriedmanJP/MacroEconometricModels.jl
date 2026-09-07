@@ -7432,7 +7432,17 @@ end
     @test sol_auto.value_fn == sol_g1d.value_fn
     @test sol_auto.coefficients == sol_g1d.coefficients
     sol_nm = vfi_solver(spec; base_kw..., optimizer=:fminbox_nm)
-    @test abs(evaluate_value(sol_nm, x_ss) - evaluate_value(sol_auto, x_ss)) < 0.05
+    if Base.pkgversion(MacroEconometricModels.Optim) < v"2"
+        # Optim v1 Fminbox(NelderMead) stalls at boundary optima (upstream: the
+        # 1-D min of -log(x) on [1e-4, 5] returns x=3.775 instead of 5.0, and is
+        # insensitive to mu0/mufactor; fixed by the Optim 2 Fminbox rewrite).
+        # Early VFI iterations maximize at the consumption bound, so the v1 NM
+        # solve lands ~8 from :grid1d and never converges. Track as broken so a
+        # future Optim v1 fix surfaces as an unexpected pass.
+        @test_broken abs(evaluate_value(sol_nm, x_ss) - evaluate_value(sol_auto, x_ss)) < 0.05
+    else
+        @test abs(evaluate_value(sol_nm, x_ss) - evaluate_value(sol_auto, x_ss)) < 0.05
+    end
     sol_lb = vfi_solver(spec; base_kw..., optimizer=:fminbox_lbfgs)
     @test abs(evaluate_value(sol_lb, x_ss) - evaluate_value(sol_auto, x_ss)) < 0.05
 end
