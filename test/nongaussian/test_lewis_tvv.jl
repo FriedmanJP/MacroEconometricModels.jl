@@ -16,8 +16,14 @@ if !@isdefined(simulate_svar)
     include(joinpath(@__DIR__, "..", "var", "id_dgps.jl"))
 end
 
+if !@isdefined(FAST)
+    const FAST = get(ENV, "MACRO_FAST_TESTS", "") == "1"
+end
+
 @testset "Lewis TVV-ID (#824)" begin
-    # No FAST reduction in this file: recovery thresholds need full T (see #824).
+    # Full-T recovery testsets run only outside FAST (ubuntu-full gate): under
+    # macOS coverage instrumentation they cost ~10 min. All other testsets run
+    # everywhere as the FAST smoke.
 
     @testset "moments vanish at truth, not at random Q" begin
         _, _, B0t, Ut = MEM.simulate_tvv_dgp(Xoshiro(101), 2, 1, 10_000; kind=:sv)
@@ -32,39 +38,41 @@ end
         @test n0 < 0.5
     end
 
-    @testset "recovers B on SV fixture (n=2)" begin
-        # Lewis-GMM moments vanish to first order at truth (fourth-order
-        # objective), so recovery is draw-sensitive; assert mean/max over draws.
-        qs = Float64[]
-        for s in (102, 202, 302)
-            Y, _, Q0t, _ = generate_sv_var(; n=2, Tobs=20000, rng=Xoshiro(s),
+    if !FAST
+        @testset "recovers B on SV fixture (n=2)" begin
+            # Lewis-GMM moments vanish to first order at truth (fourth-order
+            # objective), so recovery is draw-sensitive; assert mean/max over draws.
+            qs = Float64[]
+            for s in (102, 202, 302)
+                Y, _, Q0t, _ = generate_sv_var(; n=2, Tobs=20000, rng=Xoshiro(s),
+                    rhos=[0.97, 0.85], sigmas=[0.25, 0.20])
+                m = MEM.estimate_var(Y, 1)
+                r = MEM.identify_lewis_tvv(m; rng=Xoshiro(s + 1))
+                push!(qs, MEM.q_distance(r.Q, Q0t))
+                @test r.weak_id == false
+            end
+            @test maximum(qs) < 0.4   # no breakdown on any draw
+            @test sum(qs) / length(qs) < 0.25
+            Y, _, _, _ = generate_sv_var(; n=2, Tobs=20000, rng=Xoshiro(102),
                 rhos=[0.97, 0.85], sigmas=[0.25, 0.20])
-            m = MEM.estimate_var(Y, 1)
-            r = MEM.identify_lewis_tvv(m; rng=Xoshiro(s + 1))
-            push!(qs, MEM.q_distance(r.Q, Q0t))
-            @test r.weak_id == false
+            r = MEM.identify_lewis_tvv(MEM.estimate_var(Y, 1); rng=Xoshiro(103))
+            @test r.converged == true
+            @test occursin("Lewis", sprint(show, r))
         end
-        @test maximum(qs) < 0.4   # no breakdown on any draw
-        @test sum(qs) / length(qs) < 0.25
-        Y, _, _, _ = generate_sv_var(; n=2, Tobs=20000, rng=Xoshiro(102),
-            rhos=[0.97, 0.85], sigmas=[0.25, 0.20])
-        r = MEM.identify_lewis_tvv(MEM.estimate_var(Y, 1); rng=Xoshiro(103))
-        @test r.converged == true
-        @test occursin("Lewis", sprint(show, r))
-    end
 
-    @testset "recovers B on SV fixture (n=3)" begin
-        qs = Float64[]
-        for s in (104, 204, 304)
-            Y, _, Q0t, _ = generate_sv_var(; n=3, Tobs=40000, rng=Xoshiro(s),
-                rhos=[0.98, 0.96, 0.94], sigmas=[0.22, 0.32, 0.38])
-            m = MEM.estimate_var(Y, 1)
-            r = MEM.identify_lewis_tvv(m; rng=Xoshiro(s + 1))
-            push!(qs, MEM.q_distance(r.Q, Q0t))
-            @test r.weak_id == false
+        @testset "recovers B on SV fixture (n=3)" begin
+            qs = Float64[]
+            for s in (104, 204, 304)
+                Y, _, Q0t, _ = generate_sv_var(; n=3, Tobs=40000, rng=Xoshiro(s),
+                    rhos=[0.98, 0.96, 0.94], sigmas=[0.22, 0.32, 0.38])
+                m = MEM.estimate_var(Y, 1)
+                r = MEM.identify_lewis_tvv(m; rng=Xoshiro(s + 1))
+                push!(qs, MEM.q_distance(r.Q, Q0t))
+                @test r.weak_id == false
+            end
+            @test maximum(qs) < 0.25
+            @test sum(qs) / length(qs) < 0.2
         end
-        @test maximum(qs) < 0.25
-        @test sum(qs) / length(qs) < 0.2
     end
 
     @testset "determinism" begin
