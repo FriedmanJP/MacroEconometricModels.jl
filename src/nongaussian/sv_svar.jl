@@ -255,7 +255,10 @@ change in `s`, and change in `Q` all below `tol`; default `1e-3`), NOT on the
 `loglik` path: the recorded Q mixes E-step distributions and Monte Carlo
 noise, so its relative change never reaches BB's deterministic-EM threshold.
 `loglik` is kept as a diagnostic path. Returns the full `(A,B,SV)` object; the
-`compute_Q` layer exposes only Q/B given `model.Sigma`.
+`compute_Q` layer exposes only Q/B given `model.Sigma`. Like any MCEM
+estimator this can land in a worse-but-nearby rotation basin from a single
+start (seen at n=3); in applied work run a few `rng` starts and keep the
+highest final `loglik`, which separates good basins from bad ones.
 
 # Examples
 ```julia
