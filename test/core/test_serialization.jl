@@ -542,6 +542,10 @@ function _sid24_dummy_objects()
     gmm = NonGaussianGMMResult{T}(B0, Q, T[0.1], Matrix{T}(I, 1, 1), se,
                                    T(1.2), T(0.3), :coskewness, :two_step,
                                    shocks, vnames, snames)
+    lewis = LewisTVVResult{T}(B0, Q, T[0.1], Matrix{T}(I, 1, 1), se,
+                              T(7.0), T(0.5), 5, [1, 2, 3, 4, 5], :two_step,
+                              true, 10, false, T(3.0), "converged",
+                              shocks, vnames, snames)
     ms = MarkovSwitchingSVARResult{T}(B0, Q, [I2, 2 .* I2],
                                        [T[1.0, 1.0], T[2.0, 0.5]],
                                        fill(T(0.5), 12, 2), T[0.9 0.1; 0.1 0.9],
@@ -559,6 +563,9 @@ function _sid24_dummy_objects()
                                            [T[1.0, 1.0], T[2.0, 0.5]],
                                            [[1, 2, 3], [4, 5, 6]], T(-10),
                                            se, vcov, shocks, snames)
+    svsvar = SVSVARResult{T}(B0, [I2], T[0.1, 0.2], T[-0.5, -0.1],
+                             T[0.97, 0.85], T[0.25, 0.2], trues(n),
+                             ones(T, 12, n), T[1.0, 2.0], true, 5, "converged")
     proxy = ProxySVARResult{T}(Q, B0, 1, T(15), T(0.5), ["z1"], vnames,
                                 ["Proxy", "Unidentified 1"], true)
     maxs = MaxShareResult{T}(Q, Q[:, 1], 1, 0:20, nothing, T(0.4), T[0.8, 0.2],
@@ -578,8 +585,8 @@ function _sid24_dummy_objects()
                                      vnames, snames, T[1.0], T(1), T(1), nothing)
     rb = RobustBayesResult{T}(irf3, irf3 .+ 1, irf3 .- T(0.1), irf3 .+ T(1.1),
                                irf3, irf3 .+ T(0.5), T(0.2), T(0.0), T(0.68))
-    return [ica, ml, gmm, ms, garch, st, ext, proxy, maxs, maxs_band,
-            arias, uhlig, bset, signs, signs_fn, rb]
+    return [ica, ml, gmm, lewis, ms, garch, st, ext, svsvar, proxy, maxs,
+            maxs_band, arias, uhlig, bset, signs, signs_fn, rb]
 end
 
 @testset "SID-24 identification result serialization (#753)" begin

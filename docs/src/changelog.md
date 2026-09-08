@@ -29,9 +29,11 @@ existing paths — the new estimators only take effect when requested.
 - `compute_Q` symbols `:lewis_tvv` and `:sv_em` with registry entries (25→27 methods),
   so `irf`, `fevd`, and `historical_decomposition` accept both estimators through the
   standard `method=` keyword (`#826`).
-- Recovery table, T×n benchmark (`benchmarks/bench_tvv_sv.jl`), `id_tvv.md` /
-  `id_sv_svar.md` documentation pages, and loud negative controls (homoskedastic
-  data trips `weak_id`; proportional variance shifts reject the J-test) (`#827`).
+- Recovery table, T×n benchmark timings (lewis <0.1s/0.8s/14s; sv-em 6s/6s/87s
+  on the (n,T) grid), `id_tvv.md` / `id_sv_svar.md` documentation pages,
+  `save_model` / `load_model` round-trips for both result types, and loud negative
+  controls (homoskedastic data trips `weak_id`; proportional variance shifts reject
+  the J-test) (`#827`).
 
 ---
 
