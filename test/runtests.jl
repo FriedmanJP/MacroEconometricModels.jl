@@ -161,6 +161,9 @@ const TEST_GROUPS = [
         "mgarch/test_mgarch.jl",            # EV-16 (#424): multivariate GARCH — CCC/DCC/BEKK
         "nongaussian/test_nongaussian_svar.jl",
         "nongaussian/test_nongaussian_internals.jl",
+        "nongaussian/test_tvv_common.jl",   # v0.9.6 (#823): TVV/SV-ID shared infra
+        "nongaussian/test_lewis_tvv.jl",    # v0.9.6 (#824): Lewis TVV-ID
+        "nongaussian/test_sv_svar.jl",      # v0.9.6 (#825): BB SV-SVAR
         "filters/test_filters.jl",
         "filters/test_x13.jl",
         "filters/test_x13_coverage.jl",
