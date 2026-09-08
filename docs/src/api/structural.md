@@ -50,10 +50,12 @@ NormalityTestSuite
 ICASVARResult
 NonGaussianMLResult
 NonGaussianGMMResult
+LewisTVVResult
 MarkovSwitchingSVARResult
 GARCHSVARResult
 SmoothTransitionSVARResult
 ExternalVolatilitySVARResult
+SVSVARResult
 IdentifiabilityTestResult
 ```
 
@@ -196,16 +198,27 @@ identify_nongaussian_ml
 identify_gmm_moments
 ```
 
+### Time-Varying Volatility Identification
+
+Model-free GMM on lagged cross-moments of squared shocks (Lewis 2021), with no
+variance law assumed. See [Time-Varying Volatility](@ref id_tvv_page).
+
+```@docs
+identify_lewis_tvv
+```
+
 ### Heteroskedasticity Identification
 
-Four ways of modelling the variance shift that delivers identification: discrete regimes,
-conditional volatility, a smooth transition, or an externally supplied regime indicator.
+Five ways of modelling the variance shift that delivers identification: discrete regimes,
+conditional volatility, a smooth transition, an externally supplied regime indicator,
+or AR(1) log-volatility estimated by EM (Bertsche & Braun 2022).
 
 ```@docs
 identify_markov_switching
 identify_garch
 identify_smooth_transition
 identify_external_volatility
+identify_sv_svar
 ```
 
 ### Identifiability Tests

@@ -250,6 +250,8 @@ Impulse response functions, forecast error variance decomposition, historical de
 | `identify_skew_normal(model; ...)` | Skew-normal ML SVAR identification |
 | `identify_nongaussian_ml(model; ...)` | Unified non-Gaussian ML dispatcher |
 | `identify_gmm_moments(model; ...)` | Coskewness / cokurtosis GMM SVAR identification |
+| `identify_lewis_tvv(model; ...)` | Time-varying-volatility GMM SVAR identification (Lewis 2021) |
+| `identify_sv_svar(Y, p; ...)` | Stochastic-volatility SVAR via EM (Bertsche–Braun 2022) |
 | `identify_proxy(model, Z; ...)` | External-instrument (proxy) SVAR identification |
 | `estimate_svar(model, pattern; ...)` | Amisano–Giannini AB-model ML |
 | `identify_max_share(model; target=...)` | Max-share / news-shock identification |
@@ -570,7 +572,8 @@ const _SER_GROUPS = [
     "SVAR identification" => ["ProxySVARResult", "SVARModel", "MaxShareResult",
         "SVECResult", "ICASVARResult", "NonGaussianMLResult", "NonGaussianGMMResult",
         "MarkovSwitchingSVARResult", "GARCHSVARResult", "SmoothTransitionSVARResult",
-        "ExternalVolatilitySVARResult", "AriasSVARResult", "UhligSVARResult",
+        "ExternalVolatilitySVARResult", "LewisTVVResult", "SVSVARResult",
+        "AriasSVARResult", "UhligSVARResult",
         "BayesianSetIdentifiedSVAR", "SignIdentifiedSet", "RobustBayesResult",
         "IdentifiabilityTestResult"],
     "Innovation accounting" => ["ImpulseResponse", "BayesianImpulseResponse", "FEVD",
