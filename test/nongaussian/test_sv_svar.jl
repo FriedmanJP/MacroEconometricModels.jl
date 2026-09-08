@@ -12,7 +12,9 @@ using Statistics
 
 const MEM = MacroEconometricModels
 
-include(joinpath(@__DIR__, "..", "var", "id_dgps.jl"))
+if !@isdefined(simulate_svar)
+    include(joinpath(@__DIR__, "..", "var", "id_dgps.jl"))
+end
 
 @testset "BB SV-SVAR (#825)" begin
 

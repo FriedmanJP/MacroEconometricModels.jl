@@ -12,7 +12,9 @@ using Statistics
 
 const MEM = MacroEconometricModels
 
-include(joinpath(@__DIR__, "..", "var", "id_dgps.jl"))
+if !@isdefined(simulate_svar)
+    include(joinpath(@__DIR__, "..", "var", "id_dgps.jl"))
+end
 
 _ar1_coef(x::AbstractVector) = cor(x[1:(end - 1)], x[2:end])
 

@@ -12,7 +12,9 @@ using Statistics
 
 const MEM = MacroEconometricModels
 
-include(joinpath(@__DIR__, "..", "var", "id_dgps.jl"))
+if !@isdefined(simulate_svar)
+    include(joinpath(@__DIR__, "..", "var", "id_dgps.jl"))
+end
 
 @testset "Lewis TVV-ID (#824)" begin
     # No FAST reduction in this file: recovery thresholds need full T (see #824).
