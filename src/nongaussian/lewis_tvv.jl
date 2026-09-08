@@ -176,6 +176,10 @@ end
                        hac=true, bandwidth=0, n_starts=10, max_iter=100,
                        tol=1e-8, rng=Random.default_rng()) -> LewisTVVResult
 
+`J_pvalue` is `NaN` under `weighting=:one_step`: identity weighting is
+inefficient, so Hansen's χ² limit fails and the GMM kernel reports no
+p-value (same convention as `estimate_gmm`).
+
 Identify `B₀ = L Q(θ)` from time-varying volatility (Lewis 2021) without
 assuming any variance law.
 

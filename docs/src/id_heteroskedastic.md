@@ -7,7 +7,7 @@ Heteroskedasticity-based SVAR identification exploits time-varying second moment
 - **Smooth transition**: a logistic transition function allows gradual regime shifts (Lütkepohl & Netšunajev 2017)
 - **External volatility**: known regime indicators (NBER recessions, financial crises) give the simplest sample-split approach (Rigobon 2003)
 
-For an overview and method comparison, see [Statistical Identification](@ref nongaussian_page). For identification from higher moments instead of second moments, see [Non-Gaussian Methods](@ref id_nongaussian_page). For identifiability diagnostics, see [Testing](@ref id_testing_page). For schemes built on economic restrictions, see [Structural Identification](@ref structural_identification_page).
+For an overview and method comparison, see [Statistical Identification](@ref nongaussian_page). For identification from higher moments instead of second moments, see [Non-Gaussian Methods](@ref id_nongaussian_page). For identifiability diagnostics, see [Testing](@ref id_testing_page). For schemes built on economic restrictions, see [Structural Identification](@ref structural_identification_page). Model-free time-varying volatility (Lewis 2021) is [Time-Varying Volatility](@ref id_tvv_page); the parametric AR(1) log-volatility EM estimator is [Stochastic Volatility SVAR](@ref id_sv_svar_page).
 
 ```@setup id_het
 using MacroEconometricModels, Random

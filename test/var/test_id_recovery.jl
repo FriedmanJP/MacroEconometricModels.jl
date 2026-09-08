@@ -522,3 +522,86 @@ end
     @test s.Q ≈ identify_cholesky(m) atol = 1e-6
 end
 
+# =============================================================================
+# SID-10 v0.9.6: Lewis TVV-ID + BB SV-SVAR recovery (#827)
+# =============================================================================
+
+if !@isdefined(_irf_shock_cor)
+    # Per-shock IRF shape correlation between estimate (rotation Q on model m)
+    # and truth (VAR slopes A, impact B0t), after signed-permutation alignment.
+    function _irf_shock_cor(m, Q, B0t, A, H)
+        IRh = MacroEconometricModels.compute_irf(m, Matrix{Float64}(Q), H)
+        n = size(B0t, 1)
+        Phi = [Matrix{Float64}(I, n, n)]
+        for h in 1:H
+            push!(Phi, A[1] * Phi[h])
+        end
+        IRt = permutedims(cat([Phi[h + 1] * B0t for h in 1:H]...; dims=3), (3, 1, 2))
+        _, perm, sgn = MacroEconometricModels.align_Q(Matrix{Float64}(Q),
+                                                      Matrix{Float64}(_population_Q(B0t)))
+        IRta = IRt[:, perm, :] .* reshape(sgn, 1, n, 1)
+        [cor(vec(IRh[:, :, j]), vec(IRta[:, :, j])) for j in 1:n]
+    end
+end
+
+@testset "identify_lewis_tvv recovery" begin
+    if !FAST
+        @testset "SV DGP recovers Q, B0, IRFs" begin
+            Y, B0t, Q0t, A = generate_sv_var(; n=2, Tobs=20000, rng=Xoshiro(102),
+                rhos=[0.97, 0.85], sigmas=[0.25, 0.20])
+            m = estimate_var(Y, 1)
+            r = identify_lewis_tvv(m; rng=Xoshiro(103))
+            @test r.weak_id == false
+            @test MacroEconometricModels.q_distance(r.Q, Q0t) < 0.3
+            @test _pd(r.B0, B0t) < 0.3
+            @test r.J_pvalue > 0.05  # overidentifying restrictions not rejected
+            cors = _irf_shock_cor(m, r.Q, B0t, A, 12)
+            @test all(>(0.95), cors)
+        end
+
+        @testset "homoskedastic control fails loud (weak flag)" begin
+            Yh, _ = simulate_svar(_B_rec, _A2; Tobs=2000, rng=Xoshiro(110))
+            rh = identify_lewis_tvv(estimate_var(Yh, 1); n_starts=3, rng=Xoshiro(111))
+            @test rh.weak_id == true
+            @test occursin("weak identification", rh.message)
+        end
+
+        @testset "proportional-shift control fails loud (J rejects)" begin
+            # Common proportional variance shifts pass the strength screen
+            # (persistent scalar volatility autocorrelates squares) but carry
+            # no rotation information: moments cannot vanish at any Q, so the
+            # J-test rejects loudly instead of returning a silent estimate.
+            Yp, _ = simulate_two_regime(_B_rec, _A2, [2.0, 2.0]; Tobs=2000,
+                                        rng=Xoshiro(120))
+            rp = identify_lewis_tvv(estimate_var(Yp, 1); n_starts=5, rng=Xoshiro(121))
+            @test rp.weak_id == false  # strength screen passes: documented boundary
+            @test rp.J_pvalue < 0.05
+        end
+    end
+end
+
+@testset "identify_sv_svar recovery" begin
+    if !FAST
+        @testset "SV DGP recovers B, Q, IRFs" begin
+            Y, B0t, Q0t, A = generate_sv_var(; n=2, Tobs=2000, rng=Xoshiro(71))
+            m = estimate_var(Y, 1)
+            r = identify_sv_svar(Y, 1; rng=Xoshiro(171))
+            @test r.converged == true
+            @test _pd(r.B, B0t) < 0.2
+            L = Matrix{Float64}(MacroEconometricModels.safe_cholesky(m.Sigma))
+            Q = Matrix{Float64}(L \ r.B)
+            @test MacroEconometricModels.q_distance(Q, Q0t) < 0.2
+            @test all(isfinite, r.loglik)
+            cors = _irf_shock_cor(m, Q, B0t, A, 12)
+            @test all(>(0.95), cors)
+        end
+
+        @testset "misspecified GARCH DGP stays finite" begin
+            Yg, _ = simulate_garch_svar(_B_rec, _A2; Tobs=1500, rng=Xoshiro(172))
+            rg = identify_sv_svar(Yg, 1; maxiter=50, rng=Xoshiro(173))
+            @test all(isfinite, rg.B)
+            @test all(isfinite, rg.H_smooth)
+        end
+    end
+end
+
