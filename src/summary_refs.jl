@@ -530,6 +530,11 @@ const _REFERENCES = Dict{Symbol, _RefEntry}(
         title="GMM Estimation of Non-Gaussian Structural Vector Autoregression",
         journal="Journal of Business \\& Economic Statistics", volume="39", issue="1", pages="69--81",
         doi="10.1080/07350015.2019.1629940", isbn="", publisher="", entry_type=:article),
+    :bertsche_braun2022 => (key=:bertsche_braun2022,
+        authors="Bertsche, Dominik and Braun, Robin", year=2022,
+        title="Identification of Structural Vector Autoregressions by Stochastic Volatility",
+        journal="Journal of Business \\& Economic Statistics", volume="40", issue="1", pages="328--341",
+        doi="10.1080/07350015.2020.1813588", isbn="", publisher="", entry_type=:article),
     :comon1994 => (key=:comon1994,
         authors="Comon, Pierre", year=1994,
         title="Independent Component Analysis, A New Concept?",
@@ -2159,15 +2164,19 @@ const _TYPE_REFS = Dict{Symbol, Vector{Symbol}}(
     :skew_normal => [:lanne_meitz_saikkonen2017, :lewis2025],
     :nongaussian_ml => [:lanne_meitz_saikkonen2017, :lewis2025],
     :gmm_moments => [:keweloh2021, :lanne_luoto2021, :lewis2025],
+    :lewis_tvv => [:lewis2021, :lewis2025],
+    :sv_em => [:bertsche_braun2022, :lewis2025],
     # Non-Gaussian result types
     :ICASVARResult => [:lewis2025],
     :NonGaussianMLResult => [:lanne_meitz_saikkonen2017, :lewis2025],
     :NonGaussianGMMResult => [:keweloh2021, :lanne_luoto2021, :lewis2025],
+    :LewisTVVResult => [:lewis2021, :lewis2025],
     # Heteroskedastic identification
     :MarkovSwitchingSVARResult => [:rigobon2003, :lanne_lutkepohl2008, :lewis2025],
     :GARCHSVARResult => [:rigobon2003, :normandin_phaneuf2004, :lewis2025],
     :SmoothTransitionSVARResult => [:lutkepohl_netsunajev2017, :lewis2025],
     :ExternalVolatilitySVARResult => [:rigobon2003, :lewis2025],
+    :SVSVARResult => [:bertsche_braun2022, :lewis2025],
     :markov_switching => [:rigobon2003, :lanne_lutkepohl2008, :lewis2025],
     :smooth_transition => [:lutkepohl_netsunajev2017, :lewis2025],
     :external_volatility => [:rigobon2003, :lewis2025],
@@ -2835,6 +2844,8 @@ refs(io::IO, ::MarkovSwitchingSVARResult; kw...) = refs(io, _TYPE_REFS[:MarkovSw
 refs(io::IO, ::GARCHSVARResult; kw...) = refs(io, _TYPE_REFS[:GARCHSVARResult]; kw...)
 refs(io::IO, ::SmoothTransitionSVARResult; kw...) = refs(io, _TYPE_REFS[:SmoothTransitionSVARResult]; kw...)
 refs(io::IO, ::ExternalVolatilitySVARResult; kw...) = refs(io, _TYPE_REFS[:ExternalVolatilitySVARResult]; kw...)
+refs(io::IO, ::LewisTVVResult; kw...) = refs(io, _TYPE_REFS[:LewisTVVResult]; kw...)
+refs(io::IO, ::SVSVARResult; kw...) = refs(io, _TYPE_REFS[:SVSVARResult]; kw...)
 
 # Identifiability test result
 refs(io::IO, ::IdentifiabilityTestResult; kw...) = refs(io, [:lanne_meitz_saikkonen2017]; kw...)

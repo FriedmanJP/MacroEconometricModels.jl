@@ -83,8 +83,8 @@ _ar1_coef(x::AbstractVector) = cor(x[1:(end - 1)], x[2:end])
         Qa6, p6, _ = MEM.align_Q(Q6t, Q6)
         @test p6 == [3, 1, 2, 6, 4, 5]
         @test Qa6 ≈ Q6t
-        @test_throws DimensionMismatch MEM.align_Q(randn(3, 3), randn(3, 2))
-        @test_throws DimensionMismatch MEM.q_distance(randn(3, 3), randn(2, 2))
+        @test_throws DimensionMismatch MEM.align_Q(randn(Xoshiro(84), 3, 3), randn(Xoshiro(85), 3, 2))
+        @test_throws DimensionMismatch MEM.q_distance(randn(Xoshiro(86), 3, 3), randn(Xoshiro(87), 2, 2))
     end
 
     @testset "check_orthogonal" begin

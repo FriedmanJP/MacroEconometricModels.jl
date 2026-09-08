@@ -141,4 +141,16 @@ include(joinpath(@__DIR__, "..", "var", "id_dgps.jl"))
         @test_throws MethodError MEM.compute_Q(m, :lewis_tvv; bogus_kw=1)
     end
 
+    @testset "plot_result mixing heatmap / refs" begin
+        Y, _, _, _ = generate_tvv_var(; Tobs=1500, rng=Xoshiro(122))
+        r = MEM.identify_lewis_tvv(MEM.estimate_var(Y, 1); n_starts=2,
+                                   rng=Xoshiro(123))
+        p = plot_result(r)
+        @test occursin("Mixing Matrix", p.html)
+        @test_throws ArgumentError plot_result(r; view=:shocks)
+        io = IOBuffer()
+        refs(io, r)
+        @test occursin("Lewis", String(take!(io)))
+    end
+
 end
