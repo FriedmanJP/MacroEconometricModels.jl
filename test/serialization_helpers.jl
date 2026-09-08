@@ -335,8 +335,9 @@ const _COVER_ESTIMATOR_TYPES = [
 
 const _SID24_TYPES = (
     "ICASVARResult", "NonGaussianMLResult", "NonGaussianGMMResult",
+    "LewisTVVResult",
     "MarkovSwitchingSVARResult", "GARCHSVARResult", "SmoothTransitionSVARResult",
-    "ExternalVolatilitySVARResult", "ProxySVARResult", "MaxShareResult",
+    "ExternalVolatilitySVARResult", "SVSVARResult", "ProxySVARResult", "MaxShareResult",
     "AriasSVARResult", "UhligSVARResult", "BayesianSetIdentifiedSVAR",
     "SignIdentifiedSet", "RobustBayesResult",
 )
