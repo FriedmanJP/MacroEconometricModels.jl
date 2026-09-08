@@ -215,3 +215,33 @@ function simulate_news_maxshare(; Tobs::Int=2000, rng=Random.default_rng())
     Y, ε = simulate_svar(B0, A; Tobs=Tobs, rng=rng)
     return Y, ε, B0, [1.0, 0.0, 0.0]
 end
+
+"""Population orthogonal rotation for a DGP impact matrix: `Q0 = chol(B0*B0') \\ B0`."""
+function _population_Q(B0::AbstractMatrix{T}) where {T<:AbstractFloat}
+    L = cholesky(Symmetric(Matrix{T}(B0 * B0'))).L
+    return Matrix{T}(L \ B0)
+end
+
+"""Lewis TVV fixture: estimate-ready VAR data with ground truth (default: Markov variances).
+
+Returns `(Y, B0_true, Q_true, A_true)`. Extra kwargs forward to
+`MacroEconometricModels.simulate_tvv_dgp`.
+"""
+function generate_tvv_var(; n::Int=2, p::Int=1, Tobs::Int=2000, kind::Symbol=:markov,
+                             rng=Random.default_rng(), kwargs...)
+    Y, A_true, B0_true, _ = MacroEconometricModels.simulate_tvv_dgp(
+        rng, n, p, Tobs; kind=kind, kwargs...)
+    return Y, B0_true, _population_Q(B0_true), A_true
+end
+
+"""BB SV-SVAR fixture: estimate-ready VAR data with AR(1) log-vol shocks.
+
+Returns `(Y, B0_true, Q_true, A_true)`. Extra kwargs forward to
+`MacroEconometricModels.simulate_tvv_dgp` with `kind=:sv`.
+"""
+function generate_sv_var(; n::Int=2, p::Int=1, Tobs::Int=2000,
+                           rng=Random.default_rng(), kwargs...)
+    Y, A_true, B0_true, _ = MacroEconometricModels.simulate_tvv_dgp(
+        rng, n, p, Tobs; kind=:sv, kwargs...)
+    return Y, B0_true, _population_Q(B0_true), A_true
+end

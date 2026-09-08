@@ -253,6 +253,7 @@ include("nongaussian/ica.jl")
 include("nongaussian/ml.jl")
 include("nongaussian/heteroskedastic.jl")
 include("nongaussian/gmm.jl")
+include("nongaussian/tvv_common.jl")
 include("nongaussian/tests.jl")
 
 # Bayesian utilities (after bayesian + identification)
