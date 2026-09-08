@@ -109,8 +109,10 @@ The six economic schemes, the instrument / pattern / share schemes, and the fift
 | Proxy | `irf(m, H; method=:proxy, instruments=Z)` | `instruments` |
 | AB-model | `irf(m, H; method=:ab, pattern=…)` | `pattern` |
 | Max-share | `irf(m, H; method=:max_share, target=…)` | `target` |
+| Time-varying volatility | `irf(m, H; method=:lewis_tvv)` or `identify_lewis_tvv` | `K`, `weighting`, `n_starts` |
+| Stochastic volatility (EM) | `irf(m, H; method=:sv_em)` or `identify_sv_svar` | `maxiter`, `tol`, `hetero` |
 
-The `method=` keyword accepts **twenty-five** symbols: the ten above plus fifteen statistical schemes (five ICA, four ML, the `:nongaussian_ml` dispatcher, GMM, and four heteroskedasticity estimators). Every one of them returns the same `ImpulseResponse` object, so switching identification never changes the downstream code.
+The `method=` keyword accepts **twenty-seven** symbols: the ten above plus seventeen statistical schemes (five ICA, four ML, the `:nongaussian_ml` dispatcher, GMM, four heteroskedasticity estimators, time-varying-volatility GMM, and SV-EM). Every one of them returns the same `ImpulseResponse` object, so switching identification never changes the downstream code.
 
 !!! note "Technical Note"
     `irf(m, H; method=:sign)` and `irf(m, H; method=:narrative)` run `identify_sign` / `identify_narrative` with `store_all=true` and return the **pointwise median** of the identified set. Bands are identified-set quantiles (`ci_type = :identified_set`); `max_draws` defaults to 1000. That median path is a set summary, not an IRF (Fry & Pagan 2011) --- use `median_target` for the admissible rotation closest to it.

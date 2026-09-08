@@ -253,6 +253,9 @@ include("nongaussian/ica.jl")
 include("nongaussian/ml.jl")
 include("nongaussian/heteroskedastic.jl")
 include("nongaussian/gmm.jl")
+include("nongaussian/tvv_common.jl")
+include("nongaussian/lewis_tvv.jl")
+include("nongaussian/sv_svar.jl")
 include("nongaussian/tests.jl")
 
 # Bayesian utilities (after bayesian + identification)
@@ -1295,6 +1298,8 @@ export AbstractNormalityTest, AbstractNonGaussianSVAR
 # Result types
 export NormalityTestResult, NormalityTestSuite
 export ICASVARResult, NonGaussianMLResult, NonGaussianGMMResult
+export LewisTVVResult
+export SVSVARResult
 export MarkovSwitchingSVARResult, GARCHSVARResult
 export SmoothTransitionSVARResult, ExternalVolatilitySVARResult
 export IdentifiabilityTestResult
@@ -1313,6 +1318,12 @@ export identify_pml, identify_skew_normal, identify_nongaussian_ml
 
 # Moment-based GMM SVAR
 export identify_gmm_moments
+
+# Time-varying-volatility SVAR (Lewis 2021)
+export identify_lewis_tvv
+
+# Stochastic-volatility SVAR, EM-ML (Bertsche–Braun 2022)
+export identify_sv_svar
 
 # Heteroskedasticity identification
 export identify_markov_switching, identify_garch

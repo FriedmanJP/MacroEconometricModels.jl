@@ -299,6 +299,14 @@ const MEM_IH = MacroEconometricModels
         @test _expected_rank("HA-DSGE") > _expected_rank("HA-DSGE Advanced")
         @test _expected_rank("HA-DSGE Advanced") > _expected_rank("DSGE Core")
         @test _expected_rank("HA-DSGE") > _expected_rank("DSGE Core")
+        # macOS empirical timeout (#828): Volatility is a sequential
+        # GARCH/FIGARCH/MCEM straggler. It must start in the first wave with
+        # ARIMA (rank 55), not at the default 40 after Plotting/IRF/Bayesian.
+        @test _expected_rank("ARIMA & Tests & Data & Reg") >
+              _expected_rank("Volatility & Filters")
+        @test _expected_rank("Volatility & Filters") > _expected_rank("Plotting")
+        @test _expected_rank("Volatility & Filters") > _expected_rank("IRF & VECM")
+        @test _expected_rank("Volatility & Filters") > _expected_rank("Bayesian & SVAR")
 
         dummy = ["Plotting" => ["plotting/test_plot_render.jl"],
                  "HA-DSGE" => ["dsge/test_ha_dsge.jl"],
@@ -376,6 +384,12 @@ const MEM_IH = MacroEconometricModels
         end
         @test names == ["HA-DSGE", "Core & VAR", "Counterfactual"]  # heaviest first
         @test !isopen(work)
+
+        vol_q = ["Plotting" => ["plotting/test_plot_render.jl"],
+                 "IO" => ["io/test_io_types.jl"],
+                 "Volatility & Filters" => ["volatility/test_volatility.jl"]]
+        vol_names = String[gn for (gn, _) in _make_work_queue(vol_q)]
+        @test vol_names == ["Volatility & Filters", "Plotting", "IO"]
 
         # Do-block is f-first. The reverse signature crashed every Windows group
         # (CI 31689698555) before any include ran.

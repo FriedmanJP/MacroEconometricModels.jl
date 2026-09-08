@@ -8,7 +8,7 @@ This page covers three complementary approaches:
 - **Maximum likelihood methods** (parametric): Student-t, mixture of normals, PML, skew-normal, plus a unified dispatcher
 - **Moment-based GMM** (semiparametric): coskewness and cokurtosis conditions (Keweloh 2021; Lanne & Luoto 2021)
 
-For an overview and method comparison, see [Statistical Identification](@ref nongaussian_page). For heteroskedasticity-based identification, see [Heteroskedasticity](@ref id_heteroskedastic_page). For the diagnostics that decide whether these methods are applicable at all, see [Testing](@ref id_testing_page). For schemes built on economic rather than statistical restrictions, see [Structural Identification](@ref structural_identification_page).
+For an overview and method comparison, see [Statistical Identification](@ref nongaussian_page). For heteroskedasticity-based identification, see [Heteroskedasticity](@ref id_heteroskedastic_page). For GMM on time-varying-volatility moments instead of skewness and kurtosis, see [Time-Varying Volatility](@ref id_tvv_page). For the diagnostics that decide whether these methods are applicable at all, see [Testing](@ref id_testing_page). For schemes built on economic rather than statistical restrictions, see [Structural Identification](@ref structural_identification_page).
 
 ```@setup id_ng
 using MacroEconometricModels, Random, LinearAlgebra

@@ -19,6 +19,9 @@ plot_result methods for the statistical-identification SVAR family (PLT-32):
   `:shocks` (recovered structural-shock lines).
 - `NonGaussianMLResult` — `B0` heatmap with a likelihood-ratio annotation.
 - `NonGaussianGMMResult` — `view=:mixing` (`B0` heatmap; same panel helper as ICA).
+- `LewisTVVResult` — `view=:mixing` (`B0` heatmap; same panel helper as ICA/GMM).
+- `SVSVARResult` — `view=:B` (impact heatmap) / `:volatility` (smoothed
+  log-volatility lines).
 - `ProxySVARResult` — `view=:B0` (impact heatmap) / `:impact` (identified columns).
 - `MaxShareResult` — `view=:Q` (rotation heatmap) / `:eigvals` (criterion eigenvalues).
 - `SVARModel` — `view=:B0` (impact ``A^{-1}B`` heatmap).
@@ -362,6 +365,72 @@ function plot_result(r::NonGaussianGMMResult{T};
     ftitle = isempty(title) ?
              "Moment-based GMM SVAR — mixing matrix ($(r.moments), $(r.weighting))" :
              title
+    p = _make_plot([panel]; title=ftitle, ncols=1)
+    save_path !== nothing && save_plot(p, save_path)
+    p
+end
+
+# =============================================================================
+# LewisTVVResult
+# =============================================================================
+
+"""
+    plot_result(r::LewisTVVResult; view=:mixing, title="", save_path=nothing)
+
+Lewis TVV-ID diagnostics. `view=:mixing` (default) draws the structural impact /
+mixing matrix `B₀` as a diverging heatmap, reusing the ICA mixing-matrix panel
+helper. Unknown `view` throws an `ArgumentError`.
+"""
+function plot_result(r::LewisTVVResult{T};
+                     view::Symbol=:mixing, title::String="",
+                     save_path::Union{String,Nothing}=nothing) where {T}
+    view === :mixing || throw(ArgumentError("Unknown view :$view. Valid views: :mixing"))
+    id = _next_plot_id("lewis_b0")
+    js = _statid_heatmap_panel(id, r.B0, r.varnames, r.shock_names;
+                               scale=:diverging, xlabel="Shock", ylabel="Variable",
+                               tip_label="")
+    panel = _PanelSpec(id, "Mixing Matrix (B₀)", js)
+    ftitle = isempty(title) ?
+             "Lewis TVV-ID — mixing matrix ($(r.weighting))" :
+             title
+    p = _make_plot([panel]; title=ftitle, ncols=1)
+    save_path !== nothing && save_plot(p, save_path)
+    p
+end
+
+# =============================================================================
+# SVSVARResult
+# =============================================================================
+
+"""
+    plot_result(r::SVSVARResult; view=:B, title="", save_path=nothing)
+
+SV-SVAR diagnostics. `view=:B` (default) draws the structural impact matrix as a
+diverging heatmap; `view=:volatility` draws the smoothed log-volatilities
+(`H_smooth`) as overlaid per-shock lines. Unknown `view` throws an
+`ArgumentError`.
+"""
+function plot_result(r::SVSVARResult{T};
+                     view::Symbol=:B, title::String="",
+                     save_path::Union{String,Nothing}=nothing) where {T}
+    n = size(r.B, 1)
+    if view === :B
+        id = _next_plot_id("svsvar_b")
+        js = _statid_heatmap_panel(id, r.B, _statid_var_names(n),
+                                   _statid_shock_names(n);
+                                   scale=:diverging, xlabel="Shock", ylabel="Variable",
+                                   tip_label="")
+        panel = _PanelSpec(id, "Impact Matrix (B)", js)
+        ftitle = isempty(title) ? "SV-SVAR — impact matrix" : title
+    elseif view === :volatility
+        id = _next_plot_id("svsvar_h")
+        js = _statid_line_panel(id, r.H_smooth, _statid_shock_names(n);
+                                ylabel="Smoothed log-volatility")
+        panel = _PanelSpec(id, "Smoothed Log-Volatilities", js)
+        ftitle = isempty(title) ? "SV-SVAR — smoothed log-volatilities" : title
+    else
+        throw(ArgumentError("Unknown view :$view. Valid views: :B, :volatility"))
+    end
     p = _make_plot([panel]; title=ftitle, ncols=1)
     save_path !== nothing && save_plot(p, save_path)
     p

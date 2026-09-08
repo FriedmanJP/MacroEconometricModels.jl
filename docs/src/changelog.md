@@ -6,6 +6,37 @@ output, not just documentation.
 
 ---
 
+## v0.9.6 (unreleased)
+
+Minor release on the `0.9` series: statistical identification from volatility dynamics —
+Lewis (2021) model-free TVV-GMM and Bertsche–Braun (2022) SV-SVAR EM
+(`#823`–`#827`, parent `#739` item 7). Downstream `[compat]` of
+`MacroEconometricModels = "0.9"` still resolves. **Changed numerical output**: none on
+existing paths — the new estimators only take effect when requested.
+
+**New**
+
+- `identify_lewis_tvv`: GMM on lagged cross-moments of squared shocks (Lewis 2021),
+  no variance law assumed; one-step / two-step / CUE weighting, multi-start
+  globalization, portmanteau weak-identification screen (`weak_id`), and J-test.
+  Recovery: `q_distance` below `0.25` (mean over 3 draws) on the SV fixture at
+  `T = 20000` (`#824`).
+- `identify_sv_svar`: EM maximum likelihood under AR(1) log-volatility (Bertsche–Braun
+  2022, EM-2 with mixture Kalman smoother); rotation-only M-step with scales frozen
+  at the OLS Cholesky factor, full/partial identification via `hetero`, smoothed
+  log-volatilities in `H_smooth`. Recovery: Procrustes distance below `0.2` at
+  `T = 2000` (`#825`).
+- `compute_Q` symbols `:lewis_tvv` and `:sv_em` with registry entries (25→27 methods),
+  so `irf`, `fevd`, and `historical_decomposition` accept both estimators through the
+  standard `method=` keyword (`#826`).
+- Recovery table, T×n benchmark timings (lewis <0.1s/0.8s/14s; sv-em 6s/6s/87s
+  on the (n,T) grid), `id_tvv.md` / `id_sv_svar.md` documentation pages,
+  `save_model` / `load_model` round-trips for both result types, and loud negative
+  controls (homoskedastic data trips `weak_id`; proportional variance shifts reject
+  the J-test) (`#827`).
+
+---
+
 ## v0.9.5
 
 Minor release on the `0.9` series: Smolyak sparse-grid and multi-control value-function iteration

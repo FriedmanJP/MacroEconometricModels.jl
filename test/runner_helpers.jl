@@ -18,6 +18,7 @@ function _expected_rank(name::AbstractString)
     name == "Extensions (JuMP/Ipopt/PATH)"    && return 60   # cold-load: schedule early
     startswith(name, "Coverage-A")            && return 60
     name == "ARIMA & Tests & Data & Reg"      && return 55
+    name == "Volatility & Filters" && return 54  # GARCH/FIGARCH/MCEM sequential; start with ARIMA (#828)
     name == "Plotting"            && return 52   # render + 11 lanes; schedule early to avoid a straggler
     name == "Serialization DSGE"  && return 88  # DSER is DSGE-Core-sized; start with HA
     name == "IRF & VECM"          && return 50

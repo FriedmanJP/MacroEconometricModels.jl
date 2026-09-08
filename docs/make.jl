@@ -98,6 +98,8 @@ makedocs(;
                 "Overview" => "nongaussian.md",
                 "Non-Gaussian Methods" => "id_nongaussian.md",
                 "Heteroskedasticity" => "id_heteroskedastic.md",
+                "Time-Varying Volatility" => "id_tvv.md",
+                "Stochastic Volatility SVAR" => "id_sv_svar.md",
                 "Testing" => "id_testing.md",
             ],
             "Innovation Accounting" => [
