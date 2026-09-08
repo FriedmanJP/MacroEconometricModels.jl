@@ -267,6 +267,11 @@ const MEM_EP = MacroEconometricModels
         model = estimate_var(Y, 2)
         # Unknown method
         @test_throws Union{ArgumentError, ErrorException} MEM_EP.compute_Q(model, :nonexistent_method, 10, nothing, nothing)
+        # v0.9.6 TVV/SV-ID wiring (#826): unknown kwargs fall through to the
+        # estimator (MethodError, as with :gmm_moments); bad smoother is ArgumentError
+        @test_throws MethodError MEM_EP.compute_Q(model, :lewis_tvv; bogus_kw=1)
+        @test_throws MethodError MEM_EP.compute_Q(model, :sv_em; bogus_kw=1)
+        @test_throws ArgumentError MEM_EP.compute_Q(model, :sv_em; smoother=:ekf)
     end
 
     # =========================================================================

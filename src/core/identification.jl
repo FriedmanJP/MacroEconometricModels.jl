@@ -842,6 +842,8 @@ Compute identification matrix Q for structural VAR analysis.
 - `:pml` — Pseudo-ML with Pearson Type IV (Gouriéroux, Monfort & Renne 2017)
 - `:skew_normal` — Skew-normal ML (Azzalini 1985 density)
 - `:nongaussian_ml` — Unified non-Gaussian ML dispatcher (default: Student-t)
+- `:lewis_tvv` — Time-varying-volatility ID, GMM on lagged cross-moments (Lewis 2021)
+- `:sv_em` — Stochastic-volatility SVAR via EM (Bertsche & Braun 2022); Q/B given `model.Sigma`
 - `:markov_switching` — Markov-switching heteroskedasticity (Lanne, Lütkepohl & Maciejowska 2010)
 - `:garch` — GARCH-based heteroskedasticity (Normandin & Phaneuf 2004)
 - `:smooth_transition` — Smooth-transition heteroskedasticity (requires `transition_var`)
@@ -916,6 +918,13 @@ function compute_Q(model::VARModel{T}, method::Symbol;
         identify_nongaussian_ml(model).Q
     elseif method == :gmm_moments
         identify_gmm_moments(model; kwargs...).Q
+    elseif method == :lewis_tvv
+        identify_lewis_tvv(model; rng=rng, kwargs...).Q
+    elseif method == :sv_em
+        # Q/B given model.Sigma; VAR-slope re-estimation inside the EM is
+        # ignored at this layer (full (A,B,SV) object via identify_sv_svar).
+        B_sv = identify_sv_svar(model.Y, model.p; rng=rng, kwargs...).B
+        Matrix{T}(Matrix{T}(safe_cholesky(model.Sigma)) \ B_sv)
     # Heteroskedasticity methods (defined in heteroskedastic_id.jl)
     elseif method == :markov_switching
         identify_markov_switching(model).Q
@@ -973,6 +982,8 @@ function _register_builtin_identification!()
         (:skew_normal, true, false, false),
         (:nongaussian_ml, true, false, false),
         (:gmm_moments, true, false, false),
+        (:lewis_tvv, true, false, false),
+        (:sv_em, true, false, false),
         (:markov_switching, true, false, false),
         (:garch, true, false, false),
         (:smooth_transition, true, false, false),

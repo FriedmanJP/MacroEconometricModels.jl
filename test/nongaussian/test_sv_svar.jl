@@ -90,6 +90,29 @@ include(joinpath(@__DIR__, "..", "var", "id_dgps.jl"))
         @test d1.B == d2.B
     end
 
+    @testset "registry and compute_Q (#826)" begin
+        Y, _, _, _ = generate_sv_var(; n=2, Tobs=1000, rng=Xoshiro(70))
+        m = estimate_var(Y, 1)
+        @test haskey(MEM.IDENTIFICATION_REGISTRY, :sv_em)
+        @test MEM._needs_residuals(:sv_em)
+        @test !MEM._is_set_identified(:sv_em)
+        @test !MEM._is_partial(:sv_em)
+        @test MEM._should_match_columns(:sv_em)
+        Q = MEM.compute_Q(m, :sv_em; maxiter=5, rng=Xoshiro(71))
+        @test size(Q) == (2, 2)
+        @test norm(Q' * Q - I) < 1e-6
+        Q2 = MEM.compute_Q(m, :sv_em; maxiter=5, rng=Xoshiro(71))
+        @test Q == Q2  # determinism under explicit Xoshiro
+        S = MEM.compute_structural_shocks(m, Q)
+        @test size(S) == (999, 2)
+        IR = MEM.compute_irf(m, Q, 8)
+        @test size(IR) == (8, 2, 2)
+        ir = irf(m, 4; method=:sv_em, maxiter=5, rng=Xoshiro(71))
+        @test size(ir.values) == (4, 2, 2)
+        @test_throws MethodError MEM.compute_Q(m, :sv_em; bogus_kw=1)
+        @test_throws ArgumentError MEM.compute_Q(m, :sv_em; smoother=:ekf)
+    end
+
     @testset "input validation" begin
         Yv, _, _, _ = generate_sv_var(; n=2, Tobs=500, rng=Xoshiro(60))
         @test_throws ArgumentError MEM.identify_sv_svar(Yv, 1; smoother=:ekf)

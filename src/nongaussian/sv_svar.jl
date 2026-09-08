@@ -255,7 +255,22 @@ change in `s`, and change in `Q` all below `tol`; default `1e-3`), NOT on the
 `loglik` path: the recorded Q mixes E-step distributions and Monte Carlo
 noise, so its relative change never reaches BB's deterministic-EM threshold.
 `loglik` is kept as a diagnostic path. Returns the full `(A,B,SV)` object; the
-`compute_Q` layer (see #826) exposes only Q/B.
+`compute_Q` layer exposes only Q/B given `model.Sigma`.
+
+# Examples
+```julia
+rng = Xoshiro(13)
+T = 800
+h = zeros(T, 2)
+for t in 2:T, i in 1:2
+    h[t, i] = 0.95 * h[t - 1, i] + 0.2 * randn(rng)
+end
+E = randn(rng, T, 2) .* exp.(h ./ 2)
+B0 = [1.0 0.3; 0.2 1.0]
+Y = Matrix((B0 * E')')
+res = identify_sv_svar(Y, 1; maxiter=50, rng=Xoshiro(14))
+res.B  # ≈ B0 up to signed permutation; check res.converged
+```
 """
 function identify_sv_svar(Y::AbstractMatrix, p::Int;
         hetero::AbstractVector{Bool}=trues(size(Y, 2)),
