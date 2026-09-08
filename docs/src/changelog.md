@@ -6,7 +6,7 @@ output, not just documentation.
 
 ---
 
-## v0.9.6 (unreleased)
+## v0.9.6
 
 Minor release on the `0.9` series: statistical identification from volatility dynamics —
 Lewis (2021) model-free TVV-GMM and Bertsche–Braun (2022) SV-SVAR EM
