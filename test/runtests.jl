@@ -151,7 +151,9 @@ const TEST_GROUPS = [
         "preg/test_pcse_prais.jl",   # EV-25 (#433): Beck-Katz PCSE + Prais-Winsten AR(1)
         "preg/test_panel_tests.jl",
     ]),
-    # Group 6: Volatility & Non-Gaussian & Plotting & Filters & Spectral
+    # Group 6: Volatility & Non-Gaussian & Filters & Spectral.
+    # Ranked just under ARIMA so macOS empirical (3-wide + coverage) does not
+    # start this sequential GARCH/MCEM group after the first wave (#828).
     ("Volatility & Filters" => [
         "volatility/test_volatility.jl",
         "volatility/test_volatility_coverage.jl",
