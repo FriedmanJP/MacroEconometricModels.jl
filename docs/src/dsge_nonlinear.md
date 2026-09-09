@@ -530,7 +530,7 @@ Five refinement rounds grow the 5-node ``\mu = 1`` grid into a 21-node grid with
 
 ### Evaluating the Policy Function
 
-`evaluate_policy` maps a state vector to the full vector of endogenous variables using the stored Chebyshev coefficients. The argument is the **lagged** state ``x_{t-1}`` in physical units, and the return value is the current-period vector of all ``n`` endogenous variables in `spec.varnames` order — the same ``v_t = [x_{t-1}; \varepsilon_t]`` convention the perturbation solutions use.
+`evaluate_policy` maps a state vector to the full vector of endogenous variables using the stored Chebyshev coefficients. The argument is the **lagged** state ``x_{t-1}`` in physical units, and the return value is the current-period vector of all ``n`` endogenous variables in `spec.varnames` order — the same ``v_t = [x_{t-1}; \varepsilon_t]`` convention the perturbation solutions use. `ProjectionSolution.collocation_nodes` stores the same points in Chebyshev coordinates on ``[-1, 1]``; [`physical_nodes`](@ref)`(sol)` rescales them to levels so a row can be passed to `evaluate_policy` / `evaluate_value`.
 
 ```@example dsge_nonlinear
 x_lag = [37.0, 1.0]                     # K_{t-1} = 37, A_{t-1} = 1
@@ -615,7 +615,7 @@ PFI reaches the ``10^{-8}`` sup-norm target in 223 iterations here — roughly f
 | `state_bounds` | `Matrix{T}` | ``n_x \times 2`` state domain bounds |
 | `grid_type` | `Symbol` | `:tensor` or `:smolyak` |
 | `degree` | `Int` | Polynomial degree (tensor) or highest Smolyak level reached |
-| `collocation_nodes` | `Matrix{T}` | ``n_{\text{nodes}} \times n_x`` grid points in ``[-1, 1]`` |
+| `collocation_nodes` | `Matrix{T}` | ``n_{\text{nodes}} \times n_x`` Chebyshev coordinates on ``[-1, 1]``. Physical levels: [`physical_nodes`](@ref)`(sol)` |
 | `residual_norm` | `T` | Final ``\|R\|`` residual (collocation) or sup-norm (PFI/VFI); fit **at the nodes only** |
 | `n_basis` | `Int` | Number of basis functions |
 | `multi_indices` | `Matrix{Int}` | ``n_b \times n_x`` multi-index matrix |

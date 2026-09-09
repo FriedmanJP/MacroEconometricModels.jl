@@ -162,12 +162,14 @@ const _SDFM_ID_METHODS = (
     :cholesky, :sign, :narrative, :long_run, :proxy,
     :fastica, :jade, :sobi, :dcov, :hsic,
     :student_t, :mixture_normal, :pml, :skew_normal, :nongaussian_ml,
+    :gmm_moments, :lewis_tvv, :sv_em,
     :markov_switching, :garch, :smooth_transition, :external_volatility,
     :arias, :uhlig,
 )
 const _SDFM_COMPUTE_Q_METHODS = (
     :narrative, :fastica, :jade, :sobi, :dcov, :hsic,
     :student_t, :mixture_normal, :pml, :skew_normal, :nongaussian_ml,
+    :gmm_moments, :lewis_tvv, :sv_em,
     :markov_switching, :garch, :smooth_transition, :external_volatility,
 )
 
@@ -190,7 +192,9 @@ legacy two-sided GDFM-factor VAR.
 - `q`: Number of dynamic / common shocks
 
 # Keyword Arguments
-- `identification::Symbol=:cholesky`: Identification method (:cholesky or :sign)
+- `identification::Symbol=:cholesky`: Identification method (`:cholesky`, `:sign`,
+  `:long_run`, `:proxy`, `:narrative`, ICA/ML/heteroskedastic `compute_Q` methods
+  including `:lewis_tvv`/`:sv_em`/`:gmm_moments`, `:arias`, `:uhlig`)
 - `p::Union{Int,Symbol}=1`: VAR lag order, or `:aic`/`:bic`/`:hq` over `1:p_max`
 - `p_max::Int=8`: Grid upper bound when `p` is a criterion
 - `check_stability::Bool=true`: Warn when the factor-VAR companion modulus is ≥ 1
@@ -211,6 +215,7 @@ legacy two-sided GDFM-factor VAR.
 - `varnames::Union{Nothing,Vector{String}}=nothing`: Panel variable names (length N)
 - `shock_names::Union{Nothing,Vector{String}}=nothing`: Structural shock names (length q)
 - `rng::AbstractRNG=Random.default_rng()`: RNG for sign-restriction search
+- `id_kwargs::NamedTuple`: Extra keywords forwarded to `compute_Q` for statistical-ID methods
 
 # Returns
 `StructuralDFM{T}` with identified factor IRFs mapped to all N panel variables.
@@ -257,6 +262,7 @@ function estimate_structural_dfm(X::AbstractMatrix{T}, q::Int;
     seed::Union{Integer,Nothing}=nothing,
     instrument::Union{Nothing,AbstractVector}=nothing,
     normalize::Union{Nothing,Tuple}=nothing,
+    id_kwargs::NamedTuple=NamedTuple(),
 ) where {T<:AbstractFloat}
     rng = _resolve_repro_rng(rng, seed)
 
@@ -277,7 +283,7 @@ function estimate_structural_dfm(X::AbstractMatrix{T}, q::Int;
         target_vars=target_vars, restrictions=restrictions,
         transition_var=transition_var, regime_indicator=regime_indicator,
         varnames=varnames, shock_names=shock_names, rng=rng, seed=seed,
-        standardize=standardize)
+        standardize=standardize, id_kwargs=id_kwargs)
 end
 
 @float_fallback estimate_structural_dfm X
@@ -386,6 +392,7 @@ function estimate_structural_dfm(gdfm::GeneralizedDynamicFactorModel{T};
     standardize::Bool=true,
     instrument::Union{Nothing,AbstractVector}=nothing,
     normalize::Union{Nothing,Tuple}=nothing,
+    id_kwargs::NamedTuple=NamedTuple(),
 ) where {T<:AbstractFloat}
     rng = _resolve_repro_rng(rng, seed)
 
@@ -433,12 +440,12 @@ function estimate_structural_dfm(gdfm::GeneralizedDynamicFactorModel{T};
             sign_check, sign_restrictions, restriction_space, store_all,
             max_draws, narrative_check, target_vars, restrictions,
             transition_var, regime_indicator, vn, sn, rng, standardize,
-            instrument, normalize)
+            instrument, normalize, id_kwargs)
     else
         _estimate_sdfm_gdfm_var(gdfm, q, p, p_max, check_stability, H, identification, sign_check, sign_restrictions,
             restriction_space, store_all, max_draws, narrative_check, target_vars,
             restrictions, transition_var, regime_indicator, vn, sn, rng,
-            instrument, normalize)
+            instrument, normalize, id_kwargs)
     end
     return _with_manifest(result, capture_manifest(; seed=seed,
         settings=Dict{String,Any}("identification" => String(identification),
@@ -456,7 +463,7 @@ function _estimate_sdfm_fglr(gdfm::GeneralizedDynamicFactorModel{T}, q::Int, r::
     max_draws::Int, narrative_check, target_vars, restrictions,
     transition_var, regime_indicator, vn::Vector{String}, sn::Vector{String},
     rng::AbstractRNG, standardize::Bool,
-    instrument, normalize) where {T<:AbstractFloat}
+    instrument, normalize, id_kwargs::NamedTuple=NamedTuple()) where {T<:AbstractFloat}
 
     X = gdfm.X
     T_obs, N = size(X)
@@ -482,7 +489,8 @@ function _estimate_sdfm_fglr(gdfm::GeneralizedDynamicFactorModel{T}, q::Int, r::
                             sign_check, sign_restrictions, restriction_space, store_all,
                             max_draws, narrative_check, target_vars, restrictions,
                             transition_var, regime_indicator,
-                            rng, vn, sn, X, standardize, units, instrument, normalize)
+                            rng, vn, sn, X, standardize, units, instrument, normalize,
+                            id_kwargs)
     B0 = from_var_Q ? Matrix{T}(safe_cholesky(factor_var.Sigma) * H_id) : Matrix{T}(K * H_id)
 
     structural_irf = _fglr_panel_irf(factor_var, Lambda, B0, H; X=X,
@@ -518,7 +526,8 @@ function _fglr_identify_H(Lambda::AbstractMatrix{T}, K::AbstractMatrix{T},
     store_all::Bool, max_draws::Int, narrative_check, target_vars, restrictions,
     transition_var, regime_indicator, rng::AbstractRNG,
     vn::Vector{String}, sn::Vector{String}, X, standardize::Bool,
-    units::Symbol, instrument=nothing, normalize=nothing) where {T<:AbstractFloat}
+    units::Symbol, instrument=nothing, normalize=nothing,
+    id_kwargs::NamedTuple=NamedTuple()) where {T<:AbstractFloat}
 
     q = size(K, 2)
     r = size(K, 1)
@@ -586,7 +595,8 @@ function _fglr_identify_H(Lambda::AbstractMatrix{T}, K::AbstractMatrix{T},
         "identification must be one of $(_SDFM_ID_METHODS), got :$identification"))
     Q = compute_Q(factor_var, identification; horizon=H_irf, check_func=sign_check,
                   narrative_check=narrative_check, max_draws=max_draws,
-                  transition_var=transition_var, regime_indicator=regime_indicator, rng=rng)
+                  transition_var=transition_var, regime_indicator=regime_indicator, rng=rng,
+                  id_kwargs...)
     return Matrix{T}(Q), nothing, one(T), true, nothing, nanF
 end
 
@@ -889,7 +899,8 @@ function _estimate_sdfm_gdfm_var(gdfm::GeneralizedDynamicFactorModel{T}, q::Int,
     restriction_space::Symbol, store_all::Bool, max_draws::Int,
     narrative_check, target_vars, restrictions, transition_var, regime_indicator,
     vn::Vector{String}, sn::Vector{String}, rng::AbstractRNG,
-    instrument=nothing, normalize=nothing) where {T<:AbstractFloat}
+    instrument=nothing, normalize=nothing,
+    id_kwargs::NamedTuple=NamedTuple()) where {T<:AbstractFloat}
 
     F = gdfm.factors
     T_obs, N = size(gdfm.X)
@@ -949,7 +960,8 @@ function _estimate_sdfm_gdfm_var(gdfm::GeneralizedDynamicFactorModel{T}, q::Int,
     else
         Q = compute_Q(factor_var, identification; horizon=H, check_func=sign_check,
                       narrative_check=narrative_check, max_draws=max_draws,
-                      transition_var=transition_var, regime_indicator=regime_indicator, rng=rng)
+                      transition_var=transition_var, regime_indicator=regime_indicator, rng=rng,
+                      id_kwargs...)
     end
 
     factor_irf = compute_irf(factor_var, Q, H)

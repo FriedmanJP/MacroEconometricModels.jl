@@ -55,6 +55,17 @@ const _RSER11_GMM = ("GMMWeighting", "ParameterTransform")
         @test m2.weighting isa GMMWeighting{Float64}
         @test m2.weighting.method === m.weighting.method
         @test m2.theta == m.theta
+        @test isnan(m.first_stage_F) && isnan(m2.first_stage_F)
+    end
+
+    @testset "IV-GMM first_stage_F round-trip (#815)" begin
+        d = dgp_gmm(Xoshiro(815); kind=:iv, beta=[1.0, 0.5], n=200, hetero=false, overid_k=2)
+        moment_fn(theta, dd) = dd[:, 4:6] .* (dd[:, 1] - dd[:, 2:3] * theta)
+        m = estimate_gmm(moment_fn, [0.0, 0.0], hcat(d.y, d.X, d.Z);
+                         weighting=:identity, hac=false, X=d.X, Z=d.Z, endogenous=[2])
+        @test isfinite(m.first_stage_F)
+        m2 = _assert_roundtrip(m)
+        @test m2.first_stage_F == m.first_stage_F
     end
 
     @testset "ParameterTransform including Inf bounds" begin

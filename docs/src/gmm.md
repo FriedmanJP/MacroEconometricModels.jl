@@ -8,6 +8,7 @@
 - **Model & moment selection**: Andrews-Lu (2001) MMSC criteria
 - **`estimate_smm`**: parameter estimation when moments are available only through simulation
 - **Linear GMM utilities**: closed-form solvers and robust sandwich covariances for IV-type models
+- **IV first-stage F**: pass `X` and `Z` to `estimate_gmm` to report the Stock–Yogo partial F on `GMMModel`
 - **StatsAPI interface**: `coef`, `vcov`, `stderror`, `confint`, `nobs`, and `report` for both estimators
 
 This page documents the general-purpose GMM/SMM surface. For Local Projections estimated by GMM see [Local Projections](@ref lp_page); for DSGE parameter estimation with `method=:smm` see [DSGE Estimation](@ref dsge_estimation).
@@ -32,7 +33,8 @@ data = hcat(y, X, Z)
 # Moment conditions: E[Z_t (y_t − X_t β)] = 0  →  3 moments, 1 parameter
 iv_moments(theta, d) = d[:, 3:5] .* (d[:, 1] .- d[:, 2] .* theta[1])
 
-m_iv = estimate_gmm(iv_moments, [0.0], data; weighting=:two_step)
+m_iv = estimate_gmm(iv_moments, [0.0], data; weighting=:two_step,
+                    X=reshape(X, :, 1), Z=Z)
 report(m_iv)
 ```
 
@@ -161,7 +163,8 @@ The same choices are wrapped in the `GMMWeighting` specification, stored on ever
 ```julia
 estimate_gmm(moment_fn, theta0, data;
              weighting=:two_step, max_iter=100, tol=1e-8,
-             hac=true, bandwidth=0, bounds=nothing)
+             hac=true, bandwidth=0, bounds=nothing,
+             X=nothing, Z=nothing, endogenous=nothing)
 ```
 
 | Keyword | Type | Default | Description |
@@ -172,6 +175,9 @@ estimate_gmm(moment_fn, theta0, data;
 | `hac` | `Bool` | `true` | Use HAC correction when building the optimal weighting matrix |
 | `bandwidth` | `Int` | `0` | HAC bandwidth (`0` = automatic Newey-West selection) |
 | `bounds` | `ParameterTransform` or `nothing` | `nothing` | Optional box constraints via bijective transforms; SEs corrected by the delta method |
+| `X` | `AbstractMatrix` or `nothing` | `nothing` | IV regressors; with `Z`, fills `first_stage_F` |
+| `Z` | `AbstractMatrix` or `nothing` | `nothing` | IV instruments; with `X`, fills `first_stage_F` |
+| `endogenous` | `AbstractVector{<:Integer}` or `nothing` | `nothing` | Endogenous columns of `X` (default: every non-constant column) |
 
 The optimizer is LBFGS with a Nelder-Mead fallback. When `bounds` are supplied the search runs in an unconstrained space via `ParameterTransform`, so parameters such as variances or probabilities can be constrained without penalty terms. `hac` governs only the weighting matrix; the ``\Omega`` entering the identity-weighting sandwich is always the Bartlett long-run covariance.
 
@@ -191,8 +197,9 @@ The optimizer is LBFGS with a Nelder-Mead fallback. When `bounds` are supplied t
 | `J_pvalue` | `T` | J-test p-value (`NaN` under identity weighting) |
 | `converged` | `Bool` | Optimizer convergence flag |
 | `iterations` | `Int` | Total iterations |
+| `first_stage_F` | `T` | Minimum excluded-instrument partial first-stage F when `X` and `Z` are supplied (IV-GMM); `NaN` otherwise |
 
-The `report` method prints the specification, a Stata-style coefficient table, and — when overidentified — the Hansen J-test. `coef`, `vcov`, `stderror`, `confint`, `nobs`, and `dof` follow the StatsAPI convention. Both `GMMModel` and `SMMModel` subtype the abstract [`AbstractGMMModel`](@ref), on which the shared `report` and StatsAPI accessors dispatch.
+The `report` method prints the specification, a Stata-style coefficient table, and — when overidentified — the Hansen J-test. When `first_stage_F` is finite it is printed as a weak-instrument diagnostic (Stock & Yogo 2005), with a warning if the statistic is below 10. `coef`, `vcov`, `stderror`, `confint`, `nobs`, and `dof` follow the StatsAPI convention. Both `GMMModel` and `SMMModel` subtype the abstract [`AbstractGMMModel`](@ref), on which the shared `report` and StatsAPI accessors dispatch.
 
 ---
 

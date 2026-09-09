@@ -110,6 +110,10 @@ function _from_serializable(::Type{T}, p::AbstractDict, ::Int) where {T}
                 push!(args, nothing)
                 continue
             end
+            if f === :first_stage_F
+                push!(args, NaN)   # IV-GMM diagnostic added in v0.9.7 (#815)
+                continue
+            end
             throw(SerializationError(
                 "field '$key' of $(nameof(T)) is missing from the payload — the file " *
                 "was saved by an older package version, before this field existed. " *

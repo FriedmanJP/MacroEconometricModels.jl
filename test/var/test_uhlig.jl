@@ -606,10 +606,6 @@ end
     # Satisfied candidate must have the lower (better) penalty.
     # Construct via a tiny helper that injects responses — or call _uhlig_penalty
     # on hand-built Qs once a VAR is estimated.
-    # Xoshiro(732) reproduces this testset's historical global-RNG stream
-    # exactly (verified); it stays on white noise because the r_uniq block
-    # below is seed-sensitive at ~50/50 across streams — see #814 (filed
-    # from DGP-02 #791).
     rng = Xoshiro(732)  # DGP-02: explicit rng
     n = 2
     Y = randn(rng, 200, n)
@@ -656,7 +652,8 @@ end
     @test spA[1] < spB[1]
 
     # Unique admissible rotation: zero on (2,1) plus a positive impact sign on (1,1)
-    # is Cholesky up to the sign, which the restriction pins.
+    # is Cholesky up to the sign, which the restriction pins. Sign-normalization
+    # (#814) makes this independent of the historical Xoshiro(732) stream.
     r_uniq = SVARRestrictions(n;
         zeros=[zero_restriction(2, 1)],
         signs=[sign_restriction(1, 1, :positive)])
@@ -668,10 +665,59 @@ end
     @test abs(u.irf[1, 2, 1]) < 1e-8
     @test all(sr -> sr.sign * u.irf[sr.horizon + 1, sr.variable, sr.shock] > 0,
               r_uniq.signs)
+    @test u.penalty < 0
 
     io = IOBuffer()
     show(io, u)
     @test occursin("lower", lowercase(String(take!(io))))
+end
+
+@testset "#814 uniquely-determined Uhlig sign is stable across streams" begin
+    n = 2
+    r_uniq = SVARRestrictions(n;
+        zeros=[zero_restriction(2, 1)],
+        signs=[sign_restriction(1, 1, :positive)])
+    uhlig_kw = (n_starts=FAST ? 3 : 10, n_refine=FAST ? 1 : 2,
+                max_iter_coarse=FAST ? 50 : 100, max_iter_fine=FAST ? 100 : 300)
+    # White-noise streams that previously converged ~50/50 (#814).
+    for seed in 1:6
+        rng = Xoshiro(seed)
+        m = estimate_var(randn(rng, 200, n), 1)
+        u = identify_uhlig(m, r_uniq, 5; rng=Xoshiro(seed + 100), uhlig_kw...)
+        @test u.converged
+        @test u.irf[1, 1, 1] > 0
+        @test abs(u.irf[1, 2, 1]) < 1e-8
+        @test u.penalty < 0
+    end
+    # Lower-triangular B0 DGP: previously 0/4 streams converged.
+    for seed in 7:10
+        d = dgp_var(Xoshiro(seed); A=[0.5 0.1; 0.2 0.4],
+                    B0=[1.0 0.0; 0.5 1.0], T=200, burn=50)
+        m = estimate_var(d.Y, 1)
+        u = identify_uhlig(m, r_uniq, 5; rng=Xoshiro(seed + 200), uhlig_kw...)
+        @test u.converged
+        @test u.irf[1, 1, 1] > 0
+        @test abs(u.irf[1, 2, 1]) < 1e-8
+        @test u.penalty < 0
+    end
+    # Direct penalty: the sign-flipped unique Q scores large positive, not 0.
+    rng = Xoshiro(11)
+    m = estimate_var(randn(rng, 200, n), 1)
+    Phi = MacroEconometricModels._compute_ma_coefficients(m, 1)
+    L = MacroEconometricModels.safe_cholesky(m.Sigma)
+    Q0 = MacroEconometricModels._uhlig_build_Q(Float64[], r_uniq, Phi, L, n)
+    impact = L * Q0
+    Qviol = copy(Q0)
+    Qviol[:, 1] .*= -1
+    Qsat = copy(Q0)
+    if impact[1, 1] < 0
+        Qsat, Qviol = Qviol, Qsat
+    end
+    pen_sat = MacroEconometricModels._uhlig_penalty_from_Q(Qsat, r_uniq, Phi, L, m, 1)
+    pen_viol = MacroEconometricModels._uhlig_penalty_from_Q(Qviol, r_uniq, Phi, L, m, 1)
+    @test pen_sat < 0
+    @test pen_viol > 1          # violated sign is weighted, not 0
+    @test pen_sat < pen_viol
 end
 
 @testset "SID-14 Uhlig rejects non-sign rejection types" begin

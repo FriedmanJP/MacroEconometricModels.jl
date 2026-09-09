@@ -785,6 +785,23 @@ using MacroEconometricModels
             sprint(showerror, e)
         end
         @test occursin("long_run", msg) || occursin("fastica", msg)
+        @test occursin("lewis_tvv", msg)
+        @test occursin("sv_em", msg)
+        @test :lewis_tvv in MacroEconometricModels._SDFM_ID_METHODS
+        @test :sv_em in MacroEconometricModels._SDFM_ID_METHODS
+        @test :gmm_moments in MacroEconometricModels._SDFM_ID_METHODS
+        @test :lewis_tvv in MacroEconometricModels._SDFM_COMPUTE_Q_METHODS
+        @test :sv_em in MacroEconometricModels._SDFM_COMPUTE_Q_METHODS
+        sdfm_tvv = estimate_structural_dfm(X, q; r=2, identification=:lewis_tvv, p=1, H=8,
+            standardize=false, rng=Random.Xoshiro(830),
+            id_kwargs=(n_starts=2, max_iter=20, K=2))
+        @test sdfm_tvv.identification === :lewis_tvv
+        @test sdfm_tvv.Q' * sdfm_tvv.Q ≈ I(q) atol=1e-8
+        sdfm_sv = estimate_structural_dfm(X, q; r=2, identification=:sv_em, p=1, H=8,
+            standardize=false, rng=Random.Xoshiro(831),
+            id_kwargs=(maxiter=5, gibbs_draws=10, gibbs_burn=1, b_iter=1))
+        @test sdfm_sv.identification === :sv_em
+        @test sdfm_sv.Q' * sdfm_sv.Q ≈ I(q) atol=1e-8
     end
 
     @testset "stochastic identification is seed-identical" begin
