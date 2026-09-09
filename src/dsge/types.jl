@@ -345,7 +345,8 @@ Fields:
 - `state_bounds` — `nx × 2` domain bounds `[lower upper]` per state
 - `grid_type` — `:tensor` or `:smolyak`
 - `degree` — polynomial degree (tensor) or Smolyak level μ
-- `collocation_nodes` — `n_nodes × nx` grid points
+- `collocation_nodes` — `n_nodes × nx` Chebyshev coordinates on `[-1, 1]`;
+  physical levels are `physical_nodes(sol)` (via `state_bounds`)
 - `residual_norm` — final `||R||`
 - `n_basis` — number of basis functions
 - `multi_indices` — `n_basis × nx` multi-index matrix
@@ -374,7 +375,7 @@ struct ProjectionSolution{T<:AbstractFloat}
     state_bounds::Matrix{T}         # nx × 2 ([lower upper] per state)
     grid_type::Symbol               # :tensor or :smolyak
     degree::Int                     # polynomial degree (tensor) or Smolyak level μ
-    collocation_nodes::Matrix{T}    # n_nodes × nx
+    collocation_nodes::Matrix{T}    # n_nodes × nx, Chebyshev coords on [-1, 1]; see physical_nodes
     residual_norm::T                # final ||R||
     n_basis::Int
     multi_indices::Matrix{Int}      # n_basis × nx

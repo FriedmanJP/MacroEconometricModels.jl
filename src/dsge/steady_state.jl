@@ -156,8 +156,28 @@ function compute_steady_state(spec::ModelSpec{T};
     # silently-wrong steady state (#214).
     lower = fill(T(-Inf), n)
     upper = fill(T(Inf), n)
-    y_ss = _nonlinearsolve_steady_state(spec, lower, upper;
-                initial_guess=initial_guess, algorithm=algorithm)
+    y_ss = try
+        _nonlinearsolve_steady_state(spec, lower, upper;
+                    initial_guess=initial_guess, algorithm=algorithm)
+    catch e
+        # LinearSolve's generated QR-fallback (`defaultalg_symbol(::QRFactorization)`)
+        # can throw a world-age MethodError on infeasible systems instead of
+        # returning a failed retcode (#816). Surface that as the residual-gate
+        # DSGESolveError so callers mapping DSGESolveError → model/solve stay typed.
+        e isa MethodError || rethrow()
+        y_fail = if initial_guess !== nothing
+            Vector{T}(initial_guess)
+        elseif !isempty(spec.steady_state)
+            Vector{T}(spec.steady_state)
+        else
+            ones(T, n)
+        end
+        resnorm, bad = _ss_residual_norm(spec, y_fail)
+        throw(DSGESolveError(
+            "Numerical steady state did not satisfy the equilibrium conditions " *
+            "(‖F‖∞ = $resnorm > $(SS_RESIDUAL_TOL); offending equation index/indices: $bad). " *
+            "Supply an analytical ss_fn or a better initial_guess, or add bounds via a constrained solver."))
+    end
     resnorm, bad = _ss_residual_norm(spec, y_ss)
     resnorm > T(SS_RESIDUAL_TOL) && throw(DSGESolveError(
         "Numerical steady state did not satisfy the equilibrium conditions " *
@@ -236,7 +256,10 @@ function _nonlinearsolve_steady_state(spec::ModelSpec{T}, lower::Vector{T}, uppe
     end
 
     alg = algorithm !== nothing ? algorithm : NonlinearSolve.TrustRegion()
-    sol = NonlinearSolve.solve(prob, alg; abstol=T(1e-10), maxiters=5000)
+    # invokelatest: LinearSolve's @generated QR-fallback can be stale in the
+    # world that compiled this method (#816). A leftover MethodError is caught
+    # by compute_steady_state and rewritten as DSGESolveError.
+    sol = Base.invokelatest(NonlinearSolve.solve, prob, alg; abstol=T(1e-10), maxiters=5000)
 
     if !NonlinearSolve.SciMLBase.successful_retcode(sol.retcode)
         @warn "Steady state solver did not converge (retcode = $(sol.retcode))"

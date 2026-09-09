@@ -76,6 +76,8 @@ Fields:
 - J_pvalue: p-value for J-test
 - converged: Convergence flag
 - iterations: Number of iterations
+- first_stage_F: Minimum excluded-instrument partial first-stage F when
+  `X`/`Z` were supplied to `estimate_gmm` (IV-GMM); `NaN` otherwise
 """
 struct GMMModel{T<:AbstractFloat} <: AbstractGMMModel
     theta::Vector{T}
@@ -90,10 +92,12 @@ struct GMMModel{T<:AbstractFloat} <: AbstractGMMModel
     J_pvalue::T
     converged::Bool
     iterations::Int
+    first_stage_F::T
 
     function GMMModel{T}(theta::Vector{T}, vcov::Matrix{T}, n_moments::Int, n_params::Int,
                          n_obs::Int, weighting::GMMWeighting{T}, W::Matrix{T}, g_bar::Vector{T},
-                         J_stat::T, J_pvalue::T, converged::Bool, iterations::Int) where {T<:AbstractFloat}
+                         J_stat::T, J_pvalue::T, converged::Bool, iterations::Int,
+                         first_stage_F::Real=T(NaN)) where {T<:AbstractFloat}
         @assert length(theta) == n_params
         @assert size(vcov) == (n_params, n_params)
         @assert size(W) == (n_moments, n_moments)
@@ -103,7 +107,7 @@ struct GMMModel{T<:AbstractFloat} <: AbstractGMMModel
         # NaN marks an invalid p-value (J is not χ² under :identity weighting)
         @assert isnan(J_pvalue) || 0 <= J_pvalue <= 1
         new{T}(theta, vcov, n_moments, n_params, n_obs, weighting, W, g_bar,
-               J_stat, J_pvalue, converged, iterations)
+               J_stat, J_pvalue, converged, iterations, T(first_stage_F))
     end
 end
 
@@ -145,6 +149,18 @@ function Base.show(io::IO, m::GMMModel{T}) where {T}
         if isnan(m.J_pvalue)
             println(io, "Note: the J-statistic under identity weighting is not χ²-distributed;")
             println(io, "the p-value is invalid — use two-step/optimal weighting for the J-test.")
+        end
+    end
+    if isfinite(m.first_stage_F)
+        fs_data = Any["1st-stage F" _fmt(m.first_stage_F; digits=2)]
+        _pretty_table(io, fs_data;
+            title = "Weak-identification diagnostic",
+            column_labels = ["", ""],
+            alignment = [:l, :r],
+        )
+        if m.first_stage_F < T(10)
+            println(io, "Weak instruments: 1st-stage F = $(_fmt(m.first_stage_F; digits=2)) < 10 ",
+                        "(Stock & Yogo 2005).")
         end
     end
 end
@@ -333,7 +349,8 @@ end
     estimate_gmm(moment_fn::Function, theta0::AbstractVector{T}, data;
                  weighting::Symbol=:two_step, max_iter::Int=100,
                  tol::T=T(1e-8), hac::Bool=true, bandwidth::Int=0,
-                 bounds::Union{Nothing,ParameterTransform}=nothing) -> GMMModel{T}
+                 bounds::Union{Nothing,ParameterTransform}=nothing,
+                 X=nothing, Z=nothing, endogenous=nothing) -> GMMModel{T}
 
 Estimate parameters via Generalized Method of Moments.
 
@@ -351,6 +368,11 @@ Arguments:
 - bounds: Parameter bounds via `ParameterTransform` (default: nothing = unconstrained).
   When provided, optimization is performed in unconstrained space via bijective transforms,
   and standard errors are corrected via the delta method.
+- X, Z: Optional IV design (`n × k` regressors, `n × m` instruments). When both
+  are supplied, `first_stage_F` is the minimum excluded-instrument partial F
+  (Stock & Yogo 2005) and is printed by `report` / `gmm_summary`.
+- endogenous: Column indices of `X` treated as endogenous (default: every
+  non-constant column).
 
 Returns:
 - GMMModel with estimates, covariance, and J-test results
@@ -358,7 +380,9 @@ Returns:
 function estimate_gmm(moment_fn::Function, theta0::AbstractVector{T}, data;
                       weighting::Symbol=:two_step, max_iter::Int=100,
                       tol::T=T(1e-8), hac::Bool=true, bandwidth::Int=0,
-                      bounds::Union{Nothing,ParameterTransform}=nothing) where {T<:AbstractFloat}
+                      bounds::Union{Nothing,ParameterTransform}=nothing,
+                      X=nothing, Z=nothing,
+                      endogenous=nothing) where {T<:AbstractFloat}
     n_params = length(theta0)
 
     # Get dimensions from initial moment evaluation
@@ -501,8 +525,29 @@ function estimate_gmm(moment_fn::Function, theta0::AbstractVector{T}, data;
         (zero(T), one(T))  # Just identified
     end
 
+    fs_F = _gmm_first_stage_F(X, Z, endogenous, T)
+    if isfinite(fs_F) && fs_F < T(10)
+        @warn "Weak instruments: first-stage F = $(round(fs_F, digits=2)) < 10 (Stock & Yogo 2005)"
+    end
+
     GMMModel{T}(theta_hat, vcov, n_moments, n_params, n_obs, weighting_spec,
-                W_final, g_bar, J_stat, J_pvalue, converged, iterations)
+                W_final, g_bar, J_stat, J_pvalue, converged, iterations, fs_F)
+end
+
+"""Partial first-stage F for IV-GMM when `X` and `Z` are supplied; else `NaN`."""
+function _gmm_first_stage_F(X, Z, endogenous, ::Type{T}) where {T<:AbstractFloat}
+    (X === nothing || Z === nothing) && return T(NaN)
+    Xm = Matrix{T}(X)
+    Zm = Matrix{T}(Z)
+    size(Xm, 1) == size(Zm, 1) || throw(ArgumentError(
+        "X and Z must have the same number of rows, got $(size(Xm, 1)) and $(size(Zm, 1))"))
+    idx = if endogenous === nothing
+        Int[j for j in 1:size(Xm, 2) if maximum(abs, Xm[:, j] .- Xm[1, j]) > T(1e-12)]
+    else
+        Vector{Int}(endogenous)
+    end
+    isempty(idx) && return T(NaN)
+    _first_stage_f(Xm, Zm, idx)
 end
 
 # =============================================================================
@@ -556,7 +601,8 @@ function gmm_summary(model::GMMModel{T}) where {T<:AbstractFloat}
     (theta=model.theta, se=se, t_stats=t_stats, p_values=p_values,
      n_moments=model.n_moments, n_params=model.n_params, n_obs=model.n_obs,
      weighting=model.weighting.method, converged=model.converged,
-     iterations=model.iterations, j_test=j_result)
+     iterations=model.iterations, j_test=j_result,
+     first_stage_F=model.first_stage_F)
 end
 
 # =============================================================================

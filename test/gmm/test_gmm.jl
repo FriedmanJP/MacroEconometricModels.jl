@@ -334,6 +334,7 @@ end
         @test s.weighting == :two_step
         @test s.converged isa Bool
         @test s.j_test isa NamedTuple
+        @test isnan(s.first_stage_F)
     end
 
     @testset "GMMModel StatsAPI interface" begin
@@ -764,7 +765,23 @@ end
                  overid_k=2, pi1=0.07)
     moment_fn(theta, dd) = dd[:, 4:6] .* (dd[:, 1] - dd[:, 2:3] * theta)
     res = estimate_gmm(moment_fn, [0.0, 0.0], hcat(dw.y, dw.X, dw.Z);
-                       weighting=:two_step, hac=false)
+                       weighting=:two_step, hac=false,
+                       X=dw.X, Z=dw.Z, endogenous=[2])
     @test res isa MacroEconometricModels.GMMModel
     @test all(isfinite, res.theta)
+    x = dw.X[:, 2]
+    Z = dw.Z
+    k = size(Z, 2)
+    Pz = Z * inv(Symmetric(Z' * Z)) * Z'
+    hand_F = ((dot(x, Pz * x) - dot(x, ones(length(x)))^2 / length(x)) / (k - 1)) /
+             ((dot(x, x) - dot(x, Pz * x)) / (length(x) - k))
+    @test res.first_stage_F ≈ hand_F rtol=1e-8
+    @test res.first_stage_F < 10          # weak-IV arm is below the Stock–Yogo rule of thumb
+    s = gmm_summary(res)
+    @test s.first_stage_F == res.first_stage_F
+    io = IOBuffer()
+    show(io, res)
+    shown = String(take!(io))
+    @test occursin("1st-stage F", shown)
+    @test occursin("Weak instruments", shown)
 end

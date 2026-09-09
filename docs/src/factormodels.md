@@ -689,7 +689,8 @@ The first structural shock moves `UNRATE` by ``-0.0481`` and `FEDFUNDS` by ``-0.
 
 | Keyword | Type | Default | Description |
 |---------|------|---------|-------------|
-| `identification` | `Symbol` | `:cholesky` | `:cholesky`, `:sign`, `:long_run`, `:proxy`, `:narrative`, ICA/ML/heteroskedastic `compute_Q` methods, `:arias`/`:uhlig` |
+| `identification` | `Symbol` | `:cholesky` | `:cholesky`, `:sign`, `:long_run`, `:proxy`, `:narrative`, ICA/ML/heteroskedastic `compute_Q` methods (including `:lewis_tvv`, `:sv_em`, `:gmm_moments`), `:arias`/`:uhlig` |
+| `id_kwargs` | `NamedTuple` | empty | Extra keywords forwarded to `compute_Q` for statistical-ID methods |
 | `target_vars` | `Vector` | `1:q` | Observables whose long-run responses are lower-triangular (`:long_run`) |
 | `method` | `Symbol` | `:fglr` | `:fglr` (FGLR 2009) or `:gdfm_var` (legacy two-sided) |
 | `r` | `Int` | `q` | Static factors; must satisfy ``r \ge q`` |

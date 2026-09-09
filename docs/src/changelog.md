@@ -6,6 +6,23 @@ output, not just documentation.
 
 ---
 
+## v0.9.7
+
+Patch on the `0.9` series: identification and solver follow-ups from the v0.9.5–v0.9.6 backlog (`#814`–`#816`, `#829`, `#830`). Downstream `[compat]` of `MacroEconometricModels = "0.9"` still resolves. **Changed numerical output**: `identify_uhlig` sign-normalizes uniquely determined columns, so previously sign-flipped penalty rotations now satisfy the imposed signs.
+
+**Correctness**
+
+- `identify_uhlig` sign-normalizes columns that carry a sign restriction after the search (zeros are preserved under a column sign flip). Uniquely determined rotations (`free_dim = 1`) no longer land on the sign-flipped Cholesky with a dummy penalty of 0.0 from a 0-parameter Nelder–Mead run (`#814`).
+- `compute_steady_state` on an infeasible model throws `DSGESolveError` from the residual gate rather than a LinearSolve world-age `MethodError` on the QR-fallback path (`#816`).
+
+**New**
+
+- IV-GMM first-stage F: pass `X` and `Z` to `estimate_gmm` to store `first_stage_F` (Stock–Yogo partial F) on `GMMModel`; `report` / `gmm_summary` print it and warn when F < 10 (`#815`).
+- `physical_nodes(sol)` rescales `ProjectionSolution.collocation_nodes` from Chebyshev `[-1, 1]` to physical state levels. The field comment documents the convention (`#829`).
+- `estimate_structural_dfm` accepts `:lewis_tvv`, `:sv_em`, and `:gmm_moments` (plus `id_kwargs` forwarded to `compute_Q`) (`#830`).
+
+---
+
 ## v0.9.6
 
 Minor release on the `0.9` series: statistical identification from volatility dynamics —

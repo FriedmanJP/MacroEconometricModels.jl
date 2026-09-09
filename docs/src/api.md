@@ -801,6 +801,7 @@ Heterogeneous-agent (Reiter/SSJ/Krusell-Smith), continuous-time (HJB/KFE), and O
 | `dsge_smoother(ss, data)` | RTS Kalman smoother for linear DSGE |
 | `dsge_particle_smoother(nss, data)` | FFBSi particle smoother for nonlinear DSGE |
 | `evaluate_policy(sol, grid)` | Evaluate policy function on grid |
+| `physical_nodes(sol)` | Collocation nodes in physical state levels |
 | `max_euler_error(sol, grid)` | Maximum Euler equation error |
 
 OLS, WLS, IV/2SLS, logit, probit, ordered, and multinomial estimation for cross-sectional data. See [Linear Regression](@ref regression_page) and [Binary Choice](@ref binary_choice_page) for theory and examples.

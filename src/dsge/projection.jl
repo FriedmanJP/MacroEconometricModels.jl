@@ -985,6 +985,19 @@ function _proj_eval(coeffs::Matrix{T}, multi_indices::Matrix{Int},
 end
 
 """
+    physical_nodes(sol::ProjectionSolution) -> Matrix
+
+Collocation nodes in physical state units (`n_nodes × nx`).
+
+`sol.collocation_nodes` stores Chebyshev coordinates on `[-1, 1]`. This
+rescales each column through `sol.state_bounds` so rows can be passed to
+[`evaluate_value`](@ref) / [`evaluate_policy`](@ref), which take levels.
+"""
+function physical_nodes(sol::ProjectionSolution{T}) where {T}
+    Matrix{T}(_scale_from_unit(sol.collocation_nodes, sol.state_bounds))
+end
+
+"""
     evaluate_policy(sol::ProjectionSolution{T}, x_state::AbstractVector) -> Vector{T}
 
 Evaluate the global policy function at a state vector.

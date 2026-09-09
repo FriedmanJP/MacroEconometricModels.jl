@@ -2374,6 +2374,23 @@ end
     end
     @test_throws M.DSGESolveError compute_steady_state(spec_bad)
 
+    # #816: infeasible SS must be DSGESolveError, not LinearSolve world-age MethodError
+    spec_816 = @dsge begin
+        parameters: sigma = 0.01
+        endogenous: Y
+        exogenous: e
+        Y[t] = Y[t-1]^2 + 2 + sigma * e[t]
+    end
+    err816 = try
+        compute_steady_state(spec_816)
+        nothing
+    catch e
+        e
+    end
+    @test err816 isa M.DSGESolveError
+    @test occursin("equilibrium conditions", sprint(showerror, err816))
+    @test !(err816 isa MethodError)
+
     # S-17 (#224): is_stable / show read the cached eigenvalues, equal to recomputing eigvals(G1)
     spec = @dsge begin
         parameters: ρ = 0.9, σ = 1.0
@@ -7187,6 +7204,10 @@ end
     @test all(isfinite, sol_s.value_fn)
     v_ss = evaluate_value(sol_s, x_ss)
     @test isfinite(v_ss)
+    nodes_s = physical_nodes(sol_s)
+    @test size(nodes_s) == size(sol_s.collocation_nodes)
+    @test all(-1 .<= sol_s.collocation_nodes .<= 1)
+    @test isfinite(evaluate_value(sol_s, nodes_s[1, :]))
     y_ss = evaluate_policy(sol_s, x_ss)
     @test all(isfinite, y_ss)
     @test 0 < y_ss[1] < 10
@@ -7210,6 +7231,22 @@ end
     v_hi = evaluate_value(sol, [1.05 * k_ss, 0.0])
     @test v_hi > v_lo
     @test v_ss > log(spec.steady_state[1]) / (1 - spec.param_values[:β]) * 0.25
+end
+
+@testset "#829 collocation_nodes are Chebyshev coords; physical_nodes are levels" begin
+    nodes_u = sol.collocation_nodes
+    @test all(-1 .<= nodes_u .<= 1)
+    nodes_p = physical_nodes(sol)
+    @test size(nodes_p) == size(nodes_u)
+    lo = sol.state_bounds[:, 1]
+    hi = sol.state_bounds[:, 2]
+    for j in 1:size(nodes_p, 1)
+        for d in 1:size(nodes_p, 2)
+            @test lo[d] - 1e-10 <= nodes_p[j, d] <= hi[d] + 1e-10
+        end
+        @test isfinite(evaluate_value(sol, nodes_p[j, :]))
+    end
+    @test nodes_p ≈ MacroEconometricModels._scale_from_unit(nodes_u, sol.state_bounds)
 end
 
 @testset "Bellman residual is small after Howard PE" begin
