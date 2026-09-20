@@ -1024,6 +1024,21 @@ end
         @test irf[1, :, :] ≈ A0_inv
     end
 
+    @testset "LowerTriangular backing store (Julia 1.13)" begin
+        # Julia 1.13 returns cholesky().L as LowerTriangular{T,Adjoint} instead of
+        # LowerTriangular{T,Matrix}; SVAR internals must accept any backing store.
+        rng = Xoshiro(113113)
+        Y = randn(rng, 100, 2)
+        model = estimate_var(Y, 1)
+        Phi = MacroEconometricModels._compute_ma_coefficients(model, 5)
+        Lm = safe_cholesky(model.Sigma)
+        La = LowerTriangular(Matrix(Matrix(Lm)')')
+        @test La isa LowerTriangular{Float64,Adjoint{Float64,Matrix{Float64}}}
+        Q = Matrix{Float64}(I, 2, 2)
+        @test MacroEconometricModels._compute_irf_for_Q(model, Q, Phi, La, 5) ≈
+            MacroEconometricModels._compute_irf_for_Q(model, Q, Phi, Lm, 5)
+    end
+
     @testset "_draw_Q_with_zero_restrictions" begin
         rng = Xoshiro(45454)  # DGP-02: explicit rng
 

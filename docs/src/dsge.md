@@ -159,7 +159,7 @@ Variables with `[t+1]` subscripts generate expectation errors in the Sims (2002)
 | `n_endog` | `Int` | Number of endogenous variables |
 | `n_exog` | `Int` | Number of exogenous shocks |
 | `n_expect` | `Int` | Number of expectation errors |
-| `forward_indices` | `Vector{Int}` | Indices of forward-looking equations |
+| `forward_indices` | `Vector{Int}` | Indices of distinct lead variables (one ``\eta`` each) |
 | `steady_state` | `Vector{T}` | Steady-state values |
 | `varnames` | `Vector{String}` | Display names |
 

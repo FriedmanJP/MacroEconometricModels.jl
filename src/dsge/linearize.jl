@@ -26,7 +26,7 @@ function linearize(spec::ModelSpec{T}) where {T<:AbstractFloat}
 
     n = spec.n_endog
     n_ε = spec.n_exog
-    n_η = spec.n_expect
+    n_η = spec.n_expect  # #223 ([T124]): distinct lead variables == #η shocks == size(Π, 2)
     y_ss = spec.steady_state
     θ = spec.param_values
     ε_zero = zeros(T, n_ε)
@@ -65,9 +65,12 @@ function linearize(spec::ModelSpec{T}) where {T<:AbstractFloat}
     # Π: select columns of -f_lead corresponding to forward-looking variables
     if n_η > 0
         fwd_var_indices = _forward_variable_indices(spec)
-        # width = #DISTINCT lead variables (not n_expect, which counts forward EQUATIONS); the
-        # dedup here is exactly the n_expect↔Π reconciliation flagged in #223 (verified fine).
-        Pi = -f_lead[:, fwd_var_indices]    # n × (#distinct lead vars)
+        # #223 ([T124]): the Jacobian probe and the parser catalog must agree —
+        # both count DISTINCT lead variables (n_expect == size(Π, 2)). The probe
+        # stays as the construction layer (it also catches hand-built residual
+        # fns whose exprs carry substituted-out leads); the parser catalog is
+        # the static layer used for display and validation.
+        Pi = -f_lead[:, fwd_var_indices]    # n × n_η
     else
         Pi = zeros(T, n, 0)
     end

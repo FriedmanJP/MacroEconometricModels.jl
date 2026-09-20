@@ -621,3 +621,17 @@ end
     @test w_c.approximation == :rvr
     @test !isapprox(w_c.statistic, w_diag.statistic; rtol=1e-3)
 end
+
+@testset "LowerTriangular backing store (Julia 1.13)" begin
+    # Julia 1.13 returns cholesky().L as LowerTriangular{T,Adjoint}; the ML
+    # loglikelihood must accept any backing store.
+    rng = Xoshiro(113115)
+    U = randn(rng, 50, 2)
+    S = Symmetric(cov(U) + 0.1 * I)
+    Lm = MEM.safe_cholesky(Matrix(S))
+    La = LowerTriangular(Matrix(Matrix(Lm)')')
+    @test La isa LowerTriangular{Float64,Adjoint{Float64,Matrix{Float64}}}
+    ll_m = MEM._nongaussian_loglik([0.3], [1.0, 1.0], U, Lm, 2; distribution=:student_t)
+    ll_a = MEM._nongaussian_loglik([0.3], [1.0, 1.0], U, La, 2; distribution=:student_t)
+    @test isfinite(ll_m) && ll_a ≈ ll_m
+end

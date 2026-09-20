@@ -206,7 +206,7 @@ Full non-Gaussian log-likelihood:
 where ε_t = B₀⁻¹ u_t.
 """
 function _nongaussian_loglik(angles::AbstractVector{T}, dist_params_vec::AbstractVector{T},
-                             U::Matrix{T}, L::LowerTriangular{T, Matrix{T}}, n::Int;
+                             U::Matrix{T}, L::LowerTriangular{T,<:AbstractMatrix{T}}, n::Int;
                              distribution::Symbol=:student_t) where {T<:AbstractFloat}
     Q = _givens_to_orthogonal(angles, n)
     B0 = Matrix(L) * Q
@@ -315,7 +315,7 @@ function _numerical_hessian(f::Function, x::Vector{T}; eps_step::T=T(1e-5)) wher
 end
 
 """Compute asymptotic covariance and standard errors from Hessian."""
-function _nongaussian_vcov(params::Vector{T}, U::Matrix{T}, L::LowerTriangular{T, Matrix{T}},
+function _nongaussian_vcov(params::Vector{T}, U::Matrix{T}, L::LowerTriangular{T,<:AbstractMatrix{T}},
                            n::Int, distribution::Symbol) where {T<:AbstractFloat}
     n_angles = n * (n - 1) ÷ 2
     n_dp = _n_dist_params(distribution) * n

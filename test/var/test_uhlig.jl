@@ -816,4 +816,23 @@ end
     end
 end
 
+@testset "LowerTriangular backing store (Julia 1.13)" begin
+    # Julia 1.13 returns cholesky().L as LowerTriangular{T,Adjoint}; the Uhlig
+    # internals must accept any backing store.
+    rng = Xoshiro(113114)
+    n = 2
+    Y = randn(rng, 100, n)
+    B = zeros(1 + n, n)
+    U = randn(rng, 99, n)
+    Sigma = Matrix{Float64}(I, n, n)
+    m = VARModel(Y, 1, B, U, Sigma, 0.0, 0.0, 0.0)
+    r = SVARRestrictions(n; signs=[sign_restriction(1, 1, :positive)])
+    Phi = MacroEconometricModels._compute_ma_coefficients(m, 1)
+    Lm = MacroEconometricModels.safe_cholesky(m.Sigma)
+    La = LowerTriangular(Matrix(Matrix(Lm)')')
+    Q = Matrix{Float64}(I, n, n)
+    @test MacroEconometricModels._uhlig_shock_penalties(Q, r, Phi, La, m, 1) ≈
+        MacroEconometricModels._uhlig_shock_penalties(Q, r, Phi, Lm, m, 1)
+end
+
 _tprint("Mountford-Uhlig (2009) tests completed.")

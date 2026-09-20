@@ -157,7 +157,7 @@ ss_vfi = compute_steady_state(spec_vfi; hh_solver=:vfi)
 ```
 
 !!! note "Two-asset steady states"
-    One-asset models still bisect a single rate. Two-asset models use a damped `(K, r_b)` closer (the discrete-time analogue of `ct_two_asset_ge`): illiquid wealth clears against firm capital and liquid wealth against `B_supply`, with `τ = r_b B_supply`. The default `load_ha_example(:two_asset_hank)` grid is 50 × 50 × 7; shrink it for interactive work. `distribution=:winberry` on a two-asset spec still errors.
+    One-asset models still bisect a single rate. Two-asset models use a nested-bisection `(K, r_b)` closer (#709): an inner bisection clears liquid wealth against `B_supply` at fixed `K`, and an outer bisection clears illiquid wealth against firm capital, with `τ = r_b B_supply` and best-tracking on both loops. (Raw damped updates — the `ct_two_asset_ge` analogue — limit-cycle on the discrete model's cliff demand curves, so this is deliberately not that.) Household evaluations run pure VFI (`howard_steps=0`) to genuine policy stability (`stable_iters=20`): Howard evaluation re-targets `V` on every deposit flip while the one-iteration backstop fires in transit, and both leave slop the outer bisection cannot cross. The two-asset default `tol=2e-3` reflects the resulting evaluation floor. The default `load_ha_example(:two_asset_hank)` grid is 50 × 50 × 7; shrink it for interactive work. `distribution=:winberry` on a two-asset spec still errors.
 
 ---
 
@@ -793,7 +793,7 @@ where:
 
 The cost is quadratic in the deposit rate and therefore smooth at ``d = 0``. The continuous-time module carries the Kaplan-Moll-Violante linear-plus-convex alternative, whose kink at zero generates a genuine inaction region — see [Continuous Time](@ref dsge_continuous).
 
-The individual problem is solved via **nested EGM**: an outer loop over deposit choices with an inner EGM on the liquid dimension.
+The individual problem is solved via **nested EGM**: an outer loop over deposit choices with an inner EGM on the liquid dimension. The GE closer evaluates that problem in pure-VFI regime (see the note under Individual Problem); its keywords are:
 
 ```@example dsge_ha
 spec_2a = load_ha_example(:two_asset_hank)
@@ -806,6 +806,20 @@ ss_2a = compute_steady_state(spec_2a; grid_check=:none)
 ```
 
 The shipped `load_ha_example(:two_asset_hank)` grid is 50 × 50 × 7. Because the adjustment cost is quadratic and therefore differentiable at ``d = 0``, its marginal cost passes smoothly through zero: every household whose marginal valuations differ rebalances, by an amount that shrinks continuously to zero as ``V_a/V_b \to 1``. There is no inaction band here — generating one requires a cost with a kink at the origin, which is the `cost=:kinked` specification documented under [Continuous Time](@ref dsge_continuous).
+
+| Keyword | Type | Default | Description |
+|---------|------|---------|-------------|
+| `K_init` | `T` | `10.0` | Seeds the outer-bracket expansion |
+| `k_lo`, `k_hi` | `T` | `nothing` | Explicit outer bracket; `k_lo` below the capital floor clamps up |
+| `max_iter` | `Int` | `60` | Maximum outer bisection iterations |
+| `tol` | `Real` | ``2 \times 10^{-3}`` | Clearing tolerance on ``\max(|A-K|, |B-B_{supply}|)`` |
+| `inner_max_iter` | `Int` | `30` | Inner ``r_b`` bisection depth |
+| `hh_max_iter` | `Int` | `500` | Household VFI iteration budget |
+| `hh_tol` | `T` | ``10^{-6}`` | Household Bellman-residual tolerance |
+| `howard_steps` | `Int` | `0` | Howard evaluations per VFI sweep (pure VFI) |
+| `stable_iters` | `Int` | `20` | Consecutive stable-policy iterations to stop, EGM-only |
+| `stall_window` | `Int` | `8` | Outer iterations without improvement before stopping |
+| `k_atol` | `Real` | ``10^{-9}`` | Outer bracket-width stop |
 
 `solve(spec_2a; method=:ssj, ss=ss_2a)` and `method=:reiter` linearize around that stationary point. `method=:krusell_smith` re-solves the two-asset household each period and fits a PLM for ``K``.
 
@@ -1224,7 +1238,7 @@ The reloaded steady state keeps the market-clearing residual and the aggregate c
 
 5. **Ho-Kalman `n_reduced` too small.** Check `explained_variance` in the `HADSGESolution` --- it should exceed 0.999. If not, increase `n_reduced`.
 
-6. **Two-asset deposit grid resolution.** The nested EGM searches over a discrete deposit grid. With too few points (`n_deposit < 20`), the optimal deposit choice may be inaccurate near the adjustment cost kink.
+6. **Two-asset deposit ties on fine grids.** The nested EGM searches deposits over the full illiquid grid (`n_deposit` is retained for API compatibility only and has no effect). On fine grids adjacent deposits are near-tied in value, so the EGM operator limit-cycles in `V` instead of converging; the GE closer therefore runs household evaluations to policy stability (`stable_iters=20`) rather than value convergence. Sub-`2e-3` GE residuals on the 50 × 50 × 7 grid sit below the evaluation floor — coarsen the grid or accept the floor.
 
 7. **Targets that do not vanish in steady state.** `ssj_jacobian` warns when a target's steady-state level exceeds `target_tol`, which means the DAG is being linearized around a point that does not clear. The usual cause is an asset grid whose upper bound truncates the savings policy, so mass piles up at `a_max` and ``\int a' d\mu`` exceeds ``\int a \, d\mu``. Widen the grid rather than raising the tolerance.
 

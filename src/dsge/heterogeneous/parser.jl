@@ -613,14 +613,16 @@ function _ha_model_spec_quote(endog, exog, params, raw_equations,
         # this macro still emits closures inline (no eval at expansion).
         residual_exprs = Expr[]
         fn_exprs = Expr[]
-        fwd = Int[]
+        fwd_vars = Set{Int}()
         for (i, eq) in enumerate(eqs)
             resid = _equation_to_residual(eq)
             subst = _substitute_vars(resid, endog, exog, params)
             push!(residual_exprs, resid)
             push!(fn_exprs, Expr(:->, Expr(:tuple, :_y_t_, :_y_lag_, :_y_lead_, :_ε_, :_θ_), subst))
-            _has_forward_looking(eq, endog, exog) && push!(fwd, i)
+            # #223 ([T124]): catalog distinct lead VARIABLES, not equations.
+            union!(fwd_vars, _lead_variable_indices(eq, endog))
         end
+        fwd = sort!(collect(fwd_vars))
         named = Expr(:vect, (:(NamedEquation($(QuoteNode(eq_names[i])),
                                              $(eq_defines[i] === nothing ? :nothing : QuoteNode(eq_defines[i])),
                                              $(QuoteNode(residual_exprs[i])),

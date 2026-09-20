@@ -536,6 +536,52 @@ end
     @test spec.n_expect == 1
 end
 
+@testset "Parser: shared lead catalogued once (#223)" begin
+    # Two equations share pi's lead and nothing else leads: an equation count
+    # would say 2, but there is exactly one expectational error η_pi.
+    spec = @dsge begin
+        parameters: a = 0.5, b = 0.8, c = 0.2
+        endogenous: y, pi
+        exogenous: e
+        y[t] = a * pi[t+1] + e[t]
+        pi[t] = b * pi[t+1] + c * y[t]
+    end
+    @test spec.n_expect == 1
+    @test spec.forward_indices == [2]   # pi only
+    sol = solve(spec; method=:gensys)
+    @test size(sol.linear.Pi, 2) == spec.n_expect == 1
+    # Hand-derived eu: substituting the static y equation into the pi equation
+    # gives pi_t = (b + c*a) * E_t[pi_{t+1}] + c*e_t, a scalar pure-forward
+    # model with |b + c*a| = 0.9 < 1 → determinate ([1, 1]), by the same rule
+    # the "pure forward model" testset below pins at matrix level.
+    @test sol.eu == [1, 1]
+    # Flip side: b = 1.0 pushes |b + c*a| = 1.1 > 1 → indeterminate ([1, 0]).
+    # Same shared-lead shape, same single η; only the composite root moves.
+    spec_flip = @dsge begin
+        parameters: a = 0.5, b = 1.0, c = 0.2
+        endogenous: y, pi
+        exogenous: e
+        y[t] = a * pi[t+1] + e[t]
+        pi[t] = b * pi[t+1] + c * y[t]
+    end
+    @test spec_flip.n_expect == 1
+    @test spec_flip.forward_indices == [2]
+    @test solve(spec_flip; method=:gensys).eu == [1, 0]
+
+    # Mirror shape: one equation carrying two distinct leads.
+    spec2 = @dsge begin
+        parameters: β = 0.5, ρ = 0.9
+        endogenous: x, z
+        exogenous: e
+        x[t] = β * x[t+1] + β * z[t+1] + e[t]
+        z[t] = ρ * z[t-1]
+    end
+    @test spec2.n_expect == 2
+    @test spec2.forward_indices == [1, 2]
+    sol2 = solve(spec2; method=:gensys)
+    @test size(sol2.linear.Pi, 2) == spec2.n_expect == 2
+end
+
 @testset "Parser: residual functions" begin
     spec = AR1_SPEC
     fn = spec.residual_fns[1]

@@ -402,7 +402,7 @@ end
 
 """
     _two_asset_egm_solve(ip, grid, income, prices; max_iter=1000, tol=1e-8,
-                         n_deposit=30, howard_steps=30)
+                         n_deposit=30, howard_steps=30, stable_iters=1)
         → Dict{Symbol,Array{T}}
 
 Solve a two-asset household problem to a *converged* stationary policy over the
@@ -431,10 +431,24 @@ evaluation under the fixed policy accelerate convergence (β is close to 1). The
 maximiser yields a genuine *state-dependent* deposit `d(b, a, e)` (the optimal
 `a'` varies with liquid wealth `b`).
 
+`stable_iters` (default 1) stops when the deposit policy is unchanged for
+that many consecutive iterations. The legacy one-iteration backstop fires in
+early transit (2-5 iterations, Bellman residual ~0.1), so callers that need
+settled evaluations — e.g. the GE closer (#709) — pass a larger value
+(20) and converge on genuine policy stability instead. Must be ≥ 1. Note the
+Bellman residual need not clear `tol` on fine grids: near-tied deposits put
+the EGM operator on a limit cycle (residual plateau ~1.6e-2 on 50×50×7)
+along which the policy is stable, so the stability arm — not the residual
+arm — is the operative stop there; on coarse grids the residual arm fires
+with true value convergence.
+
 Returns a `Dict` with keys `:consumption`, `:liquid_savings`, `:deposit`,
-`:value`, `:converged` — the first three each an `n_b × n_a × n_e` array
-(liquid × illiquid × income); `:value` the converged value function;
-`:converged` a 0/1 flag stored as `T[flag]`.
+`:value`, `:converged`, `:iterations`, `:bellman_residual` — the first three
+each an `n_b × n_a × n_e` array (liquid × illiquid × income); `:value` the
+converged value function; `:converged` a 0/1 flag stored as `T[flag]`;
+`:iterations` the iteration count as `T[iters]`; `:bellman_residual` the final
+sup-norm Bellman update `T[resid]` (`converged && resid >= tol` means the
+policy-stability arm fired, not value convergence).
 
 The `n_deposit` keyword is retained for API compatibility; deposits are now
 searched over the full illiquid grid.
@@ -444,9 +458,12 @@ function _two_asset_egm_solve(ip::IndividualProblem{T}, grid::HAGrid{T},
                                max_iter::Int=1000, tol::T=T(1e-8),
                                n_deposit::Int=30,
                                howard_steps::Int=30,
+                               stable_iters::Int=1,
                                init_value::Union{Nothing,AbstractArray{T,3}}=nothing) where {T<:AbstractFloat}
     @assert ip.n_asset_dims == 2 "Two-asset EGM requires n_asset_dims == 2"
     @assert grid.n_dims == 2 "Two-asset EGM requires a two-dimensional grid"
+    stable_iters >= 1 || throw(ArgumentError(
+        "_two_asset_egm_solve: stable_iters must be ≥ 1, got $stable_iters"))
 
     b_grid = grid.grids[1]   # liquid
     a_grid = grid.grids[2]   # illiquid
@@ -512,8 +529,12 @@ function _two_asset_egm_solve(ip::IndividualProblem{T}, grid::HAGrid{T},
     x_endo  = zeros(T, n_b)
 
     converged = false
+    final_iter = 0
+    final_resid = T(Inf)
+    stable_count = 0
 
     for iter in 1:max_iter
+        final_iter = iter
         # Continuation EV[ib', ia', je] = β Σ_{jep} Pi[je,jep] V[ib',ia',jep]
         fill!(EV, zero(T))
         for je in 1:n_e, jep in 1:n_e
@@ -595,6 +616,7 @@ function _two_asset_egm_solve(ip::IndividualProblem{T}, grid::HAGrid{T},
         @inbounds for idx in eachindex(iap_new)
             iap_new[idx] != iap_opt[idx] && (policy_changes += 1)
         end
+        stable_count = policy_changes == 0 ? stable_count + 1 : 0
 
         copyto!(c_opt, c_new)
         copyto!(b_opt, b_new)
@@ -614,6 +636,7 @@ function _two_asset_egm_solve(ip::IndividualProblem{T}, grid::HAGrid{T},
                 max_diff = diff
             end
         end
+        final_resid = max_diff
         copyto!(V, V_new)
 
         # ---- Howard policy evaluation under the fixed policy ----
@@ -630,7 +653,7 @@ function _two_asset_egm_solve(ip::IndividualProblem{T}, grid::HAGrid{T},
             copyto!(V, V_hnew)
         end
 
-        if max_diff < tol || (policy_changes == 0 && iter > 1)
+        if max_diff < tol || (stable_count >= stable_iters && iter > 1)
             converged = true
             break
         end
@@ -642,6 +665,8 @@ function _two_asset_egm_solve(ip::IndividualProblem{T}, grid::HAGrid{T},
         :liquid_savings => b_opt,
         :deposit       => d_opt,
         :value         => V,
-        :converged     => T[flag]
+        :converged     => T[flag],
+        :iterations    => T[final_iter],
+        :bellman_residual => T[final_resid]
     )
 end
