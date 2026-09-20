@@ -148,7 +148,7 @@ where:
 - ``\varepsilon_t`` is the ``n_\varepsilon \times 1`` vector of exogenous shocks
 - ``\eta_t`` is the ``n_\eta \times 1`` vector of expectation errors (``\eta_t = y_t - E_{t-1}[y_t]`` for forward-looking variables)
 
-``n_\eta`` counts distinct **lead variables**, not lead equations, and the two are different numbers. `spec.n_expect` records how many equations contain a lead term; ``n_\eta`` is `size(ld.Pi, 2)`. In the RBC model above the single Euler equation carries both ``C_{t+1}`` and ``A_{t+1}``, so `spec.n_expect` is 1 while ``\Pi`` is ``4 \times 2``.
+``n_\eta`` counts distinct **lead variables**, not lead equations. `spec.n_expect` records the same number, and ``n_\eta`` is `size(ld.Pi, 2)`. In the RBC model above the single Euler equation carries both ``C_{t+1}`` and ``A_{t+1}``, so `spec.n_expect` is 2 and ``\Pi`` is ``4 \times 2``.
 
 The solvers reduce this system to the **state-space solution**:
 

@@ -181,6 +181,7 @@ const MEM = MacroEconometricModels
         angles = zeros(1)  # 2x2 case: 1 angle
         obj = MEM._dcov_objective(angles, Z, 2)
         @test obj >= 0
+        # T159: kept — nonnegativity above is the pin for a dependence measure.
         @test isfinite(obj)
     end
 
@@ -190,6 +191,7 @@ const MEM = MacroEconometricModels
         y = randn(rng, 30)
         hsic_val = MEM._hsic_statistic(x, y; sigma=1.0)
         @test isfinite(hsic_val)
+        @test hsic_val >= 0  # T159: tr(Kc·Lc) of psd kernels (observed 0.0055; mirrors the dcov pin)
     end
 
     @testset "HSIC objective" begin
@@ -198,6 +200,7 @@ const MEM = MacroEconometricModels
         angles = zeros(1)
         obj = MEM._hsic_objective(angles, Z, 2; sigma=1.0)
         @test isfinite(obj)
+        @test obj >= 0  # T159: sum of HSIC terms (observed 0.0052)
     end
 
     # =========================================================================
@@ -205,12 +208,14 @@ const MEM = MacroEconometricModels
     # =========================================================================
 
     @testset "Student-t log-pdf" begin
-        # Should return finite values
+        # Should return finite values (own unit-variance parameterization — NOT Distributions.TDist)
         val = MEM._student_t_logpdf(0.0, 5.0)
         @test isfinite(val)
+        @test val ≈ -0.7132067771717288  # T159: deterministic pure-function value
         # nu near boundary (2.01)
         val_boundary = MEM._student_t_logpdf(1.0, 2.01)
         @test isfinite(val_boundary)
+        @test val_boundary ≈ -5.333258781178699  # T159: deterministic pure-function value
         # Large nu should approximate normal
         val_large = MEM._student_t_logpdf(0.0, 1000.0)
         normal_val = logpdf(Normal(), 0.0)
@@ -221,12 +226,15 @@ const MEM = MacroEconometricModels
         # p_mix = 0.5, equal variances => standard normal
         val = MEM._mixture_normal_logpdf(0.0, 0.5, 1.0, 1.0)
         @test isfinite(val)
+        @test val ≈ logpdf(Normal(), 0.0)  # T159: exact reduction (observed to fp)
         # p_mix = 0.8, sigma1=0.5, sigma2=1.5
         val_asym = MEM._mixture_normal_logpdf(0.0, 0.8, 0.5, 1.5)
         @test isfinite(val_asym)
+        @test val_asym ≈ log(0.8 * pdf(Normal(0, 0.5), 0.0) + 0.2 * pdf(Normal(0, 1.5), 0.0))  # T159: closed form (observed to fp)
         # p_mix near 0 => mostly second component
         val_low = MEM._mixture_normal_logpdf(0.0, 0.01, 0.5, 1.0)
         @test isfinite(val_low)
+        @test val_low ≈ logpdf(Normal(), 0.0) atol = 0.05  # T159: 1% contamination (observed dev 0.0099)
     end
 
     @testset "Skew-normal log-pdf" begin
@@ -237,13 +245,16 @@ const MEM = MacroEconometricModels
         # Non-zero alpha
         val_skew = MEM._skew_normal_logpdf(1.0, 2.0)
         @test isfinite(val_skew)
+        @test val_skew ≈ log(2.0) + logpdf(Normal(), 1.0) + logcdf(Normal(), 2.0)  # T159: closed form (observed to fp)
     end
 
     @testset "Pearson IV log-pdf" begin
         val = MEM._pearson_iv_logpdf(0.0, 0.0, 5.0)
         @test isfinite(val)
+        @test val ≈ -0.8210027579468608  # T159: deterministic pure-function value
         val2 = MEM._pearson_iv_logpdf(1.0, 0.5, 10.0)
         @test isfinite(val2)
+        @test val2 ≈ -1.439755024852729  # T159: deterministic pure-function value
     end
 
     @testset "Gaussian log-likelihood" begin
@@ -251,6 +262,7 @@ const MEM = MacroEconometricModels
         Y = randn(rng, 100, 2)
         model = estimate_var(Y, 1)
         ll = MEM._gaussian_loglik(model)
+        # T159: kept — the < 0 pin below is the real guard.
         @test isfinite(ll)
         @test ll < 0  # log-likelihood should be negative for reasonable data
     end
@@ -303,6 +315,7 @@ const MEM = MacroEconometricModels
             dp = zeros(ndp)
             ll = MEM._nongaussian_loglik(angles, dp, model.U, L, n; distribution=dist)
             @test isfinite(ll)
+            @test ll < 0  # T159: all four densities give negative ll here (observed ≤ -261)
         end
     end
 
@@ -355,6 +368,7 @@ const MEM = MacroEconometricModels
         @test size(filtered) == (T_obs, 2)
         @test size(predicted) == (T_obs, 2)
         @test isfinite(loglik)
+        @test loglik < 0  # T159: mixture loglik on randn data (observed -153.4)
         # Probabilities should sum to ~1
         @test all(isapprox.(sum(filtered, dims=2), 1.0, atol=1e-6))
     end
@@ -431,6 +445,7 @@ const MEM = MacroEconometricModels
         # sigmoid(-2) ≈ 0.12 → alpha ≈ 0.06, sigmoid(0) = 0.5 → beta ≈ 0.495
         params = [log(0.01), -2.0, 0.0]
         ll = MEM._garch11_loglik(params, eps_sq)
+        # T159: kept — value is DGP-scale-dependent (observed +482.2, densities > 1); the isinf-on-nonstationary below is the real pin.
         @test isfinite(ll)
 
         # alpha + beta >= 1 should return Inf (non-stationary)
@@ -529,6 +544,7 @@ const MEM = MacroEconometricModels
             @test isapprox(m2, 1.0; atol=1e-5)
         end
         # finite everywhere the optimizer can reach
+        # T159: kept — optimizer-domain smoke; the Z/m1/m2 ≈ pins above guard the pdf.
         @test all(isfinite, [MEM._pearson_iv_logpdf(x, v, m)
                              for x in (-30.0, 0.0, 30.0), v in (-60.0, 0.0, 60.0),
                                  m in (2.05, 5.0, 9912.0)])
@@ -620,4 +636,18 @@ end
     w_c = MEM._wald_B0_zeros(B0, se, mask; vcov_B=V2)
     @test w_c.approximation == :rvr
     @test !isapprox(w_c.statistic, w_diag.statistic; rtol=1e-3)
+end
+
+@testset "LowerTriangular backing store (Julia 1.13)" begin
+    # Julia 1.13 returns cholesky().L as LowerTriangular{T,Adjoint}; the ML
+    # loglikelihood must accept any backing store.
+    rng = Xoshiro(113115)
+    U = randn(rng, 50, 2)
+    S = Symmetric(cov(U) + 0.1 * I)
+    Lm = MEM.safe_cholesky(Matrix(S))
+    La = LowerTriangular(Matrix(Matrix(Lm)')')
+    @test La isa LowerTriangular{Float64,Adjoint{Float64,Matrix{Float64}}}
+    ll_m = MEM._nongaussian_loglik([0.3], [1.0, 1.0], U, Lm, 2; distribution=:student_t)
+    ll_a = MEM._nongaussian_loglik([0.3], [1.0, 1.0], U, La, 2; distribution=:student_t)
+    @test isfinite(ll_m) && ll_a ≈ ll_m
 end

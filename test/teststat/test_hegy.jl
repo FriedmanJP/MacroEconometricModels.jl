@@ -95,7 +95,7 @@ end
         @test StatsAPI.pvalue(r) == r.pvalue
         @test StatsAPI.dof(r) == 1
         @test StatsAPI.dof(ers_test(y; trend=true)) == 2
-        @test isfinite(r.P_T)                           # Pt reproduces the frozen DFGLS Pt
+        @test r.P_T == dfgls_test(y; regression=:constant).pt_statistic   # T159: bit-for-bit identity (cf. L79)
         @test haskey(r.critical_values, 5)
         # renders without error
         io = IOBuffer(); show(io, r); s = String(take!(io))
@@ -166,13 +166,17 @@ end
         @test r.lags >= 0
         @test length(r.pi_coefs) == 4                   # π₁..π₄ for quarterly
         @test length(r.pair_F) == 1                     # one harmonic pair (π/2)
-        @test isfinite(r.t_zero) && isfinite(r.t_nyquist)
-        @test all(isfinite, r.pair_F)
+        # T159: seasonal RW ⇒ fail to reject at every frequency (mirrors the dedicated
+        # FAIL testset below); joint Fs are exactly non-negative; p is a probability.
+        @test isfinite(r.t_zero) && r.t_zero > r.t_zero_cv[5]
+        @test isfinite(r.t_nyquist) && r.t_nyquist > r.t_nyquist_cv[5]  # T159: (see note above)
+        @test all(isfinite, r.pair_F) && all(r.pair_F .< r.pair_F_cv[5])  # T159: (see note above)
         @test r.pair_F[1] >= 0                          # F is non-negative
-        @test isfinite(r.F_seasonal) && isfinite(r.F_all)
+        @test isfinite(r.F_seasonal) && r.F_seasonal >= 0  # T159: (see note above)
+        @test isfinite(r.F_all) && r.F_all >= 0  # T159: (see note above)
         @test r.pair_freqs[1] ≈ pi/2 rtol=1e-8
         @test StatsAPI.nobs(r) == r.nobs
-        @test isfinite(StatsAPI.pvalue(r))
+        @test 0 <= StatsAPI.pvalue(r) <= 1
         io = IOBuffer(); show(io, r); s = String(take!(io))
         @test occursin("HEGY", s)
         io2 = IOBuffer(); refs(io2, r); @test occursin("Hylleberg", String(take!(io2)))
@@ -201,7 +205,8 @@ end
         for det in (:none, :const, :const_seas, :const_trend, :const_trend_seas)
             r = hegy_test(y; frequency=4, deterministic=det)
             @test r.deterministic == det
-            @test isfinite(r.t_zero)
+            # T159: seasonal RW fails to reject under every deterministic spec.
+            @test isfinite(r.t_zero) && r.t_zero > r.t_zero_cv[5]
         end
         rL = hegy_test(y; frequency=4, lags=2)
         @test rL.lags == 2
@@ -219,7 +224,10 @@ end
         @test r.frequency == 12
         @test length(r.pi_coefs) == 12                  # π₁..π₁₂ for monthly
         @test length(r.pair_F) == 5                     # 5 complex-conjugate pairs
-        @test all(isfinite, r.pair_F)
+        # T159: F non-negativity only — with 5 pairs, one rejects at 5% here (pair 1:
+        # 8.60 > 6.32), as expected under multiple testing; decisions are pinned on
+        # the n=360 oracle seed below, not here.
+        @test all(isfinite, r.pair_F) && all(r.pair_F .>= 0)  # T159: (see note above)
         # pair frequencies ascending, in (0, π)
         @test all(0 .< r.pair_freqs .< pi)
         @test issorted(r.pair_freqs)

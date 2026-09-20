@@ -90,6 +90,7 @@ end
             r = MEM.identify_lewis_tvv(m; weighting=w, n_starts=2, rng=Xoshiro(109))
             @test MEM.check_orthogonal(r.Q)
             @test isfinite(r.J)
+            @test r.J >= 0  # T159: Hansen J statistic (exact, by construction)
         end
         @test_throws ArgumentError MEM.identify_lewis_tvv(m; weighting=:bogus)
     end

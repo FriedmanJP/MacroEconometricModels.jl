@@ -10,6 +10,11 @@ using Random
 using LinearAlgebra
 using Statistics
 
+# Standalone-runnable: runtests.jl defines FAST for workers; default it here.
+if !@isdefined(FAST)
+    const FAST = get(ENV, "MACRO_FAST_TESTS", "") == "1"
+end
+
 @testset "LP Forecasting" begin
     # Diagonal AR(1) on the shared simulator (DGP-05 #794): same design as
     # the legacy inline loop (0.3 persistence, identity innovations).
@@ -37,11 +42,13 @@ using Statistics
         @test fc.ci_method == :analytical
         @test fc.conf_level ≈ 0.95
 
-        # All values finite
+        # T159: the point forecast is ci_method-invariant (bands change, points don't —
+        # verified bit-identical); analytical bands bracket it (strict pins below).
         @test all(isfinite, fc.forecast)
-        @test all(isfinite, fc.ci_lower)
-        @test all(isfinite, fc.ci_upper)
-        @test all(isfinite, fc.se)
+        @test fc.forecast == forecast(lp, shock_path; ci_method=:none).forecast
+        @test all(isfinite, fc.ci_lower)  # T159: (see note above)
+        @test all(isfinite, fc.ci_upper)  # T159: (see note above)
+        @test all(isfinite, fc.se)  # T159: (see note above)
 
         # SE should be non-negative
         @test all(fc.se .>= 0)
@@ -65,7 +72,7 @@ using Statistics
         @test fc.ci_lower == fc.forecast
         @test fc.ci_upper == fc.forecast
 
-        @test all(isfinite, fc.forecast)
+        @test all(isfinite, fc.forecast)   # T159: kept — excludes the all-+Inf escape hatch of ==.
     end
 
     # =========================================================================
@@ -74,9 +81,11 @@ using Statistics
         fc = forecast(lp, shock_path; ci_method=:bootstrap, n_boot=(FAST ? 50 : 100))
 
         @test fc.ci_method == :bootstrap
+        # T159: kept — the ordering below passes a −Inf lower bound, so finiteness is
+        # meaningful; percentile bands need not bracket the point forecast.
         @test all(isfinite, fc.ci_lower)
-        @test all(isfinite, fc.ci_upper)
-        @test all(isfinite, fc.se)
+        @test all(isfinite, fc.ci_upper)  # T159: (see note above)
+        @test all(isfinite, fc.se)  # T159: (see note above)
 
         # CI bounds should be ordered
         for h in 1:H, j in 1:n
@@ -122,6 +131,8 @@ using Statistics
         @test fc isa LPForecast{Float64}
         @test size(fc.forecast) == (H, n)
         @test all(isfinite, fc.forecast)
+        # T159: point forecast is ci_method-invariant (bit-identical, verified).
+        @test fc.forecast == forecast(slp, 1, shock_path; ci_method=:none).forecast
 
         # Test different shock indices
         for j in 1:n
@@ -140,6 +151,9 @@ using Statistics
         @test fc.ci_method == :bootstrap
         @test all(isfinite, fc.ci_lower)
         @test all(isfinite, fc.ci_upper)
+        # T159: bootstrap bands are ordered and bracket the point forecast (verified).
+        @test all(fc.ci_lower .<= fc.ci_upper)
+        @test all(fc.ci_lower .<= fc.forecast .<= fc.ci_upper)
     end
 
     # =========================================================================

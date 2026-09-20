@@ -64,6 +64,7 @@ const _RSER11_GMM = ("GMMWeighting", "ParameterTransform")
         m = estimate_gmm(moment_fn, [0.0, 0.0], hcat(d.y, d.X, d.Z);
                          weighting=:identity, hac=false, X=d.X, Z=d.Z, endogenous=[2])
         @test isfinite(m.first_stage_F)
+        @test m.first_stage_F >= 0  # T159: F statistic (exact, by construction)
         m2 = _assert_roundtrip(m)
         @test m2.first_stage_F == m.first_stage_F
     end

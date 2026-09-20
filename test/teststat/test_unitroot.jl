@@ -451,7 +451,16 @@ using Statistics
         @test result_trend4 isa JohansenResult
         @test result_trend4.deterministic == :trend
         @test length(result_trend4.trace_stats) == 2
-        @test all(isfinite, result_trend4.trace_stats)
+        # T159: truth is one cointegrating vector — rank == 1 guards the T171
+        # off-by-one fix on :trend too; trace rejects r=0 (89 >> 25.3) and fails
+        # r≤1 (3.37 < 12.5); eigenvalues are squared canonical correlations ∈ [0,1].
+        @test result_trend4.rank == 1
+        @test result_trend4.trace_stats[1] > result_trend4.critical_values_trace[1, 2]
+        @test result_trend4.trace_stats[2] < result_trend4.critical_values_trace[2, 2]
+        @test all(result_trend4.trace_stats .>= 0)
+        @test issorted(result_trend4.trace_stats; rev=true)
+        @test all(0 .<= result_trend4.eigenvalues .<= 1)
+        @test all(isfinite, result_trend4.trace_stats)   # T159 kept: excludes +Inf escape on the reject leg
     end
 
     @testset "Johansen rank selection (B1/T171)" begin
@@ -629,7 +638,8 @@ using Statistics
         y = randn(Random.Xoshiro(15004), 100)
         result = pp_test(y; regression=:trend)
         @test result isa MacroEconometricModels.PPResult
-        @test isfinite(result.statistic)
+        # T159: white noise rejects decisively (−9.36 vs CV −3.45).
+        @test isfinite(result.statistic) && result.statistic < result.critical_values[5]
         @test result.regression == :trend
     end
 
@@ -637,10 +647,13 @@ using Statistics
         y = randn(Random.Xoshiro(15005), 100)
         result = ngperron_test(y; regression=:trend)
         @test result isa MacroEconometricModels.NgPerronResult
-        @test isfinite(result.MZa)
-        @test isfinite(result.MZt)
-        @test isfinite(result.MSB)
-        @test isfinite(result.MPT)
+        # T159: signs only — MZa/MZt are (ρ̂−1)-forms (negative here), MSB/MPT are
+        # ratios (> 0). No rejection pins: with trend + MAIC on n=100 this seed
+        # sits above every 5% CV (a known NP finite-sample power quirk, not a bug).
+        @test isfinite(result.MZa) && result.MZa < 0  # T159: (see note above)
+        @test isfinite(result.MZt) && result.MZt < 0  # T159: (see note above)
+        @test isfinite(result.MSB) && result.MSB > 0  # T159: (see note above)
+        @test isfinite(result.MPT) && result.MPT > 0  # T159: (see note above)
     end
 
     @testset "ZA with both regression" begin
@@ -744,6 +757,10 @@ end
         end
         # cointegrated pair -> rank 0 rejected decisively
         @test res.trace_pvalues[1] < 0.01
-        @test all(isfinite.(res.trace_pvalues)) && all(isfinite.(res.max_eigen_pvalues))
+        # T159: [0,1] is non-circular (the reconstruction above reuses the same
+        # surface, so a surface bug returning 1.5 would pass it); isfinite kept
+        # belt-and-braces.
+        @test all(0 .<= res.trace_pvalues .<= 1) && all(0 .<= res.max_eigen_pvalues .<= 1)
+        @test all(isfinite.(res.trace_pvalues)) && all(isfinite.(res.max_eigen_pvalues))  # T159: (see note above)
     end
 end

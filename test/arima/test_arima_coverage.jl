@@ -56,7 +56,13 @@ end
 
     model = auto_arima(y; criterion=:aic, max_p=2, max_q=2, max_d=1)
     @test model isa MacroEconometricModels.AbstractARIMAModel
+    # T159: AIC must not difference white noise (differencing induces a unit MA
+    # root); only d is pinned — AIC overfits AR order by design (p=2 observed).
     @test isfinite(model.aic)
+    @test MacroEconometricModels.diff_order(model) == 0
+    ll_aa = loglikelihood(model)
+    @test ll_aa < 0   # Gaussian ll ≈-300; sign flip gives +300
+    @test model.aic ≈ -2 * ll_aa + 2 * dof(model) atol = 1e-8
 end
 
 # =============================================================================

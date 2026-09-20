@@ -53,6 +53,7 @@ const MEM_EP = MacroEconometricModels
         result = MEM_EP.robust_inv(A)
         @test size(result) == (2, 2)
         @test isfinite(result[1, 1])
+        @test result ≈ [1.0 0.0; 0.0 0.0]  # T159: pinv of diag(1,0) (exact closed form)
 
         # Integer input
         A_int = [1 2; 3 4]
@@ -79,6 +80,7 @@ const MEM_EP = MacroEconometricModels
         # Near-singular: eigenvalue fallback
         A_sing = [1.0 1.0; 1.0 1.0 + 1e-15]
         ld = MEM_EP.logdet_safe(A_sing)
+        # T159: kept — disjunctive contract (finite, else honest -Inf) already encodes the fallback.
         @test isfinite(ld) || ld == -Inf
     end
 
@@ -134,6 +136,7 @@ const MEM_EP = MacroEconometricModels
         bw = 5
         for k in [:bartlett, :parzen, :tukey_hanning, :quadratic_spectral]
             w = MEM_EP.kernel_weight(bw, bw, k)
+            # T159: kept — nonnegativity below is the pin for kernel weights.
             @test isfinite(w)
             @test w >= 0
         end
@@ -208,6 +211,7 @@ const MEM_EP = MacroEconometricModels
         # Short vector (length 1: var returns NaN)
         x_short = [1.0]
         lrv = MEM_EP.long_run_variance(x_short)
+        # T159: kept — documents the NaN-vs-finite ambiguity on n=1 (excludes ±Inf).
         @test isnan(lrv) || isfinite(lrv)  # implementation-dependent edge case
 
         # Normal case

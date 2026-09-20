@@ -645,10 +645,16 @@ Extracts the individual problem, grid, income process, and parameters from
 does not provide one, and delegates to `_ha_steady_state`.
 
 # Keyword Arguments
-- `K_init::T` — initial capital guess (default 10.0)
-- `r_bounds::Tuple{T,T}` — bisection bounds for r (default (-0.01, 0.04))
-- `max_iter::Int` — maximum iterations (default 200)
-- `tol` — absolute convergence tolerance on `|K_s − K_d|` (default 1e-8)
+- `K_init::T` — initial capital guess (default 10.0; seeds the outer-bracket
+  expansion for two-asset models)
+- `r_bounds::Tuple{T,T}` — bisection bounds for r (default (-0.01, 0.04);
+  one-asset models only)
+- `max_iter::Int` — maximum iterations (default 200 one-asset, 60 two-asset)
+- `tol` — convergence tolerance (default 1e-8 one-asset on `|K_s − K_d|`,
+  2e-3 two-asset on `max(|A−K|, |B−B_supply|)`); explicit values pass through
+- two-asset models additionally accept the closer kwargs (`k_lo`, `k_hi`,
+  `inner_max_iter`, `hh_max_iter`, `hh_tol`, `howard_steps`, `stable_iters`,
+  `stall_window`, `k_atol`), forwarded to `_ha_two_asset_steady_state`
 - `rtol` — relative convergence tolerance (default 1e-8); the effective threshold
   is `max(tol, rtol * max(1, |K_d|))`, so it means the same thing at any scale
 - `r_atol` — stop once the bisection bracket is narrower than this (default 1e-13)
@@ -659,8 +665,9 @@ does not provide one, and delegates to `_ha_steady_state`.
 - `verbose::Bool` — print progress (default false)
 - `hh_solver::Symbol` — household solver: `:egm` (default) or `:vfi` (Bellman
   iteration, including GHH/separable labor and two-asset nested VFI). Writes
-  `ss.value_fn`. Two-asset specs use a damped `(K, r_b)` closer. Reiter
-  finite-difference kernels honor `hh_solver`; SSJ fake-news stays on EGM.
+  `ss.value_fn`. Two-asset specs use a nested-bisection `(K, r_b)` closer
+  (#709). Reiter finite-difference kernels honor `hh_solver`; SSJ fake-news
+  stays on EGM.
 - `price_fn::Function` — custom price function; if not supplied, uses Cobb-Douglas
 - `distribution::Symbol` — override `_hh(spec).distribution`: `:young` (default, the
   Young 2010 histogram) or `:winberry` (Winberry 2018 parametric moment family).
@@ -685,8 +692,8 @@ difference. See [`ha_grid_diagnostics`](@ref).
 function _ha_compute_steady_state(spec::ModelSpec{T};
                           K_init::T=T(10),
                           r_bounds::Union{Nothing,Tuple{T,T}}=nothing,
-                          max_iter::Int=200,
-                          tol::Real=T(1e-8),
+                          max_iter::Union{Nothing,Int}=nothing,
+                          tol::Union{Nothing,Real}=nothing,
                           rtol::Real=T(1e-8),
                           r_atol::Real=T(1e-13),
                           grid_check::Symbol=:warn,
@@ -700,10 +707,16 @@ function _ha_compute_steady_state(spec::ModelSpec{T};
                           n_quad::Int=4,
                           winberry_tol::Real=1e-9,
                           euler_points::Symbol=:midpoints,
-                          hh_solver::Symbol=:egm) where {T<:AbstractFloat}
+                          hh_solver::Symbol=:egm,
+                          kwargs...) where {T<:AbstractFloat}
     hh_solver in (:egm, :vfi) || throw(ArgumentError(
         "compute_steady_state: hh_solver must be :egm or :vfi, got :$hh_solver"))
     if _hh(spec).grid.n_dims == 2
+        # #709: the two-asset closer has its own iteration budget and level
+        # tolerance (nested bisection, not one-asset rate bisection), so the
+        # one-asset max_iter=200/tol=1e-8 defaults must NOT be forwarded.
+        # `nothing` resolves per branch; explicit values pass through, as do
+        # any closer kwargs (k_lo, k_hi, inner_max_iter, hh_*, ...) via kwargs.
         dist_sym = isnothing(distribution) ? _hh(spec).distribution : distribution
         p2 = copy(_hh(spec).het_params)
         haskey(p2, :alpha) || (p2[:alpha] = T(0.36))
@@ -711,14 +724,22 @@ function _ha_compute_steady_state(spec::ModelSpec{T};
         haskey(p2, :Z) || (p2[:Z] = one(T))
         haskey(p2, :L) || (p2[:L] = one(T))
         haskey(p2, :B_supply) || (p2[:B_supply] = one(T))
+        extra = NamedTuple()
+        max_iter !== nothing && (extra = merge(extra, (max_iter=max_iter,)))
+        tol !== nothing && (extra = merge(extra, (tol=T(tol),)))
         return _ha_two_asset_steady_state(
             _hh(spec).individual, _hh(spec).grid, _hh(spec).income, p2;
-            K_init=K_init, max_iter=max_iter, tol=T(tol),
+            K_init=K_init,
             hh_solver=hh_solver, grid_check=grid_check,
             ceiling_mass_tol=ceiling_mass_tol, residual_tol=residual_tol,
             euler_points=euler_points, verbose=verbose,
-            distribution=dist_sym)
+            distribution=dist_sym, extra..., kwargs...)
     end
+    isempty(kwargs) || throw(ArgumentError(
+        "compute_steady_state: unknown keyword(s) for one-asset models: " *
+        join(string.(keys(kwargs)), ", ") * "."))
+    max_iter = something(max_iter, 200)
+    tol = something(tol, T(1e-8))
     pfn = isnothing(price_fn) ? _default_cobb_douglas_price_fn : price_fn
 
     # Extract parameters: merge het_params with aggregate steady-state params

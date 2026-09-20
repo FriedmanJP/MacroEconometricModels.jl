@@ -232,9 +232,11 @@ function ModelSpec{T}(endog, exog, params, param_values, equations, residual_fns
     end
     length(forward_indices) == n_expect || throw(ArgumentError(
         "ModelSpec: forward_indices length $(length(forward_indices)) ≠ n_expect $n_expect"))
+    # #223 ([T124]): forward_indices are lead VARIABLE indices into endog
+    # (one expectational error η per distinct lead variable), not equation indices.
     for i in forward_indices
-        1 <= i <= length(equations) || throw(ArgumentError(
-            "ModelSpec: forward_indices entry $i is outside 1:$(length(equations))"))
+        1 <= i <= n_endog || throw(ArgumentError(
+            "ModelSpec: forward_indices entry $i is outside 1:$n_endog"))
     end
     vnames = varnames === nothing ? [string(s) for s in endog] : copy(varnames)
     return ModelSpec{T,A}(

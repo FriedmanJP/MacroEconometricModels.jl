@@ -250,6 +250,7 @@ end
     # Automatic bandwidth is now well-defined with genuine contributions (no NaN)
     W2 = MacroEconometricModels.smm_weighting_matrix(data, cfn; hac=true)
     @test size(W2) == (5, 5)
+    # T159: kept — well-defined-bandwidth no-NaN IS the contract (stated above).
     @test all(isfinite, W2)
 end
 

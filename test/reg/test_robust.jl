@@ -319,6 +319,7 @@ end
             @test all(diag(c_psd.vcov) .>= -1e-12)
         end
         @test all(isfinite, c_psd.se)
+        @test all(c_psd.se .>= 0)  # T159: PSD-adjusted SEs (exact, by construction)
     end
 
     @testset "spatial correlation in BOTH error and regressor inflates the SE" begin

@@ -21,6 +21,11 @@ using Random
 using Statistics
 using StatsAPI
 
+# Standalone-runnable: runtests.jl defines FAST for workers; default it here.
+if !@isdefined(FAST)
+    const FAST = get(ENV, "MACRO_FAST_TESTS", "") == "1"
+end
+
 # =============================================================================
 # SV Leverage Variant
 # =============================================================================
@@ -42,8 +47,11 @@ using StatsAPI
     @test length(m.sigma_eta_post) == (FAST ? 20 : 40)
     @test size(m.h_draws) == ((FAST ? 20 : 40), n)
     @test all(m.volatility_mean .> 0)
-    @test all(isfinite.(m.mu_post))
-    @test all(isfinite.(m.phi_post))
+    # T159: φ draws must respect stationarity (sampler invariant — an explosive draw
+    # is a bug); μ is log-variance scale (observed ≈−3; ±5 headroom catches divergent
+    # Gibbs draws). Bounds-only: MCMC draws vary run to run (unseeded global RNG).
+    @test all(isfinite.(m.mu_post)) && all(-8 .< m.mu_post .< 2)  # T159: (see note above)
+    @test all(isfinite.(m.phi_post)) && all(-1 .< m.phi_post .< 1)  # T159: (see note above)
 
     # Display should include "leverage"
     io = IOBuffer()
@@ -229,9 +237,11 @@ end
         @test length(StatsAPI.coef(m)) == 5  # mu + omega + alpha + gamma + beta
         @test length(StatsAPI.residuals(m)) == 300
         @test length(StatsAPI.predict(m)) == 300
-        @test isfinite(StatsAPI.loglikelihood(m))
-        @test isfinite(StatsAPI.aic(m))
-        @test isfinite(StatsAPI.bic(m))
+        # T159: sign pin (ll ≈-436) + exact IC wiring (k = 2+2q+p = 5 = dof).
+        ll_eg = StatsAPI.loglikelihood(m)
+        @test isfinite(ll_eg) && ll_eg < 0
+        @test StatsAPI.aic(m) ≈ -2 * ll_eg + 2 * StatsAPI.dof(m) atol = 1e-8
+        @test StatsAPI.bic(m) ≈ -2 * ll_eg + StatsAPI.dof(m) * log(StatsAPI.nobs(m)) atol = 1e-8
         @test StatsAPI.dof(m) == 2 + 2 * 1 + 1
         @test StatsAPI.islinear(m) == false
         @test arch_order(m) == 1
@@ -244,9 +254,11 @@ end
         @test length(StatsAPI.coef(m)) == 5
         @test length(StatsAPI.residuals(m)) == 300
         @test length(StatsAPI.predict(m)) == 300
-        @test isfinite(StatsAPI.loglikelihood(m))
-        @test isfinite(StatsAPI.aic(m))
-        @test isfinite(StatsAPI.bic(m))
+        # T159: sign pin (ll ≈-436) + exact IC wiring (k = 2+2q+p = 5 = dof).
+        ll_gjr = StatsAPI.loglikelihood(m)
+        @test isfinite(ll_gjr) && ll_gjr < 0
+        @test StatsAPI.aic(m) ≈ -2 * ll_gjr + 2 * StatsAPI.dof(m) atol = 1e-8
+        @test StatsAPI.bic(m) ≈ -2 * ll_gjr + StatsAPI.dof(m) * log(StatsAPI.nobs(m)) atol = 1e-8
         @test StatsAPI.dof(m) == 2 + 2 * 1 + 1
         @test StatsAPI.islinear(m) == false
         @test arch_order(m) == 1

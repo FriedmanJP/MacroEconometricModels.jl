@@ -192,10 +192,13 @@ end
         r = dh_causality_test(pd, :x, :y; p = 2)
         for pv in (r.Zbar_pvalue, r.Ztilde_pvalue)
             @test 0.0 <= pv <= 1.0
-            @test isfinite(pv)
+            @test isfinite(pv)   # T159: kept — belt-and-braces; subsumed by the [0,1] range pin.
         end
         @test length(r.W_i) == r.N
-        @test all(w -> w >= 0 && isfinite(w), r.W_i)
+        @test all(w -> w >= 0 && isfinite(w), r.W_i)   # T159: kept — Wald stats are ≥ 0; isfinite excludes the +Inf escape.
+        # T159: exact aggregation identity — W̄ = mean(W_i) (a wrong weighting stays
+        # finite but breaks this).
+        @test r.Wbar ≈ sum(r.W_i) / r.N atol = 1e-12
         @test isnan(r.bootstrap_pvalue)          # no bootstrap requested
 
         # p ≥ 1 required.
@@ -213,7 +216,7 @@ end
         b1 = dh_causality_test(pd, :x, :y; p = 1, bootstrap = 200, seed = 11)
         b2 = dh_causality_test(pd, :x, :y; p = 1, bootstrap = 200, seed = 11)
         @test b1.bootstrap == 200 && b1.seed == 11
-        @test isfinite(b1.bootstrap_pvalue)
+        @test isfinite(b1.bootstrap_pvalue)   # T159: kept — subsumed by the [0,1] pin below.
         @test 0.0 <= b1.bootstrap_pvalue <= 1.0
         @test b1.bootstrap_pvalue == b2.bootstrap_pvalue          # reproducible
         # Strongly causal panel ⇒ small bootstrap p-value (reject H0).

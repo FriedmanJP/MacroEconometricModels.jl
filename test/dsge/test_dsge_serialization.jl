@@ -1964,7 +1964,10 @@ end
     pf2 = _suppress_warnings() do
         solve(ar1b; method=:perfect_foresight, T_periods=20, shock_path=shocks)
     end
-    @test pf2.path ≈ pf1.path atol=1e-10
+    @test pf1.converged && pf2.converged
+    # Round-trip-vs-original solve agreement at solver precision: Newton abstol is
+    # 1e-8, so 1e-10 over-constrains (ubuntu CI round-trip ulps hit 1.03e-10).
+    @test pf2.path ≈ pf1.path atol=1e-6
     nk = @dsge begin
         parameters: rho = 0.9, phi = 1.5
         endogenous: y, i

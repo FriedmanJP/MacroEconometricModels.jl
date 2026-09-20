@@ -592,6 +592,12 @@ end
             Q = Matrix{Float64}(L \ r.B)
             @test MacroEconometricModels.q_distance(Q, Q0t) < 0.2
             @test all(isfinite, r.loglik)
+            @test length(r.loglik) == r.iters  # T159: one expected complete-data LL per EM iteration
+            # T159 [reworked for cross-platform CI]: endpoint ascent is NOT portable —
+            # EM theory guarantees ascent only for exact E-steps; with E-step
+            # Monte-Carlo noise the net endpoint order flips across BLAS/Optim paths
+            # (ubuntu CI: 2096 < 2503 vs +1651 locally). Identification quality is
+            # pinned portably below (q_distance, IRF shock correlations).
             cors = _irf_shock_cor(m, Q, B0t, A, 12)
             @test all(>(0.95), cors)
         end
@@ -599,8 +605,13 @@ end
         @testset "misspecified GARCH DGP stays finite" begin
             Yg, _ = simulate_garch_svar(_B_rec, _A2; Tobs=1500, rng=Xoshiro(172))
             rg = identify_sv_svar(Yg, 1; maxiter=50, rng=Xoshiro(173))
+            # T159 [reworked for cross-platform CI]: recovery quality under GARCH/SV
+            # misspecification is optimizer-basin-dependent (ubuntu CI maxdev 2.04 vs
+            # 0.035 locally), so the portable contract is finiteness; SV detection of
+            # GARCH time-variation below (H_smooth pins) is the value assertion.
             @test all(isfinite, rg.B)
-            @test all(isfinite, rg.H_smooth)
+            @test abs(mean(rg.H_smooth)) < 0.5  # T159: smoothed log-vols centered near log(1) = 0 (observed -0.16)
+            @test std(vec(rg.H_smooth)) > 0.1  # T159: SV detects GARCH time-variation (observed 0.46; collapse → 0)
         end
     end
 end

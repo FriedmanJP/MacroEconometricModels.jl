@@ -69,8 +69,9 @@ end
             opp_sequence(fcs, ce, loss; dates=["a", "b", "c"])
         end
         @test all(isnan, sq.delta[:, 2])
+        # T159: kept — the skipped-date NaN contract above is the pin; kept dates just need values.
         @test all(isfinite, sq.delta[:, 1])
-        @test all(isfinite, sq.delta[:, 3])
+        @test all(isfinite, sq.delta[:, 3])  # T159: kept (see above)
         @test sq.dates == ["a", "b", "c"]
     end
 

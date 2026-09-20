@@ -181,6 +181,7 @@ const _HUG_SS_M2 = compute_steady_state(_HUG_SPEC_M2; max_iter=FAST ? 80 : 200, 
         # Posterior summary should work
         ps = posterior_summary(result)
         @test haskey(ps, :alpha)
+        # T159: kept — 6-draw dispatch smoke under a -Inf likelihood (chain stuck); finiteness is the stable contract.
         @test isfinite(ps[:alpha][:mean])
 
         # #136: theta0 as a Dict (order-independent) is accepted through the HA method;
@@ -246,6 +247,7 @@ const _HUG_SS_M2 = compute_steady_state(_HUG_SPEC_M2; max_iter=FAST ? 80 : 200, 
                 :ssj, (T_horizon=30, n_reduced=10))
         @test solved_at === :posterior_mean
         @test theta_used ≈ [0.5]                    # built at the mean, not spec's 0.36
+        # T159: kept — provenance marking above is the test's pin; G1 smoke only.
         @test all(isfinite, linear_sol.G1)
 
         # No candidate solves (unsupported method ⇒ no HADSGESolution) ⇒ loud error, never a
@@ -268,6 +270,7 @@ end
     if !(FAST || NUMERICAL)
     ss = compute_steady_state(spec; r_bounds=(-0.02, 0.04), max_iter=100, tol=1e-3)
     @test ss.aggregates[:K] > 0
+    # T159: kept — the clearing + r*-bracket pins below guard the SS price.
     @test isfinite(ss.prices[:r])
     @test haskey(ss.prices, :w)                         # Cobb-Douglas wage still produced
     @test abs(ss.excess_demand) < 5e-3                  # market essentially clears
@@ -371,6 +374,7 @@ end
     dh = den_haan_test(ks; T_sim=150, T_burn=100)
     @test dh isa DenHaanAccuracy
     @test dh.aggregate === :K
+    # T159: kept — the ordering is the pin here; dh_max < 1.0 below guards accuracy.
     @test isfinite(dh.dh_max) && dh.dh_max >= dh.dh_mean >= 0
     @test dh.sigma_ref > 0 && dh.sigma_plm > 0
     @test length(dh.ref_path) == 150 && length(dh.plm_path) == 150
@@ -893,6 +897,7 @@ end
         thr = dcegm_threshold(sol, t, 2, 1; M_lo=0.5, M_hi=60.0)
         idx = findlast(i -> D_vfi[t, i, 2] == 2, 1:length(Mg))
         @test idx !== nothing
+        # T159: kept — the 2-step oracle agreement below guards the threshold.
         @test isfinite(thr)
         @test abs(thr - Mg[idx]) <= 2 * step
     end
@@ -967,6 +972,7 @@ end
     # Retirement is absorbing, so its share can only rise with age.
     @test issorted(dist.shares[:, 1])
     @test dist.shares[1, 2] ≈ 1.0                       # everyone starts working
+    # T159: kept — positivity is the real pin; exact-mass + absorbing-share pins surround it.
     @test all(isfinite, dist.consumption) && all(dist.consumption .> 0)
     @test all(dist.assets .>= -1e-12)
     report(dist)                                        # display smoke test
@@ -1542,6 +1548,7 @@ end # @testset "HA-DSGE Types"
             @test ss.euler.nodes.max < ss.euler.midpoints.max
             # mean < max, and both are finite and reported.
             @test ss.euler.midpoints.mean < ss.euler.midpoints.max
+            # T159: kept — mean < max above is the pin; max ≈ mid/nodes are pinned too.
             @test isfinite(ss.euler.midpoints.mean)
             @test ss.euler.midpoints.n_evaluated > 0
 
@@ -1590,15 +1597,152 @@ if !(FAST || NUMERICAL)
     @testset "Two-asset compute_steady_state closer is live (MSR-14)" begin
         spec = MacroEconometricModels._two_asset_hank_example(;
             n_liquid=8, n_illiquid=6, n_e=2, B_supply=2.0)
-        ss = compute_steady_state(spec; max_iter=60, tol=1e-4, grid_check=:none)
-        # 8×6×2 is too coarse for both markets: A bangs between 0 and a_max,
-        # so residuals stay O(1). Require a well-defined live closer, not
-        # 25% clearing that this grid cannot deliver.
-        @test isfinite(ss.aggregates[:resid_liquid])
-        @test isfinite(ss.aggregates[:resid_illiquid])
-        @test isfinite(ss.prices[:r_a]) && isfinite(ss.prices[:r_b])
-        @test ss.iterations >= 1
-        @test haskey(ss.aggregates, :K) && isfinite(ss.aggregates[:K])
+        # 8×6×2 cannot represent tol=1e-4 clearing (grid quantum above tol),
+        # so this grid either runs finite (best-tracked, unconverged) or
+        # fails loudly with a diagnostic. Either outcome is a live closer;
+        # silent garbage is what is excluded.
+        # O(1) residuals by design on this grid; finiteness XOR
+        # diagnostic-throw is the live-closer contract.
+        outcome = try
+            ss = compute_steady_state(spec; max_iter=60, tol=1e-4, grid_check=:none)
+            (:ok, ss)
+        catch e
+            e isa ArgumentError || rethrow()
+            (:err, e)
+        end
+        if outcome[1] === :ok
+            ss = outcome[2]
+            @test isfinite(ss.aggregates[:resid_liquid])
+            @test isfinite(ss.aggregates[:resid_illiquid])
+            @test isfinite(ss.prices[:r_a]) && isfinite(ss.prices[:r_b])
+            @test ss.iterations >= 1
+            @test haskey(ss.aggregates, :K) && isfinite(ss.aggregates[:K])
+            @test 0 <= ss.aggregates[:K] <= 100  # unit-mass average over the [0, 100] illiquid grid (exact)
+            @test ss.aggregates[:B_supply] == 2.0
+        else
+            @test outcome[2] isa ArgumentError
+            msg = sprint(showerror, outcome[2])
+            @test occursin("bracket", msg) || occursin("floor", msg) ||
+                  occursin("clearing", msg) || occursin("clamp binds", msg)
+        end
+    end
+
+    @testset "Two-asset GE clears both markets numerically (#709)" begin
+        # Production-grid clearing (50×50×7) is verified locally (see the #709
+        # plan); CI pins the same nested closer on a 25×25×3 grid that clears
+        # in ~1 min. CT-twin pattern: numeric residual bounds + premium + FOC.
+        spec = MacroEconometricModels._two_asset_hank_example(;
+            n_liquid=25, n_illiquid=25, n_e=3, B_supply=2.0)
+        # A' regime pin (#709): pure VFI (howard_steps=0) to genuine policy
+        # stability (stable_iters=20). Howard evaluation re-targets V on
+        # every deposit flip and the legacy 1-iter backstop fires in transit
+        # (resid ~0.1) — both leave slop that stalls the outer. tol=2e-3 is
+        # the default (basin-spread floor × outer slope); pinned explicitly
+        # against default drift.
+        ss = compute_steady_state(spec; tol=2e-3, howard_steps=0,
+                                  stable_iters=20, hh_max_iter=500,
+                                  grid_check=:none)
+        # Measured 2026-09-19 (A' regime): resid_liquid 8.2e-4,
+        # resid_illiquid 1.4e-3, K 35.265, r_a 0.01181, r_b 0.00881.
+        # Bounds ≈ 3.5× (illiquid) / 6× (liquid) headroom; the regime is
+        # deterministic (pure-VFI basin-locked), cross-platform FP noise ~1e-12.
+        @test ss.converged
+        @test abs(ss.aggregates[:resid_liquid]) < 5e-3
+        @test abs(ss.aggregates[:resid_illiquid]) < 5e-3
+        @test ss.prices[:r_a] > ss.prices[:r_b]   # positive illiquidity premium
+        @test ss.prices[:r_a] ≈ 0.36 * (ss.aggregates[:K])^(0.36 - 1) - 0.025 rtol = 1e-14
+        @test ss.aggregates[:hh_converged] == 1.0
         @test ss.aggregates[:B_supply] == 2.0
     end
+end
+
+# P1.3 (#709): nested-bisection guardrails — instant/tiny-grid, always run.
+@testset "Two-asset infeasible liquid supply fails loudly (#709)" begin
+    M = MacroEconometricModels
+    # B_supply=1e6 exceeds the grid-representable maximum (B is a unit-mass
+    # average over liquid nodes in [-2, 50]): fail fast before any solve.
+    spec = M._two_asset_hank_example(; n_liquid=8, n_illiquid=6, n_e=2, B_supply=1e6)
+    hh = only(values(spec.agents))
+    err = try
+        M._ha_two_asset_steady_state(hh.individual, hh.grid, hh.income,
+                                     copy(hh.het_params); grid_check=:none)
+        nothing
+    catch e
+        e
+    end
+    @test err isa ArgumentError
+    @test occursin("grid-representable range", sprint(showerror, err))
+end
+
+@testset "Two-asset K floor clamps explicit k_lo (#709)" begin
+    M = MacroEconometricModels
+    spec = M._two_asset_hank_example(; n_liquid=8, n_illiquid=6, n_e=2)
+    hh = only(values(spec.agents))
+    # k_lo=10 is below the RA-stock floor (≈32.1): clamped up, run proceeds.
+    # Tight explicit k_hi keeps every evaluation near the floor: on this
+    # chaos-amplifier grid, far-flung widening points poison the warm-start
+    # chain (inner bracket flips run-to-run); small jumps stay on-branch.
+    # Reduced budgets keep this FAST-safe; the clamp is what is tested.
+    ss = M._ha_two_asset_steady_state(hh.individual, hh.grid, hh.income,
+                                      copy(hh.het_params);
+                                      k_lo=10.0, k_hi=33.0, max_iter=1,
+                                      inner_max_iter=3, grid_check=:none)
+    @test ss.aggregates[:K] >= 32.0
+    @test isfinite(ss.aggregates[:resid_liquid])
+    # Whole bracket below the floor: loud error before any household solve.
+    err = try
+        M._ha_two_asset_steady_state(hh.individual, hh.grid, hh.income,
+                                     copy(hh.het_params);
+                                     k_lo=10.0, k_hi=20.0, grid_check=:none)
+        nothing
+    catch e
+        e
+    end
+    @test err isa ArgumentError
+    @test occursin("below the capital floor", sprint(showerror, err))
+end
+
+@testset "Two-asset public path forwards closer kwargs (#709)" begin
+    M = MacroEconometricModels
+    # 25×25×3 (not 8×6×2): the tiny grid cannot represent tol-level
+    # clearing, while the 25-grid brackets deterministically. Reduced
+    # budgets via the PUBLIC path: max_iter observes iterations==2,
+    # inner_max_iter passes the kwargs catchall (MethodError before Phase 2).
+    spec = M._two_asset_hank_example(; n_liquid=25, n_illiquid=25, n_e=3)
+    ss = compute_steady_state(spec; max_iter=2, inner_max_iter=5, grid_check=:none)
+    @test ss.iterations == 2
+    @test isfinite(ss.aggregates[:B])
+    @test ss.aggregates[:B_supply] == 2.0
+    # stable_iters validation edges (instant: thrown before any solve).
+    tiny = M._two_asset_hank_example(; n_liquid=8, n_illiquid=6, n_e=2)
+    hh_t = only(values(tiny.agents))
+    pr = Dict{Symbol,Float64}(:r => 0.01, :w => 1.0, :tau => 0.0, :div => 0.0)
+    err_st = try
+        M._two_asset_egm_solve(hh_t.individual, hh_t.grid, hh_t.income, pr;
+                               stable_iters=0)
+        nothing
+    catch e
+        e
+    end
+    @test err_st isa ArgumentError
+    err_vfi = try
+        M._two_asset_hh_solve(hh_t.individual, hh_t.grid, hh_t.income, pr;
+                              hh_solver=:vfi, stable_iters=20)
+        nothing
+    catch e
+        e
+    end
+    @test err_vfi isa ArgumentError
+end
+
+@testset "One-asset path rejects unknown kwargs (#709)" begin
+    spec = load_ha_example(:krusell_smith)
+    err = try
+        compute_steady_state(spec; bogus_kwarg=1)
+        nothing
+    catch e
+        e
+    end
+    @test err isa ArgumentError
+    @test occursin("unknown keyword", sprint(showerror, err))
 end

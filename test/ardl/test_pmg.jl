@@ -142,6 +142,7 @@ end
         @test dfe.theta_se[1] > 0
         # Hausman DFE-vs-MG runs (sign not asserted — finite-sample dV may be non-PSD).
         h2 = hausman_test(dfe, mg)
+        # T159: kept — dV may be non-PSD (sign unassertable per comment); [0,1] pvalue below completes it.
         @test isfinite(h2.statistic)
         @test 0.0 ≤ h2.pvalue ≤ 1.0
     end
@@ -191,6 +192,7 @@ end
         pmg_t = estimate_pmg(yv, Xv, id, tm; p=1, q=1, method=:pmg, trend=:trend, xnames=["x"])
         @test !("(Intercept)" in pmg_n.srnames)
         @test "trend" in pmg_t.srnames && "(Intercept)" in pmg_t.srnames
+        # T159: kept — the trend-coefficient/τ̂ pins below guard the EC form; long-run θ has no reference here.
         @test isfinite(pmg_n.theta[1]) && isfinite(pmg_t.theta[1])
         # Trend short-run coefficient ≈ 0 on the trendless DGP (DGP-04 #793;
         # probed −0.00068), and scales with a planted trend: in EC form

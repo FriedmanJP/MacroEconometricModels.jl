@@ -66,6 +66,7 @@ end
     @test sol.method === :ssj
     @test sol.steady_state.converged
     @test abs(sol.steady_state.excess_demand) < 5e-3
+    # T159: kept — the clearing + r*-bracket pins around it guard the SS price.
     @test isfinite(sol.steady_state.prices[:r])
     @test sol.steady_state.prices[:r] <
           1 / maximum(hh.individual.beta for hh in values(spec.agents)) - 1
@@ -94,10 +95,11 @@ end
     Th = 8
     gej = ssj_jacobian(dag; unknowns=[:r], targets=[:bond_mkt], shocks=[:w],
                        T_horizon=Th, target_tol=Inf)
+    # T159: kept — the residual identity below pins the whole IRF solve.
     @test all(isfinite, gej.H_U) && all(isfinite, gej.H_Z)
     dw = [0.9^(t - 1) for t in 1:Th]
     ir = ssj_irf(gej, Dict(:w => dw); residual=false)
-    @test all(isfinite, ir.paths[:r])
+    @test all(isfinite, ir.paths[:r])  # T159: kept (residual identity below pins the solve)
     @test maximum(abs, gej.H_U * ir.paths[:r] .+ gej.H_Z * dw) < 1e-8
 
     # irf/fevd still assume a unique household; they name #651 until retargeted.

@@ -78,7 +78,7 @@ using Test, MacroEconometricModels, Random, LinearAlgebra, Statistics, Distribut
         @test all(m.theta .>= 0)                     # variances non-negative
         @test all(m.smoothed_cov[1, 1, t] <= m.filtered_cov[1, 1, t] + 1e-6
                   for t in 1:m.T_obs)
-        @test isfinite(m.loglik)
+        @test m.loglik < 0  # T159: Gaussian state-space ll (seed-fixed; verified by green run)
     end
 
     # ------------------------------------------------------------------
@@ -159,7 +159,7 @@ using Test, MacroEconometricModels, Random, LinearAlgebra, Statistics, Distribut
                                 param_names=["atanh(φ)", "logσ²_η", "logσ²_ε"])
         @test m isa StateSpaceModel
         @test isapprox(tanh(m.theta[1]), φ; atol=0.15)   # φ recovered
-        @test isfinite(m.loglik)
+        @test m.loglik < 0  # T159: Gaussian ll (seed-fixed; verified by green run)
     end
 
     # ------------------------------------------------------------------
@@ -290,7 +290,7 @@ using Test, MacroEconometricModels, Random, LinearAlgebra, Statistics, Distribut
         @test m isa StateSpaceModel
         @test m.init_mode === :diffuse
         @test isapprox(tanh(m.theta[1]), φ; atol=0.15)   # φ recovered
-        @test isfinite(m.loglik)
+        @test m.loglik < 0  # T159: Gaussian ll under diffuse init (seed-fixed; verified by green run)
     end
 
     # ------------------------------------------------------------------

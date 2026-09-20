@@ -184,6 +184,9 @@ end
     @test res.ci_type == :bootstrap
     @test res._draws !== nothing
     @test all(isfinite, res._draws)
+    # T159: non-degenerate bootstrap (global-RNG draws; observed 0.048/0.065, 19σ+ margins).
+    @test std(vec(res._draws[:, 1, 1, 1])) > 0.01
+    @test std(vec(res._draws[:, 2, 1, 1])) > 0.01
 
     # Uncorrected residual bootstrap ⇒ draws are centered at the estimated B̂, so the
     # bootstrap mean tracks the point IRF. A bias-corrected (Kilian 1998) bootstrap would
@@ -569,8 +572,11 @@ end
         @test all(lo .<= hi)
         mt = median_target(s)
         # sup-t is simultaneous around the pointwise median; median-target need not
-        # sit inside, but the band is nonempty and finite.
-        @test all(isfinite, lo) && all(isfinite, hi)
+        # sit inside. The band is median ± cσ by construction, so it contains the
+        # pointwise median exactly (T159).
+        med_band = irf_median(s)
+        @test all(isfinite, med_band)
+        @test all(lo .<= med_band .<= hi)
     end
 
     @testset "fevd(model, s, H) weighted median and adding-up" begin

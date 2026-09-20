@@ -4,7 +4,7 @@
 # This file is part of MacroEconometricModels.jl.
 # Licensed under GPL-3.0-or-later. See LICENSE for details.
 
-using Test, MacroEconometricModels, Random
+using Test, MacroEconometricModels, Random, StatsAPI
 
 @testset "LM Unit Root Tests" begin
     rng = Random.Xoshiro(77889)
@@ -21,7 +21,8 @@ using Test, MacroEconometricModels, Random
         @test result.breaks == 0
         @test isempty(result.break_dates)
         @test isempty(result.break_fractions)
-        @test isfinite(result.statistic)
+        # T159: stationary AR(1) decisively rejects (−6.95 vs CV −1.95).
+        @test isfinite(result.statistic) && result.statistic < result.critical_values[5]
         @test haskey(result.critical_values, 5)
         @test result.lags >= 0
         @test result.nobs > 0
@@ -51,7 +52,10 @@ using Test, MacroEconometricModels, Random
         @test length(result.break_fractions) == 1
         @test result.break_dates[1] > 0
         @test 50 < result.break_dates[1] < 150
-        @test isfinite(result.statistic)
+        # T159: broken-mean stationary series rejects (−14.76 vs CV −3.41) and the
+        # break search recovers the true date t=100 exactly (fixed seed).
+        @test isfinite(result.statistic) && result.statistic < result.critical_values[5]
+        @test result.break_dates[1] == 100
         @test haskey(result.critical_values, 1)
         @test haskey(result.critical_values, 5)
         @test haskey(result.critical_values, 10)
@@ -70,7 +74,9 @@ using Test, MacroEconometricModels, Random
         @test length(result.break_dates) == 2
         @test length(result.break_fractions) == 2
         @test result.break_dates[1] < result.break_dates[2]
-        @test isfinite(result.statistic)
+        # T159: sign pin only — with two searched breaks this seed sits just above
+        # the 5% CV (−3.04 vs −3.67, low power), so rejection is not asserted.
+        @test isfinite(result.statistic) && result.statistic < 0
 
         result_both = lm_unitroot_test(y_2break_s; breaks=2, regression=:both)
         @test result_both.breaks == 2

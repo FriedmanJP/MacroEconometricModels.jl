@@ -463,7 +463,7 @@ end
 
 """Compute structural IRF for rotation Q."""
 function _compute_irf_for_Q(model::VARModel{T}, Q::Matrix{T}, Phi::Vector{Matrix{T}},
-                            L::LowerTriangular{T,Matrix{T}}, horizon::Int) where {T<:AbstractFloat}
+                            L::LowerTriangular{T,<:AbstractMatrix{T}}, horizon::Int) where {T<:AbstractFloat}
     structural_irf(Phi, L, Q, horizon)
 end
 
@@ -713,7 +713,7 @@ end
 
 """Build constraint matrix for zero restrictions on shock j."""
 function _build_zero_constraint_matrix(r::SVARRestrictions, shock::Int, Phi::Vector{Matrix{T}},
-                                       L::LowerTriangular{T,Matrix{T}};
+                                       L::LowerTriangular{T,<:AbstractMatrix{T}};
                                        B=nothing, C1=nothing) where {T<:AbstractFloat}
     ZF = _compute_ZF(r, Phi, L, shock; B=B, C1=C1)
     [Vector{T}(ZF[i, :]) for i in axes(ZF, 1)]
@@ -739,7 +739,7 @@ end
 
 """Draw orthogonal Q satisfying zero restrictions (Algorithm 2, Arias et al. 2018)."""
 function _draw_Q_with_zero_restrictions(r::SVARRestrictions, Phi::Vector{Matrix{T}},
-                                         L::LowerTriangular{T,Matrix{T}};
+                                         L::LowerTriangular{T,<:AbstractMatrix{T}};
                                          rng::AbstractRNG=Random.default_rng(),
                                          B=nothing, C1=nothing) where {T<:AbstractFloat}
     n = r.n_vars
@@ -851,7 +851,7 @@ end
 RWZ row convention ``y_t' A_0``: ``A_0 = L^{-T} Q``. The column-convention
 impact matrix is ``A_0^{-1} = L Q``, the transpose-inverse of this `A0`.
 """
-function _rf_to_struct(B::Matrix{T}, L::LowerTriangular{T,Matrix{T}}, Q::Matrix{T}) where {T}
+function _rf_to_struct(B::Matrix{T}, L::LowerTriangular{T,<:AbstractMatrix{T}}, Q::Matrix{T}) where {T}
     A0 = Matrix{T}(L') \ Q   # A0 = inv(L') * Q  (y'A0, not A0^{-1}=LQ)
     Aplus = B * A0
     (A0, Aplus)
@@ -1339,7 +1339,7 @@ where f_h is the structural-to-reduced-form map and ff_h includes sphere coordin
 """
 function _compute_importance_weight(Q::Matrix{T}, model::VARModel{T},
                                      setup::_AriasSVARSetup{T}, restrictions::SVARRestrictions,
-                                     Phi::Vector{Matrix{T}}, L::LowerTriangular{T,Matrix{T}},
+                                     Phi::Vector{Matrix{T}}, L::LowerTriangular{T,<:AbstractMatrix{T}},
                                      ff_h, zero_fn) where {T}
     isempty(restrictions.zeros) && return one(T)
 
@@ -1365,7 +1365,7 @@ end
 
 function _compute_importance_weight(Q::Matrix{T}, model::VARModel{T},
                                      setup::_AriasSVARSetup{T}, restrictions::SVARRestrictions,
-                                     Phi::Vector{Matrix{T}}, L::LowerTriangular{T,Matrix{T}}) where {T}
+                                     Phi::Vector{Matrix{T}}, L::LowerTriangular{T,<:AbstractMatrix{T}}) where {T}
     isempty(restrictions.zeros) && return one(T)
     n = nvars(model)
     p = model.p
@@ -1379,7 +1379,7 @@ end
 """FD importance weight (SID-27 pin): freeze-QR finite differences, new closures."""
 function _compute_importance_weight_fd(Q::Matrix{T}, model::VARModel{T},
                                        setup::_AriasSVARSetup{T}, restrictions::SVARRestrictions,
-                                       Phi::Vector{Matrix{T}}, L::LowerTriangular{T,Matrix{T}}) where {T}
+                                       Phi::Vector{Matrix{T}}, L::LowerTriangular{T,<:AbstractMatrix{T}}) where {T}
     isempty(restrictions.zeros) && return one(T)
     n = nvars(model)
     p = model.p
@@ -1398,7 +1398,7 @@ end
 
 # Backward-compatible signature for pure sign restrictions (no setup needed)
 function _compute_importance_weight(Q::Matrix{T}, r::SVARRestrictions,
-                                     Phi::Vector{Matrix{T}}, L::LowerTriangular{T,Matrix{T}}) where {T}
+                                     Phi::Vector{Matrix{T}}, L::LowerTriangular{T,<:AbstractMatrix{T}}) where {T}
     isempty(r.zeros) && return one(T)
     # This path should not be reached for zero restrictions in the new code,
     # but kept for backward compatibility

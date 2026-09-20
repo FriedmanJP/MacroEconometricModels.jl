@@ -174,6 +174,7 @@ end
         @test mk.cv_mse !== nothing
         @test length(mk.cv_mse) == length(mk.lambda_path)
         @test all(isfinite, mk.cv_mse)
+        @test all(mk.cv_mse .>= 0)  # T159: MSEs (exact, by construction)
         @test mk.lambda_min > 0
         # 1-SE lambda is >= lambda_min (more parsimonious)
         @test mk.lambda_1se >= mk.lambda_min - 1e-12
@@ -183,6 +184,7 @@ end
         @test mt.cv === :timeseries
         @test mt.cv_mse !== nothing
         @test all(isfinite, mt.cv_mse)
+        @test all(mt.cv_mse .>= 0)  # T159: MSEs (exact, by construction)
     end
 
     # =========================================================================
@@ -192,6 +194,7 @@ end
         for sel in (:aic, :bic, :ebic)
             m = estimate_lasso(y, X; select=sel)
             @test m.select == sel
+            # T159: kept — the ebic ≥ bic penalty pin below guards IC wiring.
             @test isfinite(m.aic) && isfinite(m.bic) && isfinite(m.ebic)
             @test m.lambda > 0
         end
@@ -229,7 +232,7 @@ end
         @test coef(ml) === ml.beta
         @test nobs(ml) == n
         @test length(residuals(ml)) == n
-        @test isfinite(loglikelihood(ml))
+        @test loglikelihood(ml) < 0  # T159: Gaussian lasso ll (seed-fixed; verified by green run)
         @test StatsAPI.dof(ml) ≈ ml.df_star + 1
         @test 0 <= r2(ml) <= 1
     end

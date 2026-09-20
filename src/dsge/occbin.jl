@@ -216,7 +216,14 @@ function _derive_alternative_regime(spec::ModelSpec{T}, constraint::OccBinConstr
     new_residual_fns = copy(spec.residual_fns)
     new_residual_fns[eq_idx] = bind_fn
 
-    new_forward_indices = filter(!=(eq_idx), spec.forward_indices)
+    # #223 ([T124]): forward_indices are lead VARIABLE indices — recompute the
+    # set over the new equation list (the replaced equation may hold the only
+    # occurrence of some lead variable; the static bound itself has no leads).
+    new_fwd_vars = Set{Int}()
+    for eq in new_equations
+        union!(new_fwd_vars, _lead_variable_indices(eq.expr, spec.endog))
+    end
+    new_forward_indices = sort!(collect(new_fwd_vars))
     n_expect_new = length(new_forward_indices)
 
     _copy_model_spec(spec; equations=new_equations, residual_fns=new_residual_fns,

@@ -79,6 +79,8 @@ end
     @test fc.ci_method == :theoretical
     @test all(isfinite, fc.factors_lower)
     @test all(isfinite, fc.factors_upper)
+    # T159: theoretical bands are point ± z_0.975·se exactly (observed maxdev 8e-15).
+    @test maximum(abs, (fc.factors_upper .- fc.factors_lower) .- 2 * 1.959963984540054 .* fc.factors_se) < 1e-10
     @test all(fc.factors_se .>= 0)
     @test fc.factors_lower != fc.factors_upper  # CIs not degenerate
 
@@ -93,19 +95,23 @@ end
     @test all(fc_none.observables_upper .== 0)
     @test all(fc_none.observables_se .== 0)
     @test all(isfinite, fc_none.observables)     # point path still correctly unstandardized
+    @test fc_none.observables == fc.observables  # T159: point path independent of ci_method (bit-exact, observed 0.0)
 end
 
 @testset "ci_method=:none yields exactly-zero bounds across model types (T098 #197)" begin
     rng = Random.Xoshiro(19797)
     X = dgp_dynamic_factors(rng; N=8, T=120).X
-    for fc in (forecast(estimate_factors(X, 2), 5; ci_method=:none),
-               forecast(estimate_dynamic_factors(X, 2, 1), 5; ci_method=:none),
-               forecast(estimate_gdfm(X, 2), 5; ci_method=:none))
+    for m in (estimate_factors(X, 2), estimate_dynamic_factors(X, 2, 1), estimate_gdfm(X, 2))
+        fc = forecast(m, 5; ci_method=:none)
         @test all(fc.observables_lower .== 0)
         @test all(fc.observables_upper .== 0)
         @test all(fc.observables_se .== 0)
         @test all(fc.factors_lower .== 0) && all(fc.factors_se .== 0)
         @test all(isfinite, fc.observables) && all(isfinite, fc.factors)
+        # T159: point path independent of ci_method (bit-exact on all 3 types, observed 0.0).
+        fc_ref = forecast(m, 5)
+        @test fc.observables == fc_ref.observables
+        @test fc.factors == fc_ref.factors
     end
 end
 
@@ -299,6 +305,7 @@ end
 
     fc = forecast(gdfm, 5)
     @test size(fc.observables) == (5, 10)
+    # T159: kept — backward-compat field-existence smoke; forecast values pinned in Basic Forecasting.
     @test all(isfinite, fc.observables)
     @test all(isfinite, fc.factors)
 end
@@ -346,6 +353,7 @@ end
     fc_sp = forecast(gdfm, 5; method=:spectral, ci_method=:none)
     fc_os = forecast(gdfm, 5; method=:one_sided, ci_method=:none)
     @test size(fc_ar.factors) == (5, 2)
+    # T159: kept — spectral≈one_sided (1e-10) + ar≉spectral below compare the methods.
     @test all(isfinite, fc_ar.factors)
     @test all(isfinite, fc_sp.observables)
     @test fc_sp.observables ≈ fc_os.observables atol=1e-10
