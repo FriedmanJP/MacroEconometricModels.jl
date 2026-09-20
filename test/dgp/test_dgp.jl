@@ -98,6 +98,7 @@ using DataFrames  # nrow (no-op when fixtures.jl already loaded it)
         # log of a negative init (DGP-10 #799).
         ge = dgp_garch_family(Xoshiro(31); kind=:egarch, omega=-0.3,
                               alpha=0.15, gamma=-0.08, beta=0.95, T=2000)
+        # T159: kept — no-crash-on-negative-init IS the contract (DGP-10); h > 0 is the pin.
         @test all(isfinite.(ge.y)) && all(ge.h .> 0)
     end
 
@@ -298,7 +299,7 @@ using DataFrames  # nrow (no-op when fixtures.jl already loaded it)
         @test dropdims(mean(cem.draws; dims=1); dims=1) ≈ cem.point atol=0.05
         # Vector input with corr != 0 runs and stays centred (C1 second path).
         cev = dgp_pce_draws(Xoshiro(65), [1.0, 2.0, 3.0]; sd=0.1, corr=0.5)
-        @test size(cev.draws) == (500, 3) && all(isfinite, cev.draws)
+        @test size(cev.draws) == (500, 3) && all(isfinite, cev.draws)  # T159: kept (centredness ≈ below guards the corr path)
         @test vec(mean(cev.draws; dims=1)) ≈ [1.0, 2.0, 3.0] atol=0.05
         do_ = dgp_dsge_observed(Xoshiro(63), ones(50, 2); H=[0.25, 0.25])
         @test size(do_.y_obs) == (50, 2)

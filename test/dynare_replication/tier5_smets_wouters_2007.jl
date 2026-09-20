@@ -403,32 +403,26 @@ residual_fns = _build_sw07_residual_fns(vi, ei)
 # Verify equation count
 @assert length(residual_fns) == length(endog) "Need $(length(endog)) equations, got $(length(residual_fns))"
 
-# ── Determine forward-looking equations ──
-# Equations with [t+1] terms: (5) invef, (6) pkf, (7) cf, (9) yf (implicit via labf+1?),
-# Actually let me identify from the residual_fns directly:
-forward_indices = Int[]
+# ── Determine forward-looking variables (#223: distinct lead variables) ──
+forward_vars = Set{Int}()
 n = length(endog)
 y_test = zeros(n)
 ε_test = zeros(length(exog))
-for (i, fn) in enumerate(residual_fns)
-    # Check if changing y_lead changes the residual
-    is_fwd = false
+for fn in residual_fns
+    # Check which y_lead entries move the residual
+    r1 = fn(y_test, y_test, y_test, ε_test, param_values)
     for j in 1:n
         y_lead_plus = copy(y_test)
         y_lead_plus[j] = 1.0
-        r1 = fn(y_test, y_test, y_test, ε_test, param_values)
         r2 = fn(y_test, y_test, y_lead_plus, ε_test, param_values)
         if abs(r2 - r1) > 1e-12
-            is_fwd = true
-            break
+            push!(forward_vars, j)
         end
     end
-    if is_fwd
-        push!(forward_indices, i)
-    end
 end
+forward_indices = sort!(collect(forward_vars))
 n_expect = length(forward_indices)
-println("Forward-looking equations: $n_expect")
+println("Forward-looking variables: $n_expect")
 println("  Indices: $forward_indices")
 
 # Equations as placeholder expressions (not used for linear models)

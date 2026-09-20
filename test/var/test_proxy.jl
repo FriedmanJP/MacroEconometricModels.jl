@@ -33,7 +33,7 @@ const MEM = MacroEconometricModels
         @test keys(nt) == (:Q, :b1, :first_stage_F, :z_eff)
         @test size(nt.Q) == (3, 3)
         @test length(nt.b1) == 3
-        @test isfinite(nt.first_stage_F)
+        @test nt.first_stage_F > 150  # T159: strong proxy (ρ=0.8, T=400): F≈279
     end
 
     @testset "matrix method returns ProxySVARResult" begin
@@ -114,7 +114,7 @@ const MEM = MacroEconometricModels
         ir = irf(m, 8; method=:proxy, instruments=Z, normalize=:unit_variance)
         @test ir isa ImpulseResponse
         @test size(ir.values) == (8, 3, 3)
-        @test isfinite(ir.values[1, 1, 1])
+        @test ir.values[1, 1, 1] ≈ 1.0 atol = 0.05  # T159: unit-variance impact ≈ B_true[1,1] = 1 (observed 0.999)
         fv = fevd(m, 8; method=:proxy, instruments=Z, normalize=:unit_variance)
         @test fv isa FEVD
         hd = historical_decomposition(m, 20; method=:proxy, instruments=Z, normalize=:unit_variance)
@@ -128,7 +128,7 @@ const MEM = MacroEconometricModels
         m = estimate_var(Y, 1)
         r = identify_proxy(m, reshape(z, :, 1); align=true)
         @test r isa ProxySVARResult
-        @test isfinite(r.first_stage_F)
+        @test r.first_stage_F > 400  # T159: 380 clean rows of strong proxy: F≈644
     end
 
     @testset "weak instrument warns" begin
@@ -165,7 +165,8 @@ const MEM = MacroEconometricModels
         band = proxy_ar_band(m, z; horizon=2, normalize_var=1, n_grid=81, span=8)
         @test band isa LPIVARBand
         @test size(band.point, 1) == 3
-        @test all(isfinite, band.point)
+        @test band.point[1, 1] ≈ 1 atol = 1e-9  # T159: unit-effect normalization (observed 1+7e-16)
+        @test band.point[1, 2] ≈ 0.5 atol = 0.1  # T159: h=1 LP-IV point ≈ A[1,1] = 0.5 (observed 0.511)
         z_eff = z[(m.p + 1):end]
         @test length(z_eff) == size(m.U, 1)
         band_eff = proxy_ar_band(m, z_eff; horizon=2, normalize_var=1, n_grid=81, span=8)
@@ -234,6 +235,8 @@ const MEM = MacroEconometricModels
                  reps=40, seed=7414)
         @test ir isa ImpulseResponse
         @test all(isfinite, ir.values)
+        @test ir.values[1, 1, 1] == 1.0  # T159: unit-effect impact normalization is exact (x/x)
+        @test maximum(abs, ir.values[1, :, 1] .- [1.0, 0.5, 0.4]) < 0.2  # T159: impact ≈ B_true[:,1] (observed [1.0, 0.608, 0.390])
         @test ir._draws !== nothing
         @test 1 <= size(ir._draws, 1) <= 40
     end

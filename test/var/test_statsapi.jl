@@ -40,27 +40,27 @@ using Random
     _tprint("Testing predict() in-sample...")
     y_hat = StatsAPI.predict(model)
     @test size(y_hat) == (T - p, n) # Effective sample size
-    @test all(isfinite, y_hat)
+    @test maximum(abs, y_hat .- (Y[(p + 1):end, :] .- model.U)) < 1e-12  # T159: in-sample predict = fitted values Y-U (observed bit-exact)
 
     # 5. Test predict (forecast)
     _tprint("Testing predict() forecast...")
     steps = 5
     y_fcast = StatsAPI.predict(model, steps)
     @test size(y_fcast) == (steps, n)
-    @test all(isfinite, y_fcast)
+    @test maximum(abs, vec(y_fcast[1:1, :]) .- vec([1.0 Y[end, 1] Y[end, 2]] * model.B)) < 1e-12  # T159: 1-step forecast = X_T B (observed bit-exact)
 
     # 6. Test loglikelihood
     _tprint("Testing loglikelihood...")
     ll = StatsAPI.loglikelihood(model)
     @test ll isa Float64
-    @test isfinite(ll)
+    @test ll ≈ -((T - p) * n / 2) * log(2pi) - ((T - p) / 2) * logdet(model.Sigma) - (T - p) * n / 2 atol = 1e-8  # T159: Gaussian VAR LL identity (observed bit-exact 185.042)
 
     # 7. Test stderror
     _tprint("Testing stderror...")
     se = StatsAPI.stderror(model)
     @test length(se) == length(vec(StatsAPI.coef(model)))
     @test all(se .> 0)
-    @test all(isfinite, se)
+    @test se ≈ sqrt.(diag(V)) rtol = 1e-12  # T159: stderror is sqrt(diag(vcov)) by definition
 
     # 8. Test confint
     _tprint("Testing confint...")
@@ -112,7 +112,7 @@ end
     r2_val = StatsAPI.r2(model)
     @test r2_val isa AbstractVector
     @test length(r2_val) == n
-    @test all(isfinite, r2_val)
+    # T159: isfinite deleted as redundant — bounds below + population ≈ pin cover it.
     @test all(x -> 0 <= x <= 1, r2_val)
     _tprint("r2 for VAR: ", r2_val)
 

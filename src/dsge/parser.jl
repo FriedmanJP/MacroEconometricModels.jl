@@ -287,12 +287,14 @@ function _dsge_impl(block::Expr)
     max_lead_val = maximum((get(offsets, v, (max_lag=0, max_lead=0)).max_lead for v in original_endog); init=1)
     max_lead_val = max(max_lead_val, 1)
 
-    forward_indices = Int[]
-    for (i, eq) in enumerate(raw_equations)
-        if _has_forward_looking(eq, endog, exog)
-            push!(forward_indices, i)
-        end
+    # #223 ([T124]): the catalog is distinct lead VARIABLES, not lead-containing
+    # equations — one expectational error η per variable with a lead, so that
+    # n_expect == size(Π, 2) even when equations share a lead.
+    forward_vars = Set{Int}()
+    for eq in raw_equations
+        union!(forward_vars, _lead_variable_indices(eq, endog))
     end
+    forward_indices = sort!(collect(forward_vars))
     n_expect = length(forward_indices)
 
     # `_substitute_vars` / `_equation_to_residual` live in ir.jl (shared with
@@ -752,6 +754,27 @@ function _has_forward_looking(eq::Expr, endog::Vector{Symbol}, exog::Vector{Symb
         end
     end
     return found[]
+end
+
+"""
+    _lead_variable_indices(eq, endog) → Vector{Int}
+
+Sorted indices into `endog` of the variables appearing with a `[t+k]` lead,
+`k > 0`, in equation `eq`. Exogenous leads are excluded (`E_t ε_{t+1} = 0`
+needs no expectational error). Counterpart to `_has_forward_looking` for the
+#223 ([T124]) per-variable catalog.
+"""
+function _lead_variable_indices(eq::Expr, endog::Vector{Symbol})
+    vars = Set{Int}()
+    _walk_expr(eq) do ex
+        if _is_time_ref(ex, endog)
+            idx = _parse_time_index(ex.args[2])
+            if idx > 0
+                push!(vars, findfirst(==(ex.args[1]), endog))
+            end
+        end
+    end
+    return sort!(collect(vars))
 end
 
 """

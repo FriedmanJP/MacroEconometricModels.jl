@@ -124,7 +124,7 @@
         @test m.method == :css_mle
         @test length(m.phi) == 1
         @test length(m.theta) == 1
-        @test isfinite(m.loglik)
+        @test m.loglik < 0  # T159: ARMA Gaussian ll on randn data (seed-fixed; negative w.h.p. — verified by green run)
     end
 
     # =========================================================================
@@ -145,6 +145,7 @@
         @test length(phi) == 2
         # Fallback is a finite small INIT for the optimizer (not a fabricated fit); the
         # catch is narrowed so a genuine singular system still hits it.
+        # T159: kept — finiteness IS the fallback contract (small init, not a fit).
         @test all(isfinite, phi)
     end
 
@@ -176,6 +177,7 @@
         se = stderror(m)
         @test length(se) == 2  # c + theta
         @test all(isfinite, se)
+        @test all(se .>= 0)  # T159: standard errors (exact, by construction)
 
         # Force the catch path by testing with a very short series
         # where MLE may produce a near-singular Hessian

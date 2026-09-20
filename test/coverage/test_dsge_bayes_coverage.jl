@@ -69,6 +69,7 @@ end
 
     M._pf_initialize_stationary!(ws, ss; rng=Random.Xoshiro(1234))
 
+    # T159: kept — the uniform-weights/log-weights pins below guard stationary init.
     @test all(isfinite, ws.particles)
     @test all(ws.weights .≈ 1.0 / N)
     @test all(ws.log_weights .≈ -log(Float64(N)))
@@ -121,7 +122,7 @@ end
     ll = M._bootstrap_particle_filter!(ws, ss, data, T_sim;
             rng=Random.Xoshiro(5002), store_trajectory=true)
 
-    @test isfinite(ll)
+    @test ll < 0  # T159: bootstrap PF loglik on 60 obs (observed -113.5)
     @test ws.reference_trajectory !== nothing
     # After store_trajectory, last column should be populated
     @test any(!iszero, ws.reference_trajectory[:, T_sim])
@@ -152,7 +153,7 @@ end
     for i in 1:3
         ll = M._conditional_smc!(ws, ss, data, T_sim;
             rng=Random.Xoshiro(5007 + i))
-        @test isfinite(ll)
+        @test ll < 0  # T159: CSMC loglik (observed ≤ -317 across the 3 runs)
     end
 end
 
@@ -182,6 +183,7 @@ end
 
         M._pf_initialize_nonlinear!(ws, nlss; rng=Random.Xoshiro(6001))
 
+        # T159: kept — the so == 0 + uniform-weights pins below guard nonlinear init.
         @test all(isfinite, ws.particles)
         @test all(isfinite, ws.particles_fo)
         @test all(ws.particles_so .== 0.0)
@@ -226,6 +228,7 @@ end
     # In-bounds
     θ = [0.33, 0.8]  # sorted: alpha, beta
     lp = M._log_prior(θ, prior)
+    # T159: kept — the ≈ expected pin below is exact.
     @test isfinite(lp)
     expected = logpdf(Normal(0.33, 0.1), 0.33) + logpdf(Beta(5.0, 2.0), 0.8)
     @test lp ≈ expected atol=1e-10
@@ -257,6 +260,7 @@ end
 
         # Valid parameter
         ll_val = ll_fn([0.7])
+        # T159: kept — the < 0 pin below guards the likelihood.
         @test isfinite(ll_val)
         @test ll_val < 0.0
 
@@ -268,7 +272,7 @@ end
         ll_fn_me = M._build_likelihood_fn(spec, [:rho], data_mat,
             [:y], [0.1], :gensys, NamedTuple())
         ll_me = ll_fn_me([0.7])
-        @test isfinite(ll_me)
+        @test ll_me < 0.0  # T159: measurement-error likelihood on the same DGP (mirrors the ll_val < 0 pin)
     end
 end
 
@@ -323,6 +327,7 @@ end
     M._update_proposal_cov!(state)
 
     @test size(state.proposal_cov) == (n_params, n_params)
+    # T159: kept — the PSD + Roberts-Rosenthal pins below guard adaptation.
     @test all(isfinite, state.proposal_cov)
     # Should be positive semi-definite
     @test all(eigvals(Symmetric(state.proposal_cov)) .>= 0.0)
@@ -396,6 +401,7 @@ end
         c = StatsAPI.coef(result)
         @test length(c) == 1
         @test isfinite(c[1])
+        @test 0 < c[1] < 1  # T159: Beta(2,2) prior support ⇒ posterior mean in (0,1) (exact)
 
         # StatsAPI.islinear
         @test StatsAPI.islinear(result) == false
@@ -425,10 +431,10 @@ end
         @test length(pt) == 1
         @test pt[1].param == :rho
         @test pt[1].prior_dist == "Beta"
-        @test isfinite(pt[1].prior_mean)
-        @test isfinite(pt[1].prior_std)
-        @test isfinite(pt[1].post_mean)
-        @test isfinite(pt[1].post_std)
+        @test pt[1].prior_mean ≈ 0.5  # T159: Beta(2,2) mean (exact closed form)
+        @test pt[1].prior_std ≈ sqrt(0.05)  # T159: Beta(2,2) std = √(4/80) (exact)
+        @test 0 < pt[1].post_mean < 1  # T159: posterior on Beta support (exact)
+        @test pt[1].post_std >= 0  # T159: std by construction (exact)
         @test pt[1].ci_lower < pt[1].ci_upper
     end
 end
@@ -488,13 +494,13 @@ end
         @test result.method == :rwmh
         # :mh discards burn-in (T023): stored draws = n_draws - burnin
         @test size(result.theta_draws, 1) == 60
-        @test isfinite(result.log_marginal_likelihood)
+        @test isfinite(result.log_marginal_likelihood)  # T159: kept (accessor identity below is exact)
         @test isempty(result.ess_history)
         @test isempty(result.phi_schedule)
 
         # marginal_likelihood and bayes_factor
         ml = marginal_likelihood(result)
-        @test isfinite(ml)
+        @test ml == result.log_marginal_likelihood  # T159: accessor identity (exact, src/dsge/bayes_estimation.jl:1221)
 
         # posterior_summary
         ps = posterior_summary(result)
@@ -540,6 +546,7 @@ end
 
         sim = simulate(sol, 30; rng=Random.Xoshiro(9001))
         @test all(isfinite, sim)
+        @test maximum(abs, sim) < 10  # T159: stationary pruned sim on unit shocks (observed 3.44)
         @test size(sim, 1) == 30
     end
 end
@@ -553,6 +560,7 @@ end
         shocks = randn(Random.Xoshiro(9002), 40, n_eps)
         sim = simulate(sol, 40; shock_draws=shocks)
         @test all(isfinite, sim)
+        @test maximum(abs, sim) < 10  # T159: stationary pruned sim (observed 3.69)
         @test size(sim, 1) == 40
     end
 end
@@ -564,6 +572,7 @@ end
 
         sim = simulate(sol, 40; antithetic=true, rng=Random.Xoshiro(9003))
         @test all(isfinite, sim)
+        @test maximum(abs, sim) < 10  # T159: stationary pruned sim (observed 4.05)
         @test size(sim, 1) == 40
     end
 end
@@ -575,6 +584,7 @@ end
 
         sim = simulate(sol, 40; antithetic=true, rng=Random.Xoshiro(9004))
         @test all(isfinite, sim)
+        @test maximum(abs, sim) < 10  # T159: stationary pruned sim (observed 2.12)
         @test size(sim, 1) == 40
     end
 end
@@ -587,6 +597,8 @@ end
         irf_result = irf(sol, 15; irf_type=:analytical)
         @test size(irf_result.values, 1) == 15
         @test all(isfinite, irf_result.values)
+        # T159: unit e-shock ⇒ c jumps 1 (forward solution), k = c on impact with k(-1) = 0 (observed bit-exact).
+        @test irf_result.values[1, :, :] ≈ [1.0; 1.0;;]
     end
 end
 
@@ -598,6 +610,7 @@ end
         irf_result = irf(sol, 8; irf_type=:girf, n_draws=10)
         @test size(irf_result.values, 1) == 8
         @test all(isfinite, irf_result.values)
+        @test maximum(abs, irf_result.values) < 10  # T159: 10-draw MC GIRF on a linear model (observed max 1.0); blowup guard
     end
 end
 
@@ -627,6 +640,14 @@ end
         m = analytical_moments(sol; format=:gmm, lags=2)
         @test length(m) > 0
         @test all(isfinite, m)
+        # T159: c is white noise (forward solution), k ≈ AR(1) in c (observed [0,0,1,1,5.263,0,4.737,0,4.263]).
+        @test m[1:2] == [0.0, 0.0]
+        @test m[3] ≈ 1.0  # E[c²] = σ²
+        @test m[4] ≈ 1.0  # E[c·k] = E[c²] (c ⊥ past)
+        @test m[5] ≈ 1 / (1 - 0.9^2) rtol = 1e-10
+        @test m[6] == 0.0 && m[8] == 0.0  # c has no autocovariance
+        @test m[7] ≈ 0.9 * m[5] rtol = 1e-10
+        @test m[9] ≈ 0.9 * m[7] rtol = 1e-10
     end
 end
 
@@ -645,6 +666,10 @@ end
         m = analytical_moments(sol; format=:gmm, lags=1)
         @test length(m) > 0
         @test all(isfinite, m)
+        # T159: order-3 = order-1 on a linear model; AR(1) closed form (observed [0, 5.263157894736843, 4.736842105263158]).
+        @test m[1] == 0.0
+        @test m[2] ≈ 1 / (1 - 0.9^2) rtol = 1e-12
+        @test m[3] ≈ 0.9 * m[2] rtol = 1e-12
     end
 end
 
@@ -689,6 +714,7 @@ end
     @test all(isfinite, Var_inov)
     # Should be symmetric
     @test norm(Var_inov - Var_inov') < 1e-10
+    @test minimum(eigvals(Symmetric(Var_inov))) >= -1e-10  # T159: innovation variance ⇒ PSD up to fp (observed min -1.4e-17)
 end
 
 @testset "pruning: _dlyap_doubling convergence" begin
@@ -1134,6 +1160,9 @@ end
         d_alt = M._regime_constant(alt_spec)
         # d_alt may be nonzero since the bound (0.5) differs from steady state (0.0)
         @test all(isfinite, d_alt)
+        # T159: regime constant = bound − SS (observed [1.8e-11, -0.5]).
+        @test abs(d_alt[1]) < 1e-8
+        @test d_alt[2] ≈ -0.5
     end
 end
 

@@ -29,7 +29,7 @@ Fields:
 - `Gamma1::Matrix{T}` — n × n coefficient on y_{t-1}
 - `C::Vector{T}` — n × 1 constants
 - `Psi::Matrix{T}` — n × n_shocks shock loading
-- `Pi::Matrix{T}` — n × n_expect expectation error selection
+- `Pi::Matrix{T}` — n × n_expect expectation error selection (one η column per distinct lead variable; #223)
 - `spec::ModelSpec{T,NoAgents}` — back-reference to specification
 """
 struct LinearDSGE{T<:AbstractFloat}

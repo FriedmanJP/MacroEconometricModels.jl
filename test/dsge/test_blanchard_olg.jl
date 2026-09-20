@@ -171,6 +171,8 @@ using LinearAlgebra
             resp = irf(sol, 12)
             @test all(isfinite, resp.values)
             @test maximum(abs, resp.values) > 0
+            i_C = findfirst(==("C"), resp.variables)
+            @test resp.values[1, i_C, 1] > 0  # T159: TFP shock raises consumption on impact (observed 0.0063)
         end
 
         @testset "NK Phillips-Taylor-Fisher block (#647 G-13b)" begin
@@ -210,15 +212,18 @@ using LinearAlgebra
             @test is_determined(sol)
 
             resp = irf(sol, 12)
-            @test all(isfinite, resp.values)
+            @test all(isfinite, resp.values)  # T159: kept (C/π impact signs pinned below)
             @test resp.variables == ["k", "C", "r", "w", "Z", "pi", "i", "rr"]
             @test resp.shocks == ["eps_Z", "eps_i"]
             i_C = findfirst(==("C"), resp.variables)
             i_pi = findfirst(==("pi"), resp.variables)
-            @test all(isfinite, resp.values[:, i_C, 1])
-            @test all(isfinite, resp.values[:, i_pi, 1])
+            @test all(isfinite, resp.values[:, i_C, 1])  # T159: kept (impact signs pinned below)
+            @test all(isfinite, resp.values[:, i_pi, 1])  # T159: kept (impact signs pinned below)
             @test maximum(abs, resp.values[:, i_C, 1]) > 0
             @test maximum(abs, resp.values[:, i_pi, 1]) > 0
+            # T159: demand-side NK block — TFP raises C and π on impact (observed 0.0063, 0.0097).
+            @test resp.values[1, i_C, 1] > 0
+            @test resp.values[1, i_pi, 1] > 0
 
             # Convenience ctor from BlanchardOLG; monetary shock IRF is finite.
             spec_m = blanchard_nk_spec(m; rho_z=0.9, sigma_z=0.0,
@@ -228,22 +233,24 @@ using LinearAlgebra
             resp_m = irf(sol_m, 12)
             @test all(isfinite, resp_m.values)
             @test maximum(abs, resp_m.values[:, :, 2]) > 0   # eps_i moves i (and rr)
+            # T159: Taylor rule — policy rate moves 1:1 with the eps_i shock on impact (σ_i = 0.01).
+            i_i = findfirst(==("i"), resp_m.variables)
+            @test resp_m.values[1, i_i, 2] ≈ 0.01 atol = 1e-10
         end
 
-        @testset "Blanchard forward_indices are lead-containing equations (MSR-11)" begin
-            function lead_eqs(spec)
-                Set(i for (i, eq) in enumerate(spec.equations)
-                    if eq.expr isa Expr &&
-                       MacroEconometricModels._has_forward_looking(eq.expr, spec.endog, spec.exog))
-            end
+        @testset "Blanchard forward_indices are distinct lead variables (#223)" begin
             m = BlanchardOLG()
             spec = to_spec(m)
-            @test Set(spec.forward_indices) == lead_eqs(spec)
-            @test spec.n_expect == length(spec.forward_indices)
+            # #223 ([T124]): only C carries a lead in the residual fns (the
+            # k[t+1], r[t+1] in the euler expr are substituted out) → {C} = [2].
+            @test spec.forward_indices == [2]
+            @test spec.n_expect == 1
 
             nk = blanchard_nk_spec(m)
-            @test Set(nk.forward_indices) == lead_eqs(nk) == Set([1, 6, 8])
-            @test nk.n_expect == 3
+            # euler touches C's lead; phillips and fisher SHARE pi's lead →
+            # {C, pi} = [2, 6]. (Old equation catalog was [1, 6, 8].)
+            @test Set(nk.forward_indices) == Set([2, 6])
+            @test nk.n_expect == 2
         end
     end
 

@@ -109,6 +109,7 @@ end
         @test mA isa ModelBankMember{Float64}
         @test size(mA.theta_draws, 1) == 100
         @test 0.05 <= mA.acceptance_rate <= 0.7
+        # T159: kept — the posterior-concentration + decisive-win pins below guard estimation.
         @test isfinite(mA.log_marglik)
         # posterior concentrates near the generating kappa
         @test abs(median(mA.theta_draws[:, 1]) - kappa0) < 0.05
@@ -161,6 +162,7 @@ end
                       rng=Xoshiro(6))
         end
         @test m isa ModelBankMember{Float64}
+        # T159: kept — adapt-config smoke; finite log-post is the contract.
         @test all(isfinite, m.log_post)
 
         priors = [truncated(Normal(0.1, 0.05), 0.01, 0.5)]

@@ -255,6 +255,7 @@ end
     @test occursin("y1", early.shocks[1])
 
     # Bands finite and ordered
+    # T159: kept — quantile ordering + n_effective accounting below guard the bands.
     for r in (early, late)
         @test all(isfinite, r.quantiles)
         @test all(r.quantiles[:, :, :, 1] .<= r.quantiles[:, :, :, end])

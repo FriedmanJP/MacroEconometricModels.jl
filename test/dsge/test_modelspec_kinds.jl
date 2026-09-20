@@ -128,6 +128,7 @@ end
     fam = blanchard_solve(m, ss)
     @test any(λ -> isapprox(abs(λ), fam.stable_eig; atol=1e-6), sol.eigenvalues)
     resp = irf(sol, 20)
+    # T159: kept — the Z AR(1) ≈ pins below guard the IRF.
     @test all(isfinite, resp.values)
     @test maximum(abs, resp.values) > 0
     @test resp.shocks == ["eps_Z"]
@@ -145,12 +146,15 @@ end
     @test resp isa ImpulseResponse
     @test all(isfinite, resp.values)
     @test resp.variables == ["k", "C", "r", "w", "Z"]
+    @test resp.values[1, 5, 1] ≈ 0.01 atol = 1e-8  # T159: Z AR(1) impact = σ (same calibration as G-13a)
     fv = fevd(spec, 12)
     @test fv isa FEVD
     @test all(isfinite, fv.proportions)
+    @test all(0 .<= fv.proportions .<= 1)  # T159: variance shares by construction (exact)
     path = simulate(sol, 20; rng=Random.Xoshiro(1))
     @test size(path) == (20, 5)
     @test all(isfinite, path)
+    @test maximum(abs, path) < 100  # T159: levels sim stays O(1) (observed 5.1); blowup guard only
 
     pe = dcegm_solve(dcegm_retirement_model(; n_a=20, n_periods=4))
     @test_throws ArgumentError irf(pe, 8)

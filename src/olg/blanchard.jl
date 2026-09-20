@@ -385,9 +385,12 @@ function to_spec(m::BlanchardOLG{T}; rho_z=T(0), sigma_z=T(0)) where {T}
     ]
     ir = ModelIR(:discrete, :perpetual_youth, decls, ir_eqs)
 
+    # #223 ([T124]): forward_indices are lead VARIABLE indices. Only C carries a
+    # lead in the residual fns (k[t+1], r[t+1] in the euler expr are substituted
+    # out, so gensys must not see them as jumps) → {C} = [2].
     return ModelSpec{T}(
         endog, exog, params, param_values, equations, residual_fns,
-        1, [1], T[], ss_fn;
+        1, [2], T[], ss_fn;
         max_lag=1, max_lead=1,
         agents=NamedTuple(),
         ir=ir,
@@ -527,10 +530,12 @@ function blanchard_nk_spec(spec::ModelSpec{T};
     ]
     ir = ModelIR(:discrete, :perpetual_youth, decls, ir_eqs)
 
-    # Equation indices of lead-containing residuals: 1=euler, 6=phillips, 8=fisher.
+    # #223 ([T124]): distinct lead VARIABLES from the residual fns: euler touches
+    # y_lead[C], phillips and fisher both touch y_lead[pi] (shared lead) →
+    # {C, pi} = [2, 6]. (Old equation catalog was [1, 6, 8].)
     return ModelSpec{T}(
         endog, exog, params, param_values, equations, residual_fns,
-        3, [1, 6, 8], T[], ss_fn;
+        2, [2, 6], T[], ss_fn;
         max_lag=1, max_lead=1,
         agents=NamedTuple(),
         ir=ir,

@@ -44,7 +44,7 @@ Random.seed!(9002)
 
         @test m isa NowcastBVAR{Float64}
         @test !any(isnan, m.X_sm)
-        @test isfinite(m.loglik)
+        @test m.loglik < 0  # T159: BVAR ll on randn data (seed-fixed; verified by green run)
     end
 
     @testset "Fallback with empty valid set (column all NaN)" begin
@@ -68,6 +68,7 @@ Random.seed!(9002)
 
         @test m isa NowcastBVAR{Float64}
         @test !any(isnan, m.X_sm)
+        # T159: kept — all-NaN-column fallback smoke; finite fill is the contract.
         @test all(isfinite.(m.X_sm[:, 3]))
     end
 
@@ -108,6 +109,7 @@ Random.seed!(9002)
 
         @test m isa NowcastBVAR{Float64}
         @test !any(isnan, m.X_sm)
+        # T159: kept — t_lag < 1 edge smoke; finite fill is the contract.
         @test isfinite(m.X_sm[1, 1])
     end
 
@@ -155,6 +157,7 @@ Random.seed!(9002)
         @test !any(isnan, m.X_sm)
         # Interpolated values should be finite
         for t in 10:15
+            # T159: kept — neighbor-search interpolation smoke; finite fill is the contract.
             @test isfinite(m.X_sm[t, 1])
         end
     end
@@ -292,6 +295,7 @@ end
         X_sm = MacroEconometricModels._bvar_smooth_missing(Y, beta, sigma, lags, 2)
 
         @test !any(isnan, X_sm)
+        # T159: kept — zeros-branch edge smoke; finite fill is the contract.
         @test all(isfinite.(X_sm))
     end
 
@@ -435,6 +439,7 @@ end
         m = nowcast_bridge(Y, nM, nQ; lagM=1, lagQ=0, lagY=1)
 
         @test m isa NowcastBridge{Float64}
+        # T159: kept — all-NaN-indicator bridge smoke; finite fill is the contract.
         @test all(isfinite.(m.X_sm[:, 2]))
     end
 

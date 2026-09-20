@@ -536,6 +536,52 @@ end
     @test spec.n_expect == 1
 end
 
+@testset "Parser: shared lead catalogued once (#223)" begin
+    # Two equations share pi's lead and nothing else leads: an equation count
+    # would say 2, but there is exactly one expectational error η_pi.
+    spec = @dsge begin
+        parameters: a = 0.5, b = 0.8, c = 0.2
+        endogenous: y, pi
+        exogenous: e
+        y[t] = a * pi[t+1] + e[t]
+        pi[t] = b * pi[t+1] + c * y[t]
+    end
+    @test spec.n_expect == 1
+    @test spec.forward_indices == [2]   # pi only
+    sol = solve(spec; method=:gensys)
+    @test size(sol.linear.Pi, 2) == spec.n_expect == 1
+    # Hand-derived eu: substituting the static y equation into the pi equation
+    # gives pi_t = (b + c*a) * E_t[pi_{t+1}] + c*e_t, a scalar pure-forward
+    # model with |b + c*a| = 0.9 < 1 → determinate ([1, 1]), by the same rule
+    # the "pure forward model" testset below pins at matrix level.
+    @test sol.eu == [1, 1]
+    # Flip side: b = 1.0 pushes |b + c*a| = 1.1 > 1 → indeterminate ([1, 0]).
+    # Same shared-lead shape, same single η; only the composite root moves.
+    spec_flip = @dsge begin
+        parameters: a = 0.5, b = 1.0, c = 0.2
+        endogenous: y, pi
+        exogenous: e
+        y[t] = a * pi[t+1] + e[t]
+        pi[t] = b * pi[t+1] + c * y[t]
+    end
+    @test spec_flip.n_expect == 1
+    @test spec_flip.forward_indices == [2]
+    @test solve(spec_flip; method=:gensys).eu == [1, 0]
+
+    # Mirror shape: one equation carrying two distinct leads.
+    spec2 = @dsge begin
+        parameters: β = 0.5, ρ = 0.9
+        endogenous: x, z
+        exogenous: e
+        x[t] = β * x[t+1] + β * z[t+1] + e[t]
+        z[t] = ρ * z[t-1]
+    end
+    @test spec2.n_expect == 2
+    @test spec2.forward_indices == [1, 2]
+    sol2 = solve(spec2; method=:gensys)
+    @test size(sol2.linear.Pi, 2) == spec2.n_expect == 2
+end
+
 @testset "Parser: residual functions" begin
     spec = AR1_SPEC
     fn = spec.residual_fns[1]
@@ -1041,6 +1087,7 @@ end
             su = simulate_unpruned(sol, e)
             @test sp[1:2, :] ≈ su[1:2, :] rtol = 1e-10
             @test !isapprox(sp, su; rtol=1e-8)
+            # T159: kept — pruned≈unpruned + divergence pins above guard both paths.
             @test all(isfinite, sp) && all(isfinite, su)
             @test maximum(abs, sp) < 5 && maximum(abs, su) < 5
         end
@@ -1052,8 +1099,10 @@ end
             sol = perturbation_solver(strong; order=order)
             e = randn(Random.Xoshiro(seed), 2000, 1)
             sp = simulate(sol, 2000; shock_draws=e) .- sol.steady_state'
+            # T159: kept — the < 50 boundedness pin below guards the pruned path.
             @test all(isfinite, sp)
             @test maximum(abs, sp) < 50
+            # T159: kept — negative assertion (unpruned path explodes) is already the strong form.
             @test !all(isfinite, simulate_unpruned(sol, e))     # the premise of pruning
         end
     end
@@ -2256,6 +2305,7 @@ end
         @test sol.converged
         @test sol.refinements > 0
         @test size(sol.collocation_nodes, 1) > size(base.collocation_nodes, 1)
+        # T159: kept — beats-base + ≈ max_euler_error pins guard the reported accuracy.
         @test isfinite(sol.euler_error)
         @test sol.euler_error < e_base                       # 1.3e-4 vs 1.2e-2
 
@@ -2897,6 +2947,7 @@ end
         est = estimate_dsge(spec, Y, [:ρ]; method=:irf_matching,
                             irf_horizon=H, weighting=:efficient, n_boot=300)
         dof = H - 1
+        # T159: kept — nonnegativity + χ²-scaled bound below guard J.
         @test isfinite(est.J_stat)
         @test est.J_stat >= 0
         @test 0.0 <= est.J_pvalue <= 1.0
@@ -3085,6 +3136,7 @@ end
     @test abs(est.theta[1] - 0.7) < 0.25  # reasonable recovery
     @test is_determined(est.solution)
     # Corrected two-step weighting (#172): valid Ω⁻¹ ⇒ finite, positive-variance vcov
+    # T159: kept — positive-variance pin below guards vcov.
     @test all(isfinite, est.vcov)
     @test all(diag(est.vcov) .> 0)
     end
@@ -4233,6 +4285,7 @@ end
     result = irf(sol, 40)
     @test result isa OccBinIRF{Float64}
     @test size(result.piecewise, 1) >= 40
+    # T159: kept — API-shape smoke for the OccBin IRF path; regime-path accuracy is #257 territory.
     @test all(isfinite.(result.piecewise))
 
     # With custom shock
@@ -4710,6 +4763,7 @@ end
     k = sol.spec.n_endog  # 3 (augmented)
     expected_len = div(k * (k + 1), 2) + k  # upper-tri variance + 1 lag autocov
     @test length(moments) == expected_len
+    # T159: kept — analytic-vs-theory/simulation siblings (AR(1), 2D testsets) guard the values.
     @test all(isfinite, moments)
 end
 
@@ -5053,6 +5107,7 @@ end
 
         # Stochastic simulation doesn't explode
         sim2 = simulate(sol, 10000; rng=Random.Xoshiro(42))
+        # T159: kept — the std < 1 bound below guards non-explosion.
         @test all(isfinite.(sim2))
         @test std(sim2[:, 1]) < 1.0
 
@@ -5060,6 +5115,7 @@ end
         sim_anti = simulate(sol, 1000; antithetic=true, rng=Random.Xoshiro(42))
         @test size(sim_anti) == (1000, 1)
         @test all(isfinite.(sim_anti))
+        @test abs(mean(sim_anti[:, 1]) - sol.steady_state[1]) < 0.005  # T159: antithetic mean ≈ SS (observed 2e-4)
 
         # IRF works
         ir = irf(sol, 20)
@@ -5167,6 +5223,7 @@ end
         # Second-order moments (simulation-based for order >= 2)
         sol2 = solve(spec; method=:perturbation, order=2)
         mom2 = analytical_moments(sol2; lags=1)
+        # T159: kept — the ≈ 1st-order pin below guards 2nd-order moments on linear models.
         @test all(isfinite.(mom2))
         @test length(mom2) == length(mom1)
         # For a linear model, 2nd-order moments should be close to 1st-order
@@ -5280,9 +5337,11 @@ end
         sim = simulate(sol3, 100; shock_draws=zeros(100, 1))
         @test size(sim) == (100, 1)
         @test all(isfinite.(sim))
+        @test maximum(abs, sim .- sol3.steady_state') == 0  # T159: zero-shock path sits exactly on SS (observed bit-exact)
 
         # Stochastic simulation doesn't explode
         sim2 = simulate(sol3, 10000; rng=Random.Xoshiro(42))
+        # T159: kept — the std < 1 bound below guards non-explosion.
         @test all(isfinite.(sim2))
         @test std(sim2[:, 1]) < 1.0
 
@@ -5290,6 +5349,7 @@ end
         sim_anti = simulate(sol3, 1000; antithetic=true, rng=Random.Xoshiro(42))
         @test size(sim_anti) == (1000, 1)
         @test all(isfinite.(sim_anti))
+        @test abs(mean(sim_anti[:, 1]) - sol3.steady_state[1]) < 0.005  # T159: antithetic mean ≈ SS (observed 2e-4)
 
         # IRF works with order 3
         ir = irf(sol3, 20)
@@ -5299,6 +5359,7 @@ end
         ir_g = irf(sol3, 20; irf_type=:girf, n_draws=100)
         @test size(ir_g.values) == (20, 1, 1)
         @test all(isfinite.(ir_g.values))
+        @test maximum(abs, ir_g.values .- ir.values) < 1e-10  # T159: on a linear model every GIRF draw equals the IRF (observed 1e-17; RNG-free by linearity)
 
         # For linear model, order 3 sim should be very close to order 2
         sol2 = solve(spec; method=:perturbation, order=2)
@@ -5320,6 +5381,7 @@ end
 
         # GMM format moments
         mom3 = analytical_moments(sol3; lags=1, format=:gmm)
+        # T159: kept — the ≈ simulation pins below guard GMM moments.
         @test all(isfinite.(mom3))
         @test length(mom3) == 3  # 1 mean + 1 product moment + 1 autocov
 
@@ -5338,6 +5400,7 @@ end
         # Covariance format also works
         mom3_cov = analytical_moments(sol3; lags=1)
         @test all(isfinite.(mom3_cov))
+        @test mom3_cov == mom3[2:3]  # T159: covariance format is exactly the GMM vector minus the mean (observed bit-exact)
     end
 
     @testset "Third-order moments multi-variable" begin
@@ -5354,6 +5417,7 @@ end
         mom = analytical_moments(sol3; lags=2, format=:gmm)
         # ny=2: 2 means + 3 product moments + 2*2 autocov = 9
         @test length(mom) == 9
+        # T159: kept — the ≈ order-2 pin below guards multi-variable moments.
         @test all(isfinite.(mom))
 
         # For linear model, should be close to 2nd-order
@@ -5420,11 +5484,13 @@ end
         sim = simulate(sol2, 1000; rng=Random.Xoshiro(42))
         @test size(sim, 2) == 2
         @test all(isfinite.(sim))
+        @test maximum(abs, sim[:, 1] .- sim[1, 1]) == 0  # T159: k has zero shock response ⇒ frozen at its start (observed bit-exact)
 
         # IRF — 2 variables, 1 shock
         ir = irf(sol2, 40)
         @test size(ir.values) == (40, 2, 1)
         @test all(isfinite.(ir.values))
+        @test maximum(abs, ir.values[:, 2, 1]) > 1e-6  # T159: c responds to the shock (k does not; observed 0.01)
 
         # FEVD — single shock. c (variable 2) responds to the shock, so it explains 100% of c's
         # variance. k (variable 1) is a unit-root state whose ε-response cancels in equilibrium
@@ -5433,6 +5499,7 @@ end
         # solution via the companion-QZ core (T112 #211): the old raw-gensys solver dropped the
         # lead term, wrongly giving k no persistence (hx=0) so its FEVD spuriously read 1.0.
         fv = fevd(sol2, 40)
+        # T159: kept — zero-impact + 100%-share pins guard the degenerate FEVD.
         @test all(isfinite.(fv.proportions))
         @test maximum(abs, ir.values[:, 1, 1]) < 1e-8        # k has ~zero shock impact (correct)
         for h in 1:40
@@ -5442,6 +5509,7 @@ end
         # Unconditional FEVD (order=2 augmented Lyapunov). Only c has nonzero shock variance;
         # k is the degenerate zero-variance case (see above).
         fv_uc = fevd(sol2, 1; unconditional=true)
+        # T159: kept — 100%-share + sums-to-1 pins below guard the unconditional FEVD.
         @test all(isfinite.(fv_uc.proportions))
         @test size(fv_uc.proportions, 3) == 1
         @test fv_uc.proportions[2, 1, 1] ≈ 1.0 atol=1e-6
@@ -5450,6 +5518,9 @@ end
         # Moments
         mom = analytical_moments(sol2; lags=2)
         @test all(isfinite.(mom))
+        # T159: k frozen ⇒ all k-moments vanish; c is white noise σ·ε (observed [0,0,1e-4,0,0,0,0]).
+        @test maximum(abs, mom[[1, 2, 4, 5, 6, 7]]) == 0
+        @test mom[3] ≈ 1e-4 rtol = 1e-8
     end
 
     @testset "Order=2 unconditional FEVD multi-shock" begin
@@ -5470,6 +5541,7 @@ end
 
         fv = fevd(sol2, 1; unconditional=true)
         @test size(fv.proportions) == (2, 2, 1)
+        # T159: kept — the ≈1/≈0 share pins below guard shock attribution.
         @test all(isfinite.(fv.proportions))
         # z is driven only by eps_z
         @test fv.proportions[2, 2, 1] ≈ 1.0 atol=1e-6
@@ -5494,6 +5566,7 @@ end
         sol2 = solve(spec; method=:perturbation, order=2)
         # Long simulation should not explode — key pruning stability test
         sim = simulate(sol2, 30000; rng=Random.Xoshiro(42))
+        # T159: kept — the std < 10 bound below guards pruning stability.
         @test all(isfinite.(sim))
         @test std(sim[:, 1]) < 10.0  # bounded variance
     end
@@ -5686,6 +5759,7 @@ end
         rng1 = Random.Xoshiro(123)
         sim_anti = simulate(sol, 2000; antithetic=true, rng=rng1)
         @test size(sim_anti) == (2000, 1)
+        # T159: kept — the mean < 1 pin below guards variance reduction.
         @test all(isfinite.(sim_anti))
 
         # Mean should be closer to zero than raw simulation (on average)
@@ -5779,6 +5853,7 @@ end
         mom_gmm2 = analytical_moments(sol2; lags=1, format=:gmm)
         @test length(mom_gmm2) == 3
         @test all(isfinite.(mom_gmm2))
+        @test mom_gmm2 ≈ mom_gmm1 atol = 1e-4  # T159: on a linear model order-2 = order-1 (precedes the multi-var 1e-4 pin)
 
         # Default format (:covariance) still works and is backward-compatible
         mom_cov = analytical_moments(sol1; lags=1)
@@ -5888,6 +5963,7 @@ end
 
         # Mean exists and is finite
         @test all(isfinite.(result[:E_y]))
+        @test result[:E_y] == [0.0]  # T159: linear model ⇒ zero 2nd-order mean correction (observed bit-exact)
         # Variance is positive
         @test all(diag(result[:Var_y]) .> 0)
     end
@@ -5964,6 +6040,15 @@ end
         # ny=2: 2 means + 3 product moments + 2*2 autocov = 2 + 3 + 4 = 9
         @test length(mom) == 9
         @test all(isfinite.(mom))
+        # T159: closed-form AR(1) theory (Lyapunov matches to fp; rtol=1e-10).
+        @test mom[1:2] == [0.0, 0.0]
+        @test mom[3] ≈ 0.01^2 / (1 - 0.8^2) rtol = 1e-10
+        @test mom[4] == 0.0
+        @test mom[5] ≈ 0.02^2 / (1 - 0.7^2) rtol = 1e-10
+        @test mom[6] ≈ 0.8 * mom[3] rtol = 1e-10
+        @test mom[7] ≈ 0.7 * mom[5] rtol = 1e-10
+        @test mom[8] ≈ 0.8 * mom[6] rtol = 1e-10
+        @test mom[9] ≈ 0.7 * mom[7] rtol = 1e-10
     end
 
     @testset "Backward compatibility: default format unchanged" begin
@@ -6551,6 +6636,7 @@ end
     y_pert_low = sol_pert.G1 * y_lag_dev .+ [k_ss, c_ss]
 
     # Both should produce valid (finite) values
+    # T159: kept — state-bounds smoke (approximations diverge off-SS by design); near-SS agreement pinned above at 1%.
     @test all(isfinite.(y_proj_low))
     @test all(isfinite.(y_pert_low))
     @test length(y_proj_low) == 2
@@ -6732,6 +6818,7 @@ end
     Y_sim = simulate(sol, 100; seed=42)
     @test size(Y_sim) == (100, 2)
     @test all(isfinite.(Y_sim))
+    @test maximum(abs, Y_sim) < 100  # T159: RBC levels stay O(1); the bound only trips on blowup
 end
 
 @testset "PFI Anderson acceleration" begin
@@ -6799,7 +6886,9 @@ end
     cH = evaluate_policy(solH, x_ss)[1]
     cA = evaluate_policy(solA, x_ss)[1]
     @test abs(c0 - cH) / max(abs(c0), 1e-8) < 0.08
+    # T159: kept — disjunctive contract (converged, else finite residual) already encodes the fallback.
     @test solNL.converged || isfinite(solNL.residual_norm)
+    # T159: kept — possibly-unconverged solver smoke; converged-solver accuracy pinned by the 8%/10% agreements.
     @test all(isfinite, evaluate_policy(solNL, x_ss))
     @test isfinite(c0) && isfinite(cH) && isfinite(cA)
     @test abs(cH - cA) / max(abs(cH), 1e-8) < 0.1
@@ -6854,6 +6943,7 @@ end # Policy Function Iteration
 
     x_anderson = MacroEconometricModels._anderson_step(history, residuals_fp, 3)
     @test length(x_anderson) == 1
+    # T159: kept — the improvement pin below guards Anderson acceleration.
     @test isfinite(x_anderson[1])
     @test abs(x_anderson[1] - 2.0) < abs(x[1] - 2.0)
 end
@@ -6863,6 +6953,7 @@ end
     residuals_a = [[0.5], [0.25]]
     x_a = MacroEconometricModels._anderson_step(history, residuals_a, 1)
     @test length(x_a) == 1
+    # T159: kept — edge-shape smoke; the Anderson math is pinned by the m=3 improvement test above.
     @test isfinite(x_a[1])
 end
 
@@ -6871,6 +6962,7 @@ end
     residuals_a = [[0.5, -0.2], [0.2, 0.1], [0.1, 0.05]]
     x_a = MacroEconometricModels._anderson_step(history, residuals_a, 2)
     @test length(x_a) == 2
+    # T159: kept — edge-shape smoke; the Anderson math is pinned by the m=3 improvement test above.
     @test all(isfinite.(x_a))
 end
 
@@ -7141,6 +7233,7 @@ end
     @test sol_crra.converged
     x_ss_crra = spec_crra.steady_state[sol_crra.state_indices]
     @test isfinite(evaluate_policy(sol_crra, x_ss_crra)[1])
+    @test evaluate_policy(sol_crra, x_ss_crra)[1] > 0  # T159: CRRA consumption is positive at an interior SS (exact)
 end
 
 @testset "@dsge utility: unknown symbol (MSR-12)" begin
@@ -7201,14 +7294,19 @@ end
     @test sol_s.n_basis == 13
     @test size(sol_s.smolyak_levels) == (6, 2)
     @test size(sol_s.value_fn) == (13, 1)
+    # T159: kept — converged-solver smoke; grid dims pinned above.
     @test all(isfinite, sol_s.value_fn)
     v_ss = evaluate_value(sol_s, x_ss)
     @test isfinite(v_ss)
+    # T159: Smolyak vs tensor VFI agree at SS (observed 4.9% — different grids, same Bellman problem).
+    @test abs(v_ss - evaluate_value(sol, x_ss)) / abs(evaluate_value(sol, x_ss)) < 0.10
     nodes_s = physical_nodes(sol_s)
     @test size(nodes_s) == size(sol_s.collocation_nodes)
     @test all(-1 .<= sol_s.collocation_nodes .<= 1)
+    # T159: kept — collocation-node smoke; the SS agreement above guards accuracy.
     @test isfinite(evaluate_value(sol_s, nodes_s[1, :]))
     y_ss = evaluate_policy(sol_s, x_ss)
+    # T159: kept — the 0 < c < 10 pin below guards policy sanity.
     @test all(isfinite, y_ss)
     @test 0 < y_ss[1] < 10
 end
@@ -7221,10 +7319,12 @@ end
     @test !isempty(sol.value_coefficients)
     @test all(isfinite, sol.value_fn)
     @test !all(iszero, sol.value_fn)
+    @test all(sol.value_fn .> 0)  # T159: log-utility RBC with c_ss > 1 ⇒ V > 0 everywhere (observed range [77, 112])
 end
 
 @testset "evaluate_value and V increasing in capital" begin
     v_ss = evaluate_value(sol, x_ss)
+    # T159: kept — the monotonicity + lower-bound pins below guard V shape.
     @test isfinite(v_ss)
     k_ss = x_ss[1]
     v_lo = evaluate_value(sol, [0.95 * k_ss, 0.0])
@@ -7244,6 +7344,7 @@ end
         for d in 1:size(nodes_p, 2)
             @test lo[d] - 1e-10 <= nodes_p[j, d] <= hi[d] + 1e-10
         end
+        # T159: kept — per-node smoke; the coordinate-mapping ≈ below is the test's real pin.
         @test isfinite(evaluate_value(sol, nodes_p[j, :]))
     end
     @test nodes_p ≈ MacroEconometricModels._scale_from_unit(nodes_u, sol.state_bounds)
@@ -7314,6 +7415,7 @@ end
     rng = Random.Xoshiro(42)
     Y_sim = simulate(sol, 40; rng=rng)
     @test size(Y_sim) == (40, 3)
+    # T159: kept — the c > 0 pin below guards simulation sanity.
     @test all(isfinite, Y_sim)
     @test all(Y_sim[:, 1] .> 0)   # consumption
 
@@ -7458,6 +7560,8 @@ end
     end
     # Out-of-box at 2x the box corner: clamp + penalty, no NaN, no throw.
     @test isfinite(itp_l([4.0, 0.2]))
+    # T159: the penalty strictly worsens out-of-box value vs the clamped corner (observed -84.9 vs 6.8).
+    @test itp_l([4.0, 0.2]) < itp_l([2.0, 0.1])
     @test_throws ArgumentError M.build_V_interpolant(cache, ones(12))
 end
 
@@ -7511,6 +7615,7 @@ end
     @test sol_2.converged
     x_2ss = spec_labor.steady_state[sol_2.state_indices]
     y_2ss = evaluate_policy(sol_2, x_2ss)
+    # T159: kept — the 5% SS pins below guard two-control policy accuracy.
     @test all(isfinite, y_2ss)
     @test abs(y_2ss[1] - spec_labor.steady_state[1]) / spec_labor.steady_state[1] < 0.05
     @test abs(y_2ss[2] - spec_labor.steady_state[2]) < 0.05
@@ -7609,9 +7714,10 @@ end
     @test sol_4.converged
     @test sol_4.grid_type == :smolyak
     x_4ss = spec_4.steady_state[sol_4.state_indices]
+    # T159: kept — the Euler < 0.05 pin below guards 4-state accuracy.
     @test isfinite(evaluate_value(sol_4, x_4ss))
     y_4ss = evaluate_policy(sol_4, x_4ss)
-    @test all(isfinite, y_4ss)
+    @test all(isfinite, y_4ss)  # T159: kept (see Euler note above)
     # Consumption-Euler errors via the solver's monomial quadrature.
     @test _vfi_4state_maxeuler(sol_4, spec_4, x_4ss) < 0.05
 end
@@ -7646,6 +7752,7 @@ end
     e_ani = _vfi_4state_maxeuler(sol_ani, spec_4, x_4ss)
     @test e_ani < e_iso
     @test e_ani < 0.005
+    # T159: kept — the e_ani < e_iso / < 0.005 pins above guard anisotropic accuracy.
     @test isfinite(evaluate_value(sol_ani, x_4ss))
     @test all(isfinite, evaluate_policy(sol_ani, x_4ss))
 end
@@ -7659,9 +7766,10 @@ end
     @test sol_2s.converged
     @test sol_2s.grid_type == :smolyak
     x_2ss = spec_labor.steady_state[sol_2s.state_indices]
+    # T159: kept — tensor reference is out of scope here; the 30% SS pin below guards policy sanity.
     @test isfinite(evaluate_value(sol_2s, x_2ss))
     y_2ss = evaluate_policy(sol_2s, x_2ss)
-    @test all(isfinite, y_2ss)
+    @test all(isfinite, y_2ss)  # T159: kept (see 30% note above)
     @test abs(y_2ss[1] - spec_labor.steady_state[1]) / spec_labor.steady_state[1] < 0.30
 end
 

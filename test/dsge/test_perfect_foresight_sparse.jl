@@ -217,6 +217,7 @@ end
         [:(log(r[t]) - log(rss))], [fn], 0, Int[], [0.05])
     pf = perfect_foresight(spec; T_periods=8)
     @test all(isfinite, pf.path)
+    @test pf.path ≈ fill(0.05, 8, 1) atol = 1e-12  # T159: zero shocks ⇒ path sits at SS (observed bit-exact)
 end
 
 @testset "PF sparsity=:dense matches :auto on a smooth model (MSR-04)" begin
@@ -243,4 +244,5 @@ end
         [:(y[t] - ρ * y[t-1])], [fn], 0, Int[], [0.0])
     pf = perfect_foresight(spec; T_periods=10, sparsity=:dense)
     @test all(isfinite, pf.path)
+    @test maximum(abs, pf.path) < 1e-12  # T159: zero shocks ⇒ path sits at SS = 0 (observed bit-exact)
 end

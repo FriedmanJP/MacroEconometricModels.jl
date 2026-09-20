@@ -22,7 +22,10 @@ using Test, MacroEconometricModels, Random, StatsAPI
         @test result.break1 < result.break2
         @test result.break1 > 0
         @test result.break2 <= length(y_2break)
-        @test isfinite(result.statistic)
+        # T159: broken-mean stationary series rejects decisively (−13.8 vs CV −5.8)
+        # and both breaks are recovered exactly (truth: 80, 140; fixed seed).
+        @test isfinite(result.statistic) && result.statistic < result.critical_values[5]
+        @test (result.break1, result.break2) == (80, 140)
         @test haskey(result.critical_values, 5)
         @test result.nobs > 0
         @test result.break1_fraction > 0.0
@@ -35,7 +38,10 @@ using Test, MacroEconometricModels, Random, StatsAPI
         @test result isa ADF2BreakResult
         @test result.model == :both
         @test result.break1 < result.break2
-        @test isfinite(result.statistic)
+        # T159: rejects (−8.57 vs CV −6.39); break1 recovered exactly (truth 30).
+        # break2 (69 vs truth 55) is left unpinned — short-sample search noise.
+        @test isfinite(result.statistic) && result.statistic < result.critical_values[5]
+        @test result.break1 == 30
         @test haskey(result.critical_values, 1)
         @test haskey(result.critical_values, 10)
     end
@@ -51,7 +57,7 @@ using Test, MacroEconometricModels, Random, StatsAPI
         @test result_bic.lags >= 0
 
         result_trim = adf_2break_test(y_short; trim=0.15, lags=1)
-        @test isfinite(result_trim.statistic)
+        @test isfinite(result_trim.statistic) && result_trim.statistic < result_trim.critical_values[5]   # T159: rejects (−7.62 vs −5.84)
 
         result_maxlags = adf_2break_test(y_short; max_lags=4)
         @test result_maxlags.lags <= 4

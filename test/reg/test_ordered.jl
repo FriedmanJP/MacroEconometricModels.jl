@@ -455,7 +455,11 @@ using LinearAlgebra, Statistics, Random, Distributions
         J = length(m.categories)
         @test size(me.effects) == (K, J)
         @test size(me.se) == (K, J)
-        @test all(me.se .>= 0) || all(isfinite, me.se)
+        # T159: delta-method SEs must be finite and strictly positive — the old
+        # `||` passed for anything but NaN. n=3000 ⇒ SEs are O(1/√n)≈0.02;
+        # observed max 0.0074, so 0.1 keeps >10× headroom while a dropped-1/n
+        # variance normalization (√n≈55× inflation to O(0.4)) cleanly fails.
+        @test all(isfinite, me.se) && all(0 .< me.se .< 0.1)  # T159: (see SE note above)
 
         # Key property: AMEs sum to ~0 across categories for each variable
         row_sums = sum(me.effects, dims=2)
@@ -471,6 +475,7 @@ using LinearAlgebra, Statistics, Random, Distributions
         me_p = marginal_effects(mp)
         @test size(me_p.effects) == (K, J)
         @test size(me_p.se) == (K, J)
+        @test all(isfinite, me_p.se) && all(0 .< me_p.se .< 0.1)  # T159: same SE pin as ologit (observed max 0.0073)
         row_sums_p = sum(me_p.effects, dims=2)
         for k in 1:K
             @test abs(row_sums_p[k]) < 1e-10
@@ -645,6 +650,8 @@ end
 
         # Pearson: response scaled by sqrt(p(1-p)).
         rp = residuals(m; kind=:pearson)
+        # T159: kept — belt-and-braces alongside the exact-value pin below, which
+        # already fails on any non-finite element (array ≈ propagates NaN/Inf).
         @test all(isfinite, rp)
         @test rp ≈ r ./ sqrt.(m.fitted .* (1 .- m.fitted)) rtol = 1e-10
 
@@ -664,6 +671,8 @@ end
              ("oprobit", op, MacroEconometricModels._normal_cdf))
         e = generalized_residuals(m)
         @test length(e) == n
+        # T159: kept — belt-and-braces alongside the score-identity and
+        # finite-difference pins below, which fail on any non-finite element.
         @test all(isfinite, e)
 
         # (1) Exact analytic identity: the ordered-model score with respect to

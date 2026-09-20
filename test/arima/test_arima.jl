@@ -434,10 +434,12 @@ end
         n_eff = length(m2.residuals) - max(m2.p, m2.q)
         @test m2.bic ≈ -2 * m2.loglik + kA * log(n_eff) atol=1e-6
 
-        # select_arima_order with :css produces finite, comparable IC and a valid order.
+        # T159: BIC recovers the TRUE order (2,0) of the AR(2) DGP (BIC is consistent;
+        # T=300 suffices here) — a mis-scaled likelihood or penalty changes the argmin.
         res = select_arima_order(y, 2, 2; method=:css, criterion=:bic, include_intercept=true)
-        @test all(isfinite, res.bic_matrix)
-        @test 0 <= res.best_p_bic <= 2
+        @test all(isfinite, res.bic_matrix)  # T159: (see note above)
+        @test (res.best_p_bic, res.best_q_bic) == (2, 0)
+        @test res.bic_matrix[res.best_p_bic+1, res.best_q_bic+1] == minimum(res.bic_matrix)
     end
 
     @testset "IC matrix dimensions" begin
@@ -654,14 +656,21 @@ end
     # loglikelihood
     ll = loglikelihood(model)
     @test !isnan(ll)
+    # T159: kept — excludes the Inf==Inf escape hatch of the identity below.
     @test isfinite(ll)
     @test ll == model.loglik
+    # T159: Gaussian ll at σ²≈1, n=300 is ≈-409; a sign flip (reporting the
+    # minimization objective instead of the maximized likelihood) gives +409.
+    @test ll < 0
 
     # aic, bic
     @test !isnan(aic(model))
     @test !isnan(bic(model))
     @test aic(model) == model.aic
     @test bic(model) == model.bic
+    # T159: exact definitional IC wiring (k=dof, N=n_resid for :css_mle).
+    @test aic(model) ≈ -2 * ll + 2 * dof(model) atol = 1e-8
+    @test bic(model) ≈ -2 * ll + dof(model) * log(length(r)) atol = 1e-8
 
     # r2
     r2_val = r2(model)
@@ -722,10 +731,12 @@ end
     y_eff = model.y[end-length(r)+1:end]
     @test isapprox(f + r, y_eff, atol=1e-8)
 
-    # loglikelihood, aic, bic
-    @test isfinite(loglikelihood(model))
-    @test isfinite(aic(model))
-    @test isfinite(bic(model))
+    # T159: loglik sign pin (Gaussian ll ≈-541 here; objective/likelihood sign
+    # confusion gives +541) + exact definitional IC wiring (k=dof, N=n_resid).
+    ll_arma = loglikelihood(model)
+    @test isfinite(ll_arma) && ll_arma < 0  # T159: (see note above)
+    @test aic(model) ≈ -2 * ll_arma + 2 * dof(model) atol = 1e-8
+    @test bic(model) ≈ -2 * ll_arma + dof(model) * log(length(r)) atol = 1e-8
 
     # r2
     r2_val = r2(model)
@@ -779,10 +790,12 @@ end
     @test length(r) > 0
     @test length(f) > 0
 
-    # loglikelihood, aic, bic
-    @test isfinite(loglikelihood(model))
-    @test isfinite(aic(model))
-    @test isfinite(bic(model))
+    # T159: sign pin (ll ≈-434; sign flip gives +434) + exact IC wiring. Note N
+    # is the effective residual count (299 after differencing), not nobs=300.
+    ll_arima = loglikelihood(model)
+    @test isfinite(ll_arima) && ll_arima < 0  # T159: (see note above)
+    @test aic(model) ≈ -2 * ll_arima + 2 * dof(model) atol = 1e-8
+    @test bic(model) ≈ -2 * ll_arima + dof(model) * log(length(r)) atol = 1e-8
 
     # r2
     r2_val = r2(model)
@@ -1087,7 +1100,11 @@ end
         @test isapprox(ll, ll0; rtol=1e-10)
         @test isapprox(res, res0; rtol=1e-10)
         @test isapprox(fit, fit0; rtol=1e-10)
-        @test all(isfinite, res) && all(isfinite, fit) && isfinite(ll)
+        # T159: res/fit finiteness is subsumed by the array ≈ pins above (they fail
+        # on any non-finite element); kept belt-and-braces. ll gets a sign pin:
+        # Gaussian ll at σ²≈1, n=160 is ≈-220; reporting the min-objective flips it.
+        @test all(isfinite, res) && all(isfinite, fit)  # T159: (see note above)
+        @test isfinite(ll) && ll < 0  # T159: (see note above)
     end
 
     # Loglik-only MLE fast path (kernel with store=nothing) agrees with the full filter (T147/#246).
@@ -1101,5 +1118,8 @@ end
     m1 = estimate_arima(yr, 1, 0, 1)
     m2 = estimate_arima(yr, 1, 0, 1)
     @test loglikelihood(m1) == loglikelihood(m2)
-    @test isfinite(loglikelihood(m1))
+    ll_m1 = loglikelihood(m1)
+    # T159: kept — excludes the Inf==Inf escape hatch of the determinism pin.
+    @test isfinite(ll_m1)
+    @test ll_m1 < 0   # Gaussian ll ≈-138 here; reporting the min-objective flips the sign
 end

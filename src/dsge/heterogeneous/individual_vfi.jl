@@ -440,7 +440,8 @@ continuation. Intended as a convex-problem cross-check of nested EGM, not as
 a production GE solver.
 
 Returns the same `Dict` keys as `_two_asset_egm_solve`: `:consumption`,
-`:liquid_savings`, `:deposit`, `:value`, `:converged`.
+`:liquid_savings`, `:deposit`, `:value`, `:converged`, `:iterations`,
+`:bellman_residual`.
 """
 function _two_asset_vfi_solve(ip::IndividualProblem{T}, grid::HAGrid{T},
                               income::IncomeProcess{T}, prices::Dict{Symbol,T};
@@ -491,8 +492,11 @@ function _two_asset_vfi_solve(ip::IndividualProblem{T}, grid::HAGrid{T},
     EV = zeros(T, n_b, n_a, n_e)
     V_new = zeros(T, n_b, n_a, n_e)
     converged = false
+    final_iter = 0
+    final_resid = T(Inf)
 
     for iter in 1:max_iter
+        final_iter = iter
         fill!(EV, zero(T))
         for je in 1:n_e, jep in 1:n_e
             wgt = Pi[je, jep]
@@ -566,6 +570,7 @@ function _two_asset_vfi_solve(ip::IndividualProblem{T}, grid::HAGrid{T},
                 max_diff = d
             end
         end
+        final_resid = max_diff
         copyto!(V, V_new)
         if isfinite(max_diff) && max_diff < tol
             converged = true
@@ -586,5 +591,7 @@ function _two_asset_vfi_solve(ip::IndividualProblem{T}, grid::HAGrid{T},
         :deposit => d_opt,
         :value => V,
         :converged => T[converged ? one(T) : zero(T)],
+        :iterations => T[final_iter],
+        :bellman_residual => T[final_resid],
     )
 end

@@ -592,6 +592,10 @@ end
             Q = Matrix{Float64}(L \ r.B)
             @test MacroEconometricModels.q_distance(Q, Q0t) < 0.2
             @test all(isfinite, r.loglik)
+            @test length(r.loglik) == r.iters  # T159: one expected complete-data LL per EM iteration
+            # T159: EM net ascent (+1651 over 91 iters). The path itself is NOT
+            # monotone (E-step noise: 57 negative diffs), so only endpoints are pinned.
+            @test r.loglik[end] > r.loglik[1]
             cors = _irf_shock_cor(m, Q, B0t, A, 12)
             @test all(>(0.95), cors)
         end
@@ -599,8 +603,9 @@ end
         @testset "misspecified GARCH DGP stays finite" begin
             Yg, _ = simulate_garch_svar(_B_rec, _A2; Tobs=1500, rng=Xoshiro(172))
             rg = identify_sv_svar(Yg, 1; maxiter=50, rng=Xoshiro(173))
-            @test all(isfinite, rg.B)
-            @test all(isfinite, rg.H_smooth)
+            @test maximum(abs, rg.B .- _B_rec) < 0.1  # T159: B recovers the impact even under GARCH/SV misspecification (observed maxdev 0.035)
+            @test abs(mean(rg.H_smooth)) < 0.5  # T159: smoothed log-vols centered near log(1) = 0 (observed -0.16)
+            @test std(vec(rg.H_smooth)) > 0.1  # T159: SV detects GARCH time-variation (observed 0.46; collapse → 0)
         end
     end
 end
