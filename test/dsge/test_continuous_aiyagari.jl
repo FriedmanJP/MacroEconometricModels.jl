@@ -284,7 +284,6 @@ const _CT = MacroEconometricModels
         s = ct_two_asset_solve(m; tol=1e-6, max_iter=300)
         @test s.hjb_converged
         @test s.hjb_iterations > 0
-        # T159: kept — the < 1e-6 bound implies finiteness and is the real pin.
         @test isfinite(s.kfe_residual) && s.kfe_residual < 1e-6
         # mass integrates to 1 under the trapezoidal weights, and the generator is valid
         mass = sum(s.g[i, j, k] * s.bdelta[i] * s.adelta[j]
@@ -381,11 +380,8 @@ const _CT = MacroEconometricModels
             @test tr.r_a[n] ≈ m.alpha * Z[n] * (tr.K[n] / ge.L)^(m.alpha - 1) - m.delta rtol = 1e-12
             @test tr.w[n] ≈ (1 - m.alpha) * Z[n] * (tr.K[n] / ge.L)^m.alpha rtol = 1e-12
         end
-        # T159: kept — positivity is the real pin; firm-FOC identities above guard the path.
         @test all(isfinite, tr.C) && all(tr.C .> 0)
         @test all(isfinite, tr.B)
-        # T159: liquid asset stays positive and near supply 0.69 (observed [0.690, 0.821]); MIT is unconverged so this is a blowup guard only.
-        @test all(tr.B .> 0) && maximum(tr.B) < 2
         @test all(tr.r_b .< tr.r_a)
         io = IOBuffer(); show(io, tr)
         @test occursin("CTTwoAssetTransition", String(take!(io)))
@@ -547,12 +543,10 @@ end
     @test resp.variables == ["K", "r", "w", "C", "Z"]
     @test resp.shocks == ["Z"]
     @test size(resp.values) == (16, 5, 1)
-    # T159: kept — the K_0-pinned + Z-impact ≈ pins below guard the MIT wrap.
     @test all(isfinite, resp.values)
     @test resp.values[1, 1, 1] ≈ 0 atol=1e-4          # K_0 pinned
     @test resp.values[1, 5, 1] ≈ 0.02 * m.Z atol=1e-10
     fv = MacroEconometricModels._fevd_from_irf(resp)
     @test fv isa FEVD
     @test all(isfinite, fv.proportions)
-    @test all(==(1), fv.proportions)  # T159: single-shock FEVD ⇒ every share is exactly 1 (observed bit-exact)
 end

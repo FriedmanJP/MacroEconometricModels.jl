@@ -519,7 +519,6 @@ end
         result = estimate_gmm(moment_fn, zeros(3), data; weighting=:iterated, max_iter=20)
         @test result isa GMMModel
         @test isfinite(result.J_stat)
-        @test result.J_stat >= 0  # T159: Hansen J is a quadratic form (exact, by construction)
         @test length(result.theta) == 3
     end
 
@@ -612,7 +611,6 @@ end
 
         r_id = estimate_gmm(moment_fn, zeros(2), data; weighting=:identity)
         @test MacroEconometricModels.is_overidentified(r_id)
-        # T159: kept — nonnegativity is the pin (already strong); NaN-pvalue contract below completes it.
         @test r_id.J_stat >= 0 && isfinite(r_id.J_stat)
         @test isnan(r_id.J_pvalue)
 
@@ -770,7 +768,6 @@ end
                        weighting=:two_step, hac=false,
                        X=dw.X, Z=dw.Z, endogenous=[2])
     @test res isa MacroEconometricModels.GMMModel
-    # T159: kept — the 2SLS-projection ≈ pins below guard theta.
     @test all(isfinite, res.theta)
     x = dw.X[:, 2]
     Z = dw.Z

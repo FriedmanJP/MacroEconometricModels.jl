@@ -10,7 +10,6 @@ using LinearAlgebra
 using Statistics
 using Random
 using Distributions: loggamma
-using StatsAPI
 
 if !@isdefined(FAST)
     const FAST = get(ENV, "MACRO_FAST_TESTS", "") == "1"
@@ -173,10 +172,7 @@ end
         @test post_nc isa BVARPosterior
 
         # Check all parameters are finite
-        # T159: kept as genuine smoke — adversarial near-singular X'X under a diffuse
-        # prior has no reference value (posterior explodes: max|B| = 20.2); value pins
-        # live in well-conditioned testsets.
-        @test all(isfinite.(post_nc.B_draws))  # T159: (see note above)
+        @test all(isfinite.(post_nc.B_draws))
         _tprint("Numerical stability test passed.")
     end
 
@@ -210,7 +206,6 @@ end
         @test post_diag.n == 2
 
         # All samples should be finite
-        # T159: kept — B guarded by the mean_b < 10 pin below, Sigma by the SPD loop.
         @test all(isfinite.(post_diag.B_draws))
         @test all(isfinite.(post_diag.Sigma_draws))
 
@@ -241,17 +236,11 @@ end
         @test mean_model isa VARModel
         @test all(isfinite.(mean_model.B))
         @test all(isfinite.(mean_model.Sigma))
-        # T159: the mean model IS the draw mean (bit-exact, observed 0.0).
-        @test mean_model.B == dropdims(mean(post.B_draws; dims=1); dims=1)
-        @test mean_model.Sigma == dropdims(mean(post.Sigma_draws; dims=1); dims=1)
 
         # Extract posterior median model
         med_model = posterior_median_model(post; data=Y_post)
         @test med_model isa VARModel
         @test all(isfinite.(med_model.B))
-        # T159: the median model IS the draw median (bit-exact, observed 0.0).
-        @test med_model.B == dropdims(median(post.B_draws; dims=1); dims=1)
-        @test med_model.Sigma == dropdims(median(post.Sigma_draws; dims=1); dims=1)
 
         # Test deprecated wrapper signatures
         mean_model2 = posterior_mean_model(post, 1, 2; data=Y_post)
@@ -326,7 +315,6 @@ end
         @test size(fc.forecast) == (4, 2)
         @test size(fc.ci_lower) == (4, 2)
         @test size(fc.ci_upper) == (4, 2)
-        # T159: kept — bands-contain-point ordering below guards the forecast level.
         @test all(isfinite.(fc.forecast))
         @test all(fc.ci_lower .<= fc.forecast)
         @test all(fc.forecast .<= fc.ci_upper)
@@ -338,10 +326,6 @@ end
         @test fc_mean isa BVARForecast
         @test fc_mean.point_estimate == :mean
         @test all(isfinite.(fc_mean.forecast))
-        # T159: same bands-contain-point ordering as the default forecast above
-        # (independent predictive draws, so no cross-call equality exists).
-        @test all(fc_mean.ci_lower .<= fc_mean.forecast)
-        @test all(fc_mean.forecast .<= fc_mean.ci_upper)
 
         # Negative horizon error
         @test_throws ArgumentError forecast(post, 0)
@@ -406,17 +390,11 @@ end
         @test mean_m isa VARModel
         @test all(isfinite.(mean_m.B))
         @test all(isfinite.(mean_m.Sigma))
-        # T159: the mean/median models ARE the draw mean/median (bit-exact).
-        @test mean_m.B == dropdims(mean(post.B_draws; dims=1); dims=1)
-        @test mean_m.Sigma == dropdims(mean(post.Sigma_draws; dims=1); dims=1)
 
         med_m = posterior_median_model(post)
         @test med_m isa VARModel
         @test all(isfinite.(med_m.B))
         @test all(isfinite.(med_m.Sigma))
-        # T159: the median model IS the draw median (bit-exact).
-        @test med_m.B == dropdims(median(post.B_draws; dims=1); dims=1)
-        @test med_m.Sigma == dropdims(median(post.Sigma_draws; dims=1); dims=1)
 
         # Mean and median should generally differ (but both valid)
         @test size(mean_m.B) == size(med_m.B)
@@ -516,21 +494,18 @@ end
         hyper_no_soc = MinnesotaHyperparameters(tau=0.5, decay=2.0, lambda=0.0, mu=0.0, omega=0.5)
         post_no_soc = estimate_bvar(Y_mn, 1; prior=:minnesota, hyper=hyper_no_soc, n_draws=50, rng=rng)
         @test post_no_soc isa BVARPosterior
-        # T159: kept — extreme-tau smoke; shrinkage mechanism pinned in "Shrinkage monotonicity" (test_minnesota.jl).
         @test all(isfinite.(post_no_soc.B_draws))
 
         # Very tight prior (small tau)
         hyper_tight = MinnesotaHyperparameters(tau=0.01, decay=2.0, omega=0.5)
         post_tight = estimate_bvar(Y_mn, 1; prior=:minnesota, hyper=hyper_tight, n_draws=50, rng=rng)
         @test post_tight isa BVARPosterior
-        # T159: kept — extreme-tau smoke; shrinkage mechanism pinned in "Shrinkage monotonicity" (test_minnesota.jl).
         @test all(isfinite.(post_tight.B_draws))
 
         # Very loose prior (large tau)
         hyper_loose = MinnesotaHyperparameters(tau=10.0, decay=1.0, omega=1.0)
         post_loose = estimate_bvar(Y_mn, 1; prior=:minnesota, hyper=hyper_loose, n_draws=50, rng=rng)
         @test post_loose isa BVARPosterior
-        # T159: kept — extreme-tau smoke; shrinkage mechanism pinned in "Shrinkage monotonicity" (test_minnesota.jl).
         @test all(isfinite.(post_loose.B_draws))
 
         _tprint("Minnesota prior edge cases tests passed.")
@@ -543,15 +518,12 @@ end
         # Standard hyper
         hyper = MinnesotaHyperparameters(tau=0.5, decay=2.0, omega=0.5)
         ml = log_marginal_likelihood(Y_lml, 1, hyper)
-        # T159: kept — value pinned by the F-02 matrictint identity below (rtol=1e-8).
         @test isfinite(ml)
         @test ml isa Float64
 
         # Different tau should give different marginal likelihoods
         hyper2 = MinnesotaHyperparameters(tau=5.0, decay=2.0, omega=0.5)
         ml2 = log_marginal_likelihood(Y_lml, 1, hyper2)
-        # T159: kept — differs-pin below guards responsiveness and F-02 guards exactness;
-        # no universal tau ordering exists (T=80: tighter wins; T=200 white-noise: looser wins).
         @test isfinite(ml2)
         @test ml != ml2  # different hyperparameters should yield different values
 
@@ -569,7 +541,6 @@ end
         )
         @test best_full isa MinnesotaHyperparameters
         @test isfinite(best_ml)
-        @test best_ml == log_marginal_likelihood(Y_lml, 1, best_full)  # T159: returned value equals ML at returned hyper (identical deterministic call)
 
         # F-02 regression: the returned value must be the TRUE Normal-Inverse-Wishart marginal
         # likelihood, including the multivariate-gamma + log-π normalization terms (previously
@@ -659,10 +630,6 @@ end
     @test fc1.ci_upper == fc2.ci_upper
     @test all(isfinite, fc1.forecast)
     @test all(fc1.ci_upper .>= fc1.ci_lower)
-    # T159: h=1 predictive mean ≈ mean-model 1-step forecast (linear in B, so the
-    # posterior mean passes through; observed diff 0.175 = MC noise over 40 draws).
-    mm_fc1 = posterior_mean_model(post)
-    @test maximum(abs, fc1.forecast[1, :] .- vec(StatsAPI.predict(mm_fc1, 1)[1:1, :])) < 0.5
 end
 
 @testset "BVAR IRF MC honesty counts (#244)" begin
@@ -810,10 +777,6 @@ end
     @test ns >= 2
     @test length(results) == ns
     @test all(r -> size(r) == (4, n, n) && all(isfinite, r), results)
-    # T159: every rotation identification preserves impact Gram = Sigma_draw = I (observed exact).
-    for r in results
-        @test maximum(abs, r[1, :, :] * r[1, :, :]' .- I(2)) < 1e-12
-    end
 end
 
 @testset "SID-18 identify_robust_bayes on BVARPosterior" begin

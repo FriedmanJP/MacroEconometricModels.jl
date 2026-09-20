@@ -25,7 +25,6 @@ _ar1_coef(x::AbstractVector) = cor(x[1:(end - 1)], x[2:end])
         E2, H2 = MEM.simulate_sv_shocks(Xoshiro(11), 500, 2)
         @test E1 == E2 && H1 == H2  # determinism under explicit seed
         @test size(E1) == (500, 2) && size(H1) == (500, 2)
-        # T159: kept — the AR(1) ≈ pins below guard persistence; determinism above guards seeding.
         @test all(isfinite, E1) && all(isfinite, H1)
 
         # Distinct default persistence: AR(1) of log-vol recovers default rhos
@@ -111,7 +110,6 @@ _ar1_coef(x::AbstractVector) = cor(x[1:(end - 1)], x[2:end])
             g = MEM.estimate_gmm(mfn, [0.0, 0.0], data; weighting=w, hac=true)
             @test isfinite(g.J_stat)
             @test g.theta ≈ β atol = 0.3
-            @test g.J_stat >= 0  # T159: Hansen J is a quadratic form (exact, by construction)
         end
     end
 

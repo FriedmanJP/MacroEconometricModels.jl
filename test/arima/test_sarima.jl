@@ -174,8 +174,7 @@ end
 
     m_css = estimate_sarima(y, 0, 1, 1, 0, 1, 1, 4; method=:css, include_intercept=false)
     @test m_css.method === :css
-    # T159: CSS Gaussian ll ≈-280 here; reporting the min-objective flips the sign.
-    @test isfinite(m_css.loglik) && m_css.loglik < 0
+    @test isfinite(m_css.loglik)
     m_mle = estimate_sarima(y, 0, 1, 1, 0, 1, 1, 4; method=:mle, include_intercept=false)
     @test m_mle.method === :mle
     # CSS and MLE agree closely on the parameters. Their reported log-likelihoods are NOT

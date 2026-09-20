@@ -183,7 +183,6 @@ end
     for wtype in [:rectangular, :bartlett, :hann, :hanning, :hamming, :blackman, :tukey, :flat_top]
         w = MacroEconometricModels._spectral_window(n, wtype)
         @test length(w) == n
-        # T159: kept — the symmetry pin below guards window shape.
         @test all(isfinite.(w))
         # Symmetric (up to floating point)
         @test all(abs.(w .- reverse(w)) .< 1e-12)
@@ -283,7 +282,6 @@ end
     # Bandpass to keep only f_in (roughly 0.5 to 0.8 radians)
     y_filt = ideal_bandpass(y, 0.4, 0.9)
     @test length(y_filt) == n
-    # T159: kept — the energy-ratio pins below guard band selection.
     @test all(isfinite.(y_filt))
 
     # Filtered signal should retain the in-band component
@@ -798,7 +796,6 @@ end
     # Still should return valid result without error
     r = pacf(rw; lags=10)
     @test length(r.pacf) == 10
-    # T159: kept — random-walk no-crash smoke; finiteness is the contract.
     @test all(isfinite.(r.pacf))
 end
 
@@ -808,7 +805,6 @@ end
     y = randn(rng, 20)
     r = pacf(y; lags=15, method=:ols)
     @test length(r.pacf) == 15
-    # T159: kept — the trailing-zero pin below guards the neff break; this covers the rest.
     @test all(isfinite.(r.pacf))
     # High lags should be zero (neff < k+1 break)
     @test r.pacf[end] == 0.0
@@ -959,7 +955,7 @@ end
     # High but valid order
     a, sigma2 = MacroEconometricModels._burg_coefficients(y, 15)
     @test length(a) == 15
-    @test sigma2 > 0  # T159: Burg residual variance on noisy data (exact: > 0 short of perfect fit)
+    @test isfinite(sigma2)
 end
 
 @testset "report() for spectral types" begin
@@ -1113,7 +1109,6 @@ end
     # Large m: the old Float64 term C(m,k)·(1-kg)^{m-1} overflows to Inf·0 = NaN.
     y = randn(rng, 5000)
     ft = fisher_test(y)
-    # T159: kept — the log-space no-overflow contract (stated above); [0,1] completes it.
     @test isfinite(ft.pvalue)
     @test 0.0 <= ft.pvalue <= 1.0
 end

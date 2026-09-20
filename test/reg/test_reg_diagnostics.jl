@@ -294,7 +294,6 @@ end
         w = white_test(mc; cross_terms = true)
         # Full cross design would be d,xc,d²,xc²,d·xc = 5 terms, but d²==d is
         # dropped -> df reduced. Statistic finite and valid.
-        # T159: kept — the ≥ 0 + df + pvalue pins below guard the White test.
         @test isfinite(w.statistic)
         @test w.statistic >= 0
         @test w.df < 5

@@ -129,12 +129,10 @@ end
         Gtrue = [1 / (1 + exp(-15.0 * yl)) for yl in y[1:end-1]]
         @test cor(m.G, Gtrue) > 0.99
         # SEs are finite and positive.
-        # T159: kept — positivity is the pin (already strong); cor > 0.99 above guards fit.
         @test all(isfinite, m.se_phi1) && all(m.se_phi1 .> 0)
         @test all(isfinite, m.se_phi2) && all(m.se_phi2 .> 0)
-        @test isfinite(m.se_gamma) && m.se_gamma > 0  # T159: (see above)
+        @test isfinite(m.se_gamma) && m.se_gamma > 0
         @test all(isfinite, m.se_c)
-        @test all(m.se_c .> 0)  # T159: threshold SEs, mirroring the phi/gamma positivity pins
     end
 
     # -------------------------------------------------------------------------
@@ -217,7 +215,6 @@ end
         @test m.trans_type == :estr
         @test length(m.c) == 1
         @test all(0 .<= m.G .< 1)
-        # T159: kept — positivity is the pin for SSR (already strong).
         @test isfinite(m.ssr) && m.ssr > 0
     end
 

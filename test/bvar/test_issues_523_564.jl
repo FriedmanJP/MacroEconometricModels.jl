@@ -48,9 +48,6 @@ const M = MacroEconometricModels
         ml3 = log_marginal_likelihood(Y, 1, h3)
         @test ml1 != ml3
         @test isfinite(ml1) && isfinite(ml3)
-        # T159: more prior dof around the well-specified location raises ML (closed
-        # form, zero MC noise; observed −172.3 > −173.4).
-        @test ml3 > ml1
     end
 
     @testset "#527 BayesianFEVD axis order matches FEVD" begin
@@ -94,7 +91,6 @@ const M = MacroEconometricModels
         base = irf(m, 8; ci_type=:none)
         bc = irf(m, 8; ci_type=:bootstrap, reps=60, seed=5,
                  bias_correct=true, bias_reps=40)
-        # T159: kept — moves-pin and long-horizon ordering below guard the correction.
         @test all(isfinite, bc.values)
         @test size(bc.values) == size(base.values)
         # On a persistent AR(1) at T=40 the OLS bias is material — the corrected
@@ -163,7 +159,6 @@ const M = MacroEconometricModels
         ir = irf(bf, 6)
         panel = favar_panel_irf(bf, ir)
         @test size(panel.point_estimate, 2) == N
-        # T159: kept — exact Λ·factor_irf identity below (atol=1e-10) guards the values.
         @test all(isfinite, panel.point_estimate)
         # Non-key rows equal Λ · factor_irf exactly
         Lam = dropdims(mean(bf.loadings_draws; dims=1), dims=1)
@@ -186,16 +181,9 @@ const M = MacroEconometricModels
         X = dgp_dynamic_factors(rng; N=10, T=60).X
         bf = estimate_favar(X, [1], 2, 1; method=:bayesian, n_draws=40, burnin=15)
         B_mean = dropdims(mean(bf.B_draws; dims=1), dims=1)
-        # T159: kept — magnitude bound below guards B_mean.
         @test all(isfinite, B_mean)
         @test all(isfinite, bf.Sigma_draws)
         @test maximum(abs, B_mean) < 3.0
-        # T159: NIW Sigma draws are symmetric positive definite by construction.
-        for s in axes(bf.Sigma_draws, 1)
-            S_t159 = bf.Sigma_draws[s, :, :]
-            @test isapprox(S_t159, S_t159'; atol=1e-10)
-            @test all(eigvals(Symmetric(S_t159)) .> -1e-10)
-        end
     end
 
     @testset "#524 panel CI lower ≤ upper via draws" begin

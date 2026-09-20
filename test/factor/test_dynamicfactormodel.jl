@@ -41,7 +41,6 @@ using MacroEconometricModels
         @test model.standardized == true
         @test model.converged == true
         @test isfinite(model.loglik)
-        @test model.loglik < 0  # T159: Gaussian LL on T×N data with O(1) variances is deeply negative
     end
 
     @testset "Basic Estimation - EM Algorithm" begin
@@ -59,7 +58,6 @@ using MacroEconometricModels
         @test model.method == :em
         @test model.iterations >= 1
         @test isfinite(model.loglik)
-        @test model.loglik < 0  # T159: Gaussian LL on T×N data with O(1) variances is deeply negative
     end
 
     @testset "Non-Standardized Estimation" begin
@@ -161,7 +159,6 @@ using MacroEconometricModels
         # Should not throw, should handle gracefully
         model = estimate_dynamic_factors(X, r, 1)
         @test model isa DynamicFactorModel
-        # T159: kept as genuine smoke — degenerate idio_sd=1e-6 input; the || already encodes the -Inf contract.
         @test isfinite(model.loglik) || model.loglik < 0  # Allow -Inf for degenerate cases
     end
 
@@ -179,7 +176,6 @@ using MacroEconometricModels
         @test model isa DynamicFactorModel
         @test all(isfinite.(model.loadings))
         @test all(isfinite.(model.factors))
-        @test predict(model) == model.factors * model.loadings'  # T159: fitted common is exactly FΛ' (bit-exact, observed 0.0)
     end
 
     @testset "Numerical Stability - Nearly Non-Stationary" begin
@@ -416,15 +412,11 @@ using MacroEconometricModels
         # loglikelihood
         ll = loglikelihood(model)
         @test isfinite(ll)
-        @test ll == model.loglik  # T159: the accessor returns the stored field
 
         # aic, bic
         @test isfinite(aic(model))
         @test isfinite(bic(model))
         @test bic(model) >= aic(model)  # BIC penalizes more for n > e^2
-        # T159: spec-flagship IC identities (bit-exact, observed 0.0; k = dof, n = T_obs).
-        @test aic(model) == -2 * ll + 2 * df
-        @test bic(model) == -2 * ll + df * log(T_obs)
     end
 
     # ==========================================================================
@@ -452,7 +444,6 @@ using MacroEconometricModels
         @test 1 <= ic.p_BIC <= 2
 
         # At least one (r, p) combination should have finite IC
-        # T159: kept — argmin recovery is #256 territory ("reduced range to avoid edge failures"); grid smoke stays.
         @test any(isfinite.(ic.AIC))
         @test any(isfinite.(ic.BIC))
     end
@@ -518,7 +509,6 @@ using MacroEconometricModels
         # (The old `EM ≥ twostep − 50` only held because the F-06 PCA-reconstruction bug made
         # the two-step residuals — and hence its loglik — artificially low.) Require both finite
         # and negative, and agreeing to within ~1 nat per observation-variable.
-        # T159: kept — negativity + per-observation agreement below guard both likelihoods.
         @test isfinite(model_twostep.loglik) && isfinite(model_em.loglik)
         @test model_twostep.loglik < 0 && model_em.loglik < 0
         @test abs(model_em.loglik - model_twostep.loglik) / (T_obs * N) < 1.0

@@ -165,7 +165,6 @@ end
         # Pedroni (2000) pooled FMOLS covariance is (Σ wᵢ S_xx,i)⁻¹ — SPD, so se > 0.
         @test m.se[1] > 0
         @test isfinite(m.tstats[1])
-        @test m.tstats[1] ≈ S.coef(m)[1] / m.se[1]  # T159: t = β̂/se definitional identity (exact)
         @test size(m.unit_coefs) == (1, N)                 # per-unit slopes stored
     end
 

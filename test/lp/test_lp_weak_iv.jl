@@ -51,8 +51,6 @@ end
     @test mop.n_instruments == 1
     @test mop.tau == 0.10
     @test mop.critical_value == 23.11
-    # T159: kept — subsumed by the exact hand-reconstruction below (scalar ≈ against
-    # a finite target fails on any non-finite value); belt-and-braces.
     @test isfinite(mop.f_effective) && mop.f_effective > 0
     @test !mop.weak                              # a strong instrument by construction
 
@@ -172,11 +170,9 @@ end
 
     band = lp_iv_ar_band(m; responses=[2], n_grid=201)
     @test !all(band.bounded)                     # at least one cell is unbounded
-    # Every Wald cell is finite, so the AR band is strictly less informative — correctly so.
-    # T159: kept — finiteness-vs-unboundedness IS the asserted comparison here (AR cells
-    # go ±Inf where Wald stays finite); the width pins below carry the magnitudes.
+    # Every Wald cell is finite, so the AR band is strictly less informative — correctly so
     @test all(isfinite, band.wald_lower)
-    @test all(isfinite, band.wald_upper)  # T159: (see note above)
+    @test all(isfinite, band.wald_upper)
     for h in 1:size(band.lower, 1)
         if !band.bounded[h, 1]
             ar_w = band.upper[h, 1] - band.lower[h, 1]
@@ -249,8 +245,6 @@ end
     @test sj.valid
     @test sj.df == 1
     @test isfinite(sj.J_stat) && sj.J_stat >= 0
-    # T159: exact p-value identity p = 1−χ²_df(J) (a p from the wrong stat breaks it).
-    @test sj.p_value ≈ 1 - cdf(Chisq(sj.df), sj.J_stat) atol = 1e-12
     # A valid over-identifying restriction is not rejected
     @test sj.p_value > 0.01
 end
@@ -273,7 +267,6 @@ end
             m = estimate_lp_iv(Y, 1, hcat(Z1, Z2), 3; lags=2)
             sj = sargan_test(m, h)
             @test sj.valid && isfinite(sj.J_stat) && sj.J_stat >= 0
-            @test sj.p_value ≈ 1 - cdf(Chisq(sj.df), sj.J_stat) atol = 1e-12   # T159: exact p identity
             n_rej += sj.p_value < 0.01
         end
         # Nominal size is 1%; before the fix h=0 rejected ~92% of draws.

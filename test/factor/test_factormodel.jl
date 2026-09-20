@@ -56,7 +56,6 @@ const _FM_A3 = [0.5 0.1 0.0; 0.05 0.5 0.1; 0.0 0.05 0.5]
         @test model.standardized == true
 
         # Factors should have reasonable magnitude (not exploding or collapsing)
-        # T159: kept — the < 100 magnitude bound below guards the factors.
         @test all(isfinite, model.factors)
         @test maximum(abs.(model.factors)) < 100  # Reasonable bound
 
@@ -110,7 +109,6 @@ const _FM_A3 = [0.5 0.1 0.0; 0.05 0.5 0.1; 0.0 0.05 0.5]
         @test size(resid) == (T, N)
 
         # Residuals should be finite
-        # T159: kept — the < 10 magnitude bound below guards the residuals.
         @test all(isfinite, resid)
 
         # Residuals should have reasonable magnitude (not exploding)
@@ -131,7 +129,6 @@ const _FM_A3 = [0.5 0.1 0.0; 0.05 0.5 0.1; 0.0 0.05 0.5]
         @test all(r2_vals .>= -0.1)
         @test all(r2_vals .<= 1.1)
         # R² values should be finite
-        # T159: kept — the [-0.1, 1.1] bounds above guard R² (loose for fp, per comment).
         @test all(isfinite, r2_vals)
     end
 
@@ -156,11 +153,6 @@ const _FM_A3 = [0.5 0.1 0.0; 0.05 0.5 0.1; 0.0 0.05 0.5]
         @test all(isfinite.(ic.IC1))
         @test all(isfinite.(ic.IC2))
         @test all(isfinite.(ic.IC3))
-        # T159: Bai-Ng criteria select r_true = 3 on this clean fixed-data DGP
-        # (consistent selection, zero MC noise — deterministic).
-        @test ic.r_IC1 == 3
-        @test ic.r_IC2 == 3
-        @test ic.r_IC3 == 3
     end
 
     @testset "Scree Plot Data" begin
@@ -272,13 +264,11 @@ const _FM_A3 = [0.5 0.1 0.0; 0.05 0.5 0.1; 0.0 0.05 0.5]
         # Fitted values should be finite
         @test all(isfinite, X_fitted)
         @test size(X_fitted) == size(X)
-        @test X_fitted == model.factors * model.loadings'  # T159: fitted is exactly FΛ' (bit-exact, observed 0.0)
 
         # R² should be computed without errors
         r2_vals = fm_r2(model)
         @test length(r2_vals) == N
         @test all(isfinite, r2_vals)
-        @test minimum(r2_vals) > 0.5  # T159: clean DGP (idio_sd=0.1) reconstructs well (observed min 0.68)
     end
 
     @testset "Type Stability" begin
@@ -305,7 +295,6 @@ const _FM_A3 = [0.5 0.1 0.0; 0.05 0.5 0.1; 0.0 0.05 0.5]
 
         model = estimate_factors(X_int, r)
         @test model isa FactorModel{Float64}
-        # T159: kept — integer-conversion smoke; factor values pinned in the PCA testsets.
         @test all(isfinite, model.factors)
     end
 

@@ -392,7 +392,6 @@ end
         for s in 1:S
             dr = MEM._simulation_smoother(rng, y, Z, Tt, RQR, Hobs; d=d, b=b,
                                           a0=a0, P0=P0)
-            # T159: kept — per-draw smoke; the mean/variance-moment pins below carry the weight.
             @test all(isfinite, dr)
             acc .+= dr; acc2 .+= dr .^ 2
         end

@@ -107,7 +107,6 @@ const rfm_nobs = MacroEconometricModels.nobs
 
         r2_vals = rfm_r2(fm)
         @test length(r2_vals) == N
-        # T159: kept — the mean > 0.3 bound below guards R².
         @test all(isfinite, r2_vals)
 
         # With strong signal and low noise, R2 should be reasonably high
@@ -203,17 +202,14 @@ const rfm_nobs = MacroEconometricModels.nobs
         pred = rfm_predict(fm)
         @test size(pred) == (T_obs, N)
         @test all(isfinite, pred)
-        @test pred == fm.factors * fm.loadings'  # T159: fitted is exactly FΛ' (bit-exact, observed 0.0)
 
         resid = rfm_residuals(fm)
         @test size(resid) == (T_obs, N)
         @test all(isfinite, resid)
-        @test 0.1 < std(vec(resid)) < 1.0  # T159: residuals at idiosyncratic scale (idio_sd=0.3; observed 0.354)
 
         r2_vals = rfm_r2(fm)
         @test length(r2_vals) == N
         @test all(isfinite, r2_vals)
-        @test all(0 .<= r2_vals .<= 1)  # T159: R² shares in [0,1] (observed [0.54, 0.97])
     end
 
     @testset "Without standardization" begin

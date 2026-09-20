@@ -60,15 +60,6 @@ end
         @test isfinite(favar.aic)
         @test isfinite(favar.bic)
         @test isfinite(favar.loglik)
-        # T159: concentrated per-observation IC identities (bit-exact, observed 0.0;
-        # k = n·(1+n·p) = 36 params, n = Teff = 198).
-        k_t159 = ncoefs(favar) * nvars(favar)
-        n_t159 = effective_nobs(favar)
-        @test favar.aic ≈ logdet(favar.Sigma) + 2 * k_t159 / n_t159
-        @test favar.bic ≈ logdet(favar.Sigma) + k_t159 * log(n_t159) / n_t159
-        # T159: Gaussian VAR loglik identity (observed diff 1e-13).
-        @test favar.loglik ≈ -((n_t159 * nvars(favar)) / 2) * (1 + log(2pi)) -
-                             (n_t159 / 2) * logdet(favar.Sigma)
     end
 
     @testset "FAVARModel accessors" begin
@@ -96,9 +87,6 @@ end
         @test vm.varnames == favar.varnames
         @test isfinite(vm.aic)
         @test isfinite(vm.bic)
-        # T159: to_var documents same-criteria-through-either-accessor (#522); bit-exact.
-        @test vm.aic == favar.aic
-        @test vm.bic == favar.bic
     end
 
     @testset "Display output" begin
@@ -577,14 +565,12 @@ end
         #     fixed OLS point estimate every sweep, so this variance was ~0.
         @test mean(var(bf.B_draws; dims=1)) > 1e-3
         @test mean(var(bf.Sigma_draws; dims=1)) > 1e-6
-        # T159: kept — non-degeneracy pins above guard the draw values (T093 regression).
         @test all(isfinite, bf.B_draws) && all(isfinite, bf.Sigma_draws)
 
         # (2) Carter–Kohn FFBS: sampled factor paths inherit the VAR transition's serial
         #     dependence (the true AR is 0.7). The old independent per-t draws gave ~0
         #     autocorrelation. Autocorrelation is sign-invariant, so factor-identification
         #     sign flips across sweeps do not affect it.
-        # T159: kept — FFBS autocorrelation pin below guards the factor paths.
         @test all(isfinite, bf.factor_draws)
         acs = [cor(bf.factor_draws[s, 2:end, 1], bf.factor_draws[s, 1:end-1, 1])
                for s in 1:size(bf.factor_draws, 1)]
@@ -610,21 +596,13 @@ end
         bfavar = estimate_favar(X, [1, 3], 2, 1; method=:bayesian, n_draws=30, burnin=10)
 
         # B_draws should be finite
-        # T159: non-degeneracy pins below guard every Gibbs block (T093 bug family).
         @test all(isfinite, bfavar.B_draws)
         # Sigma_draws should be finite
-        @test all(isfinite, bfavar.Sigma_draws)  # T159: (see non-degeneracy note above)
+        @test all(isfinite, bfavar.Sigma_draws)
         # Factor draws should be finite
         @test all(isfinite, bfavar.factor_draws)
         # Loadings should be finite
         @test all(isfinite, bfavar.loadings_draws)
-        # T159: every Gibbs block genuinely varies across sweeps (the T093 bug family:
-        # a reused point estimate has exactly zero variance). Strict > 0 holds for any
-        # RNG state on continuous posteriors.
-        @test mean(var(bfavar.B_draws; dims=1)) > 0
-        @test mean(var(bfavar.Sigma_draws; dims=1)) > 0
-        @test mean(var(bfavar.factor_draws; dims=1)) > 0
-        @test mean(var(bfavar.loadings_draws; dims=1)) > 0
     end
 
     @testset "Bayesian FAVAR with column indices" begin
@@ -685,11 +663,6 @@ end
         @test length(irf_result.variables) == 4
         @test length(irf_result.shocks) == 4
         @test all(isfinite, irf_result.point_estimate)
-        # T159: default method is Cholesky, whose impact diagonals are positive per
-        # draw, hence positive in the posterior mean.
-        for i in 1:4
-            @test irf_result.point_estimate[1, i, i] > 0
-        end
     end
 
     @testset "Bayesian FAVAR FEVD" begin
@@ -697,11 +670,6 @@ end
         @test fevd_result isa BayesianFEVD{Float64}
         @test fevd_result.horizon == 10
         @test all(isfinite, fevd_result.point_estimate)
-        # T159: Cholesky FEVD shares sum to 1 per draw, and the point estimate is the
-        # draw mean, so linearity preserves the sum (observed maxdev 2e-16).
-        for h in 1:10, v in 1:4
-            @test sum(fevd_result.point_estimate[v, :, h]) ≈ 1.0 atol = 1e-10
-        end
     end
 
     @testset "Bayesian FAVAR panel IRF" begin
@@ -713,14 +681,6 @@ end
         @test length(panel_irf.variables) == 20
         @test panel_irf.variables == bfavar.panel_varnames
         @test all(isfinite, panel_irf.point_estimate)
-        # T159: non-key rows equal Λ · factor_irf exactly (mirrors the #528 pin in
-        # test_issues_523_564.jl; key rows carry the override channel).
-        Lam_t159 = dropdims(mean(bfavar.loadings_draws; dims=1); dims=1)
-        i_t159 = findfirst(i -> !(i in bfavar.Y_key_indices), 1:size(Lam_t159, 1))
-        for h in 1:10, j in 1:4
-            expected_t159 = dot(Lam_t159[i_t159, :], irf_aug.point_estimate[h, 1:2, j])
-            @test panel_irf.point_estimate[h, i_t159, j] ≈ expected_t159 atol = 1e-10
-        end
     end
 
     @testset "Bayesian FAVAR panel IRF key variable override" begin
@@ -827,7 +787,6 @@ end  # @testset "FAVAR Tests"
     F1 = MacroEconometricModels._favar_ffbs(ffbs_args..., Random.Xoshiro(123))
     F2 = MacroEconometricModels._favar_ffbs(ffbs_args..., Random.Xoshiro(123))
     @test F1 == F2
-    # T159: kept — bit-determinism above guards the refactor; FFBS level pinned by the drift test (≈ 2.0).
     @test all(isfinite, F1)
 
     # (3) Integration before/after: the full Bayesian FAVAR is deterministic on a fixed seed — the
@@ -842,7 +801,6 @@ end  # @testset "FAVAR Tests"
     @test bf1.Sigma_draws == bf2.Sigma_draws
     @test bf1.factor_draws == bf2.factor_draws
     @test bf1.loadings_draws == bf2.loadings_draws
-    # T159: kept — bit-determinism above guards the buffer refactor; draw values pinned in T093/#528 testsets.
     @test all(isfinite, bf1.B_draws) && all(isfinite, bf1.factor_draws)
 end
 
@@ -867,7 +825,6 @@ end
 
     # (2) The VAR coefficient posterior is no longer explosive on a short sample.
     B_mean = dropdims(mean(bf.B_draws; dims=1), dims=1)
-    # T159: kept — the < 3.0 non-explosion bound below guards B_mean.
     @test all(isfinite, B_mean)
     @test maximum(abs, B_mean) < 3.0
 

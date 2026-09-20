@@ -146,7 +146,6 @@ rng = Xoshiro(12345)  # DGP-02: explicit rng
         # Should handle near-zero variance gracefully (may warn about jitter)
         irf_result = irf(model, 10)
         # IRF should still have reasonable values
-        # T159: kept — near-zero-variance jitter smoke; finiteness is the contract.
         @test all(isfinite.(irf_result.values))
     end
 

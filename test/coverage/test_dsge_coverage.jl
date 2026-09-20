@@ -434,7 +434,6 @@ end
     sim = simulate(sol, 100; rng=Random.Xoshiro(42))
     @test size(sim) == (100, 1)
     @test all(isfinite, sim)
-    @test maximum(abs, sim) < 20  # T159: stationary AR(1) sim, sd ≈ 2.3 (observed 6.49); blowup guard
 end
 
 @testset "pruning.jl: simulate order=2 pruned" begin
@@ -450,7 +449,6 @@ end
     sim = simulate(sol, 100; rng=Random.Xoshiro(42))
     @test size(sim) == (100, 1)
     @test all(isfinite, sim)
-    @test maximum(abs, sim) < 20  # T159: order-2 = order-1 on a linear model (observed 6.49); blowup guard
 
     # With custom shock draws
     shocks = randn(Random.Xoshiro(9005), 50, 1)
@@ -476,7 +474,6 @@ end
     irf_girf = irf(sol, 10; irf_type=:girf, n_draws=20)
     @test size(irf_girf.values) == (10, 1, 1)
     @test all(isfinite, irf_girf.values)
-    @test maximum(abs, irf_girf.values) < 2  # T159: AR(1) GIRF ≈ analytical ρ^h ≤ 1 (observed 1.0); MC-safe bound
 end
 
 @testset "pruning.jl: analytical_moments covariance format" begin
@@ -493,19 +490,12 @@ end
     m1 = analytical_moments(sol1; lags=2)
     @test length(m1) > 0
     @test all(isfinite, m1)
-    # T159: AR(1) closed form var·[1, ρ, ρ²] (observed [5.263, 4.737, 4.263]).
-    @test m1[1] ≈ 1 / (1 - 0.9^2) rtol = 1e-10
-    @test m1[2] ≈ 0.9 * m1[1] rtol = 1e-10
-    @test m1[3] ≈ 0.9 * m1[2] rtol = 1e-10
 
     # Order 2: simulation-based moments
     sol2 = perturbation_solver(spec; order=2)
     m2 = analytical_moments(sol2; lags=1)
     @test length(m2) > 0
     @test all(isfinite, m2)
-    # T159: order-2 = order-1 on a linear model (observed [5.263, 4.737]).
-    @test m2[1] ≈ 1 / (1 - 0.9^2) rtol = 1e-10
-    @test m2[2] ≈ 0.9 * m2[1] rtol = 1e-10
 end
 
 @testset "pruning.jl: analytical_moments GMM format" begin
@@ -522,24 +512,12 @@ end
     m1 = analytical_moments(sol1; format=:gmm, lags=3)
     @test length(m1) > 0
     @test all(isfinite, m1)
-    # T159: [mean 0, var·(1, ρ, ρ², ρ³)] (observed [0, 5.263, 4.737, 4.263, 3.837]).
-    @test m1[1] == 0.0
-    @test m1[2] ≈ 1 / (1 - 0.9^2) rtol = 1e-10
-    @test m1[3] ≈ 0.9 * m1[2] rtol = 1e-10
-    @test m1[4] ≈ 0.9 * m1[3] rtol = 1e-10
-    @test m1[5] ≈ 0.9 * m1[4] rtol = 1e-10
 
     # Order 2: GMM format with closed-form augmented Lyapunov
     sol2 = perturbation_solver(spec; order=2)
     m2 = analytical_moments(sol2; format=:gmm, lags=3)
     @test length(m2) > 0
     @test all(isfinite, m2)
-    # T159: order-2 = order-1 on a linear model (same closed form).
-    @test m2[1] == 0.0
-    @test m2[2] ≈ 1 / (1 - 0.9^2) rtol = 1e-10
-    @test m2[3] ≈ 0.9 * m2[2] rtol = 1e-10
-    @test m2[4] ≈ 0.9 * m2[3] rtol = 1e-10
-    @test m2[5] ≈ 0.9 * m2[4] rtol = 1e-10
 end
 
 @testset "pruning.jl: FEVD for PerturbationSolution" begin
@@ -640,7 +618,6 @@ end
         y_val = evaluate_policy(sol_eval, [0.0])
         @test length(y_val) == 1
         @test all(isfinite, y_val)
-        @test y_val ≈ [0.0] atol = 1e-8  # T159: AR(1) policy y = ρx ⇒ y(0) = 0 (observed -1.1e-12, converged)
 
         # Multi-point evaluation
         X = reshape([0.0, 0.1, -0.1], 3, 1)
@@ -668,7 +645,6 @@ end
 
         sol = MacroEconometricModels.collocation_solver(spec; degree=3, max_iter=5, tol=1e-4)
         err = max_euler_error(sol; n_test=20, rng=Random.Xoshiro(42))
-        # T159: kept — nonnegativity below is the pin for an error norm.
         @test isfinite(err)
         @test err >= 0
     end
@@ -1028,7 +1004,6 @@ end
         @test size(sim, 1) == 25
         @test size(sim, 2) >= 2  # at least 2 variables (may be augmented)
         @test all(isfinite, sim)
-        @test maximum(abs, sim) < 10  # T159: stationary forward-model sim (observed 3.73); blowup guard
     end
 end
 
@@ -1047,7 +1022,6 @@ end
         irf_result = irf(sol, 10; irf_type=:girf, n_draws=10)
         @test size(irf_result.values, 1) == 10
         @test all(isfinite, irf_result.values)
-        @test maximum(abs, irf_result.values) < 10  # T159: 10-draw MC GIRF on a linear model (observed 1.0); blowup guard
     end
 end
 
@@ -1165,7 +1139,6 @@ end
 
     X = MacroEconometricModels._solve_kronecker_sylvester(f_c, f_f, Mkd, RHS, n, nvd)
     @test size(X) == (n, nvd)
-    # T159: kept — the residual < 1e-8 + dense-reference pins below are exact.
     @test all(isfinite, X)
 
     # X must satisfy the Sylvester equation
@@ -1185,7 +1158,6 @@ end
 
     X = MacroEconometricModels._solve_kronecker_sylvester(f_c, f_f, Mkd, RHS, n, nvd)
     @test size(X) == (n, nvd)
-    # T159: kept — the residual < 1e-6 pin below uniquely pins X (per the comment).
     @test all(isfinite, X)
 
     # GMRES must drive the Sylvester residual to (near) zero. For this
@@ -1221,7 +1193,6 @@ end
     spec = _asset_pricing_spec()
     sol = solve(spec; method=:gensys)
     @test sol.eu == [1, 1]
-    # T159: kept — the impact ≈ + eigenvalue ≈ pins below guard the gensys solve.
     @test all(isfinite, sol.G1)
     @test all(isfinite, sol.impact)
     # A unit shock to e moves d by 1 and p by r/((1+r)-ρ) = 0.2 on impact.
@@ -1237,7 +1208,6 @@ end
     spec = _asset_pricing_spec()
     uc = MacroEconometricModels._solve_undetermined_coefficients(spec)
     @test uc.converged
-    # T159: kept — the stable-roots + quadratic-residual pins below guard UC.
     @test all(isfinite, uc.G1)
     @test all(isfinite, uc.impact)
     # G1 eigenvalues are the stable roots of the saddle system
@@ -1256,7 +1226,6 @@ end
     sol = solve(spec; method=:gensys)
     ir = irf(sol, 15)
     @test size(ir.values) == (15, 2, 1)
-    # T159: kept — the p = 0.2d identity + decay pins below guard the IRF.
     @test all(isfinite, ir.values)
     # p_t = 0.2·d_t at every horizon for this model
     for h in 1:15

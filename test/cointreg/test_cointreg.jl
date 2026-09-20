@@ -182,7 +182,6 @@ end
             # slope block recovers the true cointegrating vector (the intercept on
             # I(1) regressors converges more slowly, so it is not pinned here)
             @test coef(m)[2:3] ≈ [0.8, -0.5] atol=0.05
-            # T159: kept — slope ≈ above is the pin (intercept converges slowly, stated); this covers it.
             @test all(isfinite, coef(m))
             @test size(m.Omega) == (3, 3)
         end

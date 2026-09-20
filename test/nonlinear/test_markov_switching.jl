@@ -171,7 +171,6 @@ end
         # φ ≈ (0.014, -0.058, -0.247, -0.213).
         @test isapprox(m.ar, [0.014, -0.058, -0.247, -0.213]; atol=0.05)
         # Reported SEs are finite and positive.
-        # T159: kept — nonnegativity is the pin (already strong); the ≈ pins above guard values.
         @test all(isfinite, m.se_coefs) && all(m.se_coefs .>= 0)
         @test all(isfinite, m.se_ar)   && all(m.se_ar .>= 0)
         @test m.converged
@@ -324,7 +323,6 @@ end
 
         # Both are genuine convex combinations of the regime-specific means, so they
         # lie inside the range those means can produce.
-        # T159: kept — convex-combination smoke; finiteness is the contract.
         @test all(isfinite, pf)
     end
 

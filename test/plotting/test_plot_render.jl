@@ -438,7 +438,6 @@ end
         xs, dens = M._kde_line(randn(400))
         @test isapprox(sum(dens) * (xs[2] - xs[1]), 1.0; atol=0.05)     # KDE integrates to ~1
         xs2, dens2 = M._kde_line([1.0, NaN, 2.0, Inf, 3.0])            # NaN dropped
-        # T159: kept — NaN/Inf-drop IS the contract; the integrates-to-1 pin above guards the KDE.
         @test all(isfinite, dens2)
 
         sj = "[{\"name\":\"Data\",\"color\":\"#1f77b4\"},{\"name\":\"KDE\",\"color\":\"#d62728\"}]"

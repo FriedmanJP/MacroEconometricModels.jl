@@ -210,7 +210,6 @@ end
     m = estimate_reg(y, X; cov_type=:cluster, clusters=cl, varnames=["const", "x"])
     b = wild_cluster_bootstrap(m, "x", 0.0; clusters=cl, rng=Random.Xoshiro(1))
 
-    # T159: kept — the estimate-inside-CI pin below guards the bootstrap interval.
     @test isfinite(b.ci_lower) && isfinite(b.ci_upper)
     @test b.ci_lower < b.estimate < b.ci_upper
 

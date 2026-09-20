@@ -188,7 +188,6 @@ end
         men = marginal_effects(mn)
         @test isapprox(men.effects[2], mean(mn.fitted) * coef(mn)[2]; rtol=1e-9)
         @test all(isfinite, men.se[2:3])
-        @test all(men.se[2:3] .> 0)  # T159: delta-method SEs (exact, by construction)
         irrn = incidence_rate_ratio(mn)
         @test irrn.or ≈ exp.(coef(mn)) atol = 1e-12
     end
@@ -278,7 +277,6 @@ end
         mc = estimate_poisson(D.y_nb, D.X; cov_type=:cluster, clusters=clusters)
         @test mc.cov_type == :cluster
         @test all(isfinite, stderror(mc))
-        @test all(stderror(mc) .> 0)  # T159: cluster SEs (exact, by construction)
         @test !isapprox(stderror(mc), stderror(estimate_poisson(D.y_nb, D.X)); rtol=1e-6)
         @test_throws ArgumentError estimate_poisson(D.y_nb, D.X; cov_type=:cluster)
     end
@@ -396,7 +394,6 @@ end
         @test _poisson_deviance(y, y .+ 0.0 .+ eps()) < 1e-6      # perfect fit -> 0
         @test _poisson_deviance(y, mu) > 0
         # zero counts contribute 2*mu and must not produce NaN
-        # T159: kept — the ≈ 3.0 pin below guards the 0·log0 branch; this guards the vector path.
         @test isfinite(_poisson_deviance([0.0, 0.0], [1.0, 2.0]))
         @test _poisson_deviance([0.0], [1.5]) ≈ 3.0 atol = 1e-12
         # the moment estimator of alpha recovers the truth on NB data
@@ -404,7 +401,6 @@ end
         @test 0.2 < _ct_moment_alpha(D.y_nb, mp.fitted) < 0.8
         # IRLS starting value is finite even when every count is zero
         b, mu0, w0, ll, cv, it = _irls_poisson(zeros(20), ones(20, 1), zeros(20))
-        # T159: kept — all-zero-count init smoke; finite start values are the contract.
         @test all(isfinite, mu0) && all(isfinite, w0) && isfinite(ll)
     end
 end

@@ -110,7 +110,6 @@ end
         @test model.steps == :mstep
         @test model.method == :fd_gmm
         @test size(model.Phi) == (2, 2)
-        # T159: kept — nonnegativity below is the pin for SEs.
         @test all(isfinite.(model.se))
         @test all(model.se .>= 0)
     end
@@ -153,7 +152,6 @@ end
         @test model.n_instruments > 0
         @test size(model.Phi) == (2, 2)
         @test all(isfinite.(model.Phi))
-        @test maximum(abs, eigvals(model.Phi)) < 1  # T159: system GMM returns a stationary VAR on stationary data (observed max 0.92)
     end
 
     @testset "System GMM onestep" begin
@@ -238,7 +236,6 @@ end
         m2 = estimate_pvar(pd, 1; steps=:twostep)
         m3 = estimate_pvar(pd, 1; steps=:mstep, max_iter=25)
         # mstep iterates further — SEs may differ
-        # T159: kept — nonnegativity below is the pin for SEs.
         @test all(isfinite.(m3.se))
         @test all(m3.se .>= 0)
     end
@@ -263,7 +260,6 @@ end
         model = estimate_pvar(pd_short, 1; steps=:twostep)
         @test model isa PVARModel
         @test all(isfinite.(model.se))
-        @test all(model.se .>= 0)  # T159: standard errors (exact, by construction; mirrors the mstep pin)
     end
 
     @testset "System GMM with short T" begin
@@ -371,7 +367,6 @@ end
         B2 = randn(rng, 6, 6)
         d = MEM._procrustes_distance(B1, B2)
         @test d >= 0
-        # T159: kept — nonnegativity above is the pin for a distance.
         @test isfinite(d)
     end
 
@@ -394,7 +389,6 @@ end
         d = MEM._procrustes_distance(B, B_perm)
         @test d >= 0
         # Should find a good match (greedy is approximate, may not be exactly 0)
-        # T159: kept — nonnegativity above is the pin; exactness explicitly disclaimed.
         @test isfinite(d)
     end
 

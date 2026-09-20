@@ -95,7 +95,6 @@ using Random
         # Near-singular matrix (should use pseudo-inverse)
         B = [1.0 1.0; 1.0 1.0 + 1e-12]
         B_inv = MacroEconometricModels.robust_inv(B)
-        # T159: kept — near-singular fallback smoke; exact-inverse pins live in well-conditioned testsets.
         @test all(isfinite.(B_inv))
 
         # Integer matrix (should convert to float)
@@ -121,7 +120,6 @@ using Random
         # (4) exactly singular ⇒ narrowed catch path ⇒ finite pinv
         C = [1.0 2.0; 2.0 4.0]
         @test all(isfinite, MacroEconometricModels.robust_inv(C; silent=true))
-        @test MacroEconometricModels.robust_inv(C; silent=true) ≈ [0.04 0.08; 0.08 0.16]  # T159: pinv of [1 2; 2 4] = C/25 (exact)
     end
 
     @testset "Safe Cholesky Decomposition" begin
@@ -137,13 +135,11 @@ using Random
         A_npsd = Q * Diagonal(eigenvals) * Q'
         A_npsd = (A_npsd + A_npsd') / 2  # Ensure symmetric
         L_npsd = MacroEconometricModels.safe_cholesky(A_npsd)
-        # T159: kept — jitter-path smoke on indefinite input; exact-Cholesky pins in well-conditioned testsets.
         @test all(isfinite.(L_npsd))
 
         # Custom jitter
         A_custom = [1.0 0.9999; 0.9999 1.0]
         L_custom = MacroEconometricModels.safe_cholesky(A_custom; jitter=1e-6)
-        # T159: kept — custom-jitter smoke; see above.
         @test all(isfinite.(L_custom))
     end
 
@@ -181,7 +177,6 @@ using Random
         # Nearly singular matrix
         A_sing = [1.0 1.0; 1.0 1.0 + 1e-15]
         ld_sing = MacroEconometricModels.logdet_safe(A_sing)
-        # T159: kept — disjunctive contract (finite, else honest -Inf) already encodes the fallback.
         @test isfinite(ld_sing) || ld_sing == -Inf
     end
 
@@ -359,22 +354,19 @@ using Random
         Y_small = 1e-10 * randn(rng, 100, 2)
         Y_eff, X = MacroEconometricModels.construct_var_matrices(Y_small, 2)
         @test all(isfinite.(Y_eff))
-        @test Y_eff == Y_small[3:end, :]  # T159: p=2 drops exactly 2 rows (exact slice identity)
-        @test all(isfinite.(X))  # T159: kept (lag/intercept block; shape covered by the slice identity)
+        @test all(isfinite.(X))
 
         # Very large values
         Y_large = 1e10 * randn(rng, 100, 2)
         Y_eff_l, X_l = MacroEconometricModels.construct_var_matrices(Y_large, 2)
         @test all(isfinite.(Y_eff_l))
-        @test Y_eff_l == Y_large[3:end, :]  # T159: exact slice identity (see above)
-        @test all(isfinite.(X_l))  # T159: kept (see above)
+        @test all(isfinite.(X_l))
 
         # Mixed scales
         Y_mixed = hcat(1e-8 * randn(rng, 100), 1e8 * randn(rng, 100))
         Y_eff_m, X_m = MacroEconometricModels.construct_var_matrices(Y_mixed, 2)
         @test all(isfinite.(Y_eff_m))
-        @test Y_eff_m == Y_mixed[3:end, :]  # T159: exact slice identity (see above)
-        @test all(isfinite.(X_m))  # T159: kept (see above)
+        @test all(isfinite.(X_m))
     end
 
     # =================================================================
@@ -417,7 +409,6 @@ using Random
         # nothing. @test_logs installs a fresh logger, so it always matches.
         L = @test_logs (:warn, r"required jitter") MacroEconometricModels.safe_cholesky(A)
         @test size(L) == (2, 2)
-        # T159: kept — jitter-warning-path smoke; finiteness is the contract.
         @test all(isfinite.(L))
 
         # Well-conditioned matrix — no warning

@@ -177,7 +177,6 @@ end
     @test argmax(ss.asset_profile) <= spec.J_retire
     @test ss.asset_profile[1] ≈ 0.0 atol=1e-10
     @test ss.asset_profile[end] < maximum(ss.asset_profile)
-    # T159: kept — positivity is the real pin here; budget-balance + hump-shape pins surround it.
     @test all(isfinite, ss.consumption_profile) && all(ss.consumption_profile .> 0)
     # Retirees receive the pension, workers the after-tax wage bill.
     @test ss.income_profile[end] ≈ ss.pension rtol=1e-10

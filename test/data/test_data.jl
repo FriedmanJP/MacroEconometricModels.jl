@@ -753,7 +753,6 @@ const _suppress_warnings = MacroEconometricModels._suppress_warnings
             @test d2.tcode == [1, 2, 2]            # effective codes are recorded
             @test d2.data[:, 1] ≈ X[2:end, 1]      # levels column aligned to the end
             @test d2.data[:, 2] ≈ diff(X[:, 2])
-            # T159: kept — the column-alignment ≈ pins above guard demotion.
             @test all(isfinite, d2.data)
 
             # Same demotion through the uniform and per-variable entry points

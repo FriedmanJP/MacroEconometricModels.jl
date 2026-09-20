@@ -1058,7 +1058,6 @@ end
         @test wb_abs.p_value == wb_plain.p_value
 
         wb_hd = wild_cluster_bootstrap(m_hd, :x1; n_boot=99, rng=Random.Xoshiro(5))
-        # T159: kept — the absorption-travel pins around it guard the bootstrap; [0,1] completes it.
         @test isfinite(wb_hd.t_stat)
         @test 0 <= wb_hd.p_value <= 1
 

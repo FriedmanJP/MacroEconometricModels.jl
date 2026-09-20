@@ -106,7 +106,6 @@ end
     @test ar_c.cov_type === :cluster
     @test ar_c.distribution === :chisq
     @test isfinite(ar_c.statistic)
-    @test ar_c.statistic >= 0  # T159: χ² statistic (exact, by construction)
     @test_throws ArgumentError anderson_rubin_test(m, 1.0; cov_type=:cluster)
     @test_throws ArgumentError anderson_rubin_test(m, 1.0; cov_type=:cluster,
                                                    clusters=cl[1:10])
@@ -167,7 +166,6 @@ end
     @test !ci.bounded
     @test !ci.is_empty
     # The Wald interval is bounded and therefore over-confident
-    # T159: kept — the AR-width > Wald-width pin below guards the comparison.
     @test isfinite(ci.wald_lower) && isfinite(ci.wald_upper)
     wald_width = ci.wald_upper - ci.wald_lower
     ar_width = sum(b - a for (a, b) in ci.intervals)

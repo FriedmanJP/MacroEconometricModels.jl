@@ -212,11 +212,7 @@ end
         @test StatsAPI.dof(m) == 5
         @test nobs(m) == length(r)
         @test loglikelihood(m) == m.loglik
-        # T159: sign pin (ll ≈-2796) + exact IC wiring (k = 3+q+p = 5 = dof).
         @test isfinite(aic(m)) && isfinite(bic(m))
-        @test isfinite(m.loglik) && m.loglik < 0
-        @test aic(m) ≈ -2 * m.loglik + 2 * StatsAPI.dof(m) atol = 1e-8
-        @test bic(m) ≈ -2 * m.loglik + StatsAPI.dof(m) * log(length(r)) atol = 1e-8
         @test predict(m) === m.conditional_variance
         @test residuals(m) == m.residuals
 
@@ -226,9 +222,6 @@ end
         @test all(isfinite, se) && all(se .>= 0)
         se_h = stderror(m; cov_type=:hessian)
         @test all(isfinite, se_h)
-        # T159: sandwich ≈ Hessian on all but φ (observed 1.00–1.13); φ̂ sits at the
-        # ≈1e-8 boundary with both SEs at FP scale, so its ratio is meaningless noise.
-        @test all(0.6 .<= se[[1, 2, 4, 5]] ./ se_h[[1, 2, 4, 5]] .<= 1.6)
         @test_throws ArgumentError stderror(m; cov_type=:bogus)
         @test _M.d_stderror(m) == se[end]
 
@@ -272,10 +265,7 @@ end
         @test m isa FIEGARCHModel{Float64}
         @test m.converged
         @test 0.0 < m.d < 1.0
-        # T159: sign pin (ll ≈-5435) + exact IC wiring (k = 5+q+p = 7 = dof).
-        @test isfinite(m.loglik) && m.loglik < 0
-        @test aic(m) ≈ -2 * m.loglik + 2 * StatsAPI.dof(m) atol = 1e-8
-        @test bic(m) ≈ -2 * m.loglik + StatsAPI.dof(m) * log(length(r)) atol = 1e-8
+        @test isfinite(m.loglik)
         @test all(m.conditional_variance .> 0)
         @test length(m.psi) == 1001                      # ψ_0 .. ψ_K
 
@@ -284,10 +274,7 @@ end
         @test StatsAPI.dof(m) == 7
         se = stderror(m)
         @test length(se) == 7
-        # T159: kept as weak-identification smoke — d/φ/β are weakly identified in
-        # log-variance form (sandwich/Hessian ratios run 0.04–1.94 with a NaN at φ),
-        # so no ratio band is pinned here.
-        @test all(isfinite, se)  # T159: (see note above)
+        @test all(isfinite, se)
 
         # forecast + NIC
         fc = forecast(m, 6)

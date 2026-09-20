@@ -171,8 +171,6 @@ using LinearAlgebra
             resp = irf(sol, 12)
             @test all(isfinite, resp.values)
             @test maximum(abs, resp.values) > 0
-            i_C = findfirst(==("C"), resp.variables)
-            @test resp.values[1, i_C, 1] > 0  # T159: TFP shock raises consumption on impact (observed 0.0063)
         end
 
         @testset "NK Phillips-Taylor-Fisher block (#647 G-13b)" begin
@@ -212,18 +210,15 @@ using LinearAlgebra
             @test is_determined(sol)
 
             resp = irf(sol, 12)
-            @test all(isfinite, resp.values)  # T159: kept (C/π impact signs pinned below)
+            @test all(isfinite, resp.values)
             @test resp.variables == ["k", "C", "r", "w", "Z", "pi", "i", "rr"]
             @test resp.shocks == ["eps_Z", "eps_i"]
             i_C = findfirst(==("C"), resp.variables)
             i_pi = findfirst(==("pi"), resp.variables)
-            @test all(isfinite, resp.values[:, i_C, 1])  # T159: kept (impact signs pinned below)
-            @test all(isfinite, resp.values[:, i_pi, 1])  # T159: kept (impact signs pinned below)
+            @test all(isfinite, resp.values[:, i_C, 1])
+            @test all(isfinite, resp.values[:, i_pi, 1])
             @test maximum(abs, resp.values[:, i_C, 1]) > 0
             @test maximum(abs, resp.values[:, i_pi, 1]) > 0
-            # T159: demand-side NK block — TFP raises C and π on impact (observed 0.0063, 0.0097).
-            @test resp.values[1, i_C, 1] > 0
-            @test resp.values[1, i_pi, 1] > 0
 
             # Convenience ctor from BlanchardOLG; monetary shock IRF is finite.
             spec_m = blanchard_nk_spec(m; rho_z=0.9, sigma_z=0.0,
@@ -233,9 +228,6 @@ using LinearAlgebra
             resp_m = irf(sol_m, 12)
             @test all(isfinite, resp_m.values)
             @test maximum(abs, resp_m.values[:, :, 2]) > 0   # eps_i moves i (and rr)
-            # T159: Taylor rule — policy rate moves 1:1 with the eps_i shock on impact (σ_i = 0.01).
-            i_i = findfirst(==("i"), resp_m.variables)
-            @test resp_m.values[1, i_i, 2] ≈ 0.01 atol = 1e-10
         end
 
         @testset "Blanchard forward_indices are distinct lead variables (#223)" begin

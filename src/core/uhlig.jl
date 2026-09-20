@@ -100,7 +100,7 @@ Returns a unit vector in the null space of [Q_prev columns; zero constraint rows
 function _uhlig_build_q_column(theta_j::AbstractVector{T}, j::Int, Q_prev::Matrix{T},
                                 restrictions::SVARRestrictions,
                                 Phi::Vector{Matrix{T}},
-                                L::LowerTriangular{T,Matrix{T}},
+                                L::LowerTriangular{T,<:AbstractMatrix{T}},
                                 n::Int; B=nothing, C1=nothing) where {T<:AbstractFloat}
     # Build constraint matrix: orthogonality to previous columns + zero restrictions
     constraint_rows = Vector{Vector{T}}()
@@ -157,7 +157,7 @@ Build full Q matrix from concatenated angle parameters.
 Returns an n×n orthogonal matrix satisfying all zero restrictions.
 """
 function _uhlig_build_Q(theta_all::AbstractVector{T}, restrictions::SVARRestrictions,
-                         Phi::Vector{Matrix{T}}, L::LowerTriangular{T,Matrix{T}},
+                         Phi::Vector{Matrix{T}}, L::LowerTriangular{T,<:AbstractMatrix{T}},
                          n::Int; B=nothing, C1=nothing) where {T<:AbstractFloat}
     Q = zeros(T, n, n)
     offset = 0
@@ -223,7 +223,7 @@ expensive rather than rewarding large satisfied responses.
 Reference: Uhlig (2005, JME 52, §3.3); Mountford & Uhlig (2009, JAE 24, §3).
 """
 function _uhlig_penalty(theta_all::AbstractVector{T}, restrictions::SVARRestrictions,
-                         Phi::Vector{Matrix{T}}, L::LowerTriangular{T,Matrix{T}},
+                         Phi::Vector{Matrix{T}}, L::LowerTriangular{T,<:AbstractMatrix{T}},
                          model::VARModel{T}, horizon::Int, n::Int;
                          penalty_weight::Real=100, C1=nothing) where {T<:AbstractFloat}
     pw = T(penalty_weight)
@@ -242,7 +242,7 @@ end
 
 """Penalty of a candidate rotation `Q` (Uhlig 2005 §3.3). Lower is better."""
 function _uhlig_penalty_from_Q(Q::AbstractMatrix{T}, restrictions::SVARRestrictions,
-                                Phi::Vector{Matrix{T}}, L::LowerTriangular{T,Matrix{T}},
+                                Phi::Vector{Matrix{T}}, L::LowerTriangular{T,<:AbstractMatrix{T}},
                                 model::VARModel{T}, horizon::Int;
                                 penalty_weight::Real=100) where {T<:AbstractFloat}
     pw = T(penalty_weight)
@@ -272,7 +272,7 @@ always free. This is required when a column is uniquely determined
 0-parameter Nelder–Mead run never evaluates the objective (reports 0.0).
 """
 function _uhlig_sign_normalize(Q::AbstractMatrix{T}, restrictions::SVARRestrictions,
-                                Phi::Vector{Matrix{T}}, L::LowerTriangular{T,Matrix{T}},
+                                Phi::Vector{Matrix{T}}, L::LowerTriangular{T,<:AbstractMatrix{T}},
                                 model::VARModel{T}, horizon::Int;
                                 penalty_weight::Real=100) where {T<:AbstractFloat}
     shocks = unique(Int[sr.shock for sr in restrictions.signs if sr isa SignRestriction])
@@ -299,7 +299,7 @@ Same `f(x)` as `_uhlig_penalty`: weight 1 if satisfied, `penalty_weight` if
 violated. Lower is better.
 """
 function _uhlig_shock_penalties(Q::Matrix{T}, restrictions::SVARRestrictions,
-                                 Phi::Vector{Matrix{T}}, L::LowerTriangular{T,Matrix{T}},
+                                 Phi::Vector{Matrix{T}}, L::LowerTriangular{T,<:AbstractMatrix{T}},
                                  model::VARModel{T}, horizon::Int;
                                  penalty_weight::Real=100) where {T<:AbstractFloat}
     pw = T(penalty_weight)

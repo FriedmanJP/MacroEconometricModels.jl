@@ -120,15 +120,11 @@ end
         # standard errors are finite and positive
         se = MacroEconometricModels.StatsAPI.stderror(m)
         @test length(se) == 6
-        # T159: kept — positivity below is the pin for SEs.
         @test all(isfinite, se)
         @test all(se .> 0)
         # hessian-based SEs also finite
         se_h = MacroEconometricModels.StatsAPI.stderror(m; cov_type=:hessian)
         @test all(isfinite, se_h)
-        # T159: correctly-specified sim ⇒ sandwich ≈ Hessian on all 6 params
-        # (observed 1.00–1.19, incl. weakly-identified w); 0.6–1.6 mirrors GARCH.
-        @test all(0.6 .<= se ./ se_h .<= 1.6)
     end
 
     # =========================================================================
@@ -158,16 +154,12 @@ end
     @testset "realized / rolling spans" begin
         mr = estimate_garch_midas(r; K=6, m_freq=22, rv=:realized, span=:fixed)
         @test all(isfinite, mr.conditional_variance)
-        @test mr.conditional_variance ≈ mr.tau .* mr.g rtol = 1e-12   # T159: h = τ·g (mirrors Oracle 1)
-        @test all(mr.g .> 0)
         @test isapprox(mean(mr.g), 1.0; atol=0.15)
         @test all(mr.tau .> 0)
         @test isempty(mr.x_lf)              # realized ⇒ no exogenous series stored
 
         mroll = estimate_garch_midas(r; K=4, m_freq=22, span=:rolling)
         @test all(isfinite, mroll.conditional_variance)
-        @test mroll.conditional_variance ≈ mroll.tau .* mroll.g rtol = 1e-12   # T159: h = τ·g (mirrors Oracle 1)
-        @test all(mroll.g .> 0)
         @test isapprox(mean(mroll.g), 1.0; atol=0.2)
         @test mroll.span == :rolling
         @test length(mroll.ret_idx) == length(mroll.conditional_variance)

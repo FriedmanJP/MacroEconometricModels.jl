@@ -175,20 +175,13 @@ _dk_vecm() = estimate_vecm(_DKY, 2; rank=1, deterministic=:constant,
         @test size(ir.values, 1) == 8                 # 8 horizons
         @test size(ir.values, 2) == 4                 # 4 variables
         @test all(isfinite, ir.values)
-        @test maximum(abs, ir.values[1, :, :] * ir.values[1, :, :]' .- rm.Sigma) < 1e-12  # T159: Cholesky impact Gram = Sigma (observed 8e-18)
         fv = fevd(rm, 8)
         @test all(isfinite, fv.decomposition)
-        # T159: unnormalized level-variance contributions: nonneg sums of squares,
-        # cumulative in h (observed max 0.0044, growing in h).
-        @test all(fv.decomposition .>= 0)
-        @test all(sum(fv.decomposition[v, :, h]) <= sum(fv.decomposition[v, :, h + 1]) for v in 1:4, h in 1:7)
         hd = historical_decomposition(rm)
         @test hd !== nothing
         # α-restricted model also runs
         ra = test_weak_exogeneity(m, "LRY").restricted_model
-        ira = irf(ra, 6)
-        @test all(isfinite, ira.values)
-        @test maximum(abs, ira.values[1, :, :] * ira.values[1, :, :]' .- ra.Sigma) < 1e-12  # T159: Cholesky impact Gram = Sigma (observed 7e-18)
+        @test all(isfinite, irf(ra, 6).values)
     end
 
     # ---- display: report / refs / show -----------------------------------

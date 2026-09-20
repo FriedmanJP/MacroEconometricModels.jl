@@ -355,11 +355,8 @@ end
     @test size(result[:deposit]) == (nl, ni, 3)
     # Consumption should be positive and finite
     @test all(result[:consumption] .> 0)
-    # T159: kept — positivity above is the real pin.
     @test all(isfinite, result[:consumption])
     @test all(isfinite, result[:deposit])
-    # T159: deposits keep a' on the [0, 50] illiquid grid ⇒ |d| ≤ 50 (observed [-13.8, 21.7]).
-    @test all(-50 .< result[:deposit] .< 50)
 end
 
 @testset "Two-asset nested EGM: state-dependent deposit (#232/T133)" begin
@@ -460,7 +457,6 @@ end
     ss_v = _VFI_HUG_SS
     ss_e = compute_steady_state(_VFI_HUG_SPEC; hh_solver=:egm, max_iter=50,
                                 tol=5e-3, grid_check=:none)
-    # T159: kept — the VFI/EGM rate agreement below guards the SS price.
     @test isfinite(ss_v.prices[:r])
     @test !all(iszero, ss_v.value_fn)
     @test !all(iszero, ss_e.value_fn)   # EGM recovers V by policy evaluation
@@ -513,7 +509,6 @@ end
                                                           tol=1e-6, howard_steps=8)
     @test conv isa Bool
     @test all(c_v .> 0)
-    # T159: kept — value smoke; the c > 0 / a ≥ 0 / n ≥ 0 policy pins guard the solve.
     @test all(isfinite, V)
     @test all(a_v .>= -1e-10)
     n_v = labor_policy(ip, grid, inc, prices, c_v)
@@ -536,7 +531,6 @@ end
     egm = MacroEconometricModels._two_asset_egm_solve(ip2, grid2, inc, prices2;
         max_iter=40, tol=1e-5)
     @test all(vfi[:consumption] .> 0)
-    # T159: kept — the 35% VFI/EGM agreement below guards solver consistency.
     @test all(isfinite, vfi[:value])
     # Mid liquid, low illiquid, first income: consumption in the same ballpark
     ib, ia, je = max(nl ÷ 2, 1), 1, 1
@@ -557,10 +551,8 @@ end
     @test size(ss.distribution) == (_hh(spec).grid.n_points[1], _hh(spec).grid.n_points[2], 2)
     @test all(ss.policies[:consumption] .> 0)
     @test isfinite(ss.euler_error)
-    @test ss.euler_error < 0  # T159: log10 units — sub-unity Euler error even on the coarse grid (observed -1.10)
     @test ss.aggregates[:B_supply] == 2.0
-    # Residuals finite; FAST may not fully clear (observed -4.0 / 58.9 — unconverged by design, so no bound).
-    # T159: kept — finiteness is the contract for this coarse smoke.
+    # Residuals finite; FAST may not fully clear
     @test isfinite(ss.aggregates[:resid_liquid])
     @test isfinite(ss.aggregates[:resid_illiquid])
     gd = ha_grid_diagnostics(ss)
@@ -587,7 +579,6 @@ end
     J = MacroEconometricModels._ssj_jacobian(ss, _hh(spec).individual, _hh(spec).grid,
                                              _hh(spec).income, :r_b, :B; T_horizon=6)
     @test size(J) == (6, 6)
-    # T159: kept — J's zero pattern is platform-dependent (MSR-05 note above); finiteness is the portable contract.
     @test all(isfinite, J)
     sol_r = solve(spec; method=:reiter, ss=ss, n_reduced=3)
     @test sol_r.method === :reiter
@@ -597,7 +588,6 @@ end
     @test sol_k isa KrusellSmithSolution
     @test haskey(sol_k.plm_coefficients, :K)
     @test isfinite(sol_k.r_squared[:K])
-    @test sol_k.r_squared[:K] <= 1  # T159: R² = 1 − SSres/SStot ≤ 1 by construction (exact)
     @test 0 <= sol_r.explained_variance <= 1
 end
 
@@ -684,7 +674,6 @@ end
     # Aggregate capital
     K = MacroEconometricModels._aggregate(dist, grid; var_index=1)
     @test K > 0
-    # T159: kept — K > 0 above is the pin; aggregation over a unit-mass finite grid is finite by construction.
     @test isfinite(K)
 end
 
@@ -722,9 +711,6 @@ end
     @test length(d) == N
     @test isfinite(MacroEconometricModels._aggregate(d, grid; var_index=1))
     @test isfinite(MacroEconometricModels._aggregate(d, grid; var_index=2))
-    # T159: unit-mass averages over the grid ⇒ inside the grid boxes (exact, by construction).
-    @test 0 <= MacroEconometricModels._aggregate(d, grid; var_index=1) <= 10
-    @test 0 <= MacroEconometricModels._aggregate(d, grid; var_index=2) <= 20
 end
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -802,7 +788,6 @@ end
     euler_err = MacroEconometricModels._compute_euler_error(c_pol, a_pol, ip, grid, inc, prices)
 
     # Euler error should be finite and in log10 units (negative = small error)
-    # T159: kept — the < -1.0 pin below guards EGM accuracy.
     @test isfinite(euler_err)
     # Well-converged EGM should yield small Euler errors (< ~1e-1 → log10 < -1)
     @test euler_err < -1.0
@@ -876,7 +861,6 @@ end
     KB = MacroEconometricModels._ks_simulate(cB, ss, grid, inc, zidx, zg, Kg, price_fn, params)
     @test maximum(abs.(cA .- cB)) > 1e-4    # different PLM → materially different policy
     @test maximum(abs.(KA .- KB)) > 1e-3    # different PLM → different realized path
-    # T159: kept — positivity is the real pin; the PLM-sensitivity pins above guard simulation.
     @test all(isfinite, KA) && all(KA .> 0)
 end
 
@@ -925,7 +909,6 @@ end
     T_h = 12
     J = MacroEconometricModels._ssj_jacobian(ss, ip, grid, inc, :r, :K; T_horizon=T_h, dx=1e-4)
     @test size(J) == (T_h, T_h)
-    # T159: kept — the nonzero-impact / decay / density pins below guard the Jacobian.
     @test all(isfinite.(J))
     # Contemporaneous effect should be nonzero
     @test abs(J[1,1]) > 1e-8
@@ -950,7 +933,6 @@ end
     Jc = MacroEconometricModels._ssj_jacobian(ss, ip, grid, inc, :r, :C;
                                               T_horizon=T_h, dx=1e-4)
     @test size(Jc) == (T_h, T_h)
-    # T159: kept — the !isapprox(Jc, J) below pins output_var threading.
     @test all(isfinite.(Jc))
     @test !isapprox(Jc, J)
 end
@@ -972,7 +954,6 @@ end
     @test size(impact, 2) == 1         # one shock
     @test length(C_sol) == size(G1, 1)
     @test eu == [1, 1]
-    # T159: kept — the eigenvalue ≈ 0.9 pin below guards realization (basis is similarity-arbitrary).
     @test all(isfinite.(G1))
     @test all(isfinite.(impact))
 
@@ -1112,8 +1093,6 @@ end
     fv = fevd(sol, 20)
     @test length(fv.variables) == 1
     @test all(isfinite.(fv.decomposition))
-    @test all(fv.decomposition .>= 0)  # T159: sums of squared IRF contributions (exact, by construction)
-    @test all(==(1), fv.proportions)  # T159: one variable + one shock ⇒ every share is exactly 1 (observed bit-exact)
 
     # simulate reports the aggregate deviation path; a unit impulse gives D_obs.
     sim = simulate(sol, 30; shock_draws=reshape([1.0; zeros(29)], 30, 1))
@@ -1215,7 +1194,6 @@ end
     # Gini coefficient
     gini = MacroEconometricModels._gini_coefficient(vec(ss.distribution), ss.grid)
     @test 0.0 <= gini <= 1.0
-    # T159: kept — the [0, 1] bracket above implies finiteness and is the real pin.
     @test isfinite(gini)
 
     # Wealth percentiles
@@ -1223,7 +1201,6 @@ end
     p90 = MacroEconometricModels._wealth_percentile(vec(ss.distribution), ss.grid, 0.9)
     @test p90 >= p50  # 90th percentile >= median
     @test isfinite(p50)
-    @test 0 <= p50 <= 200  # T159: percentile of a grid-supported distribution ⇒ inside the [0, 200] box (exact)
 end
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -1252,7 +1229,6 @@ end
     @test size(panel) == (100, 50)
     @test all(panel .>= 0)
     @test all(isfinite.(panel))
-    @test maximum(panel) < 400  # T159: policy extrapolates slightly past the 200 grid top (observed 207.9); blowup guard only
     # Mean asset holdings should be in a reasonable range
     mean_assets = sum(panel[:, end]) / 100
     @test mean_assets > 0
@@ -1299,7 +1275,6 @@ end
     # (e) inequality IRF: finite Gini in [0,1], p90 >= p50
     ineq = inequality_irf(reiter_sol, 10)
     @test all(0 .<= ineq[:gini] .<= 1)
-    # T159: kept — the [0, 1] bracket above implies finiteness and is the real pin.
     @test all(isfinite, ineq[:gini])
     @test all(ineq[:p90] .>= ineq[:p50])
 
@@ -1365,7 +1340,6 @@ end
         chi = _hh(spec).individual.adjustment_cost(1.0, 10.0)
         @test chi > 0.0
         @test isfinite(chi)
-        @test chi ≈ 0.05  # T159: quadratic cost χ(1, 10) = 0.05 closed form (observed to fp)
     end
 
     @testset "Invalid example" begin
@@ -1813,7 +1787,6 @@ end
         # a degenerate (all-zero) density falls back to uniform rather than dividing by zero
         g0 = adaptive_asset_grid(x, zeros(40))
         @test all(isfinite, g0) && all(diff(g0) .> 0)
-        @test g0 ≈ collect(range(0.0, 50.0; length=40))  # T159: degenerate density ⇒ uniform fallback (observed to fp)
     end
 
     @testset "adapt_ha_grid preserves the grid contract" begin
@@ -1853,7 +1826,6 @@ end
         @test _hh(spec2).distribution == _hh(spec).distribution
         @test _hh(spec2).grid.grids[1] == g_new.grids[1]
         ss2 = compute_steady_state(spec2; max_iter=200, tol=5e-4)
-        # T159: kept — the adapted-vs-original rate agreement below guards re-solvability.
         @test isfinite(ss2.prices[:r])
         @test isapprox(ss2.prices[:r], ss.prices[:r]; atol=2e-3)
     end

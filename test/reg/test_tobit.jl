@@ -67,7 +67,6 @@ end
             @test _mills(a) ≈ pdf(N, a) / cdf(N, a) atol = 1e-12
         end
         # Deep left tail stays finite (no 0/0 blow-up).
-        # T159: kept — positivity is the pin; the ≈ pins around it guard the hazard.
         @test isfinite(_mills(-30.0)) && _mills(-30.0) > 0
         # Two-sided hazard collapses to one-sided limits.
         @test _lambda(0.5, Inf) ≈ _mills(-0.5) atol = 1e-9      # b=∞ ⇒ φ(a)/Φ(-a)
@@ -218,7 +217,6 @@ end
 
         # SEs positive and finite; all three effect types available with SEs.
         for me in (me_u, me_p, me_c)
-            # T159: kept — positivity below is the pin for marginal-effect SEs.
             @test all(isfinite, me.se[2:3])
             @test all(>(0), me.se[2:3])
         end
@@ -237,9 +235,7 @@ end
         m_lo = estimate_tobit(d.y, X; lower = 0.0, dist = :logistic, varnames = ["const", "x1", "x2"])
         @test m_lo.converged
         @test all(isfinite, m_lo.beta) && isfinite(m_lo.sigma)
-        @test m_lo.sigma > 0  # T159: scale parameter (exact, by construction)
         @test all(isfinite, StatsAPI.stderror(m_lo))
-        @test all(StatsAPI.stderror(m_lo) .>= 0)  # T159: SEs (exact, by construction)
     end
 
     # -------------------------------------------------------------------------

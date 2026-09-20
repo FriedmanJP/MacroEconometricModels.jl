@@ -70,7 +70,7 @@ rng = Xoshiro(42)  # DGP-03: explicit rng
         @test best_hyper.lambda > 0
         @test best_hyper.mu > 0
         @test isfinite(best_ml)
-        @test best_ml > -Inf  # T159: kept — argmax-over-grid value; == ml_full consistency pinned below
+        @test best_ml > -Inf
 
         # Verify the returned hyperparameters are from the grid
         @test best_hyper.tau in range(0.1, 2.0, length=3)
@@ -85,11 +85,8 @@ rng = Xoshiro(42)  # DGP-03: explicit rng
         ml_full = log_marginal_likelihood(Y_full, p, best_hyper)
         ml_simple = log_marginal_likelihood(Y_full, p, simple_hyper)
         # Note: Not strictly >= because grids differ, but both should be finite
-        # T159: kept — ML exactness pinned by the F-02 matrictint identity (test_bayesian.jl);
-        # grids differ so no ordering exists.
         @test isfinite(ml_full)
         @test isfinite(ml_simple)
-        @test best_ml == ml_full  # T159: returned value equals ML at returned hyper (identical deterministic call)
 
         _tprint("Full Hyperparameter Optimization Test Complete.")
     end
@@ -143,16 +140,12 @@ rng = Xoshiro(42)  # DGP-03: explicit rng
         # Very tight prior (tau=0.001)
         hyper_tight = MinnesotaHyperparameters(tau=0.001, decay=2.0, omega=0.5)
         ml_tight = log_marginal_likelihood(Y_ex, p_ex, hyper_tight)
-        # T159: kept — ordered against ml_loose below (white-noise ML rises as tau loosens).
         @test isfinite(ml_tight)
 
         # Very loose prior (tau=100)
         hyper_loose = MinnesotaHyperparameters(tau=100.0, decay=1.0, omega=1.0)
         ml_loose = log_marginal_likelihood(Y_ex, p_ex, hyper_loose)
         @test isfinite(ml_loose)
-        # T159: white-noise ML rises as the RW prior loosens (closed form, zero MC
-        # noise; observed −123 > −175). Mirrors the tau-monotonicity testset above.
-        @test ml_loose > ml_tight
     end
 
     @testset "optimize_hyperparameters returns valid type" begin

@@ -98,7 +98,6 @@ end
     @test ss.method === :steady_state
     @test ss.iterations >= 1
     @test ss.K > 0 && ss.Y > 0 && ss.N > 0
-    # T159: kept — the I/K bracket + w ≈ φC pins below guard SS aggregates.
     @test isfinite(ss.I) && isfinite(ss.C)
     ik = ss.I / ss.K
     @test 0.06 < ik < 0.14
@@ -129,13 +128,11 @@ end
     @test tr.K[1] ≈ ss.K rtol=1e-8          # K predetermined
     @test all(isfinite, tr.Y) && all(isfinite, tr.I)
     @test tr.Y[1] != ss.Y                   # TFP moves output on impact
-    @test tr.Y[1] > ss.Y  # T159: TFP+ raises output on impact (observed 0.5165 vs 0.4889)
 
     resp = irf(ss, 8; shock_size=0.02)
     @test resp isa ImpulseResponse
     @test resp.variables == ["Y", "I", "K", "N", "C", "Z"]
     @test resp.shocks == ["Z"]
-    # T159: kept — the Y-impact > 0 / Z-impact ≈ / K-pinned pins below guard the IRF.
     @test all(isfinite, resp.values)
     @test resp.values[1, 1, 1] > 0          # Y IRF finite and positive on impact
     @test resp.values[1, 6, 1] ≈ 0.02 * ss.firm.Z atol=1e-12

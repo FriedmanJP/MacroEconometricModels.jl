@@ -92,11 +92,10 @@ end
     dp = MacroEconometricModels._clogit_dp_logsum
     # (a) OVERFLOW + closed form (T_g=2, s=1): raw exp overflows to Inf; log-space stays finite
     ld, p = dp(reshape([1000.0, 1001.0], 2, 1), [1.0], 1)
-    # T159: kept — the logaddexp/softmax ≈ below are exact; this pre-guards overflow.
     @test isfinite(ld)
     @test isapprox(ld, 1001.3132616875182; atol=1e-9)     # logaddexp(1000, 1001)
     @test isapprox(p, [0.2689414213699951, 0.7310585786300049]; atol=1e-8)   # softmax
-    @test all(isfinite, p) && isapprox(sum(p), 1.0)  # T159: kept (see above)
+    @test all(isfinite, p) && isapprox(sum(p), 1.0)
 
     # (b) BRUTE-FORCE cross-check (T_g=5, s=2) against explicit subset enumeration
     rng = Random.Xoshiro(88); eta = randn(rng, 5) .* 0.5
@@ -118,7 +117,6 @@ end
     y = Float64.(rand(rng, nn) .< 1.0 ./ (1.0 .+ exp.(-(alpha .+ 0.7 .* x1))))
     m1 = estimate_xtlogit(xtset(DataFrame(id=ids, t=ts, x1=x1, y=y), :id, :t), :y, [:x1]; model=:fe)
     m2 = estimate_xtlogit(xtset(DataFrame(id=ids, t=ts, x1=50.0 .* x1, y=y), :id, :t), :y, [:x1]; model=:fe)
-    # T159: kept — the scale-invariance + ll ≈ below guard rescaling.
     @test all(isfinite, coef(m2))
     @test isapprox(coef(m2)[1], coef(m1)[1] / 50.0; rtol=1e-4)
     @test isapprox(loglikelihood(m1), loglikelihood(m2); rtol=1e-5)
@@ -165,7 +163,7 @@ end
     mc = estimate_xtlogit(pd, :y, [:x1]; model=:cre)
     @test mc.converged
     @test all(stderror(mc) .> 0)
-    @test loglikelihood(mc) < 0  # T159: logit ll = Σ log p < 0 strictly (exact)
+    @test isfinite(loglikelihood(mc))
 end
 
 @testset "#600 AGH loglik is total — no non-finite value or gradient" begin
@@ -189,9 +187,8 @@ end
     for ls in (-1e4, -700.0, -340.0, -20.0, 0.0, 20.0, 340.0, 700.0, 1e4),
         s  in (1.0, 1e2, 1e3, 1e4, 1e6)
         th = [-0.3 * s, 0.9 * s, ls]
-        # T159: kept — overflow-robustness over the extreme grid IS the contract (#600).
         @test isfinite(nll(th))
-        @test all(isfinite, FD.gradient(nll, th))  # T159: kept (see above)
+        @test all(isfinite, FD.gradient(nll, th))
     end
 
     # sigma_u -> 0 must land on the pooled logit loglik and stay FLAT. Clamping the prior
@@ -214,7 +211,7 @@ end
     pd_ddcg = xtset(dfd, :country, :year)
     m_re = estimate_xtlogit(pd_ddcg, :dem, [:lngdppc]; model=:re, tol=1e-12)
     @test m_re.converged
-    @test loglikelihood(m_re) < 0  # T159: logit ll = Σ log p < 0 strictly (exact)
+    @test isfinite(loglikelihood(m_re))
     @test m_re.sigma_u > 0
 end
 

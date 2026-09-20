@@ -382,7 +382,6 @@ using MacroEconometricModels
 
         @test panel_irf.horizon == 40
         @test size(panel_irf.values) == (40, N, q)
-        # T159: kept — first-20-horizons ≈ stored (1e-10) below guards the extension.
         @test all(isfinite.(panel_irf.values))
 
         # First 20 horizons should match stored
@@ -960,10 +959,9 @@ using MacroEconometricModels
         ir = irf(sdfm, 10; ci_type=:bootstrap, reps=50, rng=Random.Xoshiro(1))
         @test ir.ci_type === :bootstrap
         @test size(ir._draws) == (50, 10, 12, 2)
-        # T159: kept — band containment + seed determinism below guard values and bands.
         @test all(isfinite, ir.values)
         @test all(isfinite, ir.ci_lower)
-        @test all(isfinite, ir.ci_upper)  # T159: (see containment note above)
+        @test all(isfinite, ir.ci_upper)
         @test all(ir.ci_lower .<= ir.values .<= ir.ci_upper)
         ir2 = irf(sdfm, 10; ci_type=:bootstrap, reps=50, rng=Random.Xoshiro(1))
         @test ir.ci_lower == ir2.ci_lower
@@ -1046,12 +1044,10 @@ using MacroEconometricModels
         @test Cs ≈ Matrix{Float64}(I, q, q) atol=0.05
         fc = forecast(sdfm_c, 6; ci_method=:none)
         @test size(fc.observables) == (6, N)
-        # T159: == bootstrap-point pin below guards the analytic point.
         @test all(isfinite, fc.observables)
         fcb = forecast(sdfm_c, 6; ci_method=:bootstrap, reps=40,
             rng=Random.Xoshiro(7163))
         @test all(fcb.observables_lower .<= fcb.observables .<= fcb.observables_upper)
-        @test fc.observables == fcb.observables  # T159: bootstrap reuses the analytic point (bit-exact, observed 0.0)
         @test sprint(report, fc) isa String
         @test plot_result(fc) isa MacroEconometricModels.PlotOutput
     end

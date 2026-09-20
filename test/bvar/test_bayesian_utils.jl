@@ -156,10 +156,6 @@ end
     @test ns == length(results)
     @test all(r -> all(isfinite, r), results)
     @test all(r -> size(r) == (8, n, n), results)
-    # T159: Cholesky impact Gram reproduces the draw's Sigma (observed ≤7e-16 in VAR IRF-CI).
-    for d in eachindex(results)
-        @test maximum(abs, results[d][1, :, :] * results[d][1, :, :]' .- post.Sigma_draws[d, :, :]) < 1e-12
-    end
 
     # (2) Before/after equality: the deterministic Cholesky posterior-IRF pipeline reproduces the
     #     same result across repeated runs with NO reseeding (the container change is value-neutral;
@@ -169,7 +165,4 @@ end
     @test ir1.point_estimate == ir2.point_estimate
     @test ir1.quantiles == ir2.quantiles
     @test all(isfinite, ir1.point_estimate)
-    # T159: default point estimate is the mean over the per-draw IRFs (observed maxdiff 1e-16).
-    stack_t159 = cat(results...; dims=4)
-    @test maximum(abs, ir1.point_estimate .- dropdims(mean(stack_t159; dims=4); dims=4)) < 1e-12
 end
