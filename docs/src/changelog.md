@@ -6,6 +6,22 @@ output, not just documentation.
 
 ---
 
+## v1.0.0
+
+First major release. **Breaking**: downstream `[compat]` of `MacroEconometricModels = "0.9"` no longer resolves — move the bound to `MacroEconometricModels = "1"`.
+
+**Breaking (source level)**
+
+- DSGE `forward_indices` / `n_expect` now catalog distinct lead *variables* (indices into `endog`), not lead-containing *equations*; `LinearDSGE.Pi` carries one expectational-error column per lead variable (`#223`). Models whose equations share a lead get a smaller, correct `n_expect` (the NK block: 3 → 2). Code reading `forward_indices` as equation indices or pinning `Pi` width must be updated.
+- Two-asset HA `compute_steady_state` closer rewritten as nested bisection: kwargs `rb_init`, `relax_K`, `relax_rb` removed (unknown kwargs error); new `k_lo`, `k_hi`, `inner_max_iter`, `k_atol`, `stable_iters`; retuned defaults (`tol = 2e-3`, `hh_max_iter = 500`, `howard_steps = 0`) (`#709`). Steady-state values can differ slightly from the damped-updater path.
+
+**New**
+
+- Julia 1.13 support: SVAR internals accept any `LowerTriangular` backing store (`cholesky().L` changed wrapper in 1.13).
+- No exports added or removed.
+
+---
+
 ## v0.9.7
 
 Patch on the `0.9` series: identification and solver follow-ups from the v0.9.5–v0.9.6 backlog (`#814`–`#816`, `#829`, `#830`). Downstream `[compat]` of `MacroEconometricModels = "0.9"` still resolves. **Changed numerical output**: `identify_uhlig` sign-normalizes uniquely determined columns, so previously sign-flipped penalty rotations now satisfy the imposed signs.
